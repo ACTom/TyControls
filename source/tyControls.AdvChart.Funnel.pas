@@ -210,7 +210,7 @@ function TyFunnelOrder(AStore: TTyDataStore; ADim: Integer;
 
 implementation
 
-uses tyControls.AdvChart.Scale;
+uses tyControls.AdvChart.Scale, tyControls.AdvChart.RichStyle;
 
 function TyFunnelSpecDefault: TTyFunnelSpec;
 begin
@@ -661,6 +661,8 @@ begin
   d := node.Find('label');
   if d is TJSONObject then TyLabelReadInk(TJSONObject(d), node, Result.Ink)
   else TyLabelReadInk(nil, node, Result.Ink);
+  { its text block [Batch 86] }
+  if d is TJSONObject then TyLabelReadBlock(TJSONObject(d), AOption.Root, Result.Ink);
   if d is TJSONObject then
   begin
     lbl := TJSONObject(d);
@@ -969,6 +971,23 @@ begin
     auto.GroundDark := AInk.GroundDark;
     TyLabelInk(auto, fill, fill <> 0, False, inside, ink, stroke, strokeW);
     TyLabelStampEmphasis(auto, fill, fill <> 0, False, inside, el.Caption);
+    { THE BLOCK, where the label's style needs one [Batch 86] }
+    if auto.Rt.Needed then
+    begin
+      auto.FontName := AInk.FontName;
+      auto.FontSizeLogical := AInk.FontSizeLogical;
+      auto.FontWeight := AInk.FontWeight;
+      el.Caption.RtScale := APPI / 96;
+      el.Caption.RtPieces := TyLabelBlockPieces(auto, words, fill, fill <> 0,
+        False, inside, anchorH, tavMiddle, el.Caption.RtScale, AMeasurer);
+      if Length(el.Caption.RtPieces) > 0 then
+      begin
+        el.Shape := TyShapeRect(TyRtDeviceBox(el.Caption.RtPieces, textX, textY,
+          0, el.Caption.RtScale));
+        el.Caption.RtEmph := TyRtReink(el.Caption.RtPieces, el.Caption.EmphColour,
+          True, el.Caption.EmphStrokeColour, el.Caption.EmphStrokeWidthLogical);
+      end;
+    end;
     el.Caption.Colour := ink;
     el.Caption.StrokeColour := stroke;
     el.Caption.StrokeWidthLogical := strokeW;

@@ -121,6 +121,164 @@ type
     ComponentIndex: Integer;
   end;
 
+  { ---- zrender's text block [Batch 86] ---- }
+
+  TTyRtAlign = (rtaNone, rtaLeft, rtaCenter, rtaRight);
+  TTyRtVAlign = (rtvNone, rtvTop, rtvMiddle, rtvBottom);
+  TTyRtWidthKind = (rtwNone, rtwNumber, rtwPercent, rtwAuto);
+  TTyRtOverflow = (rtoNone, rtoTruncate, rtoBreak, rtoBreakAll);
+
+  { ONE STYLE as zrender holds it after normalizeTextStyle. `Has` flags
+    are JavaScript's `'x' in style`, which is what the fill and stroke
+    fallbacks ask; a colour that is 'none'/'transparent' is Has with None. }
+  TTyRtStyle = record
+    FontFamily: string;
+    FontSizePx: Double;
+    FontWeight: Integer;
+    FontItalic: Boolean;
+    HasFill, FillNone: Boolean;
+    Fill: TTyChartColor;
+    HasStroke, StrokeNone: Boolean;
+    Stroke: TTyChartColor;
+    HasLineWidth: Boolean;
+    LineWidth: Double;
+    Align: TTyRtAlign;
+    VAlign: TTyRtVAlign;
+    HasLineHeight: Boolean;
+    LineHeight: Double;
+    WidthKind: TTyRtWidthKind;
+    Width: Double;          // px, or the percentage for rtwPercent
+    HasHeight: Boolean;
+    Height: Double;
+    HasPadding: Boolean;
+    Padding: array[0..3] of Double;   // top, right, bottom, left
+    HasBackground: Boolean;
+    Background: TTyChartColor;
+    HasBorderColor: Boolean;
+    BorderColor: TTyChartColor;
+    BorderWidth: Double;
+    Radius: array[0..3] of Double;
+    HasOpacity: Boolean;
+    Opacity: Double;
+    Overflow: TTyRtOverflow;
+    LineOverflowTruncate: Boolean;
+    HasEllipsis: Boolean;
+    Ellipsis: string;
+    MinChar: Integer;
+    { the text shadow: a part of 0 is none, as zrender's `||` reads it }
+    ShadowColor: TTyChartColor;
+    HasShadowColor: Boolean;
+    ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    { WHICH FONT PARTS THE STYLE NAMED ITSELF. A rich style's missing parts
+      are filled from the block's font (or the global one, with
+      richInheritPlainLabel off) by TyRtFinish, once the site knows the
+      font it draws the block in; the engine reads only the four values.
+      [Batch 86] }
+    OwnFontFamily, OwnFontSize, OwnFontWeight: Boolean;
+    { `'inherit'` (or `'auto'`) colours, and a free text's "no colour at all
+      takes the inherit colour" -- bound by TyRtFinish to the site's inherit
+      colour (a bar's visual colour, a legend item's), or dropped when there
+      is none. The engine never sees them set. [Batch 86] }
+    FillInherit, StrokeInherit, BackgroundInherit, BorderColorInherit: Boolean;
+  end;
+
+  TTyRtNamedStyle = record
+    Name: string;
+    Style: TTyRtStyle;
+  end;
+  TTyRtRich = array of TTyRtNamedStyle;
+
+  { What the host hands the text: Element.updateInnerText's defaults. }
+  TTyRtDefault = record
+    HasFill: Boolean;
+    Fill: TTyChartColor;
+    HasStroke: Boolean;
+    Stroke: TTyChartColor;
+    AutoStroke: Boolean;
+    Align: TTyRtAlign;
+    VAlign: TTyRtVAlign;
+  end;
+
+  TTyRtPieceKind = (rpkRect, rpkText);
+  TTyRtPiece = record
+    Kind: TTyRtPieceKind;
+    { -1: the block; else the token, as (line, index in the line) }
+    Line, Token: Integer;
+    X, Y, W, H: Double;        // a rect's box; a text's anchor in X, Y
+    Drawn: Boolean;            // a rect with no fill and no stroke is not
+    HasFill: Boolean;
+    Fill: TTyChartColor;
+    HasStroke: Boolean;
+    Stroke: TTyChartColor;
+    LineWidth: Double;
+    StrokeFirst: Boolean;
+    Radius: array[0..3] of Double;
+    Opacity: Double;
+    Text: string;
+    TextAlign: TTyRtAlign;     // left/center/right; the baseline is middle
+    FontFamily: string;
+    FontSizePx: Double;
+    FontWeight: Integer;
+    HasShadow: Boolean;
+    ShadowColor: TTyChartColor;
+    ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    { A TEXT'S FILL OR STROKE THAT CAME FROM THE HOST'S DEFAULT (zrender's
+      useDefaultFill, and the auto stroke), not from a style: what a hover
+      re-inks, and what a free text whose ink is the skin's takes at paint
+      time. [Batch 86] }
+    DefaultFill, DefaultStroke: Boolean;
+  end;
+  TTyRtPieceArray = array of TTyRtPiece;
+
+
+  { A TEXT'S STYLE AS THE SITE HOLDS IT BEFORE LAYOUT: zrender's block style
+    and its rich styles, resolved from the option by AdvChart.RichStyle.
+    Needed says the text takes the block path at all -- it is rich, or it
+    has a box, a size or an overflow the plain caption cannot draw; a text
+    without any of them keeps the one-run caption it always had. [Batch 86] }
+  TTyRtBlockStyle = record
+    Needed: Boolean;
+    IsRich: Boolean;
+    { richInheritPlainLabel as resolved: whether a rich style's missing font
+      parts come from the block's font or from the global one }
+    InheritPlain: Boolean;
+    Style: TTyRtStyle;
+    Rich: TTyRtRich;
+  end;
+
+  { THE ROOT'S SIDE OF A TEXT STYLE: ecModel.option.textStyle and the root
+    richInheritPlainLabel, as values. Font is the chart's global text font --
+    the skin's label font with the root textStyle over it -- which a rich
+    style takes its missing parts from when it does not inherit the plain
+    label's. [Batch 86] }
+  TTyRtGlobal = record
+    FontFamily: string;
+    FontSizeLogical, FontWeight: Integer;
+    HasColour: Boolean;
+    Colour: TTyChartColor;
+    HasStroke, StrokeNone: Boolean;
+    Stroke: TTyChartColor;
+    HasLineWidth: Boolean;
+    LineWidth: Double;
+    HasOpacity: Boolean;
+    Opacity: Double;
+    HasShadowColor: Boolean;
+    ShadowColor: TTyChartColor;
+    ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    { the root wrote richInheritPlainLabel: false -- the zero value is
+      upstream's default, on }
+    InheritPlainOff: Boolean;
+  end;
+
+  { A LAID-OUT BLOCK AND WHERE IT HANGS: the pieces in the text's own frame
+    (CSS px), the anchor in device px, the turn (counter-clockwise, as the
+    painter's), and device px per piece px. A piece at (lx, ly) lands at
+    TyRtPoint. [Batch 86] }
+  TTyRtDrawn = record
+    Pieces: TTyRtPieceArray;
+    X, Y, RotationRad, Scale: Double;
+  end;
+
   { WORDS ON A MARK, and -- once the label pass has placed them -- everything
     needed to draw them.
 
@@ -213,6 +371,14 @@ type
       bar's target rect. Its ink is chosen as over a transparent fill, not as
       over no fill at all. }
     HostTransparent: Boolean;
+    { THE BLOCK, when the label's style needed one (rich, a box, a size, an
+      overflow): the pieces zrender would paint, in the caption's own frame
+      about (X, Y) turned by RotationRad, in CSS px -- RtScale device px
+      each. Empty is the one-run caption above. RtEmph is the same block in
+      the hover's ink, where HasEmph. [Batch 86] }
+    RtPieces: TTyRtPieceArray;
+    RtEmph: TTyRtPieceArray;
+    RtScale: Double;
   end;
 
   TTyChartElement = record
@@ -324,6 +490,12 @@ function TyChartStyle: TTyChartElementStyle;
   otherwise -- so a decoration that forgets to set Silent is at worst inert,
   never a thing that steals hovers from the data. }
 function TyChartElement(const AShape: TTyChartShape): TTyChartElement;
+
+{ WHERE A PIECE'S POINT (ALX, ALY) LANDS: the anchor plus the point scaled
+  and turned counter-clockwise -- zrender's Text transform, as every child
+  of the text shares it. [Batch 86] }
+procedure TyRtPoint(AX, AY, ARotationRad, AScale, ALX, ALY: Double;
+  out AGX, AGY: Double);
 
 { The one colour a gradient degrades to where only one will do -- a legend
   swatch, a tooltip marker. Upstream's own rule: the FIRST stop, not an
@@ -469,6 +641,22 @@ begin
   Result.Silent := True;
   Result.HitSlopLogical := 0;
   Result.Datum := TyChartNoDatum;
+end;
+
+procedure TyRtPoint(AX, AY, ARotationRad, AScale, ALX, ALY: Double;
+  out AGX, AGY: Double);
+var c, s: Double;
+begin
+  if ARotationRad = 0 then
+  begin
+    AGX := AX + ALX * AScale;
+    AGY := AY + ALY * AScale;
+    Exit;
+  end;
+  c := Cos(ARotationRad);
+  s := Sin(ARotationRad);
+  AGX := AX + (ALX * c + ALY * s) * AScale;
+  AGY := AY + (ALY * c - ALX * s) * AScale;
 end;
 
 { ============================ TTyPaintList ============================ }

@@ -104,6 +104,11 @@ type
     Name: string;
     SizeLogical: Integer;
     Weight: Integer;
+    { THE ITEMS' TEXT BLOCK: legend.textStyle's `rich`, box and size, and the
+      root's side -- the words (legend.formatter's) are laid out as the block
+      and measured as one [Batch 86] }
+    Rt: TTyRtBlockStyle;
+    RtGlobal: TTyRtGlobal;
   end;
 
   { One row of `legend.data`, or one name the chart offered when there is no
@@ -376,11 +381,11 @@ function TyLayoutLegend(const ASpec: TTyLegendSpec;
 function TyBuildLegendMarks(const ASpec: TTyLegendSpec;
   const ALayout: TTyLegendLayout; const AInk: TTyLegendInk;
   const AFont: TTyLegendFont; APPI: Integer; AList: TTyPaintList;
-  ALegendIndex: Integer = -1): Integer;
+  ALegendIndex: Integer = -1; const AMeasurer: ITyTextMeasurer = nil): Integer;
 
 implementation
 
-uses tyControls.AdvChart.Handlers;
+uses tyControls.AdvChart.Handlers, tyControls.AdvChart.RichStyle;
 
 const
   { LegendModel.defaultOption, LegendModel.ts:450-539. `bottom` is
@@ -1141,6 +1146,8 @@ var
   iconR, textR: TTyRectF;
   textX, ox, oy, mainW, mainH: Double;
   drawn: Integer;
+  boxM: ITyTextBoxMeasurer;
+  tb: TTyRectF;
 begin
   Result := Default(TTyLegendLayout);
   if not ASpec.Show then Exit;
@@ -1243,6 +1250,16 @@ begin
       textR := TyRectF(textX - it.TextW, ih / 2 - it.TextH / 2,
                        textX, ih / 2 + it.TextH / 2);
     end;
+    { A BLOCK'S BOX WHERE IT SITS: a bordered token overhangs the anchor by
+      half its stroke, and the overhang on the icon's side is inside the
+      item's group already (LegendView.ts _createItem: the group's bounds) }
+    if Supports(AMeasurer, ITyTextBoxMeasurer, boxM) then
+    begin
+      tb := boxM.MeasureBox(it.Text, AFont.Name, AFont.SizeLogical, AFont.Weight,
+        it.AnchorH, tavMiddle);
+      textR := TyRectF(textX + tb.Left, ih / 2 + tb.Top, textX + tb.Right,
+        ih / 2 + tb.Bottom);
+    end;
     it.TextX := textX;
     it.TextY := ih / 2;
 
@@ -1307,8 +1324,11 @@ end;
 function TyBuildLegendMarks(const ASpec: TTyLegendSpec;
   const ALayout: TTyLegendLayout; const AInk: TTyLegendInk;
   const AFont: TTyLegendFont; APPI: Integer; AList: TTyPaintList;
-  ALegendIndex: Integer): Integer;
+  ALegendIndex: Integer; const AMeasurer: ITyTextMeasurer): Integer;
 var
+  rtb: TTyRtBlockStyle;
+  pieces: TTyRtPieceArray;
+  rtScale: Double;
   i: Integer;
   scale: Double;
   el: TTyChartElement;
@@ -1480,6 +1500,27 @@ begin
       el.Caption.Y := it.TextY;
       el.Caption.AnchorH := it.AnchorH;
       el.Caption.AnchorV := tavMiddle;
+      { THE BLOCK: the item's ink is its fixed fill and the inherit colour a
+        rich style without a colour takes (LegendView.ts:470-480) [Batch 86] }
+      if AFont.Rt.Needed and (AMeasurer <> nil) then
+      begin
+        if APPI > 0 then rtScale := APPI / 96 else rtScale := 1;
+        rtb := AFont.Rt;
+        TyRtFinish(rtb, AFont.Name, AFont.SizeLogical, AFont.Weight,
+          AFont.RtGlobal, True, el.Caption.Colour);
+        rtb.Style.HasFill := True;
+        rtb.Style.FillNone := False;
+        rtb.Style.Fill := el.Caption.Colour;
+        pieces := TyRtLay(it.Text, rtb, TyRtDefaultOf(False, 0, False, 0, False,
+          it.AnchorH, tavMiddle), rtScale, AMeasurer);
+        if Length(pieces) > 0 then
+        begin
+          el.Caption.RtPieces := pieces;
+          el.Caption.RtScale := rtScale;
+          el.Shape := TyShapeRect(TyRtDeviceBox(pieces, it.TextX, it.TextY, 0,
+            rtScale));
+        end;
+      end;
       AList.Add(el);
       Inc(Result);
     end;

@@ -29,72 +29,10 @@ uses
   SysUtils, Math,
   tyControls.AdvChart.Types, tyControls.AdvChart.Paint;
 
+{ THE STYLE, DEFAULT AND PIECE RECORDS LIVE IN AdvChart.Paint [Batch 86]: a
+  caption carries its laid-out pieces from the label pass to the renderer,
+  and the paint list is the layer both of them see. }
 type
-  TTyRtAlign = (rtaNone, rtaLeft, rtaCenter, rtaRight);
-  TTyRtVAlign = (rtvNone, rtvTop, rtvMiddle, rtvBottom);
-  TTyRtWidthKind = (rtwNone, rtwNumber, rtwPercent, rtwAuto);
-  TTyRtOverflow = (rtoNone, rtoTruncate, rtoBreak, rtoBreakAll);
-
-  { ONE STYLE as zrender holds it after normalizeTextStyle. `Has` flags
-    are JavaScript's `'x' in style`, which is what the fill and stroke
-    fallbacks ask; a colour that is 'none'/'transparent' is Has with None. }
-  TTyRtStyle = record
-    FontFamily: string;
-    FontSizePx: Double;
-    FontWeight: Integer;
-    FontItalic: Boolean;
-    HasFill, FillNone: Boolean;
-    Fill: TTyChartColor;
-    HasStroke, StrokeNone: Boolean;
-    Stroke: TTyChartColor;
-    HasLineWidth: Boolean;
-    LineWidth: Double;
-    Align: TTyRtAlign;
-    VAlign: TTyRtVAlign;
-    HasLineHeight: Boolean;
-    LineHeight: Double;
-    WidthKind: TTyRtWidthKind;
-    Width: Double;          // px, or the percentage for rtwPercent
-    HasHeight: Boolean;
-    Height: Double;
-    HasPadding: Boolean;
-    Padding: array[0..3] of Double;   // top, right, bottom, left
-    HasBackground: Boolean;
-    Background: TTyChartColor;
-    HasBorderColor: Boolean;
-    BorderColor: TTyChartColor;
-    BorderWidth: Double;
-    Radius: array[0..3] of Double;
-    HasOpacity: Boolean;
-    Opacity: Double;
-    Overflow: TTyRtOverflow;
-    LineOverflowTruncate: Boolean;
-    HasEllipsis: Boolean;
-    Ellipsis: string;
-    MinChar: Integer;
-    { the text shadow: a part of 0 is none, as zrender's `||` reads it }
-    ShadowColor: TTyChartColor;
-    HasShadowColor: Boolean;
-    ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
-  end;
-
-  TTyRtNamedStyle = record
-    Name: string;
-    Style: TTyRtStyle;
-  end;
-  TTyRtRich = array of TTyRtNamedStyle;
-
-  { What the host hands the text: Element.updateInnerText's defaults. }
-  TTyRtDefault = record
-    HasFill: Boolean;
-    Fill: TTyChartColor;
-    HasStroke: Boolean;
-    Stroke: TTyChartColor;
-    AutoStroke: Boolean;
-    Align: TTyRtAlign;
-    VAlign: TTyRtVAlign;
-  end;
-
   TTyRtToken = record
     StyleIndex: Integer;       // into the rich list; -1 the block style
     StyleName: string;
@@ -121,32 +59,6 @@ type
     Width, Height, ContentWidth, ContentHeight, OuterWidth, OuterHeight: Double;
     IsTruncated: Boolean;
   end;
-
-  TTyRtPieceKind = (rpkRect, rpkText);
-  TTyRtPiece = record
-    Kind: TTyRtPieceKind;
-    { -1: the block; else the token, as (line, index in the line) }
-    Line, Token: Integer;
-    X, Y, W, H: Double;        // a rect's box; a text's anchor in X, Y
-    Drawn: Boolean;            // a rect with no fill and no stroke is not
-    HasFill: Boolean;
-    Fill: TTyChartColor;
-    HasStroke: Boolean;
-    Stroke: TTyChartColor;
-    LineWidth: Double;
-    StrokeFirst: Boolean;
-    Radius: array[0..3] of Double;
-    Opacity: Double;
-    Text: string;
-    TextAlign: TTyRtAlign;     // left/center/right; the baseline is middle
-    FontFamily: string;
-    FontSizePx: Double;
-    FontWeight: Integer;
-    HasShadow: Boolean;
-    ShadowColor: TTyChartColor;
-    ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
-  end;
-  TTyRtPieceArray = array of TTyRtPiece;
 
   TTyRtResult = record
     Block: TTyRtBlock;
@@ -807,6 +719,9 @@ var
     p.FontFamily := tk.FontFamily;
     p.FontSizePx := tk.FontSizePx;
     p.FontWeight := tk.FontWeight;
+    { the TSpan's own box: its content, hung by its alignment }
+    p.W := tk.ContentWidth;
+    p.H := tk.ContentHeight;
     useDefaultFill := False;
     if found and ts.HasFill then
     begin
@@ -824,6 +739,7 @@ var
       p.HasFill := ADefault.HasFill;
       p.Fill := ADefault.Fill;
     end;
+    p.DefaultFill := useDefaultFill;
     if found and ts.HasStroke then
     begin
       p.HasStroke := not ts.StrokeNone;
@@ -839,6 +755,7 @@ var
     begin
       p.HasStroke := True;
       p.Stroke := ADefault.Stroke;
+      p.DefaultStroke := True;
     end;
     if p.HasStroke then
     begin
@@ -865,15 +782,16 @@ var
   procedure PlainLayout;
   var
     lines: TStringArray;
-    lh, contentH, height, width, contentW, textX, textY, bx, by: Double;
+    lh, contentH, height, width, contentW, textX, textY, bx, by, fontH: Double;
     k, keep: Integer;
     cut: TStringArray;
     p: TTyRtPiece;
     useDefaultFill, bgDrawn: Boolean;
     wr: TWrapResult;
   begin
+    fontH := FontHeight(AMeasurer, AStyle.FontFamily, AStyle.FontSizePx, AStyle.FontWeight);
     if AStyle.HasLineHeight then lh := AStyle.LineHeight
-    else lh := FontHeight(AMeasurer, AStyle.FontFamily, AStyle.FontSizePx, AStyle.FontWeight);
+    else lh := fontH;
     lines := nil;
     if AText <> '' then
     begin
@@ -967,6 +885,10 @@ var
       p.FontFamily := AStyle.FontFamily;
       p.FontSizePx := AStyle.FontSizePx;
       p.FontWeight := AStyle.FontWeight;
+      { EVERY LINE'S BOX IS THE BLOCK'S WIDEST, one font height tall
+        (Text.ts:658-676) }
+      p.W := contentW;
+      p.H := fontH;
       useDefaultFill := False;
       if AStyle.HasFill then
       begin
@@ -979,6 +901,7 @@ var
         p.HasFill := ADefault.HasFill;
         p.Fill := ADefault.Fill;
       end;
+      p.DefaultFill := useDefaultFill;
       if AStyle.HasStroke then
       begin
         p.HasStroke := not AStyle.StrokeNone;
@@ -989,6 +912,7 @@ var
       begin
         p.HasStroke := True;
         p.Stroke := ADefault.Stroke;
+        p.DefaultStroke := True;
       end;
       if p.HasStroke then
       begin

@@ -69,6 +69,12 @@ type
     InkLineWidth, InkOpacity: Double;
     Z2: Double;
     Silent: Boolean;
+    { THE TEXT BLOCK, when the label's style needs one: its styles over the
+      label levels, the inherit colour, and device px per css px [Batch 86] }
+    Rt: TTyRtBlockStyle;
+    RtHasInherit: Boolean;
+    RtInherit: TTyChartColor;
+    RtScale: Double;
   end;
 
   TTyMkLinePic = record
@@ -109,6 +115,8 @@ type
     IsDark: Boolean;
     { device px per css px }
     Scale: Double;
+    { the root's side of a text block [Batch 86] }
+    RtGlobal: TTyRtGlobal;
   end;
 
 { the global text style's defaults (globalDefault.ts): 12 px, normal, and
@@ -133,6 +141,8 @@ type
     Text, Halo: TTyChartColor;
     { the inside ink over a light, a mid and a dark fill }
     Inside: array[0..2] of TTyChartColor;
+    { the global font a rich style that does not inherit takes [Batch 86] }
+    RtGlobal: TTyRtGlobal;
   end;
 
 { the paint-list elements of a series' markLines: segment, symbols, label.
@@ -150,7 +160,8 @@ type
       dimension) }
     HasText: Boolean;
     Text: string;
-    { rich text is not drawn: the words are kept, no ink }
+    { rich text has no one-run ink (HasInk False, Lines -1): it is drawn as
+      its block, Rt below [Batch 86: it was not drawn at all] }
     Rich: Boolean;
     Lines: Integer;
     Position: TJSONData;
@@ -174,6 +185,12 @@ type
     InkLineWidth, InkOpacity: Double;
     Z2: Double;
     Silent: Boolean;
+    { THE TEXT BLOCK, when the label's style needs one: its styles over the
+      label levels, the inherit colour, and device px per css px [Batch 86] }
+    Rt: TTyRtBlockStyle;
+    RtHasInherit: Boolean;
+    RtInherit: TTyChartColor;
+    RtScale: Double;
   end;
 
   TTyMkPointPic = record
@@ -260,7 +277,7 @@ function TyMkZrShape(const APath: TTyZrPath; const M: TTyMat2D;
 
 implementation
 
-uses tyControls.AdvChart.JsMath, tyControls.AdvChart.Scale,
+uses tyControls.AdvChart.RichStyle, tyControls.AdvChart.JsMath, tyControls.AdvChart.Scale,
      tyControls.AdvChart.Data, tyControls.AdvChart.Color, tyControls.AdvChart.Labels,
      tyControls.AdvChart.Handlers, tyControls.AdvChart.Option;
 
@@ -406,6 +423,51 @@ begin
   Result[0] := A;
   Result[1] := B;
   Result[2] := C;
+end;
+
+{ THE LABEL'S TEXT BLOCK over its levels, the most specific object first,
+  when any of them asks for one; AInherit (a css string) is upstream's
+  inheritColor. [Batch 86] }
+procedure MkRt(const LB: TMkLevels; const AIn: TTyMkPicInput;
+  const AInherit: string; AScale: Double; out ART: TTyRtBlockStyle;
+  out AHasInherit: Boolean; out AInherit_: TTyChartColor; out ARtScale: Double);
+var
+  chain: array of TJSONObject;
+  i, k: Integer;
+  any: Boolean;
+begin
+  ART := Default(TTyRtBlockStyle);
+  AInherit_ := 0;
+  AHasInherit := (AInherit <> '') and TyTryParseChartColor(AInherit, AInherit_);
+  ARtScale := AScale;
+  chain := nil;
+  any := False;
+  for i := 0 to High(LB) do
+    for k := 0 to High(LB[i]) do
+      if LB[i][k] <> nil then
+      begin
+        SetLength(chain, Length(chain) + 1);
+        chain[High(chain)] := LB[i][k];
+        if TyRtNodeWantsBlock(LB[i][k]) then any := True;
+      end;
+  if not any then Exit;
+  ART := TyRtResolve(chain, AIn.RtGlobal, TyRtResolveOpt(True));
+end;
+
+{ THE BLOCK'S PIECES for a marker label: its styles in the font the skin
+  and the author give it, the defaults the one-run caption would have been
+  drawn in, hung at the label's anchor. [Batch 86] }
+function MkRtPieces(const ART: TTyRtBlockStyle; const AText, AFontName: string;
+  AFontSize, AWeight: Integer; const AGlobal: TTyRtGlobal; AHasInherit: Boolean;
+  AInherit, ADefFill: TTyChartColor; AHasDefStroke: Boolean;
+  ADefStroke: TTyChartColor; AH: TTyTextAnchorH; AV: TTyTextAnchorV;
+  AScale: Double; const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
+var b: TTyRtBlockStyle;
+begin
+  b := ART;
+  TyRtFinish(b, AFontName, AFontSize, AWeight, AGlobal, AHasInherit, AInherit);
+  Result := TyRtLay(AText, b, TyRtDefaultOf(True, ADefFill, AHasDefStroke,
+    ADefStroke, True, AH, AV), AScale, AMeasurer);
 end;
 
 { ---- ground ---- }
@@ -1129,6 +1191,8 @@ var
     end;
     if IsInfinite(maxZ2) then label_.Z2 := 0 else label_.Z2 := maxZ2 + 2;
     label_.Silent := Truthy(Chain(LB, 'silent'));
+    MkRt(LB, AIn, stroke, s, label_.Rt, label_.RtHasInherit, label_.RtInherit,
+      label_.RtScale);
     P.Lbl := label_;
   end;
 
@@ -1373,8 +1437,10 @@ var
     ah: TTyTextAnchorH;
     av: TTyTextAnchorV;
     fs: Integer;
+    pieces: TTyRtPieceArray;
   begin
-    if (not B.Present) or (not B.HasInk) or (B.Text = '') then Exit;
+    if (not B.Present) or (B.Text = '') then Exit;
+    if not B.HasInk and not B.Rt.Needed then Exit;
     if B.HasTransform then
     begin
       x := B.Transform[4];
@@ -1429,6 +1495,20 @@ var
     el.Caption.AnchorV := av;
     el.Caption.RotationRad := B.InnerRotation;
     if not B.HasTransform then el.Caption.RotationRad := 0;
+    { THE BLOCK, in the skin's outside ink and halo where the style gives
+      none [Batch 86] }
+    if B.Rt.Needed then
+    begin
+      pieces := MkRtPieces(B.Rt, B.Text, el.Caption.FontName,
+        el.Caption.FontSizeLogical, el.Caption.FontWeight, AInk.RtGlobal,
+        B.RtHasInherit, B.RtInherit, AInk.Text, B.DefStroke <> '', AInk.Halo,
+        ah, av, B.RtScale, AMeasurer);
+      if Length(pieces) = 0 then Exit;
+      el.Caption.RtPieces := pieces;
+      el.Caption.RtScale := B.RtScale;
+      el.Shape := TyShapeRect(TyRtDeviceBox(pieces, x, y,
+        el.Caption.RotationRad, B.RtScale));
+    end;
     AList.Add(el);
     Inc(Result);
   end;
@@ -1839,6 +1919,8 @@ begin
     end;
     if IsInfinite(AMaxZ2) then lp.Z2 := 0 else lp.Z2 := AMaxZ2 + 2;
     lp.Silent := Truthy(Chain(LB, 'silent'));
+    MkRt(LB, AIn, AInherit, AScale, lp.Rt, lp.RtHasInherit, lp.RtInherit,
+      lp.RtScale);
 end;
 
 function TyMkPointPictures(const ABlock: TTyMkBlock; const AIn: TTyMkPicInput;
@@ -2115,7 +2197,10 @@ function EmitLabel(const B: TTyMkPtLabelPic; const ABlock: TTyMkBlock;
 var
   fs: Integer;
   el: TTyChartElement;
-  c: TTyChartColor;
+  c, defFill, defStroke: TTyChartColor;
+  hasDefStroke: Boolean;
+  pieces: TTyRtPieceArray;
+  AGlobal: TTyRtGlobal;
   x, y, w, h: Double;
   ah: TTyTextAnchorH;
   av: TTyTextAnchorV;
@@ -2134,7 +2219,11 @@ var
 
 begin
   Result := 0;
-  if (not B.Present) or (not B.HasInk) or (B.Text = '') then Exit;
+  AGlobal := AInk.RtGlobal;
+  defStroke := 0;
+  if (not B.Present) or (B.Text = '') then Exit;
+  { a rich label has no one-run ink and is drawn as its block [Batch 86] }
+  if not B.HasInk and not B.Rt.Needed then Exit;
   if IsNan(B.InnerX) or IsNan(B.InnerY) then Exit;
     if B.HasTransform then
     begin
@@ -2203,6 +2292,34 @@ begin
     el.Caption.AnchorH := ah;
     el.Caption.AnchorV := av;
     if B.HasTransform then el.Caption.RotationRad := B.InnerRotation;
+    { THE BLOCK, in the ink the one-run caption would have had where the
+      style gives none: the band's inside (the host's fill as its halo),
+      the skin's outside ink and halo otherwise [Batch 86] }
+    if B.Rt.Needed then
+    begin
+      if B.Inside then
+      begin
+        if B.DefFill = '#333' then defFill := AInk.Inside[0]
+        else if B.DefFill = '#eee' then defFill := AInk.Inside[1]
+        else defFill := AInk.Inside[2];
+        hasDefStroke := Colour(B.DefStroke, defStroke);
+      end
+      else
+      begin
+        defFill := AInk.Text;
+        hasDefStroke := B.DefStroke <> '';
+        defStroke := AInk.Halo;
+      end;
+      pieces := MkRtPieces(B.Rt, B.Text, el.Caption.FontName,
+        el.Caption.FontSizeLogical, el.Caption.FontWeight, AGlobal,
+        B.RtHasInherit, B.RtInherit, defFill, hasDefStroke, defStroke,
+        ah, av, B.RtScale, AMeasurer);
+      if Length(pieces) = 0 then Exit;
+      el.Caption.RtPieces := pieces;
+      el.Caption.RtScale := B.RtScale;
+      el.Shape := TyShapeRect(TyRtDeviceBox(pieces, x, y,
+        el.Caption.RotationRad, B.RtScale));
+    end;
   AList.Add(el);
   Result := 1;
 end;

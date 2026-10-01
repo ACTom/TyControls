@@ -173,6 +173,8 @@ function TyPieBleedMargin(const AViewRect: TTyRectF): Double;
 
 implementation
 
+uses tyControls.AdvChart.RichStyle;
+
 const
   cRadian = Pi / 180;
   { The fixed nudge along the slice's own normal, applied to inside AND outer
@@ -304,6 +306,8 @@ begin
 
   node := ObjOf(series.Find('label'));
   TyLabelReadInk(node, series, Result.Ink);
+  { its text block [Batch 86] }
+  TyLabelReadBlock(node, AOption.Root, Result.Ink);
   if node <> nil then
   begin
     d := node.Find('show');
@@ -661,6 +665,25 @@ begin
       strokeW);
     TyLabelStampEmphasis(lbl, fill, True, False, ASpec.Position = tplInside,
       el.Caption);
+    { THE BLOCK, where the label's style needs one: laid out about the place
+      the pie gave it, 'inherit' the slice's colour [Batch 86] }
+    if lbl.Rt.Needed then
+    begin
+      lbl.FontName := AInk.FontName;
+      lbl.FontSizeLogical := AInk.FontSizeLogical;
+      lbl.FontWeight := AInk.FontWeight;
+      el.Caption.RtScale := APPI / 96;
+      el.Caption.RtPieces := TyLabelBlockPieces(lbl, words, fill, True, False,
+        ASpec.Position = tplInside, place.AnchorH, tavMiddle, el.Caption.RtScale,
+        AMeasurer);
+      if Length(el.Caption.RtPieces) > 0 then
+      begin
+        el.Shape := TyShapeRect(TyRtDeviceBox(el.Caption.RtPieces, place.X,
+          place.Y, place.RotationRad, el.Caption.RtScale));
+        el.Caption.RtEmph := TyRtReink(el.Caption.RtPieces, el.Caption.EmphColour,
+          True, el.Caption.EmphStrokeColour, el.Caption.EmphStrokeWidthLogical);
+      end;
+    end;
     el.Caption.Colour := ink;
     el.Caption.StrokeColour := stroke;
     el.Caption.StrokeWidthLogical := strokeW;

@@ -8445,3 +8445,57 @@ FPC 3.2.2 的 jsonreader 每进一层数组或对象就递归一次,几十万层
 - 图片背景(`backgroundColor: {image}`)与图片宽高比没做。
 - `fontStyle`(italic)画家画不出。
 - 盒子的阴影(`shadowBlur` 等)只随样式带着,引擎不出部件。
+
+## 121. Tier 1 第八十六批:富文本与文字盒子接到各处(A5,2026-10-01)
+
+A4 做了引擎,这一批把它接上:`rich`、背景框、边框、圆角、padding、width/height、overflow、lineHeight、文字阴影,在系列标签、标注、轴标签与轴名、标题、图例、仪表盘读数上按 zrender 的部件画出来。
+
+### 上游的做法(`labelStyle.ts` setTextStyleCommon / setTokenTextStyle,`wf85/rich.md` §7)
+
+- rich 名字是模型链上所有 `rich` 键的并集;每个 rich 样式也沿同一条链级联(条目的 `label.rich.a` 盖在系列的上面)。
+- rich 样式的字体四项和文字阴影:自己的 → 普通标签的(`richInheritPlainLabel`,不写就是开)→ 全局 textStyle。关掉继承时回落到全局,也就是 12px normal,不是标签自己的字号。
+- align、lineHeight、width、height、verticalAlign(baseline)、ellipsis 只认自己的;padding、边框、圆角、背景也只认自己的,标题的块级盒子被禁掉(rich 的不禁)。
+- 颜色:`'inherit'` 是站点给的 inheritColor(柱/符号的视觉色、图例项的文字色、仪表盘的自动色);**独立文字**的 rich 没写颜色时先取根 textStyle.color,再取 inheritColor;挂在图形上的标签从来不取。所以根颜色在独立文字的 rich 片段里压过组件自己的颜色,普通部分仍是组件色。
+- 组件固定写进去的样式(轴标签的 fill/对齐、标题的 fill、图例的 x/y/fill)只盖块,不盖 rich。
+
+### 做法
+
+- **类型挪到 `AdvChart.Paint`**:`TTyRtStyle`、`TTyRtDefault`、`TTyRtPiece` 等从 RichText 挪过来——caption 要把这些部件从标签阶段带到渲染。新增 `TTyRtBlockStyle`(站点手里的样式:`Needed`、`IsRich`、块样式、rich 样式)、`TTyRtGlobal`(根 textStyle 与 `richInheritPlainLabel` 的值,零值就是上游默认)、`TTyRtDrawn`、`TyRtPoint`(片段点落到画布:锚点加缩放加逆时针旋转)。样式多了「自己写了哪几项字体」和四个 inherit 标记;部件多了 `DefaultFill`/`DefaultStroke`(颜色来自宿主默认——悬停换色、独立文字在绘制时取皮肤色都靠它)。`TTyElementCaption` 多 `RtPieces`/`RtEmph`/`RtScale`。
+- **新单元 `tyControls.AdvChart.RichStyle`**(纯,已进 `.lpk`):`TyRtResolve`(上面那套规则)、`TyRtFinish`(站点知道画块用的字体和 inheritColor 以后补齐 rich 缺的字体项、绑定 inherit)、`TyRtLay`(按缩放布局,量字器是设备 px,样式数值是 CSS px)、`TyRtBounds`/`TyRtDeviceBox`(zrender 的 getBoundingRect:所有子元素的并集,不画的行高矩形也算,描边矩形按画出的线宽外扩;~~无填充时至少 4~~——第二轮变异推翻:zrender 给文字盒子的矩形设了 `strokeContainThreshold = 0`,没有这个下限;另外作者给的文字描边也把那一片的框外扩,自动描边不算)、`TyRtReink`、`TyRtBlockMeasurer`(把块的尺寸当作文字尺寸答回去的量字器——轴的间隔与留白、图例的行、标题两行的高度都量块而不是量标记)。
+- **什么时候走块**:rich,或有 padding、背景、有宽度的边框、width、height、lineHeight、文字阴影(没有宽度的 overflow、没有高度的 lineOverflow 在 zrender 里也不起作用,不算)。都没有的文字保持原来的一段字——测试断言整个 fixture 里只有两段文字是一段字(仪表盘的普通标题、盒子被禁的标题)。
+- **系列标签**:`TTyLabelSpec` 带上 `Rt`、`RtGlobal` 和读出它的标签节点链(存成 JSON 文本——spec 比选项活得久);`TyLabelSpecOfNode` 每级都把节点接到链头、有需要时重新解析,所以条目、层级的 rich 沿链级联。展开时 `TyLabelBlockPieces`:块用标签字体,inherit 绑宿主填充,默认墨色/光晕取 `TyLabelInk` 对「没写颜色」时的答案,对齐取位置给的;形状是块的设备框。饼图、漏斗自己摆标签,也走同一个函数。悬停时 `TyCaptionToEmphasis` 换墨色也换部件(三处悬停都改用它)。
+- **标注**:markPoint/markArea 在 `StyleLabel`、markLine 在自己的标签里按层级链解析;默认墨色是一段字本来会用的那个(内侧三档、外侧皮肤色与地色光晕)。
+- **轴**:Builder 解析 `axisLabel`、`nameTextStyle`(轴名的 width/overflow 是 AxisBuilder 定死的 `truncate` + nameTruncate.maxWidth,nameTextStyle 写的不算——已有的 axisnames 基准守着这条),spec 带 `LabelRt`/`NameRt` 和两个量字器(Layout 所有量标签、量轴名的地方都经它们);放置完成后给每个显示的标签和轴名算部件。块的填充是作者色,没写时留空,画轴时由皮肤色补上。
+- **标题**:两行各自解析(`DisableBox`),`TyLayoutTitle` 多两个可选量字器,副标题的位置按块高;部件存 `FTitleRt`,`TitleRt` 给测试。
+- **图例**:`legend.textStyle` 解析进 `TTyLegendFont`;布局用块量字器;项的颜色既是块的 fill 也是 inheritColor。
+- **仪表盘**:读数/标题节点写了 `rich` 才走块,块样式叠在上游读数默认值(width 100、lineHeight 30、padding [5,10]、透明底)上;底板就是块自己的矩形;`TyGaugeFormat` 多 `AKeepRich`,保留标记。
+- **渲染** `TyRenderRtPieces`:矩形按 zrender 的 roundRect 夹圆角,既有填充又有边框时先描边;文字逐片段按旋转画,描边照一段字的做法做膨胀;阴影只画偏移的一份(画家没有文字模糊);没有模糊时不画——zrender 只在 `textShadowBlur > 0` 时才给 TSpan 设阴影(第二轮变异补)。
+
+### 基准
+
+- `test.advchart.richwiring`:fixture 的 74 个用例(第二轮后 79 个)全部经真控件(SSR 量字)画一遍,按组件、所属、文字找到端口的那段字,逐部件比:种类、画布上的位置(文字的点、矩形四角,1e-6)、尺寸、文字、对齐、字号字重、填充、描边与线宽、先描边、四角半径、是否画出。皮肤决定的不比:默认墨色与光晕、组件色、`inherit` 指到的调色板颜色只要求有;块字体由皮肤决定的(标题 18px bold 对皮肤 12)不比几何和继承来的字号,作者写的照比。另有:一段字标签不产生部件、带背景的产生;悬停只换默认墨色的片段;块标签的形状就是部件的设备框;containLabel 下 y 轴标签的 padding 真的让出网格。
+- 首轮 16 处不对,两个真缺陷:皮肤没写字重时全局字重是 0(关掉继承的 rich 片段字重成 0);块量字器没绑 inherit,图例 `backgroundColor: 'inherit'` 的片段量出来没有矩形,图例整体窄了 6px。全量套件又抓到一个:轴名吃了 nameTextStyle 的 width。
+- 另有:条目 rich 沿系列级联、经层级(旭日图)级联;根颜色进独立文字的 rich 片段而不进块;144 DPI 下部件仍是 CSS px(量字器按 DPI 答);饼图、漏斗标签成块(`inherit` 是扇区色)。
+
+### 变异测试
+
+18 个变异(继承开关、独立文字的根颜色、标题禁盒、rich 级联、块量字器的 inherit、DPI 缩放、标签 inherit、标签框取字的框、换墨不看默认标记、标注不解析、轴标签量字器、标题量字器、图例 inherit、仪表盘剥标记、条目链不级联、轴名 width、引擎默认标记、轴块填充取解析值)。首轮存活 5 个,都是基准缺用例:rich 级联与条目链(补了条目、层级两个用例)、DPI(补了 144 的用例)、轴名 width(axisnames 基准本来就杀,首轮只跑了本测试)、轴块填充(补了根颜色的用例)。补完全部杀死。
+
+第二轮 21 个变异存活 7 个,逐个处理:
+
+- **关掉继承的 rich 片段仍取普通标签的阴影**:片段本来就带阴影,基准没比。补上逐片段比阴影(有没有、模糊、偏移、颜色),加 `rich-inherit-off-shadow`。光有「标签写阴影 + 关继承 + 片段不写」杀不掉——片段缺的项在 zrender 里回落到块的阴影,块的就是标签的——所以用例里根 textStyle 也写了阴影颜色和偏移:上游片段取根的颜色和偏移、标签的模糊。
+- **`'inherit'` 的填充不绑定**:inherit 指到的是皮肤的调色板色,fixture 说不了。补手写测试:柱内标签 `color: 'inherit'` 的片段是控件画柱子用的颜色,没写颜色的片段是默认墨色(白),两者不同。
+- **字重 0 不改 400**:不是等价的。标签、图例、轴标签的皮肤规则都没写 font-weight,解析出来就是 0,站点把 0 交给 `TyRtFinish`。基准原先在块字重和上游不同时跳过字重比较,0 对 normal 于是整片跳过;改成块字重 0 按 400 比,另加手写测试断言皮肤字重是 0、片段是 400。
+- **描边矩形不外扩 / 无填充不取 4**:fixture 每段文字加录上游 Text 自己的 `getBoundingRect`(守卫手算:无填充的 1 宽边框外扩正好 1,有填充的按加倍的 2),测试逐段比端口 `TyRtBounds` 落到画布的四角。一比就查出**两个真缺陷**:「无填充至少 4」是错的(zrender 给文字盒子的矩形设了 `strokeContainThreshold = 0`),删掉;作者写的文字描边要外扩 TSpan 的框,补上。再加两个图例用例(token 只有边框、边框加背景)看站点:图例项的宽是组的并集,图标一侧的外溢被组吞掉,端口按 `W` 量多算了半条线宽,三个项位置全偏。量字器加一个 `ITyTextBoxMeasurer`(块量字器实现,答框相对锚点的位置),图例用它按框的真实左右边组项。原来那个 4 的变异随之改成「把下限加回去」。
+- **悬停不换默认描边**:核了上游,`_placeToken` 片段没有自己的 stroke 时取合并后样式的 `stroke`/`lineWidth`。补手写测试:`emphasis.label.textBorderColor/Width` 下默认描边的片段换成悬停的颜色和宽度,自带描边的保持。顺带发现端口根本不读 `emphasis.label.textBorderColor`(普通标签也一样),补上。
+- **`baseline` 别名**:上游 `setTokenTextStyle` 确实在 verticalAlign 为空时读 `baseline`。加 `rich-baseline-alias`(24px 行里 top/bottom 两个片段),守卫核了位置。
+- 另:加 `plain-shadow-offset-only`(只写偏移不写模糊,上游不设阴影),渲染器照此改成没有模糊不画,并补一个数像素的手写测试。
+
+新加 5 个变异(文字描边不外扩、自动描边也外扩、图例不用框位置、悬停描边色不读、无模糊也画阴影)。这 12 个(原 7 个存活的加 5 个新的)重跑全部杀死。fixture 79 个用例,原 74 个除新增的 `bounds` 外逐字节不变,两次运行一致。
+
+### 已知偏差
+
+- 图例的 `legend.data[i].textStyle`、`emphasis.label.rich` 不读;悬停时 rich 只把默认墨色、默认描边的片段换成悬停的(上游里描边来自块样式、本来没描边的片段也会吃到 `emphasis.label.textBorderColor`,这里不换)。
+- 矩形树图、旭日图、桑基图自己先截断/换行再盖章,rich 标记会被当成字截;没有用例。
+- 漏斗 `color: 'inherit'` 的特殊规则不进块。
+- 仪表盘的 rich 不接根 textStyle;文字阴影不模糊;`fontStyle` 仍画不出。

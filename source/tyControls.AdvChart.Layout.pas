@@ -28,7 +28,8 @@ unit tyControls.AdvChart.Layout;
   the TYPE is, not beside whichever caller wanted it first. }
 interface
 uses SysUtils, Math, fpjson,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Coord;
+     tyControls.AdvChart.Types, tyControls.AdvChart.Coord,
+     tyControls.AdvChart.Paint;
 
 type
   { How one edge or size is expressed. }
@@ -258,6 +259,8 @@ type
       not see the paint layer. }
     HasGlobalColour: Boolean;
     GlobalColour: Cardinal;
+    { the root's side of a label's or a name's text block [Batch 86] }
+    RtGlobal: TTyRtGlobal;
   end;
 
   { One laid-out label, ready to hand to TTyPainter.DrawTextRotated: the anchor
@@ -307,6 +310,9 @@ type
     M: TTyMat2D;
     HasM: Boolean;
     DecRotation: Double;
+    { THE BLOCK, where the labels' style needs one: its pieces about (X, Y),
+      turned as the label is, in CSS px [Batch 86] }
+    Rt: TTyRtPieceArray;
   end;
   TTyAxisLabelPlacementArray = array of TTyAxisLabelPlacement;
 
@@ -382,6 +388,8 @@ type
     Occupied: TTyXYWH;
     { along its own axis: one half for a middle name, none for an end one }
     Proportion: Double;
+    { THE BLOCK, where the name's style needs one [Batch 86] }
+    Rt: TTyRtPieceArray;
   end;
   TTyAxisNamePlacementArray = array of TTyAxisNamePlacement;
   { Everything one axis needs to lay itself out. Pure data: the caller has
@@ -428,6 +436,16 @@ type
       label, shown or not; the renderer draws labels from nowhere else. }
     LabelStep: Integer;
     Placements: TTyAxisLabelPlacementArray;
+    { THE TEXT BLOCKS of the labels (axisLabel's `rich`, box, size) and of
+      the name (nameTextStyle's), resolved by the builder; the root's side;
+      device px per CSS px; and the measurers that answer a block's box,
+      which every measurement of a label or the name goes through -- so the
+      interval, the gutter and the name's room are the block's and not the
+      markup's. Nil meters: the plain measurer. [Batch 86] }
+    LabelRt, NameRt: TTyRtBlockStyle;
+    RtGlobal: TTyRtGlobal;
+    RtScale: Double;
+    LabelMeter, NameMeter: ITyTextMeasurer;
     { WHAT THIS AXIS ACTUALLY DRAWS, resolved by the builder from the option
       and from upstream's per-type defaults. Only the two that cost SPACE are
       here -- the rest are paint-time questions and the renderer asks the
@@ -1192,6 +1210,21 @@ end;
   wants the second, and measuring twice is measurably slower on a chart with
   hundreds of ticks. }
 { The weight label AIndex is drawn in. }
+{ the measurer a label (a name) of ASpec is measured through [Batch 86] }
+function LabelMeterOf(const ASpec: TTyAxisLayoutSpec;
+  const AMeasurer: ITyTextMeasurer): ITyTextMeasurer;
+begin
+  if (ASpec.LabelMeter <> nil) and (AMeasurer <> nil) then Result := ASpec.LabelMeter
+  else Result := AMeasurer;
+end;
+
+function NameMeterOf(const ASpec: TTyAxisLayoutSpec;
+  const AMeasurer: ITyTextMeasurer): ITyTextMeasurer;
+begin
+  if (ASpec.NameMeter <> nil) and (AMeasurer <> nil) then Result := ASpec.NameMeter
+  else Result := AMeasurer;
+end;
+
 function WeightAt(const ASpec: TTyAxisLayoutSpec; AIndex: Integer): Integer;
 begin
   Result := ASpec.FontWeight;
@@ -1209,8 +1242,8 @@ procedure LabelBoxes(const ASpec: TTyAxisLayoutSpec;
   APPI: Integer; out AMargin, ABare: TTyLabelBox);
 var w, h, x0, y0, padH, padV: Double;
 begin
-  AMeasurer.MeasureLine(APlace.Text, ASpec.FontName, ASpec.FontSizeLogical,
-    WeightAt(ASpec, APlace.Index), w, h);
+  LabelMeterOf(ASpec, AMeasurer).MeasureLine(APlace.Text, ASpec.FontName,
+    ASpec.FontSizeLogical, WeightAt(ASpec, APlace.Index), w, h);
   { zrender's adjustTextX / adjustTextY }
   x0 := 0;
   case APlace.AnchorH of
@@ -1295,10 +1328,10 @@ begin
   while i <= n - 1 do
   begin
     { the widest line, and one line's height }
-    AMeasurer.MeasureLine(ASpec.Labels[i], ASpec.FontName,
+    LabelMeterOf(ASpec, AMeasurer).MeasureLine(ASpec.Labels[i], ASpec.FontName,
       ASpec.FontSizeLogical, ASpec.FontWeight, w, h);
-    AMeasurer.MeasureLine(FirstLine(ASpec.Labels[i]), ASpec.FontName,
-      ASpec.FontSizeLogical, ASpec.FontWeight, lw, h);
+    LabelMeterOf(ASpec, AMeasurer).MeasureLine(FirstLine(ASpec.Labels[i]),
+      ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight, lw, h);
     ws[k] := w;
     hs[k] := h;
     Inc(k);
@@ -1329,8 +1362,8 @@ begin
     { MEASURED IN THE WEIGHT IT WILL BE DRAWN IN. Bold is wider, and a label
       measured light and drawn bold is how an axis comes to overlap the one
       thing the measuring was for. }
-    AMeasurer.MeasureLine(ASpec.Labels[i], ASpec.FontName,
-                          ASpec.FontSizeLogical, WeightAt(ASpec, i), w, h);
+    LabelMeterOf(ASpec, AMeasurer).MeasureLine(ASpec.Labels[i], ASpec.FontName,
+      ASpec.FontSizeLogical, WeightAt(ASpec, i), w, h);
     RotatedExtent(w, h, ASpec.RotationRad, rw, rh);
     if horiz then
     begin
@@ -1378,8 +1411,8 @@ begin
     which is what ECharts does and what keeps a long name from eating the plot. }
   if (AContain = obcAll) and (ASpec.Name <> '') and (AMeasurer <> nil) then
   begin
-    AMeasurer.MeasureLine(ASpec.Name, ASpec.FontName,
-                          ASpec.FontSizeLogical, ASpec.FontWeight, nw, nh);
+    NameMeterOf(ASpec, AMeasurer).MeasureLine(ASpec.Name, ASpec.FontName,
+      ASpec.FontSizeLogical, ASpec.FontWeight, nw, nh);
     { An axis name reads along its own axis, so on a vertical axis it is the
       name's HEIGHT that eats width once turned. Measured unrotated and turned
       here rather than asking the caller to pre-rotate it. }
@@ -2074,8 +2107,8 @@ begin
       k := 0;
       while k < n do
       begin
-        AMeasurer.MeasureLine(AAxes[i].Labels[k], AAxes[i].FontName,
-          AAxes[i].FontSizeLogical, AAxes[i].FontWeight, w, h);
+        LabelMeterOf(AAxes[i], AMeasurer).MeasureLine(AAxes[i].Labels[k],
+          AAxes[i].FontName, AAxes[i].FontSizeLogical, AAxes[i].FontWeight, w, h);
         s := TyJsSin(AAxes[i].RotationRad);
         rw := w * c + Abs(h * s);
         rh := w * Abs(s) + Abs(h * TyJsCos(AAxes[i].RotationRad));

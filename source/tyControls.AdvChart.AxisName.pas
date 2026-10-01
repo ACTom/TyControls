@@ -494,7 +494,11 @@ begin
     fontSize := ASpec.FontSizeLogical;
     fontWeight := ASpec.FontWeight;
   end;
-  AMeasurer.MeasureLine(ASpec.Name, fontName, fontSize, fontWeight, w, h);
+  { the name's block, where its style needs one [Batch 86] }
+  if ASpec.NameMeter <> nil then
+    ASpec.NameMeter.MeasureLine(ASpec.Name, fontName, fontSize, fontWeight, w, h)
+  else
+    AMeasurer.MeasureLine(ASpec.Name, fontName, fontSize, fontWeight, w, h);
   x0 := 0;
   case Result.AnchorH of
     tahRight: x0 := x0 - w;

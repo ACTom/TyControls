@@ -313,6 +313,9 @@ type
     FTitleSpecs: array of TTyTitleSpec;
     { each title's two fonts as laid out and drawn [Batch 83] }
     FTitleFonts: array of array[0..1] of TTyTitleFont;
+    { each line's text block, where its style makes it one: the pieces about
+      the line's anchor [Batch 86] }
+    FTitleRt: array of array[0..1] of TTyRtDrawn;
     { Every legend the option carries, in two halves. The ENTRIES and the
       SELECTION need nothing but the option and the stores, so they settle in
       Rebuild; the LAYOUT has to measure the words, so it waits for Relayout
@@ -736,7 +739,8 @@ type
     procedure MultiValueDims(const ABinding: TTySeriesBinding;
       var ADims: TTySeriesDimArray);
     { The legend's elements, into the chart's own paint list. }
-    function BuildLegends(APPI: Integer; AList: TTyPaintList): Integer;
+    function BuildLegends(APPI: Integer; AList: TTyPaintList;
+      const AMeasurer: ITyTextMeasurer): Integer;
     { Every series' elements into FPaintList, and nothing drawn. Separate from
       PaintSeries because the list is the answer to "what is under the pointer"
       as much as it is the instruction for "what to draw", and only one of
@@ -880,6 +884,10 @@ type
       var AColour: TTyChartColor; APick: TTyTextPick);
     procedure GlobalTextOver(var AName: string; var ASize, AWeight: Integer;
       var AHasColour: Boolean; var AColour: Cardinal; APick: TTyTextPick);
+    { THE ROOT'S SIDE OF A TEXT BLOCK: the root textStyle and
+      richInheritPlainLabel, and the chart's global text font -- the skin's
+      label font with the root textStyle's over it [Batch 86] }
+    function RtGlobal: TTyRtGlobal;
     { the styles an axis' labels (plain and emphasised) and name are painted
       in: the theme's, with the family, size, weight and colour the layout
       measured them in -- the author's where written [Batch 83] }
@@ -1143,6 +1151,9 @@ type
     function TitleCount: Integer;
     function TitleLayoutOf(AIndex: Integer): TTyTitleLayout;
     function TitleFontUsed(AIndex, ALine: Integer): TTyTitleFont;
+    { a title line's text block as drawn; no pieces where it is one run
+      [Batch 86] }
+    function TitleRt(AIndex, ALine: Integer): TTyRtDrawn;
   published
     { THE API. Relaxed JSON: unquoted keys, single quotes, trailing commas and
       comments all parse, because that is what an ECharts config in the wild
@@ -1204,7 +1215,8 @@ uses
   tyControls.Controller,
   { Only for the diagnostic resourcestrings -- the same one-way dependency the
     rest of the AdvChart family keeps, invisible to a host. }
-  tyControls.StrConsts;
+  tyControls.StrConsts,
+  tyControls.AdvChart.RichStyle;
 
 { ==================== construction ==================== }
 
@@ -1912,6 +1924,7 @@ begin
     lblHasCol, lblCol, [ttpWeight, ttpFamily]);
   GlobalTextOver(txt.NameFontName, txt.NameFontSizeLogical, txt.NameFontWeight,
     txt.HasGlobalColour, txt.GlobalColour, [ttpSize, ttpWeight, ttpFamily, ttpColour]);
+  txt.RtGlobal := RtGlobal;
   { Measuring goes through the painter behind an interface rather than being
     called directly, so the layout layer stays free of the painter and a test
     can hand it a deterministic measurer instead of this machine's fonts. }
@@ -2367,10 +2380,16 @@ begin
   if (spec <> nil) and spec^.NamePlacement.Shown
     and (tpTextColor in nameS.Present) then
   begin
+    { A BLOCK DRAWS ITS PIECES, the skin's ink where no style gave one
+      [Batch 86] }
+    if Length(spec^.NamePlacement.Rt) > 0 then
+      TyRenderRtPieces(APainter, spec^.NamePlacement.Rt, spec^.NamePlacement.X,
+        spec^.NamePlacement.Y, spec^.NamePlacement.RotationRad, spec^.RtScale, 1,
+        True, nameS.TextColor)
     { LEVEL IS LEVEL: a y axis' end name comes out of the matrices a few
       hundred quadrillionths of a radian off, and the flat path is the one
       that sets a name of several lines }
-    if Abs(spec^.NamePlacement.RotationRad) < 1e-9 then
+    else if Abs(spec^.NamePlacement.RotationRad) < 1e-9 then
     begin
       TextSizeOf(spec^.NamePlacement.Text, nameS, lblW, lblH);
       APainter.DrawText(
@@ -2409,6 +2428,13 @@ begin
         glyphs come to disagree. }
       lblStyle := labelS;
       if places[i].Emphasis then lblStyle := primaryS;
+      { A BLOCK DRAWS ITS PIECES [Batch 86] }
+      if Length(places[i].Rt) > 0 then
+      begin
+        TyRenderRtPieces(APainter, places[i].Rt, places[i].X, places[i].Y,
+          spec^.RotationRad, spec^.RtScale, 1, True, lblStyle.TextColor);
+        Continue;
+      end;
       TextSizeOf(places[i].Text, lblStyle, lblW, lblH);
       { BOUNDED BY axisLabel.width WHEN TRUNCATING, and only then: with no
         bound the box is exactly the text's size, so the ellipsis fitter has
@@ -4463,6 +4489,7 @@ begin
       if (nd <> nil) and (nd.JSONType = jtObject) then pin.TextStyle := TJSONObject(nd);
       MarkerGround(pin.Background, pin.IsDark);
       pin.Scale := scale;
+      pin.RtGlobal := RtGlobal;
       { UNDER MASKED TRAPS: a corner of an unknown category is not a number,
         and upstream draws on regardless }
       fpMask := GetExceptionMask;
@@ -4592,6 +4619,7 @@ begin
     ActiveController.Model.ResolveStyle('TyAdvChartLabelOnMid', '', []).TextColor);
   ink.Inside[2] := TTyChartColor(
     ActiveController.Model.ResolveStyle('TyAdvChartLabelOnDark', '', []).TextColor);
+  ink.RtGlobal := RtGlobal;
   for i := 0 to High(FMarkAreaPics) do
     if (i <= High(FMarkers)) and FMarkers[i].Blocks[mkArea].Present then
       Inc(Result, TyBuildMarkAreas(FMarkAreaPics[i], FMarkers[i].Blocks[mkArea], ink,
@@ -4862,12 +4890,21 @@ end;
 procedure TTyAdvanceChart.SolveTitles(const AMeasurer: ITyTextMeasurer;
   APPI: Integer);
 var
-  i, n: Integer;
+  i, n, line: Integer;
+  rts: array[0..1] of TTyRtBlockStyle;
+  meters: array[0..1] of ITyTextMeasurer;
+  node, st: TJSONData;
+  glob: TTyRtGlobal;
+  b: TTyRtBlockStyle;
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
 begin
   n := TyTitleCount(FOption);
   SetLength(FTitles, n);
   SetLength(FTitleSpecs, n);
   SetLength(FTitleFonts, n);
+  SetLength(FTitleRt, n);
+  glob := RtGlobal;
   for i := 0 to n - 1 do
   begin
     FTitleSpecs[i] := TyTitleSpecOf(FOption, i);
@@ -4876,8 +4913,73 @@ begin
     FTitleFonts[i][0] := TitleFontOf(i, 'TyAdvChartTitle', 'textStyle', [ttpFamily]);
     FTitleFonts[i][1] := TitleFontOf(i, 'TyAdvChartSubtitle', 'subtextStyle',
       [ttpWeight, ttpFamily]);
+    { THE TWO LINES' TEXT BLOCKS: textStyle's and subtextStyle's `rich`, size
+      and overflow -- never a box, which upstream disables for the title
+      (install.ts:166-182) -- measured as the blocks they are and laid out
+      about the anchors the layout gives them [Batch 86] }
+    for line := 0 to 1 do
+    begin
+      rts[line] := Default(TTyRtBlockStyle);
+      node := FOption.ComponentAt('title', i);
+      if node is TJSONObject then
+      begin
+        if line = 0 then st := TJSONObject(node).Find('textStyle')
+        else st := TJSONObject(node).Find('subtextStyle');
+        if (st is TJSONObject) and TyRtNodeWantsBlock(TJSONObject(st)) then
+          rts[line] := TyRtResolve([TJSONObject(st)], glob,
+            TyRtResolveOpt(False, True));
+      end;
+      meters[line] := nil;
+      if rts[line].Needed then
+        meters[line] := TyRtBlockMeasurer(AMeasurer, rts[line], glob, APPI / 96);
+    end;
     FTitles[i] := TyLayoutTitle(FTitleSpecs[i], FLastRect, AMeasurer,
-      FTitleFonts[i][0], FTitleFonts[i][1], APPI);
+      FTitleFonts[i][0], FTitleFonts[i][1], APPI, meters[0], meters[1]);
+    for line := 0 to 1 do
+    begin
+      FTitleRt[i][line] := Default(TTyRtDrawn);
+      if not rts[line].Needed or not FTitles[i].Valid then Continue;
+      if (line = 1) and not FTitles[i].HasSub then Continue;
+      if (line = 0) and (FTitleSpecs[i].Text = '') then Continue;
+      b := rts[line];
+      TyRtFinish(b, FTitleFonts[i][line].Name, FTitleFonts[i][line].SizeLogical,
+        FTitleFonts[i][line].Weight, glob, False, 0);
+      { the line's own ink over the block, the skin's at paint time where
+        none was written -- as the title's fixed fill is }
+      b.Style.HasFill := FTitleFonts[i][line].HasColour;
+      b.Style.FillNone := False;
+      b.Style.Fill := FTitleFonts[i][line].Colour;
+      case FTitles[i].Align of
+        ttaCentre: ah := tahCentre;
+        ttaRight: ah := tahRight;
+      else
+        ah := tahLeft;
+      end;
+      case FTitles[i].VAlign of
+        ttvMiddle: av := tavMiddle;
+        ttvBottom: av := tavBottom;
+      else
+        av := tavTop;
+      end;
+      if line = 0 then
+        FTitleRt[i][line].Pieces := TyRtLay(FTitleSpecs[i].Text, b,
+          TyRtDefaultOf(False, 0, False, 0, False, ah, av), APPI / 96, AMeasurer)
+      else
+        FTitleRt[i][line].Pieces := TyRtLay(FTitleSpecs[i].Subtext, b,
+          TyRtDefaultOf(False, 0, False, 0, False, ah, av), APPI / 96, AMeasurer);
+      if line = 0 then
+      begin
+        FTitleRt[i][line].X := FTitles[i].TextX;
+        FTitleRt[i][line].Y := FTitles[i].TextY;
+      end
+      else
+      begin
+        FTitleRt[i][line].X := FTitles[i].SubX;
+        FTitleRt[i][line].Y := FTitles[i].SubY;
+      end;
+      FTitleRt[i][line].RotationRad := 0;
+      FTitleRt[i][line].Scale := APPI / 96;
+    end;
   end;
 end;
 
@@ -5399,6 +5501,13 @@ begin
   Result := Default(TTyTitleFont);
   if (AIndex >= 0) and (AIndex <= High(FTitleFonts)) and (ALine in [0, 1]) then
     Result := FTitleFonts[AIndex][ALine];
+end;
+
+function TTyAdvanceChart.TitleRt(AIndex, ALine: Integer): TTyRtDrawn;
+begin
+  Result := Default(TTyRtDrawn);
+  if (AIndex >= 0) and (AIndex <= High(FTitleRt)) and (ALine in [0, 1]) then
+    Result := FTitleRt[AIndex][ALine];
 end;
 
 function TTyAdvanceChart.LegendLayoutCount: Integer;
@@ -6632,13 +6741,20 @@ begin
     f1 := FTitleFonts[i][1];
     if f0.HasColour then ink0 := TTyColor(f0.Colour) else ink0 := st.TextColor;
     if f1.HasColour then ink1 := TTyColor(f1.Colour) else ink1 := subSt.TextColor;
-    if FTitleSpecs[i].Text <> '' then
+    { A LINE THAT IS A BLOCK DRAWS ITS PIECES [Batch 86] }
+    if (i <= High(FTitleRt)) and (Length(FTitleRt[i][0].Pieces) > 0) then
+      TyRenderRtPieces(APainter, FTitleRt[i][0].Pieces, FTitleRt[i][0].X,
+        FTitleRt[i][0].Y, 0, FTitleRt[i][0].Scale, 1, True, ink0)
+    else if FTitleSpecs[i].Text <> '' then
       APainter.DrawText(
         Hang(lay.TextX, lay.TextY, lay.TextW, lay.TextH, lay.Align, lay.VAlign),
         FTitleSpecs[i].Text, f0.Name, f0.SizeLogical, f0.Weight,
         ink0, LclAlign(lay.Align), tlTop, False, 0, False,
         Pos(#10, FTitleSpecs[i].Text) > 0);
-    if lay.HasSub then
+    if (i <= High(FTitleRt)) and (Length(FTitleRt[i][1].Pieces) > 0) then
+      TyRenderRtPieces(APainter, FTitleRt[i][1].Pieces, FTitleRt[i][1].X,
+        FTitleRt[i][1].Y, 0, FTitleRt[i][1].Scale, 1, True, ink1)
+    else if lay.HasSub then
       APainter.DrawText(
         Hang(lay.SubX, lay.SubY, lay.SubW, lay.SubH, lay.Align, lay.VAlign),
         FTitleSpecs[i].Subtext, f1.Name, f1.SizeLogical,
@@ -7333,10 +7449,16 @@ begin
   { a legend's colour is its own default; its font is not }
   GlobalTextOver(AFont.Name, AFont.SizeLogical, AFont.Weight, hasCol, gcol, [ttpSize, ttpWeight, ttpFamily]);
   if hasCol then AInk.Text := TTyChartColor(gcol);
+  AFont.RtGlobal := RtGlobal;
+  AFont.Rt := Default(TTyRtBlockStyle);
   node := FOption.ComponentAt('legend', AIndex);
   if not (node is TJSONObject) then Exit;
   st := TJSONObject(node).Find('textStyle');
   if not (st is TJSONObject) then Exit;
+  { the items' text block: free text [Batch 86] }
+  if TyRtNodeWantsBlock(TJSONObject(st)) then
+    AFont.Rt := TyRtResolve([TJSONObject(st)], AFont.RtGlobal,
+      TyRtResolveOpt(False));
   d := TJSONObject(st).Find('fontFamily');
   if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') then
     AFont.Name := d.AsString;
@@ -7380,14 +7502,15 @@ begin
     fnt := LegendFont;
     ink := LegendInk;
     LegendTextOf(i, fnt, ink);
+    { a block is measured as the block it is drawn as [Batch 86] }
     FLegends[i] := TyLayoutLegend(FLegendSpecs[i], FLegendEntries[i],
       FLegendFlags[i], LegendSources(FLegendEntries[i]), FLastRect,
-      AMeasurer, fnt, APPI);
+      TyRtBlockMeasurer(AMeasurer, fnt.Rt, fnt.RtGlobal, APPI / 96), fnt, APPI);
   end;
 end;
 
 function TTyAdvanceChart.BuildLegends(APPI: Integer;
-  AList: TTyPaintList): Integer;
+  AList: TTyPaintList; const AMeasurer: ITyTextMeasurer): Integer;
 var
   i: Integer;
   ink: TTyLegendInk;
@@ -7401,7 +7524,7 @@ begin
     fnt := LegendFont;
     LegendTextOf(i, fnt, ink);
     Inc(Result, TyBuildLegendMarks(FLegendSpecs[i], FLegends[i], ink, fnt,
-      APPI, AList, i));
+      APPI, AList, i, AMeasurer));
   end;
 end;
 
@@ -7719,6 +7842,7 @@ begin
   Result.InsideColour[1] := TTyChartColor(midS.TextColor);
   Result.InsideColour[2] := TTyChartColor(darkS.TextColor);
   LabelGround(Result.Ground, Result.GroundDark);
+  Result.RtGlobal := RtGlobal;
 end;
 
 function TTyAdvanceChart.LabelSpecFor(ASlot: Integer;
@@ -7753,6 +7877,7 @@ begin
   base.InsideColour[1] := TTyChartColor(midS.TextColor);
   base.InsideColour[2] := TTyChartColor(darkS.TextColor);
   LabelGround(base.Ground, base.GroundDark);
+  base.RtGlobal := RtGlobal;
   if ASlot > High(FBindings) then Exit(base);
   { A LINE'S LABEL GOES ABOVE ITS POINT -- the one series type that declares
     a default position; every other falls to `inside`. [Revised in batch 47:
@@ -8162,7 +8287,7 @@ begin
     { MARKERS arrive as answers too: their labels are placed by Line.ts's own
       table, not by the expansion }
     Inc(drawn, BuildMarkers(AMeasurer, list));
-    Inc(drawn, BuildLegends(APPI, list));
+    Inc(drawn, BuildLegends(APPI, list, AMeasurer));
     Inc(drawn, BuildVisualMaps(list));
     Inc(drawn, BuildDataZooms(list));
     Result := drawn;
@@ -8940,6 +9065,28 @@ begin
     AHasColour := True;
     AColour := col;
   end;
+end;
+
+function TTyAdvanceChart.RtGlobal: TTyRtGlobal;
+var
+  st: TTyStyleSet;
+  fname: string;
+  fsize, fweight: Integer;
+  hasCol: Boolean;
+  col: Cardinal;
+  root: TJSONObject;
+begin
+  st := ActiveController.Model.ResolveStyle('TyAdvChartLabel', '', []);
+  fname := st.FontName;
+  fsize := ResolveFontSize(st);
+  fweight := st.FontWeight;
+  hasCol := False;
+  col := 0;
+  GlobalTextOver(fname, fsize, fweight, hasCol, col, [ttpSize, ttpWeight, ttpFamily]);
+  root := nil;
+  if (FOption <> nil) and (FOption.Root is TJSONObject) then
+    root := TJSONObject(FOption.Root);
+  Result := TyRtGlobalOf(root, fname, fsize, fweight);
 end;
 
 { An axis text style made what the layout measured: its family and size, its
@@ -10048,12 +10195,8 @@ begin
     if isCaption then
     begin
       el.Z2 := el.Z2 + TyChartEmphasisZ2Lift;
-      if el.Caption.HasEmph then
-      begin
-        el.Caption.Colour := el.Caption.EmphColour;
-        el.Caption.StrokeColour := el.Caption.EmphStrokeColour;
-        el.Caption.StrokeWidthLogical := el.Caption.EmphStrokeWidthLogical;
-      end;
+      { the block's pieces too [Batch 86] }
+      TyCaptionToEmphasis(el.Caption);
     end
     else if not isSymbol then
     begin
@@ -10276,12 +10419,8 @@ begin
       { THE WORDS RISE WITH THEIR NODE, so it does not cover them -- in the
         ink the lifted node calls for. }
       el.Z2 := el.Z2 + TyChartEmphasisZ2Lift;
-      if el.Caption.HasEmph then
-      begin
-        el.Caption.Colour := el.Caption.EmphColour;
-        el.Caption.StrokeColour := el.Caption.EmphStrokeColour;
-        el.Caption.StrokeWidthLogical := el.Caption.EmphStrokeWidthLogical;
-      end;
+      { the block's pieces too [Batch 86] }
+      TyCaptionToEmphasis(el.Caption);
     end
     else if el.Datum.IsEdge then
     begin
@@ -10465,9 +10604,8 @@ var
       if (cap.Datum.SeriesIndex <> el.Datum.SeriesIndex)
         or (cap.Datum.DataIndex <> el.Datum.DataIndex)
         or (cap.Datum.IsEdge <> el.Datum.IsEdge) then Continue;
-      cap.Caption.Colour := cap.Caption.EmphColour;
-      cap.Caption.StrokeColour := cap.Caption.EmphStrokeColour;
-      cap.Caption.StrokeWidthLogical := cap.Caption.EmphStrokeWidthLogical;
+      { the block's pieces too [Batch 86] }
+      TyCaptionToEmphasis(cap.Caption);
       cap.Z2 := el.Z2 + 1;
       list.Add(cap);
     end;

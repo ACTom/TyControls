@@ -51,6 +51,11 @@ function TyLabelSpecOfNode(ANode, ASeries: TJSONObject;
   -- ASeries is the series node, whose `emphasis.label` is read. }
 procedure TyLabelReadInk(ALabel, ASeries: TJSONObject; var ASpec: TTyLabelSpec);
 
+{ THE TEXT BLOCK OF A LABEL A SERIES PLACES ITSELF (a pie's, a funnel's):
+  ALabel's styles into ASpec.Rt, with the root option's side. [Batch 86] }
+procedure TyLabelReadBlock(ALabel: TJSONObject; ARoot: TJSONData;
+  var ASpec: TTyLabelSpec);
+
 { The words for one datum: upstream's getFormattedLabel.
 
   THE LETTER TOKENS go through formatTpl -- the first bare `{a}` becomes
@@ -91,7 +96,45 @@ function TyReplaceFirst(const AText, AToken, AWith: string): string;
 
 implementation
 
-uses tyControls.AdvChart.Scale;
+uses jsonparser, tyControls.AdvChart.Scale, tyControls.AdvChart.RichStyle;
+
+{ THE LABEL'S TEXT BLOCK, resolved over every label node the spec was read
+  from -- ANode first, then its base's -- when any of them asks for one: a
+  data item's `rich` cascades over its series' as upstream's model chain
+  does. The base's nodes are held as text and parsed back here. [Batch 86] }
+procedure ResolveBlock(ANode: TJSONObject; var ASpec: TTyLabelSpec);
+var
+  chain: array of TJSONObject;
+  parsed: array of TJSONData;
+  prior: TTyStringArray;
+  i: Integer;
+begin
+  prior := ASpec.RtChain;
+  SetLength(ASpec.RtChain, Length(prior) + 1);
+  ASpec.RtChain[0] := ANode.AsJSON;
+  for i := 0 to High(prior) do ASpec.RtChain[i + 1] := prior[i];
+  ASpec.RtAny := ASpec.RtAny or TyRtNodeWantsBlock(ANode);
+  if not ASpec.RtAny then Exit;
+  SetLength(chain, Length(prior) + 1);
+  SetLength(parsed, Length(prior));
+  chain[0] := ANode;
+  try
+    for i := 0 to High(prior) do
+    begin
+      parsed[i] := nil;
+      try
+        parsed[i] := GetJSON(prior[i]);
+      except
+        parsed[i] := nil;
+      end;
+      if parsed[i] is TJSONObject then chain[i + 1] := TJSONObject(parsed[i])
+      else chain[i + 1] := nil;
+    end;
+    ASpec.Rt := TyRtResolve(chain, ASpec.RtGlobal, TyRtResolveOpt(True));
+  finally
+    for i := 0 to High(parsed) do parsed[i].Free;
+  end;
+end;
 
 function TyLabelParams(AStore: TTyDataStore; ARow: Integer;
   const ASeriesName: string; AValueDim: Integer; APercent: Double;
@@ -350,6 +393,7 @@ begin
   else
     Result.FontWeight := TyRoundOpt(NumIn(node, 'fontWeight', Result.FontWeight),
       Result.FontWeight);
+  ResolveBlock(node, Result);
 end;
 
 procedure TyLabelReadInk(ALabel, ASeries: TJSONObject; var ASpec: TTyLabelSpec);
@@ -427,6 +471,25 @@ begin
     ASpec.EmphHasBorderWidth := True;
     ASpec.EmphBorderWidthLogical := d.AsFloat;
   end;
+  s := StrIn(emph, 'textBorderColor');
+  if s <> '' then
+  begin
+    ASpec.EmphHasBorderColour := True;
+    if (s = 'none') or (s = 'transparent') then ASpec.EmphBorderColourNone := True
+    else if (s = 'inherit') or (s = 'auto') then ASpec.EmphBorderColourInherit := True
+    else if TyTryParseChartColor(s, c) then ASpec.EmphBorderColour := c
+    else ASpec.EmphBorderColourNone := True;
+  end;
+end;
+
+procedure TyLabelReadBlock(ALabel: TJSONObject; ARoot: TJSONData;
+  var ASpec: TTyLabelSpec);
+var root: TJSONObject;
+begin
+  if ARoot is TJSONObject then root := TJSONObject(ARoot) else root := nil;
+  ASpec.RtGlobal := TyRtGlobalOf(root, '', 0, 0);
+  if (ALabel = nil) or not TyRtNodeWantsBlock(ALabel) then Exit;
+  ASpec.Rt := TyRtResolve([ALabel], ASpec.RtGlobal, TyRtResolveOpt(True));
 end;
 
 { ==================== the formatter ==================== }

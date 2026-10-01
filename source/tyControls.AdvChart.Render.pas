@@ -10,7 +10,7 @@ unit tyControls.AdvChart.Render;
   is geometry the hit test cannot see. }
 interface
 uses
-  SysUtils, Math, Types,
+  SysUtils, Math, Types, Classes, Graphics, tyControls.FontUnits,
   tyControls.AdvChart.Types, tyControls.AdvChart.Shape, tyControls.AdvChart.Paint,
   tyControls.Types,     // TTyColor: the render side speaks the library's colour type
   tyControls.AdvChart.Measure,  // the anchor-to-LCL-alignment converters
@@ -25,6 +25,16 @@ procedure TyRenderElement(P: TTyPainter; const AElement: TTyChartElement);
 
 { Draw the whole list in paint order. }
 procedure TyRenderPaintList(P: TTyPainter; AList: TTyPaintList);
+
+{ ZRENDER'S TEXT BLOCK, piece by piece in its paint order: each rect (its
+  border first where it has both, as zrender doubles and underlays it) and
+  each text, hung at (AX, AY), turned counter-clockwise by ARotationRad and
+  scaled by AScale device px per piece px. AAlpha is the element's. A text
+  whose fill came from the host's default and has none takes AInk where
+  AHasInk -- a free text's skin ink. [Batch 86] }
+procedure TyRenderRtPieces(P: TTyPainter; const APieces: TTyRtPieceArray;
+  AX, AY, ARotationRad, AScale, AAlpha: Double; AHasInk: Boolean;
+  AInk: TTyColor);
 
 implementation
 
@@ -193,6 +203,154 @@ end;
 procedure DrawCaptionAt(P: TTyPainter; const AElement: TTyChartElement;
   AInk: TTyColor; ADX, ADY: Integer); forward;
 
+{ zrender's roundRect: the radii spread CSS-wise already, cut down so that
+  every side holds the two corners on it (roundRect.ts:30-76) }
+procedure TraceRtRect(P: TTyPainter; AX, AY, AW, AH: Double;
+  const AR: array of Double);
+var
+  r1, r2, r3, r4, total: Double;
+begin
+  if AW < 0 then begin AX := AX + AW; AW := -AW; end;
+  if AH < 0 then begin AY := AY + AH; AH := -AH; end;
+  r1 := Max(0.0, AR[0]);
+  r2 := Max(0.0, AR[1]);
+  r3 := Max(0.0, AR[2]);
+  r4 := Max(0.0, AR[3]);
+  if (r1 + r2 + r3 + r4) <= 0 then
+  begin
+    P.RectPath(AX, AY, AX + AW, AY + AH);
+    Exit;
+  end;
+  total := r1 + r2;
+  if total > AW then begin r1 := r1 * AW / total; r2 := r2 * AW / total; end;
+  total := r3 + r4;
+  if total > AW then begin r3 := r3 * AW / total; r4 := r4 * AW / total; end;
+  total := r2 + r3;
+  if total > AH then begin r2 := r2 * AH / total; r3 := r3 * AH / total; end;
+  total := r1 + r4;
+  if total > AH then begin r1 := r1 * AH / total; r4 := r4 * AH / total; end;
+  P.MoveTo(AX + r1, AY);
+  P.LineTo(AX + AW - r2, AY);
+  if r2 > 0 then P.ArcTo(AX + AW - r2, AY + r2, r2, -Pi / 2, 0, False);
+  P.LineTo(AX + AW, AY + AH - r3);
+  if r3 > 0 then P.ArcTo(AX + AW - r3, AY + AH - r3, r3, 0, Pi / 2, False);
+  P.LineTo(AX + r4, AY + AH);
+  if r4 > 0 then P.ArcTo(AX + r4, AY + AH - r4, r4, Pi / 2, Pi, False);
+  P.LineTo(AX, AY + r1);
+  if r1 > 0 then P.ArcTo(AX + r1, AY + r1, r1, Pi, Pi * 1.5, False);
+  P.ClosePath;
+end;
+
+function RtAlign(A: TTyRtAlign): TAlignment;
+begin
+  case A of
+    rtaCenter: Result := taCenter;
+    rtaRight: Result := taRightJustify;
+  else
+    Result := taLeftJustify;
+  end;
+end;
+
+procedure TyRenderRtPieces(P: TTyPainter; const APieces: TTyRtPieceArray;
+  AX, AY, ARotationRad, AScale, AAlpha: Double; AHasInk: Boolean;
+  AInk: TTyColor);
+var
+  i, dx, dy, reach: Integer;
+  pc: TTyRtPiece;
+  a, gx, gy, r, rr, s: Double;
+  ink, halo, shade: TTyColor;
+  hasInk: Boolean;
+  k: Integer;
+  radii: array[0..3] of Double;
+begin
+  if P = nil then Exit;
+  if AScale <= 0 then AScale := 1;
+  for i := 0 to High(APieces) do
+  begin
+    pc := APieces[i];
+    a := pc.Opacity * AAlpha;
+    if pc.Kind = rpkRect then
+    begin
+      if not pc.Drawn then Continue;
+      P.SaveState;
+      try
+        if a < 1 then P.SetElementAlpha(a);
+        P.SetLineDash([]);
+        P.Translate(AX, AY);
+        if ARotationRad <> 0 then P.RotateBy(-ARotationRad);
+        for k := 0 to 3 do radii[k] := pc.Radius[k] * AScale;
+        { THE BORDER UNDER THE FILL where the rect has both: zrender paints
+          it first at twice its width, so the fill covers its inner half }
+        if pc.HasStroke and pc.StrokeFirst then
+        begin
+          P.BeginPath;
+          TraceRtRect(P, pc.X * AScale, pc.Y * AScale, pc.W * AScale,
+            pc.H * AScale, radii);
+          P.StrokePath(TTyColor(pc.Stroke), pc.LineWidth);
+        end;
+        if pc.HasFill then
+        begin
+          P.BeginPath;
+          TraceRtRect(P, pc.X * AScale, pc.Y * AScale, pc.W * AScale,
+            pc.H * AScale, radii);
+          P.FillPath(TTyColor(pc.Fill));
+        end;
+        if pc.HasStroke and not pc.StrokeFirst then
+        begin
+          P.BeginPath;
+          TraceRtRect(P, pc.X * AScale, pc.Y * AScale, pc.W * AScale,
+            pc.H * AScale, radii);
+          P.StrokePath(TTyColor(pc.Stroke), pc.LineWidth);
+        end;
+      finally
+        P.RestoreState;
+      end;
+      Continue;
+    end;
+    if pc.Text = '' then Continue;
+    TyRtPoint(AX, AY, ARotationRad, AScale, pc.X, pc.Y, gx, gy);
+    hasInk := pc.HasFill;
+    ink := TTyColor(pc.Fill);
+    if not hasInk and pc.DefaultFill and AHasInk then
+    begin
+      hasInk := True;
+      ink := AInk;
+    end;
+    { THE SHADOW, unblurred: the painter has no blur for glyphs, so what
+      survives of a text shadow is its offset copy. zrender sets none at all
+      without a blur (Text.ts:611, 850), whatever the offsets say }
+    if pc.HasShadow and ((pc.ShadowOffsetX <> 0) or (pc.ShadowOffsetY <> 0))
+      and ((pc.ShadowColor shr 24) <> 0) then
+    begin
+      shade := CaptionInk(pc.ShadowColor, a);
+      P.DrawTextRotated(TyInkText(pc.Text), pc.FontFamily,
+        TyFontSizeFromPx(pc.FontSizePx), pc.FontWeight, shade,
+        gx + pc.ShadowOffsetX * AScale, gy + pc.ShadowOffsetY * AScale,
+        ARotationRad, RtAlign(pc.TextAlign), tlCenter);
+    end;
+    { THE HALO FIRST -- a text's stroke is painted under its fill -- as the
+      one-run caption dilates it }
+    if pc.HasStroke and (pc.LineWidth > 0) and ((pc.Stroke shr 24) <> 0) then
+    begin
+      halo := CaptionInk(pc.Stroke, a);
+      r := pc.LineWidth / 2 * P.PPI / 96;
+      reach := Ceil(r);
+      rr := r * r + r;
+      for dy := -reach to reach do
+        for dx := -reach to reach do
+          if ((dx <> 0) or (dy <> 0)) and (dx * dx + dy * dy <= rr) then
+            P.DrawTextRotated(TyInkText(pc.Text), pc.FontFamily,
+              TyFontSizeFromPx(pc.FontSizePx), pc.FontWeight, halo,
+              gx + dx, gy + dy, ARotationRad, RtAlign(pc.TextAlign), tlCenter);
+    end;
+    if not hasInk then Continue;
+    s := a;
+    P.DrawTextRotated(TyInkText(pc.Text), pc.FontFamily,
+      TyFontSizeFromPx(pc.FontSizePx), pc.FontWeight, CaptionInk(ink, s),
+      gx, gy, ARotationRad, RtAlign(pc.TextAlign), tlCenter);
+  end;
+end;
+
 procedure TyRenderCaption(P: TTyPainter; const AElement: TTyChartElement);
 var
   ink, halo: TTyColor;
@@ -200,6 +358,14 @@ var
   dx, dy, reach: Integer;
 begin
   if (P = nil) or (AElement.Caption.Text = '') then Exit;
+  { A BLOCK DRAWS ITS PIECES, and nothing of the one-run caption }
+  if Length(AElement.Caption.RtPieces) > 0 then
+  begin
+    TyRenderRtPieces(P, AElement.Caption.RtPieces, AElement.Caption.X,
+      AElement.Caption.Y, AElement.Caption.RotationRad, AElement.Caption.RtScale,
+      AElement.Style.Alpha, True, TTyColor(AElement.Caption.Colour));
+    Exit;
+  end;
   ink := CaptionInk(AElement.Caption.Colour, AElement.Style.Alpha);
   { THE HALO FIRST, then the glyphs over it -- `paint-order: stroke`. A
     stroke w wide and centred on the outline shows w/2 outside the glyph, so

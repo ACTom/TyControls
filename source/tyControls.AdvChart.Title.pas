@@ -102,7 +102,8 @@ function TyTitleSpecOf(AOption: TTyChartOption; AIndex: Integer): TTyTitleSpec;
   Answers Valid = False when there is nothing to draw. }
 function TyLayoutTitle(const ASpec: TTyTitleSpec; const AContainer: TTyRectF;
   const AMeasurer: ITyTextMeasurer; const AFont, ASubFont: TTyTitleFont;
-  APPI: Integer): TTyTitleLayout;
+  APPI: Integer; const ATextMeter: ITyTextMeasurer = nil;
+  const ASubMeter: ITyTextMeasurer = nil): TTyTitleLayout;
 
 implementation
 
@@ -279,7 +280,8 @@ end;
 
 function TyLayoutTitle(const ASpec: TTyTitleSpec; const AContainer: TTyRectF;
   const AMeasurer: ITyTextMeasurer; const AFont, ASubFont: TTyTitleFont;
-  APPI: Integer): TTyTitleLayout;
+  APPI: Integer; const ATextMeter: ITyTextMeasurer;
+  const ASubMeter: ITyTextMeasurer): TTyTitleLayout;
 var
   raw: TTyRawBox;
   r: TTyXYWH;
@@ -299,13 +301,23 @@ begin
   for i := 0 to 3 do pad[i] := ASpec.Padding[i] * scale;
   gap := ASpec.ItemGap * scale;
 
+  { A LINE WHOSE STYLE MAKES IT A BLOCK is measured as the block: a rich
+    title's height is its tallest token's line, not its markup's [Batch 86] }
   if ASpec.Text <> '' then
-    AMeasurer.MeasureLine(ASpec.Text, AFont.Name, AFont.SizeLogical,
-      AFont.Weight, Result.TextW, Result.TextH);
+    if ATextMeter <> nil then
+      ATextMeter.MeasureLine(ASpec.Text, AFont.Name, AFont.SizeLogical,
+        AFont.Weight, Result.TextW, Result.TextH)
+    else
+      AMeasurer.MeasureLine(ASpec.Text, AFont.Name, AFont.SizeLogical,
+        AFont.Weight, Result.TextW, Result.TextH);
   Result.HasSub := ASpec.Subtext <> '';
   if Result.HasSub then
-    AMeasurer.MeasureLine(ASpec.Subtext, ASubFont.Name, ASubFont.SizeLogical,
-      ASubFont.Weight, Result.SubW, Result.SubH);
+    if ASubMeter <> nil then
+      ASubMeter.MeasureLine(ASpec.Subtext, ASubFont.Name, ASubFont.SizeLogical,
+        ASubFont.Weight, Result.SubW, Result.SubH)
+    else
+      AMeasurer.MeasureLine(ASpec.Subtext, ASubFont.Name, ASubFont.SizeLogical,
+        ASubFont.Weight, Result.SubW, Result.SubH);
 
   { The two stacked, with itemGap between -- install.ts:177. The subtext's own
     offset is the TITLE's height plus the gap, so an empty title still leaves

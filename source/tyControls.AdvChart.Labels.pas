@@ -151,11 +151,14 @@ type
       inheritColor: inside it keeps the band ink and is FORCED a stroke in
       the band's fill; outside it is the host's colour over the ground halo. }
     FunnelInherit: Boolean;
-    { `emphasis.label.color` and `.textBorderWidth`: the hover's own. }
+    { `emphasis.label.color`, `.textBorderColor` and `.textBorderWidth`:
+      the hover's own. }
     EmphHasColour: Boolean;
     EmphColour: TTyChartColor;
     EmphHasBorderWidth: Boolean;
     EmphBorderWidthLogical: Double;
+    EmphHasBorderColour, EmphBorderColourNone, EmphBorderColourInherit: Boolean;
+    EmphBorderColour: TTyChartColor;
     { `emphasis.itemStyle.color`: the hovered host's fill, when written;
       otherwise it is the normal fill lifted. }
     EmphHostHasColour: Boolean;
@@ -173,6 +176,17 @@ type
     { Painted over its mark. Z2 one above the host so a caption is never
       swallowed by the thing it names. }
     Z2Lift: Integer;
+    { THE TEXT BLOCK: zrender's styles for the label -- its rich styles, its
+      box, size and overflow -- resolved over RtChain, the label nodes this
+      spec was read from (most specific first, kept as JSON text: a spec
+      outlives the option it was read from). Rt.Needed False is the one-run
+      caption; RtAny says some node of the chain asked for a block at all,
+      which is when the chain is resolved. RtGlobal is the root's side.
+      [Batch 86] }
+    Rt: TTyRtBlockStyle;
+    RtGlobal: TTyRtGlobal;
+    RtChain: TTyStringArray;
+    RtAny: Boolean;
   end;
   TTyLabelSpecArray = array of TTyLabelSpec;
   TTyLabelSpecTable = array of TTyLabelSpecArray;
@@ -256,6 +270,23 @@ procedure TyLabelInk(const ASpec: TTyLabelSpec; AHostFill: TTyChartColor;
   AHostHasFill, AHostGradient, AInside: Boolean;
   out AInk, AStroke: TTyChartColor; out AStrokeWidthLogical: Double);
 
+{ AN ATTACHED LABEL'S BLOCK: ASpec.Rt finished in the spec's font with the
+  host's fill as the inherit colour, laid out about (0, 0) with the host's
+  defaults -- the automatic ink and halo TyLabelInk gives a label with no
+  colour of its own over that host, and the alignment the position implies.
+  Shared by the expansion and by the passes that place their own labels (a
+  pie's, a funnel's). [Batch 86] }
+function TyLabelBlockPieces(const ASpec: TTyLabelSpec; const AText: string;
+  AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
+  AH: TTyTextAnchorH; AV: TTyTextAnchorV; AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
+
+{ A CAPTION IN THE HOVER'S INK: its colour and halo, and its block's
+  pieces, where it stamped a hover's (HasEmph). Every place that draws a
+  caption hovered goes through this, so the block cannot be left in the
+  normal ink. [Batch 86] }
+procedure TyCaptionToEmphasis(var ACaption: TTyElementCaption);
+
 { Work out the hover's ink and halo for a caption now, from the host's fill
   as a hover leaves it, and stamp them on ACaption (HasEmph). }
 procedure TyLabelStampEmphasis(const ASpec: TTyLabelSpec;
@@ -302,7 +333,41 @@ procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
 
 implementation
 
-uses tyControls.AdvChart.Style;
+uses tyControls.AdvChart.Style, tyControls.AdvChart.RichStyle;
+
+function TyLabelBlockPieces(const ASpec: TTyLabelSpec; const AText: string;
+  AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
+  AH: TTyTextAnchorH; AV: TTyTextAnchorV; AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
+var
+  rt: TTyRtBlockStyle;
+  autoSpec: TTyLabelSpec;
+  autoInk, autoStroke: TTyChartColor;
+  autoW: Double;
+begin
+  rt := ASpec.Rt;
+  TyRtFinish(rt, ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight,
+    ASpec.RtGlobal, AHostHasFill, AHostFill);
+  autoSpec := ASpec;
+  autoSpec.AutoColour := True;
+  autoSpec.InheritColour := False;
+  autoSpec.FunnelInherit := False;
+  autoSpec.HasBorderColour := False;
+  autoSpec.HasBackground := False;
+  TyLabelInk(autoSpec, AHostFill, AHostHasFill, AHostGradient, AInside, autoInk,
+    autoStroke, autoW);
+  Result := TyRtLay(AText, rt, TyRtDefaultOf(True, autoInk, autoW > 0,
+    autoStroke, True, AH, AV), AScale, AMeasurer);
+end;
+
+procedure TyCaptionToEmphasis(var ACaption: TTyElementCaption);
+begin
+  if not ACaption.HasEmph then Exit;
+  ACaption.Colour := ACaption.EmphColour;
+  ACaption.StrokeColour := ACaption.EmphStrokeColour;
+  ACaption.StrokeWidthLogical := ACaption.EmphStrokeWidthLogical;
+  if Length(ACaption.RtEmph) > 0 then ACaption.RtPieces := ACaption.RtEmph;
+end;
 
 procedure TyLabelStampEmphasis(const ASpec: TTyLabelSpec;
   AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
@@ -649,6 +714,15 @@ begin
     s.HasBorderWidth := True;
     s.BorderWidthLogical := ASpec.EmphBorderWidthLogical;
   end;
+  { the hover's stroke colour over the normal one: zrender merges the
+    emphasis style's `stroke` over the label's (labelStyle.ts:550-583) }
+  if ASpec.EmphHasBorderColour then
+  begin
+    s.HasBorderColour := True;
+    s.BorderColourNone := ASpec.EmphBorderColourNone;
+    s.BorderColourInherit := ASpec.EmphBorderColourInherit;
+    s.BorderColour := ASpec.EmphBorderColour;
+  end;
   TyLabelInk(s, AHostFill, AHostHasFill, AHostGradient, AInside, AInk, AStroke,
     AStrokeWidthLogical);
 end;
@@ -778,6 +852,8 @@ var
   x, y, w, h, scale, dist, sw, atX, atY: Double;
   ah: TTyTextAnchorH;
   av: TTyTextAnchorV;
+  autoSpec: TTyLabelSpec;
+  pieces: TTyRtPieceArray;
 begin
   if (AList = nil) or (AMeasurer = nil) then Exit;
   if APPI > 0 then scale := APPI / 96 else scale := 1;
@@ -830,9 +906,16 @@ begin
       bounds.Bottom := bounds.Bottom + sw / 2;
     end;
 
-    AMeasurer.MeasureLine(host.Caption.Text, spec.FontName,
-      spec.FontSizeLogical, spec.FontWeight, w, h);
-    if (w <= 0) or (h <= 0) then Continue;
+    { THE BLOCK IS MEASURED WHERE IT IS LAID OUT, below; the one-run
+      caption here }
+    w := 0;
+    h := 0;
+    if not spec.Rt.Needed then
+    begin
+      AMeasurer.MeasureLine(host.Caption.Text, spec.FontName,
+        spec.FontSizeLogical, spec.FontWeight, w, h);
+      if (w <= 0) or (h <= 0) then Continue;
+    end;
 
     dist := spec.DistanceLogical * scale;
     { OUTSIDE IS DECIDED PER MARK: past whichever end the bar grows to. }
@@ -876,11 +959,45 @@ begin
     x := x + spec.OffsetXLogical * scale;
     y := y + spec.OffsetYLogical * scale;
 
+    hostFill := host.Style.FillColor;
+    hostHasFill := host.Style.HasFill;
+    if host.Caption.HostTransparent then
+    begin
+      hostFill := 0;
+      hostHasFill := True;
+    end;
+    pieces := nil;
+    if spec.Rt.Needed then
+    begin
+      { THE BLOCK: the label's styles in its font, 'inherit' the host's
+        colour (upstream's inheritColor is the bar's or symbol's visual
+        colour), laid out about the anchor with the host's defaults --
+        the automatic ink and halo, as updateInnerText hands them, and the
+        alignment the position implies. A mark that fixed its own anchor
+        fixed its alignment too. }
+      autoSpec := spec;
+      if host.Caption.HasFixedAnchor then
+      begin
+        autoSpec.Rt.Style.Align := rtaNone;
+        autoSpec.Rt.Style.VAlign := rtvNone;
+      end;
+      pieces := TyLabelBlockPieces(autoSpec, host.Caption.Text, hostFill,
+        hostHasFill, host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
+        TyLabelIsInside(pos), ah, av, scale, AMeasurer);
+      if Length(pieces) = 0 then Continue;
+      { THE BOX IS THE UNION OF WHAT IT DRAWS, turned as it is drawn --
+        zrender's getBoundingRect, which the label layout reads }
+      if host.Caption.HasFixedAnchor then
+        box := TyRtDeviceBox(pieces, x, y, host.Caption.FixedRotationRad, scale)
+      else
+        box := TyRtDeviceBox(pieces, x, y, spec.RotationRad, scale);
+    end
+    else
     { The box the caption occupies, from the anchor and the pinned edge. This
       is what the companion's shape IS -- so the hit test and the ink describe
       the same rectangle, which is the whole reason the caption gets an entry
       of its own rather than a note on somebody else's. }
-    box := TyAnchorBox(x, y, w, h, ah, av);
+      box := TyAnchorBox(x, y, w, h, ah, av);
 
     cap := TyChartElement(TyShapeRect(box));
     cap.Caption := host.Caption;
@@ -890,13 +1007,6 @@ begin
     { THE INK AND THE HALO, from the host's fill -- a pictorial bar's target
       counts as filled and transparent -- and from where the words ended up:
       a bar's `outside` is not inside. }
-    hostFill := host.Style.FillColor;
-    hostHasFill := host.Style.HasFill;
-    if host.Caption.HostTransparent then
-    begin
-      hostFill := 0;
-      hostHasFill := True;
-    end;
     TyLabelInk(spec, hostFill, hostHasFill,
       host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
       TyLabelIsInside(pos), ink, stroke, strokeW);
@@ -929,6 +1039,12 @@ begin
     if host.Caption.HasFixedAnchor then
       cap.Caption.RotationRad := host.Caption.FixedRotationRad;
     cap.Caption.Truncate := spec.Overflow = tloTruncate;
+    cap.Caption.RtPieces := pieces;
+    cap.Caption.RtEmph := nil;
+    cap.Caption.RtScale := scale;
+    if Length(pieces) > 0 then
+      cap.Caption.RtEmph := TyRtReink(pieces, cap.Caption.EmphColour, True,
+        cap.Caption.EmphStrokeColour, cap.Caption.EmphStrokeWidthLogical);
     AList.Add(cap);
   end;
 end;

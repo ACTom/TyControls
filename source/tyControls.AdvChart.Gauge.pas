@@ -191,6 +191,12 @@ type
     Width, Height: TTyBoxValue;
     { top, right, bottom, left -- LOGICAL px, CSS order. }
     Padding: array[0..3] of Double;
+    { THE TEXT BLOCK, when the text is rich: its styles over the node and
+      upstream's own defaults (the detail's width 100, lineHeight 30,
+      padding [5, 10], transparent plate) -- the plate is then the block's
+      own rect. Only `rich` takes this path: a plain reading keeps its plate
+      and its one run. [Batch 86] }
+    Rt: TTyRtBlockStyle;
   end;
 
   { A per-datum override of the two text blocks. Read from the series' own
@@ -330,7 +336,7 @@ function TyGaugeNeedlePoints(ACX, ACY, AAngleRad, AHalfWidth, ALen,
   String#replace with a string needle does. No formatter answers the number
   as written. }
 function TyGaugeFormat(const AFormatter: string; AHasFormatter: Boolean;
-  AValue: Double): string;
+  AValue: Double; AKeepRich: Boolean = False): string;
 
 { The label at major position AIndex of ASplitNumber, computed FORWARD from
   min -- `i * (max - min) / splitNumber + min`, multiplied before dividing so
@@ -357,7 +363,12 @@ function TyBuildGaugeValue(const ABinding: TTySeriesBinding;
 
 implementation
 
-uses tyControls.AdvChart.Scale, tyControls.FontUnits;
+uses jsonparser, tyControls.AdvChart.Scale, tyControls.FontUnits,
+  tyControls.AdvChart.RichStyle;
+
+var
+  { GaugeSeries.ts' detail defaults that shape its block }
+  GDetailDefaults: TJSONObject;
 
 const
   cRadian = Pi / 180;
@@ -563,6 +574,15 @@ begin
   AText.Width := TyBoxValueOf(n, 'width', AText.Width);
   AText.Height := TyBoxValueOf(n, 'height', AText.Height);
   ReadPadding(n, 'padding', AText.Padding);
+  { a rich text's block, over upstream's defaults; free text [Batch 86] }
+  if (n.Find('rich') <> nil) and (n.Find('rich').JSONType = jtObject) then
+  begin
+    if AKey = 'detail' then
+      AText.Rt := TyRtResolve([n, GDetailDefaults], Default(TTyRtGlobal),
+        TyRtResolveOpt(False))
+    else
+      AText.Rt := TyRtResolve([n], Default(TTyRtGlobal), TyRtResolveOpt(False));
+  end;
 end;
 
 function TyGaugeTextDefault: TTyGaugeText;
@@ -1063,7 +1083,7 @@ begin
 end;
 
 function TyGaugeFormat(const AFormatter: string; AHasFormatter: Boolean;
-  AValue: Double): string;
+  AValue: Double; AKeepRich: Boolean): string;
 var prm: TTyChartCallbackParams;
 begin
   { formatLabel: `value + ''` -- JavaScript's own text, so a missing value
@@ -1083,6 +1103,9 @@ begin
   end
   else
     Result := TyReplaceFirst(AFormatter, '{value}', Result);
+  { A RICH READING IS LAID OUT AS ITS BLOCK, markup, lines and all
+    [Batch 86] }
+  if AKeepRich then Exit;
   Result := StripRich(Result);
   { ONE LINE. A caption is drawn as a single run here, so a formatter with
     real line breaks in it would draw its first line and a row of boxes.
@@ -1436,6 +1459,10 @@ var
   box: TTyRectF;
   fname: string;
   fsize, fweight: Integer;
+  b: TTyRtBlockStyle;
+  glob: TTyRtGlobal;
+  pieces: TTyRtPieceArray;
+  ink: TTyChartColor;
 begin
   Result := 0;
   if not AText.Show then Exit;
@@ -1449,6 +1476,47 @@ begin
   if AText.HasFontName then fname := AText.FontName;
   if AText.HasFontSize then fsize := AText.FontSizeLogical;
   if AText.HasWeight then fweight := AText.FontWeight;
+
+  { A RICH TEXT IS ITS BLOCK: the plate is the block's own rect, and a rich
+    style without a colour takes the automatic colour, upstream's
+    inheritColor for the gauge's words [Batch 86] }
+  if AText.Rt.Needed and (AMeasurer <> nil) then
+  begin
+    if AText.HasColour then ink := AText.Colour
+    else if AText.Auto then ink := AAutoColour
+    else ink := ADefaultColour;
+    b := AText.Rt;
+    glob := Default(TTyRtGlobal);
+    glob.FontFamily := fname;
+    glob.FontSizeLogical := fsize;
+    glob.FontWeight := fweight;
+    TyRtFinish(b, fname, fsize, fweight, glob, True, AAutoColour);
+    b.Style.HasFill := True;
+    b.Style.FillNone := False;
+    b.Style.Fill := ink;
+    pieces := TyRtLay(AWords, b, TyRtDefaultOf(False, 0, False, 0, False,
+      tahCentre, tavMiddle), scale, AMeasurer);
+    if Length(pieces) = 0 then Exit;
+    el := TyChartElement(TyShapeRect(TyRtDeviceBox(pieces, x, y, 0, scale)));
+    el.Caption.Text := AWords;
+    el.Caption.FontName := fname;
+    el.Caption.FontSizeLogical := fsize;
+    el.Caption.FontWeight := fweight;
+    el.Caption.Colour := ink;
+    el.Caption.X := x;
+    el.Caption.Y := y;
+    el.Caption.AnchorH := tahCentre;
+    el.Caption.AnchorV := tavMiddle;
+    el.Caption.RotationRad := 0;
+    el.Caption.RtPieces := pieces;
+    el.Caption.RtScale := scale;
+    el.Z := AZ;
+    el.Z2 := AZ2;
+    el.Silent := True;
+    AList.Add(el);
+    Inc(Result);
+    Exit;
+  end;
   AMeasurer.MeasureLine(AWords, fname, fsize, fweight, w, h);
   if (w <= 0) or (h <= 0) then Exit;
 
@@ -1564,7 +1632,8 @@ begin
       AVisual.TitleFontName, AVisual.TitleFontSizeLogical,
       AVisual.TitleFontWeight, AVisual.Z, textZ2, AMeasurer, APPI, AList));
     Inc(Result, AddGaugeText(ti.Detail,
-      TyGaugeFormat(ti.Detail.Formatter, ti.Detail.HasFormatter, val),
+      TyGaugeFormat(ti.Detail.Formatter, ti.Detail.HasFormatter, val,
+        ti.Detail.Rt.Needed),
       ALayout.CX, ALayout.CY, ALayout.R, AVisual.DetailColour, autoC,
       AVisual.DetailFontName, AVisual.DetailFontSizeLogical,
       AVisual.DetailFontWeight, AVisual.Z, textZ2, AMeasurer, APPI, AList));
@@ -1725,4 +1794,10 @@ begin
   end;
 end;
 
+initialization
+  GDetailDefaults := TJSONObject(GetJSON('{"width":100,"lineHeight":30,'
+    + '"padding":[5,10],"backgroundColor":"rgba(0,0,0,0)","borderWidth":0,'
+    + '"borderColor":"#ccc"}'));
+finalization
+  GDetailDefaults.Free;
 end.

@@ -432,7 +432,7 @@ uses
   { Only for the diagnostic resourcestrings; kept out of the interface uses so
     the dependency stays one-way and this unit's public face still names only
     the AdvChart layer. }
-  tyControls.StrConsts, tyControls.AdvChart.AxisName,
+  tyControls.StrConsts, tyControls.AdvChart.AxisName, tyControls.AdvChart.RichStyle,
   tyControls.AdvChart.AxisLabels, tyControls.AdvChart.Handlers,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Color;
 
@@ -1250,6 +1250,34 @@ begin
     AHasColour := True;
     AColour := c;
   end;
+end;
+
+{ THE TEXT BLOCK OF AN AXIS TEXT (axisLabel, nameTextStyle): its styles when
+  the node asks for one. Free text -- not attached to a host. [Batch 86] }
+function AxisRtOf(ANode: TJSONObject; const AGlobal: TTyRtGlobal): TTyRtBlockStyle;
+begin
+  Result := Default(TTyRtBlockStyle);
+  if (ANode = nil) or not TyRtNodeWantsBlock(ANode) then Exit;
+  Result := TyRtResolve([ANode], AGlobal, TyRtResolveOpt(False));
+end;
+
+{ ONE AXIS TEXT'S PIECES, about its anchor: the block in the font the layout
+  measured it in, its ink the component's -- the author's where written, the
+  skin's (at paint time) where not -- which overrides the block's own as
+  AxisBuilder's fixed style does, never a rich style's. [Batch 86] }
+function AxisRtPieces(const ASpec: TTyAxisLayoutSpec; const ABlock: TTyRtBlockStyle;
+  const AText, AFontName: string; AFontSize, AWeight: Integer; AHasColour: Boolean;
+  AColour: Cardinal; AH: TTyTextAnchorH; AV: TTyTextAnchorV;
+  const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
+var b: TTyRtBlockStyle;
+begin
+  b := ABlock;
+  TyRtFinish(b, AFontName, AFontSize, AWeight, ASpec.RtGlobal, False, 0);
+  b.Style.HasFill := AHasColour;
+  b.Style.FillNone := False;
+  b.Style.Fill := TTyChartColor(AColour);
+  Result := TyRtLay(AText, b, TyRtDefaultOf(False, 0, False, 0, False, AH, AV),
+    ASpec.RtScale, AMeasurer);
 end;
 
 { axisLabel.formatter, when it is a string. }
@@ -2470,6 +2498,22 @@ var
     AuthorFont(ObjOf(FindIn(ANode, 'nameTextStyle')), ASpec.NameFontName,
       ASpec.NameFontSizeLogical, ASpec.NameFontWeight, ASpec.HasNameColour,
       ASpec.NameColour);
+    { THE NAME'S TEXT BLOCK [Batch 86] }
+    ASpec.NameRt := AxisRtOf(ObjOf(FindIn(ANode, 'nameTextStyle')), AText.RtGlobal);
+    { THE NAME'S WIDTH AND OVERFLOW ARE AxisBuilder's: `overflow: 'truncate'`
+      at nameTruncate's maxWidth, whatever nameTextStyle says (AxisBuilder.ts
+      852-930) -- and with no maxWidth, no width at all }
+    ASpec.NameRt.Style.WidthKind := rtwNone;
+    ASpec.NameRt.Style.Width := 0;
+    ASpec.NameRt.Style.Overflow := rtoNone;
+    ASpec.NameRt.Needed := TyRtNeedsBlock(ASpec.NameRt);
+    if ASpec.NameRt.Needed then
+    begin
+      if APPI > 0 then ASpec.RtScale := APPI / 96 else ASpec.RtScale := 1;
+      ASpec.RtGlobal := AText.RtGlobal;
+      ASpec.NameMeter := TyRtBlockMeasurer(AMeasurer, ASpec.NameRt,
+        AText.RtGlobal, ASpec.RtScale);
+    end;
     { 'end' by default; 'center' is 'middle'. A location upstream does not
       know takes its middle anchor and its end layout there -- here it is
       simply 'end'. }
@@ -2588,6 +2632,14 @@ var
     AuthorFont(ObjOf(FindIn(ANode, 'axisLabel')), ASpec.FontName,
       ASpec.FontSizeLogical, ASpec.FontWeight, ASpec.HasLabelColour,
       ASpec.LabelColour);
+    { THE LABELS' TEXT BLOCK, and the measurer every measurement of a label
+      goes through [Batch 86] }
+    ASpec.RtGlobal := AText.RtGlobal;
+    if APPI > 0 then ASpec.RtScale := APPI / 96 else ASpec.RtScale := 1;
+    ASpec.LabelRt := AxisRtOf(ObjOf(FindIn(ANode, 'axisLabel')), AText.RtGlobal);
+    if ASpec.LabelRt.Needed then
+      ASpec.LabelMeter := TyRtBlockMeasurer(AMeasurer, ASpec.LabelRt,
+        ASpec.RtGlobal, ASpec.RtScale);
     { THE THEME FIRST AND THE OPTION OVER IT. A gap is a geometric value and
       an author is allowed to name one -- the same arrangement
       `axisLabel.width` has already. Colours are the other kind and still
@@ -2920,6 +2972,45 @@ begin
       vp.Bottom - vp.Top, AMeasurer, APPI);
     for t := 0 to High(gb.FSpecs) do
       gb.FSpecs[t].NamePlacement := names[t];
+
+    { THE BLOCKS WHERE THEY HANG: every shown label's, and the name's, pieces
+      about the anchor the layout gave it [Batch 86] }
+    for t := 0 to High(gb.FSpecs) do
+    begin
+      if gb.FSpecs[t].LabelRt.Needed then
+        for i := 0 to High(gb.FSpecs[t].Placements) do
+          if gb.FSpecs[t].Placements[i].Shown then
+          begin
+            if gb.FSpecs[t].Placements[i].Emphasis
+              and (gb.FSpecs[t].EmphasisFontWeight > 0) then
+              j := gb.FSpecs[t].EmphasisFontWeight
+            else
+              j := gb.FSpecs[t].FontWeight;
+            gb.FSpecs[t].Placements[i].Rt := AxisRtPieces(gb.FSpecs[t],
+              gb.FSpecs[t].LabelRt, gb.FSpecs[t].Placements[i].Text,
+              gb.FSpecs[t].FontName, gb.FSpecs[t].FontSizeLogical, j,
+              gb.FSpecs[t].HasLabelColour, gb.FSpecs[t].LabelColour,
+              gb.FSpecs[t].Placements[i].AnchorH,
+              gb.FSpecs[t].Placements[i].AnchorV, AMeasurer);
+          end;
+      if gb.FSpecs[t].NameRt.Needed and gb.FSpecs[t].NamePlacement.Shown then
+      begin
+        if gb.FSpecs[t].NameFontSizeLogical > 0 then
+          gb.FSpecs[t].NamePlacement.Rt := AxisRtPieces(gb.FSpecs[t],
+            gb.FSpecs[t].NameRt, gb.FSpecs[t].NamePlacement.Text,
+            gb.FSpecs[t].NameFontName, gb.FSpecs[t].NameFontSizeLogical,
+            gb.FSpecs[t].NameFontWeight, gb.FSpecs[t].HasNameColour,
+            gb.FSpecs[t].NameColour, gb.FSpecs[t].NamePlacement.AnchorH,
+            gb.FSpecs[t].NamePlacement.AnchorV, AMeasurer)
+        else
+          gb.FSpecs[t].NamePlacement.Rt := AxisRtPieces(gb.FSpecs[t],
+            gb.FSpecs[t].NameRt, gb.FSpecs[t].NamePlacement.Text,
+            gb.FSpecs[t].FontName, gb.FSpecs[t].FontSizeLogical,
+            gb.FSpecs[t].FontWeight, gb.FSpecs[t].HasNameColour,
+            gb.FSpecs[t].NameColour, gb.FSpecs[t].NamePlacement.AnchorH,
+            gb.FSpecs[t].NamePlacement.AnchorV, AMeasurer);
+      end;
+    end;
 
     { AND THE FURNITURE, on the same final rect }
     for t := 0 to High(gb.FSpecs) do

@@ -1005,6 +1005,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.RichText"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.RichStyle.pas"/>
+        <UnitName Value="tyControls.AdvChart.RichStyle"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Diagnose.pas"/>
         <UnitName Value="tyControls.AdvChart.Diagnose"/>
       </Item>

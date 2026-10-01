@@ -70,6 +70,10 @@
 //   box        the outer rect (padding in, border not): local x, y, width,
 //              height, the four corners global (tl, tr, br, bl) and their
 //              axis-aligned bounds
+//   bounds     the Text's own getBoundingRect (Text.ts:416-446), the union of
+//              its children -- a bordered rect grown by its painted lineWidth
+//              (strokeContainThreshold 0, so no floor), a TSpan by a stroke
+//              its style gave it -- in the same shape as box
 //   isTruncated
 //   lines[]    rich only: {lineTop, lineHeight, tokens[] in source order:
 //              {index (in the line), placeOrder, styleName, text, width,
@@ -97,7 +101,10 @@
 // rich-percent-hr and rich-token-fixed-width-align; the padding forms; the
 // doubled border; the invisible lineHeight rect; the disabled title box; the
 // '{name|text}' grammar cases token by token; the plain truncation against an
-// independent reading of parseText.ts; richInheritPlainLabel; no auto stroke
+// independent reading of parseText.ts; richInheritPlainLabel and the shadow a
+// token that does not inherit takes; no shadow without a blur; 'baseline' as
+// verticalAlign's alias; a bordered token's bounds grown by exactly its
+// stroke; no auto stroke
 // over a background; every TSpan measure against the rule; one <text> in the
 // SVG per non-empty TSpan; and the whole run done twice in-process must give
 // the same JSON. Outside the script: run it twice and diff the files.
@@ -373,6 +380,18 @@ const cases = [
   { name: 'rich-inherit-off-root', note: 'the same with the root option richInheritPlainLabel false',
     option: barLabel({ formatter: '{a|{c}}{b|!}', fontSize: 16, fontWeight: 'bold', color: '#123456', textShadowBlur: 2, textShadowColor: '#999999',
       rich: { a: {}, b: { color: '#c23531', fontSize: 10 } } }, { richInheritPlainLabel: false }) },
+  // a token that does not inherit the plain label takes the root textStyle's
+  // shadow parts (labelStyle.ts:624-640), and what it has none of falls to the
+  // block's in zrender (Text.ts:850-861): colour and offsets from the root,
+  // blur from the label -- not the label's colour and offsets
+  { name: 'rich-inherit-off-shadow', note: "richInheritPlainLabel false; label shadow blur 2 #999999 offsetX 3; root textStyle shadow #ff0000 offset 5,4; a: {} , b: own #0000ff",
+    option: barLabel({ formatter: '{a|{c}}{b|!}', textShadowBlur: 2, textShadowColor: '#999999', textShadowOffsetX: 3, richInheritPlainLabel: false,
+      rich: { a: {}, b: { textShadowColor: '#0000ff' } } }, { textStyle: { textShadowColor: '#ff0000', textShadowOffsetX: 5, textShadowOffsetY: 4 } }) },
+  { name: 'rich-baseline-alias', note: "tokens baseline 'top' / 'bottom' (verticalAlign's alias, labelStyle.ts:647-652) beside a 24px token",
+    option: barLabel({ formatter: '{t|top}{b|bot}{big|Big}',
+      rich: { t: { baseline: 'top', backgroundColor: '#ffeeee' }, b: { baseline: 'bottom', backgroundColor: '#eeeeff' }, big: { fontSize: 24 } } }) },
+  { name: 'plain-shadow-offset-only', note: 'textShadowColor #ff0000 offset 2,2 and no blur: zrender sets no shadow (Text.ts:611)',
+    option: barLabel({ textShadowColor: '#ff0000', textShadowOffsetX: 2, textShadowOffsetY: 2 }) },
   { name: 'rich-block-box', note: 'block bg #ffffee, border #999999 1, radius 3, padding 6; tokens a 14px, v bg + padding 2',
     option: barLabel({ formatter: TWO, backgroundColor: '#ffffee', borderColor: '#999999', borderWidth: 1, borderRadius: 3, padding: 6,
       rich: { a: { fontSize: 14 }, v: { backgroundColor: '#eeeeee', padding: 2 } } }) },
@@ -485,6 +504,16 @@ const cases = [
     option: opt({ textStyle: { color: '#123456' }, title: { text: '{a|T}itle', textStyle: { rich: { a: { fontSize: 20 } } } },
       legend: { formatter: '{a|{name}}!', textStyle: { rich: { a: { fontWeight: 'bold' } } } },
       xAxis: xCat(), yAxis: val(), series: [{ type: 'bar', name: 'Sales', data: DATA }] }) },
+  // the legend lays its items out by their group's bounds (legend/LegendView.ts,
+  // layoutUtil.box over getBoundingRect), which a bordered token rect grows by
+  // its stroke -- no more, since zrender gives a text's box rect
+  // strokeContainThreshold 0 (Text.ts:952, Path.ts:372-384)
+  { name: 'legend-rich-token-border', note: "legend formatter '{a|{name}}': a border #333333 1, padding [0,2], no bg", record: ['legend'],
+    option: opt({ legend: { formatter: '{a|{name}}', textStyle: { rich: { a: { borderColor: '#333333', borderWidth: 1, padding: [0, 2] } } } },
+      xAxis: xCat(), yAxis: val(), series: [{ type: 'bar', name: 'Sales', data: DATA }, { type: 'bar', name: 'Cost', data: [60, 70, 80] }, { type: 'bar', name: 'Profit', data: [30, 40, 50] }] }) },
+  { name: 'legend-rich-token-border-bg', note: "the same with a bg #eeeeee: the border painted 2 wide, the box grown by 2", record: ['legend'],
+    option: opt({ legend: { formatter: '{a|{name}}', textStyle: { rich: { a: { borderColor: '#333333', borderWidth: 1, backgroundColor: '#eeeeee', padding: [0, 2] } } } },
+      xAxis: xCat(), yAxis: val(), series: [{ type: 'bar', name: 'Sales', data: DATA }, { type: 'bar', name: 'Cost', data: [60, 70, 80] }, { type: 'bar', name: 'Profit', data: [30, 40, 50] }] }) },
   { name: 'gauge-detail-box', note: "gauge detail bg, radius 3, padding [4,8], formatter '{a|{value}}%' rich; title plain", record: ['chartText'], match: '%|^Speed$',
     option: opt({ series: [{ type: 'gauge', data: [{ value: 62, name: 'Speed' }],
       detail: { formatter: '{a|{value}}%', backgroundColor: '#eeeeee', borderRadius: 3, padding: [4, 8], fontSize: 20, rich: { a: { color: '#c23531', fontSize: 24 } } } }] }) },
@@ -635,6 +664,13 @@ function recordText(lib, t, measureSet) {
     must(Object.is(d.x, pb.x) && Object.is(d.y, pb.y) && Object.is(d.w, pb.w) && Object.is(d.h, pb.h),
       where + ': the probe box is not the drawn box');
   }
+  // the Text's own bounds, what a legend lays out and labelLayout overlaps:
+  // the union of its children's (Text.ts:416-446) -- a stroked rect grown by
+  // its lineWidth as painted, a TSpan by a stroke the style gave it
+  const gbr = el.getBoundingRect();
+  must(el.__richLog === log, where + ': asking the bounds laid the text out again');
+  const bounds = put(put(put(put({}, 'x', gbr.x), 'y', gbr.y), 'width', gbr.width), 'height', gbr.height);
+  Object.assign(bounds, corners(m, gbr.x, gbr.y, gbr.width, gbr.height));
 
   // rich lines, rebuilt from the placement order
   const lines = [];
@@ -775,6 +811,7 @@ function recordText(lib, t, measureSet) {
     style: styleOf(s),
     richStyles: rich,
     box,
+    bounds,
     isTruncated: !!el.isTruncated,
     lines: log.mode === 'rich' ? lines.map(ln => Object.assign(put(put({}, 'lineTop', ln.lineTop), 'lineHeight', ln.lineHeight), { tokens: ln.tokens })) : null,
     pieces,
@@ -1056,6 +1093,45 @@ guard('rich-inherit-plain: token a has no own fill, so the label colour reaches 
   byName('rich-inherit-plain').texts.every(t => t.richStyles.a.fill === undefined && spansOf(t)[0].fill === '#123456'));
 ['rich-inherit-off', 'rich-inherit-off-root'].forEach(n => guard(n + ': token a falls back to the root 12px normal',
   byName(n).texts.every(t => { const a = spansOf(t)[0]; return a.px === 12 && a.fontWeight === 'normal'; })));
+// a token that does not inherit: the root's shadow colour and offsets, the
+// block's blur (labelStyle.ts:624-640, Text.ts:850-861)
+byName('rich-inherit-off-shadow').texts.forEach(t => {
+  const sp = spansOf(t);
+  const sh = k => sp[k] && sp[k].shadow;
+  guard('rich-inherit-off-shadow: token a is the root colour and offsets, the label blur',
+    sh(0) && sh(0).color === '#ff0000' && sh(0).offsetXText === '5' && sh(0).offsetYText === '4' && sh(0).blurText === '2');
+  guard('rich-inherit-off-shadow: token b keeps its own colour',
+    sh(1) && sh(1).color === '#0000ff' && sh(1).offsetXText === '5');
+});
+guard('plain-shadow-offset-only: no blur, no shadow',
+  byName('plain-shadow-offset-only').texts.every(t => spansOf(t).every(p => p.shadow === null)));
+// 'baseline' is verticalAlign's alias: the top token at the line top, the
+// bottom one at its bottom
+byName('rich-baseline-alias').texts.forEach(t => {
+  const tk = t.lines[0].tokens;
+  guard('rich-baseline-alias: the tokens read top / bottom',
+    tk[0].verticalAlign === 'top' && tk[1].verticalAlign === 'bottom');
+  const r = rects(t);
+  const top = H2D(t.lines[0].lineTop);
+  const lh = H2D(t.lines[0].lineHeight);
+  guard('rich-baseline-alias: t at the top, b at the bottom of a 24px line',
+    r.length === 2 && eq(lh, 24) && eq(H2D(r[0].y), top) && eq(H2D(r[1].y) + H2D(r[1].height), top + lh));
+});
+// a text's bounds grow by a bordered rect's stroke, by exactly its width:
+// no floor of 4 where it has no fill
+byName('legend-rich-token-border').texts.forEach(t => {
+  const r = rects(t);
+  guard('legend-rich-token-border: one unfilled 1-wide rect', r.length === 1 && r[0].fill === null && eq(H2D(r[0].lineWidth), 1));
+  guard('legend-rich-token-border: the bounds are the rect grown by 1',
+    r.length === 1 && eq(H2D(t.bounds.x), H2D(r[0].x) - 0.5) && eq(H2D(t.bounds.y), H2D(r[0].y) - 0.5)
+    && eq(H2D(t.bounds.width), H2D(r[0].width) + 1) && eq(H2D(t.bounds.height), H2D(r[0].height) + 1));
+});
+byName('legend-rich-token-border-bg').texts.forEach(t => {
+  const r = rects(t);
+  guard('legend-rich-token-border-bg: the bounds are the rect grown by the doubled 2',
+    r.length === 1 && eq(H2D(r[0].lineWidth), 2) && eq(H2D(t.bounds.x), H2D(r[0].x) - 1)
+    && eq(H2D(t.bounds.width), H2D(r[0].width) + 2));
+});
 // every recorded TSpan's font is makeFont of the style it came from
 records.forEach(r => r.texts.forEach(t => {
   const s = raw(t).el.style;

@@ -903,7 +903,13 @@ procedure TAdvChartGaugeRuleTest.TestARichFormatterDegradesToItsWords;
 begin
   { A RUN THIS PORT DOES NOT DRAW IS STILL A READING. `{a|83}{b| km/h}` names
     two styles the author declared under `rich:`; printed as written it is
-    line noise where the number should be. }
+    line noise where the number should be.
+    [Batch 86: a detail that DECLARES `rich` is now laid out as its block --
+    AddGaugeText asks TyGaugeFormat to keep the markup (AKeepRich) and draws
+    the tokens -- so the degrade held here is only what a formatter's
+    markup comes to when the detail names no rich styles for it: its words.
+    The rich path is held against upstream by test.advchart.richwiring
+    (gauge-detail-box).] }
   AssertEquals('83 km/h', TyGaugeFormat('{a|{value}}{b| km/h}', True, 83));
   AssertEquals('the value token still works alone', '83 km/h',
                TyGaugeFormat('{value} km/h', True, 83));
