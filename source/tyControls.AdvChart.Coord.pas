@@ -82,6 +82,10 @@ type
     function GetPxStop: Double;
     function GetPxLength: Double;
   public
+    { AN INDEX HOLE replaceMerge left [Batch 97]: the slot keeps an axis so
+      every array stays indexed by componentIndex, but no grid takes it and
+      TTyChartBuild.Axis answers nil for it -- upstream has no model there. }
+    Hole: Boolean;
     { Takes ownership of AScale. }
     constructor Create(const ADim: string; AScale: TTyScale; AHorizontal: Boolean);
     destructor Destroy; override;

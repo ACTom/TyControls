@@ -416,7 +416,15 @@ function TyFillStoreFromSource(const ASource: TTyChartSource;
   A name is never consulted, even though the option carries one. }
 function TyResolveComponentRef(ANode: TJSONObject;
   const AIndexKey, AIdKey: string; ACount: Integer;
-  const AIds: TTyStringArray): Integer;
+  const AIds: TTyStringArray): Integer; overload;
+{ THE SAME OVER A FAMILY WITH INDEX HOLES (AHoles[i]: replaceMerge left no
+  model at i) [Batch 97]: an index naming a hole names nothing, an id never
+  matches one, and neither given is the first that is NOT a hole --
+  getReferringComponents' useDefault, getComponent(mainType) skipping the
+  undefined slots. }
+function TyResolveComponentRef(ANode: TJSONObject;
+  const AIndexKey, AIdKey: string; ACount: Integer;
+  const AIds: TTyStringArray; const AHoles: array of Boolean): Integer; overload;
 
 { ---- the rules, exposed because they are worth testing directly ---- }
 { An explicit type wins with NO validation; otherwise a `data` key that is
@@ -814,10 +822,11 @@ begin
   if AMainType = 'xAxis' then
   begin
     if AComponentIndex <= High(FXAxes) then Result := FXAxes[AComponentIndex];
-    Exit;
-  end;
-  if AMainType = 'yAxis' then
+  end
+  else if AMainType = 'yAxis' then
     if AComponentIndex <= High(FYAxes) then Result := FYAxes[AComponentIndex];
+  { a hole is no axis [Batch 97] }
+  if (Result <> nil) and Result.Hole then Result := nil;
 end;
 
 function TTyChartBuild.AxisById(const AMainType, AId: string): TTyAxis;
@@ -893,10 +902,30 @@ begin
   Result := 0;
 end;
 
-function ResolveGridIndex(ANode: TJSONObject; AGridCount: Integer;
-  const AGridIds: TTyStringArray): Integer;
+function TyResolveComponentRef(ANode: TJSONObject;
+  const AIndexKey, AIdKey: string; ACount: Integer;
+  const AIds: TTyStringArray; const AHoles: array of Boolean): Integer;
+var i: Integer;
+
+  function Hole(AIndex: Integer): Boolean;
+  begin
+    Result := (AIndex >= 0) and (AIndex <= High(AHoles)) and AHoles[AIndex];
+  end;
+
 begin
-  Result := TyResolveComponentRef(ANode, 'gridIndex', 'gridId', AGridCount, AGridIds);
+  Result := TyResolveComponentRef(ANode, AIndexKey, AIdKey, ACount, AIds);
+  if not Hole(Result) then Exit;
+  if HasKey(ANode, AIndexKey) or (StrIn(ANode, AIdKey, '') <> '') then Exit(-1);
+  for i := 0 to ACount - 1 do
+    if not Hole(i) then Exit(i);
+  Result := -1;
+end;
+
+function ResolveGridIndex(ANode: TJSONObject; AGridCount: Integer;
+  const AGridIds: TTyStringArray; const AGridHoles: array of Boolean): Integer;
+begin
+  Result := TyResolveComponentRef(ANode, 'gridIndex', 'gridId', AGridCount, AGridIds,
+    AGridHoles);
 end;
 
 function MakeScale(AType: TTyAxisType; ANode: TJSONObject): TTyScale;
@@ -943,6 +972,16 @@ var
   pos: string;
   c: TTyCartesian2D;
   n: Integer;
+  gridHole: array of Boolean;
+
+  { AN INDEX HOLE replaceMerge left: an entry of the main type's array that
+    is no object [Batch 97] }
+  function IsHole(const AMainType: string; AIndex: Integer): Boolean;
+  var d: TJSONData;
+  begin
+    d := AOption.ComponentAt(AMainType, AIndex);
+    Result := (d <> nil) and (d.JSONType <> jtObject);
+  end;
 
   procedure BuildAxisFamily(const AMainType: string; AHorizontal: Boolean;
     var ATarget: TTyAxisArray; ACount: Integer);
@@ -966,6 +1005,7 @@ var
         TTyTimeScale(a.Scale).UTC := AOption.GetBool('useUTC', False);
       a.MainType := AMainType;
       a.ComponentIndex := q;
+      a.Hole := IsHole(AMainType, q);
       a.Id := StrIn(nd, 'id', '');
       a.Name := AxisNameIn(nd);
       a.AxisType := t;
@@ -1004,10 +1044,13 @@ begin
     build.Note(rsTyChartAxisWithoutPair);
 
   SetLength(gridIds, gridCount);
+  SetLength(gridHole, gridCount);
   for i := 0 to gridCount - 1 do
   begin
     if synth then node := nil else node := ObjOf(AOption.ComponentAt('grid', i));
     gridIds[i] := StrIn(node, 'id', '');
+    { a hole keeps its index and takes no axis [Batch 97] }
+    gridHole[i] := (not synth) and IsHole('grid', i);
   end;
 
   BuildAxisFamily('xAxis', True, build.FXAxes, xCount);
@@ -1045,7 +1088,8 @@ begin
     begin
       ax := build.FXAxes[j];
       node := ObjOf(AOption.ComponentAt('xAxis', j));
-      gi := ResolveGridIndex(node, gridCount, gridIds);
+      if ax.Hole then gi := -1
+      else gi := ResolveGridIndex(node, gridCount, gridIds, gridHole);
       ax.GridIndex := gi;
       if gi <> i then Continue;
       pos := StrIn(node, 'position', '');
@@ -1065,7 +1109,8 @@ begin
     begin
       ax := build.FYAxes[j];
       node := ObjOf(AOption.ComponentAt('yAxis', j));
-      gi := ResolveGridIndex(node, gridCount, gridIds);
+      if ax.Hole then gi := -1
+      else gi := ResolveGridIndex(node, gridCount, gridIds, gridHole);
       ax.GridIndex := gi;
       if gi <> i then Continue;
       pos := StrIn(node, 'position', '');
@@ -1082,10 +1127,10 @@ begin
   end;
 
   for i := 0 to High(build.FXAxes) do
-    if build.FXAxes[i].GridIndex < 0 then
+    if (build.FXAxes[i].GridIndex < 0) and not build.FXAxes[i].Hole then
       build.Note(Format(rsTyChartXAxisNoGrid, [i]));
   for i := 0 to High(build.FYAxes) do
-    if build.FYAxes[i].GridIndex < 0 then
+    if (build.FYAxes[i].GridIndex < 0) and not build.FYAxes[i].Hole then
       build.Note(Format(rsTyChartYAxisNoGrid, [i]));
 
   { The N x M cross product. A grid missing either family gets NO coordinate

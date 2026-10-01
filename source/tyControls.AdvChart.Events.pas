@@ -78,7 +78,8 @@ function TyEventQueryMatches(const AQuery: TTyEventQuery;
   given; '' for one it does not know: the nine mouse events, and the events
   of the state actions [Batch 88] -- select, unselect, toggleselect,
   selectchanged, highlight, downplay and the six legacy pie / map select
-  events; and the legend's five [Batch 93]. }
+  events; and the legend's five [Batch 93]; and `updated`, which every
+  setOption and dispatch ends with [Batch 97]. }
 function TyChartEventTypeOf(const AName: string): string;
 { whether a type is one of the action events (no params, a payload) }
 function TyChartEventIsAction(const AType: string): Boolean;
@@ -111,6 +112,8 @@ begin
   for i := 0 to High(cMouseTypes) do
     if Result = cMouseTypes[i] then Exit;
   if TyChartEventIsAction(Result) then Exit;
+  { the update's own event, no params and no payload [Batch 97] }
+  if Result = 'updated' then Exit;
   Result := '';
 end;
 

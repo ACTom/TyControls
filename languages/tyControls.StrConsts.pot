@@ -915,6 +915,24 @@ msgstr ""
 msgid "JavaScript functions cannot be used here. Write a template string such as '{b}: {c}', or the name of a registered handler such as '@MyFormatter'."
 msgstr ""
 
+#: tycontrols.strconsts.rstyoptmergenotobject
+msgid "An option to merge must be an object."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptduplicateid
+#, object-pascal-format
+msgid "Two %s components carry the id \"%s\"."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptreplacemergebadtype
+#, object-pascal-format
+msgid "replaceMerge names \"%s\", which is not a component main type."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptsetoptsnotobject
+msgid "The setOption options must be an object."
+msgstr ""
+
 #: tycontrols.strconsts.rstyoptstatusneedstype
 msgid "write a type first -- what is under here depends on which one"
 msgstr ""
