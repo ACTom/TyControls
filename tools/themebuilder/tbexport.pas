@@ -61,6 +61,11 @@ type
 function TbCollectBundleFiles(const AText, ABaseDir: string; out AFiles: TTbBundleFiles;
   out AError: string): Boolean;
 function TbManifestJson(const AInfo: TTbBundleInfo): string;
+{ the files AText refers to by a relative path -- @import and url(), as written; data: URLs
+  and absolute paths left out (they are found wherever the text is). What a theme handed to
+  the library as text (TyRegisterThemeCss, a zip) cannot reach: the library has no way to
+  give such a text a folder }
+function TbRelativeReferences(const AText: string): TStringArray;
 { write, read back, load, probe, move into place; False and AError, with nothing left behind }
 function TbExportBundle(const AEntry: string; const AFiles: TTbBundleFiles;
   const AInfo: TTbBundleInfo; AFormat: TTbBundleFormat; const ATarget: string;
@@ -222,6 +227,21 @@ end;
 function IsAbsoluteRef(const APath: string): Boolean;
 begin
   Result := (APath <> '') and ((APath[1] in ['/', '\']) or FilenameIsAbsolute(APath));
+end;
+
+function TbRelativeReferences(const AText: string): TStringArray;
+var
+  all: TStringArray;
+  i: Integer;
+begin
+  Result := nil;
+  all := Concat(ImportPaths(AText), UrlPaths(AText));
+  for i := 0 to High(all) do
+    if not IsAbsoluteRef(all[i]) then
+    begin
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := all[i];
+    end;
 end;
 
 function TbCollectBundleFiles(const AText, ABaseDir: string; out AFiles: TTbBundleFiles;

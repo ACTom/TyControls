@@ -36,6 +36,7 @@ type
     procedure TestQuotingAndCutting;
     procedure TestThemeNames;
     procedure TestTheWindow;
+    procedure TestAThemeWithFilesIsNotForText;
   end;
 
 implementation
@@ -310,6 +311,38 @@ begin
     AssertTrue('S7: from a zip', Pos('''green.zip''', f.MemoZip.Lines.Text) > 0);
     AssertTrue('S7: registered: the function', Pos('function ThemeCss', f.MemoRegister.Lines.Text) > 0);
     AssertTrue('S7: registered: the text', Pos('''TyButton { }''', f.MemoRegister.Lines.Text) > 0);
+  finally
+    f.Free;
+  end;
+end;
+
+{ The review found it: the zip and "registered by name" snippets were offered for a theme
+  that @imports a file or draws a picture by a relative path -- handed over as text it finds
+  neither (the registry takes no folder, the zip reader reads no @import or picture). Those
+  two are greyed and say why; a theme with only a data: URL or an absolute path is fine. }
+procedure TTbSnippetsTests.TestAThemeWithFilesIsNotForText;
+var
+  f: TTbSnippetsForm;
+begin
+  f := TTbSnippetsForm.Create(nil);
+  try
+    f.Prepare('green', 'green.tycss', '@import "base.tycss";'#10'TyPanel { background-image: url(assets/bg.jpg); }');
+    AssertFalse('S8: no zip snippet', f.MemoZip.Enabled);
+    AssertFalse('S8: nothing to copy', f.BtnCopyZip.Enabled);
+    AssertEquals('S8: says why, naming the file', Format(rsTbSnippetZipNeedsFiles, ['base.tycss']), f.LblZip.Caption);
+    AssertFalse('S8: no registered snippet', f.MemoRegister.Enabled);
+    AssertFalse('S8: nothing to copy there either', f.BtnCopyRegister.Enabled);
+    AssertEquals('S8: says why', Format(rsTbSnippetRegisterNeedsFiles, ['base.tycss']), f.LblRegister.Caption);
+    AssertTrue('S8: the hint lists them all', Pos('assets/bg.jpg', f.LblRegister.Hint) > 0);
+    AssertTrue('S8: from a file still', f.MemoFile.Enabled);
+    AssertTrue('S8: from a folder still', f.MemoFolder.Enabled);
+  finally
+    f.Free;
+  end;
+  f := TTbSnippetsForm.Create(nil);
+  try
+    f.Prepare('x', 'x.tycss', 'TyPanel { background-image: url(data:image/png;base64,AAAA); }');
+    AssertTrue('S8: a data: URL is no file', f.MemoRegister.Enabled and f.MemoZip.Enabled);
   finally
     f.Free;
   end;
