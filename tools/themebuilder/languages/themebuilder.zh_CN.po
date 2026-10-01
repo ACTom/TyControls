@@ -1225,3 +1225,233 @@ msgstr "这个主题用不了：注册成文本的主题找不到 %s。请从文
 #, object-pascal-format
 msgid "Not for this theme: a zip cannot carry %s. Export a folder bundle."
 msgstr "这个主题用不了：zip 包带不了 %s。请导出成文件夹包。"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: tbaiclient.rstbaiauth
+#, object-pascal-format
+msgid "The key was refused (%d). Check the key in the AI settings."
+msgstr "密钥被拒绝（%d）。请检查 AI 设置里的密钥。"
+
+#: tbaiclient.rstbaibadformat
+msgid "The reply is not in the expected format."
+msgstr "回答的格式不对。"
+
+#: tbaiclient.rstbaibadrequest
+#, object-pascal-format
+msgid "The service refused the request (%d)."
+msgstr "服务拒绝了这个请求（%d）。"
+
+#: tbaiclient.rstbaibadurl
+#, object-pascal-format
+msgid "The service address is not a web address: %s"
+msgstr "服务地址不是网址：%s"
+
+#: tbaiclient.rstbaibroken
+#, object-pascal-format
+msgid "The connection to %s broke off before the reply was complete."
+msgstr "到 %s 的连接在回答完成之前断了。"
+
+#: tbaiclient.rstbaicancelled
+msgid "Stopped."
+msgstr "已停止。"
+
+#: tbaiclient.rstbaicannotconnect
+#, object-pascal-format
+msgid "Cannot connect to %s. Is the service running, or does it need a proxy?"
+msgstr "连不上 %s。服务开着吗？或者需要代理？"
+
+#: tbaiclient.rstbainamenotresolved
+#, object-pascal-format
+msgid "Cannot find the host %s. Check the address and the network."
+msgstr "找不到主机 %s。请检查地址和网络。"
+
+#: tbaiclient.rstbainotfound
+msgid "Wrong address or model name (404)."
+msgstr "地址或模型名不对（404）。"
+
+#: tbaiclient.rstbainotransport
+#, object-pascal-format
+msgid "AI is not available: %s"
+msgstr "AI 用不了：%s"
+
+#: tbaiclient.rstbaiother
+msgid "The request failed."
+msgstr "请求失败了。"
+
+#: tbaiclient.rstbairatelimit
+msgid "Too many requests (429). Wait a little and try again."
+msgstr "请求太多（429）。等一会儿再试。"
+
+#: tbaiclient.rstbairefused
+msgid "The model declined the request."
+msgstr "模型拒绝了这个请求。"
+
+#: tbaiclient.rstbaiserver
+#, object-pascal-format
+msgid "The service had a problem (%d). Try again later."
+msgstr "服务出了问题（%d）。请稍后再试。"
+
+#: tbaiclient.rstbaiservicesays
+#, object-pascal-format
+msgid "(%s)"
+msgstr "（%s）"
+
+#: tbaiclient.rstbaistreamerror
+msgid "The service stopped with an error."
+msgstr "服务中途报错，停下了。"
+
+#: tbaiclient.rstbaitimeout
+#, object-pascal-format
+msgid "No reply from %s for %d seconds."
+msgstr "%s 已经 %d 秒没有回应。"
+
+#: tbaiclient.rstbaitls
+#, object-pascal-format
+msgid "The secure connection to %s failed."
+msgstr "到 %s 的安全连接失败了。"
+
+#: tbaiclient.rstbaitruncated
+msgid "The reply reached the maximum output length and was cut off. Raise it in the AI settings."
+msgstr "回答到了最大输出长度，被截断了。请在 AI 设置里调大。"
+
+#: tbaiframe.rstbaiconversation
+#, object-pascal-format
+msgid "This conversation: %d requests."
+msgstr "本次对话：%d 条要求。"
+
+#: tbaiframe.rstbaidescribe
+msgid "Describe the theme or the change first."
+msgstr "先描述想要的主题或改动。"
+
+#: tbaiframe.rstbainoprofile
+msgid "Add a service in the AI settings first."
+msgstr "先在 AI 设置里添加一个服务。"
+
+#: tbaiframe.rstbairound
+#, object-pascal-format
+msgid "Round %d"
+msgstr "第 %d 轮"
+
+#: tbaiframe.rstbaisentto
+#, object-pascal-format
+msgid "Sent to: %s"
+msgstr "发送到：%s"
+
+#: tbaisession.rstbaichecking
+msgid "Checking the result..."
+msgstr "正在检查结果……"
+
+#: tbaisession.rstbaidoneclean
+msgid "Done."
+msgstr "完成。"
+
+#: tbaisession.rstbaidoneissues
+#, object-pascal-format
+msgid "Done, with %d problems left."
+msgstr "完成，还剩 %d 个问题。"
+
+#: tbaisession.rstbaimodeprobe
+#, object-pascal-format
+msgid "In %s mode: %s"
+msgstr "%s模式下：%s"
+
+#: tbaisession.rstbainoblock
+msgid "The reply has no tycss code block; its text is shown below."
+msgstr "回答里没有 tycss 代码块，原文在下面。"
+
+#: tbaisession.rstbainochange
+msgid "The model returned the file unchanged."
+msgstr "模型交回的文件和原来一样。"
+
+#: tbaisession.rstbaireceiving
+#, object-pascal-format
+msgid "Receiving: %d lines so far."
+msgstr "正在接收：已有 %d 行。"
+
+#: tbaisession.rstbairetrying
+#, object-pascal-format
+msgid "Found %d problems; asking the model to fix them (%d of %d)..."
+msgstr "发现 %d 个问题，正在请模型改（第 %d 次，最多 %d 次）……"
+
+#: tbaisession.rstbaisending
+#, object-pascal-format
+msgid "Sending to %s..."
+msgstr "正在发送到 %s……"
+
+#: tbaisession.rstbaithinking
+msgid "The model is thinking..."
+msgstr "模型在思考……"
+
+#: tbaisettings.rstbaipresetcustom
+msgid "Custom"
+msgstr "自定义"
+
+#: tbaisettings.rstbaipresetlocal
+msgid "Local (Ollama)"
+msgstr "本地（Ollama）"
+
+#: tbaisettingsform.rstbaiformatanthropic
+msgid "Anthropic"
+msgstr "Anthropic"
+
+#: tbaisettingsform.rstbaiformatopenai
+msgid "OpenAI-compatible"
+msgstr "OpenAI 兼容"
+
+#: tbaisettingsform.rstbaikeystoreunix
+msgid "Keys are stored in a file only you can read."
+msgstr "密钥存在只有你能读的文件里。"
+
+#: tbaisettingsform.rstbaikeystorewin
+msgid "Keys are stored encrypted for your Windows user."
+msgstr "密钥加密保存，只有你的 Windows 账户能解开。"
+
+#: tbaisettingsform.rstbaineedmaxoutput
+msgid "Anthropic needs a maximum output length above 0."
+msgstr "Anthropic 的最大输出必须大于 0。"
+
+#: tbaisettingsform.rstbaiollamahint
+msgid "Ollama keeps only a short context by default and cuts the start of a long request without saying so. Set OLLAMA_CONTEXT_LENGTH=32768 (or more) before starting Ollama."
+msgstr "Ollama 默认的上下文很短，请求太长时会悄悄截掉开头。启动 Ollama 之前先设 OLLAMA_CONTEXT_LENGTH=32768（或更大）。"
+
+#: tbaisettingsform.rstbaiprivacy
+msgid "The theme text and your descriptions are sent to the service set here. A local model (an address on localhost) keeps them on this computer."
+msgstr "主题文本和你的描述会发给这里设置的服务。本地模型（localhost 上的地址）不会让它们离开这台电脑。"
+
+#: tbaisettingsform.rstbairemoveask
+#, object-pascal-format
+msgid "Remove the service \"%s\" and its key?"
+msgstr "删除服务「%s」和它的密钥吗？"
+
+#: tbaisettingsform.rstbaitesting
+msgid "Testing..."
+msgstr "正在测试……"
+
+#: tbaisettingsform.rstbaitestok
+#, object-pascal-format
+msgid "Connected: %s is answering."
+msgstr "已连上：%s 有回应。"
+
+#: tbcompareform.rstbcomparesummary
+#, object-pascal-format
+msgid "%d changes. Problems left: %d."
+msgstr "%d 处改动。剩下的问题：%d 个。"
+
+#: tbcompareform.rstbcomparetrialfailed
+#, object-pascal-format
+msgid "The preview cannot show it: %s"
+msgstr "预览显示不了它：%s"
+
+#: tbhttp.rstbainocurl
+#, object-pascal-format
+msgid "libcurl was not found (tried %s). Install libcurl (for example the libcurl4 package) to use AI."
+msgstr "找不到 libcurl（试过 %s）。装上 libcurl（例如 libcurl4 包）就能用 AI。"
+
+#: tbmain.rstbaiaccepted
+msgid "Accepted the AI's version. Ctrl+Z undoes it."
+msgstr "已接受 AI 的版本。Ctrl+Z 可以撤回。"
+
+#: tbmain.rstbaieditedsince
+msgid "The editor changed after this was generated. Accepting replaces those changes too. Accept?"
+msgstr "生成之后编辑器里又改过。接受会把这些改动一起替换掉。接受吗？"
