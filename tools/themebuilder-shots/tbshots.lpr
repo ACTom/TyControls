@@ -402,13 +402,13 @@ begin
     f.EdtKey.Text := cFakeKey;
     ShowAndSettle(f);
     Capture(f, 'p3-ai-settings-win32.png', '54',
-      'AI 设置：左边五种预置都加上了，选中 Anthropic（模型 `claude-sonnet-5`、最大输出 32000），密钥框是假密钥（显示为星号）；底下有「会发给这里设置的服务」与密钥怎么存的说明',
+      'AI 设置：左边五种预置都加上了，选中 Anthropic（模型 `claude-sonnet-5`、最大输出 32000），密钥框是假密钥（显示为星号）；底下有「会发给这里设置的服务」与密钥怎么存的说明；左下角「Add」是整个一块的菜单按钮，字完整',
       '`BuildAiSettingsForm` 后 `AddPreset` 五次、`SelectProfile`，密钥填 `' + cFakeKey + '`；非模态 `Show`，不点确定、什么都不保存');
     { the local preset: the Ollama context hint under the fields }
     f.SelectProfile(Ord(tapOllama));
     Pump(300);
     Capture(f, 'p3-ai-settings-ollama-win32.png', '54',
-      '同一窗口选中「Local (Ollama)」：地址是本机，字段下出现 Ollama 上下文长度的提示（提示的第三行被下面的「Test connection」挡住，是工具本身的排版，不是截图的问题）',
+      '同一窗口选中「Local (Ollama)」：地址是本机，字段下出现 Ollama 上下文长度的提示，三行完整，「Test connection」排在它下面、不重叠',
       '同上一张，`SelectProfile` 换到本机预置');
     f.Hide;
   finally
@@ -455,11 +455,11 @@ begin
   Main.Ai.FlushOutput;
   Pump(400);
   Capture(Main, 'p3-ai-page-win32.png', '57',
-    '主窗口，极简模板，侧栏在「AI」页：描述「' + cPrompt + '」，输出框里是模型的回答（**假后端**：测试用的脚本模型分 12 段流出一段固定回答，不连任何服务）',
+    '主窗口，极简模板，侧栏在「AI」页：描述「' + cPrompt + '」，输出框里是模型的回答（**假后端**：测试用的脚本模型分 12 段流出一段固定回答，不连任何服务），状态行下面是「This conversation: 1 request.」（单数）',
     '服务是指向 127.0.0.1 的自定义预置，会话的后端换成 `tests/tbaitesthelp` 的 `TScriptedBackend`，`GenerateClick`');
   ShowAndSettle(f);
   Capture(f, 'p3-compare-win32.png', '57、69',
-    '对比窗口：左「Now」是编辑器的极简模板，右是 AI 的版本（暖色、圆角 10px），改动行左红右绿、两边对齐，顶上一句「4 changes. Problems left: 0.」（**假后端**的回答）。注意改动行上的字是很浅的灰白色，几乎看不清——工具本身的绘制，不是截图的问题',
+    '对比窗口：左「Now」是编辑器的极简模板，右是 AI 的版本（暖色、圆角 10px），改动行左红右绿、两边对齐，顶上一句「4 changes. Problems left: 0.」（**假后端**的回答）。改动行上的字用编辑器正文的颜色，红、绿底上都清楚；左下「Try it in the preview」完整不截断',
     '生成结束后主窗口经 `ShowModalForTest` 交来的对比窗口，非模态 `Show` 截图后按「放弃」的结果关掉');
   f.Hide;
   f.ModalResult := mrCancel;
