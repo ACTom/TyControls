@@ -146,6 +146,12 @@ tools/themebuilder/
   > **实现期修正（3 期）**：AI 的对比窗口也用两个只读 SynEdit（与编辑器同一控件、同一套高亮与令牌取色，另加增 / 删 / 空位三种行底色）——库里没有能逐行着色、等宽、上千行还流畅的 Ty 控件；主控同意把例外扩到这个窗口（验收文档 E35）。
 - 设置、最近文件、AI 配置存用户配置目录（`GetAppConfigDir`）。
 
+> **验收反馈修正**（用户真机验收后的五条，签收见验收文档「验收反馈」）：
+> - **应用图标**：Lucide 的 `palette` 白色画在默认主题强调色（`#3B82F6`）的圆角方块上，16 / 24 / 32 / 48 / 64 / 256 每个尺寸按自己的像素画（`tools/themebuilder/icon/genicon.lpr`，`scripts/gen-themebuilder-icon.ps1` 重跑）；`.ico` 的布局照 `tools/genappicon`（64 以下 DIB、只有 256 用 PNG——LCL 启动时的读取器只在 256 那格认 PNG）。放在 `.lpi` 旁边、与工程同名、`<Icon Value="0"/>`，链接成 MAINICON：exe、任务栏、`Application.Icon` 都有，主窗体标题栏左边显示 16 px 的那张（库的标题栏不画图标，工具自己放一个 `TTyImage`）。Linux / macOS 给 256 px 的 PNG，没有 `.icns`。
+> - **编辑器字体**：SynEdit 默认 `fqNonAntialiased`，字是点阵。共用的 `TTyCssEditKit` 接上编辑框时设 `Font.Quality`（Windows `fqCleartypeNatural`，其他 `fqAntialiased`），宿主没选过字体（还是 SynEdit 的默认字体）时给平台的等宽字体 10 磅（Consolas，没有退 Courier New；Menlo；DejaVu Sans Mono，没有退 monospace）——设计期 StyleOverride 对话框一并受益；工具的编辑器外观每次换肤再设一次，`monospace` 也取同一个字体。
+> - **主窗体默认 1480 宽**（原 1280）：多出的 200 px 全给编辑区（434 → 634），预览仍 560、侧栏 280；工作区比它小时不超出工作区。
+> - **编辑菜单**（「文件」与「视图」之间）：撤销、重做、剪切、复制、粘贴、删除、全选、格式化文档、格式化选中部分、查找…、查找下一个、查找上一个、替换…。快捷键用 SynEdit 本来的（重做是 Ctrl+Shift+Z——Ctrl+Y 在 SynEdit 里是删行，不占），另加 Ctrl+F、F3、Shift+F3、Ctrl+H、Ctrl+Shift+F。文字类命令作用在**有焦点的那个框**（编辑区，或查找框、AI 描述框这类 Ty 输入框），按它的状态启用；快捷键按下时焦点在别的控件上，这几项是灰的，键照常交给那个控件（不会把粘贴贴进编辑区）。**格式化不用库的 `TyCssFormat` / `TyCssFormatLine`**：它们是给 StyleOverride 的声明块写的，用在整份主题上会给伪类的冒号加空格（`TyButton: hover`）、把多行的文件头注释并成一行、给引号里 url 的冒号加空格；工具自己的 `tbformat` 先按记号读（注释、字符串原样），只排版其余部分。整篇作为一个改动替换不同的那几行，选中部分替换它碰到的那几行，各一步撤销。**查找条**是编辑区顶上的一条 Ty 控件（不用原生 `TFindDialog`）：查找框、上一个 / 下一个（到头绕回）、区分大小写、全字匹配、找不到时提示，替换模式多一行替换框、替换、全部替换（SynEdit 的 `SearchReplace` 一次换完，一步撤销）；Enter 下一个、Shift+Enter 上一个、Esc 关闭。
+
 ## 7. AI
 
 ### 7.1 设置与密钥

@@ -37,7 +37,7 @@ program tbshots;
 uses
   Interfaces, Windows, Classes, SysUtils, FileUtil, LazFileUtils, Forms, Controls, Graphics,
   Dialogs, BGRABitmap, BGRABitmapTypes,
-  tyControls.Controller, tbmain, tbtemplates, tbdiff, tbaiformat, tbaiclient, tbaisettings, tbaisession,
+  tyControls.Controller, tyControls.Menu, tbmain, tbtemplates, tbdiff, tbaiformat, tbaiclient, tbaisettings, tbaisession,
   tbaiframe, tbcompareform, tbexportform, tbaisettingsform, tbaitesthelp;
 
 function PrintWindow(AWnd: HWND; ADC: HDC; AFlags: UINT): BOOL; stdcall;
@@ -502,6 +502,135 @@ begin
     Fail('the comparison window never came: ' + Main.Ai.LblStatus.Caption);
 end;
 
+{ AForm and the popup APop laid over it at (AX, AY) in the window's pixels -- one picture of a
+  menu that is open. The popup's window is drawn on its own (PrintWindow) and copied in pixel
+  by pixel, leaving out what PrintWindow did not paint (the corners its region cuts off). }
+function CaptureWithPopup(AForm, APop: TCustomForm; AX, AY: Integer; const AFile, AItems, AWhat,
+  AHow: string): Boolean;
+var
+  bmp, pop: TBGRABitmap;
+  why, path: string;
+  x, y, n: Integer;
+  ps, pd: PBGRAPixel;
+  sz: Int64;
+begin
+  Result := False;
+  bmp := TBGRABitmap.Create(1, 1);
+  pop := TBGRABitmap.Create(1, 1);
+  try
+    if not (ByPrintWindow(AForm, bmp, 0) and Acceptable(bmp, why)) then
+    begin
+      Log(Format('%s: the window gave nothing usable (%s)', [AFile, why]));
+      Exit;
+    end;
+    if not ByPrintWindow(APop, pop, 0) then
+    begin
+      Log(Format('%s: the menu gave nothing', [AFile]));
+      Exit;
+    end;
+    n := 0;
+    for y := 0 to pop.Height - 1 do
+    begin
+      if (AY + y < 0) or (AY + y >= bmp.Height) then Continue;
+      ps := pop.ScanLine[y];
+      pd := bmp.ScanLine[AY + y];
+      for x := 0 to pop.Width - 1 do
+      begin
+        if (AX + x >= 0) and (AX + x < bmp.Width) and
+           not ((ps^.red = $FF) and (ps^.green = 0) and (ps^.blue = $FF)) then
+        begin
+          (pd + AX + x)^ := ps^;
+          Inc(n);
+        end;
+        Inc(ps);
+      end;
+    end;
+    bmp.InvalidateBitmap;
+    if n * 2 < pop.NbPixels then
+    begin
+      Log(Format('%s: the menu was mostly unpainted', [AFile]));
+      Exit;
+    end;
+    path := IncludeTrailingPathDelimiter(OutDir) + AFile;
+    bmp.SaveToFile(path);
+    sz := FileSizeUtf8(path);
+    if sz > cMaxBytes then
+    begin
+      DeleteFile(path);
+      Fail(Format('%s: %d bytes, over the %d limit', [AFile, sz, cMaxBytes]));
+      Exit(True);
+    end;
+    Inc(Written);
+    Log(Format('%s: %dx%d, %d bytes, PrintWindow (window + menu %dx%d at %d,%d)',
+      [AFile, bmp.Width, bmp.Height, sz, pop.Width, pop.Height, AX, AY]));
+    Index.Add(Format('| `%s` | %s | %s | %s；PrintWindow（窗口与下拉菜单各画一次再叠起来） |',
+      [AFile, AItems, AWhat, AHow]));
+    Result := True;
+  finally
+    pop.Free;
+    bmp.Free;
+  end;
+end;
+
+{ the Edit menu open over the window, with the find bar (replace mode) above the editor }
+procedure ShootEditMenu;
+const
+  cItems = '77–82（验收反馈）';
+var
+  pop: TTyMenuPopup;
+  pf: TCustomForm;
+  wr: TRect;
+  org: TPoint;
+  ppi: Integer;
+begin
+  if not Main.OpenFile(RepoDir + 'themes' + PathDelim + 'builtin' + PathDelim + 'win11.tycss') then
+  begin
+    Fail('could not open win11.tycss: ' + Main.LastAsk);
+    Exit;
+  end;
+  Main.SideBar.Collapsed := False;
+  Main.SideBar.ActivateWindow(Main.ProblemsWin);
+  Main.RefreshNow;
+  Main.FindBar.Open(True);
+  Main.FindBar.EdtFind.Text := '--accent';
+  Main.FindBar.EdtReplace.Text := '--brand';
+  Main.FindBar.FindNext;
+  Main.FindBar.FindNext;
+  Main.Editor.EnsureCursorPosVisible;
+  Pump(500);
+  Main.UpdateEditMenu(False);
+  Main.MainMenuBar.OpenTopForTest(1);
+  Pump(500);
+  pop := Main.MainMenuBar.PopupForTest;
+  pf := nil;
+  if (pop <> nil) and (pop.ViewForTest <> nil) then
+    pf := GetParentForm(pop.ViewForTest);
+  { where the dropdown hangs: under the Edit cell of the bar, in the window's pixels (the
+    popup itself may have been moved onto the screen) }
+  GetWindowRect(Main.Handle, wr);
+  org := Main.MainMenuBar.ClientToScreen(Point(0, 0));
+  ppi := Main.MainMenuBar.Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  if (pf = nil) or not pf.HandleAllocated or not CaptureWithPopup(Main, pf,
+    org.X - wr.Left + Main.MainMenuBar.TopLeftForTest(1, ppi),
+    org.Y - wr.Top + Main.MainMenuBar.Height, 'p1-edit-menu-win32.png', cItems,
+    '主窗口（win11 主题），「编辑」菜单展开：撤销 / 重做、剪切 / 复制 / 粘贴 / 删除 / 全选、格式化文档 / 格式化选中部分、查找… / 查找下一个 / 查找上一个 / 替换…，右边是快捷键；编辑区顶上是替换模式的查找条，选中的是第二处 `--accent`。另看：标题栏左边的应用图标、编辑区的字是平滑的（ClearType）、窗口 1480 宽',
+    '`OpenFile` 打开 win11，`FindBar.Open(True)` 填好查找 / 替换、`FindNext` 两次；`MainMenuBar.OpenTopForTest(1)` 打开「编辑」') then
+  begin
+    { the menu could not be drawn: the find bar alone }
+    if pop <> nil then
+      pop.CloseAll;
+    Pump(300);
+    Capture(Main, 'p1-edit-menu-win32.png', cItems,
+      '主窗口（win11 主题），编辑区顶上是替换模式的查找条（「编辑」菜单展开截不到，只截了查找条）。另看：标题栏左边的应用图标、编辑区的字是平滑的、窗口 1480 宽',
+      '`OpenFile` 打开 win11，`FindBar.Open(True)` 填好查找 / 替换、`FindNext` 两次');
+  end;
+  if pop <> nil then
+    pop.CloseAll;
+  Main.FindBar.Close;
+  Pump(300);
+end;
+
 procedure WriteIndex;
 var
   head: TStringList;
@@ -571,12 +700,13 @@ begin
         Place(Main);
         Main.Show;
         Pump(800);
-        Log(Format('screen PPI %d, window %dx%d at %d,%d', [Screen.PixelsPerInch, Main.Width,
-          Main.Height, Main.Left, Main.Top]));
+        Log(Format('screen PPI %d, work area %dx%d, window %dx%d at %d,%d', [Screen.PixelsPerInch,
+          Screen.WorkAreaWidth, Screen.WorkAreaHeight, Main.Width, Main.Height, Main.Left, Main.Top]));
         ShootSeeds;
         ShootExport;
         ShootAiSettings;
         ShootAi;
+        ShootEditMenu;
         Main.Hide;
       finally
         FreeAndNil(Main);
