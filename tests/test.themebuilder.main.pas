@@ -113,6 +113,7 @@ type
     procedure TestAnotherServiceDuringAGeneration;   { M15 }
     procedure TestTheComparisonWaitsForAModal;   { M16 }
     procedure TestTheModelIsToldInEnglish;       { M17 }
+    procedure TestTheComparisonShowsTheEditorNow;   { M18 }
   end;
 
 implementation
@@ -2388,6 +2389,39 @@ begin
     ChineseUi(False);
   end;
   AssertEquals('English again', 'In %s mode: %s', rsTbModeFailed);
+end;
+
+{ M18: the comparison's left side is the editor as it is now -- what Accept replaces -- and
+  says so when that changed after the request }
+procedure TTbMainFormTests.TestTheComparisonShowsTheEditorNow;
+var
+  b: TScriptedBackend;
+  f: TTbCompareForm;
+begin
+  b := ScriptedAi;
+  b.Add(TbAnswerWith(BlueMinimal));
+  TTbMainForm.ShowModalForTest := @ModalLeave;
+  FForm.Ai.EdtPrompt.Text := 'blue';
+  FForm.Ai.GenerateClick(nil);
+  f := FForm.BuildCompareForm;
+  try
+    AssertEquals('M18: unchanged, the request''s text', Unify(TbMinimalTemplate),
+      Unify(f.LeftEdit.Lines.Text));
+    AssertEquals('M18: no note', Format(rsTbCompareSummary, [TbDiffChangeCount(f.Rows), 0]),
+      f.Summary.Caption);
+  finally
+    f.Free;
+  end;
+  FForm.Editor.Lines.Add('/* typed after the request */');
+  f := FForm.BuildCompareForm;
+  try
+    AssertTrue('M18: the editor now', Pos('typed after the request', f.LeftEdit.Lines.Text) > 0);
+    AssertTrue('M18: the left title stays: ' + f.LeftTitle.Caption, f.LeftTitle.Caption = 'Now');
+    AssertTrue('M18: the summary says it changed: ' + f.Summary.Caption,
+      Pos(rsTbCompareEditedSince, f.Summary.Caption) > 0);
+  finally
+    f.Free;
+  end;
 end;
 
 initialization

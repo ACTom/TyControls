@@ -1160,12 +1160,19 @@ end;
 function TTbMainForm.BuildCompareForm: TTbCompareForm;
 var
   o: TTbAiOutcome;
+  current: string;
 begin
   o := FAi.Session.Outcome;
   FTrialText := o.Candidate;
+  { "Now" is the editor as it is now -- what Accept replaces -- and the summary says when
+    that is not what the request was made from }
+  if FSeeds <> nil then
+    FSeeds.FlushRadius;
+  current := Editor.Lines.Text;
   Result := TTbCompareForm.Create(Self);
   Result.OnTrial := @CompareTrial;
-  Result.Prepare(o.BaseText, o.Candidate, o.Issues, FLook);
+  Result.Prepare(current, o.Candidate, o.Issues, FLook,
+    TbNormalizeEol(current) <> TbNormalizeEol(o.BaseText));
 end;
 
 procedure TTbMainForm.AiCandidate(Sender: TObject);

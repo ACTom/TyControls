@@ -23,6 +23,7 @@ uses
 
 resourcestring
   rsTbCompareSummary = '%d changes. Problems left: %d.';
+  rsTbCompareEditedSince = 'The editor changed after the request: "Now" shows it as it is now.';
   rsTbCompareTrialFailed = 'The preview cannot show it: %s';
 
 type
@@ -66,8 +67,10 @@ type
     FOnTrial: TTbTrialEvent;
     procedure EndTrial;
   public
+    { ABase: the editor's text as it is now; AEditedSince: it changed after the request
+      went out (the summary says so) }
     procedure Prepare(const ABase, ACandidate: string; const AIssues: TTbAiIssues;
-      const ALook: TTbEditorColors);
+      const ALook: TTbEditorColors; AEditedSince: Boolean = False);
     { FOR THE TESTS: the kind of the row an editor line (1-based) shows; a filler answers
       with the other side's kind }
     function RowKindAt(ARight: Boolean; AEditorLine: Integer): TTbDiffKind;
@@ -143,7 +146,7 @@ begin
 end;
 
 procedure TTbCompareForm.Prepare(const ABase, ACandidate: string; const AIssues: TTbAiIssues;
-  const ALook: TTbEditorColors);
+  const ALook: TTbEditorColors; AEditedSince: Boolean);
 var
   a, b, leftLines, rightLines: TStringList;
   i: Integer;
@@ -195,6 +198,8 @@ begin
   TbApplyEditorColors(LeftEdit, FKitLeft.Highlighter, ALook);
   TbApplyEditorColors(RightEdit, FKitRight.Highlighter, ALook);
   FSummaryBase := Format(rsTbCompareSummary, [TbDiffChangeCount(FRows), TbIssueErrorCount(AIssues)]);
+  if AEditedSince then
+    FSummaryBase := FSummaryBase + ' ' + rsTbCompareEditedSince;
   Summary.Caption := FSummaryBase;
   IssuesList.Items.BeginUpdate;
   try
