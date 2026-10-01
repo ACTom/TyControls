@@ -1455,3 +1455,59 @@ msgstr "已接受 AI 的版本。Ctrl+Z 可以撤回。"
 #: tbmain.rstbaieditedsince
 msgid "The editor changed after this was generated. Accepting replaces those changes too. Accept?"
 msgstr "生成之后编辑器里又改过。接受会把这些改动一起替换掉。接受吗？"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: tbaiclient.rstbaiinsecurekey
+#, object-pascal-format
+msgid "Not sent: over http:// the key would cross the network to %s unencrypted. Use an https:// address, or no key for a service on your own network."
+msgstr "没有发送：用 http:// 发往 %s，密钥会明文经过网络。请改用 https:// 地址；自己网络里的服务可以不填密钥。"
+
+#: tbaiclient.rstbaioption
+#, object-pascal-format
+msgid "The libcurl on this system does not accept an option the AI needs: %s. A newer libcurl is needed."
+msgstr "系统的 libcurl 不接受 AI 需要的一个选项：%s。需要新一点的 libcurl。"
+
+#: tbaiclient.rstbaiproxyauth
+msgid "The proxy asks for a user name and password (407). Set them in the system's proxy settings, or use a proxy that does not ask."
+msgstr "代理要求用户名和密码（407）。请在系统的代理设置里填上，或换一个不要密码的代理。"
+
+#: tbaiclient.rstbairedirect
+#, object-pascal-format
+msgid "The service answered with a redirect (%d) to %s. It was not followed: if that is the right address, put it in the AI settings."
+msgstr "服务返回了重定向（%d），指向 %s。没有跟过去：如果那是对的地址，请在 AI 设置里改成它。"
+
+#: tbaiframe.rstbaicomparewaits
+msgid "Use \"Show the comparison\" to look at it."
+msgstr "点「查看对比…」来看它。"
+
+#: tbaisession.rstbaiincomplete
+msgid "The reply is not complete: it ended inside its code block."
+msgstr "回答不完整：在代码块中间就结束了。"
+
+#: tbaisession.rstbaioutsideref
+#, object-pascal-format
+msgid "The AI added a reference outside the document's folder: %s. It was not read."
+msgstr "AI 加了文档所在文件夹之外的引用：%s。没有读取它。"
+
+#: tbaisettings.rstbaiplainhttp
+msgid "Not encrypted (http://)"
+msgstr "未加密（http://）"
+
+#: tbaisettings.rstbaiplainhttpmore
+msgid "Others on the network can read the theme and your descriptions."
+msgstr "网络上的其他人能看到主题文本和你的描述。"
+
+#: tbaisettingsform.rstbaiplainhttpkey
+#, object-pascal-format
+msgid "A key cannot go to %s over http://: it would cross the network unencrypted. Use an https:// address, or remove the key."
+msgstr "密钥不能用 http:// 发往 %s：它会明文经过网络。请改用 https:// 地址，或去掉密钥。"
+
+#: tbaisettingsform.rstbaisavefailed
+#, object-pascal-format
+msgid "The settings could not be saved (%s). Nothing was changed."
+msgstr "设置没能保存（%s），什么都没有改。"
+
+#: tbcompareform.rstbcompareeditedsince
+msgid "The editor changed after the request: \"Now\" shows it as it is now."
+msgstr "请求发出之后编辑器又改过：「现在」显示的是它此刻的样子。"
