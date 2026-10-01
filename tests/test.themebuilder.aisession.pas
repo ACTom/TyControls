@@ -40,13 +40,15 @@ type
     procedure TestTheCodeBlock;              { S16 }
     procedure TestTheRealBackend;            { S17 }
     procedure TestTheSystemPrompt;           { S18 }
+    { after the phase 3 reviews }
+    procedure TestNothingOutsideTheFolderIsRead;   { S19 }
   end;
 
 implementation
 
 uses
   fpjson, tyControls.ThemeLint, tbaiformat, tbaiclient, tbproblems, tbtemplates, tbreference,
-  tbfakehttp;
+  tbfakehttp, tbaichecks, tbexport;
 
 const
   cMarker = '/* MARK-ONE */';
@@ -435,6 +437,114 @@ begin
   AssertTrue('S18: the rules first', Pos('You edit themes for TyControls', s) = 1);
   AssertTrue('S18: the reference', Pos(TbReferenceText, s) > 0);
   AssertTrue('S18: one tycss block', Pos('```tycss', s) > 0);
+end;
+
+procedure WriteText(const AFileName, AText: string);
+var
+  fs: TFileStream;
+begin
+  fs := TFileStream.Create(AFileName, fmCreate);
+  try
+    if AText <> '' then
+      fs.WriteBuffer(AText[1], Length(AText));
+  finally
+    fs.Free;
+  end;
+end;
+
+function IssuesHave(const AIssues: TTbAiIssues; const AWhat: string): Boolean;
+var
+  i: Integer;
+begin
+  Result := False;
+  for i := 0 to High(AIssues) do
+    if (Pos(AWhat, AIssues[i].Text) > 0) or (Pos(AWhat, AIssues[i].FeedText) > 0) then
+      Exit(True);
+end;
+
+function FeedHas(const AIssues: TTbAiIssues; const AWhat: string): Boolean;
+var
+  i: Integer;
+begin
+  Result := Pos(AWhat, TbFeedbackMessage(AIssues)) > 0;
+  for i := 0 to High(AIssues) do
+    if Pos(AWhat, AIssues[i].FeedText) > 0 then
+      Result := True;
+end;
+
+{ S19: a reference the answer adds that leaves the document's folder is reported and not
+  read; what the model is told never quotes an imported file }
+procedure TTbAiSessionTests.TestNothingOutsideTheFolderIsRead;
+var
+  dir, sub, cand, base: string;
+  issues: TTbAiIssues;
+  d: TTbAiDocument;
+  found: Boolean;
+  i: Integer;
+begin
+  dir := TbAiTempDir;
+  try
+    sub := dir + 'doc' + PathDelim;
+    ForceDirectories(sub);
+    { not CSS: a parse error in it would quote its first word }
+    WriteText(dir + 'secret.tycss', 'TOPSECRET hunter2 {'#10);
+    WriteText(sub + 'inner.tycss', 'INNERSECRET {'#10);
+    { 1. ../ : reported, not read }
+    cand := '@import "../secret.tycss";'#10 + BlueTemplate;
+    issues := TbCheckCandidate(cand, sub, False, FBase, TbMinimalTemplate);
+    found := False;
+    for i := 0 to High(issues) do
+      if issues[i].IsError and (issues[i].Text = Format(rsTbAiOutsideRef, ['../secret.tycss'])) then
+        found := True;
+    AssertTrue('S19: ../ is reported', found);
+    AssertFalse('S19: ../ is not read', IssuesHave(issues, 'TOPSECRET'));
+    AssertFalse('S19: nor fed back', FeedHas(issues, 'TOPSECRET'));
+    { 2. an absolute path, a url(), a drive or scheme }
+    issues := TbCheckCandidate('@import "' + StringReplace(dir, PathDelim, '/', [rfReplaceAll]) +
+      'secret.tycss";'#10 + BlueTemplate, sub, False,
+      FBase, TbMinimalTemplate);
+    AssertEquals('S19: an absolute path is reported', 1, TbIssueErrorCount(issues));
+    AssertFalse('S19: an absolute path is not read', IssuesHave(issues, 'TOPSECRET'));
+    issues := TbCheckCandidate(BlueTemplate + #10'TyButton { background-image: url(../x.png); }',
+      sub, False, FBase, TbMinimalTemplate);
+    AssertTrue('S19: url(../) is reported',
+      (Length(issues) = 1) and (issues[0].Text = Format(rsTbAiOutsideRef, ['../x.png'])));
+    AssertTrue('S19: a drive leaves', TbReferenceLeavesFolder('C:x.tycss'));
+    AssertTrue('S19: a scheme leaves', TbReferenceLeavesFolder('file:///etc/x'));
+    AssertTrue('S19: UNC leaves', TbReferenceLeavesFolder('\\host\share\x.tycss'));
+    AssertFalse('S19: a sub folder does not', TbReferenceLeavesFolder('palettes/x.tycss'));
+    { 3. the document already had it: the user's own, checked -- but the model is told only
+      that the imported file has a problem }
+    base := '@import "../secret.tycss";'#10 + TbMinimalTemplate;
+    issues := TbCheckCandidate(cand, sub, False, FBase, base);
+    AssertTrue('S19: the user''s own reference is checked', TbIssueErrorCount(issues) > 0);
+    AssertFalse('S19: not called outside', IssuesHave(issues, Format(rsTbAiOutsideRef, ['../secret.tycss'])));
+    AssertFalse('S19: the model does not see the file', FeedHas(issues, 'TOPSECRET'));
+    AssertFalse('S19: not a word of it', FeedHas(issues, 'hunter2'));
+    { 4. a file in the folder: the same for the model }
+    issues := TbCheckCandidate('@import "inner.tycss";'#10 + BlueTemplate, sub, False, FBase,
+      TbMinimalTemplate);
+    AssertTrue('S19: the imported file''s problem is there', TbIssueErrorCount(issues) > 0);
+    AssertFalse('S19: the model does not see the imported file', FeedHas(issues, 'INNERSECRET'));
+    { 5. an untitled document has no folder: a new @import is not read }
+    issues := TbCheckCandidate('@import "inner.tycss";'#10 + BlueTemplate, '', True, FBase,
+      TbMinimalTemplate);
+    AssertTrue('S19: untitled, reported',
+      (Length(issues) = 1) and (issues[0].Text = Format(rsTbAiOutsideRef, ['inner.tycss'])));
+    { 6. through the session: the feedback names the reference, not the file }
+    FBackend.Add(TbAnswerWith(cand));
+    FBackend.Add(TbAnswerWith(BlueTemplate));
+    d := Doc(TbMinimalTemplate);
+    d.BaseDir := sub;
+    d.Untitled := False;
+    FSession.Generate('x', d, False);
+    AssertEquals('S19: fed back', 2, FSession.Outcome.Requests);
+    AssertTrue('S19: the feedback names it', Pos('../secret.tycss', FBackend.Sent[1][2].Text) > 0);
+    AssertTrue('S19: the feedback does not quote it', Pos('TOPSECRET', FBackend.AllSent(1)) = 0);
+  finally
+    TbAiRemoveDir(dir + 'doc' + PathDelim);
+    TbAiRemoveDir(dir);
+  end;
 end;
 
 initialization

@@ -66,6 +66,13 @@ function TbManifestJson(const AInfo: TTbBundleInfo): string;
   the library as text (TyRegisterThemeCss, a zip) cannot reach: the library has no way to
   give such a text a folder }
 function TbRelativeReferences(const AText: string): TStringArray;
+{ every @import and url() path AText writes, as written (data: URLs left out) }
+function TbAllReferences(const AText: string): TStringArray;
+{ the @import paths alone }
+function TbImportReferences(const AText: string): TStringArray;
+{ a path that reaches out of the theme's folder: absolute, UNC, a drive, a scheme
+  (file:...), or a '..' segment }
+function TbReferenceLeavesFolder(const APath: string): Boolean;
 { write, read back, load, probe, move into place; False and AError, with nothing left behind }
 function TbExportBundle(const AEntry: string; const AFiles: TTbBundleFiles;
   const AInfo: TTbBundleInfo; AFormat: TTbBundleFormat; const ATarget: string;
@@ -227,6 +234,31 @@ end;
 function IsAbsoluteRef(const APath: string): Boolean;
 begin
   Result := (APath <> '') and ((APath[1] in ['/', '\']) or FilenameIsAbsolute(APath));
+end;
+
+function TbAllReferences(const AText: string): TStringArray;
+begin
+  Result := Concat(ImportPaths(AText), UrlPaths(AText));
+end;
+
+function TbImportReferences(const AText: string): TStringArray;
+begin
+  Result := ImportPaths(AText);
+end;
+
+function TbReferenceLeavesFolder(const APath: string): Boolean;
+var
+  p: string;
+  i: Integer;
+begin
+  p := Trim(APath);
+  if IsAbsoluteRef(p) or HasDotDot(p) then
+    Exit(True);
+  { C:x, C:\x on any platform; file:..., any scheme }
+  i := 1;
+  while (i <= Length(p)) and (p[i] in ['A'..'Z', 'a'..'z', '0'..'9', '+', '-', '.']) do
+    Inc(i);
+  Result := (i > 1) and (i <= Length(p)) and (p[i] = ':');
 end;
 
 function TbRelativeReferences(const AText: string): TStringArray;

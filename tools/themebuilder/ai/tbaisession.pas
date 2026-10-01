@@ -40,12 +40,16 @@ resourcestring
   rsTbAiThinking = 'The model is thinking...';
   rsTbAiReceiving = 'Receiving: %d lines so far.';
   rsTbAiChecking = 'Checking the result...';
+  rsTbAiOutsideRef = 'The AI added a reference outside the document''s folder: %s. It was not read.';
 
 type
   TTbAiIssue = record
     Line, Col: Integer;           { in the candidate; 0 = no position }
     IsError: Boolean;
-    Text: string;
+    Text: string;                 { for the user }
+    { for the model: never a piece of a file the candidate imports (an issue on an @import
+      line says only that the imported file has a problem) }
+    FeedText: string;
   end;
   TTbAiIssues = array of TTbAiIssue;
 
@@ -132,8 +136,14 @@ function TbSystemPrompt: string;                 { the rules + TbReferenceText }
   and never closes }
 function TbExtractCodeBlock(const AReply: string; out ABlock: string;
   out ATruncated: Boolean): Boolean;
+{ ABaseText: the document the request was made from -- a reference it already had is the
+  user's own; one the answer adds that leaves the document's folder is an error and is
+  not resolved, and then nothing else is checked (it would be read) }
 function TbCheckCandidate(const AText, ABaseDir: string; AUntitled: Boolean;
-  ABaseVars: TStrings): TTbAiIssues;
+  ABaseVars: TStrings; const ABaseText: string = ''): TTbAiIssues;
+{ the @import / url() paths AText has and ABaseText has not that leave the folder ABaseDir
+  (with no folder -- an untitled document -- every new @import) }
+function TbOutsideReferences(const AText, ABaseText, ABaseDir: string): TStringArray;
 function TbIssueErrorCount(const AIssues: TTbAiIssues): Integer;
 function TbAiIssueCaption(const AIssue: TTbAiIssue): string;   { '12:5  text' / '—  text' }
 function TbFeedbackMessage(const AIssues: TTbAiIssues): string;
@@ -189,7 +199,8 @@ type
 implementation
 
 uses
-  tyControls.ThemeLint, tyControls.StyleModel, tbthemesource, tbpreview, tbdiff, tbreference;
+  tyControls.ThemeLint, tyControls.StyleModel, tbthemesource, tbpreview, tbdiff, tbreference,
+  tbexport;
 
 { What the model is told -- English, never translated (they are not the user's words). }
 const
@@ -218,6 +229,10 @@ const
   cFeedbackHead = 'The theme engine found problems in your file:';
   cFeedbackTail = 'Fix them and output the whole corrected file again in one ```tycss block. ' +
     'Change nothing else.';
+  cOutsideRefFeed = 'reference outside the document''s folder: %s. Only files in the ' +
+    'document''s folder may be referenced; remove it.';
+  cImportedProblem = 'the file imported on this line has a problem (its content is not ' +
+    'shown here).';
 
 function TbSystemPrompt: string;
 begin
@@ -340,12 +355,82 @@ end;
 
 { ---- the checks ---- }
 
-function Issue(ALine, ACol: Integer; AIsError: Boolean; const AText: string): TTbAiIssue;
+function Issue(ALine, ACol: Integer; AIsError: Boolean; const AText: string;
+  const AFeedText: string = ''): TTbAiIssue;
 begin
   Result.Line := ALine;
   Result.Col := ACol;
   Result.IsError := AIsError;
   Result.Text := AText;
+  if AFeedText <> '' then
+    Result.FeedText := AFeedText
+  else
+    Result.FeedText := AText;
+end;
+
+function TbOutsideReferences(const AText, ABaseText, ABaseDir: string): TStringArray;
+var
+  mine, base, imports: TStringArray;
+  i, k: Integer;
+  known, leaves: Boolean;
+begin
+  Result := nil;
+  mine := TbAllReferences(AText);
+  base := TbAllReferences(ABaseText);
+  imports := TbImportReferences(AText);
+  for i := 0 to High(mine) do
+  begin
+    leaves := TbReferenceLeavesFolder(mine[i]);
+    { an untitled document has no folder: an @import would be read from wherever the
+      process happens to stand }
+    if (not leaves) and (ABaseDir = '') then
+      for k := 0 to High(imports) do
+        if imports[k] = mine[i] then
+          leaves := True;
+    if not leaves then Continue;
+    known := False;
+    for k := 0 to High(base) do
+      if Trim(base[k]) = Trim(mine[i]) then
+        known := True;
+    if not known then
+    begin
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := mine[i];
+    end;
+  end;
+end;
+
+{ the 1-based lines of AText that hold an @import }
+function ImportLines(const AText: string): TStringList;
+var
+  i: Integer;
+begin
+  Result := TStringList.Create;
+  TbSplitLines(AText, Result);
+  for i := 0 to Result.Count - 1 do
+    if Pos('@import', LowerCase(Result[i])) > 0 then
+      Result.Objects[i] := TObject(PtrInt(1));
+end;
+
+{ a message that may quote an imported file: every "quoted" piece left out }
+function WithoutQuotes(const S: string): string;
+var
+  i: Integer;
+  inQuote: Boolean;
+begin
+  Result := '';
+  inQuote := False;
+  for i := 1 to Length(S) do
+    if S[i] = '"' then
+    begin
+      if not inQuote then
+        Result := Result + '"...';
+      inQuote := not inQuote;
+      if not inQuote then
+        Result := Result + '"';
+    end
+    else if not inQuote then
+      Result := Result + S[i];
 end;
 
 procedure AddIssue(var AList: TTbAiIssues; const AIssue: TTbAiIssue);
@@ -365,18 +450,59 @@ begin
 end;
 
 function TbCheckCandidate(const AText, ABaseDir: string; AUntitled: Boolean;
-  ABaseVars: TStrings): TTbAiIssues;
+  ABaseVars: TStrings; const ABaseText: string): TTbAiIssues;
 var
   probs: TTbProblems;
   i: Integer;
   model: TTyStyleModel;
-  modes: TStringArray;
-  err: string;
+  modes, outside: TStringArray;
+  err, feed: string;
+  imports: TStringList;
+  hasImports: Boolean;
+
+  { a message with no position may come out of an imported file: its quotes stay home }
+  function Unplaced(const AMsg: string): string;
+  begin
+    if hasImports then
+      Result := WithoutQuotes(AMsg)
+    else
+      Result := AMsg;
+  end;
+
 begin
   Result := nil;
-  probs := TbCollectProblems(AText, ABaseDir, AUntitled, ABaseVars);
-  for i := 0 to High(probs) do
-    AddIssue(Result, Issue(probs[i].Line, probs[i].Col, probs[i].Severity = tlsError, probs[i].Text));
+  { a reference the answer added that leaves the document's folder is not followed at all:
+    the checks below would read it, and their messages go back to the model }
+  outside := TbOutsideReferences(AText, ABaseText, ABaseDir);
+  if Length(outside) > 0 then
+  begin
+    for i := 0 to High(outside) do
+      AddIssue(Result, Issue(0, 0, True, Format(rsTbAiOutsideRef, [outside[i]]),
+        Format(cOutsideRefFeed, [outside[i]])));
+    Exit;
+  end;
+  imports := ImportLines(AText);
+  try
+    hasImports := False;
+    for i := 0 to imports.Count - 1 do
+      if imports.Objects[i] <> nil then
+        hasImports := True;
+    probs := TbCollectProblems(AText, ABaseDir, AUntitled, ABaseVars);
+    for i := 0 to High(probs) do
+    begin
+      { lint puts an imported file's problems on the @import that brought it in }
+      feed := probs[i].Text;
+      if (probs[i].Line > 0) and (probs[i].Line <= imports.Count) and
+         (imports.Objects[probs[i].Line - 1] <> nil) then
+        feed := cImportedProblem
+      else if probs[i].Line = 0 then
+        feed := Unplaced(feed);
+      AddIssue(Result, Issue(probs[i].Line, probs[i].Col, probs[i].Severity = tlsError,
+        probs[i].Text, feed));
+    end;
+  finally
+    imports.Free;
+  end;
   if TbHasParseError(probs) then
     Exit;
   { what the preview would do with it: load, then resolve in every mode }
@@ -387,7 +513,7 @@ begin
     except
       on E: Exception do
       begin
-        AddIssue(Result, Issue(0, 0, True, E.Message));
+        AddIssue(Result, Issue(0, 0, True, E.Message, Unplaced(E.Message)));
         Exit;
       end;
     end;
@@ -396,14 +522,17 @@ begin
     begin
       model.SetMode('');
       if not TbProbeDocument(model, AText, False, err) then
-        AddIssue(Result, Issue(0, 0, True, err));
+        AddIssue(Result, Issue(0, 0, True, err, Unplaced(err)));
     end
     else
       for i := 0 to High(modes) do
       begin
         model.SetMode(modes[i]);
         if not TbProbeDocument(model, AText, False, err) then
-          AddIssue(Result, Issue(0, 0, True, Format(rsTbAiModeProbe, [ModeCaption(modes[i]), err])));
+        begin
+          err := Format(rsTbAiModeProbe, [ModeCaption(modes[i]), err]);
+          AddIssue(Result, Issue(0, 0, True, err, Unplaced(err)));
+        end;
       end;
   finally
     model.Free;
@@ -437,9 +566,9 @@ begin
     if AIssues[i].IsError then
       if AIssues[i].Line > 0 then
         Result := Result + Format('- line %d, col %d: %s', [AIssues[i].Line, AIssues[i].Col,
-          AIssues[i].Text]) + #10
+          AIssues[i].FeedText]) + #10
       else
-        Result := Result + '- ' + AIssues[i].Text + #10;
+        Result := Result + '- ' + AIssues[i].FeedText + #10;
   Result := Result + cFeedbackTail;
 end;
 
@@ -831,7 +960,7 @@ begin
     Exit;
   end;
   SetStage(tasChecking);
-  issues := TbCheckCandidate(block, FDoc.BaseDir, FDoc.Untitled, FBaseVars);
+  issues := TbCheckCandidate(block, FDoc.BaseDir, FDoc.Untitled, FBaseVars, FDoc.Text);
   FOutcome.Candidate := block;
   FOutcome.Issues := issues;
   FOutcome.HasCandidate := True;
