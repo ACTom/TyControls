@@ -55,6 +55,8 @@ type
     procedure TestEndToEnd;
     procedure TestTheDocumentKeys;
     procedure TestTheDialog;
+    procedure TestWhatIsAKnownTypeKey;
+    procedure TestEveryLibraryKeyIsKnown;
   end;
 
 implementation
@@ -669,6 +671,80 @@ begin
     notShown.Free;
     def.Free;
   end;
+end;
+
+{ The review found it: the dialog marked every key outside the catalogue "not a known
+  typeKey" -- TyFormSurface (in the second list on every theme) and TyGridPanel among them;
+  the catalogue leaves out what the base deliberately does not define. Known = catalogue,
+  base rules, the part table, what the preview shows. }
+procedure TTbCoverageTests.TestWhatIsAKnownTypeKey;
+var
+  f: TTbCoverageForm;
+  notShown, def, prev: TStringList;
+begin
+  notShown := TStringList.Create;
+  def := TStringList.Create;
+  prev := TStringList.Create;
+  f := TTbCoverageForm.Create(nil);
+  try
+    notShown.CommaText := 'TyButon,TyGridPanel,TyGridPanelCell,TyShownOnly';
+    def.CommaText := 'TyFormSurface,TyListViewLine';
+    prev.CommaText := 'TyShownOnly';
+    f.Fill(notShown, def, prev);
+    AssertTrue('CV8: a typo is marked', Pos(rsTbCovUnknownKey, f.LstNotShown.Items[0]) > 0);
+    AssertTrue('CV8: TyGridPanel is not', Pos(rsTbCovUnknownKey, f.LstNotShown.Items[1]) = 0);
+    AssertTrue('CV8: TyGridPanelCell is not', Pos(rsTbCovUnknownKey, f.LstNotShown.Items[2]) = 0);
+    AssertTrue('CV8: what the preview shows is not', Pos(rsTbCovUnknownKey, f.LstNotShown.Items[3]) = 0);
+    AssertTrue('CV8: TyFormSurface is not', Pos(rsTbCovUnknownKey, f.LstDefault.Items[0]) = 0);
+    AssertTrue('CV8: TyListViewLine is not', Pos(rsTbCovUnknownKey, f.LstDefault.Items[1]) = 0);
+    AssertFalse('CV8: no preview, no such key', TbIsKnownTypeKey('TyShownOnly', nil));
+    AssertTrue('CV8: case does not matter', TbIsKnownTypeKey('tyformsurface', nil));
+  finally
+    f.Free;
+    notShown.Free;
+    def.Free;
+    prev.Free;
+  end;
+end;
+
+{ Every typeKey a library unit names in a string literal is a known one -- or the start of
+  catalogue keys it builds by adding to it ('TyTerminalAnsi' + a number). A new control
+  whose key is in no catalogue and no row turns this red: give its unit a row. }
+procedure TTbCoverageTests.TestEveryLibraryKeyIsKnown;
+var
+  sr: TSearchRec;
+  lits: TStringList;
+  i, k: Integer;
+  u: string;
+  prefix: Boolean;
+  units: Integer;
+begin
+  units := 0;
+  if FindFirst(TbRepoDir + 'source' + PathDelim + 'tyControls.*.pas', faAnyFile, sr) = 0 then
+  try
+    repeat
+      u := ChangeFileExt(sr.Name, '');
+      Inc(units);
+      lits := LiteralKeys(u);
+      try
+        for i := 0 to lits.Count - 1 do
+        begin
+          if TbIsKnownTypeKey(lits[i], nil) then Continue;
+          prefix := False;
+          for k := 0 to High(TyCatalogTypeKeys) do
+            if (Length(TyCatalogTypeKeys[k]) > Length(lits[i]))
+               and SameText(Copy(TyCatalogTypeKeys[k], 1, Length(lits[i])), lits[i]) then
+              prefix := True;
+          AssertTrue('CV9: ' + u + ' names ' + lits[i] + ', which is not a known typeKey', prefix);
+        end;
+      finally
+        lits.Free;
+      end;
+    until FindNext(sr) <> 0;
+  finally
+    FindClose(sr);
+  end;
+  AssertTrue('CV9: the units were read: ' + IntToStr(units), units > 100);
 end;
 
 initialization

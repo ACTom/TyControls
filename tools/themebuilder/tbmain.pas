@@ -970,7 +970,7 @@ begin
     TbBaseTypeKeys(baseKeys);
     TbCoverageLists(docKeys, prevKeys, baseKeys, notShown, defKeys);
     Result := TTbCoverageForm.Create(nil);
-    Result.Fill(notShown, defKeys);
+    Result.Fill(notShown, defKeys, prevKeys);
   finally
     scan.Free;
     docKeys.Free;

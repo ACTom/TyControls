@@ -34,6 +34,12 @@ procedure TbBaseTypeKeys(ADest: TStrings);
 function TbPartKeysOfUnit(const AUnit: string): string;       { comma list, '' when no row }
 procedure TbPartKeysOfClass(AClass: TClass; ADest: TStrings); { its unit's row and every ancestor's }
 function TbPartKeyUnits: TStringArray;                          { FOR THE TESTS }
+{ A typeKey something in the library resolves: a catalogue key, a key of the base theme's
+  rules, a key of the part table (every row), or one of APreview (nil: none). The coverage
+  check marks the rest "not a known typeKey" -- most often a typo. The catalogue alone is
+  not enough: it is generated from light.tycss and leaves out what the base deliberately
+  does not define (TyFormSurface, TyGridPanel). }
+function TbIsKnownTypeKey(const AKey: string; APreview: TStrings): Boolean;
 { ANotShown: in ADoc, not in APreview. ADefaultLook: in APreview, in neither ADoc nor ABase.
   Both cleared, then filled in alphabetical order. }
 procedure TbCoverageLists(ADoc, APreview, ABase, ANotShown, ADefaultLook: TStrings);
@@ -41,7 +47,7 @@ procedure TbCoverageLists(ADoc, APreview, ABase, ANotShown, ADefaultLook: TStrin
 implementation
 
 uses
-  tyControls.Css.Parser, tyControls.DefaultTheme;
+  tyControls.Css.Parser, tyControls.Css.Catalog, tyControls.DefaultTheme;
 
 type
   TTbPartRow = record
@@ -53,7 +59,7 @@ const
   { Checked against the sources by TTbCoverageTests.TestThePartTableMatchesTheSources: every
     typeKey a unit names in a string literal is in its row; what a row adds by hand (keys
     built by concatenation) must be a catalogue typeKey. }
-  cTbPartRows: array[0..50] of TTbPartRow = (
+  cTbPartRows: array[0..51] of TTbPartRow = (
     (U: 'tyControls.ActivityIndicator'; K: 'TyActivityIndicator,TyActivityIndicatorFill'),
     (U: 'tyControls.Alert'; K: 'TyAlert,TyAlertClose'),
     (U: 'tyControls.Badge'; K: 'TyBadge'),
@@ -79,6 +85,9 @@ const
       'TyGridFilterRow,TyGridFixed,TyGridGroupRow,TyGridHeader,TyGridHeaderGroup,' +
       'TyGridHeaderSection,TyGridHyperlink,TyGridIndicator,TyGridLine,TyGridProgress,' +
       'TyGridProgressFill,TyGridRating,TyGridRatingEmpty,TyGridSelectionFrame,TyGridSummaryRow'),
+    { not in the preview: in the table so its keys are known ones (the catalogue leaves them
+      out -- the base deliberately does not define them) }
+    (U: 'tyControls.GridPanel'; K: 'TyGridPanel,TyGridPanelCell'),
     (U: 'tyControls.GroupBox'; K: 'TyGroupBox'),
     (U: 'tyControls.HeaderControl'; K: 'TyHeaderControl,TyTreeHeaderSection'),
     (U: 'tyControls.LinkLabel'; K: 'TyLinkLabel,TyLinkLabelLink'),
@@ -251,6 +260,41 @@ begin
     Result[i] := cTbPartRows[i].U;
 end;
 
+var
+  GKnownKeys: TStringList = nil;   { catalogue + base + part table, lower case, sorted }
+
+function TbIsKnownTypeKey(const AKey: string; APreview: TStrings): Boolean;
+var
+  i, j, n: Integer;
+  base: TStringList;
+begin
+  if GKnownKeys = nil then
+  begin
+    GKnownKeys := TStringList.Create;
+    GKnownKeys.Sorted := True;
+    GKnownKeys.Duplicates := dupIgnore;
+    for i := 0 to High(TyCatalogTypeKeys) do
+      GKnownKeys.Add(LowerCase(TyCatalogTypeKeys[i]));
+    for i := 0 to High(cTbPartRows) do
+    begin
+      n := WordCountOf(cTbPartRows[i].K);
+      for j := 1 to n do
+        GKnownKeys.Add(LowerCase(WordOf(cTbPartRows[i].K, j)));
+    end;
+    base := TStringList.Create;
+    try
+      TbBaseTypeKeys(base);
+      for i := 0 to base.Count - 1 do
+        GKnownKeys.Add(LowerCase(base[i]));
+    finally
+      base.Free;
+    end;
+  end;
+  if GKnownKeys.IndexOf(LowerCase(AKey)) >= 0 then
+    Exit(True);
+  Result := (APreview <> nil) and (IndexOfKey(APreview, AKey) >= 0);
+end;
+
 procedure SortKeys(AList: TStrings);
 var
   sl: TStringList;
@@ -285,4 +329,5 @@ end;
 
 finalization
   FreeAndNil(GBaseKeys);
+  FreeAndNil(GKnownKeys);
 end.

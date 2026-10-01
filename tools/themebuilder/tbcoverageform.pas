@@ -1,7 +1,9 @@
 unit tbcoverageform;
 { "View > Coverage check...": the two lists of tbcoverage in a dialog. A double click on an
   entry closes it with that typeKey (Chosen) and the window goes to its rule, or adds one.
-  An entry that is not a catalogue typeKey says so -- in list 1 that is most often a typo. }
+  An entry that is not a typeKey the library knows (tbcoverage.TbIsKnownTypeKey: the
+  catalogue, the base theme's rules, the part table, what the preview shows) says so -- in
+  list 1 that is most often a typo. }
 {$mode objfpc}{$H+}
 interface
 uses
@@ -32,7 +34,8 @@ type
     FChosen: string;
     procedure Choose(AList: TTyListBox; AKeys: TStrings);
   public
-    procedure Fill(ANotShown, ADefaultLook: TStrings);
+    { APreview: the typeKeys the preview shows (known ones too); nil: none }
+    procedure Fill(ANotShown, ADefaultLook: TStrings; APreview: TStrings = nil);
     property Chosen: string read FChosen;    { the typeKey double-clicked; '' = none }
   end;
 
@@ -41,17 +44,7 @@ implementation
 {$R *.lfm}
 
 uses
-  tyControls.Css.Catalog;
-
-function IsCatalogKey(const AKey: string): Boolean;
-var
-  i: Integer;
-begin
-  for i := 0 to High(TyCatalogTypeKeys) do
-    if SameText(TyCatalogTypeKeys[i], AKey) then
-      Exit(True);
-  Result := False;
-end;
+  tbcoverage;
 
 procedure TTbCoverageForm.FormCreate(Sender: TObject);
 begin
@@ -66,7 +59,7 @@ begin
   FreeAndNil(FDefaultKeys);
 end;
 
-procedure TTbCoverageForm.Fill(ANotShown, ADefaultLook: TStrings);
+procedure TTbCoverageForm.Fill(ANotShown, ADefaultLook: TStrings; APreview: TStrings);
 
   procedure FillOne(AList: TTyListBox; AKeys, ASource: TStrings);
   var
@@ -80,7 +73,7 @@ procedure TTbCoverageForm.Fill(ANotShown, ADefaultLook: TStrings);
       for i := 0 to ASource.Count - 1 do
       begin
         caption := ASource[i];
-        if not IsCatalogKey(ASource[i]) then
+        if not TbIsKnownTypeKey(ASource[i], APreview) then
           caption := caption + '  ' + rsTbCovUnknownKey;
         AList.Items.Add(caption);
       end;
