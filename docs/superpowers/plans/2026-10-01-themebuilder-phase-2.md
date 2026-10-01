@@ -63,7 +63,7 @@
 13. 侧栏现在只有「问题」一页（`tbmain.lfm:50-69`，`SideBar: TTyToolWindowBar` 里一个 `ProblemsWin: TTyToolWindow`）；窗口顺序 = `.lfm` 里的子控件顺序（`ToolWindows.pas:689` 注释），`ActiveIndex` 在 `Loaded` 里应用（`:251`）。「种子」页在 `ProblemsWin` 之前加（spec 的顺序：种子 / 问题 / AI）。图标用 Lucide `palette`（`assets/lucide/codepoints.json` 有）。
 14. 预览是运行时建的 frame、放进 `PreviewHost`（`tbmain.pas:191-194`）；种子面板照这个办法：`SeedsWin` 里放 `SeedsHost: TTyPanel`，`FormCreate` 里建 `TTbSeedsFrame` 放进去。
 15. 颜色：`TTyColorButton`（`ColorButton.pas:26`）——`ShowText = True` 时画色块加 `#RRGGBB`（`:98`）；点它时**先** `inherited Click`、**再**开 `TySelectColor`（`:326-345`），选定后设 `SelectedColor`；`SelectedColor` 的 setter **任何改动都触发** `OnColorChange`（`:152-169`，流式加载除外）——代码里同步色块时要自己挡住回调。取色对话框是 `TySelectColor`（`Dialogs.Color.pas:109-110`），另有组件 `TTyColorDialog`（`:113`）。颜色转文字有 `TyColorHex`（`ColorButton.pas:20`，`#RRGGBB` 大写、忽略 alpha）；`TTyColor` 是 `$AARRGGBB`（`Types.pas:11`）；主题里 8 位十六进制是合法的（`breeze.tycss` 的 `#0000000F`）。
-16. 圆角：`TTySpinEdit`（`SpinEdit.pas:121-156`：`MinValue`、`MaxValue`、`Value`、`OnChange`）。
+16. 圆角：`TTySpinEdit`（`SpinEdit.pas:121-156`：`MinValue`、`MaxValue`、`Value`、`OnChange`）。（实现期修正（开工核对）：挂 `OnValueChange`——`OnChange` 对每一次缓冲改动都触发。）
 
 **4. Ctrl+点击**
 
@@ -86,7 +86,7 @@
 27. **zip 源的限制比 spec 以为的大**：单元头（`:15-21`）写明 zip 里的**图片**画不出来（painter 要文件路径）；而 `@import` 也解析不了——模型展开 `@import` 走的是磁盘（`StyleModel.pas:1372-1438` `ExpandSheet`：`FileExists(原路径)` 或 `基准目录 + 路径`），从不调主题源的 `ReadText`，zip 源的基准目录又是空的（`LoadFromSource` `:1617-1621` 的注释也写了）。所以 spec §6「tycss + `url()` / `@import` 引用的文件 + 清单」打成 zip、再用 `TTyThemeZipSource` 读回加载：带 `@import` 的会加载失败，带图片的加载通过但程序里看不到图。开工前问题一第 1 条。
 28. 引用文件的解析规则（导出要照运行时的规则收）：`@import` 相对于**导入它的那个文件**所在目录（`ExpandSheet` 每层用自己的目录）；`url()` **一律相对于入口文件的目录**——解析时用的是 `FThemeBaseDir`，即入口文件目录（`StyleModel.pas:490-498` `ResolveAssetPath`、`:1741-1756`），导入文件里的 `url()` 也一样。（`ThemeLint.pas:917` 对导入文件用它自己的目录查缺图——和运行时不一致，是库里的一个小问题，不在本期改，签收记为计划外发现。）`url()` 可以出现在任何值里，包括 `:root` 变量。
 29. FPC `zipper`：`TZipper`（`zipper.pp:413`）的 `FileName`、`Entries.AddFileEntry(ADiskFileName, AArchiveFileName)` 与 `AddFileEntry(AStream, AArchiveFileName)`（`:404-407`）、`ZipAllFiles`；测试里已有用法（`tests/test.themebundle.pas:62-84`，归档名用 `/`）。
-30. 读回后的加载：`TTyStyleModel.Create` + `LoadFromSource(源)`，再按 `ModeNames`（没有就只试 `''`）逐个 `SetMode` + 1 期的 `TbProbeResolve`（`tbpreview.pas:314-352`）——和预览的「加载后试解析」是同一个标准。
+30. 读回后的加载：`TTyStyleModel.Create` + `LoadFromSource(源)`，再按 `ModeNames`（没有就只试 `''`）逐个 `SetMode` + 1 期的 ~~`TbProbeResolve`（`tbpreview.pas:314-352`）~~ `TbProbeDocument`（实现期修正（开工核对）：1 期期末的快探测 + 引擎定案）——和预览的「加载后试解析」是同一个标准。
 
 **7. 代码片段用到的 API（逐个核过签名）**
 
@@ -99,8 +99,8 @@
 
 35. 文本进出编辑器：1 期新建 / 打开走 `LoadEditor`（`tbmain.pas:321-331`，整篇替换并 `ClearUndo`）；刷新走 `EditorChange` → 300 ms 计时器 → `RefreshNow`（`:458-483`）。无句柄的 SynEdit 在测试里可能不触发 `OnChange`（1 期 F2 的写法，`tests/test.themebuilder.main.pas:169-179`）。
 36. 一步撤销：`TCustomSynEdit.BeginUndoBlock` / `EndUndoBlock`（`synedit.pp:930-932`，public）；`SetTextBetweenPoints(起, 止, 文本, [], scamAdjust)`（`:976-983`，逻辑坐标即字节列，内部本身也包一层 undo 块，`:6368-`）；`Undo`（`:1000`）。整篇 `Lines.Text :=` 会让撤销变成「全文替换」——不能用来做局部改动。
-37. 编辑器默认开着 `eoTrimTrailingSpaces`（`SYNEDIT_DEFAULT_OPTIONS`，`synedit` 包 `:59-67`；工具的 `.lfm` 与 kit 都没去掉它，kit 只去了 `eoScrollPastEol`，`CssEditKit.pas:87`）——插入空规则时中间那行的两个缩进空格可能被修掉、光标又因为没有 `eoScrollPastEol` 夹到行首。Task 9 的 F24 守这一点，红了的处理写在那里。
-38. 询问统一走主窗体的 `Ask`（`tbmain.pas:261-270`，测试由 `PromptAnswerForTest` 回答）；frame 要问就通过事件借主窗体的 `Ask`。
+37. 编辑器默认开着 `eoTrimTrailingSpaces`（`SYNEDIT_DEFAULT_OPTIONS`，`synedit` 包 `:59-67`；工具的 `.lfm` 与 kit 都没去掉它，kit 只去了 `eoScrollPastEol`，`CssEditKit.pas:87`）——插入空规则时中间那行的两个缩进空格可能被修掉、光标又因为没有 `eoScrollPastEol` 夹到行首。Task 9 的 F24 守这一点，红了的处理写在那里。（实现期修正（开工核对）：1 期 L8 已在工具里关掉它，`ebef1b2d`。）
+38. 询问统一走主窗体的 `Ask`（`tbmain.pas:261-270`，测试由 `PromptAnswerForTest` 回答）；frame 要问就通过事件借主窗体的 `Ask`。（实现期修正（开工核对）：`Ask` 1 期期末多了 `AType` 参数，借的是适配 `AskFor`。）
 39. 1 期测试里要跟着改的：F1 断言侧栏只有一页（`tests/test.themebuilder.main.pas:155-167`）；F11 的单元清单是写死的十项（`:301-335`）；I1 的 `.lfm` 清单是写死的三个文件（`:535-570` 附近，`LfmKeys(ToolDir + 'tbmain.lfm', …)` 三行）。
 
 **9. 编译与测试工程**
@@ -110,11 +110,21 @@
 
 ---
 
+> **实现期修正（开工核对）**：计划按 `ffe4861d` 核实，1 期期末修复（`77e9d0e0..c0cebbe1`）后来改了 `tbmain`、`tbpreview`、`tbdocument`、`Css.Values`、`ThemeLint`。开工时对着 `f87c46c6` 逐条核对，调整如下（各任务原处另有标注）：
+> 1. 主窗体测试编号：1 期期末修复已用到 F28（F19–F28 是期末新增的），本期主窗体判据 F19–F29 顺延为 **F29–F39**（F19→F29 …… F29→F39），集中变异清单同。
+> 2. 核实记录 37 / F24：`eoTrimTrailingSpaces` 1 期已关（L8，`ebef1b2d`），F24（现 F34）不再有「红了怎么办」那一支。
+> 3. 核实记录 30 / Task 7 Step 4d：1 期期末把试解析改成「快探测 + 引擎定案」（`TbProbeDocument`），读回验证照预览用它，不再单用 `TbProbeResolve`。
+> 4. 核实记录 38：1 期期末 `Ask` 多了消息类型参数（`AType`，L6），方法指针对不上 `TTbAskEvent`，主窗体加一个适配 `AskFor(AMsg, AButtons)` 挂给种子页与导出对话框。
+> 5. 核实记录 16 / Task 3：圆角微调框挂 `OnValueChange`（值真的变了才触发）而不是 `OnChange`（库里注释写明它对每一次缓冲改动都触发，打一个两位数会先写进一位数）。
+> 6. 核实记录 12 / SF7：密度包是叠进用户**顶层** `:root` 的，极简模板把 `--radius` 写在 `@mode` 块里、合并时盖过密度包，所以预览在现代密度下仍是 6px——计划里「先证明是 8」对极简模板不成立。SF7 改用 `TyBuiltinThemeCss`（`--radius` 写在 `:root`）：预览现代下 8、面板 6。
+> 7. Task 9 Step 3：`RefreshNow` 调 `UpdateFrom` 时 `FProblems` 还没建（1 期期末拆出了 `BuildProblems`），传的是 `FParseFailed`（即 `TbHasParseError(FLint)`）。
+> 8. Task 6：`TbCoverage` 与单元 `tbcoverage` 同名，在用了这个单元的地方被当成单元名，改名 `TbCoverageLists`；子部件表按 CV4 的规则多两行（`HeaderControl`、`Popup`），共 51 行。
+
 ## 开工前要定的问题
 
 每条都给了建议，**计划正文按建议写**；改了哪条，执行时改对应任务，Task 11 写回 spec 原处。第一类由主控在 Task 0 决定问不问用户；用户没回复前按建议做（三期一起验收时仍可改，Task 12 把它们写进验收文档的「等你定的决定」）。
 
-> **状态**：（Task 0 Step 1 由主控填写：问了没有、答复是什么。）
+> **状态**：未单独询问用户，按建议执行（用户 2026-10-01 以 /goal 指示按计划、开发、验证、修复顺序完成 spec 全部内容），一起验收时可改。
 
 ### 一、产品方向 / 用户可见（问用户）
 
@@ -844,7 +854,7 @@ end;
 | SF4 | `'@mode light { :root { --surface: darken(#FFFFFF, 10%); } }'#10'@mode dark { :root { --surface: #222222; } }'`：`ApplyValue(surface, 0, '#EEEEEE')`，桩答 `mrNo` → False、`OnEdits` 未被调、问了 1 次；答 `mrYes` → True、一次 `OnEdits`，`TbApplyEdits` 后文本里 `darken(#FFFFFF, 10%)` 变成 `#EEEEEE`、其余不变；对 `(surface,1)`（字面值）调用不问 | ① 不问表达式；② 字面值也问 |
 | SF5 | E6 的文本：`ApplyValue(accent, 0, '#000000')` 桩答 `mrYes` → 改 `:root`；`mrNo` → 亮色块多一行；`mrCancel` → False、无 `OnEdits` | 共用格子不问（直接写进亮色块） |
 | SF6 | 坏文本 `'TyButton {'`（`ABroken = True` 传入）：`Broken`；`ApplyValue` → False、没问、没 `OnEdits`；`ModeNote.Caption = rsTbSeedsBroken`；`Scroll.Enabled = False`；`ABroken = False` 但加载会失败的文本（`'TyButton { border-radius: 1px 2px 3px; }'`）同样 `Broken` | 不看 `FEval.Load` 的结果 |
-| SF7 | 密度无关：建一个 `TTbPreviewFrame`，加载极简模板、`SetModern(True)`，**先证明** `Preview.Controller.Model.ResolveMetric('--radius', -1) = 8`；同一文本 `UpdateFrom` 后 `ResolvedText(radius,0) = '6px'` | 求值改用预览控制器的模型（得到 8px） |
+| SF7 | 密度无关：建一个 `TTbPreviewFrame`，加载 ~~极简模板~~ `TyBuiltinThemeCss`（实现期修正（开工核对）：极简模板的 `--radius` 在 `@mode` 块里，盖过密度包，预览仍是 6）、`SetModern(True)`，**先证明** `Preview.Controller.Model.ResolveMetric('--radius', -1) = 8`；同一文本 `UpdateFrom` 后 `ResolvedText(radius,0) = '6px'` | 求值改用预览控制器的模型（得到 8px） |
 | SF8 | 刷新不回写：`UpdateFrom` 极简模板再 `UpdateFrom` 一份不同的双模式文本（先证明两份的 `accent` 亮色值不同）→ `OnEdits` 计数 0；随后 `Swatch(accent,0).SelectedColor := TyRGBA($12,$34,$56,$FF)` → `OnEdits` 计数 1、改动的值是 `'#123456'` | `UpdateView` 不设 `FUpdating`（刷新时计数 > 0） |
 | SF9 | 拆分：`TyBuiltinThemeCss` 之上 `SplitModes` → 一次 `OnEdits`；应用后再 `UpdateFrom`：`Columns = light, dark`；12 格 `tssOwn`；`ResolvedText(surface,1) = ResolvedText(surface,0)`（暗色先用亮色值） | 暗色一组取的是求值出的暗色值 |
 | SF10 | 圆角：极简模板，`RadiusSpin(1).Value := 9` → `OnEdits` 的改动值 `'9px'`、落在暗色块 | `RadiusChange` 取错列（落到亮色块） |
@@ -1387,7 +1397,7 @@ end;
 ```
 
   `FormDestroy` 开头：`if FSeeds <> nil then begin FSeeds.OnEdits := nil; FSeeds.OnAsk := nil; FSeeds.OnSync := nil; end; if FPreview <> nil then FPreview.OnPick := nil;`。
-- [ ] **Step 3: 刷新**：`RefreshNow` 在收集问题之后、`ShowProblems` 之前加 `if FSeeds <> nil then FSeeds.UpdateFrom(css, FDoc.BaseDir, TbHasParseError(FProblems));`。`SeedsSync`：`if RefreshTimer.Enabled or ((FSeeds <> nil) and (Editor.Lines.Text <> FSeeds.ScannedText)) then RefreshNow;`。
+- [ ] **Step 3: 刷新**：`RefreshNow` 在收集问题之后、`ShowProblems` 之前加 `if FSeeds <> nil then FSeeds.UpdateFrom(css, FDoc.BaseDir, TbHasParseError(FProblems));`（实现期修正（开工核对）：1 期期末拆出 `BuildProblems`，这时 `FProblems` 还没建，传 `FParseFailed`）。`SeedsSync`：`if RefreshTimer.Enabled or ((FSeeds <> nil) and (Editor.Lines.Text <> FSeeds.ScannedText)) then RefreshNow;`。
 - [ ] **Step 4: 一步撤销**：
 
 ```pascal
@@ -1482,21 +1492,21 @@ end;
   - `MnuSeedsClick` / `MnuProblemsClick` → `ShowSidePage(SeedsWin / ProblemsWin)`：`if SideBar.Collapsed or (SideBar.ActiveWindow <> AWin) then begin SideBar.Collapsed := False; SideBar.ActivateWindow(AWin); end else SideBar.Collapsed := True;`（1 期的「问题」菜单只是切折叠）。
 - [ ] **Step 7: resourcestring**：`rsTbExported`。
 - [ ] **Step 8: 1 期测试跟着改**（`tests/test.themebuilder.main.pas`）：F1 改为 `WindowCount = 2`、`Windows[0] = SeedsWin`、`Windows[1] = ProblemsWin`；F11 的 `cUnits` 加本期十一个单元（数组上界跟着改）；I1 的 `.lfm` 清单改为 `FindAllFiles(ToolDir, '*.lfm', False)` 逐个 `LfmKeys`（本期新增的四个 `.lfm` 自动纳入）。
-- [ ] **Step 9: 判据测试**（接着写 `TTbMainFormTests`；`SetUp` / `TearDown` 照 1 期）：
+- [ ] **Step 9: 判据测试**（接着写 `TTbMainFormTests`；`SetUp` / `TearDown` 照 1 期；实现期修正（开工核对）：编号顺延为 F29–F39，见「开工前要定的问题」前的核对第 1 条）：
 
 | # | 判据 | 在哪个变异下必须红 |
 |---|---|---|
-| F19 | 建好：`Seeds.Parent = SeedsHost`；`SideBar.ActiveWindow = SeedsWin`；启动的极简模板下 `Seeds.Columns = light, dark`、`Seeds.Broken = False` | `FormCreate` 不建 frame / 建了不放进 `SeedsHost` |
-| F20 | 一步撤销：极简模板上**先打一个字**（光标移到第 1 行末，`Editor.CommandProcessor(ecChar, 'x', nil)`），再 `Seeds.ApplyValue(accent, 0, '#123456')` → 编辑器文本里亮色块 `--accent: #123456;`、暗色不变；预览按钮 `primary` 的背景 = `$123456`（比法同 1 期 `PreviewButtonBg`）；`Editor.Undo` **一次** → 文本 = 极简模板加那个 `x`（`x` 还在） | `ApplyEdits` 改用 `Editor.Lines.Text := TbApplyEdits(…)`（撤销一次回不到「只差 x」的样子） |
-| F21 | 陈旧保护：`Seeds.UpdateFrom` 扫的是 T；编辑器文本另设为 U（不刷新）→ `ApplyEdits(T, 一个改动)` = False、文本仍是 U；**而** `Seeds.ApplyValue(…)` 能成功（`OnSync` 先刷新）、改动落在 U 上 | ① 去掉 `Editor.Lines.Text <> AText` 检查（改动落错位置）；② `FSeeds.OnSync` 不挂（`ApplyValue` 返回 False） |
-| F22 | 面板跟着文本：编辑器设为亮色 `--accent: #ABCDEF` 的文档、`RefreshNow` → `Seeds.ResolvedText(accent,0) = '#ABCDEF'`（先证明刷新前不是） | `RefreshNow` 不调 `UpdateFrom` |
-| F23 | Ctrl+点击跳转：编辑器文本 = R1 的 T；对 `Preview.BtnPrimary` 发 Ctrl 按下（同 P1）→ `Editor.LogicalCaretXY = (1,2)`；再一次 → (9,4)；再一次 → (1,2) | ① `FPreview.OnPick` 不挂（光标不动）；② 不循环（第二次仍 (1,2)） |
-| F24 | Ctrl+点击插入：极简模板，对 `Preview.TagDanger` 发 Ctrl 按下 → 文本（每行去行尾空白、换行统一成 LF）以 `'TyTag.danger {'#10#10'}'#10` 结尾；光标在倒数第二行、`X = 3`；`Editor.Undo` 一次 → 回到极简模板 | 插入不走 `ApplyEdits`（撤销一次回不去）。**若 X = 1 而原因是 SynEdit 修掉了中间行的两个空格（核实记录 37）**：在 `FormCreate` 里 `Editor.Options := Editor.Options - [eoTrimTrailingSpaces]`（注释写明：修尾空格会让「只改那一处」之外的字节变，和保存不改字节的承诺冲突），签收写一句 |
-| F25 | 覆盖检查接线：文本 `'TyRibbon { }'` → `BuildCoverageForm.LstNotShown.Items` 含 `TyRibbon` | `BuildCoverageForm` 用的是空的文档键 |
-| F26 | 导出接线：把 green 主题与图片复制进临时目录并 `OpenFile`；`f := BuildExportForm` → `f.Files` 有 `assets/background.jpg`；`f.EdtTarget.Text := 临时目标; f.DoExport` → True，目标里的 `theme.tycss` 字节 = `EntryBytes` = 打开的文件的字节 | `EntryBytes` 用 `Editor.Lines.Text`（CRLF / LF 与文件不同时红——用一个 LF 文件、在 Windows 上跑） |
-| F27 | 片段接线：打开 `green.tycss` 的副本 → `BuildSnippetsForm.MemoFile` 含 `'green.tycss'`、`MemoFolder` 含 `'green'` | `SnippetName` 不看文件名（得到 `mytheme`） |
-| F28 | 侧栏菜单：`MnuSeedsClick` 两次 → 第一次（已在种子页）折叠，第二次展开且仍是种子页；`MnuProblemsClick` → 展开并切到问题页 | — |
-| F29 | 窗体销毁后预览的挂钩不回调主窗体：建窗体、`Free`；之后无 AV（`TearDown` 之前显式建一个再释放） | `FormDestroy` 不清 `OnPick`（若确实不 AV，「等价」，签收写明） |
+| F29 | 建好：`Seeds.Parent = SeedsHost`；`SideBar.ActiveWindow = SeedsWin`；启动的极简模板下 `Seeds.Columns = light, dark`、`Seeds.Broken = False` | `FormCreate` 不建 frame / 建了不放进 `SeedsHost` |
+| F30 | 一步撤销：极简模板上**先打一个字**（光标移到第 1 行末，`Editor.CommandProcessor(ecChar, 'x', nil)`），再 `Seeds.ApplyValue(accent, 0, '#123456')` → 编辑器文本里亮色块 `--accent: #123456;`、暗色不变；预览按钮 `primary` 的背景 = `$123456`（比法同 1 期 `PreviewButtonBg`）；`Editor.Undo` **一次** → 文本 = 极简模板加那个 `x`（`x` 还在） | `ApplyEdits` 改用 `Editor.Lines.Text := TbApplyEdits(…)`（撤销一次回不到「只差 x」的样子） |
+| F31 | 陈旧保护：`Seeds.UpdateFrom` 扫的是 T；编辑器文本另设为 U（不刷新）→ `ApplyEdits(T, 一个改动)` = False、文本仍是 U；**而** `Seeds.ApplyValue(…)` 能成功（`OnSync` 先刷新）、改动落在 U 上 | ① 去掉 `Editor.Lines.Text <> AText` 检查（改动落错位置）；② `FSeeds.OnSync` 不挂（`ApplyValue` 返回 False） |
+| F32 | 面板跟着文本：编辑器设为亮色 `--accent: #ABCDEF` 的文档、`RefreshNow` → `Seeds.ResolvedText(accent,0) = '#ABCDEF'`（先证明刷新前不是） | `RefreshNow` 不调 `UpdateFrom` |
+| F33 | Ctrl+点击跳转：编辑器文本 = R1 的 T；对 `Preview.BtnPrimary` 发 Ctrl 按下（同 P1）→ `Editor.LogicalCaretXY = (1,2)`；再一次 → (9,4)；再一次 → (1,2) | ① `FPreview.OnPick` 不挂（光标不动）；② 不循环（第二次仍 (1,2)） |
+| F34 | Ctrl+点击插入：极简模板，对 `Preview.TagDanger` 发 Ctrl 按下 → 文本（每行去行尾空白、换行统一成 LF）以 `'TyTag.danger {'#10#10'}'#10` 结尾；光标在倒数第二行、`X = 3`；`Editor.Undo` 一次 → 回到极简模板 | 插入不走 `ApplyEdits`（撤销一次回不去）。**若 X = 1 而原因是 SynEdit 修掉了中间行的两个空格（核实记录 37）**：在 `FormCreate` 里 `Editor.Options := Editor.Options - [eoTrimTrailingSpaces]`（注释写明：修尾空格会让「只改那一处」之外的字节变，和保存不改字节的承诺冲突），签收写一句 |
+| F35 | 覆盖检查接线：文本 `'TyRibbon { }'` → `BuildCoverageForm.LstNotShown.Items` 含 `TyRibbon` | `BuildCoverageForm` 用的是空的文档键 |
+| F36 | 导出接线：把 green 主题与图片复制进临时目录并 `OpenFile`；`f := BuildExportForm` → `f.Files` 有 `assets/background.jpg`；`f.EdtTarget.Text := 临时目标; f.DoExport` → True，目标里的 `theme.tycss` 字节 = `EntryBytes` = 打开的文件的字节 | `EntryBytes` 用 `Editor.Lines.Text`（CRLF / LF 与文件不同时红——用一个 LF 文件、在 Windows 上跑） |
+| F37 | 片段接线：打开 `green.tycss` 的副本 → `BuildSnippetsForm.MemoFile` 含 `'green.tycss'`、`MemoFolder` 含 `'green'` | `SnippetName` 不看文件名（得到 `mytheme`） |
+| F38 | 侧栏菜单：`MnuSeedsClick` 两次 → 第一次（已在种子页）折叠，第二次展开且仍是种子页；`MnuProblemsClick` → 展开并切到问题页 | — |
+| F39 | 窗体销毁后预览的挂钩不回调主窗体：建窗体、`Free`；之后无 AV（`TearDown` 之前显式建一个再释放） | `FormDestroy` 不清 `OnPick`（若确实不 AV，「等价」，签收写明） |
 
 - [ ] **Step 10: 提交**：`feat(themebuilder): the seeds page, Ctrl+click to a rule, the coverage check, export and snippets in the main window` + Co-Authored-By。
 
@@ -1539,7 +1549,7 @@ Expected：编过；`source/`、`designtime/` 下没有任何改动。然后：
 1. `powershell -File scripts/smoke-launch-examples.ps1 -Dirs tools\themebuilder`：起得来、只有主窗体与应用窗口、没有 `#32770`。
 2. 打开工具看一眼（不录）：种子页（极简模板两列）→ 改一个颜色 → Ctrl+Z → 打开 `themes/builtin/win11.tycss` 改 `--radius` 看询问 → Ctrl+点击预览的主按钮 → 覆盖检查 → 导出 `themes/green.tycss` 到一个临时文件夹 → 片段小窗。
 3. 截两张图放 `docs/superpowers/plans/2026-10-01-themebuilder-acceptance-shots/`：`p2-seeds-win32.png`（种子页，win11 主题）、`p2-export-win32.png`（导出对话框）——Task 12 引用。
-- [ ] **Step 6: 集中变异**（每条三拍，必须红）：C1、C2、C4、C7、C9、C10、C12、C14、E1、E3–E7、E9–E13、SF1、SF3–SF11、R1、R2、R5、P1–P9、CV2–CV5、CV7、X2、X3、X5–X11、S1–S3、S5、S7、F19–F29。结果逐条记进签收（红 / 补强 / 等价 + 理由）；没红的先查改没改对地方、再查是不是「这条路走不到」，确实没红就当场补测试。
+- [ ] **Step 6: 集中变异**（每条三拍，必须红）：C1、C2、C4、C7、C9、C10、C12、C14、E1、E3–E7、E9–E13、SF1、SF3–SF11、R1、R2、R5、P1–P9、CV2–CV5、CV7、X2、X3、X5–X11、S1–S3、S5、S7、F29–F39（实现期修正（开工核对）：原 F19–F29）。结果逐条记进签收（红 / 补强 / 等价 + 理由）；没红的先查改没改对地方、再查是不是「这条路走不到」，确实没红就当场补测试。
 - [ ] **Step 7: 期末审查（主控派两个审查 agent）**：规格核对（Step 4 的记录对着 spec 再过一遍）+ 代码质量（`git diff <Task 0 的 HEAD>..HEAD`），重点：
   - 文本改动：只替换值区间、只插入整行 / 整块；偏移全部基于同一份文本、从后往前应用；陈旧保护；一步撤销（地雷 20、21）。
   - 种子面板：刷新不回写（地雷 22）；表达式与共用两种询问的时机；坏文本整页禁用。
