@@ -42,6 +42,7 @@ type
     procedure TestTheSystemPrompt;           { S18 }
     { after the phase 3 reviews }
     procedure TestNothingOutsideTheFolderIsRead;   { S19 }
+    procedure TestAnOpenBlockIsNotComplete;        { S20 }
   end;
 
 implementation
@@ -344,6 +345,37 @@ begin
   AssertFalse('S16: none is not cut off', t);
   AssertTrue('S16: blank lines go', TbExtractCodeBlock('```tycss'#10#10'a'#10'b'#10#10'```', b, t));
   AssertEquals('S16: inner kept', 'a'#10'b', b);
+  { after the phase 3 reviews: the last tycss block; an open block is never passed over for
+    a smaller one }
+  AssertTrue('S16: two tycss', TbExtractCodeBlock('```tycss'#10'piece'#10'```'#10'```tycss'#10'whole'#10'```', b, t));
+  AssertEquals('S16: the last one', 'whole', b);
+  AssertFalse('S16: a tycss block left open after a complete one',
+    TbExtractCodeBlock('```tycss'#10'piece'#10'```'#10'```tycss'#10'whol', b, t));
+  AssertTrue('S16: is cut off', t);
+  AssertFalse('S16: a tycss block left open after a css one',
+    TbExtractCodeBlock('```css'#10'c'#10'```'#10'```tycss'#10'whol', b, t));
+  AssertTrue('S16: is cut off too', t);
+  AssertFalse('S16: an untagged block left open after a css one',
+    TbExtractCodeBlock('```css'#10'c'#10'```'#10'```'#10'whol', b, t));
+  AssertTrue('S16: cut off', t);
+  AssertTrue('S16: a stray open block after a complete tycss one',
+    TbExtractCodeBlock('```tycss'#10'whole'#10'```'#10'```'#10'x', b, t));
+  AssertEquals('S16: the tycss one', 'whole', b);
+  AssertFalse('S16: that is not cut off', t);
+end;
+
+{ S20: a reply that ends inside its code block says it is not complete -- the maximum
+  output length only when that is what the service said }
+procedure TTbAiSessionTests.TestAnOpenBlockIsNotComplete;
+begin
+  FBackend.Add('Here.'#10'```tycss'#10':root { --accent: #123456; }'#10);
+  FSession.Generate('x', Doc(TbMinimalTemplate), False);
+  AssertTrue('S20: failed', FSession.Stage = tasFailed);
+  AssertEquals('S20: not complete', rsTbAiIncomplete, FSession.Outcome.Sentence);
+  FBackend.Add('Here.'#10'```tycss'#10':root { --accent: #123456; }'#10, aekTruncated);
+  FSession.Generate('y', Doc(TbMinimalTemplate), False);
+  AssertTrue('S20: the length, when the service said so: ' + FSession.Outcome.Sentence,
+    Pos(rsTbAiTruncated, FSession.Outcome.Sentence) = 1);
 end;
 
 procedure TTbAiSessionTests.TestTheRealBackend;

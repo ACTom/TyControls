@@ -34,6 +34,7 @@ const
 
 resourcestring
   rsTbAiNoBlock = 'The reply has no tycss code block; its text is shown below.';
+  rsTbAiIncomplete = 'The reply is not complete: it ended inside its code block.';
   rsTbAiRetrying = 'Found %d problems; asking the model to fix them (%d of %d)...';
   rsTbAiNoChange = 'The model returned the file unchanged.';
   rsTbAiDoneIssues = 'Done, with %d problems left.';
@@ -134,9 +135,9 @@ const
   TbAiMaxFeedback = 2;
 
 function TbSystemPrompt: string;                 { the rules + TbReferenceText }
-{ the code block of AReply: the first tagged tycss, else the first css, else the only
-  untagged one, else the longest; False when there is none, or (ATruncated) when one opens
-  and never closes }
+{ the code block of AReply: the last tagged tycss, else the last css, else the only
+  untagged one, else the longest; False when there is none, or (ATruncated) when the reply
+  ends inside a block -- a tycss one, or any when no tycss block was complete }
 function TbExtractCodeBlock(const AReply: string; out ABlock: string;
   out ATruncated: Boolean): Boolean;
 { ABaseText: the document the request was made from -- a reference it already had is the
@@ -321,15 +322,29 @@ begin
       else if inBlock then
         body := body + lines[i] + #10;
     end;
-    if inBlock and (bodies.Count = 0) then
+    { the reply ended inside a code block: the file is not all there -- unless it was some
+      other block after a complete tycss one. Never a smaller block picked instead }
+    if inBlock and ((tag = 'tycss') or (tags.IndexOf('tycss') < 0)) then
     begin
-      ATruncated := True;   { the reply ended inside its code block }
+      ATruncated := True;
       Exit;
     end;
     if bodies.Count = 0 then Exit;
-    pick := tags.IndexOf('tycss');
+    { the last tycss block: a model may show a piece first and the whole file after it }
+    pick := -1;
+    for i := tags.Count - 1 downto 0 do
+      if tags[i] = 'tycss' then
+      begin
+        pick := i;
+        Break;
+      end;
     if pick < 0 then
-      pick := tags.IndexOf('css');
+      for i := tags.Count - 1 downto 0 do
+        if tags[i] = 'css' then
+        begin
+          pick := i;
+          Break;
+        end;
     if pick < 0 then
     begin
       k := 0;
@@ -965,8 +980,10 @@ begin
   end;
   if not TbExtractCodeBlock(AResult.Text, block, truncated) then
   begin
+    { a reply cut at the maximum output length never gets here (aekTruncated, above): the
+      service said it was finished and the block is still open }
     if truncated then
-      Finish(tasFailed, rsTbAiTruncated)
+      Finish(tasFailed, rsTbAiIncomplete)
     else
       Finish(tasFailed, rsTbAiNoBlock);
     Exit;
