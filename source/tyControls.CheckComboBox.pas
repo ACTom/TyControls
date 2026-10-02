@@ -84,8 +84,8 @@ type
       the base class fills it with a plain Items.Assign -- which would hand it our state
       POINTERS, every one of which reads as non-zero, i.e. "checked". So the two
       representations get translated at the boundary, in both directions. }
-    procedure PushChecksToList(AList: TTyCheckListBox);
-    procedure PullChecksFromList(AList: TTyCheckListBox);
+    procedure PushChecksToList(AList: TTyCustomCheckListBox);
+    procedure PullChecksFromList(AList: TTyCustomCheckListBox);
     { Read-only view of a row's state for the popup list, which paints tri-state and
       disabled rows the base checklist cannot express. Out-of-range answers the
       harmless default rather than raising, because paint code runs mid-resize. }
@@ -133,7 +133,7 @@ type
     property ItemEnabled[AIndex: Integer]: Boolean read GetItemEnabled write SetItemEnabled;
     { Test seam: run the popup -> combo state transfer against a list built by hand, so
       the disabled-row veto can be exercised without a real popup window. }
-    procedure PullChecksForTest(AList: TTyCheckListBox);
+    procedure PullChecksForTest(AList: TTyCustomCheckListBox);
     { The application's per-item slot -- LCL's TCustomCheckCombo.Objects[] (comboex.pas:327),
       which reads and writes TCheckComboItemState.Data. Items.Objects[] belongs to the
       control: writing app data straight into it is what used to destroy the check states,
@@ -424,8 +424,8 @@ begin
     keeps raw 0/1 flags, so cbGrayed lands there as NOT ticked — its own painter reads the
     tri-state back off us, so the flag is only the fallback path's opinion. }
   lst := PopupList;
-  if (lst is TTyCheckListBox) and (AIndex < lst.Items.Count) then
-    TTyCheckListBox(lst).Checked[AIndex] := (AValue = cbChecked);
+  if (lst is TTyCustomCheckListBox) and (AIndex < lst.Items.Count) then
+    TTyCustomCheckListBox(lst).Checked[AIndex] := (AValue = cbChecked);
   Invalidate;
   DoItemChange(AIndex);
 end;
@@ -580,7 +580,7 @@ begin
   if Result = '' then Result := FEmptyText;
 end;
 
-procedure TTyCustomCheckComboBox.PushChecksToList(AList: TTyCheckListBox);
+procedure TTyCustomCheckComboBox.PushChecksToList(AList: TTyCustomCheckListBox);
 var i: Integer;
 begin
   if AList = nil then Exit;
@@ -594,7 +594,7 @@ begin
   end;
 end;
 
-procedure TTyCustomCheckComboBox.PullChecksFromList(AList: TTyCheckListBox);
+procedure TTyCustomCheckComboBox.PullChecksFromList(AList: TTyCustomCheckListBox);
 var i: Integer; v: Boolean;
 begin
   if AList = nil then Exit;
@@ -620,7 +620,7 @@ begin
     end;
 end;
 
-procedure TTyCustomCheckComboBox.PullChecksForTest(AList: TTyCheckListBox);
+procedure TTyCustomCheckComboBox.PullChecksForTest(AList: TTyCustomCheckListBox);
 begin
   PullChecksFromList(AList);
 end;
@@ -630,8 +630,8 @@ begin
   { A checkbox was toggled in the popup: pull the states back out of the popup COPY (same
     order — csDropDownList never filters), repaint the field summary, and notify. The popup
     stays open. }
-  if not (PopupList is TTyCheckListBox) then Exit;
-  PullChecksFromList(TTyCheckListBox(PopupList));
+  if not (PopupList is TTyCustomCheckListBox) then Exit;
+  PullChecksFromList(TTyCustomCheckListBox(PopupList));
   Invalidate;
   if Assigned(OnChange) then OnChange(Self);
 end;
@@ -641,8 +641,15 @@ begin
   { The base fills the popup list with Items.Assign, which copies our state POINTERS into a
     control that reads that slot as a raw 0/1 flag — every row would come up ticked. }
   inherited DropDown;
-  if PopupList is TTyCheckListBox then
-    PushChecksToList(TTyCheckListBox(PopupList));
+  { Any check list, not just the library's: a descendant's CreatePopupList may hand over its
+    own TTyCustomCheckListBox. It cannot reach PopupCheckClick (private) to wire the tick
+    back, so the combo wires it here unless the list already has a handler of its own. }
+  if PopupList is TTyCustomCheckListBox then
+  begin
+    if not Assigned(TTyCustomCheckListBox(PopupList).OnClickCheck) then
+      TTyCustomCheckListBox(PopupList).OnClickCheck := @PopupCheckClick;
+    PushChecksToList(TTyCustomCheckListBox(PopupList));
+  end;
 end;
 
 function TTyCustomCheckComboBox.CreatePopupList: TTyCustomListBox;

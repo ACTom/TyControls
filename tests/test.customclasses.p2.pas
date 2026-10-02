@@ -18,7 +18,8 @@ unit test.customclasses.p2;
 interface
 
 uses
-  Classes, SysUtils, Types, TypInfo, ImgList, Controls, Forms, Graphics, ComCtrls, BGRABitmap,
+  Classes, SysUtils, Types, TypInfo, ImgList, Controls, Forms, Graphics, ComCtrls, StdCtrls,
+  BGRABitmap,
   BGRABitmapTypes, fpcunit, testregistry,
   test.customclasses, test.customclasses.p1,
   tyControls.Base, tyControls.Panel, tyControls.GridPanel, tyControls.ScrollBox,
@@ -72,6 +73,7 @@ type
     procedure TestIndexesReadBeforeTheirItemsWaitForThem;
     procedure TestThirdCheckListBox;
     procedure TestCheckComboPopupListTravelsTheWidenedApi;
+    procedure TestCheckComboDropsAThirdPartyCheckList;
     { Task 16: compound pickers }
     procedure TestThirdCascader;
     procedure TestThirdTransfer;
@@ -247,6 +249,15 @@ type
     function MakePopupList: TTyCustomListBox;
   end;
 
+  { A third party's own check list, dropped by its own check combo: it is a
+    TTyCustomCheckListBox and not a TTyCheckListBox. }
+  TP2ThirdCheckList = class(TTyCustomCheckListBox);
+
+  TP2ThirdListCheckCombo = class(TTyCustomCheckComboBox)
+  protected
+    function CreatePopupList: TTyCustomListBox; override;
+  end;
+
   { The tree's own properties are protected (TCustomTreeView keeps them protected). }
   TP2TreeCracker = class(TTyCustomTreeView)
   public
@@ -309,6 +320,11 @@ end;
 function TP2CheckComboCracker.MakePopupList: TTyCustomListBox;
 begin
   Result := CreatePopupList;
+end;
+
+function TP2ThirdListCheckCombo.CreatePopupList: TTyCustomListBox;
+begin
+  Result := TP2ThirdCheckList.Create(Self);
 end;
 
 procedure TP2TreeCracker.SetRootCount(AValue: Cardinal);
@@ -1029,6 +1045,39 @@ begin
     AssertFalse('and only that one', cc.Checked[0] or cc.Checked[2]);
   finally
     l.Free;
+  end;
+end;
+
+{ C6-5 (widened in the phase-2 fixes): a check combo that drops a third party's
+  TTyCustomCheckListBox -- not the library's TTyCheckListBox -- still pushes its ticks into the
+  list when it opens, hears a tick made on the list, and keeps an open list in step when code
+  sets State[]. The list's OnClickCheck is wired by the combo, since a third party's
+  CreatePopupList cannot reach the combo's private handler. }
+procedure TTyCustomClassesP2Test.TestCheckComboDropsAThirdPartyCheckList;
+var
+  cc: TP2ThirdListCheckCombo;
+  l: TTyCustomCheckListBox;
+begin
+  NeedWidgetSet;
+  cc := TP2ThirdListCheckCombo.Create(FForm);
+  cc.Parent := FForm;
+  cc.Items.CommaText := 'red,green,blue';
+  cc.Checked[1] := True;
+  cc.DropDown;
+  try
+    AssertTrue('the combo dropped the third party''s list', cc.PopupList is TP2ThirdCheckList);
+    AssertFalse('which is no TTyCheckListBox', TObject(cc.PopupList) is TTyCheckListBox);
+    l := TTyCustomCheckListBox(cc.PopupList);
+    AssertTrue('opening pushed the combo''s tick into the list', l.Checked[1]);
+    AssertFalse('and only that one', l.Checked[0] or l.Checked[2]);
+    AssertTrue('the combo wired the list''s OnClickCheck', Assigned(l.OnClickCheck));
+    l.Checked[2] := True;            // the user ticks "blue" on the list
+    l.OnClickCheck(l);
+    AssertTrue('the tick on the list reached the combo', cc.Checked[2]);
+    cc.State[0] := cbChecked;        // code sets a row while the list is open
+    AssertTrue('the open list follows State[]', l.Checked[0]);
+  finally
+    cc.CloseUp;
   end;
 end;
 
