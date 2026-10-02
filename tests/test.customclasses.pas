@@ -53,6 +53,7 @@ type
     procedure TestBaseClassesPublishNothing;
     procedure TestThirdPartyOnTheBareBaseSeesOnlyTheLclRoot;
     procedure TestGeneratedMimicsMatchTheirFinalClass;
+    procedure TestFreshFormFileTextUnchanged;
   end;
 
 { Shared with the per-phase suites (test.customclasses.p1 ...). }
@@ -65,6 +66,8 @@ implementation
 const
   CSnapshotFile = 'tests' + PathDelim + 'fixtures' + PathDelim + 'customclasses' + PathDelim
     + 'published-snapshot.txt';
+  CFreshStreamsFile = 'tests' + PathDelim + 'fixtures' + PathDelim + 'customclasses' + PathDelim
+    + 'fresh-streams.txt';
 
   { The classes not split, each with its reason. }
   CNotSplit: array[0..19] of string = (
@@ -1294,6 +1297,200 @@ begin
   AssertTrue('anti-vacuity: no mimics were compared', Length(CGenMimics) >= GSplit.Count);
   AssertEquals('a third party publishing what the final class publishes is not that class:' + bad,
     '', bad);
+end;
+
+{ Properties whose fresh value is read off the machine the tests run on: the installed fonts,
+  the drives. G10 keeps the line -- whether it is written, and where -- and masks the value. }
+const
+  CMachineValues: array[0..2, 0..1] of string = (
+    ('TTyFontComboBox', 'Items.Strings'),
+    ('TTyFontListBox', 'Items.Strings'),
+    ('TTyShellTreeView', 'RootNodeCount'));
+
+function IsPropPath(const S: string): Boolean;
+var
+  i: Integer;
+begin
+  Result := S <> '';
+  for i := 1 to Length(S) do
+    if not (S[i] in ['A'..'Z', 'a'..'z', '0'..'9', '_', '.']) then Exit(False);
+end;
+
+{ Every string value becomes <text>. A fresh instance's strings come from resourcestrings
+  (captions, palette names), the locale (a currency symbol, a decimal separator) or the
+  machine, and a suite that loads a translation earlier in the run would change them all.
+  What G10 is for -- whether a property is written at all, where, and its ordinal value --
+  does not need them; G9 compares the strings themselves, mimic against final, in one run. }
+function MaskStrings(const ABody: string): string;
+var
+  lines: TStringList;
+  i, p, ind: Integer;
+  t: string;
+begin
+  lines := TStringList.Create;
+  try
+    lines.Text := ABody;
+    for i := 0 to lines.Count - 1 do
+    begin
+      t := Trim(lines[i]);
+      if t = '' then Continue;
+      ind := Length(lines[i]) - Length(TrimLeft(lines[i]));
+      p := Pos(' = ', t);
+      if (p > 1) and (p + 3 <= Length(t)) and (t[p + 3] in ['''', '#'])
+         and IsPropPath(Copy(t, 1, p - 1)) then
+        lines[i] := StringOfChar(' ', ind) + Copy(t, 1, p + 2) + '<text>'
+      else if t[1] in ['''', '#'] then
+      begin
+        { An item of a string list; the last one carries the list's closing parenthesis. }
+        if t[Length(t)] = ')' then
+          lines[i] := StringOfChar(' ', ind) + '<text>)'
+        else
+          lines[i] := StringOfChar(' ', ind) + '<text>';
+      end;
+    end;
+    lines.LineBreak := #10;
+    Result := lines.Text;
+  finally
+    lines.Free;
+  end;
+end;
+
+function MaskMachineValues(const AClassName, ABody: string): string;
+var
+  lines: TStringList;
+  i, j, k: Integer;
+  t: string;
+begin
+  lines := TStringList.Create;
+  try
+    lines.Text := ABody;
+    for k := Low(CMachineValues) to High(CMachineValues) do
+    begin
+      if not SameText(CMachineValues[k, 0], AClassName) then Continue;
+      for i := 0 to lines.Count - 1 do
+      begin
+        t := Trim(lines[i]);
+        if not AnsiStartsStr(CMachineValues[k, 1] + ' = ', t) then Continue;
+        lines[i] := Copy(lines[i], 1, Pos(CMachineValues[k, 1], lines[i]) - 1)
+          + CMachineValues[k, 1] + ' = <from the machine>';
+        { A string list runs on to the line that closes it: `'last item')`. }
+        if AnsiEndsStr('(', t) then
+        begin
+          j := i + 1;
+          while (j < lines.Count) and not AnsiEndsStr(')', Trim(lines[j])) do Inc(j);
+          while j > i do
+          begin
+            if j < lines.Count then lines.Delete(j);
+            Dec(j);
+          end;
+        end;
+        Break;
+      end;
+    end;
+    lines.LineBreak := #10;
+    Result := lines.Text;
+  finally
+    lines.Free;
+  end;
+end;
+
+{ G10 (standing; it does NOT retire with the snapshot). What a fresh instance of every
+  registered class writes into the .lfm of the form it is dropped on, frozen in
+  tests/fixtures/customclasses/fresh-streams.txt.
+
+  It covers what G9 cannot see once G6 retires: a default, stored clause or constructor value
+  that drifts on a CUSTOM class. G9 compares the final class with a third party's mimic, and
+  both inherit the drift; G6 compares with the 3.0 record and goes in Task 32. Deleting
+  `default True` from TTyCustomTabSheet.TabVisible made every fresh tab sheet start writing
+  `TabVisible = True` -- G9 and the per-phase suites stayed green; this goes red.
+
+  Frozen while G6 was green, so the fixture says what 3.0 wrote. Through a host form, as in
+  G9 (FreshStreamBody), with clock values pinned, the values read off the machine masked
+  (CMachineValues) and every string value masked (MaskStrings). Sizes are measured on Windows,
+  as G6's are. The classes this plan does not split
+  (CNotSplit) stay out: the forms cannot sit on a form, and the AdvChart-branch classes are
+  still being changed elsewhere.
+
+  Rewrite with TY_WRITE_FRESH_STREAMS=1 only when a change to what a form file says is the
+  point of the commit; the diff of the fixture is then the review. }
+procedure TTyCustomClassesGuardTest.TestFreshFormFileTextUnchanged;
+var
+  reg, cur, gold, curSec, goldSec: TStringList;
+  i, diffs: Integer;
+  host: TForm;
+  inst: TComponent;
+  body, path, firstMsg, a, b: string;
+begin
+  path := RepoRoot + CFreshStreamsFile;
+  reg := RegisteredPopulation;
+  cur := TStringList.Create;
+  gold := TStringList.Create;
+  curSec := TStringList.Create;
+  goldSec := TStringList.Create;
+  try
+    cur.LineBreak := #10;
+    for i := 0 to reg.Count - 1 do
+    begin
+      if InList(reg[i], CNotSplit) then Continue;
+      host := TForm.CreateNew(nil);
+      try
+        host.SetBounds(0, 0, 640, 480);
+        try
+          inst := TComponentClass(TClass(reg.Objects[i])).Create(host);
+          if inst is TControl then TControl(inst).Parent := host;
+          PinClockValues(inst);
+          body := MaskStrings(MaskMachineValues(reg[i], FreshStreamBody(host)));
+        except
+          on E: Exception do body := '<' + E.ClassName + ': ' + E.Message + '>';
+        end;
+      finally
+        host.Free;
+      end;
+      cur.Add('# ' + reg[i]);
+      cur.Add(StringReplace(TrimRight(body), #13#10, #10, [rfReplaceAll]));
+    end;
+    AssertTrue('anti-vacuity: fewer than 150 classes were streamed', cur.Count >= 300);
+    if GetEnvironmentVariable('TY_WRITE_FRESH_STREAMS') = '1' then
+    begin
+      ForceDirectories(ExtractFilePath(path));
+      cur.SaveToFile(path);
+      Exit;
+    end;
+    AssertTrue('fresh-stream fixture missing: ' + path + ' (written with TY_WRITE_FRESH_STREAMS=1)',
+      FileExists(path));
+    gold.LoadFromFile(path);
+    { Sections keyed by class; a section is everything up to the next `# ` header line. }
+    cur.Text := cur.Text;   // split the joined bodies into lines
+    Sectionize(cur, curSec);
+    Sectionize(gold, goldSec);
+    diffs := 0;
+    firstMsg := '';
+    for i := 0 to goldSec.Count - 1 do
+    begin
+      a := goldSec.ValueFromIndex[i];
+      b := curSec.Values[goldSec.Names[i]];
+      if a = b then Continue;
+      Inc(diffs);
+      if firstMsg = '' then
+        firstMsg := goldSec.Names[i] + #10'--fixture--'#10 + a + #10'--now--'#10 + b;
+    end;
+    for i := 0 to curSec.Count - 1 do
+      if goldSec.IndexOfName(curSec.Names[i]) < 0 then
+      begin
+        Inc(diffs);
+        if firstMsg = '' then
+          firstMsg := curSec.Names[i] + ' is not in the fixture (a newly registered class: '
+            + 'add its section with TY_WRITE_FRESH_STREAMS=1)';
+      end;
+    AssertEquals('what a fresh instance writes into a form file changed for ' + IntToStr(diffs)
+      + ' class(es); first: ' + firstMsg, 0, diffs);
+  finally
+    reg.Free;
+    cur.Free;
+    gold.Free;
+    curSec.Free;
+    goldSec.Free;
+  end;
 end;
 
 initialization
