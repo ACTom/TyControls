@@ -20,26 +20,28 @@ uses
   tyControls.Card, tyControls.Cascader, tyControls.CharImage, tyControls.Chart,
   tyControls.CheckBox, tyControls.CheckComboBox, tyControls.CheckGroup, tyControls.CheckListBox,
   tyControls.CircularProgress, tyControls.ColorBox, tyControls.ColorButton,
-  tyControls.ColorComboBox, tyControls.ColorListBox, tyControls.ComboBox, tyControls.ComboBoxEx,
-  tyControls.ComboEdit, tyControls.ControlBar, tyControls.CoolBar, tyControls.CurrencyEdit,
-  tyControls.Dial, tyControls.Divider, tyControls.DropButtons, tyControls.Edit, tyControls.Empty,
-  tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit, tyControls.FontComboBox,
-  tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.Form, tyControls.FormSurface,
-  tyControls.Gauge, tyControls.GearActivityIndicator, tyControls.GearDial, tyControls.GlowLabel,
+  tyControls.ColorComboBox, tyControls.ColorGrid, tyControls.ColorListBox, tyControls.ComboBox,
+  tyControls.ComboBoxEx, tyControls.ComboEdit, tyControls.ControlBar, tyControls.CoolBar,
+  tyControls.CurrencyEdit, tyControls.Dial, tyControls.Divider, tyControls.DropButtons,
+  tyControls.Edit, tyControls.Empty, tyControls.ExPanel, tyControls.FilterComboBox,
+  tyControls.FloatSpinEdit, tyControls.FontComboBox, tyControls.FontListBox,
+  tyControls.FontSizeComboBox, tyControls.Form, tyControls.FormSurface, tyControls.Gauge,
+  tyControls.GearActivityIndicator, tyControls.GearDial, tyControls.GlowLabel,
   tyControls.GlyphButtons, tyControls.Grid, tyControls.GridPanel, tyControls.GroupBox,
-  tyControls.HeaderControl, tyControls.HtmlLabel, tyControls.Image, tyControls.ImageView,
-  tyControls.LevelMeter, tyControls.LinkLabel, tyControls.ListBox, tyControls.ListGroupPanel,
-  tyControls.ListView, tyControls.MRUComboBox, tyControls.MaskEdit, tyControls.Memo,
-  tyControls.Menu, tyControls.Meter, tyControls.NumericEdit, tyControls.OfficeComboBox,
-  tyControls.OfficeListBox, tyControls.PageControl, tyControls.Pagination, tyControls.PaintPanel,
-  tyControls.Panel, tyControls.PreviewBox, tyControls.ProgressBar, tyControls.RadioGroup,
-  tyControls.Rating, tyControls.RelativePanel, tyControls.Ribbon, tyControls.RibbonAppMenu,
-  tyControls.RibbonBackstage, tyControls.RibbonGallery, tyControls.RibbonQuickAccess,
-  tyControls.ScrollBar, tyControls.ScrollBox, tyControls.ScrollContent, tyControls.ScrollPanel,
-  tyControls.Segmented, tyControls.ShadowLabel, tyControls.Shape, tyControls.ShellComboBox,
-  tyControls.ShellListView, tyControls.ShellTreeView, tyControls.SizeBox, tyControls.Sparkline,
-  tyControls.SpinEdit, tyControls.Splitter, tyControls.StarShape, tyControls.StatusBar,
-  tyControls.Steps, tyControls.TabSet, tyControls.TabSheet, tyControls.Tag,
+  tyControls.HSColorPicker, tyControls.HeaderControl, tyControls.HtmlLabel, tyControls.Image,
+  tyControls.ImageView, tyControls.LColorPicker, tyControls.LevelMeter, tyControls.LinkLabel,
+  tyControls.ListBox, tyControls.ListGroupPanel, tyControls.ListView, tyControls.MRUComboBox,
+  tyControls.MaskEdit, tyControls.Memo, tyControls.Menu, tyControls.Meter, tyControls.NumericEdit,
+  tyControls.OfficeComboBox, tyControls.OfficeListBox, tyControls.PageControl,
+  tyControls.Pagination, tyControls.PaintPanel, tyControls.Panel, tyControls.PreviewBox,
+  tyControls.ProgressBar, tyControls.RadioGroup, tyControls.Rating, tyControls.RelativePanel,
+  tyControls.Ribbon, tyControls.RibbonAppMenu, tyControls.RibbonBackstage,
+  tyControls.RibbonGallery, tyControls.RibbonQuickAccess, tyControls.ScrollBar,
+  tyControls.ScrollBox, tyControls.ScrollContent, tyControls.ScrollPanel, tyControls.Segmented,
+  tyControls.ShadowLabel, tyControls.Shape, tyControls.ShellComboBox, tyControls.ShellListView,
+  tyControls.ShellTreeView, tyControls.SizeBox, tyControls.Sparkline, tyControls.SpinEdit,
+  tyControls.Splitter, tyControls.StarShape, tyControls.StatusBar, tyControls.Steps,
+  tyControls.TabSet, tyControls.TabSheet, tyControls.Tag, tyControls.Terminal,
   tyControls.ToggleSwitch, tyControls.ToolBar, tyControls.ToolBarEx, tyControls.ToolGroupPanel,
   tyControls.TrackBar, tyControls.TrackEdit, tyControls.Transfer, tyControls.TreeSelect,
   tyControls.TreeView, tyControls.TyLabel, tyControls.URLEdit, tyControls.UpDown,
@@ -1706,6 +1708,65 @@ type
     property NoneColorColor;
     property OnGetColors;
     property MoreCaption;
+  end;
+
+  TGenColorGrid = class(TTyCustomColorGrid)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Columns;
+    property Selected;
+    property OnChange;
+    property Align;
+    property Anchors;
   end;
 
   TGenColorListBox = class(TTyCustomColorListBox)
@@ -3737,6 +3798,66 @@ type
     property Anchors;
   end;
 
+  TGenHSColorPicker = class(TTyCustomHSColorPicker)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Hue;
+    property Sat;
+    property Value;
+    property OnChange;
+    property Align;
+    property Anchors;
+  end;
+
   TGenHeaderControl = class(TTyCustomHeaderControl)
   published
     property Version;
@@ -3979,6 +4100,66 @@ type
     property TintColor;
     property TintAmount;
     property OnZoomChange;
+    property Align;
+    property Anchors;
+  end;
+
+  TGenLColorPicker = class(TTyCustomLColorPicker)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Hue;
+    property Sat;
+    property Position;
+    property OnChange;
     property Align;
     property Anchors;
   end;
@@ -7654,6 +7835,100 @@ type
     property Anchors;
   end;
 
+  TGenTerminalView = class(TTyCustomTerminalView)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Scrollback;
+    property CursorStyle;
+    property CursorInactiveStyle;
+    property CursorBlink;
+    property AmbiguousWide;
+    property UnicodeVersion;
+    property MacOptionIsMeta;
+    property AlternateScroll;
+    property DrawBoldTextInBrightColors;
+    property ReadOnly;
+    property ConvertEol;
+    property TabStopWidth;
+    property ScrollOnUserInput;
+    property ScrollBarAutoHide;
+    property SelectionOverrideKey;
+    property WordSeparators;
+    property MinimumContrastRatio;
+    property CopyOnSelect;
+    property DetectUrls;
+    property AllowNonHttpLinks;
+    property Osc52;
+    property LineHeightPercent;
+    property LetterSpacing;
+    property ColorSource;
+    property ColorScheme;
+    property ColorSchemePaired;
+    property DarkColorScheme;
+    property Align;
+    property Anchors;
+    property ParentFont;
+    property OnData;
+    property OnGridResize;
+    property OnTitleChange;
+    property OnBell;
+    property OnOsc;
+    property OnShortcutQuery;
+    property OnSelectionChange;
+    property OnLinkActivate;
+    property OnOsc52;
+    property OnClaimedInput;
+  end;
+
   TGenTitleBar = class(TTyCustomTitleBar)
   published
     property Version;
@@ -8706,7 +8981,7 @@ type
 
 const
   { (mimic, final class) }
-  CGenMimics: array[0..128, 0..1] of TClass = (
+  CGenMimics: array[0..132, 0..1] of TClass = (
     (TGenActivityBar, TTyActivityBar),
     (TGenActivityIndicator, TTyActivityIndicator),
     (TGenAdvancedComboBox, TTyAdvancedComboBox),
@@ -8734,6 +9009,7 @@ const
     (TGenColorBox, TTyColorBox),
     (TGenColorButton, TTyColorButton),
     (TGenColorComboBox, TTyColorComboBox),
+    (TGenColorGrid, TTyColorGrid),
     (TGenColorListBox, TTyColorListBox),
     (TGenComboBox, TTyComboBox),
     (TGenComboBoxEx, TTyComboBoxEx),
@@ -8763,10 +9039,12 @@ const
     (TGenGridCell, TTyGridCell),
     (TGenGridPanel, TTyGridPanel),
     (TGenGroupBox, TTyGroupBox),
+    (TGenHSColorPicker, TTyHSColorPicker),
     (TGenHeaderControl, TTyHeaderControl),
     (TGenHtmlLabel, TTyHtmlLabel),
     (TGenImage, TTyImage),
     (TGenImageView, TTyImageView),
+    (TGenLColorPicker, TTyLColorPicker),
     (TGenLabel, TTyLabel),
     (TGenLevelMeter, TTyLevelMeter),
     (TGenLinkLabel, TTyLinkLabel),
@@ -8821,6 +9099,7 @@ const
     (TGenTabSet, TTyTabSet),
     (TGenTabSheet, TTyTabSheet),
     (TGenTag, TTyTag),
+    (TGenTerminalView, TTyTerminalView),
     (TGenTitleBar, TTyTitleBar),
     (TGenToggleSwitch, TTyToggleSwitch),
     (TGenToolBar, TTyToolBar),

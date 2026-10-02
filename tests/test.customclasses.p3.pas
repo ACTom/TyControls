@@ -79,15 +79,21 @@ type
     procedure TestThirdCharImage;
     procedure TestThirdShape;
     procedure TestThirdChart;
+    { Task 24: pickers and the terminal }
+    procedure TestThirdColorGrid;
+    procedure TestThirdTerminalView;
     { T-d, pixel for pixel, per task }
     procedure TestBarMimicsPaintLikeTheirFinalClass;
     procedure TestRibbonMimicsPaintLikeTheirFinalClass;
     procedure TestChromeMimicsPaintLikeTheirFinalClass;
     procedure TestImageMimicsPaintLikeTheirFinalClass;
+    procedure TestPickerMimicsPaintLikeTheirFinalClass;
     { Real input, one per family. }
     procedure TestInputThirdToolButtonClicks;
     procedure TestInputThirdScrollBarStepsOnArrowKeys;
     procedure TestInputThirdRibbonGroupLauncher;
+    procedure TestInputThirdColorGridSelectsOnClick;
+    procedure TestInputThirdTerminalTakesTyping;
   end;
 
   { --- third-party mimics ------------------------------------------------------------ }
@@ -178,6 +184,18 @@ type
     property Series;
   end;
 
+  TThirdColorGrid = class(TTyCustomColorGrid)
+  published
+    property Columns;
+    property Selected;
+  end;
+
+  TThirdTerminalView = class(TTyCustomTerminalView)
+  published
+    property Scrollback;
+    property CursorStyle;
+  end;
+
 implementation
 
 type
@@ -219,6 +237,7 @@ type
   TP3CharImageRender = class(TTyCustomCharImage);
   TP3ShapeRender = class(TTyCustomShape);
   TP3ChartRender = class(TTyCustomChart);
+  TP3ColorGridRender = class(TTyCustomColorGrid);
 procedure TP3ToolBarCracker.ForceLayout;
 var r: TRect;
 begin
@@ -846,6 +865,77 @@ end;
 
 { ------------------------------------------------------------------ Task 24: pickers, terminal }
 
+procedure TTyCustomClassesP3Test.TestThirdColorGrid;
+var
+  third, back: TThirdColorGrid;
+  own: TTyColorGrid;
+  c: TTyCustomColorGrid;
+begin
+  third := TThirdColorGrid.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdColorGrid, ['Columns', 'Selected']);
+  third.Columns := 4;
+  third.Selected := clRed;
+  CheckStreamText(third, ['Columns', 'Selected'], '');
+  back := TThirdColorGrid.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Columns round-trips', 4, back.Columns);
+  AssertEquals('T-c: Selected round-trips', clRed, back.Selected);
+  own := TTyColorGrid.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  { Selected has no default in 3.0 either: a fresh grid writes it, so only Columns is checked. }
+  CheckFreshDefaults(TThirdColorGrid, ['Columns']);
+  AssertTrue('T-e: a colour grid is a tab stop, the mimic too', third.TabStop);
+  c := third;
+  c.OnChange := @CountChange;
+  AssertTrue('T-v: OnChange is public through a TTyCustomColorGrid reference',
+    Assigned(third.OnChange));
+end;
+
+{ T-f: the terminal's parser, buffer and IME plumbing live in the custom class -- a mimic
+  takes text into its buffer exactly as the library's view does. }
+procedure TTyCustomClassesP3Test.TestThirdTerminalView;
+var
+  third, back: TThirdTerminalView;
+  own: TTyTerminalView;
+  c: TTyCustomTerminalView;
+
+  function Row0(V: TTyCustomTerminalView): string;
+  begin
+    Result := Trim(V.Core.Buffer.TranslateBufferLineToString(V.Core.Buffer.YDisp, True));
+  end;
+
+begin
+  third := TThirdTerminalView.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 300, 120);
+  CheckPublishesOnly(TThirdTerminalView, ['Scrollback', 'CursorStyle']);
+  third.Scrollback := 500;
+  third.CursorStyle := tcsBar;
+  third.ReadOnly := True;
+  CheckStreamText(third, ['Scrollback', 'CursorStyle'], 'ReadOnly');
+  back := TThirdTerminalView.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Scrollback round-trips', 500, back.Scrollback);
+  AssertTrue('T-c: CursorStyle round-trips', back.CursorStyle = tcsBar);
+  AssertFalse('T-c: the unpublished ReadOnly stayed at its default', back.ReadOnly);
+  own := TTyTerminalView.Create(FForm);
+  own.Parent := FForm;
+  own.SetBounds(0, 130, 300, 120);
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdTerminalView, ['Scrollback', 'CursorStyle']);
+  AssertTrue('T-e: a terminal is a tab stop, the mimic too', third.TabStop);
+  third.WriteSync('hello');
+  own.WriteSync('hello');
+  AssertEquals('T-f: the text reached the mimic''s buffer', 'hello', Row0(third));
+  AssertEquals('T-f: as it reaches TTyTerminalView''s', Row0(own), Row0(third));
+  c := third;
+  c.ConvertEol := True;
+  AssertTrue('T-v: ConvertEol is public through a TTyCustomTerminalView reference',
+    third.ConvertEol);
+end;
+
 { ------------------------------------------------------------------ Task 25: tool windows }
 
 { ------------------------------------------------------------------ T-d }
@@ -899,6 +989,11 @@ end;
 procedure RenderChart(C: TControl; ACanvas: TCanvas; const R: TRect);
 begin
   TP3ChartRender(C).RenderTo(ACanvas, R, 96);
+end;
+
+procedure RenderColorGrid(C: TControl; ACanvas: TCanvas; const R: TRect);
+begin
+  TP3ColorGridRender(C).RenderTo(ACanvas, R, 96);
 end;
 
 { Each pair is set up the same way -- same size, same values, unfocused -- and must paint the
@@ -1038,6 +1133,16 @@ begin
   CheckSamePaint(ch, och, 200, 120, @RenderChart);
 end;
 
+procedure TTyCustomClassesP3Test.TestPickerMimicsPaintLikeTheirFinalClass;
+var
+  cg: TThirdColorGrid;
+  ocg: TTyColorGrid;
+begin
+  cg := TThirdColorGrid.Create(FForm);
+  ocg := TTyColorGrid.Create(FForm);
+  CheckSamePaint(cg, ocg, 160, 80, @RenderColorGrid);
+end;
+
 { ------------------------------------------------------------------ real input }
 
 procedure PressAndRelease(C: TControl; X, Y: Integer);
@@ -1135,9 +1240,68 @@ begin
   AssertEquals('as on TTyRibbonGroup', FChanges, a);
 end;
 
+procedure TTyCustomClassesP3Test.TestInputThirdColorGridSelectsOnClick;
+var
+  third: TThirdColorGrid;
+  own: TTyColorGrid;
+begin
+  NeedWidgetSet;
+  third := TThirdColorGrid.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 160, 80);
+  third.HandleNeeded;
+  own := TTyColorGrid.Create(FForm);
+  own.Parent := FForm;
+  own.SetBounds(0, 90, 160, 80);
+  own.HandleNeeded;
+  third.OnChange := @CountChange;
+  FChanges := 0;
+  PressAndRelease(third, 30, 5);
+  PressAndRelease(own, 30, 5);
+  AssertEquals('the click chose a cell in the mimic', 1, FChanges);
+  AssertEquals('the same cell as on TTyColorGrid', own.Selected, third.Selected);
+end;
+
+procedure TTyCustomClassesP3Test.TestInputThirdTerminalTakesTyping;
+var
+  third: TThirdTerminalView;
+  own: TTyTerminalView;
+  a: string;
+  i: Integer;
+  k: TUTF8Char;
+begin
+  NeedWidgetSet;
+  third := TThirdTerminalView.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 300, 120);
+  third.HandleNeeded;
+  own := TTyTerminalView.Create(FForm);
+  own.Parent := FForm;
+  own.SetBounds(0, 130, 300, 120);
+  own.HandleNeeded;
+  TTyCustomTerminalView(third).OnData := @TermData;
+  own.OnData := @TermData;
+  FData := '';
+  for i := 1 to 2 do
+  begin
+    k := Copy('ab', i, 1);
+    third.IntfUTF8KeyPress(k, 1, False);
+  end;
+  a := FData;
+  FData := '';
+  for i := 1 to 2 do
+  begin
+    k := Copy('ab', i, 1);
+    own.IntfUTF8KeyPress(k, 1, False);
+  end;
+  AssertEquals('typing reaches the mimic''s program', 'ab', a);
+  AssertEquals('as it reaches TTyTerminalView''s', FData, a);
+end;
+
 initialization
   RegisterClasses([TThirdToolBar, TThirdToolButton, TThirdStatusBar, TThirdScrollBar,
     TThirdRibbonPage, TThirdRibbonGroup, TIdxRibbonGallery, TIdxRibbonBackstage, TThirdTitleBar,
-    TThirdMenuBar, TThirdFormSurface, TThirdCharImage, TThirdShape, TThirdChart]);
+    TThirdMenuBar, TThirdFormSurface, TThirdCharImage, TThirdShape, TThirdChart, TThirdColorGrid,
+    TThirdTerminalView]);
   RegisterTest(TTyCustomClassesP3Test);
 end.
