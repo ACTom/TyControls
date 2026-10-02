@@ -57,11 +57,11 @@ object MainForm: TMainForm
         Top = 7
         Width = 100
         Hint = 'Replay a recording, or run a real shell in the terminal'
-        ItemIndex = 0
         Items.Strings = (
           'Replay'
           'Shell'
         )
+        ItemIndex = 0
         ShowHint = True
         OnChange = ModeChange
       end
@@ -123,7 +123,6 @@ object MainForm: TMainForm
         Height = 26
         Top = 7
         Width = 100
-        ItemIndex = 1
         Items.Strings = (
           '0.5x'
           '1x'
@@ -131,6 +130,7 @@ object MainForm: TMainForm
           '4x'
           'All at once'
         )
+        ItemIndex = 1
       end
       object BtnFit: TTyButton
         Left = 794
@@ -181,13 +181,13 @@ object MainForm: TMainForm
         Height = 26
         Top = 7
         Width = 140
-        ItemIndex = 1
         Items.Strings = (
           '6'
           '11'
           '15'
           '15-graphemes'
         )
+        ItemIndex = 1
         OnChange = UnicodeChange
       end
       object ChkAmbiguous: TTyCheckBox
@@ -347,12 +347,12 @@ object MainForm: TMainForm
         Top = 7
         Width = 160
         Hint = 'What a program may do with the clipboard'
-        ItemIndex = 0
         Items.Strings = (
           'Off'
           'Write only'
           'Read and write'
         )
+        ItemIndex = 0
         ShowHint = True
         OnChange = Osc52Change
       end
