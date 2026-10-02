@@ -35,6 +35,12 @@ type
     function StyleTypeKeyForTest: string;
   protected
     property Tabs: TStrings read FTabs write SetTabs;
+  public
+    { Public, although LCL's TCustomTabControl keeps TabIndex protected (comctrls.pp:471):
+      TTyCustomTabStrip already has it public, and a redeclaration cannot take back what an
+      ancestor shows -- `TTyCustomTabStrip(ATabSet).TabIndex` reaches it either way (plan
+      N16), so a protected one here would only mislead. Redeclared for the RTTI default -1
+      that TTyTabSet's published TabIndex inherits. }
     property TabIndex: Integer read FTabIndex write SetTabIndex default -1;
   end;
 

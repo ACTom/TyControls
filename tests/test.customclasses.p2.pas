@@ -26,7 +26,7 @@ uses
   tyControls.Base, tyControls.Panel, tyControls.GridPanel, tyControls.ScrollBox,
   tyControls.ScrollContent, tyControls.ControlBar, tyControls.CoolBar, tyControls.Button,
   tyControls.GroupBox, tyControls.RadioGroup, tyControls.CheckBox, tyControls.TabStrip,
-  tyControls.TabSheet, tyControls.PageControl, tyControls.ListBox, tyControls.CheckListBox,
+  tyControls.TabSheet, tyControls.PageControl, tyControls.TabSet, tyControls.ListBox, tyControls.CheckListBox,
   tyControls.ComboBox, tyControls.CheckComboBox, tyControls.Transfer, tyControls.Cascader,
   tyControls.ImageCollection, tyControls.TreeView, tyControls.ShellTreeView, tyControls.ListView,
   tyControls.ListView.Layout, tyControls.ShellListView, tyControls.Grid, tyControls.Columns,
@@ -70,6 +70,7 @@ type
     procedure TestPageControlDropsAFreedThirdPartySheet;
     procedure TestPageControlHandsOutAThirdPartySheetAsItIs;
     procedure TestThirdTabSheetKeepsItsBoundsOutOfTheStream;
+    procedure TestTabSetIndexIsPublicOnTheCustomClass;
     { Task 15: list boxes }
     procedure TestThirdListBox;
     procedure TestIndexesReadBeforeTheirItemsWaitForThem;
@@ -884,6 +885,22 @@ begin
   own := TTyTabSheet.Create(FForm);
   CheckSameTypeKey(third, own);
   CheckFreshDefaults(TThirdTabSheet, ['Caption', 'ImageIndex']);
+end;
+
+{ TabIndex is public on TTyCustomTabSet: the strip it descends from has it public already, so a
+  protected redeclaration hid nothing and only misled (N16). }
+procedure TTyCustomClassesP2Test.TestTabSetIndexIsPublicOnTheCustomClass;
+var
+  own: TTyTabSet;
+  c: TTyCustomTabSet;
+begin
+  own := TTyTabSet.Create(FForm);
+  own.Parent := FForm;
+  own.Tabs.CommaText := 'one,two,three';
+  c := own;
+  c.TabIndex := 2;
+  AssertEquals('TabIndex through a TTyCustomTabSet reference', 2, c.TabIndex);
+  AssertEquals('is the tab set''s own', 2, own.TabIndex);
 end;
 
 { ------------------------------------------------------------------ Task 15: list boxes }
