@@ -192,6 +192,9 @@ type
     { build -> seed -> ShowModal -> read back -> free (leak-safe). }
     function Execute: Boolean;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     property Title: TCaption read FTitle write FTitle;
     property Filter: string read FFilter write FFilter;
     property FilterIndex: Integer read FFilterIndex write FFilterIndex default DefaultFilterIndex;

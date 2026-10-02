@@ -90,7 +90,7 @@ type
     illustration has to be able to sit far lighter than the message (AntD's is barely
     more than a hairline) and one rule cannot carry two inks. No TyEmptyImage colour =>
     the picture takes the message's own ink — never a hard-coded colour. }
-  TTyEmpty = class(TTyCustomControl)
+  TTyCustomEmpty = class(TTyCustomControl)
   private
     FDescription: string;
     FShowImage: Boolean;
@@ -133,7 +133,6 @@ type
       paints. Empty (zero-height) when ShowAction is False. Position hand-placed (alNone)
       children against it: LCL's raw client coords would drop them on the picture. }
     function ActionRect: TRect;
-  published
     { The message. '' = the library's translated "no data" (see DisplayDescription); any
       other text overrides it. Drawn literally (no mnemonic parsing — a placeholder
       activates nothing), centred, ellipsised when it does not fit. }
@@ -149,17 +148,70 @@ type
       empty state usually has no action, and reserving the band unasked would push the
       message off-centre. }
     property ShowAction: Boolean read FShowAction write SetShowAction default False;
+  end;
+
+  { TTyEmpty publishes TTyCustomEmpty's properties; everything lives in TTyCustomEmpty. }
+  TTyEmpty = class(TTyCustomEmpty)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
     { With AutoSize the placeholder hugs its stack (plus the themed padding); off, it
       keeps its bounds and centres the stack in them — which is the normal use (alClient
       inside the empty list). }
     property AutoSize;
-    property Align;
-    property Anchors;
-    property Enabled;
-    property Font;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
     property StyleClass;
     property StyleOverride;
     property Controller;
+    property Description;
+    property ShowImage;
+    property ShowDescription;
+    property ShowAction;
+    property Align;
+    property Anchors;
   end;
 
 implementation
@@ -279,9 +331,9 @@ begin
   APainter.Bitmap.DrawLineAntialias(r - w * 0.14, bodyT, r, t, px, th, True);
 end;
 
-{ ---- TTyEmpty ---- }
+{ ---- TTyCustomEmpty ---- }
 
-constructor TTyEmpty.Create(AOwner: TComponent);
+constructor TTyCustomEmpty.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   // Designer container: the IDE drops the action control INTO the placeholder, where it
@@ -295,12 +347,12 @@ begin
   Height := 140;
 end;
 
-function TTyEmpty.GetStyleTypeKey: string;
+function TTyCustomEmpty.GetStyleTypeKey: string;
 begin
   Result := 'TyEmpty';
 end;
 
-function TTyEmpty.DisplayDescription: string;
+function TTyCustomEmpty.DisplayDescription: string;
 begin
   { A blank Description means "the library's own translated default", resolved HERE — at
     draw/measure time — so the placeholder follows a runtime language switch. Seeding
@@ -315,7 +367,7 @@ end;
 
 { ---- property setters ---- }
 
-procedure TTyEmpty.SetDescription(const AValue: string);
+procedure TTyCustomEmpty.SetDescription(const AValue: string);
 begin
   if FDescription = AValue then Exit;
   FDescription := AValue;
@@ -330,7 +382,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyEmpty.SetShowImage(AValue: Boolean);
+procedure TTyCustomEmpty.SetShowImage(AValue: Boolean);
 begin
   if FShowImage = AValue then Exit;
   FShowImage := AValue;
@@ -345,7 +397,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyEmpty.SetShowDescription(AValue: Boolean);
+procedure TTyCustomEmpty.SetShowDescription(AValue: Boolean);
 begin
   if FShowDescription = AValue then Exit;
   FShowDescription := AValue;
@@ -358,7 +410,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyEmpty.SetShowAction(AValue: Boolean);
+procedure TTyCustomEmpty.SetShowAction(AValue: Boolean);
 begin
   if FShowAction = AValue then Exit;
   FShowAction := AValue;
@@ -373,7 +425,7 @@ end;
 
 { ---- theme-driven metrics ---- }
 
-function TTyEmpty.ImageSizeAtPPI(APPI: Integer): Integer;
+function TTyCustomEmpty.ImageSizeAtPPI(APPI: Integer): Integer;
 begin
   // MulDiv(...,APPI,96) is the same logical->device conversion TTyPainter.Scale applies,
   // so the rects the child area is carved from are the rects the paint drew.
@@ -381,19 +433,19 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-function TTyEmpty.GapAtPPI(APPI: Integer): Integer;
+function TTyCustomEmpty.GapAtPPI(APPI: Integer): Integer;
 begin
   Result := MulDiv(ActiveController.Metric(TyEmptyGapVar, TyEmptyGap), APPI, 96);
   if Result < 0 then Result := 0;
 end;
 
-function TTyEmpty.ActionHeightAtPPI(APPI: Integer): Integer;
+function TTyCustomEmpty.ActionHeightAtPPI(APPI: Integer): Integer;
 begin
   Result := MulDiv(ActiveController.Metric(TyEmptyActionHeightVar, TyEmptyActionHeight), APPI, 96);
   if Result < 1 then Result := 1;   // a reserved band the user cannot see into is a bug
 end;
 
-procedure TTyEmpty.MeasureDescription(APPI: Integer; out AWidthPx, AHeightPx: Integer);
+procedure TTyCustomEmpty.MeasureDescription(APPI: Integer; out AWidthPx, AHeightPx: Integer);
 { Measures with a CANVAS-LESS painter (the TTyBadge / tyControls.Form idiom): BeginPaint
   (nil, ...) builds only the painter's internal bitmap and EndPaint frees it WITHOUT
   blitting, so this is safe outside a paint cycle and leaks nothing. It has to be the
@@ -421,14 +473,14 @@ begin
   if AHeightPx < 1 then AHeightPx := 1;
 end;
 
-function TTyEmpty.TextHeightAtPPI(APPI: Integer): Integer;
+function TTyCustomEmpty.TextHeightAtPPI(APPI: Integer): Integer;
 var
   w: Integer;
 begin
   MeasureDescription(APPI, w, Result);
 end;
 
-function TTyEmpty.PaddedRect(const AClient: TRect; const AStyle: TTyStyleSet;
+function TTyCustomEmpty.PaddedRect(const AClient: TRect; const AStyle: TTyStyleSet;
   APPI: Integer): TRect;
 begin
   Result := AClient;
@@ -440,7 +492,7 @@ begin
   if Result.Bottom < Result.Top then Result.Bottom := Result.Top;
 end;
 
-function TTyEmpty.LayoutAtPPI(const AClient: TRect; APPI: Integer): TTyEmptyLayout;
+function TTyCustomEmpty.LayoutAtPPI(const AClient: TRect; APPI: Integer): TTyEmptyLayout;
 var
   S: TTyStyleSet;
   img, txt, act: Integer;
@@ -457,17 +509,17 @@ end;
 
 { ---- public geometry ---- }
 
-function TTyEmpty.ImageRect: TRect;
+function TTyCustomEmpty.ImageRect: TRect;
 begin
   Result := LayoutAtPPI(ClientRect, Font.PixelsPerInch).ImageRect;
 end;
 
-function TTyEmpty.DescriptionRect: TRect;
+function TTyCustomEmpty.DescriptionRect: TRect;
 begin
   Result := LayoutAtPPI(ClientRect, Font.PixelsPerInch).TextRect;
 end;
 
-function TTyEmpty.ActionRect: TRect;
+function TTyCustomEmpty.ActionRect: TRect;
 begin
   // Delegate to AdjustClientRect itself: the action band has exactly ONE definition, so a
   // hand-placed child and an aligned one land in the same band by construction.
@@ -475,7 +527,7 @@ begin
   AdjustClientRect(Result);
 end;
 
-procedure TTyEmpty.CMEnabledChanged(var Msg: TLMessage);
+procedure TTyCustomEmpty.CMEnabledChanged(var Msg: TLMessage);
 begin
   inherited CMEnabledChanged(Msg);   // base repaints for the faded/disabled look
   // The action band (the child area) is inset by CurrentStyle padding, which a theme may
@@ -485,7 +537,7 @@ begin
   if FShowAction then Realign;
 end;
 
-procedure TTyEmpty.AdjustClientRect(var ARect: TRect);
+procedure TTyCustomEmpty.AdjustClientRect(var ARect: TRect);
 var
   lay: TTyEmptyLayout;
 begin
@@ -499,7 +551,7 @@ begin
     ARect := Rect(ARect.Left, ARect.Bottom, ARect.Left, ARect.Bottom);
 end;
 
-procedure TTyEmpty.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+procedure TTyCustomEmpty.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
   WithThemeSpace: Boolean);
 var
   S: TTyStyleSet;
@@ -531,7 +583,7 @@ end;
 
 { ---- painting ---- }
 
-procedure TTyEmpty.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomEmpty.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, imgS: TTyStyleSet;
@@ -589,7 +641,7 @@ begin
   end;
 end;
 
-procedure TTyEmpty.Paint;
+procedure TTyCustomEmpty.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

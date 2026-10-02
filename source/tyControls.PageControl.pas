@@ -10,13 +10,13 @@ type
     parented to the control, streamed via the default GetChildren (Owner=Root). The
     tab strip (header) comes from TTyCustomTabStrip; tab captions are read from the
     pages. Active-page switching toggles Visible + csNoDesignVisible per page. }
-  TTyPageControl = class(TTyCustomTabStrip)
+  TTyCustomPageControl = class(TTyCustomTabStrip)
   private
-    FPages: array of TTyTabSheet;
+    FPages: array of TTyCustomTabSheet;
     FDestroying: Boolean;
-    function GetPage(AIndex: Integer): TTyTabSheet;
-    function GetActivePage: TTyTabSheet;
-    procedure SetActivePage(AValue: TTyTabSheet);
+    function GetPage(AIndex: Integer): TTyCustomTabSheet;
+    function GetActivePage: TTyCustomTabSheet;
+    procedure SetActivePage(AValue: TTyCustomTabSheet);
     procedure ShowOnlyPage(AIndex: Integer);
   protected
     function  GetTabCount: Integer; override;
@@ -49,7 +49,7 @@ type
     procedure TabVisibilityChanged(AIndex: Integer); override;
     destructor Destroy; override;
     { Public so TTyTabSheet.SetParent (a different unit) can self-register. Idempotent. }
-    procedure RegisterPage(APage: TTyTabSheet);
+    procedure RegisterPage(APage: TTyCustomTabSheet);
     { The other half of RegisterPage, and public for the same reason: SetParent lives in
       tyControls.TabSheet and protected does not reach across units. It used to be reachable
       only from Notification (opRemove) and the close path, i.e. only when a page was being
@@ -57,7 +57,7 @@ type
       stayed registered with the old one too. The old pager went on counting it, drawing its
       tab and handing it out from Pages[], while the control itself lived somewhere else.
       AFree=False leaves the page alone; True frees it (the close-button path). }
-    procedure UnregisterPage(APage: TTyTabSheet; AFree: Boolean);
+    procedure UnregisterPage(APage: TTyCustomTabSheet; AFree: Boolean);
     function AddPage(const ACaption: string): TTyTabSheet;
     function AddTab(const ACaption: string): TTyTabSheet;   // API-parity alias
     { LCL's spelling (comctrls.pp:606) and LCL's signature: no caption argument, returns the
@@ -77,14 +77,89 @@ type
       clamped and out-of-range or no-op moves are ignored. }
     procedure MovePage(AFromIndex, AToIndex: Integer);
     function PageCount: Integer;
-    property Pages[AIndex: Integer]: TTyTabSheet read GetPage;
-  published
-    { PUBLISHED, as TPageControl does. It was public-only, so the designer and the .lfm
-      could pick the shown page only by INDEX -- and an index silently points at a
-      different page the moment someone reorders the tabs, while a page reference does
-      not. ActivePageIndex stays for code that prefers it; both address one selection. }
-    property ActivePage: TTyTabSheet read GetActivePage write SetActivePage;
+    { The pages, and the shown one, as TTyCustomTabSheet: a page control takes any
+      TTyCustomTabSheet descendant (a page registers itself from SetParent), so the custom
+      class is what it can truthfully hand out -- LCL's TCustomTabControl does the same with
+      Page[] / ActivePageComponent: TCustomPage (comctrls.pp:457/500). TPageControl's
+      ActivePage: TTabSheet is a true cast only because TPageControl admits nothing but
+      TTabSheets; this one admits a third party's page. AddPage and its aliases build a
+      TTyTabSheet and still return one. }
+    property Pages[AIndex: Integer]: TTyCustomTabSheet read GetPage;
     property ActivePageIndex: Integer read FTabIndex write SetTabIndex default -1;
+    { Published by TTyPageControl, as TPageControl does. It was public-only, so the designer
+      and the .lfm could pick the shown page only by INDEX -- and an index silently points at
+      a different page the moment someone reorders the tabs, while a page reference does
+      not. ActivePageIndex stays for code that prefers it; both address one selection.
+      Public here, the visibility of its LCL counterpart ActivePageComponent. }
+    property ActivePage: TTyCustomTabSheet read GetActivePage write SetActivePage;
+  end;
+
+  { TTyPageControl publishes TTyCustomPageControl's properties; everything lives in TTyCustomPageControl. }
+  TTyPageControl = class(TTyCustomPageControl)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Images;
+    property ImagesWidth;
+    property OnGetImageIndex;
+    property TabHeight;
+    property TabsClosable;
+    property OnTabClose;
+    property OnChange;
+    property OnChanging;
+    property OnReorder;
+    property Align;
+    property Anchors;
+    property ActivePage;
+    property ActivePageIndex;
     { Promoted from public on the header engine. Published HERE and on TTyTabSet rather
       than on the shared base, because TTyRibbon is the base's third subclass and its File
       tab, collapse chevron and KeyTip chips are all pinned to a top band -- publishing on
@@ -117,22 +192,22 @@ type
 
 implementation
 
-function TTyPageControl.GetStyleTypeKey: string;
+function TTyCustomPageControl.GetStyleTypeKey: string;
 begin
   Result := 'TyPageControl';
 end;
 
-function TTyPageControl.PageCount: Integer;
+function TTyCustomPageControl.PageCount: Integer;
 begin
   Result := Length(FPages);
 end;
 
-function TTyPageControl.GetTabCount: Integer;
+function TTyCustomPageControl.GetTabCount: Integer;
 begin
   Result := Length(FPages);
 end;
 
-function TTyPageControl.GetTabCaption(AIndex: Integer): string;
+function TTyCustomPageControl.GetTabCaption(AIndex: Integer): string;
 begin
   if (AIndex >= 0) and (AIndex < Length(FPages)) then
     Result := FPages[AIndex].Caption
@@ -140,7 +215,7 @@ begin
     Result := '';
 end;
 
-function TTyPageControl.GetTabImageIndex(AIndex: Integer): Integer;
+function TTyCustomPageControl.GetTabImageIndex(AIndex: Integer): Integer;
 begin
   if (AIndex >= 0) and (AIndex < Length(FPages)) and (FPages[AIndex] <> nil) then
     Result := FPages[AIndex].ImageIndex
@@ -148,7 +223,7 @@ begin
     Result := -1;
 end;
 
-function TTyPageControl.GetTabVisibleAt(AIndex: Integer): Boolean;
+function TTyCustomPageControl.GetTabVisibleAt(AIndex: Integer): Boolean;
 begin
   if csDesigning in ComponentState then Exit(True);
   if (AIndex >= 0) and (AIndex < Length(FPages)) and (FPages[AIndex] <> nil) then
@@ -157,7 +232,7 @@ begin
     Result := True;
 end;
 
-procedure TTyPageControl.TabVisibilityChanged(AIndex: Integer);
+procedure TTyCustomPageControl.TabVisibilityChanged(AIndex: Integer);
 var
   NewIdx: Integer;
 begin
@@ -174,7 +249,7 @@ begin
   inherited TabVisibilityChanged(AIndex);
 end;
 
-procedure TTyPageControl.DoImagesChanged;
+procedure TTyCustomPageControl.DoImagesChanged;
 var i: Integer;
 begin
   { The list just changed: give every page the chance to turn a pending ImageIndex into its
@@ -184,7 +259,7 @@ begin
       FPages[i].ResolveImageIndex;
 end;
 
-function TTyPageControl.GetPage(AIndex: Integer): TTyTabSheet;
+function TTyCustomPageControl.GetPage(AIndex: Integer): TTyCustomTabSheet;
 begin
   if (AIndex >= 0) and (AIndex < Length(FPages)) then
     Result := FPages[AIndex]
@@ -192,12 +267,12 @@ begin
     Result := nil;
 end;
 
-function TTyPageControl.GetActivePage: TTyTabSheet;
+function TTyCustomPageControl.GetActivePage: TTyCustomTabSheet;
 begin
   Result := GetPage(ActivePageIndex);
 end;
 
-procedure TTyPageControl.SetActivePage(AValue: TTyTabSheet);
+procedure TTyCustomPageControl.SetActivePage(AValue: TTyCustomTabSheet);
 var
   I: Integer;
 begin
@@ -209,7 +284,7 @@ begin
     end;
 end;
 
-procedure TTyPageControl.ShowOnlyPage(AIndex: Integer);
+procedure TTyCustomPageControl.ShowOnlyPage(AIndex: Integer);
 var
   I: Integer;
 begin
@@ -229,14 +304,14 @@ begin
   Invalidate;
 end;
 
-procedure TTyPageControl.DoSelectTab(AIndex: Integer);
+procedure TTyCustomPageControl.DoSelectTab(AIndex: Integer);
 begin
   ShowOnlyPage(AIndex);
 end;
 
-procedure TTyPageControl.DoReorderTabs(AFromIndex, AToIndex: Integer);
+procedure TTyCustomPageControl.DoReorderTabs(AFromIndex, AToIndex: Integer);
 var
-  Moved: TTyTabSheet;
+  Moved: TTyCustomTabSheet;
   I: Integer;
 begin
   if (AFromIndex < 0) or (AFromIndex > High(FPages)) then Exit;
@@ -259,7 +334,7 @@ begin
   ShowOnlyPage(FTabIndex);
 end;
 
-procedure TTyPageControl.MovePage(AFromIndex, AToIndex: Integer);
+procedure TTyCustomPageControl.MovePage(AFromIndex, AToIndex: Integer);
 begin
   if (AFromIndex < 0) or (AFromIndex > High(FPages)) then Exit;
   if AToIndex < 0 then AToIndex := 0;
@@ -269,7 +344,7 @@ begin
   TabsChanged;
 end;
 
-procedure TTyPageControl.RegisterPage(APage: TTyTabSheet);
+procedure TTyCustomPageControl.RegisterPage(APage: TTyCustomTabSheet);
 var
   I: Integer;
 begin
@@ -288,10 +363,10 @@ begin
   TabsChanged;
 end;
 
-procedure TTyPageControl.UnregisterPage(APage: TTyTabSheet; AFree: Boolean);
+procedure TTyCustomPageControl.UnregisterPage(APage: TTyCustomTabSheet; AFree: Boolean);
 var
   Idx, J: Integer;
-  OldActive: TTyTabSheet;
+  OldActive: TTyCustomTabSheet;
 begin
   Idx := -1;
   for J := 0 to High(FPages) do
@@ -314,18 +389,18 @@ begin
     OnChange(Self);
 end;
 
-procedure TTyPageControl.RemoveTabData(AIndex: Integer);
+procedure TTyCustomPageControl.RemoveTabData(AIndex: Integer);
 begin
   if (AIndex >= 0) and (AIndex < Length(FPages)) then
     UnregisterPage(FPages[AIndex], True);
 end;
 
-procedure TTyPageControl.RemovePage(AIndex: Integer);
+procedure TTyCustomPageControl.RemovePage(AIndex: Integer);
 begin
   RemoveTabData(AIndex);
 end;
 
-function TTyPageControl.AddPage(const ACaption: string): TTyTabSheet;
+function TTyCustomPageControl.AddPage(const ACaption: string): TTyTabSheet;
 var
   PageOwner: TComponent;
 begin
@@ -335,19 +410,19 @@ begin
   Result.Parent := Self;     // SetParent -> RegisterPage
 end;
 
-function TTyPageControl.AddTab(const ACaption: string): TTyTabSheet;
+function TTyCustomPageControl.AddTab(const ACaption: string): TTyTabSheet;
 begin
   Result := AddPage(ACaption);
 end;
 
-function TTyPageControl.AddTabSheet: TTyTabSheet;
+function TTyCustomPageControl.AddTabSheet: TTyTabSheet;
 begin
   { '' and not a generated name: LCL's AddTabSheet leaves the caption empty too, and a
     made-up 'TabSheet1' would then be a label the host has to notice and clear. }
   Result := AddPage('');
 end;
 
-function TTyPageControl.IndexOfPageAt(X, Y: Integer): Integer;
+function TTyCustomPageControl.IndexOfPageAt(X, Y: Integer): Integer;
 var
   Body: TRect;
 begin
@@ -360,12 +435,12 @@ begin
     Result := FTabIndex;
 end;
 
-function TTyPageControl.IndexOfPageAt(P: TPoint): Integer;
+function TTyCustomPageControl.IndexOfPageAt(P: TPoint): Integer;
 begin
   Result := IndexOfPageAt(P.x, P.y);
 end;
 
-procedure TTyPageControl.SetController(AValue: TTyStyleController);
+procedure TTyCustomPageControl.SetController(AValue: TTyStyleController);
 var
   I: Integer;
 begin
@@ -375,15 +450,15 @@ begin
       FPages[I].Controller := AValue;
 end;
 
-procedure TTyPageControl.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomPageControl.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if FDestroying then Exit;
-  if (Operation = opRemove) and (AComponent is TTyTabSheet) then
-    UnregisterPage(TTyTabSheet(AComponent), False);   // LCL already freeing it
+  if (Operation = opRemove) and (AComponent is TTyCustomTabSheet) then
+    UnregisterPage(TTyCustomTabSheet(AComponent), False);   // LCL already freeing it
 end;
 
-procedure TTyPageControl.Loaded;
+procedure TTyCustomPageControl.Loaded;
 begin
   { Pages self-registered via SetParent during streaming, so FPages is already
     populated in child order; inherited applies a streamed ActivePageIndex (the
@@ -397,12 +472,12 @@ begin
   Invalidate;
 end;
 
-function TTyPageControl.DesignTabClicksEnabled: Boolean;
+function TTyCustomPageControl.DesignTabClicksEnabled: Boolean;
 begin
   Result := True;
 end;
 
-procedure TTyPageControl.ShowControl(AControl: TControl);
+procedure TTyCustomPageControl.ShowControl(AControl: TControl);
 var
   i: Integer;
 begin
@@ -418,7 +493,7 @@ begin
   inherited ShowControl(AControl);
 end;
 
-destructor TTyPageControl.Destroy;
+destructor TTyCustomPageControl.Destroy;
 begin
   FDestroying := True;
   inherited Destroy;   // pages are owned by the form (or Self) and freed normally

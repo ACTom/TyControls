@@ -253,6 +253,53 @@ type
     { The Items index at client device (X, Y), or -1 (separators, air and the '…' included). }
     function TyCrumbAt(X, Y: Integer): Integer;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    { Any click anywhere on the bar, the current crumb and the gutter included. OnCrumbClick
+      is the one that says a DESTINATION was chosen. }
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    { With AutoSize the bar hugs the whole trail (so the overflow rule never fires) and one
+      padded text line; off, it keeps the bounds it was given and the overflow rule elides
+      the middle to fit. An alTop/alClient bar therefore keeps its host's width and only
+      hugs the height, which is the usual way to place one. }
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     { The trail, root first and CURRENT LOCATION LAST — one crumb per line. Drawn with the
       resolved TyBreadcrumbItem style (NOT the LCL Font.*) and ellipsised when a crumb is
       clipped; never wrapped. No mnemonic parsing — a crumb has no Alt+key path, so an '&'
@@ -262,21 +309,8 @@ type
       navigation event: OnClick below fires for ANY click on the bar, this one only for a
       committed click on a place you can actually go. }
     property OnCrumbClick: TTyBreadcrumbClickEvent read FOnCrumbClick write FOnCrumbClick;
-    { With AutoSize the bar hugs the whole trail (so the overflow rule never fires) and one
-      padded text line; off, it keeps the bounds it was given and the overflow rule elides
-      the middle to fit. An alTop/alClient bar therefore keeps its host's width and only
-      hugs the height, which is the usual way to place one. }
-    property AutoSize;
     property Align;
     property Anchors;
-    property Enabled;
-    property Font;
-    property StyleClass;
-    property StyleOverride;
-    property Controller;
-    { Any click anywhere on the bar, the current crumb and the gutter included. OnCrumbClick
-      is the one that says a DESTINATION was chosen. }
-    property OnClick;
   end;
 
 implementation

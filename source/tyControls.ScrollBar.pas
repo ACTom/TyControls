@@ -319,6 +319,62 @@ type
       这条不变量只能挂在这儿修。见实现处。 }
     procedure Invalidate; override;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    { A standalone bar is a keyboard control (arrows / PgUp / PgDn / Home / End in
+      KeyDown), so it takes a tab stop like the native TScrollBar does. Declared True to
+      match the constructor, so a host's TabStop=False opt-out streams — which is exactly
+      what the bars EMBEDDED inside a list/grid/tree/scroll box do, in code. }
+    property TabStop default True;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     { LIVE TRACKING -- whether dragging the thumb moves Position continuously (True, the
       default and what this bar has always done) or only on mouse-up (False).
 
@@ -390,15 +446,8 @@ type
     property LargeChange: Integer read FLargeChange write SetLargeChange default 0;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property OnScroll: TScrollEvent read FOnScroll write FOnScroll;
-    { A standalone bar is a keyboard control (arrows / PgUp / PgDn / Home / End in
-      KeyDown), so it takes a tab stop like the native TScrollBar does. Declared True to
-      match the constructor, so a host's TabStop=False opt-out streams — which is exactly
-      what the bars EMBEDDED inside a list/grid/tree/scroll box do, in code. }
-    property TabStop default True;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
   end;
 
 function TyScrollThumbRect(const ATrack: TRect; AKind: TTyScrollBarKind;

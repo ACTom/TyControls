@@ -24,9 +24,9 @@ type
     Header rows are non-selectable on EVERY path — keyboard navigation, the ItemIndex setter and
     a popup row click all funnel through SelectItem, which redirects a header target to the nearest
     real item (so arrowing onto / clicking a header lands on that group's first entry). }
-  TTyOfficeComboBox = class(TTyComboBox)
+  TTyCustomOfficeComboBox = class(TTyCustomComboBox)
   protected
-    function CreatePopupList: TTyListBox; override;
+    function CreatePopupList: TTyCustomListBox; override;
     { Nearest non-header index at/after ATarget in the direction of travel (inferred from ATarget
       vs the current ItemIndex, flipping at the ends); -1 if the list is all headers. }
     function NextSelectable(ATarget: Integer): Integer;
@@ -43,6 +43,82 @@ type
     procedure AddItem(const S: string);
     // True when the row at AIndex is a group header.
     function IsHeader(AIndex: Integer): Boolean;
+  end;
+
+  { TTyOfficeComboBox publishes TTyCustomOfficeComboBox's properties; everything lives in TTyCustomOfficeComboBox. }
+  TTyOfficeComboBox = class(TTyCustomOfficeComboBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property Text;
+    property DropDownCount;
+    property Sorted;
+    property MaxLength;
+    property CharCase;
+    property Style;
+    property ItemHeight;
+    property ItemWidth;
+    property TextHint;
+    property ReadOnly;
+    property OnDrawItem;
+    property OnMeasureItem;
+    property OnChange;
+    property OnSelect;
+    property OnDropDown;
+    property OnCloseUp;
+    property OnGetItems;
+    property Align;
+    property Anchors;
   end;
 
 implementation
@@ -91,30 +167,30 @@ begin
     inherited PaintItemContent(P, ARowRect, AIndex, AStyle);
 end;
 
-{ TTyOfficeComboBox }
+{ TTyCustomOfficeComboBox }
 
-procedure TTyOfficeComboBox.AddHeader(const S: string);
+procedure TTyCustomOfficeComboBox.AddHeader(const S: string);
 begin
   Items.AddObject(S, TObject(PtrInt(1)));
 end;
 
-procedure TTyOfficeComboBox.AddItem(const S: string);
+procedure TTyCustomOfficeComboBox.AddItem(const S: string);
 begin
   Items.AddObject(S, TObject(PtrInt(0)));
 end;
 
-function TTyOfficeComboBox.IsHeader(AIndex: Integer): Boolean;
+function TTyCustomOfficeComboBox.IsHeader(AIndex: Integer): Boolean;
 begin
   Result := (AIndex >= 0) and (AIndex < Items.Count)
     and (PtrInt(Items.Objects[AIndex]) = 1);
 end;
 
-function TTyOfficeComboBox.CreatePopupList: TTyListBox;
+function TTyCustomOfficeComboBox.CreatePopupList: TTyCustomListBox;
 begin
   Result := TTyOfficeComboPopupList.Create(Self);
 end;
 
-function TTyOfficeComboBox.NextSelectable(ATarget: Integer): Integer;
+function TTyCustomOfficeComboBox.NextSelectable(ATarget: Integer): Integer;
 var dir, i: Integer;
 begin
   if ATarget >= ItemIndex then dir := 1 else dir := -1;
@@ -130,7 +206,7 @@ begin
   Result := i;
 end;
 
-procedure TTyOfficeComboBox.SelectItem(AIndex: Integer);
+procedure TTyCustomOfficeComboBox.SelectItem(AIndex: Integer);
 begin
   // Every selection (keyboard nav, ItemIndex setter, popup click) funnels here; a header
   // target is redirected to its group's nearest real item so headers are never selectable.
@@ -142,7 +218,7 @@ begin
   inherited SelectItem(AIndex);
 end;
 
-procedure TTyOfficeComboBox.SetStyle(AValue: TTyComboBoxStyle);
+procedure TTyCustomOfficeComboBox.SetStyle(AValue: TTyComboBoxStyle);
 begin
   { Pick-only, and ONLY pick-only. The reason is the edit box and nothing else: the editable
     popup commits a pick by assigning FItemIndex directly, bypassing the SelectItem override

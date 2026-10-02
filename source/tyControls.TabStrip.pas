@@ -521,7 +521,9 @@ type
       without a setter is one TWriter.WriteProperty skips and the Object Inspector reports as
       unreadable. }
     property RowCount: Integer read GetRowCount;
-  published
+    { TCustomTabControl publishes TabStop; ours is public (the custom class publishes
+      nothing beyond the LCL root), with the default a tab strip has. }
+    property TabStop default True;
     { The icon source for the tab headers, indexed by the per-tab image index.
 
       Typed TTyVirtualImageList, not LCL's TCustomImageList, and that is not a preference:
@@ -561,14 +563,11 @@ type
     property TabHeight: Integer read GetTabHeight write SetTabHeight stored FTabHeightExplicit;
     property TabsClosable: Boolean read FTabsClosable write SetTabsClosable default False;
     property OnTabClose: TTyTabCloseEvent read FOnTabClose write FOnTabClose;
-    property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property OnChanging: TTyTabChangingEvent read FOnChanging write FOnChanging;
     property OnReorder: TTyTabReorderEvent read FOnReorder write FOnReorder;
-    property TabStop default True;
-    property Align;
-    property Anchors;
-    property StyleClass;
-    property Controller;
+  protected
+    { Protected, as TCustomTabControl.OnChange is (comctrls.pp:472). }
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 
 implementation

@@ -760,16 +760,19 @@ begin
     system — so they get the other half of the same treatment: a picker behind the '...'
     button instead of a path typed from memory. All three editors are LCL's own; only the
     registrations are ours. TTyControls' file dialogs, folder picker and shell views mirror
-    the LCL components whose identical properties the IDE already registers these on. }
+    the LCL components whose identical properties the IDE already registers these on.
+    The combo-box registrations are on the TTyCustomXxx classes (4.0): the IDE matches by
+    InheritsFrom, so they reach the published TTyXxx and any descendant that publishes the
+    property, as LCL's do on TCustomXxx. }
   RegisterPropertyEditor(TypeInfo(string), TTyCustomFileDialog, 'Filter', TFileDlgFilterProperty);
-  RegisterPropertyEditor(TypeInfo(string), TTyFilterComboBox, 'Filter', TFileDlgFilterProperty);
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomFilterComboBox, 'Filter', TFileDlgFilterProperty);
   RegisterPropertyEditor(TypeInfo(string), TTyCustomFileDialog, 'FileName', TFileNamePropertyEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyCustomFileDialog, 'InitialDir', TDirectoryPropertyEditor);
   RegisterPropertyEditor(TypeInfo(string), TTySelectPathDialog, 'Root', TDirectoryPropertyEditor);
   RegisterPropertyEditor(TypeInfo(string), TTySelectPathDialog, 'Directory', TDirectoryPropertyEditor);
-  RegisterPropertyEditor(TypeInfo(string), TTyShellComboBox, 'Directory', TDirectoryPropertyEditor);
-  RegisterPropertyEditor(TypeInfo(string), TTyShellListView, 'Directory', TDirectoryPropertyEditor);
-  RegisterPropertyEditor(TypeInfo(string), TTyShellTreeView, 'Directory', TDirectoryPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomShellComboBox, 'Directory', TDirectoryPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomShellListView, 'Directory', TDirectoryPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomShellTreeView, 'Directory', TDirectoryPropertyEditor);
   // Version: read-only version display + design-time About dialog, on every registered class.
   // FIVE base classes cover the whole library through inheritance: the two control bases take
   // every visual control, TTyComponent every non-visual one (TTyStyleController included —

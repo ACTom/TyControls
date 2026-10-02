@@ -20,7 +20,7 @@ function TyGaugeSweepEnd(AStartDeg, ASweepDeg, AFrac: Double): Double;
 function TyGaugeLinearFill(const ATrack: TRect; AFrac: Double; AVertical: Boolean): TRect;
 
 type
-  TTyGauge = class(TTyGraphicControl)
+  TTyCustomGauge = class(TTyGraphicControl)
   private
     FMin, FMax, FValue: Double;
     FStyle: TTyGaugeStyle;
@@ -54,7 +54,6 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-  published
     property Min: Double read FMin write SetMin;
     property Max: Double read FMax write SetMax;
     property Value: Double read FValue write SetValue;
@@ -65,11 +64,62 @@ type
     property StartAngle: Integer read FStartAngle write SetStartAngle default 135;
     property SweepAngle: Integer read FSweepAngle write SetSweepAngle default 270;
     property AnimationsEnabled: Boolean read FAnimEnabled write FAnimEnabled default True;
+  end;
+
+  { TTyGauge publishes TTyCustomGauge's properties; everything lives in TTyCustomGauge. }
+  TTyGauge = class(TTyCustomGauge)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
     property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Min;
+    property Max;
+    property Value;
+    property Style;
+    property ShowValue;
+    property ValueFormat;
+    property Thickness;
+    property StartAngle;
+    property SweepAngle;
+    property AnimationsEnabled;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
   end;
 
 implementation
@@ -104,9 +154,9 @@ begin
   end;
 end;
 
-{ TTyGauge }
+{ TTyCustomGauge }
 
-constructor TTyGauge.Create(AOwner: TComponent);
+constructor TTyCustomGauge.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   { An instrument has no caption. Caption used to be PUBLISHED here and grep found exactly
@@ -135,18 +185,18 @@ begin
   Height := 120;
 end;
 
-destructor TTyGauge.Destroy;
+destructor TTyCustomGauge.Destroy;
 begin
   FreeAndNil(FTimer);   // stop the callback before teardown
   inherited Destroy;
 end;
 
-function TTyGauge.GetStyleTypeKey: string;
+function TTyCustomGauge.GetStyleTypeKey: string;
 begin
   Result := 'TyGauge';
 end;
 
-procedure TTyGauge.EnsureTimer;
+procedure TTyCustomGauge.EnsureTimer;
 begin
   if FTimer = nil then
   begin
@@ -157,23 +207,23 @@ begin
   end;
 end;
 
-procedure TTyGauge.HandleTimer(Sender: TObject);
+procedure TTyCustomGauge.HandleTimer(Sender: TObject);
 begin
   if AdvanceAnimation(FTimer.Interval) then Invalidate;
   if not FPosAnim.Running then FTimer.Enabled := False;
 end;
 
-function TTyGauge.AdvanceAnimation(AMs: Integer): Boolean;
+function TTyCustomGauge.AdvanceAnimation(AMs: Integer): Boolean;
 begin
   Result := FPosAnim.Advance(AMs);
 end;
 
-function TTyGauge.DisplayFrac: Single;
+function TTyCustomGauge.DisplayFrac: Single;
 begin
   Result := TyLerpF(FAnimFrom, FAnimTo, FPosAnim.Eased);
 end;
 
-procedure TTyGauge.ArmTo(AFrac: Double);
+procedure TTyCustomGauge.ArmTo(AFrac: Double);
 begin
   if AFrac < 0 then AFrac := 0 else if AFrac > 1 then AFrac := 1;
   { A graphic control paints onto its parent; "has a window to animate into" means
@@ -197,21 +247,21 @@ begin
   Invalidate;
 end;
 
-procedure TTyGauge.SetMin(const AValue: Double);
+procedure TTyCustomGauge.SetMin(const AValue: Double);
 begin
   if FMin = AValue then Exit;
   FMin := AValue;
   ArmTo(TyGaugeFraction(FValue, FMin, FMax));
 end;
 
-procedure TTyGauge.SetMax(const AValue: Double);
+procedure TTyCustomGauge.SetMax(const AValue: Double);
 begin
   if FMax = AValue then Exit;
   FMax := AValue;
   ArmTo(TyGaugeFraction(FValue, FMin, FMax));
 end;
 
-procedure TTyGauge.SetValue(const AValue: Double);
+procedure TTyCustomGauge.SetValue(const AValue: Double);
 var v: Double;
 begin
   v := AValue;
@@ -221,49 +271,49 @@ begin
   ArmTo(TyGaugeFraction(FValue, FMin, FMax));
 end;
 
-procedure TTyGauge.SetStyle(const AValue: TTyGaugeStyle);
+procedure TTyCustomGauge.SetStyle(const AValue: TTyGaugeStyle);
 begin
   if FStyle = AValue then Exit;
   FStyle := AValue;
   Invalidate;
 end;
 
-procedure TTyGauge.SetShowValue(const AValue: Boolean);
+procedure TTyCustomGauge.SetShowValue(const AValue: Boolean);
 begin
   if FShowValue = AValue then Exit;
   FShowValue := AValue;
   Invalidate;
 end;
 
-procedure TTyGauge.SetValueFormat(const AValue: string);
+procedure TTyCustomGauge.SetValueFormat(const AValue: string);
 begin
   if FValueFormat = AValue then Exit;
   FValueFormat := AValue;
   Invalidate;
 end;
 
-procedure TTyGauge.SetThickness(const AValue: Integer);
+procedure TTyCustomGauge.SetThickness(const AValue: Integer);
 begin
   if FThickness = AValue then Exit;
   FThickness := Math.Max(1, AValue);
   Invalidate;
 end;
 
-procedure TTyGauge.SetStartAngle(const AValue: Integer);
+procedure TTyCustomGauge.SetStartAngle(const AValue: Integer);
 begin
   if FStartAngle = AValue then Exit;
   FStartAngle := AValue;
   Invalidate;
 end;
 
-procedure TTyGauge.SetSweepAngle(const AValue: Integer);
+procedure TTyCustomGauge.SetSweepAngle(const AValue: Integer);
 begin
   if FSweepAngle = AValue then Exit;
   FSweepAngle := AValue;
   Invalidate;
 end;
 
-procedure TTyGauge.DrawValueText(P: TTyPainter; const R: TRect; AColor: TTyColor);
+procedure TTyCustomGauge.DrawValueText(P: TTyPainter; const R: TRect; AColor: TTyColor);
 var fs: Integer;
 begin
   if not FShowValue then Exit;
@@ -276,7 +326,7 @@ begin
     taCenter, tlCenter, False);
 end;
 
-procedure TTyGauge.DrawLinear(P: TTyPainter; const R: TRect; AFrac: Double;
+procedure TTyCustomGauge.DrawLinear(P: TTyPainter; const R: TRect; AFrac: Double;
   const ATrackS, AFillS: TTyStyleSet);
 var bw: Integer; trackR, fillR: TRect;
 begin
@@ -289,7 +339,7 @@ begin
   DrawValueText(P, R, ATrackS.TextColor);
 end;
 
-procedure TTyGauge.DrawArc(P: TTyPainter; const R: TRect; AFrac: Double;
+procedure TTyCustomGauge.DrawArc(P: TTyPainter; const R: TRect; AFrac: Double;
   const ATrackS, AFillS: TTyStyleSet);
 var
   ctx: TBGRACanvas2D;
@@ -331,7 +381,7 @@ begin
   DrawValueText(P, R, ATrackS.TextColor);
 end;
 
-procedure TTyGauge.Paint;
+procedure TTyCustomGauge.Paint;
 var
   P: TTyPainter;
   trackS, fillS: TTyStyleSet;

@@ -46,6 +46,7 @@ type
   TTyListItemState  = (lisChecked, lisCut, lisDisabled);
   TTyListItemStates = set of TTyListItemState;
 
+  TTyCustomListView = class;   { forward }
   TTyListView  = class;   { forward }
   TTyListItems = class;   { forward }
 
@@ -247,7 +248,7 @@ type
   { ===================================================================
     TTyListView
     =================================================================== }
-  TTyListView = class(TTyCustomControl, ITyScrollBarFrameHost)
+  TTyCustomListView = class(TTyCustomControl, ITyScrollBarFrameHost)
   private
     { data }
     FItems:      TTyListItems;
@@ -669,29 +670,13 @@ type
     procedure EndEdit(ACommit: Boolean; ARestoreFocus: Boolean = False);
 
     property ItemIndex: Integer read GetItemIndex write SetItemIndex;
-  published
-    property ViewStyle: TTyListViewStyle read FViewStyle write SetViewStyle default lvsReport;
-    { Report row height in logical px, DPI-scaled at paint time. Left unset it follows the
-      theme's --row-height token, so a list gets denser rows at classic density (22) and
-      roomier ones at modern density (32) automatically. Set it explicitly (a file dialog
-      wants its own density) and that value wins and is streamed; the getter then returns
-      what you set. Streamed only when explicitly set (stored FRowHeightExplicit). }
-    property RowHeight: Integer read GetRowHeight write SetRowHeight stored FRowHeightExplicit;
+    property TabStop default True;
     property OwnerData: Boolean read FOwnerData write SetOwnerData default False;
-    property ItemCount: Integer read FItemCount write SetItemCount default 0;
     property Items: TTyListItems read FItems write SetItems;
-    property Header: TTyHeader read FHeader write SetHeader;
-    property ShowColumnHeaders: Boolean read FShowColumnHeaders write SetShowColumnHeaders default True;
     property GridLines: Boolean read FGridLines write SetGridLines default False;
     property RowSelect: Boolean read FRowSelect write SetRowSelect default True;
     property HotTrack: Boolean read FHotTrack write SetHotTrack default False;
     property MultiSelect: Boolean read FMultiSelect write SetMultiSelect default False;
-    property SortColumn: Integer read FSortColumn write SetSortColumn default -1;
-    property SortDirection: TTySortDirection read FSortDirection write SetSortDirection default sdAscending;
-    property SortKind: TTyListSortKind read FSortKind write SetSortKind default lskText;
-    property AutoSort: Boolean read FAutoSort write SetAutoSort default True;
-    property LargeImages: TCustomImageList read FLargeImages write SetLargeImages;
-    property SmallImages: TCustomImageList read FSmallImages write SetSmallImages;
     { Row-first checkboxes. A click on the box, or Space on the focused row, toggles the
       check without touching the selection. The box resolves this control's own
       'TyListViewCheckBox', so a file list's boxes can differ from a tree's. }
@@ -699,6 +684,23 @@ type
     { Inline rename is opt-in, like TTyTreeView's toEditable and UNLIKE LCL
       TListView.ReadOnly=False: a file panel must not enter rename on a stray F2. }
     property ReadOnly: Boolean read FReadOnly write FReadOnly default True;
+  protected
+    property ViewStyle: TTyListViewStyle read FViewStyle write SetViewStyle default lvsReport;
+    { Report row height in logical px, DPI-scaled at paint time. Left unset it follows the
+      theme's --row-height token, so a list gets denser rows at classic density (22) and
+      roomier ones at modern density (32) automatically. Set it explicitly (a file dialog
+      wants its own density) and that value wins and is streamed; the getter then returns
+      what you set. Streamed only when explicitly set (stored FRowHeightExplicit). }
+    property RowHeight: Integer read GetRowHeight write SetRowHeight stored FRowHeightExplicit;
+    property ItemCount: Integer read FItemCount write SetItemCount default 0;
+    property Header: TTyHeader read FHeader write SetHeader;
+    property ShowColumnHeaders: Boolean read FShowColumnHeaders write SetShowColumnHeaders default True;
+    property SortColumn: Integer read FSortColumn write SetSortColumn default -1;
+    property SortDirection: TTySortDirection read FSortDirection write SetSortDirection default sdAscending;
+    property SortKind: TTyListSortKind read FSortKind write SetSortKind default lskText;
+    property AutoSort: Boolean read FAutoSort write SetAutoSort default True;
+    property LargeImages: TCustomImageList read FLargeImages write SetLargeImages;
+    property SmallImages: TCustomImageList read FSmallImages write SetSmallImages;
     { Grouped view. When on (and ViewStyle <> lvsList, which cannot host group bands and so
       silently ignores it), items are partitioned into collapsible bands. The band resolves
       'TyListViewGroupHeader' -- its own key, NOT the report column-header band's. }
@@ -708,7 +710,6 @@ type
       the embedded bars; for what the three values mean see TTyScrollBar.AutoHide. }
     property ScrollBarAutoHide: TTyScrollBarAutoHide
       read FScrollBarAutoHide write SetScrollBarAutoHide default sbahDefault;
-
     property OnGetItemText:  TTyListGetTextEvent  read FOnGetItemText  write FOnGetItemText;
     property OnGetItemImage: TTyListGetImageEvent read FOnGetItemImage write FOnGetItemImage;
     property OnGetItemState: TTyListGetStateEvent read FOnGetItemState write FOnGetItemState;
@@ -735,12 +736,101 @@ type
     property OnEdited:       TTyListEditedEvent   read FOnEdited       write FOnEdited;
     property OnGetItemGroup:   TTyListGetGroupEvent read FOnGetItemGroup   write FOnGetItemGroup;
     property OnGroupCollapsed: TTyListGroupEvent    read FOnGroupCollapsed write FOnGroupCollapsed;
+  end;
 
-    property TabStop default True;
+  { TTyListView publishes TTyCustomListView's properties; everything lives in TTyCustomListView. }
+  TTyListView = class(TTyCustomListView)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property ViewStyle;
+    property RowHeight;
+    property OwnerData;
+    property ItemCount;
+    property Items;
+    property Header;
+    property ShowColumnHeaders;
+    property GridLines;
+    property RowSelect;
+    property HotTrack;
+    property MultiSelect;
+    property SortColumn;
+    property SortDirection;
+    property SortKind;
+    property AutoSort;
+    property LargeImages;
+    property SmallImages;
+    property Checkboxes;
+    property ReadOnly;
+    property GroupView;
+    property Groups;
+    property ScrollBarAutoHide;
+    property OnGetItemText;
+    property OnGetItemImage;
+    property OnGetItemState;
+    property OnCompare;
+    property OnColumnClick;
+    property OnItemActivate;
+    property OnSelectItem;
+    property OnChange;
+    property OnChanging;
+    property OnItemChecked;
+    property OnInsert;
+    property OnDeletion;
+    property OnEditing;
+    property OnEdited;
+    property OnGetItemGroup;
+    property OnGroupCollapsed;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
   end;
 
 implementation
@@ -846,12 +936,12 @@ begin
   Result := nil;
   if not (Collection is TTyListItems) then Exit;
   own := TTyListItems(Collection).GetOwner;   // GetOwner is unit-visible
-  if own is TTyListView then
+  if own is TTyCustomListView then
   begin
     { The two lists are parallel in LCL, so resolve against whichever exists -- large first,
       because icon view is the mode that shows the name most prominently. }
-    Result := TTyListView(own).LargeImages;
-    if Result = nil then Result := TTyListView(own).SmallImages;
+    Result := TTyCustomListView(own).LargeImages;
+    if Result = nil then Result := TTyCustomListView(own).SmallImages;
   end;
 end;
 
@@ -1045,10 +1135,10 @@ begin
 end;
 
 { ---------------------------------------------------------------------------
-  TTyListView — lifecycle
+  TTyCustomListView — lifecycle
   --------------------------------------------------------------------------- }
 
-constructor TTyListView.Create(AOwner: TComponent);
+constructor TTyCustomListView.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FItems := TTyListItems.Create(Self);
@@ -1137,7 +1227,7 @@ begin
   RebuildOrder;
 end;
 
-destructor TTyListView.Destroy;
+destructor TTyCustomListView.Destroy;
 begin
   { Items go FIRST, and with OnItemNotify still armed: OnDeletion fires per row as the
     collection empties, and a control going away is exactly when a host holding owned
@@ -1154,7 +1244,7 @@ begin
   inherited Destroy;
 end;
 
-function TTyListView.GetStyleTypeKey: string;
+function TTyCustomListView.GetStyleTypeKey: string;
 begin
   { Its own key, not the tree's. This control is not a tree: it draws icon / tile / small-icon
     flow cells, a horizontally scrolling report column band, ruled grid lines, collapsible
@@ -1173,7 +1263,7 @@ begin
   Result := 'TyListView';
 end;
 
-procedure TTyListView.SetController(AValue: TTyStyleController);
+procedure TTyCustomListView.SetController(AValue: TTyStyleController);
 begin
   inherited SetController(AValue);
   if FVScroll <> nil then FVScroll.Controller := AValue;
@@ -1183,7 +1273,7 @@ begin
   if FEditor <> nil then FEditor.Controller := AValue;
 end;
 
-procedure TTyListView.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomListView.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if Operation = opRemove then
@@ -1197,7 +1287,7 @@ end;
   Data intake — the ONLY four readers
   --------------------------------------------------------------------------- }
 
-function TTyListView.GetItemCount: Integer;
+function TTyCustomListView.GetItemCount: Integer;
 begin
   if FOwnerData then
     Result := FItemCount
@@ -1205,7 +1295,7 @@ begin
     Result := FItems.Count;
 end;
 
-function TTyListView.GetItemText(AIndex, AColumn: Integer): string;
+function TTyCustomListView.GetItemText(AIndex, AColumn: Integer): string;
 begin
   Result := '';
   if FOwnerData then
@@ -1221,7 +1311,7 @@ begin
     Result := FItems[AIndex].SubItems[AColumn - 1];
 end;
 
-function TTyListView.GetItemImageIndex(AIndex, AColumn: Integer): Integer;
+function TTyCustomListView.GetItemImageIndex(AIndex, AColumn: Integer): Integer;
 begin
   Result := -1;
   if FOwnerData then
@@ -1236,7 +1326,7 @@ begin
     Result := FItems[AIndex].ImageIndex;
 end;
 
-function TTyListView.GetItemState(AIndex: Integer): TTyListItemStates;
+function TTyCustomListView.GetItemState(AIndex: Integer): TTyListItemStates;
 begin
   Result := [];
   if FOwnerData then
@@ -1249,7 +1339,7 @@ begin
     Result := FItems[AIndex].States;
 end;
 
-function TTyListView.GetItemGroup(AItemIndex: Integer): Integer;
+function TTyCustomListView.GetItemGroup(AItemIndex: Integer): Integer;
 begin
   Result := -1;
   if FOwnerData then
@@ -1266,28 +1356,28 @@ end;
   Scale helpers
   --------------------------------------------------------------------------- }
 
-function TTyListView.Dpi: Integer;
+function TTyCustomListView.Dpi: Integer;
 begin
   Result := Font.PixelsPerInch;
   if Result <= 0 then Result := 96;
 end;
 
-function TTyListView.ScaleI(ALogical: Integer): Integer;
+function TTyCustomListView.ScaleI(ALogical: Integer): Integer;
 begin
   Result := MulDiv(ALogical, Dpi, 96);
 end;
 
-function TTyListView.UnscaleI(ADevice: Integer): Integer;
+function TTyCustomListView.UnscaleI(ADevice: Integer): Integer;
 begin
   Result := MulDiv(ADevice, 96, Dpi);
 end;
 
-function TTyListView.RtlLayout: Boolean;
+function TTyCustomListView.RtlLayout: Boolean;
 begin
   Result := IsRightToLeft;
 end;
 
-function TTyListView.ColumnAxis: TTyColumnAxis;
+function TTyCustomListView.ColumnAxis: TTyColumnAxis;
 begin
   { -FOffsetX is this control's content origin (FOffsetX >= 0 here, unlike the tree's <= 0);
     the span source takes the origin so the sign lives in one place. The reflection band is
@@ -1296,7 +1386,7 @@ begin
   Result := TyColumnAxis(-FOffsetX, Dpi, RtlLayout, 0, CurrentMetrics.ViewportW);
 end;
 
-function TTyListView.ToReadingX(AX: Integer): Integer;
+function TTyCustomListView.ToReadingX(AX: Integer): Integer;
 begin
   { The exact inverse of the reflection, done by reflecting a 1px rect rather than writing
     `VW - 1 - X` out by hand: "X is inside ToScreen(R)" and "ToReadingX(X) is inside R" have
@@ -1312,7 +1402,7 @@ end;
   Order / rank / selection housekeeping
   --------------------------------------------------------------------------- }
 
-procedure TTyListView.RebuildOrder;
+procedure TTyCustomListView.RebuildOrder;
 var
   cnt, i: Integer;
 begin
@@ -1336,20 +1426,20 @@ end;
   Grouping engine (SP2b)
   --------------------------------------------------------------------------- }
 
-function TTyListView.UseGroupedLayout: Boolean;
+function TTyCustomListView.UseGroupedLayout: Boolean;
 begin
   { lvsList (column-major) cannot host group bands, so it falls back to the flat SP1 path. }
   Result := FGroupView and (FViewStyle <> lvsList);
 end;
 
-function TTyListView.GroupHeaderHeightPx: Integer;
+function TTyCustomListView.GroupHeaderHeightPx: Integer;
 begin
   Result := ScaleI(ActiveController.Metric('--listview-group-header-height', TyLvGroupHeaderH));
 end;
 
 { Stable merge sort of a sub-array by the SAME comparator Sort uses (ties by item index, so
   it stays stable). ABuf is a caller-owned scratch buffer at least AHi+1 long. }
-procedure TTyListView.MergeSortRange(var A: TTyIntArray; ALo, AHi: Integer; var ABuf: TTyIntArray);
+procedure TTyCustomListView.MergeSortRange(var A: TTyIntArray; ALo, AHi: Integer; var ABuf: TTyIntArray);
 var
   mid, i, j, k: Integer;
 begin
@@ -1376,7 +1466,7 @@ begin
     A[k] := ABuf[k];
 end;
 
-procedure TTyListView.BuildGroupedOrder;
+procedure TTyCustomListView.BuildGroupedOrder;
 var
   cnt, gcnt, i, g, bucket, total, p, k, b, maxLen: Integer;
   itemBucket: TTyIntArray;         { item index -> bucket index (0..gcnt, gcnt = implicit) }
@@ -1483,7 +1573,7 @@ end;
 { Re-derive the metric-dependent map (Tops) from the cached info array (Counts/Collapsed/
   HasHeader are metric-independent, so FOrder/FRank need not be rebuilt). O(G). Keeps grouped
   geometry correct after a resize or a scrollbar-visibility flip changed the metrics. }
-procedure TTyListView.RefreshGroupMap;
+procedure TTyCustomListView.RefreshGroupMap;
 var
   m: TTyListMetrics;
 begin
@@ -1491,7 +1581,7 @@ begin
   FGroupMap := TyListBuildGroupMap(FGroupMap.Groups, m, GroupHeaderHeightPx);
 end;
 
-procedure TTyListView.SyncRank;
+procedure TTyCustomListView.SyncRank;
 var
   p: Integer;
 begin
@@ -1502,7 +1592,7 @@ begin
     FRank[FOrder[p]] := p;   { item FOrder[p] now lives at display p }
 end;
 
-procedure TTyListView.SyncArrays;
+procedure TTyCustomListView.SyncArrays;
 var
   cnt: Integer;
 begin
@@ -1526,13 +1616,13 @@ begin
   ClampIndex(FHot);
 end;
 
-procedure TTyListView.EnsureSelectedLen;
+procedure TTyCustomListView.EnsureSelectedLen;
 begin
   if Length(FSelected) <> GetItemCount then
     SetLength(FSelected, GetItemCount);
 end;
 
-procedure TTyListView.ClearAllBits;
+procedure TTyCustomListView.ClearAllBits;
 var
   i: Integer;
 begin
@@ -1541,7 +1631,7 @@ begin
     FSelected[i] := False;
 end;
 
-procedure TTyListView.ClampIndex(var AIndex: Integer);
+procedure TTyCustomListView.ClampIndex(var AIndex: Integer);
 var
   cnt: Integer;
 begin
@@ -1550,7 +1640,7 @@ begin
   if AIndex < -1 then AIndex := -1;
 end;
 
-function TTyListView.DisplayToItem(APos: Integer): Integer;
+function TTyCustomListView.DisplayToItem(APos: Integer): Integer;
 begin
   { display pos -> item index (bounds-guarded so stale indices never crash) }
   if (APos >= 0) and (APos < Length(FOrder)) then
@@ -1559,7 +1649,7 @@ begin
     Result := -1;
 end;
 
-function TTyListView.ItemToDisplay(AItem: Integer): Integer;
+function TTyCustomListView.ItemToDisplay(AItem: Integer): Integer;
 begin
   { item index -> display pos (bounds-guarded) }
   if (AItem >= 0) and (AItem < Length(FRank)) then
@@ -1568,7 +1658,7 @@ begin
     Result := -1;
 end;
 
-function TTyListView.IsSelectedItem(AItem: Integer): Boolean;
+function TTyCustomListView.IsSelectedItem(AItem: Integer): Boolean;
 begin
   if (AItem < 0) or (AItem >= GetItemCount) then Exit(False);
   if FMultiSelect then
@@ -1582,7 +1672,7 @@ begin
     Result := (AItem = FItemIndex);
 end;
 
-procedure TTyListView.SetSingleSelection(AItem: Integer);
+procedure TTyCustomListView.SetSingleSelection(AItem: Integer);
 var
   before: TTyIntArray;
 begin
@@ -1601,7 +1691,7 @@ begin
   FireSelectionDelta(before);
 end;
 
-procedure TTyListView.SelectRangeByDisplay(AAnchorItem, ATargetItem: Integer);
+procedure TTyCustomListView.SelectRangeByDisplay(AAnchorItem, ATargetItem: Integer);
 var
   aPos, tPos, lo, hi, p, it: Integer;
 begin
@@ -1621,12 +1711,12 @@ begin
   end;
 end;
 
-procedure TTyListView.DoChange(AIndex: Integer; AChange: TTyItemChange);
+procedure TTyCustomListView.DoChange(AIndex: Integer; AChange: TTyItemChange);
 begin
   if Assigned(FOnChange) then FOnChange(Self, AIndex, AChange);
 end;
 
-function TTyListView.CanChange(AIndex: Integer; AChange: TTyItemChange): Boolean;
+function TTyCustomListView.CanChange(AIndex: Integer; AChange: TTyItemChange): Boolean;
 begin
   { LCL's CanChange (customlistview.inc:208): default True, the host lowers it. Unlike LCL
     -- where the veto only ever reaches the Win32 widgetset -- this control is its own
@@ -1636,12 +1726,12 @@ begin
     FOnChanging(Self, AIndex, AChange, Result);
 end;
 
-procedure TTyListView.DoSelectItem(AIndex: Integer; ASelected: Boolean);
+procedure TTyCustomListView.DoSelectItem(AIndex: Integer; ASelected: Boolean);
 begin
   if Assigned(FOnSelectItem) then FOnSelectItem(Self, AIndex, ASelected);
 end;
 
-function TTyListView.SnapshotSelection: TTyIntArray;
+function TTyCustomListView.SnapshotSelection: TTyIntArray;
 var
   i, n, cnt: Integer;
 begin
@@ -1672,7 +1762,7 @@ begin
   end;
 end;
 
-procedure TTyListView.FireSelectionDelta(const ABefore: TTyIntArray);
+procedure TTyCustomListView.FireSelectionDelta(const ABefore: TTyIntArray);
 var
   after: TTyIntArray;
   a, b: Integer;
@@ -1704,7 +1794,7 @@ begin
   end;
 end;
 
-function TTyListView.StatesFor(AItem: Integer): TTyStateSet;
+function TTyCustomListView.StatesFor(AItem: Integer): TTyStateSet;
 begin
   Result := [];
   if not Enabled then
@@ -1725,7 +1815,7 @@ begin
     Include(Result, tysNormal);
 end;
 
-function TTyListView.GetDisplayText(ADisplayPos: Integer): string;
+function TTyCustomListView.GetDisplayText(ADisplayPos: Integer): string;
 begin
   { callback domain is DISPLAY position -> map to item, then read column 0 }
   Result := GetItemText(DisplayToItem(ADisplayPos), 0);
@@ -1735,7 +1825,7 @@ end;
   Metrics + scrollbars
   --------------------------------------------------------------------------- }
 
-procedure TTyListView.FillMetrics(out AMetrics: TTyListMetrics; AViewW, AViewH: Integer);
+procedure TTyCustomListView.FillMetrics(out AMetrics: TTyListMetrics; AViewW, AViewH: Integer);
 var
   sz: TSize;
   icon: Integer;
@@ -1771,7 +1861,7 @@ begin
   AMetrics.CellH := sz.cy;
 end;
 
-function TTyListView.CurrentMetrics: TTyListMetrics;
+function TTyCustomListView.CurrentMetrics: TTyListMetrics;
 var
   vw, vh, sb: Integer;
 begin
@@ -1785,17 +1875,17 @@ begin
   FillMetrics(Result, vw, vh);
 end;
 
-function TTyListView.ScrollBarFrameStyle: TTyStyleSet;
+function TTyCustomListView.ScrollBarFrameStyle: TTyStyleSet;
 begin
   Result := CurrentStyle;   // RenderTo's DrawFrame uses exactly this
 end;
 
-function TTyListView.EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
+function TTyCustomListView.EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
 begin
   Result := (ABar = FVScroll) or (ABar = FHScroll);
 end;
 
-procedure TTyListView.UpdateScrollBars;
+procedure TTyCustomListView.UpdateScrollBars;
 var
   cnt, sb, vw, vh, pass, regionH, maxV, maxH: Integer;
   m: TTyListMetrics;
@@ -1912,7 +2002,7 @@ begin
   end;
 end;
 
-procedure TTyListView.VScrollChange(Sender: TObject);
+procedure TTyCustomListView.VScrollChange(Sender: TObject);
 begin
   if FSyncingScroll then Exit;
   EndEdit(True);   { rule 4: the edited cell scrolls away — commit + close before it moves }
@@ -1920,7 +2010,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyListView.HScrollChange(Sender: TObject);
+procedure TTyCustomListView.HScrollChange(Sender: TObject);
 begin
   if FSyncingScroll then Exit;
   EndEdit(True);   { rule 4 }
@@ -1928,7 +2018,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyListView.SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
+procedure TTyCustomListView.SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
 begin
   if FScrollBarAutoHide = AValue then Exit;
   FScrollBarAutoHide := AValue;
@@ -1942,12 +2032,12 @@ end;
   Sorting
   --------------------------------------------------------------------------- }
 
-procedure TTyListView.DoItemActivate(AIndex: Integer);
+procedure TTyCustomListView.DoItemActivate(AIndex: Integer);
 begin
   if Assigned(FOnItemActivate) then FOnItemActivate(Self, AIndex);
 end;
 
-function TTyListView.CompareItems(AItemA, AItemB: Integer): Integer;
+function TTyCustomListView.CompareItems(AItemA, AItemB: Integer): Integer;
 var
   c: Integer;
 begin
@@ -1969,7 +2059,7 @@ begin
   Result := c;
 end;
 
-procedure TTyListView.MergeSortOrder(ALo, AHi: Integer);
+procedure TTyCustomListView.MergeSortOrder(ALo, AHi: Integer);
 var
   mid, i, j, k: Integer;
 begin
@@ -1996,7 +2086,7 @@ begin
     FOrder[k] := FSortBuf[k];
 end;
 
-procedure TTyListView.Sort;
+procedure TTyCustomListView.Sort;
 var
   cnt: Integer;
 begin
@@ -2036,19 +2126,19 @@ end;
   Public API — batching / virtual mode
   --------------------------------------------------------------------------- }
 
-procedure TTyListView.BeginUpdate;
+procedure TTyCustomListView.BeginUpdate;
 begin
   Inc(FUpdateCount);
 end;
 
-procedure TTyListView.EndUpdate;
+procedure TTyCustomListView.EndUpdate;
 begin
   if FUpdateCount > 0 then Dec(FUpdateCount);
   if FUpdateCount = 0 then
     ItemsChanged;
 end;
 
-procedure TTyListView.ItemsChanged;
+procedure TTyCustomListView.ItemsChanged;
 var
   cnt: Integer;
 begin
@@ -2071,13 +2161,13 @@ begin
   Invalidate;
 end;
 
-procedure TTyListView.ItemsCollectionChanged(Sender: TObject);
+procedure TTyCustomListView.ItemsCollectionChanged(Sender: TObject);
 begin
   if FOwnerData then Exit;     { the collection is dormant in virtual mode }
   ItemsChanged;
 end;
 
-procedure TTyListView.ItemsCollectionNotify(Sender: TObject; AItem: TCollectionItem;
+procedure TTyCustomListView.ItemsCollectionNotify(Sender: TObject; AItem: TCollectionItem;
   AAction: TCollectionNotification);
 begin
   if FOwnerData then Exit;     { no collection lifetime to report in virtual mode }
@@ -2094,22 +2184,22 @@ begin
   end;
 end;
 
-procedure TTyListView.DoInsert(AIndex: Integer);
+procedure TTyCustomListView.DoInsert(AIndex: Integer);
 begin
   if Assigned(FOnInsert) then FOnInsert(Self, AIndex);
 end;
 
-procedure TTyListView.DoDeletion(AIndex: Integer);
+procedure TTyCustomListView.DoDeletion(AIndex: Integer);
 begin
   if Assigned(FOnDeletion) then FOnDeletion(Self, AIndex);
 end;
 
-function TTyListView.GetColumns: TTyColumns;
+function TTyCustomListView.GetColumns: TTyColumns;
 begin
   Result := FHeader.Columns;
 end;
 
-function TTyListView.GetColumn(AIndex: Integer): TTyColumn;
+function TTyCustomListView.GetColumn(AIndex: Integer): TTyColumn;
 begin
   // Out of range is nil rather than an exception: `if LV.Column[i] <> nil` is how the
   // rest of this control's index-first surface is written.
@@ -2119,12 +2209,12 @@ begin
     Result := nil;
 end;
 
-function TTyListView.GetColumnCount: Integer;
+function TTyCustomListView.GetColumnCount: Integer;
 begin
   Result := FHeader.Columns.Count;
 end;
 
-procedure TTyListView.HeaderChanged(Sender: TObject);
+procedure TTyCustomListView.HeaderChanged(Sender: TObject);
 begin
   if csLoading in ComponentState then Exit;
   Invalidate;
@@ -2134,7 +2224,7 @@ end;
   Public API — selection
   --------------------------------------------------------------------------- }
 
-function TTyListView.SelCount: Integer;
+function TTyCustomListView.SelCount: Integer;
 var
   i: Integer;
 begin
@@ -2151,7 +2241,7 @@ begin
     Result := 0;
 end;
 
-procedure TTyListView.SelectAll;
+procedure TTyCustomListView.SelectAll;
 var
   i: Integer;
   anyChanged: Boolean;
@@ -2175,7 +2265,7 @@ begin
   FireSelectionDelta(before);
 end;
 
-procedure TTyListView.ClearSelection;
+procedure TTyCustomListView.ClearSelection;
 var
   i: Integer;
   anyChanged: Boolean;
@@ -2200,7 +2290,7 @@ begin
   FireSelectionDelta(before);
 end;
 
-function TTyListView.GetNextSelected(var AIndex: Integer): Boolean;
+function TTyCustomListView.GetNextSelected(var AIndex: Integer): Boolean;
 var
   i, cnt: Integer;
 begin
@@ -2224,24 +2314,24 @@ begin
   end;
 end;
 
-function TTyListView.GetItemIndex: Integer;
+function TTyCustomListView.GetItemIndex: Integer;
 begin
   Result := FItemIndex;
 end;
 
-procedure TTyListView.SetItemIndex(AValue: Integer);
+procedure TTyCustomListView.SetItemIndex(AValue: Integer);
 begin
   if (AValue < 0) or (AValue >= GetItemCount) then AValue := -1;
   if FItemIndex = AValue then Exit;
   SetSingleSelection(AValue);
 end;
 
-function TTyListView.GetSelected(AIndex: Integer): Boolean;
+function TTyCustomListView.GetSelected(AIndex: Integer): Boolean;
 begin
   Result := IsSelectedItem(AIndex);
 end;
 
-procedure TTyListView.SetSelected(AIndex: Integer; AValue: Boolean);
+procedure TTyCustomListView.SetSelected(AIndex: Integer; AValue: Boolean);
 var
   before: TTyIntArray;
 begin
@@ -2265,7 +2355,7 @@ end;
   Checkboxes
   --------------------------------------------------------------------------- }
 
-procedure TTyListView.SetCheckboxes(AValue: Boolean);
+procedure TTyCustomListView.SetCheckboxes(AValue: Boolean);
 begin
   if FCheckboxes = AValue then Exit;
   FCheckboxes := AValue;
@@ -2274,13 +2364,13 @@ begin
   Invalidate;
 end;
 
-function TTyListView.GetChecked(AIndex: Integer): Boolean;
+function TTyCustomListView.GetChecked(AIndex: Integer): Boolean;
 begin
   { The control does NOT own check state: read lisChecked through the single data path. }
   Result := lisChecked in GetItemState(AIndex);
 end;
 
-procedure TTyListView.SetChecked(AIndex: Integer; AValue: Boolean);
+procedure TTyCustomListView.SetChecked(AIndex: Integer; AValue: Boolean);
 begin
   { Public writer: AIndex is an ITEM index. Out-of-range is silently ignored (never raises). }
   if (AIndex < 0) or (AIndex >= GetItemCount) then Exit;
@@ -2296,7 +2386,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyListView.SetItemChecked(AIndex: Integer; AValue: Boolean);
+procedure TTyCustomListView.SetItemChecked(AIndex: Integer; AValue: Boolean);
 var
   st: TTyListItemStates;
 begin
@@ -2311,7 +2401,7 @@ end;
   Public API — hit-testing / scrolling
   --------------------------------------------------------------------------- }
 
-function TTyListView.GetItemAt(X, Y: Integer): Integer;
+function TTyCustomListView.GetItemAt(X, Y: Integer): Integer;
 var
   m: TTyListMetrics;
   pos, g, idx: Integer;
@@ -2333,7 +2423,7 @@ begin
   Result := DisplayToItem(pos);   { display pos -> item index (-1 stays -1) }
 end;
 
-function TTyListView.GetHitPart(X, Y: Integer): TTyListHitPart;
+function TTyCustomListView.GetHitPart(X, Y: Integer): TTyListHitPart;
 var
   m: TTyListMetrics;
   pos, g, idx: Integer;
@@ -2392,7 +2482,7 @@ begin
   Result := lhpLabel;
 end;
 
-procedure TTyListView.ScrollIntoView(AIndex: Integer);
+procedure TTyCustomListView.ScrollIntoView(AIndex: Integer);
 var
   m: TTyListMetrics;
   pos, regionH, gv, iv: Integer;
@@ -2443,7 +2533,7 @@ end;
   Inline rename
   --------------------------------------------------------------------------- }
 
-function TTyListView.Editing: Boolean;
+function TTyCustomListView.Editing: Boolean;
 begin
   Result := (FEditor <> nil) and (FEditItem >= 0) and FEditor.Visible;
 end;
@@ -2451,7 +2541,7 @@ end;
 { The editor's bounds for an ITEM index = the item's label rect, derived from the same
   TyListItemRect the painter uses (report: the main column's text rect after the checkbox +
   icon shifts; flow: the cell's label rect). No geometry is invented here. }
-function TTyListView.EditorBoundsFor(AIndex: Integer): TRect;
+function TTyCustomListView.EditorBoundsFor(AIndex: Integer): TRect;
 var
   m: TTyListMetrics;
   pos, mainIdx, colLeft, colRight, cbShift, imgPx, ii, pad, ix, gPos, iPos: Integer;
@@ -2519,7 +2609,7 @@ begin
   end;
 end;
 
-procedure TTyListView.BeginEdit(AIndex: Integer);
+procedure TTyCustomListView.BeginEdit(AIndex: Integer);
 var
   allow: Boolean;
 begin
@@ -2548,7 +2638,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyListView.EndEdit(ACommit: Boolean; ARestoreFocus: Boolean);
+procedure TTyCustomListView.EndEdit(ACommit: Boolean; ARestoreFocus: Boolean);
 var
   item: Integer;
   txt: string;
@@ -2585,7 +2675,7 @@ begin
   end;
 end;
 
-procedure TTyListView.CommitEdit(AIndex: Integer; const AText: string);
+procedure TTyCustomListView.CommitEdit(AIndex: Integer; const AText: string);
 var
   s: string;
 begin
@@ -2608,7 +2698,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyListView.EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+procedure TTyCustomListView.EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
   case Key of
     VK_RETURN: begin EndEdit(True,  True); Key := 0; end;   { commit + return focus (rule 7) }
@@ -2616,7 +2706,7 @@ begin
   end;
 end;
 
-procedure TTyListView.EditorExit(Sender: TObject);
+procedure TTyCustomListView.EditorExit(Sender: TObject);
 begin
   { Rule 1: during form teardown the Items may already be freed — never commit into them. }
   if csDestroying in ComponentState then Exit;
@@ -2629,14 +2719,14 @@ end;
   Property setters
   --------------------------------------------------------------------------- }
 
-procedure TTyListView.SetOwnerData(AValue: Boolean);
+procedure TTyCustomListView.SetOwnerData(AValue: Boolean);
 begin
   if FOwnerData = AValue then Exit;
   FOwnerData := AValue;
   ItemsChanged;
 end;
 
-procedure TTyListView.SetItemCount(AValue: Integer);
+procedure TTyCustomListView.SetItemCount(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   if FItemCount = AValue then Exit;
@@ -2648,7 +2738,7 @@ end;
 { Effective report row height in logical px: an explicit RowHeight wins; otherwise follow
   the theme's --row-height token, which the density pack raises for modern density. Resolved
   live (not cached) so toggling Controller.Density re-heights the rows on the next layout. }
-function TTyListView.GetRowHeight: Integer;
+function TTyCustomListView.GetRowHeight: Integer;
 begin
   if FRowHeightExplicit then
     Result := FRowHeight
@@ -2656,7 +2746,7 @@ begin
     Result := ActiveController.Metric('--row-height', TyLvRowHeight);
 end;
 
-procedure TTyListView.SetRowHeight(AValue: Integer);
+procedure TTyCustomListView.SetRowHeight(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
   FRowHeightExplicit := True;   { even if the value equals the fallback, the host meant to pin it }
@@ -2666,7 +2756,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyListView.SetViewStyle(AValue: TTyListViewStyle);
+procedure TTyCustomListView.SetViewStyle(AValue: TTyListViewStyle);
 begin
   if FViewStyle = AValue then Exit;
   EndEdit(True);   { rule 4: the cell geometry changes wholesale — commit + close first }
@@ -2678,7 +2768,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyListView.SetShowColumnHeaders(AValue: Boolean);
+procedure TTyCustomListView.SetShowColumnHeaders(AValue: Boolean);
 begin
   if FShowColumnHeaders = AValue then Exit;
   FShowColumnHeaders := AValue;
@@ -2686,21 +2776,21 @@ begin
   Invalidate;
 end;
 
-procedure TTyListView.SetGridLines(AValue: Boolean);
+procedure TTyCustomListView.SetGridLines(AValue: Boolean);
 begin
   if FGridLines = AValue then Exit;
   FGridLines := AValue;
   Invalidate;
 end;
 
-procedure TTyListView.SetRowSelect(AValue: Boolean);
+procedure TTyCustomListView.SetRowSelect(AValue: Boolean);
 begin
   if FRowSelect = AValue then Exit;
   FRowSelect := AValue;
   Invalidate;
 end;
 
-procedure TTyListView.SetHotTrack(AValue: Boolean);
+procedure TTyCustomListView.SetHotTrack(AValue: Boolean);
 begin
   if FHotTrack = AValue then Exit;
   FHotTrack := AValue;
@@ -2708,7 +2798,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyListView.SetMultiSelect(AValue: Boolean);
+procedure TTyCustomListView.SetMultiSelect(AValue: Boolean);
 var
   i: Integer;
   before: TTyIntArray;
@@ -2752,20 +2842,20 @@ begin
   FireSelectionDelta(before);
 end;
 
-procedure TTyListView.SetItems(AValue: TTyListItems);
+procedure TTyCustomListView.SetItems(AValue: TTyListItems);
 begin
   FItems.Assign(AValue);
   ItemsChanged;
 end;
 
-procedure TTyListView.SetHeader(AValue: TTyHeader);
+procedure TTyCustomListView.SetHeader(AValue: TTyHeader);
 begin
   FHeader.Assign(AValue);
   UpdateScrollBars;
   Invalidate;
 end;
 
-procedure TTyListView.SetSortColumn(AValue: Integer);
+procedure TTyCustomListView.SetSortColumn(AValue: Integer);
 begin
   if AValue < -1 then AValue := -1;
   if FSortColumn = AValue then Exit;
@@ -2773,27 +2863,27 @@ begin
   Sort;
 end;
 
-procedure TTyListView.SetSortDirection(AValue: TTySortDirection);
+procedure TTyCustomListView.SetSortDirection(AValue: TTySortDirection);
 begin
   if FSortDirection = AValue then Exit;
   FSortDirection := AValue;
   if FSortColumn >= 0 then Sort else Invalidate;
 end;
 
-procedure TTyListView.SetSortKind(AValue: TTyListSortKind);
+procedure TTyCustomListView.SetSortKind(AValue: TTyListSortKind);
 begin
   if FSortKind = AValue then Exit;
   FSortKind := AValue;
   if FSortColumn >= 0 then Sort;
 end;
 
-procedure TTyListView.SetAutoSort(AValue: Boolean);
+procedure TTyCustomListView.SetAutoSort(AValue: Boolean);
 begin
   if FAutoSort = AValue then Exit;
   FAutoSort := AValue;
 end;
 
-procedure TTyListView.ResolveItemIcons;
+procedure TTyCustomListView.ResolveItemIcons;
 var i: Integer;
 begin
   { A list arriving is when each streamed item's pending ImageIndex can finally become a durable
@@ -2803,7 +2893,7 @@ begin
     FItems[i].ResolveImageIndex;
 end;
 
-procedure TTyListView.SetLargeImages(AValue: TCustomImageList);
+procedure TTyCustomListView.SetLargeImages(AValue: TCustomImageList);
 begin
   if FLargeImages = AValue then Exit;
   if FLargeImages <> nil then FLargeImages.RemoveFreeNotification(Self);
@@ -2813,7 +2903,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyListView.SetSmallImages(AValue: TCustomImageList);
+procedure TTyCustomListView.SetSmallImages(AValue: TCustomImageList);
 begin
   if FSmallImages = AValue then Exit;
   if FSmallImages <> nil then FSmallImages.RemoveFreeNotification(Self);
@@ -2823,7 +2913,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyListView.SetGroupView(AValue: Boolean);
+procedure TTyCustomListView.SetGroupView(AValue: Boolean);
 begin
   if FGroupView = AValue then Exit;
   EndEdit(True);   { rule 4: the whole layout changes — commit + close the editor first }
@@ -2839,14 +2929,14 @@ begin
   Invalidate;
 end;
 
-procedure TTyListView.SetGroups(AValue: TTyListGroups);
+procedure TTyCustomListView.SetGroups(AValue: TTyListGroups);
 begin
   FGroups.Assign(AValue);   { fires GroupsChanged via the collection's OnChange }
 end;
 
 { A group's caption/collapsed edit, or an add/remove, re-derives the order (item->group
   membership and the concat of expanded buckets both depend on it). }
-procedure TTyListView.GroupsChanged(Sender: TObject);
+procedure TTyCustomListView.GroupsChanged(Sender: TObject);
 begin
   if csLoading in ComponentState then Exit;
   if not UseGroupedLayout then
@@ -2868,7 +2958,7 @@ end;
   order + map and repaints; then OnGroupCollapsed reports the GROUP index. A focused item that
   falls into the now-collapsed group keeps FItemIndex (ItemToDisplay becomes -1, so it is
   simply not visible) — the contract accepts this; focus is not moved. }
-procedure TTyListView.ToggleGroupCollapsed(AGroup: Integer);
+procedure TTyCustomListView.ToggleGroupCollapsed(AGroup: Integer);
 begin
   if (AGroup < 0) or (AGroup >= FGroups.Count) then Exit;
   FGroups[AGroup].Collapsed := not FGroups[AGroup].Collapsed;
@@ -2879,7 +2969,7 @@ end;
   Rendering
   --------------------------------------------------------------------------- }
 
-procedure TTyListView.DrawImage(P: TTyPainter; AList: TCustomImageList;
+procedure TTyCustomListView.DrawImage(P: TTyPainter; AList: TCustomImageList;
   AImageIndex, AX, AY, ASizePx: Integer);
 begin
   if (AList = nil) or (AImageIndex < 0) or (AImageIndex >= TyImageCount(AList)) or (ASizePx <= 0) then Exit;
@@ -2889,7 +2979,7 @@ begin
   TyBlitImage(P.Bitmap, AList, AImageIndex, AX, AY, ASizePx, P.Scale(96), False);
 end;
 
-function TTyListView.CheckRectForCell(const ACell: TRect): TRect;
+function TTyCustomListView.CheckRectForCell(const ACell: TRect): TRect;
 var
   sub: TRect;
   mainIdx: Integer;
@@ -2921,7 +3011,7 @@ begin
     RtlLayout);
 end;
 
-function TTyListView.FlowCheckShift(const ACell: TRect): Integer;
+function TTyCustomListView.FlowCheckShift(const ACell: TRect): Integer;
 var
   chk: TRect;
 begin
@@ -2932,7 +3022,7 @@ begin
     Result := ScaleI(ActiveController.Metric('--listview-check-size', TyLvCheckPx)) + ScaleI(ActiveController.Metric('--listview-cell-padding', TyLvPad));
 end;
 
-function TTyListView.FlowIconLeft(const ACell: TRect;
+function TTyCustomListView.FlowIconLeft(const ACell: TRect;
   ACbShift, APad, AImgPx: Integer): Integer;
 begin
   if RtlLayout then
@@ -2941,7 +3031,7 @@ begin
     Result := ACell.Left + APad + ACbShift;
 end;
 
-function TTyListView.FlowLabelRect(const ACell: TRect; AIconLeft, AImgPx, APad,
+function TTyCustomListView.FlowLabelRect(const ACell: TRect; AIconLeft, AImgPx, APad,
   ATop, ABottom: Integer): TRect;
 begin
   { The label starts two pads past the icon, on whichever side "past" is, and runs to the
@@ -2956,7 +3046,7 @@ end;
 { Draw the box resolving this control's own 'TyListViewCheckBox' token ([tysActive] when
   checked, '' otherwise) — no literal colours. Mirrors the checkbox path in TTyTreeView, but
   a skin can now size/tint a file list's boxes without touching the tree's. }
-procedure TTyListView.RenderCheckBox(P: TTyPainter; const ABox: TRect; AChecked: Boolean);
+procedure TTyCustomListView.RenderCheckBox(P: TTyPainter; const ABox: TRect; AChecked: Boolean);
 var
   cb, S: TTyStyleSet;
 begin
@@ -2983,7 +3073,7 @@ begin
   end;
 end;
 
-procedure TTyListView.RenderReportRow(P: TTyPainter; AIndex: Integer; const ACell: TRect;
+procedure TTyCustomListView.RenderReportRow(P: TTyPainter; AIndex: Integer; const ACell: TRect;
   const AStyle: TTyStyleSet);
 var
   posIdx, colIdx, colLeft, colRight, mainCol, imgPx, ii, cbShift: Integer;
@@ -3054,7 +3144,7 @@ begin
   end;
 end;
 
-procedure TTyListView.RenderFlowCell(P: TTyPainter; AIndex: Integer; const ACell: TRect;
+procedure TTyCustomListView.RenderFlowCell(P: TTyPainter; AIndex: Integer; const ACell: TRect;
   const AStyle: TTyStyleSet);
 var
   imgList: TCustomImageList;
@@ -3136,7 +3226,7 @@ begin
   end;
 end;
 
-procedure TTyListView.RenderItem(P: TTyPainter; AIndex: Integer; const ACell: TRect;
+procedure TTyCustomListView.RenderItem(P: TTyPainter; AIndex: Integer; const ACell: TRect;
   const AStyle: TTyStyleSet; AStates: TTyStateSet);
 begin
   { Highlight only selected / hovered cells (a resting TyListViewItem has no row fill). }
@@ -3148,7 +3238,7 @@ begin
     RenderFlowCell(P, AIndex, ACell, AStyle);
 end;
 
-function TTyListView.HeaderImageList: TCustomImageList;
+function TTyCustomListView.HeaderImageList: TCustomImageList;
 begin
   { The header's OWN list when it has one, else the control's SmallImages.
 
@@ -3164,7 +3254,7 @@ begin
   if Result = nil then Result := FSmallImages;
 end;
 
-procedure TTyListView.RenderHeader(P: TTyPainter; const M: TTyListMetrics;
+procedure TTyCustomListView.RenderHeader(P: TTyPainter; const M: TTyListMetrics;
   const AFrame: TTyStyleSet);
 var
   hb, hs: TTyStyleSet;
@@ -3297,7 +3387,7 @@ begin
   P.Bitmap.DrawLine(0, M.HeaderH - 1, M.ViewportW, M.HeaderH - 1, border, False);
 end;
 
-procedure TTyListView.RenderGridLines(P: TTyPainter; const M: TTyListMetrics;
+procedure TTyCustomListView.RenderGridLines(P: TTyPainter; const M: TTyListMetrics;
   const AFrame: TTyStyleSet);
 var
   first, last, pos, posIdx, x: Integer;
@@ -3339,7 +3429,7 @@ begin
   end;
 end;
 
-procedure TTyListView.RenderMarquee(P: TTyPainter; const AFrame: TTyStyleSet);
+procedure TTyCustomListView.RenderMarquee(P: TTyPainter; const AFrame: TTyStyleSet);
 var
   box: TRect;
   mq, sel: TTyStyleSet;
@@ -3378,7 +3468,7 @@ end;
   derives candidate rows arithmetically then the caller verifies each cell through
   TyListGroupItemRect — the same candidate-then-verify discipline the flat path uses, so no
   independent geometry is invented. False = the group contributes nothing on screen. }
-function TTyListView.GroupVisibleItemRange(AGroup: Integer; const M: TTyListMetrics;
+function TTyCustomListView.GroupVisibleItemRange(AGroup: Integer; const M: TTyListMetrics;
   out AFirst, ALast: Integer): Boolean;
 var
   hh, bodyTopCy, regionH, visTop, visBottom, Tracks, PitchY,
@@ -3436,7 +3526,7 @@ end;
 { One group's header band: the 'TyListViewGroupHeader' style, the caption with a
   ' (count)' suffix, and a collapse chevron (right = collapsed, down = expanded). The band is
   full-width and does not scroll horizontally; TyListGroupHeaderRect already folds in AScrollY. }
-procedure TTyListView.RenderGroupHeader(P: TTyPainter; const M: TTyListMetrics; AGroup: Integer);
+procedure TTyCustomListView.RenderGroupHeader(P: TTyPainter; const M: TTyListMetrics; AGroup: Integer);
 var
   band, tri, tr: TRect;
   hb, S: TTyStyleSet;
@@ -3484,7 +3574,7 @@ end;
 { Grouped item region: the visible group range, then per group its header band and its
   on-screen items. Every cell rect comes from TyListGroupItemRect (single geometry source);
   RenderItem is reused unchanged. }
-procedure TTyListView.RenderGrouped(P: TTyPainter; const M: TTyListMetrics);
+procedure TTyCustomListView.RenderGrouped(P: TTyPainter; const M: TTyListMetrics);
 var
   gFirst, gLast, g, iFirst, iLast, i, pos, item: Integer;
   cell: TRect;
@@ -3511,7 +3601,7 @@ begin
   end;
 end;
 
-procedure TTyListView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomListView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, rowStyle: TTyStyleSet;
@@ -3575,12 +3665,12 @@ begin
   end;
 end;
 
-procedure TTyListView.Paint;
+procedure TTyCustomListView.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-procedure TTyListView.Resize;
+procedure TTyCustomListView.Resize;
 begin
   inherited Resize;
   { Rule 4: a resize moves cells. Commit + close the editor first. Rule 2: the base
@@ -3593,7 +3683,7 @@ end;
   Mouse
   --------------------------------------------------------------------------- }
 
-procedure TTyListView.ItemMouseSelect(AItem: Integer; Shift: TShiftState);
+procedure TTyCustomListView.ItemMouseSelect(AItem: Integer; Shift: TShiftState);
 var
   before: TTyIntArray;
 begin
@@ -3633,7 +3723,7 @@ begin
     SetSingleSelection(AItem);
 end;
 
-procedure TTyListView.ApplyMarquee;
+procedure TTyCustomListView.ApplyMarquee;
 var
   box, cell: TRect;
   hits: TTyIntArray;
@@ -3703,7 +3793,7 @@ begin
   FireSelectionDelta(before);
 end;
 
-procedure TTyListView.EndInteractions;
+procedure TTyCustomListView.EndInteractions;
 begin
   if FResizing or FMarquee then
   begin
@@ -3715,7 +3805,7 @@ begin
   end;
 end;
 
-procedure TTyListView.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomListView.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   m: TTyListMetrics;
   cnt, pos, item, dividerCol, clickCol, g, idx: Integer;
@@ -3858,7 +3948,7 @@ end;
 { Width of AText in DEVICE px, using the same font configuration DrawText would. ABmp is a
   scratch 1x1 bitmap the caller owns -- BGRA text measurement wants a bitmap but not a canvas,
   so this works with no window. }
-function TTyListView.MeasureTextW(ABmp: TBGRABitmap; const AText: string;
+function TTyCustomListView.MeasureTextW(ABmp: TBGRABitmap; const AText: string;
   const AStyle: TTyStyleSet): Integer;
 begin
   if AText = '' then Exit(0);
@@ -3875,7 +3965,7 @@ end;
   Measuring EVERY row is what Explorer does, but BGRA text measurement is far too slow for a
   100k-row virtual list, so the sample is capped. For any list that fits the cap -- which is
   every ordinary one -- the fit is exact. }
-procedure TTyListView.AutoFitColumn(AColumn: Integer);
+procedure TTyCustomListView.AutoFitColumn(AColumn: Integer);
 const
   TyLvAutoFitSample = 500;
 var
@@ -3926,7 +4016,7 @@ end;
 { Show the horizontal-split cursor while the pointer can grab a column divider. The
   predicate is GetHitPart, the SAME one MouseDown uses to start a resize, so what the
   cursor promises and what a click does cannot drift apart. }
-procedure TTyListView.SetDividerCursor(AOn: Boolean);
+procedure TTyCustomListView.SetDividerCursor(AOn: Boolean);
 begin
   if AOn = FCursorOverridden then Exit;
   if AOn then
@@ -3939,12 +4029,12 @@ begin
   FCursorOverridden := AOn;
 end;
 
-procedure TTyListView.UpdateHoverCursor(X, Y: Integer);
+procedure TTyCustomListView.UpdateHoverCursor(X, Y: Integer);
 begin
   SetDividerCursor(GetHitPart(X, Y) = lhpDivider);
 end;
 
-procedure TTyListView.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomListView.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   m: TTyListMetrics;
   newW, pos, newHot: Integer;
@@ -3993,7 +4083,7 @@ begin
   end;
 end;
 
-procedure TTyListView.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomListView.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
   if FResizing then
@@ -4011,7 +4101,7 @@ begin
   end;
 end;
 
-procedure TTyListView.NoteHostHover(AHovered: Boolean);
+procedure TTyCustomListView.NoteHostHover(AHovered: Boolean);
 begin
   { **两条都要告诉**——转发只写一半是本库反复出过的那种故障。
     两条都从构造函数起就存在，nil 判断是防御。 }
@@ -4019,14 +4109,14 @@ begin
   if FHScroll <> nil then FHScroll.SetHostHovered(AHovered);
 end;
 
-procedure TTyListView.MouseEnter;
+procedure TTyCustomListView.MouseEnter;
 begin
   { 必须 inherited：吞掉 LCL 那层的 hover 状态是本库出过好几次的故障。 }
   inherited MouseEnter;
   NoteHostHover(True);
 end;
 
-procedure TTyListView.MouseLeave;
+procedure TTyCustomListView.MouseLeave;
 begin
   inherited MouseLeave;
   { 只是起倒计时，不当场隐藏：指针从正文挪到条上时这里也会走一趟。 }
@@ -4039,7 +4129,7 @@ begin
   end;
 end;
 
-procedure TTyListView.DblClick;
+procedure TTyCustomListView.DblClick;
 begin
   inherited DblClick;
   { DblClick carries no coordinates, so lean on what the press landed on. Without this a
@@ -4053,7 +4143,7 @@ end;
   Keyboard
   --------------------------------------------------------------------------- }
 
-procedure TTyListView.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomListView.KeyDown(var Key: Word; Shift: TShiftState);
 var
   m: TTyListMetrics;
   cnt, curPos, newPos, newItem: Integer;
@@ -4158,7 +4248,7 @@ begin
   ScrollIntoView(newItem);
 end;
 
-procedure TTyListView.UTF8KeyPress(var UTF8Key: TUTF8Char);
+procedure TTyCustomListView.UTF8KeyPress(var UTF8Key: TUTF8Char);
 var
   cnt, startDisp, searchFrom, foundDisp, item: Integer;
 begin
@@ -4207,7 +4297,7 @@ begin
   end;
 end;
 
-function TTyListView.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+function TTyCustomListView.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 var
   m: TTyListMetrics;

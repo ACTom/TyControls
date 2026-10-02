@@ -122,25 +122,26 @@ type
     // user data blob (NodeDataSize bytes) follows at offset TreeNodeSize
   end;
 
+  TTyCustomTreeView = class;
   TTyTreeView = class;
 
-  TTyTreeNodeEvent    = procedure(Sender: TTyTreeView; Node: PTyTreeNode) of object;
-  TTyTreeChangingEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var Allowed: Boolean) of object;
+  TTyTreeNodeEvent    = procedure(Sender: TTyCustomTreeView; Node: PTyTreeNode) of object;
+  TTyTreeChangingEvent = procedure(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Allowed: Boolean) of object;
   { C1: fired before a check-state change; set Allowed:=False to veto }
-  TTyTreeCheckingEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var Allowed: Boolean) of object;
-  TTyTreeInitNodeEvent     = procedure(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates) of object;
-  TTyTreeInitChildrenEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var ChildCount: Cardinal) of object;
-  TTyTreeGetTextEvent  = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string) of object;
+  TTyTreeCheckingEvent = procedure(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Allowed: Boolean) of object;
+  TTyTreeInitNodeEvent     = procedure(Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates) of object;
+  TTyTreeInitChildrenEvent = procedure(Sender: TTyCustomTreeView; Node: PTyTreeNode; var ChildCount: Cardinal) of object;
+  TTyTreeGetTextEvent  = procedure(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string) of object;
   { D2: column event — fired when a column is resized }
-  TTyTreeColumnEvent = procedure(Sender: TTyTreeView; Column: Integer) of object;
+  TTyTreeColumnEvent = procedure(Sender: TTyCustomTreeView; Column: Integer) of object;
 
   { D3: column reorder event — fired when a column is dragged to a new position }
-  TTyTreeColumnReorderEvent = procedure(Sender: TTyTreeView;
+  TTyTreeColumnReorderEvent = procedure(Sender: TTyCustomTreeView;
     OldPosition, NewPosition: Integer) of object;
 
   { E1: compare event for the sort engine — app returns <0 / 0 / >0 (natural order;
     direction is handled internally by the sort). }
-  TTyTreeCompareEvent = procedure(Sender: TTyTreeView;
+  TTyTreeCompareEvent = procedure(Sender: TTyCustomTreeView;
     Node1, Node2: PTyTreeNode; Column: Integer; var CompareResult: Integer) of object;
 
   { ③e E2: inline-edit lifecycle events (mirror VTV's surface).
@@ -148,11 +149,11 @@ type
                 defaults True). OnNewText — fired on commit ONLY when the text
                 actually changed; the app writes NewText into its node blob.
                 OnEditCancelled — fired on Esc / programmatic CancelEdit. }
-  TTyTreeEditingEvent    = procedure(Sender: TTyTreeView; Node: PTyTreeNode;
+  TTyTreeEditingEvent    = procedure(Sender: TTyCustomTreeView; Node: PTyTreeNode;
     Column: Integer; var Allowed: Boolean) of object;
-  TTyTreeNewTextEvent    = procedure(Sender: TTyTreeView; Node: PTyTreeNode;
+  TTyTreeNewTextEvent    = procedure(Sender: TTyCustomTreeView; Node: PTyTreeNode;
     Column: Integer; const NewText: string) of object;
-  TTyTreeColumnNodeEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode;
+  TTyTreeColumnNodeEvent = procedure(Sender: TTyCustomTreeView; Node: PTyTreeNode;
     Column: Integer) of object;
 
   { ③f F2: intra-tree drag events.
@@ -170,14 +171,14 @@ type
     wired as an LCL drop target — assigning a TDragOverEvent there was a type error.
     Migration: rename the handler assignment to OnNodeDragOver; `OnDragOver` is back
     to being LCL's. }
-  TTyTreeDragOverEvent = procedure(Sender: TTyTreeView; Src, Target: PTyTreeNode;
+  TTyTreeDragOverEvent = procedure(Sender: TTyCustomTreeView; Src, Target: PTyTreeNode;
     Mode: TTyTreeDropMode; var Allowed: Boolean) of object;
 
   { LCL parity: one end-of-edit notification, fired exactly once per editing session
     whether the edit committed or was abandoned (comctrls.pp:2935 TTVEditingEndEvent).
     OnNewText/OnEditCancelled remain the two half-events; "the editor closed, re-enable
     my buttons" is this one. }
-  TTyTreeEditingEndEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode;
+  TTyTreeEditingEndEvent = procedure(Sender: TTyCustomTreeView; Node: PTyTreeNode;
     Column: Integer; Cancel: Boolean) of object;
 
   { LCL parity: the plain-function compare CustomSort takes (comctrls.pp:2965
@@ -192,16 +193,16 @@ type
   TTyVTImageKind = (ikNormal, ikSelected, ikState, ikOverlay);
 
   { C3: OnGetImageIndex event }
-  TTyTreeGetImageIndexEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode;
+  TTyTreeGetImageIndexEvent = procedure(Sender: TTyCustomTreeView; Node: PTyTreeNode;
     Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean;
     var ImageIndex: Integer) of object;
 
   { C3: OnGetText event with Column + TextType (full VTV signature) }
-  TTyTreeGetTextWithTypeEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode;
+  TTyTreeGetTextWithTypeEvent = procedure(Sender: TTyCustomTreeView; Node: PTyTreeNode;
     Column: Integer; TextType: TTyVSTTextType; var CellText: string) of object;
 
   { C3: OnPaintText — post-draw hook (no-op in ③a) }
-  TTyTreePaintTextEvent = procedure(Sender: TTyTreeView; const TargetCanvas: TCanvas;
+  TTyTreePaintTextEvent = procedure(Sender: TTyCustomTreeView; const TargetCanvas: TCanvas;
     Node: PTyTreeNode; Column: Integer; TextType: TTyVSTTextType) of object;
 
   { ③d B1: OnMeasureItem — fired once per node from InitNode (when
@@ -209,7 +210,7 @@ type
     ANodeHeight is seeded with the node's current height (DefaultNodeHeight for a
     fresh node); the app overwrites it. ACanvas is the control canvas (for text
     measurement). Heights are LOGICAL pixels — device scaling happens at paint. }
-  TTyTreeMeasureItemEvent = procedure(Sender: TTyTreeView; ACanvas: TCanvas;
+  TTyTreeMeasureItemEvent = procedure(Sender: TTyCustomTreeView; ACanvas: TCanvas;
     Node: PTyTreeNode; var ANodeHeight: Integer) of object;
 
   { ③d C1: OnIncrementalSearch — custom match predicate for type-to-find. Fired
@@ -217,7 +218,7 @@ type
     (seeded False) to True to accept the node. ASearchText is the accumulated
     type-ahead buffer. When unassigned, the default is a case-insensitive PREFIX
     test of ASearchText against the node's main-column text. }
-  TTyTreeIncrementalSearchEvent = procedure(Sender: TTyTreeView;
+  TTyTreeIncrementalSearchEvent = procedure(Sender: TTyCustomTreeView;
     Node: PTyTreeNode; const ASearchText: string; var AMatch: Boolean) of object;
 
   { ③d D1: per-cell owner-draw events (cross-platform post-EndPaint subset).
@@ -239,9 +240,9 @@ type
     DEFERRED (NOT implemented in ③d D1): OnBeforeCellPaint (a backdrop UNDER the
     default text) — it cannot be done post-EndPaint and needs a temp-bitmap→BGRA
     path. }
-  TTyTreeDrawNodeEvent  = procedure(Sender: TTyTreeView; ACanvas: TCanvas;
+  TTyTreeDrawNodeEvent  = procedure(Sender: TTyCustomTreeView; ACanvas: TCanvas;
     Node: PTyTreeNode; Column: Integer; const ACellRect: TRect) of object;
-  TTyTreeCellPaintEvent = procedure(Sender: TTyTreeView; ACanvas: TCanvas;
+  TTyTreeCellPaintEvent = procedure(Sender: TTyCustomTreeView; ACanvas: TCanvas;
     Node: PTyTreeNode; Column: Integer; const ACellRect: TRect) of object;
 
 const
@@ -415,7 +416,7 @@ type
     property TopLvlItems[AIndex: Integer]: TTyTreeNodeItem read GetTopLvlItems;
   end;
 
-  TTyTreeView = class(TTyCustomControl, ITyScrollBarFrameHost)
+  TTyCustomTreeView = class(TTyCustomControl, ITyScrollBarFrameHost)
   private
     FRoot: PTyTreeNode;
     FNodeDataSize: Integer;     // -1 until set
@@ -685,9 +686,9 @@ type
       back when it is shown again. }
     procedure AdjustAncestorsHeight(Node: PTyTreeNode; Delta: Integer);
     { AlphaSort's / CustomSort's stand-in compare handlers (see AlphaSort). }
-    procedure AlphaCompare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+    procedure AlphaCompare(Sender: TTyCustomTreeView; Node1, Node2: PTyTreeNode;
       Column: Integer; var CompareResult: Integer);
-    procedure CustomSortCompare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+    procedure CustomSortCompare(Sender: TTyCustomTreeView; Node1, Node2: PTyTreeNode;
       Column: Integer; var CompareResult: Integer);
     { C1: selection internals }
     procedure ClearSelectedNode;
@@ -1161,17 +1162,22 @@ type
       (comctrls.pp:3761). Same storage, same stored-sentinel behaviour — public, not
       published, so only one of the two names streams. }
     property DefaultItemHeight: Integer read GetDefaultNodeHeight write SetDefaultNodeHeight;
-  published
+    property TabStop default True;
     { B1: option flags set (default [] = ③a/③b behaviour) }
     property Options: TTyTreeOptions read FOptions write SetOptions default [];
-    { B (columns): header sub-object }
-    property Header: TTyHeader read FHeader write SetHeader;
     { 设计期 / .lfm 里的节点树(见单元中部 §条目模型)。非空 = 条目模式。
       **setter 必须在**,哪怕读者从不调用它:FPC 的 TWriter.WriteProperty 对
       没有 setter 的属性直接返回(设计器于是静默不保存),TReader.ReadPropValue
       在看属性种类之前就抛 EReadError。本库两天前刚在 TTyHeader.Columns 上
       栽过这一次(7d2c03d)。 }
     property Items: TTyTreeNodes read FItems write SetItems;
+    property Images: TCustomImageList read FImages write SetImages;
+    { LCL parity switches — see the field declarations for the LCL line numbers and for
+      why RightClickSelect defaults True here where LCL defaults False. }
+    property ScrollBars: TScrollStyle read FScrollBars write SetScrollBars default ssBoth;
+  protected
+    { B (columns): header sub-object }
+    property Header: TTyHeader read FHeader write SetHeader;
     property NodeDataSize: Integer read FNodeDataSize write SetNodeDataSize default -1;
     { Default node/row height in logical px. Left unset it follows the theme's
       --item-height token, so nodes get denser rows at classic density (18) and
@@ -1181,16 +1187,12 @@ type
     property RootNodeCount: Cardinal read GetRootNodeCount write SetRootNodeCount default 0;
     { C1: display properties }
     property Indent: Integer read FIndent write SetIndent default 16;
-    property Images: TCustomImageList read FImages write SetImages;
     property EmptyListMessage: string read FEmptyListMessage write FEmptyListMessage;
     property ShowButtons: Boolean read FShowButtons write SetShowButtons default True;
     property ShowTreeLines: Boolean read FShowTreeLines write SetShowTreeLines default True;
     property ShowRoot: Boolean read FShowRoot write SetShowRoot default True;
     property ToggleOnDblClick: Boolean read FToggleOnDblClick write SetToggleOnDblClick default True;
     property HotTrack: Boolean read FHotTrack write SetHotTrack default False;
-    { LCL parity switches — see the field declarations for the LCL line numbers and for
-      why RightClickSelect defaults True here where LCL defaults False. }
-    property ScrollBars: TScrollStyle read FScrollBars write SetScrollBars default ssBoth;
     { Whether this tree's two scrollbars fade out while nobody is using them. Forwarded to
       the embedded bars; for what the three values mean see TTyScrollBar.AutoHide. }
     property ScrollBarAutoHide: TTyScrollBarAutoHide
@@ -1202,13 +1204,6 @@ type
     { ③d C1: ms of keyboard idle before the incremental-search buffer auto-resets
       (next printable char starts a fresh search). Default 1000. }
     property SearchTimeout: Integer read FSearchTimeout write FSearchTimeout default 1000;
-    { C1: re-published standard LCL properties }
-    property Align;
-    property Anchors;
-    property Font;
-    property StyleClass;
-    property Controller;
-    property TabStop default True;
     { events }
     property OnFreeNode:      TTyTreeNodeEvent         read FOnFreeNode      write FOnFreeNode;
     property OnInitNode:      TTyTreeInitNodeEvent     read FOnInitNode      write FOnInitNode;
@@ -1261,6 +1256,37 @@ type
       it was moved off the name TControl already owns — see TTyTreeDragOverEvent. }
     property OnNodeDragOver:  TTyTreeDragOverEvent   read FOnDragOver      write FOnDragOver;
     property OnNodeMoved:     TTyTreeNodeEvent       read FOnNodeMoved     write FOnNodeMoved;
+  end;
+
+  { TTyTreeView publishes TTyCustomTreeView's properties; everything lives in TTyCustomTreeView. }
+  TTyTreeView = class(TTyCustomTreeView)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
     { The LCL drag-and-drop surface the base class publishes. Re-listed here only so
       the tree's own published block shows it is back — TTyTreeDragOverEvent used to
       shadow OnDragOver, which made this the one TTy control that could not be an LCL
@@ -1269,8 +1295,83 @@ type
     property OnDragDrop;
     property OnStartDrag;
     property OnEndDrag;
-    property DragMode;
-    property DragCursor;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Options;
+    property Header;
+    property Items;
+    property NodeDataSize;
+    property DefaultNodeHeight;
+    property RootNodeCount;
+    property Indent;
+    property Images;
+    property EmptyListMessage;
+    property ShowButtons;
+    property ShowTreeLines;
+    property ShowRoot;
+    property ToggleOnDblClick;
+    property HotTrack;
+    property ScrollBars;
+    property ScrollBarAutoHide;
+    property AutoExpand;
+    property RightClickSelect;
+    property HideSelection;
+    property ShowSeparators;
+    property SearchTimeout;
+    { C1: re-published standard LCL properties }
+    property Align;
+    property Anchors;
+    property OnFreeNode;
+    property OnInitNode;
+    property OnInitChildren;
+    property OnExpanding;
+    property OnExpanded;
+    property OnCollapsing;
+    property OnCollapsed;
+    property OnChange;
+    property OnChanging;
+    property OnFocusChanged;
+    property OnChecking;
+    property OnChecked;
+    property OnSelectionChanged;
+    property OnNodeClick;
+    property OnNodeDblClick;
+    property OnGetText;
+    property OnGetTextWithType;
+    property OnGetImageIndex;
+    property OnPaintText;
+    property OnDrawNode;
+    property OnAfterCellPaint;
+    property OnMeasureItem;
+    property OnIncrementalSearch;
+    property OnColumnResized;
+    property OnColumnReorder;
+    property OnCompareNodes;
+    property OnHeaderClick;
+    property OnEditing;
+    property OnNewText;
+    property OnEditCancelled;
+    property OnEditingEnd;
+    property OnNodeDragOver;
+    property OnNodeMoved;
   end;
 
 { ---------------------------------------------------------------------------
@@ -1389,8 +1490,8 @@ var nodes: TTyTreeNodes;
 begin
   Result := nil;
   nodes := GetTreeNodes;
-  if (nodes <> nil) and (nodes.GetOwner is TTyTreeView) then
-    Result := TTyTreeView(nodes.GetOwner).Images;
+  if (nodes <> nil) and (nodes.GetOwner is TTyCustomTreeView) then
+    Result := TTyCustomTreeView(nodes.GetOwner).Images;
 end;
 
 function TTyTreeNodeItem.GetImageIndex: Integer;
@@ -1626,14 +1727,14 @@ end;
 procedure TTyTreeNodes.Update(Item: TCollectionItem);
 begin
   inherited Update(Item);
-  if not (FOwner is TTyTreeView) then Exit;
+  if not (FOwner is TTyCustomTreeView) then Exit;
   if FStructural or (Item = nil) then
   begin
     FStructural := False;
-    TTyTreeView(FOwner).ItemsStructureChanged;
+    TTyCustomTreeView(FOwner).ItemsStructureChanged;
   end
   else
-    TTyTreeView(FOwner).ItemStateChanged(TTyTreeNodeItem(Item));
+    TTyCustomTreeView(FOwner).ItemStateChanged(TTyTreeNodeItem(Item));
 end;
 
 { 唯一的建条目出口:在 AIndex 处插入,Level 由调用者算好。
@@ -1787,7 +1888,7 @@ begin
     MoveSubTreeTo(AItem, ASibling.Index + ASibling.SubTreeCount - AItem.SubTreeCount);
 end;
 
-{ TTyTreeView }
+{ TTyCustomTreeView }
 
 { Reflect one x INSIDE a cell. It reflects the PIXEL [AX, AX+1), not the boundary at AX,
   which is the difference between a mirrored line landing on the column of pixels it was
@@ -1864,17 +1965,17 @@ begin
   Result.CaptionX     := ACellLeft;
 end;
 
-function TTyTreeView.GetStyleTypeKey: string;
+function TTyCustomTreeView.GetStyleTypeKey: string;
 begin
   Result := 'TyTreeView';
 end;
 
-function TTyTreeView.RtlLayout: Boolean;
+function TTyCustomTreeView.RtlLayout: Boolean;
 begin
   Result := IsRightToLeft;
 end;
 
-function TTyTreeView.ColumnAxis(const CR: TRect; APPI: Integer): TTyColumnAxis;
+function TTyCustomTreeView.ColumnAxis(const CR: TRect; APPI: Integer): TTyColumnAxis;
 begin
   { CR.Left + FOffsetX is this control's content origin -- FOffsetX is <= 0 here, so it is
     ADDED; the list view stores the same quantity >= 0 and subtracts. Both mean "where
@@ -1882,13 +1983,13 @@ begin
   Result := TyColumnAxis(CR.Left + FOffsetX, APPI, RtlLayout, CR.Left, CR.Right);
 end;
 
-function TTyTreeView.TreeLineX(ACellLeft, ACellRight, AX: Integer): Integer;
+function TTyCustomTreeView.TreeLineX(ACellLeft, ACellRight, AX: Integer): Integer;
 begin
   if not RtlLayout then Exit(AX);
   Result := TyTreeMirrorX(AX, ACellLeft, ACellRight);
 end;
 
-procedure TTyTreeView.KeyStepIn(Node: PTyTreeNode);
+procedure TTyCustomTreeView.KeyStepIn(Node: PTyTreeNode);
 { Deeper: expand a collapsed node, else descend to its first child. }
 var
   nxt: PTyTreeNode;
@@ -1909,7 +2010,7 @@ begin
   end;
 end;
 
-procedure TTyTreeView.KeyStepOut(Node: PTyTreeNode);
+procedure TTyCustomTreeView.KeyStepOut(Node: PTyTreeNode);
 { Shallower: collapse an expanded node, else climb to its parent. }
 var
   nxt: PTyTreeNode;
@@ -1928,7 +2029,7 @@ begin
   end;
 end;
 
-procedure TTyTreeView.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomTreeView.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FImages) then
@@ -1945,7 +2046,7 @@ end;
 
 { ClearSelectedNode: internal — removes nsSelected from the currently-selected
   node without firing any event.  Used by SetSelected before setting a new node. }
-procedure TTyTreeView.ClearSelectedNode;
+procedure TTyCustomTreeView.ClearSelectedNode;
 begin
   if FSelectedNode = nil then Exit;
   Exclude(FSelectedNode^.States, nsSelected);
@@ -1953,7 +2054,7 @@ begin
   FSelectedNode := nil;
 end;
 
-function TTyTreeView.GetSelected(Node: PTyTreeNode): Boolean;
+function TTyCustomTreeView.GetSelected(Node: PTyTreeNode): Boolean;
 begin
   Result := (Node <> nil) and (Node <> FRoot) and (nsSelected in Node^.States);
 end;
@@ -1962,7 +2063,7 @@ end;
   * Deselect the previously-selected node.
   * Set nsSelected on the new node (if AValue=True) or just clear (AValue=False).
   * Fire OnChange once IFF the selection set actually changed. }
-procedure TTyTreeView.SetSelected(Node: PTyTreeNode; AValue: Boolean);
+procedure TTyCustomTreeView.SetSelected(Node: PTyTreeNode; AValue: Boolean);
 var
   didChange: Boolean;
 begin
@@ -2001,7 +2102,7 @@ end;
   (not just visible nodes) clearing nsSelected on every node.  This ensures
   that selected descendants hidden under a collapsed parent are also cleared,
   preventing stale highlights on re-expand and FSelectionCount desync. }
-procedure TTyTreeView.ClearAllSelectedFull(ANode: PTyTreeNode);
+procedure TTyCustomTreeView.ClearAllSelectedFull(ANode: PTyTreeNode);
 var
   child: PTyTreeNode;
 begin
@@ -2021,7 +2122,7 @@ end;
   FIX 3: uses ClearAllSelectedFull (full structural walk, not just visible
   nodes) so selected nodes hidden under a collapsed parent are also cleared.
   This prevents stale highlights on re-expand and FSelectionCount desync. }
-procedure TTyTreeView.ClearSelection;
+procedure TTyCustomTreeView.ClearSelection;
 var
   prev: PTyTreeNode;
 begin
@@ -2045,7 +2146,7 @@ end;
   ctRadioButton nodes are skipped.  Lazy (not-yet-initialised) subtrees are
   intentionally untouched — they will inherit the right state when they are
   eventually initialised in Phase B/C. }
-procedure TTyTreeView.PropagateCheckDown(Node: PTyTreeNode; AState: TTyCheckState);
+procedure TTyCustomTreeView.PropagateCheckDown(Node: PTyTreeNode; AState: TTyCheckState);
 var
   child: PTyTreeNode;
 begin
@@ -2068,7 +2169,7 @@ end;
            csUnchecked if all are csUnchecked;
            csMixed if mixed or any is already csMixed;
            Node^.CheckState unchanged when there are no check-children. }
-function TTyTreeView.RecomputeParentCheckState(Node: PTyTreeNode): TTyCheckState;
+function TTyCustomTreeView.RecomputeParentCheckState(Node: PTyTreeNode): TTyCheckState;
 var
   child:        PTyTreeNode;
   hasChecked:   Boolean;
@@ -2104,7 +2205,7 @@ end;
 
 { InternalSetSelected — add/remove nsSelected AND keep FSelectionCount correct.
   Never touches FRoot.  Only counts real transitions (no double-counts). }
-procedure TTyTreeView.InternalSetSelected(Node: PTyTreeNode; AValue: Boolean);
+procedure TTyCustomTreeView.InternalSetSelected(Node: PTyTreeNode; AValue: Boolean);
 begin
   if (Node = nil) or (Node = FRoot) then Exit;
   if AValue then
@@ -2130,7 +2231,7 @@ end;
 { SelectRange — clear all selected nodes, then select every visible node from
   AAnchor to ATarget inclusive (order-independent: works in both directions).
   Maintains FSelectionCount. }
-procedure TTyTreeView.SelectRange(AAnchor, ATarget: PTyTreeNode);
+procedure TTyCustomTreeView.SelectRange(AAnchor, ATarget: PTyTreeNode);
 var
   n:       PTyTreeNode;
   inRange: Boolean;
@@ -2171,7 +2272,7 @@ begin
   end;
 end;
 
-function TTyTreeView.SelectedCount: Integer;
+function TTyCustomTreeView.SelectedCount: Integer;
 begin
   Result := FSelectionCount;
 end;
@@ -2180,7 +2281,7 @@ end;
 
 { SelectAll — select all visible initialised nodes; update FSelectionCount;
   fire OnSelectionChanged if anything changed. }
-procedure TTyTreeView.SelectAll;
+procedure TTyCustomTreeView.SelectAll;
 var
   n:      PTyTreeNode;
   didAny: Boolean;
@@ -2206,7 +2307,7 @@ begin
 end;
 
 { GetFirstSelected — return the first visible node with nsSelected, or nil. }
-function TTyTreeView.GetFirstSelected: PTyTreeNode;
+function TTyCustomTreeView.GetFirstSelected: PTyTreeNode;
 var
   n: PTyTreeNode;
 begin
@@ -2220,7 +2321,7 @@ begin
 end;
 
 { GetNextSelected — return the next visible node after Node with nsSelected, or nil. }
-function TTyTreeView.GetNextSelected(Node: PTyTreeNode): PTyTreeNode;
+function TTyCustomTreeView.GetNextSelected(Node: PTyTreeNode): PTyTreeNode;
 var
   n: PTyTreeNode;
 begin
@@ -2234,7 +2335,7 @@ begin
   Result := nil;
 end;
 
-function TTyTreeView.GetFocusedNode: PTyTreeNode;
+function TTyCustomTreeView.GetFocusedNode: PTyTreeNode;
 begin
   Result := FFocusedNode;
 end;
@@ -2242,7 +2343,7 @@ end;
 { SetFocusedNode — moving focus also selects (single-select ③a rule):
   set focused node, select it, fire OnFocusChanged.
   Selecting also fires OnChange via SetSelected. }
-procedure TTyTreeView.SetFocusedNode(AValue: PTyTreeNode);
+procedure TTyCustomTreeView.SetFocusedNode(AValue: PTyTreeNode);
 var
   prevFocus: PTyTreeNode;
 begin
@@ -2274,7 +2375,7 @@ end;
 { MoveFocusOnly — move keyboard focus without touching the selection set.
   Used by the multi-select mouse/keyboard paths to position the caret
   independently of selection. }
-procedure TTyTreeView.MoveFocusOnly(AValue: PTyTreeNode);
+procedure TTyCustomTreeView.MoveFocusOnly(AValue: PTyTreeNode);
 var
   prevFocus: PTyTreeNode;
 begin
@@ -2290,7 +2391,7 @@ end;
 { AddRangeToSelection — Ctrl+Shift additive extend: add every visible node
   from AAnchor to ATarget (inclusive, order-independent) to the EXISTING
   selection without clearing.  InternalSetSelected ignores already-selected nodes. }
-procedure TTyTreeView.AddRangeToSelection(AAnchor, ATarget: PTyTreeNode);
+procedure TTyCustomTreeView.AddRangeToSelection(AAnchor, ATarget: PTyTreeNode);
 var
   n:       PTyTreeNode;
   inRange: Boolean;
@@ -2326,7 +2427,7 @@ end;
   caption is (OnGetTextWithType for the main column / ttNormal, falling back to
   OnGetText) so the search matches what the user actually sees. No side effects
   (never inits the node). }
-function TTyTreeView.GetNodeSearchText(Node: PTyTreeNode): string;
+function TTyCustomTreeView.GetNodeSearchText(Node: PTyTreeNode): string;
 begin
   Result := '';
   if (Node = nil) or (Node = FRoot) then Exit;
@@ -2341,7 +2442,7 @@ end;
   ASearchText against the node's main-column text (both upper-cased via
   UTF8UpperCase so multibyte casing is correct). When OnIncrementalSearch is
   assigned the app fully decides (AMatch seeded False). }
-function TTyTreeView.NodeMatchesSearch(Node: PTyTreeNode; const ASearchText: string): Boolean;
+function TTyCustomTreeView.NodeMatchesSearch(Node: PTyTreeNode; const ASearchText: string): Boolean;
 var
   { 局部名不能再叫 nodeText:控件上现在有带下标属性 NodeText[]（LCL Node.Text
     的等价物），Pascal 不区分大小写，同名局部会把它遮掉。 }
@@ -2375,7 +2476,7 @@ end;
   Lazy limitation: only visible (expanded-reachable) nodes are walked via
   GetNextVisibleNoInit — collapsed subtrees are never force-initialised, so a
   match hidden under a collapsed parent is not found (unlike VTV's isAll). }
-procedure TTyTreeView.DoIncrementalSearch;
+procedure TTyCustomTreeView.DoIncrementalSearch;
 var
   start, n: PTyTreeNode;
   inclusive: Boolean;
@@ -2416,7 +2517,7 @@ end;
   Guards: Node<>nil, Node<>FRoot, toCheckSupport in FOptions, CheckType<>ctNone.
   Fires OnChecking (veto possible), toggles the state, propagates down/up when
   toAutoTristateTracking is in FOptions, fires OnChecked, repaints. }
-procedure TTyTreeView.ToggleCheck(Node: PTyTreeNode);
+procedure TTyCustomTreeView.ToggleCheck(Node: PTyTreeNode);
 var
   Allowed:  Boolean;
   sib:      PTyTreeNode;
@@ -2505,19 +2606,19 @@ end;
 
 { ── C1 ── display property setters ─────────────────────────────────────────── }
 
-procedure TTyTreeView.SetIndent(AValue: Integer);
+procedure TTyCustomTreeView.SetIndent(AValue: Integer);
 begin
   if FIndent = AValue then Exit;
   FIndent := AValue;
   Invalidate;
 end;
 
-procedure TTyTreeView.ImagesChanged(Sender: TObject);
+procedure TTyCustomTreeView.ImagesChanged(Sender: TObject);
 begin
   Invalidate;
 end;
 
-procedure TTyTreeView.SetImages(AValue: TCustomImageList);
+procedure TTyCustomTreeView.SetImages(AValue: TCustomImageList);
 var
   i: Integer;
 begin
@@ -2544,35 +2645,35 @@ begin
   Invalidate;
 end;
 
-procedure TTyTreeView.SetShowButtons(AValue: Boolean);
+procedure TTyCustomTreeView.SetShowButtons(AValue: Boolean);
 begin
   if FShowButtons = AValue then Exit;
   FShowButtons := AValue;
   Invalidate;
 end;
 
-procedure TTyTreeView.SetShowTreeLines(AValue: Boolean);
+procedure TTyCustomTreeView.SetShowTreeLines(AValue: Boolean);
 begin
   if FShowTreeLines = AValue then Exit;
   FShowTreeLines := AValue;
   Invalidate;
 end;
 
-procedure TTyTreeView.SetShowRoot(AValue: Boolean);
+procedure TTyCustomTreeView.SetShowRoot(AValue: Boolean);
 begin
   if FShowRoot = AValue then Exit;
   FShowRoot := AValue;
   Invalidate;
 end;
 
-procedure TTyTreeView.SetToggleOnDblClick(AValue: Boolean);
+procedure TTyCustomTreeView.SetToggleOnDblClick(AValue: Boolean);
 begin
   if FToggleOnDblClick = AValue then Exit;
   FToggleOnDblClick := AValue;
   Invalidate;
 end;
 
-procedure TTyTreeView.SetHotTrack(AValue: Boolean);
+procedure TTyCustomTreeView.SetHotTrack(AValue: Boolean);
 begin
   if FHotTrack = AValue then Exit;
   FHotTrack := AValue;
@@ -2581,7 +2682,7 @@ end;
 
 { ── B1 ── Options set + check array properties ──────────────────────────────── }
 
-procedure TTyTreeView.SetOptions(AValue: TTyTreeOptions);
+procedure TTyCustomTreeView.SetOptions(AValue: TTyTreeOptions);
 var
   CheckSupportChanged:  Boolean;
   MultiSelectRemoved:   Boolean;
@@ -2634,13 +2735,13 @@ begin
   Invalidate;
 end;
 
-function TTyTreeView.GetCheckType(Node: PTyTreeNode): TTyCheckType;
+function TTyCustomTreeView.GetCheckType(Node: PTyTreeNode): TTyCheckType;
 begin
   if Node = nil then Exit(ctNone);
   Result := Node^.CheckType;
 end;
 
-procedure TTyTreeView.SetCheckType(Node: PTyTreeNode; AValue: TTyCheckType);
+procedure TTyCustomTreeView.SetCheckType(Node: PTyTreeNode; AValue: TTyCheckType);
 begin
   if Node = nil then Exit;
   if Node^.CheckType = AValue then Exit;
@@ -2648,13 +2749,13 @@ begin
   Invalidate;
 end;
 
-function TTyTreeView.GetCheckState(Node: PTyTreeNode): TTyCheckState;
+function TTyCustomTreeView.GetCheckState(Node: PTyTreeNode): TTyCheckState;
 begin
   if Node = nil then Exit(csUnchecked);
   Result := Node^.CheckState;
 end;
 
-procedure TTyTreeView.SetCheckState(Node: PTyTreeNode; AValue: TTyCheckState);
+procedure TTyCustomTreeView.SetCheckState(Node: PTyTreeNode; AValue: TTyCheckState);
 begin
   if Node = nil then Exit;
   if Node^.CheckState = AValue then Exit;
@@ -2662,13 +2763,13 @@ begin
   Invalidate;
 end;
 
-function TTyTreeView.GetChecked(Node: PTyTreeNode): Boolean;
+function TTyCustomTreeView.GetChecked(Node: PTyTreeNode): Boolean;
 begin
   if Node = nil then Exit(False);
   Result := Node^.CheckState = csChecked;
 end;
 
-procedure TTyTreeView.SetChecked(Node: PTyTreeNode; AValue: Boolean);
+procedure TTyCustomTreeView.SetChecked(Node: PTyTreeNode; AValue: Boolean);
 begin
   if Node = nil then Exit;
   if AValue then
@@ -2685,7 +2786,7 @@ end;
   IMPORTANT: InitNode is called first so a fresh lazy tree (where nodes have
   not yet been visited) materialises correctly — without this, nsHasChildren
   would never be set and SetExpanded would silently do nothing. }
-procedure FullExpandSubtree(Tree: TTyTreeView; Node: PTyTreeNode);
+procedure FullExpandSubtree(Tree: TTyCustomTreeView; Node: PTyTreeNode);
 var
   child: PTyTreeNode;
 begin
@@ -2702,7 +2803,7 @@ begin
   end;
 end;
 
-procedure TTyTreeView.FullExpand(Node: PTyTreeNode);
+procedure TTyCustomTreeView.FullExpand(Node: PTyTreeNode);
 var
   child: PTyTreeNode;
 begin
@@ -2721,7 +2822,7 @@ begin
 end;
 
 { FullCollapseSubtree — recursive helper: collapse Node then recurse into children. }
-procedure FullCollapseSubtree(Tree: TTyTreeView; Node: PTyTreeNode);
+procedure FullCollapseSubtree(Tree: TTyCustomTreeView; Node: PTyTreeNode);
 var
   child: PTyTreeNode;
 begin
@@ -2737,7 +2838,7 @@ begin
     Tree.SetExpanded(Node, False);
 end;
 
-procedure TTyTreeView.FullCollapse(Node: PTyTreeNode);
+procedure TTyCustomTreeView.FullCollapse(Node: PTyTreeNode);
 var
   child: PTyTreeNode;
 begin
@@ -2764,7 +2865,7 @@ end;
     • FOffsetY is clamped to [-(FRangeY - viewH), 0].
       viewH = MulDiv(ClientHeight, 96, PPI) — the logical viewport height.
       When viewH ≥ FRangeY the clamp collapses to 0 (no scroll needed). }
-procedure TTyTreeView.ScrollIntoView(Node: PTyTreeNode);
+procedure TTyCustomTreeView.ScrollIntoView(Node: PTyTreeNode);
 var
   n:       PTyTreeNode;
   accTop:  Integer;
@@ -2830,7 +2931,7 @@ end;
   phantom sentinel row that never appears on screen.  So:
     ContentHeight = RootNode^.TotalHeight - RootNode^.NodeHeight
   This is the value used for FRangeY and for scrollbar Max. }
-function TTyTreeView.ContentHeight: Integer;
+function TTyCustomTreeView.ContentHeight: Integer;
 begin
   Result := Integer(FRoot^.TotalHeight) - Integer(FRoot^.NodeHeight);
 end;
@@ -2840,7 +2941,7 @@ end;
   the right/bottom edges when the respective scrollbar is visible.
   With no controller the padding is 0, so the result equals the old ClientRect
   minus scrollbar thickness — headless tests that use Create(nil) are unaffected. }
-function TTyTreeView.ContentRect: TRect;
+function TTyCustomTreeView.ContentRect: TRect;
 var
   SBThick, PPI: Integer;
   S: TTyStyleSet;
@@ -2866,12 +2967,12 @@ begin
     Inc(Result.Top, MulDiv(FHeader.Height, PPI, 96));
 end;
 
-function TTyTreeView.ScrollBarFrameStyle: TTyStyleSet;
+function TTyCustomTreeView.ScrollBarFrameStyle: TTyStyleSet;
 begin
   Result := CurrentStyle;   // RenderTo's DrawFrame uses exactly this
 end;
 
-function TTyTreeView.EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
+function TTyCustomTreeView.EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
 begin
   Result := (ABar = FVScroll) or (ABar = FHScroll);
 end;
@@ -2893,7 +2994,7 @@ end;
     it reflects the true widest visible row.
 
   FOffsetY is clamped to [-(ContentHeight - viewportH), 0] each call. }
-procedure TTyTreeView.UpdateScrollBars;
+procedure TTyCustomTreeView.UpdateScrollBars;
 var
   SBThick, viewW, viewH, contH, PPI: Integer;
   wantVScroll, wantHScroll: Boolean;
@@ -3042,7 +3143,7 @@ end;
 
 { VScrollChange — fired by the vertical scrollbar when the user drags/clicks it.
   Convert Position (0..Max) back to FOffsetY (≤ 0). }
-procedure TTyTreeView.VScrollChange(Sender: TObject);
+procedure TTyCustomTreeView.VScrollChange(Sender: TObject);
 begin
   if FSyncingScroll then Exit;
   FSyncingScroll := True;
@@ -3056,7 +3157,7 @@ begin
 end;
 
 { HScrollChange — horizontal bar counterpart. }
-procedure TTyTreeView.HScrollChange(Sender: TObject);
+procedure TTyCustomTreeView.HScrollChange(Sender: TObject);
 begin
   if FSyncingScroll then Exit;
   FSyncingScroll := True;
@@ -3069,7 +3170,7 @@ begin
   RepositionEditor;   // ③e E4: keep an open editor glued to its cell after scroll
 end;
 
-procedure TTyTreeView.SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
+procedure TTyCustomTreeView.SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
 begin
   if FScrollBarAutoHide = AValue then Exit;
   FScrollBarAutoHide := AValue;
@@ -3082,7 +3183,7 @@ end;
 { DoMouseWheel — scroll 3 rows per detent (mirrors ListBox wheel).
   WheelDelta > 0 = scroll up (content moves down, FOffsetY increases toward 0);
   WheelDelta < 0 = scroll down (FOffsetY decreases). }
-function TTyTreeView.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+function TTyCustomTreeView.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 var
   Delta, step: Integer;
@@ -3106,7 +3207,7 @@ end;
 { Resize — recalculate scrollbar visibility/geometry on layout change.
   D4: when hoAutoResize is on, re-apply auto-size so the designated column fills
   the remaining width whenever the control is resized. }
-procedure TTyTreeView.Resize;
+procedure TTyCustomTreeView.Resize;
 var
   PPI, contentW: Integer;
 begin
@@ -3129,7 +3230,7 @@ begin
 end;
 
 { B (columns): header/column change handler }
-procedure TTyTreeView.HeaderChanged(Sender: TObject);
+procedure TTyCustomTreeView.HeaderChanged(Sender: TObject);
 begin
   { Guard: skip during destruction (FRoot is nil after Clear+FreeNodeMem). }
   if FRoot = nil then Exit;
@@ -3153,12 +3254,12 @@ begin
   Invalidate;
 end;
 
-procedure TTyTreeView.SetHeader(AValue: TTyHeader);
+procedure TTyCustomTreeView.SetHeader(AValue: TTyHeader);
 begin
   FHeader.Assign(AValue);
 end;
 
-constructor TTyTreeView.Create(AOwner: TComponent);
+constructor TTyCustomTreeView.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FNodeDataSize := -1;
@@ -3274,7 +3375,7 @@ begin
   Width := 200; Height := 160;
 end;
 
-destructor TTyTreeView.Destroy;
+destructor TTyCustomTreeView.Destroy;
 begin
   { Unhook from the image list first: a refill arriving while the tree is being torn down would
     call Invalidate on a half-destroyed control. }
@@ -3306,7 +3407,7 @@ begin
   inherited Destroy;
 end;
 
-function TTyTreeView.MakeNewNode: PTyTreeNode;
+function TTyCustomTreeView.MakeNewNode: PTyTreeNode;
 begin
   Result := AllocMem(FNodeAllocSize);    // zero-filled by AllocMem
   Result^.States := [nsVisible];
@@ -3316,12 +3417,12 @@ begin
   Result^.TotalHeight := GetDefaultNodeHeight;
 end;
 
-procedure TTyTreeView.FreeNodeMem(Node: PTyTreeNode);
+procedure TTyCustomTreeView.FreeNodeMem(Node: PTyTreeNode);
 begin
   FreeMem(Node);
 end;
 
-procedure TTyTreeView.SetNodeDataSize(AValue: Integer);
+procedure TTyCustomTreeView.SetNodeDataSize(AValue: Integer);
 begin
   if FNodeDataSize = AValue then Exit;
   { 条目模式征用了数据块的头 4 字节,所以 app 的数据块与 Items 互斥 —— 同一段
@@ -3335,7 +3436,7 @@ end;
 
 { 分配步长的唯一出口。条目模式下块首 4 字节是控件自己的条目下标槽;虚拟模式下
   这一段不存在,步长与条目模型进来之前逐字节相同。 }
-procedure TTyTreeView.UpdateNodeAllocSize;
+procedure TTyCustomTreeView.UpdateNodeAllocSize;
 begin
   if FItemMode then
     FNodeAllocSize := TreeNodeSize + SizeOf(Cardinal)
@@ -3345,7 +3446,7 @@ begin
     FNodeAllocSize := TreeNodeSize;
 end;
 
-function TTyTreeView.GetNodeData(Node: PTyTreeNode): Pointer;
+function TTyCustomTreeView.GetNodeData(Node: PTyTreeNode): Pointer;
 begin
   if (FNodeDataSize <= 0) or (Node = nil) or (Node = FRoot) then
     Result := nil
@@ -3360,7 +3461,7 @@ end;
 { 冲突闸门。两个数据源同时出现时**报错,不择一**。csLoading 期间只记账:
   .lfm 里 Items 与 OnGetText 谁先流进来是不确定的,在读期间抛会让"报不报错"
   取决于属性顺序,而顺序不是用户写的。 }
-procedure TTyTreeView.ItemModeConflict(const AWhat: string);
+procedure TTyCustomTreeView.ItemModeConflict(const AWhat: string);
 var
   msg: string;
 begin
@@ -3377,20 +3478,20 @@ begin
 end;
 
 { 虚拟结构 API 的守卫。物化自己要用 AddChild/SetChildCount,所以留一个后门。 }
-procedure TTyTreeView.GuardVirtualStructure(const AWhat: string);
+procedure TTyCustomTreeView.GuardVirtualStructure(const AWhat: string);
 begin
   if FItemMode and not FRebuildingItems then
     ItemModeConflict(AWhat);
 end;
 
-procedure TTyTreeView.SetOnGetText(AValue: TTyTreeGetTextEvent);
+procedure TTyCustomTreeView.SetOnGetText(AValue: TTyTreeGetTextEvent);
 begin
   if Assigned(AValue) and (FItems <> nil) and (FItems.Count > 0) then
     ItemModeConflict('OnGetText');
   FOnGetText := AValue;
 end;
 
-procedure TTyTreeView.SetOnGetTextWithType(AValue: TTyTreeGetTextWithTypeEvent);
+procedure TTyCustomTreeView.SetOnGetTextWithType(AValue: TTyTreeGetTextWithTypeEvent);
 begin
   if Assigned(AValue) and (FItems <> nil) and (FItems.Count > 0) then
     ItemModeConflict('OnGetTextWithType');
@@ -3400,20 +3501,20 @@ end;
 { 直接赋值(Tree1.Items := Tree2.Items)。TCollection.Assign 清空再按**目标**的
   条目类重建,所以类型不会被源带跑。自赋值必须挡:Assign 会先 Clear,
   然后把空集合还给你。 }
-procedure TTyTreeView.SetItems(AValue: TTyTreeNodes);
+procedure TTyCustomTreeView.SetItems(AValue: TTyTreeNodes);
 begin
   if AValue = FItems then Exit;
   FItems.Assign(AValue);
 end;
 
 { 条目下标槽:存 下标+1,于是 AllocMem 的零值天然表示"不是条目建的节点"。 }
-procedure TTyTreeView.StampItemRef(ANode: PTyTreeNode; AItemIndex: Integer);
+procedure TTyCustomTreeView.StampItemRef(ANode: PTyTreeNode; AItemIndex: Integer);
 begin
   if (ANode = nil) or (ANode = FRoot) then Exit;
   PCardinal(PByte(ANode) + TreeNodeSize)^ := Cardinal(AItemIndex) + 1;
 end;
 
-function TTyTreeView.GetNodeItem(Node: PTyTreeNode): TTyTreeNodeItem;
+function TTyCustomTreeView.GetNodeItem(Node: PTyTreeNode): TTyTreeNodeItem;
 var
   ref: Cardinal;
 begin
@@ -3427,7 +3528,7 @@ end;
 { LCL `Node.Text` 的等价物 —— 两种模式都答"屏幕上那一行真正显示的字"。
   与 GetNodeSearchText 走同一条解析(主列 / ttNormal),于是"显示的"与
   "搜到的"永远是同一个字符串。 }
-function TTyTreeView.GetNodeText(Node: PTyTreeNode): string;
+function TTyCustomTreeView.GetNodeText(Node: PTyTreeNode): string;
 begin
   Result := '';
   if (Node = nil) or (Node = FRoot) then Exit;
@@ -3436,7 +3537,7 @@ end;
 
 { 结构变了:整棵重建。设计期 / 移植来的树是几十到几百个节点,重建是一瞬间的事;
   虚拟模式下这条路根本不会被走到(FItems 为空 → 直接退回虚拟模式)。 }
-procedure TTyTreeView.ItemsStructureChanged;
+procedure TTyCustomTreeView.ItemsStructureChanged;
 begin
   if csLoading in ComponentState then Exit;   { 到 Loaded 再一次性物化 }
   RebuildFromItems;
@@ -3444,7 +3545,7 @@ end;
 
 { 属性变了(标题 / 图标 / 展开 / 复选):只回写那一个节点,不动树形。
   否则改一个标题会把整棵树重建掉,选中与展开态全丢 —— 运行时改标题是常事。 }
-procedure TTyTreeView.ItemStateChanged(AItem: TTyTreeNodeItem);
+procedure TTyCustomTreeView.ItemStateChanged(AItem: TTyTreeNodeItem);
 begin
   if csLoading in ComponentState then Exit;
   if not FItemMode then Exit;
@@ -3452,7 +3553,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyTreeView.ApplyItemToNode(AItem: TTyTreeNodeItem);
+procedure TTyCustomTreeView.ApplyItemToNode(AItem: TTyTreeNodeItem);
 begin
   if (AItem = nil) or (AItem.Node = nil) then Exit;
   AItem.Node^.CheckType  := AItem.CheckType;
@@ -3465,7 +3566,7 @@ end;
 
   进出模式都在这里,所以"这棵树现在归谁"只有一个决定点:
   Items 空 → 退回虚拟模式(步长复原,树清空);非空 → 条目模式。 }
-procedure TTyTreeView.RebuildFromItems;
+procedure TTyCustomTreeView.RebuildFromItems;
 var
   i, lvl: Integer;
   it: TTyTreeNodeItem;
@@ -3526,7 +3627,7 @@ begin
   InvalidateTreeLayout;
 end;
 
-procedure TTyTreeView.AdjustTotalCount(Node: PTyTreeNode; Delta: Integer);
+procedure TTyCustomTreeView.AdjustTotalCount(Node: PTyTreeNode; Delta: Integer);
 var
   run: PTyTreeNode;
 begin
@@ -3539,7 +3640,7 @@ begin
   end;
 end;
 
-procedure TTyTreeView.AdjustTotalHeight(Node: PTyTreeNode; Delta: Integer);
+procedure TTyCustomTreeView.AdjustTotalHeight(Node: PTyTreeNode; Delta: Integer);
 { Propagates a pixel delta up the ancestor chain.
   INVARIANT: a parent's TotalHeight includes a child's contribution ONLY when the
   PARENT is expanded.  Therefore, before adding Delta to a parent, we check whether
@@ -3564,7 +3665,7 @@ begin
   end;
 end;
 
-procedure TTyTreeView.InvalidateTreeLayout;
+procedure TTyCustomTreeView.InvalidateTreeLayout;
 begin
   // B1: mark the position cache dirty and recompute FRangeY.
   // FRangeY = ContentHeight (the scrollable content height, root phantom row excluded).
@@ -3587,7 +3688,7 @@ begin
   RepositionEditor;
 end;
 
-function TTyTreeView.SumVisibleHeights: Integer;
+function TTyCustomTreeView.SumVisibleHeights: Integer;
 { Walk all screen-order visible nodes and sum their NodeHeight values.
   Used ONLY by the B1 invariant test and debug assertions — not in the hot path. }
 var
@@ -3604,17 +3705,17 @@ begin
   Inc(Result, FRoot^.NodeHeight);
 end;
 
-function TTyTreeView.GetRootNodeCount: Cardinal;
+function TTyCustomTreeView.GetRootNodeCount: Cardinal;
 begin
   Result := FRoot^.ChildCount;
 end;
 
-procedure TTyTreeView.SetRootNodeCount(AValue: Cardinal);
+procedure TTyCustomTreeView.SetRootNodeCount(AValue: Cardinal);
 begin
   SetChildCount(FRoot, AValue);
 end;
 
-procedure TTyTreeView.SetChildCount(Node: PTyTreeNode; NewCount: Cardinal);
+procedure TTyCustomTreeView.SetChildCount(Node: PTyTreeNode; NewCount: Cardinal);
 var
   i: Cardinal;
   child, prev: PTyTreeNode;
@@ -3659,7 +3760,7 @@ begin
   InvalidateTreeLayout;
 end;
 
-function TTyTreeView.AddChild(AParent: PTyTreeNode): PTyTreeNode;
+function TTyCustomTreeView.AddChild(AParent: PTyTreeNode): PTyTreeNode;
 var
   p: PTyTreeNode;
 begin
@@ -3673,7 +3774,7 @@ begin
     Include(p^.States, nsHasChildren);
 end;
 
-procedure TTyTreeView.DeleteNode(Node: PTyTreeNode);
+procedure TTyCustomTreeView.DeleteNode(Node: PTyTreeNode);
 var
   nodeParent: PTyTreeNode;
   dh, dc:     Integer;
@@ -3801,7 +3902,7 @@ end;
 { ③c A1 / ③f F1: re-stamp a parent's child list with consecutive 0-based Index
   values (sibling position). Extracted from DeleteNode so MoveNode reuses the SAME
   re-sequence (no parallel renumber math). AParent may be FRoot. }
-procedure TTyTreeView.ReindexSiblings(AParent: PTyTreeNode);
+procedure TTyCustomTreeView.ReindexSiblings(AParent: PTyTreeNode);
 var
   child: PTyTreeNode;
   idx:   Cardinal;
@@ -3819,7 +3920,7 @@ end;
 
 { ③f F1: True iff APossibleAncestor lies on ANode's Parent chain (ANode itself is
   NOT its own descendant). Walk up to the hidden root / the sentinel above it. }
-function TTyTreeView.IsDescendant(ANode, APossibleAncestor: PTyTreeNode): Boolean;
+function TTyCustomTreeView.IsDescendant(ANode, APossibleAncestor: PTyTreeNode): Boolean;
 var
   run: PTyTreeNode;
 begin
@@ -3837,7 +3938,7 @@ end;
 { ③f F1: the single validity gate for a node move. Shared by MoveNode (which
   re-checks — so a malicious OnDragOver setting Allowed:=True can't bypass it),
   the default OnDragOver, and the drop-mark gating. }
-function TTyTreeView.CanMoveNode(ANode, ATarget: PTyTreeNode;
+function TTyCustomTreeView.CanMoveNode(ANode, ATarget: PTyTreeNode;
   AMode: TTyTreeDropMode): Boolean;
 var
   newParent, afterNode: PTyTreeNode;
@@ -3884,7 +3985,7 @@ end;
 { ③f F1: the pure structural move (see the declaration comment). Reuses
   AdjustTotalCount/AdjustTotalHeight (the ③a spine), ComputeExpandedSubtreeHeight +
   the SetExpanded auto-expand delta, and ReindexSiblings (the ③c re-sequence). }
-function TTyTreeView.MoveNode(ANode, ATarget: PTyTreeNode;
+function TTyCustomTreeView.MoveNode(ANode, ATarget: PTyTreeNode;
   AMode: TTyTreeDropMode): Boolean;
 var
   oldParent, newParent, beforeNode: PTyTreeNode;
@@ -4025,7 +4126,7 @@ end;
 
 { ③f F2: end any in-progress node drag — clear all drag state + repaint (drops the
   drop-mark). Idempotent; safe from MouseUp / Esc / teardown / option-off. }
-procedure TTyTreeView.EndNodeDrag;
+procedure TTyCustomTreeView.EndNodeDrag;
 begin
   FDragActive := False;
   FDragNode   := nil;
@@ -4043,7 +4144,7 @@ end;
 { ③f F3: seed the active-drag state directly (test/descendant seam — see the
   protected declaration). Flips FDragActive True so the drop-mark in RenderTo
   paints; no Invalidate (the caller renders explicitly). }
-procedure TTyTreeView.SetActiveDragState(ASource, ATarget: PTyTreeNode;
+procedure TTyCustomTreeView.SetActiveDragState(ASource, ATarget: PTyTreeNode;
   AMode: TTyTreeDropMode);
 begin
   FDragActive := True;
@@ -4055,7 +4156,7 @@ end;
 { ③f F2: split the cursor's device-px Y across ATarget's visible row band into a
   drop mode. Uses GetCellRect (the SAME row-rect math RenderTo paints into) so the
   thirds line up with the painted row; dmNone when ATarget is nil or off-screen. }
-function TTyTreeView.DropModeFromY(Target: PTyTreeNode; AY: Integer): TTyTreeDropMode;
+function TTyCustomTreeView.DropModeFromY(Target: PTyTreeNode; AY: Integer): TTyTreeDropMode;
 var
   r: TRect;
   rTop, h, third: Integer;
@@ -4078,7 +4179,7 @@ begin
     Result := dmOn;
 end;
 
-procedure TTyTreeView.Clear;
+procedure TTyCustomTreeView.Clear;
 begin
   { 条目模式下 Items 才是树形的真相,所以"清空这棵树"必须连它一起清 ——
     只清记录会留下一集合对不上任何节点的条目。这里不报错而是**照做**:
@@ -4123,7 +4224,7 @@ end;
   descendants would occupy if Node itself were visible.
   This is a pure recursive walk — called only when we NEED the exact value
   (on expand/collapse) and not in the hot paint path. }
-function TTyTreeView.ComputeExpandedSubtreeHeight(Node: PTyTreeNode): Integer;
+function TTyCustomTreeView.ComputeExpandedSubtreeHeight(Node: PTyTreeNode): Integer;
 var
   child: PTyTreeNode;
 begin
@@ -4140,7 +4241,7 @@ begin
   end;
 end;
 
-function TTyTreeView.GetExpanded(Node: PTyTreeNode): Boolean;
+function TTyCustomTreeView.GetExpanded(Node: PTyTreeNode): Boolean;
 begin
   Result := (Node <> nil) and (nsExpanded in Node^.States);
 end;
@@ -4148,7 +4249,7 @@ end;
 { density: default node/row height — stored-sentinel accessors. When not pinned by a
   host/.lfm, follow the --item-height token (18 classic / 38 modern); the classic
   fallback 18 equals the historical default so classic rendering is byte-identical. }
-function TTyTreeView.GetDefaultNodeHeight: Integer;
+function TTyCustomTreeView.GetDefaultNodeHeight: Integer;
 begin
   if FDefaultNodeHeightExplicit then
     Result := FDefaultNodeHeight
@@ -4156,7 +4257,7 @@ begin
     Result := TyDensityMetric(ActiveController, 18, '--item-height');
 end;
 
-procedure TTyTreeView.SetDefaultNodeHeight(AValue: Integer);
+procedure TTyCustomTreeView.SetDefaultNodeHeight(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
   FDefaultNodeHeightExplicit := True;   { even if the value equals the fallback, the host meant to pin it }
@@ -4166,13 +4267,13 @@ begin
 end;
 
 { ③d B1: per-node row-height accessors. }
-function TTyTreeView.GetNodeHeight(Node: PTyTreeNode): Integer;
+function TTyCustomTreeView.GetNodeHeight(Node: PTyTreeNode): Integer;
 begin
   if Node = nil then Result := GetDefaultNodeHeight
   else Result := Node^.NodeHeight;
 end;
 
-procedure TTyTreeView.SetNodeHeight(Node: PTyTreeNode; AValue: Integer);
+procedure TTyCustomTreeView.SetNodeHeight(Node: PTyTreeNode; AValue: Integer);
 { Programmatic per-node height override (mirrors VTV SetNodeHeight). Applies the
   delta up the ancestor chain via AdjustTotalHeight so the ③a invariant holds,
   marks the node measured (so a later InitNode measure won't clobber it), and
@@ -4187,7 +4288,7 @@ begin
   InvalidateTreeLayout;
 end;
 
-procedure TTyTreeView.InitNode(Node: PTyTreeNode);
+procedure TTyCustomTreeView.InitNode(Node: PTyTreeNode);
 var
   initStates: TTyNodeInitStates;
   h: Integer;
@@ -4226,7 +4327,7 @@ begin
   end;
 end;
 
-procedure TTyTreeView.InitChildren(Node: PTyTreeNode);
+procedure TTyCustomTreeView.InitChildren(Node: PTyTreeNode);
 var
   c: Cardinal;
 begin
@@ -4242,7 +4343,7 @@ begin
     Exclude(Node^.States, nsHasChildren);       // app says "actually no children"
 end;
 
-procedure TTyTreeView.SetExpanded(Node: PTyTreeNode; AValue: Boolean);
+procedure TTyCustomTreeView.SetExpanded(Node: PTyTreeNode; AValue: Boolean);
 { Height-bookkeeping invariant (asserted by B1):
     RootNode^.TotalHeight = sum of NodeHeight for every visible (nsVisible + reachable via
     nsExpanded ancestors) node.
@@ -4300,32 +4401,32 @@ begin
   InvalidateTreeLayout;
 end;
 
-procedure TTyTreeView.ToggleNode(Node: PTyTreeNode; AExpand: Boolean);
+procedure TTyCustomTreeView.ToggleNode(Node: PTyTreeNode; AExpand: Boolean);
 begin
   SetExpanded(Node, AExpand);
 end;
 
 { ── A5 ── iterators ──────────────────────────────────────────────────────── }
 
-function TTyTreeView.GetFirstChild(Node: PTyTreeNode): PTyTreeNode;
+function TTyCustomTreeView.GetFirstChild(Node: PTyTreeNode): PTyTreeNode;
 begin
   if Node = nil then Result := FRoot^.FirstChild
   else Result := Node^.FirstChild;
 end;
 
-function TTyTreeView.GetLastChild(Node: PTyTreeNode): PTyTreeNode;
+function TTyCustomTreeView.GetLastChild(Node: PTyTreeNode): PTyTreeNode;
 begin
   if Node = nil then Result := FRoot^.LastChild
   else Result := Node^.LastChild;
 end;
 
-function TTyTreeView.GetNextSibling(Node: PTyTreeNode): PTyTreeNode;
+function TTyCustomTreeView.GetNextSibling(Node: PTyTreeNode): PTyTreeNode;
 begin
   if Node = nil then Result := nil
   else Result := Node^.NextSibling;
 end;
 
-function TTyTreeView.GetPrevSibling(Node: PTyTreeNode): PTyTreeNode;
+function TTyCustomTreeView.GetPrevSibling(Node: PTyTreeNode): PTyTreeNode;
 begin
   if Node = nil then Result := nil
   else Result := Node^.PrevSibling;
@@ -4333,7 +4434,7 @@ end;
 
 { GetParent: returns nil when Node is a top-level node (its Parent is the hidden root).
   Mirrors VTV semantics: GetNodeParent returns nil for root-level nodes. }
-function TTyTreeView.GetParent(Node: PTyTreeNode): PTyTreeNode;
+function TTyCustomTreeView.GetParent(Node: PTyTreeNode): PTyTreeNode;
 begin
   if (Node = nil) or (Node = FRoot) then
     Result := nil
@@ -4347,7 +4448,7 @@ end;
 
 { GetNodeLevel: returns 0 for top-level nodes (direct children of the hidden root).
   Counts parent hops until we hit the hidden root or the sentinel. }
-function TTyTreeView.GetNodeLevel(Node: PTyTreeNode): Integer;
+function TTyCustomTreeView.GetNodeLevel(Node: PTyTreeNode): Integer;
 var
   run: PTyTreeNode;
 begin
@@ -4362,14 +4463,14 @@ begin
 end;
 
 { GetFirst: depth-first pre-order first node, inits it. }
-function TTyTreeView.GetFirst: PTyTreeNode;
+function TTyCustomTreeView.GetFirst: PTyTreeNode;
 begin
   Result := FRoot^.FirstChild;
   if Result <> nil then InitNode(Result);
 end;
 
 { GetNext: depth-first pre-order successor, inits any node we land on. }
-function TTyTreeView.GetNext(Node: PTyTreeNode): PTyTreeNode;
+function TTyCustomTreeView.GetNext(Node: PTyTreeNode): PTyTreeNode;
 begin
   if Node = nil then begin Result := nil; Exit; end;
 
@@ -4400,7 +4501,7 @@ begin
 end;
 
 { GetFirstVisibleNoInit: first screen-order visible node (no init side-effects). }
-function TTyTreeView.GetFirstVisibleNoInit: PTyTreeNode;
+function TTyCustomTreeView.GetFirstVisibleNoInit: PTyTreeNode;
 begin
   Result := FRoot^.FirstChild;
   // Advance past any non-visible top-level nodes
@@ -4410,7 +4511,7 @@ end;
 
 { GetNextVisibleNoInit: screen-order successor, skipping collapsed subtrees.
   Never inits nodes — safe to call from paint / scroll. }
-function TTyTreeView.GetNextVisibleNoInit(Node: PTyTreeNode): PTyTreeNode;
+function TTyCustomTreeView.GetNextVisibleNoInit(Node: PTyTreeNode): PTyTreeNode;
 begin
   Result := Node;
   repeat
@@ -4436,7 +4537,7 @@ end;
 
 { GetPreviousVisibleNoInit: reverse screen-order predecessor (no init).
   Walk to the previous sibling's last expanded descendant, or to the parent. }
-function TTyTreeView.GetPreviousVisibleNoInit(Node: PTyTreeNode): PTyTreeNode;
+function TTyCustomTreeView.GetPreviousVisibleNoInit(Node: PTyTreeNode): PTyTreeNode;
 var
   prev: PTyTreeNode;
 begin
@@ -4477,7 +4578,7 @@ end;
   So when ValidateCache runs, the tree is in its current canonical state.
   There is NO path that uses a stale cache: every GetNodeAt calls ValidateCache
   first, and ValidateCache rebuilds when FCacheValid=False. }
-procedure TTyTreeView.ValidateCache;
+procedure TTyCustomTreeView.ValidateCache;
 var
   n:         PTyTreeNode;
   accTop:    Integer;  // accumulates absolute Y (named accTop to avoid conflict with TControl.Top)
@@ -4515,7 +4616,7 @@ end;
   Binary-search FPositionCache for the index of the last mark whose Top <= Y.
   Returns -1 if Y is before the first mark or the cache is empty.
   The caller should treat -1 as "start from the root" (i.e. cache miss). }
-function TTyTreeView.FindInCache(Y: Integer): Integer;
+function TTyCustomTreeView.FindInCache(Y: Integer): Integer;
 var
   lo, hi, mid: Integer;
 begin
@@ -4562,7 +4663,7 @@ end;
 
   FLastGetNodeAtVisits counts how many node-iterations the walk makes;
   it is exposed read-only for the performance-invariant test (TTreePerfTest). }
-function TTyTreeView.GetNodeAtOffset(Y: Integer; out ANodeTop: Integer): PTyTreeNode;
+function TTyCustomTreeView.GetNodeAtOffset(Y: Integer; out ANodeTop: Integer): PTyTreeNode;
 var
   node, climb: PTyTreeNode;
   runTop, h:   Integer;
@@ -4686,7 +4787,7 @@ end;
 
   Returns False only when a REAL column index does not resolve to a visible
   column (out of range / coVisible off); the main/0-column cases always succeed. }
-function TTyTreeView.NodeCaptionSlots(Node: PTyTreeNode; ACellLeft, ACellRight, APPI: Integer;
+function TTyCustomTreeView.NodeCaptionSlots(Node: PTyTreeNode; ACellLeft, ACellRight, APPI: Integer;
   AIsMainColumn: Boolean): TTyTreeCaptionSlots;
 var
   level: Integer;
@@ -4708,7 +4809,7 @@ begin
     RtlLayout);
 end;
 
-procedure TTyTreeView.MainCellAnchor(const CR: TRect; APPI: Integer;
+procedure TTyCustomTreeView.MainCellAnchor(const CR: TRect; APPI: Integer;
   out ALeft, ARight: Integer);
 { 主列单元格的两条边,换算到 GetNodeAtPoint 的内容坐标系(x=0 即 contentLeft)。
   绘制侧的单元格来自 InternalCellRect,其 Left = (CR.Left + FOffsetX) + Scale(col.Left);
@@ -4735,7 +4836,7 @@ begin
   ARight := cell.Right - (CR.Left + FOffsetX);
 end;
 
-function TTyTreeView.InternalCellRect(const CR: TRect;
+function TTyCustomTreeView.InternalCellRect(const CR: TRect;
   ARowTop, ARowH, AColumn, APPI: Integer; out ACellRect: TRect): Boolean;
 var
   col: TTyColumn;
@@ -4780,7 +4881,7 @@ end;
   by Scale(NodeHeight) per visible row to the target — byte-identical arithmetic
   to the paint loop's per-row accumulation, so no rounding drift at any PPI.
   Never calls InitNode (uses the *NoInit visible iterators only). }
-function TTyTreeView.GetCellRect(Node: PTyTreeNode; Column: Integer;
+function TTyCustomTreeView.GetCellRect(Node: PTyTreeNode; Column: Integer;
   out ACellRect: TRect): Boolean;
 var
   PPI: Integer;
@@ -4871,7 +4972,7 @@ end;
      • Tree lines (simplified: vertical guide + elbow per indent slot).
      • Accumulate FRangeX for the horizontal scrollbar.
   6. EndPaint; after the loop call UpdateScrollBars if FRangeX changed. }
-procedure TTyTreeView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomTreeView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, NodeStyle: TTyStyleSet;
@@ -6049,7 +6150,7 @@ begin
   end;
 end;
 
-procedure TTyTreeView.Paint;
+procedure TTyCustomTreeView.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
@@ -6068,7 +6169,7 @@ end;
   The absolute content X/Y:
     absY = (Y - CR.Top) + (-FOffsetY)
     absX = (X - CR.Left) + (-FOffsetX)  }
-function TTyTreeView.GetNodeAtPoint(X, Y: Integer; out APart: TTyTreeHitPart; out AColumn: Integer): PTyTreeNode;
+function TTyCustomTreeView.GetNodeAtPoint(X, Y: Integer; out APart: TTyTreeHitPart; out AColumn: Integer): PTyTreeNode;
 var
   PPI: Integer;
   CR: TRect;
@@ -6199,7 +6300,7 @@ begin
 end;
 
 { GetNodeAtPoint (2-out overload — backward-compatible delegator) }
-function TTyTreeView.GetNodeAtPoint(X, Y: Integer; out APart: TTyTreeHitPart): PTyTreeNode;
+function TTyCustomTreeView.GetNodeAtPoint(X, Y: Integer; out APart: TTyTreeHitPart): PTyTreeNode;
 var
   col: Integer;
 begin
@@ -6210,7 +6311,7 @@ end;
   Returns True and sets APart + AColumn when (X,Y) is inside the header band.
   The header band occupies device Y in [CR.Top-headerH .. CR.Top) where
   CR = ContentRect (which already has headerH added to its Top). }
-function TTyTreeView.GetHeaderHitAt(X, Y: Integer; out APart: TTyTreeHitPart; out AColumn: Integer): Boolean;
+function TTyCustomTreeView.GetHeaderHitAt(X, Y: Integer; out APart: TTyTreeHitPart; out AColumn: Integer): Boolean;
 var
   PPI, colIdx: Integer;
   axis: TTyColumnAxis;
@@ -6261,7 +6362,7 @@ begin
   end;
 end;
 
-procedure TTyTreeView.MouseDown(Button: TMouseButton; Shift: TShiftState;
+procedure TTyCustomTreeView.MouseDown(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
   part: TTyTreeHitPart;
@@ -6434,7 +6535,7 @@ begin
   end;
 end;
 
-procedure TTyTreeView.DblClick;
+procedure TTyCustomTreeView.DblClick;
 var
   node: PTyTreeNode;
   editCol: Integer;
@@ -6481,12 +6582,12 @@ end;
   OnGetTextWithType 必定为 nil(冲突闸门保证),所以五处**全部**落到这里 ——
   于是"条目模式的标题从哪来"只需要改这一个函数,五处一个字都不用动。
   这同时也是"未使用时逐字节不变"的保证:FItemMode=False 时下面这段不存在。 }
-function TTyTreeView.SupportsItemModel: Boolean;
+function TTyCustomTreeView.SupportsItemModel: Boolean;
 begin
   Result := True;
 end;
 
-procedure TTyTreeView.DoGetText(Node: PTyTreeNode; var AText: string);
+procedure TTyCustomTreeView.DoGetText(Node: PTyTreeNode; var AText: string);
 var
   it: TTyTreeNodeItem;
 begin
@@ -6503,7 +6604,7 @@ end;
   只读到一半的序列上算 Level(第 3 条的父亲可能还没读到),所以物化推迟到这里。
   读期间攒下的模式冲突也在这里抛:在读期间抛会让"报不报错"取决于 .lfm 里
   Items 与 OnGetText 谁先出现,而那个顺序不是用户写的。 }
-procedure TTyTreeView.Loaded;
+procedure TTyCustomTreeView.Loaded;
 var
   msg: string;
 begin
@@ -6518,13 +6619,13 @@ begin
     RebuildFromItems;
 end;
 
-procedure TTyTreeView.DoInitNode(AParent, Node: PTyTreeNode;
+procedure TTyCustomTreeView.DoInitNode(AParent, Node: PTyTreeNode;
   var AStates: TTyNodeInitStates);
 begin
   if Assigned(FOnInitNode) then FOnInitNode(Self, AParent, Node, AStates);
 end;
 
-procedure TTyTreeView.DoExpanding(Node: PTyTreeNode; var AAllowed: Boolean);
+procedure TTyCustomTreeView.DoExpanding(Node: PTyTreeNode; var AAllowed: Boolean);
 begin
   if Assigned(FOnExpanding) then FOnExpanding(Self, Node, AAllowed);
 end;
@@ -6532,7 +6633,7 @@ end;
 { 图标与标题同一条约定:条目模式下 ImageIndex / SelectedIndex 由条目拥有。
   和标题不同的是 OnGetImageIndex **不**参与冲突判定 —— 它不是模式的决定者,
   条目没给出图标(-1)时仍然让 app 补一个是合理的组合,不是两个主人。 }
-procedure TTyTreeView.DoGetImageIndex(Node: PTyTreeNode; AKind: TTyVTImageKind;
+procedure TTyCustomTreeView.DoGetImageIndex(Node: PTyTreeNode; AKind: TTyVTImageKind;
   AColumn: Integer; var AGhosted: Boolean; var AIndex: Integer);
 var
   it: TTyTreeNodeItem;
@@ -6551,12 +6652,12 @@ begin
     FOnGetImageIndex(Self, Node, AKind, AColumn, AGhosted, AIndex);
 end;
 
-procedure TTyTreeView.DoTreeChange(Node: PTyTreeNode);
+procedure TTyCustomTreeView.DoTreeChange(Node: PTyTreeNode);
 begin
   if Assigned(FOnChange) then FOnChange(Self, Node);
 end;
 
-procedure TTyTreeView.OverrideCursor(AOn: Boolean; AWith: TCursor);
+procedure TTyCustomTreeView.OverrideCursor(AOn: Boolean; AWith: TCursor);
 begin
   if AOn then
   begin
@@ -6574,7 +6675,7 @@ begin
   end;
 end;
 
-procedure TTyTreeView.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomTreeView.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   part: TTyTreeHitPart;
   node: PTyTreeNode;
@@ -6735,7 +6836,7 @@ begin
 
 end;
 
-procedure TTyTreeView.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomTreeView.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   draggedCol: TTyColumn;
   oldPos, newPos: Integer;
@@ -6806,7 +6907,7 @@ begin
   end;
 end;
 
-procedure TTyTreeView.NoteHostHover(AHovered: Boolean);
+procedure TTyCustomTreeView.NoteHostHover(AHovered: Boolean);
 begin
   { **两条都要告诉**——转发只写一半是本库反复出过的那种故障。
     两条都从构造函数起就存在，nil 判断是防御。 }
@@ -6814,14 +6915,14 @@ begin
   if FHScroll <> nil then FHScroll.SetHostHovered(AHovered);
 end;
 
-procedure TTyTreeView.MouseEnter;
+procedure TTyCustomTreeView.MouseEnter;
 begin
   { 必须 inherited：吞掉 LCL 那层的 hover 状态是本库出过好几次的故障。 }
   inherited MouseEnter;
   NoteHostHover(True);
 end;
 
-procedure TTyTreeView.MouseLeave;
+procedure TTyCustomTreeView.MouseLeave;
 begin
   inherited MouseLeave;
   { 只是起倒计时，不当场隐藏：指针从正文挪到条上时这里也会走一趟。 }
@@ -6833,7 +6934,7 @@ begin
   end;
 end;
 
-procedure TTyTreeView.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomTreeView.KeyDown(var Key: Word; Shift: TShiftState);
 var
   cur, nxt: PTyTreeNode;
   viewH, rowH, pgRows, i: Integer;
@@ -7189,7 +7290,7 @@ end;
   accumulate it into FSearchBuffer (resetting first if the idle timeout elapsed)
   and jump focus to the matching visible node (see DoIncrementalSearch for the
   start-position rule: re-pressing one char advances, refining keeps focus). }
-procedure TTyTreeView.UTF8KeyPress(var UTF8Key: TUTF8Char);
+procedure TTyCustomTreeView.UTF8KeyPress(var UTF8Key: TUTF8Char);
 begin
   inherited UTF8KeyPress(UTF8Key);
 
@@ -7212,7 +7313,7 @@ end;
 
 { DoCompare: wraps OnCompareNodes.  Returns 0 when no handler assigned.
   The caller uses natural ordering; the sort direction is handled by the merge. }
-function TTyTreeView.DoCompare(Node1, Node2: PTyTreeNode; Column: Integer): Integer;
+function TTyCustomTreeView.DoCompare(Node1, Node2: PTyTreeNode; Column: Integer): Integer;
 begin
   Result := 0;
   if Assigned(FOnCompareNodes) then
@@ -7224,7 +7325,7 @@ end;
   AscDir = False → pick the LARGER  node first (descending)
   Only NextSibling is used during the merge; PrevSibling/Index/Parent are
   repaired by the sweep in Sort after this returns. }
-function MergeSortedLists(Tree: TTyTreeView; A, B: PTyTreeNode;
+function MergeSortedLists(Tree: TTyCustomTreeView; A, B: PTyTreeNode;
   Column: Integer; AscDir: Boolean): PTyTreeNode;
 var
   head, tail, chosen: PTyTreeNode;
@@ -7268,7 +7369,7 @@ end;
 { MergeSortList: top-down recursive merge sort on a singly-linked list
   (linked via NextSibling only).  Returns the new head of the sorted list.
   ACount = number of nodes in the list (for efficient split). }
-function MergeSortList(Tree: TTyTreeView; Head: PTyTreeNode;
+function MergeSortList(Tree: TTyCustomTreeView; Head: PTyTreeNode;
   ACount: Integer; Column: Integer; AscDir: Boolean): PTyTreeNode;
 var
   half, i: Integer;
@@ -7294,7 +7395,7 @@ end;
 
 { Sort: sort the direct children of Node one level.
   DoInit=True → lazily materialise children first (matches the ③a lazy model). }
-procedure TTyTreeView.Sort(Node: PTyTreeNode; Column: Integer;
+procedure TTyCustomTreeView.Sort(Node: PTyTreeNode; Column: Integer;
   ADirection: TTySortDirection; DoInit: Boolean);
 var
   child, prev: PTyTreeNode;
@@ -7358,7 +7459,7 @@ end;
   Toggles SortDirection when clicking the already-sorted column; otherwise sets
   the new SortColumn and resets direction to Ascending.  Then runs SortTree.
   FSorting prevents re-entry from the programmatic SortColumn/SortDirection setters. }
-procedure TTyTreeView._HandleHeaderClick(ColIndex: Integer);
+procedure TTyCustomTreeView._HandleHeaderClick(ColIndex: Integer);
 var
   col: TTyColumn;
 begin
@@ -7407,7 +7508,7 @@ end;
 { SortTreeNode: recursive helper for SortTree.
   Sorts Node's children, then descends into initialized+expanded children.
   Collapsed subtrees are skipped (lazy: they will sort when expanded). }
-procedure SortTreeNode(Tree: TTyTreeView; Node: PTyTreeNode;
+procedure SortTreeNode(Tree: TTyCustomTreeView; Node: PTyTreeNode;
   Column: Integer; ADirection: TTySortDirection);
 var
   child: PTyTreeNode;
@@ -7429,7 +7530,7 @@ end;
 
 { SortTree: sort the whole (initialized+expanded) tree, rebuild the position
   cache, and request a repaint. }
-procedure TTyTreeView.SortTree(Column: Integer; ADirection: TTySortDirection);
+procedure TTyCustomTreeView.SortTree(Column: Integer; ADirection: TTySortDirection);
 begin
   if FSorting then Exit;   { reentrancy guard }
   FSorting := True;
@@ -7465,7 +7566,7 @@ end;
   be a note here asking whoever edited this to keep it in step with three other
   places by hand; the walk is shared now, so the note would be false. The only
   arithmetic left below is the right-hand pad, which is this function's alone. }
-function TTyTreeView.CellTextRect(Node: PTyTreeNode; Column: Integer;
+function TTyCustomTreeView.CellTextRect(Node: PTyTreeNode; Column: Integer;
   const ACellRect: TRect): TRect;
 var
   PPI, effCol: Integer;
@@ -7505,7 +7606,7 @@ end;
   elsewhere) so the edit text lands ON the caption, not over the chevron/icon.
   Vertically the editor fills the cell band (CellTextRect leaves top/bottom
   untouched) so it lines up with the row. }
-function TTyTreeView.EditorBoundsFromCell(Node: PTyTreeNode; Column: Integer;
+function TTyCustomTreeView.EditorBoundsFromCell(Node: PTyTreeNode; Column: Integer;
   const r: TRect): TRect;
 begin
   Result := CellTextRect(Node, Column, r);
@@ -7516,7 +7617,7 @@ end;
   OnGetText) so the editor seeds with what's on screen. NoColumn maps to the
   main column (multi-column); the 0-column path simply falls to OnGetText.
   No side effects (never inits the node). }
-function TTyTreeView.CurrentCellText(Node: PTyTreeNode; Column: Integer): string;
+function TTyCustomTreeView.CurrentCellText(Node: PTyTreeNode; Column: Integer): string;
 var
   effCol: Integer;
 begin
@@ -7534,7 +7635,7 @@ end;
 { FinishEdit — tear down the active edit: hide the editor, clear the edit state,
   and invalidate so the row repaints with its real caption. Shared by commit and
   cancel; assumes the caller already fired any event. }
-procedure TTyTreeView.FinishEdit;
+procedure TTyCustomTreeView.FinishEdit;
 begin
   FEditor.Visible := False;
   FEditing        := False;
@@ -7558,7 +7659,7 @@ end;
   calls Invalidate, never a layout setter, so this cannot recurse). When the cell
   scrolled out of view (GetCellRect returns False / empty) we commit + close
   (EndEditNode) — Explorer-style; a still-visible cell just re-bounds. }
-procedure TTyTreeView.RepositionEditor;
+procedure TTyCustomTreeView.RepositionEditor;
 var
   r, cr: TRect;
 begin
@@ -7582,7 +7683,7 @@ end;
 
 { EditorKeyDown — Enter commits, Esc cancels; both consume the key. Attached to
   FEditor.OnKeyDown in the ctor. }
-procedure TTyTreeView.EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+procedure TTyCustomTreeView.EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
   case Key of
     VK_RETURN: begin EndEditNode; Key := 0; end;
@@ -7593,7 +7694,7 @@ end;
 { EditorExit — focus left the editor ⇒ commit (Explorer-style). Guarded against
   re-entry during an in-flight teardown (EndEditNode hides the editor, which can
   itself trigger a focus change → OnExit). Attached to FEditor.OnExit in the ctor. }
-procedure TTyTreeView.EditorExit(Sender: TObject);
+procedure TTyCustomTreeView.EditorExit(Sender: TObject);
 begin
   { FIX 5 (adversarial): a host form tearing down can drop the editor's focus
     while the tree is being destroyed; don't fire a commit (with its event +
@@ -7607,7 +7708,7 @@ end;
   toEditable, OnEditing veto, nil node, already editing that same cell, or the
   cell has no visible rect. On success: seeds FEditor with the cell text,
   positions it over the cell, shows + focuses it, and sets the edit state. }
-function TTyTreeView.EditNode(Node: PTyTreeNode; Column: Integer): Boolean;
+function TTyCustomTreeView.EditNode(Node: PTyTreeNode; Column: Integer): Boolean;
 var
   allowed: Boolean;
   r: TRect;
@@ -7669,7 +7770,7 @@ end;
   FEndingEdit guards re-entry (a focus-loss commit can fire mid-teardown).
   OnEditingEnd(Cancel=False) fires last, ALWAYS — OnNewText is conditional on the
   text having changed, so it is not a usable "the editor closed" signal. }
-procedure TTyTreeView.EndEditNode;
+procedure TTyCustomTreeView.EndEditNode;
 var
   endNode: PTyTreeNode;
   endCol:  Integer;
@@ -7692,7 +7793,7 @@ begin
 end;
 
 { Discard the active edit: fire OnEditCancelled, then tear down (no commit). }
-procedure TTyTreeView.CancelEdit;
+procedure TTyCustomTreeView.CancelEdit;
 var
   endNode: PTyTreeNode;
   endCol:  Integer;
@@ -7720,7 +7821,7 @@ end;
 
 { ── the LCL-shaped GetNodeAt ─────────────────────────────────────────────── }
 
-function TTyTreeView.GetNodeAt(X, Y: Integer): PTyTreeNode;
+function TTyCustomTreeView.GetNodeAt(X, Y: Integer): PTyTreeNode;
 var
   part: TTyTreeHitPart;
 begin
@@ -7732,7 +7833,7 @@ end;
 
 { ── Selected: the current node (comctrls.pp:3778) ────────────────────────── }
 
-function TTyTreeView.GetSelection: PTyTreeNode;
+function TTyCustomTreeView.GetSelection: PTyTreeNode;
 begin
   { LCL's Selected is nil when nothing is selected. FFocusedNode survives a
     ClearSelection (the caret stays where it was), so answer it only while it is
@@ -7743,7 +7844,7 @@ begin
   Result := GetFirstSelected;
 end;
 
-procedure TTyTreeView.SetSelection(AValue: PTyTreeNode);
+procedure TTyCustomTreeView.SetSelection(AValue: PTyTreeNode);
 begin
   if AValue = nil then
   begin
@@ -7758,7 +7859,7 @@ begin
   if not (nsSelected in AValue^.States) then SetSelected(AValue, True);
 end;
 
-function TTyTreeView.GetSelections(AIndex: Integer): PTyTreeNode;
+function TTyCustomTreeView.GetSelections(AIndex: Integer): PTyTreeNode;
 var
   n: PTyTreeNode;
   i: Integer;
@@ -7775,7 +7876,7 @@ begin
   end;
 end;
 
-function TTyTreeView.GetLastSelected: PTyTreeNode;
+function TTyCustomTreeView.GetLastSelected: PTyTreeNode;
 var
   n: PTyTreeNode;
 begin
@@ -7790,44 +7891,44 @@ end;
 
 { ── the four switches under LCL's names (comctrls.pp:3697/:3662/:3701/:3694) ─ }
 
-function TTyTreeView.GetRowSelect: Boolean;
+function TTyCustomTreeView.GetRowSelect: Boolean;
 begin
   Result := toFullRowSelect in FOptions;
 end;
 
-procedure TTyTreeView.SetRowSelect(AValue: Boolean);
+procedure TTyCustomTreeView.SetRowSelect(AValue: Boolean);
 begin
   if AValue then Options := FOptions + [toFullRowSelect]
   else           Options := FOptions - [toFullRowSelect];
 end;
 
-function TTyTreeView.GetMultiSelect: Boolean;
+function TTyCustomTreeView.GetMultiSelect: Boolean;
 begin
   Result := toMultiSelect in FOptions;
 end;
 
-procedure TTyTreeView.SetMultiSelect(AValue: Boolean);
+procedure TTyCustomTreeView.SetMultiSelect(AValue: Boolean);
 begin
   if AValue then Options := FOptions + [toMultiSelect]
   else           Options := FOptions - [toMultiSelect];
 end;
 
-function TTyTreeView.GetShowLines: Boolean;
+function TTyCustomTreeView.GetShowLines: Boolean;
 begin
   Result := FShowTreeLines;
 end;
 
-procedure TTyTreeView.SetShowLines(AValue: Boolean);
+procedure TTyCustomTreeView.SetShowLines(AValue: Boolean);
 begin
   SetShowTreeLines(AValue);
 end;
 
-function TTyTreeView.GetReadOnly: Boolean;
+function TTyCustomTreeView.GetReadOnly: Boolean;
 begin
   Result := not (toEditable in FOptions);
 end;
 
-procedure TTyTreeView.SetReadOnly(AValue: Boolean);
+procedure TTyCustomTreeView.SetReadOnly(AValue: Boolean);
 begin
   if AValue then Options := FOptions - [toEditable]
   else           Options := FOptions + [toEditable];
@@ -7835,7 +7936,7 @@ end;
 
 { ── ScrollBars (comctrls.pp:3777) ────────────────────────────────────────── }
 
-procedure TTyTreeView.SetScrollBars(AValue: TScrollStyle);
+procedure TTyCustomTreeView.SetScrollBars(AValue: TScrollStyle);
 begin
   if FScrollBars = AValue then Exit;
   FScrollBars := AValue;
@@ -7846,14 +7947,14 @@ begin
   Invalidate;
 end;
 
-procedure TTyTreeView.SetHideSelection(AValue: Boolean);
+procedure TTyCustomTreeView.SetHideSelection(AValue: Boolean);
 begin
   if FHideSelection = AValue then Exit;
   FHideSelection := AValue;
   Invalidate;
 end;
 
-procedure TTyTreeView.SetShowSeparators(AValue: Boolean);
+procedure TTyCustomTreeView.SetShowSeparators(AValue: Boolean);
 begin
   if FShowSeparators = AValue then Exit;
   FShowSeparators := AValue;
@@ -7865,7 +7966,7 @@ end;
 { Like AdjustTotalHeight but starting at Node's PARENT, so Node's own TotalHeight
   is left intact. Hiding a node must not destroy the subtree total we add back
   when it is shown again. }
-procedure TTyTreeView.AdjustAncestorsHeight(Node: PTyTreeNode; Delta: Integer);
+procedure TTyCustomTreeView.AdjustAncestorsHeight(Node: PTyTreeNode; Delta: Integer);
 var
   run, up: PTyTreeNode;
 begin
@@ -7881,12 +7982,12 @@ begin
   end;
 end;
 
-function TTyTreeView.GetNodeVisible(Node: PTyTreeNode): Boolean;
+function TTyCustomTreeView.GetNodeVisible(Node: PTyTreeNode): Boolean;
 begin
   Result := (Node <> nil) and (nsVisible in Node^.States);
 end;
 
-procedure TTyTreeView.SetNodeVisible(Node: PTyTreeNode; AValue: Boolean);
+procedure TTyCustomTreeView.SetNodeVisible(Node: PTyTreeNode; AValue: Boolean);
 var
   contrib: Integer;
 begin
@@ -7918,12 +8019,12 @@ end;
 
 { ── per-node HasChildren, re-askable (comctrls.pp:3688 OnHasChildren) ────── }
 
-function TTyTreeView.GetHasChildren(Node: PTyTreeNode): Boolean;
+function TTyCustomTreeView.GetHasChildren(Node: PTyTreeNode): Boolean;
 begin
   Result := (Node <> nil) and (nsHasChildren in Node^.States);
 end;
 
-procedure TTyTreeView.SetHasChildren(Node: PTyTreeNode; AValue: Boolean);
+procedure TTyCustomTreeView.SetHasChildren(Node: PTyTreeNode; AValue: Boolean);
 begin
   if (Node = nil) or (Node = FRoot) then Exit;
   if AValue = (nsHasChildren in Node^.States) then Exit;
@@ -7941,12 +8042,12 @@ end;
 
 { ── writable scroll position (comctrls.pp:3698-3699/:3759/:3787) ─────────── }
 
-function TTyTreeView.GetScrolledTop: Integer;
+function TTyCustomTreeView.GetScrolledTop: Integer;
 begin
   Result := -FOffsetY;    { LCL counts pixels scrolled AWAY; FOffsetY is <= 0 }
 end;
 
-procedure TTyTreeView.SetScrolledTop(AValue: Integer);
+procedure TTyCustomTreeView.SetScrolledTop(AValue: Integer);
 var
   viewH, minOff: Integer;
 begin
@@ -7964,12 +8065,12 @@ begin
   RepositionEditor;
 end;
 
-function TTyTreeView.GetScrolledLeft: Integer;
+function TTyCustomTreeView.GetScrolledLeft: Integer;
 begin
   Result := -FOffsetX;
 end;
 
-procedure TTyTreeView.SetScrolledLeft(AValue: Integer);
+procedure TTyCustomTreeView.SetScrolledLeft(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   FOffsetX := -AValue;
@@ -7979,14 +8080,14 @@ begin
   RepositionEditor;
 end;
 
-function TTyTreeView.GetTopItem: PTyTreeNode;
+function TTyCustomTreeView.GetTopItem: PTyTreeNode;
 var
   nodeTop: Integer;
 begin
   Result := GetNodeAtOffset(-FOffsetY, nodeTop);
 end;
 
-procedure TTyTreeView.SetTopItem(AValue: PTyTreeNode);
+procedure TTyCustomTreeView.SetTopItem(AValue: PTyTreeNode);
 var
   n: PTyTreeNode;
   accTop: Integer;
@@ -8008,7 +8109,7 @@ begin
   { not reachable in the current visible order (collapsed ancestor) -- no scroll }
 end;
 
-function TTyTreeView.GetBottomItem: PTyTreeNode;
+function TTyCustomTreeView.GetBottomItem: PTyTreeNode;
 var
   viewH, y, nodeTop: Integer;
   n: PTyTreeNode;
@@ -8030,7 +8131,7 @@ end;
 
 { ── per-node geometry (comctrls.pp:3096-3102) ────────────────────────────── }
 
-function TTyTreeView.DisplayRect(Node: PTyTreeNode; TextOnly: Boolean;
+function TTyCustomTreeView.DisplayRect(Node: PTyTreeNode; TextOnly: Boolean;
   out ARect: TRect): Boolean;
 var
   cell: TRect;
@@ -8051,7 +8152,7 @@ begin
   Result := True;
 end;
 
-function TTyTreeView.DisplayTextLeft(Node: PTyTreeNode; out ALeft: Integer): Boolean;
+function TTyCustomTreeView.DisplayTextLeft(Node: PTyTreeNode; out ALeft: Integer): Boolean;
 var
   r: TRect;
 begin
@@ -8060,7 +8161,7 @@ begin
   if Result then ALeft := r.Left;
 end;
 
-function TTyTreeView.DisplayExpandSignRect(Node: PTyTreeNode; out ARect: TRect): Boolean;
+function TTyCustomTreeView.DisplayExpandSignRect(Node: PTyTreeNode; out ARect: TRect): Boolean;
 var
   cell: TRect;
   col, gSz, slotBaseX, rowH, PPI: Integer;
@@ -8088,7 +8189,7 @@ begin
   Result := True;
 end;
 
-function TTyTreeView.GetNodeWithExpandSignAt(X, Y: Integer): PTyTreeNode;
+function TTyCustomTreeView.GetNodeWithExpandSignAt(X, Y: Integer): PTyTreeNode;
 var
   part: TTyTreeHitPart;
   n: PTyTreeNode;
@@ -8100,7 +8201,7 @@ end;
 
 { ── GetHitTestInfoAt (comctrls.pp:3715, THitTest at :41) ─────────────────── }
 
-function TTyTreeView.GetHitTestInfoAt(X, Y: Integer): THitTests;
+function TTyCustomTreeView.GetHitTestInfoAt(X, Y: Integer): THitTests;
 var
   part: TTyTreeHitPart;
   n: PTyTreeNode;
@@ -8140,7 +8241,7 @@ end;
 
 { ── AlphaSort (comctrls.pp:3709) ─────────────────────────────────────────── }
 
-function TTyTreeView.AlphaSort(Node: PTyTreeNode): Boolean;
+function TTyCustomTreeView.AlphaSort(Node: PTyTreeNode): Boolean;
 var
   saved: TTyTreeCompareEvent;
 begin
@@ -8160,7 +8261,7 @@ begin
   Result := True;
 end;
 
-function TTyTreeView.CustomSort(SortProc: TTyTreeNodeCompare; Node: PTyTreeNode): Boolean;
+function TTyCustomTreeView.CustomSort(SortProc: TTyTreeNodeCompare; Node: PTyTreeNode): Boolean;
 var
   saved: TTyTreeCompareEvent;
 begin
@@ -8181,7 +8282,7 @@ begin
   Result := True;
 end;
 
-procedure TTyTreeView.CustomSortCompare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+procedure TTyCustomTreeView.CustomSortCompare(Sender: TTyCustomTreeView; Node1, Node2: PTyTreeNode;
   Column: Integer; var CompareResult: Integer);
 begin
   if Assigned(FCustomSortProc) then
@@ -8190,7 +8291,7 @@ begin
     CompareResult := 0;
 end;
 
-procedure TTyTreeView.AlphaCompare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+procedure TTyCustomTreeView.AlphaCompare(Sender: TTyCustomTreeView; Node1, Node2: PTyTreeNode;
   Column: Integer; var CompareResult: Integer);
 begin
   { The MAIN-column text the painter shows -- the same path OnGetText feeds, so
@@ -8201,7 +8302,7 @@ end;
 
 { ── OnChanging: the veto in front of a selection move (comctrls.pp:3669) ─── }
 
-function TTyTreeView.DoChanging(Node: PTyTreeNode): Boolean;
+function TTyCustomTreeView.DoChanging(Node: PTyTreeNode): Boolean;
 var
   allowed: Boolean;
 begin
@@ -8216,7 +8317,7 @@ end;
 { AutoExpand (comctrls.pp:3654): the node that gains focus opens, the one that
   loses it closes. The previous node is left alone when the new focus is inside
   its subtree -- otherwise walking INTO a folder would immediately shut it. }
-procedure TTyTreeView.ApplyAutoExpand(APrev, ANew: PTyTreeNode);
+procedure TTyCustomTreeView.ApplyAutoExpand(APrev, ANew: PTyTreeNode);
 begin
   if not FAutoExpand then Exit;
   if (APrev <> nil) and (APrev <> ANew) and (nsExpanded in APrev^.States) and

@@ -66,7 +66,7 @@ type
     font/color = the title). Every visual value is theme-token-driven — a card that
     lifts on hover is just a 'TyCard:hover' rule (the base already tracks hover). }
 
-  TTyCard = class(TTyCustomControl)
+  TTyCustomCard = class(TTyCustomControl)
   private
     FTitle: TCaption;
     FTitleAlignment: TAlignment;
@@ -98,7 +98,6 @@ type
       children against it, since raw client coords would let them slide under the
       header. }
     function ContentRect: TRect;
-  published
     { The header strip's title. Drawn literally (no mnemonic parsing — a card titles
       a surface, it does not activate anything), ellipsised when it does not fit. }
     property Title: TCaption read FTitle write SetTitle;
@@ -110,10 +109,67 @@ type
     property ShowHeader: Boolean read FShowHeader write SetShowHeader default True;
     { Whether the bottom actions strip is drawn AND carved out of the child area. }
     property ShowActions: Boolean read FShowActions write SetShowActions default False;
+  end;
+
+  { TTyCard publishes TTyCustomCard's properties; everything lives in TTyCustomCard. }
+  TTyCard = class(TTyCustomCard)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Title;
+    property TitleAlignment;
+    property ShowHeader;
+    property ShowActions;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
   end;
 
 implementation
@@ -142,9 +198,9 @@ begin
   Result.Body := Rect(AClient.Left, top_ + h, AClient.Right, bottom_ - a);
 end;
 
-{ ---- TTyCard ---- }
+{ ---- TTyCustomCard ---- }
 
-constructor TTyCard.Create(AOwner: TComponent);
+constructor TTyCustomCard.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   // Designer container: the IDE drops child controls INTO the card; they lay out in
@@ -158,12 +214,12 @@ begin
   Height := 160;
 end;
 
-function TTyCard.GetStyleTypeKey: string;
+function TTyCustomCard.GetStyleTypeKey: string;
 begin
   Result := 'TyCard';
 end;
 
-function TTyCard.HeaderHAtPPI(APPI: Integer): Integer;
+function TTyCustomCard.HeaderHAtPPI(APPI: Integer): Integer;
 begin
   // Strip heights are a skin decision (a card's proportions ARE its look), so they
   // come from theme metrics rather than published sizes — same pattern as TTyGroupBox's
@@ -172,13 +228,13 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-function TTyCard.ActionsHAtPPI(APPI: Integer): Integer;
+function TTyCustomCard.ActionsHAtPPI(APPI: Integer): Integer;
 begin
   Result := MulDiv(ActiveController.Metric('--card-actions-height', TyCardActionsHeight), APPI, 96);
   if Result < 1 then Result := 1;
 end;
 
-function TTyCard.LayoutAtPPI(const AClient: TRect; APPI: Integer): TTyCardLayout;
+function TTyCustomCard.LayoutAtPPI(const AClient: TRect; APPI: Integer): TTyCardLayout;
 var
   h, a: Integer;
 begin
@@ -187,17 +243,17 @@ begin
   Result := TyCardLayout(AClient, h, a);
 end;
 
-function TTyCard.HeaderRect: TRect;
+function TTyCustomCard.HeaderRect: TRect;
 begin
   Result := LayoutAtPPI(ClientRect, Font.PixelsPerInch).Header;
 end;
 
-function TTyCard.ActionsRect: TRect;
+function TTyCustomCard.ActionsRect: TRect;
 begin
   Result := LayoutAtPPI(ClientRect, Font.PixelsPerInch).Actions;
 end;
 
-function TTyCard.ContentRect: TRect;
+function TTyCustomCard.ContentRect: TRect;
 begin
   // Delegate to AdjustClientRect itself: the child area has exactly ONE definition,
   // so a hand-placed child and an aligned one land in the same band by construction.
@@ -205,7 +261,7 @@ begin
   AdjustClientRect(Result);
 end;
 
-procedure TTyCard.AdjustClientRect(var ARect: TRect);
+procedure TTyCustomCard.AdjustClientRect(var ARect: TRect);
 var
   S: TTyStyleSet;
   lay: TTyCardLayout;
@@ -229,21 +285,21 @@ begin
   if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
 end;
 
-procedure TTyCard.SetTitle(const AValue: TCaption);
+procedure TTyCustomCard.SetTitle(const AValue: TCaption);
 begin
   if FTitle = AValue then Exit;
   FTitle := AValue;
   Invalidate;
 end;
 
-procedure TTyCard.SetTitleAlignment(AValue: TAlignment);
+procedure TTyCustomCard.SetTitleAlignment(AValue: TAlignment);
 begin
   if FTitleAlignment = AValue then Exit;
   FTitleAlignment := AValue;
   Invalidate;
 end;
 
-procedure TTyCard.SetShowHeader(AValue: Boolean);
+procedure TTyCustomCard.SetShowHeader(AValue: Boolean);
 begin
   if FShowHeader = AValue then Exit;
   FShowHeader := AValue;
@@ -251,7 +307,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyCard.SetShowActions(AValue: Boolean);
+procedure TTyCustomCard.SetShowActions(AValue: Boolean);
 begin
   if FShowActions = AValue then Exit;
   FShowActions := AValue;
@@ -259,7 +315,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyCard.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomCard.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, hs, acts: TTyStyleSet;
@@ -407,7 +463,7 @@ begin
   end;
 end;
 
-procedure TTyCard.Paint;
+procedure TTyCustomCard.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

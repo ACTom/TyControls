@@ -506,8 +506,8 @@ type
     procedure Build(ARtl: Boolean; ACols: Integer = 3; AWidth: Integer = 400;
       APPI: Integer = 96);
     function  Shot(AWidth: Integer = 400; AHeight: Integer = 200): TBGRABitmap;
-    procedure OnText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
-    procedure OnImage(Sender: TTyTreeView; Node: PTyTreeNode; Kind: TTyVTImageKind;
+    procedure OnText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnImage(Sender: TTyCustomTreeView; Node: PTyTreeNode; Kind: TTyVTImageKind;
       Column: Integer; var Ghosted: Boolean; var ImageIndex: Integer);
     { Column index whose PAINTED cell contains device x, or NoColumn. Derived from
       GetCellRect, i.e. from the paint, never from the hit test being checked. }
@@ -4562,12 +4562,12 @@ const
     'TyListViewHeaderSection { color: #0000FF; }' +
     'TyListViewLine { background: #00FF00; }';
 
-procedure TRtlTreeViewTest.OnText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+procedure TRtlTreeViewTest.OnText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
 begin
   Text := 'n' + IntToStr(Node^.Index);
 end;
 
-procedure TRtlTreeViewTest.OnImage(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TRtlTreeViewTest.OnImage(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean; var ImageIndex: Integer);
 begin
   if Kind = ikNormal then ImageIndex := 0;

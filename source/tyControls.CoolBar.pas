@@ -3,7 +3,7 @@ unit tyControls.CoolBar;
 
 { Phase-5 (containers) — TTyCoolBar: a REBAR band container.
 
-  TTyCoolBar SUBCLASSES TTyControlBar (the band-packing base, built the same batch;
+  TTyCoolBar DESCENDS FROM TTyCustomControlBar (the band-packing base, built the same batch;
   GetStyleTypeKey='TyPanel' — NO new .tycss). TTyControlBar already packs each child
   control onto a horizontal band with a left gripper; TTyCoolBar upgrades every band so
   it can be:
@@ -102,7 +102,7 @@ type
   { Band extents along the row's run, in the packer's own units. }
   TTyCoolExtents = array of Integer;
 
-  TTyCoolBar = class;
+  TTyCustomCoolBar = class;
 
   { One band. A COLLECTION ITEM rather than the record this used to be, because band metadata
     that only exists at run time cannot be designed: a form could host the controls but not say
@@ -175,7 +175,7 @@ type
   private
     function GetItem(AIndex: Integer): TTyCoolBand;
     procedure SetItem(AIndex: Integer; AValue: TTyCoolBand);
-    function OwnerBar: TTyCoolBar;
+    function OwnerBar: TTyCustomCoolBar;
   protected
     procedure Update(AItem: TCollectionItem); override;
   public
@@ -186,7 +186,7 @@ type
     property Items[AIndex: Integer]: TTyCoolBand read GetItem write SetItem; default;
   end;
 
-  TTyCoolBar = class(TTyControlBar)
+  TTyCustomCoolBar = class(TTyCustomControlBar)
   private
     FBandList: TTyCoolBands;           // the designable band list; Control links each to its child
     FDefaultBandMinWidth: Integer;     // fallback min when a band has none of its own
@@ -318,8 +318,7 @@ type
       the packer, the hit-test and the painter cannot disagree about it. }
     procedure SetBandVisible(ACtl: TControl; AValue: Boolean);
     function BandVisible(ACtl: TControl): Boolean;
-  published
-    // GripperWidth is INHERITED from TTyControlBar (same field the band packing uses) — do NOT
+    // GripperWidth is INHERITED from TTyCustomControlBar (same field the band packing uses) — do NOT
     // redeclare it here, or the base would pack with one width while our hit-test used another.
     { Fallback resize floor for a band that has no MinWidth of its own (logical px). }
     property DefaultBandMinWidth: Integer read FDefaultBandMinWidth write FDefaultBandMinWidth default 24;
@@ -333,10 +332,86 @@ type
     { The bands, editable in the designer. Every per-control helper below is a facade over
       this, so code written against either sees the same state. }
     property Bands: TTyCoolBands read FBandList write SetBands;
+  end;
+
+  { TTyCoolBar publishes TTyCustomCoolBar's properties; everything lives in TTyCustomCoolBar. }
+  TTyCoolBar = class(TTyCustomCoolBar)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Caption;
+    property Alignment;
+    property VerticalAlignment;
+    property WordWrap;
+    property ShowAccelChar;
+    property DockSite;
+    property UseDockManager;
+    property OnDockDrop;
+    property OnDockOver;
+    property OnUnDock;
+    property OnGetSiteInfo;
+    property OnGetDockCaption;
+    property OnStartDock;
+    property OnEndDock;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
+    property BandHeight;
+    property RowSize;
+    property GripperWidth;
+    property BandSpacing;
+    property DefaultBandMinWidth;
+    property ShowText;
+    property Vertical;
+    property OnChange;
+    property Bands;
   end;
 
 { ------------------------------------------------------------------------------
@@ -843,7 +918,7 @@ end;
 
 procedure TTyCoolBand.SetWidth(AValue: Integer);
 var
-  bar: TTyCoolBar;
+  bar: TTyCustomCoolBar;
 begin
   if AValue < 0 then AValue := 0;
   if FWidth = AValue then Exit;
@@ -891,9 +966,9 @@ begin
   inherited Create(AOwner, TTyCoolBand);
 end;
 
-function TTyCoolBands.OwnerBar: TTyCoolBar;
+function TTyCoolBands.OwnerBar: TTyCustomCoolBar;
 begin
-  if GetOwner is TTyCoolBar then Result := TTyCoolBar(GetOwner) else Result := nil;
+  if GetOwner is TTyCustomCoolBar then Result := TTyCustomCoolBar(GetOwner) else Result := nil;
 end;
 
 function TTyCoolBands.GetItem(AIndex: Integer): TTyCoolBand;
@@ -921,7 +996,7 @@ begin
 end;
 
 procedure TTyCoolBands.Update(AItem: TCollectionItem);
-var bar: TTyCoolBar;
+var bar: TTyCustomCoolBar;
 begin
   inherited Update(AItem);
   { Any edit -- from the designer or from code -- re-lays the bar and reports the change, so a
@@ -931,9 +1006,9 @@ begin
 end;
 
 // =============================================================================
-// TTyCoolBar
+// TTyCustomCoolBar
 // =============================================================================
-constructor TTyCoolBar.Create(AOwner: TComponent);
+constructor TTyCustomCoolBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FBandList := TTyCoolBands.Create(Self);
@@ -944,32 +1019,32 @@ begin
   FDragCtl := nil;
 end;
 
-function TTyCoolBar.GetStyleTypeKey: string;
+function TTyCustomCoolBar.GetStyleTypeKey: string;
 begin
-  { Own key rather than the borrowed 'TyPanel': same as its TTyControlBar ancestor — band grippers are not panel chrome.
+  { Own key rather than the borrowed 'TyPanel', as TTyCustomControlBar (its parent) has — band grippers are not panel chrome.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
     unchanged — this opens a hook, it does not restyle anything. }
   Result := 'TyCoolBar';
 end;
 
-function TTyCoolBar.GripperWidthPx: Integer;
+function TTyCustomCoolBar.GripperWidthPx: Integer;
 begin
-  Result := MulDiv(GripperWidth, Font.PixelsPerInch, 96);   // inherited from TTyControlBar
+  Result := MulDiv(GripperWidth, Font.PixelsPerInch, 96);   // inherited from TTyCustomControlBar
   if Result < 0 then Result := 0;
 end;
 
-function TTyCoolBar.RunPx(ALogical: Integer): Integer;
+function TTyCustomCoolBar.RunPx(ALogical: Integer): Integer;
 begin
   Result := MulDiv(ALogical, Font.PixelsPerInch, 96);
 end;
 
-function TTyCoolBar.RunLogical(ADevice: Integer): Integer;
+function TTyCustomCoolBar.RunLogical(ADevice: Integer): Integer;
 begin
   Result := MulDiv(ADevice, 96, Font.PixelsPerInch);
 end;
 
 
-function TTyCoolBar.EnsureBand(ACtl: TControl): TTyCoolBand;
+function TTyCustomCoolBar.EnsureBand(ACtl: TControl): TTyCoolBand;
 begin
   { Band metadata used to spring into existence only when a WIDTH was assigned, so setting any
     other band property on a band nobody had sized yet silently did nothing. Every setter goes
@@ -982,35 +1057,35 @@ begin
   Result.Control := ACtl;
 end;
 
-procedure TTyCoolBar.SetBandWidth(ACtl: TControl; AWidth: Integer);
+procedure TTyCustomCoolBar.SetBandWidth(ACtl: TControl; AWidth: Integer);
 var b: TTyCoolBand;
 begin
   b := EnsureBand(ACtl);
   if b <> nil then b.Width := AWidth;
 end;
 
-function TTyCoolBar.GetBandWidth(ACtl: TControl): Integer;
+function TTyCustomCoolBar.GetBandWidth(ACtl: TControl): Integer;
 var b: TTyCoolBand;
 begin
   b := FBandList.FindBand(ACtl);
   if b <> nil then Result := b.Width else Result := 0;
 end;
 
-procedure TTyCoolBar.SetBandMinWidth(ACtl: TControl; AMinWidth: Integer);
+procedure TTyCustomCoolBar.SetBandMinWidth(ACtl: TControl; AMinWidth: Integer);
 var b: TTyCoolBand;
 begin
   b := EnsureBand(ACtl);
   if b <> nil then b.MinWidth := AMinWidth;
 end;
 
-procedure TTyCoolBar.SetBandMaxWidth(ACtl: TControl; AMaxWidth: Integer);
+procedure TTyCustomCoolBar.SetBandMaxWidth(ACtl: TControl; AMaxWidth: Integer);
 var b: TTyCoolBand;
 begin
   b := EnsureBand(ACtl);
   if b <> nil then b.MaxWidth := AMaxWidth;
 end;
 
-function TTyCoolBar.BandMinWidth(ACtl: TControl): Integer;
+function TTyCustomCoolBar.BandMinWidth(ACtl: TControl): Integer;
 var b: TTyCoolBand;
 begin
   b := FBandList.FindBand(ACtl);
@@ -1020,7 +1095,7 @@ begin
     Result := FDefaultBandMinWidth;
 end;
 
-function TTyCoolBar.BandContentCap(ACtl: TControl): Integer;
+function TTyCustomCoolBar.BandContentCap(ACtl: TControl): Integer;
 var
   pw, ph: Integer;
 begin
@@ -1059,7 +1134,7 @@ begin
   if (pw > 0) and ((Result <= 0) or (pw < Result)) then Result := pw;
 end;
 
-function TTyCoolBar.BandMaxWidth(ACtl: TControl): Integer;
+function TTyCustomCoolBar.BandMaxWidth(ACtl: TControl): Integer;
 var
   b: TTyCoolBand;
   cap: Integer;
@@ -1082,7 +1157,7 @@ begin
   if (cap > 0) and ((Result <= 0) or (cap < Result)) then Result := cap;
 end;
 
-function TTyCoolBar.BandRectFor(ACtl: TControl): TRect;
+function TTyCustomCoolBar.BandRectFor(ACtl: TControl): TRect;
 var
   gw: Integer;
   content: TRect;
@@ -1130,77 +1205,77 @@ begin
   end;
 end;
 
-procedure TTyCoolBar.SetBandBreak(ACtl: TControl; AValue: Boolean);
+procedure TTyCustomCoolBar.SetBandBreak(ACtl: TControl; AValue: Boolean);
 var b: TTyCoolBand;
 begin
   b := EnsureBand(ACtl);
   if b <> nil then b.Break := AValue;
 end;
 
-function TTyCoolBar.BandBreak(ACtl: TControl): Boolean;
+function TTyCustomCoolBar.BandBreak(ACtl: TControl): Boolean;
 var b: TTyCoolBand;
 begin
   b := FBandList.FindBand(ACtl);
   Result := (b <> nil) and b.Break;
 end;
 
-procedure TTyCoolBar.SetBandText(ACtl: TControl; const AValue: string);
+procedure TTyCustomCoolBar.SetBandText(ACtl: TControl; const AValue: string);
 var b: TTyCoolBand;
 begin
   b := EnsureBand(ACtl);
   if b <> nil then b.Text := AValue;
 end;
 
-function TTyCoolBar.BandText(ACtl: TControl): string;
+function TTyCustomCoolBar.BandText(ACtl: TControl): string;
 var b: TTyCoolBand;
 begin
   b := FBandList.FindBand(ACtl);
   if b <> nil then Result := b.Text else Result := '';
 end;
 
-procedure TTyCoolBar.SetBandFixedSize(ACtl: TControl; AValue: Boolean);
+procedure TTyCustomCoolBar.SetBandFixedSize(ACtl: TControl; AValue: Boolean);
 var b: TTyCoolBand;
 begin
   b := EnsureBand(ACtl);
   if b <> nil then b.FixedSize := AValue;
 end;
 
-function TTyCoolBar.BandFixedSize(ACtl: TControl): Boolean;
+function TTyCustomCoolBar.BandFixedSize(ACtl: TControl): Boolean;
 var b: TTyCoolBand;
 begin
   b := FBandList.FindBand(ACtl);
   Result := (b <> nil) and b.FixedSize;
 end;
 
-procedure TTyCoolBar.SetBandAutoMaxWidth(ACtl: TControl; AValue: Boolean);
+procedure TTyCustomCoolBar.SetBandAutoMaxWidth(ACtl: TControl; AValue: Boolean);
 var b: TTyCoolBand;
 begin
   b := EnsureBand(ACtl);
   if b <> nil then b.AutoMaxWidth := AValue;
 end;
 
-function TTyCoolBar.BandAutoMaxWidth(ACtl: TControl): Boolean;
+function TTyCustomCoolBar.BandAutoMaxWidth(ACtl: TControl): Boolean;
 var b: TTyCoolBand;
 begin
   b := FBandList.FindBand(ACtl);
   Result := (b <> nil) and b.AutoMaxWidth;
 end;
 
-procedure TTyCoolBar.SetBandVisible(ACtl: TControl; AValue: Boolean);
+procedure TTyCustomCoolBar.SetBandVisible(ACtl: TControl; AValue: Boolean);
 var b: TTyCoolBand;
 begin
   b := EnsureBand(ACtl);
   if b <> nil then b.Visible := AValue;
 end;
 
-function TTyCoolBar.BandVisible(ACtl: TControl): Boolean;
+function TTyCustomCoolBar.BandVisible(ACtl: TControl): Boolean;
 begin
   Result := (ACtl <> nil) and ACtl.Visible;
 end;
 
 { Measure a band caption on a scratch canvas -- the pattern TTyCustomTabStrip and TTyGroupBox
   use, so CJK and variable-width fonts measure correctly with no window. }
-function TTyCoolBar.BandTextWidth(const AText: string; const AStyle: TTyStyleSet): Integer;
+function TTyCustomCoolBar.BandTextWidth(const AText: string; const AStyle: TTyStyleSet): Integer;
 var
   bmp: TBitmap;
 begin
@@ -1220,18 +1295,18 @@ begin
   if Result > 0 then Inc(Result, MulDiv(8, Font.PixelsPerInch, 96));   // a gap before the child
 end;
 
-destructor TTyCoolBar.Destroy;
+destructor TTyCustomCoolBar.Destroy;
 begin
   FreeAndNil(FBandList);
   inherited Destroy;
 end;
 
-procedure TTyCoolBar.SetBands(AValue: TTyCoolBands);
+procedure TTyCustomCoolBar.SetBands(AValue: TTyCoolBands);
 begin
   FBandList.Assign(AValue);
 end;
 
-procedure TTyCoolBar.BandsChanged;
+procedure TTyCustomCoolBar.BandsChanged;
 begin
   { One place the collection reports into, so a designer edit and a run-time setter take the
     same path: re-lay, then tell the application. }
@@ -1239,7 +1314,7 @@ begin
   Changed;
 end;
 
-procedure TTyCoolBar.SetVertical(AValue: Boolean);
+procedure TTyCustomCoolBar.SetVertical(AValue: Boolean);
 begin
   if FVertical = AValue then Exit;
   FVertical := AValue;
@@ -1247,19 +1322,19 @@ begin
   Changed;
 end;
 
-procedure TTyCoolBar.SetShowText(AValue: Boolean);
+procedure TTyCustomCoolBar.SetShowText(AValue: Boolean);
 begin
   if FShowText = AValue then Exit;
   FShowText := AValue;
   Relayout;   // the caption strip is packed, so turning it on/off moves every band
 end;
 
-procedure TTyCoolBar.Changed;
+procedure TTyCustomCoolBar.Changed;
 begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-function TTyCoolBar.PackBands(const ABands: array of TControl; const ASizes: array of TSize;
+function TTyCustomCoolBar.PackBands(const ABands: array of TControl; const ASizes: array of TSize;
   AAvail, ABandHeight, AGripperW, ASpacing: Integer): TTyRectArray;
 var
   brks: array of Boolean;
@@ -1296,7 +1371,7 @@ begin
       IsRightToLeft);
 end;
 
-procedure TTyCoolBar.PaintGrippers(APainter: TTyPainter; const AStyle: TTyStyleSet;
+procedure TTyCustomCoolBar.PaintGrippers(APainter: TTyPainter; const AStyle: TTyStyleSet;
   ABandCount, ABandHeight, AGripperW, ASpacing: Integer);
 var
   i: Integer;
@@ -1332,7 +1407,7 @@ begin
   end;
 end;
 
-procedure TTyCoolBar.CollectLaidOutBands(out ACtls: TTyCoolBandCtls; out ARects: TTyRectArray);
+procedure TTyCustomCoolBar.CollectLaidOutBands(out ACtls: TTyCoolBandCtls; out ARects: TTyRectArray);
 var
   i, n: Integer;
   ctl: TControl;
@@ -1355,7 +1430,7 @@ begin
   SetLength(ARects, n);
 end;
 
-function TTyCoolBar.SeamOwnerOf(ACtl: TControl): TControl;
+function TTyCustomCoolBar.SeamOwnerOf(ACtl: TControl): TControl;
 var
   ctls: TTyCoolBandCtls;
   rects: TTyRectArray;
@@ -1372,7 +1447,7 @@ begin
   if seam >= 0 then Result := ctls[seam];
 end;
 
-function TTyCoolBar.RowStepPx: Integer;
+function TTyCustomCoolBar.RowStepPx: Integer;
 var
   ppi: Integer;
 begin
@@ -1380,7 +1455,7 @@ begin
   Result := MulDiv(BandHeight, ppi, 96) + MulDiv(BandSpacing, ppi, 96);
 end;
 
-function TTyCoolBar.RowOrdinalOfBand(const ARect: TRect): Integer;
+function TTyCustomCoolBar.RowOrdinalOfBand(const ARect: TRect): Integer;
 var
   step: Integer;
   content: TRect;
@@ -1407,7 +1482,7 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-function TTyCoolBar.RowOrdinalOfPoint(AX, AY: Integer): Integer;
+function TTyCustomCoolBar.RowOrdinalOfPoint(AX, AY: Integer): Integer;
 var
   step: Integer;
   content: TRect;
@@ -1426,7 +1501,7 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-function TTyCoolBar.BandLeadPx(ACtl: TControl): Integer;
+function TTyCustomCoolBar.BandLeadPx(ACtl: TControl): Integer;
 var
   bnd: TTyCoolBand;
 begin
@@ -1438,14 +1513,14 @@ begin
   if bnd <> nil then Inc(Result, BandTextWidth(bnd.Text, CurrentStyle));
 end;
 
-function TTyCoolBar.BandRunExtent(ACtl: TControl): Integer;
+function TTyCustomCoolBar.BandRunExtent(ACtl: TControl): Integer;
 begin
   Result := 0;
   if ACtl = nil then Exit;
   if FVertical then Result := ACtl.Height else Result := ACtl.Width;
 end;
 
-procedure TTyCoolBar.SetBandRunExtent(ACtl: TControl; AValue: Integer);
+procedure TTyCustomCoolBar.SetBandRunExtent(ACtl: TControl; AValue: Integer);
 begin
   if ACtl = nil then Exit;
   { Routed through the band MODEL, not poked straight into the control: the packer re-measures
@@ -1465,7 +1540,7 @@ begin
     if ACtl.Width <> AValue then ACtl.Width := AValue;
 end;
 
-function TTyCoolBar.RejoinRow(AX, AY, ATargetRow: Integer): Boolean;
+function TTyCustomCoolBar.RejoinRow(AX, AY, ATargetRow: Integer): Boolean;
 var
   ctls: TTyCoolBandCtls;
   rects: TTyRectArray;
@@ -1554,7 +1629,7 @@ begin
   Result := True;
 end;
 
-function TTyCoolBar.ReorderFromPointer(AX, AY: Integer): Boolean;
+function TTyCustomCoolBar.ReorderFromPointer(AX, AY: Integer): Boolean;
 var
   ctls: TTyCoolBandCtls;
   rects: TTyRectArray;
@@ -1608,7 +1683,7 @@ begin
   Result := True;
 end;
 
-function TTyCoolBar.BandAtPoint(AX, AY: Integer): TControl;
+function TTyCustomCoolBar.BandAtPoint(AX, AY: Integer): TControl;
 var
   i: Integer;
   ctl: TControl;
@@ -1632,7 +1707,7 @@ begin
   end;
 end;
 
-procedure TTyCoolBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomCoolBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   hit: TControl;
 begin
@@ -1663,7 +1738,7 @@ begin
     FDragStartW := 0;
 end;
 
-procedure TTyCoolBar.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomCoolBar.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   dxLogical, newW, minW, maxW, ppi, step, curRow, wantRow: Integer;
 begin
@@ -1749,7 +1824,7 @@ begin
   end;
 end;
 
-procedure TTyCoolBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomCoolBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
   if Button = mbLeft then
@@ -1761,7 +1836,7 @@ begin
   end;
 end;
 
-procedure TTyCoolBar.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomCoolBar.Notification(AComponent: TComponent; Operation: TOperation);
 var
   bnd: TTyCoolBand;
 begin

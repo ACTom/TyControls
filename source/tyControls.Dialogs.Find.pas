@@ -74,6 +74,9 @@ type
     procedure PreviewInDesigner;       // guard-free Execute body, for the component editor
     procedure CloseDialog;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     property FindText: string read FFindText write FFindText;
     property Options: TFindOptions read FOptions write FOptions default [frDown];
     property Position: TPosition read FPosition write FPosition default poScreenCenter;

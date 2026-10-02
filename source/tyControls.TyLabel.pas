@@ -6,7 +6,7 @@ uses
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
   tyControls.Accel;
 type
-  TTyLabel = class(TTyGraphicControl)
+  TTyCustomLabel = class(TTyGraphicControl)
   private
     FAlignment: TAlignment;
     FLayout: TTextLayout;
@@ -90,26 +90,69 @@ type
       size before it can decide its own bounds — the message dialog does exactly that, and
       pinning a guessed box instead is how it used to cut every message past two lines. }
     procedure MeasureCaption(APPI, AAvailWidthPx: Integer; out AWidthPx, AHeightPx: Integer);
-  published
-    property Caption;
-    property Enabled;
-    property Font;
-    property Align;
-    property Anchors;
-    property StyleClass;
-    property Controller;
-    property OnClick;
+  protected
     property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
     property Layout: TTextLayout read FLayout write SetLayout default tlCenter;
     property WordWrap: Boolean read FWordWrap write SetWordWrap default False;
-    property AutoSize;
     property Transparent: Boolean read FTransparent write SetTransparent default True;
     property FocusControl: TWinControl read FFocusControl write SetFocusControl;
   end;
 
+  { TTyLabel publishes TTyCustomLabel's properties; everything lives in TTyCustomLabel. }
+  TTyLabel = class(TTyCustomLabel)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Caption;
+    property Align;
+    property Anchors;
+    property Alignment;
+    property Layout;
+    property WordWrap;
+    property Transparent;
+    property FocusControl;
+  end;
+
 implementation
 
-constructor TTyLabel.Create(AOwner: TComponent);
+constructor TTyCustomLabel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TyAccelRegister(Self);
@@ -124,13 +167,13 @@ begin
   AccessibleRole := larLabel;
 end;
 
-destructor TTyLabel.Destroy;
+destructor TTyCustomLabel.Destroy;
 begin
   TyAccelUnregister(Self);
   inherited Destroy;
 end;
 
-function TTyLabel.DialogChar(var Message: TLMKey): Boolean;
+function TTyCustomLabel.DialogChar(var Message: TLMKey): Boolean;
 begin
   if (FFocusControl <> nil) and TyIsAccelKey(Message, Caption) then
   begin
@@ -140,12 +183,12 @@ begin
   Result := inherited DialogChar(Message);
 end;
 
-function TTyLabel.GetStyleTypeKey: string;
+function TTyCustomLabel.GetStyleTypeKey: string;
 begin
   Result := 'TyLabel';
 end;
 
-function TTyLabel.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
+function TTyCustomLabel.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
 begin
   { TTyGraphicControl has no ResolveFontSize helper, so it delegates to the shared one —
     which recovers the theme's --font-size-base when a skin suppresses the typeKey font-size
@@ -153,21 +196,21 @@ begin
   Result := TyResolveFontSize(AStyle, ParentFont, Font.Size, ActiveController);
 end;
 
-procedure TTyLabel.SetAlignment(AValue: TAlignment);
+procedure TTyCustomLabel.SetAlignment(AValue: TAlignment);
 begin
   if FAlignment = AValue then Exit;
   FAlignment := AValue;
   Invalidate;
 end;
 
-procedure TTyLabel.SetLayout(AValue: TTextLayout);
+procedure TTyCustomLabel.SetLayout(AValue: TTextLayout);
 begin
   if FLayout = AValue then Exit;
   FLayout := AValue;
   Invalidate;
 end;
 
-procedure TTyLabel.SetWordWrap(AValue: Boolean);
+procedure TTyCustomLabel.SetWordWrap(AValue: Boolean);
 begin
   if FWordWrap = AValue then Exit;
   FWordWrap := AValue;
@@ -182,14 +225,14 @@ begin
   Invalidate;
 end;
 
-procedure TTyLabel.SetTransparent(AValue: Boolean);
+procedure TTyCustomLabel.SetTransparent(AValue: Boolean);
 begin
   if FTransparent = AValue then Exit;
   FTransparent := AValue;
   Invalidate;
 end;
 
-procedure TTyLabel.SetFocusControl(AValue: TWinControl);
+procedure TTyCustomLabel.SetFocusControl(AValue: TWinControl);
 begin
   if FFocusControl = AValue then Exit;
   if FFocusControl <> nil then
@@ -199,21 +242,21 @@ begin
     FFocusControl.FreeNotification(Self);
 end;
 
-procedure TTyLabel.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomLabel.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FFocusControl) then
     FFocusControl := nil;
 end;
 
-procedure TTyLabel.Click;
+procedure TTyCustomLabel.Click;
 begin
   inherited Click;
   if (FFocusControl <> nil) and FFocusControl.CanFocus then
     FFocusControl.SetFocus;
 end;
 
-procedure TTyLabel.DoUpdateSizeConstraints;
+procedure TTyCustomLabel.DoUpdateSizeConstraints;
 var
   S: TTyStyleSet;
   ppi, padH, w, h: Integer;
@@ -252,7 +295,7 @@ begin
   Constraints.MinWidth := 0;
 end;
 
-procedure TTyLabel.Invalidate;
+procedure TTyCustomLabel.Invalidate;
 begin
   inherited Invalidate;
   { A theme switch arrives as a bare Invalidate (the controller broadcasts one to every
@@ -270,7 +313,7 @@ begin
   end;
 end;
 
-procedure TTyLabel.TextChanged;
+procedure TTyCustomLabel.TextChanged;
 begin
   inherited TextChanged;
   UpdateSizeConstraints;   // the new caption needs a different floor
@@ -282,7 +325,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyLabel.DoSetBounds(ALeft, ATop, AWidth, AHeight: Integer);
+procedure TTyCustomLabel.DoSetBounds(ALeft, ATop, AWidth, AHeight: Integer);
 var
   WidthChanged: Boolean;
 begin
@@ -295,7 +338,7 @@ begin
   end;
 end;
 
-procedure TTyLabel.WrapText(const AText: string; AMaxWidthPx: Integer;
+procedure TTyCustomLabel.WrapText(const AText: string; AMaxWidthPx: Integer;
   ACanvas: TCanvas; ALines: TStrings);
 { Greedy CJK-aware wrap. The algorithm now lives in tyControls.Painter (TyWrapTextCJK)
   so TTyNotification shares the exact same line-breaking; kept as a method for the two
@@ -304,7 +347,7 @@ begin
   TyWrapTextCJK(AText, AMaxWidthPx, ACanvas, ALines);
 end;
 
-procedure TTyLabel.MeasureCaption(APPI, AAvailWidthPx: Integer;
+procedure TTyCustomLabel.MeasureCaption(APPI, AAvailWidthPx: Integer;
   out AWidthPx, AHeightPx: Integer);
 { The body of this used to live here: build a measuring bitmap, set the four font fields,
   split or wrap, widest line x line count. It is now TyMeasureTextBlock in tyControls.Painter,
@@ -337,13 +380,13 @@ begin
   end;
 end;
 
-procedure TTyLabel.ShouldAutoAdjust(var AWidth, AHeight: Boolean);
+procedure TTyCustomLabel.ShouldAutoAdjust(var AWidth, AHeight: Boolean);
 begin
   inherited ShouldAutoAdjust(AWidth, AHeight);
   if AutoSize and FWordWrap then AWidth := True;
 end;
 
-procedure TTyLabel.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+procedure TTyCustomLabel.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
   WithThemeSpace: Boolean);
 var
   S: TTyStyleSet;
@@ -371,7 +414,7 @@ begin
   if PreferredHeight < 1 then PreferredHeight := 1;
 end;
 
-procedure TTyLabel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomLabel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -464,7 +507,7 @@ begin
   end;
 end;
 
-procedure TTyLabel.Paint;
+procedure TTyCustomLabel.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

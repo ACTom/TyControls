@@ -1641,7 +1641,12 @@ type
     { 把某个单元格滚进可视区(最小移动量)。光标一旦走出视口就得靠它跟上,
       否则按方向键会"把光标走丢"。 }
     procedure ScrollIntoView(ACol, ARow: Integer);
-  published
+    property TabStop default True;
+    { 主题接线。 }
+    { LCL 标准布局属性 —— 基类没有发布它们,必须在这里发布。
+      漏发布的后果只在**运行时流式化**才暴露(设计器里写了 Anchors,启动时报
+      "Unknown property: Anchors"),编译期完全看不出来。 }
+  protected
     { 列模型(含列集合、列头高度、排序列、自动适宽列)。 }
     property Header: TTyHeader read FHeader write SetHeader;
     { 数据行数(不含列头与固定行)。 }
@@ -1860,20 +1865,6 @@ type
     { 底部汇总带。内容由派生类给(TTyStringGrid 按列聚合)。 }
     property ShowFooter: Boolean read FShowFooter write SetShowFooter default False;
     property FooterHeight: Integer read FFooterHeight write SetFooterHeight default 24;
-
-    { LCL 标准布局属性 —— 基类没有发布它们,必须在这里发布。
-      漏发布的后果只在**运行时流式化**才暴露(设计器里写了 Anchors,启动时报
-      "Unknown property: Anchors"),编译期完全看不出来。 }
-    property Align;
-    property Anchors;
-    property BorderSpacing;
-    property Constraints;
-    property Visible;
-    property PopupMenu;
-    property TabStop default True;
-    { 主题接线。 }
-    property StyleClass;
-    property Controller;
   end;
 
   { 单元格文本由宿主提供 —— 对齐 LCL TDrawGrid 的"内容不归控件管"的定位。 }
@@ -1882,7 +1873,7 @@ type
 
   { 纯自绘网格:自己不存任何数据,每个单元格的文本现问宿主要。
     因为不存数据,它天然就是"虚拟"的 —— 一百万行也不占内存。 }
-  TTyDrawGrid = class(TTyCustomGrid)
+  TTyCustomDrawGrid = class(TTyCustomGrid)
   private
     FOnGetCellText: TTyGridGetCellTextEvent;
   protected
@@ -1898,9 +1889,142 @@ type
     function DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean; virtual;
     procedure RenderCells(P: TTyPainter; const M: TTyGridMetrics;
       const AFrame: TTyStyleSet); override;
-  published
+  public
+    { Promoted to public at this level, as TCustomDrawGrid promotes them over TCustomGrid
+      (grids.pas:1397); TTyCustomGrid keeps them protected, as TCustomGrid does. }
+    property RowCount;
+    property DefaultRowHeight;
+    property DefaultColWidth;
+    property AutoFillColumns;
+    property ScrollBars;
+    property Options;
+    property FocusRectVisible;
+    property FadeUnfocusedSelection;
+    property FixedCols;
+    property FixedRows;
+    property GridLineStyle;
+    property GridLineWidth;
+    property OnTopLeftChanged;
+    property OnHeaderClick;
     property OnGetCellText: TTyGridGetCellTextEvent
       read FOnGetCellText write FOnGetCellText;
+  end;
+
+  { TTyDrawGrid publishes TTyCustomDrawGrid's properties; everything lives in TTyCustomDrawGrid. }
+  TTyDrawGrid = class(TTyCustomDrawGrid)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Header;
+    property RowCount;
+    property DefaultRowHeight;
+    property DefaultColWidth;
+    property AutoFillColumns;
+    property VertScrollBarMode;
+    property HorzScrollBarMode;
+    property ScrollBars;
+    property Options;
+    property ShowFocusCell;
+    property FocusRectVisible;
+    property HideSelectionWhenInactive;
+    property FadeUnfocusedSelection;
+    property FixedCols;
+    property FixedRows;
+    property FixedRowsBottom;
+    property FixedColsRight;
+    property ShowIndicator;
+    property ShowRowNumbers;
+    property IndicatorWidth;
+    property GridLines;
+    property HeaderGroups;
+    property GroupHeaderHeight;
+    property GridLineStyle;
+    property AlternateRows;
+    property WordWrap;
+    property GridLineWidth;
+    property Images;
+    property OnGetCellStyle;
+    property OnGetCellBorder;
+    property OnGetHeaderStyle;
+    property OnColumnSizing;
+    property OnEndColumnSize;
+    property OnRowSizing;
+    property OnEndRowSize;
+    property OnColumnMove;
+    property OnRowMove;
+    property OnGetEditorProp;
+    property MinEditorWidth;
+    property MinRowHeight;
+    property MaxRowHeight;
+    property MinColWidth;
+    property MaxColWidth;
+    property OnClickCell;
+    property OnDblClickCell;
+    property OnRightClickCell;
+    property OnCanClickCell;
+    property OnCellButtonClick;
+    property OnCanToggleCheck;
+    property OnCheckBoxChange;
+    property OnRatingChange;
+    property OnEllipsisClick;
+    property OnGetCellWordWrap;
+    property OnHeaderClick;
+    property OnHeaderRightClick;
+    property OnTopLeftChanged;
+    property ScrollBarAutoHide;
+    property ShowFooter;
+    property FooterHeight;
+    property Align;
+    property Anchors;
+    property OnGetCellText;
   end;
 
   TTyGridSelectCellEvent = procedure(Sender: TObject; ACol, ARow: Integer;
@@ -1960,7 +2084,7 @@ type
 
   { 完整体:自带**稀疏**单元格存储 + 二维光标 + 键鼠导航。
     稀疏的意思是只有写过的单元格才占内存 —— 100 万 x 100 的空表不花一分钱。 }
-  TTyStringGrid = class(TTyDrawGrid)
+  TTyCustomStringGrid = class(TTyCustomDrawGrid)
   private
     { 'col:row' -> 文本,只存写过的格。
       **必须是哈希表**:早先用有序 TStringList + Values[] 查找,而 IndexOfName 是
@@ -2172,6 +2296,9 @@ type
       out AFirst, AStep: Integer): Boolean;
   private
     FSkipReadOnly: Boolean;
+    { 窗体文件里先于列 / 行数读到的 Col / Row,留给 Loaded 落位。见 SetCol。 }
+    FStreamedCol, FStreamedRow: Integer;
+    FColWaits, FRowWaits: Boolean;
     FGroupRowFormat: string;
     FSortDir: TTySortDirection;
     FSortKind: TTyGridSortKind;
@@ -2257,6 +2384,8 @@ type
     function  GetCellText(ACol, ARow: Integer): string; override;
     procedure RenderCells(P: TTyPainter; const M: TTyGridMetrics;
       const AFrame: TTyStyleSet); override;
+    { 先于列 / 行数读到的 Col / Row 在这里落位 —— SetCol / SetRow 读窗体时那一半的另一半。 }
+    procedure Loaded; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
@@ -3043,7 +3172,6 @@ type
       ClearSortColumns 与 SortByColumn(-1) 都会把显示序退回原始数据顺序,
       所以都不能拿来做这件事。下一次真的排序时指示器自己回来。 }
     procedure HideSortArrow;
-  published
     { 当前单元格。 }
     property Col: Integer read FCol write SetCol default 0;
     property Row: Integer read FRow write SetRow default 0;
@@ -3056,19 +3184,11 @@ type
       ReadOnly 管用户,不管宿主,与本库每个编辑控件的含义一致。
       `Options` 里的 goEditing 是它的反视图。 }
     property ReadOnly: Boolean read FReadOnly write FReadOnly default False;
-    { 选择粒度:单元格矩形 / 整行 / 整列。 }
     { 分组行的格式串:%s = 分组值,%d = 组内行数。 }
     property GroupRowFormat: string read FGroupRowFormat write FGroupRowFormat;
+    { 选择粒度:单元格矩形 / 整行 / 整列。 }
     property SelectionMode: TTyGridSelectionMode
       read FSelectionMode write SetSelectionMode default gsmCell;
-    { 能不能 Ctrl+点选出好几块。对标 LCL 的 RangeSelectMode(grids.pas:1282)。
-
-      **默认与 LCL 不同**,而且是有意的:LCL 默认 rsmSingle,本库一直无条件支持
-      离散多选,把默认改成 rsmSingle 会从每一个既有窗体上悄悄拿掉一个功能。
-      所以默认 rsmMulti(= 从前的行为),要单块的表显式设 rsmSingle。
-      rsmSingle 下 Ctrl+点只是把选区挪过去,不再叠加。 }
-    property RangeSelectMode: TTyGridRangeSelectMode
-      read FRangeSelectMode write FRangeSelectMode default rsmMulti;
     property OnSelectionChanged: TNotifyEvent
       read FOnSelectionChanged write FOnSelectionChanged;
     property DefaultEditorKind: TTyGridEditorKind
@@ -3140,9 +3260,6 @@ type
       read FOnGetRowHeight write FOnGetRowHeight;
     { 完全自绘某个单元格(置 AHandled 即接管)。 }
     property OnDrawCell: TTyGridDrawCellEvent read FOnDrawCell write FOnDrawCell;
-    { 逐格提示文本(悬停显示)。 }
-    property OnGetCellHint: TTyGridGetCellHintEvent
-      read FOnGetCellHint write FOnGetCellHint;
     { 列头上显示筛选按钮(点它弹出去重值的勾选下拉)。 }
     property ShowFilterButtons: Boolean
       read FShowFilterButtons write SetShowFilterButtons default False;
@@ -3175,6 +3292,190 @@ type
       default gsmDisplay;
     { 拖填充柄产生的一次填充;置 AHandled 可接管(自定义序列)。 }
     property OnFillCells: TTyGridFillEvent read FOnFillCells write FOnFillCells;
+  protected
+    { 能不能 Ctrl+点选出好几块。对标 LCL 的 RangeSelectMode(grids.pas:1282)。
+
+      **默认与 LCL 不同**,而且是有意的:LCL 默认 rsmSingle,本库一直无条件支持
+      离散多选,把默认改成 rsmSingle 会从每一个既有窗体上悄悄拿掉一个功能。
+      所以默认 rsmMulti(= 从前的行为),要单块的表显式设 rsmSingle。
+      rsmSingle 下 Ctrl+点只是把选区挪过去,不再叠加。 }
+    property RangeSelectMode: TTyGridRangeSelectMode
+      read FRangeSelectMode write FRangeSelectMode default rsmMulti;
+    { 逐格提示文本(悬停显示)。 }
+    property OnGetCellHint: TTyGridGetCellHintEvent
+      read FOnGetCellHint write FOnGetCellHint;
+  end;
+
+  { TTyStringGrid publishes TTyCustomStringGrid's properties; everything lives in TTyCustomStringGrid. }
+  TTyStringGrid = class(TTyCustomStringGrid)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Header;
+    property RowCount;
+    property DefaultRowHeight;
+    property DefaultColWidth;
+    property AutoFillColumns;
+    property VertScrollBarMode;
+    property HorzScrollBarMode;
+    property ScrollBars;
+    property Options;
+    property ShowFocusCell;
+    property FocusRectVisible;
+    property HideSelectionWhenInactive;
+    property FadeUnfocusedSelection;
+    property FixedCols;
+    property FixedRows;
+    property FixedRowsBottom;
+    property FixedColsRight;
+    property ShowIndicator;
+    property ShowRowNumbers;
+    property IndicatorWidth;
+    property GridLines;
+    property HeaderGroups;
+    property GroupHeaderHeight;
+    property GridLineStyle;
+    property AlternateRows;
+    property WordWrap;
+    property GridLineWidth;
+    property Images;
+    property OnGetCellStyle;
+    property OnGetCellBorder;
+    property OnGetHeaderStyle;
+    property OnColumnSizing;
+    property OnEndColumnSize;
+    property OnRowSizing;
+    property OnEndRowSize;
+    property OnColumnMove;
+    property OnRowMove;
+    property OnGetEditorProp;
+    property MinEditorWidth;
+    property MinRowHeight;
+    property MaxRowHeight;
+    property MinColWidth;
+    property MaxColWidth;
+    property OnClickCell;
+    property OnDblClickCell;
+    property OnRightClickCell;
+    property OnCanClickCell;
+    property OnCellButtonClick;
+    property OnCanToggleCheck;
+    property OnCheckBoxChange;
+    property OnRatingChange;
+    property OnEllipsisClick;
+    property OnGetCellWordWrap;
+    property OnHeaderClick;
+    property OnHeaderRightClick;
+    property OnTopLeftChanged;
+    property ScrollBarAutoHide;
+    property ShowFooter;
+    property FooterHeight;
+    property Align;
+    property Anchors;
+    property OnGetCellText;
+    property Col;
+    property Row;
+    property OnSelectCell;
+    property ReadOnly;
+    property GroupRowFormat;
+    property SelectionMode;
+    property RangeSelectMode;
+    property OnSelectionChanged;
+    property DefaultEditorKind;
+    property OnGetEditorKind;
+    property OnCellEdited;
+    property OnValidateCell;
+    property OnInvalidEditExit;
+    property OnCanEditCell;
+    property OnEditChange;
+    property OnCanInsertRow;
+    property OnCanDeleteRow;
+    property OnReturn;
+    property OnCtrlReturn;
+    property OnScrollHint;
+    property OnCellLinkClick;
+    property OnColumnCalc;
+    property OnGetFormat;
+    property OnGetFilterValues;
+    property AllowGrayed;
+    property SortKind;
+    property BlanksPosition;
+    property SortIgnoreCase;
+    property OnCanSort;
+    property OnCompareCells;
+    property OnFilterRow;
+    property OnGetPickList;
+    property OnCreateEditLink;
+    property AutoGrowOnPaste;
+    property OnClipboardCopy;
+    property OnClipboardPaste;
+    property OnBeforePasteCell;
+    property OnAfterPasteCell;
+    property OnGetFooterText;
+    property DefaultCellDisplay;
+    property OnGetCellDisplay;
+    property OnGetRowHeight;
+    property OnDrawCell;
+    property OnGetCellHint;
+    property ShowFilterButtons;
+    property TreeColumn;
+    property TreeIndent;
+    property OnGetNodeLevel;
+    property OnGetHasChildren;
+    property ShowFilterRow;
+    property FilterRowHeight;
+    property ShowGroupSubtotals;
+    property UndoLimit;
+    property SortMode;
+    property OnFillCells;
   end;
 
   { 一整列 / 一整行的 TStrings **活视图** —— 对标 LCL 的 TStringGridStrings
@@ -3193,7 +3494,7 @@ type
     而不抛异常(逐字照 LCL 的 FAddedCount,grids.pas:10791)。 }
   TTyGridStrings = class(TStrings)
   private
-    FGrid:   TTyStringGrid;
+    FGrid:   TTyCustomStringGrid;
     FIsCol:  Boolean;
     FIndex:  Integer;
     { Add 写到哪儿了。Clear 归零 —— 这就是 CommaText 赋值能从头填的原因。
@@ -3208,7 +3509,7 @@ type
     procedure Put(AIndex: Integer; const S: string); override;
     procedure PutObject(AIndex: Integer; AObject: TObject); override;
   public
-    constructor Create(AGrid: TTyStringGrid; AIsCol: Boolean; AIndex: Integer);
+    constructor Create(AGrid: TTyCustomStringGrid; AIsCol: Boolean; AIndex: Integer);
     function  Add(const S: string): Integer; override;
     procedure Clear; override;
     procedure Delete(AIndex: Integer); override;
@@ -7796,29 +8097,29 @@ end;
 
 { ---- TTyDrawGrid ---------------------------------------------------------- }
 
-function TTyDrawGrid.GetCellText(ACol, ARow: Integer): string;
+function TTyCustomDrawGrid.GetCellText(ACol, ARow: Integer): string;
 begin
   Result := '';
   if Assigned(FOnGetCellText) then
     FOnGetCellText(Self, ACol, ARow, Result);
 end;
 
-function TTyDrawGrid.DisplayCellText(ACol, ARow: Integer): string;
+function TTyCustomDrawGrid.DisplayCellText(ACol, ARow: Integer): string;
 begin
   Result := GetCellText(ACol, ARow);
 end;
 
-function TTyDrawGrid.ShouldDrawCellText(ACol, ARow: Integer): Boolean;
+function TTyCustomDrawGrid.ShouldDrawCellText(ACol, ARow: Integer): Boolean;
 begin
   Result := True;
 end;
 
-function TTyDrawGrid.DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean;
+function TTyCustomDrawGrid.DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean;
 begin
   Result := False;      { 基类不提供自绘钩子;TTyStringGrid 接 OnDrawCell }
 end;
 
-procedure TTyDrawGrid.RenderCells(P: TTyPainter; const M: TTyGridMetrics;
+procedure TTyCustomDrawGrid.RenderCells(P: TTyPainter; const M: TTyGridMetrics;
   const AFrame: TTyStyleSet);
 var
   firstRow, lastRow, row, colIdx, dataRow: Integer;
@@ -7920,7 +8221,7 @@ end;
 
 { ---- TTyStringGrid -------------------------------------------------------- }
 
-constructor TTyStringGrid.Create(AOwner: TComponent);
+constructor TTyCustomStringGrid.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FCells := TFPStringHashTable.Create;
@@ -8053,7 +8354,7 @@ begin
   FDateEditor.OnExit := @DateEditorExit;
 end;
 
-destructor TTyStringGrid.Destroy;
+destructor TTyCustomStringGrid.Destroy;
 begin
   { 先摘回调,别在半毁对象上回调。**每一个**编辑器都要摘:漏掉的那几个
     (spin/slider/memo/calc/mask)的 OnExit 仍指着 EditorExit,焦点恰好在它们
@@ -8093,17 +8394,17 @@ begin
   inherited Destroy;
 end;
 
-function TTyStringGrid.CellKey(ACol, ARow: Integer): string;
+function TTyCustomStringGrid.CellKey(ACol, ARow: Integer): string;
 begin
   Result := IntToStr(ACol) + ':' + IntToStr(ARow);
 end;
 
-function TTyStringGrid.GetCells(ACol, ARow: Integer): string;
+function TTyCustomStringGrid.GetCells(ACol, ARow: Integer): string;
 begin
   Result := FCells.Items[CellKey(ACol, ARow)];   { 哈希查找,O(1) }
 end;
 
-procedure TTyStringGrid.SetUndoLimit(AValue: Integer);
+procedure TTyCustomStringGrid.SetUndoLimit(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   if FUndoLimit = AValue then Exit;
@@ -8111,22 +8412,22 @@ begin
   if FUndoLimit = 0 then ClearUndo;
 end;
 
-function TTyStringGrid.UndoCount: Integer;
+function TTyCustomStringGrid.UndoCount: Integer;
 begin
   Result := Length(FUndoStack);
 end;
 
-function TTyStringGrid.CanUndo: Boolean;
+function TTyCustomStringGrid.CanUndo: Boolean;
 begin
   Result := Length(FUndoStack) > 0;
 end;
 
-function TTyStringGrid.CanRedo: Boolean;
+function TTyCustomStringGrid.CanRedo: Boolean;
 begin
   Result := Length(FRedoStack) > 0;
 end;
 
-procedure TTyStringGrid.ClearUndo;
+procedure TTyCustomStringGrid.ClearUndo;
 begin
   SetLength(FUndoStack, 0);
   SetLength(FRedoStack, 0);
@@ -8134,7 +8435,7 @@ begin
   FUndoOverflow := False;
 end;
 
-procedure TTyStringGrid.PushUndoStep(const AStep: TTyGridUndoStep);
+procedure TTyCustomStringGrid.PushUndoStep(const AStep: TTyGridUndoStep);
 var
   i, n: Integer;
 begin
@@ -8151,7 +8452,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.PermuteRowState(const AMap: array of Integer);
+procedure TTyCustomStringGrid.PermuteRowState(const AMap: array of Integer);
 var
   heights: array of record R, H: Integer; end;
   hidden: array of Integer;
@@ -8205,7 +8506,7 @@ begin
   end;
 end;
 
-function TTyStringGrid.SnapshotColumn(ACol: Integer): TTyGridColumnSnapshot;
+function TTyCustomStringGrid.SnapshotColumn(ACol: Integer): TTyGridColumnSnapshot;
 var
   c: TTyGridColumn;
   b: TTyColumn;
@@ -8253,7 +8554,7 @@ begin
   Result.ValFilter := FValFilters.Values[k];
 end;
 
-procedure TTyStringGrid.ApplyColumnSnapshot(ACol: Integer;
+procedure TTyCustomStringGrid.ApplyColumnSnapshot(ACol: Integer;
   const ASnap: TTyGridColumnSnapshot);
 var
   c: TTyGridColumn;
@@ -8308,7 +8609,7 @@ begin
   InvalidateOrder;
 end;
 
-procedure TTyStringGrid.RecordColumnUndo(AKind: TTyGridUndoKind; ACol: Integer;
+procedure TTyCustomStringGrid.RecordColumnUndo(AKind: TTyGridUndoKind; ACol: Integer;
   ATo: Integer);
 var
   empty: TTyGridColumnSnapshot;
@@ -8317,7 +8618,7 @@ begin
   RecordColumnUndo(AKind, ACol, ATo, empty);
 end;
 
-procedure TTyStringGrid.RecordColumnUndo(AKind: TTyGridUndoKind; ACol: Integer;
+procedure TTyCustomStringGrid.RecordColumnUndo(AKind: TTyGridUndoKind; ACol: Integer;
   ATo: Integer; const ASnap: TTyGridColumnSnapshot);
 var
   e: TTyGridUndoEntry;
@@ -8331,7 +8632,7 @@ begin
   RecordUndo(e);
 end;
 
-procedure TTyStringGrid.GrowMergesSpanningRow(AFromIndex, ADelta: Integer);
+procedure TTyCustomStringGrid.GrowMergesSpanningRow(AFromIndex, ADelta: Integer);
 var
   keys: TStringList;
   i, sep, r: Integer;
@@ -8372,7 +8673,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.ShiftRowStateWithUndo(AFromIndex, ADelta: Integer);
+procedure TTyCustomStringGrid.ShiftRowStateWithUndo(AFromIndex, ADelta: Integer);
 var
   heights: array of record R, H: Integer; end;
   hidden: array of Integer;
@@ -8435,7 +8736,7 @@ begin
   end;
 end;
 
-function TTyStringGrid.SnapshotAttr(const AKey: string): TTyGridAttrSnapshot;
+function TTyCustomStringGrid.SnapshotAttr(const AKey: string): TTyGridAttrSnapshot;
 var
   a: TTyGridCellAttr;
 begin
@@ -8459,7 +8760,7 @@ begin
   Result.Comment := a.Comment;
 end;
 
-procedure TTyStringGrid.RestoreAttr(const AKey: string;
+procedure TTyCustomStringGrid.RestoreAttr(const AKey: string;
   const ASnap: TTyGridAttrSnapshot);
 var
   a: TTyGridCellAttr;
@@ -8512,7 +8813,7 @@ begin
   if FMergeCount < 0 then FMergeCount := 0;
 end;
 
-procedure TTyStringGrid.TrimRowStateTo(ANewCount: Integer);
+procedure TTyCustomStringGrid.TrimRowStateTo(ANewCount: Integer);
 var
   i, r: Integer;
   doomed: array of Integer;
@@ -8533,7 +8834,7 @@ begin
     SetRowHidden(doomed[i], False);       { 走记录点 → 可撤销 }
 end;
 
-procedure TTyStringGrid.SetRowHidden(ARow: Integer; AHidden: Boolean);
+procedure TTyCustomStringGrid.SetRowHidden(ARow: Integer; AHidden: Boolean);
 var
   i: Integer;
   e: TTyGridUndoEntry;
@@ -8563,7 +8864,7 @@ begin
   InvalidateOrder;
 end;
 
-procedure TTyStringGrid.HandleAttrChanging(const AKey: string);
+procedure TTyCustomStringGrid.HandleAttrChanging(const AKey: string);
 var
   e: TTyGridUndoEntry;
 begin
@@ -8575,7 +8876,7 @@ begin
   RecordUndo(e);
 end;
 
-procedure TTyStringGrid.SetRowHeights(ARow, AValue: Integer);
+procedure TTyCustomStringGrid.SetRowHeights(ARow, AValue: Integer);
 var
   old: Integer;
   e: TTyGridUndoEntry;
@@ -8593,7 +8894,7 @@ begin
   RecordUndo(e);
 end;
 
-procedure TTyStringGrid.RecordUndo(const AEntry: TTyGridUndoEntry);
+procedure TTyCustomStringGrid.RecordUndo(const AEntry: TTyGridUndoEntry);
 var
   n: Integer;
   step: TTyGridUndoStep;
@@ -8633,7 +8934,7 @@ end;
 
 { 逆着放回去。返回的是"反记录":把当前值记下来,于是重做就是再逆一次。
   条目要**倒着**走 —— 同一格被改过多次时,最早那次才是真正的原值。 }
-function TTyStringGrid.ApplyUndoStep(const AStep: TTyGridUndoStep): TTyGridUndoStep;
+function TTyCustomStringGrid.ApplyUndoStep(const AStep: TTyGridUndoStep): TTyGridUndoStep;
 var
   i, n: Integer;
   e: TTyGridUndoEntry;
@@ -8711,7 +9012,7 @@ begin
   { 反记录也要倒着存,这样重做时再倒一次就回到原顺序。 }
 end;
 
-procedure TTyStringGrid.Undo;
+procedure TTyCustomStringGrid.Undo;
 var
   n: Integer;
   inv: TTyGridUndoStep;
@@ -8732,7 +9033,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.Redo;
+procedure TTyCustomStringGrid.Redo;
 var
   n: Integer;
   inv: TTyGridUndoStep;
@@ -8751,7 +9052,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.SetCells(ACol, ARow: Integer; const AValue: string);
+procedure TTyCustomStringGrid.SetCells(ACol, ARow: Integer; const AValue: string);
 var
   k: string;
   e: TTyGridUndoEntry;
@@ -8782,7 +9083,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyStringGrid.ClearRowContents(AFrom, ACount: Integer);
+procedure TTyCustomStringGrid.ClearRowContents(AFrom, ACount: Integer);
 var
   r, c: Integer;
 begin
@@ -8801,7 +9102,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.ClearColContents(AFrom, ACount: Integer);
+procedure TTyCustomStringGrid.ClearColContents(AFrom, ACount: Integer);
 var
   r, c: Integer;
 begin
@@ -8821,7 +9122,7 @@ begin
   end;
 end;
 
-function TTyStringGrid.ClearRows: Boolean;
+function TTyCustomStringGrid.ClearRows: Boolean;
 begin
   Result := RowCount > 0;
   if not Result then Exit;          { already empty -- LCL answers False here too }
@@ -8842,7 +9143,7 @@ begin
   ClearSelection;
 end;
 
-function TTyStringGrid.ClearCols: Boolean;
+function TTyCustomStringGrid.ClearCols: Boolean;
 begin
   Result := Header.Columns.Count > 0;
   if not Result then Exit;
@@ -8868,7 +9169,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyStringGrid.Clear;
+procedure TTyCustomStringGrid.Clear;
 begin
   { LCL 的 body(grids.pas:10302)就是这两句。包一层 BeginUpdate,于是整表清空
     算**一条**撤销记录而不是两条 —— 与本单元其余批量操作同一条纪律。 }
@@ -8881,7 +9182,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.ClearCells;
+procedure TTyCustomStringGrid.ClearCells;
 var
   keys: TStringList;
   i, sep, c, r: Integer;
@@ -8932,14 +9233,14 @@ end;
 
 { 把"写过的格"的键快照到 ADest。顺序不定 —— 两个调用方都不关心顺序
   (ShiftCells 自己按数值重排,AutoFitColumnWidth 只是扫一遍)。 }
-procedure TTyStringGrid.CollectKey(Item: string; const Key: string;
+procedure TTyCustomStringGrid.CollectKey(Item: string; const Key: string;
   var AContinue: Boolean);
 begin
   if FKeySink <> nil then FKeySink.Add(Key);
   AContinue := True;
 end;
 
-procedure TTyStringGrid.SnapshotCellKeys(ADest: TStrings);
+procedure TTyCustomStringGrid.SnapshotCellKeys(ADest: TStrings);
 begin
   FKeySink := ADest;
   try
@@ -8949,17 +9250,17 @@ begin
   end;
 end;
 
-function TTyStringGrid.StoredCellCount: Integer;
+function TTyCustomStringGrid.StoredCellCount: Integer;
 begin
   Result := FCells.Count;
 end;
 
-function TTyStringGrid.StoredCellAttrCount: Integer;
+function TTyCustomStringGrid.StoredCellAttrCount: Integer;
 begin
   Result := FAttrs.Count;
 end;
 
-function TTyStringGrid.GetCellText(ACol, ARow: Integer): string;
+function TTyCustomStringGrid.GetCellText(ACol, ARow: Integer): string;
 begin
   { 先给宿主事件机会(虚拟模式);没接事件就用自带存储。 }
   Result := inherited GetCellText(ACol, ARow);
@@ -8967,25 +9268,61 @@ begin
     Result := GetCells(ACol, ARow);
 end;
 
-procedure TTyStringGrid.SetSelectionMode(AValue: TTyGridSelectionMode);
+procedure TTyCustomStringGrid.SetSelectionMode(AValue: TTyGridSelectionMode);
 begin
   if FSelectionMode = AValue then Exit;
   FSelectionMode := AValue;
   Invalidate;
 end;
 
-procedure TTyStringGrid.SetCol(AValue: Integer);
+{ 读窗体文件时,Col / Row 可能先于它们指向的列(Header)和行数(RowCount)读到:第三方的
+  TTyCustomStringGrid 按自己的顺序发布(库里的 TTyStringGrid 先发布 Header 和 RowCount)。
+  那时还没有列和行,MoveCursor 会把它钳到 0,存下的光标位置就丢了。所以先记着,Loaded 时
+  按读进来的列和行再落位;读进来时就落得下的照旧当场生效。 }
+procedure TTyCustomStringGrid.SetCol(AValue: Integer);
 begin
+  if csLoading in ComponentState then
+  begin
+    FColWaits := AValue > Header.Columns.Count - 1;
+    if FColWaits then
+    begin
+      FStreamedCol := AValue;
+      Exit;
+    end;
+  end;
   MoveCursor(AValue, FRow);
 end;
 
-procedure TTyStringGrid.SetRow(AValue: Integer);
+procedure TTyCustomStringGrid.SetRow(AValue: Integer);
 begin
+  if csLoading in ComponentState then
+  begin
+    FRowWaits := AValue > RowCount - 1;
+    if FRowWaits then
+    begin
+      FStreamedRow := AValue;
+      Exit;
+    end;
+  end;
   MoveCursor(FCol, AValue);
 end;
 
+procedure TTyCustomStringGrid.Loaded;
+var
+  c, r: Integer;
+begin
+  inherited Loaded;
+  if not (FColWaits or FRowWaits) then Exit;
+  if FColWaits then c := FStreamedCol else c := FCol;
+  if FRowWaits then r := FStreamedRow else r := FRow;
+  FColWaits := False;
+  FRowWaits := False;
+  { 走 MoveCursor:光标的钳制、隐藏列、选区锚点都只在那一处,读窗体时当场生效的值也走它。 }
+  MoveCursor(c, r);
+end;
+
 { 从 AFrom 起沿 AStep 方向找第一个可编辑的列;找不到就原样返回。 }
-function TTyStringGrid.NextEditableCol(AFrom, AStep, ARow: Integer): Integer;
+function TTyCustomStringGrid.NextEditableCol(AFrom, AStep, ARow: Integer): Integer;
 var
   c: Integer;
 begin
@@ -8999,7 +9336,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.MoveCursor(ACol, ARow: Integer);
+procedure TTyCustomStringGrid.MoveCursor(ACol, ARow: Integer);
 var
   canSel: Boolean;
 begin
@@ -9054,7 +9391,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyStringGrid.MouseDown(Button: TMouseButton; Shift: TShiftState;
+procedure TTyCustomStringGrid.MouseDown(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
   hit: TTyGridHit;
@@ -9211,7 +9548,7 @@ begin
 end;
 
 
-procedure TTyStringGrid.MouseUp(Button: TMouseButton; Shift: TShiftState;
+procedure TTyCustomStringGrid.MouseUp(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
   bc, br, sc: Integer;
@@ -9266,21 +9603,21 @@ begin
   inherited MouseUp(Button, Shift, X, Y);
 end;
 
-function TTyStringGrid.EditorMinFor(ACol: Integer): Integer;
+function TTyCustomStringGrid.EditorMinFor(ACol: Integer): Integer;
 var c: TTyGridColumn;
 begin
   c := GridColumn(ACol);
   if c <> nil then Result := c.MinValue else Result := 0;
 end;
 
-function TTyStringGrid.EditorMaxFor(ACol: Integer): Integer;
+function TTyCustomStringGrid.EditorMaxFor(ACol: Integer): Integer;
 var c: TTyGridColumn;
 begin
   c := GridColumn(ACol);
   if c <> nil then Result := c.MaxValue else Result := 100;
 end;
 
-function TTyStringGrid.EditMaskFor(ACol: Integer): string;
+function TTyCustomStringGrid.EditMaskFor(ACol: Integer): string;
 var c: TTyGridColumn;
 begin
   Result := '';
@@ -9288,7 +9625,7 @@ begin
   if c <> nil then Result := c.EditMask;
 end;
 
-function TTyStringGrid.CharCaseFor(ACol: Integer): TEditCharCase;
+function TTyCustomStringGrid.CharCaseFor(ACol: Integer): TEditCharCase;
 var c: TTyGridColumn;
 begin
   Result := ecNormal;
@@ -9296,7 +9633,7 @@ begin
   if c <> nil then Result := c.CharCase;
 end;
 
-function TTyStringGrid.ValidCharsFor(ACol, ARow: Integer): string;
+function TTyCustomStringGrid.ValidCharsFor(ACol, ARow: Integer): string;
 var
   c: TTyGridColumn;
 begin
@@ -9308,7 +9645,7 @@ begin
     Result := '0123456789+-.,eE';
 end;
 
-function TTyStringGrid.MaxEditLengthFor(ACol, ARow: Integer): Integer;
+function TTyCustomStringGrid.MaxEditLengthFor(ACol, ARow: Integer): Integer;
 var
   c: TTyGridColumn;
 begin
@@ -9317,7 +9654,7 @@ begin
   if c <> nil then Result := c.MaxEditLength;
 end;
 
-procedure TTyStringGrid.KeyPress(var Key: Char);
+procedure TTyCustomStringGrid.KeyPress(var Key: Char);
 var
   vc: string;
 begin
@@ -9340,7 +9677,7 @@ begin
   Key := #0;
 end;
 
-function TTyStringGrid.TypeIntoCell(const AChar: string): Boolean;
+function TTyCustomStringGrid.TypeIntoCell(const AChar: string): Boolean;
 begin
   Result := BeginEdit;
   if not Result then Exit;
@@ -9355,7 +9692,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.UTF8KeyPress(var UTF8Key: TUTF8Char);
+procedure TTyCustomStringGrid.UTF8KeyPress(var UTF8Key: TUTF8Char);
 var
   vc: string;
 begin
@@ -9378,7 +9715,7 @@ end;
   从前这里在末尾补一句 AnchorSelection,而它只覆盖导航键这一小撮;
   程序化移动光标压根走不到这儿,锚点就陈旧了。收口到 MoveCursor 之后,
   这里只需要声明"这一次是扩选"。 }
-procedure TTyStringGrid.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomStringGrid.KeyDown(var Key: Word; Shift: TShiftState);
 var
   navKey: Word;
 begin
@@ -9491,14 +9828,14 @@ end;
 
 { ---- 行序间接层与排序 ---- }
 
-procedure TTyStringGrid.ResetOrder;
+procedure TTyCustomStringGrid.ResetOrder;
 begin
   SetLength(FOrder, 0);
   SetLength(FRank, 0);
   FOrderValid := False;
 end;
 
-procedure TTyStringGrid.CalcFooter(ACol: Integer);
+procedure TTyCustomStringGrid.CalcFooter(ACol: Integer);
 begin
   if ACol < 0 then
   begin
@@ -9510,7 +9847,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyStringGrid.InvalidateAggregates;
+procedure TTyCustomStringGrid.InvalidateAggregates;
 begin
   { 长度归零 = 全部失效。下次用到时按当时的列数重建 ——
     列增删之后也就不必单独再失效一次。 }
@@ -9518,7 +9855,7 @@ begin
   SetLength(FAggCache, 0);
 end;
 
-procedure TTyStringGrid.InvalidateOrder;
+procedure TTyCustomStringGrid.InvalidateOrder;
 begin
   { 显示序变了 → 参与统计的行集合就变了。筛选、隐藏行、分组、行数增删
     最终都汇到这里,所以汇总的失效也挂在这一处。 }
@@ -9534,12 +9871,12 @@ begin
   FRowTopsValid := False;    { 显示序变了 → 行高前缀和也失效 }
 end;
 
-procedure TTyStringGrid.InvalidateGridOrder;
+procedure TTyCustomStringGrid.InvalidateGridOrder;
 begin
   InvalidateOrder;
 end;
 
-procedure TTyStringGrid.HideRow(ARow: Integer);
+procedure TTyCustomStringGrid.HideRow(ARow: Integer);
 begin
   if (ARow < 0) or (ARow >= RowCount) then Exit;   { 公开入口的边界 }
   SetRowHidden(ARow, True);      { 记录点在那儿 }
@@ -9548,7 +9885,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyStringGrid.UnHideRow(ARow: Integer);
+procedure TTyCustomStringGrid.UnHideRow(ARow: Integer);
 begin
   SetRowHidden(ARow, False);
   InvalidateOrder;
@@ -9556,17 +9893,17 @@ begin
   Invalidate;
 end;
 
-function TTyStringGrid.IsHiddenRow(ARow: Integer): Boolean;
+function TTyCustomStringGrid.IsHiddenRow(ARow: Integer): Boolean;
 begin
   Result := FHiddenRows.IndexOf(IntToStr(ARow)) >= 0;
 end;
 
-function TTyStringGrid.NumHiddenRows: Integer;
+function TTyCustomStringGrid.NumHiddenRows: Integer;
 begin
   Result := FHiddenRows.Count;
 end;
 
-procedure TTyStringGrid.UnHideAllRows;
+procedure TTyCustomStringGrid.UnHideAllRows;
 var
   i: Integer;
   hidden: array of Integer;   { 别叫 rows —— 与 Rows[] 属性撞名 }
@@ -9590,7 +9927,7 @@ begin
   Invalidate;
 end;
 
-function TTyStringGrid.RowPassesFilter(ARow: Integer): Boolean;
+function TTyCustomStringGrid.RowPassesFilter(ARow: Integer): Boolean;
 var
   i, colIdx: Integer;
   flt, vals: string;
@@ -9630,7 +9967,7 @@ begin
   if Result and IsHiddenRow(ARow) then Result := False;
 end;
 
-procedure TTyStringGrid.RebuildOrder;
+procedure TTyCustomStringGrid.RebuildOrder;
 var
   i, n: Integer;
   keys: TTyGridSortKeys;
@@ -9677,7 +10014,7 @@ begin
   FOrderValid := True;
 end;
 
-procedure TTyStringGrid.BuildGroups;
+procedure TTyCustomStringGrid.BuildGroups;
 var
   i, lvl, n, depth: Integer;
   src, dst: array of Integer;
@@ -9769,7 +10106,7 @@ begin
 end;
 
 { 这一级的**祖先**里有没有折叠着的(不含自己)。折叠的组下面连子分组行都不该露出来。 }
-function TTyStringGrid.AnyAncestorCollapsed(const AOpen: array of Integer;
+function TTyCustomStringGrid.AnyAncestorCollapsed(const AOpen: array of Integer;
   ALevel: Integer): Boolean;
 var lvl: Integer;
 begin
@@ -9778,13 +10115,13 @@ begin
     if (AOpen[lvl] >= 0) and FGroups[AOpen[lvl]].Collapsed then Exit(True);
 end;
 
-procedure TTyStringGrid.EnsureOrder;
+procedure TTyCustomStringGrid.EnsureOrder;
 begin
   if FOrderValid and (Length(FRank) = RowCount) then Exit;
   RebuildOrder;
 end;
 
-function TTyStringGrid.DisplayToData(APos: Integer): Integer;
+function TTyCustomStringGrid.DisplayToData(APos: Integer): Integer;
 begin
   EnsureOrder;
   if (APos >= 0) and (APos < Length(FOrder)) then
@@ -9793,7 +10130,7 @@ begin
     Result := -1;
 end;
 
-function TTyStringGrid.DataToDisplay(ARow: Integer): Integer;
+function TTyCustomStringGrid.DataToDisplay(ARow: Integer): Integer;
 begin
   EnsureOrder;
   if (ARow >= 0) and (ARow < Length(FRank)) then
@@ -9802,26 +10139,26 @@ begin
     Result := -1;
 end;
 
-function TTyStringGrid.DisplayRowCount: Integer;
+function TTyCustomStringGrid.DisplayRowCount: Integer;
 begin
   EnsureOrder;
   Result := Length(FOrder);
 end;
 
-procedure TTyStringGrid.SetColumnFilterEx(ACol: Integer; AOp: TTyGridFilterOp;
+procedure TTyCustomStringGrid.SetColumnFilterEx(ACol: Integer; AOp: TTyGridFilterOp;
   const AText: string);
 begin
   SetColumnFilter(ACol, TyGridEncodeFilter(AOp, AText));
 end;
 
-function TTyStringGrid.ColumnFilterOp(ACol: Integer): TTyGridFilterOp;
+function TTyCustomStringGrid.ColumnFilterOp(ACol: Integer): TTyGridFilterOp;
 var
   txt: string;
 begin
   TyGridDecodeFilter(FColFilters.Values[IntToStr(ACol)], Result, txt);
 end;
 
-function TTyStringGrid.ColumnIsFiltered(ACol: Integer): Boolean;
+function TTyCustomStringGrid.ColumnIsFiltered(ACol: Integer): Boolean;
 var
   op: TTyGridFilterOp;
   txt: string;
@@ -9831,7 +10168,7 @@ begin
   if not Result then Result := FValFilters.Values[IntToStr(ACol)] <> '';
 end;
 
-function TTyStringGrid.FilteredRowCount: Integer;
+function TTyCustomStringGrid.FilteredRowCount: Integer;
 var
   i: Integer;
 begin
@@ -9840,7 +10177,7 @@ begin
     if RowPassesFilter(i) then Inc(Result);
 end;
 
-procedure TTyStringGrid.SetColumnFilter(ACol: Integer; const AText: string);
+procedure TTyCustomStringGrid.SetColumnFilter(ACol: Integer; const AText: string);
 var
   k: string;
   i: Integer;
@@ -9854,7 +10191,7 @@ begin
   Invalidate;
 end;
 
-function TTyStringGrid.RowCollapsedByTree(ARow: Integer): Boolean;
+function TTyCustomStringGrid.RowCollapsedByTree(ARow: Integer): Boolean;
 var
   i, lv, mine: Integer;
 begin
@@ -9877,17 +10214,17 @@ begin
   end;
 end;
 
-function TTyStringGrid.NodeCollapsed(ARow: Integer): Boolean;
+function TTyCustomStringGrid.NodeCollapsed(ARow: Integer): Boolean;
 begin
   Result := FTreeCollapsed.IndexOf(IntToStr(ARow)) >= 0;
 end;
 
-function TTyStringGrid.NodeCollapsedOf(ARow: Integer): Boolean;
+function TTyCustomStringGrid.NodeCollapsedOf(ARow: Integer): Boolean;
 begin
   Result := NodeCollapsed(ARow);
 end;
 
-procedure TTyStringGrid.ToggleNode(ARow: Integer);
+procedure TTyCustomStringGrid.ToggleNode(ARow: Integer);
 var
   i: Integer;
 begin
@@ -9901,7 +10238,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyStringGrid.ExpandAllNodes;
+procedure TTyCustomStringGrid.ExpandAllNodes;
 begin
   if FTreeCollapsed.Count = 0 then Exit;
   FTreeCollapsed.Clear;
@@ -9910,7 +10247,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyStringGrid.CollapseAllNodes;
+procedure TTyCustomStringGrid.CollapseAllNodes;
 var
   i: Integer;
 begin
@@ -9923,7 +10260,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyStringGrid.BeginFilterEdit(ACol: Integer);
+procedure TTyCustomStringGrid.BeginFilterEdit(ACol: Integer);
 var
   l, w, bandTop, h: Integer;
 begin
@@ -9953,7 +10290,7 @@ begin
   if HandleAllocated and FFilterEditor.CanFocus then FFilterEditor.SetFocus;
 end;
 
-procedure TTyStringGrid.EndFilterEdit(AApply: Boolean);
+procedure TTyCustomStringGrid.EndFilterEdit(AApply: Boolean);
 var
   which: Integer;
 begin
@@ -9966,7 +10303,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyStringGrid.FilterEditorChange(Sender: TObject);
+procedure TTyCustomStringGrid.FilterEditorChange(Sender: TObject);
 begin
   if FFilterEditCol < 0 then Exit;
   { 输入即筛,但要防抖 —— 每敲一个键就重建一次显示序,百万行的表会卡死。
@@ -9975,14 +10312,14 @@ begin
   FFilterTimer.Enabled := True;
 end;
 
-procedure TTyStringGrid.FilterDebounceTick(Sender: TObject);
+procedure TTyCustomStringGrid.FilterDebounceTick(Sender: TObject);
 begin
   FFilterTimer.Enabled := False;
   if FFilterEditCol < 0 then Exit;
   SetFilterText(FFilterEditCol, FFilterEditor.Text);
 end;
 
-procedure TTyStringGrid.FilterEditorKeyDown(Sender: TObject; var Key: Word;
+procedure TTyCustomStringGrid.FilterEditorKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
   case Key of
@@ -10003,12 +10340,12 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.FilterEditorExit(Sender: TObject);
+procedure TTyCustomStringGrid.FilterEditorExit(Sender: TObject);
 begin
   EndFilterEdit(True);      { 焦点离开 = 提交,与单元格编辑器一致 }
 end;
 
-procedure TTyStringGrid.SetFilterText(ACol: Integer; const AExpr: string);
+procedure TTyCustomStringGrid.SetFilterText(ACol: Integer; const AExpr: string);
 var
   k: string;
   i: Integer;
@@ -10025,22 +10362,22 @@ begin
   SetColumnFilter(ACol, TyGridParseFilterExpr(AExpr));
 end;
 
-function TTyStringGrid.FilterText(ACol: Integer): string;
+function TTyCustomStringGrid.FilterText(ACol: Integer): string;
 begin
   Result := FFilterText.Values[IntToStr(ACol)];
 end;
 
-function TTyStringGrid.FilterRowText(ACol: Integer): string;
+function TTyCustomStringGrid.FilterRowText(ACol: Integer): string;
 begin
   Result := FilterText(ACol);      { 显示用户打的原文,不是编码后的条件 }
 end;
 
-function TTyStringGrid.ColumnFilter(ACol: Integer): string;
+function TTyCustomStringGrid.ColumnFilter(ACol: Integer): string;
 begin
   Result := FColFilters.Values[IntToStr(ACol)];
 end;
 
-procedure TTyStringGrid.SetColumnValueFilter(ACol: Integer; AValues: TStrings);
+procedure TTyCustomStringGrid.SetColumnValueFilter(ACol: Integer; AValues: TStrings);
 var
   k, joined: string;
   i: Integer;
@@ -10066,7 +10403,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyStringGrid.ColumnValueFilter(ACol: Integer; AOut: TStrings);
+procedure TTyCustomStringGrid.ColumnValueFilter(ACol: Integer; AOut: TStrings);
 var
   v: string;
   i: Integer;
@@ -10092,7 +10429,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.ClearFilters;
+procedure TTyCustomStringGrid.ClearFilters;
 begin
   if (FColFilters.Count = 0) and (FValFilters.Count = 0)
      and (FFilterText.Count = 0) then Exit;
@@ -10104,7 +10441,7 @@ begin
   Invalidate;
 end;
 
-function TTyStringGrid.CompareRows(ACol, ARow1, ARow2: Integer): Integer;
+function TTyCustomStringGrid.CompareRows(ACol, ARow1, ARow2: Integer): Integer;
 var
   a, b: string;
   fa, fb: Double;
@@ -10181,7 +10518,7 @@ end;
 
   这件事必须在这一层做:方向翻转发生在 CompareRows **之后**,
   把规则写在 CompareRows 里的话,一翻向空行就整块冒到最上面。 }
-function TTyStringGrid.BlankVerdict(ACol, ARow1, ARow2: Integer;
+function TTyCustomStringGrid.BlankVerdict(ACol, ARow1, ARow2: Integer;
   out ACmp: Integer): Boolean;
 var
   a, b: string;
@@ -10227,7 +10564,7 @@ begin
   end;
 end;
 
-function TTyStringGrid.CompareRowsByKeys(const AKeys: TTyGridSortKeys;
+function TTyCustomStringGrid.CompareRowsByKeys(const AKeys: TTyGridSortKeys;
   ARow1, ARow2: Integer): Integer;
 var
   i, cmp: Integer;
@@ -10251,7 +10588,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.MergeSortOrder(ACol: Integer; ADirection: TTySortDirection);
+procedure TTyCustomStringGrid.MergeSortOrder(ACol: Integer; ADirection: TTySortDirection);
 var
   keys: TTyGridSortKeys;
 begin
@@ -10262,7 +10599,7 @@ begin
   MergeSortOrderByKeys(keys);
 end;
 
-procedure TTyStringGrid.MergeSortOrderByKeys(const AKeys: TTyGridSortKeys);
+procedure TTyCustomStringGrid.MergeSortOrderByKeys(const AKeys: TTyGridSortKeys);
 var
   buf: array of Integer;
 
@@ -10307,7 +10644,7 @@ end;
 
 
 
-function TTyStringGrid.RowHeightOf(ARow: Integer): Integer;
+function TTyCustomStringGrid.RowHeightOf(ARow: Integer): Integer;
 begin
   { 优先级:**显式存储 > 回调 > 默认**。
     显式的最高,是因为它来自用户的直接动作(拖分隔线 / AutoFitRow),
@@ -10320,12 +10657,12 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-procedure TTyStringGrid.InvalidateRowMetrics;
+procedure TTyCustomStringGrid.InvalidateRowMetrics;
 begin
   FRowTopsValid := False;
 end;
 
-function TTyStringGrid.RowTops: TTyIntArray;
+function TTyCustomStringGrid.RowTops: TTyIntArray;
 var
   pos, n, acc, dataRow: Integer;
 begin
@@ -10366,7 +10703,7 @@ begin
   Result.Color := AColor;
 end;
 
-procedure TTyStringGrid.RenderHyperlinkCell(P: TTyPainter; ACol, ARow: Integer;
+procedure TTyCustomStringGrid.RenderHyperlinkCell(P: TTyPainter; ACol, ARow: Integer;
   const AFrame: TTyStyleSet);
 var
   r, rr, line: TRect;
@@ -10398,7 +10735,7 @@ begin
   P.FillBackground(line, TySolidFill(ap.TextColor), 0);
 end;
 
-procedure TTyStringGrid.RenderCommentMark(P: TTyPainter; ACol, ARow: Integer;
+procedure TTyCustomStringGrid.RenderCommentMark(P: TTyPainter; ACol, ARow: Integer;
   const AFrame: TTyStyleSet);
 var
   mark, vis: TRect;
@@ -10427,7 +10764,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.RenderPickListArrow(P: TTyPainter; ACol, ARow: Integer;
+procedure TTyCustomStringGrid.RenderPickListArrow(P: TTyPainter; ACol, ARow: Integer;
   const AFrame: TTyStyleSet);
 var
   r, rr, tg: TRect;
@@ -10450,7 +10787,7 @@ begin
   TyDrawGlyph(P, ActiveController, tg, tgChevronDown, AFrame.TextColor, 1, 1);
 end;
 
-procedure TTyStringGrid.RenderColorCell(P: TTyPainter; ACol, ARow: Integer;
+procedure TTyCustomStringGrid.RenderColorCell(P: TTyPainter; ACol, ARow: Integer;
   const AFrame: TTyStyleSet);
 var
   r, sw: TRect;
@@ -10480,7 +10817,7 @@ begin
   P.StrokeBorder(sw, 2, 1, AFrame.BorderColor);
 end;
 
-procedure TTyStringGrid.RenderImageCell(P: TTyPainter; ACol, ARow: Integer;
+procedure TTyCustomStringGrid.RenderImageCell(P: TTyPainter; ACol, ARow: Integer;
   const AFrame: TTyStyleSet);
 var
   r: TRect;
@@ -10503,17 +10840,17 @@ end;
 
 { ---- 单元格图形 ----------------------------------------------------------- }
 
-function TTyStringGrid.CellDisplayOf(ACol, ARow: Integer): TTyGridCellDisplay;
+function TTyCustomStringGrid.CellDisplayOf(ACol, ARow: Integer): TTyGridCellDisplay;
 begin
   Result := CellDisplayFor(ACol, ARow);
 end;
 
-function TTyStringGrid.IsActiveCell(ACol, ARow: Integer): Boolean;
+function TTyCustomStringGrid.IsActiveCell(ACol, ARow: Integer): Boolean;
 begin
   Result := (ACol = FCol) and (ARow = FRow);
 end;
 
-function TTyStringGrid.IsActiveRow(ARow: Integer): Boolean;
+function TTyCustomStringGrid.IsActiveRow(ARow: Integer): Boolean;
 begin
   Result := ARow = FRow;
 end;
@@ -10521,17 +10858,17 @@ end;
 { goEditing = not ReadOnly。**直接读写 FReadOnly** 而不是走属性:
   ReadOnly 的 setter 就是字段(声明处 `write FReadOnly`),绕一圈没有区别,
   而写成 `ReadOnly := ...` 会让人以为那边还有别的动作。 }
-function TTyStringGrid.GetOptEditing: Boolean;
+function TTyCustomStringGrid.GetOptEditing: Boolean;
 begin
   Result := not FReadOnly;
 end;
 
-procedure TTyStringGrid.SetOptEditing(AValue: Boolean);
+procedure TTyCustomStringGrid.SetOptEditing(AValue: Boolean);
 begin
   FReadOnly := not AValue;
 end;
 
-function TTyStringGrid.GetOptRowSelect: Boolean;
+function TTyCustomStringGrid.GetOptRowSelect: Boolean;
 begin
   Result := FSelectionMode = gsmRow;
 end;
@@ -10539,7 +10876,7 @@ end;
 { 三态压两态的那一半。**只在 SetOptions 判定"这一位真的翻了"之后才会被调到** ——
   所以 gsmColumn 走不到这里,不会被压成 gsmCell。要是哪天有人直接调这个方法,
   行为仍然是明确的:开 = gsmRow,关 = gsmCell。 }
-procedure TTyStringGrid.SetOptRowSelect(AValue: Boolean);
+procedure TTyCustomStringGrid.SetOptRowSelect(AValue: Boolean);
 begin
   if AValue then SetSelectionMode(gsmRow) else SetSelectionMode(gsmCell);
 end;
@@ -10549,7 +10886,7 @@ end;
   **不能走 MoveCursor** —— 它尾巴上那句 ScrollIntoView 会立刻把视口拽回光标
   原来的位置,于是滚动条一放手画面就弹回去,看起来像滚不动。所以这里直接
   改 FCol/FRow 再重锚,跳过滚动那一步。 }
-procedure TTyStringGrid.KeepCursorVisible;
+procedure TTyCustomStringGrid.KeepCursorVisible;
 var
   M: TTyGridMetrics;
   firstRow, lastRow, pos, d, lc, vc, newCol, newRow: Integer;
@@ -10593,14 +10930,14 @@ begin
   SelectionChanged;
 end;
 
-function TTyStringGrid.FAttrs2Find(ACol, ARow: Integer): TTyGridCellAttr;
+function TTyCustomStringGrid.FAttrs2Find(ACol, ARow: Integer): TTyGridCellAttr;
 begin
   { 同上:逐格属性是稀疏的例外,常态不该为它建字符串。 }
   if FAttrs.IsEmpty then Exit(nil);
   Result := FAttrs.Find(CellKey(ACol, ARow));
 end;
 
-function TTyStringGrid.GetCellColor(ACol, ARow: Integer): TTyColor;
+function TTyCustomStringGrid.GetCellColor(ACol, ARow: Integer): TTyColor;
 var a: TTyGridCellAttr;
 begin
   Result := TyColorNone;
@@ -10608,7 +10945,7 @@ begin
   if (a <> nil) and a.HasBackground then Result := a.Background;
 end;
 
-procedure TTyStringGrid.SetCellColor(ACol, ARow: Integer; AValue: TTyColor);
+procedure TTyCustomStringGrid.SetCellColor(ACol, ARow: Integer; AValue: TTyColor);
 var
   k: string;
   a: TTyGridCellAttr;
@@ -10637,7 +10974,7 @@ begin
   Invalidate;
 end;
 
-function TTyStringGrid.GetCellTextColor(ACol, ARow: Integer): TTyColor;
+function TTyCustomStringGrid.GetCellTextColor(ACol, ARow: Integer): TTyColor;
 var a: TTyGridCellAttr;
 begin
   Result := TyColorNone;
@@ -10645,7 +10982,7 @@ begin
   if (a <> nil) and a.HasTextColor then Result := a.TextColor;
 end;
 
-procedure TTyStringGrid.SetCellTextColor(ACol, ARow: Integer; AValue: TTyColor);
+procedure TTyCustomStringGrid.SetCellTextColor(ACol, ARow: Integer; AValue: TTyColor);
 var
   k: string;
   a: TTyGridCellAttr;
@@ -10670,7 +11007,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyStringGrid.SetRowColor(ARow: Integer; AColor: TTyColor);
+procedure TTyCustomStringGrid.SetRowColor(ARow: Integer; AColor: TTyColor);
 var
   j: Integer;
 begin
@@ -10685,7 +11022,7 @@ begin
   end;
 end;
 
-function TTyStringGrid.GetCellReadOnly(ACol, ARow: Integer): Boolean;
+function TTyCustomStringGrid.GetCellReadOnly(ACol, ARow: Integer): Boolean;
 var a: TTyGridCellAttr;
 begin
   Result := False;
@@ -10696,7 +11033,7 @@ begin
   if a <> nil then Result := a.ReadOnly;
 end;
 
-procedure TTyStringGrid.SetCellReadOnly(ACol, ARow: Integer; AValue: Boolean);
+procedure TTyCustomStringGrid.SetCellReadOnly(ACol, ARow: Integer; AValue: Boolean);
 var
   k: string;
   a: TTyGridCellAttr;
@@ -10719,7 +11056,7 @@ begin
   end;
 end;
 
-function TTyStringGrid.CellDisplayFor(ACol, ARow: Integer): TTyGridCellDisplay;
+function TTyCustomStringGrid.CellDisplayFor(ACol, ARow: Integer): TTyGridCellDisplay;
 var
   c: TTyGridColumn;
   a: TTyGridCellAttr;
@@ -10738,7 +11075,7 @@ begin
   end;
 end;
 
-function TTyStringGrid.DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean;
+function TTyCustomStringGrid.DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean;
 var
   r: TRect;
 begin
@@ -10750,7 +11087,7 @@ begin
   FOnDrawCell(Self, ACol, ARow, r, P, Result);
 end;
 
-procedure TTyStringGrid.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomStringGrid.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   hit: TTyGridHit;
   txt, cmt: string;
@@ -10859,7 +11196,7 @@ end;
 
   量的口径与绘制**同一个函数**(TyGridEllipsisFit),所以"提示说放不下"
   与"屏幕上真的加了…"不可能对不上 —— 这正是自己另写一遍宽度比较会踩的坑。 }
-function TTyStringGrid.TruncatedCellHint(ACol, ARow: Integer): string;
+function TTyCustomStringGrid.TruncatedCellHint(ACol, ARow: Integer): string;
 var
   bmp: TBGRABitmap;
   { 不叫 cellS —— Pascal 不分大小写,那个名字与 TTyStringGrid.Cells 属性同名,
@@ -10912,7 +11249,7 @@ end;
   主题没定义这个键时退回强调色的常规解析(base 层会垫底,见主题回退机制)。 }
 { 链接格换文字色。放在 CellAppearance 而不是绘制处:那样连宿主的
   OnGetCellStyle 都还能再压过它 —— 优先级链就一条,不另开分支。 }
-function TTyStringGrid.CellAppearance(ACol, ARow, ADisplayPos: Integer;
+function TTyCustomStringGrid.CellAppearance(ACol, ARow, ADisplayPos: Integer;
   const AFrame: TTyStyleSet): TTyGridCellAppearance;
 begin
   Result := inherited CellAppearance(ACol, ARow, ADisplayPos, AFrame);
@@ -10920,7 +11257,7 @@ begin
     Result.TextColor := HyperlinkTextColor(Result.TextColor);
 end;
 
-function TTyStringGrid.HoverIsHyperlink(X, Y: Integer): Boolean;
+function TTyCustomStringGrid.HoverIsHyperlink(X, Y: Integer): Boolean;
 var hit: TTyGridHit;
 begin
   hit := CellAt(X, Y);
@@ -10928,7 +11265,7 @@ begin
         and (CellDisplayFor(hit.Col, hit.Row) = gcdHyperlink);
 end;
 
-function TTyStringGrid.HyperlinkTextColor(const AFallback: TTyColor): TTyColor;
+function TTyCustomStringGrid.HyperlinkTextColor(const AFallback: TTyColor): TTyColor;
 var st: TTyStyleSet;
 begin
   st := ActiveController.Model.ResolveStyle('TyGridHyperlink', StyleClass, []);
@@ -10936,13 +11273,13 @@ begin
   else Result := AFallback;
 end;
 
-function TTyStringGrid.DisplayCellText(ACol, ARow: Integer): string;
+function TTyCustomStringGrid.DisplayCellText(ACol, ARow: Integer): string;
 begin
   Result := GetCellText(ACol, ARow);
   if Assigned(FOnGetFormat) then FOnGetFormat(Self, ACol, ARow, Result);
 end;
 
-function TTyStringGrid.ShouldDrawCellText(ACol, ARow: Integer): Boolean;
+function TTyCustomStringGrid.ShouldDrawCellText(ACol, ARow: Integer): Boolean;
 begin
   { 链接格的文字仍走通用文字层(只有颜色和下划线是它自己的),
     所以它和 gcdText 一样要画字 —— 漏掉它就是一格空白。 }
@@ -10950,7 +11287,7 @@ begin
         and (CellDisplayFor(ACol, ARow) in [gcdText, gcdHyperlink]);
 end;
 
-procedure TTyStringGrid.RenderProgressCell(P: TTyPainter; ACol, ARow: Integer;
+procedure TTyCustomStringGrid.RenderProgressCell(P: TTyPainter; ACol, ARow: Integer;
   const AFrame: TTyStyleSet);
 var
   r, bar, fill: TRect;
@@ -10990,7 +11327,7 @@ end;
 
 { 第 AStar 颗星(1-based)的矩形。**绘制与命中共用它** ——
   两边各算一套的话,"点第 3 颗给出第 2 颗"这种错早晚会出现。 }
-procedure TTyStringGrid.InvokeEllipsis(ACol, ARow: Integer);
+procedure TTyCustomStringGrid.InvokeEllipsis(ACol, ARow: Integer);
 var
   oldTxt, newTxt: string;
   accept: Boolean;
@@ -11012,7 +11349,7 @@ begin
   if accept then Cells[ACol, ARow] := newTxt;
 end;
 
-procedure TTyStringGrid.SetRatingByPoint(ACol, ARow, X, Y: Integer);
+procedure TTyCustomStringGrid.SetRatingByPoint(ACol, ARow, X, Y: Integer);
 var
   i: Integer;
   oldTxt, newTxt: string;
@@ -11037,7 +11374,7 @@ begin
     end;
 end;
 
-function TTyStringGrid.RatingStarRect(ACol, ARow, AStar: Integer): TRect;
+function TTyCustomStringGrid.RatingStarRect(ACol, ARow, AStar: Integer): TRect;
 var
   r, rr: TRect;
   box, cy, x0, i: Integer;
@@ -11060,7 +11397,7 @@ begin
   Result := ToScreenRect(Result);
 end;
 
-procedure TTyStringGrid.RenderRatingCell(P: TTyPainter; ACol, ARow: Integer;
+procedure TTyCustomStringGrid.RenderRatingCell(P: TTyPainter; ACol, ARow: Integer;
   const AFrame: TTyStyleSet);
 var
   r, star: TRect;
@@ -11099,7 +11436,7 @@ end;
 
 { 这一列的勾选词汇。列没设(或根本不是网格自己的列类)时两个都回空串,
   于是所有调用点自动退回内建的那套 —— 判空一次,别在四处各判一次。 }
-procedure TTyStringGrid.CheckWordsOf(ACol: Integer;
+procedure TTyCustomStringGrid.CheckWordsOf(ACol: Integer;
   out AChecked, AUnchecked: string);
 var
   gc: TTyGridColumn;
@@ -11113,7 +11450,7 @@ begin
   AUnchecked := gc.ValueUnchecked;
 end;
 
-function TTyStringGrid.CellChecked(ACol, ARow: Integer): Boolean;
+function TTyCustomStringGrid.CellChecked(ACol, ARow: Integer): Boolean;
 var
   v, wc, wu, w: string;
 begin
@@ -11137,7 +11474,7 @@ begin
   end;
 end;
 
-function TTyStringGrid.CellCheckState(ACol, ARow: Integer): TCheckBoxState;
+function TTyCustomStringGrid.CellCheckState(ACol, ARow: Integer): TCheckBoxState;
 var
   v, wc, wu: string;
 begin
@@ -11154,7 +11491,7 @@ begin
   Result := cbUnchecked;
 end;
 
-procedure TTyStringGrid.ToggleCellChecked(ACol, ARow: Integer);
+procedure TTyCustomStringGrid.ToggleCellChecked(ACol, ARow: Integer);
 var
   accept: Boolean;
   oldTxt, newTxt, wordC, wordU: string;
@@ -11198,7 +11535,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.ToggleCellColor(ACol, ARow: Integer);
+procedure TTyCustomStringGrid.ToggleCellColor(ACol, ARow: Integer);
 var
   c: TTyColor;
   accept: Boolean;
@@ -11216,7 +11553,7 @@ begin
 end;
 
 { 省略号按钮:贴在格的右缘,方形。与绘制同源 —— 画在哪就点在哪。 }
-function TTyStringGrid.EllipsisRect(ACol, ARow: Integer): TRect;
+function TTyCustomStringGrid.EllipsisRect(ACol, ARow: Integer): TRect;
 var
   r, rr: TRect;
   box: Integer;
@@ -11236,7 +11573,7 @@ end;
 
 { 画省略号按钮。样式走 TyGridButton(与按钮单元格同一个键 —— 它们在视觉上
   本来就该是同一种东西),点在上面的态由 FPressedBtn 记。 }
-procedure TTyStringGrid.RenderEllipsisCell(P: TTyPainter; ACol, ARow: Integer;
+procedure TTyCustomStringGrid.RenderEllipsisCell(P: TTyPainter; ACol, ARow: Integer;
   const AFrame: TTyStyleSet);
 var
   r: TRect;
@@ -11262,7 +11599,7 @@ begin
     ink, taCenter, tlCenter);
 end;
 
-function TTyStringGrid.GetCellComment(ACol, ARow: Integer): string;
+function TTyCustomStringGrid.GetCellComment(ACol, ARow: Integer): string;
 var a: TTyGridCellAttr;
 begin
   Result := '';
@@ -11271,7 +11608,7 @@ begin
   if a <> nil then Result := a.Comment;
 end;
 
-procedure TTyStringGrid.SetCellComment(ACol, ARow: Integer; const AValue: string);
+procedure TTyCustomStringGrid.SetCellComment(ACol, ARow: Integer; const AValue: string);
 var
   k: string;
   a: TTyGridCellAttr;
@@ -11295,7 +11632,7 @@ begin
   Invalidate;
 end;
 
-function TTyStringGrid.GetCellFontStyles(ACol, ARow: Integer): TFontStyles;
+function TTyCustomStringGrid.GetCellFontStyles(ACol, ARow: Integer): TFontStyles;
 var a: TTyGridCellAttr;
 begin
   Result := [];
@@ -11304,7 +11641,7 @@ begin
   if (a <> nil) and a.HasFontStyle then Result := a.FontStyle;
 end;
 
-procedure TTyStringGrid.SetCellFontStyles(ACol, ARow: Integer; AValue: TFontStyles);
+procedure TTyCustomStringGrid.SetCellFontStyles(ACol, ARow: Integer; AValue: TFontStyles);
 var
   k: string;
   a: TTyGridCellAttr;
@@ -11331,7 +11668,7 @@ begin
   Invalidate;
 end;
 
-function TTyStringGrid.GetCellDisplay(ACol, ARow: Integer): TTyGridCellDisplay;
+function TTyCustomStringGrid.GetCellDisplay(ACol, ARow: Integer): TTyGridCellDisplay;
 var a: TTyGridCellAttr;
 begin
   Result := gcdText;
@@ -11340,7 +11677,7 @@ begin
   if (a <> nil) and a.HasCellDisplay then Result := a.CellDisplay;
 end;
 
-function TTyStringGrid.GetObjects(ACol, ARow: Integer): TObject;
+function TTyCustomStringGrid.GetObjects(ACol, ARow: Integer): TObject;
 var a: TTyGridCellAttr;
 begin
   Result := nil;
@@ -11349,7 +11686,7 @@ begin
   if a <> nil then Result := a.Obj;
 end;
 
-procedure TTyStringGrid.SetObjects(ACol, ARow: Integer; AValue: TObject);
+procedure TTyCustomStringGrid.SetObjects(ACol, ARow: Integer; AValue: TObject);
 var
   k: string;
   a: TTyGridCellAttr;
@@ -11378,7 +11715,7 @@ end;
 
 { ---- Cols[] / Rows[] ------------------------------------------------------- }
 
-function TTyStringGrid.ColsRowsView(var ACache: TStringList; AIsCol: Boolean;
+function TTyCustomStringGrid.ColsRowsView(var ACache: TStringList; AIsCol: Boolean;
   AIndex: Integer): TStrings;
 var
   i: Integer;
@@ -11406,27 +11743,27 @@ begin
   end;
 end;
 
-function TTyStringGrid.GetCols(AIndex: Integer): TStrings;
+function TTyCustomStringGrid.GetCols(AIndex: Integer): TStrings;
 begin
   Result := ColsRowsView(FColViews, True, AIndex);
 end;
 
-function TTyStringGrid.GetRows(AIndex: Integer): TStrings;
+function TTyCustomStringGrid.GetRows(AIndex: Integer): TStrings;
 begin
   Result := ColsRowsView(FRowViews, False, AIndex);
 end;
 
-procedure TTyStringGrid.SetCols(AIndex: Integer; AValue: TStrings);
+procedure TTyCustomStringGrid.SetCols(AIndex: Integer; AValue: TStrings);
 begin
   GetCols(AIndex).Assign(AValue);
 end;
 
-procedure TTyStringGrid.SetRows(AIndex: Integer; AValue: TStrings);
+procedure TTyCustomStringGrid.SetRows(AIndex: Integer; AValue: TStrings);
 begin
   GetRows(AIndex).Assign(AValue);
 end;
 
-procedure TTyStringGrid.SetCellDisplay(ACol, ARow: Integer;
+procedure TTyCustomStringGrid.SetCellDisplay(ACol, ARow: Integer;
   AValue: TTyGridCellDisplay);
 var
   k: string;
@@ -11442,7 +11779,7 @@ end;
 
 { 批注标记:格子右上角一个小三角。尺寸走主题(标记也是视觉),
   没有批注就返回空矩形 —— 调用方靠"空不空"判断要不要画。 }
-function TTyStringGrid.CommentMarkRect(ACol, ARow: Integer): TRect;
+function TTyCustomStringGrid.CommentMarkRect(ACol, ARow: Integer): TRect;
 var
   r, rr: TRect;
   sz: Integer;
@@ -11462,7 +11799,7 @@ begin
   Result := ToScreenRect(Rect(rr.Right - sz, r.Top, rr.Right, r.Top + sz));
 end;
 
-function TTyStringGrid.CheckBoxRect(ACol, ARow: Integer): TRect;
+function TTyCustomStringGrid.CheckBoxRect(ACol, ARow: Integer): TRect;
 var
   r: TRect;
   box, cx, cy: Integer;
@@ -11479,7 +11816,7 @@ begin
   Result := Rect(cx - box div 2, cy - box div 2, cx - box div 2 + box, cy - box div 2 + box);
 end;
 
-procedure TTyStringGrid.RenderCheckCell(P: TTyPainter; ACol, ARow: Integer;
+procedure TTyCustomStringGrid.RenderCheckCell(P: TTyPainter; ACol, ARow: Integer;
   const AFrame: TTyStyleSet);
 var
   box: TRect;
@@ -11529,26 +11866,26 @@ end;
 
 { ---- 列头筛选下拉 --------------------------------------------------------- }
 
-procedure TTyStringGrid.SetShowGroupSubtotals(AValue: Boolean);
+procedure TTyCustomStringGrid.SetShowGroupSubtotals(AValue: Boolean);
 begin
   if FShowGroupSubtotals = AValue then Exit;
   FShowGroupSubtotals := AValue;
   Invalidate;
 end;
 
-procedure TTyStringGrid.SetShowFilterButtons(AValue: Boolean);
+procedure TTyCustomStringGrid.SetShowFilterButtons(AValue: Boolean);
 begin
   if FShowFilterButtons = AValue then Exit;
   FShowFilterButtons := AValue;
   Invalidate;      { 直写字段的话,运行期开关筛选按钮不会重绘 }
 end;
 
-function TTyStringGrid.HasMergedCells: Boolean;
+function TTyCustomStringGrid.HasMergedCells: Boolean;
 begin
   Result := FMergeCount > 0;
 end;
 
-function TTyStringGrid.SameMergedCell(ACol1, ARow1, ACol2, ARow2: Integer): Boolean;
+function TTyCustomStringGrid.SameMergedCell(ACol1, ARow1, ACol2, ARow2: Integer): Boolean;
 var
   b1c, b1r, b2c, b2r, cs, rs: Integer;
 begin
@@ -11562,12 +11899,12 @@ begin
   Result := CellSpan(b1c, b1r, cs, rs);
 end;
 
-function TTyStringGrid.ColumnFilterActive(ACol: Integer): Boolean;
+function TTyCustomStringGrid.ColumnFilterActive(ACol: Integer): Boolean;
 begin
   Result := ColumnIsFiltered(ACol);
 end;
 
-function TTyStringGrid.SortRankOf(ACol: Integer): Integer;
+function TTyCustomStringGrid.SortRankOf(ACol: Integer): Integer;
 var
   i: Integer;
 begin
@@ -11580,12 +11917,12 @@ begin
     if FSortKeys[i].Col = ACol then Exit(i + 1);   { 1-based:徽标上显示的就是它 }
 end;
 
-function TTyStringGrid.SortColumnCountOf: Integer;
+function TTyCustomStringGrid.SortColumnCountOf: Integer;
 begin
   Result := Length(FSortKeys);
 end;
 
-function TTyStringGrid.ShowsFilterButton(ACol: Integer): Boolean;
+function TTyCustomStringGrid.ShowsFilterButton(ACol: Integer): Boolean;
 begin
   { 列头开了 hoColumnResize 之类无关;这里只看网格自己的开关。 }
   Result := FShowFilterButtons and (ACol >= 0) and (ACol < Header.Columns.Count);
@@ -11595,7 +11932,7 @@ end;
 
   和候选值一样按**全部数据行**算,不受本列自己的过滤影响 —— 否则勾掉一个值
   之后它的计数就变成 0,用户再也判断不出该不该勾回来。 }
-procedure TTyStringGrid.DistinctColumnValueCounts(ACol: Integer; AItems: TStrings);
+procedure TTyCustomStringGrid.DistinctColumnValueCounts(ACol: Integer; AItems: TStrings);
 var
   i, idx: Integer;
   v: string;
@@ -11620,7 +11957,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.DistinctColumnValues(ACol: Integer; AItems: TStrings);
+procedure TTyCustomStringGrid.DistinctColumnValues(ACol: Integer; AItems: TStrings);
 var
   i: Integer;
   seen: TStringList;
@@ -11656,7 +11993,7 @@ end;
 
 { 关掉下拉时提交。**只有点了"确定"才算数** —— 取消、点空白处一律丢弃。
   从前是"一关就提交";加了取消按钮之后再那样,取消也会生效。 }
-procedure TTyStringGrid.FilterPopupClosed(Sender: TObject);
+procedure TTyCustomStringGrid.FilterPopupClosed(Sender: TObject);
 var
   wasCol: Integer;                { 别叫 col/fcol —— 与 Col / FCol 撞名 }
 begin
@@ -11677,12 +12014,12 @@ end;
 
 { 搜索框只 narrow 列表,不动勾选集合 —— 勾选是按**值**记的,
   所以"搜出来、勾上、清空搜索"之后,之前勾的还在。 }
-procedure TTyStringGrid.FilterSearchChanged(Sender: TObject);
+procedure TTyCustomStringGrid.FilterSearchChanged(Sender: TObject);
 begin
   RebuildFilterList;
 end;
 
-procedure TTyStringGrid.FilterItemChecked(Sender: TObject);
+procedure TTyCustomStringGrid.FilterItemChecked(Sender: TObject);
 var
   i, idx: Integer;
   v: string;
@@ -11704,7 +12041,7 @@ end;
 
 { 「全选」作用于**当前列表里看得见的那些**(Excel 就是这样:搜出来一批,一键全勾)。
   看不见的值维持原状。 }
-procedure TTyStringGrid.FilterSelectAllClick(Sender: TObject);
+procedure TTyCustomStringGrid.FilterSelectAllClick(Sender: TObject);
 var
   i: Integer;
 begin
@@ -11713,19 +12050,19 @@ begin
   FilterItemChecked(nil);
 end;
 
-procedure TTyStringGrid.FilterOkClick(Sender: TObject);
+procedure TTyCustomStringGrid.FilterOkClick(Sender: TObject);
 begin
   FFilterAccepted := True;
   FFilterPopup.Hide;
 end;
 
-procedure TTyStringGrid.FilterCancelClick(Sender: TObject);
+procedure TTyCustomStringGrid.FilterCancelClick(Sender: TObject);
 begin
   FFilterAccepted := False;
   FFilterPopup.Hide;
 end;
 
-procedure TTyStringGrid.SyncFilterSelectAll;
+procedure TTyCustomStringGrid.SyncFilterSelectAll;
 var
   i, onCount: Integer;
 begin
@@ -11738,7 +12075,7 @@ end;
 
 { 按搜索词重建列表。勾选状态从**值集合**回填,而不是从旧的列表下标 ——
   narrow 之后下标全变了,按下标回填会把勾打到别的值上。 }
-procedure TTyStringGrid.RebuildFilterList;
+procedure TTyCustomStringGrid.RebuildFilterList;
 var
   i, n: Integer;
   q, v, disp: string;
@@ -11770,7 +12107,7 @@ begin
   FFilterList.Invalidate;
 end;
 
-procedure TTyStringGrid.EnsureFilterDropDown;
+procedure TTyCustomStringGrid.EnsureFilterDropDown;
 var
   pad, y, bh, sw: Integer;
 begin
@@ -11833,7 +12170,7 @@ begin
   FFilterPopup.OnHide := @FilterPopupClosed;
 end;
 
-procedure TTyStringGrid.ShowColumnFilterDropDown(ACol: Integer);
+procedure TTyCustomStringGrid.ShowColumnFilterDropDown(ACol: Integer);
 var
   i: Integer;
   allowed: TStringList;
@@ -11923,7 +12260,7 @@ end;
 
 { ---- 行列增删 ------------------------------------------------------------- }
 
-procedure TTyStringGrid.ShiftCells(AFromIndex, ADelta: Integer; ARows: Boolean);
+procedure TTyCustomStringGrid.ShiftCells(AFromIndex, ADelta: Integer; ARows: Boolean);
 type
   TCellPos = record C, R: Integer; end;
 var
@@ -12158,12 +12495,12 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.BeginUpdateOrder;
+procedure TTyCustomStringGrid.BeginUpdateOrder;
 begin
   Inc(FUpdatingOrder);
 end;
 
-procedure TTyStringGrid.EndUpdateOrder;
+procedure TTyCustomStringGrid.EndUpdateOrder;
 begin
   if FUpdatingOrder > 0 then Dec(FUpdatingOrder);
   if FUpdatingOrder = 0 then
@@ -12174,7 +12511,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.InsertRows(ARow, ACount: Integer);
+procedure TTyCustomStringGrid.InsertRows(ARow, ACount: Integer);
 var
   i: Integer;
 begin
@@ -12199,7 +12536,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.RemoveRows(ARow, ACount: Integer);
+procedure TTyCustomStringGrid.RemoveRows(ARow, ACount: Integer);
 var
   i: Integer;
 begin
@@ -12220,7 +12557,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.InsertCols(ACol, ACount: Integer);
+procedure TTyCustomStringGrid.InsertCols(ACol, ACount: Integer);
 var
   i: Integer;
 begin
@@ -12237,7 +12574,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.RemoveCols(ACol, ACount: Integer);
+procedure TTyCustomStringGrid.RemoveCols(ACol, ACount: Integer);
 var
   i: Integer;
 begin
@@ -12256,7 +12593,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.SwapRows(ARow1, ARow2: Integer);
+procedure TTyCustomStringGrid.SwapRows(ARow1, ARow2: Integer);
 var
   j: Integer;
   tmp: string;
@@ -12308,7 +12645,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.MoveRow(AFrom, ATo: Integer);
+procedure TTyCustomStringGrid.MoveRow(AFrom, ATo: Integer);
 var
   i: Integer;
 begin
@@ -12336,7 +12673,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.MoveColumn(AFrom, ATo: Integer);
+procedure TTyCustomStringGrid.MoveColumn(AFrom, ATo: Integer);
 begin
   if (AFrom < 0) or (AFrom >= Header.Columns.Count) then Exit;
   if (ATo < 0) or (ATo >= Header.Columns.Count) then Exit;
@@ -12348,7 +12685,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyStringGrid.CutToClipboard;
+procedure TTyCustomStringGrid.CutToClipboard;
 var
   pos, dataRow, colIdx: Integer;
 begin
@@ -12379,19 +12716,19 @@ begin
   Invalidate;
 end;
 
-function TTyStringGrid.CanInsertRow(ARow: Integer): Boolean;
+function TTyCustomStringGrid.CanInsertRow(ARow: Integer): Boolean;
 begin
   Result := True;
   if Assigned(FOnCanInsertRow) then FOnCanInsertRow(Self, ARow, Result);
 end;
 
-function TTyStringGrid.CanDeleteRow(ARow: Integer): Boolean;
+function TTyCustomStringGrid.CanDeleteRow(ARow: Integer): Boolean;
 begin
   Result := True;
   if Assigned(FOnCanDeleteRow) then FOnCanDeleteRow(Self, ARow, Result);
 end;
 
-procedure TTyStringGrid.InsertRow(ARow: Integer);
+procedure TTyCustomStringGrid.InsertRow(ARow: Integer);
 begin
   { 整个操作算**一条**撤销记录:它内部搬很多格子,逐格记的话
     用户得按几十次 Ctrl+Z 才退得回来。批量重画的边界与撤销事务的边界
@@ -12410,7 +12747,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.DeleteRow(ARow: Integer);
+procedure TTyCustomStringGrid.DeleteRow(ARow: Integer);
 begin
   { 整个操作算**一条**撤销记录:它内部搬很多格子,逐格记的话
     用户得按几十次 Ctrl+Z 才退得回来。批量重画的边界与撤销事务的边界
@@ -12431,7 +12768,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.InsertColumn(ACol: Integer);
+procedure TTyCustomStringGrid.InsertColumn(ACol: Integer);
 var
   c: TTyColumn;
 begin
@@ -12458,7 +12795,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.DeleteColumn(ACol: Integer);
+procedure TTyCustomStringGrid.DeleteColumn(ACol: Integer);
 var
   snap: TTyGridColumnSnapshot;
 begin
@@ -12488,7 +12825,7 @@ end;
   测量用的是**和绘制同一套排版** —— 都走 BGRA 的 TTextStyle + Wordbreak,
   所以不会出现"算出来的高度放不下实际画出来的字"。自己另写一套换行算法
   是这里最容易踩的坑。 }
-procedure TTyStringGrid.AutoFitRow(ARow: Integer);
+procedure TTyCustomStringGrid.AutoFitRow(ARow: Integer);
 var
   bmp: TBGRABitmap;
   cS: TTyStyleSet;
@@ -12543,7 +12880,7 @@ begin
   RowHeights[ARow] := UnscaleI(best);
 end;
 
-procedure TTyStringGrid.AutoFitRows;
+procedure TTyCustomStringGrid.AutoFitRows;
 var
   i: Integer;
 begin
@@ -12557,12 +12894,12 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.AutoFitColumnWidth(ACol: Integer);
+procedure TTyCustomStringGrid.AutoFitColumnWidth(ACol: Integer);
 begin
   AutoFitColumn(ACol);
 end;
 
-procedure TTyStringGrid.AutoFitColumn(ACol: Integer);
+procedure TTyCustomStringGrid.AutoFitColumn(ACol: Integer);
 var
   bmp: TBGRABitmap;
   cSty, hSty: TTyStyleSet;
@@ -12619,7 +12956,7 @@ end;
 
 { ---- 分组 ----------------------------------------------------------------- }
 
-procedure TTyStringGrid.GroupByColumn(ACol: Integer);
+procedure TTyCustomStringGrid.GroupByColumn(ACol: Integer);
 begin
   EndEdit(True);
   { 单列分组就是多列的退化情形 —— 只留一条路径,免得两套实现日后走样。 }
@@ -12627,18 +12964,18 @@ begin
   else GroupByColumns([ACol]);
 end;
 
-procedure TTyStringGrid.UngroupRows;
+procedure TTyCustomStringGrid.UngroupRows;
 begin
   GroupByColumn(-1);
 end;
 
-function TTyStringGrid.GroupCount: Integer;
+function TTyCustomStringGrid.GroupCount: Integer;
 begin
   EnsureOrder;
   Result := Length(FGroups);
 end;
 
-function TTyStringGrid.GroupInfo(AIndex: Integer): TTyGridGroupInfo;
+function TTyCustomStringGrid.GroupInfo(AIndex: Integer): TTyGridGroupInfo;
 begin
   EnsureOrder;
   if (AIndex >= 0) and (AIndex < Length(FGroups)) then
@@ -12651,7 +12988,7 @@ begin
   end;
 end;
 
-function TTyStringGrid.IsGroupRow(APos: Integer; out AGroupIndex: Integer): Boolean;
+function TTyCustomStringGrid.IsGroupRow(APos: Integer; out AGroupIndex: Integer): Boolean;
 begin
   EnsureOrder;
   AGroupIndex := -1;
@@ -12659,7 +12996,7 @@ begin
   if Result then AGroupIndex := -FOrder[APos] - 1;
 end;
 
-procedure TTyStringGrid.ToggleGroup(AIndex: Integer);
+procedure TTyCustomStringGrid.ToggleGroup(AIndex: Integer);
 var
   key: string;
   i: Integer;
@@ -12675,7 +13012,7 @@ begin
   Invalidate;
 end;
 
-function TTyStringGrid.GroupToggleRect(APos: Integer): TRect;
+function TTyCustomStringGrid.GroupToggleRect(APos: Integer): TRect;
 var
   r: TRect;
   box, cy, ind, gi: Integer;
@@ -12695,7 +13032,7 @@ begin
   Result := ToScreenRect(Rect(ind, cy - box div 2, ind + box, cy - box div 2 + box));
 end;
 
-procedure TTyStringGrid.RenderGroupRow(P: TTyPainter; APos, AGroupIndex: Integer;
+procedure TTyCustomStringGrid.RenderGroupRow(P: TTyPainter; APos, AGroupIndex: Integer;
   const M: TTyGridMetrics; const AFrame: TTyStyleSet);
 var
   r, tr, tg: TRect;
@@ -12757,7 +13094,7 @@ end;
 
 { ---- 汇总 ----------------------------------------------------------------- }
 
-procedure TTyStringGrid.SetColumnAggregate(ACol: Integer; AKind: TTyGridAggregate);
+procedure TTyCustomStringGrid.SetColumnAggregate(ACol: Integer; AKind: TTyGridAggregate);
 var
   k: string;
   i: Integer;
@@ -12770,7 +13107,7 @@ begin
   Invalidate;
 end;
 
-function TTyStringGrid.ColumnAggregate(ACol: Integer): TTyGridAggregate;
+function TTyCustomStringGrid.ColumnAggregate(ACol: Integer): TTyGridAggregate;
 var
   v: string;
   c: TTyGridColumn;
@@ -12784,7 +13121,7 @@ end;
 
 { 把一行并进累加器。整表汇总与分组小计共用它 —— 否则"非数值格跳过"
   这类规则会在两处各写一遍,迟早走样。 }
-procedure TTyStringGrid.AccumulateCell(ACol, ADataRow: Integer;
+procedure TTyCustomStringGrid.AccumulateCell(ACol, ADataRow: Integer;
   AKind: TTyGridAggregate; var AAcc: Double; var ACount: Integer;
   var AStarted: Boolean);
 var
@@ -12806,7 +13143,7 @@ begin
 end;
 
 { 某一组内、某一列的小计。按组的**成员数据行**统计,所以折叠着也算得出来。 }
-function TTyStringGrid.GroupAggregateValue(AGroupIndex, ACol: Integer): Double;
+function TTyCustomStringGrid.GroupAggregateValue(AGroupIndex, ACol: Integer): Double;
 var
   i, n: Integer;
   acc: Double;
@@ -12830,7 +13167,7 @@ end;
 
 { 分组行上某列显示的小计文字。与页脚同一套前缀与格式 —— 同一个数在两处
   长得不一样是最没道理的不一致。 }
-function TTyStringGrid.GroupFooterText(AGroupIndex, ACol: Integer): string;
+function TTyCustomStringGrid.GroupFooterText(AGroupIndex, ACol: Integer): string;
 var
   kind: TTyGridAggregate;
 begin
@@ -12844,7 +13181,7 @@ begin
               + FormatFloat('0.##', GroupAggregateValue(AGroupIndex, ACol));
 end;
 
-function TTyStringGrid.AggregatePrefix(AKind: TTyGridAggregate): string;
+function TTyCustomStringGrid.AggregatePrefix(AKind: TTyGridAggregate): string;
 begin
   case AKind of
     gagSum:   Result := rsGridSumPrefix;
@@ -12856,7 +13193,7 @@ begin
   end;
 end;
 
-function TTyStringGrid.AggregateValue(ACol: Integer): Double;
+function TTyCustomStringGrid.AggregateValue(ACol: Integer): Double;
 var
   pos, dataRow, n: Integer;
   v, acc: Double;
@@ -12929,7 +13266,7 @@ begin
   end;
 end;
 
-function TTyStringGrid.FooterText(ACol: Integer): string;
+function TTyCustomStringGrid.FooterText(ACol: Integer): string;
 var
   kind: TTyGridAggregate;
   prefix: string;
@@ -12947,7 +13284,7 @@ begin
   if Assigned(FOnGetFooterText) then FOnGetFooterText(Self, ACol, Result);
 end;
 
-procedure TTyStringGrid.RenderFooter(P: TTyPainter; const M: TTyGridMetrics;
+procedure TTyCustomStringGrid.RenderFooter(P: TTyPainter; const M: TTyGridMetrics;
   const AFooterRect: TRect; const AFrame: TTyStyleSet);
 var
   i, l, w: Integer;
@@ -12980,7 +13317,7 @@ begin
   end;
 end;
 
-function TTyStringGrid.CellRect(ACol, ARow: Integer): TRect;
+function TTyCustomStringGrid.CellRect(ACol, ARow: Integer): TRect;
 var
   cs, rs, bc, br, lastPos, sl, sr: Integer;
   r2: TRect;
@@ -13015,7 +13352,7 @@ begin
     Result := Rect(0, 0, 0, 0);
 end;
 
-procedure TTyStringGrid.MapToBaseCell(var ACol, ARow: Integer);
+procedure TTyCustomStringGrid.MapToBaseCell(var ACol, ARow: Integer);
 var
   bc, br: Integer;
 begin
@@ -13026,7 +13363,7 @@ end;
 
 { ---- 单元格合并 ----------------------------------------------------------- }
 
-procedure TTyStringGrid.RecordRowCountUndo(AOldCount: Integer);
+procedure TTyCustomStringGrid.RecordRowCountUndo(AOldCount: Integer);
 var
   e: TTyGridUndoEntry;
 begin
@@ -13043,7 +13380,7 @@ begin
   RecordUndo(e);
 end;
 
-procedure TTyStringGrid.OpenUndoGroup;
+procedure TTyCustomStringGrid.OpenUndoGroup;
 begin
   if FUndoBusy or (FUndoLimit = 0) then Exit;
   Inc(FUndoDepth);
@@ -13054,7 +13391,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.CloseUndoGroup;
+procedure TTyCustomStringGrid.CloseUndoGroup;
 begin
   if FUndoBusy or (FUndoLimit = 0) then Exit;
   if FUndoDepth = 0 then Exit;
@@ -13069,7 +13406,7 @@ begin
   FUndoOverflow := False;
 end;
 
-procedure TTyStringGrid.DoRowDragMove(AFrom, ATo: Integer);
+procedure TTyCustomStringGrid.DoRowDragMove(AFrom, ATo: Integer);
 begin
   MoveRow(AFrom, ATo);
 end;
@@ -13077,13 +13414,13 @@ end;
 { 直接看**实际的显示序**是不是恒等,而不是猜"有没有排序/分组/筛选"。
   更准:按一个本来就有序的列排出来仍然是恒等,这时没有任何理由拒绝合并或拖行;
   物理排序之后更是必然恒等 —— 那几条限制就此自动解除,不必再逐处去改。 }
-function TTyStringGrid.DisplayOrderIsDataOrder: Boolean;
+function TTyCustomStringGrid.DisplayOrderIsDataOrder: Boolean;
 begin
   EnsureOrder;
   Result := FOrderIsIdentity and (Length(FGroupCols) = 0);
 end;
 
-function TTyStringGrid.RowsDisplayedConsecutively(ABaseRow, ACount: Integer): Boolean;
+function TTyCustomStringGrid.RowsDisplayedConsecutively(ABaseRow, ACount: Integer): Boolean;
 var
   i, p0: Integer;
 begin
@@ -13096,7 +13433,7 @@ begin
 end;
 
 { 选区在客户区里的外接矩形(显示序 → 像素)。 }
-function TTyStringGrid.SelectionBoundsRect: TRect;
+function TTyCustomStringGrid.SelectionBoundsRect: TRect;
 var
   r: TRect;
   tl, br: TRect;
@@ -13115,7 +13452,7 @@ begin
   if tl.Right > Result.Right then Result.Right := tl.Right;
 end;
 
-function TTyStringGrid.FillHandleRect: TRect;
+function TTyCustomStringGrid.FillHandleRect: TRect;
 var
   b, bb: TRect;
   sz: Integer;
@@ -13139,7 +13476,7 @@ end;
 { 源区里某一列是不是等差数列;是则给出首项与公差。
   只认整数:'10','20' 这种。浮点的等差在表格里少见,而误判的代价是把
   用户的数据算错 —— 宁可退回"循环重复"。 }
-function TTyStringGrid.ArithmeticStep(ACol, AFrom, ATo: Integer;
+function TTyCustomStringGrid.ArithmeticStep(ACol, AFrom, ATo: Integer;
   out AFirst, AStep: Integer): Boolean;
 var
   r, v, prev, d: Integer;
@@ -13172,7 +13509,7 @@ begin
   Result := True;
 end;
 
-procedure TTyStringGrid.FillFromSelectionTo(ACol, ARow: Integer);
+procedure TTyCustomStringGrid.FillFromSelectionTo(ACol, ARow: Integer);
 var
   src: TRect;
   tgt: TRect;
@@ -13252,7 +13589,7 @@ const
     分隔符可配只会多出一个"存的时候用了什么"必须一起存下来的状态。 }
   TyGridStateDelim = ',';
 
-function TTyStringGrid.SaveLayoutToString: string;
+function TTyCustomStringGrid.SaveLayoutToString: string;
 var
   i: Integer;
   c: TTyColumn;          { 别叫 col —— 与网格的 Col 属性撞名 }
@@ -13279,7 +13616,7 @@ begin
      FFixedCols, EffectiveFixedColsRight, FFixedRows, FFixedRowsBottom]);
 end;
 
-function TTyStringGrid.LoadLayoutFromString(const AText: string): Boolean;
+function TTyCustomStringGrid.LoadLayoutFromString(const AText: string): Boolean;
 var
   parts, one, fields: TStringList;
   i, n: Integer;
@@ -13424,7 +13761,7 @@ end;
 
 { 这一列是不是某一级的分组列。去重要按"属于分组列集合"判,
   而不是"等于最外层那个" —— 后者正是上一版漏掉内层的原因。 }
-function TTyStringGrid.IsGroupColumn(ACol: Integer): Boolean;
+function TTyCustomStringGrid.IsGroupColumn(ACol: Integer): Boolean;
 var i: Integer;
 begin
   Result := False;
@@ -13432,19 +13769,19 @@ begin
     if FGroupCols[i] = ACol then Exit(True);
 end;
 
-function TTyStringGrid.GetGroupCol: Integer;
+function TTyCustomStringGrid.GetGroupCol: Integer;
 begin
   if Length(FGroupCols) = 0 then Result := -1 else Result := FGroupCols[0];
 end;
 
-function TTyStringGrid.GroupColumns: TTyIntArray;
+function TTyCustomStringGrid.GroupColumns: TTyIntArray;
 var i: Integer;
 begin
   SetLength(Result, Length(FGroupCols));
   for i := 0 to High(FGroupCols) do Result[i] := FGroupCols[i];
 end;
 
-procedure TTyStringGrid.GroupByColumns(const ACols: array of Integer);
+procedure TTyCustomStringGrid.GroupByColumns(const ACols: array of Integer);
 var
   i, n: Integer;
 begin
@@ -13463,7 +13800,7 @@ begin
   Invalidate;
 end;
 
-function TTyStringGrid.MergeSelection: Boolean;
+function TTyCustomStringGrid.MergeSelection: Boolean;
 var
   r: TRect;
   i, baseRow, prev, dr: Integer;   { 别叫 top —— 与 TRect.Top 撞名 }
@@ -13489,7 +13826,7 @@ begin
   Result := True;
 end;
 
-procedure TTyStringGrid.MergeCells(ACol, ARow, AColSpan, ARowSpan: Integer);
+procedure TTyCustomStringGrid.MergeCells(ACol, ARow, AColSpan, ARowSpan: Integer);
 var
   cs, rs: Integer;
 begin
@@ -13526,7 +13863,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyStringGrid.UnmergeCells(ACol, ARow: Integer);
+procedure TTyCustomStringGrid.UnmergeCells(ACol, ARow: Integer);
 var
   k: string;
   a: TTyGridCellAttr;
@@ -13543,7 +13880,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyStringGrid.ClearMerges;
+procedure TTyCustomStringGrid.ClearMerges;
 var
   keys: TStringList;
   i: Integer;
@@ -13576,13 +13913,13 @@ begin
   Invalidate;
 end;
 
-function TTyStringGrid.MaxRowSpanHint: Integer;
+function TTyCustomStringGrid.MaxRowSpanHint: Integer;
 begin
   Result := FMaxRowSpan;
   if Result < 1 then Result := 1;
 end;
 
-function TTyStringGrid.CellSpan(ACol, ARow: Integer;
+function TTyCustomStringGrid.CellSpan(ACol, ARow: Integer;
   out AColSpan, ARowSpan: Integer): Boolean;
 var
   a: TTyGridCellAttr;
@@ -13606,14 +13943,14 @@ begin
   Result := (AColSpan > 1) or (ARowSpan > 1);
 end;
 
-function TTyStringGrid.IsBaseCell(ACol, ARow: Integer): Boolean;
+function TTyCustomStringGrid.IsBaseCell(ACol, ARow: Integer): Boolean;
 var
   cs, rs: Integer;
 begin
   Result := CellSpan(ACol, ARow, cs, rs);
 end;
 
-procedure TTyStringGrid.BaseCellOf(ACol, ARow: Integer;
+procedure TTyCustomStringGrid.BaseCellOf(ACol, ARow: Integer;
   out ABaseCol, ABaseRow: Integer);
 var
   c, r, cs, rs, pos, basePos, minC, minP: Integer;
@@ -13665,7 +14002,7 @@ begin
   else Result := (b <> '') and (Pos(b, a) > 0);
 end;
 
-function TTyStringGrid.FindCell(const AText: string;
+function TTyCustomStringGrid.FindCell(const AText: string;
   ACaseSensitive, AWholeCell: Boolean; out ACol, ARow: Integer): Boolean;
 var
   startPos, flat, total, n, pos, c, dataRow, i: Integer;
@@ -13699,7 +14036,7 @@ begin
   end;
 end;
 
-function TTyStringGrid.FindNext(const AText: string;
+function TTyCustomStringGrid.FindNext(const AText: string;
   ACaseSensitive, AWholeCell: Boolean): Boolean;
 var
   c, r: Integer;
@@ -13713,7 +14050,7 @@ begin
   end;
 end;
 
-function TTyStringGrid.ReplaceCells(const AFind, AReplace: string;
+function TTyCustomStringGrid.ReplaceCells(const AFind, AReplace: string;
   ACaseSensitive, AWholeCell, AAll: Boolean): Integer;
 var
   pos, c, dataRow: Integer;
@@ -13753,7 +14090,7 @@ begin
 end;
 
 
-function TTyStringGrid.SaveToHTMLText: string;
+function TTyCustomStringGrid.SaveToHTMLText: string;
 var
   sb: TStringList;
   pos, cIdx, dataRow: Integer;
@@ -13784,7 +14121,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.SaveToHTMLFile(const AFileName: string);
+procedure TTyCustomStringGrid.SaveToHTMLFile(const AFileName: string);
 var
   sl: TStringList;
 begin
@@ -13799,7 +14136,7 @@ end;
 
 { ---- 剪贴板 / CSV ---------------------------------------------------------- }
 
-function TTyStringGrid.SelectionAsText: string;
+function TTyCustomStringGrid.SelectionAsText: string;
 var
   sel: TRect;
   pos, cIdx, dataRow: Integer;
@@ -13834,7 +14171,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.CopySelectionToClipboard;
+procedure TTyCustomStringGrid.CopySelectionToClipboard;
 var
   txt: string;
   allow: Boolean;
@@ -13846,7 +14183,7 @@ begin
   Clipboard.AsText := txt;
 end;
 
-procedure TTyStringGrid.PasteFromText(const AText: string);
+procedure TTyCustomStringGrid.PasteFromText(const AText: string);
 var
   lines: TStringList;
   i, j, targetRow, startPos, needRows, needCols, maxCols: Integer;
@@ -13938,7 +14275,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyStringGrid.PasteFromClipboard;
+procedure TTyCustomStringGrid.PasteFromClipboard;
 begin
   if Clipboard.HasFormat(CF_TEXT) then PasteFromText(Clipboard.AsText);
 end;
@@ -13970,7 +14307,7 @@ begin
   Result := Result + '"';
 end;
 
-function TTyStringGrid.SaveToJSONText: string;
+function TTyCustomStringGrid.SaveToJSONText: string;
 var
   sb: TStringList;
   pos, cIdx, dataRow: Integer;
@@ -14005,7 +14342,7 @@ begin
   end;
 end;
 
-function TTyStringGrid.SaveToCSVText(ADelimiter: Char;
+function TTyCustomStringGrid.SaveToCSVText(ADelimiter: Char;
   AFromRow, ARowCount, AFromCol, AColCount: Integer;
   AWriteTitles, AVisibleColumnsOnly: Boolean): string;
 var
@@ -14082,7 +14419,7 @@ end;
 
 
 
-procedure TTyStringGrid.LoadFromCSVText(const AText: string; ADelimiter: Char;
+procedure TTyCustomStringGrid.LoadFromCSVText(const AText: string; ADelimiter: Char;
   AAppend: Boolean; AMaxRows, AIgnoreRows: Integer; AUseTitles: Boolean;
   ASkipEmptyLines: Boolean);
 var
@@ -14205,7 +14542,7 @@ begin
   Result := string(txt);
 end;
 
-procedure TTyStringGrid.SaveToCSVStream(AStream: TStream; ADelimiter: Char;
+procedure TTyCustomStringGrid.SaveToCSVStream(AStream: TStream; ADelimiter: Char;
   AWriteTitles, AVisibleColumnsOnly: Boolean);
 begin
   if AStream = nil then Exit;
@@ -14213,7 +14550,7 @@ begin
     AWriteTitles, AVisibleColumnsOnly));
 end;
 
-procedure TTyStringGrid.LoadFromCSVStream(AStream: TStream; ADelimiter: Char;
+procedure TTyCustomStringGrid.LoadFromCSVStream(AStream: TStream; ADelimiter: Char;
   AUseTitles, ASkipEmptyLines: Boolean);
 var
   txt: string;
@@ -14238,7 +14575,7 @@ end;
   这不是风格之争,是正确性:显示序里没有被筛掉的行(存下来就少数据),
   排过序的表读回来行号还会整体换一位,于是同一份文件里存着的光标、选区、
   冻结行数会全部指到别的行上去。全状态存的是"这张表",不是"这一屏"。 }
-function TTyStringGrid.StateContentText: string;
+function TTyCustomStringGrid.StateContentText: string;
 var
   sb: TStringList;
   r, c: Integer;
@@ -14270,7 +14607,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.SaveToStream(AStream: TStream);
+procedure TTyCustomStringGrid.SaveToStream(AStream: TStream);
 var
   sb: TStringList;
 begin
@@ -14297,7 +14634,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.LoadFromStream(AStream: TStream);
+procedure TTyCustomStringGrid.LoadFromStream(AStream: TStream);
 var
   lines, one: TStringList;
   i, mark, savedRows, anchorCol, anchorRow, savedCol, savedRow, sx, sy: Integer;
@@ -14385,7 +14722,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.SaveToCSVFile(const AFileName: string; ADelimiter: Char;
+procedure TTyCustomStringGrid.SaveToCSVFile(const AFileName: string; ADelimiter: Char;
   AWriteTitles, AVisibleColumnsOnly: Boolean);
 var
   sl: TStringList;
@@ -14400,7 +14737,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.LoadFromCSVFile(const AFileName: string; ADelimiter: Char;
+procedure TTyCustomStringGrid.LoadFromCSVFile(const AFileName: string; ADelimiter: Char;
   AUseTitles, ASkipEmptyLines: Boolean);
 var
   sl: TStringList;
@@ -14414,7 +14751,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.SaveToFile(const AFileName: string);
+procedure TTyCustomStringGrid.SaveToFile(const AFileName: string);
 var
   fs: TFileStream;
 begin
@@ -14426,7 +14763,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.LoadFromFile(const AFileName: string);
+procedure TTyCustomStringGrid.LoadFromFile(const AFileName: string);
 var
   fs: TFileStream;
 begin
@@ -14439,7 +14776,7 @@ begin
 end;
 
 { 现在能不能安全地物理排序。 }
-function TTyStringGrid.CanSortPhysically: Boolean;
+function TTyCustomStringGrid.CanSortPhysically: Boolean;
 begin
   Result := (FSortMode = gsmData)
             { 有筛选就不行:被筛掉的行也在数据里,一起搬会把它们搬乱。 }
@@ -14462,7 +14799,7 @@ end;
   先整体快照再写回:边遍历边改会自己覆盖自己。
   写回走 Cells[] / 属性存储,所以整次排序**自动进撤销栈**;外面包了事务,
   因此是**一条**记录 —— 一次 Ctrl+Z 就退回排序前。 }
-procedure TTyStringGrid.ApplyOrderToData;
+procedure TTyCustomStringGrid.ApplyOrderToData;
 type
   TCellSnap = record C, R: Integer; V: string; end;
 var
@@ -14544,7 +14881,7 @@ begin
   InvalidateOrder;    { 数据已经有序,重建出来就是恒等 }
 end;
 
-procedure TTyStringGrid.SortByColumn(ACol: Integer; ADirection: TTySortDirection);
+procedure TTyCustomStringGrid.SortByColumn(ACol: Integer; ADirection: TTySortDirection);
 var
   i, j, cmp, tmp: Integer;
   canSort: Boolean;
@@ -14611,7 +14948,7 @@ begin
   Invalidate;
 end;
 
-function TTyStringGrid.EffectiveSortKeys: TTyGridSortKeys;
+function TTyCustomStringGrid.EffectiveSortKeys: TTyGridSortKeys;
 var
   i, n: Integer;
 begin
@@ -14639,7 +14976,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.AddSortColumn(ACol: Integer; ADirection: TTySortDirection);
+procedure TTyCustomStringGrid.AddSortColumn(ACol: Integer; ADirection: TTySortDirection);
 var
   i, n: Integer;
 begin
@@ -14681,7 +15018,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyStringGrid.ClearSortColumns;
+procedure TTyCustomStringGrid.ClearSortColumns;
 begin
   SetLength(FSortKeys, 0);
   FSortCol := -1;
@@ -14692,7 +15029,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyStringGrid.HideSortArrow;
+procedure TTyCustomStringGrid.HideSortArrow;
 begin
   { 排序键**刻意不动**:显示序是由它们算出来的,清掉就等于把行顺序也退回去了,
     而这个方法的全部意义正是"顺序留着、只是别画那个三角"。
@@ -14702,17 +15039,17 @@ begin
   Invalidate;
 end;
 
-function TTyStringGrid.GetModified: Boolean;
+function TTyCustomStringGrid.GetModified: Boolean;
 begin
   Result := FModified;
 end;
 
-procedure TTyStringGrid.SetModified(AValue: Boolean);
+procedure TTyCustomStringGrid.SetModified(AValue: Boolean);
 begin
   FModified := AValue;
 end;
 
-function TTyStringGrid.InplaceEditor: TWinControl;
+function TTyCustomStringGrid.InplaceEditor: TWinControl;
 var
   c: TControl;
 begin
@@ -14723,41 +15060,41 @@ begin
   if c is TWinControl then Result := TWinControl(c);
 end;
 
-function TTyStringGrid.GetEditorMode: Boolean;
+function TTyCustomStringGrid.GetEditorMode: Boolean;
 begin
   Result := FEditing;
 end;
 
-procedure TTyStringGrid.SetEditorMode(AValue: Boolean);
+procedure TTyCustomStringGrid.SetEditorMode(AValue: Boolean);
 begin
   if AValue = FEditing then Exit;
   if AValue then BeginEdit
   else EndEdit(True);      { LCL 的 EditorMode := False 是提交,不是丢弃 }
 end;
 
-function TTyStringGrid.GetSelectedColumn: TTyGridColumn;
+function TTyCustomStringGrid.GetSelectedColumn: TTyGridColumn;
 begin
   Result := GridColumn(FCol);
 end;
 
-function TTyStringGrid.SortColumnCount: Integer;
+function TTyCustomStringGrid.SortColumnCount: Integer;
 begin
   Result := Length(FSortKeys);
 end;
 
-function TTyStringGrid.SortColumnAt(AIndex: Integer): TTyGridSortKey;
+function TTyCustomStringGrid.SortColumnAt(AIndex: Integer): TTyGridSortKey;
 begin
   Result.Col := -1;
   Result.Dir := sdAscending;
   if (AIndex >= 0) and (AIndex <= High(FSortKeys)) then Result := FSortKeys[AIndex];
 end;
 
-function TTyStringGrid.GroupRowText(const AKey: string; ACount: Integer): string;
+function TTyCustomStringGrid.GroupRowText(const AKey: string; ACount: Integer): string;
 begin
   Result := Format(FGroupRowFormat, [AKey, ACount]);
 end;
 
-function TTyStringGrid.SortDirectionOf(ACol: Integer): TTySortDirection;
+function TTyCustomStringGrid.SortDirectionOf(ACol: Integer): TTySortDirection;
 var
   i: Integer;
 begin
@@ -14766,7 +15103,7 @@ begin
     if FSortKeys[i].Col = ACol then Exit(FSortKeys[i].Dir);
 end;
 
-procedure TTyStringGrid.ExpandAllGroups;
+procedure TTyCustomStringGrid.ExpandAllGroups;
 begin
   FCollapsed.Clear;
   InvalidateOrder;
@@ -14774,7 +15111,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyStringGrid.CollapseAllGroups;
+procedure TTyCustomStringGrid.CollapseAllGroups;
 var
   i: Integer;
 begin
@@ -14788,7 +15125,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyStringGrid.ToggleSortColumn(ACol: Integer);
+procedure TTyCustomStringGrid.ToggleSortColumn(ACol: Integer);
 begin
   if ACol <> FSortCol then
     SortByColumn(ACol, sdAscending)
@@ -14799,7 +15136,7 @@ begin
 end;
 
 
-function TTyStringGrid.ActiveSelectionRect: TRect;
+function TTyCustomStringGrid.ActiveSelectionRect: TRect;
 var
   a, c: Integer;
 begin
@@ -14831,7 +15168,7 @@ begin
   end;
 end;
 
-function TTyStringGrid.IsCellSelected(ACol, ARow: Integer): Boolean;
+function TTyCustomStringGrid.IsCellSelected(ACol, ARow: Integer): Boolean;
 var
   rp, i: Integer;
 begin
@@ -14846,7 +15183,7 @@ begin
     if TyGridRectHolds(FSelRects[i], ACol, rp, FSelectionMode) then Exit(True);
 end;
 
-procedure TTyStringGrid.CommitActiveSelection;
+procedure TTyCustomStringGrid.CommitActiveSelection;
 var
   n: Integer;
 begin
@@ -14862,13 +15199,13 @@ begin
   FSelRects[n] := ActiveSelectionRect;
 end;
 
-procedure TTyStringGrid.SelectionChanged;
+procedure TTyCustomStringGrid.SelectionChanged;
 begin
   Invalidate;
   if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
 end;
 
-procedure TTyStringGrid.SelectAll;
+procedure TTyCustomStringGrid.SelectAll;
 var
   pos, d, firstData, lastData: Integer;
 begin
@@ -14902,7 +15239,7 @@ begin
   SelectionChanged;
 end;
 
-procedure TTyStringGrid.SelectRange(ACol1, ARow1, ACol2, ARow2: Integer);
+procedure TTyCustomStringGrid.SelectRange(ACol1, ARow1, ACol2, ARow2: Integer);
 
   function ClampCol(AValue: Integer): Integer;
   begin
@@ -14928,13 +15265,13 @@ begin
   SelectionChanged;
 end;
 
-procedure TTyStringGrid.SelectRows(ARow1, ARow2: Integer);
+procedure TTyCustomStringGrid.SelectRows(ARow1, ARow2: Integer);
 begin
   if Header.Columns.Count = 0 then Exit;
   SelectRange(0, ARow1, Header.Columns.Count - 1, ARow2);
 end;
 
-procedure TTyStringGrid.ClearSelection;
+procedure TTyCustomStringGrid.ClearSelection;
 begin
   SetLength(FSelRects, 0);
   { 选区收缩成光标所在的那一格 —— 网格总有一个当前格,"什么都没选"不是它的状态。 }
@@ -14942,18 +15279,18 @@ begin
   SelectionChanged;
 end;
 
-procedure TTyStringGrid.ClearSelections;
+procedure TTyCustomStringGrid.ClearSelections;
 begin
   ClearSelection;
 end;
 
-function TTyStringGrid.GetSelectedRangeCount: Integer;
+function TTyCustomStringGrid.GetSelectedRangeCount: Integer;
 begin
   { 活动矩形恒算一块 —— 见属性声明处。 }
   Result := Length(FSelRects) + 1;
 end;
 
-function TTyStringGrid.GetSelectedRange(AIndex: Integer): TRect;
+function TTyCustomStringGrid.GetSelectedRange(AIndex: Integer): TRect;
 var
   r: TRect;
 begin
@@ -14969,12 +15306,12 @@ begin
   Result.Bottom := DisplayToData(r.Bottom);
 end;
 
-function TTyStringGrid.HasMultiSelection: Boolean;
+function TTyCustomStringGrid.HasMultiSelection: Boolean;
 begin
   Result := Length(FSelRects) > 0;
 end;
 
-function TTyStringGrid.GetSelection: TRect;
+function TTyCustomStringGrid.GetSelection: TRect;
 var
   r: TRect;
 begin
@@ -14986,7 +15323,7 @@ begin
   Result.Bottom := DisplayToData(r.Bottom);
 end;
 
-procedure TTyStringGrid.SetSelection(const AValue: TRect);
+procedure TTyCustomStringGrid.SetSelection(const AValue: TRect);
 begin
   { All four negative = cancel, as in LCL (SetSelection -> CancelSelection). This is
     not a curiosity: an empty grid reads its selection back as (-1,-1,-1,-1), so
@@ -15006,7 +15343,7 @@ end;
 
 { 选区聚合的公共骨架:走一遍选区,把能解析成数值的格喂给累加器。
   四个入口共用它,免得四份几乎一样的遍历各自跑偏。 }
-procedure TTyStringGrid.ForEachSelectedNumber(out ACount: Integer;
+procedure TTyCustomStringGrid.ForEachSelectedNumber(out ACount: Integer;
   out ASum, AMin, AMax: Double);
 var
   pos, colIdx, dataRow: Integer;
@@ -15044,7 +15381,7 @@ begin
   end;
 end;
 
-function TTyStringGrid.ApplySelectionColor(AColor: TTyColor;
+function TTyCustomStringGrid.ApplySelectionColor(AColor: TTyColor;
   ATextColor: Boolean): Integer;
 var
   pos, colIdx, dataRow: Integer;
@@ -15073,42 +15410,42 @@ begin
   end;
 end;
 
-function TTyStringGrid.SetSelectionColor(AColor: TTyColor): Integer;
+function TTyCustomStringGrid.SetSelectionColor(AColor: TTyColor): Integer;
 begin
   Result := ApplySelectionColor(AColor, False);
 end;
 
-function TTyStringGrid.SetSelectionTextColor(AColor: TTyColor): Integer;
+function TTyCustomStringGrid.SetSelectionTextColor(AColor: TTyColor): Integer;
 begin
   Result := ApplySelectionColor(AColor, True);
 end;
 
-function TTyStringGrid.SelectionSum: Double;
+function TTyCustomStringGrid.SelectionSum: Double;
 var n: Integer; mn, mx: Double;
 begin
   ForEachSelectedNumber(n, Result, mn, mx);
 end;
 
-function TTyStringGrid.SelectionAvg: Double;
+function TTyCustomStringGrid.SelectionAvg: Double;
 var n: Integer; sum, mn, mx: Double;
 begin
   ForEachSelectedNumber(n, sum, mn, mx);
   if n = 0 then Result := 0 else Result := sum / n;
 end;
 
-function TTyStringGrid.SelectionMin: Double;
+function TTyCustomStringGrid.SelectionMin: Double;
 var n: Integer; sum, mx: Double;
 begin
   ForEachSelectedNumber(n, sum, Result, mx);
 end;
 
-function TTyStringGrid.SelectionMax: Double;
+function TTyCustomStringGrid.SelectionMax: Double;
 var n: Integer; sum, mn: Double;
 begin
   ForEachSelectedNumber(n, sum, mn, Result);
 end;
 
-function TTyStringGrid.SelectedCellCount: Integer;
+function TTyCustomStringGrid.SelectedCellCount: Integer;
 var
   pos, colIdx, dataRow: Integer;
 begin
@@ -15123,7 +15460,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.AnchorSelection;
+procedure TTyCustomStringGrid.AnchorSelection;
 begin
   FSelAnchorCol := FCol;
   FSelAnchorRow := FRow;
@@ -15139,7 +15476,7 @@ begin
     Result := TTyGridColumn(FHeader.Columns.Items[ACol]);
 end;
 
-function TTyStringGrid.CanEditCell(ACol, ARow: Integer): Boolean;
+function TTyCustomStringGrid.CanEditCell(ACol, ARow: Integer): Boolean;
 begin
   { 先看有没有编辑器 —— 连编辑器都没有就不必打扰宿主。 }
   Result := EditorKindFor(ACol, ARow) <> gekNone;
@@ -15147,20 +15484,20 @@ begin
     FOnCanEditCell(Self, ACol, ARow, Result);
 end;
 
-function TTyStringGrid.ScrollHintFor(ATopRow: Integer): string;
+function TTyCustomStringGrid.ScrollHintFor(ATopRow: Integer): string;
 begin
   { 不挂钩子就不编一句出来 —— 控件并不知道哪一列对用户有意义。 }
   Result := '';
   if Assigned(FOnScrollHint) then FOnScrollHint(Self, ATopRow, Result);
 end;
 
-procedure TTyStringGrid.EditorTextChanged(Sender: TObject);
+procedure TTyCustomStringGrid.EditorTextChanged(Sender: TObject);
 begin
   if FEditing and Assigned(FOnEditChange) then
     FOnEditChange(Self, FEditCol, FEditRow, FEditor.Text);
 end;
 
-function TTyStringGrid.EditorKindFor(ACol, ARow: Integer): TTyGridEditorKind;
+function TTyCustomStringGrid.EditorKindFor(ACol, ARow: Integer): TTyGridEditorKind;
 var
   c: TTyGridColumn;
 begin
@@ -15183,7 +15520,7 @@ begin
   if Assigned(FOnGetEditorKind) then FOnGetEditorKind(Self, ACol, ARow, Result);
 end;
 
-function TTyStringGrid.BeginEdit: Boolean;
+function TTyCustomStringGrid.BeginEdit: Boolean;
 begin
   Result := BeginEdit(FCol, FRow);
 end;
@@ -15191,7 +15528,7 @@ end;
 { 窄列上把编辑器向右加宽,好让人看清自己在输入什么。
   加宽的是编辑器,列宽一点没动;也绝不越过网格右缘(越出去的部分点不到、也画不出)。
   下拉另算:列上配了 DropDownWidth 就按它走。 }
-function TTyStringGrid.WidenEditorRect(ACol, ARow: Integer;
+function TTyCustomStringGrid.WidenEditorRect(ACol, ARow: Integer;
   const ARect: TRect): TRect;
 var
   want, limit: Integer;
@@ -15224,7 +15561,7 @@ end;
 
 { 当前正在用的编辑器控件。宿主给的 EditLink 优先,其次看内建那几个谁在显示。
   单独一个函数而不是十几处各记一个字段 —— 记账点越多越容易漏。 }
-function TTyStringGrid.EditorControl: TControl;
+function TTyCustomStringGrid.EditorControl: TControl;
 begin
   Result := nil;
   if not FEditing then Exit;
@@ -15246,14 +15583,14 @@ end;
   **时机**:编辑器已经建好、摆好、拿到焦点,但还没把控制权交回调用方。
   宿主在这里改属性(字体、限长、宽度)都来得及生效;想在"显示之前"插手的话
   已经晚一步 —— 换来的是这十几种编辑器不可能有一种忘了通知。 }
-function TTyStringGrid.BeginEdit(ACol, ARow: Integer): Boolean;
+function TTyCustomStringGrid.BeginEdit(ACol, ARow: Integer): Boolean;
 begin
   Result := DoBeginEdit(ACol, ARow);
   if Result and Assigned(FOnGetEditorProp) and (EditorControl <> nil) then
     FOnGetEditorProp(Self, FEditCol, FEditRow, EditorControl);
 end;
 
-function TTyStringGrid.DoBeginEdit(ACol, ARow: Integer): Boolean;
+function TTyCustomStringGrid.DoBeginEdit(ACol, ARow: Integer): Boolean;
 var
   r: TRect;
 begin
@@ -15472,7 +15809,7 @@ begin
   Result := True;
 end;
 
-function TTyStringGrid.PendingEditText: string;
+function TTyCustomStringGrid.PendingEditText: string;
 begin
   { 一次只会有一个编辑器可见,所以按可见性挑;日期与时间共用一个控件,得看开编辑时记下的种类
     (从前一律当日期提交,时间格被写成 1899-12-30 —— 见旧 EndEdit 里的注释)。 }
@@ -15497,7 +15834,7 @@ begin
   Result := FEditor.Text;
 end;
 
-function TTyStringGrid.TryEndEdit(ACommit: Boolean): Boolean;
+function TTyCustomStringGrid.TryEndEdit(ACommit: Boolean): Boolean;
 var
   oldTxt, newTxt: string;
   valid: Boolean;
@@ -15528,7 +15865,7 @@ begin
   EndEdit(True);
 end;
 
-procedure TTyStringGrid.EndEdit(ACommit: Boolean);
+procedure TTyCustomStringGrid.EndEdit(ACommit: Boolean);
 var
   oldTxt, newTxt: string;
   accept, valid, preValidated: Boolean;
@@ -15586,7 +15923,7 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.DoExit;
+procedure TTyCustomStringGrid.DoExit;
 var
   keep: Boolean;
 begin
@@ -15604,7 +15941,7 @@ begin
   inherited DoExit;
 end;
 
-procedure TTyStringGrid.RefocusEditor;
+procedure TTyCustomStringGrid.RefocusEditor;
 var
   w: TWinControl;
 begin
@@ -15615,23 +15952,23 @@ begin
   if (w <> nil) and w.HandleAllocated and w.CanFocus then w.SetFocus;
 end;
 
-procedure TTyStringGrid.DateEditorExit(Sender: TObject);
+procedure TTyCustomStringGrid.DateEditorExit(Sender: TObject);
 begin
   TryEndEdit(True);
 end;
 
-procedure TTyStringGrid.PickEditorChange(Sender: TObject);
+procedure TTyCustomStringGrid.PickEditorChange(Sender: TObject);
 begin
   { 选中即提交 —— 下拉不像文本框那样需要按 Enter 确认。被拦下就留在下拉里。 }
   if FEditing then TryEndEdit(True);
 end;
 
-procedure TTyStringGrid.PickEditorExit(Sender: TObject);
+procedure TTyCustomStringGrid.PickEditorExit(Sender: TObject);
 begin
   TryEndEdit(True);
 end;
 
-procedure TTyStringGrid.EditorKeyDown(Sender: TObject; var Key: Word;
+procedure TTyCustomStringGrid.EditorKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
   case Key of
@@ -15645,7 +15982,7 @@ begin
   end;
 end;
 
-function TTyStringGrid.EditorCanCancelForTest: Boolean;
+function TTyCustomStringGrid.EditorCanCancelForTest: Boolean;
 begin
   Result := False;
   if not FEditing then Exit;
@@ -15660,7 +15997,7 @@ begin
   Result := Assigned(FEditor.OnKeyDown);
 end;
 
-procedure TTyStringGrid.EditorCancelKeyDown(Sender: TObject; var Key: Word;
+procedure TTyCustomStringGrid.EditorCancelKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
   if Key <> VK_ESCAPE then Exit;
@@ -15669,7 +16006,7 @@ begin
   if HandleAllocated and CanFocus then SetFocus;
 end;
 
-procedure TTyStringGrid.PickEditorKeyDown(Sender: TObject; var Key: Word;
+procedure TTyCustomStringGrid.PickEditorKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
   if Key <> VK_ESCAPE then Exit;
@@ -15681,7 +16018,7 @@ begin
   if HandleAllocated and CanFocus then SetFocus;
 end;
 
-procedure TTyStringGrid.EditorKeyPress(Sender: TObject; var Key: Char);
+procedure TTyCustomStringGrid.EditorKeyPress(Sender: TObject; var Key: Char);
 var
   vc: string;
 begin
@@ -15691,7 +16028,7 @@ begin
   if (vc <> '') and (Pos(Key, vc) = 0) then Key := #0;   { 吃掉这一击 }
 end;
 
-procedure TTyStringGrid.EditorExit(Sender: TObject);
+procedure TTyCustomStringGrid.EditorExit(Sender: TObject);
 begin
   { 焦点离开 = 提交。与库内其他内联编辑一致:凡是会让单元格移动/失焦的动作,先提交。
     被校验拦下就留着 —— **不把焦点抢回来**(在失焦回调里 SetFocus 是 widgetset 层的
@@ -15700,7 +16037,7 @@ begin
   TryEndEdit(True);
 end;
 
-procedure TTyStringGrid.DblClick;
+procedure TTyCustomStringGrid.DblClick;
 begin
   inherited DblClick;
   { 只有双击**单元格**才进编辑。行号槽、列头、末行以下的空白都不是格子 ——
@@ -15708,7 +16045,7 @@ begin
   if FLastDownHit.Part = ghpCell then BeginEdit;
 end;
 
-procedure TTyStringGrid.RenderSelectionFrame(P: TTyPainter;
+procedure TTyCustomStringGrid.RenderSelectionFrame(P: TTyPainter;
   const M: TTyGridMetrics; const AFrame: TTyStyleSet);
 var
   b, r: TRect;
@@ -15762,7 +16099,7 @@ begin
   DrawInPane(P, CellPane(r.Right, r.Bottom), M, @DrawFrameAndHandle);
 end;
 
-procedure TTyStringGrid.RenderCells(P: TTyPainter; const M: TTyGridMetrics;
+procedure TTyCustomStringGrid.RenderCells(P: TTyPainter; const M: TTyGridMetrics;
   const AFrame: TTyStyleSet);
 var
   slot: Integer;   { 绘制槽位 }
@@ -15862,7 +16199,7 @@ end;
 
 { ---- TTyGridStrings -------------------------------------------------------- }
 
-constructor TTyGridStrings.Create(AGrid: TTyStringGrid; AIsCol: Boolean;
+constructor TTyGridStrings.Create(AGrid: TTyCustomStringGrid; AIsCol: Boolean;
   AIndex: Integer);
 begin
   inherited Create;

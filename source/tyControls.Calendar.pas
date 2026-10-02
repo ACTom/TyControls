@@ -300,6 +300,58 @@ type
     { Current view anchor year (transient UI state). }
     property ViewYear: Word read FViewYear;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop default True;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     { NOTE the type. LCL's TCustomCalendar.Date is a STRING (calendar.pp) and its
       TDateTime twin is called DateTime -- which is the one TCalendar publishes. So
       `Cal.Date := Now` compiles here and fails there, and `Cal.DateTime` compiles
@@ -352,10 +404,6 @@ type
     property OnViewChange: TNotifyEvent read FOnViewChange write FOnViewChange;
     property Align;
     property Anchors;
-    property Font;
-    property StyleClass;
-    property Controller;
-    property TabStop default True;
   end;
 
 implementation

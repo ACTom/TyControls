@@ -168,8 +168,8 @@ type
     procedure CheckFeaturesItemChange(Sender: TObject; AIndex: Integer);
     procedure ListGroupsItemClick(Sender: TObject; AGroupIndex, AItemIndex: Integer);
     procedure ListGroupsGroupToggle(Sender: TObject; AGroupIndex: Integer);
-    procedure HeaderColsSectionClick(AHeader: TTyHeaderControl; AIndex: Integer);
-    procedure HeaderColsSectionResize(AHeader: TTyHeaderControl; AIndex, AWidth: Integer);
+    procedure HeaderColsSectionClick(AHeader: TTyCustomHeaderControl; AIndex: Integer);
+    procedure HeaderColsSectionResize(AHeader: TTyCustomHeaderControl; AIndex, AWidth: Integer);
     procedure ExPanelExpand(Sender: TObject);
     procedure ExPanelCollapse(Sender: TObject);
     { TTyScrollPanel's edge auto-pan is driven by the HOST: the panel exposes AutoPanTo /
@@ -439,13 +439,13 @@ begin
   LblLog.Caption := Format(rsLogGroup, [ListGroups.GroupCaption[AGroupIndex], state]);
 end;
 
-procedure TMainForm.HeaderColsSectionClick(AHeader: TTyHeaderControl; AIndex: Integer);
+procedure TMainForm.HeaderColsSectionClick(AHeader: TTyCustomHeaderControl; AIndex: Integer);
 begin
   // The strip has already cycled the section's sort by the time this fires.
   LblLog.Caption := Format(rsLogSort, [HeaderCols.SectionText[AIndex]]);
 end;
 
-procedure TMainForm.HeaderColsSectionResize(AHeader: TTyHeaderControl; AIndex, AWidth: Integer);
+procedure TMainForm.HeaderColsSectionResize(AHeader: TTyCustomHeaderControl; AIndex, AWidth: Integer);
 begin
   // Fires ONCE, on release, with the settled width (OnSectionTrack is the live one).
   LblLog.Caption := Format(rsLogColWidth, [HeaderCols.SectionText[AIndex], AWidth]);

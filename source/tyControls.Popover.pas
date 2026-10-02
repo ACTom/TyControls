@@ -327,6 +327,9 @@ type
     { Whether the popup is currently up. }
     property Showing: Boolean read FShowing;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     { The control the popover belongs to and points at. Show uses it; ShowFor/ShowAt override
       it for one call without disturbing it. }
     property Target: TControl read FTarget write SetTarget;

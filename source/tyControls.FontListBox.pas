@@ -10,7 +10,7 @@ type
   { A list box of installed font families, each row drawn IN ITS OWN typeface (via the
     TTyListBox.PaintItemContent hook + the shared TyDrawFontRow). The list-box sibling of
     TTyFontComboBox. Populated from Screen.Fonts; SelectedFont is the chosen family. }
-  TTyFontListBox = class(TTyListBox)
+  TTyCustomFontListBox = class(TTyCustomListBox)
   private
     function GetSelectedFont: string;
     procedure SetSelectedFont(const AValue: string);
@@ -23,15 +23,83 @@ type
     property SelectedFont: string read GetSelectedFont write SetSelectedFont;
   end;
 
+  { TTyFontListBox publishes TTyCustomFontListBox's properties; everything lives in TTyCustomFontListBox. }
+  TTyFontListBox = class(TTyCustomFontListBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property MultiSelect;
+    property ExtendedSelect;
+    property Sorted;
+    property ItemHeight;
+    property ScrollWidth;
+    property ScrollBarAutoHide;
+    property TopIndex;
+    property OnChange;
+    property OnSelectionChange;
+    property Align;
+    property Anchors;
+  end;
+
 implementation
 
-constructor TTyFontListBox.Create(AOwner: TComponent);
+constructor TTyCustomFontListBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   RefreshFonts;
 end;
 
-procedure TTyFontListBox.RefreshFonts;
+procedure TTyCustomFontListBox.RefreshFonts;
 begin
   Items.BeginUpdate;
   try
@@ -43,13 +111,13 @@ begin
   if Items.Count > 0 then ItemIndex := 0;
 end;
 
-procedure TTyFontListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
+procedure TTyCustomFontListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
 begin
   TyDrawFontRow(P, ARowRect, Items[AIndex], AStyle, ResolveFontSize(AStyle));
 end;
 
-function TTyFontListBox.GetSelectedFont: string;
+function TTyCustomFontListBox.GetSelectedFont: string;
 begin
   if (ItemIndex >= 0) and (ItemIndex < Items.Count) then
     Result := Items[ItemIndex]
@@ -57,7 +125,7 @@ begin
     Result := '';
 end;
 
-procedure TTyFontListBox.SetSelectedFont(const AValue: string);
+procedure TTyCustomFontListBox.SetSelectedFont(const AValue: string);
 var idx: Integer;
 begin
   idx := Items.IndexOf(AValue);

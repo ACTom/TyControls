@@ -119,7 +119,7 @@ type
 
       OWNED BY THIS COMPONENT and rebuilt in place -- read it, do not free or modify it. A
       browser drawing two thousand cells asks per repaint, and minting a fresh list each time
-      would be two thousand string allocations a frame. It is rebuilt only when Version or the
+      would be two thousand string allocations a frame. It is rebuilt only when ChangeStamp or the
       lister generation has moved, so the steady-state cost is two integer comparisons. }
     property GlyphNames: TStrings read GetGlyphNames;
     { The same names copied into ANames (cleared first), for a caller that wants to keep, sort
@@ -166,13 +166,20 @@ type
     property LoadError: string read FLoadError;
     { Bumped by every change that alters what a glyph looks like -- the map, the family, the
       file. A consumer that caches rendered glyphs compares this instead of re-rendering; one
-      that does not can just add a handler below. }
-    property Version: Integer read FVersion;
+      that does not can just add a handler below.
+      Named ChangeStamp, not Version (it was `Version: Integer` up to 3.0): TTyComponent's
+      `Version: string` is the LIBRARY version, and since 4.0 it is public on the base and
+      published by each component itself -- a class cannot publish one Version and declare
+      another, so the counter took the name TTyImageCollection already uses for the same job. }
+    property ChangeStamp: Integer read FVersion;
     { Observe changes without taking the published OnChange away from the application. }
     procedure AddHandlerOnChange(const AHandler: TNotifyEvent; AsFirst: Boolean = False);
     procedure RemoveHandlerOnChange(const AHandler: TNotifyEvent);
     procedure RemoveAllHandlersOfObject(AnObject: TObject);
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     { The font family name used to render (must match the registered/installed
       family). When FontFile is set, this is typically the file's family. }
     property FontFamily: string read FFontFamily write SetFontFamily;

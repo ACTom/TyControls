@@ -22,15 +22,15 @@ type
   end;
 
   { A combo of installed font families, each item (field + drop-down) drawn in its own
-    typeface — a WYSIWYG font picker. Subclasses TTyComboBox; the chosen family is
+    typeface — a WYSIWYG font picker. Descends from TTyCustomComboBox; the chosen family is
     SelectedFont (== Text). Populated from Screen.Fonts; RefreshFonts re-reads them.
     Reuses the 'TyComboBox' / 'TyListItem' theming. }
-  TTyFontComboBox = class(TTyComboBox)
+  TTyCustomFontComboBox = class(TTyCustomComboBox)
   private
     function GetSelectedFont: string;
     procedure SetSelectedFont(const AValue: string);
   protected
-    function CreatePopupList: TTyListBox; override;
+    function CreatePopupList: TTyCustomListBox; override;
     procedure PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet); override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -39,6 +39,82 @@ type
     // The selected font family (== the selected item's text). Setting selects the matching
     // item if present.
     property SelectedFont: string read GetSelectedFont write SetSelectedFont;
+  end;
+
+  { TTyFontComboBox publishes TTyCustomFontComboBox's properties; everything lives in TTyCustomFontComboBox. }
+  TTyFontComboBox = class(TTyCustomFontComboBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property Text;
+    property DropDownCount;
+    property Sorted;
+    property MaxLength;
+    property CharCase;
+    property Style;
+    property ItemHeight;
+    property ItemWidth;
+    property TextHint;
+    property ReadOnly;
+    property OnDrawItem;
+    property OnMeasureItem;
+    property OnChange;
+    property OnSelect;
+    property OnDropDown;
+    property OnCloseUp;
+    property OnGetItems;
+    property Align;
+    property Anchors;
   end;
 
 implementation
@@ -68,15 +144,15 @@ begin
   TyDrawFontRow(P, ARowRect, Items[AIndex], AStyle, ResolveFontSize(AStyle));
 end;
 
-{ TTyFontComboBox }
+{ TTyCustomFontComboBox }
 
-constructor TTyFontComboBox.Create(AOwner: TComponent);
+constructor TTyCustomFontComboBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   RefreshFonts;
 end;
 
-procedure TTyFontComboBox.RefreshFonts;
+procedure TTyCustomFontComboBox.RefreshFonts;
 begin
   Items.BeginUpdate;
   try
@@ -88,12 +164,12 @@ begin
   if Items.Count > 0 then ItemIndex := 0;
 end;
 
-function TTyFontComboBox.CreatePopupList: TTyListBox;
+function TTyCustomFontComboBox.CreatePopupList: TTyCustomListBox;
 begin
   Result := TTyFontPopupList.Create(Self);
 end;
 
-procedure TTyFontComboBox.PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet);
+procedure TTyCustomFontComboBox.PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet);
 begin
   if (ItemIndex >= 0) and (ItemIndex < Items.Count) then
     P.DrawText(ATextRect, Items[ItemIndex], Items[ItemIndex], ResolveFontSize(AStyle),
@@ -102,12 +178,12 @@ begin
     inherited PaintFieldContent(P, ATextRect, AStyle);
 end;
 
-function TTyFontComboBox.GetSelectedFont: string;
+function TTyCustomFontComboBox.GetSelectedFont: string;
 begin
   Result := Text;
 end;
 
-procedure TTyFontComboBox.SetSelectedFont(const AValue: string);
+procedure TTyCustomFontComboBox.SetSelectedFont(const AValue: string);
 var idx: Integer;
 begin
   idx := Items.IndexOf(AValue);

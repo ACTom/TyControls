@@ -362,6 +362,47 @@ type
     procedure SaveToFile(const AFileName: string; AFormat: TBGRAImageFormat;
       AWidth, AHeight: Integer); overload;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     property ChartType: TTyChartType read FChartType write SetChartType default ctLine;
     property Series: TTyChartSeries read FSeries write SetSeries;
     property Categories: TStrings read FCategories write SetCategories;
@@ -379,10 +420,6 @@ type
     property OnGetTooltip: TTyChartTooltipEvent read FOnGetTooltip write FOnGetTooltip;
     property Align;
     property Anchors;
-    property Font;
-    property StyleClass;
-    property StyleOverride;
-    property Controller;
   end;
 
 implementation

@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Controls, LCLType, LMessages, ExtCtrls,
   tyControls.Base, tyControls.Controller, tyControls.GroupBox, tyControls.CheckBox;
 type
-  { TTyRadioGroup — a titled frame (subclass of TTyGroupBox, so it inherits the themed
+  { TTyRadioGroup — a titled frame (descends from TTyCustomGroupBox, so it inherits the themed
     caption band + the AdjustClientRect inset) that AUTO-POPULATES one TTyRadioButton
     child per line of Items. The radios all share this control's Parent scope (they are
     parented to Self, GroupIndex 0), so they are mutually exclusive via the base
@@ -34,7 +34,7 @@ type
     the test process measures the caption font short enough that the overlap cannot arise).
     The real-window half was verified on a real machine during development and is not
     optional cover. }
-  TTyRadioGroup = class(TTyGroupBox)
+  TTyCustomRadioGroup = class(TTyCustomGroupBox)
   private
     FItems: TStrings;
     FColumns: Integer;
@@ -45,6 +45,10 @@ type
     FOnItemExit: TNotifyEvent;
     FRebuilding: Boolean;      // re-entrancy guard for RebuildButtons
     FUpdatingIndex: Boolean;   // re-entrancy guard for the child OnChange router
+    { An ItemIndex read from a form file before the Items it points into; Loaded applies it.
+      See SetItemIndex. }
+    FStreamedItemIndex: Integer;
+    FHasStreamedItemIndex: Boolean;
     procedure SetItems(AValue: TStrings);
     procedure ItemsChanged(Sender: TObject);
     procedure SetColumns(AValue: Integer);
@@ -126,6 +130,9 @@ type
       their old order and only each indicator flips, which looks like the mirroring half
       worked and the other half silently did not. }
     procedure CMBiDiModeChanged(var Message: TLMessage); message CM_BIDIMODECHANGED;
+    { Applies an ItemIndex that was read before its Items -- the other half of SetItemIndex's
+      csLoading capture. }
+    procedure Loaded; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -142,7 +149,6 @@ type
       raises out of range (include/radiogroup.inc:534-540), so this does too. The group
       still owns the child's lifetime and bounds: do not reparent or free one. }
     property Buttons[AIndex: Integer]: TTyRadioButton read GetButton;
-  published
     property Items: TStrings read FItems write SetItems;
     property Columns: Integer read FColumns write SetColumns default 1;
     { Which way the item grid FILLS -- see TTyCheckGroup.ColumnLayout, which is the same
@@ -169,8 +175,83 @@ type
       Sender convention (the button, not the group). }
     property OnItemEnter: TNotifyEvent read FOnItemEnter write FOnItemEnter;
     property OnItemExit: TNotifyEvent read FOnItemExit write FOnItemExit;
+  end;
+
+  { TTyRadioGroup publishes TTyCustomRadioGroup's properties; everything lives in TTyCustomRadioGroup. }
+  TTyRadioGroup = class(TTyCustomRadioGroup)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     property Caption;
     property Alignment;
+    property ClientWidth;
+    property ClientHeight;
+    property DockSite;
+    property UseDockManager;
+    property OnDockDrop;
+    property OnDockOver;
+    property OnUnDock;
+    property OnGetSiteInfo;
+    property OnGetDockCaption;
+    property OnStartDock;
+    property OnEndDock;
+    property Align;
+    property Anchors;
+    property Items;
+    property Columns;
+    property ColumnLayout;
+    property ItemIndex;
+    property OnSelectionChanged;
+    property OnItemEnter;
+    property OnItemExit;
   end;
 
 { TyRadioGroupCellRect — PURE layout geometry (no control state), the headless-tested core.
@@ -256,9 +337,9 @@ begin
     Result := BidiFlipRect(Result, AClient, True);
 end;
 
-{ TTyRadioGroup }
+{ TTyCustomRadioGroup }
 
-constructor TTyRadioGroup.Create(AOwner: TComponent);
+constructor TTyCustomRadioGroup.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FItems := TStringList.Create;
@@ -269,7 +350,7 @@ begin
   Height := 130;
 end;
 
-destructor TTyRadioGroup.Destroy;
+destructor TTyCustomRadioGroup.Destroy;
 begin
   // The children are owned by Self and freed by the inherited destructor's component
   // teardown; drop our tracking array + the Items list explicitly.
@@ -278,12 +359,12 @@ begin
   inherited Destroy;
 end;
 
-function TTyRadioGroup.Count: Integer;
+function TTyCustomRadioGroup.Count: Integer;
 begin
   Result := Length(FButtons);
 end;
 
-function TTyRadioGroup.FocusedIndex: Integer;
+function TTyCustomRadioGroup.FocusedIndex: Integer;
 var
   i: Integer;
 begin
@@ -293,7 +374,7 @@ begin
       Exit(i);
 end;
 
-procedure TTyRadioGroup.FocusItem(AIndex: Integer);
+procedure TTyCustomRadioGroup.FocusItem(AIndex: Integer);
 begin
   if (AIndex < 0) or (AIndex > High(FButtons)) then Exit;
   if FButtons[AIndex] = nil then Exit;
@@ -311,7 +392,7 @@ begin
     try FButtons[AIndex].SetFocus except end;
 end;
 
-procedure TTyRadioGroup.ItemMouseDown(Sender: TObject; Button: TMouseButton;
+procedure TTyCustomRadioGroup.ItemMouseDown(Sender: TObject; Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 var
   i: Integer;
@@ -325,7 +406,7 @@ begin
     end;
 end;
 
-function TTyRadioGroup.RowPitch: Integer;
+function TTyCustomRadioGroup.RowPitch: Integer;
 var
   i, itemMin, ppi: Integer;
 begin
@@ -343,17 +424,17 @@ begin
     MulDiv(ActiveController.Metric('--row-height', TyRadioRowH), ppi, 96), itemMin);
 end;
 
-procedure TTyRadioGroup.SetItems(AValue: TStrings);
+procedure TTyCustomRadioGroup.SetItems(AValue: TStrings);
 begin
   FItems.Assign(AValue);   // fires ItemsChanged -> RebuildButtons + LayoutButtons
 end;
 
-procedure TTyRadioGroup.ItemsChanged(Sender: TObject);
+procedure TTyCustomRadioGroup.ItemsChanged(Sender: TObject);
 begin
   RebuildButtons;
 end;
 
-procedure TTyRadioGroup.SetColumns(AValue: Integer);
+procedure TTyCustomRadioGroup.SetColumns(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
   if FColumns = AValue then Exit;
@@ -362,7 +443,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyRadioGroup.SetColumnLayout(AValue: TColumnLayout);
+procedure TTyCustomRadioGroup.SetColumnLayout(AValue: TColumnLayout);
 begin
   if FColumnLayout = AValue then Exit;
   FColumnLayout := AValue;
@@ -370,7 +451,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyRadioGroup.RaiseIndexOutOfBounds(AIndex: Integer);
+procedure TTyCustomRadioGroup.RaiseIndexOutOfBounds(AIndex: Integer);
 begin
   { Same message shape as TTyCheckGroup's and as LCL's rsIndexOutOfBounds, so the two read
     alike in a log. Note the range is 0..n-1 here -- unlike ItemIndex, where -1 is a legal
@@ -379,14 +460,14 @@ begin
     [ClassName, AIndex, Length(FButtons) - 1]);
 end;
 
-function TTyRadioGroup.GetButton(AIndex: Integer): TTyRadioButton;
+function TTyCustomRadioGroup.GetButton(AIndex: Integer): TTyRadioButton;
 begin
   if (AIndex < 0) or (AIndex > High(FButtons)) then
     RaiseIndexOutOfBounds(AIndex);
   Result := FButtons[AIndex];
 end;
 
-procedure TTyRadioGroup.ClearButtons;
+procedure TTyCustomRadioGroup.ClearButtons;
 var
   i: Integer;
 begin
@@ -395,7 +476,7 @@ begin
   SetLength(FButtons, 0);
 end;
 
-procedure TTyRadioGroup.SetController(AValue: TTyStyleController);
+procedure TTyCustomRadioGroup.SetController(AValue: TTyStyleController);
 var i: Integer;
 begin
   inherited SetController(AValue);
@@ -404,7 +485,7 @@ begin
       FButtons[i].Controller := AValue;
 end;
 
-procedure TTyRadioGroup.RebuildButtons;
+procedure TTyCustomRadioGroup.RebuildButtons;
 var
   prevIndex, newIndex, i: Integer;
   prevCaption: string;
@@ -468,7 +549,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyRadioGroup.LayoutButtons;
+procedure TTyCustomRadioGroup.LayoutButtons;
 var
   i, n: Integer;
   client, cell: TRect;
@@ -496,7 +577,7 @@ end;
   change, so code ported from Lazarus hangs its logic there and would otherwise get
   nothing -- TControl's OnClick only fires when the GROUP BOX itself is clicked, which on
   a control whose whole surface is covered by its children is never. }
-procedure TTyRadioGroup.NotifySelection;
+procedure TTyCustomRadioGroup.NotifySelection;
 begin
   if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
   if Assigned(OnClick) then OnClick(Self);
@@ -506,7 +587,7 @@ end;
   choice, and leaves. Every child was a tab stop, so tabbing through a form with a
   five-item radio group meant five stops inside one logical control -- and arrow keys, the
   keys that actually move a radio selection, had nothing to do. LCL: UpdateTabStops. }
-procedure TTyRadioGroup.UpdateTabStops;
+procedure TTyCustomRadioGroup.UpdateTabStops;
 var
   i, sel: Integer;
 begin
@@ -517,7 +598,7 @@ begin
       FButtons[i].TabStop := (i = sel);
 end;
 
-procedure TTyRadioGroup.ChildChanged(Sender: TObject);
+procedure TTyCustomRadioGroup.ChildChanged(Sender: TObject);
 begin
   // A child's Checked flipped. When a radio becomes checked it unchecks its siblings,
   // each of which ALSO fires ChildChanged — the FUpdatingIndex guard collapses that
@@ -535,7 +616,7 @@ begin
   end;
 end;
 
-function TTyRadioGroup.GetItemIndex: Integer;
+function TTyCustomRadioGroup.GetItemIndex: Integer;
 var
   i: Integer;
 begin
@@ -545,7 +626,7 @@ begin
       Exit(i);
 end;
 
-procedure TTyRadioGroup.SetItemIndex(AValue: Integer);
+procedure TTyCustomRadioGroup.SetItemIndex(AValue: Integer);
 var
   i: Integer;
 begin
@@ -556,16 +637,26 @@ begin
     state and therefore never investigated. LCL raises here for the same reason
     (radiogroup.inc:387), and TTyCheckGroup.Checked[] was given the same treatment on this
     branch; the message shape is deliberately identical so the two read alike in a log.
-    Streaming is exempt: a .lfm whose ItemIndex precedes its Items would otherwise abort
-    ReadComponent and take the whole form down with it. }
+    Streaming is exempt. A form file whose ItemIndex precedes its Items -- LCL's own
+    TRadioGroup publishes them in that order (extctrls.pp:808-809), and so may a third
+    party's TTyCustomRadioGroup -- reads the index while there is nothing yet for it to point
+    at. Raising would abort ReadComponent and take the whole form down; dropping it to -1
+    loses the saved choice. So it waits, and Loaded applies it against the items that
+    streamed in after it: LCL does the same with FReading (radiogroup.inc:383-384, applied
+    in ReadState at :504-510). The library's own TTyRadioGroup publishes Items first, so for
+    it nothing waits. }
   if (AValue < -1) or (AValue >= FItems.Count) then
   begin
     if csLoading in ComponentState then
-      AValue := -1
-    else
-      raise EListError.CreateFmt('%s Index %d out of bounds -1 .. %d',
-        [ClassName, AValue, FItems.Count - 1]);
+    begin
+      FStreamedItemIndex := AValue;
+      FHasStreamedItemIndex := True;
+      Exit;
+    end;
+    raise EListError.CreateFmt('%s Index %d out of bounds -1 .. %d',
+      [ClassName, AValue, FItems.Count - 1]);
   end;
+  FHasStreamedItemIndex := False;   // a value that could be applied replaces a waiting one
   if GetItemIndex = AValue then Exit;
   { The guard collapses the child-event storm (checking one radio unchecks its siblings,
     each of which fires) into ONE notification -- it is not there to make a programmatic
@@ -591,6 +682,35 @@ begin
   NotifySelection;
 end;
 
+procedure TTyCustomRadioGroup.Loaded;
+var
+  idx, i: Integer;
+begin
+  inherited Loaded;
+  if not FHasStreamedItemIndex then Exit;
+  FHasStreamedItemIndex := False;
+  idx := FStreamedItemIndex;
+  { Still out of range once every item is in: a hand-edited or damaged form file. Nothing
+    chosen, as the streaming exemption in SetItemIndex has always promised. }
+  if (idx < -1) or (idx >= Length(FButtons)) then idx := -1;
+  { Silently, as LCL applies a value read while FReading: reading a form is not the user
+    choosing something, and a handler would run before the form is whole. }
+  FUpdatingIndex := True;
+  try
+    if idx >= 0 then
+    begin
+      if FButtons[idx] <> nil then FButtons[idx].Checked := True;
+    end
+    else
+      for i := 0 to High(FButtons) do
+        if FButtons[i] <> nil then FButtons[i].Checked := False;
+  finally
+    FUpdatingIndex := False;
+  end;
+  UpdateTabStops;
+  Invalidate;
+end;
+
 { Arrow navigation. Only the GROUP can do this: moving "one to the right" means knowing the
   column count and the fill order, and a lone TTyRadioButton knows neither -- which is why
   arrows did nothing at all before, leaving Tab-to-each-item-plus-Space as the only keyboard
@@ -600,7 +720,7 @@ end;
   horizontally is +1 in row-major order and +Rows in column-major, and one cell vertically is
   the other way round. Items that cannot take the selection are stepped OVER rather than
   stopped on, so a disabled option does not become a wall. }
-procedure TTyRadioGroup.MoveSelection(AHorzDiff, AVertDiff: Integer);
+procedure TTyCustomRadioGroup.MoveSelection(AHorzDiff, AVertDiff: Integer);
 var
   rows, step, i, n: Integer;
 begin
@@ -645,7 +765,7 @@ end;
 
 { Re-raise on the GROUP first, so a group-level handler can swallow a key before the
   navigation sees it; then, if the key survived, move the selection. }
-procedure TTyRadioGroup.ItemKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+procedure TTyCustomRadioGroup.ItemKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
   KeyDown(Key, Shift);
   if Shift * [ssShift, ssAlt, ssCtrl] <> [] then Exit;   // modified arrows are not ours
@@ -657,47 +777,47 @@ begin
   end;
 end;
 
-procedure TTyRadioGroup.ItemKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
+procedure TTyCustomRadioGroup.ItemKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
   KeyUp(Key, Shift);
 end;
 
-procedure TTyRadioGroup.ItemKeyPress(Sender: TObject; var Key: char);
+procedure TTyCustomRadioGroup.ItemKeyPress(Sender: TObject; var Key: char);
 begin
   KeyPress(Key);
 end;
 
-procedure TTyRadioGroup.ItemUTF8KeyPress(Sender: TObject; var UTF8Key: TUTF8Char);
+procedure TTyCustomRadioGroup.ItemUTF8KeyPress(Sender: TObject; var UTF8Key: TUTF8Char);
 begin
   UTF8KeyPress(UTF8Key);
 end;
 
 { Sender stays the BUTTON, as LCL's does -- the whole point is to know WHICH option the
   keyboard is on, which a Sender of Self would not tell anyone. }
-procedure TTyRadioGroup.ItemEnter(Sender: TObject);
+procedure TTyCustomRadioGroup.ItemEnter(Sender: TObject);
 begin
   if Assigned(FOnItemEnter) then FOnItemEnter(Sender);
 end;
 
-procedure TTyRadioGroup.ItemExit(Sender: TObject);
+procedure TTyCustomRadioGroup.ItemExit(Sender: TObject);
 begin
   if Assigned(FOnItemExit) then FOnItemExit(Sender);
 end;
 
-procedure TTyRadioGroup.SetParent(AParent: TWinControl);
+procedure TTyCustomRadioGroup.SetParent(AParent: TWinControl);
 begin
   inherited SetParent(AParent);
   // Once we have a parent (and thus a valid ClientRect), re-place the children.
   LayoutButtons;
 end;
 
-procedure TTyRadioGroup.DoOnResize;
+procedure TTyCustomRadioGroup.DoOnResize;
 begin
   inherited DoOnResize;
   LayoutButtons;   // reflow the grid when the box is resized
 end;
 
-procedure TTyRadioGroup.CMBiDiModeChanged(var Message: TLMessage);
+procedure TTyCustomRadioGroup.CMBiDiModeChanged(var Message: TLMessage);
 begin
   inherited;       // LCL invalidates, tells the children, and calls AdjustSize
   LayoutButtons;   // and then the columns have to actually change sides

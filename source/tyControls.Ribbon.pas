@@ -159,6 +159,70 @@ type
     property Pages[AIndex: Integer]: TTyRibbonPage read GetPage;
     property ActivePage: TTyRibbonPage read GetActivePage write SetActivePage;
   published
+    { TTyCustomTabStrip publishes nothing since 4.0. Until the ribbon is split itself
+      (plan Task 21) it publishes the whole chain here, in the 3.0 RTTI order: the
+      universal and tab-strip names, then its own. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Images;
+    property ImagesWidth;
+    property OnGetImageIndex;
+    property TabHeight;
+    property TabsClosable;
+    property OnTabClose;
+    property OnChange;
+    property OnChanging;
+    property OnReorder;
+    property Align default alTop;
+    property Anchors;
     property ActivePageIndex: Integer read FTabIndex write SetTabIndex default -1;
     { When True the group band collapses so only the tab strip shows (the ribbon's
       Height shrinks to the tab-header height); setting it back restores the previous
@@ -192,7 +256,6 @@ type
       tabs (Office KeyTips); typing a badge's letter switches to that tab, Escape hides them. }
     property KeyTips: Boolean read FKeyTips write SetKeyTips default True;
     property OnFileTab: TNotifyEvent read FOnFileTab write FOnFileTab;
-    property Align default alTop;
   end;
 
   { One ribbon tab page — hosts groups. }
@@ -227,13 +290,63 @@ type
   public
     constructor Create(AOwner: TComponent); override;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     property Caption: TCaption read FCaption write SetCaption;
     { When non-empty, this page is a CONTEXTUAL tab: shown only while its host ribbon's
       context of this name is active (TTyRibbon.ShowContext/HideContext). Empty = a
       normal always-visible tab. }
     property Context: string read FContext write SetContext;
-    property StyleClass;
-    property Controller;
   end;
 
   TTyRibbonLauncherEvent = procedure(Sender: TTyRibbonGroup) of object;
@@ -266,6 +379,58 @@ type
       overflow layout, so there is no ChangeBounds loop. }
     procedure FitToContent;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     property Caption: TCaption read FCaption write SetCaption;
     { Show the bottom caption band (the group name). False = the content fills the full
       height and no caption/launcher is drawn (a caption-less group). }
@@ -274,8 +439,6 @@ type
     property ShowDialogLauncher: Boolean read FShowDialogLauncher write SetShowDialogLauncher default False;
     property OnDialogLauncher: TTyRibbonLauncherEvent read FOnDialogLauncher write FOnDialogLauncher;
     property Align default alLeft;
-    property StyleClass;
-    property Controller;
   end;
 
 const

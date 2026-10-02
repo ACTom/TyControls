@@ -128,6 +128,9 @@ type
       constant so a skin can retune their intrinsic geometry. }
     function Metric(const AName: string; ADefault: Integer): Integer;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     { Version is inherited from TTyComponent — the shared non-visual base. }
     property ThemeFile: string read FThemeFile write SetThemeFile;
     { B (Phase 2): switch theme by registered NAME. Resolves via TyResolveTheme and

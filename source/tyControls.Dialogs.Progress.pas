@@ -57,6 +57,9 @@ type
     procedure DoCancel;                    // seam: fired by the Cancel button / Esc
     property Cancelled: Boolean read FCancelled;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     property Caption: TCaption read FCaption write FCaption;
     property Text: TCaption read FText write FText;
     property Min: Integer read FMin write FMin default 0;

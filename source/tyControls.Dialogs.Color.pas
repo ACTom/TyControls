@@ -123,6 +123,9 @@ type
     function Execute: Boolean;
     property LCLColor: TColor read GetLCL write SetLCL;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     property Caption: TCaption read FCaption write FCaption;
     property Color: TTyColor read FColor write FColor default $FF000000;
     property Alpha: Byte read GetAlpha write SetAlpha default $FF;

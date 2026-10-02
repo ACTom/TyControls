@@ -86,6 +86,47 @@ type
     constructor Create(AOwner: TComponent); override;
     function GetStyleTypeKey: string; override;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     property Direction: TTyArrowDirection read FDirection write SetDirection default tadRight;
     { Which of the two glyphs to draw. HeadRatio / ShaftRatio shape the block arrow only;
       ArrowPointerAngle shapes the triangle only. Each is inert in the other mode. }
@@ -100,9 +141,6 @@ type
     property ShaftRatio: Single read FShaftRatio write SetShaftRatio;
     property Align;
     property Anchors;
-    property StyleClass;
-    property StyleOverride;
-    property Controller;
   end;
 
 { Pure geometry: the 7 vertices of a block arrow inscribed in ARect, pointing ADir.

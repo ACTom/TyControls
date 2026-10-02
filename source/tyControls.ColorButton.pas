@@ -20,10 +20,10 @@ const
 function TyColorHex(AColor: TTyColor): string;
 
 type
-  { TTyColorButton — a TTyButton that shows a colour swatch. Clicking opens the
+  { TTyColorButton — a push button (on TTyCustomButton) that shows a colour swatch. Clicking opens the
     themed TySelectColor dialog and updates the swatch on OK. GetStyleTypeKey stays
     'TyButton' (inherited), so it reuses the button theme token — no new .tycss. }
-  TTyColorButton = class(TTyButton)
+  TTyCustomColorButton = class(TTyCustomButton)
   private
     FSelectedColor: TTyColor;
     FShowText: Boolean;
@@ -74,7 +74,6 @@ type
     // and on an accepted change repaint + fire OnColorChange. inherited Click is still
     // called so OnClick fires too. (Guarded so headless tests never reach TySelectColor.)
     procedure Click; override;
-  published
     // The current swatch colour. Setting it programmatically repaints but does NOT
     // fire OnColorChange (that event is reserved for dialog-driven changes).
     property SelectedColor: TTyColor read FSelectedColor write SetSelectedColor default $FF3B82F6;
@@ -107,6 +106,81 @@ type
     property OnColorChanged: TNotifyEvent read FOnColorChanged write FOnColorChanged;
   end;
 
+  { TTyColorButton publishes TTyCustomColorButton's properties; everything lives in TTyCustomColorButton. }
+  TTyColorButton = class(TTyCustomColorButton)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property AnimationsEnabled;
+    property Default;
+    property Cancel;
+    property Down;
+    property ModalResult;
+    property Alignment;
+    property ShowAccelChar;
+    property ShowBadge;
+    property BadgeValue;
+    property BadgePosition;
+    property OnBadgeDisplay;
+    property Caption;
+    property Align;
+    property Anchors;
+    property SelectedColor;
+    property ButtonColor;
+    property ShowText;
+    property DialogCaption;
+    property OnColorChange;
+    property OnColorChanged;
+  end;
+
 implementation
 
 function TyColorHex(AColor: TTyColor): string;
@@ -116,8 +190,8 @@ begin
 end;
 
 { Build a solid TTyFill. A standalone function (NOT a method) so Default(TTyFill)
-  resolves to the compiler intrinsic — inside a TTyButton descendant's method the
-  inherited published 'Default' property would shadow it. }
+  resolves to the compiler intrinsic — inside a TTyCustomButton descendant's method the
+  inherited 'Default' property would shadow it. }
 function SolidFill(AColor: TTyColor): TTyFill;
 begin
   Result := Default(TTyFill);
@@ -125,7 +199,7 @@ begin
   Result.Color := AColor;
 end;
 
-constructor TTyColorButton.Create(AOwner: TComponent);
+constructor TTyCustomColorButton.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FSelectedColor := TyRGB(59, 130, 246);   // $FF3B82F6 — the library accent blue
@@ -136,12 +210,12 @@ begin
   Alignment := taLeftJustify;
 end;
 
-function TTyColorButton.GetButtonColor: TColor;
+function TTyCustomColorButton.GetButtonColor: TColor;
 begin
   Result := TyColorToLCL(FSelectedColor);
 end;
 
-procedure TTyColorButton.SetButtonColor(AValue: TColor);
+procedure TTyCustomColorButton.SetButtonColor(AValue: TColor);
 begin
   // Keep the current alpha: SelectedColor is ARGB and a TColor carries none, so reading
   // ButtonColor and writing it straight back must not quietly make an opaque swatch
@@ -149,7 +223,7 @@ begin
   SelectedColor := TyColorFromLCL(AValue, TyAlphaOf(FSelectedColor));
 end;
 
-procedure TTyColorButton.SetSelectedColor(AValue: TTyColor);
+procedure TTyCustomColorButton.SetSelectedColor(AValue: TTyColor);
 begin
   if FSelectedColor = AValue then Exit;
   FSelectedColor := AValue;
@@ -168,14 +242,14 @@ begin
   end;
 end;
 
-procedure TTyColorButton.SetShowText(AValue: Boolean);
+procedure TTyCustomColorButton.SetShowText(AValue: Boolean);
 begin
   if FShowText = AValue then Exit;
   FShowText := AValue;
   Invalidate;
 end;
 
-procedure TTyColorButton.DrawContent(APainter: TTyPainter; const AContentRect: TRect;
+procedure TTyCustomColorButton.DrawContent(APainter: TTyPainter; const AContentRect: TRect;
   const AStyle: TTyStyleSet);
 var
   swatch, capRect: TRect;
@@ -244,14 +318,14 @@ begin
   end;
 end;
 
-function TTyColorButton.ContentText: string;
+function TTyCustomColorButton.ContentText: string;
 begin
   if Caption <> '' then Result := Caption
   else if FShowText then Result := TyColorHex(FSelectedColor)
   else Result := '';
 end;
 
-function TTyColorButton.MeasureHexText(APPI: Integer; const AStyle: TTyStyleSet): Integer;
+function TTyCustomColorButton.MeasureHexText(APPI: Integer; const AStyle: TTyStyleSet): Integer;
 var
   Meas: TBitmap;
   txt: string;
@@ -282,7 +356,7 @@ begin
   end;
 end;
 
-function TTyColorButton.MeasureContentHeight(APPI: Integer): Integer;
+function TTyCustomColorButton.MeasureContentHeight(APPI: Integer): Integer;
 var
   lineH: Integer;
 begin
@@ -296,7 +370,7 @@ begin
   if lineH > Result then Result := lineH;
 end;
 
-procedure TTyColorButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+procedure TTyCustomColorButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
   WithThemeSpace: Boolean);
 var
   S: TTyStyleSet;
@@ -329,7 +403,7 @@ begin
   PreferredHeight := 0;
 end;
 
-procedure TTyColorButton.Click;
+procedure TTyCustomColorButton.Click;
 var
   newColor: TTyColor;
   didChange: Boolean;

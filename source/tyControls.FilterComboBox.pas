@@ -23,7 +23,7 @@ const
   DefaultFilterIndex = 1;
 
 type
-  TTyFilterComboBox = class(TTyComboBox)
+  TTyCustomFilterComboBox = class(TTyCustomComboBox)
   private
     FFilter: string;                { LCL filter string, verbatim }
     FSpecs: TTyFsFilterSpecArray;   { TyFsParseFilter(FFilter); row i <-> FSpecs[i] }
@@ -67,7 +67,6 @@ type
       description precedes its pattern list, pairwise. }
     class procedure ConvertFilterToStrings(const AFilter: string; AStrings: TStrings;
       AClearStrings, AAddDescription, AAddFilter: Boolean);
-  published
     { The LCL filter string. Writing it reparses and rebuilds the drop-down; fires no event. }
     property Filter: string read FFilter write SetFilter;
     { The active segment, 1-based (LCL convention). }
@@ -83,9 +82,89 @@ type
     property ShellListView: TTyShellListView read FShellListView write SetShellListView;
   end;
 
+  { TTyFilterComboBox publishes TTyCustomFilterComboBox's properties; everything lives in TTyCustomFilterComboBox. }
+  TTyFilterComboBox = class(TTyCustomFilterComboBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property Text;
+    property DropDownCount;
+    property Sorted;
+    property MaxLength;
+    property CharCase;
+    property Style;
+    property ItemHeight;
+    property ItemWidth;
+    property TextHint;
+    property ReadOnly;
+    property OnDrawItem;
+    property OnMeasureItem;
+    property OnChange;
+    property OnSelect;
+    property OnDropDown;
+    property OnCloseUp;
+    property OnGetItems;
+    property Align;
+    property Anchors;
+    property Filter;
+    property FilterIndex;
+    property OnFilterChange;
+    property ShellListView;
+  end;
+
 implementation
 
-constructor TTyFilterComboBox.Create(AOwner: TComponent);
+constructor TTyCustomFilterComboBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FFilter := '';
@@ -94,7 +173,7 @@ begin
   FUpdating := False;
 end;
 
-function TTyFilterComboBox.Mask: string;
+function TTyCustomFilterComboBox.Mask: string;
 begin
   if (FFilterIndex >= 1) and (FFilterIndex <= Length(FSpecs)) then
     Result := FSpecs[FFilterIndex - 1].Patterns
@@ -102,7 +181,7 @@ begin
     Result := '';
 end;
 
-class procedure TTyFilterComboBox.ConvertFilterToStrings(const AFilter: string;
+class procedure TTyCustomFilterComboBox.ConvertFilterToStrings(const AFilter: string;
   AStrings: TStrings; AClearStrings, AAddDescription, AAddFilter: Boolean);
 var
   specs: TTyFsFilterSpecArray;
@@ -126,7 +205,7 @@ begin
   end;
 end;
 
-procedure TTyFilterComboBox.SetShellListView(AValue: TTyShellListView);
+procedure TTyCustomFilterComboBox.SetShellListView(AValue: TTyShellListView);
 begin
   if FShellListView = AValue then Exit;
   FShellListView := AValue;
@@ -140,14 +219,14 @@ begin
   end;
 end;
 
-procedure TTyFilterComboBox.PushMask;
+procedure TTyCustomFilterComboBox.PushMask;
 begin
   if FShellListView = nil then Exit;
   if ComponentState * [csLoading, csDesigning] <> [] then Exit;
   FShellListView.Mask := Mask;
 end;
 
-procedure TTyFilterComboBox.Notification(AComponent: TComponent;
+procedure TTyCustomFilterComboBox.Notification(AComponent: TComponent;
   Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
@@ -155,7 +234,7 @@ begin
     FShellListView := nil;
 end;
 
-procedure TTyFilterComboBox.SetFilter(const AValue: string);
+procedure TTyCustomFilterComboBox.SetFilter(const AValue: string);
 var
   i, maxIdx: Integer;
 begin
@@ -189,7 +268,7 @@ begin
   PushMask;
 end;
 
-procedure TTyFilterComboBox.SelectModel(AModel: Integer);
+procedure TTyCustomFilterComboBox.SelectModel(AModel: Integer);
 var
   k: Integer;
 begin
@@ -202,7 +281,7 @@ begin
   ItemIndex := -1;
 end;
 
-procedure TTyFilterComboBox.SetFilterIndex(AValue: Integer);
+procedure TTyCustomFilterComboBox.SetFilterIndex(AValue: Integer);
 var
   maxIdx: Integer;
 begin
@@ -227,7 +306,7 @@ begin
     FOnFilterChange(Self);
 end;
 
-procedure TTyFilterComboBox.DoSelect;
+procedure TTyCustomFilterComboBox.DoSelect;
 var
   newIdx: Integer;
 begin
@@ -246,7 +325,7 @@ begin
   end;
 end;
 
-procedure TTyFilterComboBox.SetStyle(AValue: TTyComboBoxStyle);
+procedure TTyCustomFilterComboBox.SetStyle(AValue: TTyComboBoxStyle);
 begin
   { Pick-only, and ONLY pick-only: a FILTERED editable popup would desync the row<->spec
     mapping, so the edit box is what has to go. Owner-draw is a different question and used

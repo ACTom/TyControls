@@ -302,6 +302,9 @@ type
       put a number in every .lfm that nobody authored. }
     property CacheCapacity: Integer read FCacheCapacity write SetCacheCapacity;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     { The masters, and the .lfm's whole picture payload. The setter looks redundant
       — nothing "assigns a collection" — but TWriter.WriteProperty SKIPS a property
       with no setter, so without it the designer would save a form with no images
@@ -1501,18 +1504,18 @@ begin
       Result := FCollection.GetCachedBitmap(nm, ASizePx);
     2:
       begin
-        { The font has no cache to borrow from, so keep one slot here. The font's Version is
+        { The font has no cache to borrow from, so keep one slot here. The font's ChangeStamp is
           part of the key: editing its Glyphs or swapping its file changes what a name draws,
           and a cache that ignored that would keep serving the old glyph. }
         if (FGlyphCache = nil) or (FGlyphCacheName <> nm) or (FGlyphCacheSize <> ASizePx)
-           or (FGlyphCacheColor <> FGlyphColor) or (FGlyphCacheVersion <> FIconFont.Version) then
+           or (FGlyphCacheColor <> FGlyphColor) or (FGlyphCacheVersion <> FIconFont.ChangeStamp) then
         begin
           FreeAndNil(FGlyphCache);
           FGlyphCache := FIconFont.RenderGlyph(nm, ASizePx, FGlyphColor);
           FGlyphCacheName := nm;
           FGlyphCacheSize := ASizePx;
           FGlyphCacheColor := FGlyphColor;
-          FGlyphCacheVersion := FIconFont.Version;
+          FGlyphCacheVersion := FIconFont.ChangeStamp;
         end;
         Result := FGlyphCache;
       end;

@@ -61,6 +61,9 @@ type
     destructor Destroy; override;
     function Execute: Boolean;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     property Caption: TCaption read FCaption write FCaption;
     property Font: TFont read FFont write SetFont;
     property OnShow: TNotifyEvent read FOnShow write FOnShow;

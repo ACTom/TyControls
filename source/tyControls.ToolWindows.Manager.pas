@@ -181,6 +181,9 @@ type
     { 把此刻的样子记成默认布局,随时覆盖。 }
     procedure CaptureDefaultLayout;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     { 两侧共用的图片列表:栏自己的 Images 为空时读取时回落到它(spec §8)。只设了 ImageIndex、
       没设 ImageName 的窗口要在两侧之间移动,就得用这一份。 }
     property Images;

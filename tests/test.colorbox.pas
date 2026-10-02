@@ -1,7 +1,7 @@
 unit test.colorbox;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Graphics, fpcunit, testregistry,
+uses Classes, SysUtils, Graphics, Forms, fpcunit, testregistry,
   tyControls.Types, tyControls.ComboBox, tyControls.ColorBox;
 type
   TColorBoxTest = class(TTestCase)
@@ -12,6 +12,7 @@ type
     procedure TestAddAndClear;
     procedure TestSortedKeepsColors;
     procedure TestComboModeStaysLocked;
+    procedure TestFormFileKeepsAnExtendedSelection;
   end;
 implementation
 
@@ -94,10 +95,45 @@ var c: TTyColorBox;
 begin
   c := TTyColorBox.Create(nil);
   try
-    AssertTrue('starts list-only', TTyComboBox(c).Style = csDropDownList);
-    TTyComboBox(c).Style := csDropDown;   // must still be ignored
-    AssertTrue('stays list-only', TTyComboBox(c).Style = csDropDownList);
+    { The combo mode, reached through the combo ancestor: on a colour box `Style` is the
+      palette. TTyCustomComboBox, not TTyComboBox -- a colour box is not a TTyComboBox. }
+    AssertTrue('starts list-only', TTyCustomComboBox(c).Style = csDropDownList);
+    TTyCustomComboBox(c).Style := csDropDown;   // must still be ignored
+    AssertTrue('stays list-only', TTyCustomComboBox(c).Style = csDropDownList);
   finally c.Free; end;
+end;
+
+{ Selected is read from a form file before the Style that composes the palette holding it --
+  TTyColorBox publishes Style first, but the palette is only rebuilt in Loaded. The colour has
+  to survive until then: it used to be looked up in the default 16, missed, and come back as
+  nothing selected. }
+procedure TColorBoxTest.TestFormFileKeepsAnExtendedSelection;
+var
+  src, dst: TForm;
+  c: TTyColorBox;
+  ms: TMemoryStream;
+begin
+  src := TForm.CreateNew(nil);
+  dst := TForm.CreateNew(nil);
+  ms := TMemoryStream.Create;
+  try
+    c := TTyColorBox.Create(src);
+    c.Name := 'CB';
+    c.Parent := src;
+    c.Style := [cbStandardColors, cbExtendedColors, cbPrettyNames];
+    c.Selected := clMoneyGreen;
+    AssertTrue('setup: the extended palette holds clMoneyGreen', c.Selected = clMoneyGreen);
+    ms.WriteComponent(src);
+    ms.Position := 0;
+    ms.ReadComponent(dst);
+    c := dst.FindComponent('CB') as TTyColorBox;
+    AssertTrue('the palette came back', cbExtendedColors in c.Style);
+    AssertEquals('and so did the selected colour', clMoneyGreen, c.Selected);
+  finally
+    ms.Free;
+    src.Free;
+    dst.Free;
+  end;
 end;
 
 initialization

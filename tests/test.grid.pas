@@ -1284,6 +1284,12 @@ type
   { 每一种编辑器都欠用户一个"放弃"手势。从前只有文本框和掩码框接了键盘处理,
     另外七种(数值/滑块/备忘/计算器/下拉/日期)按 Esc 毫无反应 —— 今天只是别扭,
     一旦加上"校验不过不让走",就变成用户被锁死在格子里出不来。 }
+  { 网格释放后什么也不留下。 }
+  TGridLifetimeTest = class(TTestCase)
+  published
+    procedure TestFreeingAGridLeavesNothingBehind;
+  end;
+
   TGridEditorCancelTest = class(TTestCase)
   published
     procedure TestEveryEditorKindCanBeAbandoned;
@@ -11846,8 +11852,45 @@ begin
     after <= before);
 end;
 
+{ 建一张网格再释放,堆不涨。从前每个实例漏两个 TStringList(值筛选面板的全集与勾选集,
+  构造里建、析构里没放),一个窗体开关几次就漏几次。先热身一轮,把主题缓存之类的一次性分配
+  排除在外;之后每轮的增长必须小于一个 TStringList,而漏的时候每轮是两个。 }
+procedure TGridLifetimeTest.TestFreeingAGridLeavesNothingBehind;
+const
+  CRounds = 20;
+var
+  form: TForm;
+  g: TTyStringGrid;
+  before, after: PtrUInt;
+  i: Integer;
+begin
+  form := TForm.CreateNew(nil);
+  try
+    for i := 0 to 1 do
+    begin
+      g := TTyStringGrid.Create(form);
+      g.Parent := form;
+      g.Free;
+    end;
+    before := GetFPCHeapStatus.CurrHeapUsed;
+    for i := 1 to CRounds do
+    begin
+      g := TTyStringGrid.Create(form);
+      g.Parent := form;
+      g.Free;
+    end;
+    after := GetFPCHeapStatus.CurrHeapUsed;
+  finally
+    form.Free;
+  end;
+  AssertTrue(Format('the heap grew by %d bytes over %d grids (a TStringList is %d)',
+    [Int64(after) - Int64(before), CRounds, TStringList.InstanceSize]),
+    Int64(after) - Int64(before) < Int64(CRounds) * TStringList.InstanceSize);
+end;
+
 initialization
   RegisterTest(TTyStringGridLeakTest);
+  RegisterTest(TGridLifetimeTest);
   RegisterTest(TTyGridControlTest);
   RegisterTest(TTyGridScrollBarNilWindowTest);
   RegisterTest(TTyDrawGridTest);

@@ -277,6 +277,60 @@ type
     { The step at client device (X, Y), or -1 (the strip's padding gutter included). }
     function TyStepAt(X, Y: Integer): Integer;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    { With AutoSize the rail hugs its natural size in BOTH axes: the main axis is one
+      natural cell per step, the cross axis the marker + title block. }
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     { The steps, one TITLE per line. Title-only, deliberately: Ant's per-step `description`
       would need a second string per item, and the only way to carry one on a TStrings is
       the Objects[] pointer — which would make the host own a heap object per line, leak it
@@ -312,14 +366,8 @@ type
       the same index again is not a change and stays silent. Not fired while the .lfm is
       streaming: loading a form is not a step change. }
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
-    { With AutoSize the rail hugs its natural size in BOTH axes: the main axis is one
-      natural cell per step, the cross axis the marker + title block. }
-    property AutoSize;
     property Align;
     property Anchors;
-    property StyleClass;
-    property StyleOverride;
-    property Controller;
   end;
 
 implementation

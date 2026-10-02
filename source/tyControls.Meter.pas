@@ -19,7 +19,7 @@ type
     unexpressible) and the needle shared the spinner's accent. Eased needle movement
     (snaps headless). The sweep covers the 90/120/270-deg meter variants via
     StartAngle/SweepAngle. }
-  TTyMeter = class(TTyGraphicControl)
+  TTyCustomMeter = class(TTyGraphicControl)
   private
     FMin, FMax, FValue: Double;
     FStartAngle, FSweepAngle, FTicks: Integer;
@@ -48,7 +48,6 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-  published
     property Min: Double read FMin write SetMin;
     property Max: Double read FMax write SetMax;
     property Value: Double read FValue write SetValue;
@@ -58,11 +57,61 @@ type
     property ShowValue: Boolean read FShowValue write SetShowValue default True;
     property ValueFormat: string read FValueFormat write SetValueFormat;
     property AnimationsEnabled: Boolean read FAnimEnabled write FAnimEnabled default True;
+  end;
+
+  { TTyMeter publishes TTyCustomMeter's properties; everything lives in TTyCustomMeter. }
+  TTyMeter = class(TTyCustomMeter)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
     property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Min;
+    property Max;
+    property Value;
+    property StartAngle;
+    property SweepAngle;
+    property Ticks;
+    property ShowValue;
+    property ValueFormat;
+    property AnimationsEnabled;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
   end;
 
 implementation
@@ -73,7 +122,7 @@ begin
   Result := AStartDeg + ASweepDeg * (AIndex / (ACount - 1));
 end;
 
-constructor TTyMeter.Create(AOwner: TComponent);
+constructor TTyCustomMeter.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FMin := 0;
@@ -95,20 +144,20 @@ begin
   Height := 120;
 end;
 
-destructor TTyMeter.Destroy;
+destructor TTyCustomMeter.Destroy;
 begin
   FreeAndNil(FTimer);
   inherited Destroy;
 end;
 
-function TTyMeter.GetStyleTypeKey: string;
+function TTyCustomMeter.GetStyleTypeKey: string;
 begin
   { Its own key, not the gauge's: an analogue instrument face is a different object from a
     progress arc, so a skin can now give the meter a cream dial while gauges stay sunk grey. }
   Result := 'TyMeter';
 end;
 
-procedure TTyMeter.EnsureTimer;
+procedure TTyCustomMeter.EnsureTimer;
 begin
   if FTimer = nil then
   begin
@@ -119,23 +168,23 @@ begin
   end;
 end;
 
-procedure TTyMeter.HandleTimer(Sender: TObject);
+procedure TTyCustomMeter.HandleTimer(Sender: TObject);
 begin
   if AdvanceAnimation(FTimer.Interval) then Invalidate;
   if not FPosAnim.Running then FTimer.Enabled := False;
 end;
 
-function TTyMeter.AdvanceAnimation(AMs: Integer): Boolean;
+function TTyCustomMeter.AdvanceAnimation(AMs: Integer): Boolean;
 begin
   Result := FPosAnim.Advance(AMs);
 end;
 
-function TTyMeter.DisplayFrac: Single;
+function TTyCustomMeter.DisplayFrac: Single;
 begin
   Result := TyLerpF(FAnimFrom, FAnimTo, FPosAnim.Eased);
 end;
 
-procedure TTyMeter.ArmTo(AFrac: Double);
+procedure TTyCustomMeter.ArmTo(AFrac: Double);
 begin
   if AFrac < 0 then AFrac := 0 else if AFrac > 1 then AFrac := 1;
   if FAnimEnabled and (Parent <> nil) and Parent.HandleAllocated then
@@ -156,21 +205,21 @@ begin
   Invalidate;
 end;
 
-procedure TTyMeter.SetMin(const AValue: Double);
+procedure TTyCustomMeter.SetMin(const AValue: Double);
 begin
   if FMin = AValue then Exit;
   FMin := AValue;
   ArmTo(TyGaugeFraction(FValue, FMin, FMax));
 end;
 
-procedure TTyMeter.SetMax(const AValue: Double);
+procedure TTyCustomMeter.SetMax(const AValue: Double);
 begin
   if FMax = AValue then Exit;
   FMax := AValue;
   ArmTo(TyGaugeFraction(FValue, FMin, FMax));
 end;
 
-procedure TTyMeter.SetValue(const AValue: Double);
+procedure TTyCustomMeter.SetValue(const AValue: Double);
 var v: Double;
 begin
   v := AValue;
@@ -180,22 +229,22 @@ begin
   ArmTo(TyGaugeFraction(FValue, FMin, FMax));
 end;
 
-procedure TTyMeter.SetStartAngle(const AValue: Integer);
+procedure TTyCustomMeter.SetStartAngle(const AValue: Integer);
 begin if FStartAngle = AValue then Exit; FStartAngle := AValue; Invalidate; end;
 
-procedure TTyMeter.SetSweepAngle(const AValue: Integer);
+procedure TTyCustomMeter.SetSweepAngle(const AValue: Integer);
 begin if FSweepAngle = AValue then Exit; FSweepAngle := AValue; Invalidate; end;
 
-procedure TTyMeter.SetTicks(const AValue: Integer);
+procedure TTyCustomMeter.SetTicks(const AValue: Integer);
 begin if FTicks = AValue then Exit; FTicks := Math.Max(0, AValue); Invalidate; end;
 
-procedure TTyMeter.SetShowValue(const AValue: Boolean);
+procedure TTyCustomMeter.SetShowValue(const AValue: Boolean);
 begin if FShowValue = AValue then Exit; FShowValue := AValue; Invalidate; end;
 
-procedure TTyMeter.SetValueFormat(const AValue: string);
+procedure TTyCustomMeter.SetValueFormat(const AValue: string);
 begin if FValueFormat = AValue then Exit; FValueFormat := AValue; Invalidate; end;
 
-procedure TTyMeter.Paint;
+procedure TTyCustomMeter.Paint;
 var
   P: TTyPainter;
   faceS, tickMarkS, needleS: TTyStyleSet;

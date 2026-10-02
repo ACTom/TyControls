@@ -14,10 +14,13 @@ type
     is the chosen TColor. The list-box sibling of TTyColorBox, and it carries the same
     palette surface for the same reason -- a fix that lands on one of the pair and not the
     other is half a fix. }
-  TTyColorListBox = class(TTyListBox)
+  TTyCustomColorListBox = class(TTyCustomListBox)
   private
     FPaletteStyle:        TTyColorBoxStyle;
     FPaletteStylePending: Boolean;   { Style arrived during .lfm load; rebuild in Loaded }
+    { Selected as a form file gave it, held for Loaded: see SetSelected. }
+    FStreamedSelected:    TColor;
+    FSelectedWaits:       Boolean;
     FDefaultColorColor:   TColor;
     FNoneColorColor:      TColor;
     FColorRectWidth:      Integer;
@@ -57,7 +60,6 @@ type
       an out-of-range write is ignored. }
     property Colors[AIndex: Integer]: TColor read GetColors write SetColors;
     property ColorNames[AIndex: Integer]: string read GetColorName;
-  published
     { PUBLISHED, as TColorListBox does. It was public-only, so the control's headline
       property could not be set in the designer or streamed. }
     property Selected: TColor read GetSelected write SetSelected;
@@ -78,9 +80,84 @@ type
     property OnGetColors: TTyGetColorsEvent read FOnGetColors write FOnGetColors;
   end;
 
+  { TTyColorListBox publishes TTyCustomColorListBox's properties; everything lives in TTyCustomColorListBox. }
+  TTyColorListBox = class(TTyCustomColorListBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property MultiSelect;
+    property ExtendedSelect;
+    property Sorted;
+    property ItemHeight;
+    property ScrollWidth;
+    property ScrollBarAutoHide;
+    property TopIndex;
+    property OnChange;
+    property OnSelectionChange;
+    property Align;
+    property Anchors;
+    property Selected;
+    property Style;
+    property ColorRectWidth;
+    property ColorRectOffset;
+    property DefaultColorColor;
+    property NoneColorColor;
+    property OnGetColors;
+  end;
+
 implementation
 
-constructor TTyColorListBox.Create(AOwner: TComponent);
+constructor TTyCustomColorListBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FPaletteStyle      := TyDefaultColorBoxStyle;
@@ -92,7 +169,7 @@ begin
   if Items.Count > 0 then ItemIndex := 0;
 end;
 
-procedure TTyColorListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
+procedure TTyCustomColorListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
 begin
   { The swatch changes ends with the row, through the shared draw's own flag rather than a
@@ -104,7 +181,7 @@ begin
     AStyle, ResolveFontSize(AStyle), EffectiveRectWidth, EffectiveRectOffset, RtlRowLayout);
 end;
 
-procedure TTyColorListBox.SetPaletteStyle(const AValue: TTyColorBoxStyle);
+procedure TTyCustomColorListBox.SetPaletteStyle(const AValue: TTyColorBoxStyle);
 begin
   if FPaletteStyle = AValue then Exit;
   FPaletteStyle := AValue;
@@ -116,7 +193,7 @@ begin
     SetColorList;
 end;
 
-procedure TTyColorListBox.Loaded;
+procedure TTyCustomColorListBox.Loaded;
 begin
   inherited Loaded;
   if FPaletteStylePending then
@@ -124,13 +201,21 @@ begin
     FPaletteStylePending := False;
     SetColorList;
   end;
+  if FSelectedWaits then
+  begin
+    FSelectedWaits := False;
+    SetSelected(FStreamedSelected);
+  end;
 end;
 
-procedure TTyColorListBox.SetColorList;
+procedure TTyCustomColorListBox.SetColorList;
 var
   keep: TColor;
 begin
-  keep := GetSelected;                    // the COLOUR survives; its row index does not
+  if FSelectedWaits then
+    keep := FStreamedSelected             // Loaded, with a streamed colour still to find
+  else
+    keep := GetSelected;                  // the COLOUR survives; its row index does not
   TyBuildColorPalette(Items, FPaletteStyle);
   if cbCustomColors in FPaletteStyle then
     DoGetColors;
@@ -138,98 +223,111 @@ begin
   Invalidate;
 end;
 
-procedure TTyColorListBox.DoGetColors;
+procedure TTyCustomColorListBox.DoGetColors;
 begin
   if Assigned(FOnGetColors) then FOnGetColors(Self, Items);
 end;
 
-function TTyColorListBox.SwatchColorFor(AColor: TColor): TColor;
+function TTyCustomColorListBox.SwatchColorFor(AColor: TColor): TColor;
 begin
   if AColor = clNone then Result := FNoneColorColor
   else if AColor = clDefault then Result := FDefaultColorColor
   else Result := AColor;
 end;
 
-function TTyColorListBox.EffectiveRectWidth: Integer;
+function TTyCustomColorListBox.EffectiveRectWidth: Integer;
 begin
   if FColorRectWidth > 0 then Result := FColorRectWidth
   else Result := ActiveController.Metric('--color-swatch-width', 0);
 end;
 
-function TTyColorListBox.EffectiveRectOffset: Integer;
+function TTyCustomColorListBox.EffectiveRectOffset: Integer;
 begin
   if FColorRectOffset > 0 then Result := FColorRectOffset
   else Result := ActiveController.Metric('--color-swatch-offset', 0);
 end;
 
-procedure TTyColorListBox.SetColorRectWidth(const AValue: Integer);
+procedure TTyCustomColorListBox.SetColorRectWidth(const AValue: Integer);
 begin
   if FColorRectWidth = AValue then Exit;
   FColorRectWidth := AValue;
   Invalidate;
 end;
 
-procedure TTyColorListBox.SetColorRectOffset(const AValue: Integer);
+procedure TTyCustomColorListBox.SetColorRectOffset(const AValue: Integer);
 begin
   if FColorRectOffset = AValue then Exit;
   FColorRectOffset := AValue;
   Invalidate;
 end;
 
-procedure TTyColorListBox.SetDefaultColorColor(const AValue: TColor);
+procedure TTyCustomColorListBox.SetDefaultColorColor(const AValue: TColor);
 begin
   if FDefaultColorColor = AValue then Exit;
   FDefaultColorColor := AValue;
   Invalidate;
 end;
 
-procedure TTyColorListBox.SetNoneColorColor(const AValue: TColor);
+procedure TTyCustomColorListBox.SetNoneColorColor(const AValue: TColor);
 begin
   if FNoneColorColor = AValue then Exit;
   FNoneColorColor := AValue;
   Invalidate;
 end;
 
-procedure TTyColorListBox.ClearColors;
+procedure TTyCustomColorListBox.ClearColors;
 begin
   Items.Clear;
 end;
 
-procedure TTyColorListBox.AddColor(const AName: string; AColor: TColor);
+procedure TTyCustomColorListBox.AddColor(const AName: string; AColor: TColor);
 begin
   TyAddColorItem(Items, AName, AColor);
 end;
 
-function TTyColorListBox.ColorAt(AIndex: Integer): TColor;
+function TTyCustomColorListBox.ColorAt(AIndex: Integer): TColor;
 begin
   Result := TyColorOfItem(Items, AIndex);
 end;
 
-function TTyColorListBox.GetColors(AIndex: Integer): TColor;
+function TTyCustomColorListBox.GetColors(AIndex: Integer): TColor;
 begin
   Result := TyColorOfItem(Items, AIndex);
 end;
 
-procedure TTyColorListBox.SetColors(AIndex: Integer; const AValue: TColor);
+procedure TTyCustomColorListBox.SetColors(AIndex: Integer; const AValue: TColor);
 begin
   if (AIndex < 0) or (AIndex >= Items.Count) then Exit;
   Items.Objects[AIndex] := TObject(PtrInt(AValue));
   Invalidate;
 end;
 
-function TTyColorListBox.GetColorName(AIndex: Integer): string;
+function TTyCustomColorListBox.GetColorName(AIndex: Integer): string;
 begin
   if (AIndex >= 0) and (AIndex < Items.Count) then Result := Items[AIndex]
   else Result := '';
 end;
 
-function TTyColorListBox.GetSelected: TColor;
+function TTyCustomColorListBox.GetSelected: TColor;
 begin
   Result := ColorAt(ItemIndex);
 end;
 
-procedure TTyColorListBox.SetSelected(const AValue: TColor);
+procedure TTyCustomColorListBox.SetSelected(const AValue: TColor);
 begin
+  { While a form file is read the palette is not final yet: Style only rebuilds it in Loaded,
+    and a form file may hold Selected before Style or Items (TTyColorListBox publishes it
+    ahead of Style; a third party's TTyCustomColorBox / TTyCustomColorListBox may put it
+    anywhere). Looked up then, a colour from the extended or system palette is not there yet
+    and the selection came back as nothing. So the colour waits for Loaded, which looks it up
+    in the finished palette. LCL keeps the colour itself (FSelected) for the same reason
+    (colorbox.pas:871-878, applied in Loaded at :1058-1062). }
+  if csLoading in ComponentState then
+  begin
+    FStreamedSelected := AValue;
+    FSelectedWaits := True;
+    Exit;
+  end;
   // Matches, else the cbCustomColor slot, else -1 -- never a silently-grown palette.
   ItemIndex := TySelectColorIndexIn(Items, AValue, FPaletteStyle);
 end;

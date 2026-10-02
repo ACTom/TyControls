@@ -37,7 +37,7 @@ type
     pointer is over it — that is what makes the header-hover repaint visible. Every
     value is theme-driven. }
 
-  TTyExPanel = class(TTyPanel)
+  TTyCustomExPanel = class(TTyCustomPanel)
   private
     FCollapsed: Boolean;
     FHeaderHeight: Integer;
@@ -89,7 +89,6 @@ type
     { The full (expanded) height. While collapsed this is the height the panel
       returns to when expanded; while expanded it tracks the live Height. }
     property ExpandedHeight: Integer read FExpandedHeight write FExpandedHeight;
-  published
     property Collapsed: Boolean read FCollapsed write SetCollapsed default False;
     { Left unset it follows --expander-header-height (26 classic / 36 modern), so the
       header band grows with density; set it and that value wins and is streamed. }
@@ -101,7 +100,83 @@ type
       default 160;
     property OnExpand: TNotifyEvent read FOnExpand write FOnExpand;
     property OnCollapse: TNotifyEvent read FOnCollapse write FOnCollapse;
-    { Caption is inherited (published) from TTyPanel; drawn in the header band. }
+  end;
+
+  { TTyExPanel publishes TTyCustomExPanel's properties; everything lives in TTyCustomExPanel. }
+  TTyExPanel = class(TTyCustomExPanel)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    { Caption is TControl's; the custom class draws it in the header band. }
+    property Caption;
+    property Alignment;
+    property VerticalAlignment;
+    property WordWrap;
+    property ShowAccelChar;
+    property DockSite;
+    property UseDockManager;
+    property OnDockDrop;
+    property OnDockOver;
+    property OnUnDock;
+    property OnGetSiteInfo;
+    property OnGetDockCaption;
+    property OnStartDock;
+    property OnEndDock;
+    property Align;
+    property Anchors;
+    property Collapsed;
+    property HeaderHeight;
+    property AnimationDuration;
+    property OnExpand;
+    property OnCollapse;
   end;
 
 { PURE, headless-tested geometry. All in DEVICE pixels (caller scales HeaderHeight). }
@@ -171,9 +246,9 @@ begin
   Result := TyLerpI(ACollapsedH, AExpandedH, t);
 end;
 
-{ ---- TTyExPanel ---- }
+{ ---- TTyCustomExPanel ---- }
 
-constructor TTyExPanel.Create(AOwner: TComponent);
+constructor TTyCustomExPanel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   // TTyPanel already adds csAcceptsControls (real container) and sets a default size.
@@ -191,19 +266,19 @@ begin
   FAnimToH := Height;
 end;
 
-destructor TTyExPanel.Destroy;
+destructor TTyCustomExPanel.Destroy;
 begin
   // Free the timer first so its callback can never fire mid-teardown.
   FreeAndNil(FTimer);
   inherited Destroy;
 end;
 
-function TTyExPanel.GetStyleTypeKey: string;
+function TTyCustomExPanel.GetStyleTypeKey: string;
 begin
   Result := 'TyExPanel';
 end;
 
-function TTyExPanel.HeaderStyle: TTyStyleSet;
+function TTyCustomExPanel.HeaderStyle: TTyStyleSet;
 var
   states: TTyStateSet;
 begin
@@ -218,7 +293,7 @@ end;
 { Effective header height: an explicit set wins; otherwise follow the theme's
   --expander-header-height (density pack raises it for modern). Resolved live so a
   density toggle re-heights the header on the next layout. }
-function TTyExPanel.GetHeaderHeight: Integer;
+function TTyCustomExPanel.GetHeaderHeight: Integer;
 begin
   if FHeaderHeightExplicit then
     Result := FHeaderHeight
@@ -226,13 +301,13 @@ begin
     Result := ActiveController.Metric('--expander-header-height', TyExPanelDefaultHeaderHeight);
 end;
 
-function TTyExPanel.ScaledHeaderHeight: Integer;
+function TTyCustomExPanel.ScaledHeaderHeight: Integer;
 begin
   Result := MulDiv(GetHeaderHeight, Font.PixelsPerInch, 96);
   if Result < 1 then Result := 1;
 end;
 
-procedure TTyExPanel.AdjustClientRect(var ARect: TRect);
+procedure TTyCustomExPanel.AdjustClientRect(var ARect: TRect);
 var
   S: TTyStyleSet;
   bw: Integer;
@@ -258,7 +333,7 @@ begin
   if ARect.Left > ARect.Right then ARect.Left := ARect.Right;
 end;
 
-procedure TTyExPanel.EnsureTimer;
+procedure TTyCustomExPanel.EnsureTimer;
 begin
   if FTimer = nil then
   begin
@@ -269,7 +344,7 @@ begin
   end;
 end;
 
-procedure TTyExPanel.HandleTimer(Sender: TObject);
+procedure TTyCustomExPanel.HandleTimer(Sender: TObject);
 begin
   if FAnimator.Advance(FTimer.Interval) then
     ApplyAnimatedHeight;
@@ -277,14 +352,14 @@ begin
     FTimer.Enabled := False;
 end;
 
-procedure TTyExPanel.ApplyAnimatedHeight;
+procedure TTyCustomExPanel.ApplyAnimatedHeight;
 begin
   // Drive Height along the eased curve between the two endpoints. Setting Height
   // re-lays-out the children and repaints via the LCL.
   Height := TyExPanelHeightAt(FAnimFromH, FAnimToH, FAnimator.Eased);
 end;
 
-procedure TTyExPanel.StartHeightAnimation(ATargetH: Integer);
+procedure TTyCustomExPanel.StartHeightAnimation(ATargetH: Integer);
 begin
   FAnimFromH := Height;
   FAnimToH := ATargetH;
@@ -306,7 +381,7 @@ begin
   end;
 end;
 
-procedure TTyExPanel.SetCollapsed(AValue: Boolean);
+procedure TTyCustomExPanel.SetCollapsed(AValue: Boolean);
 var
   targetH: Integer;
 begin
@@ -334,7 +409,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyExPanel.SetHeaderHeight(AValue: Integer);
+procedure TTyCustomExPanel.SetHeaderHeight(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
   FHeaderHeightExplicit := True;   { host pinned it, even at the fallback value }
@@ -348,7 +423,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyExPanel.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomExPanel.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   hdr: TRect;
 begin
@@ -361,7 +436,7 @@ begin
   end;
 end;
 
-procedure TTyExPanel.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomExPanel.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   hdr: TRect;
   overHeader: Boolean;
@@ -376,7 +451,7 @@ begin
   end;
 end;
 
-procedure TTyExPanel.MouseLeave;
+procedure TTyCustomExPanel.MouseLeave;
 begin
   inherited MouseLeave;
   if FHeaderHover then
@@ -386,7 +461,7 @@ begin
   end;
 end;
 
-procedure TTyExPanel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomExPanel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, HD, HS: TTyStyleSet;
@@ -476,7 +551,7 @@ begin
   end;
 end;
 
-procedure TTyExPanel.Paint;
+procedure TTyCustomExPanel.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

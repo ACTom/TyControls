@@ -333,11 +333,11 @@ type
     procedure GridCellButtonClick(Sender: TObject; ACol, ARow: Integer);
     procedure GridGetNodeLevel(Sender: TObject; ARow: Integer; var ALevel: Integer);
     procedure GridGetHasChildren(Sender: TObject; ARow: Integer; var AHas: Boolean);
-    procedure TreeInitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+    procedure TreeInitNode(Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
       var InitStates: TTyNodeInitStates);
-    procedure TreeInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure TreeInitChildren(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       var ChildCount: Cardinal);
-    procedure TreeGetText(Sender: TTyTreeView; Node: PTyTreeNode; Column: Integer;
+    procedure TreeGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; Column: Integer;
       TextType: TTyVSTTextType; var CellText: string);
   private
     FApplying: Boolean;                 { re-entry guard: the menu and the switch drive each other }
@@ -1024,20 +1024,20 @@ end;
   the arrow keys swap -- Left opens a node, Right closes it, because the children are drawn
   towards the left. }
 
-procedure TMainForm.TreeInitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+procedure TMainForm.TreeInitNode(Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
   var InitStates: TTyNodeInitStates);
 begin
   if Sender.GetNodeLevel(Node) = 0 then
     Include(InitStates, ivsHasChildren);
 end;
 
-procedure TMainForm.TreeInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TMainForm.TreeInitChildren(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   var ChildCount: Cardinal);
 begin
   if Sender.GetNodeLevel(Node) = 0 then ChildCount := 3 else ChildCount := 0;
 end;
 
-procedure TMainForm.TreeGetText(Sender: TTyTreeView; Node: PTyTreeNode; Column: Integer;
+procedure TMainForm.TreeGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; Column: Integer;
   TextType: TTyVSTTextType; var CellText: string);
 var
   lvl, idx: Integer;

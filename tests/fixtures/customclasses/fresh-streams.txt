@@ -1,0 +1,1252 @@
+# TTyAboutDialog
+  end
+# TTyActivityBar
+    Left = 0
+    Height = 8
+    Top = 0
+    Width = 150
+  end
+# TTyActivityIndicator
+    Left = 0
+    Height = 32
+    Top = 0
+    Width = 32
+  end
+# TTyAdvancedComboBox
+    Left = 0
+    Height = 26
+    Top = 0
+    Width = 145
+    TabOrder = 0
+    ItemIndex = -1
+  end
+# TTyAdvancedListBox
+    Left = 0
+    Height = 120
+    Top = 0
+    Width = 160
+    TabOrder = 0
+    ItemHeight = 40
+  end
+# TTyAlert
+    Left = 0
+    Height = 40
+    Top = 0
+    Width = 320
+  end
+# TTyAnalogClock
+    Left = 0
+    Height = 120
+    Top = 0
+    Width = 120
+    Time =  3.6526500000000000E+004
+  end
+# TTyArrow
+    Left = 0
+    Height = 64
+    Top = 0
+    Width = 120
+    HeadRatio =  4.4999998807907104E-001
+    ShaftRatio =  5.0000000000000000E-001
+  end
+# TTyBadge
+    Left = 0
+    Height = 12
+    Top = 0
+    Width = 15
+  end
+# TTyBalloonHint
+  end
+# TTyBevel
+    Left = 0
+    Height = 50
+    Top = 0
+    Width = 50
+  end
+# TTyBreadcrumb
+    Left = 0
+    Height = 24
+    Top = 0
+    Width = 300
+  end
+# TTyButton
+    Left = 0
+    Height = 30
+    Top = 0
+    Width = 88
+    TabOrder = 0
+    Constraints.MinHeight = 24
+    Constraints.MinWidth = 12
+  end
+# TTyButtonGroup
+    Left = 0
+    Height = 30
+    Top = 0
+    Width = 240
+    TabOrder = 0
+  end
+# TTyCalcCurrencyEdit
+    Cursor = crIBeam
+    Left = 0
+    Height = 28
+    Top = 0
+    Width = 140
+    TabOrder = 0
+    Text = <text>
+    Alignment = taRightJustify
+    CurrencySymbol = <text>
+  end
+# TTyCalcEdit
+    Cursor = crIBeam
+    Left = 0
+    Height = 28
+    Top = 0
+    Width = 140
+    TabOrder = 0
+    Text = <text>
+    Alignment = taRightJustify
+  end
+# TTyCalculator
+    Left = 0
+    Height = 320
+    Top = 0
+    Width = 224
+    TabOrder = 0
+  end
+# TTyCard
+    Left = 0
+    Height = 160
+    Top = 0
+    Width = 240
+    TabOrder = 0
+  end
+# TTyCascader
+    Left = 0
+    Height = 26
+    Top = 0
+    Width = 145
+    TabOrder = 0
+    Nodes = <>
+    Separator = <text>
+  end
+# TTyCharImage
+    Left = 0
+    Height = 32
+    Top = 0
+    Width = 32
+  end
+# TTyChart
+    Left = 0
+    Height = 180
+    Top = 0
+    Width = 260
+    Series = <>
+  end
+# TTyCheckBox
+    Left = 0
+    Height = 22
+    Top = 0
+    Width = 130
+    TabOrder = 0
+    Constraints.MinHeight = 20
+    Constraints.MinWidth = 30
+  end
+# TTyCheckComboBox
+    Left = 0
+    Height = 26
+    Top = 0
+    Width = 145
+    TabOrder = 0
+    ItemIndex = -1
+    Separator = <text>
+  end
+# TTyCheckGroup
+    Left = 0
+    Height = 130
+    Top = 0
+    Width = 185
+    TabOrder = 0
+  end
+# TTyCheckListBox
+    Left = 0
+    Height = 120
+    Top = 0
+    Width = 160
+    TabOrder = 0
+  end
+# TTyCircularProgress
+    Left = 0
+    Height = 96
+    Top = 0
+    Width = 96
+    ValueFormat = <text>
+  end
+# TTyColorBox
+    Left = 0
+    Height = 26
+    Top = 0
+    Width = 145
+    TabOrder = 0
+    Items.Strings = (
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+    )
+    ItemIndex = 0
+    Text = <text>
+    Selected = clBlack
+  end
+# TTyColorButton
+    Left = 0
+    Height = 30
+    Top = 0
+    Width = 88
+    TabOrder = 0
+    Constraints.MinHeight = 20
+    Constraints.MinWidth = 30
+    DialogCaption = <text>
+  end
+# TTyColorComboBox
+    Left = 0
+    Height = 26
+    Top = 0
+    Width = 145
+    TabOrder = 0
+    Items.Strings = (
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+    )
+    ItemIndex = 0
+    Text = <text>
+    Selected = clBlack
+    MoreCaption = <text>
+  end
+# TTyColorGrid
+    Left = 0
+    Height = 120
+    Top = 0
+    Width = 160
+    TabOrder = 0
+    Selected = clNone
+  end
+# TTyColorListBox
+    Left = 0
+    Height = 120
+    Top = 0
+    Width = 160
+    TabOrder = 0
+    Items.Strings = (
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+    )
+    ItemIndex = 0
+    Selected = clBlack
+  end
+# TTyComboBox
+    Left = 0
+    Height = 26
+    Top = 0
+    Width = 145
+    TabOrder = 0
+    ItemIndex = -1
+  end
+# TTyComboBoxEx
+    Left = 0
+    Height = 26
+    Top = 0
+    Width = 145
+    TabOrder = 0
+    ItemIndex = -1
+    ItemsEx = <>
+  end
+# TTyComboEdit
+    Cursor = crIBeam
+    Left = 0
+    Height = 28
+    Top = 0
+    Width = 140
+    TabOrder = 0
+  end
+# TTyControlBar
+    Left = 0
+    Height = 32
+    Top = 0
+    Width = 320
+    TabOrder = 0
+  end
+# TTyCoolBar
+    Left = 0
+    Height = 32
+    Top = 0
+    Width = 320
+    TabOrder = 0
+    GripperWidth = 10
+    Bands = <>
+  end
+# TTyCurrencyEdit
+    Cursor = crIBeam
+    Left = 0
+    Height = 28
+    Top = 0
+    Width = 140
+    TabOrder = 0
+    Text = <text>
+    Alignment = taRightJustify
+    CurrencySymbol = <text>
+  end
+# TTyDial
+    Left = 0
+    Height = 72
+    Top = 0
+    Width = 72
+    TabOrder = 0
+    Max =  1.0000000000000000E+002
+    Step =  1.0000000000000000E+000
+    ValueFormat = <text>
+  end
+# TTyDivider
+    Left = 0
+    Height = 24
+    Top = 0
+    Width = 150
+  end
+# TTyDrawGrid
+    Left = 0
+    Height = 0
+    Top = 0
+    Width = 0
+    TabOrder = 0
+    Header.Columns = <>
+    Header.Options = [hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort, hoDrag]
+    HeaderGroups = <>
+  end
+# TTyDropDownButton
+    Left = 0
+    Height = 30
+    Top = 0
+    Width = 88
+    TabOrder = 0
+    Constraints.MinHeight = 24
+    Constraints.MinWidth = 12
+  end
+# TTyEdit
+    Cursor = crIBeam
+    Left = 0
+    Height = 28
+    Top = 0
+    Width = 140
+    TabOrder = 0
+  end
+# TTyEmpty
+    Left = 0
+    Height = 140
+    Top = 0
+    Width = 220
+    TabOrder = 0
+  end
+# TTyExPanel
+    Left = 0
+    Height = 140
+    Top = 0
+    Width = 200
+    TabOrder = 0
+  end
+# TTyFilterComboBox
+    Left = 0
+    Height = 26
+    Top = 0
+    Width = 145
+    TabOrder = 0
+    ItemIndex = -1
+  end
+# TTyFloatSpinEdit
+    Cursor = crIBeam
+    Left = 0
+    Height = 28
+    Top = 0
+    Width = 140
+    TabOrder = 0
+    Text = <text>
+    Alignment = taRightJustify
+  end
+# TTyFontComboBox
+    Left = 0
+    Height = 26
+    Top = 0
+    Width = 145
+    TabOrder = 0
+    Items.Strings = <from the machine>
+    ItemIndex = 0
+    Text = <text>
+  end
+# TTyFontListBox
+    Left = 0
+    Height = 120
+    Top = 0
+    Width = 160
+    TabOrder = 0
+    Items.Strings = <from the machine>
+    ItemIndex = 0
+  end
+# TTyFontSizeComboBox
+    Left = 0
+    Height = 26
+    Top = 0
+    Width = 64
+    TabOrder = 0
+    Items.Strings = (
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+      <text>
+    )
+    ItemIndex = 6
+    Text = <text>
+    Style = csDropDown
+  end
+# TTyFormSurface
+    Left = 0
+    Height = 0
+    Top = 0
+    Width = 0
+    TabOrder = 0
+  end
+# TTyGauge
+    Left = 0
+    Height = 120
+    Top = 0
+    Width = 120
+    Max =  1.0000000000000000E+002
+    ValueFormat = <text>
+  end
+# TTyGearActivityIndicator
+    Left = 0
+    Height = 32
+    Top = 0
+    Width = 32
+  end
+# TTyGearDial
+    Left = 0
+    Height = 76
+    Top = 0
+    Width = 76
+    TabOrder = 0
+    Max =  1.0000000000000000E+002
+    Step =  1.0000000000000000E+000
+    ValueFormat = <text>
+  end
+# TTyGlowLabel
+    Left = 0
+    Height = 0
+    Top = 0
+    Width = 0
+    GlowColor = -922746881
+  end
+# TTyGlyphButton
+    Left = 0
+    Height = 30
+    Top = 0
+    Width = 96
+    TabOrder = 0
+    Constraints.MinHeight = 24
+    Constraints.MinWidth = 12
+  end
+# TTyGlyphContainerButton
+    Left = 0
+    Height = 64
+    Top = 0
+    Width = 72
+    TabOrder = 0
+    Constraints.MinHeight = 24
+    Constraints.MinWidth = 12
+    GlyphSize = 24
+  end
+# TTyGlyphImageList
+    DefaultColor = -16777216
+  end
+# TTyGridCell
+    Left = 0
+    Height = 0
+    Top = 0
+    Width = 0
+    TabOrder = 0
+    Col = -1
+    Row = -1
+  end
+# TTyGridPanel
+    Left = 0
+    Height = 150
+    Top = 0
+    Width = 200
+    TabOrder = 0
+    object TTyGridCell
+      Left = 0
+      Height = 73
+      Top = 0
+      Width = 98
+      TabOrder = 0
+      Col = 0
+      Row = 0
+    end
+    object TTyGridCell
+      Left = 102
+      Height = 73
+      Top = 0
+      Width = 98
+      TabOrder = 1
+      Col = 1
+      Row = 0
+    end
+    object TTyGridCell
+      Left = 0
+      Height = 73
+      Top = 77
+      Width = 98
+      TabOrder = 2
+      Col = 0
+      Row = 1
+    end
+    object TTyGridCell
+      Left = 102
+      Height = 73
+      Top = 77
+      Width = 98
+      TabOrder = 3
+      Col = 1
+      Row = 1
+    end
+  end
+# TTyGroupBox
+    Left = 0
+    Height = 105
+    Top = 0
+    Width = 185
+    TabOrder = 0
+  end
+# TTyHeaderControl
+    Left = 0
+    Height = 26
+    Top = 0
+    Width = 300
+    TabOrder = 0
+  end
+# TTyHint
+  end
+# TTyHSColorPicker
+    Left = 0
+    Height = 140
+    Top = 0
+    Width = 180
+    TabOrder = 0
+    Sat =  1.0000000000000000E+000
+    Value =  1.0000000000000000E+000
+  end
+# TTyHtmlLabel
+    Left = 0
+    Height = 20
+    Top = 0
+    Width = 120
+    TabOrder = 0
+  end
+# TTyIconBrowserDialog
+  end
+# TTyIconFont
+  end
+# TTyImage
+    Left = 0
+    Height = 90
+    Top = 0
+    Width = 90
+  end
+# TTyImageCollection
+    Images = <>
+  end
+# TTyImageView
+    Left = 0
+    Height = 240
+    Top = 0
+    Width = 320
+    TabOrder = 0
+    ZoomMin =  5.0000000000000003E-002
+    ZoomMax =  2.0000000000000000E+001
+  end
+# TTyInputDialog
+  end
+# TTyLabel
+    Left = 0
+    Height = 0
+    Top = 0
+    Width = 0
+  end
+# TTyLColorPicker
+    Left = 0
+    Height = 160
+    Top = 0
+    Width = 28
+    TabOrder = 0
+    Sat =  1.0000000000000000E+000
+    Position =  1.0000000000000000E+000
+  end
+# TTyLevelMeter
+    Left = 0
+    Height = 24
+    Top = 0
+    Width = 180
+    Max =  1.0000000000000000E+002
+    ValueFormat = <text>
+  end
+# TTyLinkLabel
+    Cursor = crHandPoint
+    Left = 0
+    Height = 0
+    Top = 0
+    Width = 0
+  end
+# TTyListBox
+    Left = 0
+    Height = 120
+    Top = 0
+    Width = 160
+    TabOrder = 0
+  end
+# TTyListGroupPanel
+    Left = 0
+    Height = 260
+    Top = 0
+    Width = 200
+    TabOrder = 0
+    Groups = <>
+  end
+# TTyListView
+    Left = 0
+    Height = 180
+    Top = 0
+    Width = 280
+    TabOrder = 0
+    Items = <>
+    Header.Columns = <>
+    Header.Options = [hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort, hoDrag]
+    Groups = <>
+  end
+# TTyLucideIconFont
+    FontFamily = <text>
+  end
+# TTyLucideImageList
+  end
+# TTyMaskEdit
+    Cursor = crIBeam
+    Left = 0
+    Height = 28
+    Top = 0
+    Width = 140
+    TabOrder = 0
+  end
+# TTyMemo
+    Cursor = crIBeam
+    Left = 0
+    Height = 120
+    Top = 0
+    Width = 200
+    TabOrder = 0
+  end
+# TTyMenuBar
+    Left = 0
+    Height = 28
+    Top = 0
+    Width = 0
+    TabOrder = 0
+  end
+# TTyMenuButton
+    Left = 0
+    Height = 30
+    Top = 0
+    Width = 88
+    TabOrder = 0
+    Constraints.MinHeight = 24
+    Constraints.MinWidth = 30
+  end
+# TTyMessage
+  end
+# TTyMeter
+    Left = 0
+    Height = 120
+    Top = 0
+    Width = 140
+    Max =  1.0000000000000000E+002
+    ValueFormat = <text>
+  end
+# TTyMRUComboBox
+    Left = 0
+    Height = 26
+    Top = 0
+    Width = 145
+    TabOrder = 0
+    ItemIndex = -1
+    Style = csDropDown
+  end
+# TTyNativeStyler
+  end
+# TTyNotification
+  end
+# TTyNumericEdit
+    Cursor = crIBeam
+    Left = 0
+    Height = 28
+    Top = 0
+    Width = 140
+    TabOrder = 0
+    Text = <text>
+    Alignment = taRightJustify
+  end
+# TTyOfficeComboBox
+    Left = 0
+    Height = 26
+    Top = 0
+    Width = 145
+    TabOrder = 0
+    ItemIndex = -1
+  end
+# TTyOfficeListBox
+    Left = 0
+    Height = 120
+    Top = 0
+    Width = 160
+    TabOrder = 0
+  end
+# TTyPageControl
+    Left = 0
+    Height = 200
+    Top = 0
+    Width = 300
+    TabOrder = 0
+  end
+# TTyPagination
+    Left = 0
+    Height = 32
+    Top = 0
+    Width = 320
+    TabOrder = 0
+  end
+# TTyPaintPanel
+    Left = 0
+    Height = 105
+    Top = 0
+    Width = 105
+    TabOrder = 0
+  end
+# TTyPanel
+    Left = 0
+    Height = 41
+    Top = 0
+    Width = 185
+    TabOrder = 0
+  end
+# TTyPasswordDialog
+    PasswordChar = <text>
+  end
+# TTyPopover
+  end
+# TTyPreviewBox
+    Left = 0
+    Height = 200
+    Top = 0
+    Width = 220
+    TabOrder = 0
+  end
+# TTyProgressBar
+    Left = 0
+    Height = 20
+    Top = 0
+    Width = 200
+    BarTextFormat = <text>
+  end
+# TTyProgressDialog
+  end
+# TTyRadioButton
+    Left = 0
+    Height = 22
+    Top = 0
+    Width = 130
+    TabOrder = 0
+    Constraints.MinHeight = 20
+    Constraints.MinWidth = 30
+  end
+# TTyRadioGroup
+    Left = 0
+    Height = 130
+    Top = 0
+    Width = 185
+    TabOrder = 0
+  end
+# TTyRating
+    Left = 0
+    Height = 24
+    Top = 0
+    Width = 120
+    TabOrder = 0
+  end
+# TTyRelativePanel
+    Left = 0
+    Height = 160
+    Top = 0
+    Width = 240
+    TabOrder = 0
+  end
+# TTyRibbon
+    Left = 0
+    Height = 118
+    Top = 0
+    Width = 600
+    TabOrder = 0
+    FileTabCaption = <text>
+  end
+# TTyRibbonAppMenu
+    Left = 0
+    Height = 26
+    Top = 0
+    Width = 64
+    TabOrder = 0
+    Constraints.MinHeight = 24
+    Constraints.MinWidth = 54
+    StyleClass = <text>
+    Caption = <text>
+  end
+# TTyRibbonBackstage
+    Left = 0
+    Height = 0
+    Top = 0
+    Width = 0
+    Visible = False
+    TabOrder = 0
+  end
+# TTyRibbonGallery
+    Left = 0
+    Height = 40
+    Top = 0
+    Width = 200
+    TabOrder = 0
+  end
+# TTyRibbonGroup
+    Left = 0
+    Height = 0
+    Top = 0
+    Width = 96
+    TabOrder = 0
+  end
+# TTyRibbonPage
+    Left = 0
+    Height = 0
+    Top = 0
+    Width = 0
+    Visible = False
+    TabOrder = 0
+  end
+# TTyRibbonQuickAccess
+    Left = 0
+    Height = 26
+    Top = 0
+    Width = 120
+    TabOrder = 0
+  end
+# TTyScrollBar
+    Left = 0
+    Height = 160
+    Top = 0
+    Width = 12
+    TabOrder = 0
+  end
+# TTyScrollBox
+    Left = 0
+    Height = 150
+    Top = 0
+    Width = 200
+    TabOrder = 0
+  end
+# TTyScrollContent
+    Left = 0
+    Height = 100
+    Top = 0
+    Width = 100
+    TabOrder = 0
+  end
+# TTyScrollPanel
+    Left = 0
+    Height = 150
+    Top = 0
+    Width = 200
+    TabOrder = 0
+  end
+# TTySegmented
+    Left = 0
+    Height = 30
+    Top = 0
+    Width = 240
+    TabOrder = 0
+  end
+# TTySelectValueDialog
+  end
+# TTyShadowLabel
+    Left = 0
+    Height = 0
+    Top = 0
+    Width = 0
+    ShadowColor = 2013265920
+  end
+# TTyShape
+    Left = 0
+    Height = 80
+    Top = 0
+    Width = 120
+  end
+# TTyShellComboBox
+    Left = 0
+    Height = 26
+    Top = 0
+    Width = 145
+    TabOrder = 0
+    ItemIndex = -1
+  end
+# TTyShellListView
+    Left = 0
+    Height = 180
+    Top = 0
+    Width = 280
+    TabOrder = 0
+    OwnerData = True
+    Items = <>
+    Header.Columns = <    
+      item
+        Width = 320
+        Position = 0
+        Text = <text>
+        Options = [coVisible, coResizable, coAllowClick, coDraggable]
+      end    
+      item
+        Width = 90
+        Position = 1
+        Alignment = taRightJustify
+        Text = <text>
+        Options = [coVisible, coResizable, coAllowClick, coDraggable]
+      end    
+      item
+        Width = 110
+        Position = 2
+        Text = <text>
+        Options = [coVisible, coResizable, coAllowClick, coDraggable]
+      end    
+      item
+        Width = 150
+        Position = 3
+        Text = <text>
+        Options = [coVisible, coResizable, coAllowClick, coDraggable]
+      end>
+    Header.Options = [hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort]
+    SortColumn = 0
+    Groups = <>
+    Mask = <text>
+  end
+# TTyShellTreeView
+    Left = 0
+    Height = 160
+    Top = 0
+    Width = 200
+    TabOrder = 0
+    Header.Columns = <>
+    Header.Options = [hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort, hoDrag]
+    Items = <>
+    NodeDataSize = 4
+    DefaultNodeHeight = 22
+    RootNodeCount = <from the machine>
+    HotTrack = True
+  end
+# TTySizeBox
+    Cursor = crSizeNWSE
+    Left = 0
+    Height = 16
+    Top = 0
+    Width = 16
+  end
+# TTySparkline
+    Left = 0
+    Height = 36
+    Top = 0
+    Width = 120
+    MaxValue =  1.0000000000000000E+002
+  end
+# TTySpeedButton
+    Left = 0
+    Height = 32
+    Top = 0
+    Width = 32
+    TabOrder = 0
+    Constraints.MinHeight = 24
+    Constraints.MinWidth = 12
+  end
+# TTySpinEdit
+    Cursor = crIBeam
+    Left = 0
+    Height = 28
+    Top = 0
+    Width = 120
+    TabOrder = 0
+  end
+# TTySplitter
+    Cursor = crHSplit
+    Left = 0
+    Height = 100
+    Top = 0
+    Width = 5
+    TabOrder = 0
+  end
+# TTyStarShape
+    Left = 0
+    Height = 96
+    Top = 0
+    Width = 96
+    InnerRatio =  4.1999998688697815E-001
+  end
+# TTyStatusBar
+    Left = 0
+    Height = 22
+    Top = 0
+    Width = 200
+    TabOrder = 0
+    Panels = <>
+  end
+# TTySteps
+    Left = 0
+    Height = 56
+    Top = 0
+    Width = 360
+    TabOrder = 0
+  end
+# TTyStringGrid
+    Left = 0
+    Height = 0
+    Top = 0
+    Width = 0
+    TabOrder = 0
+    Header.Columns = <>
+    Header.Options = [hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort, hoDrag]
+    HeaderGroups = <>
+    GroupRowFormat = <text>
+  end
+# TTyStyleController
+  end
+# TTyTabSet
+    Left = 0
+    Height = 32
+    Top = 0
+    Width = 240
+    TabOrder = 0
+  end
+# TTyTabSheet
+  end
+# TTyTag
+    Left = 0
+    Height = 22
+    Top = 0
+    Width = 72
+  end
+# TTyTerminalView
+    Left = 0
+    Height = 300
+    Top = 0
+    Width = 480
+    TabOrder = 0
+  end
+# TTyTextDialog
+  end
+# TTyTitleBar
+    Left = 0
+    Height = 32
+    Top = 0
+    Width = 200
+    TabOrder = 0
+    Align = alTop
+    ButtonWidth = 46
+  end
+# TTyToggleSwitch
+    Left = 0
+    Height = 24
+    Top = 0
+    Width = 44
+    TabOrder = 0
+  end
+# TTyToolBar
+    Left = 0
+    Height = 30
+    Top = 0
+    Width = 300
+    TabOrder = 0
+  end
+# TTyToolBarEx
+    Left = 0
+    Height = 30
+    Top = 0
+    Width = 300
+    TabOrder = 0
+    Wrapable = False
+  end
+# TTyToolButton
+    Left = 0
+    Height = 24
+    Top = 0
+    Width = 23
+    TabOrder = 0
+    Constraints.MinHeight = 24
+    Constraints.MinWidth = 12
+  end
+# TTyToolGroupPanel
+    Left = 0
+    Height = 92
+    Top = 0
+    Width = 220
+    TabOrder = 0
+  end
+# TTyToolSeparator
+    Left = 0
+    Height = 24
+    Top = 0
+    Width = 8
+    TabOrder = 0
+  end
+# TTyToolWindow
+  end
+# TTyToolWindowActions
+    Left = 0
+    Height = 0
+    Top = 0
+    Width = 0
+    TabOrder = 0
+  end
+# TTyToolWindowBar
+    Left = 0
+    Height = 0
+    Top = 0
+    TabOrder = 0
+  end
+# TTyTrackBar
+    Left = 0
+    Height = 24
+    Top = 0
+    Width = 160
+    TabOrder = 0
+  end
+# TTyTrackEdit
+    Cursor = crIBeam
+    Left = 0
+    Height = 28
+    Top = 0
+    Width = 140
+    TabOrder = 0
+    Text = <text>
+    Alignment = taRightJustify
+    Decimals = 0
+    MaxValue =  1.0000000000000000E+002
+  end
+# TTyTransfer
+    Left = 0
+    Height = 220
+    Top = 0
+    Width = 480
+    TabOrder = 0
+  end
+# TTyTreeSelect
+    Left = 0
+    Height = 26
+    Top = 0
+    Width = 145
+    TabOrder = 0
+    Items = <>
+  end
+# TTyTreeView
+    Left = 0
+    Height = 160
+    Top = 0
+    Width = 200
+    TabOrder = 0
+    Header.Columns = <>
+    Header.Options = [hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort, hoDrag]
+    Items = <>
+  end
+# TTyUpDown
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 20
+  end
+# TTyURLEdit
+    Cursor = crIBeam
+    Left = 0
+    Height = 28
+    Top = 0
+    Width = 140
+    TabOrder = 0
+    TextHint = <text>
+  end
+# TTyValueListEditor
+    Left = 0
+    Height = 120
+    Top = 0
+    Width = 160
+    TabOrder = 0
+  end
+# TTyVirtualImageList
+  end

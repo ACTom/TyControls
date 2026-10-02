@@ -47,6 +47,9 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     { When True (default) the themed hint window is installed app-wide. }
     property Active: Boolean read FActive write SetActive default True;
     { Documentary only — the hint window always resolves via the active default

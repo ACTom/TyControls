@@ -67,6 +67,9 @@ type
     procedure DrawIndex(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer;
       AColor: TTyColor);
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     { The glyph source. Setting it registers a FreeNotification so the reference is
       nil'd automatically if the font component is freed first. }
     property IconFont: TTyIconFont read FIconFont write SetIconFont;
