@@ -1090,8 +1090,49 @@ begin
   end;
 end;
 
-{ What a fresh instance writes into a .lfm, without the `object` line (it names the class). }
-function FreshStreamBody(AComp: TComponent): string;
+{ A published date / time a constructor takes from the clock (TTyAnalogClock.Time is Now) is
+  pinned to one value on both instances before they are streamed: two instances made a moment
+  apart can straddle a clock tick, and the line would differ for no reason a form file cares
+  about. Only the value is pinned; whether the line is written at all still comes from each
+  class's own stored / default, which is what G9 compares. }
+procedure PinClockValues(AComp: TComponent);
+const
+  CPinned = 36526.5;   // 2000-01-01 12:00
+var
+  pl: PPropList;
+  n, i: Integer;
+  tn: string;
+begin
+  n := GetPropList(AComp.ClassInfo, pl);
+  try
+    for i := 0 to n - 1 do
+    begin
+      if pl^[i]^.PropType^.Kind <> tkFloat then Continue;
+      tn := pl^[i]^.PropType^.Name;
+      if not (SameText(tn, 'TDateTime') or SameText(tn, 'TDate') or SameText(tn, 'TTime')) then
+        Continue;
+      if (pl^[i]^.SetProc = nil) or (Abs(GetFloatProp(AComp, pl^[i]) - Now) > 1) then Continue;
+      SetFloatProp(AComp, pl^[i], CPinned);
+    end;
+  finally
+    if n > 0 then FreeMem(pl);
+  end;
+end;
+
+const
+  CNoChildStreamed = '<the host wrote no child>';
+
+{ What a fresh instance writes into the .lfm of the form it sits on: AHost is streamed the way
+  the IDE saves a form, and what is kept is everything the form writes for its children (the
+  one control under test, and whatever it created owned by the form -- a grid panel's cells),
+  without the first `object` line (it names the class) and the form's own closing `end`.
+  Through the host and not with the control as the root: streamed as the root, a control writes
+  the children it creates and owns itself -- scroll bars, cell editors -- which no .lfm ever
+  carries, and one of those (the string grid's date editor) starts at Now, so the comparison
+  flickered with the clock. A form file never sees those children, so G9 does not either.
+  The control's internal children are built by the custom class's constructor for mimic and
+  final class alike; what a third party can get wrong shows on the control itself. }
+function FreshStreamBody(AHost: TComponent): string;
 var
   ms: TMemoryStream;
   ss: TStringStream;
@@ -1100,7 +1141,7 @@ begin
   ms := TMemoryStream.Create;
   ss := TStringStream.Create('');
   try
-    ms.WriteComponent(AComp);
+    ms.WriteComponent(AHost);
     ms.Position := 0;
     ObjectBinaryToText(ms, ss);
     Result := ss.DataString;
@@ -1108,8 +1149,16 @@ begin
     ms.Free;
     ss.Free;
   end;
+  { The first child's `object` line: two spaces in, one level below the form. }
+  p := Pos(#10'  object ', Result);
+  if p = 0 then Exit(CNoChildStreamed);
+  Delete(Result, 1, p);
   p := Pos(#10, Result);
-  if p > 0 then Delete(Result, 1, p);
+  Delete(Result, 1, p);
+  { The form's own `end`, the last line. }
+  Result := TrimRight(Result);
+  if AnsiEndsStr(#10'end', Result) then
+    SetLength(Result, Length(Result) - 3);
 end;
 
 { The resolved theme style, as far as a control's look depends on it. }
@@ -1191,8 +1240,13 @@ begin
       try
         if gen is TControl then TControl(gen).Parent := host;
         if fin is TControl then TControl(fin).Parent := host2;
-        a := FreshStreamBody(gen);
-        b := FreshStreamBody(fin);
+        PinClockValues(gen);
+        PinClockValues(fin);
+        a := FreshStreamBody(host);
+        b := FreshStreamBody(host2);
+        if a = CNoChildStreamed then
+          bad := bad + LineEnding + '  fresh stream ' + CGenMimics[i, 1].ClassName
+            + ': the host form wrote nothing for it';
         if a <> b then
           bad := bad + LineEnding + '  fresh stream ' + CGenMimics[i, 1].ClassName + LineEnding
             + '--mimic--' + LineEnding + a + '--final--' + LineEnding + b;
@@ -1217,6 +1271,11 @@ begin
       finally
         gen.Free;
         fin.Free;
+        { And whatever they made owned by the form: a grid panel's cells belong to the form
+          (that is how they reach the .lfm) and outlive the panel. Left there, they would be
+          written into every later class's comparison. }
+        host.DestroyComponents;
+        host2.DestroyComponents;
       end;
     end;
   finally
