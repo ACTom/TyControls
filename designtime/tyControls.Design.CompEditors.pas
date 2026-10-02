@@ -239,6 +239,9 @@ type
   { GetOwner is protected on TPersistent; walking an option to its root cascader
     (TTyCascaderDesignerLink.OwnsModelObject) goes through it. }
   TNodesOwnerAccess = class(TTyCascaderNodes);
+  { Caption is protected on TTyCustomToolWindow (TControl's visibility since the custom-class
+    split); a bar hands out any TTyCustomToolWindow, and the access class reaches it for all. }
+  TTwWindowAccess = class(TTyCustomToolWindow);
 
 resourcestring
   rsDtCascEdit     = 'Edit options...';
@@ -677,7 +680,7 @@ end;
 procedure TTyToolWindowBarEditor.ShowWindowItemClick(Sender: TObject);
 var
   i: Integer;
-  W: TTyToolWindow;
+  W: TTyCustomToolWindow;
 begin
   if not (Sender is TMenuItem) then Exit;
   { GetDesigner is just whatever the editor was created with (componenteditors.pas:670-673).
@@ -699,7 +702,7 @@ end;
 procedure TTyToolWindowBarEditor.PrepareItem(Index: Integer; const AnItem: TMenuItem);
 var
   i: Integer;
-  W: TTyToolWindow;
+  W: TTyCustomToolWindow;
   Item: TMenuItem;
 begin
   inherited PrepareItem(Index, AnItem);
@@ -712,7 +715,7 @@ begin
            W := Bar.Windows[i];
            Item := TMenuItem.Create(AnItem);
            Item.Name := 'TyTwShow' + IntToStr(i);
-           Item.Caption := W.Name + ' "' + W.Caption + '"';
+           Item.Caption := W.Name + ' "' + TTwWindowAccess(W).Caption + '"';
            Item.OnClick := @ShowWindowItemClick;
            AnItem.Add(Item);
          end;
@@ -838,8 +841,8 @@ end;
 procedure TTyToolWindowEditor.ExecuteVerb(Index: Integer);
 var
   Hook: TPropertyEditorHook;
-  A: TTyToolWindowActions;
-  oldBar: TTyToolWindowBar;
+  A: TTyCustomToolWindowActions;
+  oldBar: TTyCustomToolWindowBar;
 begin
   case Index of
     0: begin

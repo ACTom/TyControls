@@ -98,8 +98,9 @@ type
   { GlyphName: the keys of the associated TTyIconFont's Glyphs map ('name=HEX' lines). That
     map is a published TStrings, so it is populated at DESIGN time and the list is real.
     Reached by RTTI rather than by a cast:
-    TTyCharImage and TTyGlyphButtonBase both publish IconFont but share no ancestor that
-    declares it, and a future control publishing the same pair gets the dropdown for free. }
+    IconFont is declared on TTyCustomCharImage and on TTyGlyphButtonBase, which share no ancestor
+    that declares it, and a future control publishing the same pair gets the dropdown for free.
+    A descendant that does not publish IconFont gets no list (the lookup goes through RTTI). }
   TTyGlyphNamePropertyEditor = class(TStringPropertyEditor)
   public
     function GetAttributes: TPropertyAttributes; override;
@@ -643,24 +644,24 @@ end;
 procedure TTyRibbonContextPropertyEditor.GetValues(Proc: TGetStrProc);
 var
   comp: TPersistent;
-  page: TTyRibbonPage;
+  page: TTyCustomRibbonPage;
   host: TWinControl;
   i: Integer;
   seen: TStringList;
   ctx: string;
 begin
   comp := GetComponent(0);
-  if not (comp is TTyRibbonPage) then Exit;
-  page := TTyRibbonPage(comp);
+  if not (comp is TTyCustomRibbonPage) then Exit;
+  page := TTyCustomRibbonPage(comp);
   host := page.Parent;
   if host = nil then Exit;
   seen := TStringList.Create;
   try
     seen.CaseSensitive := False;   // ShowContext matches case-insensitively; so must the list
     for i := 0 to host.ControlCount - 1 do
-      if host.Controls[i] is TTyRibbonPage then
+      if host.Controls[i] is TTyCustomRibbonPage then
       begin
-        ctx := TTyRibbonPage(host.Controls[i]).Context;
+        ctx := TTyCustomRibbonPage(host.Controls[i]).Context;
         // '' is not a context, it is the absence of one — and it is already the default.
         if (ctx <> '') and (seen.IndexOf(ctx) < 0) then
         begin
@@ -749,12 +750,12 @@ begin
     opens — no custom collection editor needed. }
   RegisterPropertyEditor(TypeInfo(string), TTyImageItem, 'PngBase64',
     TTyImagePayloadPropertyEditor);
-  RegisterPropertyEditor(TypeInfo(string), TTyCharImage, 'GlyphName',
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomCharImage, 'GlyphName',
     TTyGlyphNamePropertyEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyGlyphButtonBase, 'GlyphName',
     TTyGlyphNamePropertyEditor);          // covers TTyGlyphButton / GlyphContainer / SpeedButton
   // A contextual ribbon tab, spelled the way its siblings spell it.
-  RegisterPropertyEditor(TypeInfo(string), TTyRibbonPage, 'Context',
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomRibbonPage, 'Context',
     TTyRibbonContextPropertyEditor);
   { Paths and file filters. No value LIST is possible for these — the vocabulary is the file
     system — so they get the other half of the same treatment: a picker behind the '...'

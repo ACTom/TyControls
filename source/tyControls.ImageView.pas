@@ -23,7 +23,7 @@ type
     by FZoom (display scale) plus a pan offset (FOffX/FOffY) measured in DEVICE pixels
     from the image's centered rest position. Zoom/pan changes animate over FAnimMs
     milliseconds via a lazy timer (the ExPanel pattern); drag-pan is immediate. }
-  TTyImageView = class(TTyCustomControl)
+  TTyCustomImageView = class(TTyCustomControl)
   private
     { The assigned picture, KEPT. FSource is the decoded BGRA the viewer actually draws, but
       a published property must be READABLE: the Lazarus Object Inspector reads every
@@ -100,17 +100,32 @@ type
     procedure ZoomOut;
     procedure ZoomAt(AFactor: Double; AX, AY: Integer);  // zoom about (AX,AY), animated
     property  Zoom: Double read FZoom;              // read-only; current (maybe animating) scale
+    // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
+    property TabStop default True;
+    property Picture: TPicture read FPicture write SetPicture;   // assign -> decoded to FSource
+    property AutoFit: Boolean read FAutoFit write SetAutoFit default True;
+    property ZoomMin: Double read FZoomMin write SetZoomMin;
+    property ZoomMax: Double read FZoomMax write SetZoomMax;
+    property AnimationDuration: Integer read FAnimMs write FAnimMs default 180;
+    property Grayscale: Boolean read FGrayscale write SetGrayscale default False;
+    property BlurRadius: Integer read FBlurRadius write SetBlurRadius default 0;
+    property Sharpen: Boolean read FSharpen write SetSharpen default False;
+    property Invert: Boolean read FInvert write SetInvert default False;
+    property TintColor: TColor read FTintColor write SetTintColor default clNone;
+    property TintAmount: Integer read FTintAmount write SetTintAmount default 0;
+    property OnZoomChange: TNotifyEvent read FOnZoomChange write FOnZoomChange;
+  end;
+
+  { TTyImageView publishes TTyCustomImageView's properties; everything lives in TTyCustomImageView. }
+  TTyImageView = class(TTyCustomImageView)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
     property Font;
     property ShowHint;
     property TabOrder;
-    // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
-    property TabStop default True;
+    property TabStop;
     property OnClick;
     property OnDblClick;
     property OnMouseDown;
@@ -154,18 +169,18 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Picture: TPicture read FPicture write SetPicture;   // assign -> decoded to FSource
-    property AutoFit: Boolean read FAutoFit write SetAutoFit default True;
-    property ZoomMin: Double read FZoomMin write SetZoomMin;
-    property ZoomMax: Double read FZoomMax write SetZoomMax;
-    property AnimationDuration: Integer read FAnimMs write FAnimMs default 180;
-    property Grayscale: Boolean read FGrayscale write SetGrayscale default False;
-    property BlurRadius: Integer read FBlurRadius write SetBlurRadius default 0;
-    property Sharpen: Boolean read FSharpen write SetSharpen default False;
-    property Invert: Boolean read FInvert write SetInvert default False;
-    property TintColor: TColor read FTintColor write SetTintColor default clNone;
-    property TintAmount: Integer read FTintAmount write SetTintAmount default 0;
-    property OnZoomChange: TNotifyEvent read FOnZoomChange write FOnZoomChange;
+    property Picture;
+    property AutoFit;
+    property ZoomMin;
+    property ZoomMax;
+    property AnimationDuration;
+    property Grayscale;
+    property BlurRadius;
+    property Sharpen;
+    property Invert;
+    property TintColor;
+    property TintAmount;
+    property OnZoomChange;
     property Align;
     property Anchors;
   end;
@@ -329,9 +344,9 @@ begin
   Result := cur;
 end;
 
-{ ------------------------------ TTyImageView ------------------------------ }
+{ ------------------------------ TTyCustomImageView ------------------------ }
 
-constructor TTyImageView.Create(AOwner: TComponent);
+constructor TTyCustomImageView.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FZoom := 1.0;
@@ -353,7 +368,7 @@ begin
   SetBounds(0, 0, 320, 240);
 end;
 
-destructor TTyImageView.Destroy;
+destructor TTyCustomImageView.Destroy;
 begin
   FreeAndNil(FTimer);   // free the timer first so its callback can't fire mid-teardown
   FPicture.OnChange := nil;   // ...and detach the hook before it can fire mid-teardown
@@ -363,7 +378,7 @@ begin
   inherited Destroy;
 end;
 
-function TTyImageView.GetStyleTypeKey: string;
+function TTyCustomImageView.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyPanel': the letterbox matte behind a photo is not the app's panel colour.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
@@ -371,17 +386,17 @@ begin
   Result := 'TyImageView';
 end;
 
-function TTyImageView.ViewW: Integer;
+function TTyCustomImageView.ViewW: Integer;
 begin
   Result := ClientWidth;
 end;
 
-function TTyImageView.ViewH: Integer;
+function TTyCustomImageView.ViewH: Integer;
 begin
   Result := ClientHeight;
 end;
 
-procedure TTyImageView.RebuildProcessed;
+procedure TTyCustomImageView.RebuildProcessed;
 begin
   FreeAndNil(FProcessed);
   if FSource <> nil then
@@ -390,7 +405,7 @@ begin
   FProcDirty := False;
 end;
 
-procedure TTyImageView.EnsureTimer;
+procedure TTyCustomImageView.EnsureTimer;
 begin
   if FTimer = nil then
   begin
@@ -401,7 +416,7 @@ begin
   end;
 end;
 
-procedure TTyImageView.HandleTimer(Sender: TObject);
+procedure TTyCustomImageView.HandleTimer(Sender: TObject);
 var
   t: Single;
 begin
@@ -416,7 +431,7 @@ begin
     FTimer.Enabled := False;
 end;
 
-procedure TTyImageView.StartAnim(ATargetZoom, ATargetOffX, ATargetOffY: Double);
+procedure TTyCustomImageView.StartAnim(ATargetZoom, ATargetOffX, ATargetOffY: Double);
 begin
   FFromZoom := FZoom;
   FToZoom := ATargetZoom;
@@ -445,19 +460,19 @@ begin
   end;
 end;
 
-procedure TTyImageView.DoZoomChange;
+procedure TTyCustomImageView.DoZoomChange;
 begin
   if Assigned(FOnZoomChange) then FOnZoomChange(Self);
 end;
 
-procedure TTyImageView.SetPicture(AValue: TPicture);
+procedure TTyCustomImageView.SetPicture(AValue: TPicture);
 begin
   FPicture.Assign(AValue);   // triggers OnChange -> PictureChanged, which re-decodes
 end;
 
 { The picture changed — either assigned wholesale or edited in place through the property
   (the designer does the latter). Re-decode FSource from it. }
-procedure TTyImageView.PictureChanged(Sender: TObject);
+procedure TTyCustomImageView.PictureChanged(Sender: TObject);
 var
   tmp: TBitmap;
 begin
@@ -480,7 +495,7 @@ begin
     Invalidate;
 end;
 
-procedure TTyImageView.LoadFromFile(const APath: string);
+procedure TTyCustomImageView.LoadFromFile(const APath: string);
 var
   bmp: TBGRABitmap;
 begin
@@ -509,7 +524,7 @@ end;
   all-black, so a host that DREW its own content hands the BGRA here instead --
   same FSource path LoadFromFile uses, which is known to render. The view keeps
   a private copy; ownership of ABitmap stays with the caller. }
-procedure TTyImageView.AssignBitmap(ABitmap: TBGRABitmap);
+procedure TTyCustomImageView.AssignBitmap(ABitmap: TBGRABitmap);
 begin
   FreeAndNil(FSource);
   if (ABitmap <> nil) and (ABitmap.Width > 0) and (ABitmap.Height > 0) then
@@ -521,7 +536,7 @@ begin
     Invalidate;
 end;
 
-procedure TTyImageView.Clear;
+procedure TTyCustomImageView.Clear;
 begin
   FreeAndNil(FSource);
   FreeAndNil(FProcessed);
@@ -533,7 +548,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyImageView.ZoomToFit;
+procedure TTyCustomImageView.ZoomToFit;
 var
   z: Double;
 begin
@@ -544,7 +559,7 @@ begin
   StartAnim(z, 0, 0);   // fit is centered
 end;
 
-procedure TTyImageView.ZoomToActual;
+procedure TTyCustomImageView.ZoomToActual;
 var
   ox, oy: Double;
 begin
@@ -555,17 +570,17 @@ begin
   StartAnim(1.0, ox, oy);
 end;
 
-procedure TTyImageView.ZoomIn;
+procedure TTyCustomImageView.ZoomIn;
 begin
   ZoomAt(1.25, ViewW div 2, ViewH div 2);
 end;
 
-procedure TTyImageView.ZoomOut;
+procedure TTyCustomImageView.ZoomOut;
 begin
   ZoomAt(1.0 / 1.25, ViewW div 2, ViewH div 2);
 end;
 
-procedure TTyImageView.ZoomAt(AFactor: Double; AX, AY: Integer);
+procedure TTyCustomImageView.ZoomAt(AFactor: Double; AX, AY: Integer);
 var
   newZoom, nox, noy: Double;
 begin
@@ -577,28 +592,28 @@ begin
   StartAnim(newZoom, nox, noy);
 end;
 
-procedure TTyImageView.SetAutoFit(AValue: Boolean);
+procedure TTyCustomImageView.SetAutoFit(AValue: Boolean);
 begin
   if FAutoFit = AValue then Exit;
   FAutoFit := AValue;
   if FAutoFit then ZoomToFit;
 end;
 
-procedure TTyImageView.SetZoomMin(AValue: Double);
+procedure TTyCustomImageView.SetZoomMin(AValue: Double);
 begin
   if AValue <= 0 then AValue := 0.01;
   if FZoomMin = AValue then Exit;
   FZoomMin := AValue;
 end;
 
-procedure TTyImageView.SetZoomMax(AValue: Double);
+procedure TTyCustomImageView.SetZoomMax(AValue: Double);
 begin
   if AValue <= 0 then AValue := 0.01;
   if FZoomMax = AValue then Exit;
   FZoomMax := AValue;
 end;
 
-procedure TTyImageView.SetGrayscale(AValue: Boolean);
+procedure TTyCustomImageView.SetGrayscale(AValue: Boolean);
 begin
   if FGrayscale = AValue then Exit;
   FGrayscale := AValue;
@@ -606,7 +621,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyImageView.SetBlurRadius(AValue: Integer);
+procedure TTyCustomImageView.SetBlurRadius(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   if FBlurRadius = AValue then Exit;
@@ -615,7 +630,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyImageView.SetSharpen(AValue: Boolean);
+procedure TTyCustomImageView.SetSharpen(AValue: Boolean);
 begin
   if FSharpen = AValue then Exit;
   FSharpen := AValue;
@@ -623,7 +638,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyImageView.SetInvert(AValue: Boolean);
+procedure TTyCustomImageView.SetInvert(AValue: Boolean);
 begin
   if FInvert = AValue then Exit;
   FInvert := AValue;
@@ -631,7 +646,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyImageView.SetTintColor(AValue: TColor);
+procedure TTyCustomImageView.SetTintColor(AValue: TColor);
 begin
   if FTintColor = AValue then Exit;
   FTintColor := AValue;
@@ -639,7 +654,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyImageView.SetTintAmount(AValue: Integer);
+procedure TTyCustomImageView.SetTintAmount(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0
   else if AValue > 100 then AValue := 100;
@@ -649,7 +664,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyImageView.Resize;
+procedure TTyCustomImageView.Resize;
 begin
   inherited Resize;
   // Track the window while auto-fitting (immediate, not animated).
@@ -665,7 +680,7 @@ begin
   end;
 end;
 
-procedure TTyImageView.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomImageView.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseDown(Button, Shift, X, Y);
   if (Button = mbLeft) and Enabled and (FSource <> nil) then
@@ -678,7 +693,7 @@ begin
   end;
 end;
 
-procedure TTyImageView.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomImageView.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseMove(Shift, X, Y);
   if FDragging and (FSource <> nil) then
@@ -693,14 +708,14 @@ begin
   end;
 end;
 
-procedure TTyImageView.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomImageView.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
   if Button = mbLeft then
     FDragging := False;
 end;
 
-function TTyImageView.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+function TTyCustomImageView.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 var
   p: TPoint;
@@ -717,7 +732,7 @@ begin
     Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
 end;
 
-procedure TTyImageView.DblClick;
+procedure TTyCustomImageView.DblClick;
 var
   fitZoom: Double;
 begin
@@ -734,7 +749,7 @@ begin
     ZoomToFit;
 end;
 
-procedure TTyImageView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomImageView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -776,7 +791,7 @@ begin
   end;
 end;
 
-procedure TTyImageView.Paint;
+procedure TTyCustomImageView.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

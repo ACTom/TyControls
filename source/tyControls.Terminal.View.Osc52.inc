@@ -7,7 +7,7 @@
   它;这里同步问宿主,应答的顺序同样不乱。应答不是用户输入(不清选区、不滚到底)。
   这里在解析中间:宿主的事件、剪贴板(别的程序占着时 LCL 会抛)抛出来的异常一律吞在这里——
   冒出 Parse 会丢掉这一块剩下的字节。宿主可以在事件里弹模态框,不能释放控件。 }
-function TTyTerminalView.HandleOsc52(const AData: string): Boolean;
+function TTyCustomTerminalView.HandleOsc52(const AData: string): Boolean;
 var
   pc, pd, txt: string;
   allow: Boolean;

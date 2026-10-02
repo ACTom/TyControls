@@ -877,7 +877,7 @@ var
   ctl: TTyStyleController;
   bar, dbar: TTyToolWindowBar;
   w2: TTyToolWindow;
-  act: TTyToolWindowActions;
+  act: TTyCustomToolWindowActions;
   btn, body: TBodyChild;
   txt: string;
 begin
@@ -1185,7 +1185,7 @@ const
   W = 160;
   H = 120;
 var
-  act: TTyToolWindowActions;
+  act: TTyCustomToolWindowActions;
   kid: TBodyChild;
   g: TTyToolWindowHeaderGeom;
   bmp: TBitmap;
@@ -1247,7 +1247,7 @@ end;
 
 procedure TTyToolWindowTests.TestAThemeThatAddsOnlyTheRuleRelayouts;
 var
-  act: TTyToolWindowActions;
+  act: TTyCustomToolWindowActions;
   kid: TBodyChild;
   before: Integer;
 begin

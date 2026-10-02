@@ -13,7 +13,7 @@ type
     and the selection ring are all theme-driven (typeKey 'TyPanel' — reuses the panel
     surface, so no new .tycss rule). Selecting fires OnChange; setting Selected in code
     just repaints (no event). }
-  TTyColorGrid = class(TTyCustomControl)
+  TTyCustomColorGrid = class(TTyCustomControl)
   private
     FColors: array of TColor;
     FColumns: Integer;
@@ -37,17 +37,26 @@ type
     // Cell index at device point (AX, AY), or -1 if the point is outside any cell
     // (empty grid, or the trailing gap on the last, partially-filled row). Test seam.
     function CellAt(AX, AY: Integer): Integer;
+    // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
+    property TabStop default True;
+    // Number of columns; clamped to >= 1.
+    property Columns: Integer read FColumns write SetColumns default 8;
+    // The selected colour. Writing stores + repaints (no OnChange); a left-click on a
+    // cell sets it AND fires OnChange.
+    property Selected: TColor read GetSelected write SetSelected;
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+  end;
+
+  { TTyColorGrid publishes TTyCustomColorGrid's properties; everything lives in TTyCustomColorGrid. }
+  TTyColorGrid = class(TTyCustomColorGrid)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
     property Font;
     property ShowHint;
     property TabOrder;
-    // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
-    property TabStop default True;
+    property TabStop;
     property OnClick;
     property OnDblClick;
     property OnMouseDown;
@@ -91,21 +100,18 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    // Number of columns; clamped to >= 1.
-    property Columns: Integer read FColumns write SetColumns default 8;
-    // The selected colour. Writing stores + repaints (no OnChange); a left-click on a
-    // cell sets it AND fires OnChange.
-    property Selected: TColor read GetSelected write SetSelected;
-    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    property Columns;
+    property Selected;
+    property OnChange;
     property Align;
     property Anchors;
   end;
 
 implementation
 
-{ TTyColorGrid }
+{ TTyCustomColorGrid }
 
-constructor TTyColorGrid.Create(AOwner: TComponent);
+constructor TTyCustomColorGrid.Create(AOwner: TComponent);
 var
   sl: TStringList;
   i: Integer;
@@ -133,7 +139,7 @@ begin
   Height := 120;
 end;
 
-function TTyColorGrid.GetStyleTypeKey: string;
+function TTyCustomColorGrid.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyPanel': a swatch matrix with a selection ring is not a panel surface.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
@@ -141,18 +147,18 @@ begin
   Result := 'TyColorGrid';
 end;
 
-function TTyColorGrid.ColorCount: Integer;
+function TTyCustomColorGrid.ColorCount: Integer;
 begin
   Result := Length(FColors);
 end;
 
-function TTyColorGrid.RowCount: Integer;
+function TTyCustomColorGrid.RowCount: Integer;
 begin
   // Ceil(ColorCount / Columns); FColumns is always >= 1.
   Result := (ColorCount + FColumns - 1) div FColumns;
 end;
 
-procedure TTyColorGrid.SetColumns(AValue: Integer);
+procedure TTyCustomColorGrid.SetColumns(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
   if FColumns = AValue then Exit;
@@ -160,7 +166,7 @@ begin
   Invalidate;
 end;
 
-function TTyColorGrid.GetSelected: TColor;
+function TTyCustomColorGrid.GetSelected: TColor;
 begin
   if (FSelectedIndex >= 0) and (FSelectedIndex <= High(FColors)) then
     Result := FColors[FSelectedIndex]
@@ -168,7 +174,7 @@ begin
     Result := clNone;
 end;
 
-procedure TTyColorGrid.SetSelected(const AValue: TColor);
+procedure TTyCustomColorGrid.SetSelected(const AValue: TColor);
 var
   i, idx: Integer;
 begin
@@ -185,14 +191,14 @@ begin
   Invalidate;   // programmatic set: repaint only, no OnChange
 end;
 
-procedure TTyColorGrid.AddColor(AColor: TColor);
+procedure TTyCustomColorGrid.AddColor(AColor: TColor);
 begin
   SetLength(FColors, Length(FColors) + 1);
   FColors[High(FColors)] := AColor;
   Invalidate;
 end;
 
-function TTyColorGrid.CellAt(AX, AY: Integer): Integer;
+function TTyCustomColorGrid.CellAt(AX, AY: Integer): Integer;
 var
   cellW, cellH, rows, col, row, idx: Integer;
 begin
@@ -212,7 +218,7 @@ begin
   Result := idx;
 end;
 
-procedure TTyColorGrid.Paint;
+procedure TTyCustomColorGrid.Paint;
 var
   P: TTyPainter;
   st: TTyStyleSet;
@@ -273,7 +279,7 @@ begin
   end;
 end;
 
-procedure TTyColorGrid.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomColorGrid.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   idx: Integer;
 begin

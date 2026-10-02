@@ -107,7 +107,7 @@ type
     procedure ToolButtonChecked(Sender: TObject);
     procedure ToolArrowClicked(Sender: TObject);
     procedure MenuPicked(Sender: TObject);
-    procedure PaintedBarPaintButton(Sender: TTyToolButton; AState: Integer);
+    procedure PaintedBarPaintButton(Sender: TTyCustomToolButton; AState: Integer);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
   end;
@@ -218,7 +218,7 @@ begin
   LblStatus.Caption := Format(rsMenuFmt, [(Sender as TMenuItem).Caption]);
 end;
 
-procedure TMainForm.PaintedBarPaintButton(Sender: TTyToolButton; AState: Integer);
+procedure TMainForm.PaintedBarPaintButton(Sender: TTyCustomToolButton; AState: Integer);
 const
   // Swatch data, indexed by the button's position on the bar (Buttons[] order).
   // TColor is $00BBGGRR: crimson / teal / amber, with an ink that stays readable on each.

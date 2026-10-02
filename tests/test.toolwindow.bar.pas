@@ -125,7 +125,7 @@ type
     function NewWindow: TProbeWindow;
     function NewWindowIn(ABar: TTyToolWindowBar; AOwner: TComponent): TProbeWindow;
     function NewDesignBar: TBarAccess;
-    procedure Watch(AWin: TTyToolWindow);
+    procedure Watch(AWin: TTyCustomToolWindow);
     procedure ResetCounts;
     procedure HandleShowOrder(ASender: TObject);
     { 静默批次在窗口离开的空档里结束(TBarAccess.OnControlRemoved)。 }
@@ -630,7 +630,7 @@ begin
   FHides := 0;
 end;
 
-procedure TTyToolWindowBarFixture.Watch(AWin: TTyToolWindow);
+procedure TTyToolWindowBarFixture.Watch(AWin: TTyCustomToolWindow);
 begin
   AWin.OnShow := @HandleShow;
   AWin.OnHide := @HandleHide;

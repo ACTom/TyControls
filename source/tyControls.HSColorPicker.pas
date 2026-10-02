@@ -19,7 +19,7 @@ type
     crosshair, which must stay legible over the whole hue ramp) and border-color.
     The dialog's internal twins already own 'TyColorArea' (tyControls.Dialogs.Color);
     this brings the public control in line with them. }
-  TTyHSColorPicker = class(TTyCustomControl)
+  TTyCustomHSColorPicker = class(TTyCustomControl)
   private
     FHue: Single;         // 0..360
     FSat: Single;         // 0..1 (top = 1, bottom = 0)
@@ -47,17 +47,24 @@ type
     constructor Create(AOwner: TComponent); override;
     { The colour under the current Hue/Sat/Value (opaque). }
     property SelectedColor: TTyColor read GetSelectedColor;
+    // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
+    property TabStop default True;
+    property Hue: Single read FHue write SetHue;
+    property Sat: Single read FSat write SetSat;
+    property Value: Single read FValue write SetValue;
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+  end;
+
+  { TTyHSColorPicker publishes TTyCustomHSColorPicker's properties; everything lives in TTyCustomHSColorPicker. }
+  TTyHSColorPicker = class(TTyCustomHSColorPicker)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
     property Font;
     property ShowHint;
     property TabOrder;
-    // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
-    property TabStop default True;
+    property TabStop;
     property OnClick;
     property OnDblClick;
     property OnMouseDown;
@@ -101,10 +108,10 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Hue: Single read FHue write SetHue;
-    property Sat: Single read FSat write SetSat;
-    property Value: Single read FValue write SetValue;
-    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    property Hue;
+    property Sat;
+    property Value;
+    property OnChange;
     property Align;
     property Anchors;
   end;
@@ -114,7 +121,7 @@ implementation
 const
   SquareMargin = 3;   // logical-px inset of the gradient square from the control edge
 
-constructor TTyHSColorPicker.Create(AOwner: TComponent);
+constructor TTyCustomHSColorPicker.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FHue := 0;
@@ -129,19 +136,19 @@ begin
   Height := 140;
 end;
 
-function TTyHSColorPicker.GetStyleTypeKey: string;
+function TTyCustomHSColorPicker.GetStyleTypeKey: string;
 begin
   { Its own key, not the gauge's: darkening gauge text must no longer darken the crosshair,
     which needs the contrast treatment the gradient underneath demands. }
   Result := 'TyHSColorPicker';
 end;
 
-function TTyHSColorPicker.GetSelectedColor: TTyColor;
+function TTyCustomHSColorPicker.GetSelectedColor: TTyColor;
 begin
   Result := TyHSVToRGB(FHue, FSat, FValue, 255);
 end;
 
-procedure TTyHSColorPicker.SetHue(const AValue: Single);
+procedure TTyCustomHSColorPicker.SetHue(const AValue: Single);
 var
   v: Single;
 begin
@@ -153,7 +160,7 @@ begin
   if Assigned(FOnChange) and (not FUpdating) then FOnChange(Self);
 end;
 
-procedure TTyHSColorPicker.SetSat(const AValue: Single);
+procedure TTyCustomHSColorPicker.SetSat(const AValue: Single);
 var
   v: Single;
 begin
@@ -165,7 +172,7 @@ begin
   if Assigned(FOnChange) and (not FUpdating) then FOnChange(Self);
 end;
 
-procedure TTyHSColorPicker.SetValue(const AValue: Single);
+procedure TTyCustomHSColorPicker.SetValue(const AValue: Single);
 var
   v: Single;
 begin
@@ -176,7 +183,7 @@ begin
   Invalidate;                                            // Value just repaints (no OnChange)
 end;
 
-procedure TTyHSColorPicker.SquareMetrics(out ASqLeft, ASqTop, ASqWidth, ASqHeight: Integer);
+procedure TTyCustomHSColorPicker.SquareMetrics(out ASqLeft, ASqTop, ASqWidth, ASqHeight: Integer);
 var
   m: Integer;
 begin
@@ -190,7 +197,7 @@ begin
   if ASqHeight < 1 then ASqHeight := 1;
 end;
 
-procedure TTyHSColorPicker.UpdateFromXY(AX, AY: Integer);
+procedure TTyCustomHSColorPicker.UpdateFromXY(AX, AY: Integer);
 var
   sqLeft, sqTop, sqW, sqH: Integer;
   hx, sy, oldH, oldS: Single;
@@ -228,7 +235,7 @@ begin
     FOnChange(Self);
 end;
 
-procedure TTyHSColorPicker.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomHSColorPicker.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
@@ -239,20 +246,20 @@ begin
   end;
 end;
 
-procedure TTyHSColorPicker.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomHSColorPicker.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   if not Enabled then Exit;
   inherited MouseMove(Shift, X, Y);
   if FDragging then UpdateFromXY(X, Y);
 end;
 
-procedure TTyHSColorPicker.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomHSColorPicker.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
   if Button = mbLeft then FDragging := False;
 end;
 
-procedure TTyHSColorPicker.Paint;
+procedure TTyCustomHSColorPicker.Paint;
 var
   P: TTyPainter;
   bodyS: TTyStyleSet;

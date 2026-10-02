@@ -1543,11 +1543,7 @@ initialization
     // T17 trees and list views
     'TTyTreeView', 'TTyShellTreeView', 'TTyListView', 'TTyShellListView', 'TTyHeaderControl',
     // T18 grids
-    'TTyDrawGrid', 'TTyStringGrid']);
-
-  { CPending: the classes still to split, by task (plan appendix A). Each task moves its own
-    names into CSplit; Task 32 deletes this list. }
-  AddAll(GPending, [
+    'TTyDrawGrid', 'TTyStringGrid',
     // T20 bars
     'TTyStatusBar', 'TTyToolBar', 'TTyToolBarEx', 'TTyToolButton', 'TTyToolSeparator', 'TTyAlert',
     'TTyPagination', 'TTySteps', 'TTyBreadcrumb', 'TTyScrollBar',
@@ -1562,7 +1558,11 @@ initialization
     // T24 colour pickers and terminal
     'TTyColorGrid', 'TTyLColorPicker', 'TTyHSColorPicker', 'TTyTerminalView',
     // T25 tool windows
-    'TTyToolWindowBar', 'TTyToolWindow', 'TTyToolWindowActions',
+    'TTyToolWindowBar', 'TTyToolWindow', 'TTyToolWindowActions']);
+
+  { CPending: the classes still to split, by task (plan appendix A). Each task moves its own
+    names into CSplit; Task 32 deletes this list. }
+  AddAll(GPending, [
     // T27 controllers
     'TTyStyleController', 'TTyNativeStyler',
     // T28 icon fonts and images

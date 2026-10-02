@@ -32,7 +32,7 @@ uses
   tyControls.Popup, tyControls.IconFont;
 
 type
-  TTyRibbonGallery = class;
+  TTyCustomRibbonGallery = class;
 
   { ----------------------------------------------------------------------------
     TTyGalleryGrid — INTERNAL popup-content control (NOT registered on the
@@ -43,7 +43,7 @@ type
     ---------------------------------------------------------------------------- }
   TTyGalleryGrid = class(TTyCustomControl)
   private
-    FGallery: TTyRibbonGallery;
+    FGallery: TTyCustomRibbonGallery;
     FHoverIndex: Integer;    // -1 = none
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   protected
@@ -53,13 +53,13 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
   public
-    constructor CreateForGallery(AGallery: TTyRibbonGallery);
+    constructor CreateForGallery(AGallery: TTyCustomRibbonGallery);
   end;
 
   { ----------------------------------------------------------------------------
     TTyRibbonGallery
     ---------------------------------------------------------------------------- }
-  TTyRibbonGallery = class(TTyCustomControl)
+  TTyCustomRibbonGallery = class(TTyCustomControl)
   private
     FItems: TStringList;
     FGlyphNames: TStringList;
@@ -70,6 +70,10 @@ type
     FOnSelect: TNotifyEvent;
     FPopup: TTyDropdownPopup;   // created on demand; freed in Destroy
     FGrid: TTyGalleryGrid;      // popup content; owned by Self, freed in Destroy
+    { An ItemIndex read from a form before the Items it points into (a descendant that
+      publishes ItemIndex first): kept here and applied in Loaded. }
+    FPendingItemIndex: Integer;
+    FHasPendingIndex: Boolean;
     function GetItemsProp: TStrings;
     function GetGlyphNamesProp: TStrings;
     procedure SetItems(const AValue: TStrings);
@@ -99,6 +103,7 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    procedure Loaded; override;
     { Glyph name parallel to Items for the visible index AItem, or '' if none. }
     function GlyphNameFor(AItem: Integer): string;
     { Draw one gallery cell (fill for its state + optional glyph + caption) into
@@ -117,16 +122,25 @@ type
     procedure CloseUp;
     { True while the expanded grid popup is open. }
     function IsDroppedDown: Boolean;
+    property TabStop default True;
+    property Items: TStrings read GetItemsProp write SetItems;
+    property GlyphNames: TStrings read GetGlyphNamesProp write SetGlyphNames;
+    property IconFont: TTyIconFont read FIconFont write SetIconFont;
+    property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
+    property VisibleColumns: Integer read FVisibleColumns write SetVisibleColumns default 3;
+    property OnSelect: TNotifyEvent read FOnSelect write FOnSelect;
+  end;
+
+  { TTyRibbonGallery publishes TTyCustomRibbonGallery's properties; everything lives in TTyCustomRibbonGallery. }
+  TTyRibbonGallery = class(TTyCustomRibbonGallery)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
     property Font;
     property ShowHint;
     property TabOrder;
-    property TabStop default True;
+    property TabStop;
     property OnClick;
     property OnDblClick;
     property OnMouseDown;
@@ -170,12 +184,12 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Items: TStrings read GetItemsProp write SetItems;
-    property GlyphNames: TStrings read GetGlyphNamesProp write SetGlyphNames;
-    property IconFont: TTyIconFont read FIconFont write SetIconFont;
-    property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
-    property VisibleColumns: Integer read FVisibleColumns write SetVisibleColumns default 3;
-    property OnSelect: TNotifyEvent read FOnSelect write FOnSelect;
+    property Items;
+    property GlyphNames;
+    property IconFont;
+    property ItemIndex;
+    property VisibleColumns;
+    property OnSelect;
     property Align;
     property Anchors;
   end;
@@ -266,7 +280,7 @@ end;
 // TTyGalleryGrid (internal popup content)
 // ---------------------------------------------------------------------------
 
-constructor TTyGalleryGrid.CreateForGallery(AGallery: TTyRibbonGallery);
+constructor TTyGalleryGrid.CreateForGallery(AGallery: TTyCustomRibbonGallery);
 begin
   inherited Create(AGallery);   // owned by the gallery
   FGallery := AGallery;
@@ -393,10 +407,10 @@ begin
 end;
 
 // ---------------------------------------------------------------------------
-// TTyRibbonGallery
+// TTyCustomRibbonGallery
 // ---------------------------------------------------------------------------
 
-constructor TTyRibbonGallery.Create(AOwner: TComponent);
+constructor TTyCustomRibbonGallery.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FItems := TStringList.Create;
@@ -413,7 +427,7 @@ begin
   Height := TyDensityHeight(ActiveController, 40);
 end;
 
-destructor TTyRibbonGallery.Destroy;
+destructor TTyCustomRibbonGallery.Destroy;
 begin
   // Free the grid FIRST: it is owned by Self AND parented into the popup form, so
   // FreeAndNil frees it once and unlinks it from BOTH the owner-component list and the
@@ -426,7 +440,7 @@ begin
   inherited Destroy;
 end;
 
-function TTyRibbonGallery.GetStyleTypeKey: string;
+function TTyCustomRibbonGallery.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyListBox': gallery tiles and a floating popup grid are not list-box rows.
     Added to 'TyListBox's rule block as an extra selector, so every resolved value is
@@ -434,28 +448,28 @@ begin
   Result := 'TyRibbonGallery';
 end;
 
-function TTyRibbonGallery.GetItemsProp: TStrings;
+function TTyCustomRibbonGallery.GetItemsProp: TStrings;
 begin
   Result := FItems;
 end;
 
-function TTyRibbonGallery.GetGlyphNamesProp: TStrings;
+function TTyCustomRibbonGallery.GetGlyphNamesProp: TStrings;
 begin
   Result := FGlyphNames;
 end;
 
-procedure TTyRibbonGallery.SetItems(const AValue: TStrings);
+procedure TTyCustomRibbonGallery.SetItems(const AValue: TStrings);
 begin
   FItems.Assign(AValue);   // OnChange -> ItemsChanged recalcs + invalidates
 end;
 
-procedure TTyRibbonGallery.SetGlyphNames(const AValue: TStrings);
+procedure TTyCustomRibbonGallery.SetGlyphNames(const AValue: TStrings);
 begin
   FGlyphNames.Assign(AValue);
   Invalidate;
 end;
 
-procedure TTyRibbonGallery.SetIconFont(const AValue: TTyIconFont);
+procedure TTyCustomRibbonGallery.SetIconFont(const AValue: TTyIconFont);
 begin
   if FIconFont = AValue then Exit;
   if FIconFont <> nil then
@@ -477,17 +491,43 @@ begin
   Invalidate;
 end;
 
-procedure TTyRibbonGallery.IconFontChanged(Sender: TObject);
+procedure TTyCustomRibbonGallery.IconFontChanged(Sender: TObject);
 begin
   Invalidate;
 end;
 
-procedure TTyRibbonGallery.SetItemIndex(const AValue: Integer);
+procedure TTyCustomRibbonGallery.SetItemIndex(const AValue: Integer);
 begin
+  { Read from a form ahead of the Items it indexes (the library's own class publishes Items
+    first; a descendant may not): SelectAt would drop it as out of range. Keep it for Loaded,
+    the way LCL's list controls keep an index read before their items. Only when it cannot
+    land now -- an index that already fits takes the 3.0 path. }
+  if (csLoading in ComponentState) and (AValue >= FItems.Count) then
+  begin
+    FPendingItemIndex := AValue;
+    FHasPendingIndex := True;
+    Exit;
+  end;
+  FHasPendingIndex := False;
   SelectAt(AValue);   // funnel through the one selection seam
 end;
 
-procedure TTyRibbonGallery.SetVisibleColumns(const AValue: Integer);
+procedure TTyCustomRibbonGallery.Loaded;
+begin
+  inherited Loaded;
+  { Reading a form is not a selection: the parked index lands without OnSelect. }
+  if FHasPendingIndex then
+  begin
+    FHasPendingIndex := False;
+    if (FPendingItemIndex >= 0) and (FPendingItemIndex < FItems.Count) then
+    begin
+      FItemIndex := FPendingItemIndex;
+      Invalidate;
+    end;
+  end;
+end;
+
+procedure TTyCustomRibbonGallery.SetVisibleColumns(const AValue: Integer);
 var
   v: Integer;
 begin
@@ -498,7 +538,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyRibbonGallery.ItemsChanged(Sender: TObject);
+procedure TTyCustomRibbonGallery.ItemsChanged(Sender: TObject);
 begin
   // Clamp a stale selection if the list shrank; fire OnSelect only if it changed.
   if FItemIndex >= FItems.Count then
@@ -512,14 +552,14 @@ begin
   Invalidate;
 end;
 
-procedure TTyRibbonGallery.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomRibbonGallery.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FIconFont) then
     FIconFont := nil;
 end;
 
-procedure TTyRibbonGallery.SelectAt(AIndex: Integer);
+procedure TTyCustomRibbonGallery.SelectAt(AIndex: Integer);
 var
   NewIndex: Integer;
 begin
@@ -534,19 +574,19 @@ begin
     FOnSelect(Self);
 end;
 
-function TTyRibbonGallery.CellWidth: Integer;
+function TTyCustomRibbonGallery.CellWidth: Integer;
 begin
   Result := MulDiv(ActiveController.Metric('--gallery-cell-width', TyGalleryCellW), Font.PixelsPerInch, 96);
   if Result < 1 then Result := 1;
 end;
 
-function TTyRibbonGallery.ArrowWidth: Integer;
+function TTyCustomRibbonGallery.ArrowWidth: Integer;
 begin
   Result := MulDiv(ActiveController.Metric('--gallery-arrow-width', TyGalleryArrowW), Font.PixelsPerInch, 96);
   if Result < 1 then Result := 1;
 end;
 
-function TTyRibbonGallery.GlyphNameFor(AItem: Integer): string;
+function TTyCustomRibbonGallery.GlyphNameFor(AItem: Integer): string;
 begin
   if (AItem >= 0) and (AItem < FGlyphNames.Count) then
     Result := FGlyphNames[AItem]
@@ -554,7 +594,7 @@ begin
     Result := '';
 end;
 
-function TTyRibbonGallery.InlineCellAt(AX, AY: Integer): Integer;
+function TTyCustomRibbonGallery.InlineCellAt(AX, AY: Integer): Integer;
 var
   cellW, arrowW, rowRight, visN, i: Integer;
   cellR: TRect;
@@ -579,7 +619,7 @@ begin
   end;
 end;
 
-procedure TTyRibbonGallery.PaintCell(APainter: TTyPainter; const ACellRect: TRect;
+procedure TTyCustomRibbonGallery.PaintCell(APainter: TTyPainter; const ACellRect: TRect;
   AIndex: Integer; AStates: TTyStateSet; const ACorners: TTyCorners);
 var
   cellStyle: TTyStyleSet;
@@ -628,7 +668,7 @@ begin
     cellStyle.TextColor, taLeftJustify, tlCenter, True);
 end;
 
-procedure TTyRibbonGallery.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomRibbonGallery.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   BoxStyle: TTyStyleSet;
@@ -712,12 +752,12 @@ begin
   end;
 end;
 
-procedure TTyRibbonGallery.Paint;
+procedure TTyCustomRibbonGallery.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-procedure TTyRibbonGallery.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomRibbonGallery.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   hit: Integer;
 begin
@@ -736,7 +776,7 @@ begin
   end;
 end;
 
-procedure TTyRibbonGallery.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomRibbonGallery.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   hit, newHover: Integer;
 begin
@@ -750,7 +790,7 @@ begin
   end;
 end;
 
-procedure TTyRibbonGallery.MouseLeave;
+procedure TTyCustomRibbonGallery.MouseLeave;
 begin
   inherited MouseLeave;
   if FHoverCell <> -1 then
@@ -760,12 +800,12 @@ begin
   end;
 end;
 
-procedure TTyRibbonGallery.PopupClosed(Sender: TObject);
+procedure TTyCustomRibbonGallery.PopupClosed(Sender: TObject);
 begin
   Invalidate;   // repaint the inline row (selection may have changed)
 end;
 
-procedure TTyRibbonGallery.DropDown;
+procedure TTyCustomRibbonGallery.DropDown;
 var
   cols, rows, contentW, contentH: Integer;
 begin
@@ -797,13 +837,13 @@ begin
   FPopup.Popup(Self, contentW, contentH);
 end;
 
-procedure TTyRibbonGallery.CloseUp;
+procedure TTyCustomRibbonGallery.CloseUp;
 begin
   if FPopup <> nil then
     FPopup.Close;
 end;
 
-function TTyRibbonGallery.IsDroppedDown: Boolean;
+function TTyCustomRibbonGallery.IsDroppedDown: Boolean;
 begin
   Result := (FPopup <> nil) and FPopup.IsOpen;
 end;

@@ -20,8 +20,8 @@ type
   TTyToolWindowQueuedKind = (twqMove, twqIndex, twqLayout);
   TTyToolWindowQueued = record
     Kind: TTyToolWindowQueuedKind;
-    Window: TTyToolWindow;       { twqMove / twqIndex }
-    Target: TTyToolWindowBar;    { twqMove }
+    Window: TTyCustomToolWindow;       { twqMove / twqIndex }
+    Target: TTyCustomToolWindowBar;    { twqMove }
     Index: Integer;
     Text: string;                { twqLayout:要读的布局串 }
     IsReset: Boolean;            { twqLayout:恢复默认布局,执行时取那一刻的默认布局 }
@@ -36,7 +36,7 @@ type
   TTyToolLayoutPending = (tlpNone, tlpLoad, tlpReset);
 
   { 布局串的三组各对应哪条可用栏、它的窗口(Controls 顺序)。没有可用栏的组是 nil。 }
-  TTyToolLayoutBars = array[TTyToolLayoutSide] of TTyToolWindowBar;
+  TTyToolLayoutBars = array[TTyToolLayoutSide] of TTyCustomToolWindowBar;
   TTyToolLayoutWindows = array[TTyToolLayoutSide] of TTyToolWindowArray;
 
   { 工具窗口栏的协调者(spec §2):可以不放。栏经 Manager 属性注册到它上面;跨侧拖动、
@@ -72,14 +72,14 @@ type
       不问事件;跨栏先问 OnCanMoveWindow,AMayQueue 且要排队时排队。AIndex 已经换算好
       (MaxInt = 末尾)。接受了就取消此刻的拖动。答 False = 跨栏被否决(或处理器里释放了本
       manager)。 }
-    function ExecuteMove(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar; AIndex: Integer;
+    function ExecuteMove(AWindow: TTyCustomToolWindow; ATarget: TTyCustomToolWindowBar; AIndex: Integer;
       AMayQueue: Boolean): Boolean;
     { --- 队列(spec §9.9)--- }
     { 追加一项;窗口和目标栏各 FreeNotification(opRemove 时 PurgeQueue);没排过就
       QueueAsyncCall 一次。 }
     procedure Enqueue(const AItem: TTyToolWindowQueued);
     { 这个窗口还有没执行的排队项(之后对它的 MoveWindow / WindowIndex 也进队列,按调用顺序)。 }
-    function HasQueued(AWindow: TTyToolWindow): Boolean;
+    function HasQueued(AWindow: TTyCustomToolWindow): Boolean;
     { 删掉 Window 或 Target 是 AComponent 的项(含正在执行的那一批里还没轮到的)。 }
     procedure PurgeQueue(AComponent: TComponent);
     { 整个队列作废(排着的布局覆盖之前排队的计划和移动,spec §10.5)。 }
@@ -92,7 +92,7 @@ type
     procedure RunQueuedLayout(AItem: TTyToolWindowQueued);
     { 跨栏移动要排队:运行时、窗口所在窗体已经 Showing(同步换父会在窗口自己的按钮点击里
       销毁按钮的句柄,spec §9.9)。 }
-    function MustQueue(AWindow: TTyToolWindow): Boolean;
+    function MustQueue(AWindow: TTyCustomToolWindow): Boolean;
     { --- 布局(spec §10) --- }
     { 可用栏按 Placement 分到三组(每组最多一条:同 Placement 的都不可用),窗口按 Controls 顺序。 }
     function BuildWorld(out ABars: TTyToolLayoutBars;
@@ -128,7 +128,7 @@ type
     { 代码搭的 manager:窗体 Showing 之后第一次改动布局之前记默认布局(spec §10.5)。「改动」是
       布局串里存的每一样(spec §10.2):收起、尺寸、调顺序、跨栏,还有当前页 —— 点图标换了页
       之后 Reset 也要回得去。调用方在**改之前**调。 }
-    procedure NoteLayoutChanging(ABar: TTyToolWindowBar); override;
+    procedure NoteLayoutChanging(ABar: TTyCustomToolWindowBar); override;
     { spec §10.5:最后一个离开 csLoading 的参与者(manager、注册栏)在自己的 Loaded 最后调它。
       都不在加载中了:记默认布局(加载进来的样子;条件见实现处),再静默应用挂起的计划,
       OnLayoutApplied 推到加载结束之后。继承窗体每一层读完都会走到这里,默认布局取最后一层
@@ -141,20 +141,20 @@ type
     { --- 跨栏拖动(spec §9.4 / §9.7)--- }
     { 源栏 ASource 上拖着它手势里的窗口,屏幕点 AScreen 落在哪条栏的哪个槽位:答源栏自己、
       另一侧栏,或 nil(没有目标)。每次现建探测矩形,交给 TyToolWindowDropAt。 }
-    function DropTargetAt(ASource: TTyToolWindowBar; const AScreen: TPoint;
-      out ASlot: Integer): TTyToolWindowBar; override;
+    function DropTargetAt(ASource: TTyCustomToolWindowBar; const AScreen: TPoint;
+      out ASlot: Integer): TTyCustomToolWindowBar; override;
     { ABar 是不是 ASource 此刻的跨栏候选(spec §9.4):不是源栏、不是底栏、可用、看得见、启用、
       不在释放中、同一个窗体。命中测试(DropTargetAt)和放置预览(DragSourceChanged)问的都是
       这一处 —— 两处各写一遍会漂开。不问 CanMoveWindow(那要等指针进去才问)。 }
-    function IsCrossCandidate(ASource, ABar: TTyToolWindowBar): Boolean;
+    function IsCrossCandidate(ASource, ABar: TTyCustomToolWindowBar): Boolean;
     { 进入拖动:给每条「隐藏着的候选侧栏」显示放置预览;收尾:全部收掉(spec §9.8)。 }
-    procedure DragSourceChanged(ASource: TTyToolWindowBar); override;
+    procedure DragSourceChanged(ASource: TTyCustomToolWindowBar); override;
     { 拖动中(DropTargetAt 每次都调):显示着的预览对一遍 —— 不再是隐藏的候选就收掉,还是就跟上
       栏此刻的父控件和矩形。 }
-    procedure SyncDropPreviews(ASource: TTyToolWindowBar);
-    function QueueWindowIndex(AWindow: TTyToolWindow; AIndex: Integer): Boolean; override;
+    procedure SyncDropPreviews(ASource: TTyCustomToolWindowBar);
+    function QueueWindowIndex(AWindow: TTyCustomToolWindow; AIndex: Integer): Boolean; override;
     { 离开的栏:排队的移动不再以它为目标;它的放置预览收掉。 }
-    procedure BarRemoved(ABar: TTyToolWindowBar); override;
+    procedure BarRemoved(ABar: TTyCustomToolWindowBar); override;
   public
     destructor Destroy; override;
     { 把 AWindow 挪到 ATargetBar 的窗口序号 AIndex(钳住;-1 = 末尾),spec §9.9。目标就是它
@@ -162,7 +162,7 @@ type
       处理里重入、跨栏且 CanMoveWindow 为 False。设计期同步、不发事件、通知设计器。
       窗体已经 Showing 时跨栏移动排队(返回 True = 已接受,返回那一刻窗口还在旧栏);这个窗口
       还有排着的移动时,同栏的也进同一个队列。排队的执行前重做全部检查,不过就静默丢弃。 }
-    function MoveWindow(AWindow: TTyToolWindow; ATargetBar: TTyToolWindowBar;
+    function MoveWindow(AWindow: TTyCustomToolWindow; ATargetBar: TTyCustomToolWindowBar;
       AIndex: Integer = -1): Boolean;
     { 探针:队列里还有几项没执行(真实队列的长度)。 }
     function QueuedCountForTest: Integer;
@@ -196,8 +196,8 @@ type
 implementation
 
 { manager 队列里的一项(spec §9.9)。 }
-function NewQueued(AKind: TTyToolWindowQueuedKind; AWindow: TTyToolWindow;
-  ATarget: TTyToolWindowBar; AIndex: Integer): TTyToolWindowQueued;
+function NewQueued(AKind: TTyToolWindowQueuedKind; AWindow: TTyCustomToolWindow;
+  ATarget: TTyCustomToolWindowBar; AIndex: Integer): TTyToolWindowQueued;
 begin
   Result := Default(TTyToolWindowQueued);
   Result.Kind := AKind;
@@ -208,7 +208,7 @@ end;
 
 { 捕获此刻在 AWindow 里:窗口里某个按钮自己的点击处理还没走完,同步换父会在里面销毁它的句柄
   (spec §9.9 / §10.5)。排队的移动和布局执行前问这一处。 }
-function CaptureInside(AWindow: TTyToolWindow): Boolean;
+function CaptureInside(AWindow: TTyCustomToolWindow): Boolean;
 var
   cap: TControl;
 begin
@@ -241,13 +241,13 @@ begin
     PurgeQueue(AComponent);
 end;
 
-procedure TTyToolWindowManager.BarRemoved(ABar: TTyToolWindowBar);
+procedure TTyToolWindowManager.BarRemoved(ABar: TTyCustomToolWindowBar);
 begin
   PurgeQueue(ABar);
   if not (csDestroying in ABar.ComponentState) then BarHideDropPreview(ABar);
 end;
 
-function TTyToolWindowManager.QueueWindowIndex(AWindow: TTyToolWindow; AIndex: Integer): Boolean;
+function TTyToolWindowManager.QueueWindowIndex(AWindow: TTyCustomToolWindow; AIndex: Integer): Boolean;
 begin
   Result := HasQueued(AWindow);
   if Result then Enqueue(NewQueued(twqIndex, AWindow, nil, AIndex));
@@ -263,7 +263,7 @@ function TTyToolWindowManager.BuildWorld(out ABars: TTyToolLayoutBars;
   out AWindows: TTyToolLayoutWindows): TTyToolLayoutWorld;
 var
   i, k: Integer;
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
   side: TTyToolLayoutSide;
 begin
   Result := Default(TTyToolLayoutWorld);
@@ -440,7 +440,7 @@ begin
   Result := False;
 end;
 
-procedure TTyToolWindowManager.NoteLayoutChanging(ABar: TTyToolWindowBar);
+procedure TTyToolWindowManager.NoteLayoutChanging(ABar: TTyCustomToolWindowBar);
 var
   form: TCustomForm;
 begin
@@ -464,7 +464,7 @@ var
   kind: TTyToolLayoutPending;
   text: string;
   doc: TTyToolLayoutDoc;
-  bars: array of TTyToolWindowBar;
+  bars: array of TTyCustomToolWindowBar;
   i: Integer;
 begin
   if AnyParticipantLoading or ([csDesigning, csDestroying] * ComponentState <> []) then Exit;
@@ -526,7 +526,7 @@ var
   plan: TTyToolLayoutPlan;
   side: TTyToolLayoutSide;
   k: Integer;
-  w: TTyToolWindow;
+  w: TTyCustomToolWindow;
 begin
   if not LayoutCallAllowed then Exit;
   if AItem.IsReset then text := FDefaultText else text := AItem.Text;
@@ -558,11 +558,11 @@ var
   bars: TTyToolLayoutBars;
   wins: TTyToolLayoutWindows;
   plan: TTyToolLayoutPlan;
-  touched: array of TTyToolWindowBar;
+  touched: array of TTyCustomToolWindowBar;
   form: TCustomForm;
   focus: TWinControl;
-  focusWin, w, target: TTyToolWindow;
-  b: TTyToolWindowBar;
+  focusWin, w, target: TTyCustomToolWindow;
+  b: TTyCustomToolWindowBar;
   side: TTyToolLayoutSide;
   i, k, entered: Integer;
 begin
@@ -742,7 +742,7 @@ begin
   begin
     c := AParent.Controls[i];
     if not (c is TWinControl) then Continue;
-    if c is TTyToolWindowBar then
+    if c is TTyCustomToolWindowBar then
     begin
       if VisibleInForm(c) then
       begin
@@ -756,7 +756,7 @@ begin
 end;
 
 { 一条栏的探测矩形(屏幕坐标)。IsSource / Allowed 由调用方填。 }
-function DropProbeOf(ABar: TTyToolWindowBar): TTyToolWindowDropProbe;
+function DropProbeOf(ABar: TTyCustomToolWindowBar): TTyToolWindowDropProbe;
 var
   L: TTyToolWindowBarLayout;
   o: TPoint;
@@ -786,14 +786,14 @@ begin
   Result.Count := ABar.WindowCount;
 end;
 
-function TTyToolWindowManager.DropTargetAt(ASource: TTyToolWindowBar; const AScreen: TPoint;
-  out ASlot: Integer): TTyToolWindowBar;
+function TTyToolWindowManager.DropTargetAt(ASource: TTyCustomToolWindowBar; const AScreen: TPoint;
+  out ASlot: Integer): TTyCustomToolWindowBar;
 var
   probes: TTyToolWindowDropProbes;
-  bars: array of TTyToolWindowBar;
+  bars: array of TTyCustomToolWindowBar;
   form: TCustomForm;
   hit: TControl;
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
   i, n: Integer;
 begin
   Result := nil;
@@ -841,10 +841,10 @@ begin
   if i >= 0 then Result := bars[i] else ASlot := -1;
 end;
 
-procedure TTyToolWindowManager.SyncDropPreviews(ASource: TTyToolWindowBar);
+procedure TTyToolWindowManager.SyncDropPreviews(ASource: TTyCustomToolWindowBar);
 var
   i: Integer;
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
   pv: TTyToolWindowDropPreview;
 begin
   for i := 0 to High(FBars) do
@@ -862,7 +862,7 @@ begin
   end;
 end;
 
-function TTyToolWindowManager.IsCrossCandidate(ASource, ABar: TTyToolWindowBar): Boolean;
+function TTyToolWindowManager.IsCrossCandidate(ASource, ABar: TTyCustomToolWindowBar): Boolean;
 begin
   { 禁用的侧栏不是放置目标:MoveWindow 这个 API 照常可用,只是拖放不往用户看着是灰的栏里放
     (spec §9.4 候选栏要 IsVisible;禁用同理)。「可用」「同一个窗体」两条 CanMoveWindow 的结构
@@ -873,10 +873,10 @@ begin
     and (GetParentForm(ABar) = GetParentForm(ASource));
 end;
 
-procedure TTyToolWindowManager.DragSourceChanged(ASource: TTyToolWindowBar);
+procedure TTyToolWindowManager.DragSourceChanged(ASource: TTyCustomToolWindowBar);
 var
   i: Integer;
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
   show: Boolean;
 begin
   inherited DragSourceChanged(ASource);
@@ -894,10 +894,10 @@ end;
 
 { --- MoveWindow 与队列(spec §9.9) --- }
 
-function TTyToolWindowManager.MoveWindow(AWindow: TTyToolWindow; ATargetBar: TTyToolWindowBar;
+function TTyToolWindowManager.MoveWindow(AWindow: TTyCustomToolWindow; ATargetBar: TTyCustomToolWindowBar;
   AIndex: Integer): Boolean;
 var
-  src: TTyToolWindowBar;
+  src: TTyCustomToolWindowBar;
 begin
   Result := False;
   { 从本 manager 的事件处理里重入(spec §9.9);布局应用的批次里(某一页的 OnShow / OnHide)也一样:
@@ -919,10 +919,10 @@ begin
   Result := ExecuteMove(AWindow, ATargetBar, AIndex, True);
 end;
 
-function TTyToolWindowManager.ExecuteMove(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar;
+function TTyToolWindowManager.ExecuteMove(AWindow: TTyCustomToolWindow; ATarget: TTyCustomToolWindowBar;
   AIndex: Integer; AMayQueue: Boolean): Boolean;
 var
-  src: TTyToolWindowBar;
+  src: TTyCustomToolWindowBar;
   life: TTyToolWindowLife;
 begin
   src := AWindow.Bar;
@@ -959,7 +959,7 @@ begin
   Result := FRunQueueEntries;
 end;
 
-function TTyToolWindowManager.MustQueue(AWindow: TTyToolWindow): Boolean;
+function TTyToolWindowManager.MustQueue(AWindow: TTyCustomToolWindow): Boolean;
 var
   form: TCustomForm;
 begin
@@ -985,7 +985,7 @@ begin
   PostQueue;
 end;
 
-function TTyToolWindowManager.HasQueued(AWindow: TTyToolWindow): Boolean;
+function TTyToolWindowManager.HasQueued(AWindow: TTyCustomToolWindow): Boolean;
 var
   i: Integer;
 begin
@@ -1029,7 +1029,7 @@ const
   Busy = [csLoading, csDestroying];
 var
   it: TTyToolWindowQueued;
-  src: TTyToolWindowBar;
+  src: TTyCustomToolWindowBar;
   i: Integer;
   life: TTyToolWindowLife;
 begin

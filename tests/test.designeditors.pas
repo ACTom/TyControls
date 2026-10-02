@@ -483,7 +483,7 @@ initialization
     TTyShellComboBox, TTyShellListView, TTyShellTreeView,
     { 4.0: property editors registered on the custom classes, LCL style. }
     TTyCustomFilterComboBox, TTyCustomShellComboBox, TTyCustomShellListView,
-    TTyCustomShellTreeView,
+    TTyCustomShellTreeView, TTyCustomRibbonPage, TTyCustomCharImage,
     { A collection ITEM, not a component — the image-payload editor is registered on
       TTyImageItem so it applies inside the stock collection editor for
       TTyImageCollection.Images. GetClass needs it registered to resolve the name. }

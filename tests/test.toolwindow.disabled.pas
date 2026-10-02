@@ -495,7 +495,7 @@ end;
 procedure TTyToolWindowDisabledTests.TestTheYieldedPageKeepsNoHeaderRowAndTheBodyStays;
 var
   w: TProbeWindow;
-  act: TTyToolWindowActions;
+  act: TTyCustomToolWindowActions;
   body, a, x: TRect;
 begin
   NewYieldingBar;

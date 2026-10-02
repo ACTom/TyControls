@@ -87,9 +87,9 @@ uses tyControls.ToolBar, tyControls.Button;
 
 | 成员 | 类型 | 说明 |
 |------|------|------|
-| `ButtonCount` | `Integer`（只读） | 工具条的 **`TTyToolButton` 子控件**个数 |
-| `Buttons[Index]` | `TTyToolButton`（只读） | 按子控件顺序的第 `Index` 个工具按钮；越界返回 `nil`（不抛异常） |
-| `IndexOfButton(B)` | `Integer` | `B` 在 `Buttons[]` 里的下标，不是本工具条的返回 `-1` |
+| `ButtonCount` | `Integer`（只读） | 工具条的**工具按钮子控件**（`TTyCustomToolButton` 的后代：`TTyToolButton`，或第三方从 `TTyCustomToolButton` 派生的按钮）个数 |
+| `Buttons[Index]` | `TTyCustomToolButton`（只读） | 按子控件顺序的第 `Index` 个工具按钮，原样交出（第三方的按钮不会被说成 `TTyToolButton`）；越界返回 `nil`（不抛异常）。4.0 起类型是 `TTyCustomToolButton`；确知是库里的按钮、又要用 `TTyToolButton` 才有的东西时 `as TTyToolButton` |
+| `IndexOfButton(B: TTyCustomToolButton)` | `Integer` | `B` 在 `Buttons[]` 里的下标，不是本工具条的返回 `-1` |
 
 > **只装 `TTyToolButton`，别的都不算。** 这与 LCL 一致：`TToolBar.FButtons` 里只有 `TToolButton`。
 > 于是夹在两个单选按钮之间的普通 `TTyButton`、编辑框或 `TTyToolSeparator` **不会把它们的单选组切断**
@@ -223,7 +223,7 @@ TTyToolButtonStyle = (tbsButton, tbsCheck, tbsDropDown, tbsSeparator, tbsDivider
 | 成员 | 说明 |
 |------|------|
 | `Index` | 本按钮在宿主工具条 `Buttons[]` 里的下标；不在工具条上时 `-1`（LCL 同名同义） |
-| `ToolBar` | 宿主工具条，或 `nil` |
+| `ToolBar` | 宿主工具条（`TTyCustomToolBar`：`TTyToolBar`、`TTyToolBarEx` 或第三方工具条），或 `nil` |
 | `PointInArrow(X, Y)` | LCL 同名同签名：`(X, Y)` 是否落在箭头区内——**只有** `tbsDropDown` 有箭头区 |
 | `ArrowClick` | 触发 `OnArrowClick`（`virtual`，与 LCL 同） |
 | `CheckMenuDropdown` | 有菜单就弹；返回值 = "**会不会**弹"，所以无窗口的调用方（测试）也能拿到这个决定。**差异**：LCL 还要求 `DropdownMenu.AutoPopup`、并接受用 `MenuItem` 代替；本库不看 `AutoPopup`（另外两个下拉按钮也不看），于是全库一条规则——"挂了菜单就会弹"。 |
@@ -322,7 +322,7 @@ function TyToolWrapToBreakBefore(const AWrapAfter: array of Boolean): TBooleanDy
 ### 4.1 `OnPaintButton`——逐按钮自绘（LCL 同名同义）
 
 ```pascal
-TTyToolBarOnPaintButton = procedure(Sender: TTyToolButton; AState: Integer) of object;
+TTyToolBarOnPaintButton = procedure(Sender: TTyCustomToolButton; AState: Integer) of object;
 property OnPaintButton: TTyToolBarOnPaintButton;
 ```
 
@@ -559,7 +559,7 @@ B.Wrap := True;                        // 这一行到此为止，后面的工�
 - **Wrapable 自动增高：** 当 `Align in [alTop, alBottom]` 且 `Wrapable=True` 时，一行放不下的工具项换行，工具条高度按 `padY*2 + rows*ButtonHeight + (rows-1)*ButtonSpacing` 自动调整（`padY` = 主题令牌 `--toolbar-pad-y`，缺省 4；**不再是 `Indent`**，横向留白不该参与高度）——不要在代码里硬设一个与之冲突的 `Height`。
 - **重入守卫：** `AlignControls` 末尾对 `Height` 的赋值会再次触发 `AlignControls`，`FInLayout` 守卫防止无限递归。
 - **强制断行已经接线了：** `TyToolbarLayout` 的 `ABreakBefore`（见 [第 5.1 节](#51-排布函数-tytoolbarlayout)）由 `TTyToolButton.Wrap` 填入——`AlignControls` 把每个**可见**工具项的 `Wrap` 收成一个后置数组，再过一遍 `TyToolWrapToBreakBefore` 换成前置标志。没有任何工具项设 `Wrap` 时结果是全 `False`，排布函数读它与从前的无断行重载**逐像素相同**，所以既有工具条一个像素都不会动。两处与 LCL 的差异见 [第 3.2.4 节](#324-wrap两处与-lcl-的差异)。
-- **工具项不必是 `TTyToolButton`：** 工具条照旧排布任何可见子控件（`TTyButton`、`TTyToolSeparator`、编辑框、下拉框……）。只是 `Wrap` / `Grouped` / `Index` / `ImageIndex` / 六种 `Style` 这些**工具条语义**只有 `TTyToolButton` 才有，别的子控件在这些规则里读作"没有标志"——条上的 `ButtonWidth` 下限、`DropDownWidth`、`List` 同理，只够得着 `TTyToolButton`。`Buttons[]` 里也只有 `TTyToolButton`。
+- **工具项不必是 `TTyToolButton`：** 工具条照旧排布任何可见子控件（`TTyButton`、`TTyToolSeparator`、编辑框、下拉框……）。只是 `Wrap` / `Grouped` / `Index` / `ImageIndex` / 六种 `Style` 这些**工具条语义**只有 `TTyToolButton` 才有，别的子控件在这些规则里读作"没有标志"——条上的 `ButtonWidth` 下限、`DropDownWidth`、`List` 同理，只够得着工具按钮（`TTyCustomToolButton` 的后代）。`Buttons[]` 里也只有工具按钮。
 - **`ButtonWidth` 是可逆的下限：** 调低（或清成 0）会还原各按钮自己的设计宽度——工具条记着它借出的宽度，不会把 `.lfm` 值棘轮掉。但**内容下限仍在**：按钮自己的 `Constraints.MinWidth`（标题 + 内边距 + 箭头区）比 `ButtonWidth` 大时按内容算，这与 LCL"取 preferred 与 ButtonWidth 的较大者"一致。
 - **`OnPaintButton` 是整体替换：** 挂上即接管每个工具按钮的全部绘制（含分隔占位），清掉即恢复主题默认。要"在主题绘制**之上**补一笔"用继承来的 `OnPaint`（[../events.md](../events.md)），不要用它。
 - **占位样式不吃 `Flat` 的 ghost：** `Flat = True` 时工具条会把空 `StyleClass` 的子 `TTyButton` 设成 `'ghost'`，但 `Style` 为 `tbsSeparator` / `tbsDivider` 的工具按钮**被跳过**——它解析的是 `TyToolSeparator` 键，套上按钮族的变体等于向主题要一条 `TyToolSeparator.ghost`（没有哪套皮肤定义过），还会在宿主从没设过样式的控件上留下一个 `StyleClass`。

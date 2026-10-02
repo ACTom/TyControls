@@ -33,7 +33,7 @@ const
 type
   TTyBackstageSelectEvent = procedure(Sender: TObject; AIndex: Integer) of object;
 
-  TTyRibbonBackstage = class(TTyCustomControl)
+  TTyCustomRibbonBackstage = class(TTyCustomControl)
   private
     FCommands: TStrings;
     FCommandGlyphs: TStrings;
@@ -49,6 +49,10 @@ type
                                         the theme's --backstage-sidebar-width token (density-aware) }
     FOnCommandSelect: TTyBackstageSelectEvent;
     FOnClose: TNotifyEvent;
+    { An ItemIndex read from a form before the commands it points into (a descendant that
+      publishes ItemIndex first): kept here and applied in Loaded. }
+    FPendingItemIndex: Integer;
+    FHasPendingIndex: Boolean;
     procedure SetCommands(AValue: TStrings);
     procedure SetCommandGlyphs(AValue: TStrings);
     procedure SetBottomCommands(AValue: TStrings);
@@ -77,6 +81,7 @@ type
     procedure MouseLeave; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    procedure Loaded; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -88,19 +93,53 @@ type
       app can place its own content control for the selected command (a recent-files list,
       document info, …). Anchor it [akLeft,akTop,akRight,akBottom] so it tracks resizes. }
     function ContentRect: TRect;
+    { The constructor turns this on (the sidebar walks with the arrow keys); declaring the
+      default to match is what lets a host turn it OFF in the .lfm — against the inherited
+      `default False` that value is dropped as "already the default". }
+    property TabStop default True;
+    property Commands: TStrings read FCommands write SetCommands;
+    { Optional per-command glyph names, rendered from IconFont at the left of each row.
+
+      Two spellings, and the first is the one to use:
+        Open=folder-open     paired to the COMMAND TEXT -- survives reordering Commands
+        folder-open          matched by POSITION -- the original behaviour, kept working
+      Purely positional matching means inserting one command silently shifts every icon below
+      it onto the wrong row, which is why the paired form exists. An empty or missing entry is
+      no icon. }
+    property CommandGlyphs: TStrings read FCommandGlyphs write SetCommandGlyphs;
+    { A second command block PINNED to the BOTTOM of the sidebar (e.g. About / Options / Exit —
+      fully caller-defined, not hardcoded). A thin separator is drawn above it. Their unified
+      selection indices continue after the top Commands (Commands.Count + bottom index). A
+      command whose text is '-' renders as a non-selectable separator line. }
+    property BottomCommands: TStrings read FBottomCommands write SetBottomCommands;
+    property BottomCommandGlyphs: TStrings read FBottomCommandGlyphs write SetBottomCommandGlyphs;
+    { Icon-font source for the CommandGlyphs (font glyphs; Windows-only fonts like MDL2). }
+    property IconFont: TTyIconFont read FIconFont write SetIconFont;
+    { Cross-platform IMAGE source for the CommandGlyphs (BGRA icons). When set it WINS over
+      IconFont — the named icon is drawn tinted to the row text color, identically on every OS. }
+    property Images: TTyImageCollection read FImages write SetImages;
+    property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
+    { Auto-selected on ShowOver (Office selects Info by default so the right side isn't
+      blank). -1 = no default. Point it at a CONTENT command, not an action one. }
+    property DefaultItemIndex: Integer read FDefaultItemIndex write FDefaultItemIndex default -1;
+    { Sidebar width in logical px. Left unset it follows the theme's --backstage-sidebar-width
+      token (density-aware); set it explicitly and that value wins and is streamed (stored
+      FSidebarWidthExplicit). }
+    property SidebarWidth: Integer read GetSidebarWidth write SetSidebarWidth stored FSidebarWidthExplicit;
+    property OnCommandSelect: TTyBackstageSelectEvent read FOnCommandSelect write FOnCommandSelect;
+    property OnClose: TNotifyEvent read FOnClose write FOnClose;
+  end;
+
+  { TTyRibbonBackstage publishes TTyCustomRibbonBackstage's properties; everything lives in TTyCustomRibbonBackstage. }
+  TTyRibbonBackstage = class(TTyCustomRibbonBackstage)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
     property Font;
     property ShowHint;
     property TabOrder;
-    { The constructor turns this on (the sidebar walks with the arrow keys); declaring the
-      default to match is what lets a host turn it OFF in the .lfm — against the inherited
-      `default False` that value is dropped as "already the default". }
-    property TabStop default True;
+    property TabStop;
     property OnClick;
     property OnDblClick;
     property OnMouseDown;
@@ -144,37 +183,17 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Commands: TStrings read FCommands write SetCommands;
-    { Optional per-command glyph names, rendered from IconFont at the left of each row.
-
-      Two spellings, and the first is the one to use:
-        Open=folder-open     paired to the COMMAND TEXT -- survives reordering Commands
-        folder-open          matched by POSITION -- the original behaviour, kept working
-      Purely positional matching means inserting one command silently shifts every icon below
-      it onto the wrong row, which is why the paired form exists. An empty or missing entry is
-      no icon. }
-    property CommandGlyphs: TStrings read FCommandGlyphs write SetCommandGlyphs;
-    { A second command block PINNED to the BOTTOM of the sidebar (e.g. About / Options / Exit —
-      fully caller-defined, not hardcoded). A thin separator is drawn above it. Their unified
-      selection indices continue after the top Commands (Commands.Count + bottom index). A
-      command whose text is '-' renders as a non-selectable separator line. }
-    property BottomCommands: TStrings read FBottomCommands write SetBottomCommands;
-    property BottomCommandGlyphs: TStrings read FBottomCommandGlyphs write SetBottomCommandGlyphs;
-    { Icon-font source for the CommandGlyphs (font glyphs; Windows-only fonts like MDL2). }
-    property IconFont: TTyIconFont read FIconFont write SetIconFont;
-    { Cross-platform IMAGE source for the CommandGlyphs (BGRA icons). When set it WINS over
-      IconFont — the named icon is drawn tinted to the row text color, identically on every OS. }
-    property Images: TTyImageCollection read FImages write SetImages;
-    property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
-    { Auto-selected on ShowOver (Office selects Info by default so the right side isn't
-      blank). -1 = no default. Point it at a CONTENT command, not an action one. }
-    property DefaultItemIndex: Integer read FDefaultItemIndex write FDefaultItemIndex default -1;
-    { Sidebar width in logical px. Left unset it follows the theme's --backstage-sidebar-width
-      token (density-aware); set it explicitly and that value wins and is streamed (stored
-      FSidebarWidthExplicit). }
-    property SidebarWidth: Integer read GetSidebarWidth write SetSidebarWidth stored FSidebarWidthExplicit;
-    property OnCommandSelect: TTyBackstageSelectEvent read FOnCommandSelect write FOnCommandSelect;
-    property OnClose: TNotifyEvent read FOnClose write FOnClose;
+    property Commands;
+    property CommandGlyphs;
+    property BottomCommands;
+    property BottomCommandGlyphs;
+    property IconFont;
+    property Images;
+    property ItemIndex;
+    property DefaultItemIndex;
+    property SidebarWidth;
+    property OnCommandSelect;
+    property OnClose;
     property Align;
     property Anchors;
   end;
@@ -245,9 +264,9 @@ begin
 end;
 
 // ---------------------------------------------------------------------------
-// TTyRibbonBackstage
+// TTyCustomRibbonBackstage
 // ---------------------------------------------------------------------------
-constructor TTyRibbonBackstage.Create(AOwner: TComponent);
+constructor TTyCustomRibbonBackstage.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   ControlStyle := ControlStyle + [csNoDesignVisible, csAcceptsControls];
@@ -266,7 +285,7 @@ begin
   Visible := False;
 end;
 
-destructor TTyRibbonBackstage.Destroy;
+destructor TTyCustomRibbonBackstage.Destroy;
 begin
   FCommands.Free;
   FCommandGlyphs.Free;
@@ -275,12 +294,12 @@ begin
   inherited Destroy;
 end;
 
-function TTyRibbonBackstage.TotalCount: Integer;
+function TTyCustomRibbonBackstage.TotalCount: Integer;
 begin
   Result := FCommands.Count + FBottomCommands.Count;
 end;
 
-function TTyRibbonBackstage.EntryCaption(AIdx: Integer): string;
+function TTyCustomRibbonBackstage.EntryCaption(AIdx: Integer): string;
 begin
   if (AIdx >= 0) and (AIdx < FCommands.Count) then
     Result := FCommands[AIdx]
@@ -290,7 +309,7 @@ begin
     Result := '';
 end;
 
-function TTyRibbonBackstage.EntryGlyph(AIdx: Integer): string;
+function TTyCustomRibbonBackstage.EntryGlyph(AIdx: Integer): string;
 
   { BY NAME first, BY POSITION second.
 
@@ -331,23 +350,23 @@ begin
     Result := GlyphFor(FBottomCommandGlyphs, AIdx - FCommands.Count, EntryCaption(AIdx));
 end;
 
-function TTyRibbonBackstage.EntryIsSeparator(AIdx: Integer): Boolean;
+function TTyCustomRibbonBackstage.EntryIsSeparator(AIdx: Integer): Boolean;
 begin
   Result := EntryCaption(AIdx) = TyBackstageSeparator;
 end;
 
-procedure TTyRibbonBackstage.SetBottomCommands(AValue: TStrings);
+procedure TTyCustomRibbonBackstage.SetBottomCommands(AValue: TStrings);
 begin
   if AValue = nil then FBottomCommands.Clear else FBottomCommands.Assign(AValue);
 end;
 
-procedure TTyRibbonBackstage.SetBottomCommandGlyphs(AValue: TStrings);
+procedure TTyCustomRibbonBackstage.SetBottomCommandGlyphs(AValue: TStrings);
 begin
   if AValue = nil then FBottomCommandGlyphs.Clear else FBottomCommandGlyphs.Assign(AValue);
   Invalidate;
 end;
 
-function TTyRibbonBackstage.ContentRect: TRect;
+function TTyCustomRibbonBackstage.ContentRect: TRect;
 var
   sbW: Integer;
 begin
@@ -355,13 +374,13 @@ begin
   Result := Rect(sbW, 0, ClientWidth, ClientHeight);
 end;
 
-procedure TTyRibbonBackstage.SetCommandGlyphs(AValue: TStrings);
+procedure TTyCustomRibbonBackstage.SetCommandGlyphs(AValue: TStrings);
 begin
   if AValue = nil then FCommandGlyphs.Clear else FCommandGlyphs.Assign(AValue);
   Invalidate;
 end;
 
-procedure TTyRibbonBackstage.SetIconFont(AValue: TTyIconFont);
+procedure TTyCustomRibbonBackstage.SetIconFont(AValue: TTyIconFont);
 begin
   if FIconFont = AValue then Exit;
   if FIconFont <> nil then FIconFont.RemoveFreeNotification(Self);
@@ -370,7 +389,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyRibbonBackstage.SetImages(AValue: TTyImageCollection);
+procedure TTyCustomRibbonBackstage.SetImages(AValue: TTyImageCollection);
 begin
   if FImages = AValue then Exit;
   if FImages <> nil then FImages.RemoveFreeNotification(Self);
@@ -379,7 +398,22 @@ begin
   Invalidate;
 end;
 
-procedure TTyRibbonBackstage.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomRibbonBackstage.Loaded;
+begin
+  inherited Loaded;
+  { Reading a form is not a selection: the parked index lands without OnCommandSelect. }
+  if FHasPendingIndex then
+  begin
+    FHasPendingIndex := False;
+    if (FPendingItemIndex >= 0) and (FPendingItemIndex < TotalCount) then
+    begin
+      FItemIndex := FPendingItemIndex;
+      Invalidate;
+    end;
+  end;
+end;
+
+procedure TTyCustomRibbonBackstage.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FIconFont) then
@@ -388,7 +422,7 @@ begin
     FImages := nil;
 end;
 
-function TTyRibbonBackstage.GetStyleTypeKey: string;
+function TTyCustomRibbonBackstage.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyRibbon': a full-window overlay with an accent sidebar and command rows is not the ribbon strip.
     Added to 'TyRibbon's rule block as an extra selector, so every resolved value is
@@ -396,20 +430,30 @@ begin
   Result := 'TyRibbonBackstage';
 end;
 
-procedure TTyRibbonBackstage.SetCommands(AValue: TStrings);
+procedure TTyCustomRibbonBackstage.SetCommands(AValue: TStrings);
 begin
   if AValue = nil then FCommands.Clear else FCommands.Assign(AValue);
 end;
 
-procedure TTyRibbonBackstage.CommandsChanged(Sender: TObject);
+procedure TTyCustomRibbonBackstage.CommandsChanged(Sender: TObject);
 begin
   if FItemIndex >= TotalCount then FItemIndex := -1;
   if FHoverIndex >= TotalCount then FHoverIndex := TyBackstageNoRow;
   Invalidate;
 end;
 
-procedure TTyRibbonBackstage.SetItemIndex(AValue: Integer);
+procedure TTyCustomRibbonBackstage.SetItemIndex(AValue: Integer);
 begin
+  { Read from a form ahead of the commands it indexes (the library's own class publishes
+    Commands first; a descendant may not): the clamp below would cut it to -1. Keep it for
+    Loaded. Only when it cannot land now -- an index that already fits takes the 3.0 path. }
+  if (csLoading in ComponentState) and (AValue >= TotalCount) then
+  begin
+    FPendingItemIndex := AValue;
+    FHasPendingIndex := True;
+    Exit;
+  end;
+  FHasPendingIndex := False;
   if AValue < -1 then AValue := -1;
   if AValue >= TotalCount then AValue := TotalCount - 1;
   if FItemIndex = AValue then Exit;
@@ -418,7 +462,7 @@ begin
   if Assigned(FOnCommandSelect) then FOnCommandSelect(Self, FItemIndex);
 end;
 
-function TTyRibbonBackstage.GetSidebarWidth: Integer;
+function TTyCustomRibbonBackstage.GetSidebarWidth: Integer;
 begin
   if FSidebarWidthExplicit then
     Result := FSidebarWidth
@@ -426,7 +470,7 @@ begin
     Result := ActiveController.Metric('--backstage-sidebar-width', TyBackstageSidebarW);
 end;
 
-procedure TTyRibbonBackstage.SetSidebarWidth(AValue: Integer);
+procedure TTyCustomRibbonBackstage.SetSidebarWidth(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
   FSidebarWidthExplicit := True;   { even if the value equals the fallback, the host meant to pin it }
@@ -435,7 +479,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyRibbonBackstage.ShowOver(AHost: TWinControl; ATopPx: Integer);
+procedure TTyCustomRibbonBackstage.ShowOver(AHost: TWinControl; ATopPx: Integer);
 begin
   if AHost = nil then Exit;
   Parent := AHost;
@@ -455,14 +499,14 @@ begin
   end;
 end;
 
-procedure TTyRibbonBackstage.Close;
+procedure TTyCustomRibbonBackstage.Close;
 begin
   if not Visible then Exit;
   Visible := False;
   if Assigned(FOnClose) then FOnClose(Self);
 end;
 
-procedure TTyRibbonBackstage.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomRibbonBackstage.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   ContentS, SideS, RowS: TTyStyleSet;
@@ -586,12 +630,12 @@ begin
   end;
 end;
 
-procedure TTyRibbonBackstage.Paint;
+procedure TTyCustomRibbonBackstage.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-procedure TTyRibbonBackstage.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomRibbonBackstage.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   sbW, backH, rowH, r: Integer;
 begin
@@ -608,7 +652,7 @@ begin
     ItemIndex := r;
 end;
 
-procedure TTyRibbonBackstage.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomRibbonBackstage.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   sbW, backH, rowH, r: Integer;
 begin
@@ -629,7 +673,7 @@ begin
   end;
 end;
 
-procedure TTyRibbonBackstage.MouseLeave;
+procedure TTyCustomRibbonBackstage.MouseLeave;
 begin
   inherited MouseLeave;
   if FHoverIndex <> TyBackstageNoRow then
@@ -639,7 +683,7 @@ begin
   end;
 end;
 
-procedure TTyRibbonBackstage.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomRibbonBackstage.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   inherited KeyDown(Key, Shift);
   if Key = VK_ESCAPE then

@@ -3,7 +3,7 @@
 
 { ---- 右键菜单 ----------------------------------------------------------------------- }
 
-procedure TTyTerminalView.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
+procedure TTyCustomTerminalView.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
 var
   keyboard: Boolean;
   cur: TRect;
@@ -55,7 +55,7 @@ begin
   Handled := True;
 end;
 
-procedure TTyTerminalView.UpdateContextMenu;
+procedure TTyCustomTerminalView.UpdateContextMenu;
 
   function Add(const ACaption: string; AOnClick: TNotifyEvent): TMenuItem;
   begin
@@ -86,7 +86,7 @@ begin
   FMenuClear.Enabled := True;
 end;
 
-procedure TTyTerminalView.ShowContextMenu(const AClientPos: TPoint);
+procedure TTyCustomTerminalView.ShowContextMenu(const AClientPos: TPoint);
 var
   p: TPoint;
 begin
@@ -97,28 +97,28 @@ begin
   FMenu.PopUp(p.X, p.Y);
 end;
 
-function TTyTerminalView.CurrentShiftState: TShiftState;
+function TTyCustomTerminalView.CurrentShiftState: TShiftState;
 begin
   Result := GetKeyShiftState;
 end;
 
-procedure TTyTerminalView.MenuCopyClick(Sender: TObject);
+procedure TTyCustomTerminalView.MenuCopyClick(Sender: TObject);
 begin
   CopyToClipboard;
 end;
 
-procedure TTyTerminalView.MenuPasteClick(Sender: TObject);
+procedure TTyCustomTerminalView.MenuPasteClick(Sender: TObject);
 begin
   PasteFromClipboard;
 end;
 
-procedure TTyTerminalView.MenuSelectAllClick(Sender: TObject);
+procedure TTyCustomTerminalView.MenuSelectAllClick(Sender: TObject);
 begin
   SelectAll;
   FinishSelection;
 end;
 
-procedure TTyTerminalView.MenuClearClick(Sender: TObject);
+procedure TTyCustomTerminalView.MenuClearClick(Sender: TObject);
 begin
   Clear;
 end;

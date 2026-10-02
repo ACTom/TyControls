@@ -269,7 +269,7 @@ end;
 procedure TTyToolWindowDesignTests.TestAnOrphansActionsSitBelowTheNote;
 var
   a, b: TProbeWindow;
-  act: TTyToolWindowActions;
+  act: TTyCustomToolWindowActions;
 begin
   NewDesignPair(a, b);
   act := a.EnsureActions;

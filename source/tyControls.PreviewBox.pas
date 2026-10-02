@@ -46,7 +46,7 @@ type
   { ===================================================================
     TTyPreviewBox -- the reusable preview container.
     =================================================================== }
-  TTyPreviewBox = class(TTyCustomControl)
+  TTyCustomPreviewBox = class(TTyCustomControl)
   private
     { Both children are owned by the box (freed with it) and Align=alClient; at most
       one is Visible at a time (LCL aligns only visible controls, so the visible one
@@ -87,9 +87,15 @@ type
       (AllowText) ShowTextFile else a placeholder; else a placeholder. A failed
       built-in load falls back to the placeholder, so every path ends visible. }
     procedure PreviewFile(const APath: string);
+    property AllowText: Boolean read FAllowText write FAllowText default True;
+    { Low-level owner-draw hook (same signature as TTyPaintPanel.OnPaintSurface).
+      Fires only in custom-paint mode (ShowCustom), with the content rect. }
+    property OnPaintPreview: TTyPaintSurfaceEvent read FOnPaintPreview write FOnPaintPreview;
+  end;
+
+  { TTyPreviewBox publishes TTyCustomPreviewBox's properties; everything lives in TTyCustomPreviewBox. }
+  TTyPreviewBox = class(TTyCustomPreviewBox)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
@@ -140,10 +146,8 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property AllowText: Boolean read FAllowText write FAllowText default True;
-    { Low-level owner-draw hook (same signature as TTyPaintPanel.OnPaintSurface).
-      Fires only in custom-paint mode (ShowCustom), with the content rect. }
-    property OnPaintPreview: TTyPaintSurfaceEvent read FOnPaintPreview write FOnPaintPreview;
+    property AllowText;
+    property OnPaintPreview;
     property Align;
     property Anchors;
   end;
@@ -201,7 +205,7 @@ end;
   TTyPreviewBox
   --------------------------------------------------------------------------- }
 
-constructor TTyPreviewBox.Create(AOwner: TComponent);
+constructor TTyCustomPreviewBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   SetBounds(0, 0, 220, 200);   { sensible default drop size }
@@ -232,7 +236,7 @@ begin
   FMemo.Visible := False;
 end;
 
-function TTyPreviewBox.GetStyleTypeKey: string;
+function TTyCustomPreviewBox.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyPanel': a preview well is a different role from a generic panel.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
@@ -240,21 +244,21 @@ begin
   Result := 'TyPreviewBox';
 end;
 
-procedure TTyPreviewBox.SetController(AValue: TTyStyleController);
+procedure TTyCustomPreviewBox.SetController(AValue: TTyStyleController);
 begin
   inherited SetController(AValue);
   if FImage <> nil then FImage.Controller := AValue;
   if FMemo <> nil then FMemo.Controller := AValue;
 end;
 
-procedure TTyPreviewBox.HideChildren;
+procedure TTyCustomPreviewBox.HideChildren;
 begin
   FImage.Visible := False;
   FMemo.Visible := False;
   FCustom := False;
 end;
 
-procedure TTyPreviewBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomPreviewBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -288,12 +292,12 @@ begin
   end;
 end;
 
-procedure TTyPreviewBox.Paint;
+procedure TTyCustomPreviewBox.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-function TTyPreviewBox.ShowImageFile(const APath: string): Boolean;
+function TTyCustomPreviewBox.ShowImageFile(const APath: string): Boolean;
 begin
   Result := False;
   if not FileExistsUTF8(APath) then Exit;
@@ -311,7 +315,7 @@ begin
   Result := True;
 end;
 
-function TTyPreviewBox.ShowTextFile(const APath: string): Boolean;
+function TTyCustomPreviewBox.ShowTextFile(const APath: string): Boolean;
 var
   s: string;
 begin
@@ -326,7 +330,7 @@ begin
   Result := True;
 end;
 
-procedure TTyPreviewBox.ShowImage(ABitmap: TBGRABitmap);
+procedure TTyCustomPreviewBox.ShowImage(ABitmap: TBGRABitmap);
 var
   tmp: TBitmap;
 begin
@@ -349,7 +353,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyPreviewBox.ShowText(const AText: string);
+procedure TTyCustomPreviewBox.ShowText(const AText: string);
 begin
   HideChildren;
   FMessage := '';
@@ -362,14 +366,14 @@ begin
   Invalidate;
 end;
 
-procedure TTyPreviewBox.ShowMessage(const AMsg: string);
+procedure TTyCustomPreviewBox.ShowMessage(const AMsg: string);
 begin
   HideChildren;
   FMessage := AMsg;
   Invalidate;
 end;
 
-procedure TTyPreviewBox.ShowCustom;
+procedure TTyCustomPreviewBox.ShowCustom;
 begin
   FImage.Visible := False;
   FMemo.Visible := False;
@@ -378,7 +382,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyPreviewBox.Clear;
+procedure TTyCustomPreviewBox.Clear;
 begin
   HideChildren;
   FMessage := '';
@@ -387,7 +391,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyPreviewBox.PreviewFile(const APath: string);
+procedure TTyCustomPreviewBox.PreviewFile(const APath: string);
 begin
   case TyPreviewClassify(APath) of
     pkImage:

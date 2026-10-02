@@ -471,7 +471,7 @@ end;
 procedure TTyToolWindowFocusTests.TestAThemeChangeMovesTheBottomActions;
 var
   first, w: TProbeWindow;
-  act: TTyToolWindowActions;
+  act: TTyCustomToolWindowActions;
   btn: TTyButton;
 
   function Geom: TTyToolWindowHeaderGeom;

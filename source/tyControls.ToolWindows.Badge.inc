@@ -5,30 +5,30 @@
 
 { --- TTyToolWindow:角标 --------------------------------------------------------- }
 
-procedure TTyToolWindow.SetShowBadge(AValue: Boolean);
+procedure TTyCustomToolWindow.SetShowBadge(AValue: Boolean);
 begin
   if FShowBadge = AValue then Exit;
   FShowBadge := AValue;
   BadgeChanged;
 end;
 
-procedure TTyToolWindow.SetBadgeValue(AValue: Integer);
+procedure TTyCustomToolWindow.SetBadgeValue(AValue: Integer);
 begin
   if FBadgeValue = AValue then Exit;
   FBadgeValue := AValue;
   BadgeChanged;
 end;
 
-procedure TTyToolWindow.SetBadgeDot(AValue: Boolean);
+procedure TTyCustomToolWindow.SetBadgeDot(AValue: Boolean);
 begin
   if FBadgeDot = AValue then Exit;
   FBadgeDot := AValue;
   BadgeChanged;
 end;
 
-procedure TTyToolWindow.BadgeChanged;
+procedure TTyCustomToolWindow.BadgeChanged;
 var
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
 begin
   b := Bar;
   if (b = nil) or (csDestroying in b.ComponentState) then Exit;
@@ -43,12 +43,12 @@ begin
     b.Invalidate;
 end;
 
-procedure TTyToolWindow.InvalidateBadge;
+procedure TTyCustomToolWindow.InvalidateBadge;
 begin
   BadgeChanged;
 end;
 
-function TTyToolWindow.BadgeDisplay(out AText: string; out ADot: Boolean): Boolean;
+function TTyCustomToolWindow.BadgeDisplay(out AText: string; out ADot: Boolean): Boolean;
 var
   vis: Boolean;
 begin
@@ -70,7 +70,7 @@ end;
 
 { --- TTyToolWindowBar:量 / 画角标 ------------------------------------------------ }
 
-function TTyToolWindowBar.BadgeSizeAt(AWindow: TTyToolWindow; APPI: Integer;
+function TTyCustomToolWindowBar.BadgeSizeAt(AWindow: TTyCustomToolWindow; APPI: Integer;
   out AText: string; out ADot: Boolean): TSize;
 var
   S: TTyStyleSet;
@@ -99,7 +99,7 @@ begin
     MulDiv(S.Padding.Top, APPI, 96), minPx, False, dotPx);
 end;
 
-procedure TTyToolWindowBar.DrawBadgeIn(APainter: TTyPainter; const ABox: TRect;
+procedure TTyCustomToolWindowBar.DrawBadgeIn(APainter: TTyPainter; const ABox: TRect;
   const AText: string; ADot: Boolean);
 var
   S: TTyStyleSet;

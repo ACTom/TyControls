@@ -20,6 +20,7 @@ type
     DIRECTLY visible — not merely reachable through this unit's own `uses`. Re-exporting it here means
     a form unit only needs `tyControls.Form` (which every TTyForm descendant already uses); it never
     has to add `tyControls.FormSurface` by hand (the IDE's field-sync does not add units). }
+  TTyCustomFormSurface = tyControls.FormSurface.TTyCustomFormSurface;
   TTyFormSurface = tyControls.FormSurface.TTyFormSurface;
 
   TTyBorderHit = (bhNone, bhLeft, bhTop, bhRight, bhBottom,
@@ -79,7 +80,7 @@ type
       tcaNone     — do nothing. }
   TTyCaptionAction = (tcaMaximize, tcaRollUp, tcaNone);
 
-  TTyTitleBar = class(TTyCustomControl, ITyTitleBarTag)
+  TTyCustomTitleBar = class(TTyCustomControl, ITyTitleBarTag)
   private
     FCaption: TCaption;
     FMinButton: TTyCaptionButton;
@@ -174,9 +175,25 @@ type
     { The horizontal span the caption may use: the bar minus the caption-button inset, minus
       whatever the host's own child controls occupy. }
     procedure CaptionSpan(AWidth: Integer; out ALeft, ARight: Integer);
+    property Caption: TCaption read FCaption write SetCaption;
+    { Left (default) or centered title text. Centered lays out within the content
+      zone (left pad .. start of the caption buttons), so it never overlaps them. }
+    property TitleAlignment: TAlignment read FTitleAlignment write SetTitleAlignment default taLeftJustify;
+    property ButtonWidth: Integer read FButtonWidth write SetButtonWidth;
+    { Per-button switches. On a STANDALONE bar they are the whole story. Associated with a
+      TTyForm, the form additionally decides which buttons the WINDOW offers (BorderIcons +
+      Resizable, see OfferedButtons) and a button shows only when both agree: a designer-set
+      ShowMaximize=False hides the button on a maximizable window, while BorderIcons without
+      biMaximize hides it whatever the switch says. The switch keeps the user's value either
+      way, so the Object Inspector and the .lfm round-trip it. }
+    property ShowMinimize: Boolean read GetShowMinimize write SetShowMinimize default True;
+    property ShowMaximize: Boolean read GetShowMaximize write SetShowMaximize default True;
+    property ShowClose: Boolean read GetShowClose write SetShowClose default True;
+  end;
+
+  { TTyTitleBar publishes TTyCustomTitleBar's properties; everything lives in TTyCustomTitleBar. }
+  TTyTitleBar = class(TTyCustomTitleBar)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
@@ -227,22 +244,14 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Caption: TCaption read FCaption write SetCaption;
-    { Left (default) or centered title text. Centered lays out within the content
-      zone (left pad .. start of the caption buttons), so it never overlaps them. }
-    property TitleAlignment: TAlignment read FTitleAlignment write SetTitleAlignment default taLeftJustify;
+    property Caption;
+    property TitleAlignment;
     property Align;
     property Anchors;
-    property ButtonWidth: Integer read FButtonWidth write SetButtonWidth;
-    { Per-button switches. On a STANDALONE bar they are the whole story. Associated with a
-      TTyForm, the form additionally decides which buttons the WINDOW offers (BorderIcons +
-      Resizable, see OfferedButtons) and a button shows only when both agree: a designer-set
-      ShowMaximize=False hides the button on a maximizable window, while BorderIcons without
-      biMaximize hides it whatever the switch says. The switch keeps the user's value either
-      way, so the Object Inspector and the .lfm round-trip it. }
-    property ShowMinimize: Boolean read GetShowMinimize write SetShowMinimize default True;
-    property ShowMaximize: Boolean read GetShowMaximize write SetShowMaximize default True;
-    property ShowClose: Boolean read GetShowClose write SetShowClose default True;
+    property ButtonWidth;
+    property ShowMinimize;
+    property ShowMaximize;
+    property ShowClose;
   end;
 
   TTyChromeEngine = class(TObject)
@@ -362,7 +371,7 @@ type
       PPI-independent value, and every use derives device px from it. Storing the device
       value and re-multiplying it per crossing is what made the bar grow without bound. }
     FTitleHeightLogical: Integer;
-    FSurface: TTyFormSurface;         // Phase 1: runtime child content-host (covers the WS_THICKFRAME dead band)
+    FSurface: TTyCustomFormSurface;   // Phase 1: runtime child content-host (covers the WS_THICKFRAME dead band)
     FMenuBar: TTyMenuBar;             // the primary menu bar (shortcut dispatch / mac global bar)
     FResizable: Boolean;              // window edge-resize opt-out (default True); see SetResizable
     FController: TTyStyleController;   // set by ApplyChromeTheme; used by Paint
@@ -1114,9 +1123,9 @@ begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-{ TTyTitleBar }
+{ TTyCustomTitleBar }
 
-constructor TTyTitleBar.Create(AOwner: TComponent);
+constructor TTyCustomTitleBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   // Act as a real container: the designer drops controls INTO the bar (a menubar,
@@ -1157,12 +1166,12 @@ begin
     TTyForm(AOwner).WireTitleBarButtons;
 end;
 
-function TTyTitleBar.GetStyleTypeKey: string;
+function TTyCustomTitleBar.GetStyleTypeKey: string;
 begin
   Result := 'TyTitleBar';
 end;
 
-procedure TTyTitleBar.SetCaption(const AValue: TCaption);
+procedure TTyCustomTitleBar.SetCaption(const AValue: TCaption);
 begin
   if FCaption = AValue then
     Exit;
@@ -1170,7 +1179,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyTitleBar.SetButtonWidth(AValue: Integer);
+procedure TTyCustomTitleBar.SetButtonWidth(AValue: Integer);
 begin
   FButtonWidthExplicit := True;   // an explicit set pins the width, overriding the theme metric
   { a6256: stamp the PPI the pin was taken at, so a later monitor change can derive from
@@ -1185,7 +1194,7 @@ begin
   Invalidate;
 end;
 
-function TTyTitleBar.EffectiveButtonWidthPx: Integer;
+function TTyCustomTitleBar.EffectiveButtonWidthPx: Integer;
 begin
   if FButtonWidthPPI <= 0 then
     FButtonWidthPPI := 96;   // a pin taken before the stamp existed reads as logical px
@@ -1201,7 +1210,7 @@ begin
                      Font.PixelsPerInch, 96);
 end;
 
-procedure TTyTitleBar.SetTitleAlignment(AValue: TAlignment);
+procedure TTyCustomTitleBar.SetTitleAlignment(AValue: TAlignment);
 begin
   if FTitleAlignment = AValue then
     Exit;
@@ -1213,23 +1222,23 @@ end;
   not offer is hidden while its switch stays True; echoing the visibility instead would make the
   switch read False, the .lfm would save that False, and offering the button again later would
   find it still hidden by a switch nobody set. }
-function TTyTitleBar.GetShowMinimize: Boolean;
+function TTyCustomTitleBar.GetShowMinimize: Boolean;
 begin Result := FShowMinimize; end;
 
-function TTyTitleBar.GetShowMaximize: Boolean;
+function TTyCustomTitleBar.GetShowMaximize: Boolean;
 begin Result := FShowMaximize; end;
 
-function TTyTitleBar.GetShowClose: Boolean;
+function TTyCustomTitleBar.GetShowClose: Boolean;
 begin Result := FShowClose; end;
 
-procedure TTyTitleBar.SetShowMinimize(AValue: Boolean);
+procedure TTyCustomTitleBar.SetShowMinimize(AValue: Boolean);
 begin
   if FShowMinimize = AValue then Exit;
   FShowMinimize := AValue;
   ApplyButtonVisibility;
 end;
 
-procedure TTyTitleBar.SetShowMaximize(AValue: Boolean);
+procedure TTyCustomTitleBar.SetShowMaximize(AValue: Boolean);
 begin
   if FShowMaximize = AValue then Exit;
   FShowMaximize := AValue;
@@ -1241,14 +1250,14 @@ begin
     TTyForm(FEngine.Form).ApplyResizeStrategy;
 end;
 
-procedure TTyTitleBar.SetShowClose(AValue: Boolean);
+procedure TTyCustomTitleBar.SetShowClose(AValue: Boolean);
 begin
   if FShowClose = AValue then Exit;
   FShowClose := AValue;
   ApplyButtonVisibility;
 end;
 
-procedure TTyTitleBar.SetOfferedButtons(AValue: TTyCaptionButtonFlags);
+procedure TTyCustomTitleBar.SetOfferedButtons(AValue: TTyCaptionButtonFlags);
 begin
   if FOffered = AValue then Exit;
   FOffered := AValue;
@@ -1257,7 +1266,7 @@ end;
 
 { visible = switch AND offered, for each button; the cluster is re-laid only when something
   actually changed (a re-sync with the same answer must not cost a layout pass). }
-procedure TTyTitleBar.ApplyButtonVisibility;
+procedure TTyCustomTitleBar.ApplyButtonVisibility;
 var
   touched: Boolean;   { not "changed": that name is already taken up the inheritance chain }
 
@@ -1277,12 +1286,12 @@ begin
   if touched then LayoutButtons;
 end;
 
-function TTyTitleBar.CapMarginPx: Integer;
+function TTyCustomTitleBar.CapMarginPx: Integer;
 begin
   Result := MulDiv(ActiveController.Metric('--caption-button-margin', 0), Font.PixelsPerInch, 96);
 end;
 
-function TTyTitleBar.CapMarginYPx: Integer;
+function TTyCustomTitleBar.CapMarginYPx: Integer;
 { Vertical (top/bottom) inset. --caption-button-margin-y if set, else the uniform margin. }
 var my: Integer;
 begin
@@ -1291,12 +1300,12 @@ begin
   Result := MulDiv(my, Font.PixelsPerInch, 96);
 end;
 
-function TTyTitleBar.CapGapPx: Integer;
+function TTyCustomTitleBar.CapGapPx: Integer;
 begin
   Result := MulDiv(ActiveController.Metric('--caption-button-gap', 0), Font.PixelsPerInch, 96);
 end;
 
-function TTyTitleBar.RightInset: Integer;
+function TTyCustomTitleBar.RightInset: Integer;
 begin
   { The cluster's width, taken from the band the layout reserved -- not restated here. That
     restatement was the second, independent claim about the caption buttons' x, and it is what
@@ -1304,12 +1313,12 @@ begin
   with CaptionLayout.Band do Result := Right - Left;
 end;
 
-function TTyTitleBar.LeftInsetPx: Integer;
+function TTyCustomTitleBar.LeftInsetPx: Integer;
 begin
   Result := MulDiv(ActiveController.Metric('--titlebar-padding', TyTitleBarPad), Font.PixelsPerInch, 96);
 end;
 
-function TTyTitleBar.CaptionLayoutAt(AWidth, AHeight: Integer): TTyCaptionLayout;
+function TTyCustomTitleBar.CaptionLayoutAt(AWidth, AHeight: Integer): TTyCaptionLayout;
 var
   sMin, sMax, sClose: Boolean;
 begin
@@ -1329,12 +1338,12 @@ begin
     CapMarginPx, CapMarginYPx, CapGapPx, LeftInsetPx, IsRightToLeft);
 end;
 
-function TTyTitleBar.CaptionLayout: TTyCaptionLayout;
+function TTyCustomTitleBar.CaptionLayout: TTyCaptionLayout;
 begin
   Result := CaptionLayoutAt(ClientWidth, ClientHeight);
 end;
 
-procedure TTyTitleBar.LayoutButtons;
+procedure TTyCustomTitleBar.LayoutButtons;
 var
   lay: TTyCaptionLayout;
 
@@ -1356,13 +1365,13 @@ begin
   Place(FMinButton, lay.MinBtn);
 end;
 
-procedure TTyTitleBar.Resize;
+procedure TTyCustomTitleBar.Resize;
 begin
   inherited Resize;
   LayoutButtons;
 end;
 
-procedure TTyTitleBar.AdjustClientRect(var ARect: TRect);
+procedure TTyCustomTitleBar.AdjustClientRect(var ARect: TRect);
 var
   w: Integer;
   lay: TTyCaptionLayout;
@@ -1388,7 +1397,7 @@ end;
   So: take the widest contiguous gap the children do not cover. Scanning gaps rather than
   assuming children sit on the left keeps this correct for a host that anchors something to
   the right instead. }
-procedure TTyTitleBar.CaptionSpan(AWidth: Integer; out ALeft, ARight: Integer);
+procedure TTyCustomTitleBar.CaptionSpan(AWidth: Integer; out ALeft, ARight: Integer);
 var
   i, bl, br, gl, gr, bestL, bestR, scan: Integer;
   c: TControl;
@@ -1452,7 +1461,7 @@ begin
   if ARight < ALeft then ARight := ALeft;
 end;
 
-procedure TTyTitleBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomTitleBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -1481,7 +1490,7 @@ begin
   end;
 end;
 
-procedure TTyTitleBar.Paint;
+procedure TTyCustomTitleBar.Paint;
 begin
   // Re-apply the (theme-metric) button width on every repaint, so switching to a skin that sets
   // --caption-button-width resizes the caption buttons live. LayoutButtons no-ops when the bounds
@@ -1490,7 +1499,7 @@ begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-procedure TTyTitleBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomTitleBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   {$IFDEF LCLWin32}
   // Top-edge resize hot-zone: the bar sits flush at the window top (no NC strip there — that
@@ -1508,7 +1517,7 @@ begin
     FEngine.TitleBarMouseDown(Button, Shift, X, Y);
 end;
 
-procedure TTyTitleBar.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomTitleBar.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseMove(Shift, X, Y);
   {$IFDEF LCLWin32}
@@ -1523,21 +1532,21 @@ begin
     FEngine.TitleBarMouseMove(Shift, X, Y);
 end;
 
-procedure TTyTitleBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomTitleBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
   if (FEngine <> nil) and not (csDesigning in ComponentState) then
     FEngine.TitleBarMouseUp(Button, Shift, X, Y);
 end;
 
-procedure TTyTitleBar.DblClick;
+procedure TTyCustomTitleBar.DblClick;
 begin
   inherited DblClick;
   if (FEngine <> nil) and not (csDesigning in ComponentState) then
     FEngine.TitleBarDblClick;
 end;
 
-procedure TTyTitleBar.CMBiDiModeChanged(var Message: TLMessage);
+procedure TTyCustomTitleBar.CMBiDiModeChanged(var Message: TLMessage);
 begin
   inherited;         // LCL invalidates, tells the children, and calls AdjustSize
   LayoutButtons;     // and then the caption buttons have to actually change sides
@@ -2138,7 +2147,7 @@ begin
   inherited Loaded;
   // Wire the streamed content host (the .lfm's `object Surface`, which already hosts every control as
   // its child — graphic controls included). nil for a code-created form with no .lfm.
-  FSurface := TTyFormSurface(FindComponent('Surface'));
+  FSurface := TTyCustomFormSurface(FindComponent('Surface'));
   // A title bar associated from the .lfm had its engine-arming deferred (see
   // SetTitleBar); now that streaming has finished, wire it to the live engine.
   ArmEngine;
@@ -2241,8 +2250,8 @@ begin
     FMenuBar := nil;
   end
   else if (Operation = opInsert) and (FSurface = nil) and (AComponent.Owner = Self)
-     and (AComponent is TTyFormSurface) then
-    FSurface := TTyFormSurface(AComponent)   // wire the content host (streamed or designer-added)
+     and (AComponent is TTyCustomFormSurface) then
+    FSurface := TTyCustomFormSurface(AComponent)   // wire the content host (streamed or designer-added)
   else if (Operation = opRemove) and (AComponent = FSurface) then
   begin
     FSurface := nil;   // dropped ref: the one-surface guard relaxes so undo can paste it back in

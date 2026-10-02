@@ -67,7 +67,7 @@ type
     shaft, sized by an apex angle -- reachable now for a ported form or a plain pointer. }
   TTyArrowShape = (tasBlock, tasTriangle);
 
-  TTyArrow = class(TTyGraphicControl)
+  TTyCustomArrow = class(TTyGraphicControl)
   private
     FDirection: TTyArrowDirection;
     FShape: TTyArrowShape;
@@ -85,9 +85,23 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     function GetStyleTypeKey: string; override;
+    property Direction: TTyArrowDirection read FDirection write SetDirection default tadRight;
+    { Which of the two glyphs to draw. HeadRatio / ShaftRatio shape the block arrow only;
+      ArrowPointerAngle shapes the triangle only. Each is inert in the other mode. }
+    property Shape: TTyArrowShape read FShape write SetShape default tasBlock;
+    { The triangle's APEX angle in degrees, clamped 20..160 — LCL TArrow's own name,
+      default and limits (arrow.pp: ArrowPointerAngle, cMinAngle, cMaxAngle). Kept
+      spelled exactly as LCL spells it so a ported form's assignment still compiles;
+      Direction is the one name that could not be kept, because it shipped first. }
+    property ArrowPointerAngle: Integer read FPointerAngle write SetPointerAngle
+      default TyArrowDefPointerAngle;
+    property HeadRatio: Single read FHeadRatio write SetHeadRatio;
+    property ShaftRatio: Single read FShaftRatio write SetShaftRatio;
+  end;
+
+  { TTyArrow publishes TTyCustomArrow's properties; everything lives in TTyCustomArrow. }
+  TTyArrow = class(TTyCustomArrow)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
@@ -127,18 +141,11 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Direction: TTyArrowDirection read FDirection write SetDirection default tadRight;
-    { Which of the two glyphs to draw. HeadRatio / ShaftRatio shape the block arrow only;
-      ArrowPointerAngle shapes the triangle only. Each is inert in the other mode. }
-    property Shape: TTyArrowShape read FShape write SetShape default tasBlock;
-    { The triangle's APEX angle in degrees, clamped 20..160 — LCL TArrow's own name,
-      default and limits (arrow.pp: ArrowPointerAngle, cMinAngle, cMaxAngle). Kept
-      spelled exactly as LCL spells it so a ported form's assignment still compiles;
-      Direction is the one name that could not be kept, because it shipped first. }
-    property ArrowPointerAngle: Integer read FPointerAngle write SetPointerAngle
-      default TyArrowDefPointerAngle;
-    property HeadRatio: Single read FHeadRatio write SetHeadRatio;
-    property ShaftRatio: Single read FShaftRatio write SetShaftRatio;
+    property Direction;
+    property Shape;
+    property ArrowPointerAngle;
+    property HeadRatio;
+    property ShaftRatio;
     property Align;
     property Anchors;
   end;
@@ -350,7 +357,7 @@ begin
   end;
 end;
 
-constructor TTyArrow.Create(AOwner: TComponent);
+constructor TTyCustomArrow.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FDirection := tadRight;
@@ -362,7 +369,7 @@ begin
   Height := 64;
 end;
 
-function TTyArrow.GetStyleTypeKey: string;
+function TTyCustomArrow.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyPanel': a directional marker on a diagram is not a panel surface.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
@@ -370,21 +377,21 @@ begin
   Result := 'TyArrow';
 end;
 
-procedure TTyArrow.SetDirection(AValue: TTyArrowDirection);
+procedure TTyCustomArrow.SetDirection(AValue: TTyArrowDirection);
 begin
   if FDirection = AValue then Exit;
   FDirection := AValue;
   Invalidate;
 end;
 
-procedure TTyArrow.SetShape(AValue: TTyArrowShape);
+procedure TTyCustomArrow.SetShape(AValue: TTyArrowShape);
 begin
   if FShape = AValue then Exit;
   FShape := AValue;
   Invalidate;
 end;
 
-procedure TTyArrow.SetPointerAngle(AValue: Integer);
+procedure TTyCustomArrow.SetPointerAngle(AValue: Integer);
 begin
   // Clamp on assignment for the same reason the ratios do: otherwise the property reads
   // back (and streams to .lfm) an angle the arrow never draws.
@@ -394,7 +401,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyArrow.SetHeadRatio(AValue: Single);
+procedure TTyCustomArrow.SetHeadRatio(AValue: Single);
 begin
   // Clamp on assignment, not just at render time: otherwise the property reads back (and
   // streams to .lfm) a value the arrow never draws.
@@ -404,7 +411,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyArrow.SetShaftRatio(AValue: Single);
+procedure TTyCustomArrow.SetShaftRatio(AValue: Single);
 begin
   AValue := ClampRatio(AValue);
   if FShaftRatio = AValue then Exit;
@@ -412,7 +419,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyArrow.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomArrow.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -480,7 +487,7 @@ begin
   end;
 end;
 
-procedure TTyArrow.Paint;
+procedure TTyCustomArrow.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
