@@ -27,7 +27,8 @@ uses
   tyControls.TabSheet, tyControls.PageControl, tyControls.ListBox, tyControls.CheckListBox,
   tyControls.ComboBox, tyControls.CheckComboBox, tyControls.Transfer, tyControls.Cascader,
   tyControls.ImageCollection, tyControls.TreeView, tyControls.ShellTreeView, tyControls.ListView,
-  tyControls.ListView.Layout, tyControls.ShellListView, tyControls.Grid, tyControls.Columns;
+  tyControls.ListView.Layout, tyControls.ShellListView, tyControls.Grid, tyControls.Columns,
+  tyControls.ColorBox, tyControls.ColorListBox;
 
 type
   TTyCustomClassesP2Test = class(TTyCustomClassesPhaseCase)
@@ -157,6 +158,13 @@ type
     property TopIndex;
     property ItemIndex;
     property Items;
+  end;
+
+  { Selected ahead of the Style whose palette holds it (TTyColorListBox does the same). }
+  TIdxColorListBox = class(TTyCustomColorListBox)
+  published
+    property Selected;
+    property Style;
   end;
 
   TIdxStringGrid = class(TTyCustomStringGrid)
@@ -907,12 +915,13 @@ begin
   inherited DoSelectionChange(AUser);
 end;
 
-{ A list box and a string grid whose index-like properties are read before
-  the items they point into. Each value waits for Loaded and lands where it was saved, as it
+{ A list box, a colour list box and a string grid whose index-like properties are read before
+  what they point into. Each value waits for Loaded and lands where it was saved, as it
   does on the final classes, which publish the items first. }
 procedure TTyCustomClassesP2Test.TestIndexesReadBeforeTheirItemsWaitForThem;
 var
   lb, lbBack: TIdxListBox;
+  cl, clBack: TIdxColorListBox;
   g, gBack: TIdxStringGrid;
   host: TForm;
   i: Integer;
@@ -937,6 +946,17 @@ begin
   AssertEquals('and TopIndex read before Items keeps the saved scroll', 3, lbBack.TopIndex);
   AssertEquals('applied without a selection-change notification: reading a form is not one',
     0, lbBack.SelectionChanges);
+
+  host := NewHost;
+  cl := TIdxColorListBox.Create(host);
+  cl.Name := 'CL';
+  cl.Parent := host;
+  cl.Style := [cbStandardColors, cbExtendedColors, cbPrettyNames];
+  cl.Selected := clMoneyGreen;
+  AssertEquals('setup: the extended palette holds clMoneyGreen', clMoneyGreen, cl.Selected);
+  clBack := HostRoundTrip(cl) as TIdxColorListBox;
+  AssertTrue('the palette came back', cbExtendedColors in clBack.Style);
+  AssertEquals('Selected read before the Style that holds it', clMoneyGreen, clBack.Selected);
 
   host := NewHost;
   g := TIdxStringGrid.Create(host);
@@ -1353,7 +1373,7 @@ end;
 initialization
   RegisterClasses([TThirdPanel, TThirdGridPanel, TThirdScrollContent, TThirdCoolBar,
     TThirdGroupBox, TThirdRadioGroup, TThirdPageControl, TThirdTabSheet, TThirdListBox,
-    TThirdCheckListBox, TIdxListBox, TIdxStringGrid, TThirdCascader, TThirdTransfer, TThirdTreeView, TThirdListView,
+    TThirdCheckListBox, TIdxListBox, TIdxColorListBox, TIdxStringGrid, TThirdCascader, TThirdTransfer, TThirdTreeView, TThirdListView,
     TThirdStringGrid, TThirdDrawGrid]);
   RegisterTest(TTyCustomClassesP2Test);
 end.

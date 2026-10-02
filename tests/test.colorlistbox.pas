@@ -1,7 +1,8 @@
 unit test.colorlistbox;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Graphics, fpcunit, testregistry, tyControls.ColorListBox;
+uses Classes, SysUtils, Graphics, Forms, fpcunit, testregistry, tyControls.ColorBox,
+  tyControls.ColorListBox;
 type
   TColorListBoxTest = class(TTestCase)
   published
@@ -9,6 +10,7 @@ type
     procedure TestSelected;
     procedure TestSortedKeepsColors;
     procedure TestAddAndClear;
+    procedure TestFormFileKeepsAnExtendedSelection;
   end;
 implementation
 
@@ -65,6 +67,38 @@ begin
     AssertTrue('color kept', c.ColorAt(0) = clSkyBlue);
     AssertEquals('name kept', 'Sky', c.Items[0]);
   finally c.Free; end;
+end;
+
+{ TTyColorListBox publishes Selected ahead of Style, and the palette Style composes is only
+  rebuilt in Loaded. The colour has to survive until then: it used to be looked up in the
+  default 16, missed, and come back as nothing selected. }
+procedure TColorListBoxTest.TestFormFileKeepsAnExtendedSelection;
+var
+  src, dst: TForm;
+  c: TTyColorListBox;
+  ms: TMemoryStream;
+begin
+  src := TForm.CreateNew(nil);
+  dst := TForm.CreateNew(nil);
+  ms := TMemoryStream.Create;
+  try
+    c := TTyColorListBox.Create(src);
+    c.Name := 'CL';
+    c.Parent := src;
+    c.Style := [cbStandardColors, cbExtendedColors, cbPrettyNames];
+    c.Selected := clMoneyGreen;
+    AssertTrue('setup: the extended palette holds clMoneyGreen', c.Selected = clMoneyGreen);
+    ms.WriteComponent(src);
+    ms.Position := 0;
+    ms.ReadComponent(dst);
+    c := dst.FindComponent('CL') as TTyColorListBox;
+    AssertTrue('the palette came back', cbExtendedColors in c.Style);
+    AssertEquals('and so did the selected colour', clMoneyGreen, c.Selected);
+  finally
+    ms.Free;
+    src.Free;
+    dst.Free;
+  end;
 end;
 
 initialization

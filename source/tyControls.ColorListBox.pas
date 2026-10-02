@@ -18,6 +18,9 @@ type
   private
     FPaletteStyle:        TTyColorBoxStyle;
     FPaletteStylePending: Boolean;   { Style arrived during .lfm load; rebuild in Loaded }
+    { Selected as a form file gave it, held for Loaded: see SetSelected. }
+    FStreamedSelected:    TColor;
+    FSelectedWaits:       Boolean;
     FDefaultColorColor:   TColor;
     FNoneColorColor:      TColor;
     FColorRectWidth:      Integer;
@@ -198,13 +201,21 @@ begin
     FPaletteStylePending := False;
     SetColorList;
   end;
+  if FSelectedWaits then
+  begin
+    FSelectedWaits := False;
+    SetSelected(FStreamedSelected);
+  end;
 end;
 
 procedure TTyCustomColorListBox.SetColorList;
 var
   keep: TColor;
 begin
-  keep := GetSelected;                    // the COLOUR survives; its row index does not
+  if FSelectedWaits then
+    keep := FStreamedSelected             // Loaded, with a streamed colour still to find
+  else
+    keep := GetSelected;                  // the COLOUR survives; its row index does not
   TyBuildColorPalette(Items, FPaletteStyle);
   if cbCustomColors in FPaletteStyle then
     DoGetColors;
@@ -304,6 +315,19 @@ end;
 
 procedure TTyCustomColorListBox.SetSelected(const AValue: TColor);
 begin
+  { While a form file is read the palette is not final yet: Style only rebuilds it in Loaded,
+    and a form file may hold Selected before Style or Items (TTyColorListBox publishes it
+    ahead of Style; a third party's TTyCustomColorBox / TTyCustomColorListBox may put it
+    anywhere). Looked up then, a colour from the extended or system palette is not there yet
+    and the selection came back as nothing. So the colour waits for Loaded, which looks it up
+    in the finished palette. LCL keeps the colour itself (FSelected) for the same reason
+    (colorbox.pas:871-878, applied in Loaded at :1058-1062). }
+  if csLoading in ComponentState then
+  begin
+    FStreamedSelected := AValue;
+    FSelectedWaits := True;
+    Exit;
+  end;
   // Matches, else the cbCustomColor slot, else -1 -- never a silently-grown palette.
   ItemIndex := TySelectColorIndexIn(Items, AValue, FPaletteStyle);
 end;
