@@ -114,6 +114,10 @@ type
   private
     FItems: TStringList;
     FItemIndex: Integer;
+    { An ItemIndex read from a form file before the Items it points into; Loaded applies it.
+      See SetItemIndex. }
+    FStreamedItemIndex: Integer;
+    FItemIndexWaits: Boolean;
     FText: TCaption;
     FInActionChange: Boolean;   // see ActionChange
     FDropDownCount: Integer;
@@ -924,6 +928,22 @@ end;
 
 procedure TTyCustomComboBox.SetItemIndex(const AValue: Integer);
 begin
+  { A form file can hold ItemIndex ahead of Items: LCL's TComboBox publishes them in that order
+    (stdctrls.pp:474-475), and so may a third party's TTyCustomComboBox. Read then, the index
+    points past an empty list and would land on -1. So it waits, and Loaded applies it
+    against the items that streamed in after it -- LCL keeps it in FItemIndex while
+    csLoading for the same reason (customcombobox.inc:1040-1043). The library's own combo
+    boxes publish Items first, so for them nothing waits. }
+  if csLoading in ComponentState then
+  begin
+    if AValue >= FItems.Count then
+    begin
+      FStreamedItemIndex := AValue;
+      FItemIndexWaits := True;
+      Exit;
+    end;
+    FItemIndexWaits := False;   // a value that could be applied replaces a waiting one
+  end;
   SelectItem(AValue);
 end;
 
@@ -1914,8 +1934,23 @@ begin
 end;
 
 procedure TTyCustomComboBox.Loaded;
+var
+  change: TNotifyEvent;
 begin
   inherited Loaded;
+  { The other half of SetItemIndex's csLoading capture. Without OnChange: reading a form is
+    not the user changing anything, and the handler would run before the form is whole. }
+  if FItemIndexWaits then
+  begin
+    FItemIndexWaits := False;
+    change := FOnChange;
+    FOnChange := nil;
+    try
+      SelectItem(FStreamedItemIndex);
+    finally
+      FOnChange := change;
+    end;
+  end;
   { Streaming order writes Height (a TControl property) before Style (ours), so SetStyle's
     attach already saw the streamed Height -- but bounds can still be adjusted after that
     (anchors, parent scaling). Re-run the csSimple layout against the FINAL geometry. }

@@ -17,6 +17,10 @@ type
     FItems: TStrings;
     FMultiSelect: Boolean;
     FItemIndex: Integer;
+    { An ItemIndex read from a form file before the Items it points into; Loaded applies it.
+      See SetItemIndex. }
+    FStreamedItemIndex: Integer;
+    FItemIndexWaits: Boolean;
     FSelected: array of Boolean;   // multi-select bit-set (kept sized to Items.Count)
     FHoverSeg: Integer;            // -1 = none; tracked in MouseMove for :hover styling
     FRefitting: Boolean;           // guards the AutoSize re-fit in Invalidate against re-entry
@@ -29,6 +33,8 @@ type
     procedure DoSelectionChange;
   protected
     function GetStyleTypeKey: string; override;
+    { Applies an ItemIndex that was read before its Items. }
+    procedure Loaded; override;
     { Hit-test AX to a segment and apply selection, mirroring what a click does.
       Single-select: sets ItemIndex (fires OnSelectionChange iff it changed).
       Multi-select: toggles that segment (always fires OnSelectionChange on a valid
@@ -343,10 +349,38 @@ begin
   Invalidate;
 end;
 
+procedure TTyCustomButtonGroup.Loaded;
+begin
+  inherited Loaded;
+  if not FItemIndexWaits then Exit;
+  FItemIndexWaits := False;
+  { Silently: reading a form is not a selection change. Out of range still (a damaged form
+    file) means nothing selected, as SetItemIndex has always treated it. }
+  if (FStreamedItemIndex >= 0) and (FStreamedItemIndex < FItems.Count) then
+    FItemIndex := FStreamedItemIndex
+  else
+    FItemIndex := -1;
+  Invalidate;
+end;
+
 procedure TTyCustomButtonGroup.SetItemIndex(AValue: Integer);
 var
   NewIndex: Integer;
 begin
+  { A form file can hold ItemIndex ahead of Items -- a third party's TTyCustomButtonGroup
+    publishes in whatever order it likes (TTyButtonGroup publishes Items first). Read then, it
+    points past an empty list, and the Items that follow would reset the selection anyway
+    (ItemsChanged). So it waits for Loaded, as on a radio group. }
+  if csLoading in ComponentState then
+  begin
+    if AValue >= FItems.Count then
+    begin
+      FStreamedItemIndex := AValue;
+      FItemIndexWaits := True;
+      Exit;
+    end;
+    FItemIndexWaits := False;   // a value that could be applied replaces a waiting one
+  end;
   if (AValue >= 0) and (AValue < FItems.Count) then
     NewIndex := AValue
   else

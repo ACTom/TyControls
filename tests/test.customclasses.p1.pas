@@ -30,7 +30,7 @@ uses
   tyControls.MaskEdit, tyControls.Memo, tyControls.UpDown, tyControls.NumericEdit,
   tyControls.FloatSpinEdit, tyControls.CheckBox, tyControls.ListBox, tyControls.ComboBox,
   tyControls.ComboBoxEx, tyControls.ColorBox, tyControls.ColorComboBox, tyControls.ShellComboBox,
-  tyControls.ProgressBar, tyControls.Gauge, tyControls.TrackBar;
+  tyControls.ProgressBar, tyControls.Gauge, tyControls.TrackBar, tyControls.ButtonGroup;
 
 type
   { The fixture (a bare TForm.CreateNew) and the T-b / T-c / T-d / T-e checks that every
@@ -88,6 +88,7 @@ type
     procedure TestDerivedComboPopupReachesTheOwnerDraw;
     procedure TestThirdComboBoxExItemsDriveTheList;
     procedure TestThirdComboBox;
+    procedure TestButtonGroupIndexReadBeforeItsItemsWaits;
     { Task 8: combo boxes II }
     procedure TestColorBoxPopupUsesItsOwnSwatchGeometry;
     procedure TestThirdColorBox;
@@ -198,10 +199,19 @@ type
     property GroupIndex;
   end;
 
+  { LCL's order: TComboBox publishes ItemIndex ahead of Items (stdctrls.pp:474-475), so a
+    ported combo reads the index before there is anything for it to point at. }
   TThirdComboBox = class(TTyCustomComboBox)
   published
-    property Items;
     property ItemIndex;
+    property Items;
+  end;
+
+  { The same order on the button group. }
+  TIdxButtonGroup = class(TTyCustomButtonGroup)
+  published
+    property ItemIndex;
+    property Items;
   end;
 
   TThirdComboBoxEx = class(TTyCustomComboBoxEx)
@@ -1327,6 +1337,22 @@ begin
   CheckFreshDefaults(TThirdComboBoxEx, ['Images']);
 end;
 
+{ ItemIndex ahead of Items on a button group: it waits for Loaded. }
+procedure TTyCustomClassesP1Test.TestButtonGroupIndexReadBeforeItsItemsWaits;
+var
+  src, back: TIdxButtonGroup;
+begin
+  src := TIdxButtonGroup.Create(FForm);
+  src.Parent := FForm;
+  src.Items.CommaText := 'day,week,month';
+  src.ItemIndex := 2;
+  back := TIdxButtonGroup.Create(FForm);
+  back.Parent := FForm;
+  StreamInto(src, back);
+  AssertEquals('the items came back', 3, back.Items.Count);
+  AssertEquals('ItemIndex read before Items lands on the saved segment', 2, back.ItemIndex);
+end;
+
 procedure TTyCustomClassesP1Test.TestThirdComboBox;
 var
   third, back: TThirdComboBox;
@@ -1335,16 +1361,22 @@ var
 begin
   third := TThirdComboBox.Create(FForm);
   third.Parent := FForm;
-  CheckPublishesOnly(TThirdComboBox, ['Items', 'ItemIndex']);
+  CheckPublishesOnly(TThirdComboBox, ['ItemIndex', 'Items']);
   third.Items.Add('one');
   third.Items.Add('two');
   third.ItemIndex := 1;
   third.DropDownCount := 3;
-  CheckStreamText(third, ['Items', 'ItemIndex'], 'DropDownCount');
+  CheckStreamText(third, ['ItemIndex', 'Items'], 'DropDownCount');
   back := TThirdComboBox.Create(FForm);
+  FChanges := 0;
+  back.OnChange := @CountChange;
   StreamInto(third, back);
   AssertEquals('T-c: Items round-trip', 2, back.Items.Count);
-  AssertEquals('T-c: ItemIndex round-trips', 1, back.ItemIndex);
+  AssertEquals('T-c: ItemIndex round-trips, though it is read before the items', 1,
+    back.ItemIndex);
+  AssertEquals('T-c: and the field shows that item', 'two', back.Text);
+  AssertEquals('T-c: applied without OnChange -- reading a form is not a change', 0, FChanges);
+  back.OnChange := nil;
   AssertEquals('T-c: the unpublished DropDownCount stayed at its default', 8, back.DropDownCount);
   own := TTyComboBox.Create(FForm);
   own.Parent := FForm;
@@ -1930,7 +1962,7 @@ initialization
   RegisterClasses([TThirdNumericEdit, TThirdNumericRange, TThirdEditNoText]);
   RegisterClasses([TThirdButton, TThirdSpeedButton, TThirdLabel, TThirdTag, TThirdEdit,
     TThirdMaskEdit, TThirdMemo, TThirdUpDown, TThirdCheckBox, TThirdRadioButton,
-    TThirdComboBox, TThirdComboBoxEx, TThirdColorBox, TThirdShellComboBox, TThirdProgressBar,
+    TThirdComboBox, TIdxButtonGroup, TThirdComboBoxEx, TThirdColorBox, TThirdShellComboBox, TThirdProgressBar,
     TThirdGauge, TThirdTrackBar]);
   RegisterTest(TTyCustomClassesP1Test);
 end.
