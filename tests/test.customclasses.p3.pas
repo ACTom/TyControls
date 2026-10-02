@@ -85,6 +85,7 @@ type
     procedure TestRibbonIndexesReadBeforeTheirItemsWait;
     procedure TestBackstageIndexPastItsCommandsClampsAsBefore;
     procedure TestRibbonForgetsAPageThatLeaves;
+    procedure TestMinimizedRibbonReadsBackInAnyOrder;
     procedure TestFileTabOpensAThirdPartyBackstage;
     { Task 22: window chrome }
     procedure TestThirdTitleBar;
@@ -180,6 +181,14 @@ type
   published
     property ItemIndex;
     property Commands;
+  end;
+
+  { Minimized ahead of the TabHeight its collapsed height is made of -- the reverse of the
+    library's own order. }
+  TOrderRibbon = class(TTyCustomRibbon)
+  published
+    property Minimized;
+    property TabHeight;
   end;
 
   TThirdTitleBar = class(TTyCustomTitleBar)
@@ -1080,6 +1089,59 @@ begin
   fly.ReleaseContent;
   AssertTrue('back home', home.Parent = ra);
   AssertEquals('and counted once', 2, ra.PageCount);
+end;
+
+{ A minimised ribbon read from a form collapses to the TabHeight it was saved with, whichever of
+  the two a class publishes first (the library's TabHeight first, a third party may not), and
+  expanding it afterwards shows the band again. A form saved minimised stores the COLLAPSED
+  height, so the expanded one is not in the file: the ribbon opens to the height a new ribbon
+  has rather than to the strip it was saved as. }
+procedure TTyCustomClassesP3Test.TestMinimizedRibbonReadsBackInAnyOrder;
+
+  procedure Check(ASrc: TTyCustomRibbon; const AWhat: string; AMinimizedFirst: Boolean);
+  var
+    back, typed: TTyCustomRibbon;
+    fresh: Integer;
+    s, line: string;
+    host: TForm;
+  begin
+    ASrc.Name := 'Rb';
+    ASrc.Parent := ASrc.Owner as TWinControl;
+    ASrc.Height := 150;
+    ASrc.TabHeight := 44;
+    { A form that gives the full height (hand-written, or saved before the collapse): the text
+      of the expanded ribbon with Minimized put in, in the order the class publishes it. }
+    s := StreamedText(ASrc.Owner);
+    AssertTrue(AWhat + ' precondition: TabHeight streams', Pos('TabHeight = 44', s) > 0);
+    line := 'Minimized = True' + LineEnding + '    ';
+    if AMinimizedFirst then
+      s := StringReplace(s, 'TabHeight = 44', line + 'TabHeight = 44', [])
+    else
+      s := StringReplace(s, 'TabHeight = 44', 'TabHeight = 44' + LineEnding + '    Minimized = True', []);
+    host := NewHost;
+    ReadText(s, host);
+    typed := host.FindComponent('Rb') as TTyCustomRibbon;
+    AssertEquals(AWhat + ', full height in the form: collapsed to its TabHeight',
+      MulDiv(44, typed.Font.PixelsPerInch, 96), typed.Height);
+    typed.Minimized := False;
+    AssertEquals(AWhat + ', full height in the form: expands back to it', 150, typed.Height);
+    { Saved minimised: the form stores the collapsed height. }
+    ASrc.Minimized := True;
+    AssertEquals(AWhat + ' precondition: minimised to its strip',
+      MulDiv(44, ASrc.Font.PixelsPerInch, 96), ASrc.Height);
+    back := HostRoundTrip(ASrc) as TTyCustomRibbon;
+    AssertTrue(AWhat + ': read back minimised', back.Minimized);
+    AssertEquals(AWhat + ': TabHeight read back', 44, back.TabHeight);
+    AssertEquals(AWhat + ': collapsed to that TabHeight', MulDiv(44, back.Font.PixelsPerInch, 96),
+      back.Height);
+    fresh := TTyRibbon.Create(back.Owner).Height;
+    back.Minimized := False;
+    AssertEquals(AWhat + ': expanding shows the band, at a new ribbon''s height', fresh, back.Height);
+  end;
+
+begin
+  Check(TTyRibbon.Create(NewHost), 'TTyRibbon', False);
+  Check(TOrderRibbon.Create(NewHost), 'Minimized ahead of TabHeight', True);
 end;
 
 { Backstage takes any TTyCustomRibbonBackstage, on the ribbon and on the application button,
@@ -2075,7 +2137,7 @@ end;
 initialization
   RegisterClasses([TThirdToolBar, TThirdToolButton, TGlyphToolButton, TThirdStatusBar,
     TThirdScrollBar, TThirdRibbonPage, TThirdRibbonGroup, TIdxRibbonGallery, TIdxRibbonBackstage,
-    TThirdTitleBar, TThirdMenuBar, TThirdFormSurface, TThirdCharImage, TThirdShape, TThirdChart,
+    TOrderRibbon, TThirdTitleBar, TThirdMenuBar, TThirdFormSurface, TThirdCharImage, TThirdShape, TThirdChart,
     TThirdColorGrid, TThirdTerminalView, TThirdToolWindow, TThirdToolWindowBar]);
   { TThirdMenuBar's round trip streams a TMainMenu: a form unit the IDE writes registers it the
     same way. }
