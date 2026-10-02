@@ -887,8 +887,10 @@ begin
   CheckFreshDefaults(TThirdTabSheet, ['Caption', 'ImageIndex']);
 end;
 
-{ TabIndex is public on TTyCustomTabSet: the strip it descends from has it public already, so a
-  protected redeclaration hid nothing and only misled (N16). }
+{ TabIndex through a TTyCustomTabSet reference. This held before the declaration moved to
+  public too -- which is why it moved: TTyCustomTabStrip already has TabIndex public, the
+  protected redeclaration hid nothing (FPC falls back to the ancestor's public one) and only
+  misled (N16). So no mutation turns this red; it pins the access, not the keyword. }
 procedure TTyCustomClassesP2Test.TestTabSetIndexIsPublicOnTheCustomClass;
 var
   own: TTyTabSet;
