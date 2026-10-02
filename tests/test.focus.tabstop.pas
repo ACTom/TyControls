@@ -249,8 +249,8 @@ begin
       TabStop=False (tyControls.RibbonGallery.pas:224) for the same one-stop-per-widget
       reason the combos have. }
     TTyRibbonGallery,
-    { TTyRibbonAppMenu is a TTyMenuButton — a button that opens the application menu, and a
-      button is a tab stop. }
+    { TTyRibbonAppMenu is a menu button (a TTyCustomMenuButton since the custom-class split) —
+      a button that opens the application menu, and a button is a tab stop. }
     TTyRibbonAppMenu);
 end;
 

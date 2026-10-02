@@ -239,9 +239,6 @@ type
   { GetOwner is protected on TPersistent; walking an option to its root cascader
     (TTyCascaderDesignerLink.OwnsModelObject) goes through it. }
   TNodesOwnerAccess = class(TTyCascaderNodes);
-  { Caption is protected on TTyCustomToolWindow (TControl's visibility since the custom-class
-    split); a bar hands out any TTyCustomToolWindow, and the access class reaches it for all. }
-  TTwWindowAccess = class(TTyCustomToolWindow);
 
 resourcestring
   rsDtCascEdit     = 'Edit options...';
@@ -715,7 +712,7 @@ begin
            W := Bar.Windows[i];
            Item := TMenuItem.Create(AnItem);
            Item.Name := 'TyTwShow' + IntToStr(i);
-           Item.Caption := W.Name + ' "' + TTwWindowAccess(W).Caption + '"';
+           Item.Caption := W.Name + ' "' + W.Caption + '"';
            Item.OnClick := @ShowWindowItemClick;
            AnItem.Add(Item);
          end;
