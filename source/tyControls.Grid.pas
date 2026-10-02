@@ -8389,6 +8389,9 @@ begin
   FColViews.Free;
   FRowViews.Free;
   FHiddenRows.Free;
+  { 值筛选面板的全集与勾选集:构造里建,从前这里漏放,每个实例漏两个 TStringList。 }
+  FreeAndNil(FFilterAllValues);
+  FreeAndNil(FFilterChecked);
   inherited Destroy;
 end;
 
