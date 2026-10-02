@@ -1021,7 +1021,7 @@ end;
 
 function TTyCustomCoolBar.GetStyleTypeKey: string;
 begin
-  { Own key rather than the borrowed 'TyPanel': same as its TTyControlBar ancestor — band grippers are not panel chrome.
+  { Own key rather than the borrowed 'TyPanel', as TTyCustomControlBar (its parent) has — band grippers are not panel chrome.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
     unchanged — this opens a hook, it does not restyle anything. }
   Result := 'TyCoolBar';

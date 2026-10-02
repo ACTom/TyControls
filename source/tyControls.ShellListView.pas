@@ -52,9 +52,10 @@ type
     controls can point at each other: Pascal has no mutual interface-section uses,
     and LCL sidesteps the problem by putting both classes in one unit with forward
     declarations. tyControls.ShellTreeView already uses THIS unit (its
-    ShellListView property needs the concrete type), so the seam has to travel in
-    this direction. TTyShellTreeView is its only descendant; nothing else should
-    ever derive from it, and it is never registered on the palette.
+    ShellListView property needs the list's type), so the seam has to travel in
+    this direction. Its one direct descendant is TTyCustomShellTreeView, which the
+    library's TTyShellTreeView and a third party's shell tree both derive from;
+    derive from that, not from the seam, which is never registered on the palette.
 
     The methods are protected: TTyShellListView is declared in the same unit and
     can therefore reach them, while application code cannot mistake them for the
@@ -246,8 +247,8 @@ type
 
       The declared type is the abstract seam, not TTyShellTreeView, because the two
       units cannot both name each other's class -- see TTyShellTreeLink. The Object
-      Inspector still offers every shell tree on the form, since that is the only
-      concrete descendant. }
+      Inspector still offers every shell tree on the form: the library's and a third
+      party's TTyCustomShellTreeView descendants all descend from the seam. }
     property ShellTreeView: TTyShellTreeLink read FShellTreeView write SetShellTreeView;
   end;
 

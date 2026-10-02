@@ -93,8 +93,9 @@ Shell.OnFileActivate := @FileChosen;     // 双击文件 / Enter;双击文件夹
   master 128px 降采样。不从主题取色 —— 构造时主题可能还没解析。
 - **`TTyShellTreeLink` 为什么声明在这个单元里。** Pascal 的 interface 段不能互相 `uses`,而 LCL 是把两个类
   塞进同一个单元 + 前向声明绕过去的。`tyControls.ShellTreeView` 已经 `uses` 本单元(它的 `ShellListView`
-  属性需要具体类型),所以接缝只能朝这个方向走:本单元声明抽象的 `TTyShellTreeLink = class(TTyTreeView)`,
-  `TTyShellTreeView` 是它**唯一**的后代。接缝方法是 `protected` 的 —— 同单元的 `TTyShellListView` 够得着,
+  属性需要列表的类型),所以接缝只能朝这个方向走:本单元声明抽象的 `TTyShellTreeLink = class(TTyCustomTreeView)`
+  (3.0 是 `class(TTyTreeView)`),它唯一的直接后代是 `TTyCustomShellTreeView`,库里的 `TTyShellTreeView`
+  和第三方自己的 shell 树都从那里派生;要派生请从 `TTyCustomShellTreeView` 来,别直接从接缝来。接缝方法是 `protected` 的 —— 同单元的 `TTyShellListView` 够得着,
   应用代码则不会把它误当成树的公开 API(那是 `Directory` / `SelectPath` / `UpdateView`)。
 - **双向链接靠计数器防递归。** 树选中会推给列表、列表读盘又会推回树。两侧各有一个 `FLinkLock`,推的时候
   加锁,所以级联走一步就停。LCL 用 `FLockUpdate` 守同一处(`shellctrls.pas:2003-2011`)。

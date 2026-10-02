@@ -69,9 +69,9 @@ uses tyControls.ColorBox;
 
 复用三个新加的**逐项自绘钩子**(默认全部字节一致,普通 ListBox/ComboBox 不受影响):
 
-- `TTyListBox.PaintItemContent(P, rowRect, i, style)` —— 每行内容绘制(默认=文字);内部 `TTyColorPopupList` 覆写它画色块+名。
-- `TTyComboBox.CreatePopupList: TTyListBox` —— 下拉列表工厂(默认 `TTyListBox`);ColorBox 返回 `TTyColorPopupList`。
-- `TTyComboBox.PaintFieldContent(P, textRect, style)` —— 字段选中项绘制(默认=文字);ColorBox 覆写它画色块+名。
+- `TTyCustomListBox.PaintItemContent(P, rowRect, i, style)` —— 每行内容绘制(默认=文字);内部 `TTyColorPopupList` 覆写它画色块+名。
+- `TTyCustomComboBox.CreatePopupList: TTyCustomListBox` —— 下拉列表工厂(默认 `TTyComboPopupList`);ColorBox 返回 `TTyColorPopupList`。4.0 起返回类型是 `TTyCustomListBox`:勾选组合框的下拉是 `TTyCheckListBox`,它不再是 `TTyListBox`。
+- `TTyCustomComboBox.PaintFieldContent(P, textRect, style)` —— 字段选中项绘制(默认=文字);ColorBox 覆写它画色块+名。
 
 后续 `TTyColorListBox` / `TTyFontComboBox` / `TTyCheckListBox` 等都建立在这三个钩子上。纯函数 `TyTColorToTy`(TColor→TTyColor)已单测。
 

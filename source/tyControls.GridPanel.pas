@@ -131,11 +131,13 @@ type
     a control dropped into a cell is constrained (alClient) to that cell. Track sizes
     come from the published ColumnSizes/RowSizes strings (empty = all-star / equal),
     solved by the pure TyGridTrackSizes/TyGridTrackOrigins/TyGridCellRect. No spanning. }
-  TTyGridCellArray = array of TObject;   // TTyGridCell; TObject avoids a cyclic uses
+  TTyGridCellArray = array of TObject;   // TTyCustomGridCell (see FCells)
 
   TTyCustomGridPanel = class(TTyCustomPanel)
   private
-    FCells: array of TObject;        // flat, one TTyGridCell per (col,row); index = row*Cols+col
+    { Flat, one cell per (col,row); index = row*Cols+col. Any TTyCustomGridCell: the panel
+      makes TTyGridCell, and a third party's cell class registers itself here too (C11-1). }
+    FCells: array of TObject;
     FColumnCount: Integer;
     FRowCount: Integer;
     FColumnSizes: string;
@@ -149,7 +151,7 @@ type
     procedure SetColumnSizes(const AValue: string);
     procedure SetRowSizes(const AValue: string);
     procedure SetSpacing(AValue: Integer);
-    function  GetCell(ACol, ARow: Integer): TObject;   // returns TTyGridCell or nil
+    function  GetCell(ACol, ARow: Integer): TObject;   // a TTyCustomGridCell, or nil
     function  CellIndex(ACol, ARow: Integer): Integer;
     procedure EnsureCells;           // create/destroy cells to match Count, preserve in-bounds
     procedure DiscardProvisionalCells;  // free the constructor-seeded default cells
@@ -170,7 +172,8 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-    { Public so TTyGridCell.SetParent (a different unit) can self-register. Idempotent. }
+    { Public so a cell's SetParent -- any TTyCustomGridCell, a third party's included -- can
+      self-register. Idempotent. }
     procedure RegisterCell(ACell: TObject);
     procedure UnregisterCell(ACell: TObject; AFree: Boolean);
     function  CellCount: Integer;
