@@ -441,6 +441,12 @@ type
       var AHAlign: TAlignment; var AVAlign: TTextLayout);
   end;
 
+  { A freed grid takes everything it allocated with it. (#16) }
+  TTyStringGridLeakTest = class(TTestCase)
+  published
+    procedure TestCreatingAndFreeingGridsDoesNotGrowTheHeap;
+  end;
+
 implementation
 
 { 写剪贴板并确认真的写进去了。
@@ -11828,6 +11834,24 @@ begin
   AssertTrue('本批的开关宿主都设得了', G.HeaderAutoHeight);
 end;
 
+{ The constructor creates two lists for the column value filter (the values offered and the ones
+  checked), and the destructor freed every other list the grid owns but not those two: each grid
+  leaked them, which heaptrc reports on exit. Warm up first -- the first grids fill shared caches
+  (theme styles, measurement) that are not leaks -- then fifty more must leave the heap no
+  bigger: with the leak it grows by two string lists a grid. }
+procedure TTyStringGridLeakTest.TestCreatingAndFreeingGridsDoesNotGrowTheHeap;
+var
+  before, after: PtrUInt;
+  i: Integer;
+begin
+  for i := 0 to 4 do TTyStringGrid.Create(nil).Free;
+  before := GetFPCHeapStatus.CurrHeapUsed;
+  for i := 0 to 49 do TTyStringGrid.Create(nil).Free;
+  after := GetFPCHeapStatus.CurrHeapUsed;
+  AssertTrue(Format('the heap grew from %d to %d bytes over fifty grids', [before, after]),
+    after <= before);
+end;
+
 { 建一张网格再释放,堆不涨。从前每个实例漏两个 TStringList(值筛选面板的全集与勾选集,
   构造里建、析构里没放),一个窗体开关几次就漏几次。先热身一轮,把主题缓存之类的一次性分配
   排除在外;之后每轮的增长必须小于一个 TStringList,而漏的时候每轮是两个。 }
@@ -11865,6 +11889,7 @@ begin
 end;
 
 initialization
+  RegisterTest(TTyStringGridLeakTest);
   RegisterTest(TGridLifetimeTest);
   RegisterTest(TTyGridControlTest);
   RegisterTest(TTyGridScrollBarNilWindowTest);

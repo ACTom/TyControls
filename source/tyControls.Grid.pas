@@ -8384,14 +8384,13 @@ begin
   FAggregates.Free;
   FCollapsed.Free;
   FAttrs.Free;
+  FFilterAllValues.Free;   // 列值筛选的两张表,构造里建了,这里原先漏了(#16)
+  FFilterChecked.Free;
   { 视图对象归网格所有(OwnsObjects),交给宿主的引用随网格一起失效 ——
     与 LCL 的 MapFree 同一条所有权(grids.pas:11324)。 }
   FColViews.Free;
   FRowViews.Free;
   FHiddenRows.Free;
-  { 值筛选面板的全集与勾选集:构造里建,从前这里漏放,每个实例漏两个 TStringList。 }
-  FreeAndNil(FFilterAllValues);
-  FreeAndNil(FFilterChecked);
   inherited Destroy;
 end;
 

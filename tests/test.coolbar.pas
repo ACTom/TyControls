@@ -118,7 +118,7 @@ type
     procedure TestPerControlApiAndCollectionAreOneState;
     procedure TestEditingTheCollectionRelaysAndNotifies;
     procedure TestFreeingAChildDropsItsBand;
-    procedure TestFreeingTheBarWhileItsOwnerLives;
+    procedure TestFreeingTheBarWhileItsFormLives;
     procedure TestBandDisplayNamePrefersItsCaption;
     procedure TestVerticalPutsTheGripAboveTheBand;
     procedure TestGripperDragMovesTheSeamNotTheDraggedBand;
@@ -801,22 +801,26 @@ begin
   AssertEquals('the band went with its control', 0, CB.Bands.Count);
 end;
 
-{ Code that frees a bar at run time (CoolBar1.Free) while the form lives on: the form, as the
-  owner, notifies everything it owns of the removal -- the bar included, whose band list its
-  destructor has already freed. That notice used to look the bar up in the freed list. }
-procedure TCoolBarControlTest.TestFreeingTheBarWhileItsOwnerLives;
-var CB: TCoolBarAccess; b: TControl; n: Integer;
+{ Code that frees a bar at run time (CoolBar1.Free) while the form stays open. The bar's
+  destructor frees its band list first; then the form, as the owner, tells every component it
+  owns that the bar is leaving -- the bar itself included -- and the bar's Notification looked
+  the "removed control" up in the list it had just freed. Closing the form never got there: the
+  owner drops each component from its list before destroying it. (#15) }
+procedure TCoolBarControlTest.TestFreeingTheBarWhileItsFormLives;
+var CB: TCoolBarAccess; b0, b1: TControl; n: Integer;
 begin
   CB := TCoolBarAccess.Create(FForm);
   CB.Parent := FForm;
   CB.Font.PixelsPerInch := 96;
-  b := MakeBand(CB, 10, 0, 80, 30);
-  CB.SetBandWidth(b, 80);
-  AssertEquals('precondition: the bar has a band', 1, CB.Bands.Count);
+  b0 := MakeBand(CB, 10, 0, 80, 30);
+  b1 := MakeBand(CB, 100, 0, 80, 30);
+  CB.SetBandWidth(b0, 80);
+  CB.SetBandWidth(b1, 80);
+  AssertEquals('precondition: the bar has its bands', 2, CB.Bands.Count);
   n := FForm.ComponentCount;
-  CB.Free;
-  AssertEquals('the bar left its owner and nothing else did', n - 1, FForm.ComponentCount);
-  if b = nil then ;
+  CB.Free;   // raised an access violation
+  AssertEquals('the bar left the form, which lives on with nothing else gone', n - 1,
+    FForm.ComponentCount);
 end;
 
 procedure TCoolBarControlTest.TestBandDisplayNamePrefersItsCaption;
