@@ -1387,8 +1387,13 @@ end;
 
 function TTyCustomScrollBar.EmbeddingHost(out AHost: ITyScrollBarFrameHost): Boolean;
 begin
-  Result := (Parent <> nil) and Supports(Parent, ITyScrollBarFrameHost, AHost)
-            and AHost.EmbedsScrollBar(Self);
+  { Only a TTyScrollBar can be embedded: the hosts build their own bars as TTyScrollBar and
+    answer for exactly those (ITyScrollBarFrameHost.EmbedsScrollBar), so a descendant of
+    TTyCustomScrollBar is always a standalone bar -- asking is skipped rather than lying about
+    its type. }
+  Result := (Parent <> nil) and (Self is TTyScrollBar)
+            and Supports(Parent, ITyScrollBarFrameHost, AHost)
+            and AHost.EmbedsScrollBar(TTyScrollBar(Self));
   if not Result then AHost := nil;
 end;
 
