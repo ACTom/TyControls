@@ -45,6 +45,10 @@ type
     FOnItemExit: TNotifyEvent;
     FRebuilding: Boolean;      // re-entrancy guard for RebuildButtons
     FUpdatingIndex: Boolean;   // re-entrancy guard for the child OnChange router
+    { An ItemIndex read from a form file before the Items it points into; Loaded applies it.
+      See SetItemIndex. }
+    FStreamedItemIndex: Integer;
+    FHasStreamedItemIndex: Boolean;
     procedure SetItems(AValue: TStrings);
     procedure ItemsChanged(Sender: TObject);
     procedure SetColumns(AValue: Integer);
@@ -126,6 +130,9 @@ type
       their old order and only each indicator flips, which looks like the mirroring half
       worked and the other half silently did not. }
     procedure CMBiDiModeChanged(var Message: TLMessage); message CM_BIDIMODECHANGED;
+    { Applies an ItemIndex that was read before its Items -- the other half of SetItemIndex's
+      csLoading capture. }
+    procedure Loaded; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -630,16 +637,26 @@ begin
     state and therefore never investigated. LCL raises here for the same reason
     (radiogroup.inc:387), and TTyCheckGroup.Checked[] was given the same treatment on this
     branch; the message shape is deliberately identical so the two read alike in a log.
-    Streaming is exempt: a .lfm whose ItemIndex precedes its Items would otherwise abort
-    ReadComponent and take the whole form down with it. }
+    Streaming is exempt. A form file whose ItemIndex precedes its Items -- LCL's own
+    TRadioGroup publishes them in that order (extctrls.pp:808-809), and so may a third
+    party's TTyCustomRadioGroup -- reads the index while there is nothing yet for it to point
+    at. Raising would abort ReadComponent and take the whole form down; dropping it to -1
+    loses the saved choice. So it waits, and Loaded applies it against the items that
+    streamed in after it: LCL does the same with FReading (radiogroup.inc:383-384, applied
+    in ReadState at :504-510). The library's own TTyRadioGroup publishes Items first, so for
+    it nothing waits. }
   if (AValue < -1) or (AValue >= FItems.Count) then
   begin
     if csLoading in ComponentState then
-      AValue := -1
-    else
-      raise EListError.CreateFmt('%s Index %d out of bounds -1 .. %d',
-        [ClassName, AValue, FItems.Count - 1]);
+    begin
+      FStreamedItemIndex := AValue;
+      FHasStreamedItemIndex := True;
+      Exit;
+    end;
+    raise EListError.CreateFmt('%s Index %d out of bounds -1 .. %d',
+      [ClassName, AValue, FItems.Count - 1]);
   end;
+  FHasStreamedItemIndex := False;   // a value that could be applied replaces a waiting one
   if GetItemIndex = AValue then Exit;
   { The guard collapses the child-event storm (checking one radio unchecks its siblings,
     each of which fires) into ONE notification -- it is not there to make a programmatic
@@ -663,6 +680,35 @@ begin
   UpdateTabStops;
   Invalidate;
   NotifySelection;
+end;
+
+procedure TTyCustomRadioGroup.Loaded;
+var
+  idx, i: Integer;
+begin
+  inherited Loaded;
+  if not FHasStreamedItemIndex then Exit;
+  FHasStreamedItemIndex := False;
+  idx := FStreamedItemIndex;
+  { Still out of range once every item is in: a hand-edited or damaged form file. Nothing
+    chosen, as the streaming exemption in SetItemIndex has always promised. }
+  if (idx < -1) or (idx >= Length(FButtons)) then idx := -1;
+  { Silently, as LCL applies a value read while FReading: reading a form is not the user
+    choosing something, and a handler would run before the form is whole. }
+  FUpdatingIndex := True;
+  try
+    if idx >= 0 then
+    begin
+      if FButtons[idx] <> nil then FButtons[idx].Checked := True;
+    end
+    else
+      for i := 0 to High(FButtons) do
+        if FButtons[i] <> nil then FButtons[i].Checked := False;
+  finally
+    FUpdatingIndex := False;
+  end;
+  UpdateTabStops;
+  Invalidate;
 end;
 
 { Arrow navigation. Only the GROUP can do this: moving "one to the right" means knowing the

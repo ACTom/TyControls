@@ -2295,6 +2295,9 @@ type
       out AFirst, AStep: Integer): Boolean;
   private
     FSkipReadOnly: Boolean;
+    { 窗体文件里先于列 / 行数读到的 Col / Row,留给 Loaded 落位。见 SetCol。 }
+    FStreamedCol, FStreamedRow: Integer;
+    FColWaits, FRowWaits: Boolean;
     FGroupRowFormat: string;
     FSortDir: TTySortDirection;
     FSortKind: TTyGridSortKind;
@@ -2380,6 +2383,8 @@ type
     function  GetCellText(ACol, ARow: Integer): string; override;
     procedure RenderCells(P: TTyPainter; const M: TTyGridMetrics;
       const AFrame: TTyStyleSet); override;
+    { 先于列 / 行数读到的 Col / Row 在这里落位 —— SetCol / SetRow 读窗体时那一半的另一半。 }
+    procedure Loaded; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
@@ -9267,14 +9272,50 @@ begin
   Invalidate;
 end;
 
+{ 读窗体文件时,Col / Row 可能先于它们指向的列(Header)和行数(RowCount)读到:第三方的
+  TTyCustomStringGrid 按自己的顺序发布(库里的 TTyStringGrid 先发布 Header 和 RowCount)。
+  那时还没有列和行,MoveCursor 会把它钳到 0,存下的光标位置就丢了。所以先记着,Loaded 时
+  按读进来的列和行再落位;读进来时就落得下的照旧当场生效。 }
 procedure TTyCustomStringGrid.SetCol(AValue: Integer);
 begin
+  if csLoading in ComponentState then
+  begin
+    FColWaits := AValue > Header.Columns.Count - 1;
+    if FColWaits then
+    begin
+      FStreamedCol := AValue;
+      Exit;
+    end;
+  end;
   MoveCursor(AValue, FRow);
 end;
 
 procedure TTyCustomStringGrid.SetRow(AValue: Integer);
 begin
+  if csLoading in ComponentState then
+  begin
+    FRowWaits := AValue > RowCount - 1;
+    if FRowWaits then
+    begin
+      FStreamedRow := AValue;
+      Exit;
+    end;
+  end;
   MoveCursor(FCol, AValue);
+end;
+
+procedure TTyCustomStringGrid.Loaded;
+var
+  c, r: Integer;
+begin
+  inherited Loaded;
+  if not (FColWaits or FRowWaits) then Exit;
+  if FColWaits then c := FStreamedCol else c := FCol;
+  if FRowWaits then r := FStreamedRow else r := FRow;
+  FColWaits := False;
+  FRowWaits := False;
+  { 走 MoveCursor:光标的钳制、隐藏列、选区锚点都只在那一处,读窗体时当场生效的值也走它。 }
+  MoveCursor(c, r);
 end;
 
 { 从 AFrom 起沿 AStep 方向找第一个可编辑的列;找不到就原样返回。 }

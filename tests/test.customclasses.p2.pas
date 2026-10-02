@@ -68,6 +68,7 @@ type
     procedure TestThirdTabSheetKeepsItsBoundsOutOfTheStream;
     { Task 15: list boxes }
     procedure TestThirdListBox;
+    procedure TestIndexesReadBeforeTheirItemsWaitForThem;
     procedure TestThirdCheckListBox;
     procedure TestCheckComboPopupListTravelsTheWidenedApi;
     { Task 16: compound pickers }
@@ -117,11 +118,12 @@ type
     property Alignment;
   end;
 
-  { Items before ItemIndex: the index is read back against the items already there. }
+  { LCL's order: TRadioGroup publishes ItemIndex ahead of Items (extctrls.pp), so a ported
+    group reads the index before there is anything for it to point at. }
   TThirdRadioGroup = class(TTyCustomRadioGroup)
   published
-    property Items;
     property ItemIndex;
+    property Items;
   end;
 
   TThirdPageControl = class(TTyCustomPageControl)
@@ -136,10 +138,33 @@ type
     property ImageIndex;
   end;
 
+  { ItemIndex ahead of Items. TListBox happens to publish Items first (stdctrls.pp:710-712),
+    but the order is the third party's to choose, and the index must survive either. }
   TThirdListBox = class(TTyCustomListBox)
   published
-    property Items;
     property ItemIndex;
+    property Items;
+  end;
+
+  { Every index-like property ahead of what it indexes -- the order a third party may well
+    choose, and the one the library's own final classes never use. }
+  TIdxListBox = class(TTyCustomListBox)
+  protected
+    procedure DoSelectionChange(AUser: Boolean); override;
+  public
+    SelectionChanges: Integer;
+  published
+    property TopIndex;
+    property ItemIndex;
+    property Items;
+  end;
+
+  TIdxStringGrid = class(TTyCustomStringGrid)
+  published
+    property Col;
+    property Row;
+    property RowCount;
+    property Header;
   end;
 
   TThirdCheckListBox = class(TTyCustomCheckListBox)
@@ -658,14 +683,16 @@ begin
   third.Name := 'RG';
   third.Parent := host;
   third.SetBounds(0, 0, 200, 120);
-  CheckPublishesOnly(TThirdRadioGroup, ['Items', 'ItemIndex']);
+  CheckPublishesOnly(TThirdRadioGroup, ['ItemIndex', 'Items']);
   third.Items.CommaText := 'one,two,three';
   third.ItemIndex := 2;
   third.Columns := 2;
-  CheckStreamText(third, ['Items', 'ItemIndex'], 'Columns');
+  CheckStreamText(third, ['ItemIndex', 'Items'], 'Columns');
   back := HostRoundTrip(third) as TThirdRadioGroup;
   AssertEquals('T-c: Items round-trip', 'one,two,three', back.Items.CommaText);
-  AssertEquals('T-c: ItemIndex round-trips', 2, back.ItemIndex);
+  AssertEquals('T-c: ItemIndex round-trips, though it is read before the items', 2,
+    back.ItemIndex);
+  AssertTrue('T-c: and the third button is the checked one', back.Buttons[2].Checked);
   AssertEquals('T-c: the unpublished Columns stayed at its default', 1, back.Columns);
   { The group's own children are the library's radio buttons, and they answer to it. }
   AssertTrue('the group built a TTyRadioButton for each item', third.Buttons[1] is TTyRadioButton);
@@ -677,7 +704,7 @@ begin
   own := TTyRadioGroup.Create(FForm);
   own.Parent := FForm;
   CheckSameTypeKey(third, own);
-  CheckFreshDefaults(TThirdRadioGroup, ['Items', 'ItemIndex']);
+  CheckFreshDefaults(TThirdRadioGroup, ['ItemIndex', 'Items']);
   c := third;
   c.Columns := 3;
   AssertEquals('T-v: Columns is public through a TTyCustomRadioGroup reference', 3, third.Columns);
@@ -837,15 +864,16 @@ begin
   third := TThirdListBox.Create(FForm);
   third.Parent := FForm;
   third.SetBounds(0, 0, 150, 100);
-  CheckPublishesOnly(TThirdListBox, ['Items', 'ItemIndex']);
+  CheckPublishesOnly(TThirdListBox, ['ItemIndex', 'Items']);
   third.Items.CommaText := 'cherry,apple,banana';
   third.ItemIndex := 2;
-  CheckStreamText(third, ['Items', 'ItemIndex'], 'Sorted');
+  CheckStreamText(third, ['ItemIndex', 'Items'], 'Sorted');
   back := TThirdListBox.Create(FForm);
   back.Parent := FForm;
   StreamInto(third, back);
   AssertEquals('T-c: Items round-trip', 'cherry,apple,banana', back.Items.CommaText);
-  AssertEquals('T-c: ItemIndex round-trips', 2, back.ItemIndex);
+  AssertEquals('T-c: ItemIndex round-trips, though it is read before the items', 2,
+    back.ItemIndex);
   own := TTyListBox.Create(FForm);
   own.Parent := FForm;
   own.SetBounds(0, 110, 150, 100);
@@ -865,12 +893,66 @@ begin
     bmA.Free;
     bmB.Free;
   end;
-  CheckFreshDefaults(TThirdListBox, ['Items', 'ItemIndex']);
+  CheckFreshDefaults(TThirdListBox, ['ItemIndex', 'Items']);
   { T-v: Sorted is public (TCustomListBox). }
   c := third;
   c.Sorted := True;
   AssertEquals('T-v: sorting through a TTyCustomListBox reference', 'apple,banana,cherry',
     third.Items.CommaText);
+end;
+
+procedure TIdxListBox.DoSelectionChange(AUser: Boolean);
+begin
+  Inc(SelectionChanges);
+  inherited DoSelectionChange(AUser);
+end;
+
+{ A list box and a string grid whose index-like properties are read before
+  the items they point into. Each value waits for Loaded and lands where it was saved, as it
+  does on the final classes, which publish the items first. }
+procedure TTyCustomClassesP2Test.TestIndexesReadBeforeTheirItemsWaitForThem;
+var
+  lb, lbBack: TIdxListBox;
+  g, gBack: TIdxStringGrid;
+  host: TForm;
+  i: Integer;
+  txt: string;
+begin
+  { Each on a form of its own, round-tripped the way a .lfm carries it. }
+  host := NewHost;
+  lb := TIdxListBox.Create(host);
+  lb.Name := 'LB';
+  lb.Parent := host;
+  lb.SetBounds(0, 0, 150, 60);
+  for i := 0 to 9 do lb.Items.Add('row ' + IntToStr(i));
+  lb.ItemIndex := 7;
+  lb.TopIndex := 3;       // scrolled away from the selection: both have to come back as saved
+  AssertEquals('setup: the top row stayed where it was put', 3, lb.TopIndex);
+  txt := StreamedText(lb);
+  AssertTrue('setup: TopIndex streams ahead of Items' + LineEnding + txt,
+    Pos('TopIndex', txt) < Pos('Items', txt));
+  lbBack := HostRoundTrip(lb) as TIdxListBox;
+  AssertEquals('the items came back', 10, lbBack.Items.Count);
+  AssertEquals('ItemIndex read before Items lands on the saved row', 7, lbBack.ItemIndex);
+  AssertEquals('and TopIndex read before Items keeps the saved scroll', 3, lbBack.TopIndex);
+  AssertEquals('applied without a selection-change notification: reading a form is not one',
+    0, lbBack.SelectionChanges);
+
+  host := NewHost;
+  g := TIdxStringGrid.Create(host);
+  g.Name := 'G';
+  g.Parent := host;
+  g.SetBounds(0, 0, 300, 200);
+  for i := 0 to 2 do (g.Header.Columns.Add as TTyGridColumn).Text := 'c' + IntToStr(i);
+  g.RowCount := 6;
+  g.Col := 2;
+  g.Row := 4;
+  AssertEquals('setup: the cursor sits at column 2', 2, g.Col);
+  AssertEquals('setup: and row 4', 4, g.Row);
+  gBack := HostRoundTrip(g) as TIdxStringGrid;
+  AssertEquals('the columns came back', 3, gBack.Header.Columns.Count);
+  AssertEquals('Col read before the columns lands on the saved column', 2, gBack.Col);
+  AssertEquals('Row read before RowCount lands on the saved row', 4, gBack.Row);
 end;
 
 procedure TTyCustomClassesP2Test.TestThirdCheckListBox;
@@ -1271,7 +1353,7 @@ end;
 initialization
   RegisterClasses([TThirdPanel, TThirdGridPanel, TThirdScrollContent, TThirdCoolBar,
     TThirdGroupBox, TThirdRadioGroup, TThirdPageControl, TThirdTabSheet, TThirdListBox,
-    TThirdCheckListBox, TThirdCascader, TThirdTransfer, TThirdTreeView, TThirdListView,
+    TThirdCheckListBox, TIdxListBox, TIdxStringGrid, TThirdCascader, TThirdTransfer, TThirdTreeView, TThirdListView,
     TThirdStringGrid, TThirdDrawGrid]);
   RegisterTest(TTyCustomClassesP2Test);
 end.

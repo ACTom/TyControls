@@ -23,6 +23,13 @@ type
     FItemHeight: Integer;
     FItemHeightExplicit: Boolean;   { True once set; False = follow --item-height (density) }
     FTopIndex: Integer;
+    { ItemIndex / TopIndex as a form file gave them, kept for Loaded when they were read
+      before the Items they index. See SetItemIndex. }
+    FStreamedItemIndex: Integer;
+    FStreamedTopIndex: Integer;
+    FItemIndexWaits: Boolean;
+    FTopIndexWaits: Boolean;
+    FTopIndexStreamed: Boolean;
     FOnChange: TNotifyEvent;
     FHoverRow: Integer;       // -1 = none; set in MouseMove, cleared in MouseLeave
     FScrollBar: TTyScrollBar; // nil until first needed
@@ -63,6 +70,10 @@ type
       Sorted is on, an insert can reorder indices, so re-pin the selection. }
     procedure ItemsChanged(Sender: TObject);
     procedure SetItemIndex(const AValue: Integer);
+    { The TopIndex PROPERTY's writer: notes a value read from a form file, then goes through
+      SetTopIndex like every other scroll. Internal scrolls call SetTopIndex directly, so
+      they are never mistaken for the streamed value. }
+    procedure WriteTopIndex(const AValue: Integer);
     function GetItemHeight: Integer;
     procedure SetItemHeight(const AValue: Integer);
     function MaxTopIndex: Integer;
@@ -206,6 +217,8 @@ type
       new one, i.e. a gutter on one side and a bar on the other. Same defect and same fix as
       TTyRadioGroup.CMBiDiModeChanged. }
     procedure CMBiDiModeChanged(var Message: TLMessage); message CM_BIDIMODECHANGED;
+    { Applies an ItemIndex / TopIndex that was read before its Items. }
+    procedure Loaded; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -309,7 +322,7 @@ type
       语义见 TTyScrollBar.AutoHide。 }
     property ScrollBarAutoHide: TTyScrollBarAutoHide
       read FScrollBarAutoHide write SetScrollBarAutoHide default sbahDefault;
-    property TopIndex: Integer read FTopIndex write SetTopIndex default 0;
+    property TopIndex: Integer read FTopIndex write WriteTopIndex default 0;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     { LCL's name and shape for the same notification (stdctrls.pp:668). Fires alongside
       OnChange, never instead of it, so nothing that already listens has to move. }
@@ -575,7 +588,62 @@ end;
 
 procedure TTyCustomListBox.SetItemIndex(const AValue: Integer);
 begin
+  { A form file can hold ItemIndex ahead of Items: a third party's TTyCustomListBox publishes
+    in whatever order it likes (the library's own list boxes publish Items first). Read then,
+    the index points past an empty list and would land on -1, losing the saved row. So it
+    waits, and Loaded applies it against the items that streamed in after it -- the way a
+    radio group and a tab strip hold theirs (LCL's TRadioGroup: FReading). }
+  if csLoading in ComponentState then
+  begin
+    if AValue >= FItems.Count then
+    begin
+      FStreamedItemIndex := AValue;
+      FItemIndexWaits := True;
+      Exit;
+    end;
+    FItemIndexWaits := False;   // a value that could be applied replaces a waiting one
+  end;
   SelectItem(AValue);
+end;
+
+procedure TTyCustomListBox.WriteTopIndex(const AValue: Integer);
+begin
+  { The same for TopIndex, which clamps against the rows there are: ahead of Items it would
+    clamp to 0. Noted even when it does apply, because a waiting ItemIndex applied in Loaded
+    scrolls its row into view, and the saved TopIndex has to win over that, as it does when
+    the items come first (ItemIndex scrolls, then TopIndex is read). }
+  if csLoading in ComponentState then
+  begin
+    FStreamedTopIndex := AValue;
+    FTopIndexStreamed := True;
+    FTopIndexWaits := AValue > MaxTopIndex;
+    if FTopIndexWaits then Exit;
+  end;
+  SetTopIndex(AValue);
+end;
+
+procedure TTyCustomListBox.Loaded;
+begin
+  inherited Loaded;
+  if not (FItemIndexWaits or FTopIndexWaits) then
+  begin
+    FTopIndexStreamed := False;
+    Exit;
+  end;
+  { Silently: reading a form is not a selection change, and a handler would run before the
+    form is whole. The order is the one the library's own list boxes stream in. }
+  if FItemIndexWaits then
+  begin
+    SetItemIndexSilent(FStreamedItemIndex);
+    EnsureSelectionVisible;
+  end;
+  if FTopIndexStreamed then
+    SetTopIndex(FStreamedTopIndex);
+  FItemIndexWaits := False;
+  FTopIndexWaits := False;
+  FTopIndexStreamed := False;
+  UpdateScrollBar;
+  Invalidate;
 end;
 
 { Effective row height: an explicit ItemHeight wins; otherwise follow --item-height,
