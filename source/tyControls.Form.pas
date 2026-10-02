@@ -2144,22 +2144,15 @@ begin
 end;
 
 procedure TTyForm.Loaded;
-var
-  c: TComponent;
 begin
   inherited Loaded;
   // The streamed content host (the .lfm's `object Surface`, which already hosts every control as
-  // its child — graphic controls included) was wired by Notification(opInsert) as the reader
-  // created it -- by CLASS, so a renamed or third-party surface counts and a control that merely
-  // has the name does not. Re-finding it by name here used to overwrite that: a surface called
-  // anything else was dropped, and another control called Surface was cast to one. Only a form
-  // that somehow missed the insert falls back to the name, and only to a real surface.
-  if FSurface = nil then
-  begin
-    c := FindComponent('Surface');
-    if c is TTyCustomFormSurface then
-      FSurface := TTyCustomFormSurface(c);
-  end;
+  // its child — graphic controls included) is already wired: Notification(opInsert) took it as
+  // the reader created it -- by CLASS, so a renamed or third-party surface counts and a control
+  // that merely has the name does not. Every component the form owns passes through that insert,
+  // so there is nothing left to look up here. (Re-finding it with FindComponent('Surface') used to
+  // overwrite the wiring: a surface called anything else was dropped, and another control called
+  // Surface was cast to one.)
   // A title bar associated from the .lfm had its engine-arming deferred (see
   // SetTitleBar); now that streaming has finished, wire it to the live engine.
   ArmEngine;
