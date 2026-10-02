@@ -70,9 +70,15 @@ type
     procedure TestRibbonTakesAThirdPartyPage;
     procedure TestRibbonPageLaysOutAThirdPartyGroup;
     procedure TestRibbonIndexesReadBeforeTheirItemsWait;
+    { Task 22: window chrome }
+    procedure TestThirdTitleBar;
+    procedure TestThirdMenuBar;
+    procedure TestThirdFormSurface;
+    procedure TestFormWiresAThirdPartySurface;
     { T-d, pixel for pixel, per task }
     procedure TestBarMimicsPaintLikeTheirFinalClass;
     procedure TestRibbonMimicsPaintLikeTheirFinalClass;
+    procedure TestChromeMimicsPaintLikeTheirFinalClass;
     { Real input, one per family. }
     procedure TestInputThirdToolButtonClicks;
     procedure TestInputThirdScrollBarStepsOnArrowKeys;
@@ -132,6 +138,23 @@ type
     property Commands;
   end;
 
+  TThirdTitleBar = class(TTyCustomTitleBar)
+  published
+    property Caption;
+    property ShowMinimize;
+  end;
+
+  TThirdMenuBar = class(TTyCustomMenuBar)
+  published
+    property Menu;
+    property AutoSizeWidth;
+  end;
+
+  TThirdFormSurface = class(TTyCustomFormSurface)
+  published
+    property Purpose;
+  end;
+
 implementation
 
 type
@@ -169,6 +192,7 @@ type
   TP3ScrollBarRender = class(TTyCustomScrollBar);
   TP3RibbonPageRender = class(TTyCustomRibbonPage);
   TP3RibbonGroupRender = class(TTyCustomRibbonGroup);
+  TP3TitleBarRender = class(TTyCustomTitleBar);
 procedure TP3ToolBarCracker.ForceLayout;
 var r: TRect;
 begin
@@ -613,6 +637,98 @@ end;
 
 { ------------------------------------------------------------------ Task 22: window chrome }
 
+procedure TTyCustomClassesP3Test.TestThirdTitleBar;
+var
+  third, back: TThirdTitleBar;
+  own: TTyTitleBar;
+  c: TTyCustomTitleBar;
+begin
+  third := TThirdTitleBar.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdTitleBar, ['Caption', 'ShowMinimize']);
+  third.Caption := 'Editor';
+  third.ShowMinimize := False;
+  third.ShowClose := False;
+  CheckStreamText(third, ['Caption', 'ShowMinimize'], 'ShowClose');
+  back := TThirdTitleBar.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Caption round-trips', 'Editor', back.Caption);
+  AssertFalse('T-c: ShowMinimize round-trips', back.ShowMinimize);
+  AssertTrue('T-c: the unpublished ShowClose stayed at its default', back.ShowClose);
+  own := TTyTitleBar.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdTitleBar, ['Caption', 'ShowMinimize']);
+  c := third;
+  c.ShowMaximize := False;
+  AssertFalse('T-v: ShowMaximize is public through a TTyCustomTitleBar reference',
+    third.ShowMaximize);
+end;
+
+procedure TTyCustomClassesP3Test.TestThirdMenuBar;
+var
+  host: TForm;
+  third, back: TThirdMenuBar;
+  own: TTyMenuBar;
+  mm: TMainMenu;
+begin
+  host := NewHost;
+  mm := TMainMenu.Create(host);
+  mm.Name := 'MM';
+  third := TThirdMenuBar.Create(host);
+  third.Name := 'MB';
+  third.Parent := host;
+  CheckPublishesOnly(TThirdMenuBar, ['Menu', 'AutoSizeWidth']);
+  third.Menu := mm;
+  third.AutoSizeWidth := True;
+  back := HostRoundTrip(third) as TThirdMenuBar;
+  AssertTrue('T-c: Menu round-trips (by name)', (back.Menu <> nil) and (back.Menu.Name = 'MM'));
+  AssertTrue('T-c: AutoSizeWidth round-trips', back.AutoSizeWidth);
+  own := TTyMenuBar.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdMenuBar, ['Menu', 'AutoSizeWidth']);
+  AssertTrue('T-e: a menu bar is a tab stop, the mimic too', TThirdMenuBar.Create(FForm).TabStop);
+end;
+
+{ Purpose is read-only (the designer's caption for the surface): published, never streamed. }
+procedure TTyCustomClassesP3Test.TestThirdFormSurface;
+var
+  third: TThirdFormSurface;
+  own: TTyFormSurface;
+begin
+  third := TThirdFormSurface.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdFormSurface, ['Purpose']);
+  AssertTrue('the purpose reads through the mimic', third.Purpose <> '');
+  AssertFalse('T-c: a read-only property does not stream', HasProp(StreamedText(third), 'Purpose'));
+  own := TTyFormSurface.Create(FForm);
+  own.Parent := FForm;
+  AssertEquals('the same purpose as the library''s surface', own.Purpose, third.Purpose);
+  CheckSameTypeKey(third, own);
+end;
+
+{ C11-3 (Form.pas). A TTyForm wires a third party's surface as its content host: the form's
+  controller reaches it. }
+procedure TTyCustomClassesP3Test.TestFormWiresAThirdPartySurface;
+var
+  f: TTyForm;
+  s: TThirdFormSurface;
+  ctl: TTyStyleController;
+begin
+  f := TTyForm.CreateNew(nil);
+  try
+    s := TThirdFormSurface.Create(f);
+    s.Parent := f;
+    ctl := TTyStyleController.Create(f);
+    f.Controller := ctl;
+    AssertTrue('the form handed its controller to the third-party surface',
+      s.Controller = ctl);
+  finally
+    f.Free;
+  end;
+end;
+
 { ------------------------------------------------------------------ Task 23: images and shapes }
 
 { ------------------------------------------------------------------ Task 24: pickers, terminal }
@@ -650,6 +766,11 @@ end;
 procedure RenderRibbonGroup(C: TControl; ACanvas: TCanvas; const R: TRect);
 begin
   TP3RibbonGroupRender(C).RenderTo(ACanvas, R, 96);
+end;
+
+procedure RenderTitleBar(C: TControl; ACanvas: TCanvas; const R: TRect);
+begin
+  TP3TitleBarRender(C).RenderTo(ACanvas, R, 96);
 end;
 
 { Each pair is set up the same way -- same size, same values, unfocused -- and must paint the
@@ -745,6 +866,20 @@ begin
   rg.Caption := 'Font';
   org.Caption := 'Font';
   CheckSamePaint(rg, org, 140, 90, @RenderRibbonGroup);
+end;
+
+procedure TTyCustomClassesP3Test.TestChromeMimicsPaintLikeTheirFinalClass;
+var
+  tt: TThirdTitleBar;
+  ott: TTyTitleBar;
+begin
+  tt := TThirdTitleBar.Create(FForm);
+  ott := TTyTitleBar.Create(FForm);
+  tt.Align := alNone;
+  ott.Align := alNone;
+  tt.Caption := 'Editor';
+  ott.Caption := 'Editor';
+  CheckSamePaint(tt, ott, 300, 32, @RenderTitleBar);
 end;
 
 { ------------------------------------------------------------------ real input }
@@ -846,6 +981,7 @@ end;
 
 initialization
   RegisterClasses([TThirdToolBar, TThirdToolButton, TThirdStatusBar, TThirdScrollBar,
-    TThirdRibbonPage, TThirdRibbonGroup, TIdxRibbonGallery, TIdxRibbonBackstage]);
+    TThirdRibbonPage, TThirdRibbonGroup, TIdxRibbonGallery, TIdxRibbonBackstage, TThirdTitleBar,
+    TThirdMenuBar, TThirdFormSurface]);
   RegisterTest(TTyCustomClassesP3Test);
 end.

@@ -379,7 +379,7 @@ type
     .tycss tokens. Left/Right rotate the open dropdown to the adjacent top while one
     is open (via the shared view's OnNavigateAdjacentBar). Follows the TToggleSwitch
     anatomy: class(TTyCustomControl), GetStyleTypeKey, RenderTo seam + Paint. }
-  TTyMenuBar = class(TTyCustomControl)
+  TTyCustomMenuBar = class(TTyCustomControl)
   private
     FMenu: TMainMenu;
     FOpenIndex: Integer;      // index of the open top dropdown, or -1 (none open)
@@ -466,20 +466,34 @@ type
     function PopupForTest: TTyMenuPopup;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    { The constructor turns this on (the bar walks its top cells with the arrow keys);
+      declaring the default to match is what lets a host turn it OFF in the .lfm — against
+      the inherited `default False` that value is dropped as "already the default" and the
+      constructor's True wins again at run time. }
+    property TabStop default True;
+    { The associated LCL data model. Setting it (re)builds the rendered top cells;
+      freeing it nils this reference (FreeNotification). TTyForm.MenuBar reads this
+      for the non-mac shortcut dispatch and the mac global-bar handoff (Task 6). }
+    property Menu: TMainMenu read FMenu write SetMenu;
+    { Shrink-to-fit the bar's Width to its top-level cells + horizontal padding. A
+      distinct flag (not the LCL AutoSize/CanAutoSize machinery, which fights the
+      auto-size layout system): when True it sets Width to FitWidth — but only while
+      Align is NOT alTop/alBottom, where the LCL force-stretches the bar to the parent
+      width and a content fit would be overridden anyway. Recomputed when Menu is
+      (re)assigned, when this flag is set True, and on resize/relayout. }
+    property AutoSizeWidth: Boolean read FAutoSizeWidth write SetAutoSizeWidth default False;
+  end;
+
+  { TTyMenuBar publishes TTyCustomMenuBar's properties; everything lives in TTyCustomMenuBar. }
+  TTyMenuBar = class(TTyCustomMenuBar)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
     property Font;
     property ShowHint;
     property TabOrder;
-    { The constructor turns this on (the bar walks its top cells with the arrow keys);
-      declaring the default to match is what lets a host turn it OFF in the .lfm — against
-      the inherited `default False` that value is dropped as "already the default" and the
-      constructor's True wins again at run time. }
-    property TabStop default True;
+    property TabStop;
     property OnClick;
     property OnDblClick;
     property OnMouseDown;
@@ -523,17 +537,8 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    { The associated LCL data model. Setting it (re)builds the rendered top cells;
-      freeing it nils this reference (FreeNotification). TTyForm.MenuBar reads this
-      for the non-mac shortcut dispatch and the mac global-bar handoff (Task 6). }
-    property Menu: TMainMenu read FMenu write SetMenu;
-    { Shrink-to-fit the bar's Width to its top-level cells + horizontal padding. A
-      distinct flag (not the LCL AutoSize/CanAutoSize machinery, which fights the
-      auto-size layout system): when True it sets Width to FitWidth — but only while
-      Align is NOT alTop/alBottom, where the LCL force-stretches the bar to the parent
-      width and a content fit would be overridden anyway. Recomputed when Menu is
-      (re)assigned, when this flag is set True, and on resize/relayout. }
-    property AutoSizeWidth: Boolean read FAutoSizeWidth write SetAutoSizeWidth default False;
+    property Menu;
+    property AutoSizeWidth;
     property Align;
     property Anchors;
   end;
@@ -2147,9 +2152,9 @@ begin
   DoActivateRow(AIndex);
 end;
 
-{ TTyMenuBar }
+{ TTyCustomMenuBar }
 
-constructor TTyMenuBar.Create(AOwner: TComponent);
+constructor TTyCustomMenuBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TabStop := True;
@@ -2162,7 +2167,7 @@ begin
   Height := TyDensityHeight(ActiveController, 28);
 end;
 
-destructor TTyMenuBar.Destroy;
+destructor TTyCustomMenuBar.Destroy;
 begin
   TyAccelUnregister(Self);
   Application.RemoveAsyncCalls(Self);   // cancel any pending DeferredOpenTop
@@ -2171,17 +2176,17 @@ begin
   inherited Destroy;
 end;
 
-function TTyMenuBar.AccelPos(AIndex: Integer): Integer;
+function TTyCustomMenuBar.AccelPos(AIndex: Integer): Integer;
 begin
   Result := TyAccelGatePos(TopMnemonicPos(AIndex));
 end;
 
-function TTyMenuBar.GetStyleTypeKey: string;
+function TTyCustomMenuBar.GetStyleTypeKey: string;
 begin
   Result := 'TyMenuBar';
 end;
 
-procedure TTyMenuBar.SetMenu(AValue: TMainMenu);
+procedure TTyCustomMenuBar.SetMenu(AValue: TMainMenu);
 begin
   if FMenu = AValue then Exit;
   ClosePopup;
@@ -2192,14 +2197,14 @@ begin
   Invalidate;
 end;
 
-procedure TTyMenuBar.SetAutoSizeWidth(AValue: Boolean);
+procedure TTyCustomMenuBar.SetAutoSizeWidth(AValue: Boolean);
 begin
   if FAutoSizeWidth = AValue then Exit;
   FAutoSizeWidth := AValue;
   ApplyAutoSizeWidth;   // fit immediately when turned on
 end;
 
-procedure TTyMenuBar.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomMenuBar.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FMenu) then
@@ -2211,7 +2216,7 @@ begin
   end;
 end;
 
-function TTyMenuBar.TopCount: Integer;
+function TTyCustomMenuBar.TopCount: Integer;
 var i: Integer;
 begin
   Result := 0;
@@ -2220,37 +2225,37 @@ begin
     if FMenu.Items[i].Visible then Inc(Result);
 end;
 
-function TTyMenuBar.OpenIndexForTest: Integer;
+function TTyCustomMenuBar.OpenIndexForTest: Integer;
 begin
   Result := FOpenIndex;
 end;
 
-function TTyMenuBar.PopupForTest: TTyMenuPopup;
+function TTyCustomMenuBar.PopupForTest: TTyMenuPopup;
 begin
   Result := FPopup;
 end;
 
-function TTyMenuBar.TopRightJustifiedForTest(AIndex: Integer): Boolean;
+function TTyCustomMenuBar.TopRightJustifiedForTest(AIndex: Integer): Boolean;
 begin
   Result := TopRightJustified(AIndex);
 end;
 
-function TTyMenuBar.TopLeftForTest(AIndex, APPI: Integer): Integer;
+function TTyCustomMenuBar.TopLeftForTest(AIndex, APPI: Integer): Integer;
 begin
   Result := TopLeft(AIndex, APPI);
 end;
 
-procedure TTyMenuBar.OpenTopForTest(AIndex: Integer);
+procedure TTyCustomMenuBar.OpenTopForTest(AIndex: Integer);
 begin
   OpenTop(AIndex);
 end;
 
-function TTyMenuBar.TopEnabledForTest(AIndex: Integer): Boolean;
+function TTyCustomMenuBar.TopEnabledForTest(AIndex: Integer): Boolean;
 begin
   Result := TopEnabled(AIndex);
 end;
 
-function TTyMenuBar.TopEnabled(AIndex: Integer): Boolean;
+function TTyCustomMenuBar.TopEnabled(AIndex: Integer): Boolean;
 var
   mi: TMenuItem;
 begin
@@ -2258,7 +2263,7 @@ begin
   Result := (mi <> nil) and mi.Enabled;
 end;
 
-function TTyMenuBar.VisibleTopItem(AIndex: Integer): TMenuItem;
+function TTyCustomMenuBar.VisibleTopItem(AIndex: Integer): TMenuItem;
 var i, n: Integer;
 begin
   Result := nil;
@@ -2272,14 +2277,14 @@ begin
     end;
 end;
 
-function TTyMenuBar.TopCaption(AIndex: Integer): string;
+function TTyCustomMenuBar.TopCaption(AIndex: Integer): string;
 var mi: TMenuItem; pos: Integer;
 begin
   mi := VisibleTopItem(AIndex);
   if mi <> nil then TyParseMnemonic(mi.Caption, Result, pos) else Result := '';
 end;
 
-function TTyMenuBar.TopMnemonic(AIndex: Integer): Char;
+function TTyCustomMenuBar.TopMnemonic(AIndex: Integer): Char;
 var mi: TMenuItem; disp: string; pos: Integer;
 begin
   Result := #0;
@@ -2287,7 +2292,7 @@ begin
   if mi <> nil then Result := TyParseMnemonic(mi.Caption, disp, pos);
 end;
 
-function TTyMenuBar.TopMnemonicPos(AIndex: Integer): Integer;
+function TTyCustomMenuBar.TopMnemonicPos(AIndex: Integer): Integer;
 var mi: TMenuItem; disp: string;
 begin
   Result := 0;
@@ -2297,7 +2302,7 @@ end;
 
 { A top cell is the item's caption width plus the TyMenuItem left+right padding, all
   theme-driven (font + padding tokens), so the bar tracks the active theme metrics. }
-function TTyMenuBar.TopCellWidth(AIndex, APPI: Integer): Integer;
+function TTyCustomMenuBar.TopCellWidth(AIndex, APPI: Integer): Integer;
 var
   RowStyle: TTyStyleSet;
   Bmp: TBGRABitmap;
@@ -2320,7 +2325,7 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-function TTyMenuBar.TopRightJustified(AIndex: Integer): Boolean;
+function TTyCustomMenuBar.TopRightJustified(AIndex: Integer): Boolean;
 var
   mi: TMenuItem;
 begin
@@ -2333,7 +2338,7 @@ end;
   and must not read a mirrored x -- a reflection is taken about Width, and Width is the very
   thing FitWidth is computing, so mirroring there would be circular. Nothing else uses it:
   every consumer that means a position on screen goes through TopLeft. }
-function TTyMenuBar.TopLeftUnmirrored(AIndex, APPI: Integer): Integer;
+function TTyCustomMenuBar.TopLeftUnmirrored(AIndex, APPI: Integer): Integer;
 var
   S: TTyStyleSet;
   i: Integer;
@@ -2355,7 +2360,7 @@ begin
     Inc(Result, TopCellWidth(i, APPI));
 end;
 
-function TTyMenuBar.TopLeft(AIndex, APPI: Integer): Integer;
+function TTyCustomMenuBar.TopLeft(AIndex, APPI: Integer): Integer;
 begin
   Result := TopLeftUnmirrored(AIndex, APPI);
   { MIRROR once, here, so BOTH packing rules above get it and neither can be the branch
@@ -2367,7 +2372,7 @@ begin
     Result := Width - Result - TopCellWidth(AIndex, APPI);
 end;
 
-function TTyMenuBar.TopAtX(AX, APPI: Integer): Integer;
+function TTyCustomMenuBar.TopAtX(AX, APPI: Integer): Integer;
 var
   i, cellL, cellR: Integer;
 begin
@@ -2380,7 +2385,7 @@ begin
   end;
 end;
 
-function TTyMenuBar.FitWidth(APPI: Integer): Integer;
+function TTyCustomMenuBar.FitWidth(APPI: Integer): Integer;
 var
   S: TTyStyleSet;
   n: Integer;
@@ -2403,7 +2408,7 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-procedure TTyMenuBar.ApplyAutoSizeWidth;
+procedure TTyCustomMenuBar.ApplyAutoSizeWidth;
 var
   ppi, w: Integer;
 begin
@@ -2424,7 +2429,7 @@ begin
   end;
 end;
 
-procedure TTyMenuBar.ClosePopup;
+procedure TTyCustomMenuBar.ClosePopup;
 begin
   FOpenIndex := -1;
   StopHoverPoll;
@@ -2432,7 +2437,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyMenuBar.HandlePopupClosed(Sender: TObject);
+procedure TTyCustomMenuBar.HandlePopupClosed(Sender: TObject);
 begin
   // The dropdown cascade collapsed (leaf activation / focus-loss dismiss / Esc). Clear the
   // open-index and repaint the active cell. Do NOT free FPopup — this fires from inside the
@@ -2442,7 +2447,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyMenuBar.StartHoverPoll;
+procedure TTyCustomMenuBar.StartHoverPoll;
 begin
   // Only where an open popup grabs the pointer (Qt/GTK) does the bar stop getting MouseMove and need
   // to poll; on Win32 the ordinary MouseMove path handles hover-switch, so there is nothing to start.
@@ -2456,12 +2461,12 @@ begin
   FHoverPollTimer.Enabled := True;
 end;
 
-procedure TTyMenuBar.StopHoverPoll;
+procedure TTyCustomMenuBar.StopHoverPoll;
 begin
   if FHoverPollTimer <> nil then FHoverPollTimer.Enabled := False;   // ref'd on all widgetsets (nil off-poll)
 end;
 
-procedure TTyMenuBar.HoverPollTick(Sender: TObject);
+procedure TTyCustomMenuBar.HoverPollTick(Sender: TObject);
 var
   p: TPoint;
   idx, ppi: Integer;
@@ -2478,7 +2483,7 @@ begin
   if (idx >= 0) and (idx <> FOpenIndex) then OpenTop(idx);
 end;
 
-procedure TTyMenuBar.OpenTop(AIndex: Integer);
+procedure TTyCustomMenuBar.OpenTop(AIndex: Integer);
 var
   mi: TMenuItem;
   ppi, cellL, cellW: Integer;
@@ -2552,7 +2557,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyMenuBar.HandleNavigateAdjacent(Sender: TObject; ADelta: Integer);
+procedure TTyCustomMenuBar.HandleNavigateAdjacent(Sender: TObject; ADelta: Integer);
 var
   n, idx: Integer;
 begin
@@ -2569,13 +2574,13 @@ begin
   Application.QueueAsyncCall(@DeferredOpenTop, 0);
 end;
 
-procedure TTyMenuBar.DeferredOpenTop(Data: PtrInt);
+procedure TTyCustomMenuBar.DeferredOpenTop(Data: PtrInt);
 begin
   if FPendingTop >= 0 then OpenTop(FPendingTop);
   FPendingTop := -1;
 end;
 
-function TTyMenuBar.DialogChar(var Message: TLMKey): Boolean;
+function TTyCustomMenuBar.DialogChar(var Message: TLMKey): Boolean;
 var i: Integer; ch: Char; mi: TMenuItem;
 begin
   // Only Alt+<mnemonic> opens a top menu (mirrors TCustomLabel.DialogChar); a plain keystroke
@@ -2603,7 +2608,7 @@ begin
   Result := inherited DialogChar(Message);
 end;
 
-procedure TTyMenuBar.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomMenuBar.MouseMove(Shift: TShiftState; X, Y: Integer);
 var idx: Integer;
 begin
   inherited MouseMove(Shift, X, Y);
@@ -2619,7 +2624,7 @@ begin
     OpenTop(idx);
 end;
 
-procedure TTyMenuBar.MouseLeave;
+procedure TTyCustomMenuBar.MouseLeave;
 begin
   inherited MouseLeave;
   if FHotIndex <> -1 then
@@ -2629,7 +2634,7 @@ begin
   end;
 end;
 
-procedure TTyMenuBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomMenuBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var idx: Integer;
 begin
   inherited MouseDown(Button, Shift, X, Y);
@@ -2643,7 +2648,7 @@ begin
     OpenTop(idx);
 end;
 
-procedure TTyMenuBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomMenuBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, CellStyle: TTyStyleSet;
@@ -2706,12 +2711,12 @@ begin
   end;
 end;
 
-procedure TTyMenuBar.Paint;
+procedure TTyCustomMenuBar.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-procedure TTyMenuBar.Resize;
+procedure TTyCustomMenuBar.Resize;
 begin
   inherited Resize;
   // Re-fit on a relayout (e.g. the parent resized us, or a DPI/font change moved the
