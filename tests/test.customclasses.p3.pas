@@ -73,6 +73,7 @@ type
     procedure TestStatusPanelsReachAThirdPartyBar;
     procedure TestThirdScrollBar;
     procedure TestThirdToolButtonStoresOnlyAnExplicitGlyphLayout;
+    procedure TestToolBarRepaintsAThirdPartyButton;
     { Task 21: ribbon }
     procedure TestThirdRibbonPage;
     procedure TestThirdRibbonGroup;
@@ -103,6 +104,8 @@ type
     procedure TestThirdToolWindowBarTakesAToolWindow;
     procedure TestToolWindowRulesTakeThirdParties;
     procedure TestToolWindowStorageRulesReachThirdParties;
+    procedure TestAThirdPartyBarJoinsTheSideNarrowing;
+    procedure TestAnOrphanWindowReturnsToAThirdPartyBar;
     { T-d, pixel for pixel, per task }
     procedure TestBarMimicsPaintLikeTheirFinalClass;
     procedure TestRibbonMimicsPaintLikeTheirFinalClass;
@@ -265,6 +268,13 @@ type
   { Counts the repaints a status bar asks for: the panel collection's only way to tell its bar
     that a panel changed. }
   TP3CountingStatusBar = class(TTyCustomStatusBar)
+  public
+    Invalidations: Integer;
+    procedure Invalidate; override;
+  end;
+
+  { Counts the repaints a tool bar asks of its buttons. }
+  TP3CountingToolButton = class(TThirdToolButton)
   public
     Invalidations: Integer;
     procedure Invalidate; override;
@@ -437,6 +447,12 @@ end;
 procedure TP3AppMenuCracker.Drop;
 begin
   DoDropDown;
+end;
+
+procedure TP3CountingToolButton.Invalidate;
+begin
+  Inc(Invalidations);
+  inherited Invalidate;
 end;
 
 procedure TP3CountingStatusBar.Invalidate;
@@ -770,6 +786,29 @@ begin
   AssertFalse('an adopted layout does not stream', HasProp(StreamedText(b), 'GlyphLayout'));
   b.GlyphLayout := glLeft;
   AssertTrue('an explicit layout streams, glLeft included', HasProp(StreamedText(b), 'GlyphLayout'));
+end;
+
+{ C19-2 (the bar's own setters). Assigning OnPaintButton switches every button between the
+  host's paint and the themed one, and DropDownWidth is part of a drop-style button's size, so
+  the bar repaints its buttons -- a third party's among them. }
+procedure TTyCustomClassesP3Test.TestToolBarRepaintsAThirdPartyButton;
+var
+  bar: TTyToolBar;
+  b: TP3CountingToolButton;
+begin
+  bar := TTyToolBar.Create(FForm);
+  bar.Parent := FForm;
+  b := TP3CountingToolButton.Create(FForm);
+  b.Parent := bar;
+  b.Invalidations := 0;
+  bar.OnPaintButton := @PaintButton;
+  AssertTrue('assigning OnPaintButton repaints the third-party button', b.Invalidations > 0);
+  b.Invalidations := 0;
+  bar.OnPaintButton := nil;
+  AssertTrue('and so does clearing it', b.Invalidations > 0);
+  b.Invalidations := 0;
+  bar.DropDownWidth := 31;
+  AssertTrue('a new DropDownWidth re-measures it', b.Invalidations > 0);
 end;
 
 { ------------------------------------------------------------------ Task 21: ribbon }
@@ -1584,6 +1623,64 @@ begin
   txt := StreamedText(bar);
   AssertTrue('a bottom bar streams its width', HasProp(txt, 'Width'));
   AssertFalse('and not its height', HasProp(txt, 'Height'));
+end;
+
+{ C24 (the side narrowing). Bars on one axis that do not all fit share the room by
+  ExpandedSize; a third party's bar takes its share like the library's instead of being counted
+  as a plain aligned sibling. The same numbers on two forms -- the library's right bar on one, a
+  third party's on the other -- give the same widths. }
+procedure TTyCustomClassesP3Test.TestAThirdPartyBarJoinsTheSideNarrowing;
+
+  procedure Build(AHost: TForm; ARightClass: TControlClass;
+    out ALeft, ARight: TTyCustomToolWindowBar);
+  begin
+    ALeft := TTyToolWindowBar.Create(AHost);
+    ALeft.Parent := AHost;
+    ALeft.Font.PixelsPerInch := 96;
+    ALeft.Placement := twpLeft;
+    TTyToolWindow.Create(AHost).Parent := ALeft;
+    ARight := TTyCustomToolWindowBar(ARightClass.Create(AHost));
+    ARight.Parent := AHost;
+    ARight.Font.PixelsPerInch := 96;
+    ARight.Placement := twpRight;
+    TTyToolWindow.Create(AHost).Parent := ARight;
+    { Siblings arriving do not re-derive a bar (the parent resizing does); setting the sizes
+      once both are in place does. }
+    ALeft.ExpandedSize := 600;
+    ARight.ExpandedSize := 200;
+  end;
+
+var
+  libL, libR, thL, thR: TTyCustomToolWindowBar;
+begin
+  Build(NewHost, TTyToolWindowBar, libL, libR);
+  Build(NewHost, TThirdToolWindowBar, thL, thR);
+  AssertTrue('precondition: the two bars do not fit, so they narrow',
+    libL.Width + libR.Width <= libL.Parent.ClientWidth);
+  AssertTrue('precondition: and share by 600 : 200', libL.Width > libR.Width);
+  AssertEquals('the library''s left bar gets the same width next to a third party''s bar',
+    libL.Width, thL.Width);
+  AssertEquals('and the third party''s bar the same share as the library''s', libR.Width, thR.Width);
+end;
+
+{ C24 (design rules, MC). A window left without a bar at design time can be returned to any
+  bar its owner holds, a third party's included. }
+procedure TTyCustomClassesP3Test.TestAnOrphanWindowReturnsToAThirdPartyBar;
+var
+  bar: TThirdToolWindowBar;
+  w: TTyToolWindow;
+  targets: TTyToolWindowBarArray;
+begin
+  bar := TThirdToolWindowBar.Create(FForm);
+  bar.Parent := FForm;
+  w := TTyToolWindow.Create(FForm);
+  w.Parent := FForm;
+  AssertTrue('precondition: the window has no bar', w.Bar = nil);
+  targets := TyToolWindowDesignReturnTargets(w);
+  AssertEquals('the third-party bar is a return target', 1, Length(targets));
+  AssertTrue('the very one', targets[0] = TTyCustomToolWindowBar(bar));
+  AssertTrue('and the window goes back to it', TyToolWindowDesignReturnToBar(w, bar));
+  AssertTrue('where it finds its bar', w.Bar = TTyCustomToolWindowBar(bar));
 end;
 
 { ------------------------------------------------------------------ T-d }
