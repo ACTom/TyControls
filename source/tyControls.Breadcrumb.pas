@@ -183,7 +183,7 @@ type
     declares no variant enum of its own, so a theme may define as many as it likes without a
     code change, and the crumbs' own key is resolved with the SAME StyleClass so
     'TyBreadcrumbItem.compact' follows the bar. }
-  TTyBreadcrumb = class(TTyGraphicControl)
+  TTyCustomBreadcrumb = class(TTyGraphicControl)
   private
     FItems: TStrings;
     FHoverIndex: Integer;   // the LINK under the pointer; -1 = none
@@ -252,9 +252,20 @@ type
     function TyCrumbRect(AIndex: Integer): TRect;
     { The Items index at client device (X, Y), or -1 (separators, air and the '…' included). }
     function TyCrumbAt(X, Y: Integer): Integer;
+    { The trail, root first and CURRENT LOCATION LAST — one crumb per line. Drawn with the
+      resolved TyBreadcrumbItem style (NOT the LCL Font.*) and ellipsised when a crumb is
+      clipped; never wrapped. No mnemonic parsing — a crumb has no Alt+key path, so an '&'
+      is literal text. }
+    property Items: TStrings read FItems write SetItems;
+    { Fires when the user activates a crumb — see TTyBreadcrumbClickEvent. This is the
+      navigation event: OnClick below fires for ANY click on the bar, this one only for a
+      committed click on a place you can actually go. }
+    property OnCrumbClick: TTyBreadcrumbClickEvent read FOnCrumbClick write FOnCrumbClick;
+  end;
+
+  { TTyBreadcrumb publishes TTyCustomBreadcrumb's properties; everything lives in TTyCustomBreadcrumb. }
+  TTyBreadcrumb = class(TTyCustomBreadcrumb)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
@@ -300,15 +311,8 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    { The trail, root first and CURRENT LOCATION LAST — one crumb per line. Drawn with the
-      resolved TyBreadcrumbItem style (NOT the LCL Font.*) and ellipsised when a crumb is
-      clipped; never wrapped. No mnemonic parsing — a crumb has no Alt+key path, so an '&'
-      is literal text. }
-    property Items: TStrings read FItems write SetItems;
-    { Fires when the user activates a crumb — see TTyBreadcrumbClickEvent. This is the
-      navigation event: OnClick below fires for ANY click on the bar, this one only for a
-      committed click on a place you can actually go. }
-    property OnCrumbClick: TTyBreadcrumbClickEvent read FOnCrumbClick write FOnCrumbClick;
+    property Items;
+    property OnCrumbClick;
     property Align;
     property Anchors;
   end;
@@ -587,9 +591,9 @@ begin
   Result := APadTop + bandH + APadBottom;
 end;
 
-{ --- TTyBreadcrumb -------------------------------------------------------------------- }
+{ --- TTyCustomBreadcrumb -------------------------------------------------------------- }
 
-constructor TTyBreadcrumb.Create(AOwner: TComponent);
+constructor TTyCustomBreadcrumb.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FItems := TStringList.Create;
@@ -601,7 +605,7 @@ begin
   Height := 24;
 end;
 
-destructor TTyBreadcrumb.Destroy;
+destructor TTyCustomBreadcrumb.Destroy;
 begin
   // Drop the change hook before freeing: the list fires OnChange as it clears.
   TStringList(FItems).OnChange := nil;
@@ -609,29 +613,29 @@ begin
   inherited Destroy;
 end;
 
-function TTyBreadcrumb.GetStyleTypeKey: string;
+function TTyCustomBreadcrumb.GetStyleTypeKey: string;
 begin
   Result := 'TyBreadcrumb';
 end;
 
-function TTyBreadcrumb.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
+function TTyCustomBreadcrumb.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
 begin
   Result := TyResolveFontSize(AStyle, ParentFont, Font.Size, ActiveController);
 end;
 
-function TTyBreadcrumb.Count: Integer;
+function TTyCustomBreadcrumb.Count: Integer;
 begin
   Result := FItems.Count;
 end;
 
 { --- items ---------------------------------------------------------------------------- }
 
-procedure TTyBreadcrumb.SetItems(AValue: TStrings);
+procedure TTyCustomBreadcrumb.SetItems(AValue: TStrings);
 begin
   FItems.Assign(AValue);   // fires ItemsChanged
 end;
 
-procedure TTyBreadcrumb.ItemsChanged(Sender: TObject);
+procedure TTyCustomBreadcrumb.ItemsChanged(Sender: TObject);
 begin
   // A list edit can strand the live mouse state on a crumb that is gone — or, worse, on one
   // that is now the LAST crumb and therefore no longer a link, which would leave the current
@@ -649,18 +653,18 @@ end;
 
 { --- style ---------------------------------------------------------------------------- }
 
-function TTyBreadcrumb.SlotStyle(AItemIndex: Integer; AHovered: Boolean): TTyStyleSet;
+function TTyCustomBreadcrumb.SlotStyle(AItemIndex: Integer; AHovered: Boolean): TTyStyleSet;
 begin
   Result := ActiveController.Model.ResolveStyle('TyBreadcrumbItem', StyleClass,
     TyBreadcrumbItemStates(AItemIndex, FItems.Count, AHovered, Enabled));
 end;
 
-function TTyBreadcrumb.SlotHovered(AItemIndex: Integer): Boolean;
+function TTyCustomBreadcrumb.SlotHovered(AItemIndex: Integer): Boolean;
 begin
   Result := (FHoverIndex >= 0) and (AItemIndex = FHoverIndex);
 end;
 
-function TTyBreadcrumb.SlotText(AItemIndex: Integer): string;
+function TTyCustomBreadcrumb.SlotText(AItemIndex: Integer): string;
 begin
   if (AItemIndex >= 0) and (AItemIndex < FItems.Count) then
     Result := FItems[AItemIndex]
@@ -668,7 +672,7 @@ begin
     Result := TyBreadcrumbEllipsisText;
 end;
 
-function TTyBreadcrumb.ItemTextStyle(const ABar, ACrumb: TTyStyleSet): TTyStyleSet;
+function TTyCustomBreadcrumb.ItemTextStyle(const ABar, ACrumb: TTyStyleSet): TTyStyleSet;
 { The label's ink and font: the crumb's own where the theme sets them, the bar's otherwise.
   This is the house degradation rule (no colour => inherit the parent's ink) extended to the
   font by the same logic — a theme that styles only TyBreadcrumb must still get legible,
@@ -699,7 +703,7 @@ end;
 
 { --- measurement ---------------------------------------------------------------------- }
 
-procedure TTyBreadcrumb.AccrueItemHeight(APainter: TTyPainter; const AStyle: TTyStyleSet;
+procedure TTyCustomBreadcrumb.AccrueItemHeight(APainter: TTyPainter; const AStyle: TTyStyleSet;
   var AHeight: Integer);
 var
   h: Integer;
@@ -712,7 +716,7 @@ begin
   if h > AHeight then AHeight := h;
 end;
 
-procedure TTyBreadcrumb.MeasureWidths(APainter: TTyPainter;
+procedure TTyCustomBreadcrumb.MeasureWidths(APainter: TTyPainter;
   out AWidths: TTyBreadcrumbWidths; out AEllipsisWidth, AItemHeight: Integer);
 { Measured with the PAINTER, not an LCL canvas: the crumbs are drawn with BGRA text metrics,
   and only the same measurer reproduces the extent those glyphs actually render at.
@@ -746,7 +750,7 @@ begin
   AccrueItemHeight(APainter, crumbS, AItemHeight);
 end;
 
-function TTyBreadcrumb.SlotsWith(APainter: TTyPainter; const ABarStyle: TTyStyleSet;
+function TTyCustomBreadcrumb.SlotsWith(APainter: TTyPainter; const ABarStyle: TTyStyleSet;
   AWidth, AHeight: Integer): TTyBreadcrumbSlots;
 var
   widths: TTyBreadcrumbWidths;
@@ -769,7 +773,7 @@ begin
     padL, padT, padR, padB, sepSz, sepGp);
 end;
 
-function TTyBreadcrumb.SlotsFor(AWidth, AHeight, APPI: Integer): TTyBreadcrumbSlots;
+function TTyCustomBreadcrumb.SlotsFor(AWidth, AHeight, APPI: Integer): TTyBreadcrumbSlots;
 { A CANVAS-LESS painter — the TTyBadge / TTyAlert idiom: BeginPaint(nil, ...) builds only the
   painter's internal bitmap and EndPaint frees it WITHOUT blitting, so this is safe outside a
   paint cycle and leaks nothing. }
@@ -787,12 +791,12 @@ begin
   end;
 end;
 
-function TTyBreadcrumb.TyCrumbSlots: TTyBreadcrumbSlots;
+function TTyCustomBreadcrumb.TyCrumbSlots: TTyBreadcrumbSlots;
 begin
   Result := SlotsFor(ClientWidth, ClientHeight, Font.PixelsPerInch);
 end;
 
-function TTyBreadcrumb.TyVisiblePlan: TTyBreadcrumbPlan;
+function TTyCustomBreadcrumb.TyVisiblePlan: TTyBreadcrumbPlan;
 var
   slots: TTyBreadcrumbSlots;
   i: Integer;
@@ -806,7 +810,7 @@ begin
     Result[i] := slots[i].ItemIndex;
 end;
 
-function TTyBreadcrumb.TyCrumbRect(AIndex: Integer): TRect;
+function TTyCustomBreadcrumb.TyCrumbRect(AIndex: Integer): TRect;
 var
   slots: TTyBreadcrumbSlots;
   i: Integer;
@@ -821,12 +825,12 @@ begin
   // elided crumb genuinely has nowhere to be.
 end;
 
-function TTyBreadcrumb.TyCrumbAt(X, Y: Integer): Integer;
+function TTyCustomBreadcrumb.TyCrumbAt(X, Y: Integer): Integer;
 begin
   Result := TyBreadcrumbIndexAt(TyCrumbSlots, X, Y);
 end;
 
-function TTyBreadcrumb.LinkAt(X, Y: Integer): Integer;
+function TTyCustomBreadcrumb.LinkAt(X, Y: Integer): Integer;
 begin
   Result := -1;
   // Match the paint exactly: a background-less bar draws NOTHING (RenderTo exits early on the
@@ -837,7 +841,7 @@ begin
   if not TyBreadcrumbIsLink(Result, FItems.Count) then Result := -1;
 end;
 
-procedure TTyBreadcrumb.CalculatePreferredSize(var PreferredWidth,
+procedure TTyCustomBreadcrumb.CalculatePreferredSize(var PreferredWidth,
   PreferredHeight: Integer; WithThemeSpace: Boolean);
 var
   barS: TTyStyleSet;
@@ -869,7 +873,7 @@ end;
 
 { --- input ---------------------------------------------------------------------------- }
 
-procedure TTyBreadcrumb.MouseDown(Button: TMouseButton; Shift: TShiftState;
+procedure TTyCustomBreadcrumb.MouseDown(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 begin
   if not Enabled then Exit;
@@ -880,7 +884,7 @@ begin
   FPressIndex := LinkAt(X, Y);
 end;
 
-procedure TTyBreadcrumb.MouseUp(Button: TMouseButton; Shift: TShiftState;
+procedure TTyCustomBreadcrumb.MouseUp(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
   wasIdx: Integer;
@@ -898,7 +902,7 @@ begin
     FOnCrumbClick(Self, wasIdx);
 end;
 
-procedure TTyBreadcrumb.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomBreadcrumb.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   h: Integer;
 begin
@@ -914,7 +918,7 @@ begin
   end;
 end;
 
-procedure TTyBreadcrumb.MouseLeave;
+procedure TTyCustomBreadcrumb.MouseLeave;
 begin
   inherited MouseLeave;   // clears the bar's own hover
   if FHoverIndex <> -1 then
@@ -926,7 +930,7 @@ end;
 
 { --- painting ------------------------------------------------------------------------- }
 
-procedure TTyBreadcrumb.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomBreadcrumb.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, crumbS, txtS: TTyStyleSet;
@@ -1001,7 +1005,7 @@ begin
   end;
 end;
 
-procedure TTyBreadcrumb.Paint;
+procedure TTyCustomBreadcrumb.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

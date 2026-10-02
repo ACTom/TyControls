@@ -127,7 +127,7 @@ type
     two are separate types only so neither unit has to use the other. }
   TTyAlertCloseEvent = procedure(Sender: TObject; var AllowClose: Boolean) of object;
 
-  TTyAlert = class(TTyGraphicControl)
+  TTyCustomAlert = class(TTyGraphicControl)
   private
     FAlertType: TTyAlertType;
     FMessage: TCaption;
@@ -199,9 +199,31 @@ type
     function TyAlertCloseRect: TRect;
     { The status-icon slot in DEVICE px, (0,0)-local; empty when ShowIcon is off. }
     function TyAlertIconRect: TRect;
+    { The banner's semantic type: it picks BOTH the style variant ('info' / 'success' /
+      'warning' / 'error' — the theme writes a `TyAlert.warning` rule) and the status
+      glyph. Changing it re-fits an auto-sized banner, because a theme may pad a variant
+      differently. }
+    property AlertType: TTyAlertType read FAlertType write SetAlertType default atInfo;
+    { The headline. Drawn with the resolved TyAlert style (NOT the LCL Font.*), left
+      aligned, ellipsised when it does not fit, and never wrapped. No mnemonic parsing —
+      a banner activates nothing, so an '&' is literal text. }
+    property Message: TCaption read FMessage write SetMessage;
+    { The optional second line. Setting it switches the banner to the taller two-line
+      form; clearing it goes back to one line. Same drawing rules as Message. }
+    property Description: string read FDescription write SetDescription;
+    { Draw the type's status glyph in a slot at the left. On by default: the icon is what
+      makes an alert readable at a glance, and it is the one thing AlertType exists for
+      beyond colour. }
+    property ShowIcon: Boolean read FShowIcon write SetShowIcon default True;
+    { Shows the close (x) glyph and makes it live. Clicking it runs Close (OnClose, then
+      hide unless vetoed); the banner's own OnClick never fires for that gesture. }
+    property Closable: Boolean read FClosable write SetClosable default False;
+    property OnClose: TTyAlertCloseEvent read FOnClose write FOnClose;
+  end;
+
+  { TTyAlert publishes TTyCustomAlert's properties; everything lives in TTyCustomAlert. }
+  TTyAlert = class(TTyCustomAlert)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
@@ -249,26 +271,12 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    { The banner's semantic type: it picks BOTH the style variant ('info' / 'success' /
-      'warning' / 'error' — the theme writes a `TyAlert.warning` rule) and the status
-      glyph. Changing it re-fits an auto-sized banner, because a theme may pad a variant
-      differently. }
-    property AlertType: TTyAlertType read FAlertType write SetAlertType default atInfo;
-    { The headline. Drawn with the resolved TyAlert style (NOT the LCL Font.*), left
-      aligned, ellipsised when it does not fit, and never wrapped. No mnemonic parsing —
-      a banner activates nothing, so an '&' is literal text. }
-    property Message: TCaption read FMessage write SetMessage;
-    { The optional second line. Setting it switches the banner to the taller two-line
-      form; clearing it goes back to one line. Same drawing rules as Message. }
-    property Description: string read FDescription write SetDescription;
-    { Draw the type's status glyph in a slot at the left. On by default: the icon is what
-      makes an alert readable at a glance, and it is the one thing AlertType exists for
-      beyond colour. }
-    property ShowIcon: Boolean read FShowIcon write SetShowIcon default True;
-    { Shows the close (x) glyph and makes it live. Clicking it runs Close (OnClose, then
-      hide unless vetoed); the banner's own OnClick never fires for that gesture. }
-    property Closable: Boolean read FClosable write SetClosable default False;
-    property OnClose: TTyAlertCloseEvent read FOnClose write FOnClose;
+    property AlertType;
+    property Message;
+    property Description;
+    property ShowIcon;
+    property Closable;
+    property OnClose;
     property Align;
     property Anchors;
   end;
@@ -412,9 +420,9 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-{ --- TTyAlert ----------------------------------------------------------------- }
+{ --- TTyCustomAlert ----------------------------------------------------------- }
 
-constructor TTyAlert.Create(AOwner: TComponent);
+constructor TTyCustomAlert.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FAlertType := atInfo;
@@ -427,22 +435,22 @@ begin
   Height := 40;
 end;
 
-function TTyAlert.GetStyleTypeKey: string;
+function TTyCustomAlert.GetStyleTypeKey: string;
 begin
   Result := 'TyAlert';
 end;
 
-function TTyAlert.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
+function TTyCustomAlert.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
 begin
   Result := TyResolveFontSize(AStyle, ParentFont, Font.Size, ActiveController);
 end;
 
-function TTyAlert.HasDescription: Boolean;
+function TTyCustomAlert.HasDescription: Boolean;
 begin
   Result := FDescription <> '';
 end;
 
-function TTyAlert.StyleVariant: string;
+function TTyCustomAlert.StyleVariant: string;
 begin
   // The TYPE contributes its variant token FIRST and the user's StyleClass follows it.
   // ResolveLayer applies variant tokens in textual order, so the semantic look is always
@@ -454,7 +462,7 @@ begin
     Result := Result + ' ' + Trim(StyleClass);
 end;
 
-function TTyAlert.AlertStyle: TTyStyleSet;
+function TTyCustomAlert.AlertStyle: TTyStyleSet;
 var
   model: TTyStyleModel;
 begin
@@ -481,7 +489,7 @@ end;
 
 { --- property setters --------------------------------------------------------- }
 
-procedure TTyAlert.Refit;
+procedure TTyCustomAlert.Refit;
 begin
   // Every visual value here is theme-derived, so a change that can move the measured
   // height (a variant with different padding, a second line, a slot appearing) must
@@ -494,7 +502,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyAlert.SetAlertType(AValue: TTyAlertType);
+procedure TTyCustomAlert.SetAlertType(AValue: TTyAlertType);
 begin
   if FAlertType = AValue then Exit;
   FAlertType := AValue;
@@ -503,7 +511,7 @@ begin
   Refit;
 end;
 
-procedure TTyAlert.SetMessage(const AValue: TCaption);
+procedure TTyCustomAlert.SetMessage(const AValue: TCaption);
 begin
   if FMessage = AValue then Exit;
   FMessage := AValue;
@@ -512,7 +520,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyAlert.SetDescription(const AValue: string);
+procedure TTyCustomAlert.SetDescription(const AValue: string);
 begin
   if FDescription = AValue then Exit;
   // '' <-> text is the one-line/two-line switch: a height change, not a repaint.
@@ -520,14 +528,14 @@ begin
   Refit;
 end;
 
-procedure TTyAlert.SetShowIcon(AValue: Boolean);
+procedure TTyCustomAlert.SetShowIcon(AValue: Boolean);
 begin
   if FShowIcon = AValue then Exit;
   FShowIcon := AValue;
   Refit;   // the icon slot is a height floor as well as a left inset
 end;
 
-procedure TTyAlert.SetClosable(AValue: Boolean);
+procedure TTyCustomAlert.SetClosable(AValue: Boolean);
 begin
   if FClosable = AValue then Exit;
   FClosable := AValue;
@@ -543,7 +551,7 @@ end;
 
 { --- actions ------------------------------------------------------------------ }
 
-procedure TTyAlert.Close;
+procedure TTyCustomAlert.Close;
 var
   allow: Boolean;
 begin
@@ -556,7 +564,7 @@ end;
 
 { --- measurement + geometry --------------------------------------------------- }
 
-function TTyAlert.LineHeightWith(APainter: TTyPainter; const AStyle: TTyStyleSet): Integer;
+function TTyCustomAlert.LineHeightWith(APainter: TTyPainter; const AStyle: TTyStyleSet): Integer;
 begin
   // A stable reference glyph: an empty Message still sizes the banner to a line.
   Result := APainter.MeasureText('Ag', AStyle.FontName, ResolveFontSize(AStyle),
@@ -564,7 +572,7 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-function TTyAlert.LineHeightAtPPI(APPI: Integer; const AStyle: TTyStyleSet): Integer;
+function TTyCustomAlert.LineHeightAtPPI(APPI: Integer; const AStyle: TTyStyleSet): Integer;
 { A CANVAS-LESS painter — the tyControls.Form / TTyBadge idiom: BeginPaint(nil, ...) builds
   only the painter's internal bitmap and EndPaint frees it WITHOUT blitting, so this is safe
   outside a paint cycle and leaks nothing. }
@@ -581,7 +589,7 @@ begin
   end;
 end;
 
-function TTyAlert.LayoutWith(APainter: TTyPainter; const AStyle: TTyStyleSet;
+function TTyCustomAlert.LayoutWith(APainter: TTyPainter; const AStyle: TTyStyleSet;
   AWidth, AHeight: Integer): TTyAlertLayout;
 var
   lineH: Integer;
@@ -600,7 +608,7 @@ begin
     APainter.Scale(ActiveController.Metric(TyAlertCloseSizeVar, TyAlertCloseSize)));
 end;
 
-function TTyAlert.LayoutFor(AWidth, AHeight, APPI: Integer): TTyAlertLayout;
+function TTyCustomAlert.LayoutFor(AWidth, AHeight, APPI: Integer): TTyAlertLayout;
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -617,17 +625,17 @@ begin
   end;
 end;
 
-function TTyAlert.TyAlertCloseRect: TRect;
+function TTyCustomAlert.TyAlertCloseRect: TRect;
 begin
   Result := LayoutFor(ClientWidth, ClientHeight, Font.PixelsPerInch).CloseRect;
 end;
 
-function TTyAlert.TyAlertIconRect: TRect;
+function TTyCustomAlert.TyAlertIconRect: TRect;
 begin
   Result := LayoutFor(ClientWidth, ClientHeight, Font.PixelsPerInch).IconRect;
 end;
 
-function TTyAlert.PtOnClose(X, Y: Integer): Boolean;
+function TTyCustomAlert.PtOnClose(X, Y: Integer): Boolean;
 var
   R: TRect;
 begin
@@ -638,7 +646,7 @@ begin
     and (Y >= R.Top) and (Y < R.Bottom);
 end;
 
-procedure TTyAlert.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+procedure TTyCustomAlert.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
   WithThemeSpace: Boolean);
 var
   S: TTyStyleSet;
@@ -661,7 +669,7 @@ end;
 
 { --- input -------------------------------------------------------------------- }
 
-procedure TTyAlert.Click;
+procedure TTyCustomAlert.Click;
 begin
   // A banner that drew nothing (no themed background) must not fire OnClick either: the input
   // has to honour the paint's "no banner at all" decision, or a click on apparent blank space
@@ -674,7 +682,7 @@ begin
   inherited Click;
 end;
 
-procedure TTyAlert.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomAlert.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   closeHit: Boolean;
 begin
@@ -699,7 +707,7 @@ begin
   end;
 end;
 
-procedure TTyAlert.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomAlert.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   wasClose: Boolean;
 begin
@@ -712,7 +720,7 @@ begin
     Close;
 end;
 
-procedure TTyAlert.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomAlert.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   h: Boolean;
 begin
@@ -726,7 +734,7 @@ begin
   end;
 end;
 
-procedure TTyAlert.MouseLeave;
+procedure TTyCustomAlert.MouseLeave;
 begin
   inherited MouseLeave;   // clears the bar's own hover
   if FHoverClose then
@@ -738,7 +746,7 @@ end;
 
 { --- painting ----------------------------------------------------------------- }
 
-procedure TTyAlert.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomAlert.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, closeS: TTyStyleSet;
@@ -817,7 +825,7 @@ begin
   end;
 end;
 
-procedure TTyAlert.Paint;
+procedure TTyCustomAlert.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

@@ -1,0 +1,590 @@
+unit test.customclasses.p3;
+{$mode objfpc}{$H+}
+
+{ Custom-class split, phase 3 (bars, ribbon, window chrome, images, pickers, the terminal and
+  the tool windows). The same three kinds of test as test.customclasses.p1, on the same fixture
+  and checks (TTyCustomClassesPhaseCase):
+
+  * THIRD-PARTY MIMICS: a TTyCustomXxx descendant that publishes two properties of its own
+    choosing -- it can be created (T-a), publishes exactly its LCL root's names plus the two
+    (T-b), streams those two and not a property it left out (T-c), resolves the same theme
+    type key and paints the same pixels as the library's final class (T-d), streams nothing
+    from a fresh instance (T-e), and reaches a public property through a TTyCustomXxx
+    reference (T-v). Each family also gets the messages a widgetset delivers, next to the
+    final class, and must answer the same.
+  * DERIVED CONTROLS SEEN BY THEIR FAMILY: from 4.0 on a TTyToolBarEx is a TTyCustomToolBar
+    but no longer a TTyToolBar; library code that meant "any tool bar" asks for the custom
+    class, and each such check has a test that fails when it is put back.
+  * CHECKS WIDENED FOR THIRD PARTIES: a host that accepts any TTyCustomXxx child (a tool
+    bar's buttons, a ribbon's pages and groups, a form's content surface, a tool-window bar's
+    windows), proven with a mimic. }
+
+interface
+
+uses
+  Classes, SysUtils, TypInfo, Types, Controls, Forms, Graphics, Menus, LCLType, LMessages,
+  fpcunit, testregistry,
+  test.customclasses, test.customclasses.p1,
+  tyControls.Base, tyControls.Button, tyControls.GlyphButtons, tyControls.ToolBar,
+  tyControls.ToolBarEx, tyControls.StatusBar, tyControls.ScrollBar, tyControls.Painter,
+  tyControls.Ribbon, tyControls.RibbonGallery, tyControls.RibbonBackstage,
+  tyControls.Form, tyControls.Menu, tyControls.FormSurface, tyControls.Controller,
+  tyControls.CharImage, tyControls.IconFont, tyControls.Shape, tyControls.Chart,
+  tyControls.ColorGrid, tyControls.Terminal, tyControls.ToolWindows,
+  tyControls.ToolWindows.DesignRules;
+
+type
+  TP3RenderProc = procedure(C: TControl; ACanvas: TCanvas; const R: TRect);
+
+  TTyCustomClassesP3Test = class(TTyCustomClassesPhaseCase)
+  private
+    FChanges: Integer;
+    FHosts: TList;
+    FLastSender: TObject;
+    FData: string;
+    procedure CountChange(Sender: TObject);
+    procedure PaintButton(Sender: TTyCustomToolButton; AState: Integer);
+    procedure DrawPanel(AStatusBar: TTyCustomStatusBar; APanel: TTyStatusPanel;
+      APainter: TTyPainter; const ARect: TRect);
+    procedure TermData(Sender: TObject; const AData: RawByteString);
+    function NewHost: TForm;
+    { Stream the form that owns ASrc and read it into a fresh form; the copy of ASrc. }
+    function HostRoundTrip(ASrc: TComponent): TComponent;
+    { T-d: render both through ARender onto sentinel bitmaps and compare every pixel. }
+    procedure CheckSamePaint(AThird, AOwn: TControl; AW, AH: Integer; ARender: TP3RenderProc);
+  protected
+    procedure TearDown; override;
+  published
+    { Task 20: bars }
+    procedure TestThirdToolBar;
+    procedure TestThirdToolButton;
+    procedure TestToolButtonFindsItsToolBarEx;
+    procedure TestToolBarTakesAThirdPartyToolButton;
+    procedure TestThirdStatusBar;
+    procedure TestStatusPanelsReachAThirdPartyBar;
+    procedure TestThirdScrollBar;
+    { T-d, pixel for pixel, per task }
+    procedure TestBarMimicsPaintLikeTheirFinalClass;
+    { Real input, one per family. }
+    procedure TestInputThirdToolButtonClicks;
+    procedure TestInputThirdScrollBarStepsOnArrowKeys;
+  end;
+
+  { --- third-party mimics ------------------------------------------------------------ }
+
+  TThirdToolBar = class(TTyCustomToolBar)
+  published
+    property ButtonWidth;
+    property Flat;
+  end;
+
+  TThirdToolButton = class(TTyCustomToolButton)
+  published
+    property Style;
+    property Down;
+  end;
+
+  TThirdStatusBar = class(TTyCustomStatusBar)
+  published
+    property Panels;
+    property SimpleText;
+  end;
+
+  { Max ahead of Position: the bar clamps Position to Max as it is written (the same order
+    rule as TTyCustomTrackBar / TTyCustomProgressBar; see the plan's Task 31 list). }
+  TThirdScrollBar = class(TTyCustomScrollBar)
+  published
+    property Max;
+    property Position;
+  end;
+
+implementation
+
+type
+  TP3ToolBarCracker = class(TTyCustomToolBar)
+  public
+    procedure ForceLayout;
+  end;
+
+  TP3ToolBarExCracker = class(TTyCustomToolBarEx)
+  public
+    procedure ForceLayout;
+  end;
+
+  { Counts the repaints a status bar asks for: the panel collection's only way to tell its bar
+    that a panel changed. }
+  TP3CountingStatusBar = class(TTyCustomStatusBar)
+  public
+    Invalidations: Integer;
+    procedure Invalidate; override;
+  end;
+
+  TP3ToolBarRender = class(TTyCustomToolBar);
+  TP3ToolButtonRender = class(TTyCustomToolButton);
+  TP3StatusBarRender = class(TTyCustomStatusBar);
+  TP3ScrollBarRender = class(TTyCustomScrollBar);
+procedure TP3ToolBarCracker.ForceLayout;
+var r: TRect;
+begin
+  r := Rect(0, 0, Width, Height);
+  AlignControls(nil, r);
+end;
+
+procedure TP3ToolBarExCracker.ForceLayout;
+var r: TRect;
+begin
+  r := Rect(0, 0, Width, Height);
+  AlignControls(nil, r);
+end;
+
+procedure TP3CountingStatusBar.Invalidate;
+begin
+  Inc(Invalidations);
+  inherited Invalidate;
+end;
+
+procedure TTyCustomClassesP3Test.CountChange(Sender: TObject);
+begin
+  Inc(FChanges);
+  FLastSender := Sender;
+end;
+
+procedure TTyCustomClassesP3Test.PaintButton(Sender: TTyCustomToolButton; AState: Integer);
+begin
+  Inc(FChanges);
+  FLastSender := Sender;
+end;
+
+procedure TTyCustomClassesP3Test.DrawPanel(AStatusBar: TTyCustomStatusBar; APanel: TTyStatusPanel;
+  APainter: TTyPainter; const ARect: TRect);
+begin
+  Inc(FChanges);
+  FLastSender := AStatusBar;
+end;
+
+procedure TTyCustomClassesP3Test.TermData(Sender: TObject; const AData: RawByteString);
+begin
+  FData := FData + AData;
+end;
+
+procedure TTyCustomClassesP3Test.TearDown;
+var
+  i: Integer;
+begin
+  if FHosts <> nil then
+    for i := FHosts.Count - 1 downto 0 do
+      TObject(FHosts[i]).Free;
+  FreeAndNil(FHosts);
+  inherited TearDown;
+end;
+
+function TTyCustomClassesP3Test.NewHost: TForm;
+begin
+  if FHosts = nil then FHosts := TList.Create;
+  Result := TForm.CreateNew(nil);
+  Result.SetBounds(0, 0, 600, 400);
+  FHosts.Add(Result);
+end;
+
+function TTyCustomClassesP3Test.HostRoundTrip(ASrc: TComponent): TComponent;
+var
+  ms: TMemoryStream;
+  dst: TForm;
+begin
+  ms := TMemoryStream.Create;
+  try
+    ms.WriteComponent(ASrc.Owner);
+    ms.Position := 0;
+    dst := NewHost;
+    ms.ReadComponent(dst);
+  finally
+    ms.Free;
+  end;
+  Result := dst.FindComponent(ASrc.Name);
+  AssertTrue('the round trip brought ' + ASrc.Name + ' back', Result <> nil);
+end;
+
+{ ------------------------------------------------------------------ Task 20: bars }
+
+procedure TTyCustomClassesP3Test.TestThirdToolBar;
+var
+  third, back: TThirdToolBar;
+  own: TTyToolBar;
+  c: TTyCustomToolBar;
+begin
+  third := TThirdToolBar.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdToolBar, ['ButtonWidth', 'Flat']);
+  third.ButtonWidth := 60;
+  third.Flat := False;
+  third.List := False;
+  CheckStreamText(third, ['ButtonWidth', 'Flat'], 'List');
+  back := TThirdToolBar.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: ButtonWidth round-trips', 60, back.ButtonWidth);
+  AssertFalse('T-c: Flat round-trips', back.Flat);
+  AssertTrue('T-c: the unpublished List stayed at its default', back.List);
+  own := TTyToolBar.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdToolBar, ['ButtonWidth', 'Flat']);
+  c := third;
+  c.Indent := 7;
+  AssertEquals('T-v: Indent is public through a TTyCustomToolBar reference', 7, third.Indent);
+end;
+
+procedure TTyCustomClassesP3Test.TestThirdToolButton;
+var
+  third, back: TThirdToolButton;
+  own: TTyToolButton;
+  c: TTyCustomToolButton;
+begin
+  third := TThirdToolButton.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdToolButton, ['Style', 'Down']);
+  third.Style := tbsCheck;
+  third.Down := True;
+  third.Grouped := True;
+  CheckStreamText(third, ['Style', 'Down'], 'Grouped');
+  back := TThirdToolButton.Create(FForm);
+  StreamInto(third, back);
+  AssertTrue('T-c: Style round-trips', back.Style = tbsCheck);
+  AssertTrue('T-c: Down round-trips', back.Down);
+  AssertFalse('T-c: the unpublished Grouped stayed at its default', back.Grouped);
+  own := TTyToolButton.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  { The key follows the style (a space holder draws the separator's rule), from the custom
+    class: a third party's separator resolves the separator's rules too. }
+  third.Style := tbsDivider;
+  own.Style := tbsDivider;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdToolButton, ['Style', 'Down']);
+  AssertFalse('T-e: a tool button is never a tab stop, the mimic neither', third.TabStop);
+  c := third;
+  c.Wrap := True;
+  AssertTrue('T-v: Wrap is public through a TTyCustomToolButton reference', third.Wrap);
+end;
+
+{ S20-1 (A20-1). A tool button on a TTyToolBarEx finds its bar: the Ex bar is a
+  TTyCustomToolBar but, since 4.0, no TTyToolBar. }
+procedure TTyCustomClassesP3Test.TestToolButtonFindsItsToolBarEx;
+var
+  bar: TP3ToolBarExCracker;
+  b: TTyToolButton;
+begin
+  bar := TP3ToolBarExCracker(TTyToolBarEx.Create(FForm));
+  bar.Parent := FForm;
+  bar.Align := alNone;
+  bar.SetBounds(0, 0, 400, 40);
+  AssertFalse('precondition: the Ex bar is no TTyToolBar (or this proves nothing)',
+    TObject(bar) is TTyToolBar);
+  b := TTyToolButton.Create(FForm);
+  b.Parent := bar;
+  b.Caption := 'Go';
+  AssertTrue('the button finds the Ex bar as its tool bar', b.ToolBar = TTyCustomToolBar(bar));
+  AssertEquals('and its place in the bar''s Buttons[]', 0, b.Index);
+  { The bar's DropDownWidth reaches the button only through ToolBar. }
+  b.Style := tbsDropDown;
+  bar.DropDownWidth := 30;
+  AssertEquals('the arrow zone comes from the Ex bar''s DropDownWidth', 30,
+    TP3ToolButtonRender(b).ArrowZoneWidth(96));
+end;
+
+{ S20-2 (C19-2). A third party's tool button on the library's bar is one of its Buttons[],
+  gets the bar's width floor, and as a space holder is not dressed in 'ghost'. }
+procedure TTyCustomClassesP3Test.TestToolBarTakesAThirdPartyToolButton;
+var
+  bar: TP3ToolBarCracker;
+  ex: TP3ToolBarExCracker;
+  third, sep, exSep: TThirdToolButton;
+  got: TTyCustomToolButton;
+begin
+  bar := TP3ToolBarCracker(TTyToolBar.Create(FForm));
+  bar.Parent := FForm;
+  bar.Align := alNone;
+  bar.SetBounds(0, 0, 400, 40);
+  AssertTrue('the bar is flat (or the ghost check proves nothing)', bar.Flat);
+  bar.ButtonWidth := 90;
+  third := TThirdToolButton.Create(FForm);
+  third.Parent := bar;
+  third.Width := 40;
+  sep := TThirdToolButton.Create(FForm);
+  sep.Parent := bar;
+  sep.Style := tbsSeparator;
+  AssertEquals('both are the bar''s buttons', 2, bar.ButtonCount);
+  got := bar.Buttons[0];
+  AssertTrue('Buttons[] hands out the third party''s button as it is', got = third);
+  AssertFalse('which is no TTyToolButton', got is TTyToolButton);
+  AssertEquals('IndexOfButton knows it', 1, bar.IndexOfButton(sep));
+  AssertEquals('Index answers through the bar', 0, third.Index);
+  bar.ForceLayout;
+  AssertTrue('the bar floors the button to its ButtonWidth', third.Width >= 90);
+  AssertEquals('a third-party separator is not ghosted', '', sep.StyleClass);
+  AssertEquals('a third-party push button is', 'ghost', third.StyleClass);
+  { The Ex bar keeps its own copy of the space-holder exception. }
+  ex := TP3ToolBarExCracker(TTyToolBarEx.Create(FForm));
+  ex.Parent := FForm;
+  ex.Align := alNone;
+  ex.Wrapable := False;
+  ex.SetBounds(0, 50, 400, 40);
+  exSep := TThirdToolButton.Create(FForm);
+  exSep.Parent := ex;
+  exSep.Style := tbsDivider;
+  ex.ForceLayout;
+  AssertEquals('a third-party divider on the Ex bar is not ghosted', '', exSep.StyleClass);
+end;
+
+procedure TTyCustomClassesP3Test.TestThirdStatusBar;
+var
+  third, back: TThirdStatusBar;
+  own: TTyStatusBar;
+  c: TTyCustomStatusBar;
+begin
+  third := TThirdStatusBar.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdStatusBar, ['Panels', 'SimpleText']);
+  third.Panels.Add.Text := 'Ready';
+  third.SimpleText := 'idle';
+  third.SizeGrip := False;
+  CheckStreamText(third, ['Panels', 'SimpleText'], 'SizeGrip');
+  back := TThirdStatusBar.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: the panel round-trips', 1, back.Panels.Count);
+  AssertEquals('T-c: with its text', 'Ready', back.Panels[0].Text);
+  AssertEquals('T-c: SimpleText round-trips', 'idle', back.SimpleText);
+  AssertTrue('T-c: the unpublished SizeGrip stayed at its default', back.SizeGrip);
+  own := TTyStatusBar.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdStatusBar, ['Panels', 'SimpleText']);
+  c := third;
+  c.OnDrawPanel := @DrawPanel;
+  c.SimplePanel := True;
+  AssertTrue('T-v: SimplePanel and OnDrawPanel are public through a TTyCustomStatusBar '
+    + 'reference', third.SimplePanel and Assigned(third.OnDrawPanel));
+end;
+
+{ S20-3 (C19-3). The panel collection finds its owner as TTyCustomStatusBar: a panel added to,
+  or changed on, a third party's bar repaints that bar. }
+procedure TTyCustomClassesP3Test.TestStatusPanelsReachAThirdPartyBar;
+var
+  bar: TP3CountingStatusBar;
+  p: TTyStatusPanel;
+begin
+  bar := TP3CountingStatusBar.Create(FForm);
+  bar.Parent := FForm;
+  bar.Invalidations := 0;
+  p := bar.Panels.Add;
+  AssertTrue('adding a panel repaints the third-party bar', bar.Invalidations > 0);
+  bar.Invalidations := 0;
+  p.Text := 'changed';
+  AssertTrue('and so does changing one', bar.Invalidations > 0);
+end;
+
+procedure TTyCustomClassesP3Test.TestThirdScrollBar;
+var
+  third, back: TThirdScrollBar;
+  own: TTyScrollBar;
+  c: TTyCustomScrollBar;
+begin
+  third := TThirdScrollBar.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdScrollBar, ['Max', 'Position']);
+  third.Max := 200;
+  third.Position := 150;
+  third.SmallChange := 5;
+  CheckStreamText(third, ['Max', 'Position'], 'SmallChange');
+  back := TThirdScrollBar.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Max round-trips', 200, back.Max);
+  AssertEquals('T-c: Position round-trips (Max is read first)', 150, back.Position);
+  AssertEquals('T-c: the unpublished SmallChange stayed at its default', 1, back.SmallChange);
+  own := TTyScrollBar.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdScrollBar, ['Max', 'Position']);
+  AssertTrue('T-e: a scroll bar is a tab stop, the mimic too', third.TabStop);
+  c := third;
+  c.LargeChange := 20;
+  AssertEquals('T-v: LargeChange is public through a TTyCustomScrollBar reference', 20,
+    third.LargeChange);
+end;
+
+{ ------------------------------------------------------------------ Task 21: ribbon }
+
+{ ------------------------------------------------------------------ Task 22: window chrome }
+
+{ ------------------------------------------------------------------ Task 23: images and shapes }
+
+{ ------------------------------------------------------------------ Task 24: pickers, terminal }
+
+{ ------------------------------------------------------------------ Task 25: tool windows }
+
+{ ------------------------------------------------------------------ T-d }
+
+{ One renderer per family: RenderTo is protected, the empty crackers reach it. }
+procedure RenderToolBar(C: TControl; ACanvas: TCanvas; const R: TRect);
+begin
+  TP3ToolBarRender(C).RenderTo(ACanvas, R, 96);
+end;
+
+procedure RenderToolButton(C: TControl; ACanvas: TCanvas; const R: TRect);
+begin
+  TP3ToolButtonRender(C).RenderTo(ACanvas, R, 96);
+end;
+
+procedure RenderStatusBar(C: TControl; ACanvas: TCanvas; const R: TRect);
+begin
+  TP3StatusBarRender(C).RenderTo(ACanvas, R, 96);
+end;
+
+procedure RenderScrollBar(C: TControl; ACanvas: TCanvas; const R: TRect);
+begin
+  TP3ScrollBarRender(C).RenderTo(ACanvas, R, 96);
+end;
+
+{ Each pair is set up the same way -- same size, same values, unfocused -- and must paint the
+  same pixels: the drawing, the state it reads and the theme rules it resolves all live in the
+  custom class, where the third party gets them. }
+procedure TTyCustomClassesP3Test.CheckSamePaint(AThird, AOwn: TControl; AW, AH: Integer;
+  ARender: TP3RenderProc);
+var
+  a, b: TBitmap;
+  diff: string;
+  x, y, painted: Integer;
+begin
+  if AThird.Parent = nil then AThird.Parent := FForm;
+  if AOwn.Parent = nil then AOwn.Parent := FForm;
+  AThird.SetBounds(0, 0, AW, AH);
+  AOwn.SetBounds(0, AH + 10, AW, AH);
+  a := NewSentinelBitmap(AW, AH);
+  b := NewSentinelBitmap(AW, AH);
+  try
+    ARender(AThird, a.Canvas, Rect(0, 0, AW, AH));
+    ARender(AOwn, b.Canvas, Rect(0, 0, AW, AH));
+    painted := 0;
+    for y := 0 to a.Height - 1 do
+      for x := 0 to a.Width - 1 do
+        if a.Canvas.Pixels[x, y] <> CSentinel then Inc(painted);
+    AssertTrue('T-d: ' + AThird.ClassName + ' painted something (or this proves nothing)',
+      painted > 0);
+    AssertTrue('T-d: ' + AThird.ClassName + ' paints exactly what ' + AOwn.ClassName
+      + ' paints: ' + diff, SameBitmaps(a, b, diff));
+  finally
+    a.Free;
+    b.Free;
+  end;
+end;
+
+procedure TTyCustomClassesP3Test.TestBarMimicsPaintLikeTheirFinalClass;
+var
+  tb: TThirdToolBar;
+  otb: TTyToolBar;
+  bt: TThirdToolButton;
+  obt: TTyToolButton;
+  sb: TThirdStatusBar;
+  osb: TTyStatusBar;
+  sc: TThirdScrollBar;
+  osc: TTyScrollBar;
+begin
+  tb := TThirdToolBar.Create(FForm);
+  otb := TTyToolBar.Create(FForm);
+  tb.Align := alNone;
+  otb.Align := alNone;
+  CheckSamePaint(tb, otb, 300, 40, @RenderToolBar);
+
+  bt := TThirdToolButton.Create(FForm);
+  obt := TTyToolButton.Create(FForm);
+  bt.Caption := 'Save';
+  obt.Caption := 'Save';
+  bt.Style := tbsCheck;
+  obt.Style := tbsCheck;
+  bt.Down := True;
+  obt.Down := True;
+  CheckSamePaint(bt, obt, 80, 30, @RenderToolButton);
+
+  sb := TThirdStatusBar.Create(FForm);
+  osb := TTyStatusBar.Create(FForm);
+  sb.Align := alNone;
+  osb.Align := alNone;
+  sb.Panels.Add.Text := 'Ready';
+  osb.Panels.Add.Text := 'Ready';
+  CheckSamePaint(sb, osb, 300, 24, @RenderStatusBar);
+
+  sc := TThirdScrollBar.Create(FForm);
+  osc := TTyScrollBar.Create(FForm);
+  sc.Position := 30;
+  osc.Position := 30;
+  CheckSamePaint(sc, osc, 200, 17, @RenderScrollBar);
+end;
+
+{ ------------------------------------------------------------------ real input }
+
+procedure PressAndRelease(C: TControl; X, Y: Integer);
+begin
+  C.Perform(LM_LBUTTONDOWN, MK_LBUTTON, MousePos(X, Y));
+  C.Perform(LM_LBUTTONUP, 0, MousePos(X, Y));
+end;
+
+procedure TTyCustomClassesP3Test.TestInputThirdToolButtonClicks;
+var
+  bar: TTyToolBar;
+  third: TThirdToolButton;
+  own: TTyToolButton;
+  a: Integer;
+begin
+  NeedWidgetSet;
+  bar := TTyToolBar.Create(FForm);
+  bar.Parent := FForm;
+  bar.HandleNeeded;
+  third := TThirdToolButton.Create(FForm);
+  third.Parent := bar;
+  third.Style := tbsCheck;
+  third.SetBounds(0, 0, 60, 28);
+  third.HandleNeeded;
+  own := TTyToolButton.Create(FForm);
+  own.Parent := bar;
+  own.Style := tbsCheck;
+  own.SetBounds(70, 0, 60, 28);
+  own.HandleNeeded;
+  third.OnClick := @CountChange;
+  own.OnClick := @CountChange;
+  FChanges := 0;
+  PressAndRelease(third, 10, 10);
+  a := FChanges;
+  FChanges := 0;
+  PressAndRelease(own, 10, 10);
+  AssertEquals('the mimic clicks once on press + release', 1, a);
+  AssertEquals('as TTyToolButton does', FChanges, a);
+  AssertTrue('a check-style click presses the mimic', third.Down);
+  AssertEquals('as it presses TTyToolButton', own.Down, third.Down);
+end;
+
+procedure TTyCustomClassesP3Test.TestInputThirdScrollBarStepsOnArrowKeys;
+var
+  third: TThirdScrollBar;
+  own: TTyScrollBar;
+begin
+  NeedWidgetSet;
+  third := TThirdScrollBar.Create(FForm);
+  third.Parent := FForm;
+  third.HandleNeeded;
+  own := TTyScrollBar.Create(FForm);
+  own.Parent := FForm;
+  own.HandleNeeded;
+  third.Position := 10;
+  own.Position := 10;
+  third.Perform(CN_KEYDOWN, VK_RIGHT, 0);
+  own.Perform(CN_KEYDOWN, VK_RIGHT, 0);
+  AssertTrue('Right moves the mimic', third.Position > 10);
+  AssertEquals('as it moves TTyScrollBar', own.Position, third.Position);
+  third.Perform(CN_KEYDOWN, VK_END, 0);
+  own.Perform(CN_KEYDOWN, VK_END, 0);
+  AssertEquals('End as on TTyScrollBar', own.Position, third.Position);
+end;
+
+initialization
+  RegisterClasses([TThirdToolBar, TThirdToolButton, TThirdStatusBar, TThirdScrollBar]);
+  RegisterTest(TTyCustomClassesP3Test);
+end.

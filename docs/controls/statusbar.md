@@ -68,7 +68,7 @@ TTyStatusBar 继承自 `TTyCustomControl`（`tyControls.Base`）：
 | 事件 | 签名 | 说明 |
 |------|------|------|
 | `OnHint` | `TNotifyEvent` | `AutoHint = True` 时，状态栏收到应用提示后**先**触发本事件。它是**接管**而非通知：一旦赋值，状态栏自己就不再写 `SimpleText` / `Panels[0]`，由处理器决定提示放到哪、怎么排版（例如"就绪 — <hint>"放进 2 号面板）。文本从 `Application.Hint` 读。语义与 LCL `TStatusBar.OnHint`（`statusbar.inc:70-88`）一致。 |
-| `OnDrawPanel` | `TTyDrawPanelEvent = procedure(AStatusBar: TTyStatusBar; APanel: TTyStatusPanel; APainter: TTyPainter; const ARect: TRect) of object` | 为每个 `Style = psOwnerDraw` 的面板触发一次，`ARect` 是该格在状态栏绘制坐标系里的设备像素矩形。**必须通过 `APainter` 绘制，不要用状态栏的 `Canvas`**：`TTyPainter` 画进 BGRA 图层，`EndPaint` 才合成到画布上，先画到 `Canvas` 的内容会被整个覆盖。这与 `TTyPaintPanel.OnPaintSurface` 是同一套约定；LCL 的 `TDrawPanelEvent` 只给矩形、要求处理器自己去取 `StatusBar.Canvas`，在自绘管线下不成立。 |
+| `OnDrawPanel` | `TTyDrawPanelEvent = procedure(AStatusBar: TTyCustomStatusBar; APanel: TTyStatusPanel; APainter: TTyPainter; const ARect: TRect) of object` | 为每个 `Style = psOwnerDraw` 的面板触发一次，`ARect` 是该格在状态栏绘制坐标系里的设备像素矩形。**必须通过 `APainter` 绘制，不要用状态栏的 `Canvas`**：`TTyPainter` 画进 BGRA 图层，`EndPaint` 才合成到画布上，先画到 `Canvas` 的内容会被整个覆盖。这与 `TTyPaintPanel.OnPaintSurface` 是同一套约定；LCL 的 `TDrawPanelEvent` 只给矩形、要求处理器自己去取 `StatusBar.Canvas`，在自绘管线下不成立。 |
 
 > 除以上两个自有事件外，`TTyStatusBar` 暴露**基线事件集**（Tier A 鼠标 / 通用事件 + Tier B 键盘 / 焦点事件，因其为可聚焦的 `TTyCustomControl`）。若要响应面板点击，可挂接基线 `OnMouseDown` / `OnClick`，并用公开方法 `PanelAtPos(X, Y): Integer`（LCL 同名别名 `GetPanelIndexAt(X, Y)`）把坐标映射到面板索引（`SimplePanel` 模式或点击空白处返回 `-1`）。完整基线清单见 [../events.md](../events.md)。
 

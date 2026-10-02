@@ -1,7 +1,8 @@
 unit tyControls.ToolBarEx;
 {$mode objfpc}{$H+}
 
-{ TTyToolBarEx — a TTyToolBar that adds an OVERFLOW chevron.
+{ TTyToolBarEx — a tool bar (on TTyCustomToolBar, so no TTyToolBar descendant since 4.0) that
+  adds an OVERFLOW chevron.
 
   When the bar is NOT wrapping (Wrapable = False) and its tool buttons are wider than
   the bar, the trailing buttons that don't fit are hidden and a "»" chevron button
@@ -27,7 +28,7 @@ uses
   tyControls.StrConsts, tyControls.PopupSurface, tyControls.ToolBar;
 
 type
-  TTyToolBarEx = class(TTyToolBar)
+  TTyCustomToolBarEx = class(TTyCustomToolBar)
   private
     FMoreBtn: TTyGlyphButton;            // the overflow chevron, drawn as a vector glyph
     FPopup: TTyPopupSurface;             // hosts the overflow buttons while open
@@ -59,8 +60,76 @@ type
     function OverflowCount: Integer;
     { True when the "»" chevron is currently shown. }
     function OverflowVisible: Boolean;
+  end;
+
+  { TTyToolBarEx publishes TTyCustomToolBarEx's properties; everything lives in TTyCustomToolBarEx. }
+  TTyToolBarEx = class(TTyCustomToolBarEx)
   published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property ButtonHeight;
+    property ButtonWidth;
+    property ButtonSpacing;
+    property DropDownWidth;
+    property Indent;
+    property List;
     property Wrapable;
+    property ShowCaptions;
+    property Flat;
+    property Images;
+    property HotImages;
+    property DisabledImages;
+    property Align;
+    property Anchors;
+    property OnPaintButton;
   end;
 
 { Pure overflow decision (device px, left-to-right): given each lead button's width and the
@@ -105,16 +174,16 @@ begin
 end;
 
 // ===========================================================================
-// TTyToolBarEx
+// TTyCustomToolBarEx
 // ===========================================================================
-constructor TTyToolBarEx.Create(AOwner: TComponent);
+constructor TTyCustomToolBarEx.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   // Overflow is the differentiator, so default to the non-wrapping mode where it applies.
   Wrapable := False;
 end;
 
-destructor TTyToolBarEx.Destroy;
+destructor TTyCustomToolBarEx.Destroy;
 var i: Integer;
 begin
   Application.RemoveAsyncCalls(Self);   // drop any queued DeferredClosePopup before we go
@@ -134,7 +203,7 @@ begin
   inherited Destroy;
 end;
 
-function TTyToolBarEx.ChevronWidthPx: Integer;
+function TTyCustomToolBarEx.ChevronWidthPx: Integer;
 begin
   // The chevron's cell width in DEVICE px, as its name says: 30 logical, a compact fixed
   // cell like the ribbon's "more" button. It used to be the bare 30, on the grounds that
@@ -142,12 +211,12 @@ begin
   Result := MulDiv(30, LayoutPPI, 96);
 end;
 
-function TTyToolBarEx.IsInternalChild(AControl: TControl): Boolean;
+function TTyCustomToolBarEx.IsInternalChild(AControl: TControl): Boolean;
 begin
   Result := (AControl <> nil) and (AControl = FMoreBtn);
 end;
 
-procedure TTyToolBarEx.EnsureMoreButton;
+procedure TTyCustomToolBarEx.EnsureMoreButton;
 begin
   if FMoreBtn <> nil then Exit;
   FMoreBtn := TTyGlyphButton.Create(Self);  // owned by Self -> freed with the bar
@@ -170,12 +239,12 @@ begin
   FMoreBtn.Visible := False;
 end;
 
-procedure TTyToolBarEx.ClearOverflow;
+procedure TTyCustomToolBarEx.ClearOverflow;
 begin
   SetLength(FOverflow, 0);
 end;
 
-procedure TTyToolBarEx.AlignControls(AControl: TControl; var ARect: TRect);
+procedure TTyCustomToolBarEx.AlignControls(AControl: TControl; var ARect: TRect);
 var
   i, n, visCount, x, chevW, padY, rowH, rowTop, bottomBorder: Integer;
   ppi, indentPx, spacingPx: Integer;
@@ -234,8 +303,8 @@ begin
         base's ApplyToButton skips them for the same reason; this override has its own copy of
         the flat rule and so needs its own copy of the exception. }
       if (kids[i] is TTyCustomButton)
-         and not ((kids[i] is TTyToolButton)
-                  and (TTyToolButton(kids[i]).Style in [tbsSeparator, tbsDivider])) then
+         and not ((kids[i] is TTyCustomToolButton)
+                  and (TTyCustomToolButton(kids[i]).Style in [tbsSeparator, tbsDivider])) then
       begin
         { Only manage a class the bar itself put there -- the same rule TTyToolBar's
           ApplyToButton follows. Assigning unconditionally (which is what this did) wiped
@@ -339,7 +408,7 @@ begin
   end;
 end;
 
-procedure TTyToolBarEx.MoreClick(Sender: TObject);
+procedure TTyCustomToolBarEx.MoreClick(Sender: TObject);
 var
   i, x, y, w, maxW, itemH, pad, gap, ppi: Integer;
   tl: TPoint;
@@ -405,7 +474,7 @@ begin
   FPopup.ShowAt(Rect(tl.x, tl.y, tl.x + w, tl.y + y + pad - gap), FMoreBtn);
 end;
 
-procedure TTyToolBarEx.PopupItemClick(Sender: TObject);
+procedure TTyCustomToolBarEx.PopupItemClick(Sender: TObject);
 var
   i: Integer;
   orig: TNotifyEvent;
@@ -424,12 +493,12 @@ begin
   Application.QueueAsyncCall(@DeferredClosePopup, 0);
 end;
 
-procedure TTyToolBarEx.DeferredClosePopup(Data: PtrInt);
+procedure TTyCustomToolBarEx.DeferredClosePopup(Data: PtrInt);
 begin
   if (FPopup <> nil) and FPopup.Visible then FPopup.ClosePopup;
 end;
 
-procedure TTyToolBarEx.PopupClosed(Sender: TObject);
+procedure TTyCustomToolBarEx.PopupClosed(Sender: TObject);
 var
   i: Integer;
 begin
@@ -452,7 +521,7 @@ begin
   Realign;    // recompute the fit now the popup is gone
 end;
 
-procedure TTyToolBarEx.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomToolBarEx.Notification(AComponent: TComponent; Operation: TOperation);
 var
   i, j: Integer;
 begin
@@ -477,12 +546,12 @@ begin
   end;
 end;
 
-function TTyToolBarEx.OverflowCount: Integer;
+function TTyCustomToolBarEx.OverflowCount: Integer;
 begin
   Result := Length(FOverflow);
 end;
 
-function TTyToolBarEx.OverflowVisible: Boolean;
+function TTyCustomToolBarEx.OverflowVisible: Boolean;
 begin
   Result := (FMoreBtn <> nil) and FMoreBtn.Visible;
 end;
