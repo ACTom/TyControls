@@ -64,10 +64,12 @@ type
     procedure TestThirdStatusBar;
     procedure TestStatusPanelsReachAThirdPartyBar;
     procedure TestThirdScrollBar;
+    procedure TestThirdToolButtonStoresOnlyAnExplicitGlyphLayout;
     { Task 21: ribbon }
     procedure TestThirdRibbonPage;
     procedure TestThirdRibbonGroup;
     procedure TestRibbonTakesAThirdPartyPage;
+    procedure TestRibbonPageJoinsAThirdPartyRibbon;
     procedure TestRibbonPageLaysOutAThirdPartyGroup;
     procedure TestRibbonIndexesReadBeforeTheirItemsWait;
     { Task 22: window chrome }
@@ -86,6 +88,7 @@ type
     procedure TestThirdToolWindowJoinsABar;
     procedure TestThirdToolWindowBarTakesAToolWindow;
     procedure TestToolWindowRulesTakeThirdParties;
+    procedure TestToolWindowStorageRulesReachThirdParties;
     { T-d, pixel for pixel, per task }
     procedure TestBarMimicsPaintLikeTheirFinalClass;
     procedure TestRibbonMimicsPaintLikeTheirFinalClass;
@@ -111,6 +114,13 @@ type
   published
     property Style;
     property Down;
+  end;
+
+  { Publishes the redeclared GlyphLayout: `stored FGlyphLayoutExplicit nodefault` sits on
+    TTyCustomToolButton, where a descendant gets it (N31). }
+  TGlyphToolButton = class(TTyCustomToolButton)
+  published
+    property GlyphLayout;
   end;
 
   TThirdStatusBar = class(TTyCustomStatusBar)
@@ -233,6 +243,9 @@ type
   public
     function TabCount: Integer;
   end;
+
+  { A third party's ribbon: the custom class and nothing else. }
+  TP3Ribbon = class(TTyCustomRibbon);
 
   { Counts the repaints a status bar asks for: the panel collection's only way to tell its bar
     that a panel changed. }
@@ -563,6 +576,25 @@ begin
     third.LargeChange);
 end;
 
+{ N31. The bar pushes a layout onto every tool that never chose one; an adopted layout must not
+  stream, an explicit one must -- even when it equals the base's default. The storage clause is
+  TTyCustomToolButton's, so a descendant that publishes GlyphLayout gets the same rule. }
+procedure TTyCustomClassesP3Test.TestThirdToolButtonStoresOnlyAnExplicitGlyphLayout;
+var
+  bar: TTyToolBar;
+  b: TGlyphToolButton;
+begin
+  bar := TTyToolBar.Create(FForm);
+  bar.Parent := FForm;
+  bar.List := False;
+  b := TGlyphToolButton.Create(FForm);
+  b.Parent := bar;
+  AssertTrue('precondition: the bar made it adopt the stacked layout', b.GlyphLayout = glTop);
+  AssertFalse('an adopted layout does not stream', HasProp(StreamedText(b), 'GlyphLayout'));
+  b.GlyphLayout := glLeft;
+  AssertTrue('an explicit layout streams, glLeft included', HasProp(StreamedText(b), 'GlyphLayout'));
+end;
+
 { ------------------------------------------------------------------ Task 21: ribbon }
 
 procedure TTyCustomClassesP3Test.TestThirdRibbonPage;
@@ -649,6 +681,25 @@ begin
   third.Free;
   AssertEquals('freeing the page takes it out of the ribbon', 1, rb.PageCount);
   AssertTrue('the library''s own page remains', rb.Pages[0] = own);
+end;
+
+{ S21-1 (C20-1). The library's page joins a third party's ribbon: it registers itself with any
+  TTyCustomRibbon, and a Context change re-lays that ribbon's strip. }
+procedure TTyCustomClassesP3Test.TestRibbonPageJoinsAThirdPartyRibbon;
+var
+  rb: TP3Ribbon;
+  pg: TTyRibbonPage;
+begin
+  rb := TP3Ribbon.Create(FForm);
+  rb.Parent := FForm;
+  pg := TTyRibbonPage.Create(FForm);
+  pg.Caption := 'Home';
+  pg.Parent := rb;
+  AssertEquals('the page registered with the third-party ribbon', 1, rb.PageCount);
+  AssertEquals('and shows a tab there', 1, TP3RibbonCracker(rb).TabCount);
+  pg.Context := 'pictures';
+  AssertEquals('a Context of its own hides its tab on that ribbon too', 0,
+    TP3RibbonCracker(rb).TabCount);
 end;
 
 { S21-2 (C20-2). The page lays out a third party's group with its own: the group is captured
@@ -1040,6 +1091,40 @@ begin
   AssertTrue('and the strip it gets is the window''s', tw.EnsureActions.Parent = tw);
 end;
 
+{ N31 / C24. The storage rules the custom classes carry reach a third party: an actions strip
+  inside a (third-party) window leaves its bounds to the window, a standalone one streams them;
+  a bar streams only the extent its placement leaves free. }
+procedure TTyCustomClassesP3Test.TestToolWindowStorageRulesReachThirdParties;
+var
+  bar: TThirdToolWindowBar;
+  w: TThirdToolWindow;
+  loose, inside: TTyToolWindowActions;
+  txt: string;
+begin
+  loose := TTyToolWindowActions.Create(FForm);
+  loose.Parent := FForm;
+  loose.SetBounds(7, 9, 60, 20);
+  AssertTrue('a standalone actions strip streams its bounds', HasProp(StreamedText(loose), 'Left'));
+  bar := TThirdToolWindowBar.Create(FForm);
+  bar.Parent := FForm;
+  w := TThirdToolWindow.Create(FForm);
+  w.Parent := bar;
+  inside := TTyToolWindowActions.Create(FForm);
+  inside.Parent := w;
+  inside.SetBounds(7, 9, 60, 20);
+  AssertFalse('inside a third-party window the strip leaves its bounds to the window',
+    HasProp(StreamedText(inside), 'Left'));
+  txt := StreamedText(bar);
+  AssertFalse('a side bar does not stream its width (the strip and ExpandedSize make it)',
+    HasProp(txt, 'Width'));
+  AssertTrue('but streams its height', HasProp(txt, 'Height'));
+  w.Free;
+  bar.Placement := twpBottom;
+  txt := StreamedText(bar);
+  AssertTrue('a bottom bar streams its width', HasProp(txt, 'Width'));
+  AssertFalse('and not its height', HasProp(txt, 'Height'));
+end;
+
 { ------------------------------------------------------------------ T-d }
 
 { One renderer per family: RenderTo is protected, the empty crackers reach it. }
@@ -1374,10 +1459,10 @@ begin
 end;
 
 initialization
-  RegisterClasses([TThirdToolBar, TThirdToolButton, TThirdStatusBar, TThirdScrollBar,
-    TThirdRibbonPage, TThirdRibbonGroup, TIdxRibbonGallery, TIdxRibbonBackstage, TThirdTitleBar,
-    TThirdMenuBar, TThirdFormSurface, TThirdCharImage, TThirdShape, TThirdChart, TThirdColorGrid,
-    TThirdTerminalView, TThirdToolWindow, TThirdToolWindowBar]);
+  RegisterClasses([TThirdToolBar, TThirdToolButton, TGlyphToolButton, TThirdStatusBar,
+    TThirdScrollBar, TThirdRibbonPage, TThirdRibbonGroup, TIdxRibbonGallery, TIdxRibbonBackstage,
+    TThirdTitleBar, TThirdMenuBar, TThirdFormSurface, TThirdCharImage, TThirdShape, TThirdChart,
+    TThirdColorGrid, TThirdTerminalView, TThirdToolWindow, TThirdToolWindowBar]);
   { TThirdMenuBar's round trip streams a TMainMenu: a form unit the IDE writes registers it the
     same way. }
   RegisterClass(TMainMenu);
