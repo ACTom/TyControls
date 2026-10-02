@@ -42,6 +42,7 @@ type
     procedure CountChange(Sender: TObject);
     procedure TreeGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
     procedure GridGetCellText(Sender: TObject; ACol, ARow: Integer; var AText: string);
+    procedure GridHeaderClicked(Sender: TObject; ACol: Integer);
     { A form to put a control on for HostRoundTrip; freed in TearDown. }
     function NewHost: TForm;
     { T-c for a control that builds children it owns (a radio group's buttons, a transfer's
@@ -425,6 +426,11 @@ begin
   FGetTextSender := Sender;
   FGetTextSenderIsCustom := TObject(Sender) is TTyCustomTreeView;
   Text := 'row ' + IntToStr(Node^.Index);
+end;
+
+procedure TTyCustomClassesP2Test.GridHeaderClicked(Sender: TObject; ACol: Integer);
+begin
+  Inc(FChanges);
 end;
 
 procedure TTyCustomClassesP2Test.GridGetCellText(Sender: TObject; ACol, ARow: Integer;
@@ -1450,6 +1456,7 @@ begin
   g.FocusRectVisible := False;
   g.FadeUnfocusedSelection := False;
   g.GridLineWidth := 2;
+  g.OnHeaderClick := @GridHeaderClicked;   // TCustomDrawGrid declares it public (grids.pas:1561)
   AssertEquals('RowCount', 4, g.RowCount);
   AssertEquals('FixedRows', 1, g.FixedRows);
   AssertEquals('FixedCols', 1, g.FixedCols);
@@ -1458,6 +1465,7 @@ begin
   AssertTrue('AutoFillColumns', g.AutoFillColumns);
   AssertFalse('FocusRectVisible', g.FocusRectVisible);
   AssertEquals('GridLineWidth', 2, g.GridLineWidth);
+  AssertTrue('OnHeaderClick', Assigned(g.OnHeaderClick));
 end;
 
 initialization

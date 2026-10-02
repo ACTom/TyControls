@@ -1905,6 +1905,7 @@ type
     property GridLineStyle;
     property GridLineWidth;
     property OnTopLeftChanged;
+    property OnHeaderClick;
     property OnGetCellText: TTyGridGetCellTextEvent
       read FOnGetCellText write FOnGetCellText;
   end;
