@@ -32,7 +32,7 @@ uses
   tyControls.Popup, tyControls.IconFont;
 
 type
-  TTyRibbonGallery = class;
+  TTyCustomRibbonGallery = class;
 
   { ----------------------------------------------------------------------------
     TTyGalleryGrid — INTERNAL popup-content control (NOT registered on the
