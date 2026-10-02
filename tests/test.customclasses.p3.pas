@@ -43,6 +43,7 @@ type
     FLastSender: TObject;
     FData: string;
     procedure CountChange(Sender: TObject);
+    procedure Launcher(Sender: TTyCustomRibbonGroup);
     procedure PaintButton(Sender: TTyCustomToolButton; AState: Integer);
     procedure DrawPanel(AStatusBar: TTyCustomStatusBar; APanel: TTyStatusPanel;
       APainter: TTyPainter; const ARect: TRect);
@@ -63,11 +64,18 @@ type
     procedure TestThirdStatusBar;
     procedure TestStatusPanelsReachAThirdPartyBar;
     procedure TestThirdScrollBar;
+    { Task 21: ribbon }
+    procedure TestThirdRibbonPage;
+    procedure TestThirdRibbonGroup;
+    procedure TestRibbonTakesAThirdPartyPage;
+    procedure TestRibbonPageLaysOutAThirdPartyGroup;
     { T-d, pixel for pixel, per task }
     procedure TestBarMimicsPaintLikeTheirFinalClass;
+    procedure TestRibbonMimicsPaintLikeTheirFinalClass;
     { Real input, one per family. }
     procedure TestInputThirdToolButtonClicks;
     procedure TestInputThirdScrollBarStepsOnArrowKeys;
+    procedure TestInputThirdRibbonGroupLauncher;
   end;
 
   { --- third-party mimics ------------------------------------------------------------ }
@@ -98,6 +106,18 @@ type
     property Position;
   end;
 
+  TThirdRibbonPage = class(TTyCustomRibbonPage)
+  published
+    property Caption;
+    property Context;
+  end;
+
+  TThirdRibbonGroup = class(TTyCustomRibbonGroup)
+  published
+    property Caption;
+    property ShowCaption;
+  end;
+
 implementation
 
 type
@@ -109,6 +129,16 @@ type
   TP3ToolBarExCracker = class(TTyCustomToolBarEx)
   public
     procedure ForceLayout;
+  end;
+
+  TP3RibbonPageCracker = class(TTyCustomRibbonPage)
+  public
+    procedure ForceLayout;
+  end;
+
+  TP3RibbonCracker = class(TTyCustomRibbon)
+  public
+    function TabCount: Integer;
   end;
 
   { Counts the repaints a status bar asks for: the panel collection's only way to tell its bar
@@ -123,6 +153,8 @@ type
   TP3ToolButtonRender = class(TTyCustomToolButton);
   TP3StatusBarRender = class(TTyCustomStatusBar);
   TP3ScrollBarRender = class(TTyCustomScrollBar);
+  TP3RibbonPageRender = class(TTyCustomRibbonPage);
+  TP3RibbonGroupRender = class(TTyCustomRibbonGroup);
 procedure TP3ToolBarCracker.ForceLayout;
 var r: TRect;
 begin
@@ -137,6 +169,18 @@ begin
   AlignControls(nil, r);
 end;
 
+procedure TP3RibbonPageCracker.ForceLayout;
+var r: TRect;
+begin
+  r := Rect(0, 0, Width, Height);
+  AlignControls(nil, r);
+end;
+
+function TP3RibbonCracker.TabCount: Integer;
+begin
+  Result := GetTabCount;
+end;
+
 procedure TP3CountingStatusBar.Invalidate;
 begin
   Inc(Invalidations);
@@ -144,6 +188,12 @@ begin
 end;
 
 procedure TTyCustomClassesP3Test.CountChange(Sender: TObject);
+begin
+  Inc(FChanges);
+  FLastSender := Sender;
+end;
+
+procedure TTyCustomClassesP3Test.Launcher(Sender: TTyCustomRibbonGroup);
 begin
   Inc(FChanges);
   FLastSender := Sender;
@@ -413,6 +463,112 @@ end;
 
 { ------------------------------------------------------------------ Task 21: ribbon }
 
+procedure TTyCustomClassesP3Test.TestThirdRibbonPage;
+var
+  host: TForm;
+  third, back: TThirdRibbonPage;
+  own: TTyRibbonPage;
+begin
+  host := NewHost;
+  third := TThirdRibbonPage.Create(host);
+  third.Name := 'Pg';
+  third.Parent := host;
+  CheckPublishesOnly(TThirdRibbonPage, ['Caption', 'Context']);
+  third.Caption := 'Home';
+  third.Context := 'pic';
+  third.Hint := 'h';
+  CheckStreamText(third, ['Caption', 'Context'], '');
+  back := HostRoundTrip(third) as TThirdRibbonPage;
+  AssertEquals('T-c: Caption round-trips', 'Home', back.Caption);
+  AssertEquals('T-c: Context round-trips', 'pic', back.Context);
+  own := TTyRibbonPage.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdRibbonPage, ['Caption', 'Context']);
+end;
+
+procedure TTyCustomClassesP3Test.TestThirdRibbonGroup;
+var
+  third, back: TThirdRibbonGroup;
+  own: TTyRibbonGroup;
+  c: TTyCustomRibbonGroup;
+begin
+  third := TThirdRibbonGroup.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdRibbonGroup, ['Caption', 'ShowCaption']);
+  third.Caption := 'Clipboard';
+  third.ShowCaption := False;
+  third.ShowDialogLauncher := True;
+  CheckStreamText(third, ['Caption', 'ShowCaption'], 'ShowDialogLauncher');
+  back := TThirdRibbonGroup.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Caption round-trips', 'Clipboard', back.Caption);
+  AssertFalse('T-c: ShowCaption round-trips', back.ShowCaption);
+  AssertFalse('T-c: the unpublished ShowDialogLauncher stayed at its default',
+    back.ShowDialogLauncher);
+  own := TTyRibbonGroup.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdRibbonGroup, ['Caption', 'ShowCaption']);
+  c := third;
+  c.OnDialogLauncher := @Launcher;
+  AssertTrue('T-v: OnDialogLauncher is public through a TTyCustomRibbonGroup reference',
+    Assigned(third.OnDialogLauncher));
+end;
+
+{ S21-1 (C20-1, C20-3). A third party's page joins the library's ribbon: it is registered as a
+  page, the ribbon hands it out as it is, a Context change re-lays the strip, and freeing the
+  page takes it out of the ribbon. }
+procedure TTyCustomClassesP3Test.TestRibbonTakesAThirdPartyPage;
+var
+  rb: TTyRibbon;
+  own: TTyRibbonPage;
+  third: TThirdRibbonPage;
+  pg: TTyCustomRibbonPage;
+begin
+  rb := TTyRibbon.Create(FForm);
+  rb.Parent := FForm;
+  own := rb.AddPage('Home');
+  third := TThirdRibbonPage.Create(FForm);
+  third.Caption := 'Insert';
+  third.Parent := rb;
+  AssertEquals('the ribbon registers the third-party page', 2, rb.PageCount);
+  pg := rb.Pages[1];
+  AssertTrue('Pages[] hands it out as it is', pg = third);
+  AssertFalse('and it is no TTyRibbonPage', pg is TTyRibbonPage);
+  rb.ActivePage := third;
+  AssertTrue('it can be the active page', rb.ActivePage = third);
+  AssertEquals('both tabs show', 2, TP3RibbonCracker(rb).TabCount);
+  third.Context := 'pictures';
+  AssertEquals('a Context of its own hides its tab until the context is shown', 1,
+    TP3RibbonCracker(rb).TabCount);
+  rb.ShowContext('pictures');
+  AssertEquals('and shows it again with the context', 2, TP3RibbonCracker(rb).TabCount);
+  third.Free;
+  AssertEquals('freeing the page takes it out of the ribbon', 1, rb.PageCount);
+  AssertTrue('the library''s own page remains', rb.Pages[0] = own);
+end;
+
+{ S21-2 (C20-2). The page lays out a third party's group with its own: the group is captured
+  into the page's left-to-right order and placed by the page. }
+procedure TTyCustomClassesP3Test.TestRibbonPageLaysOutAThirdPartyGroup;
+var
+  pg: TP3RibbonPageCracker;
+  g: TThirdRibbonGroup;
+begin
+  pg := TP3RibbonPageCracker(TTyRibbonPage.Create(FForm));
+  pg.Parent := FForm;
+  pg.SetBounds(0, 0, 500, 90);
+  g := TThirdRibbonGroup.Create(FForm);
+  g.Parent := pg;
+  g.Width := 120;
+  AssertTrue('precondition: a group docks left until its page lays it out', g.Align = alLeft);
+  pg.ForceLayout;
+  AssertTrue('the page took the third-party group into its own layout', g.Align = alNone);
+  AssertEquals('at the band''s full height', pg.ClientHeight, g.Height);
+  AssertTrue('and shows it', g.Visible);
+end;
+
 { ------------------------------------------------------------------ Task 22: window chrome }
 
 { ------------------------------------------------------------------ Task 23: images and shapes }
@@ -442,6 +598,16 @@ end;
 procedure RenderScrollBar(C: TControl; ACanvas: TCanvas; const R: TRect);
 begin
   TP3ScrollBarRender(C).RenderTo(ACanvas, R, 96);
+end;
+
+procedure RenderRibbonPage(C: TControl; ACanvas: TCanvas; const R: TRect);
+begin
+  TP3RibbonPageRender(C).RenderTo(ACanvas, R, 96);
+end;
+
+procedure RenderRibbonGroup(C: TControl; ACanvas: TCanvas; const R: TRect);
+begin
+  TP3RibbonGroupRender(C).RenderTo(ACanvas, R, 96);
 end;
 
 { Each pair is set up the same way -- same size, same values, unfocused -- and must paint the
@@ -519,6 +685,26 @@ begin
   CheckSamePaint(sc, osc, 200, 17, @RenderScrollBar);
 end;
 
+procedure TTyCustomClassesP3Test.TestRibbonMimicsPaintLikeTheirFinalClass;
+var
+  rp: TThirdRibbonPage;
+  orp: TTyRibbonPage;
+  rg: TThirdRibbonGroup;
+  org: TTyRibbonGroup;
+begin
+  rp := TThirdRibbonPage.Create(FForm);
+  orp := TTyRibbonPage.Create(FForm);
+  CheckSamePaint(rp, orp, 300, 90, @RenderRibbonPage);
+
+  rg := TThirdRibbonGroup.Create(FForm);
+  org := TTyRibbonGroup.Create(FForm);
+  rg.Align := alNone;
+  org.Align := alNone;
+  rg.Caption := 'Font';
+  org.Caption := 'Font';
+  CheckSamePaint(rg, org, 140, 90, @RenderRibbonGroup);
+end;
+
 { ------------------------------------------------------------------ real input }
 
 procedure PressAndRelease(C: TControl; X, Y: Integer);
@@ -584,7 +770,40 @@ begin
   AssertEquals('End as on TTyScrollBar', own.Position, third.Position);
 end;
 
+procedure TTyCustomClassesP3Test.TestInputThirdRibbonGroupLauncher;
+var
+  third: TThirdRibbonGroup;
+  own: TTyRibbonGroup;
+  a: Integer;
+begin
+  NeedWidgetSet;
+  third := TThirdRibbonGroup.Create(FForm);
+  third.Parent := FForm;
+  third.Align := alNone;
+  third.SetBounds(0, 0, 140, 90);
+  third.ShowDialogLauncher := True;
+  third.HandleNeeded;
+  own := TTyRibbonGroup.Create(FForm);
+  own.Parent := FForm;
+  own.Align := alNone;
+  own.SetBounds(150, 0, 140, 90);
+  own.ShowDialogLauncher := True;
+  own.HandleNeeded;
+  third.OnDialogLauncher := @Launcher;
+  own.OnDialogLauncher := @Launcher;
+  FChanges := 0;
+  FLastSender := nil;
+  PressAndRelease(third, 135, 85);
+  a := FChanges;
+  AssertTrue('the launcher reports the third-party group itself', FLastSender = third);
+  FChanges := 0;
+  PressAndRelease(own, 135, 85);
+  AssertEquals('a click on the mimic''s launcher fires it once', 1, a);
+  AssertEquals('as on TTyRibbonGroup', FChanges, a);
+end;
+
 initialization
-  RegisterClasses([TThirdToolBar, TThirdToolButton, TThirdStatusBar, TThirdScrollBar]);
+  RegisterClasses([TThirdToolBar, TThirdToolButton, TThirdStatusBar, TThirdScrollBar,
+    TThirdRibbonPage, TThirdRibbonGroup]);
   RegisterTest(TTyCustomClassesP3Test);
 end.

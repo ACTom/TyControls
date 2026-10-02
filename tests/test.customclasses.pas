@@ -1546,14 +1546,14 @@ initialization
     'TTyDrawGrid', 'TTyStringGrid',
     // T20 bars
     'TTyStatusBar', 'TTyToolBar', 'TTyToolBarEx', 'TTyToolButton', 'TTyToolSeparator', 'TTyAlert',
-    'TTyPagination', 'TTySteps', 'TTyBreadcrumb', 'TTyScrollBar']);
+    'TTyPagination', 'TTySteps', 'TTyBreadcrumb', 'TTyScrollBar',
+    // T21 ribbon
+    'TTyRibbon', 'TTyRibbonPage', 'TTyRibbonGroup', 'TTyRibbonAppMenu', 'TTyRibbonQuickAccess',
+    'TTyRibbonGallery', 'TTyRibbonBackstage']);
 
   { CPending: the classes still to split, by task (plan appendix A). Each task moves its own
     names into CSplit; Task 32 deletes this list. }
   AddAll(GPending, [
-    // T21 ribbon
-    'TTyRibbon', 'TTyRibbonPage', 'TTyRibbonGroup', 'TTyRibbonAppMenu', 'TTyRibbonQuickAccess',
-    'TTyRibbonGallery', 'TTyRibbonBackstage',
     // T22 form chrome
     'TTyTitleBar', 'TTyMenuBar', 'TTyFormSurface',
     // T23 images and shapes

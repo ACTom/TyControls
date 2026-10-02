@@ -643,24 +643,24 @@ end;
 procedure TTyRibbonContextPropertyEditor.GetValues(Proc: TGetStrProc);
 var
   comp: TPersistent;
-  page: TTyRibbonPage;
+  page: TTyCustomRibbonPage;
   host: TWinControl;
   i: Integer;
   seen: TStringList;
   ctx: string;
 begin
   comp := GetComponent(0);
-  if not (comp is TTyRibbonPage) then Exit;
-  page := TTyRibbonPage(comp);
+  if not (comp is TTyCustomRibbonPage) then Exit;
+  page := TTyCustomRibbonPage(comp);
   host := page.Parent;
   if host = nil then Exit;
   seen := TStringList.Create;
   try
     seen.CaseSensitive := False;   // ShowContext matches case-insensitively; so must the list
     for i := 0 to host.ControlCount - 1 do
-      if host.Controls[i] is TTyRibbonPage then
+      if host.Controls[i] is TTyCustomRibbonPage then
       begin
-        ctx := TTyRibbonPage(host.Controls[i]).Context;
+        ctx := TTyCustomRibbonPage(host.Controls[i]).Context;
         // '' is not a context, it is the absence of one — and it is already the default.
         if (ctx <> '') and (seen.IndexOf(ctx) < 0) then
         begin
@@ -754,7 +754,7 @@ begin
   RegisterPropertyEditor(TypeInfo(string), TTyGlyphButtonBase, 'GlyphName',
     TTyGlyphNamePropertyEditor);          // covers TTyGlyphButton / GlyphContainer / SpeedButton
   // A contextual ribbon tab, spelled the way its siblings spell it.
-  RegisterPropertyEditor(TypeInfo(string), TTyRibbonPage, 'Context',
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomRibbonPage, 'Context',
     TTyRibbonContextPropertyEditor);
   { Paths and file filters. No value LIST is possible for these — the vocabulary is the file
     system — so they get the other half of the same treatment: a picker behind the '...'

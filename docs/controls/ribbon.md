@@ -15,9 +15,9 @@ Batch-C 的按钮家族([TTyGlyphButton](glyphbuttons.md)/[TTyGlyphContainerButt
 
 | 成员 | 说明 |
 |------|------|
-| `ActivePageIndex` / `ActivePage` | 当前激活页;运行期点标签即切换。 |
+| `ActivePageIndex` / `ActivePage` | 当前激活页;运行期点标签即切换。`ActivePage` 的类型是 `TTyCustomRibbonPage`(4.0 起;从 `TTyCustomRibbonPage` 派生的第三方页也能放进 Ribbon,原样交出)。 |
 | `AddPage(caption): TTyRibbonPage` | 新增一页。 |
-| `RemovePage(index)` / `PageCount` / `Pages[i]` | 页管理。 |
+| `RemovePage(index)` / `PageCount` / `Pages[i]` | 页管理。`Pages[i]` 交出 `TTyCustomRibbonPage`(同上)。 |
 
 > **右到左镜像:刻意不做。** 基类 `TTyCustomTabStrip` 的标签带已经支持 `BiDiMode := bdRightToLeft`
 > (`TTyPageControl` / `TTyTabSet` 都会镜像),但 Ribbon 自己的装饰件还没有:File 标签绘制并命中在
@@ -41,7 +41,7 @@ Batch-C 的按钮家族([TTyGlyphButton](glyphbuttons.md)/[TTyGlyphContainerButt
 |------|------|
 | `Caption` | 底部分组标题。 |
 | `ShowDialogLauncher` | 在标题带右下角显示对话框启动器箭头。 |
-| `OnDialogLauncher` | 点击启动器箭头触发。 |
+| `OnDialogLauncher` | 点击启动器箭头触发。签名 `procedure(Sender: TTyCustomRibbonGroup) of object`(4.0 起 Sender 写 Custom 类,同 LCL 的事件惯例)。 |
 
 ## 纯几何
 
