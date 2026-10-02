@@ -365,7 +365,7 @@ end;
 
 function TTyToolWindowBottomFixture.ActiveGeom: TTyToolWindowHeaderGeom;
 var
-  w: TTyToolWindow;
+  w: TTyCustomToolWindow;
 begin
   w := FBar.ActiveWindow;
   AssertNotNull('前提:有当前页', w);
@@ -385,7 +385,7 @@ end;
 
 function TTyToolWindowBottomFixture.AddActionsKid(AWin: TTyToolWindow; AW, AH: Integer): TBodyChild;
 var
-  act: TTyToolWindowActions;
+  act: TTyCustomToolWindowActions;
 begin
   act := AWin.EnsureActions;
   Result := TBodyChild.Create(FForm);
@@ -414,7 +414,7 @@ end;
 
 procedure TTyToolWindowBottomTests.TestTheActionsSitInTheBottomRowBeforeTheButtons;
 var
-  act: TTyToolWindowActions;
+  act: TTyCustomToolWindowActions;
   kid: TBodyChild;
   g: TTyToolWindowHeaderGeom;
   w: TProbeWindow;
@@ -481,7 +481,7 @@ end;
 
 procedure TTyToolWindowBottomTests.TestTheTabAreaMinTokenSqueezesTheActions;
 var
-  act: TTyToolWindowActions;
+  act: TTyCustomToolWindowActions;
   kid: TBodyChild;
   before, after: TTyToolWindowHeaderGeom;
 begin
@@ -688,7 +688,7 @@ end;
 procedure TTyToolWindowBottomTests.TestAConstraintsOnlyChangeReachesTheRow;
 var
   w: TProbeWindow;
-  act: TTyToolWindowActions;
+  act: TTyCustomToolWindowActions;
   kid: TBodyChild;
   pw, ph: Integer;
 begin
@@ -809,7 +809,7 @@ end;
 procedure TTyToolWindowBottomTests.TestABarStyleClassChangeRelayoutsTheActivePage;
 var
   w: TProbeWindow;
-  act: TTyToolWindowActions;
+  act: TTyCustomToolWindowActions;
   before: TRect;
 begin
   NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
@@ -1462,7 +1462,7 @@ end;
 
 function TTyToolWindowBottomTests.DesignTabCentre(ABar: TBarAccess; AIndex: Integer): TPoint;
 var
-  w: TTyToolWindow;
+  w: TTyCustomToolWindow;
 begin
   w := ABar.ActiveWindow;
   Result := TabRectOf(w.HeaderGeomAt(Rect(0, 0, w.ClientWidth, w.ClientHeight),
@@ -1489,7 +1489,7 @@ end;
 procedure TTyToolWindowBottomTests.TestDesignTimeButtonsAndSeparatorAnswerZero;
 var
   d: TBarAccess;
-  w: TTyToolWindow;
+  w: TTyCustomToolWindow;
   g: TTyToolWindowHeaderGeom;
 
   procedure Probe(const AName: string; const ARect: TRect);
@@ -1522,7 +1522,7 @@ end;
 procedure TTyToolWindowBottomTests.TestTheDesignTimeRowsBlankSelectsTheBar;
 var
   d: TBarAccess;
-  w: TTyToolWindow;
+  w: TTyCustomToolWindow;
   g: TTyToolWindowHeaderGeom;
 begin
   d := NewDesignBottomBar;

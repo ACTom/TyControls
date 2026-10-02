@@ -24,8 +24,8 @@ type
     { OnCanMoveWindow 的答案、被问了几次、最近一次的参数。 }
     FAllow: Boolean;
     FCanCalls: Integer;
-    FCanWindow: TTyToolWindow;
-    FCanTarget: TTyToolWindowBar;
+    FCanWindow: TTyCustomToolWindow;
+    FCanTarget: TTyCustomToolWindowBar;
     procedure SetUp; override;
     function NewManager: TTyToolWindowManager;
     { 窗体上一条 APlacement 的栏,按 ACaptions 建窗口(Name = 'W' + 标题,布局要用;标题长短
@@ -105,7 +105,7 @@ type
       ATargetBar: TTyCustomToolWindowBar; var AAllow: Boolean);
   private
     FReenterTarget: TTyToolWindowBar;
-    FReenterWindow: TTyToolWindow;
+    FReenterWindow: TTyCustomToolWindow;
     FReenterMgr: TTyToolWindowManager;
     { -1 = 处理器没跑过;0 / 1 = 处理器里那一次 MoveWindow 的答案。 }
     FReentered: Integer;
@@ -724,8 +724,8 @@ procedure TTyToolWindowManagerTests.TestAskingChangesNothing;
 var
   m: TTyToolWindowManager;
   l, r: TBarAccess;
-  a, b, c: TTyToolWindow;
-  x: TTyToolWindow;
+  a, b, c: TTyCustomToolWindow;
+  x: TTyCustomToolWindow;
 begin
   m := NewManager;
   l := NewBarOn(twpLeft, ['Explorer', 'Search', 'Git']);
@@ -778,7 +778,7 @@ procedure TTyToolWindowManagerTests.TestMoveWindowActivatesAndExpandsTheTarget;
 var
   m: TTyToolWindowManager;
   l, r: TBarAccess;
-  b, c: TTyToolWindow;
+  b, c: TTyCustomToolWindow;
 begin
   NewLeftRight(m, l, r);
   b := l.Windows[1];
@@ -810,7 +810,7 @@ procedure TTyToolWindowManagerTests.TestMoveWindowIndexClampsAndMinusOneMeansThe
 var
   m: TTyToolWindowManager;
   l, r: TBarAccess;
-  a, b, c, x: TTyToolWindow;
+  a, b, c, x: TTyCustomToolWindow;
 begin
   NewLeftRight(m, l, r);
   a := l.Windows[0];
@@ -831,7 +831,7 @@ procedure TTyToolWindowManagerTests.TestMovingAnInactiveWindowLeavesTheSourceAlo
 var
   m: TTyToolWindowManager;
   l, r: TBarAccess;
-  b: TTyToolWindow;
+  b: TTyCustomToolWindow;
 begin
   NewLeftRight(m, l, r);
   b := l.Windows[1];
@@ -844,7 +844,7 @@ procedure TTyToolWindowManagerTests.TestMoveWindowWithinABarIsAReorder;
 var
   m: TTyToolWindowManager;
   l, r: TBarAccess;
-  a, b, c: TTyToolWindow;
+  a, b, c: TTyCustomToolWindow;
 begin
   NewLeftRight(m, l, r);
   a := l.Windows[0];
@@ -862,7 +862,7 @@ procedure TTyToolWindowManagerTests.TestMoveWindowFromOnWindowMovedIsRefused;
 var
   m: TTyToolWindowManager;
   l, r: TBarAccess;
-  b: TTyToolWindow;
+  b: TTyCustomToolWindow;
 begin
   NewLeftRight(m, l, r);
   b := l.Windows[1];
@@ -878,7 +878,7 @@ procedure TTyToolWindowManagerTests.TestMoveWindowFromOnCanMoveWindowIsRefused;
 var
   m: TTyToolWindowManager;
   l, r: TBarAccess;
-  a, x: TTyToolWindow;
+  a, x: TTyCustomToolWindow;
 begin
   NewLeftRight(m, l, r);
   a := l.Windows[0];
@@ -896,7 +896,7 @@ procedure TTyToolWindowManagerTests.TestAVetoedMoveChangesNothing;
 var
   m: TTyToolWindowManager;
   l, r: TBarAccess;
-  b: TTyToolWindow;
+  b: TTyCustomToolWindow;
 begin
   NewLeftRight(m, l, r);
   b := l.Windows[1];
@@ -912,7 +912,7 @@ procedure TTyToolWindowManagerTests.TestEveryReorderReportsOnWindowMoved;
 var
   m, dm: TTyToolWindowManager;
   l, r, bb, d: TBarAccess;
-  b, dw: TTyToolWindow;
+  b, dw: TTyCustomToolWindow;
   p: TPoint;
   act: TProbeWindow;
   g: TTyToolWindowHeaderGeom;
@@ -1007,7 +1007,7 @@ end;
 procedure TTyToolWindowManagerTests.TestADirectParentChangeBooksTheMove;
 var
   l, r: TBarAccess;
-  b, c: TTyToolWindow;
+  b, c: TTyCustomToolWindow;
 begin
   l := NewBarOn(twpLeft, ['Explorer', 'Search', 'Git']);
   r := NewBarOn(twpRight, ['Outline']);
@@ -1056,7 +1056,7 @@ procedure TTyToolWindowManagerTests.TestAConflictingTargetStillTakesTheWindow;
 var
   m: TTyToolWindowManager;
   l, r, r2: TBarAccess;
-  b: TTyToolWindow;
+  b: TTyCustomToolWindow;
 begin
   NewLeftRight(m, l, r);
   r2 := NewBarOn(twpRight, ['Debug']);
@@ -1147,7 +1147,7 @@ procedure TTyToolWindowManagerTests.TestABarEventDuringADirectParentChangeCannot
 var
   m: TTyToolWindowManager;
   l, r: TBarAccess;
-  a: TTyToolWindow;
+  a: TTyCustomToolWindow;
 begin
   NewLeftRight(m, l, r);
   a := l.Windows[0];
@@ -1243,7 +1243,7 @@ procedure TTyToolWindowManagerTests.TestFreeingTheManagerInOnCanMoveWindowTouche
 var
   m: TTyToolWindowManager;
   l, r: TBarAccess;
-  b: TTyToolWindow;
+  b: TTyCustomToolWindow;
 begin
   NewLeftRight(m, l, r);
   b := l.Windows[1];
