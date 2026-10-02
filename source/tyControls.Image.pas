@@ -27,7 +27,7 @@ type
     DrawFrame, and the flag is also pushed into Picture.Graphic.Transparent so a
     masked/keyed bitmap behaves as it does under LCL. The style opacity (e.g.
     :disabled opacity 0.5) is honored in both modes so a disabled image dims. }
-  TTyImage = class(TTyGraphicControl)
+  TTyCustomImage = class(TTyGraphicControl)
   private
     FPicture: TPicture;
     FStretch: Boolean;
@@ -86,48 +86,6 @@ type
       Images.SizeForPPI[ImageWidth, PixelsPerInch]; this collection renders one master
       to any size on demand, so the requested edge IS the answer. 0 when no list. }
     property ImageSize: Integer read GetImageSize;
-  published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
-    property Version;
-    property Enabled;
-    property Visible;
-    property Font;
-    property ShowHint;
-    property OnClick;
-    property OnDblClick;
-    property OnMouseDown;
-    property OnMouseUp;
-    property OnMouseMove;
-    property OnMouseEnter;
-    property OnMouseLeave;
-    property OnMouseWheel;
-    property OnMouseWheelUp;
-    property OnMouseWheelDown;
-    property OnContextPopup;
-    property OnResize;
-    property OnChangeBounds;
-    property AutoSize;
-    property DragMode;
-    property DragKind;
-    property DragCursor;
-    property OnDragOver;
-    property OnDragDrop;
-    property OnStartDrag;
-    property OnEndDrag;
-    property OnMouseWheelHorz;
-    property OnMouseWheelLeft;
-    property OnMouseWheelRight;
-    property OnShowHint;
-    property PopupMenu;
-    property Constraints;
-    property BorderSpacing;
-    property ParentShowHint;
-    property Action;
-    property OnPaint;
-    property StyleClass;
-    property StyleOverride;
-    property Controller;
     property Picture: TPicture read FPicture write SetPicture;
     property Stretch: Boolean read FStretch write SetStretch default False;
     property Proportional: Boolean read FProportional write SetProportional default False;
@@ -198,6 +156,65 @@ type
       claimed by the control itself (autosize depends on it), so this was the only
       seam that could exist. }
     property OnPictureChanged: TNotifyEvent read FOnPictureChanged write FOnPictureChanged;
+  end;
+
+  { TTyImage publishes TTyCustomImage's properties; everything lives in TTyCustomImage. }
+  TTyImage = class(TTyCustomImage)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Picture;
+    property Stretch;
+    property Proportional;
+    property Center;
+    property Transparent;
+    property StretchOutEnabled;
+    property StretchInEnabled;
+    property KeepOriginXWhenClipped;
+    property KeepOriginYWhenClipped;
+    property AntialiasingMode;
+    property Images;
+    property ImageName;
+    property ImageIndex;
+    property ImageWidth;
+    property OnPictureChanged;
     property Align;
     property Anchors;
   end;
@@ -312,7 +329,7 @@ begin
   Result := Rect(ox, oy, ox + w, oy + h);
 end;
 
-constructor TTyImage.Create(AOwner: TComponent);
+constructor TTyCustomImage.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FPicture := TPicture.Create;
@@ -331,14 +348,14 @@ begin
   SetBounds(0, 0, 90, 90);   // sensible default drop size (mirrors CharImage's ctor)
 end;
 
-destructor TTyImage.Destroy;
+destructor TTyCustomImage.Destroy;
 begin
   FPicture.OnChange := nil;
   FPicture.Free;
   inherited Destroy;
 end;
 
-function TTyImage.GetStyleTypeKey: string;
+function TTyCustomImage.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyPanel': in its default transparent mode it draws no panel at all, yet a theme could only reach it through TyPanel.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
@@ -346,33 +363,33 @@ begin
   Result := 'TyImage';
 end;
 
-procedure TTyImage.SetPicture(AValue: TPicture);
+procedure TTyCustomImage.SetPicture(AValue: TPicture);
 begin
   FPicture.Assign(AValue);   // triggers OnChange -> PictureChanged
 end;
 
-procedure TTyImage.SetStretch(AValue: Boolean);
+procedure TTyCustomImage.SetStretch(AValue: Boolean);
 begin
   if FStretch = AValue then Exit;
   FStretch := AValue;
   Invalidate;
 end;
 
-procedure TTyImage.SetProportional(AValue: Boolean);
+procedure TTyCustomImage.SetProportional(AValue: Boolean);
 begin
   if FProportional = AValue then Exit;
   FProportional := AValue;
   Invalidate;
 end;
 
-procedure TTyImage.SetCenter(AValue: Boolean);
+procedure TTyCustomImage.SetCenter(AValue: Boolean);
 begin
   if FCenter = AValue then Exit;
   FCenter := AValue;
   Invalidate;
 end;
 
-procedure TTyImage.SetTransparent(AValue: Boolean);
+procedure TTyCustomImage.SetTransparent(AValue: Boolean);
 begin
   if FTransparent = AValue then Exit;
   FTransparent := AValue;
@@ -380,7 +397,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyImage.SetStretchInEnabled(AValue: Boolean);
+procedure TTyCustomImage.SetStretchInEnabled(AValue: Boolean);
 begin
   if FStretchInEnabled = AValue then Exit;
   FStretchInEnabled := AValue;
@@ -388,7 +405,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyImage.SetStretchOutEnabled(AValue: Boolean);
+procedure TTyCustomImage.SetStretchOutEnabled(AValue: Boolean);
 begin
   if FStretchOutEnabled = AValue then Exit;
   FStretchOutEnabled := AValue;
@@ -396,28 +413,28 @@ begin
   Invalidate;
 end;
 
-procedure TTyImage.SetKeepOriginX(AValue: Boolean);
+procedure TTyCustomImage.SetKeepOriginX(AValue: Boolean);
 begin
   if FKeepOriginXWhenClipped = AValue then Exit;
   FKeepOriginXWhenClipped := AValue;
   Invalidate;
 end;
 
-procedure TTyImage.SetKeepOriginY(AValue: Boolean);
+procedure TTyCustomImage.SetKeepOriginY(AValue: Boolean);
 begin
   if FKeepOriginYWhenClipped = AValue then Exit;
   FKeepOriginYWhenClipped := AValue;
   Invalidate;
 end;
 
-procedure TTyImage.SetAntialiasingMode(AValue: TAntialiasingMode);
+procedure TTyCustomImage.SetAntialiasingMode(AValue: TAntialiasingMode);
 begin
   if FAntialiasingMode = AValue then Exit;
   FAntialiasingMode := AValue;
   Invalidate;
 end;
 
-procedure TTyImage.SetImages(AValue: TCustomImageList);
+procedure TTyCustomImage.SetImages(AValue: TCustomImageList);
 begin
   if FImages = AValue then Exit;
   // FreeNotification, or a list living on another form (or with Owner = nil) would be
@@ -434,7 +451,7 @@ begin
   Invalidate;
 end;
 
-function TTyImage.GetImageIndex: Integer;
+function TTyCustomImage.GetImageIndex: Integer;
 var n: Integer;
 begin
   // DERIVED from the name whenever the name resolves; otherwise the last index written. This is
@@ -448,7 +465,7 @@ begin
   Result := FImageIndex;
 end;
 
-procedure TTyImage.SetImageIndex(AValue: Integer);
+procedure TTyCustomImage.SetImageIndex(AValue: Integer);
 begin
   if AValue < -1 then AValue := -1;   // one "no icon" value, not a range of them
   FImageIndex := AValue;
@@ -463,7 +480,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyImage.SetImageName(const AValue: string);
+procedure TTyCustomImage.SetImageName(const AValue: string);
 begin
   if FImageName = AValue then Exit;
   FImageName := AValue;
@@ -472,7 +489,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyImage.ResolveImageIndex;
+procedure TTyCustomImage.ResolveImageIndex;
 begin
   if not FImageIndexPending then Exit;   // nothing outstanding: never touch a set ImageName
   if FImages = nil then Exit;            // still unresolvable; a later SetImages retries
@@ -483,7 +500,7 @@ begin
     SetImageName(TyImageNameOfIndex(FImages, FImageIndex));  // '' for a foreign list / past end
 end;
 
-function TTyImage.ImageIndexIsStored: Boolean;
+function TTyCustomImage.ImageIndexIsStored: Boolean;
 begin
   // The NAME is the durable state; the index streams only as the fallback for a choice a name
   // cannot hold -- a foreign list with no names, or plain index-only use. When a name IS set it
@@ -492,7 +509,7 @@ begin
   Result := (FImageName = '') and (FImageIndex >= 0);
 end;
 
-procedure TTyImage.SetImageWidth(AValue: Integer);
+procedure TTyCustomImage.SetImageWidth(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   if FImageWidth = AValue then Exit;
@@ -502,7 +519,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyImage.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomImage.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FImages) then
@@ -512,7 +529,7 @@ begin
   end;
 end;
 
-function TTyImage.GetImageSize: Integer;
+function TTyCustomImage.GetImageSize: Integer;
 begin
   if FImages = nil then Exit(0);
   if FImageWidth > 0 then
@@ -522,7 +539,7 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-function TTyImage.GetHasGraphic: Boolean;
+function TTyCustomImage.GetHasGraphic: Boolean;
 begin
   // customimage.inc:270-273 — a picture, OR a list plus a usable index. Ours adds the
   // upper bound because the list is name-keyed and an index past Names.Count renders a
@@ -538,13 +555,13 @@ end;
   so what is behind shows through", so a bitmap with a real mask was drawn opaque however
   the property was set -- the one thing a reader of the LCL docs would expect it to do.
   It now does both: the surface behaviour it always had, and the graphic's mask. }
-procedure TTyImage.ApplyTransparentToGraphic;
+procedure TTyCustomImage.ApplyTransparentToGraphic;
 begin
   if (FPicture <> nil) and (FPicture.Graphic <> nil) then
     FPicture.Graphic.Transparent := FTransparent;
 end;
 
-procedure TTyImage.PictureChanged(Sender: TObject);
+procedure TTyCustomImage.PictureChanged(Sender: TObject);
 begin
   { A new graphic arrives without knowing what Transparent is set to. }
   ApplyTransparentToGraphic;
@@ -559,7 +576,7 @@ begin
   if Assigned(FOnPictureChanged) then FOnPictureChanged(Self);
 end;
 
-procedure TTyImage.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+procedure TTyCustomImage.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
   WithThemeSpace: Boolean);
 var
   sz: Integer;
@@ -584,7 +601,7 @@ begin
   end;
 end;
 
-procedure TTyImage.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomImage.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -696,7 +713,7 @@ begin
   end;
 end;
 
-procedure TTyImage.Paint;
+procedure TTyCustomImage.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

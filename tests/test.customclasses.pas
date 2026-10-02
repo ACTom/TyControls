@@ -1551,14 +1551,14 @@ initialization
     'TTyRibbon', 'TTyRibbonPage', 'TTyRibbonGroup', 'TTyRibbonAppMenu', 'TTyRibbonQuickAccess',
     'TTyRibbonGallery', 'TTyRibbonBackstage',
     // T22 form chrome
-    'TTyTitleBar', 'TTyMenuBar', 'TTyFormSurface']);
+    'TTyTitleBar', 'TTyMenuBar', 'TTyFormSurface',
+    // T23 images and shapes
+    'TTyCharImage', 'TTyImage', 'TTyPreviewBox', 'TTyImageView', 'TTyShape', 'TTyStarShape',
+    'TTyArrow', 'TTyChart']);
 
   { CPending: the classes still to split, by task (plan appendix A). Each task moves its own
     names into CSplit; Task 32 deletes this list. }
   AddAll(GPending, [
-    // T23 images and shapes
-    'TTyCharImage', 'TTyImage', 'TTyPreviewBox', 'TTyImageView', 'TTyShape', 'TTyStarShape',
-    'TTyArrow', 'TTyChart',
     // T24 colour pickers and terminal
     'TTyColorGrid', 'TTyLColorPicker', 'TTyHSColorPicker', 'TTyTerminalView',
     // T25 tool windows

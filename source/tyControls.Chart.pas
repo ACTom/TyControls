@@ -264,7 +264,7 @@ type
   TTyChartTooltipEvent = procedure(Sender: TObject; ASeries, APoint: Integer;
     var AText: string) of object;
 
-  TTyChart = class(TTyGraphicControl)
+  TTyCustomChart = class(TTyGraphicControl)
   private
     FChartType: TTyChartType;
     FSeries: TTyChartSeries;
@@ -361,9 +361,26 @@ type
     procedure SaveToFile(const AFileName: string; AFormat: TBGRAImageFormat); overload;
     procedure SaveToFile(const AFileName: string; AFormat: TBGRAImageFormat;
       AWidth, AHeight: Integer); overload;
+    property ChartType: TTyChartType read FChartType write SetChartType default ctLine;
+    property Series: TTyChartSeries read FSeries write SetSeries;
+    property Categories: TStrings read FCategories write SetCategories;
+    property Title: TCaption read FTitle write SetTitle;
+    property ShowLegend: Boolean read FShowLegend write SetShowLegend default True;
+    property ShowGrid: Boolean read FShowGrid write SetShowGrid default True;
+    property ShowValues: Boolean read FShowValues write SetShowValues default False;
+    { Paint a value tooltip for the datum under the pointer.
+      NOT named ShowHint: TControl already publishes ShowHint/Hint (the OS hint window for
+      the control as a whole) and this control inherits them — the name is taken, and the
+      two are different features anyway. This one is per-DATUM and painted inside the chart. }
+    property ShowTooltip: Boolean read FShowTooltip write SetShowTooltip default True;
+    { Override the tooltip text. Named for its property (ShowTooltip), not OnGetHint, so the
+      pair reads as one feature and neither collides with TControl's OnShowHint. }
+    property OnGetTooltip: TTyChartTooltipEvent read FOnGetTooltip write FOnGetTooltip;
+  end;
+
+  { TTyChart publishes TTyCustomChart's properties; everything lives in TTyCustomChart. }
+  TTyChart = class(TTyCustomChart)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
@@ -403,21 +420,15 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property ChartType: TTyChartType read FChartType write SetChartType default ctLine;
-    property Series: TTyChartSeries read FSeries write SetSeries;
-    property Categories: TStrings read FCategories write SetCategories;
-    property Title: TCaption read FTitle write SetTitle;
-    property ShowLegend: Boolean read FShowLegend write SetShowLegend default True;
-    property ShowGrid: Boolean read FShowGrid write SetShowGrid default True;
-    property ShowValues: Boolean read FShowValues write SetShowValues default False;
-    { Paint a value tooltip for the datum under the pointer.
-      NOT named ShowHint: TControl already publishes ShowHint/Hint (the OS hint window for
-      the control as a whole) and this control inherits them — the name is taken, and the
-      two are different features anyway. This one is per-DATUM and painted inside the chart. }
-    property ShowTooltip: Boolean read FShowTooltip write SetShowTooltip default True;
-    { Override the tooltip text. Named for its property (ShowTooltip), not OnGetHint, so the
-      pair reads as one feature and neither collides with TControl's OnShowHint. }
-    property OnGetTooltip: TTyChartTooltipEvent read FOnGetTooltip write FOnGetTooltip;
+    property ChartType;
+    property Series;
+    property Categories;
+    property Title;
+    property ShowLegend;
+    property ShowGrid;
+    property ShowValues;
+    property ShowTooltip;
+    property OnGetTooltip;
     property Align;
     property Anchors;
   end;
@@ -885,9 +896,9 @@ begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-{ ============================ TTyChart ============================ }
+{ ============================ TTyCustomChart ====================== }
 
-constructor TTyChart.Create(AOwner: TComponent);
+constructor TTyCustomChart.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FChartType := ctLine;
@@ -904,14 +915,14 @@ begin
   Height := 180;
 end;
 
-destructor TTyChart.Destroy;
+destructor TTyCustomChart.Destroy;
 begin
   FSeries.Free;
   FCategories.Free;
   inherited Destroy;
 end;
 
-function TTyChart.GetStyleTypeKey: string;
+function TTyCustomChart.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyPanel': a chart is not a panel: it draws a title, axes, gridlines, a legend and series over the surface, none of which a panel has any concept of.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
@@ -919,7 +930,7 @@ begin
   Result := 'TyChart';
 end;
 
-procedure TTyChart.SetChartType(AValue: TTyChartType);
+procedure TTyCustomChart.SetChartType(AValue: TTyChartType);
 begin
   if FChartType = AValue then Exit;
   FChartType := AValue;
@@ -929,49 +940,49 @@ begin
   Invalidate;
 end;
 
-procedure TTyChart.SetSeries(AValue: TTyChartSeries);
+procedure TTyCustomChart.SetSeries(AValue: TTyChartSeries);
 begin
   FSeries.Assign(AValue);
   ClearHover;
   Invalidate;
 end;
 
-procedure TTyChart.SetCategories(AValue: TStrings);
+procedure TTyCustomChart.SetCategories(AValue: TStrings);
 begin
   FCategories.Assign(AValue);
   ClearHover;
   Invalidate;
 end;
 
-procedure TTyChart.SetTitle(const AValue: TCaption);
+procedure TTyCustomChart.SetTitle(const AValue: TCaption);
 begin
   if FTitle = AValue then Exit;
   FTitle := AValue;
   Invalidate;
 end;
 
-procedure TTyChart.SetShowLegend(AValue: Boolean);
+procedure TTyCustomChart.SetShowLegend(AValue: Boolean);
 begin
   if FShowLegend = AValue then Exit;
   FShowLegend := AValue;
   Invalidate;
 end;
 
-procedure TTyChart.SetShowGrid(AValue: Boolean);
+procedure TTyCustomChart.SetShowGrid(AValue: Boolean);
 begin
   if FShowGrid = AValue then Exit;
   FShowGrid := AValue;
   Invalidate;
 end;
 
-procedure TTyChart.SetShowValues(AValue: Boolean);
+procedure TTyCustomChart.SetShowValues(AValue: Boolean);
 begin
   if FShowValues = AValue then Exit;
   FShowValues := AValue;
   Invalidate;
 end;
 
-procedure TTyChart.SetShowTooltip(AValue: Boolean);
+procedure TTyCustomChart.SetShowTooltip(AValue: Boolean);
 begin
   if FShowTooltip = AValue then Exit;
   FShowTooltip := AValue;
@@ -980,26 +991,26 @@ begin
   Invalidate;
 end;
 
-procedure TTyChart.ClearHover;
+procedure TTyCustomChart.ClearHover;
 begin
   if not TyChartHitValid(FHoverHit) then Exit;
   FHoverHit := TyChartNoHit;
   Invalidate;
 end;
 
-procedure TTyChart.SeriesChanged(Sender: TObject);
+procedure TTyCustomChart.SeriesChanged(Sender: TObject);
 begin
   ClearHover;   // the parked hit may index a value/series that no longer exists
   Invalidate;
 end;
 
-procedure TTyChart.CategoriesChanged(Sender: TObject);
+procedure TTyCustomChart.CategoriesChanged(Sender: TObject);
 begin
   ClearHover;
   Invalidate;
 end;
 
-function TTyChart.PaletteColor(AIndex: Integer): TColor;
+function TTyCustomChart.PaletteColor(AIndex: Integer): TColor;
 var
   slot: Integer;
   S: TTyStyleSet;
@@ -1017,7 +1028,7 @@ begin
     Result := TyChartPalette[slot];
 end;
 
-function TTyChart.SeriesColor(AItem: TTyChartSeriesItem; AIndex: Integer): TColor;
+function TTyCustomChart.SeriesColor(AItem: TTyChartSeriesItem; AIndex: Integer): TColor;
 begin
   if AItem.Color = clDefault then
     Result := PaletteColor(AIndex)
@@ -1025,12 +1036,12 @@ begin
     Result := AItem.Color;
 end;
 
-function TTyChart.SliceColor(AIndex: Integer): TColor;
+function TTyCustomChart.SliceColor(AIndex: Integer): TColor;
 begin
   Result := PaletteColor(AIndex);
 end;
 
-function TTyChart.SeriesDisplayName(AIndex: Integer): string;
+function TTyCustomChart.SeriesDisplayName(AIndex: Integer): string;
 begin
   Result := '';
   if (AIndex < 0) or (AIndex >= FSeries.Count) then Exit;
@@ -1040,7 +1051,7 @@ begin
   if Result = '' then Result := 'Series ' + IntToStr(AIndex + 1);
 end;
 
-function TTyChart.CategoryLabel(AIndex: Integer): string;
+function TTyCustomChart.CategoryLabel(AIndex: Integer): string;
 begin
   if (AIndex >= 0) and (AIndex < FCategories.Count) then
     Result := FCategories[AIndex]
@@ -1048,7 +1059,7 @@ begin
     Result := IntToStr(AIndex + 1);   // the same fallback the X axis draws
 end;
 
-function TTyChart.DataExtent(out AMin, AMax: Double; out AMaxLen: Integer): Boolean;
+function TTyCustomChart.DataExtent(out AMin, AMax: Double; out AMaxLen: Integer): Boolean;
 var
   si, vi: Integer;
   vals: TDoubleArray;
@@ -1081,7 +1092,7 @@ begin
   Result := seen;
 end;
 
-function TTyChart.LayoutFor(AWidth, AHeight, APPI: Integer): TTyChartLayout;
+function TTyCustomChart.LayoutFor(AWidth, AHeight, APPI: Integer): TTyChartLayout;
 var
   titleH: Integer;
 begin
@@ -1097,7 +1108,7 @@ begin
     MulDiv(16, APPI, 96));  // X category-label band
 end;
 
-function TTyChart.AxesData(out ASeriesValues: TDoubleArrayArray; out ACatCount: Integer;
+function TTyCustomChart.AxesData(out ASeriesValues: TDoubleArrayArray; out ACatCount: Integer;
   out ANiceMin, ANiceMax, AStep: Double): Boolean;
 var
   dMin, dMax: Double;
@@ -1122,7 +1133,7 @@ begin
     ASeriesValues[i] := FSeries.Items[i].ValueArray;
 end;
 
-function TTyChart.PieGeometry(const AArea: TRect; APPI: Integer; out AValues: TDoubleArray;
+function TTyCustomChart.PieGeometry(const AArea: TRect; APPI: Integer; out AValues: TDoubleArray;
   out ASlices: TTyChartPieSliceArray; out ACX, ACY, ARadius, AHole: Double): Boolean;
 begin
   Result := False;
@@ -1148,7 +1159,7 @@ begin
   Result := True;
 end;
 
-function TTyChart.HitTestAt(X, Y: Integer): TTyChartHit;
+function TTyCustomChart.HitTestAt(X, Y: Integer): TTyChartHit;
 var
   lay: TTyChartLayout;
   allVals: TDoubleArrayArray;
@@ -1185,7 +1196,7 @@ begin
   end;
 end;
 
-function TTyChart.RenderExportBitmap(AWidth, AHeight: Integer): TBGRABitmap;
+function TTyCustomChart.RenderExportBitmap(AWidth, AHeight: Integer): TBGRABitmap;
 var
   Tmp: TBitmap;
 begin
@@ -1207,12 +1218,12 @@ begin
   end;
 end;
 
-procedure TTyChart.SaveToStream(AStream: TStream; AFormat: TBGRAImageFormat);
+procedure TTyCustomChart.SaveToStream(AStream: TStream; AFormat: TBGRAImageFormat);
 begin
   SaveToStream(AStream, AFormat, Width, Height);
 end;
 
-procedure TTyChart.SaveToStream(AStream: TStream; AFormat: TBGRAImageFormat;
+procedure TTyCustomChart.SaveToStream(AStream: TStream; AFormat: TBGRAImageFormat;
   AWidth, AHeight: Integer);
 var
   Bmp: TBGRABitmap;
@@ -1225,12 +1236,12 @@ begin
   end;
 end;
 
-procedure TTyChart.SaveToFile(const AFileName: string);
+procedure TTyCustomChart.SaveToFile(const AFileName: string);
 begin
   SaveToFile(AFileName, Width, Height);
 end;
 
-procedure TTyChart.SaveToFile(const AFileName: string; AWidth, AHeight: Integer);
+procedure TTyCustomChart.SaveToFile(const AFileName: string; AWidth, AHeight: Integer);
 var
   Bmp: TBGRABitmap;
 begin
@@ -1243,12 +1254,12 @@ begin
   end;
 end;
 
-procedure TTyChart.SaveToFile(const AFileName: string; AFormat: TBGRAImageFormat);
+procedure TTyCustomChart.SaveToFile(const AFileName: string; AFormat: TBGRAImageFormat);
 begin
   SaveToFile(AFileName, AFormat, Width, Height);
 end;
 
-procedure TTyChart.SaveToFile(const AFileName: string; AFormat: TBGRAImageFormat;
+procedure TTyCustomChart.SaveToFile(const AFileName: string; AFormat: TBGRAImageFormat;
   AWidth, AHeight: Integer);
 var
   fs: TFileStream;
@@ -1261,7 +1272,7 @@ begin
   end;
 end;
 
-procedure TTyChart.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomChart.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   hit: TTyChartHit;
 begin
@@ -1277,13 +1288,13 @@ begin
   end;
 end;
 
-procedure TTyChart.MouseLeave;
+procedure TTyCustomChart.MouseLeave;
 begin
   inherited MouseLeave;
   ClearHover;
 end;
 
-function TTyChart.HoverTooltip(const ALayout: TTyChartLayout; APPI: Integer;
+function TTyCustomChart.HoverTooltip(const ALayout: TTyChartLayout; APPI: Integer;
   out AX, AY: Integer; out ASwatch: TColor; out AText: string): Boolean;
 var
   allVals: TDoubleArrayArray;
@@ -1365,7 +1376,7 @@ begin
   Result := AText <> '';
 end;
 
-procedure TTyChart.DrawTitle(P: TTyPainter; const S: TTyStyleSet; var ATop: Integer);
+procedure TTyCustomChart.DrawTitle(P: TTyPainter; const S: TTyStyleSet; var ATop: Integer);
 var
   h: Integer;
 begin
@@ -1378,7 +1389,7 @@ begin
   Inc(ATop, h);
 end;
 
-procedure TTyChart.DrawLegend(P: TTyPainter; const S: TTyStyleSet; const ARect: TRect; ARadial: Boolean);
+procedure TTyCustomChart.DrawLegend(P: TTyPainter; const S: TTyStyleSet; const ARect: TRect; ARadial: Boolean);
 var
   i, x, sw, gap, tw, cnt, boxSz: Integer;
   nm: string;
@@ -1417,7 +1428,7 @@ begin
   end;
 end;
 
-procedure TTyChart.DrawAxesChart(P: TTyPainter; const S: TTyStyleSet; const APlot: TRect);
+procedure TTyCustomChart.DrawAxesChart(P: TTyPainter; const S: TTyStyleSet; const APlot: TRect);
 var
   niceMin, niceMax, step, v: Double;
   catCount, seriesCount, si, ci: Integer;
@@ -1544,7 +1555,7 @@ begin
   end;
 end;
 
-procedure TTyChart.DrawPie(P: TTyPainter; const S: TTyStyleSet; const AArea: TRect; APPI: Integer);
+procedure TTyCustomChart.DrawPie(P: TTyPainter; const S: TTyStyleSet; const AArea: TRect; APPI: Integer);
 var
   vals: TDoubleArray;
   slices: TTyChartPieSliceArray;
@@ -1604,7 +1615,7 @@ begin
   end;
 end;
 
-procedure TTyChart.DrawTooltip(P: TTyPainter; const S: TTyStyleSet; const ABounds: TRect;
+procedure TTyCustomChart.DrawTooltip(P: TTyPainter; const S: TTyStyleSet; const ABounds: TRect;
   AAnchorX, AAnchorY: Integer; const AText: string; ASwatch: TColor);
 var
   tipS: TTyStyleSet;
@@ -1691,7 +1702,7 @@ begin
   end;
 end;
 
-procedure TTyChart.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomChart.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -1748,7 +1759,7 @@ begin
   end;
 end;
 
-procedure TTyChart.Paint;
+procedure TTyCustomChart.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

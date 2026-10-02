@@ -75,10 +75,15 @@ type
     procedure TestThirdMenuBar;
     procedure TestThirdFormSurface;
     procedure TestFormWiresAThirdPartySurface;
+    { Task 23: images and shapes }
+    procedure TestThirdCharImage;
+    procedure TestThirdShape;
+    procedure TestThirdChart;
     { T-d, pixel for pixel, per task }
     procedure TestBarMimicsPaintLikeTheirFinalClass;
     procedure TestRibbonMimicsPaintLikeTheirFinalClass;
     procedure TestChromeMimicsPaintLikeTheirFinalClass;
+    procedure TestImageMimicsPaintLikeTheirFinalClass;
     { Real input, one per family. }
     procedure TestInputThirdToolButtonClicks;
     procedure TestInputThirdScrollBarStepsOnArrowKeys;
@@ -155,6 +160,24 @@ type
     property Purpose;
   end;
 
+  TThirdCharImage = class(TTyCustomCharImage)
+  published
+    property IconFont;
+    property GlyphName;
+  end;
+
+  TThirdShape = class(TTyCustomShape)
+  published
+    property Shape;
+    property OnShapeClick;
+  end;
+
+  TThirdChart = class(TTyCustomChart)
+  published
+    property ChartType;
+    property Series;
+  end;
+
 implementation
 
 type
@@ -193,6 +216,9 @@ type
   TP3RibbonPageRender = class(TTyCustomRibbonPage);
   TP3RibbonGroupRender = class(TTyCustomRibbonGroup);
   TP3TitleBarRender = class(TTyCustomTitleBar);
+  TP3CharImageRender = class(TTyCustomCharImage);
+  TP3ShapeRender = class(TTyCustomShape);
+  TP3ChartRender = class(TTyCustomChart);
 procedure TP3ToolBarCracker.ForceLayout;
 var r: TRect;
 begin
@@ -731,6 +757,93 @@ end;
 
 { ------------------------------------------------------------------ Task 23: images and shapes }
 
+procedure TTyCustomClassesP3Test.TestThirdCharImage;
+var
+  host: TForm;
+  third, back: TThirdCharImage;
+  own: TTyCharImage;
+  fnt: TTyIconFont;
+  c: TTyCustomCharImage;
+begin
+  host := NewHost;
+  fnt := TTyIconFont.Create(host);
+  fnt.Name := 'Icons';
+  third := TThirdCharImage.Create(host);
+  third.Name := 'Img';
+  third.Parent := host;
+  CheckPublishesOnly(TThirdCharImage, ['IconFont', 'GlyphName']);
+  third.IconFont := fnt;
+  third.GlyphName := 'home';
+  third.GlyphSize := 30;
+  CheckStreamText(third, ['IconFont', 'GlyphName'], 'GlyphSize');
+  back := HostRoundTrip(third) as TThirdCharImage;
+  AssertTrue('T-c: IconFont round-trips (by name)',
+    (back.IconFont <> nil) and (back.IconFont.Name = 'Icons'));
+  AssertEquals('T-c: GlyphName round-trips', 'home', back.GlyphName);
+  AssertEquals('T-c: the unpublished GlyphSize stayed at its default', 0, back.GlyphSize);
+  own := TTyCharImage.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdCharImage, ['IconFont', 'GlyphName']);
+  c := third;
+  c.GlyphSize := 12;
+  AssertEquals('T-v: GlyphSize is public through a TTyCustomCharImage reference', 12,
+    third.GlyphSize);
+end;
+
+procedure TTyCustomClassesP3Test.TestThirdShape;
+var
+  third, back: TThirdShape;
+  own: TTyShape;
+begin
+  third := TThirdShape.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdShape, ['Shape', 'OnShapeClick']);
+  third.Shape := tskEllipse;
+  CheckStreamText(third, ['Shape'], '');
+  back := TThirdShape.Create(FForm);
+  StreamInto(third, back);
+  AssertTrue('T-c: Shape round-trips', back.Shape = tskEllipse);
+  third.OnShapeClick := @CountChange;
+  AssertTrue('the published event is the custom class''s', Assigned(third.OnShapeClick));
+  own := TTyShape.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdShape, ['Shape', 'OnShapeClick']);
+end;
+
+procedure TTyCustomClassesP3Test.TestThirdChart;
+var
+  third, back: TThirdChart;
+  own: TTyChart;
+  c: TTyCustomChart;
+begin
+  third := TThirdChart.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdChart, ['ChartType', 'Series']);
+  third.ChartType := ctBar;
+  with third.Series.Add do
+  begin
+    Name := 'Sales';
+    Values := '1,2,3';
+  end;
+  third.ShowLegend := False;
+  CheckStreamText(third, ['ChartType', 'Series'], 'ShowLegend');
+  back := TThirdChart.Create(FForm);
+  StreamInto(third, back);
+  AssertTrue('T-c: ChartType round-trips', back.ChartType = ctBar);
+  AssertEquals('T-c: the series round-trips', 1, back.Series.Count);
+  AssertEquals('T-c: with its values', '1,2,3', back.Series[0].Values);
+  AssertTrue('T-c: the unpublished ShowLegend stayed at its default', back.ShowLegend);
+  own := TTyChart.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdChart, ['ChartType']);
+  c := third;
+  c.ShowGrid := False;
+  AssertFalse('T-v: ShowGrid is public through a TTyCustomChart reference', third.ShowGrid);
+end;
+
 { ------------------------------------------------------------------ Task 24: pickers, terminal }
 
 { ------------------------------------------------------------------ Task 25: tool windows }
@@ -771,6 +884,21 @@ end;
 procedure RenderTitleBar(C: TControl; ACanvas: TCanvas; const R: TRect);
 begin
   TP3TitleBarRender(C).RenderTo(ACanvas, R, 96);
+end;
+
+procedure RenderCharImage(C: TControl; ACanvas: TCanvas; const R: TRect);
+begin
+  TP3CharImageRender(C).RenderTo(ACanvas, R, 96);
+end;
+
+procedure RenderShape(C: TControl; ACanvas: TCanvas; const R: TRect);
+begin
+  TP3ShapeRender(C).RenderTo(ACanvas, R, 96);
+end;
+
+procedure RenderChart(C: TControl; ACanvas: TCanvas; const R: TRect);
+begin
+  TP3ChartRender(C).RenderTo(ACanvas, R, 96);
 end;
 
 { Each pair is set up the same way -- same size, same values, unfocused -- and must paint the
@@ -882,6 +1010,34 @@ begin
   CheckSamePaint(tt, ott, 300, 32, @RenderTitleBar);
 end;
 
+procedure TTyCustomClassesP3Test.TestImageMimicsPaintLikeTheirFinalClass;
+var
+  ci: TThirdCharImage;
+  oci: TTyCharImage;
+  sh: TThirdShape;
+  osh: TTyShape;
+  ch: TThirdChart;
+  och: TTyChart;
+begin
+  ci := TThirdCharImage.Create(FForm);
+  oci := TTyCharImage.Create(FForm);
+  ci.Color := clYellow;
+  oci.Color := clYellow;
+  CheckSamePaint(ci, oci, 40, 40, @RenderCharImage);
+
+  sh := TThirdShape.Create(FForm);
+  osh := TTyShape.Create(FForm);
+  sh.Shape := tskEllipse;
+  osh.Shape := tskEllipse;
+  CheckSamePaint(sh, osh, 60, 40, @RenderShape);
+
+  ch := TThirdChart.Create(FForm);
+  och := TTyChart.Create(FForm);
+  ch.Series.Add.Values := '1,3,2';
+  och.Series.Add.Values := '1,3,2';
+  CheckSamePaint(ch, och, 200, 120, @RenderChart);
+end;
+
 { ------------------------------------------------------------------ real input }
 
 procedure PressAndRelease(C: TControl; X, Y: Integer);
@@ -982,6 +1138,6 @@ end;
 initialization
   RegisterClasses([TThirdToolBar, TThirdToolButton, TThirdStatusBar, TThirdScrollBar,
     TThirdRibbonPage, TThirdRibbonGroup, TIdxRibbonGallery, TIdxRibbonBackstage, TThirdTitleBar,
-    TThirdMenuBar, TThirdFormSurface]);
+    TThirdMenuBar, TThirdFormSurface, TThirdCharImage, TThirdShape, TThirdChart]);
   RegisterTest(TTyCustomClassesP3Test);
 end.

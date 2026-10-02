@@ -35,7 +35,7 @@ const
   TyCharImagePad = 2;
 
 type
-  TTyCharImage = class(TTyGraphicControl)
+  TTyCustomCharImage = class(TTyGraphicControl)
   private
     FIconFont: TTyIconFont;
     FGlyphName: string;
@@ -55,9 +55,19 @@ type
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
+    property IconFont: TTyIconFont read FIconFont write SetIconFont;
+    property GlyphName: string read FGlyphName write SetGlyphName;
+    { Glyph edge length in LOGICAL px (scaled by PPI). 0 = auto: fit the smaller
+      client dimension minus TyCharImagePad on each side. }
+    property GlyphSize: Integer read FGlyphSize write SetGlyphSize default 0;
+    { Glyph fill color. TyGlyphColorDefault (the default) = use the theme's
+      resolved TextColor; any other value overrides it. }
+    property GlyphColor: TTyColor read FGlyphColor write SetGlyphColor default TyGlyphColorDefault;
+  end;
+
+  { TTyCharImage publishes TTyCustomCharImage's properties; everything lives in TTyCustomCharImage. }
+  TTyCharImage = class(TTyCustomCharImage)
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
     property Version;
     property Enabled;
     property Visible;
@@ -97,14 +107,10 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property IconFont: TTyIconFont read FIconFont write SetIconFont;
-    property GlyphName: string read FGlyphName write SetGlyphName;
-    { Glyph edge length in LOGICAL px (scaled by PPI). 0 = auto: fit the smaller
-      client dimension minus TyCharImagePad on each side. }
-    property GlyphSize: Integer read FGlyphSize write SetGlyphSize default 0;
-    { Glyph fill color. TyGlyphColorDefault (the default) = use the theme's
-      resolved TextColor; any other value overrides it. }
-    property GlyphColor: TTyColor read FGlyphColor write SetGlyphColor default TyGlyphColorDefault;
+    property IconFont;
+    property GlyphName;
+    property GlyphSize;
+    property GlyphColor;
     property Align;
     property Anchors;
   end;
@@ -130,7 +136,7 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-constructor TTyCharImage.Create(AOwner: TComponent);
+constructor TTyCustomCharImage.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FGlyphSize := 0;
@@ -138,7 +144,7 @@ begin
   SetBounds(0, 0, 32, 32);   // sensible default drop size (mirrors TyForm's ctor)
 end;
 
-function TTyCharImage.GetStyleTypeKey: string;
+function TTyCustomCharImage.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyLabel': it draws no text at all: it composites a rasterised icon-font glyph.
     Added to 'TyLabel's rule block as an extra selector, so every resolved value is
@@ -146,7 +152,7 @@ begin
   Result := 'TyCharImage';
 end;
 
-procedure TTyCharImage.SetIconFont(AValue: TTyIconFont);
+procedure TTyCustomCharImage.SetIconFont(AValue: TTyIconFont);
 begin
   if FIconFont = AValue then Exit;
   if FIconFont <> nil then
@@ -168,19 +174,19 @@ begin
   Invalidate;
 end;
 
-procedure TTyCharImage.IconFontChanged(Sender: TObject);
+procedure TTyCustomCharImage.IconFontChanged(Sender: TObject);
 begin
   Invalidate;
 end;
 
-procedure TTyCharImage.SetGlyphName(const AValue: string);
+procedure TTyCustomCharImage.SetGlyphName(const AValue: string);
 begin
   if FGlyphName = AValue then Exit;
   FGlyphName := AValue;
   Invalidate;
 end;
 
-procedure TTyCharImage.SetGlyphSize(AValue: Integer);
+procedure TTyCustomCharImage.SetGlyphSize(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   if FGlyphSize = AValue then Exit;
@@ -193,21 +199,21 @@ begin
   Invalidate;
 end;
 
-procedure TTyCharImage.SetGlyphColor(AValue: TTyColor);
+procedure TTyCustomCharImage.SetGlyphColor(AValue: TTyColor);
 begin
   if FGlyphColor = AValue then Exit;
   FGlyphColor := AValue;
   Invalidate;
 end;
 
-procedure TTyCharImage.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomCharImage.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FIconFont) then
     FIconFont := nil;
 end;
 
-procedure TTyCharImage.CalculatePreferredSize(var PreferredWidth,
+procedure TTyCustomCharImage.CalculatePreferredSize(var PreferredWidth,
   PreferredHeight: Integer; WithThemeSpace: Boolean);
 var
   ppi, sz, pad: Integer;
@@ -229,7 +235,7 @@ begin
   if PreferredHeight < 1 then PreferredHeight := 1;
 end;
 
-procedure TTyCharImage.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomCharImage.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -280,7 +286,7 @@ begin
   end;
 end;
 
-procedure TTyCharImage.Paint;
+procedure TTyCustomCharImage.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
