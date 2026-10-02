@@ -53,6 +53,7 @@ type
       publishes ItemIndex first): kept here and applied in Loaded. }
     FPendingItemIndex: Integer;
     FHasPendingIndex: Boolean;
+    FPendingNotify: Boolean;   // a handler was hooked when the index was read (3.0 told it)
     procedure SetCommands(AValue: TStrings);
     procedure SetCommandGlyphs(AValue: TStrings);
     procedure SetBottomCommands(AValue: TStrings);
@@ -409,6 +410,16 @@ begin
     begin
       FItemIndex := FPendingItemIndex;
       Invalidate;
+    end
+    { Past the commands even now (a hand-edited or stale .lfm): what 3.0 did as it read the
+      index -- the library's class reads the commands first -- clamp to the last command, and
+      tell OnCommandSelect only if a handler was hooked at that point. }
+    else if FPendingNotify then
+      SetItemIndex(FPendingItemIndex)
+    else if TotalCount > 0 then
+    begin
+      FItemIndex := TotalCount - 1;
+      Invalidate;
     end;
   end;
 end;
@@ -451,6 +462,7 @@ begin
   begin
     FPendingItemIndex := AValue;
     FHasPendingIndex := True;
+    FPendingNotify := Assigned(FOnCommandSelect);
     Exit;
   end;
   FHasPendingIndex := False;

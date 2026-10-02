@@ -43,6 +43,7 @@ type
     FHosts: TList;
     FLastSender: TObject;
     FData: string;
+    FLastIndex: Integer;
     procedure CountChange(Sender: TObject);
     procedure Launcher(Sender: TTyCustomRibbonGroup);
     procedure PaintButton(Sender: TTyCustomToolButton; AState: Integer);
@@ -50,6 +51,7 @@ type
       APainter: TTyPainter; const ARect: TRect);
     procedure TermData(Sender: TObject; const AData: RawByteString);
     procedure FormClosing(Sender: TObject; var CloseAction: TCloseAction);
+    procedure BackstageSelect(Sender: TObject; AIndex: Integer);
     procedure MouseButton(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure MouseMoved(Sender: TObject; Shift: TShiftState; X, Y: Integer);
     procedure MouseWheeled(Sender: TObject; Shift: TShiftState; WheelDelta: Integer;
@@ -81,6 +83,7 @@ type
     procedure TestRibbonPageJoinsAThirdPartyRibbon;
     procedure TestRibbonPageLaysOutAThirdPartyGroup;
     procedure TestRibbonIndexesReadBeforeTheirItemsWait;
+    procedure TestBackstageIndexPastItsCommandsClampsAsBefore;
     procedure TestRibbonForgetsAPageThatLeaves;
     procedure TestFileTabOpensAThirdPartyBackstage;
     { Task 22: window chrome }
@@ -357,6 +360,24 @@ end;
 { R7-4: what a host hands out is declared as the custom class. `is` cannot tell -- it asks the
   object -- but overload resolution is decided by the declared type, so these answer 1 for a
   custom-typed expression and 2 for one still typed as the final class. }
+{ Read a component's streamed text into ADst (the root). }
+procedure ReadText(const AText: string; ADst: TComponent);
+var
+  src: TStringStream;
+  bin: TMemoryStream;
+begin
+  src := TStringStream.Create(AText);
+  bin := TMemoryStream.Create;
+  try
+    ObjectTextToBinary(src, bin);
+    bin.Position := 0;
+    bin.ReadComponent(ADst);
+  finally
+    bin.Free;
+    src.Free;
+  end;
+end;
+
 function DeclaredAs(A: TTyCustomToolButton): Integer; overload;
 begin
   Result := 1;
@@ -512,6 +533,12 @@ procedure TTyCustomClassesP3Test.MouseWheeledUpDown(Sender: TObject; Shift: TShi
   MousePos: TPoint; var Handled: Boolean);
 begin
   Inc(FChanges);
+end;
+
+procedure TTyCustomClassesP3Test.BackstageSelect(Sender: TObject; AIndex: Integer);
+begin
+  Inc(FChanges);
+  FLastIndex := AIndex;
 end;
 
 procedure TTyCustomClassesP3Test.FormClosing(Sender: TObject; var CloseAction: TCloseAction);
@@ -968,6 +995,35 @@ begin
   AssertEquals('the gallery index waits for its items', 2, galBack.ItemIndex);
   bsBack := TIdxRibbonBackstage(galBack.Owner.FindComponent('Bs'));
   AssertEquals('the backstage index waits for its commands', 1, bsBack.ItemIndex);
+end;
+
+{ A backstage read with an ItemIndex past its commands (a hand-edited or stale .lfm). The
+  library's class publishes Commands first, so 3.0 clamped the index to the last command as it
+  was read, telling OnCommandSelect when a handler was already hooked. An index read ahead of
+  its commands now waits for Loaded (for a third party's order); the wait must not change what
+  happens to one that is simply out of range. }
+procedure TTyCustomClassesP3Test.TestBackstageIndexPastItsCommandsClampsAsBefore;
+var
+  src, dst, quiet: TTyRibbonBackstage;
+  s: string;
+begin
+  src := TTyRibbonBackstage.Create(FForm);
+  src.Commands.CommaText := 'Info,New,Open';
+  src.ItemIndex := 1;
+  s := StreamedText(src);
+  AssertTrue('precondition: the index streams', Pos('ItemIndex = 1', s) > 0);
+  s := StringReplace(s, 'ItemIndex = 1', 'ItemIndex = 7', []);
+  dst := TTyRibbonBackstage.Create(NewHost);   { one per owner: the read names the root }
+  dst.OnCommandSelect := @BackstageSelect;   // hooked before the read, as on a second read
+  FChanges := 0;
+  FLastIndex := -2;
+  ReadText(s, dst);
+  AssertEquals('clamped to the last command, as 3.0 did', 2, dst.ItemIndex);
+  AssertEquals('telling the handler that was already hooked, as 3.0 did', 1, FChanges);
+  AssertEquals('with the clamped index', 2, FLastIndex);
+  quiet := TTyRibbonBackstage.Create(NewHost);
+  ReadText(s, quiet);
+  AssertEquals('with no handler hooked it is clamped all the same', 2, quiet.ItemIndex);
 end;
 
 { A page that leaves a ribbon -- for another ribbon, for no parent, or by being freed while it
