@@ -18,7 +18,8 @@ unit test.customclasses.p2;
 interface
 
 uses
-  Classes, SysUtils, Types, TypInfo, ImgList, Controls, Forms, Graphics, ComCtrls, StdCtrls,
+  Classes, SysUtils, FileUtil, LazFileUtils, Types, TypInfo, ImgList, Controls, Forms, Graphics, ComCtrls,
+  StdCtrls,
   BGRABitmap,
   BGRABitmapTypes, fpcunit, testregistry,
   test.customclasses, test.customclasses.p1,
@@ -83,6 +84,7 @@ type
     procedure TestShellTreeViewHearsItsNodeCollection;
     procedure TestThirdTreeViewNodeCollectionBuildsTheTree;
     procedure TestShellListItemResolvesItsIconOnTheShellList;
+    procedure TestShellTreeDrivesAThirdPartyShellList;
     procedure TestThirdListView;
     { Task 18: grids }
     procedure TestThirdStringGrid;
@@ -257,6 +259,9 @@ type
   protected
     function CreatePopupList: TTyCustomListBox; override;
   end;
+
+  { A third party's shell list, linked to the library's shell tree. }
+  TP2ThirdShellList = class(TTyCustomShellListView);
 
   { The tree's own properties are protected (TCustomTreeView keeps them protected). }
   TP2TreeCracker = class(TTyCustomTreeView)
@@ -1289,6 +1294,42 @@ begin
     lv.Free;
     imgs.Free;
     coll.Free;
+  end;
+end;
+
+{ TTyShellTreeView.ShellListView takes any TTyCustomShellListView, as LCL's
+  TCustomShellTreeView.ShellListView takes a TCustomShellListView (shellctrls.pas:139): a third
+  party's list can be linked, and the tree drives its Directory. (TTyFilterComboBox.ShellListView
+  stays TTyShellListView, as LCL's TFilterComboBox.ShellListView is a TShellListView,
+  filectrl.pp:167.) }
+procedure TTyCustomClassesP2Test.TestShellTreeDrivesAThirdPartyShellList;
+var
+  root, sub: string;
+  tree: TTyShellTreeView;
+  list: TP2ThirdShellList;
+begin
+  { Under the user's folder, not %TEMP%: the tree will not walk through a hidden ancestor. }
+  root := ChompPathDelim(AppendPathDelim(GetUserDir) + 'tycustomshelllink_' + IntToStr(GetProcessID));
+  sub := AppendPathDelim(root) + 'a';
+  ForceDirectories(sub);
+  tree := TTyShellTreeView.Create(nil);
+  list := TP2ThirdShellList.Create(nil);
+  try
+    AssertTrue('fixture reachable', tree.SelectPath(root));
+    tree.ShellListView := list;
+    AssertTrue('linking pushed the tree''s folder into the third party''s list',
+      SameFileName(ExcludeTrailingPathDelimiter(list.Directory), root));
+    AssertTrue('precondition', tree.SelectPath(sub));
+    AssertTrue('selecting a folder moved the list there',
+      SameFileName(ExcludeTrailingPathDelimiter(list.Directory), sub));
+    AssertEquals('the property is typed for any shell list', 'TTyCustomShellListView',
+      GetPropInfo(TTyShellTreeView, 'ShellListView')^.PropType^.Name);
+    FreeAndNil(list);
+    AssertTrue('freeing the list unlinks it', tree.ShellListView = nil);
+  finally
+    list.Free;
+    tree.Free;
+    DeleteDirectory(root, False);
   end;
 end;
 

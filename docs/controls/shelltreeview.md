@@ -52,7 +52,7 @@ List.ShellTreeView := Tree;   // 列表里进入文件夹 → 树跟着走(两�
 | `OnPathChange` | 焦点目录变化时触发,`SelectedPath` 是新路径。 |
 | `OnAddItem` | **逐条否决**:`(Sender, ABasePath, AEntry, var ACanAdd)`,置 `False` 丢掉这一条。此前唯一的过滤就是隐藏属性那一个粗粒度开关 —— 想藏掉 `.git`、系统联接点、符号链接环都做不到。 |
 | `OnSortCompare` | 对两条**原始记录**的比较器;赋值即把 `FileSortType` 切成 `fstCustom` 并重读(同 LCL `shellctrls.pas:693`),清空则退回 `fstNone`。祖先的 `OnCompareNodes` 比的是**节点**(渲染出来的文字),按扩展名/日期/自然数排序需要的是文件记录。 |
-| `ShellListView` | 设计期可赋值的**伴随文件列表**:树里选中一个文件夹,列表就加载它。以前必须手写 `OnPathChange → Directory` 的胶水,在对象查看器里根本连不起来。 |
+| `ShellListView` | 设计期可赋值的**伴随文件列表**:树里选中一个文件夹,列表就加载它。以前必须手写 `OnPathChange → Directory` 的胶水,在对象查看器里根本连不起来。类型是 `TTyCustomShellListView`(同 LCL 的 `TCustomShellListView`),自己从它派生的列表也挂得上。 |
 | `PopulateRoots` | 清空并重铺根节点(`Root` 为 `''` 时按 `TyFsRoots`,否则一个 `Root` 节点)。整棵树重来,焦点也丢。 |
 | `UpdateView(AStartDir = '')` | 按当前磁盘状态与当前设置**重新枚举已展开的节点**,保留展开状态与焦点路径。`AStartDir` 把刷新**限定在该节点的子树**内(同 LCL `shellctrls.pas:134`);该路径没有对应的**已实体化**节点时什么也不做 —— 屏幕上没有它,就没有东西需要更新。 |
 | `Refresh(ANode)` | 只重读**一个节点**的子节点,其余不动;`nil` = 整棵树重铺(同 LCL `shellctrls.pas:133`)。应用自己刚建/删了一个文件夹时,这是最省的一条路。 |

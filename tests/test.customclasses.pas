@@ -94,16 +94,22 @@ const
   { Registered with RegisterClass only: not on the palette, but streamed in .lfm files. }
   CStreamOnly: array[0..0] of string = ('TTyScrollContent');
 
-  { Property type renames the snapshot allows (plan D11): a component-reference property now
-    names the custom class, as LCL's Images: TCustomImageList does. }
-  CSnapshotTypeRenames: array[0..4, 0..1] of string = (
-    ('TTyIconFont', 'TTyCustomIconFont'),
-    ('TTyStyleController', 'TTyCustomStyleController'),
-    ('TTyImageCollection', 'TTyCustomImageCollection'),
-    ('TTyVirtualImageList', 'TTyCustomVirtualImageList'),
-    { Not a component reference: TTyPageControl.ActivePage hands out the page it shows, and a
-      page control takes any TTyCustomTabSheet (plan R7-4). }
-    ('TTyTabSheet', 'TTyCustomTabSheet'));
+  { Property type renames the snapshot allows. Columns: class, property, 3.0 type, 4.0 type;
+    '*' in the first two matches any. A rename is qualified by class and property unless it is
+    meant for every property of that type: TTyFilterComboBox.ShellListView keeps
+    TTyShellListView while TTyShellTreeView.ShellListView takes the custom class, so a
+    type-wide row would wave a wrong change through.
+    The four D11 rows are type-wide on purpose: a component-reference property names the
+    custom class wherever it appears, as LCL's Images: TCustomImageList does. }
+  CSnapshotTypeRenames: array[0..5, 0..3] of string = (
+    ('*', '*', 'TTyIconFont', 'TTyCustomIconFont'),
+    ('*', '*', 'TTyStyleController', 'TTyCustomStyleController'),
+    ('*', '*', 'TTyImageCollection', 'TTyCustomImageCollection'),
+    ('*', '*', 'TTyVirtualImageList', 'TTyCustomVirtualImageList'),
+    { Not component references: a host hands out, or takes, any custom child (plan R7-4). }
+    ('TTyPageControl', 'ActivePage', 'TTyTabSheet', 'TTyCustomTabSheet'),
+    { LCL: TCustomShellTreeView.ShellListView: TCustomShellListView (shellctrls.pas:139). }
+    ('TTyShellTreeView', 'ShellListView', 'TTyShellListView', 'TTyCustomShellListView'));
 
   { G7: where each derived control's custom class must hang (plan appendix C-0), plus the
     intermediate classes. Columns: subject, expected parent, the class whose split activates
@@ -556,9 +562,12 @@ begin
   if (ALine = '') or (ALine[1] = '#') then Exit;
   f := ALine.Split([#9]);
   if Length(f) <> 10 then Exit;
+  { f: class, index, name, type, ... }
   for i := Low(CSnapshotTypeRenames) to High(CSnapshotTypeRenames) do
-    if f[3] = CSnapshotTypeRenames[i, 0] then
-      f[3] := CSnapshotTypeRenames[i, 1];
+    if ((CSnapshotTypeRenames[i, 0] = '*') or (f[0] = CSnapshotTypeRenames[i, 0]))
+       and ((CSnapshotTypeRenames[i, 1] = '*') or (f[2] = CSnapshotTypeRenames[i, 1]))
+       and (f[3] = CSnapshotTypeRenames[i, 2]) then
+      f[3] := CSnapshotTypeRenames[i, 3];
   Result := string.Join(#9, f);
 end;
 

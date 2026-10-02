@@ -139,7 +139,7 @@ type
     FOnAddItem:    TTyFsAddItemEvent;
     FOnSortCompare: TTyFsCompareEvent;
     FLastPathError: TTyShellPathError;
-    FShellListView: TTyShellListView;
+    FShellListView: TTyCustomShellListView;
     { >0 while this control is pushing a change INTO its companion list. The list
       pushes back on load, so without it the pair would recurse forever -- LCL
       guards the same cascade with FLockUpdate (shellctrls.pas:2003-2011). }
@@ -184,7 +184,7 @@ type
     procedure SetFileSortType(AValue: TTyFsFileSortType);
     procedure SetOnSortCompare(AValue: TTyFsCompareEvent);
     procedure SetUseBuiltinIcons(AValue: Boolean);
-    procedure SetShellListView(AValue: TTyShellListView);
+    procedure SetShellListView(AValue: TTyCustomShellListView);
     { Push the focused directory into the linked list, guarded against the
       push-back it will provoke. }
     procedure PushToList;
@@ -378,8 +378,11 @@ type
       folder here loads it into the list. Without it the canonical two-control file
       browser could not be assembled in the designer at all, and every host had to
       hand-write the OnPathChange -> Directory plumbing. LCL: shellctrls.pas:139,
-      pushed from DoSelectionChanged (1141-1163) and SetRoot (641-642). }
-    property ShellListView: TTyShellListView read FShellListView write SetShellListView;
+      pushed from DoSelectionChanged (1141-1163) and SetRoot (641-642).
+      Any shell list, a third party's TTyCustomShellListView descendant included -- LCL types
+      it TCustomShellListView too. (TTyFilterComboBox.ShellListView stays TTyShellListView,
+      as LCL's TFilterComboBox.ShellListView is a TShellListView, filectrl.pp:167.) }
+    property ShellListView: TTyCustomShellListView read FShellListView write SetShellListView;
   protected
     { When a node re-reads its children. Default ecmRefreshedExpanding, matching
       LCL: every expand re-enumerates, so folders created or deleted since the last
@@ -921,10 +924,10 @@ begin
 end;
 
 { ---------------------------------------------------------------------------
-  The design-time link to a companion TTyShellListView
+  The design-time link to a companion shell list (any TTyCustomShellListView)
   --------------------------------------------------------------------------- }
 
-procedure TTyCustomShellTreeView.SetShellListView(AValue: TTyShellListView);
+procedure TTyCustomShellTreeView.SetShellListView(AValue: TTyCustomShellListView);
 begin
   if FShellListView = AValue then Exit;
   FShellListView := AValue;
