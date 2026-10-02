@@ -59,11 +59,11 @@ type
     FCommands: TTyPopupMenu;
     FRecentItems: TStrings;
     FOnRecentItemClick: TTyRecentItemEvent;
-    FBackstage: TTyRibbonBackstage;
+    FBackstage: TTyCustomRibbonBackstage;
     FBackstageTopInset: Integer;
     procedure SetCommands(AValue: TTyPopupMenu);
     procedure SetRecentItems(AValue: TStrings);
-    procedure SetBackstage(AValue: TTyRibbonBackstage);
+    procedure SetBackstage(AValue: TTyCustomRibbonBackstage);
     { OnClick target on each RECENT item: map the clicked item back to its RecentItems
       index (carried in the item's Tag) and fire OnRecentItemClick. }
     procedure HandleRecentClick(Sender: TObject);
@@ -103,7 +103,7 @@ type
     property OnRecentItemClick: TTyRecentItemEvent read FOnRecentItemClick write FOnRecentItemClick;
     { When assigned, clicking the button opens this FULL-WINDOW backstage (Office "File"
       view) instead of the small dropdown menu. FreeNotification-tracked. }
-    property Backstage: TTyRibbonBackstage read FBackstage write SetBackstage;
+    property Backstage: TTyCustomRibbonBackstage read FBackstage write SetBackstage;
     { Logical-px inset from the form top the backstage is shown below (= the title-bar
       height, so the backstage covers everything except the title bar). }
     property BackstageTopInset: Integer read FBackstageTopInset write FBackstageTopInset default 0;
@@ -330,7 +330,7 @@ begin
     Result := FMenu.Items[AIndex];
 end;
 
-procedure TTyCustomRibbonAppMenu.SetBackstage(AValue: TTyRibbonBackstage);
+procedure TTyCustomRibbonAppMenu.SetBackstage(AValue: TTyCustomRibbonBackstage);
 begin
   if FBackstage = AValue then Exit;
   if FBackstage <> nil then FBackstage.RemoveFreeNotification(Self);

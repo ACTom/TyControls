@@ -27,7 +27,7 @@ uses
   test.customclasses, test.customclasses.p1,
   tyControls.Base, tyControls.Button, tyControls.GlyphButtons, tyControls.ToolBar,
   tyControls.ToolBarEx, tyControls.StatusBar, tyControls.ScrollBar, tyControls.Painter,
-  tyControls.Ribbon, tyControls.RibbonGallery, tyControls.RibbonBackstage,
+  tyControls.Ribbon, tyControls.RibbonGallery, tyControls.RibbonBackstage, tyControls.RibbonAppMenu,
   tyControls.Form, tyControls.Menu, tyControls.FormSurface, tyControls.Controller,
   tyControls.CharImage, tyControls.IconFont, tyControls.Shape, tyControls.Chart,
   tyControls.ColorGrid, tyControls.Terminal, tyControls.ToolWindows, tyControls.PopupSurface,
@@ -48,6 +48,7 @@ type
     procedure DrawPanel(AStatusBar: TTyCustomStatusBar; APanel: TTyStatusPanel;
       APainter: TTyPainter; const ARect: TRect);
     procedure TermData(Sender: TObject; const AData: RawByteString);
+    procedure FormClosing(Sender: TObject; var CloseAction: TCloseAction);
     function NewHost: TForm;
     { Stream the form that owns ASrc and read it into a fresh form; the copy of ASrc. }
     function HostRoundTrip(ASrc: TComponent): TComponent;
@@ -73,12 +74,15 @@ type
     procedure TestRibbonPageLaysOutAThirdPartyGroup;
     procedure TestRibbonIndexesReadBeforeTheirItemsWait;
     procedure TestRibbonForgetsAPageThatLeaves;
+    procedure TestFileTabOpensAThirdPartyBackstage;
     { Task 22: window chrome }
     procedure TestThirdTitleBar;
     procedure TestThirdMenuBar;
     procedure TestThirdFormSurface;
     procedure TestFormWiresAThirdPartySurface;
     procedure TestReadFormFindsItsSurfaceByClassNotName;
+    procedure TestFormDrivesAThirdPartyTitleBar;
+    procedure TestFormDispatchesShortcutsToAThirdPartyMenuBar;
     { Task 23: images and shapes }
     procedure TestThirdCharImage;
     procedure TestThirdShape;
@@ -271,6 +275,36 @@ type
   TP3ToolWindowBarCracker = class(TTyCustomToolWindowBar);
   TP3ToolWindowCracker = class(TTyCustomToolWindow);
 
+  { The form's chrome engine and shortcut entry, for the third-party chrome tests. }
+  TP3FormAccess = class(TTyForm)
+  public
+    function EngineDragging: Boolean;
+    function EngineMaximized: Boolean;
+    procedure SetEngineMaximized(AValue: Boolean);
+    function ShortCutTaken(AKey: Word; AShift: TShiftState): Boolean;
+  end;
+
+  { A third party's title bar, with its (protected) mouse entry reachable. }
+  TP3ThirdTitleBar = class(TThirdTitleBar)
+  public
+    procedure PressAt(X, Y: Integer);
+  end;
+
+  TP3ThirdBackstage = class(TTyCustomRibbonBackstage)
+  published
+    property Commands;
+  end;
+
+  TP3RibbonClicker = class(TTyCustomRibbon)
+  public
+    procedure PressAt(X, Y: Integer);
+  end;
+
+  TP3AppMenuCracker = class(TTyCustomRibbonAppMenu)
+  public
+    procedure Drop;
+  end;
+
 procedure TP3ToolBarCracker.ForceLayout;
 var r: TRect;
 begin
@@ -355,6 +389,48 @@ begin
   Result := 2;
 end;
 
+function TP3FormAccess.EngineDragging: Boolean;
+begin
+  Result := FEngine.Dragging;
+end;
+
+function TP3FormAccess.EngineMaximized: Boolean;
+begin
+  Result := FEngine.Maximized;
+end;
+
+procedure TP3FormAccess.SetEngineMaximized(AValue: Boolean);
+begin
+  FEngine.Maximized := AValue;
+end;
+
+{ ssAlt rides in KeyData (MK_ALT), the one modifier the Win32 widgetset reads from the message
+  itself, so the match is deterministic without a real keyboard (as in test.form). }
+function TP3FormAccess.ShortCutTaken(AKey: Word; AShift: TShiftState): Boolean;
+var
+  msg: TLMKey;
+begin
+  FillChar(msg, SizeOf(msg), 0);
+  msg.CharCode := AKey;
+  if ssAlt in AShift then msg.KeyData := msg.KeyData or PtrInt(MK_ALT);
+  Result := IsShortcut(msg);
+end;
+
+procedure TP3ThirdTitleBar.PressAt(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [], X, Y);
+end;
+
+procedure TP3RibbonClicker.PressAt(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [], X, Y);
+end;
+
+procedure TP3AppMenuCracker.Drop;
+begin
+  DoDropDown;
+end;
+
 procedure TP3CountingStatusBar.Invalidate;
 begin
   Inc(Invalidations);
@@ -389,6 +465,13 @@ end;
 procedure TTyCustomClassesP3Test.TermData(Sender: TObject; const AData: RawByteString);
 begin
   FData := FData + AData;
+end;
+
+procedure TTyCustomClassesP3Test.FormClosing(Sender: TObject; var CloseAction: TCloseAction);
+begin
+  Inc(FChanges);
+  FLastSender := Sender;
+  CloseAction := caNone;   // a test form is closed by its test, not by a click
 end;
 
 procedure TTyCustomClassesP3Test.TearDown;
@@ -873,6 +956,47 @@ begin
   AssertEquals('and counted once', 2, ra.PageCount);
 end;
 
+{ Backstage takes any TTyCustomRibbonBackstage, on the ribbon and on the application button,
+  the way LCL's component references take the custom class (Images: TCustomImageList): the
+  File tab opens a third party's backstage over the form. }
+procedure TTyCustomClassesP3Test.TestFileTabOpensAThirdPartyBackstage;
+var
+  rb: TP3RibbonClicker;
+  bs: TP3ThirdBackstage;
+  am: TP3AppMenuCracker;
+begin
+  FForm.SetBounds(0, 0, 600, 400);
+  rb := TP3RibbonClicker(TTyRibbon.Create(FForm));
+  rb.Parent := FForm;
+  rb.Font.PixelsPerInch := 96;
+  rb.AddPage('Home');
+  rb.FileTab := True;
+  rb.OnFileTab := @CountChange;
+  bs := TP3ThirdBackstage.Create(FForm);
+  bs.Commands.CommaText := 'Info,New,Open';
+  bs.Visible := False;
+  rb.Backstage := bs;
+  AssertTrue('the ribbon takes a third party''s backstage', rb.Backstage = bs);
+  AssertEquals('Backstage is declared as the custom class', 'TTyCustomRibbonBackstage',
+    GetPropInfo(TTyRibbon, 'Backstage')^.PropType^.Name);
+  FChanges := 0;
+  rb.PressAt(4, 4);
+  AssertEquals('precondition: the press landed on the File tab', 1, FChanges);
+  AssertTrue('the File tab opened the third-party backstage', bs.Visible);
+  AssertTrue('over the form', bs.Parent = FForm);
+  bs.Close;
+  am := TP3AppMenuCracker(TTyRibbonAppMenu.Create(FForm));
+  am.Parent := FForm;
+  am.Backstage := bs;
+  AssertEquals('so is the application button''s', 'TTyCustomRibbonBackstage',
+    GetPropInfo(TTyRibbonAppMenu, 'Backstage')^.PropType^.Name);
+  am.Drop;
+  AssertTrue('the application button opens it too', bs.Visible);
+  bs.Free;
+  AssertTrue('freeing it clears the ribbon''s reference', rb.Backstage = nil);
+  AssertTrue('and the button''s', am.Backstage = nil);
+end;
+
 { ------------------------------------------------------------------ Task 22: window chrome }
 
 procedure TTyCustomClassesP3Test.TestThirdTitleBar;
@@ -1028,6 +1152,75 @@ begin
   RoundTrip(TTyFormSurface, 'Body', False);
   RoundTrip(TThirdFormSurface, 'Body', False);
   RoundTrip(TThirdFormSurface, 'Body', True);
+end;
+
+{ TitleBar takes any TTyCustomTitleBar, the LCL way for a component reference: a third party's
+  bar dropped on a TTyForm becomes its title bar, and the form drives it exactly as it drives
+  its own -- caption buttons wired, the drag armed from a press on the bar. }
+procedure TTyCustomClassesP3Test.TestFormDrivesAThirdPartyTitleBar;
+var
+  f: TP3FormAccess;
+  tb: TP3ThirdTitleBar;
+begin
+  f := TP3FormAccess.CreateNew(nil);
+  try
+    tb := TP3ThirdTitleBar.Create(f);
+    tb.Parent := f;
+    AssertTrue('dropped on the form, the third-party bar became its TitleBar', f.TitleBar = tb);
+    AssertEquals('TitleBar is declared as the custom class', 'TTyCustomTitleBar',
+      GetPropInfo(TTyForm, 'TitleBar')^.PropType^.Name);
+    AssertTrue('the caption buttons are wired', Assigned(tb.MinButton.OnClick)
+      and Assigned(tb.MaxButton.OnClick) and Assigned(tb.CloseButton.OnClick));
+    f.SetEngineMaximized(True);
+    tb.MaxButton.OnClick(tb.MaxButton);
+    AssertFalse('its maximise button restores the window', f.EngineMaximized);
+    tb.MinButton.OnClick(tb.MinButton);
+    AssertTrue('its minimise button minimises it', f.WindowState = wsMinimized);
+    f.WindowState := wsNormal;
+    f.OnClose := @FormClosing;
+    FChanges := 0;
+    tb.CloseButton.OnClick(tb.CloseButton);
+    AssertEquals('its close button closes it', 1, FChanges);
+    tb.PressAt(10, 16);
+    AssertTrue('a press on the bar arms the window drag', f.EngineDragging);
+    tb.Free;
+    AssertTrue('freeing it clears the reference', f.TitleBar = nil);
+  finally
+    f.Free;
+  end;
+end;
+
+{ MenuBar takes any TTyCustomMenuBar: the form hands its shortcuts to a third party's bar. }
+procedure TTyCustomClassesP3Test.TestFormDispatchesShortcutsToAThirdPartyMenuBar;
+var
+  f: TP3FormAccess;
+  bar: TThirdMenuBar;
+  mm: TMainMenu;
+  it: TMenuItem;
+begin
+  f := TP3FormAccess.CreateNew(nil);
+  try
+    mm := TMainMenu.Create(f);
+    it := TMenuItem.Create(mm);
+    it.Caption := 'Save';
+    it.ShortCut := ShortCut(Ord('S'), [ssAlt]);
+    it.OnClick := @CountChange;
+    mm.Items.Add(it);
+    bar := TThirdMenuBar.Create(f);
+    bar.Parent := f;
+    bar.Menu := mm;
+    f.MenuBar := bar;
+    AssertEquals('MenuBar is declared as the custom class', 'TTyCustomMenuBar',
+      GetPropInfo(TTyForm, 'MenuBar')^.PropType^.Name);
+    FChanges := 0;
+    AssertTrue('the form routes Alt+S to the third-party bar''s menu',
+      f.ShortCutTaken(Ord('S'), [ssAlt]));
+    AssertEquals('and the item fired', 1, FChanges);
+    bar.Free;
+    AssertTrue('freeing it clears the reference', f.MenuBar = nil);
+  finally
+    f.Free;
+  end;
 end;
 
 { ------------------------------------------------------------------ Task 23: images and shapes }

@@ -50,7 +50,7 @@ type
     FFileTabCaption: TCaption;
     FFileTabWidth: Integer;                 // logical px
     FFileTabWidthExplicit: Boolean;         // True once a host/.lfm pins FileTabWidth; else follow --ribbon-file-tab-width
-    FBackstage: TTyRibbonBackstage;
+    FBackstage: TTyCustomRibbonBackstage;
     FShowCollapseBtn: Boolean;
     FFlyout: TTyPopupSurface;        // transient page band shown while Minimized
     FKeyTips: Boolean;
@@ -73,7 +73,7 @@ type
     procedure SetFileTabCaption(const AValue: TCaption);
     procedure SetFileTabWidth(AValue: Integer);
     function  GetFileTabWidth: Integer;
-    procedure SetBackstage(AValue: TTyRibbonBackstage);
+    procedure SetBackstage(AValue: TTyCustomRibbonBackstage);
     procedure SetShowCollapseButton(AValue: Boolean);
     function FileTabWidthPx: Integer;
     function CollapseRectPx: TRect;
@@ -186,7 +186,7 @@ type
       --ribbon-file-tab-width token (density-aware); set it explicitly and that value wins
       and is streamed. Streamed only when explicitly set (stored FFileTabWidthExplicit). }
     property FileTabWidth: Integer read GetFileTabWidth write SetFileTabWidth stored FFileTabWidthExplicit;
-    property Backstage: TTyRibbonBackstage read FBackstage write SetBackstage;
+    property Backstage: TTyCustomRibbonBackstage read FBackstage write SetBackstage;
     { A collapse/expand chevron at the RIGHT end of the tab strip that toggles Minimized
       (like Office). Double-clicking any tab also toggles Minimized. }
     property ShowCollapseButton: Boolean read FShowCollapseBtn write SetShowCollapseButton default True;
@@ -912,7 +912,7 @@ begin
     Result := ActiveController.Metric('--ribbon-file-tab-width', 52);
 end;
 
-procedure TTyCustomRibbon.SetBackstage(AValue: TTyRibbonBackstage);
+procedure TTyCustomRibbon.SetBackstage(AValue: TTyCustomRibbonBackstage);
 begin
   if FBackstage = AValue then Exit;
   if FBackstage <> nil then FBackstage.RemoveFreeNotification(Self);
