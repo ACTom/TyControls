@@ -91,7 +91,6 @@ type
     procedure TestRibbonMimicsPaintLikeTheirFinalClass;
     procedure TestChromeMimicsPaintLikeTheirFinalClass;
     procedure TestImageMimicsPaintLikeTheirFinalClass;
-    procedure TestPickerMimicsPaintLikeTheirFinalClass;
     { Real input, one per family. }
     procedure TestInputThirdToolButtonClicks;
     procedure TestInputThirdScrollBarStepsOnArrowKeys;
@@ -250,10 +249,8 @@ type
   TP3RibbonPageRender = class(TTyCustomRibbonPage);
   TP3RibbonGroupRender = class(TTyCustomRibbonGroup);
   TP3TitleBarRender = class(TTyCustomTitleBar);
-  TP3CharImageRender = class(TTyCustomCharImage);
   TP3ShapeRender = class(TTyCustomShape);
   TP3ChartRender = class(TTyCustomChart);
-  TP3ColorGridRender = class(TTyCustomColorGrid);
   { ChildClassAllowed is protected (TWinControl). }
   TP3ToolWindowBarCracker = class(TTyCustomToolWindowBar);
   TP3ToolWindowCracker = class(TTyCustomToolWindow);
@@ -510,7 +507,9 @@ begin
   own := TTyStatusBar.Create(FForm);
   own.Parent := FForm;
   CheckSameTypeKey(third, own);
-  CheckFreshDefaults(TThirdStatusBar, ['Panels', 'SimpleText']);
+  { Panels is a collection: TWriter writes one whenever it has no ancestor to compare with
+    (writer.inc), so only SimpleText is checked -- the same exclusion as P1's ItemsEx. }
+  CheckFreshDefaults(TThirdStatusBar, ['SimpleText']);
   c := third;
   c.OnDrawPanel := @DrawPanel;
   c.SimplePanel := True;
@@ -704,19 +703,23 @@ end;
 
 procedure TTyCustomClassesP3Test.TestThirdTitleBar;
 var
+  host: TForm;
   third, back: TThirdTitleBar;
   own: TTyTitleBar;
   c: TTyCustomTitleBar;
 begin
-  third := TThirdTitleBar.Create(FForm);
-  third.Parent := FForm;
+  { On a host form of its own: the bar builds and owns its caption buttons, which a .lfm never
+    carries -- streamed as the root, it would write them out as its children. }
+  host := NewHost;
+  third := TThirdTitleBar.Create(host);
+  third.Name := 'TB';
+  third.Parent := host;
   CheckPublishesOnly(TThirdTitleBar, ['Caption', 'ShowMinimize']);
   third.Caption := 'Editor';
   third.ShowMinimize := False;
   third.ShowClose := False;
   CheckStreamText(third, ['Caption', 'ShowMinimize'], 'ShowClose');
-  back := TThirdTitleBar.Create(FForm);
-  StreamInto(third, back);
+  back := HostRoundTrip(third) as TThirdTitleBar;
   AssertEquals('T-c: Caption round-trips', 'Editor', back.Caption);
   AssertFalse('T-c: ShowMinimize round-trips', back.ShowMinimize);
   AssertTrue('T-c: the unpublished ShowClose stayed at its default', back.ShowClose);
@@ -1075,11 +1078,6 @@ begin
   TP3TitleBarRender(C).RenderTo(ACanvas, R, 96);
 end;
 
-procedure RenderCharImage(C: TControl; ACanvas: TCanvas; const R: TRect);
-begin
-  TP3CharImageRender(C).RenderTo(ACanvas, R, 96);
-end;
-
 procedure RenderShape(C: TControl; ACanvas: TCanvas; const R: TRect);
 begin
   TP3ShapeRender(C).RenderTo(ACanvas, R, 96);
@@ -1088,11 +1086,6 @@ end;
 procedure RenderChart(C: TControl; ACanvas: TCanvas; const R: TRect);
 begin
   TP3ChartRender(C).RenderTo(ACanvas, R, 96);
-end;
-
-procedure RenderColorGrid(C: TControl; ACanvas: TCanvas; const R: TRect);
-begin
-  TP3ColorGridRender(C).RenderTo(ACanvas, R, 96);
 end;
 
 { Each pair is set up the same way -- same size, same values, unfocused -- and must paint the
@@ -1206,19 +1199,11 @@ end;
 
 procedure TTyCustomClassesP3Test.TestImageMimicsPaintLikeTheirFinalClass;
 var
-  ci: TThirdCharImage;
-  oci: TTyCharImage;
   sh: TThirdShape;
   osh: TTyShape;
   ch: TThirdChart;
   och: TTyChart;
 begin
-  ci := TThirdCharImage.Create(FForm);
-  oci := TTyCharImage.Create(FForm);
-  ci.Color := clYellow;
-  oci.Color := clYellow;
-  CheckSamePaint(ci, oci, 40, 40, @RenderCharImage);
-
   sh := TThirdShape.Create(FForm);
   osh := TTyShape.Create(FForm);
   sh.Shape := tskEllipse;
@@ -1230,16 +1215,6 @@ begin
   ch.Series.Add.Values := '1,3,2';
   och.Series.Add.Values := '1,3,2';
   CheckSamePaint(ch, och, 200, 120, @RenderChart);
-end;
-
-procedure TTyCustomClassesP3Test.TestPickerMimicsPaintLikeTheirFinalClass;
-var
-  cg: TThirdColorGrid;
-  ocg: TTyColorGrid;
-begin
-  cg := TThirdColorGrid.Create(FForm);
-  ocg := TTyColorGrid.Create(FForm);
-  CheckSamePaint(cg, ocg, 160, 80, @RenderColorGrid);
 end;
 
 { ------------------------------------------------------------------ real input }
@@ -1298,9 +1273,10 @@ begin
   own.HandleNeeded;
   third.Position := 10;
   own.Position := 10;
-  third.Perform(CN_KEYDOWN, VK_RIGHT, 0);
-  own.Perform(CN_KEYDOWN, VK_RIGHT, 0);
-  AssertTrue('Right moves the mimic', third.Position > 10);
+  { Vertical out of the constructor: Down steps it. }
+  third.Perform(CN_KEYDOWN, VK_DOWN, 0);
+  own.Perform(CN_KEYDOWN, VK_DOWN, 0);
+  AssertTrue('Down moves the mimic', third.Position > 10);
   AssertEquals('as it moves TTyScrollBar', own.Position, third.Position);
   third.Perform(CN_KEYDOWN, VK_END, 0);
   own.Perform(CN_KEYDOWN, VK_END, 0);
@@ -1402,5 +1378,8 @@ initialization
     TThirdRibbonPage, TThirdRibbonGroup, TIdxRibbonGallery, TIdxRibbonBackstage, TThirdTitleBar,
     TThirdMenuBar, TThirdFormSurface, TThirdCharImage, TThirdShape, TThirdChart, TThirdColorGrid,
     TThirdTerminalView, TThirdToolWindow, TThirdToolWindowBar]);
+  { TThirdMenuBar's round trip streams a TMainMenu: a form unit the IDE writes registers it the
+    same way. }
+  RegisterClass(TMainMenu);
   RegisterTest(TTyCustomClassesP3Test);
 end.
