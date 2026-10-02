@@ -30,6 +30,7 @@ uses
   tyControls.Ribbon, tyControls.RibbonGallery, tyControls.RibbonBackstage, tyControls.RibbonAppMenu,
   tyControls.Form, tyControls.Menu, tyControls.FormSurface, tyControls.Controller,
   tyControls.CharImage, tyControls.IconFont, tyControls.Shape, tyControls.Chart,
+  tyControls.Image, tyControls.ImageView,
   tyControls.ColorGrid, tyControls.Terminal, tyControls.ToolWindows, tyControls.PopupSurface,
   tyControls.ToolWindows.DesignRules;
 
@@ -49,6 +50,12 @@ type
       APainter: TTyPainter; const ARect: TRect);
     procedure TermData(Sender: TObject; const AData: RawByteString);
     procedure FormClosing(Sender: TObject; var CloseAction: TCloseAction);
+    procedure MouseButton(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure MouseMoved(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+    procedure MouseWheeled(Sender: TObject; Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint; var Handled: Boolean);
+    procedure MouseWheeledUpDown(Sender: TObject; Shift: TShiftState; MousePos: TPoint;
+      var Handled: Boolean);
     function NewHost: TForm;
     { Stream the form that owns ASrc and read it into a fresh form; the copy of ASrc. }
     function HostRoundTrip(ASrc: TComponent): TComponent;
@@ -87,6 +94,7 @@ type
     procedure TestThirdCharImage;
     procedure TestThirdShape;
     procedure TestThirdChart;
+    procedure TestImagesPromoteWhatTCustomImagePromotes;
     { Task 24: pickers and the terminal }
     procedure TestThirdColorGrid;
     procedure TestThirdTerminalView;
@@ -465,6 +473,29 @@ end;
 procedure TTyCustomClassesP3Test.TermData(Sender: TObject; const AData: RawByteString);
 begin
   FData := FData + AData;
+end;
+
+procedure TTyCustomClassesP3Test.MouseButton(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+begin
+  Inc(FChanges);
+end;
+
+procedure TTyCustomClassesP3Test.MouseMoved(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+begin
+  Inc(FChanges);
+end;
+
+procedure TTyCustomClassesP3Test.MouseWheeled(Sender: TObject; Shift: TShiftState;
+  WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
+begin
+  Inc(FChanges);
+end;
+
+procedure TTyCustomClassesP3Test.MouseWheeledUpDown(Sender: TObject; Shift: TShiftState;
+  MousePos: TPoint; var Handled: Boolean);
+begin
+  Inc(FChanges);
 end;
 
 procedure TTyCustomClassesP3Test.FormClosing(Sender: TObject; var CloseAction: TCloseAction);
@@ -1310,6 +1341,53 @@ begin
   c := third;
   c.ShowGrid := False;
   AssertFalse('T-v: ShowGrid is public through a TTyCustomChart reference', third.ShowGrid);
+end;
+
+{ LCL's TCustomImage promotes TControl's eight mouse events to public (extctrls.pp:592-599), so
+  code holding the custom class can hook them -- for the three image classes that map onto it.
+  (Compile-time: a protected one does not compile here.) }
+procedure TTyCustomClassesP3Test.TestImagesPromoteWhatTCustomImagePromotes;
+var
+  img: TTyCustomImage;
+  chr: TTyCustomCharImage;
+  view: TTyCustomImageView;
+begin
+  img := TTyImage.Create(FForm);
+  img.OnMouseDown := @MouseButton;
+  img.OnMouseUp := @MouseButton;
+  img.OnMouseMove := @MouseMoved;
+  img.OnMouseEnter := @CountChange;
+  img.OnMouseLeave := @CountChange;
+  img.OnMouseWheel := @MouseWheeled;
+  img.OnMouseWheelDown := @MouseWheeledUpDown;
+  img.OnMouseWheelUp := @MouseWheeledUpDown;
+  AssertTrue('TTyCustomImage takes all eight', Assigned(img.OnMouseDown) and Assigned(img.OnMouseUp)
+    and Assigned(img.OnMouseMove) and Assigned(img.OnMouseEnter) and Assigned(img.OnMouseLeave)
+    and Assigned(img.OnMouseWheel) and Assigned(img.OnMouseWheelDown) and Assigned(img.OnMouseWheelUp));
+  chr := TTyCharImage.Create(FForm);
+  chr.OnMouseDown := @MouseButton;
+  chr.OnMouseUp := @MouseButton;
+  chr.OnMouseMove := @MouseMoved;
+  chr.OnMouseEnter := @CountChange;
+  chr.OnMouseLeave := @CountChange;
+  chr.OnMouseWheel := @MouseWheeled;
+  chr.OnMouseWheelDown := @MouseWheeledUpDown;
+  chr.OnMouseWheelUp := @MouseWheeledUpDown;
+  AssertTrue('TTyCustomCharImage takes all eight', Assigned(chr.OnMouseDown) and Assigned(chr.OnMouseUp)
+    and Assigned(chr.OnMouseMove) and Assigned(chr.OnMouseEnter) and Assigned(chr.OnMouseLeave)
+    and Assigned(chr.OnMouseWheel) and Assigned(chr.OnMouseWheelDown) and Assigned(chr.OnMouseWheelUp));
+  view := TTyImageView.Create(FForm);
+  view.OnMouseDown := @MouseButton;
+  view.OnMouseUp := @MouseButton;
+  view.OnMouseMove := @MouseMoved;
+  view.OnMouseEnter := @CountChange;
+  view.OnMouseLeave := @CountChange;
+  view.OnMouseWheel := @MouseWheeled;
+  view.OnMouseWheelDown := @MouseWheeledUpDown;
+  view.OnMouseWheelUp := @MouseWheeledUpDown;
+  AssertTrue('TTyCustomImageView takes all eight', Assigned(view.OnMouseDown) and Assigned(view.OnMouseUp)
+    and Assigned(view.OnMouseMove) and Assigned(view.OnMouseEnter) and Assigned(view.OnMouseLeave)
+    and Assigned(view.OnMouseWheel) and Assigned(view.OnMouseWheelDown) and Assigned(view.OnMouseWheelUp));
 end;
 
 { ------------------------------------------------------------------ Task 24: pickers, terminal }

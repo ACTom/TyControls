@@ -63,6 +63,16 @@ type
     { Glyph fill color. TyGlyphColorDefault (the default) = use the theme's
       resolved TextColor; any other value overrides it. }
     property GlyphColor: TTyColor read FGlyphColor write SetGlyphColor default TyGlyphColorDefault;
+    { TControl keeps the mouse events protected; LCL's TCustomImage promotes these eight to
+      public (extctrls.pp:592-599), and so does the custom class (plan D3). }
+    property OnMouseDown;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseMove;
+    property OnMouseUp;
+    property OnMouseWheel;
+    property OnMouseWheelDown;
+    property OnMouseWheelUp;
   end;
 
   { TTyCharImage publishes TTyCustomCharImage's properties; everything lives in TTyCustomCharImage. }
