@@ -1556,13 +1556,13 @@ initialization
     'TTyCharImage', 'TTyImage', 'TTyPreviewBox', 'TTyImageView', 'TTyShape', 'TTyStarShape',
     'TTyArrow', 'TTyChart',
     // T24 colour pickers and terminal
-    'TTyColorGrid', 'TTyLColorPicker', 'TTyHSColorPicker', 'TTyTerminalView']);
+    'TTyColorGrid', 'TTyLColorPicker', 'TTyHSColorPicker', 'TTyTerminalView',
+    // T25 tool windows
+    'TTyToolWindowBar', 'TTyToolWindow', 'TTyToolWindowActions']);
 
   { CPending: the classes still to split, by task (plan appendix A). Each task moves its own
     names into CSplit; Task 32 deletes this list. }
   AddAll(GPending, [
-    // T25 tool windows
-    'TTyToolWindowBar', 'TTyToolWindow', 'TTyToolWindowActions',
     // T27 controllers
     'TTyStyleController', 'TTyNativeStyler',
     // T28 icon fonts and images

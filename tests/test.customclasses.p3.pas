@@ -82,6 +82,10 @@ type
     { Task 24: pickers and the terminal }
     procedure TestThirdColorGrid;
     procedure TestThirdTerminalView;
+    { Task 25: tool windows }
+    procedure TestThirdToolWindowJoinsABar;
+    procedure TestThirdToolWindowBarTakesAToolWindow;
+    procedure TestToolWindowRulesTakeThirdParties;
     { T-d, pixel for pixel, per task }
     procedure TestBarMimicsPaintLikeTheirFinalClass;
     procedure TestRibbonMimicsPaintLikeTheirFinalClass;
@@ -196,6 +200,18 @@ type
     property CursorStyle;
   end;
 
+  TThirdToolWindow = class(TTyCustomToolWindow)
+  published
+    property Caption;
+    property ImageName;
+  end;
+
+  TThirdToolWindowBar = class(TTyCustomToolWindowBar)
+  published
+    property Placement;
+    property Collapsed;
+  end;
+
 implementation
 
 type
@@ -238,6 +254,10 @@ type
   TP3ShapeRender = class(TTyCustomShape);
   TP3ChartRender = class(TTyCustomChart);
   TP3ColorGridRender = class(TTyCustomColorGrid);
+  { ChildClassAllowed is protected (TWinControl). }
+  TP3ToolWindowBarCracker = class(TTyCustomToolWindowBar);
+  TP3ToolWindowCracker = class(TTyCustomToolWindow);
+
 procedure TP3ToolBarCracker.ForceLayout;
 var r: TRect;
 begin
@@ -938,6 +958,85 @@ end;
 
 { ------------------------------------------------------------------ Task 25: tool windows }
 
+{ C24. A third party's tool window joins the library's bar: registered, activated, handed out
+  as it is, and dropped from the bar when freed. }
+procedure TTyCustomClassesP3Test.TestThirdToolWindowJoinsABar;
+var
+  bar: TTyToolWindowBar;
+  w: TThirdToolWindow;
+  got: TTyCustomToolWindow;
+begin
+  bar := TTyToolWindowBar.Create(FForm);
+  bar.Parent := FForm;
+  AssertTrue('the bar accepts a third-party window as a child',
+    TP3ToolWindowBarCracker(bar).ChildClassAllowed(TThirdToolWindow));
+  w := TThirdToolWindow.Create(FForm);
+  w.Caption := 'Outline';
+  w.Parent := bar;
+  AssertEquals('the bar registered the third-party window', 1, bar.WindowCount);
+  AssertEquals('at index 0', 0, bar.IndexOfWindow(w));
+  got := bar.Windows[0];
+  AssertTrue('Windows[] hands it out as it is', got = w);
+  AssertFalse('which is no TTyToolWindow', got is TTyToolWindow);
+  AssertTrue('the window finds its bar', w.Bar = TTyCustomToolWindowBar(bar));
+  bar.ActivateWindow(w);
+  AssertTrue('it can be the active window', bar.ActiveWindow = w);
+  w.Free;
+  AssertEquals('freeing it takes it out of the bar', 0, bar.WindowCount);
+  AssertTrue('and the bar forgets it was active', bar.ActiveWindow = nil);
+end;
+
+{ C24. A third party's bar takes the library's window. }
+procedure TTyCustomClassesP3Test.TestThirdToolWindowBarTakesAToolWindow;
+var
+  third, back: TThirdToolWindowBar;
+  w: TTyToolWindow;
+  own: TTyToolWindowBar;
+begin
+  third := TThirdToolWindowBar.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdToolWindowBar, ['Placement', 'Collapsed']);
+  third.Placement := twpRight;
+  third.Collapsed := True;
+  CheckStreamText(third, ['Placement', 'Collapsed'], 'ExpandedSize');
+  back := TThirdToolWindowBar.Create(FForm);
+  StreamInto(third, back);
+  AssertTrue('T-c: Placement round-trips', back.Placement = twpRight);
+  AssertTrue('T-c: Collapsed round-trips', back.Collapsed);
+  third.Collapsed := False;
+  w := TTyToolWindow.Create(FForm);
+  w.Parent := third;
+  AssertEquals('the third-party bar registered the library''s window', 1, third.WindowCount);
+  AssertTrue('the window finds the third-party bar', w.Bar = TTyCustomToolWindowBar(third));
+  own := TTyToolWindowBar.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdToolWindowBar, ['Placement', 'Collapsed']);
+end;
+
+{ C24 (design rules, InheritsFrom). A tool window and its actions strip refuse a third party's
+  window or bar as a child just as they refuse the library's, and a third-party window gets an
+  actions strip. }
+procedure TTyCustomClassesP3Test.TestToolWindowRulesTakeThirdParties;
+var
+  bar: TTyToolWindowBar;
+  w: TTyToolWindow;
+  tw: TThirdToolWindow;
+begin
+  bar := TTyToolWindowBar.Create(FForm);
+  bar.Parent := FForm;
+  w := TTyToolWindow.Create(FForm);
+  w.Parent := bar;
+  AssertFalse('a window takes no third-party window as a child',
+    TP3ToolWindowCracker(w).ChildClassAllowed(TThirdToolWindow));
+  AssertFalse('nor a third-party bar', TP3ToolWindowCracker(w).ChildClassAllowed(TThirdToolWindowBar));
+  tw := TThirdToolWindow.Create(FForm);
+  tw.Parent := bar;
+  AssertTrue('the design rules let a third-party window take an actions strip',
+    TyToolWindowDesignCanAddActions(tw));
+  AssertTrue('and the strip it gets is the window''s', tw.EnsureActions.Parent = tw);
+end;
+
 { ------------------------------------------------------------------ T-d }
 
 { One renderer per family: RenderTo is protected, the empty crackers reach it. }
@@ -1302,6 +1401,6 @@ initialization
   RegisterClasses([TThirdToolBar, TThirdToolButton, TThirdStatusBar, TThirdScrollBar,
     TThirdRibbonPage, TThirdRibbonGroup, TIdxRibbonGallery, TIdxRibbonBackstage, TThirdTitleBar,
     TThirdMenuBar, TThirdFormSurface, TThirdCharImage, TThirdShape, TThirdChart, TThirdColorGrid,
-    TThirdTerminalView]);
+    TThirdTerminalView, TThirdToolWindow, TThirdToolWindowBar]);
   RegisterTest(TTyCustomClassesP3Test);
 end.

@@ -137,8 +137,8 @@ type
     procedure BtnTermNewClick(Sender: TObject);
     procedure BtnTermCloseClick(Sender: TObject);
     procedure BtnTermMoreClick(Sender: TObject);
-    procedure ToolMgrWindowMoved(Sender: TObject; AWindow: TTyToolWindow;
-      ASourceBar: TTyToolWindowBar; AOldIndex: Integer);
+    procedure ToolMgrWindowMoved(Sender: TObject; AWindow: TTyCustomToolWindow;
+      ASourceBar: TTyCustomToolWindowBar; AOldIndex: Integer);
     procedure ToolMgrLayoutApplied(Sender: TObject);
     procedure BarChange(Sender: TObject);
     procedure BottomBarCollapse(Sender: TObject);
@@ -148,8 +148,8 @@ type
     FDiagAction: TDiagAction;
     { The window and the target the strip menu was opened for (worked out in the side bar's
       OnContextPopup, which fires before the bar pops its PopupMenu up). }
-    FStripWindow: TTyToolWindow;
-    FStripTarget: TTyToolWindowBar;
+    FStripWindow: TTyCustomToolWindow;
+    FStripTarget: TTyCustomToolWindowBar;
     { ANews = False: a line the demo writes about what you just did to the bottom panel itself
       (switched its page, collapsed or expanded it) -- it is logged, but it does not light
       Output's dot. }
@@ -159,7 +159,7 @@ type
     procedure UpdatePanelMenu;
     { The usable bar on the other side of ABar (left <-> right); nil for the bottom bar or when
       that side has no usable bar. }
-    function OtherSideOf(ABar: TTyToolWindowBar): TTyToolWindowBar;
+    function OtherSideOf(ABar: TTyCustomToolWindowBar): TTyCustomToolWindowBar;
     function LayoutFile: string;
     procedure SaveLayoutFile;
     procedure LoadLayoutFile;
@@ -332,8 +332,8 @@ begin
   Log(Format(rsExpandedFmt, [BottomBar.Name]), False);
 end;
 
-procedure TMainForm.ToolMgrWindowMoved(Sender: TObject; AWindow: TTyToolWindow;
-  ASourceBar: TTyToolWindowBar; AOldIndex: Integer);
+procedure TMainForm.ToolMgrWindowMoved(Sender: TObject; AWindow: TTyCustomToolWindow;
+  ASourceBar: TTyCustomToolWindowBar; AOldIndex: Integer);
 begin
   // Gestures, MoveWindow and WindowIndex report here; reading a layout does not.
   Log(Format(rsMovedFmt, [AWindow.Name, ASourceBar.Name, AOldIndex]));
@@ -439,7 +439,7 @@ end;
 
 { ---- moving windows ---- }
 
-function TMainForm.OtherSideOf(ABar: TTyToolWindowBar): TTyToolWindowBar;
+function TMainForm.OtherSideOf(ABar: TTyCustomToolWindowBar): TTyCustomToolWindowBar;
 begin
   Result := nil;
   if ABar = nil then Exit;
@@ -470,7 +470,7 @@ end;
 
 procedure TMainForm.BtnOutlineMoveClick(Sender: TObject);
 var
-  target: TTyToolWindowBar;
+  target: TTyCustomToolWindowBar;
   ok: Boolean;
 begin
   // The button sits inside the window it moves. The form is showing, so MoveWindow queues the

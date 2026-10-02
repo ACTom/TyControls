@@ -31,8 +31,8 @@ type
     procedure ReleaseAt(const AScreen: TPoint; ASource: TBarAccess = nil);
     { 从 ASource 的第 AIndex 格一路拖到 AScreen 松开。 }
     procedure DragDrop(AIndex: Integer; const AScreen: TPoint; ASource: TBarAccess = nil);
-    procedure CountingVetoOnSecondAsk(Sender: TObject; AWindow: TTyToolWindow;
-      ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
+    procedure CountingVetoOnSecondAsk(Sender: TObject; AWindow: TTyCustomToolWindow;
+      ATargetBar: TTyCustomToolWindowBar; var AAllow: Boolean);
     { 常用的几个屏幕点。 }
     function RightFirstCellTop: TPoint;
     function RightContent: TPoint;
@@ -94,10 +94,10 @@ type
   private
     FDeadMgr: Pointer;
     FCanary: PByte;
-    procedure CancelInsideTheAsk(Sender: TObject; AWindow: TTyToolWindow;
-      ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
-    procedure FreeManagerOnTheDropAsk(Sender: TObject; AWindow: TTyToolWindow;
-      ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
+    procedure CancelInsideTheAsk(Sender: TObject; AWindow: TTyCustomToolWindow;
+      ATargetBar: TTyCustomToolWindowBar; var AAllow: Boolean);
+    procedure FreeManagerOnTheDropAsk(Sender: TObject; AWindow: TTyCustomToolWindow;
+      ATargetBar: TTyCustomToolWindowBar; var AAllow: Boolean);
   end;
 
 implementation
@@ -205,7 +205,7 @@ begin
 end;
 
 procedure TTyToolWindowCrossDragTests.CountingVetoOnSecondAsk(Sender: TObject;
-  AWindow: TTyToolWindow; ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
+  AWindow: TTyCustomToolWindow; ATargetBar: TTyCustomToolWindowBar; var AAllow: Boolean);
 begin
   Inc(FCanCalls);
   AAllow := FCanCalls < 2;
@@ -685,8 +685,8 @@ end;
 
 { --- 处理器、缓存、取消的口径 -------------------------------------------------------- }
 
-procedure TTyToolWindowCrossDragTests.CancelInsideTheAsk(Sender: TObject; AWindow: TTyToolWindow;
-  ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
+procedure TTyToolWindowCrossDragTests.CancelInsideTheAsk(Sender: TObject; AWindow: TTyCustomToolWindow;
+  ATargetBar: TTyCustomToolWindowBar; var AAllow: Boolean);
 begin
   Inc(FCanCalls);
   AAllow := True;
@@ -831,7 +831,7 @@ begin
 end;
 
 procedure TTyToolWindowCrossDragTests.FreeManagerOnTheDropAsk(Sender: TObject;
-  AWindow: TTyToolWindow; ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
+  AWindow: TTyCustomToolWindow; ATargetBar: TTyCustomToolWindowBar; var AAllow: Boolean);
 begin
   Inc(FCanCalls);
   AAllow := True;

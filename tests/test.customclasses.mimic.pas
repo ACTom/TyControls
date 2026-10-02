@@ -43,9 +43,9 @@ uses
   tyControls.Splitter, tyControls.StarShape, tyControls.StatusBar, tyControls.Steps,
   tyControls.TabSet, tyControls.TabSheet, tyControls.Tag, tyControls.Terminal,
   tyControls.ToggleSwitch, tyControls.ToolBar, tyControls.ToolBarEx, tyControls.ToolGroupPanel,
-  tyControls.TrackBar, tyControls.TrackEdit, tyControls.Transfer, tyControls.TreeSelect,
-  tyControls.TreeView, tyControls.TyLabel, tyControls.URLEdit, tyControls.UpDown,
-  tyControls.ValueListEditor;
+  tyControls.ToolWindows, tyControls.TrackBar, tyControls.TrackEdit, tyControls.Transfer,
+  tyControls.TreeSelect, tyControls.TreeView, tyControls.TyLabel, tyControls.URLEdit,
+  tyControls.UpDown, tyControls.ValueListEditor;
 
 type
   TGenActivityBar = class(TTyCustomActivityBar)
@@ -8399,6 +8399,189 @@ type
     property Align;
   end;
 
+  TGenToolWindow = class(TTyCustomToolWindow)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Caption;
+    property ImageName;
+    property ImageIndex;
+    property StripHint;
+    property OnShow;
+    property OnHide;
+    property ShowBadge;
+    property BadgeValue;
+    property BadgeDot;
+    property OnBadgeDisplay;
+  end;
+
+  TGenToolWindowActions = class(TTyCustomToolWindowActions)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+  end;
+
+  TGenToolWindowBar = class(TTyCustomToolWindowBar)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Placement;
+    property ExpandedSize;
+    property Collapsed;
+    property ActiveIndex;
+    property Manager;
+    property Images;
+    property Align;
+    property OnChange;
+    property OnCollapse;
+    property OnExpand;
+    property HideWhenEmpty;
+  end;
+
   TGenTrackBar = class(TTyCustomTrackBar)
   published
     property Version;
@@ -8981,7 +9164,7 @@ type
 
 const
   { (mimic, final class) }
-  CGenMimics: array[0..132, 0..1] of TClass = (
+  CGenMimics: array[0..135, 0..1] of TClass = (
     (TGenActivityBar, TTyActivityBar),
     (TGenActivityIndicator, TTyActivityIndicator),
     (TGenAdvancedComboBox, TTyAdvancedComboBox),
@@ -9107,6 +9290,9 @@ const
     (TGenToolButton, TTyToolButton),
     (TGenToolGroupPanel, TTyToolGroupPanel),
     (TGenToolSeparator, TTyToolSeparator),
+    (TGenToolWindow, TTyToolWindow),
+    (TGenToolWindowActions, TTyToolWindowActions),
+    (TGenToolWindowBar, TTyToolWindowBar),
     (TGenTrackBar, TTyTrackBar),
     (TGenTrackEdit, TTyTrackEdit),
     (TGenTransfer, TTyTransfer),

@@ -33,15 +33,15 @@ type
       栏的 Name 是 L / R / B 加序号(第一条不加),事件串里用它。 }
     function NewBarOn(APlacement: TTyToolWindowPlacement;
       const ACaptions: array of string): TBarAccess;
-    procedure HandleCanMove(Sender: TObject; AWindow: TTyToolWindow;
-      ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
+    procedure HandleCanMove(Sender: TObject; AWindow: TTyCustomToolWindow;
+      ATargetBar: TTyCustomToolWindowBar; var AAllow: Boolean);
     { 栏事件记进 FLog:「栏名.change;」「栏名.expand;」「栏名.collapse;」。 }
     procedure LogBarChange(ASender: TObject);
     procedure LogBarExpand(ASender: TObject);
     procedure LogBarCollapse(ASender: TObject);
     procedure LogBarEvents(ABar: TTyToolWindowBar);
     { OnWindowMoved 记进 FLog:「moved(窗口名,源栏名,原序号);」。 }
-    procedure LogMoved(Sender: TObject; AWindow: TTyToolWindow; ASourceBar: TTyToolWindowBar;
+    procedure LogMoved(Sender: TObject; AWindow: TTyCustomToolWindow; ASourceBar: TTyCustomToolWindowBar;
       AOldIndex: Integer);
     { 左栏 Explorer / Search / Git(当前页 Search),右栏 Outline(收起着),都注册在 AManager 上、
       栏事件和 OnWindowMoved 都记进 FLog。 }
@@ -101,8 +101,8 @@ type
     FDying: TTyToolWindowManager;
     FDeadAddr: Pointer;
     procedure ChangeFreesTheManager(Sender: TObject);
-    procedure CanMoveFreesTheManager(Sender: TObject; AWindow: TTyToolWindow;
-      ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
+    procedure CanMoveFreesTheManager(Sender: TObject; AWindow: TTyCustomToolWindow;
+      ATargetBar: TTyCustomToolWindowBar; var AAllow: Boolean);
   private
     FReenterTarget: TTyToolWindowBar;
     FReenterWindow: TTyToolWindow;
@@ -110,10 +110,10 @@ type
     { -1 = 处理器没跑过;0 / 1 = 处理器里那一次 MoveWindow 的答案。 }
     FReentered: Integer;
     procedure ChangeThenMove(Sender: TObject);
-    procedure MovedThenMoveAgain(Sender: TObject; AWindow: TTyToolWindow;
-      ASourceBar: TTyToolWindowBar; AOldIndex: Integer);
-    procedure CanMoveThenMove(Sender: TObject; AWindow: TTyToolWindow;
-      ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
+    procedure MovedThenMoveAgain(Sender: TObject; AWindow: TTyCustomToolWindow;
+      ASourceBar: TTyCustomToolWindowBar; AOldIndex: Integer);
+    procedure CanMoveThenMove(Sender: TObject; AWindow: TTyCustomToolWindow;
+      ATargetBar: TTyCustomToolWindowBar; var AAllow: Boolean);
   end;
 
   { 真句柄(焦点、Showing 之后的时机、队列)。夹具照 test.toolwindow.focus:本单元**自带**
@@ -148,9 +148,9 @@ type
     procedure LogChange(Sender: TObject);
     procedure LogExpand(Sender: TObject);
     procedure LogCollapse(Sender: TObject);
-    procedure LogMoved(Sender: TObject; AWindow: TTyToolWindow; ASourceBar: TTyToolWindowBar;
+    procedure LogMoved(Sender: TObject; AWindow: TTyCustomToolWindow; ASourceBar: TTyCustomToolWindowBar;
       AOldIndex: Integer);
-    procedure CountCan(Sender: TObject; AWindow: TTyToolWindow; ATargetBar: TTyToolWindowBar;
+    procedure CountCan(Sender: TObject; AWindow: TTyCustomToolWindow; ATargetBar: TTyCustomToolWindowBar;
       var AAllow: Boolean);
     procedure BtnMovesSearch(Sender: TObject);
     { 异步队列只跑一轮(见实现处)。 }
@@ -220,12 +220,12 @@ type
     FPumped: Boolean;
     FNestedRuns: Integer;
     FDeadAddr: Pointer;
-    procedure MovedPumps(Sender: TObject; AWindow: TTyToolWindow; ASourceBar: TTyToolWindowBar;
+    procedure MovedPumps(Sender: TObject; AWindow: TTyCustomToolWindow; ASourceBar: TTyCustomToolWindowBar;
       AOldIndex: Integer);
-    procedure MovedFreesTheManager(Sender: TObject; AWindow: TTyToolWindow;
-      ASourceBar: TTyToolWindowBar; AOldIndex: Integer);
-    procedure MovedStartsLoadingTheTarget(Sender: TObject; AWindow: TTyToolWindow;
-      ASourceBar: TTyToolWindowBar; AOldIndex: Integer);
+    procedure MovedFreesTheManager(Sender: TObject; AWindow: TTyCustomToolWindow;
+      ASourceBar: TTyCustomToolWindowBar; AOldIndex: Integer);
+    procedure MovedStartsLoadingTheTarget(Sender: TObject; AWindow: TTyCustomToolWindow;
+      ASourceBar: TTyCustomToolWindowBar; AOldIndex: Integer);
   end;
 
 implementation
@@ -286,8 +286,8 @@ begin
   Result.OnCanMoveWindow := @HandleCanMove;
 end;
 
-procedure TTyToolWindowManagerFixture.HandleCanMove(Sender: TObject; AWindow: TTyToolWindow;
-  ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
+procedure TTyToolWindowManagerFixture.HandleCanMove(Sender: TObject; AWindow: TTyCustomToolWindow;
+  ATargetBar: TTyCustomToolWindowBar; var AAllow: Boolean);
 begin
   Inc(FCanCalls);
   FCanWindow := AWindow;
@@ -317,8 +317,8 @@ begin
   ABar.OnCollapse := @LogBarCollapse;
 end;
 
-procedure TTyToolWindowManagerFixture.LogMoved(Sender: TObject; AWindow: TTyToolWindow;
-  ASourceBar: TTyToolWindowBar; AOldIndex: Integer);
+procedure TTyToolWindowManagerFixture.LogMoved(Sender: TObject; AWindow: TTyCustomToolWindow;
+  ASourceBar: TTyCustomToolWindowBar; AOldIndex: Integer);
 begin
   FLog := FLog + Format('moved(%s,%s,%d);', [AWindow.Name, ASourceBar.Name, AOldIndex]);
 end;
@@ -755,8 +755,8 @@ end;
 
 { --- MoveWindow 的同步路径(spec §9.5 / §9.9 / §6.6) ----------------------------------- }
 
-procedure TTyToolWindowManagerTests.MovedThenMoveAgain(Sender: TObject; AWindow: TTyToolWindow;
-  ASourceBar: TTyToolWindowBar; AOldIndex: Integer);
+procedure TTyToolWindowManagerTests.MovedThenMoveAgain(Sender: TObject; AWindow: TTyCustomToolWindow;
+  ASourceBar: TTyCustomToolWindowBar; AOldIndex: Integer);
 begin
   LogMoved(Sender, AWindow, ASourceBar, AOldIndex);
   if FReentered <> -1 then Exit;
@@ -764,8 +764,8 @@ begin
   FReentered := Ord(TTyToolWindowManager(Sender).MoveWindow(AWindow, FReenterTarget));
 end;
 
-procedure TTyToolWindowManagerTests.CanMoveThenMove(Sender: TObject; AWindow: TTyToolWindow;
-  ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
+procedure TTyToolWindowManagerTests.CanMoveThenMove(Sender: TObject; AWindow: TTyCustomToolWindow;
+  ATargetBar: TTyCustomToolWindowBar; var AAllow: Boolean);
 begin
   AAllow := True;
   { 只重入一次:变异掉重入闸时这里会无限递归。 }
@@ -1229,8 +1229,8 @@ begin
   end;
 end;
 
-procedure TTyToolWindowManagerTests.CanMoveFreesTheManager(Sender: TObject; AWindow: TTyToolWindow;
-  ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
+procedure TTyToolWindowManagerTests.CanMoveFreesTheManager(Sender: TObject; AWindow: TTyCustomToolWindow;
+  ATargetBar: TTyCustomToolWindowBar; var AAllow: Boolean);
 begin
   AAllow := True;
   if FDying = nil then Exit;
@@ -1377,14 +1377,14 @@ begin
   FLog := FLog + TComponent(Sender).Name + '.collapse;';
 end;
 
-procedure TTyToolWindowManagerLiveTests.LogMoved(Sender: TObject; AWindow: TTyToolWindow;
-  ASourceBar: TTyToolWindowBar; AOldIndex: Integer);
+procedure TTyToolWindowManagerLiveTests.LogMoved(Sender: TObject; AWindow: TTyCustomToolWindow;
+  ASourceBar: TTyCustomToolWindowBar; AOldIndex: Integer);
 begin
   FLog := FLog + Format('moved(%s,%s,%d);', [AWindow.Name, ASourceBar.Name, AOldIndex]);
 end;
 
-procedure TTyToolWindowManagerLiveTests.CountCan(Sender: TObject; AWindow: TTyToolWindow;
-  ATargetBar: TTyToolWindowBar; var AAllow: Boolean);
+procedure TTyToolWindowManagerLiveTests.CountCan(Sender: TObject; AWindow: TTyCustomToolWindow;
+  ATargetBar: TTyCustomToolWindowBar; var AAllow: Boolean);
 begin
   Inc(FCanCount);
   AAllow := (FDenyFrom = 0) or (FCanCount < FDenyFrom);
@@ -1513,8 +1513,8 @@ begin
   AssertSame('还在左栏', FLeft, FSearch.Bar);
 end;
 
-procedure TTyToolWindowManagerLiveTests.MovedPumps(Sender: TObject; AWindow: TTyToolWindow;
-  ASourceBar: TTyToolWindowBar; AOldIndex: Integer);
+procedure TTyToolWindowManagerLiveTests.MovedPumps(Sender: TObject; AWindow: TTyCustomToolWindow;
+  ASourceBar: TTyCustomToolWindowBar; AOldIndex: Integer);
 var
   before: Integer;
 begin
@@ -1559,7 +1559,7 @@ type
   TComponentCrack = class(TComponent);
 
 procedure TTyToolWindowManagerLiveTests.MovedStartsLoadingTheTarget(Sender: TObject;
-  AWindow: TTyToolWindow; ASourceBar: TTyToolWindowBar; AOldIndex: Integer);
+  AWindow: TTyCustomToolWindow; ASourceBar: TTyCustomToolWindowBar; AOldIndex: Integer);
 begin
   LogMoved(Sender, AWindow, ASourceBar, AOldIndex);
   TComponentCrack(FRight).Loading;
@@ -1606,7 +1606,7 @@ begin
 end;
 
 procedure TTyToolWindowManagerLiveTests.MovedFreesTheManager(Sender: TObject;
-  AWindow: TTyToolWindow; ASourceBar: TTyToolWindowBar; AOldIndex: Integer);
+  AWindow: TTyCustomToolWindow; ASourceBar: TTyCustomToolWindowBar; AOldIndex: Integer);
 begin
   LogMoved(Sender, AWindow, ASourceBar, AOldIndex);
   if FMgr = nil then Exit;

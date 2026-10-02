@@ -84,8 +84,11 @@ const
 type
   TTyToolWindowPlacement = (twpLeft, twpRight, twpBottom);
 
+  TTyCustomToolWindow = class;
   TTyToolWindow = class;
+  TTyCustomToolWindowBar = class;
   TTyToolWindowBar = class;
+  TTyCustomToolWindowActions = class;
   TTyToolWindowActions = class;
   TTyCustomToolWindowManager = class;
 
@@ -95,7 +98,7 @@ type
   { GetStyleTypeKey 在 TTyCustomControl 上是 abstract,不覆写就等于注册了一个
     「一解析样式就抛 EAbstractError」的类 —— 而 RegisterClass 已经把它交给流式化了。
     类型键是契约不是实现,一开始就钉死。 }
-  TTyToolWindow = class(TTyCustomControl)
+  TTyCustomToolWindow = class(TTyCustomControl)
   private
     FImageName: string;           { 持久键,在所在栏的生效列表里按名字解析 }
     FImageIndex: Integer;         { 最近一次按序号写进来的值;名字给不出答案时的回落 }
@@ -145,8 +148,8 @@ type
     procedure ResolveImageIndex;
     { 图标条画的是名字 / 序号、提示读的是 StripHint:改了要让所在栏重画。 }
     procedure InvalidateBar;
-    function GetBar: TTyToolWindowBar;
-    function GetActions: TTyToolWindowActions;
+    function GetBar: TTyCustomToolWindowBar;
+    function GetActions: TTyCustomToolWindowActions;
     function GetWindowIndex: Integer;
     procedure SetWindowIndex(AValue: Integer);
     function HeaderTokenPx: Integer;
@@ -317,7 +320,7 @@ type
     function HeaderGeomAt(const AClient: TRect; APPI: Integer): TTyToolWindowHeaderGeom;
     { 已有就返回第一个操作区,没有就建一个(spec §3.1 / §4):Owner 是窗口的 Owner
       (窗体拥有,设计期容器的契约),Parent 是本窗口,TabOrder 0。 }
-    function EnsureActions: TTyToolWindowActions;
+    function EnsureActions: TTyCustomToolWindowActions;
     function HeaderHeightPx: Integer;
     function HeaderRowRect: TRect;
     function BodyRect: TRect;
@@ -338,8 +341,8 @@ type
       0..窗口数-1,跟拖放提交走同一条路(TTyToolWindowBar.ReorderWindow)。不进 .lfm:
       顺序就是 Controls 顺序,已经流过了。 }
     property WindowIndex: Integer read GetWindowIndex write SetWindowIndex;
-    property Bar: TTyToolWindowBar read GetBar;
-    property Actions: TTyToolWindowActions read GetActions;
+    property Bar: TTyCustomToolWindowBar read GetBar;
+    property Actions: TTyCustomToolWindowActions read GetActions;
     { 探针:最近一次写 Visible 那一刻 csNoDesignVisible 在不在 —— 真实状态的只读视图。
       栏切页必须先改这个标志再写 Visible(spec §5.1 第 2、3 步),顺序无头看不出来,
       只能从这里钉(TestDesignVisibleFlagIsSetBeforeVisible)。 }
@@ -351,15 +354,54 @@ type
       控件自己看不出来,调这一句。侧栏重画图标条;底栏丢标签宽缓存、重画标签行(当前页的,或让出时
       栏自己的)—— 跟改这三个属性走的是同一条路。 }
     procedure InvalidateBadge;
+    property Visible stored False;
+    property TabOrder stored False;
+    { 栏推给窗口、窗口再推给操作区;不进 .lfm(读进来的时机在注册之后,两边会漂开)。 }
+    property Controller stored False;
+    { 图标条上的图标**按名字** —— 持久键,在所在栏的 EffectiveImages 里解析。列表是本库的
+      (TTyVirtualImageList 及其子类)时,名字挺得过列表调顺序。'' = 没有;外来的 LCL 列表
+      没有名字,那时它不起作用,键是 ImageIndex。找不到这个名字就不画(-1),不回落到序号。 }
+    property ImageName: string read FImageName write SetImageName;
+    { ImageName 的**视图**(TTyTabSheet 的约定):读 = 名字在生效列表里的那一格,名字解析
+      不出来时回落到最近一次写进来的序号;写 = 把那一格的名字记成 ImageName(在栏里、栏有
+      列表、栏不在加载中时当场换,否则挂起,栏的 Loaded / 换列表 / 进栏时再换)。
+      只在名字存不下这个选择时进流(ImageIndexIsStored)。类型是 ImgList.TImageIndex:
+      LCL 的 TImageIndexPropertyEditor 就会顺着 Parent = 栏 → Images 挂上下拉。 }
+    property ImageIndex: TImageIndex read GetImageIndex write SetImageIndex
+      stored ImageIndexIsStored default -1;
+    { 图标条提示;空的时候用 Caption,**不用 Hint**(见 TTyToolWindowBar.StripHintText)。
+      类型是 TTranslateString 不是 string:LCL 的窗体翻译只认类型正好是它的属性
+      (lcltranslator.pas:313),设计器里填的提示才进得了 .po(同 TTyRibbon.FileTabCaption)。 }
+    property StripHint: TTranslateString read FStripHint write SetStripHint;
+    { 切页的触发边是 Visible —— 栏把当前页显示出来、把上一页藏起来(spec §5.1),
+      而这两个事件就从 CM_VISIBLECHANGED 发,名字、签名、触发边都同 TCustomPage。 }
+    property OnShow: TNotifyEvent read FOnShow write FOnShow;
+    property OnHide: TNotifyEvent read FOnHide write FOnHide;
+    { 角标(spec §8.1),名字和语义照 TTyButton:ShowBadge 是总开关,开着时 0 也显示;> 99 显示
+      '99+';OnBadgeDisplay 可以改文字或藏起来(会被频繁调用 —— 量标签宽、画、命中都可能问 ——
+      不许有副作用;它的答案变了请调 InvalidateBadge —— 窗口自己的 Invalidate 不够:非当前页藏着,
+      角标画在栏或当前页里)。BadgeDot 画一个圆点代替数字。侧栏画在图标右上角,底栏画在标签标题
+      后面。不进布局串。 }
+    property ShowBadge: Boolean read FShowBadge write SetShowBadge default False;
+    property BadgeValue: Integer read FBadgeValue write SetBadgeValue default 0;
+    property BadgeDot: Boolean read FBadgeDot write SetBadgeDot default False;
+    property OnBadgeDisplay: TTyBadgeDisplayEvent read FOnBadgeDisplay write FOnBadgeDisplay;
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
+    property Left stored False;
+    property Top stored False;
+    property Width stored False;
+    property Height stored False;
+  end;
+
+  { TTyToolWindow publishes TTyCustomToolWindow's properties; everything lives in TTyCustomToolWindow. }
+  TTyToolWindow = class(TTyCustomToolWindow)
+  published
     property Version;
     property Enabled;
-    property Visible stored False;
+    property Visible;
     property Font;
     property ShowHint;
-    property TabOrder stored False;
+    property TabOrder;
     property TabStop;
     property OnClick;
     property OnDblClick;
@@ -403,47 +445,23 @@ type
     property OnEditingDone;
     property StyleClass;
     property StyleOverride;
-    { 栏推给窗口、窗口再推给操作区;不进 .lfm(读进来的时机在注册之后,两边会漂开)。 }
-    property Controller stored False;
+    property Controller;
     property Caption;
-    { 图标条上的图标**按名字** —— 持久键,在所在栏的 EffectiveImages 里解析。列表是本库的
-      (TTyVirtualImageList 及其子类)时,名字挺得过列表调顺序。'' = 没有;外来的 LCL 列表
-      没有名字,那时它不起作用,键是 ImageIndex。找不到这个名字就不画(-1),不回落到序号。 }
-    property ImageName: string read FImageName write SetImageName;
-    { ImageName 的**视图**(TTyTabSheet 的约定):读 = 名字在生效列表里的那一格,名字解析
-      不出来时回落到最近一次写进来的序号;写 = 把那一格的名字记成 ImageName(在栏里、栏有
-      列表、栏不在加载中时当场换,否则挂起,栏的 Loaded / 换列表 / 进栏时再换)。
-      只在名字存不下这个选择时进流(ImageIndexIsStored)。类型是 ImgList.TImageIndex:
-      LCL 的 TImageIndexPropertyEditor 就会顺着 Parent = 栏 → Images 挂上下拉。 }
-    property ImageIndex: TImageIndex read GetImageIndex write SetImageIndex
-      stored ImageIndexIsStored default -1;
-    { 图标条提示;空的时候用 Caption,**不用 Hint**(见 TTyToolWindowBar.StripHintText)。
-      类型是 TTranslateString 不是 string:LCL 的窗体翻译只认类型正好是它的属性
-      (lcltranslator.pas:313),设计器里填的提示才进得了 .po(同 TTyRibbon.FileTabCaption)。 }
-    property StripHint: TTranslateString read FStripHint write SetStripHint;
-    property Left stored False;
-    property Top stored False;
-    property Width stored False;
-    property Height stored False;
-    { 切页的触发边是 Visible —— 栏把当前页显示出来、把上一页藏起来(spec §5.1),
-      而这两个事件就从 CM_VISIBLECHANGED 发,名字、签名、触发边都同 TCustomPage。 }
-    property OnShow: TNotifyEvent read FOnShow write FOnShow;
-    property OnHide: TNotifyEvent read FOnHide write FOnHide;
-    { 角标(spec §8.1),名字和语义照 TTyButton:ShowBadge 是总开关,开着时 0 也显示;> 99 显示
-      '99+';OnBadgeDisplay 可以改文字或藏起来(会被频繁调用 —— 量标签宽、画、命中都可能问 ——
-      不许有副作用;它的答案变了请调 InvalidateBadge —— 窗口自己的 Invalidate 不够:非当前页藏着,
-      角标画在栏或当前页里)。BadgeDot 画一个圆点代替数字。侧栏画在图标右上角,底栏画在标签标题
-      后面。不进布局串。 }
-    property ShowBadge: Boolean read FShowBadge write SetShowBadge default False;
-    property BadgeValue: Integer read FBadgeValue write SetBadgeValue default 0;
-    property BadgeDot: Boolean read FBadgeDot write SetBadgeDot default False;
-    property OnBadgeDisplay: TTyBadgeDisplayEvent read FOnBadgeDisplay write FOnBadgeDisplay;
+    property ImageName;
+    property ImageIndex;
+    property StripHint;
+    property OnShow;
+    property OnHide;
+    property ShowBadge;
+    property BadgeValue;
+    property BadgeDot;
+    property OnBadgeDisplay;
   end;
 
   { 标题行尾端的操作区(spec §4)。只由组件编辑器的「添加操作区」或 EnsureActions 建,
     位置和尺寸永远由所在窗口排:Align 钉死 alCustom,Align / Anchors 不 published;
     AutoSize、ChildSizing、BorderSpacing 在这个类上不起作用,子控件由它自己排成一排。 }
-  TTyToolWindowActions = class(TTyCustomControl)
+  TTyCustomToolWindowActions = class(TTyCustomControl)
   private
     FInLayout: Boolean;
     { 上一次 AdjustSize 时窗口拿去用的尺寸(按自己字体的 PPI;自己看不见时是 0,没挂在窗口里
@@ -498,9 +516,19 @@ type
     { 设计期提示画在哪里(客户区坐标,按自己字体的密度)—— Paint 画提示用的就是这个框。
       窗口认的那一个、以及运行时,答空矩形。 }
     function NoteRect: TRect;
+    { 由窗口推送,不进 .lfm(同 TTyToolWindow)。 }
+    property Controller stored False;
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
+    { 在窗口里由标题行排出来;孤儿的位置是用户摆的,照常存。 }
+    property Left stored IsBoundsStored;
+    property Top stored IsBoundsStored;
+    property Width stored IsBoundsStored;
+    property Height stored IsBoundsStored;
+  end;
+
+  { TTyToolWindowActions publishes TTyCustomToolWindowActions's properties; everything lives in TTyCustomToolWindowActions. }
+  TTyToolWindowActions = class(TTyCustomToolWindowActions)
+  published
     property Version;
     property Enabled;
     property Visible;
@@ -550,13 +578,7 @@ type
     property OnEditingDone;
     property StyleClass;
     property StyleOverride;
-    { 由窗口推送,不进 .lfm(同 TTyToolWindow)。 }
-    property Controller stored False;
-    { 在窗口里由标题行排出来;孤儿的位置是用户摆的,照常存。 }
-    property Left stored IsBoundsStored;
-    property Top stored IsBoundsStored;
-    property Width stored IsBoundsStored;
-    property Height stored IsBoundsStored;
+    property Controller;
   end;
 
   { 栏自己那几项主题尺寸(设备像素):图标条宽(底栏为 0)、边缘区宽、单边 chrome、
@@ -571,7 +593,7 @@ type
     Strip, Edge, Chrome, ContentMin, NoteRow: Integer;
   end;
 
-  TTyToolWindowArray = array of TTyToolWindow;
+  TTyToolWindowArray = array of TTyCustomToolWindow;
 
   { 当前页的标签行此刻在谁身上(spec §3.7,E 期)。Host = nil:不是底栏、没有当前页或行高 0。
     Row 是 Host 客户区坐标;Geom 是行内坐标(行左上角为原点)。平时 Host 是当前页(行在它客户区
@@ -645,13 +667,13 @@ type
   TTyToolWindowGestureRelease = record
     Kind: TTyToolWindowReleaseKind;
     Part: TTyToolWindowBarPart;   { twrClick:按下的那个部件 }
-    Window: TTyToolWindow;        { twrClick / twrDrop:手势的窗口 }
+    Window: TTyCustomToolWindow;        { twrClick / twrDrop:手势的窗口 }
     Snapped: Boolean;             { twrResize:松手时处在吸附排布 }
   end;
 
   { 一次跨栏手势里问过的一条目标栏和答案(spec §9.4:每个目标栏每次手势只问一次)。 }
   TTyToolWindowAllowedEntry = record
-    Bar: TTyToolWindowBar;
+    Bar: TTyCustomToolWindowBar;
     Allowed: Boolean;
   end;
 
@@ -660,14 +682,14 @@ type
     内部类型:只给本单元的栏和 manager 用,不是公开 API。 }
   TTyToolWindowGesture = class
   private
-    FBar: TTyToolWindowBar;
+    FBar: TTyCustomToolWindowBar;
     { 跨栏拖动此刻的目标栏(另一侧栏);nil = 目标是源栏自己或者没有目标。反馈画在它身上。 }
-    FTarget: TTyToolWindowBar;
+    FTarget: TTyCustomToolWindowBar;
     FAllowed: array of TTyToolWindowAllowedEntry;
     { --- 手势记录(spec §9.2)。每次按下新建一条:窗口记引用不记序号。 --- }
     FState: TTyToolWindowGestureState;
     FPart: TTyToolWindowBarPart;
-    FWindow: TTyToolWindow;
+    FWindow: TTyCustomToolWindow;
     { 收到按下、持有捕获的控件:图标条是栏,底栏标签行是当前页。阈值原点、捕获轮询都按它。 }
     FCapturer: TControl;
     FOrigin: TPoint;            { 屏幕坐标 }
@@ -689,7 +711,7 @@ type
       LM_CANCELMODE、设计期离开、捕获被别人拿走都解除武装 —— 否则这一次的松开丢了,
       之后随便一条不带按键的命中测试都会被当成松开、切页、通知设计器。 }
     FDesignArmed: Boolean;
-    FDesignWindow: TTyToolWindow;
+    FDesignWindow: TTyCustomToolWindow;
     { --- 资源 --- }
     FCursor: TCursor;
     FCursorPushed: Boolean;
@@ -714,36 +736,36 @@ type
     procedure AppDeactivated(Sender: TObject);
     procedure CaptureTimerTick(Sender: TObject);
   public
-    constructor Create(ABar: TTyToolWindowBar);
+    constructor Create(ABar: TTyCustomToolWindowBar);
     destructor Destroy; override;
     { 新的一次按下(调用方已经 Reset(twgeDiscard) 过)。X, Y 是捕获者客户区坐标。 }
-    procedure Press(APart: TTyToolWindowBarPart; AWindow: TTyToolWindow; ADraggable: Boolean;
+    procedure Press(APart: TTyToolWindowBarPart; AWindow: TTyCustomToolWindow; ADraggable: Boolean;
       ACapturer: TControl; X, Y: Integer; AShift: TShiftState);
     procedure BeginResize(AStartSize: Integer; const AScreenPos: TPoint);
     function Move(AShift: TShiftState; X, Y: Integer): TTyToolWindowGestureMove;
     { APart / AWindow:松开点上的部件和窗口(调用方命中);引擎判完就收尾,再把答案交回。
       拖动的落点由调用方在调它**之前**算好 —— 落点要看手势窗口,收尾之后就没了。 }
-    function Release(APart: TTyToolWindowBarPart; AWindow: TTyToolWindow): TTyToolWindowGestureRelease;
+    function Release(APart: TTyToolWindowBarPart; AWindow: TTyCustomToolWindow): TTyToolWindowGestureRelease;
     { 手势收尾的**唯一入口**,幂等:拉宽(按 AReason 保留或回到起点)、临时光标、处理器、
       计时器、插入线、按下态、手势记录,一处全部归零。栏析构中只清标志,不重排不重画。
       见 TTyToolWindowGestureEnd。 }
     procedure Reset(AReason: TTyToolWindowGestureEnd);
     procedure SetCursor(ACursor: TCursor);
     { 换目标栏:旧的清外来落点、新的画 ASlot(ABar = nil 只清旧的)。 }
-    procedure SetTarget(ABar: TTyToolWindowBar; ASlot: Integer);
+    procedure SetTarget(ABar: TTyCustomToolWindowBar; ASlot: Integer);
     { 这一次手势里拖过去行不行:在缓存里找,没有就问 manager 的 CanMoveWindow 并记下。 }
-    function AllowedFor(ABar: TTyToolWindowBar): Boolean;
+    function AllowedFor(ABar: TTyCustomToolWindowBar): Boolean;
     { 缓存里 ABar 的答案丢掉:它离开了 manager 或被释放,同一个地址之后可能是另一条栏。 }
-    procedure ForgetBar(ABar: TTyToolWindowBar);
+    procedure ForgetBar(ABar: TTyCustomToolWindowBar);
     function AllowedCount: Integer;
-    property Target: TTyToolWindowBar read FTarget;
+    property Target: TTyCustomToolWindowBar read FTarget;
     { AWindow = nil 等于 DisarmDesign。 }
-    procedure ArmDesign(AWindow: TTyToolWindow);
+    procedure ArmDesign(AWindow: TTyCustomToolWindow);
     procedure DisarmDesign;
     function HasCaptureTimer: Boolean;
     property State: TTyToolWindowGestureState read FState;
     property Part: TTyToolWindowBarPart read FPart;
-    property Window: TTyToolWindow read FWindow;
+    property Window: TTyCustomToolWindow read FWindow;
     property Capturer: TControl read FCapturer;
     property Resizing: Boolean read FResizing;
     property Snapped: Boolean read FSnapped write FSnapped;
@@ -751,7 +773,7 @@ type
     property StartPos: TPoint read FStartPos;
     property SwallowClick: Boolean read FSwallowClick write FSwallowClick;
     property DesignArmed: Boolean read FDesignArmed;
-    property DesignWindow: TTyToolWindow read FDesignWindow;
+    property DesignWindow: TTyCustomToolWindow read FDesignWindow;
   end;
 
   { 隐藏侧栏的放置预览(spec §9.8,E 期):拖动时在隐藏的那一侧、按那条栏展开后的宽显示一块。
@@ -760,7 +782,7 @@ type
     manager 的几何(spec §9.4)。Owner = nil,由栏持有、栏析构时释放;只在运行时建,不进 .lfm。 }
   TTyToolWindowDropPreview = class(TTyCustomControl)
   private
-    FBar: TTyToolWindowBar;
+    FBar: TTyCustomToolWindowBar;
     FHot: Boolean;
     procedure SetHot(AValue: Boolean);
   protected
@@ -775,13 +797,13 @@ type
       自己字体的。预览挂在栏的父控件上,自己的字体 PPI 跟栏的不一定一样。 }
     function PaintPPI: Integer;
   public
-    constructor CreateFor(ABar: TTyToolWindowBar);
+    constructor CreateFor(ABar: TTyCustomToolWindowBar);
     procedure Paint; override;
     { 指针在里面、它是此刻的目标(spec §9.8)。变了才重画。 }
     property Hot: Boolean read FHot write SetHot;
   end;
 
-  TTyToolWindowBar = class(TTyCustomControl)
+  TTyCustomToolWindowBar = class(TTyCustomControl)
   private
     { 注册过的窗口(集合,顺序不算数)。**窗口顺序永远就是 Controls 顺序**(spec §6.1),
       每次现取:SetControlIndex 不是虚方法,设计器的「移到最前 / 最后」直接调它 ——
@@ -789,7 +811,7 @@ type
     FRegistered: TTyToolWindowArray;
     { 正在离开的窗口和它离开前的窗口序号。两条离开的路(SetParent 的注销分支、释放时的
       Notification)走到时它都已经不在 Controls 里了,所以在 RemoveControl 里先记下来。 }
-    FLeaving: TTyToolWindow;
+    FLeaving: TTyCustomToolWindow;
     FLeavingIndex: Integer;
     FPlacement: TTyToolWindowPlacement;
     FExpandedSize: Integer;
@@ -797,13 +819,13 @@ type
     { 当前页。加载中注册进来的窗口不碰它 —— 加载中「哪一页是当前页」只有一个答案:
       Loaded 还没挑,FActive 是 nil(继承窗体的第二遍加载例外:那时第一遍挑好的那页
       真的显示着,它照样答那一页)。 }
-    FActive: TTyToolWindow;
+    FActive: TTyCustomToolWindow;
     { 加载中的待定当前页,Loaded 里应用(那时窗口才全注册完)。两种来源,后写的算:
       读进来 / 设进来的 ActiveIndex 记序号(流里本来就是序号);按窗口激活的
       (ActiveWindow、ShowControl)记窗口本身 —— 记成序号的话,加载中调顺序、有窗口
       离开,就会指到别的窗口上。Loaded 应用完把序号记成真正应用的那一个、窗口清空。 }
     FLoadingActiveIndex: Integer;
-    FLoadingTarget: TTyToolWindow;
+    FLoadingTarget: TTyCustomToolWindow;
     { 栏自己在切 Visible:TTyToolWindow.SetVisible 看见它就直接放行,不再路由回栏。 }
     FBarSwitching: Boolean;
     FDeriving: Boolean;
@@ -881,7 +903,7 @@ type
     procedure SetCollapsed(AValue: Boolean);
     function GetActiveIndex: Integer;
     procedure SetActiveIndex(AValue: Integer);
-    function GetWindow(AIndex: Integer): TTyToolWindow;
+    function GetWindow(AIndex: Integer): TTyCustomToolWindow;
     function GetWindowCount: Integer;
     function WidthIsStored: Boolean;
     function HeightIsStored: Boolean;
@@ -930,24 +952,24 @@ type
     procedure Relayout;
     { Controls 顺序里的窗口,去掉 AExcept(可为 nil)。非窗口子控件(粘贴等途径漏进来的)
       不计入任何序号。 }
-    function WindowList(AExcept: TTyToolWindow): TTyToolWindowArray;
-    function IsRegistered(AWindow: TTyToolWindow): Boolean;
+    function WindowList(AExcept: TTyCustomToolWindow): TTyToolWindowArray;
+    function IsRegistered(AWindow: TTyCustomToolWindow): Boolean;
     { 把窗口 AWindow 挪到窗口序号 APos 要用的 Controls 下标(spec §2 的换算)。 }
-    function ControlIndexForWindowPos(AWindow: TTyToolWindow; APos: Integer): Integer;
+    function ControlIndexForWindowPos(AWindow: TTyCustomToolWindow; APos: Integer): Integer;
     procedure MoveToOuterEdge;
-    function FocusIsInside(AWindow: TTyToolWindow): Boolean;
-    procedure ShowWindowNow(AWindow: TTyToolWindow);
-    procedure HideWindowNow(AWindow: TTyToolWindow);
+    function FocusIsInside(AWindow: TTyCustomToolWindow): Boolean;
+    procedure ShowWindowNow(AWindow: TTyCustomToolWindow);
+    procedure HideWindowNow(AWindow: TTyCustomToolWindow);
     { spec §5.1 的六步。AOld 只用来判断焦点原来在不在旧页里(可为 nil 或就是 AWindow)。
       显示 / 隐藏不看 AOld:先显示目标,再把栏里**其余每一个**窗口藏起来;收起着就
       连目标一起藏。 }
-    procedure SwitchCore(AWindow, AOld: TTyToolWindow; AMoveFocus: Boolean);
+    procedure SwitchCore(AWindow, AOld: TTyCustomToolWindow; AMoveFocus: Boolean);
     { 一次静默切页 = BeginSilent + 切 + EndSilent(try/finally)的薄包装。 }
-    procedure SwitchSilently(AWindow: TTyToolWindow);
+    procedure SwitchSilently(AWindow: TTyCustomToolWindow);
     { 跨栏移动的最后一步(CommitCrossMove):AWindow(已经在本栏里)成为当前页并展开;设计期
       只激活。收起着时先按展开的样子切页、再撤收起 —— 先切再展开的话,带着 Visible 挪进来的
       AWindow 会先被收起的切页藏一次、再被展开显示一次,多一对 OnHide / OnShow。 }
-    procedure ActivateExpanded(AWindow: TTyToolWindow);
+    procedure ActivateExpanded(AWindow: TTyCustomToolWindow);
     function EventsAllowed: Boolean;
     procedure DoChange;
   private
@@ -969,7 +991,7 @@ type
     procedure FireBarEvent(AEvent: TTyToolWindowBarEvent);
     { 栏内调顺序的实体(不发 OnWindowMoved):钳到 0..N-1、换算成 Controls 下标。答挪之前的
       窗口序号;不在本栏或没挪动答 -1。 }
-    function PlaceWindow(AWindow: TTyToolWindow; AIndex: Integer): Integer;
+    function PlaceWindow(AWindow: TTyCustomToolWindow; AIndex: Integer): Integer;
     { 长度 token 按给定 PPI 换成设备像素,负的按 0。 }
     function TokenPxAt(const AName: string; ADefault, APPI: Integer): Integer;
     { 栏自己那几项主题尺寸按给定 PPI 现算(不缓存);Metrics 是按自己字体 PPI 的那一份的缓存。 }
@@ -1015,7 +1037,7 @@ type
     function MeasureTabWidths(const AWins: TTyToolWindowArray; APPI: Integer): TTyToolWindowWidths;
     { 标签宽缓存键里一个窗口的角标那一项:不显示 ''、圆点 #1'dot'(不会是真文字的串)、
       数字 '#' + 文字。 }
-    function BadgeCacheKey(AWindow: TTyToolWindow): string;
+    function BadgeCacheKey(AWindow: TTyCustomToolWindow): string;
     { 只清标签宽缓存的标志(角标变了,spec §8.1)。 }
     procedure TabWidthsChanged;
     { 标签行竖分隔线的线宽(设备像素):TyToolWindowSeparator 解析出可见边框时按 border-width
@@ -1023,7 +1045,7 @@ type
     function SeparatorLinePx(APPI: Integer): Integer;
     { 标题行排布的全部输入:窗口给公共那几项(模式、行宽、pad、gap、操作区宽、RTL),
       底栏由栏补标签宽、当前页、标签区下限、按钮、分隔线槽、溢出按钮宽。 }
-    function HeaderInputFor(AWindow: TTyToolWindow; ARowWidth, ARowHeight,
+    function HeaderInputFor(AWindow: TTyCustomToolWindow; ARowWidth, ARowHeight,
       APPI: Integer): TTyToolWindowHeaderInput;
   private
     { 上一次**用过**的统一行高里操作区那一项(HeaderActionsHeight(nil, PPI));-1 = 还没用过。 }
@@ -1058,7 +1080,7 @@ type
       高按 '0',交给 TyBadgeSize —— 量标签宽和画胶囊都问这里,两边差一个像素胶囊就压到下一个
       标签上,而且不会红。样式取 TyToolWindowBadge 静止态(不看禁用,同 TTyButton 的徽标);
       内边距、--badge-min-size、--badge-dot-size 按 APPI。 }
-    function BadgeSizeAt(AWindow: TTyToolWindow; APPI: Integer; out AText: string;
+    function BadgeSizeAt(AWindow: TTyCustomToolWindow; APPI: Integer; out AText: string;
       out ADot: Boolean): TSize;
     { 在 ABox(画笔坐标)里画角标。ABox、AText、ADot 都是同一次 BadgeSizeAt 的答案 —— 不再问
       OnBadgeDisplay:一次绘制里事件只答一次,量的和画的就不会是两个答案(事件是用户代码,两次之间
@@ -1093,18 +1115,18 @@ type
     { 标签行上 APart(标签时是窗口 AItem 的那一个)此刻是不是按下着 —— 从手势引擎读,不另记:
       武装着(标签在拖动中也算,源标签保持 :active 直到收尾)、捕获者是这一页、部件相同
       (标签还要窗口相同)。 }
-    function HeaderPressed(AWindow: TTyToolWindow; APart: TTyToolWindowBarPart;
-      AItem: TTyToolWindow): Boolean;
+    function HeaderPressed(AWindow: TTyCustomToolWindow; APart: TTyToolWindowBarPart;
+      AItem: TTyCustomToolWindow): Boolean;
     { 标签行上的手势此刻捕获在 AWindow 上(引擎的捕获者就是它)—— 窗口决定「移动 / 松开
       转不转给栏」只问这一处,自己不另记镜像。 }
-    function HeaderCapturedBy(AWindow: TTyToolWindow): Boolean;
+    function HeaderCapturedBy(AWindow: TTyCustomToolWindow): Boolean;
     { 标签的状态:当前页只有 :selected(spec §12,禁用时再加 :disabled);其余按禁用 / 悬停 /
       按下 / 静止。AIndex 是窗口序号、AItem 是那个窗口、AActiveIndex 是当前页的窗口序号 ——
       由调用方一次取好(PaintHeader 逐个标签问,每次现数窗口表就是 O(N²))。 }
-    function HeaderTabStates(AWindow: TTyToolWindow; AIndex, AActiveIndex: Integer;
-      AItem: TTyToolWindow): TTyStateSet;
+    function HeaderTabStates(AWindow: TTyCustomToolWindow; AIndex, AActiveIndex: Integer;
+      AItem: TTyCustomToolWindow): TTyStateSet;
     { 溢出 / 最大化 / 收起按钮的状态:禁用 / 悬停 / 按下 / 静止。 }
-    function HeaderPartStates(AWindow: TTyToolWindow; APart: TTyToolWindowBarPart): TTyStateSet;
+    function HeaderPartStates(AWindow: TTyCustomToolWindow; APart: TTyToolWindowBarPart): TTyStateSet;
     { 标签行的像素属于当前页,当前页有绘制缓存(spec §3.5):标签行的一切视觉变化都经这里丢
       当前页的缓存。只 Invalidate 栏的话,运行时当前页 blit 旧帧。 }
     procedure InvalidateHeader;
@@ -1120,7 +1142,7 @@ type
     { 拖动中:重算插入槽、换光标(区域外 crNoDrop,其余 crDrag;空操作不画线)。 }
     procedure RowDragIn(const AHost: TTyToolWindowTabRowHost; X, Y: Integer);
     { 页当宿主时的那一份:行在页客户区原点,几何由调用方给(页一次事件只排一份)。 }
-    function PageRowHost(AWindow: TTyToolWindow; const AGeom: TTyToolWindowHeaderGeom): TTyToolWindowTabRowHost;
+    function PageRowHost(AWindow: TTyCustomToolWindow; const AGeom: TTyToolWindowHeaderGeom): TTyToolWindowTabRowHost;
     { 标签行手势的核心(spec §7.4 / §9.2),按宿主做:AHost 是 TabRowHost(当前页或栏),X / Y 是
       宿主客户区坐标。引擎拿宿主坐标(阈值原点、捕获轮询都按宿主),几何命中减掉 Row.TopLeft
       换成行内坐标。当前页当宿主时行在它客户区原点,两套坐标相等 —— 原来那一路行为不变。 }
@@ -1133,7 +1155,7 @@ type
     function RowHintAt(const AHost: TTyToolWindowTabRowHost; X, Y: Integer; out AText: string;
       out ARect: TRect): Boolean;
     { 移动的实体,几何由调用方给(当前页一次事件只排一份,见 TTyToolWindow.MouseMove)。 }
-    procedure HeaderMoveIn(AWindow: TTyToolWindow; const AGeom: TTyToolWindowHeaderGeom;
+    procedure HeaderMoveIn(AWindow: TTyCustomToolWindow; const AGeom: TTyToolWindowHeaderGeom;
       Shift: TShiftState; X, Y: Integer);
   private
     { --- 最大化(spec §6.4)。只在运行时有,不进 .lfm。 --- }
@@ -1150,13 +1172,13 @@ type
     { 图标条某一格的状态:disabled / hover / selected / active(照 TTySegmented.ItemStates)。
       收起时当前图标不画 :selected(spec §5.3)。AWindow 是第 AIndex 个窗口,由调用方一次取好
       (绘制循环里逐格现数窗口表就是 O(N²))。 }
-    function StripItemStates(AIndex: Integer; AWindow: TTyToolWindow): TTyStateSet;
+    function StripItemStates(AIndex: Integer; AWindow: TTyCustomToolWindow): TTyStateSet;
     { 用户能不能点它切过去、按住它拖(spec §3.7):看窗口**自己的** Enabled —— IsEnabled 顺着
       父链算,栏一禁用全都答假,当前页的例外就被栏的禁用误触发了。栏自己禁用另有一道闸。 }
-    function WindowClickable(AWindow: TTyToolWindow): Boolean;
+    function WindowClickable(AWindow: TTyCustomToolWindow): Boolean;
     { 窗口的 Enabled 变了:正武装 / 拖着它、或捕获在它身上的手势取消;它的悬停清掉;重画。
       底栏当前页的「让出标签行」也在这里对一遍。 }
-    procedure WindowEnabledChanged(AWindow: TTyToolWindow);
+    procedure WindowEnabledChanged(AWindow: TTyCustomToolWindow);
     { 溢出按钮的状态:disabled / hover / active。 }
     function OverflowStates: TTyStateSet;
   private
@@ -1171,7 +1193,7 @@ type
     FOverflowHover: Boolean;
     FOverflowPressed: Boolean;
     { 右键(spec §6.8):落在图标上时是那个窗口,别处 nil。 }
-    FContextWindow: TTyToolWindow;
+    FContextWindow: TTyCustomToolWindow;
     { 这一次右键不在图标上:GetPopupMenu 答 nil,请求冒泡到窗体。DoContextPopup 置、
       GetPopupMenu 用掉就清(LCL 在同一条 WM_CONTEXTMENU 里先调前者、再调后者)。 }
     FPopupBlocked: Boolean;
@@ -1215,7 +1237,7 @@ type
     function DropLineY(const L: TTyToolWindowBarLayout): Integer;
     { 栏内调顺序:WindowIndex、图标 / 标签拖放提交、同栏 MoveWindow 的唯一一条路。
       PlaceWindow 真的挪了就经 manager 发 OnWindowMoved(spec §6.6)。 }
-    procedure ReorderWindow(AWindow: TTyToolWindow; AIndex: Integer);
+    procedure ReorderWindow(AWindow: TTyCustomToolWindow; AIndex: Integer);
     procedure SetStripHover(AIndex: Integer; AOverflow: Boolean);
     procedure UpdateHoverAt(X, Y: Integer);
     { spec §5.1 第 4 步:切页之后条上的图标可能换了位置(当前页被强制留在条上),按指针此刻
@@ -1223,7 +1245,7 @@ type
     procedure RecheckHover;
     { 点击语义(spec §9.3):不是当前页 → 激活(收起着就展开);是当前页 → 切换收起。
       按窗口 300 ms 防抖。 }
-    procedure StripClick(AWindow: TTyToolWindow);
+    procedure StripClick(AWindow: TTyCustomToolWindow);
     procedure OverflowItemClick(Sender: TObject);
     { 溢出按钮上松开:按此刻收进去的窗口重建菜单,有句柄才弹。 }
     procedure ShowOverflowMenu;
@@ -1272,8 +1294,8 @@ type
       任何位置左键按下都会起)。位置取按下消息记下的那一个,不取此刻的指针。 }
     procedure BeginAutoDrag; override;
     { 注册 / 注销窗口:SetParent 和释放通知的内部簿记,不是给外面调的接口。 }
-    procedure RegisterWindow(AWindow: TTyToolWindow);
-    procedure UnregisterWindow(AWindow: TTyToolWindow);
+    procedure RegisterWindow(AWindow: TTyCustomToolWindow);
+    procedure UnregisterWindow(AWindow: TTyCustomToolWindow);
     function GetStyleTypeKey: string; override;
     { 栏客户区坐标(0,0 起)里画整条栏:底色、图标条、图标、指示条、溢出、边缘区、设计期提示。
       几何全部来自 LayoutIn(R),跟 AdjustClientRect / 命中是同一份。 }
@@ -1324,11 +1346,11 @@ type
     function EffectiveImages: TCustomImageList;
     { 图标条要画的那一格:ImageName 非空就按名字在 EffectiveImages 里找,找不到是 -1
       (不许乱画一个);名字为空才用序号。 }
-    function ResolvedImageIndex(AWindow: TTyToolWindow): Integer;
+    function ResolvedImageIndex(AWindow: TTyCustomToolWindow): Integer;
     { 图标条提示的文字:StripHint,空的时候 Caption。**不用 Hint**:LCL 顺着父链找第一个
       非空 Hint(application.inc:33-41),窗口的 Hint 一设,里面所有没设 Hint 的控件都会
       冒出它。栏的 CM_HINTSHOW(StripHintAt)用的就是它。 }
-    function StripHintText(AWindow: TTyToolWindow): string;
+    function StripHintText(AWindow: TTyCustomToolWindow): string;
     procedure AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
       const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer); override;
     { 设计器拖栏的边:只有这一种 SetBounds 写回 ExpandedSize(spec §6.1)。Align 不是
@@ -1354,7 +1376,7 @@ type
       绘制、手势、提示、设计期命中问的都是 BarLayout 这一份几何。 }
     function PartAt(X, Y: Integer; out AIndex: Integer): TTyToolWindowBarPart;
     { (X, Y) 上的图标对应的窗口;不在图标上答 nil(同 IndexOfTabAt,spec §6.8)。 }
-    function WindowAtPos(X, Y: Integer): TTyToolWindow;
+    function WindowAtPos(X, Y: Integer): TTyCustomToolWindow;
     { 提示的纯查询:图标上答 True,给文字(StripHint,空则 Caption)和那一格的矩形。 }
     function StripHintAt(X, Y: Integer; out AText: string; out ARect: TRect): Boolean;
     { 收进溢出菜单的窗口(窗口序号,按窗口顺序)。 }
@@ -1366,7 +1388,7 @@ type
       读写方向(那一行就是按它镜像的)。ShowOverflowMenu 只问这一处。 }
     function OverflowMenuAnchorIn(out APoint: TPoint; out AAlignment: TPopupAlignment): TWinControl;
     { 最近一次右键落在哪个窗口的图标上;不在图标上是 nil(spec §6.8)。只读。 }
-    property ContextWindow: TTyToolWindow read FContextWindow;
+    property ContextWindow: TTyCustomToolWindow read FContextWindow;
     { 拉宽边(= BarLayout.Edge):运行时收起、没有窗口时为空。 }
     function EdgeRect: TRect;
     { 探针:手势此刻是否武装着 / 拖动中 —— 真实状态的只读视图。 }
@@ -1389,17 +1411,17 @@ type
     function AllowedCacheCountForTest: Integer;
     { 探针:此刻挂着处理器的兄弟有几个(真实列表的长度)。 }
     function WatchedSiblingCountForTest: Integer;
-    procedure ActivateWindow(AWindow: TTyToolWindow);
-    function IndexOfWindow(AWindow: TTyToolWindow): Integer;
+    procedure ActivateWindow(AWindow: TTyCustomToolWindow);
+    function IndexOfWindow(AWindow: TTyCustomToolWindow): Integer;
     function ChromeInsetPx: Integer;
     function StripSizePx: Integer;
     function EdgeSizePx: Integer;
     function ContentMinPx: Integer;
-    property Windows[AIndex: Integer]: TTyToolWindow read GetWindow;
+    property Windows[AIndex: Integer]: TTyCustomToolWindow read GetWindow;
     property WindowCount: Integer read GetWindowCount;
     { 设成不在本栏里的窗口(或 nil)被忽略。加载中答 nil(见 FActive)—— 继承窗体的第二遍
       加载例外,那时答第一遍挑好、正显示着的那一页。设进来的记作待定,Loaded 应用。 }
-    property ActiveWindow: TTyToolWindow read FActive write ActivateWindow;
+    property ActiveWindow: TTyCustomToolWindow read FActive write ActivateWindow;
     { 底栏最大化(spec §6.4):撑满父控件里编辑区那一截,还原回 ExpandedSize 推的高。**不
       published**:只在运行时有、不进 .lfm。收起、栏变空、换父控件、改 Placement 之前先还原。 }
     property Maximized: Boolean read FMaximized write SetMaximized;
@@ -1410,7 +1432,7 @@ type
       当前页的标题行」;没有当前页时几何为空、部件为 none。尺寸一律按入参 APPI(同 RenderTo
       的一套尺度)。只有栏一个实现、只有窗口一个调用方,所以是栏上的普通方法,不另立接口;
       放 public 是给测试直接问的。 --- }
-    function HeaderMode(AWindow: TTyToolWindow): TTyToolWindowHeaderMode;
+    function HeaderMode(AWindow: TTyCustomToolWindow): TTyToolWindowHeaderMode;
     { 栏此刻是不是替当前页画标签行、收它的输入(spec §3.7「让出标签行」):运行时、底栏、有当前
       页、当前页**自己的** Enabled = False、栏没收起、拉宽边没吸附着(吸附 = 按收起排布,高 0)。 }
     function HostsTabRow: Boolean;
@@ -1428,27 +1450,56 @@ type
       按下态和插入线的捕获者判断都问它。见 TTyToolWindowTabRowHost。 }
     function TabRowHost: TTyToolWindowTabRowHost;
     { 底栏统一行高里操作区那一项:栏里所有窗口操作区 raw 首选高的最大值(spec §3.4)。 }
-    function HeaderActionsHeight(AWindow: TTyToolWindow; APPI: Integer): Integer;
-    function HeaderGeometry(AWindow: TTyToolWindow; ARowWidth, ARowHeight,
+    function HeaderActionsHeight(AWindow: TTyCustomToolWindow; APPI: Integer): Integer;
+    function HeaderGeometry(AWindow: TTyCustomToolWindow; ARowWidth, ARowHeight,
       APPI: Integer): TTyToolWindowHeaderGeom;
-    procedure PaintHeader(AWindow: TTyToolWindow; APainter: TTyPainter; const ARow: TRect;
+    procedure PaintHeader(AWindow: TTyCustomToolWindow; APainter: TTyPainter; const ARow: TRect;
       const AGeom: TTyToolWindowHeaderGeom; APPI: Integer);
     { AWindow 的客户区坐标(nil = 栏坐标、当前页);ARect 是命中部件的矩形,同一套坐标。 }
-    function HeaderZoneAt(AWindow: TTyToolWindow; X, Y: Integer; out AIndex: Integer;
+    function HeaderZoneAt(AWindow: TTyCustomToolWindow; X, Y: Integer; out AIndex: Integer;
       out ARect: TRect): TTyToolWindowZone;
-    procedure HeaderMouseDown(AWindow: TTyToolWindow; Button: TMouseButton; Shift: TShiftState;
+    procedure HeaderMouseDown(AWindow: TTyCustomToolWindow; Button: TMouseButton; Shift: TShiftState;
       X, Y: Integer);
-    procedure HeaderMouseUp(AWindow: TTyToolWindow; Button: TMouseButton; Shift: TShiftState;
+    procedure HeaderMouseUp(AWindow: TTyCustomToolWindow; Button: TMouseButton; Shift: TShiftState;
       X, Y: Integer);
-    procedure HeaderMouseLeave(AWindow: TTyToolWindow);
+    procedure HeaderMouseLeave(AWindow: TTyCustomToolWindow);
     { 捕获者是当前页、它收到了 LM_CANCELMODE(spec §9.7)。 }
-    procedure HeaderCancelMode(AWindow: TTyToolWindow);
-    function HeaderHint(AWindow: TTyToolWindow; X, Y: Integer; out AText: string;
+    procedure HeaderCancelMode(AWindow: TTyCustomToolWindow);
+    function HeaderHint(AWindow: TTyCustomToolWindow; X, Y: Integer; out AText: string;
       out ARect: TRect): Boolean;
-    procedure HeaderContextPopup(AWindow: TTyToolWindow; X, Y: Integer);
+    procedure HeaderContextPopup(AWindow: TTyCustomToolWindow; X, Y: Integer);
+    property Placement: TTyToolWindowPlacement read FPlacement write SetPlacement default twpLeft;
+    property ExpandedSize: Integer read FExpandedSize write SetExpandedSize
+      default TyToolWindowDefaultExpandedSize;
+    property Collapsed: Boolean read FCollapsed write SetCollapsed default False;
+    { 窗口序号,跟随窗口身份:调顺序后当前页还是那个窗口,数值跟着变。 }
+    property ActiveIndex: Integer read GetActiveIndex write SetActiveIndex default -1;
+    { 跨侧拖动、MoveWindow、布局保存的协调者(spec §2)。同一个 manager 下与别的栏 Placement
+      相同的每一条都不可用(spec §10.6),栏内调顺序照常。setter 在流式 fixup 里跑,从不抛异常。 }
+    property Manager: TTyCustomToolWindowManager read FManager write SetManager;
+    { 窗口图标的列表。对象查看器里窗口 ImageIndex 的下拉只看这一个(graphpropedits.pas:
+      713-728),看不到 Manager.Images 回落 —— 只在 manager 上设列表时请设 ImageName。
+      只设了 ImageIndex、没设 ImageName 的窗口要在两侧之间移动,就得用 manager 上的共享列表。 }
+    property Images: TCustomImageList read FImages write SetImages;
+    { 构造时按 Placement 设成 alLeft,default 必须跟着一致(否则 .lfm 省略的那个值加载后丢)。
+      几何一律看 Placement,不看 Align。 }
+    property Align default alLeft;
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    property OnCollapse: TNotifyEvent read FOnCollapse write FOnCollapse;
+    property OnExpand: TNotifyEvent read FOnExpand write FOnExpand;
+    { 一侧没有窗口时整条隐藏(推导宽度为 0,Visible 不动),默认开;只对侧栏起作用 —— 底栏没有
+      窗口时本来就高 0。设计期永远不隐藏。隐藏的栏照样可用(IsBarUsable / UsableBar /
+      MoveWindow),拖动时在它的位置显示放置预览(spec §6.9 / §9.8)。 }
+    property HideWhenEmpty: Boolean read FHideWhenEmpty write SetHideWhenEmpty default True;
   published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
+    { 沿栏轴向的那一边由 ExpandedSize 推出来,不进 .lfm。 }
+    property Width stored WidthIsStored;
+    property Height stored HeightIsStored;
+  end;
+
+  { TTyToolWindowBar publishes TTyCustomToolWindowBar's properties; everything lives in TTyCustomToolWindowBar. }
+  TTyToolWindowBar = class(TTyCustomToolWindowBar)
+  published
     property Version;
     property Enabled;
     property Visible;
@@ -1499,41 +1550,26 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Placement: TTyToolWindowPlacement read FPlacement write SetPlacement default twpLeft;
-    property ExpandedSize: Integer read FExpandedSize write SetExpandedSize
-      default TyToolWindowDefaultExpandedSize;
-    property Collapsed: Boolean read FCollapsed write SetCollapsed default False;
-    { 窗口序号,跟随窗口身份:调顺序后当前页还是那个窗口,数值跟着变。 }
-    property ActiveIndex: Integer read GetActiveIndex write SetActiveIndex default -1;
-    { 跨侧拖动、MoveWindow、布局保存的协调者(spec §2)。同一个 manager 下与别的栏 Placement
-      相同的每一条都不可用(spec §10.6),栏内调顺序照常。setter 在流式 fixup 里跑,从不抛异常。 }
-    property Manager: TTyCustomToolWindowManager read FManager write SetManager;
-    { 窗口图标的列表。对象查看器里窗口 ImageIndex 的下拉只看这一个(graphpropedits.pas:
-      713-728),看不到 Manager.Images 回落 —— 只在 manager 上设列表时请设 ImageName。
-      只设了 ImageIndex、没设 ImageName 的窗口要在两侧之间移动,就得用 manager 上的共享列表。 }
-    property Images: TCustomImageList read FImages write SetImages;
-    { 构造时按 Placement 设成 alLeft,default 必须跟着一致(否则 .lfm 省略的那个值加载后丢)。
-      几何一律看 Placement,不看 Align。 }
-    property Align default alLeft;
-    { 沿栏轴向的那一边由 ExpandedSize 推出来,不进 .lfm。 }
-    property Width stored WidthIsStored;
-    property Height stored HeightIsStored;
-    property OnChange: TNotifyEvent read FOnChange write FOnChange;
-    property OnCollapse: TNotifyEvent read FOnCollapse write FOnCollapse;
-    property OnExpand: TNotifyEvent read FOnExpand write FOnExpand;
-    { 一侧没有窗口时整条隐藏(推导宽度为 0,Visible 不动),默认开;只对侧栏起作用 —— 底栏没有
-      窗口时本来就高 0。设计期永远不隐藏。隐藏的栏照样可用(IsBarUsable / UsableBar /
-      MoveWindow),拖动时在它的位置显示放置预览(spec §6.9 / §9.8)。 }
-    property HideWhenEmpty: Boolean read FHideWhenEmpty write SetHideWhenEmpty default True;
+    property Placement;
+    property ExpandedSize;
+    property Collapsed;
+    property ActiveIndex;
+    property Manager;
+    property Images;
+    property Align;
+    property OnChange;
+    property OnCollapse;
+    property OnExpand;
+    property HideWhenEmpty;
   end;
 
   { spec §9.9:跨栏移动之前问一次(拖动悬停、放下、MoveWindow、排队的移动执行前)。 }
-  TTyCanMoveWindowEvent = procedure(Sender: TObject; AWindow: TTyToolWindow;
-    ATargetBar: TTyToolWindowBar; var AAllow: Boolean) of object;
+  TTyCanMoveWindowEvent = procedure(Sender: TObject; AWindow: TTyCustomToolWindow;
+    ATargetBar: TTyCustomToolWindowBar; var AAllow: Boolean) of object;
   { spec §6.6:运行时窗口的栏或索引真正变了之后(手势、MoveWindow、WindowIndex、同一 manager 下
     直接改 Parent)。AOldIndex 是它在 ASourceBar 里原来的窗口序号。 }
-  TTyWindowMovedEvent = procedure(Sender: TObject; AWindow: TTyToolWindow;
-    ASourceBar: TTyToolWindowBar; AOldIndex: Integer) of object;
+  TTyWindowMovedEvent = procedure(Sender: TObject; AWindow: TTyCustomToolWindow;
+    ASourceBar: TTyCustomToolWindowBar; AOldIndex: Integer) of object;
 
   { 派发 manager 事件那几处放在栈上的一格(内部类型,不是公开 API):处理器里把 manager 释放了
     (spec §6.6 不许,但不许崩),析构把链上每一格的 Alive 置 False;处理器返回后只看这一格,
@@ -1560,24 +1596,24 @@ type
     FLife: PTyToolWindowLife;
     { 正在拖图标的那条栏(spec §9.2「标记 manager 正在拖」);nil = 没在拖。由源栏的引擎写:
       进入拖动时置上,收尾(ReleaseResources)时清。 }
-    FDragSource: TTyToolWindowBar;
+    FDragSource: TTyCustomToolWindowBar;
     { FDragSource 只经这里写:值变了就调 DragSourceChanged(E 期,放置预览要跟着)。 }
-    procedure SetDragSource(ABar: TTyToolWindowBar);
-    procedure AddBar(ABar: TTyToolWindowBar);
-    procedure RemoveBar(ABar: TTyToolWindowBar);
+    procedure SetDragSource(ABar: TTyCustomToolWindowBar);
+    procedure AddBar(ABar: TTyCustomToolWindowBar);
+    procedure RemoveBar(ABar: TTyCustomToolWindowBar);
     procedure SetImages(AValue: TCustomImageList);
     { 每条没在释放的注册栏的生效列表可能换了(spec §8)。 }
     procedure NotifyImagesChanged;
     { 发 OnWindowMoved 的门:manager 和源栏都不在设计 / 加载 / 释放中(spec §6.6)。 }
-    function MovedEventAllowed(ASource: TTyToolWindowBar): Boolean;
+    function MovedEventAllowed(ASource: TTyCustomToolWindowBar): Boolean;
     { 参与拖动的栏(源栏或此刻的目标栏)改了 Collapsed / Placement / Manager:取消。 }
-    procedure BarChanged(ABar: TTyToolWindowBar);
+    procedure BarChanged(ABar: TTyCustomToolWindowBar);
     { 注册栏的 Placement 集合变了(加进 / 摘掉一条栏、某条栏改了 Placement):每条栏的冲突提示
       都可能出现或消失(spec §10.6)。可用性现算,这里只让它们按新答案重排、重画。 }
     procedure PlacementsChanged;
   protected
     { 注册着的栏,注册顺序,无语义(「先注册的赢」不成立:fixup 倒序执行,spec §10.6)。 }
-    FBars: array of TTyToolWindowBar;
+    FBars: array of TTyCustomToolWindowBar;
     { > 0 = 正在发本 manager 的事件:处理器里再调 MoveWindow 答 False(spec §9.9)。 }
     FEventDepth: Integer;
     { 生命格进链 / 出链(见 TTyToolWindowLife)。Leave 在格子已死时什么都不做 —— 那时 Self
@@ -1588,55 +1624,55 @@ type
     procedure EnterEvent(var ALife: TTyToolWindowLife);
     procedure LeaveEvent(var ALife: TTyToolWindowLife);
     { spec §9.9 的结构检查(不问事件)。ASource 出参是窗口此刻的栏。 }
-    function StructureAllows(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar;
-      out ASource: TTyToolWindowBar): Boolean;
+    function StructureAllows(AWindow: TTyCustomToolWindow; ATarget: TTyCustomToolWindowBar;
+      out ASource: TTyCustomToolWindowBar): Boolean;
     { 发 OnWindowMoved(spec §6.6),包在 FEventDepth 里:处理器里再调 MoveWindow 答 False。 }
-    procedure WindowMoved(AWindow: TTyToolWindow; ASource: TTyToolWindowBar; AOldIndex: Integer);
+    procedure WindowMoved(AWindow: TTyCustomToolWindow; ASource: TTyCustomToolWindowBar; AOldIndex: Integer);
     { 真正的一次跨栏移动(spec §9.5 的顺序,跟直接改 Parent 同一条 CommitCrossMove)。调用方
       已经过了结构检查和 CanMoveWindow。AIndex 已经换算好(MaxInt = 末尾)。 }
-    procedure MoveNow(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar; AIndex: Integer);
+    procedure MoveNow(AWindow: TTyCustomToolWindow; ATarget: TTyCustomToolWindowBar; AIndex: Integer);
     { 拖放提交(spec §9.5):结构检查和 CanMoveWindow(放下时再问一次)都过才挪,**同步**,
       窗体 Showing 了也不排队(源栏不在窗口里,LCL 在 MouseUp 之前已放掉捕获)。 }
-    function MoveFromDrop(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar;
+    function MoveFromDrop(AWindow: TTyCustomToolWindow; ATarget: TTyCustomToolWindowBar;
       ASlot: Integer): Boolean;
     { --- 栏 / 窗口 / 引擎回调的钩子。基类的实现是「没有这回事」,TTyToolWindowManager 重写。 --- }
     { 改布局之前(收起、尺寸、调顺序、跨栏、当前页):代码搭的 manager 在这里记默认布局
       (spec §10.5)。调用方在**改之前**调。 }
-    procedure NoteLayoutChanging(ABar: TTyToolWindowBar); virtual;
+    procedure NoteLayoutChanging(ABar: TTyCustomToolWindowBar); virtual;
     { spec §10.5:最后一个离开 csLoading 的参与者(manager、注册栏)在自己的 Loaded 最后调它。 }
     procedure TryFinishLoading; virtual;
     { 源栏 ASource 上拖着它手势里的窗口,屏幕点 AScreen 落在哪条栏的哪个槽位(spec §9.4):答
       源栏自己、另一侧栏,或 nil(没有目标)。基类只认源栏自己的图标条。 }
-    function DropTargetAt(ASource: TTyToolWindowBar; const AScreen: TPoint;
-      out ASlot: Integer): TTyToolWindowBar; virtual;
+    function DropTargetAt(ASource: TTyCustomToolWindowBar; const AScreen: TPoint;
+      out ASlot: Integer): TTyCustomToolWindowBar; virtual;
     { 窗口的 WindowIndex:这个窗口还有排着的移动时排在它后面、答 True(spec §9.9);否则答
       False,由窗口当场调顺序。 }
-    function QueueWindowIndex(AWindow: TTyToolWindow; AIndex: Integer): Boolean; virtual;
+    function QueueWindowIndex(AWindow: TTyCustomToolWindow; AIndex: Integer): Boolean; virtual;
     { 一条栏离开了本 manager(注销、被释放、从 Owner 摘走):它不再是排队移动的目标。 }
-    procedure BarRemoved(ABar: TTyToolWindowBar); virtual;
+    procedure BarRemoved(ABar: TTyCustomToolWindowBar); virtual;
     { 「正在拖」变了(进入拖动 / 手势收尾,E 期):ASource 是此刻在拖的栏,nil = 不拖了。
       TTyToolWindowManager 在这里显示 / 收掉隐藏侧栏的放置预览(spec §9.8)。基类什么都不做。 }
-    procedure DragSourceChanged(ASource: TTyToolWindowBar); virtual;
+    procedure DragSourceChanged(ASource: TTyCustomToolWindowBar); virtual;
     { 放置预览(spec §9.8):显示 / 收掉 ABar 的那一块。 }
-    procedure BarShowDropPreview(ABar: TTyToolWindowBar);
-    procedure BarHideDropPreview(ABar: TTyToolWindowBar);
+    procedure BarShowDropPreview(ABar: TTyCustomToolWindowBar);
+    procedure BarHideDropPreview(ABar: TTyCustomToolWindowBar);
     { --- 给派生类动栏 / 窗口内部状态的窗口(栏和窗口的私有成员只在本单元看得见)。 --- }
     { 这一次手势里拖到 ATarget 行不行(引擎缓存,每条目标栏每次手势只问一次)。 }
-    function DragAllows(ASource, ATarget: TTyToolWindowBar): Boolean;
+    function DragAllows(ASource, ATarget: TTyCustomToolWindowBar): Boolean;
     { 栏的窗口,Controls 顺序。 }
-    function BarWindows(ABar: TTyToolWindowBar): TTyToolWindowArray;
+    function BarWindows(ABar: TTyCustomToolWindowBar): TTyToolWindowArray;
     { 栏内调顺序,不发 OnWindowMoved(PlaceWindow)/ 发(ReorderWindow)。 }
-    procedure BarPlace(ABar: TTyToolWindowBar; AWindow: TTyToolWindow; AIndex: Integer);
-    procedure BarReorder(ABar: TTyToolWindowBar; AWindow: TTyToolWindow; AIndex: Integer);
+    procedure BarPlace(ABar: TTyCustomToolWindowBar; AWindow: TTyCustomToolWindow; AIndex: Integer);
+    procedure BarReorder(ABar: TTyCustomToolWindowBar; AWindow: TTyCustomToolWindow; AIndex: Integer);
     { 切页(SwitchCore:藏其余每一个、不挪焦点、不发 OnChange)。 }
-    procedure BarSwitch(ABar: TTyToolWindowBar; AWindow: TTyToolWindow);
+    procedure BarSwitch(ABar: TTyCustomToolWindowBar; AWindow: TTyCustomToolWindow);
     { 布局应用批次(BeginLayoutBatch / EndLayoutBatch)、静默批次(BeginSilent / EndSilent)。 }
-    procedure BarEnterBatch(ABar: TTyToolWindowBar);
-    procedure BarLeaveBatch(ABar: TTyToolWindowBar);
-    procedure BarBeginSilent(ABar: TTyToolWindowBar);
-    procedure BarEndSilent(ABar: TTyToolWindowBar);
+    procedure BarEnterBatch(ABar: TTyCustomToolWindowBar);
+    procedure BarLeaveBatch(ABar: TTyCustomToolWindowBar);
+    procedure BarBeginSilent(ABar: TTyCustomToolWindowBar);
+    procedure BarEndSilent(ABar: TTyCustomToolWindowBar);
     { 静默换父(FQuietMove):不走直接改 Parent 的簿记、注册不即激活。 }
-    procedure QuietReparent(AWindow: TTyToolWindow; ABar: TTyToolWindowBar);
+    procedure QuietReparent(AWindow: TTyCustomToolWindow; ABar: TTyCustomToolWindowBar);
   protected
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
@@ -1647,13 +1683,13 @@ type
       Placement 相同(spec §10.6)。
       现算不缓存:注册栏最多几条,现算比记得在 SetManager / SetPlacement / opRemove 三处失效可靠。
       设计期的冲突提示也问它;Placement 集合一变,PlacementsChanged 让每条栏按新答案重排、重画。 }
-    function IsBarUsable(ABar: TTyToolWindowBar): Boolean;
+    function IsBarUsable(ABar: TTyCustomToolWindowBar): Boolean;
     { 此刻 Placement 为 APlacement 的可用栏(spec §10.6:同 Placement 的都不可用,所以最多一条);
       没有答 nil。现算。组件编辑器的「移到另一侧栏」、应用自己的「移到另一侧」菜单都问它。 }
-    function UsableBar(APlacement: TTyToolWindowPlacement): TTyToolWindowBar;
+    function UsableBar(APlacement: TTyToolWindowPlacement): TTyCustomToolWindowBar;
     { 结构检查 + OnCanMoveWindow(spec §9.9)。同一条栏永远 True、不问事件;设计期不问事件。
       没有副作用:不取消拖动、不记默认布局、不动任何状态。 }
-    function CanMoveWindow(AWindow: TTyToolWindow; ATargetBar: TTyToolWindowBar): Boolean;
+    function CanMoveWindow(AWindow: TTyCustomToolWindow; ATargetBar: TTyCustomToolWindowBar): Boolean;
     { 取消此刻的图标拖动(spec §9.7);没在拖什么都不做。 }
     procedure CancelDrag;
     { 注册栏里有一条正在拖图标。 }
@@ -1690,9 +1726,9 @@ uses
   tyControls.Css.Values, { TyMix:渐变底的放置预览取中间色当擦除色 }
   tyControls.Menu;       { TTyPopupMenu:图标条的溢出菜单 }
 
-{ --- TTyToolWindow ------------------------------------------------------------ }
+{ --- TTyCustomToolWindow ------------------------------------------------------ }
 
-constructor TTyToolWindow.Create(AOwner: TComponent);
+constructor TTyCustomToolWindow.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   { 多击两个标志:底栏标题行的按下落在窗口的句柄上,LCL 数点击次数看的是收到消息的
@@ -1706,27 +1742,27 @@ begin
   { 构造里一个子对象都不建 —— 建了会在流式加载时翻倍。 }
 end;
 
-destructor TTyToolWindow.Destroy;
+destructor TTyCustomToolWindow.Destroy;
 begin
   { 置 nil:继承析构里注销时,栏还可能回头 Invalidate 本窗口(Invalidate 会碰缓存)。 }
   FreeAndNil(FPaintCache);
   inherited Destroy;
 end;
 
-function TTyToolWindow.GetStyleTypeKey: string;
+function TTyCustomToolWindow.GetStyleTypeKey: string;
 begin
   Result := TyToolWindowKey;
 end;
 
-function TTyToolWindow.ImageIndexIsStored: Boolean;
+function TTyCustomToolWindow.ImageIndexIsStored: Boolean;
 begin
   { 名字是持久键,序号只在名字给不出答案时才进流。 }
   Result := (FImageName = '') and (FImageIndex >= 0);
 end;
 
-function TTyToolWindow.GetImageIndex: TImageIndex;
+function TTyCustomToolWindow.GetImageIndex: TImageIndex;
 var
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
   n: Integer;
 begin
   { 名字能在生效列表里解析就答那一格;否则答最近一次写进来的序号 —— 于是「设名字、读序号」
@@ -1744,7 +1780,7 @@ begin
   Result := FImageIndex;
 end;
 
-procedure TTyToolWindow.SetImageIndex(AValue: TImageIndex);
+procedure TTyCustomToolWindow.SetImageIndex(AValue: TImageIndex);
 var
   oldName: string;
 begin
@@ -1760,7 +1796,7 @@ begin
   if FImageName = oldName then InvalidateBar;
 end;
 
-procedure TTyToolWindow.SetImageName(const AValue: string);
+procedure TTyCustomToolWindow.SetImageName(const AValue: string);
 begin
   { 后写的算:按名字设了,之前挂起的那个序号就作废 —— 不然栏一拿到列表,挂起的序号会把
     刚设的名字盖掉。ResolveImageIndex 自己调这里之前已经清了挂起,不受影响。 }
@@ -1770,7 +1806,7 @@ begin
   InvalidateBar;
 end;
 
-procedure TTyToolWindow.SetStripHint(const AValue: TTranslateString);
+procedure TTyCustomToolWindow.SetStripHint(const AValue: TTranslateString);
 begin
   if FStripHint = AValue then Exit;
   FStripHint := AValue;
@@ -1779,9 +1815,9 @@ end;
 
 {$I tyControls.ToolWindows.Badge.inc}
 
-procedure TTyToolWindow.ResolveImageIndex;
+procedure TTyCustomToolWindow.ResolveImageIndex;
 var
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
   list: TCustomImageList;
 begin
   if not FImageIndexPending then Exit;   { 没有挂起的:绝不碰已经设好的 ImageName }
@@ -1798,39 +1834,39 @@ begin
     SetImageName(TyImageNameOfIndex(list, FImageIndex));
 end;
 
-procedure TTyToolWindow.InvalidateBar;
+procedure TTyCustomToolWindow.InvalidateBar;
 var
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
 begin
   b := Bar;
   if b <> nil then b.Invalidate;
 end;
 
-function TTyToolWindow.GetBar: TTyToolWindowBar;
+function TTyCustomToolWindow.GetBar: TTyCustomToolWindowBar;
 begin
-  if Parent is TTyToolWindowBar then Result := TTyToolWindowBar(Parent)
+  if Parent is TTyCustomToolWindowBar then Result := TTyCustomToolWindowBar(Parent)
   else Result := nil;
 end;
 
-function TTyToolWindow.IsActive: Boolean;
+function TTyCustomToolWindow.IsActive: Boolean;
 var
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
 begin
   b := Bar;
   Result := (b <> nil) and (b.ActiveWindow = Self);
 end;
 
-function TTyToolWindow.GetWindowIndex: Integer;
+function TTyCustomToolWindow.GetWindowIndex: Integer;
 var
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
 begin
   b := Bar;
   if b <> nil then Result := b.IndexOfWindow(Self) else Result := -1;
 end;
 
-procedure TTyToolWindow.SetWindowIndex(AValue: Integer);
+procedure TTyCustomToolWindow.SetWindowIndex(AValue: Integer);
 var
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
 begin
   b := Bar;
   if b = nil then Exit;
@@ -1840,21 +1876,21 @@ begin
   b.ReorderWindow(Self, AValue);
 end;
 
-function TTyToolWindow.GetActions: TTyToolWindowActions;
+function TTyCustomToolWindow.GetActions: TTyCustomToolWindowActions;
 var
   i: Integer;
 begin
   { 一个窗口只认 Controls[] 里的第一个操作区;粘贴等途径多出来的不参与标题行。
     不缓存:子控件增删、调顺序都不用再记得回来作废什么。 }
   for i := 0 to ControlCount - 1 do
-    if Controls[i] is TTyToolWindowActions then
-      Exit(TTyToolWindowActions(Controls[i]));
+    if Controls[i] is TTyCustomToolWindowActions then
+      Exit(TTyCustomToolWindowActions(Controls[i]));
   Result := nil;
 end;
 
-procedure TTyToolWindow.TextChanged;
+procedure TTyCustomToolWindow.TextChanged;
 var
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
 begin
   inherited TextChanged;
   { 标题就画在自己的标题行里(见 RenderTo),不重画就停在上一句。 }
@@ -1864,9 +1900,9 @@ begin
   if b <> nil then b.InvalidateHeader;
 end;
 
-function TTyToolWindow.HeaderMode: TTyToolWindowHeaderMode;
+function TTyCustomToolWindow.HeaderMode: TTyToolWindowHeaderMode;
 var
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
 begin
   { 只看所在栏的**位置** —— 不看哪页是当前页,否则切页时正文会跳。
     「在不在栏里」只由 GetBar 一处回答;在栏里时模式由栏答(TTyToolWindowBar.HeaderMode)。 }
@@ -1875,7 +1911,7 @@ begin
   else Result := b.HeaderMode(Self);
 end;
 
-function TTyToolWindow.HeaderInput(APPI, ARowWidth: Integer): TTyToolWindowHeaderInput;
+function TTyCustomToolWindow.HeaderInput(APPI, ARowWidth: Integer): TTyToolWindowHeaderInput;
 begin
   Result := Default(TTyToolWindowHeaderInput);
   Result.Mode := HeaderMode;
@@ -1897,7 +1933,7 @@ end;
   单独成一个过程是为了 Invalidate:它要比「主题动了没有」,而比的必须是同一个量 ——
   HeaderHeightPx 的返回值是 max(这一项, 操作区) 再钳到下限 1,token 为 0 时它永远不等于
   这一项,于是悬停、焦点、主题广播 —— 每一次重画都会整控件重排一遍。 }
-function TTyToolWindow.HeaderTokenPx: Integer;
+function TTyCustomToolWindow.HeaderTokenPx: Integer;
 var
   mdl: TTyStyleModel;
   ver: Cardinal;
@@ -1931,7 +1967,7 @@ begin
   Result := FHeaderPxCache;
 end;
 
-function TTyToolWindow.HeaderRuleUncached(APPI: Integer): Integer;
+function TTyCustomToolWindow.HeaderRuleUncached(APPI: Integer): Integer;
 var
   S: TTyStyleSet;
 begin
@@ -1944,7 +1980,7 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-function TTyToolWindow.HeaderRuleAt(APPI: Integer): Integer;
+function TTyCustomToolWindow.HeaderRuleAt(APPI: Integer): Integer;
 begin
   if APPI = Font.PixelsPerInch then
   begin
@@ -1958,9 +1994,9 @@ end;
 { 操作区的首选尺寸(设备像素,按给定 PPI),**一处答**:标题行高拿它的高钳底、排布
   拿它的宽留位。两边各问各的话改一处漏一处,画出来的那条和挖出来的正文就会错开,
   而且不会红。只认第一个操作区(Actions),多出来的不进标题行。 }
-function TTyToolWindow.ActionsPreferredSize(APPI: Integer): TSize;
+function TTyCustomToolWindow.ActionsPreferredSize(APPI: Integer): TSize;
 var
-  act: TTyToolWindowActions;
+  act: TTyCustomToolWindowActions;
 begin
   { 没有操作区、或者它被藏起来了,标题行高退化成 token 值、标题占满整条。 }
   act := Actions;
@@ -1975,7 +2011,7 @@ end;
 
 { 标题行高,按**给定的** PPI。缓存键钉在 Font.PixelsPerInch 上,所以只有问的就是
   自己那个密度时才走缓存,别的密度现算 —— HeaderInput 要能按它的入参 APPI 回答。 }
-function TTyToolWindow.HeaderHeightAt(APPI: Integer): Integer;
+function TTyCustomToolWindow.HeaderHeightAt(APPI: Integer): Integer;
 var
   actionsPx: Integer;
 begin
@@ -2007,7 +2043,7 @@ end;
   CustomAlignPosition 就照着它把操作区摆到控件外面去。一处钳 —— 正文区
   (AdjustClientRect)、HeaderGeomAt、HeaderRowRect、RenderTo 问的是同一条。
   照 TTyCard.LayoutAtPPI(Card.pas:181)。 }
-function TTyToolWindow.HeaderRowIn(const AClient: TRect; APPI: Integer): TRect;
+function TTyCustomToolWindow.HeaderRowIn(const AClient: TRect; APPI: Integer): TRect;
 var
   clientH, h: Integer;
 begin
@@ -2018,7 +2054,7 @@ begin
   Result := Rect(AClient.Left, AClient.Top, AClient.Right, AClient.Top + h);
 end;
 
-function TTyToolWindow.HeaderGeomAt(const AClient: TRect; APPI: Integer): TTyToolWindowHeaderGeom;
+function TTyCustomToolWindow.HeaderGeomAt(const AClient: TRect; APPI: Integer): TTyToolWindowHeaderGeom;
 var
   inp: TTyToolWindowHeaderInput;
   row: TRect;
@@ -2033,7 +2069,7 @@ begin
   Result := TyToolWindowHeaderLayout(inp);
 end;
 
-function TTyToolWindow.EnsureActions: TTyToolWindowActions;
+function TTyCustomToolWindow.EnsureActions: TTyCustomToolWindowActions;
 var
   own: TComponent;
 begin
@@ -2051,10 +2087,10 @@ begin
   Result.TabOrder := 0;
 end;
 
-procedure TTyToolWindow.FocusFirst;
+procedure TTyCustomToolWindow.FocusFirst;
 var
   form: TCustomForm;
-  act: TTyToolWindowActions;
+  act: TTyCustomToolWindowActions;
   list: TFPList;
   c: TWinControl;
   pass, i: Integer;
@@ -2089,14 +2125,14 @@ end;
   MovesAcrossBarKinds 里,manager 的结构检查(设计期也要拒)只用这一句。 }
 function BarKindsDiffer(AOld, ANew: TWinControl): Boolean;
 begin
-  Result := (AOld <> ANew) and (AOld is TTyToolWindowBar) and (ANew is TTyToolWindowBar)
-    and ((TTyToolWindowBar(AOld).Placement = twpBottom)
-         <> (TTyToolWindowBar(ANew).Placement = twpBottom));
+  Result := (AOld <> ANew) and (AOld is TTyCustomToolWindowBar) and (ANew is TTyCustomToolWindowBar)
+    and ((TTyCustomToolWindowBar(AOld).Placement = twpBottom)
+         <> (TTyCustomToolWindowBar(ANew).Placement = twpBottom));
 end;
 
 { 跨栏移动(MoveWindow、直接改 Parent)之后:焦点原来在窗口里的,还给它 —— 换父控件时 LCL
   把它挪走了(spec §3.2 / §9.5)。 }
-procedure RestoreMovedFocus(AForm: TCustomForm; AWindow: TTyToolWindow; AFocus: TWinControl);
+procedure RestoreMovedFocus(AForm: TCustomForm; AWindow: TTyCustomToolWindow; AFocus: TWinControl);
 begin
   if (AForm <> nil) and (AFocus <> nil) and AWindow.ContainsControl(AFocus)
      and AFocus.CanFocus then
@@ -2105,7 +2141,7 @@ end;
 
 { 跨栏移动延后下来的栏事件,按 spec §6.6 的顺序发:源栏 OnChange → 目标栏 OnExpand →
   目标栏 OnChange。源栏从不发 OnCollapse(拖空不写 Collapsed)。 }
-procedure FireMovedBarEvents(ASource, ATarget: TTyToolWindowBar;
+procedure FireMovedBarEvents(ASource, ATarget: TTyCustomToolWindowBar;
   ASourceEvents, ATargetEvents: TTyToolWindowBarEvents);
 begin
   if twbeChange in ASourceEvents then ASource.FireBarEvent(twbeChange);
@@ -2113,7 +2149,7 @@ begin
   if twbeChange in ATargetEvents then ATarget.FireBarEvent(twbeChange);
 end;
 
-function TTyToolWindow.MovesAcrossBarKinds(AOld, ANew: TWinControl): Boolean;
+function TTyCustomToolWindow.MovesAcrossBarKinds(AOld, ANew: TWinControl): Boolean;
 const
   Exempt = [csLoading, csDesigning, csDestroying];
 begin
@@ -2126,7 +2162,7 @@ begin
 end;
 
 { 取消 ABar 参与的图标拖动:有 manager 的问 manager(它知道此刻谁在拖),没有的看栏自己。 }
-procedure CancelBarDrag(ABar: TTyToolWindowBar);
+procedure CancelBarDrag(ABar: TTyCustomToolWindowBar);
 begin
   if ABar.Manager <> nil then ABar.Manager.CancelDrag
   else if ABar.FGesture.State = twgsDragging then ABar.ResetGesture(twgeCancel);
@@ -2139,7 +2175,7 @@ end;
   OnWindowMoved。整段包在参与的 manager 的 FEventDepth 里:栏事件、OnWindowMoved、换父时
   回落页的 OnShow / OnHide 的处理器里再调 MoveWindow / Load / Reset 都答 False。处理器里把
   manager 释放了(spec §6.6 不许)也不崩:生命格判死之后不再碰它。 }
-procedure CommitCrossMove(AWindow: TTyToolWindow; ASource, ATarget: TTyToolWindowBar;
+procedure CommitCrossMove(AWindow: TTyCustomToolWindow; ASource, ATarget: TTyCustomToolWindowBar;
   AIndex: Integer);
 var
   mSrc, mDst: TTyCustomToolWindowManager;
@@ -2218,19 +2254,19 @@ begin
   end;
 end;
 
-function TTyToolWindow.BooksDirectMove(AOld, ANew: TWinControl): Boolean;
+function TTyCustomToolWindow.BooksDirectMove(AOld, ANew: TWinControl): Boolean;
 begin
   { 运行时同类栏之间直接改 Parent。MoveWindow / 布局应用自己换父时(FQuietMove)不算;
     布局应用的批次里(某一页的 OnShow / OnHide 里用户直接改 Parent)也不算 —— 批次不发栏事件
     和 OnWindowMoved、不自己展开,当前页由批次最后统一定(拦不住,只能不添乱)。 }
   Result := (not FQuietMove) and (AOld <> ANew)
-    and (AOld is TTyToolWindowBar) and (ANew is TTyToolWindowBar)
+    and (AOld is TTyCustomToolWindowBar) and (ANew is TTyCustomToolWindowBar)
     and ([csLoading, csDesigning, csDestroying]
          * (ComponentState + AOld.ComponentState + ANew.ComponentState) = [])
-    and (TTyToolWindowBar(AOld).FLayoutBatch = 0) and (TTyToolWindowBar(ANew).FLayoutBatch = 0);
+    and (TTyCustomToolWindowBar(AOld).FLayoutBatch = 0) and (TTyCustomToolWindowBar(ANew).FLayoutBatch = 0);
 end;
 
-procedure TTyToolWindow.SetParent(NewParent: TWinControl);
+procedure TTyCustomToolWindow.SetParent(NewParent: TWinControl);
 var
   old: TWinControl;
 begin
@@ -2247,19 +2283,19 @@ begin
     那几项执行时自己重新检查。 }
   if BooksDirectMove(old, NewParent) then
   begin
-    CommitCrossMove(Self, TTyToolWindowBar(old), TTyToolWindowBar(NewParent), MaxInt);
+    CommitCrossMove(Self, TTyCustomToolWindowBar(old), TTyCustomToolWindowBar(NewParent), MaxInt);
     Exit;
   end;
   inherited SetParent(NewParent);
   { 离开一条栏跟进入一条栏一样是窗口表的事件。任一方正在拆:释放那条路走栏的
     Notification(opRemove),而旧栏这时可能已经拆了一半。 }
-  if (old <> NewParent) and (old is TTyToolWindowBar)
+  if (old <> NewParent) and (old is TTyCustomToolWindowBar)
      and not (csDestroying in ComponentState)
      and not (csDestroying in old.ComponentState) then
-    TTyToolWindowBar(old).UnregisterWindow(Self);
+    TTyCustomToolWindowBar(old).UnregisterWindow(Self);
   { 注册本身推 Controller;流式加载、设计器放下、代码里 Parent := 都走这一条。 }
-  if NewParent is TTyToolWindowBar then
-    TTyToolWindowBar(NewParent).RegisterWindow(Self)
+  if NewParent is TTyCustomToolWindowBar then
+    TTyCustomToolWindowBar(NewParent).RegisterWindow(Self)
   else if not (csDestroying in ComponentState) then
   begin
     if csDesigning in ComponentState then
@@ -2283,9 +2319,9 @@ begin
     RelayoutHeader;
 end;
 
-procedure TTyToolWindow.SetVisible(Value: Boolean);
+procedure TTyCustomToolWindow.SetVisible(Value: Boolean);
 var
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
 begin
   b := Bar;
   { 每条栏同时只显示一页,这个不变量由栏守(spec §3.3)。栏自己在切页 / 收起 / 展开
@@ -2325,67 +2361,67 @@ begin
   end;
 end;
 
-procedure TTyToolWindow.SetController(AValue: TTyStyleController);
+procedure TTyCustomToolWindow.SetController(AValue: TTyStyleController);
 var
   i: Integer;
 begin
   inherited SetController(AValue);
   { 继承那一句在值没变时直接返回,推送照做:操作区可能是后插进来、带着别的控制器的。 }
   for i := 0 to ControlCount - 1 do
-    if Controls[i] is TTyToolWindowActions then
-      TTyToolWindowActions(Controls[i]).Controller := AValue;
+    if Controls[i] is TTyCustomToolWindowActions then
+      TTyCustomToolWindowActions(Controls[i]).Controller := AValue;
 end;
 
-procedure TTyToolWindow.InsertControl(AControl: TControl; Index: Integer);
+procedure TTyCustomToolWindow.InsertControl(AControl: TControl; Index: Integer);
 begin
   inherited InsertControl(AControl, Index);
-  if AControl is TTyToolWindowActions then
+  if AControl is TTyCustomToolWindowActions then
   begin
-    TTyToolWindowActions(AControl).Controller := Controller;
+    TTyCustomToolWindowActions(AControl).Controller := Controller;
     { 带着子控件挂进来的:LCL 不替它调 AdjustSize,底栏的共用行高要在这一刻知道(spec §3.4)。 }
-    TTyToolWindowActions(AControl).AdjustSize;
+    TTyCustomToolWindowActions(AControl).AdjustSize;
   end;
 end;
 
-procedure TTyToolWindow.RemoveControl(AControl: TControl);
+procedure TTyCustomToolWindow.RemoveControl(AControl: TControl);
 var
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
 begin
   inherited RemoveControl(AControl);
-  if AControl is TTyToolWindowActions then
+  if AControl is TTyCustomToolWindowActions then
   begin
     { 下一次挂进窗口时从「没有」比起。 }
-    TTyToolWindowActions(AControl).FLastPreferred := Default(TSize);
+    TTyCustomToolWindowActions(AControl).FLastPreferred := Default(TSize);
     b := Bar;
     if (b <> nil) and not (csDestroying in ComponentState) then b.ActionsSizeChanged;
   end;
 end;
 
-function TTyToolWindow.HeaderHeightPx: Integer;
+function TTyCustomToolWindow.HeaderHeightPx: Integer;
 begin
   { 按自己字体的像素密度问的那一问,**没钳过**。正文区(AdjustClientRect)和
     HeaderRowRect 要的是钳进客户区的那一条,走 HeaderRowIn,不走这里。 }
   Result := HeaderHeightAt(Font.PixelsPerInch);
 end;
 
-function TTyToolWindow.HeaderRowRect: TRect;
+function TTyCustomToolWindow.HeaderRowRect: TRect;
 begin
   Result := HeaderRowIn(Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
 end;
 
-function TTyToolWindow.BodyRect: TRect;
+function TTyCustomToolWindow.BodyRect: TRect;
 begin
   { 查询就调自己的 AdjustClientRect —— 正文区只有一个定义,手摆和对齐摆落在同一处。 }
   Result := ClientRect;
   AdjustClientRect(Result);
 end;
 
-function TTyToolWindow.OrphanNoteRect: TRect;
+function TTyCustomToolWindow.OrphanNoteRect: TRect;
 begin
   Result := OrphanNoteRectIn(Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
 end;
 
-function TTyToolWindow.OrphanNoteRectIn(const AClient: TRect; APPI: Integer): TRect;
+function TTyCustomToolWindow.OrphanNoteRectIn(const AClient: TRect; APPI: Integer): TRect;
 var
   h: Integer;
 begin
@@ -2398,7 +2434,7 @@ begin
   Result := Rect(AClient.Left, AClient.Top, AClient.Right, AClient.Top + h);
 end;
 
-procedure TTyToolWindow.AdjustClientRect(var ARect: TRect);
+procedure TTyCustomToolWindow.AdjustClientRect(var ARect: TRect);
 var
   n: TRect;
 begin
@@ -2411,16 +2447,16 @@ begin
   if n.Bottom > ARect.Top then ARect.Top := n.Bottom;
 end;
 
-function TTyToolWindow.ChildClassAllowed(ChildClass: TClass): Boolean;
+function TTyCustomToolWindow.ChildClassAllowed(ChildClass: TClass): Boolean;
 begin
   { 用 InheritsFrom 不用 = :派生类同样不许进来。设计期面板拖放和「改变父控件」都问这里;
     粘贴漏过去的由孤儿模式显示出来(spec §11),不在 CheckNewParent 里抛异常。 }
   Result := inherited ChildClassAllowed(ChildClass)
-    and not ChildClass.InheritsFrom(TTyToolWindow)
-    and not ChildClass.InheritsFrom(TTyToolWindowBar);
+    and not ChildClass.InheritsFrom(TTyCustomToolWindow)
+    and not ChildClass.InheritsFrom(TTyCustomToolWindowBar);
 end;
 
-procedure TTyToolWindow.AlignControls(AControl: TControl; var RemainingClientRect: TRect);
+procedure TTyCustomToolWindow.AlignControls(AControl: TControl; var RemainingClientRect: TRect);
 var
   row: TRect;
   g: TTyToolWindowHeaderGeom;
@@ -2440,14 +2476,14 @@ begin
   inherited Invalidate;
 end;
 
-procedure TTyToolWindow.CustomAlignPosition(AControl: TControl; var ANewLeft, ANewTop,
+procedure TTyCustomToolWindow.CustomAlignPosition(AControl: TControl; var ANewLeft, ANewTop,
   ANewWidth, ANewHeight: Integer; var AlignRect: TRect; AlignInfo: TAlignInfo);
 var
   g: TTyToolWindowHeaderGeom;
   body: TRect;
   sz: TSize;
 begin
-  if not (AControl is TTyToolWindowActions) then
+  if not (AControl is TTyCustomToolWindowActions) then
   begin
     inherited CustomAlignPosition(AControl, ANewLeft, ANewTop, ANewWidth, ANewHeight,
       AlignRect, AlignInfo);
@@ -2467,14 +2503,14 @@ begin
   { 多出来的操作区(只有设计期走得到这里,运行时它不露面),以及没有标题行的窗口
     (孤儿,不在栏里)的那一个:放在正文区左上角,按 raw 首选尺寸(spec §3.2 / §3.4)。 }
   body := BodyRect;
-  sz := TTyToolWindowActions(AControl).PreferredSizeAt(Font.PixelsPerInch);
+  sz := TTyCustomToolWindowActions(AControl).PreferredSizeAt(Font.PixelsPerInch);
   ANewLeft := body.Left;
   ANewTop := body.Top;
   ANewWidth := sz.cx;
   ANewHeight := sz.cy;
 end;
 
-procedure TTyToolWindow.RelayoutHeader;
+procedure TTyCustomToolWindow.RelayoutHeader;
 begin
   if FRelayouting then Exit;
   FRelayouting := True;
@@ -2493,7 +2529,7 @@ begin
   end;
 end;
 
-procedure TTyToolWindow.Invalidate;
+procedure TTyCustomToolWindow.Invalidate;
 var
   old, oldRule: Integer;
   hadOld: Boolean;
@@ -2520,9 +2556,9 @@ begin
   inherited Invalidate;
 end;
 
-function TTyToolWindow.BottomGeomDrifted: Boolean;
+function TTyCustomToolWindow.BottomGeomDrifted: Boolean;
 var
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
   g: TTyToolWindowHeaderGeom;
 begin
   { 底栏的标题行几何不止看行高:按钮尺寸、标签区下限、分隔线粗细、标签宽都能在行高不变时
@@ -2542,7 +2578,7 @@ begin
   Result := True;
 end;
 
-procedure TTyToolWindow.AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
+procedure TTyCustomToolWindow.AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
   const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer);
 begin
   inherited AutoAdjustLayout(AMode, AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth);
@@ -2551,15 +2587,15 @@ begin
   RelayoutHeader;
 end;
 
-procedure TTyToolWindow.CMBiDiModeChanged(var Msg: TLMessage);
+procedure TTyCustomToolWindow.CMBiDiModeChanged(var Msg: TLMessage);
 begin
   inherited;
   RelayoutHeader;
 end;
 
-procedure TTyToolWindow.CMEnabledChanged(var Message: TLMessage);
+procedure TTyCustomToolWindow.CMEnabledChanged(var Message: TLMessage);
 var
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
   form: TCustomForm;
   focusIn: Boolean;
 begin
@@ -2583,7 +2619,7 @@ begin
   end;
 end;
 
-procedure TTyToolWindow.CMVisibleChanged(var Msg: TLMessage);
+procedure TTyCustomToolWindow.CMVisibleChanged(var Msg: TLMessage);
 begin
   inherited;
   { spec §6.6 的事件表:设计期不发(设计器摆控件、点页签,切的都是 Visible),栏静默
@@ -2593,29 +2629,29 @@ begin
   if Visible then DoShow else DoHide;
 end;
 
-procedure TTyToolWindow.BeginSilentVisibility;
+procedure TTyCustomToolWindow.BeginSilentVisibility;
 begin
   Inc(FSilentVisibility);
 end;
 
-procedure TTyToolWindow.EndSilentVisibility;
+procedure TTyCustomToolWindow.EndSilentVisibility;
 begin
   { 钳住 0:没配对的 End 把计数压到负数的话,后面每一个 Begin 都只是从负数往上爬,
     抑制口就再也关不上了 —— 而那时事件照发,没有一条断言会指向这里。 }
   if FSilentVisibility > 0 then Dec(FSilentVisibility);
 end;
 
-procedure TTyToolWindow.DoShow;
+procedure TTyCustomToolWindow.DoShow;
 begin
   if Assigned(FOnShow) then FOnShow(Self);
 end;
 
-procedure TTyToolWindow.DoHide;
+procedure TTyCustomToolWindow.DoHide;
 begin
   if Assigned(FOnHide) then FOnHide(Self);
 end;
 
-procedure TTyToolWindow.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomToolWindow.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, hdrS, noteS: TTyStyleSet;
@@ -2683,7 +2719,7 @@ begin
   end;
 end;
 
-procedure TTyToolWindow.Paint;
+procedure TTyCustomToolWindow.Paint;
 var
   w, h: Integer;
 begin
@@ -2703,14 +2739,14 @@ end;
 
 { --- 底栏标签行的输入(spec §3.6 运行时、§7.4) ------------------------------------- }
 
-function TTyToolWindow.InTabRowRegion(X, Y: Integer): Boolean;
+function TTyCustomToolWindow.InTabRowRegion(X, Y: Integer): Boolean;
 begin
   if HeaderMode <> twhBottom then Exit(False);
   Result := InTabRowRegionOf(HeaderGeomAt(Rect(0, 0, ClientWidth, ClientHeight),
     Font.PixelsPerInch), X, Y);
 end;
 
-function TTyToolWindow.InTabRowRegionOf(const AGeom: TTyToolWindowHeaderGeom;
+function TTyCustomToolWindow.InTabRowRegionOf(const AGeom: TTyToolWindowHeaderGeom;
   X, Y: Integer): Boolean;
 var
   pt: TPoint;
@@ -2723,7 +2759,7 @@ begin
   Result := not PtInRect(AGeom.Actions, pt);
 end;
 
-procedure TTyToolWindow.WndProc(var TheMessage: TLMessage);
+procedure TTyCustomToolWindow.WndProc(var TheMessage: TLMessage);
 begin
   if (TheMessage.Msg = LM_LBUTTONDOWN) or (TheMessage.Msg = LM_LBUTTONDBLCLK) then
   begin
@@ -2743,9 +2779,9 @@ begin
     inherited WndProc(TheMessage);
 end;
 
-procedure TTyToolWindow.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomToolWindow.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
   idx: Integer;
   r: TRect;
 begin
@@ -2764,9 +2800,9 @@ begin
   b.HeaderMouseDown(Self, Button, Shift, X, Y);
 end;
 
-procedure TTyToolWindow.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomToolWindow.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
   g: TTyToolWindowHeaderGeom;
   idx: Integer;
 begin
@@ -2788,9 +2824,9 @@ begin
   inherited MouseMove(Shift, X, Y);
 end;
 
-procedure TTyToolWindow.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomToolWindow.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
 begin
   { 这个键的按下落在哪决定这整次点击归谁 —— 按在正文、松开在标签行,照常给用户。 }
   if not (Button in FRowPresses) then
@@ -2806,38 +2842,38 @@ begin
     b.HeaderMouseUp(Self, Button, Shift, X, Y);
 end;
 
-procedure TTyToolWindow.MouseLeave;
+procedure TTyCustomToolWindow.MouseLeave;
 var
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
 begin
   inherited MouseLeave;
   b := Bar;
   if b <> nil then b.HeaderMouseLeave(Self);
 end;
 
-procedure TTyToolWindow.Click;
+procedure TTyCustomToolWindow.Click;
 begin
   { LCL 在 MouseUp 之前调它(control.inc:2827-2846)。 }
   if mbLeft in FRowPresses then Exit;
   inherited Click;
 end;
 
-procedure TTyToolWindow.DblClick;
+procedure TTyCustomToolWindow.DblClick;
 begin
   if mbLeft in FRowPresses then Exit;
   inherited DblClick;
 end;
 
-function TTyToolWindow.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+function TTyCustomToolWindow.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 begin
   if InTabRowRegion(MousePos.X, MousePos.Y) then Exit(True);
   Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
 end;
 
-procedure TTyToolWindow.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
+procedure TTyCustomToolWindow.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
 var
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
   idx: Integer;
   r: TRect;
 begin
@@ -2852,14 +2888,14 @@ begin
   inherited DoContextPopup(MousePos, Handled);
 end;
 
-function TTyToolWindow.PointerInClient(out APoint: TPoint): Boolean;
+function TTyCustomToolWindow.PointerInClient(out APoint: TPoint): Boolean;
 begin
   Result := HandleAllocated;
   if Result then APoint := ScreenToClient(Mouse.CursorPos)
   else APoint := Point(-1, -1);
 end;
 
-procedure TTyToolWindow.BeginAutoDrag;
+procedure TTyCustomToolWindow.BeginAutoDrag;
 var
   p: TPoint;
 begin
@@ -2869,12 +2905,12 @@ begin
   StartLclAutoDrag;
 end;
 
-procedure TTyToolWindow.StartLclAutoDrag;
+procedure TTyCustomToolWindow.StartLclAutoDrag;
 begin
   inherited BeginAutoDrag;
 end;
 
-procedure TTyToolWindow.CMHintShow(var Message: TLMessage);
+procedure TTyCustomToolWindow.CMHintShow(var Message: TLMessage);
 var
   info: PHintInfo;
   txt: string;
@@ -2902,7 +2938,7 @@ begin
   end;
 end;
 
-procedure TTyToolWindow.CMMaskHitTest(var Message: TCMHitTest);
+procedure TTyCustomToolWindow.CMMaskHitTest(var Message: TCMHitTest);
 var
   frm: TCustomForm;
   p: TPoint;
@@ -2916,15 +2952,15 @@ begin
   Message.Result := DesignMaskAnswerAt(p.X, p.Y);
 end;
 
-function TTyToolWindow.DesignMaskAnswerAt(X, Y: Integer): Integer;
+function TTyCustomToolWindow.DesignMaskAnswerAt(X, Y: Integer): Integer;
 begin
   { 注意极性:1 = 「跳过我」,0 = 「在我身上」(同 TyShapeMaskHitTestAnswer 的约定)。 }
   if InTabRowRegion(X, Y) then Result := 1 else Result := 0;
 end;
 
-procedure TTyToolWindow.LMCancelMode(var Message: TLMessage);
+procedure TTyCustomToolWindow.LMCancelMode(var Message: TLMessage);
 var
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
 begin
   inherited;
   { 捕获者是本页、手势进行中(spec §9.7);是不是由栏按引擎判。 }
@@ -2932,9 +2968,9 @@ begin
   if b <> nil then b.HeaderCancelMode(Self);
 end;
 
-{ --- TTyToolWindowActions ----------------------------------------------------- }
+{ --- TTyCustomToolWindowActions ----------------------------------------------- }
 
-constructor TTyToolWindowActions.Create(AOwner: TComponent);
+constructor TTyCustomToolWindowActions.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   { 两个 KeepChild 标志:用户在对象查看器里开 AutoSize,TWinControl.DoAutoSize 会把
@@ -2945,37 +2981,37 @@ begin
   { 构造里一个子对象都不建 —— 建了会在流式加载时翻倍。 }
 end;
 
-function TTyToolWindowActions.GetStyleTypeKey: string;
+function TTyCustomToolWindowActions.GetStyleTypeKey: string;
 begin
   Result := TyToolWindowActionsKey;
 end;
 
-procedure TTyToolWindowActions.SetAlign(Value: TAlign);
+procedure TTyCustomToolWindowActions.SetAlign(Value: TAlign);
 begin
   { 位置由所在窗口的 CustomAlignPosition 定,Align 不接受别的值。 }
   inherited SetAlign(alCustom);
 end;
 
-function TTyToolWindowActions.ChildClassAllowed(ChildClass: TClass): Boolean;
+function TTyCustomToolWindowActions.ChildClassAllowed(ChildClass: TClass): Boolean;
 begin
   { 用 InheritsFrom 不用 = :派生类同样不许进来。 }
   Result := inherited ChildClassAllowed(ChildClass)
-    and not ChildClass.InheritsFrom(TTyToolWindow)
-    and not ChildClass.InheritsFrom(TTyToolWindowBar)
-    and not ChildClass.InheritsFrom(TTyToolWindowActions);
+    and not ChildClass.InheritsFrom(TTyCustomToolWindow)
+    and not ChildClass.InheritsFrom(TTyCustomToolWindowBar)
+    and not ChildClass.InheritsFrom(TTyCustomToolWindowActions);
 end;
 
-function TTyToolWindowActions.IsBoundsStored: Boolean;
+function TTyCustomToolWindowActions.IsBoundsStored: Boolean;
 begin
-  Result := not (Parent is TTyToolWindow);
+  Result := not (Parent is TTyCustomToolWindow);
 end;
 
-function TTyToolWindowActions.IsUsedByWindow: Boolean;
+function TTyCustomToolWindowActions.IsUsedByWindow: Boolean;
 begin
-  Result := (Parent is TTyToolWindow) and (TTyToolWindow(Parent).Actions = Self);
+  Result := (Parent is TTyCustomToolWindow) and (TTyCustomToolWindow(Parent).Actions = Self);
 end;
 
-function TTyToolWindowActions.IsControlVisible: Boolean;
+function TTyCustomToolWindowActions.IsControlVisible: Boolean;
 begin
   Result := inherited IsControlVisible;
   { 状态一翻(第一个被删掉、孤儿被放回窗口)不用谁来通知:RemoveControl / InsertControl
@@ -2984,7 +3020,7 @@ begin
     Result := False;
 end;
 
-function TTyToolWindowActions.HasVisibleChild: Boolean;
+function TTyCustomToolWindowActions.HasVisibleChild: Boolean;
 var
   i: Integer;
 begin
@@ -2993,14 +3029,14 @@ begin
   Result := False;
 end;
 
-function TTyToolWindowActions.MetricPx(const AName: string; ADefault, APPI: Integer): Integer;
+function TTyCustomToolWindowActions.MetricPx(const AName: string; ADefault, APPI: Integer): Integer;
 begin
   Result := MulDiv(ActiveController.Metric(AName, ADefault), APPI, 96);
   { 同 TyToolWindowHeaderLayout:度量值不钳(TyEvalLength),负的内距 / 间距按 0 算。 }
   if Result < 0 then Result := 0;
 end;
 
-function TTyToolWindowActions.FlowInput(APPI: Integer;
+function TTyCustomToolWindowActions.FlowInput(APPI: Integer;
   out AKids: TTyToolWindowKids): TTyToolWindowFlowItems;
 var
   i, n, own: Integer;
@@ -3030,7 +3066,7 @@ begin
   SetLength(AKids, n);
 end;
 
-function TTyToolWindowActions.RowSizeAt(APPI: Integer): TSize;
+function TTyCustomToolWindowActions.RowSizeAt(APPI: Integer): TSize;
 var
   kids: TTyToolWindowKids;
 begin
@@ -3039,7 +3075,7 @@ begin
     MetricPx(TyToolWindowHeaderGapVar, TyToolWindowHeaderGapDef, APPI), False).Size;
 end;
 
-function TTyToolWindowActions.PreferredSizeAt(APPI: Integer): TSize;
+function TTyCustomToolWindowActions.PreferredSizeAt(APPI: Integer): TSize;
 var
   own, lo: Integer;
 begin
@@ -3064,10 +3100,10 @@ begin
   if lo > Result.cy then Result.cy := lo;
 end;
 
-procedure TTyToolWindowActions.AdjustSize;
+procedure TTyCustomToolWindowActions.AdjustSize;
 var
   sz: TSize;
-  win: TTyToolWindow;
+  win: TTyCustomToolWindow;
 begin
   inherited AdjustSize;
   { 子控件只改 Constraints 时 LCL 不作废本控件的首选尺寸缓存(control.inc:1520-1522 只调
@@ -3078,14 +3114,14 @@ begin
   if IsControlVisible then sz := PreferredSizeAt(Font.PixelsPerInch)
   else sz := Default(TSize);
   { 没挂在窗口里时不记:先建好、带着子控件再挂进窗口的,挂进去那一次才是「变了」。 }
-  if not (Parent is TTyToolWindow) then Exit;
+  if not (Parent is TTyCustomToolWindow) then Exit;
   if (sz.cx = FLastPreferred.cx) and (sz.cy = FLastPreferred.cy) then Exit;
   FLastPreferred := sz;
-  win := TTyToolWindow(Parent);
+  win := TTyCustomToolWindow(Parent);
   if win.Bar <> nil then win.Bar.ActionsSizeChanged;
 end;
 
-procedure TTyToolWindowActions.CalculatePreferredSize(var PreferredWidth,
+procedure TTyCustomToolWindowActions.CalculatePreferredSize(var PreferredWidth,
   PreferredHeight: Integer; WithThemeSpace: Boolean);
 var
   sz: TSize;
@@ -3096,19 +3132,19 @@ begin
   PreferredHeight := sz.cy;
 end;
 
-function TTyToolWindowActions.NoteText: string;
+function TTyCustomToolWindowActions.NoteText: string;
 begin
-  if Parent is TTyToolWindow then Result := rsTyToolWindowActionsExtra
+  if Parent is TTyCustomToolWindow then Result := rsTyToolWindowActionsExtra
   else Result := rsTyToolWindowActionsOrphan;
 end;
 
-function TTyToolWindowActions.NoteStyle: TTyStyleSet;
+function TTyCustomToolWindowActions.NoteStyle: TTyStyleSet;
 begin
   Result := ActiveController.Model.ResolveStyle(TyToolWindowNoteKey,
     TyStyleClassFor(Self, StyleClass), [tysNormal]);
 end;
 
-function TTyToolWindowActions.NoteLeadAt(APPI: Integer): Integer;
+function TTyCustomToolWindowActions.NoteLeadAt(APPI: Integer): Integer;
 begin
   { 粘贴一个现成的操作区,进来的就是带按钮的多余操作区(spec §4 点名的场景)。子控件照常
     从前导边排,提示排在那一排后面 —— 从 pad 开始画的话前半截压在按钮底下。 }
@@ -3118,7 +3154,7 @@ begin
     Result := MetricPx(TyToolWindowHeaderPadVar, TyToolWindowHeaderPadDef, APPI);
 end;
 
-function TTyToolWindowActions.NoteRectIn(const AClient: TRect; APPI: Integer): TRect;
+function TTyCustomToolWindowActions.NoteRectIn(const AClient: TRect; APPI: Integer): TRect;
 var
   lead, pad: Integer;
 begin
@@ -3135,13 +3171,13 @@ begin
   if Result.Right < Result.Left then Result.Right := Result.Left;
 end;
 
-function TTyToolWindowActions.NoteRect: TRect;
+function TTyCustomToolWindowActions.NoteRect: TRect;
 begin
   { Paint 按 ClientRect、Font.PixelsPerInch 画(见 Paint → RenderTo),这里问的是同一个框。 }
   Result := NoteRectIn(Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
 end;
 
-function TTyToolWindowActions.StrayDesignSize(APPI: Integer): TSize;
+function TTyCustomToolWindowActions.StrayDesignSize(APPI: Integer): TSize;
 var
   st: TTyStyleSet;
   blockW, blockH, textW, fontSize: Integer;
@@ -3162,7 +3198,7 @@ begin
   if blockH > Result.cy then Result.cy := blockH;
 end;
 
-procedure TTyToolWindowActions.ConstrainedResize(var MinWidth, MinHeight, MaxWidth,
+procedure TTyCustomToolWindowActions.ConstrainedResize(var MinWidth, MinHeight, MaxWidth,
   MaxHeight: TConstraintSize);
 var
   sz: TSize;
@@ -3179,7 +3215,7 @@ begin
   if sz.cy > MinHeight then MinHeight := sz.cy;
 end;
 
-procedure TTyToolWindowActions.AlignControls(AControl: TControl; var RemainingClientRect: TRect);
+procedure TTyCustomToolWindowActions.AlignControls(AControl: TControl; var RemainingClientRect: TRect);
 var
   kids: TTyToolWindowKids;
   items: TTyToolWindowFlowItems;
@@ -3234,7 +3270,7 @@ begin
   end;
 end;
 
-procedure TTyToolWindowActions.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomToolWindowActions.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, extraS: TTyStyleSet;
@@ -3272,19 +3308,19 @@ begin
   end;
 end;
 
-procedure TTyToolWindowActions.Paint;
+procedure TTyCustomToolWindowActions.Paint;
 begin
   { 不做绘制缓存:它小,而且子控件就铺在它上面,几乎没有只露它自己的那种重画。 }
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-{ --- TTyToolWindowBar ---------------------------------------------------------- }
+{ --- TTyCustomToolWindowBar ---------------------------------------------------- }
 
 type
   { AdjustClientRect 是 protected:收窄要的是父控件「调整后」的客户区。 }
   TWinControlAccess = class(TWinControl);
 
-constructor TTyToolWindowBar.Create(AOwner: TComponent);
+constructor TTyCustomToolWindowBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   { 第一句:下面的 DeriveSize 会走到 SizesAsCollapsed(读吸附标志)。 }
@@ -3308,7 +3344,7 @@ begin
   DeriveSize;
 end;
 
-destructor TTyToolWindowBar.Destroy;
+destructor TTyCustomToolWindowBar.Destroy;
 begin
   { 直接 Free(不经 Owner 的 DestroyComponents)时 csDestroying 要到继承析构里才置上;
     先置上,下面的手势收尾就只清标志,不在拆到一半的栏上重排、重画。幂等。 }
@@ -3340,12 +3376,12 @@ begin
   FreeAndNil(FGesture);
 end;
 
-function TTyToolWindowBar.GetStyleTypeKey: string;
+function TTyCustomToolWindowBar.GetStyleTypeKey: string;
 begin
   Result := TyToolWindowBarKey;
 end;
 
-function TTyToolWindowBar.EffectiveImages: TCustomImageList;
+function TTyCustomToolWindowBar.EffectiveImages: TCustomImageList;
 begin
   Result := FImages;
   if (Result = nil) and (FManager <> nil)
@@ -3354,7 +3390,7 @@ begin
   if (Result <> nil) and (csDestroying in Result.ComponentState) then Result := nil;
 end;
 
-procedure TTyToolWindowBar.UnsubscribeImages;
+procedure TTyCustomToolWindowBar.UnsubscribeImages;
 var
   old: TCustomImageList;
 begin
@@ -3371,7 +3407,7 @@ begin
     old.RemoveFreeNotification(Self);
 end;
 
-procedure TTyToolWindowBar.SyncImageSubscription;
+procedure TTyCustomToolWindowBar.SyncImageSubscription;
 var
   target: TCustomImageList;
 begin
@@ -3388,7 +3424,7 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.ResolvePendingImageIndexes;
+procedure TTyCustomToolWindowBar.ResolvePendingImageIndexes;
 var
   i: Integer;
 begin
@@ -3397,14 +3433,14 @@ begin
     FRegistered[i].ResolveImageIndex;
 end;
 
-procedure TTyToolWindowBar.ImagesChanged;
+procedure TTyCustomToolWindowBar.ImagesChanged;
 begin
   SyncImageSubscription;
   ResolvePendingImageIndexes;
   if not (csDestroying in ComponentState) then Invalidate;
 end;
 
-procedure TTyToolWindowBar.ImageListChange(Sender: TObject);
+procedure TTyCustomToolWindowBar.ImageListChange(Sender: TObject);
 begin
   { 只重画,不解析挂起的序号:挂起只在「栏没有列表」或「栏在加载中」时才有 —— 前者这里
     订阅着列表就不成立,后者 ResolvePendingImageIndexes 本来就不做。越界的序号也不是挂起的:
@@ -3412,7 +3448,7 @@ begin
   if not (csDestroying in ComponentState) then Invalidate;
 end;
 
-procedure TTyToolWindowBar.SetImages(AValue: TCustomImageList);
+procedure TTyCustomToolWindowBar.SetImages(AValue: TCustomImageList);
 begin
   if FImages = AValue then Exit;
   FImages := AValue;
@@ -3421,7 +3457,7 @@ begin
   ImagesChanged;
 end;
 
-function TTyToolWindowBar.ResolvedImageIndex(AWindow: TTyToolWindow): Integer;
+function TTyCustomToolWindowBar.ResolvedImageIndex(AWindow: TTyCustomToolWindow): Integer;
 begin
   if AWindow = nil then Exit(-1);
   if AWindow.ImageName <> '' then
@@ -3430,26 +3466,26 @@ begin
     Result := AWindow.FImageIndex;
 end;
 
-function TTyToolWindowBar.StripHintText(AWindow: TTyToolWindow): string;
+function TTyCustomToolWindowBar.StripHintText(AWindow: TTyCustomToolWindow): string;
 begin
   if AWindow = nil then Exit('');
   if AWindow.StripHint <> '' then Result := AWindow.StripHint
   else Result := AWindow.Caption;
 end;
 
-function TTyToolWindowBar.ChildClassAllowed(ChildClass: TClass): Boolean;
+function TTyCustomToolWindowBar.ChildClassAllowed(ChildClass: TClass): Boolean;
 begin
   Result := inherited ChildClassAllowed(ChildClass)
-    and ChildClass.InheritsFrom(TTyToolWindow);
+    and ChildClass.InheritsFrom(TTyCustomToolWindow);
 end;
 
-function TTyToolWindowBar.PPI: Integer;
+function TTyCustomToolWindowBar.PPI: Integer;
 begin
   Result := Font.PixelsPerInch;
   if Result <= 0 then Result := 96;
 end;
 
-function TTyToolWindowBar.MetricsAt(APPI: Integer): TTyToolWindowBarMetrics;
+function TTyCustomToolWindowBar.MetricsAt(APPI: Integer): TTyToolWindowBarMetrics;
 var
   S: TTyStyleSet;
 begin
@@ -3468,7 +3504,7 @@ begin
   Result.Chrome := MulDiv(TyChromeInsetLogical(S), APPI, 96);
 end;
 
-function TTyToolWindowBar.Metrics: TTyToolWindowBarMetrics;
+function TTyCustomToolWindowBar.Metrics: TTyToolWindowBarMetrics;
 var
   mdl: TTyStyleModel;
   ver: Cardinal;
@@ -3496,32 +3532,32 @@ begin
   Result := FMetrics;
 end;
 
-function TTyToolWindowBar.ChromeInsetPx: Integer;
+function TTyCustomToolWindowBar.ChromeInsetPx: Integer;
 begin
   Result := Metrics.Chrome;
 end;
 
-function TTyToolWindowBar.StripSizePx: Integer;
+function TTyCustomToolWindowBar.StripSizePx: Integer;
 begin
   Result := Metrics.Strip;
 end;
 
-function TTyToolWindowBar.EdgeSizePx: Integer;
+function TTyCustomToolWindowBar.EdgeSizePx: Integer;
 begin
   Result := Metrics.Edge;
 end;
 
-function TTyToolWindowBar.ContentMinPx: Integer;
+function TTyCustomToolWindowBar.ContentMinPx: Integer;
 begin
   Result := Metrics.ContentMin;
 end;
 
-function TTyToolWindowBar.CollapsedAtRunTime: Boolean;
+function TTyCustomToolWindowBar.CollapsedAtRunTime: Boolean;
 begin
   Result := FCollapsed and not (csDesigning in ComponentState);
 end;
 
-function TTyToolWindowBar.SizesAsCollapsed: Boolean;
+function TTyCustomToolWindowBar.SizesAsCollapsed: Boolean;
 begin
   { 设计期不算收起,没有窗口也按展开算 —— 零宽 / 零高的栏在设计器里点不中(spec §5.4)。
     算放置预览的宽时(FAssumeShown,只在 ShownAxisPx 里)按「有一个窗口、展开着」答。 }
@@ -3529,14 +3565,14 @@ begin
     and (FCollapsed or (WindowCount = 0) or EdgeSnapped);
 end;
 
-function TTyToolWindowBar.HiddenAsEmpty: Boolean;
+function TTyCustomToolWindowBar.HiddenAsEmpty: Boolean;
 begin
   { FAssumeShown:算放置预览的宽时按「有一个窗口」答(只在 ShownAxisPx 里置位)。 }
   Result := FHideWhenEmpty and (FPlacement <> twpBottom) and not FAssumeShown
     and not (csDesigning in ComponentState) and (WindowCount = 0);
 end;
 
-function TTyToolWindowBar.FixedAxisPx(const AM: TTyToolWindowBarMetrics): Integer;
+function TTyCustomToolWindowBar.FixedAxisPx(const AM: TTyToolWindowBarMetrics): Integer;
 begin
   if FPlacement = twpBottom then
   begin
@@ -3553,25 +3589,25 @@ begin
   end;
 end;
 
-function TTyToolWindowBar.UnnarrowedContentPx(const AM: TTyToolWindowBarMetrics): Integer;
+function TTyCustomToolWindowBar.UnnarrowedContentPx(const AM: TTyToolWindowBarMetrics): Integer;
 begin
   if SizesAsCollapsed then Exit(0);
   Result := MulDiv(FExpandedSize, PPI, 96);
   if Result < AM.ContentMin then Result := AM.ContentMin;
 end;
 
-function TTyToolWindowBar.JoinsNarrowing: Boolean;
+function TTyCustomToolWindowBar.JoinsNarrowing: Boolean;
 begin
   { 只有按 Placement 对齐的、看得见的栏参与分空间:改成 alClient 之类的栏,宽高由父控件定。 }
   Result := IsControlVisible and (Align = PlacementAlign);
 end;
 
-function TTyToolWindowBar.NarrowedContentPx(const AM: TTyToolWindowBarMetrics): Integer;
+function TTyCustomToolWindowBar.NarrowedContentPx(const AM: TTyToolWindowBarMetrics): Integer;
 var
   p: TWinControl;
   r: TRect;
   c: TControl;
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
   m: TTyToolWindowBarMetrics;
   side: Boolean;
   avail, demand, sumDemand, sumW, n, i, v: Integer;
@@ -3592,12 +3628,12 @@ begin
   begin
     c := p.Controls[i];
     if not c.IsControlVisible then Continue;
-    if (c is TTyToolWindowBar) and TTyToolWindowBar(c).JoinsNarrowing
-       and ((TTyToolWindowBar(c).FPlacement <> twpBottom) = side) then
+    if (c is TTyCustomToolWindowBar) and TTyCustomToolWindowBar(c).JoinsNarrowing
+       and ((TTyCustomToolWindowBar(c).FPlacement <> twpBottom) = side) then
     begin
       { 同轴的栏:扣掉固定部分,内容按各自**未收窄**的值算,不读对方此刻的宽 ——
         读的话结果跟对齐顺序有关,先排的那一条总是赢。 }
-      b := TTyToolWindowBar(c);
+      b := TTyCustomToolWindowBar(c);
       if b = Self then m := AM else m := b.Metrics;
       Dec(avail, b.FixedAxisPx(m));
       demand := b.UnnarrowedContentPx(m);
@@ -3623,7 +3659,7 @@ begin
   if Result < AM.ContentMin then Result := AM.ContentMin;
 end;
 
-function TTyToolWindowBar.DerivedAxisPx(const AM: TTyToolWindowBarMetrics): Integer;
+function TTyCustomToolWindowBar.DerivedAxisPx(const AM: TTyToolWindowBarMetrics): Integer;
 begin
   { 最大化只改内容项;按收起算尺寸时照旧(那时内容项是 0)。 }
   if (FPlacement = twpBottom) and FMaximized and not SizesAsCollapsed then
@@ -3632,12 +3668,12 @@ begin
     Result := FixedAxisPx(AM) + NarrowedContentPx(AM);
 end;
 
-function TTyToolWindowBar.MaximizedContentPx(const AM: TTyToolWindowBarMetrics): Integer;
+function TTyCustomToolWindowBar.MaximizedContentPx(const AM: TTyToolWindowBarMetrics): Integer;
 var
   p: TWinControl;
   r: TRect;
   c: TControl;
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
   m: TTyToolWindowBarMetrics;
   i: Integer;
 begin
@@ -3650,10 +3686,10 @@ begin
   begin
     c := p.Controls[i];
     if not c.IsControlVisible then Continue;
-    if (c is TTyToolWindowBar) and TTyToolWindowBar(c).JoinsNarrowing
-       and (TTyToolWindowBar(c).FPlacement = twpBottom) then
+    if (c is TTyCustomToolWindowBar) and TTyCustomToolWindowBar(c).JoinsNarrowing
+       and (TTyCustomToolWindowBar(c).FPlacement = twpBottom) then
     begin
-      b := TTyToolWindowBar(c);
+      b := TTyCustomToolWindowBar(c);
       if b = Self then m := AM else m := b.Metrics;
       Dec(Result, b.FixedAxisPx(m));
       if b <> Self then Dec(Result, b.UnnarrowedContentPx(m));
@@ -3665,7 +3701,7 @@ begin
   if Result < AM.ContentMin then Result := AM.ContentMin;
 end;
 
-procedure TTyToolWindowBar.SetMaximized(AValue: Boolean);
+procedure TTyCustomToolWindowBar.SetMaximized(AValue: Boolean);
 begin
   if FMaximized = AValue then Exit;
   if AValue and ((FPlacement <> twpBottom)
@@ -3679,12 +3715,12 @@ begin
   InvalidateHeader;
 end;
 
-procedure TTyToolWindowBar.ParentResized(Sender: TObject);
+procedure TTyCustomToolWindowBar.ParentResized(Sender: TObject);
 begin
   if [csLoading, csDestroying] * ComponentState = [] then DeriveSize;
 end;
 
-procedure TTyToolWindowBar.WatchSiblings;
+procedure TTyCustomToolWindowBar.WatchSiblings;
 var
   p: TWinControl;
   c: TControl;
@@ -3701,7 +3737,7 @@ begin
     c := p.Controls[i];
     { 栏之间已经互相通知(DeriveSiblings、CMVisibleChanged),不再挂。放置预览(spec §6.2 E 期补)
       alNone、不影响分空间,挂上只会让每次显示 / 隐藏多一轮推导。 }
-    if (c = Self) or (c is TTyToolWindowBar) or (c is TTyToolWindowDropPreview)
+    if (c = Self) or (c is TTyCustomToolWindowBar) or (c is TTyToolWindowDropPreview)
        or (csDestroying in c.ComponentState) then Continue;
     known := False;
     for k := 0 to High(FWatched) do
@@ -3719,7 +3755,7 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.UnwatchAt(AIndex: Integer);
+procedure TTyCustomToolWindowBar.UnwatchAt(AIndex: Integer);
 var
   c: TControl;
 begin
@@ -3735,7 +3771,7 @@ begin
   c.RemoveFreeNotification(Self);
 end;
 
-procedure TTyToolWindowBar.UnwatchAll;
+procedure TTyCustomToolWindowBar.UnwatchAll;
 var
   i: Integer;
 begin
@@ -3743,7 +3779,7 @@ begin
     UnwatchAt(i);
 end;
 
-procedure TTyToolWindowBar.SiblingChanged(Sender: TObject);
+procedure TTyCustomToolWindowBar.SiblingChanged(Sender: TObject);
 begin
   { 自己推导时改了尺寸,对齐引擎接着挪兄弟,那一圈回到这里 —— FDeriving 挡住。已经不在
     同一父控件里的(还没来得及摘)不算。 }
@@ -3752,17 +3788,17 @@ begin
   DeriveSize;
 end;
 
-procedure TTyToolWindowBar.DeriveSiblings(AParent: TWinControl);
+procedure TTyCustomToolWindowBar.DeriveSiblings(AParent: TWinControl);
 var
   i: Integer;
 begin
   if AParent = nil then Exit;
   for i := 0 to AParent.ControlCount - 1 do
-    if (AParent.Controls[i] is TTyToolWindowBar) and (AParent.Controls[i] <> Self) then
-      TTyToolWindowBar(AParent.Controls[i]).DeriveSize;
+    if (AParent.Controls[i] is TTyCustomToolWindowBar) and (AParent.Controls[i] <> Self) then
+      TTyCustomToolWindowBar(AParent.Controls[i]).DeriveSize;
 end;
 
-procedure TTyToolWindowBar.SetParent(NewParent: TWinControl);
+procedure TTyCustomToolWindowBar.SetParent(NewParent: TWinControl);
 var
   old: TWinControl;
 begin
@@ -3785,12 +3821,12 @@ begin
   end;
 end;
 
-function TTyToolWindowBar.DerivedAxisPx: Integer;
+function TTyCustomToolWindowBar.DerivedAxisPx: Integer;
 begin
   Result := DerivedAxisPx(Metrics);
 end;
 
-function TTyToolWindowBar.PlacementAlign: TAlign;
+function TTyCustomToolWindowBar.PlacementAlign: TAlign;
 begin
   case FPlacement of
     twpRight: Result := alRight;
@@ -3800,7 +3836,7 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.DeriveSize;
+procedure TTyCustomToolWindowBar.DeriveSize;
 var
   m: TTyToolWindowBarMetrics;
   v: Integer;
@@ -3832,7 +3868,7 @@ begin
   if noteMoved and not FRelayouting then Realign;
 end;
 
-procedure TTyToolWindowBar.ApplyAxisSize(AValue: Integer);
+procedure TTyCustomToolWindowBar.ApplyAxisSize(AValue: Integer);
 var
   p: TWinControl;
   c, best: TControl;
@@ -3939,7 +3975,7 @@ begin
   SetBounds(nl, nt, nw, nh);
 end;
 
-procedure TTyToolWindowBar.Relayout;
+procedure TTyCustomToolWindowBar.Relayout;
 begin
   if FRelayouting then Exit;
   FRelayouting := True;
@@ -3955,7 +3991,7 @@ begin
     HideDropPreview;
 end;
 
-procedure TTyToolWindowBar.Invalidate;
+procedure TTyCustomToolWindowBar.Invalidate;
 var
   m: TTyToolWindowBarMetrics;
   key: string;
@@ -3992,7 +4028,7 @@ begin
   inherited Invalidate;
 end;
 
-procedure TTyToolWindowBar.AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
+procedure TTyCustomToolWindowBar.AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
   const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer);
 begin
   { 继承那一遍按比例缩放了 Width(期间 FDpiAdjusting 为真,不写回 ExpandedSize、
@@ -4001,17 +4037,17 @@ begin
   Relayout;
 end;
 
-function TTyToolWindowBar.WidthIsStored: Boolean;
+function TTyCustomToolWindowBar.WidthIsStored: Boolean;
 begin
   Result := FPlacement = twpBottom;
 end;
 
-function TTyToolWindowBar.HeightIsStored: Boolean;
+function TTyCustomToolWindowBar.HeightIsStored: Boolean;
 begin
   Result := FPlacement <> twpBottom;
 end;
 
-procedure TTyToolWindowBar.SetBounds(ALeft, ATop, AWidth, AHeight: Integer);
+procedure TTyCustomToolWindowBar.SetBounds(ALeft, ATop, AWidth, AHeight: Integer);
 var
   m: TTyToolWindowBarMetrics;
   v: Integer;
@@ -4049,7 +4085,7 @@ begin
   inherited SetBounds(ALeft, ATop, AWidth, AHeight);
 end;
 
-procedure TTyToolWindowBar.ConstrainedResize(var MinWidth, MinHeight, MaxWidth,
+procedure TTyCustomToolWindowBar.ConstrainedResize(var MinWidth, MinHeight, MaxWidth,
   MaxHeight: TConstraintSize);
 var
   m: TTyToolWindowBarMetrics;
@@ -4077,30 +4113,30 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.AdjustClientRect(var ARect: TRect);
+procedure TTyCustomToolWindowBar.AdjustClientRect(var ARect: TRect);
 begin
   inherited AdjustClientRect(ARect);
   { 内容区只有一个定义:LayoutIn。画的、命中的、摆窗口的是同一份。 }
   ARect := LayoutIn(ARect).Content;
 end;
 
-function TTyToolWindowBar.TokenPxAt(const AName: string; ADefault, APPI: Integer): Integer;
+function TTyCustomToolWindowBar.TokenPxAt(const AName: string; ADefault, APPI: Integer): Integer;
 begin
   Result := MulDiv(ActiveController.Metric(AName, ADefault), APPI, 96);
   { 度量值不钳(TyEvalLength),负的按 0 算。 }
   if Result < 0 then Result := 0;
 end;
 
-function TTyToolWindowBar.StrayCount: Integer;
+function TTyCustomToolWindowBar.StrayCount: Integer;
 var
   i: Integer;
 begin
   Result := 0;
   for i := 0 to ControlCount - 1 do
-    if not (Controls[i] is TTyToolWindow) then Inc(Result);
+    if not (Controls[i] is TTyCustomToolWindow) then Inc(Result);
 end;
 
-function TTyToolWindowBar.PlacementConflicts: Boolean;
+function TTyCustomToolWindowBar.PlacementConflicts: Boolean;
 begin
   { 本栏在 manager 的表里、不在释放中时,IsBarUsable 答 False 只有冲突一种原因。释放中的栏
     IsBarUsable 也答 False,但那不是冲突 —— 先排除掉。 }
@@ -4109,19 +4145,19 @@ begin
     and not FManager.IsBarUsable(Self);
 end;
 
-procedure TTyToolWindowBar.ConflictMayHaveChanged;
+procedure TTyCustomToolWindowBar.ConflictMayHaveChanged;
 begin
   if [csDesigning, csLoading, csDestroying] * ComponentState <> [csDesigning] then Exit;
   Realign;
   Invalidate;
 end;
 
-function TTyToolWindowBar.LayoutIn(const AClient: TRect): TTyToolWindowBarLayout;
+function TTyCustomToolWindowBar.LayoutIn(const AClient: TRect): TTyToolWindowBarLayout;
 begin
   Result := LayoutAt(AClient, PPI);
 end;
 
-function TTyToolWindowBar.LayoutAt(const AClient: TRect; APPI: Integer): TTyToolWindowBarLayout;
+function TTyCustomToolWindowBar.LayoutAt(const AClient: TRect; APPI: Integer): TTyToolWindowBarLayout;
 var
   m: TTyToolWindowBarMetrics;
   R: TRect;
@@ -4251,12 +4287,12 @@ begin
   end;
 end;
 
-function TTyToolWindowBar.BarLayout: TTyToolWindowBarLayout;
+function TTyCustomToolWindowBar.BarLayout: TTyToolWindowBarLayout;
 begin
   Result := LayoutIn(ClientRect);
 end;
 
-function TTyToolWindowBar.StripItemRect(AIndex: Integer): TRect;
+function TTyCustomToolWindowBar.StripItemRect(AIndex: Integer): TRect;
 var
   L: TTyToolWindowBarLayout;
   i: Integer;
@@ -4267,7 +4303,7 @@ begin
   Result := Rect(0, 0, 0, 0);
 end;
 
-function TTyToolWindowBar.OverflowStates: TTyStateSet;
+function TTyCustomToolWindowBar.OverflowStates: TTyStateSet;
 begin
   { 同 StripItemStates:禁用时不接悬停、按下。溢出按钮没有「当前」。 }
   Result := [];
@@ -4281,7 +4317,7 @@ begin
   if Result = [] then Include(Result, tysNormal);
 end;
 
-function TTyToolWindowBar.StripItemStates(AIndex: Integer; AWindow: TTyToolWindow): TTyStateSet;
+function TTyCustomToolWindowBar.StripItemStates(AIndex: Integer; AWindow: TTyCustomToolWindow): TTyStateSet;
 begin
   Result := [];
   if (AWindow <> nil) and (AWindow = FActive) and not CollapsedAtRunTime then
@@ -4300,12 +4336,12 @@ begin
   if Result = [] then Include(Result, tysNormal);
 end;
 
-function TTyToolWindowBar.WindowClickable(AWindow: TTyToolWindow): Boolean;
+function TTyCustomToolWindowBar.WindowClickable(AWindow: TTyCustomToolWindow): Boolean;
 begin
   Result := (AWindow <> nil) and AWindow.Enabled;
 end;
 
-procedure TTyToolWindowBar.WindowEnabledChanged(AWindow: TTyToolWindow);
+procedure TTyCustomToolWindowBar.WindowEnabledChanged(AWindow: TTyCustomToolWindow);
 var
   idx: Integer;
 begin
@@ -4328,7 +4364,7 @@ begin
   if AWindow = FActive then TabRowHostMayHaveChanged;
 end;
 
-procedure TTyToolWindowBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomToolWindowBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, stripS, itemS, partS: TTyStyleSet;
@@ -4341,7 +4377,7 @@ var
   ink: TTyColor;
   states: TTyStateSet;
   wins: TTyToolWindowArray;
-  w: TTyToolWindow;
+  w: TTyCustomToolWindow;
   bsz: TSize;
   bpt: TPoint;
   btxt: string;
@@ -4562,16 +4598,16 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.Paint;
+procedure TTyCustomToolWindowBar.Paint;
 begin
   { 不做绘制缓存:悬停变化频繁,而且没有会不停打脏它的子控件(工具窗口有,所以工具窗口做)。 }
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-procedure TTyToolWindowBar.InsertControl(AControl: TControl; Index: Integer);
+procedure TTyCustomToolWindowBar.InsertControl(AControl: TControl; Index: Integer);
 begin
   inherited InsertControl(AControl, Index);
-  if AControl is TTyToolWindow then Exit;
+  if AControl is TTyCustomToolWindow then Exit;
   { 漏进来的:运行时藏起来(写 Visible 而不是派生 —— 这不是我们的类,IsControlVisible
     重写不了;运行时写 Visible 也进不了 .lfm)。设计期让出提示那一行,内缩量变了要重排。 }
   if not (csDesigning in ComponentState) then
@@ -4585,7 +4621,7 @@ end;
 
 { --- 底栏标题行(栏作宿主,spec §7.2) ----------------------------------------------- }
 
-function TTyToolWindowBar.MeasureTabWidths(const AWins: TTyToolWindowArray;
+function TTyCustomToolWindowBar.MeasureTabWidths(const AWins: TTyToolWindowArray;
   APPI: Integer): TTyToolWindowWidths;
 var
   cls: string;
@@ -4635,7 +4671,7 @@ begin
   end;
 end;
 
-function TTyToolWindowBar.BadgeCacheKey(AWindow: TTyToolWindow): string;
+function TTyCustomToolWindowBar.BadgeCacheKey(AWindow: TTyCustomToolWindow): string;
 var
   txt: string;
   dot: Boolean;
@@ -4645,12 +4681,12 @@ begin
   else Result := '#' + txt;
 end;
 
-procedure TTyToolWindowBar.TabWidthsChanged;
+procedure TTyCustomToolWindowBar.TabWidthsChanged;
 begin
   FTabCacheValid := False;
 end;
 
-function TTyToolWindowBar.TabWidthsAt(APPI: Integer): TTyToolWindowWidths;
+function TTyCustomToolWindowBar.TabWidthsAt(APPI: Integer): TTyToolWindowWidths;
 var
   wins: TTyToolWindowArray;
   mdl: TTyStyleModel;
@@ -4707,7 +4743,7 @@ begin
   Result := Copy(FTabCacheWidths);
 end;
 
-function TTyToolWindowBar.SeparatorLinePx(APPI: Integer): Integer;
+function TTyCustomToolWindowBar.SeparatorLinePx(APPI: Integer): Integer;
 var
   S: TTyStyleSet;
 begin
@@ -4718,7 +4754,7 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-function TTyToolWindowBar.HeaderInputFor(AWindow: TTyToolWindow; ARowWidth, ARowHeight,
+function TTyCustomToolWindowBar.HeaderInputFor(AWindow: TTyCustomToolWindow; ARowWidth, ARowHeight,
   APPI: Integer): TTyToolWindowHeaderInput;
 begin
   Result := AWindow.HeaderInput(APPI, ARowWidth);
@@ -4733,14 +4769,14 @@ begin
   Result.SeparatorWidth := 2 * Result.Gap + SeparatorLinePx(APPI);
 end;
 
-function TTyToolWindowBar.HeaderMode(AWindow: TTyToolWindow): TTyToolWindowHeaderMode;
+function TTyCustomToolWindowBar.HeaderMode(AWindow: TTyCustomToolWindow): TTyToolWindowHeaderMode;
 begin
   { 只看位置(同 TTyToolWindow.HeaderMode 的说明)。 }
   if FPlacement = twpBottom then Result := twhBottom
   else Result := twhSide;
 end;
 
-function TTyToolWindowBar.HostsTabRow: Boolean;
+function TTyCustomToolWindowBar.HostsTabRow: Boolean;
 begin
   { 设计期不让出:设计期 LCL 不禁用句柄(wincontrol.inc:6758),页照常收得到。收起时高 0,
     本来就没有这一行;拉宽边正吸附着(按收起排布,SizesAsCollapsed)同样高 0 —— 两种一个口径,
@@ -4750,7 +4786,7 @@ begin
     and not (csDesigning in ComponentState) and not FCollapsed and not EdgeSnapped;
 end;
 
-function TTyToolWindowBar.BottomRowHeightAt(APPI: Integer): Integer;
+function TTyCustomToolWindowBar.BottomRowHeightAt(APPI: Integer): Integer;
 var
   a: Integer;
 begin
@@ -4760,7 +4796,7 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-function TTyToolWindowBar.TabRowHost: TTyToolWindowTabRowHost;
+function TTyCustomToolWindowBar.TabRowHost: TTyToolWindowTabRowHost;
 var
   L: TTyToolWindowBarLayout;
 begin
@@ -4787,14 +4823,14 @@ begin
   end;
 end;
 
-function TTyToolWindowBar.TabRowHostControl: TWinControl;
+function TTyCustomToolWindowBar.TabRowHostControl: TWinControl;
 begin
   if FPlacement <> twpBottom then Result := nil
   else if HostsTabRow then Result := Self
   else Result := FActive;
 end;
 
-procedure TTyToolWindowBar.TabRowHostMayHaveChanged;
+procedure TTyCustomToolWindowBar.TabRowHostMayHaveChanged;
 var
   now: Boolean;
 begin
@@ -4813,18 +4849,18 @@ begin
   InvalidateHeader;
 end;
 
-function TTyToolWindowBar.InDisabledActivePage(const AP: TPoint): Boolean;
+function TTyCustomToolWindowBar.InDisabledActivePage(const AP: TPoint): Boolean;
 begin
   Result := (FActive <> nil) and not FActive.Enabled and FActive.Visible
     and PtInRect(FActive.BoundsRect, AP);
 end;
 
-function TTyToolWindowBar.SwallowPress(const AP: TPoint): Boolean;
+function TTyCustomToolWindowBar.SwallowPress(const AP: TPoint): Boolean;
 begin
   Result := (HostsTabRow and PtInRect(BarLayout.TabRow, AP)) or InDisabledActivePage(AP);
 end;
 
-function TTyToolWindowBar.HeaderActionsHeight(AWindow: TTyToolWindow; APPI: Integer): Integer;
+function TTyCustomToolWindowBar.HeaderActionsHeight(AWindow: TTyCustomToolWindow; APPI: Integer): Integer;
 var
   wins: TTyToolWindowArray;
   i, h: Integer;
@@ -4839,7 +4875,7 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.ActionsSizeChanged;
+procedure TTyCustomToolWindowBar.ActionsSizeChanged;
 var
   h: Integer;
 begin
@@ -4864,10 +4900,10 @@ begin
   end;
 end;
 
-function TTyToolWindowBar.HeaderGeometry(AWindow: TTyToolWindow; ARowWidth, ARowHeight,
+function TTyCustomToolWindowBar.HeaderGeometry(AWindow: TTyCustomToolWindow; ARowWidth, ARowHeight,
   APPI: Integer): TTyToolWindowHeaderGeom;
 var
-  w: TTyToolWindow;
+  w: TTyCustomToolWindow;
 begin
   w := AWindow;
   if w = nil then w := FActive;
@@ -4875,8 +4911,8 @@ begin
   Result := TyToolWindowHeaderLayout(HeaderInputFor(w, ARowWidth, ARowHeight, APPI));
 end;
 
-function TTyToolWindowBar.HeaderPressed(AWindow: TTyToolWindow; APart: TTyToolWindowBarPart;
-  AItem: TTyToolWindow): Boolean;
+function TTyCustomToolWindowBar.HeaderPressed(AWindow: TTyCustomToolWindow; APart: TTyToolWindowBarPart;
+  AItem: TTyCustomToolWindow): Boolean;
 begin
   { 拖动中被拖的那个标签(源)照样画按下态,直到手势收尾;按钮不是拖动把手,只有武装态。
     捕获者要是标签行此刻的宿主(当前页,或让出时的栏,spec §3.7);AWindow 只是画它的那一页。 }
@@ -4888,13 +4924,13 @@ begin
     Result := (AItem <> nil) and (FGesture.Window = AItem);
 end;
 
-function TTyToolWindowBar.HeaderCapturedBy(AWindow: TTyToolWindow): Boolean;
+function TTyCustomToolWindowBar.HeaderCapturedBy(AWindow: TTyCustomToolWindow): Boolean;
 begin
   Result := (AWindow <> nil) and (FGesture <> nil) and (FGesture.Capturer = AWindow);
 end;
 
-function TTyToolWindowBar.HeaderTabStates(AWindow: TTyToolWindow; AIndex, AActiveIndex: Integer;
-  AItem: TTyToolWindow): TTyStateSet;
+function TTyCustomToolWindowBar.HeaderTabStates(AWindow: TTyCustomToolWindow; AIndex, AActiveIndex: Integer;
+  AItem: TTyCustomToolWindow): TTyStateSet;
 begin
   Result := [];
   if AIndex = AActiveIndex then Include(Result, tysSelected);
@@ -4913,7 +4949,7 @@ begin
   if Result = [] then Include(Result, tysNormal);
 end;
 
-function TTyToolWindowBar.HeaderPartStates(AWindow: TTyToolWindow;
+function TTyCustomToolWindowBar.HeaderPartStates(AWindow: TTyCustomToolWindow;
   APart: TTyToolWindowBarPart): TTyStateSet;
 begin
   Result := [];
@@ -4927,7 +4963,7 @@ begin
   if Result = [] then Include(Result, tysNormal);
 end;
 
-function TTyToolWindowBar.PartOfZone(AZone: TTyToolWindowZone): TTyToolWindowBarPart;
+function TTyCustomToolWindowBar.PartOfZone(AZone: TTyToolWindowZone): TTyToolWindowBarPart;
 begin
   case AZone of
     twzTab: Result := twbpItem;
@@ -4940,7 +4976,7 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.SetHeaderHover(APart: TTyToolWindowBarPart; AIndex: Integer);
+procedure TTyCustomToolWindowBar.SetHeaderHover(APart: TTyToolWindowBarPart; AIndex: Integer);
 begin
   { 分隔线不可点,没有悬停态。 }
   if APart = twbpSeparator then APart := twbpNone;
@@ -4951,7 +4987,7 @@ begin
   InvalidateHeader;
 end;
 
-function TTyToolWindowBar.RowDropSlot(const AHost: TTyToolWindowTabRowHost;
+function TTyCustomToolWindowBar.RowDropSlot(const AHost: TTyToolWindowTabRowHost;
   X, Y: Integer): Integer;
 var
   g: TTyToolWindowHeaderGeom;
@@ -4967,7 +5003,7 @@ begin
   rowH := AHost.Row.Bottom - AHost.Row.Top;
   if not PtInRect(Rect(0, 0, rowW, rowH), pt) or PtInRect(AHost.Geom.Actions, pt) then Exit;
   { 几何按画它的那一页的读写方向镜像:页当宿主就是它,栏当宿主是当前页。 }
-  if AHost.Host is TTyToolWindow then rtl := TTyToolWindow(AHost.Host).IsRightToLeft
+  if AHost.Host is TTyCustomToolWindow then rtl := TTyCustomToolWindow(AHost.Host).IsRightToLeft
   else rtl := (FActive <> nil) and FActive.IsRightToLeft;
   g := AHost.Geom;
   if rtl then
@@ -4980,7 +5016,7 @@ begin
   Result := TyToolWindowSlotAt(g.Tabs, pt.X, pt.Y, False, WindowCount);
 end;
 
-procedure TTyToolWindowBar.RowDragIn(const AHost: TTyToolWindowTabRowHost; X, Y: Integer);
+procedure TTyCustomToolWindowBar.RowDragIn(const AHost: TTyToolWindowTabRowHost; X, Y: Integer);
 var
   slot: Integer;
 begin
@@ -4990,7 +5026,7 @@ begin
   if slot < 0 then FGesture.SetCursor(crNoDrop) else FGesture.SetCursor(crDrag);
 end;
 
-function TTyToolWindowBar.PageRowHost(AWindow: TTyToolWindow;
+function TTyCustomToolWindowBar.PageRowHost(AWindow: TTyCustomToolWindow;
   const AGeom: TTyToolWindowHeaderGeom): TTyToolWindowTabRowHost;
 begin
   Result.Host := AWindow;
@@ -4998,7 +5034,7 @@ begin
   Result.Geom := AGeom;
 end;
 
-procedure TTyToolWindowBar.InvalidateHeader;
+procedure TTyCustomToolWindowBar.InvalidateHeader;
 begin
   if (FPlacement <> twpBottom) or (csDestroying in ComponentState) then Exit;
   { 标签行让到了栏里(当前页被禁用,spec §3.7):画在栏自己的像素里,栏没有绘制缓存,
@@ -5013,7 +5049,7 @@ begin
     FActive.Invalidate;
 end;
 
-procedure TTyToolWindowBar.PaintHeader(AWindow: TTyToolWindow; APainter: TTyPainter;
+procedure TTyCustomToolWindowBar.PaintHeader(AWindow: TTyCustomToolWindow; APainter: TTyPainter;
   const ARow: TRect; const AGeom: TTyToolWindowHeaderGeom; APPI: Integer);
 var
   cls: string;
@@ -5213,7 +5249,7 @@ begin
   end;
 end;
 
-function TTyToolWindowBar.HeaderZoneAt(AWindow: TTyToolWindow; X, Y: Integer;
+function TTyCustomToolWindowBar.HeaderZoneAt(AWindow: TTyCustomToolWindow; X, Y: Integer;
   out AIndex: Integer; out ARect: TRect): TTyToolWindowZone;
 var
   g: TTyToolWindowHeaderGeom;
@@ -5263,7 +5299,7 @@ begin
   if Result <> twzNone then Types.OffsetRect(ARect, ox, oy);
 end;
 
-procedure TTyToolWindowBar.RowDown(const AHost: TTyToolWindowTabRowHost; Button: TMouseButton;
+procedure TTyCustomToolWindowBar.RowDown(const AHost: TTyToolWindowTabRowHost; Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 var
   zone: TTyToolWindowZone;
@@ -5294,7 +5330,7 @@ begin
   InvalidateHeader;        { 按下态 }
 end;
 
-procedure TTyToolWindowBar.RowMove(const AHost: TTyToolWindowTabRowHost; Shift: TShiftState;
+procedure TTyCustomToolWindowBar.RowMove(const AHost: TTyToolWindowTabRowHost; Shift: TShiftState;
   X, Y: Integer);
 var
   zone: TTyToolWindowZone;
@@ -5319,12 +5355,12 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.RowUp(const AHost: TTyToolWindowTabRowHost; Button: TMouseButton;
+procedure TTyCustomToolWindowBar.RowUp(const AHost: TTyToolWindowTabRowHost; Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 var
   zone: TTyToolWindowZone;
   part: TTyToolWindowBarPart;
-  w: TTyToolWindow;
+  w: TTyCustomToolWindow;
   rel: TTyToolWindowGestureRelease;
   idx, slot: Integer;
   commit: Boolean;
@@ -5376,7 +5412,7 @@ begin
   end;
 end;
 
-function TTyToolWindowBar.RowHintAt(const AHost: TTyToolWindowTabRowHost; X, Y: Integer;
+function TTyCustomToolWindowBar.RowHintAt(const AHost: TTyToolWindowTabRowHost; X, Y: Integer;
   out AText: string; out ARect: TRect): Boolean;
 var
   idx, i: Integer;
@@ -5417,7 +5453,7 @@ begin
   else ARect := Rect(0, 0, 0, 0);
 end;
 
-procedure TTyToolWindowBar.HeaderMouseDown(AWindow: TTyToolWindow; Button: TMouseButton;
+procedure TTyCustomToolWindowBar.HeaderMouseDown(AWindow: TTyCustomToolWindow; Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 begin
   { 只认当前页转来的(旧页迟到的消息不算)。其余的闸在 RowDown。 }
@@ -5426,7 +5462,7 @@ begin
     AWindow.ClientHeight), AWindow.Font.PixelsPerInch)), Button, Shift, X, Y);
 end;
 
-procedure TTyToolWindowBar.HeaderMoveIn(AWindow: TTyToolWindow;
+procedure TTyCustomToolWindowBar.HeaderMoveIn(AWindow: TTyCustomToolWindow;
   const AGeom: TTyToolWindowHeaderGeom; Shift: TShiftState; X, Y: Integer);
 begin
   { spec §7.1:旧页迟到的消息不许清新页的悬停。设计期不做悬停(RowMove)。 }
@@ -5434,7 +5470,7 @@ begin
   RowMove(PageRowHost(AWindow, AGeom), Shift, X, Y);
 end;
 
-procedure TTyToolWindowBar.HeaderMouseUp(AWindow: TTyToolWindow; Button: TMouseButton;
+procedure TTyCustomToolWindowBar.HeaderMouseUp(AWindow: TTyCustomToolWindow; Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 begin
   if AWindow = nil then Exit;
@@ -5443,20 +5479,20 @@ begin
     AWindow.ClientHeight), AWindow.Font.PixelsPerInch)), Button, Shift, X, Y);
 end;
 
-procedure TTyToolWindowBar.HeaderMouseLeave(AWindow: TTyToolWindow);
+procedure TTyCustomToolWindowBar.HeaderMouseLeave(AWindow: TTyCustomToolWindow);
 begin
   { 只清悬停,从不解除武装(spec §9.2:捕获期间 Win32 的 WM_MOUSELEAVE 可能在捕获者身上触发)。
     旧页迟到的离开不算(spec §7.1)。 }
   if (AWindow <> nil) and (AWindow = FActive) then SetHeaderHover(twbpNone, -1);
 end;
 
-procedure TTyToolWindowBar.HeaderCancelMode(AWindow: TTyToolWindow);
+procedure TTyCustomToolWindowBar.HeaderCancelMode(AWindow: TTyCustomToolWindow);
 begin
   { 捕获者是这一页、它收到了 LM_CANCELMODE(spec §9.7):ShowModal、异常对话框之类。 }
   if (AWindow <> nil) and (FGesture.Capturer = AWindow) then ResetGesture(twgeCancel);
 end;
 
-function TTyToolWindowBar.HeaderHint(AWindow: TTyToolWindow; X, Y: Integer; out AText: string;
+function TTyCustomToolWindowBar.HeaderHint(AWindow: TTyCustomToolWindow; X, Y: Integer; out AText: string;
   out ARect: TRect): Boolean;
 var
   h: TTyToolWindowTabRowHost;
@@ -5471,7 +5507,7 @@ begin
   Result := RowHintAt(h, X, Y, AText, ARect);
 end;
 
-procedure TTyToolWindowBar.HeaderContextPopup(AWindow: TTyToolWindow; X, Y: Integer);
+procedure TTyCustomToolWindowBar.HeaderContextPopup(AWindow: TTyCustomToolWindow; X, Y: Integer);
 var
   idx: Integer;
   r: TRect;
@@ -5498,7 +5534,7 @@ end;
 
 { --- 图标条手势 ---------------------------------------------------------------- }
 
-function TTyToolWindowBar.PartAt(X, Y: Integer; out AIndex: Integer): TTyToolWindowBarPart;
+function TTyCustomToolWindowBar.PartAt(X, Y: Integer; out AIndex: Integer): TTyToolWindowBarPart;
 var
   L: TTyToolWindowBarLayout;
   pt: TPoint;
@@ -5532,7 +5568,7 @@ begin
   if PtInRect(L.Edge, pt) and not FMaximized then Exit(twbpEdge);
 end;
 
-function TTyToolWindowBar.WindowAtPos(X, Y: Integer): TTyToolWindow;
+function TTyCustomToolWindowBar.WindowAtPos(X, Y: Integer): TTyCustomToolWindow;
 var
   idx: Integer;
 begin
@@ -5540,7 +5576,7 @@ begin
   else Result := nil;
 end;
 
-function TTyToolWindowBar.StripHintAt(X, Y: Integer; out AText: string;
+function TTyCustomToolWindowBar.StripHintAt(X, Y: Integer; out AText: string;
   out ARect: TRect): Boolean;
 var
   idx: Integer;
@@ -5553,7 +5589,7 @@ begin
   ARect := StripItemRect(idx);
 end;
 
-function TTyToolWindowBar.OverflowWindows: TTyToolWindowPlan;
+function TTyCustomToolWindowBar.OverflowWindows: TTyToolWindowPlan;
 var
   L: TTyToolWindowBarLayout;
   h: TTyToolWindowTabRowHost;
@@ -5585,59 +5621,59 @@ begin
     end;
 end;
 
-function TTyToolWindowBar.GestureStateForTest: TTyToolWindowGestureState;
+function TTyCustomToolWindowBar.GestureStateForTest: TTyToolWindowGestureState;
 begin
   Result := FGesture.State;
 end;
 
-function TTyToolWindowBar.HasCaptureTimerForTest: Boolean;
+function TTyCustomToolWindowBar.HasCaptureTimerForTest: Boolean;
 begin
   Result := FGesture.HasCaptureTimer;
 end;
 
-function TTyToolWindowBar.AllowedCacheCountForTest: Integer;
+function TTyCustomToolWindowBar.AllowedCacheCountForTest: Integer;
 begin
   Result := FGesture.AllowedCount;
 end;
 
-function TTyToolWindowBar.WatchedSiblingCountForTest: Integer;
+function TTyCustomToolWindowBar.WatchedSiblingCountForTest: Integer;
 begin
   Result := Length(FWatched);
 end;
 
-function TTyToolWindowBar.IsEdgeDraggingForTest: Boolean;
+function TTyCustomToolWindowBar.IsEdgeDraggingForTest: Boolean;
 begin
   Result := EdgeResizing;
 end;
 
-function TTyToolWindowBar.EdgeResizing: Boolean;
+function TTyCustomToolWindowBar.EdgeResizing: Boolean;
 begin
   Result := (FGesture <> nil) and FGesture.Resizing;
 end;
 
-function TTyToolWindowBar.EdgeSnapped: Boolean;
+function TTyCustomToolWindowBar.EdgeSnapped: Boolean;
 begin
   Result := (FGesture <> nil) and FGesture.Snapped;
 end;
 
-function TTyToolWindowBar.TickNow: QWord;
+function TTyCustomToolWindowBar.TickNow: QWord;
 begin
   Result := GetTickCount64;
 end;
 
-function TTyToolWindowBar.PointerInClient(out APoint: TPoint): Boolean;
+function TTyCustomToolWindowBar.PointerInClient(out APoint: TPoint): Boolean;
 begin
   Result := HandleAllocated;
   if Result then APoint := ScreenToClient(Mouse.CursorPos)
   else APoint := Point(-1, -1);
 end;
 
-procedure TTyToolWindowBar.ResetGesture(AReason: TTyToolWindowGestureEnd);
+procedure TTyCustomToolWindowBar.ResetGesture(AReason: TTyToolWindowGestureEnd);
 begin
   if FGesture <> nil then FGesture.Reset(AReason);
 end;
 
-procedure TTyToolWindowBar.ResizeEnded(AReason: TTyToolWindowGestureEnd; AWasSnapped: Boolean);
+procedure TTyCustomToolWindowBar.ResizeEnded(AReason: TTyToolWindowGestureEnd; AWasSnapped: Boolean);
 begin
   { 拉宽:松开保留此刻的尺寸;其他收尾回到起点(spec §6.3)。析构中引擎不调这里 —— 回到
     起点要 Relayout,而栏已经拆了一半。 }
@@ -5654,7 +5690,7 @@ begin
   if AWasSnapped then TabRowHostMayHaveChanged;
 end;
 
-procedure TTyToolWindowBar.GestureCleared(ATabRow: Boolean);
+procedure TTyCustomToolWindowBar.GestureCleared(ATabRow: Boolean);
 begin
   if (FStripPressed <> -1) or FOverflowPressed then
   begin
@@ -5666,7 +5702,7 @@ begin
   if ATabRow then InvalidateHeader;
 end;
 
-procedure TTyToolWindowBar.SetStripHover(AIndex: Integer; AOverflow: Boolean);
+procedure TTyCustomToolWindowBar.SetStripHover(AIndex: Integer; AOverflow: Boolean);
 begin
   { 只管图标和溢出按钮。边缘区的悬停另由 SetEdgeHover 管,调用方显式地给 —— 在这里顺手清
     的话,在边缘区里每移动一下都是「清掉、再设回去」,光标和整条栏各白写一遍。 }
@@ -5676,7 +5712,7 @@ begin
   if not (csDestroying in ComponentState) then Invalidate;
 end;
 
-procedure TTyToolWindowBar.UpdateHoverAt(X, Y: Integer);
+procedure TTyCustomToolWindowBar.UpdateHoverAt(X, Y: Integer);
 var
   part: TTyToolWindowBarPart;
   idx: Integer;
@@ -5706,7 +5742,7 @@ begin
   SetEdgeHover(part = twbpEdge);
 end;
 
-procedure TTyToolWindowBar.RecheckHover;
+procedure TTyCustomToolWindowBar.RecheckHover;
 var
   p: TPoint;
 begin
@@ -5722,7 +5758,7 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.StripClick(AWindow: TTyToolWindow);
+procedure TTyCustomToolWindowBar.StripClick(AWindow: TTyCustomToolWindow);
 var
   now: QWord;
 begin
@@ -5751,13 +5787,13 @@ begin
     Collapsed := not FCollapsed;
 end;
 
-procedure TTyToolWindowBar.OverflowItemClick(Sender: TObject);
+procedure TTyCustomToolWindowBar.OverflowItemClick(Sender: TObject);
 var
-  w: TTyToolWindow;
+  w: TTyCustomToolWindow;
 begin
   { Tag 里是窗口引用;只拿来跟活着的窗口列表比指针,不解引用 —— 菜单开着的时候它可能
     已经走了。菜单项不受防抖限制(spec §6.5)。 }
-  w := TTyToolWindow(PtrUInt(TMenuItem(Sender).Tag));
+  w := TTyCustomToolWindow(PtrUInt(TMenuItem(Sender).Tag));
   if IndexOfWindow(w) < 0 then Exit;
   { 菜单开着的时候它被禁用了(菜单项在建菜单那一刻就灰了,spec §3.7)。 }
   if not w.Enabled then Exit;
@@ -5765,12 +5801,12 @@ begin
   Collapsed := False;
 end;
 
-procedure TTyToolWindowBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomToolWindowBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   part: TTyToolWindowBarPart;
   idx: Integer;
   inStrip: Boolean;
-  w: TTyToolWindow;
+  w: TTyCustomToolWindow;
 begin
   { 每次按下都新建一条记录。上一次手势丢了松开留下的一切 —— 临时光标、处理器、计时器、
     拉到一半的边 —— 在这里一次收干净,而且在继承之前:用户的 OnMouseDown 看到的是
@@ -5829,7 +5865,7 @@ begin
     BeginEdgeDrag(X, Y);
 end;
 
-procedure TTyToolWindowBar.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomToolWindowBar.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   { spec §9.7:任何注册栏看到没有 ssLeft 的移动,别的栏上正在拖的就丢了松开 —— 取消。 }
   if (FManager <> nil) and (FManager.FDragSource <> nil) and (FManager.FDragSource <> Self)
@@ -5857,14 +5893,14 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomToolWindowBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   part: TTyToolWindowBarPart;
-  w: TTyToolWindow;
+  w: TTyCustomToolWindow;
   rel: TTyToolWindowGestureRelease;
   commit: Boolean;
   idx, slot: Integer;
-  tgt, cross: TTyToolWindowBar;
+  tgt, cross: TTyCustomToolWindowBar;
 begin
   { 手势在继承之后收尾(spec §9.2);用户的 OnMouseUp 抛异常的话,残局在这里收掉再往外抛。 }
   try
@@ -5948,7 +5984,7 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.MouseLeave;
+procedure TTyCustomToolWindowBar.MouseLeave;
 begin
   inherited MouseLeave;
   { 只清悬停,**不**解除武装:捕获期间 Win32 的 WM_MOUSELEAVE 可能在捕获者身上触发一次
@@ -5962,7 +5998,7 @@ begin
     FGesture.DisarmDesign;
 end;
 
-procedure TTyToolWindowBar.Click;
+procedure TTyCustomToolWindowBar.Click;
 begin
   { 栏 published 了 OnClick,LCL 在 MouseUp 之前调它:按在图标条 / 边缘区上的那一下不是
     「点了栏」。 }
@@ -5970,13 +6006,13 @@ begin
   inherited Click;
 end;
 
-procedure TTyToolWindowBar.DblClick;
+procedure TTyCustomToolWindowBar.DblClick;
 begin
   if FGesture.SwallowClick then Exit;
   inherited DblClick;
 end;
 
-procedure TTyToolWindowBar.WndProc(var TheMessage: TLMessage);
+procedure TTyCustomToolWindowBar.WndProc(var TheMessage: TLMessage);
 begin
   if (TheMessage.Msg = LM_LBUTTONDOWN) or (TheMessage.Msg = LM_LBUTTONDBLCLK) then
   begin
@@ -5992,14 +6028,14 @@ begin
     inherited WndProc(TheMessage);
 end;
 
-procedure TTyToolWindowBar.CaptureChanged;
+procedure TTyCustomToolWindowBar.CaptureChanged;
 begin
   if (csDesigning in ComponentState) and FGesture.DesignArmed and (GetCaptureControl <> Self) then
     FGesture.DisarmDesign;
   inherited CaptureChanged;
 end;
 
-procedure TTyToolWindowBar.BeginAutoDrag;
+procedure TTyCustomToolWindowBar.BeginAutoDrag;
 var
   p: TPoint;
   idx: Integer;
@@ -6017,12 +6053,12 @@ begin
   StartLclAutoDrag;
 end;
 
-procedure TTyToolWindowBar.StartLclAutoDrag;
+procedure TTyCustomToolWindowBar.StartLclAutoDrag;
 begin
   inherited BeginAutoDrag;
 end;
 
-procedure TTyToolWindowBar.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
+procedure TTyCustomToolWindowBar.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
 begin
   { 让出来的标签行里、不在标签上(spec §3.7 / §6.8 E 期补):吞掉,不冒泡到窗体(同页那一路)。
     标签上照常:WindowAtPos 按 TabRowHost 认得出。 }
@@ -6043,14 +6079,14 @@ begin
   inherited DoContextPopup(MousePos, Handled);
 end;
 
-function TTyToolWindowBar.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+function TTyCustomToolWindowBar.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 begin
   if HostsTabRow and PtInRect(BarLayout.TabRow, MousePos) then Exit(True);
   Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
 end;
 
-function TTyToolWindowBar.GetPopupMenu: TPopupMenu;
+function TTyCustomToolWindowBar.GetPopupMenu: TPopupMenu;
 begin
   if FPopupBlocked then
   begin
@@ -6060,14 +6096,14 @@ begin
   Result := inherited GetPopupMenu;
 end;
 
-procedure TTyToolWindowBar.ShowOverflowMenu;
+procedure TTyCustomToolWindowBar.ShowOverflowMenu;
 var
   hidden: TTyToolWindowPlan;
   item: TMenuItem;
   host: TWinControl;
   pt: TPoint;
   menuAlign: TPopupAlignment;
-  w: TTyToolWindow;
+  w: TTyCustomToolWindow;
   btxt: string;
   bdot: Boolean;
   i: Integer;
@@ -6102,7 +6138,7 @@ begin
   FOverflowMenu.PopUp(pt.X, pt.Y);
 end;
 
-function TTyToolWindowBar.OverflowMenuAnchorIn(out APoint: TPoint;
+function TTyCustomToolWindowBar.OverflowMenuAnchorIn(out APoint: TPoint;
   out AAlignment: TPopupAlignment): TWinControl;
 var
   r: TRect;
@@ -6135,12 +6171,12 @@ begin
   end;
 end;
 
-function TTyToolWindowBar.EdgeRect: TRect;
+function TTyCustomToolWindowBar.EdgeRect: TRect;
 begin
   Result := BarLayout.Edge;
 end;
 
-procedure TTyToolWindowBar.LMCancelMode(var Message: TLMessage);
+procedure TTyCustomToolWindowBar.LMCancelMode(var Message: TLMessage);
 begin
   inherited;
   { ShowModal、Application.HandleException 会发:拉宽到一半的尺寸不许留下,拖到一半的
@@ -6149,7 +6185,7 @@ begin
   FGesture.DisarmDesign;
 end;
 
-procedure TTyToolWindowBar.CMEnabledChanged(var Message: TLMessage);
+procedure TTyCustomToolWindowBar.CMEnabledChanged(var Message: TLMessage);
 begin
   inherited;
   if not Enabled then ResetGesture(twgeCancel);
@@ -6160,7 +6196,7 @@ begin
   InvalidateHeader;
 end;
 
-procedure TTyToolWindowBar.CMVisibleChanged(var Message: TLMessage);
+procedure TTyCustomToolWindowBar.CMVisibleChanged(var Message: TLMessage);
 begin
   inherited;
   if not Visible then ResetGesture(twgeCancel);
@@ -6170,7 +6206,7 @@ begin
   if [csLoading, csDestroying] * ComponentState = [] then DeriveSiblings(Parent);
 end;
 
-procedure TTyToolWindowBar.SetEdgeHover(AOn: Boolean);
+procedure TTyCustomToolWindowBar.SetEdgeHover(AOn: Boolean);
 var
   want: TCursor;
 begin
@@ -6194,7 +6230,7 @@ begin
   if not (csDestroying in ComponentState) then Invalidate;
 end;
 
-procedure TTyToolWindowBar.BeginEdgeDrag(X, Y: Integer);
+procedure TTyCustomToolWindowBar.BeginEdgeDrag(X, Y: Integer);
 begin
   { 没有窗口、设计期:边缘区不起作用(LayoutIn 这时给的 Edge 本来就是空的,按不到这里)。
     吞点击的标志 MouseDown 已经按部件设过了。 }
@@ -6203,7 +6239,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyToolWindowBar.EdgeDragTo(X, Y: Integer);
+procedure TTyCustomToolWindowBar.EdgeDragTo(X, Y: Integer);
 var
   p: TPoint;
   d, want, minL, v: Integer;
@@ -6239,12 +6275,12 @@ begin
   if wasSnapped <> FGesture.Snapped then TabRowHostMayHaveChanged;
 end;
 
-function TTyToolWindowBar.IsDraggingForTest: Boolean;
+function TTyCustomToolWindowBar.IsDraggingForTest: Boolean;
 begin
   Result := FGesture.State = twgsDragging;
 end;
 
-function TTyToolWindowBar.DropSlotAt(X, Y: Integer): Integer;
+function TTyCustomToolWindowBar.DropSlotAt(X, Y: Integer): Integer;
 var
   L: TTyToolWindowBarLayout;
 begin
@@ -6255,7 +6291,7 @@ begin
   Result := TyToolWindowSlotAt(L.Slots, X, Y, True, WindowCount);
 end;
 
-function TTyToolWindowBar.IsNoOpSlot(ASlot: Integer): Boolean;
+function TTyCustomToolWindowBar.IsNoOpSlot(ASlot: Integer): Boolean;
 var
   src: Integer;
 begin
@@ -6263,7 +6299,7 @@ begin
   Result := (src < 0) or (ASlot = src) or (ASlot = src + 1);
 end;
 
-function TTyToolWindowBar.DropLineY(const L: TTyToolWindowBarLayout): Integer;
+function TTyCustomToolWindowBar.DropLineY(const L: TTyToolWindowBarLayout): Integer;
 var
   i: Integer;
 begin
@@ -6283,7 +6319,7 @@ begin
   if FForeignDrop then Result := L.Cells.Top;
 end;
 
-procedure TTyToolWindowBar.SetForeignDrop(ASlot: Integer);
+procedure TTyCustomToolWindowBar.SetForeignDrop(ASlot: Integer);
 var
   lit: Boolean;
 begin
@@ -6298,12 +6334,12 @@ begin
   else Invalidate;
 end;
 
-function TTyToolWindowBar.DragCursorForTest: TCursor;
+function TTyCustomToolWindowBar.DragCursorForTest: TCursor;
 begin
   Result := FGesture.FCursor;
 end;
 
-procedure TTyToolWindowBar.SetDropSlot(ASlot: Integer);
+procedure TTyCustomToolWindowBar.SetDropSlot(ASlot: Integer);
 begin
   if ASlot = FDropSlot then Exit;
   FDropSlot := ASlot;
@@ -6313,10 +6349,10 @@ begin
   else Invalidate;
 end;
 
-procedure TTyToolWindowBar.DragTo(X, Y: Integer);
+procedure TTyCustomToolWindowBar.DragTo(X, Y: Integer);
 var
   slot: Integer;
-  tgt: TTyToolWindowBar;
+  tgt: TTyCustomToolWindowBar;
 begin
   { 有 manager 的侧栏:问 manager(spec §9.4),答本栏、另一侧栏或没有目标。 }
   if (FManager <> nil) and (FPlacement <> twpBottom) then
@@ -6345,7 +6381,7 @@ begin
   if slot < 0 then FGesture.SetCursor(crNoDrop) else FGesture.SetCursor(crDrag);
 end;
 
-function TTyToolWindowBar.PlaceWindow(AWindow: TTyToolWindow; AIndex: Integer): Integer;
+function TTyCustomToolWindowBar.PlaceWindow(AWindow: TTyCustomToolWindow; AIndex: Integer): Integer;
 var
   cur, n: Integer;
 begin
@@ -6365,7 +6401,7 @@ begin
   Result := cur;
 end;
 
-procedure TTyToolWindowBar.ReorderWindow(AWindow: TTyToolWindow; AIndex: Integer);
+procedure TTyCustomToolWindowBar.ReorderWindow(AWindow: TTyCustomToolWindow; AIndex: Integer);
 var
   old: Integer;
 begin
@@ -6378,12 +6414,12 @@ begin
     FManager.WindowMoved(AWindow, Self, old);
 end;
 
-procedure TTyToolWindowBar.BeginDeferEvents;
+procedure TTyCustomToolWindowBar.BeginDeferEvents;
 begin
   Inc(FDeferEvents);
 end;
 
-function TTyToolWindowBar.EndDeferEvents: TTyToolWindowBarEvents;
+function TTyCustomToolWindowBar.EndDeferEvents: TTyToolWindowBarEvents;
 begin
   Result := [];
   if FDeferEvents <= 0 then Exit;
@@ -6393,7 +6429,7 @@ begin
   FPendingEvents := [];
 end;
 
-procedure TTyToolWindowBar.FireBarEvent(AEvent: TTyToolWindowBarEvent);
+procedure TTyCustomToolWindowBar.FireBarEvent(AEvent: TTyToolWindowBarEvent);
 begin
   if not EventsAllowed then Exit;
   case AEvent of
@@ -6406,10 +6442,10 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.CMDesignHitTest(var Message: TCMDesignHitTest);
+procedure TTyCustomToolWindowBar.CMDesignHitTest(var Message: TCMDesignHitTest);
 var
   idx: Integer;
-  w: TTyToolWindow;
+  w: TTyCustomToolWindow;
 begin
   { 应答照 TabStrip(designer-hittest-gesture-consistency):按下和拖动答 1,松开答 0
     交还设计器。切换时机不照 TabStrip(它按下就切):写在松开分支里,**先切再答 0** ——
@@ -6433,7 +6469,7 @@ begin
     Message.Result := 1;
 end;
 
-procedure TTyToolWindowBar.CMHintShow(var Message: TLMessage);
+procedure TTyCustomToolWindowBar.CMHintShow(var Message: TLMessage);
 var
   info: PHintInfo;
   txt: string;
@@ -6477,7 +6513,7 @@ begin
     inherited;
 end;
 
-procedure TTyToolWindowBar.SetPlacement(AValue: TTyToolWindowPlacement);
+procedure TTyCustomToolWindowBar.SetPlacement(AValue: TTyToolWindowPlacement);
 var
   wins: TTyToolWindowArray;
   i: Integer;
@@ -6508,7 +6544,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyToolWindowBar.MoveToOuterEdge;
+procedure TTyCustomToolWindowBar.MoveToOuterEdge;
 var
   p: TWinControl;
   c: TControl;
@@ -6556,7 +6592,7 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.SetHideWhenEmpty(AValue: Boolean);
+procedure TTyCustomToolWindowBar.SetHideWhenEmpty(AValue: Boolean);
 begin
   if FHideWhenEmpty = AValue then Exit;
   FHideWhenEmpty := AValue;
@@ -6565,7 +6601,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyToolWindowBar.SetExpandedSize(AValue: Integer);
+procedure TTyCustomToolWindowBar.SetExpandedSize(AValue: Integer);
 begin
   { 和布局串的 1-5 位纯数字对齐。拉宽、设计器改大小、代码、读布局都经过这里。 }
   if AValue < 0 then AValue := 0
@@ -6578,13 +6614,13 @@ begin
   Invalidate;
 end;
 
-function TTyToolWindowBar.EventsAllowed: Boolean;
+function TTyCustomToolWindowBar.EventsAllowed: Boolean;
 begin
   Result := ([csDesigning, csLoading, csDestroying] * ComponentState = []) and (FSilent = 0)
     and (FLayoutBatch = 0);
 end;
 
-procedure TTyToolWindowBar.DoChange;
+procedure TTyCustomToolWindowBar.DoChange;
 begin
   { 延后期间只记下来,由 MoveWindow / 直接改 Parent 的簿记按顺序发。 }
   if FDeferEvents > 0 then
@@ -6595,7 +6631,7 @@ begin
   if EventsAllowed and Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTyToolWindowBar.SetCollapsed(AValue: Boolean);
+procedure TTyCustomToolWindowBar.SetCollapsed(AValue: Boolean);
 var
   focusIn: Boolean;
   form: TCustomForm;
@@ -6655,7 +6691,7 @@ begin
   end;
 end;
 
-function TTyToolWindowBar.WindowList(AExcept: TTyToolWindow): TTyToolWindowArray;
+function TTyCustomToolWindowBar.WindowList(AExcept: TTyCustomToolWindow): TTyToolWindowArray;
 var
   i, n: Integer;
 begin
@@ -6663,15 +6699,15 @@ begin
   SetLength(Result, ControlCount);
   n := 0;
   for i := 0 to ControlCount - 1 do
-    if (Controls[i] is TTyToolWindow) and (Controls[i] <> AExcept) then
+    if (Controls[i] is TTyCustomToolWindow) and (Controls[i] <> AExcept) then
     begin
-      Result[n] := TTyToolWindow(Controls[i]);
+      Result[n] := TTyCustomToolWindow(Controls[i]);
       Inc(n);
     end;
   SetLength(Result, n);
 end;
 
-function TTyToolWindowBar.IsRegistered(AWindow: TTyToolWindow): Boolean;
+function TTyCustomToolWindowBar.IsRegistered(AWindow: TTyCustomToolWindow): Boolean;
 var
   i: Integer;
 begin
@@ -6681,30 +6717,30 @@ begin
   Result := False;
 end;
 
-function TTyToolWindowBar.GetWindow(AIndex: Integer): TTyToolWindow;
+function TTyCustomToolWindowBar.GetWindow(AIndex: Integer): TTyCustomToolWindow;
 var
   i, n: Integer;
 begin
   n := 0;
   for i := 0 to ControlCount - 1 do
-    if Controls[i] is TTyToolWindow then
+    if Controls[i] is TTyCustomToolWindow then
     begin
-      if n = AIndex then Exit(TTyToolWindow(Controls[i]));
+      if n = AIndex then Exit(TTyCustomToolWindow(Controls[i]));
       Inc(n);
     end;
   raise EListError.CreateFmt('Tool window index out of bounds (%d)', [AIndex]);
 end;
 
-function TTyToolWindowBar.GetWindowCount: Integer;
+function TTyCustomToolWindowBar.GetWindowCount: Integer;
 var
   i: Integer;
 begin
   Result := 0;
   for i := 0 to ControlCount - 1 do
-    if Controls[i] is TTyToolWindow then Inc(Result);
+    if Controls[i] is TTyCustomToolWindow then Inc(Result);
 end;
 
-function TTyToolWindowBar.IndexOfWindow(AWindow: TTyToolWindow): Integer;
+function TTyCustomToolWindowBar.IndexOfWindow(AWindow: TTyCustomToolWindow): Integer;
 var
   i, n: Integer;
 begin
@@ -6712,7 +6748,7 @@ begin
   begin
     n := 0;
     for i := 0 to ControlCount - 1 do
-      if Controls[i] is TTyToolWindow then
+      if Controls[i] is TTyCustomToolWindow then
       begin
         if Controls[i] = AWindow then Exit(n);
         Inc(n);
@@ -6721,7 +6757,7 @@ begin
   Result := -1;
 end;
 
-function TTyToolWindowBar.ControlIndexForWindowPos(AWindow: TTyToolWindow;
+function TTyCustomToolWindowBar.ControlIndexForWindowPos(AWindow: TTyCustomToolWindow;
   APos: Integer): Integer;
 var
   others: TTyToolWindowArray;
@@ -6745,12 +6781,12 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.SetChildOrder(Child: TComponent; Order: Integer);
+procedure TTyCustomToolWindowBar.SetChildOrder(Child: TComponent; Order: Integer);
 begin
-  if (Child is TTyToolWindow) and (TTyToolWindow(Child).Parent = Self) then
+  if (Child is TTyCustomToolWindow) and (TTyCustomToolWindow(Child).Parent = Self) then
   begin
     SetControlIndex(TControl(Child),
-      ControlIndexForWindowPos(TTyToolWindow(Child), Order));
+      ControlIndexForWindowPos(TTyCustomToolWindow(Child), Order));
     Invalidate;
     InvalidateHeader;
   end
@@ -6758,7 +6794,7 @@ begin
     inherited SetChildOrder(Child, Order);
 end;
 
-function TTyToolWindowBar.FocusIsInside(AWindow: TTyToolWindow): Boolean;
+function TTyCustomToolWindowBar.FocusIsInside(AWindow: TTyCustomToolWindow): Boolean;
 var
   form: TCustomForm;
 begin
@@ -6769,7 +6805,7 @@ begin
   Result := AWindow.ContainsControl(form.ActiveControl);
 end;
 
-procedure TTyToolWindowBar.ShowWindowNow(AWindow: TTyToolWindow);
+procedure TTyCustomToolWindowBar.ShowWindowNow(AWindow: TTyCustomToolWindow);
 var
   was: Boolean;
 begin
@@ -6790,7 +6826,7 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.HideWindowNow(AWindow: TTyToolWindow);
+procedure TTyCustomToolWindowBar.HideWindowNow(AWindow: TTyCustomToolWindow);
 var
   was: Boolean;
 begin
@@ -6805,7 +6841,7 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.SwitchCore(AWindow, AOld: TTyToolWindow; AMoveFocus: Boolean);
+procedure TTyCustomToolWindowBar.SwitchCore(AWindow, AOld: TTyCustomToolWindow; AMoveFocus: Boolean);
 var
   focusIn: Boolean;
   wins: TTyToolWindowArray;
@@ -6818,7 +6854,7 @@ begin
   FActive := AWindow;
   { 标签行上的手势属于捕获它的那一页。代码在手势进行中换了当前页:那一页的标签行不再显示,
     手势作废 —— 否则之后在旧页上的松开照样被当成点击 / 落点(spec §7.1 / §9.7)。 }
-  if (FGesture.Capturer is TTyToolWindow) and (FGesture.Capturer <> FActive) then
+  if (FGesture.Capturer is TTyCustomToolWindow) and (FGesture.Capturer <> FActive) then
     ResetGesture(twgeCancel);
   { 藏的是栏里**其余每一个**窗口,不只 AOld:带着 Visible = True 进来的窗口(从别的栏
     挪过来、代码里先 Visible 再 Parent)、布局应用挪进来的窗口,都不是「上一页」,
@@ -6860,7 +6896,7 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.BeginSilent;
+procedure TTyCustomToolWindowBar.BeginSilent;
 var
   i: Integer;
 begin
@@ -6872,7 +6908,7 @@ begin
     FRegistered[i].BeginSilentVisibility;
 end;
 
-procedure TTyToolWindowBar.EndSilent;
+procedure TTyCustomToolWindowBar.EndSilent;
 var
   i: Integer;
 begin
@@ -6883,7 +6919,7 @@ begin
   Dec(FSilent);
 end;
 
-procedure TTyToolWindowBar.ActivateExpanded(AWindow: TTyToolWindow);
+procedure TTyCustomToolWindowBar.ActivateExpanded(AWindow: TTyCustomToolWindow);
 begin
   if csDesigning in ComponentState then
   begin
@@ -6906,13 +6942,13 @@ begin
   Collapsed := False;
 end;
 
-procedure TTyToolWindowBar.BeginLayoutBatch;
+procedure TTyCustomToolWindowBar.BeginLayoutBatch;
 begin
   Inc(FLayoutBatch);
   DisableAlign;
 end;
 
-procedure TTyToolWindowBar.EndLayoutBatch;
+procedure TTyCustomToolWindowBar.EndLayoutBatch;
 begin
   { 恢复对齐会重排,重排里用户的 OnResize 可能抛异常:层数照样还。 }
   try
@@ -6922,7 +6958,7 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.SwitchSilently(AWindow: TTyToolWindow);
+procedure TTyCustomToolWindowBar.SwitchSilently(AWindow: TTyCustomToolWindow);
 begin
   BeginSilent;
   try
@@ -6932,9 +6968,9 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.ActivateWindow(AWindow: TTyToolWindow);
+procedure TTyCustomToolWindowBar.ActivateWindow(AWindow: TTyCustomToolWindow);
 var
-  prev: TTyToolWindow;
+  prev: TTyCustomToolWindow;
 begin
   if IndexOfWindow(AWindow) < 0 then Exit;
   { 流式加载期间只记下来,Loaded 统一应用。记窗口本身,不记序号(见 FLoadingTarget)。 }
@@ -6952,14 +6988,14 @@ begin
   if FActive <> prev then DoChange;
 end;
 
-function TTyToolWindowBar.GetActiveIndex: Integer;
+function TTyCustomToolWindowBar.GetActiveIndex: Integer;
 begin
   if not (csLoading in ComponentState) then Result := IndexOfWindow(FActive)
   else if FLoadingTarget <> nil then Result := IndexOfWindow(FLoadingTarget)
   else Result := FLoadingActiveIndex;
 end;
 
-procedure TTyToolWindowBar.SetActiveIndex(AValue: Integer);
+procedure TTyCustomToolWindowBar.SetActiveIndex(AValue: Integer);
 begin
   { 流式加载时窗口还没读完,先记下来。 }
   if csLoading in ComponentState then
@@ -6972,10 +7008,10 @@ begin
   ActivateWindow(Windows[AValue]);
 end;
 
-procedure TTyToolWindowBar.RegisterWindow(AWindow: TTyToolWindow);
+procedure TTyCustomToolWindowBar.RegisterWindow(AWindow: TTyCustomToolWindow);
 var
   i: Integer;
-  prev: TTyToolWindow;
+  prev: TTyCustomToolWindow;
 begin
   if (AWindow = nil) or (AWindow.Parent <> Self) then Exit;
   if IsRegistered(AWindow) then Exit;     { 幂等 }
@@ -7007,16 +7043,16 @@ begin
   if FActive <> prev then DoChange;
 end;
 
-procedure TTyToolWindowBar.RemoveControl(AControl: TControl);
+procedure TTyCustomToolWindowBar.RemoveControl(AControl: TControl);
 begin
-  if (AControl is TTyToolWindow) and IsRegistered(TTyToolWindow(AControl)) then
+  if (AControl is TTyCustomToolWindow) and IsRegistered(TTyCustomToolWindow(AControl)) then
   begin
-    FLeaving := TTyToolWindow(AControl);
+    FLeaving := TTyCustomToolWindow(AControl);
     FLeavingIndex := IndexOfWindow(FLeaving);
   end;
   inherited RemoveControl(AControl);
   { 设计期漏进来的那个被删掉 / 挪走:提示那一行让回给窗口。 }
-  if not (AControl is TTyToolWindow)
+  if not (AControl is TTyCustomToolWindow)
      and ([csDesigning, csDestroying] * ComponentState = [csDesigning]) then
   begin
     Realign;
@@ -7024,10 +7060,10 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.UnregisterWindow(AWindow: TTyToolWindow);
+procedure TTyCustomToolWindowBar.UnregisterWindow(AWindow: TTyCustomToolWindow);
 var
   i, idx: Integer;
-  prev, next: TTyToolWindow;
+  prev, next: TTyCustomToolWindow;
   rest: TTyToolWindowArray;
 begin
   if not IsRegistered(AWindow) then Exit;
@@ -7101,7 +7137,7 @@ begin
   if FActive <> prev then DoChange;
 end;
 
-procedure TTyToolWindowBar.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomToolWindowBar.Notification(AComponent: TComponent; Operation: TOperation);
 var
   i: Integer;
 begin
@@ -7114,8 +7150,8 @@ begin
   if (Operation = opRemove) and (AComponent = FZeroInner) then FZeroInner := nil;
   { 窗口被释放(含设计期删除):LCL 在 SetParent(nil) 时它已经 csDestroying,
     注销那一步跳过了,走到这里。 }
-  if (Operation = opRemove) and (AComponent is TTyToolWindow) then
-    UnregisterWindow(TTyToolWindow(AComponent));
+  if (Operation = opRemove) and (AComponent is TTyCustomToolWindow) then
+    UnregisterWindow(TTyCustomToolWindow(AComponent));
   { manager 被释放:只清自己的引用,不回头调它 —— 它正在走,它的表由它自己清。
     只是从 Owner 摘走(RemoveComponent、InsertComponent 换 Owner):它还活着、表里还记着本栏,
     而继承的 Notification 刚把两边的 FreeNotification 都拆了 —— 不从它的表里摘掉本栏,
@@ -7139,7 +7175,7 @@ begin
   end;
 end;
 
-procedure TTyToolWindowBar.DetachManager;
+procedure TTyCustomToolWindowBar.DetachManager;
 begin
   { 拖到一半 manager 走了(spec §9.7「manager 的 opRemove」)。 }
   ResetGesture(twgeCancel);
@@ -7150,7 +7186,7 @@ begin
   ConflictMayHaveChanged;
 end;
 
-procedure TTyToolWindowBar.SetManager(AValue: TTyCustomToolWindowManager);
+procedure TTyCustomToolWindowBar.SetManager(AValue: TTyCustomToolWindowManager);
 begin
   if FManager = AValue then Exit;
   { 本栏正在拖图标(spec §9.7:参与拖动的栏改了 Manager 就取消)。原来没有 manager 时这是栏内
@@ -7175,7 +7211,7 @@ begin
   ConflictMayHaveChanged;
 end;
 
-procedure TTyToolWindowBar.SetController(AValue: TTyStyleController);
+procedure TTyCustomToolWindowBar.SetController(AValue: TTyStyleController);
 var
   wins: TTyToolWindowArray;
   i: Integer;
@@ -7187,11 +7223,11 @@ begin
     wins[i].Controller := AValue;
 end;
 
-procedure TTyToolWindowBar.ShowControl(AControl: TControl);
+procedure TTyCustomToolWindowBar.ShowControl(AControl: TControl);
 begin
-  if (AControl is TTyToolWindow) and (IndexOfWindow(TTyToolWindow(AControl)) >= 0) then
+  if (AControl is TTyCustomToolWindow) and (IndexOfWindow(TTyCustomToolWindow(AControl)) >= 0) then
   begin
-    ActivateWindow(TTyToolWindow(AControl));
+    ActivateWindow(TTyCustomToolWindow(AControl));
     if not (csDesigning in ComponentState) then
       Collapsed := False;
   end;
@@ -7199,11 +7235,11 @@ begin
   inherited ShowControl(AControl);
 end;
 
-procedure TTyToolWindowBar.Loaded;
+procedure TTyCustomToolWindowBar.Loaded;
 var
   wins: TTyToolWindowArray;
   idx, i: Integer;
-  target: TTyToolWindow;
+  target: TTyCustomToolWindow;
 begin
   inherited Loaded;
   { 窗口都在 SetParent 里注册过了,顺序就是 Controls 顺序(ffChildPos 经 SetChildOrder)。
@@ -7245,7 +7281,7 @@ end;
 
 { --- TTyToolWindowGesture ------------------------------------------------------ }
 
-constructor TTyToolWindowGesture.Create(ABar: TTyToolWindowBar);
+constructor TTyToolWindowGesture.Create(ABar: TTyCustomToolWindowBar);
 begin
   inherited Create;
   FBar := ABar;
@@ -7301,17 +7337,17 @@ begin
     FBar.Manager.SetDragSource(nil);
 end;
 
-procedure TTyToolWindowGesture.SetTarget(ABar: TTyToolWindowBar; ASlot: Integer);
+procedure TTyToolWindowGesture.SetTarget(ABar: TTyCustomToolWindowBar; ASlot: Integer);
 begin
   if (FTarget <> nil) and (FTarget <> ABar) then FTarget.SetForeignDrop(-1);
   FTarget := ABar;
   if ABar <> nil then ABar.SetForeignDrop(ASlot);
 end;
 
-function TTyToolWindowGesture.AllowedFor(ABar: TTyToolWindowBar): Boolean;
+function TTyToolWindowGesture.AllowedFor(ABar: TTyCustomToolWindowBar): Boolean;
 var
   i: Integer;
-  w: TTyToolWindow;
+  w: TTyCustomToolWindow;
 begin
   for i := 0 to High(FAllowed) do
     if FAllowed[i].Bar = ABar then Exit(FAllowed[i].Allowed);
@@ -7325,7 +7361,7 @@ begin
   FAllowed[High(FAllowed)].Allowed := Result;
 end;
 
-procedure TTyToolWindowGesture.ForgetBar(ABar: TTyToolWindowBar);
+procedure TTyToolWindowGesture.ForgetBar(ABar: TTyCustomToolWindowBar);
 var
   i: Integer;
 begin
@@ -7354,7 +7390,7 @@ begin
   Reset(twgeCancel);
 end;
 
-procedure TTyToolWindowGesture.Press(APart: TTyToolWindowBarPart; AWindow: TTyToolWindow;
+procedure TTyToolWindowGesture.Press(APart: TTyToolWindowBarPart; AWindow: TTyCustomToolWindow;
   ADraggable: Boolean; ACapturer: TControl; X, Y: Integer; AShift: TShiftState);
 begin
   FState := twgsArmed;
@@ -7455,7 +7491,7 @@ begin
 end;
 
 function TTyToolWindowGesture.Release(APart: TTyToolWindowBarPart;
-  AWindow: TTyToolWindow): TTyToolWindowGestureRelease;
+  AWindow: TTyCustomToolWindow): TTyToolWindowGestureRelease;
 begin
   Result := Default(TTyToolWindowGestureRelease);
   if FResizing then
@@ -7485,7 +7521,7 @@ var
 begin
   { 捕获者是一页(底栏标签行),或者是让出标签行的底栏自己(spec §3.7):标签行画着按下态,
     收尾之后要重画。清记录之前先记下。 }
-  onTabRow := (FCapturer is TTyToolWindow)
+  onTabRow := (FCapturer is TTyCustomToolWindow)
     or ((FCapturer = FBar) and (FBar.Placement = twpBottom)
         and (FPart in [twbpItem, twbpOverflow, twbpMaximize, twbpCollapse]));
   dying := csDestroying in FBar.ComponentState;
@@ -7520,7 +7556,7 @@ begin
   FCursor := ACursor;
 end;
 
-procedure TTyToolWindowGesture.ArmDesign(AWindow: TTyToolWindow);
+procedure TTyToolWindowGesture.ArmDesign(AWindow: TTyCustomToolWindow);
 begin
   FDesignWindow := AWindow;
   FDesignArmed := AWindow <> nil;
@@ -7628,10 +7664,10 @@ begin
   Result := FDragSource <> nil;
 end;
 
-function TTyCustomToolWindowManager.MoveFromDrop(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar;
+function TTyCustomToolWindowManager.MoveFromDrop(AWindow: TTyCustomToolWindow; ATarget: TTyCustomToolWindowBar;
   ASlot: Integer): Boolean;
 var
-  src: TTyToolWindowBar;
+  src: TTyCustomToolWindowBar;
   life: TTyToolWindowLife;
 begin
   { 这个窗口还有排着的移动也照做:拖动开始后它不会再被排队以外的路挪走,排着的那一项
@@ -7649,7 +7685,7 @@ begin
   end;
 end;
 
-procedure TTyCustomToolWindowManager.BarChanged(ABar: TTyToolWindowBar);
+procedure TTyCustomToolWindowManager.BarChanged(ABar: TTyCustomToolWindowBar);
 begin
   if (FDragSource <> nil) and (ABar <> nil)
      and ((ABar = FDragSource) or (ABar = FDragSource.FGesture.Target)) then
@@ -7658,7 +7694,7 @@ end;
 
 { --- 钩子的基类实现 --- }
 
-procedure TTyCustomToolWindowManager.NoteLayoutChanging(ABar: TTyToolWindowBar);
+procedure TTyCustomToolWindowManager.NoteLayoutChanging(ABar: TTyCustomToolWindowBar);
 begin
 end;
 
@@ -7666,8 +7702,8 @@ procedure TTyCustomToolWindowManager.TryFinishLoading;
 begin
 end;
 
-function TTyCustomToolWindowManager.DropTargetAt(ASource: TTyToolWindowBar;
-  const AScreen: TPoint; out ASlot: Integer): TTyToolWindowBar;
+function TTyCustomToolWindowManager.DropTargetAt(ASource: TTyCustomToolWindowBar;
+  const AScreen: TPoint; out ASlot: Integer): TTyCustomToolWindowBar;
 var
   p: TPoint;
 begin
@@ -7677,88 +7713,88 @@ begin
   if ASlot >= 0 then Result := ASource else Result := nil;
 end;
 
-function TTyCustomToolWindowManager.QueueWindowIndex(AWindow: TTyToolWindow;
+function TTyCustomToolWindowManager.QueueWindowIndex(AWindow: TTyCustomToolWindow;
   AIndex: Integer): Boolean;
 begin
   Result := False;
 end;
 
-procedure TTyCustomToolWindowManager.BarRemoved(ABar: TTyToolWindowBar);
+procedure TTyCustomToolWindowManager.BarRemoved(ABar: TTyCustomToolWindowBar);
 begin
 end;
 
-procedure TTyCustomToolWindowManager.DragSourceChanged(ASource: TTyToolWindowBar);
+procedure TTyCustomToolWindowManager.DragSourceChanged(ASource: TTyCustomToolWindowBar);
 begin
 end;
 
-procedure TTyCustomToolWindowManager.SetDragSource(ABar: TTyToolWindowBar);
+procedure TTyCustomToolWindowManager.SetDragSource(ABar: TTyCustomToolWindowBar);
 begin
   if FDragSource = ABar then Exit;
   FDragSource := ABar;
   DragSourceChanged(ABar);
 end;
 
-procedure TTyCustomToolWindowManager.BarShowDropPreview(ABar: TTyToolWindowBar);
+procedure TTyCustomToolWindowManager.BarShowDropPreview(ABar: TTyCustomToolWindowBar);
 begin
   ABar.ShowDropPreview;
 end;
 
-procedure TTyCustomToolWindowManager.BarHideDropPreview(ABar: TTyToolWindowBar);
+procedure TTyCustomToolWindowManager.BarHideDropPreview(ABar: TTyCustomToolWindowBar);
 begin
   ABar.HideDropPreview;
 end;
 
 { --- 给派生类的内部操作 --- }
 
-function TTyCustomToolWindowManager.DragAllows(ASource, ATarget: TTyToolWindowBar): Boolean;
+function TTyCustomToolWindowManager.DragAllows(ASource, ATarget: TTyCustomToolWindowBar): Boolean;
 begin
   Result := ASource.FGesture.AllowedFor(ATarget);
 end;
 
-function TTyCustomToolWindowManager.BarWindows(ABar: TTyToolWindowBar): TTyToolWindowArray;
+function TTyCustomToolWindowManager.BarWindows(ABar: TTyCustomToolWindowBar): TTyToolWindowArray;
 begin
   Result := ABar.WindowList(nil);
 end;
 
-procedure TTyCustomToolWindowManager.BarPlace(ABar: TTyToolWindowBar; AWindow: TTyToolWindow;
+procedure TTyCustomToolWindowManager.BarPlace(ABar: TTyCustomToolWindowBar; AWindow: TTyCustomToolWindow;
   AIndex: Integer);
 begin
   ABar.PlaceWindow(AWindow, AIndex);
 end;
 
-procedure TTyCustomToolWindowManager.BarReorder(ABar: TTyToolWindowBar; AWindow: TTyToolWindow;
+procedure TTyCustomToolWindowManager.BarReorder(ABar: TTyCustomToolWindowBar; AWindow: TTyCustomToolWindow;
   AIndex: Integer);
 begin
   ABar.ReorderWindow(AWindow, AIndex);
 end;
 
-procedure TTyCustomToolWindowManager.BarSwitch(ABar: TTyToolWindowBar; AWindow: TTyToolWindow);
+procedure TTyCustomToolWindowManager.BarSwitch(ABar: TTyCustomToolWindowBar; AWindow: TTyCustomToolWindow);
 begin
   ABar.SwitchCore(AWindow, ABar.FActive, False);
 end;
 
-procedure TTyCustomToolWindowManager.BarEnterBatch(ABar: TTyToolWindowBar);
+procedure TTyCustomToolWindowManager.BarEnterBatch(ABar: TTyCustomToolWindowBar);
 begin
   ABar.BeginLayoutBatch;
 end;
 
-procedure TTyCustomToolWindowManager.BarLeaveBatch(ABar: TTyToolWindowBar);
+procedure TTyCustomToolWindowManager.BarLeaveBatch(ABar: TTyCustomToolWindowBar);
 begin
   ABar.EndLayoutBatch;
 end;
 
-procedure TTyCustomToolWindowManager.BarBeginSilent(ABar: TTyToolWindowBar);
+procedure TTyCustomToolWindowManager.BarBeginSilent(ABar: TTyCustomToolWindowBar);
 begin
   ABar.BeginSilent;
 end;
 
-procedure TTyCustomToolWindowManager.BarEndSilent(ABar: TTyToolWindowBar);
+procedure TTyCustomToolWindowManager.BarEndSilent(ABar: TTyCustomToolWindowBar);
 begin
   ABar.EndSilent;
 end;
 
-procedure TTyCustomToolWindowManager.QuietReparent(AWindow: TTyToolWindow;
-  ABar: TTyToolWindowBar);
+procedure TTyCustomToolWindowManager.QuietReparent(AWindow: TTyCustomToolWindow;
+  ABar: TTyCustomToolWindowBar);
 begin
   AWindow.FQuietMove := True;
   try
@@ -7768,7 +7804,7 @@ begin
   end;
 end;
 
-procedure TTyCustomToolWindowManager.AddBar(ABar: TTyToolWindowBar);
+procedure TTyCustomToolWindowManager.AddBar(ABar: TTyCustomToolWindowBar);
 var
   i: Integer;
 begin
@@ -7781,7 +7817,7 @@ begin
   PlacementsChanged;
 end;
 
-procedure TTyCustomToolWindowManager.RemoveBar(ABar: TTyToolWindowBar);
+procedure TTyCustomToolWindowManager.RemoveBar(ABar: TTyCustomToolWindowBar);
 var
   i: Integer;
 begin
@@ -7813,12 +7849,12 @@ end;
 
 procedure TTyCustomToolWindowManager.Notification(AComponent: TComponent; Operation: TOperation);
 var
-  b: TTyToolWindowBar;
+  b: TTyCustomToolWindowBar;
 begin
   inherited Notification(AComponent, Operation);
-  if (Operation = opRemove) and (AComponent is TTyToolWindowBar) then
+  if (Operation = opRemove) and (AComponent is TTyCustomToolWindowBar) then
   begin
-    b := TTyToolWindowBar(AComponent);
+    b := TTyCustomToolWindowBar(AComponent);
     RemoveBar(b);
     { 栏只是从 Owner 摘走(RemoveComponent、InsertComponent 换 Owner),还活着、还指着本
       manager:继承的 Notification 已经把两边的 FreeNotification 拆了,本 manager 日后释放时
@@ -7853,7 +7889,7 @@ begin
       FBars[i].ImagesChanged;
 end;
 
-function TTyCustomToolWindowManager.IsBarUsable(ABar: TTyToolWindowBar): Boolean;
+function TTyCustomToolWindowManager.IsBarUsable(ABar: TTyCustomToolWindowBar): Boolean;
 var
   i: Integer;
 begin
@@ -7868,7 +7904,7 @@ begin
        and not (csDestroying in FBars[i].ComponentState) then Exit(False);
 end;
 
-function TTyCustomToolWindowManager.UsableBar(APlacement: TTyToolWindowPlacement): TTyToolWindowBar;
+function TTyCustomToolWindowManager.UsableBar(APlacement: TTyToolWindowPlacement): TTyCustomToolWindowBar;
 var
   i: Integer;
 begin
@@ -7878,8 +7914,8 @@ begin
   Result := nil;
 end;
 
-function TTyCustomToolWindowManager.StructureAllows(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar;
-  out ASource: TTyToolWindowBar): Boolean;
+function TTyCustomToolWindowManager.StructureAllows(AWindow: TTyCustomToolWindow; ATarget: TTyCustomToolWindowBar;
+  out ASource: TTyCustomToolWindowBar): Boolean;
 const
   Busy = [csLoading, csDestroying];
 begin
@@ -7901,10 +7937,10 @@ begin
   Result := (ASource = ATarget) or (IsBarUsable(ASource) and IsBarUsable(ATarget));
 end;
 
-function TTyCustomToolWindowManager.CanMoveWindow(AWindow: TTyToolWindow;
-  ATargetBar: TTyToolWindowBar): Boolean;
+function TTyCustomToolWindowManager.CanMoveWindow(AWindow: TTyCustomToolWindow;
+  ATargetBar: TTyCustomToolWindowBar): Boolean;
 var
-  src: TTyToolWindowBar;
+  src: TTyCustomToolWindowBar;
   allow: Boolean;
   life: TTyToolWindowLife;
 begin
@@ -7925,7 +7961,7 @@ begin
   Result := allow;
 end;
 
-function TTyCustomToolWindowManager.MovedEventAllowed(ASource: TTyToolWindowBar): Boolean;
+function TTyCustomToolWindowManager.MovedEventAllowed(ASource: TTyCustomToolWindowBar): Boolean;
 const
   Quiet = [csDesigning, csLoading, csDestroying];
 begin
@@ -7933,7 +7969,7 @@ begin
     and (Quiet * (ComponentState + ASource.ComponentState) = []);
 end;
 
-procedure TTyCustomToolWindowManager.WindowMoved(AWindow: TTyToolWindow; ASource: TTyToolWindowBar;
+procedure TTyCustomToolWindowManager.WindowMoved(AWindow: TTyCustomToolWindow; ASource: TTyCustomToolWindowBar;
   AOldIndex: Integer);
 var
   life: TTyToolWindowLife;
@@ -7947,7 +7983,7 @@ begin
   end;
 end;
 
-procedure TTyCustomToolWindowManager.MoveNow(AWindow: TTyToolWindow; ATarget: TTyToolWindowBar;
+procedure TTyCustomToolWindowManager.MoveNow(AWindow: TTyCustomToolWindow; ATarget: TTyCustomToolWindowBar;
   AIndex: Integer);
 begin
   { 跟运行时直接改 Parent 同一条路(spec §3.2 / §9.5)。AIndex 已经是换算过的(MoveWindow 入口
