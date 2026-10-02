@@ -27,10 +27,11 @@ uses
   test.customclasses, test.customclasses.p1,
   tyControls.Base, tyControls.Button, tyControls.GlyphButtons, tyControls.ToolBar,
   tyControls.ToolBarEx, tyControls.StatusBar, tyControls.ScrollBar, tyControls.Painter,
-  tyControls.Ribbon, tyControls.RibbonGallery, tyControls.RibbonBackstage,
+  tyControls.Ribbon, tyControls.RibbonGallery, tyControls.RibbonBackstage, tyControls.RibbonAppMenu,
   tyControls.Form, tyControls.Menu, tyControls.FormSurface, tyControls.Controller,
   tyControls.CharImage, tyControls.IconFont, tyControls.Shape, tyControls.Chart,
-  tyControls.ColorGrid, tyControls.Terminal, tyControls.ToolWindows,
+  tyControls.Image, tyControls.ImageView,
+  tyControls.ColorGrid, tyControls.Terminal, tyControls.ToolWindows, tyControls.PopupSurface,
   tyControls.ToolWindows.DesignRules;
 
 type
@@ -42,12 +43,21 @@ type
     FHosts: TList;
     FLastSender: TObject;
     FData: string;
+    FLastIndex: Integer;
     procedure CountChange(Sender: TObject);
     procedure Launcher(Sender: TTyCustomRibbonGroup);
     procedure PaintButton(Sender: TTyCustomToolButton; AState: Integer);
     procedure DrawPanel(AStatusBar: TTyCustomStatusBar; APanel: TTyStatusPanel;
       APainter: TTyPainter; const ARect: TRect);
     procedure TermData(Sender: TObject; const AData: RawByteString);
+    procedure FormClosing(Sender: TObject; var CloseAction: TCloseAction);
+    procedure BackstageSelect(Sender: TObject; AIndex: Integer);
+    procedure MouseButton(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure MouseMoved(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+    procedure MouseWheeled(Sender: TObject; Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint; var Handled: Boolean);
+    procedure MouseWheeledUpDown(Sender: TObject; Shift: TShiftState; MousePos: TPoint;
+      var Handled: Boolean);
     function NewHost: TForm;
     { Stream the form that owns ASrc and read it into a fresh form; the copy of ASrc. }
     function HostRoundTrip(ASrc: TComponent): TComponent;
@@ -65,6 +75,7 @@ type
     procedure TestStatusPanelsReachAThirdPartyBar;
     procedure TestThirdScrollBar;
     procedure TestThirdToolButtonStoresOnlyAnExplicitGlyphLayout;
+    procedure TestToolBarRepaintsAThirdPartyButton;
     { Task 21: ribbon }
     procedure TestThirdRibbonPage;
     procedure TestThirdRibbonGroup;
@@ -72,15 +83,23 @@ type
     procedure TestRibbonPageJoinsAThirdPartyRibbon;
     procedure TestRibbonPageLaysOutAThirdPartyGroup;
     procedure TestRibbonIndexesReadBeforeTheirItemsWait;
+    procedure TestBackstageIndexPastItsCommandsClampsAsBefore;
+    procedure TestRibbonForgetsAPageThatLeaves;
+    procedure TestMinimizedRibbonReadsBackInAnyOrder;
+    procedure TestFileTabOpensAThirdPartyBackstage;
     { Task 22: window chrome }
     procedure TestThirdTitleBar;
     procedure TestThirdMenuBar;
     procedure TestThirdFormSurface;
     procedure TestFormWiresAThirdPartySurface;
+    procedure TestReadFormFindsItsSurfaceByClassNotName;
+    procedure TestFormDrivesAThirdPartyTitleBar;
+    procedure TestFormDispatchesShortcutsToAThirdPartyMenuBar;
     { Task 23: images and shapes }
     procedure TestThirdCharImage;
     procedure TestThirdShape;
     procedure TestThirdChart;
+    procedure TestImagesPromoteWhatTCustomImagePromotes;
     { Task 24: pickers and the terminal }
     procedure TestThirdColorGrid;
     procedure TestThirdTerminalView;
@@ -89,6 +108,8 @@ type
     procedure TestThirdToolWindowBarTakesAToolWindow;
     procedure TestToolWindowRulesTakeThirdParties;
     procedure TestToolWindowStorageRulesReachThirdParties;
+    procedure TestAThirdPartyBarJoinsTheSideNarrowing;
+    procedure TestAnOrphanWindowReturnsToAThirdPartyBar;
     { T-d, pixel for pixel, per task }
     procedure TestBarMimicsPaintLikeTheirFinalClass;
     procedure TestRibbonMimicsPaintLikeTheirFinalClass;
@@ -160,6 +181,14 @@ type
   published
     property ItemIndex;
     property Commands;
+  end;
+
+  { Minimized ahead of the TabHeight its collapsed height is made of -- the reverse of the
+    library's own order. }
+  TOrderRibbon = class(TTyCustomRibbon)
+  published
+    property Minimized;
+    property TabHeight;
   end;
 
   TThirdTitleBar = class(TTyCustomTitleBar)
@@ -242,6 +271,7 @@ type
   TP3RibbonCracker = class(TTyCustomRibbon)
   public
     function TabCount: Integer;
+    function TabCaption(AIndex: Integer): string;
   end;
 
   { A third party's ribbon: the custom class and nothing else. }
@@ -250,6 +280,13 @@ type
   { Counts the repaints a status bar asks for: the panel collection's only way to tell its bar
     that a panel changed. }
   TP3CountingStatusBar = class(TTyCustomStatusBar)
+  public
+    Invalidations: Integer;
+    procedure Invalidate; override;
+  end;
+
+  { Counts the repaints a tool bar asks of its buttons. }
+  TP3CountingToolButton = class(TThirdToolButton)
   public
     Invalidations: Integer;
     procedure Invalidate; override;
@@ -267,6 +304,36 @@ type
   { ChildClassAllowed is protected (TWinControl). }
   TP3ToolWindowBarCracker = class(TTyCustomToolWindowBar);
   TP3ToolWindowCracker = class(TTyCustomToolWindow);
+
+  { The form's chrome engine and shortcut entry, for the third-party chrome tests. }
+  TP3FormAccess = class(TTyForm)
+  public
+    function EngineDragging: Boolean;
+    function EngineMaximized: Boolean;
+    procedure SetEngineMaximized(AValue: Boolean);
+    function ShortCutTaken(AKey: Word; AShift: TShiftState): Boolean;
+  end;
+
+  { A third party's title bar, with its (protected) mouse entry reachable. }
+  TP3ThirdTitleBar = class(TThirdTitleBar)
+  public
+    procedure PressAt(X, Y: Integer);
+  end;
+
+  TP3ThirdBackstage = class(TTyCustomRibbonBackstage)
+  published
+    property Commands;
+  end;
+
+  TP3RibbonClicker = class(TTyCustomRibbon)
+  public
+    procedure PressAt(X, Y: Integer);
+  end;
+
+  TP3AppMenuCracker = class(TTyCustomRibbonAppMenu)
+  public
+    procedure Drop;
+  end;
 
 procedure TP3ToolBarCracker.ForceLayout;
 var r: TRect;
@@ -294,9 +361,32 @@ begin
   Result := GetTabCount;
 end;
 
+function TP3RibbonCracker.TabCaption(AIndex: Integer): string;
+begin
+  Result := GetTabCaption(AIndex);
+end;
+
 { R7-4: what a host hands out is declared as the custom class. `is` cannot tell -- it asks the
   object -- but overload resolution is decided by the declared type, so these answer 1 for a
   custom-typed expression and 2 for one still typed as the final class. }
+{ Read a component's streamed text into ADst (the root). }
+procedure ReadText(const AText: string; ADst: TComponent);
+var
+  src: TStringStream;
+  bin: TMemoryStream;
+begin
+  src := TStringStream.Create(AText);
+  bin := TMemoryStream.Create;
+  try
+    ObjectTextToBinary(src, bin);
+    bin.Position := 0;
+    bin.ReadComponent(ADst);
+  finally
+    bin.Free;
+    src.Free;
+  end;
+end;
+
 function DeclaredAs(A: TTyCustomToolButton): Integer; overload;
 begin
   Result := 1;
@@ -347,6 +437,54 @@ begin
   Result := 2;
 end;
 
+function TP3FormAccess.EngineDragging: Boolean;
+begin
+  Result := FEngine.Dragging;
+end;
+
+function TP3FormAccess.EngineMaximized: Boolean;
+begin
+  Result := FEngine.Maximized;
+end;
+
+procedure TP3FormAccess.SetEngineMaximized(AValue: Boolean);
+begin
+  FEngine.Maximized := AValue;
+end;
+
+{ ssAlt rides in KeyData (MK_ALT), the one modifier the Win32 widgetset reads from the message
+  itself, so the match is deterministic without a real keyboard (as in test.form). }
+function TP3FormAccess.ShortCutTaken(AKey: Word; AShift: TShiftState): Boolean;
+var
+  msg: TLMKey;
+begin
+  FillChar(msg, SizeOf(msg), 0);
+  msg.CharCode := AKey;
+  if ssAlt in AShift then msg.KeyData := msg.KeyData or PtrInt(MK_ALT);
+  Result := IsShortcut(msg);
+end;
+
+procedure TP3ThirdTitleBar.PressAt(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [], X, Y);
+end;
+
+procedure TP3RibbonClicker.PressAt(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [], X, Y);
+end;
+
+procedure TP3AppMenuCracker.Drop;
+begin
+  DoDropDown;
+end;
+
+procedure TP3CountingToolButton.Invalidate;
+begin
+  Inc(Invalidations);
+  inherited Invalidate;
+end;
+
 procedure TP3CountingStatusBar.Invalidate;
 begin
   Inc(Invalidations);
@@ -381,6 +519,42 @@ end;
 procedure TTyCustomClassesP3Test.TermData(Sender: TObject; const AData: RawByteString);
 begin
   FData := FData + AData;
+end;
+
+procedure TTyCustomClassesP3Test.MouseButton(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+begin
+  Inc(FChanges);
+end;
+
+procedure TTyCustomClassesP3Test.MouseMoved(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+begin
+  Inc(FChanges);
+end;
+
+procedure TTyCustomClassesP3Test.MouseWheeled(Sender: TObject; Shift: TShiftState;
+  WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
+begin
+  Inc(FChanges);
+end;
+
+procedure TTyCustomClassesP3Test.MouseWheeledUpDown(Sender: TObject; Shift: TShiftState;
+  MousePos: TPoint; var Handled: Boolean);
+begin
+  Inc(FChanges);
+end;
+
+procedure TTyCustomClassesP3Test.BackstageSelect(Sender: TObject; AIndex: Integer);
+begin
+  Inc(FChanges);
+  FLastIndex := AIndex;
+end;
+
+procedure TTyCustomClassesP3Test.FormClosing(Sender: TObject; var CloseAction: TCloseAction);
+begin
+  Inc(FChanges);
+  FLastSender := Sender;
+  CloseAction := caNone;   // a test form is closed by its test, not by a click
 end;
 
 procedure TTyCustomClassesP3Test.TearDown;
@@ -650,6 +824,29 @@ begin
   AssertTrue('an explicit layout streams, glLeft included', HasProp(StreamedText(b), 'GlyphLayout'));
 end;
 
+{ C19-2 (the bar's own setters). Assigning OnPaintButton switches every button between the
+  host's paint and the themed one, and DropDownWidth is part of a drop-style button's size, so
+  the bar repaints its buttons -- a third party's among them. }
+procedure TTyCustomClassesP3Test.TestToolBarRepaintsAThirdPartyButton;
+var
+  bar: TTyToolBar;
+  b: TP3CountingToolButton;
+begin
+  bar := TTyToolBar.Create(FForm);
+  bar.Parent := FForm;
+  b := TP3CountingToolButton.Create(FForm);
+  b.Parent := bar;
+  b.Invalidations := 0;
+  bar.OnPaintButton := @PaintButton;
+  AssertTrue('assigning OnPaintButton repaints the third-party button', b.Invalidations > 0);
+  b.Invalidations := 0;
+  bar.OnPaintButton := nil;
+  AssertTrue('and so does clearing it', b.Invalidations > 0);
+  b.Invalidations := 0;
+  bar.DropDownWidth := 31;
+  AssertTrue('a new DropDownWidth re-measures it', b.Invalidations > 0);
+end;
+
 { ------------------------------------------------------------------ Task 21: ribbon }
 
 procedure TTyCustomClassesP3Test.TestThirdRibbonPage;
@@ -809,6 +1006,185 @@ begin
   AssertEquals('the backstage index waits for its commands', 1, bsBack.ItemIndex);
 end;
 
+{ A backstage read with an ItemIndex past its commands (a hand-edited or stale .lfm). The
+  library's class publishes Commands first, so 3.0 clamped the index to the last command as it
+  was read, telling OnCommandSelect when a handler was already hooked. An index read ahead of
+  its commands now waits for Loaded (for a third party's order); the wait must not change what
+  happens to one that is simply out of range. }
+procedure TTyCustomClassesP3Test.TestBackstageIndexPastItsCommandsClampsAsBefore;
+var
+  src, dst, quiet: TTyRibbonBackstage;
+  s: string;
+begin
+  src := TTyRibbonBackstage.Create(FForm);
+  src.Commands.CommaText := 'Info,New,Open';
+  src.ItemIndex := 1;
+  s := StreamedText(src);
+  AssertTrue('precondition: the index streams', Pos('ItemIndex = 1', s) > 0);
+  s := StringReplace(s, 'ItemIndex = 1', 'ItemIndex = 7', []);
+  dst := TTyRibbonBackstage.Create(NewHost);   { one per owner: the read names the root }
+  dst.OnCommandSelect := @BackstageSelect;   // hooked before the read, as on a second read
+  FChanges := 0;
+  FLastIndex := -2;
+  ReadText(s, dst);
+  AssertEquals('clamped to the last command, as 3.0 did', 2, dst.ItemIndex);
+  AssertEquals('telling the handler that was already hooked, as 3.0 did', 1, FChanges);
+  AssertEquals('with the clamped index', 2, FLastIndex);
+  quiet := TTyRibbonBackstage.Create(NewHost);
+  ReadText(s, quiet);
+  AssertEquals('with no handler hooked it is clamped all the same', 2, quiet.ItemIndex);
+end;
+
+{ A page that leaves a ribbon -- for another ribbon, for no parent, or by being freed while it
+  has a different owner (no owner broadcast reaches the ribbon then) -- leaves its page list.
+  It used to stay counted, tabbed and handed out by Pages[], and the freed one was read through
+  on the next caption lookup. Lending a page to the ribbon's own minimised fly-out is not
+  leaving: it comes back to the same place in the list. }
+procedure TTyCustomClassesP3Test.TestRibbonForgetsAPageThatLeaves;
+var
+  ra, rb: TTyRibbon;
+  home, p, orphan: TTyRibbonPage;
+  third: TThirdRibbonPage;
+  fly: TTyPopupSurface;
+  i: Integer;
+  s: string;
+begin
+  ra := TTyRibbon.Create(FForm);
+  ra.Parent := FForm;
+  rb := TTyRibbon.Create(FForm);
+  rb.Parent := FForm;
+  home := ra.AddPage('Home');
+  p := ra.AddPage('Insert');
+  p.Parent := rb;
+  AssertEquals('moved to another ribbon: the old one forgets it', 1, ra.PageCount);
+  AssertEquals('and the new one has it', 1, rb.PageCount);
+  AssertEquals('the old ribbon shows one tab', 1, TP3RibbonCracker(ra).TabCount);
+  p.Parent := nil;
+  AssertEquals('taken out of a ribbon: forgotten', 0, rb.PageCount);
+  p.Free;
+  orphan := TTyRibbonPage.Create(nil);
+  orphan.Caption := 'Orphan';
+  orphan.Parent := ra;
+  ra.ActivePage := orphan;
+  AssertEquals('an ownerless page joins', 2, ra.PageCount);
+  orphan.Free;
+  AssertEquals('freed with another owner: it leaves all the same', 1, ra.PageCount);
+  AssertTrue('the page that stays is the active one', ra.ActivePage = home);
+  s := '';
+  for i := 0 to TP3RibbonCracker(ra).TabCount - 1 do
+    s := s + TP3RibbonCracker(ra).TabCaption(i) + ';';
+  AssertEquals('every tab reads a live page', 'Home;', s);
+  third := TThirdRibbonPage.Create(nil);
+  third.Parent := ra;
+  third.Free;
+  AssertEquals('a third party''s ownerless page leaves the same way', 1, ra.PageCount);
+  { The minimised ribbon flies its active page out in a popup it owns, re-parenting the page
+    there until the popup closes (TTyCustomRibbon.ShowFlyout). }
+  ra.AddPage('View');
+  fly := TTyPopupSurface.CreateNew(ra);
+  fly.AdoptContent(home);
+  AssertTrue('precondition: the page is in the fly-out', home.Parent = fly);
+  AssertEquals('lent to the ribbon''s fly-out: still the ribbon''s page', 2, ra.PageCount);
+  AssertTrue('in its place', ra.Pages[0] = home);
+  fly.ReleaseContent;
+  AssertTrue('back home', home.Parent = ra);
+  AssertEquals('and counted once', 2, ra.PageCount);
+end;
+
+{ A minimised ribbon read from a form collapses to the TabHeight it was saved with, whichever of
+  the two a class publishes first (the library's TabHeight first, a third party may not), and
+  expanding it afterwards shows the band again. A form saved minimised stores the COLLAPSED
+  height, so the expanded one is not in the file: the ribbon opens to the height a new ribbon
+  has rather than to the strip it was saved as. }
+procedure TTyCustomClassesP3Test.TestMinimizedRibbonReadsBackInAnyOrder;
+
+  procedure Check(ASrc: TTyCustomRibbon; const AWhat: string; AMinimizedFirst: Boolean);
+  var
+    back, typed: TTyCustomRibbon;
+    fresh: Integer;
+    s, line: string;
+    host: TForm;
+  begin
+    ASrc.Name := 'Rb';
+    ASrc.Parent := ASrc.Owner as TWinControl;
+    ASrc.Height := 150;
+    ASrc.TabHeight := 44;
+    { A form that gives the full height (hand-written, or saved before the collapse): the text
+      of the expanded ribbon with Minimized put in, in the order the class publishes it. }
+    s := StreamedText(ASrc.Owner);
+    AssertTrue(AWhat + ' precondition: TabHeight streams', Pos('TabHeight = 44', s) > 0);
+    line := 'Minimized = True' + LineEnding + '    ';
+    if AMinimizedFirst then
+      s := StringReplace(s, 'TabHeight = 44', line + 'TabHeight = 44', [])
+    else
+      s := StringReplace(s, 'TabHeight = 44', 'TabHeight = 44' + LineEnding + '    Minimized = True', []);
+    host := NewHost;
+    ReadText(s, host);
+    typed := host.FindComponent('Rb') as TTyCustomRibbon;
+    AssertEquals(AWhat + ', full height in the form: collapsed to its TabHeight',
+      MulDiv(44, typed.Font.PixelsPerInch, 96), typed.Height);
+    typed.Minimized := False;
+    AssertEquals(AWhat + ', full height in the form: expands back to it', 150, typed.Height);
+    { Saved minimised: the form stores the collapsed height. }
+    ASrc.Minimized := True;
+    AssertEquals(AWhat + ' precondition: minimised to its strip',
+      MulDiv(44, ASrc.Font.PixelsPerInch, 96), ASrc.Height);
+    back := HostRoundTrip(ASrc) as TTyCustomRibbon;
+    AssertTrue(AWhat + ': read back minimised', back.Minimized);
+    AssertEquals(AWhat + ': TabHeight read back', 44, back.TabHeight);
+    AssertEquals(AWhat + ': collapsed to that TabHeight', MulDiv(44, back.Font.PixelsPerInch, 96),
+      back.Height);
+    fresh := TTyRibbon.Create(back.Owner).Height;
+    back.Minimized := False;
+    AssertEquals(AWhat + ': expanding shows the band, at a new ribbon''s height', fresh, back.Height);
+  end;
+
+begin
+  Check(TTyRibbon.Create(NewHost), 'TTyRibbon', False);
+  Check(TOrderRibbon.Create(NewHost), 'Minimized ahead of TabHeight', True);
+end;
+
+{ Backstage takes any TTyCustomRibbonBackstage, on the ribbon and on the application button,
+  the way LCL's component references take the custom class (Images: TCustomImageList): the
+  File tab opens a third party's backstage over the form. }
+procedure TTyCustomClassesP3Test.TestFileTabOpensAThirdPartyBackstage;
+var
+  rb: TP3RibbonClicker;
+  bs: TP3ThirdBackstage;
+  am: TP3AppMenuCracker;
+begin
+  FForm.SetBounds(0, 0, 600, 400);
+  rb := TP3RibbonClicker(TTyRibbon.Create(FForm));
+  rb.Parent := FForm;
+  rb.Font.PixelsPerInch := 96;
+  rb.AddPage('Home');
+  rb.FileTab := True;
+  rb.OnFileTab := @CountChange;
+  bs := TP3ThirdBackstage.Create(FForm);
+  bs.Commands.CommaText := 'Info,New,Open';
+  bs.Visible := False;
+  rb.Backstage := bs;
+  AssertTrue('the ribbon takes a third party''s backstage', rb.Backstage = bs);
+  AssertEquals('Backstage is declared as the custom class', 'TTyCustomRibbonBackstage',
+    GetPropInfo(TTyRibbon, 'Backstage')^.PropType^.Name);
+  FChanges := 0;
+  rb.PressAt(4, 4);
+  AssertEquals('precondition: the press landed on the File tab', 1, FChanges);
+  AssertTrue('the File tab opened the third-party backstage', bs.Visible);
+  AssertTrue('over the form', bs.Parent = FForm);
+  bs.Close;
+  am := TP3AppMenuCracker(TTyRibbonAppMenu.Create(FForm));
+  am.Parent := FForm;
+  am.Backstage := bs;
+  AssertEquals('so is the application button''s', 'TTyCustomRibbonBackstage',
+    GetPropInfo(TTyRibbonAppMenu, 'Backstage')^.PropType^.Name);
+  am.Drop;
+  AssertTrue('the application button opens it too', bs.Visible);
+  bs.Free;
+  AssertTrue('freeing it clears the ribbon''s reference', rb.Backstage = nil);
+  AssertTrue('and the button''s', am.Backstage = nil);
+end;
+
 { ------------------------------------------------------------------ Task 22: window chrome }
 
 procedure TTyCustomClassesP3Test.TestThirdTitleBar;
@@ -907,6 +1283,134 @@ begin
   end;
 end;
 
+{ A form read from a .lfm knows its content surface by class, the way it knows one dropped on
+  it: the designer calls it Surface, but a renamed one, or a third party's, is still the
+  surface -- and another control that happens to be called Surface is not. }
+procedure TTyCustomClassesP3Test.TestReadFormFindsItsSurfaceByClassNotName;
+
+  procedure RoundTrip(ASurfaceClass: TControlClass; const AName: string; ADecoy: Boolean);
+  var
+    src, dst: TTyForm;
+    s: TControl;
+    decoy: TThirdToolBar;
+    ms: TMemoryStream;
+    got: TComponent;
+    ctl: TTyStyleController;
+    what: string;
+  begin
+    what := ASurfaceClass.ClassName + ' named ' + AName;
+    if ADecoy then what := what + ', next to a tool bar named Surface';
+    src := TTyForm.CreateNew(nil);
+    dst := nil;
+    ms := TMemoryStream.Create;
+    try
+      src.Name := 'F';
+      s := ASurfaceClass.Create(src);
+      s.Name := AName;
+      s.Parent := src;
+      s.Align := alClient;
+      if ADecoy then
+      begin
+        decoy := TThirdToolBar.Create(src);
+        decoy.Name := 'Surface';
+        decoy.Parent := TWinControl(s);
+      end;
+      ms.WriteComponent(src);
+      ms.Position := 0;
+      dst := TTyForm.CreateNew(nil);
+      ms.ReadComponent(dst);
+      got := dst.FindComponent(AName);
+      AssertTrue(what + ': the surface came back', got is TTyCustomFormSurface);
+      ctl := TTyStyleController.Create(dst);
+      dst.Controller := ctl;
+      AssertTrue(what + ': a Controller set after reading reaches the surface',
+        TTyCustomFormSurface(got).Controller = ctl);
+      if ADecoy then
+        AssertFalse(what + ': and not the control that is merely called Surface',
+          TTyCustomToolBar(dst.FindComponent('Surface')).Controller = ctl);
+    finally
+      ms.Free;
+      dst.Free;
+      src.Free;
+    end;
+  end;
+
+begin
+  RoundTrip(TTyFormSurface, 'Surface', False);
+  RoundTrip(TTyFormSurface, 'Body', False);
+  RoundTrip(TThirdFormSurface, 'Body', False);
+  RoundTrip(TThirdFormSurface, 'Body', True);
+end;
+
+{ TitleBar takes any TTyCustomTitleBar, the LCL way for a component reference: a third party's
+  bar dropped on a TTyForm becomes its title bar, and the form drives it exactly as it drives
+  its own -- caption buttons wired, the drag armed from a press on the bar. }
+procedure TTyCustomClassesP3Test.TestFormDrivesAThirdPartyTitleBar;
+var
+  f: TP3FormAccess;
+  tb: TP3ThirdTitleBar;
+begin
+  f := TP3FormAccess.CreateNew(nil);
+  try
+    tb := TP3ThirdTitleBar.Create(f);
+    tb.Parent := f;
+    AssertTrue('dropped on the form, the third-party bar became its TitleBar', f.TitleBar = tb);
+    AssertEquals('TitleBar is declared as the custom class', 'TTyCustomTitleBar',
+      GetPropInfo(TTyForm, 'TitleBar')^.PropType^.Name);
+    AssertTrue('the caption buttons are wired', Assigned(tb.MinButton.OnClick)
+      and Assigned(tb.MaxButton.OnClick) and Assigned(tb.CloseButton.OnClick));
+    f.SetEngineMaximized(True);
+    tb.MaxButton.OnClick(tb.MaxButton);
+    AssertFalse('its maximise button restores the window', f.EngineMaximized);
+    tb.MinButton.OnClick(tb.MinButton);
+    AssertTrue('its minimise button minimises it', f.WindowState = wsMinimized);
+    f.WindowState := wsNormal;
+    f.OnClose := @FormClosing;
+    FChanges := 0;
+    tb.CloseButton.OnClick(tb.CloseButton);
+    AssertEquals('its close button closes it', 1, FChanges);
+    tb.PressAt(10, 16);
+    AssertTrue('a press on the bar arms the window drag', f.EngineDragging);
+    tb.Free;
+    AssertTrue('freeing it clears the reference', f.TitleBar = nil);
+  finally
+    f.Free;
+  end;
+end;
+
+{ MenuBar takes any TTyCustomMenuBar: the form hands its shortcuts to a third party's bar. }
+procedure TTyCustomClassesP3Test.TestFormDispatchesShortcutsToAThirdPartyMenuBar;
+var
+  f: TP3FormAccess;
+  bar: TThirdMenuBar;
+  mm: TMainMenu;
+  it: TMenuItem;
+begin
+  f := TP3FormAccess.CreateNew(nil);
+  try
+    mm := TMainMenu.Create(f);
+    it := TMenuItem.Create(mm);
+    it.Caption := 'Save';
+    it.ShortCut := ShortCut(Ord('S'), [ssAlt]);
+    it.OnClick := @CountChange;
+    mm.Items.Add(it);
+    bar := TThirdMenuBar.Create(f);
+    bar.Parent := f;
+    bar.Menu := mm;
+    f.MenuBar := bar;
+    AssertEquals('MenuBar is declared as the custom class', 'TTyCustomMenuBar',
+      GetPropInfo(TTyForm, 'MenuBar')^.PropType^.Name);
+    FChanges := 0;
+    AssertTrue('the form routes Alt+S to the third-party bar''s menu',
+      f.ShortCutTaken(Ord('S'), [ssAlt]));
+    AssertEquals('and the item fired', 1, FChanges);
+    bar.Free;
+    AssertTrue('freeing it clears the reference', f.MenuBar = nil);
+  finally
+    f.Free;
+  end;
+end;
+
 { ------------------------------------------------------------------ Task 23: images and shapes }
 
 procedure TTyCustomClassesP3Test.TestThirdCharImage;
@@ -994,6 +1498,53 @@ begin
   c := third;
   c.ShowGrid := False;
   AssertFalse('T-v: ShowGrid is public through a TTyCustomChart reference', third.ShowGrid);
+end;
+
+{ LCL's TCustomImage promotes TControl's eight mouse events to public (extctrls.pp:592-599), so
+  code holding the custom class can hook them -- for the three image classes that map onto it.
+  (Compile-time: a protected one does not compile here.) }
+procedure TTyCustomClassesP3Test.TestImagesPromoteWhatTCustomImagePromotes;
+var
+  img: TTyCustomImage;
+  chr: TTyCustomCharImage;
+  view: TTyCustomImageView;
+begin
+  img := TTyImage.Create(FForm);
+  img.OnMouseDown := @MouseButton;
+  img.OnMouseUp := @MouseButton;
+  img.OnMouseMove := @MouseMoved;
+  img.OnMouseEnter := @CountChange;
+  img.OnMouseLeave := @CountChange;
+  img.OnMouseWheel := @MouseWheeled;
+  img.OnMouseWheelDown := @MouseWheeledUpDown;
+  img.OnMouseWheelUp := @MouseWheeledUpDown;
+  AssertTrue('TTyCustomImage takes all eight', Assigned(img.OnMouseDown) and Assigned(img.OnMouseUp)
+    and Assigned(img.OnMouseMove) and Assigned(img.OnMouseEnter) and Assigned(img.OnMouseLeave)
+    and Assigned(img.OnMouseWheel) and Assigned(img.OnMouseWheelDown) and Assigned(img.OnMouseWheelUp));
+  chr := TTyCharImage.Create(FForm);
+  chr.OnMouseDown := @MouseButton;
+  chr.OnMouseUp := @MouseButton;
+  chr.OnMouseMove := @MouseMoved;
+  chr.OnMouseEnter := @CountChange;
+  chr.OnMouseLeave := @CountChange;
+  chr.OnMouseWheel := @MouseWheeled;
+  chr.OnMouseWheelDown := @MouseWheeledUpDown;
+  chr.OnMouseWheelUp := @MouseWheeledUpDown;
+  AssertTrue('TTyCustomCharImage takes all eight', Assigned(chr.OnMouseDown) and Assigned(chr.OnMouseUp)
+    and Assigned(chr.OnMouseMove) and Assigned(chr.OnMouseEnter) and Assigned(chr.OnMouseLeave)
+    and Assigned(chr.OnMouseWheel) and Assigned(chr.OnMouseWheelDown) and Assigned(chr.OnMouseWheelUp));
+  view := TTyImageView.Create(FForm);
+  view.OnMouseDown := @MouseButton;
+  view.OnMouseUp := @MouseButton;
+  view.OnMouseMove := @MouseMoved;
+  view.OnMouseEnter := @CountChange;
+  view.OnMouseLeave := @CountChange;
+  view.OnMouseWheel := @MouseWheeled;
+  view.OnMouseWheelDown := @MouseWheeledUpDown;
+  view.OnMouseWheelUp := @MouseWheeledUpDown;
+  AssertTrue('TTyCustomImageView takes all eight', Assigned(view.OnMouseDown) and Assigned(view.OnMouseUp)
+    and Assigned(view.OnMouseMove) and Assigned(view.OnMouseEnter) and Assigned(view.OnMouseLeave)
+    and Assigned(view.OnMouseWheel) and Assigned(view.OnMouseWheelDown) and Assigned(view.OnMouseWheelUp));
 end;
 
 { ------------------------------------------------------------------ Task 24: pickers, terminal }
@@ -1190,6 +1741,64 @@ begin
   txt := StreamedText(bar);
   AssertTrue('a bottom bar streams its width', HasProp(txt, 'Width'));
   AssertFalse('and not its height', HasProp(txt, 'Height'));
+end;
+
+{ C24 (the side narrowing). Bars on one axis that do not all fit share the room by
+  ExpandedSize; a third party's bar takes its share like the library's instead of being counted
+  as a plain aligned sibling. The same numbers on two forms -- the library's right bar on one, a
+  third party's on the other -- give the same widths. }
+procedure TTyCustomClassesP3Test.TestAThirdPartyBarJoinsTheSideNarrowing;
+
+  procedure Build(AHost: TForm; ARightClass: TControlClass;
+    out ALeft, ARight: TTyCustomToolWindowBar);
+  begin
+    ALeft := TTyToolWindowBar.Create(AHost);
+    ALeft.Parent := AHost;
+    ALeft.Font.PixelsPerInch := 96;
+    ALeft.Placement := twpLeft;
+    TTyToolWindow.Create(AHost).Parent := ALeft;
+    ARight := TTyCustomToolWindowBar(ARightClass.Create(AHost));
+    ARight.Parent := AHost;
+    ARight.Font.PixelsPerInch := 96;
+    ARight.Placement := twpRight;
+    TTyToolWindow.Create(AHost).Parent := ARight;
+    { Siblings arriving do not re-derive a bar (the parent resizing does); setting the sizes
+      once both are in place does. }
+    ALeft.ExpandedSize := 600;
+    ARight.ExpandedSize := 200;
+  end;
+
+var
+  libL, libR, thL, thR: TTyCustomToolWindowBar;
+begin
+  Build(NewHost, TTyToolWindowBar, libL, libR);
+  Build(NewHost, TThirdToolWindowBar, thL, thR);
+  AssertTrue('precondition: the two bars do not fit, so they narrow',
+    libL.Width + libR.Width <= libL.Parent.ClientWidth);
+  AssertTrue('precondition: and share by 600 : 200', libL.Width > libR.Width);
+  AssertEquals('the library''s left bar gets the same width next to a third party''s bar',
+    libL.Width, thL.Width);
+  AssertEquals('and the third party''s bar the same share as the library''s', libR.Width, thR.Width);
+end;
+
+{ C24 (design rules, MC). A window left without a bar at design time can be returned to any
+  bar its owner holds, a third party's included. }
+procedure TTyCustomClassesP3Test.TestAnOrphanWindowReturnsToAThirdPartyBar;
+var
+  bar: TThirdToolWindowBar;
+  w: TTyToolWindow;
+  targets: TTyToolWindowBarArray;
+begin
+  bar := TThirdToolWindowBar.Create(FForm);
+  bar.Parent := FForm;
+  w := TTyToolWindow.Create(FForm);
+  w.Parent := FForm;
+  AssertTrue('precondition: the window has no bar', w.Bar = nil);
+  targets := TyToolWindowDesignReturnTargets(w);
+  AssertEquals('the third-party bar is a return target', 1, Length(targets));
+  AssertTrue('the very one', targets[0] = TTyCustomToolWindowBar(bar));
+  AssertTrue('and the window goes back to it', TyToolWindowDesignReturnToBar(w, bar));
+  AssertTrue('where it finds its bar', w.Bar = TTyCustomToolWindowBar(bar));
 end;
 
 { ------------------------------------------------------------------ T-d }
@@ -1528,7 +2137,7 @@ end;
 initialization
   RegisterClasses([TThirdToolBar, TThirdToolButton, TGlyphToolButton, TThirdStatusBar,
     TThirdScrollBar, TThirdRibbonPage, TThirdRibbonGroup, TIdxRibbonGallery, TIdxRibbonBackstage,
-    TThirdTitleBar, TThirdMenuBar, TThirdFormSurface, TThirdCharImage, TThirdShape, TThirdChart,
+    TOrderRibbon, TThirdTitleBar, TThirdMenuBar, TThirdFormSurface, TThirdCharImage, TThirdShape, TThirdChart,
     TThirdColorGrid, TThirdTerminalView, TThirdToolWindow, TThirdToolWindowBar]);
   { TThirdMenuBar's round trip streams a TMainMenu: a form unit the IDE writes registers it the
     same way. }

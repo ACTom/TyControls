@@ -104,7 +104,7 @@ const
     type-wide row would wave a wrong change through.
     The four D11 rows are type-wide on purpose: a component-reference property names the
     custom class wherever it appears, as LCL's Images: TCustomImageList does. }
-  CSnapshotTypeRenames: array[0..5, 0..3] of string = (
+  CSnapshotTypeRenames: array[0..11, 0..3] of string = (
     ('*', '*', 'TTyIconFont', 'TTyCustomIconFont'),
     ('*', '*', 'TTyStyleController', 'TTyCustomStyleController'),
     ('*', '*', 'TTyImageCollection', 'TTyCustomImageCollection'),
@@ -112,7 +112,15 @@ const
     { Not component references: a host hands out, or takes, any custom child (plan R7-4). }
     ('TTyPageControl', 'ActivePage', 'TTyTabSheet', 'TTyCustomTabSheet'),
     { LCL: TCustomShellTreeView.ShellListView: TCustomShellListView (shellctrls.pas:139). }
-    ('TTyShellTreeView', 'ShellListView', 'TTyShellListView', 'TTyCustomShellListView'));
+    ('TTyShellTreeView', 'ShellListView', 'TTyShellListView', 'TTyCustomShellListView'),
+    { Component references a host takes from the user, the LCL way (Images: TCustomImageList):
+      any custom descendant can be assigned, not only the library's final class. }
+    ('TTyForm', 'TitleBar', 'TTyTitleBar', 'TTyCustomTitleBar'),
+    ('TTyForm', 'MenuBar', 'TTyMenuBar', 'TTyCustomMenuBar'),
+    ('TTyDialog', 'TitleBar', 'TTyTitleBar', 'TTyCustomTitleBar'),
+    ('TTyDialog', 'MenuBar', 'TTyMenuBar', 'TTyCustomMenuBar'),
+    ('TTyRibbon', 'Backstage', 'TTyRibbonBackstage', 'TTyCustomRibbonBackstage'),
+    ('TTyRibbonAppMenu', 'Backstage', 'TTyRibbonBackstage', 'TTyCustomRibbonBackstage'));
 
   { G7: where each derived control's custom class must hang (plan appendix C-0), plus the
     intermediate classes. Columns: subject, expected parent, the class whose split activates

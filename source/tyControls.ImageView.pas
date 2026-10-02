@@ -114,6 +114,16 @@ type
     property TintColor: TColor read FTintColor write SetTintColor default clNone;
     property TintAmount: Integer read FTintAmount write SetTintAmount default 0;
     property OnZoomChange: TNotifyEvent read FOnZoomChange write FOnZoomChange;
+    { TControl keeps the mouse events protected; LCL's TCustomImage promotes these eight to
+      public (extctrls.pp:592-599), and so does the custom class (plan D3). }
+    property OnMouseDown;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseMove;
+    property OnMouseUp;
+    property OnMouseWheel;
+    property OnMouseWheelDown;
+    property OnMouseWheelUp;
   end;
 
   { TTyImageView publishes TTyCustomImageView's properties; everything lives in TTyCustomImageView. }

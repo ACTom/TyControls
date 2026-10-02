@@ -352,6 +352,10 @@ begin
     if FPages[I] = APage then Exit;   // already registered (idempotent)
   SetLength(FPages, Length(FPages) + 1);
   FPages[High(FPages)] := APage;
+  { Hear about the page's destruction ourselves: Notification(opRemove) reaches us on its own
+    only when we share its owner, so a page owned by anything else (or by nothing) would be
+    freed while still in FPages -- counted, tabbed and read through on the next caption. }
+  APage.FreeNotification(Self);
   APage.Controller := Self.Controller;
   if Length(FPages) = 1 then
   begin
@@ -375,6 +379,7 @@ begin
   OldActive := GetActivePage;
   for J := Idx to High(FPages) - 1 do FPages[J] := FPages[J + 1];
   SetLength(FPages, Length(FPages) - 1);
+  APage.RemoveFreeNotification(Self);   // the other half of RegisterPage's
   if Length(FPages) = 0 then
     FTabIndex := -1
   else if Idx < FTabIndex then

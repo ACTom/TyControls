@@ -156,6 +156,16 @@ type
       claimed by the control itself (autosize depends on it), so this was the only
       seam that could exist. }
     property OnPictureChanged: TNotifyEvent read FOnPictureChanged write FOnPictureChanged;
+    { TControl keeps the mouse events protected; LCL's TCustomImage promotes these eight to
+      public (extctrls.pp:592-599), and so does the custom class (plan D3). }
+    property OnMouseDown;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseMove;
+    property OnMouseUp;
+    property OnMouseWheel;
+    property OnMouseWheelDown;
+    property OnMouseWheelUp;
   end;
 
   { TTyImage publishes TTyCustomImage's properties; everything lives in TTyCustomImage. }

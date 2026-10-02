@@ -20,7 +20,7 @@ type
 - **`Surface: TTyFormSurface`**——铺满窗体（`alClient`）的内容承载容器，**每个窗体有且只有一个**，
   固定名为 `Surface`。它**不是构造时创建的**，而是从 `.lfm` 流式化出来的：File > New 的
   *TyControls Form / Application* 模板已经带好它，设计器里拖控件本来就落进它。
-- **`TitleBar: TTyTitleBar`**——可关联的标题栏，走的是 `Form.Menu` 那种「属性指向一个组件」的模式，
+- **`TitleBar: TTyCustomTitleBar`**——可关联的标题栏，走的是 `Form.Menu` 那种「属性指向一个组件」的模式，
   不是硬塞的子组件。它本身也放在 `Surface` 里。
 
 **你的应用控件都放在 `Surface` 里。** 尤其是 `TTyLabel`、`TTyShape` 这类**无窗口的图形控件**——
@@ -83,7 +83,7 @@ TTyChromeEngine（由 TTyForm 拥有/释放）     // 与窗体无关的窗口�
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
-| `TitleBar` | `TTyTitleBar` | **可关联**的标题栏——指向窗体上某个 `TTyTitleBar` 实例（`Form.Menu` 模式），不是构造时硬创建的子组件。流式化的 `.lfm` **必须显式写 `TitleBar = <名字>`**，否则窗口拖不动。 |
+| `TitleBar` | `TTyCustomTitleBar` | **可关联**的标题栏——指向窗体上某个 `TTyTitleBar` 实例（`Form.Menu` 模式），不是构造时硬创建的子组件。4.0 起类型是 `TTyCustomTitleBar`：从它派生的第三方标题栏同样挂得上、放上窗体同样自动关联（`MenuBar` 同理是 `TTyCustomMenuBar`）。流式化的 `.lfm` **必须显式写 `TitleBar = <名字>`**，否则窗口拖不动。 |
 | `Surface` | `TTyFormSurface` | 内容承载容器（`alClient`，固定名 `Surface`）。由 `.lfm` 流式化，不在构造函数里创建。 |
 
 ### 继承的标准 TForm 生命周期事件

@@ -5,7 +5,7 @@ unit tyControls.RibbonAppMenu;
   TTyRibbonAppMenu — a prominent accent button (StyleClass 'primary') that drops a
   menu composed of the app's top COMMANDS plus an optional RECENT-ITEMS section.
 
-  It SUBCLASSES TTyMenuButton (unit tyControls.DropButtons): the whole button is the
+  It SUBCLASSES TTyCustomMenuButton (unit tyControls.DropButtons): the whole button is the
   drop trigger, it inherits the caption + trailing arrow drawing, and its Click fires
   OnDropDown then pops the inherited DropDownMenu when a window handle exists. It carries
   its OWN 'TyRibbonAppMenu' style token (see GetStyleTypeKey) — it is not a button but a
@@ -46,8 +46,9 @@ type
     is the 0-based index into RecentItems of the chosen entry. }
   TTyRecentItemEvent = procedure(Sender: TObject; AIndex: Integer) of object;
 
-  { The ribbon application ("File") button: an accent TTyMenuButton that composes the
-    user's Commands menu with an optional recent-items list into an internal dropdown. }
+  { The ribbon application ("File") button: an accent menu button (TTyCustomMenuButton)
+    that composes the user's Commands menu with an optional recent-items list into an
+    internal dropdown. }
   TTyCustomRibbonAppMenu = class(TTyCustomMenuButton)
   private
     { The internal menu the button actually drops. Owned by Self (created in Create,
@@ -59,11 +60,11 @@ type
     FCommands: TTyPopupMenu;
     FRecentItems: TStrings;
     FOnRecentItemClick: TTyRecentItemEvent;
-    FBackstage: TTyRibbonBackstage;
+    FBackstage: TTyCustomRibbonBackstage;
     FBackstageTopInset: Integer;
     procedure SetCommands(AValue: TTyPopupMenu);
     procedure SetRecentItems(AValue: TStrings);
-    procedure SetBackstage(AValue: TTyRibbonBackstage);
+    procedure SetBackstage(AValue: TTyCustomRibbonBackstage);
     { OnClick target on each RECENT item: map the clicked item back to its RecentItems
       index (carried in the item's Tag) and fire OnRecentItemClick. }
     procedure HandleRecentClick(Sender: TObject);
@@ -103,7 +104,7 @@ type
     property OnRecentItemClick: TTyRecentItemEvent read FOnRecentItemClick write FOnRecentItemClick;
     { When assigned, clicking the button opens this FULL-WINDOW backstage (Office "File"
       view) instead of the small dropdown menu. FreeNotification-tracked. }
-    property Backstage: TTyRibbonBackstage read FBackstage write SetBackstage;
+    property Backstage: TTyCustomRibbonBackstage read FBackstage write SetBackstage;
     { Logical-px inset from the form top the backstage is shown below (= the title-bar
       height, so the backstage covers everything except the title bar). }
     property BackstageTopInset: Integer read FBackstageTopInset write FBackstageTopInset default 0;
@@ -330,7 +331,7 @@ begin
     Result := FMenu.Items[AIndex];
 end;
 
-procedure TTyCustomRibbonAppMenu.SetBackstage(AValue: TTyRibbonBackstage);
+procedure TTyCustomRibbonAppMenu.SetBackstage(AValue: TTyCustomRibbonBackstage);
 begin
   if FBackstage = AValue then Exit;
   if FBackstage <> nil then FBackstage.RemoveFreeNotification(Self);

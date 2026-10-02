@@ -56,6 +56,7 @@ type
     procedure TestABarOnAnotherFormIsNoTarget;
     procedure TestComingBackClearsTheOtherBar;
     procedure TestANestedBarIsAHole;
+    procedure TestANestedThirdPartyBarIsAHole;
     procedure TestTheDropLineIsDrawnOnTheTargetBar;
     procedure TestEscCancelsTheCrossDrag;
     procedure TestCancelDragCancels;
@@ -104,6 +105,8 @@ implementation
 
 type
   TFormAccess = class(TForm);
+  { A third party's bar: the custom class and nothing else. }
+  TThirdPartyBar = class(TTyCustomToolWindowBar);
 
 const
   Orange = TColor($0080FF);    { CSS #FF8000 }
@@ -428,6 +431,32 @@ begin
   MoveTo(p);
   AssertNoDropAnywhere('嵌在右栏里的栏');
   { 只问命中的那一条:落在洞里一条都不问(按「在不在它的可见矩形里」问的话会问右栏)。 }
+  AssertEquals('落在洞里:不问外面那条栏', 0, FCanCalls);
+end;
+
+{ 同上,嵌的是第三方的栏(TTyCustomToolWindowBar 的子类):探测矩形里的洞按 Custom 类认,不按最终类。 }
+procedure TTyToolWindowCrossDragTests.TestANestedThirdPartyBarIsAHole;
+var
+  host: TBodyChild;
+  nested: TThirdPartyBar;
+  p: TPoint;
+begin
+  host := TBodyChild.Create(FForm);
+  host.Parent := FOutline;
+  host.SetBounds(0, 30, 150, 200);
+  nested := TThirdPartyBar.Create(FForm);
+  nested.Parent := host;
+  nested.Align := alNone;
+  nested.Controller := FCtl;
+  nested.SetBounds(10, 40, 60, 120);
+  AssertTrue('前提:嵌套栏和它所在的页都显示着(窗体以下)',
+    nested.Visible and host.Visible and FOutline.Visible and FRight.Visible);
+  p := nested.ClientToScreen(Point(nested.ClientWidth div 2, nested.ClientHeight div 2));
+  AssertTrue('前提:这一点在右栏的内容区里',
+    PtInRect(FRight.BarLayout.Content, FRight.ScreenToClient(p)));
+  StartDrag(1);
+  MoveTo(p);
+  AssertNoDropAnywhere('嵌在右栏里的第三方栏');
   AssertEquals('落在洞里:不问外面那条栏', 0, FCanCalls);
 end;
 

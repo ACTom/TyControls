@@ -296,8 +296,9 @@ begin
     was wired: un-registration hung off Notification(opRemove), which fires when a page is
     freed, not when it is re-parented. So moving a page to a second pager left it counted,
     tabbed and handed out by BOTH -- the old one drew a tab for a control that was no longer
-    inside it. Skipped while either side is being torn down: Notification already covers the
-    free path, and the old host may be half-destroyed by then. }
+    inside it. Skipped while either side is being torn down: the free path is covered by the
+    FreeNotification RegisterPage asks for (whoever owns the page), and the old host may be
+    half-destroyed by then. }
   if (Old <> AParent) and (Old is TTyCustomPageControl)
      and not (csDestroying in ComponentState)
      and not (csDestroying in Old.ComponentState) then

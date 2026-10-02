@@ -50,7 +50,7 @@ type
     FFileTabCaption: TCaption;
     FFileTabWidth: Integer;                 // logical px
     FFileTabWidthExplicit: Boolean;         // True once a host/.lfm pins FileTabWidth; else follow --ribbon-file-tab-width
-    FBackstage: TTyRibbonBackstage;
+    FBackstage: TTyCustomRibbonBackstage;
     FShowCollapseBtn: Boolean;
     FFlyout: TTyPopupSurface;        // transient page band shown while Minimized
     FKeyTips: Boolean;
@@ -73,7 +73,7 @@ type
     procedure SetFileTabCaption(const AValue: TCaption);
     procedure SetFileTabWidth(AValue: Integer);
     function  GetFileTabWidth: Integer;
-    procedure SetBackstage(AValue: TTyRibbonBackstage);
+    procedure SetBackstage(AValue: TTyCustomRibbonBackstage);
     procedure SetShowCollapseButton(AValue: Boolean);
     function FileTabWidthPx: Integer;
     function CollapseRectPx: TRect;
@@ -186,7 +186,7 @@ type
       --ribbon-file-tab-width token (density-aware); set it explicitly and that value wins
       and is streamed. Streamed only when explicitly set (stored FFileTabWidthExplicit). }
     property FileTabWidth: Integer read GetFileTabWidth write SetFileTabWidth stored FFileTabWidthExplicit;
-    property Backstage: TTyRibbonBackstage read FBackstage write SetBackstage;
+    property Backstage: TTyCustomRibbonBackstage read FBackstage write SetBackstage;
     { A collapse/expand chevron at the RIGHT end of the tab strip that toggles Minimized
       (like Office). Double-clicking any tab also toggles Minimized. }
     property ShowCollapseButton: Boolean read FShowCollapseBtn write SetShowCollapseButton default True;
@@ -737,6 +737,10 @@ begin
   OldActive := GetActivePage;         // BEFORE appending (append keeps old indices valid)
   SetLength(FPages, Length(FPages) + 1);
   FPages[High(FPages)] := APage;
+  { Ask to hear about the page's destruction ourselves: Notification(opRemove) reaches us on
+    its own only when we share its owner, so a page owned by anything else (or by nothing)
+    would be freed while still in FPages, and the next caption lookup reads a dead object. }
+  APage.FreeNotification(Self);
   APage.Controller := Self.Controller;
   ReconcileVisibleFrom(OldActive, False);   // no OnChange on add
 end;
@@ -753,6 +757,7 @@ begin
   OldActive := GetActivePage;         // capture BEFORE mutating FPages
   for J := Idx to High(FPages) - 1 do FPages[J] := FPages[J + 1];
   SetLength(FPages, Length(FPages) - 1);
+  APage.RemoveFreeNotification(Self);   // the other half of RegisterPage's
   if AFree and (APage <> nil) then
     APage.Free;
   ReconcileVisibleFrom(OldActive, True);    // fires OnChange when the active page moved
@@ -816,6 +821,9 @@ procedure TTyCustomRibbon.SetMinimized(AValue: Boolean);
 begin
   if FMinimized = AValue then Exit;
   FMinimized := AValue;
+  { While a form is read, Height is the one the form stored and TabHeight may not have been
+    read yet (a descendant can publish Minimized first): Loaded collapses the band. }
+  if csLoading in ComponentState then Exit;
   if FMinimized then
   begin
     FExpandedHeight := Height;                          // remember the full height
@@ -907,7 +915,7 @@ begin
     Result := ActiveController.Metric('--ribbon-file-tab-width', 52);
 end;
 
-procedure TTyCustomRibbon.SetBackstage(AValue: TTyRibbonBackstage);
+procedure TTyCustomRibbon.SetBackstage(AValue: TTyCustomRibbonBackstage);
 begin
   if FBackstage = AValue then Exit;
   if FBackstage <> nil then FBackstage.RemoveFreeNotification(Self);
@@ -1240,6 +1248,8 @@ begin
 end;
 
 procedure TTyCustomRibbon.Loaded;
+var
+  collapsed: Integer;
 begin
   inherited Loaded;
   // Build the visible-tab list from the streamed pages (each self-registered during
@@ -1249,6 +1259,19 @@ begin
   begin
     SetTabIndex(FPendingTabIndex);
     FPendingTabIndex := -1;
+  end;
+  { A Minimized read from the form collapses here, against the final TabHeight, whichever was
+    read first. A ribbon saved minimised stored its COLLAPSED height, so the expanded one is not
+    in the form: expanding falls back to the theme's ribbon height (what a new ribbon gets)
+    rather than to the strip it was saved as. A form that gives the full height keeps it. }
+  if FMinimized then
+  begin
+    collapsed := MulDiv(TabHeight, Font.PixelsPerInch, 96);
+    if Height > collapsed then
+      FExpandedHeight := Height
+    else
+      FExpandedHeight := ActiveController.Metric('--ribbon-height', TyRibbonDefaultHeight);
+    Height := collapsed;
   end;
   Invalidate;
 end;
@@ -1289,8 +1312,23 @@ begin
 end;
 
 procedure TTyCustomRibbonPage.SetParent(AParent: TWinControl);
+var
+  Old: TWinControl;
 begin
+  Old := Parent;
   inherited SetParent(AParent);
+  { LEAVING a ribbon is as much a page-list event as joining one (the TTyCustomTabSheet rule):
+    a page moved to another ribbon, or taken out of this one, must leave the list, or the old
+    ribbon goes on counting it, drawing its tab and handing it out from Pages[]. Two exceptions:
+    while either side is being torn down (the free path is the FreeNotification RegisterPage
+    asked for, and the old host may be half-destroyed), and the ribbon's OWN fly-out -- a
+    minimised ribbon lends its active page to a popup it owns (ShowFlyout -> AdoptContent) and
+    takes it back on close; the page never stops being that ribbon's. }
+  if (Old <> AParent) and (Old is TTyCustomRibbon)
+     and not ((AParent is TTyPopupSurface) and (AParent.Owner = Old))
+     and not (csDestroying in ComponentState)
+     and not (csDestroying in Old.ComponentState) then
+    TTyCustomRibbon(Old).UnregisterPage(Self, False);
   if (AParent <> nil) and (AParent is TTyCustomRibbon) then
     TTyCustomRibbon(AParent).RegisterPage(Self);
 end;

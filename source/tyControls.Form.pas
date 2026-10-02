@@ -257,7 +257,7 @@ type
   TTyChromeEngine = class(TObject)
   private
     FForm: TCustomForm;
-    FTitleBar: TTyTitleBar;
+    FTitleBar: TTyCustomTitleBar;
     FBorderZone: Integer;
     FInstalledPPI: Integer;
     FDragging: Boolean;
@@ -337,7 +337,7 @@ type
       designer-set maximize and a caption-button maximize cannot differ. }
     procedure MaximizeToWorkArea;
     property Form: TCustomForm read FForm write FForm;
-    property TitleBar: TTyTitleBar read FTitleBar write FTitleBar;
+    property TitleBar: TTyCustomTitleBar read FTitleBar write FTitleBar;
     { The resize hot zone along the window's edges, LOGICAL px. BorderZonePx is what every
       hit test and the GTK/Qt gutter use: the same zone at the form's PPI, so the edge is
       as easy to grab at 175% as it is at 100%. }
@@ -363,7 +363,7 @@ type
     ordinary TForm: drop your controls straight onto it and design them in place. }
   TTyForm = class(TForm, ITyGlassHost, ITyThemedBackground)
   private
-    FTitleBar: TTyTitleBar;
+    FTitleBar: TTyCustomTitleBar;
     FTitleHeightExplicit: Boolean;    // True once TitleHeight is set in code/.lfm (pins it; else follows density)
     { a6256. The pinned title-bar height in LOGICAL (96-PPI) px. A pinned height must scale
       with the monitor like the theme-driven one does, and it must come BACK to the same
@@ -372,7 +372,7 @@ type
       value and re-multiplying it per crossing is what made the bar grow without bound. }
     FTitleHeightLogical: Integer;
     FSurface: TTyCustomFormSurface;   // Phase 1: runtime child content-host (covers the WS_THICKFRAME dead band)
-    FMenuBar: TTyMenuBar;             // the primary menu bar (shortcut dispatch / mac global bar)
+    FMenuBar: TTyCustomMenuBar;       // the primary menu bar (shortcut dispatch / mac global bar)
     FResizable: Boolean;              // window edge-resize opt-out (default True); see SetResizable
     FController: TTyStyleController;   // set by ApplyChromeTheme; used by Paint
     FSharpBackdrop: TBGRABitmap;      // form bg snapshot, UNblurred (fills glass corners)
@@ -413,8 +413,8 @@ type
     // ITyThemedBackground — the form's themed TyForm bg, for children's parent-bg fill.
     function ThemedBgColor(out AColor: TTyColor): Boolean;
     procedure SetupChrome;
-    procedure SetTitleBar(AValue: TTyTitleBar);
-    procedure SetMenuBar(AValue: TTyMenuBar);
+    procedure SetTitleBar(AValue: TTyCustomTitleBar);
+    procedure SetMenuBar(AValue: TTyCustomMenuBar);
     procedure WireTitleBarButtons;
     procedure ArmEngine;
     function GetTitleHeight: Integer;
@@ -568,12 +568,12 @@ type
       fallback); the themed background paint keeps its existing rule of drawing only when a
       Controller is assigned. }
     property StyleOverride: string read FStyleOverride write SetStyleOverride;
-    property TitleBar: TTyTitleBar read FTitleBar write SetTitleBar;
+    property TitleBar: TTyCustomTitleBar read FTitleBar write SetTitleBar;
     { Designate the primary application menu bar. Non-mac: the bar stays visible and
       owns shortcut dispatch (IsShortcut forwards to its TMainMenu). Mac: the bar's
       TMainMenu is handed to the inherited Form.Menu (the global top-of-screen bar)
       and the in-window bar is hidden. Freeing the bar nils this (FreeNotification). }
-    property MenuBar: TTyMenuBar read FMenuBar write SetMenuBar;
+    property MenuBar: TTyCustomMenuBar read FMenuBar write SetMenuBar;
     { Title-bar height. Unset, it follows the density axis (classic 32 / modern --control-height,
       applied by ApplyChromeTheme); an explicit value pins it. Streamed only when explicitly set
       (stored FTitleHeightExplicit) so a density-driven height is never baked into the .lfm. }
@@ -717,7 +717,7 @@ function TyRescaleChromeMetric(AValue, AFromPPI, AToPPI: Integer): Integer;
   output -- this DERIVES the height from PPI-independent inputs, so it is idempotent and a
   monitor round trip is exact. Exported so the contract can be pinned directly; see
   TTitleBarDpiTest in tests/test.form.pas. }
-function TyTitleBarDeviceHeight(AForm: TCustomForm; ABar: TTyTitleBar; APPI: Integer): Integer;
+function TyTitleBarDeviceHeight(AForm: TCustomForm; ABar: TTyCustomTitleBar; APPI: Integer): Integer;
 
 implementation
 
@@ -993,7 +993,7 @@ begin
   Result := (AValue * AToPPI + AFromPPI div 2) div AFromPPI;
 end;
 
-function TyTitleBarDeviceHeight(AForm: TCustomForm; ABar: TTyTitleBar; APPI: Integer): Integer;
+function TyTitleBarDeviceHeight(AForm: TCustomForm; ABar: TTyCustomTitleBar; APPI: Integer): Integer;
 { a6256. The title bar's height in DEVICE px at APPI, derived from PPI-independent inputs
   only: either the height the host pinned (remembered as logical px) or the active theme's
   --titlebar-height under the current density. Because the answer is a pure function of
@@ -2023,8 +2023,9 @@ begin
   FEngine.Form := Self;
   // The content host (TTyFormSurface) is NOT created here — it is streamed from the .lfm as
   // `object Surface: TTyFormSurface` with the controls nested under it, so graphic controls paint on
-  // its canvas (visible) and it covers the WS_THICKFRAME dead band. Loaded wires FSurface via
-  // FindComponent. Creating it here (a second, code-side instance) would collide with the streamed one.
+  // its canvas (visible) and it covers the WS_THICKFRAME dead band. Notification(opInsert) wires
+  // FSurface as the reader creates it. Creating it here (a second, code-side instance) would
+  // collide with the streamed one.
 end;
 
 function TTyForm.GetVersion: string;
@@ -2058,7 +2059,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TTyForm.SetTitleBar(AValue: TTyTitleBar);
+procedure TTyForm.SetTitleBar(AValue: TTyCustomTitleBar);
 begin
   if AValue = FTitleBar then Exit;
   if (AValue <> nil) and (AValue.Owner <> Self) and (GetParentForm(AValue) <> Self) then
@@ -2094,7 +2095,7 @@ end;
   on macOS the bar's TMainMenu becomes the inherited Form.Menu (LCL renders it as
   the global top-of-screen bar) and the in-window bar is hidden; everywhere else the
   in-window bar stays visible and owns shortcut dispatch via IsShortcut. }
-procedure TTyForm.SetMenuBar(AValue: TTyMenuBar);
+procedure TTyForm.SetMenuBar(AValue: TTyCustomMenuBar);
 begin
   if AValue = FMenuBar then Exit;
   {$IFDEF DARWIN}
@@ -2145,9 +2146,13 @@ end;
 procedure TTyForm.Loaded;
 begin
   inherited Loaded;
-  // Wire the streamed content host (the .lfm's `object Surface`, which already hosts every control as
-  // its child — graphic controls included). nil for a code-created form with no .lfm.
-  FSurface := TTyCustomFormSurface(FindComponent('Surface'));
+  // The streamed content host (the .lfm's `object Surface`, which already hosts every control as
+  // its child — graphic controls included) is already wired: Notification(opInsert) took it as
+  // the reader created it -- by CLASS, so a renamed or third-party surface counts and a control
+  // that merely has the name does not. Every component the form owns passes through that insert,
+  // so there is nothing left to look up here. (Re-finding it with FindComponent('Surface') used to
+  // overwrite the wiring: a surface called anything else was dropped, and another control called
+  // Surface was cast to one.)
   // A title bar associated from the .lfm had its engine-arming deferred (see
   // SetTitleBar); now that streaming has finished, wire it to the live engine.
   ArmEngine;
@@ -2235,8 +2240,8 @@ begin
   inherited Notification(AComponent, Operation);
   if (Operation = opInsert) and not (csLoading in ComponentState)
      and (FTitleBar = nil) and (AComponent.Owner = Self)
-     and (AComponent is TTyTitleBar) then
-    TitleBar := TTyTitleBar(AComponent)          // routes through SetTitleBar
+     and (AComponent is TTyCustomTitleBar) then
+    TitleBar := TTyCustomTitleBar(AComponent)    // routes through SetTitleBar
   else if (Operation = opRemove) and (AComponent = FTitleBar) then
   begin
     FTitleBar := nil;
