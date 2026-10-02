@@ -69,6 +69,7 @@ type
     procedure TestThirdRibbonGroup;
     procedure TestRibbonTakesAThirdPartyPage;
     procedure TestRibbonPageLaysOutAThirdPartyGroup;
+    procedure TestRibbonIndexesReadBeforeTheirItemsWait;
     { T-d, pixel for pixel, per task }
     procedure TestBarMimicsPaintLikeTheirFinalClass;
     procedure TestRibbonMimicsPaintLikeTheirFinalClass;
@@ -116,6 +117,19 @@ type
   published
     property Caption;
     property ShowCaption;
+  end;
+
+  { ItemIndex ahead of what it indexes -- the order the library's own classes never use. }
+  TIdxRibbonGallery = class(TTyCustomRibbonGallery)
+  published
+    property ItemIndex;
+    property Items;
+  end;
+
+  TIdxRibbonBackstage = class(TTyCustomRibbonBackstage)
+  published
+    property ItemIndex;
+    property Commands;
   end;
 
 implementation
@@ -569,6 +583,34 @@ begin
   AssertTrue('and shows it', g.Visible);
 end;
 
+{ An index a third party publishes ahead of the strings it indexes (the library's own classes
+  publish the strings first) waits for Loaded instead of falling off the empty list, and
+  lands without telling anyone -- reading a form is not a selection. }
+procedure TTyCustomClassesP3Test.TestRibbonIndexesReadBeforeTheirItemsWait;
+var
+  host: TForm;
+  gal, galBack: TIdxRibbonGallery;
+  bs, bsBack: TIdxRibbonBackstage;
+begin
+  host := NewHost;
+  gal := TIdxRibbonGallery.Create(host);
+  gal.Name := 'Gal';
+  gal.Parent := host;
+  gal.Items.CommaText := 'a,b,c';
+  gal.ItemIndex := 2;
+  bs := TIdxRibbonBackstage.Create(host);
+  bs.Name := 'Bs';
+  bs.Parent := host;
+  bs.Commands.CommaText := 'Info,New,Open';
+  bs.ItemIndex := 1;
+  AssertTrue('precondition: the gallery streams ItemIndex ahead of Items',
+    Pos('ItemIndex', StreamedText(gal)) < Pos('Items.Strings', StreamedText(gal)));
+  galBack := HostRoundTrip(gal) as TIdxRibbonGallery;
+  AssertEquals('the gallery index waits for its items', 2, galBack.ItemIndex);
+  bsBack := TIdxRibbonBackstage(galBack.Owner.FindComponent('Bs'));
+  AssertEquals('the backstage index waits for its commands', 1, bsBack.ItemIndex);
+end;
+
 { ------------------------------------------------------------------ Task 22: window chrome }
 
 { ------------------------------------------------------------------ Task 23: images and shapes }
@@ -804,6 +846,6 @@ end;
 
 initialization
   RegisterClasses([TThirdToolBar, TThirdToolButton, TThirdStatusBar, TThirdScrollBar,
-    TThirdRibbonPage, TThirdRibbonGroup]);
+    TThirdRibbonPage, TThirdRibbonGroup, TIdxRibbonGallery, TIdxRibbonBackstage]);
   RegisterTest(TTyCustomClassesP3Test);
 end.

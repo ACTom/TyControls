@@ -49,6 +49,10 @@ type
                                         the theme's --backstage-sidebar-width token (density-aware) }
     FOnCommandSelect: TTyBackstageSelectEvent;
     FOnClose: TNotifyEvent;
+    { An ItemIndex read from a form before the commands it points into (a descendant that
+      publishes ItemIndex first): kept here and applied in Loaded. }
+    FPendingItemIndex: Integer;
+    FHasPendingIndex: Boolean;
     procedure SetCommands(AValue: TStrings);
     procedure SetCommandGlyphs(AValue: TStrings);
     procedure SetBottomCommands(AValue: TStrings);
@@ -77,6 +81,7 @@ type
     procedure MouseLeave; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    procedure Loaded; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -393,6 +398,21 @@ begin
   Invalidate;
 end;
 
+procedure TTyCustomRibbonBackstage.Loaded;
+begin
+  inherited Loaded;
+  { Reading a form is not a selection: the parked index lands without OnCommandSelect. }
+  if FHasPendingIndex then
+  begin
+    FHasPendingIndex := False;
+    if (FPendingItemIndex >= 0) and (FPendingItemIndex < TotalCount) then
+    begin
+      FItemIndex := FPendingItemIndex;
+      Invalidate;
+    end;
+  end;
+end;
+
 procedure TTyCustomRibbonBackstage.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
@@ -424,6 +444,16 @@ end;
 
 procedure TTyCustomRibbonBackstage.SetItemIndex(AValue: Integer);
 begin
+  { Read from a form ahead of the commands it indexes (the library's own class publishes
+    Commands first; a descendant may not): the clamp below would cut it to -1. Keep it for
+    Loaded. Only when it cannot land now -- an index that already fits takes the 3.0 path. }
+  if (csLoading in ComponentState) and (AValue >= TotalCount) then
+  begin
+    FPendingItemIndex := AValue;
+    FHasPendingIndex := True;
+    Exit;
+  end;
+  FHasPendingIndex := False;
   if AValue < -1 then AValue := -1;
   if AValue >= TotalCount then AValue := TotalCount - 1;
   if FItemIndex = AValue then Exit;

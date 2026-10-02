@@ -70,6 +70,10 @@ type
     FOnSelect: TNotifyEvent;
     FPopup: TTyDropdownPopup;   // created on demand; freed in Destroy
     FGrid: TTyGalleryGrid;      // popup content; owned by Self, freed in Destroy
+    { An ItemIndex read from a form before the Items it points into (a descendant that
+      publishes ItemIndex first): kept here and applied in Loaded. }
+    FPendingItemIndex: Integer;
+    FHasPendingIndex: Boolean;
     function GetItemsProp: TStrings;
     function GetGlyphNamesProp: TStrings;
     procedure SetItems(const AValue: TStrings);
@@ -99,6 +103,7 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    procedure Loaded; override;
     { Glyph name parallel to Items for the visible index AItem, or '' if none. }
     function GlyphNameFor(AItem: Integer): string;
     { Draw one gallery cell (fill for its state + optional glyph + caption) into
@@ -493,7 +498,33 @@ end;
 
 procedure TTyCustomRibbonGallery.SetItemIndex(const AValue: Integer);
 begin
+  { Read from a form ahead of the Items it indexes (the library's own class publishes Items
+    first; a descendant may not): SelectAt would drop it as out of range. Keep it for Loaded,
+    the way LCL's list controls keep an index read before their items. Only when it cannot
+    land now -- an index that already fits takes the 3.0 path. }
+  if (csLoading in ComponentState) and (AValue >= FItems.Count) then
+  begin
+    FPendingItemIndex := AValue;
+    FHasPendingIndex := True;
+    Exit;
+  end;
+  FHasPendingIndex := False;
   SelectAt(AValue);   // funnel through the one selection seam
+end;
+
+procedure TTyCustomRibbonGallery.Loaded;
+begin
+  inherited Loaded;
+  { Reading a form is not a selection: the parked index lands without OnSelect. }
+  if FHasPendingIndex then
+  begin
+    FHasPendingIndex := False;
+    if (FPendingItemIndex >= 0) and (FPendingItemIndex < FItems.Count) then
+    begin
+      FItemIndex := FPendingItemIndex;
+      Invalidate;
+    end;
+  end;
 end;
 
 procedure TTyCustomRibbonGallery.SetVisibleColumns(const AValue: Integer);
