@@ -294,6 +294,59 @@ begin
   Result := GetTabCount;
 end;
 
+{ R7-4: what a host hands out is declared as the custom class. `is` cannot tell -- it asks the
+  object -- but overload resolution is decided by the declared type, so these answer 1 for a
+  custom-typed expression and 2 for one still typed as the final class. }
+function DeclaredAs(A: TTyCustomToolButton): Integer; overload;
+begin
+  Result := 1;
+end;
+
+function DeclaredAs(A: TTyToolButton): Integer; overload;
+begin
+  Result := 2;
+end;
+
+function DeclaredAs(A: TTyCustomRibbonPage): Integer; overload;
+begin
+  Result := 1;
+end;
+
+function DeclaredAs(A: TTyRibbonPage): Integer; overload;
+begin
+  Result := 2;
+end;
+
+function DeclaredAs(A: TTyCustomToolWindow): Integer; overload;
+begin
+  Result := 1;
+end;
+
+function DeclaredAs(A: TTyToolWindow): Integer; overload;
+begin
+  Result := 2;
+end;
+
+function DeclaredAs(A: TTyCustomToolWindowBar): Integer; overload;
+begin
+  Result := 1;
+end;
+
+function DeclaredAs(A: TTyToolWindowBar): Integer; overload;
+begin
+  Result := 2;
+end;
+
+function DeclaredAs(A: TTyCustomToolWindowActions): Integer; overload;
+begin
+  Result := 1;
+end;
+
+function DeclaredAs(A: TTyToolWindowActions): Integer; overload;
+begin
+  Result := 2;
+end;
+
 procedure TP3CountingStatusBar.Invalidate;
 begin
   Inc(Invalidations);
@@ -479,6 +532,8 @@ begin
   got := bar.Buttons[0];
   AssertTrue('Buttons[] hands out the third party''s button as it is', got = third);
   AssertFalse('which is no TTyToolButton', got is TTyToolButton);
+  AssertEquals('Buttons[] is declared as TTyCustomToolButton, not cast to TTyToolButton', 1,
+    DeclaredAs(bar.Buttons[0]));
   AssertEquals('IndexOfButton knows it', 1, bar.IndexOfButton(sep));
   AssertEquals('Index answers through the bar', 0, third.Index);
   bar.ForceLayout;
@@ -670,6 +725,8 @@ begin
   pg := rb.Pages[1];
   AssertTrue('Pages[] hands it out as it is', pg = third);
   AssertFalse('and it is no TTyRibbonPage', pg is TTyRibbonPage);
+  AssertEquals('Pages[] is declared as TTyCustomRibbonPage', 1, DeclaredAs(rb.Pages[1]));
+  AssertEquals('so is ActivePage', 1, DeclaredAs(rb.ActivePage));
   rb.ActivePage := third;
   AssertTrue('it can be the active page', rb.ActivePage = third);
   AssertEquals('both tabs show', 2, TP3RibbonCracker(rb).TabCount);
@@ -681,6 +738,8 @@ begin
   third.Free;
   AssertEquals('freeing the page takes it out of the ribbon', 1, rb.PageCount);
   AssertTrue('the library''s own page remains', rb.Pages[0] = own);
+  AssertEquals('AddPage hands back the TTyRibbonPage it built (R7-4: it builds nothing else)', 2,
+    DeclaredAs(rb.AddPage('More')));
 end;
 
 { S21-1 (C20-1). The library's page joins a third party's ribbon: it registers itself with any
@@ -1032,6 +1091,10 @@ begin
   got := bar.Windows[0];
   AssertTrue('Windows[] hands it out as it is', got = w);
   AssertFalse('which is no TTyToolWindow', got is TTyToolWindow);
+  AssertEquals('Windows[] is declared as TTyCustomToolWindow', 1, DeclaredAs(bar.Windows[0]));
+  AssertEquals('so is ActiveWindow', 1, DeclaredAs(bar.ActiveWindow));
+  AssertEquals('and the window''s Bar is a TTyCustomToolWindowBar', 1, DeclaredAs(w.Bar));
+  AssertEquals('and its actions strip a TTyCustomToolWindowActions', 1, DeclaredAs(w.EnsureActions));
   AssertTrue('the window finds its bar', w.Bar = TTyCustomToolWindowBar(bar));
   bar.ActivateWindow(w);
   AssertTrue('it can be the active window', bar.ActiveWindow = w);
@@ -1060,8 +1123,12 @@ begin
   third.Collapsed := False;
   w := TTyToolWindow.Create(FForm);
   w.Parent := third;
-  AssertEquals('the third-party bar registered the library''s window', 1, third.WindowCount);
+  AssertEquals('the window is one of the third-party bar''s windows', 1, third.WindowCount);
   AssertTrue('the window finds the third-party bar', w.Bar = TTyCustomToolWindowBar(third));
+  { WindowCount only counts children; registering is what the window's SetParent does, and a
+    window registered outside loading becomes the current page. }
+  AssertTrue('the window registered with the third-party bar (it is the current page)',
+    third.ActiveWindow = w);
   own := TTyToolWindowBar.Create(FForm);
   own.Parent := FForm;
   CheckSameTypeKey(third, own);
