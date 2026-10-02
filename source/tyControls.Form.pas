@@ -2023,8 +2023,9 @@ begin
   FEngine.Form := Self;
   // The content host (TTyFormSurface) is NOT created here — it is streamed from the .lfm as
   // `object Surface: TTyFormSurface` with the controls nested under it, so graphic controls paint on
-  // its canvas (visible) and it covers the WS_THICKFRAME dead band. Loaded wires FSurface via
-  // FindComponent. Creating it here (a second, code-side instance) would collide with the streamed one.
+  // its canvas (visible) and it covers the WS_THICKFRAME dead band. Notification(opInsert) wires
+  // FSurface as the reader creates it. Creating it here (a second, code-side instance) would
+  // collide with the streamed one.
 end;
 
 function TTyForm.GetVersion: string;
@@ -2143,11 +2144,22 @@ begin
 end;
 
 procedure TTyForm.Loaded;
+var
+  c: TComponent;
 begin
   inherited Loaded;
-  // Wire the streamed content host (the .lfm's `object Surface`, which already hosts every control as
-  // its child — graphic controls included). nil for a code-created form with no .lfm.
-  FSurface := TTyCustomFormSurface(FindComponent('Surface'));
+  // The streamed content host (the .lfm's `object Surface`, which already hosts every control as
+  // its child — graphic controls included) was wired by Notification(opInsert) as the reader
+  // created it -- by CLASS, so a renamed or third-party surface counts and a control that merely
+  // has the name does not. Re-finding it by name here used to overwrite that: a surface called
+  // anything else was dropped, and another control called Surface was cast to one. Only a form
+  // that somehow missed the insert falls back to the name, and only to a real surface.
+  if FSurface = nil then
+  begin
+    c := FindComponent('Surface');
+    if c is TTyCustomFormSurface then
+      FSurface := TTyCustomFormSurface(c);
+  end;
   // A title bar associated from the .lfm had its engine-arming deferred (see
   // SetTitleBar); now that streaming has finished, wire it to the live engine.
   ArmEngine;

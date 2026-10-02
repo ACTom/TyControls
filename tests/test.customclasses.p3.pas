@@ -77,6 +77,7 @@ type
     procedure TestThirdMenuBar;
     procedure TestThirdFormSurface;
     procedure TestFormWiresAThirdPartySurface;
+    procedure TestReadFormFindsItsSurfaceByClassNotName;
     { Task 23: images and shapes }
     procedure TestThirdCharImage;
     procedure TestThirdShape;
@@ -905,6 +906,65 @@ begin
   finally
     f.Free;
   end;
+end;
+
+{ A form read from a .lfm knows its content surface by class, the way it knows one dropped on
+  it: the designer calls it Surface, but a renamed one, or a third party's, is still the
+  surface -- and another control that happens to be called Surface is not. }
+procedure TTyCustomClassesP3Test.TestReadFormFindsItsSurfaceByClassNotName;
+
+  procedure RoundTrip(ASurfaceClass: TControlClass; const AName: string; ADecoy: Boolean);
+  var
+    src, dst: TTyForm;
+    s: TControl;
+    decoy: TThirdToolBar;
+    ms: TMemoryStream;
+    got: TComponent;
+    ctl: TTyStyleController;
+    what: string;
+  begin
+    what := ASurfaceClass.ClassName + ' named ' + AName;
+    if ADecoy then what := what + ', next to a tool bar named Surface';
+    src := TTyForm.CreateNew(nil);
+    dst := nil;
+    ms := TMemoryStream.Create;
+    try
+      src.Name := 'F';
+      s := ASurfaceClass.Create(src);
+      s.Name := AName;
+      s.Parent := src;
+      s.Align := alClient;
+      if ADecoy then
+      begin
+        decoy := TThirdToolBar.Create(src);
+        decoy.Name := 'Surface';
+        decoy.Parent := TWinControl(s);
+      end;
+      ms.WriteComponent(src);
+      ms.Position := 0;
+      dst := TTyForm.CreateNew(nil);
+      ms.ReadComponent(dst);
+      got := dst.FindComponent(AName);
+      AssertTrue(what + ': the surface came back', got is TTyCustomFormSurface);
+      ctl := TTyStyleController.Create(dst);
+      dst.Controller := ctl;
+      AssertTrue(what + ': a Controller set after reading reaches the surface',
+        TTyCustomFormSurface(got).Controller = ctl);
+      if ADecoy then
+        AssertFalse(what + ': and not the control that is merely called Surface',
+          TTyCustomToolBar(dst.FindComponent('Surface')).Controller = ctl);
+    finally
+      ms.Free;
+      dst.Free;
+      src.Free;
+    end;
+  end;
+
+begin
+  RoundTrip(TTyFormSurface, 'Surface', False);
+  RoundTrip(TTyFormSurface, 'Body', False);
+  RoundTrip(TThirdFormSurface, 'Body', False);
+  RoundTrip(TThirdFormSurface, 'Body', True);
 end;
 
 { ------------------------------------------------------------------ Task 23: images and shapes }
