@@ -74,6 +74,7 @@ type
     procedure AddTabSheetCreatesAPage;
     procedure IndexOfPageAtNamesTheShownPage;
     procedure PageControlReadsAndWritesTheHost;
+    procedure AFreedPageWithAnotherOwnerLeavesThePager;
     procedure PageIndexMovesThePage;
     procedure OnShowAndOnHideFireOnTheSwitch;
     procedure ReorderKeepsTheShownPageOnTheSelectedTab;
@@ -801,6 +802,30 @@ begin
     TObject(Sheet.PageControl));
   AssertEquals('the old pager loses the page', 1, FPager.PageCount);
   AssertEquals('the new one gains it', 1, Other.PageCount);
+end;
+
+{ A page the pager does not share an owner with gets no owner broadcast when it is freed, so the
+  pager has to have asked for the notification itself -- or the page stays in Pages[] and the
+  next tab caption reads a dead object. }
+procedure TTyTabMemberParity.AFreedPageWithAnotherOwnerLeavesThePager;
+var
+  Orphan: TTyTabSheet;
+  I: Integer;
+  S: string;
+begin
+  BuildPager(1);
+  Orphan := TTyTabSheet.Create(nil);
+  Orphan.Caption := 'Orphan';
+  Orphan.Parent := FPager;
+  FPager.ActivePage := Orphan;
+  AssertEquals('precondition: the ownerless page joined', 2, FPager.PageCount);
+  Orphan.Free;
+  AssertEquals('freed, it leaves the pager', 1, FPager.PageCount);
+  AssertEquals('the page that stays is shown', 0, FPager.ActivePageIndex);
+  S := '';
+  for I := 0 to FPager.PageCount - 1 do
+    S := S + FPager.Pages[I].Caption + ';';
+  AssertEquals('every page read is a live one', 'Page 1;', S);
 end;
 
 procedure TTyTabMemberParity.PageIndexMovesThePage;

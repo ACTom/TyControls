@@ -30,7 +30,7 @@ uses
   tyControls.Ribbon, tyControls.RibbonGallery, tyControls.RibbonBackstage,
   tyControls.Form, tyControls.Menu, tyControls.FormSurface, tyControls.Controller,
   tyControls.CharImage, tyControls.IconFont, tyControls.Shape, tyControls.Chart,
-  tyControls.ColorGrid, tyControls.Terminal, tyControls.ToolWindows,
+  tyControls.ColorGrid, tyControls.Terminal, tyControls.ToolWindows, tyControls.PopupSurface,
   tyControls.ToolWindows.DesignRules;
 
 type
@@ -72,6 +72,7 @@ type
     procedure TestRibbonPageJoinsAThirdPartyRibbon;
     procedure TestRibbonPageLaysOutAThirdPartyGroup;
     procedure TestRibbonIndexesReadBeforeTheirItemsWait;
+    procedure TestRibbonForgetsAPageThatLeaves;
     { Task 22: window chrome }
     procedure TestThirdTitleBar;
     procedure TestThirdMenuBar;
@@ -243,6 +244,7 @@ type
   TP3RibbonCracker = class(TTyCustomRibbon)
   public
     function TabCount: Integer;
+    function TabCaption(AIndex: Integer): string;
   end;
 
   { A third party's ribbon: the custom class and nothing else. }
@@ -293,6 +295,11 @@ end;
 function TP3RibbonCracker.TabCount: Integer;
 begin
   Result := GetTabCount;
+end;
+
+function TP3RibbonCracker.TabCaption(AIndex: Integer): string;
+begin
+  Result := GetTabCaption(AIndex);
 end;
 
 { R7-4: what a host hands out is declared as the custom class. `is` cannot tell -- it asks the
@@ -808,6 +815,62 @@ begin
   AssertEquals('the gallery index waits for its items', 2, galBack.ItemIndex);
   bsBack := TIdxRibbonBackstage(galBack.Owner.FindComponent('Bs'));
   AssertEquals('the backstage index waits for its commands', 1, bsBack.ItemIndex);
+end;
+
+{ A page that leaves a ribbon -- for another ribbon, for no parent, or by being freed while it
+  has a different owner (no owner broadcast reaches the ribbon then) -- leaves its page list.
+  It used to stay counted, tabbed and handed out by Pages[], and the freed one was read through
+  on the next caption lookup. Lending a page to the ribbon's own minimised fly-out is not
+  leaving: it comes back to the same place in the list. }
+procedure TTyCustomClassesP3Test.TestRibbonForgetsAPageThatLeaves;
+var
+  ra, rb: TTyRibbon;
+  home, p, orphan: TTyRibbonPage;
+  third: TThirdRibbonPage;
+  fly: TTyPopupSurface;
+  i: Integer;
+  s: string;
+begin
+  ra := TTyRibbon.Create(FForm);
+  ra.Parent := FForm;
+  rb := TTyRibbon.Create(FForm);
+  rb.Parent := FForm;
+  home := ra.AddPage('Home');
+  p := ra.AddPage('Insert');
+  p.Parent := rb;
+  AssertEquals('moved to another ribbon: the old one forgets it', 1, ra.PageCount);
+  AssertEquals('and the new one has it', 1, rb.PageCount);
+  AssertEquals('the old ribbon shows one tab', 1, TP3RibbonCracker(ra).TabCount);
+  p.Parent := nil;
+  AssertEquals('taken out of a ribbon: forgotten', 0, rb.PageCount);
+  p.Free;
+  orphan := TTyRibbonPage.Create(nil);
+  orphan.Caption := 'Orphan';
+  orphan.Parent := ra;
+  ra.ActivePage := orphan;
+  AssertEquals('an ownerless page joins', 2, ra.PageCount);
+  orphan.Free;
+  AssertEquals('freed with another owner: it leaves all the same', 1, ra.PageCount);
+  AssertTrue('the page that stays is the active one', ra.ActivePage = home);
+  s := '';
+  for i := 0 to TP3RibbonCracker(ra).TabCount - 1 do
+    s := s + TP3RibbonCracker(ra).TabCaption(i) + ';';
+  AssertEquals('every tab reads a live page', 'Home;', s);
+  third := TThirdRibbonPage.Create(nil);
+  third.Parent := ra;
+  third.Free;
+  AssertEquals('a third party''s ownerless page leaves the same way', 1, ra.PageCount);
+  { The minimised ribbon flies its active page out in a popup it owns, re-parenting the page
+    there until the popup closes (TTyCustomRibbon.ShowFlyout). }
+  ra.AddPage('View');
+  fly := TTyPopupSurface.CreateNew(ra);
+  fly.AdoptContent(home);
+  AssertTrue('precondition: the page is in the fly-out', home.Parent = fly);
+  AssertEquals('lent to the ribbon''s fly-out: still the ribbon''s page', 2, ra.PageCount);
+  AssertTrue('in its place', ra.Pages[0] = home);
+  fly.ReleaseContent;
+  AssertTrue('back home', home.Parent = ra);
+  AssertEquals('and counted once', 2, ra.PageCount);
 end;
 
 { ------------------------------------------------------------------ Task 22: window chrome }
