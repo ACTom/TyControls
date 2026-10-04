@@ -227,6 +227,26 @@ msgstr "未找到 @import 目标：\"%s\""
 msgid "@import cycle detected: \"%s\""
 msgstr "检测到 @import 循环引用：\"%s\""
 
+#: tycontrols.strconsts.rssmtypekeyconflict
+#, object-pascal-format
+msgid "Type key \"%s\" already has parent \"%s\" (not \"%s\")"
+msgstr "typeKey \"%s\" 已登记父键 \"%s\"（不是 \"%s\"）"
+
+#: tycontrols.strconsts.rssmtypekeycycle
+#, object-pascal-format
+msgid "Type key chain cycle: \"%s\" -> \"%s\""
+msgstr "typeKey 链成环：\"%s\" -> \"%s\""
+
+#: tycontrols.strconsts.rssmtypekeyinvalidname
+#, object-pascal-format
+msgid "Invalid type key name: \"%s\""
+msgstr "无效的 typeKey 名：\"%s\""
+
+#: tycontrols.strconsts.rssmtypekeytoodeep
+#, object-pascal-format
+msgid "Type key chain too deep (more than %d keys) at \"%s\""
+msgstr "typeKey 链过深（超过 %d 个键），位于 \"%s\""
+
 #: tycontrols.strconsts.rsmsgbtnyes
 msgid "Yes"
 msgstr "是"

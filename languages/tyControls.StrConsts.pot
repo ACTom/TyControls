@@ -670,6 +670,26 @@ msgstr ""
 msgid "slice() needs 4 values: %s"
 msgstr ""
 
+#: tycontrols.strconsts.rssmtypekeyconflict
+#, object-pascal-format
+msgid "Type key \"%s\" already has parent \"%s\" (not \"%s\")"
+msgstr ""
+
+#: tycontrols.strconsts.rssmtypekeycycle
+#, object-pascal-format
+msgid "Type key chain cycle: \"%s\" -> \"%s\""
+msgstr ""
+
+#: tycontrols.strconsts.rssmtypekeyinvalidname
+#, object-pascal-format
+msgid "Invalid type key name: \"%s\""
+msgstr ""
+
+#: tycontrols.strconsts.rssmtypekeytoodeep
+#, object-pascal-format
+msgid "Type key chain too deep (more than %d keys) at \"%s\""
+msgstr ""
+
 #: tycontrols.strconsts.rsterminalmenuclear
 msgctxt "tycontrols.strconsts.rsterminalmenuclear"
 msgid "Clear"

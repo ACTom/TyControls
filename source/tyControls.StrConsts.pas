@@ -83,6 +83,11 @@ resourcestring
   rsSmImportEmptyPath           = '@import has an empty path';
   rsSmImportTargetNotFound      = '@import target not found: "%s"';
   rsSmImportCycleDetected       = '@import cycle detected: "%s"';
+  // #14 type key chain registration (translated)
+  rsSmTypeKeyInvalidName        = 'Invalid type key name: "%s"';
+  rsSmTypeKeyCycle              = 'Type key chain cycle: "%s" -> "%s"';
+  rsSmTypeKeyTooDeep            = 'Type key chain too deep (more than %d keys) at "%s"';
+  rsSmTypeKeyConflict           = 'Type key "%s" already has parent "%s" (not "%s")';
 
   // --- Message dialogs (button captions + type titles) — user-facing, translated ---
   rsMsgBtnYes          = 'Yes';
