@@ -61,6 +61,7 @@ CL.Selected := clNavy;
 
 - **组合 vs 列表:** 收起式选色用 [TTyColorBox](colorbox.md);要常驻列表用本控件。
 - **颜色随名同步:** 颜色在 `Items.Objects[i]`,`Sorted` / `Delete` 不会错位(见 [colorbox.md](colorbox.md) 的同一机制)。
+- **色板不存进 `.lfm`:** `Items` 不写进窗体文件,读窗体时按 `Style` 重建色板,再选中 `Selected`;设计器里手填的 `Items` 不会保存。自定义色板用 `cbCustomColors` + `OnGetColors` 或运行时 `AddColor`(同 [colorbox.md](colorbox.md))。
 
 ---
 

@@ -104,13 +104,13 @@ function TyFloatSpinGlyphBox(const AHalf: TRect): TRect;
 - **箭头**是 `tgArrowUp` / `tgArrowDown`，走 `TyDrawGlyph`，因此可被主题的 `--glyph-arrow-up` / `--glyph-arrow-down` 覆盖（图标字体或图片）；颜色平时取解析样式的 `TextColor`。
 - **悬停 / 按下**：指针下那一半铺 `TyButton:hover` / `TyButton:active` 的底色，箭头改用该状态的 `color`，和 `TTySpinEdit`、`TTyUpDown` 一样。底色只铺在字段的边框和焦点环以内。
 
-### 和 `TTySpinEdit` 的一处**刻意**差异：按钮区被内距挤进来了
+### 按钮和 `TTySpinEdit` 一样大
 
-`TTySpinEdit` 自己拥有整个客户区，按钮**贴齐右缘、占满上下**。`TTyFloatSpinEdit` 的按钮挂在 `TTyEdit` 的尾部区里，而这块区域是**被四边内距（`padding`）内缩过**的——所以按钮不贴边，上下也各留出一条内距。
+按钮列的宽度取 `TTyEdit` 尾部区的宽度(`--field-button-width`),高度**占满整个控件**,上下两半和 `TTySpinEdit` 用同一套几何(`TySpinUpButtonRect` / `TySpinDownButtonRect`),96 DPI 下每半约 18×14。悬停 / 按下的底色只铺在边框和焦点环以内,所以贴边也不会盖住边框。
 
-**这是设计，不是回归。** 尾部区的位置由 `TTyEdit` 定义，`TTyComboEdit` 的下拉箭头、`TTyURLEdit` 的打开按钮都在同一位置；让这一个控件跳出去会让三个尾部按钮在同一个表单上高低不一。
+> **3.0.0 时这里是一条「刻意差异」,3.0.1 起推翻了(#17)。** 当时按钮直接用尾部区,而尾部区上下各让出一条内距,每半只有约 18×10。理由是「和 `TTyComboEdit` 的下拉箭头、`TTyURLEdit` 的打开按钮放在同一位置,免得同一表单上几个尾部按钮高低不一」。这个理由不成立:那两个按钮只有一个居中的字形,上下内距看不出来;微调按钮却是上下两半,而且有悬停和按下的底色,大小一眼可见。用户拿它比的是 `TTySpinEdit`,反馈两者不一致。
 
-它带来的后果是一个必须处理的细节：96 DPI 下按钮半区约 18×10，而 `TTyPainter.DrawGlyph` **默认每边再内缩 4 逻辑像素**，箭头会被压成 1 像素高的一道糊痕（本库踩过的"字形槽位地板"）。所以字形先经 `TyFloatSpinGlyphBox` 取**最大居中正方形**（18×10 → 10×10），再用 `pad = 1` 绘制；这条换算跟着 DPI 与密度自动缩放。
+箭头字形先经 `TyFloatSpinGlyphBox` 取**最大居中正方形**再用 `pad = 1` 绘制(`TTyPainter.DrawGlyph` 默认每边内缩 4 逻辑像素,在矮的半区里会把箭头压成一道糊痕);现在它和 `TTySpinEdit` 用的是同一个正方形。
 
 ---
 

@@ -677,6 +677,9 @@ type
     function  GetTopItem: PTyTreeNode;
     procedure SetTopItem(AValue: PTyTreeNode);
     function  GetBottomItem: PTyTreeNode;
+    { The rows' viewport height in LOGICAL px: the client height less the header band when one
+      is shown. Every vertical scroll computation measures against it (#19). }
+    function  NodeViewHeight: Integer;
     function  GetScrolledTop: Integer;
     procedure SetScrolledTop(AValue: Integer);
     function  GetScrolledLeft: Integer;
@@ -2894,9 +2897,8 @@ begin
   end;
   if nodeTop < 0 then Exit;   // node is not visible in the current tree
 
-  // ClientHeight is device pixels; convert to logical so all comparisons are
-  // consistent with the logical FOffsetY / FRangeY / NodeHeight units.
-  viewH   := MulDiv(ClientHeight, 96, Font.PixelsPerInch);
+  // Logical, like FOffsetY / FRangeY / NodeHeight, and below the header band.
+  viewH   := NodeViewHeight;
   viewTop := -FOffsetY;
   viewBot := viewTop + viewH;
 
@@ -3009,7 +3011,7 @@ begin
     Horizontal model: device pixels (FRangeX/FOffsetX are device-pixel
     quantities accumulated by RenderTo via P.Scale — the X axis is already
     correct and must remain device throughout). }
-  viewH := MulDiv(ClientHeight, 96, PPI);   // logical viewport height
+  viewH := NodeViewHeight;                   // logical rows' viewport height (below the header)
   viewW := ClientWidth;                      // device viewport width (X axis)
   contH := ContentHeight;
 
@@ -4995,7 +4997,7 @@ var
   selIdx, ovlIdx: Integer;      { ikSelected / ikOverlay answers for the current row }
   rangeXNew: Integer;
   inset, insetLogical: Integer;
-  savedClip: TRect;
+  savedClip, nodeClip: TRect;
   anc: PTyTreeNode;
   ancLevel, ancMidX, ancMidY, ancSlotX: Integer;
   measW: Integer;
@@ -5332,6 +5334,13 @@ begin
       end;
     end;
 
+    { The rows' clip: below the header band. Rows scroll by pixels, so whenever the offset is not
+      a whole number of rows the first visible row starts ABOVE the node area -- inside the
+      header band -- and, clipped only to the frame inset, it painted over the header (#19). }
+    nodeClip := Rect(inset, inset, W - inset, H - inset);
+    if hasHeader and (nodeClip.Top < CR.Top) then nodeClip.Top := CR.Top;
+    P.Bitmap.ClipRect := nodeClip;
+
     { ── First on-screen node ─────────────────────────────────────────────── }
     firstNodeY := -FOffsetY;
     if firstNodeY < 0 then firstNodeY := 0;
@@ -5433,6 +5442,8 @@ begin
           clipR := Rect(colCellLeft, rowTop, colCellRight, rowTop + rowH);
           if clipR.Left  < CR.Left  then clipR.Left  := CR.Left;
           if clipR.Right > CR.Right then clipR.Right := CR.Right;
+          if clipR.Top < nodeClip.Top then clipR.Top := nodeClip.Top;              // not into the header
+          if clipR.Bottom > nodeClip.Bottom then clipR.Bottom := nodeClip.Bottom;  // nor the frame
           P.Bitmap.ClipRect := clipR;
 
           { ③d D1: this cell is owner-drawn (default text/image skipped) when
@@ -5703,8 +5714,8 @@ begin
             end;
           end;
 
-          { Restore clip to full inset rect after each cell }
-          P.Bitmap.ClipRect := Rect(inset, inset, W - inset, H - inset);
+          { Restore the rows' clip after each cell }
+          P.Bitmap.ClipRect := nodeClip;
         end;
         { FRangeX is already set from TotalWidth — do NOT re-accumulate }
       end
@@ -5971,8 +5982,10 @@ begin
           and that subtraction answers ~0. }
         if txt <> '' then
         begin
+          { What the row shows: a multi-line text is drawn as its first line and '...', so that
+            is what the range is measured for, not every line glued together (#18). }
           measW := slots.IndentPx + slots.CheckW + slots.ImageW + slots.TextPad +
-            P.MeasureText(txt, NodeStyle.FontName, ResolveFontSize(NodeStyle),
+            P.MeasureText(TySingleLineText(txt), NodeStyle.FontName, ResolveFontSize(NodeStyle),
                           NodeStyle.FontWeight).cx + P.Scale(4);
           if measW > rangeXNew then
             rangeXNew := measW;
@@ -8055,7 +8068,7 @@ begin
   FOffsetY := -AValue;
   { Same clamp ScrollIntoView applies, so a restore of a stale value cannot park
     the viewport past the end of the content. }
-  viewH  := MulDiv(ClientHeight, 96, Font.PixelsPerInch);
+  viewH  := NodeViewHeight;
   minOff := viewH - FRangeY;
   if minOff > 0 then minOff := 0;
   if FOffsetY < minOff then FOffsetY := minOff;
@@ -8109,12 +8122,24 @@ begin
   { not reachable in the current visible order (collapsed ancestor) -- no scroll }
 end;
 
+function TTyCustomTreeView.NodeViewHeight: Integer;
+begin
+  { The header band sits ABOVE the rows (ContentRect insets them by it), so it is not part of
+    the height they scroll through. Measured against the full client height, the last header's
+    worth of rows could never be scrolled into view, and ScrollIntoView stopped with a node's
+    bottom hidden behind the bottom edge. Same condition as ContentRect's header inset. }
+  Result := MulDiv(ClientHeight, 96, Font.PixelsPerInch);
+  if (FHeader <> nil) and (FHeader.Columns.Count > 0) and (hoVisible in FHeader.Options) then
+    Dec(Result, FHeader.Height);
+  if Result < 0 then Result := 0;
+end;
+
 function TTyCustomTreeView.GetBottomItem: PTyTreeNode;
 var
   viewH, y, nodeTop: Integer;
   n: PTyTreeNode;
 begin
-  viewH := MulDiv(ClientHeight, 96, Font.PixelsPerInch);
+  viewH := NodeViewHeight;
   y := -FOffsetY + viewH - 1;
   if y < 0 then y := 0;
   Result := GetNodeAtOffset(y, nodeTop);

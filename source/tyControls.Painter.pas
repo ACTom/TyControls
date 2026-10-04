@@ -606,6 +606,24 @@ procedure TyResetTextMeasureCacheStats;
   swallows the stray byte, so a pixel comparison cannot see it -- the real GUI draws a
   replacement glyph, which is what the maintainer saw. Assert the string, not the pixels. }
 function TyEllipsisPrefix(const AText: string; ACharCount: Integer): string;
+
+{ What single-line drawing shows of AText: up to its first line break, with '...' when there was
+  more. BGRA strips CR/LF before it measures or draws, so a multi-line text drawn on one line used
+  to come out with its lines glued together ("first linesecond line..."). A text without a break
+  comes back unchanged. }
+function TySingleLineText(const AText: string): string;
+
+{ AText fitted into AMaxWidthPx on ABmp's current font, the way DrawText fits a caption: whole if
+  it fits, else the longest prefix that fits with '...' after it (one codepoint at the least). A
+  text with a line break shows only its first line, with '...' (TySingleLineText). The one fit
+  DrawText and the grid share.
+
+  It used to cut one codepoint at a time and measure the whole remaining prefix each time --
+  quadratic in the text's length, with a bitmap and a GDI layout behind every measurement. A
+  300-line script in a tree cell (about 12k characters) took long enough to freeze the tree
+  (#18). Widths only grow with the prefix, so a binary search finds the same cut in about a
+  dozen measurements. }
+function TyEllipsisFit(ABmp: TBGRABitmap; const AText: string; AMaxWidthPx: Integer): string;
 { Clamp a device-px corner radius to half the shorter side of a WxH rect, so an oversized
   "pill" radius (e.g. border-radius:100 on a short progress track) renders as a rounded pill
   instead of overshooting the corner arcs into a pointed lens. Exposed for tests. }
@@ -914,6 +932,65 @@ function TyEllipsisPrefix(const AText: string; ACharCount: Integer): string;
 begin
   if ACharCount <= 0 then Exit('');
   Result := UTF8Copy(AText, 1, ACharCount);
+end;
+
+function TySingleLineText(const AText: string): string;
+var
+  i: Integer;
+begin
+  for i := 1 to Length(AText) do
+    if (AText[i] = #13) or (AText[i] = #10) then
+      Exit(Copy(AText, 1, i - 1) + '...');
+  Result := AText;
+end;
+
+function TyEllipsisFit(ABmp: TBGRABitmap; const AText: string; AMaxWidthPx: Integer): string;
+var
+  line: string;
+  cut: Boolean;
+  i, n, lo, hi, mid, best: Integer;
+begin
+  Result := AText;
+  if (ABmp = nil) or (AText = '') then Exit;
+  line := AText;
+  cut := False;
+  for i := 1 to Length(AText) do
+    if (AText[i] = #13) or (AText[i] = #10) then
+    begin
+      line := Copy(AText, 1, i - 1);
+      cut := True;
+      Break;
+    end;
+  if cut then
+  begin
+    { There is more than this line, so the ellipsis is always shown. }
+    if line = '' then Exit('...');
+    if ABmp.TextSize(line + '...').cx <= AMaxWidthPx then Exit(line + '...');
+  end
+  else
+  begin
+    if ABmp.TextSize(line).cx <= AMaxWidthPx then Exit(line);
+    if UTF8Length(line) <= 1 then Exit(line);   // a lone codepoint is never ellipsised
+  end;
+  { The longest prefix of at most n-1 codepoints that fits with '...', and one codepoint when
+    none does -- what the one-at-a-time loop found, top down. }
+  n := UTF8Length(line) - 1;
+  hi := n;
+  if hi < 1 then hi := 1;
+  lo := 1;
+  best := 1;
+  while lo <= hi do
+  begin
+    mid := (lo + hi) div 2;
+    if ABmp.TextSize(TyEllipsisPrefix(line, mid) + '...').cx <= AMaxWidthPx then
+    begin
+      best := mid;
+      lo := mid + 1;
+    end
+    else
+      hi := mid - 1;
+  end;
+  Result := TyEllipsisPrefix(line, best) + '...';
 end;
 
 procedure TyWrapSegmentCJK(const AText: string; AMaxWidthPx: Integer;
@@ -2329,10 +2406,9 @@ procedure TTyPainter.DrawTextLine(const ARect: TRect; const AText, AFontName: st
   AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment;
   AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer; ASmallCrisp: Boolean);
 var
-  n: Integer;
   style: TTextStyle;
   s: string;
-  sz, full: TSize;
+  full: TSize;
   px: TBGRAPixel;
   beforeW, charW, ux, uy, uth: Integer;
   rtl: Boolean;
@@ -2376,23 +2452,11 @@ begin
   TyConfigureTextFont(FBmp, AFontName, AFontSizeLogical, AWeight, FPPI);
   s := AText;
   if AEllipsis then
-  begin
-    { Shorten by one CODEPOINT at a time. Delete(s, Length(s), 1) took one BYTE, which for
-      any non-ASCII text cuts a UTF-8 sequence in half: every CJK character is three bytes, so
-      an ellipsised Chinese caption ended in a broken sequence and the renderer drew a '?'.
-      That is the one path nearly every control's text goes through -- title-bar captions,
-      button labels, list rows, tab headers -- so it showed up everywhere at once. }
-    n := UTF8Length(s);
-    sz := FBmp.TextSize(s);
-    while (n > 1) and (sz.cx > (ARect.Right - ARect.Left)) do
-    begin
-      Dec(n);
-      s := TyEllipsisPrefix(AText, n);
-      sz := FBmp.TextSize(s + '...');
-    end;
-    if s <> AText then
-      s := s + '...';
-  end;
+    { Cut by CODEPOINT, never by byte (a byte cut halves a CJK character and the renderer draws
+      a '?'), and in a bounded number of measurements: see TyEllipsisFit. That is the one path
+      nearly every control's text goes through -- title-bar captions, button labels, list rows,
+      tab headers, tree cells. }
+    s := TyEllipsisFit(FBmp, AText, ARect.Right - ARect.Left);
   if rtl then
   begin
     { The mnemonic is dropped for an ellipsised caption here for the same reason the legacy

@@ -23,7 +23,7 @@ interface
 uses
   Classes, SysUtils, Forms, Controls,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
-  tyControls.SpinEdit, tyControls.TyLabel, tyControls.ComboBox, tyControls.ToggleSwitch,
+  tyControls.SpinEdit, tyControls.FloatSpinEdit, tyControls.TyLabel, tyControls.ComboBox, tyControls.ToggleSwitch,
   tyControls.Button;
 
 type
@@ -45,6 +45,8 @@ type
     BtnPoke: TTyButton;        // programmatic out-of-range write (clamp demo)
     LblCentre: TTyLabel;
     SpinCentre: TTySpinEdit;   // Alignment = taCenter
+    LblFloat: TTyLabel;
+    SpinFloat: TTyFloatSpinEdit; // the decimal sibling: same buttons, same size
     LblCommit: TTyLabel;
     LblClickCap: TTyLabel;
     LblClick: TTyLabel;        // OnClick output

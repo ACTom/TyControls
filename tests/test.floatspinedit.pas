@@ -22,7 +22,7 @@ uses
   Classes, SysUtils, Types, Graphics, Controls, LCLType, TypInfo,
   fpcunit, testregistry,
   tyControls.Types, tyControls.Painter, tyControls.StyleModel,
-  tyControls.FloatSpinEdit;
+  tyControls.SpinEdit, tyControls.FloatSpinEdit;
 
 type
   { Reaches the protected input dispatch, the trailing-zone geometry and RenderTo. Declared
@@ -62,7 +62,8 @@ type
     procedure IncrementDefaultsToOneAndOnlyStreamsWhenItIsNot;
     { --- geometry --- }
     procedure TheButtonColumnIsTheFieldButtonMetric;
-    procedure TheTwoHalvesTileTheTrailingZoneExactly;
+    procedure TheTwoHalvesTileTheButtonColumnExactly;
+    procedure TheButtonsAreTheIntegerSpinEditsButtons;
     procedure TheGlyphBoxIsTheLargestCentredSquare;
     procedure WhatIsPaintedIsWhatIsClickable;
     { --- stepping --- }
@@ -307,10 +308,12 @@ begin
   end;
 end;
 
-procedure TFloatSpinEditTest.TheTwoHalvesTileTheTrailingZoneExactly;
+procedure TFloatSpinEditTest.TheTwoHalvesTileTheButtonColumnExactly;
 { Edges, not centres. A half-split that drifts by one pixel leaves either a dead stripe between
   the buttons or an overlap where the up button eats the down button's top row; a centre probe
-  is blind to both. }
+  is blind to both. The column is the trailing zone's width and the FIELD's full height, as on
+  TTySpinEdit: the zone stops a padding short of the top and bottom, which squeezed each half to
+  about 18x10 against the integer spin edit's 18x14 (#17). }
 var
   p: TFloatSpinProbe;
   z, u, d: TRect;
@@ -326,8 +329,8 @@ begin
     AssertEquals('down starts at the zone left', z.Left, d.Left);
     AssertEquals('up ends at the zone right', z.Right, u.Right);
     AssertEquals('down ends at the zone right', z.Right, d.Right);
-    AssertEquals('up starts at the zone top', z.Top, u.Top);
-    AssertEquals('down ends at the zone bottom', z.Bottom, d.Bottom);
+    AssertEquals('up starts at the field top', 0, u.Top);
+    AssertEquals('down ends at the field bottom', p.ClientHeight, d.Bottom);
     AssertEquals('and they meet with no gap and no overlap', u.Bottom, d.Top);
     { The same must hold at the DPI the control actually runs at, which is not necessarily 96
       — and it is the one MouseDown uses, so every click test below asks for the rects at
@@ -337,8 +340,28 @@ begin
     u := p.UpButtonRect(p.Font.PixelsPerInch);
     d := p.DownButtonRect(p.Font.PixelsPerInch);
     AssertEquals('at the live DPI too: up starts at the zone left', z.Left, u.Left);
-    AssertEquals('at the live DPI too: down ends at the zone bottom', z.Bottom, d.Bottom);
+    AssertEquals('at the live DPI too: down ends at the field bottom', p.ClientHeight, d.Bottom);
     AssertEquals('at the live DPI too: they still meet exactly', u.Bottom, d.Top);
+  finally
+    p.Free;
+  end;
+end;
+
+{ The two spin edits side by side must show the same buttons (#17): same size, same place. }
+procedure TFloatSpinEditTest.TheButtonsAreTheIntegerSpinEditsButtons;
+var
+  p: TFloatSpinProbe;
+  w: Integer;
+begin
+  p := NewProbe;
+  try
+    w := p.Reserve(96);
+    AssertTrue('the up button is the integer spin edit''s',
+      EqualRect(TySpinUpButtonRect(Rect(0, 0, p.ClientWidth, p.ClientHeight), 96, w),
+        p.UpButtonRect(96)));
+    AssertTrue('and so is the down button',
+      EqualRect(TySpinDownButtonRect(Rect(0, 0, p.ClientWidth, p.ClientHeight), 96, w),
+        p.DownButtonRect(96)));
   finally
     p.Free;
   end;
@@ -446,23 +469,25 @@ begin
 end;
 
 procedure TFloatSpinEditTest.ClickingOffTheHalvesDoesNotStep;
-{ The negative half of the same edges — a zone that has quietly grown is invisible without it. }
+{ The negative half of the same edges — a column that has quietly grown is invisible without it.
+  The column runs the field's full height (#17), so above and below it are off the control. }
 var
   p: TFloatSpinProbe;
-  z: TRect;
+  u, d: TRect;
 begin
   p := NewProbe;
   try
-    z := p.Zone(p.Font.PixelsPerInch);
+    u := p.UpButtonRect(p.Font.PixelsPerInch);
+    d := p.DownButtonRect(p.Font.PixelsPerInch);
     p.Increment := 0.5;
     p.Value := 4;
-    p.ClickAt(z.Left - 1, z.Top);          // one pixel left of the column: that is the text area
+    p.ClickAt(u.Left - 1, u.Top + 1);      // one pixel left of the column: that is the text area
     AssertEquals('a click in the text does not step', 4.0, p.Value, EPS);
-    p.ClickAt(z.Right, z.Top);             // one past the right edge: the field's right padding
+    p.ClickAt(u.Right, u.Top + 1);         // one past the right edge: off the control
     AssertEquals('nor does one past the right edge', 4.0, p.Value, EPS);
-    p.ClickAt(z.Left, z.Top - 1);          // above the zone: the field's top padding
+    p.ClickAt(u.Left, u.Top - 1);          // above the column: off the control
     AssertEquals('nor one above it', 4.0, p.Value, EPS);
-    p.ClickAt(z.Left, z.Bottom);           // below the zone
+    p.ClickAt(d.Left, d.Bottom);           // below the column: off the control
     AssertEquals('nor one below it', 4.0, p.Value, EPS);
   finally
     p.Free;

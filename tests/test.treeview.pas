@@ -2693,7 +2693,12 @@ type
                                var ChildCount: Cardinal);
     { FIX 4 helper: returns a text string wide enough to overflow a 50px viewport }
     procedure OnGetTextWide(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnGetTextMultiLine(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnGetTextShownLine(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
+    function RangeXFor(AHandler: TTyTreeGetTextEvent): Integer;
   published
+    { #18: a multi-line caption's scroll range is that of the line it shows, not the glued lines. }
+    procedure TestAMultiLineCaptionsRangeIsItsShownLine;
     { Scrollbars exist immediately after Create — never lazily created during paint. }
     procedure TestScrollBarsExistAfterConstruction;
     { ContentHeight = TotalHeight - NodeHeight (phantom root excluded). }
@@ -2724,6 +2729,71 @@ procedure TTreeC2Test.OnGetTextWide(Sender: TTyCustomTreeView; Node: PTyTreeNode
                                      var Text: string);
 begin
   Text := 'Wide label text that overflows the narrow 50px viewport easily';
+end;
+
+procedure TTreeC2Test.OnGetTextMultiLine(Sender: TTyCustomTreeView; Node: PTyTreeNode;
+  var Text: string);
+var
+  i: Integer;
+begin
+  Text := 'Alpha';
+  for i := 1 to 40 do
+    Text := Text + #13#10 + Format('script line %d with some more words on it', [i]);
+end;
+
+procedure TTreeC2Test.OnGetTextShownLine(Sender: TTyCustomTreeView; Node: PTyTreeNode;
+  var Text: string);
+begin
+  Text := 'Alpha...';
+end;
+
+function TTreeC2Test.RangeXFor(AHandler: TTyTreeGetTextEvent): Integer;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  Bmp: TBitmap;
+  n: PTyTreeNode;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  F := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyTreeView { background: #FFFFFF; border-width: 0px; padding: 0px; } ' +
+      'TyTreeNode  { background: none; color: #000000; }');
+    t := TTyTreeView.Create(F);
+    t.Parent := F;
+    t.Controller := Ctl;
+    t.Font.PixelsPerInch := 96;
+    t.DefaultNodeHeight := 20;
+    t.SetBounds(0, 0, 50, 200);
+    t.OnGetText := AHandler;
+    t.RootNodeCount := 1;
+    n := t.RootNode^.FirstChild;
+    Include(n^.States, nsInitialized);
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(t.Width, t.Height);
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).RenderTo(Bmp.Canvas, Rect(0, 0, Bmp.Width, Bmp.Height), 96);
+    {$POP}
+    Result := t.RangeX;
+  finally
+    Bmp.Free;
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTreeC2Test.TestAMultiLineCaptionsRangeIsItsShownLine;
+var
+  multi, shown: Integer;
+begin
+  shown := RangeXFor(@OnGetTextShownLine);
+  multi := RangeXFor(@OnGetTextMultiLine);
+  AssertTrue('precondition: the shown line overflows the narrow tree', shown > 0);
+  AssertEquals('the multi-line caption scrolls as far as the line it shows, no further',
+    shown, multi);
 end;
 
 procedure TTreeC2Test.TestScrollBarsExistAfterConstruction;
@@ -3935,6 +4005,22 @@ type
   { TTreeColumnPaintTest — pixel tests for multi-column node paint (C1)
     and header band paint (C2).
     Guard: 0-column render must be byte-identical to ① (existing tests green). }
+  { #19: a tree with a header, scrolled. }
+  TTreeHeaderScrollTest = class(TTestCase)
+  private
+    FCtl: TTyStyleController;
+    FForm: TForm;
+    function BuildTree: TTyTreeView;
+    function Render(ATree: TTyTreeView): TBGRABitmap;
+    procedure GetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
+  protected
+    procedure TearDown; override;
+  published
+    procedure TestAPartlyScrolledRowStaysBelowTheHeader;
+    procedure TestAPartlyScrolledRowsTextStaysBelowTheHeader;
+    procedure TestTheLastRowScrollsIntoViewBelowTheHeader;
+  end;
+
   TTreeColumnPaintTest = class(TTestCase)
   private
     { Per-column text returned by OnGetTextWithType }
@@ -9723,7 +9809,170 @@ begin
   end;
 end;
 
+{ TTreeHeaderScrollTest }
+
+const
+  { Header green, rows red: a pixel says which of the two painted it. }
+  HEADER_SCROLL_CSS =
+    'TyTreeView { background: #FFFFFF; border-width: 0px; padding: 0px; } ' +
+    'TyTreeNode { background: #FF0000; color: #000000; font-size: 12px; } ' +
+    'TyTreeHeader { background: #00FF00; color: #000000; } ' +
+    'TyTreeHeaderSection { background: none; color: #000000; }';
+  HS_ROW = 20;
+  HS_HEADER = 24;
+  HS_HEIGHT = 150;    // 126 px of rows below the header: not a whole number of rows
+  HS_COUNT = 30;
+
+function TTreeHeaderScrollTest.BuildTree: TTyTreeView;
+var
+  i: Integer;
+  n: PTyTreeNode;
+  c: TTyColumn;
+begin
+  FCtl := TTyStyleController.Create(nil);
+  FCtl.LoadThemeCss(HEADER_SCROLL_CSS);
+  FForm := TForm.CreateNew(nil);
+  Result := TTyTreeView.Create(FForm);
+  Result.Parent := FForm;
+  Result.Controller := FCtl;
+  Result.Font.PixelsPerInch := 96;
+  Result.DefaultNodeHeight := HS_ROW;
+  Result.SetBounds(0, 0, 300, HS_HEIGHT);
+  for i := 0 to 2 do
+  begin
+    c := Result.Header.Columns.Add as TTyColumn;
+    c.Width := 100;
+    c.Text := '';    // no header captions: the header band holds no ink of its own
+  end;
+  Result.Header.Height := HS_HEADER;
+  Result.Header.Options := [hoVisible];
+  Result.OnGetText := @GetText;
+  Result.RootNodeCount := HS_COUNT;
+  n := Result.RootNode^.FirstChild;
+  while n <> nil do
+  begin
+    Include(n^.States, nsInitialized);
+    n := n^.NextSibling;
+  end;
+end;
+
+function TTreeHeaderScrollTest.Render(ATree: TTyTreeView): TBGRABitmap;
+var
+  bmp: TBitmap;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(ATree.Width, ATree.Height);
+    bmp.Canvas.FillRect(0, 0, bmp.Width, bmp.Height);
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(ATree).RenderTo(bmp.Canvas, Rect(0, 0, bmp.Width, bmp.Height), 96);
+    {$POP}
+    Result := TBGRABitmap.Create(bmp);
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TTreeHeaderScrollTest.GetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
+  var Text: string);
+begin
+  Text := 'Wg Wg Wg Wg';   // tall and deep glyphs, black, in every cell
+end;
+
+procedure TTreeHeaderScrollTest.TearDown;
+begin
+  FreeAndNil(FForm);
+  FreeAndNil(FCtl);
+end;
+
+{ Rows scroll by pixels, so whenever the offset is not a whole number of rows the first visible
+  row starts above the node area -- inside the header band -- and it used to paint over the
+  header: the rows were clipped to the control, not to the area below the header. Whether it
+  showed depended on the window height (a node area a whole number of rows tall never ended up
+  part-scrolled at the bottom). }
+procedure TTreeHeaderScrollTest.TestAPartlyScrolledRowStaysBelowTheHeader;
+var
+  t: TTyTreeView;
+  b: TBGRABitmap;
+  px: TBGRAPixel;
+begin
+  t := BuildTree;
+  Render(t).Free;                  // lays the tree out
+  t.ScrolledTop := 7;              // a row and a part: the first row starts 7 px above the rows
+  b := Render(t);
+  try
+    px := b.GetPixel(150, HS_HEADER - 3);
+    AssertTrue(Format('the header band is the header''s green, not a row''s red: (%d,%d,%d)',
+      [px.red, px.green, px.blue]), (px.green > 200) and (px.red < 60));
+    px := b.GetPixel(150, HS_HEADER + 3);
+    AssertTrue(Format('just below the header the rows show: (%d,%d,%d)',
+      [px.red, px.green, px.blue]), (px.red > 200) and (px.green < 60));
+  finally
+    b.Free;
+  end;
+end;
+
+{ The same for what a cell draws: the cell's own clip started at its row's top, so a part-
+  scrolled row's caption was drawn into the header too. Scrolled further, the first row's text
+  sits mostly inside the header band's height; none of its black may show there. }
+procedure TTreeHeaderScrollTest.TestAPartlyScrolledRowsTextStaysBelowTheHeader;
+var
+  t: TTyTreeView;
+  b: TBGRABitmap;
+  px: TBGRAPixel;
+  x, y, ink: Integer;
+begin
+  t := BuildTree;
+  Render(t).Free;
+  t.ScrolledTop := 12;             // the first row spans 12..32: its text is mostly up there
+  b := Render(t);
+  try
+    ink := 0;
+    for y := 0 to HS_HEADER - 1 do
+      for x := 0 to b.Width - 1 do
+      begin
+        px := b.GetPixel(x, y);
+        if (px.red < 80) and (px.green < 80) and (px.blue < 80) then Inc(ink);
+      end;
+    AssertEquals('no caption ink in the header band', 0, ink);
+    ink := 0;
+    for y := HS_HEADER to HS_HEADER + HS_ROW do
+      for x := 0 to b.Width - 1 do
+      begin
+        px := b.GetPixel(x, y);
+        if (px.red < 80) and (px.green < 80) and (px.blue < 80) then Inc(ink);
+      end;
+    AssertTrue('precondition: the captions are drawn, below it', ink > 0);
+  finally
+    b.Free;
+  end;
+end;
+
+{ The rows' viewport is the client height LESS the header band. Measured against the full client
+  height, the last header's worth of rows could never be scrolled into view, and a node scrolled
+  "into view" stopped with its bottom hidden behind the bottom edge. }
+procedure TTreeHeaderScrollTest.TestTheLastRowScrollsIntoViewBelowTheHeader;
+var
+  t: TTyTreeView;
+  last: PTyTreeNode;
+  rowsH: Integer;
+begin
+  t := BuildTree;
+  Render(t).Free;
+  rowsH := HS_HEIGHT - HS_HEADER;
+  last := t.RootNode^.LastChild;
+  t.ScrollIntoView(last);
+  AssertEquals('the last row scrolled in: its bottom on the bottom edge of the rows',
+    -(HS_COUNT * HS_ROW - rowsH), t.OffsetY);
+  t.ScrolledTop := 100000;
+  AssertEquals('scrolled as far as it goes: the same place', HS_COUNT * HS_ROW - rowsH,
+    t.ScrolledTop);
+  AssertTrue('and the bottom item is the last node', t.BottomItem = last);
+end;
+
 initialization
+  RegisterTest(TTreeHeaderScrollTest);
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
   RegisterTest(TTreeDeleteTest);

@@ -187,24 +187,6 @@
     Top = 0
     Width = 145
     TabOrder = 0
-    Items.Strings = (
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-    )
     ItemIndex = 0
     Text = <text>
     Selected = clBlack
@@ -225,25 +207,6 @@
     Top = 0
     Width = 145
     TabOrder = 0
-    Items.Strings = (
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-    )
     ItemIndex = 0
     Text = <text>
     Selected = clBlack
@@ -263,24 +226,6 @@
     Top = 0
     Width = 160
     TabOrder = 0
-    Items.Strings = (
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-    )
     ItemIndex = 0
     Selected = clBlack
   end
