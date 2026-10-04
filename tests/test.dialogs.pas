@@ -56,6 +56,7 @@ type
     procedure TestAddButtonWiresModalResult;
     procedure TestCloseGivesCancel;
     procedure TestTwoButtonLayoutRightToLeft;
+    procedure TestAHiddenButtonLeavesNoGap;
   end;
 
   TResizeProbeDialog = class(TTyDialog)
@@ -319,6 +320,26 @@ begin
     secondary := d.AddButton('Cancel', mrCancel, False, True);
     d.AutoSizeToContent(200, 100);   // give the bar a real width + relayout
     AssertTrue('primary is right of secondary', primary.Left > secondary.Left);
+  finally d.Free; end;
+end;
+
+{ A dialog may keep a button it shows on some runs only (the find dialog's Help). Hidden, it
+  must not keep its slot: the buttons either side close up as if it had never been added. }
+procedure TDialogBaseTest.TestAHiddenButtonLeavesNoGap;
+var d: TTyDialog; a, b, c: TTyButton; aRight: Integer;
+begin
+  d := TTyDialog.CreateNew(nil);
+  try
+    a := d.AddButton('OK', mrOk, True, False);           // rightmost
+    b := d.AddButton('Help', mrNone);                    // middle
+    c := d.AddButton('Cancel', mrCancel, False, True);   // leftmost
+    d.AutoSizeToContent(300, 100);
+    aRight := a.Left + a.Width;
+    b.Visible := False;
+    d.LayoutButtonBar;
+    AssertEquals('the right button does not move', aRight, a.Left + a.Width);
+    AssertEquals('the left button closes up to one spacing from it',
+      d.Px(8), a.Left - (c.Left + c.Width));
   finally d.Free; end;
 end;
 

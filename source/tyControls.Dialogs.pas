@@ -640,7 +640,7 @@ var i: Integer;
 begin
   Result := Px(TyDensityHeight(Controller, cDlgBtnH));   // nil Controller -> the default one
   for i := 0 to High(FButtons) do
-    if FButtons[i].Constraints.MinHeight > Result then
+    if FButtons[i].Visible and (FButtons[i].Constraints.MinHeight > Result) then
       Result := FButtons[i].Constraints.MinHeight;
 end;
 
@@ -650,7 +650,11 @@ begin
 end;
 
 procedure TTyDialog.LayoutButtonBar;
-var sizes: array of TSize; rects: TTyRectArray; i, y, h, w: Integer;
+var
+  sizes: array of TSize;
+  rects: TTyRectArray;
+  shown: array of TTyButton;
+  i, n, y, h, w: Integer;
 begin
   if Length(FButtons) = 0 then Exit;
   h := ButtonHeight;
@@ -658,20 +662,32 @@ begin
     form's align pass, which comes back through Resize -> here. }
   if FButtonBar.Height <> h + 2 * Px(cDlgBarPadV) then
     FButtonBar.Height := h + 2 * Px(cDlgBarPadV);
-  sizes := nil;
-  SetLength(sizes, Length(FButtons));
+  { Only the buttons that are showing take a slot: a dialog may keep a button it shows on some
+    runs only (the find dialog's Help, for one), and a hidden one must not leave a hole. }
+  shown := nil;
+  SetLength(shown, Length(FButtons));
+  n := 0;
   for i := 0 to High(FButtons) do
+    if FButtons[i].Visible then
+    begin
+      shown[n] := FButtons[i];
+      Inc(n);
+    end;
+  if n = 0 then Exit;
+  sizes := nil;
+  SetLength(sizes, n);
+  for i := 0 to n - 1 do
   begin
     { Width has the same three inputs; a long caption under a big font wants more than 88. }
     w := Px(cDlgBtnW);
-    if FButtons[i].Constraints.MinWidth > w then w := FButtons[i].Constraints.MinWidth;
+    if shown[i].Constraints.MinWidth > w then w := shown[i].Constraints.MinWidth;
     sizes[i] := Size(w, h);
   end;
   rects := TyDialogButtonBar(sizes, FButtonBar.ClientWidth, Px(cDlgBarMargin),
     Px(cDlgBarSpacing));
   y := (FButtonBar.ClientHeight - h) div 2;
-  for i := 0 to High(FButtons) do
-    FButtons[i].SetBounds(rects[i].Left, y, rects[i].Right - rects[i].Left, h);
+  for i := 0 to n - 1 do
+    shown[i].SetBounds(rects[i].Left, y, rects[i].Right - rects[i].Left, h);
 end;
 
 function TTyDialog.BottomGutter: Integer;
@@ -695,7 +711,8 @@ begin
   LayoutButtonBar;
   totalBtn := Px(cDlgBarMargin);
   for i := 0 to High(FButtons) do
-    totalBtn := totalBtn + FButtons[i].Width + Px(cDlgBarSpacing);
+    if FButtons[i].Visible then
+      totalBtn := totalBtn + FButtons[i].Width + Px(cDlgBarSpacing);
   w := AContentW; if totalBtn > w then w := totalBtn;
   ClientWidth := w + Px(32);
   ClientHeight := TitleHeight + AContentH + FButtonBar.Height + BottomGutter + Px(16);
