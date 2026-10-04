@@ -190,15 +190,26 @@ begin
 end;
 
 procedure TTyCustomFontComboBox.SetFixedPitchOnly(AValue: Boolean);
-var keep: string;
+
+  function Chosen: string;
+  begin
+    if ItemIndex >= 0 then Result := Text else Result := '';
+  end;
+
+var before: string;
 begin
   if FFixedPitchOnly = AValue then Exit;
   FFixedPitchOnly := AValue;
   { While a form is being read, Loaded fills the list once, with the final value. }
   if csLoading in ComponentState then Exit;
-  keep := SelectedFont;
-  RefreshFonts;
-  SetSelectedFont(keep);   // still listed -> stays chosen; gone -> RefreshFonts' first row
+  { Refilled in place, as Loaded does -- not RefreshFonts, which would pick the first row: the
+    combo re-pins its selection by TEXT when Items changes, so a family still listed stays
+    chosen at its new row, one that is gone leaves nothing selected, and nothing selected stays
+    nothing selected. That re-pin is silent; OnChange fires once, and only when the chosen
+    family actually changed. }
+  before := Chosen;
+  TyGetFontFamilies(Items, FFixedPitchOnly);
+  if (Chosen <> before) and Assigned(OnChange) then OnChange(Self);
 end;
 
 function TTyCustomFontComboBox.CreatePopupList: TTyCustomListBox;

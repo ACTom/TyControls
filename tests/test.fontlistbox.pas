@@ -5,6 +5,9 @@ uses Classes, SysUtils, Forms, fpcunit, testregistry, tyControls.FontListBox,
   tyControls.FontFamilies;
 type
   TFontListBoxTest = class(TTestCase)
+  private
+    FChanges: Integer;
+    procedure CountChange(Sender: TObject);
   published
     procedure TestSelectedFontRoundTrip;
     procedure TestRefreshDoesNotCrash;
@@ -15,6 +18,8 @@ type
     procedure TestFixedPitchOnlyListsTheSystemsFixedFamilies;
     procedure TestTogglingKeepsAFamilyStillListed;
     procedure TestTogglingOnDropsAProportionalChoice;
+    procedure TestTogglingWithNothingSelectedSelectsNothing;
+    procedure TestTogglingKeepsTheChoiceWithoutOnChange;
     procedure TestAFormFileWithFixedPitchOnlyLoadsTheFilteredList;
     procedure TestFixedPitchOnlyIsWrittenOnlyWhenOn;
   end;
@@ -216,6 +221,11 @@ begin
   end;
 end;
 
+procedure TFontListBoxTest.CountChange(Sender: TObject);
+begin
+  Inc(FChanges);
+end;
+
 procedure TFontListBoxTest.TestTogglingOnDropsAProportionalChoice;
 var c: TTyFontListBox;
 begin
@@ -223,9 +233,50 @@ begin
   c := TTyFontListBox.Create(nil);
   try
     c.SelectedFont := 'Arial';
+    FChanges := 0;
+    c.OnChange := @CountChange;
     c.FixedPitchOnly := True;
-    AssertEquals('a family no longer listed falls back to the first row', 0, c.ItemIndex);
-    AssertTrue('which is not Arial', c.SelectedFont <> 'Arial');
+    AssertEquals('a family no longer listed leaves nothing selected', -1, c.ItemIndex);
+    AssertEquals('the choice changed: OnChange once', 1, FChanges);
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TFontListBoxTest.TestTogglingWithNothingSelectedSelectsNothing;
+var c: TTyFontListBox;
+begin
+  FLBNeedFonts;
+  c := TTyFontListBox.Create(nil);
+  try
+    c.ItemIndex := -1;
+    FChanges := 0;
+    c.OnChange := @CountChange;
+    c.FixedPitchOnly := True;
+    AssertEquals('on: still nothing selected', -1, c.ItemIndex);
+    c.FixedPitchOnly := False;
+    AssertEquals('off: still nothing selected', -1, c.ItemIndex);
+    AssertEquals('nothing changed: no OnChange', 0, FChanges);
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TFontListBoxTest.TestTogglingKeepsTheChoiceWithoutOnChange;
+var c: TTyFontListBox;
+begin
+  FLBNeedFonts;
+  c := TTyFontListBox.Create(nil);
+  try
+    c.SelectedFont := 'Courier New';
+    FChanges := 0;
+    c.OnChange := @CountChange;
+    c.FixedPitchOnly := True;
+    AssertEquals('on: still Courier New', 'Courier New', c.SelectedFont);
+    AssertEquals('at its row in the shorter list', c.Items.IndexOf('Courier New'), c.ItemIndex);
+    c.FixedPitchOnly := False;
+    AssertEquals('off: still Courier New', 'Courier New', c.SelectedFont);
+    AssertEquals('the same family at another row is no change: no OnChange', 0, FChanges);
   finally
     c.Free;
   end;

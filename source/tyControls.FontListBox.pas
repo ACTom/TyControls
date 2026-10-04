@@ -100,7 +100,7 @@ type
 
 implementation
 
-uses tyControls.FontFamilies;
+uses Math, tyControls.FontFamilies;
 
 constructor TTyCustomFontListBox.Create(AOwner: TComponent);
 begin
@@ -136,15 +136,25 @@ begin
 end;
 
 procedure TTyCustomFontListBox.SetFixedPitchOnly(AValue: Boolean);
-var keep: string;
+var keep: string; idx: Integer;
 begin
   if FFixedPitchOnly = AValue then Exit;
   FFixedPitchOnly := AValue;
   { While a form is being read, Loaded fills the list once, with the final value. }
   if csLoading in ComponentState then Exit;
+  { Same as the combo box: refilled in place (not RefreshFonts, which picks the first row) and
+    the chosen family found again by NAME -- still listed stays chosen, gone leaves nothing
+    selected, nothing selected stays so. The index is re-pinned silently; OnChange /
+    OnSelectionChange fire once, and only when the chosen family actually changed. }
   keep := SelectedFont;
-  RefreshFonts;
-  SetSelectedFont(keep);   // still listed -> stays chosen; gone -> RefreshFonts' first row
+  TyGetFontFamilies(Items, FFixedPitchOnly);
+  if keep <> '' then idx := Items.IndexOf(keep) else idx := -1;
+  SetItemIndexSilent(idx);
+  if (idx >= 0) and ((idx < TopIndex) or (idx >= TopIndex + Math.Max(1, VisibleRows))) then
+    TopIndex := idx;   // the chosen row in view, as selecting it would have done
+  UpdateScrollBar;
+  Invalidate;
+  if SelectedFont <> keep then DoSelectionChange(False);
 end;
 
 procedure TTyCustomFontListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
