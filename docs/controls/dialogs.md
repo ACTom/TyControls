@@ -512,17 +512,16 @@ if DlgFont.Execute then
 
 ---
 
-## 10. Modeless dialogs — Find / Replace / Progress (S4)
+## 10. 非模态对话框 — 查找 / 替换 / 进度（S4）
 
-Unlike the modal dialogs above, these are **non-modal**: they show with `Show`, stay open, and drive
-work through events. Each is a non-visual component that owns and reuses its window.
+和上面的模态对话框不同，这几个是**非模态**的：用 `Show` 显示，显示后一直开着，工作靠事件推动。每个都是一个非可视组件，自己持有并反复使用同一个窗口。
 
-### Find / Replace
+### 查找 / 替换
 
 ```pascal
 uses tyControls.Dialogs.Find;
 
-// once, e.g. in FormCreate:
+// 只做一次，比如在 FormCreate 里：
 FindDlg := TTyFindDialog.Create(Self);
 FindDlg.OnFind := @DoFind;
 
@@ -530,41 +529,39 @@ procedure TForm1.DoFind(Sender: TObject);
 var d: TTyFindDialog;
 begin
   d := Sender as TTyFindDialog;
-  // search Memo1 for d.FindText using d.Options (frMatchCase, frWholeWord, frDown, ...)
+  // 按 d.Options（frMatchCase、frWholeWord、frDown……）在 Memo1 里找 d.FindText
 end;
 
-// to open it (modeless — returns immediately):
+// 打开它（非模态，立即返回）：
 FindDlg.Execute;
 ```
 
-`TTyReplaceDialog` adds `ReplaceText` + `OnReplace`. **Replace and Replace All both fire `OnReplace`** —
-tell them apart with `frReplaceAll in d.Options`. `Options` defaults to `[frDown]` (search down);
-`TTyReplaceDialog` also defaults `frReplace, frReplaceAll, frHidePromptOnReplace`.
+`TTyReplaceDialog` 多了 `ReplaceText` 和 `OnReplace`。**「替换」和「全部替换」都触发 `OnReplace`**，用 `frReplaceAll in d.Options` 区分。`Options` 默认 `[frDown]`（向下找）；`TTyReplaceDialog` 默认再加上 `frReplace`、`frReplaceAll`、`frHidePromptOnReplace`。
 
-**`Options` 的 18 个选项**和 LCL 的 `TFindDialog` / `TReplaceDialog` 用法一样(`TFindOptions`)。窗口开着时改 `Options`,窗口跟着变(勾选、隐藏、禁用),已经输入的查找文字不动。
+**`Options` 的 18 个选项**和 LCL 的 `TFindDialog` / `TReplaceDialog` 用法一样（`TFindOptions`）。窗口开着时改 `Options`，窗口跟着变（勾选、隐藏、禁用），已经输入的查找文字不动。
 
 | 选项 | 效果 |
 |---|---|
-| `frDown` | 向下找;对话框里是「向上查找」复选框,勾上就去掉 `frDown`。 |
-| `frMatchCase`、`frWholeWord` | 两个复选框的勾选状态,读回 `Options`。 |
-| `frEntireScope` | 「整个范围」复选框的勾选状态,读回 `Options`。 |
-| `frPromptOnReplace` | 替换对话框「替换前提示」复选框的勾选状态,读回 `Options`。 |
-| `frFindNext`、`frReplace`、`frReplaceAll` | 输出:点的是哪个按钮(见上)。 |
-| `frHideMatchCase`、`frHideWholeWord`、`frHideUpDown`、`frHideEntireScope`、`frHidePromptOnReplace` | 隐藏对应的复选框,下面的往上挪。 |
-| `frDisableMatchCase`、`frDisableWholeWord`、`frDisableUpDown` | 对应的复选框变灰,不能改。 |
-| `frShowHelp` | 按钮栏多一个「帮助」,点了触发 `OnHelpClicked`(`Sender` 是对话框组件)。 |
-| `frButtonsAtBottom` | 不起作用:按钮本来就在底部的按钮栏。 |
+| `frDown` | 向下找；对话框里是「向上查找」复选框，勾上就去掉 `frDown`。 |
+| `frMatchCase`、`frWholeWord` | 两个复选框的勾选状态，读回 `Options`。 |
+| `frEntireScope` | 「整个范围」复选框的勾选状态，读回 `Options`。 |
+| `frPromptOnReplace` | 替换对话框「替换前提示」复选框的勾选状态，读回 `Options`。 |
+| `frFindNext`、`frReplace`、`frReplaceAll` | 输出：点的是哪个按钮（见上）。 |
+| `frHideMatchCase`、`frHideWholeWord`、`frHideUpDown`、`frHideEntireScope`、`frHidePromptOnReplace` | 隐藏对应的复选框，下面的往上挪。 |
+| `frDisableMatchCase`、`frDisableWholeWord`、`frDisableUpDown` | 对应的复选框变灰，不能改。 |
+| `frShowHelp` | 按钮栏多一个「帮助」，点了触发 `OnHelpClicked`（`Sender` 是对话框组件）。 |
+| `frButtonsAtBottom` | 不起作用：按钮本来就在底部的按钮栏。 |
 
-「整个范围」和「替换前提示」跟 LCL 一样只是复选框:按范围搜、每次替换前问用户,由程序在 `OnFind` / `OnReplace` 里看这两位自己做。
+「整个范围」和「替换前提示」跟 LCL 一样只是复选框：按范围搜、每次替换前问用户，由程序在 `OnFind` / `OnReplace` 里看这两位自己做。
 
-#### 从 3.0 升级须知:查找 / 替换对话框会多出复选框
+#### 从 3.0 升级须知：查找 / 替换对话框会多出复选框
 
-**凡是 3.0 窗体里放过的查找、替换对话框,升级后打开都会多出复选框**,窗体不用重新保存也一样:
+**凡是 3.0 窗体里放过的查找、替换对话框，升级后打开都会多出复选框**，窗体不用重新保存也一样：
 
-- **「整个范围」**:查找、替换对话框都多这一个。它是 LCL 的 `frEntireScope`,不带 `frHideEntireScope` 就显示;3.0 没有这个复选框,也就没有哪个 3.0 窗体会带着 `frHideEntireScope`。
-- **「替换前提示」**:替换对话框多这一个。4.0 的 `TTyReplaceDialog` 构造时照 LCL 带上 `frHidePromptOnReplace`,所以新放的不显示;但 3.0 的构造初值(`[frDown, frReplace, frReplaceAll]`)和声明的默认值(`[frDown]`)不同,设计器里放过的替换对话框都把 `Options` 整行写进了窗体,读窗体时这一行整个盖掉构造函数的初值,`frHidePromptOnReplace` 就没了。
+- **「整个范围」**：查找、替换对话框都多这一个。它是 LCL 的 `frEntireScope`，不带 `frHideEntireScope` 就显示；3.0 没有这个复选框，也就没有哪个 3.0 窗体会带着 `frHideEntireScope`。
+- **「替换前提示」**：替换对话框多这一个。4.0 的 `TTyReplaceDialog` 构造时照 LCL 带上 `frHidePromptOnReplace`，所以新放的不显示；但 3.0 的构造初值（`[frDown, frReplace, frReplaceAll]`）和声明的默认值（`[frDown]`）不同，设计器里放过的替换对话框都把 `Options` 整行写进了窗体，读窗体时这一行整个盖掉构造函数的初值，`frHidePromptOnReplace` 就没了。
 
-这是照 LCL 的语义,代码不替旧窗体改。两个复选框都只是勾选状态(见上),程序不处理 `frEntireScope` / `frPromptOnReplace` 的话,把它们藏起来就是 3.0 的样子。在 `.lfm` 里给 `Options` 补上:
+这是照 LCL 的语义，代码不替旧窗体改。两个复选框都只是勾选状态（见上），程序不处理 `frEntireScope` / `frPromptOnReplace` 的话，把它们藏起来就是 3.0 的样子。在 `.lfm` 里给 `Options` 补上：
 
 ```
 object FindDlg: TTyFindDialog
@@ -575,41 +572,40 @@ object ReplaceDlg: TTyReplaceDialog
 end
 ```
 
-或在代码里(比如 `FormCreate`):
+或在代码里（比如 `FormCreate`）：
 
 ```pascal
 FindDlg.Options := FindDlg.Options + [frHideEntireScope];
 ReplaceDlg.Options := ReplaceDlg.Options + [frHideEntireScope, frHidePromptOnReplace];
 ```
 
-代码里新建的替换对话框本来就带 `frHidePromptOnReplace`,只多「整个范围」。另外,3.0.0 收下这 12 个选项却不理会(3.0 的后续修复版已经照 LCL 处理三个隐藏、三个禁用和 `frShowHelp`);3.0 窗体里设过这些选项的,现在照选项生效。
+代码里新建的替换对话框本来就带 `frHidePromptOnReplace`，只多「整个范围」。另外，3.0.0 收下这 12 个选项却不理会（3.0 的后续修复版已经照 LCL 处理三个隐藏、三个禁用和 `frShowHelp`）；3.0 窗体里设过这些选项的，现在照选项生效。
 
-> **Note:** `Position` here is an LCL `TPosition` placement *strategy* (`poScreenCenter`, `poDesigned`, …), **not** LCL `TFindDialog.Position`'s `TPoint` window coordinate. Modeless Ty dialogs place themselves by strategy, so LCL Find/Replace code that assigns `Position := Point(x, y)` needs adjusting.
+> **注意**：这里的 `Position` 是 LCL 的 `TPosition` 摆放**策略**（`poScreenCenter`、`poDesigned`……），**不是** LCL `TFindDialog.Position` 那个 `TPoint` 窗口坐标。Ty 的非模态对话框按策略摆放自己，所以 LCL 查找 / 替换代码里 `Position := Point(x, y)` 这样的赋值要改。
 
-### Progress
+### 进度
 
 ```pascal
 uses tyControls.Dialogs.Progress;
 
 Prog := TTyProgressDialog.Create(Self);
-Prog.Caption := 'Working…';
+Prog.Caption := '处理中…';
 Prog.Min := 0; Prog.Max := N; Prog.Cancelable := True;
-Prog.OnCancel := @HandleCancel;   // MUST NOT Free Prog — just set a flag / call Close
+Prog.OnCancel := @HandleCancel;   // 这里绝不能 Free Prog——只设个标志或调 Close
 Prog.Show;
 try
   for i := 0 to N - 1 do
   begin
     if Prog.Cancelled then Break;
     DoWork(i);
-    Prog.SetProgress(i + 1, Format('Item %d of %d', [i + 1, N]));  // repaints + pumps
+    Prog.SetProgress(i + 1, Format('第 %d 项，共 %d 项', [i + 1, N]));  // 重画并处理消息
   end;
 finally
   Prog.Close;
 end;
 ```
 
-`SetProgress` pumps the message loop so the bar repaints and a Cancel click is seen. It is determinate
-only (no marquee).
+`SetProgress` 会处理消息循环，进度条才能重画、「取消」的点击才收得到。只有确定进度（没有来回滚动的不定进度条）。
 
 ---
 
