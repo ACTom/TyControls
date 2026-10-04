@@ -29,7 +29,8 @@ uses
   tyControls.Icons.Lucide, tyControls.ImageCollection, tyControls.ImageDraw, tyControls.Image,
   tyControls.CharImage, tyControls.GlyphButtons, tyControls.ToolBar, tyControls.RibbonBackstage,
   tyControls.Hint, tyControls.BalloonHint, tyControls.Popover, tyControls.Notification,
-  tyControls.Panel;
+  tyControls.Panel, Dialogs, tyControls.Dialogs, tyControls.Dialogs.Progress,
+  tyControls.Dialogs.About, tyControls.Dialogs.IconBrowser;
 
 type
   TTyCustomClassesP4Test = class(TTyCustomClassesPhaseCase)
@@ -47,6 +48,10 @@ type
     procedure TestThirdPopover;
     procedure TestThirdNotification;
     procedure TestThirdHintAndBalloonHint;
+    { Task 30: dialogs }
+    procedure TestThirdMessage;
+    procedure TestThirdInputDialog;
+    procedure TestDialogsSplitTheLclWay;
   end;
 
   { --- third-party mimics ------------------------------------------------------------ }
@@ -96,6 +101,18 @@ type
   published
     property Title;
     property HideInterval;
+  end;
+
+  TThirdMessage = class(TTyCustomMessage)
+  published
+    property Msg;
+    property Buttons;
+  end;
+
+  TThirdInputDialog = class(TTyCustomInputDialog)
+  published
+    property Prompt;
+    property Value;
   end;
 
 implementation
@@ -449,8 +466,84 @@ begin
   AssertTrue('T-v: Icon is public through a TTyCustomBalloonHint reference', b.Icon = biInfo);
 end;
 
+{ ------------------------------------------------------------------ Task 30: dialogs }
+
+procedure TTyCustomClassesP4Test.TestThirdMessage;
+var
+  third, back: TThirdMessage;
+  c: TTyCustomMessage;
+begin
+  CheckCreatesWithoutOwner(TThirdMessage);
+  third := TThirdMessage.Create(FForm);
+  CheckPublishesOnly(TThirdMessage, ['Msg', 'Buttons']);
+  third.Msg := 'Discard the changes?';
+  third.Buttons := [mbYes, mbNo];
+  third.DlgType := mtWarning;
+  CheckStreamText(third, ['Msg', 'Buttons'], 'DlgType');
+  back := TThirdMessage.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Msg round-trips', 'Discard the changes?', back.Msg);
+  AssertTrue('T-c: Buttons round-trip', back.Buttons = [mbYes, mbNo]);
+  AssertTrue('T-c: the unpublished DlgType stayed at its default', back.DlgType = mtInformation);
+  CheckFreshDefaults(TThirdMessage, ['Msg', 'Buttons']);
+  c := third;
+  c.Title := 'Close';
+  AssertEquals('T-v: Title is public through a TTyCustomMessage reference', 'Close', third.Title);
+end;
+
+procedure TTyCustomClassesP4Test.TestThirdInputDialog;
+var
+  third, back: TThirdInputDialog;
+  c: TTyCustomInputDialog;
+begin
+  CheckCreatesWithoutOwner(TThirdInputDialog);
+  third := TThirdInputDialog.Create(FForm);
+  CheckPublishesOnly(TThirdInputDialog, ['Prompt', 'Value']);
+  third.Prompt := 'Name:';
+  third.Value := 'untitled';
+  third.Caption := 'Hidden caption';
+  CheckStreamText(third, ['Prompt', 'Value'], 'Caption');
+  back := TThirdInputDialog.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Prompt round-trips', 'Name:', back.Prompt);
+  AssertEquals('T-c: Value round-trips', 'untitled', back.Value);
+  AssertEquals('T-c: the unpublished Caption stayed empty', '', back.Caption);
+  CheckFreshDefaults(TThirdInputDialog, ['Prompt', 'Value']);
+  c := third;
+  c.Caption := 'Rename';
+  AssertEquals('T-v: Caption is public through a TTyCustomInputDialog reference', 'Rename',
+    third.Caption);
+end;
+
+{ Plan appendix F: the dialogs with an LCL counterpart that is split (TCustomTaskDialog) or with
+  none are split; the TCommonDialog family stays unsplit, as LCL leaves it, and so do the
+  TForm-role classes. The structural guard G5 holds every registered class to one of the two
+  lists; this pins the dialog half by name, so a change of mind shows up here. }
+procedure TTyCustomClassesP4Test.TestDialogsSplitTheLclWay;
+
+  procedure CheckSplit(AClass: TClass);
+  begin
+    AssertEquals(AClass.ClassName + ' sits on its custom class',
+      'TTyCustom' + Copy(AClass.ClassName, 4, MaxInt), AClass.ClassParent.ClassName);
+  end;
+
+begin
+  CheckSplit(TTyMessage);
+  CheckSplit(TTyInputDialog);
+  CheckSplit(TTyPasswordDialog);
+  CheckSplit(TTyTextDialog);
+  CheckSplit(TTySelectValueDialog);
+  CheckSplit(TTyProgressDialog);
+  CheckSplit(TTyAboutDialog);
+  CheckSplit(TTyIconBrowserDialog);
+  AssertEquals('TTyAboutDialog keeps TComponent under its custom class (its Version is the app''s)',
+    'TComponent', TTyAboutDialog.ClassParent.ClassParent.ClassName);
+  AssertEquals('TTyDialog is not split (the TForm role)', 'TTyForm', TTyDialog.ClassParent.ClassName);
+end;
+
 initialization
   RegisterClasses([TThirdStyleController, TThirdNativeStyler, TThirdIconFont,
-    TThirdVirtualImageList, TThirdPopover, TThirdNotification, TThirdHint, TThirdBalloonHint]);
+    TThirdVirtualImageList, TThirdPopover, TThirdNotification, TThirdHint, TThirdBalloonHint,
+    TThirdMessage, TThirdInputDialog]);
   RegisterTest(TTyCustomClassesP4Test);
 end.

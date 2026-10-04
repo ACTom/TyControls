@@ -1573,14 +1573,14 @@ initialization
     'TTyIconFont', 'TTyLucideIconFont', 'TTyVirtualImageList', 'TTyLucideImageList',
     'TTyGlyphImageList', 'TTyImageCollection',
     // T29 hints and notifications
-    'TTyHint', 'TTyBalloonHint', 'TTyPopover', 'TTyNotification']);
-
-  { CPending: the classes still to split, by task (plan appendix A). Each task moves its own
-    names into CSplit; Task 32 deletes this list. }
-  AddAll(GPending, [
+    'TTyHint', 'TTyBalloonHint', 'TTyPopover', 'TTyNotification',
     // T30 dialogs
     'TTyMessage', 'TTyInputDialog', 'TTyPasswordDialog', 'TTyTextDialog', 'TTySelectValueDialog',
     'TTyProgressDialog', 'TTyAboutDialog', 'TTyIconBrowserDialog']);
+
+  { CPending: the classes still to split, by task (plan appendix A). Each task moves its own
+    names into CSplit; Task 32 deletes this list. }
+  { (empty: Task 30 split the last of them) }
 
   { CDemoted: base and intermediate classes that publish nothing beyond their LCL root. }
   AddAll(GDemoted, ['TTyCustomControl', 'TTyGraphicControl', 'TTyComponent', 'TTyGlyphButtonBase', 'TTyCustomTabStrip', 'TTyCustomGrid',

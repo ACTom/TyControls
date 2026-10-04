@@ -175,7 +175,7 @@ function TyBrowseIcons(const ACaption: string; AFont: TTyCustomIconFont;
 
 type
   { The droppable wrapper, like every other dialog in this library. }
-  TTyIconBrowserDialog = class(TTyComponent)
+  TTyCustomIconBrowserDialog = class(TTyComponent)
   private
     FCaption: TCaption;
     FIconFont: TTyCustomIconFont;
@@ -188,10 +188,6 @@ type
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     function Execute: Boolean;
-  published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
-    property Version;
     property Caption: TCaption read FCaption write FCaption;
     { The font to browse. Without one the dialog opens empty and says so, rather than
       pretending the font has no icons. }
@@ -201,6 +197,18 @@ type
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
+  end;
+
+  { TTyIconBrowserDialog publishes TTyCustomIconBrowserDialog's properties; everything lives in TTyCustomIconBrowserDialog. }
+  TTyIconBrowserDialog = class(TTyCustomIconBrowserDialog)
+  published
+    property Version;
+    property Caption;
+    property IconFont;
+    property GlyphName;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
   end;
 
 implementation
@@ -801,9 +809,9 @@ begin
   end;
 end;
 
-{ ======================================================= TTyIconBrowserDialog ======== }
+{ ================================================= TTyCustomIconBrowserDialog ======== }
 
-procedure TTyIconBrowserDialog.SetIconFont(AValue: TTyCustomIconFont);
+procedure TTyCustomIconBrowserDialog.SetIconFont(AValue: TTyCustomIconFont);
 begin
   if FIconFont = AValue then Exit;
   if FIconFont <> nil then FIconFont.RemoveFreeNotification(Self);
@@ -811,13 +819,13 @@ begin
   if FIconFont <> nil then FIconFont.FreeNotification(Self);
 end;
 
-procedure TTyIconBrowserDialog.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomIconBrowserDialog.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FIconFont) then FIconFont := nil;
 end;
 
-function TTyIconBrowserDialog.Execute: Boolean;
+function TTyCustomIconBrowserDialog.Execute: Boolean;
 var d: TTyIconBrowserForm;
 begin
   { Inlined rather than delegated to TyBrowseIcons so the wrapper's OnShow/OnClose/OnCanClose

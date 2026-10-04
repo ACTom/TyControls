@@ -23,21 +23,22 @@ uses
   tyControls.ColorButton, tyControls.ColorComboBox, tyControls.ColorGrid, tyControls.ColorListBox,
   tyControls.ComboBox, tyControls.ComboBoxEx, tyControls.ComboEdit, tyControls.ControlBar,
   tyControls.Controller, tyControls.CoolBar, tyControls.CurrencyEdit, tyControls.Dial,
-  tyControls.Divider, tyControls.DropButtons, tyControls.Edit, tyControls.Empty,
-  tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit, tyControls.FontComboBox,
-  tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.Form, tyControls.FormSurface,
-  tyControls.Gauge, tyControls.GearActivityIndicator, tyControls.GearDial, tyControls.GlowLabel,
-  tyControls.GlyphButtons, tyControls.GlyphImageList, tyControls.Grid, tyControls.GridPanel,
-  tyControls.GroupBox, tyControls.HSColorPicker, tyControls.HeaderControl, tyControls.Hint,
-  tyControls.HtmlLabel, tyControls.IconFont, tyControls.Icons.Lucide, tyControls.Image,
-  tyControls.ImageCollection, tyControls.ImageView, tyControls.LColorPicker, tyControls.LevelMeter,
-  tyControls.LinkLabel, tyControls.ListBox, tyControls.ListGroupPanel, tyControls.ListView,
-  tyControls.MRUComboBox, tyControls.MaskEdit, tyControls.Memo, tyControls.Menu, tyControls.Meter,
-  tyControls.NativeStyler, tyControls.Notification, tyControls.NumericEdit,
-  tyControls.OfficeComboBox, tyControls.OfficeListBox, tyControls.PageControl,
-  tyControls.Pagination, tyControls.PaintPanel, tyControls.Panel, tyControls.Popover,
-  tyControls.PreviewBox, tyControls.ProgressBar, tyControls.RadioGroup, tyControls.Rating,
-  tyControls.RelativePanel, tyControls.Ribbon, tyControls.RibbonAppMenu,
+  tyControls.Dialogs, tyControls.Dialogs.About, tyControls.Dialogs.IconBrowser,
+  tyControls.Dialogs.Progress, tyControls.Divider, tyControls.DropButtons, tyControls.Edit,
+  tyControls.Empty, tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit,
+  tyControls.FontComboBox, tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.Form,
+  tyControls.FormSurface, tyControls.Gauge, tyControls.GearActivityIndicator, tyControls.GearDial,
+  tyControls.GlowLabel, tyControls.GlyphButtons, tyControls.GlyphImageList, tyControls.Grid,
+  tyControls.GridPanel, tyControls.GroupBox, tyControls.HSColorPicker, tyControls.HeaderControl,
+  tyControls.Hint, tyControls.HtmlLabel, tyControls.IconFont, tyControls.Icons.Lucide,
+  tyControls.Image, tyControls.ImageCollection, tyControls.ImageView, tyControls.LColorPicker,
+  tyControls.LevelMeter, tyControls.LinkLabel, tyControls.ListBox, tyControls.ListGroupPanel,
+  tyControls.ListView, tyControls.MRUComboBox, tyControls.MaskEdit, tyControls.Memo,
+  tyControls.Menu, tyControls.Meter, tyControls.NativeStyler, tyControls.Notification,
+  tyControls.NumericEdit, tyControls.OfficeComboBox, tyControls.OfficeListBox,
+  tyControls.PageControl, tyControls.Pagination, tyControls.PaintPanel, tyControls.Panel,
+  tyControls.Popover, tyControls.PreviewBox, tyControls.ProgressBar, tyControls.RadioGroup,
+  tyControls.Rating, tyControls.RelativePanel, tyControls.Ribbon, tyControls.RibbonAppMenu,
   tyControls.RibbonBackstage, tyControls.RibbonGallery, tyControls.RibbonQuickAccess,
   tyControls.ScrollBar, tyControls.ScrollBox, tyControls.ScrollContent, tyControls.ScrollPanel,
   tyControls.Segmented, tyControls.ShadowLabel, tyControls.Shape, tyControls.ShellComboBox,
@@ -50,6 +51,20 @@ uses
   tyControls.UpDown, tyControls.ValueListEditor;
 
 type
+  TGenAboutDialog = class(TTyCustomAboutDialog)
+  published
+    property Title;
+    property AppName;
+    property Version;
+    property Description;
+    property Copyright;
+    property License;
+    property Homepage;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
+  end;
+
   TGenActivityBar = class(TTyCustomActivityBar)
   published
     property Version;
@@ -4004,6 +4019,17 @@ type
     property Anchors;
   end;
 
+  TGenIconBrowserDialog = class(TTyCustomIconBrowserDialog)
+  published
+    property Version;
+    property Caption;
+    property IconFont;
+    property GlyphName;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
+  end;
+
   TGenIconFont = class(TTyCustomIconFont)
   published
     property Version;
@@ -4145,6 +4171,17 @@ type
     property OnZoomChange;
     property Align;
     property Anchors;
+  end;
+
+  TGenInputDialog = class(TTyCustomInputDialog)
+  published
+    property Version;
+    property Caption;
+    property Prompt;
+    property Value;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
   end;
 
   TGenLColorPicker = class(TTyCustomLColorPicker)
@@ -4957,6 +4994,18 @@ type
     property OnDropDown;
   end;
 
+  TGenMessage = class(TTyCustomMessage)
+  published
+    property Version;
+    property Title;
+    property Msg;
+    property DlgType;
+    property Buttons;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
+  end;
+
   TGenMeter = class(TTyCustomMeter)
   published
     property Version;
@@ -5534,6 +5583,18 @@ type
     property Anchors;
   end;
 
+  TGenPasswordDialog = class(TTyCustomPasswordDialog)
+  published
+    property Version;
+    property Caption;
+    property Prompt;
+    property Value;
+    property PasswordChar;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
+  end;
+
   TGenPopover = class(TTyCustomPopover)
   published
     property Version;
@@ -5660,6 +5721,21 @@ type
     property OnChange;
     property Align;
     property Anchors;
+  end;
+
+  TGenProgressDialog = class(TTyCustomProgressDialog)
+  published
+    property Version;
+    property Caption;
+    property Text;
+    property Min;
+    property Max;
+    property Position;
+    property Cancelable;
+    property OnCancel;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
   end;
 
   TGenRadioButton = class(TTyCustomRadioButton)
@@ -6709,6 +6785,18 @@ type
     property OnChange;
     property Align;
     property Anchors;
+  end;
+
+  TGenSelectValueDialog = class(TTyCustomSelectValueDialog)
+  published
+    property Version;
+    property Caption;
+    property Prompt;
+    property Items;
+    property ItemIndex;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
   end;
 
   TGenShadowLabel = class(TTyCustomShadowLabel)
@@ -8049,6 +8137,17 @@ type
     property OnClaimedInput;
   end;
 
+  TGenTextDialog = class(TTyCustomTextDialog)
+  published
+    property Version;
+    property Caption;
+    property Prompt;
+    property Value;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
+  end;
+
   TGenTitleBar = class(TTyCustomTitleBar)
   published
     property Version;
@@ -9295,7 +9394,8 @@ type
 
 const
   { (mimic, final class) }
-  CGenMimics: array[0..147, 0..1] of TClass = (
+  CGenMimics: array[0..155, 0..1] of TClass = (
+    (TGenAboutDialog, TTyAboutDialog),
     (TGenActivityBar, TTyActivityBar),
     (TGenActivityIndicator, TTyActivityIndicator),
     (TGenAdvancedComboBox, TTyAdvancedComboBox),
@@ -9359,10 +9459,12 @@ const
     (TGenHeaderControl, TTyHeaderControl),
     (TGenHint, TTyHint),
     (TGenHtmlLabel, TTyHtmlLabel),
+    (TGenIconBrowserDialog, TTyIconBrowserDialog),
     (TGenIconFont, TTyIconFont),
     (TGenImage, TTyImage),
     (TGenImageCollection, TTyImageCollection),
     (TGenImageView, TTyImageView),
+    (TGenInputDialog, TTyInputDialog),
     (TGenLColorPicker, TTyLColorPicker),
     (TGenLabel, TTyLabel),
     (TGenLevelMeter, TTyLevelMeter),
@@ -9377,6 +9479,7 @@ const
     (TGenMemo, TTyMemo),
     (TGenMenuBar, TTyMenuBar),
     (TGenMenuButton, TTyMenuButton),
+    (TGenMessage, TTyMessage),
     (TGenMeter, TTyMeter),
     (TGenNativeStyler, TTyNativeStyler),
     (TGenNotification, TTyNotification),
@@ -9387,9 +9490,11 @@ const
     (TGenPagination, TTyPagination),
     (TGenPaintPanel, TTyPaintPanel),
     (TGenPanel, TTyPanel),
+    (TGenPasswordDialog, TTyPasswordDialog),
     (TGenPopover, TTyPopover),
     (TGenPreviewBox, TTyPreviewBox),
     (TGenProgressBar, TTyProgressBar),
+    (TGenProgressDialog, TTyProgressDialog),
     (TGenRadioButton, TTyRadioButton),
     (TGenRadioGroup, TTyRadioGroup),
     (TGenRating, TTyRating),
@@ -9406,6 +9511,7 @@ const
     (TGenScrollContent, TTyScrollContent),
     (TGenScrollPanel, TTyScrollPanel),
     (TGenSegmented, TTySegmented),
+    (TGenSelectValueDialog, TTySelectValueDialog),
     (TGenShadowLabel, TTyShadowLabel),
     (TGenShape, TTyShape),
     (TGenShellComboBox, TTyShellComboBox),
@@ -9425,6 +9531,7 @@ const
     (TGenTabSheet, TTyTabSheet),
     (TGenTag, TTyTag),
     (TGenTerminalView, TTyTerminalView),
+    (TGenTextDialog, TTyTextDialog),
     (TGenTitleBar, TTyTitleBar),
     (TGenToggleSwitch, TTyToggleSwitch),
     (TGenToolBar, TTyToolBar),

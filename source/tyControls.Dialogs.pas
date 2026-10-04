@@ -116,7 +116,7 @@ function TyMessageDlg(const AMsg: string; ADlgType: TMsgDlgType; AButtons: TMsgD
 function TyMessageDlgPos(const AMsg: string; ADlgType: TMsgDlgType; AButtons: TMsgDlgButtons; AHelpCtx: Longint; X, Y: Integer): TModalResult;
 
 type
-  TTyMessage = class(TTyComponent)
+  TTyCustomMessage = class(TTyComponent)
   private
     FTitle, FMsg: string;
     FDlgType: TMsgDlgType;
@@ -127,10 +127,6 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     function Execute: TModalResult;
-  published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
-    property Version;
     property Title: TCaption read FTitle write FTitle;
     property Msg: string read FMsg write FMsg;
     property DlgType: TMsgDlgType read FDlgType write FDlgType default mtInformation;
@@ -140,6 +136,19 @@ type
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
   end;
 
+  { TTyMessage publishes TTyCustomMessage's properties; everything lives in TTyCustomMessage. }
+  TTyMessage = class(TTyCustomMessage)
+  published
+    property Version;
+    property Title;
+    property Msg;
+    property DlgType;
+    property Buttons;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
+  end;
+
 { Input dialog — construct-only builder returns the dialog + its edit (out param). }
 function TyBuildInputDialog(const ACaption, APrompt, ADefault: string; out AEdit: TTyEdit): TTyDialog;
 function TyInputResult(AEdit: TTyEdit; const ADefault: string; AResult: TModalResult): string;
@@ -147,7 +156,7 @@ function TyInputQuery(const ACaption, APrompt: string; var AValue: string): Bool
 function TyInputBox(const ACaption, APrompt, ADefault: string): string;
 
 type
-  TTyInputDialog = class(TTyComponent)
+  TTyCustomInputDialog = class(TTyComponent)
   private
     FCaption, FPrompt, FValue: string;
     FOnShow: TNotifyEvent;
@@ -155,16 +164,24 @@ type
     FOnCanClose: TCloseQueryEvent;
   public
     function Execute: Boolean;
-  published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
-    property Version;
     property Caption: TCaption read FCaption write FCaption;
     property Prompt: string read FPrompt write FPrompt;
     property Value: string read FValue write FValue;
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
+  end;
+
+  { TTyInputDialog publishes TTyCustomInputDialog's properties; everything lives in TTyCustomInputDialog. }
+  TTyInputDialog = class(TTyCustomInputDialog)
+  published
+    property Version;
+    property Caption;
+    property Prompt;
+    property Value;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
   end;
 
 { Password dialog — masked-edit delta on Input }
@@ -174,7 +191,7 @@ function TyPasswordBox(const ACaption, APrompt: string): string;
 function TyPasswordQuery(const ACaption, APrompt: string; var AValue: string): Boolean;
 
 type
-  TTyPasswordDialog = class(TTyComponent)
+  TTyCustomPasswordDialog = class(TTyComponent)
   private
     FCaption, FPrompt, FValue, FPasswordChar: string;
     FOnShow: TNotifyEvent;
@@ -183,10 +200,6 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     function Execute: Boolean;
-  published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
-    property Version;
     property Caption: TCaption read FCaption write FCaption;
     property Prompt: string read FPrompt write FPrompt;
     property Value: string read FValue write FValue;
@@ -194,6 +207,19 @@ type
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
+  end;
+
+  { TTyPasswordDialog publishes TTyCustomPasswordDialog's properties; everything lives in TTyCustomPasswordDialog. }
+  TTyPasswordDialog = class(TTyCustomPasswordDialog)
+  published
+    property Version;
+    property Caption;
+    property Prompt;
+    property Value;
+    property PasswordChar;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
   end;
 
 { Text dialog — resizable multi-line memo input }
@@ -213,7 +239,7 @@ function TyBuildTextDialog(const ACaption, APrompt, ADefault: string; out AMemo:
 function TyTextQuery(const ACaption, APrompt: string; var AValue: string): Boolean;
 
 type
-  TTyTextDialog = class(TTyComponent)
+  TTyCustomTextDialog = class(TTyComponent)
   private
     FCaption, FPrompt, FValue: string;
     FOnShow: TNotifyEvent;
@@ -221,16 +247,24 @@ type
     FOnCanClose: TCloseQueryEvent;
   public
     function Execute: Boolean;
-  published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
-    property Version;
     property Caption: TCaption read FCaption write FCaption;
     property Prompt: string read FPrompt write FPrompt;
     property Value: string read FValue write FValue;
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
+  end;
+
+  { TTyTextDialog publishes TTyCustomTextDialog's properties; everything lives in TTyCustomTextDialog. }
+  TTyTextDialog = class(TTyCustomTextDialog)
+  published
+    property Version;
+    property Caption;
+    property Prompt;
+    property Value;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
   end;
 
 { Shared layout constants — exported so sub-units (e.g. SelectPath) can
@@ -272,7 +306,7 @@ type
   end;
 
 type
-  TTySelectValueDialog = class(TTyComponent)
+  TTyCustomSelectValueDialog = class(TTyComponent)
   private
     FCaption, FPrompt: string;
     FItems: TStrings;
@@ -286,10 +320,6 @@ type
     destructor Destroy; override;
     function Execute: Boolean;
     function SelectedText: string;
-  published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
-    property Version;
     property Caption: TCaption read FCaption write FCaption;
     property Prompt: string read FPrompt write FPrompt;
     property Items: TStrings read FItems write SetItems;
@@ -297,6 +327,19 @@ type
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
+  end;
+
+  { TTySelectValueDialog publishes TTyCustomSelectValueDialog's properties; everything lives in TTyCustomSelectValueDialog. }
+  TTySelectValueDialog = class(TTyCustomSelectValueDialog)
+  published
+    property Version;
+    property Caption;
+    property Prompt;
+    property Items;
+    property ItemIndex;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
   end;
 
 implementation
@@ -857,16 +900,16 @@ end;
 procedure TyShowMessage(const AMsg: string);
 begin TyMessageDlg(AMsg, mtInformation, [mbOK]); end;
 
-{ TTyMessage }
+{ TTyCustomMessage }
 
-constructor TTyMessage.Create(AOwner: TComponent);
+constructor TTyCustomMessage.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FDlgType := mtInformation;
   FButtons := [mbOK];
 end;
 
-function TTyMessage.Execute: TModalResult;
+function TTyCustomMessage.Execute: TModalResult;
 var d: TTyDialog;
 begin
   d := TyBuildMessageDialog(FMsg, FDlgType, FButtons, FTitle);
@@ -934,9 +977,9 @@ begin
   finally d.Free; end;
 end;
 
-{ TTyInputDialog }
+{ TTyCustomInputDialog }
 
-function TTyInputDialog.Execute: Boolean;
+function TTyCustomInputDialog.Execute: Boolean;
 var d: TTyDialog; e: TTyEdit;
 begin
   // Inline the build/show (rather than call TyInputQuery) so the wrapper's own
@@ -988,15 +1031,15 @@ begin
   finally d.Free; end;
 end;
 
-{ TTyPasswordDialog }
+{ TTyCustomPasswordDialog }
 
-constructor TTyPasswordDialog.Create(AOwner: TComponent);
+constructor TTyCustomPasswordDialog.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FPasswordChar := TyDefaultPasswordChar;
 end;
 
-function TTyPasswordDialog.Execute: Boolean;
+function TTyCustomPasswordDialog.Execute: Boolean;
 var d: TTyDialog; e: TTyEdit;
 begin
   d := TyBuildPasswordDialog(FCaption, FPrompt, FPasswordChar, e);
@@ -1050,9 +1093,9 @@ begin
   finally d.Free; end;
 end;
 
-{ TTyTextDialog }
+{ TTyCustomTextDialog }
 
-function TTyTextDialog.Execute: Boolean;
+function TTyCustomTextDialog.Execute: Boolean;
 var d: TTyTextDialogForm; m: TTyMemo;
 begin
   // Inline (rather than call TyTextQuery) so the wrapper's events forward before ShowModal.
@@ -1115,27 +1158,27 @@ begin
   finally d.Free; end;
 end;
 
-{ TTySelectValueDialog }
+{ TTyCustomSelectValueDialog }
 
-constructor TTySelectValueDialog.Create(AOwner: TComponent);
+constructor TTyCustomSelectValueDialog.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FItems := TStringList.Create;
   FItemIndex := -1;
 end;
 
-destructor TTySelectValueDialog.Destroy;
+destructor TTyCustomSelectValueDialog.Destroy;
 begin
   FItems.Free;
   inherited Destroy;
 end;
 
-procedure TTySelectValueDialog.SetItems(AValue: TStrings);
+procedure TTyCustomSelectValueDialog.SetItems(AValue: TStrings);
 begin
   FItems.Assign(AValue);
 end;
 
-function TTySelectValueDialog.SelectedText: string;
+function TTyCustomSelectValueDialog.SelectedText: string;
 begin
   if (FItemIndex >= 0) and (FItemIndex < FItems.Count) then
     Result := FItems[FItemIndex]
@@ -1143,7 +1186,7 @@ begin
     Result := '';
 end;
 
-function TTySelectValueDialog.Execute: Boolean;
+function TTyCustomSelectValueDialog.Execute: Boolean;
 var d: TTyDialog; lb: TTyListBox;
 begin
   // Inline (rather than call TySelectValue) so the wrapper's events forward before ShowModal.
