@@ -305,6 +305,66 @@ TyButton { background: #00FF00; }   /* overrides background only; color is still
 Even so, avoid defining the same selector twice **in one file**; when you need parallel declarations, put them in one rule
 block so readers do not have to scan the whole file for overrides.
 
+### 4.5 typeKey chains: a subclass inherits its parent's rules
+
+A third-party control that overrides `GetStyleTypeKey` to report a key of its own (say `TagButton`) can register, in Pascal,
+the key it derives from (see section 2 of [subclassing.en.md](subclassing.en.md)):
+
+```pascal
+TyRegisterTypeKeyParent('TagButton', 'TyButton');   // in tyControls.StyleModel
+```
+
+From then on `TagButton` resolves in two steps:
+
+1. `TyButton` is resolved **completely** — built-in layer, theme layer, variants, states — exactly as when resolving
+   `TyButton` itself;
+2. `TagButton`'s own rules (`TagButton`, `TagButton.variant`, `TagButton:state`, `TagButton.variant:state`) are then applied in
+   the §4.4 order, each overriding the result of step 1 per property.
+
+A theme that never mentions `TagButton` therefore draws it exactly like a button; one that does only writes the differences:
+
+```css
+TagButton { border-radius: var(--radius-pill); }
+```
+
+**A child key's plain rules come after the parent's state rules.** Step 1 has already applied the parent's `:hover` and
+`:disabled`; step 2's `TagButton { }` then overrides the same properties. Written like this, `TagButton` does not change
+colour on hover:
+
+```css
+TyButton:hover  { background: var(--surface-hover); }
+TagButton       { background: #DCFCE7; }     /* still #DCFCE7 on hover */
+TagButton:hover { background: #BBF7D0; }     /* this line brings the hover colour back */
+```
+
+Browser CSS gives the opposite result here (`.btn:hover` outranks `.tag`). The rule of thumb: whatever property you change
+for the child key, also write the states in which that property should change.
+
+**Chains can have several links**, e.g. `FancyTag` → `TagButton` → `TyButton`, applied from the topmost parent down.
+A chain holds at most 8 keys.
+
+**The built-in layer yields per key** (§8.1). A plain `TagButton { }` (no variant, no state) disables only `TagButton`'s own
+built-in rules; `TyButton`'s built-in rules still apply underneath. Third-party keys have no built-in rules anyway, so this
+only shows when a built-in key is registered as a child.
+
+**Sub-part keys are registered separately.** Sub-part keys a control builds as `GetStyleTypeKey + 'Fill'` and the like do
+not follow on their own: `TagMeter`'s fill resolves `TagMeterFill`, which needs its own registration to inherit `TyMeterFill`.
+
+Registration rules:
+
+- Register in the unit's `initialization` and undo it in `finalization` with `TyUnregisterTypeKeyParent`. The registry is
+  process-wide; a registration made after controls are on screen does not repaint them.
+- Key names are case-insensitive and must be identifiers (a letter or `_`, then letters, digits, `_` and `-`).
+- These raise `ETyCssError` and leave the registry unchanged: an invalid name; a cycle (including a key registered as its own
+  parent); a chain longer than 8 keys; a key that already has a **different** parent (registering the same pair again is fine).
+- Queries: `TyTypeKeyParent`, `TyTypeKeyChain`, `TyGetRegisteredTypeKeys`.
+
+The tools follow the chain too: the design-time `StyleClass` drop-down lists the parent's variants (`TagButton` gets
+`primary`, `danger`, `ghost`); the controller-level StyleOverride editor offers registered keys when completing selectors.
+Lint does not check type key names, so a child key is never reported.
+
+A typeKey with no registered parent works as before: it gets only the rules a theme writes for it.
+
 ---
 
 ## 5. Property Reference
@@ -709,6 +769,7 @@ Gradient endpoints sit where the gradient axis crosses the control's bounding bo
 ## 8. typeKeys and the Built-in Variant List
 
 The type name in a selector is the typeKey returned by the control's `GetStyleTypeKey` (sub-part typeKeys included).
+A third-party control's own key can register a parent key and inherit all its rules; see §4.5.
 
 This section is the theme author's **authoritative key table**. Every entry is taken from `themes/light.tycss`, the single
 source of truth; `source/tyControls.DefaultTheme.pas` (the built-in base layer compiled into the library) is generated from

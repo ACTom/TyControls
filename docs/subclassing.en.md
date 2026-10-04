@@ -89,7 +89,62 @@ These do not care about order — the value is held while the form loads and app
 
 A control finds its styles through the type key `GetStyleTypeKey` returns (`'TyEdit'` for `TTyEdit`), and that override lives in the custom class. So `TMyTagEdit`, without a line of extra code, picks up every `TyEdit` rule and follows theme switches. You never write `TyCustomEdit` in a `.tycss` file; it is always `TyEdit`.
 
-If you override `GetStyleTypeKey` to return a key of your own (`'MyTagEdit'`, say), the theme needs `MyTagEdit { ... }` rules or the control gets no style at all — there is no "fall back to `TyEdit`" yet; that is [#14](https://github.com/ACTom/TyControls/issues/14). Until it lands, either keep the inherited key or write the full rule set in your own theme.
+### A theme key of your own
+
+To let a theme style your control on its own, override `GetStyleTypeKey` to return a key of your own and, in the unit's `initialization`, register the key it derives from:
+
+```pascal
+unit MyTagButton;
+{$mode objfpc}{$H+}
+
+interface
+
+uses
+  Classes, tyControls.Button;
+
+type
+  TMyTagButton = class(TTyCustomButton)
+  protected
+    function GetStyleTypeKey: string; override;
+  published
+    property Caption;
+    property StyleClass;
+    property OnClick;
+  end;
+
+implementation
+
+uses
+  tyControls.StyleModel;
+
+function TMyTagButton.GetStyleTypeKey: string;
+begin
+  Result := 'MyTagButton';
+end;
+
+initialization
+  TyRegisterTypeKeyParent('MyTagButton', 'TyButton');
+
+finalization
+  TyUnregisterTypeKeyParent('MyTagButton');
+
+end.
+```
+
+A theme that never mentions `MyTagButton` draws it exactly like a `TTyButton`, and the `StyleClass` drop-down offers the button variants (`primary`, `danger`, …). A theme that wants it to look different writes only the differences:
+
+```css
+MyTagButton { border-radius: var(--radius-pill); }
+```
+
+The engine first applies everything `TyButton` has (built-in layer, theme layer, variants, states), then lays `MyTagButton`'s own rules over it, property by property. So if a theme gives `MyTagButton` a background, it has to give it its `:hover` and friends too, or hovering won't change it — see section 4.5 of [tycss-reference.en.md](tycss-reference.en.md).
+
+A few things to know:
+
+- Chains can have several links (`MyFancyTag` → `MyTagButton` → `TyButton`), up to 8 keys. A cycle, a chain longer than 8 keys, or a second, different parent for the same key makes `TyRegisterTypeKeyParent` raise `ETyCssError`.
+- Controls that build sub-part keys as `GetStyleTypeKey + 'Fill'` (the gauge family) need one registration per sub-part key, e.g. `TyRegisterTypeKeyParent('MyMeterFill', 'TyMeterFill')`.
+- Register before any control is created. A registration made later does not repaint controls already on screen.
+- Not registering is fine too: the key then gets only the rules a theme writes for it, and no style at all if the theme writes none.
 
 ---
 

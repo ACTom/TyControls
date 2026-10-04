@@ -89,7 +89,62 @@ IDE 存窗体时按 published 段的顺序写属性，读回来时按文件里�
 
 控件靠 `GetStyleTypeKey` 报出的主题键找样式（`TTyEdit` 报 `'TyEdit'`），这个覆写在 Custom 类里。所以 `TMyTagEdit` 什么都不写，就吃 `TyEdit` 的全部 tycss 规则，换主题跟着变。`.tycss` 里不会出现 `TyCustomEdit` 这种键，永远写 `TyEdit`。
 
-如果你覆写 `GetStyleTypeKey` 换成自己的键（比如 `'MyTagEdit'`），主题里就得有 `MyTagEdit { ... }` 的规则，否则这个控件拿不到任何样式——现在还没有「找不到就退回 `TyEdit`」的机制，这件事记在 [#14](https://github.com/ACTom/TyControls/issues/14)。在那之前，要么不覆写，要么自己的主题里把规则写全。
+### 给自己的控件一个主题键
+
+想让主题能单独给你的控件换肤，就覆写 `GetStyleTypeKey` 报一个自己的键，再在单元的 `initialization` 里登记它从哪个键来：
+
+```pascal
+unit MyTagButton;
+{$mode objfpc}{$H+}
+
+interface
+
+uses
+  Classes, tyControls.Button;
+
+type
+  TMyTagButton = class(TTyCustomButton)
+  protected
+    function GetStyleTypeKey: string; override;
+  published
+    property Caption;
+    property StyleClass;
+    property OnClick;
+  end;
+
+implementation
+
+uses
+  tyControls.StyleModel;
+
+function TMyTagButton.GetStyleTypeKey: string;
+begin
+  Result := 'MyTagButton';
+end;
+
+initialization
+  TyRegisterTypeKeyParent('MyTagButton', 'TyButton');
+
+finalization
+  TyUnregisterTypeKeyParent('MyTagButton');
+
+end.
+```
+
+主题里没写 `MyTagButton` 时，它和 `TTyButton` 画得一模一样，`StyleClass` 下拉里也有 `primary`、`danger` 这些按钮的变体；主题想让它不一样，只写不同的地方：
+
+```css
+MyTagButton { border-radius: var(--radius-pill); }
+```
+
+引擎先把 `TyButton` 的规则（内置层、主题层、变体、状态）全部用上，再用 `MyTagButton` 自己的规则逐个属性盖上去。所以 `MyTagButton` 改了背景，就要把 `:hover` 之类也为它写上，否则悬停时不变色——细节见 [tycss-reference.md](tycss-reference.md) 第 4.5 节。
+
+几点要注意：
+
+- 链可以有好几级（`MyFancyTag` → `MyTagButton` → `TyButton`），最多 8 个键。登记成环、超过 8 级、或者同一个键登记两个不同的父键，`TyRegisterTypeKeyParent` 会抛 `ETyCssError`。
+- 用 `GetStyleTypeKey + 'Fill'` 这种办法拼子部件键的控件（仪表一族），子部件键要各登记一条，比如 `TyRegisterTypeKeyParent('MyMeterFill', 'TyMeterFill')`。
+- 在控件创建之前登记。运行到一半才登记，已经画好的控件不会自己重画。
+- 不登记也可以，那这个键就只吃主题里为它写的规则；主题一条都没写，控件就什么样式都没有。
 
 ---
 
