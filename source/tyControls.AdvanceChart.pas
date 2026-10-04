@@ -646,6 +646,8 @@ type
     FTipNow: Double;
     FTipTimer: TTimer;
     FTipBox, FTipRect: TTyRectF;
+    { [Batch 104] what the last paint's string or handler formatter said }
+    FTipFormatterText: string;
     { [Batch 100] the option's own `status: 'show'` pointers are gone: the
       first pointer event rewrites every status, and an option set brings
       them back }
@@ -1290,10 +1292,11 @@ type
       richInheritPlainLabel, and the chart's global text font -- the skin's
       label font with the root textStyle's over it [Batch 86] }
     function RtGlobal: TTyRtGlobal;
-    { the styles an axis' labels (plain and emphasised) and name are painted
-      in: the theme's, with the family, size, weight and colour the layout
-      measured them in -- the author's where written [Batch 83] }
-    procedure AxisTextStyles(ASpec: PTyAxisLayoutSpec; out ALabel, APrimary,
+    { the styles an axis' labels and name are painted in: the theme's, with
+      the family, size, weight and colour the layout measured them in -- the
+      author's where written [Batch 83]. A time axis' heavier `{primary|...}`
+      part is a rich piece of the label's block [Batch 104]. }
+    procedure AxisTextStyles(ASpec: PTyAxisLayoutSpec; out ALabel,
       AName: TTyStyleSet);
     procedure AxisTextOver(var AStyle: TTyStyleSet; const AName: string;
       ASize, AWeight: Integer; AHasColour: Boolean; AColour: Cardinal;
@@ -1344,6 +1347,10 @@ type
       const ASpec: TTyTooltipSpec): TTyTooltipBlock;
     { hit -> the record a formatter is given. }
     function TooltipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
+    { [Batch 104] THE TEXT THE LAST PAINT'S FORMATTER GAVE THE BOX -- a
+      template after the time format and formatTpl, or a handler's answer --
+      '' when the box was not drawn or had no formatter. }
+    function TooltipFormatterText: string;
     { [Batch 100] THE BOX'S SIZE AS MEASURED, device px, just before it is
       placed. Nothing here; a test that compares a placement against
       upstream's -- whose sizes come from another measurer -- answers the
@@ -3133,8 +3140,12 @@ begin
   txt.FontName := labelS.FontName;
   txt.FontSizeLogical := ResolveFontSize(labelS);
   txt.FontWeight := labelS.FontWeight;
-  txt.EmphasisFontWeight := ActiveController.Model.ResolveStyle(
-    'TyAdvChartAxisLabelPrimary', '', []).FontWeight;
+  { THE TIME AXIS' `rich.primary` DEFAULT, from the skin's primary rule: its
+    weight, and its colour where it has one [Batch 104] }
+  labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisLabelPrimary', '', []);
+  txt.EmphasisFontWeight := labelS.FontWeight;
+  txt.HasEmphasisColour := tpTextColor in labelS.Present;
+  txt.EmphasisColour := Cardinal(labelS.TextColor);
   txt.LabelMarginLogical := ActiveController.Metric(TyAdvChartLabelMarginVar,
     TyAdvChartLabelMargin);
   txt.TickLengthLogical := ActiveController.Metric(TyAdvChartTickLenVar,
@@ -3197,7 +3208,7 @@ var
   lx, ly: Double;
   model: TTyStyleModel;
   lineS, tickStyle, labelS, splitS: TTyStyleSet;
-  lblStyle, primaryS: TTyStyleSet;
+  lblStyle: TTyStyleSet;
   minorTickS, minorSplitS, nameS: TTyStyleSet;
   i: Integer;
   tickLen, minorLen, at, along, x1, y1, x2, y2: Double;
@@ -3456,7 +3467,7 @@ begin
   spec := nil;
   if AGrid <> nil then spec := AGrid.SpecFor(AAxis);
   { DRAWN IN WHAT IT WAS MEASURED IN [Batch 83] }
-  AxisTextStyles(spec, labelS, primaryS, nameS);
+  AxisTextStyles(spec, labelS, nameS);
   { WHAT THIS AXIS ACTUALLY DRAWS. Resolved once by the builder, from the
     option AND from upstream's per-type defaults -- which is where most of
     the answers come from: on a chart with no axis option written at all, the
@@ -3767,13 +3778,11 @@ begin
     begin
       if not places[i].Shown then Continue;
       if places[i].Text = '' then Continue;
-      { THE WEIGHT THE LAYOUT MEASURED IT IN. A time axis marks its coarse
-        ticks for emphasis -- the `Mar` in a run of day numbers -- and the
-        layout already reserved the wider box that bold needs. Resolving it
-        again here from anything but the placement is how the box and the
-        glyphs come to disagree. }
+      { THE STYLE THE LAYOUT MEASURED IT IN. A time axis' heavier `Mar` in a
+        run of day numbers is a `{primary|Mar}` tag, drawn from its pieces
+        below in the weight the block was measured in. [Revised in batch
+        104: a whole label marked emphasised and drawn in a second style.] }
       lblStyle := labelS;
-      if places[i].Emphasis then lblStyle := primaryS;
       { where its groupTransition has it now [Batch 96] }
       lx := places[i].X;
       ly := places[i].Y;
@@ -11009,19 +11018,15 @@ begin
 end;
 
 procedure TTyAdvanceChart.AxisTextStyles(ASpec: PTyAxisLayoutSpec;
-  out ALabel, APrimary, AName: TTyStyleSet);
+  out ALabel, AName: TTyStyleSet);
 var model: TTyStyleModel;
 begin
   model := ActiveController.Model;
   ALabel := model.ResolveStyle('TyAdvChartAxisLabel', '', []);
-  APrimary := model.ResolveStyle('TyAdvChartAxisLabelPrimary', '', []);
   AName := model.ResolveStyle('TyAdvChartAxisName', '', []);
   if ASpec = nil then Exit;
   AxisTextOver(ALabel, ASpec^.FontName, ASpec^.FontSizeLogical, ASpec^.FontWeight,
     ASpec^.HasLabelColour, ASpec^.LabelColour, False);
-  { the emphasised label keeps the theme's heavier weight }
-  AxisTextOver(APrimary, ASpec^.FontName, ASpec^.FontSizeLogical, ASpec^.FontWeight,
-    ASpec^.HasLabelColour, ASpec^.LabelColour, True);
   AxisTextOver(AName, ASpec^.NameFontName, ASpec^.NameFontSizeLogical,
     ASpec^.NameFontWeight, ASpec^.HasNameColour, ASpec^.NameColour, False);
 end;
@@ -11199,7 +11204,7 @@ var
   axObj: TTyAxis;
   spec: PTyAxisLayoutSpec;
   meas: ITyTextMeasurer;
-  lblS, priS, nameS: TTyStyleSet;
+  lblS, nameS: TTyStyleSet;
   fw, fh: Double;
   kind: TTyMarkerKind;
   mk: TTyMkBlock;
@@ -11428,7 +11433,7 @@ begin
       if not TriggersEvent(FOption.ComponentAt(mainT, axObj.ComponentIndex)) then Continue;
       spec := gb.SpecFor(axObj);
       if spec = nil then Continue;
-      AxisTextStyles(spec, lblS, priS, nameS);
+      AxisTextStyles(spec, lblS, nameS);
       Result.Model.Valid := True;
       Result.Model.MainType := mainT;
       case axObj.AxisType of
@@ -11457,14 +11462,24 @@ begin
       for q := 0 to High(spec^.Placements) do
       begin
         if not spec^.Placements[q].Shown then Continue;
-        if meas = nil then meas := NewTextMeasurer(FPaintListPPI);
-        fw := 0;
-        fh := 0;
-        if meas <> nil then
-          meas.MeasureLine(spec^.Placements[q].Text, lblS.FontName,
-            ResolveFontSize(lblS), lblS.FontWeight, fw, fh);
-        if not Inside(Boxed(spec^.Placements[q].X, spec^.Placements[q].Y, fw, fh,
-          spec^.Placements[q].AnchorH, spec^.Placements[q].AnchorV)) then Continue;
+        { A BLOCK IS HIT WHERE ITS PIECES ARE: measuring the text of a
+          `{primary|Feb}` would box the tag as well [Batch 104] }
+        if Length(spec^.Placements[q].Rt) > 0 then
+        begin
+          if not Inside(TyRtDeviceBox(spec^.Placements[q].Rt, spec^.Placements[q].X,
+            spec^.Placements[q].Y, spec^.RotationRad, spec^.RtScale)) then Continue;
+        end
+        else
+        begin
+          if meas = nil then meas := NewTextMeasurer(FPaintListPPI);
+          fw := 0;
+          fh := 0;
+          if meas <> nil then
+            meas.MeasureLine(spec^.Placements[q].Text, lblS.FontName,
+              ResolveFontSize(lblS), lblS.FontWeight, fw, fh);
+          if not Inside(Boxed(spec^.Placements[q].X, spec^.Placements[q].Y, fw, fh,
+            spec^.Placements[q].AnchorH, spec^.Placements[q].AnchorV)) then Continue;
+        end;
         Result.Id := -(100000 + g * 10000 + a * 1000 + q);
         Result.HasData := True;
         Result.Params.TargetType := 'axisLabel';
@@ -14911,20 +14926,18 @@ end;
 
 function TTyAdvanceChart.AxisValueText(AAxis: TTyAxis; AValue: Double;
   const ALabel: TTyAxisPointerLabelSpec): string;
-var tt: TTyTimeTick;
 begin
   Result := '';
   if AAxis = nil then Exit;
   if AAxis.Scale is TTyOrdinalScale then
     Result := TTyOrdinalScale(AAxis.Scale).GetLabel(AValue)
   else if AAxis.Scale is TTyTimeScale then
-  begin
-    tt.Value := AValue;
-    tt.Unit_ := TyTimeUnitOf(AValue, TTyTimeScale(AAxis.Scale).UTC);
-    tt.Level := 0;
-    tt.NotNice := False;
-    Result := TyTimeLabel(tt, TTyTimeScale(AAxis.Scale).UTC);
-  end
+    { getValueLabel asks the scale's getLabel: the full date, to the day
+      over years and months and to the second below -- never the axis'
+      short level template, which would head a tooltip with a bare `2`.
+      [Revised in batch 104: TyTimeLabel, the label seed of the tick's
+      unit.] }
+    Result := TTyTimeScale(AAxis.Scale).GetLabel(AValue)
   else if ALabel.HasPrecision then
     Result := TyScaleValueLabel(AAxis.Scale, AValue, ALabel.Precision)
   else
@@ -16503,6 +16516,11 @@ begin
   Result := FTipShown;
 end;
 
+function TTyAdvanceChart.TooltipFormatterText: string;
+begin
+  Result := FTipFormatterText;
+end;
+
 function TTyAdvanceChart.TooltipShownWhich: string;
 const
   cMk: array[TTyChartTargetKind] of string = ('item', 'markPoint', 'markLine',
@@ -16927,7 +16945,9 @@ var
   lines: TTyTooltipLineArray;
   st: TTyStyleSet;
   params: TTyChartParams;
-  tipText: string;
+  tipText, fmtText: string;
+  k, m: Integer;
+  hasSeries: Boolean;
   w, h, lineH, gap, cx, cy: Double;
   padL, padT, padR, padB, radius, borderW: Double;
   box: TTyRectF;
@@ -16943,6 +16963,7 @@ var
 begin
   FTipBox := TyInvalidRectF;
   FTipRect := TyInvalidRectF;
+  FTipFormatterText := '';
   { [Batch 100] WHAT IS SHOWN, NOT WHAT IS HOVERED: the box's own state
     decides -- a show waiting out showDelay is not drawn yet, a hide waiting
     out hideDelay still is, at the place and with the content of the show }
@@ -16986,10 +17007,32 @@ begin
       if onAxis then params := AxisTooltipParams(snap.Hits)
       else params[0] := TooltipParams(snap.Datum);
       if Length(params) = 0 then Exit;
-      if not TyChartResolveText(spec.Formatter, params, tipText) then
+      fmtText := spec.Formatter;
+      { A TEMPLATE UNDER A TIME AXIS IS A TIME TEMPLATE FIRST: TooltipView
+        runs the string through util/time.ts format at the first series'
+        axis value before formatTpl sees it -- so `{a}` there is am / pm and
+        `{d}` the day, never the series name or the percent. Only an axis
+        trigger's params carry an axis type, and only an axis trigger has
+        sections to walk: an item tooltip is left alone. [Batch 104] }
+      if not TyChartIsHandlerRef(fmtText) then
+        for k := 0 to High(snap.Hits) do
+        begin
+          { params[0] is the first series of the first section that has one }
+          hasSeries := False;
+          for m := 0 to High(snap.Hits[k].Slots) do
+            if (snap.Hits[k].Slots[m] >= 0)
+              and (snap.Hits[k].Slots[m] <= High(FBindings)) then hasSeries := True;
+          if snap.Hits[k].Cross or not hasSeries then Continue;
+          if (snap.Hits[k].Axis <> nil) and (snap.Hits[k].Axis.Scale is TTyTimeScale) then
+            fmtText := TyFormatTime(snap.Hits[k].SnapValue, fmtText,
+              TTyTimeScale(snap.Hits[k].Axis.Scale).UTC);
+          Break;
+        end;
+      if not TyChartResolveText(fmtText, params, tipText) then
         { A named handler that is not registered says so rather than drawing
           nothing -- TyChartResolveText puts the message in the text. }
         ;
+      FTipFormatterText := tipText;
       if Trim(tipText) = '' then Exit;
       block := TTyTooltipBlock.CreateSection('', True);
       { THE WHOLE STRING AS ONE NAME. A formatter's output is words, not a

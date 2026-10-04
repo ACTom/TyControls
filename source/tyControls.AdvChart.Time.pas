@@ -30,7 +30,7 @@ unit tyControls.AdvChart.Time;
   else the machine's locale -- so a chart and the calendar beside it cannot
   disagree about what to call March. }
 interface
-uses SysUtils, Math;
+uses SysUtils, Math, fpjson;
 
 type
   { The seven units a tick can be ON, coarsest first. A tick's unit is a
@@ -63,6 +63,82 @@ type
   end;
   TTyTimeTickArray = array of TTyTimeTick;
 
+  { ONE UNIT'S LEVELED TEMPLATES, as upstream's array holds them: level 0
+    first, a level past the end reading the last. Each entry keeps what
+    JavaScript would make of it twice over -- its String() (Texts), which is
+    what the cascade glues to another template, and whether it is falsy
+    (Falsy), which `leveledTplArr[i] || ''` turns into an empty label. A null
+    in an author's array is 'null' to the one and '' to the other.
+    [Batch 104] }
+  TTyTimeTemplates = record
+    Texts: array of string;
+    Falsy: array of Boolean;
+  end;
+
+  { UPSTREAM'S GENERATED DICTIONARY (parseTimeAxisLabelFormatterDictionary):
+    Lists[lowest, upper] for every upper unit at or above the lowest one.
+    A tick that is not on an axis break only ever reads Lists[u, u] with u
+    its own unit -- the rest is what a break tick would read, and is built
+    because the cascade that fills a unit nobody wrote runs through it.
+    Highlight: no unit was written at all, so the default templates carry a
+    second, `{primary|...}` entry for the coarser levels. [Batch 104] }
+  TTyTimeTemplateDict = record
+    Highlight: Boolean;
+    Lists: array[TTyTimeUnit, TTyTimeUnit] of TTyTimeTemplates;
+  end;
+
+  { axisLabel.formatter on a time axis, parsed once per axis the way
+    parseTimeAxisLabelFormatter parses it: a string is one template for every
+    tick, a named handler ('@Name', upstream's function) answers a template,
+    and anything else -- an object, nothing at all, a number -- is the
+    leveled dictionary. [Batch 104] }
+  TTyTimeFormatterKind = (tfkDict, tfkString, tfkHandler);
+  TTyTimeLabelFormatter = record
+    Kind: TTyTimeFormatterKind;
+    { the string, or the handler reference }
+    Template: string;
+    Dict: TTyTimeTemplateDict;
+  end;
+
+{ 'year', 'month', ... 'millisecond': upstream's primary unit names, the keys
+  of the formatter dictionary. }
+function TyTimeUnitName(AUnit: TTyTimeUnit): string;
+
+{ upstream's defaultFormatterSeed: the short template of each unit -- the
+  label a tick in that unit carries when nobody wrote one. }
+function TyTimeSeed(AUnit: TTyTimeUnit): string;
+
+{ THE DICTIONARY FROM THE OPTION. AOption is axisLabel.formatter when it is
+  neither a string nor a function, or nil for none. Upstream's rules, entry by
+  entry:
+    - a unit's entry that is an object is looked into by the upper unit's
+      name; anything else -- a string, an array, a number -- is the entry for
+      every upper unit alike;
+    - an array is copied as written, and its first entry (or '' when it is
+      falsy) is what the units above build on; a string is a list of one;
+    - anything else is the seed, or for an upper unit whose matcher the
+      template so far does not contain, that unit's own first template, a
+      space, and the template so far -- `{yyyy} {MMM} {d}` for a day under a
+      year; and only these get the `{primary|...}` second entry, and only
+      while no unit at all was written. }
+function TyTimeTemplateDict(AOption: TJSONData): TTyTimeTemplateDict;
+
+{ parseTimeAxisLabelFormatter: AFormatter is axisLabel.formatter as written,
+  nil when absent. }
+function TyTimeLabelFormatterOf(AFormatter: TJSONData): TTyTimeLabelFormatter;
+
+{ leveledFormat's lookup: Lists[ALower, AUpper][min(level, count - 1)], or ''
+  where that entry is falsy or the list is empty. }
+function TyTimeLeveledTemplate(const ADict: TTyTimeTemplateDict;
+  ALower, AUpper: TTyTimeUnit; ALevel: Integer): string;
+
+{ The label a tick at AMs carries under a string or dictionary formatter: its
+  template for the tick's own unit and level, expanded. A handler's template
+  comes from the handler, which this pure unit cannot run -- the caller expands
+  what it answers with TyFormatTime. }
+function TyTimeLeveledLabel(const AFormatter: TTyTimeLabelFormatter; AMs: Double;
+  AUnit: TTyTimeUnit; ALevel: Integer; AUTC: Boolean): string;
+
 { The ticks for [AMinMs, AMaxMs], at roughly ASplitNumber of them.
 
   AUTC decides whether the calendar arithmetic runs in UTC or in the machine's
@@ -94,11 +170,20 @@ function TyTimeLabel(const ATick: TTyTimeTick; AUTC: Boolean): string;
 function TyTimeFullLabel(AMs, AMinMs, AMaxMs: Double; ASplitNumber: Integer;
   AUTC: Boolean; AMinInterval, AMaxInterval: Double): string;
 
-// Expand a template. The tokens are upstream's, brace-delimited at both ends:
-//   {yyyy} {yy} {Q} {MMMM} {MMM} {MM} {M} {dd} {d} {eeee} {ee} {e}
-//   {HH} {H} {hh} {h} {mm} {m} {ss} {s} {SSS} {S} {a} {A}
-// Padding follows upstream exactly: the four-digit year is NOT padded, the
-// millisecond pads to three, everything else that pads pads to two.
+// Expand a template: util/time.ts format. The 24 tokens are upstream's,
+// brace-delimited at both ends, and they are replaced ONE AFTER ANOTHER in
+// upstream's order, each over what the ones before left:
+//   {a} {A} {yyyy} {yy} {Q} {MMMM} {MMM} {MM} {M} {dd} {d} {eeee} {ee} {e}
+//   {HH} {H} {hh} {h} {mm} {m} {ss} {s} {SSS} {S}
+// So `{x{yyyy}}` reads `{x2024}` -- the braces round a token are text -- and
+// a token nobody knows is left as written. Padding follows upstream exactly:
+// the four-digit year is NOT padded, the millisecond pads to three, the rest
+// that pads pads to two, and nothing is ever cut. The 12-hour clock is
+// `(H - 1) % 12 + 1` with JavaScript's remainder, so midnight is 0.
+//
+// AMs is rounded as parseDate rounds a number (half up). Not a number or an
+// infinity is upstream's invalid date: every number `NaN`, every name
+// `undefined`, and `am` / `AM`.
 //
 // Line comments rather than a brace block, here and wherever else a token is
 // quoted: FPC nests brace comments, so one of these inside one would swallow
@@ -108,7 +193,8 @@ function TyFormatTime(AMs: Double; const ATemplate: string;
 
 implementation
 
-uses tyControls.AdvChart.Data, tyControls.StrConsts;
+uses tyControls.AdvChart.Data, tyControls.AdvChart.Handlers,
+  tyControls.StrConsts;
 
 const
   cOneSecond = 1000.0;
@@ -190,8 +276,18 @@ type
   asked about exactly twice -- here, and in the inverse -- and never inside a
   loop, which also keeps FPC 3.2.2's offset-for-NOW approximation from
   compounding: it is applied once per value, not once per step. }
+{ Math.round: half towards plus infinity. FPC's Round is the banker's, which
+  reads 2.5 ms as 2 where upstream's parseDate reads 3. [Batch 104] }
+function JsRoundMs(AMs: Double): Double;
+begin
+  Result := Int(AMs);
+  if Result > AMs then Result := Result - 1;
+  if AMs - Result >= 0.5 then Result := Result + 1;
+end;
+
 function WallOf(AMs: Double; AUTC: Boolean): Int64;
 begin
+  AMs := JsRoundMs(AMs);
   if AUTC then Exit(Round(AMs));
   { Shift to local, then read the shifted stamp AS IF it were UTC. }
   Result := Round(TyDateTimeToMs(TyMsToDateTime(AMs, False), True));
@@ -739,68 +835,344 @@ function TyFormatTime(AMs: Double; const ATemplate: string;
   AUTC: Boolean): string;
 var
   p: TTyTimeParts;
-  i, j: Integer;
-  tok, rep: string;
   dow, h12: Integer;
+  ok: Boolean;
+  txt, bad: string;
+
+  { one token, everywhere, over what the earlier ones left }
+  procedure Sub(const AToken, AValue: string);
+  begin
+    txt := StringReplace(txt, '{' + AToken + '}', AValue, [rfReplaceAll]);
+  end;
+
+  { the number when there is a date, upstream's NaN when there is not }
+  function N(AValue: Integer): string;
+  begin
+    if ok then Result := IntToStr(AValue) else Result := bad;
+  end;
+
+  function NPad(AValue, ALen: Integer): string;
+  begin
+    if ok then Result := Pad(IntToStr(AValue), ALen) else Result := bad;
+  end;
+
+begin
+  txt := ATemplate;
+  bad := 'NaN';
+  ok := not (IsNan(AMs) or IsInfinite(AMs));
+  p := Default(TTyTimeParts);
+  dow := 0;
+  h12 := 0;
+  if ok then
+  begin
+    p := PartsOf(AMs, AUTC);
+    { Sunday is NOUGHT, which is JS' reckoning and one less than the RTL's. }
+    dow := (DayOfWeek(cEpochDT + DayNumberOf(AMs, AUTC)) - 1) mod 7;
+    { JavaScript's remainder keeps the sign: midnight is (-1) % 12 + 1 = 0 }
+    h12 := (p.Hour - 1) mod 12 + 1;
+  end;
+  { THE ORDER IS UPSTREAM'S and it is the whole rule: a chain of
+    replacements, each over what the ones before left. The am/pm pair goes
+    FIRST -- `NaN >= 12` is false, so an invalid date is am. }
+  if ok and (p.Hour >= 12) then
+  begin
+    Sub('a', 'pm');
+    Sub('A', 'PM');
+  end
+  else
+  begin
+    Sub('a', 'am');
+    Sub('A', 'AM');
+  end;
+  Sub('yyyy', N(p.Year));
+  Sub('yy', NPad(p.Year mod 100, 2));
+  Sub('Q', N((p.Month - 1) div 3 + 1));
+  if ok then
+  begin
+    Sub('MMMM', MonthFull(p.Month));
+    Sub('MMM', MonthAbbr(p.Month));
+  end
+  else
+  begin
+    Sub('MMMM', 'undefined');
+    Sub('MMM', 'undefined');
+  end;
+  Sub('MM', NPad(p.Month, 2));
+  Sub('M', N(p.Month));
+  Sub('dd', NPad(p.Day, 2));
+  Sub('d', N(p.Day));
+  if ok then
+  begin
+    Sub('eeee', DowFull(dow));
+    Sub('ee', DowAbbr(dow));
+  end
+  else
+  begin
+    Sub('eeee', 'undefined');
+    Sub('ee', 'undefined');
+  end;
+  Sub('e', N(dow));
+  Sub('HH', NPad(p.Hour, 2));
+  Sub('H', N(p.Hour));
+  Sub('hh', NPad(h12, 2));
+  Sub('h', N(h12));
+  Sub('mm', NPad(p.Minute, 2));
+  Sub('m', N(p.Minute));
+  Sub('ss', NPad(p.Second, 2));
+  Sub('s', N(p.Second));
+  Sub('SSS', NPad(p.Milli, 3));
+  Sub('S', N(p.Milli));
+  Result := txt;
+end;
+
+{ ==================== the leveled formatter ==================== }
+
+const
+  cUnitNames: array[TTyTimeUnit] of string = (
+    'year', 'month', 'day', 'hour', 'minute', 'second', 'millisecond');
+  { UPSTREAM'S SHORT SEEDS, one per unit. They are short on purpose: an axis
+    reads as a sequence because each tick says only what its neighbours do
+    not. Hour and minute share a template, which is upstream's and not a
+    slip. }
+  cSeed: array[TTyTimeUnit] of string = (
+    '{yyyy}',              // year
+    '{MMM}',               // month
+    '{d}',                 // day
+    '{HH}:{mm}',           // hour
+    '{HH}:{mm}',           // minute
+    '{HH}:{mm}:{ss}',      // second
+    '{HH}:{mm}:{ss} {SSS}' // millisecond
+  );
+
+function TyTimeUnitName(AUnit: TTyTimeUnit): string;
+begin
+  Result := cUnitNames[AUnit];
+end;
+
+function TyTimeSeed(AUnit: TTyTimeUnit): string;
+begin
+  Result := cSeed[AUnit];
+end;
+
+{ primaryTimeUnitFormatterMatchers: does the template already name this unit }
+function NamesUnit(AUnit: TTyTimeUnit; const ATemplate: string): Boolean;
+
+  function Has(const AToken: string): Boolean;
+  begin
+    Result := Pos('{' + AToken + '}', ATemplate) > 0;
+  end;
+
+begin
+  case AUnit of
+    ttuYear: Result := Has('yyyy') or Has('yy');
+    ttuMonth: Result := Has('MMMM') or Has('MMM') or Has('MM') or Has('M');
+    ttuDay: Result := Has('dd') or Has('d');
+    ttuHour: Result := Has('HH') or Has('H') or Has('hh') or Has('h');
+    ttuMinute: Result := Has('mm') or Has('m');
+    ttuSecond: Result := Has('ss') or Has('s');
+  else
+    Result := Has('SSS') or Has('S');
+  end;
+end;
+
+{ A NAMED HANDLER IS A FUNCTION, and zrender's isObject says yes to a
+  function: an entry that is one is looked into like an object (and has no
+  keys), never read as a template. }
+function IsFunctionRef(AData: TJSONData): Boolean;
+begin
+  Result := (AData <> nil) and (AData.JSONType = jtString)
+    and TyChartIsHandlerRef(AData.AsString);
+end;
+
+function Nullish(AData: TJSONData): Boolean;
+begin
+  Result := (AData = nil) or (AData.JSONType = jtNull);
+end;
+
+{ JavaScript's String() of an option value, and whether it is falsy }
+procedure JsTextOf(AData: TJSONData; out AText: string; out AFalsy: Boolean);
+var i: Integer; s: string; f: Boolean;
+begin
+  AText := '';
+  AFalsy := True;
+  if Nullish(AData) then
+  begin
+    AText := 'null';
+    Exit;
+  end;
+  case AData.JSONType of
+    jtString:
+      begin
+        AText := AData.AsString;
+        AFalsy := AText = '';
+      end;
+    jtNumber:
+      begin
+        AText := TyChartValueText(AData.AsFloat);
+        AFalsy := AData.AsFloat = 0;
+      end;
+    jtBoolean:
+      begin
+        AFalsy := not AData.AsBoolean;
+        if AData.AsBoolean then AText := 'true' else AText := 'false';
+      end;
+    jtArray:
+      begin
+        { join(','), a null as nothing }
+        AFalsy := False;
+        for i := 0 to AData.Count - 1 do
+        begin
+          if i > 0 then AText := AText + ',';
+          if not Nullish(AData.Items[i]) then
+          begin
+            JsTextOf(AData.Items[i], s, f);
+            AText := AText + s;
+          end;
+        end;
+      end;
+  else
+    begin
+      AText := '[object Object]';
+      AFalsy := False;
+    end;
+  end;
+end;
+
+procedure AddTemplate(var AList: TTyTimeTemplates; const AText: string;
+  AFalsy: Boolean);
+var n: Integer;
+begin
+  n := Length(AList.Texts);
+  SetLength(AList.Texts, n + 1);
+  SetLength(AList.Falsy, n + 1);
+  AList.Texts[n] := AText;
+  AList.Falsy[n] := AFalsy;
+end;
+
+function TyTimeTemplateDict(AOption: TJSONData): TTyTimeTemplateDict;
+var
+  lu, uu, u: TTyTimeUnit;
+  uo, item: TJSONData;
+  lower, s: string;
+  hasLower, falsy: Boolean;
+  lst: TTyTimeTemplates;
+  i: Integer;
+
+  { dictOption[unit]: only an object has keys }
+  function UnitEntry(AUnit: TTyTimeUnit): TJSONData;
+  begin
+    Result := nil;
+    if AOption is TJSONObject then
+      Result := TJSONObject(AOption).Find(cUnitNames[AUnit]);
+  end;
+
+begin
+  Result := Default(TTyTimeTemplateDict);
+  { NOT ONE UNIT WRITTEN, or the primary is not added anywhere: an author
+    who wrote `day` may have written their own rich tags into it. A null is
+    not written; `none` is no unit. }
+  Result.Highlight := True;
+  for u := Low(TTyTimeUnit) to High(TTyTimeUnit) do
+    if not Nullish(UnitEntry(u)) then Result.Highlight := False;
+
+  for lu := Low(TTyTimeUnit) to High(TTyTimeUnit) do
+  begin
+    uo := UnitEntry(lu);
+    hasLower := False;
+    lower := '';
+    { FROM THE UNIT ITSELF UP TO THE YEAR, carrying the template so far }
+    for uu := lu downto Low(TTyTimeUnit) do
+    begin
+      if ((uo is TJSONObject) or IsFunctionRef(uo)) and not (uo is TJSONArray) then
+      begin
+        item := nil;
+        if uo is TJSONObject then item := TJSONObject(uo).Find(cUnitNames[uu]);
+      end
+      else
+        item := uo;
+      lst := Default(TTyTimeTemplates);
+      if item is TJSONArray then
+      begin
+        for i := 0 to item.Count - 1 do
+        begin
+          JsTextOf(item.Items[i], s, falsy);
+          AddTemplate(lst, s, falsy);
+        end;
+        { `tplArr[0] || ''` }
+        if (Length(lst.Texts) = 0) or lst.Falsy[0] then lower := ''
+        else lower := lst.Texts[0];
+        hasLower := True;
+      end
+      else if (item <> nil) and (item.JSONType = jtString)
+        and not IsFunctionRef(item) then
+      begin
+        lower := item.AsString;
+        hasLower := True;
+        AddTemplate(lst, lower, lower = '');
+      end
+      else
+      begin
+        if not hasLower then
+        begin
+          lower := cSeed[lu];
+          hasLower := True;
+        end
+        else if not NamesUnit(uu, lower) then
+        begin
+          { THE UPPER UNIT'S OWN FIRST TEMPLATE, a space, and the template so
+            far -- `undefined` when that list is empty, as `[][0] + ' '` is }
+          if Length(Result.Lists[uu, uu].Texts) = 0 then s := 'undefined'
+          else s := Result.Lists[uu, uu].Texts[0];
+          lower := s + ' ' + lower;
+        end;
+        AddTemplate(lst, lower, lower = '');
+        if Result.Highlight then
+          AddTemplate(lst, '{primary|' + lower + '}', False);
+      end;
+      Result.Lists[lu, uu] := lst;
+    end;
+  end;
+end;
+
+function TyTimeLabelFormatterOf(AFormatter: TJSONData): TTyTimeLabelFormatter;
+begin
+  Result := Default(TTyTimeLabelFormatter);
+  if (AFormatter <> nil) and (AFormatter.JSONType = jtString) then
+  begin
+    Result.Template := AFormatter.AsString;
+    if TyChartIsHandlerRef(Result.Template) then Result.Kind := tfkHandler
+    else Result.Kind := tfkString;
+    Exit;
+  end;
+  { `dictOption || {}`: nothing, null, a number, an array -- all the
+    defaults }
+  Result.Kind := tfkDict;
+  Result.Dict := TyTimeTemplateDict(AFormatter);
+end;
+
+function TyTimeLeveledTemplate(const ADict: TTyTimeTemplateDict;
+  ALower, AUpper: TTyTimeUnit; ALevel: Integer): string;
+var n, i: Integer;
 begin
   Result := '';
-  if IsNan(AMs) or IsInfinite(AMs) then Exit(ATemplate);
-  p := PartsOf(AMs, AUTC);
-  { Sunday is NOUGHT, which is JS' reckoning and one less than the RTL's. }
-  dow := (DayOfWeek(cEpochDT + DayNumberOf(AMs, AUTC)) - 1) mod 7;
-  h12 := (p.Hour - 1) mod 12 + 1;
+  n := Length(ADict.Lists[ALower, AUpper].Texts);
+  { an empty list reads [-1]: undefined, and `|| ''` }
+  if n = 0 then Exit;
+  i := Min(ALevel, n - 1);
+  if i < 0 then i := 0;
+  if ADict.Lists[ALower, AUpper].Falsy[i] then Exit;
+  Result := ADict.Lists[ALower, AUpper].Texts[i];
+end;
 
-  i := 1;
-  { ONE LEFT-TO-RIGHT SCAN, not a chain of replacements: a chain re-reads what
-    it has already written, so a month name containing a brace would be
-    rewritten by a later token. }
-  while i <= Length(ATemplate) do
-  begin
-    if ATemplate[i] <> '{' then
-    begin
-      Result := Result + ATemplate[i];
-      Inc(i);
-      Continue;
-    end;
-    j := i + 1;
-    while (j <= Length(ATemplate)) and (ATemplate[j] <> '}') do Inc(j);
-    if j > Length(ATemplate) then
-    begin
-      Result := Result + Copy(ATemplate, i, MaxInt);
-      Break;
-    end;
-    tok := Copy(ATemplate, i + 1, j - i - 1);
-    rep := '';
-    if tok = 'yyyy' then rep := IntToStr(p.Year)
-    else if tok = 'yy' then rep := Pad(IntToStr(p.Year mod 100), 2)
-    else if tok = 'Q' then rep := IntToStr((p.Month - 1) div 3 + 1)
-    else if tok = 'MMMM' then rep := MonthFull(p.Month)
-    else if tok = 'MMM' then rep := MonthAbbr(p.Month)
-    else if tok = 'MM' then rep := Pad(IntToStr(p.Month), 2)
-    else if tok = 'M' then rep := IntToStr(p.Month)
-    else if tok = 'dd' then rep := Pad(IntToStr(p.Day), 2)
-    else if tok = 'd' then rep := IntToStr(p.Day)
-    else if tok = 'eeee' then rep := DowFull(dow)
-    else if tok = 'ee' then rep := DowAbbr(dow)
-    else if tok = 'e' then rep := IntToStr(dow)
-    else if tok = 'HH' then rep := Pad(IntToStr(p.Hour), 2)
-    else if tok = 'H' then rep := IntToStr(p.Hour)
-    else if tok = 'hh' then rep := Pad(IntToStr(h12), 2)
-    else if tok = 'h' then rep := IntToStr(h12)
-    else if tok = 'mm' then rep := Pad(IntToStr(p.Minute), 2)
-    else if tok = 'm' then rep := IntToStr(p.Minute)
-    else if tok = 'ss' then rep := Pad(IntToStr(p.Second), 2)
-    else if tok = 's' then rep := IntToStr(p.Second)
-    else if tok = 'SSS' then rep := Pad(IntToStr(p.Milli), 3)
-    else if tok = 'S' then rep := IntToStr(p.Milli)
-    else if tok = 'a' then begin if p.Hour >= 12 then rep := 'pm' else rep := 'am'; end
-    else if tok = 'A' then begin if p.Hour >= 12 then rep := 'PM' else rep := 'AM'; end
-    else
-      { Not a token this understands -- left alone, braces and all, rather than
-        swallowed. }
-      rep := '{' + tok + '}';
-    Result := Result + rep;
-    i := j + 1;
+function TyTimeLeveledLabel(const AFormatter: TTyTimeLabelFormatter; AMs: Double;
+  AUnit: TTyTimeUnit; ALevel: Integer; AUTC: Boolean): string;
+begin
+  case AFormatter.Kind of
+    tfkString, tfkHandler:
+      Result := TyFormatTime(AMs, AFormatter.Template, AUTC);
+  else
+    Result := TyFormatTime(AMs,
+      TyTimeLeveledTemplate(AFormatter.Dict, AUnit, AUnit, ALevel), AUTC);
   end;
 end;
 
@@ -834,19 +1206,6 @@ begin
 end;
 
 function TyTimeLabel(const ATick: TTyTimeTick; AUTC: Boolean): string;
-const
-  { UPSTREAM'S SHORT SEEDS, one per unit. They are short on purpose: an axis
-    reads as a sequence because each tick says only what its neighbours do not.
-    Hour and minute share a template, which is upstream's and not a slip. }
-  cSeed: array[TTyTimeUnit] of string = (
-    '{yyyy}',              // year
-    '{MMM}',               // month
-    '{d}',                 // day
-    '{HH}:{mm}',           // hour
-    '{HH}:{mm}',           // minute
-    '{HH}:{mm}:{ss}',      // second
-    '{HH}:{mm}:{ss} {SSS}' // millisecond
-  );
 begin
   Result := TyFormatTime(ATick.Value, cSeed[ATick.Unit_], AUTC);
 end;

@@ -515,7 +515,7 @@ uses
   tyControls.AdvChart.AxisLabels, tyControls.AdvChart.Handlers,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Color,
   tyControls.AdvChart.JsMath, tyControls.AdvChart.Marker,
-  tyControls.AdvChart.Labels;
+  tyControls.AdvChart.Labels, tyControls.AdvChart.RichText;
 
 const
   { GridModel's defaultOption. Percentages are of the FULL container extent, not
@@ -1396,6 +1396,51 @@ begin
   b.Style.Fill := TTyChartColor(AColour);
   Result := TyRtLay(AText, b, TyRtDefaultOf(False, 0, False, 0, False, AH, AV),
     ASpec.RtScale, AMeasurer);
+end;
+
+{ THE TIME AXIS' LABEL BLOCK [Batch 104]: the author's axisLabel over the time
+  axis' own default, `rich: { primary: { fontWeight: 'bold' } }`
+  (coord/axisDefault.ts) -- the weight the skin's primary label rule gives,
+  bold where it gives none. A tag the author, the root textStyle and the label
+  all leave without a colour takes the skin's primary colour where it has one:
+  upstream's falls to the label's own, and the label's own here is the skin's.
+
+  An author's `rich` that is there and not an object -- false, null -- keeps
+  the default out: the model's merge never overwrites a key the option has, so
+  upstream's labels then have no rich at all. }
+function TimeAxisRtOf(ANode: TJSONObject; const AText: TTyAxisTextStyle;
+  AHasLabelColour: Boolean): TTyRtBlockStyle;
+var
+  def, rich, prim: TJSONObject;
+  d: TJSONData;
+  i: Integer;
+begin
+  def := TJSONObject.Create;
+  try
+    d := FindIn(ANode, 'rich');
+    if (d = nil) or (d is TJSONObject) then
+    begin
+      prim := TJSONObject.Create;
+      if AText.EmphasisFontWeight > 0 then
+        prim.Add('fontWeight', AText.EmphasisFontWeight)
+      else
+        prim.Add('fontWeight', 'bold');
+      rich := TJSONObject.Create;
+      rich.Add('primary', prim);
+      def.Add('rich', rich);
+    end;
+    Result := TyRtResolve([ANode, def], AText.RtGlobal, TyRtResolveOpt(False));
+  finally
+    def.Free;
+  end;
+  if AText.HasEmphasisColour and not AHasLabelColour then
+    for i := 0 to High(Result.Rich) do
+      if (Result.Rich[i].Name = 'primary') and not Result.Rich[i].Style.HasFill then
+      begin
+        Result.Rich[i].Style.HasFill := True;
+        Result.Rich[i].Style.FillInherit := False;
+        Result.Rich[i].Style.Fill := TTyChartColor(AText.EmphasisColour);
+      end;
 end;
 
 { axisLabel.formatter, when it is a string. }
@@ -3088,8 +3133,8 @@ var
     q, kept: Integer;
     lbl, wd: TJSONData;
     ovf: string;
-    isTime: Boolean;
-    tt: TTyTimeTick;
+    isTime, marked: Boolean;
+    tfmt: TTyTimeLabelFormatter;
   begin
     ASpec := Default(TTyAxisLayoutSpec);
     ASpec.Side := AAxis.Side;
@@ -3247,43 +3292,39 @@ var
     begin
       SetLength(ASpec.LabelNotNice, Length(ticks));
       SetLength(ASpec.LabelLevel, Length(ticks));
-      SetLength(ASpec.LabelEmphasis, Length(ticks));
-      { its coarse ticks are the ones that carry the weight }
-      ASpec.EmphasisFontWeight := AText.EmphasisFontWeight;
+      { parseTimeAxisLabelFormatter, once per axis [Batch 104] }
+      tfmt := TyTimeLabelFormatterOf(FindIn(ObjOf(FindIn(ANode, 'axisLabel')),
+        'formatter'));
     end;
+    marked := False;
     kept := 0;
     for q := 0 to High(ticks) do
     begin
       if ticks[q].Level <> 0 then Continue;
       if isTime then
       begin
-        tt.Value := ticks[q].Value;
-        tt.Unit_ := ticks[q].TimeUnit;
-        tt.Level := ticks[q].TimeLevel;
-        tt.NotNice := ticks[q].NotNice;
         { A NAMED HANDLER ANSWERS A TEMPLATE, not the text: upstream's
           leveledFormat runs whatever the function returns through the same
           time format a string formatter goes through. A string formatter is
-          that template for every level. }
-        if AFurn.HasLabelFormatter and TyChartIsHandlerRef(AFurn.LabelFormatter) then
+          that template for every level; the dictionary (the default too)
+          gives each tick the template of its own unit at its own level --
+          `{primary|Feb}` among the days, where nobody wrote a unit.
+          [Batch 104] }
+        if tfmt.Kind = tfkHandler then
           ASpec.Labels[kept] := TyFormatTime(ticks[q].Value,
-            TyChartRunHandler(AFurn.LabelFormatter, TyChartOneParams(
+            TyChartRunHandler(tfmt.Template, TyChartOneParams(
               AxisLabelParams(AAxis, ticks[q].Value, q, '', True,
               ticks[q].TimeLevel))), TTyTimeScale(AAxis.Scale).UTC)
-        else if AFurn.HasLabelFormatter then
-          ASpec.Labels[kept] := TyFormatTime(ticks[q].Value, AFurn.LabelFormatter,
-            TTyTimeScale(AAxis.Scale).UTC)
         else
-          ASpec.Labels[kept] := TyTimeLabel(tt, TTyTimeScale(AAxis.Scale).UTC);
+          ASpec.Labels[kept] := TyTimeLeveledLabel(tfmt, ticks[q].Value,
+            ticks[q].TimeUnit, ticks[q].TimeLevel, TTyTimeScale(AAxis.Scale).UTC);
+        if TyRtHasMarkup(ASpec.Labels[kept]) then marked := True;
         { THE TWO RAGGED ENDS. The extent of a time axis is the data's own,
           never rounded outwards, so its first and last ticks are wherever
           the data happens to start and stop; labelling those puts a `07:13`
           hard against the first round hour -- unless the author asks. }
         ASpec.LabelNotNice[kept] := ticks[q].NotNice;
         ASpec.LabelLevel[kept] := ticks[q].TimeLevel;
-        { Every level above the finest is emphasised, which is what makes an
-          axis read `12 13 14 Feb 2 3` rather than as six equal numbers. }
-        ASpec.LabelEmphasis[kept] := ticks[q].TimeLevel >= 1;
       end
       else
         { UPSTREAM'S getLabel, grouped and to the tick's own decimals --
@@ -3328,7 +3369,19 @@ var
     begin
       SetLength(ASpec.LabelNotNice, kept);
       SetLength(ASpec.LabelLevel, kept);
-      SetLength(ASpec.LabelEmphasis, kept);
+      { A TIME AXIS' LABELS ARE ALWAYS RICH upstream -- its defaults carry
+        `rich.primary` -- so a tag in one is a style and not text. The block
+        is needed where a label holds a tag, or the author asked for a box;
+        a label with neither lays out the same either way and keeps the
+        one-run caption. [Batch 104] }
+      ASpec.LabelRt := TimeAxisRtOf(ObjOf(FindIn(ANode, 'axisLabel')), AText,
+        ASpec.HasLabelColour);
+      ASpec.LabelRt.Needed := marked
+        or TyRtNodeWantsBlock(ObjOf(FindIn(ANode, 'axisLabel')));
+      ASpec.LabelMeter := nil;
+      if ASpec.LabelRt.Needed then
+        ASpec.LabelMeter := TyRtBlockMeasurer(AMeasurer, ASpec.LabelRt,
+          ASpec.RtGlobal, ASpec.RtScale);
     end;
   end;
 
@@ -3495,14 +3548,10 @@ begin
         for i := 0 to High(gb.FSpecs[t].Placements) do
           if gb.FSpecs[t].Placements[i].Shown then
           begin
-            if gb.FSpecs[t].Placements[i].Emphasis
-              and (gb.FSpecs[t].EmphasisFontWeight > 0) then
-              j := gb.FSpecs[t].EmphasisFontWeight
-            else
-              j := gb.FSpecs[t].FontWeight;
             gb.FSpecs[t].Placements[i].Rt := AxisRtPieces(gb.FSpecs[t],
               gb.FSpecs[t].LabelRt, gb.FSpecs[t].Placements[i].Text,
-              gb.FSpecs[t].FontName, gb.FSpecs[t].FontSizeLogical, j,
+              gb.FSpecs[t].FontName, gb.FSpecs[t].FontSizeLogical,
+              gb.FSpecs[t].FontWeight,
               gb.FSpecs[t].HasLabelColour, gb.FSpecs[t].LabelColour,
               gb.FSpecs[t].Placements[i].AnchorH,
               gb.FSpecs[t].Placements[i].AnchorV, AMeasurer);

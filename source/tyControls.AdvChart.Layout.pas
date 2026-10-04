@@ -239,11 +239,17 @@ type
     FontName: string;
     FontSizeLogical: Integer;
     FontWeight: Integer;
-    { The weight an EMPHASISED label is drawn in -- a time axis' coarse
-      ticks. Resolved from the theme by the caller, like everything else in
-      this record, because a weight is a visual value and this library does
-      not put those in control code. }
+    { THE TIME AXIS' `rich.primary`, from the skin: the weight (and the
+      colour, where the skin gives one) its coarse ticks' `{primary|...}`
+      tags are drawn in -- upstream's default is `fontWeight: 'bold'`. An
+      author's axisLabel.rich.primary is laid over it. Resolved from the theme
+      by the caller, like everything else in this record, because these are
+      visual values and this library does not put those in control code.
+      [Revised in batch 104: the weight of a whole label marked emphasised;
+      now the default of a rich style, so only the tagged part is heavier.] }
     EmphasisFontWeight: Integer;
+    HasEmphasisColour: Boolean;
+    EmphasisColour: Cardinal;
     LabelMarginLogical: Double;
     TickLengthLogical: Double;
     NameGapLogical: Double;
@@ -297,10 +303,6 @@ type
     { a category axis' end that the interval did not land on }
     OffInterval: Boolean;
     Shown: Boolean;
-    { Drawn in the heavier weight. Carried on the PLACEMENT and not looked up
-      again at paint time, because the measurement that reserved room for this
-      label was made in that same weight. }
-    Emphasis: Boolean;
     { THE LABEL'S MATRIX AS ZRENDER ENDS UP WITH IT: the axis group's times
       the label's own turn, decomposed into props and recomposed from them --
       which is not the turn asked for, by a few units in the last place, and
@@ -510,12 +512,6 @@ type
     { A time label's level, which is its priority under hideOverlap: the
       coarser ticks are kept first. }
     LabelLevel: TTyIntegerArray;
-    { Which labels carry the heavier weight: on a time axis the coarse ticks,
-      the ones that say `Mar` among a run of day numbers. }
-    LabelEmphasis: TTyBoolArray;
-    { The weight those get. Nought means the spec's own weight, so an axis
-      that marks no label for emphasis need not name one. }
-    EmphasisFontWeight: Integer;
     { THE RULES THIS AXIS' LABELS ARE PICKED BY. Only a category axis is
       thinned by index; upstream never drops a value, log or time label for its
       position, only for crowding.
@@ -1278,14 +1274,6 @@ begin
   else Result := AMeasurer;
 end;
 
-function WeightAt(const ASpec: TTyAxisLayoutSpec; AIndex: Integer): Integer;
-begin
-  Result := ASpec.FontWeight;
-  if (ASpec.EmphasisFontWeight > 0) and (AIndex >= 0)
-    and (AIndex <= High(ASpec.LabelEmphasis)) and ASpec.LabelEmphasis[AIndex]
-    then Result := ASpec.EmphasisFontWeight;
-end;
-
 { ONE LABEL'S BOX, as zrender holds it: the text's box hung by its anchor,
   with axisLabel.textMargin round it (AMargin) and without (ABare), placed by
   the label's point and turn. The end rules weigh the bare one unless the
@@ -1296,7 +1284,7 @@ procedure LabelBoxes(const ASpec: TTyAxisLayoutSpec;
 var w, h, x0, y0, padH, padV: Double;
 begin
   LabelMeterOf(ASpec, AMeasurer).MeasureLine(APlace.Text, ASpec.FontName,
-    ASpec.FontSizeLogical, WeightAt(ASpec, APlace.Index), w, h);
+    ASpec.FontSizeLogical, ASpec.FontWeight, w, h);
   { zrender's adjustTextX / adjustTextY }
   x0 := 0;
   case APlace.AnchorH of
@@ -1412,11 +1400,12 @@ begin
   SetLength(AAlongEach, Length(ASpec.Labels));
   for i := 0 to High(ASpec.Labels) do
   begin
-    { MEASURED IN THE WEIGHT IT WILL BE DRAWN IN. Bold is wider, and a label
-      measured light and drawn bold is how an axis comes to overlap the one
-      thing the measuring was for. }
+    { MEASURED AS IT WILL BE DRAWN: a time axis' `{primary|...}` part is
+      bold, and the label meter lays the tags out in their own weight -- a
+      label measured light and drawn bold is how an axis comes to overlap the
+      one thing the measuring was for. }
     LabelMeterOf(ASpec, AMeasurer).MeasureLine(ASpec.Labels[i], ASpec.FontName,
-      ASpec.FontSizeLogical, WeightAt(ASpec, i), w, h);
+      ASpec.FontSizeLogical, ASpec.FontWeight, w, h);
     RotatedExtent(w, h, ASpec.RotationRad, rw, rh);
     if horiz then
     begin
@@ -2354,9 +2343,6 @@ begin
     Result[i].Built := False;
     Result[i].OffInterval := False;
     Result[i].Shown := False;
-    Result[i].Emphasis := (ASpec.EmphasisFontWeight > 0)
-                          and (i <= High(ASpec.LabelEmphasis))
-                          and ASpec.LabelEmphasis[i];
     { THE ANCHOR POINT is the side's business; WHICH POINT OF THE TEXT sits
       on it is AnchorsFor's, for all four alike. }
     Result[i].AnchorH := ah;

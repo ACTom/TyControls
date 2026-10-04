@@ -3551,13 +3551,13 @@ TDateTime 从 1899-12-30 起算、之前是负数,**钳在 0 看着像地板,其
 
 ### 这一批没做的
 
-- `axisLabel.formatter`(字符串 / 回调 / 按单位的字典)——默认模板已经全套,
+- **[第 104 批：字符串（§117 先接上）、句柄（§117）、按单位的字典（含数组按级别、级联、`{primary|}`）都按上游接上了，见 §139。]** `axisLabel.formatter`(字符串 / 回调 / 按单位的字典)——默认模板已经全套,
   用户自定义模板接口留给「标签格式化」那一行。
-- 上游的 `{primary|...}` 富文本。端口用一个独立 typeKey
+- **[第 104 批：推翻。「效果一样」不成立——上游只有标了 `{primary|}` 的那一段加粗，作者写了字符串或任何一个单位的字典就不加；作者的 `axisLabel.rich.primary` 也该生效。现在是真的富文本：时间轴默认的 `rich.primary` 由 `TyAdvChartAxisLabelPrimary` 给字重（和颜色），作者的盖在上面；整条标签加粗的做法删掉。见 §139。]** 上游的 `{primary|...}` 富文本。端口用一个独立 typeKey
   `TyAdvChartAxisLabelPrimary` 代替:效果一样,而且皮肤能改。
-- ECharts 自己的 locale registry。月名走的是本库的三级规则(见上),
+- **[第 104 批：维持，理由仍成立；在 §139 重新核过。上游在浏览器里看 `navigator.language`，中文环境本来也是中文月名，本库的三级规则是同一类做法。]** ECharts 自己的 locale registry。月名走的是本库的三级规则(见上),
   和日历共用——这是有意的偏离。
-- 断轴上的 `upperTimeUnit`(断轴本身还没做)、`axisPointer`/`tooltip` 上的时间
+- **[第 104 批：`axisPointer` 标签和轴 tooltip 的表头改走 `TimeScale.getLabel`（以前用的是刻度的短模板，表头只写一个 `2`），轴触发下字符串 `tooltip.formatter` 先过时间模板；断轴的 `upperTimeUnit` 仍然没有（断轴没做，字典的跨单位项已经建好）。见 §139。]** 断轴上的 `upperTimeUnit`(断轴本身还没做)、`axisPointer`/`tooltip` 上的时间
   格式(那两行还没到)。
 - `hideOverlap`。**上游默认也不开**,所以「Feb 和 2 挤在一起」是忠实的;
   真要按测量去碰撞归到「标签去碰撞」那一行。
@@ -9588,3 +9588,107 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 ### 下一批
 
 （按路线图）
+
+## 139. Tier 1 第一百零四批：时间轴 formatter（B7，2026-10-05）
+
+路线图 B7：时间轴的字符串模板（24 个 token）、按级别的对象形式和它的级联、`{primary|}` 走富文本。§52 把这三件事都留下了：对象形式完全不读（写了也是默认模板）；`{primary|...}` 用一个独立 typeKey 给「整条标签加粗」代替，并且声称「效果一样」；`axisPointer` / `tooltip` 上的时间格式「那两行还没到」。§117 接上了字符串和句柄，但用的 `TyFormatTime` 是自己写的单趟扫描，不是上游的替换链。这一批对着 `util/time.ts` 逐行核过，在真 dist 上跑基准，全部按上游补齐；§52 的四条在原处标注。
+
+### 上游的做法（`util/time.ts` 的 `format` / `leveledFormat` / `parseTimeAxisLabelFormatter` / `parseTimeAxisLabelFormatterDictionary` / `getUnitFromValue` / `pad`、`coord/axisHelper.ts` 的 `makeLabelFormatter`、`scale/Time.ts` 的 `getLabel` / `getFormattedLabel` / `createIntervalTicks`、`coord/axisDefault.ts` 的 `timeAxis`、`component/tooltip/TooltipView.ts` 的字符串 formatter 分支、`axisPointer/viewHelper.ts` 的 `getValueLabel`、`util/format.ts` 的 `makeValueReadable`、`util/number.ts` 的 `parseDate`、`core/locale.ts` 的 `SYSTEM_LANG`、zrender `Text._updateSubTexts` 逐行核过）
+
+- **24 个 token，一条替换链**：`{a} {A} {yyyy} {yy} {Q} {MMMM} {MMM} {MM} {M} {dd} {d} {eeee} {ee} {e} {HH} {H} {hh} {h} {mm} {m} {ss} {s} {SSS} {S}`，按这个顺序每个 `replace(/{x}/g, …)` 作用在前一个留下的结果上。花括号是 token 的一部分，所以 `{x{yyyy}}` 读作 `{x2024}`（端口以前的单趟扫描把 `{x{yyyy}` 当成一个不认识的 token，整段原样留下）；不认识的 token 原样留下；替换值里只有数字、`am`/`pm`、月名周名，造不出新 token，**顺序在英文名下看不出来**（变异测试确认，见下）。模板里的 `$&`、`$1` 是普通文字。
+- **补零**：`pad` 是 `'0000'.substr(0, len - s.length) + s`，只补不截；`{yyyy}` 不补（公元 5 年是 `5`），`{yy}` 是 `pad(y % 100, 2)`，`{SSS}` 补到三位，其余补零的补到两位。
+- **12 小时制**：`h = (H - 1) % 12 + 1`，JS 的余数带符号，**午夜是 0**（`{h}` 为 `0`，`{hh}` 为 `00`），中午是 12；`{a}` 是 `H >= 12 ? 'pm' : 'am'`，`{A}` 大写。`{e}` 从星期日 0 起；`{Q}` 是 `floor((M − 1) / 3) + 1`。
+- **时刻**：`parseDate` 对数字是 `new Date(Math.round(v))`——**半数向上**（`1.5 → 2`、`2.5 → 3`、`−0.5 → 0`）。NaN、±Infinity 是无效日期：所有数字成 `NaN`（补零也不改它），月名周名是 `undefined`，`{a}` 是 `am`（`NaN >= 12` 为假）。
+- **名字**：`format` 取 locale 模型的 `time.month` / `monthAbbr` / `dayOfWeek` / `dayOfWeekAbbr`；默认 locale 是 `SYSTEM_LANG`——node 里是 EN，浏览器里看 `document.documentElement.lang || navigator.language`，含 `ZH` 就是中文名。
+- **`makeLabelFormatter` 对时间轴**：一律交给 `parseTimeAxisLabelFormatter`：字符串原样（是所有刻度共用的一个模板，`{value}` 不是 token，原样留下；空串就是空标签）；函数原样（返回值再过 `format`，`extra` 是 `{time, level}`）；其余（对象、undefined、null、数字、数组……）一律当字典，`dictOption || {}`。
+- **字典**（`parseTimeAxisLabelFormatterDictionary`）：对每个最低单位 `low`，从它自己往上到 year 逐个 `upper` 填 `dict[low][upper]`，带着一个「目前的模板」`lowerTpl` 往上走：
+  - 条目 `dictOption[low]` 是对象（zrender 的 `isObject`，函数也算）且不是数组时，按 `upper` 的名字往里取；否则（字符串、数组、数字……）整个条目对每个 `upper` 都一样；
+  - 数组：照抄，`lowerTpl = arr[0] || ''`；字符串：`[s]`；
+  - 其余：`lowerTpl` 还没有时取该单位的种子（`{yyyy}` `{MMM}` `{d}` `{HH}:{mm}` `{HH}:{mm}` `{HH}:{mm}:{ss}` `{HH}:{mm}:{ss} {SSS}`）；有了而又不含 `upper` 的匹配 token（year 是 `{yyyy}|{yy}`，month 是四个 M……）时，前面接上 `dict[upper][upper][0] + ' '`——空数组的 `[0]` 是 `undefined`，接出来就是 `undefined {MMM}`；这一支（也只有这一支）在 **七个单位一个都没写**（`== null`，所以 `null` 不算写了；`none` 不是单位）时再加第二项 `{primary|模板}`。
+- **取模板**（`leveledFormat`）：`arr = dict[tick.time.lowerTimeUnit][tick.time.upperTimeUnit]`，`arr[min(level, len − 1)] || ''`——超过数组长度取最后一项，空数组、`null`、`''` 都是空标签。不在断轴上的刻度 `lowerTimeUnit = upperTimeUnit = getUnitFromValue(值)`，级别是刻度生成时的层号（最粗的层最大），两端补上的不整齐刻度级别 0；跨单位的项只有断轴的刻度会读。然后 `format(new Date(tick.value), 模板, isUTC)`。
+- **`{primary|}` 是富文本**：时间轴的默认选项带 `axisLabel.rich.primary = {fontWeight: 'bold'}`（`axisDefault.ts`），模型合并不覆盖选项里已有的键——作者的 `axisLabel.rich.primary` 逐项盖在它上面；作者写了 `rich: false` / `rich: null` 时默认的也进不来。zrender 只要 `style.rich` 在就走富文本，所以**时间轴的标签永远是富文本**：`{primary|Feb}` 画成粗体的 `Feb`，`{foo|20}` 这种没定义的样式名画成普通的 `20`，没有 `rich` 时 `{primary|Feb}` 原样画出来。primary 片段的颜色按 §121：自己的 → 根 `textStyle.color` → 块的（作者的 `axisLabel.color` 或主题色）；`richInheritPlainLabel: false` 时字号回落到全局 12px。默认之外（字符串 formatter、写了任何单位的字典）没有 primary，也就**不加粗**。
+- **tooltip**：`tooltip.formatter` 是字符串、`params[0].axisType` 含 `time`（只有轴触发的 params 有 `axisType`）时，先 `timeFormat(params[0].axisValue, 模板, ecModel.get('useUTC'))` 再 `formatTpl`——于是 `{a}` 是 am/pm、`{d}` 是日、`{e}` 是星期，`{a0}`、`{b}`、`{c}` 才轮到 formatTpl。`axisValue` 是吸附后的值（「Tooltip should always be snapToValue」）。物品触发、基轴是值轴的都不过时间模板。轴 tooltip 的表头、指针标签是 `getValueLabel` → `TimeScale.getLabel`：`fullLeveledFormatter[getDefaultFormatPrecisionOfInterval(底层单位)]`，年/月到日（`{yyyy}-{MM}-{dd}`），其余到秒。数据里时间维的值在 tooltip 里是 `makeValueReadable`：`{yyyy}-{MM}-{dd} {HH}:{mm}:{ss}`。
+- **useUTC**：根选项，`format` 用 `getUTC*` 还是本地 getter；不带时区的日期字符串按本地时间解析。
+
+### port 以前
+
+- `TyFormatTime` 是单趟扫描：`{x{yyyy}}` 原样留下；NaN 直接返回模板；时刻用 FPC 的 `Round`（银行家舍入，`2.5 → 2`）。
+- `axisLabel.formatter` 只认字符串和句柄，对象形式被忽略；默认标签用 `TyTimeLabel`（每单位一个种子），级别 ≥ 1 的整条标签标「强调」，用 `TyAdvChartAxisLabelPrimary` 的字重量、画——字符串 formatter 下也照样加粗，作者的 `rich.primary` 不起作用。
+- 指针标签和轴 tooltip 的表头用 `TyTimeLabel`：一天里的刻度表头只写 `2`；轴触发的字符串 tooltip formatter 不过时间模板，`{a}` 是系列名。
+
+### 做法
+
+- `tyControls.AdvChart.Time`：
+  - `TyFormatTime` 改成上游的替换链（`StringReplace` 逐个 token，按上游顺序），无效日期按上游的 `NaN` / `undefined` / `am`；`WallOf` 先按 JS 的 `Math.round` 取整（`JsRoundMs`），所有读字段的路径都经它。
+  - 新类型 `TTyTimeTemplates`（每项留两样：JS 的 `String()`，是级联拼接用的；是否 falsy，是 `|| ''` 用的——作者数组里的 `null` 拼出来是 `null`、取模板时是空）、`TTyTimeTemplateDict`（`Highlight` 加 7×7 的 `Lists[最低单位, 上层单位]`）、`TTyTimeLabelFormatter`（字典 / 字符串 / 句柄）。
+  - `TyTimeTemplateDict`：上面的字典规则逐条照抄；`'@Name'` 句柄在字典里按函数算（`isObject` 为真、没有键）。`TyTimeLabelFormatterOf`：`parseTimeAxisLabelFormatter`。`TyTimeLeveledTemplate`、`TyTimeLeveledLabel`：`leveledFormat` 的取模板和格式化。`TyTimeUnitName`、`TyTimeSeed`。种子表从 `TyTimeLabel` 里挪到单元级（`TyTimeLabel` 保留，就是级别 0 的种子）。
+- `tyControls.AdvChart.RichText`：`TyRtHasMarkup`——文字里有没有 zrender 解析器认的标记。
+- `tyControls.AdvChart.Builder`：
+  - 时间轴每根轴解析一次 formatter；句柄照旧（返回值过 `TyFormatTime`），字符串和字典走 `TyTimeLeveledLabel`，用刻度自己的单位和级别。标签文字就是上游的 `formattedLabel`，**带着 `{primary|…}` 标记**。
+  - `TimeAxisRtOf`：标签块 = 作者的 `axisLabel` 在前、时间轴默认的 `{rich: {primary: {fontWeight}}}` 在后，一起交给 `TyRtResolve`（§121 的链式级联）；默认的字重取皮肤 `TyAdvChartAxisLabelPrimary` 的（皮肤没写时 `'bold'`）；作者的 `rich` 在而不是对象时不加默认。primary 自己、根 textStyle、作者的标签都没给颜色时，用皮肤这条规则的颜色——上游这时是标签自己的颜色，而端口标签自己的颜色本来就是皮肤的，主题色走主题令牌。
+  - 块只在需要时走：有标签带标记，或者作者写了块的属性（§121 的 `TyRtNodeWantsBlock`）；都没有的标签画一段字，和块的结果一样（变异测试确认）。走块时量字器换成块量字器，布局、隐藏重叠、名称避让都量块。
+  - 整条标签的强调删掉：`TTyAxisLayoutSpec.LabelEmphasis` / `EmphasisFontWeight`、`TTyAxisLabelPlacement.Emphasis`、`Layout` 的 `WeightAt` 都去掉；`TTyAxisTextStyle.EmphasisFontWeight` 保留，加 `HasEmphasisColour` / `EmphasisColour`，现在是默认 `rich.primary` 的来源。
+- `tyControls.AdvanceChart`：
+  - 重排时读皮肤的 primary 规则（字重、颜色）进 `TTyAxisTextStyle`；`AxisTextStyles` 不再给「强调」样式，`PaintAxis` 只按块的片段画。
+  - 轴标签的事件命中：有片段的标签按 `TyRtDeviceBox`（以前量的是带标记的原文，框会宽出一截）。
+  - `AxisValueText` 在时间轴上改用 `TTyTimeScale.GetLabel`（`getLabel`）：指针标签和轴 tooltip 表头。
+  - `PaintTooltip`：轴触发、字符串 formatter、第一个带系列的轴段是时间轴时，先 `TyFormatTime(那段的 SnapValue, 模板, 那根轴的 UTC)` 再交给模板；受保护的 `TooltipFormatterText` 给测试读最后一次画出的 formatter 文字。
+- **月名的政策不变**：端口没有 `locale` 选项，名字走本库的 `TyDateTimeNames` 三级规则（app 显式选择 > 已加载的翻译 > 机器 locale），和日历共用（§52）。没有加载翻译时库的 resourcestring 就是上游 langEN 的名字，测试钉在 `dnTranslation` 上与上游逐字比较。上游在浏览器里也随 `navigator.language` 换成中文名，所以「跟着环境走」本身是上游的行为，不同只在于环境从哪里读。
+- **本地时间的政策不变**：`useUTC` 是根选项，进 `TTyTimeScale.UTC`；关掉时读机器时区（FPC 3.2.2 的 `UniversalTimeToLocal`，按「现在」的偏移，每个值换一次，不在循环里累积）。不带时区的字符串按本地解析，和上游一样。
+
+### 基准
+
+`tools/advchart-oracle/time-format.js`（真 dist，node SSR，`TZ=UTC`，量字用 zrender 的宽度表）→ `tests/fixtures/advchart-time-format.json`：
+
+- `format` 356 例：24 个 token 各自在 10 个时刻（周二上午、跨年前一毫秒、中午、午夜、下午 1 点、1969 年最后一毫秒、公元 5 年、105 年、2000 年、1999 年）；8 个组合模板（含 24 个连写、同一 token 两次）各 4 个时刻；21 个不认识的 token；23 个花括号边界（`{{yyyy}}`、`{yyyy`、`{x{yyyy}}`、`{y{yy}y}`、`{}`、`\{yyyy}`、`{a{A}}`、`{primary|{yyyy}}`、换行、`$&` 等）各 2 个时刻；6 个取整（`.5`、`.4999`、`−0.5`、`2.5`、`−1.5`、0）；NaN、±Infinity；useUTC 关掉的 8 例。用的是 dist 公开的 `echarts.time.format`。
+- `dict` 30 例：`parseTimeAxisLabelFormatter` 从 dist 的源码里切出来单独跑（`var primaryTimeUnitFormatterMatchers` 到 `function pad`），每例记 7 个最低单位 × 各自上层的完整列表：默认、null、空对象、数字、false、数组、字符串、空串、各单位单写、数组带 rich、级联（`{hour: '{H}h'}` 是字符串所以每层一样；`{day: {month, day}}` 的 year 层是 `{yyyy} {MMM} {d}`）、嵌套缺自己的键、嵌套数组、`null` / `none`、`''`、`[]`、year 的 `[]`（`undefined {MMM}`）、`[null, '{d}']` 和嵌在对象里的同一个（它的 month 层是 `{MMM} `：打头的 falsy 项往上带的是空串，不是 `null`）、数字、true、空对象、三级数组。
+- `charts` 49 例：默认 formatter 在年、月、日、时、分、秒、毫秒、跨年、三层各一张（每个单位都出现，级别到 2）；两端毫秒刻度显示；纵轴；转 30°；字符串 6 种（普通、作者自己的 `{primary|}`、没定义的样式名、`{value}`、空串、花括号、12 小时制）；字典 15 种；primary 样式 7 种（rich.primary 颜色和字号、`fontWeight: 'normal'`、带框、标签颜色、标签加粗而 primary `lighter`、根颜色、`richInheritPlainLabel: false`）；`rich: false` / `null`；useUTC 关掉的不带时区字符串 3 张、带 `Z` 的 1 张。每个标签记值、级别、单位、`formattedLabel`、显没显示、Text 的子元素（TSpan 的文字、字重、字号、填充、对齐、位置；框的矩形和填充）。
+- `tooltip` 10 例：活的 TooltipView（`env.node` 关、`getDom` 打桩，跑完还原），在数据点的整数像素上 `showTip`：轴触发的 24 token 模板、`{a} {a0} {b} {c} {d} {e}` 的冲突、下午、y 是时间轴、本地时间、基轴是值轴、物品触发的模板、默认内容的表头（到秒、到日）、物品 tooltip 里的时间维。默认内容的样式名带全局计数（`__EC_aUTo_N`），记录前归一。表头另跑一遍，formatter 换成探针函数读 `axisValueLabel`。
+- 守卫 41 条：dist 的 token 顺序、种子、单位表与转写一致；`format` 每例由独立转写（替换链、`pad`、12 小时、无效日期）复现；字典每例由独立转写的级联复现；每个图表标签都是 `dict[unit][unit][min(level, len−1)] || ''` 再格式化；具名事实（花括号里的 token 照样换、午夜 0、中午 12 pm、年份不补零、无效日期 `undefined` 与 `am`、半数向上、未知 token 原样、`$` 是文字、`null` 不算写了、空数组级联出 `undefined`、falsy 打头往上带空串、默认的高层级都是 `{primary|`、primary 片段默认 bold、字符串和写了单位的字典都没有 primary、三级数组到第三项、未定义样式名画普通字、不整齐两端默认隐藏、毫秒单位出现、每个单位都出现、primary 取根颜色、继承标签颜色、`rich` 不是对象时标记是字、`{a}` 是 am、物品触发和值轴不格式化、表头精度两种、时间维可读）；**所有图表和 tooltip 在 `TZ=Asia/Shanghai` 下再跑一遍，标签文字、显示、级别、单位、片段（填充除外）逐项相同**——所以夹具在任何固定偏移的机器上都能重放；两次运行逐字节一致。
+
+测试 `test.advchart.timeformat`（新，8 个，注册在 `tytests.lpr`）：token 与模板常量；`format` 每例（useUTC 关掉的按本机偏移挪一下时刻，本机是 UTC+8，这一半真的在换时区）；字典每例逐项比 `Texts` 与 `Falsy`；图表每例经控件自己的路径（SSR 量字）比刻度值（本地例按偏移挪）、文字、级别、单位、显示、片段（文字、按端口规则读上游字重、作者写了字号时的字号、位置 1e-6、作者的颜色必须是作者的、主题色的地方不许是作者的、框）；tooltip 每例 `MouseMove` 到同一像素后比 formatter 文字、表头（`TooltipShownWhich`）或物品内容的文字。手写 3 个：皮肤的 primary 规则给字重和颜色（红、900）而作者的 `rich.primary.fontWeight` 盖过字重；作者的标签颜色、根颜色、primary 自己的颜色依次压过皮肤的；useUTC 换钟。
+
+已有测试的改动：`test.advchart.time` 的「粗刻度加粗」改成查 `{primary|` 标记和片段字重，纵轴标签的期望值带标记，`FirstLabel` 读第一个显示的标签并去掉 primary 标记，「按自己的字重去量」改用块量字器；`test.advchart.labelthinning` 比较前按夹具的 `stripRich` 去掉标记，测试字体写成 `TyFontSizeFromPx(12)`（裸 12 在表里是 px、在块里是 12pt，以前只有一段字的路径所以没露出来）；`test.advchart.textstyle` 去掉强调样式那一行。
+
+### 变异测试
+
+`b7/mut.py`：逐个改源码、重编、跑 `TAdvChartTimeFormatOracleTest` 与 `test.advchart.time` 的三组、按原字节还原。59 个：
+
+- token 26 个：每个 token 的取值或补零各一个（`yyyy` 取两位、`yyyy` 补到四位、`yy` 不补、`Q` 差一、`MMMM`/`MMM` 互换、`MM` 不补、`M` 补、`dd` 不补、`d` 补、`eeee`/`ee` 互换、`e` 从周一数、`HH` 不补、`H` 补、`hh` 不补、`h` 用 24 小时、`mm` 不补、`m` 补、`ss` 不补、`s` 补、`SSS` 补到两位、`S` 补到三位、13 点才算 pm、`A` 小写），外加替换顺序（`MMM` 先于 `MMMM`）。
+- 12 小时制 2 个：中午成 0、午夜成 12。
+- 无效日期与取整 3 个：月名印 `NaN`、无效日期原样返回模板（旧行为）、银行家舍入。
+- 字典 12 个：`null` 算写了、primary 永远加、上层从 year 往下走、上层模板接在后面、接上层的种子而不是它的模板、匹配器不看、打头的 falsy 项照带、对象不往里取、级别不看、falsy 项照印、primary 不带标记、空的上层列表接空串。
+- 轴 9 个：级别一律 0、单位一律 day、不加默认 primary、默认的压在作者的上面、皮肤字重不读、皮肤颜色不给、皮肤颜色压过作者的标签色、带标记也不走块、所有时间标签都走块。
+- useUTC 3 个：`TyFormatTime` 永远 UTC、轴标签永远 UTC、tooltip 永远 UTC。
+- tooltip 4 个：模板不过时间格式、物品触发也过、任何轴都过、表头用短种子。
+
+首轮杀死 55 个，存活 4 个：
+- **打头的 falsy 项照带**：基准缺用例——数组条目对每个上层单位都一样，走不到级联；只有「对象里某单位是数组、上层单位没写」才把它往上带。补 `nested-null-first`（`{day: {day: [null, '{d}']}}`，上游 month 层是 `{MMM} `），杀死。
+- **物品触发也过时间格式**：等价——`onAxis` 就是「有轴段」，物品触发没有轴段可走，循环本来什么都不做。条件删掉，注释写明，变异不复存在。
+- **`MMM` 先于 `MMMM`**：等价。token 带着花括号，`{MMM}` 不是 `{MMMM}` 的子串；替换值（数字、am/pm、英文名）也造不出新 token，所以链的顺序看不出来。保留上游的顺序照抄。
+- **所有时间标签都走块**：等价——没有标记、没有块属性的标签，块的量法和画法与一段字相同（这正是「只在需要时走块」可以成立的依据）。
+
+补完重跑存活的那一个：杀死。
+
+### 已知偏差
+
+- **月名**：见上，走本库的三级规则，不是上游的 locale 注册表；没有 `locale` 选项。
+- **年份范围**：端口的日历算术钳在公元 1–9999 年；JS 的日期到 ±275760 年，超出 8.64e15 才无效。
+- **替换值里的 `$`**：JS 的 `replace` 会解释替换串里的 `$&`、`$1`；替换值来自名字表，英文名里没有，端口不模拟。
+- **字典数组里的非字符串真值**（数字、对象）：上游拿它当模板时抛 `TypeError`，端口印它的 `String()`。
+- **断轴**：跨单位的字典项照上游建好，但端口没有断轴，用不到。
+- **`new Date(tick.value)`**：上游给刻度格式化时是截断，给数字格式化时是 `Math.round`；端口一律按后者。只有作者写了小数毫秒的 `min` / `max` 时不整齐的两端会差 1 毫秒。
+- **轴标签事件的 `value`**：上游是 `rawLabel`，时间轴上就是 `getLabel` 的完整日期；端口仍给数值。基准没有覆盖，留给事件那一行。
+- **毫秒精度的 `getLabel`**：端口的间隔表没有毫秒行（§52），`fullLeveledFormatter.millisecond` 到不了。
+
+### 落地
+
+- `source/tyControls.AdvChart.Time.pas`：替换链的 `TyFormatTime`、`JsRoundMs`、字典的三个类型和五个函数。
+- `source/tyControls.AdvChart.RichText.pas`：`TyRtHasMarkup`。
+- `source/tyControls.AdvChart.Builder.pas`：`TimeAxisRtOf`、时间标签按 formatter 种类、块的接线。
+- `source/tyControls.AdvChart.Layout.pas`：去掉整条强调；`TTyAxisTextStyle` 的 primary 颜色。
+- `source/tyControls.AdvanceChart.pas`：皮肤 primary 规则、`AxisTextStyles`、`PaintAxis`、事件命中框、`AxisValueText`、`PaintTooltip` 的时间模板、`TooltipFormatterText`。
+- `tools/advchart-oracle/time-format.js`、`tests/fixtures/advchart-time-format.json`、`tests/test.advchart.timeformat.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.time.pas`、`tests/test.advchart.labelthinning.pas`、`tests/test.advchart.textstyle.pas` 随改。
+- §52 的四条推迟在原处标注。
+
+全量 **8136 个测试，0 错误，0 失败**（新增 `test.advchart.timeformat` 8 个；改了期望的 `test.advchart.time`、`test.advchart.labelthinning`、`test.advchart.textstyle` 全绿）。

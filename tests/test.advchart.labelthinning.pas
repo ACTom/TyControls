@@ -26,7 +26,8 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvChart.Coord, tyControls.AdvChart.Data,
      tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
      tyControls.AdvChart.Layout, tyControls.AdvChart.AxisLabels,
-     tyControls.AdvChart.JsMath, tyControls.StrConsts, test.advchart.gridbounds;
+     tyControls.AdvChart.JsMath, tyControls.StrConsts, tyControls.FontUnits,
+     test.advchart.gridbounds;
 type
   TAdvChartLabelThinningOracleTest = class(TTestCase)
   private
@@ -154,6 +155,37 @@ begin
   else Result := d.AsFloat;
 end;
 
+{ THE FIXTURE'S stripRich: every `{name|text}` (no brace inside) as its text.
+  A time axis' label says `{primary|Feb}` since batch 104, as upstream's does;
+  the fixture records the text with the tags taken out. }
+function StripRich(const S: string): string;
+var i, k, close: Integer;
+begin
+  Result := '';
+  i := 1;
+  while i <= Length(S) do
+  begin
+    if S[i] = '{' then
+    begin
+      k := i + 1;
+      while (k <= Length(S)) and (S[k] in ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Inc(k);
+      if (k > i + 1) and (k <= Length(S)) and (S[k] = '|') then
+      begin
+        close := k + 1;
+        while (close <= Length(S)) and not (S[close] in ['{', '}']) do Inc(close);
+        if (close <= Length(S)) and (S[close] = '}') then
+        begin
+          Result := Result + Copy(S, k + 1, close - k - 1);
+          i := close + 1;
+          Continue;
+        end;
+      end;
+    end;
+    Result := Result + S[i];
+    Inc(i);
+  end;
+end;
+
 function Joined(const AList: TStringList): string;
 var i: Integer;
 begin
@@ -213,7 +245,10 @@ function TestTextStyle: TTyAxisTextStyle;
 begin
   Result := Default(TTyAxisTextStyle);
   Result.FontName := 'sans-serif';
-  Result.FontSizeLogical := 12;
+  { 12 PX, SAID AS PX: the raw table reads a bare 12 as px, but a time
+    axis' labels are a rich block since batch 104 and the block reads a bare
+    size as the logical points it is everywhere else (16 px) }
+  Result.FontSizeLogical := TyFontSizeFromPx(12);
   Result.FontWeight := 400;
   Result.EmphasisFontWeight := 700;
   Result.LabelMarginLogical := 8;
@@ -639,7 +674,7 @@ begin
           if labels.Objects[k].Booleans['shown'] then
             want.Add(labels.Objects[k].Strings['text']);
         for k := 0 to High(spec^.Placements) do
-          if spec^.Placements[k].Shown then got.Add(spec^.Placements[k].Text);
+          if spec^.Placements[k].Shown then got.Add(StripRich(spec^.Placements[k].Text));
         if Joined(got) <> Joined(want) then
           why := Format('%s%d draws %s, upstream %s', [ax.Strings['dim'],
             ax.Integers['index'], Joined(got), Joined(want)]);
