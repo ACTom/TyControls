@@ -203,6 +203,8 @@ end;
 - **`GlyphName` 编辑器按名字找宿主的 `IconFont`。** 你的子类要在对象查看器里用图标下拉，就得发布 `IconFont`。
 - **`TTyGridCell` 由 `TTyGridPanel` 自己建。** 你的格子子类只能在代码里手动放进去。
 - **你的 `TTyCustomScrollBar` 子类永远是独立滚动条。** 宿主只内嵌自己建的 `TTyScrollBar`，不会把你的条当成内嵌条。
+- **行是代码生成的列表框、组合框，别让 `Items` 进 `.lfm`。** `TTyCustomListBox`、`TTyCustomComboBox` 默认把 `Items` 写进窗体文件，因为作者在对象查看器里填的行就该存下来。如果你的子类的行是按别的属性算出来的（比如按 `Style` 填一张色板），在构造函数里 `inherited Create(AOwner);` 之后加一句 `FItemsStreamed := False;`。否则 IDE 存窗体时会把算出来的行也写进去：`TStrings` 只存文字、不存 `Objects`，读回来这份残缺的行还会盖掉你刚算好的。读旧窗体不受影响，文件里有 `Items` 块照样读得进来。库里的颜色框、颜色列表框和 `TTyComboBoxEx` 都是这样做的。
+- **Lucide 图像列表的 `IconFont` 固定是内置的 Lucide 字体。** `TTyCustomLucideImageList` 在构造函数里设好它，声明为 `stored False`，隐藏编辑器也注册在 Custom 类上。你的子类发布了 `IconFont`，对象查看器里也看不到；代码里改了能用，但不会存进 `.lfm`。想自己选字体，从 `TTyCustomVirtualImageList` 派生。
 - **可以放心不发布的：** 编辑框、多行编辑框、组合框的 `Text`。这三个家族的 `Caption` 就是 `Text`，`TTyUpDown` 之类按 `Caption` 驱动的东西照样能用。
 
 ### 没有拆的类
