@@ -38,7 +38,8 @@ type
     procedure Loaded; override;
   public
     constructor Create(AOwner: TComponent); override;
-    // Re-populate the family list from Screen.Fonts (call after installing fonts).
+    // Re-populate the family list from Screen.Fonts (and select the first row). LCL fills
+    // Screen.Fonts once per process, so a font installed while the program runs is not in it.
     procedure RefreshFonts;
     // The selected font family (== the selected item's text). Setting selects the matching
     // item if present.

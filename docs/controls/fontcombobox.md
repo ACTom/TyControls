@@ -27,7 +27,7 @@ uses tyControls.FontComboBox;
 |------|------|
 | `SelectedFont: string` | 选中的字体族名(== `Text`);写入会选中同名项(若存在)。 |
 | `FixedPitchOnly: Boolean` | 只列等宽字体,默认 `False`。改它会重新填充列表,原来选中的字体族还在就仍选中它,不在了就什么都不选(不会换成第一项);原来没选中的仍不选中。选中的字体族没变就不触发 `OnChange`,变了只触发一次。见下文「只列等宽字体」。 |
-| `RefreshFonts` | 重新填充(装了新字体后调用);`FixedPitchOnly` 开着时只填等宽字体。 |
+| `RefreshFonts` | 按 `Screen.Fonts` 重新填充并选中第一项;`FixedPitchOnly` 开着时只填等宽字体。LCL 的 `Screen.Fonts` 在程序里只读一次,程序运行中新装的字体要重启程序才会出现,调它也不会。 |
 
 另继承 `TTyCustomComboBox` 的 `Items` / `ItemIndex` / `OnChange` / `OnSelect` 等。
 

@@ -585,9 +585,9 @@ end;
 function TTyFontDialog.BuildForm: TTyFontForm;
 var fams: TStringList;
 begin
-  { The families are read on each build, so a font installed since the last one shows up.
-    The same list the font combo box shows: Screen.Fonts without the vertical "@" variants,
-    filtered further when an option asks. }
+  { The same list the font combo box shows: Screen.Fonts without the vertical "@" variants,
+    filtered further when an option asks. Taken on each build, but from Screen.Fonts, which LCL
+    fills once per process: a font installed while the program runs shows up after a restart. }
   fams := TStringList.Create;
   try
     TyGetFontFamilies(fams, fdFixedPitchOnly in FOptions, fdScalableOnly in FOptions);

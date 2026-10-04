@@ -25,8 +25,12 @@ unit tyControls.FontFamilies;
   and keep the names whose FontType lacks RASTER_FONTTYPE. Where the system's flag is wrong for
   some font, the system wins -- the same answer every other program on that machine shows.
 
-  Nothing is cached: the lists are read only when a caller asks for a filtered list, at about
-  the cost of the plain Screen.Fonts enumeration, and a font installed since then shows up. }
+  The flags are not cached: they are enumerated only when a caller asks for a filtered list,
+  at about the cost of the plain Screen.Fonts enumeration. The NAMES are not fresh, though:
+  every list is Screen.Fonts with rows taken out, and LCL fills Screen.Fonts once, on first
+  use, and never re-reads it. A font installed while the program runs is in no list here
+  until the program restarts -- a filtered enumeration may see it, but the intersection with
+  Screen.Fonts drops it. }
 
 interface
 

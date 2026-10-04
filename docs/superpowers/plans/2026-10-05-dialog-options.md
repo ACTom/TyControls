@@ -53,6 +53,7 @@
   - **（期末修复补记）** 第三处「Unix 上 `FileName` 解析符号链接」同样落在选文件夹组件上：`TTySelectPathDialog.Execute` 没有 `ofNoResolveLinks` 时把 `Directory` 过 `GetPhysicalFilename`（`Options` 默认 `[]`，所以 Linux / macOS 上所有 3.0 窗体里的选文件夹对话框都会把链接换成实际路径；全局函数 `TySelectDirectory` 不解析）。写进 `dialogs.md` §8.5 的「从 3.0 升级」，恢复旧行为加 `ofNoResolveLinks`。
 - **D4 「默认开着」的选项不实现成开关**：LCL 默认带 `ofEnableSizing`、`ofViewDetail`、`cdFullOpen`；Ty 的对话框本来就总能缩放、总从详细视图开始、总是展开的取色器。要让「去掉这一位」生效就得改默认值或改现有窗体行为，所以归「收下不起作用」，文档写明「总是如此」。
 - **D5 等宽 / 可缩放只读系统标志**（V7、V8），不量字形宽度、不缓存：只在选项打开时枚举一次，开销与 `Screen.Fonts` 首次填充同级；字体框只在构造、`Loaded`、`RefreshFonts`、改 `FixedPitchOnly` 时枚举，字体对话框每次 `Execute` 枚举一次（用户可能刚装了字体）。
+  - **（期末修复补记）** 「刚装的字体会出现」不成立：结果按 `Screen.Fonts` 取交集，而 LCL 只在首次访问时填充 `Screen.Fonts`、之后从不重读（`screen.inc` `GetFonts`），运行中新装的字体要重启程序才出现。单元头注释、`BuildForm` 注释与 `RefreshFonts` 的文档已改成实话。
 - **D6 查找对话框的复选框按可见的重新排列**，隐藏的不留空位；窗体高度跟着变。
 - **D7 `CustomColors` 为空时不显示自定义色一行**（默认空，旧窗体外观不变）；有条目时显示 16 格（`ColorA..ColorP`，缺的格子画白色，和 Windows 自定义色格的初值一致），「添加到自定义颜色」按钮把当前颜色放进下一格；确定后只写回原来就有的和新加的格子，其余条目原样保留。
 - **D8 测试缝**：组件加 public `BuildForm`（建并配置窗体，不显示，调用方释放；`TTyFindDialog` 已有同名方法，形状照它）；文件对话框加 public `ApplyResult(AOK, AFileName, AFiles)`（`Execute` 在 `ShowModal` 之后调它，测试直接调）；校验做成纯函数 `TyFileDialogCheck`、`TySelectPathCheck`。
