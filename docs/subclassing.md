@@ -184,6 +184,7 @@ end;
 
 - **LCL 根类发布的 15 个属性藏不掉。** `TComponent` 的 `Name`、`Tag`，`TControl` 的 `Left`、`Top`、`Width`、`Height`、`Hint`、`Cursor`、四个 `AnchorSide*`、三个 `Help*`。Pascal 没法取消发布，LCL 自己的 Custom 类也一样。
 - **宿主交出的子项有时仍是最终类型。** 多数宿主属性已经写成 Custom 类（见第 7 节），但只交出自己建的那个类的保持不变：`TTyRadioGroup` 的按钮是 `TTyRadioButton`，`TTyCheckGroup` 的是 `TTyCheckBox`，`TTyPageControl.AddPage` 返回 `TTyTabSheet`，`TTyFilterComboBox.ShellListView` 是 `TTyShellListView`（照 LCL 的 `TFilterComboBox`）。
+- **自己的样式控制器挂不到控件上。** 所有 `Controller` 属性在 4.0 首版仍是 `TTyStyleController` 类型，从 `TTyCustomStyleController` 派生的控制器可以单独用（加载主题、解析样式、通知监听者），但赋不给任何控件的 `Controller`。要么从 `TTyStyleController` 派生，要么等后续版本把这个类型放宽。
 - **`GlyphName` 编辑器按名字找宿主的 `IconFont`。** 你的子类要在对象查看器里用图标下拉，就得发布 `IconFont`。
 - **`TTyGridCell` 由 `TTyGridPanel` 自己建。** 你的格子子类只能在代码里手动放进去。
 - **你的 `TTyCustomScrollBar` 子类永远是独立滚动条。** 宿主只内嵌自己建的 `TTyScrollBar`，不会把你的条当成内嵌条。
@@ -366,6 +367,7 @@ procedure TForm1.TreeGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var T
 | 属性 | 3.0 | 4.0 |
 |---|---|---|
 | 所有 `IconFont` | `TTyIconFont` | `TTyCustomIconFont` |
+| `Controller` | `TTyStyleController` | 不变（见第 5 节） |
 | `Images` / `HotImages` / `DisabledImages`（图像集合）、`TTyVirtualImageList.Collection` | `TTyImageCollection` | `TTyCustomImageCollection` |
 | `TTyForm.TitleBar` / `MenuBar`（`TTyDialog` 同） | `TTyTitleBar` / `TTyMenuBar` | `TTyCustomTitleBar` / `TTyCustomMenuBar` |
 | `TTyRibbon.Backstage`、`TTyRibbonAppMenu.Backstage` | `TTyRibbonBackstage` | `TTyCustomRibbonBackstage` |

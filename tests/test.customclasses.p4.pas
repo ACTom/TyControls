@@ -29,15 +29,20 @@ uses
   tyControls.Icons.Lucide, tyControls.ImageCollection, tyControls.ImageDraw, tyControls.Image,
   tyControls.CharImage, tyControls.GlyphButtons, tyControls.ToolBar, tyControls.RibbonBackstage,
   tyControls.Hint, tyControls.BalloonHint, tyControls.Popover, tyControls.Notification,
-  tyControls.Panel, Dialogs, tyControls.Dialogs, tyControls.Dialogs.Progress,
+  tyControls.Panel, tyControls.Button, tyControls.Types, Dialogs, tyControls.Dialogs,
+  tyControls.Dialogs.Progress,
   tyControls.Dialogs.About, tyControls.Dialogs.IconBrowser;
 
 type
   TTyCustomClassesP4Test = class(TTyCustomClassesPhaseCase)
+  private
+    FChanges: Integer;
+    procedure CountChange(Sender: TObject);
   published
     { Task 27: controllers }
     procedure TestThirdStyleController;
     procedure TestThirdNativeStyler;
+    procedure TestControllerPropertyKeepsTheFinalTypeForNow;
     { Task 28: icon fonts and images }
     procedure TestThirdIconFont;
     procedure TestThirdVirtualImageList;
@@ -116,6 +121,11 @@ type
   end;
 
 implementation
+
+procedure TTyCustomClassesP4Test.CountChange(Sender: TObject);
+begin
+  Inc(FChanges);
+end;
 
 { T-a: a non-visual component is created without an owner just as well. }
 procedure CheckCreatesWithoutOwner(AClass: TComponentClass);
@@ -342,6 +352,34 @@ begin
   CheckPropType(TTyToolBar, 'HotImages', 'TTyCustomImageCollection');
   CheckPropType(TTyRibbonBackstage, 'Images', 'TTyCustomImageCollection');
   CheckPropType(TTyVirtualImageList, 'Collection', 'TTyCustomImageCollection');
+end;
+
+{ S27-1, as decided for the first 4.0 release (plan Task 27, option C). Every Controller property
+  still names TTyStyleController: widening it means ActiveController hands out the custom class,
+  and that reaches TextMenu.pas (TeController) and the excluded Calendar.pas, which this plan does
+  not touch. So a third-party controller cannot be assigned to a control's Controller yet -- the
+  RTTI below pins that, so the day the type changes this test is where it shows. What a third
+  party CAN do today is use its controller on its own: it loads a theme, resolves styles and
+  metrics, and tells its listeners -- all of that lives on TTyCustomStyleController. There is no
+  path that hands a controller to a control other than the Controller property, so there is
+  nothing more to drive. }
+procedure TTyCustomClassesP4Test.TestControllerPropertyKeepsTheFinalTypeForNow;
+var
+  third: TThirdStyleController;
+  st: TTyStyleSet;
+begin
+  CheckPropType(TTyButton, 'Controller', 'TTyStyleController');
+  CheckPropType(TTyNativeStyler, 'Controller', 'TTyStyleController');
+  CheckPropType(TTyPopover, 'Controller', 'TTyStyleController');
+  third := TThirdStyleController.Create(FForm);
+  FChanges := 0;
+  third.AddChangeListener(@CountChange);
+  third.LoadThemeCss(':root { --p4-gap: 13px; } TyButton { background: #123456; }');
+  AssertTrue('the third-party controller tells its listeners', FChanges > 0);
+  AssertEquals('it resolves a metric from its own theme', 13, third.Metric('--p4-gap', 4));
+  st := third.Model.ResolveStyle('TyButton', '', [tysNormal]);
+  AssertEquals('and a style', Int64($FF123456), Int64(st.Background.Color));
+  third.RemoveChangeListener(@CountChange);
 end;
 
 { ------------------------------------------------------------------ Task 29: hints and notifications }

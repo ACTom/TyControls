@@ -102,11 +102,11 @@ const
     meant for every property of that type: TTyFilterComboBox.ShellListView keeps
     TTyShellListView while TTyShellTreeView.ShellListView takes the custom class, so a
     type-wide row would wave a wrong change through.
-    The four D11 rows are type-wide on purpose: a component-reference property names the
+    The three D11 rows are type-wide on purpose (Controller stays TTyStyleController in 4.0,
+    plan Task 27 option C): a component-reference property names the
     custom class wherever it appears, as LCL's Images: TCustomImageList does. }
-  CSnapshotTypeRenames: array[0..11, 0..3] of string = (
+  CSnapshotTypeRenames: array[0..10, 0..3] of string = (
     ('*', '*', 'TTyIconFont', 'TTyCustomIconFont'),
-    ('*', '*', 'TTyStyleController', 'TTyCustomStyleController'),
     ('*', '*', 'TTyImageCollection', 'TTyCustomImageCollection'),
     ('*', '*', 'TTyVirtualImageList', 'TTyCustomVirtualImageList'),
     { Not component references: a host hands out, or takes, any custom child (plan R7-4). }
