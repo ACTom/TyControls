@@ -100,6 +100,7 @@ type
     procedure TestATypeChangeKeepsTheName;
     procedure TestAReplacedSeriesEntersAndAKeptOneUpdates;
     procedure TestABadReplaceMergeIsRefused;
+    procedure TestOptsTooDeepAreRefused;
     procedure TestASeriesOnAHoleAxisIsUnresolved;
     procedure TestTheOptionsText;
     procedure TestALazyUpdatePairsWithTheRenderBeforeIt;
@@ -1120,6 +1121,37 @@ end;
   touched; the control refuses the setOption and keeps the option -- for a
   notMerge too, where upstream has already thrown its old model away. An
   options text that is no object is refused the same way. }
+{ N arrays inside each other: with the object around it, N + 1 deep }
+function OmNest(N: Integer): string;
+begin
+  Result := StringOfChar('[', N) + StringOfChar(']', N);
+end;
+
+{ THE OPTS TEXT TAKES THE OPTION'S NESTING BOUND: 256 deep is read, 257
+  is refused before fpjson recurses -- and a text deep enough to overflow
+  the stack is refused the same way, not crashed on }
+procedure TAdvChartOptionMergeTest.TestOptsTooDeepAreRefused;
+var
+  before: string;
+  o: TTySetOptionOpts;
+begin
+  NewChart;
+  FChart.Option := cLegend3;
+  Draw;
+  before := FChart.GetOptionJson;
+  AssertFalse('257 deep', FChart.SetOption('{"series":[]}',
+    '{"notMerge":true,"x":' + OmNest(256) + '}'));
+  AssertTrue('says how deep: ' + FChart.OptionError, Pos('256', FChart.OptionError) > 0);
+  AssertEquals('nothing changed', before, FChart.GetOptionJson);
+  AssertFalse('nor the opts parser alone',
+    TySetOptionOptsOf('{"x":' + OmNest(256) + '}', o));
+  AssertFalse('a stack-overflowing depth', FChart.SetOption('{"series":[]}',
+    '{"x":' + OmNest(200000) + '}'));
+  AssertEquals('nothing changed', before, FChart.GetOptionJson);
+  AssertTrue('256 deep is read', FChart.SetOption('{"title":{"text":"t"}}',
+    '{"x":' + OmNest(255) + '}'));
+end;
+
 procedure TAdvChartOptionMergeTest.TestABadReplaceMergeIsRefused;
 var before: string;
 begin

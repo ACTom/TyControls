@@ -117,6 +117,7 @@ type
     procedure TestAnUnregisteredLegacyEventIsNotPublished;
     procedure TestTheZ2CreepsAndAnEmptyListRestores;
     procedure TestABatchOrAnUnknownActionIsRefused;
+    procedure TestAPayloadTooDeepIsRefused;
     { the rules the fixture has no case for (each found by a surviving
       mutant) }
     procedure TestSelectedModeTrueIsSingle;
@@ -1175,6 +1176,26 @@ begin
   AssertFalse('case matters', FChart.DispatchAction('{"type":"toggleselect"}'));
   AssertFalse('a batch', FChart.DispatchAction('{"type":"select","batch":[{"dataIndex":0}]}'));
   AssertTrue(FChart.DispatchAction('{"type":"toggleSelect","dataIndex":0}'));
+end;
+
+{ N arrays inside each other: with the object around it, N + 1 deep }
+function SelNest(N: Integer): string;
+begin
+  Result := StringOfChar('[', N) + StringOfChar(']', N);
+end;
+
+{ A PAYLOAD TAKES THE OPTION'S NESTING BOUND: the same toggle is taken at
+  256 deep and refused at 257, before fpjson recurses -- so a payload deep
+  enough to overflow the stack is refused, not crashed on }
+procedure TAdvChartSelectOracleTest.TestAPayloadTooDeepIsRefused;
+begin
+  Plain('{"series":[{"type":"pie","data":[{"name":"a","value":1}]}]}');
+  AssertFalse('257 deep', FChart.DispatchAction(
+    '{"type":"toggleSelect","dataIndex":0,"x":' + SelNest(256) + '}'));
+  AssertFalse('a stack-overflowing depth', FChart.DispatchAction(
+    '{"type":"toggleSelect","dataIndex":0,"x":' + SelNest(200000) + '}'));
+  AssertTrue('256 deep is taken', FChart.DispatchAction(
+    '{"type":"toggleSelect","dataIndex":0,"x":' + SelNest(255) + '}'));
 end;
 
 procedure TAdvChartSelectHarness.Plain(const AOption: string);

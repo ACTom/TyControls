@@ -149,6 +149,15 @@ function TyFontWeightOf(AData: TJSONData; ADefault: Integer): Integer;
   not positive. [Batch 83] }
 function TyOptFontSize(AData: TJSONData; ADefault: Integer): Integer;
 
+{ THE NESTING GUARD every JSON text a host hands the chart passes before
+  fpjson recurses into it -- the option, a merge, the setOption opts, an
+  action payload, an event query. See TyJsonNestingExceeds. }
+const
+  TyOptionMaxNesting = 256;
+
+function TyJsonNestingExceeds(const AText: string; AMax: Integer;
+  out ALine, ACol: Integer): Boolean;
+
 implementation
 
 uses
@@ -307,9 +316,8 @@ end;
   overflows the stack -- uncatchable on Win64, SIGSEGV on Linux -- and takes
   the IDE down with the chart. A real option is a few dozen deep; a tree or
   treemap's `children` add two per level, so this leaves room for a hierarchy
-  over a hundred levels deep. [Batch 76] }
-const
-  TyOptionMaxNesting = 256;
+  over a hundred levels deep. [Batch 76] The constant is in the interface:
+  every other JSON entry point of the chart takes the same bound. }
 
 { Whether AText opens more than AMax arrays and objects at once, and where
   the first one too many is (1-based). Strings and comments are skipped as

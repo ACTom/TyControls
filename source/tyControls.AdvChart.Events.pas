@@ -66,8 +66,9 @@ type
   end;
 
 { AQuery as written: '' (no query), a class type ('series.bar'), or a JSON
-  object ('{"seriesIndex": 1}'). A JSON text that does not parse is taken as
-  a class type, as a string would be. }
+  object ('{"seriesIndex": 1}'). A JSON text that does not parse, or nests
+  deeper than TyOptionMaxNesting, is taken as a class type, as a string
+  would be. }
 function TyEventQueryOf(const AQuery: string): TTyEventQuery;
 
 { ECEventProcessor.filter }
@@ -86,6 +87,9 @@ function TyChartEventTypeOf(const AName: string): string;
 function TyChartEventIsAction(const AType: string): Boolean;
 
 implementation
+
+uses
+  tyControls.AdvChart.Option;
 
 const
   cMouseTypes: array[0..8] of string = ('click', 'dblclick', 'mousedown',
@@ -143,14 +147,17 @@ const
 var
   d: TJSONData;
   o: TJSONObject;
-  k, s, p: Integer;
+  k, s, p, nLine, nCol: Integer;
   key, main: string;
   v: TTyEventQueryValue;
 begin
   Result := Default(TTyEventQuery);
   s := Length(AQuery);
   d := nil;
-  if (s > 0) and (Trim(AQuery)[1] = '{') then
+  { an object query too deep to parse safely reads as text, as a malformed
+    one does -- a main type nothing is }
+  if (s > 0) and (Trim(AQuery)[1] = '{')
+    and not TyJsonNestingExceeds(AQuery, TyOptionMaxNesting, nLine, nCol) then
     try
       d := GetJSON(AQuery);
     except

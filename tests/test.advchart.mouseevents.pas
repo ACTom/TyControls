@@ -66,6 +66,7 @@ type
   published
     procedure TestMouseEventsAsUpstream;
     procedure TestAnUnknownTypeIsRefusedAndOffRemoves;
+    procedure TestAQueryTooDeepIsText;
   end;
 
 implementation
@@ -418,6 +419,33 @@ begin
   FLog.Clear;
   FChart.Leave(10, 10);
   AssertEquals('and after off, not', 0, FLog.Count);
+end;
+
+{ N arrays inside each other: with the object around it, N + 1 deep }
+function MeNest(N: Integer): string;
+begin
+  Result := StringOfChar('[', N) + StringOfChar(']', N);
+end;
+
+{ AN OBJECT QUERY TAKES THE OPTION'S NESTING BOUND: 256 deep is read as
+  the object it is, 257 is taken as text (a main type nothing has), as a
+  malformed one is -- and a stack-overflowing depth the same, not crashed on }
+procedure TAdvChartMouseEventsOracleTest.TestAQueryTooDeepIsText;
+var
+  q: TTyEventQuery;
+  s: string;
+begin
+  s := '{"seriesIndex":0,"x":' + MeNest(255) + '}';
+  q := TyEventQueryOf(s);
+  AssertEquals('256 deep: the object', 'series', q.MainType);
+  AssertTrue('with its index', q.Index.Has);
+  s := '{"seriesIndex":0,"x":' + MeNest(256) + '}';
+  q := TyEventQueryOf(s);
+  AssertEquals('257 deep: text', s, q.MainType);
+  AssertFalse('no index', q.Index.Has);
+  s := '{"seriesIndex":0,"x":' + MeNest(200000) + '}';
+  q := TyEventQueryOf(s);
+  AssertEquals('a stack-overflowing depth: text', s, q.MainType);
 end;
 
 initialization

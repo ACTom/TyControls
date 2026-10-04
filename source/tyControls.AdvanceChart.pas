@@ -2030,7 +2030,7 @@ function TySetOptionOptsOf(const AJson: string; out AOpts: TTySetOptionOpts): Bo
 var
   d, r: TJSONData;
   o: TJSONObject;
-  k: Integer;
+  k, nLine, nCol: Integer;
 
   function Truthy(A: TJSONData): Boolean;
   begin
@@ -2058,6 +2058,8 @@ var
 begin
   AOpts := Default(TTySetOptionOpts);
   if Trim(AJson) = '' then Exit(True);
+  { too deep is refused before fpjson can recurse into it }
+  if TyJsonNestingExceeds(AJson, TyOptionMaxNesting, nLine, nCol) then Exit(False);
   try
     d := GetJSON(AJson);
   except
@@ -2198,8 +2200,15 @@ begin
 end;
 
 function TTyAdvanceChart.SetOption(const AJson, AOptsJson: string): Boolean;
-var o: TTySetOptionOpts;
+var
+  o: TTySetOptionOpts;
+  nLine, nCol: Integer;
 begin
+  if TyJsonNestingExceeds(AOptsJson, TyOptionMaxNesting, nLine, nCol) then
+  begin
+    FOption.Refuse(Format(rsTyOptTooDeep, [TyOptionMaxNesting]));
+    Exit(False);
+  end;
   if not TySetOptionOptsOf(AOptsJson, o) then
   begin
     FOption.Refuse(rsTyOptSetOptsNotObject);
@@ -13909,8 +13918,11 @@ var
   d, tp: TJSONData;
   p: TJSONObject;
   t: string;
+  nLine, nCol: Integer;
 begin
   Result := False;
+  { too deep is no payload: refused before fpjson can recurse into it }
+  if TyJsonNestingExceeds(APayloadJson, TyOptionMaxNesting, nLine, nCol) then Exit;
   try
     d := GetJSON(NulSafeJson(APayloadJson));
     NulRestore(d);
