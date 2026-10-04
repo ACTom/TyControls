@@ -150,12 +150,16 @@ begin
 end;
 
 procedure TTyStyleOverrideDialog.BuildRefList;
-  procedure Cat(const ATitle: string; const AItems: array of string);
-  var node: TTreeNode; s: string;
+  function Cat(const ATitle: string; const AItems: array of string): TTreeNode;
+  var s: string;
   begin
-    node := FList.Items.Add(nil, ATitle);
-    for s in AItems do FList.Items.AddChild(node, s);
+    Result := FList.Items.Add(nil, ATitle);
+    for s in AItems do FList.Items.AddChild(Result, s);
   end;
+var
+  keysNode: TTreeNode;
+  keys: TStringList;
+  i: Integer;
 begin
   FList.Items.BeginUpdate;
   try
@@ -163,7 +167,17 @@ begin
     Cat(rsCssEdCatFuncs, TyKnownColorFns);
     if FSelectorMode then
     begin
-      Cat(rsCssEdCatTypeKeys, TyCatalogTypeKeys);
+      { #14: the catalogue's keys plus the ones a third-party package registered into a type
+        key chain -- the very list the completion offers (TyCssSelectorTypeKeys). }
+      keysNode := Cat(rsCssEdCatTypeKeys, []);
+      keys := TStringList.Create;
+      try
+        TyCssSelectorTypeKeys(keys);
+        for i := 0 to keys.Count - 1 do
+          FList.Items.AddChild(keysNode, keys[i]);
+      finally
+        keys.Free;
+      end;
       Cat(rsCssEdCatPseudo, TyKnownPseudoStates);
     end;
     Cat(rsCssEdCatTokens, TyCatalogTokens);
