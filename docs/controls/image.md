@@ -52,7 +52,7 @@ uses tyControls.Image;
 | `KeepOriginXWhenClipped` | `Boolean` | `False` | `Center` 打开且图**大于**控件时，居中会把原点推成负数，切掉左边。置 `True` 则把该轴钉在 0，保住地图 / 截图 / 扫描件的左上角。图装得下时无效（仍居中）。 |
 | `KeepOriginYWhenClipped` | `Boolean` | `False` | 同上，纵轴。 |
 | `AntialiasingMode` | `TAntialiasingMode` | `amDontCare` | 缩放质量。`amOff` **保证**硬边（像素画 / 二维码 / 精灵图，任何缩放比例下都不混色）；`amOn` **保证**插值平滑；`amDontCare` 走原有路径，不改变任何既有窗体。 |
-| `Images` | `TTyVirtualImageList` | `nil` | 共享图像源。`Picture` 非空时**优先用 `Picture`**（与 `customimage.inc` 一致）。列表被释放时引用自动置 `nil`。 |
+| `Images` | `TCustomImageList` | `nil` | 共享图像源。`Picture` 非空时**优先用 `Picture`**（与 `customimage.inc` 一致）。列表被释放时引用自动置 `nil`。 |
 | `ImageIndex` | `Integer` | `-1` | 显示 `Images` 的第几项。`-1` = 不显示（LCL 默认是 `0`；这里用 `-1`，因为本库的列表按**名字**索引、设计期 `Names` 可以是空的，而 `-1` 也是全库统一的"无图标"哨兵）。 |
 | `ImageWidth` | `Integer` | `0` | 渲染列表项时的像素**边长**；`0` = 用列表自己的 `DefaultSize`。 |
 | `Enabled` | `Boolean` | `True` | 为 `False` 时触发 `:disabled` 主题状态（通常降低不透明度，图像一并变淡）。 |

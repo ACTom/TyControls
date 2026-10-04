@@ -71,7 +71,7 @@ uses tyControls.TabSet;
 |------|------|--------|------|
 | `TabHeight` | `Integer` | 不设时跟随主题（经典 `28` / 现代 `38`） | 页签条高度（逻辑像素）。`0` = 完全不要条带；`TyTabHeightAuto`（`-1`，任意负值同义）= 交回主题。完整取值表与和 LCL 的差异见 [`pagecontrol.md` §6](pagecontrol.md)。 |
 | `TabsClosable` | `Boolean` | `False` | 为 `True` 时每个页签头右侧渲染关闭 × 字形，点击触发 `OnTabClose`。 |
-| `Images` | `TTyVirtualImageList` | `nil` | 页签图标来源。`TTyTabSet` 的标题只是一串字符串、没有可挂 `ImageIndex` 的逐项对象，所以在这个控件上图标由 **`OnGetImageIndex`** 提供（引擎的逐项那一层在基类返回 -1）。类型与 `FreeNotification` 语义见 [`pagecontrol.md` §3](pagecontrol.md)。 |
+| `Images` | `TCustomImageList` | `nil` | 页签图标来源。`TTyTabSet` 的标题只是一串字符串、没有可挂 `ImageIndex` 的逐项对象，所以在这个控件上图标由 **`OnGetImageIndex`** 提供（引擎的逐项那一层在基类返回 -1）。类型与 `FreeNotification` 语义见 [`pagecontrol.md` §3](pagecontrol.md)。 |
 | `ImagesWidth` | `Integer` | `0` | 图标边长（逻辑像素），`0` = 跟随 `--tab-icon-size`。 |
 | `OnGetImageIndex` | 事件 | `nil` | `procedure(Sender; AIndex; var AImageIndex)`；`-1` = 无图标。 |
 | `TabStop` | `Boolean` | `True` | 参与键盘 Tab 焦点循环（`Create` 中设 `True`）。 |
