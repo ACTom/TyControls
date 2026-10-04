@@ -3428,21 +3428,9 @@ function TyGridEllipsisFit(ABmp: TBGRABitmap; const AText: string;
 { 与 TTyPainter.DrawText 用同一套规则 —— 连"砍到几个字"这一步都调它那支
   TyEllipsisPrefix,免得两条路径排出来的字不一样。
   从前这里是 Delete(txt, Length(txt), 1):砍掉的是一个**字节**。 }
-var
-  cpN: Integer;
-  tsz: TSize;
 begin
-  Result := AText;
-  if (ABmp = nil) or (AText = '') then Exit;
-  cpN := UTF8Length(Result);
-  tsz := ABmp.TextSize(Result);
-  while (cpN > 1) and (tsz.cx > AMaxWidthPx) do
-  begin
-    Dec(cpN);
-    Result := TyEllipsisPrefix(AText, cpN);
-    tsz := ABmp.TextSize(Result + '...');
-  end;
-  if Result <> AText then Result := Result + '...';
+  { 现在直接就是 DrawText 的那一支(TyEllipsisFit):同一套截法,也同样不再逐字重量整段(#18)。 }
+  Result := TyEllipsisFit(ABmp, AText, AMaxWidthPx);
 end;
 
 { 一段文字在给定宽度下会占几行 —— 与 BGRA 的 Wordbreak 断法保持一致:

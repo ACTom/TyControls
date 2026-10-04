@@ -7,7 +7,7 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, LCLType, LazUTF8, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter;
+  tyControls.Types, tyControls.Painter, tyControls.Grid;
 
 type
   TPainterTest = class(TTestCase)
@@ -1122,7 +1122,141 @@ begin
     end;
 end;
 
+{ ---- the ellipsis fit DrawText and the grid share (#18) ---- }
+
+type
+  TEllipsisFitTest = class(TTestCase)
+  published
+    procedure TestTheFitIsTheOneAtATimeCut;
+    procedure TestAMultiLineTextShowsItsFirstLine;
+    procedure TestAHugeTextIsDrawnQuickly;
+  end;
+
+{ The cut as it was made before #18: one codepoint at a time, re-measuring the rest each time.
+  Quadratic, but its answers are the reference -- the bounded search must give the same ones. }
+function OneAtATimeFit(ABmp: TBGRABitmap; const AText: string; AW: Integer): string;
+var
+  n: Integer;
+  sz: TSize;
+begin
+  Result := AText;
+  if AText = '' then Exit;
+  n := UTF8Length(Result);
+  sz := ABmp.TextSize(Result);
+  while (n > 1) and (sz.cx > AW) do
+  begin
+    Dec(n);
+    Result := TyEllipsisPrefix(AText, n);
+    sz := ABmp.TextSize(Result + '...');
+  end;
+  if Result <> AText then Result := Result + '...';
+end;
+
+procedure TEllipsisFitTest.TestTheFitIsTheOneAtATimeCut;
+const
+  TEXTS: array[0..8] of string = ('Hello', 'Try it in the preview', 'Show hidden files',
+    '中文标题测试一下', 'Mixed 中英 text here', 'a', 'ab',
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWW', 'iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii');
+  FONTS: array[0..1] of string = ('Arial', 'Microsoft YaHei UI');
+  { Too narrow for anything, a few glyphs, and the widths where these captions get cut. }
+  WIDTHS: array[0..13] of Integer = (0, 1, 5, 10, 20, 30, 45, 60, 80, 100, 130, 160, 200, 240);
+var
+  bmp: TBGRABitmap;
+  f, i, k: Integer;
+  want, got: string;
+begin
+  bmp := TBGRABitmap.Create(1, 1);
+  try
+    for f := Low(FONTS) to High(FONTS) do
+    begin
+      TyConfigureTextFont(bmp, FONTS[f], 9, 400, 96);
+      for i := Low(TEXTS) to High(TEXTS) do
+      begin
+        for k := Low(WIDTHS) to High(WIDTHS) do
+        begin
+          want := OneAtATimeFit(bmp, TEXTS[i], WIDTHS[k]);
+          got := TyEllipsisFit(bmp, TEXTS[i], WIDTHS[k]);
+          AssertEquals(Format('%s, "%s" in %d px', [FONTS[f], TEXTS[i], WIDTHS[k]]), want, got);
+        end;
+      end;
+    end;
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ BGRA strips CR/LF before it measures or draws, so a multi-line text drawn on one line used to
+  come out with its lines glued together. One line now shows its first line, and says there is
+  more. }
+procedure TEllipsisFitTest.TestAMultiLineTextShowsItsFirstLine;
+var
+  bmp: TBGRABitmap;
+  s: string;
+begin
+  AssertEquals('the shown line of a multi-line text', 'First...',
+    TySingleLineText('First' + #13#10 + 'Second'));
+  AssertEquals('a text without a break is itself', 'First', TySingleLineText('First'));
+  bmp := TBGRABitmap.Create(1, 1);
+  try
+    TyConfigureTextFont(bmp, 'Arial', 9, 400, 96);
+    AssertEquals('room for it all: the first line and the ellipsis', 'First...',
+      TyEllipsisFit(bmp, 'First' + #13#10 + 'Second', 400));
+    AssertEquals('a bare LF counts too', 'First...', TyEllipsisFit(bmp, 'First' + #10 + 'Second', 400));
+    AssertEquals('a text that starts with a break shows the ellipsis alone', '...',
+      TyEllipsisFit(bmp, #10 + 'Second', 400));
+    s := TyEllipsisFit(bmp, 'A first line long enough to need cutting' + #10 + 'x', 60);
+    AssertTrue('narrow: a shorter prefix of the first line, with the ellipsis: ' + s,
+      (Pos('...', s) = Length(s) - 2) and (Pos('A first', s) = 1) and (Pos('x', s) = 0));
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ A 300-line script in a tree cell froze the tree: the old cut re-measured the whole remaining
+  text once per codepoint. Both shapes now cost about a dozen measurements of strings no longer
+  than the cell can show. The bound is generous on purpose; the old cut took far longer. }
+procedure TEllipsisFitTest.TestAHugeTextIsDrawnQuickly;
+var
+  host: TBitmap;
+  p: TTyPainter;
+  lines, one: string;
+  i: Integer;
+  t0, took: QWord;
+begin
+  lines := '';
+  one := '';
+  for i := 1 to 300 do
+  begin
+    lines := lines + Format('line %d: if value > limit then report(value, ''too high'');', [i]);
+    one := one + Format('part %d of a very long single line of text ', [i]);
+    if i < 300 then lines := lines + #13#10;
+  end;
+  AssertTrue('precondition: about 12k characters each', (Length(lines) > 10000) and (Length(one) > 10000));
+  host := TBitmap.Create;
+  p := TTyPainter.Create;
+  try
+    host.SetSize(220, 40);
+    p.BeginPaint(host.Canvas, Rect(0, 0, 220, 40), 96);
+    t0 := GetTickCount64;
+    p.DrawText(Rect(0, 0, 200, 20), lines, 'Arial', 9, 400, TyRGB(0, 0, 0), taLeftJustify,
+      tlCenter, True);
+    p.DrawText(Rect(0, 20, 200, 40), one, 'Arial', 9, 400, TyRGB(0, 0, 0), taLeftJustify,
+      tlCenter, True);
+    { The grid's cell fit is the same function; ask it too, so a grid that went back to its own
+      loop would show here. }
+    TyGridEllipsisFit(p.Bitmap, one, 200);
+    TyGridEllipsisFit(p.Bitmap, lines, 200);
+    took := GetTickCount64 - t0;
+    p.EndPaint;
+    AssertTrue(Format('the 12k-character texts ellipsised in %d ms', [took]), took < 1000);
+  finally
+    p.Free;
+    host.Free;
+  end;
+end;
+
 initialization
+  RegisterTest(TEllipsisFitTest);
   RegisterTest(TPainterTest);
 
 end.

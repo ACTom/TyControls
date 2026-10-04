@@ -2693,7 +2693,12 @@ type
                                var ChildCount: Cardinal);
     { FIX 4 helper: returns a text string wide enough to overflow a 50px viewport }
     procedure OnGetTextWide(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnGetTextMultiLine(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnGetTextShownLine(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+    function RangeXFor(AHandler: TTyTreeGetTextEvent): Integer;
   published
+    { #18: a multi-line caption's scroll range is that of the line it shows, not the glued lines. }
+    procedure TestAMultiLineCaptionsRangeIsItsShownLine;
     { Scrollbars exist immediately after Create — never lazily created during paint. }
     procedure TestScrollBarsExistAfterConstruction;
     { ContentHeight = TotalHeight - NodeHeight (phantom root excluded). }
@@ -2724,6 +2729,71 @@ procedure TTreeC2Test.OnGetTextWide(Sender: TTyTreeView; Node: PTyTreeNode;
                                      var Text: string);
 begin
   Text := 'Wide label text that overflows the narrow 50px viewport easily';
+end;
+
+procedure TTreeC2Test.OnGetTextMultiLine(Sender: TTyTreeView; Node: PTyTreeNode;
+  var Text: string);
+var
+  i: Integer;
+begin
+  Text := 'Alpha';
+  for i := 1 to 40 do
+    Text := Text + #13#10 + Format('script line %d with some more words on it', [i]);
+end;
+
+procedure TTreeC2Test.OnGetTextShownLine(Sender: TTyTreeView; Node: PTyTreeNode;
+  var Text: string);
+begin
+  Text := 'Alpha...';
+end;
+
+function TTreeC2Test.RangeXFor(AHandler: TTyTreeGetTextEvent): Integer;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  Bmp: TBitmap;
+  n: PTyTreeNode;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  F := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyTreeView { background: #FFFFFF; border-width: 0px; padding: 0px; } ' +
+      'TyTreeNode  { background: none; color: #000000; }');
+    t := TTyTreeView.Create(F);
+    t.Parent := F;
+    t.Controller := Ctl;
+    t.Font.PixelsPerInch := 96;
+    t.DefaultNodeHeight := 20;
+    t.SetBounds(0, 0, 50, 200);
+    t.OnGetText := AHandler;
+    t.RootNodeCount := 1;
+    n := t.RootNode^.FirstChild;
+    Include(n^.States, nsInitialized);
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(t.Width, t.Height);
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).RenderTo(Bmp.Canvas, Rect(0, 0, Bmp.Width, Bmp.Height), 96);
+    {$POP}
+    Result := t.RangeX;
+  finally
+    Bmp.Free;
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTreeC2Test.TestAMultiLineCaptionsRangeIsItsShownLine;
+var
+  multi, shown: Integer;
+begin
+  shown := RangeXFor(@OnGetTextShownLine);
+  multi := RangeXFor(@OnGetTextMultiLine);
+  AssertTrue('precondition: the shown line overflows the narrow tree', shown > 0);
+  AssertEquals('the multi-line caption scrolls as far as the line it shows, no further',
+    shown, multi);
 end;
 
 procedure TTreeC2Test.TestScrollBarsExistAfterConstruction;
