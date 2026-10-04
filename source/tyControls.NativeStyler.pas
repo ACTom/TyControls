@@ -26,6 +26,7 @@ type
     FApplyFontSize: Boolean;
     FOnStyleControl: TTyStyleControlEvent;
     procedure SetController(AValue: TTyStyleController);
+    procedure SetRoot(AValue: TWinControl);
     procedure ControllerChanged(Sender: TObject);
     function EffectiveRoot: TWinControl;
     procedure WalkAndStyle(AParent: TWinControl);
@@ -45,7 +46,7 @@ type
     class function IsDenied(AControl: TControl): Boolean;
   published
     property Controller: TTyStyleController read FController write SetController;
-    property Root: TWinControl read FRoot write FRoot;
+    property Root: TWinControl read FRoot write SetRoot;
     property Enabled: Boolean read FEnabled write FEnabled default True;
     property ApplyFontName: Boolean read FApplyFontName write FApplyFontName default False;
     property ApplyFontSize: Boolean read FApplyFontSize write FApplyFontSize default False;
@@ -121,6 +122,16 @@ begin
     AValue.AddChangeListener(@ControllerChanged);
   end;
   if not (csLoading in ComponentState) then Apply;
+end;
+
+procedure TTyNativeStyler.SetRoot(AValue: TWinControl);
+begin
+  if FRoot = AValue then Exit;
+  if FRoot <> nil then RemoveFreeNotification(FRoot);
+  FRoot := AValue;
+  { Root can be a control on another form, which the owner's broadcast never reaches: without
+    this the Notification below only ever cleared a root that shared this styler's owner. }
+  if FRoot <> nil then FreeNotification(FRoot);
 end;
 
 procedure TTyNativeStyler.ControllerChanged(Sender: TObject);

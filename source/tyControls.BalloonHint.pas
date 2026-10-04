@@ -58,6 +58,7 @@ type
     FWin: TTyBalloonWindow;
     FTimer: TTimer;
     procedure TimerFire(Sender: TObject);
+    procedure SetController(AValue: TTyStyleController);
     function ActiveModel: TTyStyleModel;
     { Measure the body content (icon + title + description) in device px at APPI. }
     procedure MeasureBody(APPI: Integer; out ABodyW, ABodyH: Integer);
@@ -65,6 +66,7 @@ type
     { The wedge's half-base AND height in LOGICAL px, from the active theme. Protected so a
       headless test can read what a theme resolved to without putting a window up. }
     function ArrowSizeLogical: Integer;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -80,7 +82,7 @@ type
     property Icon: TTyBalloonIcon read FIcon write FIcon default biNone;
     { Auto-hide delay in ms (0 = stay until HideHint). Default 4000. }
     property HideInterval: Integer read FHideInterval write FHideInterval default 4000;
-    property Controller: TTyStyleController read FController write FController;
+    property Controller: TTyStyleController read FController write SetController;
   end;
 
 { Pure placement: given the target rect and body/pointer sizes + screen, decide
@@ -381,6 +383,24 @@ begin
   FreeAndNil(FTimer);
   FreeAndNil(FWin);
   inherited Destroy;
+end;
+
+procedure TTyBalloonHint.SetController(AValue: TTyStyleController);
+begin
+  if FController = AValue then Exit;
+  if FController <> nil then FController.RemoveFreeNotification(Self);
+  FController := AValue;
+  { The controller may sit on another form, or have no owner at all, and the owner's broadcast
+    reaches this component only when the two share an owner. Without a free notification a
+    freed controller stayed here: ShowAt measured the balloon
+    through its Model, and the IDE read it when it saved the form. }
+  if FController <> nil then FController.FreeNotification(Self);
+end;
+
+procedure TTyBalloonHint.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent = FController) then FController := nil;
 end;
 
 function TTyBalloonHint.ActiveModel: TTyStyleModel;

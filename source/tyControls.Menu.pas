@@ -512,10 +512,12 @@ type
       and clearing the global ActivePopupMenu -- runs when the themed popup goes
       away, whichever way it went away (activation, Esc, click-outside). }
     procedure HandleRendererClosed(Sender: TObject);
+    procedure SetController(AValue: TTyStyleController);
   protected
     { Hook for subclasses to configure the shared renderer (e.g. opt into section headers)
       after its controller is set and BEFORE its rows are built. Base does nothing. }
     procedure ConfigureRenderer(ARenderer: TTyMenuPopup); virtual;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -542,7 +544,7 @@ type
       the About dialog. }
     property Version: string read GetVersion;
     { The .tycss style controller the themed popup resolves its tokens through. }
-    property Controller: TTyStyleController read FController write FController;
+    property Controller: TTyStyleController read FController write SetController;
   end;
 
   { Image-list-backed themed context menu: renders each item's ImageIndex icon (from Images --
@@ -2718,6 +2720,24 @@ begin
   ConfigureRenderer(FRenderer);   // subclasses opt into headers/etc. BEFORE the rows are built
   // Root the shared renderer at this popup menu's items (the inherited LCL model).
   FRenderer.SetRoot(Items);
+end;
+
+procedure TTyPopupMenu.SetController(AValue: TTyStyleController);
+begin
+  if FController = AValue then Exit;
+  if FController <> nil then FController.RemoveFreeNotification(Self);
+  FController := AValue;
+  { The controller may sit on another form, or have no owner at all, and the owner's broadcast
+    reaches this component only when the two share an owner. Without a free notification a
+    freed controller stayed here: the next PopUp handed it to
+    the renderer. }
+  if FController <> nil then FController.FreeNotification(Self);
+end;
+
+procedure TTyPopupMenu.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent = FController) then FController := nil;
 end;
 
 procedure TTyPopupMenu.ConfigureRenderer(ARenderer: TTyMenuPopup);
