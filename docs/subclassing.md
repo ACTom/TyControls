@@ -2,7 +2,7 @@
 
 > English: [subclassing.en.md](subclassing.en.md)
 
-从 4.0 起，每个控件都分成两层，跟 LCL 的 `TCustomEdit` / `TEdit` 一个路数：
+从 4.0 起，大多数控件都分成两层，跟 LCL 的 `TCustomEdit` / `TEdit` 一个路数（没拆的几个见第 5 节末尾）：
 
 - `TTyCustomXxx`：全部实现都在这里。属性按 LCL 的规矩放在 public 或 protected，一个都不发布。
 - `TTyXxx`：组件面板上的那个类，只有一段 `published`，把该露的属性列出来。
@@ -200,6 +200,20 @@ end;
 - **`TTyGridCell` 由 `TTyGridPanel` 自己建。** 你的格子子类只能在代码里手动放进去。
 - **你的 `TTyCustomScrollBar` 子类永远是独立滚动条。** 宿主只内嵌自己建的 `TTyScrollBar`，不会把你的条当成内嵌条。
 - **可以放心不发布的：** 编辑框、多行编辑框、组合框的 `Text`。这三个家族的 `Caption` 就是 `Text`，`TTyUpDown` 之类按 `Caption` 驱动的东西照样能用。
+
+### 没有拆的类
+
+下面这些没有 `TTyCustomXxx`，要派生就直接从组件面板上的那个类派生，它发布的属性你都会继承下来、藏不掉：
+
+| 类 | 为什么不拆 | 怎么派生 | 以后拆不拆 |
+|---|---|---|---|
+| 菜单：`TTyPopupMenu`、`TTyImagesMenu`、`TTyMenuEx` | LCL 的 `TPopupMenu` 也不拆 | 直接派生 | 跟 LCL，不拆 |
+| 对话框：`TTySelectPathDialog`、`TTyColorDialog`、`TTyFontDialog`、`TTyFindDialog`、`TTyReplaceDialog`、`TTyOpenDialog`、`TTySaveDialog`、`TTyOpenPictureDialog`、`TTySavePictureDialog`、`TTyOpenPreviewDialog`、`TTySavePreviewDialog` | LCL 的 `TCommonDialog` 一系（`TOpenDialog`、`TColorDialog`……）每层都直接发布 | 直接派生 | 跟 LCL，不拆 |
+| `TTyForm`、`TTyDialog` | 它们扮演的是 `TForm` 的角色：你的窗体本来就从它们派生 | 照常「新建窗体」，或者 `class(TTyForm)` | 不拆 |
+| `TTyToolWindowManager` | 已经有 `TTyCustomToolWindowManager`（什么都不发布），但跨栏移动、排队、布局保存这些实现为了单元依赖放在最终类里 | 从 `TTyToolWindowManager` 派生，别从 `TTyCustomToolWindowManager` 派生——后者挂得上栏的 `Manager`，却不会移动窗口、存不了布局 | 等实现能挪进 Custom 类再拆，目前没排期 |
+| `TTyAdvanceChart`、`TTyCalendar`、`TTyDateTimePicker` | 另一条分支正在改它们 | 直接派生 | 那条分支合进来以后补拆 |
+
+另外 8 个 Ty 自己的对话框（`TTyMessage`、`TTyInputDialog`、`TTyPasswordDialog`、`TTyTextDialog`、`TTySelectValueDialog`、`TTyProgressDialog`、`TTyAboutDialog`、`TTyIconBrowserDialog`）是拆了的，LCL 的 `TCustomTaskDialog` / `TTaskDialog` 也是这么拆。
 
 ---
 

@@ -2,7 +2,7 @@
 
 > 中文版见 [subclassing.md](subclassing.md)。
 
-Since 4.0 every control comes in two layers, the way LCL does `TCustomEdit` / `TEdit`:
+Since 4.0 most controls come in two layers, the way LCL does `TCustomEdit` / `TEdit` (the few that do not are listed at the end of section 5):
 
 - `TTyCustomXxx` holds the whole implementation. Its properties sit in public or protected, following LCL, and none of them is published.
 - `TTyXxx` is the class on the component palette. It is nothing but a `published` section listing what the Object Inspector shows.
@@ -200,6 +200,20 @@ end;
 - **`TTyGridCell` is created by `TTyGridPanel`.** A cell subclass of yours has to be put in from code.
 - **A `TTyCustomScrollBar` subclass is always a standalone scroll bar.** Hosts only embed the `TTyScrollBar` they create themselves; they never treat yours as their embedded bar.
 - **Safe to leave unpublished:** `Text` on edits, memos and combo boxes. In those three families `Caption` is the text, so anything that drives a control through `Caption` — `TTyUpDown`, for one — still works.
+
+### Classes that are not split
+
+These have no `TTyCustomXxx`. To derive one, derive from the class on the palette; you inherit everything it publishes and cannot hide any of it.
+
+| Class | Why it is not split | How to derive | Will it be split? |
+|---|---|---|---|
+| Menus: `TTyPopupMenu`, `TTyImagesMenu`, `TTyMenuEx` | LCL does not split `TPopupMenu` either | Derive directly | No, as in LCL |
+| Dialogs: `TTySelectPathDialog`, `TTyColorDialog`, `TTyFontDialog`, `TTyFindDialog`, `TTyReplaceDialog`, `TTyOpenDialog`, `TTySaveDialog`, `TTyOpenPictureDialog`, `TTySavePictureDialog`, `TTyOpenPreviewDialog`, `TTySavePreviewDialog` | LCL's `TCommonDialog` family (`TOpenDialog`, `TColorDialog`…) publishes at every level | Derive directly | No, as in LCL |
+| `TTyForm`, `TTyDialog` | They play the part of `TForm`: your forms already derive from them | New Form as usual, or `class(TTyForm)` | No |
+| `TTyToolWindowManager` | There is a `TTyCustomToolWindowManager` (it publishes nothing), but moving windows across bars, the move queue and layout saving live in the final class, for unit dependencies | Derive from `TTyToolWindowManager`, not from `TTyCustomToolWindowManager` — the latter fits a bar's `Manager` but cannot move windows or save a layout | Once the implementation can move into the custom class; not scheduled |
+| `TTyAdvanceChart`, `TTyCalendar`, `TTyDateTimePicker` | Another branch is still changing them | Derive directly | After that branch merges |
+
+Ty's own eight dialogs (`TTyMessage`, `TTyInputDialog`, `TTyPasswordDialog`, `TTyTextDialog`, `TTySelectValueDialog`, `TTyProgressDialog`, `TTyAboutDialog`, `TTyIconBrowserDialog`) are split, as LCL splits `TCustomTaskDialog` / `TTaskDialog`.
 
 ---
 
