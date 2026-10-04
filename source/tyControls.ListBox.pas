@@ -105,6 +105,12 @@ type
     function FSelAnchorOr(ADefault: Integer): Integer;
     procedure ApplyRangeSelection(ALo, AHi: Integer);
   protected
+    { False = do not write Items into the .lfm, the switch TTyComboBox has (FItemsStreamed there
+      too). A subclass whose rows are BUILT rather than authored clears it: TTyColorListBox,
+      whose palette comes from Style and whose colours a TStrings in a form file cannot carry.
+      READING an Items block is unaffected, so older .lfm files still load. }
+    FItemsStreamed: Boolean;
+    function ItemsStored: Boolean;
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     // Per-item content paint (default: the item text). A subclass overrides to draw a
@@ -264,7 +270,7 @@ type
       `LB.Items := Memo.Lines` -- the everyday population idiom -- a compile error, because
       the ABSTRACT base is what every other TStrings source is. The backing store is still a
       TStringList (Sorted rides on it); assigning any TStrings copies into it. }
-    property Items: TStrings read GetItems write SetItems;
+    property Items: TStrings read GetItems write SetItems stored ItemsStored;
     property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
     property MultiSelect: Boolean read FMultiSelect write SetMultiSelect default False;
     { With MultiSelect on, WHICH multi-select discipline the mouse follows. True (LCL's
@@ -317,6 +323,7 @@ begin
   inherited Create(AOwner);
   FItems := TStringList.Create;
   FItems.OnChange := @ItemsChanged;
+  FItemsStreamed := True;   // a plain list's Items IS the persisted row set
   FSorted := False;
   FSuppressItemsChanged := False;
   FItemIndex := -1;
@@ -690,6 +697,11 @@ begin
   UpdateScrollBar;
   Invalidate;
   FireSelectionChanged;
+end;
+
+function TTyListBox.ItemsStored: Boolean;
+begin
+  Result := FItemsStreamed;
 end;
 
 procedure TTyListBox.ScrollBarChange(Sender: TObject);

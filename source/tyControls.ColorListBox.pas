@@ -17,7 +17,9 @@ type
   TTyColorListBox = class(TTyListBox)
   private
     FPaletteStyle:        TTyColorBoxStyle;
-    FPaletteStylePending: Boolean;   { Style arrived during .lfm load; rebuild in Loaded }
+    { Selected as a form file gave it, held for Loaded: see SetSelected. }
+    FStreamedSelected: TColor;
+    FSelectedWaits: Boolean;
     FDefaultColorColor:   TColor;
     FNoneColorColor:      TColor;
     FColorRectWidth:      Integer;
@@ -88,6 +90,9 @@ begin
   FNoneColorColor    := clBlack;
   FColorRectWidth    := 0;
   FColorRectOffset   := 0;
+  { Built from Style, never authored: a form file cannot carry the colours, so Items is not
+    written (see Loaded). }
+  FItemsStreamed     := False;
   SetColorList;
   if Items.Count > 0 then ItemIndex := 0;
 end;
@@ -108,29 +113,35 @@ procedure TTyColorListBox.SetPaletteStyle(const AValue: TTyColorBoxStyle);
 begin
   if FPaletteStyle = AValue then Exit;
   FPaletteStyle := AValue;
-  // Deferred while streaming: a .lfm may set Style before or after Items, and a rebuild
-  // mid-load would wipe whichever arrived first.
-  if csLoading in ComponentState then
-    FPaletteStylePending := True
-  else
+  { Streaming order is not ours to choose: a .lfm may set Style before or after anything else,
+    so while one is read the rebuild waits for Loaded, which always rebuilds. (It used to rebuild
+    only when Style had been read, to keep "a hand-populated Items list"; that list never had
+    colours to keep -- see Loaded.) }
+  if not (csLoading in ComponentState) then
     SetColorList;
 end;
 
 procedure TTyColorListBox.Loaded;
 begin
   inherited Loaded;
-  if FPaletteStylePending then
-  begin
-    FPaletteStylePending := False;
-    SetColorList;
-  end;
+  { ALWAYS rebuild from Style, as LCL does (colorbox.pas Loaded). Items cannot carry the colours:
+    a form file stores a TStrings as its strings alone, so a list read back from one is names over
+    black swatches. 3.0.0 wrote Items for every box, and on a form that left Style at its default
+    nothing rebuilt it -- every swatch came back black and the selection was lost. Items is no
+    longer written (FItemsStreamed), but forms saved before still carry it, and this is what reads
+    them right. A palette of one's own is cbCustomColors + OnGetColors, or AddColor at run time. }
+  SetColorList;              // a Selected the form file held is found in the rebuilt palette
+  FSelectedWaits := False;   // and from here on the box's own selection is what survives
 end;
 
 procedure TTyColorListBox.SetColorList;
 var
   keep: TColor;
 begin
-  keep := GetSelected;                    // the COLOUR survives; its row index does not
+  if FSelectedWaits then
+    keep := FStreamedSelected             // Loaded, with a streamed colour still to find
+  else
+    keep := GetSelected;                  // the COLOUR survives; its row index does not
   TyBuildColorPalette(Items, FPaletteStyle);
   if cbCustomColors in FPaletteStyle then
     DoGetColors;
@@ -230,6 +241,18 @@ end;
 
 procedure TTyColorListBox.SetSelected(const AValue: TColor);
 begin
+  { While a form file is read the palette is not final yet: Style only rebuilds it in Loaded,
+    and a form file may hold Selected before Style or Items (this class publishes it ahead of Style). Looked up then, a colour from
+    the extended or system palette is not there yet and the selection came back as nothing. So
+    the colour waits for Loaded, which looks it up in the finished palette. LCL keeps the colour
+    itself (FSelected) for the same reason (colorbox.pas:871-878, applied in Loaded at
+    :1058-1062). }
+  if csLoading in ComponentState then
+  begin
+    FStreamedSelected := AValue;
+    FSelectedWaits := True;
+    Exit;
+  end;
   // Matches, else the cbCustomColor slot, else -1 -- never a silently-grown palette.
   ItemIndex := TySelectColorIndexIn(Items, AValue, FPaletteStyle);
 end;

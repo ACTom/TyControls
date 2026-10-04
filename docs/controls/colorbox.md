@@ -38,6 +38,8 @@ uses tyControls.ColorBox;
 
 另继承 `TTyComboBox` 的 `ItemIndex` / `OnChange` / `OnSelect` 等。
 
+**色板不存进 `.lfm`,读窗体时按 `Style` 重建。** `.lfm` 只能存 `Items` 的文字、存不了颜色,所以 `Items` 不写进窗体文件;窗体读完后(`Loaded`)总是按 `Style` 重新生成色板,再选中 `.lfm` 里记的 `Selected`。设计器里手填的 `Items` 不会保存。要自己的色板,用 `cbCustomColors` + `OnGetColors`,或在运行时 `ClearColors` / `AddColor`。3.0.0 存过的窗体里还带着一份只有色名的 `Items`,照样能正确读回。
+
 ### 3.1 Style —— 色板由什么组成
 
 对齐 LCL `TColorBox.Style`(`colorbox.pas:35-43`),成员一一对应:
