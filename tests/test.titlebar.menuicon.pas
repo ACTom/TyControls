@@ -47,6 +47,9 @@ type
     procedure TestAltSpaceOpensTheWindowMenu;
     procedure TestOnlyAltSpaceIsTheWindowMenuKey;
     procedure TestAltSpaceWithoutATitleBarIsNotEaten;
+    procedure TestIconClickWithTheMenuUpOnlyClosesIt;
+    procedure TestMenuKeyFromAFocusedHostChildBubbles;
+    procedure TestTopEdgePressIsNotTheIcons;
   end;
 
   { The icon slot: layout, paint, source, tokens, streaming. }
@@ -67,6 +70,9 @@ type
     procedure TestIconSourcePriority;
     procedure TestIconStoredOnlyWhenSet;
     procedure TestShowIconAndIconRoundTrip;
+    procedure TestIconChangeRepaints;
+    procedure TestNewPictureInTheSameIconIsDrawn;
+    procedure TestFormAndApplicationIconChangesReachTheBar;
   end;
 
 implementation
@@ -79,6 +85,8 @@ type
     Opened: TPopupMenu;
     OpenedAt: TPoint;
     OpenCount: Integer;
+    InvalidateCount: Integer;
+    procedure Invalidate; override;
     procedure PopupWindowMenu(AMenu: TPopupMenu; const AScreenPt: TPoint); override;
     procedure CallContextPopup(const APt: TPoint; out AHandled: Boolean);
     procedure InjectMouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -99,6 +107,12 @@ begin
   OpenedAt := AScreenPt;
   Inc(OpenCount);
   if AMenu <> nil then AMenu.PopupComponent := Self;   // what the real one does before PopUp
+end;
+
+procedure TMenuProbeBar.Invalidate;
+begin
+  Inc(InvalidateCount);
+  inherited Invalidate;
 end;
 
 procedure TMenuProbeBar.CallContextPopup(const APt: TPoint; out AHandled: Boolean);
@@ -230,6 +244,29 @@ end;
 function IsDark(const P: TBGRAPixel): Boolean;
 begin
   Result := (P.red < 100) and (P.green < 100) and (P.blue < 100);
+end;
+
+function IsBlue(const P: TBGRAPixel): Boolean;
+begin
+  Result := (P.blue > 200) and (P.red < 60) and (P.green < 60);
+end;
+
+function IsGreen(const P: TBGRAPixel): Boolean;
+begin
+  Result := (P.green > 100) and (P.red < 60) and (P.blue < 60);
+end;
+
+{ The pixel at the centre of the bar's icon slot. }
+function IconCentre(ABar: TMenuProbeBar): TBGRAPixel;
+var p: TBGRABitmap; r: TRect;
+begin
+  r := ABar.CaptionLayout.Icon;
+  p := RenderBar(ABar);
+  try
+    Result := p.GetPixel((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  finally
+    p.Free;
+  end;
 end;
 
 { ==== TTitleBarWindowMenuTest ================================================= }
@@ -941,6 +978,160 @@ begin
     ms.Free;
     dst.Free;
     src.Free;
+  end;
+end;
+
+procedure TTitleBarWindowMenuTest.TestIconClickWithTheMenuUpOnlyClosesIt;
+var b: TMenuProbeBar; m: TPopupMenu; ic: TRect; cx, cy: Integer;
+begin
+  b := NewProbe(nil);
+  try
+    b.ShowIcon := True;
+    ic := b.CaptionLayout.Icon;
+    cx := (ic.Left + ic.Right) div 2;
+    cy := (ic.Top + ic.Bottom) div 2;
+    b.InjectMouseDown(mbLeft, [], cx, cy);
+    AssertEquals('control: a click on the icon opens the menu', 1, b.OpenCount);
+    m := b.WindowMenu;
+    ActivePopupMenu := m;   // what a real PopUp leaves behind while the menu is up
+    try
+      b.InjectMouseDown(mbLeft, [], cx, cy);
+      AssertEquals('with the menu up, the click on the icon does not open it again', 1, b.OpenCount);
+      { The order the other way round: the menu's own outside-click dismissal ran first. }
+      m.Close;   // TPopupMenu.Close: OnClose, ActivePopupMenu := nil
+      AssertTrue('setup: closed', ActivePopupMenu = nil);
+      b.InjectMouseDown(mbLeft, [], cx, cy);
+      AssertEquals('nor right after the menu closed', 1, b.OpenCount);
+    finally
+      ActivePopupMenu := nil;
+    end;
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TTitleBarWindowMenuTest.TestMenuKeyFromAFocusedHostChildBubbles;
+var f: TProbeForm; b: TMenuProbeBar; btn: TTyButton; h: Boolean;
+begin
+  f := NewProbeForm(b);
+  try
+    btn := TTyButton.Create(f);
+    btn.Parent := b;
+    btn.SetBounds(100, 2, 40, 20);
+    f.ActiveControl := btn;
+    b.CallContextPopup(Point(-1, -1), h);
+    AssertEquals('the menu key on a control the host put on the bar is that control''s', 0,
+      b.OpenCount);
+    AssertFalse('not claimed: it keeps bubbling', h);
+    f.ActiveControl := nil;
+    b.CallContextPopup(Point(-1, -1), h);
+    AssertEquals('with the focus elsewhere it is the bar''s', 1, b.OpenCount);
+  finally
+    f.Free;
+  end;
+end;
+
+procedure TTitleBarWindowMenuTest.TestTopEdgePressIsNotTheIcons;
+{$IFDEF LCLWin32}
+var f: TProbeForm; b: TMenuProbeBar; ic: TRect;
+{$ENDIF}
+begin
+  {$IFDEF LCLWin32}
+  f := NewProbeForm(b);
+  try
+    b.ShowIcon := True;
+    ic := b.CaptionLayout.Icon;
+    b.InjectMouseDown(mbLeft, [], (ic.Left + ic.Right) div 2, (ic.Top + ic.Bottom) div 2);
+    AssertEquals('setup: the icon was pressed', 1, b.OpenCount);
+    AssertTrue('setup: the top resize strip is above the icon', f.Engine.BorderZonePx <= ic.Top);
+    { A double-click in the top resize strip: its press goes to the OS resize (no handle here, so
+      nothing happens), and the double-click is the bar's -- not the icon's from before. }
+    b.InjectMouseDown(mbLeft, [ssDouble], 150, 1);
+    b.InjectDblClick;
+    AssertTrue('the double-click maximizes, as anywhere else on the bar', f.Engine.Maximized);
+  finally
+    f.Free;
+  end;
+  {$ELSE}
+  Ignore('the top resize strip is Win32 only');
+  {$ENDIF}
+end;
+
+procedure TTitleBarIconTest.TestIconChangeRepaints;
+var b: TMenuProbeBar; ic, blue: TIcon; n: Integer;
+begin
+  b := NewProbe(nil);
+  ic := SolidIcon(clRed, 16);
+  blue := SolidIcon(clBlue, 16);
+  try
+    n := b.InvalidateCount;
+    b.Icon := ic;
+    AssertEquals('icon off: a new Icon is not drawn, nothing to repaint', n, b.InvalidateCount);
+    b.ShowIcon := True;
+    n := b.InvalidateCount;
+    b.Icon.Assign(blue);   // what the IDE's picture editor does: into the object
+    AssertTrue('icon on: a new picture repaints the bar', b.InvalidateCount > n);
+  finally
+    blue.Free;
+    ic.Free;
+    b.Free;
+  end;
+end;
+
+procedure TTitleBarIconTest.TestNewPictureInTheSameIconIsDrawn;
+var b: TMenuProbeBar; c: TTyStyleController; red, blue: TIcon;
+begin
+  c := TTyStyleController.Create(nil);
+  b := NewProbe(nil);
+  red := SolidIcon(clRed, 16);
+  blue := SolidIcon(clBlue, 16);
+  try
+    c.LoadThemeCss(cFlatCss);
+    b.Controller := c;
+    b.ShowIcon := True;
+    b.Icon := red;
+    AssertTrue('red', IsRed(IconCentre(b)));
+    AssertTrue('drawn again unchanged: still red (the kept bitmap)', IsRed(IconCentre(b)));
+    b.Icon.Assign(blue);   // same TIcon object, new picture
+    AssertTrue('the new picture, not the kept one', IsBlue(IconCentre(b)));
+  finally
+    blue.Free; red.Free;
+    b.Free; c.Free;
+  end;
+end;
+
+procedure TTitleBarIconTest.TestFormAndApplicationIconChangesReachTheBar;
+var f: TProbeForm; b: TMenuProbeBar; c: TTyStyleController; red, blue, green, saved: TIcon;
+    n: Integer;
+begin
+  c := TTyStyleController.Create(nil);
+  red := SolidIcon(clRed, 16);
+  blue := SolidIcon(clBlue, 16);
+  green := SolidIcon(clGreen, 16);
+  saved := TIcon.Create;
+  saved.Assign(Application.Icon);
+  f := NewProbeForm(b);
+  try
+    c.LoadThemeCss(cFlatCss);
+    b.Controller := c;
+    b.ShowIcon := True;
+    Application.Icon.Assign(red);
+    AssertTrue('the application''s icon', IsRed(IconCentre(b)));
+    n := b.InvalidateCount;
+    Application.Icon.Assign(blue);
+    AssertTrue('a new application icon repaints the bar', b.InvalidateCount > n);
+    AssertTrue('and is the one drawn', IsBlue(IconCentre(b)));
+    f.Icon.Assign(green);
+    AssertTrue('the form''s icon', IsGreen(IconCentre(b)));
+    n := b.InvalidateCount;
+    f.Icon.Assign(red);
+    AssertTrue('a new form icon repaints the bar', b.InvalidateCount > n);
+    AssertTrue('and is the one drawn', IsRed(IconCentre(b)));
+  finally
+    f.Free;
+    Application.Icon.Assign(saved);
+    saved.Free; green.Free; blue.Free; red.Free;
+    c.Free;
   end;
 end;
 

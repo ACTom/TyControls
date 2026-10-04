@@ -71,7 +71,7 @@
 
 **D8 Alt+Space**：`TTyForm.IsShortcut` 里，按键是 Space、修饰键恰好是 Alt、有可见的关联标题栏、`ShowWindowMenu` 返回 True → 吃掉。Windows、Linux 启用；**macOS 不启用**（Option+Space 在 mac 上是输入不换行空格，截了会让编辑框打不出这个字符；mac 窗口也没有窗口菜单这个惯例）——偏离主控「其它平台也启用」，理由如上，写进文档。Linux 上不少 WM 自己绑了 Alt+Space（GNOME / KDE 的窗口菜单），它们先抢到时我们收不到，文档写明。
 
-**D9 偏离汇总**：① BorderStyle 不参与判断（V13）；② 已最大化时还原 / 最小化 / 最大化三项不藏（D1）；③ macOS 不显示 `Alt+F4`、不截 Option+Space（D1、D8）；④ 自由放置的内嵌菜单栏不随图标移动（V15，沿用既有范围说明）；⑤ 用户的 `PopupMenu` 也用于图标单击与 Alt+Space（D4）。
+**D9 偏离汇总**：① BorderStyle 不参与判断（V13）；② 已最大化时还原 / 最小化 / 最大化三项不藏（D1）；③ macOS 不显示 `Alt+F4`、不截 Option+Space（D1、D8）；④ 自由放置的内嵌菜单栏不随图标移动（V15，沿用既有范围说明）；⑤ 用户的 `PopupMenu` 也用于图标单击与 Alt+Space（D4）；⑥（期末修复补记）取图顺序比主控设计多了一级窗体 `Icon`：`Icon` → 宿主窗体 `Icon` → `Application.Icon`（D6），窗体图标是这扇窗自己的图标，比程序图标更贴切；⑦（期末修复补记）标题栏右键不再冒泡到窗体的 `PopupMenu`（3.0 会），要旧行为把 `TitleBar.PopupMenu` 设成窗体的菜单——写进 `titlebar.md`、`ttyform.md` 的「从 3.0 升级」。
 
 **D10 公开面**（全部在 `TTyCustomTitleBar`；最终类只追加 `property ShowIcon; property Icon;`）：
 

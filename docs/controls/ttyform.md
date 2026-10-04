@@ -124,6 +124,8 @@ end;
 
 右键标题栏弹出窗口菜单（还原、最小化、最大化、关闭），按 `BorderIcons`、`Resizable` 和是否已最大化决定哪些项显示、哪些灰掉；点菜单项等于点对应的标题按钮。窗体收到 **Alt+Space** 时也弹这个菜单，和原生窗口的系统菜单一样（macOS 除外，那里 Option+Space 是输入字符）。给 `TitleBar.PopupMenu` 设了自己的菜单，三处都换成你的。标题栏开了 `ShowIcon` 时，单击图标同样弹它，双击图标关闭窗口。规则细节见 [titlebar.md](titlebar.md)「窗口菜单」「图标」。
 
+**从 3.0 升级：** 右键标题栏不再冒泡到窗体的 `PopupMenu`——3.0 时给窗体设的右键菜单在标题栏上也会弹，4.0 起标题栏弹自己的窗口菜单。要旧行为，把 `TitleBar.PopupMenu` 设成窗体的菜单（`TitleBar.PopupMenu := PopupMenu;`），单击图标和 Alt+Space 也会跟着弹它。
+
 ### 右到左（`BiDiMode = bdRightToLeft`）
 
 把窗体的 `BiDiMode` 设成 `bdRightToLeft`（它会经 `ParentBiDiMode` 传播到标题栏），**窗框跟着一起镜像**：标题文本移到右边，系统按钮簇移到左边并翻转内部顺序（关闭占窗口角）。细节与理由见 [titlebar.md](titlebar.md) §5「右到左」。
