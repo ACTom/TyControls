@@ -29,7 +29,7 @@ uses tyControls.GlyphImageList;
 | `IconFont` | `TTyIconFont` | `nil` | 字形来源。赋值时注册 `FreeNotification`,字体组件被先释放时本引用自动置 `nil`。 |
 | `Glyphs` | `TStrings` | 空 | 有序的字形**名字**,一行一个——每个名字是 `IconFont.Glyphs` 里的键。 |
 | `DefaultSize` | `Integer` | `16` | 默认条目边长(逻辑 px),供不显式传尺寸的消费方使用。 |
-| `DefaultColor` | `TTyColor` | `0` | 默认字形颜色(`$AARRGGBB`),供不显式传颜色的消费方使用。 |
+| `DefaultColor` | `TTyColor` | `$FF000000`(不透明黑) | 默认字形颜色(`$AARRGGBB`),供不显式传颜色的消费方使用。 |
 
 ---
 
