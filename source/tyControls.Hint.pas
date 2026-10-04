@@ -40,9 +40,11 @@ type
     FInstalled: Boolean;
     FController: TTyStyleController;
     procedure SetActive(AValue: Boolean);
+    procedure SetController(AValue: TTyStyleController);
     procedure Apply;
   protected
     procedure Loaded; override;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -51,7 +53,7 @@ type
     { Documentary only — the hint window always resolves via the active default
       controller (LCL owns the window's instantiation, so a per-instance controller
       cannot be threaded through). Kept for design-time clarity. }
-    property Controller: TTyStyleController read FController write FController;
+    property Controller: TTyStyleController read FController write SetController;
   end;
 
   { TTyHint publishes TTyCustomHint's properties; everything lives in TTyCustomHint. }
@@ -269,6 +271,24 @@ begin
   else
     UninstallHintWindow;
   FInstalled := want;
+end;
+
+procedure TTyCustomHint.SetController(AValue: TTyStyleController);
+begin
+  if FController = AValue then Exit;
+  if FController <> nil then FController.RemoveFreeNotification(Self);
+  FController := AValue;
+  { The controller may sit on another form, or have no owner at all, and the owner's broadcast
+    reaches this component only when the two share an owner. Without a free notification a
+    freed controller stayed here: the IDE reads this property
+    when it saves the form. }
+  if FController <> nil then FController.FreeNotification(Self);
+end;
+
+procedure TTyCustomHint.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent = FController) then FController := nil;
 end;
 
 procedure TTyCustomHint.SetActive(AValue: Boolean);

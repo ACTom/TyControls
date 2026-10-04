@@ -1237,7 +1237,9 @@ begin
   DropGlyphCache;
   TStringList(FNames).OnChange := nil;   { must not fire into a half-freed component }
   FNames.Free;
-  FChangeHandlers.Free;
+  { Nil, not just freed: the owner's broadcast reaches this list's own Notification during the
+    inherited destructor, and that takes a dying watcher's methods off FChangeHandlers. }
+  FreeAndNil(FChangeHandlers);
   inherited Destroy;
 end;
 
@@ -1289,6 +1291,8 @@ end;
 procedure TTyCustomVirtualImageList.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
+  { A watcher on the change list that is freed leaves it, the rule TTyIconFont follows. }
+  if Operation = opRemove then RemoveAllHandlersOfObject(AComponent);
   if (Operation = opRemove) and (AComponent = FCollection) then
     FCollection := nil;
   if (Operation = opRemove) and (AComponent = FIconFont) then

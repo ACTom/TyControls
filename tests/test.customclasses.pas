@@ -971,8 +971,9 @@ end;
   text carries such a value gets a row here, nothing wider.
 
   Read off the machine:
-  - the font combo / list box fill their items from the installed fonts, and the combo box's
-    Text is the first of them ('@Fixedsys' on one Windows machine, something else on the next);
+  - the font combo box's Text is the first installed font ('@Fixedsys' on one Windows machine,
+    something else on the next). The font boxes' Items are filled from the same fonts but no
+    longer written at all (#26), so their rows left this table;
   - the shell tree's root nodes are the drives.
   Read off the locale:
   - the numeric edits format their zero with the locale's decimal separator ('0.00' / '0,00');
@@ -988,10 +989,8 @@ end;
   round every string value was masked, and swapping the password dialog's default character
   for '*' stayed green.) }
 const
-  CMachineValues: array[0..11, 0..2] of string = (
-    ('TTyFontComboBox', 'Items.Strings', '<from the machine>'),
+  CMachineValues: array[0..9, 0..2] of string = (
     ('TTyFontComboBox', 'Text', '<from the machine>'),
-    ('TTyFontListBox', 'Items.Strings', '<from the machine>'),
     ('TTyShellTreeView', 'RootNodeCount', '<from the machine>'),
     ('TTyNumericEdit', 'Text', '<from the locale>'),
     ('TTyCurrencyEdit', 'Text', '<from the locale>'),

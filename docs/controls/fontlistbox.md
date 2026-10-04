@@ -36,3 +36,4 @@ uses tyControls.FontListBox;
 
 - **组合 vs 列表:** 收起式选字体用 [TTyFontComboBox](fontcombobox.md);要常驻列表用本控件。
 - **所见即所得:** 每行用自己的字体画(BGRA 找不到时回退)。填充来源 `Screen.Fonts`,headless 下可能为空(不崩)。
+- **字体列表不存进 `.lfm`:** `Items` 是本机装的字体,不写进窗体文件,读窗体时按本机字体重新填充。3.0.0 存过的窗体里带着保存那台机器的字体列表,读完会换成本机的,并按名字选回原来的字体族(本机没有就不选)。新存的窗体只记 `ItemIndex` 序号,换一台字体不同的机器会对到别的字体;要固定某个字体族,运行时设 `SelectedFont`。
