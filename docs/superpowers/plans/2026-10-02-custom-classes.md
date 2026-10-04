@@ -72,7 +72,7 @@
 
 **D1 继承链：A（LCL 式）。** 派生控件 `TTyCustomX2 = class(TTyCustomX1)`、`TTyX2 = class(TTyCustomX2)`，例如 `TTyCustomNumericEdit = class(TTyCustomEdit)`、`TTyNumericEdit = class(TTyCustomNumericEdit)`。链上每一层都有 Custom 类；中间类（不在面板上、本来就为家族服务的 `TTyGlyphButtonBase` 等）当作 Custom 层，改挂到上一层的 Custom 类并降级，名字不变（Q1）。代价：55 个派生控件的类层级变了，`TTyGlyphButton is TTyButton`、`TTyNumericEdit is TTyEdit`、`TTyColorBox is TTyComboBox`、`TTyScrollBox is TTyPanel`、`TTyShellTreeView is TTyTreeView`、`TTyLucideImageList is TTyVirtualImageList` 等从 True 变 False——进「不兼容变化清单」第 1 条，库内、测试、示例、工具里的判断逐处处理（「`is` / `as` 翻转」一节、附录 C）。
 
-**D2 设计期注册。** 属性编辑器（`RegisterPropertyEditor`）改注册到 Custom 类（LCL 按 `InheritsFrom` 取最派生的一条，对象查看器只显示 published 的属性，第三方子类发布了就用上、没发布就看不见）；`THiddenPropertyEditor` 那几条留在最终类（它们管的是最终类在对象查看器里的样子）。组件编辑器（`RegisterComponentEditor`）留在最终类（动词会改属性，第三方子类没发布、又不靠 `DefineProperties` 存，就静默丢）；**凡是原来靠继承落到派生控件上的组件编辑器，A 下在注册行里把那些派生最终类显式加上**（实有一处：`[TTyIconFont, TTyVirtualImageList]` 的图标浏览器原来覆盖 `TTyLucideIconFont` / `TTyLucideImageList`，Task 28；`TTyTreeView` 的节点编辑器原来也落到 `TTyShellTreeView`，但在那里没有动词，A 下改由默认编辑器接手、行为不变，只改注释，Task 17）。
+**D2 设计期注册。** 属性编辑器（`RegisterPropertyEditor`）改注册到 Custom 类（LCL 按 `InheritsFrom` 取最派生的一条，对象查看器只显示 published 的属性，第三方子类发布了就用上、没发布就看不见）；`THiddenPropertyEditor` 那几条留在最终类（它们管的是最终类在对象查看器里的样子）——**第 4 期期末修复改**：Custom 类里声明了 `stored False` 的属性例外，它的隐藏编辑器注册在 Custom 类上（Lucide 图像列表的 `IconFont`、工具窗口与操作区的 `Controller`；否则第三方子类发布它就能在对象查看器里改、存盘就丢），`TestNeverStoredPropertiesHideOnTheCustomClass` 守着；另外非隐藏的属性编辑器一律不许注册在拆过的最终类上（`TTyFormSurface` 的 `Purpose` / `Version` 例外，要压过同一类上的整批隐藏编辑器），`TestEditorsSitOnTheCustomClass` 守着，Lucide 两个 `License` 编辑器因此挪到 Custom 类。组件编辑器（`RegisterComponentEditor`）留在最终类（动词会改属性，第三方子类没发布、又不靠 `DefineProperties` 存，就静默丢）；**凡是原来靠继承落到派生控件上的组件编辑器，A 下在注册行里把那些派生最终类显式加上**（实有一处：`[TTyIconFont, TTyVirtualImageList]` 的图标浏览器原来覆盖 `TTyLucideIconFont` / `TTyLucideImageList`，Task 28；`TTyTreeView` 的节点编辑器原来也落到 `TTyShellTreeView`，但在那里没有动词，A 下改由默认编辑器接手、行为不变，只改注释，Task 17）。
 
 **D3 Custom 类里属性的可见性：照 LCL。** 有 LCL 对应类的控件，同名属性照抄它在 LCL Custom 类处的可见性（most-derived 声明，`split.py vis` 查）；同义属性（名字不同、意思相同，如 `TTyGauge.Value` ↔ `TCustomProgressBar.Position`）照对应的那个；Ty 独有的属性照该对应类自身属性的多数（附录 E 的「独有属性」列）；没有对应类的控件按 LCL 主流——**public**（V16：LCL 92 对 `TCustomX`/`TX` 里 73 对多数在 public、10 对多数在 protected）。对照表见附录 E。LCL 有两个异例在 Custom 类里就 published（`TCustomTrackBar`、`TCustomHeaderControl`），我们不照抄 published（那会让 Custom 类失去意义、违反 G2），用 public（Q6）。
 
@@ -2251,6 +2251,57 @@ RadioGroup / CheckGroup 的错误消息用 `ClassName`（V8），实例类名不
 - 五期合计：拆 156 个类（1 期 59、2 期 42、3 期 35、4 期 20），中间类改挂 / 降级 5 个，基类降级 3 个；不拆 17 个、排除 3 个各有理由（`CNotSplit`）。全量 8590（Task 0 基线）→ **8733**（Task 0 后加的常驻守卫与五期 suite，G6 退役减 1）。常驻守卫 G1–G5、G7–G10（11 条）。用户验收清单：`docs/superpowers/plans/2026-10-02-custom-classes-acceptance.md`（28 项 + 决定 F1–F6）。
 - 不兼容变化清单最终版：见本计划「不兼容变化清单」第 1–9 条（第 5 条已按 4 期的 C 改写）；`docs/subclassing.md` 第 7 节是用户版。
 - 【主控执行】待办：编 `tycontrols.lpk` / `tycontrols_dt.lpk`（本期改了 `designtime/` 的 PropEditors、CompEditors、Css.Editor）、编全部 examples（本期没改 `examples/`；`examples/icons` 里 `TyBrowseIcons('', Lucide, ...)` 把 Lucide 字体传给图标浏览器，4.0 下靠参数放宽到 Custom 类才编得过，编示例时留意）、`check-lfm-props.py`、冒烟；期末审查；把验收清单交给用户；通知 3.0 会话：本期已拆单元（Controller、NativeStyler、IconFont、Icons.Lucide（生成器）、ImageCollection、GlyphImageList、ImageDraw、Hint、BalloonHint、Popover、Notification、Dialogs、Dialogs.Progress、Dialogs.About、Dialogs.IconBrowser）与移植规矩；本期没有要移植到 3.0 的修复。发版时 CHANGELOG「变更」写一条并关联 #8。
+### 第 4 期期末修复（2026-10-04，起点 `9a6dfb0d`）
+- 起点：`9a6dfb0d` 是第 4 期签收 `e9dac442` 之后把 main 合进本分支的合并提交，带进了 main 上的 3.0 移植，其中 `147fe85e`（#20：颜色框 / 颜色列表 `Loaded` 一律按 `Style` 重建、`Items` 不再写出）改了 G10 夹具的三段（见 G10 判据）。主控在 `9a6dfb0d` 上已做：`-B` 编两个包与全部 49 个 examples、`check-lfm-props` / `check-example-po` 通过、全量 8750 条 0/0、逐个冒烟无错误框。
+- 起因：主控派的第 4 期期末审查（scratchpad `splitrv4/`、`rv4/`）。审查另查出 5 个 3.0 也有的 bug（图标字体回调悬空、Hint / BalloonHint 的 Controller 悬空、FontComboBox / FontListBox 写出整机字体、NativeStyler.Root 无 FreeNotification、`glyphimagelist.md` 的 DefaultColor），已移交 3.0 会话，本分支不修，等它们摘到 main 后合进来。
+- 提交（每个问题一个，正文 `Refs #8`）：
+
+| # | 提交 | 处理 |
+|---|---|---|
+| 1 | `c92a652b` | **G9 生成器进仓库**：`scripts/gen-mimic.py`（CRLF；任何目录下能跑；严格 UTF-8 读源码；`CSplit` 块缺失 / 重复 / 类名重复就拒绝；重复声明的最终类拒绝）。在当前树上重跑，生成物只变了头注释。脚本、生成的单元头、`test.customclasses.pas` 的 G9 注释与报错文字都写明「重新生成会照抄最终类当前的发布段，生成后必须看 diff，只该多出新类」。CONTRIBUTING / CONTRIBUTING.en「新控件生来要拆」补两步：加进 `CSplit` 后跑 `scripts/gen-mimic.py` 审 diff；在 `tests/` 下 `TY_WRITE_FRESH_STREAMS=1 ./tytests --suite=TTyCustomClassesGuardTest.TestFreshFormFileTextUnchanged` 刷 G10 夹具审 diff（核实：变量名照测试代码；夹具路径按 exe 所在位置找，与工作目录无关） |
+| 2 | `6ffe2874` | **G10 打码收窄**：原先所有字符串值都打成 `<text>`（理由：资源串、区域设置、本机字体），`PasswordChar` 改 `'*'` 照样绿。逐个查了 53 个被打码的值的来源：真随环境变的只有字体（字体组合框 / 列表框 `Items`、字体组合框 `Text`）、驱动器（shell 树 `RootNodeCount`）、小数点（五个数值编辑框的 `Text`）、翻译（颜色框 / 颜色组合框首色的 LCL 资源串名、字符串网格的 `GroupRowFormat` 资源串）——全部列进 `CMachineValues` 并写明来源，打成 `<from the machine>` / `<from the locale>`；其余是构造函数里的字面量（`'Select Color'`、`'File'`、列标题、`'%.0f'`、`'●'`……），照比。`MaskStrings` 删掉。重生成夹具的 diff 正好是原来写着 `<text>` 的 53 行，行数不变，别的行一字未动 |
+| 3 | `bb207970` | **`License` 属性编辑器挪到 Custom 类**（`TTyCustomLucideImageList` / `TTyCustomLucideIconFont`，D2）。新守卫 `TestEditorsSitOnTheCustomClass`：非隐藏的属性编辑器注册在拆过的最终类上就红，唯一例外 `TTyFormSurface`（`Purpose` / `Version` 要压过同类上的整批隐藏编辑器）。修前红，红名单正是两条 `License` |
+| 4 | `c44512a0` | **Custom 类上 `stored False` 的属性，隐藏编辑器挪到 Custom 类**：Lucide 列表的 `IconFont`，以及同一形状的工具窗口、操作区的 `Controller`（审查只点了前者，新守卫一并找出后两者）。查过 `propedits.pp` 的 `GetEditorClass`：按名字、属性类型精确匹配、注册在类上的这一条，任何顺序下都压过 IDE 的通用组件编辑器，所以挪过去不会被盖掉，`docs/subclassing.md` 不需要那条警告。新守卫 `TestNeverStoredPropertiesHideOnTheCustomClass`（`TComponent.Name` 处处 `stored False`，按名字排除）。修前红，红名单正是这三条 |
+| 5 | `bc0c538f` | **发布顺序表补全**：逐个读 setter 核实（当场钳值、没有 `csLoading` 暂存），再用脚本扫全部最终类的发布属性 setter 及其直接调用的辅助方法。结果见「第 5 项扫描」 |
+| 6 | `71199954` | 导言改「大多数控件」；第 5 节新增「没有拆的类」：菜单 3、`TCommonDialog` 一系 11、`TTyForm` / `TTyDialog`、`TTyToolWindowManager`（从最终类派生，Custom 类挂得上栏的 `Manager` 却不会移动窗口、存不了布局——Q4）、排除的 AdvChart 三个，各写理由、怎么派生、何时补拆 |
+| 7 | `f3f9d2bb` | 第 4 节：删掉不存在的 `ImageName` 编辑器；改成「注册在 Custom 类或基类、中间类上」，唯一按类型注册的是 `TTyColor`；隐藏属性分两种（第 4 项的结果）；对话框预览判最终类用的是 `is`，注册给第三方类不抛、只是什么都不做；借用图标浏览器要依赖 `tycontrols_dt`、`uses tyControls.Design.CompEditors`；`DefineProperties` 照实写（只有 `TTyCustomVirtualImageList` 一处：写设计位置，故意不写 `Bitmap` 像素块，读到旧的就丢） |
+| 8 | `41a814fa` | 7.2「强转会抛」改成「用 `as TTyXxx`」，去掉「真话」；7.4 的行内变量声明改成先声明后赋值；第 1 节 15 个属性补 `Tag` |
+| 9 | `f80e2023` | 第 5 节补：行是代码生成的列表框 / 组合框子类在构造函数里 `FItemsStreamed := False;`（#20 加的开关）；Lucide 列表的 `IconFont` 在子类里也固定、不存、看不见 |
+| 10 | `2f30eb54` | `docs/controls`：`Images` 类型改 `TCustomImageList`（pagecontrol 并删掉错误解释、grid、advancedcombobox、advancedlistbox、comboboxex 两处、listgrouppanel 两处——grep 多找出 `listgrouppanel.md:93`）；「由基类 published」改为「声明在父类、由 TTyXxx 发布」（panel、groupbox、treeview、relativepanel、scrollbox；grep 多找出 `gridpanel.md:122`、`controlbar.md:47/49`）；层级旧说法（controlbar、coolbar 两处、scrollpanel）；`docs/events.md` 的 `DragMode` 说法改准、指向 `subclassing.md` 7.5（即不兼容清单第 9 条）。全 `docs/` 再 grep：剩下的「由基类状态机计算」「基类 `RenderTo`」等说的是实现所在，不是发布，保留 |
+| 11 | `8d52560f` | 验收清单：F3 标为已由 main `147fe85e`（#20）解决；第 12 项加「旧 `.lfm` 读回色块正常、存盘后 `Items` 块消失」；新增 29–33（`icons` 示例的 `TyBrowseIcons(Lucide)`、`hint` 示例的提示与气泡提示、`antdesign` 示例的弹出框与通知、`dialogs` 示例 8 个对话框、1 期遗留的 gallery 工具 A2-5）；「准备」里 IDE 项补上第 7 项；第 22 项写成弹出框（`TTyPopover`）；清单原来指的 `controls` 示例不存在，改成 `demo` |
+| 12 | `d9bb8491` | 计划：总目录 Task 27、Q8 与状态说明标出方案 C；「后续」收 F1 方案 A（要批准改 `TextMenu.pas`）与 F2；G10 判据与测试单元头补上合入 main 后有意改过的三段与本轮取消字符串打码；gen-mimic 两处指向 `scripts/`。签收（本提交）另在 D2 原处标注第 3、4 条的改动 |
+
+- **第 5 项扫描**：表里原有 5 行，补 9 行。范围在前、值在后：`TTyCustomMeter`、`TTyCustomLevelMeter`、`TTyCustomDial`、`TTyCustomGearDial`（`Min` / `Max` → `Value`）、`TTyCustomCircularProgress`、`TTyCustomUpDown`（`Min` / `Max` → `Position`）、`TTyCustomRating`（`Count` → `Value`）；ProgressBar、Gauge 由「`Max`」改「`Min`、`Max`」（`Min` 也当场钳）。扫描多找出三处不是范围的：`TTyCustomFilterComboBox`（`Filter` → `FilterIndex`，按组数钳）、`TTyCustomMaskEdit`（`Mask` → `SpaceChar`，掩码自带空白符时改写它）、`TTyCustomSpinEdit`（`ValueEmpty` 要在 `Value` 后，写进数就清空状态）。其余扫到的（组合框 `Text` / `Style`、`Items` / `Sorted`、速度按钮 `Down` / `GroupIndex` / `AllowAllUp`、工具条按钮尺寸、ExPanel `HeaderHeight` / `Collapsed`）不钳值或结果与顺序无关，不列。最终类的发布顺序全都满足这张表。计划 Task 31 第 2 条已同步。
+- 全量（`lazbuild -B tests/tytests.lpi` 0 错，复制成 `tests/tytests-split4fix.exe`，输出重定向）：**8752** 条，**0 错 0 败**，红名单空。对账：8750（`9a6dfb0d`）+ `TDesignEditorsTest` 新增 2 = 8752。
+- **守卫连跑**：同一构建的副本上 `TTyCustomClassesGuardTest` 单独连跑 **12 次全绿**（11 条，G9 / G10 每次都比）；`TDesignEditorsTest` 8 条全绿。
+- `check-lfm-props.py` 通过；`check-example-po` 101 个文件 0 问题；设计期单元用 fpc 对着测试构建产出的运行时单元单独编过（0 错，4 个既有警告都在 AdvChart 编辑器），输出只写 scratchpad。
+- **文档代码片段**：`docs/subclassing.md` 与 `.en.md` 的 8 个 pascal 块（两版代码逐行相同）由脚本原样抽出、按需包成单元（scratchpad `fix4/snip/assemble.py`），外加正文里的行内写法（`as TTyTabSheet`、`SetMethodProp`、构造函数里 `FItemsStreamed := False`、借用 `TTyIconBrowserComponentEditor` 的注册），用 fpc 对着测试构建产物与设计期单元编：`MyTagEdit`、片段合集（含第 6 节那段发布段的窗口化 50 行与去掉「窗口化才有」后的图形 39 行）、页控件编辑器、图标浏览器注册全部 0 错；7.4 那段「编不过」的示例确实编不过（`Incompatible types: got "TTyCustomTabSheet" expected "TTyTabSheet"`）。
+- 变异（改 → 读回比对 → 跑点名测试 → 写回原字节并核对哈希；改源码的那条之后重编）：
+  - **红**（6）：G10 的 `FPasswordChar := '*'`（`Dialogs.pas`）→ `TestFreshFormFileTextUnchanged` 红、只红 `TTyPasswordDialog` 一类（修前审查记录为存活）；`License` 编辑器改回 `TTyLucideImageList` / `TTyLucideIconFont`（两条）→ `TestEditorsSitOnTheCustomClass`；`IconFont`、工具窗口 `Controller`、操作区 `Controller` 的隐藏编辑器各改回最终类（三条）→ `TestNeverStoredPropertiesHideOnTheCustomClass`。设计期的五条不用重编（测试读 `designtime/` 源码）。
+  - **存活**：0。
+- 偏差：
+  - 第 4 项比 brief 多挪了工具窗口与操作区 `Controller` 的隐藏编辑器：同一形状（Custom 类 `stored False`），新守卫一并报出，留着就得给守卫开例外。
+  - 第 1 项的 CONTRIBUTING 命令写 `./tytests`（不带 `.exe`），Windows 的 Git Bash 与 Linux 都能用。
+- 计划外发现：本轮没有新的 3.0 也有的 bug（审查那 5 个已移交）。
+- 主控待做：本轮改了 `designtime/`（PropEditors：`License` 两条、三条隐藏编辑器换注册类）——重编 `tycontrols_dt.lpk`（`tycontrols.lpk` 与 examples 本轮没改 `source/` / `examples/`，不必重编）；IDE 里顺手看验收清单第 3、21 项（Lucide 列表的 `License` 「...」仍弹全文、`IconFont` 仍藏着；工具窗口 / 操作区的 `Controller` 仍藏着）；把验收清单（现 33 项 + 决定 F1–F6）交给用户；3.0 会话那 5 个修复摘到 main 后合进来，届时再跑全量。
+
+### 整个计划的最终签收（2026-10-04）
+- **五期总表**：
+
+| 期 | 拆的类 | 主要提交 / 签收 | 期末全量 | 期末修复 |
+|---|---|---|---|---|
+| 0（Task 0–1） | 基类降级 3（`TTyCustomControl`、`TTyGraphicControl`、`TTyComponent`），110 个类补发布段 | `12ec0e78`、`e4f3c648`（Q3）、`950fe415` | 基线 8590 | 与 1 期合并修复 |
+| 1（Task 2–11） | 59 | 见「1 期」 | 见「1 期」 | 「第 0、1 期期末修复」：G9 加入 |
+| 2（Task 12–19） | 42 | 见「2 期」 | 8668（修复后） | 「第 2 期期末修复」：G10 加入 |
+| 3（Task 20–26） | 35 | 见「3 期」 | 8720（修复后） | 「第 3 期期末修复」 |
+| 4（Task 27–32） | 20 | 见「4 期」；G6 退役 `33b4038c` | 8733（`e9dac442`） | 本轮（「第 4 期期末修复」） |
+
+  合计拆 156 个类，中间类改挂 / 降级 5 个（`TTyGlyphButtonBase`、`TTyCustomTabStrip`、`TTyCustomGrid`、`TTyShellTreeLink`、`TTyIconPackFont`），不拆 17 个、排除 3 个（`CNotSplit`，各有理由，用户文档第 5 节「没有拆的类」）。
+- **最终全量**：`d9bb8491` 之上（本签收只改计划文字）`lazbuild -B` 后 **8752** 条，**0 错 0 败**，红名单空；守卫 suite 12 次连跑全绿。
+- **常驻守卫**（`tests/test.customclasses.pas`，11 条）：G1 拆过的类挂在自己的 Custom 类上；G2 Custom 类不多发布；G3 / G3b Custom 与最终类一致、最终类发布段只有 `property X;`；G4 最终类不加字段；G5 每个注册类都有归属（`CSplit` / `CNotSplit`）；G7 派生控件挂在 Custom 链上；G8 降级的中间类与基类只发布 LCL 根；另两条：基类不发布、直接派生基类的第三方只看见 LCL 根；G9 生成的第三方模拟子类与最终类逐项相同（`scripts/gen-mimic.py`）；G10 新实例写进窗体文件的文本（夹具）。G6（迁移期快照）已于 `33b4038c` 退役，附录 B 补拆时临时恢复。设计期另有 `TDesignEditorsTest` 的两条（本轮加）：编辑器注册在 Custom 类、不存的属性在 Custom 类上藏。
+- **不兼容变化清单最终版**：本计划「不兼容变化清单」**9 条**（第 5 条按 4 期的方案 C 改写：`Controller` 不改类型）；用户版是 `docs/subclassing.md` 第 7 节（7.1–7.8）。
+- **留给用户的决定**（验收清单「等你定的决定」）：F1 `Controller` 改不改 Custom 类型（方案 A 要批准改 `TextMenu.pas`）；F2 `TTyColorComboBox` 下拉不读色块几何算不算 bug；F3 已由 #20 解决、不用再定；F4 Ribbon 收起存盘的展开高度；F5 Lucide 两个类继续发布再用隐藏编辑器藏；F6 组件编辑器留在最终类。
+- **后续事项**：#14 typeKey 链；附录 B 三个类在 `feat/advancechart` 合进 main 后补拆（临时恢复 G6）；F1 方案 A（批准后）；F5（4.x 评估）；`feat/theme-builder` 合并后复核 `tools/themebuilder/` 的类型判断；3.0 会话那 5 个修复合进来；发版时 CHANGELOG「变更」写一条并关联 #8；用户验收（33 项）。
 ### 计划外发现
 - `TTyColorComboBox` 的下拉列表（`TTyColorMorePopupList`）不读宿主的 `ColorRectWidth` / `ColorRectOffset` 与伪行颜色，只有字段区用得上——3.0 起如此，与本计划无关；`TTyColorBox` 的下拉（`TTyColorPopupList`）是读的。是否算 bug 交主控定。
 - `TTyIconFont.Version: Integer` 遮住库版本 `Version: string` 的写法（见 Task 1 签收），已按 `ChangeStamp` 先例改名。
