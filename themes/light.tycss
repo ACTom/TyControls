@@ -309,6 +309,8 @@
   --terminal-cursor-width: 1px;
   --terminal-pad: 4px;
   --terminal-underline-width: 1px;
+  --titlebar-icon-gap: 6px;
+  --titlebar-icon-size: 16px;
   --titlebar-padding: 8px;
   --toolwindow-button-size: 22px;
   --toolwindow-content-min: 120px;

@@ -684,7 +684,7 @@ const
     'TyToolWindowSeparator|', 'TyToolWindowDropIndicator|', 'TyToolWindowNote|',
     'TyToolWindowBadge|', 'TyToolWindowDropZone|');
 
-  GMETRICS: array[0..127] of string = (
+  GMETRICS: array[0..129] of string = (
     '--alert-close-gap',
     '--alert-close-size',
     '--alert-icon-gap',
@@ -790,6 +790,8 @@ const
     '--terminal-cursor-width',
     '--terminal-pad',
     '--terminal-underline-width',
+    '--titlebar-icon-gap',
+    '--titlebar-icon-size',
     '--titlebar-padding',
     '--toolwindow-button-size',
     '--toolwindow-content-min',
