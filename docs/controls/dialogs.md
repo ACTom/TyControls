@@ -467,6 +467,12 @@ FindDlg.Execute;
 tell them apart with `frReplaceAll in d.Options`. `Options` defaults to `[frDown]` (search down);
 `TTyReplaceDialog` also defaults `frReplace, frReplaceAll`.
 
+Besides `frMatchCase` / `frWholeWord` / `frDown`, the dialog honours LCL's `frHideMatchCase`,
+`frHideWholeWord`, `frHideUpDown` (the box is hidden and the ones below move up),
+`frDisableMatchCase`, `frDisableWholeWord`, `frDisableUpDown` (the box shows but is disabled) and
+`frShowHelp` (a Help button, which fires `OnHelpClicked`), as LCL's `TFindDialog` does. Writing
+`Options` while the dialog is open updates it at once, without touching the text being typed.
+
 > **Note:** `Position` here is an LCL `TPosition` placement *strategy* (`poScreenCenter`, `poDesigned`, …), **not** LCL `TFindDialog.Position`'s `TPoint` window coordinate. Modeless Ty dialogs place themselves by strategy, so LCL Find/Replace code that assigns `Position := Point(x, y)` needs adjusting.
 
 ### Progress
