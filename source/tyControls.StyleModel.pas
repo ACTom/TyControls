@@ -31,6 +31,11 @@ type
     HasState: Boolean;
     State: TTyState;
     Decls: array of TTyCssDeclaration;
+    { #14: which properties Decls write, worked out once (TTyStyleModel.EntryProps). It
+      depends on the property NAMES and the shape of the raw values, never on a var's
+      value, so it holds for the entry's whole life. }
+    PropsKnown: Boolean;
+    Props: TTyPropSet;
   end;
 
   { ===== a6256 / DPI-storm fix: one boxed resolve result, so the cascade below can be
@@ -93,6 +98,7 @@ type
     FResolveCache: TStringList;   // sorted; Objects[] own TTyResolvedStyle
     FCacheVer: Cardinal;          // FVersion the cache was built against
     FCacheVerValid: Boolean;      // False until the first fill (FVersion 0 is a legal version)
+    FCacheChainStamp: Cardinal;   // #14: the type key chain registry stamp the cache was built against
     { Same story for the named length metrics. ResolveMetric measured 0.096 ms/call: the
       FMergedVars.Values[] lookup is a LINEAR scan that splits 'name=value' on every entry,
       and TyEvalLength then re-parses the result. Controls pull several metrics per layout
@@ -100,6 +106,10 @@ type
       the value is a plain Integer stashed in Objects[] (no box to free). }
     FMetricCache: TStringList;
     procedure InvalidateResolveCache;
+    { #14. The memo is current when it was built against THIS theme version AND this state of
+      the process-wide type key chain registry. ReanchorCache drops it and records both. }
+    function CacheCurrent: Boolean; inline;
+    procedure ReanchorCache;
     function ResolveCacheKey(const ATypeKey, AStyleClass: string; AStates: TTyStateSet): string;
     procedure SetPropertyCascade(AValue: Boolean);
     procedure ClearList(ARules: TFPList);
@@ -121,6 +131,13 @@ type
       AHasState: Boolean; AState: TTyState; var AResult: TTyStyleSet);
     procedure ApplyEntry(var AResult: TTyStyleSet; AEntry: TTyStyleRuleEntry);
     procedure ResolveLayer(ARules: TFPList; const ATypeKey, AStyleClass: string;
+      AStates: TTyStateSet; var AResult: TTyStyleSet);
+    { #14 stage interleave (see LayerChainChildren). }
+    function EntryProps(AEntry: TTyStyleRuleEntry): TTyPropSet;
+    procedure ForTier(ARules: TFPList; const AKey: string; AVariants: TStrings;
+      AStates: TTyStateSet; ATier: Integer; AApply: Boolean; var AResult: TTyStyleSet;
+      var AProps: TTyPropSet; var ALastTier: array of Integer);
+    procedure LayerChainChildren(const AChain: TStringArray; const AStyleClass: string;
       AStates: TTyStateSet; var AResult: TTyStyleSet);
     function UserHasTypeKey(const ATypeKey: string): Boolean;
   public
@@ -235,6 +252,40 @@ const
   closed keyword sets stay in step; test.css.catalog asserts each suggestion is actually accepted
   by TyApplyDeclaration. The editor uses this to fill its value-completion list. }
 procedure TyStyleValueHints(const AProp: string; ADest: TStrings);
+
+{ ===== #14: the type key chain =================================================
+
+  A control subclass that reports its own typeKey (say 'TagButton') registers the key it
+  derives from ('TyButton'). ResolveStyle then resolves the parent exactly as it resolves
+  'TyButton' itself and lays the child's own rules over the result, property by property,
+  stage by stage: the child's plain rules beat the parent's plain rules, its variant rules
+  beat the parent's variant rules, its :state rules the parent's same-state rules -- but a
+  parent rule from a LATER stage still beats a child rule from an earlier one (a plain
+  child background does not swallow the parent's :hover). A theme that never mentions
+  'TagButton' therefore draws it exactly like a button; one that does only writes the
+  differences. Chains may be several links long (FancyTag -> TagButton -> TyButton).
+
+  The registry is PROCESS-WIDE and keyed on the typeKey, not on a control instance: every
+  path that resolves a key -- CurrentStyle, the thirty-odd direct ResolveStyle(GetStyleTypeKey)
+  calls, a parent resolving a child's key, lint and completion, which have no control at
+  all -- follows the chain without being told. Register in the unit's `initialization`,
+  before any control is created; a running control is not repainted by a registration.
+
+  A typeKey nobody registered resolves exactly as before. Names compare case-insensitively,
+  like rule type names. Raises ETyCssError for an invalid name, a cycle (including a key
+  that is its own parent), a chain longer than TyMaxTypeKeyChain keys, or a key that is
+  already registered with a DIFFERENT parent (registering the same link again is a no-op). }
+const
+  TyMaxTypeKeyChain = 8;   // keys in one chain, the key itself included
+
+procedure TyRegisterTypeKeyParent(const ATypeKey, AParentKey: string);
+procedure TyUnregisterTypeKeyParent(const ATypeKey: string);   // no-op if not registered
+{ The registered parent of ATypeKey, '' when it has none. }
+function TyTypeKeyParent(const ATypeKey: string): string;
+{ [ATypeKey, its parent, the parent's parent, ...]; just [ATypeKey] when unregistered. }
+function TyTypeKeyChain(const ATypeKey: string): TStringArray;
+{ Appends every registered CHILD key (as registered) to AList. }
+procedure TyGetRegisteredTypeKeys(AList: TStrings);
 
 implementation
 
@@ -934,6 +985,138 @@ begin
   { Everything else (lengths, url(), font-family, opacity, ...) is free text: no hints. }
 end;
 
+{ ── #14 type key chain registry ──────────────────────────────────────────────── }
+
+var
+  { 'child=parent' lines; Names compare case-insensitively (CaseSensitive False), like the
+    SameText rule matching. Small (a handful of third-party keys), so a linear IndexOfName
+    is fine -- and it runs only on a ResolveStyle MISS, never on the memo hit path. }
+  GTypeKeyParents: TStringList = nil;
+  { Bumped on every registration change. Part of TTyStyleModel's memo anchor (CacheCurrent):
+    a chain change re-resolves every key in every model, which is what "the cache key holds
+    the whole chain" needs, at the cost of one integer compare on the hit path. }
+  GTypeKeyChainStamp: Cardinal = 0;
+
+function IsTypeKeyName(const S: string): Boolean;
+var i: Integer;
+begin
+  Result := (S <> '') and (S[1] in ['A'..'Z', 'a'..'z', '_']);
+  if Result then
+    for i := 2 to Length(S) do
+      if not (S[i] in ['A'..'Z', 'a'..'z', '0'..'9', '_', '-']) then
+        Exit(False);
+end;
+
+function TyTypeKeyParent(const ATypeKey: string): string;
+var idx: Integer;
+begin
+  Result := '';
+  if (GTypeKeyParents = nil) or (GTypeKeyParents.Count = 0) then Exit;
+  idx := GTypeKeyParents.IndexOfName(ATypeKey);
+  if idx >= 0 then
+    Result := GTypeKeyParents.ValueFromIndex[idx];
+end;
+
+function TyTypeKeyChain(const ATypeKey: string): TStringArray;
+var
+  k: string;
+  n: Integer;
+begin
+  Result := nil;
+  SetLength(Result, 1);
+  Result[0] := ATypeKey;
+  if (GTypeKeyParents = nil) or (GTypeKeyParents.Count = 0) then Exit;
+  n := 1;
+  k := TyTypeKeyParent(ATypeKey);
+  { Registration already refuses cycles and over-long chains; the bound is a backstop so a
+    walk can never spin. }
+  while (k <> '') and (n < TyMaxTypeKeyChain) do
+  begin
+    SetLength(Result, n + 1);
+    Result[n] := k;
+    Inc(n);
+    k := TyTypeKeyParent(k);
+  end;
+end;
+
+{ Number of keys in AKey's chain, counted without the TyMaxTypeKeyChain cap (but stopping
+  one past it, so a loop cannot spin). }
+function ChainLength(const AKey: string): Integer;
+var k: string;
+begin
+  Result := 1;
+  k := TyTypeKeyParent(AKey);
+  while (k <> '') and (Result <= TyMaxTypeKeyChain) do
+  begin
+    Inc(Result);
+    k := TyTypeKeyParent(k);
+  end;
+end;
+
+procedure TyRegisterTypeKeyParent(const ATypeKey, AParentKey: string);
+var
+  idx, i, steps: Integer;
+  k: string;
+begin
+  if not IsTypeKeyName(ATypeKey) then
+    raise ETyCssError.CreateFmt(rsSmTypeKeyInvalidName, [ATypeKey]);
+  if not IsTypeKeyName(AParentKey) then
+    raise ETyCssError.CreateFmt(rsSmTypeKeyInvalidName, [AParentKey]);
+  if GTypeKeyParents = nil then
+  begin
+    GTypeKeyParents := TStringList.Create;
+    GTypeKeyParents.CaseSensitive := False;
+  end;
+  idx := GTypeKeyParents.IndexOfName(ATypeKey);
+  if idx >= 0 then
+  begin
+    if SameText(GTypeKeyParents.ValueFromIndex[idx], AParentKey) then
+      Exit;   // the same link again: nothing changes, nothing to invalidate
+    raise ETyCssError.CreateFmt(rsSmTypeKeyConflict,
+      [ATypeKey, GTypeKeyParents.ValueFromIndex[idx], AParentKey]);
+  end;
+  { Cycle: walking up from the new parent must never reach the new child. The registry is
+    acyclic before this call, so the walk ends; the step bound is a backstop. }
+  k := AParentKey;
+  steps := 0;
+  while (k <> '') and (steps <= GTypeKeyParents.Count) do
+  begin
+    if SameText(k, ATypeKey) then
+      raise ETyCssError.CreateFmt(rsSmTypeKeyCycle, [ATypeKey, AParentKey]);
+    k := TyTypeKeyParent(k);
+    Inc(steps);
+  end;
+  GTypeKeyParents.Add(ATypeKey + '=' + AParentKey);
+  { Depth: the new link can lengthen the chain of every key below ATypeKey, not just its
+    own, so check them all and withdraw the link if any goes over. }
+  for i := 0 to GTypeKeyParents.Count - 1 do
+    if ChainLength(GTypeKeyParents.Names[i]) > TyMaxTypeKeyChain then
+    begin
+      k := GTypeKeyParents.Names[i];
+      GTypeKeyParents.Delete(GTypeKeyParents.Count - 1);
+      raise ETyCssError.CreateFmt(rsSmTypeKeyTooDeep, [TyMaxTypeKeyChain, k]);
+    end;
+  Inc(GTypeKeyChainStamp);
+end;
+
+procedure TyUnregisterTypeKeyParent(const ATypeKey: string);
+var idx: Integer;
+begin
+  if GTypeKeyParents = nil then Exit;
+  idx := GTypeKeyParents.IndexOfName(ATypeKey);
+  if idx < 0 then Exit;
+  GTypeKeyParents.Delete(idx);
+  Inc(GTypeKeyChainStamp);
+end;
+
+procedure TyGetRegisteredTypeKeys(AList: TStrings);
+var i: Integer;
+begin
+  if (AList = nil) or (GTypeKeyParents = nil) then Exit;
+  for i := 0 to GTypeKeyParents.Count - 1 do
+    AList.Add(GTypeKeyParents.Names[i]);
+end;
+
 constructor TTyStyleModel.Create;
 begin
   inherited Create;
@@ -1164,7 +1347,7 @@ var
   v, key: string;
   idx: Integer;
 begin
-  if FCacheVerValid and (FCacheVer = FVersion) then
+  if CacheCurrent then
   begin
     key := AName + '|' + IntToStr(ADefault);
     idx := FMetricCache.IndexOf(key);
@@ -1173,9 +1356,7 @@ begin
   end
   else
   begin
-    InvalidateResolveCache;
-    FCacheVer := FVersion;
-    FCacheVerValid := True;
+    ReanchorCache;
     key := AName + '|' + IntToStr(ADefault);
   end;
 
@@ -1675,6 +1856,212 @@ begin
   end;
 end;
 
+{ ===== #14: stage interleave for the keys below a chain's root ====================
+
+  Stages ("tiers"), in the order ResolveLayer applies them inside one layer:
+    0 = the plain Key rule, 1 = Key.variant (StyleClass order), 2.. = one per state in
+    cTierStates (Key:state, then Key.variant:state).
+  A child's rules at tier T beat whatever its ancestors last wrote at a tier <= T, and lose
+  to what they last wrote at a tier > T: a plain TagButton background does not swallow the
+  parent's :hover / :disabled, TagButton:hover beats TyButton:hover, TagButton.primary beats
+  TyButton.primary, TyButton:hover still beats TagButton.primary. Within a tier the
+  ancestor goes first and the child second, so ties go to the child; several links stack the
+  same way, root to leaf.
+
+  "Last wrote" is literal: the root's own resolution is the unchanged layer-major one (built-in
+  layer, all tiers, then the user layer, all tiers), so a user-layer plain rule that already
+  overrode a built-in :hover in the PARENT'S OWN result counts as tier 0 -- the child sees the
+  parent exactly as the parent looks. With no child rules nothing is written below the root
+  and the result is the parent's, byte for byte. }
+const
+  cTierStates: array[0..4] of TTyState =   // = ResolveLayer's cStateOrder; keep in step
+    (tysSelected, tysHover, tysFocused, tysActive, tysDisabled);
+  cTierCount = 7;   // tier 0, tier 1, then the five cTierStates
+
+function TTyStyleModel.EntryProps(AEntry: TTyStyleRuleEntry): TTyPropSet;
+{ The properties AEntry writes. Its Present flags, plus the three sub-field declarations that
+  write a field without raising a flag of their own. }
+var
+  s: TTyStyleSet;
+  di: Integer;
+  n: string;
+begin
+  if AEntry.PropsKnown then Exit(AEntry.Props);
+  s := EmptyStyleSet;
+  Result := [];
+  for di := 0 to High(AEntry.Decls) do
+  begin
+    TyApplyDeclaration(s, AEntry.Decls[di].Prop, AEntry.Decls[di].RawValue, FMergedVars);
+    n := LowerCase(Trim(AEntry.Decls[di].Prop));
+    if (n = 'background-size') or (n = 'background-blur') then Include(Result, tpBackground)
+    else if n = 'outline-offset' then Include(Result, tpOutline);
+  end;
+  Result := Result + s.Present;
+  AEntry.Props := Result;
+  AEntry.PropsKnown := True;
+end;
+
+procedure TTyStyleModel.ForTier(ARules: TFPList; const AKey: string; AVariants: TStrings;
+  AStates: TTyStateSet; ATier: Integer; AApply: Boolean; var AResult: TTyStyleSet;
+  var AProps: TTyPropSet; var ALastTier: array of Integer);
+{ Visit the rules of ONE tier of AKey in ResolveLayer's order. AApply: apply each into AResult
+  and add what it writes to AProps. Otherwise: only record ATier as the last writer tier of
+  every property each rule writes (ALastTier is indexed by Ord(TTyProp)). }
+
+  procedure Cell(const AVariant: string; AHasState: Boolean; AState: TTyState);
+  var
+    i: Integer;
+    e: TTyStyleRuleEntry;
+    ps: TTyPropSet;
+    p: TTyProp;
+  begin
+    for i := 0 to ARules.Count - 1 do
+    begin
+      e := TTyStyleRuleEntry(ARules[i]);
+      if SameText(e.TypeName, AKey) and SameText(e.Variant, AVariant)
+         and (e.HasState = AHasState) and ((not AHasState) or (e.State = AState)) then
+      begin
+        ps := EntryProps(e);
+        if AApply then
+        begin
+          ApplyEntry(AResult, e);
+          AProps := AProps + ps;
+        end
+        else
+          for p := Low(TTyProp) to High(TTyProp) do
+            if p in ps then ALastTier[Ord(p)] := ATier;
+      end;
+    end;
+  end;
+
+var
+  vi: Integer;
+  st: TTyState;
+begin
+  if ATier = 0 then
+    Cell('', False, tysNormal)
+  else if ATier = 1 then
+  begin
+    for vi := 0 to AVariants.Count - 1 do
+      if Trim(AVariants[vi]) <> '' then Cell(Trim(AVariants[vi]), False, tysNormal);
+  end
+  else
+  begin
+    st := cTierStates[ATier - 2];
+    if not (st in AStates) then Exit;
+    Cell('', True, st);
+    for vi := 0 to AVariants.Count - 1 do
+      if Trim(AVariants[vi]) <> '' then Cell(Trim(AVariants[vi]), True, st);
+  end;
+end;
+
+{ Put back the properties in AProps from ASrc (what they were before a child tier wrote them).
+  Field groups mirror TyMergeStyleSet, plus RenderStyle; Background is copied whole except the
+  glass pair, which travels with tpGlass. Present is untouched: every restored property was
+  already present in ASrc. }
+procedure RestoreProps(var ADst: TTyStyleSet; const ASrc: TTyStyleSet; AProps: TTyPropSet);
+var gb: Integer; gt: TTyColor;
+begin
+  if tpBackground in AProps then
+  begin
+    gb := ADst.Background.GlassBlur; gt := ADst.Background.GlassTint;
+    ADst.Background := ASrc.Background;
+    ADst.Background.GlassBlur := gb; ADst.Background.GlassTint := gt;
+  end;
+  if tpGlass in AProps then
+  begin
+    ADst.Background.GlassBlur := ASrc.Background.GlassBlur;
+    ADst.Background.GlassTint := ASrc.Background.GlassTint;
+  end;
+  if tpTextColor    in AProps then ADst.TextColor    := ASrc.TextColor;
+  if tpBorderColor  in AProps then ADst.BorderColor  := ASrc.BorderColor;
+  if tpBorderWidth  in AProps then ADst.BorderWidth  := ASrc.BorderWidth;
+  if tpBorderStyle  in AProps then ADst.BorderStyle  := ASrc.BorderStyle;
+  if tpRenderStyle  in AProps then ADst.RenderStyle  := ASrc.RenderStyle;
+  if tpBorderRadius in AProps then
+  begin
+    ADst.BorderRadius := ASrc.BorderRadius;
+    ADst.Radius := ASrc.Radius;
+  end;
+  if tpPadding      in AProps then ADst.Padding      := ASrc.Padding;
+  if tpFontName     in AProps then ADst.FontName     := ASrc.FontName;
+  if tpFontSize     in AProps then ADst.FontSize     := ASrc.FontSize;
+  if tpFontWeight   in AProps then ADst.FontWeight   := ASrc.FontWeight;
+  if tpOpacity      in AProps then ADst.Opacity      := ASrc.Opacity;
+  if tpShadow in AProps then
+  begin
+    ADst.ShadowColor := ASrc.ShadowColor;
+    ADst.ShadowBlur := ASrc.ShadowBlur;
+    ADst.ShadowOffset := ASrc.ShadowOffset;
+  end;
+  if tpOutline in AProps then
+  begin
+    ADst.OutlineColor := ASrc.OutlineColor;
+    ADst.OutlineWidth := ASrc.OutlineWidth;
+    ADst.OutlineOffset := ASrc.OutlineOffset;
+  end;
+  if tpBgUnderTitle in AProps then ADst.BackgroundUnderTitlebar := ASrc.BackgroundUnderTitlebar;
+  if tpWindowShadow in AProps then ADst.WindowShadow := ASrc.WindowShadow;
+end;
+
+procedure TTyStyleModel.LayerChainChildren(const AChain: TStringArray; const AStyleClass: string;
+  AStates: TTyStateSet; var AResult: TTyStyleSet);
+{ AResult holds the chain root, resolved the ordinary way. Lay every key below it on top, one
+  tier at a time (see the block comment above). }
+var
+  variants: TStringList;
+  lastTier: array[0..Ord(High(TTyProp))] of Integer;   // tier of each property's last writer
+  p: TTyProp;
+  ci, t: Integer;
+  root: string;
+  useBase: Boolean;
+  wrote, keep, none: TTyPropSet;
+  before: TTyStyleSet;
+begin
+  variants := TStringList.Create;
+  try
+    variants.Delimiter := ' ';
+    variants.StrictDelimiter := False;
+    variants.DelimitedText := Trim(AStyleClass);
+    for ci := 0 to High(lastTier) do lastTier[ci] := -1;
+    none := [];
+    { Replay the root's resolution (same layers, same order) recording who wrote last. }
+    root := AChain[High(AChain)];
+    if FPropertyCascade or not UserHasTypeKey(root) then
+      for t := 0 to cTierCount - 1 do
+        ForTier(FBaseRules, root, variants, AStates, t, False, AResult, none, lastTier);
+    for t := 0 to cTierCount - 1 do
+      ForTier(FRules, root, variants, AStates, t, False, AResult, none, lastTier);
+    { Each key below the root, root-most first; inside a key, tier by tier. }
+    for ci := High(AChain) - 1 downto 0 do
+    begin
+      useBase := FPropertyCascade or not UserHasTypeKey(AChain[ci]);
+      for t := 0 to cTierCount - 1 do
+      begin
+        before := AResult;
+        wrote := [];
+        if useBase then
+          ForTier(FBaseRules, AChain[ci], variants, AStates, t, True, AResult, wrote, lastTier);
+        ForTier(FRules, AChain[ci], variants, AStates, t, True, AResult, wrote, lastTier);
+        if wrote = [] then Continue;
+        keep := [];
+        for p := Low(TTyProp) to High(TTyProp) do
+          if p in wrote then
+          begin
+            if lastTier[Ord(p)] > t then
+              Include(keep, p)                 // an ancestor wrote it at a later stage: it stays
+            else
+              lastTier[Ord(p)] := t;           // the child's value stands, at this stage
+          end;
+        if keep <> [] then
+          RestoreProps(AResult, before, keep);
+      end;
+    end;
+  finally
+    variants.Free;
+  end;
+end;
+
 procedure TTyStyleModel.InvalidateResolveCache;
 { a6256. Drop every memoised style. Called from the ONE place that can serve a stale
   entry — a FVersion mismatch seen at lookup time — so no mutator has to remember to
@@ -1686,6 +2073,23 @@ begin
     FResolveCache.Objects[i].Free;
   FResolveCache.Clear;
   FMetricCache.Clear;   // metrics ride the same FVersion anchor; Objects[] are plain ints
+end;
+
+function TTyStyleModel.CacheCurrent: Boolean; inline;
+begin
+  Result := FCacheVerValid and (FCacheVer = FVersion)
+    and (FCacheChainStamp = GTypeKeyChainStamp);
+end;
+
+procedure TTyStyleModel.ReanchorCache;
+{ Everything memoised was resolved against an older theme or an older chain registry: drop it
+  all and record what the next fills are resolved against. Metrics do not depend on the
+  chain; dropping them on a (rare, initialization-time) registration is harmless. }
+begin
+  InvalidateResolveCache;
+  FCacheVer := FVersion;
+  FCacheChainStamp := GTypeKeyChainStamp;
+  FCacheVerValid := True;
 end;
 
 function TTyStyleModel.ResolveCacheKey(const ATypeKey, AStyleClass: string;
@@ -1716,10 +2120,13 @@ var
   key: string;
   idx: Integer;
   box: TTyResolvedStyle;
+  chain: TStringArray;
+  root: string;
 begin
   { a6256 / DPI-storm fix. Serve from the memo when the theme has not changed since it
-    was filled. See the FResolveCache declaration for the measured cost this removes. }
-  if FCacheVerValid and (FCacheVer = FVersion) then
+    was filled. See the FResolveCache declaration for the measured cost this removes.
+    #14: nor the type key chain registry (CacheCurrent). }
+  if CacheCurrent then
   begin
     key := ResolveCacheKey(ATypeKey, AStyleClass, AStates);
     idx := FResolveCache.IndexOf(key);
@@ -1730,9 +2137,7 @@ begin
   begin
     { Version moved (or first call): everything memoised was resolved against the OLD
       theme. Drop it all and re-anchor. }
-    InvalidateResolveCache;
-    FCacheVer := FVersion;
-    FCacheVerValid := True;
+    ReanchorCache;
     key := ResolveCacheKey(ATypeKey, AStyleClass, AStates);
   end;
 
@@ -1748,10 +2153,18 @@ begin
       themed control gets no base bleed; the golden baseline. With PropertyCascade ON
       the base layer ALWAYS applies first, then the user layer overwrites per-property
       (omitted user props inherit the base; omission = inheritance, D4). Both layers' raw declarations
-      evaluate against the MERGED vars, so overriding a seed reaches base rules (D2). }
-    if FPropertyCascade or not UserHasTypeKey(ATypeKey) then
-      ResolveLayer(FBaseRules, ATypeKey, AStyleClass, AStates, Result);
-    ResolveLayer(FRules, ATypeKey, AStyleClass, AStates, Result);
+      evaluate against the MERGED vars, so overriding a seed reaches base rules (D2).
+
+      #14. The ROOT of the type key chain -- the key itself when nothing is registered --
+      gets exactly that treatment, so an unregistered key is unchanged byte for byte. The
+      keys below the root are then interleaved by stage (LayerChainChildren). }
+    chain := TyTypeKeyChain(ATypeKey);
+    root := chain[High(chain)];
+    if FPropertyCascade or not UserHasTypeKey(root) then
+      ResolveLayer(FBaseRules, root, AStyleClass, AStates, Result);
+    ResolveLayer(FRules, root, AStyleClass, AStates, Result);
+    if Length(chain) > 1 then
+      LayerChainChildren(chain, AStyleClass, AStates, Result);
   finally
     GThemeBaseDir := savedBaseDir;
   end;
@@ -1766,22 +2179,31 @@ end;
 
 procedure TTyStyleModel.GetVariantsForType(const ATypeKey: string; AList: TStrings);
 
-  procedure ScanLayer(ARules: TFPList);
+  procedure ScanLayer(ARules: TFPList; const AKey: string);
   var i: Integer; e: TTyStyleRuleEntry;
   begin
     for i := 0 to ARules.Count - 1 do
     begin
       e := TTyStyleRuleEntry(ARules[i]);
-      if SameText(e.TypeName, ATypeKey) and (e.Variant <> '')
+      if SameText(e.TypeName, AKey) and (e.Variant <> '')
          and (AList.IndexOf(e.Variant) < 0) then
         AList.Add(e.Variant);
     end;
   end;
 
+var
+  chain: TStringArray;
+  ci: Integer;
 begin
   if AList = nil then Exit;
-  ScanLayer(FBaseRules);   // built-in defaults (always present)
-  ScanLayer(FRules);       // user theme layer
+  { #14: a parent's variants reach the child through the chain (ResolveStyle applies them),
+    so they belong in the child's list too -- root first, like the resolve. }
+  chain := TyTypeKeyChain(ATypeKey);
+  for ci := High(chain) downto 0 do
+  begin
+    ScanLayer(FBaseRules, chain[ci]);   // built-in defaults (always present)
+    ScanLayer(FRules, chain[ci]);       // user theme layer
+  end;
 end;
 
 function TTyStyleModel.ResolveOverride(const ASource: string): TTyStyleSet;
@@ -1836,5 +2258,8 @@ end;
 initialization
   TySystemAccentHook := @DefaultSystemAccentHook;
   TySystemModeHook := @DefaultSystemModeHook;
+
+finalization
+  FreeAndNil(GTypeKeyParents);
 
 end.

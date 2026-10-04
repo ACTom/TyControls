@@ -302,6 +302,68 @@ TyButton { background: #00FF00; }   /* 只覆盖 background;color 仍是 #111111
 即便如此,仍不建议在**同一个文件里**重复定义同一选择器 —— 需要并列声明时把它们写进同一个规则块,
 读起来才不用满文件找覆盖。
 
+### 4.5 typeKey 链:子类继承父类的规则
+
+第三方控件覆写 `GetStyleTypeKey` 报自己的键(比如 `TagButton`)时,可以在 Pascal 里登记它从哪个键来
+(写法见 [subclassing.md](subclassing.md) 第 2 节):
+
+```pascal
+TyRegisterTypeKeyParent('TagButton', 'TyButton');   // 在 tyControls.StyleModel 里
+```
+
+登记之后,`TagButton` 先拿到 `TyButton` 的全部样式(内置层、主题层、变体、状态,和解析 `TyButton`
+本身一模一样),再用自己的规则逐属性盖上去。主题里没写 `TagButton` 时,它和普通按钮完全一样;
+写了就只需写不同的地方:
+
+```css
+TagButton { border-radius: var(--radius-pill); }
+```
+
+子键的规则按 §4.4 的**阶段**和父键交错:普通规则 → 变体 → 各状态(selected → hover → focus →
+active → disabled),每个阶段里先父后子。所以:
+
+- 子键的规则盖过父键**同一阶段或更早阶段**写的值:`TagButton { }` 盖过 `TyButton { }`,
+  `TagButton.primary` 盖过 `TyButton.primary`,`TagButton:hover` 盖过 `TyButton:hover`;
+- 父键**更晚阶段**写的值仍然有效:`TyButton:hover`、`TyButton:disabled` 盖过 `TagButton { }`
+  和 `TagButton.primary`,`TyButton:disabled` 也盖过 `TagButton:hover`。
+
+```css
+TagButton       { background: #DCFCE7; }   /* 平时是绿的 */
+                                           /* 悬停时用 TyButton:hover 的底色 */
+TagButton:hover { background: #BBF7D0; }   /* 想要自己的悬停色,就写这一条 */
+```
+
+这和浏览器里「带状态、带类的选择器优先」的直觉一致:给子键写一条普通背景,不会吃掉父键的悬停和禁用效果。
+
+「父键写的值」指父键**自己解析出来**的结果。例如主题打开了 `PropertyCascade`、又写了一条普通的
+`TyButton { background }`,它在 `TyButton` 自己的结果里已经盖掉了内置的 `:hover` 底色,那么对
+`TagButton` 来说这个背景也只算普通阶段写的。
+
+**链可以有好几级**,比如 `FancyTag` → `TagButton` → `TyButton`:每个阶段里从最上面的父键往下叠,
+同一阶段子键胜。一条链最多 8 个键。
+
+**内置层的让位按键各算各的**(§8.1)。主题写了 `TagButton { }`(无变体、无状态),只让 `TagButton`
+自己的内置规则失效;`TyButton` 的内置规则照常垫在下面。第三方键在内置层本来就没有规则,
+所以这条只在把内置键登记成子键时才看得出来。
+
+**子部件键要分别登记。** 控件用 `GetStyleTypeKey + 'Fill'` 之类拼出来的子部件键不会自动跟着走:
+`TagMeter` 的填充解析的是 `TagMeterFill`,想继承 `TyMeterFill` 就再登记一条。
+
+登记规则:
+
+- 在单元的 `initialization` 里登记,`finalization` 里用 `TyUnregisterTypeKeyParent` 撤销。登记表是
+  整个进程共用的;运行中途才登记,已经画好的控件不会自己重画。
+- 键名不分大小写,必须是标识符(字母或 `_` 开头,后面是字母、数字、`_`、`-`)。
+- 下列情况抛 `ETyCssError`,登记表保持原样:键名不合法;成环(包括把一个键登记成它自己的父键);
+  一条链超过 8 个键;同一个键已经登记了**别的**父键(同一对再登记一次不算错)。
+- 查询用 `TyTypeKeyParent`、`TyTypeKeyChain`、`TyGetRegisteredTypeKeys`。
+
+工具也认这条链:设计期 `StyleClass` 下拉会列出父键的变体(`TagButton` 也有 `primary`、`danger`、
+`ghost`);控制器级 StyleOverride 编辑器的补全和右侧参考列表都列出登记过的键。lint 不检查 typeKey 名,
+子键不会被报。
+
+没登记父键的 typeKey 跟以前一样:只吃主题里为它写的规则。
+
 ---
 
 ## 5. 属性参考
@@ -703,6 +765,7 @@ TyButton.primary {
 ## 8. typeKey 与内置变体清单
 
 选择器中的类型名即控件 `GetStyleTypeKey` 返回的 typeKey（含子部件 typeKey）。
+第三方控件自己的键可以登记一个父键、继承它的全部规则,见 §4.5。
 
 本节是主题作者的**权威键表**。清单逐条取自 `themes/light.tycss` —— 该文件是唯一事实来源,
 `source/tyControls.DefaultTheme.pas`(编译进库的内置基础层)由它生成并逐字节同步。

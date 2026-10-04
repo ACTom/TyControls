@@ -216,7 +216,8 @@ uses
   test.dpi.dialogs, test.dpi.snapshot,
   test.parity.datetime,
   test.customclasses, test.customclasses.p1, test.customclasses.p2, test.customclasses.p3,
-  test.customclasses.p4;
+  test.customclasses.p4,
+  test.typekeychain;
 
 type
   TTyTestRunner = class(TTestRunner)
