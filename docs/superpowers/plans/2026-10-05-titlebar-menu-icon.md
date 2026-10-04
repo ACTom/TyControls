@@ -378,4 +378,62 @@ begin
 
 ## 签收
 
-（执行完填写）
+**2026-10-05，实现 agent。**
+
+**提交**（`main` @ `140496e6` 之后）：`70a93b1a` 计划；`9af9e01f` 令牌（Task 1）；`e796fc02` 字符串（Task 2）；`1746f10b` 功能与测试（Task 3–6 的代码部分合成一个提交：几处改动落在同一个类声明里，按任务拆反而要中间态能编过，不值）；`dd5d30cc` 示例与文档；本签收提交。
+
+**编译与测试**：`lazbuild -B tests/tytests.lpi` 通过，exe 复制成 `tests/tytests-tb9.exe` 跑。
+- 新增两组：`TTitleBarWindowMenuTest` 20 条、`TTitleBarIconTest` 15 条，全绿。
+- 相关：`TI18NTest` 7、`TTyCustomClassesGuardTest` 11、`TTestThemeGolden` 8，全绿。
+- **全量 8799 条，0 失败 0 错误**，没有计时类偶发红。
+- fresh-streams：`TY_WRITE_FRESH_STREAMS=1` 重写后内容**无 diff**（只是写出时换成了 LF，已转回 CRLF）——两个新属性的默认值都不写进窗体文件，符合 V18 的预期。
+- mimic：`gen-mimic.py` 的 diff 只有 `TGenTitleBar` 段末多出 `property ShowIcon;`、`property Icon;` 两行。
+- 生成器：改动前先重跑两个生成器确认与源同步（`git diff --quiet` 为真），改动后 `DefaultTheme.pas` 只多两行令牌、`Css.Catalog.pas` 只多两个令牌名与数组上界。
+
+**变异**（`mut.py`：读原字节 → 断言命中一次 → 写入并读回比对 → `lazbuild -B` → 跑对应 suite → 写回原字节并读回比对；全部做完后再 `-B` 一次，上面那几组重跑全绿）：
+
+| 变异 | 改了什么 | 结果 |
+|---|---|---|
+| M1 | 还原可用 = 三项可见 | 红（2） |
+| M2 | 三项可见去掉「已最大化」 | 红（1） |
+| M3 | 最大化可用不看已最大化 | 红（2） |
+| M4 | 能最大化只看开关、不看 `FOffered` | 红（1） |
+| M5 | `DoContextPopup` 不让 `PopupMenu` | 红（1） |
+| M6 | 去掉宿主子控件冒泡判断 | 红（1） |
+| M7 | 不看 inherited 之后的 Handled | 红（1） |
+| M8 | `RenderTo` 去掉 `FShowIcon` 门 | **不做**：等价变异——关图标时 `CaptionLayoutAt` 给的 `Icon` 是空矩形，`DrawIcon` 首行就退出，去掉门画面不变。「关图标却画出图标」只能经 M9 发生，M9 红 |
+| M9 | `CaptionLayoutAt` 总传图标尺寸 | 红（4） |
+| M10 | 内容区漏加图标间距 | 红（5） |
+| M11 | 镜像漏掉 `Icon` | 红（1） |
+| M12 | 图标分支不 `Exit`（落进拖动） | 红（1） |
+| M13 | `DblClick` 不看 `FIconPressed` | 红（1） |
+| M14 | 取图先窗体后自己 | 红（1） |
+| M15 | `TyIsWindowMenuKey` 不看 Space | 红（2） |
+| M16 | `IsIconStored` 恒 True | 红（1） |
+| M17 | 图标尺寸不乘 PPI | 红（1） |
+| M18 | light.tycss 图标 16 → 18 | 红（1） |
+| M19 | 默认菜单不设 Controller | 红（1） |
+| M20 | 关闭项去掉 Alt+F4 | 红（1） |
+| M21 | 「最大化」接到最小化按钮 | 红（1） |
+| M22 | pot 删掉 `rstywindowmenuclose` | 红（`TI18NTest` 1） |
+| M23 | `IsShortcut` 不看 `FTitleBar <> nil` | 红（错误 1，nil 访问） |
+| M24 | 最终类删掉 `property Icon;`（不重生 mimic） | 红（`TTyCustomClassesGuardTest` 1） |
+| M26 | `IsWindowMaximized` 恒 False | 红（2） |
+| M27 | 分隔线不看前三项 | 红（1） |
+| M28 | 锚点不跟图标走 | 红（1） |
+
+27 个跑了的变异全红，没有存活。
+
+**与计划的出入**：Task 3–6 的代码合并为一个提交（见上）；变异表比计划多了 M26–M28（计划写了判据、没编号的三处）；M8 判为等价变异。
+
+**没有自动化覆盖、要人看的**：
+- `SetShowIcon` 里的 `ReAlign`（无头跑不到 LCL 对齐引擎）：示例里切换 / 启动时内嵌菜单栏是否落在图标之后。
+- 真弹窗：`PopupWindowMenu` 的真实路径（`TTyPopupMenu.PopUp`）测试里被替身截住。
+- Win32 上 Alt+Space：`WM_SYSKEYDOWN` 被吃掉后，后续 `WM_SYSCHAR` 是否还会让 `DefWindowProc` 弹出原生系统菜单（预期 LCL 在 KeyDown 已处理时丢掉随后的字符消息）。
+- 图标双击：第一下弹出菜单、菜单窗口抢走激活后，第二下是否仍以双击（`ssDouble`）到达标题栏。
+
+**【主控执行】**
+1. 编 `tycontrols.lpk`、`tycontrols_dt.lpk`。
+2. 编 `examples/toolwindows`，冒烟：标题栏左侧出现程序图标，菜单栏在图标之后、不与图标重叠；换主题（含现代密度）后图标与菜单栏位置跟着变。
+3. 手点：右键标题栏空白处 → 菜单四项，状态随最大化 / 还原变化；右键菜单栏、主题下拉框 → 不弹窗口菜单；单击图标 → 菜单挂在图标正下方；双击图标 → 关窗；Alt+Space → 菜单；最大化后菜单里「还原」可用、「最大化」灰；菜单项「关闭」走 `OnCloseQuery`。
+4. 设计器：选中标题栏，对象查看器里 `ShowIcon`、`Icon` 出现在 `ShowClose` 之后；`Icon` 的「...」打开 LCL 的图像编辑器，载入 `.ico` 后设计面板上（`ShowIcon=True` 时）立即重画；未设图时保存的 `.lfm` 里没有 `Icon`。
