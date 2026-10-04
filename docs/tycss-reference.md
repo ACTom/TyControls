@@ -342,6 +342,34 @@ TagButton:hover { background: #BBF7D0; }   /* 想要自己的悬停色,就写这
 **链可以有好几级**,比如 `FancyTag` → `TagButton` → `TyButton`:每个阶段里从最上面的父键往下叠,
 同一阶段子键胜。一条链最多 8 个键。
 
+**链根以下的键,同一阶段里先内置层、后用户层。** 链根(最上面的父键)照 §4.4 解析:先整个内置层
+(各阶段),再整个用户层。链根下面的键则按阶段走,每个阶段里先内置层、再用户层。所以把一个内置键
+登记成子键、又开着 `PropertyCascade` 时,它内置的 `:hover` 会盖过主题给它写的普通规则(阶段更晚);
+链根自己不会这样(用户层整个排在内置层之后)。第三方键没有内置规则,看不出这条区别。
+
+**按属性组交错,不按单条声明。** 「哪个阶段写了这个值」按属性组记,组的划分和控件的 StyleOverride
+合并进来时一样:一组里任何一个声明都算写了整组,让位时整组一起让。平时一条声明就是一组,要留意的是这几组:
+
+- `outline` 与 `outline-offset` 是一组(焦点环)。子键只写 `outline-offset`,父键在更晚的阶段
+  (常见的是 `:focus`)写了 `outline`,那个阶段里整组用父键的,子键的偏移也一起让掉:
+
+  ```css
+  TyButton:focus  { outline: 2px var(--focus-ring); outline-offset: 1px; }
+  TagButton       { outline-offset: 6px; }   /* 聚焦时不生效:整组用 TyButton:focus 的 */
+  TagButton:focus { outline-offset: 6px; }   /* 写在同一阶段,子键胜 */
+  ```
+
+- `background-size`、`background-blur` 跟 `background` 一组:父键的 `:hover` 换了底色,子键的
+  `background-size` 也跟着让。
+- 玻璃效果 `glass-blur` / `glass-tint` 是单独一组,不跟 `background` 走:父键的 `:hover` 只换底色时,
+  子键的玻璃参数不受影响;父键的 `:hover` 写了 `glass-tint`,悬停时子键的 `glass-blur` 也一起让掉。
+- `border-radius` 的四个角是一组:让位时四角一起回到父键的值。
+- `shadow` 的颜色、模糊、偏移是一组。
+
+没有把 `outline-offset` 单独拆成一项:组的划分和 StyleOverride 合并是同一套,主题作者只记一套规则;
+拆开要给样式集加一个新的属性标志,每个读 `Present` 的地方都得认它,而要碰到这种差别,得父子键在
+不同阶段分写同一个焦点环的两半,把偏移和焦点环写在同一条规则里就不会遇到。
+
 **内置层的让位按键各算各的**(§8.1)。主题写了 `TagButton { }`(无变体、无状态),只让 `TagButton`
 自己的内置规则失效;`TyButton` 的内置规则照常垫在下面。第三方键在内置层本来就没有规则,
 所以这条只在把内置键登记成子键时才看得出来。
@@ -353,6 +381,9 @@ TagButton:hover { background: #BBF7D0; }   /* 想要自己的悬停色,就写这
 
 - 在单元的 `initialization` 里登记,`finalization` 里用 `TyUnregisterTypeKeyParent` 撤销。登记表是
   整个进程共用的;运行中途才登记,已经画好的控件不会自己重画。
+- **在 `initialization` 里抛异常会让程序还没启动就中止**——比如两个包给同一个键登记了不同的父键,
+  后加载的那个一抛,整个程序起不来。包里登记用 `TyTryRegisterTypeKeyParent`:出错时返回 `False`、
+  登记表不变、不抛异常,控件只是不继承父键的规则;登记成功或同一对已经登记过返回 `True`。
 - 键名不分大小写,必须是标识符(字母或 `_` 开头,后面是字母、数字、`_`、`-`)。
 - 下列情况抛 `ETyCssError`,登记表保持原样:键名不合法;成环(包括把一个键登记成它自己的父键);
   一条链超过 8 个键;同一个键已经登记了**别的**父键(同一对再登记一次不算错)。

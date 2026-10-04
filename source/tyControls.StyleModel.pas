@@ -279,6 +279,12 @@ const
   TyMaxTypeKeyChain = 8;   // keys in one chain, the key itself included
 
 procedure TyRegisterTypeKeyParent(const ATypeKey, AParentKey: string);
+{ TyRegisterTypeKeyParent without the exception: False when it would have raised (the
+  registry is then unchanged), True when the link is registered or already was. For a
+  package's `initialization`, where an exception aborts the program before it starts -- two
+  packages that both register the same key with different parents would otherwise take the
+  application down with them; with this the later one simply goes without the chain. }
+function TyTryRegisterTypeKeyParent(const ATypeKey, AParentKey: string): Boolean;
 procedure TyUnregisterTypeKeyParent(const ATypeKey: string);   // no-op if not registered
 { The registered parent of ATypeKey, '' when it has none. }
 function TyTypeKeyParent(const ATypeKey: string): string;
@@ -1097,6 +1103,16 @@ begin
       raise ETyCssError.CreateFmt(rsSmTypeKeyTooDeep, [TyMaxTypeKeyChain, k]);
     end;
   Inc(GTypeKeyChainStamp);
+end;
+
+function TyTryRegisterTypeKeyParent(const ATypeKey, AParentKey: string): Boolean;
+begin
+  try
+    TyRegisterTypeKeyParent(ATypeKey, AParentKey);
+    Result := True;
+  except
+    on ETyCssError do Result := False;
+  end;
 end;
 
 procedure TyUnregisterTypeKeyParent(const ATypeKey: string);

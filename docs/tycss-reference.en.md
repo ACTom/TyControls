@@ -346,6 +346,39 @@ for `TagButton` it counts as written at the plain stage too.
 **Chains can have several links**, e.g. `FancyTag` → `TagButton` → `TyButton`: within each stage the topmost parent goes
 first and the child wins ties. A chain holds at most 8 keys.
 
+**Below the chain root, each stage takes the built-in layer first and then the user layer.** The root (the topmost parent)
+resolves as §4.4 says: the whole built-in layer (every stage), then the whole user layer. The keys below it go stage by stage,
+built-in then user within each stage. So when a built-in key is registered as a child and `PropertyCascade` is on, its
+built-in `:hover` beats a plain rule the theme writes for it (a later stage); the root never does that (its user layer comes
+after its entire built-in layer). Third-party keys have no built-in rules, so for them the difference never shows.
+
+**The interleave goes by property group, not by declaration.** "Which stage wrote this value" is recorded per property group,
+the same groups a control's StyleOverride merges by: any declaration in a group counts as writing the whole group, and the group
+yields as one. Usually one declaration is one group; these are the ones to know:
+
+- `outline` and `outline-offset` are one group (the focus ring). If the child writes only `outline-offset` and the parent
+  writes `outline` at a later stage (typically `:focus`), the parent has the whole group at that stage and the child's offset
+  yields with it:
+
+  ```css
+  TyButton:focus  { outline: 2px var(--focus-ring); outline-offset: 1px; }
+  TagButton       { outline-offset: 6px; }   /* no effect while focused: the group is TyButton:focus's */
+  TagButton:focus { outline-offset: 6px; }   /* same stage: the child wins */
+  ```
+
+- `background-size` and `background-blur` go with `background`: when the parent's `:hover` replaces the fill, the child's
+  `background-size` yields too.
+- The glass effect, `glass-blur` / `glass-tint`, is a group of its own and does not go with `background`: a parent `:hover`
+  that only changes the fill leaves the child's glass alone; a parent `:hover` that writes `glass-tint` takes the child's
+  `glass-blur` with it while hovered.
+- The four corners of `border-radius` are one group: they yield back to the parent's values together.
+- `shadow`'s colour, blur and offset are one group.
+
+`outline-offset` is not split out as a property of its own: the groups are the ones StyleOverride merges by, so a theme author
+learns one set of rules; splitting it would add a property flag to the style set that every reader of `Present` has to learn,
+and the difference only shows when a parent and a child write the two halves of one focus ring at different stages -- writing
+the offset in the same rule as the ring avoids it.
+
 **The built-in layer yields per key** (§8.1). A plain `TagButton { }` (no variant, no state) disables only `TagButton`'s own
 built-in rules; `TyButton`'s built-in rules still apply underneath. Third-party keys have no built-in rules anyway, so this
 only shows when a built-in key is registered as a child.
@@ -357,6 +390,10 @@ Registration rules:
 
 - Register in the unit's `initialization` and undo it in `finalization` with `TyUnregisterTypeKeyParent`. The registry is
   process-wide; a registration made after controls are on screen does not repaint them.
+- **An exception in `initialization` stops the program before it starts** -- two packages registering the same key with
+  different parents, and the one loaded second takes the whole application down. In a package, register with
+  `TyTryRegisterTypeKeyParent`: on an error it returns `False`, leaves the registry unchanged and raises nothing (the control
+  just does not inherit the parent's rules); it returns `True` when the link is registered or already was.
 - Key names are case-insensitive and must be identifiers (a letter or `_`, then letters, digits, `_` and `-`).
 - These raise `ETyCssError` and leave the registry unchanged: an invalid name; a cycle (including a key registered as its own
   parent); a chain longer than 8 keys; a key that already has a **different** parent (registering the same pair again is fine).

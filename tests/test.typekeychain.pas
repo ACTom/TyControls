@@ -45,6 +45,9 @@ type
     procedure TestParentVariantBeatsChildBase;
     procedure TestThreeLevelInterleave;
     procedure TestSubFieldDeclarationYieldsWithItsField;
+    procedure TestCornerRadiiYieldWithTheirGroup;
+    procedure TestOutlineOffsetYieldsWithTheOutline;
+    procedure TestTryRegisterReportsInsteadOfRaising;
     procedure TestPlainChildRuleYieldsOnlyChildBase;
     procedure TestThreeLevelChain;
     procedure TestCycleRaisesAndLeavesRegistryIntact;
@@ -489,6 +492,70 @@ begin
   finally
     m.Free;
   end;
+end;
+
+procedure TTypeKeyChainTest.TestCornerRadiiYieldWithTheirGroup;
+var
+  m: TTyStyleModel;
+  h: TTyStyleSet;
+begin
+  { border-radius carries the four corners (Radius) with the single BorderRadius: when the
+    parent's :hover takes the group back from the child, all four come back. }
+  TyRegisterTypeKeyParent('TagButton', 'TyButton');
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('TyButton:hover { border-radius: 2px 3px 4px 5px; } '
+      + 'TagButton { border-radius: 12px; }');
+    h := m.ResolveStyle('TagButton', '', [tysHover]);
+    AssertEquals('hovered child = hovered button',
+      Dump(m.ResolveStyle('TyButton', '', [tysHover])), Dump(h));
+    AssertEquals('top-left', 2, h.Radius.TL);
+    AssertEquals('top-right', 3, h.Radius.TR);
+    AssertEquals('bottom-right', 4, h.Radius.BR);
+    AssertEquals('bottom-left', 5, h.Radius.BL);
+    h := m.ResolveStyle('TagButton', '', [tysNormal]);
+    AssertEquals('at rest the child''s radius stands', 12, h.BorderRadius);
+    AssertEquals('on every corner', 12, h.Radius.BR);
+  finally
+    m.Free;
+  end;
+end;
+
+procedure TTypeKeyChainTest.TestOutlineOffsetYieldsWithTheOutline;
+var
+  m: TTyStyleModel;
+begin
+  { The interleave goes by property GROUP, the groups StyleOverride merges by: outline-offset
+    is part of the outline. The parent's :focus outline takes the whole group, the child's
+    offset with it (tycss-reference §4.5). }
+  TyRegisterTypeKeyParent('TagButton', 'TyButton');
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('TyButton:focus { outline: 2px #FF0000; outline-offset: 1px; } '
+      + 'TagButton { outline-offset: 6px; }');
+    AssertEquals('focused: the parent''s outline, offset included', 1,
+      m.ResolveStyle('TagButton', '', [tysFocused]).OutlineOffset);
+    AssertEquals('at rest the child''s offset stands', 6,
+      m.ResolveStyle('TagButton', '', [tysNormal]).OutlineOffset);
+    m.LoadFromCss('TyButton:focus { outline: 2px #FF0000; outline-offset: 1px; } '
+      + 'TagButton:focus { outline-offset: 6px; }');
+    AssertEquals('written at the same stage, the child''s offset wins', 6,
+      m.ResolveStyle('TagButton', '', [tysFocused]).OutlineOffset);
+  finally
+    m.Free;
+  end;
+end;
+
+procedure TTypeKeyChainTest.TestTryRegisterReportsInsteadOfRaising;
+begin
+  AssertTrue('a new link', TyTryRegisterTypeKeyParent('TagButton', 'TyButton'));
+  AssertTrue('the same link again', TyTryRegisterTypeKeyParent('TagButton', 'TyButton'));
+  AssertFalse('another parent: refused, no exception',
+    TyTryRegisterTypeKeyParent('TagButton', 'TyEdit'));
+  AssertEquals('the first parent stays', 'TyButton', TyTypeKeyParent('TagButton'));
+  AssertFalse('a cycle', TyTryRegisterTypeKeyParent('TyButton', 'TagButton'));
+  AssertEquals('and nothing registered', '', TyTypeKeyParent('TyButton'));
+  AssertFalse('an invalid name', TyTryRegisterTypeKeyParent('1x', 'TyButton'));
 end;
 
 { ── registry rules ──────────────────────────────────────────────────────────── }
