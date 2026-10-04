@@ -737,11 +737,13 @@ end;
 
 function TTyFileDialogForm.CloseQuery: Boolean;
 begin
-  { Respect any wired OnCanClose first, then gate an OK on our own validation. }
+  { Our own validation of an OK first, and only then the program's OnCanClose -- the order the
+    Windows dialog keeps: it refuses a name that fails fdoFileMustExist / fdoPathMustExist
+    before CDN_FILEOK, which is where LCL raises OnCanClose. The other way round, an OnCanClose
+    that had said yes, and acted on it (saved, say), could still find the dialog kept open. }
+  if (ModalResult = mrOK) and not AcceptSelection then
+    Exit(False);               { LCL resets ModalResult, the dialog stays open }
   Result := inherited CloseQuery;
-  if not Result then Exit;
-  if ModalResult <> mrOK then Exit;
-  Result := AcceptSelection;   { False -> LCL resets ModalResult, dialog stays open }
 end;
 
 function TTyFileDialogForm.AcceptSelection: Boolean;
