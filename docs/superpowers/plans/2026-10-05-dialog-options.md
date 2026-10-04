@@ -382,6 +382,25 @@ procedure TyGetFontFamilies(ADest: TStrings; AFixedPitchOnly: Boolean;
 - LCL `TOpenDialog` 的 `OptionsEx`、`OnFolderChange`、`OnSelectionChange`、`OnTypeChange`，`TCommonDialog.Title`、`HelpContext`：LCL 窗体若存了它们，换成 Ty 对话框读入会报未知属性。
 - 示例自带的 `tycontrols.zh_CN.po` 副本同步。
 
-## 签收
+## 签收（2026-10-05）
 
-（Task 12 填写）
+**提交**（起点 `140496e6`）：`dd92f87f` 计划 → `bf9c849a` FontFamilies → `67c1f723` FixedPitchOnly → `a5957091` 终端示例（Fixes #27）→ `f5b60a4a` 按钮栏 → `5cb993a8` 文字 → `26e29b1a` 查找 → `99a7fa95` 字体对话框 → `9540a665` 颜色网格 → `937b66f1` 颜色对话框 → `64981c85` 文件对话框 → `e5b20298` 选文件夹 → `7e21dd6b` 文档 → `5e1cc7af` G9 mimic → `a6cc92be` 网格测试加强 → 本签收（Fixes #28）。
+
+**编译**：`lazbuild -B tests/tytests.lpi` 一次过（只修了一处漏写的 `type`），本批单元无新警告。
+
+**全量**（`tests/tytests-dlg28.exe --all`，变异后 `-B` 重编再跑）：**8836 条，0 错 0 败**，忽略 1 条（`TSelectPathOptionsTest.TestNoReadOnlyReturn`：Windows 上给文件夹设只读属性不影响写入，造不出「不可写的文件夹」）。第一次全量唯一的红是 G9（mimic 尚未重新生成），重新生成后绿。
+
+**G9 / G10**：`gen-mimic.py` 的 diff 只多 `TGenFontComboBox`、`TGenFontListBox` 各一行 `property FixedPitchOnly;`；`TY_WRITE_FRESH_STREAMS=1` 重写 `fresh-streams.txt` 内容无变化（只有行尾，未提交内容差异）。
+
+**变异**（52 个，按字节替换、写回原字节还原、每个变异重编）：51 个第一次就红；**M7-1**（`ClearColors` 不清选中）第一次存活——测试选的是 VGA 后面的格子，清空后新加的第 0 格碰不到那个旧下标；改成选第 0 格（`a6cc92be`）后复跑变红。另加了计划外的 M2-*L（列表框同款）、M8-11（帮助按钮不看 `ofShowHelp`）、M9-4（`BuildForm` 不传 `Options`），全红。
+
+**未覆盖**：
+- `ofNoResolveLinks`：Windows 上 `GetPhysicalFilename` 原样返回，本机测不出，只能读码确认（文件、选文件夹两处）。
+- `TySelectPathCheck` 的 `spcNotWritable`：同上，Windows 造不出不可写的文件夹，测试被忽略。
+- 弹出的消息框（`TyMessageDlg`）是模态的，文件 / 选文件夹对话框里「判断结果 → 报哪句话」的映射只读码，判断本身由纯函数测住。
+- 非 Windows widgetset 上的等宽 / 点阵判断只按 LCL 源码核实（V3–V6），没有真机。
+
+**与计划的出入**：
+- 新文字集中在一个提交（`5cb993a8`），没有分散到各任务。
+- 枚举别名没有在 `finalization` 里 `RemoveEnumElementAliases`：它会删掉 `TOpenOption` 上**所有**别名（包括别人注册的），而包从不卸载。
+- 文档（Task 10）挪到编译之后写，好让文档里的名字以编译通过的为准；颜色测试里一个写错的期望条数（应为 5）随文档提交一起改了。
