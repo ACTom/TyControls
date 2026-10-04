@@ -8,7 +8,7 @@ unit test.themelint;
 interface
 uses
   Classes, SysUtils, fpcunit, testregistry,
-  tyControls.ThemeLint;
+  tyControls.ThemeLint, tyControls.StyleModel;
 
 type
   TThemeLintTest = class(TTestCase)
@@ -45,6 +45,8 @@ type
     procedure TestImportedVarsResolve;
     // the headline sanity guard
     procedure TestLightThemeLintsClean;
+    // #14: a type key chain's child key is not a lint problem, registered or not
+    procedure TestChainKeyLintsClean;
   end;
 
 implementation
@@ -308,6 +310,27 @@ begin
     AssertEquals('shipped light.tycss lints clean: ' + JoinWarnings(w), 0, Length(w));
   finally
     sl.Free;
+  end;
+end;
+
+procedure TThemeLintTest.TestChainKeyLintsClean;
+const
+  cSrc = 'TagButton { border-color: #FF0000; }'
+       + 'TagButton.primary:hover { color: #FFFFFF; }';
+var
+  w: TTyLintResult;
+begin
+  { The linter reads no typeKey list: a third-party key draws no warning whether or not it
+    is in a chain. Whoever adds an unknown-typeKey check must make it accept the keys
+    TyGetRegisteredTypeKeys reports, or this goes red. }
+  w := TyLintCss(cSrc);
+  AssertEquals('unregistered child key: ' + JoinWarnings(w), 0, Length(w));
+  TyRegisterTypeKeyParent('TagButton', 'TyButton');
+  try
+    w := TyLintCss(cSrc);
+    AssertEquals('registered child key: ' + JoinWarnings(w), 0, Length(w));
+  finally
+    TyUnregisterTypeKeyParent('TagButton');
   end;
 end;
 

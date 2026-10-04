@@ -71,6 +71,7 @@ var
   i, depth, boundary: Integer;
   curWord, prop: string;
   colonAfter: Boolean;
+  reg: TStringList;
 
   procedure AddAll(const A: array of string);
   var s: string;
@@ -118,6 +119,16 @@ begin
   if ASelectorMode then
   begin
     AddAll(TyCatalogTypeKeys);
+    { #14: a third-party key registered into a type key chain is a real selector head too. }
+    reg := TStringList.Create;
+    try
+      TyGetRegisteredTypeKeys(reg);
+      for i := 0 to reg.Count - 1 do
+        if ADest.IndexOf(reg[i]) < 0 then
+          ADest.Add(reg[i]);
+    finally
+      reg.Free;
+    end;
     AddAll(TyKnownPseudoStates);
   end;
 end;
