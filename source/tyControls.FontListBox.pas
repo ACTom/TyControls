@@ -17,6 +17,7 @@ type
   protected
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); override;
+    procedure Loaded; override;
   public
     constructor Create(AOwner: TComponent); override;
     procedure RefreshFonts;
@@ -28,7 +29,22 @@ implementation
 constructor TTyFontListBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  { This machine's fonts are not written into the form file -- see TTyFontComboBox.Create. }
+  FItemsStreamed := False;
   RefreshFonts;
+end;
+
+procedure TTyFontListBox.Loaded;
+var
+  keep: string;
+begin
+  inherited Loaded;
+  { This machine's fonts again, for a form that still carries another machine's list, with the
+    chosen family found by NAME: its row number is different on every machine, and a family this
+    machine lacks leaves nothing selected rather than whatever font now sits at that row. }
+  keep := SelectedFont;
+  Items.Assign(Screen.Fonts);
+  ItemIndex := Items.IndexOf(keep);
 end;
 
 procedure TTyFontListBox.RefreshFonts;
