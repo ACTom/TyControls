@@ -33,6 +33,8 @@
 | `Align` | `TAlign` | `alNone` | 对齐方式（继承自 LCL，现 published）。作为 `TTyForm` 子组件时由窗体设为 `alTop`。 |
 | `Anchors` | `TAnchors` | `[akLeft, akTop]` | 锚定（继承自 LCL，现 published）。 |
 | `ButtonWidth` | `Integer` | `46` | 每个系统按钮的宽度（逻辑像素）。写入时重排按钮并刷新右侧内缩（`RightInset`）。 |
+| `ShowIcon` | `Boolean` | `False` | 在标题栏阅读起始侧显示图标。默认关，升级后标题栏样子不变。见 §6「图标」。 |
+| `Icon` | `TIcon` | 空 | `ShowIcon` 画的图标。空着就用所在窗体的 `Icon`，再没有就用 `Application.Icon`。只在设了图时写进 `.lfm`；对象查看器里用 LCL 自带的图像编辑器（和 `TForm.Icon` 同一个）。 |
 
 ### public 只读属性 / 方法（non-published）
 
@@ -42,6 +44,11 @@
 | `MaxButton` | `TTyCaptionButton` | 最大化/还原按钮（`Kind = cbkMax`，最大化后切换为 `cbkRestore`）。 |
 | `CloseButton` | `TTyCaptionButton` | 关闭按钮（`Kind = cbkClose`）。 |
 | `CaptionLayout` | `function: TTyCaptionLayout` | 系统按钮簇与内容区当前的几何（`MinBtn`/`MaxBtn`/`CloseBtn`/`Band`/`Content`，均为客户区设备像素）。**这是按钮 x 的唯一权威**：`LayoutButtons`、`AdjustClientRect`、`CaptionSpan` 全部读它。宿主要在标题栏上放东西时，问它按钮在哪一侧，别自己算。 |
+| `WindowMenu` | `function: TPopupMenu` | 标题栏要弹的窗口菜单：设了 `PopupMenu` 就是它，否则是 `DefaultWindowMenu`；窗口什么都不提供（没有一项可见）时为 nil。右键、单击图标、Alt+Space 都弹这一个。 |
+| `DefaultWindowMenu` | `function: TPopupMenu` | 库自带的窗口菜单（`TTyPopupMenu`），每次调用都按窗口当前状态刷新可见 / 可用，并用标题栏的样式控制器上主题。各项位置见常量 `TyWindowMenuRestoreIndex` … `TyWindowMenuCloseIndex`。**不会**赋给 `PopupMenu`。 |
+| `ShowWindowMenu` | `function: Boolean` | 在 `WindowMenuAnchor` 处弹 `WindowMenu`。设计期或没有菜单可弹时返回 False。 |
+| `WindowMenuAnchor` | `function: TPoint` | 没有指针位置时菜单挂在哪（屏幕坐标）：显示图标时挂在图标下沿的阅读起始边，否则挂在标题栏阅读起始角的下沿。 |
+| `EffectiveIcon` | `function: TIcon` | `ShowIcon` 实际画的那张图：`Icon` → 窗体 `Icon` → `Application.Icon`，都没有时 nil（槽位照留）。 |
 | `RightInset` | `function: Integer` | 系统按钮簇占用的总**宽度**（= `CaptionLayout.Band` 的宽度）。宽度没有方向，所以镜像不改变它的值——但镜像后它量的那条带在**左**边，名字会骗人。保留原名是因为改公开成员名属破坏性变更，收益不抵成本（见 `plans/2026-08-04-rtl-mirroring-scope.md` §6.3 第 6 条）。 |
 
 这三个按钮的 `Parent` 设为 `TTyTitleBar` 自身（**代码持有**），由 `LayoutButtons` 在构造和 `Resize` 时自动排布。它们是**窗口化子控件**，所以 `LayoutButtons` 写下的 `SetBounds` 同时就是它们的命中区、悬停区和按下区——LCL 按这份 bounds 路由——这也是按钮几何只需要在一个地方正确的原因。
@@ -81,6 +88,44 @@
 
 三个系统按钮的 `OnClick` 由 `TTyForm` 接线：最小化 → `WindowState := wsMinimized`；最大化/还原 → 引擎 `ToggleMaximize`；关闭 → `Close`。
 
+右键标题栏弹窗口菜单（见下一节）。`OnContextPopup` 先触发，里面置了 `Handled := True` 就不弹。
+
+### 窗口菜单
+
+没设 `PopupMenu` 时，右键标题栏弹出库自带的窗口菜单，项目和 Windows 的系统菜单一样：
+
+| 项 | 显示 | 可用 |
+|---|---|---|
+| 还原 | 窗口能最小化或能最大化，或者已经最大化 | 已最大化 |
+| 最小化 | 同上 | 能最小化 |
+| 最大化 | 同上 | 能最大化，且还没最大化 |
+| 关闭（Alt+F4） | 能关闭 | 总是 |
+
+「能最小化 / 最大化 / 关闭」就是对应的标题按钮在不在：标题栏的 `ShowMinimize` 等开关，加上窗体按 `BorderIcons` 和 `Resizable` 提供的按钮，两边都允许才算。所以只带关闭按钮的 `TTyDialog` 菜单里只有「关闭」；去掉 `biMaximize` 的窗口，「最大化」显示但灰掉。窗口既不能最小化也不能最大化时，前三项照 Windows 的做法整个去掉；但已经最大化的窗口始终留着「还原」。
+
+点菜单项等于点对应的标题按钮，走的是同一条路：在 `TTyForm` 上就是上面那三个接线，独立使用的标题栏就是你给按钮挂的 `OnClick`。
+
+- **设了 `PopupMenu`，用你的。** 右键、单击图标、Alt+Space 都弹你的菜单。
+- **点在标题栏上的其他窗口化控件上**（菜单栏、主题下拉框之类），标题栏不弹，右键请求照常冒泡到窗体。点在三个标题按钮上、或者标题栏上的图形控件（`TTyLabel` 等）上，算作标题栏本身。
+- **菜单键**（键盘上的菜单键）弹在 `WindowMenuAnchor`。
+- **Alt+Space**：`TTyForm` 收到 Alt+Space 时弹同一个菜单，和原生窗口一样。Linux 上不少窗口管理器自己占用了这个组合键（GNOME、KDE 的窗口菜单），这时按键先被它们拿走，到不了程序里。
+- **macOS** 上不显示「Alt+F4」，也不接 Alt（Option）+Space：mac 没有这个关窗键，Option+Space 是输入不换行空格。
+
+### 图标
+
+`ShowIcon := True` 后，标题栏在阅读起始侧（左到右时是最左边）画一个图标：
+
+```
+[ 图标  标题文本  ...  ] [ Min ] [ Max ] [ Close ]
+```
+
+- **取图顺序**：`Icon` → 所在窗体的 `Icon` → `Application.Icon`（工程选项里的程序图标）。都没有图时什么也不画，但位置照样留着，布局不会因为有没有图而跳动。图标里有多种尺寸时挑最接近的一张，再缩放到格子大小。
+- **尺寸**走主题令牌，逻辑像素，按 DPI 缩放：`--titlebar-icon-size`（图标边长，经典 16、现代 20）、`--titlebar-icon-gap`（图标与标题的间距，经典 6、现代 8）；图标前面的边距沿用 `--titlebar-padding`。图标不会比标题栏高，垂直居中。
+- **让位**：标题文字和标题栏上**对齐的**子控件（`Align = alLeft` 等）一起往后挪出图标的位置。自由放置（`alNone`）的子控件保持你写的坐标，不会被挪动（与 §1「范围说明」一致）——标题栏里放菜单栏又要开图标的话，把菜单栏设成 `alLeft`，参考 `examples/toolwindows`。
+- **鼠标**：单击图标弹窗口菜单，挂在图标正下方；双击图标关闭窗口（能关闭时）。图标不属于拖动区，按在图标上不会拖动窗口，双击图标也不会最大化或卷起。
+- **右到左**：图标随整条栏镜像到右边，菜单挂在图标的右下角。
+- `ShowIcon = False` 时布局与没有这个功能时逐像素一致（`TyTitleBarLayoutFor` 收到的图标尺寸为 0，就是原来的 `TyCaptionLayoutFor`）。
+
 ## 5. 状态与主题
 
 ### 状态
@@ -118,7 +163,7 @@ TyTitleBar {
 [  标题文本  ...  ] [ Min ] [ Max ] [ Close ]
 ```
 
-文本区域：`Left + 8px` 到 `Right - RightInset`，其中 `RightInset = VisibleButtonCount × ButtonWidth`（三个全可见时为 138px = 3 × 46；隐藏最小化/最大化按钮会相应缩小内缩）。
+文本区域：`Left + 8px`（显示图标时再加图标与间距）到 `Right - RightInset`，其中 `RightInset = VisibleButtonCount × ButtonWidth`（三个全可见时为 138px = 3 × 46；隐藏最小化/最大化按钮会相应缩小内缩）。
 
 ### 右到左（`BiDiMode = bdRightToLeft`）
 
