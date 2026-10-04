@@ -45,9 +45,8 @@ type
     procedure TestReusedFormClearsStaleActionFlag;
   end;
 
-  { The TFindOptions gates 3.0 accepted and ignored -- LCL's SetFormValues, gate for gate: the
-    frHide* / frDisable* pairs and frShowHelp. (frEntireScope and frPromptOnReplace add check
-    boxes, so they change how a default dialog looks; they are 4.0's.) }
+  { The twelve TFindOptions 3.0 accepted and ignored (#28): LCL's SetFormValues /
+    GetFormValues, gate for gate. }
   TFindOptionsTest = class(TTestCase)
   private
     FHelpSender: TObject;
@@ -57,9 +56,14 @@ type
   published
     procedure TestEachHideOptionHidesItsBoxAndClosesTheGap;
     procedure TestEachDisableOptionGreysOnlyItsBox;
-    procedure TestNoHelpButtonByDefault;
+    procedure TestEntireScopeGoesInAndComesBack;
+    procedure TestPromptOnReplaceGoesInAndComesBack;
+    procedure TestFindFormHasNoPromptOnReplace;
+    procedure TestReplaceHidesPromptOnReplaceByDefault;
+    procedure TestEntireScopeShowsByDefault;
     procedure TestShowHelpShowsHelpAndForwardsTheClick;
     procedure TestOptionsWrittenWhileOpenUpdateTheWindow;
+    procedure TestNoHelpButtonByDefault;
     procedure TestOptionsChangedBetweenExecutesTakeEffect;
     procedure TestAHiddenHelpButtonDoesNotWidenTheDialog;
   end;
@@ -344,14 +348,16 @@ begin
   FHelpSender := Sender;
 end;
 
-{ The boxes in their stacking order: match case, whole word, search up. }
+{ The boxes in their stacking order: match case, whole word, search up, entire scope, prompt. }
 function TFindOptionsTest.BoxOf(AForm: TTyFindForm; AIndex: Integer): TTyCheckBox;
 begin
   case AIndex of
     0: Result := AForm.MatchCaseCheck;
     1: Result := AForm.WholeWordCheck;
+    2: Result := AForm.SearchUpCheck;
+    3: Result := AForm.EntireScopeCheck;
   else
-    Result := AForm.SearchUpCheck;
+    Result := AForm.PromptOnReplaceCheck;
   end;
 end;
 
@@ -362,29 +368,34 @@ procedure TFindOptionsTest.CheckHide(AOption: TFindOption; AReplace: Boolean;
 var
   dlg: TTyFindDialog;
   frm: TTyFindForm;
-  tops: array[0..2] of Integer;
-  hidden, i, h0, stride: Integer;
+  tops: array[0..4] of Integer;
+  hidden, i, last, h0, stride: Integer;
 begin
   if AReplace then dlg := TTyReplaceDialog.Create(nil) else dlg := TTyFindDialog.Create(nil);
   try
+    if AReplace then dlg.Options := [frDown, frReplace, frReplaceAll]   // prompt box showing
+    else dlg.Options := [frDown];
     frm := dlg.BuildForm;
-    for i := 0 to 2 do tops[i] := BoxOf(frm, i).Top;
+    if AReplace then last := 4 else last := 3;
+    for i := 0 to last do tops[i] := BoxOf(frm, i).Top;
     h0 := frm.ClientHeight;
     case AOption of
       frHideMatchCase: hidden := 0;
       frHideWholeWord: hidden := 1;
+      frHideUpDown: hidden := 2;
+      frHideEntireScope: hidden := 3;
     else
-      hidden := 2;
+      hidden := 4;
     end;
     stride := tops[1] - tops[0];
     dlg.Options := dlg.Options + [AOption];
     frm := dlg.BuildForm;
-    for i := 0 to 2 do
+    for i := 0 to last do
       if i = hidden then
         AssertFalse(AWhat + ': its box is hidden', BoxOf(frm, i).Visible)
       else
         AssertTrue(AWhat + ': box ' + IntToStr(i) + ' still shows', BoxOf(frm, i).Visible);
-    for i := hidden + 1 to 2 do
+    for i := hidden + 1 to last do
       AssertEquals(AWhat + ': box ' + IntToStr(i) + ' moved up one place',
         tops[i - 1], BoxOf(frm, i).Top);
     AssertEquals(AWhat + ': the window is one row shorter', h0 - stride, frm.ClientHeight);
@@ -396,7 +407,9 @@ begin
   CheckHide(frHideMatchCase, False, 'frHideMatchCase');
   CheckHide(frHideWholeWord, False, 'frHideWholeWord');
   CheckHide(frHideUpDown, False, 'frHideUpDown');
+  CheckHide(frHideEntireScope, False, 'frHideEntireScope');
   CheckHide(frHideMatchCase, True, 'frHideMatchCase (replace)');
+  CheckHide(frHidePromptOnReplace, True, 'frHidePromptOnReplace');
 end;
 
 procedure TFindOptionsTest.TestEachDisableOptionGreysOnlyItsBox;
@@ -420,8 +433,80 @@ begin
         AssertTrue('gate ' + IntToStr(g) + ', box ' + IntToStr(i) + ' still shows',
           BoxOf(frm, i).Visible);
       end;
+      AssertTrue('entire scope is never disabled', frm.EntireScopeCheck.Enabled);
     finally dlg.Free; end;
   end;
+end;
+
+procedure TFindOptionsTest.TestEntireScopeGoesInAndComesBack;
+var dlg: TTyFindDialog; frm: TTyFindForm;
+begin
+  dlg := TTyFindDialog.Create(nil);
+  try
+    dlg.Options := [frDown, frEntireScope];
+    frm := dlg.BuildForm;
+    AssertTrue('frEntireScope checks the box', frm.EntireScopeCheck.Checked);
+    frm.EntireScopeCheck.Checked := False;
+    frm.DoFindNext;
+    AssertFalse('unchecked -> frEntireScope cleared', frEntireScope in dlg.Options);
+    frm.EntireScopeCheck.Checked := True;
+    frm.DoFindNext;
+    AssertTrue('checked -> frEntireScope set', frEntireScope in dlg.Options);
+  finally dlg.Free; end;
+end;
+
+procedure TFindOptionsTest.TestPromptOnReplaceGoesInAndComesBack;
+var dlg: TTyReplaceDialog; frm: TTyFindForm;
+begin
+  dlg := TTyReplaceDialog.Create(nil);
+  try
+    dlg.Options := [frDown, frReplace, frPromptOnReplace];
+    frm := dlg.BuildForm;
+    AssertTrue('frPromptOnReplace checks the box', frm.PromptOnReplaceCheck.Checked);
+    AssertTrue('and the box shows (no frHidePromptOnReplace)', frm.PromptOnReplaceCheck.Visible);
+    frm.PromptOnReplaceCheck.Checked := False;
+    frm.DoReplace;
+    AssertFalse('unchecked -> frPromptOnReplace cleared', frPromptOnReplace in dlg.Options);
+    frm.PromptOnReplaceCheck.Checked := True;
+    frm.DoReplaceAll;
+    AssertTrue('checked -> frPromptOnReplace set', frPromptOnReplace in dlg.Options);
+  finally dlg.Free; end;
+end;
+
+procedure TFindOptionsTest.TestFindFormHasNoPromptOnReplace;
+var dlg: TTyFindDialog; frm: TTyFindForm;
+begin
+  dlg := TTyFindDialog.Create(nil);
+  try
+    dlg.Options := [frDown, frPromptOnReplace];
+    frm := dlg.BuildForm;
+    AssertTrue('a find-only form has no prompt-on-replace box', frm.PromptOnReplaceCheck = nil);
+    frm.DoFindNext;
+    AssertTrue('and leaves the flag as the program set it', frPromptOnReplace in dlg.Options);
+  finally dlg.Free; end;
+end;
+
+procedure TFindOptionsTest.TestReplaceHidesPromptOnReplaceByDefault;
+var dlg: TTyReplaceDialog; frm: TTyFindForm;
+begin
+  dlg := TTyReplaceDialog.Create(nil);
+  try
+    AssertTrue('LCL''s TReplaceDialog default', frHidePromptOnReplace in dlg.Options);
+    frm := dlg.BuildForm;
+    AssertFalse('so a new replace dialog shows no prompt box', frm.PromptOnReplaceCheck.Visible);
+  finally dlg.Free; end;
+end;
+
+procedure TFindOptionsTest.TestEntireScopeShowsByDefault;
+var dlg: TTyFindDialog; frm: TTyFindForm;
+begin
+  dlg := TTyFindDialog.Create(nil);
+  try
+    frm := dlg.BuildForm;
+    AssertTrue('as in LCL, shown unless frHideEntireScope', frm.EntireScopeCheck.Visible);
+    AssertFalse('and unchecked unless frEntireScope', frm.EntireScopeCheck.Checked);
+    AssertFalse('no Help button without frShowHelp', frm.HelpButton.Visible);
+  finally dlg.Free; end;
 end;
 
 procedure TFindOptionsTest.TestNoHelpButtonByDefault;

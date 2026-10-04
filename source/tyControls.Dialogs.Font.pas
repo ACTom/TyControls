@@ -2,7 +2,7 @@ unit tyControls.Dialogs.Font;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Controls, Forms,
+  Classes, SysUtils, Types, Graphics, Controls, Forms, StdCtrls, Dialogs,
   tyControls.Dialogs, tyControls.ListBox, tyControls.FontListBox, tyControls.SpinEdit,
   tyControls.CheckBox, tyControls.Button, tyControls.TyLabel,
   tyControls.Painter, tyControls.ColorMath,
@@ -27,15 +27,40 @@ type
     FSeedSize: Integer;      // caller's original Size (may be <= 0 for "default")
     FSeedName: string;       // caller's family; the preview falls back to it (see PreviewFamily)
     FPreviewChanges: Integer;  // test seam, see PreviewChangeCount
+    FSeedStyle: TFontStyles;   // the caller's styles: what a grey (untouched) box stands for
+    FOptions: TFontDialogOptions;   // [fdEffects] until Configure says otherwise
+    FPreviewText: string;
+    FApplyBtn: TTyButton;
+    FOnApply: TNotifyEvent;
     procedure ColorBtnClick(Sender: TObject);
+    procedure ApplyClick(Sender: TObject);
     procedure PreviewChanged(Sender: TObject);
+    { The style a box stands for: its own state, or -- grey, under fdNoStyleSel, never touched --
+      the caller's. }
+    function EffectiveStyle(ABox: TTyCheckBox; AStyle: TFontStyle): Boolean;
+    function PreviewSize: Integer;
   protected
     procedure LayoutContent; override;
     procedure Paint; override;             // preview
   public
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
     procedure SeedFrom(AFont: TFont; AFamilies: TStrings);
+    { LCL's TFontDialog options, applied after SeedFrom (the no-preselection ones undo what
+      SeedFrom selected). AMinSize / AMaxSize count only under fdLimitSize, and only when > 0.
+      APreviewText replaces the sample when not empty. Without a call the form behaves as with
+      [fdEffects], LCL's default. }
+    procedure Configure(AOptions: TFontDialogOptions; AMinSize, AMaxSize: Integer;
+      const APreviewText: string);
+    { Writes the choice into AFont. Whatever the user could not see or did not touch stays as
+      AFont has it: the family when none is selected, the size when the box is blank, a grey
+      style box, and -- without fdEffects -- underline, strikeout and colour. Under fdLimitSize
+      the size written is always inside the limits. }
     procedure WriteTo(AFont: TFont);
+    { The Apply button (fdApplyButton): fires OnApply; the dialog stays open. }
+    procedure DoApply;
+    property OnApply: TNotifyEvent read FOnApply write FOnApply;
+    { The text the preview strip shows: PreviewText, or the built-in sample. }
+    function SampleText: string;
     // test seams:
     function SizeValue: Integer;
     function BoldChecked: Boolean; function ItalicChecked: Boolean;
@@ -55,11 +80,22 @@ type
     FOnShow: TNotifyEvent;
     FOnClose: TCloseEvent;
     FOnCanClose: TCloseQueryEvent;
+    FOptions: TFontDialogOptions;
+    FMinFontSize, FMaxFontSize: Integer;
+    FPreviewText: string;
+    FOnApplyClicked: TNotifyEvent;
     procedure SetFont(AValue: TFont);
+    procedure FormApply(Sender: TObject);
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    { Builds the dialog Execute would show -- families, seed, options, the Apply wiring and the
+      three forwarded events -- without showing it. The caller frees it. }
+    function BuildForm: TTyFontForm;
     function Execute: Boolean;
+    { The Apply button was clicked: Font already holds the current choice. Fires
+      OnApplyClicked; LCL's TFontDialog.ApplyClicked. }
+    procedure ApplyClicked; virtual;
   published
     { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
       RTTI order is the 3.0 order. }
@@ -69,11 +105,23 @@ type
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
+    { LCL's TFontDialogOptions. fdEffects (underline, strikeout, colour), fdFixedPitchOnly,
+      fdScalableOnly, fdLimitSize, fdNoFaceSel, fdNoSizeSel, fdNoStyleSel and fdApplyButton do
+      what they say; the Windows ChooseFont leftovers (fdAnsiOnly, fdTrueTypeOnly, fdNoOEMFonts,
+      fdNoSimulations, fdNoVectorFonts, fdWysiwyg, fdShowHelp, fdForceFontExist) are accepted
+      and have no effect -- see docs/controls/dialogs.md. }
+    property Options: TFontDialogOptions read FOptions write FOptions default [fdEffects];
+    { The size range under fdLimitSize; 0 = no limit on that side. }
+    property MinFontSize: Integer read FMinFontSize write FMinFontSize default 0;
+    property MaxFontSize: Integer read FMaxFontSize write FMaxFontSize default 0;
+    { The preview strip's text; empty = the built-in sample. }
+    property PreviewText: string read FPreviewText write FPreviewText;
+    property OnApplyClicked: TNotifyEvent read FOnApplyClicked write FOnApplyClicked;
   end;
 
 implementation
 
-uses Math;
+uses Math, tyControls.FontFamilies;
 
 function TyFontStyleToChecks(AStyle: TFontStyles): TTyFontChecks;
 begin
@@ -156,6 +204,7 @@ begin
   Constraints.MinWidth := Px(460);
   Constraints.MinHeight := Px(360);
   FColorValue := clWindowText;
+  FOptions := [fdEffects];   // LCL's default; Configure replaces it
 
   r := ContentRect;
   x0 := r.Left + Px(TyDlgPad);
@@ -239,6 +288,7 @@ begin
   FSeedDisplay := FSize.Value;     // what the user sees
   FSeedSize := AFont.Size;         // the caller's original (may be <= 0)
   FSeedName := AFont.Name;         // survives a family that isn't installed (list stays unselected)
+  FSeedStyle := AFont.Style;
   ch := TyFontStyleToChecks(AFont.Style);
   FBold.Checked := ch.Bold;
   FItalic.Checked := ch.Italic;
@@ -248,18 +298,113 @@ begin
   Invalidate;
 end;
 
+procedure TTyFontForm.Configure(AOptions: TFontDialogOptions; AMinSize, AMaxSize: Integer;
+  const APreviewText: string);
+begin
+  FOptions := AOptions;
+  FPreviewText := APreviewText;
+  if fdLimitSize in AOptions then
+  begin
+    { The spin re-clamps its value on each range write; the clamped value is what the user
+      sees, so it is the new "untouched" mark. }
+    if AMaxSize > 0 then FSize.MaxValue := AMaxSize;
+    if AMinSize > 0 then FSize.MinValue := AMinSize;
+    FSeedDisplay := FSize.Value;
+  end;
+  if fdNoFaceSel in AOptions then FList.ItemIndex := -1;
+  if fdNoSizeSel in AOptions then FSize.ValueEmpty := True;
+  if fdNoStyleSel in AOptions then
+  begin
+    { ChooseFont's style list is weight + slant; underline and strikeout are effects. }
+    FBold.State := cbGrayed;
+    FItalic.State := cbGrayed;
+  end;
+  if not (fdEffects in AOptions) then
+  begin
+    FUnderline.Visible := False;
+    FStrike.Visible := False;
+    FColorBtn.Visible := False;
+  end;
+  if (fdApplyButton in AOptions) and (FApplyBtn = nil) then
+  begin
+    FApplyBtn := AddButton(rsDlgFontApply, mrNone);   // mrNone: the dialog stays open
+    FApplyBtn.OnClick := @ApplyClick;
+  end;
+  Invalidate;
+end;
+
 procedure TTyFontForm.WriteTo(AFont: TFont);
-var ch: TTyFontChecks;
+var
+  st: TFontStyles;
+  restore: Boolean;
+
+  procedure Put(ABox: TTyCheckBox; AStyle: TFontStyle);
+  begin
+    case ABox.State of
+      cbChecked:   Include(st, AStyle);
+      cbUnchecked: Exclude(st, AStyle);
+    else
+      ;   // grey: never touched under fdNoStyleSel -> the caller's bit stays
+    end;
+  end;
+
 begin
   if SelectedFamily <> '' then AFont.Name := SelectedFamily;
-  if FSize.Value = FSeedDisplay then AFont.Size := FSeedSize  // untouched → restore original (0 stays 0)
-  else AFont.Size := FSize.Value;                             // user changed the size → apply it
-  ch.Bold := FBold.Checked;
-  ch.Italic := FItalic.Checked;
-  ch.Underline := FUnderline.Checked;
-  ch.Strikeout := FStrike.Checked;
-  AFont.Style := TyChecksToFontStyle(ch);
-  AFont.Color := FColorValue;
+  if not FSize.ValueEmpty then   // blank (fdNoSizeSel, untouched) -> the caller's size stays
+  begin
+    { Untouched -> the caller's original (0 stays 0) -- unless fdLimitSize clamped it, in
+      which case the clamped value is the answer. }
+    restore := (FSize.Value = FSeedDisplay)
+      and (not (fdLimitSize in FOptions) or (FSeedSize <= 0) or (FSeedSize = FSeedDisplay));
+    if restore then AFont.Size := FSeedSize
+    else AFont.Size := FSize.Value;
+  end;
+  st := AFont.Style;
+  Put(FBold, fsBold);
+  Put(FItalic, fsItalic);
+  if fdEffects in FOptions then
+  begin
+    Put(FUnderline, fsUnderline);
+    Put(FStrike, fsStrikeOut);
+  end;
+  AFont.Style := st;
+  if fdEffects in FOptions then AFont.Color := FColorValue;
+end;
+
+procedure TTyFontForm.ApplyClick(Sender: TObject);
+begin
+  DoApply;
+end;
+
+procedure TTyFontForm.DoApply;
+begin
+  if Assigned(FOnApply) then FOnApply(Self);
+end;
+
+function TTyFontForm.SampleText: string;
+begin
+  if FPreviewText <> '' then Result := FPreviewText
+  else Result := rsDlgFontSample;
+end;
+
+function TTyFontForm.EffectiveStyle(ABox: TTyCheckBox; AStyle: TFontStyle): Boolean;
+begin
+  case ABox.State of
+    cbChecked: Result := True;
+    cbUnchecked: Result := False;
+  else
+    Result := AStyle in FSeedStyle;
+  end;
+  { Without fdEffects the boxes are hidden: the caller's underline / strikeout is what
+    WriteTo keeps, so it is what the sample shows. }
+  if (not (fdEffects in FOptions)) and (AStyle in [fsUnderline, fsStrikeOut]) then
+    Result := AStyle in FSeedStyle;
+end;
+
+function TTyFontForm.PreviewSize: Integer;
+begin
+  if FSize.ValueEmpty then Result := FSeedDisplay   // blank box: the caller's size
+  else Result := FSize.Value;
 end;
 
 procedure TTyFontForm.ColorBtnClick(Sender: TObject);
@@ -319,12 +464,12 @@ begin
   P := TTyPainter.Create;
   try
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
-    TyConfigureTextFont(P.Bitmap, PreviewFamily, FSize.Value,
-      IfThen(FBold.Checked, 700, 400), Font.PixelsPerInch);
+    TyConfigureTextFont(P.Bitmap, PreviewFamily, PreviewSize,
+      IfThen(EffectiveStyle(FBold, fsBold), 700, 400), Font.PixelsPerInch);
     extra := [];
-    if FItalic.Checked then Include(extra, fsItalic);
-    if FUnderline.Checked then Include(extra, fsUnderline);
-    if FStrike.Checked then Include(extra, fsStrikeOut);
+    if EffectiveStyle(FItalic, fsItalic) then Include(extra, fsItalic);
+    if EffectiveStyle(FUnderline, fsUnderline) then Include(extra, fsUnderline);
+    if EffectiveStyle(FStrike, fsStrikeOut) then Include(extra, fsStrikeOut);
     P.Bitmap.FontStyle := P.Bitmap.FontStyle + extra;
     style := Default(TTextStyle);
     style.Alignment := taLeftJustify;
@@ -332,7 +477,7 @@ begin
     style.SingleLine := True;
     style.Clipping := True;
     P.Bitmap.TextRect(FPreviewRect, FPreviewRect.Left + Px(4), FPreviewRect.Top + Px(4),
-      rsDlgFontSample, style, TyColorToBGRA(TyColorFromLCL(FColorValue, 255)));
+      SampleText, style, TyColorToBGRA(TyColorFromLCL(FColorValue, 255)));
     P.EndPaint;
   finally P.Free; end;
 end;
@@ -412,6 +557,7 @@ constructor TTyFontDialog.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FFont := TFont.Create;
+  FOptions := [fdEffects];
 end;
 
 destructor TTyFontDialog.Destroy;
@@ -425,18 +571,49 @@ begin
   FFont.Assign(AValue);
 end;
 
+function TTyFontDialog.BuildForm: TTyFontForm;
+var fams: TStringList;
+begin
+  { The families are read on each build, so a font installed since the last one shows up.
+    Filtered only when an option asks -- otherwise this is Screen.Fonts, as before. }
+  fams := nil;
+  try
+    if (fdFixedPitchOnly in FOptions) or (fdScalableOnly in FOptions) then
+    begin
+      fams := TStringList.Create;
+      TyGetFontFamilies(fams, fdFixedPitchOnly in FOptions, fdScalableOnly in FOptions);
+      Result := TyBuildFontDialog(FCaption, FFont, fams);
+    end
+    else
+      Result := TyBuildFontDialog(FCaption, FFont, Screen.Fonts);
+  finally
+    fams.Free;
+  end;
+  Result.Configure(FOptions, FMinFontSize, FMaxFontSize, FPreviewText);
+  Result.OnApply := @FormApply;
+  // The wrapper's OnShow/OnClose/OnCanClose forward onto the form before it shows.
+  TyForwardDialogEvents(Result, FOnShow, FOnClose, FOnCanClose);
+end;
+
 function TTyFontDialog.Execute: Boolean;
 var d: TTyFontForm;
 begin
-  // Inline the build/show (rather than call TyFontDialog) so the wrapper's
-  // OnShow/OnClose/OnCanClose forward onto the form before ShowModal, and so the
-  // component's Caption is honoured.
-  d := TyBuildFontDialog(FCaption, FFont, Screen.Fonts);
+  d := BuildForm;
   try
-    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
     Result := (d.ShowModal = mrOK);
     if Result then d.WriteTo(FFont);
   finally d.Free; end;
+end;
+
+procedure TTyFontDialog.FormApply(Sender: TObject);
+begin
+  (Sender as TTyFontForm).WriteTo(FFont);
+  ApplyClicked;
+end;
+
+procedure TTyFontDialog.ApplyClicked;
+begin
+  if Assigned(FOnApplyClicked) then FOnApplyClicked(Self);
 end;
 
 end.

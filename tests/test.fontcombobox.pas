@@ -1,7 +1,8 @@
 unit test.fontcombobox;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Forms, fpcunit, testregistry, tyControls.FontComboBox;
+uses Classes, SysUtils, Forms, fpcunit, testregistry, tyControls.FontComboBox,
+  tyControls.FontFamilies;
 type
   TFontComboBoxTest = class(TTestCase)
   published
@@ -10,6 +11,12 @@ type
     procedure TestAFormFileDoesNotCarryThisMachinesFonts;
     procedure TestA300FormFileShowsThisMachinesFonts;
     procedure TestAFamilyThisMachineLacksIsNotSwappedForAnother;
+    { FixedPitchOnly (#27) }
+    procedure TestFixedPitchOnlyListsTheSystemsFixedFamilies;
+    procedure TestTogglingKeepsAFamilyStillListed;
+    procedure TestTogglingOnDropsAProportionalChoice;
+    procedure TestAFormFileWithFixedPitchOnlyLoadsTheFilteredList;
+    procedure TestFixedPitchOnlyIsWrittenOnlyWhenOn;
   end;
 implementation
 
@@ -161,6 +168,112 @@ begin
     AssertEquals('a family this machine lacks leaves nothing selected', -1, c.ItemIndex);
   finally
     dst.Free;
+  end;
+end;
+
+procedure FCBNeedFonts;
+begin
+  if (Screen.Fonts.IndexOf('Courier New') < 0) or (Screen.Fonts.IndexOf('Arial') < 0) then
+    raise EIgnoredTest.Create('needs Courier New and Arial installed');
+end;
+
+procedure FCBAssertSame(const AWhat: string; AExpected, AActual: TStrings);
+var i: Integer;
+begin
+  TAssert.AssertEquals(AWhat + ': row count', AExpected.Count, AActual.Count);
+  for i := 0 to AExpected.Count - 1 do
+    TAssert.AssertEquals(AWhat + ': row ' + IntToStr(i), AExpected[i], AActual[i]);
+end;
+
+procedure TFontComboBoxTest.TestFixedPitchOnlyListsTheSystemsFixedFamilies;
+var c: TTyFontComboBox; fixed: TStringList;
+begin
+  FCBNeedFonts;
+  fixed := TStringList.Create;
+  c := TTyFontComboBox.Create(nil);
+  try
+    TyGetFontFamilies(fixed, True);
+    c.FixedPitchOnly := True;
+    FCBAssertSame('on', fixed, c.Items);
+    AssertTrue('Arial is not offered', c.Items.IndexOf('Arial') < 0);
+    c.FixedPitchOnly := False;
+    FCBAssertSame('off again', Screen.Fonts, c.Items);
+  finally
+    c.Free;
+    fixed.Free;
+  end;
+end;
+
+procedure TFontComboBoxTest.TestTogglingKeepsAFamilyStillListed;
+var c: TTyFontComboBox;
+begin
+  FCBNeedFonts;
+  c := TTyFontComboBox.Create(nil);
+  try
+    c.SelectedFont := 'Courier New';
+    c.FixedPitchOnly := True;
+    AssertEquals('a fixed-pitch choice stays chosen', 'Courier New', c.SelectedFont);
+    AssertEquals('at its row in the shorter list', c.Items.IndexOf('Courier New'), c.ItemIndex);
+    c.FixedPitchOnly := False;
+    AssertEquals('and back', 'Courier New', c.SelectedFont);
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TFontComboBoxTest.TestTogglingOnDropsAProportionalChoice;
+var c: TTyFontComboBox;
+begin
+  FCBNeedFonts;
+  c := TTyFontComboBox.Create(nil);
+  try
+    c.SelectedFont := 'Arial';
+    c.FixedPitchOnly := True;
+    AssertEquals('a family no longer listed falls back to the first row', 0, c.ItemIndex);
+    AssertTrue('which is not Arial', c.SelectedFont <> 'Arial');
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TFontComboBoxTest.TestAFormFileWithFixedPitchOnlyLoadsTheFilteredList;
+var dst: TForm; c: TTyFontComboBox; fixed: TStringList;
+begin
+  FCBNeedFonts;
+  fixed := TStringList.Create;
+  dst := FCBFromText(
+    'object Form1: TForm' + LineEnding +
+    '  object F: TTyFontComboBox' + LineEnding +
+    '    Text = ''Courier New''' + LineEnding +
+    '    FixedPitchOnly = True' + LineEnding +
+    '  end' + LineEnding +
+    'end' + LineEnding);
+  try
+    c := dst.FindComponent('F') as TTyFontComboBox;
+    TyGetFontFamilies(fixed, True);
+    AssertTrue('read in', c.FixedPitchOnly);
+    FCBAssertSame('the list Loaded built', fixed, c.Items);
+    AssertEquals('the chosen family, by name', 'Courier New', c.SelectedFont);
+  finally
+    dst.Free;
+    fixed.Free;
+  end;
+end;
+
+procedure TFontComboBoxTest.TestFixedPitchOnlyIsWrittenOnlyWhenOn;
+var src: TForm; c: TTyFontComboBox;
+begin
+  src := TForm.CreateNew(nil);
+  try
+    c := TTyFontComboBox.Create(src);
+    c.Name := 'F';
+    c.Parent := src;
+    AssertTrue('off is the default and is not written',
+      Pos('FixedPitchOnly', FCBFormText(src)) = 0);
+    c.FixedPitchOnly := True;
+    AssertTrue('on is written', Pos('FixedPitchOnly = True', FCBFormText(src)) > 0);
+  finally
+    src.Free;
   end;
 end;
 

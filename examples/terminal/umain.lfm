@@ -203,11 +203,22 @@ object MainForm: TMainForm
         Left = 700
         Height = 20
         Top = 11
-        Width = 70
-        Caption = 'Font size:'
+        Width = 40
+        Caption = 'Font:'
+      end
+      object CmbFont: TTyFontComboBox
+        Left = 746
+        Height = 26
+        Top = 7
+        Width = 140
+        Hint = 'Fixed-pitch fonts installed on this machine'
+        ReadOnly = True
+        ShowHint = True
+        TextHint = 'Theme font'
+        FixedPitchOnly = True
       end
       object SpnFontSize: TTySpinEdit
-        Left = 776
+        Left = 892
         Height = 26
         Top = 7
         Width = 76
@@ -215,17 +226,6 @@ object MainForm: TMainForm
         MaxValue = 32
         Value = 9
         OnChange = FontSizeChange
-      end
-      object BtnPaste: TTyButton
-        Left = 872
-        Height = 28
-        Top = 6
-        Width = 80
-        AutoSize = True
-        Caption = 'Paste'
-        Hint = 'Paste the clipboard into the terminal (what Ctrl+Shift+V does)'
-        ShowHint = True
-        OnClick = PasteClick
       end
     end
     object Tools3: TTyPanel
@@ -379,6 +379,17 @@ object MainForm: TMainForm
         ItemIndex = 0
         ShowHint = True
         OnChange = ContrastChange
+      end
+      object BtnPaste: TTyButton
+        Left = 860
+        Height = 28
+        Top = 6
+        Width = 80
+        AutoSize = True
+        Caption = 'Paste'
+        Hint = 'Paste the clipboard into the terminal (what Ctrl+Shift+V does)'
+        ShowHint = True
+        OnClick = PasteClick
       end
     end
     object Tools5: TTyPanel
@@ -604,7 +615,7 @@ object MainForm: TMainForm
   end
   object DlgUpload: TTyOpenDialog
     Title = 'Files to send'
-    Options = [fdoFileMustExist, fdoAllowMultiSelect]
+    Options = [ofAllowMultiSelect, ofFileMustExist]
     Left = 220
     Top = 160
   end

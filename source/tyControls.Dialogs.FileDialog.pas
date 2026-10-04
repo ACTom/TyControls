@@ -18,9 +18,15 @@ unit tyControls.Dialogs.FileDialog;
   filter combo) plus a name edit + Up / New-Folder buttons; it does NOT modify any
   of them, nor the TTyDialog base, nor any theme token.
 
-  The ONLY headless-testable seam is the pure function TyFileDialogResolveName --
-  the windowed form cannot be instantiated under the console test runner, so all
-  "what path does OK return" logic is factored into that function. }
+  The form can be built headless (the dialog-fit scan does), but OK runs through
+  TyMessageDlg, which is modal -- so "what path does OK return" and "may OK go through"
+  are pure functions (TyFileDialogResolveName, TyFileDialogCheck), and the component's
+  Execute is BuildForm + ShowModal + ApplyResult, the outer two testable on their own.
+
+  Options are LCL's TOpenOptions (#28). The 3.0 names a form file may still carry
+  (fdoOverwritePrompt, fdoFileMustExist, fdoPathMustExist, fdoAllowMultiSelect) are
+  registered as aliases of TOpenOption's values in this unit's initialization, so the
+  reader maps them; the IDE writes the of* names the next time the form is saved. }
 
 interface
 
@@ -48,11 +54,35 @@ function TyFileDialogResolveName(ASaveMode: Boolean;
   const ADir, ATyped, ASelected, ADefaultExt: string): string;
 
 type
-  { The LCL-parity option set. }
-  TTyFileDialogOption  = (fdoOverwritePrompt, fdoFileMustExist, fdoPathMustExist,
-                          fdoAllowMultiSelect);
-  TTyFileDialogOptions = set of TTyFileDialogOption;
+  { 3.0's own four-value option set is LCL's TOpenOptions since 4.0. The old names still
+    compile (with a warning) and still load from a form file (see the unit header). }
+  TTyFileDialogOption  = TOpenOption deprecated 'use LCL''s TOpenOption (unit Dialogs)';
+  TTyFileDialogOptions = TOpenOptions deprecated 'use LCL''s TOpenOptions (unit Dialogs)';
 
+const
+  fdoOverwritePrompt  = ofOverwritePrompt deprecated 'use ofOverwritePrompt';
+  fdoFileMustExist    = ofFileMustExist deprecated 'use ofFileMustExist';
+  fdoPathMustExist    = ofPathMustExist deprecated 'use ofPathMustExist';
+  fdoAllowMultiSelect = ofAllowMultiSelect deprecated 'use ofAllowMultiSelect';
+
+type
+  { What OK may do with one chosen file, per LCL's TOpenDialog.CheckFile order. }
+  TTyFileDialogCheck = (
+    fdcOK,            // accept
+    fdcPathMissing,   // ofPathMustExist: its folder does not exist -> error, stay open
+    fdcFileMissing,   // ofFileMustExist: it does not exist -> error, stay open
+    fdcNotWritable,   // ofNoReadOnlyReturn: the file (or, for a new one, its folder) is read-only
+    fdcAskCreate,     // ofCreatePrompt: it does not exist -> ask; No stays open
+    fdcAskOverwrite   // ofOverwritePrompt, Save: it exists -> ask; No stays open
+  );
+
+{ The check OK runs on each chosen file: ofPathMustExist, then ofFileMustExist, then
+  ofNoReadOnlyReturn, then ofCreatePrompt (missing file), then -- saving -- ofOverwritePrompt
+  (existing file). The first that applies wins. Pure apart from reading the file system. }
+function TyFileDialogCheck(ASaveMode: Boolean; const AFileName: string;
+  AOptions: TOpenOptions): TTyFileDialogCheck;
+
+type
   { Fires as the preview refreshes for AFileName (the focused selection; '' or a
     directory when nothing previewable is focused). Draw into APreview yourself
     (ShowImage / ShowText / ShowMessage / ShowCustom) and set AHandled := True to
@@ -95,7 +125,7 @@ type
     FResultName: string;    { the primary OK result (a full path) }
     FDefaultExt: string;
     FFiles:      TStrings;   { the Open multi-select result set (a TStringList instance) }
-    FOptions:    TTyFileDialogOptions;
+    FOptions:    TOpenOptions;
     FPreviewAllowsText: Boolean;   { seeds FPreview.AllowText each refresh (picture=False) }
     FOnPreview:  TTyFileDialogPreviewEvent;
     { Flag setters -- create/toggle the conditional children. }
@@ -108,7 +138,7 @@ type
     procedure SetFilter(const AValue: string);
     function  GetFilterIndex: Integer;
     procedure SetFilterIndex(AValue: Integer);
-    procedure SetOptions(AValue: TTyFileDialogOptions);
+    procedure SetOptions(AValue: TOpenOptions);
     { Four-way wiring handlers. }
     procedure TreePathChange(Sender: TObject);
     procedure LookInSelectPath(Sender: TObject);
@@ -126,8 +156,9 @@ type
     procedure NavigateTo(const APath: string);
     { mrOK validation: harvest + validate; returns False to veto (keep the dialog). }
     function  AcceptSelection: Boolean;
-    { fdoPathMustExist / fdoFileMustExist for one name; False (after ReportProblem) refuses it. }
-    function  NameAcceptable(const AName: string): Boolean;
+    { TyFileDialogCheck on one file, with the message (via ReportProblem) or question it
+      calls for; False refuses it. }
+    function  CheckChosenFile(const AFileName: string): Boolean;
     { Load the focused image into the preview pane (PreviewMode only, crash-safe). }
     procedure RefreshPreview;
   protected
@@ -155,7 +186,7 @@ type
     property Filter: string read GetFilter write SetFilter;
     property FilterIndex: Integer read GetFilterIndex write SetFilterIndex;
     property DefaultExt: string read FDefaultExt write FDefaultExt;
-    property Options: TTyFileDialogOptions read FOptions write SetOptions;
+    property Options: TOpenOptions read FOptions write SetOptions;
     { PreviewMode extras: whether the preview pane also renders text files, and a
       hook to render an unrecognised format yourself. Seeded before ShowModal. }
     property PreviewAllowsText: Boolean read FPreviewAllowsText write FPreviewAllowsText;
@@ -179,12 +210,14 @@ type
   private
     FTitle, FFilter, FFileName, FInitialDir, FDefaultExt: string;
     FFilterIndex: Integer;
-    FOptions: TTyFileDialogOptions;
+    FOptions: TOpenOptions;
     FFiles: TStrings;
     FOnShow: TNotifyEvent;
     FOnClose: TCloseEvent;
     FOnCanClose: TCloseQueryEvent;
     FOnPreview: TTyFileDialogPreviewEvent;
+    FOnHelpClicked: TNotifyEvent;
+    procedure FormHelpClick(Sender: TObject);
   protected
     { Subclasses override to pick the variant. }
     function SaveMode: Boolean; virtual;
@@ -197,7 +230,14 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-    { build -> seed -> ShowModal -> read back -> free (leak-safe). }
+    { The form Execute shows -- seeded from the properties, Help added under ofShowHelp, the
+      three events forwarded -- without showing it. The caller frees it. }
+    function BuildForm: TTyFileDialogForm;
+    { What Execute does once the form has closed: takes the result on OK and applies LCL's
+      after-the-fact options -- links resolved unless ofNoResolveLinks, InitialDir moved to
+      the result's folder unless ofNoChangeDir, ofExtensionDifferent set or cleared. }
+    procedure ApplyResult(AOK: Boolean; const AFileName: string; AFiles: TStrings);
+    { BuildForm -> ShowModal -> ApplyResult -> free (leak-safe). }
     function Execute: Boolean;
   published
     { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
@@ -209,7 +249,11 @@ type
     property FileName: string read FFileName write FFileName;
     property InitialDir: string read FInitialDir write FInitialDir;
     property DefaultExt: string read FDefaultExt write FDefaultExt;
-    property Options: TTyFileDialogOptions read FOptions write FOptions default [];
+    { LCL's TOpenOptions; what each one does here is in docs/controls/filedialog.md. The
+      default stays [] (not LCL's [ofEnableSizing, ofViewDetail]): the dialog is always
+      resizable and always opens on the details view, and a form saved with Options would
+      otherwise lose bits it never had. }
+    property Options: TOpenOptions read FOptions write FOptions default [];
     property Files: TStrings read FFiles;   { read-only result set }
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
@@ -217,6 +261,8 @@ type
     { PreviewMode-only: render a selection into the preview pane yourself. Ignored by
       non-preview variants (no preview pane to draw into). }
     property OnPreview: TTyFileDialogPreviewEvent read FOnPreview write FOnPreview;
+    { The Help button (shown with ofShowHelp) was clicked. Sender is this component. }
+    property OnHelpClicked: TNotifyEvent read FOnHelpClicked write FOnHelpClicked;
   end;
 
   { Open a single/multiple existing file(s). }
@@ -265,7 +311,7 @@ function TySavePreviewDialog(var AFileName, ADefaultExt: string): Boolean;
 implementation
 
 uses
-  Math;
+  Math, TypInfo;
 
 { The rsFd* / rsPvCannotPreview strings live in tyControls.StrConsts (already in uses)
   so they share the central package .po like every other user-facing string. }
@@ -303,6 +349,38 @@ begin
     else
       Result := '';
   end;
+end;
+
+function TyFileDialogCheck(ASaveMode: Boolean; const AFileName: string;
+  AOptions: TOpenOptions): TTyFileDialogCheck;
+var
+  exists: Boolean;
+  dir: string;
+begin
+  Result := fdcOK;
+  exists := FileExistsUTF8(AFileName);
+  dir := ExtractFileDir(AFileName);
+  if (ofPathMustExist in AOptions) and (dir <> '') and not DirectoryExistsUTF8(dir) then
+    Exit(fdcPathMissing);
+  if (ofFileMustExist in AOptions) and not exists then
+    Exit(fdcFileMissing);
+  if ofNoReadOnlyReturn in AOptions then
+  begin
+    { LCL: an existing file must be writable; a new one needs a writable folder. }
+    if exists then
+    begin
+      if not FileIsWritable(AFileName) then Exit(fdcNotWritable);
+    end
+    else
+    begin
+      if dir = '' then dir := '.';
+      if not DirectoryIsWritable(dir) then Exit(fdcNotWritable);
+    end;
+  end;
+  if (ofCreatePrompt in AOptions) and not exists then
+    Exit(fdcAskCreate);
+  if ASaveMode and exists and (ofOverwritePrompt in AOptions) then
+    Exit(fdcAskOverwrite);
 end;
 
 { ---------------------------------------------------------------------------
@@ -522,12 +600,17 @@ begin
   FList.Mask := FFilter.Mask;
 end;
 
-procedure TTyFileDialogForm.SetOptions(AValue: TTyFileDialogOptions);
+procedure TTyFileDialogForm.SetOptions(AValue: TOpenOptions);
 begin
   FOptions := AValue;
   { Multi-select is Open-mode only; the flag maps straight onto the list. }
   if FList <> nil then
-    FList.MultiSelect := fdoAllowMultiSelect in AValue;
+  begin
+    FList.MultiSelect := ofAllowMultiSelect in AValue;
+    FList.ShowHidden := ofForceShowHidden in AValue;
+  end;
+  if FTree <> nil then
+    FTree.ShowHidden := ofForceShowHidden in AValue;
 end;
 
 function TTyFileDialogForm.CurrentDirectory: string;
@@ -747,6 +830,35 @@ begin
   Result := AcceptSelection;   { False -> LCL resets ModalResult, dialog stays open }
 end;
 
+function TTyFileDialogForm.CheckChosenFile(const AFileName: string): Boolean;
+begin
+  case TyFileDialogCheck(FSaveMode, AFileName, FOptions) of
+    fdcPathMissing:
+      begin
+        ReportProblem(Format(rsFdPathMustExist, [ExtractFileDir(AFileName)]));
+        Result := False;
+      end;
+    fdcFileMissing:
+      begin
+        ReportProblem(Format(rsFdMustExist, [AFileName]));
+        Result := False;
+      end;
+    fdcNotWritable:
+      begin
+        ReportProblem(Format(rsFdNotWritable, [AFileName]));
+        Result := False;
+      end;
+    fdcAskCreate:
+      Result := TyMessageDlg(Format(rsFdCreatePrompt, [AFileName]),
+        mtConfirmation, [mbYes, mbNo]) = mrYes;
+    fdcAskOverwrite:
+      Result := TyMessageDlg(Format(rsFdOverwritePrompt, [AFileName]),
+        mtConfirmation, [mbYes, mbNo]) = mrYes;
+  else
+    Result := True;
+  end;
+end;
+
 function TTyFileDialogForm.AcceptSelection: Boolean;
 var
   i: Integer;
@@ -759,11 +871,7 @@ begin
     FResultName := TyFileDialogResolveName(True, CurrentDirectory, FNameEdit.Text,
       FList.SelectedFile, FDefaultExt);
     if FResultName = '' then Exit;                       { empty name -> veto }
-    if not NameAcceptable(FResultName) then Exit;        { folder / file must exist -> veto }
-    if (fdoOverwritePrompt in FOptions) and FileExistsUTF8(FResultName) then
-      if TyMessageDlg(Format(rsFdOverwritePrompt, [FResultName]),
-           mtConfirmation, [mbYes, mbNo]) <> mrYes then
-        Exit;                                            { declined -> veto }
+    if not CheckChosenFile(FResultName) then Exit;      { error or declined -> veto }
     FFiles.Clear;
     FFiles.Add(FResultName);
     Result := True;
@@ -794,35 +902,13 @@ begin
     end;
     if FFiles.Count = 0 then
       FFiles.Add(FResultName);
-    { LCL's CheckAllFiles: the name, then every file of a multiple selection. Only the name
-      was checked before, so a selection could hand back a file that had gone. }
-    if not NameAcceptable(FResultName) then Exit;
+    { LCL's CheckAllFiles: the typed name, then every file of a multiple selection (the
+      name is not checked twice when it is one of them). }
+    if (FFiles.IndexOf(FResultName) < 0) and not CheckChosenFile(FResultName) then Exit;
     for i := 0 to FFiles.Count - 1 do
-      if not NameAcceptable(FFiles[i]) then Exit;
+      if not CheckChosenFile(FFiles[i]) then Exit;       { error or declined -> veto }
     Result := True;
   end;
-end;
-
-function TTyFileDialogForm.NameAcceptable(const AName: string): Boolean;
-var
-  dir: string;
-begin
-  { LCL's TOpenDialog.CheckFile, which TSaveDialog inherits: the folder first, then the file,
-    for both kinds of dialog. fdoPathMustExist used to be accepted and never looked at, and
-    fdoFileMustExist was looked at for Open only. }
-  Result := False;
-  dir := ExtractFileDir(AName);
-  if (fdoPathMustExist in FOptions) and not DirectoryExistsUTF8(dir) then
-  begin
-    ReportProblem(Format(rsFdPathMustExist, [dir]));
-    Exit;
-  end;
-  if (fdoFileMustExist in FOptions) and not FileExistsUTF8(AName) then
-  begin
-    ReportProblem(Format(rsFdMustExist, [AName]));
-    Exit;
-  end;
-  Result := True;
 end;
 
 procedure TTyFileDialogForm.ReportProblem(const AMsg: string);
@@ -1045,27 +1131,77 @@ begin
   Result := rsFdAllFilesFilter;
 end;
 
+function TTyCustomFileDialog.BuildForm: TTyFileDialogForm;
+var
+  btn: TTyButton;
+begin
+  Result := TyBuildFileDialog(SaveMode, PreviewMode, FTitle);
+  Result.InitialDir := FInitialDir;
+  if FFilter <> '' then Result.Filter := FFilter else Result.Filter := DefaultFilter;
+  Result.FilterIndex := FFilterIndex;
+  Result.DefaultExt := FDefaultExt;
+  Result.Options := FOptions;
+  Result.PreviewAllowsText := PreviewAllowsText;   { virtual: image-only vs image+text }
+  Result.OnPreview := FOnPreview;                  { custom-render hook (PreviewMode only) }
+  Result.FileName := FFileName;   { seed AFTER InitialDir so a path-bearing name wins }
+  if ofShowHelp in FOptions then
+  begin
+    btn := Result.AddButton(rsMsgBtnHelp, mrNone);   { mrNone: the dialog stays open }
+    btn.OnClick := @FormHelpClick;
+  end;
+  TyForwardDialogEvents(Result, FOnShow, FOnClose, FOnCanClose);
+end;
+
+procedure TTyCustomFileDialog.FormHelpClick(Sender: TObject);
+begin
+  if Assigned(FOnHelpClicked) then FOnHelpClicked(Self);
+end;
+
+procedure TTyCustomFileDialog.ApplyResult(AOK: Boolean; const AFileName: string;
+  AFiles: TStrings);
+var
+  i: Integer;
+  def: string;
+begin
+  { LCL's TOpenDialog.DoExecute, after the widgetset has run. ofExtensionDifferent is an
+    output: cleared first, set again only by this run. }
+  Exclude(FOptions, ofExtensionDifferent);
+  if not AOK then Exit;
+  FFileName := AFileName;
+  if AFiles <> nil then FFiles.Assign(AFiles) else FFiles.Clear;
+  if not (ofNoResolveLinks in FOptions) then
+  begin
+    { Unix: a symbolic link becomes its target. Windows: GetPhysicalFilename returns the
+      name as it is. }
+    if FFileName <> '' then FFileName := GetPhysicalFilename(FFileName, pfeOriginal);
+    for i := 0 to FFiles.Count - 1 do
+      if FFiles[i] <> '' then FFiles[i] := GetPhysicalFilename(FFiles[i], pfeOriginal);
+  end;
+  if not (ofNoChangeDir in FOptions) then
+  begin
+    if ExtractFilePath(FFileName) <> '' then
+      FInitialDir := ExtractFilePath(FFileName)
+    else if (FFiles.Count > 0) and (ExtractFilePath(FFiles[0]) <> '') then
+      FInitialDir := ExtractFilePath(FFiles[0]);
+  end;
+  { Several files: never set (LCL follows Delphi 7 there). }
+  if (FFiles.Count <= 1) and (FDefaultExt <> '') then
+  begin
+    def := FDefaultExt;
+    if def[1] <> '.' then def := '.' + def;
+    if CompareFileNames(def, ExtractFileExt(FFileName)) <> 0 then
+      Include(FOptions, ofExtensionDifferent);
+  end;
+end;
+
 function TTyCustomFileDialog.Execute: Boolean;
 var
   d: TTyFileDialogForm;
 begin
-  d := TyBuildFileDialog(SaveMode, PreviewMode, FTitle);
+  d := BuildForm;
   try
-    d.InitialDir := FInitialDir;
-    if FFilter <> '' then d.Filter := FFilter else d.Filter := DefaultFilter;
-    d.FilterIndex := FFilterIndex;
-    d.DefaultExt := FDefaultExt;
-    d.Options := FOptions;
-    d.PreviewAllowsText := PreviewAllowsText;   { virtual: image-only vs image+text }
-    d.OnPreview := FOnPreview;                  { custom-render hook (PreviewMode only) }
-    d.FileName := FFileName;   { seed AFTER InitialDir so a path-bearing name wins }
-    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
     Result := (d.ShowModal = mrOK);
-    if Result then
-    begin
-      FFileName := d.FileName;
-      FFiles.Assign(d.Files);
-    end;
+    ApplyResult(Result, d.FileName, d.Files);
   finally
     d.Free;
   end;
@@ -1165,7 +1301,30 @@ begin
   end;
 end;
 
+{ 3.0 wrote its own option names into form files. Registering them as aliases of the
+  TOpenOption values lets the reader (GetEnumValue falls back on aliases, FPC 3.2's typinfo)
+  map them; the names are unique, but a second registration of the same alias raises, which
+  must not take the unit's initialization down. }
+procedure RegisterLegacyOptionNames;
+
+  procedure Alias(const AName: string; AValue: TOpenOption);
+  begin
+    try
+      AddEnumElementAliases(TypeInfo(TOpenOption), [AName], Ord(AValue));
+    except
+      on EArgumentException do ;
+    end;
+  end;
+
+begin
+  Alias('fdoOverwritePrompt', ofOverwritePrompt);
+  Alias('fdoFileMustExist', ofFileMustExist);
+  Alias('fdoPathMustExist', ofPathMustExist);
+  Alias('fdoAllowMultiSelect', ofAllowMultiSelect);
+end;
+
 initialization
+  RegisterLegacyOptionNames;
   { So a .lfm that streams any of these resolves the class. }
   RegisterClass(TTyOpenDialog);
   RegisterClass(TTySaveDialog);

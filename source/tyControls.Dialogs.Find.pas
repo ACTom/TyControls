@@ -29,6 +29,8 @@ type
     FFindEdit: TTyEdit;
     FReplaceEdit: TTyEdit;        // nil unless FWithReplace
     FMatchCase, FWholeWord, FSearchUp: TTyCheckBox;
+    FEntireScope: TTyCheckBox;
+    FPromptOnReplace: TTyCheckBox;   // nil unless FWithReplace
     FHelpBtn: TTyButton;
     { Where the check boxes start, and the content box the form is sized to -- kept from Build
       so LayoutChecks can re-stack the boxes that are showing. }
@@ -59,6 +61,8 @@ type
     function MatchCaseCheck: TTyCheckBox;
     function WholeWordCheck: TTyCheckBox;
     function SearchUpCheck: TTyCheckBox;
+    function EntireScopeCheck: TTyCheckBox;
+    function PromptOnReplaceCheck: TTyCheckBox;   // nil on a find-only form
     function HelpButton: TTyButton;
     property WithReplace: Boolean read FWithReplace;
   end;
@@ -93,9 +97,11 @@ type
       RTTI order is the 3.0 order. }
     property Version;
     property FindText: string read FFindText write FFindText;
-    { LCL's TFindOptions. The ones 3.0 acts on besides frMatchCase / frWholeWord / frDown are
-      the gates of LCL's SetFormValues: frHide* hide a box, frDisable* grey it, frShowHelp
-      shows a Help button. Writing Options while the window is open updates the window. }
+    { All 18 of LCL's TFindOptions mean what they mean in LCL's TFindDialog (finddialog.inc,
+      SetFormValues / GetFormValues), except frButtonsAtBottom -- the buttons are always on the
+      bottom bar here. frEntireScope and frPromptOnReplace are check-box states the program
+      reads back; searching the whole scope, or asking before each replacement, is the
+      program's job, as in LCL. Writing Options while the window is open updates the window. }
     property Options: TFindOptions read FOptions write SetOptions default [frDown];
     property Position: TPosition read FPosition write FPosition default poScreenCenter;
     property OnFind: TNotifyEvent read FOnFind write FOnFind;
@@ -194,6 +200,13 @@ begin
   FMatchCase := MkCheck(rsDlgMatchCase, x0, y); y := FMatchCase.Top + FMatchCase.Height + Px(4);
   FWholeWord := MkCheck(rsDlgWholeWord, x0, y); y := FWholeWord.Top + FWholeWord.Height + Px(4);
   FSearchUp  := MkCheck(rsDlgSearchUp,  x0, y); y := FSearchUp.Top + FSearchUp.Height + Px(4);
+  FEntireScope := MkCheck(rsDlgEntireScope, x0, y);
+  y := FEntireScope.Top + FEntireScope.Height + Px(4);
+  if AWithReplace then
+  begin
+    FPromptOnReplace := MkCheck(rsDlgPromptOnReplace, x0, y);
+    y := FPromptOnReplace.Top + FPromptOnReplace.Height + Px(4);
+  end;
 
   // Action buttons: AddButton(caption, mrNone) is non-closing (mrNone never sets
   // Form.ModalResult) yet still lands on the auto-laid-out button bar. OnClick
@@ -218,16 +231,18 @@ end;
 
 procedure TTyFindForm.LayoutChecks;
 var
-  boxes: array[0..2] of TTyCheckBox;
+  boxes: array[0..4] of TTyCheckBox;
   i, y: Integer;
 begin
   if FMatchCase = nil then Exit;
   boxes[0] := FMatchCase;
   boxes[1] := FWholeWord;
   boxes[2] := FSearchUp;
+  boxes[3] := FEntireScope;
+  boxes[4] := FPromptOnReplace;   // nil on a find-only form
   y := FChecksTop;
   for i := 0 to High(boxes) do
-    if boxes[i].Visible then
+    if (boxes[i] <> nil) and boxes[i].Visible then
     begin
       boxes[i].SetBounds(FChecksLeft, y, Px(160), Px(22));
       y := boxes[i].Top + boxes[i].Height + Px(4);
@@ -243,14 +258,21 @@ begin
   FMatchCase.Checked := ch.MatchCase;
   FWholeWord.Checked := ch.WholeWord;
   FSearchUp.Checked  := ch.SearchUp;
+  FEntireScope.Checked := frEntireScope in AOptions;
   { LCL's SetFormValues, gate for gate: hiding takes the box out of the layout, disabling only
-    greys it. 3.0.0 accepted these and ignored them. }
+    greys it. }
   FMatchCase.Visible := not (frHideMatchCase in AOptions);
   FWholeWord.Visible := not (frHideWholeWord in AOptions);
   FSearchUp.Visible  := not (frHideUpDown in AOptions);
+  FEntireScope.Visible := not (frHideEntireScope in AOptions);
   FMatchCase.Enabled := not (frDisableMatchCase in AOptions);
   FWholeWord.Enabled := not (frDisableWholeWord in AOptions);
   FSearchUp.Enabled  := not (frDisableUpDown in AOptions);
+  if FPromptOnReplace <> nil then
+  begin
+    FPromptOnReplace.Checked := frPromptOnReplace in AOptions;
+    FPromptOnReplace.Visible := not (frHidePromptOnReplace in AOptions);
+  end;
   FHelpBtn.Visible := frShowHelp in AOptions;
   LayoutChecks;   // re-stacks the boxes, re-sizes the form and re-lays the button bar
 end;
@@ -273,6 +295,12 @@ begin
   ch.WholeWord := FWholeWord.Checked;
   ch.SearchUp  := FSearchUp.Checked;
   FDlg.FOptions := TyChecksToFindOptions(ch, FDlg.FOptions);
+  { The two reads LCL's GetFormValues adds on top of the three above. }
+  if FEntireScope.Checked then Include(FDlg.FOptions, frEntireScope)
+  else Exclude(FDlg.FOptions, frEntireScope);
+  if FPromptOnReplace <> nil then
+    if FPromptOnReplace.Checked then Include(FDlg.FOptions, frPromptOnReplace)
+    else Exclude(FDlg.FOptions, frPromptOnReplace);
 end;
 
 procedure TTyFindForm.DoFindNext;
@@ -330,6 +358,8 @@ function TTyFindForm.ReplaceEdit: TTyEdit;      begin Result := FReplaceEdit; en
 function TTyFindForm.MatchCaseCheck: TTyCheckBox; begin Result := FMatchCase; end;
 function TTyFindForm.WholeWordCheck: TTyCheckBox; begin Result := FWholeWord; end;
 function TTyFindForm.SearchUpCheck: TTyCheckBox;  begin Result := FSearchUp; end;
+function TTyFindForm.EntireScopeCheck: TTyCheckBox; begin Result := FEntireScope; end;
+function TTyFindForm.PromptOnReplaceCheck: TTyCheckBox; begin Result := FPromptOnReplace; end;
 function TTyFindForm.HelpButton: TTyButton;       begin Result := FHelpBtn; end;
 
 { TTyFindDialog }
@@ -400,7 +430,8 @@ end;
 constructor TTyReplaceDialog.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FOptions := FOptions + [frReplace, frReplaceAll];   // LCL Replace defaults
+  { LCL's TReplaceDialog defaults, frHidePromptOnReplace included (replacedialog.inc:653). }
+  FOptions := FOptions + [frReplace, frReplaceAll, frHidePromptOnReplace];
 end;
 
 function TTyReplaceDialog.WantReplace: Boolean;
