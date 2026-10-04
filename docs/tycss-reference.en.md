@@ -305,6 +305,106 @@ TyButton { background: #00FF00; }   /* overrides background only; color is still
 Even so, avoid defining the same selector twice **in one file**; when you need parallel declarations, put them in one rule
 block so readers do not have to scan the whole file for overrides.
 
+### 4.5 typeKey chains: a subclass inherits its parent's rules
+
+A third-party control that overrides `GetStyleTypeKey` to report a key of its own (say `TagButton`) can register, in Pascal,
+the key it derives from (see section 2 of [subclassing.en.md](subclassing.en.md)):
+
+```pascal
+TyRegisterTypeKeyParent('TagButton', 'TyButton');   // in tyControls.StyleModel
+```
+
+From then on `TagButton` starts from everything `TyButton` has (built-in layer, theme layer, variants, states, exactly as
+when resolving `TyButton` itself) and lays its own rules over it, property by property. A theme that never mentions
+`TagButton` therefore draws it exactly like a button; one that does only writes the differences:
+
+```css
+TagButton { border-radius: var(--radius-pill); }
+```
+
+The child's rules are interleaved with the parent's by the **stages** of §4.4: plain rule → variants → each state
+(selected → hover → focus → active → disabled), parent first and child second within a stage. So:
+
+- a child rule overrides what the parent wrote at the **same or an earlier stage**: `TagButton { }` beats `TyButton { }`,
+  `TagButton.primary` beats `TyButton.primary`, `TagButton:hover` beats `TyButton:hover`;
+- what the parent wrote at a **later stage** still applies: `TyButton:hover` and `TyButton:disabled` beat `TagButton { }` and
+  `TagButton.primary`, and `TyButton:disabled` also beats `TagButton:hover`.
+
+```css
+TagButton       { background: #DCFCE7; }   /* green at rest */
+                                           /* on hover, TyButton:hover's fill */
+TagButton:hover { background: #BBF7D0; }   /* write this for a hover colour of its own */
+```
+
+This matches the browser intuition that state and class selectors win: one plain background for the child key does not
+swallow the parent's hover and disabled looks.
+
+"What the parent wrote" means the parent's **own** result. If a theme turns `PropertyCascade` on and writes a plain
+`TyButton { background }`, that background has already replaced the built-in `:hover` fill in `TyButton`'s own result, so
+for `TagButton` it counts as written at the plain stage too.
+
+**Chains can have several links**, e.g. `FancyTag` → `TagButton` → `TyButton`: within each stage the topmost parent goes
+first and the child wins ties. A chain holds at most 8 keys.
+
+**Below the chain root, each stage takes the built-in layer first and then the user layer.** The root (the topmost parent)
+resolves as §4.4 says: the whole built-in layer (every stage), then the whole user layer. The keys below it go stage by stage,
+built-in then user within each stage. So when a built-in key is registered as a child and `PropertyCascade` is on, its
+built-in `:hover` beats a plain rule the theme writes for it (a later stage); the root never does that (its user layer comes
+after its entire built-in layer). Third-party keys have no built-in rules, so for them the difference never shows.
+
+**The interleave goes by property group, not by declaration.** "Which stage wrote this value" is recorded per property group,
+the same groups a control's StyleOverride merges by: any declaration in a group counts as writing the whole group, and the group
+yields as one. Usually one declaration is one group; these are the ones to know:
+
+- `outline` and `outline-offset` are one group (the focus ring). If the child writes only `outline-offset` and the parent
+  writes `outline` at a later stage (typically `:focus`), the parent has the whole group at that stage and the child's offset
+  yields with it:
+
+  ```css
+  TyButton:focus  { outline: 2px var(--focus-ring); outline-offset: 1px; }
+  TagButton       { outline-offset: 6px; }   /* no effect while focused: the group is TyButton:focus's */
+  TagButton:focus { outline-offset: 6px; }   /* same stage: the child wins */
+  ```
+
+- `background-size` and `background-blur` go with `background`: when the parent's `:hover` replaces the fill, the child's
+  `background-size` yields too.
+- The glass effect, `glass-blur` / `glass-tint`, is a group of its own and does not go with `background`: a parent `:hover`
+  that only changes the fill leaves the child's glass alone; a parent `:hover` that writes `glass-tint` takes the child's
+  `glass-blur` with it while hovered.
+- The four corners of `border-radius` are one group: they yield back to the parent's values together.
+- `shadow`'s colour, blur and offset are one group.
+
+`outline-offset` is not split out as a property of its own: the groups are the ones StyleOverride merges by, so a theme author
+learns one set of rules; splitting it would add a property flag to the style set that every reader of `Present` has to learn,
+and the difference only shows when a parent and a child write the two halves of one focus ring at different stages -- writing
+the offset in the same rule as the ring avoids it.
+
+**The built-in layer yields per key** (§8.1). A plain `TagButton { }` (no variant, no state) disables only `TagButton`'s own
+built-in rules; `TyButton`'s built-in rules still apply underneath. Third-party keys have no built-in rules anyway, so this
+only shows when a built-in key is registered as a child.
+
+**Sub-part keys are registered separately.** Sub-part keys a control builds as `GetStyleTypeKey + 'Fill'` and the like do
+not follow on their own: `TagMeter`'s fill resolves `TagMeterFill`, which needs its own registration to inherit `TyMeterFill`.
+
+Registration rules:
+
+- Register in the unit's `initialization` and undo it in `finalization` with `TyUnregisterTypeKeyParent`. The registry is
+  process-wide; a registration made after controls are on screen does not repaint them.
+- **An exception in `initialization` stops the program before it starts** -- two packages registering the same key with
+  different parents, and the one loaded second takes the whole application down. In a package, register with
+  `TyTryRegisterTypeKeyParent`: on an error it returns `False`, leaves the registry unchanged and raises nothing (the control
+  just does not inherit the parent's rules); it returns `True` when the link is registered or already was.
+- Key names are case-insensitive and must be identifiers (a letter or `_`, then letters, digits, `_` and `-`).
+- These raise `ETyCssError` and leave the registry unchanged: an invalid name; a cycle (including a key registered as its own
+  parent); a chain longer than 8 keys; a key that already has a **different** parent (registering the same pair again is fine).
+- Queries: `TyTypeKeyParent`, `TyTypeKeyChain`, `TyGetRegisteredTypeKeys`.
+
+The tools follow the chain too: the design-time `StyleClass` drop-down lists the parent's variants (`TagButton` gets
+`primary`, `danger`, `ghost`); the controller-level StyleOverride editor lists registered keys both in selector completion and in its reference list.
+Lint does not check type key names, so a child key is never reported.
+
+A typeKey with no registered parent works as before: it gets only the rules a theme writes for it.
+
 ---
 
 ## 5. Property Reference
@@ -709,6 +809,7 @@ Gradient endpoints sit where the gradient axis crosses the control's bounding bo
 ## 8. typeKeys and the Built-in Variant List
 
 The type name in a selector is the typeKey returned by the control's `GetStyleTypeKey` (sub-part typeKeys included).
+A third-party control's own key can register a parent key and inherit all its rules; see §4.5.
 
 This section is the theme author's **authoritative key table**. Every entry is taken from `themes/light.tycss`, the single
 source of truth; `source/tyControls.DefaultTheme.pas` (the built-in base layer compiled into the library) is generated from

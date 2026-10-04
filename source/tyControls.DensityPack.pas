@@ -169,6 +169,8 @@ begin
       out the bottom, which is how the Ant Design example's theme picker lost its lower
       edge. This leaves 5px of breathing room above and below a full-height control. }
     '  --titlebar-height: 48px;' + LineEnding +
+    '  --titlebar-icon-gap: 8px;' + LineEnding +
+    '  --titlebar-icon-size: 20px;' + LineEnding +
     '  --titlebar-padding: 12px;' + LineEnding +
     '  --toolwindow-button-size: 28px;' + LineEnding +
     '  --toolwindow-content-min: 144px;' + LineEnding +

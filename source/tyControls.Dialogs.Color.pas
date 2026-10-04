@@ -1,10 +1,11 @@
 unit tyControls.Dialogs.Color;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Types, Math, Graphics, Controls, Forms, BGRABitmap, BGRABitmapTypes,
+uses Classes, SysUtils, Types, Math, Graphics, Controls, Forms, Dialogs, BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.ColorMath,
   tyControls.Controller, tyControls.Dialogs, tyControls.Edit, tyControls.SpinEdit,
-  tyControls.TyLabel, tyControls.ColorGrid, tyControls.Component, tyControls.StrConsts;
+  tyControls.TyLabel, tyControls.ColorGrid, tyControls.Button, tyControls.Component,
+  tyControls.StrConsts;
 type
   TTyHSVSquare = class(TTyCustomControl)
   private
@@ -67,9 +68,23 @@ type
     FSquare: TTyHSVSquare; FHueBar: TTyHueBar;
     FSwatches: TTyColorGrid;
     FHex: TTyEdit; FR, FG, FB, FA: TTySpinEdit; FC, FM, FY, FK: TTySpinEdit;
+    { Layout kept from CreateNew so SetCustomColors can slot its section in above the preview. }
+    FPreviewLbl: TTyLabel;
+    FX0, FContentTop, FContentRight, FSwBottom, FSwCellW: Integer;
+    { Custom colours (LCL's CustomColors, slots ColorA..ColorP): built only when the caller has
+      at least one. FCustomDefined marks the slots the caller gave or the user added -- the
+      only ones written back. }
+    FOptions: TColorDialogOptions;
+    FCustomGrid: TTyColorGrid;
+    FAddCustomBtn: TTyButton;
+    FCustom: array[0..15] of TColor;
+    FCustomDefined: array[0..15] of Boolean;
+    FCustomNext: Integer;
     procedure SyncViewsFromColor(AFromPicker: Boolean = False);
     procedure PickerChanged(Sender: TObject);
     procedure SwatchChanged(Sender: TObject);
+    procedure CustomSwatchChanged(Sender: TObject);
+    procedure AddCustomClick(Sender: TObject);
     procedure RGBChanged(Sender: TObject);
     procedure CMYKChanged(Sender: TObject);
     procedure AlphaChanged(Sender: TObject);
@@ -103,7 +118,28 @@ type
     function PreviewRect: TRect;
     { The quick-pick grid, so a host can extend the palette (AddColor). }
     property Swatches: TTyColorGrid read FSwatches;
+    { LCL's TColorDialogOptions. cdPreventFullOpen disables everything that defines a colour
+      (square, hue bar, Hex/RGB/CMYK/Alpha, adding a custom colour): only the swatches can be
+      picked. The rest have no effect here -- see docs/controls/dialogs.md. }
+    procedure ApplyOptions(AOptions: TColorDialogOptions);
+    { Show LCL-style custom colours ('ColorA=FFFFFF' ... 'ColorP=…', the value a hex TColor)
+      as a row of 16 swatches with an "Add to custom colors" button, between the basic colours
+      and the preview. Nothing is shown when AList has no valid entry. }
+    procedure SetCustomColors(AList: TStrings);
+    { Write the custom slots back into AList: the ones the caller gave and the ones the user
+      added, each as Values['ColorX']; every other entry of AList is left as it is. }
+    procedure GetCustomColors(AList: TStrings);
+    { Put the current colour into the next custom slot (the button's action). }
+    procedure AddCustomColor;
+    { The custom-colour row; nil when there is none. }
+    property CustomSwatches: TTyColorGrid read FCustomGrid;
   end;
+
+{ One LCL CustomColors entry: AName 'ColorA'..'ColorP' -> slot 0..15, AValue a hex TColor
+  ('FF0000' is blue). False for anything else (LCL's own list also has ColorQ..ColorT, which
+  its Windows dialog never shows either). }
+function TyParseCustomColor(const AName, AValue: string; out ASlot: Integer;
+  out AColor: TColor): Boolean;
 
 function TyBuildColorDialog(const ACaption: string; ASeed: TTyColor): TTyColorForm;
 function TySelectColor(const ACaption: string; var AColor: TTyColor): Boolean; overload;
@@ -116,10 +152,17 @@ type
     FOnShow: TNotifyEvent;
     FOnClose: TCloseEvent;
     FOnCanClose: TCloseQueryEvent;
+    FOptions: TColorDialogOptions;
+    FCustomColors: TStrings;
     function GetLCL: TColor; procedure SetLCL(v: TColor);
     function GetAlpha: Byte; procedure SetAlpha(v: Byte);
+    procedure SetCustomColors(AValue: TStrings);
   public
     constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+    { The form Execute shows -- seeded, options and custom colours applied, the three events
+      forwarded -- without showing it. The caller frees it. }
+    function BuildForm: TTyColorForm;
     function Execute: Boolean;
     property LCLColor: TColor read GetLCL write SetLCL;
   published
@@ -132,11 +175,27 @@ type
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
+    { LCL's TColorDialogOptions (default [cdFullOpen], as LCL). Only cdPreventFullOpen has an
+      effect -- see TTyColorForm.ApplyOptions. }
+    property Options: TColorDialogOptions read FOptions write FOptions default [cdFullOpen];
+    { LCL's custom colours: 'ColorA=FFFFFF' ... 'ColorP=…'. Empty (the default) shows no
+      custom row -- the dialog looks as it always did. With entries the dialog shows them and
+      lets the user add the current colour; OK writes the slots back. }
+    property CustomColors: TStrings read FCustomColors write SetCustomColors;
   end;
 
 implementation
 
 uses tyControls.Css.Values;   // TyParseColor
+
+const
+  { Section metrics shared by CreateNew and SetCustomColors (96-PPI design numbers). }
+  SecGap    = 12;    // gap above each stacked section (swatch grid, custom row, preview)
+  SecLblH   = 24;    // a section label (20px tall) plus its gap to the content below
+  SecLblW   = 160;   // section-label width -- room for a translated caption
+  SwCols    = 16;    // swatch columns; the palette fills whole rows
+  SwCellH   = 24;    // swatch cell height (the width follows the content width)
+  CustomBtnW = 200;  // "Add to custom colors" button: a floor, the button may want more
 
 { TyColorToBGRA lives in tyControls.Painter (public, imported above) — no local copy. }
 
@@ -300,11 +359,6 @@ const
   CellGap   = 10;    // gap between adjacent channel cells (label+spin)
   RowGap    = 10;    // vertical gap between editor rows
   LblGap    = 6;     // gap between a channel label and its spin
-  SecGap    = 12;    // gap above each stacked section (swatch grid, preview)
-  SecLblH   = 24;    // a section label (20px tall) plus its gap to the content below
-  SecLblW   = 160;   // section-label width — room for a translated caption
-  SwCols    = 16;    // quick-pick swatch columns; the palette fills whole rows
-  SwCellH   = 24;    // quick-pick swatch cell height (the width follows the content width)
   PrevH     = 44;    // preview swatch height
 var
   r: TRect;
@@ -347,6 +401,7 @@ begin
   inherited CreateNew(AOwner, Num);
   Caption := rsDlgColorTitle;   // title bar text (builders may override via ACaption)
   FColor := $FF000000;
+  FOptions := [cdFullOpen];
   r := ContentRect;
   x0 := r.Left + Px(TyDlgPad);
   y0 := r.Top + Px(TyDlgPad);
@@ -430,9 +485,14 @@ begin
   swCellW := (contentRight - x0) div SwCols;
   FSwatches.SetBounds(x0, swTop, swCellW * SwCols, Px(SwCellH) * swRows);
   swBottom := swTop + Px(SwCellH) * swRows;
+  FX0 := x0;
+  FContentTop := r.Top;
+  FContentRight := contentRight;
+  FSwBottom := swBottom;
+  FSwCellW := swCellW;
 
   // Preview: a full-width labelled swatch band beneath the quick-pick grid.
-  MkLabel(rsDlgPreview, x0, swBottom + Px(SecGap), Px(SecLblW));
+  FPreviewLbl := MkLabel(rsDlgPreview, x0, swBottom + Px(SecGap), Px(SecLblW));
   previewTop := swBottom + Px(SecGap) + Px(SecLblH);
   FPreviewRect := Rect(x0, previewTop, contentRight, previewTop + Px(PrevH));
 
@@ -466,6 +526,135 @@ begin
     FPreviewRect := Rect(Round(FPreviewRect.Left * AXProportion),
       Round(FPreviewRect.Top * AYProportion), Round(FPreviewRect.Right * AXProportion),
       Round(FPreviewRect.Bottom * AYProportion));
+end;
+
+function TyParseCustomColor(const AName, AValue: string; out ASlot: Integer;
+  out AColor: TColor): Boolean;
+var
+  n: string;
+  v: Longint;
+  code: Integer;
+begin
+  Result := False;
+  ASlot := -1;
+  AColor := clNone;
+  n := Trim(AName);
+  { LCL's ExtractColorIndexAndColor: 'Color' + one letter, the value Val('$' + hex). }
+  if (Length(n) <> 6) or (Copy(n, 1, 5) <> 'Color') then Exit;
+  if (n[6] < 'A') or (n[6] > 'P') then Exit;
+  Val('$' + Trim(AValue), v, code);
+  if (code <> 0) or (Trim(AValue) = '') then Exit;
+  ASlot := Ord(n[6]) - Ord('A');
+  AColor := TColor(v);
+  Result := True;
+end;
+
+procedure TTyColorForm.ApplyOptions(AOptions: TColorDialogOptions);
+var define: Boolean;
+begin
+  FOptions := AOptions;
+  define := not (cdPreventFullOpen in AOptions);
+  FSquare.Enabled := define;
+  FHueBar.Enabled := define;
+  FHex.Enabled := define;
+  FR.Enabled := define; FG.Enabled := define; FB.Enabled := define;
+  FC.Enabled := define; FM.Enabled := define; FY.Enabled := define; FK.Enabled := define;
+  FA.Enabled := define;
+  if FAddCustomBtn <> nil then FAddCustomBtn.Enabled := define;
+end;
+
+procedure TTyColorForm.SetCustomColors(AList: TStrings);
+var
+  i, slot, lastSlot, lblTop, gridTop, btnTop, shift, btnH, btnW: Integer;
+  c: TColor;
+  any: Boolean;
+  lbl: TTyLabel;
+begin
+  if (AList = nil) or (FCustomGrid <> nil) then Exit;
+  any := False;
+  lastSlot := -1;
+  for i := 0 to 15 do
+  begin
+    FCustom[i] := clWhite;   // an empty slot is white, as Windows' custom-colour grid starts
+    FCustomDefined[i] := False;
+  end;
+  for i := 0 to AList.Count - 1 do
+    if TyParseCustomColor(AList.Names[i], AList.ValueFromIndex[i], slot, c) then
+    begin
+      FCustom[slot] := c;
+      FCustomDefined[slot] := True;
+      if slot > lastSlot then lastSlot := slot;
+      any := True;
+    end;
+  if not any then Exit;   // an empty list keeps the dialog exactly as it was
+  FCustomNext := (lastSlot + 1) mod 16;
+
+  { Label, a one-row grid as wide as the basic colours, and the Add button -- slotted in
+    where the preview was; the preview moves down by what the section takes. }
+  lblTop := FSwBottom + Px(SecGap);
+  lbl := TTyLabel.Create(Self);
+  lbl.Parent := Self;
+  lbl.Caption := rsDlgCustomColors;
+  lbl.SetBounds(FX0, lblTop, Px(SecLblW), Px(20));
+  gridTop := lblTop + Px(SecLblH);
+  if lbl.Top + lbl.Height > gridTop then gridTop := lbl.Top + lbl.Height;
+  FCustomGrid := TTyColorGrid.Create(Self);
+  FCustomGrid.Parent := Self;
+  FCustomGrid.Columns := SwCols;
+  FCustomGrid.ClearColors;
+  for i := 0 to 15 do FCustomGrid.AddColor(FCustom[i]);
+  FCustomGrid.SetBounds(FX0, gridTop, FSwCellW * SwCols, Px(SwCellH));
+  FCustomGrid.OnChange := @CustomSwatchChanged;
+  btnTop := gridTop + Px(SwCellH) + Px(8);
+  FAddCustomBtn := TTyButton.Create(Self);
+  FAddCustomBtn.Parent := Self;
+  FAddCustomBtn.Caption := rsDlgAddCustomColor;
+  btnW := Px(CustomBtnW);
+  if FAddCustomBtn.Constraints.MinWidth > btnW then btnW := FAddCustomBtn.Constraints.MinWidth;
+  btnH := Px(TyDensityHeight(nil, TyDlgEditH));
+  FAddCustomBtn.SetBounds(FX0, btnTop, btnW, btnH);
+  FAddCustomBtn.OnClick := @AddCustomClick;
+  FAddCustomBtn.Enabled := not (cdPreventFullOpen in FOptions);
+
+  shift := (FAddCustomBtn.Top + FAddCustomBtn.Height) - FSwBottom;
+  FPreviewLbl.Top := FPreviewLbl.Top + shift;
+  OffsetRect(FPreviewRect, 0, shift);
+  AutoSizeToContent(FContentRight - FX0, (FPreviewRect.Bottom + Px(TyDlgPad)) - FContentTop);
+  SyncViewsFromColor;   // ring the current colour in the new row too
+end;
+
+procedure TTyColorForm.GetCustomColors(AList: TStrings);
+var i: Integer;
+begin
+  if (AList = nil) or (FCustomGrid = nil) then Exit;
+  for i := 0 to 15 do
+    if FCustomDefined[i] then
+      AList.Values['Color' + Chr(Ord('A') + i)] := IntToHex(FCustom[i], 6);
+end;
+
+procedure TTyColorForm.AddCustomColor;
+var c: TColor;
+begin
+  if FCustomGrid = nil then Exit;
+  c := TyColorToLCL(FColor);
+  FCustom[FCustomNext] := c;
+  FCustomDefined[FCustomNext] := True;
+  FCustomGrid.SetColorAt(FCustomNext, c);
+  FCustomNext := (FCustomNext + 1) mod 16;
+  SyncViewsFromColor;
+end;
+
+procedure TTyColorForm.AddCustomClick(Sender: TObject);
+begin
+  AddCustomColor;
+end;
+
+procedure TTyColorForm.CustomSwatchChanged(Sender: TObject);
+begin
+  if FUpdating then Exit;
+  if FCustomGrid.Selected = clNone then Exit;
+  // The same commit path as the basic swatches: no alpha in a swatch, the dialog keeps its own.
+  ApplyColor(TyColorFromLCL(FCustomGrid.Selected, FA.Value));
 end;
 
 procedure TTyColorForm.SetColorValue(AColor: TTyColor);
@@ -551,6 +740,7 @@ begin
     end;
     // Rings the matching swatch, or clears the ring when the colour is not in the palette.
     FSwatches.Selected := TyColorToLCL(FColor);
+    if FCustomGrid <> nil then FCustomGrid.Selected := TyColorToLCL(FColor);
     Invalidate;   // repaint the preview swatch
   finally
     FUpdating := False;
@@ -688,6 +878,28 @@ constructor TTyColorDialog.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FColor := $FF000000;
+  FOptions := [cdFullOpen];
+  FCustomColors := TStringList.Create;
+end;
+
+destructor TTyColorDialog.Destroy;
+begin
+  FCustomColors.Free;
+  inherited Destroy;
+end;
+
+procedure TTyColorDialog.SetCustomColors(AValue: TStrings);
+begin
+  FCustomColors.Assign(AValue);
+end;
+
+function TTyColorDialog.BuildForm: TTyColorForm;
+begin
+  Result := TyBuildColorDialog(FCaption, FColor);
+  Result.SetCustomColors(FCustomColors);
+  Result.ApplyOptions(FOptions);
+  // The wrapper's OnShow/OnClose/OnCanClose forward onto the form before it shows.
+  TyForwardDialogEvents(Result, FOnShow, FOnClose, FOnCanClose);
 end;
 
 function TTyColorDialog.GetLCL: TColor;
@@ -705,13 +917,14 @@ begin FColor := TyRGBA(TyRedOf(FColor), TyGreenOf(FColor), TyBlueOf(FColor), v);
 function TTyColorDialog.Execute: Boolean;
 var d: TTyColorForm;
 begin
-  // Inline the build/show (rather than call TySelectColor) so the wrapper's
-  // OnShow/OnClose/OnCanClose forward onto the form before ShowModal.
-  d := TyBuildColorDialog(FCaption, FColor);
+  d := BuildForm;
   try
-    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
     Result := (d.ShowModal = mrOK);
-    if Result then FColor := d.CurrentColor;
+    if Result then
+    begin
+      FColor := d.CurrentColor;
+      d.GetCustomColors(FCustomColors);
+    end;
   finally d.Free; end;
 end;
 

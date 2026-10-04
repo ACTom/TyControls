@@ -76,8 +76,16 @@ msgid "Ambiguous wide"
 msgstr "歧义字符算宽"
 
 #: tmainform.lblfontsize.caption
-msgid "Font size:"
-msgstr "字号："
+msgid "Font:"
+msgstr "字体："
+
+#: tmainform.cmbfont.hint
+msgid "Fixed-pitch fonts installed on this machine"
+msgstr "本机安装的等宽字体"
+
+#: tmainform.cmbfont.texthint
+msgid "Theme font"
+msgstr "主题字体"
 
 #: tmainform.btnpaste.caption
 msgid "Paste"

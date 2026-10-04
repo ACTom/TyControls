@@ -344,6 +344,8 @@ token（`light.tycss` 基础层，所有皮肤继承）：
 
 字体的来源顺序：**`StyleOverride` 里的 `font-family` / `font-size` > `ParentFont = False` 时的 `Font` > `TyTerminal` 规则 > token**。`Font.Name = 'default'` 当没设。
 
+让用户挑字体，放一个开了 `FixedPitchOnly` 的 [`TTyFontComboBox`](fontcombobox.md)（只列系统报为等宽的字体），选中后设 `ParentFont := False; Font.Name := FontBox.SelectedFont`。`examples/terminal` 第二行工具栏就是这样：字体框开始时什么都不选（提示「主题字体」），终端用主题给的字体，用户选了才换。
+
 ```css
 /* 自己的皮肤里给终端换一套深色 */
 :root {

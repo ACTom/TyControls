@@ -1,14 +1,15 @@
 unit test.dialogs.filedialog;
-{ Headless tests for the ONLY headless-testable surface of the phase-7 file
-  dialogs: the pure resolver
+{ (#28 added three suites at the end of this unit: the 3.0 option names still loading, the
+  pure TyFileDialogCheck, and the component's BuildForm / ApplyResult -- the form CAN be built
+  headless; only ShowModal and the message boxes cannot run here.)
+
+  Headless tests for the pure resolver of the phase-7 file dialogs:
 
     function TyFileDialogResolveName(ASaveMode: Boolean;
       const ADir, ATyped, ASelected, ADefaultExt: string): string;
 
-  The dialog FORM and its windowed child controls cannot be created under the
-  console test runner (no win32 handle), so nothing here instantiates a form or
-  a component -- every rule from the plan's "pure resolver function" section is
-  pinned against the pure function alone.
+  Every rule from the phase-7 plan's "pure resolver function" section is pinned against the
+  pure function alone.
 
   Semantics under test (plan lines):
     Save  : bare name expands against ADir + ADefaultExt appended when the
@@ -20,9 +21,9 @@ unit test.dialogs.filedialog;
 
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Controls, fpcunit, testregistry,
-  tyControls.FileSystem, tyControls.StrConsts, tyControls.ListView, tyControls.ShellListView,
-  tyControls.Dialogs.FileDialog;
+uses Classes, SysUtils, Forms, Controls, Dialogs, LazFileUtils, fpcunit, testregistry,
+  tyControls.FileSystem, tyControls.Dialogs.FileDialog, tyControls.ListView,
+  tyControls.ShellListView, tyControls.Button, tyControls.StrConsts;
 type
   TFileDialogResolveTest = class(TTestCase)
   private
@@ -46,20 +47,69 @@ type
     procedure TestOpenTypedWithPathVerbatim;
     procedure TestOpenAllEmptyIsEmpty;
   end;
+
+  { Options became LCL's TOpenOptions (#28); 3.0's names must still load. }
+  TFileDialogLegacyOptionsTest = class(TTestCase)
+  private
+    function Load(const AOptions: string): TOpenOptions;
+  published
+    procedure TestEachOldNameLoadsAsItsLclValue;
+    procedure TestOldNamesMixWithNew;
+    procedure TestFormsWriteTheLclNames;
+    procedure TestTheDefaultStaysEmptyAndUnwritten;
+    procedure TestOldConstantsAreTheLclValues;
+  end;
+
+  { TyFileDialogCheck: what OK may do with one chosen file. }
+  TFileDialogCheckTest = class(TTestCase)
+  private
+    FDir, FFile, FReadOnly: string;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestNoOptionsAcceptsAnything;
+    procedure TestPathMustExist;
+    procedure TestFileMustExistBothModes;
+    procedure TestNoReadOnlyReturn;
+    procedure TestCreatePrompt;
+    procedure TestOverwritePromptOnlyWhenSaving;
+    procedure TestOrder;
+  end;
+
+  { BuildForm and ApplyResult: the two halves of Execute around ShowModal. }
+  TFileDialogComponentTest = class(TTestCase)
+  private
+    FHelpSender: TObject;
+    procedure HandleHelp(Sender: TObject);
+    function ListOf(AForm: TTyFileDialogForm): TTyShellListView;
+    function HelpOf(AForm: TTyFileDialogForm): TTyButton;
+  published
+    procedure TestExtensionDifferent;
+    procedure TestExtensionDifferentIsClearedFirst;
+    procedure TestNoChangeDir;
+    procedure TestCancelChangesNothing;
+    procedure TestForceShowHiddenAndMultiSelectReachTheList;
+    procedure TestShowHelp;
+  end;
+
   { The form with its error box swapped for a list, so a refused name can be read instead of
     putting a modal window up. Everything else is the real form: the name box, the list, the
     OK path through CloseQuery. }
   TProbeFileDialog = class(TTyFileDialogForm)
   protected
     procedure ReportProblem(const AMsg: string); override;
+    function ConfirmChoice(const AMsg: string): Boolean; override;
   public
     Problems: TStringList;
+    Questions: TStringList;   // every yes / no question, in order
+    Answer: Boolean;          // what the user answers to each
   end;
 
-  { fdoPathMustExist and fdoFileMustExist as LCL's TOpenDialog.CheckFile / CheckAllFiles apply
-    them: for an open AND a save, the folder before the file, and for every file of a multiple
-    selection. 3.0.0 never looked at fdoPathMustExist, checked fdoFileMustExist for an open only,
-    and for a selection checked one name. }
+  { ofPathMustExist and ofFileMustExist as LCL's TOpenDialog.CheckFile / CheckAllFiles apply
+    them, through the real OK path: for an open AND a save, the folder before the file, and
+    for every file of a multiple selection. 3.0.0 never looked at fdoPathMustExist, checked
+    fdoFileMustExist for an open only, and for a selection checked one name. }
   TFileDialogValidationTest = class(TTestCase)
   private
     FDir: string;
@@ -68,7 +118,7 @@ type
     FAnswer: Boolean;
     procedure CanClose(Sender: TObject; var ACanClose: Boolean);
     procedure Touch(const AName: string);
-    procedure Dialog(ASave: Boolean; AOptions: TTyFileDialogOptions);
+    procedure Dialog(ASave: Boolean; AOptions: TOpenOptions);
     function Accepts: Boolean;
   protected
     procedure SetUp; override;
@@ -79,6 +129,9 @@ type
     procedure TestOpenRefusesAFolderThatIsNotThere;
     procedure TestOpenChecksEveryFileOfASelection;
     procedure TestOpenChecksTheTypedNameBesideASelection;
+    procedure TestCreatePromptAsksAndTheAnswerDecides;
+    procedure TestOverwritePromptAsksOnlyForAnExistingFileOnSave;
+    procedure TestTheTypedNameInTheSelectionIsAskedOnce;
     procedure TestOnCanCloseIsNotAskedAboutARefusedName;
     procedure TestOnCanCloseHasTheLastWord;
   end;
@@ -193,11 +246,347 @@ begin
     '', TyFileDialogResolveName(False, FDir, '', '', ''));
 end;
 
+{ TFileDialogLegacyOptionsTest }
+
+function TFileDialogLegacyOptionsTest.Load(const AOptions: string): TOpenOptions;
+var f: TForm; ts: TStringStream; bs: TMemoryStream;
+begin
+  f := TForm.CreateNew(nil);
+  ts := TStringStream.Create(
+    'object Form1: TForm' + LineEnding +
+    '  object D: TTyOpenDialog' + LineEnding +
+    '    Options = ' + AOptions + LineEnding +
+    '  end' + LineEnding +
+    'end' + LineEnding);
+  bs := TMemoryStream.Create;
+  try
+    ObjectTextToBinary(ts, bs);
+    bs.Position := 0;
+    bs.ReadComponent(f);
+    Result := (f.FindComponent('D') as TTyOpenDialog).Options;
+  finally
+    bs.Free; ts.Free; f.Free;
+  end;
+end;
+
+procedure TFileDialogLegacyOptionsTest.TestEachOldNameLoadsAsItsLclValue;
+begin
+  AssertTrue('fdoOverwritePrompt', Load('[fdoOverwritePrompt]') = [ofOverwritePrompt]);
+  AssertTrue('fdoFileMustExist', Load('[fdoFileMustExist]') = [ofFileMustExist]);
+  AssertTrue('fdoPathMustExist', Load('[fdoPathMustExist]') = [ofPathMustExist]);
+  AssertTrue('fdoAllowMultiSelect', Load('[fdoAllowMultiSelect]') = [ofAllowMultiSelect]);
+end;
+
+procedure TFileDialogLegacyOptionsTest.TestOldNamesMixWithNew;
+begin
+  AssertTrue('a 3.0 form: all four',
+    Load('[fdoOverwritePrompt, fdoFileMustExist, fdoPathMustExist, fdoAllowMultiSelect]')
+    = [ofOverwritePrompt, ofFileMustExist, ofPathMustExist, ofAllowMultiSelect]);
+  AssertTrue('an LCL form', Load('[ofEnableSizing, ofViewDetail, ofShowHelp]')
+    = [ofEnableSizing, ofViewDetail, ofShowHelp]);
+end;
+
+procedure TFileDialogLegacyOptionsTest.TestFormsWriteTheLclNames;
+var src: TForm; d: TTySaveDialog; ms, ts: TMemoryStream; L: TStringList;
+begin
+  src := TForm.CreateNew(nil);
+  ms := TMemoryStream.Create;
+  ts := TMemoryStream.Create;
+  L := TStringList.Create;
+  try
+    d := TTySaveDialog.Create(src);
+    d.Name := 'D';
+    d.Options := [ofOverwritePrompt, ofPathMustExist];
+    ms.WriteComponent(src);
+    ms.Position := 0;
+    ObjectBinaryToText(ms, ts);
+    ts.Position := 0;
+    L.LoadFromStream(ts);
+    AssertTrue('written with LCL''s names' + LineEnding + L.Text,
+      Pos('Options = [ofOverwritePrompt, ofPathMustExist]', L.Text) > 0);
+    AssertEquals('never the old ones', 0, Pos('fdo', L.Text));
+  finally
+    L.Free; ts.Free; ms.Free; src.Free;
+  end;
+end;
+
+procedure TFileDialogLegacyOptionsTest.TestTheDefaultStaysEmptyAndUnwritten;
+var src: TForm; d: TTyOpenDialog; ms, ts: TMemoryStream; L: TStringList;
+begin
+  src := TForm.CreateNew(nil);
+  ms := TMemoryStream.Create;
+  ts := TMemoryStream.Create;
+  L := TStringList.Create;
+  try
+    d := TTyOpenDialog.Create(src);
+    d.Name := 'D';
+    AssertTrue('default [] (not LCL''s [ofEnableSizing, ofViewDetail])', d.Options = []);
+    ms.WriteComponent(src);
+    ms.Position := 0;
+    ObjectBinaryToText(ms, ts);
+    ts.Position := 0;
+    L.LoadFromStream(ts);
+    AssertEquals('not written', 0, Pos('Options', L.Text));
+    AssertEquals('OnHelpClicked unset is not written', 0, Pos('OnHelpClicked', L.Text));
+  finally
+    L.Free; ts.Free; ms.Free; src.Free;
+  end;
+end;
+
+{$push}{$warn 5043 off}{$warn 5066 off}   // the deprecated 3.0 names are what is under test
+procedure TFileDialogLegacyOptionsTest.TestOldConstantsAreTheLclValues;
+var o: TTyFileDialogOptions;
+begin
+  AssertTrue('fdoOverwritePrompt', fdoOverwritePrompt = ofOverwritePrompt);
+  AssertTrue('fdoFileMustExist', fdoFileMustExist = ofFileMustExist);
+  AssertTrue('fdoPathMustExist', fdoPathMustExist = ofPathMustExist);
+  AssertTrue('fdoAllowMultiSelect', fdoAllowMultiSelect = ofAllowMultiSelect);
+  o := [fdoAllowMultiSelect];
+  AssertTrue('3.0 code still builds a set', o = [ofAllowMultiSelect]);
+end;
+{$pop}
+
+{ TFileDialogCheckTest }
+
+procedure TFileDialogCheckTest.SetUp;
+begin
+  FDir := IncludeTrailingPathDelimiter(GetTempDir)
+        + Format('tyfdcheck_%d_%d', [PtrUInt(Self), Random(MaxInt)]);
+  ForceDirectories(FDir);
+  FFile := FDir + PathDelim + 'a.txt';
+  FReadOnly := FDir + PathDelim + 'ro.txt';
+  with TStringList.Create do
+    try
+      Add('x');
+      SaveToFile(FFile);
+      SaveToFile(FReadOnly);
+    finally Free; end;
+  FileSetAttr(FReadOnly, faReadOnly);
+end;
+
+procedure TFileDialogCheckTest.TearDown;
+begin
+  FileSetAttr(FReadOnly, 0);
+  DeleteFile(FReadOnly);
+  DeleteFile(FFile);
+  RemoveDir(FDir);
+end;
+
+procedure TFileDialogCheckTest.TestNoOptionsAcceptsAnything;
+begin
+  AssertTrue('existing', TyFileDialogCheck(False, FFile, []) = fdcOK);
+  AssertTrue('missing', TyFileDialogCheck(False, FDir + PathDelim + 'none.txt', []) = fdcOK);
+  AssertTrue('missing folder', TyFileDialogCheck(True,
+    FDir + PathDelim + 'nodir' + PathDelim + 'x.txt', []) = fdcOK);
+  AssertTrue('existing, saving', TyFileDialogCheck(True, FFile, []) = fdcOK);
+end;
+
+procedure TFileDialogCheckTest.TestPathMustExist;
+begin
+  AssertTrue('its folder is missing', TyFileDialogCheck(True,
+    FDir + PathDelim + 'nodir' + PathDelim + 'x.txt', [ofPathMustExist]) = fdcPathMissing);
+  AssertTrue('its folder exists, the file need not', TyFileDialogCheck(True,
+    FDir + PathDelim + 'new.txt', [ofPathMustExist]) = fdcOK);
+end;
+
+procedure TFileDialogCheckTest.TestFileMustExistBothModes;
+begin
+  AssertTrue('missing, open', TyFileDialogCheck(False,
+    FDir + PathDelim + 'none.txt', [ofFileMustExist]) = fdcFileMissing);
+  AssertTrue('missing, save (LCL checks both)', TyFileDialogCheck(True,
+    FDir + PathDelim + 'none.txt', [ofFileMustExist]) = fdcFileMissing);
+  AssertTrue('existing', TyFileDialogCheck(False, FFile, [ofFileMustExist]) = fdcOK);
+end;
+
+procedure TFileDialogCheckTest.TestNoReadOnlyReturn;
+begin
+  if FileIsWritable(FReadOnly) then Ignore('this file system has no read-only attribute');
+  AssertTrue('a read-only file', TyFileDialogCheck(False, FReadOnly,
+    [ofNoReadOnlyReturn]) = fdcNotWritable);
+  AssertTrue('a writable one', TyFileDialogCheck(False, FFile, [ofNoReadOnlyReturn]) = fdcOK);
+  AssertTrue('a new one in a writable folder', TyFileDialogCheck(True,
+    FDir + PathDelim + 'new.txt', [ofNoReadOnlyReturn]) = fdcOK);
+  AssertTrue('without the option a read-only file is fine',
+    TyFileDialogCheck(False, FReadOnly, []) = fdcOK);
+end;
+
+procedure TFileDialogCheckTest.TestCreatePrompt;
+begin
+  AssertTrue('missing -> ask', TyFileDialogCheck(False,
+    FDir + PathDelim + 'none.txt', [ofCreatePrompt]) = fdcAskCreate);
+  AssertTrue('missing, saving -> ask', TyFileDialogCheck(True,
+    FDir + PathDelim + 'none.txt', [ofCreatePrompt]) = fdcAskCreate);
+  AssertTrue('existing -> nothing to create', TyFileDialogCheck(False, FFile,
+    [ofCreatePrompt]) = fdcOK);
+end;
+
+procedure TFileDialogCheckTest.TestOverwritePromptOnlyWhenSaving;
+begin
+  AssertTrue('saving over a file -> ask', TyFileDialogCheck(True, FFile,
+    [ofOverwritePrompt]) = fdcAskOverwrite);
+  AssertTrue('opening it -> nothing to overwrite', TyFileDialogCheck(False, FFile,
+    [ofOverwritePrompt]) = fdcOK);
+  AssertTrue('saving a new file', TyFileDialogCheck(True, FDir + PathDelim + 'new.txt',
+    [ofOverwritePrompt]) = fdcOK);
+end;
+
+procedure TFileDialogCheckTest.TestOrder;
+begin
+  AssertTrue('the folder before the file', TyFileDialogCheck(False,
+    FDir + PathDelim + 'nodir' + PathDelim + 'x.txt',
+    [ofPathMustExist, ofFileMustExist]) = fdcPathMissing);
+  AssertTrue('must exist beats offering to create', TyFileDialogCheck(False,
+    FDir + PathDelim + 'none.txt', [ofFileMustExist, ofCreatePrompt]) = fdcFileMissing);
+  if not FileIsWritable(FReadOnly) then
+    AssertTrue('read-only beats the overwrite question', TyFileDialogCheck(True, FReadOnly,
+      [ofNoReadOnlyReturn, ofOverwritePrompt]) = fdcNotWritable);
+end;
+
+{ TFileDialogComponentTest }
+
+procedure TFileDialogComponentTest.HandleHelp(Sender: TObject);
+begin
+  FHelpSender := Sender;
+end;
+
+function TFileDialogComponentTest.ListOf(AForm: TTyFileDialogForm): TTyShellListView;
+var i: Integer;
+begin
+  for i := 0 to AForm.ComponentCount - 1 do
+    if AForm.Components[i] is TTyShellListView then
+      Exit(TTyShellListView(AForm.Components[i]));
+  Fail('no file list on the form');
+  Result := nil;
+end;
+
+function TFileDialogComponentTest.HelpOf(AForm: TTyFileDialogForm): TTyButton;
+var i: Integer;
+begin
+  Result := nil;
+  for i := 0 to AForm.ButtonCount - 1 do
+    if AForm.Buttons[i].Caption = rsMsgBtnHelp then Exit(AForm.Buttons[i]);
+end;
+
+procedure TFileDialogComponentTest.TestExtensionDifferent;
+var d: TTySaveDialog; two: TStringList;
+begin
+  d := TTySaveDialog.Create(nil);
+  two := TStringList.Create;
+  try
+    d.Options := [ofNoChangeDir];
+    d.DefaultExt := 'txt';
+    d.ApplyResult(True, 'C:\x\a.md', nil);
+    AssertTrue('a.md against txt -> set', ofExtensionDifferent in d.Options);
+    d.ApplyResult(True, 'C:\x\a.txt', nil);
+    AssertFalse('a.txt -> clear', ofExtensionDifferent in d.Options);
+    d.DefaultExt := '.txt';
+    d.ApplyResult(True, 'C:\x\a.TXT', nil);
+    AssertFalse('a dotted DefaultExt, file names compared as file names',
+      ofExtensionDifferent in d.Options);
+    two.Add('C:\x\a.md');
+    two.Add('C:\x\b.md');
+    d.ApplyResult(True, 'C:\x\a.md', two);
+    AssertFalse('several files -> never set', ofExtensionDifferent in d.Options);
+    d.DefaultExt := '';
+    d.ApplyResult(True, 'C:\x\a.md', nil);
+    AssertFalse('no DefaultExt -> never set', ofExtensionDifferent in d.Options);
+  finally two.Free; d.Free; end;
+end;
+
+procedure TFileDialogComponentTest.TestExtensionDifferentIsClearedFirst;
+var d: TTySaveDialog;
+begin
+  d := TTySaveDialog.Create(nil);
+  try
+    d.DefaultExt := 'txt';
+    d.Options := [ofNoChangeDir, ofExtensionDifferent];   // left over from a previous run
+    d.ApplyResult(False, '', nil);
+    AssertFalse('an output bit: even a cancelled run clears it', ofExtensionDifferent in d.Options);
+  finally d.Free; end;
+end;
+
+procedure TFileDialogComponentTest.TestNoChangeDir;
+var d: TTyOpenDialog;
+begin
+  d := TTyOpenDialog.Create(nil);
+  try
+    d.InitialDir := 'C:\start\';
+    d.ApplyResult(True, 'C:\picked\a.txt', nil);
+    AssertEquals('without ofNoChangeDir InitialDir follows the result',
+      'C:\picked\', d.InitialDir);
+    AssertEquals('FileName', 'C:\picked\a.txt', d.FileName);
+    d.InitialDir := 'C:\start\';
+    d.Options := [ofNoChangeDir];
+    d.ApplyResult(True, 'C:\other\b.txt', nil);
+    AssertEquals('with it InitialDir stays', 'C:\start\', d.InitialDir);
+  finally d.Free; end;
+end;
+
+procedure TFileDialogComponentTest.TestCancelChangesNothing;
+var d: TTyOpenDialog;
+begin
+  d := TTyOpenDialog.Create(nil);
+  try
+    d.InitialDir := 'C:\start\';
+    d.FileName := 'C:\seed\s.txt';
+    d.ApplyResult(False, 'C:\picked\a.txt', nil);
+    AssertEquals('FileName', 'C:\seed\s.txt', d.FileName);
+    AssertEquals('InitialDir', 'C:\start\', d.InitialDir);
+  finally d.Free; end;
+end;
+
+procedure TFileDialogComponentTest.TestForceShowHiddenAndMultiSelectReachTheList;
+var d: TTyOpenDialog; f: TTyFileDialogForm;
+begin
+  d := TTyOpenDialog.Create(nil);
+  try
+    f := d.BuildForm;
+    try
+      AssertFalse('hidden files stay hidden by default', ListOf(f).ShowHidden);
+      AssertFalse('single selection by default', ListOf(f).MultiSelect);
+    finally f.Free; end;
+    d.Options := [ofForceShowHidden, ofAllowMultiSelect];
+    f := d.BuildForm;
+    try
+      AssertTrue('ofForceShowHidden', ListOf(f).ShowHidden);
+      AssertTrue('ofAllowMultiSelect', ListOf(f).MultiSelect);
+    finally f.Free; end;
+  finally d.Free; end;
+end;
+
+procedure TFileDialogComponentTest.TestShowHelp;
+var d: TTySaveDialog; f: TTyFileDialogForm;
+begin
+  FHelpSender := nil;
+  d := TTySaveDialog.Create(nil);
+  try
+    d.OnHelpClicked := @HandleHelp;
+    f := d.BuildForm;
+    try
+      AssertTrue('no Help without ofShowHelp', HelpOf(f) = nil);
+    finally f.Free; end;
+    d.Options := [ofShowHelp];
+    f := d.BuildForm;
+    try
+      AssertTrue('ofShowHelp adds Help', HelpOf(f) <> nil);
+      HelpOf(f).Click;
+      AssertTrue('the click reaches OnHelpClicked, Sender = the component', FHelpSender = d);
+      AssertEquals('and leaves the dialog open', Ord(mrNone), Ord(f.ModalResult));
+    finally f.Free; end;
+  finally d.Free; end;
+end;
+
 { TProbeFileDialog / TFileDialogValidationTest }
 
 procedure TProbeFileDialog.ReportProblem(const AMsg: string);
 begin
   Problems.Add(AMsg);
+end;
+
+function TProbeFileDialog.ConfirmChoice(const AMsg: string): Boolean;
+begin
+  Questions.Add(AMsg);
+  Result := Answer;
 end;
 
 procedure TFileDialogValidationTest.SetUp;
@@ -215,6 +604,7 @@ begin
   if FForm <> nil then
   begin
     FForm.Problems.Free;
+    FForm.Questions.Free;
     FreeAndNil(FForm);
   end;
   if FindFirst(FDir + PathDelim + '*', faAnyFile, sr) = 0 then
@@ -234,10 +624,11 @@ begin
     try Add('x'); SaveToFile(FDir + PathDelim + AName); finally Free; end;
 end;
 
-procedure TFileDialogValidationTest.Dialog(ASave: Boolean; AOptions: TTyFileDialogOptions);
+procedure TFileDialogValidationTest.Dialog(ASave: Boolean; AOptions: TOpenOptions);
 begin
   FForm := TProbeFileDialog.CreateNew(nil);
   FForm.Problems := TStringList.Create;
+  FForm.Questions := TStringList.Create;
   FForm.SaveMode := ASave;
   FForm.Options := AOptions;
   FForm.InitialDir := FDir;
@@ -247,13 +638,14 @@ end;
 function TFileDialogValidationTest.Accepts: Boolean;
 begin
   FForm.Problems.Clear;
+  FForm.Questions.Clear;
   FForm.ModalResult := mrOK;
   Result := FForm.CloseQuery;
 end;
 
 procedure TFileDialogValidationTest.TestSaveRefusesAFolderThatIsNotThere;
 begin
-  Dialog(True, [fdoPathMustExist]);
+  Dialog(True, [ofPathMustExist]);
   FForm.NameEdit.Text := FDir + PathDelim + 'nope' + PathDelim + 'x.txt';
   AssertFalse('a save into a folder that is not there is refused', Accepts);
   AssertEquals('and the user is told which folder',
@@ -266,9 +658,9 @@ end;
 procedure TFileDialogValidationTest.TestSaveRefusesAMissingFileWhenItMustExist;
 begin
   Touch('a.txt');
-  Dialog(True, [fdoFileMustExist]);
+  Dialog(True, [ofFileMustExist]);
   FForm.NameEdit.Text := 'missing.txt';
-  AssertFalse('fdoFileMustExist holds for a save too, as in LCL', Accepts);
+  AssertFalse('ofFileMustExist holds for a save too, as in LCL', Accepts);
   AssertEquals('one message', 1, FForm.Problems.Count);
   AssertTrue('naming the file: ' + FForm.Problems.Text, Pos('missing.txt', FForm.Problems[0]) > 0);
   FForm.NameEdit.Text := 'a.txt';
@@ -277,7 +669,7 @@ end;
 
 procedure TFileDialogValidationTest.TestOpenRefusesAFolderThatIsNotThere;
 begin
-  Dialog(False, [fdoPathMustExist]);
+  Dialog(False, [ofPathMustExist]);
   FForm.NameEdit.Text := FDir + PathDelim + 'nope' + PathDelim + 'x.txt';
   AssertFalse('an open from a folder that is not there is refused', Accepts);
   AssertEquals('and the message is about the folder, not the file',
@@ -288,7 +680,7 @@ procedure TFileDialogValidationTest.TestOpenChecksEveryFileOfASelection;
 begin
   Touch('a.txt');
   Touch('b.txt');
-  Dialog(False, [fdoFileMustExist, fdoAllowMultiSelect]);
+  Dialog(False, [ofFileMustExist, ofAllowMultiSelect]);
   FForm.ShellList.SelectAll;
   AssertEquals('setup: both files are selected', 2, FForm.ShellList.SelCount);
   FForm.NameEdit.Text := 'a.txt';
@@ -302,11 +694,62 @@ procedure TFileDialogValidationTest.TestOpenChecksTheTypedNameBesideASelection;
 begin
   Touch('a.txt');
   Touch('b.txt');
-  Dialog(False, [fdoFileMustExist, fdoAllowMultiSelect]);
+  Dialog(False, [ofFileMustExist, ofAllowMultiSelect]);
   FForm.ShellList.SelectAll;
   FForm.NameEdit.Text := 'c.txt';
   AssertFalse('a typed name that is not there is refused, whatever else is selected', Accepts);
   AssertTrue('naming it: ' + FForm.Problems.Text, Pos('c.txt', FForm.Problems.Text) > 0);
+end;
+
+procedure TFileDialogValidationTest.TestCreatePromptAsksAndTheAnswerDecides;
+begin
+  Dialog(False, [ofCreatePrompt]);
+  FForm.NameEdit.Text := 'new.txt';
+  FForm.Answer := False;
+  AssertFalse('"no": the dialog stays open', Accepts);
+  AssertEquals('one question', 1, FForm.Questions.Count);
+  AssertEquals('about creating that file',
+    Format(rsFdCreatePrompt, [FDir + PathDelim + 'new.txt']), FForm.Questions[0]);
+  FForm.Answer := True;
+  AssertTrue('"yes": it goes through', Accepts);
+  Touch('there.txt');
+  FForm.NameEdit.Text := 'there.txt';
+  AssertTrue('a file that exists', Accepts);
+  AssertEquals('is not asked about', 0, FForm.Questions.Count);
+end;
+
+procedure TFileDialogValidationTest.TestOverwritePromptAsksOnlyForAnExistingFileOnSave;
+begin
+  Touch('a.txt');
+  Dialog(True, [ofOverwritePrompt]);
+  FForm.NameEdit.Text := 'a.txt';
+  FForm.Answer := False;
+  AssertFalse('"no": not overwritten', Accepts);
+  AssertEquals('asked about replacing it',
+    Format(rsFdOverwritePrompt, [FDir + PathDelim + 'a.txt']), FForm.Questions.Text.Trim);
+  FForm.Answer := True;
+  AssertTrue('"yes": it goes through', Accepts);
+  FForm.NameEdit.Text := 'b.txt';
+  AssertTrue('a new name', Accepts);
+  AssertEquals('is not asked about', 0, FForm.Questions.Count);
+end;
+
+procedure TFileDialogValidationTest.TestTheTypedNameInTheSelectionIsAskedOnce;
+begin
+  { LCL's CheckAllFiles checks the typed name, then each file of the selection -- and not the
+    typed name a second time when it is one of them. A question shows that: twice would ask
+    the user the same thing twice. }
+  Touch('a.txt');
+  Touch('b.txt');
+  Dialog(False, [ofCreatePrompt, ofAllowMultiSelect]);
+  FForm.ShellList.SelectAll;
+  AssertEquals('setup: both files are selected', 2, FForm.ShellList.SelCount);
+  FForm.NameEdit.Text := 'b.txt';
+  DeleteFile(FDir + PathDelim + 'b.txt');   // gone between picking it and pressing OK
+  FForm.Answer := True;
+  AssertTrue('"yes, create it" lets it through', Accepts);
+  AssertEquals('asked once about b.txt, not twice: ' + FForm.Questions.Text, 1,
+    FForm.Questions.Count);
 end;
 
 { The program's OnCanClose (forwarded onto the form's OnCloseQuery) records that it was asked. }
@@ -320,7 +763,7 @@ end;
   it could say yes and act, and the validation after it still kept the dialog open. }
 procedure TFileDialogValidationTest.TestOnCanCloseIsNotAskedAboutARefusedName;
 begin
-  Dialog(True, [fdoPathMustExist]);
+  Dialog(True, [ofPathMustExist]);
   FForm.OnCloseQuery := @CanClose;
   FAsked := False;
   FAnswer := True;
@@ -331,7 +774,7 @@ end;
 
 procedure TFileDialogValidationTest.TestOnCanCloseHasTheLastWord;
 begin
-  Dialog(True, [fdoPathMustExist]);
+  Dialog(True, [ofPathMustExist]);
   FForm.OnCloseQuery := @CanClose;
   FForm.NameEdit.Text := FDir + PathDelim + 'new.txt';
   FAsked := False;
@@ -344,6 +787,9 @@ end;
 
 initialization
   Randomize;
+  RegisterTest(TFileDialogLegacyOptionsTest);
+  RegisterTest(TFileDialogCheckTest);
+  RegisterTest(TFileDialogComponentTest);
   RegisterTest(TFileDialogResolveTest);
   RegisterTest(TFileDialogValidationTest);
 end.

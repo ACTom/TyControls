@@ -10,7 +10,7 @@ uses
   test.controller.hotreload, test.base,
   test.baseevents,
   test.eventfiring,
-  test.base.drawframe, test.formgradientbg, test.button, test.skinfit, test.englishfit, test.utf8, test.designeditors, test.focus.tabstop, test.tylabel, test.edit, test.edit.word, test.edit.undo, test.numericedit, test.currencyedit, test.maskedit, test.urledit, test.comboedit, test.trackedit, test.colorbox, test.colorcombobox, test.colorlistbox, test.fontcombobox, test.fontlistbox, test.fontsizecombobox, test.checklistbox,
+  test.base.drawframe, test.formgradientbg, test.button, test.skinfit, test.englishfit, test.utf8, test.designeditors, test.focus.tabstop, test.tylabel, test.edit, test.edit.word, test.edit.undo, test.numericedit, test.currencyedit, test.maskedit, test.urledit, test.comboedit, test.trackedit, test.colorbox, test.colorcombobox, test.colorlistbox, test.fontcombobox, test.fontlistbox, test.fontfamilies, test.fontsizecombobox, test.checklistbox,
   test.mrucombobox, test.comboboxex, test.officelistbox, test.officecombobox, test.colorgrid, test.lcolorpicker,
   test.hscolorpicker, test.advancedlistbox, test.advancedcombobox, test.checkcombobox, test.valuelisteditor,
   test.calculator, test.calcedit,
@@ -26,7 +26,7 @@ uses
   test.controls.scrollbar,
   test.scrollbar.autohide,
   test.scrollbar.hostframe,
-  test.form, test.formsurface, test.formsurface.cache, test.newproject, test.edgepassthrough, test.release, test.themes,
+  test.form, test.titlebar.menuicon, test.formsurface, test.formsurface.cache, test.newproject, test.edgepassthrough, test.release, test.themes,
   test.listbox, test.listbox.scroll,
   test.progressbar,
   test.toggleswitch,
@@ -216,7 +216,8 @@ uses
   test.dpi.dialogs, test.dpi.snapshot,
   test.parity.datetime,
   test.customclasses, test.customclasses.p1, test.customclasses.p2, test.customclasses.p3,
-  test.customclasses.p4;
+  test.customclasses.p4,
+  test.typekeychain;
 
 type
   TTyTestRunner = class(TTestRunner)

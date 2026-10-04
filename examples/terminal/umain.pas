@@ -81,7 +81,8 @@ interface
 uses
   Classes, SysUtils, Types, Forms, Controls, ExtCtrls, LazUTF8, LCLIntf, Dialogs,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes, tyControls.Panel,
-  tyControls.TyLabel, tyControls.Button, tyControls.ComboBox, tyControls.CheckBox,
+  tyControls.TyLabel, tyControls.Button, tyControls.ComboBox, tyControls.FontComboBox,
+  tyControls.CheckBox,
   tyControls.ToggleSwitch, tyControls.SpinEdit, tyControls.Memo, tyControls.Splitter,
   tyControls.StatusBar, tyControls.Dialogs, tyControls.Dialogs.FileDialog,
   tyControls.Dialogs.SelectPath, tyControls.ProgressBar,
@@ -162,6 +163,7 @@ type
     CmbUnicode: TTyComboBox;
     ChkAmbiguous: TTyCheckBox;
     LblFontSize: TTyLabel;
+    CmbFont: TTyFontComboBox;
     SpnFontSize: TTySpinEdit;
     Tools6: TTyPanel;
     LblTransfer: TTyLabel;
@@ -191,6 +193,7 @@ type
     procedure UnicodeChange(Sender: TObject);
     procedure AmbiguousClick(Sender: TObject);
     procedure FontSizeChange(Sender: TObject);
+    procedure FontNameChange(Sender: TObject);
     procedure TermData(Sender: TObject; const AData: RawByteString);
     procedure TermTitleChange(Sender: TObject; const AText: string);
     procedure TermGridResize(Sender: TObject; ACols, ARows: Integer);
@@ -432,6 +435,12 @@ begin
   ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
   TyDefaultController.ThemeName := 'default';
   ApplyChromeTheme(TyDefaultController);
+
+  { The font box starts on nothing chosen (its hint says "Theme font"): until the user picks a
+    family the terminal keeps the one its theme gives it. Wired here, not in the .lfm, so that
+    filling the list while the form loads does not pick a font for the user. }
+  CmbFont.ItemIndex := -1;
+  CmbFont.OnChange := @FontNameChange;
 
   FCast := TAsciicast.Create;
   FPlayer := TAsciicastPlayer.Create(FCast);
@@ -682,6 +691,14 @@ begin
   { an explicit Font beats the theme's size (StyleOverride would beat both) }
   Term.ParentFont := False;
   Term.Font.Size := SpnFontSize.Value;
+end;
+
+procedure TMainForm.FontNameChange(Sender: TObject);
+begin
+  if CmbFont.ItemIndex < 0 then Exit;
+  { like the size: an explicit Font beats the theme's family }
+  Term.ParentFont := False;
+  Term.Font.Name := CmbFont.SelectedFont;
 end;
 
 procedure TMainForm.AddKeyLine(const S: string);

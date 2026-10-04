@@ -1,15 +1,27 @@
 unit test.fontcombobox;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Forms, fpcunit, testregistry, tyControls.FontComboBox;
+uses Classes, SysUtils, Forms, fpcunit, testregistry, test.fontfamilies, tyControls.FontComboBox,
+  tyControls.FontFamilies;
 type
   TFontComboBoxTest = class(TTestCase)
+  private
+    FChanges: Integer;
+    procedure CountChange(Sender: TObject);
   published
     procedure TestSelectedFontRoundTrip;
     procedure TestRefreshDoesNotCrash;
     procedure TestAFormFileDoesNotCarryThisMachinesFonts;
     procedure TestA300FormFileShowsThisMachinesFonts;
     procedure TestAFamilyThisMachineLacksIsNotSwappedForAnother;
+    { FixedPitchOnly (#27) }
+    procedure TestFixedPitchOnlyListsTheSystemsFixedFamilies;
+    procedure TestTogglingKeepsAFamilyStillListed;
+    procedure TestTogglingOnDropsAProportionalChoice;
+    procedure TestTogglingWithNothingSelectedSelectsNothing;
+    procedure TestTogglingKeepsTheChoiceWithoutOnChange;
+    procedure TestAFormFileWithFixedPitchOnlyLoadsTheFilteredList;
+    procedure TestFixedPitchOnlyIsWrittenOnlyWhenOn;
     procedure TestNoVerticalAliasIsListed;
     procedure TestEveryFontPickerListsThroughTheOneFilter;
   end;
@@ -81,6 +93,21 @@ begin
   end;
 end;
 
+{ The rows a font picker shows without a filter (see test.fontfamilies). }
+function FCBPlainCount: Integer;
+var L: TStringList;
+begin
+  L := TStringList.Create;
+  try FontsWithoutVerticalVariants(L); Result := L.Count; finally L.Free; end;
+end;
+
+function FCBPlainIndexOf(const AName: string): Integer;
+var L: TStringList;
+begin
+  L := TStringList.Create;
+  try FontsWithoutVerticalVariants(L); Result := L.IndexOf(AName); finally L.Free; end;
+end;
+
 { A font this machine has, late in its list, whose name a form file can carry as a plain quoted
   string -- so the row it sits at here is not the row a stale index points at. }
 function FCBLateFont: string;
@@ -89,28 +116,18 @@ begin
   Result := '';
   fams := TStringList.Create;
   try
-  TyFontPickerFamilies(fams);
-  for i := fams.Count - 1 downto 3 do
-  begin
-    nm := fams[i];
-    ok := nm <> '';
-    for ch in nm do
-      if (ch < ' ') or (ch > '~') or (ch = '''') then ok := False;
-    if ok then Exit(nm);
-  end;
+    FontsWithoutVerticalVariants(fams);
+    for i := fams.Count - 1 downto 3 do
+    begin
+      nm := fams[i];
+      ok := nm <> '';
+      for ch in nm do
+        if (ch < ' ') or (ch > '~') or (ch = '''') then ok := False;
+      if ok then Exit(nm);
+    end;
   finally
     fams.Free;
   end;
-end;
-
-{ What a font picker lists on this machine, and how many '@' names Screen.Fonts has. }
-function FCBPickerCount(out AAliases: Integer): Integer;
-var i: Integer;
-begin
-  AAliases := 0;
-  for i := 0 to Screen.Fonts.Count - 1 do
-    if Copy(Screen.Fonts[i], 1, 1) = '@' then Inc(AAliases);
-  Result := Screen.Fonts.Count - AAliases;
 end;
 
 { What 3.0.0 wrote: another machine's list, with ItemIndex at row 2 (AChosen) or row 1 (a family
@@ -151,7 +168,7 @@ begin
 end;
 
 procedure TFontComboBoxTest.TestA300FormFileShowsThisMachinesFonts;
-var dst: TForm; c: TTyFontComboBox; f: string; n: Integer;
+var dst: TForm; c: TTyFontComboBox; f: string;
 begin
   f := FCBLateFont;
   AssertTrue('setup: a font past row 2 with a plain name', f <> '');
@@ -159,11 +176,11 @@ begin
   try
     c := dst.FindComponent('F') as TTyFontComboBox;
     AssertEquals('the list is this machine''s fonts, not the saved one',
-      FCBPickerCount(n), c.Items.Count);
+      FCBPlainCount, c.Items.Count);
     AssertEquals('none of the saving machine''s missing fonts is listed', -1,
       c.Items.IndexOf('NoSuchFontA'));
     AssertEquals('the chosen family is still chosen, at the row it has here', f, c.SelectedFont);
-    AssertEquals('and that row is its row on this machine', c.Items.IndexOf(f), c.ItemIndex);
+    AssertEquals('and that row is its row on this machine', FCBPlainIndexOf(f), c.ItemIndex);
     AssertTrue('which is a real row', c.ItemIndex >= 0);
   finally
     dst.Free;
@@ -171,15 +188,171 @@ begin
 end;
 
 procedure TFontComboBoxTest.TestAFamilyThisMachineLacksIsNotSwappedForAnother;
-var dst: TForm; c: TTyFontComboBox; n: Integer;
+var dst: TForm; c: TTyFontComboBox;
 begin
   dst := FCBFromText(FCBOldForm('NoSuchFontC', 1));
   try
     c := dst.FindComponent('F') as TTyFontComboBox;
-    AssertEquals('the list is this machine''s fonts', FCBPickerCount(n), c.Items.Count);
+    AssertEquals('the list is this machine''s fonts', FCBPlainCount, c.Items.Count);
     AssertEquals('a family this machine lacks leaves nothing selected', -1, c.ItemIndex);
   finally
     dst.Free;
+  end;
+end;
+
+procedure FCBNeedFonts;
+begin
+  if (Screen.Fonts.IndexOf('Courier New') < 0) or (Screen.Fonts.IndexOf('Arial') < 0) then
+    raise EIgnoredTest.Create('needs Courier New and Arial installed');
+end;
+
+procedure FCBAssertSame(const AWhat: string; AExpected, AActual: TStrings);
+var i: Integer;
+begin
+  TAssert.AssertEquals(AWhat + ': row count', AExpected.Count, AActual.Count);
+  for i := 0 to AExpected.Count - 1 do
+    TAssert.AssertEquals(AWhat + ': row ' + IntToStr(i), AExpected[i], AActual[i]);
+end;
+
+procedure TFontComboBoxTest.TestFixedPitchOnlyListsTheSystemsFixedFamilies;
+var c: TTyFontComboBox; fixed, plain: TStringList;
+begin
+  FCBNeedFonts;
+  fixed := TStringList.Create;
+  plain := TStringList.Create;
+  c := TTyFontComboBox.Create(nil);
+  try
+    TyGetFontFamilies(fixed, True);
+    FontsWithoutVerticalVariants(plain);
+    FCBAssertSame('a new combo', plain, c.Items);
+    c.FixedPitchOnly := True;
+    FCBAssertSame('on', fixed, c.Items);
+    AssertTrue('Arial is not offered', c.Items.IndexOf('Arial') < 0);
+    c.FixedPitchOnly := False;
+    FCBAssertSame('off again', plain, c.Items);
+  finally
+    c.Free;
+    plain.Free;
+    fixed.Free;
+  end;
+end;
+
+procedure TFontComboBoxTest.TestTogglingKeepsAFamilyStillListed;
+var c: TTyFontComboBox;
+begin
+  FCBNeedFonts;
+  c := TTyFontComboBox.Create(nil);
+  try
+    c.SelectedFont := 'Courier New';
+    c.FixedPitchOnly := True;
+    AssertEquals('a fixed-pitch choice stays chosen', 'Courier New', c.SelectedFont);
+    AssertEquals('at its row in the shorter list', c.Items.IndexOf('Courier New'), c.ItemIndex);
+    c.FixedPitchOnly := False;
+    AssertEquals('and back', 'Courier New', c.SelectedFont);
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TFontComboBoxTest.CountChange(Sender: TObject);
+begin
+  Inc(FChanges);
+end;
+
+procedure TFontComboBoxTest.TestTogglingOnDropsAProportionalChoice;
+var c: TTyFontComboBox;
+begin
+  FCBNeedFonts;
+  c := TTyFontComboBox.Create(nil);
+  try
+    c.SelectedFont := 'Arial';
+    FChanges := 0;
+    c.OnChange := @CountChange;
+    c.FixedPitchOnly := True;
+    AssertEquals('a family no longer listed leaves nothing selected', -1, c.ItemIndex);
+    AssertTrue('and is not swapped for the first row', c.SelectedFont <> c.Items[0]);
+    AssertEquals('the choice changed: OnChange once', 1, FChanges);
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TFontComboBoxTest.TestTogglingWithNothingSelectedSelectsNothing;
+var c: TTyFontComboBox;
+begin
+  FCBNeedFonts;
+  c := TTyFontComboBox.Create(nil);
+  try
+    c.ItemIndex := -1;
+    FChanges := 0;
+    c.OnChange := @CountChange;
+    c.FixedPitchOnly := True;
+    AssertEquals('on: still nothing selected', -1, c.ItemIndex);
+    c.FixedPitchOnly := False;
+    AssertEquals('off: still nothing selected', -1, c.ItemIndex);
+    AssertEquals('nothing changed: no OnChange', 0, FChanges);
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TFontComboBoxTest.TestTogglingKeepsTheChoiceWithoutOnChange;
+var c: TTyFontComboBox;
+begin
+  FCBNeedFonts;
+  c := TTyFontComboBox.Create(nil);
+  try
+    c.SelectedFont := 'Courier New';
+    FChanges := 0;
+    c.OnChange := @CountChange;
+    c.FixedPitchOnly := True;
+    AssertEquals('on: still Courier New', 'Courier New', c.SelectedFont);
+    c.FixedPitchOnly := False;
+    AssertEquals('off: still Courier New', 'Courier New', c.SelectedFont);
+    AssertEquals('the same family at another row is no change: no OnChange', 0, FChanges);
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TFontComboBoxTest.TestAFormFileWithFixedPitchOnlyLoadsTheFilteredList;
+var dst: TForm; c: TTyFontComboBox; fixed: TStringList;
+begin
+  FCBNeedFonts;
+  fixed := TStringList.Create;
+  dst := FCBFromText(
+    'object Form1: TForm' + LineEnding +
+    '  object F: TTyFontComboBox' + LineEnding +
+    '    Text = ''Courier New''' + LineEnding +
+    '    FixedPitchOnly = True' + LineEnding +
+    '  end' + LineEnding +
+    'end' + LineEnding);
+  try
+    c := dst.FindComponent('F') as TTyFontComboBox;
+    TyGetFontFamilies(fixed, True);
+    AssertTrue('read in', c.FixedPitchOnly);
+    FCBAssertSame('the list Loaded built', fixed, c.Items);
+    AssertEquals('the chosen family, by name', 'Courier New', c.SelectedFont);
+  finally
+    dst.Free;
+    fixed.Free;
+  end;
+end;
+
+procedure TFontComboBoxTest.TestFixedPitchOnlyIsWrittenOnlyWhenOn;
+var src: TForm; c: TTyFontComboBox;
+begin
+  src := TForm.CreateNew(nil);
+  try
+    c := TTyFontComboBox.Create(src);
+    c.Name := 'F';
+    c.Parent := src;
+    AssertTrue('off is the default and is not written',
+      Pos('FixedPitchOnly', FCBFormText(src)) = 0);
+    c.FixedPitchOnly := True;
+    AssertTrue('on is written', Pos('FixedPitchOnly = True', FCBFormText(src)) > 0);
+  finally
+    src.Free;
   end;
 end;
 
@@ -188,7 +361,8 @@ end;
 procedure TFontComboBoxTest.TestNoVerticalAliasIsListed;
 var c: TTyFontComboBox; i, n, shown: Integer;
 begin
-  shown := FCBPickerCount(n);
+  shown := FCBPlainCount;
+  n := Screen.Fonts.Count - shown;   // the '@' names
   if n = 0 then Exit;   // this machine has no '@' fonts: nothing for the filter to leave out
   c := TTyFontComboBox.Create(nil);
   try
@@ -200,10 +374,11 @@ begin
   finally c.Free; end;
 end;
 
-{ The font dialog builds its list where no test can reach it without putting a window up, so the
-  rule is held on the source: no unit reads Screen.Fonts for a list but the filter itself, which
-  lives in tyControls.FontComboBox. Comments and string literals are blanked out first, so prose
-  about Screen.Fonts does not count. }
+{ Every list of installed fonts goes through the one filter, so none of them offers the '@'
+  names -- the font dialog's included, which builds its list where no test can reach it without
+  putting a window up. So the rule is held on the source: no unit reads Screen.Fonts but the
+  filter's own, tyControls.FontFamilies (TyGetFontFamilies). Comments and string literals are
+  blanked out first, so prose about Screen.Fonts does not count. }
 procedure TFontComboBoxTest.TestEveryFontPickerListsThroughTheOneFilter;
 
   function CodeOf(const S: string): string;
@@ -271,7 +446,7 @@ begin
     end;
     AssertTrue('the scan read the source tree (' + IntToStr(scanned) + ' units)', scanned > 100);
     AssertEquals('units that read Screen.Fonts themselves:' + LineEnding + readers.Text,
-      'tyControls.FontComboBox.pas', Trim(readers.Text));
+      'tyControls.FontFamilies.pas', Trim(readers.Text));
   finally
     L.Free;
     readers.Free;

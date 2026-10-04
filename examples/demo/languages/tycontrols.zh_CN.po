@@ -406,3 +406,27 @@ msgstr "关于"
 #: tycontrols.strconsts.rsdlgbasiccolors
 msgid "Basic colors"
 msgstr "基本颜色"
+
+#: tycontrols.strconsts.rstywindowmenurestore
+msgid "&Restore"
+msgstr "还原(&R)"
+
+#: tycontrols.strconsts.rstywindowmenuminimize
+msgid "Mi&nimize"
+msgstr "最小化(&N)"
+
+#: tycontrols.strconsts.rstywindowmenumaximize
+msgid "Ma&ximize"
+msgstr "最大化(&X)"
+
+#: tycontrols.strconsts.rstywindowmenuclose
+msgid "&Close"
+msgstr "关闭(&C)"
+
+#: tycontrols.strconsts.rsdlgentirescope
+msgid "Entire scope"
+msgstr "整个范围"
+
+#: tycontrols.strconsts.rsdlgpromptonreplace
+msgid "Prompt on replace"
+msgstr "替换前提示"

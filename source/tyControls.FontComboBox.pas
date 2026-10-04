@@ -23,23 +23,31 @@ type
 
   { A combo of installed font families, each item (field + drop-down) drawn in its own
     typeface — a WYSIWYG font picker. Descends from TTyCustomComboBox; the chosen family is
-    SelectedFont (== Text). Populated from Screen.Fonts; RefreshFonts re-reads them.
+    SelectedFont (== Text). Populated from Screen.Fonts, less the vertical "@" variants
+    (TyGetFontFamilies); RefreshFonts re-reads them.
     Reuses the 'TyComboBox' / 'TyListItem' theming. }
   TTyCustomFontComboBox = class(TTyCustomComboBox)
   private
+    FFixedPitchOnly: Boolean;
     function GetSelectedFont: string;
     procedure SetSelectedFont(const AValue: string);
+    procedure SetFixedPitchOnly(AValue: Boolean);
   protected
     function CreatePopupList: TTyCustomListBox; override;
     procedure PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet); override;
     procedure Loaded; override;
   public
     constructor Create(AOwner: TComponent); override;
-    // Re-populate the family list from Screen.Fonts (call after installing fonts).
+    // Re-populate the family list from Screen.Fonts (and select the first row). LCL fills
+    // Screen.Fonts once per process, so a font installed while the program runs is not in it.
     procedure RefreshFonts;
     // The selected font family (== the selected item's text). Setting selects the matching
     // item if present.
     property SelectedFont: string read GetSelectedFont write SetSelectedFont;
+    { List only the families the system reports as fixed-pitch (see tyControls.FontFamilies:
+      the font's pitch flag, never a measurement). Turning it on or off re-reads the list and
+      keeps the chosen family when it is still in it; with it off the list is every family. }
+    property FixedPitchOnly: Boolean read FFixedPitchOnly write SetFixedPitchOnly default False;
   end;
 
   { TTyFontComboBox publishes TTyCustomFontComboBox's properties; everything lives in TTyCustomFontComboBox. }
@@ -116,34 +124,12 @@ type
     property OnGetItems;
     property Align;
     property Anchors;
+    property FixedPitchOnly;
   end;
-
-{ The font families a font picker lists: Screen.Fonts, in its order, without the names that start
-  with '@'. Those are Windows' vertical-writing aliases of the CJK fonts (@SimSun, @新宋体), which
-  draw every glyph turned on its side, and no Windows font picker lists them. ADest's contents are
-  replaced in one change. }
-procedure TyFontPickerFamilies(ADest: TStrings);
 
 implementation
 
-procedure TyFontPickerFamilies(ADest: TStrings);
-var
-  i: Integer;
-  nm: string;
-begin
-  ADest.BeginUpdate;
-  try
-    ADest.Clear;
-    for i := 0 to Screen.Fonts.Count - 1 do
-    begin
-      nm := Screen.Fonts[i];
-      if (nm <> '') and (nm[1] = '@') then Continue;
-      ADest.Add(nm);
-    end;
-  finally
-    ADest.EndUpdate;
-  end;
-end;
+uses tyControls.FontFamilies;
 
 procedure TyDrawFontRow(P: TTyPainter; const ARect: TRect; const AFontName: string;
   const AStyle: TTyStyleSet; AFontSize: Integer);
@@ -190,7 +176,7 @@ begin
     re-pins its selection by TEXT whenever Items changes, so the chosen family stays chosen at
     whatever row it has here, and one this machine lacks is left unselected rather than swapped
     for whichever font took its row number. }
-  TyFontPickerFamilies(Items);
+  TyGetFontFamilies(Items, FFixedPitchOnly);
 end;
 
 procedure TTyCustomFontComboBox.RefreshFonts;
@@ -198,11 +184,34 @@ begin
   Items.BeginUpdate;
   try
     Items.Clear;
-    TyFontPickerFamilies(Items);   // installed font families
+    TyGetFontFamilies(Items, FFixedPitchOnly);   // installed font families
   finally
     Items.EndUpdate;
   end;
   if Items.Count > 0 then ItemIndex := 0;
+end;
+
+procedure TTyCustomFontComboBox.SetFixedPitchOnly(AValue: Boolean);
+
+  function Chosen: string;
+  begin
+    if ItemIndex >= 0 then Result := Text else Result := '';
+  end;
+
+var before: string;
+begin
+  if FFixedPitchOnly = AValue then Exit;
+  FFixedPitchOnly := AValue;
+  { While a form is being read, Loaded fills the list once, with the final value. }
+  if csLoading in ComponentState then Exit;
+  { Refilled in place, as Loaded does -- not RefreshFonts, which would pick the first row: the
+    combo re-pins its selection by TEXT when Items changes, so a family still listed stays
+    chosen at its new row, one that is gone leaves nothing selected, and nothing selected stays
+    nothing selected. That re-pin is silent; OnChange fires once, and only when the chosen
+    family actually changed. }
+  before := Chosen;
+  TyGetFontFamilies(Items, FFixedPitchOnly);
+  if (Chosen <> before) and Assigned(OnChange) then OnChange(Self);
 end;
 
 function TTyCustomFontComboBox.CreatePopupList: TTyCustomListBox;

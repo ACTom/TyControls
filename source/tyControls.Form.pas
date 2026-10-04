@@ -9,6 +9,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Controls, Graphics, Forms, Dialogs, ExtCtrls, LCLType, LMessages,
+  Menus,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.Controller,
   tyControls.Menu, tyControls.WindowEffects, tyControls.PlatformWS,
@@ -48,7 +49,35 @@ type
     MinBtn, MaxBtn, CloseBtn: TRect;   // per-button box; empty (zero width) when that one is hidden
     Band: TRect;                       // the whole strip the cluster reserves, both margins included
     Content: TRect;                    // what is left for the caption and the host's own children
+    { #9. The icon at the reading start, when the bar shows one; empty otherwise. In the same
+      record for the same reason as everything above: the icon, the caption and the host's
+      children must give way to each other from ONE answer, mirrored in ONE step. }
+    Icon: TRect;
   end;
+
+  { #9. What the title bar's default window menu shows, from what the window offers. See
+    TyWindowMenuStateFor. }
+  TTyWindowMenuState = record
+    RestoreVisible, RestoreEnabled: Boolean;
+    MinimizeVisible, MinimizeEnabled: Boolean;
+    MaximizeVisible, MaximizeEnabled: Boolean;
+    CloseVisible: Boolean;
+  end;
+
+const
+  { #9. The optional title-bar icon: its edge and its distance to the caption, LOGICAL px. }
+  TyTitleBarIconSizeVar = '--titlebar-icon-size';
+  TyTitleBarIconSizeDef = 16;
+  TyTitleBarIconGapVar  = '--titlebar-icon-gap';
+  TyTitleBarIconGapDef  = 6;
+  { #9. Where each item sits in TTyCustomTitleBar.DefaultWindowMenu.Items. }
+  TyWindowMenuRestoreIndex   = 0;
+  TyWindowMenuMinimizeIndex  = 1;
+  TyWindowMenuMaximizeIndex  = 2;
+  TyWindowMenuSeparatorIndex = 3;
+  TyWindowMenuCloseIndex     = 4;
+
+type
 
   TTyChromeEngine = class;
 
@@ -105,6 +134,64 @@ type
       into the bar: the .lfm said hide, the form said show, and the form spoke last. }
     FShowMinimize, FShowMaximize, FShowClose: Boolean;
     FOffered: TTyCaptionButtonFlags;
+    { #9. The optional icon at the reading start. FIcon always exists (like TCustomForm.Icon),
+      so the Object Inspector's graphic editor -- which assigns INTO the object rather than
+      through the setter -- has something to fill; its OnChange is what repaints the bar. }
+    FShowIcon: Boolean;
+    FIcon: TIcon;
+    { Bumped whenever the picture EffectiveIcon gives may have changed under the same object:
+      the bar's own Icon (IconChanged), the host form's or the application's (HostIconChanged). }
+    FIconVersion: Cardinal;
+    { The icon as DrawIcon last drew it, already at its edge length: rebuilt only when the
+      source object, the edge length or FIconVersion differ from what it was built from, so a
+      repaint does not convert and resample the icon again. }
+    FIconCache: TBGRABitmap;
+    FIconCacheSrc: TIcon;      // compared, never dereferenced
+    FIconCacheSide: Integer;
+    FIconCacheVer: Cardinal;
+    procedure SetShowIcon(AValue: Boolean);
+    procedure SetIcon(AValue: TIcon);
+    procedure IconChanged(Sender: TObject);
+    function IsIconStored: Boolean;
+    { Device px at the bar's PPI, from --titlebar-icon-size / --titlebar-icon-gap. }
+    function IconSizePx: Integer;
+    function IconGapPx: Integer;
+    { Paint EffectiveIcon into ARect (device px of the painter's surface). }
+    procedure DrawIcon(P: TTyPainter; const ARect: TRect);
+  private
+    { #9. The default window menu: built on first use, NO Owner -- owned by the bar it would
+      sit in the bar's Components and the streaming would have to be told to skip it -- and
+      freed in the destructor. Never assigned to PopupMenu: that property reads through the
+      virtual GetPopupMenu, so a default answered there would be written into the .lfm and
+      shown in the Object Inspector as if the user had set it. }
+    FWindowMenu: TPopupMenu;
+    { The last left press landed on the icon, so the DblClick that follows it belongs to the
+      icon (close) and must not reach the engine (maximize / roll up). }
+    FIconPressed: Boolean;
+    { When the default window menu last closed (GetTickCount64; 0 = never). }
+    FWindowMenuClosedAt: QWord;
+    procedure BuildWindowMenu;
+    procedure WindowMenuClosed(Sender: TObject);
+    { AMenu is up, or the default menu closed a moment ago. A click on the icon then is the
+      click that dismisses the menu, and must not open it again. }
+    function WindowMenuJustShown(AMenu: TPopupMenu): Boolean;
+    { The host form's focused control sits in a windowed control the HOST placed on the bar:
+      a menu-key request arriving here bubbled up from it (see HostChildAt). }
+    function HostChildHasFocus: Boolean;
+    procedure WindowMenuRestoreClick(Sender: TObject);
+    procedure WindowMenuMinimizeClick(Sender: TObject);
+    procedure WindowMenuMaximizeClick(Sender: TObject);
+    procedure WindowMenuCloseClick(Sender: TObject);
+    { The window is maximized: the max button has turned into the restore button (both the
+      engine's work-area maximize and the OS's go through ApplyMaximizedState, which flips it;
+      WindowState stays wsNormal under the engine's), or the host form says so. }
+    function IsWindowMaximized: Boolean;
+    function CanMinimizeNow: Boolean;
+    function CanMaximizeNow: Boolean;
+    function CanCloseNow: Boolean;
+    { A windowed control the HOST placed on the bar (not one of the caption buttons) is under
+      APt: a context request from there bubbled up from it and is not the bar's. }
+    function HostChildAt(const APt: TPoint): Boolean;
     procedure ApplyButtonVisibility;
     procedure SetOfferedButtons(AValue: TTyCaptionButtonFlags);
     procedure SetCaption(const AValue: TCaption);
@@ -151,9 +238,40 @@ type
       but the caption buttons are placed by SetBounds rather than redrawn from a paint, so
       without this the cluster stays on the old side until something happens to repaint the bar. }
     procedure CMBiDiModeChanged(var Message: TLMessage); message CM_BIDIMODECHANGED;
+    { #9. A context request on the bar itself (or on a caption button, or a graphic child)
+      opens the default window menu when the user has not set PopupMenu. OnContextPopup runs
+      first and may claim it; a request that bubbled up from a windowed control the host put
+      on the bar is left to keep bubbling. }
+    procedure DoContextPopup(MousePos: TPoint; var Handled: Boolean); override;
+    { The one place a window menu reaches the screen (right-click, icon, Alt+Space). Virtual
+      so a headless test can record the request instead of opening a popup window. }
+    procedure PopupWindowMenu(AMenu: TPopupMenu; const AScreenPt: TPoint); virtual;
   public
     constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
     function GetStyleTypeKey: string; override;
+    { #9. The built-in window menu -- Restore, Minimize, Maximize, a separator, Close --
+      refreshed to the window's state now (TyWindowMenuStateFor) and themed by this bar's
+      controller. Items sit at the TyWindowMenu*Index positions. Each item clicks the matching
+      caption button, so it does exactly what the button does. }
+    function DefaultWindowMenu: TPopupMenu;
+    { The menu the bar opens: PopupMenu when the user set one, else DefaultWindowMenu -- nil
+      when that has nothing visible to show. Right-click, the icon and Alt+Space all open this
+      one, so a replaced window menu is replaced everywhere. }
+    function WindowMenu: TPopupMenu;
+    { Open WindowMenu at WindowMenuAnchor. False (nothing opened) at design time or when there
+      is no menu to show. TTyForm calls it for Alt+Space. }
+    function ShowWindowMenu: Boolean;
+    { Where a menu opened without a pointer hangs, in screen coords: under the icon's
+      reading-start edge when the icon shows, else under the bar's reading-start corner. }
+    function WindowMenuAnchor: TPoint;
+    { The icon ShowIcon draws: Icon when set, else the host form's Icon, else
+      Application.Icon; nil when none of them holds an image (the slot stays, empty). }
+    function EffectiveIcon: TIcon;
+    { The host form's Icon or Application.Icon changed: the bar draws EffectiveIcon afresh.
+      TTyForm calls it for both (LCL tells every form of an application icon change through
+      CM_ICONCHANGED); a host of another kind calls it itself when it changes its icon. }
+    procedure HostIconChanged;
     property MinButton: TTyCaptionButton read FMinButton;
     property MaxButton: TTyCaptionButton read FMaxButton;
     property CloseButton: TTyCaptionButton read FCloseButton;
@@ -189,6 +307,15 @@ type
     property ShowMinimize: Boolean read GetShowMinimize write SetShowMinimize default True;
     property ShowMaximize: Boolean read GetShowMaximize write SetShowMaximize default True;
     property ShowClose: Boolean read GetShowClose write SetShowClose default True;
+    { #9. Show an icon at the reading start of the bar. Off by default, so a bar looks exactly
+      as it did before the switch existed. On, the caption and the bar's ALIGNED children move
+      over by the icon's slot (--titlebar-padding, then --titlebar-icon-size, then
+      --titlebar-icon-gap); a control placed freely (alNone) keeps the coordinates its author
+      gave it. A click on the icon opens WindowMenu, a double-click closes the window. }
+    property ShowIcon: Boolean read FShowIcon write SetShowIcon default False;
+    { The icon ShowIcon draws. Empty (the default) means the host form's Icon, and failing that
+      Application.Icon -- see EffectiveIcon. Streamed only when set. }
+    property Icon: TIcon read FIcon write SetIcon stored IsIconStored;
   end;
 
   { TTyTitleBar publishes TTyCustomTitleBar's properties; everything lives in TTyCustomTitleBar. }
@@ -252,6 +379,8 @@ type
     property ShowMinimize;
     property ShowMaximize;
     property ShowClose;
+    property ShowIcon;
+    property Icon;
   end;
 
   TTyChromeEngine = class(TObject)
@@ -447,6 +576,11 @@ type
       its TMainMenu before the inherited (Form.Menu / action-list) handling. On mac
       the global Form.Menu already does this, so the override just calls inherited. }
     function IsShortcut(var Message: TLMKey): Boolean; override;
+    { #9. The form's Icon changed (its OnChange is routed here, see SetupChrome) or the
+      application's did (LCL sends CM_ICONCHANGED to every form): LCL's own handling, then the
+      title bars, whose icon falls back to these two. }
+    procedure CMIconChanged(var Message: TLMessage); message CM_ICONCHANGED;
+    procedure FormIconChanged(Sender: TObject);
     { Build (or refresh) FSharpBackdrop/FGlassBackdrop — the photo snapshot every glass
       child SAMPLES — OFFSCREEN, without a paint cycle. Keyed on imagepath|WxH|blurDev so
       it rebuilds only when something changes; frees + clears the backdrop on a non-image
@@ -653,6 +787,25 @@ function TyResolveCaptionButtons(ABorderIcons: TBorderIcons; AResizable: Boolean
 function TyCaptionLayoutFor(AShowMin, AShowMax, AShowClose: Boolean;
   ABarWidth, ABarHeight, AButtonWidthPx, AMarginXPx, AMarginYPx, AGapPx,
   ALeadPadPx: Integer; ARightToLeft: Boolean = False): TTyCaptionLayout;
+{ #9. The same layout with an icon slot at the reading start: AIconPx (device px, clamped to the
+  bar height, square, centred vertically) sits ALeadPadPx in, and the content zone starts
+  AIconGapPx after it. AIconPx = 0 is exactly TyCaptionLayoutFor -- which is how that function
+  is implemented, so the two cannot drift. A separate name rather than two more parameters on
+  TyCaptionLayoutFor: adding parameters changes a public signature, defaults or not. }
+function TyTitleBarLayoutFor(AShowMin, AShowMax, AShowClose: Boolean;
+  ABarWidth, ABarHeight, AButtonWidthPx, AMarginXPx, AMarginYPx, AGapPx,
+  ALeadPadPx, AIconPx, AIconGapPx: Integer; ARightToLeft: Boolean): TTyCaptionLayout;
+
+{ #9. The title bar's default window menu, after the Windows system menu. ACanMinimize /
+  ACanMaximize / ACanClose say whether the window has that caption button (its switch AND the
+  window offering it). Restore, Minimize and Maximize are dropped when the window can neither
+  minimize nor maximize -- as Windows drops them for a window with neither box -- except while
+  it is maximized: a maximized window can always be restored, here as on the button. Restore is
+  enabled only while maximized, Maximize only while not. Pure, so the rules are tested directly. }
+function TyWindowMenuStateFor(ACanMinimize, ACanMaximize, ACanClose,
+  AMaximized: Boolean): TTyWindowMenuState;
+{ #9. Alt+Space -- with no other modifier -- the key that opens a window's menu. }
+function TyIsWindowMenuKey(AKey: Word; AShift: TShiftState): Boolean;
 
 const
   { Win32 WM_NCHITTEST result codes, declared platform-neutrally so TyNcHitTest (a pure
@@ -822,8 +975,37 @@ end;
 function TyCaptionLayoutFor(AShowMin, AShowMax, AShowClose: Boolean;
   ABarWidth, ABarHeight, AButtonWidthPx, AMarginXPx, AMarginYPx, AGapPx,
   ALeadPadPx: Integer; ARightToLeft: Boolean): TTyCaptionLayout;
+begin
+  Result := TyTitleBarLayoutFor(AShowMin, AShowMax, AShowClose, ABarWidth, ABarHeight,
+    AButtonWidthPx, AMarginXPx, AMarginYPx, AGapPx, ALeadPadPx, 0, 0, ARightToLeft);
+end;
+
+function TyWindowMenuStateFor(ACanMinimize, ACanMaximize, ACanClose,
+  AMaximized: Boolean): TTyWindowMenuState;
 var
-  n, h, y, x, span: Integer;
+  sizing: Boolean;
+begin
+  Result := Default(TTyWindowMenuState);
+  sizing := ACanMinimize or ACanMaximize or AMaximized;
+  Result.RestoreVisible := sizing;
+  Result.MinimizeVisible := sizing;
+  Result.MaximizeVisible := sizing;
+  Result.RestoreEnabled := AMaximized;
+  Result.MinimizeEnabled := ACanMinimize;
+  Result.MaximizeEnabled := ACanMaximize and not AMaximized;
+  Result.CloseVisible := ACanClose;
+end;
+
+function TyIsWindowMenuKey(AKey: Word; AShift: TShiftState): Boolean;
+begin
+  Result := (AKey = VK_SPACE) and (AShift * [ssShift, ssCtrl, ssAlt, ssMeta] = [ssAlt]);
+end;
+
+function TyTitleBarLayoutFor(AShowMin, AShowMax, AShowClose: Boolean;
+  ABarWidth, ABarHeight, AButtonWidthPx, AMarginXPx, AMarginYPx, AGapPx,
+  ALeadPadPx, AIconPx, AIconGapPx: Integer; ARightToLeft: Boolean): TTyCaptionLayout;
+var
+  n, h, y, x, span, lead, s: Integer;
   bar: TRect;
 
   { One slot, taken off the running x. The cluster PACKS: a hidden button consumes neither a
@@ -854,7 +1036,19 @@ begin
     // both margins + N buttons + (N-1) gaps: the left margin is the caption's gap before the group
     span := 2 * AMarginXPx + n * AButtonWidthPx + (n - 1) * AGapPx;
   Result.Band := Rect(ABarWidth - span, 0, ABarWidth, ABarHeight);
-  Result.Content := Rect(ALeadPadPx, 0, ABarWidth - span, ABarHeight);
+  { The icon takes the lead pad's place in the reading order: pad, icon, gap, then content.
+    With no icon this is the old single statement, to the pixel. }
+  lead := ALeadPadPx;
+  if AIconPx > 0 then
+  begin
+    s := AIconPx;
+    if s > ABarHeight then s := ABarHeight;   // never taller than the bar
+    if s < 0 then s := 0;
+    y := (ABarHeight - s) div 2;
+    Result.Icon := Rect(ALeadPadPx, y, ALeadPadPx + s, y + s);
+    lead := ALeadPadPx + s + AIconGapPx;
+  end;
+  Result.Content := Rect(lead, 0, ABarWidth - span, ABarHeight);
   if Result.Content.Right < Result.Content.Left then
     Result.Content.Right := Result.Content.Left;
 
@@ -870,6 +1064,8 @@ begin
     Result.CloseBtn := BidiFlipRect(Result.CloseBtn, bar, True);
     Result.Band     := BidiFlipRect(Result.Band, bar, True);
     Result.Content  := BidiFlipRect(Result.Content, bar, True);
+    if not IsRectEmpty(Result.Icon) then
+      Result.Icon   := BidiFlipRect(Result.Icon, bar, True);
   end;
 end;
 
@@ -1148,6 +1344,8 @@ begin
   FShowMaximize := True;
   FShowClose := True;
   FOffered := [cbfMinimize, cbfMaximize, cbfClose];
+  FIcon := TIcon.Create;
+  FIcon.OnChange := @IconChanged;
   SetBounds(0, 0, 200, TyTitleBarHeightFor(ActiveController));
   FMinButton := TTyCaptionButton.Create(Self);
   FMinButton.Kind := cbkMin;
@@ -1166,9 +1364,66 @@ begin
     TTyForm(AOwner).WireTitleBarButtons;
 end;
 
+destructor TTyCustomTitleBar.Destroy;
+begin
+  FreeAndNil(FWindowMenu);
+  inherited Destroy;
+  FreeAndNil(FIcon);   // after inherited: a late paint during teardown still finds it
+  FreeAndNil(FIconCache);
+end;
+
 function TTyCustomTitleBar.GetStyleTypeKey: string;
 begin
   Result := 'TyTitleBar';
+end;
+
+procedure TTyCustomTitleBar.SetShowIcon(AValue: Boolean);
+begin
+  if FShowIcon = AValue then Exit;
+  FShowIcon := AValue;
+  { The content zone moved: the aligned children follow it through AdjustClientRect, which
+    only runs on a realign; the caption follows it on the repaint. }
+  ReAlign;
+  Invalidate;
+end;
+
+procedure TTyCustomTitleBar.SetIcon(AValue: TIcon);
+begin
+  if AValue = nil then
+    FIcon.Clear
+  else
+    FIcon.Assign(AValue);   // OnChange repaints
+end;
+
+procedure TTyCustomTitleBar.IconChanged(Sender: TObject);
+begin
+  Inc(FIconVersion);
+  if FShowIcon then Invalidate;
+end;
+
+procedure TTyCustomTitleBar.HostIconChanged;
+begin
+  { Only the fallbacks changed; a bar with its own Icon draws the same picture, but the
+    version is cheap and the next paint simply finds the cache still keyed to its own Icon. }
+  Inc(FIconVersion);
+  if FShowIcon and FIcon.Empty then Invalidate;
+end;
+
+function TTyCustomTitleBar.IsIconStored: Boolean;
+begin
+  Result := (FIcon <> nil) and not FIcon.Empty;
+end;
+
+function TTyCustomTitleBar.IconSizePx: Integer;
+begin
+  Result := MulDiv(ActiveController.Metric(TyTitleBarIconSizeVar, TyTitleBarIconSizeDef),
+    Font.PixelsPerInch, 96);
+end;
+
+function TTyCustomTitleBar.IconGapPx: Integer;
+begin
+  Result := MulDiv(ActiveController.Metric(TyTitleBarIconGapVar, TyTitleBarIconGapDef),
+    Font.PixelsPerInch, 96);
 end;
 
 procedure TTyCustomTitleBar.SetCaption(const AValue: TCaption);
@@ -1321,6 +1576,7 @@ end;
 function TTyCustomTitleBar.CaptionLayoutAt(AWidth, AHeight: Integer): TTyCaptionLayout;
 var
   sMin, sMax, sClose: Boolean;
+  iconPx, gapPx: Integer;
 begin
   { The ctor sets the bar's bounds BEFORE it builds the three buttons, so this can be reached
     with all of them still nil -- reserve nothing then, exactly as the VisibleButtonCount rule
@@ -1333,9 +1589,18 @@ begin
     sMax := FMaxButton.Visible;
     sClose := FCloseButton.Visible;
   end;
-  Result := TyCaptionLayoutFor(sMin, sMax, sClose,
+  { #9. No icon -> 0/0, which is TyCaptionLayoutFor exactly: ShowIcon = False lays the bar out
+    as it always was. The slot is reserved whether or not an icon resolves, so the layout never
+    jumps with the image. }
+  iconPx := 0; gapPx := 0;
+  if FShowIcon then
+  begin
+    iconPx := IconSizePx;
+    gapPx := IconGapPx;
+  end;
+  Result := TyTitleBarLayoutFor(sMin, sMax, sClose,
     AWidth, AHeight, EffectiveButtonWidthPx,
-    CapMarginPx, CapMarginYPx, CapGapPx, LeftInsetPx, IsRightToLeft);
+    CapMarginPx, CapMarginYPx, CapGapPx, LeftInsetPx, iconPx, gapPx, IsRightToLeft);
 end;
 
 function TTyCustomTitleBar.CaptionLayout: TTyCaptionLayout;
@@ -1480,6 +1745,8 @@ begin
     P.BeginPaint(ACanvas, ARect, APPI, IsRightToLeft);
     S := CurrentStyle;
     DrawFrame(P, R, S);
+    if FShowIcon then
+      DrawIcon(P, CaptionLayoutAt(W, H).Icon);
     CaptionSpan(W, tl, tr);
     TextRect := Rect(R.Left + tl, R.Top, R.Left + tr, R.Top + H);
     P.DrawText(TextRect, FCaption, S.FontName, ResolveFontSize(S), S.FontWeight,
@@ -1488,6 +1755,287 @@ begin
   finally
     P.Free;
   end;
+end;
+
+function TTyCustomTitleBar.EffectiveIcon: TIcon;
+var
+  f: TCustomForm;
+begin
+  if (FIcon <> nil) and not FIcon.Empty then Exit(FIcon);
+  f := GetParentForm(Self);
+  if (f <> nil) and (f.Icon <> nil) and not f.Icon.Empty then Exit(f.Icon);
+  if (Application <> nil) and (Application.Icon <> nil) and not Application.Icon.Empty then
+    Exit(Application.Icon);
+  Result := nil;
+end;
+
+{ ASrc at ASide x ASide, or nil when it holds no picture. }
+function TyIconBitmapAt(ASrc: TIcon; ASide: Integer): TBGRABitmap;
+var
+  ico: TIcon;
+  tmp: TBitmap;
+  bmp: TBGRABitmap;
+  want: TSize;
+begin
+  Result := nil;
+  ico := TIcon.Create;
+  tmp := TBitmap.Create;
+  bmp := nil;
+  try
+    { A COPY, because picking the size moves Current -- and the source may be
+      Application.Icon or the form's, whose change notifications re-set the window icons. }
+    ico.Assign(ASrc);
+    if ico.Count > 1 then
+    begin
+      want.cx := ASide;
+      want.cy := ASide;
+      ico.Current := ico.GetBestIndexForSize(want);
+    end;
+    { BGRABitmap has no TGraphic constructor; bridge through a TBitmap as TTyImage does. }
+    tmp.Assign(ico);
+    if (tmp.Width <= 0) or (tmp.Height <= 0) then Exit;
+    bmp := TBGRABitmap.Create(tmp);
+    if (bmp.Width <> ASide) or (bmp.Height <> ASide) then
+      Result := bmp.Resample(ASide, ASide, rmFineResample) as TBGRABitmap
+    else
+    begin
+      Result := bmp;
+      bmp := nil;
+    end;
+  finally
+    bmp.Free;
+    tmp.Free;
+    ico.Free;
+  end;
+end;
+
+procedure TTyCustomTitleBar.DrawIcon(P: TTyPainter; const ARect: TRect);
+var
+  src: TIcon;
+  side: Integer;
+begin
+  side := ARect.Right - ARect.Left;
+  if (side <= 0) or (ARect.Bottom - ARect.Top <= 0) then Exit;
+  src := EffectiveIcon;
+  if src = nil then Exit;
+  if (src <> FIconCacheSrc) or (side <> FIconCacheSide) or (FIconVersion <> FIconCacheVer) then
+  begin
+    FreeAndNil(FIconCache);
+    FIconCache := TyIconBitmapAt(src, side);
+    FIconCacheSrc := src;
+    FIconCacheSide := side;
+    FIconCacheVer := FIconVersion;
+  end;
+  if FIconCache <> nil then P.DrawGlyphBitmap(ARect, FIconCache);
+end;
+
+{ ---- #9: the window menu ---------------------------------------------------- }
+
+procedure TTyCustomTitleBar.BuildWindowMenu;
+
+  function Add(AHandler: TNotifyEvent): TMenuItem;
+  begin
+    Result := TMenuItem.Create(FWindowMenu);
+    Result.OnClick := AHandler;
+    FWindowMenu.Items.Add(Result);
+  end;
+
+begin
+  if FWindowMenu <> nil then Exit;
+  FWindowMenu := TTyPopupMenu.Create(nil);
+  FWindowMenu.OnClose := @WindowMenuClosed;     // the bar's own menu: nobody else's handler
+  Add(@WindowMenuRestoreClick);                // TyWindowMenuRestoreIndex
+  Add(@WindowMenuMinimizeClick);               // TyWindowMenuMinimizeIndex
+  Add(@WindowMenuMaximizeClick);               // TyWindowMenuMaximizeIndex
+  Add(nil).Caption := cLineCaption;            // TyWindowMenuSeparatorIndex
+  {$IFDEF DARWIN}
+  Add(@WindowMenuCloseClick);                  // a mac window closes with Cmd+W, not Alt+F4
+  {$ELSE}
+  Add(@WindowMenuCloseClick).ShortCut := Menus.ShortCut(VK_F4, [ssAlt]);
+  {$ENDIF}
+end;
+
+procedure TTyCustomTitleBar.WindowMenuClosed(Sender: TObject);
+begin
+  FWindowMenuClosedAt := GetTickCount64;
+end;
+
+function TTyCustomTitleBar.WindowMenuJustShown(AMenu: TPopupMenu): Boolean;
+const
+  cReopenGuardMs = 200;   // the combo box's guard against the click that closed it reopening it
+begin
+  Result := (AMenu <> nil) and ((ActivePopupMenu = AMenu)
+    or ((AMenu = FWindowMenu) and (FWindowMenuClosedAt <> 0)
+        and (GetTickCount64 - FWindowMenuClosedAt < cReopenGuardMs)));
+end;
+
+function TTyCustomTitleBar.IsWindowMaximized: Boolean;
+var
+  f: TCustomForm;
+begin
+  Result := (FMaxButton <> nil) and (FMaxButton.Kind = cbkRestore);
+  if not Result then
+  begin
+    f := GetParentForm(Self);
+    Result := (f <> nil) and (f.WindowState = wsMaximized);
+  end;
+end;
+
+{ The same switch-AND-offered test that decides whether each caption button is on the bar. }
+function TTyCustomTitleBar.CanMinimizeNow: Boolean;
+begin Result := FShowMinimize and (cbfMinimize in FOffered); end;
+
+function TTyCustomTitleBar.CanMaximizeNow: Boolean;
+begin Result := FShowMaximize and (cbfMaximize in FOffered); end;
+
+function TTyCustomTitleBar.CanCloseNow: Boolean;
+begin Result := FShowClose and (cbfClose in FOffered); end;
+
+function TTyCustomTitleBar.DefaultWindowMenu: TPopupMenu;
+var
+  st: TTyWindowMenuState;
+
+  procedure Put(AIndex: Integer; const ACaption: string; AVisible, AEnabled: Boolean);
+  var it: TMenuItem;
+  begin
+    it := FWindowMenu.Items[AIndex];
+    it.Caption := ACaption;   // re-read every time: the resourcestring may have been translated
+    it.Visible := AVisible;
+    it.Enabled := AEnabled;
+  end;
+
+begin
+  BuildWindowMenu;
+  st := TyWindowMenuStateFor(CanMinimizeNow, CanMaximizeNow, CanCloseNow, IsWindowMaximized);
+  Put(TyWindowMenuRestoreIndex, rsTyWindowMenuRestore, st.RestoreVisible, st.RestoreEnabled);
+  Put(TyWindowMenuMinimizeIndex, rsTyWindowMenuMinimize, st.MinimizeVisible, st.MinimizeEnabled);
+  Put(TyWindowMenuMaximizeIndex, rsTyWindowMenuMaximize, st.MaximizeVisible, st.MaximizeEnabled);
+  // A separator only between two groups that are both there.
+  Put(TyWindowMenuSeparatorIndex, cLineCaption, st.CloseVisible and st.RestoreVisible, True);
+  Put(TyWindowMenuCloseIndex, rsTyWindowMenuClose, st.CloseVisible, True);
+  { Themed like the bar it drops from: the bar's controller, not the global default. }
+  TTyPopupMenu(FWindowMenu).Controller := ActiveController;
+  Result := FWindowMenu;
+end;
+
+function TTyCustomTitleBar.WindowMenu: TPopupMenu;
+var
+  i: Integer;
+begin
+  Result := PopupMenu;
+  if Result <> nil then Exit;
+  Result := DefaultWindowMenu;
+  for i := 0 to Result.Items.Count - 1 do
+    if Result.Items[i].Visible and not Result.Items[i].IsLine then Exit;
+  Result := nil;   // a window that offers nothing at all: no empty menu
+end;
+
+function TTyCustomTitleBar.WindowMenuAnchor: TPoint;
+var
+  lay: TTyCaptionLayout;
+  pt: TPoint;
+begin
+  lay := CaptionLayout;
+  if FShowIcon and not IsRectEmpty(lay.Icon) then
+  begin
+    if IsRightToLeft then pt := Point(lay.Icon.Right, ClientHeight)
+    else pt := Point(lay.Icon.Left, ClientHeight);
+  end
+  else if IsRightToLeft then
+    pt := Point(ClientWidth, ClientHeight)
+  else
+    pt := Point(0, ClientHeight);
+  Result := ClientToScreen(pt);
+end;
+
+procedure TTyCustomTitleBar.PopupWindowMenu(AMenu: TPopupMenu; const AScreenPt: TPoint);
+begin
+  if AMenu = nil then Exit;
+  AMenu.PopupComponent := Self;   // TTyPopupMenu mirrors with the control it drops from
+  AMenu.PopUp(AScreenPt.X, AScreenPt.Y);
+end;
+
+function TTyCustomTitleBar.ShowWindowMenu: Boolean;
+var
+  m: TPopupMenu;
+begin
+  Result := False;
+  if csDesigning in ComponentState then Exit;
+  m := WindowMenu;
+  if m = nil then Exit;
+  PopupWindowMenu(m, WindowMenuAnchor);
+  Result := True;
+end;
+
+function TTyCustomTitleBar.HostChildAt(const APt: TPoint): Boolean;
+var
+  i: Integer;
+  c: TControl;
+begin
+  for i := 0 to ControlCount - 1 do
+  begin
+    c := Controls[i];
+    if not (c is TWinControl) or not c.Visible then Continue;
+    if (c = FMinButton) or (c = FMaxButton) or (c = FCloseButton) then Continue;
+    if PtInRect(c.BoundsRect, APt) then Exit(True);
+  end;
+  Result := False;
+end;
+
+function TTyCustomTitleBar.HostChildHasFocus: Boolean;
+var
+  f: TCustomForm;
+  c: TControl;
+begin
+  Result := False;
+  f := GetParentForm(Self);
+  if f = nil then Exit;
+  c := f.ActiveControl;
+  while (c <> nil) and (c.Parent <> Self) do c := c.Parent;
+  Result := (c <> nil) and (c <> FMinButton) and (c <> FMaxButton) and (c <> FCloseButton);
+end;
+
+procedure TTyCustomTitleBar.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
+var
+  m: TPopupMenu;
+  keyboard: Boolean;
+  pt: TPoint;
+begin
+  inherited DoContextPopup(MousePos, Handled);   // the user's OnContextPopup speaks first
+  if Handled or (csDesigning in ComponentState) then Exit;
+  if PopupMenu <> nil then Exit;                 // LCL pops the user's own menu right after this
+  keyboard := (MousePos.X = -1) and (MousePos.Y = -1);   // the menu key (control.inc:2480)
+  if (not keyboard) and HostChildAt(MousePos) then Exit;
+  { The menu key goes to the focused control and bubbles up from there, so here it came from
+    a control the host put on the bar -- the same rule as a right-click on one. }
+  if keyboard and HostChildHasFocus then Exit;
+  m := WindowMenu;
+  if m = nil then Exit;
+  if keyboard then pt := WindowMenuAnchor else pt := ClientToScreen(MousePos);
+  PopupWindowMenu(m, pt);
+  Handled := True;
+end;
+
+procedure TTyCustomTitleBar.WindowMenuRestoreClick(Sender: TObject);
+begin
+  { Only reachable while maximized (the item is disabled otherwise), when the max button IS
+    the restore button. }
+  if FMaxButton <> nil then FMaxButton.Click;
+end;
+
+procedure TTyCustomTitleBar.WindowMenuMinimizeClick(Sender: TObject);
+begin
+  if FMinButton <> nil then FMinButton.Click;
+end;
+
+procedure TTyCustomTitleBar.WindowMenuMaximizeClick(Sender: TObject);
+begin
+  if FMaxButton <> nil then FMaxButton.Click;
+end;
+
+procedure TTyCustomTitleBar.WindowMenuCloseClick(Sender: TObject);
+begin
+  if FCloseButton <> nil then FCloseButton.Click;
 end;
 
 procedure TTyCustomTitleBar.Paint;
@@ -1508,11 +2056,26 @@ begin
   if (Button = mbLeft) and (FEngine <> nil) and not (csDesigning in ComponentState)
      and FEngine.FormResizable and not FEngine.Maximized and (Y < FEngine.BorderZonePx) then
   begin
+    FIconPressed := False;   // this press is not the icon's: the DblClick after it is the bar's
     TyNcBeginTopResize(GetParentForm(Self));
     Exit;
   end;
   {$ENDIF}
+  { #9. The icon is not part of the drag band: a click opens the window menu and the second
+    press of a double-click closes the window, as on a native caption. Neither arms the drag. }
+  FIconPressed := (Button = mbLeft) and FShowIcon and not (csDesigning in ComponentState)
+    and PtInRect(CaptionLayout.Icon, Point(X, Y));
   inherited MouseDown(Button, Shift, X, Y);
+  if FIconPressed then
+  begin
+    if ssDouble in Shift then
+    begin
+      if CanCloseNow then WindowMenuCloseClick(Self);
+    end
+    else if not WindowMenuJustShown(WindowMenu) then
+      ShowWindowMenu;   // with the menu up, the click on the icon only closes it
+    Exit;
+  end;
   if (FEngine <> nil) and not (csDesigning in ComponentState) then
     FEngine.TitleBarMouseDown(Button, Shift, X, Y);
 end;
@@ -1542,6 +2105,7 @@ end;
 procedure TTyCustomTitleBar.DblClick;
 begin
   inherited DblClick;
+  if FIconPressed then Exit;   // the icon's double-click closed the window in MouseDown
   if (FEngine <> nil) and not (csDesigning in ComponentState) then
     FEngine.TitleBarDblClick;
 end;
@@ -2021,6 +2585,10 @@ begin
   BorderIcons := [biSystemMenu, biMinimize, biMaximize];
   FEngine := TTyChromeEngine.Create;
   FEngine.Form := Self;
+  { TCustomForm points Icon.OnChange at its own (non-virtual) IconChanged; going through
+    CM_ICONCHANGED instead runs that same IconChanged (TCustomForm.CMIconChanged) and lets the
+    title bars hear of it too. }
+  Icon.OnChange := @FormIconChanged;
   // The content host (TTyFormSurface) is NOT created here — it is streamed from the .lfm as
   // `object Surface: TTyFormSurface` with the controls nested under it, so graphic controls paint on
   // its canvas (visible) and it covers the WS_THICKFRAME dead band. Notification(opInsert) wires
@@ -2119,6 +2687,14 @@ end;
 function TTyForm.IsShortcut(var Message: TLMKey): Boolean;
 begin
   {$IFNDEF DARWIN}
+  { #9. Alt+Space opens the window menu, as it opens the system menu of a native window on
+    Windows and on most Linux desktops (a window manager that binds the key itself gets it
+    first, and then it never arrives here). Not on macOS: Option+Space types a no-break space
+    there, and a mac window has no window menu to open. }
+  if TyIsWindowMenuKey(Message.CharCode, KeyDataToShiftState(Message.KeyData))
+     and (FTitleBar <> nil) and FTitleBar.Visible
+     and not (csDesigning in ComponentState) and FTitleBar.ShowWindowMenu then
+    Exit(True);
   // Non-mac: the in-window menu bar owns dispatch. Let its TMainMenu try to match
   // and fire the shortcut first; on mac the inherited path already consults the
   // global Form.Menu (assigned in SetMenuBar), so we skip straight to inherited.
@@ -2291,6 +2867,22 @@ end;
 
 procedure TTyForm.DoCloseClick(Sender: TObject);
 begin Close; end;
+
+procedure TTyForm.FormIconChanged(Sender: TObject);
+begin
+  Perform(CM_ICONCHANGED, 0, 0);
+end;
+
+procedure TTyForm.CMIconChanged(var Message: TLMessage);
+var
+  i: Integer;
+begin
+  inherited;
+  for i := 0 to ControlCount - 1 do
+    if Controls[i] is TTyCustomTitleBar then
+      TTyCustomTitleBar(Controls[i]).HostIconChanged;
+  if (FTitleBar <> nil) and (FTitleBar.Parent <> Self) then FTitleBar.HostIconChanged;
+end;
 
 procedure TTyForm.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin

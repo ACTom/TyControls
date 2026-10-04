@@ -9,6 +9,45 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
+#: tycontrols.strconsts.rsdlgaddcustomcolor
+msgid "Add to custom colors"
+msgstr "添加到自定义颜色"
+
+#: tycontrols.strconsts.rsdlgcustomcolors
+msgid "Custom colors"
+msgstr "自定义颜色"
+
+#: tycontrols.strconsts.rsdlgentirescope
+msgid "Entire scope"
+msgstr "整个范围"
+
+#: tycontrols.strconsts.rsdlgfontapply
+msgid "Apply"
+msgstr "应用"
+
+#: tycontrols.strconsts.rsdlgpromptonreplace
+msgid "Prompt on replace"
+msgstr "替换前提示"
+
+#: tycontrols.strconsts.rsfdcreateprompt
+#, object-pascal-format
+msgid ""
+"\"%s\" does not exist.\n"
+"Do you want to create it?"
+msgstr ""
+"\"%s\" 不存在。\n"
+"要创建吗？"
+
+#: tycontrols.strconsts.rsfdnotwritable
+#, object-pascal-format
+msgid "\"%s\" is not writable."
+msgstr "\"%s\" 不可写。"
+
+#: tycontrols.strconsts.rsfdpathmustexist
+#, object-pascal-format
+msgid "The folder \"%s\" does not exist."
+msgstr "文件夹 \"%s\" 不存在。"
+
 #: tycontrols.strconsts.rsgridgrouprow
 #, object-pascal-format
 msgid "%s  (%d)"
@@ -226,6 +265,26 @@ msgstr "未找到 @import 目标：\"%s\""
 #, object-pascal-format
 msgid "@import cycle detected: \"%s\""
 msgstr "检测到 @import 循环引用：\"%s\""
+
+#: tycontrols.strconsts.rssmtypekeyconflict
+#, object-pascal-format
+msgid "Type key \"%s\" already has parent \"%s\" (not \"%s\")"
+msgstr "typeKey \"%s\" 已登记父键 \"%s\"（不是 \"%s\"）"
+
+#: tycontrols.strconsts.rssmtypekeycycle
+#, object-pascal-format
+msgid "Type key chain cycle: \"%s\" -> \"%s\""
+msgstr "typeKey 链成环：\"%s\" -> \"%s\""
+
+#: tycontrols.strconsts.rssmtypekeyinvalidname
+#, object-pascal-format
+msgid "Invalid type key name: \"%s\""
+msgstr "无效的 typeKey 名：\"%s\""
+
+#: tycontrols.strconsts.rssmtypekeytoodeep
+#, object-pascal-format
+msgid "Type key chain too deep (more than %d keys) at \"%s\""
+msgstr "typeKey 链过深（超过 %d 个键），位于 \"%s\""
 
 #: tycontrols.strconsts.rsmsgbtnyes
 msgid "Yes"
@@ -445,11 +504,6 @@ msgstr "查找范围:"
 #, object-pascal-format
 msgid "The file \"%s\" does not exist."
 msgstr "文件 \"%s\" 不存在。"
-
-#: tycontrols.strconsts.rsfdpathmustexist
-#, object-pascal-format
-msgid "The path \"%s\" does not exist."
-msgstr "路径 \"%s\" 不存在。"
 
 #: tycontrols.strconsts.rsfdopentitle
 msgctxt "tycontrols.strconsts.rsfdopentitle"
@@ -1162,3 +1216,19 @@ msgstr "option 没有问题。series 的图元还没有实现绘制，而这张�
 #: tycontrols.strconsts.rstyoptdiagnoseries
 msgid "The option is understood. There are no series, so only the axes would draw."
 msgstr "option 没有问题。没有任何 series，所以只会画出坐标轴。"
+
+#: tycontrols.strconsts.rstywindowmenuclose
+msgid "&Close"
+msgstr "关闭(&C)"
+
+#: tycontrols.strconsts.rstywindowmenumaximize
+msgid "Ma&ximize"
+msgstr "最大化(&X)"
+
+#: tycontrols.strconsts.rstywindowmenuminimize
+msgid "Mi&nimize"
+msgstr "最小化(&N)"
+
+#: tycontrols.strconsts.rstywindowmenurestore
+msgid "&Restore"
+msgstr "还原(&R)"

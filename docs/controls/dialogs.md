@@ -334,6 +334,34 @@ if TySelectDirectory('选择输出目录', 'C:\Users', dir) then
   OutputDir := dir;
 ```
 
+**组件 `TTySelectPathDialog`**:`Caption`、`Root`、`Directory`(进出两用:先设好就预选,确定后是选中的文件夹),外加和 LCL `TSelectDirectoryDialog` 一样的 `Options: TOpenOptions`(默认 `[]`)和 `OnHelpClicked`。`BuildForm` 返回 `Execute` 要显示的窗体(不显示,调用方释放)。
+
+`Options` 里 LCL 的 25 个选项:
+
+| 类别 | 选项 | 效果 / 原因 |
+|---|---|---|
+| 起作用 | `ofPathMustExist` | 路径框里输入的文件夹,上一级不存在就报错、不关。 |
+| | `ofFileMustExist` | 输入的文件夹本身不存在就报错、不关(LCL 选文件夹时也是这么理解的)。 |
+| | `ofCreatePrompt` | 输入的文件夹不存在,问要不要创建;选「是」就建好并返回它。 |
+| | `ofNoReadOnlyReturn` | 选中的文件夹不可写就报错、不关。 |
+| | `ofShowHelp` | 按钮栏多一个「帮助」,点了触发 `OnHelpClicked`。 |
+| | `ofNoResolveLinks` | 没有它时,确定后 `Directory` 里的符号链接换成实际路径(同 LCL;只在 Linux / macOS 上有区别)。 |
+| 不起作用 | `ofForceShowHidden` | 目录树本来就列出隐藏的文件夹。 |
+| | `ofEnableSizing`、`ofViewDetail` | 总能缩放;没有别的视图。 |
+| | `ofReadOnly`、`ofHideReadOnly`、`ofNoValidate`、`ofShareAware`、`ofNoTestFileCreate`、`ofNoNetworkButton`、`ofNoLongNames`、`ofOldStyleDialog`、`ofNoDereferenceLinks`、`ofDontAddToRecent` | Windows 文件对话框的遗留,见 [文件对话框](filedialog.md#options)。 |
+| 不适用 | `ofNoChangeDir` | 这个对话框没有 `InitialDir`,`Directory` 本来就是进出两用。 |
+| | `ofOverwritePrompt` | 选文件夹不会覆盖什么。 |
+| | `ofAllowMultiSelect` | 目录树只能单选。 |
+| | `ofExtensionDifferent` | 文件夹没有扩展名。 |
+| | `ofAutoPreview` | 没有预览窗格。 |
+| | `ofEnableIncludeNotify` | LCL 自己也没用。 |
+
+没有 `ofPathMustExist` / `ofFileMustExist` / `ofCreatePrompt` 时,路径框里输入一个不存在的文件夹再点确定,返回的仍是树上选中的文件夹,和 3.0 一样。判断由纯函数 `TySelectPathCheck` 做。这些检查都在 `OnCanClose` 之前:没通过就不问 `OnCanClose`,通过了才问,它答应了对话框就一定关,和文件对话框一样。
+
+路径框里输入的相对路径(比如只输一个名字 `新项目`,或 `..\其它`)按**树上选中的文件夹**展开,和 Windows 的选文件夹对话框一样:路径框本来显示的就是选中文件夹的完整路径,在它上面输入一个名字,意思就是「在这里面」。不会按程序的当前目录展开——带 `ofCreatePrompt` 时文件夹也就建在选中的文件夹里,不会建到程序运行的目录。树上什么都没选时相对路径无从展开:带上面三个选项之一时报错、不关;都不带时照旧返回树上的选择(也就是空)。
+
+**从 3.0 升级:** 在 Linux / macOS 上,`Execute` 返回的 `Directory` 里的符号链接现在换成了实际路径(照 LCL `TSelectDirectoryDialog`,`Options` 不带 `ofNoResolveLinks` 时就这么做,而 `Options` 默认是空的)。3.0 原样返回用户选的路径:用户选了 `~/proj`,而它是指向 `/data/proj` 的链接,3.0 给 `~/proj`,4.0 给 `/data/proj`。程序要保留链接本身(比如把路径存进配置、下次还按链接打开),给 `Options` 加上 `ofNoResolveLinks`。Windows 上没有区别。只影响组件 `TTySelectPathDialog`;全局函数 `TySelectDirectory` 不解析,和 3.0 一样。
+
 ### 8.6 非可视设计期组件
 
 以下 5 个非可视组件位于 **TyControls Dialogs** 组件面板页，每个组件均封装了对应对话框的 published 属性，代码中一行 `Execute` 即可显示：
@@ -407,6 +435,24 @@ if DlgColor.Execute then
   MyShape.FillColor := DlgColor.Color;
 ```
 
+和 LCL `TColorDialog` 一样还有 `Options: TColorDialogOptions`（默认 `[cdFullOpen]`）和 `CustomColors: TStrings`；`BuildForm` 返回 `Execute` 要显示的窗体（不显示，调用方释放）。
+
+| 选项 | 类别 | 效果 / 原因 |
+|---|---|---|
+| `cdPreventFullOpen` | 起作用 | 不许自己调颜色：HSV 方块、色相条、Hex / RGB / CMYK / Alpha 输入框和「添加到自定义颜色」都禁用，只能点色块。 |
+| `cdFullOpen` | 不起作用 | 这个取色器没有收起的状态，总是展开的。 |
+| `cdSolidColor`、`cdAnyColor` | 不起作用 | Windows 256 色模式下怎么显示基本色。 |
+| `cdShowHelp` | 不起作用 | LCL 的 `TColorDialog` 没有帮助事件，帮助按钮没事可做。 |
+
+**`CustomColors`** 的格式和 LCL 一样，一行一个 `ColorA=FFFFFF` … `ColorP=…`，值是十六进制的 `TColor`（`FF0000` 是蓝色）。默认是空的，空着时对话框和以前一模一样；有条目时，在基本颜色和预览之间多一行 16 格的「自定义颜色」（没给的格子是白色）和一个「添加到自定义颜色」按钮，按钮把当前颜色放进下一格。点确定后，给过的格子和新加的格子写回 `CustomColors`（`Values['ColorX']`），其余条目不动；`ColorQ` 之后的条目（LCL 默认列表里有）不显示，也原样保留。要让用户从一排空格子开始存自己的颜色，给它 16 条 `ColorA=FFFFFF` … `ColorP=FFFFFF`。
+
+```pascal
+// 记住用户自己调的颜色，下次再用
+DlgColor.CustomColors.Assign(FSavedCustomColors);
+if DlgColor.Execute then
+  FSavedCustomColors.Assign(DlgColor.CustomColors);
+```
+
 ### 9.2 TyFontDialog — 字体对话框
 
 弹出字体选择对话框，可设置字体族、字号、粗体/斜体/下划线/删除线、颜色（内嵌取色器），并实时预览效果；对话框可拖拽边框缩放。
@@ -434,21 +480,48 @@ if DlgFont.Execute then
   Memo1.Font.Assign(DlgFont.Font);
 ```
 
+和 LCL `TFontDialog` 一样还有：
+
+| 属性 | 说明 |
+|---|---|
+| `Options: TFontDialogOptions` | 默认 `[fdEffects]`，见下表。 |
+| `MinFontSize`、`MaxFontSize` | 带 `fdLimitSize` 时的字号范围，0 表示这一头不限。 |
+| `PreviewText` | 预览条里的文字，空着用内置的示例。 |
+| `OnApplyClicked` | 点了「应用」（`fdApplyButton`）。触发时 `Font` 已经是对话框里当前的选择。 |
+| `BuildForm` | 返回 `Execute` 要显示的窗体（不显示，调用方释放）。 |
+
+| 选项 | 类别 | 效果 / 原因 |
+|---|---|---|
+| `fdEffects` | 起作用 | 有它才显示下划线、删除线和颜色按钮；没有时三者隐藏，确定后字体原来的下划线、删除线、颜色不变。 |
+| `fdFixedPitchOnly` | 起作用 | 只列等宽字体，判断方法和字体框的 `FixedPitchOnly` 一样（读系统的等宽标志，见 [TTyFontComboBox](fontcombobox.md#只列等宽字体)）。 |
+| `fdScalableOnly` | 起作用 | 不列点阵字体。只有 Windows 会把字体报成点阵（`Fixedsys`、`Terminal` 等）；GTK、Qt、Cocoa 下 LCL 不报点阵字体，列表不变。 |
+| `fdLimitSize` | 起作用 | 字号只能在 `MinFontSize`..`MaxFontSize` 里选；原字号超出范围时显示并返回范围内最近的值。原字号是 0（用默认字号）时字号框显示 9：9 在范围内，用户不动就仍返回 0；9 不在范围内，就显示并返回范围内最近的值，不会返回范围外的 0。 |
+| `fdNoFaceSel` | 起作用 | 打开时不选中字体族；用户不选就不改 `Font.Name`。 |
+| `fdNoSizeSel` | 起作用 | 打开时字号框空着；用户不填就不改 `Font.Size`。 |
+| `fdNoStyleSel` | 起作用 | 粗体、斜体复选框打开时是灰的（不确定）；用户不点就保留原样式。 |
+| `fdApplyButton` | 起作用 | 按钮栏多一个「应用」：把当前选择写进 `Font`、触发 `OnApplyClicked`，对话框不关。 |
+| `fdAnsiOnly`、`fdNoOEMFonts` | 不起作用 | Windows `ChooseFont` 的字符集过滤。 |
+| `fdTrueTypeOnly` | 不起作用 | TrueType 是 Windows 的字体技术分类；GTK、Qt 下 LCL 报不出来，照做会把列表滤空。 |
+| `fdNoSimulations`、`fdNoVectorFonts`、`fdWysiwyg` | 不起作用 | Windows GDI 的合成粗斜体、矢量字体、打印机字体。 |
+| `fdShowHelp` | 不起作用 | LCL 的 `TFontDialog` 没有帮助事件。 |
+| `fdForceFontExist` | 不适用 | 只能从列表里选字体族，没有手输字体名的框，选中的一定存在。 |
+
+字体族列表和 [TTyFontComboBox](fontcombobox.md#6-注意事项) 一样不含 `@` 开头的竖排字体(Windows 自己的字体对话框也不列)。**从 3.0 升级:** 3.0 的字体对话框列出这些 `@` 字体,4.0 起不列;传进来的 `Font.Name` 是 `@` 字体时,列表不选中任何项,用户不选别的就原样返回。
+
 > **注意**：两个组件均在 **TyControls Dialogs** 组件面板页可以找到。字体对话框的颜色选择器复用 `TTyColorDialog` 内核，保证视觉一致性。
 
 ---
 
-## 10. Modeless dialogs — Find / Replace / Progress (S4)
+## 10. 非模态对话框 — 查找 / 替换 / 进度（S4）
 
-Unlike the modal dialogs above, these are **non-modal**: they show with `Show`, stay open, and drive
-work through events. Each is a non-visual component that owns and reuses its window.
+和上面的模态对话框不同，这几个是**非模态**的：用 `Show` 显示，显示后一直开着，工作靠事件推动。每个都是一个非可视组件，自己持有并反复使用同一个窗口。
 
-### Find / Replace
+### 查找 / 替换
 
 ```pascal
 uses tyControls.Dialogs.Find;
 
-// once, e.g. in FormCreate:
+// 只做一次，比如在 FormCreate 里：
 FindDlg := TTyFindDialog.Create(Self);
 FindDlg.OnFind := @DoFind;
 
@@ -456,49 +529,83 @@ procedure TForm1.DoFind(Sender: TObject);
 var d: TTyFindDialog;
 begin
   d := Sender as TTyFindDialog;
-  // search Memo1 for d.FindText using d.Options (frMatchCase, frWholeWord, frDown, ...)
+  // 按 d.Options（frMatchCase、frWholeWord、frDown……）在 Memo1 里找 d.FindText
 end;
 
-// to open it (modeless — returns immediately):
+// 打开它（非模态，立即返回）：
 FindDlg.Execute;
 ```
 
-`TTyReplaceDialog` adds `ReplaceText` + `OnReplace`. **Replace and Replace All both fire `OnReplace`** —
-tell them apart with `frReplaceAll in d.Options`. `Options` defaults to `[frDown]` (search down);
-`TTyReplaceDialog` also defaults `frReplace, frReplaceAll`.
+`TTyReplaceDialog` 多了 `ReplaceText` 和 `OnReplace`。**「替换」和「全部替换」都触发 `OnReplace`**，用 `frReplaceAll in d.Options` 区分。`Options` 默认 `[frDown]`（向下找）；`TTyReplaceDialog` 默认再加上 `frReplace`、`frReplaceAll`、`frHidePromptOnReplace`。
 
-Besides `frMatchCase` / `frWholeWord` / `frDown`, the dialog honours LCL's `frHideMatchCase`,
-`frHideWholeWord`, `frHideUpDown` (the box is hidden and the ones below move up),
-`frDisableMatchCase`, `frDisableWholeWord`, `frDisableUpDown` (the box shows but is disabled) and
-`frShowHelp` (a Help button, which fires `OnHelpClicked`), as LCL's `TFindDialog` does. Writing
-`Options` while the dialog is open updates it at once, without touching the text being typed.
+**`Options` 的 18 个选项**和 LCL 的 `TFindDialog` / `TReplaceDialog` 用法一样（`TFindOptions`）。窗口开着时改 `Options`，窗口跟着变（勾选、隐藏、禁用），已经输入的查找文字不动。
 
-> **Note:** `Position` here is an LCL `TPosition` placement *strategy* (`poScreenCenter`, `poDesigned`, …), **not** LCL `TFindDialog.Position`'s `TPoint` window coordinate. Modeless Ty dialogs place themselves by strategy, so LCL Find/Replace code that assigns `Position := Point(x, y)` needs adjusting.
+| 选项 | 效果 |
+|---|---|
+| `frDown` | 向下找；对话框里是「向上查找」复选框，勾上就去掉 `frDown`。 |
+| `frMatchCase`、`frWholeWord` | 两个复选框的勾选状态，读回 `Options`。 |
+| `frEntireScope` | 「整个范围」复选框的勾选状态，读回 `Options`。 |
+| `frPromptOnReplace` | 替换对话框「替换前提示」复选框的勾选状态，读回 `Options`。 |
+| `frFindNext`、`frReplace`、`frReplaceAll` | 输出：点的是哪个按钮（见上）。 |
+| `frHideMatchCase`、`frHideWholeWord`、`frHideUpDown`、`frHideEntireScope`、`frHidePromptOnReplace` | 隐藏对应的复选框，下面的往上挪。 |
+| `frDisableMatchCase`、`frDisableWholeWord`、`frDisableUpDown` | 对应的复选框变灰，不能改。 |
+| `frShowHelp` | 按钮栏多一个「帮助」，点了触发 `OnHelpClicked`（`Sender` 是对话框组件）。 |
+| `frButtonsAtBottom` | 不起作用：按钮本来就在底部的按钮栏。 |
 
-### Progress
+「整个范围」和「替换前提示」跟 LCL 一样只是复选框：按范围搜、每次替换前问用户，由程序在 `OnFind` / `OnReplace` 里看这两位自己做。
+
+#### 从 3.0 升级须知：查找 / 替换对话框会多出复选框
+
+**凡是 3.0 窗体里放过的查找、替换对话框，升级后打开都会多出复选框**，窗体不用重新保存也一样：
+
+- **「整个范围」**：查找、替换对话框都多这一个。它是 LCL 的 `frEntireScope`，不带 `frHideEntireScope` 就显示；3.0 没有这个复选框，也就没有哪个 3.0 窗体会带着 `frHideEntireScope`。
+- **「替换前提示」**：替换对话框多这一个。4.0 的 `TTyReplaceDialog` 构造时照 LCL 带上 `frHidePromptOnReplace`，所以新放的不显示；但 3.0 的构造初值（`[frDown, frReplace, frReplaceAll]`）和声明的默认值（`[frDown]`）不同，设计器里放过的替换对话框都把 `Options` 整行写进了窗体，读窗体时这一行整个盖掉构造函数的初值，`frHidePromptOnReplace` 就没了。
+
+这是照 LCL 的语义，代码不替旧窗体改。两个复选框都只是勾选状态（见上），程序不处理 `frEntireScope` / `frPromptOnReplace` 的话，把它们藏起来就是 3.0 的样子。在 `.lfm` 里给 `Options` 补上：
+
+```
+object FindDlg: TTyFindDialog
+  Options = [frDown, frHideEntireScope]
+end
+object ReplaceDlg: TTyReplaceDialog
+  Options = [frDown, frReplace, frReplaceAll, frHideEntireScope, frHidePromptOnReplace]
+end
+```
+
+或在代码里（比如 `FormCreate`）：
+
+```pascal
+FindDlg.Options := FindDlg.Options + [frHideEntireScope];
+ReplaceDlg.Options := ReplaceDlg.Options + [frHideEntireScope, frHidePromptOnReplace];
+```
+
+代码里新建的替换对话框本来就带 `frHidePromptOnReplace`，只多「整个范围」。另外，3.0.0 收下这 12 个选项却不理会（3.0 的后续修复版已经照 LCL 处理三个隐藏、三个禁用和 `frShowHelp`）；3.0 窗体里设过这些选项的，现在照选项生效。
+
+> **注意**：这里的 `Position` 是 LCL 的 `TPosition` 摆放**策略**（`poScreenCenter`、`poDesigned`……），**不是** LCL `TFindDialog.Position` 那个 `TPoint` 窗口坐标。Ty 的非模态对话框按策略摆放自己，所以 LCL 查找 / 替换代码里 `Position := Point(x, y)` 这样的赋值要改。
+
+### 进度
 
 ```pascal
 uses tyControls.Dialogs.Progress;
 
 Prog := TTyProgressDialog.Create(Self);
-Prog.Caption := 'Working…';
+Prog.Caption := '处理中…';
 Prog.Min := 0; Prog.Max := N; Prog.Cancelable := True;
-Prog.OnCancel := @HandleCancel;   // MUST NOT Free Prog — just set a flag / call Close
+Prog.OnCancel := @HandleCancel;   // 这里绝不能 Free Prog——只设个标志或调 Close
 Prog.Show;
 try
   for i := 0 to N - 1 do
   begin
     if Prog.Cancelled then Break;
     DoWork(i);
-    Prog.SetProgress(i + 1, Format('Item %d of %d', [i + 1, N]));  // repaints + pumps
+    Prog.SetProgress(i + 1, Format('第 %d 项，共 %d 项', [i + 1, N]));  // 重画并处理消息
   end;
 finally
   Prog.Close;
 end;
 ```
 
-`SetProgress` pumps the message loop so the bar repaints and a Cancel click is seen. It is determinate
-only (no marquee).
+`SetProgress` 会处理消息循环，进度条才能重画、「取消」的点击才收得到。只有确定进度（没有来回滚动的不定进度条）。
 
 ---
 

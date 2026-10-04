@@ -1,8 +1,9 @@
 unit test.dialogs.selectpath;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, fpcunit, testregistry,
-  tyControls.Dialogs, tyControls.TreeView, tyControls.Dialogs.SelectPath;
+uses Classes, SysUtils, Forms, Controls, Dialogs, LazFileUtils, fpcunit, testregistry,
+  tyControls.Dialogs, tyControls.TreeView, tyControls.Dialogs.SelectPath, tyControls.Button,
+  tyControls.StrConsts;
 type
   TSelectPathFsTest = class(TTestCase)
   private
@@ -21,6 +22,62 @@ type
     procedure TestCreateSubfolderShowsAndFocuses;
     procedure TestCreateSubfolderUnderCollapsedParent;
     procedure TestDirectoryPreselectsPath;
+  end;
+
+  { LCL's TOpenOptions on the folder picker (#28). }
+  TSelectPathOptionsTest = class(TTestCase)
+  private
+    FDir: string;
+    FHelpSender: TObject;
+    procedure HandleHelp(Sender: TObject);
+    function HelpOf(AForm: TTySelectPathForm): TTyButton;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestAMissingFolderWithNoOptionsIsLeftToTheTree;
+    procedure TestPathMustExistLooksAtTheParent;
+    procedure TestFileMustExistLooksAtTheFolder;
+    procedure TestCreatePromptOffersToCreate;
+    procedure TestExistingFoldersPass;
+    procedure TestNoReadOnlyReturn;
+    procedure TestBuildFormCarriesTheOptions;
+    procedure TestShowHelp;
+    procedure TestDefaultsAreNotWritten;
+  end;
+
+  { The folder picker with its error box and its yes / no question swapped for lists, so OK can
+    be pressed headless; everything else is the real form. }
+  TProbeSelectPath = class(TTySelectPathForm)
+  protected
+    procedure ReportProblem(const AMsg: string); override;
+    function ConfirmChoice(const AMsg: string): Boolean; override;
+  public
+    Problems, Questions: TStringList;
+    Answer: Boolean;
+  end;
+
+  { A relative path typed into the path field means a folder under the one selected in the
+    tree -- never one under the program's current directory, where 4.0's first cut looked for
+    it and, under ofCreatePrompt, created it. }
+  TSelectPathTypedTest = class(TTestCase)
+  private
+    FDir, FName: string;
+    FForm: TProbeSelectPath;
+    FAsked: Boolean;
+    FAnswer: Boolean;
+    procedure CanClose(Sender: TObject; var ACanClose: Boolean);
+    function Accepts: Boolean;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestARelativeNameIsTakenUnderTheSelectedFolder;
+    procedure TestCreatePromptCreatesItThereNotInTheCurrentDirectory;
+    procedure TestARelativeNameWithNothingSelectedIsRefused;
+    procedure TestAFullPathIsTakenAsTyped;
+    procedure TestOnCanCloseIsNotAskedAboutARefusedFolder;
+    procedure TestOnCanCloseHasTheLastWord;
   end;
 implementation
 
@@ -250,7 +307,296 @@ begin
   end;
 end;
 
+{ TSelectPathOptionsTest }
+
+procedure TSelectPathOptionsTest.SetUp;
+begin
+  FDir := IncludeTrailingPathDelimiter(GetTempDir)
+        + Format('tyselopt_%d_%d', [PtrUInt(Self), Random(MaxInt)]);
+  ForceDirectories(FDir);
+end;
+
+procedure TSelectPathOptionsTest.TearDown;
+begin
+  FileSetAttr(FDir, faDirectory);
+  RemoveDir(FDir);
+end;
+
+procedure TSelectPathOptionsTest.HandleHelp(Sender: TObject);
+begin
+  FHelpSender := Sender;
+end;
+
+function TSelectPathOptionsTest.HelpOf(AForm: TTySelectPathForm): TTyButton;
+var i: Integer;
+begin
+  Result := nil;
+  for i := 0 to AForm.ButtonCount - 1 do
+    if AForm.Buttons[i].Caption = rsMsgBtnHelp then Exit(AForm.Buttons[i]);
+end;
+
+procedure TSelectPathOptionsTest.TestAMissingFolderWithNoOptionsIsLeftToTheTree;
+begin
+  AssertTrue('3.0''s behaviour: OK goes through, the tree''s folder is the answer',
+    TySelectPathCheck(FDir + PathDelim + 'none', []) = spcOK);
+  AssertTrue('even two levels down', TySelectPathCheck(
+    FDir + PathDelim + 'a' + PathDelim + 'b', [ofNoReadOnlyReturn]) = spcOK);
+end;
+
+procedure TSelectPathOptionsTest.TestPathMustExistLooksAtTheParent;
+begin
+  AssertTrue('the parent is missing', TySelectPathCheck(
+    FDir + PathDelim + 'a' + PathDelim + 'b', [ofPathMustExist]) = spcParentMissing);
+  AssertTrue('the parent exists: a new folder under it is fine', TySelectPathCheck(
+    FDir + PathDelim + 'new', [ofPathMustExist]) = spcOK);
+end;
+
+procedure TSelectPathOptionsTest.TestFileMustExistLooksAtTheFolder;
+begin
+  AssertTrue('the folder itself is missing', TySelectPathCheck(
+    FDir + PathDelim + 'new', [ofFileMustExist]) = spcMissing);
+  AssertTrue('the parent first', TySelectPathCheck(
+    FDir + PathDelim + 'a' + PathDelim + 'b', [ofPathMustExist, ofFileMustExist]) = spcParentMissing);
+  AssertTrue('must exist beats offering to create', TySelectPathCheck(
+    FDir + PathDelim + 'new', [ofFileMustExist, ofCreatePrompt]) = spcMissing);
+end;
+
+procedure TSelectPathOptionsTest.TestCreatePromptOffersToCreate;
+begin
+  AssertTrue('missing -> ask', TySelectPathCheck(
+    FDir + PathDelim + 'new', [ofCreatePrompt]) = spcAskCreate);
+end;
+
+procedure TSelectPathOptionsTest.TestExistingFoldersPass;
+begin
+  AssertTrue('an existing folder passes every existence check', TySelectPathCheck(FDir,
+    [ofPathMustExist, ofFileMustExist, ofCreatePrompt, ofNoReadOnlyReturn]) = spcOK);
+  AssertTrue('an empty path is the tree''s business', TySelectPathCheck('', [ofFileMustExist]) = spcOK);
+end;
+
+procedure TSelectPathOptionsTest.TestNoReadOnlyReturn;
+begin
+  FileSetAttr(FDir, faDirectory or faReadOnly);
+  if DirectoryIsWritable(FDir) then
+    Ignore('cannot make a folder the user cannot write to here (Windows ignores read-only on folders)');
+  AssertTrue('a folder that cannot be written to', TySelectPathCheck(FDir,
+    [ofNoReadOnlyReturn]) = spcNotWritable);
+  AssertTrue('without the option it is fine', TySelectPathCheck(FDir, []) = spcOK);
+end;
+
+procedure TSelectPathOptionsTest.TestBuildFormCarriesTheOptions;
+var d: TTySelectPathDialog; f: TTySelectPathForm;
+begin
+  d := TTySelectPathDialog.Create(nil);
+  try
+    d.Root := FDir;
+    d.Options := [ofPathMustExist, ofCreatePrompt];
+    f := d.BuildForm;
+    try
+      AssertTrue('the form validates with the component''s options',
+        f.Options = [ofPathMustExist, ofCreatePrompt]);
+    finally f.Free; end;
+  finally d.Free; end;
+end;
+
+procedure TSelectPathOptionsTest.TestShowHelp;
+var d: TTySelectPathDialog; f: TTySelectPathForm;
+begin
+  FHelpSender := nil;
+  d := TTySelectPathDialog.Create(nil);
+  try
+    d.Root := FDir;
+    d.OnHelpClicked := @HandleHelp;
+    f := d.BuildForm;
+    try
+      AssertTrue('no Help without ofShowHelp', HelpOf(f) = nil);
+    finally f.Free; end;
+    d.Options := [ofShowHelp];
+    f := d.BuildForm;
+    try
+      AssertTrue('ofShowHelp adds Help', HelpOf(f) <> nil);
+      HelpOf(f).Click;
+      AssertTrue('the click reaches OnHelpClicked, Sender = the component', FHelpSender = d);
+      AssertEquals('and leaves the dialog open', Ord(mrNone), Ord(f.ModalResult));
+    finally f.Free; end;
+  finally d.Free; end;
+end;
+
+procedure TSelectPathOptionsTest.TestDefaultsAreNotWritten;
+var src: TForm; d: TTySelectPathDialog; ms, ts: TMemoryStream; L: TStringList;
+begin
+  src := TForm.CreateNew(nil);
+  ms := TMemoryStream.Create;
+  ts := TMemoryStream.Create;
+  L := TStringList.Create;
+  try
+    d := TTySelectPathDialog.Create(src);
+    d.Name := 'D';
+    AssertTrue('default []', d.Options = []);
+    ms.WriteComponent(src);
+    ms.Position := 0;
+    ObjectBinaryToText(ms, ts);
+    ts.Position := 0;
+    L.LoadFromStream(ts);
+    AssertEquals('Options not written', 0, Pos('Options', L.Text));
+    d.Options := [ofCreatePrompt];
+    ms.Clear; ts.Clear;
+    ms.WriteComponent(src);
+    ms.Position := 0;
+    ObjectBinaryToText(ms, ts);
+    ts.Position := 0;
+    L.LoadFromStream(ts);
+    AssertTrue('set, it is written with LCL''s name', Pos('Options = [ofCreatePrompt]', L.Text) > 0);
+  finally
+    L.Free; ts.Free; ms.Free; src.Free;
+  end;
+end;
+
+{ TProbeSelectPath / TSelectPathTypedTest }
+
+procedure TProbeSelectPath.ReportProblem(const AMsg: string);
+begin
+  Problems.Add(AMsg);
+end;
+
+function TProbeSelectPath.ConfirmChoice(const AMsg: string): Boolean;
+begin
+  Questions.Add(AMsg);
+  Result := Answer;
+end;
+
+procedure TSelectPathTypedTest.SetUp;
+begin
+  FDir := IncludeTrailingPathDelimiter(GetTempDir)
+        + Format('tyseltyped_%d_%d', [PtrUInt(Self), Random(MaxInt)]);
+  ForceDirectories(FDir);
+  { A name the current directory certainly does not have either. }
+  FName := Format('tyrel_%d', [Random(MaxInt)]);
+  FForm := TProbeSelectPath.CreateNew(nil);
+  FForm.Problems := TStringList.Create;
+  FForm.Questions := TStringList.Create;
+  FForm.Root := FDir;
+  FForm.PopulateRoots;
+end;
+
+procedure TSelectPathTypedTest.TearDown;
+begin
+  FForm.Problems.Free;
+  FForm.Questions.Free;
+  FreeAndNil(FForm);
+  RemoveDir(FDir + PathDelim + FName);
+  RemoveDir(FDir);
+  RemoveDir(IncludeTrailingPathDelimiter(GetCurrentDir) + FName);   // only if the code is wrong
+end;
+
+{ What pressing OK does: CloseQuery with mrOK, which runs the validation. }
+function TSelectPathTypedTest.Accepts: Boolean;
+begin
+  FForm.Problems.Clear;
+  FForm.Questions.Clear;
+  FForm.ModalResult := mrOK;
+  Result := FForm.CloseQuery;
+end;
+
+procedure TSelectPathTypedTest.TestARelativeNameIsTakenUnderTheSelectedFolder;
+begin
+  ForceDirectories(FDir + PathDelim + FName);
+  FForm.Directory := FDir;
+  AssertTrue('setup: the folder is selected', FForm.Tree.FocusedNode <> nil);
+  FForm.PathEdit.Text := FName;
+  AssertEquals('the typed name, under the selected folder', FDir + PathDelim + FName,
+    ExcludeTrailingPathDelimiter(FForm.TypedPath));
+  AssertTrue('OK goes through', Accepts);
+  AssertEquals('and the answer is that folder, not the selected one', FDir + PathDelim + FName,
+    ExcludeTrailingPathDelimiter(FForm.Directory));
+end;
+
+procedure TSelectPathTypedTest.TestCreatePromptCreatesItThereNotInTheCurrentDirectory;
+begin
+  FForm.Directory := FDir;
+  FForm.Options := [ofCreatePrompt];
+  FForm.PathEdit.Text := FName;
+  FForm.Answer := False;
+  AssertFalse('declined: OK is refused', Accepts);
+  AssertEquals('after one question', 1, FForm.Questions.Count);
+  AssertEquals('about the folder under the selected one',
+    Format(rsFdCreatePrompt, [FDir + PathDelim + FName]), FForm.Questions[0]);
+  FForm.Answer := True;
+  AssertTrue('accepted: OK goes through', Accepts);
+  AssertTrue('the folder is made under the selected one',
+    DirectoryExists(FDir + PathDelim + FName));
+  AssertFalse('and not in the current directory',
+    DirectoryExists(IncludeTrailingPathDelimiter(GetCurrentDir) + FName));
+  AssertEquals('and it is the answer', FDir + PathDelim + FName,
+    ExcludeTrailingPathDelimiter(FForm.Directory));
+end;
+
+procedure TSelectPathTypedTest.TestARelativeNameWithNothingSelectedIsRefused;
+begin
+  AssertTrue('setup: nothing selected', FForm.Tree.FocusedNode = nil);
+  FForm.Options := [ofCreatePrompt];
+  FForm.PathEdit.Text := FName;
+  AssertEquals('no folder to put it under', '', FForm.TypedPath);
+  AssertFalse('OK is refused', Accepts);
+  AssertEquals('nothing is asked', 0, FForm.Questions.Count);
+  AssertEquals('the user is told', Format(rsFdPathMustExist, [FName]), FForm.Problems.Text.Trim);
+  AssertFalse('and nothing is made in the current directory',
+    DirectoryExists(IncludeTrailingPathDelimiter(GetCurrentDir) + FName));
+end;
+
+procedure TSelectPathTypedTest.TestAFullPathIsTakenAsTyped;
+begin
+  ForceDirectories(FDir + PathDelim + FName);
+  FForm.PopulateRoots;   // the tree reads the folders when it is filled
+  FForm.PathEdit.Text := FDir + PathDelim + FName;
+  AssertEquals('a full path needs nothing selected', FDir + PathDelim + FName,
+    ExcludeTrailingPathDelimiter(FForm.TypedPath));
+end;
+
+{ The program's OnCanClose (forwarded onto the form's OnCloseQuery) records that it was asked. }
+procedure TSelectPathTypedTest.CanClose(Sender: TObject; var ACanClose: Boolean);
+begin
+  FAsked := True;
+  ACanClose := FAnswer;
+end;
+
+{ The file dialog's order, for the same reason: OnCanClose is where a program acts on the folder,
+  so it is asked only about one the options let through -- not about one the dialog then keeps
+  open for a missing parent, or for a "create it?" the user said no to. }
+procedure TSelectPathTypedTest.TestOnCanCloseIsNotAskedAboutARefusedFolder;
+begin
+  FForm.OnCloseQuery := @CanClose;
+  FAnswer := True;
+  FForm.Options := [ofPathMustExist];
+  FForm.PathEdit.Text := FDir + PathDelim + FName + PathDelim + 'deeper';
+  FAsked := False;
+  AssertFalse('setup: a folder whose parent is missing is refused', Accepts);
+  AssertEquals('setup: and the user is told', 1, FForm.Problems.Count);
+  AssertFalse('OnCanClose was never asked about it', FAsked);
+  FForm.Options := [ofCreatePrompt];
+  FForm.PathEdit.Text := FDir + PathDelim + FName;
+  FForm.Answer := False;
+  FAsked := False;
+  AssertFalse('setup: "create it?" declined keeps the dialog open', Accepts);
+  AssertFalse('nor about the folder the user would not create', FAsked);
+end;
+
+procedure TSelectPathTypedTest.TestOnCanCloseHasTheLastWord;
+begin
+  FForm.OnCloseQuery := @CanClose;
+  FForm.Options := [ofPathMustExist];
+  FForm.PathEdit.Text := FDir;
+  FAsked := False;
+  FAnswer := False;
+  AssertFalse('a folder that passes is still the program''s to refuse', Accepts);
+  AssertTrue('it was asked', FAsked);
+  FAnswer := True;
+  AssertTrue('and when it agrees the dialog closes', Accepts);
+end;
+
 initialization
+  RegisterTest(TSelectPathTypedTest);
+  RegisterTest(TSelectPathOptionsTest);
   RegisterTest(TSelectPathFsTest);
   RegisterTest(TSelectPathBuildTest);
 end.

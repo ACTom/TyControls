@@ -342,6 +342,8 @@ begin
     '  --terminal-cursor-width: 1px;' + LineEnding +
     '  --terminal-pad: 4px;' + LineEnding +
     '  --terminal-underline-width: 1px;' + LineEnding +
+    '  --titlebar-icon-gap: 6px;' + LineEnding +
+    '  --titlebar-icon-size: 16px;' + LineEnding +
     '  --titlebar-padding: 8px;' + LineEnding +
     '  --toolwindow-button-size: 22px;' + LineEnding +
     '  --toolwindow-content-min: 120px;' + LineEnding +

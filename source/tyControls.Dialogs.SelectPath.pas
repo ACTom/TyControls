@@ -2,7 +2,7 @@ unit tyControls.Dialogs.SelectPath;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Dialogs, Forms, Graphics, ImgList,
+  Classes, SysUtils, Types, Controls, Dialogs, Forms, Graphics, ImgList, LazFileUtils,
   tyControls.Dialogs, tyControls.TreeView, tyControls.Button, tyControls.Edit,
   tyControls.StrConsts, tyControls.Component, tyControls.FileSystem,
   tyControls.Controller;
@@ -10,6 +10,22 @@ uses
 function TySubdirectories(const APath: string): TStringArray;
 function TyPathHasSubdir(const APath: string): Boolean;
 function TyDriveRoots: TStringArray;
+
+type
+  { What OK may do with a folder path (LCL's TSelectDirectoryDialog reading of TOpenOptions). }
+  TTySelectPathCheck = (
+    spcOK,             // accept (a missing path with none of the options below: the tree's choice)
+    spcParentMissing,  // ofPathMustExist: the folder above it does not exist -> error
+    spcMissing,        // ofFileMustExist: the folder itself does not exist -> error
+    spcNotWritable,    // ofNoReadOnlyReturn: an existing folder that cannot be written to
+    spcAskCreate       // ofCreatePrompt: it does not exist -> ask, Yes creates it
+  );
+
+{ For an existing folder only ofNoReadOnlyReturn applies. For a missing one, in order:
+  ofPathMustExist (parent), ofFileMustExist, ofCreatePrompt; with none of them it is spcOK,
+  which leaves the dialog to return the tree's choice, as 3.0 did. APath is a full path: the
+  dialog turns a relative one typed into its path field into one first (TypedPath). }
+function TySelectPathCheck(const APath: string; AOptions: TOpenOptions): TTySelectPathCheck;
 
 type
   { Concrete resizable directory-tree folder picker. Declared in the interface so
@@ -24,12 +40,13 @@ type
     FRoot:  string;        // '' = all drive roots, else a single rooted subtree
     FIcons: TImageList;    // 16x16 folder glyph(s); owned by the form (Self)
     FNewBtn: TTyButton;    // "New Folder" action button; enabled only when a node is selected
+    FOptions: TOpenOptions;
     procedure BuildIcons;
     // Reveal APath in the tree (expand roots->leaf lazily) and return its node, or the
     // deepest reachable one; nil if no root is a prefix. Best-effort (visual feedback only).
     function  RevealPath(const APath: string): PTyTreeNode;
-    // The path field changed (typed / pasted): if it names an existing directory, reveal
-    // + select it in the tree. Guarded against the tree->edit sync.
+    // The path field changed (typed / pasted): if it names an existing directory by its full
+    // path, reveal + select it in the tree. Guarded against the tree->edit sync.
     procedure PathEditChanged(Sender: TObject);
     // Node-data helpers (node data = an Integer index into FPaths).
     function  AddPathNode(AParent: PTyTreeNode; const AFullPath: string): PTyTreeNode;
@@ -44,15 +61,33 @@ type
       Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean; var ImageIndex: Integer);
     procedure TreeFocusChanged(Sender: TTyCustomTreeView; Node: PTyTreeNode);
     procedure NewFolderClick(Sender: TObject);
+    { mrOK validation per Options: a typed folder that does not exist, then the result's
+      writability. False keeps the dialog open. }
+    function  AcceptSelection: Boolean;
   protected
     procedure LayoutContent; override;
+    { Says why OK was refused: an error box. Virtual so a test can read the message instead of
+      putting a modal window up. }
+    procedure ReportProblem(const AMsg: string); virtual;
+    { Asks a yes / no question before OK goes through (ofCreatePrompt); True = yes. Virtual for
+      the same reason. }
+    function  ConfirmChoice(const AMsg: string): Boolean; virtual;
   public
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
     destructor  Destroy; override;
+    function  CloseQuery: Boolean; override;
     // Add one root node per configured source (a single FRoot, else every drive).
     procedure PopulateRoots;
     function  SelectedPath: string;
     procedure SetDirectory(const APath: string);
+    { The path field as a folder. A full path as typed; a relative one is taken under the
+      folder selected in the tree -- the field shows that folder's full path, so a bare name
+      typed over it means "in here", as in the Windows folder picker -- and never under the
+      program's current directory. '' when the field is empty, or relative with no folder
+      selected. }
+    function  TypedPath: string;
+    // test seam: the path field, as the user types into it
+    function  PathEdit: TTyEdit;
     // The in/out selection (idiomatic dialog pattern): assign before ShowModal to pre-select a
     // folder (reveal + focus it); read after OK for the chosen folder. No-op if unreachable.
     property  Directory: string read SelectedPath write SetDirectory;
@@ -64,6 +99,8 @@ type
     function  NodeText(Node: PTyTreeNode): string;
     property  Tree: TTyTreeView read FTree;
     property  Root: string read FRoot write FRoot;
+    { LCL's TOpenOptions as a folder picker reads them; see TySelectPathCheck. }
+    property  Options: TOpenOptions read FOptions write FOptions;
   end;
 
 { Construct-only builder: create + configure + populate roots + size. No ShowModal. }
@@ -78,7 +115,13 @@ type
     FOnShow: TNotifyEvent;
     FOnClose: TCloseEvent;
     FOnCanClose: TCloseQueryEvent;
+    FOptions: TOpenOptions;
+    FOnHelpClicked: TNotifyEvent;
+    procedure FormHelpClick(Sender: TObject);
   public
+    { The form Execute shows -- roots, the pre-selected Directory, Options, Help under
+      ofShowHelp, the three events forwarded -- without showing it. The caller frees it. }
+    function BuildForm: TTySelectPathForm;
     function Execute: Boolean;
   published
     { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
@@ -90,6 +133,13 @@ type
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
+    { LCL's TOpenOptions, as LCL's TSelectDirectoryDialog has them. ofPathMustExist,
+      ofFileMustExist, ofCreatePrompt and ofNoReadOnlyReturn check the folder on OK,
+      ofShowHelp adds Help, and without ofNoResolveLinks the result's links are resolved;
+      the rest have no effect or do not apply -- see docs/controls/dialogs.md. }
+    property Options: TOpenOptions read FOptions write FOptions default [];
+    { The Help button (shown with ofShowHelp) was clicked. Sender is this component. }
+    property OnHelpClicked: TNotifyEvent read FOnHelpClicked write FOnHelpClicked;
   end;
 
 implementation
@@ -151,6 +201,26 @@ begin
   Result[0] := '/';
 end;
 {$ENDIF}
+
+function TySelectPathCheck(const APath: string; AOptions: TOpenOptions): TTySelectPathCheck;
+var
+  p, parent: string;
+begin
+  Result := spcOK;
+  p := Trim(APath);
+  if p = '' then Exit;
+  if DirectoryExistsUTF8(p) then
+  begin
+    if (ofNoReadOnlyReturn in AOptions) and not DirectoryIsWritable(p) then
+      Result := spcNotWritable;
+    Exit;
+  end;
+  parent := ExtractFileDir(ExcludeTrailingPathDelimiter(p));
+  if (ofPathMustExist in AOptions) and (parent <> '') and not DirectoryExistsUTF8(parent) then
+    Exit(spcParentMissing);
+  if ofFileMustExist in AOptions then Exit(spcMissing);
+  if ofCreatePrompt in AOptions then Exit(spcAskCreate);
+end;
 
 { TTySelectPathForm }
 
@@ -233,6 +303,94 @@ destructor TTySelectPathForm.Destroy;
 begin
   FPaths.Free;    // FTree is owned by the form (Create(Self)) and freed with it
   inherited Destroy;
+end;
+
+function TTySelectPathForm.CloseQuery: Boolean;
+begin
+  { The options gate an OK first, and only then the program's OnCanClose -- the file dialog's
+    order: OnCanClose is where a program acts on the folder, so it is asked only about one the
+    dialog accepts, never about one it then keeps open for a missing parent or a "create it?"
+    the user declined. }
+  if (ModalResult = mrOK) and not AcceptSelection then
+    Exit(False);               // LCL resets ModalResult, the dialog stays open
+  Result := inherited CloseQuery;
+end;
+
+function TTySelectPathForm.AcceptSelection: Boolean;
+var
+  raw, typed, dir: string;
+begin
+  Result := False;
+  raw := '';
+  if FPathEdit <> nil then raw := Trim(FPathEdit.Text);
+  typed := TypedPath;
+  if (raw <> '') and (typed = '')
+     and (FOptions * [ofPathMustExist, ofFileMustExist, ofCreatePrompt] <> []) then
+  begin
+    { A relative name with no folder selected to put it under: no folder it could mean
+      exists, and creating it would put it wherever the program happens to run. }
+    ReportProblem(Format(rsFdPathMustExist, [raw]));
+    Exit;
+  end;
+  if (typed <> '') and not DirectoryExistsUTF8(typed) then
+    case TySelectPathCheck(typed, FOptions) of
+      spcParentMissing:
+        begin
+          ReportProblem(Format(rsFdPathMustExist,
+            [ExtractFileDir(ExcludeTrailingPathDelimiter(typed))]));
+          Exit;
+        end;
+      spcMissing:
+        begin
+          ReportProblem(Format(rsFdPathMustExist, [typed]));
+          Exit;
+        end;
+      spcAskCreate:
+        begin
+          if not ConfirmChoice(Format(rsFdCreatePrompt, [typed])) then Exit;
+          if not ForceDirectoriesUTF8(typed) then
+          begin
+            ReportProblem(Format(rsDlgCreateFolderErr, [typed]));
+            Exit;
+          end;
+          { it exists now, so SelectedPath below returns it }
+        end;
+    end;
+  dir := SelectedPath;
+  if (dir <> '') and (TySelectPathCheck(dir, FOptions) = spcNotWritable) then
+  begin
+    ReportProblem(Format(rsFdNotWritable, [dir]));
+    Exit;
+  end;
+  Result := True;
+end;
+
+procedure TTySelectPathForm.ReportProblem(const AMsg: string);
+begin
+  TyMessageDlg(AMsg, mtError, [mbOK]);
+end;
+
+function TTySelectPathForm.ConfirmChoice(const AMsg: string): Boolean;
+begin
+  Result := TyMessageDlg(AMsg, mtConfirmation, [mbYes, mbNo]) = mrYes;
+end;
+
+function TTySelectPathForm.TypedPath: string;
+var s, base: string;
+begin
+  Result := '';
+  if FPathEdit = nil then Exit;
+  s := Trim(FPathEdit.Text);
+  if s = '' then Exit;
+  if FilenameIsAbsolute(s) then Exit(s);
+  base := NodePath(FTree.FocusedNode);
+  if base = '' then Exit;
+  Result := CreateAbsolutePath(s, base);
+end;
+
+function TTySelectPathForm.PathEdit: TTyEdit;
+begin
+  Result := FPathEdit;
 end;
 
 function TTySelectPathForm.AddPathNode(AParent: PTyTreeNode; const AFullPath: string): PTyTreeNode;
@@ -435,7 +593,10 @@ var s: string; node: PTyTreeNode;
 begin
   if FSyncing then Exit;   // change came from TreeFocusChanged, not the user
   s := Trim(FPathEdit.Text);
-  if (s = '') or not DirectoryExists(s) then Exit;
+  { Only a full path is followed while typing. A relative one is resolved against the selected
+    folder on OK (TypedPath); following it here would move that folder under the user's fingers
+    -- and DirectoryExists would read it against the current directory. }
+  if (s = '') or not FilenameIsAbsolute(s) or not DirectoryExists(s) then Exit;
   node := RevealPath(s);
   if node <> nil then
     FTree.FocusedNode := node;   // fires TreeFocusChanged -> re-syncs the field (guarded)
@@ -495,12 +656,9 @@ begin
   { The path field is the source of truth: it mirrors the tree selection AND holds
     any directly typed/pasted path. Prefer it when it names an existing folder (covers
     a pasted path the tree could not reveal); otherwise fall back to the tree node. }
-  if FPathEdit <> nil then
-  begin
-    s := Trim(FPathEdit.Text);
-    if (s <> '') and DirectoryExists(s) then
-      Exit(s);
-  end;
+  s := TypedPath;
+  if (s <> '') and DirectoryExists(s) then
+    Exit(s);
   Result := NodePath(FTree.FocusedNode);
 end;
 
@@ -550,17 +708,43 @@ end;
 
 { TTySelectPathDialog }
 
-function TTySelectPathDialog.Execute: Boolean;
-var d: TTySelectPathForm;
+function TTySelectPathDialog.BuildForm: TTySelectPathForm;
+var btn: TTyButton;
 begin
-  // Inline the build/show (rather than call TySelectDirectory) so the wrapper's
-  // OnShow/OnClose/OnCanClose forward onto the form before ShowModal.
-  d := TyBuildSelectPathDialog(FCaption, FRoot);
+  Result := TyBuildSelectPathDialog(FCaption, FRoot);
+  Result.Options := FOptions;
+  Result.Directory := FDirectory;              // pre-select the current directory (in)
+  if ofShowHelp in FOptions then
+  begin
+    btn := Result.AddButton(rsMsgBtnHelp, mrNone);   // mrNone: the dialog stays open
+    btn.OnClick := @FormHelpClick;
+  end;
+  // The wrapper's OnShow/OnClose/OnCanClose forward onto the form before it shows.
+  TyForwardDialogEvents(Result, FOnShow, FOnClose, FOnCanClose);
+end;
+
+procedure TTySelectPathDialog.FormHelpClick(Sender: TObject);
+begin
+  if Assigned(FOnHelpClicked) then FOnHelpClicked(Self);
+end;
+
+function TTySelectPathDialog.Execute: Boolean;
+var
+  d: TTySelectPathForm;
+  dir: string;
+begin
+  d := BuildForm;
   try
-    d.Directory := FDirectory;              // pre-select the current directory (in)
-    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
     Result := (d.ShowModal = mrOK);
-    if Result then FDirectory := d.Directory;   // chosen directory (out)
+    if Result then
+    begin
+      dir := d.Directory;                      // chosen directory (out)
+      { LCL's TOpenDialog.DoExecute: links resolved unless ofNoResolveLinks (Unix; Windows
+        returns the name as it is). }
+      if (dir <> '') and not (ofNoResolveLinks in FOptions) then
+        dir := GetPhysicalFilename(dir, pfeOriginal);
+      FDirectory := dir;
+    end;
   finally d.Free; end;
 end;
 

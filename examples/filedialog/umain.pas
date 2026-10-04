@@ -11,9 +11,9 @@ unit umain;
   settings, exactly as you would wire them in your own form. The code below only fills in InitialDir
   (a runtime path) and handles the events.
 
-  "Open" demonstrates multi-select (Options = fdoFileMustExist + fdoPathMustExist + fdoAllowMultiSelect),
+  "Open" demonstrates multi-select (Options = ofFileMustExist + ofPathMustExist + ofAllowMultiSelect),
   starts on the second filter (FilterIndex = 2) and logs its OnShow / OnClose.
-  "Save" demonstrates a default extension, overwrite confirmation (fdoOverwritePrompt), a pre-filled
+  "Save" demonstrates a default extension, overwrite confirmation (ofOverwritePrompt), a pre-filled
   FileName -- and OnCanClose, which can refuse the OK and keep the dialog open (tick the check box).
   "Open Preview" hooks up a custom OnPreview covering three of the preview box's render entry points:
   ShowMessage (a 0-byte file), ShowCustom + OnPaintPreview (owner-drawn, for .exe/.zip and friends)
