@@ -60,6 +60,7 @@ type
     procedure TestFixedPitchOnlyListsTheSystemsFixedFamilies;
     procedure TestScalableOnlyDropsBitmapFonts;
     procedure TestLimitSizeClampsTheSize;
+    procedure TestLimitSizeOnADefaultSize;
     procedure TestLimitsCountOnlyUnderLimitSize;
     procedure TestNoSizeSelLeavesTheSizeAlone;
     procedure TestNoFaceSelLeavesTheFamilyAlone;
@@ -396,6 +397,33 @@ begin
     Spin.Value := 3;   // below the limit: the spin clamps it
     FForm.WriteTo(f);
     AssertEquals('the user cannot go below MinFontSize', 8, f.Size);
+  finally f.Free; end;
+end;
+
+procedure TFontDialogOptionsTest.TestLimitSizeOnADefaultSize;
+var f: TFont;
+begin
+  { Size 0 ("the default") is shown as 9. Limits that leave the 9 alone keep the 0; limits that
+    move it make the moved value the answer -- a 0 would be outside them. }
+  FDlg.MinFontSize := 8;
+  FDlg.MaxFontSize := 12;
+  FDlg.Font.Size := 0;
+  Build([fdEffects, fdLimitSize]);
+  AssertEquals('the default is shown as 9', 9, FForm.SizeValue);
+  f := TFont.Create;
+  try
+    f.Size := 0;
+    FForm.WriteTo(f);
+    AssertEquals('9 is inside 8..12: the default stays the default', 0, f.Size);
+  finally f.Free; end;
+  FDlg.MinFontSize := 10;
+  Build([fdEffects, fdLimitSize]);
+  AssertEquals('shown clamped to the bottom', 10, FForm.SizeValue);
+  f := TFont.Create;
+  try
+    f.Size := 0;
+    FForm.WriteTo(f);
+    AssertEquals('9 is below 10: the clamped size is written', 10, f.Size);
   finally f.Free; end;
 end;
 

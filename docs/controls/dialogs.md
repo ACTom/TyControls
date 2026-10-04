@@ -491,7 +491,7 @@ if DlgFont.Execute then
 | `fdEffects` | 起作用 | 有它才显示下划线、删除线和颜色按钮；没有时三者隐藏，确定后字体原来的下划线、删除线、颜色不变。 |
 | `fdFixedPitchOnly` | 起作用 | 只列等宽字体，判断方法和字体框的 `FixedPitchOnly` 一样（读系统的等宽标志，见 [TTyFontComboBox](fontcombobox.md#只列等宽字体)）。 |
 | `fdScalableOnly` | 起作用 | 不列点阵字体。只有 Windows 会把字体报成点阵（`Fixedsys`、`Terminal` 等）；GTK、Qt、Cocoa 下 LCL 不报点阵字体，列表不变。 |
-| `fdLimitSize` | 起作用 | 字号只能在 `MinFontSize`..`MaxFontSize` 里选；原字号超出范围时显示并返回范围内最近的值。 |
+| `fdLimitSize` | 起作用 | 字号只能在 `MinFontSize`..`MaxFontSize` 里选；原字号超出范围时显示并返回范围内最近的值。原字号是 0（用默认字号）时字号框显示 9：9 在范围内，用户不动就仍返回 0；9 不在范围内，就显示并返回范围内最近的值，不会返回范围外的 0。 |
 | `fdNoFaceSel` | 起作用 | 打开时不选中字体族；用户不选就不改 `Font.Name`。 |
 | `fdNoSizeSel` | 起作用 | 打开时字号框空着；用户不填就不改 `Font.Size`。 |
 | `fdNoStyleSel` | 起作用 | 粗体、斜体复选框打开时是灰的（不确定）；用户不点就保留原样式。 |

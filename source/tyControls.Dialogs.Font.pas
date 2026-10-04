@@ -25,6 +25,7 @@ type
     FPreviewRect: TRect;
     FSeedDisplay: Integer;   // display value shown in the spin at seed time
     FSeedSize: Integer;      // caller's original Size (may be <= 0 for "default")
+    FSeedClamped: Boolean;   // fdLimitSize moved the seed display (Configure)
     FSeedName: string;       // caller's family; the preview falls back to it (see PreviewFamily)
     FPreviewChanges: Integer;  // test seam, see PreviewChangeCount
     FSeedStyle: TFontStyles;   // the caller's styles: what a grey (untouched) box stands for
@@ -300,6 +301,7 @@ end;
 
 procedure TTyFontForm.Configure(AOptions: TFontDialogOptions; AMinSize, AMaxSize: Integer;
   const APreviewText: string);
+var shown: Integer;
 begin
   FOptions := AOptions;
   FPreviewText := APreviewText;
@@ -307,9 +309,11 @@ begin
   begin
     { The spin re-clamps its value on each range write; the clamped value is what the user
       sees, so it is the new "untouched" mark. }
+    shown := FSize.Value;
     if AMaxSize > 0 then FSize.MaxValue := AMaxSize;
     if AMinSize > 0 then FSize.MinValue := AMinSize;
     FSeedDisplay := FSize.Value;
+    FSeedClamped := FSeedDisplay <> shown;
   end;
   if fdNoFaceSel in AOptions then FList.ItemIndex := -1;
   if fdNoSizeSel in AOptions then FSize.ValueEmpty := True;
@@ -353,9 +357,12 @@ begin
   if not FSize.ValueEmpty then   // blank (fdNoSizeSel, untouched) -> the caller's size stays
   begin
     { Untouched -> the caller's original (0 stays 0) -- unless fdLimitSize clamped it, in
-      which case the clamped value is the answer. }
+      which case the clamped value is the answer. A "default" size (<= 0) is shown as 9; it
+      stays 0 only when the limits left that 9 alone, otherwise the size written would be
+      outside them. }
     restore := (FSize.Value = FSeedDisplay)
-      and (not (fdLimitSize in FOptions) or (FSeedSize <= 0) or (FSeedSize = FSeedDisplay));
+      and (not (fdLimitSize in FOptions) or ((FSeedSize <= 0) and not FSeedClamped)
+           or (FSeedSize = FSeedDisplay));
     if restore then AFont.Size := FSeedSize
     else AFont.Size := FSize.Value;
   end;
