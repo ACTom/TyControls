@@ -48,6 +48,9 @@ type
     Batch: Boolean;
     Deferred: Boolean;
     FromSlider: Integer;
+    { a slider's dispatch during a realtime drag: its payload carries
+      REALTIME_ANIMATION_CONFIG [Batch 96] }
+    Realtime: Boolean;
     Items: TTyDzActionItemArray;
   end;
 

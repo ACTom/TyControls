@@ -299,6 +299,21 @@ type
     its list tagged, and its coordinate systems [Batch 90] }
   TTyChartAnimPrev = record
     Valid: Boolean;
+    { A FULL UPDATE OF THE SAME OPTION (a legend toggle, a dataZoom)
+      [Batch 96]: a series it no longer draws kept its view, whose remove()
+      runs -- a bar fades, a line's or a scatter's symbols fade and shrink --
+      where notMerge disposes the view (gone at once). Series then carry
+      their models. }
+    FullUpdate: Boolean;
+    { A MERGE setOption [Batch 99, AN6]: the models it maps onto are the
+      same ones, so their views are too -- a series' as a full update's, the
+      markers' (component views) update instead of entering again }
+    Merge: Boolean;
+    { the views alive after the update: every series model of the new
+      option, shown or not, as ViewKey + #1 + type (a brand new one's key
+      'n:'-prefixed). An old view that is not among them was disposed --
+      gone at once; one that is, but draws nothing, is remove()d. }
+    AliveKeys: TTyStringArray;
     Series: TTyChartAnimSeriesArray;
     Elements: array of TTyChartElement;
     ToOldPoint: TTyChartAnimToPoint;
@@ -371,6 +386,11 @@ procedure TyAnimApply(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
   proxy, whose branch drew the keys it knows }
 procedure TyAnimApplyState(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy;
   ARole: Boolean);
+{ A markLine's numbers with its ends as AProxy has them now (shape.x1, y1,
+  x2, y2 of Line.updateData's tween; the layout's where it has none):
+  Line.beforeUpdate places the symbols and the label from them every frame
+  [Batch 99, AN6] }
+function TyAnimMarkLineG(const AEl: TTyChartElement; AProxy: TTyChartAnimProxy): TTyDoubleArray;
 { a packed colour as the state machine hands it to the engine: lifted (or
   not opaque) as zrender's rgba() string, else as '#rrggbb' }
 function TyAnimColorValue(AColor: TTyChartColor; ALifted: Boolean): TTyAnimValue;
@@ -932,7 +952,7 @@ begin
     carGaugeDetail: Result := 'gaugeDetail';
     carEffectSymbol: Result := 'effectSymbol';
     carRipple: Result := 'ripple';
-    carMarkPoint: Result := 'markPoint';
+    carMarkPoint, carMarkPointLabel: Result := 'markPoint';
     carMarkLine, carMarkLineFrom, carMarkLineTo, carMarkLineLabel: Result := 'markLine';
     carEndLabel: Result := 'lineClip';
   else
@@ -2026,12 +2046,7 @@ var
           if AEl.Caption.ValAnim and AC.Enabled then
             CountOn(p, oe, AEl, s, r, 'gaugeDetail', AC.Model);
         end;
-      { a marker's view is a component's: new under notMerge, so it enters
-        again (probed on the real build) }
-      carMarkPoint:
-        if Find(s, r, 'markPoint') = nil then ArmOne(AList, AAt, AEl, AC, True);
-      carMarkLine, carMarkLineFrom, carMarkLineTo, carMarkLineLabel:
-        if Find(s, r, 'markLine') = nil then ArmOne(AList, AAt, AEl, AC, True);
+      { the markers go through UpdateMarker [Batch 99] }
       carEffectSymbol:
         begin
           hasOld := (AOldRow >= 0) and OldEl(AOld, AOldRow, 'effectSymbol', oe);
@@ -2071,6 +2086,67 @@ var
           ArmOne(AList, AAt, AEl, AC, True);
         end;
     end;
+  end;
+
+  { ---- a marker of a kept series [Batch 99, AN6] ----
+    The marker views are components': a merge and a full update keep them
+    (prepareView finds the same model), a notMerge makes new ones (probed:
+    the markers enter again). A kept MarkPointView updates its SymbolDraw
+    -- the symbol path's scale at the marker's row, the group's x / y with
+    none, the style set at once (Symbol.updateData, SymbolDraw.updateData)
+    -- and a kept MarkLineView its LineDraw: the line's ends at the row
+    (Line.updateData), the symbols and the label following them every frame
+    (Line.beforeUpdate). Both on the MARKER's model. Rows are paired by the
+    marker's data index. }
+  procedure UpdateMarker(AAt: Integer; const AEl: TTyChartElement;
+    const AC: TTyChartAnimSeries; AOld, ARow: Integer);
+  var
+    props, oprops: TTyAnimProps;
+    oe: TTyChartElement;
+    rk: string;
+  begin
+    rk := TyChartAnimRoleKey(AEl);
+    { once a marker: a markLine's four elements share a proxy, a markPoint's
+      label rides its symbol's }
+    if Find(s, ARow, rk) <> nil then Exit;
+    if AEl.Anim.Role = carMarkPointLabel then Exit;
+    if not (APrev.FullUpdate or APrev.Merge) or not OldEl(AOld, ARow, rk, oe) then
+    begin
+      ArmOne(AList, AAt, AEl, AC, True);
+      Exit;
+    end;
+    if AEl.Anim.Role = carMarkPoint then
+    begin
+      props := TyAnimProps([Num1('scaleX', AEl.Anim.G[2]), Num1('scaleY', AEl.Anim.G[3]),
+        Num1('style.opacity', AEl.Anim.G[4]), Num1('x', AEl.Anim.G[0]),
+        Num1('y', AEl.Anim.G[1])]);
+      oprops := TyAnimProps([Num1('scaleX', oe.Anim.G[2]), Num1('scaleY', oe.Anim.G[3]),
+        Num1('style.opacity', oe.Anim.G[4]), Num1('x', oe.Anim.G[0]),
+        Num1('y', oe.Anim.G[1])]);
+      p := Take(AOld, ARow, s, ARow, 'markPoint', oprops, props, True);
+      { an entering proxy was made without the group's place }
+      Ensure(p, 'x', oe.Anim.G[0]);
+      Ensure(p, 'y', oe.Anim.G[1]);
+      p.SetFinal(props);
+      p.SetNum('style.opacity', AEl.Anim.G[4]);
+      TyUpdateProps(p, TyAnimProps([props[0], props[1]]), AC.MarkPoint, TyAnimCallAt(ARow));
+      TyUpdateProps(p, TyAnimProps([props[3], props[4]]), AC.MarkPoint, TyAnimCallNoIndex);
+      Exit;
+    end;
+    props := TyAnimProps([Num1('shape.x1', AEl.Anim.G[0]), Num1('shape.y1', AEl.Anim.G[1]),
+      Num1('shape.x2', AEl.Anim.G[2]), Num1('shape.y2', AEl.Anim.G[3]),
+      Num1('shape.percent', 1)]);
+    oprops := TyAnimProps([Num1('shape.x1', oe.Anim.G[0]), Num1('shape.y1', oe.Anim.G[1]),
+      Num1('shape.x2', oe.Anim.G[2]), Num1('shape.y2', oe.Anim.G[3]),
+      Num1('shape.percent', 1)]);
+    p := Take(AOld, ARow, s, ARow, 'markLine', oprops, props, True);
+    Ensure(p, 'shape.x1', oe.Anim.G[0]);
+    Ensure(p, 'shape.y1', oe.Anim.G[1]);
+    Ensure(p, 'shape.x2', oe.Anim.G[2]);
+    Ensure(p, 'shape.y2', oe.Anim.G[3]);
+    p.SetFinal(props);
+    TyUpdateProps(p, TyAnimProps([props[0], props[1], props[2], props[3]]), AC.MarkLine,
+      TyAnimCallAt(ARow));
   end;
 
   { ---- the line: lineAnimationDiff and the tween of its points ---- }
@@ -2411,6 +2487,13 @@ begin
         if Find(s, r, role) = nil then ArmOne(AList, i, el, ASeries[s]);
         Continue;
       end;
+      { THE MARKERS, by their own data index [Batch 99] }
+      if el.Anim.Role in [carMarkPoint, carMarkPointLabel, carMarkLine, carMarkLineFrom,
+        carMarkLineTo, carMarkLineLabel] then
+      begin
+        UpdateMarker(i, el, ASeries[s], oldOf[s], r);
+        Continue;
+      end;
       if (el.Anim.Role in [carLineRun, carLineArea]) then q := -1
       else if (r >= 0) and (r <= High(rowMap[s])) then q := rowMap[s][r]
       else q := -1;
@@ -2430,6 +2513,61 @@ begin
         for k := 0 to High(diffs[s]) do
           if diffs[s][k].Kind = ddkRemove then
             Leave(s, oldOf[s], diffs[s][k].OldIdx, ASeries[s].Model);
+    { A VIEW A FULL UPDATE NO LONGER RENDERS (the legend switched its series
+      off) is remove()d, not disposed [Batch 96]: BarView._clear fades every
+      bar when its model animates, a line's and a scatter's
+      SymbolDraw.remove(true) fades and shrinks every symbol (the polyline
+      goes at once), every other view empties at once }
+    { [Batch 99] a merge's too, where the view lives on: its model is still
+      there with the same id and type, and does not ask for a new view. A
+      view whose model a replaceMerge removed, whose type changed, or whose
+      model is brand new is disposed: gone at once }
+    if APrev.FullUpdate or APrev.Merge then
+      for o := 0 to High(APrev.Series) do
+      begin
+        if not APrev.Series[o].Present then Continue;
+        done := False;
+        for s := 0 to High(oldOf) do
+          if oldOf[s] = o then done := True;
+        if done then Continue;
+        done := True;
+        for k := 0 to High(APrev.AliveKeys) do
+          if APrev.AliveKeys[k] = APrev.Series[o].ViewKey + #1 + APrev.Series[o].SeriesType then
+            done := False;
+        if done then Continue;
+        role := APrev.Series[o].SeriesType;
+        if (role <> 'bar') and (role <> 'line') and (role <> 'scatter') then Continue;
+        if not TyAnimIsEnabled(APrev.Series[o].Model) then Continue;
+        for k := 0 to High(APrev.Series[o].Keys) do
+          Leave(o, o, k, APrev.Series[o].Model);
+      end;
+    { THE STATES' OWN PROXIES of a reused element go with it [Batch 96]: a
+      line symbol's path, a line's polyline and area, the other types' own
+      ('st:' roles, by raw index) -- upstream's element is the same one and
+      keeps its state lists, so a held hover does not transition again }
+    for i := 0 to oldItems.Count - 1 do
+    begin
+      p := TTyChartAnimProxy(oldItems[i]);
+      if p.FClaimed or (Copy(p.FRole, 1, 3) <> 'st:') then Continue;
+      for s := 0 to High(ASeries) do
+      begin
+        if (not upd[s]) or (oldOf[s] <> p.FSeries) then Continue;
+        if p.FIndex < 0 then
+        begin
+          Carry(p, s, -1);
+          Break;
+        end;
+        r := -1;
+        for k := 0 to High(diffs[s]) do
+          if (diffs[s][k].Kind = ddkUpdate)
+            and (diffs[s][k].OldIdx <= High(APrev.Series[oldOf[s]].Raws))
+            and (APrev.Series[oldOf[s]].Raws[diffs[s][k].OldIdx] = p.FIndex)
+            and (diffs[s][k].NewIdx <= High(ASeries[s].Raws)) then
+            r := ASeries[s].Raws[diffs[s][k].NewIdx];
+        if r >= 0 then Carry(p, s, r);
+        Break;
+      end;
+    end;
     { EVERYTHING ELSE OF THE OLD RENDER IS GONE AT ONCE }
     for i := 0 to oldItems.Count - 1 do
     begin
@@ -2674,6 +2812,18 @@ begin
     AEl.Caption.Text := AProxy.FText;
 end;
 
+function TyAnimMarkLineG(const AEl: TTyChartElement; AProxy: TTyChartAnimProxy): TTyDoubleArray;
+var k: Integer;
+begin
+  SetLength(Result, Length(AEl.Anim.G));
+  for k := 0 to High(AEl.Anim.G) do Result[k] := AEl.Anim.G[k];
+  if AProxy = nil then Exit;
+  Result[0] := NumOr(AProxy, 'shape.x1', Result[0]);
+  Result[1] := NumOr(AProxy, 'shape.y1', Result[1]);
+  Result[2] := NumOr(AProxy, 'shape.x2', Result[2]);
+  Result[3] := NumOr(AProxy, 'shape.y2', Result[3]);
+end;
+
 procedure TyAnimApply(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
 var
   x, y, fx, fy, a, d, c, s, cx, cy, tx, ty, lx, ly, lx1, ly1, bw, bh: Double;
@@ -2681,6 +2831,7 @@ var
   v: TTyAnimValue;
   i, n, ah, av, ah1, av1, flags: Integer;
   pts: TTyPointFArray;
+  mg: TTyDoubleArray;
 begin
   if (AProxy = nil) or AProxy.AtFinal then Exit;
   case AEl.Anim.Role of
@@ -2858,30 +3009,47 @@ begin
         begin
           TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], fx, fy);
           AEl.Style.Alpha := Min(1.0, a);
+          { the group's place, where a kept view moves it [Batch 99] }
+          TyShapeMove(AEl.Shape, NumOr(AProxy, 'x', AEl.Anim.G[0]) - AEl.Anim.G[0],
+            NumOr(AProxy, 'y', AEl.Anim.G[1]) - AEl.Anim.G[1]);
         end;
       end;
+    carMarkPointLabel:
+      { the symbol path's text goes with its group [Batch 99] }
+      MoveCaption(AEl, NumOr(AProxy, 'x', AEl.Anim.G[0]) - AEl.Anim.G[0],
+        NumOr(AProxy, 'y', AEl.Anim.G[1]) - AEl.Anim.G[1]);
     carMarkLine:
       begin
-        { Line's buildPath at percent: the segment to x1 * (1 - p) + x2 * p }
+        { Line's buildPath at percent: the segment to x1 * (1 - p) + x2 * p
+          -- of its ends as they are now [Batch 99] }
         a := AProxy.Num('shape.percent');
+        mg := TyAnimMarkLineG(AEl, AProxy);
         if Length(AEl.Shape.Points) = 2 then
-          AEl.Shape.Points := [AEl.Shape.Points[0],
-            TyPointF(AEl.Anim.G[4] * (1 - a) + AEl.Anim.G[6] * a,
-              AEl.Anim.G[5] * (1 - a) + AEl.Anim.G[7] * a)];
+          AEl.Shape.Points := [
+            TyPointF(AEl.Anim.G[4] + (mg[0] - AEl.Anim.G[0]),
+              AEl.Anim.G[5] + (mg[1] - AEl.Anim.G[1])),
+            TyPointF((AEl.Anim.G[4] + (mg[0] - AEl.Anim.G[0])) * (1 - a)
+              + (AEl.Anim.G[6] + (mg[2] - AEl.Anim.G[2])) * a,
+              (AEl.Anim.G[5] + (mg[1] - AEl.Anim.G[1])) * (1 - a)
+              + (AEl.Anim.G[7] + (mg[3] - AEl.Anim.G[3])) * a)];
         if not (a > 0) then MakeInkless(AEl);
       end;
     carMarkLineFrom, carMarkLineTo:
       begin
         { Line.beforeUpdate: the end symbols at pointAt(0) and
-          pointAt(percent), scaled by the percent }
+          pointAt(percent), scaled by the percent -- of the ends now }
         a := AProxy.Num('shape.percent');
+        mg := TyAnimMarkLineG(AEl, AProxy);
         if not (a > 0) then
           MakeInkless(AEl)
         else if AEl.Anim.Role = carMarkLineFrom then
-          TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], a, a)
+        begin
+          TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1], a, a);
+          TyShapeMove(AEl.Shape, mg[0] - AEl.Anim.G[0], mg[1] - AEl.Anim.G[1]);
+        end
         else
         begin
-          TyMkLineAt(AEl.Anim.G, a, tx, ty, lx, ly, ah, av);
+          TyMkLineAt(mg, a, tx, ty, lx, ly, ah, av);
           TyShapeScaleAbout(AEl.Shape, AEl.Anim.G[2], AEl.Anim.G[3], a, a);
           TyShapeMove(AEl.Shape, tx - AEl.Anim.G[2], ty - AEl.Anim.G[3]);
         end;
@@ -2891,7 +3059,8 @@ begin
         { and the label, placed for the percent: moved by where it is now
           less where it rests, re-aligned where the author did not align it }
         a := AProxy.Num('shape.percent');
-        TyMkLineAt(AEl.Anim.G, a, tx, ty, lx, ly, ah, av);
+        mg := TyAnimMarkLineG(AEl, AProxy);
+        TyMkLineAt(mg, a, tx, ty, lx, ly, ah, av);
         TyMkLineAt(AEl.Anim.G, 1, tx, ty, lx1, ly1, ah1, av1);
         flags := Round(AEl.Anim.G[9]);
         x := AEl.Caption.X + (lx - lx1);

@@ -8759,7 +8759,7 @@ AN2 之后，第二次设 Option 仍被当成一次新的入场：每根柱子�
 ### 推迟与偏差
 
 - **AN4**：标签从旧布局位移（`LabelManager` 的 oldLayout 过渡：饼标签的 x/y、引导线的点）、`valueAnimation`（`bar-label-update` 的文字）。测试从 clip 数里扣掉它们的动画器。
-- **`groupTransition` 不做**：控件只有 notMerge，上游 notMerge 下坐标轴不过渡（见上）。将来若加 merge 式的 setOption，需要把坐标轴画进动态层、按 `anid` 建代理。（第 95 批：merge 式的 setOption 已有（§130），“控件只有 notMerge”这条理由不再成立；坐标轴仍没有代理，合并下轴直接到终值，仍未做。）
+- **[第 96 批：同一 Option 的整体更新（图例、dataZoom）已做，见 §131；notMerge 下仍不过渡，与上游一致。]** **`groupTransition` 不做**：控件只有 notMerge，上游 notMerge 下坐标轴不过渡（见上）。将来若加 merge 式的 setOption，需要把坐标轴画进动态层、按 `anid` 建代理。（第 95 批：merge 式的 setOption 已有（§130），“控件只有 notMerge”这条理由不再成立；坐标轴仍没有代理，合并下轴直接到终值，仍未做。）
 - **阶梯线**的更新直接到终值（上游补间阶梯化后的点、符号跟 `__points`，没移植）；`step` 改变时上游会整条重新入场，这里同样直接到终值。
 - 漏斗的更新只补间不透明度，多边形的点不补间；仪表盘、雷达、K 线的更新按 3B 的规则做了，没有 fixture 用例。仪表盘「没有旧指针时从 startAngle 当 rotation」的怪癖没有覆盖。
 - 端口不构建完全被裁掉的柱子，所以「旧的被裁掉、新的露出来」走的是「旧行无元素」那条路：从零长出，上游是从裁到边上的形状补间。
@@ -8795,7 +8795,7 @@ AN2、AN3 之后还有一圈动画没接：柱子标签的数值滚动、仪表�
 - **代理加三样**（`AnimView`）：计数（`FVal*`、`ValueDuring`、当前文字 `Text`）；末端标签记录（`TTyChartAnimEndLabel`，挂在裁剪代理上，`EndLabelDuring` / `EndLabelDone` 照抄 `_endLabelOnDuring` 与动画记录）；`MergeFinal` 让一个代理在入场之后再加键。新角色：`gaugeDetail`、`effectSymbol`、`ripple0..n`（键带序号，`TyChartAnimRoleKey`）、`markPoint`、`markLine`（线、两端符号、标签共用一个代理，`shape.percent`）、末端标签读裁剪代理。`TyAnimInterpolateValue` 是 `interpolateRawValues` 的数值分支。
 - **构建器打标签**：`TTyElementCaption` 多了 `ValAnim/ValHas/ValNum/ValTpl/ValHasPrec/ValPrec`，文字模板里用 `#1` 占住值的位置（`TyLabelValueTemplate`：`TyLabelText` 加了「值的文字」覆盖参数，formatTpl 的 `{c}` 就落在那里；handler formatter 不滚动）；柱的 `ItemCaption` 记值，`label.valueAnimation/precision` 读进 `TTyLabelSpec`；仪表盘读数（`TyGaugeFormatTpl`）同理。markLine 的四个元素带端点、距离、位置码、dy、切线方向；`TyMkLineAt` 是 `Line.beforeUpdate` 对直线在任意 percent 的那一段（终点、标签位置、对齐）。effectScatter 的涟漪带中心、序号、个数、周期（ms）、缩放、`idx/count`、符号类型，`rippleEffect.period/scale` 读进视觉（含数据项覆盖）。
 - **末端标签**是新元素（端口以前没有画 `endLabel`）：控件在折线的标记之后建它——最后一个合法点、`during(1)` 的位置与文字（`LinePath` 新增 `TyPathPointOn`、`TyEndLabelStep`、`TyLastLegalRow`，traps 屏蔽），z2 200，主题字体，墨色按系列色作外侧标签；datum 为空，免得标签展开把它当宿主再展开一次。
-- **ArmUpdate**：保留下来的饼标签按旧布局位移；引导线按旧点补间；柱标签、仪表盘读数按上面的规则计数（进行中的接着插值，值没变不动）；标注一律重新入场；effectScatter 的符号按散点规则更新，涟漪按 DIFFICULT_PROPS 决定接着跑还是重启；裁剪代理的末端标签记录在更新时停用。
+- **[第 99 批：“标注一律重新入场”只在 notMerge 下成立；合并与整体更新下标注视图留着，markPoint 的组与 markLine 的两端补间，见 §134。]** **ArmUpdate**：保留下来的饼标签按旧布局位移；引导线按旧点补间；柱标签、仪表盘读数按上面的规则计数（进行中的接着插值，值没变不动）；标注一律重新入场；effectScatter 的符号按散点规则更新，涟漪按 DIFFICULT_PROPS 决定接着跑还是重启；裁剪代理的末端标签记录在更新时停用。
 - **持续动画与分层**：涟漪不停，图表一直 `AnimLive`。只剩循环 clip 时（`AnimLoopOnly`）进入 `AnimContinuous`：静态层重画一次、画除涟漪与 effectScatter 符号（及挂在它们上的标签）之外的一切，动态层每帧只画这三样（`AnimPart`）；入场或更新还在跑时仍按 AN2 的方式整体进动态层。
 - **指示器**：独立的 `FPtrAnim` 驱动，按轴（`xAxis0`）一个代理，键是上游指示器的形状（line 的 `x1/y1/x2/y2`，shadow 的 `x/y/width/height`）；`MouseMove` 解析出命中后 `PtrAnimSync`，`PaintAxisPointers` 画在代理当前的位置，标签跟着线走。指示器动画不碰系列分层，定时器在任一驱动有 clip 时开。`camOff` 不建代理（直接跳）。
 - **顺带修的**：饼标签的 `cos/sin/atan2` 改用 V8 的（`TyJsCos/TyJsSin/TyJsAtan2`）——标签要从旧位置逐位补间，FPC 的 libm 差一个 ulp 就对不上；`label.valueAnimation` 以前对所有系列都关掉淡入，现在只对柱生效；effectScatter 的标签加入 LabelManager 淡入。
@@ -8826,7 +8826,7 @@ AN2、AN3 之后还有一圈动画没接：柱子标签的数值滚动、仪表�
 
 ### 推迟与偏差
 
-- **dataZoom / 漫游的载荷动画不做**：上游这时是同一个 Option 的 merge 式更新，坐标轴走 `groupTransition`，系列与轴一起补间 100 ms。端口只有 notMerge 的更新路径，也没有坐标轴代理（AN3 已推迟）；只让系列补间、轴跳到终值会让柱子与刻度错位，比不动更糟。等做 merge 式更新与 `groupTransition` 时一起做。上游 fixture 未录。（第 95 批：merge 式更新已有（§130），`groupTransition` 仍未做，这一条仍推迟。）
+- **[第 96 批：已做，见 §131。]** **dataZoom / 漫游的载荷动画不做**：上游这时是同一个 Option 的 merge 式更新，坐标轴走 `groupTransition`，系列与轴一起补间 100 ms。端口只有 notMerge 的更新路径，也没有坐标轴代理（AN3 已推迟）；只让系列补间、轴跳到终值会让柱子与刻度错位，比不动更糟。等做 merge 式更新与 `groupTransition` 时一起做。上游 fixture 未录。（第 95 批：merge 式更新已有（§130），`groupTransition` 仍未做，这一条仍推迟。）
 - **指示器标签**：上游对标签的 x/y 单独以同一时序补间；端口的标签框按皮肤排版，跟着线走，不与上游逐位比较。轴上 `axisPointer` 组件根的动画键（全局 `axisPointer` 选项）不读；悬停高亮的 stateTransition（AN3b）不在这批。
 - **末端标签**：状态里的 `endLabel.show`、富文本末端标签（画成一段）、阶梯线（沿未阶梯化的路径走）、只有一个点的折线（没有 run，不画）不支持；值是数组的数据项不滚动（文字停在终值）。浏览器里路径数据画过一次后会转成 Float32Array，平滑线的 `getPointOn` 在浏览器里读的是单精度控制点；oracle（不绘制）与端口都是双精度。
 - **计数**：handler formatter、富文本标签、数组原始值不滚动；静止时画的是静态列表的文字（`12.50` 这样的原样文本），上游 during(1) 之后是 `12.5`。
@@ -8878,7 +8878,7 @@ B1、B2 之后，图例仍然只是一张画：`legend.selected` 与 single 模�
 
 ### 推迟与偏差
 
-- **图例切换不动画**：整体更新走 Relayout 的「直接到终值」分支并停掉进行中的动画。上游此时被关掉的柱子淡出（`BarView._clear` 的 removeElementWithFadeOut）、重新显示的系列作为新视图入场、留下的补间——要接 AN3 的更新布防，并区分「视图被 remove」与 notMerge 的删除，留给 AN 系列。
+- **[第 96 批：已做，见 §131。]** **图例切换不动画**：整体更新走 Relayout 的「直接到终值」分支并停掉进行中的动画。上游此时被关掉的柱子淡出（`BarView._clear` 的 removeElementWithFadeOut）、重新显示的系列作为新视图入场、留下的补间——要接 AN3 的更新布防，并区分「视图被 remove」与 notMerge 的删除，留给 AN 系列。
 - **selector 按钮（全选/反选）和滚动图例（`type: 'scroll'`）的翻页**没做；对应的动作（legendAllSelect / legendInverseSelect）已经在。
 - 图例项级的 `inactiveColor` 等（`legend.data[i]` 对象里写的）不读，只读图例级；图例项的 `textStyle` 同样只读图例级（第 83 批起就是）。
 - 图标描边只认作者写的 `itemStyle.borderColor / borderWidth` 与饼、漏斗的默认值；K 线等类型自带的默认边框（上游 K 线图例图标会有 2 宽的边）没有建模；折线自绘图标的规则线未选中时用 `lineStyle.inactiveColor / inactiveWidth`，标记点仍是 inactive 墨。
@@ -8933,7 +8933,7 @@ Q7 在 3.1 承诺了「入场动画和状态过渡」。AN2–AN4 把前一半�
 
 ### 推迟与偏差
 
-- **新选项后悬停不保留**：B1 在设 Option 时清掉了状态记录（`FSt := nil`），上游 notMerge 下复用的元素带着 hoverState 和 hbo 位。`bar-hover-notmerge` 里上游高亮一直保持到 downplay，端口在 400 ms 的整体更新时带过渡退回常态；测试只比到 400 ms。选中的丢失与上游一致（新模型没有 selectedMap）。这是 B3 的「重渲染语义」要解决的。
+- **[第 96 批：复用的元素保留悬停与 hbo，见 §131。]** **新选项后悬停不保留**：B1 在设 Option 时清掉了状态记录（`FSt := nil`），上游 notMerge 下复用的元素带着 hoverState 和 hbo 位。`bar-hover-notmerge` 里上游高亮一直保持到 downplay，端口在 400 ms 的整体更新时带过渡退回常态；测试只比到 400 ms。选中的丢失与上游一致（新模型没有 selectedMap）。这是 B3 的「重渲染语义」要解决的。
 - **悬停层**只做了「不过渡」这一半：上游在悬停层里只改样式（饼不放大、符号不缩放、z2 不变），端口照常改；元素数用显示列表的长度近似 storage 里的非组元素数。
 - **标签的不透明度**在代理上是相对 rest 的倍数（与淡入一致）：rest 不透明度为 1 时与上游逐位相同，否则数值成比例、画面相同。
 - 改尺寸、换主题等重新布局（`AnimDropAll`）丢掉代理：进行中的状态过渡直接到终值（上游会接着跑）。
@@ -8976,7 +8976,7 @@ Q7 在 3.1 承诺了「入场动画和状态过渡」。AN2–AN4 把前一半�
 - **控件**：
   - `SetOption(AJson, ANotMerge = False)`：notMerge 就是上游的 notMerge——**同样的文本也重来**；否则 `MergeOption`。
   - `MergeOption(AJson): Boolean`：第一次是 init；否则先记下旧的视图键、合并、把 `Option` 属性的文本换成合并后的 `GetOptionJson`、按报告处理树外的状态、置 `FAnimPending`（这是一次更新）、重画。
-  - 树外的状态按位置的命运处理（`MergeKeepStates`）：留下来的系列（kept / merged）保留力导向的 preservedPoints、roam 的写回、选中模型、树图视图的上一个盒子；合并写了 `center` 或 `zoom` 的，roam 状态里对应的那一半换成选项里的（`MergeRoamOverride`，读法与系列的 spec 相同）；新建的系列这些都清掉。树图的展开状态**全部清掉**（每次都访问系列、重建数据）。dataZoom：动作留下的窗口在合并写了这个 dataZoom 的范围（start/end/startValue/endValue/rangeMode 任一）时先写回树里（`MergeBefore`，start/end 百分比、两个值置 null，和 setRawRange 一样），再合并，再按模式规则置 null；没写的保留窗口；数组按新的个数伸长、新的没有窗口。悬停、按下、拖动、状态记录照 notMerge 清空；`FLegendLoaded := False`（图例每次都被访问，single 模式重新解决，`selected` 本身在树里、已合并）。
+  - **[第 99 批：“悬停、按下、拖动、状态记录照 notMerge 清空”中的状态记录改为在合并前取走、按复用的行带回（悬停、hbo、选中都留着），见 §134。]** 树外的状态按位置的命运处理（`MergeKeepStates`）：留下来的系列（kept / merged）保留力导向的 preservedPoints、roam 的写回、选中模型、树图视图的上一个盒子；合并写了 `center` 或 `zoom` 的，roam 状态里对应的那一半换成选项里的（`MergeRoamOverride`，读法与系列的 spec 相同）；新建的系列这些都清掉。树图的展开状态**全部清掉**（每次都访问系列、重建数据）。dataZoom：动作留下的窗口在合并写了这个 dataZoom 的范围（start/end/startValue/endValue/rangeMode 任一）时先写回树里（`MergeBefore`，start/end 百分比、两个值置 null，和 setRawRange 一样），再合并，再按模式规则置 null；没写的保留窗口；数组按新的个数伸长、新的没有窗口。悬停、按下、拖动、状态记录照 notMerge 清空；`FLegendLoaded := False`（图例每次都被访问，single 模式重新解决，`selected` 本身在树里、已合并）。
   - `GetOptionJson`、`ComponentModelId / ComponentModelName / ComponentModelSubType`。
   - **身份从 keys 来**：`AnimViewKeys`（更新动画配对新旧系列视图）改成模型 id；`SeriesModelId`（事件的 seriesId、图例悬停的 excludeSeriesId）先取模型 id；`SeriesNameOf` 在选项没写名字时先用模型留下的非虚名（类型改变后系列只剩新选项，名字仍是原来的——图例仍叫它 S，点 S 仍能关掉它）。
 
@@ -8993,7 +8993,7 @@ Q7 在 3.1 承诺了「入场动画和状态过渡」。AN2–AN4 把前一半�
 
 合并是一次更新。系列视图按 `(模型 id, 类型)` 配对，id 在合并里不变：改了名的系列（id 仍是 `'\0A\00'`）保留视图、从原来的柱高补间过去；同样的改名用 notMerge 是新视图（id `'\0B\00'`）、从零长出来（手写测试与 fixture 的 `series-view-kept-on-rename` 一致）。fixture 每一步都记下上游复用了哪个视图，测试逐系列核对“上游复用 ⇔ 端口的 (id, 子类型) 配得上”。
 
-**坐标轴的 `groupTransition` 仍然不做**（§126 推迟时的理由是“控件只有 notMerge，上游 notMerge 下坐标轴不过渡”——这个理由不成立了，原处已标注）：上游合并时坐标轴、网格这些组件视图保留，`groupTransition` 让刻度、标签、分隔线跟着新范围补间。端口没有坐标轴代理，合并下的轴直接跳到终值，系列照常补间——和 notMerge 下一样，与上游合并的画面有差别（AN 系列另立任务）。同理，标注（markPoint/markLine/markArea）在合并下上游是同一个视图、走更新，端口仍按 AN4 的规则每次重新入场；dataZoom / roam 的载荷动画（§127）也仍未做。
+**[第 99 批：已做——合并下坐标轴按视图键（模型 id + 子类型、非 brand new）走 groupTransition，标注走更新，见 §134；dataZoom / roam 的载荷动画第 96 批已做。]** **坐标轴的 `groupTransition` 仍然不做**（§126 推迟时的理由是“控件只有 notMerge，上游 notMerge 下坐标轴不过渡”——这个理由不成立了，原处已标注）：上游合并时坐标轴、网格这些组件视图保留，`groupTransition` 让刻度、标签、分隔线跟着新范围补间。端口没有坐标轴代理，合并下的轴直接跳到终值，系列照常补间——和 notMerge 下一样，与上游合并的画面有差别（AN 系列另立任务）。同理，标注（markPoint/markLine/markArea）在合并下上游是同一个视图、走更新，端口仍按 AN4 的规则每次重新入场；dataZoom / roam 的载荷动画（§127）也仍未做。
 
 ### 基准
 
@@ -9029,10 +9029,68 @@ Q7 在 3.1 承诺了「入场动画和状态过渡」。AN2–AN4 把前一半�
 - `emphasis.label.show` 上游只在 init 时由 `label.show` 补（defaultEmphasis），合并改了 `label.show` 之后它保持 init 时的值；端口在读的时候从当前的 `label.show` 补。
 - 系列从 dataset 维度自动取的名字（autoSeriesName）不进 keys；合并时按名字找人用的是写过的名字或虚名，维度名变了以后与上游可能不同。
 - 选中：合并后留下来的系列保留选中模型，但 `selectedMode` 的改变和新数据里 `selected: true` 的补选（`_initSelectedMapFromData`）不重读。
-- 合并后的悬停状态、强调状态记录照 notMerge 清空，下一次移动重新建立；上游复用的元素会带着状态。
+- **[第 99 批：已做，复用的行带着悬停、hbo 与选中，悬停目标也认回复用的元素，见 §134。]** 合并后的悬停状态、强调状态记录照 notMerge 清空，下一次移动重新建立；上游复用的元素会带着状态。
 - 拒绝的合并（重复 id）整个不生效；上游在断言处抛错，模型可能已经部分合并。
 - `GetOptionJson` 是原始合并层：没有主题和默认值、没有模型 id、没有访问过但没写的主类型（上游是 `[]`），根上键的顺序是树里的顺序（上游按拓扑访问顺序）。上游 getOption 中 dataZoom 的 start/end 是计算出的窗口，端口树里是作者写的（动作的窗口在树外，直到合并写到它）。
 - 未知的系列类型：上游找不到类时跳过这一项（后面的下标前移）；端口照常占位置。
+
+## 131. Tier 1 第九十六批：整体更新过渡（AN5，2026-10-01）
+
+AN2–AN4、AN3b 之后，同一个 Option 上的整体更新仍然一帧切过去：图例关掉一个系列，它的柱子当场消失、剩下的堆叠当场落下、值轴的刻度当场换；dataZoom 拖一下窗口，柱子和刻度同样当场跳。上游不是这样——这些都是同一个 Option 的 `update`，系列视图拿新数据跟旧数据做差分，被 `chart.remove()` 的视图淡出，坐标轴走 `groupTransition`，而 dataZoom 的动作还在载荷里带着自己的动画时序。这一批把这四件事接上：图例切换（§128 的偏差）、dataZoom 与漫游的载荷动画（§127 推迟的）、坐标轴的 `groupTransition`（§126 推迟的），以及新选项之后悬停不保留（§129 的偏差）。
+
+### 上游的做法（`core/echarts.ts` 的 update 与 render、`util/graphic.ts`、`animation/basicTransition.ts`、`component/axis/*`、`component/dataZoom/*`；源码逐行核过，关键处在真 dist 上探针确认）
+
+- **整体更新**：图例的五个动作和 `dataZoom` 都是默认的 `update: 'update'`，`render` 先渲染组件、再渲染每个显示中的系列，最后对本次没有渲染到的系列视图调 `chart.remove()`——视图**不销毁**（只有 setOption 的 prepareView 才销毁）。于是：
+  - 被图例关掉的柱系列走 `BarView._clear(this._model)`：模型 `isAnimationEnabled()` 时每根柱子 `removeElementWithFadeOut`（200 ms、`cubicOut`、标签当即去掉），否则 `removeAll`；`_data` 置空。折线的 `remove()` 把折线与面积当即 `removeAll`，符号走 `SymbolDraw.remove(true)`：每个符号 `fadeOut`，路径的不透明度和缩放一起到 0；散点同样。K 线、热力图、雷达、涟漪散点（`fadeOut` 直接回调）当即消失。
+  - 重新打开的系列：视图的 `_data` 是空的，所有行都是新增，按**入场**时序进来——柱子从 0 长出、折线的裁剪矩形重新长、符号重新弹出。探针：折线的符号**被复用**——`SymbolDraw.remove` 不清 `_data`，重新显示时旧符号按差分更新回来，组的缩放 0 → 1 照首次渲染的规则弹出，路径的缩放与不透明度直接设回。
+  - 其余系列照常差分：堆叠的另一层以**更新**时序落到新的底上；并排的柱子变宽、挪位；饼按名字过滤，被关掉的那一片淡出，其余的角度补间，标签从旧布局挪过去，重新打开的一片只扫 `endAngle`、更新时序，它的标签和引导线按 LabelManager 首次出现淡入、描入。
+- **[第 99 批：“只有同一个 Option 的整体更新才有”——合并式 setOption 也有，模型与视图都留着；被替换、类型变了的轴是新视图，见 §134。]** **坐标轴的 groupTransition**（`util/graphic.ts:406-447`）：`CartesianAxisView.render` 留着旧的 `_axisGroup`、建新的，然后对新组里每个有 `anid` 的非组元素，若旧组有同 anid 的元素，就先 `attr(旧元素当前的 x、y、rotation、shape)`、再 `updateProps` 到自己的——坐标轴模型（自己的选项 → 根 → 全局默认，即 500 ms `cubicInOut`），**不带 dataIndex**。没有配对的新元素当即出现，没有配对的旧元素当即消失；样式不动画。anid：轴线 `'line'`，刻度 `'ticks_' + 刻度值`，标签 `'label_' + 刻度值`，分隔线 `'line_' + 刻度值`（另有次刻度、次分隔线、分隔区域、轴名，见偏差）；刻度值按 JavaScript 的数字转字符串，类目轴是序号，带 boundaryGap 时最后多一条 `最后类目 + 1`。几何：轴线是 `(extent[0], 0)`、`(extent[1], 0)` 经轴组矩阵，刻度是 `(coord, 0)`、`(coord, tickDirection × length)` 经同一矩阵（**y 轴的四分之一转不精确**：`cos(π/2) = 6e-17`，刻度端点的 x 是 `60.00000000000001` 而不是 60），分隔线是网格矩形上的画布坐标；三者都过 `subPixelOptimizeLine`（`Math.round`，不是银行家舍入）。标签是分解后的 x、y、rotation。坐标轴 `onZero` 时，另一个轴的零点一挪，轴线和它的刻度就跟着滑（`legend-bar-negative`）。**notMerge 下坐标轴是新视图，不过渡**（§126 已确认）；只有同一个 Option 的整体更新才有。
+- **载荷动画**（`getAnimationConfig`，`basicTransition.ts:58-130`）：`ecModel.getUpdatePayload().animation` 在模型时序之后覆盖 duration、easing、delay 中写了的那几项——enter、update、**leave 都覆盖**（leave 原本恒为 200 ms `cubicOut`）。inside 的漫游（滚轮缩放、拖动平移）派发 `{easing: 'cubicOut', duration: 100}`（`roams.ts:158-168`）；slider 在 `realtime` 拖动时派发 `{cubicOut, 100, delay 0}`，拖动结束（非 realtime）、点击面板、刷选派发 `animation: null`——不覆盖，即模型的更新时序；API 的 `dispatchAction({type: 'dataZoom'})` 没有 animation，同样是模型的时序。系列、标签的淡入、坐标轴的 groupTransition 一起按载荷补间。节流（`throttle`，默认 100 ms）延后的那次调用用的是**最后一次调用**的参数。关系图、树的漫游是 `{duration: 0}`，当即到位（`graph-roam`：全程 0 个 clip）。
+- **一帧的顺序**：`dispatchAction` 同步渲染完就返回，**不 flush**；这次渲染建出的 clip 在下一帧第一次步进。动作发生时还在跑的动画，新的补间从它们**上一帧**的值出发。
+- **悬停跨过重渲染**：图例/dataZoom 的整体更新里复用的元素带着 hoverState 和 `__highByOuter`（§128 已做）。**notMerge 的 setOption 同样**：系列视图按 id/名字/序号与类型复用，元素按数据差分复用，复用的元素保留 hoverState 和 hbo 位；`updateStates` 先无过渡地套回 prevStates，列表没变就什么都不做（`bar-hover-notmerge` 高亮一直保持到 downplay）。选中丢失（新模型没有 selectedMap），系列的 `isBlured` 也是新的。zrender 的悬停目标就是那个复用的元素，下一次移动在它上面既不 out 也不 over。
+
+### 做法
+
+- **AnimOpt**：`TTyAnimModel` 多了 `Payload / HasPayload`，即 `ecModel.getUpdatePayload().animation`；`TyAnimGetConfig` 在调用自己的载荷之后读它，三种类型都覆盖。
+- **控件的整体更新**（`FullUpdateWith`，图例动作的 `FullUpdate` 与 dataZoom 的 `DzSyncLayout` 都走它）：`AnimFullBegin` 在布局前把它当成一次「待布防的更新」（`FAnimPending`、`FAnimFull`、载荷），于是 `Relayout` 照新选项的路子留下旧渲染的快照（列表、行键、旧 build）；建好列表后 `AnimFullEnd`：可以动画时（`camAlways`，或窗口绘制里）当场布防——`ArmUpdate`、坐标轴、状态——**不 flush**，clip 在下一次 `AnimTick` 第一次步进；`camAuto` 的非窗口调用留给窗口那次绘制布防；`camOff`、设计器照旧直接到终值。快照记下 `FullUpdate` 与每个系列的模型。
+- **[第 99 批：合并下同样淡出，但只在视图仍活着时（`AliveKeys`：模型还在、类型没变、不要新视图），否则当场消失，见 §134。]** **被移除的视图**（`AnimView.ArmUpdate`）：整体更新里旧渲染有、新渲染没有的系列，柱子按 `BarView._clear`、折线与散点的符号按 `SymbolDraw.remove(true)` 变成幽灵淡出（模型不动画时当即消失），其余类型当即消失；notMerge 下照旧当即消失。快照与 `AnimSeriesInfo` 跳过被图例关掉的系列（`Hidden`），重新打开的系列因此按入场布防，而不是「从无到有的更新」。
+- **新单元 `tyControls.AdvChart.AnimAxis`**（纯，已进 `.lpk`）：`TyAxisAnimElements` 从轴的布局 spec 按上游的规则算出每个叶子（轴线、刻度、标签、分隔线）的 anid 与几何——刻度用新加的 `TTyAxisMark.Local`（轴自己坐标系里的位置，上游的 `ticksCoords[i].coord`）经 `NameFrame` 的矩阵（`TyMatLocal`）按 `v2ApplyTransform` 的运算顺序变换；`TySubPixelOptimize(Line)` 照 zrender 用 `TyJsRound`；`TyAxisAnimProps` 是 groupTransition 动的那几个键。
+- **[第 99 批：合并也布防；配对旧叶子前先核对轴的视图键（`AxisViewKeys`）与 `FAnimFreshAxes`，见 §134。]** **控件的坐标轴代理**（`FAxisProxies`，按 `'xAxis0/label_20'`）：整体更新布防时 `AxisAnimArm` 用旧 build 算旧叶子、新 build 算新叶子，配上的从旧叶子**现在**的值（还在动就读旧代理）`updateProps` 到新值，坐标轴模型、无下标、带载荷；没配上的代理就停在新值。新选项的布防、`AnimDropAll` 丢掉它们。笔宽按皮肤画的宽度（默认 1）。
+- **画**：坐标轴的绘制抽成 `PaintAxes`。动画进行中且有坐标轴代理时（`AxesDynamic`），静态层不画坐标轴，动态层先画坐标轴（`PaintAxis` 的 `AProxied`：每个叶子有代理就画代理当前的值——端点已在像素格上，中途的值照原样画，不再吸附）、再画系列的帧和标题；静止后静态层按布局画回。
+- **dataZoom 的载荷**：`TTyDzAction` 多了 `Realtime`；`DzDispatch` 按来源定载荷——inside 的批量是 `{cubicOut, 100}`，realtime 拖动的 slider 是 `{cubicOut, 100, 0}`，其余没有。slider 被节流推迟的那次用最后一次调用的 `Realtime`（`PendingRealtime`）。`DzSyncLayout` 改走 `FullUpdateWith`，于是 dataZoom 的整体更新也建列表、按 #6198 重找悬停目标。
+- **[第 99 批：合并同样带过（用合并前的视图键），每次渲染只取一次（`FStCarryHeld`），brand new 的系列不带，见 §134。]** **notMerge 的悬停**：`SetOptionText` 在换掉选项之前 `StCarryTake` 记下旧的状态记录、每个系列的视图键与类型、每行的差分键；新选项第一次 `StSync` 时 `StCarryApply` 按视图键与类型配对系列、按 `TyDataDiff` 配对行，把旧记录放到复用的行上（折线本体与面积跟着视图），之后照「回 rest、套旧列表、再套标志」走——标志里 hover 与 hbo 留着，selected 由新模型重设。悬停中的数据项若被复用，`FEvHover` 改指新列表里的它，下一次移动不 out 也不 over。`ArmUpdate` 同时把状态自己的代理（`'st:'` 角色：折线符号的路径、折线与面积等）按原始下标带到复用的行上——否则保持着的高亮会被当成新元素再过渡一次。
+- **顺带修的**：饼标签 `avoidOverlap` 的最后一步（`labelLayout.ts:224-255`）——不管有没有挪动标签，只要 `avoidLabelOverlap`（默认 true）且没有旋转，就按标签的 x 重新算引导线的末点（`label.x ∓ labelDistance`）和中点（保持原来与末点的距离）。加回去又减掉的 x 不总是原来的值：`legend-pie` 里关掉 b 之后，c 的引导线中点和末点差一个 ulp。读了系列的 `avoidLabelOverlap`（`NoAvoidOverlap`）；`alignTo: 'edge'` 的那一支需要文字宽度，没做。
+
+### 基准
+
+- `tools/advchart-oracle/full-update-anim.js`（复制 `state-anim.js` 的钩子：替换 `Date`、`_ssr = false`、`env.node = false`、种子随机数、手动步进）→ `tests/fixtures/advchart-full-update-anim.json`：13 个用例、583 个元素、38 个采样点（0…2000 ms），每个采样先放事件（`dispatchAction`、`zr.handler` 的 mousemove / mousedown / mouseup / click / mousewheel、notMerge 的 setOption），再走一帧。记录：每个系列视图（包括被 remove 的）的每个元素——键同 §129，另加每个采样的动画器作用域（`scope:targetName`）和随过滤变化的数据下标（标签、引导线记宿主的）；每个直角坐标轴 `_axisGroup` 里带 anid 的叶子**按 anid** 记（每次渲染都是新元素）；每次更新的载荷的 animation。用例：图例——堆叠柱关掉再打开、关掉 150 ms 后又打开（一切都在半路：淡出的接着淡、重新打开的作为新元素入场、留下的柱子和坐标轴叶子从各自走到的地方重新出发）、带负值的并排柱（x 轴 onZero 滑动、刻度跟着）、两条折线、饼按名字；`legend-hover-held`（悬停着做图例动作）；`notmerge-hover`、`notmerge-highlight-line`（悬停、动作高亮跨过 notMerge）；dataZoom——API 动作（模型时序）、inside 滚轮两次、inside 拖动平移两次（载荷 100 ms）、slider 拖右手柄（realtime 载荷）再点面板（`null`，模型时序）；关系图拖动平移（没有动画）。27 条守卫（离场淡出与时序、留下的更新、重新打开的入场、坐标轴配对的过渡与没配上的当即出现、打断时从当前值出发、onZero 的轴线、五种载荷、漫游无动画、两种悬停保持、全部静止），两次生成逐字节一致。
+- `test.advchart.animfullupdate`（新单元，已登记）：
+  - `TestFullUpdatesAsUpstream`：每个用例经真控件（`camAlways`、注入 `AnimNow` 与 `DataZoomNow`、SSR 量字、400×300）在 T0 设选项并照 oracle 静止，之后每个采样先放事件（`DispatchAction`、`DispatchDataZoom`、`MouseMove/MouseDown/MouseUp`、滚轮、`Option`），再 `AnimTick`、渲染一次，逐采样比：clip 数；每个系列元素按**该采样的**下标映射到它的代理（离场中的映射到幽灵，只在它离场期间；容器跟着它离场的路径走）——在不在、动画器数、每个被追踪的键**逐位**；坐标轴代理一旦建出，每个叶子在不在与上游完全一致、动画器数、标签的 x / y / rotation 与线的四个端点**逐位**；保持中的悬停的状态列表与状态动画器。4592 次代理采样、7761 次坐标轴叶子采样、2393 次状态采样，全部对上。首跑就对上的：图例的两种柱子、全部坐标轴叶子（刻度端点的 6e-17 项、`Math.round` 的吸附都逐位）。其余的差异，端口的两处：饼的引导线差一个 ulp（上面「顺带修的」那一步），notMerge 的悬停（就是要做的那件事；折线符号的路径还要把状态自己的代理带过去）；基准的三处：过滤和 dataZoom 会移动行的下标（oracle 改为逐采样记录下标，标签、引导线记宿主的），被关掉的折线的符号上游会在重新打开时复用（幽灵只在离场期间算），悬停着的元素在离场之前仍是普通元素。
+  - 手写 6 个（共 7 个测试）：动画中坐标轴画在动态层、半路的分隔线在那里有墨；载荷覆盖 enter / update / leave 而调用自己的载荷优先；`subPixelOptimize` 是 `Math.round`（银行家舍入在偶数宽度上差半个像素）；`camAuto` 无头时不布防；`camOff` 直接到终值、新选项丢掉坐标轴代理；跨 notMerge 悬停着的柱子不发 out / over（这条手写测试先红，查出「找到悬停行」的哨兵值在系列 0 上与「没找到」相同）。
+- `test.advchart.animstate`：删掉 `bar-hover-notmerge` 只比到 400 ms 的豁免，全程逐位对上。
+- `test.advchart.emphasis`：两个按「悬停改变的像素数」比较的旧测试在换选项前先把指针移开——上游的复用元素在新选项下仍是悬停的，冷画面里它已经抬亮了。
+
+### 变异测试
+
+`an5/mutate.py`：22 个变异，逐个改源码、重编、跑本单元、`animstate`、`animupdate` 三套、还原。
+
+- 图例（4）：快照不跳过被关掉的系列（重新打开的按「从无到有的更新」以更新时序长出）、留下的柱子按入场时序、被移除的视图不淡出、只有柱子的视图淡出（折线的符号当即消失）；
+- 坐标轴（8）：标签、刻度、分隔线三种 anid 改按列表里的位置、按入场时序、不读载荷、旧叶子从布局值而不是代理的当前值出发、y 轴的四分之一转当成精确的（丢掉 `cos(π/2)` 那一项）、`subPixelOptimize` 用银行家舍入；
+- 载荷（4）：时长 200、模型的载荷不读、slider 的点击也带 realtime 载荷、inside 的漫游不带；
+- 悬停（3）：notMerge 不带过状态记录、状态自己的代理不带过去、悬停目标不重新指向；
+- 其余（3）：动画中坐标轴留在静态层、整体更新推迟到下一次绘制才布防（在半路的代理被多推进一帧再读）、饼的引导线不重新对齐。
+
+首轮 21 个杀死，存活 1 个：**旧叶子从布局值出发**——没有在坐标轴还在动时再来一次整体更新的用例，从代理读和从旧布局读一样。补上游用例 `legend-interrupt`（关掉 150 ms 后又打开），新增守卫 `axis-from-current`，重跑杀死。补完全部杀死，没有等价变异。
+
+### 推迟与偏差
+
+- 轴名（`'name'`，挂在轴组的变换组下，x、y 是局部的）、次刻度（`'minorticks_'`）、次分隔线（`'minor_line_'`）、分隔区域（`'area_'`）不过渡，画在布局的位置；极坐标、单轴、平行坐标的轴端口没有。
+- 动画中的坐标轴叶子照代理的值原样画，中途不吸附像素；静止后静态层按布局画（与代理的终值最多差一个 ulp）。
+- `camAuto` 下窗口外的动作（图例点击、dataZoom 手势）留给下一次窗口绘制布防，起点是那次绘制的 flush，而不是下一帧——最多差一帧。
+- 悬停目标的重新指向只认数据项；悬停在折线本体上跨过 notMerge 时下一次移动仍会 out / over（没有用例）。
+- 饼标签的避让本身（`adjustSingleSide` 挪动标签）仍没有（§62 起的偏差），这里只补了最后那一步；`alignTo: 'edge'` 的引导线不重算。
+- 载荷只认 dataZoom 的两种来源；`resize` 派发的 `{duration: 0}` 端口照旧用「重新布局直接到终值」实现。
+- 被图例关掉的折线的符号：上游重新打开时复用旧符号（组的缩放照首次渲染弹出、路径的值直接设回），端口的幽灵在淡出结束时释放、重新打开时新建代理——画面与数值一致，只是对象不是同一个。
 
 ## 132. Tier 1 第九十七批：replaceMerge 与索引空洞（A11，2026-10-01）
 
@@ -9079,8 +9137,8 @@ Q7 在 3.1 承诺了「入场动画和状态过渡」。AN2–AN4 把前一半�
 
 ### 动画
 
-- **配对**：`DoMerge` 把报告里 `Brand` 的系列记进 `FAnimFresh`；武装更新时（`AnimSeriesInfo`）这些系列的视图键加前缀 `n:`，与任何旧视图都配不上——从零长出来，即使它重新生成的 id 正是被移除的那个模型的。只生效一次：配对之后（武装或 camOff 丢弃时）清空；notMerge 也清空（新模型没有这个要求）。被 id 认领回来的系列照常按 `(模型 id, 类型)` 配对、从旧位置补间；被移除的系列没有新视图，和 notMerge 下一样当帧消失（上游视图 `__alive` 为假，立即移除，没有淡出）。
-- **lazy 的更新配的是它之前的渲染**：旧视图键只在“上一次更新已经用掉、且没有 lazy 更新在等”时重新取。lazy 的 notMerge 把 A 改名为 B、再同步合并一次、再渲染：上游唯一的那次更新找不到 `'\0B\00'` 的视图，B 从零长出（手写测试）。
+- **[第 99 批：坐标轴同理——brand new 的轴记进 `FAnimFreshAxes`，不过渡；brand new 的系列也不带状态记录，见 §134。]** **配对**：`DoMerge` 把报告里 `Brand` 的系列记进 `FAnimFresh`；武装更新时（`AnimSeriesInfo`）这些系列的视图键加前缀 `n:`，与任何旧视图都配不上——从零长出来，即使它重新生成的 id 正是被移除的那个模型的。只生效一次：配对之后（武装或 camOff 丢弃时）清空；notMerge 也清空（新模型没有这个要求）。被 id 认领回来的系列照常按 `(模型 id, 类型)` 配对、从旧位置补间；被移除的系列没有新视图，和 notMerge 下一样当帧消失（上游视图 `__alive` 为假，立即移除，没有淡出）。
+- **[第 99 批：旧坐标轴视图键按同一规则取；状态记录在下一次渲染前只取一次；布防在那次延后的渲染里（测试按上游那一帧的顺序先步进再渲染），见 §134。]** **lazy 的更新配的是它之前的渲染**：旧视图键只在“上一次更新已经用掉、且没有 lazy 更新在等”时重新取。lazy 的 notMerge 把 A 改名为 B、再同步合并一次、再渲染：上游唯一的那次更新找不到 `'\0B\00'` 的视图，B 从零长出（手写测试）。
 - 测试钩子：`SeriesViewKey(i)`（下一次更新按什么配，brand new 的带 `n:`）、`SeriesOldViewKey(i)`（旧渲染的键）。
 
 ### 基准
@@ -9119,7 +9177,7 @@ Q7 在 3.1 承诺了「入场动画和状态过渡」。AN2–AN4 把前一半�
 - **lazy 的“下一帧”是下一次布局的渲染**：端口的构建本来就在渲染时做，lazy 与否只差 `updated` 的时机和旧视图键的取法；查询类接口（`SeriesStore`、命中测试）一直读的是上一次渲染的结果，这一点 lazy 与否都一样，和上游同步 setOption 之后立刻就能查不同（§130 之前就是如此）。
 - **整份选项的 replaceAll**（`resetOption('recreate')`）不单独提供：它只服务 timeline / media，端口没有这两样；没有它们时它就是 notMerge。
 - **内部组件**（`'\0_ec_\0'` 开头的 id，工具箱的 dataZoom）：上游在两种模式下都不让它们参与映射；端口的工具箱 dataZoom 不进 keys，不涉及。
-- **被移除的系列当帧消失**，和上游一样没有离场动画；被移除的组件（轴、图例、标题）同样直接消失。
+- **[第 99 批：被替换的轴是新视图，叶子当场出现、不过渡；留下的轴照常过渡，见 §134。]** **被移除的系列当帧消失**，和上游一样没有离场动画；被移除的组件（轴、图例、标题）同样直接消失。
 - 空洞网格仍按默认盒子算了一个外框（只是不收轴、不画），`Build.Grid(i)` 的下标因此与组件下标一致；上游那里没有网格。
 
 ## 133. Tier 1 第九十八批：图例选择器与翻页（B4，2026-10-01）
@@ -9182,6 +9240,71 @@ B3 之后图例能点、能联动，但 `selector`（全选 / 反选按钮）和
 - **语言**：默认标题走端口的资源字符串（英文 All / Inv，中文目录里是上游中文语言包的「全选」「反选」），跟宿主程序的翻译走，不跟 ECharts 的 `locale` 选项——端口没有那个选项。
 - **补间的时钟**：动作之后由端口的动画计时器开始第一步（上游是下一帧）；补间期间静态层每帧重建一次。只有内容组在动，选择器和翻页器不动——与上游相同。滚轮在滚动图例上什么都不做，与上游相同。
 - **找不到名字的图例项**：上游 `renderInner` 对既不是系列名、也不在任何数据提供者里的名字**什么都不画**；端口从第 45 批起把它画成灰的（Legend 单元 `TTyLegendSource.Found` 的注释说上游也画——那条理由是错的）。在滚动图例里这会多出一项、页码按端口画出的项算。这一批的用例都避开了它；改过来会动到第 45 批的测试，留作单独一项。**[第一百批已改：不画、不占位、不算页，见 §135 第 0 部分。]**
+
+## 134. Tier 1 第九十九批：合并式 setOption 的过渡（AN6，2026-10-01）
+
+A10（§130）让 `MergeOption` 和 `SetOption(json)` 成了一次更新，可布防走的还是 notMerge 那条路：坐标轴直接跳到终值，标注每次都重新入场，悬停和动作高亮在合并之后被清掉。AN5（§131）为同一个 Option 的整体更新（图例切换、dataZoom）建好了另一条路：坐标轴叶子的代理与 `groupTransition`、被 `remove()` 的视图淡出、复用的行带着悬停。上游眼里，合并式 setOption 正是同一批模型的更新——模型还是那些模型，视图也就还是那些视图。这一批把合并接到这条路上，并补上 AN5 没碰过的标注更新。
+
+### 上游的做法（`core/echarts.ts` 的 `setOption` / `prepareView` / `_onframe`、`component/marker/*`、`chart/helper/SymbolDraw.ts`、`LineDraw.ts`、`Line.ts`；源码逐行核过，关键处在真 dist 上探针确认）
+
+- **视图按 `'_ec_' + model.id + '_' + model.type` 找**（`prepareView` 的 `doPrepare`）。合并不换模型，id 永远不变，所以系列、坐标轴、标注的视图都是原来那个。三种情况例外：replaceMerge 移除的模型没有了，它的视图 `__alive` 为假，当场 dispose（没有淡出）；按序号补进来的模型带 `__requireNewView`，即使重新生成的 id 和旧的一样也建新视图，只生效一次；类型变了（柱变折线、value 轴变 log 轴）的模型换了类，`model.type` 不同，视图 id 也就不同，同样是新视图。探针（fixture 的 `views` 字段逐采样记下每个系列和坐标轴模型用的是第几个视图对象）：合并下所有视图对象不变；`replace-axis` 的 x 轴、`merge-type-change` 的系列 1 换了新对象。
+- **notMerge 下组件仍是新视图**：`doPrepare` 的注释说 notMerge 也尽量复用视图，可探针里 notMerge 之后两个坐标轴、两个标注的视图对象全换了——AN3、AN4 的结论不变，这一批不动 notMerge。
+- **系列**：和 AN5 的整体更新一样，按数据差分；合并写了 `legend.selected` 关掉的系列，视图还活着，渲染时被 `chart.remove()`——柱子淡出；再打开时视图没有数据，作为新元素入场（`merge-legend-hide`）。
+- **坐标轴**：`CartesianAxisView.render` 的 `groupTransition` 照 §131——按 anid 配对，坐标轴模型的更新时序，不带下标。被替换的轴、类型变了的轴是新视图，叶子当场出现、不过渡。
+- **标注**：`MarkPointView` / `MarkLineView` 各是一个组件视图，`markerGroupMap` 按宿主系列 id 存着 `SymbolDraw` / `LineDraw`，标注模型（`inner(seriesModel).model`）在合并里也被复用。所以合并时：
+  - markPoint 走 `SymbolDraw.updateData` 的差分：留下的符号路径以更新时序、带下标补间 `scaleX/Y`，符号组以更新时序、**不带下标**补间 `x/y`，样式直接设上——和散点一样；
+  - markLine 走 `LineDraw.updateData`：`Line.updateData` 以更新时序、带下标补间线的 `shape.x1/y1/x2/y2`，`percent` 不动；两端符号和标签每帧由 `beforeUpdate` 按线的当前形状重新摆（`merge-markers`：线的 `y1`、两端符号的 `y`、标签的 `y` 逐位同步）；
+  - 时序是标注模型的（markLine 默认的 `linear` 只管入场，更新默认 500 ms `cubicInOut`）；markPoint 的标签是符号路径的文字，跟着符号组走。
+- **状态**：复用的元素带着 `hoverState` 和 `__highByOuter`，`updateStates` 先无过渡地套回 prevStates，列表没变就什么都不做；选中在系列模型的 `selectedMap` 里，合并留着它，复用的柱子一直是 `select`（`merge-select`）。brand new 的系列是新视图、新元素，没有悬停（`replace-hover`：重新生成的 id 和被替换的一样，柱子仍然入场、状态为空）。
+- **lazyUpdate**：模型当场合并，更新留到下一帧的 `_onframe`——那一帧先步进所有 clip，再 `prepare` + `update`，再 `zr.flush()`（在同一时刻再步进一次）。所以 lazy 的新补间从**这一帧步进之后**的值出发，而同步的 setOption 从**上一帧**的值出发：`merge-lazy` 与 `merge-interrupt` 在 150 ms 处的柱高不同（守卫 `lazy-after-the-step`）。
+
+### 做法
+
+- **控件**：
+  - `FAnimMerge`：`DoMerge` 在没有 notMerge 等着布防时置上（有 notMerge 在等，模型相对于它要出发的那次渲染就是新的，组件视图也是新的）；`ApplyNotMerge` 清掉它和已拍快照里的 `Merge`。布防之后、`camOff` 丢弃时清掉。
+  - **坐标轴的身份**：`AxisViewKeys` 给出 `'xAxis0=' + 模型 id + #1 + 子类型`（上游视图 id 的两部分）。`DoMerge` 在合并之前记下旧的（与旧系列视图键同一条规则：上一次更新已经用掉、且没有 lazy 在等时才重取），并把报告里 xAxis / yAxis 的 `Brand` 记进 `FAnimFreshAxes`；`AnimFullBegin` 记下同一个 Option 的。`AxisAnimArm` 只给“视图还是那个”的轴配对旧叶子：前后的键相同、且不是 brand new。代理仍按 `'xAxis0/anid'` 存——合并下组件的位置下标永远不动，身份由键核对。
+  - **快照**：`FAnimPrev.Merge`；合并和整体更新一样记下每个系列的模型（同一个模型对象、合并后的选项），供 `remove()` 用。布防时 `AnimAliveKeys` 写进 `FAnimPrev.AliveKeys`：新选项里每个系列模型（显示与否）的视图键 + 类型，brand new 的带 `n:`。
+  - 坐标轴在 `FullUpdate or Merge` 时布防 `AxisAnimArm`，否则照旧丢掉代理。
+  - **状态**：`DoMerge` 在合并成功后用合并前的视图键 `StCarryTake`，与 notMerge 共用 AN5 的带过机制；`StCarryTake` 每次渲染只取一次（`FStCarryHeld`，`StSync` 用掉后清）——渲染前连着两次 setOption，记录仍属于第一次之前那次渲染，第二次不能拿空的 `FSt` 盖掉它；`StCarryApply` 跳过 brand new 的系列。选中模型本来就在合并里留着（§130），`SelSyncFlags` 照常重设。
+- **`AnimView.ArmUpdate`**：
+  - 旧渲染有、新渲染没配上的系列视图，在整体更新**或合并**下，只有它的键仍在 `AliveKeys` 里（模型还在、类型没变、没要新视图）才按 `remove()` 淡出（柱、折线与散点的符号）；否则被 dispose，当场消失。notMerge 照旧当场消失。
+  - **`UpdateMarker`**：标注按宿主系列的旧视图、标注自己的数据下标配对旧元素。整体更新或合并下有旧元素：markPoint 取旧代理（或在旧值上新建），补上组的 `x/y`，`scaleX/Y` 以标注模型的更新时序带下标、`x/y` 不带下标，不透明度直接设；markLine 的代理加上 `shape.x1/y1/x2/y2`，以标注模型的更新时序带下标补间，`percent` 留着（入场还没走完的接着走）。否则（notMerge、没有旧元素）照 AN4 重新入场。
+- **帧**：`TyAnimMarkLineG` 把 markLine 元素的数字换成代理当前的两端；线段、两端符号（`pointAt(0)`、`pointAt(percent)`）、标签都从它算（`TyMkLineAt`），静止时与布局逐位相同。markPoint 的符号多平移 `(x, y)` 与布局之差；它的标签打上新角色 `carMarkPointLabel`（与符号共用 `'markPoint'` 代理），同样平移——入场时代理没有 `x/y`，标签不动，和 AN4 一样。
+- notMerge、`camAuto` 的窗口外渲染、`camOff` 的行为不变。
+
+### 基准
+
+- `tools/advchart-oracle/merge-anim.js`（复制 `full-update-anim.js` 的钩子：替换 `Date`、T0 = 1700000000000、`_ssr = false`、`env.node = false`、种子随机数、手动步进，`process.exit()` 收尾）→ `tests/fixtures/advchart-merge-anim.json`：38 个采样点（0…2000 ms），事件为 `setOption(option, opts)`（合并；`opts` 可带 `replaceMerge`、`lazyUpdate`；同步的自己 flush，lazy 的在那一帧里渲染）、悬停、`highlight` / `downplay` / `select` 动作。记录：每个系列视图与标注视图的每个元素（按对象身份）、坐标轴叶子按 anid、每个采样上各系列和坐标轴模型的视图对象编号。15 个用例：
+  - `merge-bar-data`（合并新数据，值轴 0–40 → 0–60 的 groupTransition；700 ms 再合并回去）、`merge-add-series`（新系列入场、原有的变窄挪位）、`replace-remove-series`（replaceMerge 留 a、c：b 当场消失，c 仍是系列 2）、`merge-ymax`（合并 `yAxis.max`，两次）、`merge-markers`（markPoint max 与 markLine average 随数据更新）；
+  - `merge-hover`、`merge-highlight-line`、`merge-select`（悬停、动作高亮、选中跨过合并）、`replace-hover`（brand new 的系列不带悬停）；
+  - `merge-interrupt`（150 ms 时同步再合并）、`merge-lazy`（同一时刻改为 lazy）；
+  - `merge-legend-hide`（合并 `legend.selected` 关掉 b：淡出；700 ms 再打开：入场）、`replace-axis`（replaceMerge 换掉带 id 的 x 轴：新视图不过渡，y 轴照常过渡）、`replace-axis-same-id`（变异补的：轴都没写 id，replaceMerge 换掉 y 轴，重新生成的 id 正是旧的，仍是新视图）、`merge-type-change`（系列 1 由柱变折线：柱子当场消失、折线入场）。
+- 守卫（任一失败不写文件）：合并下值轴的标签、刻度、分隔线按 anid 补间，视图对象全程不变，柱子走更新；replaceMerge 移除的系列一个元素都没有、留下的视图不变；markPoint 的符号组与 markLine 的线是同一个元素、走更新；悬停、选中跨过合并；lazy 从步进之后出发；图例关掉的柱子走 `leave`；被替换的轴（id 不同、id 相同两种）没有任何叶子动、视图对象换了而另一根轴没换；brand new 系列的柱子入场且没有状态；类型改变换了视图；每个用例最后静止。两次生成逐字节一致。
+- `test.advchart.animmerge`（新单元，已登记，6 个测试）：
+  - `TestMergesAsUpstream`：每个用例经真控件（`camAlways`、注入 `AnimNow`、SSR 量字、400×300）在 T0 设选项并照 oracle 静止，之后每个采样先放事件（`SetOption(json, opts)`、`MouseMove`、`DispatchAction`），同步的合并之后直接渲染，否则（含 lazy）先 `AnimTick` 再渲染——与上游那一帧同序；逐采样比：clip 数；系列元素按代理（离场的按幽灵）逐位比每个被追踪的键和动画器数；markPoint 的组与路径合成一个代理比（`x/y`、缩放，两者动画器数之和）；markLine 的线比代理的四个端点，两端符号和标签比端口从代理推导的值，并核对帧里确实画在那里；坐标轴叶子逐位比，且控件没有坐标轴代理而上游叶子在动也算错；悬停、高亮、选中元素的状态列表与状态动画器。约 3600 次代理采样、190 次标注采样、1.1 万次坐标轴叶子采样、3100 次状态采样，全部对上。
+  - 手写：类型变了的 y 轴（value → log，新模型只有新选项）是新视图、`label_10` 不动，而同样的合并不改类型时 `label_20` 与分隔线在动；lazy 的合并当场进了模型、渲染之前什么都没布防、渲染时柱子开始更新且坐标轴有代理；悬停着的柱子跨过合并既不 out 也不 over；渲染前连着两次合并（以及合并接 notMerge）高亮仍在；markPoint 移动时它的标签在帧里跟着符号走。
+
+### 变异测试
+
+`an6/mutate.py`（临时脚本，未入库）：逐个改源码、重编、依次跑本单元与 AN5（animfullupdate）、AN3（animupdate）、AN2/AN4（animenter）、AN3b（animstate）、A10/A11（optionmerge）六套、还原。15 个变异：
+
+- 坐标轴（3）：合并下不布防坐标轴（只认整体更新）、replaceMerge 换进来的轴仍当作旧视图（不看 `FAnimFreshAxes`）、轴的视图键不看子类型（类型变了的轴照样过渡）；
+- 状态（3）：合并不带过状态记录、一次渲染前取两次记录（去掉 `FStCarryHeld`）、brand new 的系列也带过记录；
+- 标注（5）：合并下标注照旧重新入场、帧不读 markLine 代理的当前两端、markLine 的两端直接设到终值（不补间）、markPoint 的组直接设到终值、markPoint 的标签不跟着符号走；
+- 被移除的视图（3）：被 dispose 的视图也淡出（不看 `AliveKeys`）、合并下关掉的系列当场消失（只认整体更新）、快照不给合并记模型（淡出要用模型判断能否动画）；
+- lazy（1）：lazy 的合并在调用时就布防并 flush（而不是在那次延后的渲染里）。
+
+首轮 14 个杀死，存活 1 个：**replaceMerge 换进来的轴仍当作旧视图**——`replace-axis` 里旧轴写了 id `x0`，新轴重新生成的 id 与它不同，视图键本来就配不上，`FAnimFreshAxes` 这一道被 id 遮住。补上游用例 `replace-axis-same-id`（轴都不写 id，replaceMerge 换掉 y 轴：重新生成的 id 与旧的相同，上游仍因 `__requireNewView` 建新视图，叶子当场出现）与守卫 `replaced-axis-same-id-new-view`，重跑杀死。补完全部杀死，没有等价变异。
+
+### 推迟与偏差
+
+- **标注按数据下标配对**，不是 DataDiffer 的键：标注数据不变、只是值变时与上游相同；标注数据增删、重排时会配错。合并删掉的 markPoint 当场消失（上游 `fadeOut`：缩放与不透明度到 0）；markPoint 的符号类型改变不重建（上游新建符号、重新弹出）。
+- **被图例关掉又打开的系列的标注**重新入场；上游 `markerGroupMap` 里的 `SymbolDraw` / `LineDraw` 留着旧数据，是一次更新。
+- **notMerge 下被新选项的图例关掉的系列**：探针确认上游视图复用、`remove()`，柱子淡出；端口当场消失（`remove()` 要用旧模型判断能否动画，notMerge 之后旧选项已经不在了）。合并下已按上游做。
+- markPoint 的不透明度在更新时直接设上；入场的不透明度若还在补间，上游换了 style 对象、旧补间落空，这里补间会接着写（与 §126 散点的偏差相同）。
+- 渲染前连着几次 setOption，端口只在下一次渲染布防一次，对的是第一次之前的那次渲染；上游同步的 setOption 每次都渲染。状态记录同理只取一次。
+- 系列级的 `isBlured`（`focus: 'series'` 的淡化标志）没有随合并带过去，由下一次悬停重新建立（没有用例）。
+- lazy 的“下一帧”仍是下一次布局的渲染（§132 的偏差不变）；测试里 lazy 的采样先 `AnimTick` 再渲染，与上游那一帧同序。
 
 ## 135. Tier 1 第一百批：tooltip 收尾（B5，2026-10-02）
 

@@ -2495,9 +2495,9 @@ function TyBuildMarkPoints(const APics: TTyMkPointPicArray; const ABlock: TTyMkB
   const AInk: TTyMkInk; const AMeasurer: ITyTextMeasurer; AList: TTyPaintList;
   AHostSeries: Integer): Integer;
 var
-  first: Integer;
+  first, at, k: Integer;
   i, fs: Integer;
-  el: TTyChartElement;
+  el, lel: TTyChartElement;
   c: TTyChartColor;
   B: TTyMkPtLabelPic;
   x, y, w, h: Double;
@@ -2574,7 +2574,22 @@ begin
       AList.Add(el);
       Inc(Result);
     end;
+    at := AList.Count;
     Inc(Result, EmitLabel(APics[i].Lbl, ABlock, AInk, AMeasurer, AList));
+    { THE LABEL IS THE SYMBOL PATH'S TEXT: where an update moves the symbol's
+      group, it goes along (the markPoint's proxy) [Batch 99, AN6] }
+    if (at > first) and (AList.Element(first).Anim.Role = carMarkPoint) then
+      for k := at to AList.Count - 1 do
+      begin
+        lel := AList.Element(k);
+        lel.Anim := Default(TTyChartAnim);
+        lel.Anim.Role := carMarkPointLabel;
+        lel.Anim.Series := AHostSeries;
+        lel.Anim.Index := ABlock.Points[APics[i].Item].DataIndex;
+        lel.Anim.G[0] := AList.Element(first).Anim.G[0];
+        lel.Anim.G[1] := AList.Element(first).Anim.G[1];
+        AList.SetElement(k, lel);
+      end;
     MkTarget(AList, first, ctkMarkPoint, AHostSeries,
       ABlock.Points[APics[i].Item].DataIndex, ABlock.Silent);
   end;

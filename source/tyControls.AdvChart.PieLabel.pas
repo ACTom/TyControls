@@ -99,6 +99,10 @@ type
       two strings. Any other value -- 'top', say -- takes the outer placement
       and gets no line. }
     PositionWord: string;
+    { `avoidLabelOverlap: false` (the series'): the default true runs
+      avoidOverlap, whose last step stands the line off the label's x again
+      [Batch 96] }
+    NoAvoidOverlap: Boolean;
   end;
 
   { One placed label, DEVICE px. AnchorV is always the middle -- upstream forces
@@ -303,6 +307,11 @@ begin
 
   Result.MinShowLabelDeg := NumIn(series, 'minShowLabelAngle',
     Result.MinShowLabelDeg);
+  d := series.Find('avoidLabelOverlap');
+  Result.NoAvoidOverlap := (d <> nil) and (d.JSONType in [jtBoolean, jtNull, jtNumber, jtString])
+    and not ((d.JSONType = jtBoolean) and d.AsBoolean)
+    and not ((d.JSONType = jtNumber) and (d.AsFloat <> 0) and not IsNan(d.AsFloat))
+    and not ((d.JSONType = jtString) and (d.AsString <> ''));
 
   node := ObjOf(series.Find('label'));
   TyLabelReadInk(node, series, Result.Ink);
@@ -495,6 +504,20 @@ begin
       begin
         if nx < 0 then Result.X := x3 - distToLine
         else Result.X := x3 + distToLine;
+        { AVOIDOVERLAP'S LAST STEP (labelLayout.ts:224-255), which runs
+          whether a label moved or not -- unless a label is turned or the
+          series says no: the line's end stands off the label's x again and
+          its middle point keeps its distance from the end. Taken back off
+          the x it was added to, the end is not always where it was, in the
+          last bits [Batch 96] }
+        if (not ASpec.NoAvoidOverlap) and ((ASpec.Rotate = tprNone)
+          or ((ASpec.Rotate = tprNumber) and (ASpec.RotateDeg = 0))) then
+        begin
+          sweep := x2 - x3;
+          if Result.X < ASector.CX then x3 := Result.X + distToLine
+          else x3 := Result.X - distToLine;
+          x2 := x3 + sweep;
+        end;
       end;
       Result.Y := y3;
 

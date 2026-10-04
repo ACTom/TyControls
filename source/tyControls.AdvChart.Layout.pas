@@ -330,6 +330,10 @@ type
   TTyAxisMark = record
     Value: Double;
     Coord: Double;
+    { the same place in the axis' own frame, upstream's ticksCoords[i].coord
+      -- what a tick is drawn from through the axis group's matrix
+      [Batch 96] }
+    Local: Double;
     OffInterval: Boolean;
     OnBand: Boolean;
     Drawn: Boolean;
