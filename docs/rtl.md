@@ -132,12 +132,12 @@ does **not** move to the right edge. That is correct, and it is asserted by
   | `TTyCheckBox`, `TTyRadioButton` | the indicator moves to the right, the caption re-hugs it |
   | `TTyGroupBox` | the caption band moves to the other end of the top border |
   | `TTyCheckGroup`, `TTyRadioGroup` | the columns fill from the right; each hosted box flips its own indicator; the ←/→ keys follow the columns |
-  | `TTyButton` and descendants | the caption (a `taCenter` caption — the default — does not move) |
+  | `TTyButton` and the rest of the `TTyCustomButton` family | the caption (a `taCenter` caption — the default — does not move) |
   | `TTyGlyphButton`, `TTySpeedButton`, `TTyGlyphContainerButton` | the icon slot swaps sides (`glLeft` ↔ `glRight`; `glTop`/`glBottom` unaffected) |
   | `TTyColorButton` | the colour swatch moves to the right, the caption to its left |
   | the numeric badge on any button | `BadgePosition` flips horizontally: `bpBottomRight` (the default) becomes bottom-**left** |
   | `TTyScrollBox`, `TTyScrollPanel` | the vertical bar docks to the **left** edge; the viewport, the horizontal bar and the child layout origin all start after it; the auto-pan edge bands follow |
-  | `TTyListBox` and its plain descendants | the scroll bar docks to the **left**, the rows give up that side instead of the right, and the row text reads to the right edge. With `ScrollWidth` set, the row content starts at the **right** edge and the horizontal offset slides it right — the leading edge is the one that moves in either reading direction |
+  | `TTyListBox` and the plain members of the `TTyCustomListBox` family | the scroll bar docks to the **left**, the rows give up that side instead of the right, and the row text reads to the right edge. With `ScrollWidth` set, the row content starts at the **right** edge and the horizontal offset slides it right — the leading edge is the one that moves in either reading direction |
   | `TTyCheckListBox` | the toggle column moves with the row: the check box is drawn at the trailing end and the zone that toggles it moves with it |
   | `TTyColorListBox` | the colour swatch moves to the right end of the row, the name to its left |
   | `TTyScrollBar` (horizontal) | **opt-in via `MirrorHorizontal`, not `BiDiMode`** — see below |

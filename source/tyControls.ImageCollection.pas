@@ -97,6 +97,7 @@ const
 
 type
   TTyImageCollection = class;
+  TTyCustomImageCollection = class;
 
   { ONE authored master: a name plus its pixels, held as a base64-encoded PNG.
     PngBase64 is the single source of truth — Master is decoded FROM it and
@@ -155,7 +156,7 @@ type
     is only the number of images when every name has exactly one. }
   TTyImageItems = class(TCollection)
   private
-    FOwner: TTyImageCollection;
+    FOwner: TTyCustomImageCollection;
     function GetItem(AIndex: Integer): TTyImageItem;
     procedure SetItem(AIndex: Integer; AValue: TTyImageItem);
   protected
@@ -166,7 +167,7 @@ type
     procedure Notify(AItem: TCollectionItem; AAction: TCollectionNotification); override;
     procedure Update(AItem: TCollectionItem); override;
   public
-    constructor Create(AOwner: TTyImageCollection);
+    constructor Create(AOwner: TTyCustomImageCollection);
     function Add: TTyImageItem;
     property Items[AIndex: Integer]: TTyImageItem read GetItem write SetItem; default;
   end;
@@ -181,7 +182,7 @@ type
     destructor Destroy; override;
   end;
 
-  TTyImageCollection = class(TTyComponent)
+  TTyCustomImageCollection = class(TTyComponent)
   private
     FImages: TTyImageItems;   // THE store: every master, streamed to the .lfm
     FNames: TStringList;      // distinct names in first-appearance order; lazy
@@ -301,10 +302,6 @@ type
       published: it is a memory knob with no visual effect, and publishing it would
       put a number in every .lfm that nobody authored. }
     property CacheCapacity: Integer read FCacheCapacity write SetCacheCapacity;
-  published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
-    property Version;
     { The masters, and the .lfm's whole picture payload. The setter looks redundant
       — nothing "assigns a collection" — but TWriter.WriteProperty SKIPS a property
       with no setter, so without it the designer would save a form with no images
@@ -312,6 +309,13 @@ type
       (commit 7d2c03d, the grid's Columns). The reader does not use the setter:
       vaCollection goes through ReadCollection. }
     property Images: TTyImageItems read FImages write SetImages;
+  end;
+
+  { TTyImageCollection publishes TTyCustomImageCollection's properties; everything lives in TTyCustomImageCollection. }
+  TTyImageCollection = class(TTyCustomImageCollection)
+  published
+    property Version;
+    property Images;
   end;
 
   { An ordered, NAME-keyed selection of icons -- and, because it descends from LCL's
@@ -341,10 +345,10 @@ type
     * DefaultSize and Width are the SAME state. They were two fields, and a patched build drew
       the same object at 20px through one reference type and 16px through the other -- silently,
       in the size a user actually sees. DefaultSize is now a view of Width. }
-  TTyVirtualImageList = class(TCustomImageList)
+  TTyCustomVirtualImageList = class(TCustomImageList)
   private
-    FCollection: TTyImageCollection;
-    FIconFont: TTyIconFont;
+    FCollection: TTyCustomImageCollection;
+    FIconFont: TTyCustomIconFont;
     FNames: TStrings;          // ordered image NAMES to expose (a TStringList)
     FBaseSize: Integer;        // the authoritative logical edge; Width mirrors it
     FMultiResolution: Boolean;
@@ -379,8 +383,8 @@ type
     procedure ReadDesignTop(Reader: TReader);
     procedure WriteDesignTop(Writer: TWriter);
     procedure SwallowLegacyBlob(AStream: TStream);
-    procedure SetCollection(AValue: TTyImageCollection);
-    procedure SetIconFont(AValue: TTyIconFont);
+    procedure SetCollection(AValue: TTyCustomImageCollection);
+    procedure SetIconFont(AValue: TTyCustomIconFont);
     procedure SetGlyphColor(AValue: TTyColor);
     procedure SetNames(AValue: TStrings);
     procedure DropGlyphCache;
@@ -453,10 +457,9 @@ type
     { override, not a new method: TLCLComponent declares this virtual (lclclasses.pp:57), and
       hiding it would give the wrong answer to anyone holding the list as a TLCLComponent. }
     procedure RemoveAllHandlersOfObject(AnObject: TObject); override;
-  published
     { The raster image source. Setting it registers a FreeNotification so the
       reference is nil'd automatically if the collection is freed first. }
-    property Collection: TTyImageCollection read FCollection write SetCollection;
+    property Collection: TTyCustomImageCollection read FCollection write SetCollection;
     { A SECOND source: an icon font, so the same list can expose vector glyphs by name.
 
       This is what puts icon-font icons on a toolbar or a menu at all. Sixteen published
@@ -471,7 +474,7 @@ type
       so a list can mix hand-drawn raster art with font glyphs. Deliberately per name and not
       "collection wins outright": an outright winner would make the other property silently
       inert, which is the defect class this library spends the most effort on. }
-    property IconFont: TTyIconFont read FIconFont write SetIconFont;
+    property IconFont: TTyCustomIconFont read FIconFont write SetIconFont;
     { The ordered image NAMES, one per line — a key into Collection, or a glyph name in
       IconFont. }
     property Names: TStrings read FNames write SetNames;
@@ -494,6 +497,18 @@ type
       the wrong colour". The same trap already cost this library a ShowValue readout nobody
       could see in any theme. Set it from the theme's ink on a dark background. }
     property GlyphColor: TTyColor read FGlyphColor write SetGlyphColor default $FF000000;
+  end;
+
+  { TTyVirtualImageList publishes TTyCustomVirtualImageList's properties; everything lives in TTyCustomVirtualImageList. }
+  TTyVirtualImageList = class(TTyCustomVirtualImageList)
+  published
+    property Collection;
+    property IconFont;
+    property Names;
+    property DefaultSize;
+    property MultiResolution;
+    property Version;
+    property GlyphColor;
   end;
 
 const
@@ -747,7 +762,7 @@ end;
 
 { ---- TTyImageItems ---- }
 
-constructor TTyImageItems.Create(AOwner: TTyImageCollection);
+constructor TTyImageItems.Create(AOwner: TTyCustomImageCollection);
 begin
   inherited Create(TTyImageItem);
   FOwner := AOwner;
@@ -802,9 +817,9 @@ begin
   inherited Destroy;
 end;
 
-{ ---- TTyImageCollection ---- }
+{ ---- TTyCustomImageCollection ---- }
 
-constructor TTyImageCollection.Create(AOwner: TComponent);
+constructor TTyCustomImageCollection.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FImages := TTyImageItems.Create(Self);
@@ -821,7 +836,7 @@ begin
   FCacheStamp := FChangeStamp;
 end;
 
-destructor TTyImageCollection.Destroy;
+destructor TTyCustomImageCollection.Destroy;
 begin
   FCache.Free;    // OwnsObjects frees every cached render
   // Detach first: TCollection.Clear notifies per item, and each notification would
@@ -832,14 +847,14 @@ begin
   inherited Destroy;
 end;
 
-class function TTyImageCollection.CacheKey(const AName: string; ASizePx: Integer): string;
+class function TTyCustomImageCollection.CacheKey(const AName: string; ASizePx: Integer): string;
 begin
   // #1 cannot appear in a practical image name, so it separates the two parts
   // without a collision between e.g. ('a', 11) and ('a1', 1).
   Result := AName + #1 + IntToStr(ASizePx);
 end;
 
-procedure TTyImageCollection.Changed;
+procedure TTyCustomImageCollection.Changed;
 begin
   // Monotonic; SyncCache compares it lazily on the next read. Cheaper than an
   // observer list, and a mutation that forgets to flush still cannot serve a
@@ -847,19 +862,19 @@ begin
   Inc(FChangeStamp);
 end;
 
-procedure TTyImageCollection.FlushCache;
+procedure TTyCustomImageCollection.FlushCache;
 begin
   FCache.Clear;   // OwnsObjects frees every render
   FCacheStamp := FChangeStamp;
 end;
 
-procedure TTyImageCollection.SyncCache;
+procedure TTyCustomImageCollection.SyncCache;
 begin
   if FCacheStamp <> FChangeStamp then
     FlushCache;
 end;
 
-procedure TTyImageCollection.TrimCacheTo(AMax: Integer);
+procedure TTyCustomImageCollection.TrimCacheTo(AMax: Integer);
 var
   i, victim: Integer;
   oldest: Int64;
@@ -882,7 +897,7 @@ begin
   end;
 end;
 
-procedure TTyImageCollection.SetCacheCapacity(AValue: Integer);
+procedure TTyCustomImageCollection.SetCacheCapacity(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
   if FCacheCapacity = AValue then Exit;
@@ -890,26 +905,26 @@ begin
   TrimCacheTo(FCacheCapacity);   // shrink now rather than at the next read
 end;
 
-function TTyImageCollection.CacheCount: Integer;
+function TTyCustomImageCollection.CacheCount: Integer;
 begin
   Result := FCache.Count;
 end;
 
-function TTyImageCollection.IsCached(const AName: string; ASizePx: Integer): Boolean;
+function TTyCustomImageCollection.IsCached(const AName: string; ASizePx: Integer): Boolean;
 begin
   if ASizePx < 1 then ASizePx := 1;
   SyncCache;   // a mutation since the last read means nothing is really cached
   Result := FCache.IndexOf(CacheKey(AName, ASizePx)) >= 0;
 end;
 
-procedure TTyImageCollection.SetImages(AValue: TTyImageItems);
+procedure TTyCustomImageCollection.SetImages(AValue: TTyImageItems);
 begin
   // Assign, never take the instance: the collection is ours for our whole life.
   // Only here so TWriter.WriteProperty does not skip Images — see the property.
   FImages.Assign(AValue);
 end;
 
-procedure TTyImageCollection.SyncNames;
+procedure TTyCustomImageCollection.SyncNames;
 var
   i: Integer;
   nm: string;
@@ -927,7 +942,7 @@ begin
   FNamesStamp := FChangeStamp;
 end;
 
-function TTyImageCollection.RemoveMasters(const AName: string): Integer;
+function TTyCustomImageCollection.RemoveMasters(const AName: string): Integer;
 var
   i: Integer;
 begin
@@ -942,7 +957,7 @@ begin
     end;
 end;
 
-procedure TTyImageCollection.AddBitmap(const AName: string; ABmp: TBGRABitmap);
+procedure TTyCustomImageCollection.AddBitmap(const AName: string; ABmp: TBGRABitmap);
 var
   it: TTyImageItem;
 begin
@@ -954,7 +969,7 @@ begin
   // Each of those already called Changed through the collection's Notify/Update.
 end;
 
-procedure TTyImageCollection.AddMasterBitmap(const AName: string; ABmp: TBGRABitmap);
+procedure TTyCustomImageCollection.AddMasterBitmap(const AName: string; ABmp: TBGRABitmap);
 var
   i, edge: Integer;
   it: TTyImageItem;
@@ -971,7 +986,7 @@ begin
   it.SetBitmap(ABmp);
 end;
 
-function TTyImageCollection.MasterCount(const AName: string): Integer;
+function TTyCustomImageCollection.MasterCount(const AName: string): Integer;
 var
   i: Integer;
 begin
@@ -982,7 +997,7 @@ begin
       Inc(Result);
 end;
 
-function TTyImageCollection.PickMaster(const AName: string; ASizePx: Integer): TBGRABitmap;
+function TTyCustomImageCollection.PickMaster(const AName: string; ASizePx: Integer): TBGRABitmap;
 var
   i, edge, bestFitEdge, largestEdge: Integer;
   m, bestFit, largest: TBGRABitmap;
@@ -1011,7 +1026,7 @@ begin
   if bestFit <> nil then Result := bestFit else Result := largest;
 end;
 
-function TTyImageCollection.PickedMasterSize(const AName: string; ASizePx: Integer): Integer;
+function TTyCustomImageCollection.PickedMasterSize(const AName: string; ASizePx: Integer): Integer;
 var
   m: TBGRABitmap;
 begin
@@ -1021,7 +1036,7 @@ begin
   if m.Width >= m.Height then Result := m.Width else Result := m.Height;
 end;
 
-procedure TTyImageCollection.AddPicture(const AName: string; APicture: TPicture);
+procedure TTyCustomImageCollection.AddPicture(const AName: string; APicture: TPicture);
 var
   master: TBGRABitmap;
   tmp: TBitmap;
@@ -1046,7 +1061,7 @@ begin
   end;
 end;
 
-procedure TTyImageCollection.Clear;
+procedure TTyCustomImageCollection.Clear;
 begin
   FImages.Clear;  // frees every item -> every decoded master; Notify -> Changed
   // Unconditionally, NOT just via the per-item Notify: clearing an already-empty
@@ -1056,13 +1071,13 @@ begin
   FlushCache;     // "drop everything" should release the render memory now, not lazily
 end;
 
-function TTyImageCollection.Count: Integer;
+function TTyCustomImageCollection.Count: Integer;
 begin
   SyncNames;
   Result := FNames.Count;
 end;
 
-function TTyImageCollection.NameOf(AIndex: Integer): string;
+function TTyCustomImageCollection.NameOf(AIndex: Integer): string;
 begin
   SyncNames;
   if (AIndex >= 0) and (AIndex < FNames.Count) then
@@ -1071,18 +1086,18 @@ begin
     Result := '';
 end;
 
-function TTyImageCollection.IndexOf(const AName: string): Integer;
+function TTyCustomImageCollection.IndexOf(const AName: string): Integer;
 begin
   SyncNames;
   Result := FNames.IndexOf(AName);
 end;
 
-function TTyImageCollection.Contains(const AName: string): Boolean;
+function TTyCustomImageCollection.Contains(const AName: string): Boolean;
 begin
   Result := IndexOf(AName) >= 0;
 end;
 
-function TTyImageCollection.RenderMaster(const AName: string; ASizePx: Integer): TBGRABitmap;
+function TTyCustomImageCollection.RenderMaster(const AName: string; ASizePx: Integer): TBGRABitmap;
 var
   dw, dh, ox, oy: Integer;
   master, scaled: TBGRABitmap;
@@ -1121,7 +1136,7 @@ begin
   end;
 end;
 
-function TTyImageCollection.GetCachedBitmap(const AName: string; ASizePx: Integer): TBGRABitmap;
+function TTyCustomImageCollection.GetCachedBitmap(const AName: string; ASizePx: Integer): TBGRABitmap;
 var
   key: string;
   idx: Integer;
@@ -1158,7 +1173,7 @@ begin
   Result := entry.FBmp;
 end;
 
-function TTyImageCollection.GetBitmap(const AName: string; ASizePx: Integer): TBGRABitmap;
+function TTyCustomImageCollection.GetBitmap(const AName: string; ASizePx: Integer): TBGRABitmap;
 var
   cached: TBGRABitmap;
 begin
@@ -1171,31 +1186,31 @@ begin
     Result := TBGRABitmap.Create(ASizePx, ASizePx, BGRAPixelTransparent);
 end;
 
-{ ---- TTyVirtualImageList ---- }
+{ ---- TTyCustomVirtualImageList ---- }
 
-procedure TTyVirtualImageList.AddHandlerOnChange(const AHandler: TNotifyEvent;
+procedure TTyCustomVirtualImageList.AddHandlerOnChange(const AHandler: TNotifyEvent;
   AsFirst: Boolean);
 begin
   if FChangeHandlers = nil then FChangeHandlers := TMethodList.Create;
   FChangeHandlers.Add(TMethod(AHandler), not AsFirst);
 end;
 
-procedure TTyVirtualImageList.RemoveHandlerOnChange(const AHandler: TNotifyEvent);
+procedure TTyCustomVirtualImageList.RemoveHandlerOnChange(const AHandler: TNotifyEvent);
 begin
   if FChangeHandlers <> nil then FChangeHandlers.Remove(TMethod(AHandler));
 end;
 
-procedure TTyVirtualImageList.RemoveAllHandlersOfObject(AnObject: TObject);
+procedure TTyCustomVirtualImageList.RemoveAllHandlersOfObject(AnObject: TObject);
 begin
   if FChangeHandlers <> nil then FChangeHandlers.RemoveAllMethodsOfObject(AnObject);
 end;
 
-procedure TTyVirtualImageList.Changed;
+procedure TTyCustomVirtualImageList.Changed;
 begin
   if FChangeHandlers <> nil then FChangeHandlers.CallNotifyEvents(Self);
 end;
 
-procedure TTyVirtualImageList.NamesChanged(Sender: TObject);
+procedure TTyCustomVirtualImageList.NamesChanged(Sender: TObject);
 begin
   { FNames was a bare TStringList with no OnChange, so `List.Names.Add('x')` -- the ordinary
     way to use this component -- changed what it exposes and told nobody. }
@@ -1204,7 +1219,7 @@ begin
   Changed;
 end;
 
-constructor TTyVirtualImageList.Create(AOwner: TComponent);
+constructor TTyCustomVirtualImageList.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FNames := TStringList.Create;
@@ -1217,7 +1232,7 @@ begin
   FGlyphCacheVersion := -1;
 end;
 
-destructor TTyVirtualImageList.Destroy;
+destructor TTyCustomVirtualImageList.Destroy;
 begin
   DropGlyphCache;
   TStringList(FNames).OnChange := nil;   { must not fire into a half-freed component }
@@ -1228,13 +1243,13 @@ begin
   inherited Destroy;
 end;
 
-procedure TTyVirtualImageList.DropGlyphCache;
+procedure TTyCustomVirtualImageList.DropGlyphCache;
 begin
   FreeAndNil(FGlyphCache);
   FGlyphCacheName := '';
 end;
 
-procedure TTyVirtualImageList.SetCollection(AValue: TTyImageCollection);
+procedure TTyCustomVirtualImageList.SetCollection(AValue: TTyCustomImageCollection);
 begin
   if FCollection = AValue then Exit;
   if FCollection <> nil then
@@ -1246,7 +1261,7 @@ begin
   Changed;
 end;
 
-procedure TTyVirtualImageList.SetIconFont(AValue: TTyIconFont);
+procedure TTyCustomVirtualImageList.SetIconFont(AValue: TTyCustomIconFont);
 begin
   if FIconFont = AValue then Exit;
   if FIconFont <> nil then
@@ -1259,7 +1274,7 @@ begin
   Changed;
 end;
 
-procedure TTyVirtualImageList.SetGlyphColor(AValue: TTyColor);
+procedure TTyCustomVirtualImageList.SetGlyphColor(AValue: TTyColor);
 begin
   if FGlyphColor = AValue then Exit;
   FGlyphColor := AValue;
@@ -1268,12 +1283,12 @@ begin
   Changed;
 end;
 
-procedure TTyVirtualImageList.SetNames(AValue: TStrings);
+procedure TTyCustomVirtualImageList.SetNames(AValue: TStrings);
 begin
   FNames.Assign(AValue);   { fires NamesChanged, which drops the cache and announces }
 end;
 
-procedure TTyVirtualImageList.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomVirtualImageList.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   { A watcher on the change list that is freed leaves it, the rule TTyIconFont follows. }
@@ -1289,7 +1304,7 @@ begin
 end;
 
 { 0 = nothing, 1 = the collection, 2 = the icon font. }
-function TTyVirtualImageList.ResolveSource(AIndex: Integer; out AName: string): Integer;
+function TTyCustomVirtualImageList.ResolveSource(AIndex: Integer; out AName: string): Integer;
 begin
   Result := 0;
   AName := NameOf(AIndex);
@@ -1298,7 +1313,7 @@ begin
   if (FIconFont <> nil) and FIconFont.HasGlyph(AName) then Exit(2);
 end;
 
-function TTyVirtualImageList.GetDefaultSize: Integer;
+function TTyCustomVirtualImageList.GetDefaultSize: Integer;
 begin
   { FBaseSize, not Width: they are the same after every Refill, but Width is public and
     writable and writing it CLEARS the list (SetWidth -> SetWidthHeight -> Clear). Reporting
@@ -1307,7 +1322,7 @@ begin
   Result := FBaseSize;
 end;
 
-procedure TTyVirtualImageList.SetDefaultSize(AValue: Integer);
+procedure TTyCustomVirtualImageList.SetDefaultSize(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
   if FBaseSize = AValue then Exit;
@@ -1317,19 +1332,19 @@ begin
   Refill;
 end;
 
-procedure TTyVirtualImageList.SetMultiResolution(AValue: Boolean);
+procedure TTyCustomVirtualImageList.SetMultiResolution(AValue: Boolean);
 begin
   if FMultiResolution = AValue then Exit;
   FMultiResolution := AValue;
   Refill;
 end;
 
-function TTyVirtualImageList.GetTyVersion: string;
+function TTyCustomVirtualImageList.GetTyVersion: string;
 begin
   Result := TyVersion;
 end;
 
-procedure TTyVirtualImageList.ApplySize;
+procedure TTyCustomVirtualImageList.ApplySize;
 var
   w: Integer;
 begin
@@ -1347,14 +1362,14 @@ begin
     RegisterResolutions([w]);
 end;
 
-procedure TTyVirtualImageList.Loaded;
+procedure TTyCustomVirtualImageList.Loaded;
 begin
   inherited Loaded;
   { Not the constructor: the .lfm has not delivered Names/Collection/IconFont yet there. }
   Refill;
 end;
 
-procedure TTyVirtualImageList.DefineProperties(Filer: TFiler);
+procedure TTyCustomVirtualImageList.DefineProperties(Filer: TFiler);
 var
   di, ancDi: LongInt;
 begin
@@ -1382,7 +1397,7 @@ begin
   Filer.DefineBinaryProperty('BitmapAdv', @SwallowLegacyBlob, nil, False);
 end;
 
-procedure TTyVirtualImageList.ReadDesignLeft(Reader: TReader);
+procedure TTyCustomVirtualImageList.ReadDesignLeft(Reader: TReader);
 var di: LongInt;
 begin
   di := DesignInfo;
@@ -1390,14 +1405,14 @@ begin
   DesignInfo := di;
 end;
 
-procedure TTyVirtualImageList.WriteDesignLeft(Writer: TWriter);
+procedure TTyCustomVirtualImageList.WriteDesignLeft(Writer: TWriter);
 var di: LongInt;
 begin
   di := DesignInfo;
   Writer.WriteInteger(LongRec(di).Lo);
 end;
 
-procedure TTyVirtualImageList.ReadDesignTop(Reader: TReader);
+procedure TTyCustomVirtualImageList.ReadDesignTop(Reader: TReader);
 var di: LongInt;
 begin
   di := DesignInfo;
@@ -1405,19 +1420,19 @@ begin
   DesignInfo := di;
 end;
 
-procedure TTyVirtualImageList.WriteDesignTop(Writer: TWriter);
+procedure TTyCustomVirtualImageList.WriteDesignTop(Writer: TWriter);
 var di: LongInt;
 begin
   di := DesignInfo;
   Writer.WriteInteger(LongRec(di).Hi);
 end;
 
-procedure TTyVirtualImageList.SwallowLegacyBlob(AStream: TStream);
+procedure TTyCustomVirtualImageList.SwallowLegacyBlob(AStream: TStream);
 begin
   if AStream <> nil then AStream.Seek(0, soEnd);
 end;
 
-procedure TTyVirtualImageList.Refill;
+procedure TTyCustomVirtualImageList.Refill;
 var
   widths: array of Integer;
   i, k, w: Integer;
@@ -1468,7 +1483,7 @@ begin
   end;
 end;
 
-function TTyVirtualImageList.NameOf(AIndex: Integer): string;
+function TTyCustomVirtualImageList.NameOf(AIndex: Integer): string;
 begin
   if (AIndex >= 0) and (AIndex < FNames.Count) then
     Result := FNames[AIndex]
@@ -1476,12 +1491,12 @@ begin
     Result := '';
 end;
 
-function TTyVirtualImageList.IndexOf(const AName: string): Integer;
+function TTyCustomVirtualImageList.IndexOf(const AName: string): Integer;
 begin
   Result := FNames.IndexOf(AName);
 end;
 
-function TTyVirtualImageList.RenderIndex(AIndex, ASizePx: Integer): TBGRABitmap;
+function TTyCustomVirtualImageList.RenderIndex(AIndex, ASizePx: Integer): TBGRABitmap;
 var
   nm: string;
 begin
@@ -1496,7 +1511,7 @@ begin
   end;
 end;
 
-function TTyVirtualImageList.CachedIndex(AIndex, ASizePx: Integer): TBGRABitmap;
+function TTyCustomVirtualImageList.CachedIndex(AIndex, ASizePx: Integer): TBGRABitmap;
 var
   nm: string;
 begin
@@ -1526,7 +1541,7 @@ begin
   end;
 end;
 
-procedure TTyVirtualImageList.Draw(ACanvas: TCanvas; AX, AY, AIndex: Integer;
+procedure TTyCustomVirtualImageList.Draw(ACanvas: TCanvas; AX, AY, AIndex: Integer;
   AEnabled: Boolean);
 begin
   // The one place the two polarities meet. Named here rather than at each call site so
@@ -1534,7 +1549,7 @@ begin
   DrawIndex(ACanvas, AIndex, AX, AY, FBaseSize, not AEnabled);
 end;
 
-procedure TTyVirtualImageList.DrawIndex(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer;
+procedure TTyCustomVirtualImageList.DrawIndex(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer;
   AGhosted: Boolean);
 var
   bmp, dim: TBGRABitmap;

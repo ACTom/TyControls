@@ -10,6 +10,8 @@ Ribbon 按钮消费。
 (后续可补 per-widgetset 加载器)。name→codepoint 映射是纯逻辑、已 headless 单测;实际栅格像素需
 真机 + 字体。
 
+4.0 起实现在 `TTyCustomIconFont`，`TTyIconFont` 只负责发布属性。内置的 `TTyLucideIconFont` 也挂在 `TTyCustomIconFont` 下（经 `TTyIconPackFont`），**不是** `TTyIconFont` 的后代，所以库里所有 `IconFont` 属性的类型都是 `TTyCustomIconFont`；自己代码里判断「是不是图标字体」也要判 `TTyCustomIconFont`。
+
 ## 属性
 
 | 属性 | 说明 |

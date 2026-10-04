@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyOfficeListBox 是**带分组标题行的列表框**(Office 风格分组列表)。继承自 [TTyListBox](listbox.md),覆写 `PaintItemContent`:**标题行**画一条着色带 + 加粗文字,**普通行**同 `TTyListBox`。某行是不是标题,存在 `Items.Objects[i]`(`1`=标题,`0`=普通条目),与条目天然对齐(排序 / 删除都跟着走,不会错位)。标题行**不可选中**——点击会被吞掉。用 `AddHeader` / `AddItem` 构建列表。
+TTyOfficeListBox 是**带分组标题行的列表框**(Office 风格分组列表)。继承自 [TTyCustomListBox](listbox.md),覆写 `PaintItemContent`:**标题行**画一条着色带 + 加粗文字,**普通行**同 `TTyListBox`。某行是不是标题,存在 `Items.Objects[i]`(`1`=标题,`0`=普通条目),与条目天然对齐(排序 / 删除都跟着走,不会错位)。标题行**不可选中**——点击会被吞掉。用 `AddHeader` / `AddItem` 构建列表。
 
 ---
 
@@ -29,7 +29,7 @@ uses tyControls.OfficeListBox;
 | `AddItem(const S)` | 追加一条普通条目行(可选)。 |
 | `IsHeader(AIndex): Boolean` | 第 i 行是否为标题行。 |
 
-另继承 `TTyListBox` 的 `Items` / `ItemIndex` / `OnChange` / `Sorted` 等。
+另继承 `TTyCustomListBox` 的 `Items` / `ItemIndex` / `OnChange` / `Sorted` 等。
 
 ---
 

@@ -92,9 +92,9 @@
     Top = 0
     Width = 140
     TabOrder = 0
-    Text = <text>
+    Text = <from the locale>
     Alignment = taRightJustify
-    CurrencySymbol = <text>
+    CurrencySymbol = '$'
   end
 # TTyCalcEdit
     Cursor = crIBeam
@@ -103,7 +103,7 @@
     Top = 0
     Width = 140
     TabOrder = 0
-    Text = <text>
+    Text = <from the locale>
     Alignment = taRightJustify
   end
 # TTyCalculator
@@ -127,7 +127,7 @@
     Width = 145
     TabOrder = 0
     Nodes = <>
-    Separator = <text>
+    Separator = ' / '
   end
 # TTyCharImage
     Left = 0
@@ -158,7 +158,7 @@
     Width = 145
     TabOrder = 0
     ItemIndex = -1
-    Separator = <text>
+    Separator = ', '
   end
 # TTyCheckGroup
     Left = 0
@@ -179,7 +179,7 @@
     Height = 96
     Top = 0
     Width = 96
-    ValueFormat = <text>
+    ValueFormat = '%.0f%%'
   end
 # TTyColorBox
     Left = 0
@@ -188,7 +188,7 @@
     Width = 145
     TabOrder = 0
     ItemIndex = 0
-    Text = <text>
+    Text = <from the locale>
     Selected = clBlack
   end
 # TTyColorButton
@@ -199,7 +199,7 @@
     TabOrder = 0
     Constraints.MinHeight = 20
     Constraints.MinWidth = 30
-    DialogCaption = <text>
+    DialogCaption = 'Select Color'
   end
 # TTyColorComboBox
     Left = 0
@@ -208,9 +208,9 @@
     Width = 145
     TabOrder = 0
     ItemIndex = 0
-    Text = <text>
+    Text = <from the locale>
     Selected = clBlack
-    MoreCaption = <text>
+    MoreCaption = 'More'#226#128#166
   end
 # TTyColorGrid
     Left = 0
@@ -277,9 +277,9 @@
     Top = 0
     Width = 140
     TabOrder = 0
-    Text = <text>
+    Text = <from the locale>
     Alignment = taRightJustify
-    CurrencySymbol = <text>
+    CurrencySymbol = '$'
   end
 # TTyDial
     Left = 0
@@ -289,7 +289,7 @@
     TabOrder = 0
     Max =  1.0000000000000000E+002
     Step =  1.0000000000000000E+000
-    ValueFormat = <text>
+    ValueFormat = '%.0f'
   end
 # TTyDivider
     Left = 0
@@ -353,7 +353,7 @@
     Top = 0
     Width = 140
     TabOrder = 0
-    Text = <text>
+    Text = <from the locale>
     Alignment = taRightJustify
   end
 # TTyFontComboBox
@@ -363,7 +363,7 @@
     Width = 145
     TabOrder = 0
     ItemIndex = 0
-    Text = <text>
+    Text = <from the machine>
   end
 # TTyFontListBox
     Left = 0
@@ -380,27 +380,27 @@
     Width = 64
     TabOrder = 0
     Items.Strings = (
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
-      <text>
+      '6'
+      '7'
+      '8'
+      '9'
+      '10'
+      '11'
+      '12'
+      '14'
+      '16'
+      '18'
+      '20'
+      '24'
+      '28'
+      '32'
+      '36'
+      '48'
+      '60'
+      '72'
     )
     ItemIndex = 6
-    Text = <text>
+    Text = '12'
     Style = csDropDown
   end
 # TTyFormSurface
@@ -416,7 +416,7 @@
     Top = 0
     Width = 120
     Max =  1.0000000000000000E+002
-    ValueFormat = <text>
+    ValueFormat = '%.0f'
   end
 # TTyGearActivityIndicator
     Left = 0
@@ -432,7 +432,7 @@
     TabOrder = 0
     Max =  1.0000000000000000E+002
     Step =  1.0000000000000000E+000
-    ValueFormat = <text>
+    ValueFormat = '%.0f'
   end
 # TTyGlowLabel
     Left = 0
@@ -592,7 +592,7 @@
     Top = 0
     Width = 180
     Max =  1.0000000000000000E+002
-    ValueFormat = <text>
+    ValueFormat = '%.0f'
   end
 # TTyLinkLabel
     Cursor = crHandPoint
@@ -628,7 +628,7 @@
     Groups = <>
   end
 # TTyLucideIconFont
-    FontFamily = <text>
+    FontFamily = 'lucide'
   end
 # TTyLucideImageList
   end
@@ -672,7 +672,7 @@
     Top = 0
     Width = 140
     Max =  1.0000000000000000E+002
-    ValueFormat = <text>
+    ValueFormat = '%.0f'
   end
 # TTyMRUComboBox
     Left = 0
@@ -694,7 +694,7 @@
     Top = 0
     Width = 140
     TabOrder = 0
-    Text = <text>
+    Text = <from the locale>
     Alignment = taRightJustify
   end
 # TTyOfficeComboBox
@@ -741,7 +741,7 @@
     TabOrder = 0
   end
 # TTyPasswordDialog
-    PasswordChar = <text>
+    PasswordChar = #226#151#143
   end
 # TTyPopover
   end
@@ -757,7 +757,7 @@
     Height = 20
     Top = 0
     Width = 200
-    BarTextFormat = <text>
+    BarTextFormat = '%p%%'
   end
 # TTyProgressDialog
   end
@@ -797,7 +797,7 @@
     Top = 0
     Width = 600
     TabOrder = 0
-    FileTabCaption = <text>
+    FileTabCaption = 'File'
   end
 # TTyRibbonAppMenu
     Left = 0
@@ -807,8 +807,8 @@
     TabOrder = 0
     Constraints.MinHeight = 24
     Constraints.MinWidth = 54
-    StyleClass = <text>
-    Caption = <text>
+    StyleClass = 'primary'
+    Caption = 'File'
   end
 # TTyRibbonBackstage
     Left = 0
@@ -917,32 +917,32 @@
       item
         Width = 320
         Position = 0
-        Text = <text>
+        Text = 'Name'
         Options = [coVisible, coResizable, coAllowClick, coDraggable]
       end    
       item
         Width = 90
         Position = 1
         Alignment = taRightJustify
-        Text = <text>
+        Text = 'Size'
         Options = [coVisible, coResizable, coAllowClick, coDraggable]
       end    
       item
         Width = 110
         Position = 2
-        Text = <text>
+        Text = 'Type'
         Options = [coVisible, coResizable, coAllowClick, coDraggable]
       end    
       item
         Width = 150
         Position = 3
-        Text = <text>
+        Text = 'Modified'
         Options = [coVisible, coResizable, coAllowClick, coDraggable]
       end>
     Header.Options = [hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort]
     SortColumn = 0
     Groups = <>
-    Mask = <text>
+    Mask = '*'
   end
 # TTyShellTreeView
     Left = 0
@@ -1028,7 +1028,7 @@
     Header.Columns = <>
     Header.Options = [hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort, hoDrag]
     HeaderGroups = <>
-    GroupRowFormat = <text>
+    GroupRowFormat = <from the locale>
   end
 # TTyStyleController
   end
@@ -1139,7 +1139,7 @@
     Top = 0
     Width = 140
     TabOrder = 0
-    Text = <text>
+    Text = '0'
     Alignment = taRightJustify
     Decimals = 0
     MaxValue =  1.0000000000000000E+002
@@ -1182,7 +1182,7 @@
     Top = 0
     Width = 140
     TabOrder = 0
-    TextHint = <text>
+    TextHint = 'https://'#226#128#166
   end
 # TTyValueListEditor
     Left = 0

@@ -215,7 +215,8 @@ uses
   test.dpi.fontlatch, test.dpi.measurefont, test.dpi.containers, test.dpi.controls,
   test.dpi.dialogs, test.dpi.snapshot,
   test.parity.datetime,
-  test.customclasses, test.customclasses.p1, test.customclasses.p2, test.customclasses.p3;
+  test.customclasses, test.customclasses.p1, test.customclasses.p2, test.customclasses.p3,
+  test.customclasses.p4;
 
 type
   TTyTestRunner = class(TTestRunner)

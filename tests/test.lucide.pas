@@ -324,7 +324,7 @@ var
   list: TTyLucideImageList;
 begin
   { The third way in: a droppable image list that needs no font wiring. It IS a
-    TTyVirtualImageList (so it takes the on-demand vector path, not the baked one), its IconFont
+    TTyCustomVirtualImageList (so it takes the on-demand vector path, not the baked one), its IconFont
     is the shared bundled font, and it starts empty so the developer fills only what they use. }
   list := TTyLucideImageList.Create(nil);
   try

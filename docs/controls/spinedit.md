@@ -12,7 +12,7 @@
 |------|-----|
 | 单元 | `tyControls.SpinEdit` |
 | typeKey | `TySpinEdit` |
-| 基类 | `TTyCustomControl`（继承自 `TCustomControl`） |
+| 基类 | `TTyCustomSpinEdit` → `TTyCustomControl`（继承自 `TCustomControl`） |
 | 默认尺寸 | 120 × 28（逻辑像素） |
 
 ```pascal
@@ -63,7 +63,7 @@ uses tyControls.SpinEdit;
 
 TTySpinEdit 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机制。**基线事件集**（Tier A + Tier B，含 `OnEditingDone`）全部暴露——见 [../events.md](../events.md)。
 
-`AutoSize`（基类已 published）现在**有东西可问**了：控件实现了 `CalculatePreferredSize`，按主题字号 + padding + 边框算出**高度**（宽度返回 `0` = 该轴无意见，由窗体作者决定）。换一个字号更大或内距更厚的皮肤时，`AutoSize := True` 的微调框会长高而不是把数字裁掉。
+`AutoSize`（已发布）现在**有东西可问**了：控件实现了 `CalculatePreferredSize`，按主题字号 + padding + 边框算出**高度**（宽度返回 `0` = 该轴无意见，由窗体作者决定）。换一个字号更大或内距更厚的皮肤时，`AutoSize := True` 的微调框会长高而不是把数字裁掉。
 
 ---
 

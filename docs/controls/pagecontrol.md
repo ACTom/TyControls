@@ -44,7 +44,7 @@
 | `RaggedRight` | `Boolean`（published, 默认 False） | `MultiLine` 打开时，一行内的页签是否保持自然宽度、行尾留白。**默认 False = 拉伸铺满整行**——这是 LCL 的极性（`TCS_RAGGEDRIGHT` 这个样式位是属性为 **True** 时才设的，不设它 comctl32 才拉伸）。`MultiLine` 关着时无效 |
 | `RowCount` | `Integer`（public, **只读**） | 折出来的行数：无页签时 0，`MultiLine` 关着时恒 1。行数是布局的**结果**不是输入，所以没有 setter；也正因为没有 setter 才不能 published（`TWriter.WriteProperty` 会跳过无 setter 的属性，对象检查器则报"无法读取"） |
 | `TabsClosable` | `Boolean`（默认 False） | 页签头是否显示关闭 × |
-| `Images` | `TTyVirtualImageList`（published, 默认 nil） | 页签图标的来源，按各页的 `ImageIndex` 取。类型是 `TTyVirtualImageList` 而不是 LCL 的 `TCustomImageList`：本库的虚拟列表按需渲染、因而**不是** `TCustomImageList` 的后代，属性若写成 LCL 类型，能赋进去的就只剩下 `TTyPainter` 一个都画不出来的那些（`TTyHeader.Images` 正是为此改的类型）。赋值会注册 `FreeNotification`，列表先被释放时引用自动置 nil |
+| `Images` | `TCustomImageList`（published, 默认 nil） | 页签图标的来源，按各页的 `ImageIndex` 取。类型照 LCL 写 `TCustomImageList`：本库的 `TTyVirtualImageList`（和 Lucide 图像列表）是它的后代，按需渲染矢量图；LCL 自己的 `TImageList` 也能赋，按位图画。赋值会注册 `FreeNotification`，列表先被释放时引用自动置 nil |
 | `ImagesWidth` | `Integer`（published, 默认 0） | 图标渲染边长（逻辑像素）。`0` = 跟随主题令牌 `--tab-icon-size`（默认 16），密度换挡时图标跟着走；非 0 = 钉死。LCL 的 `ImagesWidth` 是从多分辨率列表里**挑一档**，本库的虚拟列表要多大画多大，所以这里是一个尺寸请求。负值按 0 处理 |
 | `OnGetImageIndex` | `procedure(Sender; AIndex; var AImageIndex)` | 图标索引的**最终决定权**。在读过该页自己的 `ImageIndex` **之后**触发，`AImageIndex` 以那个值作**种子**——所以处理器看得见自己在覆盖什么，没有处理器时逐页的值原样生效。与 `TTyTreeView.OnGetImageIndex` 同一条优先级规则（控件级列表 → 逐项覆盖 → 事件最后），不另立第三套 |
 | `AnimationsEnabled` | `Boolean`（默认 True） | 切页时活动页签头是否交叉淡入（无窗口句柄时直接定格，保证 headless 测试稳定） |

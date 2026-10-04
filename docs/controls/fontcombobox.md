@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyFontComboBox 是**字体族组合框**:字段和下拉列表的每一项都**用它自己的字体绘制**(所见即所得的字体选择器)。继承自 [TTyComboBox](combobox.md),覆写 `CreatePopupList`(注入一个按行字体绘制的下拉列表)和 `PaintFieldContent`(字段用选中字体绘制)。列表从 `Screen.Fonts`(已安装字体族)填充。
+TTyFontComboBox 是**字体族组合框**:字段和下拉列表的每一项都**用它自己的字体绘制**(所见即所得的字体选择器)。继承自 [TTyCustomComboBox](combobox.md),覆写 `CreatePopupList`(注入一个按行字体绘制的下拉列表)和 `PaintFieldContent`(字段用选中字体绘制)。列表从 `Screen.Fonts`(已安装字体族)填充。
 
 ---
 
@@ -28,7 +28,7 @@ uses tyControls.FontComboBox;
 | `SelectedFont: string` | 选中的字体族名(== `Text`);写入会选中同名项(若存在)。 |
 | `RefreshFonts` | 重新从 `Screen.Fonts` 填充(装了新字体后调用)。 |
 
-另继承 `TTyComboBox` 的 `Items` / `ItemIndex` / `OnChange` / `OnSelect` 等。
+另继承 `TTyCustomComboBox` 的 `Items` / `ItemIndex` / `OnChange` / `OnSelect` 等。
 
 ---
 

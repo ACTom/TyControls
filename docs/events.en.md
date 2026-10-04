@@ -4,7 +4,7 @@
 
 This page summarizes the event contract across the library: the baseline event set every control exposes (Tier A / Tier B), each control's specific events, and the properties deliberately not exposed because themes own the visuals.
 
-> The goal of the parity work is for TyControls' event/property panels in the Object Inspector to match native LCL controls as closely as possible. Baseline events are published by the two base classes; control-specific events are published per control.
+> The goal of the parity work is for TyControls' event/property panels in the Object Inspector to match native LCL controls as closely as possible. Both the baseline and the control-specific events are published by each control's own published section. Since 4.0 the two base classes publish nothing (like LCL's `TControl`), and neither does each control's `TTyCustomXxx` parent; for what to publish when you derive from them yourself, see [subclassing.en.md](subclassing.en.md).
 
 ---
 
@@ -19,7 +19,7 @@ Every control inherits from one of two base classes (`tyControls.Base`):
 
 The `TTyGraphicControl` descendants are the display-only controls (`TTyLabel` / `TTyProgressBar` / `TTyDivider` / `TTyImage` / `TTyShape` / `TTyBadge` / `TTyTag` / `TTyGauge` / `TTyMeter` / `TTyChart` / `TTySparkline` / `TTyArrow` / `TTyBevel`, about 28 in all), so they expose Tier A only. Everything else (Button / Edit / Memo / SpinEdit / ComboBox / CheckBox / RadioButton / ScrollBar / TrackBar / TabControl / ToggleSwitch / ListBox / Panel / GroupBox and the rest) inherits `TTyCustomControl` and exposes both tiers.
 
-### Tier A — mouse / general events and properties (both base classes, all controls)
+### Tier A — mouse / general events and properties (published by every control)
 
 | Member | Kind | Description |
 |------|------|------|
@@ -57,9 +57,9 @@ The `TTyGraphicControl` descendants are the display-only controls (`TTyLabel` / 
 | `ParentShowHint` | property | Inherit the parent's `ShowHint` |
 | `Action` | property | Associated `TAction` |
 
-> These members re-publish what the LCL parents already have; dispatch goes through `inherited` and matches native behavior exactly. Drag-and-drop is declared by `TControl` and dispatched by the LCL above the paint layer, so it behaves identically on custom-drawn controls — it only needed publishing.
+> These are properties and events the LCL parents already have (mostly public or protected there), republished by each control's published section; dispatch goes through `inherited` and matches native behavior exactly. Drag-and-drop is declared by `TControl` and dispatched by the LCL above the paint layer, so it behaves identically on custom-drawn controls — it only needed publishing.
 
-### Tier B — keyboard / focus events (`TTyCustomControl` only)
+### Tier B — keyboard / focus events (windowed controls only)
 
 | Event | Description |
 |------|------|
@@ -71,7 +71,7 @@ The `TTyGraphicControl` descendants are the display-only controls (`TTyLabel` / 
 | `OnExit` | Lost focus |
 | `OnEditingDone` | Editing finished (focus lost or Enter) |
 
-> Tier B events are declared by `TWinControl`, so only windowed `TTyCustomControl` descendants expose them. `TTyLabel` / `TTyDivider` and the other graphic controls cannot take focus and do not.
+> Tier B events are declared by `TWinControl`, so only windowed controls (the `TTyCustomControl` descendants) publish them. `TTyLabel` / `TTyDivider` and the other graphic controls cannot take focus and do not.
 
 > Two container properties are also windowed-only: `BorderWidth` (insets the child area) and `ChildSizing` (the LCL per-container layout engine). Both are `TWinControl` members and meaningless on graphic controls.
 
@@ -121,7 +121,7 @@ TyControls' hard rule is that visuals belong to the theme (`.tycss`): colors, fo
 | `BorderStyle` | Border style comes from the theme's `border-*` tokens |
 | `DoubleBuffered` | Forced on (BGRABitmap offscreen composition); turning it off causes flicker and tearing |
 
-> **`BorderWidth` is not a border width.** It is published on `TTyCustomControl`, but it is a layout property (child-area inset). The painted border's width comes only from the theme's `border-width` token.
+> **`BorderWidth` is not a border width.** Every windowed control publishes it, but it is a layout property (child-area inset). The painted border's width comes only from the theme's `border-width` token.
 
 > **`OnPaint` is an overlay, not a takeover.** It fires after the control has painted and been composited, handing you the LCL `Canvas` — you draw on top of the finished control and cannot alter the themed layer. That is why it does not violate the themes-own-visuals rule. It differs from `TTyPaintPanel.OnPaintSurface` / `TTyPreviewBox.OnPaintPreview`, which fire before composition and hand you a `TTyPainter` for theme-token-aware drawing.
 

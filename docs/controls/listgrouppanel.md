@@ -40,7 +40,7 @@ uses tyControls.ListGroupPanel;
 
 **关键设计**：分组标题**不设 `background` = 无底色带**(现代侧边栏的样子,不是默认灰带);选中条目的**内缩量与圆角由主题驱动**——控件负责内缩+抠圆角,`--listgroup-item-inset` 定内缩、`border-radius` 定圆角、`background` 定色。所有颜色/尺寸均主题驱动,控件代码中**无硬编码**。
 
-**图标**:`AddGroup(caption, AImageIndex)` / `AddItem(gi, caption, AImageIndex)` 带图标索引,`Images: TTyVirtualImageList` 供图(同 `TTyComboBoxEx`)。索引 < 0 或未设 `Images` = 纯文字。
+**图标**:`AddGroup(caption, AImageIndex)` / `AddItem(gi, caption, AImageIndex)` 带图标索引,`Images: TCustomImageList` 供图(同 `TTyComboBoxEx`)。索引 < 0 或未设 `Images` = 纯文字。
 
 **尺寸令牌**(均可选,未设走兜底常量/已发布属性):`--listgroup-header-height`、`--listgroup-item-height`、`--listgroup-chevron-size`(14)、`--listgroup-icon-size`(16)、`--listgroup-icon-gap`(6)、`--listgroup-item-inset`(4)。高度令牌**优先于**已发布的 `HeaderHeight`/`ItemHeight`——"行距留白"是皮肤的决定,单实例仍可覆盖。
 
@@ -90,7 +90,7 @@ TyListGroupItem:active   { background: var(--selection); color: var(--accent); }
 |------|------|------|
 | `HeaderHeight: Integer` | 26 | 标题栏逻辑高度（`--listgroup-header-height` 优先） |
 | `ItemHeight: Integer` | 24 | 条目行逻辑高度（`--listgroup-item-height` 优先） |
-| `Images: TTyVirtualImageList` | `nil` | 分组/条目图标源（按 `ImageIndex` 取；`nil` = 纯文字） |
+| `Images: TCustomImageList` | `nil` | 分组/条目图标源（按 `ImageIndex` 取；`nil` = 纯文字） |
 | `OnGroupToggle: TTyListGroupToggleEvent` | — | `procedure(Sender; AGroupIndex)`，分组展开状态真变化时触发 |
 | `OnItemClick: TTyListGroupItemEvent` | — | `procedure(Sender; AGroupIndex, AItemIndex)`，选中条目真变化时触发 |
 | `OnItemDblClick: TTyListGroupItemEvent` | — | 双击条目行时触发（第一击已按 `OnItemClick` 发过；标题栏双击仍是两次切换,不触发本事件） |

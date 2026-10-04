@@ -25,14 +25,14 @@ uses
   tyControls.ImageCollection;
 
 type
-  TTyGlyphImageList = class(TTyComponent)
+  TTyCustomGlyphImageList = class(TTyComponent)
   private
     FGlyphs: TStrings;          // ordered glyph NAMES, one per line (a TStringList)
-    FIconFont: TTyIconFont;
+    FIconFont: TTyCustomIconFont;
     FDefaultSize: Integer;
     FDefaultColor: TTyColor;
     procedure SetGlyphs(AValue: TStrings);
-    procedure SetIconFont(AValue: TTyIconFont);
+    procedure SetIconFont(AValue: TTyCustomIconFont);
   protected
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
@@ -66,13 +66,9 @@ type
       used to be. Renamed so the two argument orders cannot be confused. }
     procedure DrawIndex(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer;
       AColor: TTyColor);
-  published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
-    property Version;
     { The glyph source. Setting it registers a FreeNotification so the reference is
       nil'd automatically if the font component is freed first. }
-    property IconFont: TTyIconFont read FIconFont write SetIconFont;
+    property IconFont: TTyCustomIconFont read FIconFont write SetIconFont;
     { The ordered glyph NAMES, one per line — each a key into IconFont.Glyphs. }
     property Glyphs: TStrings read FGlyphs write SetGlyphs;
     { Default item edge in LOGICAL px, used by consumers that don't pass a size. }
@@ -81,9 +77,19 @@ type
     property DefaultColor: TTyColor read FDefaultColor write FDefaultColor;
   end;
 
+  { TTyGlyphImageList publishes TTyCustomGlyphImageList's properties; everything lives in TTyCustomGlyphImageList. }
+  TTyGlyphImageList = class(TTyCustomGlyphImageList)
+  published
+    property Version;
+    property IconFont;
+    property Glyphs;
+    property DefaultSize;
+    property DefaultColor;
+  end;
+
 implementation
 
-constructor TTyGlyphImageList.Create(AOwner: TComponent);
+constructor TTyCustomGlyphImageList.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FGlyphs := TStringList.Create;
@@ -94,18 +100,18 @@ begin
   FDefaultColor := $FF000000;
 end;
 
-destructor TTyGlyphImageList.Destroy;
+destructor TTyCustomGlyphImageList.Destroy;
 begin
   FGlyphs.Free;
   inherited Destroy;
 end;
 
-procedure TTyGlyphImageList.SetGlyphs(AValue: TStrings);
+procedure TTyCustomGlyphImageList.SetGlyphs(AValue: TStrings);
 begin
   FGlyphs.Assign(AValue);
 end;
 
-procedure TTyGlyphImageList.SetIconFont(AValue: TTyIconFont);
+procedure TTyCustomGlyphImageList.SetIconFont(AValue: TTyCustomIconFont);
 begin
   if FIconFont = AValue then Exit;
   if FIconFont <> nil then
@@ -115,19 +121,19 @@ begin
     FIconFont.FreeNotification(Self);
 end;
 
-procedure TTyGlyphImageList.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomGlyphImageList.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FIconFont) then
     FIconFont := nil;
 end;
 
-function TTyGlyphImageList.Count: Integer;
+function TTyCustomGlyphImageList.Count: Integer;
 begin
   Result := FGlyphs.Count;
 end;
 
-function TTyGlyphImageList.GlyphNameOf(AIndex: Integer): string;
+function TTyCustomGlyphImageList.GlyphNameOf(AIndex: Integer): string;
 begin
   if (AIndex >= 0) and (AIndex < FGlyphs.Count) then
     Result := FGlyphs[AIndex]
@@ -135,12 +141,12 @@ begin
     Result := '';
 end;
 
-function TTyGlyphImageList.IndexOf(const AName: string): Integer;
+function TTyCustomGlyphImageList.IndexOf(const AName: string): Integer;
 begin
   Result := FGlyphs.IndexOf(AName);
 end;
 
-function TTyGlyphImageList.RenderIndex(AIndex: Integer; ASizePx: Integer;
+function TTyCustomGlyphImageList.RenderIndex(AIndex: Integer; ASizePx: Integer;
   AColor: TTyColor): TBGRABitmap;
 var
   gname: string;
@@ -155,7 +161,7 @@ begin
     Result := FIconFont.RenderGlyph(gname, ASizePx, AColor);
 end;
 
-procedure TTyGlyphImageList.Draw(ACanvas: TCanvas; AX, AY, AIndex: Integer;
+procedure TTyCustomGlyphImageList.Draw(ACanvas: TCanvas; AX, AY, AIndex: Integer;
   AEnabled: Boolean);
 var
   bmp: TBGRABitmap;
@@ -172,7 +178,7 @@ begin
   end;
 end;
 
-procedure TTyGlyphImageList.DrawIndex(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer;
+procedure TTyCustomGlyphImageList.DrawIndex(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer;
   AColor: TTyColor);
 var
   bmp: TBGRABitmap;

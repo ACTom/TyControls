@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyButton 是 TyControls 库中的主题化按钮控件，继承自 `TTyCustomControl`。典型用途：触发操作（提交、确认、删除等），支持默认、`primary`、`danger` 三种视觉变体，通过 `StyleClass` 切换。
+TTyButton 是 TyControls 库中的主题化按钮控件，实现在 `TTyCustomButton`（继承自 `TTyCustomControl`），`TTyButton` 只负责发布属性。典型用途：触发操作（提交、确认、删除等），支持默认、`primary`、`danger` 三种视觉变体，通过 `StyleClass` 切换。
 
 ---
 
@@ -46,7 +46,7 @@ uses tyControls.Button;
 
 ### 继承的通用成员
 
-每个 TyControls 控件都从 `TTyCustomControl`（`tyControls.Base`）继承以下两个 published 属性：
+下面两个属性声明在 `TTyCustomControl`（`tyControls.Base`，public），由每个控件各自发布：
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|

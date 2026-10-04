@@ -496,18 +496,18 @@ type
     FShowCaptions: Boolean;
     FFlat: Boolean;
     FOnPaintButton: TTyToolBarOnPaintButton;
-    FImages: TTyImageCollection;
+    FImages: TTyCustomImageCollection;
     { The collection this bar last LENT to its tools. A tool still holding it is one we
       handed it to, so we may re-point or take it back; anything else is the host's own
       choice and is left alone. Nil'd with FImages in Notification — a freed collection's
       address can be re-used, and a stale marker would make us adopt a stranger's. }
-    FLentImages: TTyImageCollection;
+    FLentImages: TTyCustomImageCollection;
     { Per-state ALTERNATES for FImages, looked up by the SAME ImageName. Deliberately NOT
       lent to the tools the way FImages is: lending exists so a tool can own its icon
       source, and these are the BAR's statement about the bar's own icons. A tool asks for
       them at paint time (TTyToolButton.GetGlyphSource) and only when it is drawing FImages. }
-    FHotImages: TTyImageCollection;
-    FDisabledImages: TTyImageCollection;
+    FHotImages: TTyCustomImageCollection;
+    FDisabledImages: TTyCustomImageCollection;
     FInLayout: Boolean;
     function GetButtonHeight: Integer;
     function GetButtonWidth: Integer;
@@ -521,9 +521,9 @@ type
     procedure SetList(AValue: Boolean);
     procedure SetWrapable(AValue: Boolean);
     procedure SetShowCaptions(AValue: Boolean);
-    procedure SetImages(AValue: TTyImageCollection);
-    procedure SetHotImages(AValue: TTyImageCollection);
-    procedure SetDisabledImages(AValue: TTyImageCollection);
+    procedure SetImages(AValue: TTyCustomImageCollection);
+    procedure SetHotImages(AValue: TTyCustomImageCollection);
+    procedure SetDisabledImages(AValue: TTyCustomImageCollection);
     procedure SetFlat(AValue: Boolean);
     procedure SetOnPaintButton(AValue: TTyToolBarOnPaintButton);
     procedure Relayout;
@@ -662,7 +662,7 @@ type
       the name-keyed BGRA collection (see tyControls.ImageCollection), so a TImageList here
       could never reach a tool button no matter what a host assigned — which is exactly why
       this property used to do nothing. }
-    property Images: TTyImageCollection read FImages write SetImages;
+    property Images: TTyCustomImageCollection read FImages write SetImages;
     { Per-state ALTERNATE artwork, keyed by the same ImageName as Images.
 
       LCL's pair (comctrls.pp: HotImages/DisabledImages) are parallel TImageLists indexed by
@@ -687,8 +687,8 @@ type
 
       Precedence when a button is both disabled and hot: DISABLED wins (LCL orders it the
       same way, and a disabled tool is not really hovered — it just has a pointer over it). }
-    property HotImages: TTyImageCollection read FHotImages write SetHotImages;
-    property DisabledImages: TTyImageCollection read FDisabledImages write SetDisabledImages;
+    property HotImages: TTyCustomImageCollection read FHotImages write SetHotImages;
+    property DisabledImages: TTyCustomImageCollection read FDisabledImages write SetDisabledImages;
     property Align default alTop;
     { LCL's per-button owner draw (comctrls.pp:2416): while assigned, EVERY tool button's
       paint — all six styles, separators included, exactly as LCL routes it — is REPLACED by
@@ -1429,7 +1429,7 @@ end;
 function TTyCustomToolButton.GetGlyphSource(AStates: TTyStateSet): TTyGlyphSource;
 var
   bar: TTyCustomToolBar;
-  alt: TTyImageCollection;
+  alt: TTyCustomImageCollection;
 begin
   Result := inherited GetGlyphSource(AStates);
   bar := GetToolBar;
@@ -1877,7 +1877,7 @@ begin
     if Controls[i] is TTyCustomToolButton then Controls[i].Invalidate;
 end;
 
-procedure TTyCustomToolBar.SetImages(AValue: TTyImageCollection);
+procedure TTyCustomToolBar.SetImages(AValue: TTyCustomImageCollection);
 begin
   if FImages = AValue then Exit;
   // FreeNotification, not just the Notification override: opRemove only reaches us for a
@@ -1891,7 +1891,7 @@ begin
   Relayout;
 end;
 
-procedure TTyCustomToolBar.SetHotImages(AValue: TTyImageCollection);
+procedure TTyCustomToolBar.SetHotImages(AValue: TTyCustomImageCollection);
 begin
   if FHotImages = AValue then Exit;
   if FHotImages <> nil then FHotImages.RemoveFreeNotification(Self);
@@ -1903,7 +1903,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyCustomToolBar.SetDisabledImages(AValue: TTyImageCollection);
+procedure TTyCustomToolBar.SetDisabledImages(AValue: TTyCustomImageCollection);
 begin
   if FDisabledImages = AValue then Exit;
   if FDisabledImages <> nil then FDisabledImages.RemoveFreeNotification(Self);

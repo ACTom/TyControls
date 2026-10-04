@@ -334,15 +334,15 @@ begin
     if comp is TTyGraphicControl then ctrl := TTyGraphicControl(comp).Controller
     else if comp is TTyCustomControl then ctrl := TTyCustomControl(comp).Controller;
   end
-  else if comp is TTyPopover then
+  else if comp is TTyCustomPopover then   { any popover, a third party's too }
   begin
     { A popover is NOT ITyStyleable — the controller's styleable registry holds TControls and
       a non-visual component is not one — so it publishes its typeKey as a class function
       instead. Same StyleClass property, same variants, same dropdown; only the way in
       differs. Its own title key (TyPopoverTitle) is resolved with the SAME StyleClass, so
       there is nothing extra to offer. }
-    key := TTyPopover.StyleTypeKey;
-    ctrl := TTyPopover(comp).Controller;
+    key := TTyCustomPopover.StyleTypeKey;
+    ctrl := TTyCustomPopover(comp).Controller;
   end
   else
     Exit;
@@ -427,12 +427,12 @@ begin
     BACK from a mode is always one click away. }
   Proc('');
   comp := GetComponent(0);
-  if not (comp is TTyStyleController) then Exit;
+  if not (comp is TTyCustomStyleController) then Exit;   { any controller, a third party's too }
   { The modes are a property of the LOADED theme, not of the library, so they are read from
     this controller's own model. A controller whose ThemeName/ThemeFile has not resolved in
     the IDE has an unloaded model and offers nothing further — the honest answer, and better
     than a list of modes that no theme here declares. }
-  names := TTyStyleController(comp).Model.ModeNames;
+  names := TTyCustomStyleController(comp).Model.ModeNames;
   for i := 0 to High(names) do
     Proc(names[i]);
 end;
@@ -476,13 +476,14 @@ begin
     parameterless GetPropInfo of its own that would shadow the unit-level one. }
   if TypInfo.GetPropInfo(comp, 'IconFont') = nil then Exit;
   fnt := TypInfo.GetObjectProp(comp, 'IconFont');
-  if not (fnt is TTyIconFont) then
+  { Any icon font: since 4.0 the bundled packs hang on TTyCustomIconFont, not under TTyIconFont. }
+  if not (fnt is TTyCustomIconFont) then
   begin
     TyMessageDlg(rsDtIconNeedsFont, mtInformation, [mbOK]);
     Exit;
   end;
   nm := GetStrValue;
-  if TyBrowseIcons('', TTyIconFont(fnt), nm) then
+  if TyBrowseIcons('', TTyCustomIconFont(fnt), nm) then
     SetStrValue(nm);
 end;
 
@@ -504,7 +505,7 @@ begin
     package is compiled, which is why a green test build says nothing about it. }
   if TypInfo.GetPropInfo(comp, 'IconFont') = nil then Exit;
   fnt := TypInfo.GetObjectProp(comp, 'IconFont');
-  if not (fnt is TTyIconFont) then Exit;
+  if not (fnt is TTyCustomIconFont) then Exit;   { the custom class: a bundled pack is one }
   { GlyphNames, NOT Glyphs. A bundled pack maps nothing by hand -- TTyLucideIconFont ships an
     empty Glyphs on purpose and answers through a registered lister -- so the old loop over
     Glyphs.Names produced an EMPTY dropdown for the one icon font most users will have on the
@@ -514,7 +515,7 @@ begin
     No paSortList in GetAttributes: the list arrives sorted, and paSortList would make the IDE
     re-sort two thousand strings on the fill path for nothing. A two-thousand-entry combo is
     usable but poor -- that is an argument for a browser dialog, not for changing the sort. }
-  names := TTyIconFont(fnt).GlyphNames;   { owned by the component -- do not free }
+  names := TTyCustomIconFont(fnt).GlyphNames;   { owned by the component -- do not free }
   for i := 0 to names.Count - 1 do
     Proc(names[i]);
 end;
@@ -687,7 +688,7 @@ begin
   // TTyPopover is the one class that publishes StyleClass off that tree: it is a non-visual
   // TTyComponent (its window is created on Show), so neither control base reaches it and its
   // variant list was plain free text. Same editor —it knows the popover's way in.
-  RegisterPropertyEditor(TypeInfo(string), TTyPopover, 'StyleClass',
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomPopover, 'StyleClass',
     TTyStyleClassPropertyEditor);
   { === Guided string properties ===============================================================
     A published string with a KNOWN vocabulary is unusable in the Object Inspector until an
@@ -696,17 +697,17 @@ begin
     stay typeable (see the note above the editor declarations). }
   // The three string properties of the style controller — the whole reason a controller is
   // dropped on a form, and until now three empty boxes.
-  RegisterPropertyEditor(TypeInfo(string), TTyStyleController, 'ThemeName',
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomStyleController, 'ThemeName',
     TTyThemeNamePropertyEditor);          // built-in pack + this process's theme registry
-  RegisterPropertyEditor(TypeInfo(string), TTyStyleController, 'Mode',
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomStyleController, 'Mode',
     TTyThemeModePropertyEditor);          // the loaded theme's own @mode blocks, plus ''
-  RegisterPropertyEditor(TypeInfo(string), TTyStyleController, 'ThemeFile',
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomStyleController, 'ThemeFile',
     TTyThemeFilePropertyEditor);          // '...' opens a *.tycss file dialog
   // Icon fonts: the family must name a renderable font, the file is a file, and a glyph name
   // must be a key of the referenced font's Glyphs map.
-  RegisterPropertyEditor(TypeInfo(string), TTyIconFont, 'FontFamily',
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomIconFont, 'FontFamily',
     TTyFontFamilyPropertyEditor);
-  RegisterPropertyEditor(TypeInfo(string), TTyIconFont, 'FontFile',
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomIconFont, 'FontFile',
     TTyFontFilePropertyEditor);
   // StyleOverride: the '...' opens a SynEdit tycss editor with catalog completion. Control-level
   // (no selectors) on the two bases; controller-level (with selectors) on the controller.
@@ -714,16 +715,18 @@ begin
     TTyStyleOverrideProperty);
   RegisterPropertyEditor(TypeInfo(string), TTyCustomControl, 'StyleOverride',
     TTyStyleOverrideProperty);
-  RegisterPropertyEditor(TypeInfo(string), TTyStyleController, 'StyleOverride',
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomStyleController, 'StyleOverride',
     TTyStyleOverrideProperty);
   // The chart's whole API is this one string, so it gets the biggest editor in the
   // package: SynEdit, catalog completion, a browsable reference and live diagnostics.
   RegisterPropertyEditor(TypeInfo(string), TTyAdvanceChart, 'Option',
     TTyChartOptionProperty);
   // Both bundled Lucide components carry their attribution: '...' pops the full ISC + MIT text.
-  RegisterPropertyEditor(TypeInfo(string), TTyLucideImageList, 'License',
+  // On the custom classes (plan D2), so a third-party Lucide list or font that publishes
+  // License gets the same '...'.
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomLucideImageList, 'License',
     TTyLucideLicenseProperty);
-  RegisterPropertyEditor(TypeInfo(string), TTyLucideIconFont, 'License',
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomLucideIconFont, 'License',
     TTyLucideLicenseProperty);
   { The bundled Lucide font is fixed: family is 'lucide', there is no file, and Glyphs is empty
     (a resolver maps all 2000 names). Hide the three so the OI does not offer edits that would
@@ -734,14 +737,19 @@ begin
   { The bundled Lucide LIST is fixed the same way (real-machine feedback: the inherited
     source pickers read as "wire me up"): its IconFont is the shared Lucide font the
     constructor sets, and the bitmap-collection source is never this component's way in --
-    you pick NAMES. Hide both; Names/DefaultSize/GlyphColor stay, they are the point. }
-  RegisterPropertyEditor(TypeInfo(TTyImageCollection), TTyLucideImageList, 'Collection', THiddenPropertyEditor);
-  RegisterPropertyEditor(TypeInfo(TTyIconFont), TTyLucideImageList, 'IconFont', THiddenPropertyEditor);
+    you pick NAMES. Hide both; Names/DefaultSize/GlyphColor stay, they are the point.
+    IconFont is hidden on the CUSTOM class: it is `stored False` there, so a third-party list
+    that publishes it would otherwise show an edit the next save drops
+    (test.designeditors TestNeverStoredPropertiesHideOnTheCustomClass). Collection is stored,
+    so hiding it stays a choice about the library's own list (plan D2). }
+  RegisterPropertyEditor(TypeInfo(TTyCustomImageCollection), TTyLucideImageList, 'Collection', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TTyCustomIconFont), TTyCustomLucideImageList, 'IconFont', THiddenPropertyEditor);
   { A tool window's and an actions area's Controller is pushed down by the bar / the window and
     never streamed (spec §3.1 / §4): an edit in the inspector would be overwritten by the next
-    push, so it is not shown. }
-  RegisterPropertyEditor(TypeInfo(TTyStyleController), TTyToolWindow, 'Controller', THiddenPropertyEditor);
-  RegisterPropertyEditor(TypeInfo(TTyStyleController), TTyToolWindowActions, 'Controller', THiddenPropertyEditor);
+    push, so it is not shown. On the custom classes, where `stored False` is declared, for the
+    same reason as the Lucide list's IconFont above. }
+  RegisterPropertyEditor(TypeInfo(TTyStyleController), TTyCustomToolWindow, 'Controller', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TTyStyleController), TTyCustomToolWindowActions, 'Controller', THiddenPropertyEditor);
   // Every TTyColor property ($AARRGGBB) gets a readable hex value + a colour picker on '...',
   // instead of a raw integer like 4278190080 nobody can fill (DefaultColor, GlyphColor, ...).
   RegisterPropertyEditor(TypeInfo(TTyColor), nil, '', TTyColorPropertyEditor);
@@ -788,8 +796,10 @@ begin
   RegisterPropertyEditor(TypeInfo(string), TTyComponent, 'Version', TTyVersionEditor);
   { TTyVirtualImageList no longer descends from TTyComponent, so
     the editor has to be named for it explicitly or its '...' stops opening the About box.
+    On the custom class, like every property editor since 4.0, so TTyLucideImageList (which
+    hangs on TTyCustomVirtualImageList) keeps it too.
     test.version's InheritsFromAnEditorBase resolves the bases it parses out of THIS file. }
-  RegisterPropertyEditor(TypeInfo(string), TTyVirtualImageList, 'Version', TTyVersionEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomVirtualImageList, 'Version', TTyVersionEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyPopupMenu, 'Version', TTyVersionEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyForm, 'Version', TTyVersionEditor);
   // BorderStyle is locked to bsNone (TTyForm is a borderless custom-chrome window) —

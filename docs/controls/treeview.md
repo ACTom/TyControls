@@ -89,7 +89,7 @@ uses tyControls.TreeView, tyControls.Columns;
 | `SortColumn` | `Integer` | `-1` | 当前排序列（`-1` = 未排序）；点击表头自动更新 |
 | `SortDirection` | `TTySortDirection` | `sdAscending` | 当前排序方向 |
 | `AutoSizeIndex` | `Integer` | `-1` | 自动填充剩余宽度的列索引（配合 `hoAutoResize`） |
-| `Images` | `TTyVirtualImageList` | `nil` | 列头图标的图像源，按 `TTyColumn.ImageIndex` 取图。以前的类型是 LCL 的 `TCustomImageList`——而 `TTyVirtualImageList` 并非它的后代，于是能赋给它的恰恰全是本库画不了的列表，这个属性从类型上就是不可用的。**目前只有 `TTyListView` 的报表表头会读它**；树的表头绘制尚未接上。|
+| `Images` | `TCustomImageList` | `nil` | 列头图标的图像源，按 `TTyColumn.ImageIndex` 取图。`TTyVirtualImageList` 早已是 `TCustomImageList` 的后代，本库的列表和 LCL 的列表都能赋值。**目前只有 `TTyListView` 的报表表头会读它**；树的表头绘制尚未接上。|
 | `Options` | `TTyHeaderOptions` | `[hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort, hoDrag]` | 表头选项（见下） |
 
 > **⚠️ 关键陷阱：`MainColumn` 必须在列添加之后设置。** `SetMainColumn` 在 `Columns.Count = 0` 时会把任何赋值**夹紧为 `NoColumn`（-1）**。若在添加任何列之前写 `MainColumn := 0`，它会被夹成 -1，导致主列块永远不匹配——展开按钮、节点图标、主列文字**全部消失**，只剩平铺文本格。**正确顺序是先 `Columns.Add`，再设 `MainColumn`。** 作为兜底，控件在**添加第一列**且 `MainColumn` 仍为 `NoColumn` 时会自动把它默认为 `0`（与 VirtualTreeView 一致）；但显式的错误顺序仍应避免。示例（来自 showcase）：
@@ -535,7 +535,7 @@ Tree.OnNodeMoved := @OnMoved;
 | `GetNodeAt(X, Y: Integer): PTyTreeNode` | —— | LCL 的 `GetNodeAt` 就是"客户区某点上的节点"（`comctrls.pp:3716`） |
 | `GetNodeAtOffset(Y; out ANodeTop)` | `GetNodeAt(Y; out ANodeTop)` | **同名、同参数个数、两个参数都是 `Integer`**，所以移植过来的 `Tree.GetNodeAt(X, Y)` 会**编译通过**：把调用方的 X 当成滚动空间的 Y 用，再把调用方的 Y 变量用 out 参数覆写掉，返回错误的节点且没有任何警告。改名当天本仓库自己的 12 条断言立刻变红，就是这条路径 |
 | `NodeSelected[Node]: Boolean` | `Selected[Node]: Boolean` | `Selected` 在 LCL 是**当前节点**（`comctrls.pp:3778`）。`if Tree.Selected <> nil` / `Tree.Selected := N` 这两句最常写的代码在带下标的布尔属性上根本编不过 |
-| `OnNodeDragOver` | `OnDragOver` | `OnDragOver` 是 `TControl` 的 LCL 拖放钩子，基类本来就 published。树把这个名字占成了内部节点拖放的否决事件，于是**整个库里只有这一个控件不能当 LCL 拖放目标**——往上挂一个正常的 `TDragOverEvent` 是类型错误 |
+| `OnNodeDragOver` | `OnDragOver` | `OnDragOver` 是 `TControl` 的 LCL 拖放钩子，`TTyTreeView` 跟别的 Ty 控件一样发布它。树把这个名字占成了内部节点拖放的否决事件，于是**整个库里只有这一个控件不能当 LCL 拖放目标**——往上挂一个正常的 `TDragOverEvent` 是类型错误 |
 
 迁移只有三条替换：`GetNodeAt(y, top)` → `GetNodeAtOffset(y, top)`；`Selected[n]` → `NodeSelected[n]`；`OnDragOver := @H` → `OnNodeDragOver := @H`。
 

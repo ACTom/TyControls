@@ -195,6 +195,7 @@ var
   cls: TPersistentClass;
   props: PPropList;
   pi: PPropInfo;
+  tcls: TClass;
   home, elsewhere: TForm;
   c: TComponent;
   font: TTyIconFont;
@@ -215,7 +216,11 @@ begin
         begin
           pi := props^[j];
           if (pi^.PropType^.Kind <> tkClass) or (pi^.SetProc = nil) then Continue;
-          if not GetTypeData(pi^.PropType)^.ClassType.InheritsFrom(TTyIconFont) then Continue;
+          { Since the custom-class split (#8) the properties are typed TTyCustomIconFont, and a
+            TTyIconFont is one: any property that can hold the font the sweep hands it. }
+          tcls := GetTypeData(pi^.PropType)^.ClassType;
+          if not (tcls.InheritsFrom(TTyCustomIconFont) and TTyIconFont.InheritsFrom(tcls)) then
+            Continue;
           home := TForm.CreateNew(nil);
           elsewhere := TForm.CreateNew(nil);
           try

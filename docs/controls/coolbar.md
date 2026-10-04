@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-`TTyCoolBar` 是 TyControls 库中的 **rebar（可调节带）容器**，继承自 `TTyControlBar`（同批次由兄弟控件提供的"带打包"基类）。它把每个子控件停靠成一条水平"带"（band），并在每条带的左侧提供一个**夹具（gripper）**。
+`TTyCoolBar` 是 TyControls 库中的 **rebar（可调节带）容器**，继承自 `TTyCustomControlBar`（同批次由兄弟控件提供的"带打包"基类）。它把每个子控件停靠成一条水平"带"（band），并在每条带的左侧提供一个**夹具（gripper）**。
 
 ### 夹具手势一览
 
@@ -21,7 +21,7 @@
 >
 > **这一条不是照 Lazarus 抄的。** `TCoolBar` 有同样的死手势——它的 `CalculateAndAlign` 只按溢出换行（`RowEndHelper`，`coolbar.inc:1391`），整个单元里没有任何一处会在落band时减少别的带的 `Width`。**参考是 Win32 的 rebar**：它会把行上的带压到各自的 `cxMinChild`，本库的 `BandMinWidth` 就是那个 `cxMinChild`。
 
-与父类 `TTyControlBar` 的区别在于：`TTyCoolBar` 让每条带**可拖动重排、可拖动改宽**，并为每条带引入按子控件键控的 `Width` / `MinWidth` / `MaxWidth` 元数据。典型用途：经典 Office / IE 风格的可拖拽工具带条。
+与父类 `TTyCustomControlBar` 的区别在于：`TTyCoolBar` 让每条带**可拖动重排、可拖动改宽**，并为每条带引入按子控件键控的 `Width` / `MinWidth` / `MaxWidth` 元数据。典型用途：经典 Office / IE 风格的可拖拽工具带条。
 
 > **交互 vs 数学：** 真正的拖动（鼠标捕获）属于真机行为；**缝的归属**、**落点**、**命中判定**与**改宽钳制**四处几何都被抽成纯函数（`TyCoolBandSeamOwner` / `TyCoolBandDropIndex` / `TyCoolGripperHit` / `TyCoolBandResize`），可无窗口 headless 单测。
 
@@ -33,17 +33,17 @@
 |------|-----|
 | 单元 | `tyControls.CoolBar` |
 | `GetStyleTypeKey` 返回值 | `'TyCoolBar'`（**自有 typeKey**） |
-| 基类 | `TTyControlBar`（带打包容器；其 `GetStyleTypeKey` 为 `'TyControlBar'`） |
+| 基类 | `TTyCustomControlBar`（带打包容器；其 `GetStyleTypeKey` 为 `'TyControlBar'`） |
 | 默认夹具宽度 | 10（逻辑像素） |
 | 默认带最小宽度 | 24（逻辑像素） |
 
-它从前和基类一样返回 `'TyPanel'`，主题层因此够不着它。现在两者各有其名：`TyCoolBar` 已作为附加选择器并入主题里 `TyPanel` 的规则块，解析值与从前逐字节相同，**开钩子而不动像素**；第三方主题若只覆盖了 `TyPanel`，需要补上 `TyCoolBar`（主题层按 typeKey 全有全无地回落）。
+它从前和 `TTyControlBar` 一样返回 `'TyPanel'`，主题层因此够不着它。现在两者各有其名：`TyCoolBar` 已作为附加选择器并入主题里 `TyPanel` 的规则块，解析值与从前逐字节相同，**开钩子而不动像素**；第三方主题若只覆盖了 `TyPanel`，需要补上 `TyCoolBar`（主题层按 typeKey 全有全无地回落）。
 
-与基类分名是有实质理由的：`TTyCoolBar` 的夹具是**可交互**的（`MouseDown` 经 `TyCoolGripperHit` 命中后拖动即改宽 / 重排），而 `TTyControlBar` 的夹具只是装饰；一套皮肤完全有理由让"能拖的导轨"和"只是好看的导轨"读起来不一样。
+与 `TTyControlBar` 分名是有实质理由的：`TTyCoolBar` 的夹具是**可交互**的（`MouseDown` 经 `TyCoolGripperHit` 命中后拖动即改宽 / 重排），而 `TTyControlBar` 的夹具只是装饰；一套皮肤完全有理由让"能拖的导轨"和"只是好看的导轨"读起来不一样。
 
 ### 子部件 typeKey
 
-**没有。** 本控件没有自己的 `Paint`——像素全部来自 `TTyControlBar`（面板框架 + 每条带一个夹具），夹具颜色从盒子样式的 `border-color`（缺省回落 `color`）派生，粗细 / 间距 / 内缩是代码里的 `Scale()` 字面量。子部件键 `TyCoolBarGripper` 的扩展已被**刻意推迟**，该键当前**并不存在**，写进 `.tycss` 解析不到任何东西。
+**没有。** 本控件没有自己的 `Paint`——像素全部来自 `TTyCustomControlBar`（面板框架 + 每条带一个夹具），夹具颜色从盒子样式的 `border-color`（缺省回落 `color`）派生，粗细 / 间距 / 内缩是代码里的 `Scale()` 字面量。子部件键 `TyCoolBarGripper` 的扩展已被**刻意推迟**，该键当前**并不存在**，写进 `.tycss` 解析不到任何东西。
 
 ```pascal
 uses tyControls.CoolBar, tyControls.ControlBar, tyControls.Panel;
@@ -98,7 +98,7 @@ uses tyControls.CoolBar, tyControls.ControlBar, tyControls.Panel;
 
 ### 3.3 继承成员
 
-继承自 `TTyControlBar` → `TTyCustomControl`：`Enabled` / `Font` / `Hint` / `TabOrder` / Tier A 鼠标事件 + Tier B 键盘焦点事件等。完整清单见 [../events.md](../events.md)。
+继承自 `TTyCustomControlBar` → `TTyCustomControl`：`Enabled` / `Font` / `Hint` / `TabOrder` / Tier A 鼠标事件 + Tier B 键盘焦点事件等。完整清单见 [../events.md](../events.md)。
 
 ---
 

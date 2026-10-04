@@ -36,11 +36,11 @@ uses tyControls.Panel;
 | `Anchors` | `TAnchors` | `[akLeft, akTop]` | 随父控件调整大小时的锚点 |
 | `DockSite` / `UseDockManager` / `OnDockDrop` / `OnDockOver` / `OnUnDock` / `OnGetSiteInfo` / `OnGetDockCaption` / `OnStartDock` / `OnEndDock` | — | — | 停靠族，照 `TPanel` 原样 republish。全部是 `TWinControl` / `TControl` 自己的成员，驱动它们的 dock manager 是 LCL 的代码；`tests/test.parity.container.pas` 里的探针真的把一个控件停靠进 `TTyPanel` 并断言了重新 parent、dock client 列表与通知，所以这是 republish 而非重新实现。前五个在 `TWinControl` 上是 public（代码里一直能写），`OnGetSiteInfo` / `OnGetDockCaption` / `OnStartDock` / `OnEndDock` 是 protected——**它们此前没有任何途径可达**，对象检视器和代码都够不着 |
 
-> **注意：** 上表只列 TTyPanel **自己**声明（或 republish）的属性。`Enabled` / `Visible` / `Font` / `Hint` / `AutoSize` / `BorderWidth` / `ChildSizing` / 拖放族等由基类 `TTyCustomControl` 统一 published，在对象检视器里同样可见（完整清单见 [../events.md](../events.md)）。
+> **注意：** 上表只列 TTyPanel **自己**声明（或 republish）的属性。`Enabled` / `Visible` / `Font` / `Hint` / `AutoSize` / `BorderWidth` / `ChildSizing` / 拖放族等是 LCL `TControl` / `TWinControl` 的成员，由 `TTyPanel` 的发布段一并发布，在对象检视器里同样可见（完整清单见 [../events.md](../events.md)）。
 
 ### 继承的通用成员
 
-TTyPanel 继承自 `TTyCustomControl`（`tyControls.Base`）：
+TTyPanel 的实现在 `TTyCustomPanel`（继承自 `TTyCustomControl`，`tyControls.Base`）：
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
@@ -145,7 +145,7 @@ R1.Checked := True;
 ## 7. 注意事项
 
 - **真容器，可承载子控件：** `TTyPanel` 继承自 `TCustomControl`（有窗口句柄），子控件可以将其设为 `Parent`，坐标系以面板左上角为原点。这与 `TGraphicControl` 类控件（如 `TTyLabel`）不同，后者无法作为父容器。
-- **子控件不受 padding 约束，但受 `BorderWidth` 约束：** 面板的**主题 `padding`** 只影响 `Caption` 文字的绘制位置，不约束子控件布局。要给某一个面板留出内边距，用 `BorderWidth`——`TTyPanel.AdjustClientRect` 现在是它**唯一**的消费者。`BorderWidth` 是 `TWinControl` 的成员、由基类 published，但 `TWinControl` 自己从不读它（`TWinControl.AdjustClientRect` 是空实现，`SetBorderWidth` 只发一条 `CM_BORDERCHANGED`）；在 LCL 里内缩是 `TCustomPanel.AdjustClientRect` 做的，别处都没有。所以在补上这个重写之前，对象检视器里明摆着一个面板根本不理会的属性：设计器写下 `BorderWidth = 8`，子控件依旧贴着边框，也没有任何东西说明为什么。
+- **子控件不受 padding 约束，但受 `BorderWidth` 约束：** 面板的**主题 `padding`** 只影响 `Caption` 文字的绘制位置，不约束子控件布局。要给某一个面板留出内边距，用 `BorderWidth`——`TTyPanel.AdjustClientRect` 现在是它**唯一**的消费者。`BorderWidth` 是 `TWinControl` 的成员、由 `TTyPanel` 发布，但 `TWinControl` 自己从不读它（`TWinControl.AdjustClientRect` 是空实现，`SetBorderWidth` 只发一条 `CM_BORDERCHANGED`）；在 LCL 里内缩是 `TCustomPanel.AdjustClientRect` 做的，别处都没有。所以在补上这个重写之前，对象检视器里明摆着一个面板根本不理会的属性：设计器写下 `BorderWidth = 8`，子控件依旧贴着边框，也没有任何东西说明为什么。
   > 这条同样适用于 `TTyTabSheet` / `TTyPageControl`：它们的 `BorderWidth` 仍然是惰性的——**因为 LCL 的 `TTabSheet` / `TPageControl` 也一样**（`TCustomPage` 和 `TCustomTabControl` 都没有重写 `AdjustClientRect`）。这不是缺口，是对齐。
 - **单选分组的关键：** `TTyRadioButton` 的互斥范围由 `Parent` 决定，将不同组的单选按钮放在不同 `TTyPanel` 内，是实现多个独立单选组的标准做法。
 - **Caption vs 子控件重叠：** 若同时使用 `Caption` 和子控件，需注意标题文字绘制在内容区域（经 `padding` 内缩后）顶部、按 `Alignment` 水平对齐、垂直居中的位置（默认 `taCenter` 居中），子控件的 `Top` 值应给标题文字留出足够空间。

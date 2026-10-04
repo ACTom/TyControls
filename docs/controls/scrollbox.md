@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-`TTyScrollBox` 是 TyControls 库中的主题化**滚动视口容器**，继承自 [`TTyPanel`](panel.md)。典型用途：承载尺寸超过自身可视区域的子控件集合（例如一整块表单、一张大图、一组排布很长的控件），当内容在某个方向上溢出时，在该方向自动出现一个内嵌的 `TTyScrollBar`，用户拖动滚动条即可平移内容；内容能完整放下时，对应滚动条自动隐藏。
+`TTyScrollBox` 是 TyControls 库中的主题化**滚动视口容器**，继承自 [`TTyCustomPanel`](panel.md)。典型用途：承载尺寸超过自身可视区域的子控件集合（例如一整块表单、一张大图、一组排布很长的控件），当内容在某个方向上溢出时，在该方向自动出现一个内嵌的 `TTyScrollBar`，用户拖动滚动条即可平移内容；内容能完整放下时，对应滚动条自动隐藏。
 
 它是**真正的 LCL 容器**（有窗口句柄），子控件直接以其为 `Parent`，坐标系以视口左上角为原点。行为上与 [`TTyPanel`](panel.md) 的区别在于「内容超出视口时可滚动」；主题上它有**自己的 typeKey** `TyScrollBox`——滚动井在视觉惯例上是**下沉**的，而面板是**抬起**的，二者必须能分开表达。
 
@@ -14,7 +14,7 @@
 |------|-----|
 | 单元 | `tyControls.ScrollBox` |
 | `GetStyleTypeKey` 返回值 | `'TyScrollBox'`（**自有 typeKey**） |
-| 基类 | `TTyPanel`（继承自 `TTyCustomControl` → `TCustomControl`；只继承框架与容器管道，不再共用它的键） |
+| 基类 | `TTyCustomPanel`（继承自 `TTyCustomControl` → `TCustomControl`；只继承框架与容器管道，不再共用它的键） |
 | 默认尺寸 | 200 × 150（逻辑像素） |
 | 内嵌滚动条 typeKey | `TyScrollBar` / `TyScrollThumb`（见 [scrollbar.md](scrollbar.md)） |
 | 视口 typeKey | `TyScrollContent`（`TTyScrollContent`，可选的显式视口，见 §5） |
@@ -56,9 +56,9 @@ uses tyControls.ScrollBox;
 |------|------|--------|------|
 | `ScrollBarAutoHide` | `TTyScrollBarAutoHide` | `sbahDefault` | 两条内嵌滚动条闲下来之后要不要淡出，转发给它们。默认跟主题走，三个值的含义与主题令牌见 [scrollbar.md](scrollbar.md) §7。 |
 
-本控件自己 published 的就这一个，下面那些都是从基类 republish 的。
+本控件自己声明的就这一个，下面那些声明在父类（`TTyCustomPanel`、`TTyCustomControl` 或 LCL）里，由 `TTyScrollBox` 发布。
 
-### 继承自 TTyPanel / TTyCustomControl 的 published 成员
+### 声明在父类、由 TTyScrollBox 发布的成员
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
@@ -68,7 +68,7 @@ uses tyControls.ScrollBox;
 | `Controller` | `TTyStyleController` | `nil`（全局 `TyDefaultController`） | 指定样式控制器；该值会自动传播给两个内嵌滚动条。 |
 | `OnConstrainedResize` | `TConstrainedResizeEvent` | `nil` | 尺寸协商钩子，照 `TScrollBox` republish。它在 `TControl` 上是 **protected**，所以此前不只是对象检视器里没有——**代码里也够不着**，能表达的尺寸限制只有静态的 `Constraints` 值；"这一栏永远不超过窗体的一半"这类依赖运行期数值的限制无从表达。 |
 
-> `Caption` / `Alignment` 从 `TTyPanel` 继承而来，滚动框场景一般不使用（若设置了 `Caption`，它会被子控件覆盖）。
+> `Caption` / `Alignment` 从 `TTyCustomPanel` 继承而来，滚动框场景一般不使用（若设置了 `Caption`，它会被子控件覆盖）。
 
 ---
 

@@ -12,7 +12,7 @@
 |------|-----|
 | 单元 | `tyControls.TabSet` |
 | `GetStyleTypeKey` 返回值 | `'TyTabSet'`（自己的键） |
-| 基类 | `TTyCustomTabStrip`（`tyControls.TabStrip`，继承自 `TTyCustomControl`） |
+| 基类 | `TTyCustomTabSet` → `TTyCustomTabStrip`（`tyControls.TabStrip`，继承自 `TTyCustomControl`） |
 | 默认尺寸 | 240 × 32（逻辑像素，`Create` 中设置） |
 
 | typeKey | 画什么 |
@@ -63,15 +63,15 @@ uses tyControls.TabSet;
 
 > **不提供 `ScrollOpposite`**，而且是刻意的：它只在"选中的那一行会被重排到贴着页面体"这个 comctl32 行为存在时才有意义，而本库不做那个重排——它会把选中从渲染状态变成布局输入，并在拖拽重排的过程中把页签从指针底下挪走。理由与代价见 [`pagecontrol.md` §6](pagecontrol.md)。
 
-### 继承自 `TTyCustomTabStrip` 的 published 成员
+### 来自 `TTyCustomTabStrip` 的成员
 
-引擎在基类的 `published` 段暴露了以下成员，`TTyTabSet` 一并继承：
+以下成员声明在引擎基类 `TTyCustomTabStrip`，由 `TTyTabSet` 发布：
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `TabHeight` | `Integer` | 不设时跟随主题（经典 `28` / 现代 `38`） | 页签条高度（逻辑像素）。`0` = 完全不要条带；`TyTabHeightAuto`（`-1`，任意负值同义）= 交回主题。完整取值表与和 LCL 的差异见 [`pagecontrol.md` §6](pagecontrol.md)。 |
 | `TabsClosable` | `Boolean` | `False` | 为 `True` 时每个页签头右侧渲染关闭 × 字形，点击触发 `OnTabClose`。 |
-| `Images` | `TTyVirtualImageList` | `nil` | 页签图标来源。`TTyTabSet` 的标题只是一串字符串、没有可挂 `ImageIndex` 的逐项对象，所以在这个控件上图标由 **`OnGetImageIndex`** 提供（引擎的逐项那一层在基类返回 -1）。类型与 `FreeNotification` 语义见 [`pagecontrol.md` §3](pagecontrol.md)。 |
+| `Images` | `TCustomImageList` | `nil` | 页签图标来源。`TTyTabSet` 的标题只是一串字符串、没有可挂 `ImageIndex` 的逐项对象，所以在这个控件上图标由 **`OnGetImageIndex`** 提供（引擎的逐项那一层在基类返回 -1）。类型与 `FreeNotification` 语义见 [`pagecontrol.md` §3](pagecontrol.md)。 |
 | `ImagesWidth` | `Integer` | `0` | 图标边长（逻辑像素），`0` = 跟随 `--tab-icon-size`。 |
 | `OnGetImageIndex` | 事件 | `nil` | `procedure(Sender; AIndex; var AImageIndex)`；`-1` = 无图标。 |
 | `TabStop` | `Boolean` | `True` | 参与键盘 Tab 焦点循环（`Create` 中设 `True`）。 |
@@ -106,7 +106,7 @@ uses tyControls.TabSet;
 
 ## 4. 事件
 
-`TTyTabSet` 自身**不新增事件**；下列专有事件全部由基类 `TTyCustomTabStrip` published，直接继承可用：
+`TTyTabSet` 自身**不新增事件**；下列专有事件声明在引擎基类 `TTyCustomTabStrip`，由 `TTyTabSet` 发布：
 
 | 事件 | 类型 | 触发时机 |
 |------|------|----------|

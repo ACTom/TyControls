@@ -4,7 +4,7 @@
 
 本页汇总 TyControls 全库控件的**事件契约**：每个控件都暴露的**基线事件集**（Tier A / Tier B）、各控件的**专有事件**，以及为遵守"主题拥有视觉"原则而**刻意不暴露**的与主题冲突的属性。
 
-> 本批次（API events+properties parity）的目标是让 TyControls 控件在 Lazarus 对象查看器（Object Inspector）中的事件/属性面板尽量与原生 LCL 控件**对齐**，便于设计期挂接事件、用 DFM/LFM 流式保存。基线事件全部由两个基类统一 published，专有事件由各控件单独 published。
+> 本批次（API events+properties parity）的目标是让 TyControls 控件在 Lazarus 对象查看器（Object Inspector）中的事件/属性面板尽量与原生 LCL 控件**对齐**，便于设计期挂接事件、用 DFM/LFM 流式保存。基线事件和专有事件都由每个控件自己的 published 段发布。4.0 起两个基类本身不发布任何属性（跟 LCL 的 `TControl` 一样），各控件的 `TTyCustomXxx` 父类也不发布；自己从基类或 Custom 类派生控件时怎么发布，见 [subclassing.md](subclassing.md)。
 
 ---
 
@@ -19,7 +19,7 @@ TyControls 的全部控件继承自两个基类之一（`tyControls.Base`）：
 
 继承自 `TTyGraphicControl` 的是纯展示 / 无需焦点的那一批（`TTyLabel` / `TTyProgressBar` / `TTyDivider` / `TTyImage` / `TTyShape` / `TTyBadge` / `TTyTag` / `TTyGauge` / `TTyMeter` / `TTyChart` / `TTySparkline` / `TTyArrow` / `TTyBevel` 等，共约 28 个），**因此只有 Tier A 事件**；**其余所有控件**（Button / Edit / Memo / SpinEdit / ComboBox / CheckBox / RadioButton / ScrollBar / TrackBar / TabControl / ToggleSwitch / ListBox / Panel / GroupBox / ContentPanel / 以及 `TTyForm` 标题栏的 TitleBar/CaptionButton 等）继承自 `TTyCustomControl`，**Tier A + Tier B 全部具备**。
 
-### Tier A —— 鼠标 / 通用事件与属性（两个基类都有，**全控件可用**）
+### Tier A —— 鼠标 / 通用事件与属性（**全部控件都发布**）
 
 | 成员 | 类别 | 说明 |
 |------|------|------|
@@ -57,11 +57,11 @@ TyControls 的全部控件继承自两个基类之一（`tyControls.Base`）：
 | `ParentShowHint` | 属性 | 是否继承父控件的 `ShowHint` |
 | `Action` | 属性 | 关联的 `TAction` |
 
-> 这些成员只是把 LCL 父类**已有**的 published 成员重新 published（声明在基类的 `published` 段）；事件分发链路全部走 `inherited`，与原生行为一致——基类**没有**改写任何分发逻辑，仅打开了对象查看器中的可见性。
+> 这些成员都是 LCL 父类**本来就有**的属性和事件（在 LCL 里多是 public 或 protected），由每个控件的 `published` 段重新发布；事件分发链路全部走 `inherited`，与原生行为一致——库里**没有**改写任何分发逻辑，只是让它们出现在对象查看器里、能存进 `.lfm`。
 >
-> **拖放为什么"白捡"：** `DragMode` / `OnDragOver` / `OnDragDrop` 等全部由 `TControl` 声明、由 LCL 完成分发，拖放的判定发生在绘制层**之上**，所以自绘控件与原生控件的拖放行为完全一致。它们此前只是没被重新 published——`Ctl.DragMode := dmAutomatic` 从代码里一直编得过，缺的是对象查看器与流式化的那一份。`Visible` 同理。
+> **拖放为什么"白捡"：** `DragMode` / `OnDragOver` / `OnDragDrop` 等全部由 `TControl` 声明、由 LCL 完成分发，拖放的判定发生在绘制层**之上**，所以自绘控件与原生控件的拖放行为完全一致。它们此前只是没被重新 published，缺的是对象查看器与流式化的那一份；`Visible` 同理。代码里设 `DragMode` 要经最终类类型的引用（`TTyButton(Ctl).DragMode := dmAutomatic`）：它在 `TControl` 里是 protected，经 `TTyCustomControl`、`TTyGraphicControl` 或任何 `TTyCustomXxx` 类型的引用编不过，见 [subclassing.md](subclassing.md) 7.5 节。
 
-### Tier B —— 键盘 / 焦点事件（仅 `TTyCustomControl`，即可聚焦控件）
+### Tier B —— 键盘 / 焦点事件（仅窗口化控件，即可聚焦控件）
 
 | 事件 | 说明 |
 |------|------|
@@ -75,7 +75,7 @@ TyControls 的全部控件继承自两个基类之一（`tyControls.Base`）：
 
 > Tier B 事件由 `TWinControl` 声明，因此只有窗口化的 `TTyCustomControl` 子类暴露。`TTyLabel` / `TTyDivider` 等 `TTyGraphicControl` 子类**不**暴露键盘 / 焦点事件——它们不可获得焦点。
 
-> **仅窗口化基类的两个容器属性：** `BorderWidth`（把子控件区域整体内缩若干像素）与 `ChildSizing`（LCL 的每容器子控件布局引擎：`Layout` / `ControlsPerLine` / 各方向间距 / `EnlargeHorizontal` 等）也只在 `TTyCustomControl` 上 published——二者都是 `TWinControl` 成员，对不承载子控件的图形控件没有意义。两者的分发同样全在 `TWinControl` 的对齐流程里，基类只是打开了可见性。
+> **仅窗口化基类的两个容器属性：** `BorderWidth`（把子控件区域整体内缩若干像素）与 `ChildSizing`（LCL 的每容器子控件布局引擎：`Layout` / `ControlsPerLine` / 各方向间距 / `EnlargeHorizontal` 等）也只有窗口化控件发布——二者都是 `TWinControl` 成员，对不承载子控件的图形控件没有意义。两者的分发同样全在 `TWinControl` 的对齐流程里，库里只是把它们发布出来。
 
 ---
 
@@ -124,7 +124,7 @@ TyControls 的硬性原则是**视觉由主题（.tycss）拥有**：颜色、�
 | `BorderStyle` | 边框样式由主题 `border-*` 令牌决定 |
 | `DoubleBuffered` | **强制开启**（BGRABitmap 离屏合成），不允许关闭——关闭会导致闪烁与绘制撕裂 |
 
-> **别把 `BorderWidth` 当边框宽度。** `TWinControl.BorderWidth` 已在 `TTyCustomControl` 上 published，但它是**布局**属性（子控件区域的内缩量），与画出来的那条边无关；边框的粗细仍然只由主题的 `border-width` 令牌决定，控件不暴露任何覆盖它的原生属性。
+> **别把 `BorderWidth` 当边框宽度。** 窗口化控件都发布了 `TWinControl.BorderWidth`，但它是**布局**属性（子控件区域的内缩量），与画出来的那条边无关；边框的粗细仍然只由主题的 `border-width` 令牌决定，控件不暴露任何覆盖它的原生属性。
 
 > **`OnPaint` 不在此列——它是"叠加"而不是"接管"。** 控件的外观仍然只由 Painter + 主题决定；`OnPaint` 在控件**画完并合成到画布之后**才触发，宿主程序只能在成品之上再画东西，改不了主题画出来的那一层。所以它不违反"视觉由主题拥有"：它加的是**应用自己的**标记（角标、选中框、调试矩形），不是控件的皮肤。
 >

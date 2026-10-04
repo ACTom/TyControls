@@ -31,7 +31,7 @@ uses tyControls.IconFont, tyControls.CharImage;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `IconFont` | `TTyIconFont` | `nil` | 字形来源。用 `FreeNotification`/`Notification` 挂钩：所指字体被释放时自动置 `nil`，不留悬垂引用。 |
+| `IconFont` | `TTyCustomIconFont` | `nil` | 字形来源。用 `FreeNotification`/`Notification` 挂钩：所指字体被释放时自动置 `nil`，不留悬垂引用。 |
 | `GlyphName` | `string` | `''` | 要显示的字形名（对应 IconFont 的 `Glyphs` 映射，如 `save`）。为空则不绘制。 |
 | `GlyphSize` | `Integer` | `0` | 字形边长（**逻辑像素**，随 PPI 经 `P.Scale` 缩放）。`0` = 自动：适配较小的一边减去两侧内边距（`TyCharImagePad`）。 |
 | `GlyphColor` | `TTyColor` | `TyGlyphColorDefault` | 字形填充色。默认哨兵值 `TyGlyphColorDefault`（即全透明 `$00000000`，表示“**用主题**”）→ 取 `CurrentStyle.TextColor`；设为其他值则覆盖主题色。 |

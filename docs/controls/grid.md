@@ -57,7 +57,7 @@ end;
 | `ShowFilterButtons` | 列头上显示筛选漏斗,点开是带搜索框与逐值计数的下拉 |
 | `MinEditorWidth` | 编辑器的最小宽度(逻辑像素)。0 = 完全跟着格走。设大于 0 后,窄列上的编辑器会向右加宽到这个宽度 —— 加宽的是**编辑器**,列宽一点没动,也不会越过网格右缘 |
 | `SelectionMode` | `gsmCell`(默认)/ `gsmRow` / `gsmColumn` |
-| `Images` | `gcdImage` 用的图像集(`TTyVirtualImageList`) |
+| `Images` | `gcdImage` 用的图像列表(`TCustomImageList`,本库的 `TTyVirtualImageList` 或 LCL 的 `TImageList` 都行) |
 | `OnGetRowHeight` | 逐行行高。**接了它才启用可变行高**;不接则全表等高,几何层走整除快路径(百万行时省下一个百万项的前缀和数组) |
 | `SortKind` | `gskText` 还是 `gskNumber`。数值列用文本排会得到 `'10' < '9'` |
 | `DefaultEditorKind` | 默认编辑器种类,见下表 |

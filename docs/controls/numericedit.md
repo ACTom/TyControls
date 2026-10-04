@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyNumericEdit 是**数值编辑框**,继承自 [TTyEdit](edit.md),复用它的整套文本引擎(选区 / 撤销 / IME / 光标)与 `'TyEdit'` 主题。输入被过滤到数字 / 负号 / 小数点;**聚焦时编辑"原始值"(无千分位),失焦后重新按分组格式化显示**——从而避免"边打边格式化"带来的光标错乱。`Value` 是强类型访问器;`MinValue`/`MaxValue` 在失焦时夹紧。
+TTyNumericEdit 是**数值编辑框**,继承自 [TTyCustomEdit](edit.md),复用它的整套文本引擎(选区 / 撤销 / IME / 光标)与 `'TyEdit'` 主题。输入被过滤到数字 / 负号 / 小数点;**聚焦时编辑"原始值"(无千分位),失焦后重新按分组格式化显示**——从而避免"边打边格式化"带来的光标错乱。`Value` 是强类型访问器;`MinValue`/`MaxValue` 在失焦时夹紧。
 
 ---
 
@@ -31,7 +31,7 @@ uses tyControls.NumericEdit;
 | `MinValue` | `Double` | `0` | 下限(仅当 `MaxValue > MinValue` 时启用夹紧)。 |
 | `MaxValue` | `Double` | `0` | 上限。 |
 
-另继承 [TTyEdit](edit.md) 的全部已发布属性(`Text` / `Alignment` / `ReadOnly` / `MaxLength` / `OnChange` …)与 `Modified` 脏标记。构造时默认 `Alignment = taRightJustify`(数字右对齐)。
+另继承 [TTyCustomEdit](edit.md) 的全部已发布属性(`Text` / `Alignment` / `ReadOnly` / `MaxLength` / `OnChange` …)与 `Modified` 脏标记。构造时默认 `Alignment = taRightJustify`(数字右对齐)。
 
 ---
 

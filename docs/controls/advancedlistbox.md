@@ -4,7 +4,7 @@
 
 TTyAdvancedListBox 是一个**富行(rich row)列表框**:每一行可带一张**左侧图片** + 一行**加粗标题(Title)** + 一行**暗色副标题(Subtitle)**,行高比普通列表更高,用于呈现「头像 + 名字 + 说明」这类两行信息。
 
-继承自 [TTyListBox](../../source/tyControls.ListBox.pas),只重写 `PaintItemContent` 来画富行,其余滚动 / 选中 / 键盘导航行为完全复用基类。图片来自 [TTyVirtualImageList](../../source/tyControls.ImageCollection.pas)(按索引寻址)。
+继承自 [TTyCustomListBox](../../source/tyControls.ListBox.pas),只重写 `PaintItemContent` 来画富行,其余滚动 / 选中 / 键盘导航行为完全复用基类。图片来自 [TTyVirtualImageList](../../source/tyControls.ImageCollection.pas)(按索引寻址)。
 
 **数据模型(排序安全,无并行数组):**
 
@@ -34,7 +34,7 @@ uses tyControls.AdvancedListBox;
 
 | 成员 | 说明 |
 |------|------|
-| `Images: TTyVirtualImageList` | 栅格图片来源(按索引)。设置时注册 `FreeNotification`,列表先释放会自动置 nil。 |
+| `Images: TCustomImageList` | 栅格图片来源(按索引)。设置时注册 `FreeNotification`,列表先释放会自动置 nil。 |
 | `AddItem(const ATitle, ASubtitle: string; AImageIndex: Integer)` | 追加一行富项。`ASubtitle` 可为 `''`;`AImageIndex < 0` 表示无图。 |
 | `TitleOf(AIndex): string` | 该行的标题(越界返回 `''`)。 |
 | `SubtitleOf(AIndex): string` | 该行的副标题(无副标题 / 越界返回 `''`)。 |

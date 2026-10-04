@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-`TTyControlBar` 是 TyControls 库中的**可停靠工具带宿主**（band host），继承自 [`TTyPanel`](panel.md)。它把作为其子控件（`Parent := ControlBar`）的控件——典型是工具条 / 小面板——排布成若干**水平工具带（band，即“行”）**：每个子控件停靠在某条 band 上；一条 band 可并排容纳多个子控件；当当前行放不下时，下一个子控件自动**换行**到下方的新 band。每条 band 在左侧绘制一个**抓手（gripper）**——由主题色画出的两条竖直点状导轨——band 上的所有子控件都从抓手右侧开始，因而可通过抓手“抓住”整条 band（对应经典 VCL `TControlBar` / Office rebar）。
+`TTyControlBar` 是 TyControls 库中的**可停靠工具带宿主**（band host），继承自 [`TTyCustomPanel`](panel.md)。它把作为其子控件（`Parent := ControlBar`）的控件——典型是工具条 / 小面板——排布成若干**水平工具带（band，即“行”）**：每个子控件停靠在某条 band 上；一条 band 可并排容纳多个子控件；当当前行放不下时，下一个子控件自动**换行**到下方的新 band。每条 band 在左侧绘制一个**抓手（gripper）**——由主题色画出的两条竖直点状导轨——band 上的所有子控件都从抓手右侧开始，因而可通过抓手“抓住”整条 band（对应经典 VCL `TControlBar` / Office rebar）。
 
 核心排布逻辑抽成一个**纯函数** `TyControlBarPack`（无窗口句柄，直接被单元测试驱动）；控件本身是一层薄壳，在 `AlignControls` 里跑解算器并对每个子控件 `SetBounds`。实时拖拽换带是真机后续工作（拖拽交互），但**每个子控件所属的 band（band 索引）以子控件为键存储**，跨重排保留，子控件被释放时通过 `Notification` 自动清除。
 
@@ -16,7 +16,7 @@
 |------|-----|
 | 单元 | `tyControls.ControlBar` |
 | `GetStyleTypeKey` 返回值 | `'TyControlBar'`（**自有 typeKey**） |
-| 基类 | `TTyPanel`（继承自 `TTyCustomControl` → `TCustomControl`） |
+| 基类 | `TTyCustomPanel`（继承自 `TTyCustomControl` → `TCustomControl`） |
 | 默认尺寸 | 320 × 32（逻辑像素） |
 
 在 `.tycss` 文件中，本控件对应选择器 `TyControlBar`。
@@ -44,13 +44,13 @@ uses tyControls.ControlBar;
 | `GripperWidth` | `Integer` | `12` | 每条 band 左侧为抓手预留的逻辑宽度；子控件从此宽度右侧开始排布。改值触发重排。 |
 | `BandSpacing` | `Integer` | `3` | 相邻 band 之间（以及一行内相邻子控件之间）的逻辑间距。改值触发重排。 |
 
-### 3.2 继承自 TTyPanel / TTyCustomControl 的成员
+### 3.2 声明在父类、由 TTyControlBar 发布的成员
 
-`TTyControlBar` 继承 [`TTyPanel`](panel.md) 的全部 published 成员：
+`TTyControlBar` 发布的、声明在 [`TTyCustomPanel`](panel.md) 及其上层的成员：
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Caption` | `string` | `''` | 面板标题文本（继承自 `TTyPanel`；band 宿主一般留空）。 |
+| `Caption` | `string` | `''` | 面板标题文本（继承自 `TTyCustomPanel`；band 宿主一般留空）。 |
 | `Alignment` | `TAlignment` | `taCenter` | `Caption` 的水平对齐（继承）。 |
 | `Align` | `TAlign` | `alNone` | 停靠方式；设为 `alTop` / `alBottom` 时控件随 band 行数**自动增高**（见 [第 7 节](#7-注意事项)）。 |
 | `Anchors` | `TAnchors` | — | 锚点布局（继承）。 |
@@ -118,7 +118,7 @@ TyPanel, TyControlBar, /* ... */ {
 
 ### 渲染细节
 
-- **面板框架：** `Paint` 先调用 `inherited Paint`（`TTyPanel` 的框架绘制，走 `CurrentStyle`，解析的是本控件自己的 `TyControlBar` 键），画出主题化背景 / 边框。
+- **面板框架：** `Paint` 先调用 `inherited Paint`（`TTyCustomPanel` 的框架绘制，走 `CurrentStyle`，解析的是本控件自己的 `TyControlBar` 键），画出主题化背景 / 边框。
 - **band 抓手：** 随后为每条**已占用**的 band 在其左侧抓手列内绘制两条竖直导轨；颜色取当前样式的 `border-color`（缺省时回落 `text-color`），上下各内缩若干像素。band 行数由存储的子控件分配推导。
 - 抓手颜色**由盒子样式令牌派生**，控件代码不硬编码颜色（遵循库的主题可定制原则）；但导轨的粗细、间距与内缩是代码里的 `Scale(1)`/`Scale(3)`/`Scale(3)`，且抓手没有自己的键，因此"只改抓手不改工具带底色"目前做不到（见 2 节）。
 
@@ -160,7 +160,7 @@ ShowMessage(Format('TB3 在第 %d 条 band', [Bar.BandIndexOf(TB3)]));
 
 ## 8. 注意事项
 
-- **子控件即 band 项：** 把控件的 `Parent` 设为 band 宿主即完成停靠；宿主是 `csAcceptsControls` 容器（继承自 `TTyPanel`），在 `AlignControls` 里按子控件顺序（仅可见者）逐个装带。band 高度由 `BandHeight` 统一覆盖子控件高度，子控件只需设 `Width`。
+- **子控件即 band 项：** 把控件的 `Parent` 设为 band 宿主即完成停靠；宿主是 `csAcceptsControls` 容器（继承自 `TTyCustomPanel`），在 `AlignControls` 里按子控件顺序（仅可见者）逐个装带。band 高度由 `BandHeight` 统一覆盖子控件高度，子控件只需设 `Width`。
 - **Align 自动增高：** 当 `Align in [alTop, alBottom]` 时，宿主高度按 band 行数自动调整（`bands*BandHeight + (bands-1)*BandSpacing + 2*BandSpacing + 两条边框描边`）——不要在代码里硬设与之冲突的 `Height`。
 - **band 排在 `BandContentRect` 里，不是 `ClientRect` 里：** `TTyPanel` 的 `DrawFrame` 把 `border-width` 描在客户区**内侧**，而 band 是窗口化子控件——它在父控件之后绘制，并且会把自己的矩形整个擦成表面色。所以一条排在 `(0,0)` 的 band 不是"盖住"边框，是**抹掉**它（表现为 rebar 顶边只剩圆角那一小段）。排布、夹具绘制、自动增高三处都读同一个 `BandContentRect`，内缩宽度取自同一个 `border-width` 主题令牌，边框更粗的皮肤会自动一起让位。**注意 LCL 的 `ClientRect` 不含 `AdjustClientRect` 的内缩**，自己 `SetBounds` 子控件的容器必须自己算这一圈。
 - **重入守卫：** `AlignControls` 末尾对 `Height` 的赋值会再次触发 `AlignControls`，`FInLayout` 守卫防止无限递归。

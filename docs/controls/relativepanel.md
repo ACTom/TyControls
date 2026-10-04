@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-`TTyRelativePanel` 是 TyControls 库中的**相对布局容器**，继承自 [`TTyPanel`](panel.md)，风格对标 Android `RelativeLayout` / WinUI `RelativePanel`。它托管任意子控件，每个子控件通过一组**规则**声明自己相对于**兄弟控件**或**父容器**的摆放方式，容器在 `Resize`（以及规则变化后）自动求解每个子控件的 `Left/Top` 并 `SetBounds`。
+`TTyRelativePanel` 是 TyControls 库中的**相对布局容器**，继承自 [`TTyCustomPanel`](panel.md)，风格对标 Android `RelativeLayout` / WinUI `RelativePanel`。它托管任意子控件，每个子控件通过一组**规则**声明自己相对于**兄弟控件**或**父容器**的摆放方式，容器在 `Resize`（以及规则变化后）自动求解每个子控件的 `Left/Top` 并 `SetBounds`。
 
 核心价值是一套**纯布局数学**：把子控件的规则集拓扑排序后逐个定位，被引用的兄弟先定位、再定位引用它的子控件；对**依赖环**做了保护（环中的子控件回退到父容器原点，永不死循环）。这套求解逻辑以纯函数 `TyRelativeSolve` 暴露，可脱离窗口句柄直接单元测试。
 
@@ -18,7 +18,7 @@
 |------|-----|
 | 单元 | `tyControls.RelativePanel` |
 | `GetStyleTypeKey` 返回值 | `'TyPanel'`（**刻意借用**，见下） |
-| 基类 | `TTyPanel`（继承自 `TTyCustomControl` → `TCustomControl`） |
+| 基类 | `TTyCustomPanel`（继承自 `TTyCustomControl` → `TCustomControl`） |
 | 默认尺寸 | 240 × 160（逻辑像素） |
 
 ```pascal
@@ -86,7 +86,7 @@ uses tyControls.RelativePanel;
 |------|------|--------|------|
 | `Spacing` | `Integer` | `8` | 位置规则（`trRightOf/trLeftOf/trBelow/trAbove`）在兄弟之间插入的间距（px）。**边对齐 / 父对齐规则不受此值影响。** 修改后自动重排。 |
 
-### 继承自 TTyPanel / TTyCustomControl 的 published 成员
+### 声明在父类、由 TTyRelativePanel 发布的成员
 
 | 属性 | 类型 | 说明 |
 |------|------|------|

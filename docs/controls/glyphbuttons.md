@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-这三个控件把 [[TTyIconFont]] 的**图标字体字形**和按钮标题配对，全部继承自 [[TTyButton]]，共享同一套框架、悬停背景淡入、状态、焦点环与数字角标（主题令牌见 §2，三者**并不共用一个键**）：
+这三个控件把 [[TTyIconFont]] 的**图标字体字形**和按钮标题配对，全部继承自 [[TTyCustomButton]]（经 `TTyGlyphButtonBase`），共享同一套框架、悬停背景淡入、状态、焦点环与数字角标（主题令牌见 §2，三者**并不共用一个键**）：
 
 | 控件 | 布局 | 典型用途 | 默认尺寸 |
 |------|------|----------|----------|
@@ -47,11 +47,11 @@ uses tyControls.IconFont, tyControls.GlyphButtons;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `IconFont` | `TTyIconFont` | `nil` | 字形来源。用 `FreeNotification`/`Notification` 挂钩：所指字体被释放时自动置 `nil`，不留悬垂引用。 |
+| `IconFont` | `TTyCustomIconFont` | `nil` | 字形来源。用 `FreeNotification`/`Notification` 挂钩：所指字体被释放时自动置 `nil`，不留悬垂引用。 |
 | `GlyphName` | `string` | `''` | 要绘制的字形名（对应 IconFont 的 `Glyphs` 映射，如 `save`）。为空或未映射 → 不画字形，标题占满内容区（退化为普通按钮）。 |
 | `GlyphSize` | `Integer` | `0` | 字形边长（**逻辑像素**，随 PPI 经 `TTyPainter.Scale` 缩放）。`0` = 自动：堆叠布局（`glTop` / `glBottom`）取内容区短边，并排布局（`glLeft` / `glRight`）取内容区高度。 |
 | `GlyphColor` | `TTyColor` | `TyGlyphButtonColorDefault` | 字形填充色。默认哨兵值 `TyGlyphButtonColorDefault`（即全透明 `$00000000`，表示“**用主题**”）→ 取 `TextColor`，与标题同色；设为其他值则覆盖。 |
-| `Images` | `TTyImageCollection` | `nil` | **跨平台图像**字形源（一组 BGRA 图标）。同样用 `FreeNotification` 置 `nil`。 |
+| `Images` | `TTyCustomImageCollection` | `nil` | **跨平台图像**字形源（一组 BGRA 图标）。同样用 `FreeNotification` 置 `nil`。 |
 | `ImageName` | `string` | `''` | 要画的图标名。`Images` + `ImageName` **同时**设定时**优先于** `IconFont`/`GlyphName`（图标按 `GlyphColor`/`TextColor` 染色）；与系统图标字体不同，它在每个 OS 上渲染一致。为空则回落到图标字体。 |
 | `GlyphLayout` | `TTyGlyphLayout` | `glLeft` | 字形相对标题的朝向（见下表）。**以前是 protected**——想要非默认朝向必须继承一个子类；现在设计器里直接选。`TTyGlyphContainerButton` 重新声明为 `default glTop`（与它构造函数一致，免得每个 `.lfm` 都写一行）。 |
 | `Spacing` | `Integer` | `-1` | 字形与标题之间的间距，单位**逻辑像素**。`-1`（默认）= 交给主题令牌 `--glyph-button-gap`；`>= 0` = 本控件用这个字面像素值。 |
@@ -101,7 +101,7 @@ uses tyControls.IconFont, tyControls.GlyphButtons;
 |------|------|------|
 | `FindDownButton` | `TTyCustomSpeedButton` | 本按钮所在分组当前被按下的那一个；全部弹起时返回 `nil`，`GroupIndex = 0`（未分组）也返回 `nil`。以前只有"释放兄弟"的写侧、没有读侧，每个 app 都得自己写一遍带类型判断的 `Parent.Controls` 扫描。**作用域分歧要说清楚**：本实现只扫**直接父容器**，与 `UnpressSiblings`、与 LCL 的 `UpdateExclusive`（`include/speedbutton.inc:479-491`，`Parent.Broadcast`）一致；LCL 自己的 `FindDownButton` 却扫整个窗体（`include/speedbutton.inc:81-111`），因而可能返回一个它自己的分组逻辑根本不管的按钮。 |
 
-### 3.3 继承自 [[TTyButton]] 的常用成员
+### 3.3 继承自 [[TTyCustomButton]] 的常用成员
 
 `Caption`、`Down`（`:selected` 常驻选中态）、`Default`、`Cancel`、`ModalResult`、`ShowBadge`/`BadgeValue`/`BadgePosition`/`OnBadgeDisplay`（数字角标）、`AnimationsEnabled`（悬停背景渐变）、`Enabled`、`Font`、`Align`、`Anchors`、`StyleClass`、`Controller`、`OnClick` 等——细节见 [button.md](button.md)。
 
@@ -111,7 +111,7 @@ uses tyControls.IconFont, tyControls.GlyphButtons;
 
 三者都**只重写** `DrawContent`（`TTySpeedButton` 另重写 `Click` / `SetDown`，各自重写 `Create` 设默认值），不触碰框架/状态/角标绘制路径：
 
-1. 基类 `RenderTo`（继承自 TTyButton）先画框架、算内边距，再把已内缩的内容矩形交给 `DrawContent`。
+1. 基类 `RenderTo`（继承自 TTyCustomButton）先画框架、算内边距，再把已内缩的内容矩形交给 `DrawContent`。
 2. `TTyGlyphButtonBase.DrawContent`：
    - 若 `IconFont = nil`、`GlyphName` 为空或内容区退化 → 直接 `inherited DrawContent`（居中标题，即普通按钮）。**这几条提前返回在 `ShowCaption` 之前，正是"没有图标的按钮永远不会被藏掉标题"的实现所在。**
    - 否则算出字形像素大小（显式 `GlyphSize` 优先，否则按布局自动适配），再按 `ShowCaption` 分两路切内容矩形：
@@ -251,7 +251,7 @@ end;
 
 ## 相关
 
-- [[TTyButton]] —— 基类，提供框架、状态、悬停渐变、角标、Default/Cancel/ModalResult。
+- [[TTyCustomButton]] —— 基类，提供框架、状态、悬停渐变、角标、Default/Cancel/ModalResult。
 - [[TTyIconFont]] —— 图标字体源，`RenderGlyph` 光栅化字形。
 - [[TTyCharImage]] —— 只显示单个字形的叶子图形控件（同样的字形合成机制）。
 - **右到左镜像：** `GlyphLayout` 的左右一对会翻转（`glLeft` ↔ `glRight`），上下一对不动（`glTop`/`glBottom` 没有阅读方向）。这与 LCL 给 `TBitBtn` 备的 `BidiAdjustButtonLayout`（`buttons.pp:700`）是同一张表，所以 ty 图标按钮和 `TBitBtn` 在同一个右到左窗体上会把图标放在同一侧。尺寸不变，只是三段的顺序变了。

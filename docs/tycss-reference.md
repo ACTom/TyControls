@@ -778,7 +778,7 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 
 | typeKey | 画什么 | 谁解析 |
 |---|---|---|
-| `TyButton` | 普通按钮外框 + 文字 | `TTyButton`(及未重写键的后代:`TTyGlyphButton`、`TTyColorButton`、`TTyDropDownButton`、`TTyMenuButton`、`TTyTransferArrowButton`) |
+| `TyButton` | 普通按钮外框 + 文字 | `TTyButton`(及同族未重写键的控件:`TTyGlyphButton`、`TTyColorButton`、`TTyDropDownButton`、`TTyMenuButton`、`TTyTransferArrowButton`) |
 | `TySpeedButton` | 工具条上的快捷按钮 | `TTySpeedButton` |
 | `TyGlyphContainerButton` | 带图标容器的按钮 | `TTyGlyphContainerButton` |
 | `TyRibbonAppMenu` | Ribbon 左上角的应用菜单按钮 | `TTyRibbonAppMenu` |
@@ -823,10 +823,10 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 
 | typeKey | 画什么 | 谁解析 | 状态 / 变体 |
 |---|---|---|---|
-| `TyEdit` | 单行输入框 | `TTyEdit` 及未重写键的后代(`TTyMaskEdit`/`TTyCurrencyEdit`/`TTyURLEdit`/`TTyNumericEdit`/`TTyCalcEdit`/`TTyValueEdit`/`TTyComboEdit`/`TTyTrackEdit`);`TTyCalculator` 的显示条也显式解析它 | `:hover` `:focus` `:disabled` |
+| `TyEdit` | 单行输入框 | `TTyEdit` 及同族未重写键的控件(`TTyMaskEdit`/`TTyCurrencyEdit`/`TTyURLEdit`/`TTyNumericEdit`/`TTyCalcEdit`/`TTyValueEdit`/`TTyComboEdit`/`TTyTrackEdit`);`TTyCalculator` 的显示条也显式解析它 | `:hover` `:focus` `:disabled` |
 | `TySpinEdit` | 数字微调输入框 | `TTySpinEdit` | `:hover` `:focus` `:disabled` |
 | `TyMemo` | 多行文本框 | `TTyMemo` | `:hover` `:focus` `:disabled` |
-| `TyComboBox` | 下拉框字段(下拉箭头用 `color`) | `TTyComboBox` 及其 11 个后代;`TTyTreeSelect` 刻意共用(§8.5) | `:hover` `:focus` `:disabled` |
+| `TyComboBox` | 下拉框字段(下拉箭头用 `color`) | `TTyComboBox` 及同族的另外 11 个控件;`TTyTreeSelect` 刻意共用(§8.5) | `:hover` `:focus` `:disabled` |
 | `TyCascader` | 级联选择字段 | `TTyCascader` | `:hover` `:focus` `:disabled` |
 | `TyDateTimePicker` | 日期时间字段 | `TTyDateTimePicker` | `:hover` `:focus` `:disabled` |
 | `TyTextSelection` | 文本选区高亮带,只读 `background` | `TTyEdit` / `TTyMemo` / `TTyDateTimePicker` | 无状态 |
@@ -896,7 +896,7 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 
 | typeKey | 画什么 | 谁解析 | 状态 |
 |---|---|---|---|
-| `TyListBox` | 列表外框 | `TTyListBox` 及 14 个未重写键的后代;`TTyComboBox`/`TTyValueListEditor` 的下拉体、`TTyPopupSurface`、`TTyGalleryGrid`(画廊弹出网格)也解析它 | `:hover` `:focus` `:disabled` |
+| `TyListBox` | 列表外框 | `TTyListBox` 及同族 14 个未重写键的控件;`TTyComboBox`/`TTyValueListEditor` 的下拉体、`TTyPopupSurface`、`TTyGalleryGrid`(画廊弹出网格)也解析它 | `:hover` `:focus` `:disabled` |
 | `TyValueListEditor` | 属性网格外框(与 `TyListBox` 共块) | `TTyValueListEditor` | `:hover` `:focus` `:disabled` |
 | `TyRibbonGallery` | Ribbon 画廊的内嵌行外框(与 `TyListBox` 共块) | `TTyRibbonGallery` | `:hover` `:focus` `:disabled` |
 | `TyListItem` | 单行条目:`background` 决定行底、`color` 决定文字 | `TTyListBox`;`TTyRibbonGallery` 的图块也仍解析它 | `:hover` `:active`(=选中行) |

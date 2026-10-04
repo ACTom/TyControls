@@ -37,11 +37,11 @@ const
 type
   TTyCustomCharImage = class(TTyGraphicControl)
   private
-    FIconFont: TTyIconFont;
+    FIconFont: TTyCustomIconFont;
     FGlyphName: string;
     FGlyphSize: Integer;
     FGlyphColor: TTyColor;
-    procedure SetIconFont(AValue: TTyIconFont);
+    procedure SetIconFont(AValue: TTyCustomIconFont);
     procedure IconFontChanged(Sender: TObject);
     procedure SetGlyphName(const AValue: string);
     procedure SetGlyphSize(AValue: Integer);
@@ -55,7 +55,7 @@ type
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
-    property IconFont: TTyIconFont read FIconFont write SetIconFont;
+    property IconFont: TTyCustomIconFont read FIconFont write SetIconFont;
     property GlyphName: string read FGlyphName write SetGlyphName;
     { Glyph edge length in LOGICAL px (scaled by PPI). 0 = auto: fit the smaller
       client dimension minus TyCharImagePad on each side. }
@@ -162,7 +162,7 @@ begin
   Result := 'TyCharImage';
 end;
 
-procedure TTyCustomCharImage.SetIconFont(AValue: TTyIconFont);
+procedure TTyCustomCharImage.SetIconFont(AValue: TTyCustomIconFont);
 begin
   if FIconFont = AValue then Exit;
   if FIconFont <> nil then
