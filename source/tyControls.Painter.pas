@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, LazUTF8, BGRABitmap, BGRABitmapTypes,
-  BGRAGradientScanner, BGRACanvas2D, BGRATextBidi,
+  BGRAGradientScanner, BGRACanvas2D, BGRATextBidi, BGRATransform,
   BGRAPath,   // TBGRAPath: measures a path:// symbol's own bounds for SvgPathIn
   FPReadJPEG, FPReadPNG, FPReadBMP,  // register FPImage readers so url() jpg/png/bmp load
   tyControls.Types, tyControls.FontUnits;
@@ -338,6 +338,13 @@ type
     procedure FillPathGradient(const AStops: array of TTyGradStop;
       AX1, AY1, AX2, AY2, ARadius: Double;
       ARule: TTyFillRule = tfrNonZero);
+    { Fill the current path with AImage tiled as a canvas pattern:
+      ARepetition is createPattern's ('repeat', 'repeat-x', 'repeat-y',
+      'no-repeat'; anything else repeats both ways), AMatrix [a, b, c, d, e,
+      f] takes the image's pixels to DEVICE pixels, on top of the current
+      transform. The image is borrowed, not owned. }
+    procedure FillPathPattern(AImage: TBGRABitmap; const ARepetition: string;
+      const AMatrix: array of Double; ARule: TTyFillRule = tfrNonZero);
     { Fill with a themed TTyFill. ABounds is what a gradient's angle resolves
       against (the rect the caller would have passed FillBackground), which is
       not derivable from the path: a bar's gradient is usually meant to run
@@ -2810,6 +2817,64 @@ begin
   grad := BuildGradient(ctx, AStops, AX1, AY1, AX2, AY2, ARadius);
   ctx.fillStyle(grad);
   ctx.fill;
+end;
+
+procedure TTyPainter.FillPathPattern(AImage: TBGRABitmap;
+  const ARepetition: string; const AMatrix: array of Double; ARule: TTyFillRule);
+var
+  ctx: TBGRACanvas2D;
+  pat: IBGRACanvasTextureProvider2D;
+  tex: TBGRAAffineBitmapTransform;
+  rx, ry: Boolean;
+  m: TAffineMatrix;
+begin
+  if (FBmp = nil) or (AImage = nil) or (Length(AMatrix) < 6) then Exit;
+  if (AImage.Width <= 0) or (AImage.Height <= 0) then Exit;
+  ctx := FBmp.Canvas2D;
+  ctx.fillMode := VecFillMode(ARule);
+  rx := True;
+  ry := True;
+  if LowerCase(Trim(ARepetition)) = 'repeat-x' then ry := False
+  else if LowerCase(Trim(ARepetition)) = 'repeat-y' then rx := False
+  else if LowerCase(Trim(ARepetition)) = 'no-repeat' then
+  begin
+    rx := False;
+    ry := False;
+  end;
+  { OUR OWN TEXTURE rather than createPattern(image): that one fits the
+    image's first and LAST pixel centres to the tile's corners, which
+    stretches a tile by width / (width - 1) the moment its origin is not a
+    whole pixel. Here the scanner is asked at device pixel CENTRES and the
+    image's pixel centres sit at its integer coordinates, so the map from
+    image to device is the pattern's matrix with half a pixel taken off on
+    the way in and put back on the way out. }
+  tex := TBGRAAffineBitmapTransform.Create(AImage, rx, ry, rfLinear);
+  try
+    m := AffineMatrixTranslation(-0.5, -0.5)
+      * AffineMatrix(AMatrix[0], AMatrix[2], AMatrix[4],
+                     AMatrix[1], AMatrix[3], AMatrix[5])
+      * AffineMatrixTranslation(0.5, 0.5);
+    tex.Matrix := m;
+    tex.Invert;
+    { the pattern's own transform is the identity: createPattern(texture)
+      adds only the canvas offset, which the scanner's coordinates already
+      are }
+    ctx.save;
+    try
+      ctx.resetTransform;
+      pat := ctx.createPattern(tex);
+    finally
+      ctx.restore;
+    end;
+    ctx.fillStyle(pat);
+    try
+      ctx.fill;
+    finally
+      pat := nil;
+    end;
+  finally
+    tex.Free;
+  end;
 end;
 
 procedure TTyPainter.StrokePathGradient(

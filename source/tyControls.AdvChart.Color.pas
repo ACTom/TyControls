@@ -110,6 +110,103 @@ function TyPaletteTake(var ACursor: TTyPaletteCursor; const AName: string;
   series the FIRST palette colour. }
 function TyChartSeriesDefaultName(ASeriesIndex: Integer): string;
 
+{ ==================== palettes, layers and scopes [Batch 105] ====================
+
+  model/mixin/palette.ts as it is, rather than the one-cursor reading above.
+  Three things that reading could not say:
+
+  COLORLAYER. With `colorLayer` written and a requested count given, the
+  palette is the first layer LONGER than the count, else the last one -- so
+  three series take their colours from a three-colour layer only when a longer
+  one does not come first. The series pass asks with the number of series
+  models, the per-datum pass with the series' raw data count.
+
+  AN INDEX PAST THE END. The cursor belongs to the SCOPE, not to a palette, and
+  is advanced modulo whichever palette answered; the next ask may choose a
+  shorter layer, and `palette[idx]` past its end is undefined. That undefined is
+  remembered under the name like any colour, and the shape it lands on is
+  painted with no fill at all.
+
+  THE THEME AS THE DEFAULT PALETTE. Where upstream's default palette stands --
+  no `color` at the root -- the theme's nine ramp slots stand here, taken
+  through the same cursor and the same memo, and answered as a SLOT rather
+  than a colour so a re-skin repaints without a rebuild. }
+const
+  cTyThemePaletteLength = 9;
+
+type
+  TTyPalette = record
+    { the theme's nine slots, in place of Colors }
+    Theme: Boolean;
+    Colors: TTyChartColorArray;
+  end;
+  TTyPaletteArray = array of TTyPalette;
+
+  { `colorLayer`: Present when the key holds an array (an empty one included:
+    it is truthy, and its last layer is undefined, which sends the ask back to
+    the default palette). }
+  TTyPaletteLayers = record
+    Present: Boolean;
+    Layers: TTyPaletteArray;
+  end;
+
+  TTyPalettePickKind = (
+    ppkNone,     // undefined: an empty palette, or an index past the end
+    ppkColor,    // the author's colour
+    ppkTheme);   // the theme ramp's Slot
+  TTyPalettePick = record
+    Kind: TTyPalettePickKind;
+    Color: TTyChartColor;
+    Slot: Integer;
+  end;
+
+  TTyPaletteMemo = record
+    Name: string;
+    Pick: TTyPalettePick;
+  end;
+
+  { upstream's inner(scope): paletteIdx and paletteNameMap }
+  TTyPaletteScope = record
+    Idx: Integer;
+    Names: array of TTyPaletteMemo;
+  end;
+
+function TyPaletteLength(const APalette: TTyPalette): Integer;
+function TyThemePalette: TTyPalette;
+
+{ The chart's default palette: the root `color` when the key is there (an
+  empty list kills the palette, as upstream's truthy `[]` keeps the theme's
+  out), else the theme's nine. }
+function TyChartRootPalette(AOption: TTyChartOption): TTyPalette;
+
+{ A series' own `color` (get('color', true)): empty when it wrote none. }
+function TySeriesOwnPalette(AOption: TTyChartOption;
+  ASeriesIndex: Integer): TTyPalette;
+
+{ `colorLayer` at the root (ASeriesIndex -1) or on one series, own key only.
+  A layer that is not a list counts as an empty one. }
+function TyChartPaletteLayersOf(AOption: TTyChartOption;
+  ASeriesIndex: Integer): TTyPaletteLayers;
+
+{ getFromPalette, verbatim. ARequest < 0 is `requestNum == null`. }
+function TyPaletteFrom(const ADefault: TTyPalette;
+  const ALayers: TTyPaletteLayers; const AName: string;
+  var AScope: TTyPaletteScope; ARequest: Integer): TTyPalettePick;
+
+{ SeriesModel.getColorFromPalette: the series' own palette over AOwnScope,
+  and when that answers undefined the chart's over AChartScope. The per-datum
+  pass hands the SAME scope twice -- upstream's shared scope object. }
+function TySeriesPaletteFrom(const AOwn: TTyPalette;
+  const AOwnLayers: TTyPaletteLayers; const AChart: TTyPalette;
+  const AChartLayers: TTyPaletteLayers; const AName: string;
+  var AOwnScope, AChartScope: TTyPaletteScope; ARequest: Integer): TTyPalettePick;
+
+{ getColorBy(): the series' own `colorBy`, else its type's default ('data'
+  for pie, funnel, gauge, radar, chord and themeRiver), else the root's, else
+  'series'. A falsy value is 'series'. }
+function TyChartColorByOf(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const ASeriesType: string): string;
+
 { ==================== a colour that is an object ==================== }
 
 { Read a gradient, if that is what this value is.
@@ -123,6 +220,13 @@ function TyChartSeriesDefaultName(ASeriesIndex: Integer): string;
   that survive. }
 function TyTryReadGradient(AData: TJSONData;
   out AGrad: TTyChartGradient): Boolean;
+
+{ Read an image pattern, if that is what this value is: an object with an
+  `image` that is not null and no `colorStops` (a gradient wins, as it does
+  in brushPath). Only a string image can be held; anything else reads as a
+  pattern with no image, which paints nothing. [Batch 105] }
+function TyTryReadPattern(AData: TJSONData;
+  out APat: TTyChartPattern): Boolean;
 
 { ==================== the style blocks ==================== }
 
@@ -140,6 +244,9 @@ type
       degrades to, so every caller that wants one number keeps working and
       only the painter has to know the difference. }
     Gradient: TTyChartGradient;
+    { or an image [Batch 105]: Color is then transparent, upstream's
+      convertToColorString of an object without stops }
+    Pattern: TTyChartPattern;
   end;
 
   { `borderType` / `type`. A number or an array is verbatim pixels; the two
@@ -684,6 +791,171 @@ begin
   Result := True;
 end;
 
+{ ==================== palettes, layers and scopes ==================== }
+
+function TyPaletteLength(const APalette: TTyPalette): Integer;
+begin
+  if APalette.Theme then Result := cTyThemePaletteLength
+  else Result := Length(APalette.Colors);
+end;
+
+function TyThemePalette: TTyPalette;
+begin
+  Result.Theme := True;
+  Result.Colors := nil;
+end;
+
+function TyChartRootPalette(AOption: TTyChartOption): TTyPalette;
+var declared: Boolean;
+begin
+  Result.Theme := False;
+  Result.Colors := TyChartPaletteOf(AOption, -1, declared);
+  if not declared then Result := TyThemePalette;
+end;
+
+function TySeriesOwnPalette(AOption: TTyChartOption;
+  ASeriesIndex: Integer): TTyPalette;
+var declared: Boolean;
+begin
+  Result.Theme := False;
+  Result.Colors := TyChartPaletteOf(AOption, ASeriesIndex, declared);
+end;
+
+function TyChartPaletteLayersOf(AOption: TTyChartOption;
+  ASeriesIndex: Integer): TTyPaletteLayers;
+var
+  node: TJSONObject;
+  d: TJSONData;
+  i: Integer;
+begin
+  Result := Default(TTyPaletteLayers);
+  if AOption = nil then Exit;
+  if ASeriesIndex >= 0 then
+    node := ObjOf(AOption.ComponentAt('series', ASeriesIndex))
+  else
+    node := ObjOf(AOption.Root);
+  if node = nil then Exit;
+  d := node.Find('colorLayer');
+  { only a list reaches getNearestPalette as a list; null and the rest of the
+    falsy values are `!layeredPalette` }
+  if (d = nil) or (d.JSONType <> jtArray) then Exit;
+  Result.Present := True;
+  SetLength(Result.Layers, TJSONArray(d).Count);
+  for i := 0 to TJSONArray(d).Count - 1 do
+  begin
+    Result.Layers[i].Theme := False;
+    if TJSONArray(d).Items[i].JSONType = jtArray then
+      ColorsFrom(TJSONArray(d).Items[i], Result.Layers[i].Colors)
+    else
+      Result.Layers[i].Colors := nil;
+  end;
+end;
+
+function TyPaletteFrom(const ADefault: TTyPalette;
+  const ALayers: TTyPaletteLayers; const AName: string;
+  var AScope: TTyPaletteScope; ARequest: Integer): TTyPalettePick;
+var
+  i, n: Integer;
+  pal: TTyPalette;
+begin
+  Result := Default(TTyPalettePick);
+  Result.Kind := ppkNone;
+  { THE NAME FIRST, an undefined answer included -- hasOwnProperty }
+  for i := 0 to High(AScope.Names) do
+    if AScope.Names[i].Name = AName then
+      Exit(AScope.Names[i].Pick);
+  if (ARequest < 0) or not ALayers.Present then
+    pal := ADefault
+  else if Length(ALayers.Layers) = 0 then
+    { palettes[-1] is undefined, and `palette || defaultPalette` takes over }
+    pal := ADefault
+  else
+  begin
+    { getNearestPalette: the first layer LONGER than the count, else the last }
+    pal := ALayers.Layers[High(ALayers.Layers)];
+    for i := 0 to High(ALayers.Layers) do
+      if TyPaletteLength(ALayers.Layers[i]) > ARequest then
+      begin
+        pal := ALayers.Layers[i];
+        Break;
+      end;
+  end;
+  n := TyPaletteLength(pal);
+  { an empty palette answers undefined and is neither remembered nor
+    advanced }
+  if n = 0 then Exit;
+  { palette[paletteIdx], NOT modulo: the index may have been advanced by a
+    longer palette on the same scope }
+  if AScope.Idx < n then
+  begin
+    if pal.Theme then
+    begin
+      Result.Kind := ppkTheme;
+      Result.Slot := AScope.Idx;
+    end
+    else
+    begin
+      Result.Kind := ppkColor;
+      Result.Color := pal.Colors[AScope.Idx];
+    end;
+  end;
+  if AName <> '' then
+  begin
+    SetLength(AScope.Names, Length(AScope.Names) + 1);
+    AScope.Names[High(AScope.Names)].Name := AName;
+    AScope.Names[High(AScope.Names)].Pick := Result;
+  end;
+  AScope.Idx := (AScope.Idx + 1) mod n;
+end;
+
+function TySeriesPaletteFrom(const AOwn: TTyPalette;
+  const AOwnLayers: TTyPaletteLayers; const AChart: TTyPalette;
+  const AChartLayers: TTyPaletteLayers; const AName: string;
+  var AOwnScope, AChartScope: TTyPaletteScope; ARequest: Integer): TTyPalettePick;
+begin
+  Result := TyPaletteFrom(AOwn, AOwnLayers, AName, AOwnScope, ARequest);
+  { `if (!color)`: undefined, however it came about }
+  if Result.Kind = ppkNone then
+    Result := TyPaletteFrom(AChart, AChartLayers, AName, AChartScope, ARequest);
+end;
+
+function ColorByText(AData: TJSONData; out AText: string): Boolean;
+begin
+  AText := '';
+  Result := (AData <> nil) and (AData.JSONType <> jtNull);
+  if not Result then Exit;
+  case AData.JSONType of
+    jtString: AText := AData.AsString;
+    jtBoolean: if AData.AsBoolean then AText := 'true';
+    jtNumber: if AData.AsFloat <> 0 then AText := AData.AsJSON;
+  else
+    AText := AData.AsJSON;
+  end;
+end;
+
+function TyChartColorByOf(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const ASeriesType: string): string;
+var node: TJSONObject; s: string;
+begin
+  Result := 'series';
+  if AOption = nil then Exit;
+  node := ObjOf(AOption.ComponentAt('series', ASeriesIndex));
+  if (node <> nil) and ColorByText(node.Find('colorBy'), s) then
+  begin
+    if s <> '' then Result := s;
+    Exit;
+  end;
+  { the type's defaultOption is merged into the series option, so it stands
+    before the root }
+  if (ASeriesType = 'pie') or (ASeriesType = 'funnel') or (ASeriesType = 'gauge')
+    or (ASeriesType = 'radar') or (ASeriesType = 'chord')
+    or (ASeriesType = 'themeRiver') then
+    Exit('data');
+  node := ObjOf(AOption.Root);
+  if (node <> nil) and ColorByText(node.Find('colorBy'), s) and (s <> '') then
+    Result := s;
+end;
+
 { ==================== the style blocks ==================== }
 
 function NumIn(ANode: TJSONObject; const AKey: string;
@@ -760,6 +1032,34 @@ begin
   Result := True;
 end;
 
+function TyTryReadPattern(AData: TJSONData;
+  out APat: TTyChartPattern): Boolean;
+var node: TJSONObject; d: TJSONData;
+begin
+  APat := Default(TTyChartPattern);
+  Result := False;
+  node := ObjOf(AData);
+  if node = nil then Exit;
+  if node.Find('colorStops') <> nil then Exit;
+  d := node.Find('image');
+  if (d = nil) or (d.JSONType = jtNull) then Exit;
+  APat.Present := True;
+  if d.JSONType = jtString then APat.Image := d.AsString;
+  { `pattern.repeat || 'repeat'` }
+  d := node.Find('repeat');
+  if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') then
+    APat.Repetition := d.AsString
+  else
+    APat.Repetition := 'repeat';
+  { NaN for what is not a number: TyPatternMatrix's `|| 0` / `|| 1` }
+  APat.X := NumIn(node, 'x', NaN);
+  APat.Y := NumIn(node, 'y', NaN);
+  APat.Rotation := NumIn(node, 'rotation', NaN);
+  APat.ScaleX := NumIn(node, 'scaleX', NaN);
+  APat.ScaleY := NumIn(node, 'scaleY', NaN);
+  Result := True;
+end;
+
 function ReadOptColor(ANode: TJSONObject; const AKey: string): TTyOptColor;
 var d: TJSONData; s: string;
 begin
@@ -776,6 +1076,14 @@ begin
     Result.Written := True;
     { The solid it degrades to, for every caller that wants one number. }
     Result.Color := TyGradientSolid(Result.Gradient);
+    Exit;
+  end;
+  if TyTryReadPattern(d, Result.Pattern) then
+  begin
+    { an object: truthy, so it takes no palette slot; transparent where one
+      colour is wanted }
+    Result.Written := True;
+    Result.Color := 0;
     Exit;
   end;
   if d.JSONType <> jtString then Exit;

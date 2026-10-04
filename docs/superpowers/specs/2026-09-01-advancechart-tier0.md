@@ -3215,6 +3215,7 @@ radar 一样。端口原来默认 1,而且注释还专门写着「上游没有�
 
 渐变和图案(自己一行)、`decal`、`visualMap`(**[编码见 §88]**)、`brush`、颜色回调、`colorLayer`、
 `colorBy: 'data'` 的**独立**游标(饼现在按原始行取同一条色板,顺序对、作用域还没分家)。
+**[第 105 批：`colorLayer`、`colorBy` 的作用域（按 `类型-colorBy` 在同类系列之间共享）、`pattern` 填充都做了，见 §140；没写 `color` 时主题九色也改成走同一个游标和名字备忘，不再按系列下标取。]**
 
 一条**明确拒绝**的:**逐数据项的颜色回调**。上游 `dataStyleTask` 里没有 `isFunction`
 判断,那个 Function 被原样写进 `style.fill`,过了 `styleHasFill`、没过
@@ -3261,6 +3262,7 @@ globalStyle.stroke = (stroke === 'auto') ? 色板那个 : stroke
 第二轮补完夹具后 15 个里活 7 个,其中 4 个是真等价:
 
 - **游标那个 `mod` 是多余的**:前进那一步已经取模,下标永远到不了长度
+  **[第 105 批：有了 `colorLayer` 就不多余了，而且上游根本没有这个 `mod`——游标属于作用域，前进时按答话的那一层取模，下一次可能换成更短的一层，`palette[idx]` 越界就是 undefined，什么都不填。见 §140。]**
 - **`jtNull` 那道门是多余的**:紧跟着的 `jtString` 判断本来就会把 null 挡掉,
   而 `Written := True` 在它之后
 - **匿名 series 那个假名字在本端口不承重**:空名字本来就不进备忘录、还照样前进,
@@ -3330,7 +3332,8 @@ Canvas 2D 预乘所以没这个问题。修法是**把一个看不见的停靠�
 ### 不在这一批里
 
 `type: 'pattern'`(要一条图片管线,而且上游那个字段收的是
-`HTMLImageElement`/canvas,不是路径——照搬不过来,补一条路径形式就是发明而不是移植)、
+`HTMLImageElement`/canvas,不是路径——照搬不过来,补一条路径形式就是发明而不是移植)
+**[第 105 批：上游的图案是 `{image, repeat, x, y, rotation, scaleX, scaleY}`，`image` 也收字符串；端口做了 `data:` URL（base64）这一种，见 §140。]**、
 `decal`、文字上的渐变(上游把带 `colorStops` 的文字填充**换成字面量 `'#000'`**,
 这在深色皮肤上是个上游缺陷,不抄)。
 
@@ -7270,7 +7273,7 @@ B3b:饼、漏斗、雷达、仪表盘按数据项取色(调色板在 visualMap �
 
 ### 做法
 
-- `PerDatumColours`:先取行的视觉颜色,其余行按请求顺序向调色板或主题色环要色;系列 `itemStyle.color` 只覆盖没有视觉颜色的行;项自己的颜色最后。饼、漏斗、雷达、仪表盘都走这里。
+- `PerDatumColours`:先取行的视觉颜色,其余行按请求顺序向调色板或主题色环要色;系列 `itemStyle.color` 只覆盖没有视觉颜色的行;项自己的颜色最后。饼、漏斗、雷达、仪表盘都走这里。**[第 105 批：取色挪到过滤之后的 `SolveDatumPalette`，作用域在同类系列之间共享；自己写了颜色的行、系列写了颜色（`auto` 也算写了）的系列都不再占格，见 §140。]**
 - 饼:`TTyPieVisual.Alphas` 逐片透明度;漏斗不接。
 - 雷达:`TTyRadarVisual.Sizes` 逐环符号大小;`TySymbolDefault('radar')` 改成实心圆 8px。
 - 图例:按数据项的来源做 alpha 补救并带上项的透明度(`HasOpacity`/`Opacity`),色块元素用它。
@@ -7768,7 +7771,7 @@ M4:markArea 的画面。
 
 ### 已知偏差
 
-- 渐变填充的区域在端口里暂不画填充(只画描边和标签)。
+- 渐变填充的区域在端口里暂不画填充(只画描边和标签)。**[第 105 批：画了，渐变和图案都画，渐变的盒子是多边形的包围盒按描边撑开，见 §140。]**
 - 标注的提示框、悬停强调没有移植。
 
 ### 标注系列小结
@@ -9692,3 +9695,104 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - §52 的四条推迟在原处标注。
 
 全量 **8136 个测试，0 错误，0 失败**（新增 `test.advchart.timeformat` 8 个；改了期望的 `test.advchart.time`、`test.advchart.labelthinning`、`test.advchart.textstyle` 全绿）。
+
+## 140. Tier 1 第一百零五批：调色板与填充（B9，2026-10-05）
+
+路线图 B9：`colorLayer`、`colorBy` 的作用域、`pattern` 填充、markArea 的渐变填充。§49 把 `colorLayer` 和 `colorBy: 'data'` 的独立游标留下了，还把「游标的 `mod` 是多余的」记成等价变异；§50 把 `type: 'pattern'` 拒了；§101 记着「渐变填充的区域不画填充」。这一批对着 `model/mixin/palette.ts`、`visual/style.ts`、`model/Series.ts`、zrender `canvas/helper.ts` / `canvas/graphic.ts` / `graphic/Path.ts` 逐行核过，在真 dist 上跑基准，推迟的几条在原处标注。
+
+### 上游的做法
+
+- **`getFromPalette` 的顺序**：先查名字备忘（`hasOwnProperty`，**记下来的 undefined 也算命中**）；`requestNum == null` 或没有 `colorLayer` 时用 `color`，否则用**第一个长度大于 requestNum 的层**，一个都不够长就用最后一层；`colorLayer: []` 的最后一层是 `palettes[-1]` = undefined，`palette || defaultPalette` 退回 `color`；**空的那一层是 `[]`，是真值**，不退回，直接答 undefined。调色板为空时答 undefined，**不记、不前进**。否则取 `palette[paletteIdx]`——**不取模**，名字非空就记下，`idx = (idx + 1) % palette.length`。
+- **游标属于作用域，不属于调色板**。同一个作用域上，一次请求按这一次选中的层取模前进，下一次请求可能选到更短的一层，`palette[idx]` 越界就是 undefined：那个形状的 `fill` 是 undefined，什么都不填（`layer-pie-undefined`：四片的饼把共享作用域推到 4，后面一片的饼问长度 2 的那层要 `palette[4]`）。
+- **两个请求数**：`seriesStyleTask` 用 `ecModel.getSeriesCount()`——系列**模型**的个数，索引空洞不算；`dataColorPaletteTask` 用这条系列**原始数据**的行数。
+- **系列的调色板**（`SeriesModel.getColorFromPalette`）：先用自己的 `color` / `colorLayer`（`get(.., true)`，只读自己的键），答 undefined（不管为什么）就用图表的，**作用域是同一个**。系列这一层不传作用域时，自己的那份作用域是系列本身、图表的是全局模型；逐数据那一层两边都是共享的作用域对象。
+- **`colorBy`**：`getColorBy()` 是 `get('colorBy') || 'series'`，`get` 不带 `ignoreParent`，所以链是 系列自己写的 → 类型的 defaultOption（pie、funnel、gauge、radar、chord、themeRiver 是 `'data'`）→ **根上的 `colorBy`** → globalDefault 的 `'series'`。根上写 `colorBy: 'data'`，柱、折线、散点全都按数据着色。
+- **`dataColorPaletteTask`**：`eachSeries`（被图例关掉的系列不参与）里 `getColorBy() !== 'series'` 的，**按 `type + '-' + colorBy` 一个作用域**——两个饼共用一个，第二个从第一个停下的地方接着取、同名的拿同一个颜色；饼和漏斗不共用；`colorBy: 'foo'` 不是 `'series'`，也逐数据，作用域是 `bar-foo`。逐**原始行**、按原始顺序；只有 `colorFromPalette` 还为真的行去要色：系列那层是「颜色没写」时才置真（**`'auto'` 不算没写**——`itemStyle.color: 'auto'` 的饼每片都是系列那一格的颜色，逐数据一格都不占）；在视图里的行，自己的 `itemStyle.color` 写了（值不是 null，字符串和对象都算）或者 visualMap 写了颜色，就置假；**不在视图里的行读系列那层**——被图例关掉、自己写了颜色的那一片照样占一格。键是 `name || rawIndex`，请求数是原始行数。
+- **`seriesStyleTask` 照样对每条系列跑**，`colorBy: 'data'` 的柱也先占系列那一格：图例里它的图标是系列的颜色，不是哪个数据的。
+- **渐变的坐标**（`createLinearGradient` / `createRadialGradient`）对的是 `el.getBoundingRect()`：路径的包围盒，**有描边时按线宽撑开**（没有填充时撑 `max(线宽, 5)`，即 `strokeContainThreshold`；`strokeNoScale` 的符号除以 `getLineScale()`）。宽高是 `max − min`，撑开是先 `width += w` 再 `x −= w/2`。扇形的路径包围盒是**弧的范围**加圆心（或内弧），不是整个圆。
+- **图案**：`{image, repeat, x, y, rotation, scaleX, scaleY}`，按 `image != null` 结构判断（`colorStops` 在就是渐变，先判）；`createPattern(image, repeat || 'repeat')`，矩阵 `translate(x, y)·rotate(rotation 换成度)·scale(scaleX || 1, scaleY || 1)`，在**画布空间**里，不对元素的盒子归一。图片没加载好时 `hasFill = false`：什么都不填。
+- 图例图标用系列或数据的样式原样画：渐变、图案都画进图标里。
+
+### port 以前
+
+- 没有 `colorLayer`；逐数据的取色每条系列从零开始、不跨系列共享，自己写了颜色的行也占一格；`colorBy` 只认类型（饼按数据、其余按系列），根上的 `colorBy` 不读，柱/折线/散点不能按数据着色；`itemStyle.color: 'auto'` 的饼仍按数据取色。
+- 没写 `color` 时主题九色按**系列下标**取：写了颜色的系列照样「占」一格，同名系列不共用。
+- 渐变的盒子是形状的边界：不按描边撑开，扇形用整个圆；数据项自己 `itemStyle.color` 写的渐变不读（逐点覆盖只存标量）；饼和漏斗的系列渐变只剩第一个色标；数据项写了字符串颜色时系列的渐变还留着；markArea 的渐变不画；以透明色标开头的渐变整个不画（`HasFill` 看的是单色）。
+- 没有图案。
+
+### 做法
+
+- `tyControls.AdvChart.Color`：`TTyPalette`（作者的颜色，或主题九格 `Theme`）、`TTyPaletteLayers`、`TTyPalettePick`（undefined / 颜色 / 主题第几格）、`TTyPaletteScope`；`TyPaletteFrom` 照抄 `getFromPalette`，`TySeriesPaletteFrom` 照抄 `SeriesModel.getColorFromPalette`；`TyChartRootPalette`（根上写了 `color` 就用，`[]` 也算写了，否则主题）、`TySeriesOwnPalette`、`TyChartPaletteLayersOf`、`TyChartColorByOf`；`TyTryReadPattern`，`TTyOptColor.Pattern`（图案是写了的颜色，不占格，单色退化成透明——`convertToColorString` 的默认）。
+- `tyControls.AdvChart.Paint`：`TTyChartPattern`、`TTyChartObjFill`；元素样式加 `FillPattern` 和 `GradBoxSet` / `GradBox`（构造者比形状更清楚盒子时给）；`TyPatternMatrix`、`TyGrowByStroke`、`TyRectToXYWH`、`TyResolveGradientXYWH`（盒子按 x、y、宽、高拿）。
+- `tyControls.AdvChart.Render`：`TyElementGradientBox`——构造者给的盒子，否则形状边界按描边撑开（端口分不出「透明描边」和「没有描边」，以描边颜色不透明或有描边渐变为准）；图案走 `TyPatternImage`（`data:` URL、base64，经 BGRA 解码，按源字符串缓存，满 64 个清空）和 `TTyPainter.FillPathPattern`，矩阵乘上 PPI/96。
+- `tyControls.Painter`：`FillPathPattern`。**不用 `createPattern(image)`**：BGRA 那个把图片首末两个像素中心拟合到平铺块的两角，原点不在整像素上时平铺块被拉宽 `w/(w−1)`——画布偏移 −0.5 让原点永远不在整像素上，2×2 棋盘每个像素都是混色。改成自己建 `TBGRAAffineBitmapTransform`，矩阵 `T(−0.5)·M·T(0.5)`——像素中心对像素中心——再交给 `createPattern(texture)`。
+- `tyControls.AdvChart.Marks`：`TTyRowFill`（逐数据的取色、数据自己的对象颜色）、`TTySeriesVisual.RowFills` / `FillPattern`；`RowVisual` 按上游的阶段顺序叠：视觉通道 → 逐数据取色 → 数据自己的对象颜色 → 数据自己的字符串颜色（**清掉系列的渐变和图案**）。`MarkElement` 把对象填充算作有填充。空心符号把渐变挪到描边上（上游的空心符号是白底、描边是那个对象）；折线本身和面积不继承系列的图案。
+- `tyControls.AdvChart.Pie` / `Funnel`：逐扇区/逐行的 `Objs`；`TyPieSectorPathBox` 照 `roundSector.buildPath`（无圆角那一支）用 JS 的三角函数建路径、经 `TyZrBBox` 得盒子，有边框时撑开。饼顺手读系列的 `itemStyle.borderColor` / `borderWidth`（默认宽 1、无颜色，以前完全不读）。
+- `tyControls.AdvChart.MarkerView`：`TyBuildMarkAreas` 画对象填充（渐变、图案）和渐变描边；`TTyMkAreaPic.GradBox` 是设备像素下按描边撑开的包围盒。
+- `tyControls.AdvChart.Legend`：`TTyLegendSource.Obj` / `TTyLegendItem.Obj`，选中的图标用它画。
+- `tyControls.AdvanceChart`：
+  - `SolveSeriesColors` 换成新的调色板：没写 `color` 时**主题九格当默认调色板走同一个游标和备忘**，记的是格号不是颜色，换肤不用重建；请求数是系列模型数；`FSeriesColorFromPalette` 记「颜色没写」（`auto` 为假）。
+  - `SolveDatumPalette`：`Rebuild` 的最后（图例、dataZoom、采样之后），按上面的规则给每条系列的每个原始行取色，作用域按 `类型-colorBy` 共享。接的类型：bar、line、scatter、effectScatter、pictorialBar、pie、funnel、gauge、radar。
+  - `PerDatumColours` 改成上游的阶段顺序：系列颜色 → visualMap → 逐数据取色 → 数据自己的颜色；`colorBy: 'series'` 的饼、漏斗整片是系列色。
+  - `DatumObjectFill` / `SeriesObjectFill`、`RawItemNode`、`SeriesRowFills`；公开 `PaletteSeriesColour` / `PaletteDatumColour` 给测试读。
+
+### 基准
+
+`tools/advchart-oracle/palette-fill.js`（真 dist，node SSR，`animation: false`）→ `tests/fixtures/advchart-palette-fill.json`，62 个用例、312 行：
+
+- **colorLayer**：1、2、3、4、6 条柱按系列数选层；`colorLayer: []`；只有 `colorLayer` 没有 `color`；索引空洞；系列自己的 `colorLayer` 和 `color`；系列自己写了 `color`、自己的层却是空的（答 undefined，图表的调色板接着答）；写了颜色不占格、同名共用；饼按 1、2、3、5 个数据选层；两个饼共享作用域时换层；越界的 undefined 和它被记住。
+- **colorBy**：柱、根上的 `colorBy`（柱、折线、散点、饼）、折线（符号逐数据、线和面积是系列色）、散点；两条柱共享、折线自己一份；共享作用域按名字记；`colorBy: 'foo'`；`colorBy: 'series'` 的饼和图例；漏斗两种；饼和漏斗不共享；两个饼；系列自己的 `color`；`auto`；系列写了颜色；数据自己的颜色不占格；图例关掉、自己写了颜色的一片照样占格；图例关掉的整条系列不占格；visualMap 写了颜色的行；重名、空名；两个雷达。
+- **渐变**：markArea 的线性（默认左到右）、竖向三色标带 `transparent`、宽而矮的区域上的径向、全局线性与径向、带边框（盒子撑开）、渐变边框、没写条目颜色时用系列的渐变；柱的系列渐变、数据渐变（局部、全局）、数据写字符串换掉系列渐变、带边框；饼（半圆扇形宽于高，径向半径按短边）、饼的数据渐变和环、带边框；漏斗；折线的渐变描边（撑 `max(2, 5)`）；面积的渐变。
+- **图案**：柱、饼的三种（`repeat-x`；`no-repeat` 平移加放大；旋转加缩放）、markArea（`repeat-y` 平移）、URL 图案。图片是脚本自己用 zlib 拼的 2×2、4×2 PNG，写在 `images` 里，选项里用 `@img:名字` 引用。
+- **图例图标**：饼的数据色（含自己写的）、按数据着色的柱（图标是系列色）、分层调色板、图案图标。
+- 每个元素记填充、描边（原样：字符串或对象）、线宽、`getBoundingRect`、变换，以及**画布坐标**：SVG 渲染器不调 `createLinearGradient`，这一段按 `helper.ts` 转写，喂的是元素真实的 `getBoundingRect()`——自检核对过它就是「路径盒子按描边撑开」。
+- 调色板的转写（`getFromPalette`、系列的退回、`seriesStyleTask` 的取色分支、`dataColorPaletteTask`）从记录下来的事实（系列写没写颜色、`auto`、自己的 `color` / `colorLayer`、每行的键、在不在视图、自己写没写、visualMap 写没写）逐位复现每条系列、每个视图内行的颜色。20 条守卫：层用 `>=`、不读 `colorLayer`、系列那层不带请求数、逐数据那层用系列数、`palette[idx % len]`、undefined 不记、每条系列自己一个作用域、作用域只按类型、`auto` 也逐数据、视图外的行也看自己的颜色、图例关掉的系列也占格、自己有颜色时图表不接、逐数据用系列自己的作用域、渐变盒子不按描边撑开、无填充时撑 4、`global` 不读、全都当全局、径向半径按宽、线性默认向下、图案矩阵先缩放后平移。两次运行逐字节一致。
+
+测试 `test.advchart.palettefill`（新，6 个，注册在 `tytests.lpr`）：
+
+- 逐例经控件重放（选项没写 `color` 时补上游的九色）：每条系列的颜色（`PaletteSeriesColour`）、每个视图内行的颜色（`PaletteDatumColour`）；每个画出来的元素按数据找到，字符串填充比颜色，`none` 和全透明当无填充；渐变比形状、`global`、每个色标，再用 `TyElementGradientBox` + `TyResolveGradientXYWH` **逐位**比五个画布坐标；图案比图片、`repeat` 和六个矩阵数；有线宽的渐变描边同样比；折线本身和面积；markArea 的多边形；图例每个选中项的颜色或对象种类（`LegendLayout`）。
+- 像素：markArea 的红到蓝按解析出的坐标逐列线性（容差 6）；2×2 棋盘在 96 PPI 下逐像素「x + y 偶数是红」（**画布空间**平铺，与柱的位置无关），图例图标恰好一个带图案；192 PPI 下每个图片像素盖两个设备像素、平滑后以所在格为主；越界的 undefined 那一片露出底色；不写 `color` 时第三条系列拿主题第二格、同名系列同色。
+
+已有测试的改动：`test.advchart.color` 的 `TestAPieSliceCanNameItsOwnColour` 断言「第三片还是第三个颜色」——钉住的正是「自己有颜色的行也占一格」这个缺陷；上游第三片是第二个颜色（基准 `colorby-item-own`），期望值改过来，注释写明。
+
+### 变异测试
+
+`b9/mut.py`：逐个改源码、重编、跑 `TAdvChartPaletteFillTest` 与 `TAdvChartColorTest`、按原字节还原。41 个：
+
+- colorLayer 8 个：层用 `>=`、永远取最后一层、空 `colorLayer` 不退回、`idx mod n`、undefined 不记、系列那层不带请求数、逐数据那层用系列数、自己有颜色时图表不接。
+- colorBy 9 个：类型默认改 `series`、根上的不读、`series` 不跳过、`auto` 也逐数据、视图外也看自己的颜色、图例关掉的系列也取、visualMap 的行不跳过、`PerDatumColours` 不用取色、`RowVisual` 不用取色。
+- 作用域 3 个：只按类型、每条系列一个、取完不写回。
+- 渐变的全局与局部 9 个：线性不看 `global`、径向不看 `global`、径向半径按宽、阈值 4、不按描边撑开、构造者的盒子不用、扇形不给盒子、markArea 的盒子不乘缩放、色标 offset 减半。
+- 色标的绘制 2 个：所有色标取第一个颜色、位置取 `1 − offset`。
+- 对象填充 10 个：字符串不清系列渐变、数据的对象颜色不读、`RowFills` 的对象不用、空心符号不挪渐变、markArea 不画对象、图案 x/y 对调、图案不减半像素、图案不乘 PPI、图例图标不画对象、主题不走游标。
+
+首轮杀死 38 个，存活 3 个：
+
+- **自己有颜色时图表不接**：基准缺用例——自己的 `color` 非空却答 undefined，只有「自己的 `colorLayer` 选中了空层」这一条路。补 `layer-own-empty-layer` 和对应守卫，杀死。
+- **图例关掉的系列也取**：`colorby-hidden-series` 两条柱的数据名都是类目名 `c0`、`c1`，共享作用域按名字记，关不关都一样——**夹具碰巧让两个答案重合**。改成各自的名字，补守卫，杀死。
+- **图例图标不画对象**：测试只比了 `LegendLayout` 项上的 `Obj`，没看图标元素。在图案像素测试里加图例、断言恰好一个非系列元素带图案。第一版断言用的是 `Datum.Kind <> ctkSeries`——图标的 datum 是零值，`Kind` 正是 `ctkSeries`，断言本身空转（一条都数不到）；改成 `SeriesIndex < 0`，杀死。
+
+补完重跑这 3 个：全部杀死。
+
+### 已知偏差
+
+- **图案只认 `data:` URL（base64）**：别的字符串（URL、路径）上游会去取、取到后才画，端口不取，什么都不填——就是上游图片没到时的样子；`HTMLImageElement`、canvas 在 JSON 里写不出来。描边的图案不画。旋转、缩放的图案用 BGRA 的双线性采样，和浏览器的平滑只是近似；基准里的矩阵按 node 的 `Math.cos` 记，浏览器的 DOMMatrix 用 C++ 的三角函数。
+- **调色板里的渐变条目**仍只取第一个色标（§50），调色板里解析不了的字符串仍被丢掉——上游会原样交给画布，后面的系列不会前移。`colorLayer` 里不是数组的层当空层；整个 `colorLayer` 不是数组时当没写。
+- **逐数据取色接的类型**：bar、line、scatter、effectScatter、pictorialBar、pie、funnel、gauge、radar。graph、tree、treemap、sunburst、sankey 有自己的着色；candlestick、boxplot 的默认值写了颜色；heatmap、lines、parallel 等没接。
+- **视图依赖**：`SolveDatumPalette` 在 `Rebuild` 末尾跑；dataZoom 交互不重建时，进出视图、自己写了颜色的那种行的占格不重算。
+- **undefined 的一片**：端口画透明填充（像素相同），上游没有填充，命中测试不同。
+- **描边判断**：端口分不出「透明描边」和「没有描边」，上游 `stroke: 'transparent'` 也撑开渐变盒子，端口不撑。带圆角的扇形用无圆角路径的盒子。
+- **散点符号上的全局渐变**：上游符号是缩放过的单位路径，全局坐标落在局部空间里；端口的符号在设备坐标里，按画布坐标算。基准只记了局部渐变和无变换元素上的全局渐变。
+- **图例图标上的渐变**用图标形状的盒子，没有比坐标。
+
+### 落地
+
+- `source/tyControls.AdvChart.Color.pas`：调色板、层、作用域、`TyPaletteFrom`、`TySeriesPaletteFrom`、`TyChartColorByOf`、`TyTryReadPattern`。
+- `source/tyControls.AdvChart.Paint.pas`：`TTyChartPattern`、`TTyChartObjFill`、`FillPattern`、`GradBox`、`TyPatternMatrix`、`TyGrowByStroke`、`TyResolveGradientXYWH`。
+- `source/tyControls.AdvChart.Render.pas`：`TyElementGradientBox`、`TyPatternImage`、图案分支。
+- `source/tyControls.Painter.pas`：`FillPathPattern`。
+- `source/tyControls.AdvChart.Marks.pas`、`Pie.pas`、`Funnel.pas`、`MarkerView.pas`、`Legend.pas`、`source/tyControls.AdvanceChart.pas`：见上。
+- `tools/advchart-oracle/palette-fill.js`、`tests/fixtures/advchart-palette-fill.json`、`tests/test.advchart.palettefill.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.color.pas` 改一条期望。
+- §49 的两条、§50、§91 的 `PerDatumColours`、§101 的推迟在原处标注。
+
+全量 **8142 个测试，0 错误，0 失败**（新增 `test.advchart.palettefill` 6 个；改了期望的 `test.advchart.color` 全绿）。

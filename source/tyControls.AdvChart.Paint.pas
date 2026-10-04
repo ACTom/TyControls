@@ -65,6 +65,36 @@ type
     Stops: TTyChartGradStopArray;
   end;
 
+  { A COLOUR THAT IS AN IMAGE: zrender's ImagePatternObject -- `image`,
+    `repeat`, `x`, `y`, `rotation`, `scaleX`, `scaleY` -- detected STRUCTURALLY by `image` the way
+    a gradient is by `colorStops`. [Batch 105]
+
+    THE IMAGE IS A STRING HERE AND NOTHING ELSE. Upstream also takes an
+    HTMLImageElement or a canvas, which an option written as JSON cannot hold;
+    of the strings, only a `data:` URL is drawn -- a URL upstream would fetch
+    and paint once it arrived, and the port fetches nothing, so that pattern
+    fills nothing, which is what upstream shows until the image is ready.
+
+    The pattern lives in the CANVAS's space, not the element's: there is no
+    box to normalise against, and createCanvasPattern sets the matrix
+    translate(x, y) . rotate(rotation) . scale(scaleX, scaleY) on it. }
+  TTyChartPattern = record
+    Present: Boolean;
+    Image: string;
+    { `repeat || 'repeat'` as zrender hands it to createPattern }
+    Repetition: string;
+    X, Y, Rotation, ScaleX, ScaleY: Double;
+  end;
+
+  { A FILL THAT IS AN OBJECT, for a renderer handed colours one per datum
+    [Batch 105]: a gradient, or a pattern, or neither (Present False). }
+  TTyChartObjFill = record
+    Present: Boolean;
+    Gradient: TTyChartGradient;
+    Pattern: TTyChartPattern;
+  end;
+  TTyChartObjFillArray = array of TTyChartObjFill;
+
   TTyChartElementStyle = record
     HasFill: Boolean;
     FillColor: TTyChartColor;
@@ -78,6 +108,16 @@ type
       rule for producing it is `colorStops[0].color`. }
     FillGradient: TTyChartGradient;
     StrokeGradient: TTyChartGradient;
+    { AN IMAGE INSTEAD OF THE FILL COLOUR [Batch 105]. FillColor holds what
+      upstream's convertToColorString makes of it -- transparent. }
+    FillPattern: TTyChartPattern;
+    { THE BOX A LOCAL GRADIENT NORMALISES AGAINST, when the builder knows it
+      better than the shape does: upstream's el.getBoundingRect() is the PATH's
+      box grown by the stroke, and a sector's path box is its arc's extent
+      rather than the whole disc TyShapeBounds answers. Unset, the renderer
+      takes the shape's bounds grown by the stroke itself. [Batch 105] }
+    GradBoxSet: Boolean;
+    GradBox: TTyXYWH;
     FillEvenOdd: Boolean;
     DashLogical: TTyDoubleArray;
     Alpha: Double;                    // 0..1; 1 = opaque
@@ -577,6 +617,26 @@ procedure TyRtPoint(AX, AY, ARotationRad, AScale, ALX, ALY: Double;
   average and not a midpoint; transparent when it has no stops. }
 function TyGradientSolid(const AGrad: TTyChartGradient): TTyChartColor;
 
+{ The canvas pattern's matrix: DOMMatrix translateSelf(x, y), rotateSelf(0, 0,
+  rotation in degrees), scaleSelf(scaleX || 1, scaleY || 1), multiplied out as
+  [a, b, c, d, e, f] -- in the chart's own (css) pixels. The rotation goes to
+  degrees and back because zrender hands DOMMatrix degrees. [Batch 105] }
+procedure TyPatternMatrix(const APat: TTyChartPattern; out AM: TTyDoubleArray);
+
+{ getBoundingRect's stroke allowance: the path's box grown by the line width
+  -- by max(width, 5) when the path has no fill, strokeContainThreshold -- half
+  on each side. ALineWidth is in the box's own units. [Batch 105] }
+function TyGrowByStroke(const ABox: TTyXYWH; AHasFill: Boolean;
+  ALineWidth: Double): TTyXYWH;
+
+{ A box as zrender's BoundingRect holds it: x, y and max - min. }
+function TyRectToXYWH(const ARect: TTyRectF): TTyXYWH;
+
+{ The same against a box held as x, y, width, height -- the numbers
+  createLinearGradient is handed, with no right edge to subtract. }
+procedure TyResolveGradientXYWH(const AGrad: TTyChartGradient;
+  const ABox: TTyXYWH; out AX1, AY1, AX2, AY2, AR: Double);
+
 { The gradient's geometry in real coordinates, against the element's box.
 
   WHICH BOX: the ELEMENT's own, and nothing larger. Not the plot, not the
@@ -908,6 +968,54 @@ begin
   Result := AGrad.Stops[0].Color;
 end;
 
+procedure TyPatternMatrix(const APat: TTyChartPattern; out AM: TTyDoubleArray);
+var deg, rad, cs, sn, sx, sy: Double;
+begin
+  { `p.rotation || 0` and friends: NaN and 0 fall back alike }
+  deg := APat.Rotation;
+  if IsNan(deg) then deg := 0;
+  deg := deg * (180 / Pi);
+  rad := deg * Pi / 180;
+  cs := Cos(rad);
+  sn := Sin(rad);
+  sx := APat.ScaleX;
+  if IsNan(sx) or (sx = 0) then sx := 1;
+  sy := APat.ScaleY;
+  if IsNan(sy) or (sy = 0) then sy := 1;
+  SetLength(AM, 6);
+  AM[0] := sx * cs;
+  AM[1] := sx * sn;
+  AM[2] := -sy * sn;
+  AM[3] := sy * cs;
+  AM[4] := APat.X;
+  if IsNan(AM[4]) then AM[4] := 0;
+  AM[5] := APat.Y;
+  if IsNan(AM[5]) then AM[5] := 0;
+end;
+
+function TyGrowByStroke(const ABox: TTyXYWH; AHasFill: Boolean;
+  ALineWidth: Double): TTyXYWH;
+var w: Double;
+begin
+  Result := ABox;
+  if not (ALineWidth > 0) then Exit;
+  w := ALineWidth;
+  if (not AHasFill) and (w < 5) then w := 5;
+  { width first, then x -- rectStroke.width += w; rectStroke.x -= w / 2 }
+  Result.W := ABox.W + w;
+  Result.H := ABox.H + w;
+  Result.X := ABox.X - w / 2;
+  Result.Y := ABox.Y - w / 2;
+end;
+
+function TyRectToXYWH(const ARect: TTyRectF): TTyXYWH;
+begin
+  Result.X := ARect.Left;
+  Result.Y := ARect.Top;
+  Result.W := ARect.Right - ARect.Left;
+  Result.H := ARect.Bottom - ARect.Top;
+end;
+
 function SafeNum(AValue, ADefault: Double): Double;
 begin
   if IsNan(AValue) or IsInfinite(AValue) then Exit(ADefault);
@@ -916,10 +1024,16 @@ end;
 
 procedure TyResolveGradient(const AGrad: TTyChartGradient;
   const ABox: TTyRectF; out AX1, AY1, AX2, AY2, AR: Double);
+begin
+  TyResolveGradientXYWH(AGrad, TyRectToXYWH(ABox), AX1, AY1, AX2, AY2, AR);
+end;
+
+procedure TyResolveGradientXYWH(const AGrad: TTyChartGradient;
+  const ABox: TTyXYWH; out AX1, AY1, AX2, AY2, AR: Double);
 var w, h: Double;
 begin
-  w := ABox.Right - ABox.Left;
-  h := ABox.Bottom - ABox.Top;
+  w := ABox.W;
+  h := ABox.H;
   if AGrad.Kind = cgkRadial then
   begin
     AX1 := AGrad.X;
@@ -927,8 +1041,8 @@ begin
     AR := AGrad.R;
     if not AGrad.Global then
     begin
-      AX1 := AX1 * w + ABox.Left;
-      AY1 := AY1 * h + ABox.Top;
+      AX1 := AX1 * w + ABox.X;
+      AY1 := AY1 * h + ABox.Y;
       { THE RADIUS SCALES BY THE SMALLER SIDE, so a radial gradient is a
         circle on any box rather than an ellipse squeezed into it. }
       AR := AR * Min(w, h);
@@ -952,10 +1066,10 @@ begin
     { EACH AXIS ON ITS OWN -- x by the width and y by the height. The
       anisotropy is the point: it is how `0,0 -> 0,1` is vertical whatever
       the box's shape, and Sankey exploits it deliberately. }
-    AX1 := AX1 * w + ABox.Left;
-    AX2 := AX2 * w + ABox.Left;
-    AY1 := AY1 * h + ABox.Top;
-    AY2 := AY2 * h + ABox.Top;
+    AX1 := AX1 * w + ABox.X;
+    AX2 := AX2 * w + ABox.X;
+    AY1 := AY1 * h + ABox.Y;
+    AY2 := AY2 * h + ABox.Y;
   end;
   AX1 := SafeNum(AX1, 0);
   AX2 := SafeNum(AX2, 1);

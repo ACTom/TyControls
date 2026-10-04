@@ -567,8 +567,21 @@ type
       writes `itemStyle: { color: '#fff', borderColor: 'auto' }` is white
       with a border in the palette colour -- so both numbers exist at once
       and one field could not hold them. }
-    FSeriesPalette: array of TTyChartColor;
-    FSeriesPaletteKnown: array of Boolean;
+    FSeriesPick: array of TTyPalettePick;
+    FSeriesPickAsked: array of Boolean;
+    { the fill IS the pick: unwritten, or written `auto` [Batch 105] }
+    FSeriesFromPick: array of Boolean;
+    { upstream's colorFromPalette: the colour was UNWRITTEN -- `auto` asks
+      the palette and still is not, so its rows take no per-datum slot }
+    FSeriesColorFromPalette: array of Boolean;
+    { THE PER-DATUM PALETTE, colorBy other than 'series' [Batch 105]: per
+      binding slot, per RAW row, what dataColorPaletteTask gave the row --
+      Asked False where the row kept the series' colour (its own colour, a
+      visual channel's, a series colour that was written). Solved after the
+      filters, with one scope per `type-colorBy` shared by every series of
+      that kind. }
+    FDatumPicks: array of array of TTyPalettePick;
+    FDatumAsked: array of array of Boolean;
     FDirty: Boolean;
     FLastRect: TTyRectF;
     FOptionText: string;
@@ -939,6 +952,27 @@ type
     function ThemeRampColor(ASlot: Integer): TTyColor;
     { What `auto` means on this series: the palette's pick for it. }
     function SeriesPaletteColor(ASeriesIndex: Integer): TTyColor;
+    { what a palette answer paints: the author's colour, the theme's slot, or
+      nothing (an undefined pick) [Batch 105] }
+    function PickColor(const APick: TTyPalettePick): TTyColor;
+    { dataColorPaletteTask, after the filters [Batch 105] }
+    procedure SolveDatumPalette;
+    { the JSON item of a series' own `data` at a raw row, nil when the data
+      came from elsewhere or the item is no object }
+    function RawItemNode(ASlot, ARaw: Integer): TJSONObject;
+    { a row's own colour object -- a gradient or a pattern in the item's
+      itemStyle.color -- for the row fills a renderer reads [Batch 105] }
+    function RowObjectFill(ASlot, ARaw: Integer; out AColor: TTyOptColor): Boolean;
+    { the row fills a series' renderer reads: palette picks and object
+      colours, by raw row [Batch 105] }
+    function SeriesRowFills(ASlot: Integer): TTyRowFillArray;
+    { a per-datum renderer's object fill for a raw row: the datum's own
+      gradient or pattern, else the series' -- unless a visual channel, a
+      string colour of the datum's own or the per-datum palette coloured the
+      row [Batch 105] }
+    function DatumObjectFill(ASlot, ARaw: Integer): TTyChartObjFill;
+    { the series' own fill as an object, `auto` aside [Batch 105] }
+    function SeriesObjectFill(ASlot: Integer): TTyChartObjFill;
     { What the author wrote on this series' style blocks, laid over the
       palette colour the visual already carries. }
     procedure ApplyOptStyle(var AVisual: TTySeriesVisual; ASlot: Integer);
@@ -1572,6 +1606,13 @@ type
       out ARow: TTyVisualRow): Boolean;
     function VisualMetas(ASeriesIndex: Integer): TTyVisualMetaArray;
     function VisualLineFill(ASeriesIndex: Integer): TTyVisualLineFill;
+    { THE PALETTE AS THE LAST BUILD SOLVED IT [Batch 105]: the colour series
+      ASeriesIndex takes (its written one, its palette pick, 0 for none), and
+      the colour its datum at ARawIndex takes before any element draws it --
+      the series', a visual channel's, the datum's own or the per-datum
+      palette's, in upstream's stage order. }
+    function PaletteSeriesColour(ASeriesIndex: Integer): TTyChartColor;
+    function PaletteDatumColour(ASeriesIndex, ARawIndex: Integer): TTyChartColor;
     { THE COMPONENT AIndex AS THE LAST RENDER LAID IT OUT: Valid is False
       when it is hidden, piecewise, or nothing has rendered. }
     function VisualMapLayout(AIndex: Integer): TTyVisualMapLayout;
@@ -2866,6 +2907,227 @@ begin
   DzRenderStates;
   TyApplyAxisExtents(FOption, FBuild, FBindings, FStores, FStacks, FIndex,
     FLastPPI, FAxisZooms);
+  { LAST, ON THE VIEWS THE FILTERS LEFT: dataColorPaletteTask is a visual
+    stage (4600), after every processor -- a row the legend or a dataZoom
+    took out reads the series' colorFromPalette, a row still in reads its
+    own. [Batch 105] }
+  SolveDatumPalette;
+end;
+
+{ dataColorPaletteTask [Batch 105]. eachSeries -- the series the legend kept
+  -- whose getColorBy() is not 'series', ONE SCOPE PER `type-colorBy` shared
+  by every such series in the chart: a second pie continues where the first
+  stopped, and a name the first one coloured comes out the same colour.
+  Every RAW row in raw order, so a row a filter took out still takes its
+  slot and the colours stay put across a legend click; a row asks only while
+  its colour is the palette's -- the series' was unwritten (`auto` is
+  written) and, while it is in view, neither its own itemStyle colour nor a
+  visual channel coloured it. Out of view its own colour is not seen: the
+  item style task only met the rows in view. The palette is the series' own
+  `color` / `colorLayer`, else the chart's, both over the shared scope, asked
+  with the RAW count. }
+procedure TTyAdvanceChart.SolveDatumPalette;
+type
+  TKeyedScope = record
+    Key: string;
+    Scope: TTyPaletteScope;
+  end;
+var
+  scopes: array of TKeyedScope;
+  i, j, k, si, rawN, sIdx: Integer;
+  cb, typ, nm: string;
+  chartPal, ownPal: TTyPalette;
+  chartLayers, ownLayers: TTyPaletteLayers;
+  sc: TTyPaletteScope;
+  item: TJSONObject;
+  d: TJSONData;
+  own: Boolean;
+begin
+  FDatumPicks := nil;
+  FDatumAsked := nil;
+  SetLength(FDatumPicks, Length(FBindings));
+  SetLength(FDatumAsked, Length(FBindings));
+  if FOption = nil then Exit;
+  chartPal := TyChartRootPalette(FOption);
+  chartLayers := TyChartPaletteLayersOf(FOption, -1);
+  scopes := nil;
+  for i := 0 to High(FBindings) do
+  begin
+    if FBindings[i].Hidden then Continue;
+    if (i > High(FStores)) or (FStores[i] = nil) then Continue;
+    si := FBindings[i].SeriesIndex;
+    typ := FBindings[i].SeriesType;
+    { THE TYPES WHOSE ROWS THIS PORT PAINTS ONE BY ONE. A graph, a tree, a
+      treemap, a sunburst and a sankey colour their own nodes; a candlestick's
+      and a boxplot's defaults write the colour. }
+    if not ((typ = 'bar') or (typ = 'line') or (typ = 'scatter')
+      or (typ = 'effectScatter') or (typ = 'pictorialBar')
+      or (typ = TyPieSeriesTypeName) or (typ = 'funnel') or (typ = 'gauge')
+      or (typ = 'radar')) then Continue;
+    cb := TyChartColorByOf(FOption, si, typ);
+    if cb = 'series' then Continue;
+    { the scope first, whether or not a row asks: upstream hands every such
+      series its scope before any of them picks }
+    sIdx := -1;
+    for j := 0 to High(scopes) do
+      if scopes[j].Key = typ + '-' + cb then sIdx := j;
+    if sIdx < 0 then
+    begin
+      SetLength(scopes, Length(scopes) + 1);
+      sIdx := High(scopes);
+      scopes[sIdx].Key := typ + '-' + cb;
+      scopes[sIdx].Scope := Default(TTyPaletteScope);
+    end;
+    { a written series colour leaves no row from the palette }
+    if (si < 0) or (si > High(FSeriesColorFromPalette))
+      or not FSeriesColorFromPalette[si] then Continue;
+    rawN := FStores[i].RawCount;
+    SetLength(FDatumPicks[i], rawN);
+    SetLength(FDatumAsked[i], rawN);
+    ownPal := TySeriesOwnPalette(FOption, si);
+    ownLayers := TyChartPaletteLayersOf(FOption, si);
+    sc := scopes[sIdx].Scope;
+    for k := 0 to rawN - 1 do
+    begin
+      if FStores[i].IndexOfRawIndex(k) >= 0 then
+      begin
+        { ITS OWN COLOUR: the key present and not null, an object included }
+        item := RawItemNode(i, k);
+        own := False;
+        if item <> nil then
+        begin
+          d := item.Find(TyStyleAccessPath(typ));
+          if d is TJSONObject then
+          begin
+            d := TJSONObject(d).Find('color');
+            own := (d <> nil) and (d.JSONType <> jtNull);
+          end;
+        end;
+        if own then Continue;
+        { a visual channel's }
+        if (i <= High(FVisualRows)) and (k <= High(FVisualRows[i]))
+          and FVisualRows[i][k].ColorSet then Continue;
+      end;
+      nm := FStores[i].GetNameByRaw(k);
+      if nm = '' then nm := IntToStr(k);
+      FDatumPicks[i][k] := TySeriesPaletteFrom(ownPal, ownLayers, chartPal,
+        chartLayers, nm, sc, sc, rawN);
+      FDatumAsked[i][k] := True;
+    end;
+    scopes[sIdx].Scope := sc;
+  end;
+end;
+
+function TTyAdvanceChart.RawItemNode(ASlot, ARaw: Integer): TJSONObject;
+var d: TJSONData;
+begin
+  Result := nil;
+  if (FOption = nil) or (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  { a dataset's rows are no option items }
+  if (ASlot <= High(FSeriesDataset)) and (FSeriesDataset[ASlot] >= 0) then Exit;
+  d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if not (d is TJSONObject) then Exit;
+  d := TJSONObject(d).Find('data');
+  if not (d is TJSONArray) then Exit;
+  if (ARaw < 0) or (ARaw >= TJSONArray(d).Count) then Exit;
+  d := TJSONArray(d).Items[ARaw];
+  if d is TJSONObject then Result := TJSONObject(d);
+end;
+
+function TTyAdvanceChart.RowObjectFill(ASlot, ARaw: Integer;
+  out AColor: TTyOptColor): Boolean;
+var st: TTyOptStyle;
+begin
+  AColor := Default(TTyOptColor);
+  st := TyReadOptStyle(RawItemNode(ASlot, ARaw), 'itemStyle');
+  Result := st.Color.Written
+    and ((st.Color.Gradient.Kind <> cgkNone) or st.Color.Pattern.Present);
+  if Result then AColor := st.Color;
+end;
+
+function TTyAdvanceChart.DatumObjectFill(ASlot, ARaw: Integer): TTyChartObjFill;
+var
+  item: TJSONObject;
+  d: TJSONData;
+  st: TTyOptStyle;
+begin
+  Result := Default(TTyChartObjFill);
+  if (ASlot < 0) or (ASlot > High(FBindings)) or (FOption = nil) then Exit;
+  if (ASlot <= High(FVisualRows)) and (ARaw >= 0) and (ARaw <= High(FVisualRows[ASlot]))
+    and FVisualRows[ASlot][ARaw].ColorSet then Exit;
+  if (ASlot <= High(FDatumAsked)) and (ARaw >= 0) and (ARaw <= High(FDatumAsked[ASlot]))
+    and FDatumAsked[ASlot][ARaw] then Exit;
+  item := RawItemNode(ASlot, ARaw);
+  if item <> nil then
+  begin
+    d := item.Find('itemStyle');
+    if (d is TJSONObject) and (TJSONObject(d).Find('color') <> nil)
+      and (TJSONObject(d).Find('color').JSONType <> jtNull) then
+    begin
+      { the datum wrote its own: an object is the fill, a string is not one }
+      st := TyReadOptStyle(item, 'itemStyle');
+      if (st.Color.Gradient.Kind <> cgkNone) or st.Color.Pattern.Present then
+      begin
+        Result.Present := True;
+        Result.Gradient := st.Color.Gradient;
+        Result.Pattern := st.Color.Pattern;
+      end;
+      Exit;
+    end;
+  end;
+  Result := SeriesObjectFill(ASlot);
+end;
+
+function TTyAdvanceChart.SeriesObjectFill(ASlot: Integer): TTyChartObjFill;
+var
+  d: TJSONData;
+  st: TTyOptStyle;
+begin
+  Result := Default(TTyChartObjFill);
+  if (ASlot < 0) or (ASlot > High(FBindings)) or (FOption = nil) then Exit;
+  d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if not (d is TJSONObject) then Exit;
+  st := TyReadOptStyle(TJSONObject(d), 'itemStyle');
+  if st.Color.IsAuto then Exit;
+  if (st.Color.Gradient.Kind <> cgkNone) or st.Color.Pattern.Present then
+  begin
+    Result.Present := True;
+    Result.Gradient := st.Color.Gradient;
+    Result.Pattern := st.Color.Pattern;
+  end;
+end;
+
+function TTyAdvanceChart.SeriesRowFills(ASlot: Integer): TTyRowFillArray;
+var
+  k, n: Integer;
+  any: Boolean;
+  oc: TTyOptColor;
+begin
+  Result := nil;
+  if (ASlot < 0) or (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
+  n := FStores[ASlot].RawCount;
+  SetLength(Result, n);
+  any := False;
+  for k := 0 to n - 1 do
+  begin
+    if (ASlot <= High(FDatumAsked)) and (k <= High(FDatumAsked[ASlot]))
+      and FDatumAsked[ASlot][k] then
+    begin
+      Result[k].PaletteSet := True;
+      Result[k].PaletteNone := FDatumPicks[ASlot][k].Kind = ppkNone;
+      Result[k].Palette := TTyChartColor(PickColor(FDatumPicks[ASlot][k]));
+      any := True;
+    end;
+    if RowObjectFill(ASlot, k, oc) then
+    begin
+      Result[k].ObjSet := True;
+      Result[k].ObjSolid := oc.Color;
+      Result[k].ObjGradient := oc.Gradient;
+      Result[k].ObjPattern := oc.Pattern;
+      any := True;
+    end;
+  end;
+  if not any then Result := nil;
 end;
 
 procedure TTyAdvanceChart.SolveSampling;
@@ -4048,31 +4310,46 @@ procedure TTyAdvanceChart.SolveSeriesColors;
   end;
 
 var
-  i, n: Integer;
-  declared: Boolean;
-  cur, own: TTyPaletteCursor;
-  ownPal: TTyChartColorArray;
+  i, n, count: Integer;
+  chartScope, ownScope: TTyPaletteScope;
+  chartPal, ownPal: TTyPalette;
+  chartLayers, ownLayers: TTyPaletteLayers;
   node: TJSONObject;
   d: TJSONData;
   st: string;
   style: TTyOptStyle;
   key, other: TTyOptColor;
   hasAuto: Boolean;
-  c: TTyChartColor;
 begin
   FSeriesColors := nil;
   FSeriesColorKnown := nil;
   FSeriesColorNone := nil;
-  FSeriesPalette := nil;
-  FSeriesPaletteKnown := nil;
+  FSeriesPick := nil;
+  FSeriesPickAsked := nil;
+  FSeriesFromPick := nil;
+  FSeriesColorFromPalette := nil;
   if FOption = nil then Exit;
   n := FOption.ComponentCount('series');
   SetLength(FSeriesColors, n);
   SetLength(FSeriesColorKnown, n);
   SetLength(FSeriesColorNone, n);
-  SetLength(FSeriesPalette, n);
-  SetLength(FSeriesPaletteKnown, n);
-  cur := TyPaletteStart(TyChartPaletteOf(FOption, -1, declared));
+  SetLength(FSeriesPick, n);
+  SetLength(FSeriesPickAsked, n);
+  SetLength(FSeriesFromPick, n);
+  SetLength(FSeriesColorFromPalette, n);
+  { THE THEME STANDS WHERE UPSTREAM'S DEFAULT PALETTE STANDS, through the same
+    cursor: a written colour takes no slot from it and two series of one name
+    share one, exactly as with an authored list. [Batch 105: the theme ramp
+    was read by series index, so the series after a written colour skipped a
+    slot.] }
+  chartPal := TyChartRootPalette(FOption);
+  chartLayers := TyChartPaletteLayersOf(FOption, -1);
+  chartScope := Default(TTyPaletteScope);
+  { getSeriesCount(): the series MODELS, so an index hole is not counted --
+    the count is what chooses a colorLayer }
+  count := 0;
+  for i := 0 to n - 1 do
+    if FOption.ComponentAt('series', i) is TJSONObject then Inc(count);
 
   { DECLARATION ORDER, AND EVERY SLOT. A series the legend switched off still
     takes its colour, and so does one whose type has no renderer -- that is the
@@ -4087,11 +4364,8 @@ begin
       series after it pick on from the palette [Batch 97] }
     if node = nil then Continue;
     st := '';
-    if node <> nil then
-    begin
-      d := node.Find('type');
-      if (d <> nil) and (d.JSONType = jtString) then st := d.AsString;
-    end;
+    d := node.Find('type');
+    if (d <> nil) and (d.JSONType = jtString) then st := d.AsString;
 
     { WHICH KEY SUPPRESSES THE PALETTE depends on what the series draws with.
       Nearly everything fills, so it is `itemStyle.color`; a boxplot draws with
@@ -4157,51 +4431,31 @@ begin
       Continue;
     end;
 
-    { A SERIES WITH ITS OWN `color` ARRAY runs its own cursor over it from
-      nought, and never touches the chart-wide one. }
-    ownPal := TyChartPaletteOf(FOption, i, declared);
-    if Length(ownPal) > 0 then
+    { SeriesModel.getColorFromPalette(name, null, getSeriesCount()): the
+      series' own `color` / `colorLayer` over a scope of its own, and when
+      that answers nothing the chart's over the chart's scope. `auto` asks as
+      surely as writing nothing does -- it means `the palette colour`, so it
+      has to have one. [Batch 105: colorLayer] }
+    ownPal := TySeriesOwnPalette(FOption, i);
+    ownLayers := TyChartPaletteLayersOf(FOption, i);
+    ownScope := Default(TTyPaletteScope);
+    FSeriesPick[i] := TySeriesPaletteFrom(ownPal, ownLayers, chartPal,
+      chartLayers, NameFor(i), ownScope, chartScope, count);
+    FSeriesPickAsked[i] := True;
+    FSeriesColorFromPalette[i] := not key.Written;
+    { THE PICK IS NOT ALWAYS THE FILL. It becomes the fill only when the
+      fill was left unwritten, or was written as `auto`; a series that
+      named its fill and asked for `auto` somewhere else keeps the name
+      it gave. }
+    if (not key.Written) or key.IsAuto then
+      FSeriesFromPick[i] := True
+    else if not key.IsNone then
     begin
-      own := TyPaletteStart(ownPal);
-      if TyPaletteTake(own, NameFor(i), c) then
-      begin
-        FSeriesPalette[i] := c;
-        FSeriesPaletteKnown[i] := True;
-        if (not key.Written) or key.IsAuto then
-        begin
-          FSeriesColors[i] := c;
-          FSeriesColorKnown[i] := True;
-        end
-        else if not key.IsNone then
-        begin
-          FSeriesColors[i] := key.Color;
-          FSeriesColorKnown[i] := True;
-        end;
-      end;
-      Continue;
-    end;
-
-    { `auto` takes a slot as surely as writing nothing does -- it means `the
-      palette colour`, so it has to have one. }
-    if TyPaletteTake(cur, NameFor(i), c) then
-    begin
-      FSeriesPalette[i] := c;
-      FSeriesPaletteKnown[i] := True;
-      { THE PICK IS NOT ALWAYS THE FILL. It becomes the fill only when the
-        fill was left unwritten, or was written as `auto`; a series that
-        named its fill and asked for `auto` somewhere else keeps the name
-        it gave. }
-      if (not key.Written) or key.IsAuto then
-      begin
-        FSeriesColors[i] := c;
-        FSeriesColorKnown[i] := True;
-      end
-      else if not key.IsNone then
-      begin
-        FSeriesColors[i] := key.Color;
-        FSeriesColorKnown[i] := True;
-      end;
-    end;
+      FSeriesColors[i] := key.Color;
+      FSeriesColorKnown[i] := True;
+    end
+    else
+      FSeriesColorNone[i] := True;
   end;
 end;
 
@@ -4330,6 +4584,9 @@ var
   metas: TTyVisualMetaArray;
   origin, len: Double;
 begin
+  { the per-datum palette and the datums' object colours ride along with the
+    visual rows: every caller that asks for these asks for those [Batch 105] }
+  AVisual.RowFills := SeriesRowFills(ASlot);
   if (ASlot < 0) or (ASlot > High(FVisualRows)) then Exit;
   AVisual.VisualRows := FVisualRows[ASlot];
   if APPI <= 0 then Exit;
@@ -5992,6 +6249,38 @@ begin
   Result := FMarkPointPics[slot];
 end;
 
+function TTyAdvanceChart.PaletteSeriesColour(ASeriesIndex: Integer): TTyChartColor;
+begin
+  Result := TTyChartColor(SeriesColor(ASeriesIndex));
+end;
+
+function TTyAdvanceChart.PaletteDatumColour(ASeriesIndex,
+  ARawIndex: Integer): TTyChartColor;
+var
+  slot, view: Integer;
+  per: TTyChartColorArray;
+  v: TTySeriesVisual;
+  typ: string;
+begin
+  Result := 0;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Exit;
+  typ := FBindings[slot].SeriesType;
+  if (typ = TyPieSeriesTypeName) or (typ = 'funnel') or (typ = 'gauge')
+    or (typ = 'radar') then
+  begin
+    per := PerDatumColours(slot);
+    if (ARawIndex >= 0) and (ARawIndex <= High(per)) then Result := per[ARawIndex];
+    Exit;
+  end;
+  v := TySeriesVisual(TTyChartColor(SeriesColor(ASeriesIndex)));
+  ApplyOptStyle(v, ASeriesIndex);
+  ApplyVisualMaps(v, slot, 0);
+  view := FStores[slot].IndexOfRawIndex(ARawIndex);
+  if view >= 0 then Result := TyRowFill(v, FStores[slot], view)
+  else Result := v.Fill;
+end;
+
 function TTyAdvanceChart.MarkAreaPictures(ASeriesIndex: Integer): TTyMkAreaPicArray;
 var slot: Integer;
 begin
@@ -6172,6 +6461,7 @@ begin
     legend swatch and a tooltip marker go on working unchanged. }
   AVisual.FillGradient := item.Color.Gradient;
   AVisual.StrokeGradient := item.BorderColor.Gradient;
+  AVisual.FillPattern := item.Color.Pattern;
 
   { A LINE READS ITS OWN BLOCK FOR THE PEN, and only for the pen. Its
     palette colour came from `itemStyle` -- that is the trap in this whole
@@ -6226,11 +6516,22 @@ begin
   Result := st.TextColor;
 end;
 
+function TTyAdvanceChart.PickColor(const APick: TTyPalettePick): TTyColor;
+begin
+  case APick.Kind of
+    ppkColor: Result := TTyColor(APick.Color);
+    ppkTheme: Result := ThemeRampColor(APick.Slot);
+  else
+    { undefined: no fill at all }
+    Result := 0;
+  end;
+end;
+
 function TTyAdvanceChart.SeriesPaletteColor(ASeriesIndex: Integer): TTyColor;
 begin
-  if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSeriesPaletteKnown))
-    and FSeriesPaletteKnown[ASeriesIndex] then
-    Exit(TTyColor(FSeriesPalette[ASeriesIndex]));
+  if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSeriesPickAsked))
+    and FSeriesPickAsked[ASeriesIndex] then
+    Exit(PickColor(FSeriesPick[ASeriesIndex]));
   Result := ThemeRampColor(ASeriesIndex);
 end;
 
@@ -6245,6 +6546,11 @@ begin
   if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSeriesColorNone))
     and FSeriesColorNone[ASeriesIndex] then
     Exit(0);
+  { the palette's answer, the theme's slot through the shared cursor
+    included [Batch 105] }
+  if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSeriesFromPick))
+    and FSeriesFromPick[ASeriesIndex] then
+    Exit(PickColor(FSeriesPick[ASeriesIndex]));
 
   Result := ThemeRampColor(ASeriesIndex);
 end;
@@ -7900,10 +8206,14 @@ begin
 end;
 
 function TTyAdvanceChart.FunnelVisual(ASlot: Integer): TTyFunnelVisual;
-var st: TTyStyleSet;
+var st: TTyStyleSet; k: Integer;
 begin
   Result := TyFunnelVisual;
   Result.Fills := PerDatumColours(ASlot);
+  { the object fills by raw row [Batch 105] }
+  SetLength(Result.Objs, Length(Result.Fills));
+  for k := 0 to High(Result.Objs) do
+    Result.Objs[k] := DatumObjectFill(ASlot, k);
   { THE BAND'S OUTLINE IS THE CHART'S OWN GROUND, which is what separates two
     adjacent bands of nearly the same colour. Upstream writes neutral00 -- its
     white -- and on a dark skin that is a white grid over a dark funnel; the
@@ -7941,69 +8251,34 @@ end;
 
 function TTyAdvanceChart.PerDatumColours(ASlot: Integer): TTyChartColorArray;
 var
-  k, rawN: Integer;
-  c: TTyChartColor;
+  k, rawN, si: Integer;
+  c, base: TTyChartColor;
   ov: TTyDataValue;
-  pal: TTyChartColorArray;
-  cur: TTyPaletteCursor;
-  declared: Boolean;
-  nm: string;
-  d: TJSONData;
-  st: TTyOptStyle;
-  mapped: array of Boolean;
-  asked: Integer;
 begin
-  { colorBy: 'data'. Each DATUM takes the next slot of the same nine-colour
-    ramp a bar series cycles across series -- which is what makes a pie or a
-    funnel read at all, and what makes it re-skin with the accent like
-    everything else.
-
-    KEYED ON THE DATUM'S NAME, so two charts over the same categories agree
-    about which category is which colour, and a repeated name inside one chart
-    shares a colour rather than taking a second slot. }
+  { ONE COLOUR PER RAW ROW, in the order upstream's stages write it: the
+    series' colour (its written one, its palette pick -- `auto` included --
+    or none), then a visualMap's over it (4000), then the datum's own
+    itemStyle colour (4500), then the per-datum palette for the rows still
+    the palette's (4600, colorBy other than 'series'; SolveDatumPalette).
+    [Batch 105: the palette ran from nought for every series, took a slot
+    for rows that had their own colour, and a pie by series was still
+    coloured by datum.] }
   Result := nil;
-  pal := TyChartPaletteOf(FOption, ASlot, declared);
-  if Length(pal) = 0 then pal := TyChartPaletteOf(FOption, -1, declared);
-  cur := TyPaletteStart(pal);
   rawN := 0;
   if (ASlot <= High(FStores)) and (FStores[ASlot] <> nil) then
     rawN := FStores[ASlot].RawCount;
   SetLength(Result, rawN);
-  SetLength(mapped, rawN);
-  { A visualMap's colour FIRST: upstream's per-data palette runs after the
-    encoding (priority 4500) and passes over any datum a colour channel
-    wrote, so only the rest ask the palette -- in the order they ask, not
-    by row. [Batch 57: the palette went to every row by row index.] }
-  asked := 0;
+  si := FBindings[ASlot].SeriesIndex;
+  base := TTyChartColor(SeriesColor(si));
   for k := 0 to rawN - 1 do
   begin
-    mapped[k] := (ASlot <= High(FVisualRows)) and (k <= High(FVisualRows[ASlot]))
-      and FVisualRows[ASlot][k].ColorSet;
-    if mapped[k] then
-    begin
-      Result[k] := TyVisualToChart(FVisualRows[ASlot][k].Color);
-      Continue;
-    end;
-    Result[k] := TTyChartColor(ThemeRampColor(asked));
-    Inc(asked);
-    if Length(pal) = 0 then Continue;
-    nm := FStores[ASlot].GetNameByRaw(k);
-    if nm = '' then nm := IntToStr(k);
-    if TyPaletteTake(cur, nm, c) then Result[k] := c;
-  end;
-  { THE SERIES' OWN `itemStyle.color` beats the ramp for every datum -- it is
-    the parent of each datum's style. [Revised in batch 47: it was not read,
-    and every slice kept the ramp's colour.] }
-  d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
-  if d is TJSONObject then
-  begin
-    st := TyReadOptStyle(TJSONObject(d), 'itemStyle');
-    if st.Color.Written and not st.Color.IsAuto then
-      for k := 0 to rawN - 1 do
-        { the visual colour was worked out FROM this one; it stands }
-        if mapped[k] then Continue
-        else if st.Color.IsNone then Result[k] := 0
-        else Result[k] := st.Color.Color;
+    Result[k] := base;
+    if (ASlot <= High(FVisualRows)) and (k <= High(FVisualRows[ASlot]))
+      and FVisualRows[ASlot][k].ColorSet then
+      Result[k] := TyVisualToChart(FVisualRows[ASlot][k].Color)
+    else if (ASlot <= High(FDatumAsked)) and (k <= High(FDatumAsked[ASlot]))
+      and FDatumAsked[ASlot][k] then
+      Result[k] := TTyChartColor(PickColor(FDatumPicks[ASlot][k]));
   end;
   { AND A DATUM THAT NAMED ITS OWN COLOUR KEEPS IT. `data: [{ value: 5,
     itemStyle: { color: '#c23531' } }]` is the commonest thing anybody writes
@@ -8022,6 +8297,7 @@ function TTyAdvanceChart.PieVisual(ASlot: Integer): TTyPieVisual;
 var
   k, n, raw: Integer;
   perRaw: TTyChartColorArray;
+  bst: TTyOptStyle;
 begin
   Result := TyPieVisual(0);
   { colorBy:''data''. Each SECTOR takes the next slot of the same nine-colour
@@ -8046,6 +8322,24 @@ begin
   n := Length(FPies[ASlot].Sectors);
   if n < 1 then n := 1;
   SetLength(Result.Fills, n);
+  { THE OBJECT FILLS, per sector by its raw row [Batch 105] }
+  SetLength(Result.Objs, n);
+  for k := 0 to n - 1 do
+    if k <= High(FPies[ASlot].Sectors) then
+      Result.Objs[k] := DatumObjectFill(ASlot, FPies[ASlot].Sectors[k].RawIndex);
+  { AND THE BORDER the series wrote: PieSeries' itemStyle is borderWidth 1
+    with no colour, so nothing is stroked until a colour is written [Batch
+    105: it was never read] }
+  bst := TyReadOptStyle(TJSONObject(FOption.ComponentAt('series',
+    FBindings[ASlot].SeriesIndex)), 'itemStyle');
+  if bst.BorderColor.Written and not bst.BorderColor.IsNone
+    and not bst.BorderColor.IsAuto then
+  begin
+    Result.Stroke := bst.BorderColor.Color;
+    if IsNan(bst.BorderWidthLogical) then Result.StrokeWidthLogical := 1
+    else Result.StrokeWidthLogical := bst.BorderWidthLogical;
+  end;
+  if FLastPPI > 0 then Result.PxScale := FLastPPI / 96;
   { AND A visualMap's OPACITY, which a pie keeps (a funnel does not) }
   SetLength(Result.Alphas, n);
   for k := 0 to n - 1 do
@@ -8353,6 +8647,7 @@ begin
       Result[i].Found := True;
       Result[i].SeriesType := FBindings[j].SeriesType;
       Result[i].Colour := TTyChartColor(SeriesColor(FBindings[j].SeriesIndex));
+      Result[i].Obj := SeriesObjectFill(j);
       Result[i].DefaultIcon := TyLegendDefaultIcon(FBindings[j].SeriesType,
         SeriesSymbolWord(j));
       Result[i].OwnIcon := TyLegendDrawsOwnIcon(FBindings[j].SeriesType);
@@ -8448,6 +8743,7 @@ begin
             Result[i].Colour := perRaw[k]
           else
             Result[i].Colour := TTyChartColor(SeriesColor(k));
+          Result[i].Obj := DatumObjectFill(j, k);
           { A TRANSPARENT DATUM IS SHOWN AT A FIFTH, as the category chip
             above is -- but the swatch still carries the datum's own opacity,
             so a slice a visualMap put out of range (colour and opacity both
