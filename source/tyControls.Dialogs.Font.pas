@@ -544,9 +544,13 @@ begin
 end;
 
 function TyFontDialog(AFont: TFont): Boolean;
-var d: TTyFontForm;
+var d: TTyFontForm; fams: TStringList;
 begin
-  d := TyBuildFontDialog('', AFont, Screen.Fonts);
+  fams := TStringList.Create;
+  try
+    TyGetFontFamilies(fams, False);   // Screen.Fonts without the vertical "@" variants
+    d := TyBuildFontDialog('', AFont, fams);
+  finally fams.Free; end;
   try
     if d.ShowModal = mrOK then
     begin
@@ -582,17 +586,12 @@ function TTyFontDialog.BuildForm: TTyFontForm;
 var fams: TStringList;
 begin
   { The families are read on each build, so a font installed since the last one shows up.
-    Filtered only when an option asks -- otherwise this is Screen.Fonts, as before. }
-  fams := nil;
+    The same list the font combo box shows: Screen.Fonts without the vertical "@" variants,
+    filtered further when an option asks. }
+  fams := TStringList.Create;
   try
-    if (fdFixedPitchOnly in FOptions) or (fdScalableOnly in FOptions) then
-    begin
-      fams := TStringList.Create;
-      TyGetFontFamilies(fams, fdFixedPitchOnly in FOptions, fdScalableOnly in FOptions);
-      Result := TyBuildFontDialog(FCaption, FFont, fams);
-    end
-    else
-      Result := TyBuildFontDialog(FCaption, FFont, Screen.Fonts);
+    TyGetFontFamilies(fams, fdFixedPitchOnly in FOptions, fdScalableOnly in FOptions);
+    Result := TyBuildFontDialog(FCaption, FFont, fams);
   finally
     fams.Free;
   end;

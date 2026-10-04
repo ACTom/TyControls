@@ -35,11 +35,25 @@ uses
 
 { Fills ADest with the installed families, in Screen.Fonts order and spelling, keeping only
   those the system reports as fixed-pitch (AFixedPitchOnly) and/or not a bitmap font
-  (AScalableOnly). With neither flag ADest is a copy of Screen.Fonts. }
+  (AScalableOnly). With neither flag ADest is Screen.Fonts.
+
+  Never listed, with or without a flag: the vertical variants Windows enumerates beside each
+  CJK family ("@SimSun", "@MS Gothic"). They are the same face with its glyphs turned for
+  top-to-bottom text, so in a horizontal control they draw sideways; the Windows font dialog
+  (ChooseFont, which LCL's TFontDialog shows) does not offer them either, and the other
+  widgetsets never report them. }
 procedure TyGetFontFamilies(ADest: TStrings; AFixedPitchOnly: Boolean;
   AScalableOnly: Boolean = False);
 
+{ A Windows vertical-writing variant: the family name with an '@' in front. }
+function TyIsVerticalFontFamily(const AName: string): Boolean;
+
 implementation
+
+function TyIsVerticalFontFamily(const AName: string): Boolean;
+begin
+  Result := (AName <> '') and (AName[1] = '@');
+end;
 
 function CollectFixedPitch(var ELogFont: TEnumLogFontEx; var Metric: TNewTextMetricEx;
   FontType: Longint; Data: LParam): Longint; extdecl;
@@ -91,11 +105,6 @@ var
   i: Integer;
   name: string;
 begin
-  if not (AFixedPitchOnly or AScalableOnly) then
-  begin
-    ADest.Assign(Screen.Fonts);
-    Exit;
-  end;
   fixed := nil;
   scalable := nil;
   try
@@ -115,6 +124,7 @@ begin
       for i := 0 to Screen.Fonts.Count - 1 do
       begin
         name := Screen.Fonts[i];
+        if TyIsVerticalFontFamily(name) then Continue;
         if (fixed <> nil) and (fixed.IndexOf(name) < 0) then Continue;
         if (scalable <> nil) and (scalable.IndexOf(name) < 0) then Continue;
         ADest.Add(name);

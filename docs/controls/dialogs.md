@@ -502,6 +502,8 @@ if DlgFont.Execute then
 | `fdShowHelp` | 不起作用 | LCL 的 `TFontDialog` 没有帮助事件。 |
 | `fdForceFontExist` | 不适用 | 只能从列表里选字体族，没有手输字体名的框，选中的一定存在。 |
 
+字体族列表和 [TTyFontComboBox](fontcombobox.md#6-注意事项) 一样不含 `@` 开头的竖排字体(Windows 自己的字体对话框也不列)。**从 3.0 升级:** 3.0 的字体对话框列出这些 `@` 字体,4.0 起不列;传进来的 `Font.Name` 是 `@` 字体时,列表不选中任何项,用户不选别的就原样返回。
+
 > **注意**：两个组件均在 **TyControls Dialogs** 组件面板页可以找到。字体对话框的颜色选择器复用 `TTyColorDialog` 内核，保证视觉一致性。
 
 ---

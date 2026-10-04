@@ -9,7 +9,8 @@ uses
 type
   { A list box of installed font families, each row drawn IN ITS OWN typeface (via the
     TTyListBox.PaintItemContent hook + the shared TyDrawFontRow). The list-box sibling of
-    TTyFontComboBox. Populated from Screen.Fonts; SelectedFont is the chosen family. }
+    TTyFontComboBox. Populated from Screen.Fonts, less the vertical "@" variants
+    (TyGetFontFamilies); SelectedFont is the chosen family. }
   TTyCustomFontListBox = class(TTyCustomListBox)
   private
     FFixedPitchOnly: Boolean;

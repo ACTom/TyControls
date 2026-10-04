@@ -17,11 +17,26 @@ type
     procedure TearDown; override;
   published
     procedure TestNoFilterIsScreenFonts;
+    procedure TestVerticalVariantsAreNeverListed;
     procedure TestFixedPitchKeepsMonospaceOnly;
     procedure TestScalableDropsBitmapFonts;
     procedure TestBothFiltersIntersect;
   end;
+
+{ What every font picker lists without a filter: Screen.Fonts minus the vertical "@" variants.
+  Written out here rather than asked of TyGetFontFamilies, so the tests that compare against it
+  are not comparing the code with itself. }
+procedure FontsWithoutVerticalVariants(AList: TStrings);
+
 implementation
+
+procedure FontsWithoutVerticalVariants(AList: TStrings);
+var i: Integer;
+begin
+  AList.Clear;
+  for i := 0 to Screen.Fonts.Count - 1 do
+    if Copy(Screen.Fonts[i], 1, 1) <> '@' then AList.Add(Screen.Fonts[i]);
+end;
 
 procedure TFontFamiliesTest.SetUp;
 begin
@@ -53,12 +68,36 @@ begin
 end;
 
 procedure TFontFamiliesTest.TestNoFilterIsScreenFonts;
-var i: Integer;
+var i: Integer; plain: TStringList;
 begin
-  TyGetFontFamilies(FList, False, False);
-  AssertEquals('row count', Screen.Fonts.Count, FList.Count);
-  for i := 0 to FList.Count - 1 do
-    AssertEquals('row ' + IntToStr(i), Screen.Fonts[i], FList[i]);
+  plain := TStringList.Create;
+  try
+    FontsWithoutVerticalVariants(plain);
+    TyGetFontFamilies(FList, False, False);
+    AssertEquals('row count', plain.Count, FList.Count);
+    for i := 0 to FList.Count - 1 do
+      AssertEquals('row ' + IntToStr(i), plain[i], FList[i]);
+  finally plain.Free; end;
+  AssertOrderedSubsetOfScreenFonts;
+end;
+
+procedure TFontFamiliesTest.TestVerticalVariantsAreNeverListed;
+var fixed, scalable, i: Integer; any: Boolean;
+begin
+  { "@SimSun" is SimSun with its glyphs turned for vertical text -- and fixed-pitch whenever
+    SimSun is, so the fixed-pitch list would pick it up too. }
+  for fixed := 0 to 1 do
+    for scalable := 0 to 1 do
+    begin
+      TyGetFontFamilies(FList, fixed = 1, scalable = 1);
+      for i := 0 to FList.Count - 1 do
+        AssertFalse(Format('fixed=%d scalable=%d: "%s" is a vertical variant',
+          [fixed, scalable, FList[i]]), Copy(FList[i], 1, 1) = '@');
+    end;
+  any := False;
+  for i := 0 to Screen.Fonts.Count - 1 do
+    if Copy(Screen.Fonts[i], 1, 1) = '@' then any := True;
+  if not any then Ignore('no vertical "@" font installed (Windows with a CJK font)');
 end;
 
 procedure TFontFamiliesTest.TestFixedPitchKeepsMonospaceOnly;

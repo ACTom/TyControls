@@ -3,7 +3,8 @@ unit test.dialogs.font;
 interface
 uses Classes, SysUtils, Graphics, Controls, Forms, StdCtrls, Dialogs, fpcunit, testregistry,
   tyControls.Dialogs.Font, tyControls.FontListBox, tyControls.FontFamilies,
-  tyControls.SpinEdit, tyControls.CheckBox, tyControls.Button, tyControls.StrConsts;
+  tyControls.SpinEdit, tyControls.CheckBox, tyControls.Button, tyControls.StrConsts,
+  test.fontfamilies;
 type
   TFontMapTest = class(TTestCase)
   published
@@ -308,6 +309,13 @@ begin
       Exit(TTyButton(FForm.Components[i]));
 end;
 
+function FontsWithoutVerticalVariantsCount: Integer;
+var L: TStringList;
+begin
+  L := TStringList.Create;
+  try FontsWithoutVerticalVariants(L); Result := L.Count; finally L.Free; end;
+end;
+
 procedure TFontDialogOptionsTest.TestDefaultsKeepTheOldDialog;
 begin
   AssertTrue('Options default to LCL''s [fdEffects]', FDlg.Options = [fdEffects]);
@@ -315,7 +323,8 @@ begin
   AssertEquals('MaxFontSize', 0, FDlg.MaxFontSize);
   AssertEquals('PreviewText', '', FDlg.PreviewText);
   Build(FDlg.Options);
-  AssertEquals('every installed family', Screen.Fonts.Count, FForm.FamilyCount);
+  AssertEquals('every installed family but the vertical "@" variants',
+    FontsWithoutVerticalVariantsCount, FForm.FamilyCount);
   AssertTrue('underline shows', Box(rsDlgFontUnderline).Visible);
   AssertTrue('strikeout shows', Box(rsDlgFontStrike).Visible);
   AssertTrue('colour shows', FindButton(rsDlgFontColor).Visible);
@@ -456,9 +465,10 @@ end;
 
 procedure TFontDialogOptionsTest.TestNoFaceSelLeavesTheFamilyAlone;
 begin
-  FDlg.Font.Name := Screen.Fonts[0];
   Build([fdEffects]);
-  AssertEquals('setup: normally the family is preselected', Screen.Fonts[0], FForm.SelectedFamily);
+  FDlg.Font.Name := List.Items[0];
+  Build([fdEffects]);
+  AssertEquals('setup: normally the family is preselected', List.Items[0], FForm.SelectedFamily);
   Build([fdEffects, fdNoFaceSel]);
   AssertEquals('no preselection', -1, List.ItemIndex);
   FDlg.Font.Name := 'Zz Kept';

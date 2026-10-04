@@ -23,7 +23,8 @@ type
 
   { A combo of installed font families, each item (field + drop-down) drawn in its own
     typeface — a WYSIWYG font picker. Descends from TTyCustomComboBox; the chosen family is
-    SelectedFont (== Text). Populated from Screen.Fonts; RefreshFonts re-reads them.
+    SelectedFont (== Text). Populated from Screen.Fonts, less the vertical "@" variants
+    (TyGetFontFamilies); RefreshFonts re-reads them.
     Reuses the 'TyComboBox' / 'TyListItem' theming. }
   TTyCustomFontComboBox = class(TTyCustomComboBox)
   private
@@ -44,7 +45,7 @@ type
     property SelectedFont: string read GetSelectedFont write SetSelectedFont;
     { List only the families the system reports as fixed-pitch (see tyControls.FontFamilies:
       the font's pitch flag, never a measurement). Turning it on or off re-reads the list and
-      keeps the chosen family when it is still in it; with it off the list is Screen.Fonts. }
+      keeps the chosen family when it is still in it; with it off the list is every family. }
     property FixedPitchOnly: Boolean read FFixedPitchOnly write SetFixedPitchOnly default False;
   end;
 

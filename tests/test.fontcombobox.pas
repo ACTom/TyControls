@@ -1,7 +1,7 @@
 unit test.fontcombobox;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Forms, fpcunit, testregistry, tyControls.FontComboBox,
+uses Classes, SysUtils, Forms, fpcunit, testregistry, test.fontfamilies, tyControls.FontComboBox,
   tyControls.FontFamilies;
 type
   TFontComboBoxTest = class(TTestCase)
@@ -91,6 +91,21 @@ begin
   end;
 end;
 
+{ The rows a font picker shows without a filter (see test.fontfamilies). }
+function FCBPlainCount: Integer;
+var L: TStringList;
+begin
+  L := TStringList.Create;
+  try FontsWithoutVerticalVariants(L); Result := L.Count; finally L.Free; end;
+end;
+
+function FCBPlainIndexOf(const AName: string): Integer;
+var L: TStringList;
+begin
+  L := TStringList.Create;
+  try FontsWithoutVerticalVariants(L); Result := L.IndexOf(AName); finally L.Free; end;
+end;
+
 { A font this machine has, late in its list, whose name a form file can carry as a plain quoted
   string -- so the row it sits at here is not the row a stale index points at. }
 function FCBLateFont: string;
@@ -153,11 +168,11 @@ begin
   try
     c := dst.FindComponent('F') as TTyFontComboBox;
     AssertEquals('the list is this machine''s fonts, not the saved one',
-      Screen.Fonts.Count, c.Items.Count);
+      FCBPlainCount, c.Items.Count);
     AssertEquals('none of the saving machine''s missing fonts is listed', -1,
       c.Items.IndexOf('NoSuchFontA'));
     AssertEquals('the chosen family is still chosen, at the row it has here', f, c.SelectedFont);
-    AssertEquals('and that row is its row on this machine', Screen.Fonts.IndexOf(f), c.ItemIndex);
+    AssertEquals('and that row is its row on this machine', FCBPlainIndexOf(f), c.ItemIndex);
   finally
     dst.Free;
   end;
@@ -169,7 +184,7 @@ begin
   dst := FCBFromText(FCBOldForm('NoSuchFontC', 1));
   try
     c := dst.FindComponent('F') as TTyFontComboBox;
-    AssertEquals('the list is this machine''s fonts', Screen.Fonts.Count, c.Items.Count);
+    AssertEquals('the list is this machine''s fonts', FCBPlainCount, c.Items.Count);
     AssertEquals('a family this machine lacks leaves nothing selected', -1, c.ItemIndex);
   finally
     dst.Free;
@@ -191,20 +206,24 @@ begin
 end;
 
 procedure TFontComboBoxTest.TestFixedPitchOnlyListsTheSystemsFixedFamilies;
-var c: TTyFontComboBox; fixed: TStringList;
+var c: TTyFontComboBox; fixed, plain: TStringList;
 begin
   FCBNeedFonts;
   fixed := TStringList.Create;
+  plain := TStringList.Create;
   c := TTyFontComboBox.Create(nil);
   try
     TyGetFontFamilies(fixed, True);
+    FontsWithoutVerticalVariants(plain);
+    FCBAssertSame('a new combo', plain, c.Items);
     c.FixedPitchOnly := True;
     FCBAssertSame('on', fixed, c.Items);
     AssertTrue('Arial is not offered', c.Items.IndexOf('Arial') < 0);
     c.FixedPitchOnly := False;
-    FCBAssertSame('off again', Screen.Fonts, c.Items);
+    FCBAssertSame('off again', plain, c.Items);
   finally
     c.Free;
+    plain.Free;
     fixed.Free;
   end;
 end;
