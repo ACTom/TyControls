@@ -7442,7 +7442,7 @@ dataZoom 的模型、窗口、过滤和轴范围钉点。slider 组件的画面�
 
 ### 已知偏差
 
-- 折线的 `sampling`(lttb 等)没有移植:area-simple 按采样前的行比较。
+- **[第 102 批：已移植，area-simple 按采样后的行与位置比较，见 §137。]** 折线的 `sampling`(lttb 等)没有移植:area-simple 按采样前的行比较。
 - `smooth` 折线画成直线段,不比较它的顶点。
 - 这个测试不给测量表,轴标签宽度和上游不同时 plot 位置会变,那样的用例不比较画出的位置(窗口、范围、刻度照比)。
 - 选项里写 NaN 无法用 JSON 表达,按 null 处理(对记录到的用例结果相同)。
@@ -9423,6 +9423,8 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 
 全量 **8092 个测试，0 错误，0 失败**。
 
+
+
 ## 136. Tier 1 第一百零一批：坐标轴收尾（B6，2026-10-05）
 
 路线图 B6 的五件事，每一件以前都在某一节的「已知偏差」或「故意留的偏差」里：`axisLine.symbol` 写了也不画箭头；`nameTruncate` 没有截断（§72）；分割线只用皮肤的一种颜色、分割区域隔一块涂一块并且每次渲染从头数（§48、§74）；类目轴的自动间隔每次从头算，没有上游那层「只抑制减一」的缓存（§53、§73）；值轴和时间轴上 `axisPointer.type: 'shadow'` 什么都不画（§56）。这一批逐个对着上游源码核过，再在真 dist 上跑基准，全部按上游补齐。顺带改了指示器的两处老问题：值轴上指示器的落点范围和参与吸附的系列。
@@ -9499,3 +9501,90 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - `tools/advchart-oracle/axis-finish.js`、`tests/fixtures/advchart-axis-finish.json`、`tests/test.advchart.axisfinish.pas`（新，注册在 `tytests.lpr`）。
 
 全量 **8119 个测试，0 错误，0 失败**（第 100 批是 8092；新增 `test.advchart.axisfinish` 11 个，其余是两批之间别处加的）。
+
+## 137. Tier 1 第一百零二批：采样（B10，2026-10-05）
+
+路线图 B10：`series.sampling`——lttb（上游的变体）、minmax、average、sum、max、min、nearest。在这之前端口完全没有采样：§94 的已知偏差第一条记着 area-simple 按采样前的行比较，gallery 里 area-simple、line-tooltip-touch 写了 `sampling` 也照全量画。
+
+### 上游的做法（`processor/dataSample.ts`、`data/DataStore.ts` 的 `lttbDownSample` / `minmaxDownSample` / `downSample`、`SeriesData` 的三个包装、`Grid.create` / `resize` 逐行核过，全部在真 dist 上由基准确认）
+
+- **哪些系列**：`dataSample` 只给 line 和 bar 注册（`chart/line/install.ts`、`chart/bar/install.ts`），优先级 `PROCESSOR.STATISTIC`（5000）；line 的默认值是 `'none'`，bar 没有默认值。只认 cartesian2d。scatter 写了 `sampling` 也不采样。
+- **闸门**：`count > 10` 且 `sampling` 是真值。count 是 dataZoom 过滤**之后**的行数——5000 排在堆叠（900）和 dataZoom 过滤（1000）后面。40 行、窗口留下 10 行，尺寸再小也不采样。
+- **尺寸**：基轴 `getExtent()` 两端差的绝对值 × `api.getDevicePixelRatio()`。读的是数据处理阶段的轴：`Grid.create` 里 `resize(..., beforeDataProcessing = true)` 只按 grid 的 left/right/top/bottom 排出原始矩形，containLabel 和 outerBounds 的收缩要等坐标系更新。横向折线（y 是类目轴，基轴是 y）用的是网格高度。node SSR 下 dpr 是 1。
+- **速率**：`Math.round(count / size)`，有限且 `> 1` 才采样。1.495 舍成 1 不采样，1.5 进成 2；尺寸为 0 时是 Infinity，不采样。三个方法拿到的是 `1 / rate`，再自己 `Math.floor(1 / rate)` 当帧宽。
+- **lttb 是上游的变体**，和教科书版有四处不同：
+  - 下一桶到 `len` 为止（教科书是 `len - 1`），最后一行算进最后一桶的均值，最后一帧也可能选中最后一行——它随后又作为"最后一帧"再追加一次；
+  - 下一桶的均值除以桶长，NaN 行算在分母里（只是不加进分子）；
+  - 一帧里既有 NaN 又有数时，先按原始下标顺序追加第一个 NaN 行和选中的行，线在数据断开的地方断开；
+  - 一帧里一个点也没算出面积（全是 NaN，或者 A 点本身是 NaN）时，保留 `nextRawIndex = frameStart`——这是**视图下标**，被当成原始下标用。dataZoom 之后它指向窗口外的行（`zoom-lttb-nan`：窗口从 100 开始，保留下来的第二行是原始第 1 行）。
+  - 下标数组只有 `min((ceil(len / 帧宽) + 2) * 2, len)` 个槽。只有"交替 null、速率 2、奇数行"这一种输入会写多一个：typed array 把它丢掉，`_count` 却记着，渲染时 `SeriesData.diff` 抛 `Invalid typed array length`（`throws-alt-nan`）。
+- **minmax**：每帧从帧首行起算最小最大，帧首是 NaN 时所有比较都为假，这一帧把帧首行保留两次；最小最大按帧内先后排；同一行既是最小又是最大时也保留两次（全等值的数据每行两份，行数可以正好等于输入）。
+- **五个取值采样器**：average 跳过 NaN，一个数都没有时是 NaN；sum 把 NaN 当 0（`frame[i] || 0`）；max / min 结果是无穷（包括 `'Infinity'` 单元格）或一个数都没有时都是 NaN；nearest 取帧首值，NaN 也照取。每帧只保留一行：帧首 + `Math.round(帧长 / 2)`，夹到最后一行（帧长 1 的末帧会落到下一行，被夹回来）；值写进这一行。
+- **写到哪里**：写进**克隆**的值列——`getRawData()` 还是解析出的原值；只写 `data.mapDimension(valueAxis.dim)` 这一维，堆叠系列是原始值维，不是堆叠结果。堆叠在 900 已按未采样的值求和，所以 average 采样的堆叠线画的是**未平均**的堆叠结果，只是行少了。
+- **之后读采样结果的地方**：
+  - 坐标轴范围在坐标系更新时按采样后的视图算（`getDataExtent` 走 indices）：average 的时间轴、数值基轴两端都往里缩（保留的是每帧中间那行）；被 dataZoom 缩放的轴仍按 §94 钉住。
+  - 折线的布局点、面积的 stackedOn 点、柱子、symbol 都按采样后的行；`showAllSymbol: 'auto'` 的拥挤判断和按类目标签间隔保留 symbol 也按采样后的行。柱宽的最小间距是轴统计（920），按未采样的数据。
+  - 标签文字是原始数据项（`getDefaultLabel` → `retrieveRawValue` → `getRawDataItem`），位置是采样后的值（`label-average`：文字 100.56，点在平均值上）。
+  - 轴触发的 tooltip 在采样后的视图里找最近的行；minmax 留下的重复行两个都报（`label-minmax-equal`：`[0,4,4],[0,5,4]`）。
+
+### port 以前
+
+- 没有采样。`test.advchart.datazoomwindow` 对有 `stage` 的系列（area-simple）按 dataZoom 留下的行比较、不比画出的位置。
+
+### 做法
+
+- **新单元 `tyControls.AdvChart.Sampling`**（纯单元：SysUtils、Math、fpjson 和数据层）：
+  - `TySamplingModeOf`：系列写的 `sampling` 是七个名字之一（区分大小写）才算，其余（`'none'`、未知名字、布尔、数字、null）都是不采样。
+  - `TySamplingRate`（`TyJsRound(count / size)`，NaN 尺寸是 NaN，0 尺寸是 Infinity）、`TySamplingApplies`（count > 10、有限、> 1）。
+  - `TySampleView(mode, 视图的原始下标, 按原始下标的值列, 1 / rate)`：三个方法逐行照抄，帧宽是 `JsFloor(1 / 参数)`；帧宽大于视图时按视图宽（每一处边界都对长度取 min，结果相同，也避开整数溢出）。lttb 的槽位上限照抄，多出来的不要——上游抛异常的那种输入，端口保留数组里实际有的那些行。算术在屏蔽 FPU 陷阱下进行（Infinity、NaN 与 JS 一致），出口清 MXCSR。
+  - `TySampleStore`：闸门、速率、采样器，再把视图和写回的值交给 store。
+- **`Data`**：`SetSampledView`——永远是视图，和 `SetIndices` 不同（后者把"和输入一样长"读成"全部行"，而 minmax 的等值数据正好一样长却不是恒等）；`SetSampledValue`——第一次写时留下原列（和 dataZoom `empty` 共用 `FPristine`，谁先写谁留），`GetOriginalByRaw` 仍是解析值，slider 的数据阴影不受影响。
+- **控件**：`SolveSampling` 放在 `SolveDataZooms` 之后、`DzRenderStates` 和 `TyApplyAxisExtents` 之前。只看 line / bar、cartesian2d、有基轴和值轴的绑定；值列是 `TyAxisDataDims(值轴, 不带堆叠)` 的第一列；尺寸是 `BaseAxis.PxLength`——此时轴还是 `TyBuildGrids` 按原始网格矩形排的（设备像素 = CSS 像素 × PPI/96，对应上游的 dpr）。每次重建都重新采样，改变尺寸就改变速率。
+
+### 基准
+
+- `tools/advchart-oracle/sampling.js`（真 dist，node SSR，800×600）：注册两个处理器——999（dataZoom 过滤之前）和 4999（采样之前）——给每个 cartesian2d 的 line / bar 拍快照（视图、按原始行的值列、基轴 `getExtent()`、dpr）；包装三个下采样方法记下哪个跑了、参数是多少；setOption 后渲染一次 SVG，读布局点、stackedOn、柱子、symbol、标签的全局位置和对齐、轴范围；三个指针位置派发 `updateAxisPointer`，读 `showtip` 的 `seriesDataIndices`。77 个用例：七种模式各一（速率 3）、其他速率（4、5、7 带短末帧、末帧长 1、末帧长 3、速率 2、6）、速率与闸门（1.495 / 1.5 / 2.5、10 行 / 11 行、dataZoom 后剩 10 行）、不采样的写法（`'none'`、未知名字、`true`、`''`、scatter）、NaN（七种模式各一组 null 段、每三行一个 null、交替 null、minmax 每帧首行 null、全 null、`'Infinity'` / `'-Infinity'` 单元格）、全等值（四种）、负值（四种）、dataZoom（inside 百分比、slider 值窗口、50–100%、窗口 + 整帧 null、y 轴 `empty`、1000 行 10–40%）、堆叠（lttb、average、堆叠面积 minmax + sum、采样的线叠在不采样的线上）、面积（average、带 null 的 lttb）、时间基轴、数值基轴（含 x 无序）、横向（y 类目轴：lttb、average、480 px 高不采样而网格宽不算数）、柱子（max、横向 lttb、不写 sampling 不采样）、原始网格与最终网格不同（outerBounds 收缩：原始 100 px 速率 2，最终网格上会是 3）、symbol 与标签（average 全显示、数值基轴 lttb、minmax 等值的重复 symbol 和标签、auto 稀疏化）、上游抛异常的交替 null。19 条守卫（取整改成 floor、速率 ≥ 1、count ≥ 10、lttb 下一桶到 len − 1、均值只除数的个数、view 下标改成原始下标、不追加 NaN 行、平局取后者、A 点在 i、minmax 总是先最小、跳过 NaN 帧首、average 分母算 NaN、sum 不把 NaN 当 0、max 保留无穷、nearest 取帧尾、保留行用 floor、不夹到末行、在 dataZoom 之前采样、尺寸用最终网格），转写逐位重放全部系列，两次生成逐字节一致 → `tests/fixtures/advchart-sampling.json`。
+- `test.advchart.sampling`（新，9 个测试）：
+  - **规则**：每个有快照的系列把记录的视图、值列、尺寸直接喂给 `TySamplingRate` / `TySamplingApplies` / `TySampleView`，逐位比速率、`1 / rate`、方法、保留的原始下标、写回的值。
+  - **接线**：控件渲染每个选项，量字用 zrender SSR 宽度表（与 gridbounds、tooltipfinish 相同），逐位比 store 的行数、原始下标、值列，每根轴的范围，折线布局点（非法点按非法比）、stackedOn、symbol 的位置、标签的文字 / 锚点 / 对齐，柱子（按 plot 裁剪后），三个指针位置上命中的 `[系列, 视图行, 原始行]` 和吸附值。同时断言没有一个用例的 plot 与上游不同（outerBounds 那个也对上了），以及标签、symbol、柱子、折线、指针行各自比到的数量下限——不让它静默通过。
+  - 手写：上游抛异常的用例端口保留槽位里的行；`sampling` 的读法；速率与闸门的边界、帧宽大于视图、帧宽小于 1；average 之后 `GetOriginalByRaw` 仍是原值；改变控件宽度重新采样（1201 行，640 px 速率 2 → 601 行，240 px 速率 5 → 241 行）；屏蔽的算术之后宿主的除以零仍报 `EZeroDivide`；store 写值后不经视图变化 extent 也看得到（变异测试补的）。
+- `test.advchart.datazoomwindow`：去掉对 `stage` 系列的豁免，area-simple 按最终（采样后）的行和位置比较。
+
+### 被推翻的旧说法
+
+- §94「已知偏差」第一条（折线的 `sampling` 没有移植：area-simple 按采样前的行比较）不再成立：`test.advchart.datazoomwindow` 的豁免已去掉，原注释改写（`[Batch 102]`）。§94 原处需要标注（本批没有改 spec 文件）。
+
+### 变异测试
+
+`b10mut.py`：每次改一处源码、重编、跑 `test.advchart.sampling`（存活的再跑 `test.advchart.datazoomwindow`），然后还原。共 43 个变异：
+- 模式选择：名字不分大小写、lttb 走 minmax、average 算成 sum。
+- lttb 的分桶和面积：下一桶到 `len - 1`、均值只除数的个数、去掉 Abs、A 点在 i、avgX 取桶首、平局取后者、视图下标改成原始下标、不追加 NaN 行、NaN 行与选中行倒序、去掉槽位上限、不追加最后一行。
+- minmax 的取法：总是先最小、跳过 NaN 帧首、短末帧少读一行。
+- 取值采样器：average 分母算 NaN、sum 让 NaN 传染、max / min 保留无穷、nearest 取帧尾、保留行用 floor、不夹到末行。
+- 速率与闸门：取整改成截断、改成 FPC 的银行家舍入、速率 ≥ 1、count ≥ 10、帧宽用 ceil。
+- store：视图走 `SetIndices`、写值不留原列、写值不作废缓存、值不写回、视图当恒等、count 用原始行数。
+- NaN 与屏蔽：不屏蔽陷阱、不清 MXCSR。
+- 接线：在 dataZoom 之前采样、尺寸取值轴、尺寸取 x 轴、值列取堆叠结果、不采 bar、所有类型都采。
+
+首轮杀死 42 个，存活 1 个：**写值不作废缓存**（`SetSampledValue` 不置 `HasCalculated`，也不 `InvalidateExtents`）。控件总在写值之后设视图，而 `SetSampledView` 本身就作废缓存，所以接线层看不出来。补了一个 store 层的测试 `TestASampledValueIsSeenByTheExtent`：不经过视图变化，直接写值再读 extent（未过滤的快路径和已缓存的视图各一次），另加"视图和输入一样长也仍是视图"。之后杀死，43/43。
+
+### 推迟与偏差
+
+- **函数形式的 `sampling`** 不支持（没有 JS）；上游的采样器表是普通对象字面量，`'toString'` 这类原型上的名字在那边会被当成采样器，端口按不采样。
+- **上游抛异常的 lttb**（交替 null、速率 2、奇数行）：端口不抛，保留下标数组里实际有的 `len` 行。
+- **dataZoom 动作后的尺寸**：上游的 `dataZoom` 动作走 `update`，不再跑 `Grid.create`，采样器读到的是上一次布局后的最终网格；端口每次重建都从原始网格矩形读。只有 containLabel / outerBounds 收缩了网格时两者不同。setOption 的路径（基准覆盖的）一致。
+- **dpr**：端口用设备像素（`PxLength`），等于 CSS 像素 × PPI/96；上游在浏览器里乘的是 `window.devicePixelRatio`，两者在同一台机器上通常一致，但不是同一个来源。
+- **格式器句柄的 `Values`** 取 store 里的值，average 等采样之后是采样值；上游 `params.value` 是原始数据项。标签和 tooltip 的文字走原始项，与上游一致。
+- **非法的布局点**：上游是 `[x, NaN]`，端口是 `[NaN, NaN]`（之前就这样，这一批只按"非法"比较）。
+
+### 落地
+
+- `source/tyControls.AdvChart.Sampling.pas`（新）：模式、速率、闸门、三个方法、`TySampleStore`。
+- `source/tyControls.AdvChart.Data.pas`：`SetSampledView`、`SetSampledValue`。
+- `source/tyControls.AdvanceChart.pas`：`SolveSampling`，接在 `SolveDataZooms` 之后。
+- `tycontrols.lpk`、`tycontrols.pas`：新单元。
+- `tools/advchart-oracle/sampling.js`、`tests/fixtures/advchart-sampling.json`、`tests/test.advchart.sampling.pas`（注册进 `tests/tytests.lpr`）；`tests/test.advchart.datazoomwindow.pas` 去掉豁免。
+
+### 下一批
+
+（按路线图）

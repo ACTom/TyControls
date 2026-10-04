@@ -378,7 +378,7 @@ end;
 procedure TAdvChartDataZoomWindowOracleTest.CheckSeries(ACase: TJSONObject);
 var
   arr, ri, lay, em, vals: TJSONArray;
-  s, st, it: TJSONObject;
+  s, it: TJSONObject;
   i, k, j, si, col, n, found: Integer;
   store: TTyDataStore;
   cnt: Integer;
@@ -390,7 +390,6 @@ var
   b: TTyRectF;
   x, y, w, h, l, r, t, bt: Double;
   px, py, pw, ph: Double;
-  sampled: Boolean;
 
   { the series' plot rect, from its axes }
   procedure PlotOf(ACs, ASer: TJSONObject; out AX, AY, AW, AH: Double);
@@ -453,22 +452,12 @@ begin
       Miss(Format('s%d: no store here', [si]));
       Continue;
     end;
-    { A SAMPLED SERIES (lttb) is compared as the dataZoom left it: this
-      port does not sample }
-    sampled := not IsNull(s.Find('stage'));
-    if sampled then
-    begin
-      st := s.Objects['stage'];
-      if st.Find('count') <> nil then cnt := st.Integers['count']
-      else cnt := s.Integers['count'];
-      if st.Find('rawIndices') <> nil then ri := st.Arrays['rawIndices']
-      else ri := s.Arrays['rawIndices'];
-    end
-    else
-    begin
-      cnt := s.Integers['count'];
-      ri := s.Arrays['rawIndices'];
-    end;
+    { A SAMPLED SERIES (lttb) is compared as it was finally drawn: the rows
+      the sampler kept after the dataZoom's. [Batch 102: it was compared as
+      the dataZoom left it, because the port did not sample; `stage` is the
+      snapshot before the sampler.] }
+    cnt := s.Integers['count'];
+    ri := s.Arrays['rawIndices'];
     if store.RawCount <> s.Integers['rawCount'] then
       Miss(Format('s%d: %d raw rows upstream, %d here', [si, s.Integers['rawCount'],
         store.RawCount]));
@@ -515,7 +504,7 @@ begin
       grid rect follows the axis labels' measured widths, and this test
       measures with the skin's font, not zrender's; a case whose plot moved
       for that reason is not a dataZoom question. }
-    if sampled or IsNull(s.Find('layout')) or (lst = nil) then Continue;
+    if IsNull(s.Find('layout')) or (lst = nil) then Continue;
     if not SamePlot(ACase, s) then Continue;
     lay := s.Arrays['layout'];
     { KNOWN: a smooth line is drawn as a polyline here -- the port has no

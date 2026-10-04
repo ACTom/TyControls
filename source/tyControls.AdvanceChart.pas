@@ -38,7 +38,7 @@ uses
   tyControls.AdvChart.Paint, tyControls.AdvChart.Render,
   tyControls.AdvChart.Shape, tyControls.AdvChart.Style,
   tyControls.AdvChart.Marks, tyControls.AdvChart.BarLayout,
-  tyControls.AdvChart.Stack, tyControls.AdvChart.Symbol,
+  tyControls.AdvChart.Stack, tyControls.AdvChart.Sampling, tyControls.AdvChart.Symbol,
   tyControls.AdvChart.Pictorial,
   tyControls.AdvChart.Color, tyControls.AdvChart.VisualMap,
   tyControls.AdvChart.VisualMapView,
@@ -877,6 +877,8 @@ type
     procedure SolveSeriesColors;
     procedure SolveVisualMaps;
     procedure SolveDataZooms;
+    { series.sampling over every cartesian2d line and bar [Batch 102] }
+    procedure SolveSampling;
     function WeakKeep(ARawIndex: Integer): Boolean;
     procedure SolveVisualMapViews(const AMeasurer: ITyTextMeasurer; APPI: Integer);
     function VisualMapInk(const AView: TTyVmViewSpec): TTyVisualMapInk;
@@ -2848,11 +2850,49 @@ begin
     1000, after the stack (900): the sums are the unzoomed ones, and the
     axis not zoomed is sized from the rows the zoom left. }
   SolveDataZooms;
+  { AFTER THE dataZoom FILTER AND BEFORE THE EXTENTS: upstream's dataSample
+    runs at 5000, behind the stack (900) and the filter (1000), and the
+    coordinate system is sized from what it leaves. [Batch 102] }
+  SolveSampling;
   { EVERY RENDER IS A RENDER OF THE VIEWS: a slider rebuilds from the window
     unless the action was its own, an inside takes the window again }
   DzRenderStates;
   TyApplyAxisExtents(FOption, FBuild, FBindings, FStores, FStacks, FIndex,
     FLastPPI, FAxisZooms);
+end;
+
+procedure TTyAdvanceChart.SolveSampling;
+var
+  i: Integer;
+  d: TJSONData;
+  mode: TTySamplingMode;
+  cols: TTyIntegerArray;
+begin
+  if FBuild = nil then Exit;
+  for i := 0 to High(FBindings) do
+  begin
+    if (i > High(FStores)) or (FStores[i] = nil) then Continue;
+    { dataSample is registered for 'line' and 'bar', and acts on cartesian2d
+      alone }
+    if (FBindings[i].SeriesType <> 'line') and (FBindings[i].SeriesType <> 'bar') then
+      Continue;
+    if FBindings[i].CoordSysName <> 'cartesian2d' then Continue;
+    if (FBindings[i].BaseAxis = nil) or (FBindings[i].ValueAxis = nil) then Continue;
+    d := FOption.ComponentAt('series', FBindings[i].SeriesIndex);
+    if (d = nil) or (d.JSONType <> jtObject) then Continue;
+    mode := TySamplingModeOf(TJSONObject(d).Find('sampling'));
+    if mode = tsmNone then Continue;
+    { data.mapDimension(valueAxis.dim): the value column itself, never a
+      stack's sum }
+    cols := TyAxisDataDims(FStores[i], FBindings[i].ValueAxis, FBindings[i],
+      Default(TTySeriesStack));
+    if Length(cols) = 0 then Continue;
+    { THE SIZE IS THE GRID AS IT STANDS NOW: the raw grid rect, before the
+      labels shrink it -- upstream's Grid.create sizes the axes before the
+      data processing and dataSample reads them there. Device pixels are
+      upstream's css pixels times its pixel ratio. }
+    TySampleStore(mode, FStores[i], cols[0], Abs(FBindings[i].BaseAxis.PxLength));
+  end;
 end;
 
 function TTyAdvanceChart.WeakKeep(ARawIndex: Integer): Boolean;
