@@ -550,6 +550,10 @@ begin
   OldActive := GetActivePage;         // BEFORE appending (append keeps old indices valid)
   SetLength(FPages, Length(FPages) + 1);
   FPages[High(FPages)] := APage;
+  { Ask to hear about the page's destruction ourselves: Notification(opRemove) reaches us on
+    its own only when we share its owner, so a page owned by anything else (or by nothing)
+    would be freed while still in FPages, and the next caption lookup reads a dead object. }
+  APage.FreeNotification(Self);
   APage.Controller := Self.Controller;
   ReconcileVisibleFrom(OldActive, False);   // no OnChange on add
 end;
@@ -566,6 +570,7 @@ begin
   OldActive := GetActivePage;         // capture BEFORE mutating FPages
   for J := Idx to High(FPages) - 1 do FPages[J] := FPages[J + 1];
   SetLength(FPages, Length(FPages) - 1);
+  APage.RemoveFreeNotification(Self);   // the other half of RegisterPage's
   if AFree and (APage <> nil) then
     APage.Free;
   ReconcileVisibleFrom(OldActive, True);    // fires OnChange when the active page moved
@@ -1102,8 +1107,23 @@ begin
 end;
 
 procedure TTyRibbonPage.SetParent(AParent: TWinControl);
+var
+  Old: TWinControl;
 begin
+  Old := Parent;
   inherited SetParent(AParent);
+  { LEAVING a ribbon is as much a page-list event as joining one (the TTyTabSheet rule): a page
+    moved to another ribbon, or taken out of this one, must leave the list, or the old ribbon goes
+    on counting it, drawing its tab and handing it out from Pages[]. Two exceptions: while either
+    side is being torn down (the free path is the FreeNotification RegisterPage asked for, and the
+    old host may be half-destroyed), and the ribbon's OWN fly-out -- a minimised ribbon lends its
+    active page to a popup it owns (ShowFlyout -> AdoptContent) and takes it back on close; the
+    page never stops being that ribbon's. }
+  if (Old <> AParent) and (Old is TTyRibbon)
+     and not ((AParent is TTyPopupSurface) and (AParent.Owner = Old))
+     and not (csDestroying in ComponentState)
+     and not (csDestroying in Old.ComponentState) then
+    TTyRibbon(Old).UnregisterPage(Self, False);
   if (AParent <> nil) and (AParent is TTyRibbon) then
     TTyRibbon(AParent).RegisterPage(Self);
 end;

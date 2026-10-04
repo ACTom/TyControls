@@ -2,8 +2,8 @@ unit test.ribbon;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, fpcunit, testregistry,
-  tyControls.Base, tyControls.Ribbon;
+  Classes, SysUtils, Types, Controls, Forms, fpcunit, testregistry,
+  tyControls.Base, tyControls.Ribbon, tyControls.PopupSurface;
 
 type
   { Cracker for the protected designer-path members (SetDesigning). }
@@ -31,6 +31,7 @@ type
     procedure MinimizedCollapsesAndRestoresHeight;
     procedure FileTabRoundTripAndDefaults;
     procedure DefaultAligns;
+    procedure APageThatLeavesIsForgotten;
   end;
 
 implementation
@@ -348,6 +349,63 @@ begin
   finally
     Grp.Free;
     Rib.Free;
+  end;
+end;
+
+{ A page that leaves a ribbon -- for another ribbon, for no parent, or by being freed while it has
+  a different owner (no owner broadcast reaches the ribbon then) -- leaves its page list. It used
+  to stay counted, tabbed and handed out by Pages[], and the freed one was read through on the
+  next caption lookup. Lending a page to the ribbon's own minimised fly-out is not leaving: it
+  comes back to the same place in the list. }
+procedure TRibbonTest.APageThatLeavesIsForgotten;
+var
+  form: TForm;
+  ra, rb: TTyRibbon;
+  home, p, orphan: TTyRibbonPage;
+  fly: TTyPopupSurface;
+  i: Integer;
+  s: string;
+begin
+  form := TForm.CreateNew(nil);
+  try
+    ra := TTyRibbon.Create(form);
+    ra.Parent := form;
+    rb := TTyRibbon.Create(form);
+    rb.Parent := form;
+    home := ra.AddPage('Home');
+    p := ra.AddPage('Insert');
+    p.Parent := rb;
+    AssertEquals('moved to another ribbon: the old one forgets it', 1, ra.PageCount);
+    AssertEquals('and the new one has it', 1, rb.PageCount);
+    AssertEquals('the old ribbon shows one tab', 1, ra.TabCount);
+    p.Parent := nil;
+    AssertEquals('taken out of a ribbon: forgotten', 0, rb.PageCount);
+    p.Free;
+    orphan := TTyRibbonPage.Create(nil);
+    orphan.Caption := 'Orphan';
+    orphan.Parent := ra;
+    ra.ActivePage := orphan;
+    AssertEquals('an ownerless page joins', 2, ra.PageCount);
+    orphan.Free;
+    AssertEquals('freed with another owner: it leaves all the same', 1, ra.PageCount);
+    AssertTrue('the page that stays is the active one', ra.ActivePage = home);
+    s := '';
+    for i := 0 to ra.TabCount - 1 do
+      s := s + ra.TabCaption(i) + ';';
+    AssertEquals('every tab reads a live page', 'Home;', s);
+    { The minimised ribbon flies its active page out in a popup it owns, re-parenting the page
+      there until the popup closes (TTyRibbon.ShowFlyout). }
+    ra.AddPage('View');
+    fly := TTyPopupSurface.CreateNew(ra);
+    fly.AdoptContent(home);
+    AssertTrue('precondition: the page is in the fly-out', home.Parent = fly);
+    AssertEquals('lent to the ribbon''s fly-out: still the ribbon''s page', 2, ra.PageCount);
+    AssertTrue('in its place', ra.Pages[0] = home);
+    fly.ReleaseContent;
+    AssertTrue('back home', home.Parent = ra);
+    AssertEquals('and counted once', 2, ra.PageCount);
+  finally
+    form.Free;
   end;
 end;
 
