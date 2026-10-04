@@ -47,6 +47,7 @@ type
     procedure TestValueListsStayTypeable;
     procedure TestNoDeclaredPropertyEditorIsUnregistered;
     procedure TestEditorsSitOnTheCustomClass;
+    procedure TestNeverStoredPropertiesHideOnTheCustomClass;
   end;
 
 implementation
@@ -534,6 +535,68 @@ begin
   end;
 end;
 
+{ `stored False` on a property means the form file never keeps it: the constructor or the host
+  sets it (the Lucide list's IconFont is the shared Lucide font; a tool window's Controller is
+  pushed down by its bar). The library hides such a property in the inspector, because an edit
+  there is lost on the next save or the next push. The stored clause lives on the custom class,
+  so a third party that publishes the property inherits "never stored" -- and if the Hidden
+  editor sits on the final class only, the third party's inspector offers an edit that silently
+  goes nowhere. So: a Hidden registration on a split final class for a property that class
+  never stores must be on the custom class instead. Nothing overrides it there: a by-name
+  registration with the exact property type on a class beats the IDE's generic component
+  editor whatever the order (propedits.pp GetEditorClass). }
+function NeverStored(APropInfo: PPropInfo): Boolean;
+begin
+  Result := ((APropInfo^.PropProcs shr 4) and 3 = ptConst) and (APropInfo^.StoredProc = nil);
+end;
+
+procedure TDesignEditorsTest.TestNeverStoredPropertiesHideOnTheCustomClass;
+var
+  regs, bad: TStringList;
+  i, hidden: Integer;
+  ty, base, prop, ed: string;
+  cls: TPersistentClass;
+  pi: PPropInfo;
+begin
+  regs := Registrations;
+  bad := TStringList.Create;
+  try
+    hidden := 0;
+    for i := 0 to regs.Count - 1 do
+    begin
+      if not SplitEditorRegistration(regs[i], ty, base, prop, ed) then Continue;
+      base := Squeezed(base); prop := Squeezed(prop); ed := Squeezed(ed);
+      if not SameText(ed, 'THiddenPropertyEditor') or (prop = '') then Continue;
+      Inc(hidden);
+      { TComponent.Name is `stored False` everywhere: the object line carries it, not a
+        property line. Hiding it is a page-layout choice, not this rule. }
+      if SameText(prop, 'Name') then Continue;
+      if CustomClassesSplit.IndexOf(base) < 0 then Continue;
+      cls := GetClass(base);
+      if cls = nil then Continue;   // reported by TestEveryRegistrationTargetsARealProperty
+      pi := GetPropInfo(cls, prop);
+      if (pi <> nil) and NeverStored(pi) then
+        bad.Add(Format('%s.%s: hide it on %s', [base, prop, cls.ClassParent.ClassName]));
+    end;
+    AssertTrue(Format('only %d named Hidden registrations were checked -- the parse has shrunk',
+      [hidden]), hidden >= 10);
+    { Anti-vacuity for NeverStored itself: the property that started this check is declared
+      `stored False` on the custom class and republished as is. }
+    AssertTrue('NeverStored does not see TTyLucideImageList.IconFont as never stored',
+      NeverStored(GetPropInfo(TTyLucideImageList, 'IconFont')));
+    AssertFalse('NeverStored calls TTyLucideImageList.Names never stored',
+      NeverStored(GetPropInfo(TTyLucideImageList, 'Names')));
+    AssertEquals('a never-stored property hidden only on the final class: a third party'
+      + ' publishing it can edit it in the inspector and loses the edit:' + LineEnding
+      + bad.Text, 0, bad.Count);
+    AssertEquals('TTyCustomLucideImageList.IconFont', 'THiddenPropertyEditor',
+      EditorFor('TTyCustomLucideImageList', 'IconFont'));
+  finally
+    bad.Free;
+    regs.Free;
+  end;
+end;
+
 initialization
   { Name -> class, so a base parsed out of the registrations can be resolved. Not the list under
     test: TestEveryRegistrationTargetsARealProperty fails (with the name) when it falls behind
@@ -547,6 +610,7 @@ initialization
     TTyCustomFilterComboBox, TTyCustomShellComboBox, TTyCustomShellListView,
     TTyCustomShellTreeView, TTyCustomRibbonPage, TTyCustomCharImage, TTyCustomStyleController,
     TTyCustomIconFont, TTyCustomPopover, TTyCustomLucideImageList, TTyCustomLucideIconFont,
+    TTyCustomToolWindow, TTyCustomToolWindowActions,
     { A collection ITEM, not a component — the image-payload editor is registered on
       TTyImageItem so it applies inside the stock collection editor for
       TTyImageCollection.Images. GetClass needs it registered to resolve the name. }

@@ -737,14 +737,19 @@ begin
   { The bundled Lucide LIST is fixed the same way (real-machine feedback: the inherited
     source pickers read as "wire me up"): its IconFont is the shared Lucide font the
     constructor sets, and the bitmap-collection source is never this component's way in --
-    you pick NAMES. Hide both; Names/DefaultSize/GlyphColor stay, they are the point. }
+    you pick NAMES. Hide both; Names/DefaultSize/GlyphColor stay, they are the point.
+    IconFont is hidden on the CUSTOM class: it is `stored False` there, so a third-party list
+    that publishes it would otherwise show an edit the next save drops
+    (test.designeditors TestNeverStoredPropertiesHideOnTheCustomClass). Collection is stored,
+    so hiding it stays a choice about the library's own list (plan D2). }
   RegisterPropertyEditor(TypeInfo(TTyCustomImageCollection), TTyLucideImageList, 'Collection', THiddenPropertyEditor);
-  RegisterPropertyEditor(TypeInfo(TTyCustomIconFont), TTyLucideImageList, 'IconFont', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TTyCustomIconFont), TTyCustomLucideImageList, 'IconFont', THiddenPropertyEditor);
   { A tool window's and an actions area's Controller is pushed down by the bar / the window and
     never streamed (spec §3.1 / §4): an edit in the inspector would be overwritten by the next
-    push, so it is not shown. }
-  RegisterPropertyEditor(TypeInfo(TTyStyleController), TTyToolWindow, 'Controller', THiddenPropertyEditor);
-  RegisterPropertyEditor(TypeInfo(TTyStyleController), TTyToolWindowActions, 'Controller', THiddenPropertyEditor);
+    push, so it is not shown. On the custom classes, where `stored False` is declared, for the
+    same reason as the Lucide list's IconFont above. }
+  RegisterPropertyEditor(TypeInfo(TTyStyleController), TTyCustomToolWindow, 'Controller', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TTyStyleController), TTyCustomToolWindowActions, 'Controller', THiddenPropertyEditor);
   // Every TTyColor property ($AARRGGBB) gets a readable hex value + a colour picker on '...',
   // instead of a raw integer like 4278190080 nobody can fill (DefaultColor, GlyphColor, ...).
   RegisterPropertyEditor(TypeInfo(TTyColor), nil, '', TTyColorPropertyEditor);
