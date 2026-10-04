@@ -543,6 +543,22 @@ type
     procedure FilterSelf(AFunc: TTyDataFilterFunc);
     { True when the view is narrower than the input. }
     function IsFiltered: Boolean;
+
+    { ---- sampling (series.sampling) [Batch 102] ---- }
+    { THE VIEW A SAMPLER LEAVES: the raw rows kept, in the sampler's order,
+      duplicates and all. Always a view -- unlike SetIndices, which reads a
+      vector as long as the input as "every row". A sampler can hand back
+      exactly as many rows as there were and still not be the identity:
+      minmax over equal values keeps every other row TWICE. Ascending but not
+      strictly, so IndexOfRawIndex finds one of a duplicated pair. }
+    procedure SetSampledView(const ARaw: array of Integer; ACount: Integer);
+    { A value sampler's answer written into one raw row of ADim (average,
+      sum, max, min, nearest). Upstream writes into a CLONED column, so the
+      parsed value is still what getRawData() reads: the first write keeps the
+      column as it was, for GetOriginalByRaw -- the same copy dataZoom's
+      `empty` keeps, and the first of the two keeps it. No ordinal refusal:
+      upstream samples whatever column the value axis maps. }
+    procedure SetSampledValue(ADim, ARawIndex: Integer; AValue: Double);
   end;
 
 { ---- override keys ----
@@ -2357,6 +2373,34 @@ end;
 function TTyDataStore.IsFiltered: Boolean;
 begin
   Result := FFiltered;
+end;
+
+procedure TTyDataStore.SetSampledView(const ARaw: array of Integer; ACount: Integer);
+var
+  i: Integer;
+begin
+  if ACount > Length(ARaw) then ACount := Length(ARaw);
+  if ACount < 0 then ACount := 0;
+  SetLength(FIndices, ACount);
+  for i := 0 to ACount - 1 do
+    FIndices[i] := ARaw[i];
+  FFiltered := True;
+  FCount := ACount;
+  InvalidateExtents;
+end;
+
+procedure TTyDataStore.SetSampledValue(ADim, ARawIndex: Integer; AValue: Double);
+begin
+  if (ADim < 0) or (ADim > High(FDims)) then Exit;
+  if (ARawIndex < 0) or (ARawIndex >= FRawCount) then Exit;
+  if Length(FPristine) < Length(FDims) then SetLength(FPristine, Length(FDims));
+  if FPristine[ADim] = nil then FPristine[ADim] := Copy(FCols[ADim], 0, FRawCount);
+  FCols[ADim][ARawIndex] := AValue;
+  { the two staleness hazards SetCalculated names, and an ordinal's
+    inverted index }
+  FDims[ADim].HasCalculated := True;
+  InvalidateExtents;
+  if FDims[ADim].Kind = ddtOrdinal then RetireInverted;
 end;
 
 end.
