@@ -634,6 +634,9 @@ procedure TTyRibbon.SetMinimized(AValue: Boolean);
 begin
   if FMinimized = AValue then Exit;
   FMinimized := AValue;
+  { While a form is read, Height is the one the form stored, and it may be the collapsed one:
+    Loaded collapses the band and settles the height to expand back to. }
+  if csLoading in ComponentState then Exit;
   if FMinimized then
   begin
     FExpandedHeight := Height;                          // remember the full height
@@ -1058,6 +1061,8 @@ begin
 end;
 
 procedure TTyRibbon.Loaded;
+var
+  collapsed: Integer;
 begin
   inherited Loaded;
   // Build the visible-tab list from the streamed pages (each self-registered during
@@ -1067,6 +1072,20 @@ begin
   begin
     SetTabIndex(FPendingTabIndex);
     FPendingTabIndex := -1;
+  end;
+  { A Minimized read from the form collapses here, against the final TabHeight. A ribbon saved
+    minimised stored its COLLAPSED height, so the expanded one is not in the form: it used to be
+    read back as the height to expand to, and expanding showed only the tab strip. It now falls
+    back to the theme's ribbon height (what a new ribbon gets). A form that gives the full height
+    keeps it. (#23) }
+  if FMinimized then
+  begin
+    collapsed := MulDiv(TabHeight, Font.PixelsPerInch, 96);
+    if Height > collapsed then
+      FExpandedHeight := Height
+    else
+      FExpandedHeight := ActiveController.Metric('--ribbon-height', TyRibbonDefaultHeight);
+    Height := collapsed;
   end;
   Invalidate;
 end;

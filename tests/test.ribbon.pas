@@ -2,7 +2,7 @@ unit test.ribbon;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Forms, fpcunit, testregistry,
+  Classes, SysUtils, Types, Controls, Forms, LCLType, fpcunit, testregistry,
   tyControls.Base, tyControls.Ribbon, tyControls.PopupSurface;
 
 type
@@ -32,6 +32,7 @@ type
     procedure FileTabRoundTripAndDefaults;
     procedure DefaultAligns;
     procedure APageThatLeavesIsForgotten;
+    procedure AMinimisedRibbonReadBackExpandsToABand;
   end;
 
 implementation
@@ -406,6 +407,95 @@ begin
     AssertEquals('and counted once', 2, ra.PageCount);
   finally
     form.Free;
+  end;
+end;
+
+function RibbonFormText(AForm: TForm): string;
+var ms, ts: TMemoryStream; L: TStringList;
+begin
+  ms := TMemoryStream.Create;
+  ts := TMemoryStream.Create;
+  L := TStringList.Create;
+  try
+    ms.WriteComponent(AForm);
+    ms.Position := 0;
+    ObjectBinaryToText(ms, ts);
+    ts.Position := 0;
+    L.LoadFromStream(ts);
+    Result := L.Text;
+  finally
+    L.Free;
+    ts.Free;
+    ms.Free;
+  end;
+end;
+
+function RibbonFormFromText(const AText: string): TForm;
+var ts: TStringStream; bs: TMemoryStream;
+begin
+  Result := TForm.CreateNew(nil);
+  ts := TStringStream.Create(AText);
+  bs := TMemoryStream.Create;
+  try
+    ObjectTextToBinary(ts, bs);
+    bs.Position := 0;
+    bs.ReadComponent(Result);
+  finally
+    bs.Free;
+    ts.Free;
+  end;
+end;
+
+{ A ribbon saved minimised stores its COLLAPSED height, so the expanded one is not in the form. It
+  used to be read back as the height to expand to, and expanding showed only the tab strip; it now
+  opens to the height a new ribbon has. A form that gives the full height (written by hand, or
+  saved before the collapse) keeps it. (#23) }
+procedure TRibbonTest.AMinimisedRibbonReadBackExpandsToABand;
+var
+  src, back, fresh: TForm;
+  rb, typed: TTyRibbon;
+  s: string;
+  freshH: Integer;
+begin
+  src := TForm.CreateNew(nil);
+  back := nil;
+  fresh := TForm.CreateNew(nil);
+  try
+    src.Name := 'F';
+    rb := TTyRibbon.Create(src);
+    rb.Name := 'Rb';
+    rb.Parent := src;
+    rb.Height := 150;
+    rb.TabHeight := 44;
+    freshH := TTyRibbon.Create(fresh).Height;
+    { The full height in the form: the expanded ribbon's text with Minimized put in. }
+    s := RibbonFormText(src);
+    AssertTrue('precondition: TabHeight streams', Pos('TabHeight = 44', s) > 0);
+    s := StringReplace(s, 'TabHeight = 44', 'TabHeight = 44' + LineEnding + '    Minimized = True', []);
+    back := RibbonFormFromText(s);
+    typed := back.FindComponent('Rb') as TTyRibbon;
+    AssertTrue('full height in the form: read back minimised', typed.Minimized);
+    AssertEquals('full height in the form: collapsed to its TabHeight',
+      MulDiv(44, typed.Font.PixelsPerInch, 96), typed.Height);
+    typed.Minimized := False;
+    AssertEquals('full height in the form: expands back to it', 150, typed.Height);
+    FreeAndNil(back);
+    { Saved minimised: the form stores the collapsed height. }
+    rb.Minimized := True;
+    AssertEquals('precondition: minimised to its strip', MulDiv(44, rb.Font.PixelsPerInch, 96),
+      rb.Height);
+    back := RibbonFormFromText(RibbonFormText(src));
+    typed := back.FindComponent('Rb') as TTyRibbon;
+    AssertTrue('read back minimised', typed.Minimized);
+    AssertEquals('TabHeight read back', 44, typed.TabHeight);
+    AssertEquals('collapsed to that TabHeight', MulDiv(44, typed.Font.PixelsPerInch, 96),
+      typed.Height);
+    typed.Minimized := False;
+    AssertEquals('expanding shows the band, at a new ribbon''s height', freshH, typed.Height);
+  finally
+    fresh.Free;
+    back.Free;
+    src.Free;
   end;
 end;
 
