@@ -95,6 +95,7 @@ type
       component would report Available = True purely because it has a family name, which is the
       exact lie Available exists to prevent. }
     procedure SetSourceState(ARequested, ALoaded: Boolean; const AError: string);
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -529,7 +530,10 @@ begin
   FGlyphs.Free;
   FIndex.Free;
   FNames.Free;
-  FChangeHandlers.Free;
+  { Nil, not just freed: the inherited destructor removes this font from its owner, the owner
+    tells every component it owns -- this one too -- and Notification then takes the dying
+    component's methods off this list. }
+  FreeAndNil(FChangeHandlers);
   inherited Destroy;
 end;
 
@@ -629,6 +633,17 @@ begin
     object -- the same rule TTyEdit follows. (No inherited to chain: TTyComponent is not a
     TControl, so this is the whole implementation rather than an override.) }
   if FChangeHandlers <> nil then FChangeHandlers.RemoveAllMethodsOfObject(AnObject);
+end;
+
+procedure TTyIconFont.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  { A control that follows this font puts a method on the change list AND asks for a free
+    notification (TTyCharImage, TTyRibbonGallery), and the second is what brings it here when it
+    is freed, from whatever owner. Nothing took the method off before: free the control while the
+    font lived -- a child form closed with caFree, a control deleted in the designer -- and the
+    font's next change called into freed memory. }
+  if Operation = opRemove then RemoveAllHandlersOfObject(AComponent);
 end;
 
 procedure TTyIconFont.RebuildIndex;
