@@ -64,6 +64,9 @@ type
   private
     FDir: string;
     FForm: TProbeFileDialog;
+    FAsked: Boolean;
+    FAnswer: Boolean;
+    procedure CanClose(Sender: TObject; var ACanClose: Boolean);
     procedure Touch(const AName: string);
     procedure Dialog(ASave: Boolean; AOptions: TTyFileDialogOptions);
     function Accepts: Boolean;
@@ -76,6 +79,8 @@ type
     procedure TestOpenRefusesAFolderThatIsNotThere;
     procedure TestOpenChecksEveryFileOfASelection;
     procedure TestOpenChecksTheTypedNameBesideASelection;
+    procedure TestOnCanCloseIsNotAskedAboutARefusedName;
+    procedure TestOnCanCloseHasTheLastWord;
   end;
 
 implementation
@@ -302,6 +307,39 @@ begin
   FForm.NameEdit.Text := 'c.txt';
   AssertFalse('a typed name that is not there is refused, whatever else is selected', Accepts);
   AssertTrue('naming it: ' + FForm.Problems.Text, Pos('c.txt', FForm.Problems.Text) > 0);
+end;
+
+{ The program's OnCanClose (forwarded onto the form's OnCloseQuery) records that it was asked. }
+procedure TFileDialogValidationTest.CanClose(Sender: TObject; var ACanClose: Boolean);
+begin
+  FAsked := True;
+  ACanClose := FAnswer;
+end;
+
+{ OnCanClose is where a program acts on the choice -- saves, say. It used to be asked first, so
+  it could say yes and act, and the validation after it still kept the dialog open. }
+procedure TFileDialogValidationTest.TestOnCanCloseIsNotAskedAboutARefusedName;
+begin
+  Dialog(True, [fdoPathMustExist]);
+  FForm.OnCloseQuery := @CanClose;
+  FAsked := False;
+  FAnswer := True;
+  FForm.NameEdit.Text := FDir + PathDelim + 'nope' + PathDelim + 'x.txt';
+  AssertFalse('setup: the name is refused', Accepts);
+  AssertFalse('and OnCanClose was never asked about it', FAsked);
+end;
+
+procedure TFileDialogValidationTest.TestOnCanCloseHasTheLastWord;
+begin
+  Dialog(True, [fdoPathMustExist]);
+  FForm.OnCloseQuery := @CanClose;
+  FForm.NameEdit.Text := FDir + PathDelim + 'new.txt';
+  FAsked := False;
+  FAnswer := False;
+  AssertFalse('a name that passes is still the program''s to refuse', Accepts);
+  AssertTrue('it was asked', FAsked);
+  FAnswer := True;
+  AssertTrue('and when it agrees the dialog closes', Accepts);
 end;
 
 initialization

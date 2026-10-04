@@ -65,7 +65,7 @@ if Dlg.Execute then
   过滤下拉 `OnFilterChange` → `List.Mask`。选中文件 → 填文件名框(**只认选中,不认取消选中** ——
   列表的 `OnSelectItem` 现在也会报告刚被**离开**的那一行,拿它去填名字会写进一个用户已经不在的文件名,
   Save 模式下还会盖掉用户刚敲进去的名字);双击文件(Open)→ 直接接受。
-- **OK 在 `CloseQuery` 里校验**(不是按钮 OnClick):Save 走 `TyFsResolveSaveName` 解析 + `TyMessageDlg` 覆盖确认;
+- **OK 在 `CloseQuery` 里校验**(不是按钮 OnClick),校验通过才问 `OnCanClose`(和 Windows 原生对话框的顺序一样),所以 `OnCanClose` 答应了就一定会关:Save 走 `TyFsResolveSaveName` 解析 + `TyMessageDlg` 覆盖确认;
   Open 收集选中集;两种对话框都照 LCL 的 `CheckFile` 先查 `fdoPathMustExist`(文件夹)、再查 `fdoFileMustExist`(文件),
   Open 多选时文件名框里的名字和每个选中的文件都查;不通过就报错并返回 False,把对话框留住。
 - **Open 手敲优先**:文件名框非空时以它为准(带路径原样、裸名对当前目录展开),空框才回落到列表选中项。
