@@ -959,61 +959,42 @@ begin
     '', bad);
 end;
 
-{ Properties whose fresh value is read off the machine the tests run on: the installed fonts,
-  the drives. G10 keeps the line -- whether it is written, and where -- and masks the value. }
+{ The values in a fresh instance's form text that depend on where the suite runs rather than on
+  the code. G10 keeps each such line -- whether it is written, and where -- and masks only its
+  value; every other value, strings included, is compared as written. A new class whose fresh
+  text carries such a value gets a row here, nothing wider.
+
+  Read off the machine:
+  - the font combo / list box fill their items from the installed fonts, and the combo box's
+    Text is the first of them ('@Fixedsys' on one Windows machine, something else on the next);
+  - the shell tree's root nodes are the drives.
+  Read off the locale:
+  - the numeric edits format their zero with the locale's decimal separator ('0.00' / '0,00');
+    the track edit's has no decimals, so it is compared;
+  - the colour box and colour combo box show their first colour under its pretty name, the
+    LCL's resourcestring rsBlackColorCaption, translated wherever the LCL is;
+  - the string grid's group row format is our resourcestring rsGridGroupRow: a suite that
+    loads a translation and fails before restoring it leaves it changed for the rest of the run.
+  Every other string a fresh instance writes is a literal in a constructor ('Select Color',
+  'File', the shell list view's column titles, '%.0f', the password dialog's black circle ...)
+  and reads the same on every machine. Comparing them is the point: a constructor that starts
+  writing another default is drift, whatever the value's type. (Until the fourth phase's fix
+  round every string value was masked, and swapping the password dialog's default character
+  for '*' stayed green.) }
 const
-  CMachineValues: array[0..2, 0..1] of string = (
-    ('TTyFontComboBox', 'Items.Strings'),
-    ('TTyFontListBox', 'Items.Strings'),
-    ('TTyShellTreeView', 'RootNodeCount'));
-
-function IsPropPath(const S: string): Boolean;
-var
-  i: Integer;
-begin
-  Result := S <> '';
-  for i := 1 to Length(S) do
-    if not (S[i] in ['A'..'Z', 'a'..'z', '0'..'9', '_', '.']) then Exit(False);
-end;
-
-{ Every string value becomes <text>. A fresh instance's strings come from resourcestrings
-  (captions, palette names), the locale (a currency symbol, a decimal separator) or the
-  machine, and a suite that loads a translation earlier in the run would change them all.
-  What G10 is for -- whether a property is written at all, where, and its ordinal value --
-  does not need them; G9 compares the strings themselves, mimic against final, in one run. }
-function MaskStrings(const ABody: string): string;
-var
-  lines: TStringList;
-  i, p, ind: Integer;
-  t: string;
-begin
-  lines := TStringList.Create;
-  try
-    lines.Text := ABody;
-    for i := 0 to lines.Count - 1 do
-    begin
-      t := Trim(lines[i]);
-      if t = '' then Continue;
-      ind := Length(lines[i]) - Length(TrimLeft(lines[i]));
-      p := Pos(' = ', t);
-      if (p > 1) and (p + 3 <= Length(t)) and (t[p + 3] in ['''', '#'])
-         and IsPropPath(Copy(t, 1, p - 1)) then
-        lines[i] := StringOfChar(' ', ind) + Copy(t, 1, p + 2) + '<text>'
-      else if t[1] in ['''', '#'] then
-      begin
-        { An item of a string list; the last one carries the list's closing parenthesis. }
-        if t[Length(t)] = ')' then
-          lines[i] := StringOfChar(' ', ind) + '<text>)'
-        else
-          lines[i] := StringOfChar(' ', ind) + '<text>';
-      end;
-    end;
-    lines.LineBreak := #10;
-    Result := lines.Text;
-  finally
-    lines.Free;
-  end;
-end;
+  CMachineValues: array[0..11, 0..2] of string = (
+    ('TTyFontComboBox', 'Items.Strings', '<from the machine>'),
+    ('TTyFontComboBox', 'Text', '<from the machine>'),
+    ('TTyFontListBox', 'Items.Strings', '<from the machine>'),
+    ('TTyShellTreeView', 'RootNodeCount', '<from the machine>'),
+    ('TTyNumericEdit', 'Text', '<from the locale>'),
+    ('TTyCurrencyEdit', 'Text', '<from the locale>'),
+    ('TTyCalcEdit', 'Text', '<from the locale>'),
+    ('TTyCalcCurrencyEdit', 'Text', '<from the locale>'),
+    ('TTyFloatSpinEdit', 'Text', '<from the locale>'),
+    ('TTyColorBox', 'Text', '<from the locale>'),
+    ('TTyColorComboBox', 'Text', '<from the locale>'),
+    ('TTyStringGrid', 'GroupRowFormat', '<from the locale>'));
 
 function MaskMachineValues(const AClassName, ABody: string): string;
 var
@@ -1032,7 +1013,7 @@ begin
         t := Trim(lines[i]);
         if not AnsiStartsStr(CMachineValues[k, 1] + ' = ', t) then Continue;
         lines[i] := Copy(lines[i], 1, Pos(CMachineValues[k, 1], lines[i]) - 1)
-          + CMachineValues[k, 1] + ' = <from the machine>';
+          + CMachineValues[k, 1] + ' = ' + CMachineValues[k, 2];
         { A string list runs on to the line that closes it: `'last item')`. }
         if AnsiEndsStr('(', t) then
         begin
@@ -1064,15 +1045,22 @@ end;
   `default True` from TTyCustomTabSheet.TabVisible made every fresh tab sheet start writing
   `TabVisible = True` -- G9 and the per-phase suites stayed green; this goes red.
 
-  Frozen while G6 was green, so the fixture says what 3.0 wrote. Through a host form, as in
-  G9 (FreshStreamBody), with clock values pinned, the values read off the machine masked
-  (CMachineValues) and every string value masked (MaskStrings). Sizes are measured on Windows,
+  Frozen while G6 was green, so the fixture says what 3.0 wrote -- with two deliberate changes
+  since: the merge of main's fix for #20 (147fe85e) dropped the Items block of TTyColorBox,
+  TTyColorComboBox and TTyColorListBox (a fresh colour box no longer writes its palette), and
+  the fourth phase's fix round unmasked the string values, read again from the same code.
+  Through a host form, as in G9 (FreshStreamBody), with clock values pinned and only the values
+  read off the machine or the locale masked (CMachineValues). Sizes are measured on Windows,
   as G6's are. The classes this plan does not split
   (CNotSplit) stay out: the forms cannot sit on a form, and the AdvChart-branch classes are
   still being changed elsewhere.
 
   Rewrite with TY_WRITE_FRESH_STREAMS=1 only when a change to what a form file says is the
-  point of the commit; the diff of the fixture is then the review. }
+  point of the commit (or a new class is registered); the diff of the fixture is then the
+  review -- it must hold the lines the commit means to change and nothing else:
+    TY_WRITE_FRESH_STREAMS=1 tytests.exe --suite=TTyCustomClassesGuardTest.TestFreshFormFileTextUnchanged
+  with the exe (or a copy of it) sitting in tests/: the fixture path is found from the exe's
+  own location (RepoRoot), not from the working directory. }
 procedure TTyCustomClassesGuardTest.TestFreshFormFileTextUnchanged;
 var
   reg, cur, gold, curSec, goldSec: TStringList;
@@ -1099,7 +1087,7 @@ begin
           inst := TComponentClass(TClass(reg.Objects[i])).Create(host);
           if inst is TControl then TControl(inst).Parent := host;
           PinClockValues(inst);
-          body := MaskStrings(MaskMachineValues(reg[i], FreshStreamBody(host)));
+          body := MaskMachineValues(reg[i], FreshStreamBody(host));
         except
           on E: Exception do body := '<' + E.ClassName + ': ' + E.Message + '>';
         end;
