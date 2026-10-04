@@ -399,7 +399,7 @@ TTyAdvancedListBox	61	OnEditingDone	TNotifyEvent	tkMethod	-2147483648	T	0	RW	s=1
 TTyAdvancedListBox	62	StyleClass	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyAdvancedListBox	63	StyleOverride	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyAdvancedListBox	64	Controller	TTyStyleController	tkClass	-2147483648	T	0	RW	s=1,d=-
-TTyAdvancedListBox	65	Items	TStrings	tkClass	-2147483648	T	0	RW	s=1,d=-
+TTyAdvancedListBox	65	Items	TStrings	tkClass	-2147483648	D	0	RW	s=1,d=-
 TTyAdvancedListBox	66	ItemIndex	LongInt	tkInteger	-1	T	0	RW	s=1,d=eq
 TTyAdvancedListBox	67	MultiSelect	Boolean	tkBool	0	T	0	RW	s=1,d=eq
 TTyAdvancedListBox	68	ExtendedSelect	Boolean	tkBool	1	T	0	RW	s=1,d=eq
@@ -1874,7 +1874,7 @@ TTyCheckListBox	61	OnEditingDone	TNotifyEvent	tkMethod	-2147483648	T	0	RW	s=1,d=
 TTyCheckListBox	62	StyleClass	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyCheckListBox	63	StyleOverride	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyCheckListBox	64	Controller	TTyStyleController	tkClass	-2147483648	T	0	RW	s=1,d=-
-TTyCheckListBox	65	Items	TStrings	tkClass	-2147483648	T	0	RW	s=1,d=-
+TTyCheckListBox	65	Items	TStrings	tkClass	-2147483648	D	0	RW	s=1,d=-
 TTyCheckListBox	66	ItemIndex	LongInt	tkInteger	-1	T	0	RW	s=1,d=eq
 TTyCheckListBox	67	MultiSelect	Boolean	tkBool	0	T	0	RW	s=1,d=eq
 TTyCheckListBox	68	ExtendedSelect	Boolean	tkBool	1	T	0	RW	s=1,d=eq
@@ -2021,7 +2021,7 @@ TTyColorBox	61	OnEditingDone	TNotifyEvent	tkMethod	-2147483648	T	0	RW	s=1,d=-
 TTyColorBox	62	StyleClass	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyColorBox	63	StyleOverride	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyColorBox	64	Controller	TTyStyleController	tkClass	-2147483648	T	0	RW	s=1,d=-
-TTyColorBox	65	Items	TStringList	tkClass	-2147483648	D	0	RW	s=1,d=-
+TTyColorBox	65	Items	TStringList	tkClass	-2147483648	D	0	RW	s=0,d=-
 TTyColorBox	66	ItemIndex	LongInt	tkInteger	-2147483648	T	0	RW	s=1,d=-
 TTyColorBox	67	Text	TTranslateString	tkAString	0	T	0	RW	s=1,d=-
 TTyColorBox	68	DropDownCount	LongInt	tkInteger	8	T	0	RW	s=1,d=eq
@@ -2202,7 +2202,7 @@ TTyColorComboBox	61	OnEditingDone	TNotifyEvent	tkMethod	-2147483648	T	0	RW	s=1,d
 TTyColorComboBox	62	StyleClass	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyColorComboBox	63	StyleOverride	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyColorComboBox	64	Controller	TTyStyleController	tkClass	-2147483648	T	0	RW	s=1,d=-
-TTyColorComboBox	65	Items	TStringList	tkClass	-2147483648	D	0	RW	s=1,d=-
+TTyColorComboBox	65	Items	TStringList	tkClass	-2147483648	D	0	RW	s=0,d=-
 TTyColorComboBox	66	ItemIndex	LongInt	tkInteger	-2147483648	T	0	RW	s=1,d=-
 TTyColorComboBox	67	Text	TTranslateString	tkAString	0	T	0	RW	s=1,d=-
 TTyColorComboBox	68	DropDownCount	LongInt	tkInteger	8	T	0	RW	s=1,d=eq
@@ -2380,7 +2380,7 @@ TTyColorListBox	61	OnEditingDone	TNotifyEvent	tkMethod	-2147483648	T	0	RW	s=1,d=
 TTyColorListBox	62	StyleClass	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyColorListBox	63	StyleOverride	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyColorListBox	64	Controller	TTyStyleController	tkClass	-2147483648	T	0	RW	s=1,d=-
-TTyColorListBox	65	Items	TStrings	tkClass	-2147483648	T	0	RW	s=1,d=-
+TTyColorListBox	65	Items	TStrings	tkClass	-2147483648	D	0	RW	s=0,d=-
 TTyColorListBox	66	ItemIndex	LongInt	tkInteger	-1	T	0	RW	s=1,d=ne
 TTyColorListBox	67	MultiSelect	Boolean	tkBool	0	T	0	RW	s=1,d=eq
 TTyColorListBox	68	ExtendedSelect	Boolean	tkBool	1	T	0	RW	s=1,d=eq
@@ -4382,7 +4382,7 @@ TTyFontListBox	61	OnEditingDone	TNotifyEvent	tkMethod	-2147483648	T	0	RW	s=1,d=-
 TTyFontListBox	62	StyleClass	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyFontListBox	63	StyleOverride	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyFontListBox	64	Controller	TTyStyleController	tkClass	-2147483648	T	0	RW	s=1,d=-
-TTyFontListBox	65	Items	TStrings	tkClass	-2147483648	T	0	RW	s=1,d=-
+TTyFontListBox	65	Items	TStrings	tkClass	-2147483648	D	0	RW	s=1,d=-
 TTyFontListBox	66	ItemIndex	LongInt	tkInteger	-1	T	0	RW	s=1,d=ne
 TTyFontListBox	67	MultiSelect	Boolean	tkBool	0	T	0	RW	s=1,d=eq
 TTyFontListBox	68	ExtendedSelect	Boolean	tkBool	1	T	0	RW	s=1,d=eq
@@ -6300,7 +6300,7 @@ TTyListBox	61	OnEditingDone	TNotifyEvent	tkMethod	-2147483648	T	0	RW	s=1,d=-
 TTyListBox	62	StyleClass	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyListBox	63	StyleOverride	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyListBox	64	Controller	TTyStyleController	tkClass	-2147483648	T	0	RW	s=1,d=-
-TTyListBox	65	Items	TStrings	tkClass	-2147483648	T	0	RW	s=1,d=-
+TTyListBox	65	Items	TStrings	tkClass	-2147483648	D	0	RW	s=1,d=-
 TTyListBox	66	ItemIndex	LongInt	tkInteger	-1	T	0	RW	s=1,d=eq
 TTyListBox	67	MultiSelect	Boolean	tkBool	0	T	0	RW	s=1,d=eq
 TTyListBox	68	ExtendedSelect	Boolean	tkBool	1	T	0	RW	s=1,d=eq
@@ -7301,7 +7301,7 @@ TTyOfficeListBox	61	OnEditingDone	TNotifyEvent	tkMethod	-2147483648	T	0	RW	s=1,d
 TTyOfficeListBox	62	StyleClass	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyOfficeListBox	63	StyleOverride	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyOfficeListBox	64	Controller	TTyStyleController	tkClass	-2147483648	T	0	RW	s=1,d=-
-TTyOfficeListBox	65	Items	TStrings	tkClass	-2147483648	T	0	RW	s=1,d=-
+TTyOfficeListBox	65	Items	TStrings	tkClass	-2147483648	D	0	RW	s=1,d=-
 TTyOfficeListBox	66	ItemIndex	LongInt	tkInteger	-1	T	0	RW	s=1,d=eq
 TTyOfficeListBox	67	MultiSelect	Boolean	tkBool	0	T	0	RW	s=1,d=eq
 TTyOfficeListBox	68	ExtendedSelect	Boolean	tkBool	1	T	0	RW	s=1,d=eq
@@ -12406,7 +12406,7 @@ TTyValueListEditor	61	OnEditingDone	TNotifyEvent	tkMethod	-2147483648	T	0	RW	s=1
 TTyValueListEditor	62	StyleClass	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyValueListEditor	63	StyleOverride	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyValueListEditor	64	Controller	TTyStyleController	tkClass	-2147483648	T	0	RW	s=1,d=-
-TTyValueListEditor	65	Items	TStrings	tkClass	-2147483648	T	0	RW	s=1,d=-
+TTyValueListEditor	65	Items	TStrings	tkClass	-2147483648	D	0	RW	s=1,d=-
 TTyValueListEditor	66	ItemIndex	LongInt	tkInteger	-1	T	0	RW	s=1,d=eq
 TTyValueListEditor	67	MultiSelect	Boolean	tkBool	0	T	0	RW	s=1,d=eq
 TTyValueListEditor	68	ExtendedSelect	Boolean	tkBool	1	T	0	RW	s=1,d=eq
