@@ -1,8 +1,9 @@
 unit test.dialogs.color;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Types, Graphics, Controls, fpcunit, testregistry,
-  tyControls.Types, tyControls.ColorMath, tyControls.ColorGrid, tyControls.Dialogs.Color;
+uses Classes, SysUtils, Types, Graphics, Controls, Forms, Dialogs, fpcunit, testregistry,
+  tyControls.Types, tyControls.ColorMath, tyControls.ColorGrid, tyControls.Dialogs.Color,
+  tyControls.Edit, tyControls.SpinEdit, tyControls.Button, tyControls.StrConsts;
 type
   TColorControlsTest = class(TTestCase)
   published
@@ -32,6 +33,24 @@ type
     procedure TestClickKeepsAlpha;
     procedure TestGreySwatchKeepsHue;
     procedure TestRingFollowsColor;
+  end;
+  { LCL's Options and CustomColors on TTyColorDialog (#28). }
+  TColorDialogOptionsTest = class(TTestCase)
+  private
+    FDlg: TTyColorDialog;
+    FForm: TTyColorForm;
+    function AddButton: TTyButton;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestParseCustomColor;
+    procedure TestDefaultsKeepTheOldDialog;
+    procedure TestNewPropertiesAreNotWrittenAtTheirDefaults;
+    procedure TestCustomColorsShowInTheirSlots;
+    procedure TestClickingACustomSwatchPicksIt;
+    procedure TestAddFillsTheNextSlotsAndOnlyThoseAreWrittenBack;
+    procedure TestPreventFullOpenLeavesOnlyTheSwatches;
   end;
 implementation
 
@@ -266,7 +285,180 @@ begin
   finally d.Free; end;
 end;
 
+{ TColorDialogOptionsTest }
+
+procedure TColorDialogOptionsTest.SetUp;
+begin
+  FDlg := TTyColorDialog.Create(nil);
+  FDlg.LCLColor := clBlack;
+end;
+
+procedure TColorDialogOptionsTest.TearDown;
+begin
+  FreeAndNil(FForm);
+  FreeAndNil(FDlg);
+end;
+
+function TColorDialogOptionsTest.AddButton: TTyButton;
+var i: Integer;
+begin
+  Result := nil;
+  for i := 0 to FForm.ComponentCount - 1 do
+    if (FForm.Components[i] is TTyButton)
+    and (TTyButton(FForm.Components[i]).Caption = rsDlgAddCustomColor) then
+      Exit(TTyButton(FForm.Components[i]));
+end;
+
+procedure TColorDialogOptionsTest.TestParseCustomColor;
+var slot: Integer; c: TColor;
+begin
+  AssertTrue('ColorA', TyParseCustomColor('ColorA', 'FF0000', slot, c));
+  AssertEquals('slot A', 0, slot);
+  AssertEquals('a hex TColor: FF0000 is blue', clBlue, c);
+  AssertTrue('ColorP', TyParseCustomColor('ColorP', '00FF00', slot, c));
+  AssertEquals('slot P', 15, slot);
+  AssertFalse('ColorQ: past the 16 slots', TyParseCustomColor('ColorQ', 'FFFFFF', slot, c));
+  AssertFalse('ColorAA', TyParseCustomColor('ColorAA', 'FFFFFF', slot, c));
+  AssertFalse('lower-case letter', TyParseCustomColor('Colora', 'FFFFFF', slot, c));
+  AssertFalse('not a colour name', TyParseCustomColor('Foo', 'FFFFFF', slot, c));
+  AssertFalse('bad hex', TyParseCustomColor('ColorB', 'FFGG00', slot, c));
+  AssertFalse('empty value', TyParseCustomColor('ColorB', '', slot, c));
+end;
+
+procedure TColorDialogOptionsTest.TestDefaultsKeepTheOldDialog;
+var plain: TTyColorForm;
+begin
+  AssertTrue('Options default to LCL''s [cdFullOpen]', FDlg.Options = [cdFullOpen]);
+  AssertEquals('no custom colours', 0, FDlg.CustomColors.Count);
+  FForm := FDlg.BuildForm;
+  AssertTrue('no custom row', FForm.CustomSwatches = nil);
+  AssertTrue('no Add button', AddButton = nil);
+  plain := TyBuildColorDialog('', FDlg.Color);
+  try
+    AssertEquals('the same height as the plain dialog', plain.ClientHeight, FForm.ClientHeight);
+    AssertTrue('the preview where it always was', EqualRect(plain.PreviewRect, FForm.PreviewRect));
+  finally plain.Free; end;
+end;
+
+procedure TColorDialogOptionsTest.TestNewPropertiesAreNotWrittenAtTheirDefaults;
+var src: TForm; ms, ts: TMemoryStream; L: TStringList; d: TTyColorDialog;
+begin
+  src := TForm.CreateNew(nil);
+  ms := TMemoryStream.Create;
+  ts := TMemoryStream.Create;
+  L := TStringList.Create;
+  try
+    d := TTyColorDialog.Create(src);
+    d.Name := 'D';
+    ms.WriteComponent(src);
+    ms.Position := 0;
+    ObjectBinaryToText(ms, ts);
+    ts.Position := 0;
+    L.LoadFromStream(ts);
+    AssertEquals('Options', 0, Pos('Options', L.Text));
+    AssertEquals('CustomColors', 0, Pos('CustomColors', L.Text));
+  finally
+    L.Free; ts.Free; ms.Free; src.Free;
+  end;
+end;
+
+procedure TColorDialogOptionsTest.TestCustomColorsShowInTheirSlots;
+var plain: TTyColorForm; g: TTyColorGrid;
+begin
+  FDlg.CustomColors.Add('ColorA=0000FF');
+  FDlg.CustomColors.Add('ColorC=00FF00');
+  FForm := FDlg.BuildForm;
+  g := FForm.CustomSwatches;
+  AssertTrue('a custom row', g <> nil);
+  AssertEquals('16 slots', 16, g.ColorCount);
+  AssertEquals('slot A', TColor($0000FF), g.ColorAt(0));
+  AssertEquals('slot B: empty, white', clWhite, g.ColorAt(1));
+  AssertEquals('slot C', TColor($00FF00), g.ColorAt(2));
+  AssertTrue('an Add button', AddButton <> nil);
+  plain := TyBuildColorDialog('', FDlg.Color);
+  try
+    AssertTrue('the preview moved down below the row',
+      FForm.PreviewRect.Top > plain.PreviewRect.Top);
+    AssertTrue('the dialog grew to hold it', FForm.ClientHeight > plain.ClientHeight);
+    AssertTrue('the row sits below the basic colours',
+      g.Top >= FForm.Swatches.Top + FForm.Swatches.Height);
+    AssertTrue('and above the preview', AddButton.Top + AddButton.Height <= FForm.PreviewRect.Top);
+  finally plain.Free; end;
+end;
+
+type
+  TCustomSwatchAccess = class(TTyColorGrid)
+  public
+    procedure ClickAt(X, Y: Integer);
+  end;
+
+procedure TCustomSwatchAccess.ClickAt(X, Y: Integer);
+begin MouseDown(mbLeft, [], X, Y); end;
+
+procedure TColorDialogOptionsTest.TestClickingACustomSwatchPicksIt;
+var g: TTyColorGrid; cw: Integer;
+begin
+  FDlg.CustomColors.Add('ColorB=8040C0');
+  FForm := FDlg.BuildForm;
+  g := FForm.CustomSwatches;
+  cw := g.ClientWidth div g.Columns;
+  AssertEquals('the click lands on slot B', 1, g.CellAt(cw + cw div 2, g.ClientHeight div 2));
+  TCustomSwatchAccess(g).ClickAt(cw + cw div 2, g.ClientHeight div 2);
+  AssertEquals('the dialog took the custom colour', TColor($8040C0),
+    TyColorToLCL(FForm.CurrentColor));
+end;
+
+procedure TColorDialogOptionsTest.TestAddFillsTheNextSlotsAndOnlyThoseAreWrittenBack;
+var L: TStringList;
+begin
+  FDlg.CustomColors.Add('ColorA=0000FF');
+  FDlg.CustomColors.Add('ColorC=00FF00');
+  FDlg.CustomColors.Add('ColorQ=123456');   // LCL lists Q..T too; not ours to touch
+  FForm := FDlg.BuildForm;
+  FForm.SetColorValue(TyColorFromLCL(TColor($102030), 255));
+  FForm.AddCustomColor;
+  FForm.SetColorValue(TyColorFromLCL(TColor($405060), 255));
+  AddButton.Click;
+  AssertEquals('after the last given slot (C): D', TColor($102030), FForm.CustomSwatches.ColorAt(3));
+  AssertEquals('then E', TColor($405060), FForm.CustomSwatches.ColorAt(4));
+  L := TStringList.Create;
+  try
+    L.Assign(FDlg.CustomColors);
+    FForm.GetCustomColors(L);
+    AssertEquals('A kept', '0000FF', L.Values['ColorA']);
+    AssertEquals('B never defined: not written', '', L.Values['ColorB']);
+    AssertEquals('C kept', '00FF00', L.Values['ColorC']);
+    AssertEquals('D added', '102030', L.Values['ColorD']);
+    AssertEquals('E added', '405060', L.Values['ColorE']);
+    AssertEquals('F untouched', '', L.Values['ColorF']);
+    AssertEquals('Q left as it was', '123456', L.Values['ColorQ']);
+    AssertEquals('five slots plus Q', 6, L.Count);
+  finally L.Free; end;
+end;
+
+procedure TColorDialogOptionsTest.TestPreventFullOpenLeavesOnlyTheSwatches;
+var i: Integer; c: TComponent;
+begin
+  FDlg.CustomColors.Add('ColorA=0000FF');
+  FDlg.Options := [cdPreventFullOpen];
+  FForm := FDlg.BuildForm;
+  for i := 0 to FForm.ComponentCount - 1 do
+  begin
+    c := FForm.Components[i];
+    if (c is TTyEdit) or (c is TTySpinEdit) or (c is TTyHSVSquare) or (c is TTyHueBar) then
+      AssertFalse(c.ClassName + ' disabled: no colour can be defined', TControl(c).Enabled);
+  end;
+  AssertFalse('nothing to add to the custom colours', AddButton.Enabled);
+  AssertTrue('the basic swatches still pick', FForm.Swatches.Enabled);
+  AssertTrue('so do the custom ones', FForm.CustomSwatches.Enabled);
+  FDlg.Options := [cdFullOpen];
+  FreeAndNil(FForm);
+  FForm := FDlg.BuildForm;
+  AssertTrue('without it the editors work', AddButton.Enabled);
+end;
+
 initialization
+  RegisterTest(TColorDialogOptionsTest);
   RegisterTest(TColorControlsTest);
   RegisterTest(TColorDialogTest);
   RegisterTest(TColorPickerStateTest);
