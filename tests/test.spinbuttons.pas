@@ -72,6 +72,7 @@ type
     procedure TestFloatSpinEditLeavingWhileHeldStopsTheRepeat;
     procedure TestFloatSpinEditWithoutAWindowAPressStepsOnce;
     procedure TestFloatSpinEditFillStaysInsideTheFocusRing;
+    procedure TestFloatSpinEditButtonsSpanTheFieldHeight;
   end;
 
 implementation
@@ -557,6 +558,26 @@ begin
   Build(True, StringReplace(cSpinCss, 'border-radius: 0px;',
     'border-radius: 0px; outline: 3px #00FFFF;', [rfReplaceAll]));
   CheckFillStaysInsideTheFocusRing;
+end;
+
+{ The float spin edit's buttons used to sit in the trailing zone, a padding short of the field's
+  top and bottom, so each half was about 18x10 where the integer spin edit's is 18x14 (#17). The
+  row just inside the field's border, which was padding, is now part of the up button: it lights
+  when hovered and a press there steps. }
+procedure TSpinButtonsTest.TestFloatSpinEditButtonsSpanTheFieldHeight;
+var
+  pt: TPoint;
+  c: TBGRAPixel;
+begin
+  Build(True);
+  pt := Point(UpRect.Left + 1, 2);
+  Move(CenterPoint(UpRect));
+  c := PixelAt(pt);
+  AssertTrue('hovered: the up half lights right up to the border, got ' + PxStr(c), IsRed(c));
+  Leave;
+  Press(pt);
+  AssertEquals('and a press up there steps', 6.0, NumValue, 1e-9);
+  Release(pt);
 end;
 
 initialization
