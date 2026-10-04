@@ -99,8 +99,11 @@ type
   TProbeFileDialog = class(TTyFileDialogForm)
   protected
     procedure ReportProblem(const AMsg: string); override;
+    function ConfirmChoice(const AMsg: string): Boolean; override;
   public
     Problems: TStringList;
+    Questions: TStringList;   // every yes / no question, in order
+    Answer: Boolean;          // what the user answers to each
   end;
 
   { ofPathMustExist and ofFileMustExist as LCL's TOpenDialog.CheckFile / CheckAllFiles apply
@@ -123,6 +126,9 @@ type
     procedure TestOpenRefusesAFolderThatIsNotThere;
     procedure TestOpenChecksEveryFileOfASelection;
     procedure TestOpenChecksTheTypedNameBesideASelection;
+    procedure TestCreatePromptAsksAndTheAnswerDecides;
+    procedure TestOverwritePromptAsksOnlyForAnExistingFileOnSave;
+    procedure TestTheTypedNameInTheSelectionIsAskedOnce;
   end;
 
 implementation
@@ -572,6 +578,12 @@ begin
   Problems.Add(AMsg);
 end;
 
+function TProbeFileDialog.ConfirmChoice(const AMsg: string): Boolean;
+begin
+  Questions.Add(AMsg);
+  Result := Answer;
+end;
+
 procedure TFileDialogValidationTest.SetUp;
 begin
   FDir := IncludeTrailingPathDelimiter(GetTempDir)
@@ -587,6 +599,7 @@ begin
   if FForm <> nil then
   begin
     FForm.Problems.Free;
+    FForm.Questions.Free;
     FreeAndNil(FForm);
   end;
   if FindFirst(FDir + PathDelim + '*', faAnyFile, sr) = 0 then
@@ -610,6 +623,7 @@ procedure TFileDialogValidationTest.Dialog(ASave: Boolean; AOptions: TOpenOption
 begin
   FForm := TProbeFileDialog.CreateNew(nil);
   FForm.Problems := TStringList.Create;
+  FForm.Questions := TStringList.Create;
   FForm.SaveMode := ASave;
   FForm.Options := AOptions;
   FForm.InitialDir := FDir;
@@ -619,6 +633,7 @@ end;
 function TFileDialogValidationTest.Accepts: Boolean;
 begin
   FForm.Problems.Clear;
+  FForm.Questions.Clear;
   FForm.ModalResult := mrOK;
   Result := FForm.CloseQuery;
 end;
@@ -679,6 +694,57 @@ begin
   FForm.NameEdit.Text := 'c.txt';
   AssertFalse('a typed name that is not there is refused, whatever else is selected', Accepts);
   AssertTrue('naming it: ' + FForm.Problems.Text, Pos('c.txt', FForm.Problems.Text) > 0);
+end;
+
+procedure TFileDialogValidationTest.TestCreatePromptAsksAndTheAnswerDecides;
+begin
+  Dialog(False, [ofCreatePrompt]);
+  FForm.NameEdit.Text := 'new.txt';
+  FForm.Answer := False;
+  AssertFalse('"no": the dialog stays open', Accepts);
+  AssertEquals('one question', 1, FForm.Questions.Count);
+  AssertEquals('about creating that file',
+    Format(rsFdCreatePrompt, [FDir + PathDelim + 'new.txt']), FForm.Questions[0]);
+  FForm.Answer := True;
+  AssertTrue('"yes": it goes through', Accepts);
+  Touch('there.txt');
+  FForm.NameEdit.Text := 'there.txt';
+  AssertTrue('a file that exists', Accepts);
+  AssertEquals('is not asked about', 0, FForm.Questions.Count);
+end;
+
+procedure TFileDialogValidationTest.TestOverwritePromptAsksOnlyForAnExistingFileOnSave;
+begin
+  Touch('a.txt');
+  Dialog(True, [ofOverwritePrompt]);
+  FForm.NameEdit.Text := 'a.txt';
+  FForm.Answer := False;
+  AssertFalse('"no": not overwritten', Accepts);
+  AssertEquals('asked about replacing it',
+    Format(rsFdOverwritePrompt, [FDir + PathDelim + 'a.txt']), FForm.Questions.Text.Trim);
+  FForm.Answer := True;
+  AssertTrue('"yes": it goes through', Accepts);
+  FForm.NameEdit.Text := 'b.txt';
+  AssertTrue('a new name', Accepts);
+  AssertEquals('is not asked about', 0, FForm.Questions.Count);
+end;
+
+procedure TFileDialogValidationTest.TestTheTypedNameInTheSelectionIsAskedOnce;
+begin
+  { LCL's CheckAllFiles checks the typed name, then each file of the selection -- and not the
+    typed name a second time when it is one of them. A question shows that: twice would ask
+    the user the same thing twice. }
+  Touch('a.txt');
+  Touch('b.txt');
+  Dialog(False, [ofCreatePrompt, ofAllowMultiSelect]);
+  FForm.ShellList.SelectAll;
+  AssertEquals('setup: both files are selected', 2, FForm.ShellList.SelCount);
+  FForm.NameEdit.Text := 'b.txt';
+  DeleteFile(FDir + PathDelim + 'b.txt');   // gone between picking it and pressing OK
+  FForm.Answer := True;
+  AssertTrue('"yes, create it" lets it through', Accepts);
+  AssertEquals('asked once about b.txt, not twice: ' + FForm.Questions.Text, 1,
+    FForm.Questions.Count);
 end;
 
 initialization

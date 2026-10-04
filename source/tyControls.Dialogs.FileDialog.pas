@@ -166,6 +166,9 @@ type
     { Says why a chosen name was refused: an error box. Virtual so a test can read the message
       instead of putting a modal window up. }
     procedure ReportProblem(const AMsg: string); virtual;
+    { Asks a yes / no question before a chosen name goes through (ofCreatePrompt,
+      ofOverwritePrompt); True = yes. Virtual for the same reason. }
+    function  ConfirmChoice(const AMsg: string): Boolean; virtual;
   public
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
     destructor  Destroy; override;
@@ -849,11 +852,9 @@ begin
         Result := False;
       end;
     fdcAskCreate:
-      Result := TyMessageDlg(Format(rsFdCreatePrompt, [AFileName]),
-        mtConfirmation, [mbYes, mbNo]) = mrYes;
+      Result := ConfirmChoice(Format(rsFdCreatePrompt, [AFileName]));
     fdcAskOverwrite:
-      Result := TyMessageDlg(Format(rsFdOverwritePrompt, [AFileName]),
-        mtConfirmation, [mbYes, mbNo]) = mrYes;
+      Result := ConfirmChoice(Format(rsFdOverwritePrompt, [AFileName]));
   else
     Result := True;
   end;
@@ -914,6 +915,11 @@ end;
 procedure TTyFileDialogForm.ReportProblem(const AMsg: string);
 begin
   TyMessageDlg(AMsg, mtError, [mbOK]);
+end;
+
+function TTyFileDialogForm.ConfirmChoice(const AMsg: string): Boolean;
+begin
+  Result := TyMessageDlg(AMsg, mtConfirmation, [mbYes, mbNo]) = mrYes;
 end;
 
 function TTyFileDialogForm.NameEdit: TTyEdit;
