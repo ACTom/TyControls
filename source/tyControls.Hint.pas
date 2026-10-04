@@ -34,7 +34,7 @@ type
 
   { Non-visual installer. Drop one on a form (or create at runtime); while Active
     and not designing, every control's hint uses TTyHintWindow. }
-  TTyHint = class(TTyComponent)
+  TTyCustomHint = class(TTyComponent)
   private
     FActive: Boolean;
     FInstalled: Boolean;
@@ -46,16 +46,20 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-  published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
-    property Version;
     { When True (default) the themed hint window is installed app-wide. }
     property Active: Boolean read FActive write SetActive default True;
     { Documentary only — the hint window always resolves via the active default
       controller (LCL owns the window's instantiation, so a per-instance controller
       cannot be threaded through). Kept for design-time clarity. }
     property Controller: TTyStyleController read FController write FController;
+  end;
+
+  { TTyHint publishes TTyCustomHint's properties; everything lives in TTyCustomHint. }
+  TTyHint = class(TTyCustomHint)
+  published
+    property Version;
+    property Active;
+    property Controller;
   end;
 
 { Pure geometry: the hint box for text of (ATextW x ATextH) device px, padded by
@@ -226,9 +230,9 @@ begin
 end;
 
 // ---------------------------------------------------------------------------
-// TTyHint
+// TTyCustomHint
 // ---------------------------------------------------------------------------
-constructor TTyHint.Create(AOwner: TComponent);
+constructor TTyCustomHint.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FActive := True;
@@ -238,7 +242,7 @@ begin
     Apply;
 end;
 
-destructor TTyHint.Destroy;
+destructor TTyCustomHint.Destroy;
 begin
   if FInstalled then
   begin
@@ -248,13 +252,13 @@ begin
   inherited Destroy;
 end;
 
-procedure TTyHint.Loaded;
+procedure TTyCustomHint.Loaded;
 begin
   inherited Loaded;
   Apply;
 end;
 
-procedure TTyHint.Apply;
+procedure TTyCustomHint.Apply;
 var
   want: Boolean;
 begin
@@ -267,7 +271,7 @@ begin
   FInstalled := want;
 end;
 
-procedure TTyHint.SetActive(AValue: Boolean);
+procedure TTyCustomHint.SetActive(AValue: Boolean);
 begin
   if FActive = AValue then Exit;
   FActive := AValue;

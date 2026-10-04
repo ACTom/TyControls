@@ -15,26 +15,27 @@ interface
 uses
   Classes, tyControls.ActivityBar, tyControls.ActivityIndicator, tyControls.AdvancedComboBox,
   tyControls.AdvancedListBox, tyControls.Alert, tyControls.AnalogClock, tyControls.Arrow,
-  tyControls.Badge, tyControls.Bevel, tyControls.Breadcrumb, tyControls.Button,
-  tyControls.ButtonGroup, tyControls.CalcCurrencyEdit, tyControls.CalcEdit, tyControls.Calculator,
-  tyControls.Card, tyControls.Cascader, tyControls.CharImage, tyControls.Chart,
-  tyControls.CheckBox, tyControls.CheckComboBox, tyControls.CheckGroup, tyControls.CheckListBox,
-  tyControls.CircularProgress, tyControls.ColorBox, tyControls.ColorButton,
-  tyControls.ColorComboBox, tyControls.ColorGrid, tyControls.ColorListBox, tyControls.ComboBox,
-  tyControls.ComboBoxEx, tyControls.ComboEdit, tyControls.ControlBar, tyControls.Controller,
-  tyControls.CoolBar, tyControls.CurrencyEdit, tyControls.Dial, tyControls.Divider,
-  tyControls.DropButtons, tyControls.Edit, tyControls.Empty, tyControls.ExPanel,
-  tyControls.FilterComboBox, tyControls.FloatSpinEdit, tyControls.FontComboBox,
+  tyControls.Badge, tyControls.BalloonHint, tyControls.Bevel, tyControls.Breadcrumb,
+  tyControls.Button, tyControls.ButtonGroup, tyControls.CalcCurrencyEdit, tyControls.CalcEdit,
+  tyControls.Calculator, tyControls.Card, tyControls.Cascader, tyControls.CharImage,
+  tyControls.Chart, tyControls.CheckBox, tyControls.CheckComboBox, tyControls.CheckGroup,
+  tyControls.CheckListBox, tyControls.CircularProgress, tyControls.ColorBox,
+  tyControls.ColorButton, tyControls.ColorComboBox, tyControls.ColorGrid, tyControls.ColorListBox,
+  tyControls.ComboBox, tyControls.ComboBoxEx, tyControls.ComboEdit, tyControls.ControlBar,
+  tyControls.Controller, tyControls.CoolBar, tyControls.CurrencyEdit, tyControls.Dial,
+  tyControls.Divider, tyControls.DropButtons, tyControls.Edit, tyControls.Empty,
+  tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit, tyControls.FontComboBox,
   tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.Form, tyControls.FormSurface,
   tyControls.Gauge, tyControls.GearActivityIndicator, tyControls.GearDial, tyControls.GlowLabel,
   tyControls.GlyphButtons, tyControls.GlyphImageList, tyControls.Grid, tyControls.GridPanel,
-  tyControls.GroupBox, tyControls.HSColorPicker, tyControls.HeaderControl, tyControls.HtmlLabel,
-  tyControls.IconFont, tyControls.Icons.Lucide, tyControls.Image, tyControls.ImageCollection,
-  tyControls.ImageView, tyControls.LColorPicker, tyControls.LevelMeter, tyControls.LinkLabel,
-  tyControls.ListBox, tyControls.ListGroupPanel, tyControls.ListView, tyControls.MRUComboBox,
-  tyControls.MaskEdit, tyControls.Memo, tyControls.Menu, tyControls.Meter, tyControls.NativeStyler,
-  tyControls.NumericEdit, tyControls.OfficeComboBox, tyControls.OfficeListBox,
-  tyControls.PageControl, tyControls.Pagination, tyControls.PaintPanel, tyControls.Panel,
+  tyControls.GroupBox, tyControls.HSColorPicker, tyControls.HeaderControl, tyControls.Hint,
+  tyControls.HtmlLabel, tyControls.IconFont, tyControls.Icons.Lucide, tyControls.Image,
+  tyControls.ImageCollection, tyControls.ImageView, tyControls.LColorPicker, tyControls.LevelMeter,
+  tyControls.LinkLabel, tyControls.ListBox, tyControls.ListGroupPanel, tyControls.ListView,
+  tyControls.MRUComboBox, tyControls.MaskEdit, tyControls.Memo, tyControls.Menu, tyControls.Meter,
+  tyControls.NativeStyler, tyControls.Notification, tyControls.NumericEdit,
+  tyControls.OfficeComboBox, tyControls.OfficeListBox, tyControls.PageControl,
+  tyControls.Pagination, tyControls.PaintPanel, tyControls.Panel, tyControls.Popover,
   tyControls.PreviewBox, tyControls.ProgressBar, tyControls.RadioGroup, tyControls.Rating,
   tyControls.RelativePanel, tyControls.Ribbon, tyControls.RibbonAppMenu,
   tyControls.RibbonBackstage, tyControls.RibbonGallery, tyControls.RibbonQuickAccess,
@@ -484,6 +485,16 @@ type
     property Dot;
     property Position;
     property Anchors;
+  end;
+
+  TGenBalloonHint = class(TTyCustomBalloonHint)
+  published
+    property Version;
+    property Title;
+    property Description;
+    property Icon;
+    property HideInterval;
+    property Controller;
   end;
 
   TGenBevel = class(TTyCustomBevel)
@@ -3927,6 +3938,13 @@ type
     property Anchors;
   end;
 
+  TGenHint = class(TTyCustomHint)
+  published
+    property Version;
+    property Active;
+    property Controller;
+  end;
+
   TGenHtmlLabel = class(TTyCustomHtmlLabel)
   published
     property Version;
@@ -5004,6 +5022,22 @@ type
     property OnStyleControl;
   end;
 
+  TGenNotification = class(TTyCustomNotification)
+  published
+    property Version;
+    property Title;
+    property Message;
+    property NotificationType;
+    property Duration;
+    property Position;
+    property Closable;
+    property ShowIcon;
+    property PauseOnHover;
+    property Controller;
+    property OnClose;
+    property OnClick;
+  end;
+
   TGenNumericEdit = class(TTyCustomNumericEdit)
   published
     property Version;
@@ -5498,6 +5532,22 @@ type
     property OnEndDock;
     property Align;
     property Anchors;
+  end;
+
+  TGenPopover = class(TTyCustomPopover)
+  published
+    property Version;
+    property Target;
+    property Content;
+    property Placement;
+    property Title;
+    property ShowArrow;
+    property CloseOnClickOutside;
+    property CloseOnEscape;
+    property StyleClass;
+    property Controller;
+    property OnShow;
+    property OnHide;
   end;
 
   TGenPreviewBox = class(TTyCustomPreviewBox)
@@ -9245,7 +9295,7 @@ type
 
 const
   { (mimic, final class) }
-  CGenMimics: array[0..143, 0..1] of TClass = (
+  CGenMimics: array[0..147, 0..1] of TClass = (
     (TGenActivityBar, TTyActivityBar),
     (TGenActivityIndicator, TTyActivityIndicator),
     (TGenAdvancedComboBox, TTyAdvancedComboBox),
@@ -9254,6 +9304,7 @@ const
     (TGenAnalogClock, TTyAnalogClock),
     (TGenArrow, TTyArrow),
     (TGenBadge, TTyBadge),
+    (TGenBalloonHint, TTyBalloonHint),
     (TGenBevel, TTyBevel),
     (TGenBreadcrumb, TTyBreadcrumb),
     (TGenButton, TTyButton),
@@ -9306,6 +9357,7 @@ const
     (TGenGroupBox, TTyGroupBox),
     (TGenHSColorPicker, TTyHSColorPicker),
     (TGenHeaderControl, TTyHeaderControl),
+    (TGenHint, TTyHint),
     (TGenHtmlLabel, TTyHtmlLabel),
     (TGenIconFont, TTyIconFont),
     (TGenImage, TTyImage),
@@ -9327,6 +9379,7 @@ const
     (TGenMenuButton, TTyMenuButton),
     (TGenMeter, TTyMeter),
     (TGenNativeStyler, TTyNativeStyler),
+    (TGenNotification, TTyNotification),
     (TGenNumericEdit, TTyNumericEdit),
     (TGenOfficeComboBox, TTyOfficeComboBox),
     (TGenOfficeListBox, TTyOfficeListBox),
@@ -9334,6 +9387,7 @@ const
     (TGenPagination, TTyPagination),
     (TGenPaintPanel, TTyPaintPanel),
     (TGenPanel, TTyPanel),
+    (TGenPopover, TTyPopover),
     (TGenPreviewBox, TTyPreviewBox),
     (TGenProgressBar, TTyProgressBar),
     (TGenRadioButton, TTyRadioButton),

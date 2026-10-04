@@ -33,11 +33,12 @@ type
   end;
 
   TTyBalloonHint = class;
+  TTyCustomBalloonHint = class;
 
   { Internal borderless popup that paints the balloon. Owned by the component. }
   TTyBalloonWindow = class(TForm)
   private
-    FOwnerHint: TTyBalloonHint;
+    FOwnerHint: TTyCustomBalloonHint;
     FPlacement: TTyBalloonPlacement;
     FPointerH: Integer;    // device px
     procedure ApplyShape;
@@ -48,7 +49,7 @@ type
   end;
 
   { The balloon component. }
-  TTyBalloonHint = class(TTyComponent)
+  TTyCustomBalloonHint = class(TTyComponent)
   private
     FTitle: TCaption;
     FDescription: string;
@@ -74,16 +75,23 @@ type
     procedure ShowAt(const ATargetScreen: TRect);
     { Hide immediately (also called by the auto-hide timer). }
     procedure HideHint;
-  published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
-    property Version;
     property Title: TCaption read FTitle write FTitle;
     property Description: string read FDescription write FDescription;
     property Icon: TTyBalloonIcon read FIcon write FIcon default biNone;
     { Auto-hide delay in ms (0 = stay until HideHint). Default 4000. }
     property HideInterval: Integer read FHideInterval write FHideInterval default 4000;
     property Controller: TTyStyleController read FController write FController;
+  end;
+
+  { TTyBalloonHint publishes TTyCustomBalloonHint's properties; everything lives in TTyCustomBalloonHint. }
+  TTyBalloonHint = class(TTyCustomBalloonHint)
+  published
+    property Version;
+    property Title;
+    property Description;
+    property Icon;
+    property HideInterval;
+    property Controller;
   end;
 
 { Pure placement: given the target rect and body/pointer sizes + screen, decide
@@ -367,16 +375,16 @@ begin
 end;
 
 // ---------------------------------------------------------------------------
-// TTyBalloonHint
+// TTyCustomBalloonHint
 // ---------------------------------------------------------------------------
-constructor TTyBalloonHint.Create(AOwner: TComponent);
+constructor TTyCustomBalloonHint.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FIcon := biNone;
   FHideInterval := 4000;
 end;
 
-destructor TTyBalloonHint.Destroy;
+destructor TTyCustomBalloonHint.Destroy;
 begin
   HideHint;
   if FTimer <> nil then
@@ -386,7 +394,7 @@ begin
   inherited Destroy;
 end;
 
-function TTyBalloonHint.ActiveModel: TTyStyleModel;
+function TTyCustomBalloonHint.ActiveModel: TTyStyleModel;
 begin
   if FController <> nil then
     Result := FController.Model
@@ -394,7 +402,7 @@ begin
     Result := TyDefaultController.Model;
 end;
 
-function TTyBalloonHint.ArrowSizeLogical: Integer;
+function TTyCustomBalloonHint.ArrowSizeLogical: Integer;
 begin
   { Read from the controller that MEASURED this balloon, not from the default one: a hint
     wired to its own controller would otherwise size its wedge off a different theme than the
@@ -407,7 +415,7 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-procedure TTyBalloonHint.MeasureBody(APPI: Integer; out ABodyW, ABodyH: Integer);
+procedure TTyCustomBalloonHint.MeasureBody(APPI: Integer; out ABodyW, ABodyH: Integer);
 var
   S: TTyStyleSet;
   Meas: TBitmap;
@@ -457,7 +465,7 @@ begin
       + MulDiv(S.Padding.Top + S.Padding.Bottom, APPI, 96));
 end;
 
-procedure TTyBalloonHint.ShowFor(AControl: TControl);
+procedure TTyCustomBalloonHint.ShowFor(AControl: TControl);
 var
   tl: TPoint;
 begin
@@ -465,7 +473,7 @@ begin
   ShowAt(Rect(tl.X, tl.Y, tl.X + AControl.Width, tl.Y + AControl.Height));
 end;
 
-procedure TTyBalloonHint.ShowAt(const ATargetScreen: TRect);
+procedure TTyCustomBalloonHint.ShowAt(const ATargetScreen: TRect);
 var
   ppi, bodyW, bodyH, pointerPx: Integer;
   pl: TTyBalloonPlacement;
@@ -510,14 +518,14 @@ begin
   end;
 end;
 
-procedure TTyBalloonHint.HideHint;
+procedure TTyCustomBalloonHint.HideHint;
 begin
   if FTimer <> nil then FTimer.Enabled := False;
   if (FWin <> nil) and FWin.Visible then
     FWin.Hide;
 end;
 
-procedure TTyBalloonHint.TimerFire(Sender: TObject);
+procedure TTyCustomBalloonHint.TimerFire(Sender: TObject);
 begin
   HideHint;
 end;

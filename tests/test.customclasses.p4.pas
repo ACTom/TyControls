@@ -27,7 +27,9 @@ uses
   BGRABitmap, BGRABitmapTypes, ImgList,
   tyControls.Base, tyControls.Controller, tyControls.NativeStyler, tyControls.IconFont,
   tyControls.Icons.Lucide, tyControls.ImageCollection, tyControls.ImageDraw, tyControls.Image,
-  tyControls.CharImage, tyControls.GlyphButtons, tyControls.ToolBar, tyControls.RibbonBackstage;
+  tyControls.CharImage, tyControls.GlyphButtons, tyControls.ToolBar, tyControls.RibbonBackstage,
+  tyControls.Hint, tyControls.BalloonHint, tyControls.Popover, tyControls.Notification,
+  tyControls.Panel;
 
 type
   TTyCustomClassesP4Test = class(TTyCustomClassesPhaseCase)
@@ -41,6 +43,10 @@ type
     procedure TestLucideImageListTakesTheVectorPath;
     procedure TestLucideIconFontFitsAnIconFontProperty;
     procedure TestImagePropertiesNameTheCustomClasses;
+    { Task 29: hints and notifications }
+    procedure TestThirdPopover;
+    procedure TestThirdNotification;
+    procedure TestThirdHintAndBalloonHint;
   end;
 
   { --- third-party mimics ------------------------------------------------------------ }
@@ -67,6 +73,29 @@ type
   published
     property Names;
     property Collection;
+  end;
+
+  TThirdPopover = class(TTyCustomPopover)
+  published
+    property Content;
+    property Placement;
+  end;
+
+  TThirdNotification = class(TTyCustomNotification)
+  published
+    property Title;
+    property Message;
+  end;
+
+  TThirdHint = class(TTyCustomHint)
+  published
+    property Active;
+  end;
+
+  TThirdBalloonHint = class(TTyCustomBalloonHint)
+  published
+    property Title;
+    property HideInterval;
   end;
 
 implementation
@@ -298,8 +327,130 @@ begin
   CheckPropType(TTyVirtualImageList, 'Collection', 'TTyCustomImageCollection');
 end;
 
+{ ------------------------------------------------------------------ Task 29: hints and notifications }
+
+procedure TTyCustomClassesP4Test.TestThirdPopover;
+var
+  third, back: TThirdPopover;
+  pnl: TTyPanel;
+  c: TTyCustomPopover;
+  ms: TMemoryStream;
+  dst: TForm;
+begin
+  CheckCreatesWithoutOwner(TThirdPopover);
+  CheckPublishesOnly(TThirdPopover, ['Content', 'Placement']);
+  pnl := TTyPanel.Create(FForm);
+  pnl.Name := 'P4PopContent';
+  pnl.Parent := FForm;
+  third := TThirdPopover.Create(FForm);
+  third.Name := 'P4Pop';
+  third.Content := pnl;
+  third.Placement := ppTop;
+  third.Title := 'Hidden title';
+  CheckStreamText(third, ['Content', 'Placement'], 'Title');
+  { Content is a component reference: stream the form that owns both, as an .lfm does. }
+  dst := TForm.CreateNew(nil);
+  ms := TMemoryStream.Create;
+  try
+    ms.WriteComponent(FForm);
+    ms.Position := 0;
+    ms.ReadComponent(dst);
+    back := dst.FindComponent('P4Pop') as TThirdPopover;
+    AssertTrue('T-c: the Content reference round-trips',
+      back.Content = dst.FindComponent('P4PopContent'));
+    AssertTrue('T-c: Placement round-trips', back.Placement = ppTop);
+    AssertEquals('T-c: the unpublished Title stayed empty', '', back.Title);
+  finally
+    ms.Free;
+    dst.Free;
+  end;
+  CheckFreshDefaults(TThirdPopover, ['Content', 'Placement']);
+  { T-k: the popover answers its theme keys as class functions (it is not ITyStyleable); they
+    live on the custom class, so a third party's popover reads the library's rules. }
+  AssertEquals('T-k: StyleTypeKey', TTyPopover.StyleTypeKey, TThirdPopover.StyleTypeKey);
+  AssertEquals('T-k: TitleStyleTypeKey', TTyPopover.TitleStyleTypeKey,
+    TThirdPopover.TitleStyleTypeKey);
+  c := third;
+  c.ShowArrow := False;
+  AssertFalse('T-v: ShowArrow is public through a TTyCustomPopover reference', third.ShowArrow);
+end;
+
+procedure TTyCustomClassesP4Test.TestThirdNotification;
+var
+  third, back: TThirdNotification;
+  c: TTyCustomNotification;
+begin
+  CheckCreatesWithoutOwner(TThirdNotification);
+  third := TThirdNotification.Create(FForm);
+  CheckPublishesOnly(TThirdNotification, ['Title', 'Message']);
+  third.Title := 'Saved';
+  third.Message := 'All changes are on disk.';
+  third.Closable := False;
+  CheckStreamText(third, ['Title', 'Message'], 'Closable');
+  back := TThirdNotification.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Title round-trips', 'Saved', back.Title);
+  AssertEquals('T-c: Message round-trips', 'All changes are on disk.', back.Message);
+  AssertTrue('T-c: the unpublished Closable stayed at its default', back.Closable);
+  CheckFreshDefaults(TThirdNotification, ['Title', 'Message']);
+  AssertEquals('T-k: StyleTypeKey', TTyNotification.StyleTypeKey, TThirdNotification.StyleTypeKey);
+  AssertEquals('T-k: CloseStyleTypeKey', TTyNotification.CloseStyleTypeKey,
+    TThirdNotification.CloseStyleTypeKey);
+  c := third;
+  c.Duration := 1234;
+  AssertEquals('T-v: Duration is public through a TTyCustomNotification reference', 1234,
+    third.Duration);
+end;
+
+procedure TTyCustomClassesP4Test.TestThirdHintAndBalloonHint;
+var
+  h, hb: TThirdHint;
+  b, bb: TThirdBalloonHint;
+  ch: TTyCustomHint;
+  cb: TTyCustomBalloonHint;
+begin
+  CheckCreatesWithoutOwner(TThirdHint);
+  CheckCreatesWithoutOwner(TThirdBalloonHint);
+  CheckPublishesOnly(TThirdHint, ['Active']);
+  CheckPublishesOnly(TThirdBalloonHint, ['Title', 'HideInterval']);
+  { Active swaps the application's hint window class; turn it off for the round trip. }
+  h := TThirdHint.Create(FForm);
+  h.Active := False;
+  CheckStreamText(h, ['Active'], '');
+  { Two round trips in one test: the copies get no owner, or the reader's generated root names
+    collide on the shared form. }
+  hb := TThirdHint.Create(nil);
+  try
+    StreamInto(h, hb);
+    AssertFalse('T-c: Active round-trips', hb.Active);
+  finally
+    hb.Free;
+  end;
+  b := TThirdBalloonHint.Create(FForm);
+  b.Title := 'Caps Lock is on';
+  b.HideInterval := 2500;
+  b.Description := 'Hidden description';
+  CheckStreamText(b, ['Title', 'HideInterval'], 'Description');
+  bb := TThirdBalloonHint.Create(nil);
+  try
+    StreamInto(b, bb);
+    AssertEquals('T-c: Title round-trips', 'Caps Lock is on', bb.Title);
+    AssertEquals('T-c: HideInterval round-trips', 2500, bb.HideInterval);
+    AssertEquals('T-c: the unpublished Description stayed empty', '', bb.Description);
+  finally
+    bb.Free;
+  end;
+  CheckFreshDefaults(TThirdBalloonHint, ['Title', 'HideInterval']);
+  ch := h;
+  ch.Active := False;
+  AssertFalse('T-v: Active is public through a TTyCustomHint reference', h.Active);
+  cb := b;
+  cb.Icon := biInfo;
+  AssertTrue('T-v: Icon is public through a TTyCustomBalloonHint reference', b.Icon = biInfo);
+end;
+
 initialization
   RegisterClasses([TThirdStyleController, TThirdNativeStyler, TThirdIconFont,
-    TThirdVirtualImageList]);
+    TThirdVirtualImageList, TThirdPopover, TThirdNotification, TThirdHint, TThirdBalloonHint]);
   RegisterTest(TTyCustomClassesP4Test);
 end.

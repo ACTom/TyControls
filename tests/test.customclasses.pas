@@ -1571,13 +1571,13 @@ initialization
     'TTyStyleController', 'TTyNativeStyler',
     // T28 icon fonts and images
     'TTyIconFont', 'TTyLucideIconFont', 'TTyVirtualImageList', 'TTyLucideImageList',
-    'TTyGlyphImageList', 'TTyImageCollection']);
+    'TTyGlyphImageList', 'TTyImageCollection',
+    // T29 hints and notifications
+    'TTyHint', 'TTyBalloonHint', 'TTyPopover', 'TTyNotification']);
 
   { CPending: the classes still to split, by task (plan appendix A). Each task moves its own
     names into CSplit; Task 32 deletes this list. }
   AddAll(GPending, [
-    // T29 hints and notifications
-    'TTyHint', 'TTyBalloonHint', 'TTyPopover', 'TTyNotification',
     // T30 dialogs
     'TTyMessage', 'TTyInputDialog', 'TTyPasswordDialog', 'TTyTextDialog', 'TTySelectValueDialog',
     'TTyProgressDialog', 'TTyAboutDialog', 'TTyIconBrowserDialog']);

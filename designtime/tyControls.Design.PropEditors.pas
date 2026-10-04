@@ -334,15 +334,15 @@ begin
     if comp is TTyGraphicControl then ctrl := TTyGraphicControl(comp).Controller
     else if comp is TTyCustomControl then ctrl := TTyCustomControl(comp).Controller;
   end
-  else if comp is TTyPopover then
+  else if comp is TTyCustomPopover then   { any popover, a third party's too }
   begin
     { A popover is NOT ITyStyleable — the controller's styleable registry holds TControls and
       a non-visual component is not one — so it publishes its typeKey as a class function
       instead. Same StyleClass property, same variants, same dropdown; only the way in
       differs. Its own title key (TyPopoverTitle) is resolved with the SAME StyleClass, so
       there is nothing extra to offer. }
-    key := TTyPopover.StyleTypeKey;
-    ctrl := TTyPopover(comp).Controller;
+    key := TTyCustomPopover.StyleTypeKey;
+    ctrl := TTyCustomPopover(comp).Controller;
   end
   else
     Exit;
@@ -688,7 +688,7 @@ begin
   // TTyPopover is the one class that publishes StyleClass off that tree: it is a non-visual
   // TTyComponent (its window is created on Show), so neither control base reaches it and its
   // variant list was plain free text. Same editor —it knows the popover's way in.
-  RegisterPropertyEditor(TypeInfo(string), TTyPopover, 'StyleClass',
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomPopover, 'StyleClass',
     TTyStyleClassPropertyEditor);
   { === Guided string properties ===============================================================
     A published string with a KNOWN vocabulary is unusable in the Object Inspector until an
