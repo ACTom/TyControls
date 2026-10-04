@@ -32,6 +32,13 @@ type
     constructor Create(AOwner: TComponent); override;
     // Append a colour to the grid and repaint.
     procedure AddColor(AColor: TColor);
+    // Remove every colour (the built-in palette too) and the selection; repaint.
+    procedure ClearColors;
+    // The colour in cell AIndex; clNone outside the grid.
+    function ColorAt(AIndex: Integer): TColor;
+    // Repaint cell AIndex in AColor (ignored outside the grid). The selection stays on the
+    // cell, so a selected cell now stands for the new colour. No OnChange.
+    procedure SetColorAt(AIndex: Integer; AColor: TColor);
     // Number of colours in the grid (test seam).
     function ColorCount: Integer;
     // Cell index at device point (AX, AY), or -1 if the point is outside any cell
@@ -195,6 +202,28 @@ procedure TTyCustomColorGrid.AddColor(AColor: TColor);
 begin
   SetLength(FColors, Length(FColors) + 1);
   FColors[High(FColors)] := AColor;
+  Invalidate;
+end;
+
+procedure TTyCustomColorGrid.ClearColors;
+begin
+  FColors := nil;
+  FSelectedIndex := -1;
+  Invalidate;
+end;
+
+function TTyCustomColorGrid.ColorAt(AIndex: Integer): TColor;
+begin
+  if (AIndex >= 0) and (AIndex <= High(FColors)) then
+    Result := FColors[AIndex]
+  else
+    Result := clNone;
+end;
+
+procedure TTyCustomColorGrid.SetColorAt(AIndex: Integer; AColor: TColor);
+begin
+  if (AIndex < 0) or (AIndex > High(FColors)) then Exit;
+  FColors[AIndex] := AColor;
   Invalidate;
 end;
 
