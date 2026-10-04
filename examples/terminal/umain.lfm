@@ -370,13 +370,13 @@ object MainForm: TMainForm
         Top = 7
         Width = 80
         Hint = 'Push text colours off their background until they reach this contrast ratio (1 = off)'
-        ItemIndex = 0
         Items.Strings = (
           '1'
           '3'
           '4.5'
           '7'
         )
+        ItemIndex = 0
         ShowHint = True
         OnChange = ContrastChange
       end
@@ -430,12 +430,12 @@ object MainForm: TMainForm
         Top = 7
         Width = 110
         Hint = 'The cursor''s shape when the program does not ask for one'
-        ItemIndex = 0
         Items.Strings = (
           'Block'
           'Underline'
           'Bar'
         )
+        ItemIndex = 0
         ShowHint = True
         OnChange = CursorStyleChange
       end
@@ -462,7 +462,6 @@ object MainForm: TMainForm
         Top = 7
         Width = 110
         Hint = 'The cursor when the terminal does not have the focus'
-        ItemIndex = 0
         Items.Strings = (
           'Outline'
           'Block'
@@ -470,6 +469,7 @@ object MainForm: TMainForm
           'Underline'
           'None'
         )
+        ItemIndex = 0
         ShowHint = True
         OnChange = CursorInactiveChange
       end
