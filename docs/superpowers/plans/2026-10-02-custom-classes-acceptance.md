@@ -10,7 +10,7 @@
 - **1 期**：输入与显示，59 个类（按钮、标签、编辑框、选择、组合框、进度、滑块）。
 - **2 期**：容器、列表、表格，42 个类；TreeView / HeaderControl 的事件 Sender 改写 Custom 类。
 - **3 期**：其余可视控件，35 个类（工具条、Ribbon、窗体镶边、图像、取色、终端、工具窗口）。
-- **4 期**：非可视组件 20 个（控制器、图标字体与图像列表、提示与通知、8 个对话框），`IconFont` 与图像集合的引用属性写 Custom 类（`Controller` 暂不改，见决定 F1）；文档 `docs/subclassing.md`（含「从 3.0 升级」）。
+- **4 期**：非可视组件 20 个（控制器、图标字体与图像列表、提示与通知、8 个对话框），`IconFont` 与图像集合的引用属性写 Custom 类（~~`Controller` 暂不改，见决定 F1~~ 用户 2026-10-04 定 F1 选 A，`Controller` 也改成 `TTyCustomStyleController`，已实现）；文档 `docs/subclassing.md`（含「从 3.0 升级」）。
 
 一共拆了 156 个类；不拆的 17 个（菜单 3、`TCommonDialog` 一系的对话框 11、`TTyForm` / `TTyDialog`、`TTyToolWindowManager`）各有理由写在 `tests/test.customclasses.pas` 的 `CNotSplit`；`TTyAdvanceChart`、`TTyCalendar`、`TTyDateTimePicker` 等 AdvChart 分支合进来后再拆。
 
@@ -18,10 +18,10 @@
 
 ## 准备
 
-- **装包**：用本分支的 `tycontrols.lpk`、`tycontrols_dt.lpk` 重建 IDE（第 1–4、7、20–25 项要在 IDE 里看）。验收完记得装回 main 的包。
+- **装包**：用本分支的 `tycontrols.lpk`、`tycontrols_dt.lpk` 重建 IDE（第 1–4、7、20–25、34 项要在 IDE 里看）。验收完记得装回 main 的包。
 - **示例**：`lazbuild -B examples/<名字>/*.lpi`。要手点的是 `demo`、`toolbar`、`grid`、`containers`、`tabcontrol`、`treeview`、`shell`、`inputs`、`ribbon`、`toolwindows`、`terminal`、`rtl`、`icons`、`hint`、`antdesign`、`dialogs`（仓库里没有叫 `controls` 的示例，综合演示是 `demo`）。
 - **对照**：第 2、4 项要和 main 比，另开一个装着 main 包的 Lazarus（或验完一项换一次包）。
-- **顺序建议**：先 IDE 里的项（1–4、7、20–25），再示例（5、6、8–19、29–33），最后读文档（26–27）。除注明的外都在 Windows（Win32）上做；拆分不碰平台代码，Linux / macOS 只做第 28 项抽查。
+- **顺序建议**：先 IDE 里的项（1–4、7、20–25、34），再示例（5、6、8–19、29–33），最后读文档（26–27）。除注明的外都在 Windows（Win32）上做；拆分不碰平台代码，Linux / macOS 只做第 28 项抽查。
 
 ## 验收表
 
@@ -49,7 +49,7 @@
 | 18 | 3 期 | 工具窗口 | Win32 | `toolwindows` 示例：右键图标「移到另一侧」；Outline 窗口里的移动按钮；把窗口拖到另一条栏 | 都正常；日志里有 moved |  |
 | 19 | 3 期（期末修复） | 下拉的初始选中 | Win32 | `terminal` 示例的四个下拉、`rtl` 示例的按钮组 | 一打开就选在 `.lfm` 写的那一项 |  |
 | 20 | 3 期 | 工具窗口栏的设计期菜单 | Win32（IDE） | 设计器里右键工具窗口栏「显示窗口」 | 子菜单列出各窗口标题 |  |
-| 21 | 4 期 | 控制器的属性编辑器 | Win32（IDE） | 窗体上的 `TTyStyleController`：`ThemeName` 下拉、`Mode` 下拉、`ThemeFile` 的「...」、`StyleOverride` 的「...」；工具窗口、操作区、窗体表面的 `Controller` 在对象查看器里仍然藏着 | 与 main 一样（编辑器改挂到 Custom 类） |  |
+| 21 | 4 期 | 控制器的属性编辑器 | Win32（IDE） | 窗体上的 `TTyStyleController`：`ThemeName` 下拉、`Mode` 下拉、`ThemeFile` 的「...」、`StyleOverride` 的「...」；工具窗口、操作区、窗体表面的 `Controller` 在对象查看器里仍然藏着 | 与 main 一样（编辑器改挂到 Custom 类；三条隐藏编辑器随 F1 改按 `TTyCustomStyleController` 注册） |  |
 | 22 | 4 期 | 弹出框（`TTyPopover`）的 StyleClass | Win32（IDE） | `TTyPopover` 的 `StyleClass` 下拉 | 列出主题里 `TyPopover` 的变体 |  |
 | 23 | 4 期 | 对话框预览 | Win32（IDE） | 双击窗体上的 `TTyMessage`、`TTyInputDialog`、`TTyProgressDialog`、`TTyAboutDialog` | 都弹出预览 |  |
 | 24 | 计划（用户验收 4） | 第三方包装控件 | Win32（IDE） | 照 `docs/subclassing.md` 的例子写 `TMyTagEdit` 小包装进 IDE；放到窗体上、设 `Text` 和 `ReadOnly`，存盘再打开；换一个主题 | 面板上出现；对象查看器只有 `Text`、`ReadOnly`、`OnChange` 加 LCL 根的 15 个；值都在；跟着换主题 |  |
@@ -62,10 +62,11 @@
 | 31 | 4 期（Task 29） | 弹出框与通知 | Win32 | `antdesign` 示例：打开弹出框（`TTyPopover`），触发两种通知（`TTyNotification`） | 弹出框出现在触发它的控件旁、样式正常；通知弹出，信息 / 错误两种样式对，能关 |  |
 | 32 | 4 期（Task 30） | 8 个对话框 | Win32 | `dialogs` 示例：依次点 Message、Input、Password、Text、Select value、Progress、About、Icon browser，再点「Message (component)」「Input (component)」 | 都弹得出来、主题对；结果写进下面的日志；Input 组件下次打开记着上次的值 |  |
 | 33 | 1 期（A2-5） | gallery 工具 | Win32 | 下次跑 `scripts/make-gallery.ps1` 时（编 `tools/gallery`） | 编得过；按标题点按钮的步骤找得到示例里的 GlyphButton（`tyGalleryCapture.pas` 的 `FindByCaption` 已改判 `TTyCustomButton`），日志里没有「找不到」，截图齐全 |  |
+| 34 | F1（方案 A，S27-1） | 第三方控制器挂到控件上、换主题 | Win32（IDE） | 在第 24 项的小包里再加一个 `TMyController = class(TTyCustomStyleController)`，发布 `ThemeName`、`Mode`，装进 IDE；窗体上放一个它和一个 `TTyButton`，按钮的 `Controller` 下拉里选它；在对象查看器里换 `ThemeName`（再换 `Mode`）；存盘、关掉再打开窗体；运行，在代码里换一次 `ThemeName` | `Controller` 下拉列出它；设计器里按钮跟着它的主题变；存盘再打开引用还在（`.lfm` 里只写名字）；运行时换主题按钮跟着变 |  |
 
 ## 按平台的项号
 
-- **Win32（IDE）**：1、2、3、4、7、20、21、22、23、24、25
+- **Win32（IDE）**：1、2、3、4、7、20、21、22、23、24、25、34
 - **Win32（示例）**：5、6、8、9、10、11、12、13、14、15、16、17、18、19、29、30、31、32、33
 - **GTK2、Qt6、Cocoa**：28
 - **不分平台（读）**：26、27
@@ -74,7 +75,7 @@
 
 | 编号 | 问题 | 选项 | 现在的做法 | 相关项 |
 |---|---|---|---|---|
-| F1 | `Controller` 属性的类型（D11）：第三方从 `TTyCustomStyleController` 派生的控制器能不能挂到控件上 | （a）改成 `TTyCustomStyleController`（照 LCL）：`ActiveController` 跟着返回 Custom 类，要放开 `TextMenu.pas` 一行（`TeController` 的返回类型）和排除单元 `Calendar.pas` 两行（`TyCalendarSizeFor` 的参数），后者单独提交给 AdvChart 会话摘取；试验 diff 在主控 scratchpad `p4/d11proto.diff`，135 行类型名替换，测试编过；（b）只改属性，`ActiveController` 里硬转回 `TTyStyleController`（对第三方控制器说类型假话，计划不允许）；（c）保持 `TTyStyleController`，文档写进限制 | （c）：4.0 首版第三方控制器挂不上 `Controller`，`docs/subclassing.md` 第 5 节写明；选（a）的话需要你批准改 `TextMenu.pas` | 21、24 |
+| F1 | `Controller` 属性的类型（D11）：第三方从 `TTyCustomStyleController` 派生的控制器能不能挂到控件上 | （a）改成 `TTyCustomStyleController`（照 LCL）：`ActiveController` 跟着返回 Custom 类，要放开 `TextMenu.pas` 一行（`TeController` 的返回类型）和排除单元 `Calendar.pas` 两行（`TyCalendarSizeFor` 的参数），后者单独提交给 AdvChart 会话摘取；试验 diff 在主控 scratchpad `p4/d11proto.diff`，135 行类型名替换，测试编过；（b）只改属性，`ActiveController` 里硬转回 `TTyStyleController`（对第三方控制器说类型假话，计划不允许）；（c）保持 `TTyStyleController`，文档写进限制 | **已定（a）**：用户 2026-10-04 选 A（批准改 `TextMenu.pas` 那一行），已实现：全部 `Controller` 属性、`ActiveController` 与接收控制器的参数改 `TTyCustomStyleController`，`Calendar.pas` 两行单独提交交 AdvChart 会话；~~（c）：4.0 首版第三方控制器挂不上 `Controller`，`docs/subclassing.md` 第 5 节写明~~ 那条限制已删 | 21、24、34 |
 | F2 | `TTyColorComboBox` 的下拉不读宿主的色块几何（`ColorRectWidth` / `ColorRectOffset`） | （a）当 bug 修；（b）保持（3.0 起如此） | 未改（1 期计划外发现） | 12 |
 | F3 | ~~`TTyColorListBox` / `TTyColorBox` 的 `Items` 是 published 的：IDE 存窗体时把色板名字写进 `.lfm`、颜色不存，`Style` 没写的窗体读回来色块全黑~~ | — | **已由 main `147fe85e`（#20）解决**，不用再定：`Loaded` 一律按 `Style` 重建，`Items` 不再写出（读旧窗体照常），3.0 那边同一修法；本分支 `9a6dfb0d` 合进来 | 12 |
 | F4 | Ribbon 收起时存盘，读回后展开高度只能退回主题的 Ribbon 高度 | （a）保持；（b）另存一个展开高度（改 `.lfm` 格式） | （a）（3 期期末修复） | 16 |
@@ -83,7 +84,7 @@
 
 ### 与计划不符、你可能想改的
 
-- `Controller` 属性仍是 `TTyStyleController`（F1 选了 c），计划原来建议照 LCL 改成 Custom 类。
+- ~~`Controller` 属性仍是 `TTyStyleController`（F1 选了 c），计划原来建议照 LCL 改成 Custom 类。~~ 用户 2026-10-04 选 A，已照计划原来的建议改成 Custom 类（第 34 项）。
 - 组合框弹层、`ActivePage` / `Pages[]`、工具条 `Buttons[]`、工具窗口一族交出的对象等，比计划最初写的更多地改成了 Custom 类型（第 0–3 期期末修复改定 R7-4），升级时要改的赋值比最初估的多；全部列在 `docs/subclassing.md` 7.4。
 - 数值编辑框、组合框、列表框等在读窗体期间先存下索引或值、`Loaded` 时再落——这是 3.0 没有的行为，只在第三方按别的顺序发布时用得上（3.0 的窗体读入路径一字不变）。
 - 编辑框、多行编辑框、组合框的 `Caption` 就是 `Text`，新放上窗体的编辑框不再把控件名写进文字（照 LCL 的 `csSetCaption` 去掉了）。
