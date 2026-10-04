@@ -8,13 +8,11 @@ uses
 
 { The largest CENTRED SQUARE inside a spin-button half — the box the arrow glyph is drawn in.
 
-  It exists because the two spin controls have differently shaped button halves. TTySpinEdit
-  owns its whole client rect and runs its buttons flush to the right edge, so a half is about
-  18x14 at 96 DPI. This control hangs its buttons in TTyEdit's trailing zone, which is inset
-  by the field padding on all four sides, so a half is about 18x10 — and TTyPainter.DrawGlyph
-  insets a further 4 logical px per side by default, which would leave the arrow one pixel
-  tall. Squaring the box first (and passing a 1px pad) keeps the arrow an arrow at every
-  density instead of a horizontal smudge. }
+  It exists because TTyPainter.DrawGlyph insets 4 logical px per side by default, which in a
+  short half leaves the arrow one pixel tall. Squaring the box first (and passing a 1px pad)
+  keeps the arrow an arrow at every density instead of a horizontal smudge. It was written when
+  this control's halves were about 18x10 (squeezed by the field padding); they are now the
+  integer spin edit's 18x14 -- see UpButtonRect -- and the same square serves both. }
 function TyFloatSpinGlyphBox(const AHalf: TRect): TRect;
 
 type
@@ -83,8 +81,9 @@ type
       notch goes through here, so a descendant can re-point all of them at once. }
     procedure StepValue(ADelta: Double); virtual;
     { The two clickable halves, in client pixels — the same rects the paint uses, so a test can
-      assert where a click has to land without reading pixels. Empty when the trailing zone is
-      (a control too narrow to hold a button column). }
+      assert where a click has to land without reading pixels. The column is the trailing zone's
+      width and the field's FULL height, split in two: exactly TTySpinEdit's buttons. Empty when
+      the trailing zone is (a control too narrow to hold a button column). }
     function UpButtonRect(APPI: Integer): TRect;
     function DownButtonRect(APPI: Integer): TRect;
     { The step, as a Double — the property that makes this control worth having (LCL:
@@ -274,11 +273,15 @@ var
 begin
   Z := TrailingZone(APPI);
   if (Z.Right - Z.Left) <= 0 then Exit(Rect(0, 0, 0, 0));
-  { The SAME half-split the integer spin edit uses, taken from its own geometry helper rather
-    than re-derived here: two spin controls in one library must not disagree about where the
-    up button stops and the down button starts. (The APPI argument only feeds that helper's
-    no-context fallback width; the explicit width wins.) }
-  Result := TySpinUpButtonRect(Z, APPI, Z.Right - Z.Left);
+  { The SAME geometry the integer spin edit uses, taken from its own helper rather than
+    re-derived here: two spin controls in one library must not disagree about where the up
+    button stops and the down button starts. The column runs the field's full height, as
+    TTySpinEdit's does -- NOT the trailing zone's, which stops a padding short of the top and
+    bottom: that squeezed each half to about 18x10 against the integer spin edit's 18x14, and
+    users saw the two controls' buttons differ (#17). The hover fill stays inside the frame
+    (TTySpinButtons.PaintHalf), so running to the edge never draws over the border. (The APPI
+    argument only feeds that helper's no-context fallback width; the explicit width wins.) }
+  Result := TySpinUpButtonRect(Rect(Z.Left, 0, Z.Right, ClientHeight), APPI, Z.Right - Z.Left);
 end;
 
 function TTyCustomFloatSpinEdit.DownButtonRect(APPI: Integer): TRect;
@@ -287,31 +290,33 @@ var
 begin
   Z := TrailingZone(APPI);
   if (Z.Right - Z.Left) <= 0 then Exit(Rect(0, 0, 0, 0));
-  Result := TySpinDownButtonRect(Z, APPI, Z.Right - Z.Left);
+  Result := TySpinDownButtonRect(Rect(Z.Left, 0, Z.Right, ClientHeight), APPI, Z.Right - Z.Left);
 end;
 
 procedure TTyCustomFloatSpinEdit.PaintTrailing(APainter: TTyPainter; const AZone: TRect;
   const AStyle: TTyStyleSet);
 var
   ppi, w, bw: Integer;
-  upR, dnR, inner: TRect;
+  col, upR, dnR, inner: TRect;
   upInk, dnInk: TTyColor;
 begin
   w := AZone.Right - AZone.Left;
   if w <= 0 then Exit;
   ppi := Font.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
-  { Split the zone THE PAINTER WAS GIVEN, not a re-computed one: TTyEdit hands PaintTrailing
-    the very rect TrailingZone reports, so deriving both halves from it is what makes the
-    painted arrows and the clickable halves the same two rectangles by construction. }
-  upR := TySpinUpButtonRect(AZone, ppi, w);
-  dnR := TySpinDownButtonRect(AZone, ppi, w);
+  { Build the column from the zone THE PAINTER WAS GIVEN, not a re-computed one: TTyEdit hands
+    PaintTrailing the very rect TrailingZone reports, and UpButtonRect builds the clickable halves
+    from that same zone, so the painted and the clickable halves are the same rectangles. The
+    column is the zone's width and the field's full height (see UpButtonRect): the zone stops a
+    padding short of the top and bottom, so the padding is added back. }
+  col := Rect(AZone.Left, AZone.Top - APainter.Scale(AStyle.Padding.Top), AZone.Right,
+    AZone.Bottom + APainter.Scale(AStyle.Padding.Bottom));
+  upR := TySpinUpButtonRect(col, ppi, w);
+  dnR := TySpinDownButtonRect(col, ppi, w);
   { The hovered or pressed half first (TTySpinButtons.PaintHalf), clipped to the field inside
-    its frame, border and focus ring both. The zone runs to the right edge and stops short of the
-    top and bottom by the padding, so the field's bottom is the zone's plus that padding. }
+    its frame, border and focus ring both: the column runs edge to edge, the fill does not. }
   bw := TySpinFrameInsetPx(APainter, AStyle);
-  inner := Rect(0, bw, AZone.Right - bw,
-    AZone.Bottom + APainter.Scale(AStyle.Padding.Bottom) - bw);
+  inner := Rect(0, col.Top + bw, col.Right - bw, col.Bottom - bw);
   upInk := FSpin.PaintHalf(APainter, ActiveController, upR, inner, AStyle, 1);
   dnInk := FSpin.PaintHalf(APainter, ActiveController, dnR, inner, AStyle, -1);
   TyDrawGlyph(APainter, ActiveController, TyFloatSpinGlyphBox(upR), tgTriangleUp, upInk, 2, 1);
