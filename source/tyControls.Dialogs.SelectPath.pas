@@ -23,7 +23,8 @@ type
 
 { For an existing folder only ofNoReadOnlyReturn applies. For a missing one, in order:
   ofPathMustExist (parent), ofFileMustExist, ofCreatePrompt; with none of them it is spcOK,
-  which leaves the dialog to return the tree's choice, as 3.0 did. }
+  which leaves the dialog to return the tree's choice, as 3.0 did. APath is a full path: the
+  dialog turns a relative one typed into its path field into one first (TypedPath). }
 function TySelectPathCheck(const APath: string; AOptions: TOpenOptions): TTySelectPathCheck;
 
 type
@@ -44,8 +45,8 @@ type
     // Reveal APath in the tree (expand roots->leaf lazily) and return its node, or the
     // deepest reachable one; nil if no root is a prefix. Best-effort (visual feedback only).
     function  RevealPath(const APath: string): PTyTreeNode;
-    // The path field changed (typed / pasted): if it names an existing directory, reveal
-    // + select it in the tree. Guarded against the tree->edit sync.
+    // The path field changed (typed / pasted): if it names an existing directory by its full
+    // path, reveal + select it in the tree. Guarded against the tree->edit sync.
     procedure PathEditChanged(Sender: TObject);
     // Node-data helpers (node data = an Integer index into FPaths).
     function  AddPathNode(AParent: PTyTreeNode; const AFullPath: string): PTyTreeNode;
@@ -65,6 +66,12 @@ type
     function  AcceptSelection: Boolean;
   protected
     procedure LayoutContent; override;
+    { Says why OK was refused: an error box. Virtual so a test can read the message instead of
+      putting a modal window up. }
+    procedure ReportProblem(const AMsg: string); virtual;
+    { Asks a yes / no question before OK goes through (ofCreatePrompt); True = yes. Virtual for
+      the same reason. }
+    function  ConfirmChoice(const AMsg: string): Boolean; virtual;
   public
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
     destructor  Destroy; override;
@@ -73,6 +80,14 @@ type
     procedure PopulateRoots;
     function  SelectedPath: string;
     procedure SetDirectory(const APath: string);
+    { The path field as a folder. A full path as typed; a relative one is taken under the
+      folder selected in the tree -- the field shows that folder's full path, so a bare name
+      typed over it means "in here", as in the Windows folder picker -- and never under the
+      program's current directory. '' when the field is empty, or relative with no folder
+      selected. }
+    function  TypedPath: string;
+    // test seam: the path field, as the user types into it
+    function  PathEdit: TTyEdit;
     // The in/out selection (idiomatic dialog pattern): assign before ShowModal to pre-select a
     // folder (reveal + focus it); read after OK for the chosen folder. No-op if unreachable.
     property  Directory: string read SelectedPath write SetDirectory;
@@ -301,31 +316,39 @@ end;
 
 function TTySelectPathForm.AcceptSelection: Boolean;
 var
-  typed, dir: string;
+  raw, typed, dir: string;
 begin
   Result := False;
-  typed := '';
-  if FPathEdit <> nil then typed := Trim(FPathEdit.Text);
+  raw := '';
+  if FPathEdit <> nil then raw := Trim(FPathEdit.Text);
+  typed := TypedPath;
+  if (raw <> '') and (typed = '')
+     and (FOptions * [ofPathMustExist, ofFileMustExist, ofCreatePrompt] <> []) then
+  begin
+    { A relative name with no folder selected to put it under: no folder it could mean
+      exists, and creating it would put it wherever the program happens to run. }
+    ReportProblem(Format(rsFdPathMustExist, [raw]));
+    Exit;
+  end;
   if (typed <> '') and not DirectoryExistsUTF8(typed) then
     case TySelectPathCheck(typed, FOptions) of
       spcParentMissing:
         begin
-          TyMessageDlg(Format(rsFdPathMustExist,
-            [ExtractFileDir(ExcludeTrailingPathDelimiter(typed))]), mtError, [mbOK]);
+          ReportProblem(Format(rsFdPathMustExist,
+            [ExtractFileDir(ExcludeTrailingPathDelimiter(typed))]));
           Exit;
         end;
       spcMissing:
         begin
-          TyMessageDlg(Format(rsFdPathMustExist, [typed]), mtError, [mbOK]);
+          ReportProblem(Format(rsFdPathMustExist, [typed]));
           Exit;
         end;
       spcAskCreate:
         begin
-          if TyMessageDlg(Format(rsFdCreatePrompt, [typed]), mtConfirmation,
-               [mbYes, mbNo]) <> mrYes then Exit;
+          if not ConfirmChoice(Format(rsFdCreatePrompt, [typed])) then Exit;
           if not ForceDirectoriesUTF8(typed) then
           begin
-            TyMessageDlg(Format(rsDlgCreateFolderErr, [typed]), mtError, [mbOK]);
+            ReportProblem(Format(rsDlgCreateFolderErr, [typed]));
             Exit;
           end;
           { it exists now, so SelectedPath below returns it }
@@ -334,10 +357,38 @@ begin
   dir := SelectedPath;
   if (dir <> '') and (TySelectPathCheck(dir, FOptions) = spcNotWritable) then
   begin
-    TyMessageDlg(Format(rsFdNotWritable, [dir]), mtError, [mbOK]);
+    ReportProblem(Format(rsFdNotWritable, [dir]));
     Exit;
   end;
   Result := True;
+end;
+
+procedure TTySelectPathForm.ReportProblem(const AMsg: string);
+begin
+  TyMessageDlg(AMsg, mtError, [mbOK]);
+end;
+
+function TTySelectPathForm.ConfirmChoice(const AMsg: string): Boolean;
+begin
+  Result := TyMessageDlg(AMsg, mtConfirmation, [mbYes, mbNo]) = mrYes;
+end;
+
+function TTySelectPathForm.TypedPath: string;
+var s, base: string;
+begin
+  Result := '';
+  if FPathEdit = nil then Exit;
+  s := Trim(FPathEdit.Text);
+  if s = '' then Exit;
+  if FilenameIsAbsolute(s) then Exit(s);
+  base := NodePath(FTree.FocusedNode);
+  if base = '' then Exit;
+  Result := CreateAbsolutePath(s, base);
+end;
+
+function TTySelectPathForm.PathEdit: TTyEdit;
+begin
+  Result := FPathEdit;
 end;
 
 function TTySelectPathForm.AddPathNode(AParent: PTyTreeNode; const AFullPath: string): PTyTreeNode;
@@ -540,7 +591,10 @@ var s: string; node: PTyTreeNode;
 begin
   if FSyncing then Exit;   // change came from TreeFocusChanged, not the user
   s := Trim(FPathEdit.Text);
-  if (s = '') or not DirectoryExists(s) then Exit;
+  { Only a full path is followed while typing. A relative one is resolved against the selected
+    folder on OK (TypedPath); following it here would move that folder under the user's fingers
+    -- and DirectoryExists would read it against the current directory. }
+  if (s = '') or not FilenameIsAbsolute(s) or not DirectoryExists(s) then Exit;
   node := RevealPath(s);
   if node <> nil then
     FTree.FocusedNode := node;   // fires TreeFocusChanged -> re-syncs the field (guarded)
@@ -600,12 +654,9 @@ begin
   { The path field is the source of truth: it mirrors the tree selection AND holds
     any directly typed/pasted path. Prefer it when it names an existing folder (covers
     a pasted path the tree could not reveal); otherwise fall back to the tree node. }
-  if FPathEdit <> nil then
-  begin
-    s := Trim(FPathEdit.Text);
-    if (s <> '') and DirectoryExists(s) then
-      Exit(s);
-  end;
+  s := TypedPath;
+  if (s <> '') and DirectoryExists(s) then
+    Exit(s);
   Result := NodePath(FTree.FocusedNode);
 end;
 

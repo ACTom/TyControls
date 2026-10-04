@@ -358,6 +358,8 @@ if TySelectDirectory('选择输出目录', 'C:\Users', dir) then
 
 没有 `ofPathMustExist` / `ofFileMustExist` / `ofCreatePrompt` 时,路径框里输入一个不存在的文件夹再点确定,返回的仍是树上选中的文件夹,和 3.0 一样。判断由纯函数 `TySelectPathCheck` 做。
 
+路径框里输入的相对路径(比如只输一个名字 `新项目`,或 `..\其它`)按**树上选中的文件夹**展开,和 Windows 的选文件夹对话框一样:路径框本来显示的就是选中文件夹的完整路径,在它上面输入一个名字,意思就是「在这里面」。不会按程序的当前目录展开——带 `ofCreatePrompt` 时文件夹也就建在选中的文件夹里,不会建到程序运行的目录。树上什么都没选时相对路径无从展开:带上面三个选项之一时报错、不关;都不带时照旧返回树上的选择(也就是空)。
+
 **从 3.0 升级:** 在 Linux / macOS 上,`Execute` 返回的 `Directory` 里的符号链接现在换成了实际路径(照 LCL `TSelectDirectoryDialog`,`Options` 不带 `ofNoResolveLinks` 时就这么做,而 `Options` 默认是空的)。3.0 原样返回用户选的路径:用户选了 `~/proj`,而它是指向 `/data/proj` 的链接,3.0 给 `~/proj`,4.0 给 `/data/proj`。程序要保留链接本身(比如把路径存进配置、下次还按链接打开),给 `Options` 加上 `ofNoResolveLinks`。Windows 上没有区别。只影响组件 `TTySelectPathDialog`;全局函数 `TySelectDirectory` 不解析,和 3.0 一样。
 
 ### 8.6 非可视设计期组件

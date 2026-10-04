@@ -45,6 +45,35 @@ type
     procedure TestShowHelp;
     procedure TestDefaultsAreNotWritten;
   end;
+
+  { The folder picker with its error box and its yes / no question swapped for lists, so OK can
+    be pressed headless; everything else is the real form. }
+  TProbeSelectPath = class(TTySelectPathForm)
+  protected
+    procedure ReportProblem(const AMsg: string); override;
+    function ConfirmChoice(const AMsg: string): Boolean; override;
+  public
+    Problems, Questions: TStringList;
+    Answer: Boolean;
+  end;
+
+  { A relative path typed into the path field means a folder under the one selected in the
+    tree -- never one under the program's current directory, where 4.0's first cut looked for
+    it and, under ofCreatePrompt, created it. }
+  TSelectPathTypedTest = class(TTestCase)
+  private
+    FDir, FName: string;
+    FForm: TProbeSelectPath;
+    function Accepts: Boolean;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestARelativeNameIsTakenUnderTheSelectedFolder;
+    procedure TestCreatePromptCreatesItThereNotInTheCurrentDirectory;
+    procedure TestARelativeNameWithNothingSelectedIsRefused;
+    procedure TestAFullPathIsTakenAsTyped;
+  end;
 implementation
 
 procedure TSelectPathFsTest.MakeTree;
@@ -418,7 +447,109 @@ begin
   end;
 end;
 
+{ TProbeSelectPath / TSelectPathTypedTest }
+
+procedure TProbeSelectPath.ReportProblem(const AMsg: string);
+begin
+  Problems.Add(AMsg);
+end;
+
+function TProbeSelectPath.ConfirmChoice(const AMsg: string): Boolean;
+begin
+  Questions.Add(AMsg);
+  Result := Answer;
+end;
+
+procedure TSelectPathTypedTest.SetUp;
+begin
+  FDir := IncludeTrailingPathDelimiter(GetTempDir)
+        + Format('tyseltyped_%d_%d', [PtrUInt(Self), Random(MaxInt)]);
+  ForceDirectories(FDir);
+  { A name the current directory certainly does not have either. }
+  FName := Format('tyrel_%d', [Random(MaxInt)]);
+  FForm := TProbeSelectPath.CreateNew(nil);
+  FForm.Problems := TStringList.Create;
+  FForm.Questions := TStringList.Create;
+  FForm.Root := FDir;
+  FForm.PopulateRoots;
+end;
+
+procedure TSelectPathTypedTest.TearDown;
+begin
+  FForm.Problems.Free;
+  FForm.Questions.Free;
+  FreeAndNil(FForm);
+  RemoveDir(FDir + PathDelim + FName);
+  RemoveDir(FDir);
+  RemoveDir(IncludeTrailingPathDelimiter(GetCurrentDir) + FName);   // only if the code is wrong
+end;
+
+{ What pressing OK does: CloseQuery with mrOK, which runs the validation. }
+function TSelectPathTypedTest.Accepts: Boolean;
+begin
+  FForm.Problems.Clear;
+  FForm.Questions.Clear;
+  FForm.ModalResult := mrOK;
+  Result := FForm.CloseQuery;
+end;
+
+procedure TSelectPathTypedTest.TestARelativeNameIsTakenUnderTheSelectedFolder;
+begin
+  ForceDirectories(FDir + PathDelim + FName);
+  FForm.Directory := FDir;
+  AssertTrue('setup: the folder is selected', FForm.Tree.FocusedNode <> nil);
+  FForm.PathEdit.Text := FName;
+  AssertEquals('the typed name, under the selected folder', FDir + PathDelim + FName,
+    ExcludeTrailingPathDelimiter(FForm.TypedPath));
+  AssertTrue('OK goes through', Accepts);
+  AssertEquals('and the answer is that folder, not the selected one', FDir + PathDelim + FName,
+    ExcludeTrailingPathDelimiter(FForm.Directory));
+end;
+
+procedure TSelectPathTypedTest.TestCreatePromptCreatesItThereNotInTheCurrentDirectory;
+begin
+  FForm.Directory := FDir;
+  FForm.Options := [ofCreatePrompt];
+  FForm.PathEdit.Text := FName;
+  FForm.Answer := False;
+  AssertFalse('declined: OK is refused', Accepts);
+  AssertEquals('after one question', 1, FForm.Questions.Count);
+  AssertEquals('about the folder under the selected one',
+    Format(rsFdCreatePrompt, [FDir + PathDelim + FName]), FForm.Questions[0]);
+  FForm.Answer := True;
+  AssertTrue('accepted: OK goes through', Accepts);
+  AssertTrue('the folder is made under the selected one',
+    DirectoryExists(FDir + PathDelim + FName));
+  AssertFalse('and not in the current directory',
+    DirectoryExists(IncludeTrailingPathDelimiter(GetCurrentDir) + FName));
+  AssertEquals('and it is the answer', FDir + PathDelim + FName,
+    ExcludeTrailingPathDelimiter(FForm.Directory));
+end;
+
+procedure TSelectPathTypedTest.TestARelativeNameWithNothingSelectedIsRefused;
+begin
+  AssertTrue('setup: nothing selected', FForm.Tree.FocusedNode = nil);
+  FForm.Options := [ofCreatePrompt];
+  FForm.PathEdit.Text := FName;
+  AssertEquals('no folder to put it under', '', FForm.TypedPath);
+  AssertFalse('OK is refused', Accepts);
+  AssertEquals('nothing is asked', 0, FForm.Questions.Count);
+  AssertEquals('the user is told', Format(rsFdPathMustExist, [FName]), FForm.Problems.Text.Trim);
+  AssertFalse('and nothing is made in the current directory',
+    DirectoryExists(IncludeTrailingPathDelimiter(GetCurrentDir) + FName));
+end;
+
+procedure TSelectPathTypedTest.TestAFullPathIsTakenAsTyped;
+begin
+  ForceDirectories(FDir + PathDelim + FName);
+  FForm.PopulateRoots;   // the tree reads the folders when it is filled
+  FForm.PathEdit.Text := FDir + PathDelim + FName;
+  AssertEquals('a full path needs nothing selected', FDir + PathDelim + FName,
+    ExcludeTrailingPathDelimiter(FForm.TypedPath));
+end;
+
 initialization
+  RegisterTest(TSelectPathTypedTest);
   RegisterTest(TSelectPathOptionsTest);
   RegisterTest(TSelectPathFsTest);
   RegisterTest(TSelectPathBuildTest);
