@@ -43,7 +43,7 @@ begin
     chosen family found by NAME: its row number is different on every machine, and a family this
     machine lacks leaves nothing selected rather than whatever font now sits at that row. }
   keep := SelectedFont;
-  Items.Assign(Screen.Fonts);
+  TyFontPickerFamilies(Items);
   ItemIndex := Items.IndexOf(keep);
 end;
 
@@ -52,7 +52,7 @@ begin
   Items.BeginUpdate;
   try
     Items.Clear;
-    Items.Assign(Screen.Fonts);
+    TyFontPickerFamilies(Items);
   finally
     Items.EndUpdate;
   end;

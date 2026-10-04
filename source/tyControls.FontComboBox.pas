@@ -42,7 +42,32 @@ type
     property SelectedFont: string read GetSelectedFont write SetSelectedFont;
   end;
 
+{ The font families a font picker lists: Screen.Fonts, in its order, without the names that start
+  with '@'. Those are Windows' vertical-writing aliases of the CJK fonts (@SimSun, @新宋体), which
+  draw every glyph turned on its side, and no Windows font picker lists them. ADest's contents are
+  replaced in one change. }
+procedure TyFontPickerFamilies(ADest: TStrings);
+
 implementation
+
+procedure TyFontPickerFamilies(ADest: TStrings);
+var
+  i: Integer;
+  nm: string;
+begin
+  ADest.BeginUpdate;
+  try
+    ADest.Clear;
+    for i := 0 to Screen.Fonts.Count - 1 do
+    begin
+      nm := Screen.Fonts[i];
+      if (nm <> '') and (nm[1] = '@') then Continue;
+      ADest.Add(nm);
+    end;
+  finally
+    ADest.EndUpdate;
+  end;
+end;
 
 procedure TyDrawFontRow(P: TTyPainter; const ARect: TRect; const AFontName: string;
   const AStyle: TTyStyleSet; AFontSize: Integer);
@@ -89,7 +114,7 @@ begin
     re-pins its selection by TEXT whenever Items changes, so the chosen family stays chosen at
     whatever row it has here, and one this machine lacks is left unselected rather than swapped
     for whichever font took its row number. }
-  Items.Assign(Screen.Fonts);
+  TyFontPickerFamilies(Items);
 end;
 
 procedure TTyFontComboBox.RefreshFonts;
@@ -97,7 +122,7 @@ begin
   Items.BeginUpdate;
   try
     Items.Clear;
-    Items.Assign(Screen.Fonts);   // installed font families
+    TyFontPickerFamilies(Items);   // installed font families
   finally
     Items.EndUpdate;
   end;

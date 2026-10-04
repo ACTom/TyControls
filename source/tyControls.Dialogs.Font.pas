@@ -3,7 +3,8 @@ unit tyControls.Dialogs.Font;
 interface
 uses
   Classes, SysUtils, Types, Graphics, Controls, Forms,
-  tyControls.Dialogs, tyControls.ListBox, tyControls.FontListBox, tyControls.SpinEdit,
+  tyControls.Dialogs, tyControls.ListBox, tyControls.FontComboBox, tyControls.FontListBox,
+  tyControls.SpinEdit,
   tyControls.CheckBox, tyControls.Button, tyControls.TyLabel,
   tyControls.Painter, tyControls.ColorMath,
   tyControls.Dialogs.Color, tyControls.Component, tyControls.StrConsts;
@@ -388,10 +389,23 @@ begin
   Result.SeedFrom(AFont, AFamilies);
 end;
 
+{ The family list both entry points show: the installed fonts as every font picker lists them. }
+function TyBuildPickerFontDialog(const ACaption: string; AFont: TFont): TTyFontForm;
+var fams: TStringList;
+begin
+  fams := TStringList.Create;
+  try
+    TyFontPickerFamilies(fams);
+    Result := TyBuildFontDialog(ACaption, AFont, fams);
+  finally
+    fams.Free;
+  end;
+end;
+
 function TyFontDialog(AFont: TFont): Boolean;
 var d: TTyFontForm;
 begin
-  d := TyBuildFontDialog('', AFont, Screen.Fonts);
+  d := TyBuildPickerFontDialog('', AFont);
   try
     if d.ShowModal = mrOK then
     begin
@@ -428,7 +442,7 @@ begin
   // Inline the build/show (rather than call TyFontDialog) so the wrapper's
   // OnShow/OnClose/OnCanClose forward onto the form before ShowModal, and so the
   // component's Caption is honoured.
-  d := TyBuildFontDialog(FCaption, FFont, Screen.Fonts);
+  d := TyBuildPickerFontDialog(FCaption, FFont);
   try
     TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
     Result := (d.ShowModal = mrOK);
