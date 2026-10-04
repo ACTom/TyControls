@@ -51,7 +51,7 @@ if Dlg.Execute then
 | `Filter` / `FilterIndex` | LCL 过滤串 / 生效段(1-based)。为空时回落到变体默认过滤器。 |
 | `InitialDir: string` | 起始目录。 |
 | `DefaultExt: string` | Save:文件名无扩展名时补它。 |
-| `Options: TTyFileDialogOptions` | `fdoOverwritePrompt`(Save 覆盖确认)/ `fdoFileMustExist`(Open 必须存在)/ `fdoPathMustExist` / `fdoAllowMultiSelect`。 |
+| `Options: TTyFileDialogOptions` | `fdoOverwritePrompt`(Save 覆盖确认)/ `fdoFileMustExist`(文件必须存在)/ `fdoPathMustExist`(所在文件夹必须存在)/ `fdoAllowMultiSelect`。两个「必须存在」Open 和 Save 都查,多选时每个选中的文件都查,与 LCL 一致。 |
 | `Title: string` | 标题栏文字。 |
 | `OnShow`/`OnClose`/`OnCanClose` | 转发给内部表单。 |
 
@@ -66,7 +66,8 @@ if Dlg.Execute then
   列表的 `OnSelectItem` 现在也会报告刚被**离开**的那一行,拿它去填名字会写进一个用户已经不在的文件名,
   Save 模式下还会盖掉用户刚敲进去的名字);双击文件(Open)→ 直接接受。
 - **OK 在 `CloseQuery` 里校验**(不是按钮 OnClick):Save 走 `TyFsResolveSaveName` 解析 + `TyMessageDlg` 覆盖确认;
-  Open 收集选中集 + `fdoFileMustExist` 校验;不通过返回 False 把对话框留住。
+  Open 收集选中集;两种对话框都照 LCL 的 `CheckFile` 先查 `fdoPathMustExist`(文件夹)、再查 `fdoFileMustExist`(文件),
+  Open 多选时文件名框里的名字和每个选中的文件都查;不通过就报错并返回 False,把对话框留住。
 - **Open 手敲优先**:文件名框非空时以它为准(带路径原样、裸名对当前目录展开),空框才回落到列表选中项。
 - **Save 存名解析**(`TyFileDialogResolveName` → `TyFsResolveSaveName`):裸名对当前目录展开,无扩展名补 `DefaultExt`,已有扩展名不动。
 - **图片预览**:选中图片时 `TTyImage.Picture.LoadFromFile`(`try/except`,读不了清空),`Proportional+Center` 缩放适配;

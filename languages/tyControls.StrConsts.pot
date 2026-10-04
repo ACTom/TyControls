@@ -392,6 +392,11 @@ msgstr ""
 msgid "The file \"%s\" does not exist."
 msgstr ""
 
+#: tycontrols.strconsts.rsfdpathmustexist
+#, object-pascal-format
+msgid "The path \"%s\" does not exist."
+msgstr ""
+
 #: tycontrols.strconsts.rsfdopentitle
 msgctxt "tycontrols.strconsts.rsfdopentitle"
 msgid "Open"

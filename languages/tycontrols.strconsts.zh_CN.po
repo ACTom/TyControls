@@ -446,6 +446,11 @@ msgstr "查找范围:"
 msgid "The file \"%s\" does not exist."
 msgstr "文件 \"%s\" 不存在。"
 
+#: tycontrols.strconsts.rsfdpathmustexist
+#, object-pascal-format
+msgid "The path \"%s\" does not exist."
+msgstr "路径 \"%s\" 不存在。"
+
 #: tycontrols.strconsts.rsfdopentitle
 msgctxt "tycontrols.strconsts.rsfdopentitle"
 msgid "Open"

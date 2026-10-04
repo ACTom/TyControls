@@ -20,8 +20,9 @@ unit test.dialogs.filedialog;
 
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, fpcunit, testregistry,
-  tyControls.FileSystem, tyControls.Dialogs.FileDialog;
+uses Classes, SysUtils, Controls, fpcunit, testregistry,
+  tyControls.FileSystem, tyControls.StrConsts, tyControls.ListView, tyControls.ShellListView,
+  tyControls.Dialogs.FileDialog;
 type
   TFileDialogResolveTest = class(TTestCase)
   private
@@ -45,6 +46,38 @@ type
     procedure TestOpenTypedWithPathVerbatim;
     procedure TestOpenAllEmptyIsEmpty;
   end;
+  { The form with its error box swapped for a list, so a refused name can be read instead of
+    putting a modal window up. Everything else is the real form: the name box, the list, the
+    OK path through CloseQuery. }
+  TProbeFileDialog = class(TTyFileDialogForm)
+  protected
+    procedure ReportProblem(const AMsg: string); override;
+  public
+    Problems: TStringList;
+  end;
+
+  { fdoPathMustExist and fdoFileMustExist as LCL's TOpenDialog.CheckFile / CheckAllFiles apply
+    them: for an open AND a save, the folder before the file, and for every file of a multiple
+    selection. 3.0.0 never looked at fdoPathMustExist, checked fdoFileMustExist for an open only,
+    and for a selection checked one name. }
+  TFileDialogValidationTest = class(TTestCase)
+  private
+    FDir: string;
+    FForm: TProbeFileDialog;
+    procedure Touch(const AName: string);
+    procedure Dialog(ASave: Boolean; AOptions: TTyFileDialogOptions);
+    function Accepts: Boolean;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestSaveRefusesAFolderThatIsNotThere;
+    procedure TestSaveRefusesAMissingFileWhenItMustExist;
+    procedure TestOpenRefusesAFolderThatIsNotThere;
+    procedure TestOpenChecksEveryFileOfASelection;
+    procedure TestOpenChecksTheTypedNameBesideASelection;
+  end;
+
 implementation
 
 function TFileDialogResolveTest.SamePath(const A, B: string): Boolean;
@@ -155,7 +188,124 @@ begin
     '', TyFileDialogResolveName(False, FDir, '', '', ''));
 end;
 
+{ TProbeFileDialog / TFileDialogValidationTest }
+
+procedure TProbeFileDialog.ReportProblem(const AMsg: string);
+begin
+  Problems.Add(AMsg);
+end;
+
+procedure TFileDialogValidationTest.SetUp;
+begin
+  FDir := IncludeTrailingPathDelimiter(GetTempDir)
+        + Format('tyfdcheck_%d_%d', [PtrUInt(Self), Random(MaxInt)]);
+  ForceDirectories(FDir);
+  FForm := nil;
+end;
+
+procedure TFileDialogValidationTest.TearDown;
+var
+  sr: TSearchRec;
+begin
+  if FForm <> nil then
+  begin
+    FForm.Problems.Free;
+    FreeAndNil(FForm);
+  end;
+  if FindFirst(FDir + PathDelim + '*', faAnyFile, sr) = 0 then
+  try
+    repeat
+      if (sr.Attr and faDirectory) = 0 then DeleteFile(FDir + PathDelim + sr.Name);
+    until FindNext(sr) <> 0;
+  finally
+    FindClose(sr);
+  end;
+  RemoveDir(FDir);
+end;
+
+procedure TFileDialogValidationTest.Touch(const AName: string);
+begin
+  with TStringList.Create do
+    try Add('x'); SaveToFile(FDir + PathDelim + AName); finally Free; end;
+end;
+
+procedure TFileDialogValidationTest.Dialog(ASave: Boolean; AOptions: TTyFileDialogOptions);
+begin
+  FForm := TProbeFileDialog.CreateNew(nil);
+  FForm.Problems := TStringList.Create;
+  FForm.SaveMode := ASave;
+  FForm.Options := AOptions;
+  FForm.InitialDir := FDir;
+end;
+
+{ What pressing OK does: CloseQuery with mrOK, which runs the validation. }
+function TFileDialogValidationTest.Accepts: Boolean;
+begin
+  FForm.Problems.Clear;
+  FForm.ModalResult := mrOK;
+  Result := FForm.CloseQuery;
+end;
+
+procedure TFileDialogValidationTest.TestSaveRefusesAFolderThatIsNotThere;
+begin
+  Dialog(True, [fdoPathMustExist]);
+  FForm.NameEdit.Text := FDir + PathDelim + 'nope' + PathDelim + 'x.txt';
+  AssertFalse('a save into a folder that is not there is refused', Accepts);
+  AssertEquals('and the user is told which folder',
+    Format(rsFdPathMustExist, [FDir + PathDelim + 'nope']), FForm.Problems.Text.Trim);
+  FForm.NameEdit.Text := FDir + PathDelim + 'new.txt';
+  AssertTrue('a new file in a folder that is there is fine', Accepts);
+  AssertEquals('and nothing is said', 0, FForm.Problems.Count);
+end;
+
+procedure TFileDialogValidationTest.TestSaveRefusesAMissingFileWhenItMustExist;
+begin
+  Touch('a.txt');
+  Dialog(True, [fdoFileMustExist]);
+  FForm.NameEdit.Text := 'missing.txt';
+  AssertFalse('fdoFileMustExist holds for a save too, as in LCL', Accepts);
+  AssertEquals('one message', 1, FForm.Problems.Count);
+  AssertTrue('naming the file: ' + FForm.Problems.Text, Pos('missing.txt', FForm.Problems[0]) > 0);
+  FForm.NameEdit.Text := 'a.txt';
+  AssertTrue('an existing file passes', Accepts);
+end;
+
+procedure TFileDialogValidationTest.TestOpenRefusesAFolderThatIsNotThere;
+begin
+  Dialog(False, [fdoPathMustExist]);
+  FForm.NameEdit.Text := FDir + PathDelim + 'nope' + PathDelim + 'x.txt';
+  AssertFalse('an open from a folder that is not there is refused', Accepts);
+  AssertEquals('and the message is about the folder, not the file',
+    Format(rsFdPathMustExist, [FDir + PathDelim + 'nope']), FForm.Problems.Text.Trim);
+end;
+
+procedure TFileDialogValidationTest.TestOpenChecksEveryFileOfASelection;
+begin
+  Touch('a.txt');
+  Touch('b.txt');
+  Dialog(False, [fdoFileMustExist, fdoAllowMultiSelect]);
+  FForm.ShellList.SelectAll;
+  AssertEquals('setup: both files are selected', 2, FForm.ShellList.SelCount);
+  FForm.NameEdit.Text := 'a.txt';
+  DeleteFile(FDir + PathDelim + 'b.txt');   // gone between picking it and pressing OK
+  AssertFalse('a selection holding a file that has gone is refused', Accepts);
+  AssertEquals('one message', 1, FForm.Problems.Count);
+  AssertTrue('naming that file: ' + FForm.Problems.Text, Pos('b.txt', FForm.Problems[0]) > 0);
+end;
+
+procedure TFileDialogValidationTest.TestOpenChecksTheTypedNameBesideASelection;
+begin
+  Touch('a.txt');
+  Touch('b.txt');
+  Dialog(False, [fdoFileMustExist, fdoAllowMultiSelect]);
+  FForm.ShellList.SelectAll;
+  FForm.NameEdit.Text := 'c.txt';
+  AssertFalse('a typed name that is not there is refused, whatever else is selected', Accepts);
+  AssertTrue('naming it: ' + FForm.Problems.Text, Pos('c.txt', FForm.Problems.Text) > 0);
+end;
+
 initialization
   Randomize;
   RegisterTest(TFileDialogResolveTest);
+  RegisterTest(TFileDialogValidationTest);
 end.
