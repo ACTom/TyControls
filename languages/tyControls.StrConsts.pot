@@ -1151,3 +1151,18 @@ msgstr ""
 msgid "\"%s\" is already associated with the up-down \"%s\"."
 msgstr ""
 
+#: tycontrols.strconsts.rstywindowmenuclose
+msgid "&Close"
+msgstr ""
+
+#: tycontrols.strconsts.rstywindowmenumaximize
+msgid "Ma&ximize"
+msgstr ""
+
+#: tycontrols.strconsts.rstywindowmenuminimize
+msgid "Mi&nimize"
+msgstr ""
+
+#: tycontrols.strconsts.rstywindowmenurestore
+msgid "&Restore"
+msgstr ""

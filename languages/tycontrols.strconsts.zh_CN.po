@@ -1157,3 +1157,19 @@ msgstr "option 没有问题。series 的图元还没有实现绘制，而这张�
 #: tycontrols.strconsts.rstyoptdiagnoseries
 msgid "The option is understood. There are no series, so only the axes would draw."
 msgstr "option 没有问题。没有任何 series，所以只会画出坐标轴。"
+
+#: tycontrols.strconsts.rstywindowmenuclose
+msgid "&Close"
+msgstr "关闭(&C)"
+
+#: tycontrols.strconsts.rstywindowmenumaximize
+msgid "Ma&ximize"
+msgstr "最大化(&X)"
+
+#: tycontrols.strconsts.rstywindowmenuminimize
+msgid "Mi&nimize"
+msgstr "最小化(&N)"
+
+#: tycontrols.strconsts.rstywindowmenurestore
+msgid "&Restore"
+msgstr "还原(&R)"

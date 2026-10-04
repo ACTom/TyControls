@@ -53,3 +53,19 @@ msgstr "The option is understood. Series marks are not painted yet, and this cha
 #: tycontrols.strconsts.rstyoptdiagnoseries
 msgid "The option is understood. There are no series, so only the axes would draw."
 msgstr "The option is understood. There are no series, so only the axes would draw."
+
+#: tycontrols.strconsts.rstywindowmenuclose
+msgid "&Close"
+msgstr "&Close"
+
+#: tycontrols.strconsts.rstywindowmenumaximize
+msgid "Ma&ximize"
+msgstr "Ma&ximize"
+
+#: tycontrols.strconsts.rstywindowmenuminimize
+msgid "Mi&nimize"
+msgstr "Mi&nimize"
+
+#: tycontrols.strconsts.rstywindowmenurestore
+msgid "&Restore"
+msgstr "&Restore"
