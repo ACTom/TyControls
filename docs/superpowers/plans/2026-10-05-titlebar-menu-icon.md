@@ -437,3 +437,69 @@ begin
 2. 编 `examples/toolwindows`，冒烟：标题栏左侧出现程序图标，菜单栏在图标之后、不与图标重叠；换主题（含现代密度）后图标与菜单栏位置跟着变。
 3. 手点：右键标题栏空白处 → 菜单四项，状态随最大化 / 还原变化；右键菜单栏、主题下拉框 → 不弹窗口菜单；单击图标 → 菜单挂在图标正下方；双击图标 → 关窗；Alt+Space → 菜单；最大化后菜单里「还原」可用、「最大化」灰；菜单项「关闭」走 `OnCloseQuery`。
 4. 设计器：选中标题栏，对象查看器里 `ShowIcon`、`Icon` 出现在 `ShowClose` 之后；`Icon` 的「...」打开 LCL 的图像编辑器，载入 `.ico` 后设计面板上（`ShowIcon=True` 时）立即重画；未设图时保存的 `.lfm` 里没有 `Icon`。
+
+## 集成与期末修复（2026-10-05，`feat/4.0-batch`）
+
+三个分支（#9 标题栏、#14 typeKey 链、#27/#28 对话框选项）合进 `feat/4.0-batch`（`d509261d`）后整批审查，下面是按审查意见做的修复，每项一个提交（正文按 issue 写 `Refs`）：
+
+| 提交 | 处理 |
+|---|---|
+| `0d0a2758` | 字体对话框 `fdLimitSize` + 原字号 0：显示的 9 被范围夹过时写回夹过的值，未被夹才保留 0（#28） |
+| `2e5f883e` | 字体框 / 字体列表切换 `FixedPitchOnly`：原地重填、按名字找回选中，不再选第一行；没选中的仍不选；选中的字体族不变不发 `OnChange`、变了只发一次（#27） |
+| `072528cb` | `TyGetFontFamilies` 所有列表（过滤与不过滤）都不列 `@` 竖排字体；字体对话框的不过滤列表也走它；写进升级说明（#27） |
+| `4e7ce551` | `dialogs.md` §10 写成「从 3.0 升级须知」：所有 3.0 窗体里的查找 / 替换对话框都多出复选框，给 `.lfm` 与代码两种恢复写法；demo 的替换对话框补 `frHidePromptOnReplace`（#28） |
+| `396e5c67` | 示例里的库翻译副本补这批界面上看得见的字符串：50 份都补窗口菜单 4 项（每个示例都有标题栏），demo / dialogs / ribbon 补「整个范围」「替换前提示」，filedialog 补文件对话框 3 条新消息（#9、#28） |
+| `1e37ab32` | 选文件夹组件在 Linux / macOS 上把 `Directory` 的符号链接换成实际路径，写进 §8.5「从 3.0 升级」（#28） |
+| `0f81e711` | 选文件夹路径框里的相对路径按树上选中的文件夹展开（不再按进程当前目录）；没选中时带三个存在性选项之一就报错；报错 / 询问走虚方法，OK 路径可无头测（#28） |
+| `c2b3ceca` | 标题栏：Win32 顶边缩放热区清掉图标按下标记；图标跟随窗体 / 程序图标变化重画（`TTyForm` 经 `CM_ICONCHANGED` 转告 `HostIconChanged`），缩放好的图标按「图源 + 边长 + 版本号」缓存；菜单开着时单击图标只关菜单；焦点在 bar 上宿主放的窗口化控件里时菜单键不弹窗口菜单；文档写明右键不再冒泡到窗体的 `PopupMenu`（#9） |
+| `7a80d1f4` | 新增 `TyTryRegisterTypeKeyParent`；`tycss-reference` §4.5 中英补「按属性组交错」「链根以下同一阶段先内置层后用户层」「`initialization` 里抛异常会让程序起不来」；补四角圆角还原测试（#14） |
+| `f6dcc412` | 文件对话框「询问创建 / 询问覆盖」走虚方法 `ConfirmChoice`，补测试（#28） |
+| `22fcad6a` | `FontFamilies` 单元头、`BuildForm`、`RefreshFonts` 文档改成实话：LCL 只填一次 `Screen.Fonts`，运行中新装的字体要重启程序（#27、#28） |
+| `8ec8d708` | `rsTyWindowMenu*` 挪出 `rsTyToolWindow*` 那组；`.pot` 末尾补回生成器写的空行（提交的那份在 `e796fc02` 里丢了它，每次编包都把工作树弄脏）（#9） |
+| `68b8bf33` | `tycontrols.strconsts.en.po` 删掉追加的 4 条与英文相同的翻译（文件头写明故意最小化）（#9） |
+| `539736ce` | `dialogs.md` §10 中英混排改成全中文（#28） |
+
+**编译**：`lazbuild -B tests/tytests.lpi` 通过，本批改过的单元没有新警告（StyleModel、Form 里的三条是原有的）；设计期 7 个单元用 fpc 对着测试构建的运行时单元、IDEIntf / SynEdit / LazControls 的已编单元单独编过，0 错误（4 条警告在 AdvChart 编辑器里，原有），输出只进 scratchpad。
+
+**全量**（`tests/tytests-batchfix.exe --all`，即合并后的整批）：**8931 条，0 错 0 败**，没有计时类偶发红。合并前三份签收分别是 8836 / 8799 / 8793（各自分支）；本轮新增 22 条。`main` 上那 4 个 3.0 移植提交（`34d58e8a` 按钮栏不给隐藏按钮留空、`1f69a555` 隐藏按钮不定按钮栏高度、`bf26ce09` 文件对话框 `ofPathMustExist` / `ofFileMustExist`、`92076c03` 查找对话框的隐藏 / 禁用 / 帮助）带来的测试在 4.0 路径下全部跑到且全绿：`TestAHiddenButtonLeavesNoGap`、`TestAHiddenButtonDoesNotSetTheBarHeight`、`TFileDialogValidationTest` 的 5 条、`TFindOptionsTest` 的 7 条。`TTyCustomClassesGuardTest` 连跑 3 次，11/11 全绿。
+
+**G9 / G10**：`gen-mimic.py` 重生成无 diff（没有新 published 属性）；`TY_WRITE_FRESH_STREAMS=1` 重写 `fresh-streams.txt` 内容无变化（只有写出时的 LF，已转回 CRLF）。`check-lfm-props` 通过，`check-example-po` 101 个文件 0 问题。
+
+**变异**（按字节替换、断言命中 1 次、写回原字节并核对、每个变异后重编再跑相关 suite）：
+
+| 变异 | 改了什么 | 结果 |
+|---|---|---|
+| M28f | 原字号 ≤0 一律保留 0（审查时存活的那个） | 红 |
+| M28f2 | 原字号 ≤0 一律不保留 | 红 |
+| M27c / M27cL | 切换 `FixedPitchOnly` 退回选第一行（字体框 / 列表） | 红（4 / 1） |
+| M27d / M27dL | 不管变没变都发 `OnChange` | 红（2 / 2） |
+| M27e / M27eL | 变了也不发 | 红（1 / 1） |
+| M27f | `TyGetFontFamilies` 不滤 `@` | 红（字体族 2、字体框 3、列表 4、对话框 1） |
+| M27g | 字体对话框不过滤时退回 `Screen.Fonts` | 红 |
+| M28g | 相对路径不展开 | 红 |
+| M28h | 没选中时相对路径不拒绝 | 红（2） |
+| M9c | `IconChanged` 不 `Invalidate`（审查时存活的那个） | 红 |
+| M9d | `IconChanged` 不升版本号（缓存不失效） | 红 |
+| M9e | `TTyForm` 不改接 `Icon.OnChange` | 红 |
+| M9f | `CMIconChanged` 不转告标题栏 | 红 |
+| M9g | 图标单击不看菜单开着 / 刚关 | 红 |
+| M9h | 菜单键不看焦点在宿主子控件上 | 红 |
+| M9i | 顶边热区不清图标按下标记 | 红 |
+| M9j | 默认菜单关闭不记时 | 红 |
+| M14b | `RestoreProps` 不还原四角 `Radius`（审查时存活的那个） | 红 |
+| M14c | `TyTryRegisterTypeKeyParent` 出错仍返回 True | 红 |
+| M14d | `outline-offset` 不算进 outline 组 | 红 |
+| M28a | 选中集里的输入名再查一次（审查时存活的那个） | 红 |
+| M28i / M28j | 询问创建 / 覆盖不问直接放行 | 红（2 / 1） |
+
+**选择与理由**：
+- `@` 竖排字体：普通列表也过滤。LCL `TFontDialog` 在 Windows 上就是 `ChooseFont`，它不列这些；GTK / Qt / Cocoa 本来不报；它们在横排控件里字是躺着的。3.0 列出它们，写进 `fontcombobox.md` / `fontlistbox.md` / `dialogs.md` 的升级说明。
+- 选文件夹相对路径：展开而不拒绝。路径框平时显示选中文件夹的完整路径，在上面输一个名字的意思就是「在这里面」，Windows 选文件夹对话框也这样；没选中时无从展开，才拒绝。输入过程中只跟随完整路径，免得选中的文件夹在手底下变动。
+- `outline-offset`：不拆成单独属性位，只写文档。组的划分和 StyleOverride 合并是同一套；拆开要给样式集加新的 `Present` 标志，所有读它的地方都得认，而只有父子键在不同阶段分写同一个焦点环的两半时才碰得到。
+
+**未覆盖 / 要人看的**：
+- 图标单击「只关菜单」在真机上依赖弹出菜单自己的失活关闭（点击主窗口 → 延迟关闭），测试只模拟了「菜单开着」「刚关」两种顺序。
+- 标题栏放在非 `TTyForm` 的窗体上时，窗体 / 程序图标的变化要宿主自己调 `HostIconChanged`（文档已写）。
+- `ofNoResolveLinks`、选文件夹的不可写文件夹：同前，Windows 上测不出。
+
+**主控待做**：编 `tycontrols.lpk` / `tycontrols_dt.lpk`、编示例冒烟（toolwindows 的图标与窗口菜单、demo 的替换对话框）；合 `main` 时注意 `main` 在本分支起点之后又有 `672c16c9`、`12ca184f`（3.0 的 `@` 字体修复，`TyFontPickerFamilies` 与「只有过滤单元读 `Screen.Fonts`」的源码守卫）、`0fb45bbc`（文件对话框 OnCanClose 只问通过校验的名字），与本批在 `FontComboBox` / `FontListBox` / `Dialogs.Font` / `Dialogs.FileDialog` / `.pot` 及对应测试上会冲突——4.0 一侧以 `TyGetFontFamilies` 为准（`TyFontPickerFamilies` 可改成调它），守卫要放行 `tyControls.FontFamilies`；合完再跑一次全量。
