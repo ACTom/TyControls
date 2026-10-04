@@ -379,6 +379,10 @@ type
     { the old option's records and keys, until the new one's first sync maps
       them across; the hovered item's series and raw row [Batch 96] }
     FStCarry: array of TTyStSeries;
+    { taken since the last render: a second setOption before it carries
+      nothing new -- the render the records belong to is still the old one
+      [Batch 99] }
+    FStCarryHeld: Boolean;
     FStCarryKeys: array of TTyStCarryKeys;
     FStCarryHover: Boolean;
     FStCarryHoverSeries, FStCarryHoverRaw: Integer;
@@ -646,6 +650,15 @@ type
     FAnimFull: Boolean;
     FAnimPayload: TTyAnimOverride;
     FAnimHasPayload: Boolean;
+    { A MERGE setOption waiting for its arming [Batch 99, AN6]: the models it
+      maps onto are the old ones, so are their views -- a series kept as a
+      full update keeps it, the axes groupTransition, the markers update }
+    FAnimMerge: Boolean;
+    { THE AXIS VIEWS the update starts from, 'xAxis0=' + model id + #1 +
+      subtype (prepareView's '_ec_' + id + '_' + type), read before the
+      option changes; and the axes a replaceMerge made brand new since --
+      both new views, which never transition [Batch 99] }
+    FAnimOldAxisKeys, FAnimFreshAxes: TTyStringArray;
     { THE AXES' groupTransition [Batch 96]: one proxy per leaf of an axis
       group, by 'xAxis0/anid', on the series' driver; made by a full update's
       arming, dropped with every other proxy }
@@ -721,6 +734,11 @@ type
     { upstream's series view ids of the option, by series index: the
       models' ids, which a merge keeps [Batch 95] }
     function AnimViewKeys: TTyStringArray;
+    { the axis views of the option now: 'xAxis0=' + id + #1 + subtype [Batch 99] }
+    function AxisViewKeys: TTyStringArray;
+    { the view of every series model now, shown or not: view key + #1 + type
+      [Batch 99] }
+    function AnimAliveKeys: TTyStringArray;
     { each view row's DataDiffer key and raw index }
     procedure AnimRowKeys(AStore: TTyDataStore; out AKeys: TTyStringArray;
       out ARaws: TTyIntegerArray);
@@ -1245,7 +1263,7 @@ type
     procedure StSync(AList: TTyPaintList; APPI: Integer);
     { a notMerge option: the records taken before the option goes, then put
       on the reused rows of the reused series views [Batch 96] }
-    procedure StCarryTake;
+    procedure StCarryTake(const AViewKeys: TTyStringArray);
     procedure StCarryApply;
     procedure StDeclareItem(ASlot, ARaw: Integer; AList: TTyPaintList;
       APPI: Integer);
@@ -1906,16 +1924,20 @@ begin
   FAnimFresh := nil;
   { the state records the reused elements keep, while the old option and
     its stores are still there [Batch 96] }
-  StCarryTake;
-  { a full update still waiting: its models are the option's about to go,
-    and what it arms now is a notMerge update [Batch 96] }
-  if FAnimPrev.FullUpdate then
+  StCarryTake(AnimViewKeys);
+  { a full update or a merge still waiting: its models are the option's
+    about to go, and what it arms now is a notMerge update [Batch 96] }
+  if FAnimPrev.FullUpdate or FAnimPrev.Merge then
   begin
     FAnimPrev.FullUpdate := False;
+    FAnimPrev.Merge := False;
     for i := 0 to High(FAnimPrev.Series) do
       FAnimPrev.Series[i].Model := TyAnimNoModel;
   end;
   FAnimFull := False;
+  { new models: every component view is new, no axis transitions [Batch 99] }
+  FAnimMerge := False;
+  FAnimFreshAxes := nil;
   FAnimHasPayload := False;
   FOption.SetOptionText(AValue);
   FGraphForce := nil;
@@ -2008,11 +2030,12 @@ function TTyAdvanceChart.DoMerge(const AJson: string;
   const AReplace: array of string): Boolean;
 var
   rep: TTyMergeReport;
-  oldKeys: TTyStringArray;
-  si, s: Integer;
+  oldKeys, oldAxes: TTyStringArray;
+  si, s, t: Integer;
 begin
   { the old views, before the merge renames anything }
   oldKeys := AnimViewKeys;
+  oldAxes := AxisViewKeys;
   if not FOption.MergeOptionText(AJson, AReplace, @MergeBefore, rep) then Exit(False);
   { the views the next update pairs with: the last render's -- unless an
     update already waits (an old render kept) or a lazy one does }
@@ -2020,7 +2043,31 @@ begin
   begin
     FAnimOldViewKeys := oldKeys;
     FAnimFresh := nil;
+    FAnimOldAxisKeys := oldAxes;
+    FAnimFreshAxes := nil;
   end;
+  { A MERGE KEEPS ITS MODELS, and their views [Batch 99] -- unless a
+    notMerge waits: then the models are new against the render it starts
+    from, and so is every component view }
+  if not FAnimPending or FAnimFull or FAnimMerge then FAnimMerge := True;
+  { an axis brought in by index is brand new: a new view }
+  for t := 0 to 1 do
+  begin
+    if t = 0 then si := TyMergeSlotsIndex(rep, 'xAxis')
+    else si := TyMergeSlotsIndex(rep, 'yAxis');
+    if si < 0 then Continue;
+    for s := 0 to High(rep.Slots[si].Brand) do
+      if rep.Slots[si].Brand[s] then
+      begin
+        SetLength(FAnimFreshAxes, Length(FAnimFreshAxes) + 1);
+        if t = 0 then FAnimFreshAxes[High(FAnimFreshAxes)] := 'xAxis' + IntToStr(s)
+        else FAnimFreshAxes[High(FAnimFreshAxes)] := 'yAxis' + IntToStr(s);
+      end;
+  end;
+  { THE STATE RECORDS a reused element keeps: its hoverState, its
+    __highByOuter bits, its select (the model keeps its selectedMap)
+    [Batch 99] -- by the old view keys, read before the merge }
+  StCarryTake(oldKeys);
   { A BRAND NEW MODEL ASKS FOR A NEW VIEW, whatever id it made (a removed
     model's, often) -- until the update that pairs the views [Batch 97] }
   si := TyMergeSlotsIndex(rep, 'series');
@@ -2220,6 +2267,8 @@ begin
   FDzDrag := Default(TTyDzTarget);
   FDzHasDown := False;
   FDzPanGrid := -1;
+  { the hovered element, a removed one until the carry finds it reused
+    (StCarryTake has the records) [Batch 99] }
   if FEvHover.Id <> 0 then FEvHover.Id := Low(Int64);
   FSt := nil;
   FStDirty := False;
@@ -11664,6 +11713,8 @@ begin
     StCarryApply;
     if FStCarryHoverSeries <= -2 then hoverS := -2 - FStCarryHoverSeries;
   end;
+  { the render the records were taken for is this one [Batch 99] }
+  FStCarryHeld := False;
   n := 0;
   for slot := 0 to High(FBindings) do
     if FBindings[slot].SeriesIndex >= n then n := FBindings[slot].SeriesIndex + 1;
@@ -11819,11 +11870,15 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.StCarryTake;
+procedure TTyAdvanceChart.StCarryTake(const AViewKeys: TTyStringArray);
 var
   slot, si: Integer;
   vk: TTyStringArray;
 begin
+  { ONE TAKE A RENDER: a second setOption before the render finds FSt
+    gone already, and the records are still the last render's [Batch 99] }
+  if FStCarryHeld then Exit;
+  FStCarryHeld := True;
   FStCarry := FSt;
   FStCarryKeys := nil;
   FStCarryHover := False;
@@ -11831,7 +11886,7 @@ begin
   FStCarryHoverSeries := -1;
   FStCarryHoverRaw := -1;
   if Length(FSt) = 0 then Exit;
-  vk := AnimViewKeys;
+  vk := AViewKeys;
   SetLength(FStCarryKeys, Length(FSt));
   for slot := 0 to High(FBindings) do
   begin
@@ -11871,6 +11926,8 @@ begin
     s := FBindings[slot].SeriesIndex;
     if (s < 0) or FBindings[slot].Hidden then Continue;
     if (slot > High(FStores)) or (FStores[slot] = nil) then Continue;
+    { a brand new model asks for a new view: new elements [Batch 99] }
+    if (s <= High(FAnimFresh)) and FAnimFresh[s] then Continue;
     { the view upstream keeps: the same model id and type }
     o := -1;
     for k := 0 to High(FStCarryKeys) do
@@ -15678,7 +15735,8 @@ end;
 procedure TTyAdvanceChart.AxisAnimArm(AOldBuild, ANewBuild: TTyChartBuild);
 var
   oldEls, newEls: TTyAxisAnimElArray;
-  oldKeys, newKeys, oldAx, newAx: TTyStringArray;
+  oldKeys, newKeys, oldAx, newAx, nowAxes: TTyStringArray;
+  kept: TStringList;
   oldIdx, oldMap: TFPHashList;
   oldList: TFPList;
   i, k: Integer;
@@ -15701,6 +15759,22 @@ begin
   FAxisList := TFPList.Create;
   FAxisProxies := TFPHashList.Create;
   oldIdx := TFPHashList.Create;
+  { WHICH AXIS VIEWS ARE KEPT [Batch 99]: prepareView's '_ec_' + model id +
+    '_' + type is the same and the model does not ask for a new view. A
+    replaced axis, or one whose type changed, is a new view: its leaves
+    appear where they are. }
+  kept := TStringList.Create;
+  nowAxes := AxisViewKeys;
+  for i := 0 to High(nowAxes) do
+  begin
+    ak := Copy(nowAxes[i], 1, Pos('=', nowAxes[i]) - 1);
+    v := nil;
+    for k := 0 to High(FAnimFreshAxes) do
+      if FAnimFreshAxes[k] = ak then v := Pointer(1);
+    if v <> nil then Continue;
+    for k := 0 to High(FAnimOldAxisKeys) do
+      if FAnimOldAxisKeys[k] = nowAxes[i] then kept.Add(ak);
+  end;
   try
     { the old group's leaves by anid (getElMap) }
     for i := 0 to High(oldEls) do
@@ -15714,6 +15788,7 @@ begin
       FAxisList.Add(p);
       if FAxisProxies.Find(newKeys[i]) = nil then FAxisProxies.Add(newKeys[i], p);
       v := oldIdx.Find(newKeys[i]);
+      if kept.IndexOf(newAx[i]) < 0 then v := nil;
       if v = nil then
       begin
         { NO OLD LEAF OF THAT ANID: it appears where it is }
@@ -15739,6 +15814,7 @@ begin
       TyUpdateProps(p, props, model, TyAnimCallNoIndex);
     end;
   finally
+    kept.Free;
     oldIdx.Free;
     for i := 0 to oldList.Count - 1 do TObject(oldList[i]).Free;
     oldList.Free;
@@ -15769,6 +15845,44 @@ begin
     id := FOption.ComponentId('series', i);
     if id <> '' then Result[i] := 'i:' + id
     else Result[i] := 'x:' + IntToStr(i);
+  end;
+end;
+
+function TTyAdvanceChart.AxisViewKeys: TTyStringArray;
+var
+  t, i, n: Integer;
+  mt: string;
+begin
+  Result := nil;
+  for t := 0 to 1 do
+  begin
+    if t = 0 then mt := 'xAxis' else mt := 'yAxis';
+    n := FOption.ComponentCount(mt);
+    for i := 0 to n - 1 do
+    begin
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := mt + IntToStr(i) + '=' + FOption.ComponentId(mt, i) + #1
+        + FOption.ComponentSubType(mt, i);
+    end;
+  end;
+end;
+
+function TTyAdvanceChart.AnimAliveKeys: TTyStringArray;
+var
+  slot, si: Integer;
+  vk: TTyStringArray;
+  k: string;
+begin
+  Result := nil;
+  vk := AnimViewKeys;
+  for slot := 0 to High(FBindings) do
+  begin
+    si := FBindings[slot].SeriesIndex;
+    if si < 0 then Continue;
+    if si <= High(vk) then k := vk[si] else k := 'x:' + IntToStr(si);
+    if (si <= High(FAnimFresh)) and FAnimFresh[si] then k := 'n:' + k;
+    SetLength(Result, Length(Result) + 1);
+    Result[High(Result)] := k + #1 + FBindings[slot].SeriesType;
   end;
 end;
 
@@ -15865,8 +15979,11 @@ begin
     end;
     Exit;
   end;
-  { the same option: its series views are the ones there are now }
+  { the same option: its series views are the ones there are now, its axis
+    views too [Batch 99] }
   FAnimOldViewKeys := AnimViewKeys;
+  FAnimOldAxisKeys := AxisViewKeys;
+  FAnimFreshAxes := nil;
   FAnimPayload := APayload;
   FAnimHasPayload := AHasPayload;
   FAnimFull := True;
@@ -15899,6 +16016,7 @@ begin
   if FPaintList = nil then Exit;
   FAnimPrev.Valid := True;
   FAnimPrev.FullUpdate := FAnimFull;
+  FAnimPrev.Merge := FAnimMerge;
   for slot := 0 to High(FBindings) do
   begin
     si := FBindings[slot].SeriesIndex;
@@ -15911,8 +16029,9 @@ begin
     r := Default(TTyChartAnimSeries);
     r.Present := True;
     r.SeriesType := FBindings[slot].SeriesType;
-    { the same option: its model, for the view's remove() }
-    if FAnimFull then
+    { the same option, or a merge -- the same model object, its option
+      merged: its model, for the view's remove() [Batch 99] }
+    if FAnimFull or FAnimMerge then
     begin
       n := 0;
       if (slot <= High(FStores)) and (FStores[slot] <> nil) then n := FStores[slot].Count;
@@ -16068,7 +16187,12 @@ begin
       { AN UPDATE when there was a render before, an entry otherwise
         [Batch 90] }
       if FAnimPrev.Valid then
-        FAnimSet.ArmUpdate(FPaintList, AnimSeriesInfo, FAnimPrev)
+      begin
+        { the views alive after it: an old one that is not among them was
+          disposed [Batch 99] }
+        FAnimPrev.AliveKeys := AnimAliveKeys;
+        FAnimSet.ArmUpdate(FPaintList, AnimSeriesInfo, FAnimPrev);
+      end
       else
       begin
         FAnimSet.Clear;
@@ -16078,15 +16202,21 @@ begin
         views again and groupTransitions them; a new option's are new views,
         which never do (probed: under notMerge only the series move)
         [Batch 96] }
-      if FAnimPrev.Valid and FAnimPrev.FullUpdate and (FAnimOldBuild <> nil) then
+      { A MERGE keeps its axis models and their views: the same groupTransition,
+        an axis whose model is new (replaced, its type changed) excepted
+        [Batch 99] }
+      if FAnimPrev.Valid and (FAnimPrev.FullUpdate or FAnimPrev.Merge)
+        and (FAnimOldBuild <> nil) then
         AxisAnimArm(FAnimOldBuild, FBuild)
       else
         AxisAnimDrop;
       FAnimFull := False;
+      FAnimMerge := False;
       FAnimHasPayload := False;
       AnimDropPrev;
       { the views are paired: __requireNewView works once }
       FAnimFresh := nil;
+      FAnimFreshAxes := nil;
       { THE FLUSH: upstream's setOption ends with a synchronous update, so
         every clip it made starts NOW and this same paint shows the from
         values. A step on the next tick would shift every timeline by up
@@ -16097,9 +16227,11 @@ begin
     begin
       FAnimPending := False;
       FAnimFull := False;
+      FAnimMerge := False;
       FAnimHasPayload := False;
       AnimDropPrev;
       FAnimFresh := nil;
+      FAnimFreshAxes := nil;
     end;
   end;
   FAnimStBind := nil;

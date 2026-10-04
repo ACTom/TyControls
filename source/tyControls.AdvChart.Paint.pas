@@ -411,7 +411,10 @@ type
       segment, its two end symbols and its label (one proxy, the line's
       percent); a line's end label (driven by its clip) }
     carGaugeDetail, carEffectSymbol, carRipple, carMarkPoint, carMarkLine,
-    carMarkLineFrom, carMarkLineTo, carMarkLineLabel, carEndLabel);
+    carMarkLineFrom, carMarkLineTo, carMarkLineLabel, carEndLabel,
+    { [Batch 99, AN6] a markPoint's label: it rides its symbol's group when
+      a kept marker view moves it (the markPoint's proxy) }
+    carMarkPointLabel);
 
   TTyChartAnim = record
     Role: TTyChartAnimRole;
