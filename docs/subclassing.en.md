@@ -137,7 +137,7 @@ A theme that never mentions `MyTagButton` draws it exactly like a `TTyButton`, a
 MyTagButton { border-radius: var(--radius-pill); }
 ```
 
-The engine first applies everything `TyButton` has (built-in layer, theme layer, variants, states), then lays `MyTagButton`'s own rules over it, property by property. So if a theme gives `MyTagButton` a background, it has to give it its `:hover` and friends too, or hovering won't change it — see section 4.5 of [tycss-reference.en.md](tycss-reference.en.md).
+`MyTagButton` starts from everything `TyButton` has and lays its own rules over it, property by property, stage by stage: plain beats plain, a variant beats a variant, `:hover` beats `:hover`, but a parent rule from a later stage still applies. So a theme that gives `MyTagButton` just a plain background still gets the button's hover fill and disabled look; for a hover colour of its own it writes `MyTagButton:hover`. See section 4.5 of [tycss-reference.en.md](tycss-reference.en.md).
 
 A few things to know:
 

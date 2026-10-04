@@ -137,7 +137,7 @@ end.
 MyTagButton { border-radius: var(--radius-pill); }
 ```
 
-引擎先把 `TyButton` 的规则（内置层、主题层、变体、状态）全部用上，再用 `MyTagButton` 自己的规则逐个属性盖上去。所以 `MyTagButton` 改了背景，就要把 `:hover` 之类也为它写上，否则悬停时不变色——细节见 [tycss-reference.md](tycss-reference.md) 第 4.5 节。
+`MyTagButton` 先拿到 `TyButton` 的全部样式，再用自己的规则逐个属性盖上去，按阶段交错：普通规则盖普通规则、变体盖变体、`:hover` 盖 `:hover`，但父键更晚阶段的规则仍然有效。所以只给 `MyTagButton` 写一条普通背景，悬停、禁用时照样是按钮的悬停色、禁用效果；想要自己的悬停色就写 `MyTagButton:hover`。细节见 [tycss-reference.md](tycss-reference.md) 第 4.5 节。
 
 几点要注意：
 

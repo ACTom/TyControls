@@ -314,34 +314,37 @@ the key it derives from (see section 2 of [subclassing.en.md](subclassing.en.md)
 TyRegisterTypeKeyParent('TagButton', 'TyButton');   // in tyControls.StyleModel
 ```
 
-From then on `TagButton` resolves in two steps:
-
-1. `TyButton` is resolved **completely** — built-in layer, theme layer, variants, states — exactly as when resolving
-   `TyButton` itself;
-2. `TagButton`'s own rules (`TagButton`, `TagButton.variant`, `TagButton:state`, `TagButton.variant:state`) are then applied in
-   the §4.4 order, each overriding the result of step 1 per property.
-
-A theme that never mentions `TagButton` therefore draws it exactly like a button; one that does only writes the differences:
+From then on `TagButton` starts from everything `TyButton` has (built-in layer, theme layer, variants, states, exactly as
+when resolving `TyButton` itself) and lays its own rules over it, property by property. A theme that never mentions
+`TagButton` therefore draws it exactly like a button; one that does only writes the differences:
 
 ```css
 TagButton { border-radius: var(--radius-pill); }
 ```
 
-**A child key's plain rules come after the parent's state rules.** Step 1 has already applied the parent's `:hover` and
-`:disabled`; step 2's `TagButton { }` then overrides the same properties. Written like this, `TagButton` does not change
-colour on hover:
+The child's rules are interleaved with the parent's by the **stages** of §4.4: plain rule → variants → each state
+(selected → hover → focus → active → disabled), parent first and child second within a stage. So:
+
+- a child rule overrides what the parent wrote at the **same or an earlier stage**: `TagButton { }` beats `TyButton { }`,
+  `TagButton.primary` beats `TyButton.primary`, `TagButton:hover` beats `TyButton:hover`;
+- what the parent wrote at a **later stage** still applies: `TyButton:hover` and `TyButton:disabled` beat `TagButton { }` and
+  `TagButton.primary`, and `TyButton:disabled` also beats `TagButton:hover`.
 
 ```css
-TyButton:hover  { background: var(--surface-hover); }
-TagButton       { background: #DCFCE7; }     /* still #DCFCE7 on hover */
-TagButton:hover { background: #BBF7D0; }     /* this line brings the hover colour back */
+TagButton       { background: #DCFCE7; }   /* green at rest */
+                                           /* on hover, TyButton:hover's fill */
+TagButton:hover { background: #BBF7D0; }   /* write this for a hover colour of its own */
 ```
 
-Browser CSS gives the opposite result here (`.btn:hover` outranks `.tag`). The rule of thumb: whatever property you change
-for the child key, also write the states in which that property should change.
+This matches the browser intuition that state and class selectors win: one plain background for the child key does not
+swallow the parent's hover and disabled looks.
 
-**Chains can have several links**, e.g. `FancyTag` → `TagButton` → `TyButton`, applied from the topmost parent down.
-A chain holds at most 8 keys.
+"What the parent wrote" means the parent's **own** result. If a theme turns `PropertyCascade` on and writes a plain
+`TyButton { background }`, that background has already replaced the built-in `:hover` fill in `TyButton`'s own result, so
+for `TagButton` it counts as written at the plain stage too.
+
+**Chains can have several links**, e.g. `FancyTag` → `TagButton` → `TyButton`: within each stage the topmost parent goes
+first and the child wins ties. A chain holds at most 8 keys.
 
 **The built-in layer yields per key** (§8.1). A plain `TagButton { }` (no variant, no state) disables only `TagButton`'s own
 built-in rules; `TyButton`'s built-in rules still apply underneath. Third-party keys have no built-in rules anyway, so this
@@ -360,7 +363,7 @@ Registration rules:
 - Queries: `TyTypeKeyParent`, `TyTypeKeyChain`, `TyGetRegisteredTypeKeys`.
 
 The tools follow the chain too: the design-time `StyleClass` drop-down lists the parent's variants (`TagButton` gets
-`primary`, `danger`, `ghost`); the controller-level StyleOverride editor offers registered keys when completing selectors.
+`primary`, `danger`, `ghost`); the controller-level StyleOverride editor lists registered keys both in selector completion and in its reference list.
 Lint does not check type key names, so a child key is never reported.
 
 A typeKey with no registered parent works as before: it gets only the rules a theme writes for it.

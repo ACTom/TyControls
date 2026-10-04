@@ -311,32 +311,36 @@ TyButton { background: #00FF00; }   /* 只覆盖 background;color 仍是 #111111
 TyRegisterTypeKeyParent('TagButton', 'TyButton');   // 在 tyControls.StyleModel 里
 ```
 
-登记之后,解析 `TagButton` 分两步:
-
-1. 按 `TyButton` **完整**解析一遍 —— 内置层、主题层、变体、状态,和解析 `TyButton` 本身一模一样;
-2. 再按 §4.4 的顺序应用 `TagButton` 自己的规则(`TagButton`、`TagButton.变体`、`TagButton:状态`、
-   `TagButton.变体:状态`),逐属性盖在第 1 步的结果上。
-
-所以主题里没写 `TagButton` 时,它和普通按钮完全一样;写了就只需写不同的地方:
+登记之后,`TagButton` 先拿到 `TyButton` 的全部样式(内置层、主题层、变体、状态,和解析 `TyButton`
+本身一模一样),再用自己的规则逐属性盖上去。主题里没写 `TagButton` 时,它和普通按钮完全一样;
+写了就只需写不同的地方:
 
 ```css
 TagButton { border-radius: var(--radius-pill); }
 ```
 
-**子键的普通规则排在父键的状态规则之后。** 第 1 步已经用上了父键的 `:hover`、`:disabled`,第 2 步的
-`TagButton { }` 再把同名属性盖掉。下面这样写,鼠标移上去 `TagButton` 不会变色:
+子键的规则按 §4.4 的**阶段**和父键交错:普通规则 → 变体 → 各状态(selected → hover → focus →
+active → disabled),每个阶段里先父后子。所以:
+
+- 子键的规则盖过父键**同一阶段或更早阶段**写的值:`TagButton { }` 盖过 `TyButton { }`,
+  `TagButton.primary` 盖过 `TyButton.primary`,`TagButton:hover` 盖过 `TyButton:hover`;
+- 父键**更晚阶段**写的值仍然有效:`TyButton:hover`、`TyButton:disabled` 盖过 `TagButton { }`
+  和 `TagButton.primary`,`TyButton:disabled` 也盖过 `TagButton:hover`。
 
 ```css
-TyButton:hover  { background: var(--surface-hover); }
-TagButton       { background: #DCFCE7; }     /* 悬停时还是 #DCFCE7 */
-TagButton:hover { background: #BBF7D0; }     /* 补上这条才有悬停色 */
+TagButton       { background: #DCFCE7; }   /* 平时是绿的 */
+                                           /* 悬停时用 TyButton:hover 的底色 */
+TagButton:hover { background: #BBF7D0; }   /* 想要自己的悬停色,就写这一条 */
 ```
 
-浏览器 CSS 在这里结果相反(`.btn:hover` 比 `.tag` 优先)。规矩只有一条:给子键改了哪个属性,
-就把要随状态变化的那几个状态也给子键写上。
+这和浏览器里「带状态、带类的选择器优先」的直觉一致:给子键写一条普通背景,不会吃掉父键的悬停和禁用效果。
 
-**链可以有好几级**,比如 `FancyTag` → `TagButton` → `TyButton`,从最上面的父键开始逐级往下叠。
-一条链最多 8 个键。
+「父键写的值」指父键**自己解析出来**的结果。例如主题打开了 `PropertyCascade`、又写了一条普通的
+`TyButton { background }`,它在 `TyButton` 自己的结果里已经盖掉了内置的 `:hover` 底色,那么对
+`TagButton` 来说这个背景也只算普通阶段写的。
+
+**链可以有好几级**,比如 `FancyTag` → `TagButton` → `TyButton`:每个阶段里从最上面的父键往下叠,
+同一阶段子键胜。一条链最多 8 个键。
 
 **内置层的让位按键各算各的**(§8.1)。主题写了 `TagButton { }`(无变体、无状态),只让 `TagButton`
 自己的内置规则失效;`TyButton` 的内置规则照常垫在下面。第三方键在内置层本来就没有规则,
@@ -355,7 +359,7 @@ TagButton:hover { background: #BBF7D0; }     /* 补上这条才有悬停色 */
 - 查询用 `TyTypeKeyParent`、`TyTypeKeyChain`、`TyGetRegisteredTypeKeys`。
 
 工具也认这条链:设计期 `StyleClass` 下拉会列出父键的变体(`TagButton` 也有 `primary`、`danger`、
-`ghost`);控制器级 StyleOverride 编辑器补全选择器时列出登记过的键。lint 不检查 typeKey 名,
+`ghost`);控制器级 StyleOverride 编辑器的补全和右侧参考列表都列出登记过的键。lint 不检查 typeKey 名,
 子键不会被报。
 
 没登记父键的 typeKey 跟以前一样:只吃主题里为它写的规则。
