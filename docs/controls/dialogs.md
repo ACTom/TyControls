@@ -553,7 +553,32 @@ tell them apart with `frReplaceAll in d.Options`. `Options` defaults to `[frDown
 
 「整个范围」和「替换前提示」跟 LCL 一样只是复选框:按范围搜、每次替换前问用户,由程序在 `OnFind` / `OnReplace` 里看这两位自己做。
 
-**从 3.0 升级**:3.0.0 收下这 12 个选项却不理会(和 LCL 不一致;3.0 的后续修复版已经照 LCL 处理三个隐藏、三个禁用和 `frShowHelp`)。现在照 LCL 来,有两处看得见的变化——查找、替换对话框多一个「整个范围」复选框,不想要就加 `frHideEntireScope`;3.0 存过的替换对话框窗体里 `Options` 没有 `frHidePromptOnReplace`,会多一个「替换前提示」复选框,不想要就把它加上(代码里新建的替换对话框默认带着它,和 LCL 一样)。
+#### 从 3.0 升级须知:查找 / 替换对话框会多出复选框
+
+**凡是 3.0 窗体里放过的查找、替换对话框,升级后打开都会多出复选框**,窗体不用重新保存也一样:
+
+- **「整个范围」**:查找、替换对话框都多这一个。它是 LCL 的 `frEntireScope`,不带 `frHideEntireScope` 就显示;3.0 没有这个复选框,也就没有哪个 3.0 窗体会带着 `frHideEntireScope`。
+- **「替换前提示」**:替换对话框多这一个。4.0 的 `TTyReplaceDialog` 构造时照 LCL 带上 `frHidePromptOnReplace`,所以新放的不显示;但 3.0 的构造初值(`[frDown, frReplace, frReplaceAll]`)和声明的默认值(`[frDown]`)不同,设计器里放过的替换对话框都把 `Options` 整行写进了窗体,读窗体时这一行整个盖掉构造函数的初值,`frHidePromptOnReplace` 就没了。
+
+这是照 LCL 的语义,代码不替旧窗体改。两个复选框都只是勾选状态(见上),程序不处理 `frEntireScope` / `frPromptOnReplace` 的话,把它们藏起来就是 3.0 的样子。在 `.lfm` 里给 `Options` 补上:
+
+```
+object FindDlg: TTyFindDialog
+  Options = [frDown, frHideEntireScope]
+end
+object ReplaceDlg: TTyReplaceDialog
+  Options = [frDown, frReplace, frReplaceAll, frHideEntireScope, frHidePromptOnReplace]
+end
+```
+
+或在代码里(比如 `FormCreate`):
+
+```pascal
+FindDlg.Options := FindDlg.Options + [frHideEntireScope];
+ReplaceDlg.Options := ReplaceDlg.Options + [frHideEntireScope, frHidePromptOnReplace];
+```
+
+代码里新建的替换对话框本来就带 `frHidePromptOnReplace`,只多「整个范围」。另外,3.0.0 收下这 12 个选项却不理会(3.0 的后续修复版已经照 LCL 处理三个隐藏、三个禁用和 `frShowHelp`);3.0 窗体里设过这些选项的,现在照选项生效。
 
 > **Note:** `Position` here is an LCL `TPosition` placement *strategy* (`poScreenCenter`, `poDesigned`, …), **not** LCL `TFindDialog.Position`'s `TPoint` window coordinate. Modeless Ty dialogs place themselves by strategy, so LCL Find/Replace code that assigns `Position := Point(x, y)` needs adjusting.
 

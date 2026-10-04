@@ -1254,7 +1254,7 @@ object DemoMainForm: TDemoMainForm
     Top = 112
   end
   object ReplaceDlg: TTyReplaceDialog
-    Options = [frDown, frReplace, frReplaceAll]
+    Options = [frDown, frReplace, frReplaceAll, frHidePromptOnReplace]
     OnReplace = ReplaceDlgReplace
     Left = 640
     Top = 112
