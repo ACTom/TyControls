@@ -3050,6 +3050,7 @@ type
     property OnGetItems;
     property Align;
     property Anchors;
+    property FixedPitchOnly;
   end;
 
   TGenFontListBox = class(TTyCustomFontListBox)
@@ -3117,6 +3118,7 @@ type
     property OnSelectionChange;
     property Align;
     property Anchors;
+    property FixedPitchOnly;
   end;
 
   TGenFontSizeComboBox = class(TTyCustomFontSizeComboBox)
