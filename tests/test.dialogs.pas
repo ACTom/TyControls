@@ -57,6 +57,7 @@ type
     procedure TestCloseGivesCancel;
     procedure TestTwoButtonLayoutRightToLeft;
     procedure TestAHiddenButtonLeavesNoGap;
+    procedure TestAHiddenButtonDoesNotSetTheBarHeight;
   end;
 
   TResizeProbeDialog = class(TTyDialog)
@@ -340,6 +341,24 @@ begin
     AssertEquals('the right button does not move', aRight, a.Left + a.Width);
     AssertEquals('the left button closes up to one spacing from it',
       d.Px(8), a.Left - (c.Left + c.Width));
+  finally d.Free; end;
+end;
+
+{ The other half of the same rule: the bar is as tall as its tallest SHOWING button. A hidden
+  one with a taller floor (a bigger caption, a roomier theme) must not stretch the rest. }
+procedure TDialogBaseTest.TestAHiddenButtonDoesNotSetTheBarHeight;
+var d: TTyDialog; a, b: TTyButton; h: Integer;
+begin
+  d := TTyDialog.CreateNew(nil);
+  try
+    a := d.AddButton('OK', mrOk, True, False);
+    b := d.AddButton('Tall', mrNone);
+    d.AutoSizeToContent(300, 100);
+    h := a.Height;
+    b.Constraints.MinHeight := h + 40;
+    b.Visible := False;
+    d.LayoutButtonBar;
+    AssertEquals('the showing button keeps its height', h, a.Height);
   finally d.Free; end;
 end;
 
