@@ -1508,6 +1508,7 @@ type
     procedure RenderGridLines(P: TTyPainter; const M: TTyGridMetrics;
       const AFrame: TTyStyleSet); virtual;
     procedure Paint; override;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
 
     procedure SetScrollX(AValue: Integer);
     procedure SetScrollY(AValue: Integer);
@@ -6108,8 +6109,18 @@ end;
 procedure TTyCustomGrid.SetImages(AValue: TCustomImageList);
 begin
   if FImages = AValue then Exit;
+  if FImages <> nil then FImages.RemoveFreeNotification(Self);
   FImages := AValue;
+  { An image list on another form, or with no owner, is freed without the owner's broadcast
+    ever reaching the grid; the next paint then drew from freed memory. }
+  if FImages <> nil then FImages.FreeNotification(Self);
   Invalidate;
+end;
+
+procedure TTyCustomGrid.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent = FImages) then FImages := nil;
 end;
 
 procedure TTyCustomGrid.SetFooterHeight(AValue: Integer);
