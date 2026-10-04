@@ -64,6 +64,9 @@ type
   private
     FDir, FName: string;
     FForm: TProbeSelectPath;
+    FAsked: Boolean;
+    FAnswer: Boolean;
+    procedure CanClose(Sender: TObject; var ACanClose: Boolean);
     function Accepts: Boolean;
   protected
     procedure SetUp; override;
@@ -73,6 +76,8 @@ type
     procedure TestCreatePromptCreatesItThereNotInTheCurrentDirectory;
     procedure TestARelativeNameWithNothingSelectedIsRefused;
     procedure TestAFullPathIsTakenAsTyped;
+    procedure TestOnCanCloseIsNotAskedAboutARefusedFolder;
+    procedure TestOnCanCloseHasTheLastWord;
   end;
 implementation
 
@@ -546,6 +551,47 @@ begin
   FForm.PathEdit.Text := FDir + PathDelim + FName;
   AssertEquals('a full path needs nothing selected', FDir + PathDelim + FName,
     ExcludeTrailingPathDelimiter(FForm.TypedPath));
+end;
+
+{ The program's OnCanClose (forwarded onto the form's OnCloseQuery) records that it was asked. }
+procedure TSelectPathTypedTest.CanClose(Sender: TObject; var ACanClose: Boolean);
+begin
+  FAsked := True;
+  ACanClose := FAnswer;
+end;
+
+{ The file dialog's order, for the same reason: OnCanClose is where a program acts on the folder,
+  so it is asked only about one the options let through -- not about one the dialog then keeps
+  open for a missing parent, or for a "create it?" the user said no to. }
+procedure TSelectPathTypedTest.TestOnCanCloseIsNotAskedAboutARefusedFolder;
+begin
+  FForm.OnCloseQuery := @CanClose;
+  FAnswer := True;
+  FForm.Options := [ofPathMustExist];
+  FForm.PathEdit.Text := FDir + PathDelim + FName + PathDelim + 'deeper';
+  FAsked := False;
+  AssertFalse('setup: a folder whose parent is missing is refused', Accepts);
+  AssertEquals('setup: and the user is told', 1, FForm.Problems.Count);
+  AssertFalse('OnCanClose was never asked about it', FAsked);
+  FForm.Options := [ofCreatePrompt];
+  FForm.PathEdit.Text := FDir + PathDelim + FName;
+  FForm.Answer := False;
+  FAsked := False;
+  AssertFalse('setup: "create it?" declined keeps the dialog open', Accepts);
+  AssertFalse('nor about the folder the user would not create', FAsked);
+end;
+
+procedure TSelectPathTypedTest.TestOnCanCloseHasTheLastWord;
+begin
+  FForm.OnCloseQuery := @CanClose;
+  FForm.Options := [ofPathMustExist];
+  FForm.PathEdit.Text := FDir;
+  FAsked := False;
+  FAnswer := False;
+  AssertFalse('a folder that passes is still the program''s to refuse', Accepts);
+  AssertTrue('it was asked', FAsked);
+  FAnswer := True;
+  AssertTrue('and when it agrees the dialog closes', Accepts);
 end;
 
 initialization

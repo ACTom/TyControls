@@ -307,11 +307,13 @@ end;
 
 function TTySelectPathForm.CloseQuery: Boolean;
 begin
-  { A wired OnCanClose first, then gate an OK on the options. }
+  { The options gate an OK first, and only then the program's OnCanClose -- the file dialog's
+    order: OnCanClose is where a program acts on the folder, so it is asked only about one the
+    dialog accepts, never about one it then keeps open for a missing parent or a "create it?"
+    the user declined. }
+  if (ModalResult = mrOK) and not AcceptSelection then
+    Exit(False);               // LCL resets ModalResult, the dialog stays open
   Result := inherited CloseQuery;
-  if not Result then Exit;
-  if ModalResult <> mrOK then Exit;
-  Result := AcceptSelection;   // False -> LCL resets ModalResult, the dialog stays open
 end;
 
 function TTySelectPathForm.AcceptSelection: Boolean;

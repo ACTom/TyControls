@@ -356,7 +356,7 @@ if TySelectDirectory('选择输出目录', 'C:\Users', dir) then
 | | `ofAutoPreview` | 没有预览窗格。 |
 | | `ofEnableIncludeNotify` | LCL 自己也没用。 |
 
-没有 `ofPathMustExist` / `ofFileMustExist` / `ofCreatePrompt` 时,路径框里输入一个不存在的文件夹再点确定,返回的仍是树上选中的文件夹,和 3.0 一样。判断由纯函数 `TySelectPathCheck` 做。
+没有 `ofPathMustExist` / `ofFileMustExist` / `ofCreatePrompt` 时,路径框里输入一个不存在的文件夹再点确定,返回的仍是树上选中的文件夹,和 3.0 一样。判断由纯函数 `TySelectPathCheck` 做。这些检查都在 `OnCanClose` 之前:没通过就不问 `OnCanClose`,通过了才问,它答应了对话框就一定关,和文件对话框一样。
 
 路径框里输入的相对路径(比如只输一个名字 `新项目`,或 `..\其它`)按**树上选中的文件夹**展开,和 Windows 的选文件夹对话框一样:路径框本来显示的就是选中文件夹的完整路径,在它上面输入一个名字,意思就是「在这里面」。不会按程序的当前目录展开——带 `ofCreatePrompt` 时文件夹也就建在选中的文件夹里,不会建到程序运行的目录。树上什么都没选时相对路径无从展开:带上面三个选项之一时报错、不关;都不带时照旧返回树上的选择(也就是空)。
 
