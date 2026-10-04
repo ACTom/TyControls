@@ -34,7 +34,8 @@ uses
   tyControls.CharImage, tyControls.GlyphButtons, tyControls.Ribbon,
   tyControls.Dialogs.FileDialog, tyControls.Dialogs.SelectPath, tyControls.FilterComboBox,
   tyControls.ShellComboBox, tyControls.ShellListView, tyControls.ShellTreeView,
-  tyControls.ImageCollection, tyControls.ToolWindows;
+  tyControls.ImageCollection, tyControls.ToolWindows, tyControls.Icons.Lucide,
+  test.customclasses;
 
 type
   TDesignEditorsTest = class(TTestCase)
@@ -45,6 +46,7 @@ type
     procedure TestThemeFileIsPickedFromAFileDialog;
     procedure TestValueListsStayTypeable;
     procedure TestNoDeclaredPropertyEditorIsUnregistered;
+    procedure TestEditorsSitOnTheCustomClass;
   end;
 
 implementation
@@ -474,6 +476,64 @@ begin
   end;
 end;
 
+{ Plan D2, from the third party's side. A property editor that DOES something (a list, a dialog,
+  a '...') is registered on the custom class: the IDE matches by InheritsFrom, so the final
+  class and every third-party descendant that publishes the property get it. Registered on the
+  final class, it reaches the library's own control and nobody else's -- a TMyLucideList that
+  publishes License shows a bare read-only string where TTyLucideImageList pops the licence
+  text. Hidden editors are the other half of D2 and may stay on the final class (they shape
+  the final class's inspector page; see the next test for the one case that cannot).
+
+  The one class allowed an editing registration on its final class: TTyFormSurface, whose
+  Purpose and Version editors must beat the batch of Hidden editors registered on that same
+  final class (a named registration on the same class is the only thing that does). }
+procedure TDesignEditorsTest.TestEditorsSitOnTheCustomClass;
+const
+  CAllowedOnFinal: array[0..0] of string = ('TTyFormSurface');
+var
+  regs, bad: TStringList;
+  i, k, checked: Integer;
+  ty, base, prop, ed: string;
+  cls: TPersistentClass;
+  allowed: Boolean;
+begin
+  regs := Registrations;
+  bad := TStringList.Create;
+  try
+    checked := 0;
+    for i := 0 to regs.Count - 1 do
+    begin
+      if not SplitEditorRegistration(regs[i], ty, base, prop, ed) then Continue;
+      base := Squeezed(base); prop := Squeezed(prop); ed := Squeezed(ed);
+      if SameText(ed, 'THiddenPropertyEditor') then Continue;
+      Inc(checked);
+      if CustomClassesSplit.IndexOf(base) < 0 then Continue;   // not a split final class
+      allowed := False;
+      for k := Low(CAllowedOnFinal) to High(CAllowedOnFinal) do
+        if SameText(base, CAllowedOnFinal[k]) then allowed := True;
+      if allowed then Continue;
+      cls := GetClass(base);
+      if (cls <> nil) and (cls.ClassParent <> nil) then
+        bad.Add(Format('%s.%s (%s): register it on %s', [base, prop, ed, cls.ClassParent.ClassName]))
+      else
+        bad.Add(Format('%s.%s (%s): register it on the custom class', [base, prop, ed]));
+    end;
+    AssertTrue(Format('only %d editing registrations were checked -- the parse has shrunk',
+      [checked]), checked >= 30);
+    AssertEquals('property editor registered on a split FINAL class: a third party deriving the'
+      + ' custom class and publishing the property gets a plain box (plan D2):' + LineEnding
+      + bad.Text, 0, bad.Count);
+    { The two that started this check, by name. }
+    AssertEquals('TTyCustomLucideImageList.License', 'TTyLucideLicenseProperty',
+      EditorFor('TTyCustomLucideImageList', 'License'));
+    AssertEquals('TTyCustomLucideIconFont.License', 'TTyLucideLicenseProperty',
+      EditorFor('TTyCustomLucideIconFont', 'License'));
+  finally
+    bad.Free;
+    regs.Free;
+  end;
+end;
+
 initialization
   { Name -> class, so a base parsed out of the registrations can be resolved. Not the list under
     test: TestEveryRegistrationTargetsARealProperty fails (with the name) when it falls behind
@@ -486,7 +546,7 @@ initialization
     { 4.0: property editors registered on the custom classes, LCL style. }
     TTyCustomFilterComboBox, TTyCustomShellComboBox, TTyCustomShellListView,
     TTyCustomShellTreeView, TTyCustomRibbonPage, TTyCustomCharImage, TTyCustomStyleController,
-    TTyCustomIconFont, TTyCustomPopover,
+    TTyCustomIconFont, TTyCustomPopover, TTyCustomLucideImageList, TTyCustomLucideIconFont,
     { A collection ITEM, not a component — the image-payload editor is registered on
       TTyImageItem so it applies inside the stock collection editor for
       TTyImageCollection.Images. GetClass needs it registered to resolve the name. }

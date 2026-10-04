@@ -722,9 +722,11 @@ begin
   RegisterPropertyEditor(TypeInfo(string), TTyAdvanceChart, 'Option',
     TTyChartOptionProperty);
   // Both bundled Lucide components carry their attribution: '...' pops the full ISC + MIT text.
-  RegisterPropertyEditor(TypeInfo(string), TTyLucideImageList, 'License',
+  // On the custom classes (plan D2), so a third-party Lucide list or font that publishes
+  // License gets the same '...'.
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomLucideImageList, 'License',
     TTyLucideLicenseProperty);
-  RegisterPropertyEditor(TypeInfo(string), TTyLucideIconFont, 'License',
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomLucideIconFont, 'License',
     TTyLucideLicenseProperty);
   { The bundled Lucide font is fixed: family is 'lucide', there is no file, and Glyphs is empty
     (a resolver maps all 2000 names). Hide the three so the OI does not offer edits that would
