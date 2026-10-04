@@ -233,8 +233,9 @@ begin
   // An LCL TImageList is index-keyed and nothing in this library renders from one:
   // whatever a host assigned there could never reach a tool button. The bar's icon
   // source has to be the same name-keyed BGRA collection the buttons consume.
+  // Since 4.0 the type is the custom class (LCL's Images: TCustomImageList): any collection.
   AssertEquals('Images must be the collection the tool buttons can actually draw from',
-    'TTyImageCollection', string(PI^.PropType^.Name));
+    'TTyCustomImageCollection', string(PI^.PropType^.Name));
 end;
 
 procedure TToolBarImagesParityTest.TestLendsItsCollectionToANewTool;
@@ -711,14 +712,14 @@ begin
   AssertTrue('and has a setter — TWriter.WriteProperty skips a setter-less one, so the '
     + '.lfm would lose the reference with no error', pi^.SetProc <> nil);
   AssertEquals('and is the name-keyed BGRA collection, not an LCL TImageList',
-    'TTyImageCollection', string(pi^.PropType^.Name));
+    'TTyCustomImageCollection', string(pi^.PropType^.Name));
 
   pi := GetPropInfo(TTyToolBar, 'DisabledImages');
   AssertTrue('DisabledImages is published', pi <> nil);
   AssertTrue('and readable', pi^.GetProc <> nil);
   AssertTrue('and has a setter', pi^.SetProc <> nil);
   AssertEquals('and the same collection type',
-    'TTyImageCollection', string(pi^.PropType^.Name));
+    'TTyCustomImageCollection', string(pi^.PropType^.Name));
 end;
 
 procedure TToolBarMembersApiParityTest.TestGlyphLayoutStreamsOnlyWhenTheHostWroteIt;

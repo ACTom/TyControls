@@ -27,8 +27,9 @@ uses
   tyControls.FilterComboBox, tyControls.FloatSpinEdit, tyControls.FontComboBox,
   tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.Form, tyControls.FormSurface,
   tyControls.Gauge, tyControls.GearActivityIndicator, tyControls.GearDial, tyControls.GlowLabel,
-  tyControls.GlyphButtons, tyControls.Grid, tyControls.GridPanel, tyControls.GroupBox,
-  tyControls.HSColorPicker, tyControls.HeaderControl, tyControls.HtmlLabel, tyControls.Image,
+  tyControls.GlyphButtons, tyControls.GlyphImageList, tyControls.Grid, tyControls.GridPanel,
+  tyControls.GroupBox, tyControls.HSColorPicker, tyControls.HeaderControl, tyControls.HtmlLabel,
+  tyControls.IconFont, tyControls.Icons.Lucide, tyControls.Image, tyControls.ImageCollection,
   tyControls.ImageView, tyControls.LColorPicker, tyControls.LevelMeter, tyControls.LinkLabel,
   tyControls.ListBox, tyControls.ListGroupPanel, tyControls.ListView, tyControls.MRUComboBox,
   tyControls.MaskEdit, tyControls.Memo, tyControls.Menu, tyControls.Meter, tyControls.NativeStyler,
@@ -3595,6 +3596,15 @@ type
     property ShowCaption;
   end;
 
+  TGenGlyphImageList = class(TTyCustomGlyphImageList)
+  published
+    property Version;
+    property IconFont;
+    property Glyphs;
+    property DefaultSize;
+    property DefaultColor;
+  end;
+
   TGenGridCell = class(TTyCustomGridCell)
   published
     property Version;
@@ -3976,6 +3986,15 @@ type
     property Anchors;
   end;
 
+  TGenIconFont = class(TTyCustomIconFont)
+  published
+    property Version;
+    property FontFamily;
+    property FontFile;
+    property Glyphs;
+    property OnChange;
+  end;
+
   TGenImage = class(TTyCustomImage)
   published
     property Version;
@@ -4034,6 +4053,12 @@ type
     property OnPictureChanged;
     property Align;
     property Anchors;
+  end;
+
+  TGenImageCollection = class(TTyCustomImageCollection)
+  published
+    property Version;
+    property Images;
   end;
 
   TGenImageView = class(TTyCustomImageView)
@@ -4545,6 +4570,28 @@ type
     property OnGroupCollapsed;
     property Align;
     property Anchors;
+  end;
+
+  TGenLucideIconFont = class(TTyCustomLucideIconFont)
+  published
+    property Version;
+    property FontFamily;
+    property FontFile;
+    property Glyphs;
+    property OnChange;
+    property License;
+  end;
+
+  TGenLucideImageList = class(TTyCustomLucideImageList)
+  published
+    property Collection;
+    property IconFont;
+    property Names;
+    property DefaultSize;
+    property MultiResolution;
+    property Version;
+    property GlyphColor;
+    property License;
   end;
 
   TGenMRUComboBox = class(TTyCustomMRUComboBox)
@@ -9185,9 +9232,20 @@ type
     property OnEditRow;
   end;
 
+  TGenVirtualImageList = class(TTyCustomVirtualImageList)
+  published
+    property Collection;
+    property IconFont;
+    property Names;
+    property DefaultSize;
+    property MultiResolution;
+    property Version;
+    property GlyphColor;
+  end;
+
 const
   { (mimic, final class) }
-  CGenMimics: array[0..137, 0..1] of TClass = (
+  CGenMimics: array[0..143, 0..1] of TClass = (
     (TGenActivityBar, TTyActivityBar),
     (TGenActivityIndicator, TTyActivityIndicator),
     (TGenAdvancedComboBox, TTyAdvancedComboBox),
@@ -9242,13 +9300,16 @@ const
     (TGenGlowLabel, TTyGlowLabel),
     (TGenGlyphButton, TTyGlyphButton),
     (TGenGlyphContainerButton, TTyGlyphContainerButton),
+    (TGenGlyphImageList, TTyGlyphImageList),
     (TGenGridCell, TTyGridCell),
     (TGenGridPanel, TTyGridPanel),
     (TGenGroupBox, TTyGroupBox),
     (TGenHSColorPicker, TTyHSColorPicker),
     (TGenHeaderControl, TTyHeaderControl),
     (TGenHtmlLabel, TTyHtmlLabel),
+    (TGenIconFont, TTyIconFont),
     (TGenImage, TTyImage),
+    (TGenImageCollection, TTyImageCollection),
     (TGenImageView, TTyImageView),
     (TGenLColorPicker, TTyLColorPicker),
     (TGenLabel, TTyLabel),
@@ -9257,6 +9318,8 @@ const
     (TGenListBox, TTyListBox),
     (TGenListGroupPanel, TTyListGroupPanel),
     (TGenListView, TTyListView),
+    (TGenLucideIconFont, TTyLucideIconFont),
+    (TGenLucideImageList, TTyLucideImageList),
     (TGenMRUComboBox, TTyMRUComboBox),
     (TGenMaskEdit, TTyMaskEdit),
     (TGenMemo, TTyMemo),
@@ -9325,7 +9388,8 @@ const
     (TGenTreeView, TTyTreeView),
     (TGenURLEdit, TTyURLEdit),
     (TGenUpDown, TTyUpDown),
-    (TGenValueListEditor, TTyValueListEditor));
+    (TGenValueListEditor, TTyValueListEditor),
+    (TGenVirtualImageList, TTyVirtualImageList));
 
 implementation
 

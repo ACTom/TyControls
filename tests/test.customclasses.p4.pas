@@ -24,7 +24,10 @@ uses
   Classes, SysUtils, TypInfo, Controls, Forms, Graphics,
   fpcunit, testregistry,
   test.customclasses, test.customclasses.p1,
-  tyControls.Base, tyControls.Controller, tyControls.NativeStyler;
+  BGRABitmap, BGRABitmapTypes, ImgList,
+  tyControls.Base, tyControls.Controller, tyControls.NativeStyler, tyControls.IconFont,
+  tyControls.Icons.Lucide, tyControls.ImageCollection, tyControls.ImageDraw, tyControls.Image,
+  tyControls.CharImage, tyControls.GlyphButtons, tyControls.ToolBar, tyControls.RibbonBackstage;
 
 type
   TTyCustomClassesP4Test = class(TTyCustomClassesPhaseCase)
@@ -32,6 +35,12 @@ type
     { Task 27: controllers }
     procedure TestThirdStyleController;
     procedure TestThirdNativeStyler;
+    { Task 28: icon fonts and images }
+    procedure TestThirdIconFont;
+    procedure TestThirdVirtualImageList;
+    procedure TestLucideImageListTakesTheVectorPath;
+    procedure TestLucideIconFontFitsAnIconFontProperty;
+    procedure TestImagePropertiesNameTheCustomClasses;
   end;
 
   { --- third-party mimics ------------------------------------------------------------ }
@@ -46,6 +55,18 @@ type
   published
     property Enabled;
     property ApplyFontSize;
+  end;
+
+  TThirdIconFont = class(TTyCustomIconFont)
+  published
+    property FontFamily;
+    property Glyphs;
+  end;
+
+  TThirdVirtualImageList = class(TTyCustomVirtualImageList)
+  published
+    property Names;
+    property Collection;
   end;
 
 implementation
@@ -115,7 +136,170 @@ begin
   AssertTrue('T-v: Root is public through a TTyCustomNativeStyler reference', third.Root = FForm);
 end;
 
+{ ------------------------------------------------------------------ Task 28: icon fonts and images }
+
+procedure TTyCustomClassesP4Test.TestThirdIconFont;
+var
+  third, back: TThirdIconFont;
+  c: TTyCustomIconFont;
+begin
+  CheckCreatesWithoutOwner(TThirdIconFont);
+  third := TThirdIconFont.Create(FForm);
+  CheckPublishesOnly(TThirdIconFont, ['FontFamily', 'Glyphs']);
+  third.FontFamily := 'p4-family';
+  third.MapGlyph('save', $F0C7);
+  { A file that is not there: the name is still recorded (LoadError says why it did not take). }
+  third.FontFile := 'p4-no-such-font.ttf';
+  CheckStreamText(third, ['FontFamily', 'Glyphs'], 'FontFile');
+  back := TThirdIconFont.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: FontFamily round-trips', 'p4-family', back.FontFamily);
+  AssertEquals('T-c: the glyph map round-trips', Int64($F0C7), Int64(back.CodepointOf('save')));
+  AssertEquals('T-c: the unpublished FontFile stayed empty', '', back.FontFile);
+  CheckFreshDefaults(TThirdIconFont, ['FontFamily', 'Glyphs']);
+  c := third;
+  c.FontFile := '';
+  AssertEquals('T-v: FontFile is public through a TTyCustomIconFont reference', '', third.FontFile);
+end;
+
+procedure TTyCustomClassesP4Test.TestThirdVirtualImageList;
+var
+  third, back: TThirdVirtualImageList;
+  coll: TTyImageCollection;
+  c: TTyCustomVirtualImageList;
+  ms: TMemoryStream;
+  dst: TForm;
+begin
+  CheckCreatesWithoutOwner(TThirdVirtualImageList);
+  AssertTrue('T-b: the LCL root is TCustomImageList',
+    LclRootOf(TThirdVirtualImageList.ClassParent) = TCustomImageList);
+  CheckPublishesOnly(TThirdVirtualImageList, ['Names', 'Collection']);
+  coll := TTyImageCollection.Create(FForm);
+  coll.Name := 'P4Coll';
+  third := TThirdVirtualImageList.Create(FForm);
+  third.Name := 'P4List';
+  third.Names.Text := 'open' + LineEnding + 'save';
+  third.Collection := coll;
+  AssertEquals('precondition: the fresh list is 16 px (or the round trip proves nothing)', 16,
+    third.DefaultSize);
+  third.DefaultSize := 24;
+  CheckStreamText(third, ['Names', 'Collection'], 'DefaultSize');
+  { Collection is a component reference: stream the form that owns both, as an .lfm does. }
+  dst := TForm.CreateNew(nil);
+  ms := TMemoryStream.Create;
+  try
+    ms.WriteComponent(FForm);
+    ms.Position := 0;
+    ms.ReadComponent(dst);
+    back := dst.FindComponent('P4List') as TThirdVirtualImageList;
+    AssertEquals('T-c: Names round-trip', 2, back.Names.Count);
+    AssertEquals('T-c: in order', 'save', back.Names[1]);
+    AssertTrue('T-c: the Collection reference round-trips',
+      back.Collection = dst.FindComponent('P4Coll'));
+    AssertEquals('T-c: the unpublished DefaultSize stayed at its default', 16, back.DefaultSize);
+  finally
+    ms.Free;
+    dst.Free;
+  end;
+  CheckFreshDefaults(TThirdVirtualImageList, ['Names', 'Collection']);
+  c := third;
+  c.GlyphColor := $FF336699;
+  AssertEquals('T-v: GlyphColor is public through a TTyCustomVirtualImageList reference',
+    Int64($FF336699), Int64(third.GlyphColor));
+end;
+
+{ S28-1 (A28-1). The bundled Lucide list takes the image-drawing unit's on-demand vector path
+  and resolves an ImageName to its index. Before 4.0 ImageDraw asked `is TTyVirtualImageList`,
+  which the Lucide list answered True; on the custom chain it answers False, and only
+  `is TTyCustomVirtualImageList` still finds it -- asked the old way, every control fed a Lucide
+  list falls back to the baked raster path and an ImageName finds nothing. }
+procedure TTyCustomClassesP4Test.TestLucideImageListTakesTheVectorPath;
+var
+  list: TTyLucideImageList;
+  img: TTyImage;
+  bmp: TBGRABitmap;
+  x, y: Integer;
+  ink: Boolean;
+begin
+  list := TTyLucideImageList.Create(FForm);
+  AssertFalse('the Lucide list is not a TTyVirtualImageList since 4.0 (or this proves nothing)',
+    TObject(list) is TTyVirtualImageList);
+  list.Names.Text := TyIconHouse + LineEnding + TyIconSettings;
+  AssertFalse('it is drawn on demand, as a vector, not from baked rasters', TyImageIsBaked(list));
+  AssertEquals('its count is its name list', 2, TyImageCount(list));
+  AssertEquals('a name resolves to its slot', 1, TyImageIndexOfName(list, TyIconSettings));
+  AssertEquals('and a slot to its name', TyIconHouse, TyImageNameOfIndex(list, 0));
+  img := TTyImage.Create(FForm);
+  img.Parent := FForm;
+  img.Images := list;
+  img.ImageName := TyIconSettings;
+  AssertEquals('a TTyImage fed the Lucide list finds the icon by name', 1, img.ImageIndex);
+  bmp := TyRenderImage(list, 1, 24, 96, False);
+  try
+    AssertNotNull('the icon renders', bmp);
+    AssertEquals('at exactly the size asked for (the vector path)', 24, bmp.Width);
+    ink := False;
+    for y := 0 to bmp.Height - 1 do
+      for x := 0 to bmp.Width - 1 do
+        if bmp.GetPixel(x, y).alpha <> 0 then ink := True;
+    AssertTrue('with ink in it', ink);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ S28-2 (D11, forced). Every IconFont property names TTyCustomIconFont, because the bundled
+  TTyLucideIconFont is no TTyIconFont since 4.0. Compile-time first: these assignments do not
+  compile against a TTyIconFont-typed property. }
+procedure TTyCustomClassesP4Test.TestLucideIconFontFitsAnIconFontProperty;
+var
+  fnt: TTyLucideIconFont;
+  ci: TTyCharImage;
+  gb: TTyGlyphButton;
+begin
+  fnt := TTyLucideIconFont.Create(FForm);
+  AssertFalse('the Lucide font is not a TTyIconFont since 4.0 (or this proves nothing)',
+    TObject(fnt) is TTyIconFont);
+  ci := TTyCharImage.Create(FForm);
+  ci.Parent := FForm;
+  ci.IconFont := fnt;
+  ci.GlyphName := TyIconHouse;
+  AssertTrue('the char image reaches the glyph through the Lucide font',
+    ci.IconFont.HasGlyph(ci.GlyphName));
+  gb := TTyGlyphButton.Create(FForm);
+  gb.Parent := FForm;
+  gb.IconFont := fnt;
+  AssertTrue('a glyph button takes it too', gb.IconFont = fnt);
+  FreeAndNil(fnt);
+  AssertNull('and lets go of it when it is freed', ci.IconFont);
+end;
+
+{ D11, the LCL way (Images: TCustomImageList): the component-reference properties name the
+  custom classes, so a third party's font or collection is assignable. RTTI pins the declared
+  type; G6 holds the rest of each row to 3.0. }
+procedure CheckPropType(AClass: TClass; const AProp, AType: string);
+var
+  pi: PPropInfo;
+begin
+  pi := GetPropInfo(AClass, AProp);
+  TAssert.AssertNotNull(AClass.ClassName + '.' + AProp + ' is published', pi);
+  TAssert.AssertEquals(AClass.ClassName + '.' + AProp + ' names the custom class', AType,
+    pi^.PropType^.Name);
+end;
+
+procedure TTyCustomClassesP4Test.TestImagePropertiesNameTheCustomClasses;
+begin
+  CheckPropType(TTyCharImage, 'IconFont', 'TTyCustomIconFont');
+  CheckPropType(TTyGlyphButton, 'IconFont', 'TTyCustomIconFont');
+  CheckPropType(TTyVirtualImageList, 'IconFont', 'TTyCustomIconFont');
+  CheckPropType(TTyGlyphButton, 'Images', 'TTyCustomImageCollection');
+  CheckPropType(TTyToolBar, 'HotImages', 'TTyCustomImageCollection');
+  CheckPropType(TTyRibbonBackstage, 'Images', 'TTyCustomImageCollection');
+  CheckPropType(TTyVirtualImageList, 'Collection', 'TTyCustomImageCollection');
+end;
+
 initialization
-  RegisterClasses([TThirdStyleController, TThirdNativeStyler]);
+  RegisterClasses([TThirdStyleController, TThirdNativeStyler, TThirdIconFont,
+    TThirdVirtualImageList]);
   RegisterTest(TTyCustomClassesP4Test);
 end.

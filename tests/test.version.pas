@@ -471,7 +471,9 @@ initialization
     name, and an unresolvable base would make that check quietly answer False for everything
     below it. TestVersionEditorBasesResolve is what catches that. }
   RegisterClasses([
-    TTyGraphicControl, TTyCustomControl, TTyComponent]);
+    TTyGraphicControl, TTyCustomControl, TTyComponent,
+    { 4.0: the image list's editor sits on its custom class, which TTyLucideImageList shares. }
+    TTyCustomVirtualImageList]);
   RegisterTest(TVersionTest);
 
 finalization

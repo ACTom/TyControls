@@ -359,7 +359,8 @@ type
     { 栏推给窗口、窗口再推给操作区;不进 .lfm(读进来的时机在注册之后,两边会漂开)。 }
     property Controller stored False;
     { 图标条上的图标**按名字** —— 持久键,在所在栏的 EffectiveImages 里解析。列表是本库的
-      (TTyVirtualImageList 及其子类)时,名字挺得过列表调顺序。'' = 没有;外来的 LCL 列表
+      (TTyCustomVirtualImageList 一系,TTyLucideImageList 也在内)时,名字挺得过列表调顺序。
+      '' = 没有;外来的 LCL 列表
       没有名字,那时它不起作用,键是 ImageIndex。找不到这个名字就不画(-1),不回落到序号。 }
     property ImageName: string read FImageName write SetImageName;
     { ImageName 的**视图**(TTyTabSheet 的约定):读 = 名字在生效列表里的那一格,名字解析

@@ -63,7 +63,7 @@ type
   private
     FItems: TStringList;
     FGlyphNames: TStringList;
-    FIconFont: TTyIconFont;
+    FIconFont: TTyCustomIconFont;
     FItemIndex: Integer;
     FVisibleColumns: Integer;
     FHoverCell: Integer;     // -1 = none (inline row)
@@ -78,7 +78,7 @@ type
     function GetGlyphNamesProp: TStrings;
     procedure SetItems(const AValue: TStrings);
     procedure SetGlyphNames(const AValue: TStrings);
-    procedure SetIconFont(const AValue: TTyIconFont);
+    procedure SetIconFont(const AValue: TTyCustomIconFont);
     procedure IconFontChanged(Sender: TObject);
     procedure SetItemIndex(const AValue: Integer);
     procedure SetVisibleColumns(const AValue: Integer);
@@ -125,7 +125,7 @@ type
     property TabStop default True;
     property Items: TStrings read GetItemsProp write SetItems;
     property GlyphNames: TStrings read GetGlyphNamesProp write SetGlyphNames;
-    property IconFont: TTyIconFont read FIconFont write SetIconFont;
+    property IconFont: TTyCustomIconFont read FIconFont write SetIconFont;
     property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
     property VisibleColumns: Integer read FVisibleColumns write SetVisibleColumns default 3;
     property OnSelect: TNotifyEvent read FOnSelect write FOnSelect;
@@ -469,7 +469,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyCustomRibbonGallery.SetIconFont(const AValue: TTyIconFont);
+procedure TTyCustomRibbonGallery.SetIconFont(const AValue: TTyCustomIconFont);
 begin
   if FIconFont = AValue then Exit;
   if FIconFont <> nil then

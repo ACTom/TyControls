@@ -88,9 +88,9 @@ type
     This exists for GetGlyphSource (below): resolving the source became a QUESTION, asked
     per visual state, instead of four field reads spread across the draw. }
   TTyGlyphSource = record
-    Images: TTyImageCollection;
+    Images: TTyCustomImageCollection;
     ImageName: string;
-    IconFont: TTyIconFont;
+    IconFont: TTyCustomIconFont;
     GlyphName: string;
   end;
 
@@ -99,11 +99,11 @@ type
     concrete controls below; it is NOT registered on the palette itself. }
   TTyGlyphButtonBase = class(TTyCustomButton)
   private
-    FIconFont: TTyIconFont;
+    FIconFont: TTyCustomIconFont;
     FGlyphName: string;
     FGlyphSize: Integer;
     FGlyphColor: TTyColor;
-    FImages: TTyImageCollection;
+    FImages: TTyCustomImageCollection;
     FImageName: string;
     FGlyphKind: TTyGlyphKind;   { painter (vector) glyph icon source -- an alternative to a
                                   font glyph / image, for arrows and chrome that ship with the
@@ -115,11 +115,11 @@ type
       (the container default) then leaves it alone forever — see there. }
     FShowCaptionExplicit: Boolean;
     procedure SetSpacing(AValue: Integer);
-    procedure SetIconFont(AValue: TTyIconFont);
+    procedure SetIconFont(AValue: TTyCustomIconFont);
     procedure SetGlyphName(const AValue: string);
     procedure SetGlyphSize(AValue: Integer);
     procedure SetGlyphColor(AValue: TTyColor);
-    procedure SetImages(AValue: TTyImageCollection);
+    procedure SetImages(AValue: TTyCustomImageCollection);
     procedure SetImageName(const AValue: string);
     procedure SetGlyphKind(AValue: TTyGlyphKind);
     procedure SetShowCaption(AValue: Boolean);
@@ -221,7 +221,7 @@ type
       in Invalidate, which is where TTyButton re-fits an auto-sized button. }
     { Icon-font source for the glyph. Nilled automatically (FreeNotification) when
       the referenced font is freed, so no dangling reference remains. }
-    property IconFont: TTyIconFont read FIconFont write SetIconFont;
+    property IconFont: TTyCustomIconFont read FIconFont write SetIconFont;
     { The glyph name to draw (a key in IconFont.Glyphs, e.g. 'save'). Empty or
       unmapped -> no glyph, caption fills the whole content box. }
     property GlyphName: string read FGlyphName write SetGlyphName;
@@ -240,7 +240,7 @@ type
       and ImageName are both set they WIN over IconFont/GlyphName — the named icon is drawn
       (tinted to GlyphColor/TextColor). Unlike a system icon font this renders identically
       on every OS. Nilled via FreeNotification. }
-    property Images: TTyImageCollection read FImages write SetImages;
+    property Images: TTyCustomImageCollection read FImages write SetImages;
     { The icon name in Images to draw. Empty -> fall back to the IconFont glyph. }
     property ImageName: string read FImageName write SetImageName;
     { Where the glyph sits relative to the caption. Public here and published by every glyph
@@ -770,7 +770,7 @@ begin
   FShowCaptionExplicit := False;
 end;
 
-procedure TTyGlyphButtonBase.SetIconFont(AValue: TTyIconFont);
+procedure TTyGlyphButtonBase.SetIconFont(AValue: TTyCustomIconFont);
 begin
   if FIconFont = AValue then Exit;
   if FIconFont <> nil then
@@ -811,7 +811,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyGlyphButtonBase.SetImages(AValue: TTyImageCollection);
+procedure TTyGlyphButtonBase.SetImages(AValue: TTyCustomImageCollection);
 begin
   if FImages = AValue then Exit;
   if FImages <> nil then FImages.RemoveFreeNotification(Self);

@@ -1568,14 +1568,14 @@ initialization
     // T25 tool windows
     'TTyToolWindowBar', 'TTyToolWindow', 'TTyToolWindowActions',
     // T27 controllers
-    'TTyStyleController', 'TTyNativeStyler']);
+    'TTyStyleController', 'TTyNativeStyler',
+    // T28 icon fonts and images
+    'TTyIconFont', 'TTyLucideIconFont', 'TTyVirtualImageList', 'TTyLucideImageList',
+    'TTyGlyphImageList', 'TTyImageCollection']);
 
   { CPending: the classes still to split, by task (plan appendix A). Each task moves its own
     names into CSplit; Task 32 deletes this list. }
   AddAll(GPending, [
-    // T28 icon fonts and images
-    'TTyIconFont', 'TTyLucideIconFont', 'TTyVirtualImageList', 'TTyLucideImageList',
-    'TTyGlyphImageList', 'TTyImageCollection',
     // T29 hints and notifications
     'TTyHint', 'TTyBalloonHint', 'TTyPopover', 'TTyNotification',
     // T30 dialogs
@@ -1583,7 +1583,8 @@ initialization
     'TTyProgressDialog', 'TTyAboutDialog', 'TTyIconBrowserDialog']);
 
   { CDemoted: base and intermediate classes that publish nothing beyond their LCL root. }
-  AddAll(GDemoted, ['TTyCustomControl', 'TTyGraphicControl', 'TTyComponent', 'TTyGlyphButtonBase', 'TTyCustomTabStrip', 'TTyCustomGrid']);
+  AddAll(GDemoted, ['TTyCustomControl', 'TTyGraphicControl', 'TTyComponent', 'TTyGlyphButtonBase', 'TTyCustomTabStrip', 'TTyCustomGrid',
+    'TTyIconPackFont']);
 
   RegisterTest(TTyCustomClassesGuardTest);
 

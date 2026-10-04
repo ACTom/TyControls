@@ -45,9 +45,9 @@ type
   public
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
     { Load the source into the working copy (the source itself stays untouched). }
-    procedure LoadFrom(ASource: TTyImageCollection);
+    procedure LoadFrom(ASource: TTyCustomImageCollection);
     { Write the working copy back -- the OK half of the contract. }
-    procedure CommitTo(ATarget: TTyImageCollection);
+    procedure CommitTo(ATarget: TTyCustomImageCollection);
 
     { Action seams (the buttons call these; tests call them directly). }
     function EntryCount: Integer;
@@ -72,20 +72,20 @@ type
   end;
 
 { Construct-only builder (no ShowModal), loaded from ASource; the test seam. }
-function TyBuildImageCollectionEditor(ASource: TTyImageCollection): TTyImageCollectionEditorForm;
+function TyBuildImageCollectionEditor(ASource: TTyCustomImageCollection): TTyImageCollectionEditorForm;
 
 { The one-liner: edit ACollection in place; True (and committed) on OK. }
-function TyEditImageCollection(ACollection: TTyImageCollection): Boolean;
+function TyEditImageCollection(ACollection: TTyCustomImageCollection): Boolean;
 
 implementation
 
-function TyBuildImageCollectionEditor(ASource: TTyImageCollection): TTyImageCollectionEditorForm;
+function TyBuildImageCollectionEditor(ASource: TTyCustomImageCollection): TTyImageCollectionEditorForm;
 begin
   Result := TTyImageCollectionEditorForm.CreateNew(nil);
   Result.LoadFrom(ASource);
 end;
 
-function TyEditImageCollection(ACollection: TTyImageCollection): Boolean;
+function TyEditImageCollection(ACollection: TTyCustomImageCollection): Boolean;
 var
   dlg: TTyImageCollectionEditorForm;
 begin
@@ -186,7 +186,7 @@ end;
 
 { ---- model <-> view ---- }
 
-procedure TTyImageCollectionEditorForm.LoadFrom(ASource: TTyImageCollection);
+procedure TTyImageCollectionEditorForm.LoadFrom(ASource: TTyCustomImageCollection);
 begin
   if ASource <> nil then
     FWork.Images.Assign(ASource.Images)
@@ -195,7 +195,7 @@ begin
   RefreshList(0);
 end;
 
-procedure TTyImageCollectionEditorForm.CommitTo(ATarget: TTyImageCollection);
+procedure TTyImageCollectionEditorForm.CommitTo(ATarget: TTyCustomImageCollection);
 begin
   if ATarget <> nil then
     ATarget.Images.Assign(FWork.Images);

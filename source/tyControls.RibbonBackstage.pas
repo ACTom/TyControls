@@ -39,8 +39,8 @@ type
     FCommandGlyphs: TStrings;
     FBottomCommands: TStrings;
     FBottomCommandGlyphs: TStrings;
-    FIconFont: TTyIconFont;
-    FImages: TTyImageCollection;
+    FIconFont: TTyCustomIconFont;
+    FImages: TTyCustomImageCollection;
     FItemIndex: Integer;
     FDefaultItemIndex: Integer;
     FHoverIndex: Integer;
@@ -58,8 +58,8 @@ type
     procedure SetCommandGlyphs(AValue: TStrings);
     procedure SetBottomCommands(AValue: TStrings);
     procedure SetBottomCommandGlyphs(AValue: TStrings);
-    procedure SetIconFont(AValue: TTyIconFont);
-    procedure SetImages(AValue: TTyImageCollection);
+    procedure SetIconFont(AValue: TTyCustomIconFont);
+    procedure SetImages(AValue: TTyCustomImageCollection);
     procedure SetItemIndex(AValue: Integer);
     function GetSidebarWidth: Integer;
     procedure SetSidebarWidth(AValue: Integer);
@@ -115,10 +115,10 @@ type
     property BottomCommands: TStrings read FBottomCommands write SetBottomCommands;
     property BottomCommandGlyphs: TStrings read FBottomCommandGlyphs write SetBottomCommandGlyphs;
     { Icon-font source for the CommandGlyphs (font glyphs; Windows-only fonts like MDL2). }
-    property IconFont: TTyIconFont read FIconFont write SetIconFont;
+    property IconFont: TTyCustomIconFont read FIconFont write SetIconFont;
     { Cross-platform IMAGE source for the CommandGlyphs (BGRA icons). When set it WINS over
       IconFont — the named icon is drawn tinted to the row text color, identically on every OS. }
-    property Images: TTyImageCollection read FImages write SetImages;
+    property Images: TTyCustomImageCollection read FImages write SetImages;
     property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
     { Auto-selected on ShowOver (Office selects Info by default so the right side isn't
       blank). -1 = no default. Point it at a CONTENT command, not an action one. }
@@ -381,7 +381,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyCustomRibbonBackstage.SetIconFont(AValue: TTyIconFont);
+procedure TTyCustomRibbonBackstage.SetIconFont(AValue: TTyCustomIconFont);
 begin
   if FIconFont = AValue then Exit;
   if FIconFont <> nil then FIconFont.RemoveFreeNotification(Self);
@@ -390,7 +390,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyCustomRibbonBackstage.SetImages(AValue: TTyImageCollection);
+procedure TTyCustomRibbonBackstage.SetImages(AValue: TTyCustomImageCollection);
 begin
   if FImages = AValue then Exit;
   if FImages <> nil then FImages.RemoveFreeNotification(Self);
