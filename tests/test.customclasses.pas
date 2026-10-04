@@ -860,9 +860,14 @@ end;
   style. That holds only when every default, stored clause, type key and constructor value the
   final class shows lives in the custom class -- the third party's view, which the snapshot (G6)
   never looked at: G6 compares the final class with 3.0 and passes whether a redeclaration
-  sits in the custom class or in the final one. The mimics are generated from source by the
-  plan's gen-mimic.py (test.customclasses.mimic); the first check makes a split class without a
-  mimic red, so the generator is re-run as each phase splits more. }
+  sits in the custom class or in the final one. The mimics are generated from source by
+  scripts/gen-mimic.py (test.customclasses.mimic); the first check makes a split class without a
+  mimic red, so the generator is re-run after every split.
+
+  Regenerating copies each final class's CURRENT published section into its mimic. Run on a
+  tree where a published line moved by accident, it copies the move and this guard passes it.
+  So read the diff of test.customclasses.mimic.pas after every run: it must add the new
+  classes and change nothing else. }
 procedure TTyCustomClassesGuardTest.TestGeneratedMimicsMatchTheirFinalClass;
 var
   i: Integer;
@@ -887,7 +892,7 @@ begin
     end;
     for i := 0 to GSplit.Count - 1 do
       if covered.IndexOf(GSplit[i]) < 0 then
-        bad := bad + LineEnding + '  split class without a mimic (re-run gen-mimic.py): ' + GSplit[i];
+        bad := bad + LineEnding + '  split class without a mimic (run scripts/gen-mimic.py, then review its diff): ' + GSplit[i];
   finally
     covered.Free;
   end;
