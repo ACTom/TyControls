@@ -11,7 +11,7 @@ uses
   Classes, SysUtils, Forms, Controls, Dialogs, Menus, ClipBrd,
   PropEdits, PropEditUtils, ComponentEditors,
   tyControls.AdvanceChart, tyControls.Design.AdvChart.Editor,
-  tyControls.IconFont, tyControls.ImageCollection,
+  tyControls.IconFont, tyControls.Icons.Lucide, tyControls.ImageCollection,
   tyControls.Dialogs, tyControls.Dialogs.IconBrowser,
   tyControls.Dialogs.ImageCollectionEditor, tyControls.Dialogs.StructureEditor,
   tyControls.Dialogs.ListGroupsEditor, tyControls.Dialogs.TreeNodesEditor,
