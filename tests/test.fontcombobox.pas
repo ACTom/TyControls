@@ -22,6 +22,8 @@ type
     procedure TestTogglingKeepsTheChoiceWithoutOnChange;
     procedure TestAFormFileWithFixedPitchOnlyLoadsTheFilteredList;
     procedure TestFixedPitchOnlyIsWrittenOnlyWhenOn;
+    procedure TestNoVerticalAliasIsListed;
+    procedure TestEveryFontPickerListsThroughTheOneFilter;
   end;
 implementation
 
@@ -109,16 +111,22 @@ end;
 { A font this machine has, late in its list, whose name a form file can carry as a plain quoted
   string -- so the row it sits at here is not the row a stale index points at. }
 function FCBLateFont: string;
-var i: Integer; nm: string; ok: Boolean; ch: Char;
+var i: Integer; nm: string; ok: Boolean; ch: Char; fams: TStringList;
 begin
   Result := '';
-  for i := Screen.Fonts.Count - 1 downto 3 do
-  begin
-    nm := Screen.Fonts[i];
-    ok := nm <> '';
-    for ch in nm do
-      if (ch < ' ') or (ch > '~') or (ch = '''') then ok := False;
-    if ok then Exit(nm);
+  fams := TStringList.Create;
+  try
+    FontsWithoutVerticalVariants(fams);
+    for i := fams.Count - 1 downto 3 do
+    begin
+      nm := fams[i];
+      ok := nm <> '';
+      for ch in nm do
+        if (ch < ' ') or (ch > '~') or (ch = '''') then ok := False;
+      if ok then Exit(nm);
+    end;
+  finally
+    fams.Free;
   end;
 end;
 
@@ -173,6 +181,7 @@ begin
       c.Items.IndexOf('NoSuchFontA'));
     AssertEquals('the chosen family is still chosen, at the row it has here', f, c.SelectedFont);
     AssertEquals('and that row is its row on this machine', FCBPlainIndexOf(f), c.ItemIndex);
+    AssertTrue('which is a real row', c.ItemIndex >= 0);
   finally
     dst.Free;
   end;
@@ -344,6 +353,103 @@ begin
     AssertTrue('on is written', Pos('FixedPitchOnly = True', FCBFormText(src)) > 0);
   finally
     src.Free;
+  end;
+end;
+
+{ Windows lists every CJK font twice: as itself and as an '@' alias that draws each glyph turned
+  on its side. A picker that offers the alias hands the program a font no text should be set in. }
+procedure TFontComboBoxTest.TestNoVerticalAliasIsListed;
+var c: TTyFontComboBox; i, n, shown: Integer;
+begin
+  shown := FCBPlainCount;
+  n := Screen.Fonts.Count - shown;   // the '@' names
+  if n = 0 then Exit;   // this machine has no '@' fonts: nothing for the filter to leave out
+  c := TTyFontComboBox.Create(nil);
+  try
+    AssertEquals('every installed font but the ' + IntToStr(n) + ' aliases', shown, c.Items.Count);
+    for i := 0 to c.Items.Count - 1 do
+      AssertFalse('no alias: ' + c.Items[i], Copy(c.Items[i], 1, 1) = '@');
+    c.RefreshFonts;
+    AssertEquals('and RefreshFonts lists the same', shown, c.Items.Count);
+  finally c.Free; end;
+end;
+
+{ Every list of installed fonts goes through the one filter, so none of them offers the '@'
+  names -- the font dialog's included, which builds its list where no test can reach it without
+  putting a window up. So the rule is held on the source: no unit reads Screen.Fonts but the
+  filter's own, tyControls.FontFamilies (TyGetFontFamilies). Comments and string literals are
+  blanked out first, so prose about Screen.Fonts does not count. }
+procedure TFontComboBoxTest.TestEveryFontPickerListsThroughTheOneFilter;
+
+  function CodeOf(const S: string): string;
+  var i, depth: Integer; inStr, inLine, inParen: Boolean;
+  begin
+    Result := S;
+    depth := 0; inStr := False; inLine := False; inParen := False;
+    i := 1;
+    while i <= Length(Result) do
+    begin
+      if inLine then
+      begin
+        if Result[i] in [#10, #13] then inLine := False else Result[i] := ' ';
+      end
+      else if inParen then
+      begin
+        if (Result[i] = '*') and (i < Length(Result)) and (Result[i + 1] = ')') then
+        begin
+          Result[i] := ' '; Result[i + 1] := ' '; Inc(i); inParen := False;
+        end
+        else if not (Result[i] in [#10, #13]) then Result[i] := ' ';
+      end
+      else if depth > 0 then
+      begin
+        if Result[i] = '{' then Inc(depth) else if Result[i] = '}' then Dec(depth);
+        if not (Result[i] in [#10, #13]) then Result[i] := ' ';
+      end
+      else if inStr then
+      begin
+        if Result[i] = '''' then inStr := False;
+        Result[i] := ' ';
+      end
+      else if Result[i] = '{' then begin depth := 1; Result[i] := ' '; end
+      else if (Result[i] = '/') and (i < Length(Result)) and (Result[i + 1] = '/') then
+      begin inLine := True; Result[i] := ' '; end
+      else if (Result[i] = '(') and (i < Length(Result)) and (Result[i + 1] = '*') then
+      begin inParen := True; Result[i] := ' '; end
+      else if Result[i] = '''' then begin inStr := True; Result[i] := ' '; end;
+      Inc(i);
+    end;
+  end;
+
+var
+  dir, code: string;
+  sr: TSearchRec;
+  L: TStringList;
+  readers: TStringList;
+  scanned: Integer;
+begin
+  dir := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'source' + PathDelim;
+  readers := TStringList.Create;
+  L := TStringList.Create;
+  try
+    scanned := 0;
+    if FindFirst(dir + '*.pas', faAnyFile, sr) = 0 then
+    try
+      repeat
+        L.LoadFromFile(dir + sr.Name);
+        Inc(scanned);
+        code := LowerCase(CodeOf(L.Text));
+        if Pos('screen.fonts', code) > 0 then readers.Add(sr.Name);
+      until FindNext(sr) <> 0;
+    finally
+      FindClose(sr);
+    end;
+    AssertTrue('the scan read the source tree (' + IntToStr(scanned) + ' units)', scanned > 100);
+    AssertEquals('units that read Screen.Fonts themselves:' + LineEnding + readers.Text,
+      'tyControls.FontFamilies.pas', Trim(readers.Text));
+  finally
+    L.Free;
+    readers.Free;
   end;
 end;
 

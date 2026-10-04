@@ -22,6 +22,7 @@ type
     procedure TestTogglingKeepsTheChoiceWithoutOnChange;
     procedure TestAFormFileWithFixedPitchOnlyLoadsTheFilteredList;
     procedure TestFixedPitchOnlyIsWrittenOnlyWhenOn;
+    procedure TestNoVerticalAliasIsListed;
   end;
 implementation
 
@@ -106,16 +107,22 @@ end;
 { A font this machine has, late in its list, whose name a form file can carry as a plain quoted
   string -- so the row it sits at here is not the row a stale index points at. }
 function FLBLateFont: string;
-var i: Integer; nm: string; ok: Boolean; ch: Char;
+var i: Integer; nm: string; ok: Boolean; ch: Char; fams: TStringList;
 begin
   Result := '';
-  for i := Screen.Fonts.Count - 1 downto 3 do
-  begin
-    nm := Screen.Fonts[i];
-    ok := nm <> '';
-    for ch in nm do
-      if (ch < ' ') or (ch > '~') or (ch = '''') then ok := False;
-    if ok then Exit(nm);
+  fams := TStringList.Create;
+  try
+    FontsWithoutVerticalVariants(fams);
+    for i := fams.Count - 1 downto 3 do
+    begin
+      nm := fams[i];
+      ok := nm <> '';
+      for ch in nm do
+        if (ch < ' ') or (ch > '~') or (ch = '''') then ok := False;
+      if ok then Exit(nm);
+    end;
+  finally
+    fams.Free;
   end;
 end;
 
@@ -169,6 +176,7 @@ begin
       c.Items.IndexOf('NoSuchFontA'));
     AssertEquals('the chosen family is still chosen, at the row it has here', f, c.SelectedFont);
     AssertEquals('and that row is its row on this machine', FLBPlainIndexOf(f), c.ItemIndex);
+    AssertTrue('which is a real row', c.ItemIndex >= 0);
   finally
     dst.Free;
   end;
@@ -340,6 +348,22 @@ begin
   finally
     src.Free;
   end;
+end;
+
+procedure TFontListBoxTest.TestNoVerticalAliasIsListed;
+var c: TTyFontListBox; i, n, shown: Integer;
+begin
+  shown := FLBPlainCount;
+  n := Screen.Fonts.Count - shown;   // the '@' names
+  if n = 0 then Exit;   // this machine has no '@' fonts: nothing for the filter to leave out
+  c := TTyFontListBox.Create(nil);
+  try
+    AssertEquals('every installed font but the ' + IntToStr(n) + ' aliases', shown, c.Items.Count);
+    for i := 0 to c.Items.Count - 1 do
+      AssertFalse('no alias: ' + c.Items[i], Copy(c.Items[i], 1, 1) = '@');
+    c.RefreshFonts;
+    AssertEquals('and RefreshFonts lists the same', shown, c.Items.Count);
+  finally c.Free; end;
 end;
 
 initialization
