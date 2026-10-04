@@ -20,6 +20,11 @@ uses
 procedure TyCssCompletionItems(const ATextBeforeCaret: string; ASelectorMode: Boolean;
   ADest: TStrings);
 
+{ Append every selector head the editor offers to ADest: the catalogue's typeKeys, then (#14)
+  the keys registered into a type key chain that the catalogue does not have. The completion
+  list and the design-time reference panel both read this, so they cannot disagree. }
+procedure TyCssSelectorTypeKeys(ADest: TStrings);
+
 { The property names in ASource the resolver does NOT recognise, one indented per line (''
   when all are known). ASource may be a bare declaration block (control level) or full tycss
   with selectors (controller level). }
@@ -71,7 +76,6 @@ var
   i, depth, boundary: Integer;
   curWord, prop: string;
   colonAfter: Boolean;
-  reg: TStringList;
 
   procedure AddAll(const A: array of string);
   var s: string;
@@ -118,18 +122,33 @@ begin
 
   if ASelectorMode then
   begin
-    AddAll(TyCatalogTypeKeys);
-    { #14: a third-party key registered into a type key chain is a real selector head too. }
-    reg := TStringList.Create;
-    try
-      TyGetRegisteredTypeKeys(reg);
-      for i := 0 to reg.Count - 1 do
-        if ADest.IndexOf(reg[i]) < 0 then
-          ADest.Add(reg[i]);
-    finally
-      reg.Free;
-    end;
+    TyCssSelectorTypeKeys(ADest);
     AddAll(TyKnownPseudoStates);
+  end;
+end;
+
+procedure TyCssSelectorTypeKeys(ADest: TStrings);
+var
+  reg: TStringList;
+  i, j: Integer;
+  inCatalog: Boolean;
+begin
+  if ADest = nil then Exit;
+  for i := 0 to High(TyCatalogTypeKeys) do
+    ADest.Add(TyCatalogTypeKeys[i]);
+  reg := TStringList.Create;
+  try
+    TyGetRegisteredTypeKeys(reg);
+    for i := 0 to reg.Count - 1 do
+    begin
+      inCatalog := False;
+      for j := 0 to High(TyCatalogTypeKeys) do
+        if SameText(reg[i], TyCatalogTypeKeys[j]) then begin inCatalog := True; Break; end;
+      if not inCatalog then
+        ADest.Add(reg[i]);
+    end;
+  finally
+    reg.Free;
   end;
 end;
 

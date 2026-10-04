@@ -127,6 +127,13 @@ type
     procedure ApplyEntry(var AResult: TTyStyleSet; AEntry: TTyStyleRuleEntry);
     procedure ResolveLayer(ARules: TFPList; const ATypeKey, AStyleClass: string;
       AStates: TTyStateSet; var AResult: TTyStyleSet);
+    { #14 stage interleave (see LayerChainChildren). }
+    function EntryProps(AEntry: TTyStyleRuleEntry): TTyPropSet;
+    procedure ForTier(ARules: TFPList; const AKey: string; AVariants: TStrings;
+      AStates: TTyStateSet; ATier: Integer; AApply: Boolean; var AResult: TTyStyleSet;
+      var AProps: TTyPropSet; var ALastTier: array of Integer);
+    procedure LayerChainChildren(const AChain: TStringArray; const AStyleClass: string;
+      AStates: TTyStateSet; var AResult: TTyStyleSet);
     function UserHasTypeKey(const ATypeKey: string): Boolean;
   public
     constructor Create;
@@ -244,9 +251,12 @@ procedure TyStyleValueHints(const AProp: string; ADest: TStrings);
 { ===== #14: the type key chain =================================================
 
   A control subclass that reports its own typeKey (say 'TagButton') registers the key it
-  derives from ('TyButton'). ResolveStyle then resolves the parent COMPLETELY -- base layer,
-  user layer, variants, states, exactly as it resolves 'TyButton' itself -- and lays the
-  child's own rules over the result, property by property. A theme that never mentions
+  derives from ('TyButton'). ResolveStyle then resolves the parent exactly as it resolves
+  'TyButton' itself and lays the child's own rules over the result, property by property,
+  stage by stage: the child's plain rules beat the parent's plain rules, its variant rules
+  beat the parent's variant rules, its :state rules the parent's same-state rules -- but a
+  parent rule from a LATER stage still beats a child rule from an earlier one (a plain
+  child background does not swallow the parent's :hover). A theme that never mentions
   'TagButton' therefore draws it exactly like a button; one that does only writes the
   differences. Chains may be several links long (FancyTag -> TagButton -> TyButton).
 
@@ -1841,6 +1851,209 @@ begin
   end;
 end;
 
+{ ===== #14: stage interleave for the keys below a chain's root ====================
+
+  Stages ("tiers"), in the order ResolveLayer applies them inside one layer:
+    0 = the plain Key rule, 1 = Key.variant (StyleClass order), 2.. = one per state in
+    cTierStates (Key:state, then Key.variant:state).
+  A child's rules at tier T beat whatever its ancestors last wrote at a tier <= T, and lose
+  to what they last wrote at a tier > T: a plain TagButton background does not swallow the
+  parent's :hover / :disabled, TagButton:hover beats TyButton:hover, TagButton.primary beats
+  TyButton.primary, TyButton:hover still beats TagButton.primary. Within a tier the
+  ancestor goes first and the child second, so ties go to the child; several links stack the
+  same way, root to leaf.
+
+  "Last wrote" is literal: the root's own resolution is the unchanged layer-major one (built-in
+  layer, all tiers, then the user layer, all tiers), so a user-layer plain rule that already
+  overrode a built-in :hover in the PARENT'S OWN result counts as tier 0 -- the child sees the
+  parent exactly as the parent looks. With no child rules nothing is written below the root
+  and the result is the parent's, byte for byte. }
+const
+  cTierStates: array[0..4] of TTyState =   // = ResolveLayer's cStateOrder; keep in step
+    (tysSelected, tysHover, tysFocused, tysActive, tysDisabled);
+  cTierCount = 7;   // tier 0, tier 1, then the five cTierStates
+
+function TTyStyleModel.EntryProps(AEntry: TTyStyleRuleEntry): TTyPropSet;
+{ The properties AEntry writes. Its Present flags, plus the three sub-field declarations that
+  write a field without raising a flag of their own. }
+var
+  s: TTyStyleSet;
+  di: Integer;
+  n: string;
+begin
+  s := EmptyStyleSet;
+  Result := [];
+  for di := 0 to High(AEntry.Decls) do
+  begin
+    TyApplyDeclaration(s, AEntry.Decls[di].Prop, AEntry.Decls[di].RawValue, FMergedVars);
+    n := LowerCase(Trim(AEntry.Decls[di].Prop));
+    if (n = 'background-size') or (n = 'background-blur') then Include(Result, tpBackground)
+    else if n = 'outline-offset' then Include(Result, tpOutline);
+  end;
+  Result := Result + s.Present;
+end;
+
+procedure TTyStyleModel.ForTier(ARules: TFPList; const AKey: string; AVariants: TStrings;
+  AStates: TTyStateSet; ATier: Integer; AApply: Boolean; var AResult: TTyStyleSet;
+  var AProps: TTyPropSet; var ALastTier: array of Integer);
+{ Visit the rules of ONE tier of AKey in ResolveLayer's order. AApply: apply each into AResult
+  and add what it writes to AProps. Otherwise: only record ATier as the last writer tier of
+  every property each rule writes (ALastTier is indexed by Ord(TTyProp)). }
+
+  procedure Cell(const AVariant: string; AHasState: Boolean; AState: TTyState);
+  var
+    i: Integer;
+    e: TTyStyleRuleEntry;
+    ps: TTyPropSet;
+    p: TTyProp;
+  begin
+    for i := 0 to ARules.Count - 1 do
+    begin
+      e := TTyStyleRuleEntry(ARules[i]);
+      if SameText(e.TypeName, AKey) and SameText(e.Variant, AVariant)
+         and (e.HasState = AHasState) and ((not AHasState) or (e.State = AState)) then
+      begin
+        ps := EntryProps(e);
+        if AApply then
+        begin
+          ApplyEntry(AResult, e);
+          AProps := AProps + ps;
+        end
+        else
+          for p := Low(TTyProp) to High(TTyProp) do
+            if p in ps then ALastTier[Ord(p)] := ATier;
+      end;
+    end;
+  end;
+
+var
+  vi: Integer;
+  st: TTyState;
+begin
+  if ATier = 0 then
+    Cell('', False, tysNormal)
+  else if ATier = 1 then
+  begin
+    for vi := 0 to AVariants.Count - 1 do
+      if Trim(AVariants[vi]) <> '' then Cell(Trim(AVariants[vi]), False, tysNormal);
+  end
+  else
+  begin
+    st := cTierStates[ATier - 2];
+    if not (st in AStates) then Exit;
+    Cell('', True, st);
+    for vi := 0 to AVariants.Count - 1 do
+      if Trim(AVariants[vi]) <> '' then Cell(Trim(AVariants[vi]), True, st);
+  end;
+end;
+
+{ Put back the properties in AProps from ASrc (what they were before a child tier wrote them).
+  Field groups mirror TyMergeStyleSet, plus RenderStyle; Background is copied whole except the
+  glass pair, which travels with tpGlass. Present is untouched: every restored property was
+  already present in ASrc. }
+procedure RestoreProps(var ADst: TTyStyleSet; const ASrc: TTyStyleSet; AProps: TTyPropSet);
+var gb: Integer; gt: TTyColor;
+begin
+  if tpBackground in AProps then
+  begin
+    gb := ADst.Background.GlassBlur; gt := ADst.Background.GlassTint;
+    ADst.Background := ASrc.Background;
+    ADst.Background.GlassBlur := gb; ADst.Background.GlassTint := gt;
+  end;
+  if tpGlass in AProps then
+  begin
+    ADst.Background.GlassBlur := ASrc.Background.GlassBlur;
+    ADst.Background.GlassTint := ASrc.Background.GlassTint;
+  end;
+  if tpTextColor    in AProps then ADst.TextColor    := ASrc.TextColor;
+  if tpBorderColor  in AProps then ADst.BorderColor  := ASrc.BorderColor;
+  if tpBorderWidth  in AProps then ADst.BorderWidth  := ASrc.BorderWidth;
+  if tpBorderStyle  in AProps then ADst.BorderStyle  := ASrc.BorderStyle;
+  if tpRenderStyle  in AProps then ADst.RenderStyle  := ASrc.RenderStyle;
+  if tpBorderRadius in AProps then
+  begin
+    ADst.BorderRadius := ASrc.BorderRadius;
+    ADst.Radius := ASrc.Radius;
+  end;
+  if tpPadding      in AProps then ADst.Padding      := ASrc.Padding;
+  if tpFontName     in AProps then ADst.FontName     := ASrc.FontName;
+  if tpFontSize     in AProps then ADst.FontSize     := ASrc.FontSize;
+  if tpFontWeight   in AProps then ADst.FontWeight   := ASrc.FontWeight;
+  if tpOpacity      in AProps then ADst.Opacity      := ASrc.Opacity;
+  if tpShadow in AProps then
+  begin
+    ADst.ShadowColor := ASrc.ShadowColor;
+    ADst.ShadowBlur := ASrc.ShadowBlur;
+    ADst.ShadowOffset := ASrc.ShadowOffset;
+  end;
+  if tpOutline in AProps then
+  begin
+    ADst.OutlineColor := ASrc.OutlineColor;
+    ADst.OutlineWidth := ASrc.OutlineWidth;
+    ADst.OutlineOffset := ASrc.OutlineOffset;
+  end;
+  if tpBgUnderTitle in AProps then ADst.BackgroundUnderTitlebar := ASrc.BackgroundUnderTitlebar;
+  if tpWindowShadow in AProps then ADst.WindowShadow := ASrc.WindowShadow;
+end;
+
+procedure TTyStyleModel.LayerChainChildren(const AChain: TStringArray; const AStyleClass: string;
+  AStates: TTyStateSet; var AResult: TTyStyleSet);
+{ AResult holds the chain root, resolved the ordinary way. Lay every key below it on top, one
+  tier at a time (see the block comment above). }
+var
+  variants: TStringList;
+  lastTier: array[0..Ord(High(TTyProp))] of Integer;   // tier of each property's last writer
+  p: TTyProp;
+  ci, t: Integer;
+  root: string;
+  useBase: Boolean;
+  wrote, keep, none: TTyPropSet;
+  before: TTyStyleSet;
+begin
+  variants := TStringList.Create;
+  try
+    variants.Delimiter := ' ';
+    variants.StrictDelimiter := False;
+    variants.DelimitedText := Trim(AStyleClass);
+    for ci := 0 to High(lastTier) do lastTier[ci] := -1;
+    none := [];
+    { Replay the root's resolution (same layers, same order) recording who wrote last. }
+    root := AChain[High(AChain)];
+    if FPropertyCascade or not UserHasTypeKey(root) then
+      for t := 0 to cTierCount - 1 do
+        ForTier(FBaseRules, root, variants, AStates, t, False, AResult, none, lastTier);
+    for t := 0 to cTierCount - 1 do
+      ForTier(FRules, root, variants, AStates, t, False, AResult, none, lastTier);
+    { Each key below the root, root-most first; inside a key, tier by tier. }
+    for ci := High(AChain) - 1 downto 0 do
+    begin
+      useBase := FPropertyCascade or not UserHasTypeKey(AChain[ci]);
+      for t := 0 to cTierCount - 1 do
+      begin
+        before := AResult;
+        wrote := [];
+        if useBase then
+          ForTier(FBaseRules, AChain[ci], variants, AStates, t, True, AResult, wrote, lastTier);
+        ForTier(FRules, AChain[ci], variants, AStates, t, True, AResult, wrote, lastTier);
+        if wrote = [] then Continue;
+        keep := [];
+        for p := Low(TTyProp) to High(TTyProp) do
+          if p in wrote then
+          begin
+            if lastTier[Ord(p)] > t then
+              Include(keep, p)                 // an ancestor wrote it at a later stage: it stays
+            else
+              lastTier[Ord(p)] := t;           // the child's value stands, at this stage
+          end;
+        if keep <> [] then
+          RestoreProps(AResult, before, keep);
+      end;
+    end;
+  finally
+    variants.Free;
+  end;
+end;
+
 procedure TTyStyleModel.InvalidateResolveCache;
 { a6256. Drop every memoised style. Called from the ONE place that can serve a stale
   entry — a FVersion mismatch seen at lookup time — so no mutator has to remember to
@@ -1897,9 +2110,10 @@ function TTyStyleModel.ResolveStyle(const ATypeKey, AStyleClass: string;
 var
   savedBaseDir: string;
   key: string;
-  idx, ci: Integer;
+  idx: Integer;
   box: TTyResolvedStyle;
   chain: TStringArray;
+  root: string;
 begin
   { a6256 / DPI-storm fix. Serve from the memo when the theme has not changed since it
     was filled. See the FResolveCache declaration for the measured cost this removes.
@@ -1933,21 +2147,16 @@ begin
       (omitted user props inherit the base; omission = inheritance, D4). Both layers' raw declarations
       evaluate against the MERGED vars, so overriding a seed reaches base rules (D2).
 
-      #14. Every key of the type key chain gets exactly that treatment, ROOT FIRST: the
-      parent resolves completely (base + user, variants, states) and each child's own rules
-      then overwrite per property. Note what "completely" implies: a child's plain rule
-      lands after the parent's :hover/:disabled rules, so a theme that gives the child a
-      background must give the child its states too (docs/tycss-reference.md §4.5).
-      Each key's base layer yields only to a plain user rule for THAT key: a plain user
-      'TagButton' rule silences TagButton's base rules, never TyButton's. An unregistered key
-      is a one-element chain -- the two statements this loop replaced, unchanged. }
+      #14. The ROOT of the type key chain -- the key itself when nothing is registered --
+      gets exactly that treatment, so an unregistered key is unchanged byte for byte. The
+      keys below the root are then interleaved by stage (LayerChainChildren). }
     chain := TyTypeKeyChain(ATypeKey);
-    for ci := High(chain) downto 0 do
-    begin
-      if FPropertyCascade or not UserHasTypeKey(chain[ci]) then
-        ResolveLayer(FBaseRules, chain[ci], AStyleClass, AStates, Result);
-      ResolveLayer(FRules, chain[ci], AStyleClass, AStates, Result);
-    end;
+    root := chain[High(chain)];
+    if FPropertyCascade or not UserHasTypeKey(root) then
+      ResolveLayer(FBaseRules, root, AStyleClass, AStates, Result);
+    ResolveLayer(FRules, root, AStyleClass, AStates, Result);
+    if Length(chain) > 1 then
+      LayerChainChildren(chain, AStyleClass, AStates, Result);
   finally
     GThemeBaseDir := savedBaseDir;
   end;

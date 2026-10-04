@@ -37,7 +37,14 @@ type
     procedure TestChainWithoutChildRulesEqualsParent;
     procedure TestChildRuleOverridesOnlyItsProperties;
     procedure TestChildVariantAndStateRules;
-    procedure TestChildBaseRuleBeatsParentState;
+    procedure TestChildBaseRuleYieldsToParentState;
+    procedure TestChildBaseRuleYieldsToBuiltinHover;
+    procedure TestChildStateBeatsParentSameState;
+    procedure TestParentDisabledBeatsChildHover;
+    procedure TestChildVariantBeatsParentVariantNotParentState;
+    procedure TestParentVariantBeatsChildBase;
+    procedure TestThreeLevelInterleave;
+    procedure TestSubFieldDeclarationYieldsWithItsField;
     procedure TestPlainChildRuleYieldsOnlyChildBase;
     procedure TestThreeLevelChain;
     procedure TestCycleRaisesAndLeavesRegistryIntact;
@@ -258,23 +265,148 @@ begin
   end;
 end;
 
-procedure TTypeKeyChainTest.TestChildBaseRuleBeatsParentState;
+{ D2 (stage interleave, the coordinator's ruling): a child rule beats what its parent wrote
+  at the same or an earlier stage, and loses to what the parent wrote at a later one. }
+
+procedure TTypeKeyChainTest.TestChildBaseRuleYieldsToParentState;
 var
   m: TTyStyleModel;
   s: TTyStyleSet;
 begin
-  { D2: the parent resolves completely (states included) BEFORE the child's rules, so the
-    child's plain background wins over the parent's :hover background. Pinned on purpose:
-    a theme that gives the child a background must give it its states too. }
   TyRegisterTypeKeyParent('TagButton', 'TyButton');
   m := TTyStyleModel.Create;
   try
     m.LoadFromCss('TyButton:hover { background: #0000FF; } TagButton { background: #00FF00; }');
-    s := m.ResolveStyle('TyButton', '', [tysHover]);
-    AssertEquals('the parent hovers blue', 255, TyBlueOf(s.Background.Color));
+    s := m.ResolveStyle('TagButton', '', [tysNormal]);
+    AssertEquals('at rest the child is green', 255, TyGreenOf(s.Background.Color));
     s := m.ResolveStyle('TagButton', '', [tysHover]);
-    AssertEquals('the hovered child stays green (G)', 255, TyGreenOf(s.Background.Color));
-    AssertEquals('the hovered child stays green (B)', 0, TyBlueOf(s.Background.Color));
+    AssertEquals('hovered: the parent''s :hover wins (B)', 255, TyBlueOf(s.Background.Color));
+    AssertEquals('hovered: the parent''s :hover wins (G)', 0, TyGreenOf(s.Background.Color));
+  finally
+    m.Free;
+  end;
+end;
+
+procedure TTypeKeyChainTest.TestChildBaseRuleYieldsToBuiltinHover;
+var
+  m: TTyStyleModel;
+  s, b: TTyStyleSet;
+begin
+  { The usual case: the theme never touches TyButton, so its :hover comes from the built-in
+    layer; the theme gives TagButton a background. Hovering must still show the hover fill. }
+  TyRegisterTypeKeyParent('TagButton', 'TyButton');
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('TagButton { background: #00FF00; }');
+    b := m.ResolveStyle('TyButton', '', [tysHover]);
+    s := m.ResolveStyle('TagButton', '', [tysHover]);
+    AssertEquals('hovered child = hovered button', Dump(b), Dump(s));
+    s := m.ResolveStyle('TagButton', '', [tysNormal]);
+    AssertEquals('at rest the child is green', 255, TyGreenOf(s.Background.Color));
+    AssertEquals('at rest the child is green (R)', 0, TyRedOf(s.Background.Color));
+  finally
+    m.Free;
+  end;
+end;
+
+procedure TTypeKeyChainTest.TestChildStateBeatsParentSameState;
+var
+  m: TTyStyleModel;
+  s: TTyStyleSet;
+begin
+  TyRegisterTypeKeyParent('TagButton', 'TyButton');
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('TyButton:hover { background: #0000FF; } TagButton:hover { background: #00FF00; }');
+    s := m.ResolveStyle('TagButton', '', [tysHover]);
+    AssertEquals('same stage: the child wins (G)', 255, TyGreenOf(s.Background.Color));
+    AssertEquals('same stage: the child wins (B)', 0, TyBlueOf(s.Background.Color));
+  finally
+    m.Free;
+  end;
+end;
+
+procedure TTypeKeyChainTest.TestParentDisabledBeatsChildHover;
+var
+  m: TTyStyleModel;
+  s, b: TTyStyleSet;
+begin
+  { :disabled is a later stage than :hover, so the parent's disabled opacity stands. }
+  TyRegisterTypeKeyParent('TagButton', 'TyButton');
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('TagButton:hover { opacity: 0.25; }');
+    b := m.ResolveStyle('TyButton', '', [tysHover, tysDisabled]);
+    AssertTrue('fixture: the parent dims when disabled', tpOpacity in b.Present);
+    s := m.ResolveStyle('TagButton', '', [tysHover, tysDisabled]);
+    AssertEquals('disabled+hover: the parent''s disabled opacity', Dump(b), Dump(s));
+    s := m.ResolveStyle('TagButton', '', [tysHover]);
+    AssertEquals('hover alone: the child''s opacity', 0.25, s.Opacity, 0.001);
+  finally
+    m.Free;
+  end;
+end;
+
+procedure TTypeKeyChainTest.TestChildVariantBeatsParentVariantNotParentState;
+var
+  m: TTyStyleModel;
+  s: TTyStyleSet;
+begin
+  TyRegisterTypeKeyParent('TagButton', 'TyButton');
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('TagButton.primary { background: #00FF00; border-color: #00FF00; }');
+    s := m.ResolveStyle('TagButton', 'primary', [tysNormal]);
+    AssertEquals('child .primary beats parent .primary: background', 255, TyGreenOf(s.Background.Color));
+    AssertEquals('child .primary beats parent .primary: background (R)', 0, TyRedOf(s.Background.Color));
+    AssertEquals('child .primary beats parent .primary: border', 255, TyGreenOf(s.BorderColor));
+    { TyButton:hover and TyButton.primary:hover (built-in) write background and border-color
+      at a later stage than any .primary rule. }
+    AssertEquals('hovered: the parent''s states win over the child variant',
+      Dump(m.ResolveStyle('TyButton', 'primary', [tysHover])),
+      Dump(m.ResolveStyle('TagButton', 'primary', [tysHover])));
+  finally
+    m.Free;
+  end;
+end;
+
+procedure TTypeKeyChainTest.TestParentVariantBeatsChildBase;
+var
+  m: TTyStyleModel;
+  s, b: TTyStyleSet;
+begin
+  TyRegisterTypeKeyParent('TagButton', 'TyButton');
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('TagButton { color: #FF0000; }');
+    s := m.ResolveStyle('TagButton', '', [tysNormal]);
+    AssertEquals('no class: the child colour', 255, TyRedOf(s.TextColor));
+    b := m.ResolveStyle('TyButton', 'primary', [tysNormal]);
+    s := m.ResolveStyle('TagButton', 'primary', [tysNormal]);
+    AssertEquals('.primary (built-in) beats the plain child colour', Dump(b), Dump(s));
+  finally
+    m.Free;
+  end;
+end;
+
+procedure TTypeKeyChainTest.TestThreeLevelInterleave;
+var
+  m: TTyStyleModel;
+  s: TTyStyleSet;
+begin
+  TyRegisterTypeKeyParent('TagButton', 'TyButton');
+  TyRegisterTypeKeyParent('FancyTag', 'TagButton');
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('TagButton:hover { color: #222222; } FancyTag { color: #333333; }');
+    s := m.ResolveStyle('FancyTag', '', [tysNormal]);
+    AssertEquals('at rest: the grandchild colour', $33, TyRedOf(s.TextColor));
+    s := m.ResolveStyle('FancyTag', '', [tysHover]);
+    AssertEquals('hovered: the middle key''s :hover beats the grandchild''s plain rule',
+      $22, TyRedOf(s.TextColor));
+    m.LoadFromCss('TagButton:hover { color: #222222; } FancyTag:hover { color: #444444; }');
+    s := m.ResolveStyle('FancyTag', '', [tysHover]);
+    AssertEquals('same stage: the leaf wins', $44, TyRedOf(s.TextColor));
   finally
     m.Free;
   end;
@@ -334,6 +466,26 @@ begin
     AssertEquals('child border carries down', $22, TyRedOf(f.BorderColor));
     AssertEquals('parent background carries down', b.Background.Color, f.Background.Color);
     AssertEquals('the child keeps its own colour', $11, TyRedOf(t.TextColor));
+  finally
+    m.Free;
+  end;
+end;
+
+procedure TTypeKeyChainTest.TestSubFieldDeclarationYieldsWithItsField;
+var
+  m: TTyStyleModel;
+begin
+  { background-size writes a Background field without raising tpBackground. It still belongs
+    to the background, so it yields with it when the parent's :hover replaces the fill. }
+  TyRegisterTypeKeyParent('TagButton', 'TyButton');
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('TagButton { background-size: stretch; }');
+    AssertEquals('hovered child = hovered button',
+      Dump(m.ResolveStyle('TyButton', '', [tysHover])),
+      Dump(m.ResolveStyle('TagButton', '', [tysHover])));
+    AssertTrue('at rest the child''s background-size stands',
+      m.ResolveStyle('TagButton', '', [tysNormal]).Background.ImageMode = timStretch);
   finally
     m.Free;
   end;
@@ -519,6 +671,14 @@ begin
     l.Clear;
     TyCssCompletionItems('', False, l);
     AssertTrue('a control-level block has no selectors to complete', l.IndexOf('TagButton') < 0);
+    { The list the design-time reference panel shows: the same keys, a catalogue key that is
+      also registered as a child listed once. }
+    TyRegisterTypeKeyParent('TyTag', 'TyButton');
+    l.Clear;
+    TyCssSelectorTypeKeys(l);
+    AssertTrue('panel list has the registered key', l.IndexOf('TagButton') >= 0);
+    AssertEquals('panel list: catalogue + new registered keys only',
+      Length(TyCatalogTypeKeys) + 1, l.Count);
   finally
     l.Free;
   end;
