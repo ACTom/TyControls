@@ -12,8 +12,10 @@ type
     TTyFontComboBox. Populated from Screen.Fonts; SelectedFont is the chosen family. }
   TTyCustomFontListBox = class(TTyCustomListBox)
   private
+    FFixedPitchOnly: Boolean;
     function GetSelectedFont: string;
     procedure SetSelectedFont(const AValue: string);
+    procedure SetFixedPitchOnly(AValue: Boolean);
   protected
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); override;
@@ -22,6 +24,9 @@ type
     constructor Create(AOwner: TComponent); override;
     procedure RefreshFonts;
     property SelectedFont: string read GetSelectedFont write SetSelectedFont;
+    { List only the families the system reports as fixed-pitch -- see
+      TTyCustomFontComboBox.FixedPitchOnly. }
+    property FixedPitchOnly: Boolean read FFixedPitchOnly write SetFixedPitchOnly default False;
   end;
 
   { TTyFontListBox publishes TTyCustomFontListBox's properties; everything lives in TTyCustomFontListBox. }
@@ -90,9 +95,12 @@ type
     property OnSelectionChange;
     property Align;
     property Anchors;
+    property FixedPitchOnly;
   end;
 
 implementation
+
+uses tyControls.FontFamilies;
 
 constructor TTyCustomFontListBox.Create(AOwner: TComponent);
 begin
@@ -111,7 +119,7 @@ begin
     chosen family found by NAME: its row number is different on every machine, and a family this
     machine lacks leaves nothing selected rather than whatever font now sits at that row. }
   keep := SelectedFont;
-  Items.Assign(Screen.Fonts);
+  TyGetFontFamilies(Items, FFixedPitchOnly);
   ItemIndex := Items.IndexOf(keep);
 end;
 
@@ -120,11 +128,23 @@ begin
   Items.BeginUpdate;
   try
     Items.Clear;
-    Items.Assign(Screen.Fonts);
+    TyGetFontFamilies(Items, FFixedPitchOnly);
   finally
     Items.EndUpdate;
   end;
   if Items.Count > 0 then ItemIndex := 0;
+end;
+
+procedure TTyCustomFontListBox.SetFixedPitchOnly(AValue: Boolean);
+var keep: string;
+begin
+  if FFixedPitchOnly = AValue then Exit;
+  FFixedPitchOnly := AValue;
+  { While a form is being read, Loaded fills the list once, with the final value. }
+  if csLoading in ComponentState then Exit;
+  keep := SelectedFont;
+  RefreshFonts;
+  SetSelectedFont(keep);   // still listed -> stays chosen; gone -> RefreshFonts' first row
 end;
 
 procedure TTyCustomFontListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
