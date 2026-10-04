@@ -16,7 +16,7 @@
 
 **工作树：** `D:/Projects/ty-typekey`，分支 `feat/typekey-chain`，起点 `main` @ `140496e6`。
 
-**不在本计划**：CHANGELOG（发版时写）；`designtime/` 里 StyleOverride 编辑器的参考面板（直接读 `TyCatalogTypeKeys`，见 §5）；主题编辑器（theme builder，未立项、仓库里没有）；合 `main`。
+**不在本计划**：CHANGELOG（发版时写）；~~`designtime/` 里 StyleOverride 编辑器的参考面板（直接读 `TyCatalogTypeKeys`，见 §5）~~（主控裁决后补做，见 §9）；主题编辑器（theme builder，未立项、仓库里没有）；合 `main`。
 
 ---
 
@@ -71,6 +71,8 @@ finalization
 **子部件键**（`GetStyleTypeKey + 'Fill'`）：要继承也得登记（`TyRegisterTypeKeyParent('TagMeterFill', 'TyMeterFill')`），文档写明。
 
 ### D2 解析语义（照 brief）
+
+> **已被主控裁决推翻（2026-10-05），现行语义见 §9 D2′「按阶段交错」。** 下文保留原样，作为当时的设计记录。
 
 链 `[C, P, G]`（叶在前）。缓存未命中时：
 
@@ -235,10 +237,10 @@ procedure TyUnregisterTypeKeyParent(const ATypeKey: string);   // Delete + Inc s
 
 ## 5. 主控 / 用户要做的事
 
-- 【主控执行】裁决 D2 的顺序（先父后子 vs 按阶段交错）。
+- ~~【主控执行】裁决 D2 的顺序（先父后子 vs 按阶段交错）。~~ 已裁决：按阶段交错（§9）。
 - 【主控执行】编 `tycontrols.lpk` / `tycontrols_dt.lpk`。
-- 【主控执行】合 `main` 前按 pre-merge checklist 查 i18n（`examples/*/languages` 里各有一份库字符串目录副本，本任务只改了 `languages/` 下的两份）。
-- 设计期 StyleOverride 编辑器的参考面板（`designtime/tyControls.Design.Css.Editor.pas:166`）仍只列目录键；补全已经列登记键。要不要让面板也列，主控定。
+- ~~【主控执行】合 `main` 前按 pre-merge checklist 查 i18n（`examples/*/languages` 里各有一份库字符串目录副本，本任务只改了 `languages/` 下的两份）。~~ 已查：不需要同步，理由见 §9。
+- ~~设计期 StyleOverride 编辑器的参考面板（`designtime/tyControls.Design.Css.Editor.pas:166`）仍只列目录键；补全已经列登记键。要不要让面板也列，主控定。~~ 主控定为要列，已做（§9）。
 
 ## 6. 变异清单
 
@@ -289,3 +291,72 @@ procedure TyUnregisterTypeKeyParent(const ATypeKey: string);   // Delete + Inc s
 **与计划的偏差**：完成补全的测试随 Task 1 一起提交（Task 2 才实现），中间那个提交上它是红的。原计划 M8b 构造不出能区分的变异，换成 M13。
 
 **未做 / 交主控**：见 §5。
+
+## 9. 主控裁决后的修订（2026-10-05）
+
+主控裁决三条：① 解析顺序改为按阶段交错；② 设计期参考面板也列登记键；③ 查 `examples/*/languages` 是否要同步。
+
+### D2′ 按阶段交错（取代 D2）
+
+阶段（tier）就是 §4.4 在一层里的顺序：0 = 普通规则，1 = 变体（按 StyleClass 顺序），2–6 = selected、hover、focus、active、disabled 各一档（每档先 `Key:state` 再 `Key.variant:state`）。
+
+- 链根照旧：`if PropertyCascade or not UserHasTypeKey(root) then ResolveLayer(底层, root); ResolveLayer(用户层, root)`。**不登记链的键只走这两行，逐字节不变。**
+- 链根下面的键（`LayerChainChildren`）：先按链根自己的解析顺序（底层全部阶段、再用户层全部阶段）重放一遍，只记下**每个属性最后是哪一档写的**（`lastTier`）；然后从根往叶，每个键逐档应用（该档内先底层、后用户层，底层照 D3 按该键自己让位）。某档写过的属性里，凡 `lastTier` 比这一档**更晚**的，从该档应用前的快照写回（祖先更晚阶段的值胜）；其余属性记为这一档（子键胜同档和更早档）。
+- 结果：子键普通规则盖不过父键 `:hover` / `:disabled`；子键 `:hover` 盖过父键 `:hover`；子键 `.primary` 盖过父键 `.primary`，但盖不过父键的 `:hover`；同档先父后子，多级同理。
+- 「父键最后写的档」取父键**自己的**结果：用户层一条普通规则在父键自己的结果里已经盖掉了内置 `:hover`（`PropertyCascade` 开时），对子键也只算普通档。这是为满足「主题没写子键时与父键完全相同」必须的——父键自己的顺序是按层的，不是按档的。
+- 只写子字段、不立 Present 标志的三个声明（`background-size`、`background-blur`、`outline-offset`）算作写了所属属性（`tpBackground` / `tpOutline`），随它一起让位。
+- 每条规则写哪些属性（`EntryProps`）只看属性名和值的形状、不看变量取值，缓存在规则条目上（`f1663d64`），否则链键冷解析要贵一倍。
+
+让位规则（D3）不变。
+
+### 测试（`TTypeKeyChainTest`，21 → 28）
+
+`TestChildBaseRuleBeatsParentState` 改写为 `TestChildBaseRuleYieldsToParentState`（新语义）；新增 `TestChildBaseRuleYieldsToBuiltinHover`（主题只写子键普通背景，悬停时等于按钮悬停，最常见的情形）、`TestChildStateBeatsParentSameState`、`TestParentDisabledBeatsChildHover`、`TestChildVariantBeatsParentVariantNotParentState`、`TestParentVariantBeatsChildBase`、`TestThreeLevelInterleave`、`TestSubFieldDeclarationYieldsWithItsField`；`TestCompletionOffersRegisteredKeys` 加了参考面板列表（`TyCssSelectorTypeKeys`）的断言。
+
+### 设计期参考面板
+
+`Css.Complete.pas` 新增 `TyCssSelectorTypeKeys`（目录键 + 目录里没有的登记键），补全和 `designtime/tyControls.Design.Css.Editor.pas` 的参考面板都读它，两边不会不一致。设计期单元用 fpc 对着测试构建产出的运行时单元、IDEIntf / SynEdit 的已编单元单独编过：0 错误、0 警告，输出只写 scratchpad。dt 包由主控编。
+
+### i18n：`examples/*/languages` 不同步
+
+- `scripts/check-example-po.py` 只检查已有条目（空 msgid+msgstr、占位符不一致、多余的格式标记、重复），**不**拿示例目录和库的 `.pot` 比完整性；跑了一遍：101 个文件 0 问题。
+- 示例里的库字符串副本不是库目录的完整镜像（库 267 条，示例 92–96 条）。最近给库加报错文字的提交（`97572817` 终端配色方案的报错、`639a773b`）只改了 `languages/` 两份；只有示例界面上看得见的字符串才同步进示例副本（`fe1429b8` 的「基本颜色」）。
+- 本任务的 4 条是 `TyRegisterTypeKeyParent` 用错时抛的异常文字，没有示例调用它。按惯例不同步。
+
+### 变异（重做）
+
+| 编号 | 变异 | 结果 |
+|---|---|---|
+| M1 | 不叠链根下面的键 | 杀 |
+| M2 | **退回「先父后子」**（永不写回祖先更晚档的值） | 杀：YieldsToParentState、YieldsToBuiltinHover、ParentDisabledBeatsChildHover、ChildVariantBeats…NotParentState、ParentVariantBeatsChildBase、ThreeLevelInterleave、SubFieldDeclaration… |
+| M2b | 叶先于中间键 | 杀：ThreeLevelInterleave、ThreeLevelChain |
+| M2c | 同档归祖先（`>` 改 `>=`） | 杀：ChildRuleOverrides、ChildStateBeatsParentSameState 等 7 条 |
+| M2d | 子键写的档不记下 | 杀：ThreeLevelInterleave |
+| M2e | 重放链根时跳过底层 | 杀：YieldsToBuiltinHover 等 5 条 |
+| M2f | 子字段声明不算所属属性 | 杀：SubFieldDeclaration… |
+| M3 | 链根让位看叶键 | 杀：PlainChildRuleYieldsOnlyChildBase 等 7 条 |
+| M3b | 子键底层从不让位 | 杀：PlainChildRuleYieldsOnlyChildBase |
+| M4–M12 | 同 §6 | 全杀，各红在 §6 所列测试上 |
+| M13 | 链根底层从不让位 | 杀：`TTestThemeGolden.TestShowcaseGolden` |
+
+全部写回原字节并逐字节核对；加了条目缓存之后重跑了 M2、M2d、M2f，仍被杀。
+
+### 性能（重测）
+
+同 §7 的探针，改前快照对改后交替各 3 次，15 个样本中位数，微秒 / 次。
+
+| 场景 | 改前冷 | 改后冷 | 改前热 | 改后热 |
+|---|---|---|---|---|
+| 只有内置层 | 286.8 | 300.0 | 3.96 | 4.22 |
+| 内置层 + dark 主题 | 268.3 | 276.0 | 4.00 | 4.28 |
+| 同上 + 登记 20 个无关子键 | — | 293.7 | — | 4.25 |
+| 只解析 `TyButton` | 826.6 | 833.9 | 6.54 | 6.62 |
+| 两级链的子键 | — | 907.3 | — | 6.59 |
+
+未登记的键走的代码和交错之前完全一样，差别在噪声（±10%）以内。链键冷解析比 `TyButton` 本身贵约 9%（没有条目缓存时是 2 倍：1700 µs）；热路径不变。
+
+### 签收（修订）
+
+**提交**：`3f4f6f6f` 按阶段交错；`b303dd97` 设计期参考面板；`756be3e8` 文档（`tycss-reference` §4.5 中英、`subclassing` 第 2 节中英）；`f1663d64` 条目属性缓存；本提交签收。
+
+**测试**：`lazbuild -B tests/tytests.lpi` 通过，`tests/tytests-tk14.exe --all`：**8793 条，0 错误，0 失败**（基线 8764 + 本任务 28 + lint 1）。`tests/golden` 三份一字不变（`git diff --quiet`）；M13 变异留下的 `showcase.golden.txt.actual` 已删。
