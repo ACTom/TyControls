@@ -343,6 +343,12 @@ resourcestring
     overflow button that lists the tabs that did not fit. }
   rsTyToolWindowMaximize = 'Maximize';
   rsTyToolWindowRestore  = 'Restore';
+  // --- Title bar: the window menu (right-click, the icon, Alt+Space) ---
+  // The same items, order and mnemonics as the Windows system menu.
+  rsTyWindowMenuRestore  = '&Restore';
+  rsTyWindowMenuMinimize = 'Mi&nimize';
+  rsTyWindowMenuMaximize = 'Ma&ximize';
+  rsTyWindowMenuClose    = '&Close';
   rsTyToolWindowCollapse = 'Hide';
   rsTyToolWindowMore     = 'More';
   { Raised (EInvalidOperation) when code moves a tool window straight from a side bar to a
