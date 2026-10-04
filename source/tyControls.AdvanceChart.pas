@@ -288,6 +288,11 @@ type
     FOption: TTyChartOption;
     FBuild: TTyChartBuild;
     FIndex: TTyAxisSeriesIndex;
+    { WHAT EACH AXIS KEEPS FROM ONE RENDER TO THE NEXT [Batch 101]: the
+      category interval's hysteresis store and the split areas' colours by
+      tick value. Lives as long as the axis' model: a notMerge clears it, a
+      merge forgets only the axes it brought in new. }
+    FAxisMemory: TTyAxisMemoryStore;
     FBindings: TTySeriesBindingArray;
     FStores: array of TTyDataStore;
     { Every bar's width and offset, index-parallel to FBindings. Solved in
@@ -827,6 +832,9 @@ type
     function PtrProps(const AHit: TTyAxisHit; AAt: Double): TTyAnimProps;
     { where the pointer of AHit is drawn: its proxy's place, AAt without one }
     function PtrAt(const AHit: TTyAxisHit; AAt: Double): Double;
+    { the shadow of AHit as it is drawn now: its proxy's rect while that
+      moves, the shape upstream builds otherwise [Batch 101] }
+    function PtrShadowNow(const AHit: TTyAxisHit; out AShape: TTyXYWH): Boolean;
     function PtrLive: Boolean;
     { the frame's continuous part (AContinuous) or the rest }
     function AnimPart(AContinuous: Boolean): TTyPaintList;
@@ -1304,6 +1312,20 @@ type
       with snap on, the cursor with it off, clamped by PointerAt. The tooltip
       header is not this -- it always describes the snapped row. }
     function PointerValue(const AHit: TTyAxisHit): Double;
+    { THE SHADOW'S RECT as upstream's CartesianAxisPointer builds it
+      [Batch 101]: makeRectShape([min, other0], [max - min, otherSpan]) --
+      x, y, width, height, the width (on a y axis the height) negative or
+      not as the other axis' extent runs. The band is a category's (at least
+      1px), or on a value, log or time axis the largest positive gap of the
+      bar, pictorial bar, candlestick or boxplot statistics holding a hovered
+      series (taken on that series' base axis, whichever axis the pointer is
+      on), four fifths of the axis for a lone value, else 1px; the ends
+      clamped to the axis. False when the hit has no axis or no value. }
+    function PointerShadowShape(const AHit: TTyAxisHit;
+      out AShape: TTyXYWH): Boolean;
+    { the same about the pixel AAt rather than the hit's own value }
+    function PointerShadowShapeAt(const AHit: TTyAxisHit; AAt: Double;
+      out AShape: TTyXYWH): Boolean;
     { WHAT THE TOOLTIP WOULD SAY, in four answerable pieces rather than one
       procedure that draws. PROTECTED for the same reason RenderTo is: a
       headless test has no window and no pointer, and a content rule tested
@@ -1582,6 +1604,10 @@ type
       chart at once and publish legendselectchanged, legendselected,
       legendunselected, legendselectall or legendinverseselect. }
     function DispatchAction(const APayloadJson: string): Boolean;
+    { What each axis keeps from one render to the next: the category
+      interval's store and the split areas' colours [Batch 101]. Read-only
+      to a host; a test reads it. }
+    property AxisMemory: TTyAxisMemoryStore read FAxisMemory;
     { getSelectedDataIndices: the RAW indices of series ASeriesIndex's
       selection, in the order the names entered it }
     function SelectedDataIndices(ASeriesIndex: Integer): TTyIntegerArray;
@@ -1913,6 +1939,7 @@ begin
   FLegendSelHoverLegend := -1;
   FLegendSelHoverIdx := -1;
   FIndex := TTyAxisSeriesIndex.Create;
+  FAxisMemory := TTyAxisMemoryStore.Create;
   FDirty := True;
   FTipDatum := TyChartNoDatum;
   FTipElement := -1;
@@ -1939,6 +1966,7 @@ begin
   DropBuild;
   FreeAndNil(FPaintList);
   FreeAndNil(FIndex);
+  FreeAndNil(FAxisMemory);
   FreeAndNil(FOption);
   { The static layer owns a TBitmap. TTyPaintCache.Drop only marks it stale --
     it keeps the surface deliberately, for reuse -- so dropping is not freeing. }
@@ -2127,6 +2155,9 @@ begin
   FAnimFreshAxes := nil;
   FAnimHasPayload := False;
   FOption.SetOptionText(AValue);
+  { new axis models and views: nothing kept from the last render
+    [Batch 101] }
+  FAxisMemory.Clear;
   FGraphForce := nil;
   { notMerge: new series models, so no roam survives either, nor a toggle. }
   FGraphRoam := nil;
@@ -2255,6 +2286,9 @@ begin
     for s := 0 to High(rep.Slots[si].Brand) do
       if rep.Slots[si].Brand[s] then
       begin
+        { a new model in the slot: its memory starts over [Batch 101] }
+        if t = 0 then FAxisMemory.Forget('xAxis' + IntToStr(s))
+        else FAxisMemory.Forget('yAxis' + IntToStr(s));
         SetLength(FAnimFreshAxes, Length(FAnimFreshAxes) + 1);
         if t = 0 then FAnimFreshAxes[High(FAnimFreshAxes)] := 'xAxis' + IntToStr(s)
         else FAnimFreshAxes[High(FAnimFreshAxes)] := 'yAxis' + IntToStr(s);
@@ -3087,7 +3121,7 @@ begin
   { Measuring goes through the painter behind an interface rather than being
     called directly, so the layout layer stays free of the painter and a test
     can hand it a deterministic measurer instead of this machine's fonts. }
-  TyLayoutGrids(FBuild, FOption, AMeasurer, APPI, txt);
+  TyLayoutGrids(FBuild, FOption, AMeasurer, APPI, txt, FAxisMemory);
   { AFTER phase C, for the reason on FBarCols. }
   FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex);
   { AFTER THE BARS: a marker on a bar series sits on its own bar }
@@ -3136,6 +3170,10 @@ var
   furn: TTyAxisFurniture;
   areaS: TTyStyleSet;
   bandLo, bandHi: Double;
+  { the split colours [Batch 101] }
+  ink: Integer;
+  areaFill: TTyFill;
+  inkStyle: TTyStyleSet;
 
   { THE BOX IS THE TRANSLATION. The layout layer says "this point, with the
     text hanging off it this way"; the painter aligns text INSIDE a rectangle.
@@ -3248,6 +3286,45 @@ var
     nothing -- while StrokePath wants the LOGICAL width and scales it itself.
     Handing the scaled width to both is a double scale that 96 DPI hides
     completely, which is how the first version of this passed. }
+  { one arrow of the axis line: the symbol in its box about (0, 0), turned
+    and moved as the element is [Batch 101] }
+  procedure PaintAxisArrow(P: TTyPainter; const AArrow: TTyAxisArrow;
+    const ALineStyle: TTyStyleSet);
+  var
+    el: TTyChartElement;
+    path: TTyZrPath;
+    t: string;
+    empty: Boolean;
+  begin
+    t := AArrow.SymbolType;
+    empty := Copy(t, 1, 5) = 'empty';
+    path := TyZrSymbol(t, -AArrow.W / 2, -AArrow.H / 2, AArrow.W, AArrow.H);
+    if Length(path) = 0 then Exit;
+    el := Default(TTyChartElement);
+    el.Style.Alpha := 1;
+    el.Shape := TyMkZrShape(path, TyZrLocal(1, 1, AArrow.Rotation, AArrow.X,
+      AArrow.Y), True);
+    if empty then
+    begin
+      el.Style.HasFill := True;
+      el.Style.FillColor := TTyChartColor(model.ResolveStyle(
+        'TyAdvChartEmptyCircle', '', []).Background.Color);
+      el.Style.StrokeColor := TTyChartColor(ALineStyle.BorderColor);
+      el.Style.StrokeWidthLogical := 2;
+    end
+    else if t = 'line' then
+    begin
+      el.Style.StrokeColor := TTyChartColor(ALineStyle.BorderColor);
+      el.Style.StrokeWidthLogical := 1;
+    end
+    else
+    begin
+      el.Style.HasFill := True;
+      el.Style.FillColor := TTyChartColor(ALineStyle.BorderColor);
+    end;
+    TyRenderElement(P, el);
+  end;
+
   procedure BatchLine(AX1, AY1, AX2, AY2: Double; AWidthLogical: Double);
   begin
     TySubPixelLine(AX1, AY1, AX2, AY2, APainter.ScaleF(AWidthLogical));
@@ -3410,23 +3487,39 @@ begin
     the labels' unless it says otherwise.
     [Revised in batch 40: between every band edge, whatever the labels
     were doing.] }
-  if ABelow and furn.ShowSplitArea and (tpBackground in areaS.Present)
-    and (spec <> nil) then
+  { IN THE COLOUR THE LAYOUT GAVE EACH BAND [Batch 101]: the author's list
+    in turn, or the skin's colour and none in turn -- upstream's default is
+    a tint and a transparent -- and a band keeps the colour it had at the
+    last render, so the stripes do not swap under a zoom.
+    [Revised in batch 101: every other band in the skin's colour, from the
+    first band of each render.] }
+  if ABelow and furn.ShowSplitArea and (spec <> nil) then
   begin
     for i := 0 to High(spec^.SplitAreaMarks) - 1 do
     begin
-      if i mod 2 <> 0 then Continue;
       if not spec^.SplitAreaMarks[i].Drawn then Continue;
+      ink := spec^.SplitAreaMarks[i].ColourIndex;
+      areaFill := areaS.Background;
+      if Length(spec^.SplitAreaInks) > 0 then
+      begin
+        { a string is one colour for every band, whatever its count says }
+        if ink > High(spec^.SplitAreaInks) then ink := 0;
+        if not spec^.SplitAreaInks[ink].Ok then Continue;
+        areaFill.Kind := tfkSolid;
+        areaFill.Color := TTyColor(spec^.SplitAreaInks[ink].Colour);
+      end
+      else if (ink <> 0) or not (tpBackground in areaS.Present) then
+        Continue;
       bandLo := spec^.SplitAreaMarks[i].Coord;
       bandHi := spec^.SplitAreaMarks[i + 1].Coord;
       if horiz then
         APainter.FillBackground(
           Rect(Round(bandLo), Round(APlot.Top),
-               Round(bandHi), Round(APlot.Bottom)), areaS.Background, 0)
+               Round(bandHi), Round(APlot.Bottom)), areaFill, 0)
       else
         APainter.FillBackground(
           Rect(Round(APlot.Left), Round(bandLo),
-               Round(APlot.Right), Round(bandHi)), areaS.Background, 0);
+               Round(APlot.Right), Round(bandHi)), areaFill, 0);
     end;
   end;
 
@@ -3456,21 +3549,35 @@ begin
     [Revised in batch 40: every tickStep-th band edge, the stride of
     axisTick.interval when there was one, and no closing edge unless the
     count suited it.] }
-  if ABelow and furn.ShowSplitLine and (tpBorderColor in splitS.Present)
-    and (spec <> nil) then
+  { ONE STROKE PER COLOUR OF THE AUTHOR'S LIST, each line in the colour its
+    count among the drawn lines gives it; the skin's one colour when none
+    was written [Batch 101] }
+  if ABelow and furn.ShowSplitLine and (spec <> nil)
+    and ((tpBorderColor in splitS.Present) or (Length(spec^.SplitLineInks) > 0)) then
   begin
-    APainter.BeginPath;
-    for i := 0 to High(spec^.SplitLineMarks) do
+    for ink := 0 to Max(0, High(spec^.SplitLineInks)) do
     begin
-      if not spec^.SplitLineMarks[i].Drawn then Continue;
-      if ProxLine('line_' + TyJsNumberToString(spec^.SplitLineMarks[i].Value)) then Continue;
-      along := spec^.SplitLineMarks[i].Coord;
-      if horiz then
-        BatchLine(along, APlot.Top, along, APlot.Bottom, LineWidth(splitS))
-      else
-        BatchLine(APlot.Left, along, APlot.Right, along, LineWidth(splitS));
+      inkStyle := splitS;
+      if Length(spec^.SplitLineInks) > 0 then
+      begin
+        if not spec^.SplitLineInks[ink].Ok then Continue;
+        inkStyle.BorderColor := TTyColor(spec^.SplitLineInks[ink].Colour);
+      end;
+      APainter.BeginPath;
+      for i := 0 to High(spec^.SplitLineMarks) do
+      begin
+        if not spec^.SplitLineMarks[i].Drawn then Continue;
+        if (Length(spec^.SplitLineInks) > 0)
+          and (spec^.SplitLineMarks[i].ColourIndex <> ink) then Continue;
+        if ProxLine('line_' + TyJsNumberToString(spec^.SplitLineMarks[i].Value)) then Continue;
+        along := spec^.SplitLineMarks[i].Coord;
+        if horiz then
+          BatchLine(along, APlot.Top, along, APlot.Bottom, LineWidth(splitS))
+        else
+          BatchLine(APlot.Left, along, APlot.Right, along, LineWidth(splitS));
+      end;
+      StrokeBatch(inkStyle);
     end;
-    StrokeBatch(splitS);
   end;
 
   { EVERYTHING ABOVE THIS LINE IS THE GRID and everything below it is the
@@ -3498,6 +3605,12 @@ begin
     else
       BatchLine(at, APlot.Top, at, APlot.Bottom, LineWidth(lineS));
     StrokeBatch(lineS);
+    { THE ARROWS, over the line (z2 11 to its 1), in its colour: a symbol's
+      setColor fills it -- strokes a `line`, rings an `empty` one round the
+      skin's empty-symbol ground [Batch 101] }
+    if spec <> nil then
+      for i := 0 to High(spec^.Arrows) do
+        PaintAxisArrow(APainter, spec^.Arrows[i], lineS);
   end;
 
   { ALIGNED WITH THE LABELS OR WITH THE BAND EDGES. On a banded category axis
@@ -14596,6 +14709,122 @@ begin
   Result := PointerAt(AHit.Axis, Result);
 end;
 
+function TTyAdvanceChart.PointerShadowShape(const AHit: TTyAxisHit;
+  out AShape: TTyXYWH): Boolean;
+begin
+  AShape := Default(TTyXYWH);
+  if AHit.Axis = nil then Exit(False);
+  { CLAMPED, as the pointer asks the axis: dataToCoord(value, true) }
+  Result := PointerShadowShapeAt(AHit,
+    AHit.Axis.DataToCoord(PointerValue(AHit), True), AShape);
+end;
+
+function TTyAdvanceChart.PointerShadowShapeAt(const AHit: TTyAxisHit;
+  AAt: Double; out AShape: TTyXYWH): Boolean;
+var
+  ax, other, base: TTyAxis;
+  bw, px, span, gap, best, lo, hi, t0, t1, o0, o1: Double;
+  ext: TTyRange;
+  g, j, k, s: Integer;
+  gb: TTyGridBuild;
+  cart: TTyCartesian2D;
+  only: Boolean;
+  typ: string;
+begin
+  Result := False;
+  AShape := Default(TTyXYWH);
+  ax := AHit.Axis;
+  if (ax = nil) or IsNan(AAt) or (FBuild = nil) then Exit;
+  { THE BAND (calcAxisPointerShadowBandWidth, at least 1px). A category's
+    own; on any other axis upstream asks the axis statistics -- the
+    smallest positive gap between the values of the bars (pictorial bars,
+    candlesticks, boxplots) sharing a hovered series' key on its BASE axis,
+    the largest such gap over the hovered series -- and spans it over this
+    axis' mapping extent, even when this is not the axis it was measured
+    on. One value alone is four fifths of the axis; nothing at all, 1px. }
+  { getExtent, upstream's order: an inverse axis runs from its far end }
+  ax.LocalExtent(t0, t1);
+  px := Abs(t1 - t0);
+  if ax.Scale is TTyOrdinalScale then
+    bw := ax.BandWidth
+  else
+  begin
+    ext := ax.Scale.LinearExtent2(sekMapping);
+    span := ext.Stop - ext.Start;
+    best := NegInfinity;
+    only := False;
+    for k := 0 to High(AHit.Slots) do
+    begin
+      s := AHit.Slots[k];
+      if (s < 0) or (s > High(FBindings)) then Continue;
+      typ := FBindings[s].SeriesType;
+      if (typ <> 'bar') and (typ <> 'pictorialBar') and (typ <> 'candlestick')
+        and (typ <> 'boxplot') then Continue;
+      if FBindings[s].CoordSysName <> 'cartesian2d' then Continue;
+      base := FBindings[s].BaseAxis;
+      if (base = nil) or (base.Scale is TTyOrdinalScale) then Continue;
+      gap := TyLiPosMinGap(FStores,
+        FIndex.SeriesOnAxisOfKey(base, TySeriesStatKey(typ, 'cartesian2d')), base);
+      if gap > 0 then
+      begin
+        if gap > best then best := gap;
+        only := False;
+      end
+      else if gap = cTyMinGapSingle then
+        only := True;
+    end;
+    bw := NaN;
+    if (not IsNan(span)) and (not IsInfinite(span)) and (span > 0)
+      and (not IsInfinite(best)) and (not IsNan(best)) then
+      bw := px / span * best
+    else if only then
+      bw := px * 0.8;
+  end;
+  if IsNan(bw) or IsInfinite(bw) then bw := 1
+  else bw := Math.Max(Double(1), bw);
+  { THE ENDS, each clamped to the axis on its own (calcAxisPointerShadowEnds) }
+  t0 := ax.ToGlobal(t0);
+  t1 := ax.ToGlobal(t1);
+  lo := Math.Max(Math.Min(t0, t1), AAt - bw / 2);
+  hi := Math.Min(AAt + bw / 2, Math.Max(t0, t1));
+  { ACROSS THE OTHER AXIS of the first cartesian holding this one, from its
+    first end as its extent runs }
+  other := nil;
+  for g := 0 to FBuild.GridCount - 1 do
+  begin
+    gb := FBuild.Grid(g);
+    for j := 0 to gb.CartesianCount - 1 do
+    begin
+      cart := gb.CartesianByIndex(j);
+      if cart.AxisByDim(ax.Dim) = ax then
+      begin
+        other := cart.GetOtherAxis(ax);
+        Break;
+      end;
+    end;
+    if other <> nil then Break;
+  end;
+  if other = nil then Exit;
+  other.LocalExtent(o0, o1);
+  o0 := other.ToGlobal(o0);
+  o1 := other.ToGlobal(o1);
+  if ax.Dim = 'x' then
+  begin
+    AShape.X := lo;
+    AShape.Y := o0;
+    AShape.W := hi - lo;
+    AShape.H := o1 - o0;
+  end
+  else
+  begin
+    AShape.X := o0;
+    AShape.Y := lo;
+    AShape.W := o1 - o0;
+    AShape.H := hi - lo;
+  end;
+  Result := True;
+end;
+
 { THE POINTER'S LABEL, and the axis tooltip's header. A named handler is
   given upstream's getValueLabel params: first the axis itself (its dimension,
   index and the value), then one entry per series the pointer collected --
@@ -14763,7 +14992,16 @@ var
       narrower than the plot -- an `offset`, or a second pair sharing the
       grid -- and a guard that is redundant only by coincidence is still the
       guard that has to be there when the coincidence ends. }
-    if not TyRangeContains(AAxis.Scale.GetExtent2(sekEffective), value) then Exit;
+    { OVER THE MAPPING EXTENT on a value or time axis, as upstream's
+      scale.contain: a bar's half width that containShape added is part of
+      the axis a pointer can stand on [Batch 101]
+      [Revised in batch 101: the effective extent, so the outer half of the
+      first and last bar on a value axis took no pointer.] }
+    if AAxis.AxisType in [atValue, atTime] then
+    begin
+      if not TyRangeContains(AAxis.Scale.GetExtent2(sekMapping), value) then Exit;
+    end
+    else if not TyRangeContains(AAxis.Scale.GetExtent2(sekEffective), value) then Exit;
     { AND ON A CATEGORY AXIS, A CATEGORY: upstream's contain asks for one
       that exists, so a min or max reaching past the list leaves positions
       that take no pointer; and a blank axis takes none anywhere. }
@@ -14779,7 +15017,12 @@ var
       for s := 0 to High(FBindings) do
       begin
         if FBindings[s].Hidden then Continue;
-        if FBindings[s].BaseAxis <> AAxis then Continue;
+        { EVERY SERIES ON THIS AXIS, base or not: upstream's collectSeriesInfo
+          takes a series into an axis' list when its coordinate system's axis
+          of that dimension is this one -- so a pointer on a bar chart's value
+          axis finds the bar nearest in value [Batch 101]
+          [Revised in batch 101: only the series whose base axis this is.] }
+        if (FBindings[s].XAxis <> AAxis) and (FBindings[s].YAxis <> AAxis) then Continue;
         if not NearestOnAxis(s, AAxis, value, maxDist, rows) then Continue;
         v := FStores[s].Get(FStores[s].DimIndexOf(AAxis.Dim), rows[0]);
         if IsNan(v) or IsInfinite(v) then Continue;
@@ -15580,6 +15823,7 @@ var
   box: TRect;
   corners: TTyCorners;
   surface: TTyFill;
+  sh: TTyXYWH;
 begin
   lineS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointer', '', []);
   shadowS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerShadow',
@@ -15608,27 +15852,18 @@ begin
     case hit.Spec.PointerType of
       aptShadow:
         begin
-          { THE BAND IS THE CATEGORY'S OWN WIDTH, and only a category axis has
-            one. Upstream derives a numeric axis' band from a statistics pass
-            over the hovered series' minimum positive gap; this port has no
-            such pass, so a shadow on a value axis draws NOTHING rather than
-            the one-pixel sliver the missing statistic would produce. A
-            deliberate restriction, recorded rather than approximated. }
-          w := hit.Axis.BandWidth;
-          if w <= 0 then Continue;
+          { THE BAND upstream draws [Batch 101]: a category's, or on a value,
+            log or time axis the hovered bars' gap -- 1px for a line --
+            clamped to the axis and across the other one. While its proxy
+            moves, the proxy's rect.
+            [Revised in batch 101: nothing at all on a value axis, the
+            statistic having no port.] }
           if not (tpBackground in shadowS.Present) then Continue;
-          if hit.Axis.Horizontal then
-          begin
-            if not TyAxisPointerBand(at, w, hit.Plot.Left, hit.Plot.Right,
-              lo, hi) then Continue;
-            band := TyRectF(lo, hit.Plot.Top, hi, hit.Plot.Bottom);
-          end
-          else
-          begin
-            if not TyAxisPointerBand(at, w, hit.Plot.Top, hit.Plot.Bottom,
-              lo, hi) then Continue;
-            band := TyRectF(hit.Plot.Left, lo, hit.Plot.Right, hi);
-          end;
+          if not PtrShadowNow(hit, sh) then Continue;
+          band := TyRectF(Math.Min(sh.X, sh.X + sh.W), Math.Min(sh.Y, sh.Y + sh.H),
+            Math.Max(sh.X, sh.X + sh.W), Math.Max(sh.Y, sh.Y + sh.H));
+          if (band.Right - band.Left <= 0) or (band.Bottom - band.Top <= 0) then
+            Continue;
           colour := shadowS.Background.Color;
           if hit.Spec.HasShadowColour then colour := TTyColor(hit.Spec.ShadowColour);
           surface := shadowS.Background;
@@ -17865,23 +18100,20 @@ begin
 end;
 
 function TTyAdvanceChart.PtrProps(const AHit: TTyAxisHit; AAt: Double): TTyAnimProps;
-var w: Double;
+var sh: TTyXYWH;
 begin
   { CartesianAxisPointer's shapes: a line across the other axis' extent, or
-    the category's band }
+    the band -- clamped to the axis, across the other axis as its extent
+    runs [Batch 101]
+    [Revised in batch 101: a category's band about the value, unclamped,
+    from the plot's bottom (left) edge.] }
   if AHit.Spec.PointerType = aptShadow then
   begin
-    w := Max(Double(1), AHit.Axis.BandWidth);
-    if AHit.Axis.Horizontal then
-      Result := TyAnimProps([TyAnimProp('shape.x', TyAnimNum(AAt - w / 2)),
-        TyAnimProp('shape.y', TyAnimNum(AHit.Plot.Bottom)),
-        TyAnimProp('shape.width', TyAnimNum(w)),
-        TyAnimProp('shape.height', TyAnimNum(AHit.Plot.Top - AHit.Plot.Bottom))])
-    else
-      Result := TyAnimProps([TyAnimProp('shape.x', TyAnimNum(AHit.Plot.Left)),
-        TyAnimProp('shape.y', TyAnimNum(AAt - w / 2)),
-        TyAnimProp('shape.width', TyAnimNum(AHit.Plot.Right - AHit.Plot.Left)),
-        TyAnimProp('shape.height', TyAnimNum(w))]);
+    if not PointerShadowShapeAt(AHit, AAt, sh) then sh := Default(TTyXYWH);
+    Result := TyAnimProps([TyAnimProp('shape.x', TyAnimNum(sh.X)),
+      TyAnimProp('shape.y', TyAnimNum(sh.Y)),
+      TyAnimProp('shape.width', TyAnimNum(sh.W)),
+      TyAnimProp('shape.height', TyAnimNum(sh.H))]);
   end
   else if AHit.Axis.Horizontal then
     Result := TyAnimProps([TyAnimProp('shape.x1', TyAnimNum(AAt)),
@@ -17952,6 +18184,33 @@ begin
     end;
   end;
   AnimArmTimer;
+end;
+
+function TTyAdvanceChart.PtrShadowNow(const AHit: TTyAxisHit;
+  out AShape: TTyXYWH): Boolean;
+var
+  k: Integer;
+  p: TTyChartAnimProxy;
+  key: string;
+begin
+  if (FPtrProxies <> nil) and (AHit.Axis <> nil) then
+  begin
+    key := PtrKeyOf(AHit.Axis);
+    for k := 0 to FPtrProxies.Count - 1 do
+    begin
+      p := TTyChartAnimProxy(FPtrProxies[k]);
+      if p.Role <> key then Continue;
+      if p.AtFinal then Break;
+      AShape.X := p.Num('shape.x');
+      AShape.Y := p.Num('shape.y');
+      AShape.W := p.Num('shape.width');
+      AShape.H := p.Num('shape.height');
+      if not (IsNan(AShape.X) or IsNan(AShape.Y) or IsNan(AShape.W)
+        or IsNan(AShape.H)) then Exit(True);
+      Break;
+    end;
+  end;
+  Result := PointerShadowShape(AHit, AShape);
 end;
 
 function TTyAdvanceChart.PtrAt(const AHit: TTyAxisHit; AAt: Double): Double;

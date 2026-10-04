@@ -337,8 +337,33 @@ type
     OffInterval: Boolean;
     OnBand: Boolean;
     Drawn: Boolean;
+    { WHICH COLOUR OF ITS LIST [Batch 101]: a split line's is the count of
+      the lines drawn before it, a split area mark's the colour of the band
+      that starts at it -- carried from the last render by tick value, as
+      upstream's axis view keeps it. Nought on a tick. }
+    ColourIndex: Integer;
   end;
   TTyAxisMarkArray = array of TTyAxisMark;
+
+  { AN ARROW AT ONE END OF THE AXIS LINE [Batch 101]: axisLine.symbol at that
+    end, its box (-W/2, -H/2, W, H) about (X, Y), turned by Rotation
+    (counter-clockwise, as zrender turns it) -- AxisBuilder's element as it
+    stands. End_ is 0 for the start, which is the SMALLER end of the axis'
+    local extent whichever way the axis runs, and 1 for the other. }
+  TTyAxisArrow = record
+    End_: Integer;
+    SymbolType: string;
+    X, Y, Rotation, W, H: Double;
+  end;
+  TTyAxisArrowArray = array of TTyAxisArrow;
+
+  { ONE COLOUR OF AN AUTHOR'S SPLIT LINE OR SPLIT AREA LIST [Batch 101]. Ok
+    False is a colour the port cannot read: nothing is drawn in it. }
+  TTyAxisInk = record
+    Ok: Boolean;
+    Colour: Cardinal;
+  end;
+  TTyAxisInkArray = array of TTyAxisInk;
 
   { nameLocation: 'end' is upstream's default and so the zero value;
     'center' is 'middle'. }
@@ -597,6 +622,30 @@ type
     TickMarks: TTyAxisMarkArray;
     SplitLineMarks: TTyAxisMarkArray;
     SplitAreaMarks: TTyAxisMarkArray;
+
+    { ---- the finishing touches [Batch 101] ---- }
+
+    { THE AXIS LINE'S ARROWS on the final rect, in the order upstream adds
+      them (the start first); empty when the line is not drawn }
+    Arrows: TTyAxisArrowArray;
+    { THE AUTHOR'S SPLIT COLOURS: splitLine.lineStyle.color and
+      splitArea.areaStyle.color, a string as a list of one. Empty is the
+      skin's -- one line colour, and for the areas the skin's colour and
+      none in turn, which is upstream's default pair (a tint and a
+      transparent). Each mark's ColourIndex picks from it. }
+    SplitLineInks: TTyAxisInkArray;
+    SplitAreaInks: TTyAxisInkArray;
+    { the length upstream's split-area cache counts in: the list's, a
+      string's own (each band then falls back to the one colour), 2 for the
+      skin's pair }
+    SplitAreaInkCount: Integer;
+    { nameTruncate [Batch 101]: whether a maxWidth was written, the width
+      and the ellipsis; applied to Name by the builder. A flag and not a
+      sentinel width: the zero value has to be `no cut`, and 0 is a width
+      upstream honours (it leaves nothing). }
+    HasNameTrunc: Boolean;
+    NameTruncWidth: Double;
+    NameTruncEllipsis: string;
   end;
   TTyAxisLayoutSpecArray = array of TTyAxisLayoutSpec;
   PTyAxisLayoutSpec = ^TTyAxisLayoutSpec;

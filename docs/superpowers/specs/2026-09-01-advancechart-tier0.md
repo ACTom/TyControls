@@ -3073,7 +3073,7 @@ if other axis is category / time"。所以时间轴对面那根数值轴 **不�
 `axisLabel.formatter`、`axisLabel.interval`、`showMinLabel`/`showMaxLabel`、
 `lineStyle` 的颜色(等配色那一行)、多根轴。
 
-还有一个 **故意留的偏差**:`splitArea.areaStyle.color` 上游是一个颜色
+**[第 101 批：作者写的颜色列表已接上，分割线、分割区域都按上游的下标轮流取；没写时区域按皮肤色与透明交替，并像上游那样跨渲染保色，见 §136。]** 还有一个 **故意留的偏差**:`splitArea.areaStyle.color` 上游是一个颜色
 **列表**,每条带子轮流取,默认两个几乎一样的半透明灰。端口按主题一个
 `TyAdvChartSplitArea` 令牌隔一条画一条——在默认值下肉眼等价(等于其中一色
 全透明),而「作者自己写颜色列表」属于配色那一行。
@@ -3648,6 +3648,7 @@ diff ≈ π   → 垂直 = dir>0 ? 底 : 顶,  水平 = 居中
 
 ### `'auto'` 保留端口自己的规则
 
+**[第 101 批：公式第三十九批已换成上游的（§73）；那层防抖缓存（只抑制「减一」、resize 不用、沿用时不写回）也已照做，见 §136。]**
 上游 `calculateCategoryInterval` 是 `floor(min(最大标签宽/单类目宽, 最大标签高/单类目高))`,
 其中标签尺寸乘 1.3、每维取 7px 下限,再加一层防抖缓存。
 端口用的是**逐对测量碰撞找第一个不碰撞的均匀步长**。
@@ -3896,7 +3897,7 @@ per-series 那个 `0.5` 才是像素——**半个像素**,不是半个类目。
 两端**各自独立**钳位,所以第一个/最后一个类目上的带子是**半宽且不对称**的——
 不是被推进去保持宽度。先居中再裁剪的端口会把带子挪离它自己的类目。
 
-**value 轴上端口不画带子。** 上游是从悬停序列的最小正间隔统计出来的;
+**[第 101 批：已做。带宽取悬停系列所在统计记录的最大最小正间隔（柱、象形柱、K 线、箱线图在各自基轴上记），按指示器所在轴的映射范围换算，单值取轴长 0.8，没有统计就是 1 像素，两端照样钳位，见 §136。]** **value 轴上端口不画带子。** 上游是从悬停序列的最小正间隔统计出来的;
 没有那趟统计,诚实的答案是不画,而不是那个缺失的数会产出的一像素细条。
 **记录在案的限制**,不是近似。
 
@@ -5872,7 +5873,7 @@ port 一直把名称居中画在标签外侧,y 轴的转 90°,位置由画的时
 ### 已知偏差
 
 - **有向包围盒**:名称或障碍物不和坐标轴平行、外接框又相交时,上游用有向包围盒算平移,port 不挪。只有 `nameRotate` 不是 90° 的倍数、或者两端名称碰上转过的标签时才会出现。
-- **`nameTruncate`**:没有和 zrender 一致的截断,等标签截断一起做。
+- **[第 101 批：已做，按 zrender 的纯文本截断（块名称在块里截），见 §136。]** **`nameTruncate`**:没有和 zrender 一致的截断,等标签截断一起做。
 - **`nameTextStyle` 的字号、颜色、padding、lineHeight 等**:字体和颜色来自主题,和 `axisLabel` 的做法一致。
 - **不认识的 `nameLocation`**:上游用居中的锚点配两端的排布,port 当成 `'end'`。
 - **颜色**:上游名称和轴线、标签同色;port 用主题的 `TyAdvChartAxisName`,这是主题的决定。
@@ -5999,7 +6000,7 @@ port 以前对除时间轴外的每根轴都用同一条规则:找最小的等�
   **[第四十批已做,见 §74。]**
 - **类目轴的 `min` / `max`**:port 不截取类目范围,相关三条用例延后。
 - **grid 盒子**:上下边距之和超过容器高度时和上游不同(time.pas:861 的场景),归 grid 盒子那一批。
-- **按模型缓存的间隔**(跨 `setOption` 和缩放保持间隔稳定):port 每次从头算,只有单次渲染一致。
+- **[第 101 批：已做，缓存挂在控件按轴保存的记忆上，notMerge 清空、merge 新建的轴清空，见 §136。]** **按模型缓存的间隔**(跨 `setOption` 和缩放保持间隔稳定):port 每次从头算,只有单次渲染一致。
 - `customValues`、函数间隔和格式化器、轴断裂、`minMargin`、标签的 `fontSize` / `width` / `overflow` 进入间隔测量:未做。
 - 小数间隔仍按整数部分处理,这是有意的偏差(axislabel.pas:506)。
 - 线图符号的稀疏仍按 `k mod 步长`,不按"类目在间隔上"。
@@ -6081,7 +6082,7 @@ port 以前对除时间轴外的每根轴都用同一条规则:找最小的等�
 
 ### 已知偏差
 
-- 分割区域的颜色:上游两种颜色交替,并且跨渲染保持连续;port 用主题的一种颜色,隔一块涂一块,只管首次渲染。
+- **[第 101 批：已做，颜色下标按上游的跨渲染规则算，作者的列表照用，见 §136。]** 分割区域的颜色:上游两种颜色交替,并且跨渲染保持连续;port 用主题的一种颜色,隔一块涂一块,只管首次渲染。
 - 线图符号的稀疏仍按 `k mod 步长`,不是"类目在间隔上"。
   **[第四十四批已做,见 §78。]**
 - `customValues`、函数间隔、轴断裂:未做。
@@ -9422,3 +9423,79 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 
 全量 **8092 个测试，0 错误，0 失败**。
 
+## 136. Tier 1 第一百零一批：坐标轴收尾（B6，2026-10-05）
+
+路线图 B6 的五件事，每一件以前都在某一节的「已知偏差」或「故意留的偏差」里：`axisLine.symbol` 写了也不画箭头；`nameTruncate` 没有截断（§72）；分割线只用皮肤的一种颜色、分割区域隔一块涂一块并且每次渲染从头数（§48、§74）；类目轴的自动间隔每次从头算，没有上游那层「只抑制减一」的缓存（§53、§73）；值轴和时间轴上 `axisPointer.type: 'shadow'` 什么都不画（§56）。这一批逐个对着上游源码核过，再在真 dist 上跑基准，全部按上游补齐。顺带改了指示器的两处老问题：值轴上指示器的落点范围和参与吸附的系列。
+
+### 上游的做法（`AxisBuilder.ts` 的 `axisLine` / `axisName`、`CartesianAxisView.ts` 的 `splitLine`、`axisSplitHelper.ts` 的 `rectCoordAxisBuildSplitArea`、`axisTickLabelBuilder.ts` 的 `calculateCategoryInterval` / `calculateCategoryIntervalDealCache` / `makeAutoCategoryInterval`、`AxisBuilder.ts` 的 `dealLastTickLabelResultReusable`、`CartesianAxisPointer.ts` 的 `pointerShapeBuilder.shadow`、`axisPointer/viewHelper.ts` 的 `calcAxisPointerShadowBandWidth` / `calcAxisPointerShadowEnds`、`coord/axisBand.ts` 的 `calcBandWidth`、`coord/axisStatistics.ts` 的 `getAxisStatBySeries`、`axisPointer/modelHelper.ts` 的 `collectSeriesInfo`、`scale/scaleMapper.ts` 的 `contain`，zrender 的 `parsePlainText` / `prepareTruncateOptions` / `truncateSingleLine` 逐行核过）
+
+- **箭头**：只在轴线画出来时才有（`axisLine.show` 的 `'auto'` 照旧解析）。`symbol` 是字符串时两端同一个，数组时逐端取；`'none'`、null、不是字符串的都不画。`symbolSize` 是数字（或字符串）时宽高相同，数组照写，默认 `[10, 15]`。`symbolOffset` 先 `|| 0`，再走 `normalizeSymbolOffset`：单个值两端同用，数组第二项缺省取第一项；百分比**起点按宽、终点按高**（同一个函数给符号用时是 x 按宽 y 按高，这里两项被当成两端的沿轴偏移，照搬）。两端的位置：轴线两端 `[extent[0], 0]`、`[extent[1], 0]` 经轴组的矩阵变到画布，**起点永远是本地范围较小的那一端**（反向轴的 `extent` 是 `[len, 0]`，起点仍在左 / 下），离起点 `r = 偏移`（终点 `r = 线长 + 偏移`，线长是两端距离的 `Math.sqrt`），`x = pt.x + r·cos(rotation)`、`y = pt.y − r·sin(rotation)`——y 轴的 `rotation` 是 π/2，`cos(π/2)` 那 6e-17 会落进 x 的最后一位（基准里 y 轴终点的 x 是 90.00000000000001）。符号在 `(−w/2, −h/2, w, h)` 里建，转角 `rotation + π/2`（起点）/ `rotation − π/2`（终点），z2 11，颜色是轴线的描边色（`setColor`：普通符号填充，`line` 描边，`empty*` 描边、内填白、线宽 2）。
+- **nameTruncate**：直角坐标的轴名 `overflow` 固定是 `'truncate'`，`width` 是 `nameTruncate.maxWidth`（没写就没有宽度，不截），`ellipsis` 取 `nameTruncate.ellipsis`（模型默认 `'...'`；`placeholder` 不往下传）。截断是 zrender 的纯文本规则：按 `\n` 分行逐行截，容器宽 `max(0, width − 1)`，省略号比可用宽还宽时丢掉省略号，宽为 0 截成空串；包围盒是截后的文字（没有背景时），有 padding / 背景时外框宽是 `width + padding`。名称的放置、外边界收缩、避让都量截后的盒子。
+- **分割线的颜色**：`lineStyle.color` 是字符串当成一项的列表；颜色下标是**画出来的线**的计数对列表长度取模——`showMinLine: false` 跳过的第一条不占颜色。
+- **分割区域的颜色**：每块的颜色下标从 0 起逐块加一取模；**轴视图记着上一次渲染每块带子起点刻度值对应的下标**，这次渲染找到第一个认识的刻度 `i`、它上次的下标 `c`，起始下标取 `(c + (len − 1)·i) mod len`，于是那个刻度开头的带子保持原色。`len` 是选项值的 `.length`——数组是项数，**字符串是字符串自己的长度**（之后包成一项，下标越界的块退回同一个颜色，看起来一样）。只有显示分割区域的轴才读写这张表；表挂在视图上：merge 保留，notMerge 新视图从头来（真 dist 上验证：merge 后颜色接着，notMerge 后从第一色开始），resize 保留。默认颜色是 `[backgroundTint, backgroundTransparent]`，也就是一块有色一块透明，同样跟着这张表走。
+- **自动间隔的缓存**（`calculateCategoryIntervalDealCache`）：存在**轴的模型**上——上一次的间隔、类目数、轴的像素范围 `getExtent()`。这次算出的间隔 `raw`，当且仅当 `|last − raw| ≤ 1`、`|lastCount − count| ≤ 1`、`last > raw`（只抑制变小，「临界点放大缩小时一致」）、像素范围两端都没变（resize 不用缓存）时沿用 `last`；**沿用时不写回**，所以只能挡一步；不沿用时把四项都写成这次的。估算那一遍（`kind = estimate`）不读也不写缓存；确定那一遍沿用估算结果时也要先问缓存（`noPxChangeTryDetermine`），问出「要沿用」就作废估算的标签重建——最终效果等于在最终矩形上算 `raw` 再过一次缓存。只有 `e1 − e0 < 1` 时直接返回 0，不碰缓存。基准里 60 个类目逐步缩窗：类目数 52→51 时 raw 从 6 掉到 5，用的仍是 6；同一窗口再派发一次仍是 6（缓存没被写）；到 50 才变成 5。
+- **阴影指示器的带宽**（`calcAxisPointerShadowBandWidth` → `calcBandWidth(axis, {fromStat: {sers}, min: 1})`）：类目轴是一个类目的带宽，至少 1。值轴、时间轴、对数轴问**轴统计**：`getAxisStatBySeries` 遍历**所有轴、所有键**的统计记录，凡是包含某个悬停系列的都算进来——统计只有柱、象形柱、K 线、箱线图在**自己的基轴**（非类目）上记，值是同一个键下所有系列数据的最小正间隔。取这些间隔里最大的一个，按**指示器所在轴**的映射范围（containShape 放宽过的）换成像素：`pxSpan / span × gap`；全都只有一个值时取轴长的 0.8；什么都没有（折线、散点）就是 1 像素。于是两根值轴、柱子的基轴是 x、指示器放在 y 上时，用的是 x 上量出来的间隔按 y 的比例换算（基准 `ptr-y-of-x-bars`：51 = 255 / 5 × 1）。带子两端各自钳到轴的范围内，横跨**另一根轴**的全局范围、从它的第一个端点起（`makeRectShape([min, other[0]], [max − min, other[1] − other[0]])`，另一根轴反向时矩形从顶上往下）。
+- **指示器在值轴上的落点与系列**（顺带核出来的两处）：`axis.containData` 用的是**映射**范围（`scaleMapper.contain` 的注释写明是为了轴触发），所以 containShape 给值轴上的柱子放宽的那半根柱子也能悬停；`collectSeriesInfo` 把坐标系里**用到这根轴**的每个系列都收进来，不管它是不是基轴——指示器在柱状图的值轴上时，按值找最近的那根柱子并吸附过去。
+
+### 做法
+
+- `tyControls.AdvChart.Layout`：`TTyAxisMark` 加 `ColourIndex`；新类型 `TTyAxisArrow`（端、符号名、x、y、转角、宽、高）与 `TTyAxisInk`（能不能读、颜色）；规格加 `Arrows`、`SplitLineInks`、`SplitAreaInks`、`SplitAreaInkCount`、`HasNameTrunc` / `NameTruncWidth` / `NameTruncEllipsis`（有没有写用标志，不用哨兵宽度：0 是上游认的宽度，零值必须是「不截」）。
+- `tyControls.AdvChart.Builder`：
+  - 家具记录读 `axisLine` 的 `symbol` / `symbolSize` / `symbolOffset`（偏移在这里按上游的规则换算好）和两张颜色表（`InksIn`：字符串是一项、计数取字符串的 UTF-16 长度；空数组和读不出的颜色是一项「不画」）。
+  - `TTyAxisMemoryStore`：每根轴（`xAxis0` 这样的键）一份 `TTyAxisMemory`——间隔缓存四项，加上分割区域的刻度值→颜色下标表。`TyLayoutGrids` 多一个可选参数接它，不传就和以前一样每次从头算。
+  - `TyCategoryIntervalHold`：`calculateCategoryIntervalDealCache` 逐条照抄。`TyLayoutGrids` 在最终矩形写进轴、帧算好之后，对每根显示的、自动间隔的类目轴（至少两个类目）在最终矩形上量一次 raw，过缓存，把结果写成 `ForcedLabelStep`——标签、刻度、分割线、名称避让、折线符号此后都读这一个数。估算那一遍不经过它。
+  - `TySplitAreaColours`：上面的区域颜色规则；`AxisMarks` 在定下「画不画」之后算分割线的颜色下标（数画出来的线）和区域下标（只在区域显示、轴显示时读写记忆）。
+  - `TyAxisArrows`：在名称用的那个轴组帧（`NameFrame` 的位置、转角、本地范围）里照抄 `axisLine` 的算式，三角函数用 `TyJsCos` / `TyJsSin`；轴显示且轴线显示时才算。
+  - `ReadName`：读 `nameTruncate`；名称需要文字块（padding、背景等）时把块的宽度、`truncate`、省略号设上，块自己截；纯文字名称在这里用 `TyZrPlainTextLines`（zrender 的纯文本截断，早就有）截好，布局量的、画的都是截后的文字。截成空串的名称当没有名称。
+- `tyControls.AdvanceChart`：
+  - 控件持有 `FAxisMemory`，传给 `TyLayoutGrids`；notMerge（`ApplyNotMerge`）清空，merge 时对报告里「新建」的 x / y 轴槽位逐个忘掉；公开只读属性 `AxisMemory`。
+  - `PaintAxis`：分割区域按每块的颜色下标画——作者的列表取对应颜色（读不出的不画），没写时下标 0 用皮肤的 `TyAdvChartSplitArea`、下标 1 不画；分割线按颜色分组，每组一条路径一次描边；轴线画完紧接着画箭头（`TyZrSymbol` 的路径、`TyZrLocal` 的变换、`TyMkZrShape` + `TyRenderElement`），颜色是轴线的皮肤色，`empty*` 的内填用皮肤的 `TyAdvChartEmptyCircle` 底色。
+  - `PointerShadowShape` / `PointerShadowShapeAt`（受保护）：上面的带宽与矩形，类目轴、值轴、时间轴同一条路；绘制和指示器动画的目标（`PtrProps`）都用它，动画进行中画代理的矩形（`PtrShadowNow`）。
+  - `ResolveAxisPointers`：值轴和时间轴的落点按映射范围判断；参与吸附的系列从「基轴是这根轴的」改成「用到这根轴的」。
+
+### 基准
+
+`tools/advchart-oracle/axis-finish.js`（真 dist，node SSR，量字用 zrender 的宽度表，与测试的 `TZrSsrMeasurer` 一致）→ `tests/fixtures/advchart-axis-finish.json`，58 个用例：
+
+- 箭头 14 例：两端同一个 `'arrow'`、`['none','arrow']` 配数字尺寸和数字偏移、`[−5, '50%']` 配 `[8, 12]`（终点百分比按高）、单个 `'25%'`、反向类目轴配 `['arrow','circle']`、值 y 轴、反向值 y 轴（x 轴落到顶上的零点）、右侧 y 轴带 offset、顶部 x 轴、onZero 的 x 轴、`'none'`、轴线隐藏、整轴隐藏、两根值轴。逐个记符号名、x、y、转角、形状盒子、z2，以及轴组的帧和本地范围。
+- 截断 13 例：末端、起点（省略号 `~`）、y 轴居中随轴转、x 轴居中转 30° 并且离开标签（转过的名称被标签推开时上游用有向包围盒挪，端口不挪，见 §72，所以 nameGap 拉开）、y 轴末端 nameRotate 0 与 90、两行各自截、maxWidth 0、宽度够、空省略号、没写 maxWidth、省略号比可用宽还宽、带 padding 和背景的块。记画出的每行、`isTruncated`、名称最终的 x、y、转角、局部包围盒，以及 grid 矩形。
+- 颜色（一次渲染）8 例：类目轴三色分割线配 `showMinLine: false`、类目轴三色区域、值轴两色线两色区域、单个字符串的区域色、单个字符串的线色、默认区域色（按下标比）、分割线和区域各自的 interval、`showMaxLine: false`。
+- 颜色（跨渲染）6 例：类目窗口缩小再放大、默认颜色跟着缩放、值轴缩放（刻度值整个变了）、merge 保留与 notMerge 重来、resize 保留、merge 把三色换成两色（缓存下标按新长度取模）。
+- 间隔 7 例：60 个类目逐步缩窗（在 51 处挡住一步）、放大不挡、merge 少一个类目挡、少两个不挡、resize 不挡（范围变了）、notMerge 没有缓存、标签转 45° 的长轴、类目 y 轴。每一步记 count、raw（同一根轴以 estimate 再问一遍，不读不写缓存）、实际用的间隔、是否被挡、渲染后的缓存四项、画出的标签。
+- 指示器 10 例 21 个探针：两根值轴上的柱和折线（悬停柱子得间隔、悬停折线得 1px、两端被钳）、时间轴上的柱、只有折线、指示器在 y 上而柱的基轴是 x、单根柱（0.8）、反向值轴、类目轴两端被钳、类目轴配反向值轴、900 个类目（带宽不足 1 像素，按 1 画）、横向柱子指示器放在值轴 x 上（类目基轴没有统计，1px）。记矩形四个数、悬停的系列和按配方算出的带宽。
+- 生成器自检：每一类记录都由脚本里的配方（箭头算式、`parsePlainText` + `truncateSingleLine`、线色计数、区域缓存算式、`DealCache`、带宽与矩形）用 `Object.is` 逐个复现，外加 20 条具名事实（窄于一像素的类目带按 1 画、`'none'` 不画、轴线隐藏不画、反向轴从小端起、截断以省略号结尾、0 宽截空、够宽不截、跳过的最小线不占颜色、缩放后带子保色、merge 保留 notMerge 重来、间隔挡住一步且只比 raw 大一、resize 不挡、merge 少一个类目挡、notMerge 不挡、折线 1px、柱子按间隔、y 指示器用 x 的间隔、单根柱 0.8）；同一进程两次生成逐字节一致，两个进程各跑一次也逐字节一致（记录的选项和动作载荷先克隆——ECharts 会往传给它的对象上挂 `__ec_inner_N`，编号随进程变）。
+
+测试 `test.advchart.axisfinish`（新，注册在 `tytests.lpr`）：六组用例全部经控件自己的路径重放——每例先 notMerge 设选项（`Option` 的 setter 遇到同一段文字直接返回，相邻两例选项一样时会把上一例的缩放带过来，测试因此改用 `SetOption(…, True)`）、按步骤 `DispatchDataZoom` / `MergeOption` / `SetOption(…, True)` / 改尺寸、每步渲染一次，逐位比较：轴组的帧、每个箭头的端、符号、x、y、转角、宽高和盒子，名称的文字（块的名称按块的文字片段拼）、x、y、转角，grid 矩形，每条画出的分割线的刻度值、颜色下标和作者的颜色，每块分割区域的起点刻度、颜色下标、颜色和两条边，类目轴实际用的间隔、`AxisMemory` 里的四项、画出的标签，每个探针的阴影矩形四个数。手写 5 个：箭头真的画在线端外面（尖后有墨、尖前没有）；区域按作者的三色、线按两色画在屏幕上，没写颜色时第一块是皮肤色、第二块露出底色；值轴上的阴影是 90 像素宽的一条带子而不是一根细线；merge 保留记忆、replaceMerge 换进来的新轴和 notMerge 都忘掉；`TyCategoryIntervalHold` 的各个分支（挡一步、不写回、count 差二放开、变大不挡、范围任一端变了放开、差二不挡、没有存储取 raw）。
+
+### 变异测试
+
+`b6/mut.py`：逐个改源码、重编、跑 `test.advchart.axisfinish`、按原字节还原。43 个：
+
+- 箭头 10 个：反向轴不从小端起、起点转角取反、终点不加偏移、y 的符号取反、终点百分比按宽、字符串只给起点、`'none'` 当符号、轴线隐藏照样算箭头、算了不画、数字尺寸只给宽。
+- 截断 5 个：纯文字名称不截、默认省略号为空、块名称不截、截断宽度加倍、作者的省略号不读。
+- 颜色 10 个：分割线按全部刻度而不是画出的线计数、区域不读记忆、跨渲染起始下标的偏移取反向、字符串的计数取 1、记忆不写回、notMerge 不清记忆、merge 新建的轴不清记忆、作者的区域色画成皮肤色、分割线全用第一种颜色、皮肤的一对颜色画在奇数块上。
+- 间隔 5 个：变大也挡、resize 也挡、挡住时照样写回、从不问缓存、类目数差二也挡。
+- 指示器 10 个：不读统计、只读指示器所在轴的统计、单值取 1 像素、两端不钳、另一根轴的范围按排序后的、跨度用有效范围、只看基轴是这根轴的系列、落点按有效范围、值轴上不画阴影、类目带宽不设 1 像素下限。
+- 2ccaa47b（嵌套深度守卫）的三个：(a) `TySetOptionOptsOf` 与 `SetOption(AJson, AOptsJson)` 都去掉提前返回——`TAdvChartOptionMergeTest` 红；(b) `DispatchAction` 去掉提前返回——`TAdvChartSelectOracleTest` 红；(c) `TyEventQueryOf` 去掉 `and not TyJsonNestingExceeds(...)`——`TAdvChartMouseEventsOracleTest` 红。三个都是测试失败，进程没有崩溃。
+
+首轮 43 个杀死 41 个（「皮肤的一对颜色画在奇数块上」在本套件里活着，只被已有的 `TAdvanceChartTest` 杀死，也算作存活处理），存活 2 个，补上后全部杀死：
+- **皮肤的一对颜色画在奇数块上**：基准对默认颜色只比下标，画面没比。手写测试加「第一块是皮肤色、第二块露出底色」（对照不开分割区域的同一张图数像素），在本套件里杀死。
+- **类目带宽不设 1 像素下限**：所有用例的带宽都大于 1。补上游用例 `ptr-category-narrow`（900 个类目排在 450 像素上，带宽 0.5，上游按 1 画），杀死。
+
+### 已知偏差
+
+- **截成空串的名称**：上游仍然建一个空文字、盒子宽 0 高 12，参与边距和避让；端口当成没有名称。宽 0 的盒子在末端不会越出画布，基准的 grid 矩形一致。
+- **箭头的颜色**：上游是轴线的描边色（作者写的 `axisLine.lineStyle.color` 或主题的）；端口的轴线一直用皮肤的 `TyAdvChartAxisLine`，箭头跟着轴线走。`image://` 符号不画（端口没有图片符号）；字符串形式的 `symbolSize`（上游会拿字符串去做加法，路径坏掉）按数字读。
+- **分割线、分割区域的其余样式**：只接了作者的颜色列表；`lineStyle.width` / `type`、`areaStyle.opacity` 等仍是皮肤的。区域色用 `FillBackground` 按整像素画，和以前一样。
+- **记忆的寿命**：按轴的主类型和下标存，notMerge 清空、merge 时新建的槽位清空。上游的间隔缓存在模型上、颜色表在视图上，replaceMerge 删掉一根轴而不补的时候视图被移除、表也没了；端口这时留着那份记忆，等这个下标再有新轴进来（报告记为新建）才清。隐藏的轴（`show: false`）不量间隔，上游的折线符号稀疏在这种轴上可能仍会问一次缓存。
+- **阴影的统计**：按端口已有的 `TyLiPosMinGap` 取同一键下所有系列（与柱宽同一个统计）；上游 `getAxisStatBySeries` 对每个包含悬停系列的「键 × 轴」记录各推一次，同一系列不会出现在两根轴的记录里，结果相同。
+- **值轴上指示器的落点**：只把值轴和时间轴改成按映射范围判断；对数轴仍按有效范围（基准没有对数轴上的柱子）。
+
+### 落地
+
+- `source/tyControls.AdvChart.Layout.pas`：`TTyAxisMark.ColourIndex`、`TTyAxisArrow`、`TTyAxisInk`、规格的新字段。
+- `source/tyControls.AdvChart.Builder.pas`：家具的箭头与颜色、`TTyAxisMemoryStore`、`TyCategoryIntervalHold`、`TySplitAreaColours`、`TyAxisArrows`、`ReadName` 的截断、`TyLayoutGrids` 的新参数与接线。
+- `source/tyControls.AdvanceChart.pas`：`FAxisMemory` 及其清理、`PaintAxis` 的箭头和颜色、`PointerShadowShape` / `PointerShadowShapeAt` / `PtrShadowNow`、`PtrProps`、`ResolveAxisPointers` 的两处。
+- `tools/advchart-oracle/axis-finish.js`、`tests/fixtures/advchart-axis-finish.json`、`tests/test.advchart.axisfinish.pas`（新，注册在 `tytests.lpr`）。
+
+全量 **8119 个测试，0 错误，0 失败**（第 100 批是 8092；新增 `test.advchart.axisfinish` 11 个，其余是两批之间别处加的）。
