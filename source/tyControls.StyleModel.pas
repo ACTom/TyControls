@@ -31,6 +31,11 @@ type
     HasState: Boolean;
     State: TTyState;
     Decls: array of TTyCssDeclaration;
+    { #14: which properties Decls write, worked out once (TTyStyleModel.EntryProps). It
+      depends on the property NAMES and the shape of the raw values, never on a var's
+      value, so it holds for the entry's whole life. }
+    PropsKnown: Boolean;
+    Props: TTyPropSet;
   end;
 
   { ===== a6256 / DPI-storm fix: one boxed resolve result, so the cascade below can be
@@ -1881,6 +1886,7 @@ var
   di: Integer;
   n: string;
 begin
+  if AEntry.PropsKnown then Exit(AEntry.Props);
   s := EmptyStyleSet;
   Result := [];
   for di := 0 to High(AEntry.Decls) do
@@ -1891,6 +1897,8 @@ begin
     else if n = 'outline-offset' then Include(Result, tpOutline);
   end;
   Result := Result + s.Present;
+  AEntry.Props := Result;
+  AEntry.PropsKnown := True;
 end;
 
 procedure TTyStyleModel.ForTier(ARules: TFPList; const AKey: string; AVariants: TStrings;
