@@ -5971,8 +5971,10 @@ begin
           and that subtraction answers ~0. }
         if txt <> '' then
         begin
+          { What the row shows: a multi-line text is drawn as its first line and '...', so that
+            is what the range is measured for, not every line glued together (#18). }
           measW := slots.IndentPx + slots.CheckW + slots.ImageW + slots.TextPad +
-            P.MeasureText(txt, NodeStyle.FontName, ResolveFontSize(NodeStyle),
+            P.MeasureText(TySingleLineText(txt), NodeStyle.FontName, ResolveFontSize(NodeStyle),
                           NodeStyle.FontWeight).cx + P.Scale(4);
           if measW > rangeXNew then
             rangeXNew := measW;
