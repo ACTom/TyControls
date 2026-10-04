@@ -160,7 +160,7 @@ TagButton      { background: #DCFCE7; }
 | `TestInvalidNamesRaise` | `''`、`'1x'`、`'a b'` 抛 | M12 |
 | `TestCacheFollowsRegistration` | 先解析 `TagButton`（空，进缓存）→ 登记 → 再解析等于 `TyButton` → 撤销 → 再解析为空 | M4、M11 |
 | `TestCaseInsensitiveChain` | 登记 `TagButton`，解析 `tagbutton` 也跟链 | M10 |
-| `TestNoChainIsByteIdentical` | 登记 20 个无关子键前后，目录里每个键在 4 组 (class, states) 下的转储相同 | M8b |
+| `TestNoChainIsByteIdentical` | 登记 20 个无关子键前后，目录里每个键在 4 组 (class, states) 下的转储相同 | —（回归；单键路径的逐字节等价由 golden 守，见 M13） |
 | `TestPropertyCascadeFollowsChain` | `PropertyCascade := True` 时，用户层 `TagButton { color }` 之外的属性仍来自 `TyButton` 底层 | M1 |
 | `TestVariantsFollowChain` | `GetVariantsForType('TagButton')` 含 `primary`、`danger`、`ghost`；没登记时为空 | M8 |
 | `TestTagButtonRendersLikeButton`（端到端） | 第三方子类 `TTestTagButton = class(TTyCustomButton)` 报 `TagButton`，登记到 `TyButton`；独立控制器、内置主题，`RenderTo` 到黑底位图，与 `TTyButton` 逐像素相同 | M1 |
@@ -252,7 +252,7 @@ procedure TyUnregisterTypeKeyParent(const ATypeKey: string);   // Delete + Inc s
 | M6 | 去掉过深检查 | TooDeepRaises |
 | M7 | 冲突时覆盖而不是抛 | ConflictingParentRaises |
 | M8 | `GetVariantsForType` 只扫叶 | VariantsFollowChain |
-| M8b | 链取法把未登记键也接到某个父上（`TyTypeKeyChain` 对空父也追加） | NoChainIsByteIdentical、UnregisteredKeyGetsNothing |
+| M13 | 底层从不让位：`if FPropertyCascade or not UserHasTypeKey(chain[ci])` 换成 `if True`（单键路径与今天不再等价） | PlainChildRuleYieldsOnlyChildBase、`TTestThemeGolden.TestShowcaseGolden` |
 | M9 | 补全不追加登记键 | CompletionOffersRegisteredKeys |
 | M10 | 登记表大小写敏感 | CaseInsensitiveChain |
 | M11 | 撤销不动戳记 | CacheFollowsRegistration |
@@ -260,8 +260,32 @@ procedure TyUnregisterTypeKeyParent(const ATypeKey: string);   // Delete + Inc s
 
 ## 7. 性能
 
-（Task 4 填）
+探针：scratchpad 里一个只链 StyleModel 的小程序（`fpc -O2`），改前用 `140496e6` 的 `source/` 快照编，改后用本分支编；两者交替各跑 3 次，每次 5 轮，表里是 15 个样本的中位数，单位为每次 `ResolveStyle` 的微秒。「冷」= 每轮先 `RefreshSystemTokens` 让缓存失效，再对目录全部 253 个键各解析两次（`primary`+hover、无类+normal）；「热」= 同样的请求缓存已满。机器上同时有别的会话在编译跑测试，单次波动约 ±10%。
+
+| 场景 | 改前冷 | 改后冷 | 改前热 | 改后热 |
+|---|---|---|---|---|
+| 只有内置层 | 296.8 | 294.1 | 3.99 | 4.28 |
+| 内置层 + dark 主题 | 275.5 | 290.2 | 4.11 | 4.19 |
+| 同上 + 登记 20 个无关子键 | — | 294.0 | — | 4.36 |
+| 只解析 `TyButton` | 862.2 | 847.8 | 6.64 | 6.55 |
+| 只解析一条两级链的子键 | — | 901.2 | — | 6.59 |
+
+结论：没有可测的变慢。未命中路径多一次登记表查询（空表时直接返回）和一次动态数组分配；命中路径多一次整数比较。子键冷解析比 `TyButton` 本身贵约 6%（多扫一遍两层规则找子键）。
 
 ## 8. 签收
 
-（Task 4 填）
+**提交**：`52ec197e` 计划；`9ba746f8` 登记表与沿链解析；`5c87b9b4` 补全；`ab590436` 文档；`83f3228f` 修一处注释里的花括号（FPC 的 `{ }` 注释会嵌套，编译出 Comment level 2 警告）和一条写错的成环测试；本提交签收。
+
+**编译**：`lazbuild -B tests/tytests.lpi` 通过；StyleModel 只剩改前就有的两条警告。
+
+**测试**：`TTypeKeyChainTest` 21/21、`TThemeLintTest` 20/20、`TTestThemeGolden` 8/8、`TTestThemes` 19/19、`TCssCatalogTest` 14/14、`TButtonTest` 25/25、`TTestStyle{Resolve,PropertyCascade,Load,Override,Mode}` 全绿。全量（`tests/tytests-tk14.exe --all`）8786 条，0 错误，1 失败：`TTyTerminalPerfTests.TestTheLongestSliceStaysNearTheBudget`（计时，25.7 ms 超预算）；单独重跑第一次 298.9 ms、第二次 13.1 ms 通过——机器负载导致的偶发，与本改动无关（终端写队列不经样式解析的未命中路径）。基线（`140496e6`）全量 8764 条全绿；差值 22 = 新增 21 + lint 1。
+
+**golden**：`git diff --quiet tests/golden` 通过，三份一字不变。
+
+**文档示例**：`docs/subclassing.md` 与 `.en.md` 里的 `MyTagButton` 单元抽出来逐字节相同，用 fpc 编进一个小程序：编译通过，运行时 `TyTypeKeyParent('MyTagButton') = 'TyButton'`，且 `ResolveStyle('MyTagButton')` 有背景。
+
+**变异**（§6，写回原字节还原并逐字节核对，每个变异后增量重编，结束后 `-B` 全量重编再跑全量）：M1–M13 全部被杀，每个都红在表中预期的测试上（M3 另外还红了 ChildRuleOverrides、ThreeLevel、TagButtonRule…，因为它们的用户层也有子键普通规则）。
+
+**与计划的偏差**：完成补全的测试随 Task 1 一起提交（Task 2 才实现），中间那个提交上它是红的。原计划 M8b 构造不出能区分的变异，换成 M13。
+
+**未做 / 交主控**：见 §5。
