@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-`TTyRadioGroup` 是 TyControls 库中的**单选组容器**控件，继承自 [`TTyGroupBox`](groupbox.md)。它复用了父类的主题化标题边框与客户区内缩（`AdjustClientRect` 在标题带下方留出空间），并在此基础上**自动为 `Items` 中的每一行文字生成一个 `TTyRadioButton` 子控件**，在客户区内按列布局。
+`TTyRadioGroup` 是 TyControls 库中的**单选组容器**控件，继承自 [`TTyCustomGroupBox`](groupbox.md)。它复用了父类的主题化标题边框与客户区内缩（`AdjustClientRect` 在标题带下方留出空间），并在此基础上**自动为 `Items` 中的每一行文字生成一个 `TTyRadioButton` 子控件**，在客户区内按列布局。
 
 这些单选子控件是**内部辅助控件**：由控件自身拥有（`Owner = Self`）、标记为 `csNoDesignVisible`（不会泄漏到 IDE 的对象树 / 组件列表中），并在 `Items` 变化时整体重建。所有子单选按钮共享同一 `Parent`（即本控件）且 `GroupIndex = 0`，因此借助 `TTyRadioButton.UncheckSiblings` 天然互斥——无需额外的分组名属性。
 
@@ -18,10 +18,10 @@
 |------|-----|
 | 单元 | `tyControls.RadioGroup` |
 | typeKey | `TyGroupBox`（**继承自父类，复用同一主题规则，无新增 .tycss**） |
-| 基类 | `TTyGroupBox`（继承自 `TTyCustomControl`） |
+| 基类 | `TTyCustomGroupBox`（继承自 `TTyCustomControl`） |
 | 子控件类型 | `TTyRadioButton`（`tyControls.CheckBox`） |
 | 默认尺寸 | 185 × 130（逻辑像素） |
-| 客户区顶边内缩 | 16 逻辑像素（继承自 `TTyGroupBox.AdjustClientRect`） |
+| 客户区顶边内缩 | 16 逻辑像素（继承自 `TTyCustomGroupBox.AdjustClientRect`） |
 
 ```pascal
 uses tyControls.RadioGroup;
@@ -41,8 +41,8 @@ uses tyControls.RadioGroup;
 | `Columns` | `Integer` | `1` | 子控件在客户区内的列数（≥ 1，小于 1 会被夹取为 1）。填充**顺序**由 `ColumnLayout` 决定。 |
 | `ColumnLayout` | `TColumnLayout`（`ExtCtrls`） | `clHorizontalThenVertical` | 网格的**填充顺序**。`clHorizontalThenVertical`（默认，也是 LCL 的默认，`extctrls.pp:777`）先横着填满第 0 行，6 项 2 列读作 `1 2 / 3 4 / 5 6`；`clVerticalThenHorizontal` 先竖着填满第 0 列，读作 `1 4 / 2 5 / 3 6`。**方向键导航也读这个值**，所以键盘永远走向用户眼里的那个邻居。见 [§7 注意事项](#7-注意事项) 的破坏性变更说明。 |
 | `ItemIndex` | `Integer` | `-1` | 当前选中项的索引（`-1` = 无选中）。**读**：返回当前处于 `Checked` 状态的子控件索引；**写**：选中对应子控件（其余自动取消），越界值则清空所有选中。**程序化写入同样触发 `OnSelectionChanged` 与 `OnClick`**（写入值与当前值相同时不触发）。 |
-| `Caption` | `string` | `''` | 分组框标题（继承自 `TTyGroupBox`）。 |
-| `Alignment` | `TAlignment` | `taLeftJustify` | 标题在顶部边框带内的对齐方式（继承自 `TTyGroupBox`）。 |
+| `Caption` | `string` | `''` | 分组框标题（继承自 `TTyCustomGroupBox`）。 |
+| `Alignment` | `TAlignment` | `taLeftJustify` | 标题在顶部边框带内的对齐方式（继承自 `TTyCustomGroupBox`）。 |
 
 ### public 方法
 

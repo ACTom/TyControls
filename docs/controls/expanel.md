@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-`TTyExPanel` 是 TyControls 库中的**可折叠/展开面板容器**，继承自 `TTyPanel`（后者继承自 `TTyCustomControl`）。它在控件顶部绘制一段**标题栏（header band）**：内含一个展开/折叠的三角形箭头（chevron）和 `Caption` 文字；点击标题栏即切换 `Collapsed` 状态。标题栏下方是**主体区（body）**，用于放置用户的子控件。
+`TTyExPanel` 是 TyControls 库中的**可折叠/展开面板容器**，继承自 `TTyCustomPanel`（后者继承自 `TTyCustomControl`）。它在控件顶部绘制一段**标题栏（header band）**：内含一个展开/折叠的三角形箭头（chevron）和 `Caption` 文字；点击标题栏即切换 `Collapsed` 状态。标题栏下方是**主体区（body）**，用于放置用户的子控件。
 
 - **折叠时**：控件的 `Height` 收缩到只剩标题栏高度；`ExpandedHeight` 记住折叠前的完整高度。
 - **展开时**：`Height` 恢复到 `ExpandedHeight`。
@@ -22,7 +22,7 @@
 | 单元 | `tyControls.ExPanel` |
 | 盒子 typeKey | `TyExPanel`（**自有 typeKey**） |
 | 标题栏 typeKey | `TyExPanelHeader`（**自有子部件键**，支持 `:hover`） |
-| 基类 | `TTyPanel`（继承自 `TTyCustomControl` → `TCustomControl`） |
+| 基类 | `TTyCustomPanel`（继承自 `TTyCustomControl` → `TCustomControl`） |
 | 默认尺寸 | 200 × 140（逻辑像素） |
 | 默认标题栏高度 | 26 逻辑像素（常量 `TyExPanelDefaultHeaderHeight`） |
 | 客户区顶边内缩 | 一个标题栏高度（`AdjustClientRect` 实现，随 DPI 缩放） |
@@ -57,7 +57,7 @@ uses tyControls.ExPanel;
 | `AnimationDuration` | `Integer` | `160` | 折叠/展开动画时长（毫秒）。`0` = 瞬间跳变（不启动定时器）。运行时由 `TTimer` 逐帧驱动，headless 环境下始终跳变。 |
 | `OnExpand` | `TNotifyEvent` | `nil` | 从折叠切换到展开时触发。 |
 | `OnCollapse` | `TNotifyEvent` | `nil` | 从展开切换到折叠时触发。 |
-| `Caption` | `string` | `''` | **继承自 `TTyPanel`**。绘制在标题栏内、箭头右侧，垂直居中。 |
+| `Caption` | `string` | `''` | **继承自 `TTyCustomPanel`**。绘制在标题栏内、箭头右侧，垂直居中。 |
 | `Align` / `Anchors` / `StyleClass` / `Controller` | — | — | 继承自基类的通用容器成员。 |
 
 ### public 属性

@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyFontListBox 是**字体族列表框**——[TTyFontComboBox](fontcombobox.md) 的列表版。每一行(字体族名)都**用它自己的字体绘制**。继承自 [TTyListBox](listbox.md),覆写 `PaintItemContent`(与 FontComboBox 共用自由函数 `TyDrawFontRow`)。从 `Screen.Fonts` 填充,`SelectedFont` 是选中族。
+TTyFontListBox 是**字体族列表框**——[TTyFontComboBox](fontcombobox.md) 的列表版。每一行(字体族名)都**用它自己的字体绘制**。继承自 [TTyCustomListBox](listbox.md),覆写 `PaintItemContent`(与 FontComboBox 共用自由函数 `TyDrawFontRow`)。从 `Screen.Fonts` 填充,`SelectedFont` 是选中族。
 
 ---
 
@@ -28,7 +28,7 @@ uses tyControls.FontListBox;
 | `SelectedFont: string` | 选中的字体族名(读=当前行;写=选中同名行,若存在)。 |
 | `RefreshFonts` | 重新从 `Screen.Fonts` 填充。 |
 
-另继承 `TTyListBox` 的 `ItemIndex` / `OnChange` 等。
+另继承 `TTyCustomListBox` 的 `ItemIndex` / `OnChange` 等。
 
 ---
 

@@ -361,7 +361,7 @@ TyScrollBar:disabled { opacity: var(--disabled-opacity); }
 
 六个宿主各有一个 published 的 `ScrollBarAutoHide`，三个值、默认值都和 `AutoHide` 一样，写下去落到它内嵌的那一条（或两条）上：
 
-`TTyStringGrid` / `TTyDrawGrid`、`TTyListBox`、`TTyListView`、`TTyMemo`、`TTyScrollBox`、`TTyTreeView`。`TTyValueListEditor` 从 `TTyListBox` 继承，不必单列。
+`TTyStringGrid` / `TTyDrawGrid`、`TTyListBox`、`TTyListView`、`TTyMemo`、`TTyScrollBox`、`TTyTreeView`。`TTyValueListEditor` 从 `TTyCustomListBox` 继承，不必单列。
 
 ```pascal
 Memo1.ScrollBarAutoHide := sbahNever;   // 这个 Memo 的条不许消失，不管皮肤怎么说

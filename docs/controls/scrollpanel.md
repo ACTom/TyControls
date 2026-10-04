@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyScrollPanel 是 TyControls 库中的**自动平移滚动容器**，继承自 `TTyScrollBox`（本批次的滚动容器基类）。它把父类完整的“视口 + 内嵌滚动条 + 子控件按滚动位偏移”机制原样继承下来，只额外添加**一件事**——**边缘自动平移（edge auto-pan）**：当用户正在拖拽（橡皮筋框选、拖动某个子控件、或一次拖放 DnD）且指针进入视口某条边缘的 `EdgeMargin` 带内时，面板会朝那条边自动滚动，指针离边越近滚得越快。这正是“把拖动对象拽到列表边缘、列表就自己继续滚”的经典手感，也是设计期 / 拖放场景里最常用的辅助。
+TTyScrollPanel 是 TyControls 库中的**自动平移滚动容器**，继承自 `TTyCustomScrollBox`（本批次的滚动容器基类）。它把父类完整的“视口 + 内嵌滚动条 + 子控件按滚动位偏移”机制原样继承下来，只额外添加**一件事**——**边缘自动平移（edge auto-pan）**：当用户正在拖拽（橡皮筋框选、拖动某个子控件、或一次拖放 DnD）且指针进入视口某条边缘的 `EdgeMargin` 带内时，面板会朝那条边自动滚动，指针离边越近滚得越快。这正是“把拖动对象拽到列表边缘、列表就自己继续滚”的经典手感，也是设计期 / 拖放场景里最常用的辅助。
 
 本控件被测的**核心**是纯函数 `TyEdgeAutoPan`（见第 4 节）：给定指针位置、视口矩形、边缘带宽与最大速度，返回本帧应施加的滚动增量 `(dx, dy)`。这段数学完全 headless 可测。真正驱动它的定时器、以及给它喂实时指针的拖拽 / DnD 接线属于交互路径，需真机验证（运行时由一个 `TTimer` 每帧调用 `AutoPanTo`→`AutoPanStep`）。
 
@@ -13,8 +13,8 @@ TTyScrollPanel 是 TyControls 库中的**自动平移滚动容器**，继承自 
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.ScrollPanel` |
-| `GetStyleTypeKey` 返回值 | `'TyScrollBox'`（**继承自 `TTyScrollBox`，刻意不重写**） |
-| 基类 | `TTyScrollBox`（滚动容器，继承自 `TTyPanel` = `TTyCustomControl`，有窗口句柄、可作父容器） |
+| `GetStyleTypeKey` 返回值 | `'TyScrollBox'`（**继承自 `TTyCustomScrollBox`，刻意不重写**） |
+| 基类 | `TTyCustomScrollBox`（滚动容器，继承自 `TTyCustomPanel` = `TTyCustomControl`，有窗口句柄、可作父容器） |
 
 在 `.tycss` 文件中，本控件走 `TyScrollBox` 选择器着色（背景/边框/内边距令牌），与 [`TTyScrollBox`](scrollbox.md) 完全一致——**注意它不再是 `TyPanel`**：`TTyScrollBox` 在 2026-07 的 typeKey 审计中拿到了自己的键（滚动井下沉、面板抬起，两者观感相反），本控件作为它的子类自动继承了新键。
 
@@ -34,7 +34,7 @@ uses tyControls.ScrollPanel;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `AutoPan` | `Boolean` | `True` | **边缘自动平移**总开关。为 `False` 时 `AutoPanTo` 变为 no-op（面板仍可用滚轮 / 滚动条滚动，行为等同其 `TTyScrollBox` 基类）；置 `False` 会立即停止任何正在进行的自动平移。**破坏性改名：** 它原名 `AutoScroll`——LCL 里每一个滚动容器上的 `AutoScroll` 都表示"自动管理滚动条"，与"指针靠近边缘时平移"完全是两回事，那个名字承诺的是滚动条行为、给的却是拖动平移。`AutoPan` 也与本控件自己的其余 API（`AutoPanTo` / `AutoPanActive` / `StopAutoPan` / `EdgeMargin`）对齐 |
+| `AutoPan` | `Boolean` | `True` | **边缘自动平移**总开关。为 `False` 时 `AutoPanTo` 变为 no-op（面板仍可用滚轮 / 滚动条滚动，行为等同其 `TTyCustomScrollBox` 基类）；置 `False` 会立即停止任何正在进行的自动平移。**破坏性改名：** 它原名 `AutoScroll`——LCL 里每一个滚动容器上的 `AutoScroll` 都表示"自动管理滚动条"，与"指针靠近边缘时平移"完全是两回事，那个名字承诺的是滚动条行为、给的却是拖动平移。`AutoPan` 也与本控件自己的其余 API（`AutoPanTo` / `AutoPanActive` / `StopAutoPan` / `EdgeMargin`）对齐 |
 | `EdgeMargin` | `Integer` | `24` | 触发自动平移的边缘带**逻辑**宽度（px@96ppi）；越大则离边越远就开始平移。使用时按 `MulDiv(值, PPI, 96)` 做 DPI 缩放；赋负值钳制为 `0` |
 | `MaxSpeed` | `Integer` | `16` | 到达（或越过）边缘时每帧的**逻辑**最大滚动增量（px@96ppi）；增量从边缘带内边界处的 `0` 线性升到此值。DPI 缩放同上；赋负值钳制为 `0` |
 
@@ -48,7 +48,7 @@ uses tyControls.ScrollPanel;
 
 ### 继承的通用成员
 
-TTyScrollPanel 继承自 `TTyScrollBox` → `TTyPanel` → `TTyCustomControl`（`tyControls.Base`），因此拥有滚动容器的全部能力（内嵌滚动条、`AdjustClientRect`、子控件偏移）以及基础的 `StyleClass` / `StyleOverride` / `Controller` / `Anchors` / `Align` 等（完整清单见基类文档）。
+TTyScrollPanel 继承自 `TTyCustomScrollBox` → `TTyCustomPanel` → `TTyCustomControl`（`tyControls.Base`），因此拥有滚动容器的全部能力（内嵌滚动条、`AdjustClientRect`、子控件偏移）以及基础的 `StyleClass` / `StyleOverride` / `Controller` / `Anchors` / `Align` 等（完整清单见基类文档）。
 
 **状态跟踪字段（private，不 published）：**
 
@@ -84,13 +84,13 @@ function TyEdgeAutoPan(const AMousePos: TPoint; const AViewport: TRect;
 | **薄视口守卫** | 某轴太窄容不下两条不重叠的边缘带时，把带宽钳为该轴一半，从中点一分为二——每半仍朝各自的边平移，无死重叠区、不重复计数 |
 | **空视口** | `span <= 0`（退化矩形）→ 该轴永不平移 |
 
-> 每帧的实际滚动落地（把 `(dx,dy)` 加到 `TTyScrollBox` 的滚动偏移）属于交互路径，需真机验证；上述平移数学则完全 headless 可测。控件内部通过受保护的 `AutoPanStep` → `ApplyAutoPanDelta` 两级“接缝”把纯计算与偏移落地隔开，测试用访问子类覆写 `ApplyAutoPanDelta` 即可在无实时偏移的情况下观察请求的增量。
+> 每帧的实际滚动落地（把 `(dx,dy)` 加到 `TTyCustomScrollBox` 的滚动偏移）属于交互路径，需真机验证；上述平移数学则完全 headless 可测。控件内部通过受保护的 `AutoPanStep` → `ApplyAutoPanDelta` 两级“接缝”把纯计算与偏移落地隔开，测试用访问子类覆写 `ApplyAutoPanDelta` 即可在无实时偏移的情况下观察请求的增量。
 
 ---
 
 ## 5. 事件
 
-TTyScrollPanel 未在 `published` 节声明专有事件。自动平移逻辑通过公开方法 `AutoPanTo` / `StopAutoPan` 由宿主的拖拽处理器驱动，不经外部事件回调。作为 `TTyScrollBox` 后代，它暴露基类的 Tier A/B 基线事件（`OnMouseDown`/`OnMouseMove`/`OnMouseUp`/`OnDragOver` 等，完整清单见 [../events.md](../events.md)）。
+TTyScrollPanel 未在 `published` 节声明专有事件。自动平移逻辑通过公开方法 `AutoPanTo` / `StopAutoPan` 由宿主的拖拽处理器驱动，不经外部事件回调。作为 `TTyCustomScrollBox` 后代，它暴露基类的 Tier A/B 基线事件（`OnMouseDown`/`OnMouseMove`/`OnMouseUp`/`OnDragOver` 等，完整清单见 [../events.md](../events.md)）。
 
 典型接线：在拖拽 `OnDragOver` 或橡皮筋 `OnMouseMove` 里把指针位置传给 `AutoPanTo(ScreenToClient(...))`，在 `OnDragDrop`/`OnEndDrag`/`OnMouseUp` 里调 `StopAutoPan`。
 
@@ -137,21 +137,21 @@ end;
 
 ## 8. 注意事项
 
-- **薄壳子类，刻意共用滚动井的键：** `GetStyleTypeKey` 不重写，直接继承 `TTyScrollBox` 的 `'TyScrollBox'`（该键在 2026-07 审计中已从 `'TyPanel'` 拆出）。本控件只加行为、不加表面，因此不该有自己的键；要改它的外观，改 `TyScrollBox` 规则（会同时作用于普通滚动框，这是预期的）。
+- **薄壳子类，刻意共用滚动井的键：** `GetStyleTypeKey` 不重写，直接继承 `TTyCustomScrollBox` 的 `'TyScrollBox'`（该键在 2026-07 审计中已从 `'TyPanel'` 拆出）。本控件只加行为、不加表面，因此不该有自己的键；要改它的外观，改 `TyScrollBox` 规则（会同时作用于普通滚动框，这是预期的）。
 - **纯数学是被测核心：** `TyEdgeAutoPan` 是完全 headless 的纯函数（斜坡 / 钳制 / 薄视口分裂 / 禁用守卫都在此），单测直接调用；定时器 + 拖拽接线是真机路径。
 - **坐标系一致：** `AutoPanTo` 的指针位置必须与 `AutoPanViewport`（默认 `ClientRect`）**同一坐标系**（客户区 px）。从屏幕坐标来时先 `ScreenToClient`。
 - **指针停在边缘也持续滚：** 定时器从 `FLastPanPos` 每帧续滚，因此拖拽对象“压在边缘不动”时列表仍持续滚动，符合直觉；指针回到中间平静区则暂停（仍武装），拖拽结束需显式 `StopAutoPan`。
 - **DPI 缩放：** `EdgeMargin` / `MaxSpeed` 是逻辑值（96ppi 基准），使用时按 `MulDiv(值, Font.PixelsPerInch, 96)` 缩放；负值钳为 `0`。
 - **AutoPan 关闭即退化：** `AutoPan := False` 时 `AutoPanTo`/`AutoPanStep` 均为 no-op，面板仍是一个可用滚轮 / 滚动条滚动的普通 `TTyScrollBox`。该属性**原名 `AutoScroll`**，升级时需要改名：老名字与 LCL 滚动容器上"自动管理滚动条"的语义撞车。
 - **定时器安全：** `FPanTimer` 由 `Self` 拥有但析构里先 `FreeAndNil`，避免拆卸期 `OnTimer` 触发（沿用 `TTyScrollBar` 的定时器拆卸约定）。
-- **滚动落地接缝：** 每帧增量经受保护的 `ApplyAutoPanDelta` 落到基类偏移——它调 `TTyScrollBox.ScrollByDelta`（夹取到滚动范围 + 同步缩略块），并返回偏移是否**真的动了**，好让已经滚到头的空转帧停下来。此钩子被刻意隔离在一处，测试用访问子类覆写它即可在无实时偏移的情况下观察请求的增量。
+- **滚动落地接缝：** 每帧增量经受保护的 `ApplyAutoPanDelta` 落到基类偏移——它调 `TTyCustomScrollBox.ScrollByDelta`（夹取到滚动范围 + 同步缩略块），并返回偏移是否**真的动了**，好让已经滚到头的空转帧停下来。此钩子被刻意隔离在一处，测试用访问子类覆写它即可在无实时偏移的情况下观察请求的增量。
 </content>
 
 ---
 
 ## RTL 镜像（`BiDiMode = bdRightToLeft`）
 
-本控件继承 `TTyScrollBox` 的全部镜像：竖条到左边缘、视口与子控件布局原点让开它。此外它自己有一处：**边缘自动平移的感应带跟着视口走**。
+本控件继承 `TTyCustomScrollBox` 的全部镜像：竖条到左边缘、视口与子控件布局原点让开它。此外它自己有一处：**边缘自动平移的感应带跟着视口走**。
 
 `ClientRect` 让出的是滚动条的**宽度**，但它的左端永远是 0（这是 LCL 的硬约束，见 `docs/controls/scrollbox.md`），所以镜像后真正的视口是那个矩形整体右移一个条宽。不跟着移的话，左边那条感应带会压在滚动条上，而右边那条用户真正够得到的边带落在矩形之外——按 `TyEdgeAutoPan` 的语义那等于**一直在满速平移**。
 

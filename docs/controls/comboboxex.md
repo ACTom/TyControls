@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyComboBoxEx 是**每一行带一套扩展数据（图片 / 缩进 / 载荷）+ 文字**的下拉框。继承自 [TTyComboBox](combobox.md),覆写 `PaintFieldContent`(字段区)与自定义弹出列表的 `PaintItemContent`(下拉行),在图片右侧画文字——**字段和下拉里画的是同一套图文布局**(共享 `DrawImageText` / `DrawExItem`)。
+TTyComboBoxEx 是**每一行带一套扩展数据（图片 / 缩进 / 载荷）+ 文字**的下拉框。继承自 [TTyCustomComboBox](combobox.md),覆写 `PaintFieldContent`(字段区)与自定义弹出列表的 `PaintItemContent`(下拉行),在图片右侧画文字——**字段和下拉里画的是同一套图文布局**(共享 `DrawImageText` / `DrawExItem`)。
 
 这个控件存在的理由是 **`ItemsEx`**:一个 published、**设计期可编辑的集合**(`TTyComboExItems`,元素为 `TTyComboExItem`)。每个条目带 `Caption` / `ImageIndex` / `OverlayImageIndex` / `SelectedImageIndex` / `Indent` / `Data`。没有它,这个控件就只是"多几步的组合框"。
 
@@ -68,7 +68,7 @@ uses tyControls.ComboBoxEx, tyControls.ImageCollection;
 | `DrawImageText(P; ARect; S; AImageIndex; AStyle)` | 共享绘制:左图右文。 |
 | `DrawExItem(P; ARect; AItem; ASelected; AStyle)` | 完整行绘制:应用 `Indent`、选中时换 `SelectedImageIndex`、再叠 `OverlayImageIndex`。 |
 
-另继承 `TTyComboBox` 的 `Items` / `ItemIndex` / `Text` / `Sorted` / `DropDownCount` / `TextHint` / `OnChange` / `OnSelect` 等。
+另继承 `TTyCustomComboBox` 的 `Items` / `ItemIndex` / `Text` / `Sorted` / `DropDownCount` / `TextHint` / `OnChange` / `OnSelect` 等。
 
 ---
 

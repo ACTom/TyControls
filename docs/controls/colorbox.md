@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyColorBox 是**命名颜色组合框**:字段(收起态)和下拉列表的每一项都显示一个**颜色色块 + 名称**。继承自 [TTyComboBox](combobox.md),靠给列表/组合框新增的**逐项自绘钩子**实现——`CreatePopupList` 注入一个会画色块的下拉列表、`PaintFieldContent` 画字段里的色块。通过 `AddColor` / `ClearColors` 管理色板,`Selected` 是当前选中的 `TColor`。这是整个颜色/字体选择器子族的**地基控件**。
+TTyColorBox 是**命名颜色组合框**:字段(收起态)和下拉列表的每一项都显示一个**颜色色块 + 名称**。继承自 [TTyCustomComboBox](combobox.md),靠给列表/组合框新增的**逐项自绘钩子**实现——`CreatePopupList` 注入一个会画色块的下拉列表、`PaintFieldContent` 画字段里的色块。通过 `AddColor` / `ClearColors` 管理色板,`Selected` 是当前选中的 `TColor`。这是整个颜色/字体选择器子族的**地基控件**。
 
 ---
 
@@ -36,7 +36,7 @@ uses tyControls.ColorBox;
 | `ClearColors` | — | 清空所有项与颜色。 |
 | `ColorAt(AIndex)` | `TColor` | 第 i 项的色(越界 `clNone`)。 |
 
-另继承 `TTyComboBox` 的 `ItemIndex` / `OnChange` / `OnSelect` 等。
+另继承 `TTyCustomComboBox` 的 `ItemIndex` / `OnChange` / `OnSelect` 等。
 
 ### 3.1 Style —— 色板由什么组成
 

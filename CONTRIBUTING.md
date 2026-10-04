@@ -73,6 +73,7 @@ tests/tytests --all --format=plain
 - 颜色、尺寸、圆角等视觉值走主题 token,不写死在代码里。
 - 自绘界面里不用原生 LCL 控件(`TEdit`、`TButton` 等)。
 - 新单元要加进 `tycontrols.lpk`(设计期的加进 `tycontrols_dt.lpk`)。
+- 新控件一开始就拆成两个类:`TTyCustomXxx` 放全部实现,`TTyXxx` 只有一段 `published`(做法见 [docs/subclassing.md](docs/subclassing.md))。不拆的要在 `tests/test.customclasses.pas` 的 `CNotSplit` 里写明理由,否则测试会红。
 - 用户可见的文字用 `resourcestring`,并同步更新 `languages/` 下的 zh_CN `.po`。
 - 新示例用 `.lfm` 窗体,带标题栏,能在运行时换主题。
 - 不用比 Lazarus 3.0 更新的 LCL API;必须用时,按 `LCL_FULLVERSION` 给旧版本留一条路。

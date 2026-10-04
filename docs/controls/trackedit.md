@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyTrackEdit 是**数值编辑框 + 内嵌迷你滑块**,继承自 [TTyNumericEdit](numericedit.md)。在编辑框尾部保留一小块区域画一条滑轨 + 圆形滑块,**拖动滑块设置 `Value`**(范围 `MinValue..MaxValue`,默认 `0..100`),编辑框里的数字实时回显;也可以直接键入数字。复用 NumericEdit 的 `Value` / 格式化 / 输入过滤,以及 TTyEdit 的 `RightReserve` / `PaintTrailing` 钩子来预留并绘制滑块。
+TTyTrackEdit 是**数值编辑框 + 内嵌迷你滑块**,继承自 [TTyCustomNumericEdit](numericedit.md)。在编辑框尾部保留一小块区域画一条滑轨 + 圆形滑块,**拖动滑块设置 `Value`**(范围 `MinValue..MaxValue`,默认 `0..100`),编辑框里的数字实时回显;也可以直接键入数字。复用 NumericEdit 的 `Value` / 格式化 / 输入过滤,以及 TTyCustomEdit 的 `RightReserve` / `PaintTrailing` 钩子来预留并绘制滑块。
 
 ---
 
@@ -35,7 +35,7 @@ uses tyControls.TrackEdit;
 
 ## 3. 属性
 
-继承 [TTyNumericEdit](numericedit.md) 的 `Value` / `Decimals`(TrackEdit 默认 `0`)/ `MinValue`(默认 `0`)/ `MaxValue`(默认 `100`)/ `UseThousands`,以及 TTyEdit 的全部已发布属性。
+继承 [TTyCustomNumericEdit](numericedit.md) 的 `Value` / `Decimals`(TrackEdit 默认 `0`)/ `MinValue`(默认 `0`)/ `MaxValue`(默认 `100`)/ `UseThousands`,以及 TTyCustomEdit 的全部已发布属性。
 
 滑块把 `Value` 映射到 `[MinValue, MaxValue]`——所以这两个要设成一个有意义的区间(默认已给 0..100)。
 

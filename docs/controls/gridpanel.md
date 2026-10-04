@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-`TTyGridPanel` 是 TyControls 库中的**可在设计器里拖放的网格布局容器**，继承自 [`TTyPanel`](panel.md)。设 `ColumnCount × RowCount`，它就**自动生成同样数量的 [`TTyGridCell`](#2-单元与-typekey) 格子容器**——每个格子是一个真正的透明子容器，你把控件拖进(或代码 parent 进)某个格子，`alClient` 的子控件就被 LCL 约束在**它所在格子**的范围内。
+`TTyGridPanel` 是 TyControls 库中的**可在设计器里拖放的网格布局容器**，继承自 [`TTyCustomPanel`](panel.md)。设 `ColumnCount × RowCount`，它就**自动生成同样数量的 [`TTyGridCell`](#2-单元与-typekey) 格子容器**——每个格子是一个真正的透明子容器，你把控件拖进(或代码 parent 进)某个格子，`alClient` 的子控件就被 LCL 约束在**它所在格子**的范围内。
 
 这套模型照抄库里已跑通的 [`TTyPageControl` / `TTyTabSheet`](pagecontrol.md):格子是 **form 拥有、parent 是网格、走 `GetChildren` 流式化**的真组件,所以整套布局(格子 + 拖进去的控件)都能在 `.lfm` 里保存,并在设计器里可视化编辑。
 
@@ -17,7 +17,7 @@
 | 项目 | `TTyGridPanel` | `TTyGridCell` |
 |------|-----|-----|
 | 单元 | `tyControls.GridPanel` | `tyControls.GridPanel`(与网格同单元;`tyControls.GridCell` 是兼容再导出) |
-| 基类 | `TTyPanel`(→ `TTyCustomControl` → `TCustomControl`) | `TTyCustomControl`(→ `TCustomControl`) |
+| 基类 | `TTyCustomPanel`(→ `TTyCustomControl` → `TCustomControl`) | `TTyCustomControl`(→ `TCustomControl`) |
 | `GetStyleTypeKey` | `'TyGridPanel'`(**默认无主题规则 → 透明布局宿主**;格间距露出父容器颜色。主题可定义该键来要一个可见的网格表面) | `'TyGridPanelCell'`(同上:**默认无主题规则 → 透明**,主题可接管) |
 | 默认尺寸 / 网格 | 200 × 150;默认 2 × 2 全等分 | 由网格定位,不单独设尺寸 |
 | 设计器注册 | 面板:`TyControls Containers` 组 | `RegisterNoIcon`(网格自动建,不从面板单独拖) |
@@ -119,7 +119,7 @@ type
 
 > **两级间距:** 网格的 `Spacing` = 格**间**距;格子的 `Padding` = 格**内**缩。
 
-### 继承自 TTyPanel 的常用 published 成员
+### 继承自 TTyCustomPanel 的常用 published 成员
 
 `Align` / `Anchors`(常设 `alClient` 或 `[akLeft,akTop,akRight]` 让网格随宿主伸缩)、`StyleClass`、`Controller`。
 
@@ -231,4 +231,4 @@ Ed.Align := alClient;                          // 约束在该格内
 
 ---
 
-参见 [`TTyPanel`](panel.md)(父类)、[`TTyPageControl`](pagecontrol.md)(同款 form-owned 子容器设计器模式)。
+参见 [`TTyCustomPanel`](panel.md)(父类)、[`TTyPageControl`](pagecontrol.md)(同款 form-owned 子容器设计器模式)。

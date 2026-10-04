@@ -36,11 +36,11 @@ uses tyControls.Panel;
 | `Anchors` | `TAnchors` | `[akLeft, akTop]` | 随父控件调整大小时的锚点 |
 | `DockSite` / `UseDockManager` / `OnDockDrop` / `OnDockOver` / `OnUnDock` / `OnGetSiteInfo` / `OnGetDockCaption` / `OnStartDock` / `OnEndDock` | — | — | 停靠族，照 `TPanel` 原样 republish。全部是 `TWinControl` / `TControl` 自己的成员，驱动它们的 dock manager 是 LCL 的代码；`tests/test.parity.container.pas` 里的探针真的把一个控件停靠进 `TTyPanel` 并断言了重新 parent、dock client 列表与通知，所以这是 republish 而非重新实现。前五个在 `TWinControl` 上是 public（代码里一直能写），`OnGetSiteInfo` / `OnGetDockCaption` / `OnStartDock` / `OnEndDock` 是 protected——**它们此前没有任何途径可达**，对象检视器和代码都够不着 |
 
-> **注意：** 上表只列 TTyPanel **自己**声明（或 republish）的属性。`Enabled` / `Visible` / `Font` / `Hint` / `AutoSize` / `BorderWidth` / `ChildSizing` / 拖放族等由基类 `TTyCustomControl` 统一 published，在对象检视器里同样可见（完整清单见 [../events.md](../events.md)）。
+> **注意：** 上表只列 TTyPanel **自己**声明（或 republish）的属性。`Enabled` / `Visible` / `Font` / `Hint` / `AutoSize` / `BorderWidth` / `ChildSizing` / 拖放族等是 LCL `TControl` / `TWinControl` 的成员，由 `TTyPanel` 的发布段一并发布，在对象检视器里同样可见（完整清单见 [../events.md](../events.md)）。
 
 ### 继承的通用成员
 
-TTyPanel 继承自 `TTyCustomControl`（`tyControls.Base`）：
+TTyPanel 的实现在 `TTyCustomPanel`（继承自 `TTyCustomControl`，`tyControls.Base`）：
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|

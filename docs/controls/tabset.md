@@ -12,7 +12,7 @@
 |------|-----|
 | 单元 | `tyControls.TabSet` |
 | `GetStyleTypeKey` 返回值 | `'TyTabSet'`（自己的键） |
-| 基类 | `TTyCustomTabStrip`（`tyControls.TabStrip`，继承自 `TTyCustomControl`） |
+| 基类 | `TTyCustomTabSet` → `TTyCustomTabStrip`（`tyControls.TabStrip`，继承自 `TTyCustomControl`） |
 | 默认尺寸 | 240 × 32（逻辑像素，`Create` 中设置） |
 
 | typeKey | 画什么 |
@@ -63,9 +63,9 @@ uses tyControls.TabSet;
 
 > **不提供 `ScrollOpposite`**，而且是刻意的：它只在"选中的那一行会被重排到贴着页面体"这个 comctl32 行为存在时才有意义，而本库不做那个重排——它会把选中从渲染状态变成布局输入，并在拖拽重排的过程中把页签从指针底下挪走。理由与代价见 [`pagecontrol.md` §6](pagecontrol.md)。
 
-### 继承自 `TTyCustomTabStrip` 的 published 成员
+### 来自 `TTyCustomTabStrip` 的成员
 
-引擎在基类的 `published` 段暴露了以下成员，`TTyTabSet` 一并继承：
+以下成员声明在引擎基类 `TTyCustomTabStrip`，由 `TTyTabSet` 发布：
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
@@ -106,7 +106,7 @@ uses tyControls.TabSet;
 
 ## 4. 事件
 
-`TTyTabSet` 自身**不新增事件**；下列专有事件全部由基类 `TTyCustomTabStrip` published，直接继承可用：
+`TTyTabSet` 自身**不新增事件**；下列专有事件声明在引擎基类 `TTyCustomTabStrip`，由 `TTyTabSet` 发布：
 
 | 事件 | 类型 | 触发时机 |
 |------|------|----------|

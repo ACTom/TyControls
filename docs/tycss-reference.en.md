@@ -786,7 +786,7 @@ The following six keys **share one rule block** with byte-identical values, each
 
 | typeKey | What it paints | Resolved by |
 |---|---|---|
-| `TyButton` | Regular button frame + text | `TTyButton` (and descendants that do not override the key: `TTyGlyphButton`, `TTyColorButton`, `TTyDropDownButton`, `TTyMenuButton`, `TTyTransferArrowButton`) |
+| `TyButton` | Regular button frame + text | `TTyButton` (and the family members that do not override the key: `TTyGlyphButton`, `TTyColorButton`, `TTyDropDownButton`, `TTyMenuButton`, `TTyTransferArrowButton`) |
 | `TySpeedButton` | Toolbar speed buttons | `TTySpeedButton` |
 | `TyGlyphContainerButton` | Buttons with a glyph container | `TTyGlyphContainerButton` |
 | `TyRibbonAppMenu` | The application menu button at the ribbon's top-left | `TTyRibbonAppMenu` |
@@ -831,10 +831,10 @@ States: `:disabled` only (`opacity`).
 
 | typeKey | What it paints | Resolved by | States / variants |
 |---|---|---|---|
-| `TyEdit` | Single-line input | `TTyEdit` and descendants that do not override the key (`TTyMaskEdit`/`TTyCurrencyEdit`/`TTyURLEdit`/`TTyNumericEdit`/`TTyCalcEdit`/`TTyValueEdit`/`TTyComboEdit`/`TTyTrackEdit`); the display strip of `TTyCalculator` also resolves it explicitly | `:hover` `:focus` `:disabled` |
+| `TyEdit` | Single-line input | `TTyEdit` and the family members that do not override the key (`TTyMaskEdit`/`TTyCurrencyEdit`/`TTyURLEdit`/`TTyNumericEdit`/`TTyCalcEdit`/`TTyValueEdit`/`TTyComboEdit`/`TTyTrackEdit`); the display strip of `TTyCalculator` also resolves it explicitly | `:hover` `:focus` `:disabled` |
 | `TySpinEdit` | Numeric spinner input | `TTySpinEdit` | `:hover` `:focus` `:disabled` |
 | `TyMemo` | Multi-line text box | `TTyMemo` | `:hover` `:focus` `:disabled` |
-| `TyComboBox` | Dropdown field (the dropdown arrow uses `color`) | `TTyComboBox` and its 11 descendants; `TTyTreeSelect` shares it deliberately (§8.5) | `:hover` `:focus` `:disabled` |
+| `TyComboBox` | Dropdown field (the dropdown arrow uses `color`) | `TTyComboBox` and the 11 other members of its family; `TTyTreeSelect` shares it deliberately (§8.5) | `:hover` `:focus` `:disabled` |
 | `TyCascader` | Cascading select field | `TTyCascader` | `:hover` `:focus` `:disabled` |
 | `TyDateTimePicker` | Date-time field | `TTyDateTimePicker` | `:hover` `:focus` `:disabled` |
 | `TyTextSelection` | Text selection highlight band, reads `background` only | `TTyEdit` / `TTyMemo` / `TTyDateTimePicker` | none |
@@ -905,7 +905,7 @@ This block has **no state rules**. To fade a disabled image you must write
 
 | typeKey | What it paints | Resolved by | States |
 |---|---|---|---|
-| `TyListBox` | List frame | `TTyListBox` and 14 descendants that do not override the key; the dropdown bodies of `TTyComboBox`/`TTyValueListEditor`, `TTyPopupSurface`, and `TTyGalleryGrid` (the gallery popup grid) also resolve it | `:hover` `:focus` `:disabled` |
+| `TyListBox` | List frame | `TTyListBox` and 14 family members that do not override the key; the dropdown bodies of `TTyComboBox`/`TTyValueListEditor`, `TTyPopupSurface`, and `TTyGalleryGrid` (the gallery popup grid) also resolve it | `:hover` `:focus` `:disabled` |
 | `TyValueListEditor` | Property grid frame (shares a block with `TyListBox`) | `TTyValueListEditor` | `:hover` `:focus` `:disabled` |
 | `TyRibbonGallery` | The ribbon gallery's in-ribbon row frame (shares a block with `TyListBox`) | `TTyRibbonGallery` | `:hover` `:focus` `:disabled` |
 | `TyListItem` | A single row: `background` sets the row fill, `color` the text | `TTyListBox`; the tiles of `TTyRibbonGallery` still resolve it too | `:hover` `:active` (= the selected row) |

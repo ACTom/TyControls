@@ -400,6 +400,7 @@ Thirty-plus single-control examples live under [examples/](examples/).
 | [themes.en.md](docs/themes.en.md) | Built-in themes and writing your own |
 | [tycss-reference.en.md](docs/tycss-reference.en.md) | The `.tycss` language reference |
 | [events.en.md](docs/events.en.md) | Common event conventions |
+| [subclassing.en.md](docs/subclassing.en.md) | Deriving your own controls from `TTyCustomXxx`; upgrading from 3.0 |
 | [rtl.md](docs/rtl.md) | Bidirectional text and right-to-left layout (Chinese) |
 | [known-issues.en.md](docs/known-issues.en.md) | Known issues |
 | [CHANGELOG.en.md](CHANGELOG.en.md) | Changelog |

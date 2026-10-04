@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-`TTyCoolBar` 是 TyControls 库中的 **rebar（可调节带）容器**，继承自 `TTyControlBar`（同批次由兄弟控件提供的"带打包"基类）。它把每个子控件停靠成一条水平"带"（band），并在每条带的左侧提供一个**夹具（gripper）**。
+`TTyCoolBar` 是 TyControls 库中的 **rebar（可调节带）容器**，继承自 `TTyCustomControlBar`（同批次由兄弟控件提供的"带打包"基类）。它把每个子控件停靠成一条水平"带"（band），并在每条带的左侧提供一个**夹具（gripper）**。
 
 ### 夹具手势一览
 
@@ -21,7 +21,7 @@
 >
 > **这一条不是照 Lazarus 抄的。** `TCoolBar` 有同样的死手势——它的 `CalculateAndAlign` 只按溢出换行（`RowEndHelper`，`coolbar.inc:1391`），整个单元里没有任何一处会在落band时减少别的带的 `Width`。**参考是 Win32 的 rebar**：它会把行上的带压到各自的 `cxMinChild`，本库的 `BandMinWidth` 就是那个 `cxMinChild`。
 
-与父类 `TTyControlBar` 的区别在于：`TTyCoolBar` 让每条带**可拖动重排、可拖动改宽**，并为每条带引入按子控件键控的 `Width` / `MinWidth` / `MaxWidth` 元数据。典型用途：经典 Office / IE 风格的可拖拽工具带条。
+与父类 `TTyCustomControlBar` 的区别在于：`TTyCoolBar` 让每条带**可拖动重排、可拖动改宽**，并为每条带引入按子控件键控的 `Width` / `MinWidth` / `MaxWidth` 元数据。典型用途：经典 Office / IE 风格的可拖拽工具带条。
 
 > **交互 vs 数学：** 真正的拖动（鼠标捕获）属于真机行为；**缝的归属**、**落点**、**命中判定**与**改宽钳制**四处几何都被抽成纯函数（`TyCoolBandSeamOwner` / `TyCoolBandDropIndex` / `TyCoolGripperHit` / `TyCoolBandResize`），可无窗口 headless 单测。
 
@@ -33,7 +33,7 @@
 |------|-----|
 | 单元 | `tyControls.CoolBar` |
 | `GetStyleTypeKey` 返回值 | `'TyCoolBar'`（**自有 typeKey**） |
-| 基类 | `TTyControlBar`（带打包容器；其 `GetStyleTypeKey` 为 `'TyControlBar'`） |
+| 基类 | `TTyCustomControlBar`（带打包容器；其 `GetStyleTypeKey` 为 `'TyControlBar'`） |
 | 默认夹具宽度 | 10（逻辑像素） |
 | 默认带最小宽度 | 24（逻辑像素） |
 
@@ -43,7 +43,7 @@
 
 ### 子部件 typeKey
 
-**没有。** 本控件没有自己的 `Paint`——像素全部来自 `TTyControlBar`（面板框架 + 每条带一个夹具），夹具颜色从盒子样式的 `border-color`（缺省回落 `color`）派生，粗细 / 间距 / 内缩是代码里的 `Scale()` 字面量。子部件键 `TyCoolBarGripper` 的扩展已被**刻意推迟**，该键当前**并不存在**，写进 `.tycss` 解析不到任何东西。
+**没有。** 本控件没有自己的 `Paint`——像素全部来自 `TTyCustomControlBar`（面板框架 + 每条带一个夹具），夹具颜色从盒子样式的 `border-color`（缺省回落 `color`）派生，粗细 / 间距 / 内缩是代码里的 `Scale()` 字面量。子部件键 `TyCoolBarGripper` 的扩展已被**刻意推迟**，该键当前**并不存在**，写进 `.tycss` 解析不到任何东西。
 
 ```pascal
 uses tyControls.CoolBar, tyControls.ControlBar, tyControls.Panel;
@@ -98,7 +98,7 @@ uses tyControls.CoolBar, tyControls.ControlBar, tyControls.Panel;
 
 ### 3.3 继承成员
 
-继承自 `TTyControlBar` → `TTyCustomControl`：`Enabled` / `Font` / `Hint` / `TabOrder` / Tier A 鼠标事件 + Tier B 键盘焦点事件等。完整清单见 [../events.md](../events.md)。
+继承自 `TTyCustomControlBar` → `TTyCustomControl`：`Enabled` / `Font` / `Hint` / `TabOrder` / Tier A 鼠标事件 + Tier B 键盘焦点事件等。完整清单见 [../events.md](../events.md)。
 
 ---
 

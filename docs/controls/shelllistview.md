@@ -8,7 +8,7 @@
 它是**纯适配器**:`TTyListView` 的 OwnerData 模式,唯一后备存储是 `tyControls.FileSystem` 的
 `TTyFsEntryArray`(item index == 数组下标)。只 override 五个取值方法 + `CommitEdit`(重命名)+
 `CompareItems`(原始值排序)+ `DoItemActivate`(文件夹进入 / 文件激活),其余(绘制/滚动/命中/多选/首字母/表头排序/F2 编辑器/列/分组)全部**继承不动**。
-主题也一并继承:它不 override `GetStyleTypeKey`,因此解析的是 `TTyListView` 自己的那套键
+主题也一并继承:它不 override `GetStyleTypeKey`,因此解析的是 `TTyCustomListView` 自己的那套键
 (`TyListView` 外框 + `TyListViewItem` / `TyListViewHeader` / `TyListViewHeaderSection` /
 `TyListViewGroupHeader` / `TyListViewCheckBox` / `TyListViewLine` / `TyListViewMarquee`,
 逐项说明见 [listview.md](listview.md))。**这个"借用"是刻意的**:适配器只换数据源,一个像素都不自己画,

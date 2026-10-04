@@ -73,6 +73,7 @@ Bug fixes should come with a test that fails without the fix.
 - Visual values (colors, sizes, radii) come from theme tokens, never hard-coded.
 - No native LCL controls (`TEdit`, `TButton`, …) inside owner-drawn UI.
 - Add new units to `tycontrols.lpk` (design-time ones to `tycontrols_dt.lpk`).
+- A new control is split from the start: `TTyCustomXxx` holds the implementation, `TTyXxx` is just a `published` section (see [docs/subclassing.en.md](docs/subclassing.en.md)). A control that is not split goes in `CNotSplit` in `tests/test.customclasses.pas` with its reason, or the tests fail.
 - User-visible text goes in a `resourcestring`, with the zh_CN `.po` under `languages/` updated to match.
 - New examples use `.lfm` forms, have a title bar and can switch themes at runtime.
 - Don't use LCL API newer than Lazarus 3.0; where you must, keep a path for older versions behind `LCL_FULLVERSION`.

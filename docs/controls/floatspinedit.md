@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-`TTyFloatSpinEdit` 是**带步进按钮的小数微调框**——LCL `TFloatSpinEdit`（`spin.pp:89`）的对标控件，继承自 [`TTyNumericEdit`](numericedit.md)。它把库里原本分开的两半合到一起：`TTyNumericEdit` 有 `Value: Double` 和 `Decimals` 但没有按钮，[`TTySpinEdit`](spinedit.md) 有按钮但值是 `Integer`。要一个"单价 / 百分比 / 缩放系数"字段以前必须二选一。
+`TTyFloatSpinEdit` 是**带步进按钮的小数微调框**——LCL `TFloatSpinEdit`（`spin.pp:89`）的对标控件，继承自 [`TTyCustomNumericEdit`](numericedit.md)。它把库里原本分开的两半合到一起：`TTyCustomNumericEdit` 有 `Value: Double` 和 `Decimals` 但没有按钮，[`TTySpinEdit`](spinedit.md) 有按钮但值是 `Integer`。要一个"单价 / 百分比 / 缩放系数"字段以前必须二选一。
 
 因为底座是 `TTyEdit`，它自带**完整文本引擎**：选区、剪贴板、撤销 / 重做、词级导航、IME —— 这些 `TTySpinEdit` 的轻量行缓冲全都没有。
 
@@ -14,8 +14,8 @@
 |------|-----|
 | 单元 | `tyControls.FloatSpinEdit` |
 | `GetStyleTypeKey` | `'TyEdit'`（**继承**，不覆盖）|
-| 基类 | `TTyNumericEdit` → `TTyEdit` → `TTyCustomControl` |
-| 默认尺寸 | 140 × 28（逻辑像素，继承自 `TTyEdit`）|
+| 基类 | `TTyCustomNumericEdit` → `TTyCustomEdit` → `TTyCustomControl` |
+| 默认尺寸 | 140 × 28（逻辑像素，继承自 `TTyCustomEdit`）|
 
 复用 `TyEdit` 主题规则，**无新增 `.tycss`**。
 
@@ -38,7 +38,7 @@ uses tyControls.FloatSpinEdit;
 | 在继承来的 `Value: Integer` 上**遮蔽**一个 `Value: Double` | 步进引擎还是整数那套：`1.5` 会被**静默截断**成 1，没有任何提示。`test.floatspinedit` 的 `ValueKeepsItsFraction` 与 `AFractionalIncrementIsNotTruncated` 就是钉这个的。 |
 | 给 `TTySpinEdit` 加一个 `DecimalPlaces` **模式** | 需要第二个值属性（`Value: Integer` + 一个 `FloatValue`），于是任何时刻总有一个在说谎。 |
 
-所以：**继承 `TTyNumericEdit`（拿到 Double + 小数位 + 文本引擎），只补一对步进按钮**，按钮走 `TTyEdit` 早就公开的尾部部件三件套 `RightReserve` / `PaintTrailing` / `TrailingZone` —— 和 [`TTyComboEdit`](comboedit.md)、[`TTyURLEdit`](urledit.md) 挂按钮用的是同一组钩子。
+所以：**继承 `TTyCustomNumericEdit`（拿到 Double + 小数位 + 文本引擎），只补一对步进按钮**，按钮走 `TTyCustomEdit` 早就公开的尾部部件三件套 `RightReserve` / `PaintTrailing` / `TrailingZone` —— 和 [`TTyComboEdit`](comboedit.md)、[`TTyURLEdit`](urledit.md) 挂按钮用的是同一组钩子。
 
 ---
 
@@ -50,9 +50,9 @@ uses tyControls.FloatSpinEdit;
 |------|------|--------|------|
 | `Increment` | `Double` | `1` | 每步步进量（LCL `spin.pp:80`，同默认值、同 `stored` 规则——等于 1 时**不写进 `.lfm`**）。**刻意不像 `TTySpinEdit.Increment` 那样下限钳到 1**：小于 1 的步长正是小数微调框的意义所在。 |
 | `EditorEnabled` | `Boolean` | `True` | 只锁**键盘**，箭头 / 滚轮 / 按钮照常步进（LCL `spin.pp:79`）。详见第 7 节。 |
-| `UseThousands` | `Boolean` | **`False`**（重声明，父类是 `True`）| LCL 的小数微调框**不做千分位分组**——它的 `ValueToStr` 就是一句 `FloatToStrF(..., ffFixed, 20, DecimalPlaces)`（`include/spinedit.inc:237`）。父类 `TTyNumericEdit` 默认分组，因为它是通用金额 / 数量框。 |
+| `UseThousands` | `Boolean` | **`False`**（重声明，父类是 `True`）| LCL 的小数微调框**不做千分位分组**——它的 `ValueToStr` 就是一句 `FloatToStrF(..., ffFixed, 20, DecimalPlaces)`（`include/spinedit.inc:237`）。父类 `TTyCustomNumericEdit` 默认分组，因为它是通用金额 / 数量框。 |
 
-### 继承自 [`TTyNumericEdit`](numericedit.md)
+### 继承自 [`TTyCustomNumericEdit`](numericedit.md)
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
@@ -60,7 +60,7 @@ uses tyControls.FloatSpinEdit;
 | `MinValue` / `MaxValue` | `Double` | `0` / `0` | 仅当 `MaxValue > MinValue` 时才夹紧；`MaxValue <= MinValue` 表示**不限制**（LCL `include/spinedit.inc:228` 同一条规则）。 |
 | `Value` | `Double` | `0` | **public，不是 published**——和父类一致。原因见第 8 节第 3 条。 |
 
-### 继承自 [`TTyEdit`](edit.md)
+### 继承自 [`TTyCustomEdit`](edit.md)
 
 `Text`（published，`.lfm` 里承载数值的就是它）、`ReadOnly`、`MaxLength`、`Alignment`（构造时为 `taRightJustify`）、`TextHint`、`AutoSelect`、`HideSelection`、`CharCase`、`OnChange`，以及 public 的 `Modified` / `CaretPos` / `SelStart` / `SelLength` / `SelText` / `Undo` / `Redo` / `CopyToClipboard` / `CutToClipboard` / `PasteFromClipboard`。
 
@@ -86,14 +86,14 @@ function TyFloatSpinGlyphBox(const AHalf: TRect): TRect;
 
 | 操作 | 行为 |
 |------|------|
-| 数字 / `-` / 小数点 | 插入（继承 `TTyNumericEdit` 的输入过滤；小数点仅当 `Decimals > 0`）|
+| 数字 / `-` / 小数点 | 插入（继承 `TTyCustomNumericEdit` 的输入过滤；小数点仅当 `Decimals > 0`）|
 | `↑` / `↓` | `Value ± Increment`。**先跑 `inherited`（也就是应用的 `OnKeyDown`）**，处理程序把 `Key` 置 0 表示自己消费掉了，这时**不**步进 |
 | 鼠标移到按钮上 | 光标变成普通箭头（文字区仍是 I 形）；指针下那一半显示悬停底色（`ReadOnly` 时不显示） |
 | 按下上 / 下按钮 | `Value ± Increment`，并把焦点交给字段；按住约 400 ms 后每 100 ms 再走一步，松开或移出控件即停；按住期间显示按下底色 |
 | 鼠标滚轮 | `Value ± Increment`；应用的 `OnMouseWheel` 先跑，它消费了就不再步进 |
 | 聚焦 | 去掉千分位（若开启），显示原始数字（继承） |
 | 失焦 | 夹紧 + 重新格式化（继承） |
-| 选区 / 剪贴板 / 撤销 / 词级导航 / IME | 全部继承自 `TTyEdit` |
+| 选区 / 剪贴板 / 撤销 / 词级导航 / IME | 全部继承自 `TTyCustomEdit` |
 
 ---
 
@@ -140,7 +140,7 @@ function TyFloatSpinGlyphBox(const AHalf: TRect): TRect;
 2. **同一条重新量化也是好事：** `Increment = 0.1` 连点十次上箭头得到的是**正好** `1.00`，不是 `0.9999999999999999` —— 二进制累积误差每一步都被显示文本抹平了。`test.floatspinedit.SteppingDoesNotAccumulateBinaryDrift` 钉住这一条。
 3. **`Value` 是 public 不是 published。** 与 `TTyNumericEdit` 一致：这个控件的存储就是 `Text`，而 `Text` 已经 published。两个都 published 的话，一个把 `Text` 设成 `'abc'` 的窗体会写出 `Text='abc'` + `Value=0`，加载时后写的 `Value` 覆盖前者，`.lfm` 不再能原样往返。设计期填数值请写 `Text`，运行期读写用 `Value`。
 4. **`Increment` 没有下限保护。** 给 0 会让按钮不动、给负数会让上下颠倒 —— LCL 也不拦（小数没有一个说得通的下限），这是调用方的选择。整数兄弟 `TTySpinEdit` 把 `Increment` 钳到 ≥ 1，两者必须不同。
-5. **`ValueEmpty` 没有。** LCL 的 `TFloatSpinEdit` 也**没有** published 它（只在 `TCustomFloatSpinEdit` 的 public 段）。在一个 `TTyEdit` 底座上，"空"就是 `Text = ''`，占位提示用继承来的 `TextHint`。
+5. **`ValueEmpty` 没有。** LCL 的 `TFloatSpinEdit` 也**没有** published 它（只在 `TCustomFloatSpinEdit` 的 public 段）。在一个 `TTyCustomEdit` 底座上，"空"就是 `Text = ''`，占位提示用继承来的 `TextHint`。
 6. **没有 `OnValueChange`。** `TTySpinEdit` 的那一对（`OnChange` = 文字变了 / `OnValueChange` = 提交后的值动了）是为它的"缓冲 + 提交"模型准备的；这里值**就是**文字，`OnChange` 一个就够，与 `TTyNumericEdit` / `TTyCurrencyEdit` 一致。
 7. **点按钮会取走焦点**，这一点和另外两个尾部按钮控件不同（`TTyComboEdit` 弹 popup、`TTyURLEdit` 打开浏览器，都把用户交出去了）。微调按钮之后用户还在字段里，方向键要能接着按。
 8. **只读时滚轮报告"未处理"**（`DoMouseWheel` 返回 `False`），这样外层滚动容器还能滚 —— 否则鼠标停在一个用不上滚轮的字段上，整页就滚不动了。

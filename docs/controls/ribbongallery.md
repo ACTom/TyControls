@@ -47,7 +47,7 @@ uses tyControls.IconFont, tyControls.RibbonGallery;
 |------|------|--------|------|
 | `Items` | `TStrings` | 空 | 每一格的标题。`OnChange` → 重算 + 重绘；列表缩短到选中项之下时 `ItemIndex` 自动收敛到 `-1`。 |
 | `GlyphNames` | `TStrings` | 空 | 可选，与 `Items` **平行**：每项一个字形名（对应 `IconFont.Glyphs` 映射）。缺省或越界的项不画字形。 |
-| `IconFont` | `TTyIconFont` | `nil` | 可选字形来源。用 `FreeNotification`/`Notification` 挂钩：所指字体被释放时自动置 `nil`。 |
+| `IconFont` | `TTyCustomIconFont` | `nil` | 可选字形来源。用 `FreeNotification`/`Notification` 挂钩：所指字体被释放时自动置 `nil`。 |
 | `ItemIndex` | `Integer` | `-1` | 当前选中项（`-1` = 无）。越界值收敛为 `-1`。设置**只在真正改变时**触发一次 `OnSelect`。 |
 | `VisibleColumns` | `Integer` | `3` | 内联行在下拉箭头之前显示多少格；也是弹出网格的列数。`< 1` 钳制为 `1`。 |
 | `OnSelect` | `TNotifyEvent` | — | 选中项**改变**时触发（内联点击、弹窗网格点击、或代码设 `ItemIndex`）。无变化的重复设置**不触发**。 |

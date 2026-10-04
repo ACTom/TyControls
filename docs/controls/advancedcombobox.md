@@ -4,7 +4,7 @@
 
 TTyAdvancedComboBox 是一个**富行(rich row)下拉框**:下拉列表的每一项可带一张**左侧图片** + 一行**加粗标题(Title)** + 一行**暗色副标题(Subtitle)**;由于字段(field)很短,选中项在字段里**只画图片 + 标题**(单行)。它是 [TTyAdvancedListBox](advancedlistbox.md) 的下拉版孪生控件。
 
-继承自 [TTyComboBox](../../source/tyControls.ComboBox.pas)。它自带**自己的弹出列表** `TTyAdvancedComboPopupList`(重写 `CreatePopupList` 返回),因此不依赖 `TTyAdvancedListBox` 存在;两者仅共用 `tyControls.AdvancedListBox` 里的行绘制 / 拆分辅助函数,保证字段、弹出行、独立列表框渲染一致。图片来自 [TTyVirtualImageList](../../source/tyControls.ImageCollection.pas)(按索引寻址)。
+继承自 [TTyCustomComboBox](../../source/tyControls.ComboBox.pas)。它自带**自己的弹出列表** `TTyAdvancedComboPopupList`(重写 `CreatePopupList` 返回),因此不依赖 `TTyAdvancedListBox` 存在;两者仅共用 `tyControls.AdvancedListBox` 里的行绘制 / 拆分辅助函数,保证字段、弹出行、独立列表框渲染一致。图片来自 [TTyVirtualImageList](../../source/tyControls.ImageCollection.pas)(按索引寻址)。
 
 **数据模型(排序安全,无并行数组):** 与 [TTyAdvancedListBox](advancedlistbox.md) 完全相同 —— 两行文字合并成 `Title + LineEnding + Subtitle`,图片索引存进 `Items.Objects[i]`(`AImageIndex + 1`,`0` = 无图)。`Items.Assign` 把 `Objects[]` 一并复制进弹出列表,故弹出行读到同一批索引;排序按整段合并串比较(标题在前)。
 

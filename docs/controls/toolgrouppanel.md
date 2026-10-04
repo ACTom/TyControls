@@ -2,9 +2,9 @@
 
 ## 1. 概述
 
-`TTyToolGroupPanel` 是 TyControls 库中的**工具按钮分组面板**，继承自 [`TTyGroupBox`](groupbox.md)。它的外观是一个带标题的圆角边框盒子（**用自己的主题令牌**，见 §2），内部横向**流式排布**一排工具按钮（`TTyButton`），当一行放不下时**自动换行**到下一行——即一个可以放在 **Ribbon 之外**使用的“Ribbon 分组”式命令盒。
+`TTyToolGroupPanel` 是 TyControls 库中的**工具按钮分组面板**，继承自 [`TTyCustomGroupBox`](groupbox.md)。它的外观是一个带标题的圆角边框盒子（**用自己的主题令牌**，见 §2），内部横向**流式排布**一排工具按钮（`TTyButton`），当一行放不下时**自动换行**到下一行——即一个可以放在 **Ribbon 之外**使用的“Ribbon 分组”式命令盒。
 
-因为继承自 `TTyGroupBox`（进而 `TTyCustomControl`），它**免费获得**：
+因为继承自 `TTyCustomGroupBox`（进而 `TTyCustomControl`），它**免费获得**：
 
 - 主题化的带标题边框（`RenderTo` / `Paint` / `Caption` / `Alignment`）；
 - 标题栏下方的客户区内缩（`AdjustClientRect` 已把 `ClientRect.Top` 下移一个标题带高度）——子按钮直接落在标题下方；
@@ -25,7 +25,7 @@
 |------|-----|
 | 单元 | `tyControls.ToolGroupPanel` |
 | `GetStyleTypeKey` 返回值 | `'TyToolGroupPanel'`（**重写了**，不再沿用父类的 `'TyGroupBox'`） |
-| 基类 | `TTyGroupBox`（`tyControls.GroupBox`） → `TTyCustomControl` |
+| 基类 | `TTyCustomGroupBox`（`tyControls.GroupBox`） → `TTyCustomControl` |
 | 默认尺寸 | 220 × 92（逻辑像素，`Create` 中设置） |
 
 | typeKey | 画什么 |
@@ -65,7 +65,7 @@ uses tyControls.ToolGroupPanel;
 |------|------|------|
 | `AddButton` | `function AddButton(const ACaption: string; AOnClick: TNotifyEvent = nil): TTyButton` | 创建一个由本面板 owns、`Parent = Self`、`StyleClass = 'ghost'`、`Height = ButtonHeight` 的 `TTyButton` 子控件，设置标题（可选 `OnClick`），流式定位进客户区并返回。返回的按钮归调用者继续配置。**不**标记 `csNoDesignVisible`——这是用户控件，不是内部辅助控件。 |
 
-### 继承的关键成员（来自 `TTyGroupBox`）
+### 继承的关键成员（来自 `TTyCustomGroupBox`）
 
 | 成员 | 类型/签名 | 说明 |
 |------|------|------|
@@ -151,11 +151,11 @@ end;
 
 1. **有独立 typeKey `TyToolGroupPanel`：** 主题化时写 `TyToolGroupPanel` 选择器；内建主题让它与 `TyGroupBox` 共写一条规则（默认观感不变），但改 `TyGroupBox` 会连全窗体的分组框一起改。内部按钮走 `TyButton.ghost`。
 2. **子按钮是用户控件：** `AddButton` 创建的按钮**不**标记 `csNoDesignVisible`——本控件是真容器，不是自动填充的辅助控件族（对比 `TTyRadioGroup` 一类的隐藏子控件）。因此它们会正常出现在 IDE 设计器中。
-3. **客户区自动内缩：** 继承 `TTyGroupBox.AdjustClientRect`，子按钮从标题带下方开始排布，`ClientRect` 已内缩，无需手动加顶部偏移。
+3. **客户区自动内缩：** 继承 `TTyCustomGroupBox.AdjustClientRect`，子按钮从标题带下方开始排布，`ClientRect` 已内缩，无需手动加顶部偏移。
 4. **换行按客户区宽度：** 流式布局以 `ClientRect` 宽度为界；面板变窄会触发换行、变宽会回流。行高恒为 `ButtonHeight`。
 5. **`ButtonHeight` 统一高度：** 所有流式按钮高度被强制为 `ButtonHeight`（宽度各自保留）；单独改某按钮的 `Height` 会在下次重排时被覆盖。
 6. **首个按钮不换行：** 超宽的单个按钮会溢出当前行而非丢失或死循环。
 
 ---
 
-参见 [[TTyGroupBox]]（父类，提供带标题边框的绘制代码 + 客户区内缩；主题令牌各归各的）与 [[TTyButton]]（流式子按钮，复用其 `ghost` 变体主题）。
+参见 [[TTyCustomGroupBox]]（父类，提供带标题边框的绘制代码 + 客户区内缩；主题令牌各归各的）与 [[TTyButton]]（流式子按钮，复用其 `ghost` 变体主题）。
