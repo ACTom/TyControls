@@ -432,7 +432,7 @@ begin
     AssertEquals('E added', '405060', L.Values['ColorE']);
     AssertEquals('F untouched', '', L.Values['ColorF']);
     AssertEquals('Q left as it was', '123456', L.Values['ColorQ']);
-    AssertEquals('five slots plus Q', 6, L.Count);
+    AssertEquals('A, C, D, E and Q -- nothing else', 5, L.Count);
   finally L.Free; end;
 end;
 

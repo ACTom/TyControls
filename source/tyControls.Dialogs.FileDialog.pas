@@ -82,6 +82,7 @@ type
 function TyFileDialogCheck(ASaveMode: Boolean; const AFileName: string;
   AOptions: TOpenOptions): TTyFileDialogCheck;
 
+type
   { Fires as the preview refreshes for AFileName (the focused selection; '' or a
     directory when nothing previewable is focused). Draw into APreview yourself
     (ShowImage / ShowText / ShowMessage / ShowCustom) and set AHandled := True to

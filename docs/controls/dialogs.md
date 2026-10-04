@@ -334,6 +334,30 @@ if TySelectDirectory('选择输出目录', 'C:\Users', dir) then
   OutputDir := dir;
 ```
 
+**组件 `TTySelectPathDialog`**:`Caption`、`Root`、`Directory`(进出两用:先设好就预选,确定后是选中的文件夹),外加和 LCL `TSelectDirectoryDialog` 一样的 `Options: TOpenOptions`(默认 `[]`)和 `OnHelpClicked`。`BuildForm` 返回 `Execute` 要显示的窗体(不显示,调用方释放)。
+
+`Options` 里 LCL 的 25 个选项:
+
+| 类别 | 选项 | 效果 / 原因 |
+|---|---|---|
+| 起作用 | `ofPathMustExist` | 路径框里输入的文件夹,上一级不存在就报错、不关。 |
+| | `ofFileMustExist` | 输入的文件夹本身不存在就报错、不关(LCL 选文件夹时也是这么理解的)。 |
+| | `ofCreatePrompt` | 输入的文件夹不存在,问要不要创建;选「是」就建好并返回它。 |
+| | `ofNoReadOnlyReturn` | 选中的文件夹不可写就报错、不关。 |
+| | `ofShowHelp` | 按钮栏多一个「帮助」,点了触发 `OnHelpClicked`。 |
+| | `ofNoResolveLinks` | 没有它时,确定后 `Directory` 里的符号链接换成实际路径(同 LCL;只在 Linux / macOS 上有区别)。 |
+| 不起作用 | `ofForceShowHidden` | 目录树本来就列出隐藏的文件夹。 |
+| | `ofEnableSizing`、`ofViewDetail` | 总能缩放;没有别的视图。 |
+| | `ofReadOnly`、`ofHideReadOnly`、`ofNoValidate`、`ofShareAware`、`ofNoTestFileCreate`、`ofNoNetworkButton`、`ofNoLongNames`、`ofOldStyleDialog`、`ofNoDereferenceLinks`、`ofDontAddToRecent` | Windows 文件对话框的遗留,见 [文件对话框](filedialog.md#options)。 |
+| 不适用 | `ofNoChangeDir` | 这个对话框没有 `InitialDir`,`Directory` 本来就是进出两用。 |
+| | `ofOverwritePrompt` | 选文件夹不会覆盖什么。 |
+| | `ofAllowMultiSelect` | 目录树只能单选。 |
+| | `ofExtensionDifferent` | 文件夹没有扩展名。 |
+| | `ofAutoPreview` | 没有预览窗格。 |
+| | `ofEnableIncludeNotify` | LCL 自己也没用。 |
+
+没有 `ofPathMustExist` / `ofFileMustExist` / `ofCreatePrompt` 时,路径框里输入一个不存在的文件夹再点确定,返回的仍是树上选中的文件夹,和 3.0 一样。判断由纯函数 `TySelectPathCheck` 做。
+
 ### 8.6 非可视设计期组件
 
 以下 5 个非可视组件位于 **TyControls Dialogs** 组件面板页，每个组件均封装了对应对话框的 published 属性，代码中一行 `Execute` 即可显示：
@@ -407,6 +431,24 @@ if DlgColor.Execute then
   MyShape.FillColor := DlgColor.Color;
 ```
 
+和 LCL `TColorDialog` 一样还有 `Options: TColorDialogOptions`（默认 `[cdFullOpen]`）和 `CustomColors: TStrings`；`BuildForm` 返回 `Execute` 要显示的窗体（不显示，调用方释放）。
+
+| 选项 | 类别 | 效果 / 原因 |
+|---|---|---|
+| `cdPreventFullOpen` | 起作用 | 不许自己调颜色：HSV 方块、色相条、Hex / RGB / CMYK / Alpha 输入框和「添加到自定义颜色」都禁用，只能点色块。 |
+| `cdFullOpen` | 不起作用 | 这个取色器没有收起的状态，总是展开的。 |
+| `cdSolidColor`、`cdAnyColor` | 不起作用 | Windows 256 色模式下怎么显示基本色。 |
+| `cdShowHelp` | 不起作用 | LCL 的 `TColorDialog` 没有帮助事件，帮助按钮没事可做。 |
+
+**`CustomColors`** 的格式和 LCL 一样，一行一个 `ColorA=FFFFFF` … `ColorP=…`，值是十六进制的 `TColor`（`FF0000` 是蓝色）。默认是空的，空着时对话框和以前一模一样；有条目时，在基本颜色和预览之间多一行 16 格的「自定义颜色」（没给的格子是白色）和一个「添加到自定义颜色」按钮，按钮把当前颜色放进下一格。点确定后，给过的格子和新加的格子写回 `CustomColors`（`Values['ColorX']`），其余条目不动；`ColorQ` 之后的条目（LCL 默认列表里有）不显示，也原样保留。要让用户从一排空格子开始存自己的颜色，给它 16 条 `ColorA=FFFFFF` … `ColorP=FFFFFF`。
+
+```pascal
+// 记住用户自己调的颜色，下次再用
+DlgColor.CustomColors.Assign(FSavedCustomColors);
+if DlgColor.Execute then
+  FSavedCustomColors.Assign(DlgColor.CustomColors);
+```
+
 ### 9.2 TyFontDialog — 字体对话框
 
 弹出字体选择对话框，可设置字体族、字号、粗体/斜体/下划线/删除线、颜色（内嵌取色器），并实时预览效果；对话框可拖拽边框缩放。
@@ -433,6 +475,32 @@ DlgFont.Font.Assign(Memo1.Font);
 if DlgFont.Execute then
   Memo1.Font.Assign(DlgFont.Font);
 ```
+
+和 LCL `TFontDialog` 一样还有：
+
+| 属性 | 说明 |
+|---|---|
+| `Options: TFontDialogOptions` | 默认 `[fdEffects]`，见下表。 |
+| `MinFontSize`、`MaxFontSize` | 带 `fdLimitSize` 时的字号范围，0 表示这一头不限。 |
+| `PreviewText` | 预览条里的文字，空着用内置的示例。 |
+| `OnApplyClicked` | 点了「应用」（`fdApplyButton`）。触发时 `Font` 已经是对话框里当前的选择。 |
+| `BuildForm` | 返回 `Execute` 要显示的窗体（不显示，调用方释放）。 |
+
+| 选项 | 类别 | 效果 / 原因 |
+|---|---|---|
+| `fdEffects` | 起作用 | 有它才显示下划线、删除线和颜色按钮；没有时三者隐藏，确定后字体原来的下划线、删除线、颜色不变。 |
+| `fdFixedPitchOnly` | 起作用 | 只列等宽字体，判断方法和字体框的 `FixedPitchOnly` 一样（读系统的等宽标志，见 [TTyFontComboBox](fontcombobox.md#只列等宽字体)）。 |
+| `fdScalableOnly` | 起作用 | 不列点阵字体。只有 Windows 会把字体报成点阵（`Fixedsys`、`Terminal` 等）；GTK、Qt、Cocoa 下 LCL 不报点阵字体，列表不变。 |
+| `fdLimitSize` | 起作用 | 字号只能在 `MinFontSize`..`MaxFontSize` 里选；原字号超出范围时显示并返回范围内最近的值。 |
+| `fdNoFaceSel` | 起作用 | 打开时不选中字体族；用户不选就不改 `Font.Name`。 |
+| `fdNoSizeSel` | 起作用 | 打开时字号框空着；用户不填就不改 `Font.Size`。 |
+| `fdNoStyleSel` | 起作用 | 粗体、斜体复选框打开时是灰的（不确定）；用户不点就保留原样式。 |
+| `fdApplyButton` | 起作用 | 按钮栏多一个「应用」：把当前选择写进 `Font`、触发 `OnApplyClicked`，对话框不关。 |
+| `fdAnsiOnly`、`fdNoOEMFonts` | 不起作用 | Windows `ChooseFont` 的字符集过滤。 |
+| `fdTrueTypeOnly` | 不起作用 | TrueType 是 Windows 的字体技术分类；GTK、Qt 下 LCL 报不出来，照做会把列表滤空。 |
+| `fdNoSimulations`、`fdNoVectorFonts`、`fdWysiwyg` | 不起作用 | Windows GDI 的合成粗斜体、矢量字体、打印机字体。 |
+| `fdShowHelp` | 不起作用 | LCL 的 `TFontDialog` 没有帮助事件。 |
+| `fdForceFontExist` | 不适用 | 只能从列表里选字体族，没有手输字体名的框，选中的一定存在。 |
 
 > **注意**：两个组件均在 **TyControls Dialogs** 组件面板页可以找到。字体对话框的颜色选择器复用 `TTyColorDialog` 内核，保证视觉一致性。
 
@@ -465,7 +533,25 @@ FindDlg.Execute;
 
 `TTyReplaceDialog` adds `ReplaceText` + `OnReplace`. **Replace and Replace All both fire `OnReplace`** —
 tell them apart with `frReplaceAll in d.Options`. `Options` defaults to `[frDown]` (search down);
-`TTyReplaceDialog` also defaults `frReplace, frReplaceAll`.
+`TTyReplaceDialog` also defaults `frReplace, frReplaceAll, frHidePromptOnReplace`.
+
+**`Options` 的 18 个选项**和 LCL 的 `TFindDialog` / `TReplaceDialog` 用法一样(`TFindOptions`)。窗口开着时改 `Options`,窗口跟着变(勾选、隐藏、禁用),已经输入的查找文字不动。
+
+| 选项 | 效果 |
+|---|---|
+| `frDown` | 向下找;对话框里是「向上查找」复选框,勾上就去掉 `frDown`。 |
+| `frMatchCase`、`frWholeWord` | 两个复选框的勾选状态,读回 `Options`。 |
+| `frEntireScope` | 「整个范围」复选框的勾选状态,读回 `Options`。 |
+| `frPromptOnReplace` | 替换对话框「替换前提示」复选框的勾选状态,读回 `Options`。 |
+| `frFindNext`、`frReplace`、`frReplaceAll` | 输出:点的是哪个按钮(见上)。 |
+| `frHideMatchCase`、`frHideWholeWord`、`frHideUpDown`、`frHideEntireScope`、`frHidePromptOnReplace` | 隐藏对应的复选框,下面的往上挪。 |
+| `frDisableMatchCase`、`frDisableWholeWord`、`frDisableUpDown` | 对应的复选框变灰,不能改。 |
+| `frShowHelp` | 按钮栏多一个「帮助」,点了触发 `OnHelpClicked`(`Sender` 是对话框组件)。 |
+| `frButtonsAtBottom` | 不起作用:按钮本来就在底部的按钮栏。 |
+
+「整个范围」和「替换前提示」跟 LCL 一样只是复选框:按范围搜、每次替换前问用户,由程序在 `OnFind` / `OnReplace` 里看这两位自己做。
+
+**从 3.0 升级**:3.0 收下这 12 个选项却不理会(和 LCL 不一致)。现在照 LCL 来,有两处看得见的变化——查找、替换对话框多一个「整个范围」复选框,不想要就加 `frHideEntireScope`;3.0 存过的替换对话框窗体里 `Options` 没有 `frHidePromptOnReplace`,会多一个「替换前提示」复选框,不想要就把它加上(代码里新建的替换对话框默认带着它,和 LCL 一样)。
 
 > **Note:** `Position` here is an LCL `TPosition` placement *strategy* (`poScreenCenter`, `poDesigned`, …), **not** LCL `TFindDialog.Position`'s `TPoint` window coordinate. Modeless Ty dialogs place themselves by strategy, so LCL Find/Replace code that assigns `Position := Point(x, y)` needs adjusting.
 
