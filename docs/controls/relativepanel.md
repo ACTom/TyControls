@@ -93,7 +93,7 @@ uses tyControls.RelativePanel;
 | `Align` | `TAlign` | 父容器内停靠方式；常设 `alClient`。 |
 | `Anchors` | `TAnchors` | 锚点布局。 |
 | `StyleClass` | `string` | CSS 类名，对应 `.tycss` 中 `TyPanel.classname` 选择器。 |
-| `Controller` | `TTyStyleController` | 指定样式控制器（`nil` = 全局 `TyDefaultController`）。 |
+| `Controller` | `TTyCustomStyleController` | 指定样式控制器（`nil` = 全局 `TyDefaultController`）。 |
 
 ---
 

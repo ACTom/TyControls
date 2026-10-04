@@ -46,7 +46,7 @@ type
     FRect        : TRect;           // last computed screen rect (for deferred Qt re-apply)
     FCornerRadiusLogical: Integer;
     FOnClose     : TNotifyEvent;
-    FController  : TTyStyleController; // for resolving themed corner-radius in ApplyRegion
+    FController  : TTyCustomStyleController; // for resolving themed corner-radius in ApplyRegion
     FClosing     : Boolean;         // guard: prevents re-entrant deactivate→close→deactivate loops
     FCloseUpTick : QWord;           // tick when popup last closed (deactivate-reopen-race guard)
     FNoActivate  : Boolean;         // show without stealing activation (autocomplete popups)
@@ -100,7 +100,7 @@ type
     { Optional style controller used in ApplyRegion to resolve the background
       color for the popup form (fills the corner gaps).  When nil the form
       Color is left at its default.  Set before calling Popup. }
-    property Controller: TTyStyleController
+    property Controller: TTyCustomStyleController
       read FController write FController;
 
     { When True the popup is shown WITHOUT taking activation, so the owner control

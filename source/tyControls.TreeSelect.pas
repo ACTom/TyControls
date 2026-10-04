@@ -171,7 +171,7 @@ type
     procedure DeferredCloseUp(Data: PtrInt);
   protected
     function GetStyleTypeKey: string; override;
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     { Create the popup helper and park the tree in it. Lazy (the window is only needed once
       the user drops), unlike the TREE itself, which exists from the constructor because the
       app populates it long before — and maybe without ever — opening the drop. }
@@ -509,7 +509,7 @@ begin
   Result := FText;
 end;
 
-procedure TTyCustomTreeSelect.SetController(AValue: TTyStyleController);
+procedure TTyCustomTreeSelect.SetController(AValue: TTyCustomStyleController);
 begin
   inherited SetController(AValue);
   { Keep the parts themed by the same controller when it is reassigned; otherwise the tree

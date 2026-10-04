@@ -47,7 +47,7 @@ uses tyControls.Memo;
 | `Align` | `TAlign` | — | 父容器内的停靠方式。 |
 | `Anchors` | `TAnchors` | — | 锚点布局。 |
 | `StyleClass` | `string` | `''` | CSS 变体类名。 |
-| `Controller` | `TTyStyleController` | `nil`（全局默认） | 关联的样式控制器；内嵌滚动条会继承同一 Controller。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（全局默认） | 关联的样式控制器；内嵌滚动条会继承同一 Controller。 |
 | `OnClick` | `TNotifyEvent` | `nil` | 鼠标点击时触发。 |
 
 ### public 扁平选区属性（非 published，API parity 新增）

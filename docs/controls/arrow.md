@@ -56,7 +56,7 @@ uses tyControls.Arrow;
 |------|------|------|
 | `StyleClass` | `string` | `.tycss` 类名（作用于 `TyArrow` 解析，可给某些箭头单独换色）。 |
 | `StyleOverride` | `string` | 单实例内联 CSS 覆盖块（可引用 `var(--...)`），例如 `'background: var(--accent); border-color: var(--accent);'`。 |
-| `Controller` | `TTyStyleController` | 指定样式控制器（`nil` 时用全局默认）。 |
+| `Controller` | `TTyCustomStyleController` | 指定样式控制器（`nil` 时用全局默认）。 |
 | `Align` / `Anchors` | — | 父容器内布局 / 锚点。 |
 
 ---

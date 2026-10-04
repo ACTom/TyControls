@@ -231,7 +231,7 @@ type
     FCloseOnClickOutside: Boolean;
     FCloseOnEscape: Boolean;
     FStyleClass: string;
-    FController: TTyStyleController;
+    FController: TTyCustomStyleController;
     FOnShow: TNotifyEvent;
     FOnHide: TNotifyEvent;
     FWin: TTyPopoverWindow;
@@ -250,7 +250,7 @@ type
     procedure SetTitle(const AValue: TCaption);
     procedure SetShowArrow(AValue: Boolean);
     procedure SetStyleClass(const AValue: string);
-    procedure SetController(AValue: TTyStyleController);
+    procedure SetController(AValue: TTyCustomStyleController);
     { The theme metrics in LOGICAL px (each call site scales). Named helpers rather than
       inline Metric() calls so a typo cannot strand one call site on the default. }
     function ArrowSizeLogical: Integer;
@@ -290,7 +290,7 @@ type
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     { The controller whose theme this popover resolves against — never FController directly:
       a popover themed by the global default has Controller = nil. }
-    function ActiveController: TTyStyleController;
+    function ActiveController: TTyCustomStyleController;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -357,7 +357,7 @@ type
     { The variant entry: a `TyPopover.danger` rule in the theme. Resolved for BOTH typeKeys,
       so TyPopoverTitle.danger tints a danger popover's headline. }
     property StyleClass: string read FStyleClass write SetStyleClass;
-    property Controller: TTyStyleController read FController write SetController;
+    property Controller: TTyCustomStyleController read FController write SetController;
     { Fired after the popup is on screen (and after the content has been adopted into it, so a
       handler may focus a control inside). }
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
@@ -845,7 +845,7 @@ begin
   Result := 'TyPopoverTitle';
 end;
 
-function TTyCustomPopover.ActiveController: TTyStyleController;
+function TTyCustomPopover.ActiveController: TTyCustomStyleController;
 begin
   if FController <> nil then
     Result := FController
@@ -1286,7 +1286,7 @@ begin
   if (FWin <> nil) and FWin.Visible then FWin.Invalidate;
 end;
 
-procedure TTyCustomPopover.SetController(AValue: TTyStyleController);
+procedure TTyCustomPopover.SetController(AValue: TTyCustomStyleController);
 begin
   if FController = AValue then Exit;
   if FController <> nil then FController.RemoveFreeNotification(Self);

@@ -316,7 +316,7 @@ procedure TTyStyleClassPropertyEditor.GetValues(Proc: TGetStrProc);
 var
   comp: TPersistent;
   sty: ITyStyleable;
-  ctrl: TTyStyleController;
+  ctrl: TTyCustomStyleController;
   model: TTyStyleModel;
   list: TStringList;
   key: string;
@@ -748,8 +748,8 @@ begin
     never streamed (spec §3.1 / §4): an edit in the inspector would be overwritten by the next
     push, so it is not shown. On the custom classes, where `stored False` is declared, for the
     same reason as the Lucide list's IconFont above. }
-  RegisterPropertyEditor(TypeInfo(TTyStyleController), TTyCustomToolWindow, 'Controller', THiddenPropertyEditor);
-  RegisterPropertyEditor(TypeInfo(TTyStyleController), TTyCustomToolWindowActions, 'Controller', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TTyCustomStyleController), TTyCustomToolWindow, 'Controller', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TTyCustomStyleController), TTyCustomToolWindowActions, 'Controller', THiddenPropertyEditor);
   // Every TTyColor property ($AARRGGBB) gets a readable hex value + a colour picker on '...',
   // instead of a raw integer like 4278190080 nobody can fill (DefaultColor, GlyphColor, ...).
   RegisterPropertyEditor(TypeInfo(TTyColor), nil, '', TTyColorPropertyEditor);
@@ -845,7 +845,7 @@ begin
   RegisterPropertyEditor(TypeInfo(TBasicAction), TTyFormSurface, 'Action', THiddenPropertyEditor);
   RegisterPropertyEditor(TypeInfo(TAnchors), TTyFormSurface, 'Anchors', THiddenPropertyEditor);
   RegisterPropertyEditor(TypeInfo(TSizeConstraints), TTyFormSurface, 'Constraints', THiddenPropertyEditor);
-  RegisterPropertyEditor(TypeInfo(TTyStyleController), TTyFormSurface, 'Controller', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TTyCustomStyleController), TTyFormSurface, 'Controller', THiddenPropertyEditor);
   RegisterPropertyEditor(TypeInfo(TFont), TTyFormSurface, 'Font', THiddenPropertyEditor);
   RegisterPropertyEditor(TypeInfo(TTranslateString), TTyFormSurface, 'Hint', THiddenPropertyEditor);
   RegisterPropertyEditor(TypeInfo(TComponentName), TTyFormSurface, 'Name', THiddenPropertyEditor);

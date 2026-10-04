@@ -199,7 +199,6 @@ end;
 
 - **The fifteen properties the LCL roots publish cannot be hidden.** `Name` and `Tag` from `TComponent`; `Left`, `Top`, `Width`, `Height`, `Hint`, `Cursor`, the four `AnchorSide*` and the three `Help*` from `TControl`. Pascal cannot unpublish, and LCL's own custom classes carry them too.
 - **Some hosts still hand out a final class.** Most host properties now name the custom class (see section 7), but a host that only ever hands out what it built itself keeps the final type: `TTyRadioGroup`'s buttons are `TTyRadioButton`, `TTyCheckGroup`'s are `TTyCheckBox`, `TTyPageControl.AddPage` returns `TTyTabSheet`, and `TTyFilterComboBox.ShellListView` is `TTyShellListView`, as in LCL's `TFilterComboBox`.
-- **Your own style controller cannot be attached to a control.** In the first 4.0 release every `Controller` property is still typed `TTyStyleController`. A controller derived from `TTyCustomStyleController` works on its own (loads a theme, resolves styles, notifies its listeners) but cannot be assigned to any control's `Controller`. Derive from `TTyStyleController` instead, or wait for a later release to widen the type.
 - **The `GlyphName` editor looks the host's `IconFont` up by name.** Publish `IconFont` if your subclass should get the icon drop-down in the Object Inspector.
 - **`TTyGridCell` is created by `TTyGridPanel`.** A cell subclass of yours has to be put in from code.
 - **A `TTyCustomScrollBar` subclass is always a standalone scroll bar.** Hosts only embed the `TTyScrollBar` they create themselves; they never treat yours as their embedded bar.
@@ -398,7 +397,7 @@ Properties that reference a component name the custom class, as LCL does (`Image
 | Property | 3.0 | 4.0 |
 |---|---|---|
 | every `IconFont` | `TTyIconFont` | `TTyCustomIconFont` |
-| `Controller` | `TTyStyleController` | unchanged (see section 5) |
+| every `Controller` | `TTyStyleController` | `TTyCustomStyleController` |
 | `Images` / `HotImages` / `DisabledImages` (image collections), `TTyVirtualImageList.Collection` | `TTyImageCollection` | `TTyCustomImageCollection` |
 | `TTyForm.TitleBar` / `MenuBar` (same on `TTyDialog`) | `TTyTitleBar` / `TTyMenuBar` | `TTyCustomTitleBar` / `TTyCustomMenuBar` |
 | `TTyRibbon.Backstage`, `TTyRibbonAppMenu.Backstage` | `TTyRibbonBackstage` | `TTyCustomRibbonBackstage` |
@@ -424,7 +423,7 @@ begin
 
 Change the variable to the custom class; if you know it is the library's control and need something only the final class has, write `Ts := PageControl1.ActivePage as TTyTabSheet;`.
 
-If you override any of these virtual methods, update the signature too.
+If you override any of these virtual methods, update the signature too. `Controller` works the same way: `TTyStyleController` only publishes the properties of `TTyCustomStyleController` and adds nothing, so code that assigns `Button1.Controller` to a `TTyStyleController` variable just needs the variable retyped to `TTyCustomStyleController`; if you override `SetController`, change its parameter type too.
 
 ### 7.5 Protected members through a base or custom reference
 

@@ -63,7 +63,7 @@ uses tyControls.Chart;
 |------|------|--------|------|
 | `StyleClass` | `string` | `''` | 对应 `.tycss` 里 `TyChart.<classname>`；**tooltip 用同一个 `StyleClass` 解析**，所以 `TyChartTooltip.compact` 能跟随 `TyChart.compact`。 |
 | `StyleOverride` | `string` | `''` | 单实例内联 CSS 声明块。 |
-| `Controller` | `TTyStyleController` | `nil`（用全局 `TyDefaultController`） | 指定样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（用全局 `TyDefaultController`） | 指定样式控制器。 |
 
 另暴露 `Align` / `Anchors` / `Font` 及 `TTyGraphicControl` 基线事件集，见 [../events.md](../events.md)。
 

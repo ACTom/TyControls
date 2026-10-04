@@ -62,7 +62,7 @@ uses tyControls.Pagination;
 | `TabStop` | `Boolean` | **`True`**（构造时置位，且 `default True`） | **窗口化基类的全部意义**：它取焦点、吃方向键。 |
 | `StyleClass` | `string` | `''` | **变体入口**：对应 `.tycss` 里 `TyPagination.<classname>`；**同一个 `StyleClass` 还会追加到格子的 kind 之后**，所以 `TyPaginationItem.page.small` 能跟着整条带一起变。 |
 | `StyleOverride` | `string` | `''` | 单实例内联 CSS 声明块（可引用 `var(--...)` 令牌）。 |
-| `Controller` | `TTyStyleController` | `nil`（用全局 `TyDefaultController`） | 指定样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（用全局 `TyDefaultController`） | 指定样式控制器。 |
 
 另暴露 `Align` / `Anchors` / `OnClick`，以及 `TTyCustomControl` 基线成员集（`Enabled` / `Font` / `Hint` / `TabOrder` / 键鼠事件 / `OnEnter` / `OnExit` 等），见 [../events.md](../events.md)。
 

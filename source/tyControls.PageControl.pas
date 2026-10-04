@@ -33,7 +33,7 @@ type
     procedure DoSelectTab(AIndex: Integer); override;
     procedure DoReorderTabs(AFromIndex, AToIndex: Integer); override;
     procedure RemoveTabData(AIndex: Integer); override;
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Loaded; override;
     { Designer tab clicks flip pages (see TTyCustomTabStrip.CMDesignHitTest). }
@@ -445,7 +445,7 @@ begin
   Result := IndexOfPageAt(P.x, P.y);
 end;
 
-procedure TTyCustomPageControl.SetController(AValue: TTyStyleController);
+procedure TTyCustomPageControl.SetController(AValue: TTyCustomStyleController);
 var
   I: Integer;
 begin

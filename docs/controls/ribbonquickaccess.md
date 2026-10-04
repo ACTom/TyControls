@@ -87,7 +87,7 @@ function TyQatContentWidth(const AItemWidths: array of Integer;
 | `Align` | `TAlign` | `alNone` | 停靠方式（继承）。 |
 | `Anchors` | `TAnchors` | — | 锚点布局（继承）。 |
 | `StyleClass` | `string` | `''` | CSS 类名，对应 `.tycss` 选择器的 `.classname` 部分。 |
-| `Controller` | `TTyStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定样式控制器。 |
 
 QAT 还暴露 `TTyCustomControl` 的基线事件集（Tier A 鼠标 / 通用事件 + Tier B 键盘 / 焦点事件）；命令响应通常挂在**子按钮**的 `OnClick` 上，而非 QAT 自身。
 

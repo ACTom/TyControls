@@ -254,7 +254,7 @@ type
       Strip-only mode keeps the frame's TOP border as a baseline rail — the tabs must
       still sit on a line — and drops the rest of the box. }
     function HasPageBody: Boolean; virtual;
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     { Drops the Images reference when the list is freed. The setter also registers a
       FreeNotification, because opRemove only reaches us for a component we asked about:
       a list owned by another form (or created with Owner = nil) would be freed without a
@@ -758,7 +758,7 @@ end;
 
 { The header engine only needs the inherited controller wiring; a page-owning
   subclass overrides this to propagate the controller down to its child pages. }
-procedure TTyCustomTabStrip.SetController(AValue: TTyStyleController);
+procedure TTyCustomTabStrip.SetController(AValue: TTyCustomStyleController);
 begin
   inherited SetController(AValue);
 end;

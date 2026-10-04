@@ -44,7 +44,7 @@ uses tyControls.Notification;
 | `Closable` | `Boolean` | `True` | 显示并启用关闭（`x`）。默认开：关不掉的 toast 就是挡路的 toast。 |
 | `ShowIcon` | `Boolean` | `True` | 显示语义标记。关掉 = 纯文字卡片（`NotificationType` 此时只影响主题）。 |
 | `PauseOnHover` | `Boolean` | `True` | 指针停在卡片上时**冻结**倒计时，免得 toast 从正在读它（或正伸手去点 `x`）的人眼皮底下消失。 |
-| `Controller` | `TTyStyleController` | `nil`（用全局 `TyDefaultController`） | 指定样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（用全局 `TyDefaultController`） | 指定样式控制器。 |
 | `OnClose` | `TNotifyEvent` | `nil` | 见第 4 节。 |
 | `OnClick` | `TNotifyEvent` | `nil` | 见第 4 节。 |
 

@@ -79,7 +79,7 @@ type
   TTyGraphicControl = class(TGraphicControl, ITyStyleable)
   private
     FStyleClass: string;
-    FController: TTyStyleController;
+    FController: TTyCustomStyleController;
     { A9 per-instance StyleOverride: a bare CSS decl block layered on top of the resolved
       theme style. FOvrCache holds the parsed+evaluated set; recomputed only when the text
       or the model's ThemeVersion changes (so var(--...) re-binds on a theme switch). }
@@ -90,14 +90,14 @@ type
     FOvrCacheValid: Boolean;
     procedure SetStyleClass(const AValue: string);
     procedure SetStyleOverride(const AValue: string);
-    procedure SetController(AValue: TTyStyleController);
+    procedure SetController(AValue: TTyCustomStyleController);
   protected
     FHover, FPressed: Boolean;
     FDpiAdjusting: Boolean;
     function _AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function _Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function GetStyleTypeKey: string; virtual; abstract;
-    function ActiveController: TTyStyleController;
+    function ActiveController: TTyCustomStyleController;
     function CurrentStates: TTyStateSet; virtual;
     function CurrentStyle: TTyStyleSet;
     { ===== PER-MONITOR DPI: the size floor (see the twin on TTyCustomControl, and
@@ -262,7 +262,7 @@ type
       applied on top of the theme for THIS control only. May reference var(--...) tokens,
       which resolve against the active theme. A malformed value is skipped, never fatal. }
     property StyleOverride: string read FStyleOverride write SetStyleOverride;
-    property Controller: TTyStyleController read FController write SetController;
+    property Controller: TTyCustomStyleController read FController write SetController;
   end;
 
   TTyCustomControl = class(TCustomControl, ITyStyleable)
@@ -272,7 +272,7 @@ type
     FInEraseRefresh: Boolean;
     {$ENDIF}
     FStyleClass: string;
-    FController: TTyStyleController;
+    FController: TTyCustomStyleController;
     { A9 per-instance StyleOverride (mirrors the TTyGraphicControl twin — the two base
       classes share no ancestor, so the field + setter + cache are duplicated). }
     FStyleOverride: string;
@@ -285,11 +285,11 @@ type
   protected
     FHover, FPressed: Boolean;
     FDpiAdjusting: Boolean;
-    procedure SetController(AValue: TTyStyleController); virtual;
+    procedure SetController(AValue: TTyCustomStyleController); virtual;
     function _AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function _Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function GetStyleTypeKey: string; virtual; abstract;
-    function ActiveController: TTyStyleController;
+    function ActiveController: TTyCustomStyleController;
     function CurrentStates: TTyStateSet; virtual;
     function CurrentStyle: TTyStyleSet;
     { ===== PER-MONITOR DPI: the size floor ===================================
@@ -359,7 +359,7 @@ type
       only. May reference var(--...) tokens (resolved against the active theme); a
       malformed value is skipped, never fatal. }
     property StyleOverride: string read FStyleOverride write SetStyleOverride;
-    property Controller: TTyStyleController read FController write SetController;
+    property Controller: TTyCustomStyleController read FController write SetController;
   end;
 
 { Shared font-size resolution for every ty control (windowed AND graphic — the label family
@@ -375,7 +375,7 @@ type
   the skin load (vars merge separately), and ty controls are theme-locked, so their size follows
   the theme, not the inherited system font. (Headless masks the bug: rootless Font.Size is 0.) }
 function TyResolveFontSize(const AStyle: TTyStyleSet; AParentFont: Boolean;
-  AControlFontSize: Integer; AController: TTyStyleController): Integer;
+  AControlFontSize: Integer; AController: TTyCustomStyleController): Integer;
 
 { Resolve the background a windowed child should composite onto (it does not inherit its
   parent's painted bg, so corner-gaps / transparent fills would otherwise show the child's
@@ -426,16 +426,16 @@ procedure TyApplyStyleOpacity(AControl: TControl; APainter: TTyPainter;
   DEDICATED slot from a size token: 4+4 (+1 for the inclusive right edge) eats 9 logical px, so
   a 12px slot leaves a 3px mark — an unreadable smudge, not an arrow. Such callers pass a small
   pad so the slot's token size means the MARK's size. ~12px is otherwise the practical floor. }
-procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
+procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyCustomStyleController;
   const ARect: TRect; const ATokenName: string; AVectorKind: TTyGlyphKind;
   AColor: TTyColor; AThickness: Integer; APadLogical: Integer = 4); overload;
-procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
+procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyCustomStyleController;
   const ARect: TRect; AVectorKind: TTyGlyphKind; AColor: TTyColor; AThickness: Integer;
   APadLogical: Integer = 4); overload;
 { v3/C5. Try to draw a theme glyph override into ARect; True = drawn (icon path), False =
   unset/malformed so the CALLER draws its own default (used where the default isn't a plain
   vector kind, e.g. the drop chevron). And the canonical token for a vector kind. }
-function TyTryDrawGlyphOverride(APainter: TTyPainter; AController: TTyStyleController;
+function TyTryDrawGlyphOverride(APainter: TTyPainter; AController: TTyCustomStyleController;
   const ARect: TRect; const ATokenName: string; AColor: TTyColor): Boolean;
 function TyGlyphKindToken(AKind: TTyGlyphKind): string;
 { The largest CENTRED SQUARE inside ARect. A spinner's button half is wide and short (18 x 14
@@ -449,7 +449,7 @@ function TySquareGlyphBox(const ARect: TRect): TRect;
   read from --glyph-chevron-size in ONE place rather than at nine call sites; it was a literal
   default on TTyPainter.DrawDropChevron that no caller overrode, which made it the only visual
   value in this path a skin or a density axis could not reach. }
-procedure TyDrawDropChevron(APainter: TTyPainter; AController: TTyStyleController;
+procedure TyDrawDropChevron(APainter: TTyPainter; AController: TTyCustomStyleController;
   const AZoneRect: TRect; AColor: TTyColor);
 
 { Contextual styling for a control hosted ON a title bar. A title bar is a container, and
@@ -659,7 +659,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyGraphicControl.SetController(AValue: TTyStyleController);
+procedure TTyGraphicControl.SetController(AValue: TTyCustomStyleController);
 begin
   if FController = AValue then Exit;
   { Unregister from current active controller and remove free-notification }
@@ -685,7 +685,7 @@ begin
     FController := nil;
 end;
 
-function TTyGraphicControl.ActiveController: TTyStyleController;
+function TTyGraphicControl.ActiveController: TTyCustomStyleController;
 begin
   if FController <> nil then
     Result := FController
@@ -1114,7 +1114,7 @@ end;
 function TyThemedFormGradient(AChild: TControl; const APR, ACR: TRect;
   out AFill: TTyFill): Boolean;
 var
-  ctrl: TTyStyleController;
+  ctrl: TTyCustomStyleController;
   st: TTyStyleSet;
 begin
   Result := False;
@@ -1382,7 +1382,7 @@ begin
     APainter.DrawEdge(ARect, AStyle.BorderWidth, light, dark);  // raised (outset): TL light, BR dark
 end;
 
-function TyTryDrawGlyphOverride(APainter: TTyPainter; AController: TTyStyleController;
+function TyTryDrawGlyphOverride(APainter: TTyPainter; AController: TTyCustomStyleController;
   const ARect: TRect; const ATokenName: string; AColor: TTyColor): Boolean;
 { v3/C5 core. If the theme sets ATokenName to a valid glyph override, render that icon-font
   glyph into ARect and return True (honoured even if it renders blank — the theme asked for
@@ -1440,10 +1440,10 @@ begin
   end;
 end;
 
-procedure TyDrawDropChevron(APainter: TTyPainter; AController: TTyStyleController;
+procedure TyDrawDropChevron(APainter: TTyPainter; AController: TTyCustomStyleController;
   const AZoneRect: TRect; AColor: TTyColor);
 var
-  ctrl: TTyStyleController;
+  ctrl: TTyCustomStyleController;
 begin
   if AController <> nil then ctrl := AController else ctrl := TyDefaultController;
   APainter.DrawDropChevron(AZoneRect, AColor,
@@ -1464,7 +1464,7 @@ begin
   Result := Rect(ARect.Left + dx, ARect.Top + dy, ARect.Left + dx + s, ARect.Top + dy + s);
 end;
 
-procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
+procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyCustomStyleController;
   const ARect: TRect; const ATokenName: string; AVectorKind: TTyGlyphKind;
   AColor: TTyColor; AThickness: Integer; APadLogical: Integer = 4);
 begin
@@ -1474,7 +1474,7 @@ begin
     APainter.DrawGlyph(ARect, AVectorKind, AColor, AThickness, APadLogical);
 end;
 
-procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
+procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyCustomStyleController;
   const ARect: TRect; AVectorKind: TTyGlyphKind; AColor: TTyColor; AThickness: Integer;
   APadLogical: Integer = 4);
 { v3/C5. Convenience: the override token is derived from the kind (--glyph-<kind>). }
@@ -1840,7 +1840,7 @@ begin
 end;
 {$ENDIF}
 
-procedure TTyCustomControl.SetController(AValue: TTyStyleController);
+procedure TTyCustomControl.SetController(AValue: TTyCustomStyleController);
 begin
   if FController = AValue then Exit;
   { Unregister from current active controller and remove free-notification }
@@ -1866,7 +1866,7 @@ begin
     FController := nil;
 end;
 
-function TTyCustomControl.ActiveController: TTyStyleController;
+function TTyCustomControl.ActiveController: TTyCustomStyleController;
 begin
   if FController <> nil then
     Result := FController
@@ -1958,7 +1958,7 @@ begin
 end;
 
 function TyResolveFontSize(const AStyle: TTyStyleSet; AParentFont: Boolean;
-  AControlFontSize: Integer; AController: TTyStyleController): Integer;
+  AControlFontSize: Integer; AController: TTyCustomStyleController): Integer;
 var
   base: Integer;
 begin

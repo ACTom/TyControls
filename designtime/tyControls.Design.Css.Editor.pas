@@ -53,7 +53,7 @@ type
     FList: TTreeView;
     FWarn: TLabel;
     FSelectorMode: Boolean;
-    FController: TTyStyleController;   // source of the theme's CURRENT value for an inserted prop
+    FController: TTyCustomStyleController;   // source of the theme's CURRENT value for an inserted prop
     FTypeKey: string;                 // the target control's typeKey ('' = controller level)
     FLastLine: Integer;               // for format-on-line-leave
     FFormatting: Boolean;             // reentrancy guard for the in-place line format
@@ -68,12 +68,12 @@ type
     procedure FormatClick(Sender: TObject);
     function DefaultValueFor(const AProp: string): string;
   public
-    constructor CreateFor(AController: TTyStyleController; const ATypeKey: string;
+    constructor CreateFor(AController: TTyCustomStyleController; const ATypeKey: string;
       ASelectorMode: Boolean); reintroduce;
     function Execute(var AText: string): Boolean;
   end;
 
-constructor TTyStyleOverrideDialog.CreateFor(AController: TTyStyleController;
+constructor TTyStyleOverrideDialog.CreateFor(AController: TTyCustomStyleController;
   const ATypeKey: string; ASelectorMode: Boolean);
 var
   panel: TPanel;
@@ -321,7 +321,7 @@ procedure TTyStyleOverrideProperty.Edit;
 var
   dlg: TTyStyleOverrideDialog;
   comp: TPersistent;
-  ctrl: TTyStyleController;
+  ctrl: TTyCustomStyleController;
   typeKey, s: string;
   selectorMode: Boolean;
   styleable: ITyStyleable;

@@ -241,7 +241,7 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     procedure SetTopIndex(const AValue: Integer); override;
     procedure Resize; override;
     procedure Paint; override;
@@ -460,8 +460,8 @@ uses
   returns AClassic byte-identical (--icon-size is defined in the base theme as 16 and so cannot be
   used as a fallback here without shifting the classic geometry); at MODERN density it reads the
   --icon-size token (falling back to AClassic only if the token is somehow unset). }
-function TyDensityIconSlot(AController: TTyStyleController; AClassic: Integer): Integer;
-var c: TTyStyleController;
+function TyDensityIconSlot(AController: TTyCustomStyleController; AClassic: Integer): Integer;
+var c: TTyCustomStyleController;
 begin
   c := AController;
   if c = nil then c := TyDefaultController;
@@ -1670,7 +1670,7 @@ begin
   if (FEditFlat >= 0) and not FEndingEdit then EndEdit(True);
 end;
 
-procedure TTyCustomValueListEditor.SetController(AValue: TTyStyleController);
+procedure TTyCustomValueListEditor.SetController(AValue: TTyCustomStyleController);
 begin
   inherited SetController(AValue);
   if FEditor <> nil then FEditor.Controller := AValue;

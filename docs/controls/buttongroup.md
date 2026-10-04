@@ -55,7 +55,7 @@ uses tyControls.ButtonGroup;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `StyleClass` | `string` | `''` | CSS 类名，对应 `.tycss` 选择器的 `.classname` 部分；作用于**整条**（每段都用同一变体，如 `'primary'` 让全部分段用主色按钮主题） |
-| `Controller` | `TTyStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定使用哪个样式控制器；为 `nil` 时回退到全局默认 |
+| `Controller` | `TTyCustomStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定使用哪个样式控制器；为 `nil` 时回退到全局默认 |
 
 ### 状态跟踪字段（protected，不 published）
 

@@ -28,7 +28,7 @@ uses tyControls.NativeStyler;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Controller` | `TTyStyleController` | `nil` | 提供主题令牌的样式控制器。写入时自动挂接其变更监听（`AddChangeListener`）——主题变化即自动重新样式化。设为 `nil` 或未设时不执行任何样式化。|
+| `Controller` | `TTyCustomStyleController` | `nil` | 提供主题令牌的样式控制器。写入时自动挂接其变更监听（`AddChangeListener`）——主题变化即自动重新样式化。设为 `nil` 或未设时不执行任何样式化。|
 | `Root` | `TWinControl` | `nil` | 递归样式化的子树根。为 `nil` 时退回 `Owner`（若 `Owner` 是 `TWinControl`，通常即宿主窗体），见 `EffectiveRoot`。|
 | `Enabled` | `Boolean` | `True` | 为 `False` 时 `Apply` 直接返回，不做任何样式化。|
 | `ApplyFontName` | `Boolean` | `False` | 为 `True` 且主题令牌含 `font-name` 时，把控件字体族改为主题字体族；默认 `False`（只改字体**颜色**，不动字体族）。|

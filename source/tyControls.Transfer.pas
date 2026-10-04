@@ -279,7 +279,7 @@ type
     function LayoutAtPPI(const AClient: TRect; APPI: Integer): TTyTransferLayout;
     { Keep the panes and the rail on our controller, so a controller assigned AFTER the
       children exist still themes them (TTyRadioGroup.SetController's rule). }
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     procedure Loaded; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -873,7 +873,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyCustomTransfer.SetController(AValue: TTyStyleController);
+procedure TTyCustomTransfer.SetController(AValue: TTyCustomStyleController);
 var
   m: TTyTransferMove;
 begin

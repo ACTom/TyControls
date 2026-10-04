@@ -340,7 +340,7 @@ type
     // --- ITyTextEditActions: the seam the shared default context menu drives (thin
     // delegates to the public API above; see tyControls.TextMenu). ---
     function TeControl: TControl;
-    function TeController: TTyStyleController;
+    function TeController: TTyCustomStyleController;
     procedure TeUndo;
     procedure TeRedo;
     procedure TeCut;
@@ -821,7 +821,7 @@ end;
 // ---- ITyTextEditActions (default context-menu seam) ----
 
 function TTyCustomEdit.TeControl: TControl;             begin Result := Self; end;
-function TTyCustomEdit.TeController: TTyStyleController; begin Result := ActiveController; end;
+function TTyCustomEdit.TeController: TTyCustomStyleController; begin Result := ActiveController; end;
 procedure TTyCustomEdit.TeUndo;                          begin Undo; end;
 procedure TTyCustomEdit.TeRedo;                          begin Redo; end;
 procedure TTyCustomEdit.TeCut;                           begin CutToClipboard; end;

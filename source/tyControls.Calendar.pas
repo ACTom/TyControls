@@ -176,7 +176,7 @@ const
 
   Exported because it has TWO callers -- the control's own constructor and any dropdown host
   that has to size a popup around one -- and a second copy is how they drift apart. }
-function TyCalendarSizeFor(AController: TTyStyleController): TSize;
+function TyCalendarSizeFor(AController: TTyCustomStyleController): TSize;
 
 { Clamps ADate into [AMin, AMax].
   AMin=0 / AMax=0 mean unbounded on that side. }
@@ -1097,7 +1097,7 @@ begin
   end;
 end;
 
-function TyCalendarSizeFor(AController: TTyStyleController): TSize;
+function TyCalendarSizeFor(AController: TTyCustomStyleController): TSize;
 var rowH: Integer;
 begin
   if (AController = nil) or (AController.Density <> tdModern) then

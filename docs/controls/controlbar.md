@@ -55,7 +55,7 @@ uses tyControls.ControlBar;
 | `Align` | `TAlign` | `alNone` | 停靠方式；设为 `alTop` / `alBottom` 时控件随 band 行数**自动增高**（见 [第 7 节](#7-注意事项)）。 |
 | `Anchors` | `TAnchors` | — | 锚点布局（继承）。 |
 | `StyleClass` | `string` | `''` | CSS 类名，对应 `.tycss` 选择器的 `.classname` 部分。 |
-| `Controller` | `TTyStyleController` | `nil`（用全局 `TyDefaultController`） | 指定样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（用全局 `TyDefaultController`） | 指定样式控制器。 |
 
 ### 3.3 公有查询方法
 

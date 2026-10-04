@@ -80,7 +80,7 @@ LCL 的 `TDividerBevel` 只有 `LeftIndent`（`dividerbevel.pas:80`，`default 6
 |------|------|--------|------|
 | `StyleClass` | `string` | `''` | CSS 类名，对应 `.tycss` 选择器的 `.classname` 部分（可用来给某些分割线单独换色）。 |
 | `StyleOverride` | `string` | `''` | 单实例内联 CSS 声明块（可引用 `var(--...)` 令牌）。 |
-| `Controller` | `TTyStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定使用哪个样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定使用哪个样式控制器。 |
 
 > **无独立交互状态字段：** `TTyDivider` 未声明自己的 `FHover`/`FPressed` 逻辑，也未重写 `CurrentStates`；它是纯展示控件，绘制只解析 `CurrentStyle`（普通态样式）。`:disabled`（`Enabled = False`）等仍由基类状态机计算，但控件本身无交互态视觉切换。
 

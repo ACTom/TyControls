@@ -249,7 +249,7 @@ type
       窗口也不会跟它的栏分在两个流里(栏只收窗口,窗口的父控件在同一个流里)。收尾只靠 manager
       和栏的 Loaded(TTyToolWindowManager.TryFinishLoading)。 }
     { 推送链的第二段:窗口 → **每一个**操作区。多出来的那些设计期要按它画提示。 }
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     { 有些 Visible 切换不是用户眼里的「显示 / 隐藏」,spec §6.6 要求它们不发
       OnShow / OnHide:栏在 Loaded 里应用 ActiveIndex、加载结束时 manager 应用挂起的布局计划
       (TTyToolWindowManager.TryFinishLoading)。
@@ -1308,7 +1308,7 @@ type
       MaxHeight: TConstraintSize); override;
     procedure Loaded; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     { TWinControl 不重写它(继承的是 TComponent 的空实现),继承窗体里写的 ffChildPos
       会被静默丢掉。Order 按窗口序号算(spec §2)。 }
     procedure SetChildOrder(Child: TComponent; Order: Integer); override;
@@ -2362,7 +2362,7 @@ begin
   end;
 end;
 
-procedure TTyCustomToolWindow.SetController(AValue: TTyStyleController);
+procedure TTyCustomToolWindow.SetController(AValue: TTyCustomStyleController);
 var
   i: Integer;
 begin
@@ -7212,7 +7212,7 @@ begin
   ConflictMayHaveChanged;
 end;
 
-procedure TTyCustomToolWindowBar.SetController(AValue: TTyStyleController);
+procedure TTyCustomToolWindowBar.SetController(AValue: TTyCustomStyleController);
 var
   wins: TTyToolWindowArray;
   i: Integer;

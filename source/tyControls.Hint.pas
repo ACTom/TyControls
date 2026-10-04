@@ -38,9 +38,9 @@ type
   private
     FActive: Boolean;
     FInstalled: Boolean;
-    FController: TTyStyleController;
+    FController: TTyCustomStyleController;
     procedure SetActive(AValue: Boolean);
-    procedure SetController(AValue: TTyStyleController);
+    procedure SetController(AValue: TTyCustomStyleController);
     procedure Apply;
   protected
     procedure Loaded; override;
@@ -53,7 +53,7 @@ type
     { Documentary only — the hint window always resolves via the active default
       controller (LCL owns the window's instantiation, so a per-instance controller
       cannot be threaded through). Kept for design-time clarity. }
-    property Controller: TTyStyleController read FController write SetController;
+    property Controller: TTyCustomStyleController read FController write SetController;
   end;
 
   { TTyHint publishes TTyCustomHint's properties; everything lives in TTyCustomHint. }
@@ -273,7 +273,7 @@ begin
   FInstalled := want;
 end;
 
-procedure TTyCustomHint.SetController(AValue: TTyStyleController);
+procedure TTyCustomHint.SetController(AValue: TTyCustomStyleController);
 begin
   if FController = AValue then Exit;
   if FController <> nil then FController.RemoveFreeNotification(Self);

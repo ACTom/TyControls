@@ -203,7 +203,7 @@ type
     FClosable: Boolean;
     FShowIcon: Boolean;
     FPauseOnHover: Boolean;
-    FController: TTyStyleController;
+    FController: TTyCustomStyleController;
     FOnClose: TNotifyEvent;
     FOnClick: TNotifyEvent;
     FWin: TTyNotificationWindow;
@@ -220,7 +220,7 @@ type
     procedure SetPosition(AValue: TTyNotificationPosition);
     procedure SetClosable(AValue: Boolean);
     procedure SetShowIcon(AValue: Boolean);
-    procedure SetController(AValue: TTyStyleController);
+    procedure SetController(AValue: TTyCustomStyleController);
     { The theme metrics, in LOGICAL px (each call site scales). Named helpers rather than
       inline Metric() calls so a typo cannot strand one call site on the default. }
     function WidthLogical: Integer;
@@ -294,7 +294,7 @@ type
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     { The controller whose theme this toast resolves against — never FController directly: a
       toast themed by the global default has Controller = nil. }
-    function ActiveController: TTyStyleController;
+    function ActiveController: TTyCustomStyleController;
     { Move the live window onto the slot the rules give it. No-op with no window. }
     procedure PlaceWindow;
   public
@@ -350,7 +350,7 @@ type
     { Freeze the countdown while the pointer is over the card, so a toast cannot expire out
       from under someone who is reading it (or reaching for its x). }
     property PauseOnHover: Boolean read FPauseOnHover write FPauseOnHover default True;
-    property Controller: TTyStyleController read FController write SetController;
+    property Controller: TTyCustomStyleController read FController write SetController;
     { Fired once per dismissal, whatever caused it: the countdown, the x, or Hide. NOT fired
       when the component is destroyed — a component going away is not a toast the user closed.
       Do NOT Free the toast from this handler: a timed-out dismissal reaches it from inside the
@@ -694,7 +694,7 @@ begin
   Result := 'TyNotificationClose';
 end;
 
-function TTyCustomNotification.ActiveController: TTyStyleController;
+function TTyCustomNotification.ActiveController: TTyCustomStyleController;
 begin
   if FController <> nil then
     Result := FController
@@ -1282,7 +1282,7 @@ begin
   Restyle;   // the mark is a height floor, so dropping it can shrink the card
 end;
 
-procedure TTyCustomNotification.SetController(AValue: TTyStyleController);
+procedure TTyCustomNotification.SetController(AValue: TTyCustomStyleController);
 begin
   if FController = AValue then Exit;
   if FController <> nil then FController.RemoveFreeNotification(Self);

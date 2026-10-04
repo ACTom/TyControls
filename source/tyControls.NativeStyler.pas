@@ -19,13 +19,13 @@ type
     runs at design time (would bake theme colors into the .lfm). }
   TTyCustomNativeStyler = class(TTyComponent)
   private
-    FController: TTyStyleController;
+    FController: TTyCustomStyleController;
     FRoot: TWinControl;
     FEnabled: Boolean;
     FApplyFontName: Boolean;
     FApplyFontSize: Boolean;
     FOnStyleControl: TTyStyleControlEvent;
-    procedure SetController(AValue: TTyStyleController);
+    procedure SetController(AValue: TTyCustomStyleController);
     procedure SetRoot(AValue: TWinControl);
     procedure ControllerChanged(Sender: TObject);
     function EffectiveRoot: TWinControl;
@@ -44,7 +44,7 @@ type
     { Add a class whose BACKGROUND must never be set (OS-draws it). Affects all stylers. }
     class procedure RegisterDeny(AClass: TControlClass);
     class function IsDenied(AControl: TControl): Boolean;
-    property Controller: TTyStyleController read FController write SetController;
+    property Controller: TTyCustomStyleController read FController write SetController;
     property Root: TWinControl read FRoot write SetRoot;
     property Enabled: Boolean read FEnabled write FEnabled default True;
     property ApplyFontName: Boolean read FApplyFontName write FApplyFontName default False;
@@ -118,7 +118,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TTyCustomNativeStyler.SetController(AValue: TTyStyleController);
+procedure TTyCustomNativeStyler.SetController(AValue: TTyCustomStyleController);
 begin
   if FController = AValue then Exit;
   if FController <> nil then

@@ -53,7 +53,7 @@ uses tyControls.Bevel;
 |------|------|------|
 | `StyleClass` | `string` | `.tycss` 类名(作用于 `TyBevel` 解析)。 |
 | `StyleOverride` | `string` | 每实例 CSS 覆盖块(可用 `var(--...)`),例如把边线基色改为强调色。 |
-| `Controller` | `TTyStyleController` | 指定样式控制器(nil 时用全局默认)。 |
+| `Controller` | `TTyCustomStyleController` | 指定样式控制器(nil 时用全局默认)。 |
 | `Align` / `Anchors` | — | 布局。 |
 
 **枚举:** `TTyBevelShape = (tbsBox, tbsFrame, tbsTopLine, tbsBottomLine, tbsLeftLine, tbsRightLine, tbsSpacer)`;`TTyBevelStyle = (tbsLowered, tbsRaised)`。

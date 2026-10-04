@@ -31,7 +31,8 @@ uses
   tyControls.Hint, tyControls.BalloonHint, tyControls.Popover, tyControls.Notification,
   tyControls.Panel, tyControls.Button, tyControls.Types, Dialogs, tyControls.Dialogs,
   tyControls.Dialogs.Progress,
-  tyControls.Dialogs.About, tyControls.Dialogs.IconBrowser;
+  tyControls.Dialogs.About, tyControls.Dialogs.IconBrowser, tyControls.Form,
+  tyControls.FormSurface, tyControls.Menu, tyControls.ToolWindows;
 
 type
   TTyCustomClassesP4Test = class(TTyCustomClassesPhaseCase)
@@ -42,7 +43,7 @@ type
     { Task 27: controllers }
     procedure TestThirdStyleController;
     procedure TestThirdNativeStyler;
-    procedure TestControllerPropertyKeepsTheFinalTypeForNow;
+    procedure TestThirdControllerDrivesAControl;
     { Task 28: icon fonts and images }
     procedure TestThirdIconFont;
     procedure TestThirdVirtualImageList;
@@ -118,6 +119,16 @@ type
   published
     property Prompt;
     property Value;
+  end;
+
+  { S27-1: a stock button that counts the Invalidates a theme switch broadcasts and shows the
+    controller and style its Paint goes through. }
+  TS27Button = class(TTyButton)
+  public
+    Invalidates: Integer;
+    procedure Invalidate; override;
+    function StyleNow: TTyStyleSet;
+    function ControllerNow: TTyCustomStyleController;
   end;
 
 implementation
@@ -354,32 +365,104 @@ begin
   CheckPropType(TTyVirtualImageList, 'Collection', 'TTyCustomImageCollection');
 end;
 
-{ S27-1, as decided for the first 4.0 release (plan Task 27, option C). Every Controller property
-  still names TTyStyleController: widening it means ActiveController hands out the custom class,
-  and that reaches TextMenu.pas (TeController) and the excluded Calendar.pas, which this plan does
-  not touch. So a third-party controller cannot be assigned to a control's Controller yet -- the
-  RTTI below pins that, so the day the type changes this test is where it shows. What a third
-  party CAN do today is use its controller on its own: it loads a theme, resolves styles and
-  metrics, and tells its listeners -- all of that lives on TTyCustomStyleController. There is no
-  path that hands a controller to a control other than the Controller property, so there is
-  nothing more to drive. }
-procedure TTyCustomClassesP4Test.TestControllerPropertyKeepsTheFinalTypeForNow;
+procedure TS27Button.Invalidate;
+begin
+  Inc(Invalidates);
+  inherited Invalidate;
+end;
+
+function TS27Button.StyleNow: TTyStyleSet;
+begin
+  Result := CurrentStyle;
+end;
+
+function TS27Button.ControllerNow: TTyCustomStyleController;
+begin
+  Result := ActiveController;
+end;
+
+{ S27-1 (D11, the LCL way; plan decision F1, option A). Every Controller property names
+  TTyCustomStyleController, so a third party's controller hangs on a stock control: the control
+  resolves its style through that controller's theme -- CurrentStyle, the call Paint makes -- and
+  hears a theme switch the way it hears the library's own: the controller's Changed invalidates
+  every control registered with it. Driven through the real paths: the Controller setter, the
+  controller's LoadThemeCss, and an .lfm-style round trip whose reference fixup assigns it. }
+procedure TTyCustomClassesP4Test.TestThirdControllerDrivesAControl;
 var
   third: TThirdStyleController;
+  btn: TS27Button;
+  back: TTyButton;
   st: TTyStyleSet;
+  n: Integer;
+  ms: TMemoryStream;
+  dst: TForm;
 begin
-  CheckPropType(TTyButton, 'Controller', 'TTyStyleController');
-  CheckPropType(TTyNativeStyler, 'Controller', 'TTyStyleController');
-  CheckPropType(TTyPopover, 'Controller', 'TTyStyleController');
+  CheckPropType(TTyButton, 'Controller', 'TTyCustomStyleController');
+  CheckPropType(TTyCharImage, 'Controller', 'TTyCustomStyleController');
+  CheckPropType(TTyNativeStyler, 'Controller', 'TTyCustomStyleController');
+  CheckPropType(TTyPopover, 'Controller', 'TTyCustomStyleController');
+  CheckPropType(TTyHint, 'Controller', 'TTyCustomStyleController');
+  CheckPropType(TTyBalloonHint, 'Controller', 'TTyCustomStyleController');
+  CheckPropType(TTyNotification, 'Controller', 'TTyCustomStyleController');
+  CheckPropType(TTyPopupMenu, 'Controller', 'TTyCustomStyleController');
+  CheckPropType(TTyForm, 'Controller', 'TTyCustomStyleController');
+  CheckPropType(TTyFormSurface, 'Controller', 'TTyCustomStyleController');
+  CheckPropType(TTyToolWindow, 'Controller', 'TTyCustomStyleController');
+  CheckPropType(TTyToolWindowActions, 'Controller', 'TTyCustomStyleController');
+
   third := TThirdStyleController.Create(FForm);
+  third.Name := 'P4Ctl';
   FChanges := 0;
   third.AddChangeListener(@CountChange);
   third.LoadThemeCss(':root { --p4-gap: 13px; } TyButton { background: #123456; }');
+  third.RemoveChangeListener(@CountChange);
   AssertTrue('the third-party controller tells its listeners', FChanges > 0);
   AssertEquals('it resolves a metric from its own theme', 13, third.Metric('--p4-gap', 4));
-  st := third.Model.ResolveStyle('TyButton', '', [tysNormal]);
-  AssertEquals('and a style', Int64($FF123456), Int64(st.Background.Color));
-  third.RemoveChangeListener(@CountChange);
+
+  btn := TS27Button.Create(FForm);
+  btn.Name := 'P4CtlBtn';
+  btn.Parent := FForm;
+  st := btn.StyleNow;
+  AssertTrue('precondition: under the default controller the button is not #123456',
+    Int64(st.Background.Color) <> Int64($FF123456));
+  btn.Controller := third;
+  AssertTrue('the button takes the third-party controller', btn.Controller = third);
+  AssertTrue('and paints through it', btn.ControllerNow = third);
+  st := btn.StyleNow;
+  AssertEquals('it resolves its style from that controller''s theme', Int64($FF123456),
+    Int64(st.Background.Color));
+
+  n := btn.Invalidates;
+  third.LoadThemeCss('TyButton { background: #654321; }');
+  AssertTrue('a theme switch on the third-party controller reaches the button',
+    btn.Invalidates > n);
+  st := btn.StyleNow;
+  AssertEquals('and the button resolves the new theme', Int64($FF654321),
+    Int64(st.Background.Color));
+  n := btn.Invalidates;
+  TyDefaultController.Changed;
+  AssertEquals('the default controller no longer drives it', n, btn.Invalidates);
+
+  { The .lfm path: the reference streams by name and the reader's fixup assigns it. }
+  dst := TForm.CreateNew(nil);
+  ms := TMemoryStream.Create;
+  try
+    ms.WriteComponent(FForm);
+    ms.Position := 0;
+    ms.ReadComponent(dst);
+    back := dst.FindComponent('P4CtlBtn') as TTyButton;
+    AssertTrue('the Controller reference round-trips to the third-party controller',
+      back.Controller = dst.FindComponent('P4Ctl'));
+    AssertTrue('as its own class', back.Controller is TThirdStyleController);
+  finally
+    ms.Free;
+    dst.Free;
+  end;
+
+  FreeAndNil(third);
+  AssertNull('freeing it lets go of it', btn.Controller);
+  AssertTrue('and the button falls back to the default controller',
+    btn.ControllerNow = TyDefaultController);
 end;
 
 { ------------------------------------------------------------------ Task 29: hints and notifications }
@@ -582,6 +665,6 @@ end;
 initialization
   RegisterClasses([TThirdStyleController, TThirdNativeStyler, TThirdIconFont,
     TThirdVirtualImageList, TThirdPopover, TThirdNotification, TThirdHint, TThirdBalloonHint,
-    TThirdMessage, TThirdInputDialog]);
+    TThirdMessage, TThirdInputDialog, TS27Button]);
   RegisterTest(TTyCustomClassesP4Test);
 end.

@@ -60,7 +60,7 @@ uses tyControls.CheckGroup;
 | `Alignment` | `TAlignment` | `taLeftJustify` | 标题在顶部边框带内的水平对齐。 |
 | `Align` / `Anchors` | — | — | 停靠 / 锚点布局。 |
 | `StyleClass` | `string` | `''` | CSS 变体类名（作用于外框；子复选框各自解析 `TyCheckBox`）。 |
-| `Controller` | `TTyStyleController` | `nil`（全局默认） | 关联的样式控制器。**赋值会同步传播给所有内部子复选框**，保证整组主题一致。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（全局默认） | 关联的样式控制器。**赋值会同步传播给所有内部子复选框**，保证整组主题一致。 |
 
 ---
 

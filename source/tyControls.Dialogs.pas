@@ -37,7 +37,7 @@ type
     // (TTyCustomControl / TTyGraphicControl — the two base classes share no common
     // ancestor exposing Controller, so test each separately), then recurse into any
     // TWinControl child. Invalidates as it goes so the new theme repaints.
-    procedure ApplyControllerToChildren(AParent: TWinControl; AController: TTyStyleController);
+    procedure ApplyControllerToChildren(AParent: TWinControl; AController: TTyCustomStyleController);
     // A resizable, custom-frame (bsNone) window resizes via WM_NCHITTEST on the form's own
     // HWND, but a child control at the very bottom edge (the button bar) steals those
     // messages, so the bottom sizing border is dead. Expose it by leaving this many px of
@@ -527,7 +527,7 @@ begin
   if FTitle <> nil then FTitle.Caption := Caption;
 end;
 
-procedure TTyDialog.ApplyControllerToChildren(AParent: TWinControl; AController: TTyStyleController);
+procedure TTyDialog.ApplyControllerToChildren(AParent: TWinControl; AController: TTyCustomStyleController);
 var i: Integer; c: TControl;
 begin
   if (AParent = nil) or (AController = nil) then Exit;
@@ -553,7 +553,7 @@ begin
 end;
 
 procedure TTyDialog.ApplyOwnerController;
-var c: TTyStyleController; mf: TCustomForm; hBefore: Integer;
+var c: TTyCustomStyleController; mf: TCustomForm; hBefore: Integer;
 begin
   // Prefer the owner's controller (the form that spawned this dialog); else the app's
   // main form. A CreateNew dialog has Controller = nil, so without this it falls back to

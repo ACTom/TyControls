@@ -374,7 +374,7 @@ type
     FSurface: TTyCustomFormSurface;   // Phase 1: runtime child content-host (covers the WS_THICKFRAME dead band)
     FMenuBar: TTyCustomMenuBar;       // the primary menu bar (shortcut dispatch / mac global bar)
     FResizable: Boolean;              // window edge-resize opt-out (default True); see SetResizable
-    FController: TTyStyleController;   // set by ApplyChromeTheme; used by Paint
+    FController: TTyCustomStyleController;   // set by ApplyChromeTheme; used by Paint
     FSharpBackdrop: TBGRABitmap;      // form bg snapshot, UNblurred (fills glass corners)
     FGlassBackdrop: TBGRABitmap;      // same snapshot, blurred once for the glass pane
     FGlassKey: string;                // imagepath|WxH|blurDev — rebuild when it changes
@@ -398,7 +398,7 @@ type
       merged on top. EVERY site that used to call Model.ResolveStyle('TyForm', ...) resolves
       through here, so an override reaches the background paint, the backdrop rebuild, the
       title-bar colour fallback, ThemedBgColor AND the OS window effects alike. ACtrl <> nil. }
-    function ResolveChromeStyle(ACtrl: TTyStyleController): TTyStyleSet;
+    function ResolveChromeStyle(ACtrl: TTyCustomStyleController): TTyStyleSet;
     procedure DoFollowTick(Sender: TObject);
     { Deferred so the dialog runs AFTER the designer's delete finishes. Showing it straight from
       Notification(opRemove) — i.e. inside a destruction notification — ran a modal loop in the middle
@@ -419,7 +419,7 @@ type
     procedure ArmEngine;
     function GetTitleHeight: Integer;
     procedure SetTitleHeight(AValue: Integer);
-    procedure SetController(AValue: TTyStyleController);
+    procedure SetController(AValue: TTyCustomStyleController);
     procedure SetResizable(AValue: Boolean);
     function GetBorderStyleTy: TFormBorderStyle;
     procedure SetBorderStyleTy(AValue: TFormBorderStyle);
@@ -512,7 +512,7 @@ type
     constructor Create(AOwner: TComponent); override;
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
     destructor Destroy; override;
-    procedure ApplyChromeTheme(AController: TTyStyleController);
+    procedure ApplyChromeTheme(AController: TTyCustomStyleController);
     procedure ApplyWindowEffects;   // (re)apply OS rounded corners + native shadow from the TyForm style
     { Render the themed `form` background into ACanvas over ARect. Public so TTyFormSurface can paint
       the identical background onto its OWN (edge-reaching) canvas. Uses the form's controller (or the
@@ -557,7 +557,7 @@ type
       title bar + caption buttons; a streamed value is applied in Loaded once the title bar
       exists. Leave it unset to use the built-in default theme (TyDefaultController), or wire
       it to the main window's controller so the whole app shares one theme. }
-    property Controller: TTyStyleController read FController write SetController;
+    property Controller: TTyCustomStyleController read FController write SetController;
     { Per-instance chrome override: a bare CSS declaration block merged over the resolved TyForm
       style for THIS window only — the same property every styled Ty control has, parsed by the
       same engine (var(--x) binds to the active theme and re-binds after a switch). Assigning it
@@ -603,7 +603,7 @@ type
   a title bar HOSTS controls, so a bar exactly one control tall leaves a full-height child
   no room -- it meets both edges, and any top offset spills past the bottom. AController may
   be nil (falls back to the default controller). }
-function TyTitleBarHeightFor(AController: TTyStyleController): Integer;
+function TyTitleBarHeightFor(AController: TTyCustomStyleController): Integer;
 
 function TyHitTestBorder(const AClient: TRect; const APt: TPoint; AZone: Integer): TTyBorderHit;
 { Resize-gated edge hit-test: bhNone when not AResizable, else TyHitTestBorder. A pure
@@ -763,7 +763,7 @@ uses
   ============================================================================ }
 {$ENDIF}
 
-function TyTitleBarHeightFor(AController: TTyStyleController): Integer;
+function TyTitleBarHeightFor(AController: TTyCustomStyleController): Integer;
 begin
   Result := TyDensityMetric(AController, TyTitleBarClassicHeight, '--titlebar-height');
 end;
@@ -2467,7 +2467,7 @@ end;
 
 procedure TTyForm.ApplyResizeStrategy;
 {$IFDEF LCLWin32}
-var capH, zone: Integer; resiz, noFrame, maxed: Boolean; ctrl: TTyStyleController;
+var capH, zone: Integer; resiz, noFrame, maxed: Boolean; ctrl: TTyCustomStyleController;
 {$ENDIF}
 begin
   if csDesigning in ComponentState then Exit;   // never poke the window on the design surface
@@ -2692,7 +2692,7 @@ function TTyForm.ThemedBgColor(out AColor: TTyColor): Boolean;
   TyDefaultController (the built-in theme) — so it is correct in the DESIGNER too, where
   ApplyChromeTheme has not run and the raw LCL Color is the dark default. }
 var
-  ctrl: TTyStyleController;
+  ctrl: TTyCustomStyleController;
   bg: TTyStyleSet;
 begin
   Result := False;
@@ -2705,7 +2705,7 @@ begin
   end;
 end;
 
-procedure TTyForm.ApplyChromeTheme(AController: TTyStyleController);
+procedure TTyForm.ApplyChromeTheme(AController: TTyCustomStyleController);
 var bg, tbBg: TTyStyleSet;
 
   { Theme-switch glass-backdrop ordering: the form (parent) paints first and rebuilds the photo/
@@ -2789,7 +2789,7 @@ begin
   InvalidateKids(Self);   // children re-sample the freshly-rebuilt glass/photo backdrop
 end;
 
-procedure TTyForm.SetController(AValue: TTyStyleController);
+procedure TTyForm.SetController(AValue: TTyCustomStyleController);
 begin
   if FController = AValue then Exit;
   if FController <> nil then RemoveFreeNotification(FController);
@@ -2835,7 +2835,7 @@ begin
   end;
 end;
 
-function TTyForm.ResolveChromeStyle(ACtrl: TTyStyleController): TTyStyleSet;
+function TTyForm.ResolveChromeStyle(ACtrl: TTyCustomStyleController): TTyStyleSet;
 begin
   Result := ACtrl.Model.ResolveStyle('TyForm', '', []);
   // A9 layer 2 — the SAME layering as TTyCustomControl.CurrentStyle: overlay the per-instance
@@ -2865,7 +2865,7 @@ begin
 end;
 
 procedure TTyForm.ApplyWindowEffects;
-var maximized: Boolean; ctrl: TTyStyleController;
+var maximized: Boolean; ctrl: TTyCustomStyleController;
 begin
   if csDesigning in ComponentState then Exit;   // never poke DWM/Cocoa on the IDE design surface
   if not HandleAllocated then Exit;

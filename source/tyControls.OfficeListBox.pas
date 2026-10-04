@@ -105,12 +105,12 @@ type
   text. Factored out so TTyOfficeComboBox's popup list draws identical bands. AController resolves
   the band style (each control has its own ActiveController). }
 procedure TyDrawOfficeHeaderBand(P: TTyPainter; const ARowRect: TRect; const S: string;
-  AController: TTyStyleController);
+  AController: TTyCustomStyleController);
 
 implementation
 
 procedure TyDrawOfficeHeaderBand(P: TTyPainter; const ARowRect: TRect; const S: string;
-  AController: TTyStyleController);
+  AController: TTyCustomStyleController);
 var
   hs: TTyStyleSet;
   textR: TRect;

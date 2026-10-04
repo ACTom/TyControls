@@ -49,7 +49,7 @@ type
       clipped to AInner, the field inside its frame (TySpinFrameInsetPx), and rounded only where it
       meets the field's own rounded corner. In the normal state nothing is filled and the ink is
       the field's. }
-    function PaintHalf(APainter: TTyPainter; AController: TTyStyleController;
+    function PaintHalf(APainter: TTyPainter; AController: TTyCustomStyleController;
       const AHalf, AInner: TRect; const AFieldStyle: TTyStyleSet; ADir: Integer): TTyColor;
     property Hot: Integer read FHot;
     property Held: Integer read FHeld;
@@ -415,7 +415,7 @@ begin
     Result := [tysNormal];
 end;
 
-function TTySpinButtons.PaintHalf(APainter: TTyPainter; AController: TTyStyleController;
+function TTySpinButtons.PaintHalf(APainter: TTyPainter; AController: TTyCustomStyleController;
   const AHalf, AInner: TRect; const AFieldStyle: TTyStyleSet; ADir: Integer): TTyColor;
 var
   st: TTyStateSet;

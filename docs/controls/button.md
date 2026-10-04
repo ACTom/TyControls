@@ -51,7 +51,7 @@ uses tyControls.Button;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `StyleClass` | `string` | `''` | CSS 类名，对应 `.tycss` 选择器的 `.classname` 部分；空字符串表示使用基础规则 |
-| `Controller` | `TTyStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定使用哪个样式控制器；为 `nil` 时自动回退到全局默认控制器 |
+| `Controller` | `TTyCustomStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定使用哪个样式控制器；为 `nil` 时自动回退到全局默认控制器 |
 
 **状态跟踪字段（protected，不 published）：**
 
