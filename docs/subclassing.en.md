@@ -46,7 +46,7 @@ end;
 end.
 ```
 
-Put it in a design-time package of your own and install it. The Object Inspector shows those three, plus the fifteen the LCL root classes publish and nobody can hide (`Name`, `Left`, `Top`, `Width`, `Height`, `Hint`, `Cursor`, the `Anchor*` and `Help*` properties).
+Put it in a design-time package of your own and install it. The Object Inspector shows those three, plus the fifteen the LCL root classes publish and nobody can hide (`Name`, `Tag`, `Left`, `Top`, `Width`, `Height`, `Hint`, `Cursor`, the `Anchor*` and `Help*` properties).
 
 A bare `property Text;` line takes the default, the stored clause and the accessors from the declaration in `TTyCustomEdit`, so what lands in the `.lfm` is exactly what `TTyEdit` writes. Do **not** write `property Text: string;` — that declares a new property and drops the default and the stored clause.
 
@@ -367,7 +367,7 @@ if AControl is TTyCustomEdit then ...
 
 You can hit all three symptoms: `is` quietly turns False, `as` raises `EInvalidCast` at run time, and assigning a derived control to a variable of the old parent type no longer compiles. A hard cast like `TTyButton(AGlyphButton)` still "runs" (final classes add no fields), but it lies about the object; change it by the same rule.
 
-If, after switching to the custom class, the property you need is protected there (section 3) and the object is one of the library's controls, cast to that final class — true for the library's control, and for a third-party subclass it raises `EInvalidCast` instead of reading the wrong thing.
+If, after switching to the custom class, the property you need is protected there (section 3) and the object is one of the library's controls, get the final class with `as TTyXxx`. That is fine for the library's control, and should a third-party subclass turn up, it raises `EInvalidCast` instead of quietly reading the wrong thing.
 
 ### 7.3 Event handler signatures
 
@@ -411,7 +411,16 @@ A host that hands out whatever child it accepts also uses the custom class:
 - the windows, bars and actions areas the tool-window family hands out (`Windows[]`, `ActiveWindow`, `Bar`, `Actions`, `EnsureActions` and so on): the matching custom classes;
 - the combo-box popup API (`CreatePopupList` and friends): `TTyCustomListBox`.
 
-So `var Ts: TTyTabSheet := PageControl1.ActivePage;` no longer compiles. Change the variable to the custom class; if you know it is the library's control and need something only the final class has, use `as TTyTabSheet`.
+So an assignment like this no longer compiles:
+
+```pascal
+var
+  Ts: TTyTabSheet;
+begin
+  Ts := PageControl1.ActivePage;   // 4.0: ActivePage is a TTyCustomTabSheet
+```
+
+Change the variable to the custom class; if you know it is the library's control and need something only the final class has, write `Ts := PageControl1.ActivePage as TTyTabSheet;`.
 
 If you override any of these virtual methods, update the signature too.
 

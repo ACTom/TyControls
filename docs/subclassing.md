@@ -46,7 +46,7 @@ end;
 end.
 ```
 
-放进自己的设计期包，装上就能在面板上看到。对象查看器里只有这三个，加上 LCL 根类本来就发布、藏不掉的那几个（`Name`、`Left`、`Top`、`Width`、`Height`、`Hint`、`Cursor`、`Anchor*`、`Help*`，共 15 个）。
+放进自己的设计期包，装上就能在面板上看到。对象查看器里只有这三个，加上 LCL 根类本来就发布、藏不掉的那几个（`Name`、`Tag`、`Left`、`Top`、`Width`、`Height`、`Hint`、`Cursor`、`Anchor*`、`Help*`，共 15 个）。
 
 `property Text;` 这样不带类型的一行，会把 `TTyCustomEdit` 里那条声明的 default、stored、读写方法原样带过来，`.lfm` 里写不写、写什么，跟 `TTyEdit` 完全一样。**不要**写成 `property Text: string;`，那是另起一个新属性，default 和 stored 全丢。
 
@@ -367,7 +367,7 @@ if AControl is TTyCustomEdit then ...
 
 `is` 静默变 False、`as` 运行时抛 `EInvalidCast`、把派生控件赋给父控件类型的变量编不过——三种都可能遇到。硬转 `TTyButton(AGlyphButton)` 仍然「能跑」（最终类不加字段），但对象不是那个类，按上面的规则改掉。
 
-判成 Custom 类以后，如果要访问的属性在 Custom 类里是 protected（见第 3 节），而对象确实是库里的控件，就强转成那个最终类，这对库里的控件是真话；对第三方子类会抛 `EInvalidCast` 而不是悄悄读错。
+判成 Custom 类以后，如果要访问的属性在 Custom 类里是 protected（见第 3 节），而对象确实是库里的控件，就用 `as TTyXxx` 转成那个最终类：对库里的控件没有问题；万一碰上第三方子类，会抛 `EInvalidCast`，不会悄悄读错。
 
 ### 7.3 事件处理过程的签名
 
@@ -411,7 +411,16 @@ procedure TForm1.TreeGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var T
 - 工具窗口一族交出的窗口、栏、操作区（`Windows[]`、`ActiveWindow`、`Bar`、`Actions`、`EnsureActions` 等）：对应的 Custom 类；
 - 组合框弹层 API（`CreatePopupList` 等）：`TTyCustomListBox`。
 
-于是 `var Ts: TTyTabSheet := PageControl1.ActivePage;` 这样的赋值编不过。把变量类型改成 Custom 类；确知拿到的是库里的控件、又要用最终类才有的东西，就 `as TTyTabSheet`。
+于是下面这样的赋值编不过：
+
+```pascal
+var
+  Ts: TTyTabSheet;
+begin
+  Ts := PageControl1.ActivePage;   // 4.0：ActivePage 是 TTyCustomTabSheet
+```
+
+把变量类型改成 Custom 类；确知拿到的是库里的控件、又要用最终类才有的东西，就写 `Ts := PageControl1.ActivePage as TTyTabSheet;`。
 
 覆写了这些虚方法的，签名一起改。
 
