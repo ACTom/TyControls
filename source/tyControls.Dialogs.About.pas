@@ -21,7 +21,7 @@ type
     procedure AddRow(const AText: string; ASize, AWeight: Integer; ALink: Boolean);
     procedure DoLayout;                       // (re)build FRows for the current fields + size the form
     function  BandHeight: Integer;
-    function  EffectiveController: TTyStyleController;   // Controller, else the global default (nil-safe)
+    function  EffectiveController: TTyCustomStyleController;   // Controller, else the global default (nil-safe)
   protected
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -111,7 +111,7 @@ begin
   AddButton(rsMsgBtnClose, mrCancel, True, True);   // Close = default + cancel (Enter/Esc/X)
 end;
 
-function TTyAboutForm.EffectiveController: TTyStyleController;
+function TTyAboutForm.EffectiveController: TTyCustomStyleController;
 begin
   Result := Controller;
   if Result = nil then Result := TyDefaultController;

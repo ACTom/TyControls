@@ -164,7 +164,7 @@ type
     procedure Relayout;
   protected
     function  GetStyleTypeKey: string; override;
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Resize; override;
     procedure Loaded; override;
@@ -534,7 +534,7 @@ begin
   Result := 'TyGridPanel';
 end;
 
-procedure TTyCustomGridPanel.SetController(AValue: TTyStyleController);
+procedure TTyCustomGridPanel.SetController(AValue: TTyCustomStyleController);
 var i: Integer;
 begin
   inherited SetController(AValue);

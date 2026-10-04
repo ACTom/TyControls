@@ -126,7 +126,7 @@ implementation
 { Shared header-band draw: a tinted band (the 'TyGroupBox' background) with bold, left-aligned
   text — same look as TTyOfficeListBox, kept unit-local so this combo is self-contained. }
 procedure DrawHeaderBand(P: TTyPainter; const ARowRect: TRect; const S: string;
-  AController: TTyStyleController);
+  AController: TTyCustomStyleController);
 var
   hs: TTyStyleSet;
   textR: TRect;

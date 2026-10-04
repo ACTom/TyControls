@@ -123,7 +123,7 @@ type
     procedure DoOnResize; override;
     // Keep the internal radio children on the group's controller so a controller assigned
     // AFTER population still themes them (mirrors TTyCheckGroup.SetController).
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     { Reading direction changed, so the COLUMNS changed sides -- and the children sit where
       SetBounds last put them, which LCL's own handling never revisits (it invalidates and
       calls AdjustSize; neither re-runs a layout done by hand). Without this the columns keep
@@ -476,7 +476,7 @@ begin
   SetLength(FButtons, 0);
 end;
 
-procedure TTyCustomRadioGroup.SetController(AValue: TTyStyleController);
+procedure TTyCustomRadioGroup.SetController(AValue: TTyCustomStyleController);
 var i: Integer;
 begin
   inherited SetController(AValue);

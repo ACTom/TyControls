@@ -248,7 +248,7 @@ type
     FView: TTyMenuView;       // owned by FForm once shown; else freed by us
     FChild: TTyMenuPopup;     // open submenu cascade (this level's child), or nil
     FRoot: TMenuItem;         // the item whose children this level renders
-    FController: TTyStyleController;
+    FController: TTyCustomStyleController;
     FCloseTick: QWord;        // tick at last close; reopen guard (ComboBox idiom)
     FPopupRect: TRect;        // computed screen rect of the last Popup (for the deferred Qt re-apply)
     FOnNavigateAdjacent: TTyMenuAdjacentEvent;
@@ -336,7 +336,7 @@ type
     function IsOpen: Boolean;
     { Test seam: activate a row as if it were clicked (same path as a real click). }
     procedure ActivateRowForTest(AIndex: Integer);
-    property Controller: TTyStyleController read FController write FController;
+    property Controller: TTyCustomStyleController read FController write FController;
     { When True, '-Text' items build as section headers (propagated to submenu cascades). }
     property AllowHeaders: Boolean read FAllowHeaders write FAllowHeaders;
     { Icon-column source (propagated to the view + submenu cascades). }
@@ -555,7 +555,7 @@ type
   TTyPopupMenu = class(TPopupMenu)
   private
     FRenderer: TTyMenuPopup;     // lazy themed popup host; created on first PopUp
-    FController: TTyStyleController;
+    FController: TTyCustomStyleController;
     { Which way this menu reads. A TPopupMenu is a component, not a control, so it has no
       BiDiMode of its own; a context menu belongs to whatever it was raised over, which LCL
       records in PopupComponent (include/control.inc:2496) before popping. Falls back to the
@@ -566,7 +566,7 @@ type
       and clearing the global ActivePopupMenu -- runs when the themed popup goes
       away, whichever way it went away (activation, Esc, click-outside). }
     procedure HandleRendererClosed(Sender: TObject);
-    procedure SetController(AValue: TTyStyleController);
+    procedure SetController(AValue: TTyCustomStyleController);
   protected
     { Hook for subclasses to configure the shared renderer (e.g. opt into section headers)
       after its controller is set and BEFORE its rows are built. Base does nothing. }
@@ -598,7 +598,7 @@ type
       the About dialog. }
     property Version: string read GetVersion;
     { The .tycss style controller the themed popup resolves its tokens through. }
-    property Controller: TTyStyleController read FController write SetController;
+    property Controller: TTyCustomStyleController read FController write SetController;
   end;
 
   { Image-list-backed themed context menu: renders each item's ImageIndex icon (from Images --
@@ -2776,7 +2776,7 @@ begin
   FRenderer.SetRoot(Items);
 end;
 
-procedure TTyPopupMenu.SetController(AValue: TTyStyleController);
+procedure TTyPopupMenu.SetController(AValue: TTyCustomStyleController);
 begin
   if FController = AValue then Exit;
   if FController <> nil then FController.RemoveFreeNotification(Self);

@@ -132,7 +132,7 @@ type
     procedure AdjustClientRect(var ARect: TRect); override;
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Loaded; override;
     procedure CreateWnd; override;
@@ -1227,7 +1227,7 @@ begin
   end;
 end;
 
-procedure TTyCustomRibbon.SetController(AValue: TTyStyleController);
+procedure TTyCustomRibbon.SetController(AValue: TTyCustomStyleController);
 var
   I: Integer;
 begin

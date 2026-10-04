@@ -55,11 +55,11 @@ type
     FDescription: string;
     FIcon: TTyBalloonIcon;
     FHideInterval: Integer;
-    FController: TTyStyleController;
+    FController: TTyCustomStyleController;
     FWin: TTyBalloonWindow;
     FTimer: TTimer;
     procedure TimerFire(Sender: TObject);
-    procedure SetController(AValue: TTyStyleController);
+    procedure SetController(AValue: TTyCustomStyleController);
     function ActiveModel: TTyStyleModel;
     { Measure the body content (icon + title + description) in device px at APPI. }
     procedure MeasureBody(APPI: Integer; out ABodyW, ABodyH: Integer);
@@ -82,7 +82,7 @@ type
     property Icon: TTyBalloonIcon read FIcon write FIcon default biNone;
     { Auto-hide delay in ms (0 = stay until HideHint). Default 4000. }
     property HideInterval: Integer read FHideInterval write FHideInterval default 4000;
-    property Controller: TTyStyleController read FController write SetController;
+    property Controller: TTyCustomStyleController read FController write SetController;
   end;
 
   { TTyBalloonHint publishes TTyCustomBalloonHint's properties; everything lives in TTyCustomBalloonHint. }
@@ -396,7 +396,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TTyCustomBalloonHint.SetController(AValue: TTyStyleController);
+procedure TTyCustomBalloonHint.SetController(AValue: TTyCustomStyleController);
 begin
   if FController = AValue then Exit;
   if FController <> nil then FController.RemoveFreeNotification(Self);

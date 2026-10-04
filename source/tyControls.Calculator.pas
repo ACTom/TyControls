@@ -39,7 +39,7 @@ type
     procedure SetValue(const AValue: Double);
   protected
     function GetStyleTypeKey: string; override;   // 'TyPanel'
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     procedure Paint; override;
     procedure Resize; override;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
@@ -284,7 +284,7 @@ begin
   Result := 'TyCalculator';
 end;
 
-procedure TTyCustomCalculator.SetController(AValue: TTyStyleController);
+procedure TTyCustomCalculator.SetController(AValue: TTyCustomStyleController);
 var i: Integer;
 begin
   inherited SetController(AValue);

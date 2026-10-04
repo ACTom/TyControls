@@ -65,7 +65,7 @@ type
     procedure Paint; override;
     { Push a per-instance controller down to the embedded panes so a standalone box
       with its own Controller themes the previewed image/text too (not just the frame). }
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
   public
     constructor Create(AOwner: TComponent); override;
     { Built-in image load: shows FImage on success, else False (caller may fall back). }
@@ -244,7 +244,7 @@ begin
   Result := 'TyPreviewBox';
 end;
 
-procedure TTyCustomPreviewBox.SetController(AValue: TTyStyleController);
+procedure TTyCustomPreviewBox.SetController(AValue: TTyCustomStyleController);
 begin
   inherited SetController(AValue);
   if FImage <> nil then FImage.Controller := AValue;

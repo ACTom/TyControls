@@ -486,7 +486,7 @@ type
       click-while-open reopen race (TTyComboBox's, same mechanics). }
     FCloseUpTick: QWord;
     function GetStyleTypeKey: string; override;
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     function LayoutFor(AWidth, AHeight, APPI: Integer): TTyCascaderFieldLayout;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -1783,7 +1783,7 @@ begin
   Result := 'TyCascader';
 end;
 
-procedure TTyCustomCascader.SetController(AValue: TTyStyleController);
+procedure TTyCustomCascader.SetController(AValue: TTyCustomStyleController);
 begin
   inherited SetController(AValue);
   // Keep an already-created panel themed by the same controller; otherwise it would keep the

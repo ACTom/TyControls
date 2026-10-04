@@ -188,7 +188,7 @@ function TyDefaultController: TTyStyleController;
   density pack's roomier value (38), so an Edit/Button/ComboBox dropped under modern density
   comes up tall enough for the larger font instead of a classic-sized box. AController may be
   nil (falls back to the default controller). }
-function TyDensityHeight(AController: TTyStyleController; AClassicH: Integer): Integer;
+function TyDensityHeight(AController: TTyCustomStyleController; AClassicH: Integer): Integer;
 
 { Density-aware value keyed on ANY length token. Classic returns AClassicVal verbatim (the
   token is NOT consulted, so a control whose classic default differs from the token's classic
@@ -196,7 +196,7 @@ function TyDensityHeight(AController: TTyStyleController; AClassicH: Integer): I
   ActiveController.Metric(token, default) whenever the default is a control's OWN classic size
   that must stay byte-identical -- reading the token directly returns the token's classic value,
   not the control's, which silently shifts classic. AController may be nil. }
-function TyDensityMetric(AController: TTyStyleController; AClassicVal: Integer;
+function TyDensityMetric(AController: TTyCustomStyleController; AClassicVal: Integer;
   const AToken: string): Integer;
 
 { The theme's --line-height (TyLineHeightVar), in LOGICAL px, for laying out a caption that
@@ -206,7 +206,7 @@ function TyDensityMetric(AController: TTyStyleController; AClassicVal: Integer;
   here would have frozen it). NOT density-keyed: extra leading is a typographic choice a
   theme makes outright, not a classic/modern variant of a control's own default.
   AController may be nil (falls back to the default controller). }
-function TyLineHeight(AController: TTyStyleController): Integer;
+function TyLineHeight(AController: TTyCustomStyleController): Integer;
 
 implementation
 
@@ -714,10 +714,10 @@ begin
   Result := GDefaultController;
 end;
 
-function TyDensityMetric(AController: TTyStyleController; AClassicVal: Integer;
+function TyDensityMetric(AController: TTyCustomStyleController; AClassicVal: Integer;
   const AToken: string): Integer;
 var
-  c: TTyStyleController;
+  c: TTyCustomStyleController;
 begin
   c := AController;
   if c = nil then c := TyDefaultController;
@@ -727,9 +727,9 @@ begin
     Result := AClassicVal;   { classic: keep the caller's own default, byte-identical }
 end;
 
-function TyLineHeight(AController: TTyStyleController): Integer;
+function TyLineHeight(AController: TTyCustomStyleController): Integer;
 var
-  c: TTyStyleController;
+  c: TTyCustomStyleController;
 begin
   c := AController;
   if c = nil then c := TyDefaultController;
@@ -737,7 +737,7 @@ begin
   if Result < 0 then Result := 0;   // a negative leading is not a thing; treat it as unset
 end;
 
-function TyDensityHeight(AController: TTyStyleController; AClassicH: Integer): Integer;
+function TyDensityHeight(AController: TTyCustomStyleController; AClassicH: Integer): Integer;
 begin
   Result := TyDensityMetric(AController, AClassicH, '--control-height');
 end;

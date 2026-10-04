@@ -525,7 +525,7 @@ type
     property Selection: TTyTermSelection read FSelection;
     property ContextMenu: TTyPopupMenu read FMenu;
     function GetStyleTypeKey: string; override;
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     procedure Loaded; override;
     procedure SetParent(AParent: TWinControl); override;
     procedure Resize; override;
@@ -1684,7 +1684,7 @@ begin
   inherited Invalidate;
 end;
 
-procedure TTyCustomTerminalView.SetController(AValue: TTyStyleController);
+procedure TTyCustomTerminalView.SetController(AValue: TTyCustomStyleController);
 begin
   inherited SetController(AValue);
   { 键里有模型指针,换 controller 自然走到 ThemeChanged;条也要跟着换 }

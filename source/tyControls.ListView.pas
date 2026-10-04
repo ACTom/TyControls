@@ -595,7 +595,7 @@ type
     procedure DoDeletion(AIndex: Integer); virtual;
 
     function GetStyleTypeKey: string; override;
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
 
     { The per-item paint seam TreeView never had. ACell is client coords; AStyle the
       resolved 'TyListViewItem' style for AStates. }
@@ -1263,7 +1263,7 @@ begin
   Result := 'TyListView';
 end;
 
-procedure TTyCustomListView.SetController(AValue: TTyStyleController);
+procedure TTyCustomListView.SetController(AValue: TTyCustomStyleController);
 begin
   inherited SetController(AValue);
   if FVScroll <> nil then FVScroll.Controller := AValue;

@@ -77,7 +77,7 @@ type
     function CheckBoxAt(AIndex: Integer): TTyCheckBox;
     procedure SetParent(AParent: TWinControl); override;
     procedure Resize; override;
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     { See TTyRadioGroup.CMBiDiModeChanged: LCL's own handling invalidates and calls
       AdjustSize, neither of which re-runs a layout this control did with SetBounds -- so
       without this the indicators would flip and the columns would not. }
@@ -593,7 +593,7 @@ begin
   LayoutCheckBoxes;                 // the columns have to actually change sides
 end;
 
-procedure TTyCustomCheckGroup.SetController(AValue: TTyStyleController);
+procedure TTyCustomCheckGroup.SetController(AValue: TTyCustomStyleController);
 var
   i: Integer;
 begin

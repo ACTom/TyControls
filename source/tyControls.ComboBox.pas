@@ -253,7 +253,7 @@ type
       applies them in declaration order — ancestor first — so the rows would be built
       twice. READING an Items block is unaffected, so older .lfm files still load. }
     FItemsStreamed: Boolean;
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     { Headless-testable popup-height calculation: DropDownCount governs how many
       rows are visible before the dropdown scrolls. Separated from DropDown so it
       can be exercised without building a real win32 popup form. }
@@ -824,7 +824,7 @@ begin
   Result := 'TyComboBox';
 end;
 
-procedure TTyCustomComboBox.SetController(AValue: TTyStyleController);
+procedure TTyCustomComboBox.SetController(AValue: TTyCustomStyleController);
 begin
   inherited SetController(AValue);
   { Keep an already-created popup list in sync when the controller is reassigned;

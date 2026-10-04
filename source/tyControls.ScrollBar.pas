@@ -703,7 +703,7 @@ function TTyCustomScrollBar.ThemeAutoHideMs: Integer;
 var
   { ActiveController，不是裸 Controller——后者在没挂 controller 时会 AV。
     全拎进局部变量:命中那条路是本函数存在的全部理由,别在上面反复问。 }
-  ctrl: TTyStyleController;
+  ctrl: TTyCustomStyleController;
   mdl: TTyStyleModel;
   ver: Cardinal;
 begin
