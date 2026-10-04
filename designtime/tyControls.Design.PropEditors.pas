@@ -427,12 +427,12 @@ begin
     BACK from a mode is always one click away. }
   Proc('');
   comp := GetComponent(0);
-  if not (comp is TTyStyleController) then Exit;
+  if not (comp is TTyCustomStyleController) then Exit;   { any controller, a third party's too }
   { The modes are a property of the LOADED theme, not of the library, so they are read from
     this controller's own model. A controller whose ThemeName/ThemeFile has not resolved in
     the IDE has an unloaded model and offers nothing further — the honest answer, and better
     than a list of modes that no theme here declares. }
-  names := TTyStyleController(comp).Model.ModeNames;
+  names := TTyCustomStyleController(comp).Model.ModeNames;
   for i := 0 to High(names) do
     Proc(names[i]);
 end;
@@ -696,11 +696,11 @@ begin
     stay typeable (see the note above the editor declarations). }
   // The three string properties of the style controller — the whole reason a controller is
   // dropped on a form, and until now three empty boxes.
-  RegisterPropertyEditor(TypeInfo(string), TTyStyleController, 'ThemeName',
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomStyleController, 'ThemeName',
     TTyThemeNamePropertyEditor);          // built-in pack + this process's theme registry
-  RegisterPropertyEditor(TypeInfo(string), TTyStyleController, 'Mode',
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomStyleController, 'Mode',
     TTyThemeModePropertyEditor);          // the loaded theme's own @mode blocks, plus ''
-  RegisterPropertyEditor(TypeInfo(string), TTyStyleController, 'ThemeFile',
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomStyleController, 'ThemeFile',
     TTyThemeFilePropertyEditor);          // '...' opens a *.tycss file dialog
   // Icon fonts: the family must name a renderable font, the file is a file, and a glyph name
   // must be a key of the referenced font's Glyphs map.
@@ -714,7 +714,7 @@ begin
     TTyStyleOverrideProperty);
   RegisterPropertyEditor(TypeInfo(string), TTyCustomControl, 'StyleOverride',
     TTyStyleOverrideProperty);
-  RegisterPropertyEditor(TypeInfo(string), TTyStyleController, 'StyleOverride',
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomStyleController, 'StyleOverride',
     TTyStyleOverrideProperty);
   // The chart's whole API is this one string, so it gets the biggest editor in the
   // package: SynEdit, catalog completion, a browsable reference and live diagnostics.

@@ -328,7 +328,7 @@ var
 begin
   comp := GetComponent(0);
   ctrl := nil; typeKey := ''; selectorMode := False;
-  if comp is TTyStyleController then
+  if comp is TTyCustomStyleController then   { any controller, a third party's too }
     selectorMode := True   { controller level: full tycss with selectors, no single typeKey }
   else if Supports(comp, ITyStyleable, styleable) then
   begin

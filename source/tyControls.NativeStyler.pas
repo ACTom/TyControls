@@ -17,7 +17,7 @@ type
     TyPanel). RTTI-generic: any control exposing a published Color/Font is themed (third-party
     included); OS-drawn classes in the deny-list keep their font but skip the background. Never
     runs at design time (would bake theme colors into the .lfm). }
-  TTyNativeStyler = class(TTyComponent)
+  TTyCustomNativeStyler = class(TTyComponent)
   private
     FController: TTyStyleController;
     FRoot: TWinControl;
@@ -43,16 +43,24 @@ type
     { Add a class whose BACKGROUND must never be set (OS-draws it). Affects all stylers. }
     class procedure RegisterDeny(AClass: TControlClass);
     class function IsDenied(AControl: TControl): Boolean;
-  published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
-    property Version;
     property Controller: TTyStyleController read FController write SetController;
     property Root: TWinControl read FRoot write FRoot;
     property Enabled: Boolean read FEnabled write FEnabled default True;
     property ApplyFontName: Boolean read FApplyFontName write FApplyFontName default False;
     property ApplyFontSize: Boolean read FApplyFontSize write FApplyFontSize default False;
     property OnStyleControl: TTyStyleControlEvent read FOnStyleControl write FOnStyleControl;
+  end;
+
+  { TTyNativeStyler publishes TTyCustomNativeStyler's properties; everything lives in TTyCustomNativeStyler. }
+  TTyNativeStyler = class(TTyCustomNativeStyler)
+  published
+    property Version;
+    property Controller;
+    property Root;
+    property Enabled;
+    property ApplyFontName;
+    property ApplyFontSize;
+    property OnStyleControl;
   end;
 
 implementation
@@ -64,13 +72,13 @@ uses
 var
   GDeny: array of TControlClass;   // background-deny classes (OS-drawn): set up in initialization
 
-class procedure TTyNativeStyler.RegisterDeny(AClass: TControlClass);
+class procedure TTyCustomNativeStyler.RegisterDeny(AClass: TControlClass);
 begin
   SetLength(GDeny, Length(GDeny) + 1);
   GDeny[High(GDeny)] := AClass;
 end;
 
-class function TTyNativeStyler.IsDenied(AControl: TControl): Boolean;
+class function TTyCustomNativeStyler.IsDenied(AControl: TControl): Boolean;
 var
   i: Integer;
 begin
@@ -97,19 +105,19 @@ begin
   else Result := 'TyPanel';
 end;
 
-constructor TTyNativeStyler.Create(AOwner: TComponent);
+constructor TTyCustomNativeStyler.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FEnabled := True;
 end;
 
-destructor TTyNativeStyler.Destroy;
+destructor TTyCustomNativeStyler.Destroy;
 begin
   if FController <> nil then FController.RemoveChangeListener(@ControllerChanged);
   inherited Destroy;
 end;
 
-procedure TTyNativeStyler.SetController(AValue: TTyStyleController);
+procedure TTyCustomNativeStyler.SetController(AValue: TTyStyleController);
 begin
   if FController = AValue then Exit;
   if FController <> nil then
@@ -126,12 +134,12 @@ begin
   if not (csLoading in ComponentState) then Apply;
 end;
 
-procedure TTyNativeStyler.ControllerChanged(Sender: TObject);
+procedure TTyCustomNativeStyler.ControllerChanged(Sender: TObject);
 begin
   Apply;
 end;
 
-procedure TTyNativeStyler.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomNativeStyler.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) then
@@ -141,27 +149,27 @@ begin
   end;
 end;
 
-procedure TTyNativeStyler.Loaded;
+procedure TTyCustomNativeStyler.Loaded;
 begin
   inherited Loaded;
   Apply;   // streamed Controller/Root now resolved; style once
 end;
 
-function TTyNativeStyler.EffectiveRoot: TWinControl;
+function TTyCustomNativeStyler.EffectiveRoot: TWinControl;
 begin
   if FRoot <> nil then Result := FRoot
   else if Owner is TWinControl then Result := TWinControl(Owner)
   else Result := nil;
 end;
 
-procedure TTyNativeStyler.Apply;
+procedure TTyCustomNativeStyler.Apply;
 begin
   if (csDesigning in ComponentState) then Exit;   // never bake theme colors into the .lfm
   if (not FEnabled) or (FController = nil) then Exit;
   if EffectiveRoot <> nil then WalkAndStyle(EffectiveRoot);
 end;
 
-procedure TTyNativeStyler.WalkAndStyle(AParent: TWinControl);
+procedure TTyCustomNativeStyler.WalkAndStyle(AParent: TWinControl);
 var
   i: Integer;
   c: TControl;
@@ -174,7 +182,7 @@ begin
   end;
 end;
 
-procedure TTyNativeStyler.StyleControl(AControl: TControl);
+procedure TTyCustomNativeStyler.StyleControl(AControl: TControl);
 var
   style, fb: TTyStyleSet;
   fnt: TFont;

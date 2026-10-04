@@ -21,27 +21,27 @@ uses
   tyControls.CheckBox, tyControls.CheckComboBox, tyControls.CheckGroup, tyControls.CheckListBox,
   tyControls.CircularProgress, tyControls.ColorBox, tyControls.ColorButton,
   tyControls.ColorComboBox, tyControls.ColorGrid, tyControls.ColorListBox, tyControls.ComboBox,
-  tyControls.ComboBoxEx, tyControls.ComboEdit, tyControls.ControlBar, tyControls.CoolBar,
-  tyControls.CurrencyEdit, tyControls.Dial, tyControls.Divider, tyControls.DropButtons,
-  tyControls.Edit, tyControls.Empty, tyControls.ExPanel, tyControls.FilterComboBox,
-  tyControls.FloatSpinEdit, tyControls.FontComboBox, tyControls.FontListBox,
-  tyControls.FontSizeComboBox, tyControls.Form, tyControls.FormSurface, tyControls.Gauge,
-  tyControls.GearActivityIndicator, tyControls.GearDial, tyControls.GlowLabel,
+  tyControls.ComboBoxEx, tyControls.ComboEdit, tyControls.ControlBar, tyControls.Controller,
+  tyControls.CoolBar, tyControls.CurrencyEdit, tyControls.Dial, tyControls.Divider,
+  tyControls.DropButtons, tyControls.Edit, tyControls.Empty, tyControls.ExPanel,
+  tyControls.FilterComboBox, tyControls.FloatSpinEdit, tyControls.FontComboBox,
+  tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.Form, tyControls.FormSurface,
+  tyControls.Gauge, tyControls.GearActivityIndicator, tyControls.GearDial, tyControls.GlowLabel,
   tyControls.GlyphButtons, tyControls.Grid, tyControls.GridPanel, tyControls.GroupBox,
   tyControls.HSColorPicker, tyControls.HeaderControl, tyControls.HtmlLabel, tyControls.Image,
   tyControls.ImageView, tyControls.LColorPicker, tyControls.LevelMeter, tyControls.LinkLabel,
   tyControls.ListBox, tyControls.ListGroupPanel, tyControls.ListView, tyControls.MRUComboBox,
-  tyControls.MaskEdit, tyControls.Memo, tyControls.Menu, tyControls.Meter, tyControls.NumericEdit,
-  tyControls.OfficeComboBox, tyControls.OfficeListBox, tyControls.PageControl,
-  tyControls.Pagination, tyControls.PaintPanel, tyControls.Panel, tyControls.PreviewBox,
-  tyControls.ProgressBar, tyControls.RadioGroup, tyControls.Rating, tyControls.RelativePanel,
-  tyControls.Ribbon, tyControls.RibbonAppMenu, tyControls.RibbonBackstage,
-  tyControls.RibbonGallery, tyControls.RibbonQuickAccess, tyControls.ScrollBar,
-  tyControls.ScrollBox, tyControls.ScrollContent, tyControls.ScrollPanel, tyControls.Segmented,
-  tyControls.ShadowLabel, tyControls.Shape, tyControls.ShellComboBox, tyControls.ShellListView,
-  tyControls.ShellTreeView, tyControls.SizeBox, tyControls.Sparkline, tyControls.SpinEdit,
-  tyControls.Splitter, tyControls.StarShape, tyControls.StatusBar, tyControls.Steps,
-  tyControls.TabSet, tyControls.TabSheet, tyControls.Tag, tyControls.Terminal,
+  tyControls.MaskEdit, tyControls.Memo, tyControls.Menu, tyControls.Meter, tyControls.NativeStyler,
+  tyControls.NumericEdit, tyControls.OfficeComboBox, tyControls.OfficeListBox,
+  tyControls.PageControl, tyControls.Pagination, tyControls.PaintPanel, tyControls.Panel,
+  tyControls.PreviewBox, tyControls.ProgressBar, tyControls.RadioGroup, tyControls.Rating,
+  tyControls.RelativePanel, tyControls.Ribbon, tyControls.RibbonAppMenu,
+  tyControls.RibbonBackstage, tyControls.RibbonGallery, tyControls.RibbonQuickAccess,
+  tyControls.ScrollBar, tyControls.ScrollBox, tyControls.ScrollContent, tyControls.ScrollPanel,
+  tyControls.Segmented, tyControls.ShadowLabel, tyControls.Shape, tyControls.ShellComboBox,
+  tyControls.ShellListView, tyControls.ShellTreeView, tyControls.SizeBox, tyControls.Sparkline,
+  tyControls.SpinEdit, tyControls.Splitter, tyControls.StarShape, tyControls.StatusBar,
+  tyControls.Steps, tyControls.TabSet, tyControls.TabSheet, tyControls.Tag, tyControls.Terminal,
   tyControls.ToggleSwitch, tyControls.ToolBar, tyControls.ToolBarEx, tyControls.ToolGroupPanel,
   tyControls.ToolWindows, tyControls.TrackBar, tyControls.TrackEdit, tyControls.Transfer,
   tyControls.TreeSelect, tyControls.TreeView, tyControls.TyLabel, tyControls.URLEdit,
@@ -4946,6 +4946,17 @@ type
     property Anchors;
   end;
 
+  TGenNativeStyler = class(TTyCustomNativeStyler)
+  published
+    property Version;
+    property Controller;
+    property Root;
+    property Enabled;
+    property ApplyFontName;
+    property ApplyFontSize;
+    property OnStyleControl;
+  end;
+
   TGenNumericEdit = class(TTyCustomNumericEdit)
   published
     property Version;
@@ -7656,6 +7667,18 @@ type
     property OnFillCells;
   end;
 
+  TGenStyleController = class(TTyCustomStyleController)
+  published
+    property Version;
+    property ThemeFile;
+    property ThemeName;
+    property Mode;
+    property Follow;
+    property Density;
+    property StyleOverride;
+    property HotReload;
+  end;
+
   TGenTabSet = class(TTyCustomTabSet)
   published
     property Version;
@@ -9164,7 +9187,7 @@ type
 
 const
   { (mimic, final class) }
-  CGenMimics: array[0..135, 0..1] of TClass = (
+  CGenMimics: array[0..137, 0..1] of TClass = (
     (TGenActivityBar, TTyActivityBar),
     (TGenActivityIndicator, TTyActivityIndicator),
     (TGenAdvancedComboBox, TTyAdvancedComboBox),
@@ -9240,6 +9263,7 @@ const
     (TGenMenuBar, TTyMenuBar),
     (TGenMenuButton, TTyMenuButton),
     (TGenMeter, TTyMeter),
+    (TGenNativeStyler, TTyNativeStyler),
     (TGenNumericEdit, TTyNumericEdit),
     (TGenOfficeComboBox, TTyOfficeComboBox),
     (TGenOfficeListBox, TTyOfficeListBox),
@@ -9279,6 +9303,7 @@ const
     (TGenStatusBar, TTyStatusBar),
     (TGenSteps, TTySteps),
     (TGenStringGrid, TTyStringGrid),
+    (TGenStyleController, TTyStyleController),
     (TGenTabSet, TTyTabSet),
     (TGenTabSheet, TTyTabSheet),
     (TGenTag, TTyTag),
