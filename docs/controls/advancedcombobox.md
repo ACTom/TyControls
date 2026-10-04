@@ -29,7 +29,7 @@ uses tyControls.AdvancedComboBox;
 
 | 成员 | 说明 |
 |------|------|
-| `Images: TTyVirtualImageList` | 栅格图片来源(按索引)。设置时注册 `FreeNotification`,列表先释放会自动置 nil。 |
+| `Images: TCustomImageList` | 栅格图片来源(按索引)。设置时注册 `FreeNotification`,列表先释放会自动置 nil。 |
 | `AddItem(const ATitle, ASubtitle: string; AImageIndex: Integer)` | 追加一项富项。`ASubtitle` 可为 `''`;`AImageIndex < 0` 表示无图。 |
 | `TitleOf(AIndex): string` | 该项的标题(越界返回 `''`)。 |
 | `SubtitleOf(AIndex): string` | 该项的副标题(无副标题 / 越界返回 `''`)。 |

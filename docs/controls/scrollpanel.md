@@ -16,7 +16,7 @@ TTyScrollPanel 是 TyControls 库中的**自动平移滚动容器**，继承自 
 | `GetStyleTypeKey` 返回值 | `'TyScrollBox'`（**继承自 `TTyCustomScrollBox`，刻意不重写**） |
 | 基类 | `TTyCustomScrollBox`（滚动容器，继承自 `TTyCustomPanel` = `TTyCustomControl`，有窗口句柄、可作父容器） |
 
-在 `.tycss` 文件中，本控件走 `TyScrollBox` 选择器着色（背景/边框/内边距令牌），与 [`TTyScrollBox`](scrollbox.md) 完全一致——**注意它不再是 `TyPanel`**：`TTyScrollBox` 在 2026-07 的 typeKey 审计中拿到了自己的键（滚动井下沉、面板抬起，两者观感相反），本控件作为它的子类自动继承了新键。
+在 `.tycss` 文件中，本控件走 `TyScrollBox` 选择器着色（背景/边框/内边距令牌），与 [`TTyScrollBox`](scrollbox.md) 完全一致——**注意它不再是 `TyPanel`**：`TTyScrollBox` 在 2026-07 的 typeKey 审计中拿到了自己的键（滚动井下沉、面板抬起，两者观感相反），本控件挂在 `TTyCustomScrollBox` 下，这个键的覆写就在那里，所以自动跟着换了。
 
 **这个借用是刻意保留的、也是正确的：** 一个会边缘自动平移的面板**就是一个滚动井**——它加的是一个**手势**，不是一个新表面；它一个额外的像素都不画，`AutoPanTo` / `AutoPanStep` 只改滚动偏移。让它和 `TTyScrollBox` 共用一个键，正是"改滚动井的皮肤，两者一起变"这个应有的行为。源码单元头也这么写着。
 

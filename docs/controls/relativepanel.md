@@ -86,7 +86,7 @@ uses tyControls.RelativePanel;
 |------|------|--------|------|
 | `Spacing` | `Integer` | `8` | 位置规则（`trRightOf/trLeftOf/trBelow/trAbove`）在兄弟之间插入的间距（px）。**边对齐 / 父对齐规则不受此值影响。** 修改后自动重排。 |
 
-### 继承自 TTyCustomPanel / TTyCustomControl 的 published 成员
+### 声明在父类、由 TTyRelativePanel 发布的成员
 
 | 属性 | 类型 | 说明 |
 |------|------|------|

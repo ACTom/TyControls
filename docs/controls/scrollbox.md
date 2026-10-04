@@ -56,9 +56,9 @@ uses tyControls.ScrollBox;
 |------|------|--------|------|
 | `ScrollBarAutoHide` | `TTyScrollBarAutoHide` | `sbahDefault` | 两条内嵌滚动条闲下来之后要不要淡出，转发给它们。默认跟主题走，三个值的含义与主题令牌见 [scrollbar.md](scrollbar.md) §7。 |
 
-本控件自己 published 的就这一个，下面那些都是从基类 republish 的。
+本控件自己声明的就这一个，下面那些声明在父类（`TTyCustomPanel`、`TTyCustomControl` 或 LCL）里，由 `TTyScrollBox` 发布。
 
-### 继承自 TTyCustomPanel / TTyCustomControl 的 published 成员
+### 声明在父类、由 TTyScrollBox 发布的成员
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|

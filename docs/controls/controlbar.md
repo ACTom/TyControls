@@ -44,9 +44,9 @@ uses tyControls.ControlBar;
 | `GripperWidth` | `Integer` | `12` | 每条 band 左侧为抓手预留的逻辑宽度；子控件从此宽度右侧开始排布。改值触发重排。 |
 | `BandSpacing` | `Integer` | `3` | 相邻 band 之间（以及一行内相邻子控件之间）的逻辑间距。改值触发重排。 |
 
-### 3.2 继承自 TTyCustomPanel / TTyCustomControl 的成员
+### 3.2 声明在父类、由 TTyControlBar 发布的成员
 
-`TTyControlBar` 继承 [`TTyCustomPanel`](panel.md) 的全部 published 成员：
+`TTyControlBar` 发布的、声明在 [`TTyCustomPanel`](panel.md) 及其上层的成员：
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
@@ -118,7 +118,7 @@ TyPanel, TyControlBar, /* ... */ {
 
 ### 渲染细节
 
-- **面板框架：** `Paint` 先调用 `inherited Paint`（`TTyPanel` 的框架绘制，走 `CurrentStyle`，解析的是本控件自己的 `TyControlBar` 键），画出主题化背景 / 边框。
+- **面板框架：** `Paint` 先调用 `inherited Paint`（`TTyCustomPanel` 的框架绘制，走 `CurrentStyle`，解析的是本控件自己的 `TyControlBar` 键），画出主题化背景 / 边框。
 - **band 抓手：** 随后为每条**已占用**的 band 在其左侧抓手列内绘制两条竖直导轨；颜色取当前样式的 `border-color`（缺省时回落 `text-color`），上下各内缩若干像素。band 行数由存储的子控件分配推导。
 - 抓手颜色**由盒子样式令牌派生**，控件代码不硬编码颜色（遵循库的主题可定制原则）；但导轨的粗细、间距与内缩是代码里的 `Scale(1)`/`Scale(3)`/`Scale(3)`，且抓手没有自己的键，因此"只改抓手不改工具带底色"目前做不到（见 2 节）。
 

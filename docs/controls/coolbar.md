@@ -37,9 +37,9 @@
 | 默认夹具宽度 | 10（逻辑像素） |
 | 默认带最小宽度 | 24（逻辑像素） |
 
-它从前和基类一样返回 `'TyPanel'`，主题层因此够不着它。现在两者各有其名：`TyCoolBar` 已作为附加选择器并入主题里 `TyPanel` 的规则块，解析值与从前逐字节相同，**开钩子而不动像素**；第三方主题若只覆盖了 `TyPanel`，需要补上 `TyCoolBar`（主题层按 typeKey 全有全无地回落）。
+它从前和 `TTyControlBar` 一样返回 `'TyPanel'`，主题层因此够不着它。现在两者各有其名：`TyCoolBar` 已作为附加选择器并入主题里 `TyPanel` 的规则块，解析值与从前逐字节相同，**开钩子而不动像素**；第三方主题若只覆盖了 `TyPanel`，需要补上 `TyCoolBar`（主题层按 typeKey 全有全无地回落）。
 
-与基类分名是有实质理由的：`TTyCoolBar` 的夹具是**可交互**的（`MouseDown` 经 `TyCoolGripperHit` 命中后拖动即改宽 / 重排），而 `TTyControlBar` 的夹具只是装饰；一套皮肤完全有理由让"能拖的导轨"和"只是好看的导轨"读起来不一样。
+与 `TTyControlBar` 分名是有实质理由的：`TTyCoolBar` 的夹具是**可交互**的（`MouseDown` 经 `TyCoolGripperHit` 命中后拖动即改宽 / 重排），而 `TTyControlBar` 的夹具只是装饰；一套皮肤完全有理由让"能拖的导轨"和"只是好看的导轨"读起来不一样。
 
 ### 子部件 typeKey
 

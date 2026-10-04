@@ -59,7 +59,7 @@ TyControls 的全部控件继承自两个基类之一（`tyControls.Base`）：
 
 > 这些成员都是 LCL 父类**本来就有**的属性和事件（在 LCL 里多是 public 或 protected），由每个控件的 `published` 段重新发布；事件分发链路全部走 `inherited`，与原生行为一致——库里**没有**改写任何分发逻辑，只是让它们出现在对象查看器里、能存进 `.lfm`。
 >
-> **拖放为什么"白捡"：** `DragMode` / `OnDragOver` / `OnDragDrop` 等全部由 `TControl` 声明、由 LCL 完成分发，拖放的判定发生在绘制层**之上**，所以自绘控件与原生控件的拖放行为完全一致。它们此前只是没被重新 published——`Ctl.DragMode := dmAutomatic` 从代码里一直编得过，缺的是对象查看器与流式化的那一份。`Visible` 同理。
+> **拖放为什么"白捡"：** `DragMode` / `OnDragOver` / `OnDragDrop` 等全部由 `TControl` 声明、由 LCL 完成分发，拖放的判定发生在绘制层**之上**，所以自绘控件与原生控件的拖放行为完全一致。它们此前只是没被重新 published，缺的是对象查看器与流式化的那一份；`Visible` 同理。代码里设 `DragMode` 要经最终类类型的引用（`TTyButton(Ctl).DragMode := dmAutomatic`）：它在 `TControl` 里是 protected，经 `TTyCustomControl`、`TTyGraphicControl` 或任何 `TTyCustomXxx` 类型的引用编不过，见 [subclassing.md](subclassing.md) 7.5 节。
 
 ### Tier B —— 键盘 / 焦点事件（仅窗口化控件，即可聚焦控件）
 

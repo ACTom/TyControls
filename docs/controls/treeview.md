@@ -535,7 +535,7 @@ Tree.OnNodeMoved := @OnMoved;
 | `GetNodeAt(X, Y: Integer): PTyTreeNode` | —— | LCL 的 `GetNodeAt` 就是"客户区某点上的节点"（`comctrls.pp:3716`） |
 | `GetNodeAtOffset(Y; out ANodeTop)` | `GetNodeAt(Y; out ANodeTop)` | **同名、同参数个数、两个参数都是 `Integer`**，所以移植过来的 `Tree.GetNodeAt(X, Y)` 会**编译通过**：把调用方的 X 当成滚动空间的 Y 用，再把调用方的 Y 变量用 out 参数覆写掉，返回错误的节点且没有任何警告。改名当天本仓库自己的 12 条断言立刻变红，就是这条路径 |
 | `NodeSelected[Node]: Boolean` | `Selected[Node]: Boolean` | `Selected` 在 LCL 是**当前节点**（`comctrls.pp:3778`）。`if Tree.Selected <> nil` / `Tree.Selected := N` 这两句最常写的代码在带下标的布尔属性上根本编不过 |
-| `OnNodeDragOver` | `OnDragOver` | `OnDragOver` 是 `TControl` 的 LCL 拖放钩子，基类本来就 published。树把这个名字占成了内部节点拖放的否决事件，于是**整个库里只有这一个控件不能当 LCL 拖放目标**——往上挂一个正常的 `TDragOverEvent` 是类型错误 |
+| `OnNodeDragOver` | `OnDragOver` | `OnDragOver` 是 `TControl` 的 LCL 拖放钩子，`TTyTreeView` 跟别的 Ty 控件一样发布它。树把这个名字占成了内部节点拖放的否决事件，于是**整个库里只有这一个控件不能当 LCL 拖放目标**——往上挂一个正常的 `TDragOverEvent` 是类型错误 |
 
 迁移只有三条替换：`GetNodeAt(y, top)` → `GetNodeAtOffset(y, top)`；`Selected[n]` → `NodeSelected[n]`；`OnDragOver := @H` → `OnNodeDragOver := @H`。
 

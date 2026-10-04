@@ -119,7 +119,7 @@ type
 
 > **两级间距:** 网格的 `Spacing` = 格**间**距;格子的 `Padding` = 格**内**缩。
 
-### 继承自 TTyCustomPanel 的常用 published 成员
+### 声明在父类、由 TTyGridPanel 发布的常用成员
 
 `Align` / `Anchors`(常设 `alClient` 或 `[akLeft,akTop,akRight]` 让网格随宿主伸缩)、`StyleClass`、`Controller`。
 
