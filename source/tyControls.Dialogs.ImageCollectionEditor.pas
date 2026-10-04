@@ -79,6 +79,9 @@ function TyEditImageCollection(ACollection: TTyCustomImageCollection): Boolean;
 
 implementation
 
+uses
+  Dialogs;   // TOpenOption (ofAllowMultiSelect)
+
 function TyBuildImageCollectionEditor(ASource: TTyCustomImageCollection): TTyImageCollectionEditorForm;
 begin
   Result := TTyImageCollectionEditorForm.CreateNew(nil);
@@ -392,7 +395,7 @@ var
 begin
   dlg := TTyOpenPictureDialog.Create(Self);
   try
-    if AMulti then dlg.Options := dlg.Options + [fdoAllowMultiSelect];
+    if AMulti then dlg.Options := dlg.Options + [ofAllowMultiSelect];
     Result := dlg.Execute;
     if Result then
     begin

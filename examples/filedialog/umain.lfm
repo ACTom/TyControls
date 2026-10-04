@@ -80,7 +80,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 104
       Width = 688
-      Caption = 'Open: FilterIndex = 2 starts on All files; Options include fdoPathMustExist; OnShow/OnClose are logged'
+      Caption = 'Open: FilterIndex = 2 starts on All files; Options include ofPathMustExist; OnShow/OnClose are logged'
     end
     object LblSaveNote: TTyLabel
       Left = 16
@@ -214,7 +214,7 @@ object MainForm: TMainForm
     Title = 'Open file'
     Filter = 'Text (*.txt;*.md)|*.txt;*.md|All files (*.*)|*.*'
     FilterIndex = 2
-    Options = [fdoFileMustExist, fdoPathMustExist, fdoAllowMultiSelect]
+    Options = [ofAllowMultiSelect, ofPathMustExist, ofFileMustExist]
     OnShow = DlgOpenShow
     OnClose = DlgOpenClose
     Left = 480
@@ -225,7 +225,7 @@ object MainForm: TMainForm
     Filter = 'Text (*.txt)|*.txt|All files (*.*)|*.*'
     FileName = 'untitled.txt'
     DefaultExt = 'txt'
-    Options = [fdoOverwritePrompt]
+    Options = [ofOverwritePrompt]
     OnCanClose = DlgSaveCanClose
     Left = 560
     Top = 60

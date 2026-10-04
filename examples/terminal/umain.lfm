@@ -615,7 +615,7 @@ object MainForm: TMainForm
   end
   object DlgUpload: TTyOpenDialog
     Title = 'Files to send'
-    Options = [fdoFileMustExist, fdoAllowMultiSelect]
+    Options = [ofAllowMultiSelect, ofFileMustExist]
     Left = 220
     Top = 160
   end
