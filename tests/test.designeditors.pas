@@ -391,17 +391,19 @@ begin
     + ' drifted and every ancestry check below is vacuous',
     'TStringPropertyEditor', LclBaseOf('TTyStyleClassPropertyEditor'));
 
-  ed := EditorFor('TTyStyleController', 'ThemeFile');
+  { Registered on the custom class since 4.0 (LCL style), so a third-party controller that
+    publishes these gets the same editors. }
+  ed := EditorFor('TTyCustomStyleController', 'ThemeFile');
   AssertTrue('TTyStyleController.ThemeFile has no property editor at all', ed <> '');
   AssertEquals('TTyStyleController.ThemeFile must be picked with a file dialog, i.e. its editor'
     + ' must specialise LCL''s file-name editor', 'TFileNamePropertyEditor', LclBaseOf(ed));
 
   { The other two are lists, not dialogs — a file dialog over a theme NAME would be nonsense. }
-  ed := EditorFor('TTyStyleController', 'ThemeName');
+  ed := EditorFor('TTyCustomStyleController', 'ThemeName');
   AssertTrue('TTyStyleController.ThemeName has no property editor at all', ed <> '');
   AssertEquals('TTyStyleController.ThemeName must be a string editor offering a value list',
     'TStringPropertyEditor', LclBaseOf(ed));
-  ed := EditorFor('TTyStyleController', 'Mode');
+  ed := EditorFor('TTyCustomStyleController', 'Mode');
   AssertTrue('TTyStyleController.Mode has no property editor at all', ed <> '');
   AssertEquals('TTyStyleController.Mode must be a string editor offering a value list',
     'TStringPropertyEditor', LclBaseOf(ed));
