@@ -20,9 +20,11 @@ unit test.customclasses;
     * a third party's subclass: it must see the same defaults the final class has, which only
       holds when the redeclarations that change a default live in the custom class.
 
-  The snapshot (G6) is taken from the code BEFORE the split and every later task is compared
-  against it, field by field. It is a migration guard: Task 32 of the plan retires it. The
-  structural guards (G1-G5, G7, G8) stay -- they are what make the next control born split.
+  During the migration a snapshot (G6) taken from the code BEFORE the split held every later
+  task to 3.0, field by field; Task 32 of the plan retired it once all 156 classes were split.
+  What stays: the structural guards (G1-G5, G7, G8) that make the next control born split, G9
+  (a third party publishing what a final class publishes gets exactly that class) and G10 (what
+  a fresh instance writes into a form file, frozen while G6 was still green).
 
   The population is whatever designtime/ registers (test.designregistry parses it; test.version
   RegisterClasses every one of them), plus TTyScrollContent, which is only RegisterClass'd but
@@ -31,18 +33,16 @@ unit test.customclasses;
 interface
 
 uses
-  Classes, SysUtils, StrUtils, TypInfo, FileUtil, Controls, Forms, ImgList, fpcunit, testregistry,
+  Classes, SysUtils, StrUtils, TypInfo, FileUtil, Controls, Forms, fpcunit, testregistry,
   test.designregistry, test.version,
   tyControls.Base, tyControls.Component, tyControls.Button, tyControls.GlyphButtons,
   tyControls.TabStrip, tyControls.Grid, tyControls.TreeView, tyControls.ShellListView,
   tyControls.IconFont, tyControls.Dialogs.FileDialog, tyControls.ToolWindows,
-  tyControls.ScrollContent, tyControls.ListBox, tyControls.TreeSelect, tyControls.Popover,
-  tyControls.Notification, tyControls.Types, test.customclasses.mimic;
+  tyControls.ScrollContent, tyControls.Types, test.customclasses.mimic;
 
 type
   TTyCustomClassesGuardTest = class(TTestCase)
   published
-    procedure TestPublishedSnapshotUnchanged;
     procedure TestSplitClassesSitOnTheirCustomClass;
     procedure TestCustomClassesPublishNothingNew;
     procedure TestCustomAndFinalAgree;
@@ -64,8 +64,6 @@ function LclRootOf(AClass: TClass): TClass;
 implementation
 
 const
-  CSnapshotFile = 'tests' + PathDelim + 'fixtures' + PathDelim + 'customclasses' + PathDelim
-    + 'published-snapshot.txt';
   CFreshStreamsFile = 'tests' + PathDelim + 'fixtures' + PathDelim + 'customclasses' + PathDelim
     + 'fresh-streams.txt';
 
@@ -96,31 +94,6 @@ const
 
   { Registered with RegisterClass only: not on the palette, but streamed in .lfm files. }
   CStreamOnly: array[0..0] of string = ('TTyScrollContent');
-
-  { Property type renames the snapshot allows. Columns: class, property, 3.0 type, 4.0 type;
-    '*' in the first two matches any. A rename is qualified by class and property unless it is
-    meant for every property of that type: TTyFilterComboBox.ShellListView keeps
-    TTyShellListView while TTyShellTreeView.ShellListView takes the custom class, so a
-    type-wide row would wave a wrong change through.
-    The three D11 rows are type-wide on purpose (Controller stays TTyStyleController in 4.0,
-    plan Task 27 option C): a component-reference property names the
-    custom class wherever it appears, as LCL's Images: TCustomImageList does. }
-  CSnapshotTypeRenames: array[0..10, 0..3] of string = (
-    ('*', '*', 'TTyIconFont', 'TTyCustomIconFont'),
-    ('*', '*', 'TTyImageCollection', 'TTyCustomImageCollection'),
-    ('*', '*', 'TTyVirtualImageList', 'TTyCustomVirtualImageList'),
-    { Not component references: a host hands out, or takes, any custom child (plan R7-4). }
-    ('TTyPageControl', 'ActivePage', 'TTyTabSheet', 'TTyCustomTabSheet'),
-    { LCL: TCustomShellTreeView.ShellListView: TCustomShellListView (shellctrls.pas:139). }
-    ('TTyShellTreeView', 'ShellListView', 'TTyShellListView', 'TTyCustomShellListView'),
-    { Component references a host takes from the user, the LCL way (Images: TCustomImageList):
-      any custom descendant can be assigned, not only the library's final class. }
-    ('TTyForm', 'TitleBar', 'TTyTitleBar', 'TTyCustomTitleBar'),
-    ('TTyForm', 'MenuBar', 'TTyMenuBar', 'TTyCustomMenuBar'),
-    ('TTyDialog', 'TitleBar', 'TTyTitleBar', 'TTyCustomTitleBar'),
-    ('TTyDialog', 'MenuBar', 'TTyMenuBar', 'TTyCustomMenuBar'),
-    ('TTyRibbon', 'Backstage', 'TTyRibbonBackstage', 'TTyCustomRibbonBackstage'),
-    ('TTyRibbonAppMenu', 'Backstage', 'TTyRibbonBackstage', 'TTyCustomRibbonBackstage'));
 
   { G7: where each derived control's custom class must hang (plan appendix C-0), plus the
     intermediate classes. Columns: subject, expected parent, the class whose split activates
@@ -189,13 +162,8 @@ const
     ('TTyCustomTabStrip', 'TTyCustomControl', 'TTyPageControl'),
     ('TTyCustomGrid', 'TTyCustomControl', 'TTyDrawGrid'));
 
-type
-  { Reads the per-row type key of the list-box family (GetItemStyleTypeKey) -- any
-    TTyCustomListBox, since 4.0 the derived list boxes are not TTyListBox descendants. }
-  TListBoxKeyAccess = class(TTyCustomListBox);
-
 var
-  GSplit, GPending, GDemoted: TStringList;
+  GSplit, GDemoted: TStringList;
 
 procedure AddAll(AList: TStringList; const ANames: array of string);
 var
@@ -212,10 +180,8 @@ end;
 
 { ------------------------------------------------------------------ populations }
 
-{ The classes that occur as snapshot inputs only (split.py reads them; the comparison skips
-  them, because changing them is the point of the plan) -- also the name lookup for the
-  intermediate classes, which nothing registers. }
-function SnapshotInputs: TList;
+{ The base and intermediate classes, which nothing registers: G7 and G8 look them up by name. }
+function UnregisteredBases: TList;
 begin
   Result := TList.Create;
   Result.Add(TTyCustomControl);
@@ -228,16 +194,6 @@ begin
   Result.Add(TTyIconPackFont);
   Result.Add(TTyCustomFileDialog);
   Result.Add(TTyCustomToolWindowManager);
-end;
-
-{ Compared too: the LCL roots never change. }
-function LclRoots: TList;
-begin
-  Result := TList.Create;
-  Result.Add(TComponent);
-  Result.Add(TCustomControl);
-  Result.Add(TGraphicControl);
-  Result.Add(TCustomImageList);
 end;
 
 { Registered classes (resolved by name; test.version RegisterClasses all of them) plus the
@@ -275,15 +231,7 @@ var
 begin
   Result := GetClass(AName);
   if Result <> nil then Exit;
-  l := SnapshotInputs;
-  try
-    for i := 0 to l.Count - 1 do
-      if SameText(TClass(l[i]).ClassName, AName) then
-        Exit(TClass(l[i]));
-  finally
-    l.Free;
-  end;
-  l := LclRoots;
+  l := UnregisteredBases;
   try
     for i := 0 to l.Count - 1 do
       if SameText(TClass(l[i]).ClassName, AName) then
@@ -334,12 +282,7 @@ begin
     and SameText(AClass.ClassParent.ClassName, 'TTyCustom' + Copy(AClass.ClassName, 4, MaxInt));
 end;
 
-{ ------------------------------------------------------------------ the snapshot }
-
-function OrdinalKind(AKind: TTypeKind): Boolean;
-begin
-  Result := AKind in [tkInteger, tkChar, tkEnumeration, tkSet, tkWChar, tkBool, tkInt64, tkQWord];
-end;
+{ ------------------------------------------------------------------ RTTI rows (G9) }
 
 function StoredCode(PI: PPropInfo): string;
 begin
@@ -369,177 +312,8 @@ begin
     + AccessCode(PI);
 end;
 
-function NewInstance(AClass: TClass): TComponent;
-begin
-  if AClass.InheritsFrom(TCustomForm) then
-    Result := TCustomFormClass(AClass).CreateNew(nil)
-  else
-    Result := TComponentClass(AClass).Create(nil);
-end;
-
-function SubKeys(AInst: TComponent): string;
-begin
-  Result := '-';
-  try
-    if AInst is TTyCustomListBox then
-      Result := TListBoxKeyAccess(AInst).GetItemStyleTypeKey
-    else if AInst is TTyTreeSelect then
-      Result := TTyTreeSelectTree(TTyTreeSelect(AInst).Tree).StyleTypeKey
-    else if AInst is TTyPopover then
-      Result := TTyPopover(AInst).StyleTypeKey + '|' + TTyPopover(AInst).TitleStyleTypeKey
-    else if AInst is TTyNotification then
-      Result := TTyNotification(AInst).StyleTypeKey + '|' + TTyNotification(AInst).CloseStyleTypeKey;
-  except
-    Result := 'x';
-  end;
-end;
-
-procedure SnapshotClass(AClass: TClass; AFresh: Boolean; AOut: TStrings);
-var
-  pl: PPropList;
-  n, i: Integer;
-  chain, key, styleCls, sub, size, fresh: string;
-  c: TClass;
-  inst: TComponent;
-  s: ITyStyleable;
-  PI: PPropInfo;
-begin
-  chain := '';
-  c := AClass.ClassParent;
-  while c <> nil do
-  begin
-    if chain <> '' then chain := chain + ',';
-    chain := chain + c.ClassName;
-    if c = TPersistent then Break;
-    c := c.ClassParent;
-  end;
-  n := GetPropList(AClass.ClassInfo, pl);
-  try
-    AOut.Add(Format('# %s n=%d chain=%s', [AClass.ClassName, n, chain]));
-    inst := nil;
-    if AFresh then
-    begin
-      try
-        inst := NewInstance(AClass);
-      except
-        inst := nil;
-      end;
-      if inst = nil then
-        AOut.Add('#typekey'#9'x'#9'x'#9'x'#9'x')
-      else
-      begin
-        try
-          if Supports(inst, ITyStyleable, s) then key := s.GetStyleTypeKey else key := '-';
-        except
-          key := 'x';
-        end;
-        s := nil;
-        try
-          if GetPropInfo(inst, 'StyleClass') <> nil then
-            styleCls := GetStrProp(inst, 'StyleClass')
-          else
-            styleCls := '-';
-        except
-          styleCls := 'x';
-        end;
-        sub := SubKeys(inst);
-        try
-          if inst is TControl then
-            size := Format('%dx%d', [TControl(inst).Width, TControl(inst).Height])
-          else
-            size := '-';
-        except
-          size := 'x';
-        end;
-        AOut.Add('#typekey'#9 + key + #9 + styleCls + #9 + sub + #9 + size);
-      end;
-    end;
-    try
-      for i := 0 to n - 1 do
-      begin
-        PI := pl^[i];
-        if not AFresh then
-          fresh := '-'
-        else if inst = nil then
-          fresh := 'x'
-        else
-          try
-            if IsStoredProp(inst, PI) then fresh := 's=1' else fresh := 's=0';
-            if OrdinalKind(PI^.PropType^.Kind) and (PI^.Default <> Low(LongInt)) then
-            begin
-              if GetOrdProp(inst, PI) = PI^.Default then
-                fresh := fresh + ',d=eq'
-              else
-                fresh := fresh + ',d=ne';
-            end
-            else
-              fresh := fresh + ',d=-';
-          except
-            fresh := 'x';
-          end;
-        AOut.Add(AClass.ClassName + #9 + IntToStr(i) + #9 + PI^.Name + #9 + AttrColumns(PI)
-          + #9 + fresh);
-      end;
-    finally
-      if inst <> nil then
-        try
-          inst.Free;
-        except
-          { a destructor that needs a parent window must not take the guard down }
-        end;
-    end;
-  finally
-    FreeMem(pl);
-  end;
-end;
-
-{ The whole snapshot, sorted by class name. AScope receives the names whose sections are
-  compared (registered, stream-only, LCL roots). }
-function BuildSnapshot(AScope: TStrings): TStringList;
-var
-  all: TStringList;
-  reg: TStringList;
-  l: TList;
-  i: Integer;
-begin
-  Result := TStringList.Create;
-  all := TStringList.Create;
-  reg := RegisteredPopulation;
-  try
-    for i := 0 to reg.Count - 1 do
-    begin
-      all.AddObject(reg[i], TObject(PtrUInt(1)));
-      AScope.Add(reg[i]);
-    end;
-    l := SnapshotInputs;
-    try
-      for i := 0 to l.Count - 1 do
-        all.AddObject(TClass(l[i]).ClassName, TObject(PtrUInt(2)));
-    finally
-      l.Free;
-    end;
-    l := LclRoots;
-    try
-      for i := 0 to l.Count - 1 do
-      begin
-        all.AddObject(TClass(l[i]).ClassName, TObject(PtrUInt(3)));
-        AScope.Add(TClass(l[i]).ClassName);
-      end;
-    finally
-      l.Free;
-    end;
-    all.Sort;
-    for i := 0 to all.Count - 1 do
-      SnapshotClass(FindClassByName(all[i]), PtrUInt(all.Objects[i]) = 1, Result);
-  finally
-    reg.Free;
-    all.Free;
-  end;
-end;
-
-{ Split lines into sections keyed by class name. Each section's lines are stored as one
-  #10-joined string. The header's chain= is cut off: the chain is the one thing the split
-  changes on purpose (G1 / G7 own it); n= stays. }
+{ Split lines into sections keyed by class name (G10's fixture). Each section's lines are stored
+  as one #10-joined string. A header's chain= is cut off if there is one. }
 procedure Sectionize(ALines: TStrings; ADest: TStringList);
 var
   i, p: Integer;
@@ -562,124 +336,6 @@ begin
       body := body + #10 + line;
   end;
   if cur <> '' then ADest.Values[cur] := body;
-end;
-
-function RenameTypes(const ALine: string): string;
-var
-  f: TStringArray;
-  i: Integer;
-begin
-  Result := ALine;
-  if (ALine = '') or (ALine[1] = '#') then Exit;
-  f := ALine.Split([#9]);
-  if Length(f) <> 10 then Exit;
-  { f: class, index, name, type, ... }
-  for i := Low(CSnapshotTypeRenames) to High(CSnapshotTypeRenames) do
-    if ((CSnapshotTypeRenames[i, 0] = '*') or (f[0] = CSnapshotTypeRenames[i, 0]))
-       and ((CSnapshotTypeRenames[i, 1] = '*') or (f[2] = CSnapshotTypeRenames[i, 1]))
-       and (f[3] = CSnapshotTypeRenames[i, 2]) then
-      f[3] := CSnapshotTypeRenames[i, 3];
-  Result := string.Join(#9, f);
-end;
-
-procedure TTyCustomClassesGuardTest.TestPublishedSnapshotUnchanged;
-var
-  scope, cur, gold, curSec, goldSec, merged: TStringList;
-  path, only, a, b, firstMsg, la1, lb1: string;
-  i, j, diffs, cls, nmax: Integer;
-  la, lb: TStringArray;
-  copying: Boolean;
-begin
-  path := RepoRoot + CSnapshotFile;
-  scope := TStringList.Create;
-  cur := nil; gold := nil; curSec := nil; goldSec := nil; merged := nil;
-  try
-    cur := BuildSnapshot(scope);
-    cur.LineBreak := #10;
-    if GetEnvironmentVariable('TY_WRITE_GOLDEN') = '1' then
-    begin
-      ForceDirectories(ExtractFilePath(path));
-      cur.SaveToFile(path);
-      Exit;
-    end;
-    gold := TStringList.Create;
-    only := GetEnvironmentVariable('TY_WRITE_GOLDEN_CLASS');
-    if only <> '' then
-    begin
-      { Replace one class's section only (plan N24): another branch changed that class's
-        published set on purpose, and the rest of the fixture must stay the 3.0 record. }
-      gold.LoadFromFile(path);
-      merged := TStringList.Create;
-      merged.LineBreak := #10;
-      i := 0;
-      while i < gold.Count do
-      begin
-        if AnsiStartsStr('# ' + only + ' ', gold[i]) then
-        begin
-          Inc(i);
-          while (i < gold.Count) and not AnsiStartsStr('# ', gold[i]) do Inc(i);
-          copying := False;
-          for j := 0 to cur.Count - 1 do
-          begin
-            if AnsiStartsStr('# ', cur[j]) then
-              copying := AnsiStartsStr('# ' + only + ' ', cur[j]);
-            if copying then merged.Add(cur[j]);
-          end;
-          Continue;
-        end;
-        merged.Add(gold[i]);
-        Inc(i);
-      end;
-      merged.SaveToFile(path);
-      Exit;
-    end;
-
-    AssertTrue('snapshot fixture missing: ' + path
-      + ' (it is generated once, before the split, with TY_WRITE_GOLDEN=1)', FileExists(path));
-    gold.LoadFromFile(path);   // LoadFromFile takes CRLF and LF alike
-    { Both sides: a rename lands in its own task (Q8 / D11), so before it the current RTTI still
-      says the old name, after it both say the new one. }
-    for i := 0 to gold.Count - 1 do
-      gold[i] := RenameTypes(gold[i]);
-    for i := 0 to cur.Count - 1 do
-      cur[i] := RenameTypes(cur[i]);
-    curSec := TStringList.Create;
-    goldSec := TStringList.Create;
-    Sectionize(cur, curSec);
-    Sectionize(gold, goldSec);
-
-    diffs := 0;
-    firstMsg := '';
-    for cls := 0 to scope.Count - 1 do
-    begin
-      a := goldSec.Values[scope[cls]];
-      b := curSec.Values[scope[cls]];
-      if a = b then Continue;
-      la := a.Split([#10]);
-      lb := b.Split([#10]);
-      nmax := Length(la);
-      if Length(lb) > nmax then nmax := Length(lb);
-      for j := 0 to nmax - 1 do
-      begin
-        if j < Length(la) then la1 := la[j] else la1 := '<missing>';
-        if j < Length(lb) then lb1 := lb[j] else lb1 := '<missing>';
-        if la1 = lb1 then Continue;
-        Inc(diffs);
-        if firstMsg = '' then
-          firstMsg := Format('class %s, line %d of its section:'#10'  fixture: %s'#10'  now:     %s',
-            [scope[cls], j + 1, la1, lb1]);
-      end;
-    end;
-    AssertEquals('published snapshot differs in ' + IntToStr(diffs) + ' line(s); first: '
-      + firstMsg, 0, diffs);
-  finally
-    scope.Free;
-    cur.Free;
-    gold.Free;
-    curSec.Free;
-    goldSec.Free;
-    merged.Free;
-  end;
 end;
 
 { ------------------------------------------------------------------ structural guards }
@@ -920,27 +576,23 @@ begin
       n := pop[i];
       hits := 0;
       if GSplit.IndexOf(n) >= 0 then Inc(hits);
-      if GPending.IndexOf(n) >= 0 then Inc(hits);
       if InList(n, CNotSplit) then Inc(hits);
       if hits <> 1 then
         bad := bad + Format(' %s(in %d lists)', [n, hits]);
     end;
-    { (3): pending and not-split classes are NOT split. }
+    { (3): not-split classes are NOT split. }
     for i := 0 to pop.Count - 1 do
     begin
       n := pop[i];
       c := TClass(pop.Objects[i]);
       if SameText(n, 'TTyToolWindowManager') then Continue;   // plan Q4: shape exemption
-      if ((GPending.IndexOf(n) >= 0) or InList(n, CNotSplit)) and IsSplitShape(c) then
-        bad := bad + ' ' + n + '(split but still listed as pending / not split)';
+      if InList(n, CNotSplit) and IsSplitShape(c) then
+        bad := bad + ' ' + n + '(split but still listed as not split)';
     end;
     { (4): every split class is in the population. }
     for i := 0 to GSplit.Count - 1 do
       if pop.IndexOf(GSplit[i]) < 0 then
         bad := bad + ' ' + GSplit[i] + '(in CSplit but not registered)';
-    for i := 0 to GPending.Count - 1 do
-      if pop.IndexOf(GPending[i]) < 0 then
-        bad := bad + ' ' + GPending[i] + '(in CPending but not registered)';
   finally
     pop.Free;
   end;
@@ -1504,8 +1156,6 @@ end;
 initialization
   GSplit := TStringList.Create;
   GSplit.CaseSensitive := False;
-  GPending := TStringList.Create;
-  GPending.CaseSensitive := False;
   GDemoted := TStringList.Create;
   GDemoted.CaseSensitive := False;
 
@@ -1578,10 +1228,6 @@ initialization
     'TTyMessage', 'TTyInputDialog', 'TTyPasswordDialog', 'TTyTextDialog', 'TTySelectValueDialog',
     'TTyProgressDialog', 'TTyAboutDialog', 'TTyIconBrowserDialog']);
 
-  { CPending: the classes still to split, by task (plan appendix A). Each task moves its own
-    names into CSplit; Task 32 deletes this list. }
-  { (empty: Task 30 split the last of them) }
-
   { CDemoted: base and intermediate classes that publish nothing beyond their LCL root. }
   AddAll(GDemoted, ['TTyCustomControl', 'TTyGraphicControl', 'TTyComponent', 'TTyGlyphButtonBase', 'TTyCustomTabStrip', 'TTyCustomGrid',
     'TTyIconPackFont']);
@@ -1590,6 +1236,5 @@ initialization
 
 finalization
   GSplit.Free;
-  GPending.Free;
   GDemoted.Free;
 end.
