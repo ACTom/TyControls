@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, Dialogs, Forms, fpcunit, testregistry,
-  tyControls.CheckBox, tyControls.Dialogs.Find;
+  tyControls.CheckBox, tyControls.Button, tyControls.Dialogs.Find;
 
 type
   TFindMapTest = class(TTestCase)
@@ -43,6 +43,25 @@ type
     procedure TestSyncFromPopulatesReplaceEdit;
     procedure TestReplaceFormShapeHasReplace;
     procedure TestReusedFormClearsStaleActionFlag;
+  end;
+
+  { The TFindOptions gates 3.0 accepted and ignored -- LCL's SetFormValues, gate for gate: the
+    frHide* / frDisable* pairs and frShowHelp. (frEntireScope and frPromptOnReplace add check
+    boxes, so they change how a default dialog looks; they are 4.0's.) }
+  TFindOptionsTest = class(TTestCase)
+  private
+    FHelpSender: TObject;
+    procedure HandleHelp(Sender: TObject);
+    procedure CheckHide(AOption: TFindOption; AReplace: Boolean; const AWhat: string);
+    function BoxOf(AForm: TTyFindForm; AIndex: Integer): TTyCheckBox;
+  published
+    procedure TestEachHideOptionHidesItsBoxAndClosesTheGap;
+    procedure TestEachDisableOptionGreysOnlyItsBox;
+    procedure TestNoHelpButtonByDefault;
+    procedure TestShowHelpShowsHelpAndForwardsTheClick;
+    procedure TestOptionsWrittenWhileOpenUpdateTheWindow;
+    procedure TestOptionsChangedBetweenExecutesTakeEffect;
+    procedure TestAHiddenHelpButtonDoesNotWidenTheDialog;
   end;
 
   { LCL-parity events (OnShow/OnClose/OnCanClose) forward onto the modeless form.
@@ -318,7 +337,175 @@ begin
   finally dlg.Free; end;
 end;
 
+{ TFindOptionsTest }
+
+procedure TFindOptionsTest.HandleHelp(Sender: TObject);
+begin
+  FHelpSender := Sender;
+end;
+
+{ The boxes in their stacking order: match case, whole word, search up. }
+function TFindOptionsTest.BoxOf(AForm: TTyFindForm; AIndex: Integer): TTyCheckBox;
+begin
+  case AIndex of
+    0: Result := AForm.MatchCaseCheck;
+    1: Result := AForm.WholeWordCheck;
+  else
+    Result := AForm.SearchUpCheck;
+  end;
+end;
+
+{ Hiding one box takes it out of the stack: every box below moves up into its place, and the
+  window loses that row. }
+procedure TFindOptionsTest.CheckHide(AOption: TFindOption; AReplace: Boolean;
+  const AWhat: string);
+var
+  dlg: TTyFindDialog;
+  frm: TTyFindForm;
+  tops: array[0..2] of Integer;
+  hidden, i, h0, stride: Integer;
+begin
+  if AReplace then dlg := TTyReplaceDialog.Create(nil) else dlg := TTyFindDialog.Create(nil);
+  try
+    frm := dlg.BuildForm;
+    for i := 0 to 2 do tops[i] := BoxOf(frm, i).Top;
+    h0 := frm.ClientHeight;
+    case AOption of
+      frHideMatchCase: hidden := 0;
+      frHideWholeWord: hidden := 1;
+    else
+      hidden := 2;
+    end;
+    stride := tops[1] - tops[0];
+    dlg.Options := dlg.Options + [AOption];
+    frm := dlg.BuildForm;
+    for i := 0 to 2 do
+      if i = hidden then
+        AssertFalse(AWhat + ': its box is hidden', BoxOf(frm, i).Visible)
+      else
+        AssertTrue(AWhat + ': box ' + IntToStr(i) + ' still shows', BoxOf(frm, i).Visible);
+    for i := hidden + 1 to 2 do
+      AssertEquals(AWhat + ': box ' + IntToStr(i) + ' moved up one place',
+        tops[i - 1], BoxOf(frm, i).Top);
+    AssertEquals(AWhat + ': the window is one row shorter', h0 - stride, frm.ClientHeight);
+  finally dlg.Free; end;
+end;
+
+procedure TFindOptionsTest.TestEachHideOptionHidesItsBoxAndClosesTheGap;
+begin
+  CheckHide(frHideMatchCase, False, 'frHideMatchCase');
+  CheckHide(frHideWholeWord, False, 'frHideWholeWord');
+  CheckHide(frHideUpDown, False, 'frHideUpDown');
+  CheckHide(frHideMatchCase, True, 'frHideMatchCase (replace)');
+end;
+
+procedure TFindOptionsTest.TestEachDisableOptionGreysOnlyItsBox;
+const
+  Gates: array[0..2] of TFindOption = (frDisableMatchCase, frDisableWholeWord, frDisableUpDown);
+var
+  dlg: TTyFindDialog;
+  frm: TTyFindForm;
+  g, i: Integer;
+begin
+  for g := 0 to 2 do
+  begin
+    dlg := TTyFindDialog.Create(nil);
+    try
+      dlg.Options := [frDown, Gates[g]];
+      frm := dlg.BuildForm;
+      for i := 0 to 2 do
+      begin
+        AssertEquals('gate ' + IntToStr(g) + ', box ' + IntToStr(i) + ' enabled',
+          i <> g, BoxOf(frm, i).Enabled);
+        AssertTrue('gate ' + IntToStr(g) + ', box ' + IntToStr(i) + ' still shows',
+          BoxOf(frm, i).Visible);
+      end;
+    finally dlg.Free; end;
+  end;
+end;
+
+procedure TFindOptionsTest.TestNoHelpButtonByDefault;
+var dlg: TTyFindDialog; frm: TTyFindForm;
+begin
+  dlg := TTyFindDialog.Create(nil);
+  try
+    AssertFalse('no Help button without frShowHelp', dlg.BuildForm.HelpButton.Visible);
+  finally dlg.Free; end;
+  { Build on its own -- what the dialog-fit scan lays out -- has none either. }
+  frm := TTyFindForm.CreateNew(nil, 0);
+  try
+    frm.Build(True);
+    AssertFalse('a freshly built form has no Help button showing', frm.HelpButton.Visible);
+  finally frm.Free; end;
+end;
+
+procedure TFindOptionsTest.TestShowHelpShowsHelpAndForwardsTheClick;
+var dlg: TTyFindDialog; frm: TTyFindForm;
+begin
+  FHelpSender := nil;
+  dlg := TTyFindDialog.Create(nil);
+  try
+    dlg.OnHelpClicked := @HandleHelp;
+    dlg.Options := [frDown, frShowHelp];
+    frm := dlg.BuildForm;
+    AssertTrue('frShowHelp shows Help', frm.HelpButton.Visible);
+    frm.HelpButton.Click;
+    AssertTrue('the click reaches OnHelpClicked, Sender = the component', FHelpSender = dlg);
+  finally dlg.Free; end;
+end;
+
+procedure TFindOptionsTest.TestOptionsWrittenWhileOpenUpdateTheWindow;
+var dlg: TTyFindDialog; frm: TTyFindForm;
+begin
+  dlg := TTyFindDialog.Create(nil);
+  try
+    frm := dlg.BuildForm;
+    frm.FindEdit.Text := 'typed, not yet written back';
+    dlg.Options := dlg.Options + [frHideWholeWord, frMatchCase];
+    AssertFalse('the open window hides the box at once', frm.WholeWordCheck.Visible);
+    AssertTrue('and checks match case', frm.MatchCaseCheck.Checked);
+    AssertEquals('but keeps what the user typed', 'typed, not yet written back',
+      frm.FindEdit.Text);
+  finally dlg.Free; end;
+end;
+
+procedure TFindOptionsTest.TestOptionsChangedBetweenExecutesTakeEffect;
+var dlg: TTyFindDialog; frm: TTyFindForm; h0: Integer;
+begin
+  dlg := TTyFindDialog.Create(nil);
+  try
+    frm := dlg.BuildForm;
+    h0 := frm.ClientHeight;
+    dlg.Options := dlg.Options + [frHideWholeWord, frDisableMatchCase];
+    frm := dlg.BuildForm;   // the same form, synced again -- what a second Execute does
+    AssertFalse('hidden on the second run', frm.WholeWordCheck.Visible);
+    AssertFalse('disabled on the second run', frm.MatchCaseCheck.Enabled);
+    dlg.Options := dlg.Options - [frHideWholeWord, frDisableMatchCase];
+    frm := dlg.BuildForm;
+    AssertTrue('shown again on the third', frm.WholeWordCheck.Visible);
+    AssertTrue('enabled again on the third', frm.MatchCaseCheck.Enabled);
+    AssertEquals('at the size it started at', h0, frm.ClientHeight);
+  finally dlg.Free; end;
+end;
+
+procedure TFindOptionsTest.TestAHiddenHelpButtonDoesNotWidenTheDialog;
+var plain, helped: TTyReplaceDialog; a, b: TTyFindForm;
+begin
+  plain := TTyReplaceDialog.Create(nil);
+  helped := TTyReplaceDialog.Create(nil);
+  try
+    helped.Options := helped.Options + [frShowHelp];
+    a := plain.BuildForm;
+    b := helped.BuildForm;
+    { A Replace dialog's buttons are wider than its fields, so a fifth one widens it -- and a
+      hidden one must not. }
+    AssertTrue(Format('a hidden Help button takes no width (%d without it shown, %d with)',
+      [a.ClientWidth, b.ClientWidth]), a.ClientWidth < b.ClientWidth);
+  finally helped.Free; plain.Free; end;
+end;
+
 initialization
+  RegisterTest(TFindOptionsTest);
   RegisterTest(TFindMapTest);
   RegisterTest(TFindWiringTest);
   RegisterTest(TReplaceWiringTest);
