@@ -126,16 +126,24 @@ type
     procedure NavigateTo(const APath: string);
     { mrOK validation: harvest + validate; returns False to veto (keep the dialog). }
     function  AcceptSelection: Boolean;
+    { fdoPathMustExist / fdoFileMustExist for one name; False (after ReportProblem) refuses it. }
+    function  NameAcceptable(const AName: string): Boolean;
     { Load the focused image into the preview pane (PreviewMode only, crash-safe). }
     procedure RefreshPreview;
   protected
     procedure LayoutContent; override;
+    { Says why a chosen name was refused: an error box. Virtual so a test can read the message
+      instead of putting a modal window up. }
+    procedure ReportProblem(const AMsg: string); virtual;
   public
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
     destructor  Destroy; override;
     function    CloseQuery: Boolean; override;
     { = FList.Directory (the directory the list is currently showing). }
     function CurrentDirectory: string;
+    // test seams: the file-name box and the file list, as the user types into and picks from them
+    function NameEdit: TTyEdit;
+    function ShellList: TTyShellListView;
     { Two-flag configuration (write = mode; read = current). SaveMode drives the OK
       caption/validation + New-Folder visibility; PreviewMode adds the preview pane. }
     property SaveMode: Boolean read FSaveMode write SetSaveMode;
@@ -751,6 +759,7 @@ begin
     FResultName := TyFileDialogResolveName(True, CurrentDirectory, FNameEdit.Text,
       FList.SelectedFile, FDefaultExt);
     if FResultName = '' then Exit;                       { empty name -> veto }
+    if not NameAcceptable(FResultName) then Exit;        { folder / file must exist -> veto }
     if (fdoOverwritePrompt in FOptions) and FileExistsUTF8(FResultName) then
       if TyMessageDlg(Format(rsFdOverwritePrompt, [FResultName]),
            mtConfirmation, [mbYes, mbNo]) <> mrYes then
@@ -785,13 +794,50 @@ begin
     end;
     if FFiles.Count = 0 then
       FFiles.Add(FResultName);
-    if (fdoFileMustExist in FOptions) and not FileExistsUTF8(FResultName) then
-    begin
-      TyMessageDlg(Format(rsFdMustExist, [FResultName]), mtError, [mbOK]);
-      Exit;                                              { missing -> veto }
-    end;
+    { LCL's CheckAllFiles: the name, then every file of a multiple selection. Only the name
+      was checked before, so a selection could hand back a file that had gone. }
+    if not NameAcceptable(FResultName) then Exit;
+    for i := 0 to FFiles.Count - 1 do
+      if not NameAcceptable(FFiles[i]) then Exit;
     Result := True;
   end;
+end;
+
+function TTyFileDialogForm.NameAcceptable(const AName: string): Boolean;
+var
+  dir: string;
+begin
+  { LCL's TOpenDialog.CheckFile, which TSaveDialog inherits: the folder first, then the file,
+    for both kinds of dialog. fdoPathMustExist used to be accepted and never looked at, and
+    fdoFileMustExist was looked at for Open only. }
+  Result := False;
+  dir := ExtractFileDir(AName);
+  if (fdoPathMustExist in FOptions) and not DirectoryExistsUTF8(dir) then
+  begin
+    ReportProblem(Format(rsFdPathMustExist, [dir]));
+    Exit;
+  end;
+  if (fdoFileMustExist in FOptions) and not FileExistsUTF8(AName) then
+  begin
+    ReportProblem(Format(rsFdMustExist, [AName]));
+    Exit;
+  end;
+  Result := True;
+end;
+
+procedure TTyFileDialogForm.ReportProblem(const AMsg: string);
+begin
+  TyMessageDlg(AMsg, mtError, [mbOK]);
+end;
+
+function TTyFileDialogForm.NameEdit: TTyEdit;
+begin
+  Result := FNameEdit;
+end;
+
+function TTyFileDialogForm.ShellList: TTyShellListView;
+begin
+  Result := FList;
 end;
 
 { ---------------------------------------------------------------------------

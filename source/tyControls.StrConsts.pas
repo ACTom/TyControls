@@ -189,6 +189,7 @@ resourcestring
   rsFdViewTile       = 'Tiles';
   rsFdOverwritePrompt = 'The file "%s" already exists.'#10'Do you want to replace it?';
   rsFdMustExist      = 'The file "%s" does not exist.';
+  rsFdPathMustExist  = 'The path "%s" does not exist.';
   rsFdAllFilesFilter = 'All Files (*.*)|*.*';
   rsFdPictureFilter  = 'Images (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|' +
                        '*.png;*.jpg;*.jpeg;*.bmp;*.gif|All Files (*.*)|*.*';
