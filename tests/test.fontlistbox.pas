@@ -1,7 +1,8 @@
 unit test.fontlistbox;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Forms, fpcunit, testregistry, tyControls.FontListBox;
+uses Classes, SysUtils, Forms, fpcunit, testregistry, tyControls.FontComboBox,
+  tyControls.FontListBox;
 type
   TFontListBoxTest = class(TTestCase)
   published
@@ -10,6 +11,7 @@ type
     procedure TestAFormFileDoesNotCarryThisMachinesFonts;
     procedure TestA300FormFileShowsThisMachinesFonts;
     procedure TestAFamilyThisMachineLacksIsNotSwappedForAnother;
+    procedure TestNoVerticalAliasIsListed;
   end;
 implementation
 
@@ -79,17 +81,33 @@ end;
 { A font this machine has, late in its list, whose name a form file can carry as a plain quoted
   string -- so the row it sits at here is not the row a stale index points at. }
 function FLBLateFont: string;
-var i: Integer; nm: string; ok: Boolean; ch: Char;
+var i: Integer; nm: string; ok: Boolean; ch: Char; fams: TStringList;
 begin
   Result := '';
-  for i := Screen.Fonts.Count - 1 downto 3 do
+  fams := TStringList.Create;
+  try
+  TyFontPickerFamilies(fams);
+  for i := fams.Count - 1 downto 3 do
   begin
-    nm := Screen.Fonts[i];
+    nm := fams[i];
     ok := nm <> '';
     for ch in nm do
       if (ch < ' ') or (ch > '~') or (ch = '''') then ok := False;
     if ok then Exit(nm);
   end;
+  finally
+    fams.Free;
+  end;
+end;
+
+{ What a font picker lists on this machine, and how many '@' names Screen.Fonts has. }
+function FLBPickerCount(out AAliases: Integer): Integer;
+var i: Integer;
+begin
+  AAliases := 0;
+  for i := 0 to Screen.Fonts.Count - 1 do
+    if Copy(Screen.Fonts[i], 1, 1) = '@' then Inc(AAliases);
+  Result := Screen.Fonts.Count - AAliases;
 end;
 
 { What 3.0.0 wrote: another machine's list, with ItemIndex at row 2 (AChosen) or row 1 (a family
@@ -129,7 +147,7 @@ begin
 end;
 
 procedure TFontListBoxTest.TestA300FormFileShowsThisMachinesFonts;
-var dst: TForm; c: TTyFontListBox; f: string;
+var dst: TForm; c: TTyFontListBox; f: string; n: Integer;
 begin
   f := FLBLateFont;
   AssertTrue('setup: a font past row 2 with a plain name', f <> '');
@@ -137,27 +155,43 @@ begin
   try
     c := dst.FindComponent('F') as TTyFontListBox;
     AssertEquals('the list is this machine''s fonts, not the saved one',
-      Screen.Fonts.Count, c.Items.Count);
+      FLBPickerCount(n), c.Items.Count);
     AssertEquals('none of the saving machine''s missing fonts is listed', -1,
       c.Items.IndexOf('NoSuchFontA'));
     AssertEquals('the chosen family is still chosen, at the row it has here', f, c.SelectedFont);
-    AssertEquals('and that row is its row on this machine', Screen.Fonts.IndexOf(f), c.ItemIndex);
+    AssertEquals('and that row is its row on this machine', c.Items.IndexOf(f), c.ItemIndex);
+    AssertTrue('which is a real row', c.ItemIndex >= 0);
   finally
     dst.Free;
   end;
 end;
 
 procedure TFontListBoxTest.TestAFamilyThisMachineLacksIsNotSwappedForAnother;
-var dst: TForm; c: TTyFontListBox;
+var dst: TForm; c: TTyFontListBox; n: Integer;
 begin
   dst := FLBFromText(FLBOldForm('NoSuchFontC', 1));
   try
     c := dst.FindComponent('F') as TTyFontListBox;
-    AssertEquals('the list is this machine''s fonts', Screen.Fonts.Count, c.Items.Count);
+    AssertEquals('the list is this machine''s fonts', FLBPickerCount(n), c.Items.Count);
     AssertEquals('a family this machine lacks leaves nothing selected', -1, c.ItemIndex);
   finally
     dst.Free;
   end;
+end;
+
+procedure TFontListBoxTest.TestNoVerticalAliasIsListed;
+var c: TTyFontListBox; i, n, shown: Integer;
+begin
+  shown := FLBPickerCount(n);
+  if n = 0 then Exit;   // this machine has no '@' fonts: nothing for the filter to leave out
+  c := TTyFontListBox.Create(nil);
+  try
+    AssertEquals('every installed font but the ' + IntToStr(n) + ' aliases', shown, c.Items.Count);
+    for i := 0 to c.Items.Count - 1 do
+      AssertFalse('no alias: ' + c.Items[i], Copy(c.Items[i], 1, 1) = '@');
+    c.RefreshFonts;
+    AssertEquals('and RefreshFonts lists the same', shown, c.Items.Count);
+  finally c.Free; end;
 end;
 
 initialization
