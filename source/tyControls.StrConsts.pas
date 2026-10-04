@@ -152,6 +152,8 @@ resourcestring
   rsDlgAlpha           = 'Alpha';
   rsDlgPreview         = 'Preview';
   rsDlgBasicColors     = 'Basic colors';
+  rsDlgCustomColors    = 'Custom colors';
+  rsDlgAddCustomColor  = 'Add to custom colors';
 
   // --- Font picker dialog (S3) — section labels, user-facing, translated ---
   rsDlgFontFamily      = 'Family';
@@ -162,6 +164,7 @@ resourcestring
   rsDlgFontStrike      = 'Strikeout';
   rsDlgFontColor       = 'Color';
   rsDlgFontSample      = 'AaBbYyZz 0123';
+  rsDlgFontApply       = 'Apply';
 
   // --- Find/Replace dialog (S4) — user-facing, translated ---
   rsDlgFindWhat        = 'Find what:';
@@ -172,6 +175,8 @@ resourcestring
   rsDlgFindNext        = 'Find Next';
   rsDlgReplace         = 'Replace';
   rsDlgReplaceAll      = 'Replace All';
+  rsDlgEntireScope     = 'Entire scope';
+  rsDlgPromptOnReplace = 'Prompt on replace';
 
   // --- File dialogs (TTyOpen/Save[Picture/Preview]Dialog) ---
   rsFdOpenTitle      = 'Open';
@@ -189,6 +194,9 @@ resourcestring
   rsFdViewTile       = 'Tiles';
   rsFdOverwritePrompt = 'The file "%s" already exists.'#10'Do you want to replace it?';
   rsFdMustExist      = 'The file "%s" does not exist.';
+  rsFdPathMustExist  = 'The folder "%s" does not exist.';
+  rsFdNotWritable    = '"%s" is not writable.';
+  rsFdCreatePrompt   = '"%s" does not exist.'#10'Do you want to create it?';
   rsFdAllFilesFilter = 'All Files (*.*)|*.*';
   rsFdPictureFilter  = 'Images (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|' +
                        '*.png;*.jpg;*.jpeg;*.bmp;*.gif|All Files (*.*)|*.*';

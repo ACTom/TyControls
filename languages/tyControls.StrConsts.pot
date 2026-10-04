@@ -114,6 +114,10 @@ msgstr ""
 msgid "About"
 msgstr ""
 
+#: tycontrols.strconsts.rsdlgaddcustomcolor
+msgid "Add to custom colors"
+msgstr ""
+
 #: tycontrols.strconsts.rsdlgalpha
 msgid "Alpha"
 msgstr ""
@@ -136,6 +140,14 @@ msgstr ""
 msgid "Could not create folder: %s"
 msgstr ""
 
+#: tycontrols.strconsts.rsdlgcustomcolors
+msgid "Custom colors"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgentirescope
+msgid "Entire scope"
+msgstr ""
+
 #: tycontrols.strconsts.rsdlgfindnext
 msgid "Find Next"
 msgstr ""
@@ -150,6 +162,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsdlgfolderpath
 msgid "Folder path (type or paste, then Enter)"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgfontapply
+msgid "Apply"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgfontbold
@@ -325,6 +341,10 @@ msgstr ""
 msgid "Preview"
 msgstr ""
 
+#: tycontrols.strconsts.rsdlgpromptonreplace
+msgid "Prompt on replace"
+msgstr ""
+
 #: tycontrols.strconsts.rsdlgreplace
 msgctxt "tycontrols.strconsts.rsdlgreplace"
 msgid "Replace"
@@ -376,6 +396,13 @@ msgstr ""
 msgid "Common Formats (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini)|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini|All Files (*.*)|*.*"
 msgstr ""
 
+#: tycontrols.strconsts.rsfdcreateprompt
+#, object-pascal-format
+msgid ""
+"\"%s\" does not exist.\n"
+"Do you want to create it?"
+msgstr ""
+
 #: tycontrols.strconsts.rsfdfilenamelbl
 msgid "File name:"
 msgstr ""
@@ -393,6 +420,11 @@ msgstr ""
 msgid "The file \"%s\" does not exist."
 msgstr ""
 
+#: tycontrols.strconsts.rsfdnotwritable
+#, object-pascal-format
+msgid "\"%s\" is not writable."
+msgstr ""
+
 #: tycontrols.strconsts.rsfdopentitle
 msgctxt "tycontrols.strconsts.rsfdopentitle"
 msgid "Open"
@@ -403,6 +435,11 @@ msgstr ""
 msgid ""
 "The file \"%s\" already exists.\n"
 "Do you want to replace it?"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdpathmustexist
+#, object-pascal-format
+msgid "The folder \"%s\" does not exist."
 msgstr ""
 
 #: tycontrols.strconsts.rsfdpicturefilter
