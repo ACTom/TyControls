@@ -32,6 +32,7 @@ type
   protected
     function CreatePopupList: TTyCustomListBox; override;
     procedure PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet); override;
+    procedure Loaded; override;
   public
     constructor Create(AOwner: TComponent); override;
     // Re-populate the family list from Screen.Fonts (call after installing fonts).
@@ -149,7 +150,22 @@ end;
 constructor TTyCustomFontComboBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  { The rows are the fonts installed on THIS machine, not something the author typed. Written
+    into a form file they came back on every other machine as the saving machine's fonts -- a
+    few hundred names in each .lfm. Reading an Items block still works, which is how a form
+    saved by 3.0.0 loads; Loaded then replaces it. }
+  FItemsStreamed := False;
   RefreshFonts;
+end;
+
+procedure TTyCustomFontComboBox.Loaded;
+begin
+  inherited Loaded;
+  { This machine's fonts again, for a form that still carries another machine's list. The combo
+    re-pins its selection by TEXT whenever Items changes, so the chosen family stays chosen at
+    whatever row it has here, and one this machine lacks is left unselected rather than swapped
+    for whichever font took its row number. }
+  Items.Assign(Screen.Fonts);
 end;
 
 procedure TTyCustomFontComboBox.RefreshFonts;

@@ -4284,7 +4284,7 @@ TTyFontComboBox	61	OnEditingDone	TNotifyEvent	tkMethod	-2147483648	T	0	RW	s=1,d=
 TTyFontComboBox	62	StyleClass	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyFontComboBox	63	StyleOverride	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyFontComboBox	64	Controller	TTyStyleController	tkClass	-2147483648	T	0	RW	s=1,d=-
-TTyFontComboBox	65	Items	TStringList	tkClass	-2147483648	D	0	RW	s=1,d=-
+TTyFontComboBox	65	Items	TStringList	tkClass	-2147483648	D	0	RW	s=0,d=-
 TTyFontComboBox	66	ItemIndex	LongInt	tkInteger	-2147483648	T	0	RW	s=1,d=-
 TTyFontComboBox	67	Text	TTranslateString	tkAString	0	T	0	RW	s=1,d=-
 TTyFontComboBox	68	DropDownCount	LongInt	tkInteger	8	T	0	RW	s=1,d=eq
@@ -4382,7 +4382,7 @@ TTyFontListBox	61	OnEditingDone	TNotifyEvent	tkMethod	-2147483648	T	0	RW	s=1,d=-
 TTyFontListBox	62	StyleClass	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyFontListBox	63	StyleOverride	AnsiString	tkAString	0	T	0	RW	s=1,d=-
 TTyFontListBox	64	Controller	TTyStyleController	tkClass	-2147483648	T	0	RW	s=1,d=-
-TTyFontListBox	65	Items	TStrings	tkClass	-2147483648	D	0	RW	s=1,d=-
+TTyFontListBox	65	Items	TStrings	tkClass	-2147483648	D	0	RW	s=0,d=-
 TTyFontListBox	66	ItemIndex	LongInt	tkInteger	-1	T	0	RW	s=1,d=ne
 TTyFontListBox	67	MultiSelect	Boolean	tkBool	0	T	0	RW	s=1,d=eq
 TTyFontListBox	68	ExtendedSelect	Boolean	tkBool	1	T	0	RW	s=1,d=eq

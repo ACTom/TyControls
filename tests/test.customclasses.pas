@@ -1307,12 +1307,11 @@ begin
     '', bad);
 end;
 
-{ Properties whose fresh value is read off the machine the tests run on: the installed fonts,
-  the drives. G10 keeps the line -- whether it is written, and where -- and masks the value. }
+{ Properties whose fresh value is read off the machine the tests run on: the drives. G10 keeps
+  the line -- whether it is written, and where -- and masks the value. (The font boxes' Items
+  were here until they stopped being written at all, #26.) }
 const
-  CMachineValues: array[0..2, 0..1] of string = (
-    ('TTyFontComboBox', 'Items.Strings'),
-    ('TTyFontListBox', 'Items.Strings'),
+  CMachineValues: array[0..0, 0..1] of string = (
     ('TTyShellTreeView', 'RootNodeCount'));
 
 function IsPropPath(const S: string): Boolean;
