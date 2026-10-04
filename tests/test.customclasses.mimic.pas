@@ -8211,6 +8211,8 @@ type
     property ShowMinimize;
     property ShowMaximize;
     property ShowClose;
+    property ShowIcon;
+    property Icon;
   end;
 
   TGenToggleSwitch = class(TTyCustomToggleSwitch)
