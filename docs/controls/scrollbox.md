@@ -65,7 +65,7 @@ uses tyControls.ScrollBox;
 | `Align` | `TAlign` | `alNone` | 父容器内的停靠方式；常设为 `alClient` 让滚动框填满宿主区域。 |
 | `Anchors` | `TAnchors` | `[akLeft, akTop]` | 锚点布局。 |
 | `StyleClass` | `string` | `''` | CSS 类名，对应 `.tycss` 中 `TyScrollBox.classname` 选择器。 |
-| `Controller` | `TTyStyleController` | `nil`（全局 `TyDefaultController`） | 指定样式控制器；该值会自动传播给两个内嵌滚动条。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（全局 `TyDefaultController`） | 指定样式控制器；该值会自动传播给两个内嵌滚动条。 |
 | `OnConstrainedResize` | `TConstrainedResizeEvent` | `nil` | 尺寸协商钩子，照 `TScrollBox` republish。它在 `TControl` 上是 **protected**，所以此前不只是对象检视器里没有——**代码里也够不着**，能表达的尺寸限制只有静态的 `Constraints` 值；"这一栏永远不超过窗体的一半"这类依赖运行期数值的限制无从表达。 |
 
 > `Caption` / `Alignment` 从 `TTyCustomPanel` 继承而来，滚动框场景一般不使用（若设置了 `Caption`，它会被子控件覆盖）。

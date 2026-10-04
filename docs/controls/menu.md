@@ -47,7 +47,7 @@ uses tyControls.Menu;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Version` | `string`（只读） | `TyVersion` | 只读库版本号；设计期编辑器打开 About 对话框。 |
-| `Controller` | `TTyStyleController` | `nil` | 主题化弹出解析令牌所用的样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil` | 主题化弹出解析令牌所用的样式控制器。 |
 
 > `TTyPopupMenu` 的菜单项模型直接用**继承自 `TPopupMenu` 的 `Items`**（标准 `TMenuItem` 树），无需另设属性——把 `TMenuItem` 加到 `Items` 即可。它同时继承 `TPopupMenu` 的全部标准成员（`Items`、`Alignment`、`PopupPoint`、`Close`、`OnPopup`、`OnClose` 等），并且这些成员**真的在跑**：
 >
@@ -77,7 +77,7 @@ uses tyControls.Menu;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `StyleClass` | `string` | `''` | CSS 类名，对应 `.tycss` 选择器的 `.classname` 部分 |
-| `Controller` | `TTyStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定使用哪个样式控制器 |
+| `Controller` | `TTyCustomStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定使用哪个样式控制器 |
 
 ### 3.4 状态跟踪字段（protected，不 published）
 

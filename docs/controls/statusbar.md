@@ -57,7 +57,7 @@ TTyStatusBar 继承自 `TTyCustomControl`（`tyControls.Base`）：
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `StyleClass` | `string` | `''` | CSS 类名，对应 `.tycss` 选择器的 `.classname` 部分 |
-| `Controller` | `TTyStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定使用哪个样式控制器 |
+| `Controller` | `TTyCustomStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定使用哪个样式控制器 |
 
 > **无独立的交互状态跟踪字段：** `TTyStatusBar` 未声明自己的 `FHover` / `FPressed` 等字段，也**未重写** `CurrentStates`；绘制仅读取 `CurrentStyle`（普通态样式）。状态栏是信息展示控件，不响应悬停 / 焦点等交互态视觉变化。
 

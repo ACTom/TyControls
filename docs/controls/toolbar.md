@@ -299,7 +299,7 @@ function TyToolWrapToBreakBefore(const AWrapAfter: array of Boolean): TBooleanDy
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `StyleClass` | `string` | `''` | CSS 类名，对应 `.tycss` 选择器的 `.classname` 部分。 |
-| `Controller` | `TTyStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定使用哪个样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定使用哪个样式控制器。 |
 
 > `TTyToolBar` 未跟踪 `FHover` / `FPressed` 等交互状态字段——它是纯容器，仅绘制背景与底部发丝线，本身不参与 `:hover` / `:active`。私有布局字段（`FButtonHeight` / `FButtonSpacing` / `FIndent` / `FWrapable` / `FShowCaptions` / `FFlat` / `FImages` / `FInLayout`）由上表 published 属性驱动，`FInLayout` 是 `AlignControls` 的重入守卫。
 
@@ -311,7 +311,7 @@ function TyToolWrapToBreakBefore(const AWrapAfter: array of Boolean): TBooleanDy
 |------|------|--------|------|
 | `Align` | `TAlign` | `alNone` | 停靠方式（继承）。 |
 | `StyleClass` | `string` | `''` | CSS 类名。 |
-| `Controller` | `TTyStyleController` | `nil` | 样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil` | 样式控制器。 |
 
 竖线颜色取 `TyToolSeparator` 样式的 `BorderColor`，竖线上下各内缩 3 逻辑像素（`P.Scale(3)`）；同一样式的 `background` 用于铺底，好让它与所在工具条无缝衔接。
 

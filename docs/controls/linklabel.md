@@ -48,7 +48,7 @@ uses tyControls.LinkLabel;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `StyleClass` | `string` | `''` | CSS 类名,对应 `.tycss` 选择器的 `.classname`。 |
-| `Controller` | `TTyStyleController` | `nil`(用全局 `TyDefaultController`)| 指定样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil`(用全局 `TyDefaultController`)| 指定样式控制器。 |
 
 > 光标在 `Create` 中设为 `crHandPoint`(手形)。
 

@@ -94,7 +94,7 @@ TTyChromeEngine（由 TTyForm 拥有/释放）     // 与窗体无关的窗口�
 
 ### public 方法
 
-#### `procedure ApplyChromeTheme(AController: TTyStyleController)`
+#### `procedure ApplyChromeTheme(AController: TTyCustomStyleController)`
 
 从 `TyForm` 主题令牌解析窗体背景：调用 `AController.Model.ResolveStyle('TyForm', '', [])`，若解析出 `tpBackground` 且为纯色（`tfkSolid`），将该颜色赋给窗体 `Color`/背景。用于让无边框窗体的背景与主题保持一致（遵守"视觉由主题令牌驱动"的硬性原则——背景不在控件代码里写死）。
 

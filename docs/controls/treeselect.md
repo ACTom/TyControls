@@ -58,7 +58,7 @@ uses tyControls.TreeSelect;
 |------|------|--------|------|
 | `StyleClass` | `string` | `''` | **变体入口**。因为字段解析的是 `'TyComboBox'`，所以这些就是**组合框的变体**——`TyComboBox.small` 会把 TreeSelect 和 ComboBox **打扮得一模一样**，这正是共用键的意义。 |
 | `StyleOverride` | `string` | `''` | 单实例内联 CSS 声明块（可引用 `var(--...)` 令牌）。 |
-| `Controller` | `TTyStyleController` | `nil`（用全局 `TyDefaultController`） | 指定样式控制器。**重新赋值时会一并同步给内部的树和弹出 helper**，否则树会一直留在旧主题上直到下次展开。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（用全局 `TyDefaultController`） | 指定样式控制器。**重新赋值时会一并同步给内部的树和弹出 helper**，否则树会一直留在旧主题上直到下次展开。 |
 
 另暴露 `Align` / `Anchors` / `Enabled` / `Font`。
 

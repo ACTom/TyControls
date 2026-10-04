@@ -211,7 +211,7 @@ Delphi 的 "TreeView Items Editor" 体验——此前的标准集合编辑器（
 | `Anchors` | `TAnchors` | `[akLeft, akTop]` | 锚点布局 |
 | `Font` | `TFont` | 系统默认 | 仅用于传递 PPI；字体族 / 字号由主题控制 |
 | `StyleClass` | `string` | `''` | CSS 变体类名，对应 `.tycss` 选择器的 `.classname` |
-| `Controller` | `TTyStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定样式控制器 |
+| `Controller` | `TTyCustomStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定样式控制器 |
 
 ### 状态跟踪字段（protected / 内部）
 
