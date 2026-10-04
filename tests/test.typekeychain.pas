@@ -348,8 +348,9 @@ begin
   AssertRaisesWith('B -> A closes a loop', 'cycle', 'ChainB', 'ChainA');
   AssertEquals('B stays unregistered', '', TyTypeKeyParent('ChainB'));
   AssertEquals('A keeps its parent', 'ChainB', TyTypeKeyParent('ChainA'));
-  TyRegisterTypeKeyParent('ChainC', 'ChainD');
-  AssertRaisesWith('a longer loop', 'cycle', 'ChainD', 'ChainA');
+  TyRegisterTypeKeyParent('ChainB', 'ChainC');   // A -> B -> C
+  AssertRaisesWith('a longer loop: C -> A', 'cycle', 'ChainC', 'ChainA');
+  AssertEquals('C stays a root', '', TyTypeKeyParent('ChainC'));
   m := TTyStyleModel.Create;
   try
     AssertTrue('resolving A still terminates', m.ResolveStyle('ChainA', '', []).Present = []);

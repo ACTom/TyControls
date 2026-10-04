@@ -1007,6 +1007,7 @@ var
   k: string;
   n: Integer;
 begin
+  Result := nil;
   SetLength(Result, 1);
   Result[0] := ATypeKey;
   if (GTypeKeyParents = nil) or (GTypeKeyParents.Count = 0) then Exit;
@@ -1937,8 +1938,8 @@ begin
       then overwrite per property. Note what "completely" implies: a child's plain rule
       lands after the parent's :hover/:disabled rules, so a theme that gives the child a
       background must give the child its states too (docs/tycss-reference.md §4.5).
-      Each key's base layer yields only to a plain user rule for THAT key: a user
-      'TagButton { }' silences TagButton's base rules, never TyButton's. An unregistered key
+      Each key's base layer yields only to a plain user rule for THAT key: a plain user
+      'TagButton' rule silences TagButton's base rules, never TyButton's. An unregistered key
       is a one-element chain -- the two statements this loop replaced, unchanged. }
     chain := TyTypeKeyChain(ATypeKey);
     for ci := High(chain) downto 0 do
