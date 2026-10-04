@@ -55,7 +55,7 @@
 | | Task 24 | 取色器与终端：ColorGrid、LColorPicker、HSColorPicker、TerminalView | 4 |
 | | Task 25 | 工具窗口：ToolWindowBar、ToolWindow、ToolWindowActions（D6 改为必做） | 3 |
 | | Task 26 | 3 期收尾 | — |
-| 4 非可视与文档 | Task 27 | 控制器：StyleController、NativeStyler（含 D11 的 `Controller` 属性类型） | 2 |
+| 4 非可视与文档 | Task 27 | 控制器：StyleController、NativeStyler（~~含 D11 的 `Controller` 属性类型~~ 4 期主控定为方案 C：`Controller` 类型不改，见 D11） | 2 |
 | | Task 28 | 图标字体与图像：IconFont →（中间类 IconPackFont）→ LucideIconFont；VirtualImageList → LucideImageList；GlyphImageList、ImageCollection；`IconFont` 属性类型 | 6 |
 | | Task 29 | 提示与通知：Hint、BalloonHint、Popover、Notification | 4 |
 | | Task 30 | 对话框：Message、InputDialog、PasswordDialog、TextDialog、SelectValueDialog、ProgressDialog、AboutDialog、IconBrowserDialog | 8 |
@@ -101,9 +101,9 @@
 | Q5 | `TTyForm` / `TTyDialog` 拆不拆（LCL 有 `TCustomForm` / `TForm`） | 不拆。它们扮演的是 `TForm` 的角色：用户的窗体从它派生，就像从 `TForm` 派生 |
 | Q6 | LCL 的 `TCustomTrackBar`（`comctrls.pp:2733`）、`TCustomHeaderControl`（`:4033`）在 Custom 类里直接 published（LCL 异例） | 不照抄，用 public（D3） |
 | Q7 | = D10 | 照 LCL 改 |
-| Q8 | = D11 | 照 LCL 改（`IconFont` 是被迫的，另三类是照 LCL） |
+| Q8 | = D11 | 照 LCL 改（`IconFont` 是被迫的，另三类是照 LCL）。**4 期改定**：`Controller` 定为方案 C（不改，见 D11），`IconFont`、图像集合两类照改 |
 
-> **状态**：主控 2026-10-02 按建议定（用户确认计划）：Q1–Q8 全部照「建议」列执行；Q3 的提交单独做（签收「Task 1 基类」记了提交号），由主控转告 AdvChart 会话摘取；Q8 下 `Controller` 等引用属性要再碰 `Base.pas`（Task 27），用户已同意。
+> **状态**：主控 2026-10-02 按建议定（用户确认计划）：Q1–Q8 全部照「建议」列执行；Q3 的提交单独做（签收「Task 1 基类」记了提交号），由主控转告 AdvChart 会话摘取；~~Q8 下 `Controller` 等引用属性要再碰 `Base.pas`（Task 27），用户已同意。~~ **4 期改定**：`Controller` 定为方案 C，`Base.pas` 没有再碰（只有 Task 1 的 `950fe415`）。
 
 ---
 
@@ -707,14 +707,16 @@ if __name__ == '__main__':
 4. 在 Custom 类 `end;` 后贴第 1 步打印的最终类声明，前面加一行注释（N27）。
 5. `python split.py impl source/tyControls.Xxx.pas TTyXxx`；改 `{ TTyXxx }` 分隔注释。
 6. 同单元内其余 `TTyXxx` 引用按 R6 / R7 / 附录 C 处理。
-7. `tests/test.customclasses.pas`：`CPending` → `CSplit`（R10）；然后在仓库根跑 `python <scratchpad>/gen-mimic.py`，重生成 `tests/test.customclasses.mimic.pas`（G9；不重跑，G9 报「split class without a mimic」）。生成器拒绝发布段里有 `property X;` 以外内容的最终类（与 G3b 同一条规矩）。
+7. `tests/test.customclasses.pas`：`CPending` → `CSplit`（R10）；然后跑 `python scripts/gen-mimic.py`（第 4 期期末修复前是 `<scratchpad>/gen-mimic.py`），重生成 `tests/test.customclasses.mimic.pas` 并审 diff（G9；不重跑，G9 报「split class without a mimic」）。生成器拒绝发布段里有 `property X;` 以外内容的最终类（与 G3b 同一条规矩）。
 8. `python split.py check` 本任务动过的每个文件。
 
 ---
 
-## 辅助脚本 `gen-mimic.py`（scratchpad，不进仓库；第 0、1 期期末修复加）
+## 辅助脚本 `gen-mimic.py`（~~scratchpad，不进仓库~~ **第 4 期期末修复进仓库：`scripts/gen-mimic.py`**；第 0、1 期期末修复加）
 
-每期开工时若 scratchpad 里没有，用 **Write 工具**原样写到 `<scratchpad>/gen-mimic.py`。在 `D:/Projects/ty-split` 下运行，无参数；输出 `tests/test.customclasses.mimic.pas`（CRLF）。生成物进仓库（G9 读它），手不改它。
+**现在用 `python scripts/gen-mimic.py`**（任何目录下都能跑；严格按 UTF-8 读源码、写 CRLF；`CSplit` 块缺失、重复或类名重复就拒绝）。重新生成会照抄最终类**当前**的发布段，所以生成后必须看 `git diff tests/test.customclasses.mimic.pas`：只该多出新类，别的行变了说明某个发布顺序被意外改了，重新生成只会把它合法化。下面是进仓库前的原稿，留作记录。
+
+~~每期开工时若 scratchpad 里没有，用 **Write 工具**原样写到 `<scratchpad>/gen-mimic.py`。~~在 `D:/Projects/ty-split` 下运行，无参数；输出 `tests/test.customclasses.mimic.pas`（CRLF）。生成物进仓库（G9 读它），手不改它。
 
 ```python
 #!/usr/bin/env python
@@ -930,7 +932,7 @@ Expected：第一段只有 `Calendar.pas`、`DateTimePicker.pas`；第二段只�
 
   **G9 `TestGeneratedMimicsMatchTheirFinalClass`（第 0、1 期期末修复加，常驻，不随 Task 32 退役）**：`tests/test.customclasses.mimic.pas` 由 `gen-mimic.py`（见「辅助脚本 `gen-mimic.py`」）从源码生成：对 `CSplit` 每个类 `TTyXxx`，写一个 `TGenXxx = class(TTyCustomXxx)`，发布段逐行照抄 `TTyXxx` 的；常量 `CGenMimics` 列出（模拟类，最终类）对。判据：① 覆盖：`CGenMimics` 的最终类集合 = `CSplit`（少一个就红——每个任务拆完都要重跑生成器），每个模拟类与最终类同父类；② 每对 RTTI 行逐项相同（位置、名字、类型、default、stored、index、读写）；③ 各放在一个新 `TForm.CreateNew` 上（两个窗体，免得 TabOrder 互相影响）的新实例，~~流式文本去掉首行后相同~~ **第 2 期期末修复改**：流式**宿主窗体**、取它写给子组件的那段（去掉首个 `object` 行与窗体的 `end`）后相同——当根流式时控件把自己建、自己拥有的子组件（滚动条、单元格编辑器）也写出来，`.lfm` 从不带它们，其中网格的日期编辑器构造时取 `Now`，八次跑七次红；构造时取自时钟的 `TDateTime` 值（`TTyAnalogClock.Time`）两边钉成同一个值；每对之间 `DestroyComponents` 清掉宿主上的残留（GridPanel 的格归窗体所有，比面板活得长）。核实：101 对里只有 25 个类当根流式时多写了自建子组件，其余逐行与宿主流式一致；GridPanel 反而多比了它归窗体所有的 4 个格；④ typeKey 相同；⑤ 默认尺寸相同；⑥ `CurrentStyle` 解析出的样式相同（背景、文字、边框、圆角、内距、字体、透明度、阴影、外框）。为什么要它：G6 比的是最终类与 3.0，改 default 的重声明写在 Custom 类还是最终类里它都绿；G9 比的是「第三方照抄发布段」与最终类，default / stored / typeKey / 构造值有任何一样只在最终类上，就红——这是审查 M2 / M3（「Custom 类声明的默认值对第三方生效」）在 P1 全绿下漏掉的视角。变异 M-G9：把 `TTyCustomSpeedButton` 的 `property TabStop default False;` 挪进 `TTySpeedButton` → G9 红（G3b 也红，G6 绿）。
 
-  **G10 `TestFreshFormFileTextUnchanged`（第 2 期期末修复加，常驻，不随 Task 32 退役）**：每个注册类（`CNotSplit` 除外：窗体放不到窗体上，AdvChart 分支的类还在别处改）的新实例放在一个新宿主窗体上，取窗体写给它的文本（同 G9 ③），与 `tests/fixtures/customclasses/fresh-streams.txt` 逐类比对；`TY_WRITE_FRESH_STREAMS=1` 重写夹具（只在「窗体文件写什么」正是这次提交要改的东西时，夹具的 diff 就是审查对象）。比对前：时钟值钉住（同 G9）；取自本机的值（`CMachineValues`：已装字体、驱动器数）只留属性行、值换成 `<from the machine>`；**所有字符串值**换成 `<text>`（构造值里的字符串来自资源串、区域设置或本机，全量里先跑的 suite 装过翻译就全变，G9 已在同一次运行里逐个比字符串）。尺寸按 Windows 量，与 G6 的默认尺寸同一类环境依赖。夹具在 G6 全绿时冻结，所以它记的就是 3.0 写的东西（G6 的 `s=` / `d=` 列逐属性比过新实例的 stored 与默认值）。为什么要它：DEFDEL（删 `TTyCustomTabSheet.TabVisible` 的 `default True`）时新 TabSheet 开始写出 `TabVisible = True`，G9 与 P2 全绿（模拟类与最终类一起变），G6 退役后就没人看见了。变异：DEFDEL → G10 红。
+  **G10 `TestFreshFormFileTextUnchanged`（第 2 期期末修复加，常驻，不随 Task 32 退役）**：每个注册类（`CNotSplit` 除外：窗体放不到窗体上，AdvChart 分支的类还在别处改）的新实例放在一个新宿主窗体上，取窗体写给它的文本（同 G9 ③），与 `tests/fixtures/customclasses/fresh-streams.txt` 逐类比对；`TY_WRITE_FRESH_STREAMS=1` 重写夹具（只在「窗体文件写什么」正是这次提交要改的东西时，夹具的 diff 就是审查对象）。比对前：时钟值钉住（同 G9）；取自本机的值（`CMachineValues`：已装字体、驱动器数）只留属性行、值换成 `<from the machine>`；~~**所有字符串值**换成 `<text>`（构造值里的字符串来自资源串、区域设置或本机，全量里先跑的 suite 装过翻译就全变，G9 已在同一次运行里逐个比字符串）~~。**第 4 期期末修复改**：打码太宽，把 `TTyPasswordDialog` 的默认 `PasswordChar` 改成 `'*'` 照样绿。现在只打码随环境变的值，每个都在 `CMachineValues` 里写明来源：本机（字体组合框 / 列表框的 `Items` 与字体组合框的 `Text`、shell 树的 `RootNodeCount`）→ `<from the machine>`；区域设置（五个数值编辑框带小数的 `Text`、颜色框与颜色组合框首色的 LCL 资源串名字、字符串网格的 `GroupRowFormat` 资源串）→ `<from the locale>`。其余字符串都是构造函数里的字面量，照比。夹具重写的 diff 恰好是原来写着 `<text>` 的 53 行。变异：`FPasswordChar := '*'` → G10 红（只红 `TTyPasswordDialog` 一类）。尺寸按 Windows 量，与 G6 的默认尺寸同一类环境依赖。夹具在 G6 全绿时冻结，所以它记的就是 3.0 写的东西（G6 的 `s=` / `d=` 列逐属性比过新实例的 stored 与默认值）——之后有意改过两次：合入 main 的 #20（`147fe85e`）去掉了 `TTyColorBox`、`TTyColorComboBox`、`TTyColorListBox` 三段的 `Items` 块（新颜色框不再写色板）；第 4 期期末修复取消字符串打码（见上，值是同一份代码读出来的）。为什么要它：DEFDEL（删 `TTyCustomTabSheet.TabVisible` 的 `default True`）时新 TabSheet 开始写出 `TabVisible = True`，G9 与 P2 全绿（模拟类与最终类一起变），G6 退役后就没人看见了。变异：DEFDEL → G10 红。
 
 - [x] **Step 6: 注册**：`tests/tytests.lpr` uses 末尾加 `test.customclasses`。
 
@@ -1465,7 +1467,9 @@ RadioGroup / CheckGroup 的错误消息用 `ClassName`（V8），实例类名不
 
 - **#14 typeKey 链**：子类报自己的 typeKey，同时继承父类的主题规则（`TMyTagEdit` 报 `MyTagEdit`、没有它的规则时落回 `TyEdit`）。排在本计划之后；本计划只保证 typeKey 一个不变（G6）并在文档里提醒现状。
 - 附录 B 的三个类在 `feat/advancechart` 合进 main 之后补拆。
-- `TTyLucideImageList` / `TTyLucideIconFont` 不再发布、而不是用 Hidden 编辑器藏掉父类的属性（要改 `.lfm` 兼容，单独评估）。
+- `TTyLucideImageList` / `TTyLucideIconFont` 不再发布、而不是用 Hidden 编辑器藏掉父类的属性（要改 `.lfm` 兼容，单独评估；验收清单决定 F5）。
+- **F1 方案 A：`Controller` 属性改 `TTyCustomStyleController`**（D11，4 期定为 C）。要用户批准改共享文件 `TextMenu.pas`（`TeController` 的返回类型）；排除单元 `Calendar.pas` 的 `TyCalendarSizeFor` 参数两行单独提交，交 AdvChart 会话摘取。试验 diff：scratchpad `p4/d11proto.diff`（135 行类型名替换，tests 编过）。批准后：`ActiveController` 返回 Custom 类，11 个 `Controller` 属性与字段、三条按 `TypeInfo(TTyStyleController)` 注册的 Hidden 编辑器一起改（`TestClassTypedRegistrationsMatchThePropertyType` 守着），P4 的 `TestControllerPropertyKeepsTheFinalTypeForNow` 改回原计划 S27-1（第三方控制器挂到按钮上、按它的主题解析），`docs/subclassing.md` 第 5 节与 7.4 删掉那条限制。
+- **F2：`TTyColorComboBox` 的下拉不读宿主的色块几何**（`ColorRectWidth` / `ColorRectOffset`，1 期计划外发现，3.0 起如此）。用户定是否当 bug 修；修的话 3.0 一起修。
 - `feat/theme-builder` 合并后的 `tools/themebuilder/` 类型判断复核（N10）。
 
 ---

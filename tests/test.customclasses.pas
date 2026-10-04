@@ -24,7 +24,8 @@ unit test.customclasses;
   task to 3.0, field by field; Task 32 of the plan retired it once all 156 classes were split.
   What stays: the structural guards (G1-G5, G7, G8) that make the next control born split, G9
   (a third party publishing what a final class publishes gets exactly that class) and G10 (what
-  a fresh instance writes into a form file, frozen while G6 was still green).
+  a fresh instance writes into a form file, frozen while G6 was still green; the few lines
+  changed on purpose since -- the colour boxes' Items, #20 -- are listed where G10 is).
 
   The population is whatever designtime/ registers (test.designregistry parses it; test.version
   RegisterClasses every one of them), plus TTyScrollContent, which is only RegisterClass'd but
