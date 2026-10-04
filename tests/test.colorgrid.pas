@@ -87,8 +87,10 @@ var g: TTyColorGrid;
 begin
   g := TTyColorGrid.Create(nil);
   try
-    g.Selected := clRed;
-    AssertTrue('setup: something selected', g.Selected = clRed);
+    { Select the FIRST cell: a stale selection index left behind by ClearColors only shows once
+      a new cell lands on it, and the first AddColor below fills cell 0. }
+    g.Selected := g.ColorAt(0);
+    AssertTrue('setup: cell 0 selected', g.Selected = g.ColorAt(0));
     g.ClearColors;
     AssertEquals('no colours left, the VGA palette included', 0, g.ColorCount);
     AssertTrue('and nothing selected', g.Selected = clNone);
