@@ -116,7 +116,9 @@ A protected property can still go in your published section. If you only want co
 
 ## 4. Design time
 
-**Property editors come along.** The library registers them on the custom classes, or by property type (`GlyphName`, `ImageName`, `Directory`, `StyleClass`, `StyleOverride`, `ThemeName` and so on). Publish the property and you get the same editor.
+**Property editors come along.** The library registers them on the custom classes, or higher up on a base or intermediate class (`StyleClass`, `StyleOverride` and `Version` on `TTyCustomControl` / `TTyGraphicControl` / `TTyComponent`, the glyph buttons' `GlyphName` on `TTyGlyphButtonBase`). The IDE matches by inheritance, so publish the property and you get the same editor. The one editor registered by property type is `TTyColor`'s: every property of that type shows a hex value and a colour picker behind "...".
+
+Hidden properties come in two kinds. Those the custom class declares `stored False` (the Lucide image list's `IconFont`, the `Controller` of tool windows and actions areas) are hidden on the custom class too, so they stay hidden even if you publish them — an edit there would never be saved anyway. The other hide rules stay on the final classes and only shape the library's own control; publish such a property and you can see and edit it.
 
 **Component editors do not.** The double-click and right-click actions stay on the final classes, because they write properties your subclass may not publish. Your subclass does not get these:
 
@@ -135,7 +137,9 @@ A protected property can still go in your published section. If you only want co
 
 `TTyFormSurface`'s `Purpose` and `Version` editors stay on the final class too; a surface subclass that publishes `Purpose` shows it as a plain read-only string.
 
-Their implementations say `Component as TTyPageControl` and the like, so you **cannot** register them for your class — the first menu click raises `EInvalidCast`. The one exception is the icon browser (`TTyIconBrowserComponentEditor`): it accepts any `TTyCustomIconFont` or `TTyCustomVirtualImageList`, so `RegisterComponentEditor(TMyIconFont, TTyIconBrowserComponentEditor)` just works.
+Their implementations say `Component as TTyPageControl` and the like, so you **cannot** register them for your class — the first menu click raises `EInvalidCast`. The dialog preview (`TTyDialogComponentEditor`) checks for the final classes too, but with `is`: registered for your dialog class it raises nothing, and "Preview" simply does nothing.
+
+The one you can borrow as is is the icon browser (`TTyIconBrowserComponentEditor`), which accepts any `TTyCustomIconFont` or `TTyCustomVirtualImageList`. It lives in the `tyControls.Design.CompEditors` unit of the design-time package `tycontrols_dt`, so make your design-time package require `tycontrols_dt`, use that unit, and call `RegisterComponentEditor(TMyIconFont, TTyIconBrowserComponentEditor)` in `Register`.
 
 For the rest, write your own; it is short. Here is "Add page" for a page control:
 
@@ -187,7 +191,7 @@ end;
 
 `Pages[]`, `PageCount`, `ActivePage` and `ActivePageIndex`, which deleting and paging need, are all public on `TTyCustomPageControl`. Other families work the same way: treat the component as the custom class.
 
-**`DefineProperties` data is still written.** Some controls store things outside their published properties through `DefineProperties` (the pixel blob an image list drops, design-time positions). That code is in the custom class, so it runs for your subclass whether or not you publish the related properties.
+**`DefineProperties` lives in the custom class too.** The only override in the library is `TTyCustomVirtualImageList`'s (the Lucide image list inherits it). It writes the component's design-time position on the form (`Left` / `Top`) as usual, and **deliberately leaves out** `TCustomImageList`'s `Bitmap` pixel blob: the images are rebuilt by name in `Loaded`, and a blob found in an older form is read and thrown away. Your subclass behaves the same whatever it publishes.
 
 ---
 

@@ -116,7 +116,9 @@ protected 的属性照样能在自己的 published 段里发布。只是想让�
 
 ## 4. 设计期
 
-**属性编辑器会跟过来。** 库里的属性编辑器注册在 Custom 类上，或者按属性类型注册（`GlyphName`、`ImageName`、`Directory`、`StyleClass`、`StyleOverride`、`ThemeName` 这些），你发布了对应属性，对象查看器里就是同一个编辑器。
+**属性编辑器会跟过来。** 库里的属性编辑器注册在 Custom 类上，或者注册在更上面的基类、中间类上（`StyleClass`、`StyleOverride`、`Version` 在 `TTyCustomControl` / `TTyGraphicControl` / `TTyComponent`，图标按钮的 `GlyphName` 在 `TTyGlyphButtonBase`），IDE 按继承关系匹配，你发布了对应属性，对象查看器里就是同一个编辑器。唯一按属性类型注册的是 `TTyColor`：所有这个类型的属性都显示十六进制值，点「...」取色。
+
+藏起来的属性分两种。Custom 类里声明了 `stored False` 的（Lucide 图像列表的 `IconFont`、工具窗口和操作区的 `Controller`），隐藏编辑器也注册在 Custom 类上，你发布了也看不见——反正改了也存不下来。其余的隐藏编辑器留在最终类上，只管库里那个控件的对象查看器，你发布了就能看见、能改。
 
 **组件编辑器不会跟过来。** 双击、右键菜单里的那些动作（组件编辑器）留在最终类上，因为它们会改属性，而你的子类未必发布了那些属性。下面这些在你的子类上没有：
 
@@ -135,7 +137,9 @@ protected 的属性照样能在自己的 published 段里发布。只是想让�
 
 `TTyFormSurface` 的 `Purpose` 说明和 `Version` 编辑器也留在最终类上；你的表面子类发布 `Purpose` 时，它只是一个普通的只读字符串。
 
-这些编辑器的实现里写的是 `Component as TTyPageControl` 这样的最终类，所以**不能**直接把它们注册给你的类——一点菜单就抛 `EInvalidCast`。唯一的例外是图标浏览器（`TTyIconBrowserComponentEditor`），它认任何 `TTyCustomIconFont` / `TTyCustomVirtualImageList`，可以直接 `RegisterComponentEditor(TMyIconFont, TTyIconBrowserComponentEditor)`。
+这些编辑器的实现里写的是 `Component as TTyPageControl` 这样的最终类，所以**不能**直接把它们注册给你的类——一点菜单就抛 `EInvalidCast`。对话框预览（`TTyDialogComponentEditor`）判的也是最终类，只是用 `is`：注册给你的对话框类不会抛异常，点「预览」什么都不发生。
+
+唯一能直接借用的是图标浏览器（`TTyIconBrowserComponentEditor`），它认任何 `TTyCustomIconFont` / `TTyCustomVirtualImageList`。它在设计期包 `tycontrols_dt` 的 `tyControls.Design.CompEditors` 单元里，所以你的设计期包要依赖 `tycontrols_dt`，`uses` 这个单元，再在 `Register` 里写 `RegisterComponentEditor(TMyIconFont, TTyIconBrowserComponentEditor)`。
 
 其余的要自己写一个，不长。以页控件的「添加页」为例：
 
@@ -187,7 +191,7 @@ end;
 
 删页、翻页要用的 `Pages[]`、`PageCount`、`ActivePage`、`ActivePageIndex` 在 `TTyCustomPageControl` 上都是 public。别的家族同理：组件编辑器里把对象当成 Custom 类来用。
 
-**`DefineProperties` 写的数据照样存。** 有些控件用 `DefineProperties` 往 `.lfm` 里存不在 published 里的东西（比如图像列表丢弃的像素块、窗体设计位置），这段代码在 Custom 类里，你的子类哪怕没发布相关属性，这些数据也会写进 `.lfm`。
+**`DefineProperties` 也在 Custom 类里。** 库里只有 `TTyCustomVirtualImageList`（Lucide 图像列表也从它来）覆写了它：照常写非可视组件在窗体上的设计位置（`Left` / `Top`），**故意不写** `TCustomImageList` 那块 `Bitmap` 像素数据——图在 `Loaded` 里按名字重新生成，旧窗体里存着的那块读到就丢掉。你的子类不管发布了什么，都是这样。
 
 ---
 
