@@ -52,15 +52,26 @@ A bare `property Text;` line takes the default, the stored clause and the access
 
 ### Publishing order is `.lfm` order
 
-The IDE writes properties in the order of the published section, and reads them back in file order, calling each setter as it goes. Some controls therefore want the range before the value; publish the value first and it gets clamped by the default range:
+The IDE writes properties in the order of the published section, and reads them back in file order, calling each setter as it goes. Some setters clamp against another property on the spot, so that property has to be published first. Mostly it is the range before the value; publish the value first and it gets clamped by the default range:
 
 | Custom class | Publish first | Then |
 |---|---|---|
-| `TTyCustomSpinEdit` | `MinValue`, `MaxValue` | `Value` |
-| `TTyCustomProgressBar` | `Max` | `Position` |
-| `TTyCustomGauge` | `Max` | `Value` |
+| `TTyCustomSpinEdit` | `MinValue`, `MaxValue` | `Value`, then `ValueEmpty` |
+| `TTyCustomProgressBar` | `Min`, `Max` | `Position` |
+| `TTyCustomCircularProgress` | `Min`, `Max` | `Position` |
+| `TTyCustomGauge` | `Min`, `Max` | `Value` |
+| `TTyCustomMeter` | `Min`, `Max` | `Value` |
+| `TTyCustomLevelMeter` | `Min`, `Max` | `Value` |
+| `TTyCustomDial` | `Min`, `Max` | `Value` |
+| `TTyCustomGearDial` | `Min`, `Max` | `Value` |
 | `TTyCustomTrackBar` | `Min`, `Max` | `Position` |
 | `TTyCustomScrollBar` | `Min`, `Max` | `Position` |
+| `TTyCustomUpDown` | `Min`, `Max` | `Position` |
+| `TTyCustomRating` | `Count` | `Value` |
+| `TTyCustomFilterComboBox` | `Filter` | `FilterIndex` |
+| `TTyCustomMaskEdit` | `Mask` | `SpaceChar` |
+
+The last three are not ranges: a rating's value is clamped to the number of stars, `FilterIndex` to the number of filters in `Filter`, and a mask that spells its own blank character sets `SpaceChar` when it is assigned. `ValueEmpty` goes after `Value` on the spin edit because writing a number clears the empty state.
 
 When in doubt, copy the order of the matching `TTyXxx`.
 

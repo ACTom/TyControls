@@ -52,15 +52,26 @@ end.
 
 ### 发布顺序就是 `.lfm` 的写出顺序
 
-IDE 存窗体时按 published 段的顺序写属性，读回来时按文件里的顺序一个个调 setter。所以有些控件要求「范围在前、值在后」，先写值就会被默认的范围钳住：
+IDE 存窗体时按 published 段的顺序写属性，读回来时按文件里的顺序一个个调 setter。有些 setter 会当场拿另一个属性钳值，所以那个属性得先发布。多数是「范围在前、值在后」，先写值就会被默认的范围钳住：
 
 | Custom 类 | 要先发布 | 再发布 |
 |---|---|---|
-| `TTyCustomSpinEdit` | `MinValue`、`MaxValue` | `Value` |
-| `TTyCustomProgressBar` | `Max` | `Position` |
-| `TTyCustomGauge` | `Max` | `Value` |
+| `TTyCustomSpinEdit` | `MinValue`、`MaxValue` | `Value`，然后 `ValueEmpty` |
+| `TTyCustomProgressBar` | `Min`、`Max` | `Position` |
+| `TTyCustomCircularProgress` | `Min`、`Max` | `Position` |
+| `TTyCustomGauge` | `Min`、`Max` | `Value` |
+| `TTyCustomMeter` | `Min`、`Max` | `Value` |
+| `TTyCustomLevelMeter` | `Min`、`Max` | `Value` |
+| `TTyCustomDial` | `Min`、`Max` | `Value` |
+| `TTyCustomGearDial` | `Min`、`Max` | `Value` |
 | `TTyCustomTrackBar` | `Min`、`Max` | `Position` |
 | `TTyCustomScrollBar` | `Min`、`Max` | `Position` |
+| `TTyCustomUpDown` | `Min`、`Max` | `Position` |
+| `TTyCustomRating` | `Count` | `Value` |
+| `TTyCustomFilterComboBox` | `Filter` | `FilterIndex` |
+| `TTyCustomMaskEdit` | `Mask` | `SpaceChar` |
+
+后三行不是范围：`Rating` 的值按星数钳；`FilterIndex` 按 `Filter` 里有几组钳；掩码里自带空白符时，设 `Mask` 会顺手改掉 `SpaceChar`。`SpinEdit` 的 `ValueEmpty` 要放在 `Value` 后面，因为写进一个数就会清掉「空」的状态。
 
 拿不准就照对应 `TTyXxx` 的发布顺序抄。
 
