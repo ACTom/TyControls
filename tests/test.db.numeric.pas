@@ -17,7 +17,7 @@ unit test.db.numeric;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Forms, LCLType, DB, fpcunit, testregistry,
+  Classes, SysUtils, Types, Controls, Forms, LCLType, DB, TypInfo, fpcunit, testregistry,
   dbfixtures, test.db.edits, tyControls.Types, tyControls.SpinEdit, tyControls.DB.Edits;
 
 type
@@ -62,6 +62,7 @@ type
   published
     procedure TestEmptiedFieldWritesNull;
     procedure TestValueIsWrittenAsANumberWhateverTheDecimalSeparator;
+    procedure TestRangeSetAfterBindingIsNotAnEdit;
   end;
 
   TDBNumericEditTest = class(TDBNumberEditTestBase)
@@ -130,6 +131,8 @@ type
     procedure TestNullRowIsValueEmpty;
     procedure TestTypedDigitsAreWrittenOnEnter;
     procedure TestOutOfRangeValueShowsClampedAndIsNotWritten;
+    procedure TestRangeSetAfterBindingIsNotAnEdit;
+    procedure TestNullRowStaysBlankUnderANewRange;
     procedure TestRefusedStepFiresNoValueChange;
     procedure TestRefusedSpinButtonDoesNotStep;
   end;
@@ -235,6 +238,36 @@ begin
   finally
     DefaultFormatSettings := saved;
   end;
+end;
+
+{ D6: the program narrowing the range after the control is bound re-clamps what is shown --
+  and that is all it does. The display changes (checked first, so a range that clamped nothing
+  cannot pass), the dataset is not put in dsEdit, a focus round trip afterwards (which
+  reformats) does not edit either, and a Post made elsewhere does not write the clamped value. }
+procedure TDBNumberEditTestBase.TestRangeSetAfterBindingIsNotAnEdit;
+var
+  before: Double;
+begin
+  Bind(FieldName);
+  before := BoundField.AsFloat;
+  { Clamped UP to a number that groups, so focus coming and going changes the text (raw
+    '1000.00' focused, '1,000.00' not) and fires the change notification at the new value.
+    The float spin edit does not group by default; here it must. }
+  SetOrdProp(FCtl, 'UseThousands', Ord(True));
+  SetFloatProp(FCtl, 'MinValue', 1000);
+  SetFloatProp(FCtl, 'MaxValue', 2000);
+  AssertTrue('shown clamped: the display changed', Shown <> ExpectedShown(1));
+  AssertBrowsing('a range set from code');
+  EnterControl;
+  LeaveControl;
+  AssertBrowsing('a focus round trip under the new range');
+  GoRow(2);
+  GoRow(1);
+  AssertEquals('the field after scrolling away and back', before, BoundField.AsFloat, 0);
+  FFix.DS.Edit;              // someone else edits the record
+  FFix.DS.Post;
+  AssertEquals('a Post elsewhere does not write the clamped value', before,
+    BoundField.AsFloat, 0);
 end;
 
 { ============================================================= TDBNumericEditTest ========= }
@@ -567,6 +600,40 @@ begin
   LeaveControl;
   FFix.DS.Post;
   AssertEquals('not written', CFixQtys[1], BoundField.AsInteger);
+end;
+
+{ D6, as for the edits: a range set from code re-clamps the display and edits nothing. }
+procedure TDBSpinEditTest.TestRangeSetAfterBindingIsNotAnEdit;
+begin
+  Bind('Qty');
+  Spin.MinValue := 0;
+  Spin.MaxValue := 5;
+  AssertEquals('shown clamped', '5', Spin.Text);
+  AssertBrowsing('a range set from code');
+  EnterControl;
+  LeaveControl;
+  AssertBrowsing('a focus round trip under the new range');
+  GoRow(2);
+  GoRow(1);
+  AssertEquals('the field after scrolling away and back', CFixQtys[1], BoundField.AsInteger);
+  FFix.DS.Edit;
+  FFix.DS.Post;
+  AssertEquals('a Post elsewhere does not write the clamped value', CFixQtys[1],
+    BoundField.AsInteger);
+end;
+
+{ The base re-clamps through its Value setter, which ends the blank state: a NULL field must
+  not turn into the range's floor on screen. }
+procedure TDBSpinEditTest.TestNullRowStaysBlankUnderANewRange;
+begin
+  Bind('Qty');
+  GoRow(3);
+  AssertTrue('NULL: ValueEmpty', Spin.ValueEmpty);
+  Spin.MinValue := 2;
+  Spin.MaxValue := 9;
+  AssertTrue('still blank', Spin.ValueEmpty);
+  AssertEquals('nothing shown', '', Spin.Text);
+  AssertBrowsing('a range set on the NULL row');
 end;
 
 { Refused before the value moves: a step that is undone afterwards would still have told the

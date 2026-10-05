@@ -519,6 +519,11 @@ type
     procedure SetReadOnly(AValue: Boolean);
     { No number in the field: the control's "no value", written back as NULL. }
     function IsBlank: Boolean;
+    function GetMinValue: Double;
+    function GetMaxValue: Double;
+    procedure SetMinValue(const AValue: Double);
+    procedure SetMaxValue(const AValue: Double);
+    procedure SetRange(AMin, AMax: Double);
     procedure DataChange(Sender: TObject);
     procedure UpdateData(Sender: TObject);
     procedure ValueChanged(Sender: TObject);
@@ -540,6 +545,11 @@ type
     property DataField: string read GetDataField write SetDataField;
     property DataSource: TDataSource read GetDataSource write SetDataSource;
     property ReadOnly: Boolean read GetReadOnly write SetReadOnly default False;
+    { A range set after the control is bound shows the value clamped to it, the way a load
+      does: that is the program's doing, not an edit. The field keeps its value until the
+      user changes the control (plan D6). }
+    property MinValue: Double read GetMinValue write SetMinValue;
+    property MaxValue: Double read GetMaxValue write SetMaxValue;
     property Text stored False;
   end;
 
@@ -638,6 +648,11 @@ type
     procedure SetReadOnly(AValue: Boolean);
     { No number in the field: the control's "no value", written back as NULL. }
     function IsBlank: Boolean;
+    function GetMinValue: Double;
+    function GetMaxValue: Double;
+    procedure SetMinValue(const AValue: Double);
+    procedure SetMaxValue(const AValue: Double);
+    procedure SetRange(AMin, AMax: Double);
     procedure DataChange(Sender: TObject);
     procedure UpdateData(Sender: TObject);
     procedure ValueChanged(Sender: TObject);
@@ -659,6 +674,11 @@ type
     property DataField: string read GetDataField write SetDataField;
     property DataSource: TDataSource read GetDataSource write SetDataSource;
     property ReadOnly: Boolean read GetReadOnly write SetReadOnly default False;
+    { A range set after the control is bound shows the value clamped to it, the way a load
+      does: that is the program's doing, not an edit. The field keeps its value until the
+      user changes the control (plan D6). }
+    property MinValue: Double read GetMinValue write SetMinValue;
+    property MaxValue: Double read GetMaxValue write SetMaxValue;
     property Text stored False;
   end;
 
@@ -759,6 +779,11 @@ type
     procedure SetReadOnly(AValue: Boolean);
     { No number in the field: the control's "no value", written back as NULL. }
     function IsBlank: Boolean;
+    function GetMinValue: Double;
+    function GetMaxValue: Double;
+    procedure SetMinValue(const AValue: Double);
+    procedure SetMaxValue(const AValue: Double);
+    procedure SetRange(AMin, AMax: Double);
     procedure DataChange(Sender: TObject);
     procedure UpdateData(Sender: TObject);
     procedure ValueChanged(Sender: TObject);
@@ -782,6 +807,11 @@ type
     property DataField: string read GetDataField write SetDataField;
     property DataSource: TDataSource read GetDataSource write SetDataSource;
     property ReadOnly: Boolean read GetReadOnly write SetReadOnly default False;
+    { A range set after the control is bound shows the value clamped to it, the way a load
+      does: that is the program's doing, not an edit. The field keeps its value until the
+      user changes the control (plan D6). }
+    property MinValue: Double read GetMinValue write SetMinValue;
+    property MaxValue: Double read GetMaxValue write SetMaxValue;
     property Text stored False;
   end;
 
@@ -882,6 +912,11 @@ type
     procedure SetReadOnly(AValue: Boolean);
     { Is (X, Y) on the up or the down button? The same rects the base control hit-tests. }
     function OnSpinButton(X, Y: Integer): Boolean;
+    function GetMinValue: Integer;
+    function GetMaxValue: Integer;
+    procedure SetMinValue(const AValue: Integer);
+    procedure SetMaxValue(const AValue: Integer);
+    procedure SetRange(AMin, AMax: Integer);
     procedure DataChange(Sender: TObject);
     procedure UpdateData(Sender: TObject);
     procedure CMGetDataLink(var Message: TLMessage); message CM_GETDATALINK;
@@ -905,6 +940,10 @@ type
     property DataField: string read GetDataField write SetDataField;
     property DataSource: TDataSource read GetDataSource write SetDataSource;
     property ReadOnly: Boolean read GetReadOnly write SetReadOnly default False;
+    { As in TTyDBNumericEdit: a range set from code re-clamps the display and is not an edit.
+      A NULL field stays blank (ValueEmpty) under the new range. }
+    property MinValue: Integer read GetMinValue write SetMinValue default 0;
+    property MaxValue: Integer read GetMaxValue write SetMaxValue default 0;
     property Value stored False;
   end;
 
@@ -1857,6 +1896,45 @@ begin
   Result := Trim(Text) = '';
 end;
 
+function TTyCustomDBNumericEdit.GetMinValue: Double;
+begin
+  Result := TTyCustomNumericEdit(Self).MinValue;
+end;
+
+function TTyCustomDBNumericEdit.GetMaxValue: Double;
+begin
+  Result := TTyCustomNumericEdit(Self).MaxValue;
+end;
+
+procedure TTyCustomDBNumericEdit.SetMinValue(const AValue: Double);
+begin
+  SetRange(AValue, MaxValue);
+end;
+
+procedure TTyCustomDBNumericEdit.SetMaxValue(const AValue: Double);
+begin
+  SetRange(MinValue, AValue);
+end;
+
+{ The base control reformats to the clamped value and fires its change notification; that
+  is the display following the program's new range, so it is taken as a load. What is shown
+  now is what a later reformat (focus coming and going) shows again, so it becomes the value
+  the user's edits are compared with. }
+procedure TTyCustomDBNumericEdit.SetRange(AMin, AMax: Double);
+var
+  was: Boolean;
+begin
+  was := FLoading;
+  FLoading := True;
+  try
+    TTyCustomNumericEdit(Self).MinValue := AMin;
+    TTyCustomNumericEdit(Self).MaxValue := AMax;
+  finally
+    FLoading := was;
+  end;
+  FLoaded := TyDBLoadedNumber(Value, IsBlank);
+end;
+
 procedure TTyCustomDBNumericEdit.DataChange(Sender: TObject);
 begin
   if FInUserEdit then Exit;
@@ -2040,6 +2118,45 @@ begin
   Result := Trim(Text) = '';
 end;
 
+function TTyCustomDBCurrencyEdit.GetMinValue: Double;
+begin
+  Result := TTyCustomNumericEdit(Self).MinValue;
+end;
+
+function TTyCustomDBCurrencyEdit.GetMaxValue: Double;
+begin
+  Result := TTyCustomNumericEdit(Self).MaxValue;
+end;
+
+procedure TTyCustomDBCurrencyEdit.SetMinValue(const AValue: Double);
+begin
+  SetRange(AValue, MaxValue);
+end;
+
+procedure TTyCustomDBCurrencyEdit.SetMaxValue(const AValue: Double);
+begin
+  SetRange(MinValue, AValue);
+end;
+
+{ The base control reformats to the clamped value and fires its change notification; that
+  is the display following the program's new range, so it is taken as a load. What is shown
+  now is what a later reformat (focus coming and going) shows again, so it becomes the value
+  the user's edits are compared with. }
+procedure TTyCustomDBCurrencyEdit.SetRange(AMin, AMax: Double);
+var
+  was: Boolean;
+begin
+  was := FLoading;
+  FLoading := True;
+  try
+    TTyCustomNumericEdit(Self).MinValue := AMin;
+    TTyCustomNumericEdit(Self).MaxValue := AMax;
+  finally
+    FLoading := was;
+  end;
+  FLoaded := TyDBLoadedNumber(Value, IsBlank);
+end;
+
 procedure TTyCustomDBCurrencyEdit.DataChange(Sender: TObject);
 begin
   if FInUserEdit then Exit;
@@ -2221,6 +2338,45 @@ end;
 function TTyCustomDBFloatSpinEdit.IsBlank: Boolean;
 begin
   Result := Trim(Text) = '';
+end;
+
+function TTyCustomDBFloatSpinEdit.GetMinValue: Double;
+begin
+  Result := TTyCustomNumericEdit(Self).MinValue;
+end;
+
+function TTyCustomDBFloatSpinEdit.GetMaxValue: Double;
+begin
+  Result := TTyCustomNumericEdit(Self).MaxValue;
+end;
+
+procedure TTyCustomDBFloatSpinEdit.SetMinValue(const AValue: Double);
+begin
+  SetRange(AValue, MaxValue);
+end;
+
+procedure TTyCustomDBFloatSpinEdit.SetMaxValue(const AValue: Double);
+begin
+  SetRange(MinValue, AValue);
+end;
+
+{ The base control reformats to the clamped value and fires its change notification; that
+  is the display following the program's new range, so it is taken as a load. What is shown
+  now is what a later reformat (focus coming and going) shows again, so it becomes the value
+  the user's edits are compared with. }
+procedure TTyCustomDBFloatSpinEdit.SetRange(AMin, AMax: Double);
+var
+  was: Boolean;
+begin
+  was := FLoading;
+  FLoading := True;
+  try
+    TTyCustomNumericEdit(Self).MinValue := AMin;
+    TTyCustomNumericEdit(Self).MaxValue := AMax;
+  finally
+    FLoading := was;
+  end;
+  FLoaded := TyDBLoadedNumber(Value, IsBlank);
 end;
 
 procedure TTyCustomDBFloatSpinEdit.DataChange(Sender: TObject);
@@ -2412,6 +2568,46 @@ begin
   bw := MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth), ppi, 96);
   Result := PtInRect(TySpinUpButtonRect(ClientRect, ppi, bw), Point(X, Y))
     or PtInRect(TySpinDownButtonRect(ClientRect, ppi, bw), Point(X, Y));
+end;
+
+function TTyCustomDBSpinEdit.GetMinValue: Integer;
+begin
+  Result := TTyCustomSpinEdit(Self).MinValue;
+end;
+
+function TTyCustomDBSpinEdit.GetMaxValue: Integer;
+begin
+  Result := TTyCustomSpinEdit(Self).MaxValue;
+end;
+
+procedure TTyCustomDBSpinEdit.SetMinValue(const AValue: Integer);
+begin
+  SetRange(AValue, MaxValue);
+end;
+
+procedure TTyCustomDBSpinEdit.SetMaxValue(const AValue: Integer);
+begin
+  SetRange(MinValue, AValue);
+end;
+
+{ See TTyCustomDBNumericEdit.SetRange. The base re-clamps through its Value setter, which
+  ends the blank state; a NULL field is still NULL, so it stays blank. The loaded text is left
+  as it was: this control never reformats on its own, so only the user's own change can be
+  compared with it, and one that types the field's value back writes the field's value. }
+procedure TTyCustomDBSpinEdit.SetRange(AMin, AMax: Integer);
+var
+  was, blank: Boolean;
+begin
+  was := FLoading;
+  blank := ValueEmpty;
+  FLoading := True;
+  try
+    TTyCustomSpinEdit(Self).MinValue := AMin;
+    TTyCustomSpinEdit(Self).MaxValue := AMax;
+    if blank then ValueEmpty := True;
+  finally
+    FLoading := was;
+  end;
 end;
 
 procedure TTyCustomDBSpinEdit.DataChange(Sender: TObject);
