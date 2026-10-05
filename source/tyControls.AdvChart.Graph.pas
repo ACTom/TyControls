@@ -57,7 +57,8 @@ type
     Friction: Double;
     { Read and not honoured: there are no frames here to animate the settling
       over, so the layout is always run to the end before anything is drawn --
-      which is what upstream does when this is false. }
+      which is what upstream does when this is false. A node drag re-runs the
+      settle the same way (TyGraphDragStep) [Batch 114]. }
     LayoutAnimation: Boolean;
   end;
 
@@ -86,8 +87,9 @@ type
     ModelCategory: Integer;
     X, Y: Double;
     { THE DRAG'S `fixed`, which the RING honours: upstream's circular layout
-      skips a node whose LAYOUT says fixed, and only a drag ever writes that.
-      There is no drag yet, so this is always false. }
+      skips a node whose LAYOUT says fixed, and only a drag ever writes that
+      (TyGraphDragStep) -- until the next full layout, which starts the
+      layouts afresh. [Batch 114: there was no drag before.] }
     Fixed: Boolean;
     { THE OPTION'S `fixed`, which the FORCE layout honours -- a different word
       in a different place. The node's own, if it wrote one, and resolved by
@@ -96,8 +98,8 @@ type
     HasOwnFixed: Boolean;
     OwnFixed: Boolean;
     Pinned: Boolean;
-    { `draggable`, resolved along the same chain as `fixed`. There is no node
-      dragging here; a draggable node is one a press does not PAN from. }
+    { `draggable`, resolved along the same chain as `fixed`: a press on such a
+      node drags it (on a view) and does not PAN. [Batch 114] }
     HasOwnDraggable: Boolean;
     OwnDraggable: Boolean;
     Draggable: Boolean;
@@ -119,6 +121,13 @@ type
     Row: Integer;
     RawRow: Integer;
     Value: Double;
+    { THE SCALE A DRAG LEFT ON THIS NODE'S SYMBOL [Batch 114]. zrender's
+      Element.drift moves the Symbol group in GLOBAL space and decomposes the
+      result back through the main group's inverse -- which re-derives the
+      group's scale as |inv0 * (osx * s)|, an ulp off the compensation scale
+      as often as not. HasDragScale False: the series' compensation scale. }
+    HasDragScale: Boolean;
+    DragScaleX, DragScaleY: Double;
   end;
   TTyGraphNodeArray = array of TTyGraphNode;
 
@@ -175,6 +184,36 @@ type
     HasEnds: Boolean;
     TX1, TY1, TX2, TY2, TCPX, TCPY: Double;
     EX1, EY1, EX2, EY2, ECPX, ECPY: Double;
+    { THE EDGE'S OWN lineStyle [Batch 114]. edgeVisual extends the series'
+      line style with the item's getLineStyle(), whose every key climbs the
+      item -> series chain -- so a key the edge wrote wins and every other is
+      the series'. Has* False: the series' value. A colour is a colour, or one
+      of the two words; an unreadable one is not written. }
+    HasOwnWidth: Boolean;
+    OwnWidth: Double;
+    HasOwnOpacity: Boolean;
+    OwnOpacity: Double;
+    HasOwnColour: Boolean;
+    OwnColourBy: TTyGraphEdgeColourBy;
+    OwnColour: TTyChartColor;
+    HasOwnDash: Boolean;
+    OwnDash: TTyOptDash;
+    OwnDashExplicit: TTyDoubleArray;
+    { `symbol` and `symbolSize` on the edge itself -- getShallow(key, TRUE),
+      the edge's own and nothing above it, each end taken only where it is
+      truthy: a size of nought keeps the series' size. '' / nought: not set
+      -- the zero value, so an edge nobody read keeps the series' ends. }
+    OwnSymFrom, OwnSymTo: string;
+    OwnSizeFrom, OwnSizeTo: Double;
+    { THE EDGE DATA'S NAME: the link's `id`, else `source + ' > ' + target`
+      as JavaScript concatenates the two raw values -- never its `name`
+      (createGraphFromNodeEdge's linkNameList). What the b placeholder prints. }
+    DataName: string;
+    { The raw `value` as written, as String() prints it -- 'undefined' when
+      absent, 'null' for a null -- for the c placeholder; HasValueText False
+      when it is absent or null. }
+    HasValueText: Boolean;
+    ValueText: string;
   end;
   TTyGraphEdgeArray = array of TTyGraphEdge;
 
@@ -279,6 +318,9 @@ type
     HasLineColour: Boolean;
     LineColour: TTyChartColor;
     ColourBy: TTyGraphEdgeColourBy;
+    { `lineStyle.type` on the series [Batch 114]. }
+    LineDash: TTyOptDash;
+    LineDashExplicit: TTyDoubleArray;
     Z, Z2: Integer;
     ZLevel: Integer;
     Draggable: Boolean;
@@ -550,6 +592,21 @@ type
       continues from it starts on fresh edges. }
     Stale: array of Boolean;
     StaleX, StaleY: TTyDoubleArray;
+    { THE INSTANCE ITSELF [Batch 114]: upstream's forceLayout keeps its nodes'
+      p and pp, its edges and its friction between the steps -- a drag warms
+      it up (friction = the option's * 0.8) and steps it again, and only a full
+      update makes a new one. HasInst False until a pass ran the solver.
+      L is each node's LAYOUT, which a fixed node is copied from before every
+      step (beforeStep) and a free node is set to after it (afterStep); Fixed
+      starts as the option's `fixed` and a drag sets and clears it. }
+    HasInst: Boolean;
+    InstPX, InstPY, InstPPX, InstPPY, InstLX, InstLY, InstRep: TTyDoubleArray;
+    InstFixed: array of Boolean;
+    InstELen: TTyDoubleArray;
+    InstEIgn: array of Boolean;
+    InstE1, InstE2: TTyIntegerArray;
+    InstFriction0, InstGravity, InstCX, InstCY: Double;
+    InstRng: LongWord;
   end;
 
 { How many steps upstream's driver runs from a given starting friction: until
@@ -627,6 +684,111 @@ procedure TyGraphTrimInView(var AEdges: TTyGraphEdgeArray;
 
 { The trimmed edges through the view, into E* and the control point. }
 procedure TyGraphMapEdges(var AEdges: TTyGraphEdgeArray; AView: TTyGraphView);
+
+{ ==================== per-edge style [Batch 114] ==================== }
+
+{ What one edge is drawn with: its own lineStyle key where it wrote one, the
+  series' otherwise; its own symbol / symbolSize per end where truthy. }
+function TyGraphEdgeWidth(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge): Double;
+function TyGraphEdgeOpacity(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge): Double;
+function TyGraphEdgeSymbol(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge;
+  AAtEnd: Boolean): string;
+function TyGraphEdgeSymbolSize(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge;
+  AAtEnd: Boolean): Double;
+{ An end that carries a symbol: neither '' nor 'none'. }
+function TyGraphEdgeHasSymbol(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge;
+  AAtEnd: Boolean): Boolean;
+{ The dash pattern, in LOGICAL px: the edge's `type` or the series', made into
+  lengths for the edge's own width (zrender's normalizeLineDash). }
+function TyGraphEdgeDash(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge): TTyDoubleArray;
+
+{ ==================== edge labels [Batch 114] ==================== }
+
+type
+  { `edgeLabel.position` on a graph (Line.ts beforeUpdate). Anything it does
+    not know is 'middle' only where it is falsy; an unknown word takes the
+    switch's default arms -- no rotation case, dy 0, middle, and no place:
+    the label stays at the line group's origin. }
+  TTyGraphLabelPos = (glpMiddle, glpStart, glpEnd, glpInsideStart,
+    glpInsideStartTop, glpInsideStartBottom, glpInsideMiddle,
+    glpInsideMiddleTop, glpInsideMiddleBottom, glpInsideEnd, glpInsideEndTop,
+    glpInsideEndBottom, glpUnknown);
+
+  { THE LINE'S FRAME: the main group's transform [SX, 0, 0, SY, X, Y] -- the
+    view's overall transform on a view, the identity on axes -- and the
+    inverse scale the label is drawn at (1 / every ancestor's scaleX). }
+  TTyGraphLabelFrame = record
+    SX, SY, X, Y: Double;
+    InvScale: Double;
+  end;
+
+function TyGraphLabelPosOf(const AWord: string): TTyGraphLabelPos;
+
+{ Line.beforeUpdate for one label, in the LINE's space -- the trimmed points
+  the line is drawn through -- composed with the frame: the anchor (the
+  label's transform [4..5], where the words are hung), its rotation (zrender's
+  sign: positive turns them anticlockwise on the screen) and the alignment
+  the position implies. Every operation in upstream's order: pointAt and
+  tangentAt as Line / BezierCurve compute them, getLocalTransform with the
+  origin, then mul(frame, local). False when the edge has no place for a
+  label (an unknown position: the anchor is the frame's own origin then). }
+function TyGraphEdgeLabelPlace(const AP1, AP2, ACP: TTyPointF; ACurved: Boolean;
+  const AFrame: TTyGraphLabelFrame; APos: TTyGraphLabelPos;
+  ADistX, ADistY: Double; out AX, AY, ARot: Double;
+  out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV): Boolean;
+
+{ JavaScript's String() of an option value. }
+function TyGraphJsText(AData: TJSONData): string;
+
+{ The default edge label (Line.ts _updateCommonStl): the NODE data's raw value
+  at the edge's index -- `seriesModel.getRawValue(idx)` reads the main data --
+  rounded to ten places when it is a finite number, as String() prints it;
+  the edge data's name when that value is null or absent. ANodeValueText ''
+  with ANodeHasValue False is null. }
+function TyGraphEdgeDefaultText(ANodeHasValue: Boolean; ANodeIsNumber: Boolean;
+  ANodeNumber: Double; const ANodeValueText, AEdgeName: string): string;
+
+{ ==================== dragging [Batch 114] ==================== }
+
+type
+  { One drag step on a graph on a view: the node, the pointer delta in px,
+    and the pointer itself (the ring reads it). }
+  TTyGraphDragStep = record
+    Node: Integer;
+    DX, DY: Double;
+    PX, PY: Double;
+    { the first move of this drag (force: the node is not fixed yet) }
+    First: Boolean;
+  end;
+
+{ Element.drift on the node's Symbol group: its global transform -- the main
+  group's [osx 0 0 osy ox oy] times its own [s 0 0 s x y], as a paint left it
+  -- moved by (ADX, ADY), then decomposed through the main group's inverse.
+  Answers the node's new data position and the group's re-derived scale. }
+procedure TyGraphDrift(AView: TTyGraphView; var ANode: TTyGraphNode;
+  ADX, ADY, ANodeScale: Double);
+
+{ ONE DRAG STEP on a graph on a view, the way GraphView's 'drag' handler runs
+  it for the layout:
+    none     the node goes where the drift put it; every edge is laid out
+             again (simpleLayoutEdge) and trimmed with the CURRENT
+             compensation scale (updateLayout's adjustEdge);
+    circular the node is fixed and put on the ring at the pointer's angle
+             (circularLayout with a dragging node); every node not fixed is
+             laid out again with the current compensation scale;
+    force    the instance warms up (friction = the option's * 0.8) and is
+             stepped until it cools -- synchronously, upstream's
+             layoutAnimation false -- with the node free on the first move
+             and fixed from then on; the node stays where the run left it.
+  The node symbols keep the scale they were drawn with (ANodeScale); only the
+  edges are trimmed with the current one. Nothing is laid out from the option. }
+procedure TyGraphDragStep(var ANodes: TTyGraphNodeArray;
+  var AEdges: TTyGraphEdgeArray; const ASpec: TTyGraphSpec;
+  AView: TTyGraphView; var AForce: TTyGraphForceState;
+  const AStep: TTyGraphDragStep; ANodeScale: Double);
+
+{ dragend: a force node is unfixed (setUnfixed -- even one the option fixed). }
+procedure TyGraphDragEnd(var AForce: TTyGraphForceState; ANode: Integer);
 
 { A ROAM STEP'S REDRAW, with no layout: every node through the view again,
   sanitised, and every edge's trimmed ends mapped. AZoomed is a step that
@@ -787,6 +949,20 @@ type
     Label_: TTyLabelSpec;
     LabelValueDim: Integer;
     SeriesName: string;
+    { THE EDGE LABELS [Batch 114], one per edge of the edge array: whether it
+      shows, its words, its position and its distance (device px, the pair
+      [x, y]). The caption's style is the expansion's, by ItemSpec = the edge's
+      index + 1 into the series' item spec row. Empty: no edge labels. }
+    EdgeLabelShow: array of Boolean;
+    EdgeLabelText: TTyStringArray;
+    EdgeLabelPos: array of TTyGraphLabelPos;
+    EdgeLabelDistX, EdgeLabelDistY: TTyDoubleArray;
+    { the line's frame on a view: the overall transform and 1 / its scaleX;
+      HasFrame False on axes (the identity) }
+    HasFrame: Boolean;
+    Frame: TTyGraphLabelFrame;
+    { the edge labels' specs, for the expansion's item spec row }
+    EdgeLabelSpecs: TTyLabelSpecArray;
   end;
 
 { WHAT ONE EDGE IS DRAWN IN -- the builder's own answer, and the one the
@@ -850,6 +1026,8 @@ function TyBuildGraphMarks(ASeriesIndex: Integer;
   ASymX, ASymY: Double): Integer;
 
 implementation
+
+uses tyControls.AdvChart.Scale, tyControls.AdvChart.JsMath;
 
 { ==================== the view ==================== }
 
@@ -2033,6 +2211,9 @@ begin
     end;
     Result.LineWidthLogical := NumIn(sub, 'width', Result.LineWidthLogical);
     Result.LineOpacity := NumIn(sub, 'opacity', Result.LineOpacity);
+    { `type`, the dash [Batch 114] }
+    Result.LineDash := TyReadOptStyle(node, 'lineStyle').Dash;
+    Result.LineDashExplicit := TyReadOptStyle(node, 'lineStyle').DashLogical;
     s := StrIn(sub, 'color', '');
     if s = 'source' then Result.ColourBy := gecSource
     else if s = 'target' then Result.ColourBy := gecTarget
@@ -2684,6 +2865,141 @@ begin
   end;
 end;
 
+{ JavaScript's String() of an option value, for the words a label prints. }
+function JsText(AData: TJSONData): string;
+var k: Integer;
+begin
+  Result := '';
+  if AData = nil then Exit('undefined');
+  case AData.JSONType of
+    jtNull: Result := 'null';
+    jtBoolean: if AData.AsBoolean then Result := 'true' else Result := 'false';
+    jtNumber: Result := TyJsNumberToString(AData.AsFloat);
+    jtString: Result := AData.AsString;
+    jtArray:
+      for k := 0 to AData.Count - 1 do
+      begin
+        if k > 0 then Result := Result + ',';
+        if AData.Items[k].JSONType <> jtNull then
+          Result := Result + JsText(AData.Items[k]);
+      end;
+  else
+    Result := '[object Object]';
+  end;
+end;
+
+{ The edge data's name: convertOptionIdName(link.id) -- a string as it is, a
+  number as String() prints it -- else `source + ' > ' + target`. }
+function EdgeDataName(AItem: TJSONObject): string;
+var d: TJSONData;
+begin
+  d := AItem.Find('id');
+  if (d <> nil) and (d.JSONType = jtString) then Exit(d.AsString);
+  if (d <> nil) and (d.JSONType = jtNumber) then Exit(TyJsNumberToString(d.AsFloat));
+  Result := JsText(AItem.Find('source')) + ' > ' + JsText(AItem.Find('target'));
+end;
+
+{ The edge's own lineStyle keys: a key that is there and not null is the
+  edge's (getShallow climbs past a null). }
+procedure ReadEdgeOwnStyle(AItem, AStyle: TJSONObject; var AEdge: TTyGraphEdge);
+var d: TJSONData; s: string; c: TTyChartColor; os: TTyOptStyle;
+begin
+  d := AStyle.Find('width');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    AEdge.HasOwnWidth := True;
+    AEdge.OwnWidth := JsNum(d);
+  end;
+  d := AStyle.Find('opacity');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    AEdge.HasOwnOpacity := True;
+    AEdge.OwnOpacity := JsNum(d);
+  end;
+  d := AStyle.Find('color');
+  if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    s := d.AsString;
+    if s = 'source' then
+    begin
+      AEdge.HasOwnColour := True;
+      AEdge.OwnColourBy := gecSource;
+    end
+    else if s = 'target' then
+    begin
+      AEdge.HasOwnColour := True;
+      AEdge.OwnColourBy := gecTarget;
+    end
+    else if TyTryParseChartColor(s, c) then
+    begin
+      AEdge.HasOwnColour := True;
+      AEdge.OwnColourBy := gecFixed;
+      AEdge.OwnColour := c;
+    end;
+  end;
+  d := AStyle.Find('type');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    os := TyReadOptStyle(AItem, 'lineStyle');
+    AEdge.HasOwnDash := os.Dash <> todNone;
+    AEdge.OwnDash := os.Dash;
+    AEdge.OwnDashExplicit := os.DashLogical;
+  end;
+end;
+
+{ `symbol` / `symbolSize` on the edge: normalize to a pair, each end only
+  where truthy. }
+procedure ReadEdgeOwnSymbols(AItem: TJSONObject; var AEdge: TTyGraphEdge);
+var d: TJSONData; a: TJSONArray;
+
+  function SymOf(AD: TJSONData): string;
+  begin
+    Result := '';
+    if (AD <> nil) and (AD.JSONType = jtString) then Result := AD.AsString;
+  end;
+
+  function SizeOf_(AD: TJSONData): Double;
+  begin
+    Result := NaN;
+    if (AD <> nil) and (AD.JSONType = jtNumber) then Result := AD.AsFloat;
+  end;
+
+begin
+  AEdge.OwnSymFrom := '';
+  AEdge.OwnSymTo := '';
+  AEdge.OwnSizeFrom := NaN;
+  AEdge.OwnSizeTo := NaN;
+  d := AItem.Find('symbol');
+  if d is TJSONArray then
+  begin
+    a := TJSONArray(d);
+    if a.Count > 0 then AEdge.OwnSymFrom := SymOf(a.Items[0]);
+    if a.Count > 1 then AEdge.OwnSymTo := SymOf(a.Items[1]);
+  end
+  else
+  begin
+    AEdge.OwnSymFrom := SymOf(d);
+    AEdge.OwnSymTo := AEdge.OwnSymFrom;
+  end;
+  d := AItem.Find('symbolSize');
+  if d is TJSONArray then
+  begin
+    a := TJSONArray(d);
+    if a.Count > 0 then AEdge.OwnSizeFrom := SizeOf_(a.Items[0]);
+    if a.Count > 1 then AEdge.OwnSizeTo := SizeOf_(a.Items[1]);
+  end
+  else
+  begin
+    AEdge.OwnSizeFrom := SizeOf_(d);
+    AEdge.OwnSizeTo := AEdge.OwnSizeFrom;
+  end;
+  { truthy only: a not-a-number size keeps the series' as a nought does }
+  if IsNan(AEdge.OwnSizeFrom) then AEdge.OwnSizeFrom := 0;
+  if IsNan(AEdge.OwnSizeTo) then AEdge.OwnSizeTo := 0;
+  AEdge.OwnSizeFrom := SaneSize(AEdge.OwnSizeFrom);
+  AEdge.OwnSizeTo := SaneSize(AEdge.OwnSizeTo);
+end;
+
 function TyGraphEdgesOf(AOption: TTyChartOption; ASlot: Integer;
   const ANodes: TTyGraphNodeArray): TTyGraphEdgeArray;
 var
@@ -2735,7 +3051,13 @@ begin
         Result[n].HasCurveness := True;
         Result[n].Curveness := d.AsFloat;
       end;
+      ReadEdgeOwnStyle(item, style, Result[n]);
     end;
+    ReadEdgeOwnSymbols(item, Result[n]);
+    Result[n].DataName := EdgeDataName(item);
+    d := item.Find('value');
+    Result[n].HasValueText := (d <> nil) and (d.JSONType <> jtNull);
+    Result[n].ValueText := JsText(d);
     Inc(n);
   end;
   SetLength(Result, n);
@@ -3248,21 +3570,185 @@ begin
   end;
 end;
 
+{ ONE STEP of upstream's forceLayout (forceHelper.ts step), on the instance
+  the state holds: beforeStep (a fixed node is copied from its layout), the
+  springs, gravity, the repulsion, the move, then afterStep (a free node's
+  layout is where it is now). AFriction is this step's friction. }
+procedure ForceStep(var St: TTyGraphForceState; AFriction: Double);
+var
+  n, ne, i, j, k, a, b: Integer;
+  d, w, len_, vx, vy, s, g, xi, yi, ri, ax, ay, repFact: Double;
+  fi: Boolean;
+  qx, qy, qpx, qpy, qr: PDouble;
+begin
+  n := Length(St.InstPX);
+  ne := Length(St.InstE1);
+  { beforeStep: A FIXED NODE IS WHERE ITS LAYOUT IS, re-read at the top of
+    every step so a drag can move it mid-settle -- and a fixed node with no
+    layout is fixed at not-a-number, which the repulsion then spreads to
+    every free node. That is upstream's answer, and the chart draws nothing
+    but the pins. }
+  for i := 0 to n - 1 do
+    if St.InstFixed[i] then
+    begin
+      St.InstPX[i] := St.InstLX[i];
+      St.InstPY[i] := St.InstLY[i];
+    end;
+
+  { THE SPRINGS, edge by edge and IN PLACE: each edge moves its two ends
+    before the next edge reads them. The weight is the far end's share of
+    the pair's repulsion, and 0/0 -- two nodes that repel at nothing -- is
+    the only way it is not a number. }
+  for k := 0 to ne - 1 do
+  begin
+    if St.InstEIgn[k] then Continue;
+    a := St.InstE1[k];
+    b := St.InstE2[k];
+    vx := St.InstPX[b] - St.InstPX[a];
+    vy := St.InstPY[b] - St.InstPY[a];
+    d := Sqrt(vx * vx + vy * vy) - St.InstELen[k];
+    w := St.InstRep[b] / (St.InstRep[a] + St.InstRep[b]);
+    if IsNan(w) then w := 0;
+    len_ := Sqrt(vx * vx + vy * vy);
+    if len_ = 0 then
+    begin
+      vx := 0;
+      vy := 0;
+    end
+    else
+    begin
+      vx := vx / len_;
+      vy := vy / len_;
+    end;
+    if not St.InstFixed[a] then
+    begin
+      s := w * d * AFriction;
+      St.InstPX[a] := St.InstPX[a] + vx * s;
+      St.InstPY[a] := St.InstPY[a] + vy * s;
+    end;
+    if not St.InstFixed[b] then
+    begin
+      s := -(1 - w) * d * AFriction;
+      St.InstPX[b] := St.InstPX[b] + vx * s;
+      St.InstPY[b] := St.InstPY[b] + vy * s;
+    end;
+  end;
+
+  { GRAVITY: a LINEAR spring to the centre, not a pull that fades. The
+    normalising lines are in upstream's source, commented out. }
+  g := St.InstGravity * AFriction;
+  for i := 0 to n - 1 do
+    if not St.InstFixed[i] then
+    begin
+      vx := St.InstCX - St.InstPX[i];
+      vy := St.InstCY - St.InstPY[i];
+      St.InstPX[i] := St.InstPX[i] + vx * g;
+      St.InstPY[i] := St.InstPY[i] + vy * g;
+    end;
+
+  { REPULSION, every pair, and it writes the PREVIOUS position, not the
+    current one. The sign looks like attraction and is not: the far node's
+    previous position is pulled TOWARDS this one, and the next pass moves
+    each node along (current - previous) -- which is away. "Fixing" the
+    sign turns the layout inside out.
+
+    Two nodes on one point are pushed apart in a random direction -- two
+    more draws, x and then y, taken even when both of them are pinned. }
+  { THE HOT LOOP -- n squared over two, five hundred times -- so the near
+    node's figures are held in locals and its own previous position is
+    summed in one. That is the SAME additions in the same order: nothing
+    else writes that node's previous position while its row runs, and
+    every column before it has already added its share. }
+  qx := PDouble(St.InstPX);
+  qy := PDouble(St.InstPY);
+  qpx := PDouble(St.InstPPX);
+  qpy := PDouble(St.InstPPY);
+  qr := PDouble(St.InstRep);
+  for i := 0 to n - 1 do
+  begin
+    xi := qx[i];
+    yi := qy[i];
+    ri := qr[i];
+    fi := St.InstFixed[i];
+    ax := qpx[i];
+    ay := qpy[i];
+    for j := i + 1 to n - 1 do
+    begin
+      vx := qx[j] - xi;
+      vy := qy[j] - yi;
+      d := Sqrt(vx * vx + vy * vy);
+      if d = 0 then
+      begin
+        vx := TyGraphRandom(St.InstRng) - 0.5;
+        vy := TyGraphRandom(St.InstRng) - 0.5;
+        d := 1;
+      end;
+      repFact := (ri + qr[j]) / d / d;
+      if not fi then
+      begin
+        ax := ax + vx * repFact;
+        ay := ay + vy * repFact;
+      end;
+      if not St.InstFixed[j] then
+      begin
+        qpx[j] := qpx[j] + vx * (-repFact);
+        qpy[j] := qpy[j] + vy * (-repFact);
+      end;
+    end;
+    qpx[i] := ax;
+    qpy[i] := ay;
+  end;
+
+  { AND THE STEP ITSELF: along (current - previous), by the friction. }
+  for i := 0 to n - 1 do
+    if not St.InstFixed[i] then
+    begin
+      vx := St.InstPX[i] - St.InstPPX[i];
+      vy := St.InstPY[i] - St.InstPPY[i];
+      St.InstPX[i] := St.InstPX[i] + vx * AFriction;
+      St.InstPY[i] := St.InstPY[i] + vy * AFriction;
+      St.InstPPX[i] := St.InstPX[i];
+      St.InstPPY[i] := St.InstPY[i];
+    end;
+
+  { afterStep: a free node's layout IS its p (upstream sets the very array) }
+  for i := 0 to n - 1 do
+    if not St.InstFixed[i] then
+    begin
+      St.InstLX[i] := St.InstPX[i];
+      St.InstLY[i] := St.InstPY[i];
+    end;
+end;
+
+{ What the pass hands back: every node where its layout is -- a free one where
+  the solver left it, a fixed one where its layout says -- and the preserved
+  points, every node's p. }
+procedure ForceAnswer(var ANodes: TTyGraphNodeArray; var AState: TTyGraphForceState;
+  AView: TTyGraphView);
+var i, n: Integer;
+begin
+  n := Length(ANodes);
+  SetLength(AState.X, n);
+  SetLength(AState.Y, n);
+  for i := 0 to n - 1 do
+  begin
+    ANodes[i].X := AState.InstLX[i];
+    ANodes[i].Y := AState.InstLY[i];
+    AState.X[i] := AState.InstPX[i];
+    AState.Y[i] := AState.InstPY[i];
+  end;
+  TyGraphLayoutNone(ANodes, AView);
+end;
+
 procedure TyGraphLayoutForce(var ANodes: TTyGraphNodeArray;
   const AEdges: TTyGraphEdgeArray; AView: TTyGraphView;
   const ASpec: TTyGraphSpec; ASeed: LongWord;
   var AState: TTyGraphForceState);
 var
-  n, ne, i, j, k, a, b, steps, total: Integer;
+  n, ne, i, k, steps, total: Integer;
   rect: TTyRectF;
-  width, height, cx, cy, gravity, friction, lo, hi, d, w, len_, repFact,
-    vx, vy, s, g, xi, yi, ri, ax, ay: Double;
-  fi: Boolean;
-  ox, oy, px, py, ppx, ppy, rep, elen: TTyDoubleArray;
-  qx, qy, qpx, qpy, qr: PDouble;
-  fixed_, eign: array of Boolean;
-  e1, e2: array of Integer;
-  rng: LongWord;
+  width, height, cx, cy, friction, lo, hi: Double;
+  ox, oy: TTyDoubleArray;
   mask: TFPUExceptionMask;
 begin
   if AView = nil then Exit;
@@ -3279,7 +3765,8 @@ begin
     { NOTHING THE SOLVER CAN SEE HAS MOVED, so the answer is the last one. A
       theme change or a focus change lays the chart out again; upstream would
       never have laid it out for those, and running five hundred steps from
-      where the last run stopped would nudge every node for no reason. }
+      where the last run stopped would nudge every node for no reason. The
+      instance -- what a drag steps again -- stays as it is. }
     if AState.Valid and (Length(AState.X) = n) and (Length(AState.Y) = n)
       and (AState.Rect.Left = rect.Left) and (AState.Rect.Top = rect.Top)
       and (AState.Rect.Right = rect.Right)
@@ -3327,6 +3814,17 @@ begin
         end;
       end;
 
+    { A NEW INSTANCE, as a full update makes one [Batch 114: kept in the state
+      for a drag to step again]. }
+    SetLength(AState.InstPX, n);
+    SetLength(AState.InstPY, n);
+    SetLength(AState.InstPPX, n);
+    SetLength(AState.InstPPY, n);
+    SetLength(AState.InstLX, n);
+    SetLength(AState.InstLY, n);
+    SetLength(AState.InstRep, n);
+    SetLength(AState.InstFixed, n);
+
     { THE NODE RECORDS. The repulsion comes out of the node's VALUE, mapped from
       the values' own extent onto the range -- not reversed. An extent of no
       values at all is [+inf, -inf], which maps every value to not-a-number,
@@ -3339,21 +3837,17 @@ begin
         if ANodes[i].Value < lo then lo := ANodes[i].Value;
         if ANodes[i].Value > hi then hi := ANodes[i].Value;
       end;
-    SetLength(rep, n);
-    SetLength(fixed_, n);
-    SetLength(px, n);
-    SetLength(py, n);
-    SetLength(ppx, n);
-    SetLength(ppy, n);
     for i := 0 to n - 1 do
     begin
-      rep[i] := TyGraphLinearMap(ANodes[i].Value, lo, hi,
+      AState.InstRep[i] := TyGraphLinearMap(ANodes[i].Value, lo, hi,
         ASpec.Force.RepulsionLo, ASpec.Force.RepulsionHi);
-      if IsNan(rep[i]) then
-        rep[i] := (ASpec.Force.RepulsionLo + ASpec.Force.RepulsionHi) / 2;
-      fixed_[i] := ANodes[i].Pinned;
-      px[i] := ox[i];
-      py[i] := oy[i];
+      if IsNan(AState.InstRep[i]) then
+        AState.InstRep[i] := (ASpec.Force.RepulsionLo + ASpec.Force.RepulsionHi) / 2;
+      AState.InstFixed[i] := ANodes[i].Pinned;
+      AState.InstPX[i] := ox[i];
+      AState.InstPY[i] := oy[i];
+      AState.InstLX[i] := ox[i];
+      AState.InstLY[i] := oy[i];
     end;
 
     { THE EDGE RECORDS. The rest length comes out of the edge's value -- and
@@ -3368,65 +3862,59 @@ begin
         if AEdges[k].Value < lo then lo := AEdges[k].Value;
         if AEdges[k].Value > hi then hi := AEdges[k].Value;
       end;
-    SetLength(elen, ne);
-    SetLength(eign, ne);
-    SetLength(e1, ne);
-    SetLength(e2, ne);
+    SetLength(AState.InstELen, ne);
+    SetLength(AState.InstEIgn, ne);
+    SetLength(AState.InstE1, ne);
+    SetLength(AState.InstE2, ne);
     for k := 0 to ne - 1 do
     begin
-      elen[k] := TyGraphLinearMap(AEdges[k].Value, lo, hi,
+      AState.InstELen[k] := TyGraphLinearMap(AEdges[k].Value, lo, hi,
         ASpec.Force.EdgeLengthHi, ASpec.Force.EdgeLengthLo);
-      if IsNan(elen[k]) then
-        elen[k] := (ASpec.Force.EdgeLengthHi + ASpec.Force.EdgeLengthLo) / 2;
-      eign[k] := AEdges[k].IgnoreForce;
-      e1[k] := AEdges[k].Source;
-      e2[k] := AEdges[k].Target;
+      if IsNan(AState.InstELen[k]) then
+        AState.InstELen[k] := (ASpec.Force.EdgeLengthHi + ASpec.Force.EdgeLengthLo) / 2;
+      AState.InstEIgn[k] := AEdges[k].IgnoreForce;
+      AState.InstE1[k] := AEdges[k].Source;
+      AState.InstE2[k] := AEdges[k].Target;
     end;
 
     { THE RANDOM START, for every node with no position: a uniform box exactly
       the size of the rectangle, centred on it, x and then y, node by node.
 
       A PINNED node with no position draws too, as upstream's does, and its
-      draw is thrown away by the line below. Whether it draws CANNOT BE SEEN:
-      that node is pinned at not-a-number, which turns every free node into
-      not-a-number in the first step, so no position a later draw would have
-      decided survives to be looked at. Kept because it is upstream's line; a
-      mutant that skips it survives, and that is why. }
+      draw is thrown away by the first step's beforeStep. Whether it draws
+      CANNOT BE SEEN: that node is pinned at not-a-number, which turns every
+      free node into not-a-number in the first step, so no position a later
+      draw would have decided survives to be looked at. Kept because it is
+      upstream's line; a mutant that skips it survives, and that is why. }
     width := rect.Right - rect.Left;
     height := rect.Bottom - rect.Top;
     cx := rect.Left + width / 2;
     cy := rect.Top + height / 2;
-    rng := ASeed;
+    AState.InstCX := cx;
+    AState.InstCY := cy;
+    AState.InstRng := ASeed;
     for i := 0 to n - 1 do
     begin
-      if IsNan(px[i]) or IsNan(py[i]) then
+      if IsNan(AState.InstPX[i]) or IsNan(AState.InstPY[i]) then
       begin
-        px[i] := width * (TyGraphRandom(rng) - 0.5) + cx;
-        py[i] := height * (TyGraphRandom(rng) - 0.5) + cy;
+        AState.InstPX[i] := width * (TyGraphRandom(AState.InstRng) - 0.5) + cx;
+        AState.InstPY[i] := height * (TyGraphRandom(AState.InstRng) - 0.5) + cy;
+        { a free node's layout is its p from the start (upstream's `p` IS the
+          layout array when the layout had one, and becomes it after the
+          first step when it did not) }
+        if not AState.InstFixed[i] then
+        begin
+          AState.InstLX[i] := AState.InstPX[i];
+          AState.InstLY[i] := AState.InstPY[i];
+        end;
       end;
-      ppx[i] := px[i];
-      ppy[i] := py[i];
+      AState.InstPPX[i] := AState.InstPX[i];
+      AState.InstPPY[i] := AState.InstPY[i];
     end;
-    { A PINNED NODE IS WHERE ITS LAYOUT IS, re-read at the top of every step
-      upstream so a drag can move it mid-settle. Nothing moves it here, so once
-      is every time -- and a pinned node with no layout is pinned at
-      not-a-number, which the repulsion then spreads to every free node. That
-      is upstream's answer, and the chart draws nothing but the pins. }
-    for i := 0 to n - 1 do
-      if fixed_[i] then
-      begin
-        px[i] := ox[i];
-        py[i] := oy[i];
-      end;
 
-    { The arrays are not resized from here on, so their storage stays put. }
-    qx := PDouble(px);
-    qy := PDouble(py);
-    qpx := PDouble(ppx);
-    qpy := PDouble(ppy);
-    qr := PDouble(rep);
-
-    gravity := ASpec.Force.Gravity;
+    AState.InstGravity := ASpec.Force.Gravity;
+    AState.InstFriction0 := ASpec.Force.Friction;
+    AState.HasInst := True;
     friction := ASpec.Force.Friction;
     total := TyGraphForceSteps(friction);
     { A FRICTION THAT CAN NEVER COOL is a loop upstream never leaves, and the
@@ -3440,145 +3928,17 @@ begin
 
     for steps := 1 to total do
     begin
-      { THE SPRINGS, edge by edge and IN PLACE: each edge moves its two ends
-        before the next edge reads them. The weight is the far end's share of
-        the pair's repulsion, and 0/0 -- two nodes that repel at nothing -- is
-        the only way it is not a number. }
-      for k := 0 to ne - 1 do
-      begin
-        if eign[k] then Continue;
-        a := e1[k];
-        b := e2[k];
-        vx := px[b] - px[a];
-        vy := py[b] - py[a];
-        d := Sqrt(vx * vx + vy * vy) - elen[k];
-        w := rep[b] / (rep[a] + rep[b]);
-        if IsNan(w) then w := 0;
-        len_ := Sqrt(vx * vx + vy * vy);
-        if len_ = 0 then
-        begin
-          vx := 0;
-          vy := 0;
-        end
-        else
-        begin
-          vx := vx / len_;
-          vy := vy / len_;
-        end;
-        if not fixed_[a] then
-        begin
-          s := w * d * friction;
-          px[a] := px[a] + vx * s;
-          py[a] := py[a] + vy * s;
-        end;
-        if not fixed_[b] then
-        begin
-          s := -(1 - w) * d * friction;
-          px[b] := px[b] + vx * s;
-          py[b] := py[b] + vy * s;
-        end;
-      end;
-
-      { GRAVITY: a LINEAR spring to the centre, not a pull that fades. The
-        normalising lines are in upstream's source, commented out. }
-      g := gravity * friction;
-      for i := 0 to n - 1 do
-        if not fixed_[i] then
-        begin
-          vx := cx - px[i];
-          vy := cy - py[i];
-          px[i] := px[i] + vx * g;
-          py[i] := py[i] + vy * g;
-        end;
-
-      { REPULSION, every pair, and it writes the PREVIOUS position, not the
-        current one. The sign looks like attraction and is not: the far node's
-        previous position is pulled TOWARDS this one, and the next pass moves
-        each node along (current - previous) -- which is away. "Fixing" the
-        sign turns the layout inside out.
-
-        Two nodes on one point are pushed apart in a random direction -- two
-        more draws, x and then y, taken even when both of them are pinned. }
-      { THE HOT LOOP -- n squared over two, five hundred times -- so the near
-        node's figures are held in locals and its own previous position is
-        summed in one. That is the SAME additions in the same order: nothing
-        else writes that node's previous position while its row runs, and
-        every column before it has already added its share. }
-      for i := 0 to n - 1 do
-      begin
-        xi := qx[i];
-        yi := qy[i];
-        ri := qr[i];
-        fi := fixed_[i];
-        ax := qpx[i];
-        ay := qpy[i];
-        for j := i + 1 to n - 1 do
-        begin
-          vx := qx[j] - xi;
-          vy := qy[j] - yi;
-          d := Sqrt(vx * vx + vy * vy);
-          if d = 0 then
-          begin
-            vx := TyGraphRandom(rng) - 0.5;
-            vy := TyGraphRandom(rng) - 0.5;
-            d := 1;
-          end;
-          repFact := (ri + qr[j]) / d / d;
-          if not fi then
-          begin
-            ax := ax + vx * repFact;
-            ay := ay + vy * repFact;
-          end;
-          if not fixed_[j] then
-          begin
-            qpx[j] := qpx[j] + vx * (-repFact);
-            qpy[j] := qpy[j] + vy * (-repFact);
-          end;
-        end;
-        qpx[i] := ax;
-        qpy[i] := ay;
-      end;
-
-      { AND THE STEP ITSELF: along (current - previous), by the friction. }
-      for i := 0 to n - 1 do
-        if not fixed_[i] then
-        begin
-          vx := px[i] - ppx[i];
-          vy := py[i] - ppy[i];
-          px[i] := px[i] + vx * friction;
-          py[i] := py[i] + vy * friction;
-          ppx[i] := px[i];
-          ppy[i] := py[i];
-        end;
-
+      ForceStep(AState, friction);
       friction := friction * 0.992;
     end;
 
     { THE ANSWER. A free node takes where the solver left it; a pinned one keeps
       its layout, which the solver never writes back. What the next pass starts
       from is every node's solver position, pinned ones included. }
-    SetLength(AState.X, n);
-    SetLength(AState.Y, n);
-    for i := 0 to n - 1 do
-    begin
-      if fixed_[i] then
-      begin
-        ANodes[i].X := ox[i];
-        ANodes[i].Y := oy[i];
-      end
-      else
-      begin
-        ANodes[i].X := px[i];
-        ANodes[i].Y := py[i];
-      end;
-      AState.X[i] := px[i];
-      AState.Y[i] := py[i];
-    end;
     AState.Rect := rect;
     AState.ViewRect := AView.GetRect;
     AState.Valid := True;
-
-    TyGraphLayoutNone(ANodes, AView);
+    ForceAnswer(ANodes, AState, AView);
   finally
     UnmaskFP(mask);
   end;
@@ -4157,11 +4517,12 @@ begin
       p2 := TyPointF(ANodes[b].X, ANodes[b].Y);
       if AEdges[i].Curved then cp := TyPointF(AEdges[i].DCPX, AEdges[i].DCPY)
       else cp := TyPointF(0, 0);
+      { each END'S OWN symbol: an edge's `symbol` beats the series' [Batch 114] }
       TyGraphTrimEdge(p1, p2, cp, AEdges[i].Curved,
         GraphNodeSymbolSize(ASpec, ANodes, a) * half,
         GraphNodeSymbolSize(ASpec, ANodes, b) * half,
-        (ASpec.EdgeSymbolFrom <> '') and (ASpec.EdgeSymbolFrom <> 'none'),
-        (ASpec.EdgeSymbolTo <> '') and (ASpec.EdgeSymbolTo <> 'none'));
+        TyGraphEdgeHasSymbol(ASpec, AEdges[i], False),
+        TyGraphEdgeHasSymbol(ASpec, AEdges[i], True));
       AEdges[i].TX1 := p1.X;
       AEdges[i].TY1 := p1.Y;
       AEdges[i].TX2 := p2.X;
@@ -4320,6 +4681,44 @@ end;
   each edge that lost an end goes with it. Edges resolve `source: 3` against
   the full list for the same reason: the fourth node is the fourth node the
   author wrote, not the fourth one that survived. }
+{ A NODE'S `symbolSize` WRITTEN AS A PAIR [Batch 114]: the store keeps a
+  data item's scalar leaves only, so a [w, h] on the item never reached the
+  node -- it was drawn at the series' size and trimmed by it. Read off the
+  option's node list (`data || nodes`), by the node's raw row. }
+procedure ReadItemSizePairs(AOption: TTyChartOption; ASeriesIndex: Integer;
+  var ANodes: TTyGraphNodeArray);
+var
+  node: TJSONObject;
+  d, sz: TJSONData;
+  a: TJSONArray;
+  i, raw: Integer;
+begin
+  node := NodeAt(AOption, ASeriesIndex);
+  if node = nil then Exit;
+  d := node.Find('data');
+  if (d = nil) or not JsTruthy(d) then d := node.Find('nodes');
+  if not (d is TJSONArray) then Exit;
+  for i := 0 to High(ANodes) do
+  begin
+    raw := ANodes[i].RawRow;
+    if (raw < 0) or (raw >= d.Count) then Continue;
+    if not (TJSONArray(d).Items[raw] is TJSONObject) then Continue;
+    sz := TJSONObject(TJSONArray(d).Items[raw]).Find('symbolSize');
+    if not (sz is TJSONArray) then Continue;
+    a := TJSONArray(sz);
+    ANodes[i].HasSize := True;
+    ANodes[i].RingSizeNaN := RingSizeNaNOf(sz);
+    ANodes[i].SizeW := NaN;
+    ANodes[i].SizeH := NaN;
+    if (a.Count > 0) and (a.Items[0].JSONType = jtNumber) then
+      ANodes[i].SizeW := SaneSize(a.Items[0].AsFloat);
+    if (a.Count > 1) and (a.Items[1].JSONType = jtNumber) then
+      ANodes[i].SizeH := SaneSize(a.Items[1].AsFloat)
+    else if a.Count = 1 then
+      ANodes[i].SizeH := ANodes[i].SizeW;
+  end;
+end;
+
 procedure GatherGraph(AOption: TTyChartOption; ASeriesIndex: Integer;
   AStore: TTyDataStore; var ASolved: TTyGraphSolved;
   out AAll: TTyGraphNodeArray; out AAllEdges: TTyGraphEdgeArray);
@@ -4328,6 +4727,7 @@ begin
   ASolved.Spec := TyGraphSpecOf(AOption, ASeriesIndex);
   ASolved.Cats := TyGraphCategoriesOf(AOption, ASeriesIndex);
   AAll := TyGraphAllNodesOf(AStore, ASolved.Cats);
+  ReadItemSizePairs(AOption, ASeriesIndex, AAll);
   AAllEdges := TyGraphEdgesOf(AOption, ASeriesIndex, AAll);
   TyGraphResolvePins(AAll, AAllEdges, ASolved.Cats, ASolved.Spec);
   { THE SURVIVORS, in the order they were written; a kept node's view position
@@ -4679,6 +5079,450 @@ begin
   end;
 end;
 
+{ ==================== per-edge style [Batch 114] ==================== }
+
+function TyGraphEdgeWidth(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge): Double;
+begin
+  if AEdge.HasOwnWidth then Result := AEdge.OwnWidth
+  else Result := ASpec.LineWidthLogical;
+end;
+
+function TyGraphEdgeOpacity(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge): Double;
+begin
+  if AEdge.HasOwnOpacity then Result := AEdge.OwnOpacity
+  else Result := ASpec.LineOpacity;
+end;
+
+function TyGraphEdgeSymbol(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge;
+  AAtEnd: Boolean): string;
+begin
+  if AAtEnd then
+  begin
+    Result := AEdge.OwnSymTo;
+    if Result = '' then Result := ASpec.EdgeSymbolTo;
+  end
+  else
+  begin
+    Result := AEdge.OwnSymFrom;
+    if Result = '' then Result := ASpec.EdgeSymbolFrom;
+  end;
+end;
+
+function TyGraphEdgeSymbolSize(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge;
+  AAtEnd: Boolean): Double;
+begin
+  if AAtEnd then
+  begin
+    Result := AEdge.OwnSizeTo;
+    if IsNan(Result) or (Result = 0) then Result := ASpec.EdgeSizeTo;
+  end
+  else
+  begin
+    Result := AEdge.OwnSizeFrom;
+    if IsNan(Result) or (Result = 0) then Result := ASpec.EdgeSizeFrom;
+  end;
+end;
+
+function TyGraphEdgeHasSymbol(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge;
+  AAtEnd: Boolean): Boolean;
+var s: string;
+begin
+  s := TyGraphEdgeSymbol(ASpec, AEdge, AAtEnd);
+  Result := (s <> '') and (s <> 'none');
+end;
+
+function TyGraphEdgeDash(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge): TTyDoubleArray;
+begin
+  if AEdge.HasOwnDash then
+    Result := TyDashPattern(AEdge.OwnDash, AEdge.OwnDashExplicit, TyGraphEdgeWidth(ASpec, AEdge))
+  else
+    Result := TyDashPattern(ASpec.LineDash, ASpec.LineDashExplicit, TyGraphEdgeWidth(ASpec, AEdge));
+end;
+
+{ ==================== edge labels [Batch 114] ==================== }
+
+function TyGraphLabelPosOf(const AWord: string): TTyGraphLabelPos;
+begin
+  if AWord = '' then Exit(glpMiddle);
+  if AWord = 'middle' then Exit(glpMiddle);
+  if AWord = 'start' then Exit(glpStart);
+  if AWord = 'end' then Exit(glpEnd);
+  if AWord = 'insideStart' then Exit(glpInsideStart);
+  if AWord = 'insideStartTop' then Exit(glpInsideStartTop);
+  if AWord = 'insideStartBottom' then Exit(glpInsideStartBottom);
+  if AWord = 'insideMiddle' then Exit(glpInsideMiddle);
+  if AWord = 'insideMiddleTop' then Exit(glpInsideMiddleTop);
+  if AWord = 'insideMiddleBottom' then Exit(glpInsideMiddleBottom);
+  if AWord = 'insideEnd' then Exit(glpInsideEnd);
+  if AWord = 'insideEndTop' then Exit(glpInsideEndTop);
+  if AWord = 'insideEndBottom' then Exit(glpInsideEndBottom);
+  Result := glpUnknown;
+end;
+
+{ Line.pointAt (straight) and BezierCurve's quadraticAt, as written: the
+  straight one is NOT p1 + (p2 - p1) t, and the curve is NOT the expanded
+  polynomial -- each rounds its own way.
+
+  FOR THE CURVE THAT DIFFERENCE CANNOT BE SEEN HERE: Line.beforeUpdate asks
+  only t = 0, 1/2 and 1, where every product is by a power of two -- and a
+  power-of-two scale commutes with rounding -- so the two forms agree to the
+  bit. A mutant that expands the polynomial survives, and that is why; the
+  form is upstream's all the same. [Batch 114] }
+function ZrLineAt(AP1, AP2, AT: Double): Double;
+begin
+  Result := AP1 * (1 - AT) + AP2 * AT;
+end;
+
+function ZrQuadAt(AP0, AP1, AP2, AT: Double): Double;
+var onet: Double;
+begin
+  onet := 1 - AT;
+  Result := onet * (onet * AP0 + 2 * AT * AP1) + AT * AT * AP2;
+end;
+
+function ZrQuadDerivAt(AP0, AP1, AP2, AT: Double): Double;
+begin
+  Result := 2 * ((1 - AT) * (AP1 - AP0) + AT * (AP2 - AP1));
+end;
+
+{ vec2.normalize: a zero length gives (0, 0) }
+function ZrNormalize(AX, AY: Double): TTyPointF;
+var d: Double;
+begin
+  d := Sqrt(AX * AX + AY * AY);
+  if d = 0 then Exit(TyPointF(0, 0));
+  Result := TyPointF(AX / d, AY / d);
+end;
+
+function TyGraphEdgeLabelPlace(const AP1, AP2, ACP: TTyPointF; ACurved: Boolean;
+  const AFrame: TTyGraphLabelFrame; APos: TTyGraphLabelPos;
+  ADistX, ADistY: Double; out AX, AY, ARot: Double;
+  out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV): Boolean;
+var
+  fromX, fromY, toX, toY, midX, midY, dvx, dvy, tgx, tgy, distX, distY,
+    dy, x, y, ox, oy, dir, sx, sy, st, ct: Double;
+  d, tg: TTyPointF;
+  L: array[0..5] of Double;
+  aa, ac, atx, ab, ad, aty: Double;
+  mask: TFPUExceptionMask;
+
+  function PointAtX(AT: Double): Double;
+  begin
+    if ACurved then Result := ZrQuadAt(AP1.X, ACP.X, AP2.X, AT)
+    else Result := ZrLineAt(AP1.X, AP2.X, AT);
+  end;
+
+  function PointAtY(AT: Double): Double;
+  begin
+    if ACurved then Result := ZrQuadAt(AP1.Y, ACP.Y, AP2.Y, AT)
+    else Result := ZrLineAt(AP1.Y, AP2.Y, AT);
+  end;
+
+begin
+  Result := True;
+  mask := MaskFP;
+  try
+    { percent is 1: the line is whole }
+    fromX := PointAtX(0);
+    fromY := PointAtY(0);
+    toX := PointAtX(1);
+    toY := PointAtY(1);
+    d := ZrNormalize(toX - fromX, toY - fromY);
+    distX := ADistX * AFrame.InvScale;
+    distY := ADistY * AFrame.InvScale;
+    { the tangent at the middle: the chord for a straight line, the
+      derivative for a curve -- normalised either way }
+    if ACurved then
+    begin
+      tgx := ZrQuadDerivAt(AP1.X, ACP.X, AP2.X, 0.5);
+      tgy := ZrQuadDerivAt(AP1.Y, ACP.Y, AP2.Y, 0.5);
+    end
+    else
+    begin
+      tgx := AP2.X - AP1.X;
+      tgy := AP2.Y - AP1.Y;
+    end;
+    tg := ZrNormalize(tgx, tgy);
+    midX := PointAtX(0.5);
+    midY := PointAtY(0.5);
+    if tg.X < 0 then dir := -1 else dir := 1;
+    ARot := 0;
+    if not (APos in [glpStart, glpEnd]) then
+    begin
+      ARot := -TyJsAtan2(tg.Y, tg.X);
+      if toX < fromX then ARot := Pi + ARot;
+    end;
+    case APos of
+      glpInsideStartTop, glpInsideMiddleTop, glpInsideEndTop, glpMiddle:
+        begin
+          dy := -distY;
+          AAV := tavBottom;
+        end;
+      glpInsideStartBottom, glpInsideMiddleBottom, glpInsideEndBottom:
+        begin
+          dy := distY;
+          AAV := tavTop;
+        end;
+    else
+      dy := 0;
+      AAV := tavMiddle;
+    end;
+    x := 0;
+    y := 0;
+    ox := 0;
+    oy := 0;
+    AAH := tahLeft;
+    dvx := d.X;
+    dvy := d.Y;
+    case APos of
+      glpEnd:
+        begin
+          x := dvx * distX + toX;
+          y := dvy * distY + toY;
+          if dvx > 0.8 then AAH := tahLeft
+          else if dvx < -0.8 then AAH := tahRight
+          else AAH := tahCentre;
+          if dvy > 0.8 then AAV := tavTop
+          else if dvy < -0.8 then AAV := tavBottom
+          else AAV := tavMiddle;
+        end;
+      glpStart:
+        begin
+          x := -dvx * distX + fromX;
+          y := -dvy * distY + fromY;
+          if dvx > 0.8 then AAH := tahRight
+          else if dvx < -0.8 then AAH := tahLeft
+          else AAH := tahCentre;
+          if dvy > 0.8 then AAV := tavBottom
+          else if dvy < -0.8 then AAV := tavTop
+          else AAV := tavMiddle;
+        end;
+      glpInsideStartTop, glpInsideStart, glpInsideStartBottom:
+        begin
+          x := distX * dir + fromX;
+          y := fromY + dy;
+          if tg.X < 0 then AAH := tahRight else AAH := tahLeft;
+          ox := -distX * dir;
+          oy := -dy;
+        end;
+      glpInsideMiddleTop, glpInsideMiddle, glpInsideMiddleBottom, glpMiddle:
+        begin
+          x := midX;
+          y := midY + dy;
+          AAH := tahCentre;
+          oy := -dy;
+        end;
+      glpInsideEndTop, glpInsideEnd, glpInsideEndBottom:
+        begin
+          x := -distX * dir + toX;
+          y := toY + dy;
+          if tg.X >= 0 then AAH := tahRight else AAH := tahLeft;
+          ox := distX * dir;
+          oy := -dy;
+        end;
+    end;
+    { getLocalTransform: the scale invScale about the origin, the rotation,
+      then the position; every zero term kept, as zrender keeps it }
+    sx := AFrame.InvScale;
+    sy := AFrame.InvScale;
+    if (ox <> 0) or (oy <> 0) then
+    begin
+      L[4] := -ox * sx - 0 * oy * sy;
+      L[5] := -oy * sy - 0 * ox * sx;
+    end
+    else
+    begin
+      L[4] := 0;
+      L[5] := 0;
+    end;
+    L[0] := sx;
+    L[3] := sy;
+    L[1] := 0 * sx;
+    L[2] := 0 * sy;
+    if ARot <> 0 then
+    begin
+      aa := L[0]; ac := L[2]; atx := L[4];
+      ab := L[1]; ad := L[3]; aty := L[5];
+      st := TyJsSin(ARot);
+      ct := TyJsCos(ARot);
+      L[0] := aa * ct + ab * st;
+      L[1] := -aa * st + ab * ct;
+      L[2] := ac * ct + ad * st;
+      L[3] := -ac * st + ct * ad;
+      L[4] := ct * atx + st * aty;
+      L[5] := ct * aty - st * atx;
+    end;
+    L[4] := L[4] + (ox + x);
+    L[5] := L[5] + (oy + y);
+    { mul(frame, local): the frame's off-diagonal terms are nought }
+    AX := AFrame.SX * L[4] + 0 * L[5] + AFrame.X;
+    AY := 0 * L[4] + AFrame.SY * L[5] + AFrame.Y;
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+function TyGraphJsText(AData: TJSONData): string;
+begin
+  Result := JsText(AData);
+end;
+
+function TyGraphEdgeDefaultText(ANodeHasValue: Boolean; ANodeIsNumber: Boolean;
+  ANodeNumber: Double; const ANodeValueText, AEdgeName: string): string;
+begin
+  if not ANodeHasValue then Exit(AEdgeName);
+  { `isFinite(rawVal) ? round(rawVal, 10) : rawVal`, then + '' }
+  if ANodeIsNumber and not IsNan(ANodeNumber) and not IsInfinite(ANodeNumber) then
+    Result := TyJsNumberToString(TyJsToFixed(ANodeNumber, 10))
+  else
+    Result := ANodeValueText;
+end;
+
+{ ==================== dragging [Batch 114] ==================== }
+
+procedure TyGraphDrift(AView: TTyGraphView; var ANode: TTyGraphNode;
+  ADX, ADY, ANodeScale: Double);
+var
+  osx, osy, ox, oy, det, i0, i2, i3, i4, i5, m4, m5, sx, sy, x, y: Double;
+  mask: TFPUExceptionMask;
+begin
+  if AView = nil then Exit;
+  mask := MaskFP;
+  try
+    osx := AView.OverallScaleX;
+    osy := AView.OverallScaleY;
+    ox := AView.OverallX;
+    oy := AView.OverallY;
+    { the main group's invTransform: matrix.invert of [osx 0 0 osy ox oy] }
+    det := osx * osy - 0 * 0;
+    det := 1.0 / det;
+    i0 := osy * det;
+    i3 := osx * det;
+    { -ac * det with ac nought: a NEGATIVE zero for a positive det }
+    i2 := -(0 * det);
+    i4 := (0 * oy - osy * ox) * det;
+    i5 := (0 * ox - osx * oy) * det;
+    if ANode.HasDragScale then
+    begin
+      sx := ANode.DragScaleX;
+      sy := ANode.DragScaleY;
+    end
+    else
+    begin
+      sx := ANodeScale;
+      sy := ANodeScale;
+    end;
+    x := ANode.X;
+    y := ANode.Y;
+    { the group's global transform as the last paint left it, moved }
+    m4 := osx * x + 0 * y + ox + ADX;
+    m5 := 0 * x + osy * y + oy + ADY;
+    { mul(inv, m), decomposed }
+    ANode.X := i0 * m4 + i2 * m5 + i4;
+    ANode.Y := i2 * m4 + i3 * m5 + i5;
+    ANode.HasDragScale := True;
+    ANode.DragScaleX := Abs(i0 * (osx * sx));
+    ANode.DragScaleY := Abs(i3 * (osy * sy));
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+procedure TyGraphDragEnd(var AForce: TTyGraphForceState; ANode: Integer);
+begin
+  if not AForce.HasInst then Exit;
+  if (ANode < 0) or (ANode > High(AForce.InstFixed)) then Exit;
+  AForce.InstFixed[ANode] := False;
+end;
+
+procedure TyGraphDragStep(var ANodes: TTyGraphNodeArray;
+  var AEdges: TTyGraphEdgeArray; const ASpec: TTyGraphSpec;
+  AView: TTyGraphView; var AForce: TTyGraphForceState;
+  const AStep: TTyGraphDragStep; ANodeScale: Double);
+var
+  k, n: Integer;
+  ns, cx, cy, r, vx, vy, len_, friction: Double;
+  rect: TTyRectF;
+  back: TTyDoubleArray;
+  mask: TFPUExceptionMask;
+begin
+  if AView = nil then Exit;
+  k := AStep.Node;
+  if (k < 0) or (k > High(ANodes)) then Exit;
+  mask := MaskFP;
+  try
+    { THE COMPENSATION SCALE NOW -- getNodeGlobalScale, which updateLayout's
+      adjustEdge and the ring both read fresh; the symbols keep theirs }
+    ns := AView.NodeScale(ASpec.NodeScaleRatio);
+    TyGraphDrift(AView, ANodes[k], AStep.DX, AStep.DY, ANodeScale);
+    case ASpec.Layout of
+      glCircular:
+        begin
+          ANodes[k].Fixed := True;
+          { circularLayout with a dragging node: the pointer back to data,
+            pulled onto the ring along its own direction from the centre }
+          rect := AView.GetDataRect;
+          cx := (rect.Right - rect.Left) / 2 + rect.Left;
+          cy := (rect.Bottom - rect.Top) / 2 + rect.Top;
+          r := Min(rect.Right - rect.Left, rect.Bottom - rect.Top) / 2;
+          if AView.PointToData(TyPointF(AStep.PX, AStep.PY), back) then
+          begin
+            vx := back[0] - cx;
+            vy := back[1] - cy;
+            len_ := Sqrt(vx * vx + vy * vy);
+            if len_ = 0 then
+            begin
+              vx := 0;
+              vy := 0;
+            end
+            else
+            begin
+              vx := vx / len_;
+              vy := vy / len_;
+            end;
+            vx := vx * r;
+            vy := vy * r;
+            ANodes[k].X := cx + vx;
+            ANodes[k].Y := cy + vy;
+          end;
+          TyGraphLayoutCircular(ANodes, AView, ASpec, ns);
+        end;
+      glForce:
+        if AForce.HasInst and (Length(AForce.InstPX) = Length(ANodes)) then
+        begin
+          { warmUp, then the iteration -- synchronous, as upstream's with
+            layoutAnimation false: stepped until the friction is under a
+            hundredth, one step at least }
+          friction := AForce.InstFriction0 * 0.8;
+          n := 0;
+          repeat
+            ForceStep(AForce, friction);
+            friction := friction * 0.992;
+            Inc(n);
+          { the ceiling TyGraphForceSteps has: a friction that never cools is
+            a loop upstream never leaves }
+          until not (friction >= 0.01) or (n >= cForceMaxSteps);
+          { setFixed AFTER the run, and the layout set to where the run
+            left it (the symbol's position the run's updateLayout set) }
+          AForce.InstFixed[k] := True;
+          AForce.InstLX[k] := AForce.InstPX[k];
+          AForce.InstLY[k] := AForce.InstPY[k];
+          ForceAnswer(ANodes, AForce, AView);
+        end;
+    else
+      { none: where the drift put it }
+      TyGraphLayoutNone(ANodes, AView);
+    end;
+    { the edges laid out again from the nodes, trimmed with the scale now }
+    TyGraphEdgeGeometry(AEdges, ANodes, AView, ASpec.Layout = glCircular);
+    TyGraphSanitiseView(ANodes, AView);
+    TyGraphTrimInView(AEdges, ANodes, ASpec, ns);
+    TyGraphMapEdges(AEdges, AView);
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
 { ==================== the marks ==================== }
 
 { How finely a curved edge is sampled. An edge is a few hundred pixels at most
@@ -4880,12 +5724,19 @@ end;
 function TyGraphEdgeStroke(const ASpec: TTyGraphSpec;
   const AEdges: TTyGraphEdgeArray; const AInk: TTyGraphInk;
   AAt: Integer): TTyChartColor;
-var at: Integer;
+var at: Integer; by: TTyGraphEdgeColourBy;
 begin
   Result := AInk.EdgeColour;
-  if ASpec.ColourBy = gecFixed then Exit;
+  by := ASpec.ColourBy;
+  { THE EDGE'S OWN colour or word over the series' [Batch 114] }
+  if (AAt >= 0) and (AAt <= High(AEdges)) and AEdges[AAt].HasOwnColour then
+  begin
+    by := AEdges[AAt].OwnColourBy;
+    if by = gecFixed then Exit(AEdges[AAt].OwnColour);
+  end;
+  if by = gecFixed then Exit;
   if (AAt < 0) or (AAt > High(AEdges)) then Exit;
-  if ASpec.ColourBy = gecSource then at := AEdges[AAt].Source
+  if by = gecSource then at := AEdges[AAt].Source
   else at := AEdges[AAt].Target;
   if (at >= 0) and (at <= High(AInk.EdgeEndFills)) then
     Result := AInk.EdgeEndFills[at]
@@ -4911,7 +5762,7 @@ var
   i, k, edgeAt: Integer;
   p1, p2, cp, pt, tan_: TTyPointF;
   curved: Boolean;
-  sz: Double;
+  sz, symX, symY: Double;
   pts: TTyPointFArray;
   sym: TTySymbolSpec;
   el: TTyChartElement;
@@ -4947,6 +5798,52 @@ var
     Result := (w + h) / 2 / 2;
   end;
 
+  { The edge's label onto its element: the anchor, the turn and the alignment
+    Line.beforeUpdate gives it, from the line as it is drawn -- the trimmed
+    ends in data space on a view (the frame carries them to the canvas), the
+    trimmed pixels on axes. }
+  procedure EdgeLabel(AAt: Integer; var AEl: TTyChartElement);
+  var
+    fr: TTyGraphLabelFrame;
+    q1, q2, qc: TTyPointF;
+    ax, ay, rot: Double;
+    ah: TTyTextAnchorH;
+    av: TTyTextAnchorV;
+  begin
+    if (AAt > High(AInk.EdgeLabelShow)) or not AInk.EdgeLabelShow[AAt] then Exit;
+    if (AAt > High(AInk.EdgeLabelText)) or (AInk.EdgeLabelText[AAt] = '') then Exit;
+    if AInk.HasFrame and AEdges[AAt].HasEnds then
+    begin
+      fr := AInk.Frame;
+      q1 := TyPointF(AEdges[AAt].TX1, AEdges[AAt].TY1);
+      q2 := TyPointF(AEdges[AAt].TX2, AEdges[AAt].TY2);
+      qc := TyPointF(AEdges[AAt].TCPX, AEdges[AAt].TCPY);
+    end
+    else
+    begin
+      fr.SX := 1;
+      fr.SY := 1;
+      fr.X := 0;
+      fr.Y := 0;
+      fr.InvScale := 1;
+      q1 := p1;
+      q2 := p2;
+      qc := cp;
+    end;
+    TyGraphEdgeLabelPlace(q1, q2, qc, curved, fr, AInk.EdgeLabelPos[AAt],
+      AInk.EdgeLabelDistX[AAt], AInk.EdgeLabelDistY[AAt], ax, ay, rot, ah, av);
+    if IsNan(ax) or IsNan(ay) or IsInfinite(ax) or IsInfinite(ay) then Exit;
+    AEl.Caption.Text := AInk.EdgeLabelText[AAt];
+    AEl.Caption.ItemSpec := AAt + 1;
+    AEl.Caption.HasFixedAnchor := True;
+    AEl.Caption.FixedX := ax;
+    AEl.Caption.FixedY := ay;
+    AEl.Caption.FixedInside := False;
+    AEl.Caption.FixedAH := ah;
+    AEl.Caption.FixedAV := av;
+    AEl.Caption.FixedRotationRad := rot;
+  end;
+
   { The arrowhead at one end of the edge just built. }
   procedure Arrow(const AName: string; ASize: Double; AAtEnd: Boolean);
   var s: TTySymbolSpec; e: TTyChartElement; sh: TTyChartShape;
@@ -4970,7 +5867,7 @@ var
     e := TyChartElement(sh);
     e.Style.HasFill := True;
     e.Style.FillColor := EdgeColour(edgeAt);
-    e.Style.Alpha := ASpec.LineOpacity;
+    e.Style.Alpha := TyGraphEdgeOpacity(ASpec, AEdges[edgeAt]);
     e.Z := ASpec.Z;
     e.Z2 := ASpec.Z2;
     { SILENT, like the edge it belongs to: an arrowhead is part of the line's
@@ -5000,8 +5897,8 @@ begin
     if IsNan(p1.X) or IsNan(p1.Y) or IsNan(p2.X) or IsNan(p2.Y) then Continue;
     if AEdges[i].Hidden then Continue;
     if AEdges[i].NaNCurve
-      and (((ASpec.EdgeSymbolFrom <> '') and (ASpec.EdgeSymbolFrom <> 'none'))
-        or ((ASpec.EdgeSymbolTo <> '') and (ASpec.EdgeSymbolTo <> 'none'))) then
+      and (TyGraphEdgeHasSymbol(ASpec, AEdges[i], False)
+        or TyGraphEdgeHasSymbol(ASpec, AEdges[i], True)) then
       Continue;
 
     { THE CONTROL POINT IS THE LAYOUT'S, not this function's. Upstream authors
@@ -5028,8 +5925,8 @@ begin
     else
       TyGraphTrimEdge(p1, p2, cp, curved,
         NodeRadius(AEdges[i].Source), NodeRadius(AEdges[i].Target),
-        (ASpec.EdgeSymbolFrom <> '') and (ASpec.EdgeSymbolFrom <> 'none'),
-        (ASpec.EdgeSymbolTo <> '') and (ASpec.EdgeSymbolTo <> 'none'));
+        TyGraphEdgeHasSymbol(ASpec, AEdges[i], False),
+        TyGraphEdgeHasSymbol(ASpec, AEdges[i], True));
 
     if curved then
     begin
@@ -5051,8 +5948,10 @@ begin
     el := TyChartElement(TyShapePolyline(pts));
     el.Style.HasFill := False;
     el.Style.StrokeColor := EdgeColour(i);
-    el.Style.StrokeWidthLogical := ASpec.LineWidthLogical;
-    el.Style.Alpha := ASpec.LineOpacity;
+    { THE EDGE'S OWN width, opacity and type over the series' [Batch 114] }
+    el.Style.StrokeWidthLogical := TyGraphEdgeWidth(ASpec, AEdges[i]);
+    el.Style.Alpha := TyGraphEdgeOpacity(ASpec, AEdges[i]);
+    el.Style.DashLogical := TyGraphEdgeDash(ASpec, AEdges[i]);
     el.Z := ASpec.Z;
     el.Z2 := ASpec.Z2;
     el.Silent := False;
@@ -5061,12 +5960,17 @@ begin
       to share the number. }
     el.Datum := TyChartEdgeDatum(ASeriesIndex, AEdges[i].Row);
     el.HitSlopLogical := 4;
+
+    { THE LABEL, at the place Line.beforeUpdate gives it [Batch 114] }
+    EdgeLabel(i, el);
     AList.Add(el);
     Inc(Result);
 
     edgeAt := i;
-    Arrow(ASpec.EdgeSymbolFrom, ASpec.EdgeSizeFrom, False);
-    Arrow(ASpec.EdgeSymbolTo, ASpec.EdgeSizeTo, True);
+    Arrow(TyGraphEdgeSymbol(ASpec, AEdges[i], False),
+      TyGraphEdgeSymbolSize(ASpec, AEdges[i], False), False);
+    Arrow(TyGraphEdgeSymbol(ASpec, AEdges[i], True),
+      TyGraphEdgeSymbolSize(ASpec, AEdges[i], True), True);
   end;
 
   for i := 0 to High(ANodes) do
@@ -5088,11 +5992,19 @@ begin
     sz := Min(sym.WidthPx, sym.HeightPx);
     if IsNan(sz) or (sz <= 0) then Continue;
     { THE SYMBOL'S HALF-EXTENTS as zrender composes them: the group's scale
-      times the compensation scale, then times the half size. }
-    if (ASymX <> 1) or (ASymY <> 1) then
+      times the compensation scale, then times the half size -- or, for a
+      node a drag moved, times the scale the drag re-derived [Batch 114]. }
+    symX := ASymX;
+    symY := ASymY;
+    if ANodes[i].HasDragScale and AInk.HasFrame then
     begin
-      sym.WidthPx := ASymX * (sym.WidthPx / 2) * 2;
-      sym.HeightPx := ASymY * (sym.HeightPx / 2) * 2;
+      symX := AInk.Frame.SX * ANodes[i].DragScaleX;
+      symY := AInk.Frame.SY * ANodes[i].DragScaleY;
+    end;
+    if (symX <> 1) or (symY <> 1) then
+    begin
+      sym.WidthPx := symX * (sym.WidthPx / 2) * 2;
+      sym.HeightPx := symY * (sym.HeightPx / 2) * 2;
     end;
 
     shape := TyBuildSymbol(sym, ANodes[i].PX, ANodes[i].PY);

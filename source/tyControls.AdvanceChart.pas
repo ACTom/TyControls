@@ -197,7 +197,10 @@ type
   TTyStKind = (sskNone, sskBar, sskPie, sskSymbol, sskRect, sskFunnel,
     sskCandle, sskPictorial, sskSunburst,
     { [Batch 108] a boxplot's path: one element, the host }
-    sskBox);
+    sskBox,
+    { [Batch 114] a sankey: node rects by node index, and its links in a
+      second set of rows (EdgeRows) }
+    sskSankey);
   TTyStNodeArray = array of TJSONObject;
   TTyStSeries = record
     Kind: TTyStKind;
@@ -209,6 +212,10 @@ type
     FollowIdx, PartIdx: array of TTyIntegerArray;
     Run, Area: TTyStItem;
     RunIdx, AreaIdx: TTyIntegerArray;
+    { THE EDGE DATA'S ITEMS [Batch 114]: a sankey's links, by link index --
+      the band and its label -- a second data type with states of its own }
+    EdgeRows: array of TTyStItem;
+    EdgeHostIdx, EdgeLabelIdx: TTyIntegerArray;
     { getComponentStates(series).isBlured: blurSeries reached it, so the next
       allLeaveBlur walks it [Batch 90] }
     IsBlured: Boolean;
@@ -409,6 +416,26 @@ type
       the pointer was last. }
     FRoamSeries: Integer;
     FRoamX, FRoamY: Integer;
+    { A NODE DRAG on a graph on a view [Batch 114]: zrender's Draggable holds
+      the node from the press to the release, and every move between is one
+      'drag' (TyGraphDragStep). Slot -1: none. }
+    FGraphDragSlot, FGraphDragNode: Integer;
+    FGraphDragX, FGraphDragY: Integer;
+    FGraphDragFirst: Boolean;
+    { A NODE DRAG on a sankey [Batch 114]: the rect's own shape position,
+      accumulated from the press (SankeyView's drift adds each delta to
+      shape.x / y), the box size its closure holds, and the pointer. }
+    FSankeyDragSlot, FSankeyDragNode: Integer;
+    FSankeyDragX, FSankeyDragY: Integer;
+    FSankeyDragShapeX, FSankeyDragShapeY, FSankeyDragW, FSankeyDragH: Double;
+    { WHAT dragNode WROTE, per series and per node: localX / localY, which
+      upstream writes into the series option's node item and which beat the
+      item's own (setNodePosition) [Batch 114] }
+    FSankeyLocal: array of TTySankeyLocalArray;
+    { a sankey's roam: the centre and zoom the sankeyRoam action wrote back,
+      per series [Batch 114] }
+    FSankeyRoam: array of TTyGraphRoamState;
+    FOnSankeyRoam: TTyGraphRoamEvent;
     FOnGraphRoam: TTyGraphRoamEvent;
     { EACH TREE'S TOGGLES, by SERIES index and row, outside the build: a
       click survives a resize and a relayout and goes only with the option.
@@ -455,6 +482,11 @@ type
       before. [Batch 82] }
     FTreeViews: array of TTyGraphView;
     FTreeSpecs: array of TTyGraphSpec;
+    { A SANKEY'S VIEW, per slot: a View whose data rect and view rect are both
+      its box (createViewCoordSysSimply), its roam options read as a graph's
+      [Batch 114] }
+    FSankeyViews: array of TTyGraphView;
+    FSankeySpecs: array of TTyGraphSpec;
     FTreeRoam: array of TTyGraphRoamState;
     FTreeBox: array of TTyXYWH;
     FTreeBoxHas: TTyBoolArray;
@@ -1311,6 +1343,8 @@ type
       series. `focusNodeAdjacency`, the old spelling, counts at the series
       when `emphasis.focus` says nothing. AIndex is into FGraphNodes /
       FGraphEdges of ASlot. }
+    procedure GraphEdgeLabels(ASlot: Integer; var AInk: TTyGraphInk);
+    function DoViewAction(const AType: string; APayload: TJSONObject): Boolean;
     function GraphEmphasisOf(ASlot: Integer; AIsEdge: Boolean;
       AIndex: Integer): TTyChartEmphasisSpec;
     { THE HOVER, APPLIED TO THE GRAPHS IN THE LIST: every element of the
@@ -1618,7 +1652,14 @@ type
     { ecData.focus / blurScope of an item's element (the item, then the
       series) and of the series' own elements }
     function StNodes(ASeriesIndex, ARaw: Integer): TTyStNodeArray;
+    function StEdgeNodes(ASeriesIndex, AEdge: Integer): TTyStNodeArray;
+    function StIsSankey(ASeriesIndex: Integer): Boolean;
+    procedure StSankeyCurveFill(ASlot, AEdge: Integer;
+      const ANodes: TTyStNodeArray; const AState: string; var AObj: TTyStObject);
+    procedure StDeclareEdge(ASlot, AEdge: Integer; AList: TTyPaintList);
     function StItemFocus(ASeriesIndex, ARaw: Integer;
+      out AScope: TTyStScope): TTyStFocus;
+    function StEdgeFocus(ASeriesIndex, AEdge: Integer;
       out AScope: TTyStScope): TTyStFocus;
     function StSeriesFocus(ASeriesIndex: Integer;
       out AScope: TTyStScope): TTyStFocus;
@@ -1711,6 +1752,14 @@ type
       allows it and whose area holds the point. -1 when none does. }
     function RoamSeriesAt(AX, AY: Integer; AZoom: Boolean): Integer;
     function IsTreeSeries(ASeriesIndex: Integer): Boolean;
+    function IsSankeySeries(ASeriesIndex: Integer): Boolean;
+    { the node drags [Batch 114] }
+    procedure GraphDragMove(AX, AY: Integer);
+    procedure GraphDragEnd;
+    function SankeyDragStart(ASlot, ANode, AX, AY: Integer): Boolean;
+    procedure SankeyDragMove(AX, AY: Integer);
+    procedure SankeyViewOf(ASlot: Integer);
+    procedure FreeSankeyViews;
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -1879,6 +1928,10 @@ type
       state list, rest and current values -- for a bar, a pie slice (with its
       label and label line) or a line / scatter symbol. False when the item
       has no element the state machine speaks for. }
+    { a sankey link's state record, by link index [Batch 114] }
+    function SankeyEdgeStates(ASeriesIndex, AEdge: Integer; out AItem: TTyStItem): Boolean;
+    { a force graph's preserved state and running instance [Batch 114] }
+    function GraphForceState(ASeriesIndex: Integer): TTyGraphForceState;
     function ItemStates(ASeriesIndex, ADataIndex: Integer;
       out AItem: TTyStItem): Boolean;
     { a line's polyline and area }
@@ -2008,6 +2061,24 @@ type
     function TreeDispatchRoam(const APayload: TTyGraphRoamPayload): Boolean;
     function TreeRoam(ASeriesIndex: Integer; ADX, ADY: Double): Boolean;
     function TreeZoom(ASeriesIndex: Integer; AScale, AOriginX, AOriginY: Double): Boolean;
+    { upstream's sankeyRoam action, on the sankey ASeriesIndex (-1: every
+      sankey): a pan and/or a zoom about a point on its view; the gestures
+      dispatch it when `roam` allows (roamTrigger 'global' by default).
+      [Batch 114] }
+    function SankeyDispatchRoam(const APayload: TTyGraphRoamPayload): Boolean;
+    function SankeyRoam(ASeriesIndex: Integer; ADX, ADY: Double): Boolean;
+    function SankeyZoom(ASeriesIndex: Integer; AScale, AOriginX, AOriginY: Double): Boolean;
+    { the sankey's view (nil: none), owned by the control and gone at the
+      next layout [Batch 114] }
+    function SankeyView(ASeriesIndex: Integer): TTyGraphView;
+    { upstream's dragNode action: node ADataIndex (its raw index) of the
+      sankey ASeriesIndex (-1: every sankey) to localX / localY, box
+      fractions -- what a node drag dispatches on every move. A position
+      not given clears that half. [Batch 114] }
+    function SankeyDragNode(ASeriesIndex, ADataIndex: Integer; AHasX: Boolean;
+      ALocalX: Double; AHasY: Boolean; ALocalY: Double): Boolean;
+    { the solved sankey, for a test to read (Valid False: none) [Batch 114] }
+    function SankeySolved(ASeriesIndex: Integer): TTySankeySolved;
     { whether the row is expanded now, the toggles applied }
     function TreeExpanded(ASeriesIndex, ADataIndex: Integer): Boolean;
     { The centre and zoom as the OPTION now says them -- the series' own
@@ -2217,6 +2288,7 @@ type
       [Batch 84] }
     property OnChartEvent: TTyChartEventHandler read FOnChartEvent write FOnChartEvent;
     property OnTreeRoam: TTyGraphRoamEvent read FOnTreeRoam write FOnTreeRoam;
+    property OnSankeyRoam: TTyGraphRoamEvent read FOnSankeyRoam write FOnSankeyRoam;
     property OnDataZoom: TTyDataZoomEvent read FOnDataZoom write FOnDataZoom;
     { when the enter animations play -- see TTyChartAnimationMode [Batch 89] }
     property AnimationMode: TTyChartAnimationMode read FAnimMode
@@ -2256,6 +2328,8 @@ begin
   Height := 200;
   TabStop := False;   { see the published declaration }
   FRoamSeries := -1;
+  FGraphDragSlot := -1;
+  FSankeyDragSlot := -1;
   FDzFrom := -1;
   FDzPanGrid := -1;
   FDzNow := NaN;
@@ -2488,6 +2562,12 @@ begin
   FTreeBoxHas := nil;
   FPressArmed := False;
   FRoamSeries := -1;
+  FGraphDragSlot := -1;
+  FSankeyDragSlot := -1;
+  { a sankey's dragNode positions and its roam are written into its series
+    option upstream: a new series model has neither [Batch 114] }
+  FSankeyLocal := nil;
+  FSankeyRoam := nil;
   { nor a zoom: the dataZooms are new models, read from what was written }
   FDzRawHas := nil;
   FDzRawStart := nil;
@@ -2856,11 +2936,20 @@ begin
         if s <= High(FTreeRoam) then FTreeRoam[s] := Default(TTyGraphRoamState);
         if s <= High(FTreeBoxHas) then FTreeBoxHas[s] := False;
         if s <= High(FSelInit) then FSelInit[s] := False;
+        if s <= High(FSankeyRoam) then FSankeyRoam[s] := Default(TTyGraphRoamState);
+        if s <= High(FSankeyLocal) then FSankeyLocal[s] := nil;
         Continue;
       end;
       if fate = mfMerged then
       begin
         if s <= High(FGraphRoam) then MergeRoamOverride(FGraphRoam[s], s, opt);
+        { a sankey's roam as a graph's; its dragNode positions live in the
+          node items, which a merge that writes the node list replaces
+          [Batch 114] }
+        if s <= High(FSankeyRoam) then MergeRoamOverride(FSankeyRoam[s], s, opt);
+        if (s <= High(FSankeyLocal)) and (opt <> nil)
+          and ((opt.Find('data') <> nil) or (opt.Find('nodes') <> nil)) then
+          FSankeyLocal[s] := nil;
         if s <= High(FTreeRoam) then MergeRoamOverride(FTreeRoam[s], s, opt);
       end;
     end;
@@ -2889,6 +2978,8 @@ begin
   { ---- what a re-render rebuilds anyway, reset as a notMerge resets it ---- }
   FPressArmed := False;
   FRoamSeries := -1;
+  FGraphDragSlot := -1;
+  FSankeyDragSlot := -1;
   FDzState := nil;
   FDzRoamThrottle := nil;
   FDzRoamBatch := nil;
@@ -7504,6 +7595,25 @@ begin
       bs := sp;
     end;
   end;
+  { AND THE SANKEYS [Batch 114]: roamTrigger 'global' by default; any other
+    word takes the view's area here (upstream: the main group's own box) }
+  for i := 0 to High(FSankeyViews) do
+  begin
+    if FSankeyViews[i] = nil then Continue;
+    sp := FSankeySpecs[i];
+    if AZoom then ok := sp.Roam in [grmZoom, grmBoth]
+    else ok := sp.Roam in [grmPan, grmBoth];
+    if not ok then Continue;
+    if not (sp.RoamGlobal or FSankeyViews[i].ContainTrigger(AX, AY)) then Continue;
+    if (best < 0) or (sp.ZLevel > bs.ZLevel)
+      or ((sp.ZLevel = bs.ZLevel) and (sp.Z > bs.Z))
+      or ((sp.ZLevel = bs.ZLevel) and (sp.Z = bs.Z)
+        and (FBindings[i].SeriesIndex < FBindings[best].SeriesIndex)) then
+    begin
+      best := i;
+      bs := sp;
+    end;
+  end;
   if best >= 0 then Result := FBindings[best].SeriesIndex;
 end;
 
@@ -7512,6 +7622,275 @@ var slot: Integer;
 begin
   slot := SlotOfSeries(ASeriesIndex);
   Result := (slot >= 0) and (FBindings[slot].SeriesType = TyTreeSeriesTypeName);
+end;
+
+function TTyAdvanceChart.IsSankeySeries(ASeriesIndex: Integer): Boolean;
+var slot: Integer;
+begin
+  slot := SlotOfSeries(ASeriesIndex);
+  Result := (slot >= 0) and (FBindings[slot].SeriesType = TySankeySeriesTypeName);
+end;
+
+{ ==================== node drags [Batch 114] ==================== }
+
+procedure TTyAdvanceChart.GraphDragMove(AX, AY: Integer);
+var
+  st: TTyGraphDragStep;
+  slot, si: Integer;
+begin
+  slot := FGraphDragSlot;
+  if (slot < 0) or (slot > High(FGraphs)) or (FGraphs[slot] = nil)
+    or (slot > High(FGraphNodes)) or (FGraphDragNode > High(FGraphNodes[slot])) then
+  begin
+    FGraphDragSlot := -1;
+    Exit;
+  end;
+  si := FBindings[slot].SeriesIndex;
+  st := Default(TTyGraphDragStep);
+  st.Node := FGraphDragNode;
+  st.DX := AX - FGraphDragX;
+  st.DY := AY - FGraphDragY;
+  st.PX := AX;
+  st.PY := AY;
+  st.First := FGraphDragFirst;
+  FGraphDragX := AX;
+  FGraphDragY := AY;
+  FGraphDragFirst := False;
+  if Length(FGraphForce) <= si then SetLength(FGraphForce, si + 1);
+  TyGraphDragStep(FGraphNodes[slot], FGraphEdges[slot], FGraphSpecs[slot],
+    FGraphs[slot], FGraphForce[si], st, FGraphNodeScale[slot]);
+  { A NEW PICTURE, NOT A NEW LAYOUT -- as a roam step }
+  TipReset;
+  DropStatic;
+  inherited Invalidate;
+end;
+
+procedure TTyAdvanceChart.GraphDragEnd;
+var slot, si: Integer;
+begin
+  slot := FGraphDragSlot;
+  FGraphDragSlot := -1;
+  if (slot < 0) or (slot > High(FBindings)) then Exit;
+  si := FBindings[slot].SeriesIndex;
+  { dragend: setUnfixed on a force graph's instance }
+  if (slot <= High(FGraphSpecs)) and (FGraphSpecs[slot].Layout = glForce)
+    and (si >= 0) and (si <= High(FGraphForce)) then
+    TyGraphDragEnd(FGraphForce[si], FGraphDragNode);
+end;
+
+function TTyAdvanceChart.SankeyDragStart(ASlot, ANode, AX, AY: Integer): Boolean;
+var x, y, w, h: Double;
+begin
+  Result := False;
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  if FBindings[ASlot].SeriesType <> TySankeySeriesTypeName then Exit;
+  if (ASlot > High(FSankeys)) or not FSankeys[ASlot].Valid then Exit;
+  if (ANode < 0) or (ANode > High(FSankeys[ASlot].Nodes)) then Exit;
+  if not TySankeyDraggable(FSankeys[ASlot], ANode) then Exit;
+  TySankeyNodeRect(FSankeys[ASlot], ANode, x, y, w, h);
+  FSankeyDragSlot := ASlot;
+  FSankeyDragNode := ANode;
+  FSankeyDragX := AX;
+  FSankeyDragY := AY;
+  FSankeyDragShapeX := x;
+  FSankeyDragShapeY := y;
+  FSankeyDragW := FSankeys[ASlot].Box.W;
+  FSankeyDragH := FSankeys[ASlot].Box.H;
+  Result := True;
+end;
+
+procedure TTyAdvanceChart.SankeyDragMove(AX, AY: Integer);
+var si: Integer; mask: TFPUExceptionMask;
+begin
+  if (FSankeyDragSlot < 0) or (FSankeyDragSlot > High(FBindings)) then
+  begin
+    FSankeyDragSlot := -1;
+    Exit;
+  end;
+  si := FBindings[FSankeyDragSlot].SeriesIndex;
+  { the rect's drift: its own shape moved by the pointer's delta, local to
+    the main group -- a zoom does not scale it -- and the action with the
+    shape over the box its render had }
+  mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    FSankeyDragShapeX := FSankeyDragShapeX + (AX - FSankeyDragX);
+    FSankeyDragShapeY := FSankeyDragShapeY + (AY - FSankeyDragY);
+    FSankeyDragX := AX;
+    FSankeyDragY := AY;
+    SankeyDragNode(si, FSankeyDragNode, True, FSankeyDragShapeX / FSankeyDragW,
+      True, FSankeyDragShapeY / FSankeyDragH);
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
+function TTyAdvanceChart.SankeyDragNode(ASeriesIndex, ADataIndex: Integer;
+  AHasX: Boolean; ALocalX: Double; AHasY: Boolean; ALocalY: Double): Boolean;
+var
+  i, si, n: Integer;
+  ev: TJSONObject;
+begin
+  Result := False;
+  for i := 0 to High(FBindings) do
+  begin
+    if FBindings[i].SeriesType <> TySankeySeriesTypeName then Continue;
+    si := FBindings[i].SeriesIndex;
+    if (ASeriesIndex >= 0) and (si <> ASeriesIndex) then Continue;
+    if (i > High(FSankeys)) or not FSankeys[i].Valid then Continue;
+    n := Length(FSankeys[i].Nodes);
+    { setNodePosition indexes the option's node list: past its end upstream
+      throws }
+    if (ADataIndex < 0) or (ADataIndex >= n) then Continue;
+    if Length(FSankeyLocal) <= si then SetLength(FSankeyLocal, si + 1);
+    if Length(FSankeyLocal[si]) < n then SetLength(FSankeyLocal[si], n);
+    FSankeyLocal[si][ADataIndex].HasX := AHasX;
+    FSankeyLocal[si][ADataIndex].X := ALocalX;
+    FSankeyLocal[si][ADataIndex].HasY := AHasY;
+    FSankeyLocal[si][ADataIndex].Y := ALocalY;
+    Result := True;
+    { the action's event, 'dragnode', with the payload }
+    ev := TJSONObject.Create;
+    try
+      ev.Strings['type'] := 'dragNode';
+      ev.Integers['seriesIndex'] := si;
+      ev.Integers['dataIndex'] := ADataIndex;
+      if AHasX then ev.Floats['localX'] := ALocalX;
+      if AHasY then ev.Floats['localY'] := ALocalY;
+      EmitPayloadEvent('dragnode', ev.AsJSON);
+    finally
+      ev.Free;
+    end;
+  end;
+  if not Result then Exit;
+  { update: 'update' -- the whole chart laid out again }
+  Invalidate;
+  EmitUpdated;
+end;
+
+function TTyAdvanceChart.SankeySolved(ASeriesIndex: Integer): TTySankeySolved;
+var slot: Integer;
+begin
+  Result := Default(TTySankeySolved);
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FSankeys)) then Exit;
+  Result := FSankeys[slot];
+end;
+
+function TTyAdvanceChart.SankeyView(ASeriesIndex: Integer): TTyGraphView;
+var slot: Integer;
+begin
+  Result := nil;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FSankeyViews)) then Exit;
+  Result := FSankeyViews[slot];
+end;
+
+procedure TTyAdvanceChart.FreeSankeyViews;
+var i: Integer;
+begin
+  for i := 0 to High(FSankeyViews) do FreeAndNil(FSankeyViews[i]);
+  FSankeyViews := nil;
+  FSankeySpecs := nil;
+end;
+
+{ THE SANKEY'S VIEW (SankeyView._updateViewCoordSys): data rect and view
+  rect both the box, the roam options read as a graph's -- `roam` false and
+  `roamTrigger` 'global' by default -- the roam's write-back over the
+  option's centre and zoom; and the main group's frame from it. }
+procedure TTyAdvanceChart.SankeyViewOf(ASlot: Integer);
+var
+  si: Integer;
+  node: TJSONData;
+  root: TJSONObject;
+  spec: TTyGraphSpec;
+  centre: TTyGraphCentre;
+  zoom: Double;
+  v: TTyGraphView;
+begin
+  si := FBindings[ASlot].SeriesIndex;
+  spec := TyGraphSpecDefault;
+  node := FOption.ComponentAt('series', si);
+  root := nil;
+  if FOption.Root is TJSONObject then root := TJSONObject(FOption.Root);
+  if node is TJSONObject then
+  begin
+    TyGraphReadRoamOptions(TJSONObject(node), root, spec);
+    if TJSONObject(node).Find('roamTrigger') = nil then spec.RoamGlobal := True;
+  end;
+  spec.Z := FSankeys[ASlot].Z;
+  FSankeySpecs[ASlot] := spec;
+  v := TTyGraphView.CreateXYWH(FSankeys[ASlot].Box, FSankeys[ASlot].Box);
+  FSankeyViews[ASlot] := v;
+  if (si <= High(FSankeyRoam)) and FSankeyRoam[si].Valid then
+  begin
+    centre := FSankeyRoam[si].Centre;
+    zoom := FSankeyRoam[si].Zoom;
+  end
+  else
+  begin
+    centre := spec.Centre;
+    zoom := spec.Zoom;
+  end;
+  v.SetRoam(centre, zoom, spec.HasLimit, spec.LimitMin, spec.LimitMax);
+  TySankeyFrame(FSankeys[ASlot], v.OverallScaleX, v.OverallScaleY, v.OverallX,
+    v.OverallY);
+end;
+
+function TTyAdvanceChart.SankeyDispatchRoam(const APayload: TTyGraphRoamPayload): Boolean;
+var
+  i, si: Integer;
+  p: TTyGraphRoamPayload;
+begin
+  Result := False;
+  if APayload.HasZoom and (IsNan(APayload.Zoom) or IsInfinite(APayload.Zoom)
+    or (APayload.Zoom <= 0)) then Exit;
+  if APayload.HasPan and (IsNan(APayload.DX) or IsNan(APayload.DY)) then Exit;
+  for i := 0 to High(FSankeyViews) do
+  begin
+    if FSankeyViews[i] = nil then Continue;
+    si := FBindings[i].SeriesIndex;
+    if (APayload.SeriesIndex >= 0) and (si <> APayload.SeriesIndex) then Continue;
+    if Length(FSankeyRoam) <= si then SetLength(FSankeyRoam, si + 1);
+    TyGraphRoamStep(FSankeyViews[i], FSankeySpecs[i], APayload, FSankeyRoam[si]);
+    Result := True;
+    if Assigned(FOnSankeyRoam) then
+    begin
+      p := APayload;
+      p.SeriesIndex := si;
+      FOnSankeyRoam(Self, p);
+    end;
+  end;
+  if not Result then Exit;
+  { the series group's transform changes; everything on the canvas follows
+    it -- laid out again here, as the tree's roam is }
+  Invalidate;
+  EmitUpdated;
+end;
+
+function TTyAdvanceChart.SankeyRoam(ASeriesIndex: Integer; ADX, ADY: Double): Boolean;
+var p: TTyGraphRoamPayload;
+begin
+  p := Default(TTyGraphRoamPayload);
+  p.SeriesIndex := ASeriesIndex;
+  p.HasPan := True;
+  p.DX := ADX;
+  p.DY := ADY;
+  Result := SankeyDispatchRoam(p);
+end;
+
+function TTyAdvanceChart.SankeyZoom(ASeriesIndex: Integer; AScale, AOriginX,
+  AOriginY: Double): Boolean;
+var p: TTyGraphRoamPayload;
+begin
+  p := Default(TTyGraphRoamPayload);
+  p.SeriesIndex := ASeriesIndex;
+  p.HasZoom := True;
+  p.Zoom := AScale;
+  p.OriginX := AOriginX;
+  p.OriginY := AOriginY;
+  Result := SankeyDispatchRoam(p);
 end;
 
 procedure TTyAdvanceChart.MouseDown(Button: TMouseButton; Shift: TShiftState;
@@ -7533,7 +7912,11 @@ begin
   FPressX := X;
   FPressY := Y;
   FPressArmed := True;
-  { A PRESS ON A DRAGGABLE NODE IS THE NODE'S, not the view's. }
+  FGraphDragSlot := -1;
+  FSankeyDragSlot := -1;
+  { A PRESS ON A DRAGGABLE NODE IS THE NODE'S, not the view's: zrender's
+    Draggable takes it (dragstart), and the RoamController walks up from the
+    target and finds `draggable` -- a node's label is its node's. }
   d := HitTestAt(X, Y, el);
   if (d.SeriesIndex >= 0) and not d.IsEdge then
   begin
@@ -7542,7 +7925,22 @@ begin
       and (slot <= High(FGraphLaidOut)) and FGraphLaidOut[slot] then
       for k := 0 to High(FGraphNodes[slot]) do
         if (FGraphNodes[slot][k].Row = d.DataIndex)
-          and FGraphNodes[slot][k].Draggable then Exit;
+          and FGraphNodes[slot][k].Draggable then
+        begin
+          { only a graph on a view is dragged here [Batch 114] }
+          if (slot <= High(FGraphs)) and (FGraphs[slot] <> nil) then
+          begin
+            FGraphDragSlot := slot;
+            FGraphDragNode := k;
+            FGraphDragX := X;
+            FGraphDragY := Y;
+            FGraphDragFirst := True;
+          end;
+          Exit;
+        end;
+    { a sankey's node, `draggable` along item -> level -> series (default
+      true) [Batch 114] }
+    if SankeyDragStart(slot, d.DataIndex, X, Y) then Exit;
   end;
   { A PRESS ON A dataZoom (a handle, the move bar, the slider body, a
     zooming grid) is the dataZoom's }
@@ -7565,6 +7963,9 @@ begin
   if Button = mbLeft then
   begin
     FRoamSeries := -1;
+    { dragend [Batch 114] }
+    GraphDragEnd;
+    FSankeyDragSlot := -1;
     { the target under the release, before anything moves }
     d := HitTestAt(X, Y, el);
     cap := (el >= 0) and (FPaintList <> nil)
@@ -7608,6 +8009,8 @@ begin
     a mouseup where the pointer was last would end it -- its commit and all;
     the widgetset's own mouseup, when it follows, finds nothing to end. }
   FRoamSeries := -1;
+  GraphDragEnd;
+  FSankeyDragSlot := -1;
   FPressArmed := False;
   if (FDzDrag.Kind <> dtkNone) or (FDzPanGrid >= 0) then
     DataZoomPointer(dpUp, FDzLastX, FDzLastY, [], 0);
@@ -7632,6 +8035,7 @@ begin
   si := RoamSeriesAt(MousePos.X, MousePos.Y, True);
   if si < 0 then Exit;
   if IsTreeSeries(si) then Result := TreeZoom(si, s, MousePos.X, MousePos.Y)
+  else if IsSankeySeries(si) then Result := SankeyZoom(si, s, MousePos.X, MousePos.Y)
   else Result := GraphZoom(si, s, MousePos.X, MousePos.Y);
 end;
 
@@ -8679,10 +9083,11 @@ end;
   survives; then the labels placed. [Batch 79] }
 procedure TTyAdvanceChart.SolveSankeys(APPI: Integer);
 var
-  i, k: Integer;
+  i, k, q: Integer;
   stops: TTyVisualColorArray;
   d, node: TJSONData;
   base, lk: TTyLabelSpec;
+  edgeSpecs: TTyLabelSpecArray;
   ls: TTyStyleSet;
 
   procedure StopsOf(AData: TJSONData);
@@ -8704,8 +9109,11 @@ var
 begin
   FSankeys := nil;
   FSankeyInks := nil;
+  FreeSankeyViews;
   SetLength(FSankeys, Length(FBindings));
   SetLength(FSankeyInks, Length(FBindings));
+  SetLength(FSankeyViews, Length(FBindings));
+  SetLength(FSankeySpecs, Length(FBindings));
   for i := 0 to High(FBindings) do
   begin
     FSankeys[i] := Default(TTySankeySolved);
@@ -8714,6 +9122,10 @@ begin
     if (not FBindings[i].Resolved) or FBindings[i].Hidden then Continue;
     FSankeys[i] := TySankeySolve(FOption, FBindings[i].SeriesIndex, FLastRect, APPI);
     if not FSankeys[i].Valid then Continue;
+    { the drags' positions, and the view with its roam [Batch 114] }
+    if FBindings[i].SeriesIndex <= High(FSankeyLocal) then
+      FSankeys[i].Local := Copy(FSankeyLocal[FBindings[i].SeriesIndex]);
+    SankeyViewOf(i);
     { the palette: series.get('color') falls through to the chart's }
     d := nil;
     node := FOption.ComponentAt('series', FBindings[i].SeriesIndex);
@@ -8734,9 +9146,17 @@ begin
     base.DefaultText := tldName;
     FSankeyInks[i].Label_ := TyLabelSpecOf(FOption, FBindings[i].SeriesIndex, base);
     FSankeyInks[i].ItemLabels := TySankeyLabelSpecs(FSankeys[i], FSankeyInks[i].Label_);
+    { THE EDGE LABELS' specs after the nodes': an edge caption's ItemSpec is
+      the node count + its index + 1 [Batch 114] }
+    lk := LabelBaseFor(i);
+    edgeSpecs := TySankeyEdgeLabelSpecs(FSankeys[i], lk);
+    k := Length(FSankeyInks[i].ItemLabels);
+    SetLength(FSankeyInks[i].ItemLabels, k + Length(edgeSpecs));
+    for q := 0 to High(edgeSpecs) do FSankeyInks[i].ItemLabels[k + q] := edgeSpecs[q];
     ls := ActiveController.Model.ResolveStyle('TyAdvChartSankeyLink', '', []);
     FSankeyInks[i].LinkColour := TTyChartColor(ls.Background.Color);
     TySankeyLabels(FSankeys[i], SeriesModelName(FBindings[i].SeriesIndex));
+    TySankeyEdgeLabels(FSankeys[i], SeriesModelName(FBindings[i].SeriesIndex));
   end;
 end;
 
@@ -8838,6 +9258,7 @@ procedure TTyAdvanceChart.FreeTreeViews;
 var i: Integer;
 begin
   for i := 0 to High(FTreeViews) do FreeAndNil(FTreeViews[i]);
+  FreeSankeyViews;
   FTreeViews := nil;
   FTreeSpecs := nil;
 end;
@@ -9031,6 +9452,198 @@ begin
         FStores[ASlot].DimIndexOf(FBindings[ASlot].ValueAxis.Dim)
     else
       Result.LabelValueDim := FStores[ASlot].DimIndexOf('value');
+  end;
+  GraphEdgeLabels(ASlot, Result);
+end;
+
+{ THE EDGE LABELS of one graph [Batch 114]: per edge, the spec (the series'
+  `edgeLabel` under the edge's own `label` -- an edge item's `label` resolves
+  to the series' `edgeLabel`, GraphSeries' resolveParentPath), whether it
+  shows, its words, its position and distance; and the line's frame. }
+procedure TTyAdvanceChart.GraphEdgeLabels(ASlot: Integer; var AInk: TTyGraphInk);
+var
+  i, n, raw: Integer;
+  sNode, item, lab, own: TJSONObject;
+  links, d, fmt, nd, nv: TJSONData;
+  base, spec: TTyLabelSpec;
+  scale, dx, dy: Double;
+  posWord: string;
+  prm: TTyChartCallbackParams;
+  vars: array of TTyStringArray;
+  nodeHas, nodeNum: Boolean;
+  nodeVal: Double;
+  nodeText: string;
+
+  { the first of the edge's own label and the series' edgeLabel that holds
+    the key (null falls through) }
+  function LabKey(const AKey: string): TJSONData;
+  begin
+    Result := nil;
+    if own <> nil then Result := own.Find(AKey);
+    if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
+    if (Result = nil) and (lab <> nil) then Result := lab.Find(AKey);
+    if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
+  end;
+
+  function JsNumOf(AData: TJSONData): Double;
+  begin
+    Result := NaN;
+    if AData = nil then Exit;
+    case AData.JSONType of
+      jtNumber: Result := AData.AsFloat;
+      jtBoolean: if AData.AsBoolean then Result := 1 else Result := 0;
+      jtString: Result := TyJsToNumber(AData.AsString);
+      jtNull: Result := 0;
+      jtArray:
+        if AData.Count = 0 then Result := 0
+        else if AData.Count = 1 then Result := JsNumOf(AData.Items[0]);
+    end;
+  end;
+
+begin
+  n := 0;
+  if (ASlot >= 0) and (ASlot <= High(FGraphEdges)) then n := Length(FGraphEdges[ASlot]);
+  SetLength(AInk.EdgeLabelShow, n);
+  SetLength(AInk.EdgeLabelText, n);
+  SetLength(AInk.EdgeLabelPos, n);
+  SetLength(AInk.EdgeLabelDistX, n);
+  SetLength(AInk.EdgeLabelDistY, n);
+  SetLength(AInk.EdgeLabelSpecs, n);
+  if FLastPPI > 0 then scale := FLastPPI / 96 else scale := 1;
+  { the line's frame: the view's overall transform, the label scaled back by
+    1 / its scaleX (every ancestor's scaleX, and only the main group has one) }
+  AInk.HasFrame := (ASlot <= High(FGraphs)) and (FGraphs[ASlot] <> nil);
+  if AInk.HasFrame then
+  begin
+    AInk.Frame.SX := FGraphs[ASlot].OverallScaleX;
+    AInk.Frame.SY := FGraphs[ASlot].OverallScaleY;
+    AInk.Frame.X := FGraphs[ASlot].OverallX;
+    AInk.Frame.Y := FGraphs[ASlot].OverallY;
+    if (AInk.Frame.SX = 0) or IsNan(AInk.Frame.SX) then AInk.Frame.InvScale := 1
+    else AInk.Frame.InvScale := 1 / AInk.Frame.SX;
+  end;
+  if n = 0 then Exit;
+  sNode := nil;
+  d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if d is TJSONObject then sNode := TJSONObject(d);
+  if sNode = nil then Exit;
+  lab := nil;
+  d := sNode.Find('edgeLabel');
+  if d is TJSONObject then lab := TJSONObject(d);
+  links := sNode.Find('edges');
+  if (links = nil) or (links.JSONType = jtNull) or ((links.JSONType = jtBoolean) and not links.AsBoolean)
+    or ((links.JSONType = jtString) and (links.AsString = '')) then
+    links := sNode.Find('links');
+  base := LabelBaseFor(ASlot);
+  base.Show := False;
+  for i := 0 to n - 1 do
+  begin
+    own := nil;
+    item := nil;
+    if (links is TJSONArray) and (FGraphEdges[ASlot][i].Row >= 0)
+      and (FGraphEdges[ASlot][i].Row < links.Count)
+      and (TJSONArray(links).Items[FGraphEdges[ASlot][i].Row] is TJSONObject) then
+      item := TJSONObject(TJSONArray(links).Items[FGraphEdges[ASlot][i].Row]);
+    if item <> nil then
+    begin
+      d := item.Find('label');
+      if d is TJSONObject then own := TJSONObject(d);
+    end;
+    spec := base;
+    if lab <> nil then spec := TyLabelSpecOfNode(lab, sNode, spec);
+    if own <> nil then spec := TyLabelSpecOfNode(own, sNode, spec);
+    { the edge places its own words: no table position, no offset }
+    spec.Position := tlpInside;
+    spec.OffsetXLogical := 0;
+    spec.OffsetYLogical := 0;
+    spec.Overflow := tloNone;
+    AInk.EdgeLabelSpecs[i] := spec;
+    AInk.EdgeLabelShow[i] := spec.Show;
+    { `position || 'middle'`; `distance`, a pair or one for both (default 5) }
+    d := LabKey('position');
+    if (d <> nil) and (d.JSONType = jtString) then posWord := d.AsString
+    else posWord := '';
+    AInk.EdgeLabelPos[i] := TyGraphLabelPosOf(posWord);
+    dx := 5;
+    dy := 5;
+    d := LabKey('distance');
+    if d is TJSONArray then
+    begin
+      dx := NaN;
+      dy := NaN;
+      if (d.Count > 0) and (d.Items[0].JSONType = jtNumber) then dx := d.Items[0].AsFloat;
+      if (d.Count > 1) and (d.Items[1].JSONType = jtNumber) then dy := d.Items[1].AsFloat;
+    end
+    else if (d <> nil) and (d.JSONType = jtNumber) then
+    begin
+      dx := d.AsFloat;
+      dy := dx;
+    end;
+    AInk.EdgeLabelDistX[i] := dx * scale;
+    AInk.EdgeLabelDistY[i] := dy * scale;
+    { THE WORDS: the formatter (a handler or a template over the EDGE's data:
+      a the series, b the edge data's name, c its value), else the default
+      text -- the NODE value at the edge's index (TyGraphEdgeDefaultText) }
+    fmt := LabKey('formatter');
+    if (fmt <> nil) and (fmt.JSONType = jtString) and TyChartIsHandlerRef(fmt.AsString) then
+    begin
+      prm := TyChartBlankParams;
+      prm.ComponentType := 'series';
+      prm.SeriesType := TyGraphSeriesTypeName;
+      prm.SeriesIndex := FBindings[ASlot].SeriesIndex;
+      prm.SeriesName := SeriesModelName(FBindings[ASlot].SeriesIndex);
+      prm.DataType := 'edge';
+      prm.Status := 'normal';
+      prm.DataIndex := i;
+      prm.RawDataIndex := i;
+      prm.Name := FGraphEdges[ASlot][i].DataName;
+      prm.ValueText := FGraphEdges[ASlot][i].ValueText;
+      SetLength(prm.Values, 1);
+      prm.Values[0] := FGraphEdges[ASlot][i].Value;
+      AInk.EdgeLabelText[i] := TyChartRunHandler(fmt.AsString, TyChartOneParams(prm));
+    end
+    else if (fmt <> nil) and (fmt.JSONType = jtString) then
+    begin
+      vars := nil;
+      SetLength(vars, 1);
+      SetLength(vars[0], 3);
+      vars[0][0] := SeriesModelName(FBindings[ASlot].SeriesIndex);
+      vars[0][1] := FGraphEdges[ASlot][i].DataName;
+      vars[0][2] := FGraphEdges[ASlot][i].ValueText;
+      AInk.EdgeLabelText[i] := TyJsFormatTpl(fmt.AsString, 3, vars);
+    end
+    else
+    begin
+      { getRawValue(idx) of the NODE data: the node at the edge's own index
+        among the survivors, its raw `value` (the item itself when it is not
+        an object) }
+      nodeHas := False;
+      nodeNum := False;
+      nodeVal := NaN;
+      nodeText := '';
+      if i <= High(FGraphNodes[ASlot]) then
+      begin
+        raw := FGraphNodes[ASlot][i].RawRow;
+        { `data || nodes` -- an empty array is truthy }
+        nd := sNode.Find('data');
+        if (nd = nil) or (nd.JSONType = jtNull) then nd := sNode.Find('nodes');
+        if (nd is TJSONArray) and (raw >= 0) and (raw < nd.Count) then
+        begin
+          nv := TJSONArray(nd).Items[raw];
+          if nv is TJSONObject then nv := TJSONObject(nv).Find('value');
+          nodeHas := (nv <> nil) and (nv.JSONType <> jtNull);
+          if nodeHas then
+          begin
+            nodeVal := JsNumOf(nv);
+            nodeNum := (nv.JSONType <> jtObject)
+              and not ((nv is TJSONArray) and (nv.Count > 1));
+            nodeText := TyGraphJsText(nv);
+          end;
+        end;
+      end;
+      AInk.EdgeLabelText[i] := TyGraphEdgeDefaultText(nodeHas, nodeNum, nodeVal,
+        nodeText, FGraphEdges[ASlot][i].DataName);
+    end;
   end;
 end;
 
@@ -11308,6 +11921,11 @@ begin
           if Length(specs) <= FBindings[i].SeriesIndex then
             SetLength(specs, FBindings[i].SeriesIndex + 1);
           specs[FBindings[i].SeriesIndex] := gi.Label_;
+          { THE EDGE LABELS' specs, one per edge: an edge's caption names its
+            own by ItemSpec = its index + 1 [Batch 114] }
+          if Length(itemSpecs) <= FBindings[i].SeriesIndex then
+            SetLength(itemSpecs, FBindings[i].SeriesIndex + 1);
+          itemSpecs[FBindings[i].SeriesIndex] := gi.EdgeLabelSpecs;
         end;
         Continue;
       end;
@@ -14075,7 +14693,8 @@ begin
   else if t = 'candlestick' then Result := sskCandle
   else if t = TyPictorialSeriesTypeName then Result := sskPictorial
   else if t = TySunburstSeriesTypeName then Result := sskSunburst
-  else if t = 'boxplot' then Result := sskBox;
+  else if t = 'boxplot' then Result := sskBox
+  else if t = TySankeySeriesTypeName then Result := sskSankey;
   { a line on a calendar is not drawn at all }
   if (FBindings[ASlot].CalendarIndex >= 0) and (t = 'line') then Result := sskNone;
 end;
@@ -14168,7 +14787,10 @@ begin
     { a heatmap's, a funnel's and a pictorial bar's: the border only
       (HeatmapSeries.ts:130, FunnelSeries.ts:200, PictorialBarSeries.ts:173)
       [Batch 90] }
-    sskRect, sskFunnel, sskPictorial:
+    sskRect, sskFunnel, sskPictorial,
+    { a sankey node's: select.itemStyle.borderColor (SankeySeries.ts)
+      [Batch 114] }
+    sskSankey:
       TyStSetColor(base, stkStroke, StPrimaryInk);
   end;
   item^.Host.Decl[stnSelect] := TyStOverlay(base,
@@ -14573,17 +15195,40 @@ begin
     FSt[s].AreaIdx := nil;
     FSt[s].FollowIdx := nil;
     FSt[s].PartIdx := nil;
+    FSt[s].EdgeHostIdx := nil;
+    FSt[s].EdgeLabelIdx := nil;
   end;
   for slot := 0 to High(FBindings) do
   begin
     if slot > High(FStores) then Break;
-    if FBindings[slot].Hidden or (FStores[slot] = nil) then Continue;
+    if FBindings[slot].Hidden then Continue;
+    { a sankey's rows are its nodes, whatever its store holds [Batch 114] }
+    if (FStores[slot] = nil) and (StKindOf(slot) <> sskSankey) then Continue;
     s := FBindings[slot].SeriesIndex;
     if s < 0 then Continue;
     FSt[s].Kind := StKindOf(slot);
     FSt[s].IsLine := FBindings[slot].SeriesType = 'line';
     if FSt[s].Kind = sskNone then Continue;
-    k := FStores[slot].RawCount;
+    if FSt[s].Kind = sskSankey then
+    begin
+      if (slot > High(FSankeys)) or not FSankeys[slot].Valid then
+      begin
+        FSt[s].Kind := sskNone;
+        Continue;
+      end;
+      k := Length(FSankeys[slot].Nodes);
+      n := Length(FSankeys[slot].Edges);
+      if Length(FSt[s].EdgeRows) < n then SetLength(FSt[s].EdgeRows, n);
+      SetLength(FSt[s].EdgeHostIdx, n);
+      SetLength(FSt[s].EdgeLabelIdx, n);
+      for i := 0 to n - 1 do
+      begin
+        FSt[s].EdgeHostIdx[i] := -1;
+        FSt[s].EdgeLabelIdx[i] := -1;
+      end;
+    end
+    else
+      k := FStores[slot].RawCount;
     if Length(FSt[s].Rows) < k then SetLength(FSt[s].Rows, k);
     SetLength(FSt[s].HostIdx, k);
     SetLength(FSt[s].LabelIdx, k);
@@ -14604,6 +15249,7 @@ begin
     if FSt[s].Kind = sskNone then
     begin
       FSt[s].Rows := nil;
+      FSt[s].EdgeRows := nil;
       FSt[s].Run := Default(TTyStItem);
       FSt[s].Area := Default(TTyStItem);
       FSt[s].IsBlured := False;
@@ -14616,6 +15262,30 @@ begin
     if el.Datum.Kind <> ctkSeries then Continue;
     s := el.Datum.SeriesIndex;
     if (s < 0) or (s > High(FSt)) or (FSt[s].Kind = sskNone) then Continue;
+    { A SANKEY: its links by link index, its nodes by node index [Batch 114] }
+    if FSt[s].Kind = sskSankey then
+    begin
+      raw := el.Datum.DataIndex;
+      if el.Datum.IsEdge then
+      begin
+        if (raw < 0) or (raw > High(FSt[s].EdgeHostIdx)) then Continue;
+        if el.Caption.FontSizeLogical > 0 then
+        begin
+          if FSt[s].EdgeLabelIdx[raw] < 0 then FSt[s].EdgeLabelIdx[raw] := k;
+        end
+        else if not el.Silent and (FSt[s].EdgeHostIdx[raw] < 0) then
+          FSt[s].EdgeHostIdx[raw] := k;
+        Continue;
+      end;
+      if (raw < 0) or (raw > High(FSt[s].HostIdx)) then Continue;
+      if el.Caption.FontSizeLogical > 0 then
+      begin
+        if FSt[s].LabelIdx[raw] < 0 then FSt[s].LabelIdx[raw] := k;
+      end
+      else if not el.Silent and (FSt[s].HostIdx[raw] < 0) then
+        FSt[s].HostIdx[raw] := k;
+      Continue;
+    end;
     if el.Datum.IsEdge then Continue;
     if el.Datum.DataIndex < 0 then
     begin
@@ -14699,6 +15369,13 @@ begin
     for raw := 0 to High(FSt[s].Rows) do
       if FSt[s].Rows[raw].Host.Exists then TyStApplyItem(FSt[s].Rows[raw]);
     if FSt[s].IsLine then StDeclareLine(slot, AList);
+    { a sankey's links [Batch 114] }
+    if FSt[s].Kind = sskSankey then
+      for raw := 0 to High(FSt[s].EdgeRows) do
+        if (raw > High(FSt[s].EdgeHostIdx)) or (FSt[s].EdgeHostIdx[raw] < 0) then
+          FSt[s].EdgeRows[raw] := Default(TTyStItem)
+        else
+          StDeclareEdge(slot, raw, AList);
   end;
   FStDirty := False;
   StWrite(AList);
@@ -14878,6 +15555,25 @@ begin
         StWriteHost(el, FSt[s].Area.Host, FStProxied);
         AList.SetElement(FSt[s].AreaIdx[k], el);
       end;
+    { a sankey's links and their labels [Batch 114] }
+    for raw := 0 to Min(High(FSt[s].EdgeHostIdx), High(FSt[s].EdgeRows)) do
+    begin
+      if FSt[s].EdgeHostIdx[raw] < 0 then Continue;
+      item := @FSt[s].EdgeRows[raw];
+      if item^.Host.States <> [] then
+      begin
+        el := AList.Element(FSt[s].EdgeHostIdx[raw]);
+        StWriteHost(el, item^.Host, FStProxied);
+        AList.SetElement(FSt[s].EdgeHostIdx[raw], el);
+      end;
+      if (FSt[s].EdgeLabelIdx[raw] >= 0) and item^.Label_.Exists
+        and (item^.Label_.States <> []) then
+      begin
+        el := AList.Element(FSt[s].EdgeLabelIdx[raw]);
+        StWriteLabel(el, item^.Label_, FStProxied);
+        AList.SetElement(FSt[s].EdgeLabelIdx[raw], el);
+      end;
+    end;
   end;
 end;
 
@@ -14899,6 +15595,9 @@ begin
     if FSt[s].Area.Host.Exists
       and TyStUseStates(FSt[s].Area.Host, TyStTargetStates(FSt[s].Area.Host)) then
       Result := True;
+    for raw := 0 to High(FSt[s].EdgeRows) do
+      if FSt[s].EdgeRows[raw].Host.Exists and TyStApplyItem(FSt[s].EdgeRows[raw]) then
+        Result := True;
   end;
 end;
 
@@ -15291,9 +15990,14 @@ begin
   if (ASeriesIndex < 0) or (ASeriesIndex > High(FSt)) then Exit;
   if FSt[ASeriesIndex].Kind = sskNone then Exit;
   slot := SlotOfSeries(ASeriesIndex);
-  if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Exit;
-  if (AInnerRow < 0) or (AInnerRow >= FStores[slot].Count) then Exit;
-  raw := FStores[slot].GetRawIndex(AInnerRow);
+  if FSt[ASeriesIndex].Kind = sskSankey then
+    raw := AInnerRow
+  else
+  begin
+    if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Exit;
+    if (AInnerRow < 0) or (AInnerRow >= FStores[slot].Count) then Exit;
+    raw := FStores[slot].GetRawIndex(AInnerRow);
+  end;
   if (raw < 0) or (raw > High(FSt[ASeriesIndex].Rows)) then Exit;
   if not FSt[ASeriesIndex].Rows[raw].Host.Exists then Exit;
   Result := @FSt[ASeriesIndex].Rows[raw];
@@ -15359,9 +16063,143 @@ begin
     Result[2] := StSeriesNode(ASeriesIndex);
     Exit;
   end;
+  { A SANKEY NODE'S CHAIN: its item, the level of its layout depth, the
+    series (SankeySeries' wrapped getItemModel) [Batch 114] }
+  if (slot >= 0) and (slot <= High(FSankeys)) and FSankeys[slot].Valid
+    and (FBindings[slot].SeriesType = TySankeySeriesTypeName) then
+  begin
+    SetLength(Result, 3);
+    Result[0] := nil;
+    Result[1] := nil;
+    if (ARaw >= 0) and (ARaw <= High(FSankeys[slot].Nodes)) then
+    begin
+      Result[0] := FSankeys[slot].Nodes[ARaw].Item;
+      Result[1] := TySankeyLevel(FSankeys[slot], FSankeys[slot].Nodes[ARaw].Depth);
+    end;
+    Result[2] := StSeriesNode(ASeriesIndex);
+    Exit;
+  end;
   SetLength(Result, 2);
   Result[0] := StItemNode(ASeriesIndex, ARaw);
   Result[1] := StSeriesNode(ASeriesIndex);
+end;
+
+{ A SANKEY LINK'S CHAIN: its item, the level of its SOURCE's depth, the
+  series [Batch 114] }
+function TTyAdvanceChart.StEdgeNodes(ASeriesIndex, AEdge: Integer): TTyStNodeArray;
+var slot: Integer;
+begin
+  Result := nil;
+  SetLength(Result, 3);
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot >= 0) and (slot <= High(FSankeys)) and FSankeys[slot].Valid
+    and (AEdge >= 0) and (AEdge <= High(FSankeys[slot].Edges)) then
+  begin
+    Result[0] := FSankeys[slot].Edges[AEdge].Item;
+    Result[1] := TySankeyLevel(FSankeys[slot],
+      FSankeys[slot].Nodes[FSankeys[slot].Edges[AEdge].Source].Depth);
+  end;
+  Result[2] := StSeriesNode(ASeriesIndex);
+end;
+
+function TTyAdvanceChart.StIsSankey(ASeriesIndex: Integer): Boolean;
+begin
+  Result := (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSt))
+    and (FSt[ASeriesIndex].Kind = sskSankey);
+end;
+
+{ applyCurveStyle on a state's style: 'source' / 'target' take that end
+  node's colour [Batch 114] }
+procedure TTyAdvanceChart.StSankeyCurveFill(ASlot, AEdge: Integer;
+  const ANodes: TTyStNodeArray; const AState: string; var AObj: TTyStObject);
+var w: string; has: Boolean; n: Integer;
+begin
+  w := TyStReadString(ANodes, [AState, 'lineStyle', 'color'], has);
+  if not has then Exit;
+  if (w <> 'source') and (w <> 'target') then Exit;
+  if w = 'source' then n := FSankeys[ASlot].Edges[AEdge].Source
+  else n := FSankeys[ASlot].Edges[AEdge].Target;
+  if FSankeys[ASlot].Nodes[n].HasColour then
+    TyStSetColor(AObj, stkFill, FSankeys[ASlot].Nodes[n].Colour);
+end;
+
+{ ONE SANKEY LINK INTO THE STATE MACHINE [Batch 114]: the band a path whose
+  states are setStatesStylesFromModel(curve, edgeModel, 'lineStyle') --
+  getItemStyle of [state].lineStyle, the words through applyCurveStyle --
+  the series' emphasis opacity 0.5 under what is declared; its label the
+  band's list. }
+procedure TTyAdvanceChart.StDeclareEdge(ASlot, AEdge: Integer; AList: TTyPaintList);
+var
+  s, idx: Integer;
+  item: PTyStItem;
+  host, cap: TTyChartElement;
+  nodes: TTyStNodeArray;
+  has, bolder, disabled, was, prevWas: Boolean;
+  prev: TTyStNames;
+  n: TTyStName;
+  ss: Double;
+  obj: TTyStObject;
+begin
+  s := FBindings[ASlot].SeriesIndex;
+  item := @FSt[s].EdgeRows[AEdge];
+  host := AList.Element(FSt[s].EdgeHostIdx[AEdge]);
+  nodes := StEdgeNodes(s, AEdge);
+  prevWas := item^.Host.Exists;
+  prev := item^.Host.States;
+  item^.Host.Exists := True;
+  item^.Host.IsPath := True;
+  disabled := TyStReadBool(nodes, ['emphasis', 'disabled'], has);
+  item^.Host.Proxy := not disabled;
+  for n := Low(TTyStName) to High(TTyStName) do item^.Host.HasState[n] := True;
+  item^.Host.Rest := StRestOf(host);
+  for n := Low(TTyStName) to High(TTyStName) do
+  begin
+    obj := TyStReadStyle(nodes, cStNames[n], 'lineStyle:item', bolder);
+    StSankeyCurveFill(ASlot, AEdge, nodes, cStNames[n], obj);
+    item^.Host.Decl[n] := obj;
+  end;
+  { SankeySeries' defaultOption: emphasis.lineStyle.opacity 0.5 }
+  if not item^.Host.Decl[stnEmphasis].Has[stkOpacity] then
+    TyStSetNum(item^.Host.Decl[stnEmphasis], stkOpacity, 0.5);
+  { the label: the band's list, the blur proxy's tenth }
+  idx := FSt[s].EdgeLabelIdx[AEdge];
+  was := item^.Label_.Exists;
+  if idx < 0 then
+    item^.Label_ := Default(TTyStElement)
+  else
+  begin
+    cap := AList.Element(idx);
+    item^.Label_.Exists := True;
+    item^.Label_.IsPath := False;
+    item^.Label_.Proxy := not disabled;
+    for n := Low(TTyStName) to High(TTyStName) do
+    begin
+      item^.Label_.HasState[n] := True;
+      obj := TyStNoObject;
+      ss := TyStReadNumber(nodes, [cStNames[n], 'edgeLabel', 'opacity'], has);
+      if has and not IsNan(ss) then TyStSetNum(obj, stkOpacity, ss);
+      item^.Label_.Decl[n] := obj;
+    end;
+    item^.Label_.Rest := StLabelRestOf(cap);
+    if not was then
+    begin
+      item^.Label_.Cur := item^.Label_.Rest;
+      item^.Label_.States := [];
+      if item^.Host.Exists and (item^.Host.States <> []) then
+        TyStUseStates(item^.Label_, item^.Host.States);
+    end;
+  end;
+  if not prevWas then
+  begin
+    item^.Host.Cur := item^.Host.Rest;
+    item^.Host.States := [];
+  end
+  else if FStRerender then
+  begin
+    TyStClearItem(item^);
+    if prev <> [] then TyStUseItemStates(item^, prev);
+  end;
+  TyStApplyItem(item^);
 end;
 
 function TTyAdvanceChart.StItemFocus(ASeriesIndex, ARaw: Integer;
@@ -15384,6 +16222,18 @@ begin
   d := TyStFind(nodes, ['emphasis', 'focus']);
   AScope := TyStScopeOf(TyStFind(nodes, ['emphasis', 'blurScope']));
   slot := SlotOfSeries(ASeriesIndex);
+  { A SANKEY'S WORDS ARE TWO INDEX SETS (SankeyView: adjacency and
+    trajectory become getAdjacentDataIndices / getTrajectoryDataIndices)
+    [Batch 114] }
+  if StIsSankey(ASeriesIndex) and (d <> nil) and (d.JSONType = jtString)
+    and ((d.AsString = 'adjacency') or (d.AsString = 'trajectory')) then
+  begin
+    Result := Default(TTyStFocus);
+    Result.Kind := sfkIndices;
+    TySankeyFocusSets(FSankeys[slot], False, ARaw, d.AsString = 'trajectory',
+      Result.Indices, Result.EdgeIndices);
+    Exit;
+  end;
   if not ((slot >= 0) and (slot <= High(FSunbursts)) and FSunbursts[slot].Valid
     and (ARaw >= 0) and (ARaw <= High(FSunbursts[slot].Hier.Nodes))) then
     Exit(TyStFocusOf(d));
@@ -15418,6 +16268,31 @@ begin
     end;
 end;
 
+{ A SANKEY LINK'S focus: along link -> level -> series, the two words its
+  index sets [Batch 114] }
+function TTyAdvanceChart.StEdgeFocus(ASeriesIndex, AEdge: Integer;
+  out AScope: TTyStScope): TTyStFocus;
+var
+  nodes: TTyStNodeArray;
+  d: TJSONData;
+  slot: Integer;
+begin
+  nodes := StEdgeNodes(ASeriesIndex, AEdge);
+  d := TyStFind(nodes, ['emphasis', 'focus']);
+  AScope := TyStScopeOf(TyStFind(nodes, ['emphasis', 'blurScope']));
+  slot := SlotOfSeries(ASeriesIndex);
+  if (d <> nil) and (d.JSONType = jtString)
+    and ((d.AsString = 'adjacency') or (d.AsString = 'trajectory')) then
+  begin
+    Result := Default(TTyStFocus);
+    Result.Kind := sfkIndices;
+    TySankeyFocusSets(FSankeys[slot], True, AEdge, d.AsString = 'trajectory',
+      Result.Indices, Result.EdgeIndices);
+    Exit;
+  end;
+  Result := TyStFocusOf(d);
+end;
+
 function TTyAdvanceChart.StSeriesFocus(ASeriesIndex: Integer;
   out AScope: TTyStScope): TTyStFocus;
 var nodes: array[0..0] of TJSONObject;
@@ -15431,6 +16306,7 @@ function TTyAdvanceChart.StInnerRaw(ASeriesIndex, AInner: Integer): Integer;
 var slot: Integer;
 begin
   Result := -1;
+  if StIsSankey(ASeriesIndex) then Exit(AInner);
   slot := SlotOfSeries(ASeriesIndex);
   if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Exit;
   if (AInner < 0) or (AInner >= FStores[slot].Count) then Exit;
@@ -15473,7 +16349,15 @@ begin
       if FSt[s].Rows[raw].Host.Exists then
         TyStItemEnterBlur(FSt[s].Rows[raw], spare, poly);
     if poly >= 0 then StPolyTo(s, poly);
+    { the view group holds the links as well [Batch 114] }
+    for raw := 0 to High(FSt[s].EdgeRows) do
+      if FSt[s].EdgeRows[raw].Host.Exists then
+      begin
+        poly := -1;
+        TyStItemEnterBlur(FSt[s].EdgeRows[raw], spare, poly);
+      end;
     if AFocus.Kind = sfkIndices then
+    begin
       for k := 0 to High(AFocus.Indices) do
       begin
         item := StItemAt(s, AFocus.Indices[k]);
@@ -15482,6 +16366,15 @@ begin
         TyStItemLeaveBlur(item^, poly);
         if poly >= 0 then StPolyTo(s, poly);
       end;
+      { the edge data's, by the same indices in every series blurred }
+      for k := 0 to High(AFocus.EdgeIndices) do
+        if (AFocus.EdgeIndices[k] >= 0) and (AFocus.EdgeIndices[k] <= High(FSt[s].EdgeRows))
+          and FSt[s].EdgeRows[AFocus.EdgeIndices[k]].Host.Exists then
+        begin
+          poly := -1;
+          TyStItemLeaveBlur(FSt[s].EdgeRows[AFocus.EdgeIndices[k]], poly);
+        end;
+    end;
     FSt[s].IsBlured := True;
     FStDirty := True;
   end;
@@ -15502,6 +16395,12 @@ begin
         if FSt[s].Rows[raw].Host.Exists then
           TyStItemLeaveBlur(FSt[s].Rows[raw], poly);
       if poly >= 0 then StPolyTo(s, poly);
+      for raw := 0 to High(FSt[s].EdgeRows) do
+        if FSt[s].EdgeRows[raw].Host.Exists then
+        begin
+          poly := -1;
+          TyStItemLeaveBlur(FSt[s].EdgeRows[raw], poly);
+        end;
       { the area on its own, should it be blurred apart from the polyline }
       if FSt[s].Area.Host.HoverState = TyStHoverBlur then
         FSt[s].Area.Host.HoverState := TyStHoverNormal;
@@ -15521,7 +16420,16 @@ begin
   s := ATarget.HdSeries;
   if ATarget.HdKind = 1 then
   begin
-    if ATarget.HdEdge then Exit;
+    if ATarget.HdEdge then
+    begin
+      { a sankey link is a dispatcher of its own [Batch 114] }
+      if not StIsSankey(s) then Exit;
+      if (ATarget.HdRow < 0) or (ATarget.HdRow > High(FSt[s].EdgeRows)) then Exit;
+      AItem := @FSt[s].EdgeRows[ATarget.HdRow];
+      if not AItem^.Host.Exists or not AItem^.Host.Proxy then Exit;
+      APart := 0;
+      Exit(True);
+    end;
     AItem := StItemAt(s, ATarget.HdRow);
     { emphasis.disabled: not a highDownDispatcher at all }
     if (AItem = nil) or not AItem^.Host.Proxy then Exit;
@@ -15610,7 +16518,9 @@ begin
   if ATarget.HdKind = 6 then Exit;
   if not StDispatcher(ATarget, item, part) then Exit;
   s := ATarget.HdSeries;
-  if part = 0 then
+  if (part = 0) and ATarget.HdEdge then
+    focus := StEdgeFocus(s, ATarget.HdRow, scope)
+  else if part = 0 then
     focus := StItemFocus(s, StInnerRaw(s, ATarget.HdRow), scope)
   else
     focus := StSeriesFocus(s, scope);
@@ -15646,6 +16556,13 @@ begin
   Result := False;
   if not StOwnsElement(AIndex) then Exit;
   d := FPaintList.Element(AIndex).Datum;
+  if d.IsEdge then
+  begin
+    Result := StIsSankey(d.SeriesIndex) and (d.DataIndex >= 0)
+      and (d.DataIndex <= High(FSt[d.SeriesIndex].EdgeRows))
+      and (stnEmphasis in FSt[d.SeriesIndex].EdgeRows[d.DataIndex].Host.States);
+    Exit;
+  end;
   item := StItemAt(d.SeriesIndex, d.DataIndex);
   Result := (item <> nil) and (stnEmphasis in item^.Host.States);
 end;
@@ -16103,6 +17020,34 @@ var
     if poly >= 0 then StPolyTo(s, poly);
   end;
 
+  { A SANKEY'S EDGE DATA [Batch 114]: `dataType: 'edge'` makes queryDataIndex
+    read the links -- dataIndex as given, a number or a list }
+  function EdgeQuery(ASeries: Integer; out AIdx: TTyIntegerArray): Boolean;
+  var x: TJSONData; j: Integer;
+  begin
+    AIdx := nil;
+    Result := False;
+    if not StIsSankey(ASeries) then Exit;
+    x := APayload.Find('dataType');
+    if not ((x <> nil) and (x.JSONType = jtString) and (x.AsString = 'edge')) then Exit;
+    Result := True;
+    x := APayload.Find('dataIndex');
+    if x is TJSONArray then
+    begin
+      for j := 0 to x.Count - 1 do
+        if (x.Items[j].JSONType = jtNumber) and (Frac(x.Items[j].AsFloat) = 0) then
+        begin
+          SetLength(AIdx, Length(AIdx) + 1);
+          AIdx[High(AIdx)] := Trunc(x.Items[j].AsFloat);
+        end;
+    end
+    else if (x <> nil) and (x.JSONType = jtNumber) and (Frac(x.AsFloat) = 0) then
+    begin
+      SetLength(AIdx, 1);
+      AIdx[0] := Trunc(x.AsFloat);
+    end;
+  end;
+
   { which field queryDataIndex reads, and whether it is a list }
   function QueryIsArray: Boolean;
   var x: TJSONData;
@@ -16175,6 +17120,21 @@ begin
       nodes[0] := StSeriesNode(s);
       if TyStReadBool(nodes, ['emphasis', 'disabled'], has) then Continue;
       slot := SlotOfSeries(s);
+      { a sankey's links: the first named link's focus [Batch 114] }
+      if EdgeQuery(s, inner) then
+      begin
+        q := 0;
+        if Length(inner) > 0 then q := inner[0];
+        if (q >= 0) and (q <= High(FSt[s].EdgeRows)) and FSt[s].EdgeRows[q].Host.Exists then
+          focus := StEdgeFocus(s, q, scope)
+        else
+        begin
+          if TyStFind(nodes, ['emphasis', 'focus']) = nil then Continue;
+          focus := StSeriesFocus(s, scope);
+        end;
+        StBlurSeries(s, focus, scope);
+        Continue;
+      end;
       { the first index of a list; || 0 }
       q := 0;
       if QueryDataIndex(slot, APayload, inner) and (Length(inner) > 0) then q := inner[0];
@@ -16205,6 +17165,16 @@ begin
   begin
     s := kept[i];
     slot := SlotOfSeries(s);
+    { a sankey's links by their own indices [Batch 114] }
+    if EdgeQuery(s, inner) then
+    begin
+      for k := 0 to High(inner) do
+        if (inner[k] >= 0) and (inner[k] <= High(FSt[s].EdgeRows))
+          and FSt[s].EdgeRows[inner[k]].Host.Exists
+          and FSt[s].EdgeRows[inner[k]].Host.Proxy then
+          Apply(FSt[s].EdgeRows[inner[k]], False);
+      Continue;
+    end;
     has := QueryDataIndex(slot, APayload, inner);
     isArr := QueryIsArray;
     if FSt[s].IsLine then
@@ -16628,6 +17598,11 @@ begin
   if (b.SeriesType = TyTreeSeriesTypeName) and (slot <= High(FTreeViews))
     and (FTreeViews[slot] <> nil) then
     Exit(FTreeViews[slot].ContainPoint(pt));
+  { a sankey's View: its box through the roam's overall transform [Batch 114:
+    the box itself before -- there was no sankey roam] }
+  if (b.SeriesType = TySankeySeriesTypeName) and (slot <= High(FSankeyViews))
+    and (FSankeyViews[slot] <> nil) then
+    Exit(FSankeyViews[slot].ContainPoint(pt));
   if (b.SeriesType = TySankeySeriesTypeName) and (slot <= High(FSankeys))
     and FSankeys[slot].Valid then
   begin
@@ -16895,6 +17870,71 @@ begin
   end;
 end;
 
+{ dragNode, sankeyRoam, graphRoam [Batch 114]: the series the payload's
+  query names (seriesIndex / seriesId / seriesName; none: every series of the
+  type), each the action's own handler }
+function TTyAdvanceChart.DoViewAction(const AType: string; APayload: TJSONObject): Boolean;
+var
+  series: TTyIntegerArray;
+  k, n: Integer;
+  d: TJSONData;
+  rp: TTyGraphRoamPayload;
+  hasX, hasY, hasIdx: Boolean;
+  lx, ly: Double;
+  idx: Integer;
+
+  function Num(const AKey: string; out AV: Double): Boolean;
+  var dd: TJSONData;
+  begin
+    dd := APayload.Find(AKey);
+    Result := (dd <> nil) and (dd.JSONType = jtNumber);
+    if Result then AV := dd.AsFloat else AV := NaN;
+  end;
+
+  function Queried: Boolean;
+  begin
+    Result := (APayload.Find('seriesIndex') <> nil) or (APayload.Find('seriesId') <> nil)
+      or (APayload.Find('seriesName') <> nil);
+  end;
+
+begin
+  Result := False;
+  if Queried then series := MatchSeries(APayload)
+  else
+  begin
+    SetLength(series, 1);
+    series[0] := -1;
+  end;
+  n := Length(series);
+  if AType = 'dragNode' then
+  begin
+    hasX := Num('localX', lx);
+    hasY := Num('localY', ly);
+    d := APayload.Find('dataIndex');
+    hasIdx := (d <> nil) and (d.JSONType = jtNumber) and (Frac(d.AsFloat) = 0);
+    if not hasIdx then Exit;
+    idx := Trunc(d.AsFloat);
+    for k := 0 to n - 1 do
+      if SankeyDragNode(series[k], idx, hasX, lx, hasY, ly) then Result := True;
+    Exit;
+  end;
+  rp := Default(TTyGraphRoamPayload);
+  rp.HasPan := Num('dx', rp.DX) and Num('dy', rp.DY);
+  rp.HasZoom := Num('zoom', rp.Zoom);
+  Num('originX', rp.OriginX);
+  Num('originY', rp.OriginY);
+  if not (rp.HasPan or rp.HasZoom) then Exit;
+  for k := 0 to n - 1 do
+  begin
+    rp.SeriesIndex := series[k];
+    if AType = 'sankeyRoam' then
+    begin
+      if SankeyDispatchRoam(rp) then Result := True;
+    end
+    else if GraphDispatchRoam(rp) then Result := True;
+  end;
+end;
+
 function TTyAdvanceChart.DispatchAction(const APayloadJson: string): Boolean;
 var
   d, tp: TJSONData;
@@ -16945,7 +17985,10 @@ begin
       { [Batch 98] }
       DoLegendScroll(p);
       Result := True;
-    end;
+    end
+    else if (t = 'dragNode') or (t = 'sankeyRoam') or (t = 'graphRoam') then
+      { [Batch 114] }
+      Result := DoViewAction(t, p);
   finally
     p.Free;
   end;
@@ -17547,6 +18590,23 @@ begin
   item := StItemAt(ASeriesIndex, ADataIndex);
   Result := item <> nil;
   if Result then AItem := item^;
+end;
+
+function TTyAdvanceChart.SankeyEdgeStates(ASeriesIndex, AEdge: Integer;
+  out AItem: TTyStItem): Boolean;
+begin
+  AItem := Default(TTyStItem);
+  Result := StIsSankey(ASeriesIndex) and (AEdge >= 0)
+    and (AEdge <= High(FSt[ASeriesIndex].EdgeRows))
+    and FSt[ASeriesIndex].EdgeRows[AEdge].Host.Exists;
+  if Result then AItem := FSt[ASeriesIndex].EdgeRows[AEdge];
+end;
+
+function TTyAdvanceChart.GraphForceState(ASeriesIndex: Integer): TTyGraphForceState;
+begin
+  Result := Default(TTyGraphForceState);
+  if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FGraphForce)) then
+    Result := FGraphForce[ASeriesIndex];
 end;
 
 function TTyAdvanceChart.LineStates(ASeriesIndex: Integer; out ARun,
@@ -20063,8 +21123,12 @@ begin
     FRoamX := X;
     FRoamY := Y;
     if IsTreeSeries(FRoamSeries) then TreeRoam(FRoamSeries, dx, dy)
+    else if IsSankeySeries(FRoamSeries) then SankeyRoam(FRoamSeries, dx, dy)
     else GraphRoam(FRoamSeries, dx, dy);
   end;
+  { A NODE DRAG: one 'drag' per move, the delta from the last move [Batch 114] }
+  if FGraphDragSlot >= 0 then GraphDragMove(X, Y);
+  if FSankeyDragSlot >= 0 then SankeyDragMove(X, Y);
   DataZoomPointer(dpMove, X, Y, Shift, 0);
   spec := TyTooltipSpecOf(FOption, -1, -1);
   { NOTHING ABOUT THE TOOLTIP IS CHECKED HERE, and that is the point. What is
