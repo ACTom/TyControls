@@ -345,7 +345,43 @@ function TyBuildSeriesMarks(const ABinding: TTySeriesBinding;
 implementation
 
 uses tyControls.AdvChart.JsMath, tyControls.AdvChart.AxisLabels,
-     tyControls.AdvChart.LinePath;
+     tyControls.AdvChart.LinePath, tyControls.AdvChart.LabelGuide;
+
+{ THE SYMBOL'S LABEL RECT. A `line` symbol (not empty) is drawn here as a
+  2 px pen without fill, but upstream's path keeps the item's fill and its
+  own line width (the border's, else zrender's 1): its rect grows by that,
+  not by the threshold of an unfilled path. [Batch 112] }
+function GuideLineSymBox(const ASpec: TTySymbolSpec; const AP: TTyPointF;
+  ALineW: Double; const AEl: TTyChartElement): TTyXYWH;
+begin
+  if (ASpec.Kind = tsyLine) and not ASpec.Empty then
+  begin
+    if not (ALineW > 0) then ALineW := 1;
+    Result := TySymbolLabelBox(ASpec, AP.X, AP.Y, ALineW, AEl.Style.StrokeColor <> 0, True);
+  end
+  else
+    Result := TySymbolLabelBox(ASpec, AP.X, AP.Y, AEl.Style.StrokeWidthLogical,
+      (AEl.Style.StrokeWidthLogical > 0) and (AEl.Style.StrokeColor <> 0), AEl.Style.HasFill);
+end;
+
+{ WHAT A LABEL LINE MEASURES a symbol by: its zrender type, size, turn,
+  offset and point (LabelGuide builds the path) [Batch 112] }
+procedure GuideSymbol(var ACaption: TTyElementCaption; const ASpec: TTySymbolSpec;
+  APX, APY: Double; AColor: TTyChartColor);
+begin
+  ACaption.LgKind := cTyGuideHostSymbol;
+  ACaption.LgColor := AColor;
+  ACaption.LgSymbol := TyGuideSymbolName(ASpec);
+  ACaption.LgKeepAspect := ASpec.KeepAspect;
+  ACaption.LgG[0] := ASpec.WidthPx;
+  ACaption.LgG[1] := ASpec.HeightPx;
+  ACaption.LgG[2] := ASpec.RotateDeg;
+  ACaption.LgG[3] := ASpec.OffsetX;
+  ACaption.LgG[4] := ASpec.OffsetY;
+  ACaption.LgG[5] := APX;
+  ACaption.LgG[6] := APY;
+  ACaption.LgG[7] := 0;
+end;
 
 function TyCandleSpecOf(AOption: TTyChartOption; ASlot: Integer;
   const ADefaults: TTyCandleSpec): TTyCandleSpec;
@@ -1268,6 +1304,20 @@ begin
     if baseHoriz then el.Anim.G[4] := 1 else el.Anim.G[4] := 0;
     ItemCaption(AVisual, AStore, i, el.Caption);
     el.Caption.Outside := BarOutside(len, zero, baseHoriz, inverse);
+    { what a label line measures the bar by: the Rect's own shape [Batch 112] }
+    el.Caption.LgKind := cTyGuideHostRect;
+    el.Caption.LgColor := el.Style.FillColor;
+    el.Caption.LgG[0] := lx;
+    el.Caption.LgG[1] := ly;
+    el.Caption.LgG[2] := lw;
+    el.Caption.LgG[3] := lh;
+    if TyHasCorner(col.Radii) then
+    begin
+      el.Caption.LgG[4] := col.Radii[0];
+      el.Caption.LgG[5] := col.Radii[1];
+      el.Caption.LgG[6] := col.Radii[2];
+      el.Caption.LgG[7] := col.Radii[3];
+    end;
     AList.Add(el);
     Inc(Result);
   end;
@@ -1310,7 +1360,7 @@ var
     sv: TTySeriesVisual;
     el: TTyChartElement;
     rs: TTySymbolSpec;
-    lift: Double;
+    lift, lineW: Double;
   begin
     Result := False;
     rs := RowSymbol(AVisual, AStore, ARow, AVisual.Symbol, lift);
@@ -1320,6 +1370,7 @@ var
     { THE ROW'S COLOUR, not the series': a visualMap's, or the datum's own
       itemStyle.color. [Batch 56: every marker was the series colour.] }
     sv := RowVisual(AVisual, AStore, ARow);
+    lineW := sv.StrokeWidthLogical;
     { An `empty` marker is a RING: the colour becomes the pen and the hole is
       the theme's own ground. A line's default symbol is emptyCircle, so this
       is the ordinary case rather than the exception. }
@@ -1363,8 +1414,12 @@ var
     { the rect zrender places the label against and LabelManager weighs
       [Batch 103] }
     el.Caption.HasSymBox := True;
-    el.Caption.SymBox := TySymbolLabelBox(rs, AP.X, AP.Y, el.Style.StrokeWidthLogical,
-      (el.Style.StrokeWidthLogical > 0) and (el.Style.StrokeColor <> 0), el.Style.HasFill);
+    el.Caption.SymBox := GuideLineSymBox(rs, AP, lineW, el);
+    { the row's colour: an empty symbol's went to the pen }
+    if rs.Empty or (rs.Kind = tsyLine) then
+      GuideSymbol(el.Caption, rs, AP.X, AP.Y, el.Style.StrokeColor)
+    else
+      GuideSymbol(el.Caption, rs, AP.X, AP.Y, el.Style.FillColor);
     AList.Add(el);
     Result := True;
   end;
@@ -1890,7 +1945,7 @@ var
   shape: TTyChartShape;
   v: TTySeriesVisual;
   el, rip: TTyChartElement;
-  lift, period, rscale: Double;
+  lift, period, rscale, lineW: Double;
   k, n: Integer;
   ink: TTyChartColor;
   ov: TTyDataValue;
@@ -1985,6 +2040,7 @@ begin
     is stroked too. Both are the same rule: the colour is the pen.
     [Batch 54: the whole row, not only its fill -- a visualMap's opacity is
     the row's too.] }
+  lineW := v.StrokeWidthLogical;
   if rs.Empty or (rs.Kind = tsyLine) then
   begin
     v.Stroke := v.Fill;
@@ -2024,8 +2080,11 @@ begin
   { the rect zrender places the label against and LabelManager weighs
     [Batch 103] }
   el.Caption.HasSymBox := True;
-  el.Caption.SymBox := TySymbolLabelBox(rs, AP.X, AP.Y, el.Style.StrokeWidthLogical,
-    (el.Style.StrokeWidthLogical > 0) and (el.Style.StrokeColor <> 0), el.Style.HasFill);
+  el.Caption.SymBox := GuideLineSymBox(rs, AP, lineW, el);
+  if rs.Empty or (rs.Kind = tsyLine) then
+    GuideSymbol(el.Caption, rs, AP.X, AP.Y, el.Style.StrokeColor)
+  else
+    GuideSymbol(el.Caption, rs, AP.X, AP.Y, el.Style.FillColor);
   AList.Add(el);
   Inc(Result);
 end;

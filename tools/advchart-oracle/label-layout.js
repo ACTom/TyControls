@@ -521,6 +521,16 @@ const CASES = [
     option: pie({ labelLayout: '@LL_PIELINE', data: pieData(8, i => i * 2 + 1) }) },
   { id: 'pie.offset', note: 'label.offset survives the default layout on a pie: it is baked into x / y',
     option: pie({ label: { offset: [5, 7] }, data: pieData(6, i => i + 2) }) },
+  // the pie's own solver on (avoidLabelOverlap, the default) before the layout [Batch 109]; the turn
+  // limits that bend a moved label's line (roadmap B14) switched off
+  { id: 'pie.avoid', note: 'avoidLabelOverlap on: the labels are moved apart first, then hideOverlap',
+    option: pie({ avoidLabelOverlap: true, labelLine: { minTurnAngle: 0, maxSurfaceAngle: 0 } }),
+    hover: [{ type: 'highlight', seriesIndex: 0, dataIndex: 5 }] },
+  { id: 'pie.avoid.many', note: 'avoidLabelOverlap on, more labels than the height holds: squeezed, overlapping, hidden',
+    option: pie({ avoidLabelOverlap: true, labelLine: { minTurnAngle: 0, maxSurfaceAngle: 0 }, data: pieData(90, i => (i * 7) % 11 + 1) }),
+    hover: [{ type: 'highlight', seriesIndex: 0, dataIndex: 1 }, { type: 'highlight', seriesIndex: 0, dataIndex: 40 }] },
+  { id: 'pie.avoid.labelLine', note: 'avoidLabelOverlap on with alignTo labelLine',
+    option: pie({ avoidLabelOverlap: true, label: { alignTo: 'labelLine' }, labelLine: { minTurnAngle: 0, maxSurfaceAngle: 0 }, data: pieData(40, i => (i * 7) % 11 + 1) }) },
   // ---- moveOverlap ----
   { id: 'shiftY.x', note: 'labels moved to x 85% and shifted apart on y',
     option: scatter([sc({ labelLayout: { x: '85%', moveOverlap: 'shiftY' }, data: pts(18, 7, 13) })]) },
@@ -576,6 +586,14 @@ const CASES = [
   // ---- other series ----
   { id: 'effectScatter.hide', note: 'an effectScatter\'s labels',
     option: scatter([Object.assign(sc({ labelLayout: { hideOverlap: true }, data: pts(20, 7, 13) }), { type: 'effectScatter' })]) },
+  // ---- label lines routed after the layout [Batch 112] ----
+  { id: 'pie.avoid.turn', note: 'the solver on with the default turn limits: the moved labels\' lines bend',
+    option: pie({ avoidLabelOverlap: true, data: pieData(60, i => (i * 7) % 11 + 1) }) },
+  { id: 'pie.x.line', note: 'a pie given an x: each line routed from its slice\'s anchor to the moved label',
+    option: pie({ labelLayout: { x: '85%', hideOverlap: true } }) },
+  { id: 'scatter.labelLine', note: 'labelLine.show on a scatter moved by dx / dy and thinned: every line routed, the hidden ones hidden',
+    option: scatter([sc({ labelLine: { show: true, length2: 6 }, labelLayout: { dx: 24, dy: -18, hideOverlap: true }, data: pts(30, 7, 13) })]),
+    hover: [{ type: 'highlight', seriesIndex: 0, dataIndex: 3 }, { type: 'highlight', seriesIndex: 0, dataIndex: 7 }] },
 ];
 
 // ---------- one case ----------

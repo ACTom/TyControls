@@ -467,6 +467,11 @@ type
       (and so the emphasis state shows it again), LmM (the transform, when
       LmHasM). }
     LmKind: Integer;
+    { THE LABEL'S OWN TEXT (zrender's style.text) where the words drawn were
+      cut to a width -- a pie label the overlap solver gave one; empty when
+      Text is the label's text. What a labelLayout function is handed.
+      [Batch 109] }
+    LmText: string;
     LmHostPlus1: Integer;
     LmBaseX, LmBaseY, LmOffX, LmOffY: Double;
     LmHasAttachedRot: Boolean;
@@ -486,6 +491,24 @@ type
     LmFree, LmOverlapHidden, LmEmphShow: Boolean;
     LmHasM: Boolean;
     LmM: TTyMat2D;
+    { ==== WHAT A LABEL LINE READS [Batch 112] ====
+      On a HOST, how updateLabelLinePoints measures it (AdvChart.LabelGuide):
+        LgKind    0 nothing, 1 a symbol, 2 a rect;
+        LgSymbol  the symbol's zrender type ('circle', 'path://...') and
+                  LgKeepAspect (symbolKeepAspect);
+        LgG       a symbol's width, height, symbolRotate (degrees), offset x
+                  and y, and the point x and y; a rect's x, y, width and height
+                  (the signed layout) and its four corner radii.
+      On a LINE, LgSmooth: the smooth its normal state draws (its Cmds hold
+      the curves; a state may straighten it). }
+    LgKind: Integer;
+    { the colour a line takes when its lineStyle has none: the item's
+      visual colour by the series' draw type }
+    LgColor: TTyChartColor;
+    LgSymbol: string;
+    LgKeepAspect: Boolean;
+    LgG: array[0..7] of Double;
+    LgSmooth: Double;
   end;
 
   { WHAT AN ELEMENT IS TO THE ENTER ANIMATION [Batch 89, AN2]: which of

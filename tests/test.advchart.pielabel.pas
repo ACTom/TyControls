@@ -564,6 +564,7 @@ var
   m: ITyTextMeasurer;
   i, captions: Integer;
   el: TTyChartElement;
+  wide: TTyPieLayout;
 begin
   { A PIE SAYS ITS NAME. Upstream falls back to the datum's name where a bar
     falls back to its number, and one default for both renders every
@@ -613,11 +614,15 @@ begin
         AssertEquals('Food is row 1', 1, el.Datum.DataIndex);
     end;
 
-    { A formatter overrides the name. }
+    { A formatter overrides the name. In a view wide enough for the longer
+      words: in the fixture's 400 px the overlap solver gives the right label
+      40 px and cuts 'Rent!' [Batch 109] }
     list.Clear;
     spec.Formatter := '{b}!';
     spec.HasFormatter := True;
-    TyBuildPieLabels(bind, TwoSliceLayout, spec, ink, [$FF000000],
+    wide := TwoSliceLayout;
+    wide.ViewRect := TyRectF(-200, 0, 600, 300);
+    TyBuildPieLabels(bind, wide, spec, ink, [$FF000000],
       store, '', 0, 2, m, 96, list);
     captions := 0;
     for i := 0 to list.Count - 1 do

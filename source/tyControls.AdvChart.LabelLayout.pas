@@ -171,6 +171,14 @@ function TySectorPathRect(ACX, ACY, AR0, AR, AStart, AEnd: Double;
 procedure TyShiftLabelsOnXY(var AItems: TTyLabelLayoutItemArray;
   const AIdx: array of Integer; ADim: Integer; AMin, AMax: Double);
 
+{ THE SAME, as upstream's function is: AOrder is sorted IN PLACE (the caller's
+  list is the one that comes out sorted -- a pie's side reads it in that
+  order afterwards) and the answer is whether anything moved, which upstream
+  counts as any first-pass push or any shift by a non-zero amount, even one
+  over an empty range. [Batch 109] }
+function TyShiftLabelsOnXYOrdered(var AItems: TTyLabelLayoutItemArray;
+  var AOrder: array of Integer; ADim: Integer; AMin, AMax: Double): Boolean;
+
 { restoreIgnore and hideOverlap over the items AIdx names. }
 procedure TyHideOverlapLabels(var AItems: TTyLabelLayoutItemArray;
   const AIdx: array of Integer);
@@ -568,8 +576,20 @@ procedure TyShiftLabelsOnXY(var AItems: TTyLabelLayoutItemArray;
   const AIdx: array of Integer; ADim: Integer; AMin, AMax: Double);
 var
   list: array of Integer;
+  i: Integer;
+begin
+  SetLength(list, Length(AIdx));
+  for i := 0 to High(AIdx) do list[i] := AIdx[i];
+  TyShiftLabelsOnXYOrdered(AItems, list, ADim, AMin, AMax);
+end;
+
+function TyShiftLabelsOnXYOrdered(var AItems: TTyLabelLayoutItemArray;
+  var AOrder: array of Integer; ADim: Integer; AMin, AMax: Double): Boolean;
+var
+  list: array of Integer;
   len, i, j, k: Integer;
   lastPos, delta, minGap, maxGap: Double;
+  adjusted: Boolean;
 
   procedure Move1(AK: Integer; AD: Double);
   begin
@@ -597,6 +617,7 @@ var
   procedure ShiftList(AD: Double; AStart, AEnd: Integer);
   var q: Integer;
   begin
+    if AD <> 0 then adjusted := True;
     for q := AStart to AEnd - 1 do Move1(list[q], AD);
   end;
 
@@ -663,10 +684,12 @@ var
   end;
 
 begin
-  len := Length(AIdx);
+  Result := False;
+  adjusted := False;
+  len := Length(AOrder);
   if len < 2 then Exit;
   SetLength(list, len);
-  for i := 0 to len - 1 do list[i] := AIdx[i];
+  for i := 0 to len - 1 do list[i] := AOrder[i];
   { a stable sort by the rect's start, as V8's is }
   for i := 1 to len - 1 do
   begin
@@ -685,7 +708,11 @@ begin
   begin
     k := list[i];
     delta := RectPos(AItems[k].Box.Rect, ADim) - lastPos;
-    if delta < 0 then Move1(k, -delta);
+    if delta < 0 then
+    begin
+      Move1(k, -delta);
+      adjusted := True;
+    end;
     lastPos := RectPos(AItems[k].Box.Rect, ADim) + RectSize(AItems[k].Box.Rect, ADim);
   end;
   UpdateMinMaxGap;
@@ -697,6 +724,8 @@ begin
   UpdateMinMaxGap;
   if minGap < 0 then SqueezeWhenBailout(-minGap);
   if maxGap < 0 then SqueezeWhenBailout(maxGap);
+  for i := 0 to len - 1 do AOrder[i] := list[i];
+  Result := adjusted;
 end;
 
 procedure TyHideOverlapLabels(var AItems: TTyLabelLayoutItemArray;

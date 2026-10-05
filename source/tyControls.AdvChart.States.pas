@@ -49,7 +49,10 @@ type
     sector's outer radius, a symbol's scale and whether a label shows.
     Geometry is in DEVICE px, colours packed. }
   TTyStKey = (stkFill, stkStroke, stkLineWidth, stkOpacity, stkZ2, stkX, stkY,
-    stkR, stkScale, stkIgnore);
+    stkR, stkScale, stkIgnore,
+    { a label line's shape.smooth: every state sets it, nought unless the
+      state's labelLine says (setLabelLineState) [Batch 112] }
+    stkSmooth);
 
   { A state object, sparse: a key the state does not set is absent. A colour
     key can be the word 'none' (None) -- zrender's hasFillOrStroke reads it as

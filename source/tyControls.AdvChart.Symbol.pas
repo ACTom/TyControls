@@ -127,6 +127,8 @@ function TyBuildSymbolInBox(const ASpec: TTySymbolSpec;
 
 implementation
 
+uses tyControls.AdvChart.ZrPath;
+
 const
   { ScatterSeries.defaultOption.symbolSize / LineSeries.defaultOption.symbolSize. }
   cScatterSymbolSize = 10;
@@ -338,10 +340,13 @@ function TySymbolLabelBox(const ASpec: TTySymbolSpec; APX, APY: Double;
   ALineWidth: Double; AHasStroke, AHasFill: Boolean): TTyXYWH;
 var
   lx, ly, lw, lh, m0, m1, m2, m3, m4, m5, r, st, ct, ls, w: Double;
+  ub: TTyXYWH;
   xs, ys: array[0..3] of Double;
   k: Integer;
 begin
-  { the unit path's own box: every built-in shape fills -1..1 but the pin }
+  { the unit path's own box: every built-in shape fills -1..1 but the pin,
+  the arrow (its tip at the centre, its body a whole height below) and the
+  line (across the middle) [Batch 112: the arrow's and the line's] }
   lx := -1; ly := -1; lw := 2; lh := 2;
   if ASpec.Kind = tsyPin then
   begin
@@ -349,6 +354,33 @@ begin
     ly := -1.7428571428571429;
     lw := 1.2000000000000002;
     lh := 1.7428571428571429;
+  end
+  else if ASpec.Kind = tsyArrow then
+  begin
+    { px -/+ w / 3 * 2 about px = 0; py = 0 down to py + h }
+    w := 2 / 3 * 2;
+    lx := 0 - w;
+    lw := (0 + w) - (0 - w);
+    ly := 0;
+    lh := 2;
+  end
+  else if ASpec.Kind = tsyLine then
+  begin
+    ly := 0;
+    lh := 0;
+  end
+  else if ASpec.Kind = tsyPath then
+  begin
+    { an icon is fitted into the unit box -- stretched over it, or keeping
+      its aspect -- and stored in single precision: its own box }
+    if ASpec.KeepAspect then
+      ub := TyZrBBox(TyZrMakePathCenter(ASpec.PathData, TyXYWH(-1, -1, 2, 2)))
+    else
+      ub := TyZrBBox(TyZrMakePathCover(ASpec.PathData, TyXYWH(-1, -1, 2, 2)));
+    lx := ub.X;
+    ly := ub.Y;
+    lw := ub.W;
+    lh := ub.H;
   end;
   { scale, rotate, translate (Transformable.getLocalTransform), then the
     group's move to the point }

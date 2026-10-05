@@ -774,6 +774,11 @@ type
       label's element index beside it [Batch 103] }
     FLmItems: TTyLabelLayoutItemArray;
     FLmEls: TTyIntegerArray;
+    { beside each: its label line's element (-1 for none), and whether
+      LabelManager routes that line again (needsUpdateLabelLine: an x or a y
+      given, no labelLinePoints for it) [Batch 112] }
+    FLmGuides: TTyIntegerArray;
+    FLmRoute: TTyBoolArray;
     { The PPI the list was built at. The hit test scales HitSlopLogical by it,
       so a list built for 96 and interrogated at 192 would give targets half
       the size the marks are drawn at. }
@@ -1246,6 +1251,13 @@ type
       then moveOverlap and hideOverlap across all of them. Runs on the
       finished list, after the expansion. [Batch 103] }
     procedure LayoutSeriesLabels(AList: TTyPaintList;
+      const ASpecs: TTyLabelSpecArray; const AItemSpecs: TTyLabelSpecTable;
+      const AMeasurer: ITyTextMeasurer; APPI: Integer);
+    { LABEL LINES ROUTED AFTER THE LAYOUT -- LabelManager.processLabelsOverall's
+      _updateLabelLine (AdvChart.LabelGuide): a pie's line again where its
+      labelLayout gave an x or a y, and a line for every label of a symbol or
+      a bar whose labelLine shows in some state. [Batch 112] }
+    procedure RouteLabelLines(AList: TTyPaintList;
       const ASpecs: TTyLabelSpecArray; const AItemSpecs: TTyLabelSpecTable;
       const AMeasurer: ITyTextMeasurer; APPI: Integer);
     { The binding slot holding a given series index, or -1. FBindings is
@@ -2208,7 +2220,7 @@ uses
     rest of the AdvChart family keeps, invisible to a host. }
   tyControls.StrConsts,
   tyControls.AdvChart.RichStyle, tyControls.AdvChart.JsMath,
-  tyControls.AdvChart.LinePath,
+  tyControls.AdvChart.LinePath, tyControls.AdvChart.LabelGuide,
   BGRABitmapTypes, FPImage, FPWriteJPEG, base64;
 
 { ==================== construction ==================== }
@@ -11465,8 +11477,13 @@ begin
     { THE LABEL LAYOUT, over the finished labels [Batch 103] }
     FLmItems := nil;
     FLmEls := nil;
+    FLmGuides := nil;
+    FLmRoute := nil;
     if drawn > 0 then
       LayoutSeriesLabels(list, specs, itemSpecs, AMeasurer, APPI);
+    { the label lines, after the layout [Batch 112] }
+    if drawn > 0 then
+      RouteLabelLines(list, specs, itemSpecs, AMeasurer, APPI);
     { A SILENT SERIES TAKES NO POINTER: nothing of it -- marks, labels -- is
       hit, hovered or clicked (upstream's series `silent`) [Batch 84] }
     if drawn > 0 then SilenceSeries(list);
@@ -11740,7 +11757,7 @@ begin
         args.DataIndex := el.Datum.DataIndex;
         args.SeriesIndex := si;
         args.DataType := '';
-        args.Text := c.Text;
+        if c.LmText <> '' then args.Text := c.LmText else args.Text := c.Text;
         args.HasRect := hasHost;
         args.RectX := hostRect.X;
         args.RectY := hostRect.Y;
@@ -11880,9 +11897,16 @@ begin
 
   { ---- the answers onto the elements ---- }
   SetLength(FLmEls, Length(refs));
+  SetLength(FLmGuides, Length(refs));
+  SetLength(FLmRoute, Length(refs));
   for r := 0 to High(refs) do
   begin
     FLmEls[r] := refs[r].El;
+    { needsUpdateLabelLine: an x or a y, unless labelLinePoints set the line
+      that is there [Batch 112] }
+    FLmGuides[r] := refs[r].Guide;
+    FLmRoute[r] := ((refs[r].Layout.X.Kind <> cpvAbsent) or (refs[r].Layout.Y.Kind <> cpvAbsent))
+      and not (refs[r].Layout.HasLabelLinePoints and (refs[r].Guide >= 0));
     el := AList.Element(refs[r].El);
     if items[r].Free then
     begin
@@ -11954,6 +11978,188 @@ begin
     end;
   end;
   FLmItems := items;
+end;
+
+procedure TTyAdvanceChart.RouteLabelLines(AList: TTyPaintList;
+  const ASpecs: TTyLabelSpecArray; const AItemSpecs: TTyLabelSpecTable;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer);
+const
+  cStNamesLg: array[TTyStName] of string = ('select', 'emphasis', 'blur');
+var
+  scale, len, minTurn, smooth, w: Double;
+  lmOf: TTyIntegerArray;
+  count, e, r, hi, slot, si, raw, j: Integer;
+  el, host, guide: TTyChartElement;
+  c: TTyElementCaption;
+  gh: TTyGuideHost;
+  pts: TTyGuidePoints;
+  rawRect: TTyXYWH;
+  m: TTyMat2D;
+  hasM, showN, showAny, has, above: Boolean;
+  nodes: TTyStNodeArray;
+  n: TTyStName;
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
+  spec: TTyLabelSpec;
+  pieces: TTyRtPieceArray;
+  txt: string;
+  col: TTyChartColor;
+  d: TJSONData;
+begin
+  if AList = nil then Exit;
+  if APPI > 0 then scale := APPI / 96 else scale := 1;
+  { ONLY WHAT WAS BUILT: the lines appended below are no labels }
+  count := AList.Count;
+  SetLength(lmOf, count);
+  for e := 0 to count - 1 do lmOf[e] := -1;
+  for r := 0 to High(FLmEls) do
+    if (FLmEls[r] >= 0) and (FLmEls[r] < count) then lmOf[FLmEls[r]] := r;
+
+  { ---- A PIE given an x or a y: its line routed again, from the anchor its
+    layout left (the line's first point) to the moved label ---- }
+  for r := 0 to High(FLmEls) do
+  begin
+    if (r > High(FLmRoute)) or not FLmRoute[r] or (FLmGuides[r] < 0) then Continue;
+    el := AList.Element(FLmEls[r]);
+    guide := AList.Element(FLmGuides[r]);
+    if Length(guide.Shape.Points) < 1 then Continue;
+    slot := SlotOfSeries(el.Datum.SeriesIndex);
+    if (slot < 0) or (FBindings[slot].SeriesType <> TyPieSeriesTypeName) then Continue;
+    nodes := StNodes(el.Datum.SeriesIndex, el.Datum.RawDataIndex);
+    gh := Default(TTyGuideHost);
+    gh.HasAnchor := True;
+    gh.AnchorX := guide.Shape.Points[0].X;
+    gh.AnchorY := guide.Shape.Points[0].Y;
+    { a pie's labelLine defaults: length2 30, minTurnAngle 90 }
+    len := TyGuideLength2(TyStFind(nodes, ['labelLine', 'length2']), 30) * scale;
+    minTurn := TyGuideJsNumber(TyStFind(nodes, ['labelLine', 'minTurnAngle']), 90);
+    TyLabelLineRoute(FLmItems[r].RawLocal, el.Caption.LmHasM, el.Caption.LmM, gh, len, pts);
+    TyLimitTurnAngle(pts, minTurn);
+    SetLength(guide.Shape.Points, 3);
+    for j := 0 to 2 do guide.Shape.Points[j] := pts[j];
+    guide.Shape.Cmds := TyLabelLineCmds(pts, guide.Caption.LgSmooth);
+    AList.SetElement(FLmGuides[r], guide);
+  end;
+
+  { ---- EVERY OTHER LABEL on a symbol or a bar: _updateLabelLine creates its
+    line where some state shows it, and routes it ---- }
+  for e := 0 to count - 1 do
+  begin
+    el := AList.Element(e);
+    c := el.Caption;
+    if c.LmKind <> 1 then Continue;
+    hi := c.LmHostPlus1 - 1;
+    if (hi < 0) or (hi >= count) then Continue;
+    host := AList.Element(hi);
+    if not TyGuideHostOf(host.Caption, gh) then Continue;
+    si := el.Datum.SeriesIndex;
+    slot := SlotOfSeries(si);
+    if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Continue;
+    if el.Datum.DataIndex < 0 then Continue;
+    raw := FStores[slot].GetRawIndex(el.Datum.DataIndex);
+    nodes := StNodes(si, raw);
+    { setLabelLineStyle: a line where the normal labelLine shows, or any
+      state's (the normal one by default) }
+    showN := TyStReadBool(nodes, ['labelLine', 'show'], has) and has;
+    showAny := showN;
+    for n := Low(TTyStName) to High(TTyStName) do
+      if TyStReadBool(nodes, [cStNamesLg[n], 'labelLine', 'show'], has) and has then
+        showAny := True;
+    if not showAny then Continue;
+
+    { ---- THE LABEL'S RECT AS IT IS READ, before getComputedTransform
+      hands the label its host's alignment: a laid-out label's own (the
+      layout already gave it), a label the layout never saw only its
+      style's -- left / top otherwise -- and one ignored at rest the one its
+      host gave it when it was listed ---- }
+    r := lmOf[e];
+    if (r >= 0) and not FLmItems[r].DefIgnore then
+      rawRect := FLmItems[r].RawLocal
+    else
+    begin
+      if c.LmStyleHasAH then ah := c.LmStyleAH
+      else if r >= 0 then ah := c.LmPosAH
+      else ah := tahLeft;
+      if c.LmStyleHasAV then av := c.LmStyleAV
+      else if r >= 0 then av := c.LmPosAV
+      else av := tavTop;
+      if Length(c.RtPieces) = 0 then
+        rawRect := LmPlainRect(c.LmTextW, c.LmTextH, c.LmStrokeW, ah, av)
+      else if (ah = c.AnchorH) and (av = c.AnchorV) then
+        rawRect := LmBlockRect(c.RtPieces, c.RtScale)
+      else
+      begin
+        { the block laid out again at that alignment }
+        if si > High(ASpecs) then Continue;
+        spec := ASpecs[si];
+        if (c.ItemSpec > 0) and (si <= High(AItemSpecs))
+          and (c.ItemSpec - 1 <= High(AItemSpecs[si])) then
+          spec := AItemSpecs[si][c.ItemSpec - 1];
+        spec.Rt.Style.Align := rtaNone;
+        spec.Rt.Style.VAlign := rtvNone;
+        pieces := TyLabelBlockPieces(spec, c.Text, c.LmInkFill, c.LmInkHasFill,
+          c.LmInkGradient, c.LmInkInside, ah, av, c.RtScale, AMeasurer);
+        rawRect := LmBlockRect(pieces, c.RtScale);
+      end;
+    end;
+    { its transform: the layout's, or the attached label's own }
+    if r >= 0 then
+    begin
+      hasM := c.LmHasM;
+      m := c.LmM;
+    end
+    else
+      hasM := TyLabelLocalTransform(c.LmBaseX + c.LmOffX, c.LmBaseY + c.LmOffY,
+        -c.LmOffX, -c.LmOffY, c.RotationRad, 1, 1, m);
+
+    { ---- route, limit ---- }
+    len := TyGuideLength2(TyStFind(nodes, ['labelLine', 'length2']), 0) * scale;
+    minTurn := TyGuideJsNumber(TyStFind(nodes, ['labelLine', 'minTurnAngle']), NaN);
+    smooth := TyLabelLineSmoothOf(TyStFind(nodes, ['labelLine', 'smooth']));
+    TyLabelLineRoute(rawRect, hasM, m, gh, len, pts);
+    TyLimitTurnAngle(pts, minTurn);
+
+    { ---- the line ---- }
+    guide := TyChartElement(TyShapePolyline(pts));
+    guide.Shape.Cmds := TyLabelLineCmds(pts, smooth);
+    guide.Caption.LgSmooth := smooth;
+    { lineStyle over the item's colour (the visual's, by its draw type) }
+    col := host.Caption.LgColor;
+    txt := TyStReadString(nodes, ['labelLine', 'lineStyle', 'color'], has);
+    if has then TyTryParseChartColor(txt, col);
+    guide.Style.HasFill := False;
+    guide.Style.StrokeColor := col;
+    w := TyStReadNumber(nodes, ['labelLine', 'lineStyle', 'width'], has);
+    if not has or IsNan(w) then w := 1;
+    guide.Style.StrokeWidthLogical := w;
+    w := TyStReadNumber(nodes, ['labelLine', 'lineStyle', 'opacity'], has);
+    if has and not IsNan(w) then guide.Style.Alpha := w;
+    d := TyStFind(nodes, ['labelLine', 'lineStyle', 'type']);
+    if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'dashed') then
+      guide.Style.DashLogical := TyDashPattern(todDashed, nil, guide.Style.StrokeWidthLogical)
+    else if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'dotted') then
+      guide.Style.DashLogical := TyDashPattern(todDotted, nil, guide.Style.StrokeWidthLogical)
+    else if (d <> nil) and (d.JSONType = jtArray) then
+    begin
+      SetLength(guide.Style.DashLogical, d.Count);
+      for j := 0 to d.Count - 1 do
+        guide.Style.DashLogical[j] := TyGuideJsNumber(d.Items[j], NaN);
+    end;
+    { a pointer at its datum, never a target }
+    guide.Silent := True;
+    guide.IsGuide := True;
+    guide.Datum := el.Datum;
+    guide.Anim.Role := carGuide;
+    guide.Anim.Series := si;
+    guide.Anim.Index := el.Datum.DataIndex;
+    { updateZ: under its host, or over it with showAbove }
+    above := TyStReadBool(nodes, ['labelLine', 'showAbove'], has) and has;
+    guide.Z := host.Z;
+    if above then guide.Z2 := host.Z2 + 1 else guide.Z2 := host.Z2 - 1;
+    { hidden where its label is, or where the normal labelLine does not show }
+    guide.Ignore := el.Ignore or not showN;
+    AList.Add(guide);
+  end;
 end;
 
 procedure TTyAdvanceChart.PaintSeries(APainter: TTyPainter;
@@ -13548,6 +13754,10 @@ end;
 function StGuideRestOf(const AEl: TTyChartElement): TTyStObject;
 begin
   Result := TyStNoObject;
+  { the line's ink, width and smooth at rest [Batch 112] }
+  TyStSetColor(Result, stkStroke, AEl.Style.StrokeColor);
+  TyStSetNum(Result, stkLineWidth, AEl.Style.StrokeWidthLogical);
+  TyStSetNum(Result, stkSmooth, AEl.Caption.LgSmooth);
   TyStSetNum(Result, stkOpacity, AEl.Style.Alpha);
   TyStSetNum(Result, stkZ2, AEl.Z2);
   TyStSetNum(Result, stkX, 0);
@@ -13729,6 +13939,12 @@ begin
   AEl.Ignore := c.Num[stkIgnore] <> 0;
   if not AProxied and not StSameNum(c.Num[stkOpacity], r.Num[stkOpacity]) then
     AEl.Style.Alpha := c.Num[stkOpacity];
+  { the state's lineStyle and smooth (a state that does not say draws it
+    straight) [Batch 112] }
+  if c.Has[stkStroke] then AEl.Style.StrokeColor := c.Color[stkStroke];
+  if c.Has[stkLineWidth] then AEl.Style.StrokeWidthLogical := c.Num[stkLineWidth];
+  if c.Has[stkSmooth] and not StSameNum(c.Num[stkSmooth], r.Num[stkSmooth]) then
+    AEl.Shape.Cmds := TyLabelLineCmds(AEl.Shape.Points, c.Num[stkSmooth]);
 end;
 
 function TTyAdvanceChart.StKindOf(ASlot: Integer): TTyStKind;
@@ -13797,7 +14013,8 @@ end;
 procedure TTyAdvanceChart.StDeclareItem(ASlot, ARaw: Integer;
   AList: TTyPaintList; APPI: Integer);
 var
-  s, idx: Integer;
+  s, idx, labIdx: Integer;
+  lineShow, labRest, labIgn, ownLine: Boolean;
   item: PTyStItem;
   host, cap, guide: TTyChartElement;
   nodes: TTyStNodeArray;
@@ -14036,11 +14253,46 @@ begin
     item^.Guide.Proxy := not disabled;
     for n := Low(TTyStName) to High(TTyStName) do item^.Guide.HasState[n] := True;
     item^.Guide.Rest := StGuideRestOf(guide);
+    { setLabelLineStyle: EVERY STATE ITS OWN IGNORE -- hidden where the label
+      is, or where the state's labelLine.show (the normal one by default) is
+      false -- its smooth (nought unless the state says) and its lineStyle.
+      The label as the line was styled: a pie's before hideOverlap (PieView
+      styles it; a line hideOverlap hid with its label then comes back with
+      it [Batch 103]), any other's after it. [Batch 112] }
+    { a pie's and a funnel's labelLine show by default, and their views style
+      the line before the label layout runs }
+    ownLine := FSt[s].Kind in [sskPie, sskFunnel];
+    lineShow := TyStReadBool(nodes, ['labelLine', 'show'], has);
+    if not has then lineShow := ownLine;
+    labIdx := FSt[s].LabelIdx[ARaw];
+    if labIdx >= 0 then
+    begin
+      cap := AList.Element(labIdx);
+      if ownLine then
+        labRest := cap.Ignore and not cap.Caption.LmOverlapHidden
+      else
+        labRest := cap.Ignore;
+    end
+    else
+      labRest := True;
     for n := Low(TTyStName) to High(TTyStName) do
-      item^.Guide.Decl[n] := TyStNoObject;
-    { a line hideOverlap hid with its label comes back with it [Batch 103] }
-    if guide.Caption.LmEmphShow then
-      TyStSetNum(item^.Guide.Decl[stnEmphasis], stkIgnore, 0);
+    begin
+      obj := TyStNoObject;
+      stShow := TyStReadBool(nodes, [cStNames[n], 'labelLine', 'show'], has);
+      if not has then stShow := lineShow;
+      if item^.Label_.Exists and item^.Label_.Decl[n].Has[stkIgnore] then
+        labIgn := item^.Label_.Decl[n].Num[stkIgnore] <> 0
+      else
+        labIgn := labRest;
+      TyStSetNum(obj, stkIgnore, Ord(labIgn or not stShow));
+      TyStSetNum(obj, stkSmooth,
+        TyLabelLineSmoothOf(TyStFind(nodes, [cStNames[n], 'labelLine', 'smooth'])));
+      txt := TyStReadString(nodes, [cStNames[n], 'labelLine', 'lineStyle', 'color'], has);
+      if has and TyTryParseChartColor(txt, c) then TyStSetColor(obj, stkStroke, c);
+      ss := TyStReadNumber(nodes, [cStNames[n], 'labelLine', 'lineStyle', 'width'], has);
+      if has and not IsNan(ss) then TyStSetNum(obj, stkLineWidth, ss);
+      item^.Guide.Decl[n] := obj;
+    end;
     TyStSetNum(item^.Guide.Decl[stnSelect], stkX, dx);
     TyStSetNum(item^.Guide.Decl[stnSelect], stkY, dy);
     if not was then
