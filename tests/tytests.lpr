@@ -247,7 +247,8 @@ uses
   test.db.choices,
   test.db.lists,
   test.db.image,
-  test.db.datetime;
+  test.db.datetime,
+  test.db.navigator;
 
 type
   TTyTestRunner = class(TTestRunner)

@@ -102,12 +102,12 @@ const
     does not hold them -- so neither does G10's fixture -- and check (4) of
     TestEveryRegisteredClassIsAccountedFor lets them through. A class registered since is
     reported, so this list empties itself rather than going stale. }
-  CNotYetOnThePalette: array[0..19] of string = (
+  CNotYetOnThePalette: array[0..20] of string = (
     'TTyDBEdit', 'TTyDBMaskEdit', 'TTyDBMemo', 'TTyDBText', 'TTyDBNumericEdit',
     'TTyDBCurrencyEdit', 'TTyDBSpinEdit', 'TTyDBFloatSpinEdit', 'TTyDBCheckBox',
     'TTyDBToggleSwitch', 'TTyDBRadioGroup', 'TTyDBSegmented', 'TTyDBRating', 'TTyDBComboBox',
     'TTyDBListBox', 'TTyDBLookupComboBox', 'TTyDBLookupListBox', 'TTyDBImage',
-    'TTyDBDateTimePicker', 'TTyDBCalendar');
+    'TTyDBDateTimePicker', 'TTyDBCalendar', 'TTyDBNavigator');
 
   { G7: where each derived control's custom class must hang (plan appendix C-0), plus the
     intermediate classes. Columns: subject, expected parent, the class whose split activates
@@ -1242,7 +1242,8 @@ initialization
     'TTyDBEdit', 'TTyDBMaskEdit', 'TTyDBMemo', 'TTyDBText', 'TTyDBNumericEdit', 'TTyDBCurrencyEdit',
     'TTyDBSpinEdit', 'TTyDBFloatSpinEdit', 'TTyDBCheckBox', 'TTyDBToggleSwitch', 'TTyDBRadioGroup',
     'TTyDBSegmented', 'TTyDBRating', 'TTyDBComboBox', 'TTyDBListBox', 'TTyDBLookupComboBox',
-    'TTyDBLookupListBox', 'TTyDBImage', 'TTyDBDateTimePicker', 'TTyDBCalendar']);
+    'TTyDBLookupListBox', 'TTyDBImage', 'TTyDBDateTimePicker', 'TTyDBCalendar',
+    'TTyDBNavigator']);
 
   { CDemoted: base and intermediate classes that publish nothing beyond their LCL root. }
   AddAll(GDemoted, ['TTyCustomControl', 'TTyGraphicControl', 'TTyComponent', 'TTyGlyphButtonBase', 'TTyCustomTabStrip', 'TTyCustomGrid',

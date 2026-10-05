@@ -27,10 +27,10 @@ uses
   tyControls.ComboBox, tyControls.ComboBoxEx, tyControls.ComboEdit, tyControls.ControlBar,
   tyControls.Controller, tyControls.CoolBar, tyControls.CurrencyEdit, tyControls.DB.Choices,
   tyControls.DB.DateTime, tyControls.DB.Edits, tyControls.DB.Image, tyControls.DB.Lists,
-  tyControls.DateTimePicker, tyControls.Dial, tyControls.Dialogs, tyControls.Dialogs.About,
-  tyControls.Dialogs.IconBrowser, tyControls.Dialogs.Progress, tyControls.Divider,
-  tyControls.DropButtons, tyControls.Edit, tyControls.Empty, tyControls.ExPanel,
-  tyControls.FilterComboBox, tyControls.FloatSpinEdit, tyControls.FontComboBox,
+  tyControls.DB.Navigator, tyControls.DateTimePicker, tyControls.Dial, tyControls.Dialogs,
+  tyControls.Dialogs.About, tyControls.Dialogs.IconBrowser, tyControls.Dialogs.Progress,
+  tyControls.Divider, tyControls.DropButtons, tyControls.Edit, tyControls.Empty,
+  tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit, tyControls.FontComboBox,
   tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.Form, tyControls.FormSurface,
   tyControls.Gauge, tyControls.GearActivityIndicator, tyControls.GearDial, tyControls.GlowLabel,
   tyControls.GlyphButtons, tyControls.GlyphImageList, tyControls.Grid, tyControls.GridPanel,
@@ -3361,6 +3361,59 @@ type
     property AutoDisplay;
     property DataField;
     property DataSource;
+  end;
+
+  TGenDBNavigator = class(TTyCustomDBNavigator)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Align;
+    property Anchors;
+    property BeforeAction;
+    property ConfirmDelete;
+    property DataSource;
+    property Direction;
+    property Hints;
+    property ShowButtonHints;
+    property VisibleButtons;
+    property Images;
   end;
 
   TGenDBNumericEdit = class(TTyCustomDBNumericEdit)
@@ -10988,7 +11041,7 @@ type
 
 const
   { (mimic, final class) }
-  CGenMimics: array[0..177, 0..1] of TClass = (
+  CGenMimics: array[0..178, 0..1] of TClass = (
     (TGenAboutDialog, TTyAboutDialog),
     (TGenActivityBar, TTyActivityBar),
     (TGenActivityIndicator, TTyActivityIndicator),
@@ -11040,6 +11093,7 @@ const
     (TGenDBLookupListBox, TTyDBLookupListBox),
     (TGenDBMaskEdit, TTyDBMaskEdit),
     (TGenDBMemo, TTyDBMemo),
+    (TGenDBNavigator, TTyDBNavigator),
     (TGenDBNumericEdit, TTyDBNumericEdit),
     (TGenDBRadioGroup, TTyDBRadioGroup),
     (TGenDBRating, TTyDBRating),

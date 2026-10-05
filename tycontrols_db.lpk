@@ -40,6 +40,10 @@
         <UnitName Value="tyControls.DB.Lists"/>
       </Item>
       <Item>
+        <Filename Value="source/db/tyControls.DB.Navigator.pas"/>
+        <UnitName Value="tyControls.DB.Navigator"/>
+      </Item>
+      <Item>
         <Filename Value="source/db/tyControls.DB.StrConsts.pas"/>
         <UnitName Value="tyControls.DB.StrConsts"/>
       </Item>
