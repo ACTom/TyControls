@@ -39,6 +39,13 @@ type
     // Re-derive the displayed text from the current value (AGroup = grouped display form).
     // Protected so a subclass can refresh after changing a display-affecting property.
     procedure Reformat(AGroup: Boolean);
+    { Display AValue (AGroup = the grouped blur form), keeping Modified as it was. Does nothing
+      while the form is being read: Loaded displays once, when every property has arrived. }
+    procedure ShowValue(AValue: Double; AGroup: Boolean);
+    { The number in a displayed text: AText without what Formatted put around it. The base adds
+      nothing; TTyCurrencyEdit takes its symbol off. }
+    function StripDecoration(const AText: string): string; virtual;
+    procedure Loaded; override;
     // Format AValue for display. AGroup = the blur/display form (grouped); False = the
     // focused raw-edit form. Virtual so TTyCurrencyEdit can wrap it with a currency symbol
     // (only on the grouped form, so the raw-edit form stays a clean editable number).
@@ -155,7 +162,11 @@ end;
 
 function TTyNumericEdit.GetValue: Double;
 begin
-  if not TyParseNumber(Text, FThousands, FDecimalSep, Result) then Result := 0;
+  { The decoration comes off first, as text, before the character filter: a symbol such as
+    'Fr.', 'kr.' or 'US$1' carries characters the filter keeps, and 'Fr.1,234.50' filtered
+    whole is '.1234.50' -- not a number, so the value read 0, and the next reformat (focusing
+    the field is one) wrote that 0 back. }
+  if not TyParseNumber(StripDecoration(Text), FThousands, FDecimalSep, Result) then Result := 0;
   Result := ClampVal(Result);
 end;
 
@@ -165,8 +176,6 @@ begin
 end;
 
 procedure TTyNumericEdit.Reformat(AGroup: Boolean);
-var
-  WasModified: Boolean;
 begin
   { Re-deriving the DISPLAY from the value the field already holds is the control's own
     bookkeeping, not the program overwriting the user's work — but it goes through the
@@ -175,9 +184,33 @@ begin
     value the user had just finished typing, which is exactly the field an enable-Save
     reads. TTySpinEdit.CommitEdit does the same around its own reformat, and the two
     spin-shaped controls have to answer "did the user touch this" the same way. }
+  ShowValue(GetValue, AGroup);
+end;
+
+procedure TTyNumericEdit.ShowValue(AValue: Double; AGroup: Boolean);
+var
+  WasModified: Boolean;
+begin
+  { While a form is read, Text arrives before the properties that shape it (Decimals, the
+    currency symbol ...), so a text parsed then would be parsed under the defaults: 'Fr.1,234.50'
+    read before CurrencySymbol = 'Fr.' came out 0. }
+  if csLoading in ComponentState then Exit;
   WasModified := Modified;
-  Text := Formatted(GetValue, AGroup);
+  Text := Formatted(AValue, AGroup);
   Modified := WasModified;
+end;
+
+function TTyNumericEdit.StripDecoration(const AText: string): string;
+begin
+  Result := AText;
+end;
+
+procedure TTyNumericEdit.Loaded;
+begin
+  inherited Loaded;
+  { The one display the setters skipped while the form was read: grouped, clamped, decorated
+    under the properties as they finally are. }
+  if not Focused then Reformat(True);
 end;
 
 procedure TTyNumericEdit.SetDecimals(const AValue: Integer);

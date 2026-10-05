@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyCurrencyEdit 是**货币编辑框**,继承自 [TTyNumericEdit](numericedit.md),只在**分组显示形态(失焦)**上额外加一个货币符号。输入过滤、编辑原始值 / 失焦分组格式化、夹紧、`'TyEdit'` 主题全部继承。符号只出现在显示态,**聚焦编辑态是干净可编辑的数字**;解析会丢弃非数字字符,所以取值不受符号影响。
+TTyCurrencyEdit 是**货币编辑框**,继承自 [TTyNumericEdit](numericedit.md),只在**分组显示形态(失焦)**上额外加一个货币符号。输入过滤、编辑原始值 / 失焦分组格式化、夹紧、`'TyEdit'` 主题全部继承。符号只出现在显示态,**聚焦编辑态是干净可编辑的数字**;解析前先把显示时加上的那段符号原样去掉,所以符号里有 `.`、数字或正负号(`Fr.`、`kr.`、`US$1`)也不影响取值。
 
 ---
 
@@ -65,5 +65,5 @@ Price.Value := 1234.5;      // 显示 ¥1,234.50;Price.Value 读回 1234.5
 
 - **符号不入编辑态:** 聚焦时看不到符号(纯数字好编辑),失焦重新包裹。
 - **曾经点一下就卡死的那个 bug,根子不在本控件。** 现象是:在真窗口上给 `TTyCurrencyEdit` 发一个 `LM_LBUTTONDOWN`,进程再也不回来(CPU 为 0,单线程)。点击本身是无辜的——真正卡住的是**释放一个正持有焦点的编辑框**:`TWinControl.Destroy` → `RemoveFocus` → `WM_KILLFOCUS` → `DoExit` → `Reformat` 写回 `Text`,而 `tyControls.Edit.pas` 的析构函数当时已经先把撤销栈释放掉了(释放后使用 → `EAccessViolation` → LCL 弹模态错误框 → 控制台进程永远等在那儿)。本控件只是**唯一一个默认值就会踩中**的:货币符号让"失焦显示态"(`$0.00`)和"聚焦编辑态"(`0.00`)不一样,于是失焦重排**真的**改了字符串;而 `TTyNumericEdit` 默认值下两者都是 `0.00`,`SetTextInternal` 的 `FText = AValue` 短路直接跨了过去。同族的 `TTyCalcCurrencyEdit` 同理默认踩中,`TTyNumericEdit`/`TTyCalcEdit` 则要持有一个带千分位的值才会踩中。**修复在 `tyControls.Edit.pas` 的析构顺序**,详见 [edit.md](edit.md) 注意事项。
-- **取值干净:** `Value` 解析丢弃符号,无论符号在前在后。
+- **取值干净:** `Value` 解析前去掉自己加的符号前缀或后缀(按整段去,不按字符过滤),无论符号在前在后、里面有没有点和数字。3.0.0 是按字符过滤的,`Fr.` 这类符号会让失焦后的 `Value` 读成 0,聚焦一下值就被冲掉;`US$1` 里的 1 还会混进数字里。改 `CurrencySymbol` / `SymbolBefore` 时先按旧符号读出值再换。
 - **小数位:** 继承 `TTyNumericEdit` 的 `Decimals`,默认 2(货币惯例)。
