@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyColorBox 是**命名颜色组合框**:字段(收起态)和下拉列表的每一项都显示一个**颜色色块 + 名称**。继承自 [TTyComboBox](combobox.md),靠给列表/组合框新增的**逐项自绘钩子**实现——`CreatePopupList` 注入一个会画色块的下拉列表、`PaintFieldContent` 画字段里的色块。通过 `AddColor` / `ClearColors` 管理色板,`Selected` 是当前选中的 `TColor`。这是整个颜色/字体选择器子族的**地基控件**。
+TTyColorBox 是**命名颜色组合框**:字段(收起态)和下拉列表的每一项都显示一个**颜色色块 + 名称**。继承自 [TTyCustomComboBox](combobox.md),靠给列表/组合框新增的**逐项自绘钩子**实现——`CreatePopupList` 注入一个会画色块的下拉列表、`PaintFieldContent` 画字段里的色块。通过 `AddColor` / `ClearColors` 管理色板,`Selected` 是当前选中的 `TColor`。这是整个颜色/字体选择器子族的**地基控件**。
 
 ---
 
@@ -36,7 +36,9 @@ uses tyControls.ColorBox;
 | `ClearColors` | — | 清空所有项与颜色。 |
 | `ColorAt(AIndex)` | `TColor` | 第 i 项的色(越界 `clNone`)。 |
 
-另继承 `TTyComboBox` 的 `ItemIndex` / `OnChange` / `OnSelect` 等。
+另继承 `TTyCustomComboBox` 的 `ItemIndex` / `OnChange` / `OnSelect` 等。
+
+**色板不存进 `.lfm`,读窗体时按 `Style` 重建。** `.lfm` 只能存 `Items` 的文字、存不了颜色,所以 `Items` 不写进窗体文件;窗体读完后(`Loaded`)总是按 `Style` 重新生成色板,再选中 `.lfm` 里记的 `Selected`。设计器里手填的 `Items` 不会保存。要自己的色板,用 `cbCustomColors` + `OnGetColors`,或在运行时 `ClearColors` / `AddColor`。3.0.0 存过的窗体里还带着一份只有色名的 `Items`,照样能正确读回。
 
 ### 3.1 Style —— 色板由什么组成
 
@@ -69,9 +71,9 @@ uses tyControls.ColorBox;
 
 复用三个新加的**逐项自绘钩子**(默认全部字节一致,普通 ListBox/ComboBox 不受影响):
 
-- `TTyListBox.PaintItemContent(P, rowRect, i, style)` —— 每行内容绘制(默认=文字);内部 `TTyColorPopupList` 覆写它画色块+名。
-- `TTyComboBox.CreatePopupList: TTyListBox` —— 下拉列表工厂(默认 `TTyListBox`);ColorBox 返回 `TTyColorPopupList`。
-- `TTyComboBox.PaintFieldContent(P, textRect, style)` —— 字段选中项绘制(默认=文字);ColorBox 覆写它画色块+名。
+- `TTyCustomListBox.PaintItemContent(P, rowRect, i, style)` —— 每行内容绘制(默认=文字);内部 `TTyColorPopupList` 覆写它画色块+名。
+- `TTyCustomComboBox.CreatePopupList: TTyCustomListBox` —— 下拉列表工厂(默认 `TTyComboPopupList`);ColorBox 返回 `TTyColorPopupList`。4.0 起返回类型是 `TTyCustomListBox`:勾选组合框的下拉是 `TTyCheckListBox`,它不再是 `TTyListBox`。
+- `TTyCustomComboBox.PaintFieldContent(P, textRect, style)` —— 字段选中项绘制(默认=文字);ColorBox 覆写它画色块+名。
 
 后续 `TTyColorListBox` / `TTyFontComboBox` / `TTyCheckListBox` 等都建立在这三个钩子上。纯函数 `TyTColorToTy`(TColor→TTyColor)已单测。
 

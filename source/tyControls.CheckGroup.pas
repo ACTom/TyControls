@@ -13,14 +13,14 @@ type
     declaration compile unchanged; OnItemClick below is the property it binds to. }
   TCheckGroupClicked = TCheckGroupItemEvent;
 
-  { TTyCheckGroup — a titled frame (subclasses TTyGroupBox) that auto-populates one
+  { TTyCheckGroup — a titled frame (descends from TTyCustomGroupBox) that auto-populates one
     TTyCheckBox per Items entry, laid out in a column grid inside the group's client
     rect (which TTyGroupBox already insets below the caption band). Unlike a radio
     group, the checkboxes are INDEPENDENT — no mutual exclusion. The child controls
     are internal helpers (owned by Self, csNoDesignVisible) so they never leak into
     the IDE designer; they are rebuilt whenever Items changes, preserving the checked
     state by index where the item still exists. }
-  TTyCheckGroup = class(TTyGroupBox)
+  TTyCustomCheckGroup = class(TTyCustomGroupBox)
   private
     FItems: TStrings;
     FColumns: Integer;
@@ -77,7 +77,7 @@ type
     function CheckBoxAt(AIndex: Integer): TTyCheckBox;
     procedure SetParent(AParent: TWinControl); override;
     procedure Resize; override;
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     { See TTyRadioGroup.CMBiDiModeChanged: LCL's own handling invalidates and calls
       AdjustSize, neither of which re-runs a layout this control did with SetBounds -- so
       without this the indicators would flip and the columns would not. }
@@ -113,7 +113,6 @@ type
       Survives an Items edit the same way Checked[] does: RebuildCheckBoxes restores the
       flag onto the item with the SAME CAPTION, not onto whatever slides into that slot. }
     property CheckEnabled[AIndex: Integer]: Boolean read GetCheckEnabled write SetCheckEnabled;
-  published
     property Items: TStrings read FItems write SetItems;
     property Columns: Integer read FColumns write SetColumns default 1;
     { Which way the item grid FILLS. clHorizontalThenVertical (the default, and LCL's --
@@ -132,7 +131,82 @@ type
       ported one binds without being renamed -- the alternative was to rename ours and
       break every form already built on it. }
     property OnItemClick: TCheckGroupClicked read FOnItemClick write FOnItemClick;
-    { Caption / Alignment inherited from TTyGroupBox; the frame + caption band. }
+  end;
+
+  { TTyCheckGroup publishes TTyCustomCheckGroup's properties; everything lives in TTyCustomCheckGroup. }
+  TTyCheckGroup = class(TTyCustomCheckGroup)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    { Caption / Alignment come from TTyCustomGroupBox: the frame + caption band. }
+    property Caption;
+    property Alignment;
+    property ClientWidth;
+    property ClientHeight;
+    property DockSite;
+    property UseDockManager;
+    property OnDockDrop;
+    property OnDockOver;
+    property OnUnDock;
+    property OnGetSiteInfo;
+    property OnGetDockCaption;
+    property OnStartDock;
+    property OnEndDock;
+    property Align;
+    property Anchors;
+    property Items;
+    property Columns;
+    property ColumnLayout;
+    property OnItemChange;
+    property OnItemClick;
   end;
 
 { The device-px cell rect of item AIndex within a client area AClientRect, given
@@ -208,9 +282,9 @@ begin
     Result := BidiFlipRect(Result, AClientRect, True);
 end;
 
-{ TTyCheckGroup }
+{ TTyCustomCheckGroup }
 
-constructor TTyCheckGroup.Create(AOwner: TComponent);
+constructor TTyCustomCheckGroup.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FItems := TStringList.Create;
@@ -222,7 +296,7 @@ begin
   Height := 130;
 end;
 
-destructor TTyCheckGroup.Destroy;
+destructor TTyCustomCheckGroup.Destroy;
 begin
   // Children are owned by Self and freed by the inherited destructor, but clear our
   // array first so any late Notification/OnChange can't touch a stale reference.
@@ -231,12 +305,12 @@ begin
   inherited Destroy;
 end;
 
-function TTyCheckGroup.Count: Integer;
+function TTyCustomCheckGroup.Count: Integer;
 begin
   Result := FItems.Count;
 end;
 
-function TTyCheckGroup.CheckedCount: Integer;
+function TTyCustomCheckGroup.CheckedCount: Integer;
 var
   i: Integer;
 begin
@@ -245,17 +319,17 @@ begin
     if (FCheckBoxes[i] <> nil) and FCheckBoxes[i].Checked then Inc(Result);
 end;
 
-procedure TTyCheckGroup.SetItems(AValue: TStrings);
+procedure TTyCustomCheckGroup.SetItems(AValue: TStrings);
 begin
   FItems.Assign(AValue);   // fires ItemsChanged -> rebuild + relayout
 end;
 
-procedure TTyCheckGroup.ItemsChanged(Sender: TObject);
+procedure TTyCustomCheckGroup.ItemsChanged(Sender: TObject);
 begin
   RebuildCheckBoxes;
 end;
 
-procedure TTyCheckGroup.SetColumns(AValue: Integer);
+procedure TTyCustomCheckGroup.SetColumns(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
   if FColumns = AValue then Exit;
@@ -264,7 +338,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyCheckGroup.SetColumnLayout(AValue: TColumnLayout);
+procedure TTyCustomCheckGroup.SetColumnLayout(AValue: TColumnLayout);
 begin
   if FColumnLayout = AValue then Exit;
   FColumnLayout := AValue;
@@ -272,7 +346,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyCheckGroup.ClearCheckBoxes;
+procedure TTyCustomCheckGroup.ClearCheckBoxes;
 var
   i: Integer;
 begin
@@ -281,7 +355,7 @@ begin
   SetLength(FCheckBoxes, 0);
 end;
 
-procedure TTyCheckGroup.RebuildCheckBoxes;
+procedure TTyCustomCheckGroup.RebuildCheckBoxes;
 var
   i, n, idx: Integer;
   oldChecked, oldDisabled: TStringList;
@@ -352,7 +426,7 @@ begin
   Invalidate;
 end;
 
-function TTyCheckGroup.RowPitch: Integer;
+function TTyCustomCheckGroup.RowPitch: Integer;
 var
   i, itemMin, ppi: Integer;
 begin
@@ -366,7 +440,7 @@ begin
     MulDiv(ActiveController.Metric('--row-height', TyGroupDefaultRowH), ppi, 96), itemMin);
 end;
 
-procedure TTyCheckGroup.LayoutCheckBoxes;
+procedure TTyCustomCheckGroup.LayoutCheckBoxes;
 var
   cr: TRect;
   n, rowH, i: Integer;
@@ -391,7 +465,7 @@ begin
   end;
 end;
 
-procedure TTyCheckGroup.ChildChanged(Sender: TObject);
+procedure TTyCustomCheckGroup.ChildChanged(Sender: TObject);
 var
   i: Integer;
 begin
@@ -412,33 +486,33 @@ end;
   `CG.OnKeyDown := @H` sees keys typed while focus is on any item -- which is the only way
   it can ever fire, the group itself never being focusable. Key stays `var` all the way
   through, so a handler that swallows a key really swallows it. }
-procedure TTyCheckGroup.ItemKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+procedure TTyCustomCheckGroup.ItemKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
   KeyDown(Key, Shift);
 end;
 
-procedure TTyCheckGroup.ItemKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
+procedure TTyCustomCheckGroup.ItemKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
   KeyUp(Key, Shift);
 end;
 
-procedure TTyCheckGroup.ItemKeyPress(Sender: TObject; var Key: char);
+procedure TTyCustomCheckGroup.ItemKeyPress(Sender: TObject; var Key: char);
 begin
   KeyPress(Key);
 end;
 
-procedure TTyCheckGroup.ItemUTF8KeyPress(Sender: TObject; var UTF8Key: TUTF8Char);
+procedure TTyCustomCheckGroup.ItemUTF8KeyPress(Sender: TObject; var UTF8Key: TUTF8Char);
 begin
   UTF8KeyPress(UTF8Key);
 end;
 
-procedure TTyCheckGroup.RaiseIndexOutOfBounds(AIndex: Integer);
+procedure TTyCustomCheckGroup.RaiseIndexOutOfBounds(AIndex: Integer);
 begin
   raise EListError.CreateFmt('%s Index %d out of bounds 0 .. %d',
     [ClassName, AIndex, Length(FCheckBoxes) - 1]);
 end;
 
-function TTyCheckGroup.GetChecked(AIndex: Integer): Boolean;
+function TTyCustomCheckGroup.GetChecked(AIndex: Integer): Boolean;
 begin
   if (AIndex < 0) or (AIndex > High(FCheckBoxes)) then
     RaiseIndexOutOfBounds(AIndex);
@@ -448,7 +522,7 @@ begin
   Result := FCheckBoxes[AIndex].Checked;
 end;
 
-procedure TTyCheckGroup.SetChecked(AIndex: Integer; AValue: Boolean);
+procedure TTyCustomCheckGroup.SetChecked(AIndex: Integer; AValue: Boolean);
 var
   cb: TTyCheckBox;
   saved: TNotifyEvent;
@@ -470,20 +544,20 @@ begin
   end;
 end;
 
-function TTyCheckGroup.CheckBoxAt(AIndex: Integer): TTyCheckBox;
+function TTyCustomCheckGroup.CheckBoxAt(AIndex: Integer): TTyCheckBox;
 begin
   if (AIndex < 0) or (AIndex > High(FCheckBoxes)) then Exit(nil);
   Result := FCheckBoxes[AIndex];
 end;
 
-function TTyCheckGroup.GetButton(AIndex: Integer): TTyCheckBox;
+function TTyCustomCheckGroup.GetButton(AIndex: Integer): TTyCheckBox;
 begin
   if (AIndex < 0) or (AIndex > High(FCheckBoxes)) then
     RaiseIndexOutOfBounds(AIndex);
   Result := FCheckBoxes[AIndex];
 end;
 
-function TTyCheckGroup.GetCheckEnabled(AIndex: Integer): Boolean;
+function TTyCustomCheckGroup.GetCheckEnabled(AIndex: Integer): Boolean;
 begin
   if (AIndex < 0) or (AIndex > High(FCheckBoxes)) then
     RaiseIndexOutOfBounds(AIndex);
@@ -493,7 +567,7 @@ begin
   Result := FCheckBoxes[AIndex].Enabled;
 end;
 
-procedure TTyCheckGroup.SetCheckEnabled(AIndex: Integer; AValue: Boolean);
+procedure TTyCustomCheckGroup.SetCheckEnabled(AIndex: Integer; AValue: Boolean);
 begin
   if (AIndex < 0) or (AIndex > High(FCheckBoxes)) then
     RaiseIndexOutOfBounds(AIndex);
@@ -501,25 +575,25 @@ begin
   FCheckBoxes[AIndex].Enabled := AValue;
 end;
 
-procedure TTyCheckGroup.SetParent(AParent: TWinControl);
+procedure TTyCustomCheckGroup.SetParent(AParent: TWinControl);
 begin
   inherited SetParent(AParent);
   LayoutCheckBoxes;                 // client rect may resolve differently once parented
 end;
 
-procedure TTyCheckGroup.Resize;
+procedure TTyCustomCheckGroup.Resize;
 begin
   inherited Resize;
   LayoutCheckBoxes;                 // reflow on resize (columns share the new width)
 end;
 
-procedure TTyCheckGroup.CMBiDiModeChanged(var Message: TLMessage);
+procedure TTyCustomCheckGroup.CMBiDiModeChanged(var Message: TLMessage);
 begin
   inherited;
   LayoutCheckBoxes;                 // the columns have to actually change sides
 end;
 
-procedure TTyCheckGroup.SetController(AValue: TTyStyleController);
+procedure TTyCustomCheckGroup.SetController(AValue: TTyCustomStyleController);
 var
   i: Integer;
 begin

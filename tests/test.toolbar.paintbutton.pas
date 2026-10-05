@@ -44,10 +44,10 @@ type
     FStaleInk: Integer;          // callbacks whose DC ink was NOT the one the handler asked for
     FLastState: Integer;
     FLastSender: TObject;
-    procedure HandleSilent(Sender: TTyToolButton; AState: Integer);
-    procedure HandleMarker(Sender: TTyToolButton; AState: Integer);
-    procedure HandleCorners(Sender: TTyToolButton; AState: Integer);
-    procedure HandleOverflowing(Sender: TTyToolButton; AState: Integer);
+    procedure HandleSilent(Sender: TTyCustomToolButton; AState: Integer);
+    procedure HandleMarker(Sender: TTyCustomToolButton; AState: Integer);
+    procedure HandleCorners(Sender: TTyCustomToolButton; AState: Integer);
+    procedure HandleOverflowing(Sender: TTyCustomToolButton; AState: Integer);
     { One paint through the real funnel into a FRESH pre-filled target. Caller frees. }
     function PaintInto(AW, AH: Integer): TBGRABitmap;
   protected
@@ -132,7 +132,7 @@ begin
   FreeAndNil(FForm);   // owns the bar and the button
 end;
 
-procedure TToolBarPaintButtonTest.HandleSilent(Sender: TTyToolButton; AState: Integer);
+procedure TToolBarPaintButtonTest.HandleSilent(Sender: TTyCustomToolButton; AState: Integer);
 begin
   { Records and paints NOTHING. With this assigned, the button must render as if nobody
     painted at all — that is the whole-replacement half of the contract. }
@@ -141,7 +141,7 @@ begin
   FLastSender := Sender;
 end;
 
-procedure TToolBarPaintButtonTest.HandleMarker(Sender: TTyToolButton; AState: Integer);
+procedure TToolBarPaintButtonTest.HandleMarker(Sender: TTyCustomToolButton; AState: Integer);
 var
   c: TCanvas;
 begin
@@ -157,7 +157,7 @@ end;
 { The shape that catches a canvas whose cached state no longer describes its DC: the SAME
   pen colour and the SAME ink on EVERY call. LineTo stops one short, so the two strokes
   cover exactly the four corners of the button. }
-procedure TToolBarPaintButtonTest.HandleCorners(Sender: TTyToolButton; AState: Integer);
+procedure TToolBarPaintButtonTest.HandleCorners(Sender: TTyCustomToolButton; AState: Integer);
 var
   c: TCanvas;
   r: TRect;
@@ -179,7 +179,7 @@ begin
 end;
 
 { Strokes WELL OUTSIDE its own button. Everything beyond the client rect must be clipped. }
-procedure TToolBarPaintButtonTest.HandleOverflowing(Sender: TTyToolButton; AState: Integer);
+procedure TToolBarPaintButtonTest.HandleOverflowing(Sender: TTyCustomToolButton; AState: Integer);
 var
   c: TCanvas;
 begin

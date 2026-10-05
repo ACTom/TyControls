@@ -302,6 +302,99 @@ TyButton { background: #00FF00; }   /* 只覆盖 background;color 仍是 #111111
 即便如此,仍不建议在**同一个文件里**重复定义同一选择器 —— 需要并列声明时把它们写进同一个规则块,
 读起来才不用满文件找覆盖。
 
+### 4.5 typeKey 链:子类继承父类的规则
+
+第三方控件覆写 `GetStyleTypeKey` 报自己的键(比如 `TagButton`)时,可以在 Pascal 里登记它从哪个键来
+(写法见 [subclassing.md](subclassing.md) 第 2 节):
+
+```pascal
+TyRegisterTypeKeyParent('TagButton', 'TyButton');   // 在 tyControls.StyleModel 里
+```
+
+登记之后,`TagButton` 先拿到 `TyButton` 的全部样式(内置层、主题层、变体、状态,和解析 `TyButton`
+本身一模一样),再用自己的规则逐属性盖上去。主题里没写 `TagButton` 时,它和普通按钮完全一样;
+写了就只需写不同的地方:
+
+```css
+TagButton { border-radius: var(--radius-pill); }
+```
+
+子键的规则按 §4.4 的**阶段**和父键交错:普通规则 → 变体 → 各状态(selected → hover → focus →
+active → disabled),每个阶段里先父后子。所以:
+
+- 子键的规则盖过父键**同一阶段或更早阶段**写的值:`TagButton { }` 盖过 `TyButton { }`,
+  `TagButton.primary` 盖过 `TyButton.primary`,`TagButton:hover` 盖过 `TyButton:hover`;
+- 父键**更晚阶段**写的值仍然有效:`TyButton:hover`、`TyButton:disabled` 盖过 `TagButton { }`
+  和 `TagButton.primary`,`TyButton:disabled` 也盖过 `TagButton:hover`。
+
+```css
+TagButton       { background: #DCFCE7; }   /* 平时是绿的 */
+                                           /* 悬停时用 TyButton:hover 的底色 */
+TagButton:hover { background: #BBF7D0; }   /* 想要自己的悬停色,就写这一条 */
+```
+
+这和浏览器里「带状态、带类的选择器优先」的直觉一致:给子键写一条普通背景,不会吃掉父键的悬停和禁用效果。
+
+「父键写的值」指父键**自己解析出来**的结果。例如主题打开了 `PropertyCascade`、又写了一条普通的
+`TyButton { background }`,它在 `TyButton` 自己的结果里已经盖掉了内置的 `:hover` 底色,那么对
+`TagButton` 来说这个背景也只算普通阶段写的。
+
+**链可以有好几级**,比如 `FancyTag` → `TagButton` → `TyButton`:每个阶段里从最上面的父键往下叠,
+同一阶段子键胜。一条链最多 8 个键。
+
+**链根以下的键,同一阶段里先内置层、后用户层。** 链根(最上面的父键)照 §4.4 解析:先整个内置层
+(各阶段),再整个用户层。链根下面的键则按阶段走,每个阶段里先内置层、再用户层。所以把一个内置键
+登记成子键、又开着 `PropertyCascade` 时,它内置的 `:hover` 会盖过主题给它写的普通规则(阶段更晚);
+链根自己不会这样(用户层整个排在内置层之后)。第三方键没有内置规则,看不出这条区别。
+
+**按属性组交错,不按单条声明。** 「哪个阶段写了这个值」按属性组记,组的划分和控件的 StyleOverride
+合并进来时一样:一组里任何一个声明都算写了整组,让位时整组一起让。平时一条声明就是一组,要留意的是这几组:
+
+- `outline` 与 `outline-offset` 是一组(焦点环)。子键只写 `outline-offset`,父键在更晚的阶段
+  (常见的是 `:focus`)写了 `outline`,那个阶段里整组用父键的,子键的偏移也一起让掉:
+
+  ```css
+  TyButton:focus  { outline: 2px var(--focus-ring); outline-offset: 1px; }
+  TagButton       { outline-offset: 6px; }   /* 聚焦时不生效:整组用 TyButton:focus 的 */
+  TagButton:focus { outline-offset: 6px; }   /* 写在同一阶段,子键胜 */
+  ```
+
+- `background-size`、`background-blur` 跟 `background` 一组:父键的 `:hover` 换了底色,子键的
+  `background-size` 也跟着让。
+- 玻璃效果 `glass-blur` / `glass-tint` 是单独一组,不跟 `background` 走:父键的 `:hover` 只换底色时,
+  子键的玻璃参数不受影响;父键的 `:hover` 写了 `glass-tint`,悬停时子键的 `glass-blur` 也一起让掉。
+- `border-radius` 的四个角是一组:让位时四角一起回到父键的值。
+- `shadow` 的颜色、模糊、偏移是一组。
+
+没有把 `outline-offset` 单独拆成一项:组的划分和 StyleOverride 合并是同一套,主题作者只记一套规则;
+拆开要给样式集加一个新的属性标志,每个读 `Present` 的地方都得认它,而要碰到这种差别,得父子键在
+不同阶段分写同一个焦点环的两半,把偏移和焦点环写在同一条规则里就不会遇到。
+
+**内置层的让位按键各算各的**(§8.1)。主题写了 `TagButton { }`(无变体、无状态),只让 `TagButton`
+自己的内置规则失效;`TyButton` 的内置规则照常垫在下面。第三方键在内置层本来就没有规则,
+所以这条只在把内置键登记成子键时才看得出来。
+
+**子部件键要分别登记。** 控件用 `GetStyleTypeKey + 'Fill'` 之类拼出来的子部件键不会自动跟着走:
+`TagMeter` 的填充解析的是 `TagMeterFill`,想继承 `TyMeterFill` 就再登记一条。
+
+登记规则:
+
+- 在单元的 `initialization` 里登记,`finalization` 里用 `TyUnregisterTypeKeyParent` 撤销。登记表是
+  整个进程共用的;运行中途才登记,已经画好的控件不会自己重画。
+- **在 `initialization` 里抛异常会让程序还没启动就中止**——比如两个包给同一个键登记了不同的父键,
+  后加载的那个一抛,整个程序起不来。包里登记用 `TyTryRegisterTypeKeyParent`:出错时返回 `False`、
+  登记表不变、不抛异常,控件只是不继承父键的规则;登记成功或同一对已经登记过返回 `True`。
+- 键名不分大小写,必须是标识符(字母或 `_` 开头,后面是字母、数字、`_`、`-`)。
+- 下列情况抛 `ETyCssError`,登记表保持原样:键名不合法;成环(包括把一个键登记成它自己的父键);
+  一条链超过 8 个键;同一个键已经登记了**别的**父键(同一对再登记一次不算错)。
+- 查询用 `TyTypeKeyParent`、`TyTypeKeyChain`、`TyGetRegisteredTypeKeys`。
+
+工具也认这条链:设计期 `StyleClass` 下拉会列出父键的变体(`TagButton` 也有 `primary`、`danger`、
+`ghost`);控制器级 StyleOverride 编辑器的补全和右侧参考列表都列出登记过的键。lint 不检查 typeKey 名,
+子键不会被报。
+
+没登记父键的 typeKey 跟以前一样:只吃主题里为它写的规则。
+
 ---
 
 ## 5. 属性参考
@@ -447,14 +540,16 @@ TyTabControl { border-radius: var(--radius) var(--radius) 0 0; }
 ```
 padding: <全部> ;
 padding: <上下> <左右> ;
+padding: <上> <左右> <下> ;
 padding: <上> <右> <下> <左> ;
 ```
 
-空格分隔,只接受 1、2、4 个值(3 个值报错)。语义与 CSS 一致。
+空格分隔,1 到 4 个值,语义与 CSS 一致;其它个数报错。
 
 ```css
 TyButton { padding: 6px; }
 TyPanel  { padding: 8px 12px; }
+TyLabel  { padding: 2px 6px 4px; }
 TyEdit   { padding: 4px 8px 4px 8px; }
 ```
 
@@ -606,13 +701,13 @@ TyButton.primary:hover { background: lighten(--accent, 8%); }
 TyButton:active { background: darken(--surface, 10%); }
 ```
 
-### 6.3 `alpha(<颜色>, <不透明度 0..1>)`
+### 6.3 `alpha(<颜色>, <不透明度>)`
 
-把颜色的 alpha **替换**为给定值(RGB 不变),`0` 全透明、`1` 不透明。
+把颜色的 alpha **替换**为给定值(RGB 不变),`0` 全透明、`1` 不透明。不透明度也可以写成
+百分比:`alpha(#fff, 50%)` 等于 `alpha(#fff, 0.5)`。
 
-> **陷阱**:第二个参数是 0..1 的小数,**不是百分比**。引擎会剥掉 `%` 后缀但
-> **不会除以 100**——`alpha(#fff, 50%)` 等价于 `alpha(#fff, 50)`,结果被钳为完全不透明。
-> 永远写小数:`alpha(#FFFFFF, 0.18)`。
+> **陷阱**:不带 `%` 的数按 0..1 理解,不是百分比。`alpha(#fff, 50)` 会被钳成完全不透明,
+> 要写 `0.5` 或 `50%`。
 
 ```css
 TyCaptionButton:hover { background: alpha(#FFFFFF, 0.18); }
@@ -701,6 +796,7 @@ TyButton.primary {
 ## 8. typeKey 与内置变体清单
 
 选择器中的类型名即控件 `GetStyleTypeKey` 返回的 typeKey（含子部件 typeKey）。
+第三方控件自己的键可以登记一个父键、继承它的全部规则,见 §4.5。
 
 本节是主题作者的**权威键表**。清单逐条取自 `themes/light.tycss` —— 该文件是唯一事实来源,
 `source/tyControls.DefaultTheme.pas`(编译进库的内置基础层)由它生成并逐字节同步。
@@ -776,7 +872,7 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 
 | typeKey | 画什么 | 谁解析 |
 |---|---|---|
-| `TyButton` | 普通按钮外框 + 文字 | `TTyButton`(及未重写键的后代:`TTyGlyphButton`、`TTyColorButton`、`TTyDropDownButton`、`TTyMenuButton`、`TTyTransferArrowButton`) |
+| `TyButton` | 普通按钮外框 + 文字 | `TTyButton`(及同族未重写键的控件:`TTyGlyphButton`、`TTyColorButton`、`TTyDropDownButton`、`TTyMenuButton`、`TTyTransferArrowButton`) |
 | `TySpeedButton` | 工具条上的快捷按钮 | `TTySpeedButton` |
 | `TyGlyphContainerButton` | 带图标容器的按钮 | `TTyGlyphContainerButton` |
 | `TyRibbonAppMenu` | Ribbon 左上角的应用菜单按钮 | `TTyRibbonAppMenu` |
@@ -821,10 +917,10 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 
 | typeKey | 画什么 | 谁解析 | 状态 / 变体 |
 |---|---|---|---|
-| `TyEdit` | 单行输入框 | `TTyEdit` 及未重写键的后代(`TTyMaskEdit`/`TTyCurrencyEdit`/`TTyURLEdit`/`TTyNumericEdit`/`TTyCalcEdit`/`TTyValueEdit`/`TTyComboEdit`/`TTyTrackEdit`);`TTyCalculator` 的显示条也显式解析它 | `:hover` `:focus` `:disabled` |
+| `TyEdit` | 单行输入框 | `TTyEdit` 及同族未重写键的控件(`TTyMaskEdit`/`TTyCurrencyEdit`/`TTyURLEdit`/`TTyNumericEdit`/`TTyCalcEdit`/`TTyValueEdit`/`TTyComboEdit`/`TTyTrackEdit`);`TTyCalculator` 的显示条也显式解析它 | `:hover` `:focus` `:disabled` |
 | `TySpinEdit` | 数字微调输入框 | `TTySpinEdit` | `:hover` `:focus` `:disabled` |
 | `TyMemo` | 多行文本框 | `TTyMemo` | `:hover` `:focus` `:disabled` |
-| `TyComboBox` | 下拉框字段(下拉箭头用 `color`) | `TTyComboBox` 及其 11 个后代;`TTyTreeSelect` 刻意共用(§8.5) | `:hover` `:focus` `:disabled` |
+| `TyComboBox` | 下拉框字段(下拉箭头用 `color`) | `TTyComboBox` 及同族的另外 11 个控件;`TTyTreeSelect` 刻意共用(§8.5) | `:hover` `:focus` `:disabled` |
 | `TyCascader` | 级联选择字段 | `TTyCascader` | `:hover` `:focus` `:disabled` |
 | `TyDateTimePicker` | 日期时间字段 | `TTyDateTimePicker` | `:hover` `:focus` `:disabled` |
 | `TyTextSelection` | 文本选区高亮带,只读 `background` | `TTyEdit` / `TTyMemo` / `TTyDateTimePicker` | 无状态 |
@@ -894,7 +990,7 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 
 | typeKey | 画什么 | 谁解析 | 状态 |
 |---|---|---|---|
-| `TyListBox` | 列表外框 | `TTyListBox` 及 14 个未重写键的后代;`TTyComboBox`/`TTyValueListEditor` 的下拉体、`TTyPopupSurface`、`TTyGalleryGrid`(画廊弹出网格)也解析它 | `:hover` `:focus` `:disabled` |
+| `TyListBox` | 列表外框 | `TTyListBox` 及同族 14 个未重写键的控件;`TTyComboBox`/`TTyValueListEditor` 的下拉体、`TTyPopupSurface`、`TTyGalleryGrid`(画廊弹出网格)也解析它 | `:hover` `:focus` `:disabled` |
 | `TyValueListEditor` | 属性网格外框(与 `TyListBox` 共块) | `TTyValueListEditor` | `:hover` `:focus` `:disabled` |
 | `TyRibbonGallery` | Ribbon 画廊的内嵌行外框(与 `TyListBox` 共块) | `TTyRibbonGallery` | `:hover` `:focus` `:disabled` |
 | `TyListItem` | 单行条目:`background` 决定行底、`color` 决定文字 | `TTyListBox`;`TTyRibbonGallery` 的图块也仍解析它 | `:hover` `:active`(=选中行) |
@@ -1235,9 +1331,10 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
    颜色函数;需要半透明用 `#rrggbbaa`(§5.12)。
 5. **`opacity` 与 `shadow` 全控件生效（v1.1）**：v1.1 修复了 `TyCheckBox` 与
    `TyRadioButton` 的渲染路径，使其也支持 `opacity` 和 `shadow`；所有 typeKey 均已生效。
-6. **`alpha()` 第二参数是 0..1 小数**,写百分号不会按百分比换算(§6.3)。
+6. **`alpha()` 第二参数不带 `%` 时是 0..1 小数**:`alpha(#fff, 50)` 是完全不透明,
+   半透明写 `0.5` 或 `50%`(§6.3)。
 7. **渐变角度方向与 CSS 不同**:`0deg` 左→右,`90deg` 上→下(§7.1);
-   只支持双色标线性渐变。
+   只有线性渐变,方向只能写角度,不支持 `to right` 这类关键字(§7)。
 8. **`font-size` 数值按 pt 解释**,`px` 后缀只是装饰(§5.9);`font-weight`
    渲染只分 ≥600 粗体 / 其余常规两档(§5.10)。
 9. **`font-family` 不要加引号**,引号会保留进字体名(§5.8)。

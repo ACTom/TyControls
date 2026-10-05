@@ -155,7 +155,7 @@ type
     procedure DoFontColor(Sender: TObject);
     procedure DoWordWrap(Sender: TObject);
     procedure DoToggleContext(Sender: TObject);
-    procedure DoLauncher(Sender: TTyRibbonGroup);
+    procedure DoLauncher(Sender: TTyCustomRibbonGroup);
     procedure DoQuit(Sender: TObject);
     procedure DoNoop(Sender: TObject);
     // ---- events ----
@@ -304,7 +304,7 @@ begin
   AMenu.Items.Add(Result);
 end;
 
-procedure TMainForm.DoLauncher(Sender: TTyRibbonGroup);
+procedure TMainForm.DoLauncher(Sender: TTyCustomRibbonGroup);
 begin
   TyShowMessage('“' + Sender.Caption + '" dialog (placeholder)');
 end;

@@ -519,7 +519,7 @@ end;
 
 procedure TTyToolWindowActionsTests.TestEnsureActionsCreatesOnceAndOwnsItLikeADesignContainer;
 var
-  act, again, a1: TTyToolWindowActions;
+  act, again, a1: TTyCustomToolWindowActions;
   w2: TProbeWindow;
   loose: TTyToolWindow;
   i, n: Integer;
@@ -712,7 +712,7 @@ end;
 
 procedure TTyToolWindowActionsTests.TestEnsureActionsMeasuresWithTheWindowController;
 var
-  act: TTyToolWindowActions;
+  act: TTyCustomToolWindowActions;
 begin
   { 专门**不**手工设控制器(NewActions 设了,会把这个缺口遮住):窗口按自己的控制器读
     pad 给操作区留位,操作区若按 TyDefaultController 量自己,留的宽就是另一套主题下的。 }

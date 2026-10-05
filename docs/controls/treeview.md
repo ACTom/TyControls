@@ -89,7 +89,7 @@ uses tyControls.TreeView, tyControls.Columns;
 | `SortColumn` | `Integer` | `-1` | 当前排序列（`-1` = 未排序）；点击表头自动更新 |
 | `SortDirection` | `TTySortDirection` | `sdAscending` | 当前排序方向 |
 | `AutoSizeIndex` | `Integer` | `-1` | 自动填充剩余宽度的列索引（配合 `hoAutoResize`） |
-| `Images` | `TTyVirtualImageList` | `nil` | 列头图标的图像源，按 `TTyColumn.ImageIndex` 取图。以前的类型是 LCL 的 `TCustomImageList`——而 `TTyVirtualImageList` 并非它的后代，于是能赋给它的恰恰全是本库画不了的列表，这个属性从类型上就是不可用的。**目前只有 `TTyListView` 的报表表头会读它**；树的表头绘制尚未接上。|
+| `Images` | `TCustomImageList` | `nil` | 列头图标的图像源，按 `TTyColumn.ImageIndex` 取图。`TTyVirtualImageList` 早已是 `TCustomImageList` 的后代，本库的列表和 LCL 的列表都能赋值。**目前只有 `TTyListView` 的报表表头会读它**；树的表头绘制尚未接上。|
 | `Options` | `TTyHeaderOptions` | `[hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort, hoDrag]` | 表头选项（见下） |
 
 > **⚠️ 关键陷阱：`MainColumn` 必须在列添加之后设置。** `SetMainColumn` 在 `Columns.Count = 0` 时会把任何赋值**夹紧为 `NoColumn`（-1）**。若在添加任何列之前写 `MainColumn := 0`，它会被夹成 -1，导致主列块永远不匹配——展开按钮、节点图标、主列文字**全部消失**，只剩平铺文本格。**正确顺序是先 `Columns.Add`，再设 `MainColumn`。** 作为兜底，控件在**添加第一列**且 `MainColumn` 仍为 `NoColumn` 时会自动把它默认为 `0`（与 VirtualTreeView 一致）；但显式的错误顺序仍应避免。示例（来自 showcase）：
@@ -211,7 +211,7 @@ Delphi 的 "TreeView Items Editor" 体验——此前的标准集合编辑器（
 | `Anchors` | `TAnchors` | `[akLeft, akTop]` | 锚点布局 |
 | `Font` | `TFont` | 系统默认 | 仅用于传递 PPI；字体族 / 字号由主题控制 |
 | `StyleClass` | `string` | `''` | CSS 变体类名，对应 `.tycss` 选择器的 `.classname` |
-| `Controller` | `TTyStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定样式控制器 |
+| `Controller` | `TTyCustomStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定样式控制器 |
 
 ### 状态跟踪字段（protected / 内部）
 
@@ -232,7 +232,9 @@ Delphi 的 "TreeView Items Editor" 体验——此前的标准集合编辑器（
 
 ## 4. 事件
 
-`TTyTreeView` 暴露的专有事件极多，按用途分组：
+`TTyTreeView` 暴露的专有事件极多，按用途分组。
+
+4.0 起这些事件的 `Sender` 是 `TTyCustomTreeView`（照 LCL：`TTVExpandingEvent` 一类写的是 `TCustomTreeView`）。`TTyShellTreeView` 和第三方从 `TTyCustomTreeView` 派生的树不是 `TTyTreeView`，事件交出来的就是它们自己。处理过程的签名照此写；3.0 的 `Sender: TTyTreeView` 要改成 `Sender: TTyCustomTreeView`，`.lfm` 不用动。
 
 ### 虚拟模型 / 生命周期
 
@@ -467,7 +469,7 @@ Tree.RootNodeCount := 3;
 
 // —— 事件处理器 ——
 
-procedure TForm1.TreeInitNode(Sender: TTyTreeView;
+procedure TForm1.TreeInitNode(Sender: TTyCustomTreeView;
   ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
 var data: PRowRec;
 begin
@@ -478,13 +480,13 @@ begin
     data^.NameIdx := Integer(Node^.Index); // 存稳定 key，排序后不失效
 end;
 
-procedure TForm1.TreeInitChildren(Sender: TTyTreeView;
+procedure TForm1.TreeInitChildren(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var ChildCount: Cardinal);
 begin
   ChildCount := 5;                         // 展开时懒惰返回子节点数
 end;
 
-procedure TForm1.TreeGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TForm1.TreeGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   Column: Integer; TextType: TTyVSTTextType; var CellText: string);
 var data: PRowRec;
 begin
@@ -496,7 +498,7 @@ begin
   end;
 end;
 
-procedure TForm1.TreeCompareNodes(Sender: TTyTreeView;
+procedure TForm1.TreeCompareNodes(Sender: TTyCustomTreeView;
   Node1, Node2: PTyTreeNode; Column: Integer; var CompareResult: Integer);
 var d1, d2: PRowRec;
 begin
@@ -533,7 +535,7 @@ Tree.OnNodeMoved := @OnMoved;
 | `GetNodeAt(X, Y: Integer): PTyTreeNode` | —— | LCL 的 `GetNodeAt` 就是"客户区某点上的节点"（`comctrls.pp:3716`） |
 | `GetNodeAtOffset(Y; out ANodeTop)` | `GetNodeAt(Y; out ANodeTop)` | **同名、同参数个数、两个参数都是 `Integer`**，所以移植过来的 `Tree.GetNodeAt(X, Y)` 会**编译通过**：把调用方的 X 当成滚动空间的 Y 用，再把调用方的 Y 变量用 out 参数覆写掉，返回错误的节点且没有任何警告。改名当天本仓库自己的 12 条断言立刻变红，就是这条路径 |
 | `NodeSelected[Node]: Boolean` | `Selected[Node]: Boolean` | `Selected` 在 LCL 是**当前节点**（`comctrls.pp:3778`）。`if Tree.Selected <> nil` / `Tree.Selected := N` 这两句最常写的代码在带下标的布尔属性上根本编不过 |
-| `OnNodeDragOver` | `OnDragOver` | `OnDragOver` 是 `TControl` 的 LCL 拖放钩子，基类本来就 published。树把这个名字占成了内部节点拖放的否决事件，于是**整个库里只有这一个控件不能当 LCL 拖放目标**——往上挂一个正常的 `TDragOverEvent` 是类型错误 |
+| `OnNodeDragOver` | `OnDragOver` | `OnDragOver` 是 `TControl` 的 LCL 拖放钩子，`TTyTreeView` 跟别的 Ty 控件一样发布它。树把这个名字占成了内部节点拖放的否决事件，于是**整个库里只有这一个控件不能当 LCL 拖放目标**——往上挂一个正常的 `TDragOverEvent` 是类型错误 |
 
 迁移只有三条替换：`GetNodeAt(y, top)` → `GetNodeAtOffset(y, top)`；`Selected[n]` → `NodeSelected[n]`；`OnDragOver := @H` → `OnNodeDragOver := @H`。
 

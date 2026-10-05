@@ -62,7 +62,7 @@ type
     FDragOverSeen: Boolean;
     procedure HLclDragOver(Sender, Source: TObject; X, Y: Integer;
       State: TDragState; var Accept: Boolean);
-    procedure HNodeDragOver(Sender: TTyTreeView; Src, Target: PTyTreeNode;
+    procedure HNodeDragOver(Sender: TTyCustomTreeView; Src, Target: PTyTreeNode;
       Mode: TTyTreeDropMode; var Allowed: Boolean);
   protected
     procedure SetUp; override;
@@ -110,10 +110,10 @@ type
     FEndSeen: Integer;
     FEndCancel: Boolean;
     FCaptions: array of string;
-    procedure HChanging(Sender: TTyTreeView; Node: PTyTreeNode; var Allowed: Boolean);
-    procedure HEditingEnd(Sender: TTyTreeView; Node: PTyTreeNode; Column: Integer;
+    procedure HChanging(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Allowed: Boolean);
+    procedure HEditingEnd(Sender: TTyCustomTreeView; Node: PTyTreeNode; Column: Integer;
       Cancel: Boolean);
-    procedure HGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+    procedure HGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -193,13 +193,13 @@ type
     FT: TTyTreeView;
     FImgs: TImageList;
     FGhost: Boolean;
-    procedure HGetImageIndex(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure HGetImageIndex(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean;
       var ImageIndex: Integer);
-    procedure HGetSelectedImage(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure HGetSelectedImage(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean;
       var ImageIndex: Integer);
-    procedure HGetOverlayImage(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure HGetOverlayImage(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean;
       var ImageIndex: Integer);
     function  RenderPixel(X, Y: Integer): TBGRAPixel;
@@ -251,7 +251,7 @@ begin
   Accept := False;
 end;
 
-procedure TTreeParityNameTest.HNodeDragOver(Sender: TTyTreeView;
+procedure TTreeParityNameTest.HNodeDragOver(Sender: TTyCustomTreeView;
   Src, Target: PTyTreeNode; Mode: TTyTreeDropMode; var Allowed: Boolean);
 begin
   FDragOverSeen := True;
@@ -468,21 +468,21 @@ end;
 
 { ── TTreeParityBehaviourTest ─────────────────────────────────────────────── }
 
-procedure TTreeParityBehaviourTest.HChanging(Sender: TTyTreeView;
+procedure TTreeParityBehaviourTest.HChanging(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var Allowed: Boolean);
 begin
   Inc(FChangingSeen);
   if FVeto then Allowed := False;
 end;
 
-procedure TTreeParityBehaviourTest.HEditingEnd(Sender: TTyTreeView;
+procedure TTreeParityBehaviourTest.HEditingEnd(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; Column: Integer; Cancel: Boolean);
 begin
   Inc(FEndSeen);
   FEndCancel := Cancel;
 end;
 
-procedure TTreeParityBehaviourTest.HGetText(Sender: TTyTreeView;
+procedure TTreeParityBehaviourTest.HGetText(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var Text: string);
 var
   i: Integer;
@@ -923,7 +923,7 @@ end;
 
 { ── TTreeParityPaintTest ─────────────────────────────────────────────────── }
 
-procedure TTreeParityPaintTest.HGetImageIndex(Sender: TTyTreeView;
+procedure TTreeParityPaintTest.HGetImageIndex(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; Kind: TTyVTImageKind; Column: Integer;
   var Ghosted: Boolean; var ImageIndex: Integer);
 begin
@@ -932,7 +932,7 @@ begin
   Ghosted    := FGhost;
 end;
 
-procedure TTreeParityPaintTest.HGetSelectedImage(Sender: TTyTreeView;
+procedure TTreeParityPaintTest.HGetSelectedImage(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; Kind: TTyVTImageKind; Column: Integer;
   var Ghosted: Boolean; var ImageIndex: Integer);
 begin
@@ -942,7 +942,7 @@ begin
   end;
 end;
 
-procedure TTreeParityPaintTest.HGetOverlayImage(Sender: TTyTreeView;
+procedure TTreeParityPaintTest.HGetOverlayImage(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; Kind: TTyVTImageKind; Column: Integer;
   var Ghosted: Boolean; var ImageIndex: Integer);
 begin

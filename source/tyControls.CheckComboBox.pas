@@ -56,7 +56,7 @@ type
     control's property, not Items.Objects[]), which is LCL's split too. Locked to
     csDropDownList (an editable prefix-filtered field is meaningless for a multi-check).
     Build with AddItem(text, state) -- or Items.Add + Checked[] as before. }
-  TTyCheckComboBox = class(TTyComboBox)
+  TTyCustomCheckComboBox = class(TTyCustomComboBox)
   private
     FSeparator: string;
     FEmptyText: string;
@@ -84,15 +84,15 @@ type
       the base class fills it with a plain Items.Assign -- which would hand it our state
       POINTERS, every one of which reads as non-zero, i.e. "checked". So the two
       representations get translated at the boundary, in both directions. }
-    procedure PushChecksToList(AList: TTyCheckListBox);
-    procedure PullChecksFromList(AList: TTyCheckListBox);
+    procedure PushChecksToList(AList: TTyCustomCheckListBox);
+    procedure PullChecksFromList(AList: TTyCustomCheckListBox);
     { Read-only view of a row's state for the popup list, which paints tri-state and
       disabled rows the base checklist cannot express. Out-of-range answers the
       harmless default rather than raising, because paint code runs mid-resize. }
     function RowState(AIndex: Integer): TCheckBoxState;
     function RowEnabled(AIndex: Integer): Boolean;
     procedure DoItemChange(AIndex: Integer); virtual;
-    function CreatePopupList: TTyListBox; override;
+    function CreatePopupList: TTyCustomListBox; override;
     procedure PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet); override;
     { A row pick must NOT commit/close — checking is a toggle, and the popup stays open. The
       checkbox toggle + field sync happen in the checklist / PopupCheckClick, so this is a no-op. }
@@ -133,14 +133,13 @@ type
     property ItemEnabled[AIndex: Integer]: Boolean read GetItemEnabled write SetItemEnabled;
     { Test seam: run the popup -> combo state transfer against a list built by hand, so
       the disabled-row veto can be exercised without a real popup window. }
-    procedure PullChecksForTest(AList: TTyCheckListBox);
+    procedure PullChecksForTest(AList: TTyCustomCheckListBox);
     { The application's per-item slot -- LCL's TCustomCheckCombo.Objects[] (comboex.pas:327),
       which reads and writes TCheckComboItemState.Data. Items.Objects[] belongs to the
       control: writing app data straight into it is what used to destroy the check states,
       and what the check states used to destroy. An object attached the idiomatic way
       (Items.AddObject) is adopted into Data on first use, so either order works. }
     property Objects[AIndex: Integer]: TObject read GetItemObject write SetItemObject;
-  published
     // Joins the checked item texts in the field summary (default ', ').
     property Separator: string read FSeparator write FSeparator;
     // Shown in the field when nothing is checked (default '').
@@ -152,6 +151,86 @@ type
       handler had to diff the whole list -- and a programmatic Checked[i] := True used to
       fire nothing at all, silently staling any view bound to the combo. }
     property OnItemChange: TTyCheckItemChangeEvent read FOnItemChange write FOnItemChange;
+  end;
+
+  { TTyCheckComboBox publishes TTyCustomCheckComboBox's properties; everything lives in TTyCustomCheckComboBox. }
+  TTyCheckComboBox = class(TTyCustomCheckComboBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property Text;
+    property DropDownCount;
+    property Sorted;
+    property MaxLength;
+    property CharCase;
+    property Style;
+    property ItemHeight;
+    property ItemWidth;
+    property TextHint;
+    property ReadOnly;
+    property OnDrawItem;
+    property OnMeasureItem;
+    property OnChange;
+    property OnSelect;
+    property OnDropDown;
+    property OnCloseUp;
+    property OnGetItems;
+    property Align;
+    property Anchors;
+    property Separator;
+    property EmptyText;
+    property AllowGrayed;
+    property OnItemChange;
   end;
 
 implementation
@@ -173,7 +252,7 @@ procedure TTyCheckComboPopupList.PaintItemContent(P: TTyPainter; const ARowRect:
   AIndex: Integer; const AStyle: TTyStyleSet);
 var
   cs: TTyStyleSet;
-  combo: TTyCheckComboBox;
+  combo: TTyCustomCheckComboBox;
   st: TCheckBoxState;
   rowEnabled: Boolean;
   pad, sz, boxTop: Integer;
@@ -191,12 +270,12 @@ begin
   { The Owner is the combo (Create(Self) in CreatePopupList); it holds the only tri-state
     truth. Without an owner we are a plain two-state checklist -- fall back rather than
     guess. }
-  if not (Owner is TTyCheckComboBox) then
+  if not (Owner is TTyCustomCheckComboBox) then
   begin
     inherited PaintItemContent(P, ARowRect, AIndex, AStyle);
     Exit;
   end;
-  combo := TTyCheckComboBox(Owner);
+  combo := TTyCustomCheckComboBox(Owner);
   st := combo.RowState(AIndex);
   rowEnabled := combo.RowEnabled(AIndex);
 
@@ -254,9 +333,9 @@ begin
   Result := TyComboMeasureRowHeight(Self, AIndex, inherited RowHeight(AIndex));
 end;
 
-{ TTyCheckComboBox }
+{ TTyCustomCheckComboBox }
 
-constructor TTyCheckComboBox.Create(AOwner: TComponent);
+constructor TTyCustomCheckComboBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FSeparator := ', ';
@@ -265,7 +344,7 @@ begin
   FStates := TList.Create;
 end;
 
-destructor TTyCheckComboBox.Destroy;
+destructor TTyCustomCheckComboBox.Destroy;
 var
   i: Integer;
 begin
@@ -275,7 +354,7 @@ begin
   inherited Destroy;
 end;
 
-function TTyCheckComboBox.EnsureState(AIndex: Integer): TTyCheckComboItemState;
+function TTyCustomCheckComboBox.EnsureState(AIndex: Integer): TTyCheckComboItemState;
 var
   raw: TObject;
 begin
@@ -295,7 +374,7 @@ begin
   Items.Objects[AIndex] := Result;
 end;
 
-procedure TTyCheckComboBox.SweepStates;
+procedure TTyCustomCheckComboBox.SweepStates;
 { Mark and sweep: Items.Delete / Items.Clear / Items.Assign drop our pointers without
   telling us, so states that are no longer reachable from any row are collected here.
   Called from EnsureState only once the pool has outgrown the list, so a list that is
@@ -322,7 +401,7 @@ begin
   end;
 end;
 
-function TTyCheckComboBox.GetState(AIndex: Integer): TCheckBoxState;
+function TTyCustomCheckComboBox.GetState(AIndex: Integer): TCheckBoxState;
 var
   st: TTyCheckComboItemState;
 begin
@@ -334,9 +413,9 @@ begin
   if st <> nil then Result := st.State;
 end;
 
-procedure TTyCheckComboBox.SetState(AIndex: Integer; AValue: TCheckBoxState);
+procedure TTyCustomCheckComboBox.SetState(AIndex: Integer; AValue: TCheckBoxState);
 var
-  lst: TTyListBox;   // PopupList (nil when the dropdown is closed — no side effect)
+  lst: TTyCustomListBox;   // PopupList (nil when the dropdown is closed — no side effect)
 begin
   if (AIndex < 0) or (AIndex >= Items.Count) then Exit;
   if GetState(AIndex) = AValue then Exit;
@@ -345,25 +424,25 @@ begin
     keeps raw 0/1 flags, so cbGrayed lands there as NOT ticked — its own painter reads the
     tri-state back off us, so the flag is only the fallback path's opinion. }
   lst := PopupList;
-  if (lst is TTyCheckListBox) and (AIndex < lst.Items.Count) then
-    TTyCheckListBox(lst).Checked[AIndex] := (AValue = cbChecked);
+  if (lst is TTyCustomCheckListBox) and (AIndex < lst.Items.Count) then
+    TTyCustomCheckListBox(lst).Checked[AIndex] := (AValue = cbChecked);
   Invalidate;
   DoItemChange(AIndex);
 end;
 
-function TTyCheckComboBox.GetChecked(AIndex: Integer): Boolean;
+function TTyCustomCheckComboBox.GetChecked(AIndex: Integer): Boolean;
 begin
   { Two-state view of the same slot. cbGrayed is deliberately NOT checked: a partially
     selected row must not join the field summary or CheckedCount. }
   Result := GetState(AIndex) = cbChecked;
 end;
 
-procedure TTyCheckComboBox.SetChecked(AIndex: Integer; AValue: Boolean);
+procedure TTyCustomCheckComboBox.SetChecked(AIndex: Integer; AValue: Boolean);
 begin
   if AValue then SetState(AIndex, cbChecked) else SetState(AIndex, cbUnchecked);
 end;
 
-function TTyCheckComboBox.GetItemEnabled(AIndex: Integer): Boolean;
+function TTyCustomCheckComboBox.GetItemEnabled(AIndex: Integer): Boolean;
 var
   st: TTyCheckComboItemState;
 begin
@@ -373,7 +452,7 @@ begin
   if st <> nil then Result := st.Enabled;
 end;
 
-procedure TTyCheckComboBox.SetItemEnabled(AIndex: Integer; AValue: Boolean);
+procedure TTyCustomCheckComboBox.SetItemEnabled(AIndex: Integer; AValue: Boolean);
 begin
   if (AIndex < 0) or (AIndex >= Items.Count) then Exit;
   if GetItemEnabled(AIndex) = AValue then Exit;
@@ -383,22 +462,22 @@ begin
     "the user ticked something" must not be woken by a row merely being greyed. }
 end;
 
-function TTyCheckComboBox.RowState(AIndex: Integer): TCheckBoxState;
+function TTyCustomCheckComboBox.RowState(AIndex: Integer): TCheckBoxState;
 begin
   Result := GetState(AIndex);
 end;
 
-function TTyCheckComboBox.RowEnabled(AIndex: Integer): Boolean;
+function TTyCustomCheckComboBox.RowEnabled(AIndex: Integer): Boolean;
 begin
   Result := GetItemEnabled(AIndex);
 end;
 
-procedure TTyCheckComboBox.DoItemChange(AIndex: Integer);
+procedure TTyCustomCheckComboBox.DoItemChange(AIndex: Integer);
 begin
   if Assigned(FOnItemChange) then FOnItemChange(Self, AIndex);
 end;
 
-procedure TTyCheckComboBox.AddItem(const AItem: string; AState: TCheckBoxState;
+procedure TTyCustomCheckComboBox.AddItem(const AItem: string; AState: TCheckBoxState;
   AEnabled: Boolean);
 var
   st: TTyCheckComboItemState;
@@ -415,7 +494,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyCheckComboBox.AssignItems(AItems: TStrings);
+procedure TTyCustomCheckComboBox.AssignItems(AItems: TStrings);
 begin
   { Every old state becomes unreachable in one step; the pool's sweep is what actually
     frees them, so nothing leaks and nothing dangles. }
@@ -424,14 +503,14 @@ begin
   Invalidate;
 end;
 
-procedure TTyCheckComboBox.DeleteItem(AIndex: Integer);
+procedure TTyCustomCheckComboBox.DeleteItem(AIndex: Integer);
 begin
   if (AIndex < 0) or (AIndex >= Items.Count) then Exit;
   Items.Delete(AIndex);      // the state it referenced is collected by the pool sweep
   Invalidate;
 end;
 
-procedure TTyCheckComboBox.CheckAll(AState: TCheckBoxState; AAllowGrayed: Boolean;
+procedure TTyCustomCheckComboBox.CheckAll(AState: TCheckBoxState; AAllowGrayed: Boolean;
   AAllowDisabled: Boolean);
 var i: Integer;
 begin
@@ -441,7 +520,7 @@ begin
       SetState(i, AState);
 end;
 
-procedure TTyCheckComboBox.Toggle(AIndex: Integer);
+procedure TTyCustomCheckComboBox.Toggle(AIndex: Integer);
 const
   { LCL's cycle (comboex.inc:842). Note the grayed path is unchecked -> GRAYED -> checked,
     not checked -> grayed: this matches TCustomCheckCombo, not TTyCheckBox. }
@@ -455,7 +534,7 @@ begin
   SetState(AIndex, NextState[GetState(AIndex), FAllowGrayed]);
 end;
 
-function TTyCheckComboBox.GetItemObject(AIndex: Integer): TObject;
+function TTyCustomCheckComboBox.GetItemObject(AIndex: Integer): TObject;
 var
   st: TTyCheckComboItemState;
 begin
@@ -467,20 +546,20 @@ begin
   if st <> nil then Result := st.Data else Result := Items.Objects[AIndex];
 end;
 
-procedure TTyCheckComboBox.SetItemObject(AIndex: Integer; AValue: TObject);
+procedure TTyCustomCheckComboBox.SetItemObject(AIndex: Integer; AValue: TObject);
 begin
   if (AIndex < 0) or (AIndex >= Items.Count) then Exit;
   EnsureState(AIndex).Data := AValue;
 end;
 
-procedure TTyCheckComboBox.SetEmptyText(const AValue: string);
+procedure TTyCustomCheckComboBox.SetEmptyText(const AValue: string);
 begin
   if FEmptyText = AValue then Exit;
   FEmptyText := AValue;
   Invalidate;
 end;
 
-function TTyCheckComboBox.CheckedCount: Integer;
+function TTyCustomCheckComboBox.CheckedCount: Integer;
 var i: Integer;
 begin
   Result := 0;
@@ -488,7 +567,7 @@ begin
     if GetChecked(i) then Inc(Result);
 end;
 
-function TTyCheckComboBox.CheckedText: string;
+function TTyCustomCheckComboBox.CheckedText: string;
 var i: Integer;
 begin
   Result := '';
@@ -501,7 +580,7 @@ begin
   if Result = '' then Result := FEmptyText;
 end;
 
-procedure TTyCheckComboBox.PushChecksToList(AList: TTyCheckListBox);
+procedure TTyCustomCheckComboBox.PushChecksToList(AList: TTyCustomCheckListBox);
 var i: Integer;
 begin
   if AList = nil then Exit;
@@ -515,7 +594,7 @@ begin
   end;
 end;
 
-procedure TTyCheckComboBox.PullChecksFromList(AList: TTyCheckListBox);
+procedure TTyCustomCheckComboBox.PullChecksFromList(AList: TTyCustomCheckListBox);
 var i: Integer; v: Boolean;
 begin
   if AList = nil then Exit;
@@ -541,32 +620,39 @@ begin
     end;
 end;
 
-procedure TTyCheckComboBox.PullChecksForTest(AList: TTyCheckListBox);
+procedure TTyCustomCheckComboBox.PullChecksForTest(AList: TTyCustomCheckListBox);
 begin
   PullChecksFromList(AList);
 end;
 
-procedure TTyCheckComboBox.PopupCheckClick(Sender: TObject);
+procedure TTyCustomCheckComboBox.PopupCheckClick(Sender: TObject);
 begin
   { A checkbox was toggled in the popup: pull the states back out of the popup COPY (same
     order — csDropDownList never filters), repaint the field summary, and notify. The popup
     stays open. }
-  if not (PopupList is TTyCheckListBox) then Exit;
-  PullChecksFromList(TTyCheckListBox(PopupList));
+  if not (PopupList is TTyCustomCheckListBox) then Exit;
+  PullChecksFromList(TTyCustomCheckListBox(PopupList));
   Invalidate;
   if Assigned(OnChange) then OnChange(Self);
 end;
 
-procedure TTyCheckComboBox.DropDown;
+procedure TTyCustomCheckComboBox.DropDown;
 begin
   { The base fills the popup list with Items.Assign, which copies our state POINTERS into a
     control that reads that slot as a raw 0/1 flag — every row would come up ticked. }
   inherited DropDown;
-  if PopupList is TTyCheckListBox then
-    PushChecksToList(TTyCheckListBox(PopupList));
+  { Any check list, not just the library's: a descendant's CreatePopupList may hand over its
+    own TTyCustomCheckListBox. It cannot reach PopupCheckClick (private) to wire the tick
+    back, so the combo wires it here unless the list already has a handler of its own. }
+  if PopupList is TTyCustomCheckListBox then
+  begin
+    if not Assigned(TTyCustomCheckListBox(PopupList).OnClickCheck) then
+      TTyCustomCheckListBox(PopupList).OnClickCheck := @PopupCheckClick;
+    PushChecksToList(TTyCustomCheckListBox(PopupList));
+  end;
 end;
 
-function TTyCheckComboBox.CreatePopupList: TTyListBox;
+function TTyCustomCheckComboBox.CreatePopupList: TTyCustomListBox;
 var lst: TTyCheckComboPopupList;
 begin
   lst := TTyCheckComboPopupList.Create(Self);
@@ -574,7 +660,7 @@ begin
   Result := lst;
 end;
 
-procedure TTyCheckComboBox.PaintFieldContent(P: TTyPainter; const ATextRect: TRect;
+procedure TTyCustomCheckComboBox.PaintFieldContent(P: TTyPainter; const ATextRect: TRect;
   const AStyle: TTyStyleSet);
 var summary: string;
 begin
@@ -590,12 +676,12 @@ begin
     AStyle.FontWeight, AStyle.TextColor, taLeftJustify, tlCenter, True);
 end;
 
-procedure TTyCheckComboBox.DoPopupPick(AIndex: Integer);
+procedure TTyCustomCheckComboBox.DoPopupPick(AIndex: Integer);
 begin
   // Intentionally empty: no single-item commit, no close (see class header).
 end;
 
-procedure TTyCheckComboBox.SetStyle(AValue: TTyComboBoxStyle);
+procedure TTyCustomCheckComboBox.SetStyle(AValue: TTyComboBoxStyle);
 begin
   { Multi-check is pick-only: an editable, prefix-FILTERED field cannot express a set of
     ticks. Take the EDIT BOX off the requested style rather than replacing the style whole

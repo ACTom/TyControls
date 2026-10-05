@@ -4,8 +4,8 @@
 
 两个**带计算器下拉的编辑框**:尾部一个小按钮(2×2 键盘图标),点它弹出一个 [TTyCalculator](calculator.md);计算结果写回编辑框。
 
-- **TTyCalcEdit** 继承自 [TTyNumericEdit](numericedit.md):数值输入 + 失焦分组格式化 + 限幅,再加计算器下拉。
-- **TTyCalcCurrencyEdit** 继承自 [TTyCurrencyEdit](currencyedit.md):货币符号 + 分组,再加同一个计算器下拉。
+- **TTyCalcEdit** 继承自 [TTyCustomNumericEdit](numericedit.md):数值输入 + 失焦分组格式化 + 限幅,再加计算器下拉。
+- **TTyCalcCurrencyEdit** 继承自 [TTyCustomCurrencyEdit](currencyedit.md):货币符号 + 分组,再加同一个计算器下拉。
 
 两者复用同一个 `TTyCalcDropdown` 助手(管理弹层 + 计算器生命周期)和同一个尾部按钮绘制,用的正是 [TTyEdit](edit.md) 的尾部小部件钩子(`RightReserve` / `PaintTrailing` / `TrailingZone`)。
 
@@ -18,7 +18,7 @@
 | TTyCalcEdit | `tyControls.CalcEdit` |
 | TTyCalcCurrencyEdit | `tyControls.CalcCurrencyEdit` |
 
-**两者的 typeKey 都是 `'TyEdit'`,这是刻意保留的借用。** `TTyCalcEdit` / `TTyCalcCurrencyEdit` 都没有覆写 `GetStyleTypeKey`,沿着 `TTyNumericEdit` → `TTyEdit` 继承下来。理由:一个带计算器下拉的数值框**就是一个编辑框**——框体、边框、内边距、文字、`:hover` / `:focus` / `:disabled` 全部与 `TTyEdit` 逐像素相同,差别只在输入过滤与尾部那颗按钮的行为。它们与普通编辑框同排出现在表单里,共用一个键才不会串色;`TyEdit.small` 之类的变体也自动同时作用于两者。
+**两者的 typeKey 都是 `'TyEdit'`,这是刻意保留的借用。** `TTyCalcEdit` / `TTyCalcCurrencyEdit` 都没有覆写 `GetStyleTypeKey`,沿着 `TTyCustomNumericEdit` → `TTyCustomEdit` 继承下来。理由:一个带计算器下拉的数值框**就是一个编辑框**——框体、边框、内边距、文字、`:hover` / `:focus` / `:disabled` 全部与 `TTyEdit` 逐像素相同,差别只在输入过滤与尾部那颗按钮的行为。它们与普通编辑框同排出现在表单里,共用一个键才不会串色;`TyEdit.small` 之类的变体也自动同时作用于两者。
 
 尾部按钮(2×2 键盘图标)走的是 `TTyEdit` 的尾部小部件钩子,用同一份 `TyEdit` 样式绘制,**没有**自己的键。
 

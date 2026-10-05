@@ -488,7 +488,7 @@ type
 
   TTyFormAccess = class(TTyForm)
   public
-    function TB: TTyTitleBar;
+    function TB: TTyCustomTitleBar;
     function MakeTitleBar: TTyTitleBar;
     function EngineDragging: Boolean;
     function EngineMaximized: Boolean;
@@ -550,7 +550,7 @@ begin AdjustClientRect(ARect); end;
 procedure TTitleBarAccess.CallLayoutButtons;
 begin LayoutButtons; end;
 
-function TTyFormAccess.TB: TTyTitleBar; begin Result := TitleBar; end;
+function TTyFormAccess.TB: TTyCustomTitleBar; begin Result := TitleBar; end;
 
 { Creating a TTyTitleBar owned by the form triggers auto-assign via Notification. }
 function TTyFormAccess.MakeTitleBar: TTyTitleBar;

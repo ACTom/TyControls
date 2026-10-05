@@ -41,7 +41,7 @@
 | `Align` | `TAlign` | — | 布局对齐方式（继承自 `TControl`）。 |
 | `Anchors` | `TAnchors` | — | 锚点布局（继承自 `TControl`）。 |
 | `StyleClass` | `string` | `''` | CSS 变体类名，对应 tycss 中的 `.class` 选择器。 |
-| `Controller` | `TTyStyleController` | `nil`（使用全局默认） | 关联的样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（使用全局默认） | 关联的样式控制器。 |
 
 ### 内部只读字段（非 published）
 

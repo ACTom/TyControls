@@ -44,7 +44,7 @@ uses tyControls.TrackBar;
 | `Align` | `TAlign` | — | 父容器内的停靠方式。 |
 | `Anchors` | `TAnchors` | — | 锚点布局。 |
 | `StyleClass` | `string` | `''` | CSS 变体类名。 |
-| `Controller` | `TTyStyleController` | `nil`（全局默认） | 关联的样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（全局默认） | 关联的样式控制器。 |
 | `OnClick` | `TNotifyEvent` | `nil` | 鼠标点击时触发（在完成定位后触发）。 |
 
 ### 继承的通用成员

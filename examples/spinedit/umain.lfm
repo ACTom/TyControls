@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 504
+  Height = 572
   Top = 0
   Width = 440
   Caption = 'TTySpinEdit example'
-  ClientHeight = 504
+  ClientHeight = 572
   ClientWidth = 440
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 504
+    Height = 572
     Top = 0
     Width = 440
     TabOrder = 0
@@ -120,14 +120,14 @@ object MainForm: TMainForm
     object LblStatusCap: TTyLabel
       Left = 24
       Height = 20
-      Top = 444
+      Top = 512
       Width = 60
       Caption = 'Status:'
     end
     object LblStatus: TTyLabel
       Left = 84
       Height = 20
-      Top = 444
+      Top = 512
       Width = 336
       Caption = '(change any value to see the OnChange output)'
     end
@@ -157,10 +157,26 @@ object MainForm: TMainForm
       Alignment = taCenter
       OnChange = SpinChange
     end
+    object LblFloat: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 384
+      Width = 380
+      Caption = 'Decimal (TTyFloatSpinEdit: 0..10, step 0.25):'
+    end
+    object SpinFloat: TTyFloatSpinEdit
+      Left = 24
+      Height = 28
+      Top = 408
+      Width = 130
+      MaxValue = 10
+      Increment = 0.25
+      Text = '2.50'
+    end
     object LblCommit: TTyLabel
       Left = 24
       Height = 40
-      Top = 384
+      Top = 452
       Width = 380
       Caption = 'Type digits into any box: Enter commits them, Esc reverts to the last value. An out-of-range number is clamped into the range, never rejected.'
       WordWrap = True
@@ -168,14 +184,14 @@ object MainForm: TMainForm
     object LblClickCap: TTyLabel
       Left = 24
       Height = 20
-      Top = 468
+      Top = 536
       Width = 60
       Caption = 'Click:'
     end
     object LblClick: TTyLabel
       Left = 84
       Height = 20
-      Top = 468
+      Top = 536
       Width = 336
       Caption = '(click the quantity box to see OnClick)'
     end

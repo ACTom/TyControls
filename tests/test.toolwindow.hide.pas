@@ -77,7 +77,7 @@ type
     FMgr: TTyToolWindowManager;
     FLeft, FRight: TBarAccess;
     FEditor: TBodyChild;
-    FSearch, FOutline: TTyToolWindow;
+    FSearch, FOutline: TTyCustomToolWindow;
     { 左栏 Explorer / Search / Git,右栏 Outline;先把 Outline 挪到左边,右栏空了、隐藏;
       一个 alClient 的编辑区;窗体对齐一遍。 }
     procedure NewHiddenRight;
@@ -231,7 +231,7 @@ procedure TTyToolWindowHideTests.TestTheLastWindowLeavingHidesTheBar;
 var
   m: TTyToolWindowManager;
   l, r: TBarAccess;
-  outline: TTyToolWindow;
+  outline: TTyCustomToolWindow;
 begin
   m := NewManager;
   l := NewBarOn(twpLeft, ['Outline']);
@@ -250,7 +250,7 @@ procedure TTyToolWindowHideTests.TestHidingNeverWritesCollapsedOrExpandedSize;
 var
   m: TTyToolWindowManager;
   l, r: TBarAccess;
-  outline: TTyToolWindow;
+  outline: TTyCustomToolWindow;
 begin
   m := NewManager;
   l := NewBarOn(twpLeft, ['Outline']);

@@ -79,7 +79,7 @@ type
   TTyGraphicControl = class(TGraphicControl, ITyStyleable)
   private
     FStyleClass: string;
-    FController: TTyStyleController;
+    FController: TTyCustomStyleController;
     { A9 per-instance StyleOverride: a bare CSS decl block layered on top of the resolved
       theme style. FOvrCache holds the parsed+evaluated set; recomputed only when the text
       or the model's ThemeVersion changes (so var(--...) re-binds on a theme switch). }
@@ -90,14 +90,14 @@ type
     FOvrCacheValid: Boolean;
     procedure SetStyleClass(const AValue: string);
     procedure SetStyleOverride(const AValue: string);
-    procedure SetController(AValue: TTyStyleController);
+    procedure SetController(AValue: TTyCustomStyleController);
   protected
     FHover, FPressed: Boolean;
     FDpiAdjusting: Boolean;
     function _AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function _Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function GetStyleTypeKey: string; virtual; abstract;
-    function ActiveController: TTyStyleController;
+    function ActiveController: TTyCustomStyleController;
     function CurrentStates: TTyStateSet; virtual;
     function CurrentStyle: TTyStyleSet;
     { ===== PER-MONITOR DPI: the size floor (see the twin on TTyCustomControl, and
@@ -251,85 +251,18 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function GetVersion: string;
-  published
+    { 4.0: published by every final class, not here (LCL TControl publishes none of these).
+      The universal properties (Enabled, Font, OnClick, ...) stay at their LCL visibility;
+      these four are the library's own and live in public. }
     { Read-only library version (TyVersion); the design-time editor for this property opens
       the About dialog. }
     property Version: string read GetVersion;
-    property Enabled;
-    { Visible was never published anywhere in this library, on either base class, so
-      no TTy control could be hidden from the designer or from a .lfm -- only from
-      code. TControl.Visible is public, which is exactly why it went unnoticed: it
-      works everywhere except the one place you look for it. Default True, so it
-      streams only where someone actually hid something. }
-    property Visible;
-    property Font;
-    property Hint;
-    property ShowHint;
-    { Tier A universal events/props (published; dispatch intact via inherited). }
-    property OnClick;
-    property OnDblClick;
-    property OnMouseDown;
-    property OnMouseUp;
-    property OnMouseMove;
-    property OnMouseEnter;
-    property OnMouseLeave;
-    property OnMouseWheel;
-    property OnMouseWheelUp;
-    property OnMouseWheelDown;
-    property OnContextPopup;
-    property OnResize;
-    property OnChangeBounds;
-    { AutoSize, republished. 21 controls here already override CalculatePreferredSize --
-      the whole point of which is to answer "how big do I want to be" -- and TControl's
-      AutoSize is what asks. It was reachable from code and absent from the designer, so
-      the measurement work was done and could not be switched on where forms are built.
-      Default False, so no existing form changes; a control that does NOT implement a
-      preferred size simply keeps its bounds, exactly as in the LCL. }
-    property AutoSize;
-    { Drag-and-drop, republished. Every one of these is a TControl member with the
-      dispatch already implemented by the LCL -- DragMode := dmAutomatic and
-      OnDragOver/OnDragDrop work on a self-drawn control exactly as on a native one,
-      because dragging is decided above the paint layer. They were simply never
-      republished on either base class, so NO control in this library could be made a
-      drag source or a drop target from the designer or a .lfm. Like Visible, the gap
-      was invisible from the code side: TControl declares them public, so
-      `Ctl.DragMode := dmAutomatic` always compiled. It was the Object Inspector and
-      the streamed form that had nothing. }
-    property DragMode;
-    property DragKind;
-    property DragCursor;
-    property OnDragOver;
-    property OnDragDrop;
-    property OnStartDrag;
-    property OnEndDrag;
-    { Horizontal / tilt wheel. The vertical three were already here; these are what a
-      side-scrolling control (a non-wrapping memo, a wide grid, a long header strip) is
-      driven by, and a tilt wheel or a trackpad's horizontal gesture arrives through
-      them and nowhere else. }
-    property OnMouseWheelHorz;
-    property OnMouseWheelLeft;
-    property OnMouseWheelRight;
-    { Per-instance hint customisation -- the seam for a row-dependent tooltip, which is
-      the only way to say "this hint depends on what the pointer is over". }
-    property OnShowHint;
-    property PopupMenu;
-    property Constraints;
-    property BorderSpacing;
-    property Cursor;
-    property ParentShowHint;
-    property Action;
-    { Fired AFTER the control has finished drawing itself, with the control's own Canvas --
-      the seam for one badge, one overlay, one debug rectangle, without subclassing. It is
-      NOT an owner-draw replacement: the themed control is already on the canvas when the
-      handler runs, and the handler draws over it. Ordering is the whole property, and it is
-      why the fire site is WMPaint rather than Paint -- see the body. }
-    property OnPaint;
     property StyleClass: string read FStyleClass write SetStyleClass;
     { A9: a per-instance CSS declaration block (e.g. 'border-color: var(--accent);')
       applied on top of the theme for THIS control only. May reference var(--...) tokens,
       which resolve against the active theme. A malformed value is skipped, never fatal. }
     property StyleOverride: string read FStyleOverride write SetStyleOverride;
-    property Controller: TTyStyleController read FController write SetController;
+    property Controller: TTyCustomStyleController read FController write SetController;
   end;
 
   TTyCustomControl = class(TCustomControl, ITyStyleable)
@@ -339,7 +272,7 @@ type
     FInEraseRefresh: Boolean;
     {$ENDIF}
     FStyleClass: string;
-    FController: TTyStyleController;
+    FController: TTyCustomStyleController;
     { A9 per-instance StyleOverride (mirrors the TTyGraphicControl twin — the two base
       classes share no ancestor, so the field + setter + cache are duplicated). }
     FStyleOverride: string;
@@ -352,11 +285,11 @@ type
   protected
     FHover, FPressed: Boolean;
     FDpiAdjusting: Boolean;
-    procedure SetController(AValue: TTyStyleController); virtual;
+    procedure SetController(AValue: TTyCustomStyleController); virtual;
     function _AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function _Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function GetStyleTypeKey: string; virtual; abstract;
-    function ActiveController: TTyStyleController;
+    function ActiveController: TTyCustomStyleController;
     function CurrentStates: TTyStateSet; virtual;
     function CurrentStyle: TTyStyleSet;
     { ===== PER-MONITOR DPI: the size floor ===================================
@@ -415,103 +348,18 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function GetVersion: string;
-  published
+    { 4.0: published by every final class, not here (LCL TControl publishes none of these).
+      The universal properties (Enabled, Font, OnClick, ...) stay at their LCL visibility;
+      these four are the library's own and live in public. }
     { Read-only library version (TyVersion); the design-time editor for this property opens
       the About dialog. }
     property Version: string read GetVersion;
-    property Enabled;
-    { Visible was never published anywhere in this library, on either base class, so
-      no TTy control could be hidden from the designer or from a .lfm -- only from
-      code. TControl.Visible is public, which is exactly why it went unnoticed: it
-      works everywhere except the one place you look for it. Default True, so it
-      streams only where someone actually hid something. }
-    property Visible;
-    property Font;
-    property Hint;
-    property ShowHint;
-    property TabOrder;
-    property TabStop;
-    { Tier A universal events/props (published; dispatch intact via inherited). }
-    property OnClick;
-    property OnDblClick;
-    property OnMouseDown;
-    property OnMouseUp;
-    property OnMouseMove;
-    property OnMouseEnter;
-    property OnMouseLeave;
-    property OnMouseWheel;
-    property OnMouseWheelUp;
-    property OnMouseWheelDown;
-    property OnContextPopup;
-    property OnResize;
-    property OnChangeBounds;
-    { AutoSize, republished. 21 controls here already override CalculatePreferredSize --
-      the whole point of which is to answer "how big do I want to be" -- and TControl's
-      AutoSize is what asks. It was reachable from code and absent from the designer, so
-      the measurement work was done and could not be switched on where forms are built.
-      Default False, so no existing form changes; a control that does NOT implement a
-      preferred size simply keeps its bounds, exactly as in the LCL. }
-    property AutoSize;
-    { Container geometry, republished for the windowed base only -- both are TWinControl
-      members and meaningless on a graphic control that hosts nothing.
-      BorderWidth insets the child area; ChildSizing is the LCL's per-container child
-      layout engine (Layout, ControlsPerLine, the spacings, EnlargeHorizontal and friends),
-      already fully implemented in TWinControl's align pass. Neither was published, so a
-      TTy container could not be given either from the designer. }
-    property BorderWidth;
-    property ChildSizing;
-    { Drag-and-drop, republished. Every one of these is a TControl member with the
-      dispatch already implemented by the LCL -- DragMode := dmAutomatic and
-      OnDragOver/OnDragDrop work on a self-drawn control exactly as on a native one,
-      because dragging is decided above the paint layer. They were simply never
-      republished on either base class, so NO control in this library could be made a
-      drag source or a drop target from the designer or a .lfm. Like Visible, the gap
-      was invisible from the code side: TControl declares them public, so
-      `Ctl.DragMode := dmAutomatic` always compiled. It was the Object Inspector and
-      the streamed form that had nothing. }
-    property DragMode;
-    property DragKind;
-    property DragCursor;
-    property OnDragOver;
-    property OnDragDrop;
-    property OnStartDrag;
-    property OnEndDrag;
-    { Horizontal / tilt wheel. The vertical three were already here; these are what a
-      side-scrolling control (a non-wrapping memo, a wide grid, a long header strip) is
-      driven by, and a tilt wheel or a trackpad's horizontal gesture arrives through
-      them and nowhere else. }
-    property OnMouseWheelHorz;
-    property OnMouseWheelLeft;
-    property OnMouseWheelRight;
-    { Per-instance hint customisation -- the seam for a row-dependent tooltip, which is
-      the only way to say "this hint depends on what the pointer is over". }
-    property OnShowHint;
-    property PopupMenu;
-    property Constraints;
-    property BorderSpacing;
-    property Cursor;
-    property ParentShowHint;
-    property Action;
-    { Fired AFTER the control has finished drawing itself, with the control's own Canvas.
-      Same contract as the graphic base's -- see there. On a CACHED container (TTyPanel and
-      friends) the handler runs after the cache blit, so its output is never baked into the
-      cache: a child's damage still costs a blit, and the overlay is still redrawn on top of
-      it. That is the reason the hook is outside RenderTo and not merely after EndPaint. }
-    property OnPaint;
-    { Tier B focusable events (TWinControl-declared; custom control only). }
-    property OnKeyDown;
-    property OnKeyUp;
-    property OnKeyPress;
-    property OnUTF8KeyPress;
-    property OnEnter;
-    property OnExit;
-    property OnEditingDone;
     property StyleClass: string read FStyleClass write SetStyleClass;
     { A9: per-instance CSS declaration block applied on top of the theme for THIS control
       only. May reference var(--...) tokens (resolved against the active theme); a
       malformed value is skipped, never fatal. }
     property StyleOverride: string read FStyleOverride write SetStyleOverride;
-    property Controller: TTyStyleController read FController write SetController;
+    property Controller: TTyCustomStyleController read FController write SetController;
   end;
 
 { Shared font-size resolution for every ty control (windowed AND graphic — the label family
@@ -527,7 +375,7 @@ type
   the skin load (vars merge separately), and ty controls are theme-locked, so their size follows
   the theme, not the inherited system font. (Headless masks the bug: rootless Font.Size is 0.) }
 function TyResolveFontSize(const AStyle: TTyStyleSet; AParentFont: Boolean;
-  AControlFontSize: Integer; AController: TTyStyleController): Integer;
+  AControlFontSize: Integer; AController: TTyCustomStyleController): Integer;
 
 { Resolve the background a windowed child should composite onto (it does not inherit its
   parent's painted bg, so corner-gaps / transparent fills would otherwise show the child's
@@ -578,16 +426,16 @@ procedure TyApplyStyleOpacity(AControl: TControl; APainter: TTyPainter;
   DEDICATED slot from a size token: 4+4 (+1 for the inclusive right edge) eats 9 logical px, so
   a 12px slot leaves a 3px mark — an unreadable smudge, not an arrow. Such callers pass a small
   pad so the slot's token size means the MARK's size. ~12px is otherwise the practical floor. }
-procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
+procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyCustomStyleController;
   const ARect: TRect; const ATokenName: string; AVectorKind: TTyGlyphKind;
   AColor: TTyColor; AThickness: Integer; APadLogical: Integer = 4); overload;
-procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
+procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyCustomStyleController;
   const ARect: TRect; AVectorKind: TTyGlyphKind; AColor: TTyColor; AThickness: Integer;
   APadLogical: Integer = 4); overload;
 { v3/C5. Try to draw a theme glyph override into ARect; True = drawn (icon path), False =
   unset/malformed so the CALLER draws its own default (used where the default isn't a plain
   vector kind, e.g. the drop chevron). And the canonical token for a vector kind. }
-function TyTryDrawGlyphOverride(APainter: TTyPainter; AController: TTyStyleController;
+function TyTryDrawGlyphOverride(APainter: TTyPainter; AController: TTyCustomStyleController;
   const ARect: TRect; const ATokenName: string; AColor: TTyColor): Boolean;
 function TyGlyphKindToken(AKind: TTyGlyphKind): string;
 { The largest CENTRED SQUARE inside ARect. A spinner's button half is wide and short (18 x 14
@@ -601,7 +449,7 @@ function TySquareGlyphBox(const ARect: TRect): TRect;
   read from --glyph-chevron-size in ONE place rather than at nine call sites; it was a literal
   default on TTyPainter.DrawDropChevron that no caller overrode, which made it the only visual
   value in this path a skin or a density axis could not reach. }
-procedure TyDrawDropChevron(APainter: TTyPainter; AController: TTyStyleController;
+procedure TyDrawDropChevron(APainter: TTyPainter; AController: TTyCustomStyleController;
   const AZoneRect: TRect; AColor: TTyColor);
 
 { Contextual styling for a control hosted ON a title bar. A title bar is a container, and
@@ -811,7 +659,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyGraphicControl.SetController(AValue: TTyStyleController);
+procedure TTyGraphicControl.SetController(AValue: TTyCustomStyleController);
 begin
   if FController = AValue then Exit;
   { Unregister from current active controller and remove free-notification }
@@ -837,7 +685,7 @@ begin
     FController := nil;
 end;
 
-function TTyGraphicControl.ActiveController: TTyStyleController;
+function TTyGraphicControl.ActiveController: TTyCustomStyleController;
 begin
   if FController <> nil then
     Result := FController
@@ -1266,7 +1114,7 @@ end;
 function TyThemedFormGradient(AChild: TControl; const APR, ACR: TRect;
   out AFill: TTyFill): Boolean;
 var
-  ctrl: TTyStyleController;
+  ctrl: TTyCustomStyleController;
   st: TTyStyleSet;
 begin
   Result := False;
@@ -1534,7 +1382,7 @@ begin
     APainter.DrawEdge(ARect, AStyle.BorderWidth, light, dark);  // raised (outset): TL light, BR dark
 end;
 
-function TyTryDrawGlyphOverride(APainter: TTyPainter; AController: TTyStyleController;
+function TyTryDrawGlyphOverride(APainter: TTyPainter; AController: TTyCustomStyleController;
   const ARect: TRect; const ATokenName: string; AColor: TTyColor): Boolean;
 { v3/C5 core. If the theme sets ATokenName to a valid glyph override, render that icon-font
   glyph into ARect and return True (honoured even if it renders blank — the theme asked for
@@ -1592,10 +1440,10 @@ begin
   end;
 end;
 
-procedure TyDrawDropChevron(APainter: TTyPainter; AController: TTyStyleController;
+procedure TyDrawDropChevron(APainter: TTyPainter; AController: TTyCustomStyleController;
   const AZoneRect: TRect; AColor: TTyColor);
 var
-  ctrl: TTyStyleController;
+  ctrl: TTyCustomStyleController;
 begin
   if AController <> nil then ctrl := AController else ctrl := TyDefaultController;
   APainter.DrawDropChevron(AZoneRect, AColor,
@@ -1616,7 +1464,7 @@ begin
   Result := Rect(ARect.Left + dx, ARect.Top + dy, ARect.Left + dx + s, ARect.Top + dy + s);
 end;
 
-procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
+procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyCustomStyleController;
   const ARect: TRect; const ATokenName: string; AVectorKind: TTyGlyphKind;
   AColor: TTyColor; AThickness: Integer; APadLogical: Integer = 4);
 begin
@@ -1626,7 +1474,7 @@ begin
     APainter.DrawGlyph(ARect, AVectorKind, AColor, AThickness, APadLogical);
 end;
 
-procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
+procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyCustomStyleController;
   const ARect: TRect; AVectorKind: TTyGlyphKind; AColor: TTyColor; AThickness: Integer;
   APadLogical: Integer = 4);
 { v3/C5. Convenience: the override token is derived from the kind (--glyph-<kind>). }
@@ -1992,7 +1840,7 @@ begin
 end;
 {$ENDIF}
 
-procedure TTyCustomControl.SetController(AValue: TTyStyleController);
+procedure TTyCustomControl.SetController(AValue: TTyCustomStyleController);
 begin
   if FController = AValue then Exit;
   { Unregister from current active controller and remove free-notification }
@@ -2018,7 +1866,7 @@ begin
     FController := nil;
 end;
 
-function TTyCustomControl.ActiveController: TTyStyleController;
+function TTyCustomControl.ActiveController: TTyCustomStyleController;
 begin
   if FController <> nil then
     Result := FController
@@ -2110,7 +1958,7 @@ begin
 end;
 
 function TyResolveFontSize(const AStyle: TTyStyleSet; AParentFont: Boolean;
-  AControlFontSize: Integer; AController: TTyStyleController): Integer;
+  AControlFontSize: Integer; AController: TTyCustomStyleController): Integer;
 var
   base: Integer;
 begin

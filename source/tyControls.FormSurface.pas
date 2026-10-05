@@ -23,7 +23,7 @@ uses
   Classes, Controls, Graphics, Forms, tyControls.Base, tyControls.StrConsts;
 
 type
-  TTyFormSurface = class(TTyCustomControl)
+  TTyCustomFormSurface = class(TTyCustomControl)
   private
     { The form's background as last rendered, and what it was rendered from (see
       PaintFormBackground). }
@@ -43,7 +43,6 @@ type
     destructor Destroy; override;
     { Drops the cached background, as a container's own Invalidate does (TTyPanel). }
     procedure Invalidate; override;
-  published
     { Why this control exists: TyFormSurface is the content host of a TTyForm — the panel every
       control on the form lives on.
 
@@ -58,14 +57,86 @@ type
       Keep exactly one surface per form, leave it filling the form, and do not delete it.
 
       (This comment is what the Object Inspector shows in its description pane, so it is written for
-      the user and mirrors the '...' dialog text in tyControls.Design / rsDtSurfacePurposeText.) }
+      the user -- it sits on both declarations, TTyCustomFormSurface's and TTyFormSurface's -- and
+      mirrors the '...' dialog text in tyControls.Design / rsDtSurfacePurposeText.) }
     property Purpose: string read GetPurpose;
+  end;
+
+  { TTyFormSurface publishes TTyCustomFormSurface's properties; everything lives in TTyCustomFormSurface. }
+  TTyFormSurface = class(TTyCustomFormSurface)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    { Why this control exists: TyFormSurface is the content host of a TTyForm — the panel every
+      control on the form lives on.
+
+      A borderless, resizable window cannot paint its own outermost pixels: the compositor gives it a
+      backing surface smaller than the window, which leaves an unpainted band along the right and
+      bottom edges. A CHILD window has no such limit and paints edge to edge, so TTyForm renders its
+      themed background onto this surface instead of onto itself.
+
+      Your controls must live on the surface. Graphic (windowless) controls such as TTyLabel paint
+      onto their parent, so one placed directly on the form is hidden behind the surface.
+
+      Keep exactly one surface per form, leave it filling the form, and do not delete it.
+
+      (This comment is what the Object Inspector shows in its description pane, so it is written for
+      the user -- it sits on both declarations, TTyCustomFormSurface's and TTyFormSurface's -- and
+      mirrors the '...' dialog text in tyControls.Design / rsDtSurfacePurposeText.) }
+    property Purpose;
     { A "custom" base (TTyCustomControl) does not publish these; the container needs them published so
       a streamed `object Surface` can carry `Align = alClient`. All three are HIDDEN in the Object
       Inspector by the design-time package (see tyControls.Design) — published for streaming only. }
     property Align;
     property Anchors;
-    property Visible;
   end;
 
 implementation
@@ -74,30 +145,30 @@ uses
   BGRABitmap, BGRABitmapTypes, tyControls.Painter,
   tyControls.Form;   // TTyForm (implementation-section cycle with Form.pas, legal)
 
-constructor TTyFormSurface.Create(AOwner: TComponent);
+constructor TTyCustomFormSurface.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   ControlStyle := ControlStyle + [csAcceptsControls];   // it hosts the form's controls (drop target)
 end;
 
-destructor TTyFormSurface.Destroy;
+destructor TTyCustomFormSurface.Destroy;
 begin
   FBgCache.Free;
   inherited Destroy;
 end;
 
-procedure TTyFormSurface.Invalidate;
+procedure TTyCustomFormSurface.Invalidate;
 begin
   if FBgCache <> nil then FBgCache.Drop;
   inherited Invalidate;
 end;
 
-function TTyFormSurface.GetPurpose: string;
+function TTyCustomFormSurface.GetPurpose: string;
 begin
   Result := rsTySurfacePurpose;   // one-liner in the OI; the '...' editor explains the full why
 end;
 
-function TTyFormSurface.GetStyleTypeKey: string;
+function TTyCustomFormSurface.GetStyleTypeKey: string;
 begin
   // The surface has NO CSS of its own — it renders the owner form's `form` background (see Paint),
   // and hosts controls that resolve their own styles. A neutral key means no accidental TyForm
@@ -105,7 +176,7 @@ begin
   Result := 'TyFormSurface';
 end;
 
-procedure TTyFormSurface.Paint;
+procedure TTyCustomFormSurface.Paint;
 var
   frm: TCustomForm;
 begin
@@ -140,7 +211,7 @@ end;
   whatever the window holds, which a snapshot cannot reproduce -- that is rendered every
   time, as it always was. A kept background is the same bytes the direct path lays down: an
   opaque pixel drawn with transparency replaces the one under it. }
-procedure TTyFormSurface.PaintFormBackground(AForm: TCustomForm; ACanvas: TCanvas);
+procedure TTyCustomFormSurface.PaintFormBackground(AForm: TCustomForm; ACanvas: TCanvas);
 var
   frm: TTyForm;
   w, h: Integer;

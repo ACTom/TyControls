@@ -10,12 +10,13 @@ uses
 
 type
   TTyProgressDialog = class;
+  TTyCustomProgressDialog = class;
 
   { TTyProgressForm — the reusable modeless progress window owned by a
     TTyProgressDialog. Pure UI + the DoCancel seam. }
   TTyProgressForm = class(TTyDialog)
   private
-    FDlg: TTyProgressDialog;
+    FDlg: TTyCustomProgressDialog;
     FBar: TTyProgressBar;
     FLabel: TTyLabel;
     FCancelBtn: TTyButton;        // nil unless cancelable
@@ -33,7 +34,7 @@ type
   { TTyProgressDialog — stateful, app-driven, modeless. The app updates it in a
     loop and calls SetProgress; SetProgress pumps the message loop so the bar
     repaints and a Cancel click is seen. OnCancel MUST NOT Free this component. }
-  TTyProgressDialog = class(TTyComponent)
+  TTyCustomProgressDialog = class(TTyComponent)
   private
     FCaption: TCaption;
     FText: TCaption;
@@ -56,7 +57,6 @@ type
     procedure Close;
     procedure DoCancel;                    // seam: fired by the Cancel button / Esc
     property Cancelled: Boolean read FCancelled;
-  published
     property Caption: TCaption read FCaption write FCaption;
     property Text: TCaption read FText write FText;
     property Min: Integer read FMin write FMin default 0;
@@ -67,6 +67,22 @@ type
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
+  end;
+
+  { TTyProgressDialog publishes TTyCustomProgressDialog's properties; everything lives in TTyCustomProgressDialog. }
+  TTyProgressDialog = class(TTyCustomProgressDialog)
+  published
+    property Version;
+    property Caption;
+    property Text;
+    property Min;
+    property Max;
+    property Position;
+    property Cancelable;
+    property OnCancel;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
   end;
 
 implementation
@@ -137,9 +153,9 @@ end;
 function TTyProgressForm.Bar: TTyProgressBar; begin Result := FBar; end;
 function TTyProgressForm.StatusLabel: TTyLabel; begin Result := FLabel; end;
 
-{ TTyProgressDialog }
+{ TTyCustomProgressDialog }
 
-constructor TTyProgressDialog.Create(AOwner: TComponent);
+constructor TTyCustomProgressDialog.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FMin := 0;
@@ -147,7 +163,7 @@ begin
   FPosition := 0;
 end;
 
-function TTyProgressDialog.BuildForm: TTyProgressForm;
+function TTyCustomProgressDialog.BuildForm: TTyProgressForm;
 begin
   if FForm = nil then
   begin
@@ -162,7 +178,7 @@ begin
   Result := FForm;
 end;
 
-procedure TTyProgressDialog.Show;
+procedure TTyCustomProgressDialog.Show;
 begin
   if csDesigning in ComponentState then Exit;
   FCancelled := False;
@@ -170,7 +186,7 @@ begin
   FForm.Show;
 end;
 
-procedure TTyProgressDialog.PreviewInDesigner;
+procedure TTyCustomProgressDialog.PreviewInDesigner;
 begin
   FCancelled := False;
   BuildForm;
@@ -186,7 +202,7 @@ const
     (the flicker) without changing the reported progress. }
   cProgressRefreshMs = 50;
 
-procedure TTyProgressDialog.SetProgress(APos: Integer; const AText: string);
+procedure TTyCustomProgressDialog.SetProgress(APos: Integer; const AText: string);
 var nowTick: QWord;
 begin
   if APos < FMin then APos := FMin;
@@ -214,18 +230,18 @@ begin
   end;
 end;
 
-procedure TTyProgressDialog.Step(ADelta: Integer);
+procedure TTyCustomProgressDialog.Step(ADelta: Integer);
 begin
   SetProgress(FPosition + ADelta);
 end;
 
-procedure TTyProgressDialog.Close;
+procedure TTyCustomProgressDialog.Close;
 begin
   FCancelled := False;
   if FForm <> nil then FForm.Hide;
 end;
 
-procedure TTyProgressDialog.DoCancel;
+procedure TTyCustomProgressDialog.DoCancel;
 begin
   FCancelled := True;
   if Assigned(FOnCancel) then FOnCancel(Self);

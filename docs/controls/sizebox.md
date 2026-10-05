@@ -47,7 +47,7 @@ TTySizeBox 继承自 `TTyGraphicControl`（`tyControls.Base`）：
 | `Anchors` | `TAnchors` | `[akLeft, akTop]` | 随父控件调整大小时的锚点（右下角手柄通常设 `[akRight, akBottom]`） |
 | `StyleClass` | `string` | `''` | CSS 类名，对应 `.tycss` 选择器的 `.classname` 部分 |
 | `StyleOverride` | `string` | `''` | 逐实例 CSS 声明块，叠加在主题之上，可引用 `var(--...)` |
-| `Controller` | `TTyStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定使用哪个样式控制器 |
+| `Controller` | `TTyCustomStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定使用哪个样式控制器 |
 
 **状态跟踪字段（private/protected，不 published）：**
 

@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyComboBoxEx 是**每一行带一套扩展数据（图片 / 缩进 / 载荷）+ 文字**的下拉框。继承自 [TTyComboBox](combobox.md),覆写 `PaintFieldContent`(字段区)与自定义弹出列表的 `PaintItemContent`(下拉行),在图片右侧画文字——**字段和下拉里画的是同一套图文布局**(共享 `DrawImageText` / `DrawExItem`)。
+TTyComboBoxEx 是**每一行带一套扩展数据（图片 / 缩进 / 载荷）+ 文字**的下拉框。继承自 [TTyCustomComboBox](combobox.md),覆写 `PaintFieldContent`(字段区)与自定义弹出列表的 `PaintItemContent`(下拉行),在图片右侧画文字——**字段和下拉里画的是同一套图文布局**(共享 `DrawImageText` / `DrawExItem`)。
 
 这个控件存在的理由是 **`ItemsEx`**:一个 published、**设计期可编辑的集合**(`TTyComboExItems`,元素为 `TTyComboExItem`)。每个条目带 `Caption` / `ImageIndex` / `OverlayImageIndex` / `SelectedImageIndex` / `Indent` / `Data`。没有它,这个控件就只是"多几步的组合框"。
 
@@ -56,7 +56,7 @@ uses tyControls.ComboBoxEx, tyControls.ImageCollection;
 | 成员 | 说明 |
 |------|------|
 | `ItemsEx: TTyComboExItems` | published 集合,设计期可编辑。**声明在依赖行集合的属性之前**,保证先流式化。 |
-| `Images: TTyVirtualImageList` | 图片来源(按索引寻址)。赋值会登记 `FreeNotification`,来源先被释放时自动置空引用。 |
+| `Images: TCustomImageList` | 图片来源(按索引寻址)。赋值会登记 `FreeNotification`,来源先被释放时自动置空引用。 |
 | `AddItem(const S: string; AImageIndex: Integer)` | 追加带图片的一行;`AImageIndex < 0` 表示无图。 |
 | `AddItem(const AItem: string; AnObject: TObject)`(override) | 继承来的形式,**改道**:对象进这一行条目的 `Data`,不会被当成图片索引读出来。 |
 | `Add: Integer` / `Add(ACaption; AIndent; AImgIdx; AOverlayImgIdx; ASelectedImgIdx)` | LCL 的两个 `Add` 重载。 |
@@ -68,7 +68,7 @@ uses tyControls.ComboBoxEx, tyControls.ImageCollection;
 | `DrawImageText(P; ARect; S; AImageIndex; AStyle)` | 共享绘制:左图右文。 |
 | `DrawExItem(P; ARect; AItem; ASelected; AStyle)` | 完整行绘制:应用 `Indent`、选中时换 `SelectedImageIndex`、再叠 `OverlayImageIndex`。 |
 
-另继承 `TTyComboBox` 的 `Items` / `ItemIndex` / `Text` / `Sorted` / `DropDownCount` / `TextHint` / `OnChange` / `OnSelect` 等。
+另继承 `TTyCustomComboBox` 的 `Items` / `ItemIndex` / `Text` / `Sorted` / `DropDownCount` / `TextHint` / `OnChange` / `OnSelect` 等。
 
 ---
 
@@ -133,7 +133,7 @@ end;
 - **`Items` 和 `ItemsEx` 双向同步:** 改集合会重建投影;直接 `Items.Add` / `Items.Delete` / `Items.Clear` 会反向对齐集合(缺条目的行补一个,没人引用的条目删掉),手工 `Items.AddObject(s, X)` 挂的对象会被接管进 `Data`。
 - **`Sorted = True` 时集合顺序与显示顺序不同:** `Sorted` 排的是投影(显示),`ItemsEx` 保持插入顺序;配对靠 `Objects[]`,不会错。要**集合**也有序就用 `ItemsEx.SortType`。
 - **`ItemIndex` 的流式化顺序:** `ItemIndex` 声明在祖先类,会**先于** `ItemsEx` 写进 `.lfm`,加载时列表还是空的、索引会被钳成 `-1`。控件在 `SelectItem` 里记住流式化期间的索引,并在 `Loaded` 里重新应用——所以设计期设的选中项能活下来。
-- **`Images` 是 `TTyVirtualImageList`(按索引)**,不是 `TTyImageCollection`(按名字);图片索引对应 `Images.Names` 的行号。
+- **`Images` 是 `TCustomImageList`(按索引)**,不是 `TTyImageCollection`(按名字);用本库的 `TTyVirtualImageList` 时,图片索引对应 `Images.Names` 的行号。
 - **自绘行支持:** `Style := csOwnerDrawFixed` / `csOwnerDrawEditableFixed` + `OnDrawItem` 时,图文行绘制整个让位给应用的 handler(字段同理)。协议与限制见 [combobox.md §8.2](combobox.md#82-自绘csownerdrawfixed--csownerdraweditablefixed--ondrawitem)。
 - **未做(与 LCL `TComboBoxEx` 的差异):** `Images` 类型不是 `TCustomImageList`(现成的 `TImageList` **不能**直接赋值,`ComboEx.Images := ImageList1` 编译不过);没有 `ImagesWidth`;没有 `AutoCompleteOptions` 和 `StyleEx`(所以没法说"关闭字段里的图标" `csExNoEditImage`);`SortType` 少一个 `stCustom` 值(用 `CustomSort` 方法代替)。
 - **纯状态逻辑已 headless 单测**(集合↔列表双向同步 / 各扩展字段 / 增删插 / 批量装载 / 排序不错位 / 对象重载不进图片槽);图文绘制、下拉交互需真机验证。

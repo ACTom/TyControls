@@ -3,7 +3,7 @@
 
 { ---- 鼠标 --------------------------------------------------------------------------- }
 
-function TTyTerminalView.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean;
+function TTyCustomTerminalView.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean;
 var
   notches, i, dir: Integer;
   ev: TTyTerminalMouseEvent;
@@ -68,7 +68,7 @@ end;
   照竖向按 ±120 累计要覆盖这一层。程序要了滚轮就报 66 / 67(左 / 右);没要就交还父控件——
   终端没有横向可滚。「要了」看协议收不收滚轮(X10 只报按下:开着上报也不收),再看这一格
   到底报出去没有(TriggerMouseEvent 的返回值:指针在内边距里也不报)。 }
-function TTyTerminalView.DoMouseWheelHorz(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean;
+function TTyCustomTerminalView.DoMouseWheelHorz(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean;
 var
   notches, i: Integer;
   probe: TTyTerminalMouseEvent;
@@ -119,7 +119,7 @@ begin
   end;
 end;
 
-function TTyTerminalView.Reporting: Boolean;
+function TTyCustomTerminalView.Reporting: Boolean;
 begin
   { 7 期(spec 19.5):数据流被接管时程序拿不到鼠标,按没要鼠标处理 }
   Result := (FCore.Modes.MouseProtocol <> tmpNone) and not FCore.StreamClaimed;
@@ -128,7 +128,7 @@ end;
 { 上报用的事件:格子按 CellAt(整除再钳,上游 getCoords 的非选区取整),像素钳在网格里
   (MouseCoordsService.ts:38-39 钳到画布宽高 - 1),修饰键原样:覆盖键按着时按键不会走到
   这里,滚轮照上游带着修饰位(MouseService.ts:175-179 只在 mouseEventsRequireAlt 时剥) }
-function TTyTerminalView.MakeMouseEvent(AButton: TTyTerminalMouseButton; AAction: TTyTerminalMouseAction;
+function TTyCustomTerminalView.MakeMouseEvent(AButton: TTyTerminalMouseButton; AAction: TTyTerminalMouseAction;
   X, Y: Integer; Shift: TShiftState): TTyTerminalMouseEvent;
 var
   cell: TPoint;
@@ -148,7 +148,7 @@ begin
   Result.Ctrl := ssCtrl in Shift;
 end;
 
-function TTyTerminalView.ReportMouse(AButton: TTyTerminalMouseButton; AAction: TTyTerminalMouseAction;
+function TTyCustomTerminalView.ReportMouse(AButton: TTyTerminalMouseButton; AAction: TTyTerminalMouseAction;
   X, Y: Integer; Shift: TShiftState): Boolean;
 begin
   { 第 4、5 键上游是 NONE + 按下 / 抬起,被 TriggerMouseEvent 滤掉:不报 }
@@ -156,12 +156,12 @@ begin
   Result := FCore.TriggerMouseEvent(MakeMouseEvent(AButton, AAction, X, Y, Shift));
 end;
 
-function TTyTerminalView.OverrideIsAlt: Boolean;
+function TTyCustomTerminalView.OverrideIsAlt: Boolean;
 begin
   Result := (FSelectionOverrideKey = tsoAlt) or ((FSelectionOverrideKey = tsoDefault) and FIsMac);
 end;
 
-function TTyTerminalView.OverrideHeld(Shift: TShiftState): Boolean;
+function TTyCustomTerminalView.OverrideHeld(Shift: TShiftState): Boolean;
 begin
   case FSelectionOverrideKey of
     tsoShift: Result := ssShift in Shift;
@@ -172,7 +172,7 @@ begin
   end;
 end;
 
-function TTyTerminalView.ColumnWanted(Shift: TShiftState): Boolean;
+function TTyCustomTerminalView.ColumnWanted(Shift: TShiftState): Boolean;
 begin
   Result := (ssAlt in Shift) and not OverrideIsAlt;
 end;
@@ -180,7 +180,7 @@ end;
 { 指针形状(xterm.css:39、:119-120、:130):程序接管鼠标(没按覆盖键)箭头;要列选择十字;
   平常 I 形,宿主设了别的 Cursor 就用宿主的。用 SetTempCursor,不写 Cursor 属性;LCL 进出
   控件时会拿 Cursor 复位,所以每次移动都重设。 }
-procedure TTyTerminalView.UpdatePointer(Shift: TShiftState);
+procedure TTyCustomTerminalView.UpdatePointer(Shift: TShiftState);
 var
   c: TCursor;
 begin
@@ -201,7 +201,7 @@ end;
 { 谁拿鼠标(4 期 4b 附录的表):路在按下那一刻定,拖动、抬起一直走它,中途松开覆盖键不换路
   (MouseService.ts:224-249,选区服务的 mousemove 监听 stopImmediatePropagation)。上报路上
   别的键按下也照报;其他路上别的键不管。 }
-procedure TTyTerminalView.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomTerminalView.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   cell: TPoint;
   link: TTyTermLink;
@@ -280,7 +280,7 @@ begin
   end;
 end;
 
-procedure TTyTerminalView.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomTerminalView.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseMove(Shift, X, Y);
   if csDesigning in ComponentState then Exit;
@@ -312,7 +312,7 @@ begin
   end;
 end;
 
-function TTyTerminalView.RouteButtonsHeld: Boolean;
+function TTyCustomTerminalView.RouteButtonsHeld: Boolean;
 var
   held: TShiftState;
   b: TMouseButton;
@@ -328,7 +328,7 @@ begin
   Result := MouseButtonShift(FRouteButton) * held <> [];
 end;
 
-procedure TTyTerminalView.ForgetPress;
+procedure TTyCustomTerminalView.ForgetPress;
 var
   rt: TTyTerminalMouseRoute;
   b: TMouseButton;
@@ -356,7 +356,7 @@ end;
 
 { LCL 的抬起:先放捕获(CaptureChanged 在这里就到),再 MouseUp。记下「在抬起里」,这时的
   捕获变化交给随后的 MouseUp }
-procedure TTyTerminalView.WMLButtonUp(var Message: TLMLButtonUp);
+procedure TTyCustomTerminalView.WMLButtonUp(var Message: TLMLButtonUp);
 begin
   FInButtonUp := True;
   try
@@ -366,7 +366,7 @@ begin
   end;
 end;
 
-procedure TTyTerminalView.WMMButtonUp(var Message: TLMMButtonUp);
+procedure TTyCustomTerminalView.WMMButtonUp(var Message: TLMMButtonUp);
 begin
   FInButtonUp := True;
   try
@@ -376,7 +376,7 @@ begin
   end;
 end;
 
-procedure TTyTerminalView.WMRButtonUp(var Message: TLMRButtonUp);
+procedure TTyCustomTerminalView.WMRButtonUp(var Message: TLMRButtonUp);
 begin
   FInButtonUp := True;
   try
@@ -388,7 +388,7 @@ end;
 
 { 捕获被拿走(Alt+Tab、模态框、别的控件 SetCapture):路要的键已经松开,抬起就不会再来了;
   还按着的话,抬起也许还会落回这里,先不动 }
-procedure TTyTerminalView.CaptureChanged;
+procedure TTyCustomTerminalView.CaptureChanged;
 begin
   inherited CaptureChanged;
   if FInButtonUp or (FRoute = mrNone) or (csDesigning in ComponentState) then Exit;
@@ -396,7 +396,7 @@ begin
   ForgetPress;
 end;
 
-procedure TTyTerminalView.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomTerminalView.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   rt: TTyTerminalMouseRoute;
   cell: TPoint;

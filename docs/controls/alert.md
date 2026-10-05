@@ -52,7 +52,7 @@ uses tyControls.Alert;
 |------|------|--------|------|
 | `StyleClass` | `string` | `''` | **附加变体**，叠在类型自带的变体之上——见下方「`StyleClass` 与 `AlertType` 怎么相处」。 |
 | `StyleOverride` | `string` | `''` | 单实例内联 CSS 声明块（可引用 `var(--...)` 令牌）。 |
-| `Controller` | `TTyStyleController` | `nil`（用全局 `TyDefaultController`） | 指定样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（用全局 `TyDefaultController`） | 指定样式控制器。 |
 
 另暴露 `Enabled` / `Font` / `Align` / `Anchors` / `OnClick` 及 `TTyGraphicControl` 基线事件集，见 [../events.md](../events.md)。
 

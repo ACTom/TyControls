@@ -27,7 +27,7 @@ type
     // The control the menu belongs to -- for ClientToScreen and PopupComponent.
     function TeControl: TControl;
     // The themed controller the popup resolves its .tycss tokens through (nil safe).
-    function TeController: TTyStyleController;
+    function TeController: TTyCustomStyleController;
     // Actions (each maps to the control's existing public method).
     procedure TeUndo;
     procedure TeRedo;

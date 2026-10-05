@@ -11,7 +11,7 @@ uses
   Classes, SysUtils, Forms, Controls, Dialogs, Menus, ClipBrd,
   PropEdits, PropEditUtils, ComponentEditors,
   tyControls.AdvanceChart, tyControls.Design.AdvChart.Editor,
-  tyControls.IconFont, tyControls.ImageCollection,
+  tyControls.IconFont, tyControls.Icons.Lucide, tyControls.ImageCollection,
   tyControls.Dialogs, tyControls.Dialogs.IconBrowser,
   tyControls.Dialogs.ImageCollectionEditor, tyControls.Dialogs.StructureEditor,
   tyControls.Dialogs.ListGroupsEditor, tyControls.Dialogs.TreeNodesEditor,
@@ -41,8 +41,8 @@ type
     On a TTyVirtualImageList it is APPENDED to Names, which is the thing that list is for. }
   TTyIconBrowserComponentEditor = class(TComponentEditor)
   private
-    FPickTarget: TTyVirtualImageList;
-    function FontOf(out AOwnerList: TTyVirtualImageList): TTyIconFont;
+    FPickTarget: TTyCustomVirtualImageList;
+    function FontOf(out AOwnerList: TTyCustomVirtualImageList): TTyCustomIconFont;
     procedure HandlePickName(Sender: TObject; const AName: string);
   public
     function GetVerbCount: Integer; override;
@@ -275,15 +275,17 @@ resourcestring
 
 { TTyIconBrowserComponentEditor }
 
-function TTyIconBrowserComponentEditor.FontOf(out AOwnerList: TTyVirtualImageList): TTyIconFont;
+function TTyIconBrowserComponentEditor.FontOf(out AOwnerList: TTyCustomVirtualImageList): TTyCustomIconFont;
 begin
   AOwnerList := nil;
   Result := nil;
-  if Component is TTyIconFont then
-    Result := TTyIconFont(Component)          { covers TTyIconPackFont / TTyLucideIconFont }
-  else if Component is TTyVirtualImageList then
+  { The custom classes: since 4.0 the bundled packs (TTyLucideIconFont, TTyLucideImageList) hang
+    on TTyCustomIconFont / TTyCustomVirtualImageList, not under TTyIconFont / TTyVirtualImageList. }
+  if Component is TTyCustomIconFont then
+    Result := TTyCustomIconFont(Component)
+  else if Component is TTyCustomVirtualImageList then
   begin
-    AOwnerList := TTyVirtualImageList(Component);
+    AOwnerList := TTyCustomVirtualImageList(Component);
     Result := AOwnerList.IconFont;
   end;
 end;
@@ -301,8 +303,8 @@ end;
 
 procedure TTyIconBrowserComponentEditor.ExecuteVerb(Index: Integer);
 var
-  lst: TTyVirtualImageList;
-  fnt: TTyIconFont;
+  lst: TTyCustomVirtualImageList;
+  fnt: TTyCustomIconFont;
   dlg: TTyIconBrowserForm;
   nm: string;
 begin
@@ -677,7 +679,7 @@ end;
 procedure TTyToolWindowBarEditor.ShowWindowItemClick(Sender: TObject);
 var
   i: Integer;
-  W: TTyToolWindow;
+  W: TTyCustomToolWindow;
 begin
   if not (Sender is TMenuItem) then Exit;
   { GetDesigner is just whatever the editor was created with (componenteditors.pas:670-673).
@@ -699,7 +701,7 @@ end;
 procedure TTyToolWindowBarEditor.PrepareItem(Index: Integer; const AnItem: TMenuItem);
 var
   i: Integer;
-  W: TTyToolWindow;
+  W: TTyCustomToolWindow;
   Item: TMenuItem;
 begin
   inherited PrepareItem(Index, AnItem);
@@ -838,8 +840,8 @@ end;
 procedure TTyToolWindowEditor.ExecuteVerb(Index: Integer);
 var
   Hook: TPropertyEditorHook;
-  A: TTyToolWindowActions;
-  oldBar: TTyToolWindowBar;
+  A: TTyCustomToolWindowActions;
+  oldBar: TTyCustomToolWindowBar;
 begin
   case Index of
     0: begin
@@ -1153,14 +1155,17 @@ begin
   RegisterComponentEditor(TTyToolWindowBar, TTyToolWindowBarEditor);
   RegisterComponentEditor(TTyToolWindow, TTyToolWindowEditor);
   // Double-click a tree in the designer to open its node editor, the way LCL's own
-  // TTreeView opens the "TreeView Items Editor". GetComponentEditor picks the
-  // most-derived registration, so this also covers TTyShellTreeView -- the editor asks
-  // SupportsItemModel and offers no verb there.
+  // TTreeView opens the "TreeView Items Editor". Since 4.0 TTyShellTreeView is no
+  // TTyTreeView (it hangs on TTyCustomTreeView, the LCL way), so it gets the default
+  // editor -- it never had a verb here anyway: the editor asks SupportsItemModel, and the
+  // shell tree builds its nodes from the file system.
   RegisterComponentEditor(TTyTreeView, TTyTreeViewComponentEditor);
-  { Right-click -> "Icon browser...". Registered on the BASE icon font, so every bundled pack
-    (TTyLucideIconFont and whatever follows it) inherits the verb without another line here;
-    GetComponentEditor picks the most-derived registration. }
-  RegisterComponentEditor([TTyIconFont, TTyVirtualImageList], TTyIconBrowserComponentEditor);
+  { Right-click -> "Icon browser...". Component editors stay on the final classes (a verb may
+    write a property a third-party subclass never published), and since 4.0 the bundled packs
+    are not TTyIconFont / TTyVirtualImageList descendants -- they hang on the custom classes --
+    so each is named here; a new pack adds its own line. }
+  RegisterComponentEditor([TTyIconFont, TTyLucideIconFont, TTyVirtualImageList, TTyLucideImageList],
+    TTyIconBrowserComponentEditor);
   RegisterComponentEditor(TTyImageCollection, TTyImageCollectionComponentEditor);
   RegisterComponentEditor(TTyListGroupPanel, TTyListGroupPanelComponentEditor);
   // Double-click a cascader to edit its nested option tree in one window.

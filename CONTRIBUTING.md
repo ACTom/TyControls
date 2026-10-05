@@ -37,7 +37,9 @@ TyControls 是跨平台、多主题的通用控件库,内置皮肤用来验证�
 
 版本号是 `主版本.次版本.修订号`。修订版只修 bug;次版本加新功能,但保持兼容,见下文。
 
-**维护周期**:最新发布的次版本持续修复和发版。上一个次版本也继续收到修复和发版,直到再下一个次版本发布时,发最后一版后停止维护:比如 3.2 发布时发最后一个 3.0.x。严重问题不受此限。
+**维护周期**:最新发布的次版本持续修复和发版。上一个次版本也继续收到修复和发版,直到再下一个次版本发布时,发最后一版后停止维护:比如 4.2 发布时发最后一个 4.0.x。严重问题不受此限。
+
+**长期支持**:3.0 是长期支持版本,3.0.0 发布后一年内(到 2027-09-30)持续修复和发版,新功能进 4.x。
 
 **兼容承诺**:同一主版本内(比如整个 3.x),次版本保证:
 
@@ -55,7 +57,7 @@ TyControls 是跨平台、多主题的通用控件库,内置皮肤用来验证�
 
 改动较大的话,先开 issue 或在已有的 issue 下说一声,免得做完发现方向不合。
 
-**分支**:修已发布版本的 bug,基于还有这个 bug 的最新发布版本的维护分支 `主版本.次版本-fixes`(比如 3.0.x 的 bug 基于 `3.0-fixes`);维护者会把修复 cherry-pick 到其他维护分支和 `main`,分支之间不做 merge。新功能和其他改动基于 `main`。
+**分支**:修已发布版本的 bug,基于还有这个 bug 的最新发布版本的维护分支 `主版本.次版本-fixes`(比如 3.0.x 的 bug 基于 `3.0-fixes`);维护者会把修复 cherry-pick 到其他维护分支和 `main`,维护分支不与其他分支互相 merge。新功能和其他改动基于 `main`,较大的功能在特性分支上做完再 merge 回 `main`。
 
 **编译和测试**:
 
@@ -71,6 +73,9 @@ tests/tytests --all --format=plain
 - 颜色、尺寸、圆角等视觉值走主题 token,不写死在代码里。
 - 自绘界面里不用原生 LCL 控件(`TEdit`、`TButton` 等)。
 - 新单元要加进 `tycontrols.lpk`(设计期的加进 `tycontrols_dt.lpk`)。
+- 新控件一开始就拆成两个类:`TTyCustomXxx` 放全部实现,`TTyXxx` 只有一段 `published`(做法见 [docs/subclassing.md](docs/subclassing.md))。不拆的要在 `tests/test.customclasses.pas` 的 `CNotSplit` 里写明理由,否则测试会红。拆好的类加进同一个文件的 `CSplit`,再做两步,各看一遍 diff:
+  - 跑 `python scripts/gen-mimic.py`,重新生成 `tests/test.customclasses.mimic.pas`(第三方模拟子类)。diff 里只该多出新类。脚本照抄每个最终类**当前**的发布段,要是别的类也有行变了,说明那个类的发布顺序被意外改了——重新生成只会把错的顺序抄过去,不会让它变对。
+  - 在 `tests/` 下跑 `TY_WRITE_FRESH_STREAMS=1 ./tytests --suite=TTyCustomClassesGuardTest.TestFreshFormFileTextUnchanged`(PowerShell 里先 `$env:TY_WRITE_FRESH_STREAMS='1'`),把新类写进 `tests/fixtures/customclasses/fresh-streams.txt`。diff 里只该多出新类那一段;别的类的行变了,就是那个类新实例写进窗体文件的东西变了。
 - 用户可见的文字用 `resourcestring`,并同步更新 `languages/` 下的 zh_CN `.po`。
 - 新示例用 `.lfm` 窗体,带标题栏,能在运行时换主题。
 - 不用比 Lazarus 3.0 更新的 LCL API;必须用时,按 `LCL_FULLVERSION` 给旧版本留一条路。

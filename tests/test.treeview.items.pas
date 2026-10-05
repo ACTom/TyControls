@@ -26,9 +26,9 @@ type
     FTree: TTyTreeView;
     FGetTextCalls: Integer;
     FFreeNodeCalls: Integer;
-    procedure FreeNode(Sender: TTyTreeView; Node: PTyTreeNode);
-    procedure GetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
-    procedure GetTextWithType(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure FreeNode(Sender: TTyCustomTreeView; Node: PTyTreeNode);
+    procedure GetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
+    procedure GetTextWithType(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       Column: Integer; TextType: TTyVSTTextType; var CellText: string);
   protected
     procedure SetUp; override;
@@ -95,7 +95,7 @@ begin
   FFreeNodeCalls := 0;
 end;
 
-procedure TTreeViewItemsTest.FreeNode(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TTreeViewItemsTest.FreeNode(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 begin
   Inc(FFreeNodeCalls);
 end;
@@ -105,14 +105,14 @@ begin
   FreeAndNil(FTree);
 end;
 
-procedure TTreeViewItemsTest.GetText(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeViewItemsTest.GetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   var Text: string);
 begin
   Inc(FGetTextCalls);
   Text := 'virtual';
 end;
 
-procedure TTreeViewItemsTest.GetTextWithType(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeViewItemsTest.GetTextWithType(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   Column: Integer; TextType: TTyVSTTextType; var CellText: string);
 begin
   Inc(FGetTextCalls);

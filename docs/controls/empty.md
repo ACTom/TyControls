@@ -56,7 +56,7 @@ uses tyControls.Empty;
 |------|------|--------|------|
 | `StyleClass` | `string` | `''` | 变体入口：对应 `.tycss` 里 `TyEmpty.<classname>`（同时也作用于 `TyEmptyImage.<classname>`）。 |
 | `StyleOverride` | `string` | `''` | 单实例内联 CSS 声明块（可引用 `var(--...)` 令牌）。 |
-| `Controller` | `TTyStyleController` | `nil`（用全局 `TyDefaultController`） | 指定样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（用全局 `TyDefaultController`） | 指定样式控制器。 |
 
 另暴露 `Align` / `Anchors` / `Enabled` / `Font` 及 `TTyCustomControl` 基线事件集，见 [../events.md](../events.md)。
 

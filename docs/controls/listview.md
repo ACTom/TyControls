@@ -140,9 +140,9 @@ LV.Sort;
 | `GridLines` | `Boolean` | `False` | 报表模式行/列网格线 |
 | `RowSelect` | `Boolean` | `True` | 整行高亮,而非仅第 0 列 |
 | `HotTrack` | `Boolean` | `False` | 鼠标悬停高亮 |
-| `LargeImages` | `TTyVirtualImageList` | `nil` | `lvsIcon` / `lvsTile` 用 |
-| `SmallImages` | `TTyVirtualImageList` | `nil` | 其余模式用；表头列图标在 `Header.Images` 为空时也取它 |
-| `Header.Images` | `TTyVirtualImageList` | `nil` | **列头图标**的图像源，按 `TTyColumn.ImageIndex` 取图；为空时回退到 `SmallImages` |
+| `LargeImages` | `TCustomImageList` | `nil` | `lvsIcon` / `lvsTile` 用 |
+| `SmallImages` | `TCustomImageList` | `nil` | 其余模式用；表头列图标在 `Header.Images` 为空时也取它 |
+| `Header.Images` | `TCustomImageList` | `nil` | **列头图标**的图像源，按 `TTyColumn.ImageIndex` 取图；为空时回退到 `SmallImages` |
 | `ScrollBarAutoHide` | `TTyScrollBarAutoHide` | `sbahDefault` | 内嵌滚动条闲下来之后要不要淡出,转发给它们。默认跟主题走,三个值的含义与主题令牌见 [scrollbar.md](scrollbar.md) §7 |
 
 #### 列头图标

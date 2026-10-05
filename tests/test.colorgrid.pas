@@ -12,6 +12,8 @@ type
     procedure TestColumnsClamp;
     procedure TestAddColor;
     procedure TestSelected;
+    procedure TestClearColorsEmptiesAndDeselects;
+    procedure TestColorAtAndSetColorAt;
   end;
 implementation
 
@@ -77,6 +79,44 @@ begin
     AssertTrue('selected set/get', g.Selected = clRed);
     g.Selected := clBlue;
     AssertTrue('selected updates', g.Selected = clBlue);
+  finally g.Free; end;
+end;
+
+procedure TColorGridTest.TestClearColorsEmptiesAndDeselects;
+var g: TTyColorGrid;
+begin
+  g := TTyColorGrid.Create(nil);
+  try
+    { Select the FIRST cell: a stale selection index left behind by ClearColors only shows once
+      a new cell lands on it, and the first AddColor below fills cell 0. }
+    g.Selected := g.ColorAt(0);
+    AssertTrue('setup: cell 0 selected', g.Selected = g.ColorAt(0));
+    g.ClearColors;
+    AssertEquals('no colours left, the VGA palette included', 0, g.ColorCount);
+    AssertTrue('and nothing selected', g.Selected = clNone);
+    g.AddColor(clLime);
+    AssertTrue('a stale selection index does not land on the new cell', g.Selected = clNone);
+  finally g.Free; end;
+end;
+
+procedure TColorGridTest.TestColorAtAndSetColorAt;
+var g: TTyColorGrid;
+begin
+  g := TTyColorGrid.Create(nil);
+  try
+    g.ClearColors;
+    g.AddColor(clRed);
+    g.AddColor(clBlue);
+    AssertTrue('cell 0', g.ColorAt(0) = clRed);
+    AssertTrue('cell 1', g.ColorAt(1) = clBlue);
+    AssertTrue('outside -> clNone', g.ColorAt(2) = clNone);
+    AssertTrue('negative -> clNone', g.ColorAt(-1) = clNone);
+    g.Selected := clBlue;
+    g.SetColorAt(1, clYellow);
+    AssertTrue('cell 1 repainted', g.ColorAt(1) = clYellow);
+    AssertTrue('the selected cell now stands for its new colour', g.Selected = clYellow);
+    g.SetColorAt(5, clGreen);   // ignored
+    AssertEquals('no cell added', 2, g.ColorCount);
   finally g.Free; end;
 end;
 

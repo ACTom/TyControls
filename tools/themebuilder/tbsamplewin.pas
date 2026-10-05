@@ -21,10 +21,10 @@ type
     procedure BtnCloseClick(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
   private
-    FListening: TTyStyleController;
+    FListening: TTyCustomStyleController;
     procedure ControllerChanged(Sender: TObject);
   public
-    procedure UseController(AController: TTyStyleController);
+    procedure UseController(AController: TTyCustomStyleController);
   end;
 
 implementation
@@ -34,7 +34,7 @@ implementation
 uses
   tbpreview;
 
-procedure TTbSampleForm.UseController(AController: TTyStyleController);
+procedure TTbSampleForm.UseController(AController: TTyCustomStyleController);
 begin
   if FListening <> nil then
     FListening.RemoveChangeListener(@ControllerChanged);

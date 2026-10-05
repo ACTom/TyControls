@@ -72,7 +72,7 @@ uses tyControls.ValueListEditor;
 | `Row(AIndex): TTyValueRow` | 第 i 根行。 |
 | `RowCount` | **(API parity 变更)根行数,现在是可读写的属性**(LCL `valedit.pas:237` 也是属性),所以能被 RTTI / 绑定层读到,`VLE.RowCount := 0` 这条"一行清空"的写法也能编译。写入时**从末尾**增删(增出来的是空行)。两处与 LCL 有意不同:只数**数据行**(LCL 的还含固定标题行,同一份列表在那边多 1),且是 public 而非 published —— 把活的行数写进 `.lfm` 会让设计器每次加载都凭空造出空行。 |
 | `DisplayRowCount` | **(API parity 重命名,破坏性)** 当前**有显示位置**的行数 = 根行 + 已展开节点的后代。折叠会让它变小,改控件大小不会。**这个含义从前叫 `VisibleRowCount`。** |
-| `VisibleRowCount` | **(API parity 变更,破坏性)视口**里现在装得下几行 —— 即 LCL `TCustomGrid.VisibleRowCount` 的含义(`grids.pas:1301`,实现 `:2274`),`TValueListEditor` 经 `TCustomStringGrid` → `TCustomDrawGrid`(`:1538` public 转发)继承而来,因为在那边这个类**就是**一个 grid。**它不是"有几行展开着"** —— 那是 `DisplayRowCount`。两者都是 `Integer`、都是 public,所以移植来的翻页算式编译得过、算出垃圾:500 行展开着就一次翻 500 行。与 LCL 一致到那个差一:答的是 `VisibleGrid.Bottom - VisibleGrid.Top`,比"碰到视口的行数"少一行(翻页留一行重叠);整份列表都装得下时不留重叠。这与 `TTyCustomGrid` 在 03c29b3 修的是同一个撞名,当时没落到这个类上,因为我们这个是 `TTyListBox` 不是 grid。 |
+| `VisibleRowCount` | **(API parity 变更,破坏性)视口**里现在装得下几行 —— 即 LCL `TCustomGrid.VisibleRowCount` 的含义(`grids.pas:1301`,实现 `:2274`),`TValueListEditor` 经 `TCustomStringGrid` → `TCustomDrawGrid`(`:1538` public 转发)继承而来,因为在那边这个类**就是**一个 grid。**它不是"有几行展开着"** —— 那是 `DisplayRowCount`。两者都是 `Integer`、都是 public,所以移植来的翻页算式编译得过、算出垃圾:500 行展开着就一次翻 500 行。与 LCL 一致到那个差一:答的是 `VisibleGrid.Bottom - VisibleGrid.Top`,比"碰到视口的行数"少一行(翻页留一行重叠);整份列表都装得下时不留重叠。这与 `TTyCustomGrid` 在 03c29b3 修的是同一个撞名,当时没落到这个类上,因为我们这个是 `TTyCustomListBox` 不是 grid。 |
 | `Keys[i]` | 第 i 根行的键,**可读写**(LCL `valedit.pas:201` 就是 `read GetKey write SetKey`)。写入是**程序化改名**:触发 `OnKeyChanged` 并重绘,但**不查 `keyUnique`、不看 `ReadOnly`**——见 §7 末条。下标越界时写入是空操作(与 `ValueFromIndex[]` 同一条契约:行式索引只寻址**既有**行,绝不凭空造行)。 |
 | `Values[key]` | **按键**读写根行的值(与 LCL / Delphi 的 `TValueListEditor.Values[const Key: string]` 同义)。查找**不分大小写**;写一个**不存在的键会追加一行**——移植过来的代码正是这样填这个控件的。 |
 | `ValueFromIndex[i]` | **按行号**读写根行的值,与 `Keys[i]` 配对(名字取自 RTL 自己的 `TStrings.Values[Name]` / `ValueFromIndex[Index]` 一对)。 |
@@ -178,7 +178,7 @@ VLE.KeyOptions := [keyEdit, keyAdd, keyDelete, keyUnique];
 
 ## RTL 镜像：**不做**，并且是钉死的
 
-本控件覆写了 `TTyListBox.RtlRowLayout` 返回 `False`，所以在 `BiDiMode = bdRightToLeft` 的窗体上它保持从左往右——基类的行矩形、行文字、滚动条边都不跟着翻。
+本控件覆写了 `TTyCustomListBox.RtlRowLayout` 返回 `False`，所以在 `BiDiMode = bdRightToLeft` 的窗体上它保持从左往右——基类的行矩形、行文字、滚动条边都不跟着翻。
 
 理由不是"来不及"，而是这个控件把 x 算了两遍：分隔条拖动（`OverSplit`）、点在哪一列上开编辑器、以及展开三角，都是从 `ContentLeftDp` / `SplitXDp` / `ContentRightDp` 算的（`:536`、`:576`、`:1542`），而 `PaintItemContent` 画的时候是从传进来的 `ARowRect` 切的（`:1426`）；`ContentRightDp` 甚至自己把滚动条从右边减掉了一次。基类一翻行矩形而这三处不动，分隔条就会画在一处、抓在另一处——正是这一轮一直在清的那类 bug。
 

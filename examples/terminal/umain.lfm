@@ -57,11 +57,11 @@ object MainForm: TMainForm
         Top = 7
         Width = 100
         Hint = 'Replay a recording, or run a real shell in the terminal'
-        ItemIndex = 0
         Items.Strings = (
           'Replay'
           'Shell'
         )
+        ItemIndex = 0
         ShowHint = True
         OnChange = ModeChange
       end
@@ -123,7 +123,6 @@ object MainForm: TMainForm
         Height = 26
         Top = 7
         Width = 100
-        ItemIndex = 1
         Items.Strings = (
           '0.5x'
           '1x'
@@ -131,6 +130,7 @@ object MainForm: TMainForm
           '4x'
           'All at once'
         )
+        ItemIndex = 1
       end
       object BtnFit: TTyButton
         Left = 794
@@ -181,13 +181,13 @@ object MainForm: TMainForm
         Height = 26
         Top = 7
         Width = 140
-        ItemIndex = 1
         Items.Strings = (
           '6'
           '11'
           '15'
           '15-graphemes'
         )
+        ItemIndex = 1
         OnChange = UnicodeChange
       end
       object ChkAmbiguous: TTyCheckBox
@@ -203,11 +203,22 @@ object MainForm: TMainForm
         Left = 700
         Height = 20
         Top = 11
-        Width = 70
-        Caption = 'Font size:'
+        Width = 40
+        Caption = 'Font:'
+      end
+      object CmbFont: TTyFontComboBox
+        Left = 746
+        Height = 26
+        Top = 7
+        Width = 140
+        Hint = 'Fixed-pitch fonts installed on this machine'
+        ReadOnly = True
+        ShowHint = True
+        TextHint = 'Theme font'
+        FixedPitchOnly = True
       end
       object SpnFontSize: TTySpinEdit
-        Left = 776
+        Left = 892
         Height = 26
         Top = 7
         Width = 76
@@ -215,17 +226,6 @@ object MainForm: TMainForm
         MaxValue = 32
         Value = 9
         OnChange = FontSizeChange
-      end
-      object BtnPaste: TTyButton
-        Left = 872
-        Height = 28
-        Top = 6
-        Width = 80
-        AutoSize = True
-        Caption = 'Paste'
-        Hint = 'Paste the clipboard into the terminal (what Ctrl+Shift+V does)'
-        ShowHint = True
-        OnClick = PasteClick
       end
     end
     object Tools3: TTyPanel
@@ -347,12 +347,12 @@ object MainForm: TMainForm
         Top = 7
         Width = 160
         Hint = 'What a program may do with the clipboard'
-        ItemIndex = 0
         Items.Strings = (
           'Off'
           'Write only'
           'Read and write'
         )
+        ItemIndex = 0
         ShowHint = True
         OnChange = Osc52Change
       end
@@ -370,15 +370,26 @@ object MainForm: TMainForm
         Top = 7
         Width = 80
         Hint = 'Push text colours off their background until they reach this contrast ratio (1 = off)'
-        ItemIndex = 0
         Items.Strings = (
           '1'
           '3'
           '4.5'
           '7'
         )
+        ItemIndex = 0
         ShowHint = True
         OnChange = ContrastChange
+      end
+      object BtnPaste: TTyButton
+        Left = 860
+        Height = 28
+        Top = 6
+        Width = 80
+        AutoSize = True
+        Caption = 'Paste'
+        Hint = 'Paste the clipboard into the terminal (what Ctrl+Shift+V does)'
+        ShowHint = True
+        OnClick = PasteClick
       end
     end
     object Tools5: TTyPanel
@@ -430,12 +441,12 @@ object MainForm: TMainForm
         Top = 7
         Width = 110
         Hint = 'The cursor''s shape when the program does not ask for one'
-        ItemIndex = 0
         Items.Strings = (
           'Block'
           'Underline'
           'Bar'
         )
+        ItemIndex = 0
         ShowHint = True
         OnChange = CursorStyleChange
       end
@@ -462,7 +473,6 @@ object MainForm: TMainForm
         Top = 7
         Width = 110
         Hint = 'The cursor when the terminal does not have the focus'
-        ItemIndex = 0
         Items.Strings = (
           'Outline'
           'Block'
@@ -470,6 +480,7 @@ object MainForm: TMainForm
           'Underline'
           'None'
         )
+        ItemIndex = 0
         ShowHint = True
         OnChange = CursorInactiveChange
       end
@@ -604,7 +615,7 @@ object MainForm: TMainForm
   end
   object DlgUpload: TTyOpenDialog
     Title = 'Files to send'
-    Options = [fdoFileMustExist, fdoAllowMultiSelect]
+    Options = [ofAllowMultiSelect, ofFileMustExist]
     Left = 220
     Top = 160
   end

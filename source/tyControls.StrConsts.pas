@@ -83,6 +83,11 @@ resourcestring
   rsSmImportEmptyPath           = '@import has an empty path';
   rsSmImportTargetNotFound      = '@import target not found: "%s"';
   rsSmImportCycleDetected       = '@import cycle detected: "%s"';
+  // #14 type key chain registration (translated)
+  rsSmTypeKeyInvalidName        = 'Invalid type key name: "%s"';
+  rsSmTypeKeyCycle              = 'Type key chain cycle: "%s" -> "%s"';
+  rsSmTypeKeyTooDeep            = 'Type key chain too deep (more than %d keys) at "%s"';
+  rsSmTypeKeyConflict           = 'Type key "%s" already has parent "%s" (not "%s")';
 
   // --- Message dialogs (button captions + type titles) — user-facing, translated ---
   rsMsgBtnYes          = 'Yes';
@@ -152,6 +157,8 @@ resourcestring
   rsDlgAlpha           = 'Alpha';
   rsDlgPreview         = 'Preview';
   rsDlgBasicColors     = 'Basic colors';
+  rsDlgCustomColors    = 'Custom colors';
+  rsDlgAddCustomColor  = 'Add to custom colors';
 
   // --- Font picker dialog (S3) — section labels, user-facing, translated ---
   rsDlgFontFamily      = 'Family';
@@ -162,6 +169,7 @@ resourcestring
   rsDlgFontStrike      = 'Strikeout';
   rsDlgFontColor       = 'Color';
   rsDlgFontSample      = 'AaBbYyZz 0123';
+  rsDlgFontApply       = 'Apply';
 
   // --- Find/Replace dialog (S4) — user-facing, translated ---
   rsDlgFindWhat        = 'Find what:';
@@ -172,6 +180,8 @@ resourcestring
   rsDlgFindNext        = 'Find Next';
   rsDlgReplace         = 'Replace';
   rsDlgReplaceAll      = 'Replace All';
+  rsDlgEntireScope     = 'Entire scope';
+  rsDlgPromptOnReplace = 'Prompt on replace';
 
   // --- File dialogs (TTyOpen/Save[Picture/Preview]Dialog) ---
   rsFdOpenTitle      = 'Open';
@@ -189,6 +199,9 @@ resourcestring
   rsFdViewTile       = 'Tiles';
   rsFdOverwritePrompt = 'The file "%s" already exists.'#10'Do you want to replace it?';
   rsFdMustExist      = 'The file "%s" does not exist.';
+  rsFdPathMustExist  = 'The folder "%s" does not exist.';
+  rsFdNotWritable    = '"%s" is not writable.';
+  rsFdCreatePrompt   = '"%s" does not exist.'#10'Do you want to create it?';
   rsFdAllFilesFilter = 'All Files (*.*)|*.*';
   rsFdPictureFilter  = 'Images (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|' +
                        '*.png;*.jpg;*.jpeg;*.bmp;*.gif|All Files (*.*)|*.*';
@@ -349,6 +362,13 @@ resourcestring
     side bar's default width (240 logical px). }
   rsTyToolWindowDropLeft  = 'Drop here to show the left side bar';
   rsTyToolWindowDropRight = 'Drop here to show the right side bar';
+
+  // --- Title bar: the window menu (right-click, the icon, Alt+Space) ---
+  // The same items, order and mnemonics as the Windows system menu.
+  rsTyWindowMenuRestore  = '&Restore';
+  rsTyWindowMenuMinimize = 'Mi&nimize';
+  rsTyWindowMenuMaximize = 'Ma&ximize';
+  rsTyWindowMenuClose    = '&Close';
 
   { --- Calendar / DateTimePicker: month & weekday names ----------------------
     The names TTyCalendar and TTyDateTimePicker render ('August', 'Sun', ...).

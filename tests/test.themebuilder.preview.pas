@@ -16,9 +16,9 @@ type
     FFrame: TTbPreviewFrame;
     FThemeName, FMode: string;
     FDensity: TTyDensity;
-    function ButtonBg(AController: TTyStyleController): Integer;
+    function ButtonBg(AController: TTyCustomStyleController): Integer;
     function Load(const AText: string; const ADir: string = ''): Boolean;
-    function CountTy(AParent: TObject; AController: TTyStyleController;
+    function CountTy(AParent: TObject; AController: TTyCustomStyleController;
       out AOthers: Integer): Integer;
   protected
     procedure SetUp; override;
@@ -79,7 +79,7 @@ begin
     TyDefaultController.Density := FDensity;
 end;
 
-function TTbPreviewTests.ButtonBg(AController: TTyStyleController): Integer;
+function TTbPreviewTests.ButtonBg(AController: TTyCustomStyleController): Integer;
 begin
   Result := Integer(Cardinal(AController.Model.ResolveStyle('TyButton', '', []).Background.Color)
     and $FFFFFF);
@@ -92,14 +92,14 @@ begin
   Result := FFrame.LoadDocument(AText, ADir, err);
 end;
 
-function TTbPreviewTests.CountTy(AParent: TObject; AController: TTyStyleController;
+function TTbPreviewTests.CountTy(AParent: TObject; AController: TTyCustomStyleController;
   out AOthers: Integer): Integer;
 
   procedure Walk(AWin: TWinControl);
   var
     i: Integer;
     c: TControl;
-    ctl: TTyStyleController;
+    ctl: TTyCustomStyleController;
     isTy: Boolean;
   begin
     for i := 0 to AWin.ControlCount - 1 do
@@ -365,7 +365,7 @@ end;
 procedure TTbPreviewTests.TestTheSampleWindowFollowsTheDocument;
 var
   w: TTbSampleForm;
-  ctl: TTyStyleController;
+  ctl: TTyCustomStyleController;
 begin
   w := FFrame.BuildSampleWindow;
   ctl := w.BtnCancel.Controller;

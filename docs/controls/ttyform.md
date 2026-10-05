@@ -20,7 +20,7 @@ type
 - **`Surface: TTyFormSurface`**——铺满窗体（`alClient`）的内容承载容器，**每个窗体有且只有一个**，
   固定名为 `Surface`。它**不是构造时创建的**，而是从 `.lfm` 流式化出来的：File > New 的
   *TyControls Form / Application* 模板已经带好它，设计器里拖控件本来就落进它。
-- **`TitleBar: TTyTitleBar`**——可关联的标题栏，走的是 `Form.Menu` 那种「属性指向一个组件」的模式，
+- **`TitleBar: TTyCustomTitleBar`**——可关联的标题栏，走的是 `Form.Menu` 那种「属性指向一个组件」的模式，
   不是硬塞的子组件。它本身也放在 `Surface` 里。
 
 **你的应用控件都放在 `Surface` 里。** 尤其是 `TTyLabel`、`TTyShape` 这类**无窗口的图形控件**——
@@ -83,7 +83,7 @@ TTyChromeEngine（由 TTyForm 拥有/释放）     // 与窗体无关的窗口�
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
-| `TitleBar` | `TTyTitleBar` | **可关联**的标题栏——指向窗体上某个 `TTyTitleBar` 实例（`Form.Menu` 模式），不是构造时硬创建的子组件。流式化的 `.lfm` **必须显式写 `TitleBar = <名字>`**，否则窗口拖不动。 |
+| `TitleBar` | `TTyCustomTitleBar` | **可关联**的标题栏——指向窗体上某个 `TTyTitleBar` 实例（`Form.Menu` 模式），不是构造时硬创建的子组件。4.0 起类型是 `TTyCustomTitleBar`：从它派生的第三方标题栏同样挂得上、放上窗体同样自动关联（`MenuBar` 同理是 `TTyCustomMenuBar`）。流式化的 `.lfm` **必须显式写 `TitleBar = <名字>`**，否则窗口拖不动。 |
 | `Surface` | `TTyFormSurface` | 内容承载容器（`alClient`，固定名 `Surface`）。由 `.lfm` 流式化，不在构造函数里创建。 |
 
 ### 继承的标准 TForm 生命周期事件
@@ -94,7 +94,7 @@ TTyChromeEngine（由 TTyForm 拥有/释放）     // 与窗体无关的窗口�
 
 ### public 方法
 
-#### `procedure ApplyChromeTheme(AController: TTyStyleController)`
+#### `procedure ApplyChromeTheme(AController: TTyCustomStyleController)`
 
 从 `TyForm` 主题令牌解析窗体背景：调用 `AController.Model.ResolveStyle('TyForm', '', [])`，若解析出 `tpBackground` 且为纯色（`tfkSolid`），将该颜色赋给窗体 `Color`/背景。用于让无边框窗体的背景与主题保持一致（遵守"视觉由主题令牌驱动"的硬性原则——背景不在控件代码里写死）。
 
@@ -119,6 +119,12 @@ end;
 | 最小化（Min） | `WindowState := wsMinimized` |
 | 最大化/还原（Max） | 引擎 `ToggleMaximize`（自绘无边框最大化/还原，避让任务栏工作区） |
 | 关闭（Close） | `Close`（走标准 `OnCloseQuery` → `OnClose` 流程） |
+
+### 窗口菜单与 Alt+Space
+
+右键标题栏弹出窗口菜单（还原、最小化、最大化、关闭），按 `BorderIcons`、`Resizable` 和是否已最大化决定哪些项显示、哪些灰掉；点菜单项等于点对应的标题按钮。窗体收到 **Alt+Space** 时也弹这个菜单，和原生窗口的系统菜单一样（macOS 除外，那里 Option+Space 是输入字符）。给 `TitleBar.PopupMenu` 设了自己的菜单，三处都换成你的。标题栏开了 `ShowIcon` 时，单击图标同样弹它，双击图标关闭窗口。规则细节见 [titlebar.md](titlebar.md)「窗口菜单」「图标」。
+
+**从 3.0 升级：** 右键标题栏不再冒泡到窗体的 `PopupMenu`——3.0 时给窗体设的右键菜单在标题栏上也会弹，4.0 起标题栏弹自己的窗口菜单。要旧行为，把 `TitleBar.PopupMenu` 设成窗体的菜单（`TitleBar.PopupMenu := PopupMenu;`），单击图标和 Alt+Space 也会跟着弹它。
 
 ### 右到左（`BiDiMode = bdRightToLeft`）
 

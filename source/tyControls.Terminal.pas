@@ -135,7 +135,7 @@ type
   end;
 
   { 终端。右键菜单是自建的四项(不实现 ITyTextEditActions:那是给编辑框六项菜单设计的)。 }
-  TTyTerminalView = class(TTyCustomControl, ITyImeEditable, ITyScrollBarFrameHost)
+  TTyCustomTerminalView = class(TTyCustomControl, ITyImeEditable, ITyScrollBarFrameHost)
   private
     FCore: TTyTerminalCore;
     FGlyphCache: TTyTermGlyphCache;
@@ -525,7 +525,7 @@ type
     property Selection: TTyTermSelection read FSelection;
     property ContextMenu: TTyPopupMenu read FMenu;
     function GetStyleTypeKey: string; override;
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     procedure Loaded; override;
     procedure SetParent(AParent: TWinControl); override;
     procedure Resize; override;
@@ -677,7 +677,7 @@ type
     property Cols: Integer read GetCols;
     property Rows: Integer read GetRows;
     property Title: string read GetTitle;
-  published
+    property TabStop default True;
     property Scrollback: Integer read GetScrollback write SetScrollback default 1000;
     property CursorStyle: TTyTerminalCursorStyle read GetCursorStyle write SetCursorStyle default tcsBlock;
     property CursorInactiveStyle: TTyTerminalCursorInactiveStyle read FCursorInactiveStyle
@@ -719,10 +719,6 @@ type
     { 开着时:主题的底是浅的用 ColorScheme、深的用 DarkColorScheme(按 tycss on() 的规则) }
     property ColorSchemePaired: Boolean read FColorSchemePaired write SetColorSchemePaired default False;
     property DarkColorScheme: TTyTerminalColorScheme read FDarkColorScheme write SetDarkColorScheme;
-    property TabStop default True;
-    property Align;
-    property Anchors;
-    property ParentFont;
     property OnData: TTyTerminalDataEvent read FOnData write FOnData;
     property OnGridResize: TTyTerminalGridResizeEvent read FOnGridResize write FOnGridResize;
     property OnTitleChange: TTyTerminalTextEvent read FOnTitleChange write FOnTitleChange;
@@ -734,6 +730,101 @@ type
     property OnOsc52: TTyTerminalOsc52Event read FOnOsc52 write FOnOsc52;
     { 7 期:数据流处理器接管期间用户的输入(编好的字节,不发给程序);ReadOnly 时不发 }
     property OnClaimedInput: TTyTerminalDataEvent read FOnClaimedInput write FOnClaimedInput;
+  end;
+
+  { TTyTerminalView publishes TTyCustomTerminalView's properties; everything lives in TTyCustomTerminalView. }
+  TTyTerminalView = class(TTyCustomTerminalView)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Scrollback;
+    property CursorStyle;
+    property CursorInactiveStyle;
+    property CursorBlink;
+    property AmbiguousWide;
+    property UnicodeVersion;
+    property MacOptionIsMeta;
+    property AlternateScroll;
+    property DrawBoldTextInBrightColors;
+    property ReadOnly;
+    property ConvertEol;
+    property TabStopWidth;
+    property ScrollOnUserInput;
+    property ScrollBarAutoHide;
+    property SelectionOverrideKey;
+    property WordSeparators;
+    property MinimumContrastRatio;
+    property CopyOnSelect;
+    property DetectUrls;
+    property AllowNonHttpLinks;
+    property Osc52;
+    property LineHeightPercent;
+    property LetterSpacing;
+    property ColorSource;
+    property ColorScheme;
+    property ColorSchemePaired;
+    property DarkColorScheme;
+    property Align;
+    property Anchors;
+    property ParentFont;
+    property OnData;
+    property OnGridResize;
+    property OnTitleChange;
+    property OnBell;
+    property OnOsc;
+    property OnShortcutQuery;
+    property OnSelectionChange;
+    property OnLinkActivate;
+    property OnOsc52;
+    property OnClaimedInput;
   end;
 
 { MouseService._sendEvent 的键(MouseService.ts:112-136):按下、抬起按 LCL 的键(左、中、右,
@@ -807,7 +898,7 @@ const
 
 { ---- 构造与析构 --------------------------------------------------------------------- }
 
-constructor TTyTerminalView.Create(AOwner: TComponent);
+constructor TTyCustomTerminalView.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   ControlStyle := ControlStyle + [csOpaque, csDoubleClicks, csTripleClicks];
@@ -891,7 +982,7 @@ begin
   SetInitialBounds(0, 0, 480, 300);
 end;
 
-destructor TTyTerminalView.Destroy;
+destructor TTyCustomTerminalView.Destroy;
 begin
   { 地雷 8 的顺序:排着的异步调用 -> 计时器 -> 输入法 -> Core 的事件 -> 选区 -> Core 和缓存 }
   Application.RemoveAsyncCalls(Self);
@@ -944,20 +1035,20 @@ begin
   inherited Destroy;
 end;
 
-function TTyTerminalView.GetStyleTypeKey: string;
+function TTyCustomTerminalView.GetStyleTypeKey: string;
 begin
   Result := 'TyTerminal';
 end;
 
 { ---- Core 的事件 ------------------------------------------------------------------- }
 
-procedure TTyTerminalView.CoreData(Sender: TObject; const AData: RawByteString);
+procedure TTyCustomTerminalView.CoreData(Sender: TObject; const AData: RawByteString);
 begin
   { ReadOnly 已经由 Core 挡掉(上游 disableStdin 同样挡在 triggerDataEvent 里) }
   if Assigned(FOnData) then FOnData(Self, AData);
 end;
 
-procedure TTyTerminalView.CoreRefreshRows(Sender: TObject; AFirst, ALast: Integer);
+procedure TTyCustomTerminalView.CoreRefreshRows(Sender: TObject; AFirst, ALast: Integer);
 begin
   { 同步输出开着:DirtyRows 攒起来,不失效(见 HoldRows);关着:连同攒着的一起画 }
   DirtyRows(AFirst, ALast);
@@ -965,29 +1056,29 @@ begin
     NoteActivity;
 end;
 
-procedure TTyTerminalView.CoreTitle(Sender: TObject; const AText: string);
+procedure TTyCustomTerminalView.CoreTitle(Sender: TObject; const AText: string);
 begin
   if Assigned(FOnTitleChange) then FOnTitleChange(Self, AText);
 end;
 
-procedure TTyTerminalView.CoreBell(Sender: TObject);
+procedure TTyCustomTerminalView.CoreBell(Sender: TObject);
 begin
   if Assigned(FOnBell) then FOnBell(Self);
 end;
 
-procedure TTyTerminalView.CoreOsc(Sender: TObject; AIdent: Integer; const AData: string);
+procedure TTyCustomTerminalView.CoreOsc(Sender: TObject; AIdent: Integer; const AData: string);
 begin
   if Assigned(FOnOsc) then FOnOsc(Self, AIdent, AData);
 end;
 
-procedure TTyTerminalView.CoreCursorMove(Sender: TObject);
+procedure TTyCustomTerminalView.CoreCursorMove(Sender: TObject);
 begin
   DirtyCursorRows;
   NoteActivity;
   { 输入法的候选窗跟着光标:光标行标脏会触发一次重画,RenderTo 末尾更新矩形 }
 end;
 
-procedure TTyTerminalView.CoreScroll(Sender: TObject; AYDisp: Integer);
+procedure TTyCustomTerminalView.CoreScroll(Sender: TObject; AYDisp: Integer);
 begin
   { 一次解析里可能滚几千次:只记下来,EndDrive 统一做一次 }
   if FDriveDepth > 0 then
@@ -1001,7 +1092,7 @@ begin
   SyncScrollBar;
 end;
 
-procedure TTyTerminalView.CoreBufferActivate(Sender: TObject);
+procedure TTyCustomTerminalView.CoreBufferActivate(Sender: TObject);
 begin
   { 换缓冲(含 RIS、Reset:新的一对缓冲)清选区,读数换成新缓冲的(SelectionService.ts:778-785) }
   ClearSelection;
@@ -1010,7 +1101,7 @@ begin
   SyncScrollBar;
 end;
 
-procedure TTyTerminalView.CoreModesChange(Sender: TObject);
+procedure TTyCustomTerminalView.CoreModesChange(Sender: TObject);
 var
   p: TTyTerminalMouseProtocol;
 begin
@@ -1027,7 +1118,7 @@ begin
   FLastProtocol := p;
 end;
 
-procedure TTyTerminalView.CoreQueryColor(Sender: TObject; AIndex: Integer; out ARgb: Cardinal);
+procedure TTyCustomTerminalView.CoreQueryColor(Sender: TObject; AIndex: Integer; out ARgb: Cardinal);
 begin
   EnsurePalette;
   if (AIndex >= 0) and (AIndex <= 258) then
@@ -1036,12 +1127,12 @@ begin
     ARgb := 0;
 end;
 
-procedure TTyTerminalView.CoreProcessRequest(Sender: TObject);
+procedure TTyCustomTerminalView.CoreProcessRequest(Sender: TObject);
 begin
   ScheduleSlice;
 end;
 
-procedure TTyTerminalView.CoreWindowReport(Sender: TObject; AKind: TTyTermWindowReport);
+procedure TTyCustomTerminalView.CoreWindowReport(Sender: TObject; AKind: TTyTermWindowReport);
 begin
   { CoreBrowserTerminal.ts:1133-1150 报 CSS 像素;我们报设备像素(同 SGR 像素鼠标) }
   EnsureMetrics(Font.PixelsPerInch);
@@ -1054,7 +1145,7 @@ begin
   end;
 end;
 
-procedure TTyTerminalView.CoreResize(Sender: TObject; ACols, ARows: Integer);
+procedure TTyCustomTerminalView.CoreResize(Sender: TObject; ACols, ARows: Integer);
 begin
   { 行数变了清选区(SelectionService.ts:158-162)。列数变了上游不清;但当前缓冲这次真的重新
     折行了,格子里已经是别的字,选区还框着原来的坐标——这时也清(spec §15)。不折行
@@ -1081,7 +1172,7 @@ begin
   InvalidateAll;
 end;
 
-procedure TTyTerminalView.CoreScrollbackCleared(Sender: TObject);
+procedure TTyCustomTerminalView.CoreScrollbackCleared(Sender: TObject);
 begin
   { 清滚回也清选区:上游 clear() 不清(CoreBrowserTerminal.ts:1075-1089),选区会指着别的行,
     这是我们加的(spec §15) }
@@ -1094,7 +1185,7 @@ begin
 end;
 
 { 用户输入清选区(SelectionService.ts:139-143);ReadOnly 时 Core 不发 }
-procedure TTyTerminalView.CoreUserInput(Sender: TObject);
+procedure TTyCustomTerminalView.CoreUserInput(Sender: TObject);
 begin
   if FSelection.HasSelection then
     ClearSelection;
@@ -1102,30 +1193,30 @@ end;
 
 { 7 期(spec 19.5):接管期间的输入转给宿主(它拿来做取消);选区不清、不滚到底——Core 已经
   不做那两样 }
-procedure TTyTerminalView.CoreClaimedInput(Sender: TObject; const AData: RawByteString);
+procedure TTyCustomTerminalView.CoreClaimedInput(Sender: TObject; const AData: RawByteString);
 begin
   NoteActivity;
   if Assigned(FOnClaimedInput) then FOnClaimedInput(Self, AData);
 end;
 
-function TTyTerminalView.GetStreamClaimed: Boolean;
+function TTyCustomTerminalView.GetStreamClaimed: Boolean;
 begin
   Result := FCore.StreamClaimed;
 end;
 
-procedure TTyTerminalView.AddStreamHandler(AHandler: TTyTerminalStreamHandler);
+procedure TTyCustomTerminalView.AddStreamHandler(AHandler: TTyTerminalStreamHandler);
 begin
   FCore.AddStreamHandler(AHandler);
 end;
 
-procedure TTyTerminalView.RemoveStreamHandler(AHandler: TTyTerminalStreamHandler);
+procedure TTyCustomTerminalView.RemoveStreamHandler(AHandler: TTyTerminalStreamHandler);
 begin
   FCore.RemoveStreamHandler(AHandler);
 end;
 
 { ---- 调度 --------------------------------------------------------------------------- }
 
-procedure TTyTerminalView.ScheduleSlice;
+procedure TTyCustomTerminalView.ScheduleSlice;
 begin
   if csDesigning in ComponentState then Exit;
   {$IFDEF LCLWin32}
@@ -1148,14 +1239,14 @@ begin
   Application.QueueAsyncCall(@AsyncSlice, 0);
 end;
 
-procedure TTyTerminalView.SliceTimerFired(Sender: TObject);
+procedure TTyCustomTerminalView.SliceTimerFired(Sender: TObject);
 begin
   FSliceTimer.Enabled := False;
   if csDestroying in ComponentState then Exit;
   AsyncSlice(0);
 end;
 
-procedure TTyTerminalView.AsyncSlice(Data: PtrInt);
+procedure TTyCustomTerminalView.AsyncSlice(Data: PtrInt);
 var
   more: Boolean;
   window, elapsed: Double;
@@ -1195,7 +1286,7 @@ begin
   end;
 end;
 
-procedure TTyTerminalView.BeginDrive;
+procedure TTyCustomTerminalView.BeginDrive;
 begin
   Inc(FDriveDepth);
   if FDriveDepth = 1 then
@@ -1206,7 +1297,7 @@ begin
   end;
 end;
 
-procedure TTyTerminalView.EndDrive;
+procedure TTyCustomTerminalView.EndDrive;
 begin
   Dec(FDriveDepth);
   if FDriveDepth > 0 then Exit;
@@ -1237,13 +1328,13 @@ end;
 
 { Kitty 键盘协议、win32-input-mode 控件都不编码:程序查询时不能报支持(宿主改了 Core 的
   VtExtensions 也一样,每次解析前再屏蔽一次) }
-procedure TTyTerminalView.MaskUnencodedExtensions;
+procedure TTyCustomTerminalView.MaskUnencodedExtensions;
 begin
   if FCore.VtExtensions * [tveKittyKeyboard, tveWin32InputMode] <> [] then
     FCore.VtExtensions := FCore.VtExtensions - [tveKittyKeyboard, tveWin32InputMode];
 end;
 
-procedure TTyTerminalView.AsyncRepaint(Data: PtrInt);
+procedure TTyCustomTerminalView.AsyncRepaint(Data: PtrInt);
 var
   r: Integer;
 begin
@@ -1255,7 +1346,7 @@ begin
       InvalidateRows(r, r);
 end;
 
-procedure TTyTerminalView.AsyncNotifyScheme(Data: PtrInt);
+procedure TTyCustomTerminalView.AsyncNotifyScheme(Data: PtrInt);
 begin
   FNotifyQueued := False;
   if csDestroying in ComponentState then Exit;
@@ -1265,13 +1356,13 @@ begin
   Invalidate;
 end;
 
-procedure TTyTerminalView.AsyncApplyGrid(Data: PtrInt);
+procedure TTyCustomTerminalView.AsyncApplyGrid(Data: PtrInt);
 begin
   if csDestroying in ComponentState then Exit;
   ApplyPendingGrid;
 end;
 
-procedure TTyTerminalView.ApplyPendingGrid;
+procedure TTyCustomTerminalView.ApplyPendingGrid;
 begin
   if not FGridPending then Exit;
   FGridPending := False;
@@ -1282,19 +1373,19 @@ begin
 end;
 
 { The core as it is: while a grid waits (header), its grid is still the old one. }
-function TTyTerminalView.GetCore: TTyTerminalCore;
+function TTyCustomTerminalView.GetCore: TTyTerminalCore;
 begin
   Result := FCore;
 end;
 
-procedure TTyTerminalView.AsyncRelayout(Data: PtrInt);
+procedure TTyCustomTerminalView.AsyncRelayout(Data: PtrInt);
 begin
   FRelayoutQueued := False;
   if csDestroying in ComponentState then Exit;
   UpdateGrid;
 end;
 
-procedure TTyTerminalView.RequestRelayout;
+procedure TTyCustomTerminalView.RequestRelayout;
 begin
   { UpdateGrid 自己也问度量:排版中途不重入,这一趟完了再来一趟 }
   if FRelayingOut then
@@ -1336,14 +1427,14 @@ end;
 { 本实例的**无状态**样式:类型键 + 本实例的类,TyTerminal 再叠 StyleOverride(覆盖是写给
   TyTerminal 这一个键的)。色表不跟悬停、聚焦、禁用走——禁用在画的时候预混
   (PremixFrameColors);色表本身是程序查询(OSC 4 / 10 / 11)答的那一份。 }
-function TTyTerminalView.InstanceStyle(const ATypeKey: string): TTyStyleSet;
+function TTyCustomTerminalView.InstanceStyle(const ATypeKey: string): TTyStyleSet;
 begin
   Result := ActiveController.Model.ResolveStyle(ATypeKey, TyStyleClassFor(Self, StyleClass), []);
   if (StyleOverride <> '') and SameText(ATypeKey, GetStyleTypeKey) then
     TyMergeStyleSet(Result, OverrideStyle);
 end;
 
-function TTyTerminalView.EnsurePalette: Boolean;
+function TTyCustomTerminalView.EnsurePalette: Boolean;
 var
   model: TTyStyleModel;
   cls, ground, raw, ansiKey: string;
@@ -1474,7 +1565,7 @@ begin
   Result := True;
 end;
 
-procedure TTyTerminalView.EnsureThemeCurrent;
+procedure TTyCustomTerminalView.EnsureThemeCurrent;
 var
   i: Integer;
   differs: Boolean;
@@ -1532,7 +1623,7 @@ begin
 end;
 
 { 外框看得见的那几项(含状态:悬停、按下、聚焦时主题可能另写边框、底色、透明度) }
-function TTyTerminalView.FrameSignature: Cardinal;
+function TTyCustomTerminalView.FrameSignature: Cardinal;
 var
   st: TTyStyleSet;
   h: Cardinal;
@@ -1569,7 +1660,7 @@ begin
   Result := h;
 end;
 
-procedure TTyTerminalView.Invalidate;
+procedure TTyCustomTerminalView.Invalidate;
 var
   wasKey: string;
 begin
@@ -1593,7 +1684,7 @@ begin
   inherited Invalidate;
 end;
 
-procedure TTyTerminalView.SetController(AValue: TTyStyleController);
+procedure TTyCustomTerminalView.SetController(AValue: TTyCustomStyleController);
 begin
   inherited SetController(AValue);
   { 键里有模型指针,换 controller 自然走到 ThemeChanged;条也要跟着换 }
@@ -1603,7 +1694,7 @@ end;
 
 { ---- 字体与度量 ---------------------------------------------------------------------- }
 
-function TTyTerminalView.OverrideStyle: TTyStyleSet;
+function TTyCustomTerminalView.OverrideStyle: TTyStyleSet;
 var
   model: TTyStyleModel;
 begin
@@ -1647,7 +1738,7 @@ begin
   {$ENDIF}
 end;
 
-function TTyTerminalView.SpecKey(APPI: Integer): string;
+function TTyCustomTerminalView.SpecKey(APPI: Integer): string;
 var
   model: TTyStyleModel;
 begin
@@ -1657,7 +1748,7 @@ begin
     + IntToStr(APPI) + '|' + IntToStr(FLetterSpacing) + '|' + IntToStr(FLineHeightPercent);
 end;
 
-function TTyTerminalView.ResolveFontSpec(APPI: Integer): TTyTermFontSpec;
+function TTyCustomTerminalView.ResolveFontSpec(APPI: Integer): TTyTermFontSpec;
 var
   ovr, st: TTyStyleSet;
   model: TTyStyleModel;
@@ -1702,7 +1793,7 @@ begin
   Result.CursorWidthLogical := ActiveController.Metric('--terminal-cursor-width', 1);
 end;
 
-function TTyTerminalView.EnsureMetrics(APPI: Integer): Boolean;
+function TTyCustomTerminalView.EnsureMetrics(APPI: Integer): Boolean;
 var
   key: string;
   spec: TTyTermFontSpec;
@@ -1726,7 +1817,7 @@ begin
   RequestRelayout;
 end;
 
-function TTyTerminalView.ContentInsets(APPI: Integer): TRect;
+function TTyCustomTerminalView.ContentInsets(APPI: Integer): TRect;
 var
   st: TTyStyleSet;
   b: Integer;
@@ -1755,20 +1846,20 @@ begin
   FInsetsValid := True;
 end;
 
-function TTyTerminalView.ScrollBarWidth(APPI: Integer): Integer;
+function TTyCustomTerminalView.ScrollBarWidth(APPI: Integer): Integer;
 begin
   Result := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), APPI, 96);
 end;
 
 { ---- 网格 --------------------------------------------------------------------------- }
 
-procedure TTyTerminalView.Resize;
+procedure TTyCustomTerminalView.Resize;
 begin
   inherited Resize;
   UpdateGrid;
 end;
 
-procedure TTyTerminalView.UpdateGrid;
+procedure TTyCustomTerminalView.UpdateGrid;
 var
   ppi, nc, nr, barW, passes: Integer;
   ins: TRect;
@@ -1830,7 +1921,7 @@ begin
   end;
 end;
 
-procedure TTyTerminalView.FontChanged(Sender: TObject);
+procedure TTyCustomTerminalView.FontChanged(Sender: TObject);
 begin
   inherited FontChanged(Sender);
   { 字号、字体一改就重排,不等下一次有人来问度量 }
@@ -1838,14 +1929,14 @@ begin
     RequestRelayout;
 end;
 
-procedure TTyTerminalView.CMParentFontChanged(var Message: TLMessage);
+procedure TTyCustomTerminalView.CMParentFontChanged(var Message: TLMessage);
 begin
   inherited;
   if (FCore <> nil) and ([csLoading, csDestroying] * ComponentState = []) then
     RequestRelayout;
 end;
 
-procedure TTyTerminalView.Loaded;
+procedure TTyCustomTerminalView.Loaded;
 begin
   inherited Loaded;
   { 加载定下的是起始状态:之后第一次建色表不算「变了」(不清 OSC 覆盖、不报 2031);
@@ -1854,13 +1945,13 @@ begin
   UpdateGrid;
 end;
 
-procedure TTyTerminalView.SetParent(AParent: TWinControl);
+procedure TTyCustomTerminalView.SetParent(AParent: TWinControl);
 begin
   inherited SetParent(AParent);
   if AParent <> nil then UpdateGrid;
 end;
 
-procedure TTyTerminalView.WriteDesignPreview;
+procedure TTyCustomTerminalView.WriteDesignPreview;
 begin
   if not (csDesigning in ComponentState) then Exit;
   if (FPreviewCols = FCore.Cols) and (FPreviewRows = FCore.Rows) then Exit;
@@ -1869,7 +1960,7 @@ begin
   FCore.WriteSync(#27'c' + TyTerminalDesignPreview);
 end;
 
-function TTyTerminalView.GridCellRect(ACol, ARow: Integer; const AInsets: TRect): TRect;
+function TTyCustomTerminalView.GridCellRect(ACol, ARow: Integer; const AInsets: TRect): TRect;
 begin
   Result.Left := AInsets.Left + ACol * FMetrics.CellW;
   Result.Top := AInsets.Top + ARow * FMetrics.CellH;
@@ -1877,14 +1968,14 @@ begin
   Result.Bottom := Result.Top + FMetrics.CellH;
 end;
 
-function TTyTerminalView.CellRect(ACol, ARow: Integer): TRect;
+function TTyCustomTerminalView.CellRect(ACol, ARow: Integer): TRect;
 begin
   ApplyPendingGrid;
   EnsureMetrics(Font.PixelsPerInch);
   Result := GridCellRect(ACol, ARow, ContentInsets(Font.PixelsPerInch));
 end;
 
-function TTyTerminalView.CellAt(X, Y: Integer): TPoint;
+function TTyCustomTerminalView.CellAt(X, Y: Integer): TPoint;
 var
   ins: TRect;
 begin
@@ -1900,7 +1991,7 @@ begin
   Result.Y := Min(Y div FMetrics.CellH, FCore.Rows - 1);
 end;
 
-function TTyTerminalView.SizeForGrid(ACols, ARows: Integer): TSize;
+function TTyCustomTerminalView.SizeForGrid(ACols, ARows: Integer): TSize;
 var
   ins: TRect;
 begin
@@ -1913,7 +2004,7 @@ end;
 
 { ---- 脏行与失效 ----------------------------------------------------------------------- }
 
-procedure TTyTerminalView.InvalidateRows(AFirst, ALast: Integer);
+procedure TTyCustomTerminalView.InvalidateRows(AFirst, ALast: Integer);
 var
   r: TRect;
   ins: TRect;
@@ -1932,13 +2023,13 @@ begin
   LCLIntf.InvalidateRect(Handle, @r, False);
 end;
 
-procedure TTyTerminalView.InvalidateAll;
+procedure TTyCustomTerminalView.InvalidateAll;
 begin
   if HandleAllocated then
     LCLIntf.InvalidateRect(Handle, nil, False);
 end;
 
-procedure TTyTerminalView.HoldRows(AFirst, ALast: Integer);
+procedure TTyCustomTerminalView.HoldRows(AFirst, ALast: Integer);
 begin
   { 同步输出(2026)开着:每一次要重画的行都攒起来——Core 报的脏行、光标行、滚动带来的
     整屏(上游这些全经 RenderService.refreshRows,开着 2026 就进 bufferRows)。计时器从
@@ -1965,7 +2056,7 @@ begin
     FSyncTimer.Enabled := True;
 end;
 
-procedure TTyTerminalView.DirtyRows(AFirst, ALast: Integer);
+procedure TTyCustomTerminalView.DirtyRows(AFirst, ALast: Integer);
 var
   r: Integer;
 begin
@@ -1996,7 +2087,7 @@ begin
   InvalidateRows(AFirst, ALast);
 end;
 
-procedure TTyTerminalView.DirtyAll;
+procedure TTyCustomTerminalView.DirtyAll;
 begin
   if FCore.Modes.SynchronizedOutput then
   begin
@@ -2007,7 +2098,7 @@ begin
   DirtyRows(0, FCore.Rows - 1);
 end;
 
-function TTyTerminalView.CursorViewRow: Integer;
+function TTyCustomTerminalView.CursorViewRow: Integer;
 var
   buf: TTyTerminalBuffer;
 begin
@@ -2015,7 +2106,7 @@ begin
   Result := buf.Y + buf.YBase - buf.YDisp;
 end;
 
-procedure TTyTerminalView.DirtyCursorRows;
+procedure TTyCustomTerminalView.DirtyCursorRows;
 var
   r: Integer;
 begin
@@ -2026,7 +2117,7 @@ begin
     DirtyRows(r, r);
 end;
 
-function TTyTerminalView.CursorShapeNow: TTyTermCursorShape;
+function TTyCustomTerminalView.CursorShapeNow: TTyTermCursorShape;
 var
   req: TTyTermCursorRequest;
 begin
@@ -2059,7 +2150,7 @@ begin
     end;
 end;
 
-function TTyTerminalView.ColorSignature: Cardinal;
+function TTyCustomTerminalView.ColorSignature: Cardinal;
 var
   i: Integer;
 begin
@@ -2085,7 +2176,7 @@ end;
 { 这一帧的色表:原色(FRawColors)禁用时按 TyTerminal:disabled 的 opacity 朝父控件底色预混
   (TyApplyStyleOpacity 同一个方向:变淡而不透出底下的东西)。键 = 原色签名 + Enabled +
   主题版本;键没变就不重算(opacity 和父底色要解析样式、走父链)。 }
-procedure TTyTerminalView.PremixFrameColors(ARawSig: Cardinal);
+procedure TTyCustomTerminalView.PremixFrameColors(ARawSig: Cardinal);
 var
   st: TTyStyleSet;
   a, i: Integer;
@@ -2121,7 +2212,7 @@ begin
   FPremixValid := True;
 end;
 
-function TTyTerminalView.FrameColor(AIndex: Integer): Cardinal;
+function TTyCustomTerminalView.FrameColor(AIndex: Integer): Cardinal;
 begin
   if (AIndex >= 0) and (AIndex <= 258) then
     Result := FFrameColors[AIndex]
@@ -2131,7 +2222,7 @@ end;
 
 { ---- 绘制 --------------------------------------------------------------------------- }
 
-procedure TTyTerminalView.PaintFrame(APPI: Integer);
+procedure TTyCustomTerminalView.PaintFrame(APPI: Integer);
 var
   P: TTyPainter;
   st: TTyStyleSet;
@@ -2181,7 +2272,7 @@ end;
 { 表面位图的 APart(表面坐标)贴到画布的 (ADstX, ADstY):Win32 直接从位图的 DIB 带源偏移
   StretchDIBits,不经 GetPart 复制一份;别的 widgetset 仍走 BGRA 的 DrawPart(零拷贝的
   路子要各平台真机核实,见真机验收) }
-procedure TTyTerminalView.BlitSurface(ACanvas: TCanvas; const APart: TRect; ADstX, ADstY: Integer);
+procedure TTyCustomTerminalView.BlitSurface(ACanvas: TCanvas; const APart: TRect; ADstX, ADstY: Integer);
 {$IFDEF LCLWin32}
 const
   BI_RGB = 0;
@@ -2230,7 +2321,7 @@ begin
     and (APrev.Overlay.Preedit = ANew.Overlay.Preedit) and (APrev.Overlay.PreeditCol = ANew.Overlay.PreeditCol);
 end;
 
-procedure TTyTerminalView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomTerminalView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 
   function Frame(ARgb: Cardinal): Cardinal;
   begin
@@ -2541,7 +2632,7 @@ begin
   end;
 end;
 
-procedure TTyTerminalView.MoveRows(const AFrom: TIntegerDynArray; const AInsets: TRect);
+procedure TTyCustomTerminalView.MoveRows(const AFrom: TIntegerDynArray; const AInsets: TRect);
 var
   r, y, k, w, h, sy, dy, cnt, d, first, last, step: Integer;
   uniform: Boolean;
@@ -2628,7 +2719,7 @@ begin
   FSurface.InvalidateBitmap;
 end;
 
-procedure TTyTerminalView.PaintPreedit(APPI: Integer);
+procedure TTyCustomTerminalView.PaintPreedit(APPI: Integer);
 var
   st: TTyStyleSet;
   bg, fg, line: Cardinal;
@@ -2675,11 +2766,11 @@ end;
   WM_ERASEBKGND,没开双缓冲(上面构造里关掉的)时 TWinControl.EraseBackground 拿 Brush 把
   更新区直接填在窗口上,贴图却要等这一帧的行都画完——中间 DWM 合成一次,重画的那几行就闪
   成一片底色(ConPTY 每个键把光标行到末行整行重写,vim 里按键就闪)。SynEdit 同一做法。 }
-procedure TTyTerminalView.EraseBackground(DC: HDC);
+procedure TTyCustomTerminalView.EraseBackground(DC: HDC);
 begin
 end;
 
-procedure TTyTerminalView.Paint;
+procedure TTyCustomTerminalView.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
@@ -2689,7 +2780,7 @@ end;
 { 焦点的唯一入口:LM_SETFOCUS / LM_KILLFOCUS(窗口真的得到、失去键盘焦点,切到别的程序
   也在内)和 DoEnter / DoExit(窗体内换 ActiveControl)都走这里,重复的一路什么都不做。
   上游看的是 textarea 的 focus / blur,也就是系统焦点。 }
-procedure TTyTerminalView.SetHasFocus(AValue: Boolean);
+procedure TTyCustomTerminalView.SetHasFocus(AValue: Boolean);
 var
   a, b: Integer;
 begin
@@ -2717,7 +2808,7 @@ begin
     DirtyRows(a, b);
 end;
 
-procedure TTyTerminalView.DoEnter;
+procedure TTyCustomTerminalView.DoEnter;
 begin
   FStateChange := True;
   try
@@ -2728,7 +2819,7 @@ begin
   SetHasFocus(True);
 end;
 
-procedure TTyTerminalView.DoExit;
+procedure TTyCustomTerminalView.DoExit;
 begin
   FStateChange := True;
   try
@@ -2742,21 +2833,21 @@ begin
     ForgetPress;
 end;
 
-procedure TTyTerminalView.WMSetFocus(var Message: TLMSetFocus);
+procedure TTyCustomTerminalView.WMSetFocus(var Message: TLMSetFocus);
 begin
   inherited;
   if not (csDestroying in ComponentState) then
     SetHasFocus(True);
 end;
 
-procedure TTyTerminalView.WMKillFocus(var Message: TLMKillFocus);
+procedure TTyCustomTerminalView.WMKillFocus(var Message: TLMKillFocus);
 begin
   inherited;
   if not (csDestroying in ComponentState) then
     SetHasFocus(False);
 end;
 
-procedure TTyTerminalView.CMEnabledChanged(var Message: TLMessage);
+procedure TTyCustomTerminalView.CMEnabledChanged(var Message: TLMessage);
 begin
   { 禁用 / 启用:色表按 :disabled 的 opacity 预混(键里有 Enabled),外框、每一行都重画 }
   inherited;
@@ -2766,7 +2857,7 @@ begin
   InvalidateAll;
 end;
 
-function TTyTerminalView.NowMs: Double;
+function TTyCustomTerminalView.NowMs: Double;
 begin
   if Assigned(FCore.Clock) then
     Result := FCore.Clock()
@@ -2774,7 +2865,7 @@ begin
     Result := TyTermDefaultClock;
 end;
 
-function TTyTerminalView.EffectiveBlink: Boolean;
+function TTyCustomTerminalView.EffectiveBlink: Boolean;
 begin
   case FCore.Modes.BlinkRequest of
     tbrOn: Result := True;
@@ -2784,7 +2875,7 @@ begin
   end;
 end;
 
-procedure TTyTerminalView.UpdateBlinkTimer;
+procedure TTyCustomTerminalView.UpdateBlinkTimer;
 var
   want: Boolean;
 begin
@@ -2812,12 +2903,12 @@ begin
   end;
 end;
 
-procedure TTyTerminalView.BlinkTimerFired(Sender: TObject);
+procedure TTyCustomTerminalView.BlinkTimerFired(Sender: TObject);
 begin
   BlinkTick(NowMs);
 end;
 
-procedure TTyTerminalView.BlinkTick(ANowMs: Double);
+procedure TTyCustomTerminalView.BlinkTick(ANowMs: Double);
 begin
   if ANowMs - FLastActivityMs >= BlinkRestMs then
   begin
@@ -2830,7 +2921,7 @@ begin
   DirtyCursorRows;
 end;
 
-procedure TTyTerminalView.NoteActivity;
+procedure TTyCustomTerminalView.NoteActivity;
 begin
   FLastActivityMs := NowMs;
   if not FBlinkVisible then
@@ -2841,7 +2932,7 @@ begin
   UpdateBlinkTimer;
 end;
 
-procedure TTyTerminalView.SyncTimerFired(Sender: TObject);
+procedure TTyCustomTerminalView.SyncTimerFired(Sender: TObject);
 begin
   if FSyncTimer <> nil then FSyncTimer.Enabled := False;
   { 清模式、RefreshAll -> 回到上一条正常重画(Core 自己做) }
@@ -2850,7 +2941,7 @@ end;
 
 { ---- 滚动条 ------------------------------------------------------------------------- }
 
-procedure TTyTerminalView.UpdateScrollBar(APPI: Integer);
+procedure TTyCustomTerminalView.UpdateScrollBar(APPI: Integer);
 begin
   if csDesigning in ComponentState then Exit;
   if FScrollBar = nil then
@@ -2871,7 +2962,7 @@ begin
   SyncScrollBar;
 end;
 
-procedure TTyTerminalView.SyncScrollBar;
+procedure TTyCustomTerminalView.SyncScrollBar;
 var
   buf: TTyTerminalBuffer;
 begin
@@ -2892,28 +2983,28 @@ begin
   end;
 end;
 
-procedure TTyTerminalView.ScrollBarChange(Sender: TObject);
+procedure TTyCustomTerminalView.ScrollBarChange(Sender: TObject);
 begin
   if FSyncingScroll then Exit;
   FCore.ScrollLines(FScrollBar.Position - FCore.Buffer.YDisp);
 end;
 
-function TTyTerminalView.ScrollBarFrameStyle: TTyStyleSet;
+function TTyCustomTerminalView.ScrollBarFrameStyle: TTyStyleSet;
 begin
   Result := CurrentStyle;
 end;
 
-function TTyTerminalView.EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
+function TTyCustomTerminalView.EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
 begin
   Result := (ABar <> nil) and (ABar = FScrollBar);
 end;
 
-procedure TTyTerminalView.NoteHostHover(AHovered: Boolean);
+procedure TTyCustomTerminalView.NoteHostHover(AHovered: Boolean);
 begin
   if FScrollBar <> nil then FScrollBar.SetHostHovered(AHovered);
 end;
 
-procedure TTyTerminalView.MouseEnter;
+procedure TTyCustomTerminalView.MouseEnter;
 begin
   FStateChange := True;
   try
@@ -2925,7 +3016,7 @@ begin
   FMouseInside := True;
 end;
 
-procedure TTyTerminalView.MouseLeave;
+procedure TTyCustomTerminalView.MouseLeave;
 begin
   FStateChange := True;
   try
@@ -2939,7 +3030,7 @@ begin
   UpdateHover(-1, -1, []);
 end;
 
-procedure TTyTerminalView.SetScrollBarAutoHide(AValue: TTyScrollBarAutoHide);
+procedure TTyCustomTerminalView.SetScrollBarAutoHide(AValue: TTyScrollBarAutoHide);
 begin
   if FScrollBarAutoHide = AValue then Exit;
   FScrollBarAutoHide := AValue;
@@ -2949,7 +3040,7 @@ end;
 { ---- 公开方法 ----------------------------------------------------------------------- }
 
 { Write 通常只入队;用户刚键入过时 Core 当场解析(回显延迟),所以也算一次解析 }
-procedure TTyTerminalView.Write(const AData: RawByteString; AOnDone: TTyTerminalWriteDone; ATag: PtrInt);
+procedure TTyCustomTerminalView.Write(const AData: RawByteString; AOnDone: TTyTerminalWriteDone; ATag: PtrInt);
 begin
   MaskUnencodedExtensions;
   BeginDrive;
@@ -2960,7 +3051,7 @@ begin
   end;
 end;
 
-procedure TTyTerminalView.Write(const ABuf; ACount: Integer; AOnDone: TTyTerminalWriteDone; ATag: PtrInt);
+procedure TTyCustomTerminalView.Write(const ABuf; ACount: Integer; AOnDone: TTyTerminalWriteDone; ATag: PtrInt);
 begin
   MaskUnencodedExtensions;
   BeginDrive;
@@ -2971,7 +3062,7 @@ begin
   end;
 end;
 
-procedure TTyTerminalView.WriteSync(const AData: RawByteString);
+procedure TTyCustomTerminalView.WriteSync(const AData: RawByteString);
 begin
   ApplyPendingGrid;
   MaskUnencodedExtensions;
@@ -2983,68 +3074,68 @@ begin
   end;
 end;
 
-procedure TTyTerminalView.Paste(const AText: string);
+procedure TTyCustomTerminalView.Paste(const AText: string);
 begin
   if AText = '' then Exit;
   FCore.Input(TyTerminalPrepareTextForPaste(AText, FCore.Modes.BracketedPaste), True);
   NoteActivity;
 end;
 
-procedure TTyTerminalView.Input(const AText: string);
+procedure TTyCustomTerminalView.Input(const AText: string);
 begin
   if AText = '' then Exit;
   FCore.Input(AText, True);
   NoteActivity;
 end;
 
-procedure TTyTerminalView.Clear;
+procedure TTyCustomTerminalView.Clear;
 begin
   FCore.ClearScrollback;
 end;
 
-procedure TTyTerminalView.Reset;
+procedure TTyCustomTerminalView.Reset;
 begin
   FCore.Reset;
   DirtyAll;
   FFrameDirty := True;
 end;
 
-procedure TTyTerminalView.ScrollLines(ADelta: Integer);
+procedure TTyCustomTerminalView.ScrollLines(ADelta: Integer);
 begin
   FCore.ScrollLines(ADelta);
 end;
 
-procedure TTyTerminalView.ScrollPages(APages: Integer);
+procedure TTyCustomTerminalView.ScrollPages(APages: Integer);
 begin
   FCore.ScrollPages(APages);
 end;
 
-procedure TTyTerminalView.ScrollToTop;
+procedure TTyCustomTerminalView.ScrollToTop;
 begin
   FCore.ScrollToTop;
 end;
 
-procedure TTyTerminalView.ScrollToBottom;
+procedure TTyCustomTerminalView.ScrollToBottom;
 begin
   FCore.ScrollToBottom;
 end;
 
-function TTyTerminalView.ReadClipboardText: string;
+function TTyCustomTerminalView.ReadClipboardText: string;
 begin
   Result := Clipboard.AsText;
 end;
 
-procedure TTyTerminalView.WriteClipboardText(const S: string);
+procedure TTyCustomTerminalView.WriteClipboardText(const S: string);
 begin
   Clipboard.AsText := S;
 end;
 
-function TTyTerminalView.ReadPrimaryText: string;
+function TTyCustomTerminalView.ReadPrimaryText: string;
 begin
   Result := PrimarySelection.AsText;
 end;
 
-procedure TTyTerminalView.OfferPrimary;
+procedure TTyCustomTerminalView.OfferPrimary;
 var
   fmt: TClipboardFormat;
 begin
@@ -3054,13 +3145,13 @@ begin
   PrimarySelection.OnRequest := @PrimaryRequest;
 end;
 
-function TTyTerminalView.PrimaryRequestText: string;
+function TTyCustomTerminalView.PrimaryRequestText: string;
 begin
   SyncSelectionTrim;
   Result := FSelection.Text(LineEnding);
 end;
 
-procedure TTyTerminalView.PrimaryRequest(const RequestedFormatID: TClipboardFormat; Data: TStream);
+procedure TTyCustomTerminalView.PrimaryRequest(const RequestedFormatID: TClipboardFormat; Data: TStream);
 var
   t: string;
 begin
@@ -3070,12 +3161,12 @@ begin
     Data.Write(t[1], Length(t));
 end;
 
-function TTyTerminalView.ClipboardHasText: Boolean;
+function TTyCustomTerminalView.ClipboardHasText: Boolean;
 begin
   Result := TyClipboardHasText;
 end;
 
-function TTyTerminalView.HeldMouseButtons: TShiftState;
+function TTyCustomTerminalView.HeldMouseButtons: TShiftState;
 begin
   Result := [];
   if GetKeyState(VK_LBUTTON) < 0 then Include(Result, ssLeft);
@@ -3083,7 +3174,7 @@ begin
   if GetKeyState(VK_RBUTTON) < 0 then Include(Result, ssRight);
 end;
 
-procedure TTyTerminalView.PasteFromClipboard;
+procedure TTyCustomTerminalView.PasteFromClipboard;
 begin
   Paste(ReadClipboardText);
 end;
@@ -3101,7 +3192,7 @@ begin
 end;
 
 { 修饰键按下 / 抬起:链接悬停与指针形状跟着变(指针没动也一样)。不改变按键的去向 }
-procedure TTyTerminalView.ModifierChanged(AKey: Word; Shift: TShiftState);
+procedure TTyCustomTerminalView.ModifierChanged(AKey: Word; Shift: TShiftState);
 begin
   if (AKey = VK_CONTROL) or (AKey = VK_SHIFT) or (AKey = VK_MENU) or (AKey = VK_LWIN) or (AKey = VK_RWIN) then
   begin
@@ -3111,7 +3202,7 @@ begin
   end;
 end;
 
-procedure TTyTerminalView.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomTerminalView.KeyDown(var Key: Word; Shift: TShiftState);
 type
   TKeyAction = (kaNone, kaSend, kaCopy, kaPaste, kaPageUp, kaPageDown, kaTop, kaBottom, kaSelectAll);
 var
@@ -3200,7 +3291,7 @@ begin
   FKeyDownHandled := True;
 end;
 
-procedure TTyTerminalView.KeyUp(var Key: Word; Shift: TShiftState);
+procedure TTyCustomTerminalView.KeyUp(var Key: Word; Shift: TShiftState);
 begin
   ModifierChanged(Key, Shift);
   inherited KeyUp(Key, Shift);
@@ -3208,7 +3299,7 @@ begin
   FKeyDownHandled := False;
 end;
 
-procedure TTyTerminalView.UTF8KeyPress(var UTF8Key: TUTF8Char);
+procedure TTyCustomTerminalView.UTF8KeyPress(var UTF8Key: TUTF8Char);
 var
   full: string;
   ev: TTyTerminalKeyEvent;
@@ -3265,7 +3356,7 @@ end;
 
 { ---- 输入法 ------------------------------------------------------------------------- }
 
-procedure TTyTerminalView.InitializeWnd;
+procedure TTyCustomTerminalView.InitializeWnd;
 begin
   inherited InitializeWnd;
   { Qt / GTK2 的库内钩子(提交整段、不被 TUTF8Char 截断;候选窗跟着光标);Win32、Cocoa
@@ -3275,13 +3366,13 @@ begin
   FImeHook := TyImeInstall(Self, @HandleImeCommit, @GetImeCaretRect);
 end;
 
-procedure TTyTerminalView.DestroyWnd;
+procedure TTyCustomTerminalView.DestroyWnd;
 begin
   TyImeUninstall(FImeHook);
   inherited DestroyWnd;
 end;
 
-function TTyTerminalView.GetImeCaretRect: TRect;
+function TTyCustomTerminalView.GetImeCaretRect: TRect;
 begin
   if (not HandleAllocated) or (not FHasFocus) or (not FImeCaretValid) then
     Exit(Rect(0, 0, 0, 0));
@@ -3289,7 +3380,7 @@ begin
 end;
 
 {$IFDEF LCLCocoa}
-procedure TTyTerminalView.CocoaImComposition(var Message: TLMessage);
+procedure TTyCustomTerminalView.CocoaImComposition(var Message: TLMessage);
 begin
   { WParam 0 = IM_MESSAGE_WPARAM_GET_IME_HANDLER:LCL-Cocoa 要 ICocoaIMEControl(Edit.pas 同一做法) }
   if Message.WParam = 0 then Message.Result := PtrInt(FCocoaIme)
@@ -3297,14 +3388,14 @@ begin
 end;
 {$ENDIF}
 
-procedure TTyTerminalView.HandleImeCommit(const ACommitUtf8: string);
+procedure TTyCustomTerminalView.HandleImeCommit(const ACommitUtf8: string);
 begin
   if ACommitUtf8 = '' then Exit;
   FCore.Input(ACommitUtf8, True);
   NoteActivity;
 end;
 
-procedure TTyTerminalView.CopyToClipboard;
+procedure TTyCustomTerminalView.CopyToClipboard;
 begin
   if HasSelection then
     WriteClipboardText(SelectionText);
@@ -3312,36 +3403,36 @@ end;
 
 { ---- 属性 --------------------------------------------------------------------------- }
 
-function TTyTerminalView.GetCols: Integer;
+function TTyCustomTerminalView.GetCols: Integer;
 begin
   ApplyPendingGrid;
   Result := FCore.Cols;
 end;
 
-function TTyTerminalView.GetRows: Integer;
+function TTyCustomTerminalView.GetRows: Integer;
 begin
   ApplyPendingGrid;
   Result := FCore.Rows;
 end;
 
-function TTyTerminalView.GetTitle: string;
+function TTyCustomTerminalView.GetTitle: string;
 begin
   Result := FCore.Title;
 end;
 
-function TTyTerminalView.GetScrollback: Integer;
+function TTyCustomTerminalView.GetScrollback: Integer;
 begin
   Result := FCore.Scrollback;
 end;
 
-procedure TTyTerminalView.SetScrollback(AValue: Integer);
+procedure TTyCustomTerminalView.SetScrollback(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   FCore.Scrollback := AValue;
   SyncScrollBar;
 end;
 
-function TTyTerminalView.GetCursorStyle: TTyTerminalCursorStyle;
+function TTyCustomTerminalView.GetCursorStyle: TTyTerminalCursorStyle;
 begin
   case FCore.CursorStyle of
     tcoUnderline: Result := tcsUnderline;
@@ -3351,7 +3442,7 @@ begin
   end;
 end;
 
-procedure TTyTerminalView.SetCursorStyle(AValue: TTyTerminalCursorStyle);
+procedure TTyCustomTerminalView.SetCursorStyle(AValue: TTyTerminalCursorStyle);
 begin
   case AValue of
     tcsUnderline: FCore.CursorStyle := tcoUnderline;
@@ -3362,30 +3453,30 @@ begin
   DirtyCursorRows;
 end;
 
-procedure TTyTerminalView.SetCursorInactiveStyle(AValue: TTyTerminalCursorInactiveStyle);
+procedure TTyCustomTerminalView.SetCursorInactiveStyle(AValue: TTyTerminalCursorInactiveStyle);
 begin
   if FCursorInactiveStyle = AValue then Exit;
   FCursorInactiveStyle := AValue;
   DirtyCursorRows;
 end;
 
-function TTyTerminalView.GetCursorBlink: Boolean;
+function TTyCustomTerminalView.GetCursorBlink: Boolean;
 begin
   Result := FCore.CursorBlink;
 end;
 
-procedure TTyTerminalView.SetCursorBlink(AValue: Boolean);
+procedure TTyCustomTerminalView.SetCursorBlink(AValue: Boolean);
 begin
   FCore.CursorBlink := AValue;
   UpdateBlinkTimer;
 end;
 
-function TTyTerminalView.GetAmbiguousWide: Boolean;
+function TTyCustomTerminalView.GetAmbiguousWide: Boolean;
 begin
   Result := FCore.AmbiguousWide;
 end;
 
-procedure TTyTerminalView.SetAmbiguousWide(AValue: Boolean);
+procedure TTyCustomTerminalView.SetAmbiguousWide(AValue: Boolean);
 begin
   if FCore.AmbiguousWide = AValue then Exit;
   FCore.AmbiguousWide := AValue;
@@ -3393,12 +3484,12 @@ begin
   DirtyAll;
 end;
 
-function TTyTerminalView.GetUnicodeVersion: TTyUnicodeVersion;
+function TTyCustomTerminalView.GetUnicodeVersion: TTyUnicodeVersion;
 begin
   Result := FCore.UnicodeVersion;
 end;
 
-procedure TTyTerminalView.SetUnicodeVersion(AValue: TTyUnicodeVersion);
+procedure TTyCustomTerminalView.SetUnicodeVersion(AValue: TTyUnicodeVersion);
 begin
   if FCore.UnicodeVersion = AValue then Exit;
   FCore.UnicodeVersion := AValue;
@@ -3406,7 +3497,7 @@ begin
   DirtyAll;
 end;
 
-procedure TTyTerminalView.SetMinContrast(AValue: Double);
+procedure TTyCustomTerminalView.SetMinContrast(AValue: Double);
 var
   v: Double;
 begin
@@ -3419,60 +3510,60 @@ begin
   DirtyAll;
 end;
 
-function TTyTerminalView.MinimumContrastRatioStored: Boolean;
+function TTyCustomTerminalView.MinimumContrastRatioStored: Boolean;
 begin
   Result := FMinContrast <> 1;
 end;
 
-procedure TTyTerminalView.SetDrawBoldBright(AValue: Boolean);
+procedure TTyCustomTerminalView.SetDrawBoldBright(AValue: Boolean);
 begin
   if FDrawBoldBright = AValue then Exit;
   FDrawBoldBright := AValue;
   DirtyAll;
 end;
 
-function TTyTerminalView.GetReadOnly: Boolean;
+function TTyCustomTerminalView.GetReadOnly: Boolean;
 begin
   Result := FCore.ReadOnly;
 end;
 
-procedure TTyTerminalView.SetReadOnly(AValue: Boolean);
+procedure TTyCustomTerminalView.SetReadOnly(AValue: Boolean);
 begin
   FCore.ReadOnly := AValue;
 end;
 
-function TTyTerminalView.GetConvertEol: Boolean;
+function TTyCustomTerminalView.GetConvertEol: Boolean;
 begin
   Result := FCore.ConvertEol;
 end;
 
-procedure TTyTerminalView.SetConvertEol(AValue: Boolean);
+procedure TTyCustomTerminalView.SetConvertEol(AValue: Boolean);
 begin
   FCore.ConvertEol := AValue;
 end;
 
-function TTyTerminalView.GetTabStopWidth: Integer;
+function TTyCustomTerminalView.GetTabStopWidth: Integer;
 begin
   Result := FCore.TabStopWidth;
 end;
 
-procedure TTyTerminalView.SetTabStopWidth(AValue: Integer);
+procedure TTyCustomTerminalView.SetTabStopWidth(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
   FCore.TabStopWidth := AValue;
 end;
 
-function TTyTerminalView.GetScrollOnUserInput: Boolean;
+function TTyCustomTerminalView.GetScrollOnUserInput: Boolean;
 begin
   Result := FCore.ScrollOnUserInput;
 end;
 
-procedure TTyTerminalView.SetScrollOnUserInput(AValue: Boolean);
+procedure TTyCustomTerminalView.SetScrollOnUserInput(AValue: Boolean);
 begin
   FCore.ScrollOnUserInput := AValue;
 end;
 
-procedure TTyTerminalView.SetLineHeightPercent(AValue: Integer);
+procedure TTyCustomTerminalView.SetLineHeightPercent(AValue: Integer);
 begin
   { 上游 lineHeight < 1 抛异常;这里钳到 100..300 }
   AValue := EnsureRange(AValue, 100, 300);
@@ -3482,7 +3573,7 @@ begin
   DirtyAll;
 end;
 
-procedure TTyTerminalView.SetLetterSpacing(AValue: Integer);
+procedure TTyCustomTerminalView.SetLetterSpacing(AValue: Integer);
 begin
   AValue := EnsureRange(AValue, -10, 50);
   if FLetterSpacing = AValue then Exit;
@@ -3493,32 +3584,32 @@ end;
 
 { ---- 独立配色方案(6 期) ------------------------------------------------------------- }
 
-procedure TTyTerminalView.SetColorSource(AValue: TTyTerminalColorSource);
+procedure TTyCustomTerminalView.SetColorSource(AValue: TTyTerminalColorSource);
 begin
   if FColorSource = AValue then Exit;
   FColorSource := AValue;
   RequestSchemeNotify;
 end;
 
-procedure TTyTerminalView.SetColorScheme(AValue: TTyTerminalColorScheme);
+procedure TTyCustomTerminalView.SetColorScheme(AValue: TTyTerminalColorScheme);
 begin
   { 对象属性要有 setter 才流式化(TTyHeader.Columns 的注释);Assign 发一次 OnChange }
   FColorScheme.Assign(AValue);
 end;
 
-procedure TTyTerminalView.SetDarkColorScheme(AValue: TTyTerminalColorScheme);
+procedure TTyCustomTerminalView.SetDarkColorScheme(AValue: TTyTerminalColorScheme);
 begin
   FDarkColorScheme.Assign(AValue);
 end;
 
-procedure TTyTerminalView.SetColorSchemePaired(AValue: Boolean);
+procedure TTyCustomTerminalView.SetColorSchemePaired(AValue: Boolean);
 begin
   if FColorSchemePaired = AValue then Exit;
   FColorSchemePaired := AValue;
   RequestSchemeNotify;
 end;
 
-procedure TTyTerminalView.SchemeChanged(Sender: TObject);
+procedure TTyCustomTerminalView.SchemeChanged(Sender: TObject);
 begin
   { 方案的修订号已经加了一:正在用的那一边,色表的键当场失效。没用到的方案(跟随主题时两个
     都没用;没配对时 DarkColorScheme 没用;配对时另一边)改了,键不变:不排通知,也就不整窗
@@ -3530,7 +3621,7 @@ begin
   RequestSchemeNotify;
 end;
 
-procedure TTyTerminalView.RequestSchemeNotify;
+procedure TTyCustomTerminalView.RequestSchemeNotify;
 begin
   { 不当场 Invalidate:它当场 EnsureThemeCurrent、当场通知,连着设几项就是几条 2031 }
   if [csLoading, csDestroying] * ComponentState <> [] then Exit;
@@ -3540,7 +3631,7 @@ begin
   Application.QueueAsyncCall(@AsyncNotifyScheme, 0);
 end;
 
-function TTyTerminalView.SideRevision(ADark: Boolean): Cardinal;
+function TTyCustomTerminalView.SideRevision(ADark: Boolean): Cardinal;
 begin
   if FColorSource = tsrcTheme then
     Result := 0
@@ -3552,17 +3643,17 @@ end;
 
 { ---- 输入法 ------------------------------------------------------------------------- }
 
-function TTyTerminalView.ImeTargetControl: TWinControl;
+function TTyCustomTerminalView.ImeTargetControl: TWinControl;
 begin
   Result := Self;
 end;
 
-function TTyTerminalView.ImeIsReadOnly: Boolean;
+function TTyCustomTerminalView.ImeIsReadOnly: Boolean;
 begin
   Result := ReadOnly;
 end;
 
-function TTyTerminalView.ImeCaretBoundClient: TRect;
+function TTyCustomTerminalView.ImeCaretBoundClient: TRect;
 begin
   { macOS 的候选窗锚:和 GetImeCaretRect 同一个矩形(上一帧画出来的光标格);还没画过就
     现算一个 }
@@ -3578,18 +3669,18 @@ begin
   end;
 end;
 
-function TTyTerminalView.ImeCaretIndex: Integer;
+function TTyCustomTerminalView.ImeCaretIndex: Integer;
 begin
   Result := 0;
 end;
 
-procedure TTyTerminalView.ImeSessionBegin;
+procedure TTyCustomTerminalView.ImeSessionBegin;
 begin
   FPreedit := '';
   FInPreedit := True;
 end;
 
-procedure TTyTerminalView.ImeSessionEnd;
+procedure TTyCustomTerminalView.ImeSessionEnd;
 begin
   if FPreedit <> '' then
   begin
@@ -3601,7 +3692,7 @@ begin
   DirtyCursorRows;
 end;
 
-procedure TTyTerminalView.ImeReplace(AStart, ALen: Integer; const AText: string);
+procedure TTyCustomTerminalView.ImeReplace(AStart, ALen: Integer; const AText: string);
 var
   n: Integer;
 begin
@@ -3623,12 +3714,12 @@ end;
 
 { ---- FOR THE TESTS ------------------------------------------------------------------ }
 
-function TTyTerminalView.RowsPainted: Integer;
+function TTyCustomTerminalView.RowsPainted: Integer;
 begin
   Result := FRowPainter.RowsPainted;
 end;
 
-function TTyTerminalView.RowKeyOf(AViewRow: Integer): TTyTermRowKey;
+function TTyCustomTerminalView.RowKeyOf(AViewRow: Integer): TTyTermRowKey;
 begin
   if (AViewRow >= 0) and (AViewRow <= High(FRowKeys)) then
     Result := FRowKeys[AViewRow]
@@ -3636,7 +3727,7 @@ begin
     Result := Default(TTyTermRowKey);
 end;
 
-procedure TTyTerminalView.ForgetPaintedRows;
+procedure TTyCustomTerminalView.ForgetPaintedRows;
 var
   r: Integer;
 begin
@@ -3644,47 +3735,47 @@ begin
     FRowKeys[r].Valid := False;
 end;
 
-function TTyTerminalView.GlyphCache: TTyTermGlyphCache;
+function TTyCustomTerminalView.GlyphCache: TTyTermGlyphCache;
 begin
   Result := FGlyphCache;
 end;
 
-function TTyTerminalView.ContrastCache: TTyTermContrastCache;
+function TTyCustomTerminalView.ContrastCache: TTyTermContrastCache;
 begin
   Result := FContrastCache;
 end;
 
-function TTyTerminalView.HalfContrastCache: TTyTermContrastCache;
+function TTyCustomTerminalView.HalfContrastCache: TTyTermContrastCache;
 begin
   Result := FHalfContrastCache;
 end;
 
-function TTyTerminalView.Metrics: TTyTermCellMetrics;
+function TTyCustomTerminalView.Metrics: TTyTermCellMetrics;
 begin
   Result := FMetrics;
 end;
 
-function TTyTerminalView.FontSpec: TTyTermFontSpec;
+function TTyCustomTerminalView.FontSpec: TTyTermFontSpec;
 begin
   Result := FSpec;
 end;
 
-function TTyTerminalView.SurfaceBitmap: TBGRABitmap;
+function TTyCustomTerminalView.SurfaceBitmap: TBGRABitmap;
 begin
   Result := FSurface;
 end;
 
-function TTyTerminalView.BlinkTimerActive: Boolean;
+function TTyCustomTerminalView.BlinkTimerActive: Boolean;
 begin
   Result := (FBlinkTimer <> nil) and FBlinkTimer.Enabled;
 end;
 
-function TTyTerminalView.SyncTimerActive: Boolean;
+function TTyCustomTerminalView.SyncTimerActive: Boolean;
 begin
   Result := (FSyncTimer <> nil) and FSyncTimer.Enabled;
 end;
 
-function TTyTerminalView.PendingSyncRows: TPoint;
+function TTyCustomTerminalView.PendingSyncRows: TPoint;
 begin
   if FSyncHolding then
     Result := Point(FSyncFirst, FSyncLast)
@@ -3692,44 +3783,44 @@ begin
     Result := Point(-1, -1);
 end;
 
-function TTyTerminalView.HasFocusFlag: Boolean;
+function TTyCustomTerminalView.HasFocusFlag: Boolean;
 begin
   Result := FHasFocus;
 end;
 
-function TTyTerminalView.ScrollBarSyncs: Integer;
+function TTyCustomTerminalView.ScrollBarSyncs: Integer;
 begin
   Result := FBarSyncs;
 end;
 
-function TTyTerminalView.ControlInvalidations: Integer;
+function TTyCustomTerminalView.ControlInvalidations: Integer;
 begin
   Result := FControlInvalidates;
 end;
 
-function TTyTerminalView.ActiveColorScheme: TTyTerminalColorScheme;
+function TTyCustomTerminalView.ActiveColorScheme: TTyTerminalColorScheme;
 begin
   EnsurePalette;
   Result := FActiveScheme;
 end;
 
-function TTyTerminalView.ThemeGroundIsDark: Boolean;
+function TTyCustomTerminalView.ThemeGroundIsDark: Boolean;
 begin
   EnsurePalette;
   Result := FThemeGroundDark;
 end;
 
-function TTyTerminalView.NotifyQueued: Boolean;
+function TTyCustomTerminalView.NotifyQueued: Boolean;
 begin
   Result := FNotifyQueued;
 end;
 
-function TTyTerminalView.SchemeNotifyRequests: Integer;
+function TTyCustomTerminalView.SchemeNotifyRequests: Integer;
 begin
   Result := FSchemeNotifyRequests;
 end;
 
-function TTyTerminalView.RowsLeftToPaint: Boolean;
+function TTyCustomTerminalView.RowsLeftToPaint: Boolean;
 var
   r: Integer;
 begin

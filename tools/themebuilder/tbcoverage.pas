@@ -105,7 +105,7 @@ const
     (U: 'tyControls.ScrollBar'; K: 'TyScrollBar,TyScrollThumb'),
     (U: 'tyControls.ScrollBox'; K: 'TyScrollBox'),
     (U: 'tyControls.ScrollContent'; K: 'TyScrollContent'),
-    (U: 'tyControls.SpinEdit'; K: 'TySpinEdit,TyTextHint'),
+    (U: 'tyControls.SpinEdit'; K: 'TyButton,TySpinEdit,TyTextHint'),
     (U: 'tyControls.Splitter'; K: 'TySplitter'),
     (U: 'tyControls.StatusBar'; K: 'TyStatusBar'),
     (U: 'tyControls.TabSet'; K: 'TyTabSet'),

@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyURLEdit 是**带"打开"按钮的 URL 编辑框**,继承自 [TTyEdit](edit.md)。在编辑框右侧保留一小块区域画一个箭头(`→`)按钮,点击用默认浏览器打开当前文本。复用 TTyEdit 的文本引擎与 `'TyEdit'` 主题,靠新增的 `RightReserve` / `PaintTrailing` 钩子在文本区右侧预留并绘制按钮(文本区自动让出这块宽度,光标/滚动/选区都不会跑到按钮下面)。
+TTyURLEdit 是**带"打开"按钮的 URL 编辑框**,继承自 [TTyCustomEdit](edit.md)。在编辑框右侧保留一小块区域画一个箭头(`→`)按钮,点击用默认浏览器打开当前文本。复用 TTyCustomEdit 的文本引擎与 `'TyEdit'` 主题,靠新增的 `RightReserve` / `PaintTrailing` 钩子在文本区右侧预留并绘制按钮(文本区自动让出这块宽度,光标/滚动/选区都不会跑到按钮下面)。
 
 ---
 
@@ -23,7 +23,7 @@ uses tyControls.URLEdit;
 
 ## 3. 属性 / 方法
 
-继承 [TTyEdit](edit.md) 的全部已发布属性(`Text` / `TextHint`(默认 `https://…`)/ `OnChange` …)。
+继承 [TTyCustomEdit](edit.md) 的全部已发布属性(`Text` / `TextHint`(默认 `https://…`)/ `OnChange` …)。
 
 | 方法 | 说明 |
 |------|------|

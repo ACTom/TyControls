@@ -38,7 +38,10 @@ uses
   tyControls.ComboBox;
 
 type
-  TButtonAccess = class(TTyButton);
+  { FindByCaption matches any TTyCustomButton (the Light / Dark switches are glyph buttons on
+    some examples), so the access class sits on the custom class: a TTyButton cracker would be
+    a type lie about every button that is not a TTyButton. }
+  TButtonAccess = class(TTyCustomButton);
 
   TStepKind = (skPrepare, skMode, skPage, skShot, skRestore, skSkin, skDone);
 
@@ -154,7 +157,9 @@ begin
     c := AForm.Components[i];
     if (not AButton) and (c is TTyToggleSwitch) and (TTyToggleSwitch(c).Caption = ACaption) then
       Exit(c);
-    if AButton and (c is TTyButton) and (TTyButton(c).Caption = ACaption) then
+    { Any push button: the example forms mix TTyButton with glyph buttons, which are
+      TTyCustomButton descendants but not TTyButton ones. }
+    if AButton and (c is TTyCustomButton) and (TTyCustomButton(c).Caption = ACaption) then
       Exit(c);
   end;
 end;

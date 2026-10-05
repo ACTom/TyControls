@@ -1329,9 +1329,11 @@ end;
 procedure TMainForm.HandleEditorProp(Sender: TObject; ACol, ARow: Integer;
   AEditor: TControl);
 begin
-  if AEditor is TTyEdit then
+  { Any edit: the grid also builds calc and mask editors, which are TTyCustomEdit
+    descendants but not TTyEdit ones. }
+  if AEditor is TTyCustomEdit then
   begin
-    TTyEdit(AEditor).Font.Color := clRed;
+    TTyCustomEdit(AEditor).Font.Color := clRed;
     Status(Format(rsEditorPropFmt, [ACol, ARow]));
   end;
 end;

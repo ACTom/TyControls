@@ -77,8 +77,8 @@ type
     { 每条栏至多一页显示着、当前页就在这条栏里。 }
     procedure AssertEveryBarWhole(const AMsg: string);
     procedure LoadFromApplied(Sender: TObject);
-    procedure ResetFromMoved(Sender: TObject; AWindow: TTyToolWindow;
-      ASourceBar: TTyToolWindowBar; AOldIndex: Integer);
+    procedure ResetFromMoved(Sender: TObject; AWindow: TTyCustomToolWindow;
+      ASourceBar: TTyCustomToolWindowBar; AOldIndex: Integer);
   end;
 
 implementation
@@ -438,8 +438,8 @@ begin
   FInner := Ord(FMgr.LoadLayoutFromString('TYTOOLLAYOUT/1|end'));
 end;
 
-procedure TTyToolWindowLayoutApplyTests.ResetFromMoved(Sender: TObject; AWindow: TTyToolWindow;
-  ASourceBar: TTyToolWindowBar; AOldIndex: Integer);
+procedure TTyToolWindowLayoutApplyTests.ResetFromMoved(Sender: TObject; AWindow: TTyCustomToolWindow;
+  ASourceBar: TTyCustomToolWindowBar; AOldIndex: Integer);
 begin
   if FInner <> -1 then Exit;
   FInner := -2;

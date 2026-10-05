@@ -3,13 +3,13 @@
 
 { ---- 选区 --------------------------------------------------------------------------- }
 
-procedure TTyTerminalView.SelectionChanged(Sender: TObject);
+procedure TTyCustomTerminalView.SelectionChanged(Sender: TObject);
 begin
   if Assigned(FOnSelectionChange) then FOnSelectionChange(Self);
 end;
 
 { 选区此刻落在哪几个视口行(钳在视口里);False = 没有,或不在视口里 }
-function TTyTerminalView.SelectionViewRows(out AFirst, ALast: Integer): Boolean;
+function TTyCustomTerminalView.SelectionViewRows(out AFirst, ALast: Integer): Boolean;
 var
   s, e: TTyTermSelPoint;
   yd: Integer;
@@ -31,7 +31,7 @@ end;
 
 { 上游 refresh():只重画涉及的行——上次画过的选区行段与现在的并集。在绘制里(追 trim)只标
   脏不失效:这一帧就画掉 }
-procedure TTyTerminalView.SelectionRedraw(Sender: TObject);
+procedure TTyCustomTerminalView.SelectionRedraw(Sender: TObject);
 var
   a, b, i: Integer;
 begin
@@ -64,7 +64,7 @@ begin
     DirtyRows(a, b);
 end;
 
-procedure TTyTerminalView.SyncSelectionTrim;
+procedure TTyCustomTerminalView.SyncSelectionTrim;
 var
   d: Int64;
 begin
@@ -78,7 +78,7 @@ begin
   end;
 end;
 
-function TTyTerminalView.SelPointAt(X, Y: Integer): TTyTermSelPoint;
+function TTyCustomTerminalView.SelPointAt(X, Y: Integer): TTyTermSelPoint;
 var
   ins: TRect;
   p: TPoint;
@@ -91,7 +91,7 @@ begin
   Result.Row := p.Y + FCore.Buffer.YDisp;
 end;
 
-procedure TTyTerminalView.SelectionPress(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomTerminalView.SelectionPress(Shift: TShiftState; X, Y: Integer);
 var
   clicks: Integer;
   cell: TPoint;
@@ -115,7 +115,7 @@ begin
     StartDragTimer;
 end;
 
-procedure TTyTerminalView.SelectionDrag(X, Y: Integer);
+procedure TTyCustomTerminalView.SelectionDrag(X, Y: Integer);
 var
   ins: TRect;
 begin
@@ -127,7 +127,7 @@ begin
     MulDiv(TyTermDragScrollMaxThreshold, Font.PixelsPerInch, 96)));
 end;
 
-procedure TTyTerminalView.SelectionRelease;
+procedure TTyCustomTerminalView.SelectionRelease;
 begin
   StopDragTimer;
   SyncSelectionTrim;
@@ -135,7 +135,7 @@ begin
   FinishSelection;
 end;
 
-procedure TTyTerminalView.FinishSelection;
+procedure TTyCustomTerminalView.FinishSelection;
 begin
   SyncSelectionTrim;
   if not FSelection.HasSelection then Exit;
@@ -147,7 +147,7 @@ begin
     WriteClipboardText(FSelection.Text(LineEnding));
 end;
 
-procedure TTyTerminalView.StartDragTimer;
+procedure TTyCustomTerminalView.StartDragTimer;
 begin
   if csDesigning in ComponentState then Exit;
   if FDragTimer = nil then
@@ -160,18 +160,18 @@ begin
   FDragTimer.Enabled := True;
 end;
 
-procedure TTyTerminalView.StopDragTimer;
+procedure TTyCustomTerminalView.StopDragTimer;
 begin
   if FDragTimer <> nil then
     FDragTimer.Enabled := False;
 end;
 
-procedure TTyTerminalView.DragTimerFired(Sender: TObject);
+procedure TTyCustomTerminalView.DragTimerFired(Sender: TObject);
 begin
   DragScrollTick;
 end;
 
-procedure TTyTerminalView.DragScrollTick;
+procedure TTyCustomTerminalView.DragScrollTick;
 var
   n: Integer;
 begin
@@ -184,18 +184,18 @@ begin
   end;
 end;
 
-function TTyTerminalView.DragTimerActive: Boolean;
+function TTyCustomTerminalView.DragTimerActive: Boolean;
 begin
   Result := (FDragTimer <> nil) and FDragTimer.Enabled;
 end;
 
-procedure TTyTerminalView.SelectAll;
+procedure TTyCustomTerminalView.SelectAll;
 begin
   SyncSelectionTrim;
   FSelection.SelectAll;
 end;
 
-procedure TTyTerminalView.ClearSelection;
+procedure TTyCustomTerminalView.ClearSelection;
 begin
   StopDragTimer;
   FSelection.Clear;
@@ -203,7 +203,7 @@ end;
 
 { 宿主给的数钳进缓冲:列 0..Cols、行 0..最后一行、长度 0..到缓冲末尾(上游不查;长度
   太大时「起点 + 长度」会溢出) }
-procedure TTyTerminalView.Select(ACol, AAbsRow, ALength: Integer);
+procedure TTyCustomTerminalView.Select(ACol, AAbsRow, ALength: Integer);
 var
   last: Integer;
   room: Int64;
@@ -220,31 +220,31 @@ begin
   FSelection.SetSelection(ACol, AAbsRow, ALength);
 end;
 
-procedure TTyTerminalView.SelectLines(AFirst, ALast: Integer);
+procedure TTyCustomTerminalView.SelectLines(AFirst, ALast: Integer);
 begin
   SyncSelectionTrim;
   FSelection.SelectLines(AFirst, ALast);
 end;
 
-function TTyTerminalView.GetSelectionText: string;
+function TTyCustomTerminalView.GetSelectionText: string;
 begin
   SyncSelectionTrim;
   Result := FSelection.Text(LineEnding);
 end;
 
-function TTyTerminalView.GetHasSelection: Boolean;
+function TTyCustomTerminalView.GetHasSelection: Boolean;
 begin
   SyncSelectionTrim;
   Result := FSelection.HasSelection;
 end;
 
-procedure TTyTerminalView.SetWordSeparators(const AValue: string);
+procedure TTyCustomTerminalView.SetWordSeparators(const AValue: string);
 begin
   FWordSeparators := AValue;
   FSelection.WordSeparators := UTF8Decode(AValue);
 end;
 
-function TTyTerminalView.WordSeparatorsStored: Boolean;
+function TTyCustomTerminalView.WordSeparatorsStored: Boolean;
 begin
   Result := FWordSeparators <> TyTermDefaultWordSeparators;
 end;

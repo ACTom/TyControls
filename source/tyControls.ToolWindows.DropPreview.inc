@@ -5,7 +5,7 @@
 
 { --- TTyToolWindowBar:放置预览 ------------------------------------------------- }
 
-function TTyToolWindowBar.ShownAxisPx: Integer;
+function TTyCustomToolWindowBar.ShownAxisPx: Integer;
 begin
   FAssumeShown := True;
   try
@@ -15,7 +15,7 @@ begin
   end;
 end;
 
-function TTyToolWindowBar.DropPreviewRect: TRect;
+function TTyCustomToolWindowBar.DropPreviewRect: TRect;
 var
   p: TWinControl;
   r: TRect;
@@ -37,7 +37,7 @@ begin
   if not Types.IntersectRect(Result, Result, r) then Result := Rect(0, 0, 0, 0);
 end;
 
-procedure TTyToolWindowBar.ShowDropPreview;
+procedure TTyCustomToolWindowBar.ShowDropPreview;
 var
   r: TRect;
   c: TColor;
@@ -64,7 +64,7 @@ begin
   FDropPreview.BringToFront;
 end;
 
-function TTyToolWindowBar.DropPreviewEraseColor(const ARect: TRect; out AColor: TColor): Boolean;
+function TTyCustomToolWindowBar.DropPreviewEraseColor(const ARect: TRect; out AColor: TColor): Boolean;
 
   function FromKey(const AKey: string): Boolean;
   var
@@ -90,21 +90,21 @@ begin
   Result := FromKey(TyToolWindowBarKey) or FromKey(TyToolWindowStripKey);
 end;
 
-procedure TTyToolWindowBar.HideDropPreview;
+procedure TTyCustomToolWindowBar.HideDropPreview;
 begin
   if FDropPreview = nil then Exit;
   FDropPreview.Hot := False;
   FDropPreview.Visible := False;
 end;
 
-procedure TTyToolWindowBar.SetDropPreviewHot(AOn: Boolean);
+procedure TTyCustomToolWindowBar.SetDropPreviewHot(AOn: Boolean);
 begin
   if (FDropPreview <> nil) and FDropPreview.Visible then FDropPreview.Hot := AOn;
 end;
 
 { --- TTyToolWindowDropPreview ---------------------------------------------------- }
 
-constructor TTyToolWindowDropPreview.CreateFor(ABar: TTyToolWindowBar);
+constructor TTyToolWindowDropPreview.CreateFor(ABar: TTyCustomToolWindowBar);
 begin
   inherited Create(nil);
   FBar := ABar;

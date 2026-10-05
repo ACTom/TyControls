@@ -37,7 +37,7 @@ uses tyControls.GroupBox;
 | `Align` | `TAlign` | — | 父容器内的停靠方式。 |
 | `Anchors` | `TAnchors` | — | 锚点布局。 |
 | `StyleClass` | `string` | `''` | CSS 变体类名。 |
-| `Controller` | `TTyStyleController` | `nil`（全局默认） | 关联的样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（全局默认） | 关联的样式控制器。 |
 
 ### 继承的通用成员
 
@@ -162,6 +162,6 @@ R4.Caption := '蓝色';
 2. **客户区自动下移 16 逻辑像素：** `AdjustClientRect` 已重写，子控件的 `Top = 0` 位置实际显示在标题栏下方。无需手动为子控件添加顶部偏移。
 3. **边框从标题中线开始：** 边框矩形的顶边位于 `CapH div 2`（约 8 逻辑像素处），而非控件顶边，以便标题文字的中心线与边框线对齐。
 4. **RadioButton 分组由 Parent 决定：** `TTyRadioButton.UncheckSiblings` 只遍历同一 `Parent` 下的兄弟控件。将两组单选按钮分别放在两个 `TTyGroupBox` 内即可实现独立互斥，无需额外的 GroupName 属性。
-5. **`AutoSize` 一直是 published 的：** 它由 `TTyCustomControl`（`tyControls.Base.pas`）发布，本库每个控件都有。曾有审计说"ty 分组框没法裹住内容因为 `AutoSize` 没发布"，那是事实错误：`TWinControl` 本来就会按子控件算容器的 preferred size，`AdjustClientRect` 也早就留出了标题带与内边距，整条路径一直是通的。这里记一笔，免得有人再"修"一次。
+5. **`AutoSize` 一直是 published 的：** 它声明在 LCL 的 `TControl` 里，由 `TTyGroupBox` 发布（4.0 以前由基类 `TTyCustomControl` 统一发布，现在每个最终类自己发布，见 [subclassing.md](../subclassing.md) 第 6 节），本库每个控件都有。曾有审计说"ty 分组框没法裹住内容因为 `AutoSize` 没发布"，那是事实错误：`TWinControl` 本来就会按子控件算容器的 preferred size，`AdjustClientRect` 也早就留出了标题带与内边距，整条路径一直是通的。这里记一笔，免得有人再"修"一次。
 6. **标题文字宽度用 Canvas 精确测量：** 渲染器使用临时 `TBitmap.Canvas` 测量文字宽度（正确处理 CJK 等可变宽字体），而非简单估算。
 - **右到左镜像：** `BiDiMode := bdRightToLeft` 时标题带移到顶边的另一端（`Alignment` 按阅读序解释）。**子控件的排布不镜像**——`Align`/`Anchors` 由 LCL 的对齐引擎负责，而它本身不认 BiDi，我们跟着不认，否则同一个窗体里 ty 容器与原生容器会朝相反方向排。见 [rtl.md](../rtl.md)。

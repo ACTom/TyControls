@@ -111,6 +111,8 @@ end
 | `WindowAtPos(X, Y)` / `ContextWindow` | 某点下的图标 / 标签对应的窗口；最近一次右键落在哪个窗口上（不在图标或标签上是 nil） |
 | `OnChange` / `OnCollapse` / `OnExpand` | 见 §4 |
 
+4.0 起栏交出的窗口（`Windows[i]`、`ActiveWindow`、`WindowAtPos`、`ContextWindow`）类型是 `TTyCustomToolWindow`：栏收任何从它派生的窗口，交出来的就是放进去的那一个。`IndexOfWindow`、`ActivateWindow` 的参数同理。
+
 ### TTyToolWindow
 
 | 成员 | 说明 |
@@ -124,7 +126,7 @@ end
 | `OnBadgeDisplay` | 显示之前改文字或藏起来，同 `TTyButton` 的同名事件 |
 | `BadgeDisplay(文字, 圆点)` | 此刻画不画角标、画什么（事件已经算进去） |
 | `WindowIndex` | 在栏里排第几，可写（写 = 调顺序）；不进 .lfm |
-| `Bar` / `IsActive` / `Actions` / `EnsureActions` | 所在的栏；是不是当前页；第一个操作区；没有就建一个 |
+| `Bar` / `IsActive` / `Actions` / `EnsureActions` | 所在的栏（`TTyCustomToolWindowBar`）；是不是当前页；第一个操作区（`TTyCustomToolWindowActions`）；没有就建一个 |
 | `FocusFirst` | 把焦点给正文里第一个能聚焦的控件（跳过操作区） |
 | `OnShow` / `OnHide` | 这一页显示 / 藏起 |
 
@@ -157,6 +159,8 @@ end
 | manager `OnLayoutApplied` | `LoadLayoutFromString` / `ResetLayout` 应用完一次；挂起布局在加载结束时应用的，推迟到加载结束之后（排进消息队列）再发 | — |
 
 **挂起的布局**：还在加载中（frame 刚建出来、继承窗体、某个 `Loaded` 里）就调 `LoadLayoutFromString` / `ResetLayout`，布局先存着，等 manager 和所有栏都加载完再应用。这时窗体的 `OnCreate` 还没跑，所以这一批当作流式加载的一部分：窗口的 `OnShow` / `OnHide` 一个都不发，`OnLayoutApplied` 推到加载结束之后才发。处理器里就能放心用 FormCreate 里才建的对象。
+
+`OnCanMoveWindow` / `OnWindowMoved` 的窗口和栏参数，4.0 起类型是 `TTyCustomToolWindow` / `TTyCustomToolWindowBar`（第三方派生的窗口、栏也会从这里经过），处理过程的签名照此写：`procedure(Sender: TObject; AWindow: TTyCustomToolWindow; ATargetBar: TTyCustomToolWindowBar; var AAllow: Boolean)`、`procedure(Sender: TObject; AWindow: TTyCustomToolWindow; ASourceBar: TTyCustomToolWindowBar; AOldIndex: Integer)`。
 
 `MoveWindow` 的发送顺序：源栏 `OnChange`（窗口原来是当前页时）→ 目标栏 `OnExpand`（原来收起时）→ 目标栏 `OnChange` → `OnWindowMoved`。都在窗口挪好、焦点还回去之后发。
 

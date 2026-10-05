@@ -37,7 +37,9 @@ Versions are ordered, not dated. A finished Milestone doesn't mean an immediate 
 
 Versions are `major.minor.patch`. Patch releases only fix bugs; minor releases add features but stay compatible, as described below.
 
-**Support window**: the latest minor version gets fixes and releases. The one before it keeps getting fixes and releases too, until the next minor version after that ships; then it gets one last release and support ends. For example, the last 3.0.x comes out together with 3.2. Severe problems are exempt from this.
+**Support window**: the latest minor version gets fixes and releases. The one before it keeps getting fixes and releases too, until the next minor version after that ships; then it gets one last release and support ends. For example, the last 4.0.x comes out together with 4.2. Severe problems are exempt from this.
+
+**Long-term support**: 3.0 is a long-term support release. It keeps getting fixes and releases until 2027-09-30, one year after 3.0.0, while new work goes into 4.x.
 
 **Compatibility**: within a major version (all of 3.x, say), a minor release guarantees that:
 
@@ -55,7 +57,7 @@ So when you hit a problem, upgrading to the latest minor version gets you the fi
 
 For anything sizeable, open an issue or comment on an existing one first, so the work doesn't end up going in a different direction.
 
-**Branches**: a fix for a released version goes on the maintenance branch, `major.minor-fixes`, of the newest release that still has the bug (a 3.0.x bug goes on `3.0-fixes`). The maintainer cherry-picks fixes to the other maintenance branches and to `main`; branches are never merged into one another. Features and everything else go on `main`.
+**Branches**: a fix for a released version goes on the maintenance branch, `major.minor-fixes`, of the newest release that still has the bug (a 3.0.x bug goes on `3.0-fixes`). The maintainer cherry-picks fixes to the other maintenance branches and to `main`; maintenance branches are never merged with any other branch. Features and everything else go on `main`; larger features are built on a feature branch and merged back into `main`.
 
 **Build and test**:
 
@@ -71,6 +73,9 @@ Bug fixes should come with a test that fails without the fix.
 - Visual values (colors, sizes, radii) come from theme tokens, never hard-coded.
 - No native LCL controls (`TEdit`, `TButton`, …) inside owner-drawn UI.
 - Add new units to `tycontrols.lpk` (design-time ones to `tycontrols_dt.lpk`).
+- A new control is split from the start: `TTyCustomXxx` holds the implementation, `TTyXxx` is just a `published` section (see [docs/subclassing.en.md](docs/subclassing.en.md)). A control that is not split goes in `CNotSplit` in `tests/test.customclasses.pas` with its reason, or the tests fail. Add the split class to `CSplit` in the same file, then do two more steps and read each diff:
+  - Run `python scripts/gen-mimic.py` to regenerate `tests/test.customclasses.mimic.pas` (the third-party mimics). The diff should only add the new class. The script copies each final class's *current* published section, so if lines change for any other class, that class's publish order was changed by accident; regenerating copies the wrong order, it doesn't fix it.
+  - From `tests/`, run `TY_WRITE_FRESH_STREAMS=1 ./tytests --suite=TTyCustomClassesGuardTest.TestFreshFormFileTextUnchanged` (in PowerShell, set `$env:TY_WRITE_FRESH_STREAMS='1'` first) to add the new class to `tests/fixtures/customclasses/fresh-streams.txt`. The diff should only add the new class's section; a changed line under any other class means what a fresh instance of it writes to a form file has changed.
 - User-visible text goes in a `resourcestring`, with the zh_CN `.po` under `languages/` updated to match.
 - New examples use `.lfm` forms, have a title bar and can switch themes at runtime.
 - Don't use LCL API newer than Lazarus 3.0; where you must, keep a path for older versions behind `LCL_FULLVERSION`.

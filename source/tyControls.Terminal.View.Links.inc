@@ -3,7 +3,7 @@
 
 { ---- 链接 --------------------------------------------------------------------------- }
 
-function TTyTerminalView.LinkKeyHeld(Shift: TShiftState): Boolean;
+function TTyCustomTerminalView.LinkKeyHeld(Shift: TShiftState): Boolean;
 begin
   if FIsMac then
     Result := ssMeta in Shift
@@ -11,13 +11,13 @@ begin
     Result := ssCtrl in Shift;
 end;
 
-function TTyTerminalView.LinkAt(ACol, AViewRow: Integer; out ALink: TTyTermLink): Boolean;
+function TTyCustomTerminalView.LinkAt(ACol, AViewRow: Integer; out ALink: TTyTermLink): Boolean;
 begin
   Result := TyTermFindLinkAt(FCore.Buffer, FCore.Links, ACol, FCore.Buffer.YDisp + AViewRow, FCore.Cols,
     FDetectUrls, FAllowNonHttpLinks, ALink);
 end;
 
-procedure TTyTerminalView.DirtyLinkRows(const ALink: TTyTermLink);
+procedure TTyCustomTerminalView.DirtyLinkRows(const ALink: TTyTermLink);
 var
   a, b, i: Integer;
 begin
@@ -33,7 +33,7 @@ begin
     DirtyRows(a, b);
 end;
 
-procedure TTyTerminalView.UpdateHover(X, Y: Integer; Shift: TShiftState);
+procedure TTyCustomTerminalView.UpdateHover(X, Y: Integer; Shift: TShiftState);
 var
   ins: TRect;
   cell: TPoint;
@@ -65,7 +65,7 @@ begin
     DirtyLinkRows(FHoverLink);
 end;
 
-procedure TTyTerminalView.SetDetectUrls(AValue: Boolean);
+procedure TTyCustomTerminalView.SetDetectUrls(AValue: Boolean);
 begin
   if FDetectUrls = AValue then Exit;
   FDetectUrls := AValue;
@@ -73,7 +73,7 @@ begin
     UpdateHover(FLastMousePos.X, FLastMousePos.Y, FHoverShift);
 end;
 
-procedure TTyTerminalView.SetAllowNonHttpLinks(AValue: Boolean);
+procedure TTyCustomTerminalView.SetAllowNonHttpLinks(AValue: Boolean);
 begin
   if FAllowNonHttpLinks = AValue then Exit;
   FAllowNonHttpLinks := AValue;

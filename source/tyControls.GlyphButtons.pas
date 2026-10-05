@@ -2,7 +2,7 @@ unit tyControls.GlyphButtons;
 {$mode objfpc}{$H+}
 
 { Glyph command buttons — three themed buttons that pair an icon-font glyph (from
-  a TTyIconFont) with the button caption, built on top of TTyButton:
+  a TTyIconFont) with the button caption, built on top of TTyCustomButton:
 
     TTyGlyphButton          glyph-LEFT: a compact command button (icon + caption
                             side by side), default ~96x30.
@@ -11,7 +11,7 @@ unit tyControls.GlyphButtons;
     TTySpeedButton          a flat/toolbar toggle button (glyph-left), groupable
                             by GroupIndex like a classic TSpeedButton.
 
-  All three subclass TTyButton and ONLY override DrawContent (plus Click/Create
+  All three descend from TTyCustomButton and ONLY override DrawContent (plus Click/Create
   where noted) — the frame, hover bg-fade, states, focus ring and numeric badge
   come for free and the glyph simply shares the resolved TextColor and box.
 
@@ -32,8 +32,8 @@ unit tyControls.GlyphButtons;
   draw in the leftover rect. With no IconFont / an unmapped glyph / no window
   handle it degrades to a plain caption button — headless-safe, never crashes.
 
-  AutoSize (inherited from TTyButton, still off by default) is taught about the
-  glyph here: TTyButton only knows about the caption plus the theme's padding, but
+  AutoSize (inherited from TTyCustomButton, still off by default) is taught about the
+  glyph here: the plain button only knows about the caption plus the theme's padding, but
   these buttons draw a glyph too, so an AutoSize glyph button that reserved only the
   caption's width would push the caption out of the box the moment the skin grew the
   padding or the font. CalculatePreferredSize below therefore mirrors DrawContent's
@@ -88,22 +88,22 @@ type
     This exists for GetGlyphSource (below): resolving the source became a QUESTION, asked
     per visual state, instead of four field reads spread across the draw. }
   TTyGlyphSource = record
-    Images: TTyImageCollection;
+    Images: TTyCustomImageCollection;
     ImageName: string;
-    IconFont: TTyIconFont;
+    IconFont: TTyCustomIconFont;
     GlyphName: string;
   end;
 
-  { Shared base: TTyButton + an icon-font glyph placed per GlyphLayout. Usable on
+  { Shared base: TTyCustomButton + an icon-font glyph placed per GlyphLayout. Usable on
     its own (it defaults to glyph-left) but primarily the parent of the three
     concrete controls below; it is NOT registered on the palette itself. }
-  TTyGlyphButtonBase = class(TTyButton)
+  TTyGlyphButtonBase = class(TTyCustomButton)
   private
-    FIconFont: TTyIconFont;
+    FIconFont: TTyCustomIconFont;
     FGlyphName: string;
     FGlyphSize: Integer;
     FGlyphColor: TTyColor;
-    FImages: TTyImageCollection;
+    FImages: TTyCustomImageCollection;
     FImageName: string;
     FGlyphKind: TTyGlyphKind;   { painter (vector) glyph icon source -- an alternative to a
                                   font glyph / image, for arrows and chrome that ship with the
@@ -115,11 +115,11 @@ type
       (the container default) then leaves it alone forever — see there. }
     FShowCaptionExplicit: Boolean;
     procedure SetSpacing(AValue: Integer);
-    procedure SetIconFont(AValue: TTyIconFont);
+    procedure SetIconFont(AValue: TTyCustomIconFont);
     procedure SetGlyphName(const AValue: string);
     procedure SetGlyphSize(AValue: Integer);
     procedure SetGlyphColor(AValue: TTyColor);
-    procedure SetImages(AValue: TTyImageCollection);
+    procedure SetImages(AValue: TTyCustomImageCollection);
     procedure SetImageName(const AValue: string);
     procedure SetGlyphKind(AValue: TTyGlyphKind);
     procedure SetShowCaption(AValue: Boolean);
@@ -212,17 +212,16 @@ type
       choice — exactly the bug ApplyToButton had when it re-wrote every child's
       StyleClass on every relayout. }
     procedure AdoptShowCaption(AValue: Boolean);
-  published
-    { Inherited from TTyButton and still off by default (a designed button keeps the
-      width its .lfm gave it). Re-published only to record what it hugs HERE: the glyph
+    { AutoSize: inherited from TTyCustomButton and still off by default (a designed button
+      keeps the width its .lfm gave it; each final glyph button publishes it). Noted here
+      only to record what it hugs HERE: the glyph
       slot and the glyph/caption gap count too, so switching to a skin with roomier
       padding — or raising GlyphSize, or a longer translated caption — lengthens the
       button instead of ellipsising its text. Every glyph property setter already ends
       in Invalidate, which is where TTyButton re-fits an auto-sized button. }
-    property AutoSize;
     { Icon-font source for the glyph. Nilled automatically (FreeNotification) when
       the referenced font is freed, so no dangling reference remains. }
-    property IconFont: TTyIconFont read FIconFont write SetIconFont;
+    property IconFont: TTyCustomIconFont read FIconFont write SetIconFont;
     { The glyph name to draw (a key in IconFont.Glyphs, e.g. 'save'). Empty or
       unmapped -> no glyph, caption fills the whole content box. }
     property GlyphName: string read FGlyphName write SetGlyphName;
@@ -241,12 +240,13 @@ type
       and ImageName are both set they WIN over IconFont/GlyphName — the named icon is drawn
       (tinted to GlyphColor/TextColor). Unlike a system icon font this renders identically
       on every OS. Nilled via FreeNotification. }
-    property Images: TTyImageCollection read FImages write SetImages;
+    property Images: TTyCustomImageCollection read FImages write SetImages;
     { The icon name in Images to draw. Empty -> fall back to the IconFont glyph. }
     property ImageName: string read FImageName write SetImageName;
-    { Where the glyph sits relative to the caption. Published so the choice can be made in
-      the designer and streamed — it used to be protected, which meant an app that wanted a
-      trailing icon had to SUBCLASS to reach a property that already existed.
+    { Where the glyph sits relative to the caption. Public here and published by every glyph
+      button, so the choice can be made in the designer and streamed — it used to be protected,
+      which meant an app that wanted a trailing icon had to SUBCLASS to reach a property that
+      already existed.
       Each concrete button still seeds its own (glLeft for the compact command button and the
       speed button, glTop for the ribbon tile), so nothing changes unless it is set. }
     property GlyphLayout: TTyGlyphLayout read FGlyphLayout write SetGlyphLayout default glLeft;
@@ -281,13 +281,92 @@ type
   end;
 
   { Compact command button: glyph on the LEFT, caption to its right. }
-  TTyGlyphButton = class(TTyGlyphButtonBase)
+  TTyCustomGlyphButton = class(TTyGlyphButtonBase)
   public
     constructor Create(AOwner: TComponent); override;
   end;
 
+  { TTyGlyphButton publishes TTyCustomGlyphButton's properties; everything lives in TTyCustomGlyphButton. }
+  TTyGlyphButton = class(TTyCustomGlyphButton)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property AnimationsEnabled;
+    property Default;
+    property Cancel;
+    property Down;
+    property ModalResult;
+    property Alignment;
+    property ShowAccelChar;
+    property ShowBadge;
+    property BadgeValue;
+    property BadgePosition;
+    property OnBadgeDisplay;
+    property Caption;
+    property Align;
+    property Anchors;
+    property IconFont;
+    property GlyphName;
+    property GlyphKind;
+    property GlyphSize;
+    property GlyphColor;
+    property Images;
+    property ImageName;
+    property GlyphLayout;
+    property Spacing;
+    property ShowCaption;
+  end;
+
   { Large ribbon-style button: a big glyph on TOP, caption below. }
-  TTyGlyphContainerButton = class(TTyGlyphButtonBase)
+  TTyCustomGlyphContainerButton = class(TTyGlyphButtonBase)
   protected
     { Own key: this is a ribbon TILE (glTop, GlyphSize 24, 72x64 — what
       examples/ribbon drops into a TyRibbonGroup), not a push button. Borrowing
@@ -300,20 +379,99 @@ type
     function GetStyleTypeKey: string; override;
   public
     constructor Create(AOwner: TComponent); override;
-  published
     { The tile IS the glyph-over-caption layout, so its declared default has to say so —
       otherwise the streamer writes GlyphLayout into every ribbon .lfm just to restate what
       the constructor already did. }
     property GlyphLayout default glTop;
   end;
 
+  { TTyGlyphContainerButton publishes TTyCustomGlyphContainerButton's properties; everything lives in TTyCustomGlyphContainerButton. }
+  TTyGlyphContainerButton = class(TTyCustomGlyphContainerButton)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property AnimationsEnabled;
+    property Default;
+    property Cancel;
+    property Down;
+    property ModalResult;
+    property Alignment;
+    property ShowAccelChar;
+    property ShowBadge;
+    property BadgeValue;
+    property BadgePosition;
+    property OnBadgeDisplay;
+    property Caption;
+    property Align;
+    property Anchors;
+    property IconFont;
+    property GlyphName;
+    property GlyphKind;
+    property GlyphSize;
+    property GlyphColor;
+    property Images;
+    property ImageName;
+    property GlyphLayout;
+    property Spacing;
+    property ShowCaption;
+  end;
+
   { Flat/toolbar toggle button (glyph-left). Groupable like a classic
     TSpeedButton: with GroupIndex > 0 it behaves as a radio within its Parent —
-    clicking presses it (Down) and releases sibling TTySpeedButtons that share the
+    clicking presses it (Down) and releases the sibling speed buttons (any
+    TTyCustomSpeedButton, a third party's too) that share the
     GroupIndex. AllowAllUp lets a click on the already-down button toggle it back
     up (so the whole group can be up). Inherits the resting :selected state via
     Down. }
-  TTySpeedButton = class(TTyGlyphButtonBase)
+  TTyCustomSpeedButton = class(TTyGlyphButtonBase)
   private
     FGroupIndex: Integer;
     FAllowAllUp: Boolean;
@@ -323,8 +481,8 @@ type
     FInGroupUpdate: Boolean;
     procedure SetGroupIndex(AValue: Integer);
     procedure SetAllowAllUp(AValue: Boolean);
-    { Release (Down := False) every sibling TTySpeedButton in the same Parent that
-      shares FGroupIndex, except Self. No-op when parentless. }
+    { Release (Down := False) every sibling speed button (any TTyCustomSpeedButton) in the
+      same Parent that shares FGroupIndex, except Self. No-op when parentless. }
     procedure UnpressSiblings;
   protected
     { Own key: a flat toolbar TOGGLE rests flat where a push button rests framed,
@@ -357,15 +515,19 @@ type
       something Down/Click actually keeps in step.
 
       Self counts -- a group of one still has a pressed member. GroupIndex = 0 means "not
-      grouped", so it answers nil rather than pretending every ungrouped button is a group. }
-    function FindDownButton: TTySpeedButton;
+      grouped", so it answers nil rather than pretending every ungrouped button is a group.
+
+      The result is the custom class, as LCL's is (TCustomSpeedButton, buttons.pp:409): the
+      group takes any speed button, a third party's TTyCustomSpeedButton descendant too, so
+      the pressed member is not necessarily a TTySpeedButton. }
+    function FindDownButton: TTyCustomSpeedButton;
   protected
     { Grouping belongs HERE and not only in Click: `Btn.Down := True` from code is a
       perfectly ordinary way to preselect a radio (restoring a saved toolbar mode, say),
       and with the logic in Click it left every sibling pressed too. LCL routes the same
       way -- SetDown -> UpdateExclusive (include/speedbutton.inc). }
     procedure SetDown(AValue: Boolean); override;
-  published
+  public
     property GroupIndex: Integer read FGroupIndex write SetGroupIndex default 0;
     { Setting this re-evaluates the group, as LCL's does. A raw field write left the
       invariant broken in the one direction that matters: turn AllowAllUp OFF on a group
@@ -374,9 +536,90 @@ type
     property AllowAllUp: Boolean read FAllowAllUp write SetAllowAllUp default False;
     { Back to False, matching what the constructor sets. The declared default has to agree
       with the constructed value or the streamer writes the property into EVERY .lfm that
-      holds one of these (TTyButton declares it True); a host that wants a focusable speed
+      holds one of these (TTyCustomButton declares it True); a host that wants a focusable speed
       button still says TabStop=True and that one line streams. }
     property TabStop default False;
+  end;
+
+  { TTySpeedButton publishes TTyCustomSpeedButton's properties; everything lives in TTyCustomSpeedButton. }
+  TTySpeedButton = class(TTyCustomSpeedButton)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property AnimationsEnabled;
+    property Default;
+    property Cancel;
+    property Down;
+    property ModalResult;
+    property Alignment;
+    property ShowAccelChar;
+    property ShowBadge;
+    property BadgeValue;
+    property BadgePosition;
+    property OnBadgeDisplay;
+    property Caption;
+    property Align;
+    property Anchors;
+    property IconFont;
+    property GlyphName;
+    property GlyphKind;
+    property GlyphSize;
+    property GlyphColor;
+    property Images;
+    property ImageName;
+    property GlyphLayout;
+    property Spacing;
+    property ShowCaption;
+    property GroupIndex;
+    property AllowAllUp;
   end;
 
 { Pure helper: split a content rect (device px) into a glyph rect + a caption rect
@@ -527,7 +770,7 @@ begin
   FShowCaptionExplicit := False;
 end;
 
-procedure TTyGlyphButtonBase.SetIconFont(AValue: TTyIconFont);
+procedure TTyGlyphButtonBase.SetIconFont(AValue: TTyCustomIconFont);
 begin
   if FIconFont = AValue then Exit;
   if FIconFont <> nil then
@@ -568,7 +811,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyGlyphButtonBase.SetImages(AValue: TTyImageCollection);
+procedure TTyGlyphButtonBase.SetImages(AValue: TTyCustomImageCollection);
 begin
   if FImages = AValue then Exit;
   if FImages <> nil then FImages.RemoveFreeNotification(Self);
@@ -887,9 +1130,9 @@ begin
     inherited DrawContent(APainter, captionRect, AStyle);
 end;
 
-{ TTyGlyphButton }
+{ TTyCustomGlyphButton }
 
-constructor TTyGlyphButton.Create(AOwner: TComponent);
+constructor TTyCustomGlyphButton.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FGlyphLayout := glLeft;
@@ -897,14 +1140,14 @@ begin
   Height := TyDensityHeight(ActiveController, 30);
 end;
 
-{ TTyGlyphContainerButton }
+{ TTyCustomGlyphContainerButton }
 
-function TTyGlyphContainerButton.GetStyleTypeKey: string;
+function TTyCustomGlyphContainerButton.GetStyleTypeKey: string;
 begin
   Result := 'TyGlyphContainerButton';
 end;
 
-constructor TTyGlyphContainerButton.Create(AOwner: TComponent);
+constructor TTyCustomGlyphContainerButton.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FGlyphLayout := glTop;
@@ -919,14 +1162,14 @@ begin
   Height := TyDensityMetric(ActiveController, 64, '--ribbon-tile-height');
 end;
 
-{ TTySpeedButton }
+{ TTyCustomSpeedButton }
 
-function TTySpeedButton.GetStyleTypeKey: string;
+function TTyCustomSpeedButton.GetStyleTypeKey: string;
 begin
   Result := 'TySpeedButton';
 end;
 
-constructor TTySpeedButton.Create(AOwner: TComponent);
+constructor TTyCustomSpeedButton.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   { A speed button is the one button that deliberately does NOT take focus — that is the
@@ -944,7 +1187,7 @@ begin
   Height := TyDensityHeight(ActiveController, 32);
 end;
 
-procedure TTySpeedButton.SetGroupIndex(AValue: Integer);
+procedure TTyCustomSpeedButton.SetGroupIndex(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   if FGroupIndex = AValue then Exit;
@@ -952,16 +1195,17 @@ begin
   Invalidate;
 end;
 
-procedure TTySpeedButton.UnpressSiblings;
+procedure TTyCustomSpeedButton.UnpressSiblings;
 var
   i: Integer;
-  sib: TTySpeedButton;
+  sib: TTyCustomSpeedButton;
 begin
   if Parent = nil then Exit;
+  { Any speed button shares the group, a third-party TTyCustomSpeedButton descendant too. }
   for i := 0 to Parent.ControlCount - 1 do
-    if (Parent.Controls[i] <> Self) and (Parent.Controls[i] is TTySpeedButton) then
+    if (Parent.Controls[i] <> Self) and (Parent.Controls[i] is TTyCustomSpeedButton) then
     begin
-      sib := TTySpeedButton(Parent.Controls[i]);
+      sib := TTyCustomSpeedButton(Parent.Controls[i]);
       if (sib.FGroupIndex = FGroupIndex) and sib.Down then
       begin
         sib.FInGroupUpdate := True;
@@ -974,24 +1218,24 @@ begin
     end;
 end;
 
-function TTySpeedButton.FindDownButton: TTySpeedButton;
+function TTyCustomSpeedButton.FindDownButton: TTyCustomSpeedButton;
 var
   i: Integer;
-  sib: TTySpeedButton;
+  sib: TTyCustomSpeedButton;
 begin
   Result := nil;
   if FGroupIndex <= 0 then Exit;
   if Down then Exit(Self);
   if Parent = nil then Exit;
   for i := 0 to Parent.ControlCount - 1 do
-    if Parent.Controls[i] is TTySpeedButton then
+    if Parent.Controls[i] is TTyCustomSpeedButton then
     begin
-      sib := TTySpeedButton(Parent.Controls[i]);
+      sib := TTyCustomSpeedButton(Parent.Controls[i]);
       if (sib.FGroupIndex = FGroupIndex) and sib.Down then Exit(sib);
     end;
 end;
 
-procedure TTySpeedButton.SetAllowAllUp(AValue: Boolean);
+procedure TTyCustomSpeedButton.SetAllowAllUp(AValue: Boolean);
 var
   i: Integer;
   anyDown: Boolean;
@@ -1005,9 +1249,9 @@ begin
   anyDown := Down;
   if not anyDown then
     for i := 0 to Parent.ControlCount - 1 do
-      if (Parent.Controls[i] is TTySpeedButton)
-         and (TTySpeedButton(Parent.Controls[i]).FGroupIndex = FGroupIndex)
-         and TTySpeedButton(Parent.Controls[i]).Down then
+      if (Parent.Controls[i] is TTyCustomSpeedButton)
+         and (TTyCustomSpeedButton(Parent.Controls[i]).FGroupIndex = FGroupIndex)
+         and TTyCustomSpeedButton(Parent.Controls[i]).Down then
       begin
         anyDown := True;
         Break;
@@ -1015,7 +1259,7 @@ begin
   if not anyDown then Down := True;
 end;
 
-procedure TTySpeedButton.SetDown(AValue: Boolean);
+procedure TTyCustomSpeedButton.SetDown(AValue: Boolean);
 begin
   if (FGroupIndex > 0) and Down and (not AValue)
      and (not FAllowAllUp) and (not FInGroupUpdate) then
@@ -1026,7 +1270,7 @@ begin
     UnpressSiblings;
 end;
 
-procedure TTySpeedButton.Click;
+procedure TTyCustomSpeedButton.Click;
 begin
   if not Enabled then Exit;
   if FGroupIndex > 0 then

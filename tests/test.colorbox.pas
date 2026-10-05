@@ -1,7 +1,7 @@
 unit test.colorbox;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Graphics, fpcunit, testregistry,
+uses Classes, SysUtils, Graphics, Forms, fpcunit, testregistry,
   tyControls.Types, tyControls.ComboBox, tyControls.ColorBox;
 type
   TColorBoxTest = class(TTestCase)
@@ -12,6 +12,10 @@ type
     procedure TestAddAndClear;
     procedure TestSortedKeepsColors;
     procedure TestComboModeStaysLocked;
+    procedure TestFormFileKeepsAnExtendedSelection;
+    procedure TestFormFileKeepsTheDefaultPalette;
+    procedure TestFormFileNoLongerCarriesItems;
+    procedure TestA300FormFileStillLoads;
   end;
 implementation
 
@@ -94,10 +98,190 @@ var c: TTyColorBox;
 begin
   c := TTyColorBox.Create(nil);
   try
-    AssertTrue('starts list-only', TTyComboBox(c).Style = csDropDownList);
-    TTyComboBox(c).Style := csDropDown;   // must still be ignored
-    AssertTrue('stays list-only', TTyComboBox(c).Style = csDropDownList);
+    { The combo mode, reached through the combo ancestor: on a colour box `Style` is the
+      palette. TTyCustomComboBox, not TTyComboBox -- a colour box is not a TTyComboBox. }
+    AssertTrue('starts list-only', TTyCustomComboBox(c).Style = csDropDownList);
+    TTyCustomComboBox(c).Style := csDropDown;   // must still be ignored
+    AssertTrue('stays list-only', TTyCustomComboBox(c).Style = csDropDownList);
   finally c.Free; end;
+end;
+
+{ Selected is read from a form file before the Style that composes the palette holding it --
+  TTyColorBox publishes Style first, but the palette is only rebuilt in Loaded. The colour has
+  to survive until then: it used to be looked up in the default 16, missed, and come back as
+  nothing selected. }
+procedure TColorBoxTest.TestFormFileKeepsAnExtendedSelection;
+var
+  src, dst: TForm;
+  c: TTyColorBox;
+  ms: TMemoryStream;
+begin
+  src := TForm.CreateNew(nil);
+  dst := TForm.CreateNew(nil);
+  ms := TMemoryStream.Create;
+  try
+    c := TTyColorBox.Create(src);
+    c.Name := 'CB';
+    c.Parent := src;
+    c.Style := [cbStandardColors, cbExtendedColors, cbPrettyNames];
+    c.Selected := clMoneyGreen;
+    AssertTrue('setup: the extended palette holds clMoneyGreen', c.Selected = clMoneyGreen);
+    ms.WriteComponent(src);
+    ms.Position := 0;
+    ms.ReadComponent(dst);
+    c := dst.FindComponent('CB') as TTyColorBox;
+    AssertTrue('the palette came back', cbExtendedColors in c.Style);
+    AssertEquals('and so did the selected colour', clMoneyGreen, c.Selected);
+    { From here on the box's own selection is what a palette rebuild keeps, not the colour the
+      form file held. }
+    c.Selected := clBlue;
+    c.Style := c.Style + [cbIncludeNone];
+    AssertEquals('a later Style change keeps the current selection, not the loaded one',
+      clBlue, c.Selected);
+  finally
+    ms.Free;
+    src.Free;
+    dst.Free;
+  end;
+end;
+
+{ ---- a colour palette in a form file ----
+
+  A form file stores a TStrings as its strings alone, so Items could only ever carry the colour
+  NAMES. 3.0.0 wrote them for every box, and reading them back replaced the palette with names
+  over black swatches (and lost the selection with it) on every form that left Style at its
+  default -- a form that set Style was rebuilt in Loaded and escaped. The palette is now always
+  rebuilt from Style in Loaded, as LCL does, and Items is no longer written. }
+
+function CBRoundTrip(ASrc: TForm): TForm;
+var ms: TMemoryStream;
+begin
+  Result := TForm.CreateNew(nil);
+  ms := TMemoryStream.Create;
+  try
+    ms.WriteComponent(ASrc);
+    ms.Position := 0;
+    ms.ReadComponent(Result);
+  finally
+    ms.Free;
+  end;
+end;
+
+function CBFormText(ASrc: TForm): string;
+var ms, ts: TMemoryStream; L: TStringList;
+begin
+  ms := TMemoryStream.Create;
+  ts := TMemoryStream.Create;
+  L := TStringList.Create;
+  try
+    ms.WriteComponent(ASrc);
+    ms.Position := 0;
+    ObjectBinaryToText(ms, ts);
+    ts.Position := 0;
+    L.LoadFromStream(ts);
+    Result := L.Text;
+  finally
+    L.Free;
+    ts.Free;
+    ms.Free;
+  end;
+end;
+
+function CBFromText(const AText: string): TForm;
+var ts: TStringStream; bs: TMemoryStream;
+begin
+  Result := TForm.CreateNew(nil);
+  ts := TStringStream.Create(AText);
+  bs := TMemoryStream.Create;
+  try
+    ObjectTextToBinary(ts, bs);
+    bs.Position := 0;
+    bs.ReadComponent(Result);
+  finally
+    bs.Free;
+    ts.Free;
+  end;
+end;
+
+procedure TColorBoxTest.TestFormFileKeepsTheDefaultPalette;
+var src, dst: TForm; c, fresh: TTyColorBox; i: Integer;
+begin
+  src := TForm.CreateNew(nil);
+  dst := nil;
+  fresh := TTyColorBox.Create(nil);
+  try
+    c := TTyColorBox.Create(src);
+    c.Name := 'CB';
+    c.Parent := src;
+    c.Selected := clRed;
+    AssertEquals('setup: red is selected', clRed, c.Selected);
+    dst := CBRoundTrip(src);
+    c := dst.FindComponent('CB') as TTyColorBox;
+    AssertEquals('the default palette came back whole', fresh.Items.Count, c.Items.Count);
+    for i := 0 to fresh.Items.Count - 1 do
+      AssertEquals(Format('row %d (%s) keeps its colour, not black', [i, fresh.Items[i]]),
+        fresh.ColorAt(i), c.ColorAt(i));
+    AssertEquals('and the selection with it', clRed, c.Selected);
+  finally
+    fresh.Free;
+    dst.Free;
+    src.Free;
+  end;
+end;
+
+procedure TColorBoxTest.TestFormFileNoLongerCarriesItems;
+var src: TForm; c: TTyColorBox; t: string;
+begin
+  src := TForm.CreateNew(nil);
+  try
+    c := TTyColorBox.Create(src);
+    c.Name := 'CB';
+    c.Parent := src;
+    c.Selected := clRed;
+    t := CBFormText(src);
+    AssertTrue('precondition: the box is in the form file' + LineEnding + t, Pos('object CB', t) > 0);
+    AssertTrue('Items is not written: it can only hold names, and Style rebuilds the palette'
+      + LineEnding + t, Pos('Items.Strings', t) = 0);
+  finally
+    src.Free;
+  end;
+end;
+
+procedure TColorBoxTest.TestA300FormFileStillLoads;
+const
+  { What 3.0.0 wrote for a box on the default palette with red selected. }
+  LFM =
+    'object Form1: TForm' + LineEnding +
+    '  object CB: TTyColorBox' + LineEnding +
+    '    Items.Strings = (' + LineEnding +
+    '      ''Black''' + LineEnding + '      ''Maroon''' + LineEnding + '      ''Green''' + LineEnding +
+    '      ''Olive''' + LineEnding + '      ''Navy''' + LineEnding + '      ''Purple''' + LineEnding +
+    '      ''Teal''' + LineEnding + '      ''Gray''' + LineEnding + '      ''Silver''' + LineEnding +
+    '      ''Red''' + LineEnding + '      ''Lime''' + LineEnding + '      ''Yellow''' + LineEnding +
+    '      ''Blue''' + LineEnding + '      ''Fuchsia''' + LineEnding + '      ''Aqua''' + LineEnding +
+    '      ''White''' + LineEnding +
+    '    )' + LineEnding +
+    '    ItemIndex = 9' + LineEnding +
+    '    Text = ''Red''' + LineEnding +
+    '    Selected = clRed' + LineEnding +
+    '  end' + LineEnding +
+    'end' + LineEnding;
+var dst: TForm; c, fresh: TTyColorBox; i: Integer;
+begin
+  dst := nil;
+  fresh := TTyColorBox.Create(nil);
+  try
+    dst := CBFromText(LFM);
+    c := dst.FindComponent('CB') as TTyColorBox;
+    AssertEquals('the palette is rebuilt, not the 16 bare names', fresh.Items.Count, c.Items.Count);
+    for i := 0 to fresh.Items.Count - 1 do
+      AssertEquals(Format('row %d (%s) has its colour back', [i, fresh.Items[i]]),
+        fresh.ColorAt(i), c.ColorAt(i));
+    AssertEquals('and red is selected again', clRed, c.Selected);
+  finally
+    fresh.Free;
+    dst.Free;
+  end;
 end;
 
 initialization

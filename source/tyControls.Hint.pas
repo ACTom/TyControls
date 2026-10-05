@@ -34,25 +34,34 @@ type
 
   { Non-visual installer. Drop one on a form (or create at runtime); while Active
     and not designing, every control's hint uses TTyHintWindow. }
-  TTyHint = class(TTyComponent)
+  TTyCustomHint = class(TTyComponent)
   private
     FActive: Boolean;
     FInstalled: Boolean;
-    FController: TTyStyleController;
+    FController: TTyCustomStyleController;
     procedure SetActive(AValue: Boolean);
+    procedure SetController(AValue: TTyCustomStyleController);
     procedure Apply;
   protected
     procedure Loaded; override;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-  published
     { When True (default) the themed hint window is installed app-wide. }
     property Active: Boolean read FActive write SetActive default True;
     { Documentary only — the hint window always resolves via the active default
       controller (LCL owns the window's instantiation, so a per-instance controller
       cannot be threaded through). Kept for design-time clarity. }
-    property Controller: TTyStyleController read FController write FController;
+    property Controller: TTyCustomStyleController read FController write SetController;
+  end;
+
+  { TTyHint publishes TTyCustomHint's properties; everything lives in TTyCustomHint. }
+  TTyHint = class(TTyCustomHint)
+  published
+    property Version;
+    property Active;
+    property Controller;
   end;
 
 { Pure geometry: the hint box for text of (ATextW x ATextH) device px, padded by
@@ -223,9 +232,9 @@ begin
 end;
 
 // ---------------------------------------------------------------------------
-// TTyHint
+// TTyCustomHint
 // ---------------------------------------------------------------------------
-constructor TTyHint.Create(AOwner: TComponent);
+constructor TTyCustomHint.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FActive := True;
@@ -235,7 +244,7 @@ begin
     Apply;
 end;
 
-destructor TTyHint.Destroy;
+destructor TTyCustomHint.Destroy;
 begin
   if FInstalled then
   begin
@@ -245,13 +254,13 @@ begin
   inherited Destroy;
 end;
 
-procedure TTyHint.Loaded;
+procedure TTyCustomHint.Loaded;
 begin
   inherited Loaded;
   Apply;
 end;
 
-procedure TTyHint.Apply;
+procedure TTyCustomHint.Apply;
 var
   want: Boolean;
 begin
@@ -264,7 +273,25 @@ begin
   FInstalled := want;
 end;
 
-procedure TTyHint.SetActive(AValue: Boolean);
+procedure TTyCustomHint.SetController(AValue: TTyCustomStyleController);
+begin
+  if FController = AValue then Exit;
+  if FController <> nil then FController.RemoveFreeNotification(Self);
+  FController := AValue;
+  { The controller may sit on another form, or have no owner at all, and the owner's broadcast
+    reaches this component only when the two share an owner. Without a free notification a
+    freed controller stayed here: the IDE reads this property
+    when it saves the form. }
+  if FController <> nil then FController.FreeNotification(Self);
+end;
+
+procedure TTyCustomHint.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent = FController) then FController := nil;
+end;
+
+procedure TTyCustomHint.SetActive(AValue: Boolean);
 begin
   if FActive = AValue then Exit;
   FActive := AValue;

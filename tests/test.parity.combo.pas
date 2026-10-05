@@ -916,9 +916,10 @@ begin
   Result := (P.green > 150) and (P.green > P.red + 40) and (P.green > P.blue + 40);
 end;
 
-{ The two popup-list families do not share an ancestor (the check combo's descends from
-  TTyCheckListBox), so the render seam is reached by class, exactly as the protocol is. }
-procedure RenderAnyPopupList(AList: TTyListBox; ACanvas: TCanvas; const ARect: TRect;
+{ The two popup-list families share no ancestor below TTyCustomListBox (the check combo's
+  descends from TTyCheckListBox), so the render seam is reached by class, exactly as the
+  protocol is. }
+procedure RenderAnyPopupList(AList: TTyCustomListBox; ACanvas: TCanvas; const ARect: TRect;
   APPI: Integer);
 begin
   if AList is TTyCheckComboPopupList then
@@ -928,7 +929,7 @@ begin
 end;
 
 { Renders two popup lists and reports whether ANY pixel differs. }
-function ListRenderDiffers(A, B: TTyListBox; AW, AH: Integer): Boolean;
+function ListRenderDiffers(A, B: TTyCustomListBox; AW, AH: Integer): Boolean;
 var
   BmpA, BmpB: TBitmap;
   x, y: Integer;
@@ -1622,12 +1623,14 @@ end;
 type
   { Calls the virtual factory, so the list under test is the one the control REALLY builds
     -- not one the test picked by name and could pick wrongly. }
-  TComboFactoryAccess = class(TTyComboBox)
+  { Cast onto every combo in the family, derived ones included -- which since 4.0 are
+    TTyCustomComboBox descendants and not TTyComboBox ones. }
+  TComboFactoryAccess = class(TTyCustomComboBox)
   public
-    function MakePopupList: TTyListBox;
+    function MakePopupList: TTyCustomListBox;
   end;
 
-function TComboFactoryAccess.MakePopupList: TTyListBox;
+function TComboFactoryAccess.MakePopupList: TTyCustomListBox;
 begin
   Result := CreatePopupList;
 end;
@@ -1635,7 +1638,7 @@ end;
 { Three rows, chosen so each list takes its OWN painting branch rather than falling through
   to the ancestor -- the grouped combo needs a real header row, or its override never runs
   and the guard passes against unwired code. }
-procedure PopulateForFamily(C: TTyComboBox);
+procedure PopulateForFamily(C: TTyCustomComboBox);
 begin
   C.Items.Clear;
   if C is TTyOfficeComboBox then
@@ -1644,11 +1647,11 @@ begin
     TTyOfficeComboBox(C).AddItem('Alpha');
     TTyOfficeComboBox(C).AddItem('Beta');
   end
-  else if C is TTyColorBox then
+  else if C is TTyCustomColorBox then   { the colour combo too: not a TTyColorBox since 4.0 }
   begin
-    TTyColorBox(C).AddColor('Red', clRed);
-    TTyColorBox(C).AddColor('Lime', clLime);
-    TTyColorBox(C).AddColor('Blue', clBlue);
+    TTyCustomColorBox(C).AddColor('Red', clRed);
+    TTyCustomColorBox(C).AddColor('Lime', clLime);
+    TTyCustomColorBox(C).AddColor('Blue', clBlue);
   end
   else
   begin
@@ -1661,11 +1664,11 @@ const
   Rows = 3;
 var
   k, before: Integer;
-  cOwn, cPlain: TTyComboBox;
-  lOwn, lPlain: TTyListBox;
+  cOwn, cPlain: TTyCustomComboBox;
+  lOwn, lPlain: TTyCustomListBox;
   klass: string;
 
-  function Build(AIndex: Integer; AHandler: TTyDrawItemEvent): TTyComboBox;
+  function Build(AIndex: Integer; AHandler: TTyDrawItemEvent): TTyCustomComboBox;
   begin
     case AIndex of
       0: Result := TTyFontComboBox.Create(FForm);
@@ -1676,14 +1679,15 @@ var
     else Result := TTyColorComboBox.Create(FForm);
     end;
     PopulateForFamily(Result);
-    Result.OnDrawItem := AHandler;
-    { Assigned through a TTyComboBox reference on purpose: on a colour box `Style` is the
+    { OnDrawItem is protected on the custom class (as on TCustomComboBox). }
+    TComboFactoryAccess(Result).OnDrawItem := AHandler;
+    { Assigned through a TTyCustomComboBox reference on purpose: on a colour box `Style` is the
       PALETTE set, and the combo mode is reachable only this way -- which is precisely the
       route a host has to take, so it is the route the guard has to take. }
     if AHandler <> nil then Result.Style := csOwnerDrawFixed;
   end;
 
-  function BuildList(ACombo: TTyComboBox): TTyListBox;
+  function BuildList(ACombo: TTyCustomComboBox): TTyCustomListBox;
   begin
     Result := TComboFactoryAccess(ACombo).MakePopupList;
     Result.Parent := FForm;
@@ -1705,6 +1709,11 @@ begin
   begin
     cOwn := Build(k, @HandleDrawSilent);
     klass := cOwn.ClassName;
+    { The colour lists must hold real colours, or their swatch branch is not the one being
+      skipped -- and the colour combo is a TTyCustomColorBox, not a TTyColorBox. }
+    if cOwn is TTyCustomColorBox then
+      AssertEquals(klass + ': the family helper filled the palette', clRed,
+        TTyCustomColorBox(cOwn).Colors[0]);
     lOwn := BuildList(cOwn);
     AssertTrue(klass + '''s drop-down list descends from TTyComboPopupList (which is what ' +
       'carries the post-composite dispatch)', lOwn is TTyComboPopupList);
@@ -1720,7 +1729,7 @@ end;
 procedure TComboOwnerDrawTest.TestEveryPickOnlyLockKeepsOwnerDraw;
 var
   k: Integer;
-  c: TTyComboBox;
+  c: TTyCustomComboBox;
   klass: string;
 begin
   { FIVE controls locked themselves pick-only by flattening every Style value to
@@ -1761,7 +1770,7 @@ end;
 procedure TComboOwnerDrawTest.TestSimpleFlattensToDropDownListAcrossThePickOnlyFamily;
 var
   k: Integer;
-  c: TTyComboBox;
+  c: TTyCustomComboBox;
   klass: string;
 begin
   { csSimple ON A PICK-ONLY COMBO lands as csDropDownList -- all SEVEN of them, stated

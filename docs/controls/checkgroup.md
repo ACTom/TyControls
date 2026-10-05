@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-`TTyCheckGroup` 是 TyControls 库中的**复选组**容器控件，继承自 [`TTyGroupBox`](groupbox.md)。它在一个带标题的圆角边框内，为 `Items` 中的每一项**自动生成一个 [`TTyCheckBox`](checkbox.md) 子控件**，并按列网格布局排列。
+`TTyCheckGroup` 是 TyControls 库中的**复选组**容器控件，继承自 [`TTyCustomGroupBox`](groupbox.md)。它在一个带标题的圆角边框内，为 `Items` 中的每一项**自动生成一个 [`TTyCheckBox`](checkbox.md) 子控件**，并按列网格布局排列。
 
 与单选组（RadioGroup）不同，组内的复选框是**互相独立**的——没有互斥关系，可任意组合勾选。典型用途：多选偏好设置（如“通知方式：邮件 / 短信 / 推送”）、功能开关面板、标签过滤器等。
 
@@ -15,8 +15,8 @@
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.CheckGroup` |
-| `GetStyleTypeKey` 返回值 | `'TyGroupBox'`（**继承自 `TTyGroupBox`，不新增 `.tycss` 选择器**） |
-| 基类 | `TTyGroupBox`（`tyControls.GroupBox`） → `TTyCustomControl`（`tyControls.Base`） |
+| `GetStyleTypeKey` 返回值 | `'TyGroupBox'`（**继承自 `TTyCustomGroupBox`，不新增 `.tycss` 选择器**） |
+| 基类 | `TTyCustomGroupBox`（`tyControls.GroupBox`） → `TTyCustomControl`（`tyControls.Base`） |
 | 默认尺寸 | 185 × 130（逻辑像素） |
 | 子复选框行距 | 24 逻辑像素（每个复选框 22 高，按 DPI 缩放） |
 
@@ -52,7 +52,7 @@ uses tyControls.CheckGroup;
 
 ### 继承的通用成员
 
-`TTyCheckGroup` 从 [`TTyGroupBox`](groupbox.md) 继承：
+`TTyCheckGroup` 从 [`TTyCustomGroupBox`](groupbox.md) 继承：
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
@@ -60,7 +60,7 @@ uses tyControls.CheckGroup;
 | `Alignment` | `TAlignment` | `taLeftJustify` | 标题在顶部边框带内的水平对齐。 |
 | `Align` / `Anchors` | — | — | 停靠 / 锚点布局。 |
 | `StyleClass` | `string` | `''` | CSS 变体类名（作用于外框；子复选框各自解析 `TyCheckBox`）。 |
-| `Controller` | `TTyStyleController` | `nil`（全局默认） | 关联的样式控制器。**赋值会同步传播给所有内部子复选框**，保证整组主题一致。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（全局默认） | 关联的样式控制器。**赋值会同步传播给所有内部子复选框**，保证整组主题一致。 |
 
 ---
 

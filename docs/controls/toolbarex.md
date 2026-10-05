@@ -2,9 +2,9 @@
 
 ## 1. 概述
 
-`TTyToolBarEx` 是 TyControls 库中带**溢出折叠**能力的工具条，继承自 [`TTyToolBar`](toolbar.md)。当工具条**不换行**（`Wrapable = False`）且子按钮的总宽超过工具条可用宽度时，放不下的**尾部按钮**会被隐藏，右端出现一个 `»`（chevron，人字形）按钮；点击它弹出一个 `TTyPopupSurface` 浮层，把这些溢出按钮竖排展示——点击其中任一项**仍然触发它自己的 `OnClick`**（按钮只是被临时移入浮层，从不重新创建）。
+`TTyToolBarEx` 是 TyControls 库中带**溢出折叠**能力的工具条，继承自 [`TTyCustomToolBar`](toolbar.md)。当工具条**不换行**（`Wrapable = False`）且子按钮的总宽超过工具条可用宽度时，放不下的**尾部按钮**会被隐藏，右端出现一个 `»`（chevron，人字形）按钮；点击它弹出一个 `TTyPopupSurface` 浮层，把这些溢出按钮竖排展示——点击其中任一项**仍然触发它自己的 `OnClick`**（按钮只是被临时移入浮层，从不重新创建）。
 
-窗口尺寸变化时会自动重新计算哪些按钮放得下，并相应显示 / 隐藏 `»` 按钮——**没有**任何 published 属性来手动开关 chevron（完全自动）。`Wrapable = True` 时行为与基类 `TTyToolBar` **完全一致**（跳过整个溢出路径，直接走基类换行布局），只有非换行的溢出路径是新增的。
+窗口尺寸变化时会自动重新计算哪些按钮放得下，并相应显示 / 隐藏 `»` 按钮——**没有**任何 published 属性来手动开关 chevron（完全自动）。`Wrapable = True` 时行为与 `TTyToolBar` **完全一致**（跳过整个溢出路径，直接走基类换行布局），只有非换行的溢出路径是新增的。
 
 典型用途：主窗口 / 编辑器顶部命令栏，宽度不足时把次要命令收进 `»` 菜单，而不是换行占用竖向空间。
 
@@ -16,7 +16,7 @@
 |------|-----|
 | 单元 | `tyControls.ToolBarEx` |
 | `GetStyleTypeKey` 返回值 | `'TyToolBar'`（**继承自基类，刻意复用**——不引入任何新 `.tycss` 选择器） |
-| 基类 | `TTyToolBar`（→ `TTyCustomControl` → `TCustomControl`） |
+| 基类 | `TTyCustomToolBar`（→ `TTyCustomControl` → `TCustomControl`） |
 | 默认尺寸 | 300 × 30（逻辑像素，继承自基类） |
 | 默认 `Wrapable` | **`False`**（与基类不同——溢出是本控件的卖点，默认进入其生效的非换行模式） |
 
@@ -30,7 +30,7 @@ uses tyControls.ToolBarEx, tyControls.Button;
 
 ## 3. 属性表
 
-`TTyToolBarEx` **不新增任何 published 属性**——它复用基类 [`TTyToolBar` 的全部属性](toolbar.md#3-属性表)（`ButtonHeight` / `ButtonSpacing` / `Indent` / `Wrapable` / `ShowCaptions` / `Flat` / `Images`（`TTyImageCollection`）/ `Align` / `Anchors` / `StyleClass` / `Controller` 等）。唯一区别是本控件把 `Wrapable` 重新 published 了一次以声明其新默认值语义（默认 `False`）。
+`TTyToolBarEx` **不新增任何 published 属性**——它复用基类 [`TTyCustomToolBar` 的全部属性](toolbar.md#3-属性表)（`ButtonHeight` / `ButtonSpacing` / `Indent` / `Wrapable` / `ShowCaptions` / `Flat` / `Images`（`TTyImageCollection`）/ `Align` / `Anchors` / `StyleClass` / `Controller` 等）。唯一区别是本控件把 `Wrapable` 重新 published 了一次以声明其新默认值语义（默认 `False`）。
 
 `ShowCaptions` 与 `Images` 在这里同样生效：它们由基类在**工具项加入工具条时**（`InsertControl`）和两个 setter 里下发，
 不依赖排布过程——而本控件重写了 `AlignControls`，正好绕开排布路径，所以这条下发时机是它能拿到图标的原因。
@@ -124,9 +124,9 @@ end;
 
 ## 8. 注意事项
 
-- **仅非换行模式生效：** 溢出折叠只在 `Wrapable = False` 时发生。设 `Wrapable := True` 时本控件与基类 `TTyToolBar` 表现**逐像素一致**（走基类换行布局，`»` 永不出现）。
+- **仅非换行模式生效：** 溢出折叠只在 `Wrapable = False` 时发生。设 `Wrapable := True` 时本控件与 `TTyToolBar` 表现**逐像素一致**（走基类换行布局，`»` 永不出现）。
 - **子控件即工具项：** 把 `TTyButton` 的 `Parent` 设为工具条即可；子按钮只需设 `Width`，高度由 `ButtonHeight` 统一接管（与基类相同）。
-- **`ButtonHeight` 是"请求"，不是命令：** 按标题自己算大小的控件会把测量结果写进 `Constraints.MinHeight`，而 `SetBounds` 会**静默地把高度抬上去**。行高因此取"`ButtonHeight` 与本行各子控件 `MinHeight` 的最大值"，一行拉齐——和基类 `TTyToolBar` 同一条规则。（本类重写了 `AlignControls`，一度漏抄这条，结果是一行按钮参差不齐。）
+- **`ButtonHeight` 是"请求"，不是命令：** 按标题自己算大小的控件会把测量结果写进 `Constraints.MinHeight`，而 `SetBounds` 会**静默地把高度抬上去**。行高因此取"`ButtonHeight` 与本行各子控件 `MinHeight` 的最大值"，一行拉齐——和 `TTyToolBar` 同一条规则。（本类重写了 `AlignControls`，一度漏抄这条，结果是一行按钮参差不齐。）
 - **行不会压在自己的底边框上：** `RenderTo` 把底边细线描在最后 `BottomBorderPx` 行里，而工具按钮是窗口化子控件——它在工具条之后绘制，并且会把自己的矩形整个擦成表面色，所以伸进那条带不是"盖住"细线而是**抹掉**它（表现为细线只在按钮之间的缝里还看得见）。行放不下时是把整行**上提**而不是压扁——压扁没用，`SetBounds` 会按 `MinHeight` 再抬回去。放得下时 `Top` 仍是 `ContentPadY`，逐像素不动。
   - 这条缺陷**跟字体走**：真机 CJK 字体测出 28 而 headless 回落字体只有 21，所以在本机是隐形的。相关守卫（`TestTallButtonStaysOffTheBottomBorder` 等）都先断言"按钮确实比 `ButtonHeight` 高"，一旦环境变得测不到这个缺陷就直接报错，而不是悄悄变成空测试。
 - **自动、无开关：** `»` 的显示 / 隐藏由每次重排时的 fit 计算自动决定，没有 published 属性来手动控制它。

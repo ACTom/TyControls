@@ -42,7 +42,7 @@ type
     FCaptions: TStringList;   // node data holds an index into this
     FChanged: Integer;        // TTyTreeSelect.OnChange fire count
     procedure HandleChange(Sender: TObject);
-    procedure HandleGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+    procedure HandleGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -317,7 +317,7 @@ begin
   Inc(FChanged);
 end;
 
-procedure TTyTreeSelectControlTest.HandleGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTyTreeSelectControlTest.HandleGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   var Text: string);
 var
   idx: Integer;

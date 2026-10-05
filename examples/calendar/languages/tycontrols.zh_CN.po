@@ -568,3 +568,19 @@ msgstr "周五"
 #: tycontrols.strconsts.rstyshortday7
 msgid "Sat"
 msgstr "周六"
+
+#: tycontrols.strconsts.rstywindowmenurestore
+msgid "&Restore"
+msgstr "还原(&R)"
+
+#: tycontrols.strconsts.rstywindowmenuminimize
+msgid "Mi&nimize"
+msgstr "最小化(&N)"
+
+#: tycontrols.strconsts.rstywindowmenumaximize
+msgid "Ma&ximize"
+msgstr "最大化(&X)"
+
+#: tycontrols.strconsts.rstywindowmenuclose
+msgid "&Close"
+msgstr "关闭(&C)"

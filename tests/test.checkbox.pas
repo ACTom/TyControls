@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, StdCtrls, TypInfo, fpcunit, testregistry, Forms, Controls, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.CheckBox,
-  tyControls.ToolBar;
+  tyControls.ToolBar, test.captionfit;
 type
   TTyCheckBoxAccess = class(TTyCheckBox)
   public
@@ -23,6 +23,7 @@ type
 
   TTyRadioAccess = class(TTyRadioButton)
   public
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure CallPreferred(out AW, AH: Integer);
     procedure CallMeasure(APPI: Integer; out AW, AH: Integer);
   end;
@@ -93,6 +94,8 @@ type
     procedure TestRadioRoomierThemeWidensPreferredWidth;
     procedure TestRadioUsesItsOwnIndicatorMetrics;
     procedure TestRadioPreferredHeightIsAlwaysZero;
+    procedure TestAutoSizedCheckBoxDrawsItsWholeCaption;
+    procedure TestAutoSizedRadioDrawsItsWholeCaption;
   end;
 
   { A hand-set Height and the theme's --control-height are REQUESTS; what is actually
@@ -127,6 +130,11 @@ end;
 procedure TTyCheckBoxAccess.CallMeasure(APPI: Integer; out AW, AH: Integer);
 begin
   MeasureCaption(APPI, AW, AH);
+end;
+
+procedure TTyRadioAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  inherited RenderTo(ACanvas, ARect, APPI);
 end;
 
 procedure TTyRadioAccess.CallPreferred(out AW, AH: Integer);
@@ -1411,6 +1419,52 @@ begin
       R.Constraints.MinHeight <= 40);
   finally
     F.Free;
+  end;
+end;
+
+{ The caption an AutoSize checkbox measured is the caption it draws, whole: see
+  test.captionfit for why the canvas alone answered short ("Try it in the previ..."). }
+procedure TCheckBoxAutoSizeTest.TestAutoSizedCheckBoxDrawsItsWholeCaption;
+var
+  Ctl: TTyStyleController;
+  Form: TForm;
+  C: TTyCheckBoxAccess;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  try
+    Form.Color := clWhite;   // the control composites onto its parent: match the white ground
+    C := TTyCheckBoxAccess.Create(Form);
+    C.Parent := Form;
+    C.Controller := Ctl;
+    C.Font.PixelsPerInch := 96;
+    C.AutoSize := True;
+    CheckAutoSizeDrawsWholeCaption(Ctl, C, 'TyCheckBox', @C.RenderTo, False);
+  finally
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TCheckBoxAutoSizeTest.TestAutoSizedRadioDrawsItsWholeCaption;
+var
+  Ctl: TTyStyleController;
+  Form: TForm;
+  R: TTyRadioAccess;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  try
+    Form.Color := clWhite;
+    R := TTyRadioAccess.Create(Form);
+    R.Parent := Form;
+    R.Controller := Ctl;
+    R.Font.PixelsPerInch := 96;
+    R.AutoSize := True;
+    CheckAutoSizeDrawsWholeCaption(Ctl, R, 'TyRadioButton', @R.RenderTo, False);
+  finally
+    Form.Free;
+    Ctl.Free;
   end;
 end;
 

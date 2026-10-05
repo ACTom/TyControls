@@ -18,15 +18,15 @@ uses
   tyControls.AdvancedComboBox;
 
 type
-  { RenderTo is protected on TTyComboBox; a descendant declared HERE can reach it on any
+  { RenderTo is protected on TTyCustomComboBox; a descendant declared HERE can reach it on any
     combo instance, which saves six probe classes differing only in their ancestor. }
-  TComboRenderAccess = class(TTyComboBox);
+  TComboRenderAccess = class(TTyCustomComboBox);
 
   TComboHintTest = class(TTestCase)
   private
     { True when the two combos paint differently at the same size -- the only honest proof
       that the paint path READS TextHint. }
-    function RendersDiffer(A, B: TTyComboBox): Boolean;
+    function RendersDiffer(A, B: TTyCustomComboBox): Boolean;
   published
     procedure TestColorBoxPaintsTheHintWhenEmpty;
     procedure TestFilterComboBoxPaintsTheHintWhenEmpty;
@@ -47,7 +47,7 @@ const
   HintW = 160;
   HintH = 26;
 
-function TComboHintTest.RendersDiffer(A, B: TTyComboBox): Boolean;
+function TComboHintTest.RendersDiffer(A, B: TTyCustomComboBox): Boolean;
 var
   BmpA, BmpB: TBitmap;
   x, y: Integer;

@@ -1,6 +1,6 @@
 unit tyControls.ShellTreeView;
 {$mode objfpc}{$H+}
-{ TTyShellTreeView -- a file-system-backed TTyTreeView.
+{ TTyShellTreeView -- a file-system-backed tree view (a TTyCustomTreeView descendant).
 
   Design: docs/superpowers/specs/2026-07-11-phase7-shell-filedialogs-design.md
   Plan  : docs/superpowers/plans/2026-07-11-phase7-shelltreeview.md
@@ -115,7 +115,7 @@ type
   { The concrete descendant of the TTyShellTreeLink seam declared in
     tyControls.ShellListView -- see that declaration for why the abstract class
     lives over there rather than here. }
-  TTyShellTreeView = class(TTyShellTreeLink)
+  TTyCustomShellTreeView = class(TTyShellTreeLink)
   private
     FNodes:        array of TTyShellNodeInfo;   { node-data index -> path + kind }
     FRoots:        TTyFsRootArray;    { the places seeded by PopulateRoots (for their Display) }
@@ -139,7 +139,7 @@ type
     FOnAddItem:    TTyFsAddItemEvent;
     FOnSortCompare: TTyFsCompareEvent;
     FLastPathError: TTyShellPathError;
-    FShellListView: TTyShellListView;
+    FShellListView: TTyCustomShellListView;
     { >0 while this control is pushing a change INTO its companion list. The list
       pushes back on load, so without it the pair would recurse forever -- LCL
       guards the same cascade with FLockUpdate (shellctrls.pas:2003-2011). }
@@ -184,7 +184,7 @@ type
     procedure SetFileSortType(AValue: TTyFsFileSortType);
     procedure SetOnSortCompare(AValue: TTyFsCompareEvent);
     procedure SetUseBuiltinIcons(AValue: Boolean);
-    procedure SetShellListView(AValue: TTyShellListView);
+    procedure SetShellListView(AValue: TTyCustomShellListView);
     { Push the focused directory into the linked list, guarded against the
       push-back it will provoke. }
     procedure PushToList;
@@ -313,7 +313,6 @@ type
       Object Inspector two rows that overwrite each other. This exists so ported
       code that says `Tree.Path := X` compiles and means what LCL means. }
     property Path: string read GetPath write SetPath;
-  published
     { The selection as a path. Reading returns SelectedPath (raw, no trailing
       delimiter); writing reveals + focuses it.
 
@@ -355,13 +354,6 @@ type
       defers to OnSortCompare. Writing it re-enumerates. }
     property FileSortType: TTyFsFileSortType read FFileSortType write SetFileSortType
       default fstNone;
-    { When a node re-reads its children. Default ecmRefreshedExpanding, matching
-      LCL: every expand re-enumerates, so folders created or deleted since the last
-      look appear. ecmKeepChildren is the behaviour this control used to be
-      hard-wired to -- a directory was enumerated exactly ONCE per control lifetime
-      and never noticed a change again. }
-    property ExpandCollapseMode: TTyExpandCollapseMode read FExpandMode write FExpandMode
-      default ecmRefreshedExpanding;
     { Whether the control's own folder/drive/file glyphs are used. Off detaches the
       built-in Images list, which is how a text-only tree (or one driven purely by
       an app's own list) is asked for -- previously the only route was to overwrite
@@ -386,8 +378,141 @@ type
       folder here loads it into the list. Without it the canonical two-control file
       browser could not be assembled in the designer at all, and every host had to
       hand-write the OnPathChange -> Directory plumbing. LCL: shellctrls.pas:139,
-      pushed from DoSelectionChanged (1141-1163) and SetRoot (641-642). }
-    property ShellListView: TTyShellListView read FShellListView write SetShellListView;
+      pushed from DoSelectionChanged (1141-1163) and SetRoot (641-642).
+      Any shell list, a third party's TTyCustomShellListView descendant included -- LCL types
+      it TCustomShellListView too. (TTyFilterComboBox.ShellListView stays TTyShellListView,
+      as LCL's TFilterComboBox.ShellListView is a TShellListView, filectrl.pp:167.) }
+    property ShellListView: TTyCustomShellListView read FShellListView write SetShellListView;
+  protected
+    { When a node re-reads its children. Default ecmRefreshedExpanding, matching
+      LCL: every expand re-enumerates, so folders created or deleted since the last
+      look appear. ecmKeepChildren is the behaviour this control used to be
+      hard-wired to -- a directory was enumerated exactly ONCE per control lifetime
+      and never noticed a change again. }
+    property ExpandCollapseMode: TTyExpandCollapseMode read FExpandMode write FExpandMode
+      default ecmRefreshedExpanding;
+  end;
+
+  { TTyShellTreeView publishes TTyCustomShellTreeView's properties; everything lives in TTyCustomShellTreeView. }
+  TTyShellTreeView = class(TTyCustomShellTreeView)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Options;
+    property Header;
+    property Items;
+    property NodeDataSize;
+    property DefaultNodeHeight;
+    property RootNodeCount;
+    property Indent;
+    property Images;
+    property EmptyListMessage;
+    property ShowButtons;
+    property ShowTreeLines;
+    property ShowRoot;
+    property ToggleOnDblClick;
+    property HotTrack;
+    property ScrollBars;
+    property ScrollBarAutoHide;
+    property AutoExpand;
+    property RightClickSelect;
+    property HideSelection;
+    property ShowSeparators;
+    property SearchTimeout;
+    property Align;
+    property Anchors;
+    property OnFreeNode;
+    property OnInitNode;
+    property OnInitChildren;
+    property OnExpanding;
+    property OnExpanded;
+    property OnCollapsing;
+    property OnCollapsed;
+    property OnChange;
+    property OnChanging;
+    property OnFocusChanged;
+    property OnChecking;
+    property OnChecked;
+    property OnSelectionChanged;
+    property OnNodeClick;
+    property OnNodeDblClick;
+    property OnGetText;
+    property OnGetTextWithType;
+    property OnGetImageIndex;
+    property OnPaintText;
+    property OnDrawNode;
+    property OnAfterCellPaint;
+    property OnMeasureItem;
+    property OnIncrementalSearch;
+    property OnColumnResized;
+    property OnColumnReorder;
+    property OnCompareNodes;
+    property OnHeaderClick;
+    property OnEditing;
+    property OnNewText;
+    property OnEditCancelled;
+    property OnEditingEnd;
+    property OnNodeDragOver;
+    property OnNodeMoved;
+    property Directory;
+    property Root;
+    property ObjectTypes;
+    property ShowHidden;
+    property FileSortType;
+    property ExpandCollapseMode;
+    property UseBuiltinIcons;
+    property OnPathChange;
+    property OnAddItem;
+    property OnSortCompare;
+    property ShellListView;
   end;
 
 implementation
@@ -396,7 +521,7 @@ implementation
   Lifecycle
   --------------------------------------------------------------------------- }
 
-constructor TTyShellTreeView.Create(AOwner: TComponent);
+constructor TTyCustomShellTreeView.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
 
@@ -422,7 +547,7 @@ begin
   PopulateRoots;
 end;
 
-destructor TTyShellTreeView.Destroy;
+destructor TTyCustomShellTreeView.Destroy;
 begin
   { FImages/FIcons are created ownerless (see BuildGlyphs). Free FImages first --
     its FreeNotification nils the inherited Images reference before we drop it. }
@@ -447,7 +572,7 @@ end;
   (a folder vs. a drive vs. a file), not control chrome, and the constructor runs
   before the Controller/theme is resolved. An app that wants themed icons can
   assign its own Images, or turn UseBuiltinIcons off. }
-procedure TTyShellTreeView.BuildGlyphs;
+procedure TTyCustomShellTreeView.BuildGlyphs;
 const
   G = 128;   { master edge, px }
 
@@ -535,7 +660,7 @@ end;
   Node <-> path mapping
   --------------------------------------------------------------------------- }
 
-function TTyShellTreeView.AddPathNode(AParent: PTyTreeNode; const AFullPath: string;
+function TTyCustomShellTreeView.AddPathNode(AParent: PTyTreeNode; const AFullPath: string;
   AIsDir: Boolean): PTyTreeNode;
 var
   idx: Integer;
@@ -551,7 +676,7 @@ begin
   InitNode(Result);
 end;
 
-function TTyShellTreeView.NodePath(Node: PTyTreeNode): string;
+function TTyCustomShellTreeView.NodePath(Node: PTyTreeNode): string;
 var
   p: Pointer;
   idx: Integer;
@@ -565,7 +690,7 @@ begin
     Result := FNodes[idx].Path;
 end;
 
-function TTyShellTreeView.NodeIsDir(Node: PTyTreeNode): Boolean;
+function TTyCustomShellTreeView.NodeIsDir(Node: PTyTreeNode): Boolean;
 var
   p: Pointer;
   idx: Integer;
@@ -579,19 +704,19 @@ begin
     Result := FNodes[idx].IsDir;
 end;
 
-function TTyShellTreeView.GetPathFromNode(ANode: PTyTreeNode): string;
+function TTyCustomShellTreeView.GetPathFromNode(ANode: PTyTreeNode): string;
 begin
   Result := NodePath(ANode);
   if (Result <> '') and NodeIsDir(ANode) then
     Result := AppendPathDelim(Result);
 end;
 
-function TTyShellTreeView.SupportsItemModel: Boolean;
+function TTyCustomShellTreeView.SupportsItemModel: Boolean;
 begin
   Result := False;
 end;
 
-function TTyShellTreeView.FindNode(const APath: string): PTyTreeNode;
+function TTyCustomShellTreeView.FindNode(const APath: string): PTyTreeNode;
 var
   n: PTyTreeNode;
   want: string;
@@ -614,7 +739,7 @@ end;
   Directory intake
   --------------------------------------------------------------------------- }
 
-function TTyShellTreeView.ReadEntries(const APath: string): TTyFsEntryArray;
+function TTyCustomShellTreeView.ReadEntries(const APath: string): TTyFsEntryArray;
 var
   i, n: Integer;
   keep: TTyFsEntryArray;
@@ -651,7 +776,7 @@ begin
   end;
 end;
 
-procedure TTyShellTreeView.PopulateChildren(Node: PTyTreeNode);
+procedure TTyCustomShellTreeView.PopulateChildren(Node: PTyTreeNode);
 var
   entries: TTyFsEntryArray;
   i: Integer;
@@ -661,7 +786,7 @@ begin
     AddPathNode(Node, entries[i].FullPath, entries[i].IsDir);
 end;
 
-class function TTyShellTreeView.GetFilesInDir(const ABaseDir, AMask: string;
+class function TTyCustomShellTreeView.GetFilesInDir(const ABaseDir, AMask: string;
   AObjectTypes: TTyFsObjectTypes; AFileSortType: TTyFsFileSortType;
   ACaseSensitivity: TTyMaskCaseSensitivity): TTyFsEntryArray;
 begin
@@ -680,7 +805,7 @@ end;
   The base's virtuals, overridden
   --------------------------------------------------------------------------- }
 
-procedure TTyShellTreeView.DoGetText(Node: PTyTreeNode; var AText: string);
+procedure TTyCustomShellTreeView.DoGetText(Node: PTyTreeNode; var AText: string);
 var
   p: string;
   i: Integer;
@@ -710,7 +835,7 @@ begin
   inherited DoGetText(Node, AText);
 end;
 
-procedure TTyShellTreeView.DoInitNode(AParent, Node: PTyTreeNode;
+procedure TTyCustomShellTreeView.DoInitNode(AParent, Node: PTyTreeNode;
   var AStates: TTyNodeInitStates);
 begin
   { Show an expand arrow iff this directory holds at least one entry the current
@@ -724,7 +849,7 @@ begin
   inherited DoInitNode(AParent, Node, AStates);
 end;
 
-procedure TTyShellTreeView.DoExpanding(Node: PTyTreeNode; var AAllowed: Boolean);
+procedure TTyCustomShellTreeView.DoExpanding(Node: PTyTreeNode; var AAllowed: Boolean);
 var
   keptFocus: string;
   refound: PTyTreeNode;
@@ -771,7 +896,7 @@ begin
   inherited DoExpanding(Node, AAllowed);   { an app handler may still veto }
 end;
 
-procedure TTyShellTreeView.DoGetImageIndex(Node: PTyTreeNode; AKind: TTyVTImageKind;
+procedure TTyCustomShellTreeView.DoGetImageIndex(Node: PTyTreeNode; AKind: TTyVTImageKind;
   AColumn: Integer; var AGhosted: Boolean; var AIndex: Integer);
 begin
   { A file leaf gets the page glyph; a top-level node of an UNSCOPED tree is one of
@@ -786,7 +911,7 @@ begin
   inherited DoGetImageIndex(Node, AKind, AColumn, AGhosted, AIndex);
 end;
 
-procedure TTyShellTreeView.DoTreeChange(Node: PTyTreeNode);
+procedure TTyCustomShellTreeView.DoTreeChange(Node: PTyTreeNode);
 begin
   { Fires on every focus/selection move (mouse, keyboard, or a programmatic
     FocusedNode from SelectPath). Cache the path + notify. }
@@ -799,10 +924,10 @@ begin
 end;
 
 { ---------------------------------------------------------------------------
-  The design-time link to a companion TTyShellListView
+  The design-time link to a companion shell list (any TTyCustomShellListView)
   --------------------------------------------------------------------------- }
 
-procedure TTyShellTreeView.SetShellListView(AValue: TTyShellListView);
+procedure TTyCustomShellTreeView.SetShellListView(AValue: TTyCustomShellListView);
 begin
   if FShellListView = AValue then Exit;
   FShellListView := AValue;
@@ -816,7 +941,7 @@ begin
   end;
 end;
 
-procedure TTyShellTreeView.PushToList;
+procedure TTyCustomShellTreeView.PushToList;
 begin
   if (FShellListView = nil) or (FLinkLock > 0) then Exit;
   if FSelectedPath = '' then Exit;
@@ -829,7 +954,7 @@ begin
   end;
 end;
 
-procedure TTyShellTreeView.ShellLinkSelect(const APath: string);
+procedure TTyCustomShellTreeView.ShellLinkSelect(const APath: string);
 begin
   { Driven BY the list. The lock is held for the whole walk so the change this
     provokes cannot push straight back and start the cascade over. }
@@ -841,7 +966,7 @@ begin
   end;
 end;
 
-procedure TTyShellTreeView.ShellLinkUpdate(const AStartDir: string);
+procedure TTyCustomShellTreeView.ShellLinkUpdate(const AStartDir: string);
 begin
   Inc(FLinkLock);
   try
@@ -851,7 +976,7 @@ begin
   end;
 end;
 
-procedure TTyShellTreeView.Notification(AComponent: TComponent;
+procedure TTyCustomShellTreeView.Notification(AComponent: TComponent;
   Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
@@ -863,7 +988,7 @@ end;
   Public API
   --------------------------------------------------------------------------- }
 
-class function TTyShellTreeView.GetBasePath: string;
+class function TTyCustomShellTreeView.GetBasePath: string;
 begin
   {$IFDEF MSWINDOWS}
   { On Windows there is no single base: the places ARE the drive letters, which is
@@ -874,7 +999,7 @@ begin
   {$ENDIF}
 end;
 
-function TTyShellTreeView.GetRootPath: string;
+function TTyCustomShellTreeView.GetRootPath: string;
 begin
   if FRoot <> '' then
     Result := FRoot
@@ -884,7 +1009,7 @@ begin
     Result := AppendPathDelim(Result);
 end;
 
-procedure TTyShellTreeView.PopulateRoots;
+procedure TTyCustomShellTreeView.PopulateRoots;
 var
   i: Integer;
 begin
@@ -904,17 +1029,17 @@ begin
   end;
 end;
 
-function TTyShellTreeView.SelectedPath: string;
+function TTyCustomShellTreeView.SelectedPath: string;
 begin
   Result := FSelectedPath;
 end;
 
-function TTyShellTreeView.GetPath: string;
+function TTyCustomShellTreeView.GetPath: string;
 begin
   Result := GetPathFromNode(FocusedNode);
 end;
 
-function TTyShellTreeView.ResolveRelative(const AValue: string): string;
+function TTyCustomShellTreeView.ResolveRelative(const AValue: string): string;
 var
   base: string;
 begin
@@ -929,12 +1054,12 @@ begin
   Result := ExpandFileNameUTF8(base + Result);
 end;
 
-procedure TTyShellTreeView.SetPath(const AValue: string);
+procedure TTyCustomShellTreeView.SetPath(const AValue: string);
 begin
   SetDirectory(ResolveRelative(AValue));
 end;
 
-function TTyShellTreeView.SelectPath(const APath: string): Boolean;
+function TTyCustomShellTreeView.SelectPath(const APath: string): Boolean;
 
   { True when ABase is ADir itself or a parent directory of it (case-insensitive,
     component-aware so 'C:\Us' is not a prefix of 'C:\Users'). }
@@ -1034,7 +1159,7 @@ begin
   end;
 end;
 
-procedure TTyShellTreeView.ResetBranch(ANode: PTyTreeNode);
+procedure TTyCustomShellTreeView.ResetBranch(ANode: PTyTreeNode);
 begin
   if ANode = nil then Exit;
   if ANode^.ChildCount = 0 then Exit;   { never enumerated -- nothing cached }
@@ -1050,7 +1175,7 @@ begin
     Exclude(ANode^.States, nsHasChildren);
 end;
 
-procedure TTyShellTreeView.CompactNodes;
+procedure TTyCustomShellTreeView.CompactNodes;
 var
   kept: array of TTyShellNodeInfo;
   n, idx: Integer;
@@ -1080,7 +1205,7 @@ begin
   FNodes := kept;
 end;
 
-procedure TTyShellTreeView.UpdateView(const AStartDir: string = '');
+procedure TTyCustomShellTreeView.UpdateView(const AStartDir: string = '');
 var
   keep: array of string;   { paths of the nodes that were expanded, pre-order }
   focus: string;
@@ -1198,7 +1323,7 @@ begin
   end;
 end;
 
-procedure TTyShellTreeView.Refresh(ANode: PTyTreeNode);
+procedure TTyCustomShellTreeView.Refresh(ANode: PTyTreeNode);
 var
   wasExpanded: Boolean;
 begin
@@ -1229,7 +1354,7 @@ begin
   end;
 end;
 
-procedure TTyShellTreeView.DrainPendingRefresh;
+procedure TTyCustomShellTreeView.DrainPendingRefresh;
 begin
   if (FBusy > 0) or FDraining then Exit;   { an outer walk still owns the tree }
   if not FPendingRefresh then Exit;
@@ -1249,7 +1374,7 @@ end;
   Setters
   --------------------------------------------------------------------------- }
 
-procedure TTyShellTreeView.SetRoot(const AValue: string);
+procedure TTyCustomShellTreeView.SetRoot(const AValue: string);
 var
   wanted: string;
 begin
@@ -1273,7 +1398,7 @@ begin
   PopulateRoots;
 end;
 
-procedure TTyShellTreeView.SetObjectTypes(AValue: TTyFsObjectTypes);
+procedure TTyCustomShellTreeView.SetObjectTypes(AValue: TTyFsObjectTypes);
 begin
   if FObjectTypes = AValue then Exit;
   FObjectTypes := AValue;
@@ -1284,7 +1409,7 @@ begin
   UpdateView;
 end;
 
-procedure TTyShellTreeView.SetShowHidden(AValue: Boolean);
+procedure TTyCustomShellTreeView.SetShowHidden(AValue: Boolean);
 begin
   if FShowHidden = AValue then Exit;
   FShowHidden := AValue;
@@ -1305,14 +1430,14 @@ begin
   UpdateView;
 end;
 
-procedure TTyShellTreeView.SetFileSortType(AValue: TTyFsFileSortType);
+procedure TTyCustomShellTreeView.SetFileSortType(AValue: TTyFsFileSortType);
 begin
   if FFileSortType = AValue then Exit;
   FFileSortType := AValue;
   UpdateView;
 end;
 
-procedure TTyShellTreeView.SetOnSortCompare(AValue: TTyFsCompareEvent);
+procedure TTyCustomShellTreeView.SetOnSortCompare(AValue: TTyFsCompareEvent);
 begin
   { Field-by-field: FPC has no '=' for TMethod, and in objfpc mode comparing two
     `function ... of object` values directly would try to CALL them. }
@@ -1329,7 +1454,7 @@ begin
   UpdateView;
 end;
 
-procedure TTyShellTreeView.SetUseBuiltinIcons(AValue: Boolean);
+procedure TTyCustomShellTreeView.SetUseBuiltinIcons(AValue: Boolean);
 begin
   if FUseBuiltinIcons = AValue then Exit;
   FUseBuiltinIcons := AValue;
@@ -1342,7 +1467,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyShellTreeView.SetDirectory(const AValue: string);
+procedure TTyCustomShellTreeView.SetDirectory(const AValue: string);
 begin
   if SelectPath(AValue) then Exit;
   { '' is not a failed selection, it is an absent one. }

@@ -12,7 +12,7 @@ uses
   tyControls.ToolWindows, tyControls.ToolWindows.Manager;
 
 type
-  TTyToolWindowBarArray = array of TTyToolWindowBar;
+  TTyToolWindowBarArray = array of TTyCustomToolWindowBar;
 
 { AComponent 在 frame 实例里 —— IDE 的 TComponentEditor.IsInInlined 就是这一句
   (componenteditors.pas:698-701)。往 frame 实例里加组件不行(:178-183),继承来的控件也不能换父
@@ -21,33 +21,33 @@ function TyToolWindowInInlined(AComponent: TComponent): Boolean;
 
 { 「新建工具窗口」:栏在、不在 frame 实例里、不在加载 / 释放中。子孙窗体里往继承来的栏加窗口
   可以(spec §11)。 }
-function TyToolWindowDesignCanAddWindow(ABar: TTyToolWindowBar): Boolean;
+function TyToolWindowDesignCanAddWindow(ABar: TTyCustomToolWindowBar): Boolean;
 
 { 「添加操作区」:窗口还没有操作区(Actions = nil)、不在 frame 实例里、不在加载 / 释放中
   (同 CanAddWindow)。继承来的窗口可以加。 }
-function TyToolWindowDesignCanAddActions(AWindow: TTyToolWindow): Boolean;
+function TyToolWindowDesignCanAddActions(AWindow: TTyCustomToolWindow): Boolean;
 
 { 「移到另一侧栏」的目标:窗口在侧栏里、不是继承来的(csAncestor)、不在 frame 实例里,所在栏
   有 manager,manager 下另一侧(左 ↔ 右)有可用栏(UsableBar)、那条栏也不在 frame 实例里,
   且 CanMoveWindow 答 True(它管本栏冲突、同一窗体、加载 / 释放中);否则 nil。 }
-function TyToolWindowDesignOtherSide(AWindow: TTyToolWindow): TTyToolWindowBar;
+function TyToolWindowDesignOtherSide(AWindow: TTyCustomToolWindow): TTyCustomToolWindowBar;
 
 { 执行「移到另一侧栏」:目标为 nil、manager 不是 TTyToolWindowManager 答 False;否则
   MoveWindow(设计期同步、不问 OnCanMoveWindow、不发事件、自己通知设计器,spec §9.9)。
   Bar.Manager 是基类类型,这里转型(spec §2)。撤销由调用方记(同「移回栏里」)。 }
-function TyToolWindowDesignMoveToOtherSide(AWindow: TTyToolWindow): Boolean;
+function TyToolWindowDesignMoveToOtherSide(AWindow: TTyCustomToolWindow): Boolean;
 
 { 「移回栏里 ▸」的候选:只有孤儿(Parent 不是栏)才有;窗口不是继承来的、不在 frame 实例里、
   有 Owner;候选 = AWindow.Owner 拥有的每一条栏(按 Owner.Components 顺序),去掉在加载 /
   释放中的。frame 实例里的栏归 frame 实例拥有,本来就不在候选里。侧栏、底栏都算:孤儿没有
   「原来那一类」。 }
-function TyToolWindowDesignReturnTargets(AWindow: TTyToolWindow): TTyToolWindowBarArray;
+function TyToolWindowDesignReturnTargets(AWindow: TTyCustomToolWindow): TTyToolWindowBarArray;
 
 { 执行「移回栏里」:ABar 必须在候选里,否则答 False、什么都不改。Parent := ABar —— 设计期
   直接改 Parent 不走 CommitCrossMove(BooksDirectMove 排除设计期),注册即成为当前页。
   设计器由调用方通知(Modified),撤销也由调用方记(一条 Parent 的 uopChange,同 IDE 组件树
   换父;回放就是再改一次 Parent,回到原来的栏时排在末尾、成为当前页)。 }
-function TyToolWindowDesignReturnToBar(AWindow: TTyToolWindow; ABar: TTyToolWindowBar): Boolean;
+function TyToolWindowDesignReturnToBar(AWindow: TTyCustomToolWindow; ABar: TTyCustomToolWindowBar): Boolean;
 
 implementation
 
@@ -60,22 +60,22 @@ begin
     and (csInline in AComponent.Owner.ComponentState);
 end;
 
-function TyToolWindowDesignCanAddWindow(ABar: TTyToolWindowBar): Boolean;
+function TyToolWindowDesignCanAddWindow(ABar: TTyCustomToolWindowBar): Boolean;
 begin
   Result := (ABar <> nil) and not TyToolWindowInInlined(ABar)
     and (Busy * ABar.ComponentState = []);
 end;
 
-function TyToolWindowDesignCanAddActions(AWindow: TTyToolWindow): Boolean;
+function TyToolWindowDesignCanAddActions(AWindow: TTyCustomToolWindow): Boolean;
 begin
   Result := (AWindow <> nil) and (AWindow.Actions = nil)
     and not TyToolWindowInInlined(AWindow)
     and (Busy * AWindow.ComponentState = []);
 end;
 
-function TyToolWindowDesignOtherSide(AWindow: TTyToolWindow): TTyToolWindowBar;
+function TyToolWindowDesignOtherSide(AWindow: TTyCustomToolWindow): TTyCustomToolWindowBar;
 var
-  src: TTyToolWindowBar;
+  src: TTyCustomToolWindowBar;
   side: TTyToolWindowPlacement;
 begin
   Result := nil;
@@ -97,9 +97,9 @@ begin
   if (Result <> nil) and not src.Manager.CanMoveWindow(AWindow, Result) then Result := nil;
 end;
 
-function TyToolWindowDesignMoveToOtherSide(AWindow: TTyToolWindow): Boolean;
+function TyToolWindowDesignMoveToOtherSide(AWindow: TTyCustomToolWindow): Boolean;
 var
-  target: TTyToolWindowBar;
+  target: TTyCustomToolWindowBar;
 begin
   Result := False;
   target := TyToolWindowDesignOtherSide(AWindow);
@@ -108,7 +108,7 @@ begin
   Result := TTyToolWindowManager(AWindow.Bar.Manager).MoveWindow(AWindow, target);
 end;
 
-function TyToolWindowDesignReturnTargets(AWindow: TTyToolWindow): TTyToolWindowBarArray;
+function TyToolWindowDesignReturnTargets(AWindow: TTyCustomToolWindow): TTyToolWindowBarArray;
 var
   own: TComponent;
   c: TComponent;
@@ -122,16 +122,16 @@ begin
   for i := 0 to own.ComponentCount - 1 do
   begin
     c := own.Components[i];
-    if not (c is TTyToolWindowBar) then Continue;
+    if not (c is TTyCustomToolWindowBar) then Continue;
     { frame 实例里的栏不用另外排除:它们归 frame 实例拥有,不在 own.Components 里;own 本身是
       frame 实例时孤儿自己就在里面,上面已经返回。 }
     if Busy * c.ComponentState <> [] then Continue;
     SetLength(Result, Length(Result) + 1);
-    Result[High(Result)] := TTyToolWindowBar(c);
+    Result[High(Result)] := TTyCustomToolWindowBar(c);
   end;
 end;
 
-function TyToolWindowDesignReturnToBar(AWindow: TTyToolWindow; ABar: TTyToolWindowBar): Boolean;
+function TyToolWindowDesignReturnToBar(AWindow: TTyCustomToolWindow; ABar: TTyCustomToolWindowBar): Boolean;
 var
   targets: TTyToolWindowBarArray;
   i: Integer;

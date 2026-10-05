@@ -194,6 +194,7 @@ function TyPopoverArrowPoints(const ALayout: TTyPopoverLayout; ASide: TTyPopover
 
 type
   TTyPopover = class;
+  TTyCustomPopover = class;
 
   { The popover's window. A plain borderless TForm (TTyBalloonHint's shell) rather than a
     TTyPopupSurface, because a popover needs three things that surface does not offer: an
@@ -204,7 +205,7 @@ type
     is fully renderable with no window at all. }
   TTyPopoverWindow = class(TForm)
   private
-    FOwnerPop: TTyPopover;
+    FOwnerPop: TTyCustomPopover;
     FSide: TTyPopoverSide;
     FTipLocal: Integer;
     { Cut the window to the body's rounded silhouette OR-ed with the arrow triangle, so the
@@ -220,7 +221,7 @@ type
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); reintroduce;
   end;
 
-  TTyPopover = class(TTyComponent)
+  TTyCustomPopover = class(TTyComponent)
   private
     FTarget: TControl;
     FContent: TWinControl;
@@ -230,7 +231,7 @@ type
     FCloseOnClickOutside: Boolean;
     FCloseOnEscape: Boolean;
     FStyleClass: string;
-    FController: TTyStyleController;
+    FController: TTyCustomStyleController;
     FOnShow: TNotifyEvent;
     FOnHide: TNotifyEvent;
     FWin: TTyPopoverWindow;
@@ -249,7 +250,7 @@ type
     procedure SetTitle(const AValue: TCaption);
     procedure SetShowArrow(AValue: Boolean);
     procedure SetStyleClass(const AValue: string);
-    procedure SetController(AValue: TTyStyleController);
+    procedure SetController(AValue: TTyCustomStyleController);
     { The theme metrics in LOGICAL px (each call site scales). Named helpers rather than
       inline Metric() calls so a typo cannot strand one call site on the default. }
     function ArrowSizeLogical: Integer;
@@ -289,7 +290,7 @@ type
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     { The controller whose theme this popover resolves against — never FController directly:
       a popover themed by the global default has Controller = nil. }
-    function ActiveController: TTyStyleController;
+    function ActiveController: TTyCustomStyleController;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -326,7 +327,6 @@ type
       ATipLocal, APPI: Integer): TTyPopoverLayout;
     { Whether the popup is currently up. }
     property Showing: Boolean read FShowing;
-  published
     { The control the popover belongs to and points at. Show uses it; ShowFor/ShowAt override
       it for one call without disturbing it. }
     property Target: TControl read FTarget write SetTarget;
@@ -357,7 +357,7 @@ type
     { The variant entry: a `TyPopover.danger` rule in the theme. Resolved for BOTH typeKeys,
       so TyPopoverTitle.danger tints a danger popover's headline. }
     property StyleClass: string read FStyleClass write SetStyleClass;
-    property Controller: TTyStyleController read FController write SetController;
+    property Controller: TTyCustomStyleController read FController write SetController;
     { Fired after the popup is on screen (and after the content has been adopted into it, so a
       handler may focus a control inside). }
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
@@ -365,6 +365,23 @@ type
       when the component is destroyed — a component going away is not a popover the user
       dismissed. }
     property OnHide: TNotifyEvent read FOnHide write FOnHide;
+  end;
+
+  { TTyPopover publishes TTyCustomPopover's properties; everything lives in TTyCustomPopover. }
+  TTyPopover = class(TTyCustomPopover)
+  published
+    property Version;
+    property Target;
+    property Content;
+    property Placement;
+    property Title;
+    property ShowArrow;
+    property CloseOnClickOutside;
+    property CloseOnEscape;
+    property StyleClass;
+    property Controller;
+    property OnShow;
+    property OnHide;
   end;
 
 implementation
@@ -796,9 +813,9 @@ begin
 end;
 
 // ---------------------------------------------------------------------------
-// TTyPopover — construction / theming
+// TTyCustomPopover — construction / theming
 // ---------------------------------------------------------------------------
-constructor TTyPopover.Create(AOwner: TComponent);
+constructor TTyCustomPopover.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FPlacement := ppBottom;
@@ -807,7 +824,7 @@ begin
   FCloseOnEscape := True;
 end;
 
-destructor TTyPopover.Destroy;
+destructor TTyCustomPopover.Destroy;
 begin
   // Dismiss WITHOUT firing OnHide: a component being destroyed is not a popover the user
   // dismissed, and the handler's form may already be half torn down. The content still has
@@ -818,17 +835,17 @@ begin
   inherited Destroy;
 end;
 
-class function TTyPopover.StyleTypeKey: string;
+class function TTyCustomPopover.StyleTypeKey: string;
 begin
   Result := 'TyPopover';
 end;
 
-class function TTyPopover.TitleStyleTypeKey: string;
+class function TTyCustomPopover.TitleStyleTypeKey: string;
 begin
   Result := 'TyPopoverTitle';
 end;
 
-function TTyPopover.ActiveController: TTyStyleController;
+function TTyCustomPopover.ActiveController: TTyCustomStyleController;
 begin
   if FController <> nil then
     Result := FController
@@ -836,22 +853,22 @@ begin
     Result := TyDefaultController;
 end;
 
-function TTyPopover.PopoverStyle: TTyStyleSet;
+function TTyCustomPopover.PopoverStyle: TTyStyleSet;
 begin
   Result := ActiveController.Model.ResolveStyle(StyleTypeKey, FStyleClass, []);
 end;
 
-function TTyPopover.TitleStyle: TTyStyleSet;
+function TTyCustomPopover.TitleStyle: TTyStyleSet;
 begin
   Result := ActiveController.Model.ResolveStyle(TitleStyleTypeKey, FStyleClass, []);
 end;
 
-function TTyPopover.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
+function TTyCustomPopover.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
 begin
   Result := TyResolveFontSize(AStyle, True, 0, ActiveController);
 end;
 
-procedure TTyPopover.TitleFont(out AName: string; out ASize, AWeight: Integer);
+procedure TTyCustomPopover.TitleFont(out AName: string; out ASize, AWeight: Integer);
 var
   bodyS, tS: TTyStyleSet;
 begin
@@ -865,7 +882,7 @@ begin
   if tpFontWeight in tS.Present then AWeight := tS.FontWeight else AWeight := bodyS.FontWeight;
 end;
 
-function TTyPopover.TitleInk: TTyColor;
+function TTyCustomPopover.TitleInk: TTyColor;
 var
   tS: TTyStyleSet;
 begin
@@ -877,19 +894,19 @@ end;
 // ---------------------------------------------------------------------------
 // Theme metrics
 // ---------------------------------------------------------------------------
-function TTyPopover.ArrowSizeLogical: Integer;
+function TTyCustomPopover.ArrowSizeLogical: Integer;
 begin
   Result := ActiveController.Metric(TyPopoverArrowSizeVar, TyPopoverArrowSize);
   if Result < 0 then Result := 0;
 end;
 
-function TTyPopover.OffsetLogical: Integer;
+function TTyCustomPopover.OffsetLogical: Integer;
 begin
   Result := ActiveController.Metric(TyPopoverOffsetVar, TyPopoverOffset);
   if Result < 0 then Result := 0;
 end;
 
-function TTyPopover.TitleGapLogical: Integer;
+function TTyCustomPopover.TitleGapLogical: Integer;
 begin
   Result := ActiveController.Metric(TyPopoverTitleGapVar, TyPopoverTitleGap);
   if Result < 0 then Result := 0;
@@ -898,7 +915,7 @@ end;
 // ---------------------------------------------------------------------------
 // Measurement + geometry
 // ---------------------------------------------------------------------------
-function TTyPopover.TitleHeightAt(APPI: Integer): Integer;
+function TTyCustomPopover.TitleHeightAt(APPI: Integer): Integer;
 { Measured with a CANVAS-LESS painter — the TTyBadge / TTyNotification idiom: BeginPaint(nil,
   ...) builds only the painter's internal bitmap and EndPaint frees it WITHOUT blitting, so
   this is safe outside a paint cycle and leaks nothing. It has to be the painter and not a
@@ -923,7 +940,7 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-function TTyPopover.MeasureFrameAtPPI(APPI: Integer): TSize;
+function TTyCustomPopover.MeasureFrameAtPPI(APPI: Integer): TSize;
 var
   S: TTyStyleSet;
   cw, ch: Integer;
@@ -949,7 +966,7 @@ begin
     MulDiv(ArrowSizeLogical, APPI, 96));
 end;
 
-function TTyPopover.GeometryIn(const AAnchorScreen, AWorkArea: TRect;
+function TTyCustomPopover.GeometryIn(const AAnchorScreen, AWorkArea: TRect;
   APPI: Integer): TTyPopoverGeometry;
 var
   sz: TSize;
@@ -960,7 +977,7 @@ begin
     MulDiv(OffsetLogical, APPI, 96), MulDiv(ArrowSizeLogical, APPI, 96));
 end;
 
-function TTyPopover.LayoutIn(AFrameW, AFrameH: Integer; ASide: TTyPopoverSide;
+function TTyCustomPopover.LayoutIn(AFrameW, AFrameH: Integer; ASide: TTyPopoverSide;
   ATipLocal, APPI: Integer): TTyPopoverLayout;
 var
   S: TTyStyleSet;
@@ -979,7 +996,7 @@ end;
 // ---------------------------------------------------------------------------
 // Content adoption
 // ---------------------------------------------------------------------------
-procedure TTyPopover.AdoptContent;
+procedure TTyCustomPopover.AdoptContent;
 begin
   if (FContent = nil) or FAdopted or (FWin = nil) then Exit;
   // Remember its whole life before we borrow it — TTyPopupSurface's contract.
@@ -993,7 +1010,7 @@ begin
   FContent.Visible := True;
 end;
 
-procedure TTyPopover.ReleaseContent;
+procedure TTyCustomPopover.ReleaseContent;
 var
   c: TWinControl;
 begin
@@ -1011,7 +1028,7 @@ end;
 // ---------------------------------------------------------------------------
 // Lifetime
 // ---------------------------------------------------------------------------
-procedure TTyPopover.EnsureWindow;
+procedure TTyCustomPopover.EnsureWindow;
 var
   S: TTyStyleSet;
 begin
@@ -1031,7 +1048,7 @@ begin
     FWin.Color := TyColorToLCL(S.Background.Color);
 end;
 
-function TTyPopover.BeginShowing(const AAnchorScreen, AWorkArea: TRect;
+function TTyCustomPopover.BeginShowing(const AAnchorScreen, AWorkArea: TRect;
   APPI: Integer): TTyPopoverGeometry;
 var
   Lay: TTyPopoverLayout;
@@ -1059,13 +1076,13 @@ begin
   FShowing := True;
 end;
 
-procedure TTyPopover.Show;
+procedure TTyCustomPopover.Show;
 begin
   if FTarget = nil then Exit;   // nothing to point at: a popover is always ABOUT something
   ShowFor(FTarget);
 end;
 
-procedure TTyPopover.ShowFor(AControl: TControl);
+procedure TTyCustomPopover.ShowFor(AControl: TControl);
 var
   tl: TPoint;
 begin
@@ -1074,7 +1091,7 @@ begin
   ShowAt(Rect(tl.X, tl.Y, tl.X + AControl.Width, tl.Y + AControl.Height));
 end;
 
-procedure TTyPopover.ShowAt(const AAnchorScreen: TRect);
+procedure TTyCustomPopover.ShowAt(const AAnchorScreen: TRect);
 var
   geo: TTyPopoverGeometry;
   ppi: Integer;
@@ -1093,7 +1110,7 @@ begin
   if Assigned(FOnShow) then FOnShow(Self);
 end;
 
-procedure TTyPopover.Hide;
+procedure TTyCustomPopover.Hide;
 begin
   if not FShowing then
   begin
@@ -1111,7 +1128,7 @@ end;
 // ---------------------------------------------------------------------------
 // Painting
 // ---------------------------------------------------------------------------
-procedure TTyPopover.RenderTo(ACanvas: TCanvas; const ARect: TRect; ASide: TTyPopoverSide;
+procedure TTyCustomPopover.RenderTo(ACanvas: TCanvas; const ARect: TRect; ASide: TTyPopoverSide;
   ATipLocal, APPI: Integer);
 var
   P: TTyPainter;
@@ -1218,7 +1235,7 @@ end;
 // ---------------------------------------------------------------------------
 // Property setters
 // ---------------------------------------------------------------------------
-procedure TTyPopover.SetTarget(AValue: TControl);
+procedure TTyCustomPopover.SetTarget(AValue: TControl);
 begin
   if FTarget = AValue then Exit;
   if FTarget <> nil then FTarget.RemoveFreeNotification(Self);
@@ -1226,7 +1243,7 @@ begin
   if FTarget <> nil then FTarget.FreeNotification(Self);
 end;
 
-procedure TTyPopover.SetContent(AValue: TWinControl);
+procedure TTyCustomPopover.SetContent(AValue: TWinControl);
 begin
   if FContent = AValue then Exit;
   // Swapping the content out from under a live popup would strand the old one in our window:
@@ -1237,7 +1254,7 @@ begin
   if FContent <> nil then FContent.FreeNotification(Self);
 end;
 
-procedure TTyPopover.SetPlacement(AValue: TTyPopoverPlacement);
+procedure TTyCustomPopover.SetPlacement(AValue: TTyPopoverPlacement);
 begin
   if FPlacement = AValue then Exit;
   FPlacement := AValue;
@@ -1245,7 +1262,7 @@ begin
   // pointer mid-gesture is how a user loses the button they were reaching for.
 end;
 
-procedure TTyPopover.SetTitle(const AValue: TCaption);
+procedure TTyCustomPopover.SetTitle(const AValue: TCaption);
 begin
   if FTitle = AValue then Exit;
   FTitle := AValue;
@@ -1255,21 +1272,21 @@ begin
   if (FWin <> nil) and FWin.Visible then FWin.Invalidate;
 end;
 
-procedure TTyPopover.SetShowArrow(AValue: Boolean);
+procedure TTyCustomPopover.SetShowArrow(AValue: Boolean);
 begin
   if FShowArrow = AValue then Exit;
   FShowArrow := AValue;
   if (FWin <> nil) and FWin.Visible then FWin.Invalidate;
 end;
 
-procedure TTyPopover.SetStyleClass(const AValue: string);
+procedure TTyCustomPopover.SetStyleClass(const AValue: string);
 begin
   if FStyleClass = AValue then Exit;
   FStyleClass := AValue;
   if (FWin <> nil) and FWin.Visible then FWin.Invalidate;
 end;
 
-procedure TTyPopover.SetController(AValue: TTyStyleController);
+procedure TTyCustomPopover.SetController(AValue: TTyCustomStyleController);
 begin
   if FController = AValue then Exit;
   if FController <> nil then FController.RemoveFreeNotification(Self);
@@ -1278,7 +1295,7 @@ begin
   if (FWin <> nil) and FWin.Visible then FWin.Invalidate;
 end;
 
-procedure TTyPopover.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomPopover.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if Operation <> opRemove then Exit;

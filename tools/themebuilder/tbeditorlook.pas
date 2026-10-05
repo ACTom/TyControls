@@ -36,7 +36,7 @@ type
     FontSize: Integer;       { points }
   end;
 
-function TbEditorColors(AController: TTyStyleController): TTbEditorColors;
+function TbEditorColors(AController: TTyCustomStyleController): TTbEditorColors;
 procedure TbApplyEditorColors(AEdit: TSynEdit; AHighlighter: TSynCssSyn;
   const AColors: TTbEditorColors);
 
@@ -53,7 +53,7 @@ begin
 end;
 
 { a token's colour; False when the theme does not define it (or it is not a colour) }
-function TokenColor(AController: TTyStyleController; const AName: string;
+function TokenColor(AController: TTyCustomStyleController; const AName: string;
   out AColor: TTyColor): Boolean;
 var
   s: TTyStyleSet;
@@ -83,7 +83,7 @@ begin
   Result := TyColorToLCL(AColor);
 end;
 
-function TbEditorColors(AController: TTyStyleController): TTbEditorColors;
+function TbEditorColors(AController: TTyCustomStyleController): TTbEditorColors;
 var
   memo: TTyStyleSet;
   bg, fg, c, gutter: TTyColor;

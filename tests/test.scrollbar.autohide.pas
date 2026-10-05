@@ -1408,10 +1408,14 @@ procedure TTyScrollBarAutoHideTests.ValueListEditorInheritsTheListBoxProperty;
 var
   vle: TTyValueListEditor;
 begin
-  { TTyValueListEditor 是 **TTyListBox** 的后代——不是网格的,尽管它长得像属性
+  { TTyValueListEditor 是 **TTyCustomListBox** 的后代——不是网格的,尽管它长得像属性
     表格、名字也像。所以它白拿这个属性和那两条惰性内嵌条,不用单独接线。
-    这条测试就是「白拿」这句话的凭据,不然它只是一句假设。 }
-  AssertTrue('TTyValueListEditor 必须是 TTyListBox 的后代',
+    这条测试就是「白拿」这句话的凭据,不然它只是一句假设。
+    4.0 起它挂在 Custom 链上(照 LCL):白拿的仍是 TTyCustomListBox 里的实现,
+    但它不再是 TTyListBox 的后代——第二句钉住这一层级。 }
+  AssertTrue('TTyValueListEditor 必须是 TTyCustomListBox 的后代',
+    TTyValueListEditor.InheritsFrom(TTyCustomListBox));
+  AssertFalse('4.0 起 TTyValueListEditor 不再是 TTyListBox 的后代(LCL 式继承链)',
     TTyValueListEditor.InheritsFrom(TTyListBox));
   vle := TTyValueListEditor.Create(FForm);
   vle.Parent := FForm;

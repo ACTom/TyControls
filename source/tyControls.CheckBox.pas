@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages, StdCtrls,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Accel;
 type
-  TTyCheckBox = class(TTyCustomControl)
+  TTyCustomCheckBox = class(TTyCustomControl)
   private
     FState: TCheckBoxState;
     FAllowGrayed: Boolean;
@@ -56,15 +56,12 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure Click; override;
-  published
-    { 默认关(设计好的复选框保持 .lfm 给的宽度)。打开后控件会横向撑开,刚好裹住
-      指示框 + 间距 + 标题 + 主题 padding,标题变长时是控件变长而不是文字被截。
-      高度不参与(见 CalculatePreferredSize):行高是排版方的事,这样放进任何会钉死
-      子控件高度的容器里都不会打架。 }
-    property AutoSize;
+    { 构造函数把它打开(复选框天然是 tab stop);这里把**声明的默认值**也改成 True,
+      是为了让"关掉"这条路走得通 —— 继承来的声明默认值是 False,设计器里设成 False
+      就等于默认值,压根不会写进 .lfm,运行时又被构造函数的 True 盖回去。 }
+    property TabStop default True;
     property State: TCheckBoxState read FState write SetState default cbUnchecked;
     property AllowGrayed: Boolean read FAllowGrayed write FAllowGrayed default False;
-    property Checked: Boolean read GetChecked write SetChecked default False;
     { 指示框在标题的哪一侧。名字、类型和默认值都照 LCL 抄
       (TCustomCheckBox.Alignment: TLeftRight default taRightJustify,stdctrls.pp:1358)。
 
@@ -77,22 +74,79 @@ type
       宽度两种摆法完全一样(padding + 指示框 + gap + 标题),所以 CalculatePreferredSize
       不用分支。 }
     property Alignment: TLeftRight read FAlignment write SetAlignment default taRightJustify;
-    property Caption;
-    property Enabled;
-    property Font;
-    { 构造函数把它打开(复选框天然是 tab stop);这里把**声明的默认值**也改成 True,
-      是为了让"关掉"这条路走得通 —— 继承来的声明默认值是 False,设计器里设成 False
-      就等于默认值,压根不会写进 .lfm,运行时又被构造函数的 True 盖回去。 }
-    property TabStop default True;
-    property Align;
-    property Anchors;
-    property StyleClass;
-    property Controller;
-    property OnClick;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+  protected
+    property Checked: Boolean read GetChecked write SetChecked default False;
   end;
 
-  TTyRadioButton = class(TTyCustomControl)
+  { TTyCheckBox publishes TTyCustomCheckBox's properties; everything lives in TTyCustomCheckBox. }
+  TTyCheckBox = class(TTyCustomCheckBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    { 默认关(设计好的复选框保持 .lfm 给的宽度)。打开后控件会横向撑开,刚好裹住
+      指示框 + 间距 + 标题 + 主题 padding,标题变长时是控件变长而不是文字被截。
+      高度不参与(见 CalculatePreferredSize):行高是排版方的事,这样放进任何会钉死
+      子控件高度的容器里都不会打架。 }
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property State;
+    property AllowGrayed;
+    property Checked;
+    property Alignment;
+    property Caption;
+    property Align;
+    property Anchors;
+    property OnChange;
+  end;
+
+  TTyCustomRadioButton = class(TTyCustomControl)
   private
     FChecked: Boolean;
     FGroupIndex: Integer;
@@ -126,32 +180,85 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure Click; override;
-  published
-    { 默认关。打开后控件横向撑开到刚好裹住圆点 + 间距 + 标题 + 主题 padding;
-      高度不参与,交给排版方。见 TTyCheckBox.AutoSize。 }
-    property AutoSize;
-    property Checked: Boolean read FChecked write SetChecked default False;
+    // 同 TTyCheckBox:声明的默认值必须和构造函数一致,否则 .lfm 里关不掉。
+    property TabStop default True;
     property GroupIndex: Integer read FGroupIndex write FGroupIndex default 0;
     { 圆点在标题的哪一侧 —— 见 TTyCheckBox.Alignment,同名同型同默认值
       (LCL 在 TRadioButton 上转发的是同一个 TCustomCheckBox.Alignment)。 }
     property Alignment: TLeftRight read FAlignment write SetAlignment default taRightJustify;
-    property Caption;
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+  protected
+    property Checked: Boolean read FChecked write SetChecked default False;
+  end;
+
+  { TTyRadioButton publishes TTyCustomRadioButton's properties; everything lives in TTyCustomRadioButton. }
+  TTyRadioButton = class(TTyCustomRadioButton)
+  published
+    property Version;
     property Enabled;
+    property Visible;
     property Font;
-    // 同 TTyCheckBox:声明的默认值必须和构造函数一致,否则 .lfm 里关不掉。
-    property TabStop default True;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    { 默认关。打开后控件横向撑开到刚好裹住圆点 + 间距 + 标题 + 主题 padding;
+      高度不参与,交给排版方。见 TTyCheckBox.AutoSize。 }
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Checked;
+    property GroupIndex;
+    property Alignment;
+    property Caption;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
-    property OnClick;
-    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    property OnChange;
   end;
 implementation
 
-{ TTyCheckBox }
+{ TTyCustomCheckBox }
 
-constructor TTyCheckBox.Create(AOwner: TComponent);
+constructor TTyCustomCheckBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TyAccelRegister(Self);
@@ -161,20 +268,20 @@ begin
   Height := TyDensityHeight(ActiveController, 22);
 end;
 
-procedure TTyCheckBox.SetAlignment(const AValue: TLeftRight);
+procedure TTyCustomCheckBox.SetAlignment(const AValue: TLeftRight);
 begin
   if FAlignment = AValue then Exit;
   FAlignment := AValue;
   Invalidate;
 end;
 
-destructor TTyCheckBox.Destroy;
+destructor TTyCustomCheckBox.Destroy;
 begin
   TyAccelUnregister(Self);
   inherited Destroy;
 end;
 
-function TTyCheckBox.DialogChar(var Message: TLMKey): Boolean;
+function TTyCustomCheckBox.DialogChar(var Message: TLMKey): Boolean;
 begin
   if Enabled and TyIsAccelKey(Message, Caption) then
   begin
@@ -185,12 +292,12 @@ begin
   Result := inherited DialogChar(Message);
 end;
 
-function TTyCheckBox.GetStyleTypeKey: string;
+function TTyCustomCheckBox.GetStyleTypeKey: string;
 begin
   Result := 'TyCheckBox';
 end;
 
-function TTyCheckBox.CurrentStates: TTyStateSet;
+function TTyCustomCheckBox.CurrentStates: TTyStateSet;
 begin
   // A checked checkbox enters tysActive so the theme's :active rule (accent box
   // fill + white glyph) actually resolves. The :active 'color' would whiten the
@@ -201,7 +308,7 @@ begin
     Include(Result, tysActive);
 end;
 
-procedure TTyCheckBox.SetState(const AValue: TCheckBoxState);
+procedure TTyCustomCheckBox.SetState(const AValue: TCheckBoxState);
 begin
   if FState = AValue then Exit;
   FState := AValue;
@@ -209,17 +316,17 @@ begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTyCheckBox.SetChecked(const AValue: Boolean);
+procedure TTyCustomCheckBox.SetChecked(const AValue: Boolean);
 begin
   if AValue then SetState(cbChecked) else SetState(cbUnchecked);
 end;
 
-function TTyCheckBox.GetChecked: Boolean;
+function TTyCustomCheckBox.GetChecked: Boolean;
 begin
   Result := FState = cbChecked;
 end;
 
-procedure TTyCheckBox.Click;
+procedure TTyCustomCheckBox.Click;
 begin
   if not Enabled then Exit;
   if FAllowGrayed then
@@ -233,7 +340,7 @@ begin
   inherited Click;
 end;
 
-procedure TTyCheckBox.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomCheckBox.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
@@ -244,7 +351,7 @@ begin
   end;
 end;
 
-procedure TTyCheckBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomCheckBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, FrameS, CaptionS: TTyStyleSet;
@@ -340,17 +447,17 @@ begin
   end;
 end;
 
-procedure TTyCheckBox.Paint;
+procedure TTyCustomCheckBox.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-procedure TTyCheckBox.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
+procedure TTyCustomCheckBox.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
 var
   S: TTyStyleSet;
   Meas: TBitmap;
   disp: string;
-  mp: Integer;
+  mp, rw: Integer;
 begin
   // RenderTo 画标题用的是 S(盒子那份样式)的字体,CaptionS 只提供墨色 —— 所以这里也
   // 必须用 S 量,否则 :active 一旦带了自己的字体,量出来的和画出来的就对不上。
@@ -362,6 +469,11 @@ begin
     Meas.SetSize(1, 1);
     TyConfigureMeasureFont(Meas.Canvas, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
     AWidth := Meas.Canvas.TextWidth(disp);
+    { 再问一次渲染器,取较大的那个。画布和渲染器是两套光栅化,取整不同;RenderTo 画标题时按
+      渲染器量的宽度决定要不要截断,渲染器只要多出一两个像素,AutoSize 刚量好的标题就被画成
+      "Try it in the previ..."。TTyButton.MeasureCaption 遇到过同一个问题,做法也一样。 }
+    rw := TyMeasureRenderedTextWidth(disp, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
+    if rw > AWidth then AWidth := rw;
     // 用固定的参考字形取行高:标题为空时也仍然是一行的高度。
     AHeight := Meas.Canvas.TextHeight('Ag');
     if AWidth < 0 then AWidth := 0;
@@ -371,7 +483,7 @@ begin
   end;
 end;
 
-procedure TTyCheckBox.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+procedure TTyCustomCheckBox.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
   WithThemeSpace: Boolean);
 var
   S: TTyStyleSet;
@@ -398,7 +510,7 @@ begin
   PreferredHeight := 0;
 end;
 
-procedure TTyCheckBox.DoUpdateSizeConstraints;
+procedure TTyCustomCheckBox.DoUpdateSizeConstraints;
 var
   S: TTyStyleSet;
   ppi, tw, th, padH, boxSize, prefW, prefH, minH: Integer;
@@ -426,7 +538,7 @@ begin
   Constraints.MinHeight := minH;
 end;
 
-procedure TTyCheckBox.TextChanged;
+procedure TTyCustomCheckBox.TextChanged;
 begin
   inherited TextChanged;
   // 标题换了,它需要的地板也就换了(空标题也仍然是一行的高度)。
@@ -440,7 +552,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyCheckBox.Invalidate;
+procedure TTyCustomCheckBox.Invalidate;
 begin
   inherited Invalidate;
   { 换主题时 TTyStyleController 给每个注册控件广播一个裸 Invalidate,而新主题的字体、
@@ -466,9 +578,9 @@ begin
   end;
 end;
 
-{ TTyRadioButton }
+{ TTyCustomRadioButton }
 
-constructor TTyRadioButton.Create(AOwner: TComponent);
+constructor TTyCustomRadioButton.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TyAccelRegister(Self);
@@ -478,20 +590,20 @@ begin
   Height := TyDensityHeight(ActiveController, 22);
 end;
 
-procedure TTyRadioButton.SetAlignment(const AValue: TLeftRight);
+procedure TTyCustomRadioButton.SetAlignment(const AValue: TLeftRight);
 begin
   if FAlignment = AValue then Exit;
   FAlignment := AValue;
   Invalidate;
 end;
 
-destructor TTyRadioButton.Destroy;
+destructor TTyCustomRadioButton.Destroy;
 begin
   TyAccelUnregister(Self);
   inherited Destroy;
 end;
 
-function TTyRadioButton.DialogChar(var Message: TLMKey): Boolean;
+function TTyCustomRadioButton.DialogChar(var Message: TLMKey): Boolean;
 begin
   if Enabled and TyIsAccelKey(Message, Caption) then
   begin
@@ -502,12 +614,12 @@ begin
   Result := inherited DialogChar(Message);
 end;
 
-function TTyRadioButton.GetStyleTypeKey: string;
+function TTyCustomRadioButton.GetStyleTypeKey: string;
 begin
   Result := 'TyRadioButton';
 end;
 
-function TTyRadioButton.CurrentStates: TTyStateSet;
+function TTyCustomRadioButton.CurrentStates: TTyStateSet;
 begin
   // See TTyCheckBox.CurrentStates: checked -> tysActive so :active accent fill +
   // white dot resolve; the caption text is resolved active-free in RenderTo so
@@ -517,7 +629,7 @@ begin
     Include(Result, tysActive);
 end;
 
-procedure TTyRadioButton.SetChecked(const AValue: Boolean);
+procedure TTyCustomRadioButton.SetChecked(const AValue: Boolean);
 begin
   if FChecked = AValue then Exit;
   FChecked := AValue;
@@ -528,7 +640,7 @@ begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTyRadioButton.UncheckSiblings;
+procedure TTyCustomRadioButton.UncheckSiblings;
 var
   I: Integer;
   Sib: TControl;
@@ -537,20 +649,21 @@ begin
   for I := 0 to Parent.ControlCount - 1 do
   begin
     Sib := Parent.Controls[I];
-    if (Sib <> Self) and (Sib is TTyRadioButton)
-       and (TTyRadioButton(Sib).GroupIndex = FGroupIndex) then
-      TTyRadioButton(Sib).SetChecked(False);
+    { Any radio button shares the group, a third-party TTyCustomRadioButton descendant too. }
+    if (Sib <> Self) and (Sib is TTyCustomRadioButton)
+       and (TTyCustomRadioButton(Sib).GroupIndex = FGroupIndex) then
+      TTyCustomRadioButton(Sib).SetChecked(False);
   end;
 end;
 
-procedure TTyRadioButton.Click;
+procedure TTyCustomRadioButton.Click;
 begin
   if not Enabled then Exit;
   SetChecked(True);
   inherited Click;
 end;
 
-procedure TTyRadioButton.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomRadioButton.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
@@ -561,7 +674,7 @@ begin
   end;
 end;
 
-procedure TTyRadioButton.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomRadioButton.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, FrameS, CaptionS: TTyStyleSet;
@@ -648,17 +761,17 @@ begin
   end;
 end;
 
-procedure TTyRadioButton.Paint;
+procedure TTyCustomRadioButton.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-procedure TTyRadioButton.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
+procedure TTyCustomRadioButton.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
 var
   S: TTyStyleSet;
   Meas: TBitmap;
   disp: string;
-  mp: Integer;
+  mp, rw: Integer;
 begin
   // 见 TTyCheckBox.MeasureCaption:字体取自 S(圆点那份样式),CaptionS 只给墨色。
   S := CurrentStyle;
@@ -668,6 +781,9 @@ begin
     Meas.SetSize(1, 1);
     TyConfigureMeasureFont(Meas.Canvas, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
     AWidth := Meas.Canvas.TextWidth(disp);
+    // 渲染器量出来更宽就按它算,理由见 TTyCheckBox.MeasureCaption。
+    rw := TyMeasureRenderedTextWidth(disp, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
+    if rw > AWidth then AWidth := rw;
     AHeight := Meas.Canvas.TextHeight('Ag');
     if AWidth < 0 then AWidth := 0;
     if AHeight < 1 then AHeight := 1;
@@ -676,7 +792,7 @@ begin
   end;
 end;
 
-procedure TTyRadioButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+procedure TTyCustomRadioButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
   WithThemeSpace: Boolean);
 var
   S: TTyStyleSet;
@@ -698,7 +814,7 @@ begin
   PreferredHeight := 0;
 end;
 
-procedure TTyRadioButton.DoUpdateSizeConstraints;
+procedure TTyCustomRadioButton.DoUpdateSizeConstraints;
 { 见 TTyCheckBox.DoUpdateSizeConstraints —— 同一套推导,只是圆点读的是 --radio-size。 }
 var
   S: TTyStyleSet;
@@ -720,7 +836,7 @@ begin
   Constraints.MinHeight := minH;
 end;
 
-procedure TTyRadioButton.TextChanged;
+procedure TTyCustomRadioButton.TextChanged;
 begin
   inherited TextChanged;
   UpdateSizeConstraints;   // 标题换了,地板也换了
@@ -732,7 +848,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyRadioButton.Invalidate;
+procedure TTyCustomRadioButton.Invalidate;
 begin
   inherited Invalidate;
   { 见 TTyCheckBox.Invalidate:换主题是一个裸 Invalidate,新主题的字体/padding/指示器

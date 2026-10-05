@@ -10,7 +10,7 @@ type
     controls. Its Caption is the TAB label (drawn by the host header), NOT painted
     on the page body. The design-time ControlStyle flags mirror Lazarus TTabSheet so
     the IDE treats it as a fixed, droppable, hide-on-inactive design surface. }
-  TTyTabSheet = class(TTyCustomControl)
+  TTyCustomTabSheet = class(TTyCustomControl)
   protected
     { protected, not private: a test drives the invalidation rule through it. }
     FPaintCache: TTyPaintCache;
@@ -57,23 +57,15 @@ type
       reading Parent and hard-casting, which compiles for any parent at all and only fails at
       run time.
 
-      Typed TTyCustomTabStrip and not TTyPageControl on purpose, and it is the unit graph
-      that decides: tyControls.PageControl's INTERFACE needs TTyTabSheet (its page array,
+      Typed TTyCustomTabStrip and not TTyCustomPageControl on purpose, and it is the unit graph
+      that decides: tyControls.PageControl's INTERFACE needs the page classes (its page array,
       AddPage's result), so the concrete pager type cannot appear in this unit's interface
       without a circular interface-uses. The strip base is the closest type that says
       "a tab host" at compile time; page-level members still need the cast this property
       cannot give. }
     property PageControl: TTyCustomTabStrip read GetPageControl write SetPageControl;
-  published
-    { Caption is TControl's, not a second string of our own.
-
-      It used to be a field-backed property shadowing TControl.Caption, so a control had
-      TWO captions: `P.Caption := 'x'` set ours and left TControl.Text empty, while
-      anything reading Text -- an action link, an accessibility query, TControl's own
-      csSetCaption wiring, generic code that walks TControl -- saw ''. On LCL these are one
-      string: Caption IS Text, routed through RealSetText, and a repaint is arranged by
-      overriding TextChanged. That is what this does now. }
-    property Caption;
+    property Visible stored False;
+    property TabOrder stored False;
     { The page's position in the pager, ASSIGNABLE: writing it MOVES the page (and its tab).
       Before this, ordering could only be changed by the user dragging a tab -- the reorder
       primitive was protected and had no entry point -- so data-driven ordering (most
@@ -111,7 +103,10 @@ type
       to. Same names, same signature and same firing edge as TCustomPage's. }
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnHide: TNotifyEvent read FOnHide write FOnHide;
-    { All six redeclared `stored False`, as TCustomPage does (comctrls.pp:270-275). The pager
+  published
+    { All six redeclared `stored False`, as TCustomPage does (comctrls.pp:270-275): Visible and
+      TabOrder in the public section above, these four here because TControl publishes them
+      and a redeclaration cannot unpublish -- so a descendant gets the clause too. The pager
       owns every one of them: the constructor forces Align := alClient and Visible := False,
       and the host rewrites Visible on every page switch. Streamed, they made each page write
       a Visible = False plus a set of bounds that the align engine overwrites on load -- .lfm
@@ -122,18 +117,84 @@ type
     property Top stored False;
     property Width stored False;
     property Height stored False;
-    property TabOrder stored False;
-    property Visible stored False;
+  end;
+
+  { TTyTabSheet publishes TTyCustomTabSheet's properties; everything lives in TTyCustomTabSheet. }
+  TTyTabSheet = class(TTyCustomTabSheet)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
     property StyleClass;
+    property StyleOverride;
     property Controller;
+    { Caption is TControl's, not a second string of our own.
+
+      It used to be a field-backed property shadowing TControl.Caption, so a control had
+      TWO captions: `P.Caption := 'x'` set ours and left TControl.Text empty, while
+      anything reading Text -- an action link, an accessibility query, TControl's own
+      csSetCaption wiring, generic code that walks TControl -- saw ''. On LCL these are one
+      string: Caption IS Text, routed through RealSetText, and a repaint is arranged by
+      overriding TextChanged. That is what this does now. }
+    property Caption;
+    property PageIndex;
+    property ImageName;
+    property ImageIndex;
+    property TabVisible;
+    property OnShow;
+    property OnHide;
   end;
 
 implementation
 
 uses
-  tyControls.PageControl;   // for TTyPageControl in SetParent (one-way: impl only)
+  tyControls.PageControl;   // for TTyCustomPageControl in SetParent (one-way: impl only)
 
-constructor TTyTabSheet.Create(AOwner: TComponent);
+constructor TTyCustomTabSheet.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   ControlStyle := ControlStyle + [csAcceptsControls, csDesignFixedBounds,
@@ -144,7 +205,7 @@ begin
   Visible := False;
 end;
 
-procedure TTyTabSheet.SetTabVisible(AValue: Boolean);
+procedure TTyCustomTabSheet.SetTabVisible(AValue: Boolean);
 begin
   if FTabVisible = AValue then Exit;
   FTabVisible := AValue;
@@ -156,14 +217,14 @@ end;
 
 { The icon is measured INTO the tab header's width, so changing it re-lays the strip --
   the same reason TextChanged invalidates the host rather than the page. }
-function TTyTabSheet.OwnerImages: TCustomImageList;
+function TTyCustomTabSheet.OwnerImages: TCustomImageList;
 var pager: TTyCustomTabStrip;
 begin
   pager := GetPageControl;
   if pager <> nil then Result := pager.Images else Result := nil;
 end;
 
-function TTyTabSheet.GetImageIndex: Integer;
+function TTyCustomTabSheet.GetImageIndex: Integer;
 var n: Integer;
 begin
   // DERIVED from the name whenever it resolves against the pager's list; otherwise the last
@@ -176,7 +237,7 @@ begin
   Result := FImageIndex;
 end;
 
-procedure TTyTabSheet.SetImageIndex(AValue: Integer);
+procedure TTyCustomTabSheet.SetImageIndex(AValue: Integer);
 begin
   if AValue < -1 then AValue := -1;   // one "no icon" value, not a range of them
   FImageIndex := AValue;
@@ -187,14 +248,14 @@ begin
   if Parent <> nil then Parent.Invalidate;
 end;
 
-procedure TTyTabSheet.SetImageName(const AValue: string);
+procedure TTyCustomTabSheet.SetImageName(const AValue: string);
 begin
   if FImageName = AValue then Exit;
   FImageName := AValue;
   if Parent <> nil then Parent.Invalidate;
 end;
 
-procedure TTyTabSheet.ResolveImageIndex;
+procedure TTyCustomTabSheet.ResolveImageIndex;
 begin
   if not FImageIndexPending then Exit;   // nothing outstanding: never touch a set ImageName
   if OwnerImages = nil then Exit;        // no pager list yet; a later attach / SetImages retries
@@ -205,19 +266,19 @@ begin
     SetImageName(TyImageNameOfIndex(OwnerImages, FImageIndex));  // '' foreign list / past end
 end;
 
-function TTyTabSheet.ImageIndexIsStored: Boolean;
+function TTyCustomTabSheet.ImageIndexIsStored: Boolean;
 begin
   // The NAME is the durable state; the index streams only as the fallback a name cannot hold.
   // See TTyImage.ImageIndexIsStored for the full reasoning.
   Result := (FImageName = '') and (FImageIndex >= 0);
 end;
 
-function TTyTabSheet.GetStyleTypeKey: string;
+function TTyCustomTabSheet.GetStyleTypeKey: string;
 begin
   Result := 'TyTabSheet';
 end;
 
-procedure TTyTabSheet.TextChanged;
+procedure TTyCustomTabSheet.TextChanged;
 begin
   inherited TextChanged;
   { The tab LABEL changed, so it is the host header that has to re-lay, not us. }
@@ -225,7 +286,7 @@ begin
     Parent.Invalidate;
 end;
 
-procedure TTyTabSheet.SetParent(AParent: TWinControl);
+procedure TTyCustomTabSheet.SetParent(AParent: TWinControl);
 var
   Old: TWinControl;
 begin
@@ -235,28 +296,29 @@ begin
     was wired: un-registration hung off Notification(opRemove), which fires when a page is
     freed, not when it is re-parented. So moving a page to a second pager left it counted,
     tabbed and handed out by BOTH -- the old one drew a tab for a control that was no longer
-    inside it. Skipped while either side is being torn down: Notification already covers the
-    free path, and the old host may be half-destroyed by then. }
-  if (Old <> AParent) and (Old is TTyPageControl)
+    inside it. Skipped while either side is being torn down: the free path is covered by the
+    FreeNotification RegisterPage asks for (whoever owns the page), and the old host may be
+    half-destroyed by then. }
+  if (Old <> AParent) and (Old is TTyCustomPageControl)
      and not (csDestroying in ComponentState)
      and not (csDestroying in Old.ComponentState) then
-    TTyPageControl(Old).UnregisterPage(Self, False);
+    TTyCustomPageControl(Old).UnregisterPage(Self, False);
   { Register with the hosting page control. Fires for AddPage (Parent := PC), for a
     designer drop onto a page control, and for a streamed load when the Parent
     property is applied — so the page list is rebuilt uniformly in all paths. }
-  if (AParent <> nil) and (AParent is TTyPageControl) then
-    TTyPageControl(AParent).RegisterPage(Self);
+  if (AParent <> nil) and (AParent is TTyCustomPageControl) then
+    TTyCustomPageControl(AParent).RegisterPage(Self);
   { Now that the page has a pager (and thus a list to resolve against), a streamed-but-pending
     ImageIndex can become its durable name. Harmless when nothing is pending. }
   ResolveImageIndex;
 end;
 
-function TTyTabSheet.GetPageControl: TTyCustomTabStrip;
+function TTyCustomTabSheet.GetPageControl: TTyCustomTabStrip;
 begin
   if Parent is TTyCustomTabStrip then Result := TTyCustomTabStrip(Parent) else Result := nil;
 end;
 
-procedure TTyTabSheet.SetPageControl(AValue: TTyCustomTabStrip);
+procedure TTyCustomTabSheet.SetPageControl(AValue: TTyCustomTabStrip);
 begin
   if GetPageControl = AValue then Exit;
   { Parent, not a private list edit: SetParent is what un-registers from the old pager and
@@ -265,45 +327,45 @@ begin
   Parent := AValue;
 end;
 
-function TTyTabSheet.GetPageIndex: Integer;
+function TTyCustomTabSheet.GetPageIndex: Integer;
 var
-  Host: TTyPageControl;
+  Host: TTyCustomPageControl;
   I: Integer;
 begin
   Result := -1;
-  if not (Parent is TTyPageControl) then Exit;
-  Host := TTyPageControl(Parent);
+  if not (Parent is TTyCustomPageControl) then Exit;
+  Host := TTyCustomPageControl(Parent);
   for I := 0 to Host.PageCount - 1 do
     if Host.Pages[I] = Self then Exit(I);
 end;
 
-procedure TTyTabSheet.SetPageIndex(AValue: Integer);
+procedure TTyCustomTabSheet.SetPageIndex(AValue: Integer);
 var
   Cur: Integer;
 begin
-  if not (Parent is TTyPageControl) then Exit;
+  if not (Parent is TTyCustomPageControl) then Exit;
   Cur := GetPageIndex;
   if (Cur < 0) or (Cur = AValue) then Exit;
-  TTyPageControl(Parent).MovePage(Cur, AValue);   // clamps, re-syncs the shown page, repaints
+  TTyCustomPageControl(Parent).MovePage(Cur, AValue);   // clamps, re-syncs the shown page, repaints
 end;
 
-procedure TTyTabSheet.CMVisibleChanged(var Message: TLMessage);
+procedure TTyCustomTabSheet.CMVisibleChanged(var Message: TLMessage);
 begin
   inherited;
   if Visible then DoShow else DoHide;
 end;
 
-procedure TTyTabSheet.DoShow;
+procedure TTyCustomTabSheet.DoShow;
 begin
   if Assigned(FOnShow) then FOnShow(Self);
 end;
 
-procedure TTyTabSheet.DoHide;
+procedure TTyCustomTabSheet.DoHide;
 begin
   if Assigned(FOnHide) then FOnHide(Self);
 end;
 
-procedure TTyTabSheet.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomTabSheet.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -321,13 +383,13 @@ begin
   end;
 end;
 
-destructor TTyTabSheet.Destroy;
+destructor TTyCustomTabSheet.Destroy;
 begin
   FPaintCache.Free;
   inherited Destroy;
 end;
 
-procedure TTyTabSheet.Invalidate;
+procedure TTyCustomTabSheet.Invalidate;
 begin
   { The one thing the cache keys on: our OWN look changed. A child's damage never reaches
     here, which is exactly why the cache survives it. }
@@ -335,7 +397,7 @@ begin
   inherited Invalidate;
 end;
 
-procedure TTyTabSheet.Paint;
+procedure TTyCustomTabSheet.Paint;
 var
   w, h: Integer;
 begin

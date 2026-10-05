@@ -46,7 +46,7 @@ uses tyControls.GlowLabel;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `StyleClass` | `string` | `''` | CSS 类名,对应 `.tycss` 选择器的 `.classname` 部分。 |
-| `Controller` | `TTyStyleController` | `nil`(用全局 `TyDefaultController`) | 指定使用哪个样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil`(用全局 `TyDefaultController`) | 指定使用哪个样式控制器。 |
 
 > **注意:** 继承自 `TTyGraphicControl`(`TGraphicControl` 子类),**无窗口句柄**,不支持键盘焦点,故**无** `:focus` 伪类。
 

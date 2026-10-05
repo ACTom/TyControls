@@ -31,6 +31,10 @@ msgstr "偏移（-50..50，步进 5，含负值范围）："
 msgid "Year (right-aligned Alignment, MaxLength=4):"
 msgstr "年份（右对齐 Alignment，MaxLength=4）："
 
+#: tmainform.lblfloat.caption
+msgid "Decimal (TTyFloatSpinEdit: 0..10, step 0.25):"
+msgstr "小数（TTyFloatSpinEdit：0..10，步长 0.25）："
+
 #: tmainform.lbllock.caption
 msgid "Locked (ReadOnly=True: no edit/step/wheel):"
 msgstr "锁定（ReadOnly=True：不可编辑/步进/滚轮）："

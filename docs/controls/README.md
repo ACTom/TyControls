@@ -4,6 +4,8 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 全自绘、由 `.tycss` 文本主题统一着色。样式语言参考见 [../tycss-reference.md](../tycss-reference.md)，
 通用事件基线见 [../events.md](../events.md)。
 
+大多数控件都有一个对应的 `TTyCustomXxx` 父类（比如 `TTyCustomEdit`），实现全在那里，`TTyXxx` 只负责发布属性。想基于某个控件包一个只露部分属性的自己的控件，见 [../subclassing.md](../subclassing.md)。
+
 ## 窗口与镶边
 
 | 控件 | 说明 |
@@ -131,7 +133,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyRelativePanel](relativepanel.md) | 相对布局（子控件按规则相对兄弟/父容器摆放,拓扑求解,环安全） |
 | [TTyToolBarEx](toolbarex.md) | 带溢出 `»` 折叠的工具条（非换行时尾部按钮收进弹出浮层） |
 | [TTyControlBar](controlbar.md) | 可停靠工具带宿主（子控件排成水平 band/行,带左侧抓手） |
-| [TTyCoolBar](coolbar.md) | Rebar：抓手拖拽移动band间的缝（改邻带宽度）、拖过邻带可换序、拖到行下另起一行（继承 TTyControlBar） |
+| [TTyCoolBar](coolbar.md) | Rebar：抓手拖拽移动band间的缝（改邻带宽度）、拖过邻带可换序、拖到行下另起一行（继承 TTyCustomControlBar） |
 | [TTyHeaderControl](headercontrol.md) | 独立列头条（分节:标题/宽度/对齐/排序,点击排序 + 拖边界调宽） |
 | [TTyListGroupPanel](listgrouppanel.md) | Outlook 式分组可展开列表（手风琴,`AddGroup`/`AddItem`） |
 | [TTyPreviewBox](previewbox.md) | 可复用预览控件（图片走 TTyImage / 文本走只读 TTyMemo / 占位 / 交出位图·文本自定义） |

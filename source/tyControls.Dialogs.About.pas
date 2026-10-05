@@ -21,7 +21,7 @@ type
     procedure AddRow(const AText: string; ASize, AWeight: Integer; ALink: Boolean);
     procedure DoLayout;                       // (re)build FRows for the current fields + size the form
     function  BandHeight: Integer;
-    function  EffectiveController: TTyStyleController;   // Controller, else the global default (nil-safe)
+    function  EffectiveController: TTyCustomStyleController;   // Controller, else the global default (nil-safe)
   protected
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -48,7 +48,7 @@ type
     the design-time editor registered for (string, TTyComponent, 'Version') attach to
     this app-version field and pop the TyControls About box from it, which is exactly
     backwards. The name belongs to the app here, so this class stays on TComponent. }
-  TTyAboutDialog = class(TComponent)
+  TTyCustomAboutDialog = class(TComponent)
   private
     FTitle, FAppName, FVersion, FDescription, FCopyright, FLicense, FHomepage: string;
     FOnShow: TNotifyEvent;
@@ -56,7 +56,6 @@ type
     FOnCanClose: TCloseQueryEvent;
   public
     procedure Execute;
-  published
     property Title: TCaption read FTitle write FTitle;
     property AppName: string read FAppName write FAppName;
     property Version: string read FVersion write FVersion;
@@ -67,6 +66,21 @@ type
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
+  end;
+
+  { TTyAboutDialog publishes TTyCustomAboutDialog's properties; everything lives in TTyCustomAboutDialog. }
+  TTyAboutDialog = class(TTyCustomAboutDialog)
+  published
+    property Title;
+    property AppName;
+    property Version;
+    property Description;
+    property Copyright;
+    property License;
+    property Homepage;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
   end;
 
 implementation
@@ -97,7 +111,7 @@ begin
   AddButton(rsMsgBtnClose, mrCancel, True, True);   // Close = default + cancel (Enter/Esc/X)
 end;
 
-function TTyAboutForm.EffectiveController: TTyStyleController;
+function TTyAboutForm.EffectiveController: TTyCustomStyleController;
 begin
   Result := Controller;
   if Result = nil then Result := TyDefaultController;
@@ -286,9 +300,9 @@ begin
   end;
 end;
 
-{ TTyAboutDialog }
+{ TTyCustomAboutDialog }
 
-procedure TTyAboutDialog.Execute;
+procedure TTyCustomAboutDialog.Execute;
 var d: TTyAboutForm;
 begin
   d := TyBuildAboutDialog(FTitle, FAppName, FVersion, FDescription, FCopyright, FLicense, FHomepage);

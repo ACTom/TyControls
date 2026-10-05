@@ -10,6 +10,8 @@ unit tyControls.Component;
   every dragged CONTROL had it; components descending straight from TComponent did
   not, and copying the same three lines into ~25 declarations is exactly the kind of
   duplication that goes stale one class at a time. One ancestor, one registration.
+  (4.0: like the visual bases, this one declares Version public and every final class
+  publishes it, so a third-party TTyCustomXxx descendant shows only what it publishes.)
 
   It lives in its own unit rather than in tyControls.Types (a leaf types/consts unit
   that must stay dependency-free) or tyControls.Base (which is about VISUAL controls
@@ -29,9 +31,9 @@ type
   TTyComponent = class(TComponent)
   public
     function GetVersion: string;
-  published
-    { Read-only library version (TyVersion); the design-time editor for this property
-      opens the About dialog. }
+    { 4.0: published by every final class, not here (TComponent publishes only Name and
+      Tag). Read-only library version (TyVersion); the design-time editor for this
+      property opens the About dialog. }
     property Version: string read GetVersion;
   end;
 

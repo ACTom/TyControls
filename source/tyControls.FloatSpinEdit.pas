@@ -8,19 +8,17 @@ uses
 
 { The largest CENTRED SQUARE inside a spin-button half — the box the arrow glyph is drawn in.
 
-  It exists because the two spin controls have differently shaped button halves. TTySpinEdit
-  owns its whole client rect and runs its buttons flush to the right edge, so a half is about
-  18x14 at 96 DPI. This control hangs its buttons in TTyEdit's trailing zone, which is inset
-  by the field padding on all four sides, so a half is about 18x10 — and TTyPainter.DrawGlyph
-  insets a further 4 logical px per side by default, which would leave the arrow one pixel
-  tall. Squaring the box first (and passing a 1px pad) keeps the arrow an arrow at every
-  density instead of a horizontal smudge. }
+  It exists because TTyPainter.DrawGlyph insets 4 logical px per side by default, which in a
+  short half leaves the arrow one pixel tall. Squaring the box first (and passing a 1px pad)
+  keeps the arrow an arrow at every density instead of a horizontal smudge. It was written when
+  this control's halves were about 18x10 (squeezed by the field padding); they are now the
+  integer spin edit's 18x14 -- see UpButtonRect -- and the same square serves both. }
 function TyFloatSpinGlyphBox(const AHalf: TRect): TRect;
 
 type
   { A DECIMAL spin edit: the counterpart of LCL's TFloatSpinEdit (spin.pp:89).
 
-    WHY IT DESCENDS FROM TTyNumericEdit AND NOT FROM TTySpinEdit. LCL builds the family the
+    WHY IT DESCENDS FROM TTyCustomNumericEdit AND NOT FROM TTyCustomSpinEdit. LCL builds the family the
     other way up — TCustomSpinEdit = class(TCustomFloatSpinEdit) (spin.pp:146) — so the
     integer control is the descendant there and the same direction is not available to us:
     TTySpinEdit's three public virtual seams (GetLimitedValue / ValueToStr / StrToValue,
@@ -40,8 +38,9 @@ type
     '--field-button-width' metric — the same token the combo box, the combo edit and the
     integer spin edit read — and the arrows are the '--glyph-arrow-up' / '--glyph-arrow-down'
     overridable glyphs. }
-  TTyFloatSpinEdit = class(TTyNumericEdit)
+  TTyCustomFloatSpinEdit = class(TTyCustomNumericEdit)
   private
+    FSpin: TTySpinButtons;
     FIncrement: Double;
     FEditorEnabled: Boolean;
     function IncrementStored: Boolean;
@@ -50,6 +49,8 @@ type
     { True for the keystrokes that would MUTATE the text. Used only while EditorEnabled is
       False; see the property comment for why the set is what it is. }
     function KeyWouldEditTheText(AKey: Word; AShift: TShiftState): Boolean;
+    procedure SpinStep(ADir: Integer);
+    function SpinHitAt(X, Y: Integer): Integer;
   protected
     { Reserve the button column at the right of the text area, and paint the two arrows in it.
       TrailingZone (TTyEdit) reports the same rect back for hit-testing, which is what keeps
@@ -63,21 +64,28 @@ type
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    { The arrow cursor and the hover / pressed state over the buttons, and the release that
+      ends a held press: see TTySpinButtons. }
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseLeave; override;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
+    property SpinButtons: TTySpinButtons read FSpin;
   public
     constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
     { Move the value by ADelta, the way the USER moves it: blocked by ReadOnly, and it marks
       the field Modified because the arrows are the user editing, exactly like typing. (The
       integer sibling's StepValue keeps the same two rules.) Every button, arrow key and wheel
       notch goes through here, so a descendant can re-point all of them at once. }
     procedure StepValue(ADelta: Double); virtual;
     { The two clickable halves, in client pixels — the same rects the paint uses, so a test can
-      assert where a click has to land without reading pixels. Empty when the trailing zone is
-      (a control too narrow to hold a button column). }
+      assert where a click has to land without reading pixels. The column is the trailing zone's
+      width and the field's FULL height, split in two: exactly TTySpinEdit's buttons. Empty when
+      the trailing zone is (a control too narrow to hold a button column). }
     function UpButtonRect(APPI: Integer): TRect;
     function DownButtonRect(APPI: Integer): TRect;
-  published
     { The step, as a Double — the property that makes this control worth having (LCL:
       spin.pp:80, same default 1, same `stored` rule so a .lfm does not carry the default).
 
@@ -116,6 +124,81 @@ type
     property UseThousands default False;
   end;
 
+  { TTyFloatSpinEdit publishes TTyCustomFloatSpinEdit's properties; everything lives in TTyCustomFloatSpinEdit. }
+  TTyFloatSpinEdit = class(TTyCustomFloatSpinEdit)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Text;
+    property ReadOnly;
+    property MaxLength;
+    property PasswordChar;
+    property EchoMode;
+    property HideSelection;
+    property AutoSelect;
+    property TextHint;
+    property Alignment;
+    property CharCase;
+    property NumbersOnly;
+    property Align;
+    property Anchors;
+    property OnChange;
+    property Decimals;
+    property UseThousands;
+    property MinValue;
+    property MaxValue;
+    property Increment;
+    property EditorEnabled;
+  end;
+
 implementation
 
 function TyFloatSpinGlyphBox(const AHalf: TRect): TRect;
@@ -126,24 +209,34 @@ begin
   Result := TySquareGlyphBox(AHalf);
 end;
 
-{ TTyFloatSpinEdit }
+{ TTyCustomFloatSpinEdit }
 
-constructor TTyFloatSpinEdit.Create(AOwner: TComponent);
+constructor TTyCustomFloatSpinEdit.Create(AOwner: TComponent);
 begin
+  { Before inherited, and freed after it in Destroy: anything the LCL routes here while the
+    control is being built or torn down (a paint, a mouse-leave) finds it there. }
+  FSpin := TTySpinButtons.Create(Self, @SpinStep);
   inherited Create(AOwner);
   FIncrement := 1;          // LCL DefIncrement (spin.pp:35)
   FEditorEnabled := True;   // LCL spin.pp:79
-  { Through the setter, because the field is private to TTyNumericEdit — and the setter also
+  { Through the setter, because the field is private to TTyCustomNumericEdit — and the setter also
     re-derives the display, so the initial text is the ungrouped form from the first paint. }
   UseThousands := False;
 end;
 
-function TTyFloatSpinEdit.IncrementStored: Boolean;
+destructor TTyCustomFloatSpinEdit.Destroy;
+begin
+  if FSpin <> nil then FSpin.MouseUp;   // first: a held button's repeat timer must not fire mid-teardown
+  inherited Destroy;
+  FreeAndNil(FSpin);
+end;
+
+function TTyCustomFloatSpinEdit.IncrementStored: Boolean;
 begin
   Result := not SameValue(FIncrement, Double(1));
 end;
 
-procedure TTyFloatSpinEdit.SetIncrement(const AValue: Double);
+procedure TTyCustomFloatSpinEdit.SetIncrement(const AValue: Double);
 begin
   if FIncrement = AValue then Exit;
   FIncrement := AValue;
@@ -151,13 +244,13 @@ begin
     only pushes the number at the widget (include/spinedit.inc:101-106). }
 end;
 
-procedure TTyFloatSpinEdit.SetEditorEnabled(const AValue: Boolean);
+procedure TTyCustomFloatSpinEdit.SetEditorEnabled(const AValue: Boolean);
 begin
   if FEditorEnabled = AValue then Exit;
   FEditorEnabled := AValue;
 end;
 
-function TTyFloatSpinEdit.KeyWouldEditTheText(AKey: Word; AShift: TShiftState): Boolean;
+function TTyCustomFloatSpinEdit.KeyWouldEditTheText(AKey: Word; AShift: TShiftState): Boolean;
 var
   Cmd: Boolean;
 begin
@@ -166,7 +259,7 @@ begin
     or (Cmd and ((AKey = VK_X) or (AKey = VK_V) or (AKey = VK_Z) or (AKey = VK_Y)));
 end;
 
-function TTyFloatSpinEdit.RightReserve(APPI: Integer): Integer;
+function TTyCustomFloatSpinEdit.RightReserve(APPI: Integer): Integer;
 begin
   { Read the metric LIVE, exactly as TTyComboEdit does, so the button column tracks the theme's
     density and lines up with a combo box's drop button and a spin edit's arrows. No constructor
@@ -174,49 +267,81 @@ begin
   Result := MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth), APPI, 96);
 end;
 
-function TTyFloatSpinEdit.UpButtonRect(APPI: Integer): TRect;
+function TTyCustomFloatSpinEdit.UpButtonRect(APPI: Integer): TRect;
 var
   Z: TRect;
 begin
   Z := TrailingZone(APPI);
   if (Z.Right - Z.Left) <= 0 then Exit(Rect(0, 0, 0, 0));
-  { The SAME half-split the integer spin edit uses, taken from its own geometry helper rather
-    than re-derived here: two spin controls in one library must not disagree about where the
-    up button stops and the down button starts. (The APPI argument only feeds that helper's
-    no-context fallback width; the explicit width wins.) }
-  Result := TySpinUpButtonRect(Z, APPI, Z.Right - Z.Left);
+  { The SAME geometry the integer spin edit uses, taken from its own helper rather than
+    re-derived here: two spin controls in one library must not disagree about where the up
+    button stops and the down button starts. The column runs the field's full height, as
+    TTySpinEdit's does -- NOT the trailing zone's, which stops a padding short of the top and
+    bottom: that squeezed each half to about 18x10 against the integer spin edit's 18x14, and
+    users saw the two controls' buttons differ (#17). The hover fill stays inside the frame
+    (TTySpinButtons.PaintHalf), so running to the edge never draws over the border. (The APPI
+    argument only feeds that helper's no-context fallback width; the explicit width wins.) }
+  Result := TySpinUpButtonRect(Rect(Z.Left, 0, Z.Right, ClientHeight), APPI, Z.Right - Z.Left);
 end;
 
-function TTyFloatSpinEdit.DownButtonRect(APPI: Integer): TRect;
+function TTyCustomFloatSpinEdit.DownButtonRect(APPI: Integer): TRect;
 var
   Z: TRect;
 begin
   Z := TrailingZone(APPI);
   if (Z.Right - Z.Left) <= 0 then Exit(Rect(0, 0, 0, 0));
-  Result := TySpinDownButtonRect(Z, APPI, Z.Right - Z.Left);
+  Result := TySpinDownButtonRect(Rect(Z.Left, 0, Z.Right, ClientHeight), APPI, Z.Right - Z.Left);
 end;
 
-procedure TTyFloatSpinEdit.PaintTrailing(APainter: TTyPainter; const AZone: TRect;
+procedure TTyCustomFloatSpinEdit.PaintTrailing(APainter: TTyPainter; const AZone: TRect;
   const AStyle: TTyStyleSet);
 var
-  ppi, w: Integer;
+  ppi, w, bw: Integer;
+  col, upR, dnR, inner: TRect;
+  upInk, dnInk: TTyColor;
 begin
   w := AZone.Right - AZone.Left;
   if w <= 0 then Exit;
   ppi := Font.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
-  { Split the zone THE PAINTER WAS GIVEN, not a re-computed one: TTyEdit hands PaintTrailing
-    the very rect TrailingZone reports, so deriving both halves from it is what makes the
-    painted arrows and the clickable halves the same two rectangles by construction. }
-  TyDrawGlyph(APainter, ActiveController,
-    TyFloatSpinGlyphBox(TySpinUpButtonRect(AZone, ppi, w)),
-    tgTriangleUp, AStyle.TextColor, 2, 1);
-  TyDrawGlyph(APainter, ActiveController,
-    TyFloatSpinGlyphBox(TySpinDownButtonRect(AZone, ppi, w)),
-    tgTriangleDown, AStyle.TextColor, 2, 1);
+  { Build the column from the zone THE PAINTER WAS GIVEN, not a re-computed one: TTyEdit hands
+    PaintTrailing the very rect TrailingZone reports, and UpButtonRect builds the clickable halves
+    from that same zone, so the painted and the clickable halves are the same rectangles. The
+    column is the zone's width and the field's full height (see UpButtonRect): the zone stops a
+    padding short of the top and bottom, so the padding is added back. }
+  col := Rect(AZone.Left, AZone.Top - APainter.Scale(AStyle.Padding.Top), AZone.Right,
+    AZone.Bottom + APainter.Scale(AStyle.Padding.Bottom));
+  upR := TySpinUpButtonRect(col, ppi, w);
+  dnR := TySpinDownButtonRect(col, ppi, w);
+  { The hovered or pressed half first (TTySpinButtons.PaintHalf), clipped to the field inside
+    its frame, border and focus ring both: the column runs edge to edge, the fill does not. }
+  bw := TySpinFrameInsetPx(APainter, AStyle);
+  inner := Rect(0, col.Top + bw, col.Right - bw, col.Bottom - bw);
+  upInk := FSpin.PaintHalf(APainter, ActiveController, upR, inner, AStyle, 1);
+  dnInk := FSpin.PaintHalf(APainter, ActiveController, dnR, inner, AStyle, -1);
+  TyDrawGlyph(APainter, ActiveController, TyFloatSpinGlyphBox(upR), tgTriangleUp, upInk, 2, 1);
+  TyDrawGlyph(APainter, ActiveController, TyFloatSpinGlyphBox(dnR), tgTriangleDown, dnInk, 2, 1);
 end;
 
-procedure TTyFloatSpinEdit.StepValue(ADelta: Double);
+procedure TTyCustomFloatSpinEdit.SpinStep(ADir: Integer);
+begin
+  StepValue(ADir * FIncrement);   // StepValue itself refuses while ReadOnly
+end;
+
+function TTyCustomFloatSpinEdit.SpinHitAt(X, Y: Integer): Integer;
+var
+  ppi: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if PtInRect(UpButtonRect(ppi), Point(X, Y)) then
+    Result := 1
+  else if PtInRect(DownButtonRect(ppi), Point(X, Y)) then
+    Result := -1
+  else
+    Result := 0;
+end;
+
+procedure TTyCustomFloatSpinEdit.StepValue(ADelta: Double);
 begin
   { ReadOnly locks the value entirely — the arrows included. LCL agrees at the widgetset
     (win32wsspin.pp guards its UDN_DELTAPOS branch with the same flag), and so does the
@@ -229,13 +354,13 @@ begin
   Modified := True;
 end;
 
-function TTyFloatSpinEdit.FilterInsert(const AText: string): string;
+function TTyCustomFloatSpinEdit.FilterInsert(const AText: string): string;
 begin
   if not FEditorEnabled then Exit('');
   Result := inherited FilterInsert(AText);
 end;
 
-procedure TTyFloatSpinEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
+procedure TTyCustomFloatSpinEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
 begin
   { Rejected here rather than in FilterInsert because InjectKey deletes any selection BEFORE
     it consults the filter (Edit.pas:1858-1869): a locked editor must not be able to wipe a
@@ -248,7 +373,7 @@ begin
   inherited UTF8KeyPress(UTF8Key);
 end;
 
-procedure TTyFloatSpinEdit.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomFloatSpinEdit.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   if not Enabled then Exit;
   { Before inherited, for the same reason as above: TTyEdit's handler would already have
@@ -275,42 +400,47 @@ begin
   end;
 end;
 
-procedure TTyFloatSpinEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
-var
-  ppi: Integer;
+procedure TTyCustomFloatSpinEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   if not Enabled then Exit;
-  if Button = mbLeft then
+  { A press on a button steps once and holds it, repeating until the release (TTySpinButtons).
+    ReadOnly locks the value: there the press steps nothing but is still the button's. }
+  if (Button = mbLeft) and FSpin.MouseDown(SpinHitAt(X, Y), not ReadOnly) then
   begin
-    ppi := Font.PixelsPerInch;
-    if PtInRect(UpButtonRect(ppi), Point(X, Y)) then
-    begin
-      StepValue(FIncrement);
-      { Unlike the combo edit's drop button and the URL edit's open button — which hand the
-        user off to a popup or a browser — a spin button leaves the user IN the field, where
-        the arrow keys continue the same gesture. So this one takes focus, the way the integer
-        sibling's buttons do. }
-      try
-        if CanFocus then SetFocus;
-      except
-        // headless / not yet parented: focus is not available, and not needed
-      end;
-      Exit;   // consumed by the button: no caret move, no selection drag
+    { Unlike the combo edit's drop button and the URL edit's open button — which hand the
+      user off to a popup or a browser — a spin button leaves the user IN the field, where
+      the arrow keys continue the same gesture. So this one takes focus, the way the integer
+      sibling's buttons do. }
+    try
+      if CanFocus then SetFocus;
+    except
+      // headless / not yet parented: focus is not available, and not needed
     end;
-    if PtInRect(DownButtonRect(ppi), Point(X, Y)) then
-    begin
-      StepValue(-FIncrement);
-      try
-        if CanFocus then SetFocus;
-      except
-      end;
-      Exit;
-    end;
+    Exit;   // consumed by the button: no caret move, no selection drag
   end;
   inherited MouseDown(Button, Shift, X, Y);
 end;
 
-function TTyFloatSpinEdit.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+procedure TTyCustomFloatSpinEdit.MouseMove(Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseMove(Shift, X, Y);
+  if not Enabled then Exit;
+  FSpin.MouseMove(SpinHitAt(X, Y), not ReadOnly);
+end;
+
+procedure TTyCustomFloatSpinEdit.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseUp(Button, Shift, X, Y);
+  FSpin.MouseUp;
+end;
+
+procedure TTyCustomFloatSpinEdit.MouseLeave;
+begin
+  inherited MouseLeave;
+  FSpin.MouseLeave;
+end;
+
+function TTyCustomFloatSpinEdit.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 begin
   if not Enabled then Exit(False);

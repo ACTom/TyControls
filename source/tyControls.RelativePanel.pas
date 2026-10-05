@@ -79,7 +79,7 @@ function TyRelativeSolve(const AItems: TTyRelativeItemArray; const AParent: TRec
 type
   { TTyRelativePanel — an anchor-to-sibling relative-layout container.
 
-    Subclasses TTyPanel (reuses the 'TyPanel' typeKey; NO new .tycss — the themed
+    Descends from TTyCustomPanel (reuses the 'TyPanel' typeKey; NO new .tycss — the themed
     frame/border/radius/padding all come from TyPanel). Hosts arbitrary design/code
     child controls; each child may be given a rule set via SetRules(child, rules[, anchor]).
 
@@ -92,7 +92,7 @@ type
 
     Per-child rule data lives in an internal list keyed by the child TControl; a freed
     child drops its entry via Notification(opRemove). }
-  TTyRelativePanel = class(TTyPanel)
+  TTyCustomRelativePanel = class(TTyCustomPanel)
   private
     FItems: TFPList;          // of PRelChildRec (owned)
     FSpacing: Integer;        // px between siblings on the position rules
@@ -128,15 +128,82 @@ type
     procedure PerformLayout;
     { Number of children that currently carry a rule set. Exposed for tests. }
     function RuledChildCount: Integer;
-  published
     { Gap in LOGICAL px inserted between siblings on the position rules (RightOf/LeftOf/
       Above/Below); the layout scales it by the panel's PPI, like the padding beside it.
       Edge-align and parent-align rules are NOT offset by it. }
     property Spacing: Integer read GetSpacing write SetSpacing stored FSpacingExplicit;
+  end;
+
+  { TTyRelativePanel publishes TTyCustomRelativePanel's properties; everything lives in TTyCustomRelativePanel. }
+  TTyRelativePanel = class(TTyCustomRelativePanel)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Caption;
+    property Alignment;
+    property VerticalAlignment;
+    property WordWrap;
+    property ShowAccelChar;
+    property DockSite;
+    property UseDockManager;
+    property OnDockDrop;
+    property OnDockOver;
+    property OnUnDock;
+    property OnGetSiteInfo;
+    property OnGetDockCaption;
+    property OnStartDock;
+    property OnEndDock;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
+    property Spacing;
   end;
 
 implementation
@@ -305,9 +372,9 @@ begin
   end;
 end;
 
-{ --- TTyRelativePanel ------------------------------------------------------------ }
+{ --- TTyCustomRelativePanel ------------------------------------------------------ }
 
-constructor TTyRelativePanel.Create(AOwner: TComponent);
+constructor TTyCustomRelativePanel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FItems := TFPList.Create;
@@ -317,7 +384,7 @@ begin
   Height := 160;
 end;
 
-destructor TTyRelativePanel.Destroy;
+destructor TTyCustomRelativePanel.Destroy;
 var
   i: Integer;
 begin
@@ -331,12 +398,12 @@ begin
   inherited Destroy;
 end;
 
-function TTyRelativePanel.GetStyleTypeKey: string;
+function TTyCustomRelativePanel.GetStyleTypeKey: string;
 begin
   Result := 'TyPanel';   // reuse the TyPanel theme; NO new .tycss selector
 end;
 
-function TTyRelativePanel.FindRec(AControl: TControl): Pointer;
+function TTyCustomRelativePanel.FindRec(AControl: TControl): Pointer;
 var
   i: Integer;
   rec: PRelChildRec;
@@ -350,7 +417,7 @@ begin
   end;
 end;
 
-function TTyRelativePanel.RemoveRec(AControl: TControl): Boolean;
+function TTyCustomRelativePanel.RemoveRec(AControl: TControl): Boolean;
 var
   i: Integer;
   rec: PRelChildRec;
@@ -369,7 +436,7 @@ begin
   end;
 end;
 
-function TTyRelativePanel.GetSpacing: Integer;
+function TTyCustomRelativePanel.GetSpacing: Integer;
 begin
   if FSpacingExplicit then
     Result := FSpacing
@@ -377,7 +444,7 @@ begin
     Result := ActiveController.Metric('--spacing', 8);
 end;
 
-procedure TTyRelativePanel.SetSpacing(AValue: Integer);
+procedure TTyCustomRelativePanel.SetSpacing(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   FSpacingExplicit := True;   { even if the value equals the fallback, the host meant to pin it }
@@ -386,7 +453,7 @@ begin
   PerformLayout;
 end;
 
-function TTyRelativePanel.ContentRect: TRect;
+function TTyCustomRelativePanel.ContentRect: TRect;
 var
   S: TTyStyleSet;
   padL, padT, padR, padB, ppi: Integer;
@@ -413,7 +480,7 @@ begin
   if Result.Bottom < Result.Top then Result.Bottom := Result.Top;
 end;
 
-procedure TTyRelativePanel.SetRules(AControl: TControl; ARules: TTyRelativeRules;
+procedure TTyCustomRelativePanel.SetRules(AControl: TControl; ARules: TTyRelativeRules;
   AAnchor: TControl);
 var
   rec: PRelChildRec;
@@ -441,7 +508,7 @@ begin
   PerformLayout;
 end;
 
-function TTyRelativePanel.GetRules(AControl: TControl): TTyRelativeRules;
+function TTyCustomRelativePanel.GetRules(AControl: TControl): TTyRelativeRules;
 var
   rec: PRelChildRec;
 begin
@@ -450,7 +517,7 @@ begin
   else Result := rec^.Rules;
 end;
 
-function TTyRelativePanel.GetAnchor(AControl: TControl): TControl;
+function TTyCustomRelativePanel.GetAnchor(AControl: TControl): TControl;
 var
   rec: PRelChildRec;
 begin
@@ -459,19 +526,19 @@ begin
   else Result := rec^.Anchor;
 end;
 
-procedure TTyRelativePanel.ClearRules(AControl: TControl);
+procedure TTyCustomRelativePanel.ClearRules(AControl: TControl);
 begin
   if RemoveRec(AControl) then
     PerformLayout;
 end;
 
-function TTyRelativePanel.RuledChildCount: Integer;
+function TTyCustomRelativePanel.RuledChildCount: Integer;
 begin
   if FItems = nil then Result := 0
   else Result := FItems.Count;
 end;
 
-procedure TTyRelativePanel.PerformLayout;
+procedure TTyCustomRelativePanel.PerformLayout;
 var
   items: TTyRelativeItemArray;
   positions: TTyRelativePosArray;
@@ -524,13 +591,13 @@ begin
   end;
 end;
 
-procedure TTyRelativePanel.Resize;
+procedure TTyCustomRelativePanel.Resize;
 begin
   inherited Resize;
   PerformLayout;
 end;
 
-procedure TTyRelativePanel.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomRelativePanel.Notification(AComponent: TComponent; Operation: TOperation);
 var
   i: Integer;
   rec: PRelChildRec;

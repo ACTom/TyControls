@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyColorComboBox 是 [TTyColorBox](colorbox.md) **加一个末尾"更多…"行**:选中它会弹出主题化的取色对话框([TTyColorDialog](../controls.md)),挑好的颜色被**插入到"更多…"之前并选中**。除此之外(色块+名、`Selected`、`Items.Objects` 存色、锁 `csDropDownList`)全部继承自 `TTyColorBox`。
+TTyColorComboBox 是 [TTyCustomColorBox](colorbox.md) **加一个末尾"更多…"行**:选中它会弹出主题化的取色对话框([TTyColorDialog](../controls.md)),挑好的颜色被**插入到"更多…"之前并选中**。除此之外(色块+名、`Selected`、`Items.Objects` 存色、锁 `csDropDownList`)全部继承自 `TTyCustomColorBox`。
 
 "更多…"行用 **`clNone` 作哨兵**标记——所以它渲染成**纯文字(无色块)**,也无需额外标志位就能识别;它始终保持在最后,新加的自定义色排到它上面。
 
@@ -13,7 +13,7 @@ TTyColorComboBox 是 [TTyColorBox](colorbox.md) **加一个末尾"更多…"行*
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.ColorComboBox` |
-| typeKey | `'TyComboBox'` / `'TyListItem'`(经 `TTyColorBox` 继承)|
+| typeKey | `'TyComboBox'` / `'TyListItem'`(经 `TTyCustomColorBox` 继承)|
 
 无新增 `.tycss`。
 
@@ -29,7 +29,7 @@ uses tyControls.ColorComboBox;
 |------|------|
 | `MoreCaption: string` | "更多…"行的文字(默认 `More…`);改动会重建该行。 |
 
-另继承 [TTyColorBox](colorbox.md) 的 `Selected` / `AddColor` / `ClearColors` / `ColorAt`。
+另继承 [TTyCustomColorBox](colorbox.md) 的 `Selected` / `AddColor` / `ClearColors` / `ColorAt`。
 
 ---
 

@@ -13,6 +13,7 @@ uses
   tyControls.GridPanel;
 
 type
+  TTyCustomGridCell = tyControls.GridPanel.TTyCustomGridCell;
   TTyGridCell = tyControls.GridPanel.TTyGridCell;
 
 implementation

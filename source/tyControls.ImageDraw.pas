@@ -92,33 +92,33 @@ implementation
 
 function TyImageIsBaked(AList: TCustomImageList): Boolean;
 begin
-  Result := (AList <> nil) and not (AList is TTyVirtualImageList);
+  Result := (AList <> nil) and not (AList is TTyCustomVirtualImageList);
 end;
 
 function TyImageCount(AList: TCustomImageList): Integer;
 begin
   if AList = nil then Exit(0);
-  if AList is TTyVirtualImageList then
+  if AList is TTyCustomVirtualImageList then
     { The NAME index, which is what RenderIndex/CachedIndex address. After the reparent this is
       also the baked count, but Names.Count is the one that is right during a load, before the
       first bake, so it is the one asked for here. }
-    Result := TTyVirtualImageList(AList).Names.Count
+    Result := TTyCustomVirtualImageList(AList).Names.Count
   else
     Result := AList.Count;
 end;
 
 function TyImageIndexOfName(AList: TCustomImageList; const AName: string): Integer;
 begin
-  if (AList <> nil) and (AName <> '') and (AList is TTyVirtualImageList) then
-    Result := TTyVirtualImageList(AList).IndexOf(AName)
+  if (AList <> nil) and (AName <> '') and (AList is TTyCustomVirtualImageList) then
+    Result := TTyCustomVirtualImageList(AList).IndexOf(AName)
   else
     Result := -1;
 end;
 
 function TyImageNameOfIndex(AList: TCustomImageList; AIndex: Integer): string;
 begin
-  if (AList <> nil) and (AIndex >= 0) and (AList is TTyVirtualImageList) then
-    Result := TTyVirtualImageList(AList).NameOf(AIndex)
+  if (AList <> nil) and (AIndex >= 0) and (AList is TTyCustomVirtualImageList) then
+    Result := TTyCustomVirtualImageList(AList).NameOf(AIndex)
   else
     Result := '';
 end;
@@ -159,7 +159,7 @@ begin
   if (AList = nil) or (TyImageCount(AList) = 0) then Exit;
   if APPI <= 0 then APPI := 96;
 
-  if AList is TTyVirtualImageList then
+  if AList is TTyCustomVirtualImageList then
   begin
     { On demand: we get exactly what we ask for, so the answer is the question. The only thing
       this branch imposes is the floor. }
@@ -181,7 +181,7 @@ end;
   caller must free (nil when the borrowed one is used directly). CachedIndex hands back the
   collection's OWN cache entry -- borrowed -- so fading it in place would ghost that icon in
   every control that draws it; hence the duplicate when ghosting. }
-function TyTakeVectorBitmap(AList: TTyVirtualImageList; AIndex, ASizePx: Integer;
+function TyTakeVectorBitmap(AList: TTyCustomVirtualImageList; AIndex, ASizePx: Integer;
   AGhosted: Boolean; out ADim: TBGRABitmap): TBGRABitmap;
 begin
   ADim := nil;
@@ -206,11 +206,11 @@ begin
   if (ACanvas = nil) or (AList = nil) or (AIndex < 0) or (ASizePx < 1) then Exit;
   if APPI <= 0 then APPI := 96;
 
-  if AList is TTyVirtualImageList then
+  if AList is TTyCustomVirtualImageList then
   begin
     dim := nil;
     try
-      bmp := TyTakeVectorBitmap(TTyVirtualImageList(AList), AIndex, ASizePx, AGhosted, dim);
+      bmp := TyTakeVectorBitmap(TTyCustomVirtualImageList(AList), AIndex, ASizePx, AGhosted, dim);
       if bmp = nil then Exit;
       { The square is already ASizePx (RenderMaster centres the aspect-preserved master in it),
         so no second centring. False = blend with alpha, do not paint opaque. }
@@ -247,11 +247,11 @@ begin
     draws nothing -- TyDrawImage is the one to reach for outside a paint pass. }
   Result := True;
   if (ADest = nil) or (AList = nil) or (AIndex < 0) or (ASizePx < 1) then Exit;
-  if not (AList is TTyVirtualImageList) then Exit(False);
+  if not (AList is TTyCustomVirtualImageList) then Exit(False);
 
   dim := nil;
   try
-    bmp := TyTakeVectorBitmap(TTyVirtualImageList(AList), AIndex, ASizePx, AGhosted, dim);
+    bmp := TyTakeVectorBitmap(TTyCustomVirtualImageList(AList), AIndex, ASizePx, AGhosted, dim);
     if bmp = nil then Exit;
     ADest.PutImage(AX, AY, bmp, dmDrawWithTransparency);
   finally
@@ -281,11 +281,11 @@ begin
   if (ADest = nil) or (AList = nil) or (AIndex < 0) or (ASizePx < 1) then Exit;
   if APPI <= 0 then APPI := 96;
 
-  if AList is TTyVirtualImageList then
+  if AList is TTyCustomVirtualImageList then
   begin
     dim := nil;
     try
-      bmp := TyTakeVectorBitmap(TTyVirtualImageList(AList), AIndex, ASizePx, AGhosted, dim);
+      bmp := TyTakeVectorBitmap(TTyCustomVirtualImageList(AList), AIndex, ASizePx, AGhosted, dim);
       if bmp = nil then Exit;
       ADest.PutImage(AX, AY, bmp, dmDrawWithTransparency);
     finally
@@ -327,12 +327,12 @@ begin
   if (AList = nil) or (AIndex < 0) or (ASizePx < 1) then Exit;
   if APPI <= 0 then APPI := 96;
 
-  if AList is TTyVirtualImageList then
+  if AList is TTyCustomVirtualImageList then
   begin
-    if AIndex >= TTyVirtualImageList(AList).Names.Count then Exit;
+    if AIndex >= TTyCustomVirtualImageList(AList).Names.Count then Exit;
     { RenderIndex returns a caller-owned square; that IS the contract here. Ghosting is applied
       to the owned copy -- no borrowed cache to protect, unlike the blit path. }
-    Result := TTyVirtualImageList(AList).RenderIndex(AIndex, ASizePx);
+    Result := TTyCustomVirtualImageList(AList).RenderIndex(AIndex, ASizePx);
     if (Result <> nil) and AGhosted then TyFadeBitmapAlpha(Result, TyGhostedAlpha);
     Exit;
   end;

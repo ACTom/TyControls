@@ -56,7 +56,7 @@ uses tyControls.Gauge;
 |------|------|------|
 | `Font` | `TFont` | 传递 PPI;数值文字大小由控件尺寸推导。 |
 | `StyleClass` | `string` | `.tycss` 类名(同时作用于 `TyGauge` 与 `TyGaugeFill` 的解析)。 |
-| `Controller` | `TTyStyleController` | 指定样式控制器(nil 时用全局默认)。 |
+| `Controller` | `TTyCustomStyleController` | 指定样式控制器(nil 时用全局默认)。 |
 | `Align` / `Anchors` | — | 布局。 |
 
 **枚举:** `TTyGaugeStyle = (gsLinearH, gsLinearV, gsArc, gsRing)`。

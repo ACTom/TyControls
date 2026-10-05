@@ -54,7 +54,7 @@ type
     FList: TTreeView;
     FWarn: TLabel;
     FSelectorMode: Boolean;
-    FController: TTyStyleController;   // source of the theme's CURRENT value for an inserted prop
+    FController: TTyCustomStyleController;   // source of the theme's CURRENT value for an inserted prop
     FTypeKey: string;                 // the target control's typeKey ('' = controller level)
     procedure BuildRefList;
     procedure ListDblClick(Sender: TObject);
@@ -63,12 +63,12 @@ type
     procedure FormatClick(Sender: TObject);
     function DefaultValueFor(const AProp: string): string;
   public
-    constructor CreateFor(AController: TTyStyleController; const ATypeKey: string;
+    constructor CreateFor(AController: TTyCustomStyleController; const ATypeKey: string;
       ASelectorMode: Boolean); reintroduce;
     function Execute(var AText: string): Boolean;
   end;
 
-constructor TTyStyleOverrideDialog.CreateFor(AController: TTyStyleController;
+constructor TTyStyleOverrideDialog.CreateFor(AController: TTyCustomStyleController;
   const ATypeKey: string; ASelectorMode: Boolean);
 var
   panel: TPanel;
@@ -132,12 +132,16 @@ begin
 end;
 
 procedure TTyStyleOverrideDialog.BuildRefList;
-  procedure Cat(const ATitle: string; const AItems: array of string);
-  var node: TTreeNode; s: string;
+  function Cat(const ATitle: string; const AItems: array of string): TTreeNode;
+  var s: string;
   begin
-    node := FList.Items.Add(nil, ATitle);
-    for s in AItems do FList.Items.AddChild(node, s);
+    Result := FList.Items.Add(nil, ATitle);
+    for s in AItems do FList.Items.AddChild(Result, s);
   end;
+var
+  keysNode: TTreeNode;
+  keys: TStringList;
+  i: Integer;
 begin
   FList.Items.BeginUpdate;
   try
@@ -145,7 +149,17 @@ begin
     Cat(rsCssEdCatFuncs, TyKnownColorFns);
     if FSelectorMode then
     begin
-      Cat(rsCssEdCatTypeKeys, TyCatalogTypeKeys);
+      { #14: the catalogue's keys plus the ones a third-party package registered into a type
+        key chain -- the very list the completion offers (TyCssSelectorTypeKeys). }
+      keysNode := Cat(rsCssEdCatTypeKeys, []);
+      keys := TStringList.Create;
+      try
+        TyCssSelectorTypeKeys(keys);
+        for i := 0 to keys.Count - 1 do
+          FList.Items.AddChild(keysNode, keys[i]);
+      finally
+        keys.Free;
+      end;
       Cat(rsCssEdCatPseudo, TyKnownPseudoStates);
     end;
     Cat(rsCssEdCatTokens, TyCatalogTokens);
@@ -243,14 +257,14 @@ procedure TTyStyleOverrideProperty.Edit;
 var
   dlg: TTyStyleOverrideDialog;
   comp: TPersistent;
-  ctrl: TTyStyleController;
+  ctrl: TTyCustomStyleController;
   typeKey, s: string;
   selectorMode: Boolean;
   styleable: ITyStyleable;
 begin
   comp := GetComponent(0);
   ctrl := nil; typeKey := ''; selectorMode := False;
-  if comp is TTyStyleController then
+  if comp is TTyCustomStyleController then   { any controller, a third party's too }
     selectorMode := True   { controller level: full tycss with selectors, no single typeKey }
   else if Supports(comp, ITyStyleable, styleable) then
   begin

@@ -10,7 +10,7 @@ type
     unreachable, so an RTL layout and a "draining" meter could not be drawn at all. }
   TTyProgressOrientation = (tpoHorizontal, tpoVertical, tpoRightToLeft, tpoTopDown);
 
-  TTyProgressBar = class(TTyGraphicControl)
+  TTyCustomProgressBar = class(TTyGraphicControl)
   private
     FMin, FMax, FPosition, FStep: Integer;
     FAnimEnabled: Boolean;
@@ -57,7 +57,6 @@ type
     { The text BarShowText draws, with the template already filled in. Public so a host
       can put the same string somewhere else (a status line) without re-deriving it. }
     function BarText: string;
-  published
     property Min: Integer read FMin write SetMin default 0;
     property Max: Integer read FMax write SetMax default 100;
     property Position: Integer read FPosition write SetPosition default 0;
@@ -83,10 +82,61 @@ type
     // Fired whenever Position (or Min/Max) actually changes — i.e. after the
     // "if = then Exit" guard in the setters, so a same-value set never fires.
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+  end;
+
+  { TTyProgressBar publishes TTyCustomProgressBar's properties; everything lives in TTyCustomProgressBar. }
+  TTyProgressBar = class(TTyCustomProgressBar)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Min;
+    property Max;
+    property Position;
+    property Orientation;
+    property Step;
+    property BarShowText;
+    property BarTextFormat;
+    property AnimationsEnabled;
+    property OnChange;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
   end;
 
 function TyProgressFillRect(const ATrack: TRect; AMin, AMax, APosition: Integer;
@@ -153,9 +203,9 @@ begin
   end;
 end;
 
-{ TTyProgressBar }
+{ TTyCustomProgressBar }
 
-constructor TTyProgressBar.Create(AOwner: TComponent);
+constructor TTyCustomProgressBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FMin := 0;
@@ -177,7 +227,7 @@ begin
   Height := TyDensityHeight(ActiveController, 20);
 end;
 
-destructor TTyProgressBar.Destroy;
+destructor TTyCustomProgressBar.Destroy;
 begin
   // FTimer is owned by Self (would be freed by DestroyComponents), but free it
   // explicitly first so the OnTimer callback can never fire mid-teardown.
@@ -185,12 +235,12 @@ begin
   inherited Destroy;
 end;
 
-function TTyProgressBar.GetStyleTypeKey: string;
+function TTyCustomProgressBar.GetStyleTypeKey: string;
 begin
   Result := 'TyProgressBar';
 end;
 
-procedure TTyProgressBar.EnsureTimer;
+procedure TTyCustomProgressBar.EnsureTimer;
 begin
   if FTimer = nil then
   begin
@@ -201,7 +251,7 @@ begin
   end;
 end;
 
-procedure TTyProgressBar.HandleTimer(Sender: TObject);
+procedure TTyCustomProgressBar.HandleTimer(Sender: TObject);
 begin
   if AdvanceAnimation(FTimer.Interval) then
     Invalidate;
@@ -209,17 +259,17 @@ begin
     FTimer.Enabled := False;
 end;
 
-function TTyProgressBar.AdvanceAnimation(AMs: Integer): Boolean;
+function TTyCustomProgressBar.AdvanceAnimation(AMs: Integer): Boolean;
 begin
   Result := FPosAnim.Advance(AMs);
 end;
 
-function TTyProgressBar.DisplayPos: Single;
+function TTyCustomProgressBar.DisplayPos: Single;
 begin
   Result := TyLerpF(FAnimFrom, FAnimTo, FPosAnim.Eased);
 end;
 
-procedure TTyProgressBar.SetPositionAnimating(AValue: Integer);
+procedure TTyCustomProgressBar.SetPositionAnimating(AValue: Integer);
 var
   Clamped: Integer;
 begin
@@ -237,7 +287,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyProgressBar.SetMin(const AValue: Integer);
+procedure TTyCustomProgressBar.SetMin(const AValue: Integer);
 begin
   if FMin = AValue then Exit;
   FMin := AValue;
@@ -246,7 +296,7 @@ begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTyProgressBar.SetMax(const AValue: Integer);
+procedure TTyCustomProgressBar.SetMax(const AValue: Integer);
 begin
   if FMax = AValue then Exit;
   FMax := AValue;
@@ -255,7 +305,7 @@ begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTyProgressBar.SetPosition(const AValue: Integer);
+procedure TTyCustomProgressBar.SetPosition(const AValue: Integer);
 var
   Clamped: Integer;
 begin
@@ -291,39 +341,39 @@ begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTyProgressBar.SetOrientation(const AValue: TTyProgressOrientation);
+procedure TTyCustomProgressBar.SetOrientation(const AValue: TTyProgressOrientation);
 begin
   if FOrientation = AValue then Exit;
   FOrientation := AValue;
   Invalidate;
 end;
 
-procedure TTyProgressBar.SetStep(const AValue: Integer);
+procedure TTyCustomProgressBar.SetStep(const AValue: Integer);
 begin
   if FStep = AValue then Exit;
   FStep := AValue;    // no clamp: LCL allows a negative Step, i.e. a counting-down bar
 end;
 
-procedure TTyProgressBar.SetBarShowText(const AValue: Boolean);
+procedure TTyCustomProgressBar.SetBarShowText(const AValue: Boolean);
 begin
   if FBarShowText = AValue then Exit;
   FBarShowText := AValue;
   Invalidate;
 end;
 
-procedure TTyProgressBar.SetBarTextFormat(const AValue: string);
+procedure TTyCustomProgressBar.SetBarTextFormat(const AValue: string);
 begin
   if FBarTextFormat = AValue then Exit;
   FBarTextFormat := AValue;
   if FBarShowText then Invalidate;
 end;
 
-procedure TTyProgressBar.StepIt;
+procedure TTyCustomProgressBar.StepIt;
 begin
   StepBy(FStep);
 end;
 
-procedure TTyProgressBar.StepBy(ADelta: Integer);
+procedure TTyCustomProgressBar.StepBy(ADelta: Integer);
 begin
   { Straight through the setter, so the clamp, the repaint, the ease and OnChange are
     the same ones a Position write gets. LCL reaches around its own setter here
@@ -331,7 +381,7 @@ begin
   Position := FPosition + ADelta;
 end;
 
-function TTyProgressBar.BarText: string;
+function TTyCustomProgressBar.BarText: string;
 var
   Travel, Pct: Integer;
 begin
@@ -348,7 +398,7 @@ begin
   Result := StringReplace(Result, '%%', '%', [rfReplaceAll]);
 end;
 
-procedure TTyProgressBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomProgressBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, FillS: TTyStyleSet;
@@ -417,7 +467,7 @@ begin
   end;
 end;
 
-procedure TTyProgressBar.Paint;
+procedure TTyCustomProgressBar.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

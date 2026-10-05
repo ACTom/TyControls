@@ -31,7 +31,7 @@ type
     FB0, FB1:           PTyTreeNode;
     FLazyChildCount:    Cardinal;     // how many children OnInitChildren materialises
     procedure BuildTree;
-    procedure OnInitLazyChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure OnInitLazyChildren(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       var ChildCount: Cardinal);
     function  SiblingIndexList(AParent: PTyTreeNode): string;  // "child0Index,child1Index,..."
     function  ChildAt(AParent: PTyTreeNode; AIdx: Integer): PTyTreeNode;
@@ -89,10 +89,10 @@ type
     { OnNodeMoved bookkeeping }
     FMovedFired:      Integer;
     FMovedNode:       PTyTreeNode;
-    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
-    procedure OnDragOver(Sender: TTyTreeView; Src, Target: PTyTreeNode;
+    procedure OnGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnDragOver(Sender: TTyCustomTreeView; Src, Target: PTyTreeNode;
       Mode: TTyTreeDropMode; var Allowed: Boolean);
-    procedure OnNodeMoved(Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure OnNodeMoved(Sender: TTyCustomTreeView; Node: PTyTreeNode);
     procedure BuildTree;
     procedure Layout;
     function  RowMidY(ARow: Integer): Integer;      // device-px Y at the middle of row ARow
@@ -128,7 +128,7 @@ type
     FForm: TForm;
     FTree: TTyTreeView;
     FN0, FN1, FN2: PTyTreeNode;
-    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
     procedure BuildTree;
     { Render the current tree state to an offscreen bitmap; out a BGRA read-only
       wrap for pixel probing. Caller frees both via FreeRender. }
@@ -250,7 +250,7 @@ end;
 { Lazy-children provider (mirrors the VirtualTree pattern): a node marked
   nsHasChildren with ChildCount=0 materialises FLazyChildCount real children the
   first time the tree needs them (here: triggered by MoveNode's dmOn path). }
-procedure TTreeDragF1Test.OnInitLazyChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeDragF1Test.OnInitLazyChildren(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   var ChildCount: Cardinal);
 begin
   ChildCount := FLazyChildCount;
@@ -556,13 +556,13 @@ end;
   F2 — drag state machine (mouse + Esc) + option + events
   ============================================================================ }
 
-procedure TTreeDragF2Test.OnGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeDragF2Test.OnGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   var Text: string);
 begin
   Text := 'row' + IntToStr(Node^.Index);
 end;
 
-procedure TTreeDragF2Test.OnDragOver(Sender: TTyTreeView; Src, Target: PTyTreeNode;
+procedure TTreeDragF2Test.OnDragOver(Sender: TTyCustomTreeView; Src, Target: PTyTreeNode;
   Mode: TTyTreeDropMode; var Allowed: Boolean);
 begin
   Inc(FDragOverFired);
@@ -573,7 +573,7 @@ begin
   else                  Allowed := FDragOverAllow;
 end;
 
-procedure TTreeDragF2Test.OnNodeMoved(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TTreeDragF2Test.OnNodeMoved(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 begin
   Inc(FMovedFired);
   FMovedNode := Node;
@@ -849,7 +849,7 @@ end;
   F3 — drop-mark paint (above/below line, on-outline) via the theme accent
   ============================================================================ }
 
-procedure TTreeDragF3Test.OnGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeDragF3Test.OnGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   var Text: string);
 begin
   Text := 'row' + IntToStr(Node^.Index);

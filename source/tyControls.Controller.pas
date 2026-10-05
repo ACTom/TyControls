@@ -28,7 +28,7 @@ var
   TyAutoSystemFontFallback: Boolean = True;
 
 type
-  TTyStyleController = class(TTyComponent)
+  TTyCustomStyleController = class(TTyComponent)
   private
     FModel: TTyStyleModel;
     { False while FThemeName names a theme that could not be RESOLVED yet. A .lfm sets
@@ -127,8 +127,6 @@ type
       falling back to ADefault (logical px). Controls call this instead of a hard-coded
       constant so a skin can retune their intrinsic geometry. }
     function Metric(const AName: string; ADefault: Integer): Integer;
-  published
-    { Version is inherited from TTyComponent — the shared non-visual base. }
     property ThemeFile: string read FThemeFile write SetThemeFile;
     { B (Phase 2): switch theme by registered NAME. Resolves via TyResolveTheme and
       loads through the §3.8 REPLACE path (LoadFromFile -> LoadInto AReplace=True +
@@ -166,6 +164,19 @@ type
     property HotReload: Boolean read FHotReload write SetHotReload default False;
   end;
 
+  { TTyStyleController publishes TTyCustomStyleController's properties; everything lives in TTyCustomStyleController. }
+  TTyStyleController = class(TTyCustomStyleController)
+  published
+    property Version;
+    property ThemeFile;
+    property ThemeName;
+    property Mode;
+    property Follow;
+    property Density;
+    property StyleOverride;
+    property HotReload;
+  end;
+
 const
   cTyHotReloadPollMs = 750;   // watch-timer interval while HotReload is armed
 
@@ -177,7 +188,7 @@ function TyDefaultController: TTyStyleController;
   density pack's roomier value (38), so an Edit/Button/ComboBox dropped under modern density
   comes up tall enough for the larger font instead of a classic-sized box. AController may be
   nil (falls back to the default controller). }
-function TyDensityHeight(AController: TTyStyleController; AClassicH: Integer): Integer;
+function TyDensityHeight(AController: TTyCustomStyleController; AClassicH: Integer): Integer;
 
 { Density-aware value keyed on ANY length token. Classic returns AClassicVal verbatim (the
   token is NOT consulted, so a control whose classic default differs from the token's classic
@@ -185,7 +196,7 @@ function TyDensityHeight(AController: TTyStyleController; AClassicH: Integer): I
   ActiveController.Metric(token, default) whenever the default is a control's OWN classic size
   that must stay byte-identical -- reading the token directly returns the token's classic value,
   not the control's, which silently shifts classic. AController may be nil. }
-function TyDensityMetric(AController: TTyStyleController; AClassicVal: Integer;
+function TyDensityMetric(AController: TTyCustomStyleController; AClassicVal: Integer;
   const AToken: string): Integer;
 
 { The theme's --line-height (TyLineHeightVar), in LOGICAL px, for laying out a caption that
@@ -195,14 +206,14 @@ function TyDensityMetric(AController: TTyStyleController; AClassicVal: Integer;
   here would have frozen it). NOT density-keyed: extra leading is a typographic choice a
   theme makes outright, not a classic/modern variant of a control's own default.
   AController may be nil (falls back to the default controller). }
-function TyLineHeight(AController: TTyStyleController): Integer;
+function TyLineHeight(AController: TTyCustomStyleController): Integer;
 
 implementation
 
 var
   GDefaultController: TTyStyleController = nil;
 
-constructor TTyStyleController.Create(AOwner: TComponent);
+constructor TTyCustomStyleController.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FModel := TTyStyleModel.Create;
@@ -236,7 +247,7 @@ begin
     end;
 end;
 
-destructor TTyStyleController.Destroy;
+destructor TTyCustomStyleController.Destroy;
 begin
   TyRemoveThemeRegistryListener(@ThemeRegistryChanged);
   FWatchTimer.Free;   // nil-safe; disarms the hot-reload watch
@@ -246,7 +257,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TTyStyleController.SetThemeFile(const AValue: string);
+procedure TTyCustomStyleController.SetThemeFile(const AValue: string);
 begin
   if FThemeFile = AValue then Exit;
   FThemeFile := AValue;
@@ -262,7 +273,7 @@ begin
   end;
 end;
 
-function TTyStyleController.TryApplyThemeName: Boolean;
+function TTyCustomStyleController.TryApplyThemeName: Boolean;
 var
   src, css: string;
 begin
@@ -292,7 +303,7 @@ begin
   end;
 end;
 
-procedure TTyStyleController.ThemeRegistryChanged(const AName: string);
+procedure TTyCustomStyleController.ThemeRegistryChanged(const AName: string);
 begin
   { A name we are still waiting for just became resolvable — apply it now. This is what
     makes a .lfm-designed ThemeName survive in a BUILT application, where streaming runs
@@ -302,7 +313,7 @@ begin
   TryApplyThemeName;
 end;
 
-procedure TTyStyleController.SetThemeName(const AValue: string);
+procedure TTyCustomStyleController.SetThemeName(const AValue: string);
 begin
   { Re-assigning the SAME name is a no-op only if that name was actually applied; see
     FThemeApplied. }
@@ -318,26 +329,26 @@ begin
   TryApplyThemeName;
 end;
 
-function TTyStyleController.GetMode: string;
+function TTyCustomStyleController.GetMode: string;
 begin
   Result := FModel.Mode;
 end;
 
-procedure TTyStyleController.SetMode(const AValue: string);
+procedure TTyCustomStyleController.SetMode(const AValue: string);
 begin
   if FModel.Mode = AValue then Exit;
   FModel.SetMode(AValue);
   Changed;
 end;
 
-procedure TTyStyleController.ApplyDensityPack;
+procedure TTyCustomStyleController.ApplyDensityPack;
 begin
   { 现代包只在 layer-1 已装好之后追加。经典什么都不做 —— 经典 = 不叠。 }
   if FDensity = tdModern then
     FModel.LoadFromCssAdditive(TyDensityModernCss);
 end;
 
-procedure TTyStyleController.ApplyStyleOverride;
+procedure TTyCustomStyleController.ApplyStyleOverride;
 begin
   { The user's tycss patch, composed on top of everything as the last additive layer -- so it
     wins over both the theme and the density pack. Applied AFTER ApplyDensityPack at every place
@@ -346,7 +357,7 @@ begin
     FModel.LoadFromCssAdditive(FStyleOverride);
 end;
 
-procedure TTyStyleController.SetStyleOverride(const AValue: string);
+procedure TTyCustomStyleController.SetStyleOverride(const AValue: string);
 begin
   if FStyleOverride = AValue then Exit;
   FStyleOverride := AValue;
@@ -356,7 +367,7 @@ begin
   ReloadThemeLayer;
 end;
 
-procedure TTyStyleController.ReloadThemeLayer;
+procedure TTyCustomStyleController.ReloadThemeLayer;
 var
   src, css, keepAccent: string;
 begin
@@ -400,7 +411,7 @@ begin
   Changed;
 end;
 
-procedure TTyStyleController.SetDensity(AValue: TTyDensity);
+procedure TTyCustomStyleController.SetDensity(AValue: TTyDensity);
 begin
   if FDensity = AValue then Exit;
   FDensity := AValue;
@@ -409,7 +420,7 @@ begin
   ReloadThemeLayer;
 end;
 
-procedure TTyStyleController.SetFollow(const AValue: TTyThemeFollow);
+procedure TTyCustomStyleController.SetFollow(const AValue: TTyThemeFollow);
 begin
   if FFollow = AValue then Exit;
   FFollow := AValue;
@@ -418,7 +429,7 @@ begin
     RefreshFromSystem;
 end;
 
-procedure TTyStyleController.RefreshFromSystem;
+procedure TTyCustomStyleController.RefreshFromSystem;
 { P4 (D8). Re-read the OS mode + accent and re-apply, but only while following. Detection
   goes through TySystemModeHook/TySystemAccentHook (defaulting to the live registry probe,
   overridable in tests) so this and the system-* token substitution read ONE seam. An empty
@@ -450,7 +461,7 @@ begin
   Changed;
 end;
 
-function TTyStyleController.PollSystemTheme: Boolean;
+function TTyCustomStyleController.PollSystemTheme: Boolean;
 { See the interface comment. Change-aware: reads the OS mode+accent through the same hooks,
   and only does work when one of them differs from the last applied snapshot. The FInPoll
   guard is shared with PollThemeFile (both run from the same watch tick, and RefreshFromSystem's
@@ -474,7 +485,7 @@ begin
   end;
 end;
 
-procedure TTyStyleController.SetHotReload(const AValue: Boolean);
+procedure TTyCustomStyleController.SetHotReload(const AValue: Boolean);
 begin
   if FHotReload = AValue then Exit;
   FHotReload := AValue;
@@ -484,7 +495,7 @@ begin
   UpdateWatch;
 end;
 
-procedure TTyStyleController.CaptureFileStamp;
+procedure TTyCustomStyleController.CaptureFileStamp;
 { Snapshot the watched file's last-modified stamp + size as the change baseline.
   A missing/empty target yields (-1, -1); FileAge already returns -1 for a missing
   file, so a file that later appears differs from the baseline and triggers a load. }
@@ -501,7 +512,7 @@ begin
   end;
 end;
 
-procedure TTyStyleController.UpdateWatch;
+procedure TTyCustomStyleController.UpdateWatch;
 { Arm the watch timer exactly when HotReload is on AND a ThemeFile is set; free it
   otherwise. The timer is the runtime-only driver — each tick calls PollThemeFile. It
   is created lazily (never in a headless test that only drives PollThemeFile directly).
@@ -522,14 +533,14 @@ begin
     FreeAndNil(FWatchTimer);
 end;
 
-procedure TTyStyleController.HandleWatchTimer(Sender: TObject);
+procedure TTyCustomStyleController.HandleWatchTimer(Sender: TObject);
 { Runtime watch tick: re-check the file and reload iff it changed. The whole effect is
   in PollThemeFile so the logic stays headless-testable; this just wires it to the clock. }
 begin
   PollThemeFile;
 end;
 
-function TTyStyleController.PollThemeFile: Boolean;
+function TTyCustomStyleController.PollThemeFile: Boolean;
 var
   age: LongInt;
   size: Int64;
@@ -580,7 +591,7 @@ begin
   end;
 end;
 
-procedure TTyStyleController.LoadTheme(const AFileName: string);
+procedure TTyCustomStyleController.LoadTheme(const AFileName: string);
 begin
   FModel.LoadFromFile(AFileName);
   FThemeFile := AFileName;
@@ -594,7 +605,7 @@ begin
   Changed;
 end;
 
-procedure TTyStyleController.LoadThemeCss(const ASource: string);
+procedure TTyCustomStyleController.LoadThemeCss(const ASource: string);
 begin
   FModel.LoadFromCss(ASource);
   ApplyDensityPack;
@@ -602,45 +613,45 @@ begin
   Changed;
 end;
 
-procedure TTyStyleController.LoadThemeCssAdditive(const ASource: string);
+procedure TTyCustomStyleController.LoadThemeCssAdditive(const ASource: string);
 begin
   FModel.LoadFromCssAdditive(ASource);
   Changed;
 end;
 
-procedure TTyStyleController.SetAccent(const AHex: string);
+procedure TTyCustomStyleController.SetAccent(const AHex: string);
 { v3/A. Override --accent (whole palette re-derives) + repaint. See the interface comment. }
 begin
   FModel.SetVarOverride('accent', AHex);
   Changed;
 end;
 
-procedure TTyStyleController.ResetAccent;
+procedure TTyCustomStyleController.ResetAccent;
 { v3/A. Drop the accent override -> back to the theme's own accent + repaint. }
 begin
   FModel.ClearVarOverride('accent');
   Changed;
 end;
 
-function TTyStyleController.AccentOverride: string;
+function TTyCustomStyleController.AccentOverride: string;
 { v3/A. The current picked accent, or '' when using the theme's own accent. }
 begin
   Result := FModel.VarOverride('accent');
 end;
 
-function TTyStyleController.Metric(const AName: string; ADefault: Integer): Integer;
+function TTyCustomStyleController.Metric(const AName: string; ADefault: Integer): Integer;
 { v3/C. Named theme length metric, ADefault when unset. See the interface comment. }
 begin
   Result := FModel.ResolveMetric(AName, ADefault);
 end;
 
-procedure TTyStyleController.RegisterStyleable(AControl: TControl);
+procedure TTyCustomStyleController.RegisterStyleable(AControl: TControl);
 begin
   if (AControl <> nil) and (FControls.IndexOf(AControl) < 0) then
     FControls.Add(AControl);
 end;
 
-procedure TTyStyleController.UnregisterStyleable(AControl: TControl);
+procedure TTyCustomStyleController.UnregisterStyleable(AControl: TControl);
 var
   i: Integer;
 begin
@@ -649,7 +660,7 @@ begin
     FControls.Delete(i);
 end;
 
-procedure TTyStyleController.SeedModeIfDual;
+procedure TTyCustomStyleController.SeedModeIfDual;
 begin
   { A dual-mode theme defines some vars ONLY inside its @mode blocks (e.g.
     --transparent-fill). If such a theme is active with NO mode selected, those vars
@@ -662,7 +673,7 @@ begin
     FModel.SetMode(FModel.DefaultModeName);
 end;
 
-procedure TTyStyleController.Changed;
+procedure TTyCustomStyleController.Changed;
 var
   i: Integer;
 begin
@@ -686,12 +697,12 @@ begin
   FChangeListeners.CallNotifyEvents(Self);
 end;
 
-procedure TTyStyleController.AddChangeListener(AListener: TNotifyEvent);
+procedure TTyCustomStyleController.AddChangeListener(AListener: TNotifyEvent);
 begin
   FChangeListeners.Add(TMethod(AListener));
 end;
 
-procedure TTyStyleController.RemoveChangeListener(AListener: TNotifyEvent);
+procedure TTyCustomStyleController.RemoveChangeListener(AListener: TNotifyEvent);
 begin
   FChangeListeners.Remove(TMethod(AListener));
 end;
@@ -703,10 +714,10 @@ begin
   Result := GDefaultController;
 end;
 
-function TyDensityMetric(AController: TTyStyleController; AClassicVal: Integer;
+function TyDensityMetric(AController: TTyCustomStyleController; AClassicVal: Integer;
   const AToken: string): Integer;
 var
-  c: TTyStyleController;
+  c: TTyCustomStyleController;
 begin
   c := AController;
   if c = nil then c := TyDefaultController;
@@ -716,9 +727,9 @@ begin
     Result := AClassicVal;   { classic: keep the caller's own default, byte-identical }
 end;
 
-function TyLineHeight(AController: TTyStyleController): Integer;
+function TyLineHeight(AController: TTyCustomStyleController): Integer;
 var
-  c: TTyStyleController;
+  c: TTyCustomStyleController;
 begin
   c := AController;
   if c = nil then c := TyDefaultController;
@@ -726,7 +737,7 @@ begin
   if Result < 0 then Result := 0;   // a negative leading is not a thing; treat it as unset
 end;
 
-function TyDensityHeight(AController: TTyStyleController; AClassicH: Integer): Integer;
+function TyDensityHeight(AController: TTyCustomStyleController; AClassicH: Integer): Integer;
 begin
   Result := TyDensityMetric(AController, AClassicH, '--control-height');
 end;

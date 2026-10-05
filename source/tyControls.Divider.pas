@@ -68,7 +68,7 @@ function TyDividerLayout(AClientWidth, AClientHeight, ACaptionWidth: Integer;
   ARightToLeft: Boolean = False): TTyDividerLayout;
 
 type
-  TTyDivider = class(TTyGraphicControl)
+  TTyCustomDivider = class(TTyGraphicControl)
   private
     FAlignment: TAlignment;
     FLeftIndent: Integer;
@@ -85,16 +85,6 @@ type
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
-  published
-    { Caption is TControl's, not a second string of our own.
-
-      It used to be a field-backed property shadowing TControl.Caption, so a control had
-      TWO captions: `P.Caption := 'x'` set ours and left TControl.Text empty, while
-      anything reading Text -- an action link, an accessibility query, TControl's own
-      csSetCaption wiring, generic code that walks TControl -- saw ''. On LCL these are one
-      string: Caption IS Text, routed through RealSetText, and a repaint is arranged by
-      overriding TextChanged. That is what this does now. }
-    property Caption;
     { Where the caption sits relative to the rule:
         taLeftJustify  — caption at the left, rule fills the space to its right;
         taRightJustify — mirror (caption at the right, rule to its left);
@@ -111,10 +101,63 @@ type
       Logical, not device, px: it is scaled through the painter alongside the gap
       and rule thickness, so an indent set once looks the same at 96 and 192 dpi. }
     property LeftIndent: Integer read FLeftIndent write SetLeftIndent default TyDividerIndentAuto;
+  end;
+
+  { TTyDivider publishes TTyCustomDivider's properties; everything lives in TTyCustomDivider. }
+  TTyDivider = class(TTyCustomDivider)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    { Caption is TControl's, not a second string of our own.
+
+      It used to be a field-backed property shadowing TControl.Caption, so a control had
+      TWO captions: `P.Caption := 'x'` set ours and left TControl.Text empty, while
+      anything reading Text -- an action link, an accessibility query, TControl's own
+      csSetCaption wiring, generic code that walks TControl -- saw ''. On LCL these are one
+      string: Caption IS Text, routed through RealSetText, and a repaint is arranged by
+      overriding TextChanged. That is what this does now. }
+    property Caption;
+    property Alignment;
+    property LeftIndent;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
   end;
 
 implementation
@@ -238,9 +281,9 @@ begin
   end;
 end;
 
-{ TTyDivider }
+{ TTyCustomDivider }
 
-constructor TTyDivider.Create(AOwner: TComponent);
+constructor TTyCustomDivider.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FAlignment := taLeftJustify;
@@ -249,7 +292,7 @@ begin
   Height := TyDensityHeight(ActiveController, 24);
 end;
 
-function TTyDivider.GetStyleTypeKey: string;
+function TTyCustomDivider.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyLabel': this is a RULE, not text chrome — it strokes solid bands around an optional caption.
     Added to 'TyLabel's rule block as an extra selector, so every resolved value is
@@ -257,25 +300,25 @@ begin
   Result := 'TyDivider';
 end;
 
-function TTyDivider.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
+function TTyCustomDivider.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
 begin
   Result := TyResolveFontSize(AStyle, ParentFont, Font.Size, ActiveController);
 end;
 
-procedure TTyDivider.TextChanged;
+procedure TTyCustomDivider.TextChanged;
 begin
   inherited TextChanged;
   Invalidate;
 end;
 
-procedure TTyDivider.SetAlignment(AValue: TAlignment);
+procedure TTyCustomDivider.SetAlignment(AValue: TAlignment);
 begin
   if FAlignment = AValue then Exit;
   FAlignment := AValue;
   Invalidate;
 end;
 
-procedure TTyDivider.SetLeftIndent(AValue: Integer);
+procedure TTyCustomDivider.SetLeftIndent(AValue: Integer);
 begin
   { Every negative value is the same state ("Alignment decides"), so normalise to
     the named one -- otherwise -2 and -1 would both work but only one of them
@@ -286,7 +329,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyDivider.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomDivider.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -381,7 +424,7 @@ begin
   end;
 end;
 
-procedure TTyDivider.Paint;
+procedure TTyCustomDivider.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

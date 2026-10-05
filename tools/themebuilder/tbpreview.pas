@@ -324,7 +324,7 @@ type
   { what TbFastProbe could tell }
   TTbFastProbe = (tfpClean, tfpRaised, tfpUnknown);
 
-procedure TbApplyController(ARoot: TWinControl; AController: TTyStyleController);
+procedure TbApplyController(ARoot: TWinControl; AController: TTyCustomStyleController);
 { The probe every load and switch runs: TbFastProbe, and only when that one does not say
   clean, TbProbeResolve (which then decides, and names the typeKey). AText is the user text
   the model holds, AModern whether the density pack sits on it. }
@@ -352,7 +352,7 @@ var
   GDensitySheet: TTyCssStylesheet = nil;
   GCatalog: TStringList = nil;          { the catalog typeKeys, lower case, sorted }
 
-procedure TbApplyController(ARoot: TWinControl; AController: TTyStyleController);
+procedure TbApplyController(ARoot: TWinControl; AController: TTyCustomStyleController);
 
   procedure SetOne(AControl: TControl);
   begin

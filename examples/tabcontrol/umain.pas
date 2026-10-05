@@ -76,8 +76,8 @@ type
     procedure ToggleStrip(Sender: TObject);       { TabHeight 32 <-> 0 }
   private
     FExtraCount: Integer;
-    function PageTitle(APage: TTyTabSheet): string;
-    function IsFixedPage(APage: TTyTabSheet): Boolean;
+    function PageTitle(APage: TTyCustomTabSheet): string;
+    function IsFixedPage(APage: TTyCustomTabSheet): Boolean;
   end;
 
 var
@@ -155,7 +155,7 @@ end;
 
 { The tab caption with its '&' mnemonic marker removed, for status-bar display
   (the header itself draws the marked letter underlined while Alt is held). }
-function TMainForm.PageTitle(APage: TTyTabSheet): string;
+function TMainForm.PageTitle(APage: TTyCustomTabSheet): string;
 var
   Display: string;
   MnemonicPos: Integer;
@@ -169,7 +169,7 @@ end;
 { True for the three pages designed in umain.lfm. Closing a page FREES it, and
   those three are form fields, so a demo that let them go would leave PgGeneral /
   PgAppearance / PgAbout dangling -- the close veto below refuses them instead. }
-function TMainForm.IsFixedPage(APage: TTyTabSheet): Boolean;
+function TMainForm.IsFixedPage(APage: TTyCustomTabSheet): Boolean;
 begin
   Result := (APage = PgGeneral) or (APage = PgAppearance) or (APage = PgAbout);
 end;
@@ -222,7 +222,7 @@ end;
 procedure TMainForm.PageClosing(Sender: TObject; AIndex: Integer;
   var AllowClose: Boolean);
 var
-  Page: TTyTabSheet;
+  Page: TTyCustomTabSheet;
 begin
   Page := PageCtrl.Pages[AIndex];
   AllowClose := not IsFixedPage(Page);
@@ -282,7 +282,7 @@ end;
   the close veto -- only a run-time page may go. }
 procedure TMainForm.RemoveCurrentPage(Sender: TObject);
 var
-  Page: TTyTabSheet;
+  Page: TTyCustomTabSheet;
   Gone: string;
 begin
   Page := PageCtrl.ActivePage;

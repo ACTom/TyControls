@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyCheckListBox 是**每行带勾选框的列表框**。继承自 [TTyListBox](listbox.md),覆写 `PaintItemContent` 在每行左侧画一个勾选框 + 文字。**勾选状态存在 `Items.Objects[i]`(0/1)**,与条目天然对齐(排序 / 删除都跟着走,不会错位)。点击勾选框列、或在选中行按**空格**即可切换;其余选择行为同 `TTyListBox`。勾选框外观取自 `'TyCheckBox'` 主题。
+TTyCheckListBox 是**每行带勾选框的列表框**。继承自 [TTyCustomListBox](listbox.md),覆写 `PaintItemContent` 在每行左侧画一个勾选框 + 文字。**勾选状态存在 `Items.Objects[i]`(0/1)**,与条目天然对齐(排序 / 删除都跟着走,不会错位)。点击勾选框列、或在选中行按**空格**即可切换;其余选择行为同 `TTyListBox`。勾选框外观取自 `'TyCheckBox'` 主题。
 
 ---
 
@@ -34,7 +34,7 @@ uses tyControls.CheckListBox;
 | `CheckedCount: Integer` | 已勾选的行数(`cbGrayed` 计入)。 |
 | `OnClickCheck: TNotifyEvent` | 某行勾选状态被切换时触发。 |
 
-另继承 `TTyListBox` 的 `Items` / `ItemIndex` / `OnChange` / 多选 等。
+另继承 `TTyCustomListBox` 的 `Items` / `ItemIndex` / `OnChange` / 多选 等。
 
 ### 3.1 逐行状态存在哪
 

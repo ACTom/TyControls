@@ -35,6 +35,9 @@ uses tyControls.ColorGrid;
 | `Columns: Integer` | 列数,默认 `8`,写入时下限夹到 `1`。 |
 | `Selected: TColor` | 当前选中的颜色。**读**返回选中色;**写**仅存值 + 重绘(不触发 `OnChange`)。 |
 | `AddColor(AColor: TColor)` | 追加一个颜色格并重绘。 |
+| `ClearColors` | 清空所有颜色格(构造时填的 VGA 调色板也清掉)并取消选中。要一套完全自己的色板时先调它。 |
+| `ColorAt(AIndex): TColor` | 第 `AIndex` 格的颜色,越界返回 `clNone`。 |
+| `SetColorAt(AIndex, AColor)` | 把第 `AIndex` 格改成 `AColor` 并重绘(越界忽略,不触发 `OnChange`);选中的格子仍是这一格。 |
 | `ColorCount: Integer` | 当前颜色格数量。 |
 | `CellAt(AX, AY): Integer` | 设备坐标点 `(AX, AY)` 处的格子索引;点在任何格子之外(空网格、或最后一行右侧空位)返回 `-1`。 |
 | `OnChange: TNotifyEvent` | **点击某格选中**时触发(代码写 `Selected` 不触发)。 |

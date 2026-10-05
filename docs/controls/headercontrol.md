@@ -95,12 +95,14 @@ property Sort[AIndex: Integer]: TTyHeaderSortDirection;    // 单独读写排序
 
 ### 事件
 
+4.0 起第一个参数是 `TTyCustomHeaderControl`（照 LCL 的 `TCustomSectionNotifyEvent`），3.0 写 `AHeader: TTyHeaderControl` 的处理过程要改签名。
+
 ```pascal
 TTyHeaderTrackState = (tsTrackBegin, tsTrackMove, tsTrackEnd);
 
-property OnSectionClick:  procedure(AHeader: TTyHeaderControl; AIndex: Integer) of object;
-property OnSectionResize: procedure(AHeader: TTyHeaderControl; AIndex, AWidth: Integer) of object;
-property OnSectionTrack:  procedure(AHeader: TTyHeaderControl; AIndex, AWidth: Integer;
+property OnSectionClick:  procedure(AHeader: TTyCustomHeaderControl; AIndex: Integer) of object;
+property OnSectionResize: procedure(AHeader: TTyCustomHeaderControl; AIndex, AWidth: Integer) of object;
+property OnSectionTrack:  procedure(AHeader: TTyCustomHeaderControl; AIndex, AWidth: Integer;
                                     AState: TTyHeaderTrackState) of object;
 ```
 

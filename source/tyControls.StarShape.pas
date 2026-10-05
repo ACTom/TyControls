@@ -61,7 +61,7 @@ type
     Valid: Boolean;
   end;
 
-  TTyStarShape = class(TTyGraphicControl)
+  TTyCustomStarShape = class(TTyGraphicControl)
   private
     FPoints: Integer;
     FInnerRatio: Single;
@@ -102,7 +102,6 @@ type
       Without that half-pixel the outermost inked row and column would be lost,
       because the stroke is centred on a path inset by ceil(width/2). }
     function PtInShape(const APt: TPoint): Boolean;
-  published
     property Points: Integer read FPoints write SetPoints default 5;
     property InnerRatio: Single read FInnerRatio write SetInnerRatio;
     { Turns the ring a half-step so vertex 0 points at 6 o'clock. This is LCL's
@@ -113,11 +112,56 @@ type
       control's rectangle — TShape.OnShapeClick's contract, on the control this
       library uses in place of Shape = stStar. }
     property OnShapeClick: TNotifyEvent read FOnShapeClick write FOnShapeClick;
-    property Align;
-    property Anchors;
+  end;
+
+  { TTyStarShape publishes TTyCustomStarShape's properties; everything lives in TTyCustomStarShape. }
+  TTyStarShape = class(TTyCustomStarShape)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
     property StyleClass;
     property StyleOverride;
     property Controller;
+    property Points;
+    property InnerRatio;
+    property PointDown;
+    property OnShapeClick;
+    property Align;
+    property Anchors;
   end;
 
 { Pure geometry: the vertices of an N-point star inscribed in ARect.
@@ -245,7 +289,7 @@ begin
          or (TyPolygonEdgeDistance(poly, APt) <= tol + HitEps);
 end;
 
-constructor TTyStarShape.Create(AOwner: TComponent);
+constructor TTyCustomStarShape.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FPoints := 5;
@@ -255,7 +299,7 @@ begin
   Height := 96;
 end;
 
-function TTyStarShape.GetStyleTypeKey: string;
+function TTyCustomStarShape.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyPanel': a decorative star is not a panel surface.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
@@ -263,7 +307,7 @@ begin
   Result := 'TyStarShape';
 end;
 
-procedure TTyStarShape.SetPoints(AValue: Integer);
+procedure TTyCustomStarShape.SetPoints(AValue: Integer);
 begin
   if AValue < TyStarMinPoints then AValue := TyStarMinPoints;
   if FPoints = AValue then Exit;
@@ -271,7 +315,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyStarShape.SetInnerRatio(AValue: Single);
+procedure TTyCustomStarShape.SetInnerRatio(AValue: Single);
 begin
   if AValue < TyStarMinInnerRatio then AValue := TyStarMinInnerRatio
   else if AValue > TyStarMaxInnerRatio then AValue := TyStarMaxInnerRatio;
@@ -280,14 +324,14 @@ begin
   Invalidate;
 end;
 
-procedure TTyStarShape.SetPointDown(AValue: Boolean);
+procedure TTyCustomStarShape.SetPointDown(AValue: Boolean);
 begin
   if FPointDown = AValue then Exit;
   FPointDown := AValue;
   Invalidate;
 end;
 
-function TTyStarShape.ResolveGeometry(const ARect: TRect; APPI: Integer): TTyStarGeometry;
+function TTyCustomStarShape.ResolveGeometry(const ARect: TRect; APPI: Integer): TTyStarGeometry;
 var
   S: TTyStyleSet;
   ppi: Integer;
@@ -304,25 +348,25 @@ begin
     TyBorderVisible(S));
 end;
 
-function TTyStarShape.StarGeometry: TTyStarGeometry;
+function TTyCustomStarShape.StarGeometry: TTyStarGeometry;
 begin
   Result := ResolveGeometry(ClientRect, Font.PixelsPerInch);
 end;
 
-function TTyStarShape.PtInShape(const APt: TPoint): Boolean;
+function TTyCustomStarShape.PtInShape(const APt: TPoint): Boolean;
 begin
   // +0.5 = the pixel CELL's centre. See the declaration for why the half matters.
   Result := TyPointInStar(StarGeometry, PointF(APt.X + 0.5, APt.Y + 0.5));
 end;
 
-procedure TTyStarShape.CMHitTest(var Message: TCMHitTest);
+procedure TTyCustomStarShape.CMHitTest(var Message: TCMHitTest);
 begin
   // The coordinates arrive control-relative (wincontrol.inc:5239 passes
   // Point(P.X - Left, P.Y - Top)), which for a graphic control is already client space.
   Message.Result := TyShapeHitTestAnswer(PtInShape(Point(Message.XPos, Message.YPos)));
 end;
 
-procedure TTyStarShape.CMMaskHitTest(var Message: TCMHitTest);
+procedure TTyCustomStarShape.CMMaskHitTest(var Message: TCMHitTest);
 var
   Frm: TCustomForm;
   P: TPoint;
@@ -340,19 +384,19 @@ begin
   Message.Result := TyShapeMaskHitTestAnswer(PtInShape(P));
 end;
 
-function TTyStarShape.ShapeClickPoint: TPoint;
+function TTyCustomStarShape.ShapeClickPoint: TPoint;
 begin
   Result := ScreenToClient(Mouse.CursorPos);
 end;
 
-procedure TTyStarShape.Click;
+procedure TTyCustomStarShape.Click;
 begin
   inherited Click;
   if Assigned(FOnShapeClick) and PtInShape(ShapeClickPoint) then
     FOnShapeClick(Self);
 end;
 
-procedure TTyStarShape.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomStarShape.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -413,7 +457,7 @@ begin
   end;
 end;
 
-procedure TTyStarShape.Paint;
+procedure TTyCustomStarShape.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

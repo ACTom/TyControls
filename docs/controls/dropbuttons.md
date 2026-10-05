@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-这两个控件把一个下拉菜单挂到按钮上，都继承自 [[TTyButton]]，共享同一套框架、悬停背景淡入、状态、焦点环与数字角标——**不新增任何 `.tycss` 规则**：
+这两个控件把一个下拉菜单挂到按钮上，都继承自 [[TTyCustomButton]]，共享同一套框架、悬停背景淡入、状态、焦点环与数字角标——**不新增任何 `.tycss` 规则**：
 
 | 控件 | 布局 | 点击行为 | 典型用途 |
 |------|------|----------|----------|
@@ -49,7 +49,7 @@ uses tyControls.Menu, tyControls.DropButtons;
 
 > 菜单按钮**没有** `ArrowWidth`——它不分裂，尾随箭头只是视觉标识，整按钮都可点。
 
-### 3.3 继承自 [[TTyButton]] 的常用成员
+### 3.3 继承自 [[TTyCustomButton]] 的常用成员
 
 `Caption`、`Down`（`:selected` 常驻选中态）、`Default`、`Cancel`、`ModalResult`、`ShowBadge`/`BadgeValue`/`BadgePosition`/`OnBadgeDisplay`（数字角标）、`AnimationsEnabled`（悬停背景渐变）、`Enabled`、`Font`、`Align`、`Anchors`、`StyleClass`、`Controller`、`OnClick` 等——细节见 [button.md](button.md)。
 
@@ -113,7 +113,7 @@ DropDownMenu.PopUp(p.X, p.Y);
 
 ## 5. 绘制机制（DrawContent）
 
-两者都**只重写** `DrawContent`（各自重写 `Create`/路由方法），不触碰框架/状态/角标绘制路径：基类 `RenderTo`（继承自 TTyButton）先画框架、算内边距，再把已内缩的内容矩形交给 `DrawContent`。
+两者都**只重写** `DrawContent`（各自重写 `Create`/路由方法），不触碰框架/状态/角标绘制路径：基类 `RenderTo`（继承自 TTyCustomButton）先画框架、算内边距，再把已内缩的内容矩形交给 `DrawContent`。
 
 - **`TTyDropDownButton.DrawContent`**：把内容矩形切成「标题矩形（左）+ 箭头矩形（右 `ArrowWidth`）」；`inherited DrawContent(P, 标题矩形, S)` 居中画标题；箭头矩形里用 `Canvas2D` 画一个居中的**向下三角**（`FillPolyG` 语义，填 `S.TextColor`）；两者之间画一条 1px 竖直**分隔线**（`S.BorderColor`）。切法来自 `TyDropArrowZoneLeft`——**和命中判定同一个**。箭头装不下时（箭头宽 ≥ 内容区宽）**整个箭头区不画**，标题拿走全部内容区；命中那边用的是同一个判断，所以不会出现"画着却点不到"或"点得到却没画"。
 - **`TTyMenuButton.DrawContent`**：同样切出标题 + 尾随箭头区，画居中标题 + 向下三角，但**无分隔线**（整按钮一体）。
@@ -184,6 +184,6 @@ SortBtn.DropDownMenu := Menu;
 
 ## 相关
 
-- [[TTyButton]] —— 基类，提供框架、状态、悬停渐变、角标、Default/Cancel/ModalResult。
+- [[TTyCustomButton]] —— 基类，提供框架、状态、悬停渐变、角标、Default/Cancel/ModalResult。
 - [[菜单|menu]] —— `TTyPopupMenu` 主题化弹出菜单（`PopUp(X, Y)` 渲染菜单树）。
 - **右到左镜像：暂不支持，且是刻意的。** `TTyDropDownButton` 把按钮面切成「标题区 + 箭头区」，并且**要把点击的 x 读回来**判断按的是哪一半（`TyDropArrowHit`，`tyControls.DropButtons.pas:170`）。只镜像绘制而不镜像命中，就会得到「画在左边、点在右边」——本库已经在 `TTyShape`、`TTyTreeView.GetNodeAt`、日期选择器上栽过三次的那个 bug。所以箭头区暂时留在右侧；`tests/test.rtl.pas` 的 `TRtlExclusionTest` 把绘制与命中钉在一起，将来谁要镜像它，必须在同一次提交里把两边一起改，否则测试变红。（`TTyMenuButton` 没有内部命中，整块就是下拉，不受影响。）

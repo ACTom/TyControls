@@ -72,7 +72,7 @@ type
     function EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
   end;
 
-  TTyScrollBar = class(TTyCustomControl)
+  TTyCustomScrollBar = class(TTyCustomControl)
   private
     FKind: TTyScrollBarKind;
     FMirrorH: Boolean;
@@ -318,7 +318,11 @@ type
     { 换主题时控件收到的就只有这一个广播,所以「自动隐藏关着 -> 条必须看得见」
       这条不变量只能挂在这儿修。见实现处。 }
     procedure Invalidate; override;
-  published
+    { A standalone bar is a keyboard control (arrows / PgUp / PgDn / Home / End in
+      KeyDown), so it takes a tab stop like the native TScrollBar does. Declared True to
+      match the constructor, so a host's TabStop=False opt-out streams — which is exactly
+      what the bars EMBEDDED inside a list/grid/tree/scroll box do, in code. }
+    property TabStop default True;
     { LIVE TRACKING -- whether dragging the thumb moves Position continuously (True, the
       default and what this bar has always done) or only on mouse-up (False).
 
@@ -390,15 +394,76 @@ type
     property LargeChange: Integer read FLargeChange write SetLargeChange default 0;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property OnScroll: TScrollEvent read FOnScroll write FOnScroll;
-    { A standalone bar is a keyboard control (arrows / PgUp / PgDn / Home / End in
-      KeyDown), so it takes a tab stop like the native TScrollBar does. Declared True to
-      match the constructor, so a host's TabStop=False opt-out streams — which is exactly
-      what the bars EMBEDDED inside a list/grid/tree/scroll box do, in code. }
-    property TabStop default True;
+  end;
+
+  { TTyScrollBar publishes TTyCustomScrollBar's properties; everything lives in TTyCustomScrollBar. }
+  TTyScrollBar = class(TTyCustomScrollBar)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property LiveTracking;
+    property AnimationsEnabled;
+    property AutoHide;
+    property MirrorHorizontal;
+    property Kind;
+    property Min;
+    property Max;
+    property Position;
+    property PageSize;
+    property SmallChange;
+    property LargeChange;
+    property OnChange;
+    property OnScroll;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
   end;
 
 function TyScrollThumbRect(const ATrack: TRect; AKind: TTyScrollBarKind;
@@ -510,7 +575,7 @@ begin
       AClient.Right - AButtonSize, AClient.Bottom);
 end;
 
-constructor TTyScrollBar.Create(AOwner: TComponent);
+constructor TTyCustomScrollBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   // KeyDown below implements the whole native keyboard: line, page and end-to-end. None of
@@ -549,7 +614,7 @@ begin
   Height := 160;
 end;
 
-destructor TTyScrollBar.Destroy;
+destructor TTyCustomScrollBar.Destroy;
 begin
   // FTimer is owned by Self (would be freed by DestroyComponents), but free it
   // explicitly first so the OnTimer callback can never fire mid-teardown.
@@ -559,17 +624,17 @@ begin
   inherited Destroy;
 end;
 
-function TTyScrollBar.GetStyleTypeKey: string;
+function TTyCustomScrollBar.GetStyleTypeKey: string;
 begin
   Result := 'TyScrollBar';
 end;
 
-function TTyScrollBar.Mirrored: Boolean;
+function TTyCustomScrollBar.Mirrored: Boolean;
 begin
   Result := FMirrorH and (FKind = sbHorizontal);
 end;
 
-procedure TTyScrollBar.SetMirrorHorizontal(const AValue: Boolean);
+procedure TTyCustomScrollBar.SetMirrorHorizontal(const AValue: Boolean);
 begin
   if FMirrorH = AValue then Exit;
   FMirrorH := AValue;
@@ -578,7 +643,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyScrollBar.SetAutoHide(const AValue: TTyScrollBarAutoHide);
+procedure TTyCustomScrollBar.SetAutoHide(const AValue: TTyScrollBarAutoHide);
 begin
   if FAutoHide = AValue then Exit;
   FAutoHide := AValue;
@@ -592,7 +657,7 @@ begin
   Invalidate;
 end;
 
-function TTyScrollBar.EffectiveAutoHideMs: Integer;
+function TTyCustomScrollBar.EffectiveAutoHideMs: Integer;
 var
   themeMs: Integer;
 begin
@@ -613,7 +678,7 @@ begin
   Result := themeMs;   // sbahDefault
 end;
 
-function TTyScrollBar.ThemeAutoHideMs: Integer;
+function TTyCustomScrollBar.ThemeAutoHideMs: Integer;
 { --scrollbar-auto-hide 的解析结果，缓存在 (model, ThemeVersion) 上。
 
   为什么值得缓存：ResolveMetric **即使缓存命中**也要先拼一个
@@ -638,7 +703,7 @@ function TTyScrollBar.ThemeAutoHideMs: Integer;
 var
   { ActiveController，不是裸 Controller——后者在没挂 controller 时会 AV。
     全拎进局部变量:命中那条路是本函数存在的全部理由,别在上面反复问。 }
-  ctrl: TTyStyleController;
+  ctrl: TTyCustomStyleController;
   mdl: TTyStyleModel;
   ver: Cardinal;
 begin
@@ -654,7 +719,7 @@ begin
   Result := FAutoHideMsCache;
 end;
 
-function TTyScrollBar.AutoHideHeldOpen: Boolean;
+function TTyCustomScrollBar.AutoHideHeldOpen: Boolean;
 begin
   { 任一成立就「按住不放」，延时表根本不起。
     注意 Focused 只对独立摆放的条有意义：内嵌条既不进 Tab 顺序(TabStop=False),点击也把
@@ -670,7 +735,7 @@ begin
             or (HandleAllocated and Focused);
 end;
 
-procedure TTyScrollBar.NoteActivity;
+procedure TTyCustomScrollBar.NoteActivity;
 begin
   FIdleMs := 0;
   if EffectiveAutoHideMs < 0 then
@@ -693,7 +758,7 @@ begin
   if FHideTimer <> nil then FHideTimer.Enabled := True;
 end;
 
-procedure TTyScrollBar.SetHostHovered(AValue: Boolean);
+procedure TTyCustomScrollBar.SetHostHovered(AValue: Boolean);
 begin
   if FHostHovered = AValue then Exit;
   FHostHovered := AValue;
@@ -715,7 +780,7 @@ begin
   if AValue or Visible then NoteActivity;
 end;
 
-procedure TTyScrollBar.StartFade(ATo: Single; ADurationMs: Integer);
+procedure TTyCustomScrollBar.StartFade(ATo: Single; ADurationMs: Integer);
 begin
   { 「已经在那儿了」只有在**没有反方向的动画在跑**的时候才等于「无事可做」。
     只比可见度的话,装了膛还没推进的那一拍(可见度 1.0、目标 0.0)会在这里
@@ -727,7 +792,7 @@ begin
   FFadeAnim := TyAnimatorInit(ADurationMs, teEaseOutCubic);
 end;
 
-function TTyScrollBar.PaintStyle: TTyStyleSet;
+function TTyCustomScrollBar.PaintStyle: TTyStyleSet;
 { 主题给的那份样式，乘上自动隐藏的当前可见度。
 
   乘出来的 Opacity 是**条身这一层**合成到底下时的不透明度(见 RenderTo),不再交给画笔。
@@ -759,12 +824,12 @@ begin
   Include(Result.Present, tpOpacity);
 end;
 
-function TTyScrollBar.PaintStyleForTest: TTyStyleSet;
+function TTyCustomScrollBar.PaintStyleForTest: TTyStyleSet;
 begin
   Result := PaintStyle;
 end;
 
-procedure TTyScrollBar.AutoHideTick(AMs: Integer);
+procedure TTyCustomScrollBar.AutoHideTick(AMs: Integer);
 var
   delay: Integer;
 begin
@@ -809,7 +874,7 @@ begin
     StartFade(0.0, TyScrollBarFadeOutMs);
 end;
 
-procedure TTyScrollBar.EnsureHideTimer;
+procedure TTyCustomScrollBar.EnsureHideTimer;
 begin
   { 设计期不淡(AutoHideHeldOpen 已经恒真),无窗口时也不建表——无头测试直接
     喂 AutoHideTick,建了也只是个永远空转的定时器。 }
@@ -823,7 +888,7 @@ begin
   end;
 end;
 
-procedure TTyScrollBar.ArmAutoHideClock;
+procedure TTyCustomScrollBar.ArmAutoHideClock;
 begin
   { 真正的门是第二句 AutoHideTimerNeeded:已经淡到 0 又没人按住的条起表也没活干,
     头一拍就会把自己停掉——那一拍是白烧的,而且 HandleHideTimer 停表时顺手清掉
@@ -846,12 +911,12 @@ begin
   if FHideTimer <> nil then FHideTimer.Enabled := True;
 end;
 
-function TTyScrollBar.AutoHideClockArmed: Boolean;
+function TTyCustomScrollBar.AutoHideClockArmed: Boolean;
 begin
   Result := (FHideTimer <> nil) and FHideTimer.Enabled;
 end;
 
-procedure TTyScrollBar.InitializeWnd;
+procedure TTyCustomScrollBar.InitializeWnd;
 begin
   inherited InitializeWnd;
   { 两个时钟都从这一刻起算。一条刚拿到句柄的条没有「已经闲置过的时间」——
@@ -862,7 +927,7 @@ begin
   ArmAutoHideClock;
 end;
 
-function TTyScrollBar.AutoHideTimerNeeded: Boolean;
+function TTyCustomScrollBar.AutoHideTimerNeeded: Boolean;
 { 三条,顺序是有讲究的。
 
   **跑着的淡入淡出排第一,这一条不是风格问题,是 Task 3 那个搁浅 bug 的完整重演。**
@@ -887,12 +952,12 @@ begin
   Result := (EffectiveAutoHideMs >= 0) and (FFadeLevel > 0.0);
 end;
 
-procedure TTyScrollBar.HandleHideTimerTick;
+procedure TTyCustomScrollBar.HandleHideTimerTick;
 begin
   HandleHideTimer(nil);
 end;
 
-procedure TTyScrollBar.HandleHideTimer(Sender: TObject);
+procedure TTyCustomScrollBar.HandleHideTimer(Sender: TObject);
 begin
   { 按**真实经过的时间**推进,不是 FHideTimer.Interval 那个标称的 16。理由和
     200 行开外的 HandleTimer 一模一样:界面忙的时候定时器会被饿死,而**网格滚动
@@ -911,12 +976,12 @@ begin
   end;
 end;
 
-function TTyScrollBar.FadeNowMs: QWord;
+function TTyCustomScrollBar.FadeNowMs: QWord;
 begin
   Result := GetTickCount64;
 end;
 
-function TTyScrollBar.FadeTickElapsedMs: Integer;
+function TTyCustomScrollBar.FadeTickElapsedMs: Integer;
 { TickElapsedMs 的孪生体,自带时刻戳。**不能共用 FLastTickMs** ——那是位置缓动
   的,两套定时器各跑各的,共用一个戳就是互相把对方的起点冲掉。
 
@@ -935,7 +1000,7 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-procedure TTyScrollBar.MouseEnter;
+procedure TTyCustomScrollBar.MouseEnter;
 begin
   { 不调 inherited 会吞掉 LCL 那层的 hover 状态。而「指针在不在条上」这件事
     inherited 已经记在 FHover 里了(TTyCustomControl.MouseEnter/MouseLeave 是
@@ -950,7 +1015,7 @@ begin
   NoteActivity;
 end;
 
-procedure TTyScrollBar.MouseLeave;
+procedure TTyCustomScrollBar.MouseLeave;
 begin
   { 先 inherited:FHover 由它清(全库只有 TTyCustomControl.MouseEnter/MouseLeave
     写这个字段),清完 AutoHideHeldOpen 才答「没按住」。
@@ -966,7 +1031,7 @@ begin
   NoteActivity;
 end;
 
-procedure TTyScrollBar.DoEnter;
+procedure TTyCustomScrollBar.DoEnter;
 begin
   { 焦点不只是「不计时」,还得**把条叫回来**。独立摆放的条 TabStop=True:等它
     淡到 0、定时器把自己停掉之后再 Tab 过来,按住不放那条臂连跑的机会都没有
@@ -979,7 +1044,7 @@ begin
   NoteActivity;
 end;
 
-procedure TTyScrollBar.DoExit;
+procedure TTyCustomScrollBar.DoExit;
 begin
   { 和 MouseLeave 同理,焦点这一半:有焦点的那段延时表是停的,这里不起回来的话条就
     一直留着。**只有独立摆放的条走得到这里。** 从前内嵌条也走得到 —— MouseDown 里那句
@@ -989,7 +1054,7 @@ begin
   NoteActivity;
 end;
 
-procedure TTyScrollBar.Invalidate;
+procedure TTyCustomScrollBar.Invalidate;
 begin
   { 换主题是这个类唯一听不见的事件:TTyStyleController.Changed 广播出来的就是
     一个光秃秃的 Invalidate(它自己的注释也这么写),全库没有 StyleChanged 钩子。
@@ -1028,7 +1093,7 @@ begin
   inherited Invalidate;
 end;
 
-procedure TTyScrollBar.EnsureTimer;
+procedure TTyCustomScrollBar.EnsureTimer;
 begin
   if FTimer = nil then
   begin
@@ -1042,7 +1107,7 @@ end;
 { 这一拍该推进多少毫秒 = 距上一拍的**真实**经过时间。
   抽成可覆写的,是为了让测试能喂一个受控时钟 —— 否则"按真实时间推进"
   这条只能靠肉眼在真机上看,而这正是当初写成名义间隔也没人发现的原因。 }
-function TTyScrollBar.TickElapsedMs: Integer;
+function TTyCustomScrollBar.TickElapsedMs: Integer;
 var
   nowMs: QWord;
 begin
@@ -1055,12 +1120,12 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-procedure TTyScrollBar.HandleTimerTick;
+procedure TTyCustomScrollBar.HandleTimerTick;
 begin
   HandleTimer(nil);
 end;
 
-procedure TTyScrollBar.HandleTimer(Sender: TObject);
+procedure TTyCustomScrollBar.HandleTimer(Sender: TObject);
 var
   elapsed: Integer;
 begin
@@ -1083,12 +1148,12 @@ begin
   end;
 end;
 
-function TTyScrollBar.AdvanceAnimation(AMs: Integer): Boolean;
+function TTyCustomScrollBar.AdvanceAnimation(AMs: Integer): Boolean;
 begin
   Result := FPosAnim.Advance(AMs);
 end;
 
-function TTyScrollBar.DisplayPos: Single;
+function TTyCustomScrollBar.DisplayPos: Single;
 begin
   { Mid-drag with LiveTracking off, the thumb is ahead of Position on purpose -- that gap IS
     the mode. Everything that PAINTS the thumb goes through here, so putting the exception in
@@ -1100,7 +1165,7 @@ begin
   Result := TyLerpF(FAnimFrom, FAnimTo, FPosAnim.Eased);
 end;
 
-procedure TTyScrollBar.SetPositionAnimating(AValue: Integer);
+procedure TTyCustomScrollBar.SetPositionAnimating(AValue: Integer);
 var
   Clamped: Integer;
 begin
@@ -1118,7 +1183,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyScrollBar.SetPositionSnapped(AValue: Integer);
+procedure TTyCustomScrollBar.SetPositionSnapped(AValue: Integer);
 var
   Clamped: Integer;
 begin
@@ -1154,14 +1219,14 @@ begin
   NoteActivity;
 end;
 
-procedure TTyScrollBar.SetKind(const AValue: TTyScrollBarKind);
+procedure TTyCustomScrollBar.SetKind(const AValue: TTyScrollBarKind);
 begin
   if FKind = AValue then Exit;
   FKind := AValue;
   Invalidate;
 end;
 
-procedure TTyScrollBar.SetMin(const AValue: Integer);
+procedure TTyCustomScrollBar.SetMin(const AValue: Integer);
 begin
   if FMin = AValue then Exit;
   FMin := AValue;
@@ -1169,7 +1234,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyScrollBar.SetMax(const AValue: Integer);
+procedure TTyCustomScrollBar.SetMax(const AValue: Integer);
 begin
   if FMax = AValue then Exit;
   FMax := AValue;
@@ -1177,7 +1242,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyScrollBar.SetPosition(const AValue: Integer);
+procedure TTyCustomScrollBar.SetPosition(const AValue: Integer);
 var
   Clamped: Integer;
 begin
@@ -1241,7 +1306,7 @@ begin
   NoteActivity;
 end;
 
-procedure TTyScrollBar.SetPageSize(const AValue: Integer);
+procedure TTyCustomScrollBar.SetPageSize(const AValue: Integer);
 begin
   if FPageSize = AValue then Exit;
   if AValue < 0 then
@@ -1251,7 +1316,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyScrollBar.SetSmallChange(const AValue: Integer);
+procedure TTyCustomScrollBar.SetSmallChange(const AValue: Integer);
 begin
   if AValue < 1 then
     FSmallChange := 1
@@ -1259,7 +1324,7 @@ begin
     FSmallChange := AValue;
 end;
 
-procedure TTyScrollBar.SetLargeChange(const AValue: Integer);
+procedure TTyCustomScrollBar.SetLargeChange(const AValue: Integer);
 begin
   // Negative is meaningless (a page action would scroll backwards); 0 is the "follow
   // PageSize" sentinel, so it is the floor rather than 1.
@@ -1272,7 +1337,7 @@ end;
 { FTrackPos is only meaningful for the duration of a deferred drag; outside one the pending
   value IS the committed value, and deriving that here rather than keeping the field in sync
   from every setter leaves exactly one place that can be wrong. }
-function TTyScrollBar.GetTrackPosition: Integer;
+function TTyCustomScrollBar.GetTrackPosition: Integer;
 begin
   if FDragging and not FLiveTracking then
     Result := FTrackPos
@@ -1280,19 +1345,19 @@ begin
     Result := FPosition;
 end;
 
-function TTyScrollBar.EffectiveLargeChange: Integer;
+function TTyCustomScrollBar.EffectiveLargeChange: Integer;
 begin
   if FLargeChange > 0 then Result := FLargeChange else Result := FPageSize;
   if Result < 1 then Result := 1;   // a page action that moves nothing is a dead control
 end;
 
-procedure TTyScrollBar.DoScroll(ACode: TScrollCode; var APos: Integer);
+procedure TTyCustomScrollBar.DoScroll(ACode: TScrollCode; var APos: Integer);
 begin
   if Assigned(FOnScroll) then
     FOnScroll(Self, ACode, APos);
 end;
 
-procedure TTyScrollBar.ScrollTo(ACode: TScrollCode; AProposed: Integer);
+procedure TTyCustomScrollBar.ScrollTo(ACode: TScrollCode; AProposed: Integer);
 var
   P: Integer;
 begin
@@ -1306,7 +1371,7 @@ begin
   Position := P;
 end;
 
-function TTyScrollBar.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+function TTyCustomScrollBar.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 begin
   // Let the published OnMouseWheel/Up/Down events fire first; if a handler marks
@@ -1320,26 +1385,31 @@ begin
   Result := True;
 end;
 
-function TTyScrollBar.EmbeddingHost(out AHost: ITyScrollBarFrameHost): Boolean;
+function TTyCustomScrollBar.EmbeddingHost(out AHost: ITyScrollBarFrameHost): Boolean;
 begin
-  Result := (Parent <> nil) and Supports(Parent, ITyScrollBarFrameHost, AHost)
-            and AHost.EmbedsScrollBar(Self);
+  { Only a TTyScrollBar can be embedded: the hosts build their own bars as TTyScrollBar and
+    answer for exactly those (ITyScrollBarFrameHost.EmbedsScrollBar), so a descendant of
+    TTyCustomScrollBar is always a standalone bar -- asking is skipped rather than lying about
+    its type. }
+  Result := (Parent <> nil) and (Self is TTyScrollBar)
+            and Supports(Parent, ITyScrollBarFrameHost, AHost)
+            and AHost.EmbedsScrollBar(TTyScrollBar(Self));
   if not Result then AHost := nil;
 end;
 
-function TTyScrollBar.IsEmbedded: Boolean;
+function TTyCustomScrollBar.IsEmbedded: Boolean;
 var
   host: ITyScrollBarFrameHost;
 begin
   Result := EmbeddingHost(host);
 end;
 
-function TTyScrollBar.PaintsParentFrame: Boolean;
+function TTyCustomScrollBar.PaintsParentFrame: Boolean;
 begin
   Result := IsEmbedded;
 end;
 
-procedure TTyScrollBar.PaintBody(APainter: TTyPainter; const ARect, ASpan: TRect;
+procedure TTyCustomScrollBar.PaintBody(APainter: TTyPainter; const ARect, ASpan: TRect;
   const AStyle: TTyStyleSet);
 var
   ThumbS: TTyStyleSet;
@@ -1424,7 +1494,7 @@ begin
   end;
 end;
 
-function TTyScrollBar.RenderBodyLayer(const ARect, ASpan: TRect; const AStyle: TTyStyleSet;
+function TTyCustomScrollBar.RenderBodyLayer(const ARect, ASpan: TRect; const AStyle: TTyStyleSet;
   APPI: Integer): TBGRABitmap;
 var
   B: TTyPainter;
@@ -1448,7 +1518,7 @@ begin
   end;
 end;
 
-procedure TTyScrollBar.RenderOverHostFrame(APainter: TTyPainter; const ARect: TRect;
+procedure TTyCustomScrollBar.RenderOverHostFrame(APainter: TTyPainter; const ARect: TRect;
   const AHost: ITyScrollBarFrameHost; const AStyle: TTyStyleSet; AAlpha: Single);
 var
   host: TControl;
@@ -1594,7 +1664,7 @@ begin
   end;
 end;
 
-procedure TTyScrollBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomScrollBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -1646,19 +1716,19 @@ begin
   end;
 end;
 
-procedure TTyScrollBar.Paint;
+procedure TTyCustomScrollBar.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-function TTyScrollBar.TrackRect: TRect;
+function TTyCustomScrollBar.TrackRect: TRect;
 begin
   // Inset client by a button-size at each end so the thumb/drag/paging
   // operate on the track between the (Task 5) end arrow buttons.
   Result := TyScrollTrackRect(ClientRect, FKind, TyScrollButtonSize(ClientRect, FKind));
 end;
 
-procedure TTyScrollBar.ButtonRects(const AClient: TRect; out ALo, AHi: TRect);
+procedure TTyCustomScrollBar.ButtonRects(const AClient: TRect; out ALo, AHi: TRect);
 var
   bs, mainLen: Integer;
 begin
@@ -1685,7 +1755,7 @@ begin
   end;
 end;
 
-function TTyScrollBar.TrackLength: Integer;
+function TTyCustomScrollBar.TrackLength: Integer;
 var
   Track: TRect;
 begin
@@ -1698,7 +1768,7 @@ begin
     Result := Track.Right - Track.Left;
 end;
 
-procedure TTyScrollBar.BeginThumbDrag(AGrabPosAlongTrack: Integer);
+procedure TTyCustomScrollBar.BeginThumbDrag(AGrabPosAlongTrack: Integer);
 var
   ThumbR: TRect;
   ThumbStart: Integer;
@@ -1721,7 +1791,7 @@ begin
   FPosAnim.SetTargetImmediate(1);
 end;
 
-procedure TTyScrollBar.DragThumbTo(APosAlongTrack: Integer);
+procedure TTyCustomScrollBar.DragThumbTo(APosAlongTrack: Integer);
 var
   Track, ThumbR: TRect;
   ThumbLen, FreeSpace, NewTop, Travel, NewPos, TrackStart, Off: Integer;
@@ -1777,7 +1847,7 @@ begin
   end;
 end;
 
-procedure TTyScrollBar.EndThumbDrag;
+procedure TTyCustomScrollBar.EndThumbDrag;
 var
   P: Integer;
   wasDragging: Boolean;
@@ -1821,7 +1891,7 @@ begin
   if wasDragging then NoteActivity;
 end;
 
-function TTyScrollBar.PosAlong(X, Y: Integer): Integer;
+function TTyCustomScrollBar.PosAlong(X, Y: Integer): Integer;
 begin
   { Stays a raw CLIENT coordinate under mirroring. The scoping document proposed turning this
     into TrackRect.Right - X, "one line"; it is the wrong line. Everything downstream of this
@@ -1835,7 +1905,7 @@ begin
     Result := X;
 end;
 
-procedure TTyScrollBar.FocusAfterClick;
+procedure TTyCustomScrollBar.FocusAfterClick;
 { 独立摆放的条:点它就拿焦点,与从前一样 —— 它有完整的键盘操作,焦点也是自动隐藏「按住
   不放」的信号。**不看 TabStop**:TabStop=False 的独立条只是不进 Tab 顺序,点它照样该拿到。
 
@@ -1872,7 +1942,7 @@ begin
   end;
 end;
 
-procedure TTyScrollBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomScrollBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   ThumbR, LoR, HiR: TRect;
   Back, Fwd: TScrollCode;
@@ -1941,7 +2011,7 @@ begin
   end;
 end;
 
-procedure TTyScrollBar.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomScrollBar.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   if not Enabled then Exit;
   inherited MouseMove(Shift, X, Y);
@@ -1949,7 +2019,7 @@ begin
     DragThumbTo(PosAlong(X, Y));
 end;
 
-procedure TTyScrollBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomScrollBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
   if Button = mbLeft then
@@ -1959,7 +2029,7 @@ begin
   end;
 end;
 
-procedure TTyScrollBar.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomScrollBar.KeyDown(var Key: Word; Shift: TShiftState);
 var
   Dec1, Inc1: Word;
 begin

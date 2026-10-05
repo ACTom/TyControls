@@ -31,7 +31,7 @@ type
     FOnEdited: TNotifyEvent;
     FRebuilding: Boolean;
     procedure TreeSelectionChanged(Sender: TObject);
-    procedure TreeChange(Sender: TTyTreeView; ANode: PTyTreeNode);
+    procedure TreeChange(Sender: TTyCustomTreeView; ANode: PTyTreeNode);
     function NodeItemOf(AObject: TPersistent): TTyTreeNodeItem;
   protected
     { The window title's fixed half; SetSubject appends ' - <SubjectTitle>' to it.
@@ -251,7 +251,7 @@ begin
     NotifySelection;
 end;
 
-procedure TTyStructureEditorForm.TreeChange(Sender: TTyTreeView; ANode: PTyTreeNode);
+procedure TTyStructureEditorForm.TreeChange(Sender: TTyCustomTreeView; ANode: PTyTreeNode);
 begin
   if not FRebuilding then
     NotifySelection;

@@ -19,8 +19,8 @@
 | `GetStyleTypeKey` 返回值（`TTyToolBar`） | `'TyToolBar'` |
 | `GetStyleTypeKey` 返回值（`TTyToolButton`） | `'TyButton'`；`Style` 为 `tbsSeparator` / `tbsDivider` 时是 `'TyToolSeparator'`（**随 `Style` 变**，见下） |
 | `GetStyleTypeKey` 返回值（`TTyToolSeparator`） | `'TyToolSeparator'`（**自己的键**，不再借工具条的） |
-| 基类（`TTyToolBar` / `TTyToolSeparator`） | `TTyCustomControl`（继承自 `TCustomControl`） |
-| 基类（`TTyToolButton`） | `TTyGlyphButtonBase` → `TTyButton` → `TTyCustomControl` |
+| 基类（`TTyToolBar` / `TTyToolSeparator`） | `TTyCustomToolBar` / `TTyCustomToolSeparator` → `TTyCustomControl`（继承自 `TCustomControl`） |
+| 基类（`TTyToolButton`） | `TTyCustomToolButton` → `TTyGlyphButtonBase` → `TTyCustomButton` → `TTyCustomControl` |
 | 默认尺寸（`TTyToolBar`） | 300 × 30（逻辑像素） |
 | 默认尺寸（`TTyToolButton`） | 23 × 22（= LCL `TToolButton.GetControlClassDefaultSize`；高走密度轴。放上工具条后高度由 `ButtonHeight` 接管，所以这个尺寸只决定**不在**工具条上时的样子） |
 | 默认尺寸（`TTyToolSeparator`） | 8 × 24（宽固定 8；高走密度轴 `TyDensityHeight(…, 24)`，现代密度下更高） |
@@ -68,9 +68,9 @@ uses tyControls.ToolBar, tyControls.Button;
 | `Wrapable` | `Boolean` | `True` | 为 `True` 时，一行放不下的工具项自动折到下一行；`Align in [alTop, alBottom]` 时工具条随行数自动增高。改值触发 `Relayout`。**这只管"宽度不够时自动换行"这一条规则**，与"某一项强制另起一行"是两回事——后者走排布函数的 `ABreakBefore` 参数（见 [第 5.1 节](#51-排布函数-tytoolbarlayout)），且**两种模式下都生效**。 |
 | `ShowCaptions` | `Boolean` | `False` | 与 LCL 一致：`False`（默认）让工具项**只显示图标**，`True` 才画标题。它下发到每个**能画图标**的子控件（`TTyGlyphButtonBase` 一族：`TTyGlyphButton` / `TTySpeedButton` / `TTyGlyphContainerButton`），走 `AdoptShowCaption`——对已被宿主自己写过 `ShowCaption` 的工具项是空操作。普通 `TTyButton` 没有图标模型，不受影响；**解析不出图标的工具项保留标题**（否则画出来是个空盒子），所以 `False` 这个默认值不会把现有的纯文字工具条抹白。改值触发 `Relayout`。 |
 | `Flat` | `Boolean` | `True` | 为 `True` 时，工具条把子 `TTyButton` 的 `StyleClass` 设为 `'ghost'`（平面外观）——但**只在它还是空串时**；为 `False` 时只把 `'ghost'` 改回 `''`。宿主自己写的 `StyleClass := 'primary'` 会保留下来。改值触发 `Relayout`。 |
-| `Images` | `TTyImageCollection` | `nil` | 工具项的图标来源：**没有自己 `Images` 的子图标按钮由工具条把这个集合借给它**，于是工具项只需设 `ImageName`。已经自带集合的工具项不受影响——工具条只管自己借出去的那一份引用（重新指向或收回）。用 `FreeNotification` 挂钩，集合被释放时连同"借出标记"一起置 `nil`。改值触发 `Relayout`。 |
-| `HotImages` | `TTyImageCollection` | `nil` | **悬停时的替换图**，用**同一个 `ImageName`** 去这份集合里取。见下方 [3.1.2 节](#312-hotimages--disabledimages按状态换形状不换颜色)。 |
-| `DisabledImages` | `TTyImageCollection` | `nil` | **禁用时的替换图**，同上。两者都到齐时**禁用优先**（LCL 同序：禁用的工具即使指针在上面也不算悬停）。 |
+| `Images` | `TTyCustomImageCollection` | `nil` | 工具项的图标来源：**没有自己 `Images` 的子图标按钮由工具条把这个集合借给它**，于是工具项只需设 `ImageName`。已经自带集合的工具项不受影响——工具条只管自己借出去的那一份引用（重新指向或收回）。用 `FreeNotification` 挂钩，集合被释放时连同"借出标记"一起置 `nil`。改值触发 `Relayout`。 |
+| `HotImages` | `TTyCustomImageCollection` | `nil` | **悬停时的替换图**，用**同一个 `ImageName`** 去这份集合里取。见下方 [3.1.2 节](#312-hotimages--disabledimages按状态换形状不换颜色)。 |
+| `DisabledImages` | `TTyCustomImageCollection` | `nil` | **禁用时的替换图**，同上。两者都到齐时**禁用优先**（LCL 同序：禁用的工具即使指针在上面也不算悬停）。 |
 | `Align` | `TAlign` | `alTop` | 停靠方式（**默认 `alTop`**，与原生工具条一致）。 |
 | `Anchors` | `TAnchors` | — | 锚点布局（继承）。 |
 
@@ -87,9 +87,9 @@ uses tyControls.ToolBar, tyControls.Button;
 
 | 成员 | 类型 | 说明 |
 |------|------|------|
-| `ButtonCount` | `Integer`（只读） | 工具条的 **`TTyToolButton` 子控件**个数 |
-| `Buttons[Index]` | `TTyToolButton`（只读） | 按子控件顺序的第 `Index` 个工具按钮；越界返回 `nil`（不抛异常） |
-| `IndexOfButton(B)` | `Integer` | `B` 在 `Buttons[]` 里的下标，不是本工具条的返回 `-1` |
+| `ButtonCount` | `Integer`（只读） | 工具条的**工具按钮子控件**（`TTyCustomToolButton` 的后代：`TTyToolButton`，或第三方从 `TTyCustomToolButton` 派生的按钮）个数 |
+| `Buttons[Index]` | `TTyCustomToolButton`（只读） | 按子控件顺序的第 `Index` 个工具按钮，原样交出（第三方的按钮不会被说成 `TTyToolButton`）；越界返回 `nil`（不抛异常）。4.0 起类型是 `TTyCustomToolButton`；确知是库里的按钮、又要用 `TTyToolButton` 才有的东西时 `as TTyToolButton` |
+| `IndexOfButton(B: TTyCustomToolButton)` | `Integer` | `B` 在 `Buttons[]` 里的下标，不是本工具条的返回 `-1` |
 
 > **只装 `TTyToolButton`，别的都不算。** 这与 LCL 一致：`TToolBar.FButtons` 里只有 `TToolButton`。
 > 于是夹在两个单选按钮之间的普通 `TTyButton`、编辑框或 `TTyToolSeparator` **不会把它们的单选组切断**
@@ -215,7 +215,7 @@ TTyToolButtonStyle = (tbsButton, tbsCheck, tbsDropDown, tbsSeparator, tbsDivider
 | `ImageIndex` | `Integer` | `-1` | 按**位置**取图标（而不是按名字）。见 [第 3.2.3 节](#323-imageindex是-imagename-的另一种拼法) |
 | `DropdownMenu` | `TTyPopupMenu` | `nil` | `tbsDropDown` 箭头区 / `tbsButtonDrop` 整面弹出的主题化菜单。LCL 写的是 `TPopupMenu`；这里收窄成它的后代 `TTyPopupMenu`（本库另外两个下拉按钮也是这个类型），否则会在自绘工具条中间弹出一个系统原生菜单。`FreeNotification` 跟踪。 |
 | `OnArrowClick` | `TNotifyEvent` | — | `tbsDropDown` 箭头区被点击**且没有弹出菜单**时触发（照抄 LCL 的抑制规则：这个事件是菜单的**替代品**，不是菜单**前面**的钩子）。要在菜单弹出**之前**跑代码（比如现场构建菜单），用 `TTyDropDownButton.OnDropDown`。 |
-| `Down` | `Boolean` | `False` | 继承自 `TTyButton`。在 `tbsCheck` 上它就是点击翻转的"选中"状态，并由 `Grouped` 维持互斥；其它样式上只是 `:selected` 外观。 |
+| `Down` | `Boolean` | `False` | 继承自 `TTyCustomButton`。在 `tbsCheck` 上它就是点击翻转的"选中"状态，并由 `Grouped` 维持互斥；其它样式上只是 `:selected` 外观。 |
 | `TabStop` | `Boolean` | `False` | 工具按钮**不取焦点**——工具条的意义就是点它之后光标还留在编辑器里。与 `TTySpeedButton` 同。 |
 
 #### 只读公开成员
@@ -223,7 +223,7 @@ TTyToolButtonStyle = (tbsButton, tbsCheck, tbsDropDown, tbsSeparator, tbsDivider
 | 成员 | 说明 |
 |------|------|
 | `Index` | 本按钮在宿主工具条 `Buttons[]` 里的下标；不在工具条上时 `-1`（LCL 同名同义） |
-| `ToolBar` | 宿主工具条，或 `nil` |
+| `ToolBar` | 宿主工具条（`TTyCustomToolBar`：`TTyToolBar`、`TTyToolBarEx` 或第三方工具条），或 `nil` |
 | `PointInArrow(X, Y)` | LCL 同名同签名：`(X, Y)` 是否落在箭头区内——**只有** `tbsDropDown` 有箭头区 |
 | `ArrowClick` | 触发 `OnArrowClick`（`virtual`，与 LCL 同） |
 | `CheckMenuDropdown` | 有菜单就弹；返回值 = "**会不会**弹"，所以无窗口的调用方（测试）也能拿到这个决定。**差异**：LCL 还要求 `DropdownMenu.AutoPopup`、并接受用 `MenuItem` 代替；本库不看 `AutoPopup`（另外两个下拉按钮也不看），于是全库一条规则——"挂了菜单就会弹"。 |
@@ -299,7 +299,7 @@ function TyToolWrapToBreakBefore(const AWrapAfter: array of Boolean): TBooleanDy
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `StyleClass` | `string` | `''` | CSS 类名，对应 `.tycss` 选择器的 `.classname` 部分。 |
-| `Controller` | `TTyStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定使用哪个样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定使用哪个样式控制器。 |
 
 > `TTyToolBar` 未跟踪 `FHover` / `FPressed` 等交互状态字段——它是纯容器，仅绘制背景与底部发丝线，本身不参与 `:hover` / `:active`。私有布局字段（`FButtonHeight` / `FButtonSpacing` / `FIndent` / `FWrapable` / `FShowCaptions` / `FFlat` / `FImages` / `FInLayout`）由上表 published 属性驱动，`FInLayout` 是 `AlignControls` 的重入守卫。
 
@@ -311,7 +311,7 @@ function TyToolWrapToBreakBefore(const AWrapAfter: array of Boolean): TBooleanDy
 |------|------|--------|------|
 | `Align` | `TAlign` | `alNone` | 停靠方式（继承）。 |
 | `StyleClass` | `string` | `''` | CSS 类名。 |
-| `Controller` | `TTyStyleController` | `nil` | 样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil` | 样式控制器。 |
 
 竖线颜色取 `TyToolSeparator` 样式的 `BorderColor`，竖线上下各内缩 3 逻辑像素（`P.Scale(3)`）；同一样式的 `background` 用于铺底，好让它与所在工具条无缝衔接。
 
@@ -322,7 +322,7 @@ function TyToolWrapToBreakBefore(const AWrapAfter: array of Boolean): TBooleanDy
 ### 4.1 `OnPaintButton`——逐按钮自绘（LCL 同名同义）
 
 ```pascal
-TTyToolBarOnPaintButton = procedure(Sender: TTyToolButton; AState: Integer) of object;
+TTyToolBarOnPaintButton = procedure(Sender: TTyCustomToolButton; AState: Integer) of object;
 property OnPaintButton: TTyToolBarOnPaintButton;
 ```
 
@@ -559,7 +559,7 @@ B.Wrap := True;                        // 这一行到此为止，后面的工�
 - **Wrapable 自动增高：** 当 `Align in [alTop, alBottom]` 且 `Wrapable=True` 时，一行放不下的工具项换行，工具条高度按 `padY*2 + rows*ButtonHeight + (rows-1)*ButtonSpacing` 自动调整（`padY` = 主题令牌 `--toolbar-pad-y`，缺省 4；**不再是 `Indent`**，横向留白不该参与高度）——不要在代码里硬设一个与之冲突的 `Height`。
 - **重入守卫：** `AlignControls` 末尾对 `Height` 的赋值会再次触发 `AlignControls`，`FInLayout` 守卫防止无限递归。
 - **强制断行已经接线了：** `TyToolbarLayout` 的 `ABreakBefore`（见 [第 5.1 节](#51-排布函数-tytoolbarlayout)）由 `TTyToolButton.Wrap` 填入——`AlignControls` 把每个**可见**工具项的 `Wrap` 收成一个后置数组，再过一遍 `TyToolWrapToBreakBefore` 换成前置标志。没有任何工具项设 `Wrap` 时结果是全 `False`，排布函数读它与从前的无断行重载**逐像素相同**，所以既有工具条一个像素都不会动。两处与 LCL 的差异见 [第 3.2.4 节](#324-wrap两处与-lcl-的差异)。
-- **工具项不必是 `TTyToolButton`：** 工具条照旧排布任何可见子控件（`TTyButton`、`TTyToolSeparator`、编辑框、下拉框……）。只是 `Wrap` / `Grouped` / `Index` / `ImageIndex` / 六种 `Style` 这些**工具条语义**只有 `TTyToolButton` 才有，别的子控件在这些规则里读作"没有标志"——条上的 `ButtonWidth` 下限、`DropDownWidth`、`List` 同理，只够得着 `TTyToolButton`。`Buttons[]` 里也只有 `TTyToolButton`。
+- **工具项不必是 `TTyToolButton`：** 工具条照旧排布任何可见子控件（`TTyButton`、`TTyToolSeparator`、编辑框、下拉框……）。只是 `Wrap` / `Grouped` / `Index` / `ImageIndex` / 六种 `Style` 这些**工具条语义**只有 `TTyToolButton` 才有，别的子控件在这些规则里读作"没有标志"——条上的 `ButtonWidth` 下限、`DropDownWidth`、`List` 同理，只够得着工具按钮（`TTyCustomToolButton` 的后代）。`Buttons[]` 里也只有工具按钮。
 - **`ButtonWidth` 是可逆的下限：** 调低（或清成 0）会还原各按钮自己的设计宽度——工具条记着它借出的宽度，不会把 `.lfm` 值棘轮掉。但**内容下限仍在**：按钮自己的 `Constraints.MinWidth`（标题 + 内边距 + 箭头区）比 `ButtonWidth` 大时按内容算，这与 LCL"取 preferred 与 ButtonWidth 的较大者"一致。
 - **`OnPaintButton` 是整体替换：** 挂上即接管每个工具按钮的全部绘制（含分隔占位），清掉即恢复主题默认。要"在主题绘制**之上**补一笔"用继承来的 `OnPaint`（[../events.md](../events.md)），不要用它。
 - **占位样式不吃 `Flat` 的 ghost：** `Flat = True` 时工具条会把空 `StyleClass` 的子 `TTyButton` 设成 `'ghost'`，但 `Style` 为 `tbsSeparator` / `tbsDivider` 的工具按钮**被跳过**——它解析的是 `TyToolSeparator` 键，套上按钮族的变体等于向主题要一条 `TyToolSeparator.ghost`（没有哪套皮肤定义过），还会在宿主从没设过样式的控件上留下一个 `StyleClass`。

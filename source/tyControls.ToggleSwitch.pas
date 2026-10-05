@@ -13,7 +13,7 @@ function TyToggleKnobX(ATrackWidthDev, AMarginDev, AKnobSideDev: Integer;
   AProgress: Single): Integer;
 
 type
-  TTyToggleSwitch = class(TTyCustomControl)
+  TTyCustomToggleSwitch = class(TTyCustomControl)
   private
     FChecked: Boolean;
     FCaption: TCaption;
@@ -81,27 +81,81 @@ type
     // Checked animates the knob slide; with no handle (every render test) it
     // snaps, preserving the existing exact-pixel toggle tests.
     property AnimationsEnabled: Boolean read FAnimationsEnabled write FAnimationsEnabled default True;
+    { The constructor turns this on (Space toggles a focused switch); declaring the default
+      to match is what lets a host turn it OFF in the .lfm — against the inherited
+      `default False` that value is dropped as "already the default". }
+    property TabStop default True;
+    // Optional text label drawn to the RIGHT of the switch (TToggleBox parity).
+    // Empty (the default) renders the bare switch unchanged.
+    property Caption: TCaption read FCaption write SetCaption;
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+  protected
+    property Checked: Boolean read FChecked write SetChecked default False;
+  end;
+
+  { TTyToggleSwitch publishes TTyCustomToggleSwitch's properties; everything lives in TTyCustomToggleSwitch. }
+  TTyToggleSwitch = class(TTyCustomToggleSwitch)
   published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
     { Off by default (a designed switch keeps the width the .lfm gave it). Switch it on and the
       control WIDENS to hug its pill plus its caption, so a caption that grows — a longer
       translation, a theme with a bigger or heavier font, a platform whose default font measures
       wider — lengthens the switch instead of being cut off. Height is left alone (see
       CalculatePreferredSize): it belongs to whoever lays out the row. }
     property AutoSize;
-    property Checked: Boolean read FChecked write SetChecked default False;
-    // Optional text label drawn to the RIGHT of the switch (TToggleBox parity).
-    // Empty (the default) renders the bare switch unchanged.
-    property Caption: TCaption read FCaption write SetCaption;
-    property OnChange: TNotifyEvent read FOnChange write FOnChange;
-    { The constructor turns this on (Space toggles a focused switch); declaring the default
-      to match is what lets a host turn it OFF in the .lfm — against the inherited
-      `default False` that value is dropped as "already the default". }
-    property TabStop default True;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Checked;
+    property Caption;
+    property OnChange;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
-    property OnClick;
   end;
 
 implementation
@@ -118,9 +172,9 @@ begin
   Result := TyLerpI(OffX, OnX, AProgress);
 end;
 
-{ TTyToggleSwitch }
+{ TTyCustomToggleSwitch }
 
-constructor TTyToggleSwitch.Create(AOwner: TComponent);
+constructor TTyCustomToggleSwitch.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TabStop := True;
@@ -135,7 +189,7 @@ begin
   Width := MulDiv(Height, 44, 24);                   { keep the 44:24 pill aspect at any density }
 end;
 
-destructor TTyToggleSwitch.Destroy;
+destructor TTyCustomToggleSwitch.Destroy;
 begin
   // FTimer is owned by Self (would be freed by DestroyComponents), but free it
   // explicitly first so the OnTimer callback can never fire mid-teardown.
@@ -143,19 +197,19 @@ begin
   inherited Destroy;
 end;
 
-function TTyToggleSwitch.GetStyleTypeKey: string;
+function TTyCustomToggleSwitch.GetStyleTypeKey: string;
 begin
   Result := 'TyToggleSwitch';
 end;
 
-function TTyToggleSwitch.CurrentStates: TTyStateSet;
+function TTyCustomToggleSwitch.CurrentStates: TTyStateSet;
 begin
   Result := inherited CurrentStates;
   if FChecked then
     Include(Result, tysActive);
 end;
 
-procedure TTyToggleSwitch.SetChecked(const AValue: Boolean);
+procedure TTyCustomToggleSwitch.SetChecked(const AValue: Boolean);
 begin
   if FChecked = AValue then Exit;
   FChecked := AValue;
@@ -177,7 +231,7 @@ begin
     FOnChange(Self);
 end;
 
-procedure TTyToggleSwitch.SetCaption(const AValue: TCaption);
+procedure TTyCustomToggleSwitch.SetCaption(const AValue: TCaption);
 begin
   if FCaption = AValue then Exit;
   FCaption := AValue;
@@ -192,7 +246,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyToggleSwitch.Invalidate;
+procedure TTyCustomToggleSwitch.Invalidate;
 begin
   inherited Invalidate;
   { 换肤时每个控件收到的只是一个裸 Invalidate(TTyStyleController 向注册控件广播),而新主题
@@ -216,7 +270,7 @@ begin
   end;
 end;
 
-procedure TTyToggleSwitch.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
+procedure TTyCustomToggleSwitch.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
 { 用 TTyPainter 量,而不是 LCL canvas:标题是 P.DrawText 以 BGRA 字体度量画出来的,只有同一个
   度量器给出的宽度才等于这些字形真正占的位置。画布传 nil —— BeginPaint 只建内部位图,EndPaint
   见 canvas 为 nil 就不 blit、直接释放,所以在 paint 周期之外调用安全且不泄漏
@@ -249,7 +303,7 @@ begin
   if AHeight < 1 then AHeight := 1;
 end;
 
-procedure TTyToggleSwitch.CalculatePreferredSize(var PreferredWidth,
+procedure TTyCustomToggleSwitch.CalculatePreferredSize(var PreferredWidth,
   PreferredHeight: Integer; WithThemeSpace: Boolean);
 var
   ppi, devH, switchW, tw, th: Integer;
@@ -278,7 +332,7 @@ begin
   PreferredHeight := 0;
 end;
 
-procedure TTyToggleSwitch.DoUpdateSizeConstraints;
+procedure TTyCustomToggleSwitch.DoUpdateSizeConstraints;
 var
   ppi, tw, th, prefW, prefH: Integer;
 begin
@@ -308,7 +362,7 @@ begin
   Constraints.MinHeight := th;
 end;
 
-procedure TTyToggleSwitch.EnsureTimer;
+procedure TTyCustomToggleSwitch.EnsureTimer;
 begin
   if FTimer = nil then
   begin
@@ -319,7 +373,7 @@ begin
   end;
 end;
 
-procedure TTyToggleSwitch.HandleTimer(Sender: TObject);
+procedure TTyCustomToggleSwitch.HandleTimer(Sender: TObject);
 begin
   if AdvanceAnimation(FTimer.Interval) then
     Invalidate;
@@ -327,34 +381,34 @@ begin
     FTimer.Enabled := False;
 end;
 
-function TTyToggleSwitch.AdvanceAnimation(AMs: Integer): Boolean;
+function TTyCustomToggleSwitch.AdvanceAnimation(AMs: Integer): Boolean;
 begin
   Result := FKnobAnim.Advance(AMs);
 end;
 
-procedure TTyToggleSwitch.ArmKnobAnim(ATarget: Single);
+procedure TTyCustomToggleSwitch.ArmKnobAnim(ATarget: Single);
 begin
   FKnobAnim.Target := ATarget;
 end;
 
-function TTyToggleSwitch.GetKnobAnimProgress: Single;
+function TTyCustomToggleSwitch.GetKnobAnimProgress: Single;
 begin
   Result := FKnobAnim.Progress;
 end;
 
-procedure TTyToggleSwitch.Toggle;
+procedure TTyCustomToggleSwitch.Toggle;
 begin
   SetChecked(not FChecked);
 end;
 
-procedure TTyToggleSwitch.Click;
+procedure TTyCustomToggleSwitch.Click;
 begin
   if not Enabled then Exit;
   Toggle;
   inherited Click;
 end;
 
-procedure TTyToggleSwitch.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomToggleSwitch.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
@@ -365,7 +419,7 @@ begin
   end;
 end;
 
-procedure TTyToggleSwitch.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomToggleSwitch.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, TrackS, KnobStyle: TTyStyleSet;
@@ -468,7 +522,7 @@ begin
   end;
 end;
 
-procedure TTyToggleSwitch.Paint;
+procedure TTyCustomToggleSwitch.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
