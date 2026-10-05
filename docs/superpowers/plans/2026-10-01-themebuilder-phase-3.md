@@ -1989,3 +1989,77 @@ spec 标「实现期修正（3 期）：期末修复批」的段落：§7.1（�
 - 全量 8965 条：0 错，1 失败——`TTyTerminalPerfTests.TestAFloodStillPaints`（最长无重绘 349.8 ms，上限 300 ms），终端的计时测试，与本分支无关；该 suite 单独重跑三次都是 0 / 0。
 - 抽看重拍后的 `p3-compare-win32.png`：改动行的字清楚，「Try it in the preview」完整。
 - 库里 `TTyCheckBox` 量标题偏短 3 px 的问题另开了任务，不在本分支修。
+
+## 合入 4.0
+
+把 `main` @ `9950f966`（4.0：`TTyCustomXxx` 拆分全部完成、#9 标题栏菜单与图标、#14 typeKey 链、#27 / #28 字体与对话框选项）合进本分支，起点 `342fdda2`，合并基点 `0fa3b777`（`main` 多 206 个提交，本分支多 166 个）。`main` 在这之后又多了 3 个 i18n 提交（`5f0d9eb6`..`129af9d3`，只动示例与设计期的 `.po`），不在这次合并里。
+
+### 提交
+
+| 提交 | 内容 |
+|---|---|
+| `6589092e` | 合并本身：解冲突，加上让它编得过、测得过的最少改动（控制器参数类型、部件表 `SpinEdit` 行、库目录副本） |
+| `3b3b1651` | 工具的标题栏图标改用库的 `ShowIcon`（#9），重拍主窗口三张截图 |
+| `79edb18a` | `TTyCssEditKit` 判断字体装没装改走 `TyGetFontFamilies`（#27） |
+| `5651ea12` | 快探测、覆盖检查、Ctrl+点击、AI 参考认 typeKey 链（#14），配测试 |
+| 本提交 | 签收、验收清单 |
+
+拆提交时合并与图标两个提交的索引都导出到临时目录编过（0 错），跑了相关 suite（合并：`TTbCoverageTests` 9、`TTbMainFormTests` 83、`TTbPreviewTests` 24、`TTbReferenceTests` 11；图标：`TTbMainFormTests` 83，全绿）；后两个提交之后的树就是跑全量的那棵。
+
+### 冲突
+
+两边都改过的文件只有 5 个，git 自动合了 4 个，逐个对着两边的提交核过：
+
+| 文件 | 本分支 | `main` | 合并结果 |
+|---|---|---|---|
+| `tests/tytests.lpr`（唯一的冲突） | 21 个 `test.themebuilder.*` 单元 | `test.customclasses*`、`test.typekeychain` 等 | 两组都留，本分支的在前 |
+| `designtime/tyControls.Design.Css.Editor.pas` | SynEdit 的配置拆进 `TTyCssEditKit` | `b303dd97` 参考面板列 `TyCssSelectorTypeKeys`；`d5ba91fa` `FController` 改 `TTyCustomStyleController` | 自动合并正确：对话框用 kit，参考面板与补全读同一张 `TyCssSelectorTypeKeys`（补全在 kit 里经 `TyCssCompletionItems` 走到它），控制器是 Custom 类型 |
+| `scripts/check-lfm-props.py` | 检查范围加 `tools/` | `0a152cbd` 认 LCL 根类自己发布的名字 | 两处都在 |
+| `README.md` / `README.en.md` | 主题编辑器一段 | 4.0 的说明 | 都在 |
+
+`Css.Parser.pas`、`Css.Values.pas`、`ThemeLint.pas` `main` 没动过（`Css.Values` 的 `VarRefKey` 改一遍扫描是本分支自己的 `83daec51`），原样保留。
+
+### 工具适配 4.0
+
+- **编译错误只有一类**：`Controller` / `ActiveController` 现在是 `TTyCustomStyleController`。工具里收控制器的参数改成 Custom 类型（`TbApplyController`、`TbEditorColors`、`TTbSampleForm.UseController` 与它记的 `FListening`、两个测试助手）；预览自己 `Create` 的那个仍是 `TTyStyleController`。`is` / `as` / 事件签名逐个查过：工具只判 `TTyCustomControl` / `TTyGraphicControl` 两个基类和 `TTyLabel`、`TTyColorButton`、`TTySpinEdit` 这类最终类本身（不是「任意 Xxx」），不受影响；没有新增 published 控件类，G9 / G10 的夹具不用动（`gen-mimic.py` 重跑无 diff，`TY_WRITE_FRESH_STREAMS=1` 重写无 diff）。
+- **库的 4.0 改动带出来的两条红**：`TTySpinButtons` 的半边悬停改用 `TyButton` 的样式，覆盖检查的部件表 `tyControls.SpinEdit` 一行补上 `TyButton`（CV4）；工具带的库目录副本 `tools/themebuilder/languages/tycontrols.zh_CN.po` 落后于 `languages/tycontrols.strconsts.zh_CN.po`（#9 的窗口菜单四条等），整份重新复制（I4）。
+- **快探测与 typeKey 链**：`ResolveStyle` 从链根开始，每个键按同一个 `UserHasTypeKey` 判断取不取底层规则（`LayerChainChildren`），所以快探测「逐条规则、按类型名判断」的做法仍然成立，只是「哪些类型名会被解析」不再只是目录：画的时候会被问到的键是 `TyCssSelectorTypeKeys`（目录 + 登记过的子键），解析一个键还会走到它链上的每个键。现在两条路都改读它：慢路（`TbProbeResolve`）逐个解析目录键再加登记键；快路（`ProbeKeys`）用这些键连同各自整条链上的键，没有登记时就是原来那份目录。工具进程里没人登记链（库自己不登记，工具不链接第三方包），所以实际结论不变，`TestTheFastProbeAgreesWithTheResolveWalk` 原样全绿；新加 `TestBothProbesFollowATypeKeyChain` 登记两条链（一个子键、一个目录键挂到非目录的根）逐条比对两条路的结论。冷探测计时不变（`TestTheProbeIsQuick` 各主题中位数 15–47 ms）。
+- **登记键接线**：覆盖检查——预览画的键连同它们链上的键都算「显示了」，预览里某个键链上有任何键被文档或底层写过就不算「没人写」，登记过的子键和它们的父键都是「已知 typeKey」（CV10）；Ctrl+点击——控件自己没有规则时跳到链上最近一个有规则的键（现在给它上样式的那条），都没有才给它自己加一条（F40，判断挪进 `tbrules.TbFindPickRule`）；AI 精简参考——TypeKeys 一节改列 `TyCssSelectorTypeKeys`，登记键标 `[inherits X]`，有登记键时说明一句这是什么意思（R12，测试用 `TbForgetReference` 让参考重建）。
+- **#9**：工具标题栏左边原来是自己摆的 `TTyImage`（`ShowAppIcon` 取 16 px 那张）。现在标题栏自己有 `ShowIcon`：打开它，图标取 `Application.Icon`，菜单栏改 `alLeft` 跟在图标后面，`AppIcon` / `ShowAppIcon` 删掉；单击图标弹窗口菜单、双击关窗、标题栏右键弹窗口菜单都是库的行为（对话框的标题栏只有「关闭」）。M27 改断言 `Bar.ShowIcon` 与 `EffectiveIcon = Application.Icon`。使用文档中英文各加一句窗口菜单。
+- **#27 / #28**：工具里没有字体选择器。`TTyCssEditKit` 判断 Consolas / DejaVu Sans Mono 装没装原来直接查 `Screen.Fonts`，改走 `TyGetFontFamilies`（源码守卫只扫 `source/`，`designtime/` 本来不在里面，这里是照同一条规矩办）。
+
+### 测试结果
+
+- 构建：`lazbuild -B tests/tytests.lpi` 0 错，exe 复制成 `tests/tytests-tbmerge.exe`。
+- 全量（`--all`，输出重定向）：**9364 / 0 errors / 1 failure** = 只修了编译的合并树（`tests/tytests-tbmerge0.exe`）的 9360 + 本节 4 条（快慢探测的链测试、CV10、F40、R12）。那一条是终端的计时项 `TTyTerminalPerfTests.TestTheLongestSliceStaysNearTheBudget`（最长切片 364.8 ms），与本分支无关；该 suite 单独重跑 6 次，4 次全绿，另 2 次各红一条计时项（69.1 ms 的切片、421.6 ms 无重绘）——当时机器上还有别的树的 `tytests.exe` 在跑，记为偶发。只修编译的那次全量是 4 条红：终端的两条计时项、CV4（上面修了）和 `TTyStringGridTest.TestCtrlXGestureCutsAndReadOnlyDegradesToCopy`（剪贴板，与另一个进程抢剪贴板；最终全量里是绿的，单跑该 suite 233 / 0 / 0）；I4 是单跑 `TTbMainFormTests` 时红的（那次全量跑到它时库目录副本已经换好了）。
+- 本节相关 suite（单跑）：`TTbPreviewTests` 25、`TTbCoverageTests` 10、`TTbMainFormTests` 84、`TTbReferenceTests` 12、`TTbPickTests` 11，30 个 `TTb*` suite 全绿。
+- 工具：`lazbuild -B tools/themebuilder/themebuilder.lpi` 0 错；`lazbuild -B tools/themebuilder-shots/tbshots.lpi` 0 错；`example-rsj2po.py` 加 0 条；`check-example-po.py` 103 个文件 0 问题；`check-lfm-props.py` OK。
+- 设计期：8 个单元用 fpc 对着测试构建产出的运行时单元、IDEIntf / SynEdit / LazControls 的已编单元单独编过，0 错，4 个既有警告都在 AdvChart 编辑器；输出只写 scratchpad。
+- 守卫：G9（`gen-mimic.py`，156 个模拟子类）无 diff；G10（fresh-streams 重写）无 diff；`TTyCustomClassesGuardTest` 11 / 0 / 0；`TFontComboBoxTest`（含「只有过滤单元读 `Screen.Fonts`」）14 / 0 / 0；`TTypeKeyChainTest` 31、`TTitleBarWindowMenuTest` 23、`TTitleBarIconTest` 18 全绿。
+- WSL 的 libcurl 测试程序没重跑：它用的单元（`tbhttp*`、`tbsse`、`tbai*`）只依赖 RTL / fpjson，R9 守着不碰 LCL 与库，这次合并和适配都没碰到它们。
+
+### 变异（改字符串 → 增量 `lazbuild` → 跑指定测试 → 写回原字节，写回后 `git diff` 与变异前逐字节相同）
+
+| 变异 | 结果 |
+|---|---|
+| `ProbeKeys` 总是返回目录 | 链测试红（快路说干净，慢路拒绝） |
+| `TbProbeResolve` 只解析目录 | 链测试红（快路拒绝，慢路放行） |
+| 覆盖检查「显示了」不展开链 | CV10 红 |
+| 覆盖检查「没人写」不看链上的文档规则 | CV10 红 |
+| `TbIsKnownTypeKey` 不认链键 | CV10 红 |
+| `IsChainKey` 不认登记过的子键（只认父键） | CV10 红（「a registered key is known」） |
+| `TbFindPickRule` 只看控件自己的键 | F40 红 |
+| 参考只列目录 | R12 红 |
+
+### 截图复核
+
+`lazbuild -B tools/themebuilder-shots/tbshots.lpi`，仓库根 `tools\themebuilder-shots\tbshots.exe > tbshots.log 2>&1`，退出码 0，7 张全写出（都走 `PrintWindow`）。逐张看过：
+
+- `p2-seeds-win32.png`、`p3-ai-page-win32.png`、`p1-edit-menu-win32.png`：主窗口三张。标题栏左边的图标现在是库画的（`ShowIcon`），和原来那张 16 px 的一样大、一样位置，「文件」菜单紧跟其后、不压图标（菜单栏左移约 1 px）。窗口内部与上次逐像素相同（AI 页除去窗口边框与标题栏一圈，差异为 0）；编辑菜单的下拉仍挂在「编辑」下面。
+- `p2-export-win32.png`、`p3-ai-settings-win32.png`、`p3-ai-settings-ollama-win32.png`、`p3-compare-win32.png`：与上次逐字节相同。
+
+### 主控待做
+
+- 编 `tycontrols.lpk`、`tycontrols_dt.lpk`（`TTyCssEditKit` 改了 uses）。
+- 真机：验收表第 83 项（标题栏窗口菜单、图标单击 / 双击）；第 77 项的期望改了一句。
+- `main` 合并之后又多的 3 个 i18n 提交，下次合入（不碰 `tycontrols.strconsts.zh_CN.po`，I4 不受影响）。
