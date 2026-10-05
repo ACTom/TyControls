@@ -515,7 +515,8 @@ uses
   tyControls.AdvChart.AxisLabels, tyControls.AdvChart.Handlers,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Color,
   tyControls.AdvChart.JsMath, tyControls.AdvChart.Marker,
-  tyControls.AdvChart.Labels, tyControls.AdvChart.RichText;
+  tyControls.AdvChart.Labels, tyControls.AdvChart.RichText,
+  tyControls.AdvChart.Convert;
 
 const
   { GridModel's defaultOption. Percentages are of the FULL container extent, not
@@ -2633,6 +2634,87 @@ begin
   end;
 end;
 
+{ AN AXIS' customValues under AModel (its axisLabel or axisTick)
+  [Batch 110]: AHas when the option is truthy -- `if (custom)` -- and then
+  parseTickLabelCustomValues: each through scale.parse, kept when it lies
+  in the scale's extent (ends included), the duplicates dropped (the first
+  kept) and the rest sorted ascending. A list is its items, an object its
+  values, a string its characters, anything else nothing. }
+function TyCustomValuesOf(AModel: TJSONObject; AAxis: TTyAxis;
+  out AHas: Boolean): TTyDoubleArray;
+var
+  d, own, item: TJSONData;
+  e: TTyRange;
+  i, k, n: Integer;
+  v, t: Double;
+  dup: Boolean;
+  vals: TTyDoubleArray;
+
+  procedure Take(AItem: TJSONData);
+  var q: Integer;
+  begin
+    v := TyAxisParseJson(AAxis, AItem);
+    if IsNan(v) or not ((v >= e.Start) and (v <= e.Stop)) then Exit;
+    dup := False;
+    for q := 0 to n - 1 do
+      if vals[q] = v then
+      begin
+        dup := True;
+        Break;
+      end;
+    if dup then Exit;
+    if n >= Length(vals) then SetLength(vals, Max(8, 2 * n));
+    vals[n] := v;
+    Inc(n);
+  end;
+
+begin
+  Result := nil;
+  AHas := False;
+  if (AModel = nil) or (AAxis = nil) then Exit;
+  d := AModel.Find('customValues');
+  if d = nil then Exit;
+  { JavaScript's truthiness }
+  case d.JSONType of
+    jtNull: Exit;
+    jtBoolean: if not d.AsBoolean then Exit;
+    jtNumber: if IsNan(d.AsFloat) or (d.AsFloat = 0) then Exit;
+    jtString: if d.AsString = '' then Exit;
+  end;
+  AHas := True;
+  e := AAxis.Scale.GetExtent;
+  vals := nil;
+  n := 0;
+  case d.JSONType of
+    jtArray, jtObject:
+      for i := 0 to d.Count - 1 do Take(d.Items[i]);
+    jtString:
+      for i := 0 to Length(UTF8Decode(d.AsString)) - 1 do
+      begin
+        item := TyJsonElement(d, i, own);
+        try
+          Take(item);
+        finally
+          own.Free;
+        end;
+      end;
+  end;
+  SetLength(vals, n);
+  { asc: insertion, the values distinct }
+  for i := 1 to n - 1 do
+  begin
+    t := vals[i];
+    k := i - 1;
+    while (k >= 0) and (vals[k] > t) do
+    begin
+      vals[k + 1] := vals[k];
+      Dec(k);
+    end;
+    vals[k + 1] := t;
+  end;
+  Result := vals;
+end;
+
 procedure TyLayoutGrids(ABuild: TTyChartBuild; AOption: TTyChartOption;
   const AMeasurer: ITyTextMeasurer; APPI: Integer;
   const AText: TTyAxisTextStyle; AMemory: TTyAxisMemoryStore);
@@ -2692,9 +2774,36 @@ var
   var
     plot: TTyRectF;
     labelIv: Double;
-    n, k, i: Integer;
+    n, k, i, p: Integer;
     ticks: TTyScaleTickArray;
     mem: PTyAxisMemory;
+    customTicks: TTyDoubleArray;
+    hasCustomTicks: Boolean;
+
+    { axisTick.customValues [Batch 110]: createAxisTicks' first branch --
+      and it is the TICK model's list whichever model asks, so the split
+      lines and areas walk it too; each then shifted onto the band edges as
+      its own alignWithLabel says }
+    function CustomMarks(const AVals: TTyDoubleArray; AAlign: Boolean): TTyAxisMarkArray;
+    var q: Integer;
+    begin
+      Result := nil;
+      SetLength(Result, Length(AVals));
+      for q := 0 to High(AVals) do
+      begin
+        Result[q] := Default(TTyAxisMark);
+        Result[q].Value := AVals[q];
+        Result[q].Coord := AAxis.DataToLocal(AVals[q]);
+      end;
+      if AAxis.Scale is TTyOrdinalScale then
+        TyFixOnBandMarks(Result, AAxis.OnBand, AAlign, AAxis.BandWidth,
+          Round(AAxis.Scale.GetExtent.Stop));
+      for q := 0 to High(Result) do
+      begin
+        Result[q].Local := Result[q].Coord;
+        Result[q].Coord := AAxis.ToGlobal(Result[q].Coord);
+      end;
+    end;
 
     function CategoryMarks(AOptInterval: Double; AAlign: Boolean): TTyAxisMarkArray;
     var
@@ -2731,8 +2840,16 @@ var
     ASpec.SplitAreaMarks := nil;
     if (AAxis = nil) or AAxis.Scale.Blank then Exit;
     plot := AGrid.FPlotRect;
-    n := Length(ASpec.Labels);
-    if ASpec.LabelKind = lakCategory then
+    n := TyCategoryLabelCount(ASpec);
+    customTicks := TyCustomValuesOf(ObjOf(FindIn(ObjOf(AOption.ComponentAt(AAxis.MainType,
+      AAxis.ComponentIndex)), 'axisTick')), AAxis, hasCustomTicks);
+    if hasCustomTicks then
+    begin
+      ASpec.TickMarks := CustomMarks(customTicks, AFurn.AlignWithLabel);
+      ASpec.SplitLineMarks := CustomMarks(customTicks, AFurn.SplitLineAlign);
+      ASpec.SplitAreaMarks := CustomMarks(customTicks, AFurn.SplitAreaAlign);
+    end
+    else if ASpec.LabelKind = lakCategory then
     begin
       if n = 0 then Exit;
       labelIv := TyCategoryLabelInterval(ASpec, plot, AMeasurer, APPI);
@@ -2765,7 +2882,20 @@ var
       ASpec.TickMarks[k].Drawn := ASpec.ShowTicks;
       if AFurn.MinorTickOption or ASpec.TickMarks[k].OnBand
         or (not ASpec.ShowLabels) then Continue;
-      if ASpec.LabelKind = lakCategory then
+      if hasCustomTicks or ASpec.CustomLabels then
+      begin
+        { syncLabelIgnoreToMajorTicks matches a hidden label to its tick by
+          VALUE, which is what pairs them once either list is custom
+          [Batch 110] }
+        i := -1;
+        for p := 0 to High(ASpec.TickValues) do
+          if ASpec.TickValues[p] = ASpec.TickMarks[k].Value then
+          begin
+            i := p;
+            Break;
+          end;
+      end
+      else if ASpec.LabelKind = lakCategory then
         i := Round(ASpec.TickMarks[k].Value) - ASpec.OrdinalStart
       else
         i := k;
@@ -2810,10 +2940,10 @@ var
     if (AAxis = nil) or not AAxis.Visible or AAxis.Scale.Blank then Exit;
     if (ASpec.LabelKind <> lakCategory) or (ASpec.ForcedLabelStep > 0) then Exit;
     { one category: upstream answers 0 before it measures or asks }
-    if Length(ASpec.Labels) < 2 then Exit;
+    if TyCategoryLabelCount(ASpec) < 2 then Exit;
     raw := TyCategoryLabelInterval(ASpec, gb.FPlotRect, AMeasurer, APPI);
     used := TyCategoryIntervalHold(AMemory.Find(AxisMemoryKey(AAxis), True),
-      raw, Length(ASpec.Labels), ASpec.NameFrame.Ext0, ASpec.NameFrame.Ext1);
+      raw, TyCategoryLabelCount(ASpec), ASpec.NameFrame.Ext0, ASpec.NameFrame.Ext1);
     if (not IsNan(used)) and (not IsInfinite(used)) and (used >= 0)
       and (used < MaxInt - 1) then
       ASpec.ForcedLabelStep := Trunc(used) + 1;
@@ -3130,11 +3260,13 @@ var
   procedure FillSpec(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
     ANode: TJSONObject; const AFurn: TTyAxisFurniture);
   var
-    q, kept: Integer;
+    q, kept, idx: Integer;
     lbl, wd: TJSONData;
     ovf: string;
-    isTime, marked: Boolean;
+    isTime, marked, custom: Boolean;
     tfmt: TTyTimeLabelFormatter;
+    cv: TTyDoubleArray;
+    v: Double;
   begin
     ASpec := Default(TTyAxisLayoutSpec);
     ASpec.Side := AAxis.Side;
@@ -3365,6 +3497,78 @@ var
     SetLength(ASpec.TickValues, kept);
     SetLength(ASpec.LocalCoords, kept);
     SetLength(ASpec.Proportions, kept);
+    { axisLabel.customValues [Batch 110]: createAxisLabels' first branch --
+      the values listed, in the extent, deduplicated and ascending, each a
+      label made as a tick's would be (a time one at its own unit's first
+      template, level 0). A category axis keeps its own labels beside them:
+      its auto interval is still theirs. }
+    cv := TyCustomValuesOf(ObjOf(FindIn(ANode, 'axisLabel')), AAxis, custom);
+    if custom then
+    begin
+      ASpec.CustomLabels := True;
+      if ASpec.LabelKind = lakCategory then
+      begin
+        ASpec.CatLabels := Copy(ASpec.Labels);
+        ASpec.CatTickValues := Copy(ASpec.TickValues);
+        ASpec.CatLocalCoords := Copy(ASpec.LocalCoords);
+      end;
+      kept := Length(cv);
+      SetLength(ASpec.Labels, kept);
+      SetLength(ASpec.Positions, kept);
+      SetLength(ASpec.TickValues, kept);
+      SetLength(ASpec.LocalCoords, kept);
+      SetLength(ASpec.Proportions, kept);
+      if isTime then
+      begin
+        SetLength(ASpec.LabelNotNice, kept);
+        SetLength(ASpec.LabelLevel, kept);
+      end;
+      marked := False;
+      for q := 0 to kept - 1 do
+      begin
+        v := cv[q];
+        if isTime then
+        begin
+          { a custom tick has no time info: getUnitFromValue's unit, its
+            template's first level; a handler is told level 0 }
+          if tfmt.Kind = tfkHandler then
+            ASpec.Labels[q] := TyFormatTime(v,
+              TyChartRunHandler(tfmt.Template, TyChartOneParams(
+                AxisLabelParams(AAxis, v, q, '', True, 0))),
+              TTyTimeScale(AAxis.Scale).UTC)
+          else
+            ASpec.Labels[q] := TyTimeLeveledLabel(tfmt, v,
+              TyTimeUnitOf(v, TTyTimeScale(AAxis.Scale).UTC), 0,
+              TTyTimeScale(AAxis.Scale).UTC);
+          if TyRtHasMarkup(ASpec.Labels[q]) then marked := True;
+          ASpec.LabelNotNice[q] := False;
+          ASpec.LabelLevel[q] := 0;
+        end
+        else
+        begin
+          { a category formatter's index is the tick less the extent's
+            start, as upstream's; any other the label's place in the list }
+          idx := q;
+          if AAxis.Scale is TTyOrdinalScale then
+            idx := Round(v - AAxis.Scale.GetExtent.Start);
+          ASpec.Labels[q] := TyAxisTickLabelAt(AAxis, v, idx,
+            AFurn.HasLabelFormatter, AFurn.LabelFormatter);
+        end;
+        if (ASpec.LabelOverflow = loBreak) and (ASpec.LabelWidthLogical > 0)
+          and (AMeasurer <> nil) then
+          ASpec.Labels[q] := AMeasurer.WrapToWidth(ASpec.Labels[q],
+            ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight,
+            AxisScaleF(ASpec.LabelWidthLogical, APPI));
+        ASpec.Positions[q] := AAxis.NormalizedCoord(v);
+        ASpec.TickValues[q] := v;
+        ASpec.LocalCoords[q] := AAxis.DataToLocal(v);
+        if AAxis.Scale is TTyOrdinalScale then
+          ASpec.Proportions[q] := AAxis.Scale.Normalize(
+            TTyOrdinalScale(AAxis.Scale).TickToOrdinal(v))
+        else
+          ASpec.Proportions[q] := AAxis.Scale.Normalize(v);
+      end;
+    end;
     if isTime then
     begin
       SetLength(ASpec.LabelNotNice, kept);
@@ -3499,6 +3703,8 @@ begin
         specs[t].LocalCoords[i] := AxisAt(gb, t).DataToLocal(specs[t].TickValues[i]);
         specs[t].Positions[i] := AxisAt(gb, t).NormalizedCoord(specs[t].TickValues[i]);
       end;
+      for i := 0 to High(specs[t].CatTickValues) do
+        specs[t].CatLocalCoords[i] := AxisAt(gb, t).DataToLocal(specs[t].CatTickValues[i]);
     end;
 
     { THE INTERVAL THE LAST RENDER LEFT [Batch 101]. A category axis' auto

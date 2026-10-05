@@ -61,6 +61,7 @@ uses
   tyControls.AdvChart.AnimView, tyControls.AdvChart.AnimAxis,
   tyControls.AdvChart.AxisLabels, tyControls.AdvChart.LabelLayout,
   tyControls.AdvChart.Export, tyControls.AdvChart.Loading,
+  tyControls.AdvChart.Convert, tyControls.AdvChart.Jitter,
   fpjson, contnrs, tyControls.SubPixel;
 
 const
@@ -313,6 +314,9 @@ type
       as long as FSources borrow from it, cleared when the stores are built
       again [Batch 108] }
     FDatasetCache: TTyDatasetCache;
+    { THE SCATTER JITTER'S PASS: the random state and every category axis'
+      placed points, started again by every BuildSeriesList [Batch 110] }
+    FJitter: TTyJitterPass;
     { Which series accumulate onto which, and into which columns. Solved in
       Rebuild, between filling the stores and sizing the axes: the totals have
       to exist before the value axis is asked how far it must reach. }
@@ -1224,6 +1228,21 @@ type
       index-parallel to the option's series array only while nothing failed to
       resolve, and a hole makes the two disagree. }
     function SlotOfSeries(ASeriesIndex: Integer): Integer;
+    { a scatter's jitter onto AVisual: its category base axis' points for
+      this pass, or nil [Batch 110] }
+    procedure JitterFor(ASlot, APPI: Integer; var AVisual: TTySeriesVisual);
+    { THE PUBLIC CONVERSIONS' WORKINGS [Batch 110]: the layout brought up to
+      date, the finder parsed against the option's models, each coordinate
+      system asked in upstream's order }
+    procedure ConvertReady;
+    function ConvertDispatch(AFinder, AValue: TJSONData; AFrom: Boolean): TTyConvertResult;
+    function ConvertOnGrid(AGrid: TTyGridBuild; const AF: TTyParsedFinder;
+      AValue: TJSONData; AFrom: Boolean): TTyConvertResult;
+    function ConvertOnCalendar(ACal: TTyCalendar; AValue: TJSONData;
+      AFrom: Boolean): TTyConvertResult;
+    function ConvertOnView(AView: TTyGraphView; AValue: TJSONData;
+      AFrom: Boolean): TTyConvertResult;
+    function ContainSeries(ASeriesIndex: Integer; APoint: TJSONData): Boolean;
     { Which row of a series a point is over, asked of the BASE axis.
 
       For a run element -- a polyline, which is one element for a whole series
@@ -2010,6 +2029,39 @@ type
     { the queries are asked again at the control's size now -- what a
       resize does; True when units were merged }
     function MediaRecheck: Boolean;
+    { ==== THE COORDINATE CONVERSIONS [Batch 110] ====
+      Upstream's chart.convertToPixel / convertFromPixel / containPixel. The
+      finder is a JSON string naming a main type ('series', 'grid',
+      'xAxis', 'calendar' ... -- its first model) or an object of
+      <mainType>Index / Id / Name keys, as util/model.ts parseFinder reads
+      them. The value is any JSON: a pair for a coordinate system, one
+      value for one axis, read with upstream's JavaScript rules (see
+      tyControls.AdvChart.Convert). The coordinate systems are asked in
+      upstream's order -- the grids, the graphs' views, the calendars --
+      and the first that answers is the answer.
+
+      The JSON forms answer JSON: a number, a pair (a coordinate that is not
+      a finite number prints as null, as JSON.stringify prints it), or ''
+      when nothing answered -- or when upstream would have thrown, having
+      indexed a null value. The typed forms answer the kind and the
+      numbers exactly. A dirty layout is brought up to date first, as
+      upstream's synchronous setOption leaves it; a chart that has never
+      been rendered answers nothing. }
+    function ConvertToPixel(const AFinderJson, AValueJson: string): string; overload;
+    function ConvertToPixel(const AFinderJson: string; const AValue: array of Double): TTyConvertResult; overload;
+    function ConvertToPixel(const AFinderJson: string; AValue: Double): TTyConvertResult; overload;
+    function ConvertToPixelData(AFinder, AValue: TJSONData): TTyConvertResult;
+    function ConvertFromPixel(const AFinderJson, APixelJson: string): string; overload;
+    function ConvertFromPixel(const AFinderJson: string; AX, AY: Double): TTyConvertResult; overload;
+    function ConvertFromPixel(const AFinderJson: string; AValue: Double): TTyConvertResult; overload;
+    function ConvertFromPixelData(AFinder, AValue: TJSONData): TTyConvertResult;
+    { Whether any model the finder names contains the point: a grid or a
+      cartesian series by its first cartesian's area (edges included), a
+      graph, tree or sankey by its view, a pie by the ring of its first
+      item; a calendar, a radar, an axis and anything else never. }
+    function ContainPixel(const AFinderJson, APointJson: string): Boolean; overload;
+    function ContainPixel(const AFinderJson: string; AX, AY: Double): Boolean; overload;
+    function ContainPixelData(AFinder, APoint: TJSONData): Boolean;
   published
     { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
       RTTI order is the 3.0 order. }
@@ -2160,6 +2212,7 @@ begin
   FreeAndNil(FAxisMemory);
   FSources := nil;
   FreeAndNil(FDatasetCache);
+  FreeAndNil(FJitter);
   FreeAndNil(FOption);
   { The static layer owns a TBitmap. TTyPaintCache.Drop only marks it stale --
     it keeps the surface deliberately, for reuse -- so dropping is not freeing. }
@@ -10391,6 +10444,9 @@ begin
     to tell "there is nothing there" from "there is nothing yet". }
   FPaintListPPI := APPI;
   FPaintListValid := True;
+  { A NEW JITTER PASS: the seed again and no points placed [Batch 110] }
+  if FJitter = nil then FJitter := TTyJitterPass.Create;
+  FJitter.Reset;
   { THE RADAR'S OWN FURNITURE, ONCE PER RADAR AND BEFORE ANY SERIES. It is not
     a series' geometry -- several series share one radar -- and it is not a
     cartesian axis either, so the grid painter never sees it. It goes into the
@@ -10612,6 +10668,7 @@ begin
       if (FBindings[i].SeriesType = 'scatter')
         or (FBindings[i].SeriesType = 'effectScatter') then
         SymbolItems(FBindings[i].SeriesIndex, v.Symbol, v.SymItems, v.SymItemHas);
+      JitterFor(i, APPI, v);
       { THE PICTORIAL OPTIONS, read for every series rather than only for the
         one type that uses them. The alternative is a branch on the type name
         here, and this file already has too many of those: the reader is
@@ -15206,6 +15263,561 @@ begin
         AData.AsString := StringReplace(AData.AsString, #$EF#$B7#$90, #0, [rfReplaceAll]);
     jtArray, jtObject:
       for i := 0 to AData.Count - 1 do NulRestore(AData.Items[i]);
+  end;
+end;
+
+{ ==================== the jitter [Batch 110] ==================== }
+
+{ jitterLayout's gate: a scatter on a cartesian whose base axis is a
+  category one with `jitter > 0` -- `jitterOverlap` true unless written
+  falsy, `jitterMargin` 2 unless written (`|| 0` after that) }
+procedure TTyAdvanceChart.JitterFor(ASlot, APPI: Integer; var AVisual: TTySeriesVisual);
+var
+  base: TTyAxis;
+  node: TJSONData;
+  d: TJSONData;
+  jit, margin, scale: Double;
+  overlap: Boolean;
+
+  function NumOf(AData: TJSONData): Double;
+  begin
+    case AData.JSONType of
+      jtNumber: Result := AData.AsFloat;
+      jtString: Result := TyJsToNumber(AData.AsString);
+      jtBoolean: if AData.AsBoolean then Result := 1 else Result := 0;
+    else
+      Result := NaN;
+    end;
+  end;
+
+begin
+  AVisual.Jitter := nil;
+  AVisual.JitterOnX := False;
+  if (ASlot < 0) or (ASlot > High(FBindings)) or (FJitter = nil) then Exit;
+  if FBindings[ASlot].SeriesType <> 'scatter' then Exit;
+  if (FBindings[ASlot].Cart = nil) or (FBindings[ASlot].CalendarIndex >= 0) then Exit;
+  base := FBindings[ASlot].Cart.GetBaseAxis;
+  if (base = nil) or (base.AxisType <> atCategory) then Exit;
+  node := FOption.ComponentAt(base.MainType, base.ComponentIndex);
+  if not (node is TJSONObject) then Exit;
+  jit := 0;
+  d := TJSONObject(node).Find('jitter');
+  if (d <> nil) and (d.JSONType <> jtNull) then jit := NumOf(d);
+  if IsNan(jit) or not (jit > 0) then Exit;
+  overlap := True;
+  d := TJSONObject(node).Find('jitterOverlap');
+  if (d <> nil) and (d.JSONType <> jtNull) then overlap := TyJsTruthy(d);
+  margin := 2;
+  d := TJSONObject(node).Find('jitterMargin');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    margin := NumOf(d);
+    if IsNan(margin) then margin := 0;
+  end;
+  if APPI > 0 then scale := APPI / 96 else scale := 1;
+  AVisual.Jitter := FJitter.AxisFor(base.Uid, jit * scale, margin * scale,
+    overlap, base.BandWidth);
+  AVisual.JitterOnX := base.Horizontal;
+end;
+
+{ ==================== the coordinate conversions [Batch 110] ==================== }
+
+procedure TTyAdvanceChart.ConvertReady;
+var m: ITyTextMeasurer;
+begin
+  { upstream's setOption lays the chart out before it returns: a layout
+    the option has made stale is made again here, as a roam does }
+  if FDirty and (FLastPPI > 0) then
+  begin
+    m := NewTextMeasurer(FLastPPI);
+    Relayout(nil, FLastRect, FLastPPI, m);
+    DropStatic;
+    LazyUpdateDone;
+    inherited Invalidate;
+  end;
+end;
+
+{ Grid.convertToPixel / convertFromPixel: _findConvertTarget -- the
+  series' own cartesian when a series is named (and only if it is this
+  grid's), else the cartesian of the x and y axes named, else the one axis
+  named, else -- lowest -- the grid's first cartesian when the grid named is
+  this one }
+function TTyAdvanceChart.ConvertOnGrid(AGrid: TTyGridBuild; const AF: TTyParsedFinder;
+  AValue: TJSONData; AFrom: Boolean): TTyConvertResult;
+var
+  s, xm, ym, gm, slot, k: Integer;
+  cart, own: TTyCartesian2D;
+  axis: TTyAxis;
+begin
+  Result := TyConvertNone;
+  cart := nil;
+  axis := nil;
+  s := TyFinderModel(AF, 'series');
+  xm := TyFinderModel(AF, 'xAxis');
+  ym := TyFinderModel(AF, 'yAxis');
+  gm := TyFinderModel(AF, 'grid');
+  if s >= 0 then
+  begin
+    slot := SlotOfSeries(s);
+    if slot >= 0 then
+    begin
+      own := FBindings[slot].Cart;
+      if own <> nil then
+        for k := 0 to AGrid.CartesianCount - 1 do
+          if AGrid.CartesianByIndex(k) = own then
+          begin
+            cart := own;
+            Break;
+          end;
+    end;
+  end
+  else if (xm >= 0) and (ym >= 0) then
+    cart := AGrid.CartesianAt(xm, ym)
+  else if xm >= 0 then
+  begin
+    if AGrid.CartesianCount > 0 then
+      for k := 0 to AGrid.XAxisCount - 1 do
+        if AGrid.XAxis(k).ComponentIndex = xm then axis := AGrid.XAxis(k);
+  end
+  else if ym >= 0 then
+  begin
+    if AGrid.CartesianCount > 0 then
+      for k := 0 to AGrid.YAxisCount - 1 do
+        if AGrid.YAxis(k).ComponentIndex = ym then axis := AGrid.YAxis(k);
+  end
+  else if (gm >= 0) and (gm = AGrid.ComponentIndex) and (AGrid.CartesianCount > 0) then
+    cart := AGrid.CartesianByIndex(0);
+  if cart <> nil then
+  begin
+    if AFrom then Result := TyCartesianFromPixel(cart, AValue)
+    else Result := TyCartesianToPixel(cart, AValue);
+  end
+  else if axis <> nil then
+  begin
+    if AFrom then Result := TyAxisFromPixel(axis, AValue)
+    else Result := TyAxisToPixel(axis, AValue);
+  end;
+end;
+
+procedure ConvertUnmask(const AMask: TFPUExceptionMask);
+begin
+  ClearExceptions(False);
+  {$IFDEF CPUX86_64}
+  { the SSE flags too, which ClearExceptions leaves standing on this CPU }
+  SetMXCSR(GetMXCSR and not LongWord($3F));
+  {$ENDIF}
+  SetExceptionMask(AMask);
+end;
+
+{ Calendar.convertToPixel: dataToPoint of the value (its first element when
+  it is an array), clamped to the range; convertFromPixel: the time of the
+  day under the point, nothing off the range }
+function TTyAdvanceChart.ConvertOnCalendar(ACal: TTyCalendar; AValue: TJSONData;
+  AFrom: Boolean): TTyConvertResult;
+var
+  v, own: TJSONData;
+  dv: TTyDataValue;
+  p: TTyPointF;
+  d: TTyDoubleArray;
+  mask: TFPUExceptionMask;
+begin
+  Result := TyConvertNone;
+  own := nil;
+  mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    if AFrom then
+    begin
+      p := TyJsonPoint(AValue);
+      if ACal.PointToData(p, d) and (Length(d) > 0) then
+        Result := TyConvertNum(d[0]);
+      Exit;
+    end;
+    v := AValue;
+    if TyJsonIsArray(AValue) then v := TyJsonElement(AValue, 0, own);
+    { getDateInfo's parseDate: a string through TIME_REG, nothing for null
+      and undefined, anything else new Date(Math.round(v)) }
+    dv := Default(TTyDataValue);
+    dv.Kind := dvkNone;
+    if not TyJsonNullish(v) then
+    begin
+      if v.JSONType = jtString then dv := TyDataText(v.AsString)
+      else dv := TyDataNum(TyJsonToNumber(v));
+    end;
+    p := ACal.DatePoint(ACal.ParseDate(dv), True);
+    Result := TyConvertXY(p.X, p.Y);
+  finally
+    own.Free;
+    ConvertUnmask(mask);
+  end;
+end;
+
+{ View.convertToPixel / convertFromPixel: the overall matrix -- whose zero
+  terms carry a not-a-number or an infinity across, as zrender's
+  applyTransform does -- or its inverse }
+function TTyAdvanceChart.ConvertOnView(AView: TTyGraphView; AValue: TJSONData;
+  AFrom: Boolean): TTyConvertResult;
+var
+  pt, p: TTyPointF;
+  d: TTyDoubleArray;
+  mask: TFPUExceptionMask;
+begin
+  Result := TyConvertNone;
+  pt := TyJsonPoint(AValue);
+  mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    if not AFrom then
+    begin
+      p := AView.DataToPoint([pt.X, pt.Y]);
+      Exit(TyConvertXY(p.X, p.Y));
+    end;
+    { no inverse: vectorCopy }
+    if not AView.PointToData(pt, d) or (Length(d) < 2) then
+      Exit(TyConvertXY(pt.X, pt.Y));
+    if IsNan(pt.Y) or IsInfinite(pt.Y) then d[0] := NaN;
+    if IsNan(pt.X) or IsInfinite(pt.X) then d[1] := NaN;
+    Result := TyConvertXY(d[0], d[1]);
+  finally
+    ConvertUnmask(mask);
+  end;
+end;
+
+{ doConvertPixel: every coordinate system in the manager's order -- the
+  grids, the radars (which answer nothing), the graphs' views, then (were
+  they here) parallel, polar and singleAxis, then the calendars -- and the
+  first answer that is not null/undefined }
+function TTyAdvanceChart.ConvertDispatch(AFinder, AValue: TJSONData;
+  AFrom: Boolean): TTyConvertResult;
+var
+  pf: TTyParsedFinder;
+  g, slot, s, c, target: Integer;
+begin
+  Result := TyConvertNone;
+  ConvertReady;
+  if (FBuild = nil) or (FOption = nil) then Exit;
+  pf := TyParseFinder(AFinder, FOption.Keys);
+  try
+    for g := 0 to FBuild.GridCount - 1 do
+    begin
+      Result := ConvertOnGrid(FBuild.Grid(g), pf, AValue, AFrom);
+      if Result.Kind <> cvkNone then Exit;
+    end;
+    { the graphs' views: one per graph series laid out on 'view', in series
+      order; each answers only for its own series }
+    s := TyFinderModel(pf, 'series');
+    for slot := 0 to High(FGraphs) do
+      if (FGraphs[slot] <> nil) and (slot <= High(FBindings))
+        and (FBindings[slot].SeriesIndex = s) then
+      begin
+        Result := ConvertOnView(FGraphs[slot], AValue, AFrom);
+        if Result.Kind <> cvkNone then Exit;
+      end;
+    { polar (C3) and singleAxis (C10) take their turn here }
+    for c := 0 to High(FCalendars) do
+    begin
+      if FCalendars[c] = nil then Continue;
+      { getCoordSys: the calendar named, else the series' own }
+      target := TyFinderModel(pf, 'calendar');
+      if (target < 0) and (s >= 0) then
+      begin
+        slot := SlotOfSeries(s);
+        if slot >= 0 then target := FBindings[slot].CalendarIndex;
+      end;
+      if target <> c then Continue;
+      Result := ConvertOnCalendar(FCalendars[c], AValue, AFrom);
+      if Result.Kind <> cvkNone then Exit;
+    end;
+  except
+    on ETyConvertNull do
+    begin
+      Result.Kind := cvkError;
+      Result.Values := nil;
+    end;
+  end;
+end;
+
+{ containPixel for a series: its coordinate system's containPoint -- a
+  cartesian's area, a graph's, tree's or sankey's view; a calendar's and a
+  radar's are always false -- or, with none, its view's: a pie's ring of
+  its first item }
+function TTyAdvanceChart.ContainSeries(ASeriesIndex: Integer; APoint: TJSONData): Boolean;
+var
+  slot, k: Integer;
+  b: TTySeriesBinding;
+  pt: TTyPointF;
+  bx: TTyXYWH;
+  dx, dy, r: Double;
+begin
+  Result := False;
+  slot := SlotOfSeries(ASeriesIndex);
+  if slot < 0 then Exit;
+  b := FBindings[slot];
+  if b.Cart <> nil then Exit(TyCartesianContainJson(b.Cart, APoint));
+  if (b.CalendarIndex >= 0) or (b.RadarIndex >= 0) then Exit;
+  pt := TyJsonPoint(APoint);
+  if IsNan(pt.X) or IsNan(pt.Y) then Exit;
+  if (b.SeriesType = TyGraphSeriesTypeName) and (slot <= High(FGraphs))
+    and (FGraphs[slot] <> nil) then
+    Exit(FGraphs[slot].ContainPoint(pt));
+  if (b.SeriesType = TyTreeSeriesTypeName) and (slot <= High(FTreeViews))
+    and (FTreeViews[slot] <> nil) then
+    Exit(FTreeViews[slot].ContainPoint(pt));
+  if (b.SeriesType = TySankeySeriesTypeName) and (slot <= High(FSankeys))
+    and FSankeys[slot].Valid then
+  begin
+    bx := FSankeys[slot].Box;
+    Exit((pt.X >= bx.X) and (pt.X <= bx.X + bx.W) and (pt.Y >= bx.Y)
+      and (pt.Y <= bx.Y + bx.H));
+  end;
+  if (b.SeriesType = TyPieSeriesTypeName) and (slot <= High(FPies))
+    and FPies[slot].Valid then
+    for k := 0 to High(FPies[slot].Sectors) do
+      if FPies[slot].Sectors[k].Index = 0 then
+      begin
+        { PieView.containPoint: the first item's layout, r0 <= d <= r }
+        dx := pt.X - FPies[slot].Sectors[k].CX;
+        dy := pt.Y - FPies[slot].Sectors[k].CY;
+        if IsNan(dx) or IsNan(dy) then Exit;
+        r := Sqrt(dx * dx + dy * dy);
+        Exit((r <= FPies[slot].Sectors[k].R1) and (r >= FPies[slot].Sectors[k].R0));
+      end;
+end;
+
+function TTyAdvanceChart.ContainPixelData(AFinder, APoint: TJSONData): Boolean;
+var
+  pf: TTyParsedFinder;
+  t, k, g: Integer;
+  mt: string;
+  gb: TTyGridBuild;
+begin
+  Result := False;
+  ConvertReady;
+  if (FBuild = nil) or (FOption = nil) then Exit;
+  pf := TyParseFinder(AFinder, FOption.Keys);
+  try
+    for t := 0 to High(pf.Types) do
+    begin
+      mt := pf.Types[t].MainType;
+      for k := 0 to High(pf.Types[t].Models) do
+      begin
+        if mt = 'series' then
+        begin
+          if ContainSeries(pf.Types[t].Models[k], APoint) then Exit(True);
+        end
+        else if mt = 'grid' then
+        begin
+          { Grid.containPoint: its first cartesian's }
+          for g := 0 to FBuild.GridCount - 1 do
+          begin
+            gb := FBuild.Grid(g);
+            if (gb.ComponentIndex = pf.Types[t].Models[k]) and (gb.CartesianCount > 0)
+              and TyCartesianContainJson(gb.CartesianByIndex(0), APoint) then
+              Exit(True);
+          end;
+        end;
+        { a calendar's and a radar's containPoint are not implemented
+          upstream (false); an axis has no coordinate system; polar,
+          singleAxis and geo are not here yet }
+      end;
+    end;
+  except
+    { upstream throws where it indexes a null point }
+    on ETyConvertNull do Result := False;
+  end;
+end;
+
+function TTyAdvanceChart.ConvertToPixelData(AFinder, AValue: TJSONData): TTyConvertResult;
+begin
+  Result := ConvertDispatch(AFinder, AValue, False);
+end;
+
+function TTyAdvanceChart.ConvertFromPixelData(AFinder, AValue: TJSONData): TTyConvertResult;
+begin
+  Result := ConvertDispatch(AFinder, AValue, True);
+end;
+
+{ The finder text: JSON, or -- written bare -- a main type's name }
+function ConvertParse(const AText: string; ABareWord: Boolean): TJSONData;
+var
+  nLine, nCol: Integer;
+  t: string;
+begin
+  Result := nil;
+  if TyJsonNestingExceeds(AText, TyOptionMaxNesting, nLine, nCol) then Exit;
+  try
+    Result := GetJSON(NulSafeJson(AText));
+    NulRestore(Result);
+  except
+    Result := nil;
+  end;
+  if (Result = nil) and ABareWord then
+  begin
+    t := Trim(AText);
+    if t <> '' then Result := TJSONString.Create(t);
+  end;
+end;
+
+{ JSON.stringify of a number: null where it is not finite }
+function ConvertNumJson(A: Double): string;
+begin
+  if IsNan(A) or IsInfinite(A) then Result := 'null'
+  else Result := TyJsNumberToString(A);
+end;
+
+function ConvertResultJson(const AR: TTyConvertResult): string;
+var i: Integer;
+begin
+  case AR.Kind of
+    cvkNumber: Result := ConvertNumJson(AR.Values[0]);
+    cvkArray:
+      begin
+        Result := '[';
+        for i := 0 to High(AR.Values) do
+        begin
+          if i > 0 then Result := Result + ',';
+          Result := Result + ConvertNumJson(AR.Values[i]);
+        end;
+        Result := Result + ']';
+      end;
+  else
+    Result := '';
+  end;
+end;
+
+function TTyAdvanceChart.ConvertToPixel(const AFinderJson, AValueJson: string): string;
+var f, v: TJSONData;
+begin
+  Result := '';
+  f := ConvertParse(AFinderJson, True);
+  v := ConvertParse(AValueJson, False);
+  try
+    if (f = nil) or (v = nil) then Exit;
+    Result := ConvertResultJson(ConvertToPixelData(f, v));
+  finally
+    f.Free;
+    v.Free;
+  end;
+end;
+
+function TTyAdvanceChart.ConvertToPixel(const AFinderJson: string;
+  const AValue: array of Double): TTyConvertResult;
+var
+  f: TJSONData;
+  v: TJSONArray;
+  i: Integer;
+begin
+  Result := TyConvertNone;
+  f := ConvertParse(AFinderJson, True);
+  v := TJSONArray.Create;
+  try
+    if f = nil then Exit;
+    for i := 0 to High(AValue) do v.Add(TJSONFloatNumber.Create(AValue[i]));
+    Result := ConvertToPixelData(f, v);
+  finally
+    f.Free;
+    v.Free;
+  end;
+end;
+
+function TTyAdvanceChart.ConvertToPixel(const AFinderJson: string;
+  AValue: Double): TTyConvertResult;
+var f, v: TJSONData;
+begin
+  Result := TyConvertNone;
+  f := ConvertParse(AFinderJson, True);
+  v := TJSONFloatNumber.Create(AValue);
+  try
+    if f = nil then Exit;
+    Result := ConvertToPixelData(f, v);
+  finally
+    f.Free;
+    v.Free;
+  end;
+end;
+
+function TTyAdvanceChart.ConvertFromPixel(const AFinderJson, APixelJson: string): string;
+var f, v: TJSONData;
+begin
+  Result := '';
+  f := ConvertParse(AFinderJson, True);
+  v := ConvertParse(APixelJson, False);
+  try
+    if (f = nil) or (v = nil) then Exit;
+    Result := ConvertResultJson(ConvertFromPixelData(f, v));
+  finally
+    f.Free;
+    v.Free;
+  end;
+end;
+
+function TTyAdvanceChart.ConvertFromPixel(const AFinderJson: string;
+  AX, AY: Double): TTyConvertResult;
+var
+  f: TJSONData;
+  v: TJSONArray;
+begin
+  Result := TyConvertNone;
+  f := ConvertParse(AFinderJson, True);
+  v := TJSONArray.Create;
+  try
+    if f = nil then Exit;
+    v.Add(TJSONFloatNumber.Create(AX));
+    v.Add(TJSONFloatNumber.Create(AY));
+    Result := ConvertFromPixelData(f, v);
+  finally
+    f.Free;
+    v.Free;
+  end;
+end;
+
+function TTyAdvanceChart.ConvertFromPixel(const AFinderJson: string;
+  AValue: Double): TTyConvertResult;
+var f, v: TJSONData;
+begin
+  Result := TyConvertNone;
+  f := ConvertParse(AFinderJson, True);
+  v := TJSONFloatNumber.Create(AValue);
+  try
+    if f = nil then Exit;
+    Result := ConvertFromPixelData(f, v);
+  finally
+    f.Free;
+    v.Free;
+  end;
+end;
+
+function TTyAdvanceChart.ContainPixel(const AFinderJson, APointJson: string): Boolean;
+var f, v: TJSONData;
+begin
+  Result := False;
+  f := ConvertParse(AFinderJson, True);
+  v := ConvertParse(APointJson, False);
+  try
+    if (f = nil) or (v = nil) then Exit;
+    Result := ContainPixelData(f, v);
+  finally
+    f.Free;
+    v.Free;
+  end;
+end;
+
+function TTyAdvanceChart.ContainPixel(const AFinderJson: string; AX, AY: Double): Boolean;
+var
+  f: TJSONData;
+  v: TJSONArray;
+begin
+  Result := False;
+  f := ConvertParse(AFinderJson, True);
+  v := TJSONArray.Create;
+  try
+    if f = nil then Exit;
+    v.Add(TJSONFloatNumber.Create(AX));
+    v.Add(TJSONFloatNumber.Create(AY));
+    Result := ContainPixelData(f, v);
+  finally
+    f.Free;
+    v.Free;
   end;
 end;
 

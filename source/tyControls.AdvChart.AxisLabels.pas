@@ -86,7 +86,7 @@ function TyLabelBoxesIntersect(const A, B: TTyLabelBox;
   category axis' `interval: 0`. }
 procedure TyFixMinMaxLabelShow(var ACands: TTyLabelCandidateArray;
   AKind: TTyLabelAxisKind; AShowAll: Boolean; AShowMin, AShowMax: TTyAxisEndLabel;
-  AHideOverlap: Boolean);
+  AHideOverlap: Boolean; ACustomValues: Boolean = False);
 
 { hideOverlap over the built labels still shown. }
 procedure TyHideOverlap(var ACands: TTyLabelCandidateArray);
@@ -345,7 +345,7 @@ end;
 
 procedure TyFixMinMaxLabelShow(var ACands: TTyLabelCandidateArray;
   AKind: TTyLabelAxisKind; AShowAll: Boolean; AShowMin, AShowMax: TTyAxisEndLabel;
-  AHideOverlap: Boolean);
+  AHideOverlap: Boolean; ACustomValues: Boolean);
 const
   cTouch = 0.1;
 
@@ -356,6 +356,9 @@ const
       Exit;
     if AOpt = aelAuto then
     begin
+      { CUSTOM LABELS AND NO hideOverlap: "users are unlikely to expect
+        labels to be hidden" -- the end is left alone [Batch 110] }
+      if ACustomValues and not AHideOverlap then Exit;
       { a time axis' ragged end, or a category axis' end off the interval }
       if ((AKind = lakTime) and ACands[AOut].NotNice)
         or ((AKind = lakCategory) and ACands[AOut].OffInterval) then

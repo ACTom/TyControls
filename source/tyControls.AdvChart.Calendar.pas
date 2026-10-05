@@ -1168,9 +1168,20 @@ begin
     Result := DateLayout(AData[0], True);
 end;
 
+{ Math.floor(x) + 1 for any x: an infinity or a not-a-number passes
+  through, where FPC's Floor would raise }
+function JsFloorPlus1(A: Double): Double;
+begin
+  if IsNan(A) or IsInfinite(A) then Exit(A);
+  Result := Floor(A) + 1;
+end;
+
 { pointToDate, with upstream's first-week slip: the blank cells before the
   range answer the dates before it (its `nthWeek === 0` guard never fires,
-  nthWeek being 1-based there) }
+  nthWeek being 1-based there). A coordinate that is not a number gives a
+  day that is not one -- an Invalid Date, whose time is NaN -- and so does
+  an infinite one that passes the guards; false is upstream's null.
+  [Batch 110: a not-a-number coordinate raised in Floor.] }
 function TTyCalendar.PointToData(const APoint: TTyPointF;
   out AData: TTyDoubleArray): Boolean;
 var
@@ -1180,8 +1191,8 @@ begin
   AData := nil;
   Result := False;
   if not FValid or (FSW = 0) or (FSH = 0) then Exit;
-  nthX := Floor((APoint.X - FRect.X) / FSW) + 1;
-  nthY := Floor((APoint.Y - FRect.Y) / FSH) + 1;
+  nthX := JsFloorPlus1((APoint.X - FRect.X) / FSW);
+  nthY := JsFloorPlus1((APoint.Y - FRect.Y) / FSH);
   if FSpec.Orient = tcoVertical then
   begin
     nthWeek := nthY;
@@ -1192,12 +1203,19 @@ begin
     nthWeek := nthX;
     day := nthY - 1;
   end;
-  if (nthWeek > FRange.Weeks) or ((nthWeek = 0) and (day < FRange.FWeek))
-    or ((nthWeek = FRange.Weeks) and (day > FRange.LWeek)) then Exit;
-  nthDay := (nthWeek - 1) * 7 - FRange.FWeek + day;
+  { JavaScript's comparisons: false for a not-a-number }
+  if not IsNan(nthWeek) and ((nthWeek > FRange.Weeks)
+    or ((nthWeek = 0) and not IsNan(day) and (day < FRange.FWeek))
+    or ((nthWeek = FRange.Weeks) and not IsNan(day) and (day > FRange.LWeek))) then Exit;
   SetLength(AData, 2);
-  AData[0] := FRange.Start.Time + nthDay * TyCalDayMs;
   AData[1] := NaN;
+  if IsNan(nthWeek) or IsNan(day) or IsInfinite(nthWeek) or IsInfinite(day) then
+    AData[0] := NaN
+  else
+  begin
+    nthDay := (nthWeek - 1) * 7 - FRange.FWeek + day;
+    AData[0] := FRange.Start.Time + nthDay * TyCalDayMs;
+  end;
   Result := True;
 end;
 

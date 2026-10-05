@@ -5442,7 +5442,7 @@ port 以前两处刻度文字都是 `FormatFloat('0.######')`:不分组、最多
 ### 已知偏差
 
 - 函数形式的 formatter(`axisLabel.formatter`、`axisPointer.label.formatter`)不做:option 文本里写不出函数,port 这边要走 `@Name` 事件,参数另设计。
-- `axisLabel.customValues` 不做:它决定标在哪些值上,文字照样走这里。
+- `axisLabel.customValues` 不做:它决定标在哪些值上,文字照样走这里。**[第 110 批：已做，axisLabel 与 axisTick 的都做了，文字照样走这里，见 §145。]**
 - 系列标签的 `{c}`、tooltip 里系列那几行的值:上游是 `addCommas(ToString(值))`,这里还是 `TyChartNumToStr`/`TyTooltipValueText`。下一小批。
   **[第三十五批已修,见 §69。标签的 `{c}` 其实不分组,只有 tooltip 的默认行分组。]**
 - 雷达环上的标签:上游分组,但环上的值要先按上游方式取整(scaleCalcAlign),不然全精度标签会印出浮点噪声。和雷达对齐一起做。
@@ -6006,7 +6006,7 @@ port 以前对除时间轴外的每根轴都用同一条规则:找最小的等�
 - **类目轴的 `min` / `max`**:port 不截取类目范围,相关三条用例延后。
 - **grid 盒子**:上下边距之和超过容器高度时和上游不同(time.pas:861 的场景),归 grid 盒子那一批。
 - **[第 101 批：已做，缓存挂在控件按轴保存的记忆上，notMerge 清空、merge 新建的轴清空，见 §136。]** **按模型缓存的间隔**(跨 `setOption` 和缩放保持间隔稳定):port 每次从头算,只有单次渲染一致。
-- `customValues`、函数间隔和格式化器、轴断裂、`minMargin`、标签的 `fontSize` / `width` / `overflow` 进入间隔测量:未做。
+- `customValues`、函数间隔和格式化器、轴断裂、`minMargin`、标签的 `fontSize` / `width` / `overflow` 进入间隔测量:未做。**[第 110 批：`customValues` 已做——自定义标签全部构建、不按间隔抽稀，类目轴的自动间隔仍按它自己的标签量，见 §145；其余仍未做。]**
 - 小数间隔仍按整数部分处理,这是有意的偏差(axislabel.pas:506)。
 - 线图符号的稀疏仍按 `k mod 步长`,不按"类目在间隔上"。
 
@@ -6090,7 +6090,7 @@ port 以前对除时间轴外的每根轴都用同一条规则:找最小的等�
 - **[第 101 批：已做，颜色下标按上游的跨渲染规则算，作者的列表照用，见 §136。]** 分割区域的颜色:上游两种颜色交替,并且跨渲染保持连续;port 用主题的一种颜色,隔一块涂一块,只管首次渲染。
 - 线图符号的稀疏仍按 `k mod 步长`,不是"类目在间隔上"。
   **[第四十四批已做,见 §78。]**
-- `customValues`、函数间隔、轴断裂:未做。
+- `customValues`、函数间隔、轴断裂:未做。**[第 110 批：`customValues` 已做——`axisTick.customValues` 同时决定刻度、分割线和分割区域，各按自己的 `alignWithLabel` 挪到带边，见 §145；其余仍未做。]**
 
 ### 变异测试
 
@@ -10199,3 +10199,99 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - §47、§75、§76、§84、§124、§125 在原处标注。没有新的 resourcestring。
 
 全量 **8176 个测试，0 错误，0 失败**（新增 `test.advchart.candleboxplot` 9 个；基轴、前插、tooltip 维、零高实体的改动之后，现有测试除上面说的 `candlestick` 两个像素测试改读影线外全绿）。
+
+## 145. Tier 2 第一百一十批：坐标换算与抖动（C2，2026-10-05）
+
+路线图 C2：`convertToPixel` / `convertFromPixel` / `containPixel` 与 finder；散点的 jitter（beeswarm）；坐标轴的 `customValues`。以前控件内部有 `DataToPoint` / `PointToData`（§76），但没有公开的换算接口，也没有 finder；`jitter`、`jitterOverlap`、`jitterMargin` 写了不起作用；`axisLabel.customValues` 与 `axisTick.customValues` 不读（§68、§73、§74 记为未做）。这一批对着 `core/echarts.ts`（`convertToPixel`、`convertFromPixel`、`containPixel`、`doConvertPixel`）、`core/CoordinateSystem.ts`（坐标系管理器的次序）、`util/model.ts`（`parseFinder`、`preParseFinder`、`queryReferringComponents`）、`model/Global.ts`（`queryComponents`、`queryByIdOrName`）、`coord/cartesian/Grid.ts` 与 `Cartesian2D.ts`、`coord/calendar/Calendar.ts`、`coord/radar/Radar.ts`、`coord/View.ts`、`chart/pie/PieView.ts`、`chart/sunburst/SunburstView.ts`、`chart/sankey/SankeyView.ts`、`chart/tree/TreeView.ts`、`util/jitter.ts`、`chart/scatter/jitterLayout.ts`、`coord/axisBand.ts`、`coord/axisTickLabelBuilder.ts`、`coord/Axis.ts`（`getTicksCoords`、`fixOnBandTicksCoords`）、`component/axis/AxisBuilder.ts`（`fixMinMaxLabelShow`、`syncLabelIgnoreToMajorTicks`）、`scale/*.ts` 的 `parse` 与 `util/time.ts` 的 `leveledFormat` 逐行核过，在真 dist 上跑基准。§68、§73、§74 的推迟在原处标注。
+
+### 上游的做法
+
+- **finder**（`parseFinder` 不带选项）：串 `s` 等于 `{sIndex: 0}`；对象的每个键按 `/^(\w+)(Index|Id|Name)$/` 拆成主类型和查询种类（贪婪的 `\w+` 回溯到最长的主类型，`xAxisIdIndex` 的主类型是 `xAxisId`），`dataIndex`、`dataIndexInside` 另放，换算不读。每个主类型按 `queryReferringComponents` 查，`useDefault` 为假：index、id、name 都没写（或都是 null）什么都找不到；`'none'` 和 `false` 什么都找不到；`'all'` 是全部非空模型。index 是 JavaScript 的属性键：`'1'` 和 `[[1]]` 是 1，`'01'`、`1.5`、`-1`、`true` 什么都不是；列表保持次序（重复的也留着）。id、name：单个值是串就是它，是数就印成串，别的都不匹配；**列表里只有串能匹配**——上游用原生 `Map` 以原样的元素为键，模型的 id 永远是串，数字 `5` 和 `'5'` 不是同一个键（`queryByIdOrName` 的注释说串和数等同，只对单个值成立）。index 优先于 id，id 优先于 name。
+- **换算的分派**（`doConvertPixel`）：坐标系管理器的次序是 `normalMasterList` 再 `nonSeriesBoxMasterList`：grid（每个 grid 一个）、radar、geo、graph 的 view（每个 `coordinateSystem: 'view'` 的 graph 系列一个）、parallel、polar、singleAxis，然后 calendar、matrix；第一个答出非 null/undefined 的就是答案，都不答是 undefined。
+- **Grid**（`_findConvertTarget`）：给了系列就只看系列自己的 cartesian（不是这个 grid 的就是 null）；否则 x、y 轴都给了取这对轴的 cartesian；只给 x 或 y 是单轴；最低优先级是 grid——是这个 grid 时取它的第一个 cartesian。cartesian 的 `dataToPoint(value)`：有仿射矩阵、两个元素都不是 null 且全局 `isFinite`（按 ToNumber 转）时走矩阵，矩阵直接吃 ToNumber 的结果（时间轴的毫秒不取整，`''` 是 0）；否则逐轴 `toGlobalCoord(dataToCoord(v))`，`dataToCoord` 先 `scale.parse`。`pointToData`：有逆矩阵用逆矩阵，否则逐轴 `coordToData(toLocalCoord(v))`。单轴：`toGlobalCoord(dataToCoord(v))` / `coordToData(toLocalCoord(v))`。**值是 null 时上游对它取下标，抛 TypeError**。
+- **scale.parse**：数值轴、对数轴 `null` 和 `''` 是 NaN，其余 `Number(v)`；类目轴 null 是 NaN（`Math.round(null)` 会是 0，所以先判）、串查类目（查不到是 NaN）、其余 `Math.round`；时间轴数字 `Math.round`，其余 `+parseDate(v)`（串过 TIME_REG，没写时区按本地时间；null 是 Invalid Date；其余 `new Date(Math.round(v))`，超出 Date 范围是 NaN）。对数轴上的 0 是 `Math.log(0) = -Infinity`，归一化成无穷，像素是无穷。类目轴的 `coordToData` 是 `Math.round`，`Math.round(-0.4)` 是 **-0**。
+- **Calendar**：系列或 finder 指向它时（`calendarModel` 优先于系列自己的），`dataToPoint(value)`（数组取第一个元素，范围外是 `[NaN, NaN]`）；`pointToData` 是像素所在那天的时间，范围外 null（于是继续问下一个坐标系，最后是 undefined）；像素不是数时是 NaN（Invalid Date），一维是正无穷时在守卫里出局，负无穷或另一维无穷是 NaN。`containPoint` 没实现（false）。
+- **Radar**：`convertToPixel` / `convertFromPixel` 都是 null，`containPoint` 是 false。
+- **View**（graph 的）：`dataToPoint` 走整体矩阵、`pointToData` 走它的逆——zrender 的 `applyTransform` 对零系数也乘，所以一维是 NaN 或无穷时另一维也是 NaN。只有 graph 的 view 在管理器里；tree、sankey 的 view 只挂在系列上，换算找不到它们。
+- **containPixel**：对 finder 里每个 `...Models` 的每个模型：它有坐标系就问坐标系的 `containPoint`（cartesian 的面积两端都闭；grid 问第一个 cartesian；graph、tree、sankey 问各自 view：数据矩形经整体矩阵后的包围盒；calendar、radar 是 false），没有就问系列视图的 `containPoint`：饼图是**第一个数据项**布局的环 `r0 <= d <= r`（玫瑰图是第一项自己的半径），旭日图读第 0 个数据（虚拟根）的布局——不下钻时根没有布局，永远是 false；漏斗、仪表盘、矩形树图没有，是 false。坐标轴模型没有坐标系，也是 false。结果是或。
+- **jitter**（`jitterLayout`，`POST_CHART_LAYOUT`）：只对 `scatter`（不含 `effectScatter`）、坐标系是 cartesian2d、基轴（类目、时间、x 的次序）是类目轴、且基轴写了 `jitter > 0` 的系列；每个系列、每一行（包括值是空的行——布局照样有，照样抖）都调一次 `fixJitter(基轴, 固定坐标, 浮动坐标, symbolSize / 2)`，类目 x 上浮动的是 x，类目 y 上浮动的是 y；`symbolSize` 是数组时取两个的平均。`jitterOverlap`（缺省 true）：`浮动 + (Math.random() - 0.5) × min(max(0, jitter), 带宽 - 2r)`。`jitterOverlap: false`：在这根轴上已放下的点中间找位置——两个方向各试一次，碰到圆（`r + 它的 r + jitterMargin`，缺省 2）就挪到它外侧、再从头检查，超过 `jitter / 2` 放弃；取移动小的一个，若仍超过 `jitter / 2` 或超过 `带宽 / 2 - r`，退回随机放置（**不记住**），否则记住这个点。放下的点挂在**轴对象**上，同一根轴上的系列共享；轴对象在 resize 时保留，所以上游第二次布局会躲开第一次的点。
+- **customValues**（`createAxisLabels` / `createAxisTicks` 的第一个分支）：写了（任何真值）就不走类目间隔或刻度——每个值 `scale.parse`、落在 `scale.getExtent()` 里（两端都算）的留下，去重、升序。`createAxisTicks` 读的是 **`axisTick` 的** `customValues`，不管是谁在问：分割线、分割区域也跟着它走，再各按自己的 `alignWithLabel` 挪到带边（自定义刻度没有 `offInterval`，末尾总是补一个 `extent[1] + 1`）。标签文字是 `makeLabelFormatter(axis)(tick, 序号)`：时间轴的自定义刻度没有 time 信息，用 `getUnitFromValue` 那个单位的第一个模板、level 0。类目轴自己的刻度和分割线仍走类目标签的自动间隔（`makeCategoryLabelsActually`，不看 customValues）。`fixMinMaxLabelShow` 在没写 showMin/MaxLabel、写了 customValues 又没开 hideOverlap 时什么都不藏。`syncLabelIgnoreToMajorTicks` 按**值**把被藏的标签和刻度对上。
+
+### 做法
+
+- **新单元 `tyControls.AdvChart.Convert`**（纯）：`TyParseFinder`（对 `TTyChartOption.Keys`，即上游组件表的镜像，空洞照样是空洞）、`TyFinderModels` / `TyFinderModel`；JavaScript 的值：`TyJsonToNumber`、`TyJsonJsString`、`TyJsonElement`（数组元素、串的 UTF-16 字符、对象的属性 `"i"`；null 抛 `ETyConvertNull`）、`TyAxisParseJson`；`TyCartesianToPixel` / `TyCartesianFromPixel` / `TyAxisToPixel` / `TyAxisFromPixel` / `TyCartesianContainJson`。结果是 `TTyConvertResult`：`cvkNone`（undefined）、`cvkNumber`、`cvkArray`、`cvkError`（上游抛错的地方）。全部在屏蔽浮点陷阱下算（无穷乘零是 NaN，不抛）。
+- **新单元 `tyControls.AdvChart.Jitter`**（纯）：`TTyJitterPass`（随机状态和每根轴放下的点）、`TTyJitterAxis.Fix`（`fixJitter` 逐行抄）、`TyJitterIgnoreOverlaps`、`TyJitterPlace`、`TyJitterRandom`。随机数是力导向布局的 xorshift32，种子 `TyJitterSeed`（等于 `TyGraphForceSeed(0)`），**每次 `BuildSeriesList` 重新播种、清空放下的点**：重画同一幅图，抖动不变。
+- **`Marks`**：`TTySeriesVisual.Jitter` / `JitterOnX`；`BuildScatter` 对每一行（空行也算）先求点、按行的符号大小（`ScatterRowRadius`：数据项、visualMap、系列的大小，`[w, h]` 取平均，除以二）抖动，再判空行与裁剪。
+- **控件**：`JitterFor` 读基轴的 `jitter` / `jitterOverlap` / `jitterMargin`（像素按 PPI 换算），给 scatter 挂上那根轴的 `TTyJitterAxis`；`FJitter`。公开的 `ConvertToPixel` / `ConvertFromPixel` / `ContainPixel`：JSON 文本形式（finder 可以是 JSON 也可以是裸的主类型名；答案是 JSON：一个数、一对数，非有限数印成 null，没有答案或上游会抛错时是空串），类型化形式（`TTyConvertResult`，`array of Double` / 一个 `Double` / 两个坐标），以及 `...Data` 形式（直接给 `TJSONData`）。分派按上游的次序：各个 grid、graph 的 view、（polar、singleAxis 留了位置）、各个 calendar。布局脏了先重新布局（上游的 setOption 是同步的）；从没渲染过的图什么都答不出。
+- **`Calendar`**：`PointToData` 对 NaN 和无穷照上游答（以前 `Floor(NaN)` 抛异常）。
+- **`Scale`**：`TyJsRound` 把舍到零的负数答成 -0，和 `Math.round` 一样。
+- **customValues**：`Builder` 的 `TyCustomValuesOf`（真值判断、parse、范围、去重、升序）；`FillSpec` 先做出类目自己的标签，有 `axisLabel.customValues` 时把它们挪进 `CatLabels` / `CatTickValues` / `CatLocalCoords`、换上自定义的标签（终矩形上一起重算坐标）；`AxisMarks` 有 `axisTick.customValues` 时刻度、分割线、分割区域都用它（类目轴各按自己的 `alignWithLabel` 走 `TyFixOnBandMarks`），刻度与被藏标签按值对上。`Layout`：`TTyAxisLayoutSpec.CustomLabels` 与三个 `Cat*` 数组、`TyCategoryLabelCount`；类目间隔在自定义标签下用类目自己的标签量（`IntervalSpec`）；自定义标签全部构建、不按间隔抽稀。`AxisLabels.TyFixMinMaxLabelShow` 多一个 `ACustomValues`。
+
+### 基准
+
+`tools/advchart-oracle/convert-jitter.js`（真 dist，node SSR，600×400，`animation: false`，`Math.random` 换成端口的 xorshift32、每张图前重设种子，每次抽取都核对来自 `fixJitterIgnoreOverlaps`，最后 `process.exit()`）→ `tests/fixtures/advchart-convert-jitter.json`：**69 个用例**。输入值里的数字写成 `{"h": 十六进制}`，测试据此还原出精确的 Double；同时记下 `JSON.stringify` 的文本和它能否安全回读（每个数不超过 15 位有效数字）。
+
+- **换算** 29 个、**3741 个探针**（to 1114、from 826、contain 1801）：每种 finder 写法（串、各种 index、`'all'` / `'none'` / `false` / `null` / `true`、`'1'` / `'01'` / `1.5` / `-1` / `[[1]]`、id 与 name 的单值和列表、数字 id、index 压过 id、不存在的主类型、小写后缀、`dataIndex`、数字 finder）× 每种操作；两根值轴（仿射）、小数网格、类目 x / y、`boundaryGap: false`、时间轴（带时区的串、毫秒的小数、本地串）、对数轴（0、负数）、两根轴都反向、dataZoom（类目与百分比）、两个 grid 四根轴的各种组合、没写 grid（预处理器补的）、图例关掉的系列、calendar（横排、竖排、firstDay 1、范围外、NaN 与正负无穷的像素）、calendar 与 grid 并存时谁先答、radar、graph 的 view（缺省、缩放平移、带 box、在 cartesian 上）、饼图（环、玫瑰）、旭日图、树图、桑基图（含盒子的四条边上和刚过边）、漏斗、饼图加 cartesian 的 `'all'`；值包括 ToNumber 的各种怪样子（`''`、null、`'0x10'`、空白、`'Infinity'`、`'1e400'`、`[]`、`[[3]]`、对象、布尔、三元素、标量、串 `'34'`）；网格四角、刚过边、中心；往返。每个答案记下是哪个坐标系答的。
+- **jitter** 21 个、386 项、172 次抽取：随机放置、避让（缺省间距、6、0）、放弃后的随机、三十个点叠在一个值上（叠出半个带宽、退回随机）、比带宽宽的 jitter、类目 y（避让和随机）、两个系列共享、钳到带宽、空行与未知类目（照样抽）、逐项与 `[w, h]` 的符号大小、值轴上的 jitter（不动）、x、y 都是类目而 jitter 写在 y 上（不动）、jitter 0、effectScatter（不动）、反向轴、`boundaryGap: false`、抖出绘图区（裁掉）。
+- **customValues** 19 个、38 根轴、176 个标签：数值轴（范围外、重复、乱序、串、null）、分割线与分割区域跟着 axisTick、类目轴（名字与序号、带边加末尾、`alignWithLabel`、分割、`boundaryGap: false`、拥挤时刻度仍走类目间隔——间隔写明，自动间隔的量法见偏差）、y 轴、时间轴（`useUTC`，含毫秒的小数）、对数轴、模板 formatter、拥挤而不开 hideOverlap（全显示）、开 hideOverlap（藏了，刻度跟着藏）、showMin/MaxLabel、只有自定义标签而刻度照旧、反向、空列表、dataZoom 窗口外的值。
+- 49 条守卫（按源码写的期望：串 finder 等于 `seriesIndex: 0`、未知主类型、`'none'` 与 `false`、`'1'` 与 `'01'`、id 列表里的数字不匹配、单轴答一个数、标量给 cartesian 是 `[NaN, NaN]`、`''` 在矩阵上是 0、null 让矩阵让路、`'34'` 读成 `'3'` 和 `'4'`、类目名字与序号、未知类目、1.4 舍到 1、时间的矩阵路径不取整、calendar 的范围外 / 时间 / null / NaN、calendar 不包含、radar 不换算、饼图的环、旭日图从不包含、树图包含、漏斗不包含、calendar 与 x 轴并存时 grid 先答、calendar 系列与 x 轴并存时 calendar 答、图例关掉的系列照样换算；jitter 每点一抽、离开带中心、有空间的避让不抽、放弃会抽、半个带宽挡住叠起来的点、值轴不抽不动、effectScatter 不抖、空行照抽、jitter 0 不抽、类目 y 上动的是 y；customValues 的范围 / 去重 / 升序、刻度、分割线跟着 axisTick、类目带边加一、对齐时不加、不开 hideOverlap 全显示、开了藏、藏标签连刻度、showMinLabel false、空列表），两次生成逐字节一致。
+
+测试 `test.advchart.convertjitter`（新，10 个，注册在 `tytests.lpr`）：
+
+- **换算**：每个探针用 `...Data` 形式、按记录的精确 Double 重放：答案的种类（undefined、数、点、布尔、上游抛错）和每个数逐位（NaN 只认 NaN）。本机时区：calendar 读本地的日期串，和上游一样，任何时区都比；calendar 的数字日期和带时区的串只在 UTC 下比，calendar 从像素换出的时间按本机偏移挪回再比；时间轴上不带时区的日期串只在 UTC 下比。
+- **JSON 文本形式**：能安全回读的探针（3720 个）再走一遍字符串接口，空串 / null / 数在打印的精度内对上。
+- **jitter**：每张图画两遍（每遍从种子重来，重画仍是上游的第一次渲染），每项是否画、画了的圆（或椭圆）中心逐位。
+- **customValues**：每根轴的刻度、分割线、分割区域边的值与像素逐位、是否画；标签按值对上：个数、文字、锚点逐位、是否藏。
+- 手写 6 个：finder 的键与查询（空洞、`'all'`、属性键、`-0`、id 列表、最长主类型、小写后缀、带连字符的键、`dataIndex`）；jitter 的随机数就是力导向的、重设回到种子；避让逐圆攀升（含挪过后面的圆又撞回前面的、放弃与 NaN 邻居）；没渲染过答不出、新选项不经绘制就生效、包含与不包含；JSON 形式的打印（裸词 finder、null 坐标、空串、上游抛错时类型化形式是 `cvkError`、坏 JSON）；类目轴有自定义标签时刻度、分割线与线符号步长和没有时一样（自动间隔路径，`containLabel` 让网格收缩），类目自己的坐标是终矩形上的。
+
+### 变异测试
+
+`c2_mut.py`（草稿目录）：逐个改源码、重编、跑 `TAdvChartConvertJitterTest`、按原字节还原。62 个：
+
+- finder 9 个：串当成 Id、后缀判断次序对调、`false` 不当 none、`'all'` 不跳空洞、`'01'` 当 1、id 列表里的数字也匹配、数字 id 不匹配、name 压过 id、index 不跳空洞；
+- JavaScript 的值 11 个：null 的 ToNumber 是 NaN、数组的 ToNumber 是 NaN、串不按字符取、null 不抛、数值轴的 `''` 当 0、类目不取整、类目的 null 当 0、时间的数字不取整、从不走矩阵、null 也走矩阵、对数轴的 0 当 NaN；
+- 分派与包含 12 个：任何 grid 都答 gridIndex、x 和 y 都给时不取那对、系列的 cartesian 不核对属于哪个 grid、calendar 模型被忽略、calendar 不取数组的第一个、view 不传零系数、饼图不看内半径、grid 的包含不算、抛错当成 undefined、不重新布局、NaN 打印成数、桑基图的盒子左边开；
+- calendar 2 个、取整 1 个：负无穷的天不当 NaN、正无穷的周不出局；`Math.round` 的 -0；
+- jitter 15 个：不钳到带宽、挪过后不从头查、不放弃、不加间距、取移动大的、不看半个带宽、不记住、浮动维对调、种子加一、不重设、空行不抖、半径用直径、间距缺省 0、缺省避让、effectScatter 也抖；
+- customValues 12 个：不看范围、不去重、不排序、类目不挪到带边、分割线不跟 axisTick、不开 hideOverlap 也藏端点、按间隔抽稀、刻度按下标同步、时间模板取 level 1、间隔用自定义标签量、类目数用自定义标签数、终矩形不重算类目坐标。
+
+首轮杀死 53 个，存活 9 个：
+
+- **`false` 不当 none** 与 **系列的 cartesian 不核对 grid**：等价。`false` 不是数组下标，走 index 分支也什么都找不到，id、name 又被 index 挡住；系列的 cartesian 不论哪个 grid 先答都是同一个对象，答案相同。
+- **时间的数字不取整**：逐轴路径的 `DataToLocal` 还会再取整一次，换算看不出来；自定义值看得出——`cu-time` 补毫秒的小数（`T0 + 6 天 + 0.6`、`+ 7 天 + 0.4`），杀死。
+- **calendar 不取数组的第一个**：测试的时区规则把数组里的第二个元素（数）也当成日期，带数组的探针在本机全被跳过——改成只看 calendar 读日期的那个元素，杀死。
+- **view 不传零系数**：graph 的像素探针都是有限数。补 `['abc', 200]`、`[100, 'Infinity']`、`['-Infinity', 3]`、`[100, 'abc']`，杀死。
+- **桑基图的盒子左边开**：网格状的点没有落在盒子边上。补盒子四角与刚过边的点，杀死。
+- **挪过后不从头查**：用例里的点总是越挪越远，不会撞回前面。手写测试补「挪过后面的圆又撞回前面的」，杀死。
+- **不看半个带宽**：用例里的避让从没挪过半个带宽。补 `j-avoid-crowd`（三十个点同一个值），杀死。
+- **终矩形不重算类目坐标**：`outerBoundsMode: 'none'` 和不收缩的网格上原矩形就是终矩形。自洽测试改用 `containLabel` 和大数值的 y 标签让网格收缩，并直接比类目坐标与轴的 `DataToLocal`，杀死。
+
+补完重跑这 9 个：7 个杀死，2 个等价。
+
+### 已知偏差
+
+- **轴的绘制仍把对数轴上的 0 当 NaN**：换算按上游答无穷像素，但同一根轴画标记时 0 仍是空（`TTyLogScaleMapper.TransformIn` 没改）。
+- **resize 之后的 jitter**：上游把放下的点挂在轴对象上，resize 不重建轴，第二次布局会躲开第一次的点（越 resize 越散）；端口每次构建都从空开始，等于上游的第一次渲染。
+- **随机数**：上游的 jitter 用 `Math.random`，每次渲染不同；端口用固定种子的 xorshift32，同一幅图永远一样。同一张图里既有力导向 graph 又有 jitter 时，上游两者共用一条 `Math.random`，端口各用各的种子。
+- **large 散点**（`largeThreshold` 以上走 Float32Array）不在这一批（C8）。
+- **finder 是数组**：上游对数组 finder 的数字键调 `match` 会抛错；端口当成什么都没找到。containPixel 的点是 null 时上游抛错，端口答 false。
+- **matrix、polar、singleAxis、geo、parallel** 坐标系不在（polar 是 C3、singleAxis 是 C10、geo 是 D14）；finder 指到它们时端口什么都答不出，containPixel 答 false。分派里给 polar、singleAxis 留了位置。
+- **桑基图**的 containPixel 按它的盒子（端口没有桑基图的 roam）；旭日图从不包含（上游不下钻时也是如此，端口没有下钻）。
+- **类目轴的自动间隔**：量的是主题字体，不是上游的 12px sans-serif；60 个 `'category N'` 标签上端口算出 10、上游 9（和有没有 customValues 无关，是原有的偏差）。基准里拥挤的类目用例把间隔写明。
+- **customValues 写成对象或串**：对象取值、串逐字符，照 `zrUtil.each` 的行为；没有基准。
+- **网格收缩时的自定义标签**：基准都用 `outerBoundsMode: 'none'`；自定义标签参与收缩估算的规则照原来的类目轴 / 数值轴走，没有单独的基准。
+
+### 落地
+
+- `source/tyControls.AdvChart.Convert.pas`、`source/tyControls.AdvChart.Jitter.pas`（新，已登记 `tycontrols.lpk` 与 `tycontrols.pas`）。
+- `source/tyControls.AdvanceChart.pas`：公开的换算接口、`ConvertReady` / `ConvertDispatch` / `ConvertOnGrid` / `ConvertOnCalendar` / `ConvertOnView` / `ContainSeries`、`JitterFor`、`FJitter`。
+- `source/tyControls.AdvChart.Marks.pas`：`Jitter` / `JitterOnX`、`ScatterRowRadius`、`BuildScatter` 的抖动。
+- `source/tyControls.AdvChart.Builder.pas`：`TyCustomValuesOf`、`FillSpec` 的自定义标签、`AxisMarks` 的自定义刻度与按值同步、`HoldInterval` 与终矩形的 `Cat*`。
+- `source/tyControls.AdvChart.Layout.pas`：`CustomLabels`、`Cat*`、`TyCategoryLabelCount`、`IntervalSpec`、构建表。
+- `source/tyControls.AdvChart.AxisLabels.pas`：`TyFixMinMaxLabelShow` 的 `ACustomValues`。
+- `source/tyControls.AdvChart.Calendar.pas`：`PointToData` 的 NaN 与无穷。
+- `source/tyControls.AdvChart.Scale.pas`：`TyJsRound` 的 -0。
+- `tools/advchart-oracle/convert-jitter.js`、`tests/fixtures/advchart-convert-jitter.json`、`tests/test.advchart.convertjitter.pas`（新，注册在 `tytests.lpr`）。
+- §68、§73、§74 在原处标注。没有新的 resourcestring。
+
+全量 **8196 个测试，0 失败**；唯一的错误是 `TTyStringGridTest.TestCtrlXGestureCutsAndReadOnlyDegradesToCopy` 的剪贴板被另一棵树的套件占着（已知的偶发），单跑 grid 套件 227 个全绿。新增 `test.advchart.convertjitter` 10 个；`TyJsRound` 的 -0、calendar 的 NaN 像素、FixMinMax 的新参数之后，现有测试全绿。

@@ -877,6 +877,14 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.WhiskerBox"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.Convert.pas"/>
+        <UnitName Value="tyControls.AdvChart.Convert"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Jitter.pas"/>
+        <UnitName Value="tyControls.AdvChart.Jitter"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Symbol.pas"/>
         <UnitName Value="tyControls.AdvChart.Symbol"/>
       </Item>

@@ -548,6 +548,19 @@ type
       labels loses half of them. }
     ForcedLabelStep: Integer;
 
+    { axisLabel.customValues WRITTEN (any truthy value) [Batch 110]: Labels,
+      TickValues and the arrays parallel to them are the custom values' --
+      those in the extent, deduplicated, ascending -- and every one is built:
+      no interval thins them, and the end rules leave them alone unless
+      hideOverlap or showMin/MaxLabel says otherwise. A CATEGORY axis keeps
+      its own labels beside them in CatLabels, CatTickValues and
+      CatLocalCoords, because its auto interval -- which its ticks, split
+      lines and line symbols still walk -- is measured from those. }
+    CustomLabels: Boolean;
+    CatLabels: TTyStringArray;
+    CatTickValues: TTyDoubleArray;
+    CatLocalCoords: TTyDoubleArray;
+
     { The stride the TICK MARKS and the SPLIT LINES walk. Nought means `the
       same one the labels walk`, which is upstream's default and the whole
       point of it: the LABEL interval drives axisTick, splitLine and splitArea
@@ -792,6 +805,10 @@ function TyLayoutAxisLabels(const ASpec: TTyAxisLayoutSpec; const APlot: TTyRect
 function TyCategoryLabelInterval(const ASpec: TTyAxisLayoutSpec;
   const APlot: TTyRectF; const AMeasurer: ITyTextMeasurer;
   APPI: Integer): Double;
+
+{ A category axis' own label count: its categories in the extent, whether or
+  not custom labels stand in for them [Batch 110] }
+function TyCategoryLabelCount(const ASpec: TTyAxisLayoutSpec): Integer;
 
 { The uniform step TyLayoutAxisLabels chose: 1 = every label, 2 = every other.
   Exposed because a caller drawing tick MARKS has to thin them the same way, and
@@ -1331,6 +1348,24 @@ begin
   Result := CategoryIntervalOn(ASpec, APlot, AMeasurer, APPI);
 end;
 
+function TyCategoryLabelCount(const ASpec: TTyAxisLayoutSpec): Integer;
+begin
+  if ASpec.CustomLabels then Result := Length(ASpec.CatLabels)
+  else Result := Length(ASpec.Labels);
+end;
+
+{ the spec its category interval is measured from: the category's own
+  labels where custom ones stand in for them }
+function IntervalSpec(const ASpec: TTyAxisLayoutSpec): TTyAxisLayoutSpec;
+begin
+  Result := ASpec;
+  if not ASpec.CustomLabels then Exit;
+  Result.CustomLabels := False;
+  Result.Labels := ASpec.CatLabels;
+  Result.TickValues := ASpec.CatTickValues;
+  Result.LocalCoords := ASpec.CatLocalCoords;
+end;
+
 function CategoryIntervalOn(const ASpec: TTyAxisLayoutSpec;
   const APlot: TTyRectF; const AMeasurer: ITyTextMeasurer;
   APPI: Integer): Double;
@@ -1340,6 +1375,8 @@ var
   ws, hs: array of Double;
 begin
   if ASpec.ForcedLabelStep > 0 then Exit(ASpec.ForcedLabelStep - 1);
+  if ASpec.CustomLabels then
+    Exit(CategoryIntervalOn(IntervalSpec(ASpec), APlot, AMeasurer, APPI));
   Result := 0;
   n := Length(ASpec.Labels);
   if (n - 1 < 1) or (AMeasurer = nil) then Exit;
@@ -2195,7 +2232,7 @@ begin
   { MEASURED EVEN WITH THE LABELS OFF: the ticks and split lines follow this
     stride whether or not the labels are drawn }
   iv := CategoryIntervalOn(ASpec, APlot, AMeasurer, APPI);
-  n := Length(ASpec.Labels);
+  n := TyCategoryLabelCount(ASpec);
   { an infinite interval, or one past the last label, keeps the first alone }
   if IsInfinite(iv) or (iv + 1 > n) then Result := Max(1, n)
   else Result := Trunc(iv) + 1;
@@ -2405,7 +2442,8 @@ begin
     and its two ends; anything else: every tick. }
   values := nil;
   offs := nil;
-  if ASpec.LabelKind = lakCategory then
+  { custom labels: every one, as a value axis builds its ticks [Batch 110] }
+  if (ASpec.LabelKind = lakCategory) and not ASpec.CustomLabels then
   begin
     iv := CategoryIntervalOn(ASpec, APlot, AMeasurer, APPI);
     TyCategoryBuiltList(ASpec.OrdinalStart, n, iv, values, offs);
@@ -2455,7 +2493,8 @@ begin
   begin
     TyFixMinMaxLabelShow(cands, ASpec.LabelKind,
       ASpec.ShowAllLabels and (ASpec.LabelKind = lakCategory),
-      ASpec.ShowMinLabel, ASpec.ShowMaxLabel, ASpec.HideOverlap);
+      ASpec.ShowMinLabel, ASpec.ShowMaxLabel, ASpec.HideOverlap,
+      ASpec.CustomLabels);
     if ASpec.HideOverlap then TyHideOverlap(cands);
   end;
   for k := 0 to m - 1 do

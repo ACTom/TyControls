@@ -46,7 +46,7 @@ uses
   tyControls.AdvChart.BarLayout, tyControls.AdvChart.Symbol,
   tyControls.AdvChart.Layout, tyControls.AdvChart.Pictorial,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
-  tyControls.AdvChart.WhiskerBox;
+  tyControls.AdvChart.WhiskerBox, tyControls.AdvChart.Jitter;
 
 type
   { Where a stepped line turns. ECharts spells `step: true` as 'start'. }
@@ -182,6 +182,11 @@ type
       axis, so it arrives like the bar column does. Unsolved: a candle half
       a band wide, unclipped [Batch 108] }
     Whisker: TTyWhiskerLayout;
+    { A SCATTER'S JITTER: its category base axis' points for this pass, nil
+      where the series is not jittered; JitterOnX when that axis is x (the
+      row's x moves, its y is fixed), else y moves [Batch 110] }
+    Jitter: TTyJitterAxis;
+    JitterOnX: Boolean;
     { Where this bar sits in its band, solved across every bar series sharing
       the base axis -- which is why it arrives rather than being computed here.
       Unsolved means no solver ran (a pure-unit caller with one series), and
@@ -2025,6 +2030,34 @@ begin
   Inc(Result);
 end;
 
+{ HALF THE ROW'S SYMBOL SIZE, the radius the jitter keeps points apart by:
+  the size AddScatterSymbol will draw the row at (the item's own, a
+  visualMap's, the series'), a [w, h] pair as its mean [Batch 110] }
+function ScatterRowRadius(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
+  ARow: Integer; const ASpec: TTySymbolSpec; ASizeCol: Integer): Double;
+var
+  rs, base: TTySymbolSpec;
+  k: Integer;
+  sz, lift: Double;
+begin
+  base := ASpec;
+  if ASizeCol >= 0 then
+  begin
+    sz := AStore.Get(ASizeCol, ARow);
+    if not IsNan(sz) and (sz > 0) then
+    begin
+      base.WidthPx := sz;
+      base.HeightPx := sz;
+    end;
+  end;
+  k := AStore.GetRawIndex(ARow);
+  if (k >= 0) and (k <= High(AVisual.SymItemHas)) and AVisual.SymItemHas[k] then
+    rs := RowSymbol(AVisual, AStore, ARow, AVisual.SymItems[k], lift)
+  else
+    rs := RowSymbol(AVisual, AStore, ARow, base, lift);
+  Result := (rs.HeightPx + rs.WidthPx) / 2 / 2;
+end;
+
 function BuildScatter(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
   const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
   AList: TTyPaintList; AColX, AColY: Integer): Integer;
@@ -2063,8 +2096,20 @@ begin
       if baseHoriz then y := AStore.Get(AStack.ResultCol, i)
                    else x := AStore.Get(AStack.ResultCol, i);
     end;
+    { THE JITTER sees every row, a gap too: upstream lays every row out and
+      jitters every layout, drawing its random number whether or not the
+      symbol will be drawn [Batch 110] }
+    if AVisual.Jitter <> nil then
+    begin
+      p := ABinding.Cart.DataToPoint([x, y]);
+      if AVisual.JitterOnX then
+        p.X := AVisual.Jitter.Fix(p.Y, p.X, ScatterRowRadius(AVisual, AStore, i, spec, sizeCol))
+      else
+        p.Y := AVisual.Jitter.Fix(p.X, p.Y, ScatterRowRadius(AVisual, AStore, i, spec, sizeCol));
+    end;
     if IsNan(x) or IsNan(y) then Continue;
-    p := ABinding.Cart.DataToPoint([x, y]);
+    if AVisual.Jitter = nil then
+      p := ABinding.Cart.DataToPoint([x, y]);
     if IsNan(p.X) or IsNan(p.Y)
       or IsInfinite(p.X) or IsInfinite(p.Y) then Continue;
     { OUTSIDE THE PLOT, WITH CLIP ON, NO MARKER: upstream's getArea(0.1) }

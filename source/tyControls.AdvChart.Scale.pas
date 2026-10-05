@@ -610,6 +610,9 @@ begin
   Result := Int(AValue);
   if Result > AValue then Result := Result - 1;
   if AValue - Result >= 0.5 then Result := Result + 1;
+  { AND A NEGATIVE THAT ROUNDS TO NOUGHT IS MINUS NOUGHT, as Math.round(-0.4)
+    is -- which a category axis' coordToData hands back [Batch 110] }
+  if (Result = 0) and (AValue < 0) then Result := -Result;
 end;
 
 { ============================ TTyScaleMapperBase ============================ }
