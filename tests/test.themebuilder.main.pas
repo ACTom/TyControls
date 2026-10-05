@@ -2699,8 +2699,10 @@ end;
   <Icon Value="0"/> (the only place Lazarus looks: lazbuild links it as MAINICON, which
   Application.Icon and the task bar take), it holds the six sizes and LCL's own reader -- the
   one that runs at start-up -- reads them all; the 256 px PNG for Linux / macOS is there; and
-  a window built while the application has the icon shows it at the left of its title bar,
-  in the 16 px picture. }
+  the window's title bar shows the application's icon at its left: since 4.0 (#9) that is the
+  title bar's own ShowIcon, which draws Application.Icon in the size nearest its slot (the
+  window has no icon of its own) and opens the window menu on a click -- no picture of the
+  tool's own any more. With no icon anywhere the slot stays empty. }
 procedure TTbMainFormTests.TestTheToolHasAnIcon;
 const
   cSizes: array[0..5] of Integer = (16, 24, 32, 48, 64, 256);
@@ -2754,17 +2756,17 @@ begin
     try
       FreeAndNil(FForm);
       FForm := TTbMainForm.Create(nil);
-      AssertTrue('M27: the title bar shows it', FForm.AppIcon.Visible);
-      AssertTrue('M27: a picture', FForm.AppIcon.HasGraphic);
-      AssertEquals('M27: the 16 px one', 16, FForm.AppIcon.Picture.Width);
+      AssertTrue('M27: the title bar shows an icon', FForm.Bar.ShowIcon);
+      AssertTrue('M27: the application''s', FForm.Bar.EffectiveIcon = Application.Icon);
+      AssertTrue('M27: none of the window''s own', FForm.Icon.Empty);
     finally
       Application.Icon.Assign(keep);
     end;
   finally
     keep.Free;
   end;
-  FForm.ShowAppIcon;
-  AssertEquals('M27: no icon, nothing shown', Application.Icon.Count > 0, FForm.AppIcon.Visible);
+  AssertEquals('M27: no icon, nothing drawn', not Application.Icon.Empty,
+    FForm.Bar.EffectiveIcon <> nil);
 end;
 
 initialization

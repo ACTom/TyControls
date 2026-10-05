@@ -20,6 +20,8 @@ The interface follows the system language (English and Chinese).
 
 **Icon**: on Windows the icon is built into the program (`tools/themebuilder/themebuilder.ico`; the task bar and the left of the title bar show it). On Linux and macOS a program file carries no icon; if you want one, use `tools/themebuilder/icon/themebuilder-256.png` — on Linux as `Icon=<path to it>` in a `.desktop` file, on macOS to make the `.icns` of an `.app` bundle (the tool has no ready `.icns`). `scripts/gen-themebuilder-icon.ps1` renders the icon; after changing it, run that and rebuild the tool.
 
+Click the icon at the left of the title bar, or right-click the title bar, for the window menu (Restore, Minimize, Maximize, Close); double-click the icon to close the window.
+
 ## The window
 
 - **The side bar** on the left has three pages: Seeds, Problems and AI. The items of the same names in the View menu switch to a page, or fold the bar away when that page is already showing.
