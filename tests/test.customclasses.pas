@@ -69,7 +69,7 @@ const
     + 'fresh-streams.txt';
 
   { The classes not split, each with its reason. }
-  CNotSplit: array[0..19] of string = (
+  CNotSplit: array[0..17] of string = (
     'TTyForm',              // designer base classes, the TForm role (plan Q5)
     'TTyDialog',            // same
     'TTyPopupMenu',         // LCL does not split TPopupMenu (menus.pp:465)
@@ -89,9 +89,9 @@ const
     { already TTyCustomToolWindowManager + final; the final carries the implementation for
       unit dependencies (plan Q4) }
     'TTyToolWindowManager',
-    'TTyAdvanceChart',      // split after feat/advancechart merges (plan appendix B)
-    'TTyCalendar',          // same
-    'TTyDateTimePicker');   // same
+    { split after feat/advancechart merged, with Calendar and DateTimePicker (plan appendix B);
+      left for when the chart stops moving }
+    'TTyAdvanceChart');
 
   { Registered with RegisterClass only: not on the palette, but streamed in .lfm files. }
   CStreamOnly: array[0..0] of string = ('TTyScrollContent');
@@ -1219,7 +1219,9 @@ initialization
     'TTyHint', 'TTyBalloonHint', 'TTyPopover', 'TTyNotification',
     // T30 dialogs
     'TTyMessage', 'TTyInputDialog', 'TTyPasswordDialog', 'TTyTextDialog', 'TTySelectValueDialog',
-    'TTyProgressDialog', 'TTyAboutDialog', 'TTyIconBrowserDialog']);
+    'TTyProgressDialog', 'TTyAboutDialog', 'TTyIconBrowserDialog',
+    // after the AdvChart merge (plan appendix B)
+    'TTyCalendar', 'TTyDateTimePicker']);
 
   { CDemoted: base and intermediate classes that publish nothing beyond their LCL root. }
   AddAll(GDemoted, ['TTyCustomControl', 'TTyGraphicControl', 'TTyComponent', 'TTyGlyphButtonBase', 'TTyCustomTabStrip', 'TTyCustomGrid',

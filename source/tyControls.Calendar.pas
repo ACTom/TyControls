@@ -147,7 +147,7 @@ function TyCalendarZoomOut(AView: TTyCalView): TTyCalView;
 function TyCalendarZoomIn(AView: TTyCalView): TTyCalView;
 
 type
-  TTyCalendar = class(TTyCustomControl)
+  TTyCustomCalendar = class(TTyCustomControl)
   private
     FDate: TDateTime;
     FMinDate: TDateTime;
@@ -247,59 +247,8 @@ type
     property ViewMonth: Word read FViewMonth;
     { Current view anchor year (transient UI state). }
     property ViewYear: Word read FViewYear;
-  published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
-    property Version;
-    property Enabled;
-    property Visible;
-    property Font;
-    property ShowHint;
-    property TabOrder;
+  public
     property TabStop default True;
-    property OnClick;
-    property OnDblClick;
-    property OnMouseDown;
-    property OnMouseUp;
-    property OnMouseMove;
-    property OnMouseEnter;
-    property OnMouseLeave;
-    property OnMouseWheel;
-    property OnMouseWheelUp;
-    property OnMouseWheelDown;
-    property OnContextPopup;
-    property OnResize;
-    property OnChangeBounds;
-    property AutoSize;
-    property BorderWidth;
-    property ChildSizing;
-    property DragMode;
-    property DragKind;
-    property DragCursor;
-    property OnDragOver;
-    property OnDragDrop;
-    property OnStartDrag;
-    property OnEndDrag;
-    property OnMouseWheelHorz;
-    property OnMouseWheelLeft;
-    property OnMouseWheelRight;
-    property OnShowHint;
-    property PopupMenu;
-    property Constraints;
-    property BorderSpacing;
-    property ParentShowHint;
-    property Action;
-    property OnPaint;
-    property OnKeyDown;
-    property OnKeyUp;
-    property OnKeyPress;
-    property OnUTF8KeyPress;
-    property OnEnter;
-    property OnExit;
-    property OnEditingDone;
-    property StyleClass;
-    property StyleOverride;
-    property Controller;
     { NOTE the type. LCL's TCustomCalendar.Date is a STRING (calendar.pp) and its
       TDateTime twin is called DateTime -- which is the one TCalendar publishes. So
       `Cal.Date := Now` compiles here and fails there, and `Cal.DateTime` compiles
@@ -350,6 +299,78 @@ type
     property OnAccept: TNotifyEvent read FOnAccept write FOnAccept;
     { Fires when ViewMode changes (zoom in/out). }
     property OnViewChange: TNotifyEvent read FOnViewChange write FOnViewChange;
+  end;
+
+  { TTyCalendar publishes TTyCustomCalendar's properties; everything lives in TTyCustomCalendar. }
+  TTyCalendar = class(TTyCustomCalendar)
+  published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Date;
+    property DateTime;
+    property MinDate;
+    property MaxDate;
+    property FirstDayOfWeek;
+    property DisplaySettings;
+    property WeekNumbers;
+    property ShowToday;
+    property ReadOnly;
+    property OnChange;
+    property OnDayChanged;
+    property OnMonthChanged;
+    property OnYearChanged;
+    property OnAccept;
+    property OnViewChange;
     property Align;
     property Anchors;
   end;
@@ -504,9 +525,9 @@ begin
   Result := row * ACols + col;
 end;
 
-{ TTyCalendar }
+{ TTyCustomCalendar }
 
-constructor TTyCalendar.Create(AOwner: TComponent);
+constructor TTyCustomCalendar.Create(AOwner: TComponent);
 var
   dy, dm, dd: Word;
 begin
@@ -529,12 +550,12 @@ begin
   FViewMonth := dm;
 end;
 
-function TTyCalendar.GetStyleTypeKey: string;
+function TTyCustomCalendar.GetStyleTypeKey: string;
 begin
   Result := 'TyCalendar';
 end;
 
-procedure TTyCalendar.StoreDate(AValue: TDateTime);
+procedure TTyCustomCalendar.StoreDate(AValue: TDateTime);
 var
   d: TDateTime;
   dy, dm, dd: Word;
@@ -571,7 +592,7 @@ end;
 
   User gestures are unaffected: SelectDate still refuses an out-of-range cell in silence,
   which is what a click on a disabled day should do. }
-procedure TTyCalendar.SetDate(AValue: TDateTime);
+procedure TTyCustomCalendar.SetDate(AValue: TDateTime);
 begin
   if csLoading in ComponentState then
   begin
@@ -588,7 +609,7 @@ begin
   StoreDate(AValue);
 end;
 
-procedure TTyCalendar.SetDateClamped(AValue: TDateTime);
+procedure TTyCustomCalendar.SetDateClamped(AValue: TDateTime);
 begin
   StoreDate(TyCalendarClampDate(AValue, FMinDate, FMaxDate));
 end;
@@ -598,7 +619,7 @@ end;
   Note the call goes to StoreDate, not SetDate: routing the re-clamp back through the
   property setter would raise ETyInvalidDate on the very date this line exists to fix,
   and MinDate/MaxDate would be unusable at run time. }
-procedure TTyCalendar.SetMinDate(AValue: TDateTime);
+procedure TTyCustomCalendar.SetMinDate(AValue: TDateTime);
 begin
   if FMinDate = AValue then Exit;
   FMinDate := AValue;
@@ -606,7 +627,7 @@ begin
   Invalidate;       // always repaint: enabled/disabled cell appearance changed
 end;
 
-procedure TTyCalendar.SetMaxDate(AValue: TDateTime);
+procedure TTyCustomCalendar.SetMaxDate(AValue: TDateTime);
 begin
   if FMaxDate = AValue then Exit;
   FMaxDate := AValue;
@@ -614,19 +635,19 @@ begin
   Invalidate;       // always repaint: enabled/disabled cell appearance changed
 end;
 
-procedure TTyCalendar.SetFirstDayOfWeek(AValue: TTyWeekDay);
+procedure TTyCustomCalendar.SetFirstDayOfWeek(AValue: TTyWeekDay);
 begin
   if FFirstDayOfWeek = AValue then Exit;
   FFirstDayOfWeek := AValue;
   Invalidate;
 end;
 
-function TTyCalendar.GetWeekNumbers: Boolean;
+function TTyCustomCalendar.GetWeekNumbers: Boolean;
 begin
   Result := dsShowWeekNumbers in FDisplaySettings;
 end;
 
-procedure TTyCalendar.SetWeekNumbers(AValue: Boolean);
+procedure TTyCustomCalendar.SetWeekNumbers(AValue: Boolean);
 begin
   if AValue then
     DisplaySettings := FDisplaySettings + [dsShowWeekNumbers]
@@ -634,21 +655,21 @@ begin
     DisplaySettings := FDisplaySettings - [dsShowWeekNumbers];
 end;
 
-procedure TTyCalendar.SetDisplaySettings(AValue: TTyCalDisplaySettings);
+procedure TTyCustomCalendar.SetDisplaySettings(AValue: TTyCalDisplaySettings);
 begin
   if FDisplaySettings = AValue then Exit;
   FDisplaySettings := AValue;
   Invalidate;
 end;
 
-procedure TTyCalendar.SetShowToday(AValue: Boolean);
+procedure TTyCustomCalendar.SetShowToday(AValue: Boolean);
 begin
   if FShowToday = AValue then Exit;
   FShowToday := AValue;
   Invalidate;
 end;
 
-procedure TTyCalendar.SetReadOnly(AValue: Boolean);
+procedure TTyCustomCalendar.SetReadOnly(AValue: Boolean);
 begin
   if FReadOnly = AValue then Exit;
   FReadOnly := AValue;
@@ -659,7 +680,7 @@ end;
   used to raise nothing at all -- the header arrows only clamped and repainted, so the
   common "fetch this month's appointments" wiring had no hook. LCL fires the same pair
   from its LMMonthChanged/LMYearChanged handlers (calendar.pp:458-478). }
-procedure TTyCalendar.SetViewMonth(AYear: Integer; AMonth: Integer);
+procedure TTyCustomCalendar.SetViewMonth(AYear: Integer; AMonth: Integer);
 var
   oldY, oldM: Word;
 begin
@@ -676,7 +697,7 @@ begin
   if (Word(AMonth) <> oldM) and Assigned(FOnMonthChanged) then FOnMonthChanged(Self);
 end;
 
-procedure TTyCalendar.SelectDate(ANewDate: TDateTime);
+procedure TTyCustomCalendar.SelectDate(ANewDate: TDateTime);
 var
   d: TDateTime;
   dy, dm, dd: Word;
@@ -703,7 +724,7 @@ begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTyCalendar.ChangeViewMode(ANewMode: TTyCalView);
+procedure TTyCustomCalendar.ChangeViewMode(ANewMode: TTyCalView);
 begin
   if FViewMode = ANewMode then Exit;
   FViewMode := ANewMode;
@@ -711,7 +732,7 @@ begin
   if Assigned(FOnViewChange) then FOnViewChange(Self);
 end;
 
-procedure TTyCalendar.CalcLayout4x3(const ARect: TRect; APPI: Integer;
+procedure TTyCustomCalendar.CalcLayout4x3(const ARect: TRect; APPI: Integer;
   out HeaderH, ColW, RowH: Integer; out GridRect: TRect);
 var
   W, H: Integer;
@@ -731,7 +752,7 @@ begin
   GridRect := Rect(0, HeaderH, 4 * ColW, HeaderH + 3 * RowH);
 end;
 
-procedure TTyCalendar.RenderMonthsView(P: TTyPainter; const ARect: TRect; APPI: Integer;
+procedure TTyCustomCalendar.RenderMonthsView(P: TTyPainter; const ARect: TRect; APPI: Integer;
   const S: TTyStyleSet; HeaderH, ColW, RowH: Integer; const GridRect: TRect);
 var
   W: Integer;
@@ -803,7 +824,7 @@ begin
   end;
 end;
 
-procedure TTyCalendar.RenderYearsView(P: TTyPainter; const ARect: TRect; APPI: Integer;
+procedure TTyCustomCalendar.RenderYearsView(P: TTyPainter; const ARect: TRect; APPI: Integer;
   const S: TTyStyleSet; HeaderH, ColW, RowH: Integer; const GridRect: TRect);
 { Layout: 4x3 = 12 cells showing decadeStart-1 .. decadeStart+10 (spill layout).
   The leading and trailing cells display years outside the decade in a muted style. }
@@ -893,7 +914,7 @@ begin
   end;
 end;
 
-procedure TTyCalendar.RenderDecadesView(P: TTyPainter; const ARect: TRect; APPI: Integer;
+procedure TTyCustomCalendar.RenderDecadesView(P: TTyPainter; const ARect: TRect; APPI: Integer;
   const S: TTyStyleSet; HeaderH, ColW, RowH: Integer; const GridRect: TRect);
 { 4x3 grid of 12 decades for the century containing FViewYear.
   centStart = (FViewYear div 100) * 100.
@@ -1006,7 +1027,7 @@ begin
              + 6 * rowH;
 end;
 
-function TTyCalendar.PreferredSize(APPI: Integer): TSize;
+function TTyCustomCalendar.PreferredSize(APPI: Integer): TSize;
 var logical: TSize;
 begin
   logical := TyCalendarSizeFor(ActiveController);
@@ -1014,7 +1035,7 @@ begin
   Result.cy := MulDiv(logical.cy, APPI, 96);
 end;
 
-procedure TTyCalendar.CalcLayout(const ARect: TRect; APPI: Integer;
+procedure TTyCustomCalendar.CalcLayout(const ARect: TRect; APPI: Integer;
   out HeaderH, WeekdayH, WkNumW, ColW, RowH: Integer; out GridRect: TRect);
 var
   W, H: Integer;
@@ -1055,7 +1076,7 @@ begin
     HeaderH + WeekdayH + 6 * RowH);
 end;
 
-procedure TTyCalendar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomCalendar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, CellStyle: TTyStyleSet;
@@ -1267,17 +1288,17 @@ begin
   end;
 end;
 
-procedure TTyCalendar.Paint;
+procedure TTyCustomCalendar.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-procedure TTyCalendar.RenderToPublic(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomCalendar.RenderToPublic(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
 end;
 
-function TTyCalendar.GetCalendarView: TTyCalendarView;
+function TTyCustomCalendar.GetCalendarView: TTyCalendarView;
 begin
   { Deliberately a straight positional map and not a cast: the two enums count the same
     four levels but name them one level apart (LCL's cvMonth = "a grid of days in one
@@ -1292,7 +1313,7 @@ begin
   end;
 end;
 
-function TTyCalendar.HitTest(APoint: TPoint): TTyCalendarPart;
+function TTyCustomCalendar.HitTest(APoint: TPoint): TTyCalendarPart;
 { The header split is measured, not guessed: the title is drawn centred, so the month
   name's pixel span depends on the resolved font and on the locale's month names, and
   the only honest way to say "you clicked the year" is to measure the same string the
@@ -1380,7 +1401,7 @@ begin
     Result := cpDate;
 end;
 
-procedure TTyCalendar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomCalendar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   HeaderH, WeekdayH, WkNumW, ColW, RowH: Integer;
   GridRect: TRect;
@@ -1534,7 +1555,7 @@ begin
   if Assigned(FOnAccept) then FOnAccept(Self);
 end;
 
-procedure TTyCalendar.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomCalendar.KeyDown(var Key: Word; Shift: TShiftState);
 var
   curDate, newDate: TDateTime;
   dy, dm, dd: Word;
