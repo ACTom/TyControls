@@ -108,27 +108,32 @@ begin
     and one does not, and "the option is understood" on its own would leave the
     author hunting for the series that is missing. Naming it is the whole
     difference between a panel that helps and a panel that is merely correct. }
+  { `chord` HERE. It was scatter, then pie, then funnel, then sankey, and each moved on
+    the day its type grew a renderer -- which is exactly what a test pinning
+    "X is not implemented yet" is for. The claim is about the RULE; the type is
+    only the current example of it, and finding this test red is the reminder
+    that one more of them now draws. }
   AssertTrue(FirstOf('{ xAxis: { data: [''A''] }, yAxis: {}, series: ['
-    + '{ type: ''bar'', data: [1] }, { type: ''scatter'', data: [1] }] }',
+    + '{ type: ''bar'', data: [1] }, { type: ''chord'', data: [1] }] }',
     odkAllClear, d));
-  AssertTrue('names scatter, got: ' + d.Text, Pos('scatter', d.Text) > 0);
+  AssertTrue('names chord, got: ' + d.Text, Pos('chord', d.Text) > 0);
   AssertTrue('and does not name bar, got: ' + d.Text, Pos('bar', d.Text) = 0);
 
   { AND ONLY ONCE for a chart full of them, or the sentence becomes a list of
     the same word. }
   AssertTrue(FirstOf('{ xAxis: { data: [''A''] }, yAxis: {}, series: ['
-    + '{ type: ''bar'', data: [1] }, { type: ''scatter'', data: [1] },'
-    + ' { type: ''scatter'', data: [2] }] }', odkAllClear, d));
+    + '{ type: ''bar'', data: [1] }, { type: ''chord'', data: [1] },'
+    + ' { type: ''chord'', data: [2] }] }', odkAllClear, d));
   txt := d.Text;
   n := 0;
-  p := Pos('scatter', txt);
+  p := Pos('chord', txt);
   while p > 0 do
   begin
     Inc(n);
-    Delete(txt, 1, p + 6);
-    p := Pos('scatter', txt);
+    Delete(txt, 1, p + 4);
+    p := Pos('chord', txt);
   end;
-  AssertEquals('scatter named once, got: ' + d.Text, 1, n);
+  AssertEquals('chord named once, got: ' + d.Text, 1, n);
 
   { TWO DIFFERENT TYPES ARE BOTH NAMED -- deduping must not turn "several
     unpainted types" into "the first one".
@@ -142,12 +147,14 @@ begin
     'tree' before 'treemap' is a PREFIX and was never affected. So the fix is
     right and unreachable, and the mutant for it survives on purpose. }
   AssertTrue(FirstOf('{ xAxis: { data: [''A''] }, yAxis: {}, series: ['
-    + '{ type: ''bar'', data: [1] }, { type: ''treemap'', data: [1] },'
-    + ' { type: ''tree'', data: [1] }] }', odkAllClear, d));
-  AssertTrue('names treemap, got: ' + d.Text, Pos('treemap', d.Text) > 0);
+    + '{ type: ''bar'', data: [1] }, { type: ''chord'', data: [1] },'
+    + ' { type: ''custom'', data: [1] }] }', odkAllClear, d));
+  { [Batches 73/75/76/79: a tree, a sunburst, a treemap and a sankey draw
+    now, so the two undrawn types are a chord and a custom] }
+  AssertTrue('names chord, got: ' + d.Text, Pos('chord', d.Text) > 0);
   txt := d.Text;
-  Delete(txt, Pos('treemap', txt), 7);
-  AssertTrue('and tree as well, got: ' + d.Text, Pos('tree', txt) > 0);
+  Delete(txt, Pos('chord', txt), 5);
+  AssertTrue('and custom as well, got: ' + d.Text, Pos('custom', txt) > 0);
 end;
 
 procedure TAdvChartDiagnoseTest.TestTextThatDoesNotParseYieldsExactlyOneThing;
@@ -375,7 +382,9 @@ procedure TAdvChartDiagnoseTest.TestTheAllClearDoesNotPromiseAxesToAPie;
 var d: TTyOptDiag;
 begin
   { A pie resolves with no axes at all. Telling its author the chart "draws its
-    axes" is precisely the lie this row exists to prevent. }
+    axes" is precisely the lie this row exists to prevent -- and it stays a lie
+    now that a pie DOES draw: the sentence would be right about the pie and
+    wrong about the axes it does not have. }
   AssertTrue(FirstOf('{ series: [{ type: ''pie'', data: [1] }] }',
     odkAllClear, d));
   AssertTrue('does not promise axes, got: ' + d.Text,

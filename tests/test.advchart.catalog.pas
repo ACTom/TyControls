@@ -44,6 +44,7 @@ type
     procedure TestValidOptionHasNoIssues;
     procedure TestUnknownOptionIsReported;
     procedure TestAnUnknownSubtreeIsReportedOnce;
+    procedure TestATopLevelMarkerIsTheSeriesMarker;
     procedure TestBadEnumValueIsReported;
     procedure TestAnUntypedSeriesIsNotReportedAsUnknownOptions;
   end;
@@ -546,6 +547,27 @@ begin
     issues := TyOptValidate(opt);
     AssertEquals('just the container', 1, Length(issues));
     AssertEquals('giid', issues[0].Path);
+  finally
+    opt.Free;
+  end;
+end;
+
+procedure TAdvChartCatalogTest.TestATopLevelMarkerIsTheSeriesMarker;
+var
+  opt: TTyChartOption;
+  issues: TTyOptIssueArray;
+begin
+  opt := TTyChartOption.Create;
+  try
+    { upstream's master marker model: known, and checked as a series' marker }
+    opt.SetOptionText('{ markLine: { z: -100, lineStyle: { type: ''dashed'' } },'
+      + ' markPoint: { symbol: ''pin'' }, markArea: { silent: true } }');
+    issues := TyOptValidate(opt);
+    AssertEquals('no issue', 0, Length(issues));
+    opt.SetOptionText('{ markLine: { zz: 1 } }');
+    issues := TyOptValidate(opt);
+    AssertEquals('a bad key inside is still one', 1, Length(issues));
+    AssertEquals('markLine.zz', issues[0].Path);
   finally
     opt.Free;
   end;

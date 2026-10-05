@@ -33,7 +33,9 @@ uses
   SysUtils, Math, fpjson,
   tyControls.AdvChart.Types, tyControls.AdvChart.Option,
   tyControls.AdvChart.Coord, tyControls.AdvChart.Data,
-  tyControls.AdvChart.Builder, tyControls.AdvChart.Series;
+  tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
+  tyControls.AdvChart.Shape, tyControls.AdvChart.Pictorial,
+  tyControls.AdvChart.Scale;
 
 type
   { What the solver has to say about one series.
@@ -46,10 +48,21 @@ type
     BandWidth: Double;
     Offset: Double;
     Width: Double;
-    { itemStyle.borderRadius in pixels, scalar form. }
-    RadiusPx: Double;
+    { itemStyle.borderRadius, one radius per corner. A scalar in the option
+      fills all four; the array forms follow zrender's own reading. }
+    Radii: TTyCornerRadii;
     { barMinHeight, in pixels along the VALUE axis. }
     MinHeightPx: Double;
+    { showBackground: a band-wide strip behind the bar, spanning the whole
+      plot along the value axis. Off by default, BarSeries.ts:151. }
+    ShowBackground: Boolean;
+    { backgroundStyle.borderRadius, which is a separate key from the bar's
+      own -- a rounded bar on a square backing strip is a real chart. }
+    BackgroundRadii: TTyCornerRadii;
+    { clip, BarSeries.ts:147, default TRUE: a bar reaching past the axis'
+      own min or max is cut off at the plot edge rather than drawn over the
+      labels. }
+    Clip: Boolean;
   end;
   TTyBarColumnArray = array of TTyBarColumn;
 
@@ -82,9 +95,15 @@ function TyBarColumnForOneSeries(ABandWidth: Double): TTyBarColumn;
   values, scaled into pixels. Exported because it is testable on its own and
   because a wrong answer here is invisible -- nothing raises, the bars are
   merely the wrong width. AValues may be in any order and may contain NaN.
-  Answers NaN when the axis is degenerate. }
+  Answers NaN when the axis is degenerate.
+
+  AScaleSpan is the span the axis MAPS over -- the mapping extent's, in the
+  axis' linear space -- which is wider than its ticks once the bars' own half
+  widths have been added to it. }
 function TyDerivedBandWidth(APxSpan, AScaleSpan: Double;
   const AValues: array of Double): Double;
+{ The same, from a gap statistic already taken (TyLiPosMinGap's answer). }
+function TyBandFromMinGap(APxSpan, AScaleSpan, AGap: Double): Double;
 
 implementation
 
@@ -105,6 +124,11 @@ const
     `get('barMinWidth') || 1`, so every auto column is floored at 1px even when
     that makes columns overlap. On a value axis that is the point. }
   cDefaultBarMinWidth = 1.0;
+  { PictorialBarSeries.defaultOption.barGap, and it is '-100%' rather than the
+    bar's 10%: pictorial series are meant to OVERLAP, because the usual reason
+    to write two of them is a foreground icon over a background one. Resolved
+    against 1 like every other barGap, so -1 is the whole width. }
+  cDefaultPictorialBarGap = -1.0;
 
 type
   { An option value in ECharts' three spellings plus "absent", which has to be
@@ -216,6 +240,15 @@ begin
   if (d <> nil) and (d.JSONType = jtNumber) then Result := d.AsFloat;
 end;
 
+function BoolIn(ANode: TJSONObject; const AKey: string; ADefault: Boolean): Boolean;
+var d: TJSONData;
+begin
+  Result := ADefault;
+  if ANode = nil then Exit;
+  d := ANode.Find(AKey);
+  if (d <> nil) and (d.JSONType = jtBoolean) then Result := d.AsBoolean;
+end;
+
 { The series node at ASlot, or nil. Series.pas has one of these too, private
   to its implementation; duplicating three lines beats exporting a helper whose
   name says nothing about which unit owns it. }
@@ -244,67 +277,72 @@ end;
   four corners is a shape change rather than a bar change, and a per-datum
   radius has to be read where the data is read. Both are named as not-done
   rather than left half-done. }
-function RadiusIn(ANode: TJSONObject): Double;
+{ borderRadius under ANode, in either of the two forms ECharts accepts: a
+  number, or an array of one to four. }
+function CornersOf(ANode: TJSONObject): TTyCornerRadii;
+var
+  d: TJSONData;
+  arr: TJSONArray;
+  vals: TTyDoubleArray;
+  i, n: Integer;
+begin
+  Result := TyCornerRadii([]);
+  if ANode = nil then Exit;
+  d := ANode.Find('borderRadius');
+  if d = nil then Exit;
+  if d.JSONType = jtNumber then Exit(TyCornerRadii([d.AsFloat]));
+  if not (d is TJSONArray) then Exit;
+  arr := TJSONArray(d);
+  n := arr.Count;
+  if n > 4 then n := 4;
+  if n = 0 then Exit;
+  SetLength(vals, n);
+  for i := 0 to n - 1 do
+    if arr.Items[i].JSONType = jtNumber then vals[i] := arr.Items[i].AsFloat
+    else vals[i] := 0;
+  Result := TyCornerRadii(vals);
+end;
+
+function RadiusIn(ANode: TJSONObject): TTyCornerRadii;
 var d: TJSONData;
 begin
-  Result := 0;
+  Result := TyCornerRadii([]);
   if ANode = nil then Exit;
   d := ANode.Find('itemStyle');
   if (d = nil) or not (d is TJSONObject) then Exit;
-  Result := AtLeast(FloatIn(TJSONObject(d), 'borderRadius', 0), 0);
+  Result := CornersOf(TJSONObject(d));
+end;
+
+function BackgroundRadiusIn(ANode: TJSONObject): TTyCornerRadii;
+var d: TJSONData;
+begin
+  Result := TyCornerRadii([]);
+  if ANode = nil then Exit;
+  d := ANode.Find('backgroundStyle');
+  if (d = nil) or not (d is TJSONObject) then Exit;
+  Result := CornersOf(TJSONObject(d));
+end;
+
+function TyBandFromMinGap(APxSpan, AScaleSpan, AGap: Double): Double;
+begin
+  { barGrid.ts via calcBandWidth: a gap and a real span give the gap in
+    pixels; one distinct value, with nothing to measure, gives a fixed share
+    of the whole axis -- whatever the span, which is upstream's order of
+    tests; anything else is no band at all. }
+  { a blank axis has no span at all -- not-a-number, which is no band }
+  if (AGap > 0) and not IsNan(AScaleSpan) and (AScaleSpan > 0)
+    and not IsInfinite(AScaleSpan) then
+    Result := APxSpan / AScaleSpan * AGap
+  else if AGap = cTyMinGapSingle then
+    Result := APxSpan * cFallbackBandWidthRatio
+  else
+    Result := NaN;
 end;
 
 function TyDerivedBandWidth(APxSpan, AScaleSpan: Double;
   const AValues: array of Double): Double;
-var
-  vals: array of Double;
-  i, j, n: Integer;
-  tmp, gap, minGap: Double;
 begin
-  Result := NaN;
-  if (AScaleSpan <= 0) or (APxSpan <= 0) then Exit;
-
-  n := 0;
-  SetLength(vals, Length(AValues));
-  for i := 0 to High(AValues) do
-    if not IsNan(AValues[i]) then
-    begin
-      vals[n] := AValues[i];
-      Inc(n);
-    end;
-  SetLength(vals, n);
-  if n = 0 then Exit;
-
-  { Insertion sort: this is one chart's bar data on one axis, already close to
-    sorted, and a sort that is obviously correct beats a clever one nobody will
-    re-read. }
-  for i := 1 to n - 1 do
-  begin
-    tmp := vals[i];
-    j := i - 1;
-    while (j >= 0) and (vals[j] > tmp) do
-    begin
-      vals[j + 1] := vals[j];
-      Dec(j);
-    end;
-    vals[j + 1] := tmp;
-  end;
-
-  minGap := Infinity;
-  for i := 1 to n - 1 do
-  begin
-    gap := vals[i] - vals[i - 1];
-    { STRICTLY positive. Duplicates are ordinary -- two series both reporting
-      the same x -- and a zero gap would collapse every bar to nothing. }
-    if (gap > 0) and (gap < minGap) then minGap := gap;
-  end;
-
-  { One value, or every value identical: there is no gap to measure, so
-    upstream falls back to a fixed share of the whole span. }
-  if IsInfinite(minGap) then
-    Result := APxSpan * cFallbackBandWidthRatio
-  else
-    Result := APxSpan / AScaleSpan * minGap;
+  Result := TyBandFromMinGap(APxSpan, AScaleSpan, TyMinGapOf(AValues));
 end;
 
 { The solve, over one axis' columns.
@@ -440,34 +478,11 @@ begin
   Result.BandWidth := band;
   Result.Offset := cols[0].Offset;
   Result.Width := cols[0].Width;
-  Result.RadiusPx := 0;
+  Result.Radii := TyCornerRadii([]);
   Result.MinHeightPx := 0;
-end;
-
-{ Every base-dimension value of every bar series on this axis, which is what
-  the value-axis band heuristic measures the gaps between. }
-function BaseValuesOnAxis(const AStores: array of TTyDataStore;
-  const ASeries: TTyIntegerArray; AAxis: TTyAxis): TTyDoubleArray;
-var
-  k, si, col, r, n: Integer;
-begin
-  Result := nil;
-  n := 0;
-  for k := 0 to High(ASeries) do
-  begin
-    si := ASeries[k];
-    if (si < 0) or (si > High(AStores)) then Continue;
-    if AStores[si] = nil then Continue;
-    col := AStores[si].DimIndexOf(AAxis.Dim);
-    if col < 0 then Continue;
-    for r := 0 to AStores[si].Count - 1 do
-    begin
-      if n > High(Result) then SetLength(Result, Max(16, n * 2));
-      Result[n] := AStores[si].Get(col, r);
-      Inc(n);
-    end;
-  end;
-  SetLength(Result, n);
+  Result.ShowBackground := False;
+  Result.BackgroundRadii := TyCornerRadii([]);
+  Result.Clip := True;
 end;
 
 function TySolveBarLayout(AOption: TTyChartOption; ABuild: TTyChartBuild;
@@ -477,6 +492,8 @@ var
   g, a, i: Integer;
   gb: TTyGridBuild;
   key: string;
+  defGap: Double;
+  defClip: Boolean;
   answer: TTyBarColumnArray;
 
   procedure DoAxis(AAxis: TTyAxis);
@@ -487,6 +504,7 @@ var
     stackId: string;
     node: TJSONObject;
     band, span: Double;
+    ext: TTyRange;
     autoCount, k, m, si: Integer;
     barGap, catGap, v: TBarSize;
     found: Boolean;
@@ -502,9 +520,13 @@ var
     band := AAxis.BandWidth;
     if band <= 0 then
     begin
-      span := TyRangeSpan(AAxis.Scale.GetExtent);
-      band := TyDerivedBandWidth(Abs(AAxis.PxStop - AAxis.PxStart), span,
-        BaseValuesOnAxis(AStores, onIt, AAxis));
+      { OVER THE MAPPING EXTENT, in the axis' own linear space: the bars'
+        half widths are part of what the plot spans, and on a log axis the
+        gaps were measured in decades, so the span has to be too. }
+      ext := AAxis.Scale.LinearExtent2(sekMapping);
+      span := ext.Stop - ext.Start;
+      band := TyBandFromMinGap(AAxis.PxLength, span,
+        TyLiPosMinGap(AStores, onIt, AAxis));
     end;
     if IsNan(band) then band := cMinBandWidth;
     band := AtLeast(band, cMinBandWidth);
@@ -529,7 +551,7 @@ var
       begin
         barGap.Present := True;
         barGap.Percent := False;
-        barGap.Value := cDefaultBarGap;
+        barGap.Value := defGap;
       end;
 
       stackId := StringIn(node, 'stack');
@@ -599,8 +621,11 @@ var
       answer[si].BandWidth := band;
       answer[si].Offset := cols[m].Offset;
       answer[si].Width := cols[m].Width;
-      answer[si].RadiusPx := RadiusIn(node);
+      answer[si].Radii := RadiusIn(node);
       answer[si].MinHeightPx := AtLeast(FloatIn(node, 'barMinHeight', 0), 0);
+      answer[si].ShowBackground := BoolIn(node, 'showBackground', False);
+      answer[si].BackgroundRadii := BackgroundRadiusIn(node);
+      answer[si].Clip := BoolIn(node, 'clip', defClip);
     end;
   end;
 
@@ -612,23 +637,49 @@ begin
     answer[i].BandWidth := 0;
     answer[i].Offset := 0;
     answer[i].Width := 0;
-    answer[i].RadiusPx := 0;
+    answer[i].Radii := TyCornerRadii([]);
     answer[i].MinHeightPx := 0;
+    answer[i].ShowBackground := False;
+    answer[i].BackgroundRadii := TyCornerRadii([]);
+    answer[i].Clip := True;
   end;
   Result := answer;
   if (AOption = nil) or (ABuild = nil) or (AIndex = nil) then Exit;
 
-  { The one key the index buckets bars under. Asking for it by name rather than
+  { THE KEY THE INDEX BUCKETS BARS UNDER. Asking for it by name rather than
     counting series here is what stops a line series sharing the axis from
     being counted as a bar -- which would make every bar half as wide on a
-    chart that looks otherwise right. }
-  key := TySeriesStatKey('bar', 'cartesian2d');
+    chart that looks otherwise right.
 
-  for g := 0 to ABuild.GridCount - 1 do
+    TWO PASSES, AND THE TWO DO NOT SHARE A BAND. ECharts 6 keys the column
+    layout by series TYPE -- makeAxisStatKey2(seriesType, 'cartesian2d') -- so
+    a pictorialBar beside a bar on the same axis gets its own full band rather
+    than half of a shared one. Its two other defaults travel with it for the
+    same reason: they are series defaults the option tree never writes down,
+    so there is nothing in the node for the reader below to find. }
+  for i := 0 to 1 do
   begin
-    gb := ABuild.Grid(g);
-    for a := 0 to gb.XAxisCount - 1 do DoAxis(gb.XAxis(a));
-    for a := 0 to gb.YAxisCount - 1 do DoAxis(gb.YAxis(a));
+    if i = 0 then
+    begin
+      key := TySeriesStatKey('bar', 'cartesian2d');
+      defGap := cDefaultBarGap;
+      defClip := True;
+    end
+    else
+    begin
+      key := TySeriesStatKey(TyPictorialSeriesTypeName, 'cartesian2d');
+      defGap := cDefaultPictorialBarGap;
+      { clip FALSE, and the source says why beside it: a pictorial chart
+        usually hides its axes, so a glyph taller than its value is expected
+        to stand proud of the plot rather than be sliced at its edge. }
+      defClip := False;
+    end;
+    for g := 0 to ABuild.GridCount - 1 do
+    begin
+      gb := ABuild.Grid(g);
+      for a := 0 to gb.XAxisCount - 1 do DoAxis(gb.XAxis(a));
+      for a := 0 to gb.YAxisCount - 1 do DoAxis(gb.YAxis(a));
+    end;
   end;
   Result := answer;
 end;

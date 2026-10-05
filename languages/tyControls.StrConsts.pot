@@ -588,6 +588,7 @@ msgid "Abort"
 msgstr ""
 
 #: tycontrols.strconsts.rsmsgbtnall
+msgctxt "tycontrols.strconsts.rsmsgbtnall"
 msgid "All"
 msgstr ""
 
@@ -834,9 +835,35 @@ msgstr ""
 msgid "xAxis or yAxis without the other: no grid was created, so neither is drawn"
 msgstr ""
 
+#: tycontrols.strconsts.rstychartexportoptsbad
+msgid "The export options are not valid JSON."
+msgstr ""
+
 #: tycontrols.strconsts.rstychartgridonedirection
 #, object-pascal-format
 msgid "grid[%d] has axes in only one direction, so it draws nothing"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartpolarnoaxis
+#, object-pascal-format
+msgid "polar[%d] has no %s, so it is not drawn"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartlegendselectall
+msgctxt "tycontrols.strconsts.rstychartlegendselectall"
+msgid "All"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartlegendselectinverse
+msgid "Inv"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartloading
+msgid "loading"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartloadingcfgbad
+msgid "The loading options are not valid JSON."
 msgstr ""
 
 #: tycontrols.strconsts.rstychartnosuchhandler
@@ -862,6 +889,11 @@ msgstr ""
 #: tycontrols.strconsts.rstychartseriesnoaxis
 #, object-pascal-format
 msgid "series[%d] names an axis that does not exist"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartseriesnorenderer
+#, object-pascal-format
+msgid "series[%d]: the \"%s\" series type is not drawn yet"
 msgstr ""
 
 #: tycontrols.strconsts.rstychartseriesnotype
@@ -1038,6 +1070,24 @@ msgstr ""
 msgid "JavaScript functions cannot be used here. Write a template string such as '{b}: {c}', or the name of a registered handler such as '@MyFormatter'."
 msgstr ""
 
+#: tycontrols.strconsts.rstyoptmergenotobject
+msgid "An option to merge must be an object."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptduplicateid
+#, object-pascal-format
+msgid "Two %s components carry the id \"%s\"."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptreplacemergebadtype
+#, object-pascal-format
+msgid "replaceMerge names \"%s\", which is not a component main type."
+msgstr ""
+
+#: tycontrols.strconsts.rstyoptsetoptsnotobject
+msgid "The setOption options must be an object."
+msgstr ""
+
 #: tycontrols.strconsts.rstyoptstatusneedstype
 msgid "write a type first -- what is under here depends on which one"
 msgstr ""
@@ -1059,6 +1109,11 @@ msgstr ""
 #: tycontrols.strconsts.rstyoptsummarysince
 #, object-pascal-format
 msgid "since %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstyopttoodeep
+#, object-pascal-format
+msgid "The option is nested more than %d levels deep."
 msgstr ""
 
 #: tycontrols.strconsts.rstyshortday1

@@ -315,6 +315,7 @@ msgid "Ignore"
 msgstr "忽略"
 
 #: tycontrols.strconsts.rsmsgbtnall
+msgctxt "tycontrols.strconsts.rsmsgbtnall"
 msgid "All"
 msgstr "全部"
 
@@ -1070,14 +1071,58 @@ msgstr "按名称搜索图标"
 msgid "%s   (ImageIndex %d)"
 msgstr "%s   (ImageIndex %d)"
 
+#: tycontrols.strconsts.rstychartlegendselectall
+msgctxt "tycontrols.strconsts.rstychartlegendselectall"
+msgid "All"
+msgstr "全选"
+
+#: tycontrols.strconsts.rstychartlegendselectinverse
+msgid "Inv"
+msgstr "反选"
+
+#: tycontrols.strconsts.rstychartloading
+msgid "loading"
+msgstr "加载中"
+
+#: tycontrols.strconsts.rstychartexportoptsbad
+msgid "The export options are not valid JSON."
+msgstr "导出选项不是合法的 JSON。"
+
+#: tycontrols.strconsts.rstychartloadingcfgbad
+msgid "The loading options are not valid JSON."
+msgstr "加载选项不是合法的 JSON。"
+
 #: tycontrols.strconsts.rstychartnosuchhandler
 #, object-pascal-format
 msgid "No formatter named '%s' is registered."
 msgstr "没有注册名为 '%s' 的格式化器。"
 
+#: tycontrols.strconsts.rstyopttoodeep
+#, object-pascal-format
+msgid "The option is nested more than %d levels deep."
+msgstr "选项的嵌套超过了 %d 层。"
+
 #: tycontrols.strconsts.rstyoptfunctionvalue
 msgid "JavaScript functions cannot be used here. Write a template string such as '{b}: {c}', or the name of a registered handler such as '@MyFormatter'."
 msgstr "这里不能写 JavaScript 函数。请改用模板串，例如 '{b}: {c}'，或已注册的处理器名，例如 '@MyFormatter'。"
+
+#: tycontrols.strconsts.rstyoptmergenotobject
+msgid "An option to merge must be an object."
+msgstr "要合并的选项必须是一个对象。"
+
+#: tycontrols.strconsts.rstyoptduplicateid
+#, object-pascal-format
+msgid "Two %s components carry the id \"%s\"."
+msgstr "有两个 %s 组件用了同一个 id \"%s\"。"
+
+#: tycontrols.strconsts.rstyoptreplacemergebadtype
+#, object-pascal-format
+msgid "replaceMerge names \"%s\", which is not a component main type."
+msgstr "replaceMerge 里的 \"%s\" 不是组件主类型。"
+
+#: tycontrols.strconsts.rstyoptsetoptsnotobject
+msgid "The setOption options must be an object."
+msgstr "setOption 的选项必须是一个对象。"
 
 #: tycontrols.strconsts.rstychartaxistypeunknown
 #, object-pascal-format
@@ -1103,6 +1148,11 @@ msgstr "yAxis[%d] 没有指向任何 grid，因此不会画"
 msgid "grid[%d] has axes in only one direction, so it draws nothing"
 msgstr "grid[%d] 只有一个方向上有轴，因此什么都不会画"
 
+#: tycontrols.strconsts.rstychartpolarnoaxis
+#, object-pascal-format
+msgid "polar[%d] has no %s, so it is not drawn"
+msgstr "polar[%d] 没有 %s，因此不会画"
+
 #: tycontrols.strconsts.rstychartseriesnotype
 #, object-pascal-format
 msgid "series[%d] has no type, so it is not drawn"
@@ -1117,6 +1167,11 @@ msgstr "series[%d]：“%s”不是一种 series 类型"
 #, object-pascal-format
 msgid "series[%d]: coordinateSystem \"%s\" is not built yet"
 msgstr "series[%d]：coordinateSystem“%s”尚未实现"
+
+#: tycontrols.strconsts.rstychartseriesnorenderer
+#, object-pascal-format
+msgid "series[%d]: the \"%s\" series type is not drawn yet"
+msgstr "series[%d]：“%s”这个系列类型还画不出来"
 
 #: tycontrols.strconsts.rstychartseriesnoaxis
 #, object-pascal-format

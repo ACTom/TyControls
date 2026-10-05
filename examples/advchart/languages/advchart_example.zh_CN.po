@@ -38,10 +38,35 @@ msgstr "应用"
 # --- code resourcestrings (msgid=Pascal source) ---
 
 #: umain.rsoptionok
-msgid "The option parsed."
+msgid "The option parsed and this chart draws."
 msgstr "option 解析成功。"
 
 #: umain.rsdiagnostics
 #, object-pascal-format
-msgid "%d thing(s) the chart could not honour — see below."
+msgid "%d thing(s) the chart could not honour:"
 msgstr "有 %d 项图表无法兑现 — 见下。"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rscounts
+#, object-pascal-format
+msgid "%s — %d example(s)"
+msgstr "%s — %d 个示例"
+
+#: umain.rsnogallery
+msgid "The gallery was not found. Run tools/advchart-gallery/harvest.js to build examples/advchart/gallery."
+msgstr "没有找到示例语料。运行 tools/advchart-gallery/harvest.js 生成 examples/advchart/gallery。"
+
+#: umain.rsnotconverted
+#, object-pascal-format
+msgid "Not converted: %s"
+msgstr "未转换：%s"
+
+#: umain.rspickone
+msgid "Pick an example on the left."
+msgstr "在左边挑一个示例。"
+
+#: umain.rssavedto
+#, object-pascal-format
+msgid "Saved to %s"
+msgstr "已保存到 %s"

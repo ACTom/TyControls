@@ -1,0 +1,106 @@
+{
+ "title": {
+  "text": "Profit",
+  "left": "center"
+ },
+ "tooltip": {},
+ "xAxis": {
+  "scale": true
+ },
+ "yAxis": {},
+ "series": [
+  {
+   "type": "custom",
+   "label": {
+    "show": true,
+    "position": "top"
+   },
+   "dimensions": [
+    "from",
+    "to",
+    "profit"
+   ],
+   "encode": {
+    "x": [
+     0,
+     1
+    ],
+    "y": 2,
+    "tooltip": [
+     0,
+     1,
+     2
+    ],
+    "itemName": 3
+   },
+   "data": [
+    {
+     "value": [
+      10,
+      16,
+      3,
+      "A"
+     ],
+     "itemStyle": {
+      "color": "#4f81bd"
+     }
+    },
+    {
+     "value": [
+      16,
+      18,
+      15,
+      "B"
+     ],
+     "itemStyle": {
+      "color": "#c0504d"
+     }
+    },
+    {
+     "value": [
+      18,
+      26,
+      12,
+      "C"
+     ],
+     "itemStyle": {
+      "color": "#9bbb59"
+     }
+    },
+    {
+     "value": [
+      26,
+      32,
+      22,
+      "D"
+     ],
+     "itemStyle": {
+      "color": "#604a7b"
+     }
+    },
+    {
+     "value": [
+      32,
+      56,
+      7,
+      "E"
+     ],
+     "itemStyle": {
+      "color": "#948a54"
+     }
+    },
+    {
+     "value": [
+      56,
+      62,
+      17,
+      "F"
+     ],
+     "itemStyle": {
+      "color": "#e46c0b"
+     }
+    }
+   ]
+  }
+ ]
+}

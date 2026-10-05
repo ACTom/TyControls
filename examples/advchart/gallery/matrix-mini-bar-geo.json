@@ -1,0 +1,2433 @@
+{
+ "matrix": {
+  "x": {
+   "levelSize": 40,
+   "data": [
+    {
+     "value": "Region and Time",
+     "size": 120
+    },
+    {
+     "value": "Data A",
+     "size": null
+    },
+    {
+     "value": "Data B",
+     "size": null
+    },
+    {
+     "value": "Location",
+     "size": "15%"
+    }
+   ],
+   "itemStyle": {
+    "color": "#f0f8ff"
+   },
+   "label": {
+    "fontWeight": "bold"
+   }
+  },
+  "y": {
+   "data": [
+    "_",
+    "_",
+    "_",
+    "_",
+    "_",
+    "_",
+    "_",
+    "_",
+    "_",
+    "_"
+   ],
+   "show": false
+  },
+  "body": {
+   "data": [
+    {
+     "value": "Valais",
+     "coord": [
+      0,
+      0
+     ]
+    },
+    {
+     "value": "Ticino",
+     "coord": [
+      0,
+      1
+     ]
+    },
+    {
+     "value": "Graubünden",
+     "coord": [
+      0,
+      2
+     ]
+    },
+    {
+     "value": "Uri",
+     "coord": [
+      0,
+      3
+     ]
+    },
+    {
+     "value": "Lucerne",
+     "coord": [
+      0,
+      4
+     ]
+    },
+    {
+     "value": "Neuchâtel",
+     "coord": [
+      0,
+      5
+     ]
+    },
+    {
+     "value": "Jura",
+     "coord": [
+      0,
+      6
+     ]
+    },
+    {
+     "value": "Vaud",
+     "coord": [
+      0,
+      7
+     ]
+    },
+    {
+     "value": "Thurgau",
+     "coord": [
+      0,
+      8
+     ]
+    },
+    {
+     "value": "Schwyz",
+     "coord": [
+      0,
+      9
+     ]
+    }
+   ]
+  },
+  "top": 25
+ },
+ "legend": {},
+ "tooltip": {},
+ "grid": [
+  {
+   "id": "mini-bar-1-0",
+   "coordinateSystem": "matrix",
+   "coord": [
+    1,
+    0
+   ],
+   "top": "15%",
+   "bottom": "15%"
+  },
+  {
+   "id": "mini-bar-1-1",
+   "coordinateSystem": "matrix",
+   "coord": [
+    1,
+    1
+   ],
+   "top": "15%",
+   "bottom": "15%"
+  },
+  {
+   "id": "mini-bar-1-2",
+   "coordinateSystem": "matrix",
+   "coord": [
+    1,
+    2
+   ],
+   "top": "15%",
+   "bottom": "15%"
+  },
+  {
+   "id": "mini-bar-1-3",
+   "coordinateSystem": "matrix",
+   "coord": [
+    1,
+    3
+   ],
+   "top": "15%",
+   "bottom": "15%"
+  },
+  {
+   "id": "mini-bar-1-4",
+   "coordinateSystem": "matrix",
+   "coord": [
+    1,
+    4
+   ],
+   "top": "15%",
+   "bottom": "15%"
+  },
+  {
+   "id": "mini-bar-1-5",
+   "coordinateSystem": "matrix",
+   "coord": [
+    1,
+    5
+   ],
+   "top": "15%",
+   "bottom": "15%"
+  },
+  {
+   "id": "mini-bar-1-6",
+   "coordinateSystem": "matrix",
+   "coord": [
+    1,
+    6
+   ],
+   "top": "15%",
+   "bottom": "15%"
+  },
+  {
+   "id": "mini-bar-1-7",
+   "coordinateSystem": "matrix",
+   "coord": [
+    1,
+    7
+   ],
+   "top": "15%",
+   "bottom": "15%"
+  },
+  {
+   "id": "mini-bar-1-8",
+   "coordinateSystem": "matrix",
+   "coord": [
+    1,
+    8
+   ],
+   "top": "15%",
+   "bottom": "15%"
+  },
+  {
+   "id": "mini-bar-1-9",
+   "coordinateSystem": "matrix",
+   "coord": [
+    1,
+    9
+   ],
+   "top": "15%",
+   "bottom": "15%"
+  },
+  {
+   "id": "mini-bar-2-0",
+   "coordinateSystem": "matrix",
+   "coord": [
+    2,
+    0
+   ],
+   "top": "15%",
+   "bottom": "15%"
+  },
+  {
+   "id": "mini-bar-2-1",
+   "coordinateSystem": "matrix",
+   "coord": [
+    2,
+    1
+   ],
+   "top": "15%",
+   "bottom": "15%"
+  },
+  {
+   "id": "mini-bar-2-2",
+   "coordinateSystem": "matrix",
+   "coord": [
+    2,
+    2
+   ],
+   "top": "15%",
+   "bottom": "15%"
+  },
+  {
+   "id": "mini-bar-2-3",
+   "coordinateSystem": "matrix",
+   "coord": [
+    2,
+    3
+   ],
+   "top": "15%",
+   "bottom": "15%"
+  },
+  {
+   "id": "mini-bar-2-4",
+   "coordinateSystem": "matrix",
+   "coord": [
+    2,
+    4
+   ],
+   "top": "15%",
+   "bottom": "15%"
+  },
+  {
+   "id": "mini-bar-2-5",
+   "coordinateSystem": "matrix",
+   "coord": [
+    2,
+    5
+   ],
+   "top": "15%",
+   "bottom": "15%"
+  },
+  {
+   "id": "mini-bar-2-6",
+   "coordinateSystem": "matrix",
+   "coord": [
+    2,
+    6
+   ],
+   "top": "15%",
+   "bottom": "15%"
+  },
+  {
+   "id": "mini-bar-2-7",
+   "coordinateSystem": "matrix",
+   "coord": [
+    2,
+    7
+   ],
+   "top": "15%",
+   "bottom": "15%"
+  },
+  {
+   "id": "mini-bar-2-8",
+   "coordinateSystem": "matrix",
+   "coord": [
+    2,
+    8
+   ],
+   "top": "15%",
+   "bottom": "15%"
+  },
+  {
+   "id": "mini-bar-2-9",
+   "coordinateSystem": "matrix",
+   "coord": [
+    2,
+    9
+   ],
+   "top": "15%",
+   "bottom": "15%"
+  }
+ ],
+ "xAxis": [
+  {
+   "id": "mini-bar-1-0",
+   "gridId": "mini-bar-1-0",
+   "type": "value",
+   "min": 0,
+   "max": 8121,
+   "scale": false,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-1-1",
+   "gridId": "mini-bar-1-1",
+   "type": "value",
+   "min": 0,
+   "max": 8121,
+   "scale": false,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-1-2",
+   "gridId": "mini-bar-1-2",
+   "type": "value",
+   "min": 0,
+   "max": 8121,
+   "scale": false,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-1-3",
+   "gridId": "mini-bar-1-3",
+   "type": "value",
+   "min": 0,
+   "max": 8121,
+   "scale": false,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-1-4",
+   "gridId": "mini-bar-1-4",
+   "type": "value",
+   "min": 0,
+   "max": 8121,
+   "scale": false,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-1-5",
+   "gridId": "mini-bar-1-5",
+   "type": "value",
+   "min": 0,
+   "max": 8121,
+   "scale": false,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-1-6",
+   "gridId": "mini-bar-1-6",
+   "type": "value",
+   "min": 0,
+   "max": 8121,
+   "scale": false,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-1-7",
+   "gridId": "mini-bar-1-7",
+   "type": "value",
+   "min": 0,
+   "max": 8121,
+   "scale": false,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-1-8",
+   "gridId": "mini-bar-1-8",
+   "type": "value",
+   "min": 0,
+   "max": 8121,
+   "scale": false,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-1-9",
+   "gridId": "mini-bar-1-9",
+   "type": "value",
+   "min": 0,
+   "max": 8121,
+   "scale": false,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-2-0",
+   "gridId": "mini-bar-2-0",
+   "type": "value",
+   "min": 0,
+   "max": 5121,
+   "scale": false,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-2-1",
+   "gridId": "mini-bar-2-1",
+   "type": "value",
+   "min": 0,
+   "max": 5121,
+   "scale": false,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-2-2",
+   "gridId": "mini-bar-2-2",
+   "type": "value",
+   "min": 0,
+   "max": 5121,
+   "scale": false,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-2-3",
+   "gridId": "mini-bar-2-3",
+   "type": "value",
+   "min": 0,
+   "max": 5121,
+   "scale": false,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-2-4",
+   "gridId": "mini-bar-2-4",
+   "type": "value",
+   "min": 0,
+   "max": 5121,
+   "scale": false,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-2-5",
+   "gridId": "mini-bar-2-5",
+   "type": "value",
+   "min": 0,
+   "max": 5121,
+   "scale": false,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-2-6",
+   "gridId": "mini-bar-2-6",
+   "type": "value",
+   "min": 0,
+   "max": 5121,
+   "scale": false,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-2-7",
+   "gridId": "mini-bar-2-7",
+   "type": "value",
+   "min": 0,
+   "max": 5121,
+   "scale": false,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-2-8",
+   "gridId": "mini-bar-2-8",
+   "type": "value",
+   "min": 0,
+   "max": 5121,
+   "scale": false,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-2-9",
+   "gridId": "mini-bar-2-9",
+   "type": "value",
+   "min": 0,
+   "max": 5121,
+   "scale": false,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  }
+ ],
+ "yAxis": [
+  {
+   "id": "mini-bar-1-0",
+   "gridId": "mini-bar-1-0",
+   "type": "category",
+   "boundaryGap": false,
+   "inverse": true,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-1-1",
+   "gridId": "mini-bar-1-1",
+   "type": "category",
+   "boundaryGap": false,
+   "inverse": true,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-1-2",
+   "gridId": "mini-bar-1-2",
+   "type": "category",
+   "boundaryGap": false,
+   "inverse": true,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-1-3",
+   "gridId": "mini-bar-1-3",
+   "type": "category",
+   "boundaryGap": false,
+   "inverse": true,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-1-4",
+   "gridId": "mini-bar-1-4",
+   "type": "category",
+   "boundaryGap": false,
+   "inverse": true,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-1-5",
+   "gridId": "mini-bar-1-5",
+   "type": "category",
+   "boundaryGap": false,
+   "inverse": true,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-1-6",
+   "gridId": "mini-bar-1-6",
+   "type": "category",
+   "boundaryGap": false,
+   "inverse": true,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-1-7",
+   "gridId": "mini-bar-1-7",
+   "type": "category",
+   "boundaryGap": false,
+   "inverse": true,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-1-8",
+   "gridId": "mini-bar-1-8",
+   "type": "category",
+   "boundaryGap": false,
+   "inverse": true,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-1-9",
+   "gridId": "mini-bar-1-9",
+   "type": "category",
+   "boundaryGap": false,
+   "inverse": true,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-2-0",
+   "gridId": "mini-bar-2-0",
+   "type": "category",
+   "boundaryGap": false,
+   "inverse": true,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-2-1",
+   "gridId": "mini-bar-2-1",
+   "type": "category",
+   "boundaryGap": false,
+   "inverse": true,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-2-2",
+   "gridId": "mini-bar-2-2",
+   "type": "category",
+   "boundaryGap": false,
+   "inverse": true,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-2-3",
+   "gridId": "mini-bar-2-3",
+   "type": "category",
+   "boundaryGap": false,
+   "inverse": true,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-2-4",
+   "gridId": "mini-bar-2-4",
+   "type": "category",
+   "boundaryGap": false,
+   "inverse": true,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-2-5",
+   "gridId": "mini-bar-2-5",
+   "type": "category",
+   "boundaryGap": false,
+   "inverse": true,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-2-6",
+   "gridId": "mini-bar-2-6",
+   "type": "category",
+   "boundaryGap": false,
+   "inverse": true,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-2-7",
+   "gridId": "mini-bar-2-7",
+   "type": "category",
+   "boundaryGap": false,
+   "inverse": true,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-2-8",
+   "gridId": "mini-bar-2-8",
+   "type": "category",
+   "boundaryGap": false,
+   "inverse": true,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  },
+  {
+   "id": "mini-bar-2-9",
+   "gridId": "mini-bar-2-9",
+   "type": "category",
+   "boundaryGap": false,
+   "inverse": true,
+   "axisLine": {
+    "show": false
+   },
+   "axisTick": {
+    "show": false
+   },
+   "splitLine": {
+    "show": false
+   },
+   "axisLabel": {
+    "show": false
+   }
+  }
+ ],
+ "geo": [
+  {
+   "id": "mini-geo-0",
+   "map": "target_map",
+   "animation": false,
+   "aspectScale": 0.6819983600624985,
+   "coordinateSystem": "matrix",
+   "coord": [
+    3,
+    0
+   ],
+   "roam": false,
+   "selectedMode": false,
+   "tooltip": {
+    "show": false
+   },
+   "regions": [
+    {
+     "name": "Valais",
+     "selected": true,
+     "select": {
+      "itemStyle": {
+       "color": "#0a41e6"
+      }
+     }
+    }
+   ],
+   "select": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "id": "mini-geo-1",
+   "map": "target_map",
+   "animation": false,
+   "aspectScale": 0.6819983600624985,
+   "coordinateSystem": "matrix",
+   "coord": [
+    3,
+    1
+   ],
+   "roam": false,
+   "selectedMode": false,
+   "tooltip": {
+    "show": false
+   },
+   "regions": [
+    {
+     "name": "Ticino",
+     "selected": true,
+     "select": {
+      "itemStyle": {
+       "color": "#0a41e6"
+      }
+     }
+    }
+   ],
+   "select": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "id": "mini-geo-2",
+   "map": "target_map",
+   "animation": false,
+   "aspectScale": 0.6819983600624985,
+   "coordinateSystem": "matrix",
+   "coord": [
+    3,
+    2
+   ],
+   "roam": false,
+   "selectedMode": false,
+   "tooltip": {
+    "show": false
+   },
+   "regions": [
+    {
+     "name": "Graubünden",
+     "selected": true,
+     "select": {
+      "itemStyle": {
+       "color": "#0a41e6"
+      }
+     }
+    }
+   ],
+   "select": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "id": "mini-geo-3",
+   "map": "target_map",
+   "animation": false,
+   "aspectScale": 0.6819983600624985,
+   "coordinateSystem": "matrix",
+   "coord": [
+    3,
+    3
+   ],
+   "roam": false,
+   "selectedMode": false,
+   "tooltip": {
+    "show": false
+   },
+   "regions": [
+    {
+     "name": "Uri",
+     "selected": true,
+     "select": {
+      "itemStyle": {
+       "color": "#0a41e6"
+      }
+     }
+    }
+   ],
+   "select": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "id": "mini-geo-4",
+   "map": "target_map",
+   "animation": false,
+   "aspectScale": 0.6819983600624985,
+   "coordinateSystem": "matrix",
+   "coord": [
+    3,
+    4
+   ],
+   "roam": false,
+   "selectedMode": false,
+   "tooltip": {
+    "show": false
+   },
+   "regions": [
+    {
+     "name": "Lucerne",
+     "selected": true,
+     "select": {
+      "itemStyle": {
+       "color": "#0a41e6"
+      }
+     }
+    }
+   ],
+   "select": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "id": "mini-geo-5",
+   "map": "target_map",
+   "animation": false,
+   "aspectScale": 0.6819983600624985,
+   "coordinateSystem": "matrix",
+   "coord": [
+    3,
+    5
+   ],
+   "roam": false,
+   "selectedMode": false,
+   "tooltip": {
+    "show": false
+   },
+   "regions": [
+    {
+     "name": "Neuchâtel",
+     "selected": true,
+     "select": {
+      "itemStyle": {
+       "color": "#0a41e6"
+      }
+     }
+    }
+   ],
+   "select": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "id": "mini-geo-6",
+   "map": "target_map",
+   "animation": false,
+   "aspectScale": 0.6819983600624985,
+   "coordinateSystem": "matrix",
+   "coord": [
+    3,
+    6
+   ],
+   "roam": false,
+   "selectedMode": false,
+   "tooltip": {
+    "show": false
+   },
+   "regions": [
+    {
+     "name": "Jura",
+     "selected": true,
+     "select": {
+      "itemStyle": {
+       "color": "#0a41e6"
+      }
+     }
+    }
+   ],
+   "select": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "id": "mini-geo-7",
+   "map": "target_map",
+   "animation": false,
+   "aspectScale": 0.6819983600624985,
+   "coordinateSystem": "matrix",
+   "coord": [
+    3,
+    7
+   ],
+   "roam": false,
+   "selectedMode": false,
+   "tooltip": {
+    "show": false
+   },
+   "regions": [
+    {
+     "name": "Vaud",
+     "selected": true,
+     "select": {
+      "itemStyle": {
+       "color": "#0a41e6"
+      }
+     }
+    }
+   ],
+   "select": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "id": "mini-geo-8",
+   "map": "target_map",
+   "animation": false,
+   "aspectScale": 0.6819983600624985,
+   "coordinateSystem": "matrix",
+   "coord": [
+    3,
+    8
+   ],
+   "roam": false,
+   "selectedMode": false,
+   "tooltip": {
+    "show": false
+   },
+   "regions": [
+    {
+     "name": "Thurgau",
+     "selected": true,
+     "select": {
+      "itemStyle": {
+       "color": "#0a41e6"
+      }
+     }
+    }
+   ],
+   "select": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "id": "mini-geo-9",
+   "map": "target_map",
+   "animation": false,
+   "aspectScale": 0.6819983600624985,
+   "coordinateSystem": "matrix",
+   "coord": [
+    3,
+    9
+   ],
+   "roam": false,
+   "selectedMode": false,
+   "tooltip": {
+    "show": false
+   },
+   "regions": [
+    {
+     "name": "Schwyz",
+     "selected": true,
+     "select": {
+      "itemStyle": {
+       "color": "#0a41e6"
+      }
+     }
+    }
+   ],
+   "select": {
+    "label": {
+     "show": false
+    }
+   }
+  }
+ ],
+ "series": [
+  {
+   "type": "bar",
+   "name": "2021",
+   "xAxisId": "mini-bar-1-0",
+   "yAxisId": "mini-bar-1-0",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#ffd10a"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     1212,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2020",
+   "xAxisId": "mini-bar-1-0",
+   "yAxisId": "mini-bar-1-0",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#0ca8df"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     1010,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2021",
+   "xAxisId": "mini-bar-1-1",
+   "yAxisId": "mini-bar-1-1",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#ffd10a"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     7181,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2020",
+   "xAxisId": "mini-bar-1-1",
+   "yAxisId": "mini-bar-1-1",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#0ca8df"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     7040,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2021",
+   "xAxisId": "mini-bar-1-2",
+   "yAxisId": "mini-bar-1-2",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#ffd10a"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     2763,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2020",
+   "xAxisId": "mini-bar-1-2",
+   "yAxisId": "mini-bar-1-2",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#0ca8df"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     2313,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2021",
+   "xAxisId": "mini-bar-1-3",
+   "yAxisId": "mini-bar-1-3",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#ffd10a"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     6122,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2020",
+   "xAxisId": "mini-bar-1-3",
+   "yAxisId": "mini-bar-1-3",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#0ca8df"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     6011,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2021",
+   "xAxisId": "mini-bar-1-4",
+   "yAxisId": "mini-bar-1-4",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#ffd10a"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     4221,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2020",
+   "xAxisId": "mini-bar-1-4",
+   "yAxisId": "mini-bar-1-4",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#0ca8df"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     3329,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2021",
+   "xAxisId": "mini-bar-1-5",
+   "yAxisId": "mini-bar-1-5",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#ffd10a"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     7221,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2020",
+   "xAxisId": "mini-bar-1-5",
+   "yAxisId": "mini-bar-1-5",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#0ca8df"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     7116,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2021",
+   "xAxisId": "mini-bar-1-6",
+   "yAxisId": "mini-bar-1-6",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#ffd10a"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     5121,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2020",
+   "xAxisId": "mini-bar-1-6",
+   "yAxisId": "mini-bar-1-6",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#0ca8df"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     4968,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2021",
+   "xAxisId": "mini-bar-1-7",
+   "yAxisId": "mini-bar-1-7",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#ffd10a"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     6121,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2020",
+   "xAxisId": "mini-bar-1-7",
+   "yAxisId": "mini-bar-1-7",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#0ca8df"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     6027,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2021",
+   "xAxisId": "mini-bar-1-8",
+   "yAxisId": "mini-bar-1-8",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#ffd10a"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     7121,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2020",
+   "xAxisId": "mini-bar-1-8",
+   "yAxisId": "mini-bar-1-8",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#0ca8df"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     7011,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2021",
+   "xAxisId": "mini-bar-1-9",
+   "yAxisId": "mini-bar-1-9",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#ffd10a"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     8121,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2020",
+   "xAxisId": "mini-bar-1-9",
+   "yAxisId": "mini-bar-1-9",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#0ca8df"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     7311,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2021",
+   "xAxisId": "mini-bar-2-0",
+   "yAxisId": "mini-bar-2-0",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#ffd10a"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     2321,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2020",
+   "xAxisId": "mini-bar-2-0",
+   "yAxisId": "mini-bar-2-0",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#0ca8df"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     2221,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2021",
+   "xAxisId": "mini-bar-2-1",
+   "yAxisId": "mini-bar-2-1",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#ffd10a"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     2114,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2020",
+   "xAxisId": "mini-bar-2-1",
+   "yAxisId": "mini-bar-2-1",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#0ca8df"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     1810,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2021",
+   "xAxisId": "mini-bar-2-2",
+   "yAxisId": "mini-bar-2-2",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#ffd10a"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     4212,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2020",
+   "xAxisId": "mini-bar-2-2",
+   "yAxisId": "mini-bar-2-2",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#0ca8df"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     4011,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2021",
+   "xAxisId": "mini-bar-2-3",
+   "yAxisId": "mini-bar-2-3",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#ffd10a"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     2942,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2020",
+   "xAxisId": "mini-bar-2-3",
+   "yAxisId": "mini-bar-2-3",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#0ca8df"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     2749,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2021",
+   "xAxisId": "mini-bar-2-4",
+   "yAxisId": "mini-bar-2-4",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#ffd10a"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     3411,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2020",
+   "xAxisId": "mini-bar-2-4",
+   "yAxisId": "mini-bar-2-4",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#0ca8df"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     3015,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2021",
+   "xAxisId": "mini-bar-2-5",
+   "yAxisId": "mini-bar-2-5",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#ffd10a"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     5121,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2020",
+   "xAxisId": "mini-bar-2-5",
+   "yAxisId": "mini-bar-2-5",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#0ca8df"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     4822,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2021",
+   "xAxisId": "mini-bar-2-6",
+   "yAxisId": "mini-bar-2-6",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#ffd10a"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     4121,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2020",
+   "xAxisId": "mini-bar-2-6",
+   "yAxisId": "mini-bar-2-6",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#0ca8df"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     3820,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2021",
+   "xAxisId": "mini-bar-2-7",
+   "yAxisId": "mini-bar-2-7",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#ffd10a"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     3121,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2020",
+   "xAxisId": "mini-bar-2-7",
+   "yAxisId": "mini-bar-2-7",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#0ca8df"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     2928,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2021",
+   "xAxisId": "mini-bar-2-8",
+   "yAxisId": "mini-bar-2-8",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#ffd10a"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     2121,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2020",
+   "xAxisId": "mini-bar-2-8",
+   "yAxisId": "mini-bar-2-8",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#0ca8df"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     1725,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2021",
+   "xAxisId": "mini-bar-2-9",
+   "yAxisId": "mini-bar-2-9",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#ffd10a"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     1121,
+     ""
+    ]
+   ]
+  },
+  {
+   "type": "bar",
+   "name": "2020",
+   "xAxisId": "mini-bar-2-9",
+   "yAxisId": "mini-bar-2-9",
+   "label": {
+    "show": true,
+    "position": "insideLeft"
+   },
+   "barMinHeight": 2,
+   "barGap": "40%",
+   "barWidth": "40%",
+   "itemStyle": {
+    "color": "#0ca8df"
+   },
+   "encode": {
+    "label": 0
+   },
+   "data": [
+    [
+     825,
+     ""
+    ]
+   ]
+  }
+ ]
+}

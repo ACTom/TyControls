@@ -36,6 +36,9 @@ type
     HasBelow: Boolean;
     ResultCol: Integer;
     OverCol: Integer;
+    { the binding slot of the series this one is stacked on -- the one
+      before it in the stack (upstream's stackedOnSeries) -- or -1 }
+    OnSlot: Integer;
   end;
   TTySeriesStackArray = array of TTySeriesStack;
 
@@ -47,6 +50,16 @@ type
     because a reversed rect is a real signal (an axis whose band collapsed) that
     callers must be able to see rather than have silently normalised away. }
   TTyRectF = record Left, Top, Right, Bottom: Double; end;
+  { x, y, width and height: upstream's own shape for a rect. A grid's plot,
+    its shrink and the name layout are kept in it so that their arithmetic is
+    upstream's to the bit -- a right edge is x + width there, and a width
+    taken back from the edges, (x + w) - x, is not always w. }
+  TTyXYWH = record
+    X, Y, W, H: Double;
+  end;
+  { zrender's 2-D affine matrix [a, b, c, d, tx, ty]:
+    x' = a x + c y + tx, y' = b x + d y + ty. }
+  TTyMat2D = array[0..5] of Double;
 
   { A closed value range. TyRange DOES normalise, because a reversed VALUE range
     is always a caller mistake — an inverse axis is expressed by the PIXEL extent
@@ -108,6 +121,7 @@ type
   TTyLabelOverflow = (loNone, loTruncate, loBreak);
 
   TTyStringArray = array of string;
+  TTyBoolArray = array of Boolean;
   TTyIntegerArray = array of Integer;
 
   { Which edge of a plot rect an axis draws on. Lives here rather than in
@@ -120,6 +134,10 @@ type
 function TyPointF(AX, AY: Double): TTyPointF;
 function TyRectF(ALeft, ATop, ARight, ABottom: Double): TTyRectF;
 function TyRange(AStart, AStop: Double): TTyRange;
+
+function TyXYWH(AX, AY, AW, AH: Double): TTyXYWH;
+function TyXYWHOfRect(const ARect: TTyRectF): TTyXYWH;
+function TyRectOfXYWH(const A: TTyXYWH): TTyRectF;
 
 function TyRectFWidth(const AR: TTyRectF): Double;
 function TyRectFHeight(const AR: TTyRectF): Double;
@@ -137,6 +155,34 @@ function TyRectFContains(const AR: TTyRectF; const AP: TTyPointF): Boolean;
   ZERO -- a real column -- and leave every reader depending on checking Stacked
   first. -1 is not a column anywhere. }
 function TyNoStack: TTySeriesStack;
+
+{ A number out of an option tree, narrowed to an Integer WITHOUT raising.
+
+  JAVASCRIPT'S `Math.round` HAS NO DOMAIN. It answers a finite Double for any
+  finite input, and every option ECharts reads this way is typed `number` with
+  no clamp anywhere -- `legend: { z: 1e30 }` is legal and upstream draws it.
+  FPC's `Round` targets an Int64 and RAISES `EInvalidOp` outside that range.
+
+  So a line transcribed with the shape of its original -- `Math.round(x)`
+  becoming `Round(x)` -- is right for every value anybody sane writes and
+  fatal for the ones nobody checks. What it costs is not a wrong chart: it is
+  the host's window, thrown out of a paint.
+
+  NaN and both infinities answer ADefault. Anything finite is clamped into
+  [ALo, AHi] BEFORE it is rounded, because clamping afterwards is the same
+  crash one line later.
+
+  Use this for every option number that becomes an Integer. It is not a
+  defensive flourish -- twenty-seven such reads were audited against the
+  ECharts source and sixteen killed the render on a value upstream accepts. }
+function TyRoundOpt(AValue: Double; ADefault: Integer = 0;
+  ALo: Integer = Low(Integer); AHi: Integer = High(Integer)): Integer;
+
+{ The same, truncating. Which one a site wants is not a detail: `Trunc` is
+  `how many whole ones fit` and `Round` is `which one is nearest`, and a site
+  that asked for a count must not quietly start asking for a nearest. }
+function TyTruncOpt(AValue: Double; ADefault: Integer = 0;
+  ALo: Integer = Low(Integer); AHi: Integer = High(Integer)): Integer;
 
 function TyRangeSpan(const AR: TTyRange): Double;
 { Closed on both ends — an axis extent's endpoints belong to the axis. }
@@ -204,6 +250,25 @@ end;
 
 { ==================== queries ==================== }
 
+function TyXYWH(AX, AY, AW, AH: Double): TTyXYWH;
+begin
+  Result.X := AX;
+  Result.Y := AY;
+  Result.W := AW;
+  Result.H := AH;
+end;
+
+function TyXYWHOfRect(const ARect: TTyRectF): TTyXYWH;
+begin
+  Result := TyXYWH(ARect.Left, ARect.Top, ARect.Right - ARect.Left,
+    ARect.Bottom - ARect.Top);
+end;
+
+function TyRectOfXYWH(const A: TTyXYWH): TTyRectF;
+begin
+  Result := TyRectF(A.X, A.Y, A.X + A.W, A.Y + A.H);
+end;
+
 function TyRectFWidth(const AR: TTyRectF): Double;
 begin
   Result := AR.Right - AR.Left;
@@ -239,6 +304,7 @@ begin
   Result.HasBelow := False;
   Result.ResultCol := -1;
   Result.OverCol := -1;
+  Result.OnSlot := -1;
 end;
 
 function TyRangeSpan(const AR: TTyRange): Double;
@@ -268,6 +334,29 @@ begin
   Result.Top := NaN;
   Result.Right := NaN;
   Result.Bottom := NaN;
+end;
+
+
+function TyRoundOpt(AValue: Double; ADefault: Integer;
+  ALo: Integer; AHi: Integer): Integer;
+begin
+  if IsNan(AValue) or IsInfinite(AValue) then Exit(ADefault);
+  { Compared with plain relational operators, which promote the Integer bound
+    to Double. Math.Max/Min would pick their SINGLE overload against an
+    integer argument and decide the comparison on twenty-four bits. }
+  if AValue <= ALo then Exit(ALo);
+  if AValue >= AHi then Exit(AHi);
+  Result := Round(AValue);
+end;
+
+
+function TyTruncOpt(AValue: Double; ADefault: Integer;
+  ALo: Integer; AHi: Integer): Integer;
+begin
+  if IsNan(AValue) or IsInfinite(AValue) then Exit(ADefault);
+  if AValue <= ALo then Exit(ALo);
+  if AValue >= AHi then Exit(AHi);
+  Result := Trunc(AValue);
 end;
 
 end.

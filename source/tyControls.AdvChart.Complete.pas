@@ -239,6 +239,17 @@ function TyOptCompletionDetail(const ATextBeforeCaret, AItem: string): string;
 function TyOptSearch(const AText: string; AList: TStrings;
   ALimit: Integer = 0): Integer;
 
+{ ---- untyped elements ---- }
+{ The type an element that wrote none gets, where ECharts registers a
+  subtype defaulter for its main type; '' where it does not. `visualMap`:
+  continuous unless it names categories, or pieces (non-empty) or a
+  positive splitNumber without `calculable`. The test is JavaScript's,
+  truthiness and all -- `categories: []` is piecewise, `pieces: []` is not.
+  `dataZoom`: always a slider. [Batch 60: dataZoom was left out, and an
+  untyped one was reported as having no type.] }
+function TyOptDefaultSubType(const AMainType: string;
+  AElement: TJSONObject): string;
+
 { ---- validation ---- }
 { Every option in the tree that the catalog does not recognise, plus every
   enumerated option set to a value outside its list. Order is the tree's own, so
@@ -250,7 +261,7 @@ implementation
 uses
   { Only for the editor vocabulary below; kept out of the interface uses so this
     unit's public face still names only the AdvChart layer. }
-  tyControls.StrConsts;
+  tyControls.StrConsts, Math, tyControls.AdvChart.Data;
 
 function TyOptStrAt(AIndex: Integer): string;
 begin
@@ -391,6 +402,65 @@ end;
 function TyOptVariant(ANode: Integer; const ATag: string): Integer;
 begin
   Result := EdgeNamed(ANode, '=' + ATag);
+end;
+
+function JsTruthy(A: TJSONData): Boolean;
+begin
+  if A = nil then Exit(False);
+  case A.JSONType of
+    jtNull: Result := False;
+    jtBoolean: Result := A.AsBoolean;
+    jtNumber: Result := (A.AsFloat <> 0) and not IsNan(A.AsFloat);
+    jtString: Result := A.AsString <> '';
+  else
+    Result := True;
+  end;
+end;
+
+{ `x > 0`, the operand coerced the way JavaScript coerces it. }
+function JsPositive(A: TJSONData): Boolean;
+begin
+  if A = nil then Exit(False);
+  case A.JSONType of
+    jtNumber: Result := A.AsFloat > 0;
+    jtString: Result := TyJsToNumber(A.AsString) > 0;
+    jtBoolean: Result := A.AsBoolean;
+  else
+    Result := False;
+  end;
+end;
+
+function TyOptDefaultSubType(const AMainType: string;
+  AElement: TJSONObject): string;
+var pieces: TJSONData; split: Boolean;
+begin
+  Result := '';
+  if AElement = nil then Exit;
+  { dataZoom: registerSubTypeDefaulter('dataZoom', () => 'slider') }
+  if AMainType = 'dataZoom' then Exit('slider');
+  if AMainType <> 'visualMap' then Exit;
+  { `pieces ? pieces.length > 0 : splitNumber > 0` -- after the preprocessor
+    renamed ec2's splitList, which it does only when there is no `pieces` }
+  if (AElement.IndexOfName('splitList') >= 0) and (AElement.IndexOfName('pieces') < 0) then
+    pieces := AElement.Find('splitList')
+  else
+    pieces := AElement.Find('pieces');
+  if JsTruthy(pieces) then
+  begin
+    case pieces.JSONType of
+      jtArray: split := TJSONArray(pieces).Count > 0;
+      jtString: split := True;
+    else
+      split := False;
+    end;
+  end
+  else
+    split := JsPositive(AElement.Find('splitNumber'));
+  if (not JsTruthy(AElement.Find('categories')))
+    and ((not split) or JsTruthy(AElement.Find('calculable'))) then
+    Result := 'continuous'
+  else
+    Result := 'piecewise';
 end;
 
 { Split 'series-line' into 'series' + 'line'. Property names never contain a
@@ -856,6 +926,24 @@ begin
   end;
 end;
 
+{ A TOP-LEVEL markPoint / markLine / markArea. The schema documents them
+  only under a series, but upstream's preprocessor makes the top-level one
+  the master every series' marker falls back to -- so it takes the series'
+  own marker node (every series type shares it; a line's is used). -1 for
+  any other key. [Batch 64: pictorialBar-body-fill's `markLine: {z: -100}`
+  was reported as an option ECharts does not know.] }
+function RootMarkerNode(const AKey: string): Integer;
+var s, v: Integer;
+begin
+  Result := -1;
+  if (AKey <> 'markPoint') and (AKey <> 'markLine') and (AKey <> 'markArea') then Exit;
+  s := TyOptChild(TyOptRoot, 'series');
+  if s < 0 then Exit;
+  v := TyOptVariant(s, 'line');
+  if v < 0 then Exit;
+  Result := TyOptChild(v, AKey);
+end;
+
 procedure WalkObject(AObj: TJSONObject; ANode: Integer; const APath: string;
   var C: TIssueCollector);
 var
@@ -867,6 +955,7 @@ begin
     key := AObj.Names[i];
     if APath = '' then sub := key else sub := APath + '.' + key;
     child := TyOptChild(ANode, key);
+    if (child < 0) and (APath = '') then child := RootMarkerNode(key);
     if child < 0 then
       AddIssue(C, oikUnknownOption, sub, '', '');
     { Descending with child = -1 is deliberate rather than guarded here: the
@@ -904,6 +993,8 @@ begin
       if TyOptIsVariantContainer(ANode) then
       begin
         tag := TJSONObject(AData).Get('type', '');
+        if tag = '' then
+          tag := TyOptDefaultSubType(APath, TJSONObject(AData));
         variant := TyOptVariant(ANode, tag);
         if variant >= 0 then
           WalkObject(TJSONObject(AData), variant, APath, C);
@@ -920,7 +1011,12 @@ begin
           begin
             tag := '';
             if arr.Items[i].JSONType = jtObject then
+            begin
               tag := TJSONObject(arr.Items[i]).Get('type', '');
+              { a type ECharts would have filled in is not a missing one }
+              if tag = '' then
+                tag := TyOptDefaultSubType(APath, TJSONObject(arr.Items[i]));
+            end;
             variant := TyOptVariant(ANode, tag);
             { An unstated or unknown type is not reported as an unknown option:
               the value itself may be perfectly good and it is the TYPE that is

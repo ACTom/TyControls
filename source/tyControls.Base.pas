@@ -238,6 +238,18 @@ type
       knows (TCustomEdit and TCustomComboBox scale their width whatever AutoSize says). }
     procedure ShouldAutoAdjust(var AWidth, AHeight: Boolean); override;
     procedure DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
+    { THE POINTER MOVED -- not the model, not the theme, not the layout.
+
+      Hover, press, release and focus all end here, and the default answer is
+      the same full Invalidate they used to call directly. It is a separate
+      method so a control that CACHES what it drew can tell the two apart:
+      Invalidate is "everything you knew may be wrong", and a pointer crossing
+      the border is not that. TTyAdvanceChart overrides it to keep a static
+      layer that costs a rebuild and a relayout to redraw.
+
+      Overriding it does not make a control interactive; it only chooses which
+      repaint a state change asks for. }
+    procedure PointerStateChanged; virtual;
     procedure MouseEnter; override;
     procedure MouseLeave; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -334,6 +346,10 @@ type
       so they read as the form's photo on image themes. A no-op (False) off-image and
       headless, so the caller's existing opaque/transparent path is left untouched. }
     function FillSharpBackdrop(APainter: TTyPainter; const ARect: TRect): Boolean;
+    { See TTyGraphicControl.PointerStateChanged -- the same seam, on the
+      windowed twin, and the one this library actually needed: the chart is a
+      windowed control with a cached static layer. }
+    procedure PointerStateChanged; virtual;
     procedure MouseEnter; override;
     procedure MouseLeave; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -1601,18 +1617,23 @@ begin
   end;
 end;
 
+procedure TTyGraphicControl.PointerStateChanged;
+begin
+  Invalidate;
+end;
+
 procedure TTyGraphicControl.MouseEnter;
 begin
   inherited MouseEnter;
   FHover := True;
-  Invalidate;
+  PointerStateChanged;
 end;
 
 procedure TTyGraphicControl.MouseLeave;
 begin
   inherited MouseLeave;
   FHover := False;
-  Invalidate;
+  PointerStateChanged;
 end;
 
 procedure TTyGraphicControl.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -1621,7 +1642,7 @@ begin
   if Button = mbLeft then
   begin
     FPressed := True;
-    Invalidate;
+    PointerStateChanged;
   end;
 end;
 
@@ -1631,7 +1652,7 @@ begin
   if Button = mbLeft then
   begin
     FPressed := False;
-    Invalidate;
+    PointerStateChanged;
   end;
 end;
 
@@ -2004,18 +2025,23 @@ begin
       Point(off.X + ARect.Left, off.Y + ARect.Top));
 end;
 
+procedure TTyCustomControl.PointerStateChanged;
+begin
+  Invalidate;
+end;
+
 procedure TTyCustomControl.MouseEnter;
 begin
   inherited MouseEnter;
   FHover := True;
-  Invalidate;
+  PointerStateChanged;
 end;
 
 procedure TTyCustomControl.MouseLeave;
 begin
   inherited MouseLeave;
   FHover := False;
-  Invalidate;
+  PointerStateChanged;
 end;
 
 procedure TTyCustomControl.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -2024,7 +2050,7 @@ begin
   if Button = mbLeft then
   begin
     FPressed := True;
-    Invalidate;
+    PointerStateChanged;
     { LCL does NOT auto-focus a custom-drawn TCustomControl on click -- only native
       widgets do -- so without this a click never moves focus (it lingers on whatever
       had it, e.g. the Edit you clicked away from). Focus a click on a focusable control
@@ -2042,20 +2068,20 @@ begin
   if Button = mbLeft then
   begin
     FPressed := False;
-    Invalidate;
+    PointerStateChanged;
   end;
 end;
 
 procedure TTyCustomControl.DoEnter;
 begin
   inherited DoEnter;
-  Invalidate;
+  PointerStateChanged;
 end;
 
 procedure TTyCustomControl.DoExit;
 begin
   inherited DoExit;
-  Invalidate;
+  PointerStateChanged;
 end;
 
 procedure TTyCustomControl.PaintWindow(DC: HDC);

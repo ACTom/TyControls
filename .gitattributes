@@ -11,6 +11,12 @@
 # would actually have been rewritten.
 assets/lucide/**  -text
 
+# The harvested ECharts gallery: LF, never converted. tools/advchart-gallery/harvest.js
+# regenerates these files, so a CRLF conversion on checkout would make every one of them
+# differ from what a re-run produces -- and there is 9.8 MB of them, so the conversion is
+# not free either. Same reasoning as the lucide codepoints above.
+examples/advchart/gallery/*.json text eol=lf
+
 # Windows Terminal's own defaults.json, byte for byte (CRLF included): the colour-scheme
 # tests count its bytes and read its comments and trailing commas as they are upstream.
 tests/fixtures/terminal-wt-defaults.json  -text

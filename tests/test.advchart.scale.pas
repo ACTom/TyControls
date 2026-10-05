@@ -24,7 +24,7 @@ type
     procedure TestContainRespectsEffectiveExtent;
     procedure TestMappingExtentAbsentByDefault;
     procedure TestMappingExtentDrivesNormalize;
-    procedure TestEffectiveExtentStillDrivesContain;
+    procedure TestMappingExtentDrivesContain;
   end;
 
   TAdvChartIntervalScaleTest = class(TTestCase)
@@ -43,6 +43,8 @@ type
     procedure TestALogAxisNicesInLogSpace;
     procedure TestALogAxisMapsItsDataAcrossTheWholeAxis;
     procedure TestALogAxisSurvivesAnImpossibleLowEnd;
+    procedure TestAUserIntervalRoundsAtItsOwnPrecision;
+    procedure TestALaterExtentRecomputesTheTicks;
   end;
 
 implementation
@@ -169,17 +171,22 @@ begin
   AssertEquals('10 is no longer at the stop', 11/12, m.Normalize(10), Eps);
 end;
 
-procedure TAdvChartMapperTest.TestEffectiveExtentStillDrivesContain;
+procedure TAdvChartMapperTest.TestMappingExtentDrivesContain;
 var m: ITyScaleMapper;
 begin
   m := TTyLinearScaleMapper.Create;
   m.SetExtent(sekEffective, TyRange(0, 10));
   m.SetExtent(sekMapping, TyRange(-1, 11));
-  { ...but ticks, labels, splitLines and hit-testing stay on the EFFECTIVE
-    extent, or a widened axis grows phantom ticks at -1 and 11. }
-  AssertFalse('below effective', m.Contain(-0.5));
-  AssertFalse('above effective', m.Contain(10.5));
-  AssertTrue('effective end', m.Contain(10));
+  { ...and so does Contain: upstream's contain reads the mapping extent
+    (scaleMapper.ts:446-451), so a pointer in a bar's margin is still on the
+    axis. The ticks stay on the effective extent -- they never ask Contain.
+    [Revised in batch 41: this test was TestEffectiveExtentStillDrivesContain
+    and pinned the opposite, which is not upstream's rule.] }
+  AssertTrue('inside the margin below', m.Contain(-0.5));
+  AssertTrue('inside the margin above', m.Contain(10.5));
+  AssertTrue('the mapping end', m.Contain(11));
+  AssertFalse('past the mapping end', m.Contain(11.5));
+  AssertFalse('past the mapping start', m.Contain(-1.5));
 end;
 
 { ---------------------- TAdvChartIntervalScaleTest ---------------------- }
@@ -189,8 +196,10 @@ var m: Double;
 begin
   if AStep <= 0 then Exit(False);
   m := AStep / Power(10, Floor(Log10(AStep)));
+  { [Batch 33: upstream's ladder is 1, 2, 3, 5 -- nice(x, round) -- and never
+    2.5. This accepted 2.5 and refused 3, which was the port's own ladder.] }
   Result := (Abs(m - 1) < 1e-9) or (Abs(m - 2) < 1e-9)
-         or (Abs(m - 2.5) < 1e-9) or (Abs(m - 5) < 1e-9);
+         or (Abs(m - 3) < 1e-9) or (Abs(m - 5) < 1e-9);
 end;
 
 procedure TAdvChartIntervalScaleTest.TestNiceContainsData;
@@ -366,6 +375,10 @@ function LogScale(ALo, AHi: Double; ASplit: Integer = 5): TTyIntervalScale;
 begin
   Result := TTyIntervalScale.Create;
   Result.Mapper := TTyLogScaleMapper.Create(10);
+  { As MakeScale builds one. [Batch 33: without the rule a log mapper is
+    niced like any other since breaks transform too -- this helper tested a
+    path no chart takes.] }
+  Result.LogRule := True;
   Result.SetExtent(TyRange(ALo, AHi));
   Result.Niceify(ASplit);
 end;
@@ -437,12 +450,16 @@ var
   e: TTyRange;
 begin
   { `min: 0` on a log axis asks for something that does not exist. Leaving it
-    as NaN is what broke the whole mapper, so the low end is pulled up to one
-    decade below the top instead -- an axis that is drawable and honest about
-    its range, rather than one that silently reports 0.5 everywhere. }
+    as NaN is what broke the whole mapper.
+    [Revised in batch 33: this said the low end is pulled up to one decade
+    below the top. Upstream's nice step replaces an extent with a broken end
+    by [0, 1] -- one decade up from 1 -- and in a chart the case never gets
+    here: the raw extent's sanitize has already moved min 0 onto the data.
+    What the test is for stands: drawable, and no 0.5 everywhere.] }
   sc := TTyIntervalScale.Create;
   try
     sc.Mapper := TTyLogScaleMapper.Create(10);
+    sc.LogRule := True;
     sc.SetExtent(TyRange(0, 1000));
     sc.Niceify(5);
     e := sc.GetExtent;
@@ -454,6 +471,83 @@ begin
       Abs(sc.Normalize(e.Stop) - sc.Normalize(e.Start)) > 0.5);
   finally
     sc.Free;
+  end;
+end;
+
+procedure TAdvChartIntervalScaleTest.TestAUserIntervalRoundsAtItsOwnPrecision;
+var s: TTyIntervalScale; t: TTyScaleTickArray;
+begin
+  { AN EXPLICIT `interval` ROUNDS ITS TICKS AT ITS OWN PRECISION, not the one
+    the automatic step would have had. 0..7 steps by 1 on its own (two
+    places); in eighths it needs five, and at two every eighth tick came out
+    0.13, 0.25, 0.38 ... -- two ticks short by the end. }
+  s := TTyIntervalScale.Create;
+  try
+    s.SetExtent(TyRange(0, 7));
+    s.Niceify(5, 0.125);
+    AssertEquals('the user step''s precision', 5, s.IntervalPrecision);
+    t := s.GetTicks;
+    AssertEquals('every eighth from 0 to 7', 57, Length(t));
+    AssertTrue('an eighth, not 0.13', t[1].Value = 0.125);
+    AssertTrue('and the last is 7', t[56].Value = 7);
+  finally
+    s.Free;
+  end;
+  { And the other way: a step of 1 beside a pinned min of 0.001. The
+    automatic step (0.5) would keep three places and walk 1.001, 2.001. }
+  s := TTyIntervalScale.Create;
+  try
+    s.SetExtent(TyRange(0.001, 3));
+    s.FixMin := True;
+    s.Niceify(5, 1);
+    AssertEquals('the user step''s precision', 2, s.IntervalPrecision);
+    t := s.GetTicks;
+    AssertEquals(4, Length(t));
+    AssertTrue('the pinned min', t[0].Value = 0.001);
+    AssertTrue('1.001 rounded at two places', t[1].Value = 1);
+    AssertTrue('', t[2].Value = 2);
+    AssertTrue('', t[3].Value = 3);
+  finally
+    s.Free;
+  end;
+end;
+
+procedure TAdvChartIntervalScaleTest.TestALaterExtentRecomputesTheTicks;
+var s: TTyIntervalScale; t: TTyScaleTickArray;
+begin
+  { THE PORT'S OWN CONTRACT, not parity: Niceify's answer belongs to the
+    extent it left, and an extent set afterwards is walked at the same step.
+    Upstream forbids the call (its development build asserts) and its
+    production build keeps the stale nice extent -- 0..100 ticks on a 0..50
+    axis. No chart path does this today; a zoom will. }
+  s := TTyIntervalScale.Create;
+  try
+    s.SetExtent(TyRange(0, 100));
+    s.Niceify(5);
+    AssertEquals('niced: six ticks', 6, Length(s.GetTicks));
+    s.SetExtent(TyRange(0, 50));
+    t := s.GetTicks;
+    AssertEquals('four ticks on the new extent', 4, Length(t));
+    AssertTrue('', t[0].Value = 0);
+    AssertTrue('', t[1].Value = 20);
+    AssertTrue('', t[2].Value = 40);
+    AssertTrue('the extent''s own end', t[3].Value = 50);
+    AssertTrue('the step is kept', s.Interval = 20);
+  finally
+    s.Free;
+  end;
+  { On a log axis the stale answer is worse than stale: the ends are read
+    back through the old lookup and the ticks come out 1, 10, 100, 1000, 100. }
+  s := LogScale(1, 10000);
+  try
+    s.SetExtent(TyRange(1, 100));
+    t := s.GetTicks;
+    AssertEquals('three decades', 3, Length(t));
+    AssertTrue('', t[0].Value = 1);
+    AssertTrue('', t[1].Value = 10);
+    AssertTrue('', t[2].Value = 100);
+  finally
+    s.Free;
   end;
 end;
 

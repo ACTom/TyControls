@@ -1,0 +1,155 @@
+{
+ "legend": {
+  "data": [
+   "bar",
+   "bar2",
+   "bar3",
+   "bar4"
+  ],
+  "left": "10%"
+ },
+ "brush": {
+  "toolbox": [
+   "rect",
+   "polygon",
+   "lineX",
+   "lineY",
+   "keep",
+   "clear"
+  ],
+  "xAxisIndex": 0
+ },
+ "toolbox": {
+  "feature": {
+   "magicType": {
+    "type": [
+     "stack"
+    ]
+   },
+   "dataView": {}
+  }
+ },
+ "tooltip": {},
+ "xAxis": {
+  "data": [
+   "Class0",
+   "Class1",
+   "Class2",
+   "Class3",
+   "Class4",
+   "Class5",
+   "Class6",
+   "Class7",
+   "Class8",
+   "Class9"
+  ],
+  "name": "X Axis",
+  "axisLine": {
+   "onZero": true
+  },
+  "splitLine": {
+   "show": false
+  },
+  "splitArea": {
+   "show": false
+  }
+ },
+ "yAxis": {},
+ "grid": {
+  "bottom": 100
+ },
+ "series": [
+  {
+   "name": "bar",
+   "type": "bar",
+   "stack": "one",
+   "emphasis": {
+    "itemStyle": {
+     "shadowBlur": 10,
+     "shadowColor": "rgba(0,0,0,0.3)"
+    }
+   },
+   "data": [
+    1.13,
+    1.24,
+    1.57,
+    1.78,
+    0.33,
+    0.58,
+    1.1,
+    0.58,
+    0.8,
+    0.18
+   ]
+  },
+  {
+   "name": "bar2",
+   "type": "bar",
+   "stack": "one",
+   "emphasis": {
+    "itemStyle": {
+     "shadowBlur": 10,
+     "shadowColor": "rgba(0,0,0,0.3)"
+    }
+   },
+   "data": [
+    4.55,
+    0.14,
+    3.32,
+    1.36,
+    4.16,
+    1.57,
+    4.73,
+    3.79,
+    4.58,
+    3.18
+   ]
+  },
+  {
+   "name": "bar3",
+   "type": "bar",
+   "stack": "two",
+   "emphasis": {
+    "itemStyle": {
+     "shadowBlur": 10,
+     "shadowColor": "rgba(0,0,0,0.3)"
+    }
+   },
+   "data": [
+    1.25,
+    0.78,
+    1.16,
+    0.75,
+    0.96,
+    0.79,
+    1.29,
+    0.89,
+    0.67,
+    1.12
+   ]
+  },
+  {
+   "name": "bar4",
+   "type": "bar",
+   "stack": "two",
+   "emphasis": {
+    "itemStyle": {
+     "shadowBlur": 10,
+     "shadowColor": "rgba(0,0,0,0.3)"
+    }
+   },
+   "data": [
+    0.97,
+    0.88,
+    0.51,
+    0.04,
+    0.54,
+    0.91,
+    0.08,
+    0.53,
+    0.51,
+    0.93
+   ]
+  }
+ ]
+}

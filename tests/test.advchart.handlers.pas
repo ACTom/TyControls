@@ -30,6 +30,7 @@ type
     procedure TestNamedDimension;
     procedure TestIndexedDimension;
     procedure TestNumbersAreLocaleIndependent;
+    procedure TestAReplacementIsReadAsJavaScriptReadsIt;
     { ---- the registry ---- }
     procedure TestARegisteredHandlerIsCalled;
     procedure TestRegisteringTwiceReplaces;
@@ -112,8 +113,12 @@ var p: TTyChartParams;
 begin
   p := One('Mon', 'S', 120);
   { Most series have no percentage. Printing a 0 there would be a number the
-    chart made up. }
-  AssertEquals('no percent', 'Mon: ', TyChartFormatTemplate('{b}: {d}', p));
+    chart made up.
+    [Revised in batch 35: this pinned 'Mon: '. Upstream's formatTpl only
+    knows d as a letter where the series has a percentage -- its $vars come
+    from the pie's or the funnel's params -- so everywhere else `{d}` is
+    text like any other and stays as written.] }
+  AssertEquals('no percent', 'Mon: {d}', TyChartFormatTemplate('{b}: {d}', p));
   p[0].HasPercent := True;
   p[0].Percent := 42.5;
   AssertEquals('with one', 'Mon: 42.5', TyChartFormatTemplate('{b}: {d}', p));
@@ -126,7 +131,9 @@ begin
   SetLength(p[0].Values, 2);
   p[0].Values[0] := 10;
   p[0].Values[1] := 20.5;
-  AssertEquals('10, 20.5', TyChartFormatTemplate('{c}', p));
+  { [Revised in batch 35: '10, 20.5'. The value is inserted the way
+    JavaScript prints an array -- joined with a bare comma.] }
+  AssertEquals('10,20.5', TyChartFormatTemplate('{c}', p));
 end;
 
 procedure TAdvChartHandlersTest.TestIndexedPlaceholdersPickTheSeries;
@@ -139,18 +146,12 @@ end;
 
 procedure TAdvChartHandlersTest.TestIndexPastTheEndExpandsToNothing;
 begin
-  { An axis tooltip whose series list is shorter than the author expected. The
-    rest of the line has to stay readable, so the placeholder expands to
-    nothing rather than leaking '{a5}' into the tooltip -- which would happen
-    legitimately whenever the series count varies at run time.
-
-    HONEST LIMIT: this test pins the BEHAVIOUR but cannot prove the guard is
-    what produces it. Removing the bounds check does not give a different
-    answer, it reads past the end of a dynamic array -- undefined behaviour that
-    happened to look the same here. Mutation confirmed it survives. Making it
-    observable would need range checking, which no unit in this repo turns on,
-    or trading the right behaviour for a testable one. }
-  AssertEquals('Sales: 120 / : ',
+  { An axis tooltip whose series list is shorter than the author expected.
+    [Revised in batch 35: this expanded '{a5}' to nothing. Upstream's
+    formatTpl only ever looks for the indices of the series it was given, so
+    '{a5}' among two series is text and stays as written -- which also shows
+    the author which placeholder had nothing behind it.] }
+  AssertEquals('Sales: 120 / {a5}: {c5}',
                TyChartFormatTemplate('{a0}: {c0} / {a5}: {c5}', Two));
 end;
 
@@ -178,8 +179,11 @@ begin
   SetLength(p[0].DimensionNames, 2);
   p[0].DimensionNames[0] := 'qty';
   p[0].DimensionNames[1] := 'price';
-  AssertEquals('price 99', TyChartFormatTemplate('price {@price}', p));
-  AssertEquals('qty 3', TyChartFormatTemplate('qty {@qty}', p));
+  { [Revised in batch 35: these expanded. Upstream expands `{@dim}` in a
+    LABEL formatter only (getFormattedLabel); a tooltip template goes through
+    formatTpl alone, which has no '@' form, and leaves it as written.] }
+  AssertEquals('price {@price}', TyChartFormatTemplate('price {@price}', p));
+  AssertEquals('qty {@qty}', TyChartFormatTemplate('qty {@qty}', p));
 end;
 
 procedure TAdvChartHandlersTest.TestIndexedDimension;
@@ -188,10 +192,27 @@ begin
   p := One('P', 'S', 0);
   SetLength(p[0].Values, 3);
   p[0].Values[0] := 1; p[0].Values[1] := 2; p[0].Values[2] := 3;
-  AssertEquals('3', TyChartFormatTemplate('{@[2]}', p));
-  { Past the end is not a placeholder this can expand, so it stays verbatim
-    rather than becoming an empty string that hides the mistake. }
+  { [Revised in batch 35: '{@[2]}' expanded to 3 -- see TestNamedDimension:
+    a tooltip template has no '@' form upstream.] }
+  AssertEquals('{@[2]}', TyChartFormatTemplate('{@[2]}', p));
   AssertEquals('{@[9]}', TyChartFormatTemplate('{@[9]}', p));
+end;
+
+procedure TAdvChartHandlersTest.TestAReplacementIsReadAsJavaScriptReadsIt;
+begin
+  { A name is the replacement string of String.prototype.replace, so its '$'
+    patterns mean what they mean there. Every answer is node's. }
+  AssertEquals('what came before', 'xaxby', TyJsReplaceFirst('x{b0}y', '{b0}', 'a$`b'));
+  AssertEquals('what comes after', 'xayby', TyJsReplaceFirst('x{b0}y', '{b0}', 'a$''b'));
+  AssertEquals('a dollar', 'xa$by', TyJsReplaceFirst('x{b0}y', '{b0}', 'a$$b'));
+  AssertEquals('the match', 'xa{b0}by', TyJsReplaceFirst('x{b0}y', '{b0}', 'a$&b'));
+  AssertEquals('no groups to refer to', 'xa$1by', TyJsReplaceFirst('x{b0}y', '{b0}', 'a$1b'));
+  AssertEquals('a dollar at the end', 'xab$y', TyJsReplaceFirst('x{b0}y', '{b0}', 'ab$'));
+  AssertEquals('three dollars', 'x$$y', TyJsReplaceFirst('x{b0}y', '{b0}', '$$$'));
+  AssertEquals('only the first', '{a}{a}{a}', TyJsReplaceFirst('{a}{a}', '{a}', '$&$&'));
+  { formatTpl's own first answer: no series at all is no text, not the
+    template with its letters renumbered }
+  AssertEquals('no series', '', TyJsFormatTpl('{a}|x', 3, []));
 end;
 
 procedure TAdvChartHandlersTest.TestNumbersAreLocaleIndependent;

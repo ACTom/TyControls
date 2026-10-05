@@ -1,0 +1,1187 @@
+unit tyControls.AdvChart.Labels;
+{$mode objfpc}{$H+}
+{ Text on a mark: where it goes, what it says, and what colour it comes out.
+
+  A LABEL IS DECLARED ON ITS MARK AND EXPANDED INTO ITS OWN PAINT ENTRY. The
+  mark builder stamps a string onto the element it just made; this unit walks
+  the finished list and turns each stamped string into a SECOND entry carrying
+  the same datum. Two entries, one author.
+
+  WHY NOT ONE ENTRY WITH BOTH. Because the element's shape would then no longer
+  describe its ink. A pie slice with an outside label 50 px past the rim would
+  have to grow its bounds by a hundred pixels, and TyShapeContains would answer
+  yes across the whole empty wedge between the arc and the caption -- which is
+  precisely the "pointer answering for ink that is not there" that the shape
+  layer's own header exists to prevent.
+
+  WHY NOT A SECOND LIST. Because the datum would then live in two structures
+  ordered by two different rules, and hovering a bar could report a different
+  row from hovering its own caption. One list, one order, one answer.
+
+  WHY THE TEXT IS NOT A SHAPE KIND. AdvChart.Shape deliberately imports no
+  measurer -- it is the pure hit-test layer, and TyShapeBounds has to be able to
+  answer from the record alone. A text kind would make it answer a question it
+  cannot compute. The caption therefore rides on the ELEMENT, where resolved ink
+  already lives, and the entry this unit emits carries a plain rect that the
+  shape layer understands completely.
+
+  A MARK STAMPS ONLY THE WORDS. Everything else about a label is the same for
+  every datum in a series, so the spec lives once per series and a mark carries
+  only what differs. A scatter series makes one element per point, and a
+  per-element copy of the spec would be a hundred bytes a point for values that
+  never vary.
+
+  PORTED FROM zrender/src/contain/text.ts (calculateTextPosition) and
+  echarts/src/label/labelStyle.ts, 6.1.0.
+
+  WHAT IS NOT HERE, deliberately:
+    - the PIE's labels. pie/labelLayout computes x, y and rotation itself, so
+      the thirteen positions below do not apply. It is a different algorithm
+      and it gets its own pass.
+
+      AND `distance` IS INERT THERE WHILE `offset` IS NOT, which took an
+      audit to notice -- an earlier version of this note said both were. The
+      two die by different mechanisms and only one of them dies: PieView
+      resets `position` and `rotation` only, and setTextConfig EXTENDS rather
+      than replaces, so both survive into zrender. `distance` is then read
+      only INSIDE the `has a position` gate, which a null position closes;
+      `offset` is applied outside it, unconditionally.
+    - the nine SECTOR positions. They serve polar bars, which this port has no
+      renderer for; building them now would be a table nothing reads.
+    - de-collision. That is the label layout's (AdvChart.LabelLayout,
+      [Batch 103]), which runs over the captions this pass makes: each one
+      carries what LabelManager keeps (its host, the anchor before the
+      offset, the offset, the alignment its position implies and the one its
+      style sets, the host's rect, the margins, the measured box).
+
+  PURE: SysUtils, Math and the AdvChart units. Fonts and colours arrive
+  resolved; text is measured through the injected measurer. }
+interface
+uses
+  SysUtils, Math,
+  tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
+  tyControls.AdvChart.Paint;
+
+type
+  { The thirteen built-in positions, plus the two forms that are not one of
+    them.
+
+    tlpNone is "no label". tlpAt is the ARRAY form -- an offset from the host's
+    top-left corner, where the two numbers are percentages of the HOST'S OWN
+    width and height, resolved to px before they get here. }
+  TTyLabelPosition = (tlpNone,
+    tlpLeft, tlpRight, tlpTop, tlpBottom,
+    tlpInside, tlpInsideLeft, tlpInsideRight, tlpInsideTop, tlpInsideBottom,
+    tlpInsideTopLeft, tlpInsideTopRight, tlpInsideBottomLeft,
+    tlpInsideBottomRight,
+    tlpAt);
+
+  { How a label that does not fit is dealt with. }
+  TTyLabelOverflow = (tloNone, tloTruncate);
+
+  { What a label says when no formatter asked for anything else.
+
+    IT IS NOT THE SAME FOR EVERY SERIES. A bar, a line and a scatter point
+    show their VALUE; a pie slice shows its NAME. One default for all of them
+    renders every unformatted pie label as a number. }
+  TTyLabelDefaultText = (tldValue, tldName,
+    { a heatmap cell's: the THIRD element of the raw item as written, else
+      '-' (HeatmapView.ts:313-317) [Batch 68] }
+    tldRawThird);
+
+  { Everything about one series' labels except the words.
+
+    THE THREE INSIDE COLOURS ARE A BAND TABLE, not a light/dark pair. Upstream
+    picks by the host fill's luminance: above 0.5 the dark ink, above 0.2 the
+    LIGHTEST one, and below that the dimmer light one -- which reads backwards
+    until you see why. On a mid-dark fill you want maximum contrast; on a nearly
+    black one the brightest ink glares, and the dimmer one is easier to read.
+    Two bands would collapse that and get the dark end wrong. }
+  TTyLabelSpec = record
+    Show: Boolean;
+    Position: TTyLabelPosition;
+    { `position: 'outside'`, which is not a position but a request for the
+      mark's own: Position then holds tlpTop, the answer for a mark that has
+      none, and a mark with an outside side (a bar) answers per datum. }
+    Outside: Boolean;
+    { tlpAt only: from the host's top-left, a FRACTION of the host's width /
+      height when AtXIsPercent / AtYIsPercent, else LOGICAL px. [Batch 68:
+      they were device px, and a '30%' became 0.3 px.] }
+    AtX, AtY: Double;
+    AtXIsPercent, AtYIsPercent: Boolean;
+    { LOGICAL px. The gap outside, or the inset inside, depending on the
+      position -- and unused entirely by tlpInside, which is the default, so a
+      chart that sets only `distance` sees nothing happen. }
+    DistanceLogical: Double;
+    { LOGICAL px, added after the position is resolved. Upstream applies it
+      inside the rotation; this applies it after, and says so below. }
+    OffsetXLogical, OffsetYLogical: Double;
+    RotationRad: Double;
+    { `align` / `verticalAlign` (or `baseline`) as written, over the ones the
+      position implies -- normalised as zrender does: 'middle' is centre,
+      'center' is middle, anything else left / top [Batch 68] }
+    HasAlignH, HasAlignV: Boolean;
+    AlignH: TTyTextAnchorH;
+    AlignV: TTyTextAnchorV;
+    FontName: string;
+    FontSizeLogical: Integer;
+    FontWeight: Integer;
+    { When False the ink is Colour. When True it is chosen from the host's own
+      fill, the way an unset label.color is. }
+    AutoColour: Boolean;
+    Colour: TTyChartColor;
+    { `color: inherit` -- the caption takes the mark's OWN fill rather than a
+      contrast ink. Kept apart from Colour because the fill is not known
+      until the expansion pass has the host in hand. }
+    InheritColour: Boolean;
+    { Bands 0..2: the ink for a light host, a mid host and a dark host. }
+    InsideColour: array[0..2] of TTyChartColor;
+    { THE GROUND the chart is drawn on, and whether it counts as dark
+      (luminance under 0.4). An outside label's halo is the ground; an inside
+      one's halo is its host's fill, and only when the ink is the band that
+      reads against that ground. }
+    Ground: TTyChartColor;
+    GroundDark: Boolean;
+    { `textBorderColor`: written, `none`/`transparent`, or `inherit`. }
+    HasBorderColour, BorderColourNone, BorderColourInherit: Boolean;
+    BorderColour: TTyChartColor;
+    { `textBorderWidth`, LOGICAL px. }
+    HasBorderWidth: Boolean;
+    BorderWidthLogical: Double;
+    { A label with its own `backgroundColor` gets no automatic halo. }
+    HasBackground: Boolean;
+    { A FUNNEL'S `inherit`, which upstream does not route through
+      inheritColor: inside it keeps the band ink and is FORCED a stroke in
+      the band's fill; outside it is the host's colour over the ground halo. }
+    FunnelInherit: Boolean;
+    { `emphasis.label.color`, `.textBorderColor` and `.textBorderWidth`:
+      the hover's own. }
+    EmphHasColour: Boolean;
+    EmphColour: TTyChartColor;
+    { A STATE SHOWS WHAT THE NORMAL LABEL HIDES: `select.label.show`,
+      `emphasis.label.show` or `blur.label.show` true on the series.
+      zrender creates the label when any state shows it (needsCreateText) and
+      leaves it ignored at rest; the state flips it. [Batch 88] }
+    StateShow: Boolean;
+    EmphHasBorderWidth: Boolean;
+    EmphBorderWidthLogical: Double;
+    EmphHasBorderColour, EmphBorderColourNone, EmphBorderColourInherit: Boolean;
+    EmphBorderColour: TTyChartColor;
+    { `emphasis.itemStyle.color`: the hovered host's fill, when written;
+      otherwise it is the normal fill lifted. }
+    EmphHostHasColour: Boolean;
+    EmphHostColour: TTyChartColor;
+    { What an OUTSIDE label is drawn in when the colour is automatic: the
+      theme's own ink rather than anything derived from the mark. }
+    OutsideColour: TTyChartColor;
+    Overflow: TTyLabelOverflow;
+    { The template, as written. HasFormatter says one was written at all: an
+      EMPTY template is an empty label, as upstream's is, and only no template
+      -- or null -- means the default text for the type. }
+    Formatter: string;
+    HasFormatter: Boolean;
+    DefaultText: TTyLabelDefaultText;
+    { Painted over its mark. Z2 one above the host so a caption is never
+      swallowed by the thing it names. }
+    Z2Lift: Integer;
+    { THE TEXT BLOCK: zrender's styles for the label -- its rich styles, its
+      box, size and overflow -- resolved over RtChain, the label nodes this
+      spec was read from (most specific first, kept as JSON text: a spec
+      outlives the option it was read from). Rt.Needed False is the one-run
+      caption; RtAny says some node of the chain asked for a block at all,
+      which is when the chain is resolved. RtGlobal is the root's side.
+      [Batch 86] }
+    Rt: TTyRtBlockStyle;
+    RtGlobal: TTyRtGlobal;
+    RtChain: TTyStringArray;
+    RtAny: Boolean;
+    { `valueAnimation`, truthy, and `precision`: a number, or 'auto' / none
+      (HasPrecision False). Only a bar counts its value (BarView's
+      setLabelValueAnimation); every other series ignores the key.
+      [Batch 92, AN4] }
+    ValueAnim: Boolean;
+    HasPrecision: Boolean;
+    Precision: Double;
+    { `minMargin` (MarginType 1: half of it on every side of the label's
+      global rect) or `textMargin` (2: CSS order, round its own rect) --
+      what the label layout grows a label by before it weighs an overlap.
+      [top, right, bottom, left], LOGICAL px. [Batch 103] }
+    MarginType: Integer;
+    MarginLogical: array[0..3] of Double;
+  end;
+  TTyLabelSpecArray = array of TTyLabelSpec;
+  TTyLabelSpecTable = array of TTyLabelSpecArray;
+
+{ A spec that draws nothing. }
+function TyLabelSpecNone: TTyLabelSpec;
+
+{ The position named, or tlpNone when the string is not one of the thirteen.
+
+  NOT tlpInside FOR AN UNKNOWN NAME. zrender's switch has no default case, so an
+  unrecognised position leaves x and y at the host rect's TOP-LEFT with the text
+  hanging down and right from it. That is a different picture from `inside`, and
+  a port that quietly substituted the default would hide a typo that upstream
+  shows. AKnown says which happened. }
+function TyLabelPositionOf(const AName: string; out AKnown: Boolean): TTyLabelPosition;
+
+{ Where one caption hangs off one host rect, and which of its own edges is
+  pinned there.
+
+  BOTH ANSWERS ARE NEEDED and they are not the same question. `top` puts the
+  anchor above the rect AND pins the caption's BOTTOM edge to it; that pairing
+  is what turns `distance` into a visible gap rather than an overlap. Get the
+  anchor right and the alignment wrong and every outside label sits on top of
+  the mark it names.
+
+  ADistancePx is DEVICE px by the time it arrives. }
+procedure TyLabelAnchor(const AHost: TTyRectF; APosition: TTyLabelPosition;
+  ADistancePx, AAtX, AAtY: Double;
+  out AX, AY: Double; out AH: TTyTextAnchorH; out AV: TTyTextAnchorV);
+{ The same table over a rect given as x, y, width and height -- the form
+  upstream adds to, so an anchor computed from it is exact. [Batch 73] }
+procedure TyLabelAnchorXYWH(const AHost: TTyXYWH; APosition: TTyLabelPosition;
+  ADistancePx, AAtX, AAtY: Double;
+  out AX, AY: Double; out AH: TTyTextAnchorH; out AV: TTyTextAnchorV);
+
+{ Whether a position puts the caption over its host. Upstream decides this by
+  asking whether the position's NAME contains "inside" -- a substring test on a
+  string, not a property of the geometry -- so `insideTopLeft` counts and
+  `center` does not. Transcribed as the same set rather than re-derived, because
+  re-deriving it from the geometry would put `inside` and `at` in the same
+  bucket and they are not. }
+function TyLabelIsInside(APosition: TTyLabelPosition): Boolean;
+
+{ Relative luminance the way zrender computes it, 0..1.
+
+  ALPHA BLENDS TOWARD BLACK, not toward white -- the call site that picks a
+  label's ink passes a background luminance of zero. So a half-transparent fill
+  reads as DARKER than its colour suggests and gets lighter ink. The comment
+  beside upstream's own formula says "assumed white background" and is wrong for
+  this call; it is right for the two dark-mode calls, which pass one. }
+{ A W x H BOX HUNG OFF ONE POINT, given which of its own edges is pinned
+  there.
+
+  Exported because it had been written out longhand in seven places by the time
+  an eighth wanted it, and because the pairing is the contract everything
+  downstream reads: an anchor alone does not say where the words go. }
+function TyAnchorBox(AX, AY, AW, AH: Double; AAnchorH: TTyTextAnchorH;
+  AAnchorV: TTyTextAnchorV): TTyRectF;
+
+function TyLabelLuminance(AColour: TTyChartColor): Double;
+
+{ The ink an automatic label comes out in, given the host's own fill. }
+function TyLabelAutoColour(const ASpec: TTyLabelSpec; AHostFill: TTyChartColor;
+  AHostHasFill, AInside: Boolean): TTyChartColor;
+
+{ Which of the three inside inks a host's fill takes: 0 over a light fill
+  (luminance above a half), 1 over a mid one (above a fifth), 2 over a dark
+  one -- and 2 over a gradient, which has no one colour to measure. }
+function TyLabelInkBand(AHostFill: TTyChartColor; AHostGradient: Boolean): Integer;
+
+{ THE WHOLE ANSWER for one caption: its ink, and its halo's colour and
+  LOGICAL width (0 for none). zrender's rule: a label is inside only over a
+  host that HAS a fill; inside, the ink is the band's and the halo is the
+  host's own fill -- only when the band is the one that reads against the
+  ground (a dark ground halos the light band, a light ground the others) and
+  never over a gradient; outside, the ink is the theme's and the halo is the
+  ground. A literal or inherited colour has no automatic halo;
+  `textBorderColor` with a width draws its own; a label background has none.
+  Two logical pixels unless `textBorderWidth` says more. }
+procedure TyLabelInk(const ASpec: TTyLabelSpec; AHostFill: TTyChartColor;
+  AHostHasFill, AHostGradient, AInside: Boolean;
+  out AInk, AStroke: TTyChartColor; out AStrokeWidthLogical: Double);
+
+{ AN ATTACHED LABEL'S BLOCK: ASpec.Rt finished in the spec's font with the
+  host's fill as the inherit colour, laid out about (0, 0) with the host's
+  defaults -- the automatic ink and halo TyLabelInk gives a label with no
+  colour of its own over that host, and the alignment the position implies.
+  Shared by the expansion and by the passes that place their own labels (a
+  pie's, a funnel's). [Batch 86] }
+function TyLabelBlockPieces(const ASpec: TTyLabelSpec; const AText: string;
+  AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
+  AH: TTyTextAnchorH; AV: TTyTextAnchorV; AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
+
+{ A CAPTION IN THE HOVER'S INK: its colour and halo, and its block's
+  pieces, where it stamped a hover's (HasEmph). Every place that draws a
+  caption hovered goes through this, so the block cannot be left in the
+  normal ink. [Batch 86] }
+procedure TyCaptionToEmphasis(var ACaption: TTyElementCaption);
+
+{ Work out the hover's ink and halo for a caption now, from the host's fill
+  as a hover leaves it, and stamp them on ACaption (HasEmph). }
+procedure TyLabelStampEmphasis(const ASpec: TTyLabelSpec;
+  AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
+  var ACaption: TTyElementCaption);
+
+{ THE SAME UNDER A HOVER: the host's fill is the lifted one, and
+  `emphasis.label.color` / `.textBorderWidth` override. }
+procedure TyLabelInkEmphasis(const ASpec: TTyLabelSpec; AHostFill: TTyChartColor;
+  AHostHasFill, AHostGradient, AInside: Boolean;
+  out AInk, AStroke: TTyChartColor; out AStrokeWidthLogical: Double);
+
+{ Turn every stamped caption in AList into a second entry carrying the same
+  datum.
+
+  RUNS ONCE, IMMEDIATELY BEFORE RENDERING, and nothing may be appended after it.
+  The companion's geometry is frozen from its host at expansion time and the
+  list has no update path, so a host moved afterwards would leave its caption
+  behind.
+
+  ASpecs is indexed by SERIES index -- an element whose datum names a series
+  outside the array, or whose series draws no labels, is left alone. }
+procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer); overload;
+
+{ ZRENDER'S PLAIN-TEXT OVERFLOW, parseText.ts: AText's lines, those the
+  height cannot hold dropped (the line height is the width of '国'), each
+  cut to the width -- the container one short of it, AMinChar 'a' widths
+  reserved before deciding whether AEllipsis fits (it is dropped if not),
+  a first cut by summing character widths, a second by proportion, then the
+  ellipsis. A width under one gives ''. Lengths are UTF-16 units, as JS's.
+  AWidth and AHeight are the box inside the padding. ARich: the rich
+  layout's threshold -- a line is cut only when wider than the box itself.
+  [Batches 76, 80] }
+function TyZrPlainTextLines(const AText: string; AWidth, AHeight: Double;
+  AMinChar: Integer; const AEllipsis: string; const AMeasurer: ITyTextMeasurer;
+  const AFontName: string; AFontSizeLogical, AWeight: Integer;
+  ARich: Boolean = False): TStringArray;
+{ AItemSpecs[series][raw row]: a data item's own label read over its
+  series', for a caption whose ItemSpec names it [Batch 68] }
+procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
+  const AItemSpecs: TTyLabelSpecTable; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer); overload;
+
+implementation
+
+uses tyControls.AdvChart.Style, tyControls.AdvChart.RichStyle,
+  tyControls.AdvChart.LabelLayout;
+
+function TyLabelBlockPieces(const ASpec: TTyLabelSpec; const AText: string;
+  AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
+  AH: TTyTextAnchorH; AV: TTyTextAnchorV; AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
+var
+  rt: TTyRtBlockStyle;
+  autoSpec: TTyLabelSpec;
+  autoInk, autoStroke: TTyChartColor;
+  autoW: Double;
+begin
+  rt := ASpec.Rt;
+  TyRtFinish(rt, ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight,
+    ASpec.RtGlobal, AHostHasFill, AHostFill);
+  autoSpec := ASpec;
+  autoSpec.AutoColour := True;
+  autoSpec.InheritColour := False;
+  autoSpec.FunnelInherit := False;
+  autoSpec.HasBorderColour := False;
+  autoSpec.HasBackground := False;
+  TyLabelInk(autoSpec, AHostFill, AHostHasFill, AHostGradient, AInside, autoInk,
+    autoStroke, autoW);
+  Result := TyRtLay(AText, rt, TyRtDefaultOf(True, autoInk, autoW > 0,
+    autoStroke, True, AH, AV), AScale, AMeasurer);
+end;
+
+procedure TyCaptionToEmphasis(var ACaption: TTyElementCaption);
+begin
+  if not ACaption.HasEmph then Exit;
+  ACaption.Colour := ACaption.EmphColour;
+  ACaption.StrokeColour := ACaption.EmphStrokeColour;
+  ACaption.StrokeWidthLogical := ACaption.EmphStrokeWidthLogical;
+  if Length(ACaption.RtEmph) > 0 then ACaption.RtPieces := ACaption.RtEmph;
+end;
+
+procedure TyLabelStampEmphasis(const ASpec: TTyLabelSpec;
+  AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
+  var ACaption: TTyElementCaption);
+var fill: TTyChartColor; grad: Boolean;
+begin
+  fill := AHostFill;
+  grad := AHostGradient;
+  if ASpec.EmphHostHasColour then
+  begin
+    fill := ASpec.EmphHostColour;
+    grad := False;
+  end
+  else if AHostHasFill and not grad then
+    fill := TyChartLiftColor(fill);
+  TyLabelInkEmphasis(ASpec, fill, AHostHasFill, grad, AInside,
+    ACaption.EmphColour, ACaption.EmphStrokeColour,
+    ACaption.EmphStrokeWidthLogical);
+  ACaption.HasEmph := True;
+end;
+
+function TyLabelSpecNone: TTyLabelSpec;
+var i: Integer;
+begin
+  Result := Default(TTyLabelSpec);
+  Result.Show := False;
+  Result.Position := tlpInside;
+  Result.DistanceLogical := 5;
+  Result.FontSizeLogical := 9;
+  Result.FontWeight := 400;
+  Result.AutoColour := True;
+  Result.Colour := 0;
+  for i := 0 to 2 do Result.InsideColour[i] := 0;
+  Result.OutsideColour := 0;
+  Result.Overflow := tloNone;
+  Result.Formatter := '';
+  Result.DefaultText := tldValue;
+  Result.Z2Lift := 1;
+end;
+
+function TyLabelPositionOf(const AName: string; out AKnown: Boolean): TTyLabelPosition;
+begin
+  AKnown := True;
+  if AName = 'left' then Exit(tlpLeft);
+  if AName = 'right' then Exit(tlpRight);
+  if AName = 'top' then Exit(tlpTop);
+  if AName = 'bottom' then Exit(tlpBottom);
+  if AName = 'inside' then Exit(tlpInside);
+  if AName = 'insideLeft' then Exit(tlpInsideLeft);
+  if AName = 'insideRight' then Exit(tlpInsideRight);
+  if AName = 'insideTop' then Exit(tlpInsideTop);
+  if AName = 'insideBottom' then Exit(tlpInsideBottom);
+  if AName = 'insideTopLeft' then Exit(tlpInsideTopLeft);
+  if AName = 'insideTopRight' then Exit(tlpInsideTopRight);
+  if AName = 'insideBottomLeft' then Exit(tlpInsideBottomLeft);
+  if AName = 'insideBottomRight' then Exit(tlpInsideBottomRight);
+  AKnown := False;
+  Result := tlpNone;
+end;
+
+function TyLabelIsInside(APosition: TTyLabelPosition): Boolean;
+begin
+  Result := APosition in [tlpInside, tlpInsideLeft, tlpInsideRight,
+    tlpInsideTop, tlpInsideBottom, tlpInsideTopLeft, tlpInsideTopRight,
+    tlpInsideBottomLeft, tlpInsideBottomRight];
+end;
+
+procedure TyLabelAnchor(const AHost: TTyRectF; APosition: TTyLabelPosition;
+  ADistancePx, AAtX, AAtY: Double;
+  out AX, AY: Double; out AH: TTyTextAnchorH; out AV: TTyTextAnchorV);
+var r: TTyXYWH;
+begin
+  r.X := AHost.Left;
+  r.Y := AHost.Top;
+  r.W := TyRectFWidth(AHost);
+  r.H := TyRectFHeight(AHost);
+  TyLabelAnchorXYWH(r, APosition, ADistancePx, AAtX, AAtY, AX, AY, AH, AV);
+end;
+
+procedure TyLabelAnchorXYWH(const AHost: TTyXYWH; APosition: TTyLabelPosition;
+  ADistancePx, AAtX, AAtY: Double;
+  out AX, AY: Double; out AH: TTyTextAnchorH; out AV: TTyTextAnchorV);
+var
+  x0, y0, w, h, halfH: Double;
+begin
+  x0 := AHost.X;
+  y0 := AHost.Y;
+  w := AHost.W;
+  h := AHost.H;
+  { NAMED, because upstream names it and uses it five times -- while the
+    horizontal half is written out inline every time. Kept the same way so the
+    two tables read against the source line by line. }
+  halfH := h / 2;
+
+  { THE TOP-LEFT IS THE FALLTHROUGH, not the default position. zrender's switch
+    has no default case, so an unrecognised name leaves these initialisers
+    standing. tlpNone reaches here only from a caller that asked for it. }
+  AX := x0;
+  AY := y0;
+  AH := tahLeft;
+  AV := tavTop;
+
+  case APosition of
+    tlpLeft:
+      begin
+        AX := x0 - ADistancePx; AY := y0 + halfH;
+        AH := tahRight; AV := tavMiddle;
+      end;
+    tlpRight:
+      begin
+        { zrender's grouping: x += distance + width }
+        AX := x0 + (ADistancePx + w); AY := y0 + halfH;
+        AV := tavMiddle;
+      end;
+    tlpTop:
+      begin
+        AX := x0 + w / 2; AY := y0 - ADistancePx;
+        AH := tahCentre; AV := tavBottom;
+      end;
+    tlpBottom:
+      begin
+        AX := x0 + w / 2; AY := y0 + (h + ADistancePx);
+        AH := tahCentre;
+      end;
+    tlpInside:
+      begin
+        { NO DISTANCE TERM, and it is the default position -- so a chart that
+          sets only `distance` and leaves `position` alone sees nothing move. }
+        AX := x0 + w / 2; AY := y0 + halfH;
+        AH := tahCentre; AV := tavMiddle;
+      end;
+    tlpInsideLeft:
+      begin
+        AX := x0 + ADistancePx; AY := y0 + halfH;
+        AV := tavMiddle;
+      end;
+    tlpInsideRight:
+      begin
+        AX := x0 + (w - ADistancePx); AY := y0 + halfH;
+        AH := tahRight; AV := tavMiddle;
+      end;
+    tlpInsideTop:
+      begin
+        AX := x0 + w / 2; AY := y0 + ADistancePx;
+        AH := tahCentre;
+      end;
+    tlpInsideBottom:
+      begin
+        AX := x0 + w / 2; AY := y0 + (h - ADistancePx);
+        AH := tahCentre; AV := tavBottom;
+      end;
+    tlpInsideTopLeft:
+      begin
+        AX := x0 + ADistancePx; AY := y0 + ADistancePx;
+      end;
+    tlpInsideTopRight:
+      begin
+        AX := x0 + (w - ADistancePx); AY := y0 + ADistancePx;
+        AH := tahRight;
+      end;
+    tlpInsideBottomLeft:
+      begin
+        AX := x0 + ADistancePx; AY := y0 + (h - ADistancePx);
+        AV := tavBottom;
+      end;
+    tlpInsideBottomRight:
+      begin
+        AX := x0 + (w - ADistancePx); AY := y0 + (h - ADistancePx);
+        AH := tahRight; AV := tavBottom;
+      end;
+    tlpAt:
+      begin
+        { THE ARRAY FORM PINS THE CAPTION'S TOP-LEFT, which is the one thing
+          about it that surprises people: ['50%','50%'] lands the anchor in the
+          middle of the host like `inside` does, and then hangs the text down
+          and to the right of that point instead of centring it. Upstream sets
+          both alignments to null here on purpose, and null resolves to
+          left/top. }
+        AX := x0 + AAtX;
+        AY := y0 + AAtY;
+      end;
+  end;
+end;
+
+function TyAnchorBox(AX, AY, AW, AH: Double; AAnchorH: TTyTextAnchorH;
+  AAnchorV: TTyTextAnchorV): TTyRectF;
+begin
+  case AAnchorH of
+    tahCentre: Result.Left := AX - AW / 2;
+    tahRight: Result.Left := AX - AW;
+  else
+    Result.Left := AX;
+  end;
+  Result.Right := Result.Left + AW;
+  case AAnchorV of
+    tavMiddle: Result.Top := AY - AH / 2;
+    tavBottom: Result.Top := AY - AH;
+  else
+    Result.Top := AY;
+  end;
+  Result.Bottom := Result.Top + AH;
+end;
+
+function TyLabelLuminance(AColour: TTyChartColor): Double;
+var
+  a, r, g, b: Double;
+begin
+  a := ((AColour shr 24) and $FF) / 255;
+  r := (AColour shr 16) and $FF;
+  g := (AColour shr 8) and $FF;
+  b := AColour and $FF;
+  { zrender's lum(), with a background luminance of zero: the alpha term is
+    multiplied in and nothing is added back, so translucency darkens. }
+  Result := (0.299 * r + 0.587 * g + 0.114 * b) * a / 255;
+end;
+
+function TyLabelAutoColour(const ASpec: TTyLabelSpec; AHostFill: TTyChartColor;
+  AHostHasFill, AInside: Boolean): TTyChartColor;
+var lum: Double;
+begin
+  { `inherit` first, because it is the one answer that is neither automatic
+    nor a literal: the caption comes out in the mark's own colour, which is
+    only legible where the caption is NOT over the mark. }
+  if ASpec.InheritColour then Exit(AHostFill);
+  if not ASpec.AutoColour then Exit(ASpec.Colour);
+  { OUTSIDE is not derived from the mark at all -- upstream returns the theme's
+    own ink, light or dark by mode, and never looks at what it is labelling. }
+  if not AInside then Exit(ASpec.OutsideColour);
+  { AN UNFILLED HOST MAKES THE LABEL AN OUTSIDE ONE: zrender tests
+    `hasFill()` before it calls anything inside, so the caption takes the
+    theme's outside ink and the ground's halo. [Revised in batch 47: it took
+    the light band's ink.] }
+  if not AHostHasFill then Exit(ASpec.OutsideColour);
+  lum := TyLabelLuminance(AHostFill);
+  if lum > 0.5 then Exit(ASpec.InsideColour[0]);
+  if lum > 0.2 then Exit(ASpec.InsideColour[1]);
+  Result := ASpec.InsideColour[2];
+end;
+
+function TyLabelInkBand(AHostFill: TTyChartColor; AHostGradient: Boolean): Integer;
+var lum: Double;
+begin
+  if AHostGradient then Exit(2);
+  lum := TyLabelLuminance(AHostFill);
+  if lum > 0.5 then Result := 0
+  else if lum > 0.2 then Result := 1
+  else Result := 2;
+end;
+
+procedure TyLabelInk(const ASpec: TTyLabelSpec; AHostFill: TTyChartColor;
+  AHostHasFill, AHostGradient, AInside: Boolean;
+  out AInk, AStroke: TTyChartColor; out AStrokeWidthLogical: Double);
+var
+  inside, auto: Boolean;
+  band: Integer;
+  w: Double;
+  ground: TTyChartColor;
+
+  procedure Halo(AColour: TTyChartColor);
+  begin
+    { A STROKE THAT IS TRANSPARENT IS NONE -- zrender drops `transparent`
+      before it paints. }
+    if (AColour shr 24) = 0 then Exit;
+    AStroke := AColour;
+    AStrokeWidthLogical := w;
+  end;
+
+begin
+  AStroke := 0;
+  AStrokeWidthLogical := 0;
+  inside := AInside and AHostHasFill;
+  band := TyLabelInkBand(AHostFill, AHostGradient);
+  { `textBorderWidth || 2`: a nought is two. }
+  if ASpec.HasBorderWidth and (ASpec.BorderWidthLogical > 0) then
+    w := ASpec.BorderWidthLogical
+  else
+    w := 2;
+  { THE GROUND AS A HALO, made opaque. }
+  ground := ASpec.Ground or $FF000000;
+
+  auto := False;
+  if ASpec.InheritColour and ASpec.FunnelInherit then
+  begin
+    if inside then AInk := ASpec.InsideColour[band] else AInk := AHostFill;
+  end
+  else if ASpec.InheritColour then AInk := AHostFill
+  else if not ASpec.AutoColour then AInk := ASpec.Colour
+  else
+  begin
+    auto := True;
+    if inside then AInk := ASpec.InsideColour[band]
+    else AInk := ASpec.OutsideColour;
+  end;
+
+  { A WRITTEN BORDER COLOUR IS ITS OWN STROKE, whatever the ink -- and with
+    no width written it is a stroke of no width, which draws nothing. }
+  if ASpec.HasBorderColour then
+  begin
+    if ASpec.BorderColourNone then Exit;
+    if not (ASpec.HasBorderWidth and (ASpec.BorderWidthLogical > 0)) then Exit;
+    if ASpec.BorderColourInherit then Halo(AHostFill)
+    else Halo(ASpec.BorderColour);
+    Exit;
+  end;
+  if ASpec.HasBackground then Exit;
+
+  if ASpec.InheritColour and ASpec.FunnelInherit then
+  begin
+    { FORCED: the band's own fill, even over a light host. }
+    if inside then
+    begin
+      if not AHostGradient then Halo(AHostFill);
+    end
+    else
+      Halo(ground);
+    Exit;
+  end;
+  if not auto then Exit;
+  if inside then
+  begin
+    if AHostGradient then Exit;
+    if ASpec.GroundDark <> (band = 0) then Exit;
+    Halo(AHostFill);
+  end
+  else
+    Halo(ground);
+end;
+
+procedure TyLabelInkEmphasis(const ASpec: TTyLabelSpec; AHostFill: TTyChartColor;
+  AHostHasFill, AHostGradient, AInside: Boolean;
+  out AInk, AStroke: TTyChartColor; out AStrokeWidthLogical: Double);
+var s: TTyLabelSpec;
+begin
+  s := ASpec;
+  if ASpec.EmphHasColour then
+  begin
+    s.AutoColour := False;
+    s.InheritColour := False;
+    s.FunnelInherit := False;
+    s.Colour := ASpec.EmphColour;
+  end;
+  if ASpec.EmphHasBorderWidth then
+  begin
+    s.HasBorderWidth := True;
+    s.BorderWidthLogical := ASpec.EmphBorderWidthLogical;
+  end;
+  { the hover's stroke colour over the normal one: zrender merges the
+    emphasis style's `stroke` over the label's (labelStyle.ts:550-583) }
+  if ASpec.EmphHasBorderColour then
+  begin
+    s.HasBorderColour := True;
+    s.BorderColourNone := ASpec.EmphBorderColourNone;
+    s.BorderColourInherit := ASpec.EmphBorderColourInherit;
+    s.BorderColour := ASpec.EmphBorderColour;
+  end;
+  TyLabelInk(s, AHostFill, AHostHasFill, AHostGradient, AInside, AInk, AStroke,
+    AStrokeWidthLogical);
+end;
+
+function TyZrPlainTextLines(const AText: string; AWidth, AHeight: Double;
+  AMinChar: Integer; const AEllipsis: string; const AMeasurer: ITyTextMeasurer;
+  const AFontName: string; AFontSizeLogical, AWeight: Integer;
+  ARich: Boolean): TStringArray;
+const
+  { U+56FD, zrender's stand-in for any wide character, as UTF-8 }
+  cGuo = #$E5#$9B#$BD;
+var
+  lines: TStringArray;
+  lh, containerWidth, contentWidth, asc, ellW, lw, w: Double;
+  ell: string;
+  k, j, i, n, keep, sub: Integer;
+  u: UnicodeString;
+
+  function M(const S: string): Double;
+  var h_: Double;
+  begin
+    if S = '' then Exit(0);
+    AMeasurer.MeasureLine(S, AFontName, AFontSizeLogical, AWeight, Result, h_);
+  end;
+
+  function CharW(ACode: Integer): Double;
+  begin
+    if (ACode >= 0) and (ACode <= 127) then Result := M(Chr(ACode))
+    else Result := M(cGuo);
+  end;
+
+begin
+  Result := nil;
+  if AText = '' then Exit;
+  lines := AText.Split([#10]);
+  lh := M(cGuo);
+  { lineOverflow 'truncate': the lines that fit }
+  if Length(lines) * lh > AHeight then
+  begin
+    keep := Floor(AHeight / lh);
+    if keep < Length(lines) then SetLength(lines, Max(keep, 0));
+  end;
+  containerWidth := Max(0.0, AWidth - 1);
+  contentWidth := containerWidth;
+  asc := M('a');
+  i := 0;
+  while (i < AMinChar) and (contentWidth >= asc) do
+  begin
+    contentWidth := contentWidth - asc;
+    Inc(i);
+  end;
+  ell := AEllipsis;
+  ellW := M(ell);
+  if ellW > contentWidth then
+  begin
+    ell := '';
+    ellW := 0;
+  end;
+  contentWidth := containerWidth - ellW;
+  for k := 0 to High(lines) do
+  begin
+    if (AWidth = 0) or (containerWidth = 0) then
+    begin
+      lines[k] := '';
+      Continue;
+    end;
+    lw := M(lines[k]);
+    { the rich layout cuts only a line wider than the box itself, the plain
+      one a line wider than the box less one [Batch 80] }
+    if ARich then
+    begin
+      if lw <= AWidth then Continue;
+    end
+    else if lw <= containerWidth then Continue;
+    j := 0;
+    while True do
+    begin
+      if (lw <= contentWidth) or (j >= 2) then
+      begin
+        lines[k] := lines[k] + ell;
+        Break;
+      end;
+      u := UTF8Decode(lines[k]);
+      n := Length(u);
+      if j = 0 then
+      begin
+        { estimateLength: characters while the sum is short, the crossing
+          one counted }
+        w := 0;
+        sub := 0;
+        while (sub < n) and (w < contentWidth) do
+        begin
+          w := w + CharW(Ord(u[sub + 1]));
+          Inc(sub);
+        end;
+      end
+      else if lw > 0 then
+        sub := Floor(n * contentWidth / lw)
+      else
+        sub := 0;
+      lines[k] := UTF8Encode(Copy(u, 1, sub));
+      lw := M(lines[k]);
+      Inc(j);
+    end;
+  end;
+  Result := lines;
+end;
+
+procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer);
+begin
+  TyExpandLabels(AList, ASpecs, nil, AMeasurer, APPI);
+end;
+
+procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
+  const AItemSpecs: TTyLabelSpecTable; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer);
+var
+  i, n, si: Integer;
+  host, cap: TTyChartElement;
+  spec: TTyLabelSpec;
+  hostFill, ink, stroke: TTyChartColor;
+  hostHasFill: Boolean;
+  strokeW: Double;
+  pos: TTyLabelPosition;
+  bounds, box: TTyRectF;
+  x, y, w, h, scale, dist, sw, atX, atY, inflate: Double;
+  ah, posAH: TTyTextAnchorH;
+  av, posAV: TTyTextAnchorV;
+  autoSpec: TTyLabelSpec;
+  pieces: TTyRtPieceArray;
+  raw: TTyRectF;
+  hostRect, hbox: TTyXYWH;
+  hasHostRect, hasBox: Boolean;
+  baseX, baseY, offX, offY, rot: Double;
+  m: TTyMat2D;
+  k: Integer;
+begin
+  if (AList = nil) or (AMeasurer = nil) then Exit;
+  if APPI > 0 then scale := APPI / 96 else scale := 1;
+  { THE COUNT IS TAKEN ONCE, and the local is documentation rather than the
+    thing that makes it safe -- which is worth saying plainly, because the
+    first version of this comment claimed otherwise and was wrong twice over.
+
+    A companion DOES carry a caption (it is copied whole from its host), so a
+    pass that re-read the length would expand its own output and never stop.
+    What prevents that today is the LANGUAGE: a Pascal `for` evaluates its
+    limit once, so `to AList.Count - 1` would behave identically. The local is
+    a guard against a future rewrite into a `while i < AList.Count` loop, and
+    a mutant that removes it therefore survives -- correctly. }
+  n := AList.Count;
+  for i := 0 to n - 1 do
+  begin
+    host := AList.Element(i);
+    if host.Caption.Text = '' then Continue;
+    si := host.Datum.SeriesIndex;
+    if (si < 0) or (si > High(ASpecs)) then Continue;
+    spec := ASpecs[si];
+    { the item's own label, read over the series' }
+    if (host.Caption.ItemSpec > 0) and (si <= High(AItemSpecs))
+      and (host.Caption.ItemSpec - 1 <= High(AItemSpecs[si])) then
+      spec := AItemSpecs[si][host.Caption.ItemSpec - 1];
+    if not (spec.Show or spec.StateShow) then Continue;
+    if spec.Position = tlpNone then Continue;
+
+    bounds := TyShapeBounds(host.Shape);
+    raw := bounds;
+    { THE RECT THE LABEL HANGS OFF: a mark's own (HostBox), a symbol's
+      (SymBox), else the shape's bounds }
+    hasBox := host.Caption.HasHostBox or host.Caption.HasSymBox;
+    if host.Caption.HasHostBox then hbox := host.Caption.HostBox
+    else hbox := host.Caption.SymBox;
+    if hasBox then
+      bounds := TyRectF(hbox.X, hbox.Y, hbox.X + hbox.W, hbox.Y + hbox.H);
+    { a fixed anchor needs no host rect -- a sankey node whose column
+      overflowed has a rect of negative height and still its label }
+    if not TyRectFIsValid(bounds) and not host.Caption.HasFixedAnchor then Continue;
+    { THE HOST'S STROKE GROWS ITS RECT, as Path.getBoundingRect grows it: by
+      the line width, or by at least five where nothing is filled, half on
+      each side. A label outside a bordered cell sits past the border.
+      [Batch 68] }
+    inflate := 0;
+    { THE HOST'S RECT AS LABELMANAGER TAKES IT -- Path.getBoundingRect, the
+      stroke added to the width and half of it taken off the corner, in that
+      order; the priority is its area [Batch 103] }
+    hasHostRect := TyRectFIsValid(raw) or hasBox;
+    if hasBox then hostRect := hbox
+    else hostRect := TyXYWH(raw.Left, raw.Top, raw.Right - raw.Left, raw.Bottom - raw.Top);
+    if (host.Style.StrokeWidthLogical > 0) and (host.Style.StrokeColor <> 0)
+      and not host.Caption.HasHostBox then
+    begin
+      sw := host.Style.StrokeWidthLogical;
+      if not host.Style.HasFill then sw := Max(sw, 5.0);
+      sw := sw * scale;
+      { the enter animation follows the shape's bounds grown by this }
+      inflate := sw / 2;
+      { a symbol's box has its stroke in it already }
+      if not host.Caption.HasSymBox then
+      begin
+        bounds.Left := bounds.Left - sw / 2;
+        bounds.Top := bounds.Top - sw / 2;
+        bounds.Right := bounds.Right + sw / 2;
+        bounds.Bottom := bounds.Bottom + sw / 2;
+        hostRect.W := hostRect.W + sw;
+        hostRect.H := hostRect.H + sw;
+        hostRect.X := hostRect.X - sw / 2;
+        hostRect.Y := hostRect.Y - sw / 2;
+      end;
+    end;
+
+    { THE BLOCK IS MEASURED WHERE IT IS LAID OUT, below; the one-run
+      caption here }
+    w := 0;
+    h := 0;
+    if not spec.Rt.Needed then
+    begin
+      AMeasurer.MeasureLine(host.Caption.Text, spec.FontName,
+        spec.FontSizeLogical, spec.FontWeight, w, h);
+      if (w <= 0) or (h <= 0) then Continue;
+    end;
+
+    dist := spec.DistanceLogical * scale;
+    { OUTSIDE IS DECIDED PER MARK: past whichever end the bar grows to. }
+    pos := spec.Position;
+    if spec.Outside then
+      case host.Caption.Outside of
+        coTop: pos := tlpTop;
+        coBottom: pos := tlpBottom;
+        coLeft: pos := tlpLeft;
+        coRight: pos := tlpRight;
+      end;
+    { the array form against the host's own rect }
+    if spec.AtXIsPercent then atX := spec.AtX * (bounds.Right - bounds.Left)
+    else atX := spec.AtX * scale;
+    if spec.AtYIsPercent then atY := spec.AtY * (bounds.Bottom - bounds.Top)
+    else atY := spec.AtY * scale;
+    if hasBox then
+    begin
+      if spec.AtXIsPercent then atX := spec.AtX * hbox.W;
+      if spec.AtYIsPercent then atY := spec.AtY * hbox.H;
+      TyLabelAnchorXYWH(hbox, pos, dist, atX, atY, x, y, ah, av);
+      { A PIN'S INSIDE LABEL sits at 40 % of its rect's height, in its head
+        (symbol.ts' SymbolClz.calculateTextPosition) [Batch 112] }
+      if (pos = tlpInside) and host.Caption.HasSymBox and (host.Caption.LgSymbol = 'pin') then
+        y := hbox.Y + hbox.H * Double(0.4);
+    end
+    else
+      TyLabelAnchor(bounds, pos, dist, atX, atY, x, y, ah, av);
+    if host.Caption.HasFixedAnchor then
+    begin
+      x := host.Caption.FixedX;
+      y := host.Caption.FixedY;
+      if host.Caption.FixedInside then pos := tlpInside else pos := tlpRight;
+      ah := host.Caption.FixedAH;
+      av := host.Caption.FixedAV;
+    end;
+    { the alignment the position implies, before the style's }
+    posAH := ah;
+    posAV := av;
+    { a fixed anchor's alignment is the mark's: it has already weighed the
+      author's in (a sunburst flips it, a radial tree takes it) }
+    if spec.HasAlignH and not host.Caption.HasFixedAnchor then ah := spec.AlignH;
+    if spec.HasAlignV and not host.Caption.HasFixedAnchor then av := spec.AlignV;
+    { OFFSET AFTER THE POSITION, and INSIDE THE ROTATION: zrender adds the
+      offset to the point and sets the origin to minus it, so the label turns
+      about the anchor and its offset runs along the turned axes. The
+      transform's translation is where the painter hangs and turns the words,
+      so it is taken whole -- getLocalTransform's own order of operations.
+      [Batch 103: it was added in screen axes.] }
+    baseX := x;
+    baseY := y;
+    offX := spec.OffsetXLogical * scale;
+    offY := spec.OffsetYLogical * scale;
+    if host.Caption.HasFixedAnchor then rot := host.Caption.FixedRotationRad
+    else rot := spec.RotationRad;
+    if host.Caption.HasFixedAnchor then
+    begin
+      { A MARK THAT FIXED ITS OWN ANCHOR set its own origin too (a radial
+        tree's is the box's centre: textConfig.origin 'center'), and an
+        origin of its own keeps zrender from moving it to minus the offset
+        -- the offset is then a plain translation }
+      x := baseX + offX;
+      y := baseY + offY;
+    end
+    else if TyLabelLocalTransform(baseX + offX, baseY + offY, -offX, -offY, rot, 1, 1, m) then
+    begin
+      x := m[4];
+      y := m[5];
+    end
+    else
+    begin
+      x := 0;
+      y := 0;
+    end;
+
+    hostFill := host.Style.FillColor;
+    hostHasFill := host.Style.HasFill;
+    if host.Caption.HostTransparent then
+    begin
+      hostFill := 0;
+      hostHasFill := True;
+    end;
+    pieces := nil;
+    if spec.Rt.Needed then
+    begin
+      { THE BLOCK: the label's styles in its font, 'inherit' the host's
+        colour (upstream's inheritColor is the bar's or symbol's visual
+        colour), laid out about the anchor with the host's defaults --
+        the automatic ink and halo, as updateInnerText hands them, and the
+        alignment the position implies. A mark that fixed its own anchor
+        fixed its alignment too. }
+      autoSpec := spec;
+      if host.Caption.HasFixedAnchor then
+      begin
+        autoSpec.Rt.Style.Align := rtaNone;
+        autoSpec.Rt.Style.VAlign := rtvNone;
+      end;
+      pieces := TyLabelBlockPieces(autoSpec, host.Caption.Text, hostFill,
+        hostHasFill, host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
+        TyLabelIsInside(pos), ah, av, scale, AMeasurer);
+      if Length(pieces) = 0 then Continue;
+      { THE BOX IS THE UNION OF WHAT IT DRAWS, turned as it is drawn --
+        zrender's getBoundingRect, which the label layout reads }
+      box := TyRtDeviceBox(pieces, x, y, rot, scale);
+    end
+    else
+    { The box the caption occupies, from the anchor and the pinned edge. This
+      is what the companion's shape IS -- so the hit test and the ink describe
+      the same rectangle, which is the whole reason the caption gets an entry
+      of its own rather than a note on somebody else's. }
+      box := TyAnchorBox(x, y, w, h, ah, av);
+
+    cap := TyChartElement(TyShapeRect(box));
+    cap.Caption := host.Caption;
+    { WHAT THE LABEL LAYOUT READS [Batch 103] }
+    if host.Caption.HasFixedAnchor then cap.Caption.LmKind := 2
+    else cap.Caption.LmKind := 1;
+    cap.Caption.LmHostPlus1 := i + 1;
+    cap.Caption.LmBaseX := baseX;
+    cap.Caption.LmBaseY := baseY;
+    cap.Caption.LmOffX := offX;
+    cap.Caption.LmOffY := offY;
+    { textConfig.rotation is there when the label wrote `rotate`; nought is
+      the same turn either way }
+    cap.Caption.LmHasAttachedRot := (not host.Caption.HasFixedAnchor) and (rot <> 0);
+    cap.Caption.LmAttachedRot := rot;
+    cap.Caption.LmPosAH := posAH;
+    cap.Caption.LmPosAV := posAV;
+    cap.Caption.LmStyleHasAH := spec.HasAlignH or host.Caption.HasFixedAnchor;
+    cap.Caption.LmStyleHasAV := spec.HasAlignV or host.Caption.HasFixedAnchor;
+    cap.Caption.LmStyleAH := ah;
+    cap.Caption.LmStyleAV := av;
+    cap.Caption.LmHasHostRect := hasHostRect;
+    cap.Caption.LmHostRect := hostRect;
+    cap.Caption.LmMarginType := spec.MarginType;
+    for k := 0 to 3 do cap.Caption.LmMargin[k] := spec.MarginLogical[k] * scale;
+    cap.Caption.LmTextW := w;
+    cap.Caption.LmTextH := h;
+    { A WRITTEN text border is counted in the text's rect; the automatic
+      halo is not (Text.ts _updatePlainTexts) }
+    cap.Caption.LmStrokeW := 0;
+    if spec.HasBorderColour and not spec.BorderColourNone and spec.HasBorderWidth
+      and (spec.BorderWidthLogical > 0) then
+      cap.Caption.LmStrokeW := spec.BorderWidthLogical * scale;
+    cap.Caption.LmInkFill := hostFill;
+    cap.Caption.LmInkHasFill := hostHasFill;
+    cap.Caption.LmInkGradient := host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone);
+    cap.Caption.LmInkInside := TyLabelIsInside(pos);
+    { NO FILL AND NO STROKE. The rectangle is there so the pointer can find
+      the words, not so anything is painted in it -- a filled one would draw a
+      solid block behind every label. }
+    { THE INK AND THE HALO, from the host's fill -- a pictorial bar's target
+      counts as filled and transparent -- and from where the words ended up:
+      a bar's `outside` is not inside. }
+    TyLabelInk(spec, hostFill, hostHasFill,
+      host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
+      TyLabelIsInside(pos), ink, stroke, strokeW);
+    cap.Caption.Colour := ink;
+    cap.Caption.StrokeColour := stroke;
+    cap.Caption.StrokeWidthLogical := strokeW;
+    TyLabelStampEmphasis(spec, hostFill, hostHasFill,
+      host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
+      TyLabelIsInside(pos), cap.Caption);
+    cap.Style.Alpha := host.Style.Alpha;
+    cap.Z := host.Z;
+    { ABOVE ITS OWN MARK. Without the lift the two tie on (Z, Z2) and fall back
+      to insertion order, which puts the caption on top anyway -- but only
+      because it was appended later, and that is an accident rather than a
+      rule. Saying it makes the ordering survive a future series `z`. }
+    cap.Z2 := host.Z2 + spec.Z2Lift;
+    if host.Caption.HasFixedZ2 then cap.Z2 := host.Caption.FixedZ2;
+    { It answers for the same datum as the thing it names: hovering a bar's
+      number has to report that bar. }
+    cap.Silent := host.Silent;
+    cap.Datum := host.Datum;
+    { built for a state only: hidden until the state shows it [Batch 88] }
+    cap.Ignore := not spec.Show;
+    { THE ENTER ANIMATION'S VIEW: a label of this datum, fading in, and --
+      unless the mark fixed its own anchor -- hanging off its host as the
+      host grows: zrender recomputes a text's place from its host's current
+      rect every frame (Element.updateInnerText) [Batch 89] }
+    cap.Anim := Default(TTyChartAnim);
+    cap.Anim.Role := carLabel;
+    cap.Anim.Series := host.Datum.SeriesIndex;
+    cap.Anim.Index := host.Datum.DataIndex;
+    if not host.Caption.HasFixedAnchor then
+    begin
+      cap.Anim.HostPlus1 := i + 1;
+      cap.Anim.LabelPos := Ord(pos);
+      cap.Anim.LabelDist := dist;
+      cap.Anim.LabelAtXPct := spec.AtXIsPercent;
+      cap.Anim.LabelAtYPct := spec.AtYIsPercent;
+      if spec.AtXIsPercent then cap.Anim.LabelAtX := spec.AtX
+      else cap.Anim.LabelAtX := spec.AtX * scale;
+      if spec.AtYIsPercent then cap.Anim.LabelAtY := spec.AtY
+      else cap.Anim.LabelAtY := spec.AtY * scale;
+      cap.Anim.LabelInflate := inflate;
+    end;
+    cap.Caption.FontName := spec.FontName;
+    cap.Caption.FontSizeLogical := spec.FontSizeLogical;
+    cap.Caption.FontWeight := spec.FontWeight;
+    cap.Caption.X := x;
+    cap.Caption.Y := y;
+    cap.Caption.AnchorH := ah;
+    cap.Caption.AnchorV := av;
+    cap.Caption.RotationRad := spec.RotationRad;
+    if host.Caption.HasFixedAnchor then
+      cap.Caption.RotationRad := host.Caption.FixedRotationRad;
+    cap.Caption.Truncate := spec.Overflow = tloTruncate;
+    cap.Caption.RtPieces := pieces;
+    cap.Caption.RtEmph := nil;
+    cap.Caption.RtScale := scale;
+    if Length(pieces) > 0 then
+      cap.Caption.RtEmph := TyRtReink(pieces, cap.Caption.EmphColour, True,
+        cap.Caption.EmphStrokeColour, cap.Caption.EmphStrokeWidthLogical);
+    AList.Add(cap);
+  end;
+end;
+
+end.

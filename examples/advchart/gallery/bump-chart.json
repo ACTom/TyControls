@@ -1,0 +1,277 @@
+{
+ "title": {
+  "text": "Bump Chart (Ranking)"
+ },
+ "tooltip": {
+  "trigger": "item"
+ },
+ "grid": {
+  "left": 30,
+  "right": 110,
+  "bottom": 30,
+  "containLabel": true
+ },
+ "toolbox": {
+  "feature": {
+   "saveAsImage": {}
+  }
+ },
+ "xAxis": {
+  "type": "category",
+  "splitLine": {
+   "show": true
+  },
+  "axisLabel": {
+   "margin": 30,
+   "fontSize": 16
+  },
+  "boundaryGap": false,
+  "data": [
+   "2001",
+   "2002",
+   "2003",
+   "2004",
+   "2005",
+   "2006"
+  ]
+ },
+ "yAxis": {
+  "type": "value",
+  "axisLabel": {
+   "margin": 30,
+   "fontSize": 16,
+   "formatter": "#{value}"
+  },
+  "inverse": true,
+  "interval": 1,
+  "min": 1,
+  "max": 9
+ },
+ "series": [
+  {
+   "name": "Orange",
+   "symbolSize": 20,
+   "type": "line",
+   "smooth": true,
+   "emphasis": {
+    "focus": "series"
+   },
+   "endLabel": {
+    "show": true,
+    "formatter": "{a}",
+    "distance": 20
+   },
+   "lineStyle": {
+    "width": 4
+   },
+   "data": [
+    2,
+    4,
+    6,
+    9,
+    1,
+    3
+   ]
+  },
+  {
+   "name": "Tomato",
+   "symbolSize": 20,
+   "type": "line",
+   "smooth": true,
+   "emphasis": {
+    "focus": "series"
+   },
+   "endLabel": {
+    "show": true,
+    "formatter": "{a}",
+    "distance": 20
+   },
+   "lineStyle": {
+    "width": 4
+   },
+   "data": [
+    7,
+    8,
+    8,
+    8,
+    4,
+    7
+   ]
+  },
+  {
+   "name": "Apple",
+   "symbolSize": 20,
+   "type": "line",
+   "smooth": true,
+   "emphasis": {
+    "focus": "series"
+   },
+   "endLabel": {
+    "show": true,
+    "formatter": "{a}",
+    "distance": 20
+   },
+   "lineStyle": {
+    "width": 4
+   },
+   "data": [
+    8,
+    9,
+    4,
+    3,
+    6,
+    9
+   ]
+  },
+  {
+   "name": "Sakana",
+   "symbolSize": 20,
+   "type": "line",
+   "smooth": true,
+   "emphasis": {
+    "focus": "series"
+   },
+   "endLabel": {
+    "show": true,
+    "formatter": "{a}",
+    "distance": 20
+   },
+   "lineStyle": {
+    "width": 4
+   },
+   "data": [
+    3,
+    3,
+    2,
+    5,
+    2,
+    2
+   ]
+  },
+  {
+   "name": "Banana",
+   "symbolSize": 20,
+   "type": "line",
+   "smooth": true,
+   "emphasis": {
+    "focus": "series"
+   },
+   "endLabel": {
+    "show": true,
+    "formatter": "{a}",
+    "distance": 20
+   },
+   "lineStyle": {
+    "width": 4
+   },
+   "data": [
+    9,
+    5,
+    3,
+    7,
+    7,
+    1
+   ]
+  },
+  {
+   "name": "Iwashi",
+   "symbolSize": 20,
+   "type": "line",
+   "smooth": true,
+   "emphasis": {
+    "focus": "series"
+   },
+   "endLabel": {
+    "show": true,
+    "formatter": "{a}",
+    "distance": 20
+   },
+   "lineStyle": {
+    "width": 4
+   },
+   "data": [
+    5,
+    1,
+    5,
+    4,
+    8,
+    8
+   ]
+  },
+  {
+   "name": "Snappy Fish",
+   "symbolSize": 20,
+   "type": "line",
+   "smooth": true,
+   "emphasis": {
+    "focus": "series"
+   },
+   "endLabel": {
+    "show": true,
+    "formatter": "{a}",
+    "distance": 20
+   },
+   "lineStyle": {
+    "width": 4
+   },
+   "data": [
+    6,
+    2,
+    9,
+    1,
+    5,
+    6
+   ]
+  },
+  {
+   "name": "Lemon",
+   "symbolSize": 20,
+   "type": "line",
+   "smooth": true,
+   "emphasis": {
+    "focus": "series"
+   },
+   "endLabel": {
+    "show": true,
+    "formatter": "{a}",
+    "distance": 20
+   },
+   "lineStyle": {
+    "width": 4
+   },
+   "data": [
+    1,
+    6,
+    1,
+    6,
+    9,
+    5
+   ]
+  },
+  {
+   "name": "Pasta",
+   "symbolSize": 20,
+   "type": "line",
+   "smooth": true,
+   "emphasis": {
+    "focus": "series"
+   },
+   "endLabel": {
+    "show": true,
+    "formatter": "{a}",
+    "distance": 20
+   },
+   "lineStyle": {
+    "width": 4
+   },
+   "data": [
+    4,
+    7,
+    7,
+    2,
+    3,
+    4
+   ]
+  }
+ ]
+}

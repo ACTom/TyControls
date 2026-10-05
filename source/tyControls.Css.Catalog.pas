@@ -5,10 +5,10 @@ unit tyControls.Css.Catalog;
   Change the theme and re-run the script. test.css.catalog guards the two against drift.
 
   The machine-readable tycss vocabulary for the design-time StyleOverride editor:
-    - TyCatalogTokens   : the --custom-property names a theme defines (258 of them).
+    - TyCatalogTokens   : the --custom-property names a theme defines (263 of them).
                           OPEN axis -- a theme may invent more, so the editor SUGGESTS these but
                           must not reject an unknown one.
-    - TyCatalogTypeKeys : the control selector heads (253 of them), for the
+    - TyCatalogTypeKeys : the control selector heads (300 of them), for the
                           controller-level (selector-carrying) override.
 
   Property names, colour functions and pseudo-states are closed sets and live in code beside their
@@ -18,14 +18,19 @@ unit tyControls.Css.Catalog;
 interface
 
 const
-  TyCatalogTokens: array[0..257] of string = (
+  TyCatalogTokens: array[0..262] of string = (
     '--accent',
     '--accent-active',
     '--accent-hover',
+    '--advchart-axispointer-margin',
     '--advchart-label-margin',
     '--advchart-minor-tick-length',
     '--advchart-name-gap',
     '--advchart-tick-length',
+    '--advchart-tooltip-gap',
+    '--advchart-tooltip-gutter',
+    '--advchart-tooltip-marker',
+    '--advchart-tooltip-marker-gap',
     '--alert-close-gap',
     '--alert-close-size',
     '--alert-icon-gap',
@@ -278,18 +283,52 @@ const
     '--treeselect-drop-height',
     '--warning');
 
-  TyCatalogTypeKeys: array[0..252] of string = (
+  TyCatalogTypeKeys: array[0..299] of string = (
     'TyActivityBar',
     'TyActivityBarFill',
     'TyActivityIndicator',
     'TyActivityIndicatorFill',
     'TyAdvChart',
     'TyAdvChartAxisLabel',
+    'TyAdvChartAxisLabelPrimary',
     'TyAdvChartAxisLine',
     'TyAdvChartAxisName',
+    'TyAdvChartAxisPointer',
+    'TyAdvChartAxisPointerLabel',
+    'TyAdvChartAxisPointerShadow',
     'TyAdvChartAxisTick',
+    'TyAdvChartBarBackground',
+    'TyAdvChartBreadcrumb',
+    'TyAdvChartCandleDown',
+    'TyAdvChartCandleUp',
+    'TyAdvChartDataZoom',
+    'TyAdvChartDataZoomBackground',
+    'TyAdvChartDataZoomBorder',
+    'TyAdvChartDataZoomBrush',
+    'TyAdvChartDataZoomFiller',
+    'TyAdvChartDataZoomHandle',
+    'TyAdvChartDataZoomMoveHandle',
+    'TyAdvChartDataZoomShadow',
+    'TyAdvChartDataZoomShadowSelected',
+    'TyAdvChartEmptyCircle',
+    'TyAdvChartGaugeDetail',
+    'TyAdvChartLabel',
+    'TyAdvChartLabelOnDark',
+    'TyAdvChartLabelOnLight',
+    'TyAdvChartLabelOnMid',
+    'TyAdvChartLegend',
+    'TyAdvChartLegendBackground',
+    'TyAdvChartLegendBorder',
+    'TyAdvChartLegendInactive',
+    'TyAdvChartLegendPageIcon',
+    'TyAdvChartLegendPageIconInactive',
+    'TyAdvChartLegendPageText',
+    'TyAdvChartLegendSelector',
+    'TyAdvChartLoading',
+    'TyAdvChartLoadingSpinner',
     'TyAdvChartMinorSplitLine',
     'TyAdvChartMinorTick',
+    'TyAdvChartSankeyLink',
     'TyAdvChartSeries1',
     'TyAdvChartSeries2',
     'TyAdvChartSeries3',
@@ -298,8 +337,21 @@ const
     'TyAdvChartSeries6',
     'TyAdvChartSeries7',
     'TyAdvChartSeries8',
+    'TyAdvChartSeries9',
     'TyAdvChartSplitArea',
     'TyAdvChartSplitLine',
+    'TyAdvChartSubtitle',
+    'TyAdvChartTitle',
+    'TyAdvChartTooltip',
+    'TyAdvChartTooltipValue',
+    'TyAdvChartTreeEdge',
+    'TyAdvChartTreeNode',
+    'TyAdvChartTreemapLabel',
+    'TyAdvChartVisualMap',
+    'TyAdvChartVisualMapBackground',
+    'TyAdvChartVisualMapBorder',
+    'TyAdvChartVisualMapHandle',
+    'TyAdvChartVisualMapInactive',
     'TyAlert',
     'TyAlertClose',
     'TyAnalogClock',

@@ -46,7 +46,7 @@ type
     procedure TestTimeFractionIsPaddedNotTruncated;
     procedure TestTimeZoneDesignatorsAreApplied;
     procedure TestTimeWithoutAZoneIsLocal;
-    procedure TestTimeRejectsImpossibleComponents;
+    procedure TestTimeCarriesOverLikeDateUTC;
     procedure TestTimeRejectsTrailingJunk;
     procedure TestTimeNumberIsAlreadyEpochMs;
     procedure TestTimeRoundTripsThroughTDateTime;
@@ -87,7 +87,7 @@ type
     { ---- extent ---- }
     procedure TestExtentIgnoresGaps;
     procedure TestAllGapsHasNoExtent;
-    procedure TestExtentIgnoresInfinity;
+    procedure TestExtentKeepsInfinityForTheAxisToDrop;
     procedure TestPositiveOnlyExtentIsForTheLogAxis;
     procedure TestExtentFollowsTheFilter;
     procedure TestExtentIsInvalidatedByAnAppend;
@@ -118,6 +118,7 @@ type
     procedure TestAnAppendRetiresTheInvertedIndex;
     procedure TestACalculatedColumnIsVisibleToDataExtent;
     procedure TestSetCalculatedRefusesWhatItCannotHonour;
+    procedure TestGetNameByRawOutlivesAFilter;
   end;
 implementation
 
@@ -169,7 +170,11 @@ begin
     its own: it is simply not a number. }
   AssertTrue('dash', IsNan(TyParseDataValue(TyDataText('-'), ddtFloat)));
   AssertTrue('empty', IsNan(TyParseDataValue(TyDataText(''), ddtFloat)));
-  AssertTrue('blank', IsNan(TyParseDataValue(TyDataText('   '), ddtFloat)));
+  { [Batch 53: this pinned '   ' as no data. Upstream's parseDataValue is
+    Number() of anything but the exact empty string, and Number('   ') is
+    nought -- upstream draws that bar at zero.] }
+  AssertEquals('blank is Number()''s nought', 0,
+    TyParseDataValue(TyDataText('   '), ddtFloat), 0);
   AssertTrue('word', IsNan(TyParseDataValue(TyDataText('none'), ddtFloat)));
 end;
 
@@ -213,8 +218,11 @@ begin
   AssertEquals(1, TyParseDataValue(TyDataBool(True), ddtFloat), 0);
   AssertEquals(0, TyParseDataValue(TyDataBool(False), ddtFloat), 0);
   { A boolean names no instant, so it is a gap on a time dimension rather than
-    the epoch. }
-  AssertTrue('time', IsNan(TyParseDataValue(TyDataBool(True), ddtTime)));
+    the epoch.
+    [Batch 53: WRONG -- upstream's parseDate is new Date(Math.round(true)),
+    the first millisecond of 1970; false is the epoch itself.] }
+  AssertEquals('time true', 1, TyParseDataValue(TyDataBool(True), ddtTime), 0);
+  AssertEquals('time false', 0, TyParseDataValue(TyDataBool(False), ddtTime), 0);
 end;
 
 procedure TAdvChartDataTest.TestOrdinalIsNotParsedByTheValueParser;
@@ -248,18 +256,20 @@ var ms, base: Double;
 begin
   base := TyDateTimeToMs(EncodeDate(2024, 3, 5) + EncodeTime(0, 0, 1, 0));
   { .5 of a second is 500 ms, not 5. Reading the digits as a plain integer is
-    the obvious mistake and it is silently wrong by two orders of magnitude. }
+    the obvious mistake and it is silently wrong by two orders of magnitude.
+    [Batch 53: and it is upstream's reading -- `+match[7].substring(0, 3)`,
+    so '.5' IS 5 ms and '.05' 5 too. Overturned to match.] }
   AssertTrue(TyParseDateMs('2024-03-05T00:00:01.5', ms, True));
-  AssertEquals('one digit', base + 500, ms, 0);
+  AssertEquals('one digit', base + 5, ms, 0);
   AssertTrue(TyParseDateMs('2024-03-05T00:00:01.05', ms, True));
-  AssertEquals('two digits', base + 50, ms, 0);
+  AssertEquals('two digits', base + 5, ms, 0);
   AssertTrue(TyParseDateMs('2024-03-05T00:00:01.125', ms, True));
   AssertEquals('three digits', base + 125, ms, 0);
   { Finer than this store's resolution: dropped, as ECharts drops it. }
   AssertTrue(TyParseDateMs('2024-03-05T00:00:01.1259999', ms, True));
   AssertEquals('surplus digits', base + 125, ms, 0);
   AssertTrue('a comma is a decimal point here', TyParseDateMs('2024-03-05T00:00:01,5', ms, True));
-  AssertEquals(base + 500, ms, 0);
+  AssertEquals(base + 5, ms, 0);
 end;
 
 procedure TAdvChartDataTest.TestTimeZoneDesignatorsAreApplied;
@@ -287,20 +297,27 @@ begin
   AssertEquals(asUTC + GetLocalTimeOffset * 60000.0, asLocal, 0);
 end;
 
-procedure TAdvChartDataTest.TestTimeRejectsImpossibleComponents;
+procedure TAdvChartDataTest.TestTimeCarriesOverLikeDateUTC;
 var ms: Double;
 begin
   { JavaScript would wrap month 13 into next January. A gap says "this is a
-    typo"; a point silently a year away does not. }
-  AssertFalse('month 13', TyParseDateMs('2024-13-01', ms, True));
-  AssertFalse('month 0', TyParseDateMs('2024-00-01', ms, True));
-  AssertFalse('day 32', TyParseDateMs('2024-01-32', ms, True));
-  AssertFalse('30 February', TyParseDateMs('2024-02-30', ms, True));
-  AssertTrue('but 29 February in a leap year', TyParseDateMs('2024-02-29', ms, True));
-  AssertFalse('and not in a common one', TyParseDateMs('2023-02-29', ms, True));
-  AssertFalse('hour 24', TyParseDateMs('2024-01-01T24:00', ms, True));
-  AssertFalse('minute 60', TyParseDateMs('2024-01-01T00:60', ms, True));
-  AssertTrue('the answer is NaN, not a stale value', IsNan(ms));
+    typo"; a point silently a year away does not.
+    [Batch 53: overturned. Upstream hands the fields to Date.UTC, which
+    wraps, and parity is the rule: month 13 IS next January.] }
+  AssertTrue('month 13', TyParseDateMs('2024-13-01', ms, True));
+  AssertEquals('is next January', TyDateTimeToMs(EncodeDate(2025, 1, 1)), ms, 0);
+  AssertTrue('month 0', TyParseDateMs('2024-00-01', ms, True));
+  AssertEquals('is the December before', TyDateTimeToMs(EncodeDate(2023, 12, 1)), ms, 0);
+  AssertTrue('day 32', TyParseDateMs('2024-01-32', ms, True));
+  AssertEquals('is 1 February', TyDateTimeToMs(EncodeDate(2024, 2, 1)), ms, 0);
+  AssertTrue('day 0', TyParseDateMs('2024-03-00', ms, True));
+  AssertEquals('is falsy and so the first', TyDateTimeToMs(EncodeDate(2024, 3, 1)), ms, 0);
+  AssertTrue('29 February in a common year', TyParseDateMs('2023-02-29', ms, True));
+  AssertEquals('is 1 March', TyDateTimeToMs(EncodeDate(2023, 3, 1)), ms, 0);
+  AssertTrue('hour 24', TyParseDateMs('2024-01-01T24:00', ms, True));
+  AssertEquals('is the next midnight', TyDateTimeToMs(EncodeDate(2024, 1, 2)), ms, 0);
+  AssertTrue('minute 60', TyParseDateMs('2024-01-01T00:60', ms, True));
+  AssertEquals('is one o''clock', TyDateTimeToMs(EncodeDate(2024, 1, 1) + EncodeTime(1, 0, 0, 0)), ms, 0);
 end;
 
 procedure TAdvChartDataTest.TestTimeRejectsTrailingJunk;
@@ -316,7 +333,11 @@ procedure TAdvChartDataTest.TestTimeNumberIsAlreadyEpochMs;
 begin
   { A number on a time dimension is a timestamp, not something to parse. }
   AssertEquals(1700000000000.0, TyParseDataValue(TyDataNum(1700000000000.0), ddtTime), 0);
-  AssertEquals('rounded to the millisecond', 1700000000001.0,
+  { KEPT AS WRITTEN: upstream parses only what is not a number, and the time
+    scale rounds where it places a value, not where it stores one.
+    [Revised in batch 42: this pinned a rounding on the way in, which moved
+    a half-millisecond extent end off upstream's.] }
+  AssertEquals('not rounded on the way in', 1700000000000.6,
     TyParseDataValue(TyDataNum(1700000000000.6), ddtTime), 0);
 end;
 
@@ -455,8 +476,13 @@ begin
   FS.AppendRow([TyDataNum(1.5)]);
   AssertEquals('an index into the list', 2, FS.Get(0, 0), 0);
   AssertEquals('Wed', FS.GetOrdinalText(0, 0));
-  AssertTrue('out of range names no category', IsNan(FS.Get(0, 1)));
-  AssertTrue('and neither does half of one', IsNan(FS.Get(0, 2)));
+  { KEPT AS IT IS, as upstream's parseAndCollect returns it: past the list
+    is still a place on the axis, which a max can reach and the plot clips
+    otherwise; the axis rounds it where it places it.
+    [Revised in batch 44: both of these were gaps.] }
+  AssertEquals('past the list is still an index', 7, FS.Get(0, 1), 0);
+  AssertEquals('and half of one is kept for the axis to round', 1.5, FS.Get(0, 2), 0);
+  AssertEquals('which names no category', '', FS.GetOrdinalText(0, 1));
 end;
 
 procedure TAdvChartDataTest.TestANumberOnACollectingAxisIsALabel;
@@ -790,7 +816,7 @@ begin
   AssertTrue('and it does not hand back a number', IsNan(lo) and IsNan(hi));
 end;
 
-procedure TAdvChartDataTest.TestExtentIgnoresInfinity;
+procedure TAdvChartDataTest.TestExtentKeepsInfinityForTheAxisToDrop;
 var lo, hi: Double;
 begin
   { An infinite bound poisons every nice-tick calculation downstream, and there
@@ -798,7 +824,12 @@ begin
     arrive, and the scan that a filter forces instead. Mutation found that only
     the first was covered -- an unfiltered store never reaches the loop -- so
     the filter here is on a SECOND dimension, which drops a row while leaving
-    both infinities in the window. }
+    both infinities in the window.
+    [Batch 53: overturned. Upstream's store keeps an infinity as an extent
+    end; it is the AXIS that drops a series whose extent is not finite
+    (unionExtentFromExtent), so one 'Infinity' blanks only an axis nothing
+    else is on. Both places now keep them; a log axis' filter still drops
+    +Infinity, as upstream's does.] }
   FS.AddDimension('v', ddtFloat);
   FS.AddDimension('k', ddtFloat);
   FS.AppendRow([3.0, 1.0]);
@@ -807,11 +838,17 @@ begin
   FS.AppendRow([NaN, 1.0]);
   FS.AppendRow([500.0, 9.0]);
   AssertTrue('kept as the rows arrived', FS.DataExtent(0, lo, hi));
+  AssertTrue('minus infinity is the low end', IsInfinite(lo) and (lo < 0));
+  AssertTrue('infinity the high one', IsInfinite(hi) and (hi > 0));
+  AssertTrue('a log axis drops both', FS.DataExtent(0, lo, hi, defPositive));
   AssertEquals(3, lo, 0);
   AssertEquals(500, hi, 0);
   FS.SelectRange(1, 0, 5);
   AssertEquals('the infinities are still in the window', 4, FS.Count);
   AssertTrue('and scanned', FS.DataExtent(0, lo, hi));
+  AssertTrue('scanned: minus infinity', IsInfinite(lo) and (lo < 0));
+  AssertTrue('scanned: infinity', IsInfinite(hi) and (hi > 0));
+  AssertTrue('a log axis drops both, scanned', FS.DataExtent(0, lo, hi, defPositive));
   AssertEquals(3, lo, 0);
   AssertEquals(3, hi, 0);
 end;
@@ -1173,8 +1210,11 @@ begin
     IsNan(TyParseDataValue(TyDataNum(NaN), ddtTime)));
   AssertTrue('so is an infinity',
     IsNan(TyParseDataValue(TyDataNum(Infinity), ddtTime)));
-  AssertTrue('and so is a number past what an Int64 can hold',
-    IsNan(TyParseDataValue(TyDataNum(1e30), ddtTime)));
+  { A number past what an Int64 can hold is still a number: nothing rounds
+    it on the way in any more, so there is nothing for it to overflow.
+    [Revised in batch 42: this was a gap, when the branch still rounded.] }
+  AssertEquals('a number past an Int64 is still a number', 1e30,
+    TyParseDataValue(TyDataNum(1e30), ddtTime), 0);
   { And an ordinary epoch millisecond still comes through exactly -- the guard
     must not cost the range the type is for. }
   AssertEquals('an ordinary instant is unharmed', 1709596800000.0,
@@ -1274,6 +1314,38 @@ begin
     Fail('writing past the last row should raise');
   except
     on EInvalidOperation do ;
+  end;
+end;
+
+procedure TAdvChartDataTest.TestGetNameByRawOutlivesAFilter;
+var st: TTyDataStore;
+begin
+  { GetName SPEAKS THE VIEW'S LANGUAGE and GetNameByRaw the input's, and the
+    difference only exists once something has been filtered out. A predicate
+    handed to FilterSelf is given a RAW index -- it is deciding which raw rows
+    survive, so it cannot speak the view's language -- and a predicate that
+    looked the name up the other way would read a different row's name, or
+    none at all. }
+  st := TTyDataStore.Create;
+  try
+    st.AddDimension('v', ddtFloat);
+    st.AppendRow([TyDataNum(1)]);
+    st.AppendRow([TyDataNum(2)]);
+    st.AppendRow([TyDataNum(3)]);
+    st.SetName(0, 'a');
+    st.SetName(1, 'b');
+    st.SetName(2, 'c');
+    st.SelectRange(0, 2.5, 4);
+    AssertEquals('one row left', 1, st.Count);
+    AssertEquals('and the view calls it by its own name', 'c', st.GetName(0));
+    AssertEquals('while the raw getter still answers for the row that went',
+      'a', st.GetNameByRaw(0));
+    AssertEquals('', 'b', st.GetNameByRaw(1));
+    AssertEquals('', 'c', st.GetNameByRaw(2));
+    AssertEquals('and refuses a row that never existed', '',
+      st.GetNameByRaw(9));
+  finally
+    st.Free;
   end;
 end;
 

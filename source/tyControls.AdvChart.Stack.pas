@@ -65,72 +65,42 @@ function TyDecimalPrecision(AValue: Double): Integer;
 
 implementation
 
+uses tyControls.AdvChart.Scale;
+
 const
-  { getPrecision gives up past 15 places, and round() clamps at 20. Both
-    numbers are upstream's. }
-  cMaxProbedPrecision = 15;
+  { round() clamps at 20 places, and addSafe hands back the raw sum past it.
+    Upstream's TO_FIXED_SUPPORTED_PRECISION_MAX. }
   cMaxFixedPrecision = 20;
 
-  { 10^0 .. 10^15, every one exactly representable in a Double (10^15 is well
-    under 2^53), so the probe below divides by an exact power and a value that
-    really does have i decimals round-trips exactly. }
-  cPow10: array[0..15] of Double = (
-    1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000,
-    1000000000, 10000000000, 100000000000, 1000000000000,
-    10000000000000, 100000000000000, 1000000000000000);
-
 function TyDecimalPrecision(AValue: Double): Integer;
-var
-  i, dot, ePos, expv: Integer;
-  v: Double;
-  s: string;
-  fs: TFormatSettings;
 begin
-  if IsNan(AValue) or IsInfinite(AValue) then Exit(0);
-  v := Abs(AValue);
-  { Upstream's own guard: below 1e-14 the round-trip probe stops being
-    trustworthy, so it falls through to reading the printed form instead. }
-  if v > 1e-14 then
-    for i := 0 to cMaxProbedPrecision - 1 do
-      if Round(AValue * cPow10[i]) / cPow10[i] = AValue then
-        Exit(i);
-
-  { The slow, safe route: count the decimals of the shortest text that reads
-    back as this number, exponent included -- 3.4e-12 has fourteen. }
-  fs := DefaultFormatSettings;
-  fs.DecimalSeparator := '.';
-  s := LowerCase(FloatToStr(AValue, fs));
-  expv := 0;
-  ePos := Pos('e', s);
-  if ePos > 0 then
-  begin
-    expv := StrToIntDef(Copy(s, ePos + 1, Length(s) - ePos), 0);
-    s := Copy(s, 1, ePos - 1);
-  end;
-  Result := 0;
-  dot := Pos('.', s);
-  if dot > 0 then Result := Length(s) - dot;
-  Result := Result - expv;
-  if Result < 0 then Result := 0;
+  { ONE getPrecision, the axis' exact one. This unit had its own copy, which
+    read what the probe could not settle from FloatToStr's fifteen digits
+    rather than the shortest text that reads back. }
+  Result := TyGetPrecision(AValue);
 end;
 
 function TyAddSafe(A, B: Double): Double;
 var
   p: Integer;
-  e: Double;
 begin
   Result := A + B;
   if IsNan(Result) or IsInfinite(Result) then Exit;
   p := Max(TyDecimalPrecision(A), TyDecimalPrecision(B));
-  { Past the clamp there is nothing sensible to round to, and upstream returns
-    the raw sum rather than inventing a precision. }
-  if (p > cMaxFixedPrecision) or (p > cMaxProbedPrecision) then Exit;
-  e := cPow10[p];
-  Result := Round(Result * e) / e;
+  if p > cMaxFixedPrecision then Exit;
+  { `round(sum, p)`, which is `+sum.toFixed(p)`: the digits from the binary
+    value, and from 1e21 up the number itself. It was Round(sum * 10^p) /
+    10^p, and stacking 1.23456789 on 1e17 took that product past Int64 and
+    the whole render with it. }
+  Result := TyJsToFixed(Result, p);
 end;
 
-{ The four types that carry `stack` in ECharts 6.1: BarSeries, PictorialBar,
-  LineSeries and ScatterSeries all mix in SeriesStackOptionMixin.
+{ The types that stack in ECharts 6.1: bar, line and scatter.
+  [Revised in batch 42: pictorialBar was on this list. It carries the option
+  through SeriesStackOptionMixin, but PictorialBarSeries.getInitialData sets
+  `stack` to null before the data is made -- a stacked pictorial bar stands on
+  the axis like any other, and the value axis spans the values, not their
+  sums.]
 
   Deliberately NOT the same list as AdvChart.Marks' renderer table, and not a
   second copy of it either: "can these values accumulate" and "can this be
@@ -139,8 +109,7 @@ end;
   over the rows. }
 function TypeCanStack(const AType: string): Boolean;
 begin
-  Result := (AType = 'bar') or (AType = 'line')
-         or (AType = 'scatter') or (AType = 'pictorialBar');
+  Result := (AType = 'bar') or (AType = 'line') or (AType = 'scatter');
 end;
 
 function SeriesNode(AOption: TTyChartOption; ASlot: Integer): TJSONObject;
@@ -273,6 +242,7 @@ var
         me.Store.SetCalculated(me.OverCol, r, over);
       end;
       answer[me.Slot].HasBelow := idx > 0;
+      if idx > 0 then answer[me.Slot].OnSlot := AMembers[idx - 1].Slot;
     end;
   end;
 
@@ -292,6 +262,7 @@ begin
     answer[i].HasBelow := False;
     answer[i].ResultCol := -1;
     answer[i].OverCol := -1;
+    answer[i].OnSlot := -1;
   end;
   Result := answer;
   if AOption = nil then Exit;
@@ -301,7 +272,13 @@ begin
     if i > High(AStores) then Break;
     b := ABindings[i];
     st := AStores[i];
-    if (st = nil) or (not b.Resolved) or (not b.HasAxes) then Continue;
+    { A HIDDEN SERIES IS NOT IN THE STACK, and the pre-seeded answer already
+      says what that means -- it looks exactly like a series that never
+      stacked. Accumulate then takes each member from the first ADMITTING
+      member below it, so the one above a hidden member lands on the next
+      survivor down rather than floating where it was. }
+    if (st = nil) or (not b.Resolved) or (not b.HasAxes) or b.Hidden then
+      Continue;
     if (b.ValueAxis = nil) or (b.BaseAxis = nil) then Continue;
     if not TypeCanStack(b.SeriesType) then Continue;
 

@@ -704,6 +704,11 @@ function TyDateTimeCheckBoxColumn(APPI: Integer): Integer;
 
 implementation
 
+uses
+  { The month and weekday names, and the three-tier rule that picks their
+    language. Implementation-only, so the dependency stays one-way. }
+  tyControls.StrConsts;
+
 { ── The empty value ──────────────────────────────────────────────────────── }
 
 function TyDateIsNull(const ADateTime: TDateTime): Boolean;

@@ -6,10 +6,10 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, LazUTF8, BGRABitmap, BGRABitmapTypes,
-  BGRAGradientScanner, BGRACanvas2D, BGRATextBidi,
+  BGRAGradientScanner, BGRACanvas2D, BGRATextBidi, BGRATransform,
   BGRAPath,   // TBGRAPath: measures a path:// symbol's own bounds for SvgPathIn
   FPReadJPEG, FPReadPNG, FPReadBMP,  // register FPImage readers so url() jpg/png/bmp load
-  tyControls.Types;
+  tyControls.Types, tyControls.FontUnits;
 
 type
   TTyGlyphKind = (tgClose, tgMinimize, tgMaximize, tgRestore, tgCheck, tgCheckIndeterminate,
@@ -319,6 +319,32 @@ type
 
     { ---- painting the current path ---- }
     procedure FillPath(AColor: TTyColor; ARule: TTyFillRule = tfrNonZero);
+    { Fill the current path with a ramp between AStops.
+
+      TWO POINTS OR A CENTRE AND A RADIUS -- not an angle. TTyFill's gradient
+      is angle-shaped because a themed control's gradient runs across its own
+      box and an angle says that in one number; a chart's gradient is written
+      by the author as two endpoints, and converting those to an angle loses
+      the length. So this is a second, lower entry point rather than a third
+      caller of GradientEndpoints.
+
+      ARadius > 0 selects the radial shape, whose inner radius is always
+      nought. Coordinates are DEVICE pixels: a chart resolves its own
+      geometry and hands over real numbers.
+
+      GAMMA OFF. BGRA's gamma-corrected ramp uses an exponent of 1.7 and
+      Canvas 2D interpolates in plain sRGB, so a corrected ramp would put the
+      midpoint of every chart gradient somewhere upstream never puts it. }
+    procedure FillPathGradient(const AStops: array of TTyGradStop;
+      AX1, AY1, AX2, AY2, ARadius: Double;
+      ARule: TTyFillRule = tfrNonZero);
+    { Fill the current path with AImage tiled as a canvas pattern:
+      ARepetition is createPattern's ('repeat', 'repeat-x', 'repeat-y',
+      'no-repeat'; anything else repeats both ways), AMatrix [a, b, c, d, e,
+      f] takes the image's pixels to DEVICE pixels, on top of the current
+      transform. The image is borrowed, not owned. }
+    procedure FillPathPattern(AImage: TBGRABitmap; const ARepetition: string;
+      const AMatrix: array of Double; ARule: TTyFillRule = tfrNonZero);
     { Fill with a themed TTyFill. ABounds is what a gradient's angle resolves
       against (the rect the caller would have passed FillBackground), which is
       not derivable from the path: a bar's gradient is usually meant to run
@@ -328,6 +354,12 @@ type
     { A width <= 0 draws NOTHING. Falling back to a default width would put a
       hairline everywhere a theme meant to switch a border off. }
     procedure StrokePath(AColor: TTyColor; AWidthLogical: Double);
+    { Stroke the current path with the same ramp FillPathGradient fills with.
+      Its own entry point rather than a flag on the fill: a stroke needs a
+      width and a fill does not, and one procedure taking both would have a
+      parameter that is meaningless half the time. }
+    procedure StrokePathGradient(const AStops: array of TTyGradStop;
+      AX1, AY1, AX2, AY2, ARadius, AWidthLogical: Double);
     procedure FillAndStrokePath(AFillColor, AStrokeColor: TTyColor;
       AWidthLogical: Double; ARule: TTyFillRule = tfrNonZero);
     { Hit-test the current path, DEVICE px, THROUGH the current transform -- so
@@ -451,6 +483,7 @@ function TyEffectiveFontName(const AName: string): string;
   --font-size-base on every theme apply, so a key that computed it differently from the
   measurement would serve a pre-switch width. }
 function TyEffectiveFontSizeLogical(AFontSizeLogical: Integer): Integer;
+
 { Greedy line wrap that understands both scripts. Western words break at spaces (runs
   collapse to one space); CJK text carries no spaces, so each ideograph / kana / hangul
   syllable is its own break opportunity — without this a Chinese run is one unbreakable
@@ -1164,7 +1197,11 @@ end;
 
 function TyFontHeightPx(AFontSizeLogical, APPI: Integer): Integer;
 begin
-  Result := MulDiv(Round(AFontSizeLogical * 96 / 72), APPI, 96);
+  { an author size in CSS px (tyControls.FontUnits) is px at 96 PPI, not points }
+  if TyFontSizeIsPx(AFontSizeLogical) then
+    Result := Round(TyFontPxOf(AFontSizeLogical) * APPI / 96)
+  else
+    Result := MulDiv(Round(AFontSizeLogical * 96 / 72), APPI, 96);
   { Never 0: an LCL Font.Height of 0 does not mean "invisible", it means "the default size",
     which would measure a caption nobody is going to draw. }
   if Result < 1 then Result := 1;
@@ -3357,6 +3394,136 @@ begin
 end;
 
 { ---- painting the current path ---- }
+
+{ One ramp, built the same way for a fill and for a stroke. }
+function BuildGradient(ctx: TBGRACanvas2D; const AStops: array of TTyGradStop;
+  AX1, AY1, AX2, AY2, ARadius: Double): IBGRACanvasGradient2D;
+var i: Integer; px: TBGRAPixel;
+begin
+  if ARadius > 0 then
+    Result := ctx.createRadialGradient(AX1, AY1, 0, AX2, AY2, ARadius)
+  else
+    Result := ctx.createLinearGradient(AX1, AY1, AX2, AY2);
+  Result.setColors(nil);
+  for i := 0 to High(AStops) do
+  begin
+    px := TyColorToBGRA(AStops[i].Color);
+    { A ZERO-ALPHA STOP LOSES ITS HUE in a straight-alpha interpolator, and
+      BGRA's is straight: a ramp from an opaque red to `transparent` decays
+      toward BLACK rather than fading out, because `transparent` is
+      rgba(0,0,0,0) and its zero channels are still averaged in. Canvas 2D
+      premultiplies and does not have the problem. Borrowing the neighbour's
+      colour for an invisible stop makes the two agree and changes nothing
+      about what that stop itself paints -- it is invisible either way. }
+    if (px.alpha = 0) and (Length(AStops) > 1) then
+    begin
+      if i > 0 then px := TyColorToBGRA(AStops[i - 1].Color)
+      else px := TyColorToBGRA(AStops[i + 1].Color);
+      px.alpha := 0;
+    end;
+    Result.addColorStop(AStops[i].Pos, px);
+  end;
+  { GAMMA OFF. BGRA's corrected ramp uses an exponent of 1.7 and Canvas 2D
+    interpolates in plain sRGB, so a corrected ramp would put the midpoint of
+    every chart gradient somewhere upstream never puts it. }
+  Result.gammaCorrection := False;
+end;
+
+procedure TTyPainter.FillPathGradient(const AStops: array of TTyGradStop;
+  AX1, AY1, AX2, AY2, ARadius: Double; ARule: TTyFillRule);
+var
+  ctx: TBGRACanvas2D;
+  grad: IBGRACanvasGradient2D;
+  i: Integer;
+  px: TBGRAPixel;
+begin
+  if FBmp = nil then Exit;
+  if Length(AStops) = 0 then Exit;
+  ctx := FBmp.Canvas2D;
+  ctx.fillMode := VecFillMode(ARule);
+  grad := BuildGradient(ctx, AStops, AX1, AY1, AX2, AY2, ARadius);
+  ctx.fillStyle(grad);
+  ctx.fill;
+end;
+
+procedure TTyPainter.FillPathPattern(AImage: TBGRABitmap;
+  const ARepetition: string; const AMatrix: array of Double; ARule: TTyFillRule);
+var
+  ctx: TBGRACanvas2D;
+  pat: IBGRACanvasTextureProvider2D;
+  tex: TBGRAAffineBitmapTransform;
+  rx, ry: Boolean;
+  m: TAffineMatrix;
+begin
+  if (FBmp = nil) or (AImage = nil) or (Length(AMatrix) < 6) then Exit;
+  if (AImage.Width <= 0) or (AImage.Height <= 0) then Exit;
+  ctx := FBmp.Canvas2D;
+  ctx.fillMode := VecFillMode(ARule);
+  rx := True;
+  ry := True;
+  if LowerCase(Trim(ARepetition)) = 'repeat-x' then ry := False
+  else if LowerCase(Trim(ARepetition)) = 'repeat-y' then rx := False
+  else if LowerCase(Trim(ARepetition)) = 'no-repeat' then
+  begin
+    rx := False;
+    ry := False;
+  end;
+  { OUR OWN TEXTURE rather than createPattern(image): that one fits the
+    image's first and LAST pixel centres to the tile's corners, which
+    stretches a tile by width / (width - 1) the moment its origin is not a
+    whole pixel. Here the scanner is asked at device pixel CENTRES and the
+    image's pixel centres sit at its integer coordinates, so the map from
+    image to device is the pattern's matrix with half a pixel taken off on
+    the way in and put back on the way out. }
+  tex := TBGRAAffineBitmapTransform.Create(AImage, rx, ry, rfLinear);
+  try
+    m := AffineMatrixTranslation(-0.5, -0.5)
+      * AffineMatrix(AMatrix[0], AMatrix[2], AMatrix[4],
+                     AMatrix[1], AMatrix[3], AMatrix[5])
+      * AffineMatrixTranslation(0.5, 0.5);
+    tex.Matrix := m;
+    tex.Invert;
+    { the pattern's own transform is the identity: createPattern(texture)
+      adds only the canvas offset, which the scanner's coordinates already
+      are }
+    ctx.save;
+    try
+      ctx.resetTransform;
+      pat := ctx.createPattern(tex);
+    finally
+      ctx.restore;
+    end;
+    ctx.fillStyle(pat);
+    try
+      ctx.fill;
+    finally
+      pat := nil;
+    end;
+  finally
+    tex.Free;
+  end;
+end;
+
+procedure TTyPainter.StrokePathGradient(
+  const AStops: array of TTyGradStop;
+  AX1, AY1, AX2, AY2, ARadius, AWidthLogical: Double);
+var
+  ctx: TBGRACanvas2D;
+  grad: IBGRACanvasGradient2D;
+  w: Double;
+begin
+  if FBmp = nil then Exit;
+  if Length(AStops) = 0 then Exit;
+  w := ScaleF(AWidthLogical);
+  { The same floor StrokePath keeps: a width that scaled to nothing is
+    still a hairline, not an absence. }
+  if w <= 0 then Exit;
+  ctx := FBmp.Canvas2D;
+  grad := BuildGradient(ctx, AStops, AX1, AY1, AX2, AY2, ARadius);
+  ctx.strokeStyle(grad);
+  ctx.lineWidth := w;
+  ctx.stroke;
+end;
 
 procedure TTyPainter.FillPath(AColor: TTyColor; ARule: TTyFillRule);
 var

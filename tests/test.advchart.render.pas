@@ -35,6 +35,7 @@ type
     procedure TestSectorRendersAsARingWithAHole;
     procedure TestInkAndHitTestAgree;
     procedure TestInkAndHitTestAgreeOnABackwardsWedge;
+    procedure TestInkAndHitTestAgreeOnFourDifferentCorners;
     procedure TestSnappingMakesAHairlineCrisp;
   end;
 implementation
@@ -257,6 +258,58 @@ begin
   AssertTrue('disagreement is a thin edge, not a region ('
              + IntToStr(mismatches) + ' px of ' + IntToStr(inked) + ')',
              mismatches < inked div 10);
+end;
+
+procedure TAdvChartRenderTest.TestInkAndHitTestAgreeOnFourDifferentCorners;
+var
+  e: TTyChartElement;
+  x, y, mismatches, inked, hit, square, round_: Integer;
+  hasInk, hasHit: Boolean;
+begin
+  { THE RENDER SIDE OF THE FOUR-CORNER RECT, and it had none: three mutants
+    survived here -- tracing a plain rect instead, turning one arc the wrong
+    way, and dropping the bottom-left corner altogether -- because nothing in
+    the suite ever asked what a rounded rect looks like on a bitmap.
+
+    FOUR DIFFERENT RADII on purpose. Any two the same and a mutant that
+    confuses one corner for another still draws the right picture. }
+  Start(200, 200, 96);
+  e := TyChartElement(TyShapeRoundRect(TyRectF(20, 20, 180, 180),
+    [40, 20, 10, 30]));
+  e.Style.HasFill := True;
+  e.Style.FillColor := Red;
+  e.Silent := False;
+  e.Datum := TyChartDatum(0, 0);
+  FList.Add(e);
+  TyRenderPaintList(FPainter, FList);
+
+  mismatches := 0;
+  inked := 0;
+  hit := 0;
+  for y := 0 to 199 do
+    for x := 0 to 199 do
+    begin
+      hasInk := AlphaAt(x, y) > 200;
+      hasHit := TyChartDatumValid(FList.HitTest(x + 0.5, y + 0.5, 96));
+      if hasInk then Inc(inked);
+      if hasHit then Inc(hit);
+      if hasInk <> hasHit then Inc(mismatches);
+    end;
+  AssertTrue('the rect really was drawn (' + IntToStr(inked) + ' px)',
+    inked > 20000);
+  AssertTrue('disagreement is a thin edge, not a region ('
+    + IntToStr(mismatches) + ' px of ' + IntToStr(inked) + ')',
+    mismatches < inked div 20);
+
+  { AND EACH CORNER IS CUT BY ITS OWN AMOUNT. The top-left asks for 40 and the
+    bottom-right for 10, so a pixel 15 in from each is outside one and inside
+    the other -- which no single-radius version can produce. }
+  round_ := AlphaAt(20 + 4, 20 + 4);
+  square := AlphaAt(180 - 4, 180 - 4);
+  AssertTrue('the 40 px corner is cut back (' + IntToStr(round_) + ')',
+    round_ < 40);
+  AssertTrue('while the 10 px one is not (' + IntToStr(square) + ')',
+    square > 200);
 end;
 
 procedure TAdvChartRenderTest.TestSnappingMakesAHairlineCrisp;

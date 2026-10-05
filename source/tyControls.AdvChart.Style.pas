@@ -52,8 +52,9 @@ type
     Blur: Boolean;
   end;
 
-  { How far a hover reaches. }
-  TTyChartFocus = (cfNone, cfSelf, cfSeries);
+  { How far a hover reaches. cfAdjacency is a graph's: the hovered node's
+    edges and the nodes at their ends are spared, everything else dims. }
+  TTyChartFocus = (cfNone, cfSelf, cfSeries, cfAdjacency);
   { How wide the dimming goes. }
   TTyChartBlurScope = (cbsCoordinateSystem, cbsSeries, cbsGlobal);
 
@@ -180,6 +181,52 @@ const
   { A blurred element's opacity is its normal one scaled by this, NOT a value
     looked up anywhere. With no normal opacity the normal one is 1. }
   TyChartBlurOpacityFactor = 0.1;
+
+type
+  { WHAT `series.emphasis` SAID. Not the resolved appearance -- that is
+    TyChartResolveStyle's job and it needs the normal style to work from. }
+  TTyChartEmphasisSpec = record
+    { `emphasis.disabled`. The whole state is off for this series. }
+    Disabled: Boolean;
+    Focus: TTyChartFocus;
+    BlurScope: TTyChartBlurScope;
+    { How much a hovered SYMBOL grows. Upstream's rule, verbatim: null or true
+      means `max(1.1, 3 / halfHeight)` -- so a four-pixel marker grows by half
+      and a forty-pixel one by a tenth, which is what keeps a small marker's
+      hover visible at all. A finite positive number is taken as written;
+      0, false, a negative and NaN all mean no scale. }
+    Scale: Double;
+    ScaleAuto: Boolean;
+    { How many PIXELS a hovered pie slice's outer radius grows. A separate
+      number because a sector does not scale: growing it about the disc centre
+      would lift its inner edge off the hole. }
+    ScaleSizePx: Double;
+    Item: TTyChartStyle;
+    Line: TTyChartStyle;
+    { WHICH KEYS THIS LEVEL WROTE, for a cascade: a data item, its category
+      and its series are asked in turn, and a key the nearer level did not
+      write (or wrote as null) is the farther level's. }
+    HasDisabled, HasFocus, HasBlurScope, HasScale: Boolean;
+    { `blur.itemStyle.opacity`, `blur.lineStyle.opacity`, `blur.label.opacity`
+      -- a sibling block of `emphasis`, read here because it is the other half
+      of the same hover. A declared value REPLACES the normal-times-a-tenth
+      rule. Not-a-number where nothing was declared. }
+    BlurItemOpacity, BlurLineOpacity, BlurLabelOpacity: Double;
+  end;
+
+{ AInner laid over AOuter, key by key -- the nearer level of a cascade over the
+  farther one. }
+function TyChartMergeEmphasis(const AOuter,
+  AInner: TTyChartEmphasisSpec): TTyChartEmphasisSpec;
+
+{ Read `emphasis` off a series or a data item. Absent leaves the defaults --
+  enabled, no focus (so nothing blurs), automatic scale. }
+function TyChartReadEmphasis(AData: TJSONData): TTyChartEmphasisSpec;
+{ The default, for a node that has none. }
+function TyChartEmphasisDefault: TTyChartEmphasisSpec;
+{ How much a symbol of this half-height grows, given what the option said. }
+function TyChartSymbolScaleRatio(const ASpec: TTyChartEmphasisSpec;
+  AHalfHeightPx: Double): Double;
 
 { Resolve one datum's style in one state.
 
@@ -633,10 +680,13 @@ begin
       TyChartSetColor(Result, cskStroke, TyChartLiftColor(ANormal.Color[cskStroke]));
   end;
 
-  if AStates.Blur then
+  if AStates.Blur and not AStateStyle.Has[cskOpacity] then
   begin
-    { Computed, not looked up. An element with no opacity of its own still dims,
-      because the normal opacity it is scaled from defaults to fully opaque. }
+    { Computed, not looked up -- unless the blur state DECLARED an opacity,
+      which then stands as written. An element with no opacity of its own
+      still dims, because the normal opacity it is scaled from defaults to
+      fully opaque. [Revised in batch 46: a declared blur opacity was
+      overwritten by this rule.] }
     if ANormal.Has[cskOpacity] then normalOpacity := ANormal.Num[cskOpacity]
     else normalOpacity := 1;
     TyChartSetNum(Result, cskOpacity, normalOpacity * TyChartBlurOpacityFactor);
@@ -650,6 +700,196 @@ begin
   if AStates.Emphasis then Exit(TyChartEmphasisZ2Lift);
   if AStates.Select then Exit(TyChartSelectZ2Lift);
   Result := 0;
+end;
+
+{ ==================== the emphasis block ==================== }
+
+function TyChartEmphasisDefault: TTyChartEmphasisSpec;
+begin
+  Result := Default(TTyChartEmphasisSpec);
+  Result.Disabled := False;
+  { NO FOCUS IS THE DEFAULT, and it is what keeps blur off on every ordinary
+    chart: the whole dimming mechanism is gated on somebody asking for it. }
+  Result.Focus := cfNone;
+  Result.BlurScope := cbsCoordinateSystem;
+  Result.ScaleAuto := True;
+  Result.Scale := 0;
+  { PieSeries.ts:321 -- five pixels of outer radius. }
+  Result.ScaleSizePx := 5;
+  Result.BlurItemOpacity := NaN;
+  Result.BlurLineOpacity := NaN;
+  Result.BlurLabelOpacity := NaN;
+  Result.Item := TyChartNoStyle;
+  Result.Line := TyChartNoStyle;
+end;
+
+{ JavaScript truthiness of one option value. }
+function Truthy(AData: TJSONData): Boolean;
+var v: Double;
+begin
+  Result := False;
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtBoolean: Result := AData.AsBoolean;
+    jtNumber:
+      begin
+        v := AData.AsFloat;
+        Result := (not IsNan(v)) and (v <> 0);
+      end;
+    jtString: Result := AData.AsString <> '';
+    jtArray, jtObject: Result := True;
+  end;
+end;
+
+{ One `blur.<key>.opacity`, or not-a-number. }
+function BlurOpacity(ABlur: TJSONObject; const AKey: string): Double;
+var d: TJSONData;
+begin
+  Result := NaN;
+  if ABlur = nil then Exit;
+  d := ABlur.Find(AKey);
+  if not (d is TJSONObject) then Exit;
+  d := TJSONObject(d).Find('opacity');
+  if (d <> nil) and (d.JSONType = jtNumber) then Result := d.AsFloat;
+end;
+
+function TyChartMergeEmphasis(const AOuter,
+  AInner: TTyChartEmphasisSpec): TTyChartEmphasisSpec;
+begin
+  Result := AOuter;
+  if AInner.HasDisabled then
+  begin
+    Result.Disabled := AInner.Disabled;
+    Result.HasDisabled := True;
+  end;
+  if AInner.HasFocus then
+  begin
+    Result.Focus := AInner.Focus;
+    Result.HasFocus := True;
+  end;
+  if AInner.HasBlurScope then
+  begin
+    Result.BlurScope := AInner.BlurScope;
+    Result.HasBlurScope := True;
+  end;
+  if AInner.HasScale then
+  begin
+    Result.Scale := AInner.Scale;
+    Result.ScaleAuto := AInner.ScaleAuto;
+    Result.HasScale := True;
+  end;
+  Result.Item := TyChartOverlay(AOuter.Item, AInner.Item);
+  Result.Line := TyChartOverlay(AOuter.Line, AInner.Line);
+  if not IsNan(AInner.BlurItemOpacity) then
+    Result.BlurItemOpacity := AInner.BlurItemOpacity;
+  if not IsNan(AInner.BlurLineOpacity) then
+    Result.BlurLineOpacity := AInner.BlurLineOpacity;
+  if not IsNan(AInner.BlurLabelOpacity) then
+    Result.BlurLabelOpacity := AInner.BlurLabelOpacity;
+end;
+
+function TyChartReadEmphasis(AData: TJSONData): TTyChartEmphasisSpec;
+var
+  node, emph: TJSONObject;
+  d: TJSONData;
+  s: string;
+begin
+  Result := TyChartEmphasisDefault;
+  if not (AData is TJSONObject) then Exit;
+  node := TJSONObject(AData);
+  d := node.Find('blur');
+  if d is TJSONObject then
+  begin
+    Result.BlurItemOpacity := BlurOpacity(TJSONObject(d), 'itemStyle');
+    Result.BlurLineOpacity := BlurOpacity(TJSONObject(d), 'lineStyle');
+    Result.BlurLabelOpacity := BlurOpacity(TJSONObject(d), 'label');
+  end;
+  d := node.Find('emphasis');
+  if not (d is TJSONObject) then Exit;
+  emph := TJSONObject(d);
+
+  d := emph.Find('disabled');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    Result.HasDisabled := True;
+    Result.Disabled := Truthy(d);
+  end;
+
+  { `focus`: falsy and 'none' are none, 'series' and 'adjacency' are
+    themselves, and ANY OTHER TRUTHY VALUE is self -- upstream tests
+    `!focus || focus === 'none'` for the first and blurs by the element for
+    everything it does not recognise. [Revised in batch 46: an unknown
+    string was none.] }
+  d := emph.Find('focus');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    Result.HasFocus := True;
+    if not Truthy(d) then Result.Focus := cfNone
+    else if d.JSONType = jtString then
+    begin
+      s := d.AsString;
+      if s = 'none' then Result.Focus := cfNone
+      else if s = 'series' then Result.Focus := cfSeries
+      else if s = 'adjacency' then Result.Focus := cfAdjacency
+      else Result.Focus := cfSelf;
+    end
+    else
+      Result.Focus := cfSelf;
+  end;
+
+  d := emph.Find('blurScope');
+  if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    Result.HasBlurScope := True;
+    s := d.AsString;
+    if s = 'series' then Result.BlurScope := cbsSeries
+    else if s = 'global' then Result.BlurScope := cbsGlobal
+    else Result.BlurScope := cbsCoordinateSystem;
+  end;
+
+  { `scale` IS FOUR THINGS IN ONE KEY, and upstream's comment names them: null
+    or true is the default strategy, a finite positive number is a literal
+    ratio, and 0 / false / negative / NaN / Infinity all mean no scale. }
+  d := emph.Find('scale');
+  if (d <> nil) and (d.JSONType <> jtNull) then Result.HasScale := True;
+  if d <> nil then
+  begin
+    if d.JSONType = jtBoolean then
+    begin
+      Result.ScaleAuto := d.AsBoolean;
+      if not d.AsBoolean then Result.Scale := 1;
+    end
+    else if d.JSONType = jtNumber then
+    begin
+      Result.ScaleAuto := False;
+      Result.Scale := d.AsFloat;
+      if IsNan(Result.Scale) or IsInfinite(Result.Scale)
+        or (Result.Scale <= 0) then Result.Scale := 1;
+    end;
+  end;
+
+  d := emph.Find('scaleSize');
+  if (d <> nil) and (d.JSONType = jtNumber) then
+  begin
+    Result.ScaleSizePx := d.AsFloat;
+    if IsNan(Result.ScaleSizePx) or IsInfinite(Result.ScaleSizePx) then
+      Result.ScaleSizePx := 0;
+  end;
+
+  TyChartReadStyle(emph.Find('itemStyle'), cskItem, Result.Item);
+  TyChartReadStyle(emph.Find('lineStyle'), cskLine, Result.Line);
+end;
+
+function TyChartSymbolScaleRatio(const ASpec: TTyChartEmphasisSpec;
+  AHalfHeightPx: Double): Double;
+begin
+  if not ASpec.ScaleAuto then Exit(ASpec.Scale);
+  { `max(1.1, 3 / halfHeight)` -- a tenth for a big marker, and half again for
+    a four-pixel one, which is what keeps a small marker's hover visible. The
+    guard is for a degenerate symbol, where upstream would divide by zero and
+    answer Infinity; here that is a raise. }
+  if not (AHalfHeightPx > 0) then Exit(1.1);
+  Result := Max(Double(1.1), 3 / AHalfHeightPx);
 end;
 
 end.

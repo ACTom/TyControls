@@ -201,6 +201,11 @@
   --advchart-minor-tick-length: 3px;
   --advchart-name-gap: 15px;
   --advchart-tick-length: 5px;
+  --advchart-axispointer-margin: 3px;
+  --advchart-tooltip-gap: 20px;
+  --advchart-tooltip-gutter: 20px;
+  --advchart-tooltip-marker: 10px;
+  --advchart-tooltip-marker-gap: 6px;
   --alert-close-gap: 8px;
   --alert-close-size: 14px;
   --alert-icon-gap: 8px;
@@ -1259,6 +1264,7 @@ TyAdvChartSeries5 { background: mix(var(--accent), var(--surface), 40%); }
 TyAdvChartSeries6 { background: mix(var(--accent), var(--on-surface), 65%); }
 TyAdvChartSeries7 { background: lighten(var(--accent), 38%); }
 TyAdvChartSeries8 { background: darken(var(--accent), 34%); }
+TyAdvChartSeries9 { background: mix(var(--accent), var(--on-surface), 15%); }
 
 /* AdvChart: the axis domain. Eight keys and four metrics, and the COUNT is part
    of the design -- twelve things can be checked by eye across seventeen themes
@@ -1282,6 +1288,12 @@ TyAdvChartAxisTick  { border-color: var(--border); border-width: 1px; }
    already alpha over --on-surface, so it follows a dark theme by itself. */
 TyAdvChartAxisLabel { color: var(--muted); font-size: var(--font-size-base); }
 TyAdvChartAxisName  { color: var(--on-surface); font-size: var(--font-size-base); }
+/* The heavier label a TIME axis gives its coarse ticks -- the `Mar` in a run
+   of day numbers. Upstream carries it as a rich-text style on the time axis'
+   own defaults; here it is a key of its own so a skin can make the level
+   marker darker, or larger, or nothing special at all. */
+TyAdvChartAxisLabelPrimary { color: var(--muted); font-size: var(--font-size-base);
+                             font-weight: var(--font-weight-bold); }
 /* Alpha over --border, NEVER over --surface. On an image theme a translucent
    surface reads as a bright halo instead of a faint line -- this library has
    shipped that bug once already. */
@@ -1291,6 +1303,184 @@ TyAdvChartSplitLine { border-color: alpha(var(--border), 0.6); border-width: 1px
 TyAdvChartSplitArea { background: alpha(var(--on-surface), 0.04); }
 TyAdvChartMinorTick { border-color: alpha(var(--border), 0.4); border-width: 1px; }
 TyAdvChartMinorSplitLine { border-color: alpha(var(--border), 0.35); border-width: 1px; }
+/* The ring a pie draws when it has no data at all. Upstream hard-codes
+   lightgray; alpha over the ink instead, so it stays faint on either mode. */
+TyAdvChartEmptyCircle { background: alpha(var(--on-surface), 0.10); }
+/* showBackground: the strip behind a bar, the height of the plot. Upstream
+   writes rgba(180,180,180,0.2) into the series default, which is a pale grey
+   band across a dark skin; alpha over the ink darkens one and lightens the
+   other from the same declaration. */
+TyAdvChartBarBackground { background: alpha(var(--on-surface), 0.10); }
+/* A TREE'S NODES AND EDGES. Upstream names the colours in the series'
+   defaults -- lightsteelblue for a node, a light grey for an edge -- and a
+   tree takes no palette slot; here they are keys, so a skin gives its trees
+   its own accent and its own line ink. */
+TyAdvChartTreeNode { background: alpha(var(--accent), 0.55); }
+TyAdvChartTreeEdge { border-color: var(--border); border-width: 1px; }
+/* A TREEMAP'S LABELS AND ITS BREADCRUMB. Upstream writes the label white --
+   a fixed ink over palette fills, which do not change with the mode, so
+   neither does this -- and draws the breadcrumb as a pale chip with
+   secondary text: here the chip is alpha over the ink and the text muted,
+   so a dark skin gets a dark chip. */
+TyAdvChartTreemapLabel { color: #FFFFFF; font-size: var(--font-size-base); }
+TyAdvChartBreadcrumb { background: alpha(var(--on-surface), 0.08); color: var(--muted); font-size: var(--font-size-base); }
+/* A SANKEY'S LINKS. Upstream fills them a mid grey at 0.2 opacity; here the
+   grey is the ink's own muted tone, so a dark skin's links stay grey on
+   its ground. */
+TyAdvChartSankeyLink { background: var(--muted); }
+/* The chart's own title and subtitle. Upstream draws them at 18/bold and
+   12/regular; the sizes come from the type scale here so a dense skin gets a
+   proportionate title instead of an 18px one on 11px axis labels. */
+TyAdvChartTitle { color: var(--on-surface); font-size: var(--font-size-title); font-weight: 700; }
+TyAdvChartSubtitle { color: var(--muted); font-size: var(--font-size-base); }
+/* A label OUTSIDE its mark: the theme's own ink, not anything derived from the
+   thing it names. Upstream picks #333 or #ccc by mode; this is the same idea
+   said in the theme's vocabulary. */
+TyAdvChartLabel { color: var(--on-surface); font-size: var(--font-size-base); }
+/* A label INSIDE its mark is a three-band table, not a light/dark pair, and the
+   order reads backwards until you see why: on a mid-dark fill you want maximum
+   contrast, but on a nearly black one the brightest ink glares and the dimmer
+   one is easier to read. Band 1 is therefore LIGHTER than band 2.
+     band 0 -- a light mark, so dark ink
+     band 1 -- a mid mark, so the brightest ink
+     band 2 -- a dark mark, so a softer light ink
+   FIXED VALUES, NOT THE SURFACE PAIR: the band is chosen by the MARK's fill,
+   which does not change with the mode -- so the ink must not either, or a
+   dark skin puts light ink on a light bar. Upstream's #333, #eee, #ccc. */
+TyAdvChartLabelOnLight { color: #333333; }
+TyAdvChartLabelOnMid   { color: #EEEEEE; }
+TyAdvChartLabelOnDark  { color: #CCCCCC; }
+/* The legend. Upstream inks the words with tokens.color.secondary and greys a
+   deselected item with tokens.color.disabled. This vocabulary has no disabled
+   INK token -- only a disabled OPACITY -- so a switched-off item is the chart's
+   own ink faded far enough to read as off on either mode. The frame is drawn
+   only when the option asks for one, so the last two are dormant on almost
+   every chart. */
+TyAdvChartLegend { color: var(--muted); font-size: var(--font-size-base); }
+TyAdvChartLegendInactive { color: alpha(var(--on-surface), 0.25); }
+TyAdvChartLegendBorder { border-color: var(--border); border-width: 1px; }
+TyAdvChartLegendBackground { background: var(--surface); }
+/* The legend's selector buttons (All / Inv) and the scrolling legend's pager.
+   Upstream draws a button as tertiary ink in a pale rounded frame that turns
+   the lighter quaternary ink under the pointer, the page arrows in its accent
+   with a pale accent for one that cannot go further, and the page count in
+   the tertiary ink. Here the ink is the chart's muted one (fainter when
+   hovered), the frame the border, and the arrows the skin's own accent. */
+TyAdvChartLegendSelector { color: var(--muted); border-color: var(--border); font-size: var(--font-size-base); }
+TyAdvChartLegendSelector:hover { color: alpha(var(--on-surface), 0.35); border-color: var(--border); font-size: var(--font-size-base); }
+TyAdvChartLegendPageIcon { color: var(--accent); }
+TyAdvChartLegendPageIconInactive { color: alpha(var(--accent), 0.25); }
+TyAdvChartLegendPageText { color: var(--muted); font-size: var(--font-size-base); }
+/* A visualMap's own picture. Upstream inks its texts with tokens.color.
+   secondary, the bar's inactive stretch and the frame with a pale grey, the
+   handles' rims white and the box transparent. The inactive stretch is the
+   chart's own ink faded, like a switched-off legend item; the rim is the
+   surface, so a handle reads as cut out of whatever it sits on. The frame is
+   drawn only when the option gives it a width. */
+TyAdvChartVisualMap { color: var(--muted); font-size: var(--font-size-base); }
+TyAdvChartVisualMapInactive { color: alpha(var(--on-surface), 0.2); }
+TyAdvChartVisualMapBorder { border-color: var(--border); }
+TyAdvChartVisualMapBackground { background: transparent; }
+TyAdvChartVisualMapHandle { border-color: var(--surface); }
+/* A slider dataZoom. Upstream tints the whole component from its accent: a
+   pale frame, the window filled with the accent at a fifth, handles white
+   with a pale rim, the brush's move bar the accent at half with a white
+   grip, and the data shadow grey outside the window and bluer inside it.
+   Here the accent is the skin's own, the grey is the ink faded, and white
+   is the surface. The labels beside the handles take the muted ink. */
+TyAdvChartDataZoom { color: var(--muted); font-size: var(--font-size-base); }
+TyAdvChartDataZoomBorder { border-color: var(--border); }
+TyAdvChartDataZoomBackground { background: transparent; }
+TyAdvChartDataZoomFiller { background: alpha(var(--accent), 0.2); }
+TyAdvChartDataZoomHandle { background: var(--surface); border-color: alpha(var(--accent), 0.35); }
+TyAdvChartDataZoomMoveHandle { background: alpha(var(--accent), 0.5); color: var(--surface); }
+TyAdvChartDataZoomShadow { background: alpha(var(--on-surface), 0.06); border-color: alpha(var(--on-surface), 0.3); }
+TyAdvChartDataZoomShadowSelected { background: alpha(var(--accent), 0.12); border-color: alpha(var(--accent), 0.55); }
+/* Under the pointer (or while a handle is dragged) a handle's rim darkens
+   and the move bar firms up; a brush across the body is the accent faded. */
+TyAdvChartDataZoomHandle:hover { background: var(--surface); border-color: alpha(var(--accent), 0.55); }
+TyAdvChartDataZoomMoveHandle:hover { background: alpha(var(--accent), 0.8); color: var(--surface); }
+TyAdvChartDataZoomBrush { background: alpha(var(--accent), 0.3); }
+/* The hover tooltip. TWO keys, because upstream's whole typographic hierarchy
+   inside the box is one weight difference -- the name at 400 and the value at
+   900, in the same grey -- and one style set cannot say two weights. Said here
+   in this vocabulary's own terms instead: the name is the muted ink a label
+   takes, the value is full ink and bold.
+
+   The chart paints NO box without a background on the first key (no surface =
+   nothing to draw on), which is the same rule TyChartTooltip follows, and it
+   is why both live in the base layer for every theme to inherit. A skin
+   wanting the box to float adds `shadow:`; the base stays flat like the rest
+   of light. The BORDER here is only the fallback -- an item tooltip tints its
+   border with the colour of the datum under the pointer, which is what makes
+   an ECharts tooltip look attached to the thing it describes. */
+TyAdvChartTooltip {
+  background: var(--surface);
+  color: var(--muted);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius-sm);
+  padding: var(--pad-tooltip);
+  font-size: var(--font-size-base);
+}
+TyAdvChartTooltipValue {
+  color: var(--on-surface);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+}
+/* The axis pointer: the line that follows the cursor along an axis, the band
+   a `shadow` draws instead, and the label at the axis end.
+
+   The line reads like a split line and not like an axis line -- it is a
+   reading aid over the plot, not a piece of the frame -- so it takes the same
+   --border it does. The BAND is alpha over the ink for the reason every other
+   band in this chart is: it darkens a light theme and lightens a dark one from
+   one declaration, where upstream's literal rgba grey does neither.
+
+   The LABEL is the one piece here that is meant to stand out: upstream inks it
+   white on an indigo chip, which is a colour this vocabulary already has a
+   name for. Accent, therefore -- so a re-skinned chart labels its pointer in
+   the skin's own colour instead of ECharts'. */
+/* A candlestick's two directions. NOT "positive and negative" however they are
+   usually described: both compare a datum against ITSELF -- close above open
+   against open above close -- and either can happen in a rising market.
+
+   Upstream writes #eb5454 and #47b262, which is the East Asian convention
+   (red up, green down) and the opposite of the North American one. This
+   library has a --success and a --danger already and they carry exactly the
+   right meaning in either convention, so a theme that wants the other way
+   round swaps two lines here instead of restyling a chart. */
+/* A GAUGE'S READING: the headline number under the needle, and the only thing
+   in this vocabulary that had no donor. The chart's own title key is bold but
+   is sized off the title scale -- a gauge's reading is the picture, not a
+   heading over it -- and every label key is base size. Upstream writes 30px
+   and a literal here is the right place for a literal: a skin that wants a
+   quieter dial changes this one line. The gauge's name caption takes
+   TyAdvChartLabel, its scale takes TyAdvChartAxisLabel, its major ticks take
+   TyAdvChartAxisTick and its minor ones TyAdvChartMinorTick, so this is the
+   only key the whole series added. */
+TyAdvChartGaugeDetail { color: var(--on-surface); font-size: 30px;
+                        font-weight: var(--font-weight-bold); }
+TyAdvChartCandleUp { background: var(--danger); }
+TyAdvChartCandleDown { background: var(--success); }
+TyAdvChartAxisPointer { border-color: var(--border); border-width: 1px; }
+TyAdvChartAxisPointerShadow { background: alpha(var(--on-surface), 0.10); }
+TyAdvChartAxisPointerLabel {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: var(--radius-sm);
+  padding: 5px 7px;
+  font-size: var(--font-size-base);
+}
+/* The loading effect (showLoading): the mask over the chart, its words, and
+   the turning arc. Upstream writes a white mask at 0.8, its darkest neutral
+   for the words and the first palette colour for the arc -- on a light skin
+   exactly this, and on a dark one a mask of its own surface instead of a
+   white sheet over a dark chart. The arc's width and radius are geometry the
+   cfg sets (5 and 10 by default); only its colour is the skin's. */
+TyAdvChartLoading { background: alpha(var(--surface), 0.8); color: var(--on-surface);
+                    font-size: var(--font-size-base); }
+TyAdvChartLoadingSpinner { border-color: var(--accent); }
 
 /* ── ListGroupPanel (navigation accordion; own keys, not the tree column header's) ────── */
 /* A modern sider: group rows carry NO fill (just muted ink + a right chevron; the OPEN group

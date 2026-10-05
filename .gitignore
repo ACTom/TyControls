@@ -32,7 +32,7 @@ backup/
 /tycontrols_dt.pas
 
 # Lazarus IDE 全局包链接缓存（机器相关，lazbuild --pcp 写出，不应入库）
-/packagefiles.xml
+packagefiles.xml
 
 # FPC 智能链接 / 临时产物
 *.fpc

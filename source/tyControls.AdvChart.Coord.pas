@@ -14,7 +14,10 @@ unit tyControls.AdvChart.Coord;
   and Cartesian2D does not implement it, which is why HeatmapView.ts:250-285 has
   to branch three ways (cartesian computes its own width/height, matrix reads
   .rect, calendar reads .contentRect). Here it is REQUIRED and cartesian
-  implements it, so that branch collapses to one path.
+  implements it -- but the heatmap's cartesian branch still does NOT go
+  through it: upstream widens each band by half a pixel before halving
+  (HeatmapView.ts:193-194), which the exact band cell here does not, so
+  BuildHeatmap sizes its own cells. [Batch 68]
 
   N AXES, not two. A secondary y axis is the commonest real-world request; making
   it a special case later is how a coordinate system ends up rewritten.
@@ -43,14 +46,24 @@ type
     ContentRect: TTyRectF;
   end;
 
+  { How an axis' own pixel coordinate becomes the canvas': upstream's
+    toGlobalCoord. A grid's x axis adds its left edge; its y axis runs the
+    other way, (extent sum - c) + top. apmIdentity is a pixel extent written
+    as canvas coordinates already -- a radar spoke, or a test. }
+  TTyAxisPxMap = (apmIdentity, apmX, apmY);
+
   { One axis: a scale plus where it lives in pixels. }
   TTyAxis = class
   private
     FDim: string;
     FScale: TTyScale;
     FHorizontal: Boolean;
-    FPxStart: Double;
-    FPxStop: Double;
+    FPxMap: TTyAxisPxMap;
+    { apmX / apmY: the grid's width or height and its left or top edge, as
+      upstream holds them. apmIdentity: the two ends as written. }
+    FPxLen: Double;
+    FPxBase: Double;
+    FIdent0, FIdent1: Double;
     FInverse: Boolean;
     FMainType: string;
     FComponentIndex: Integer;
@@ -61,27 +74,57 @@ type
     FSide: TTyAxisSide;
     FVisible: Boolean;
     FOnBand: Boolean;
+    FZeroDiscouraged: Boolean;
     FCategories: TTyOrdinalMeta;
     procedure SetOnBand(AValue: Boolean);
     procedure SetAxisType(AValue: TTyAxisType);
-    { The pixel extent a BANDED axis maps over: half a band in from each end,
-      so an ordinal value lands on its band's CENTRE rather than its edge. }
-    procedure BandPxExtent(out AStart, AStop: Double);
+    function GetPxStart: Double;
+    function GetPxStop: Double;
+    function GetPxLength: Double;
   public
+    { AN INDEX HOLE replaceMerge left [Batch 97]: the slot keeps an axis so
+      every array stays indexed by componentIndex, but no grid takes it and
+      TTyChartBuild.Axis answers nil for it -- upstream has no model there. }
+    Hole: Boolean;
     { Takes ownership of AScale. }
     constructor Create(const ADim: string; AScale: TTyScale; AHorizontal: Boolean);
     destructor Destroy; override;
+    { A pixel extent in canvas coordinates, mapped as it is: a radar spoke. }
     procedure SetPxExtent(AStart, AStop: Double);
-    { Value -> px along this axis. Extrapolates outside the extent ON PURPOSE:
-      clipping is the renderer's decision, not the coordinate system's, and a
-      clipped line still has to be drawn towards a real off-band point. }
-    function DataToCoord(AValue: Double): Double;
+    { UPSTREAM'S GRID AXIS: the local extent is [0, ALength] -- [ALength, 0]
+      when inverse -- and ABase is the grid's left (x) or top (y) edge.
+      ALength is the grid's width or height as upstream holds it, never an
+      edge minus an edge: (x + w) - x is not always w. }
+    procedure SetLayoutExtent(ABase, ALength: Double; AVertical: Boolean);
+    { The local extent, inverse applied: upstream's axis.getExtent(). }
+    procedure LocalExtent(out AStart, AStop: Double);
+    { The same pulled in by half a band each end on a banded axis, so an
+      ordinal value lands on its band's CENTRE: makeExtentWithBands. }
+    procedure BandExtent(out AStart, AStop: Double);
+    function ToGlobal(ALocal: Double): Double;
+    function ToLocal(AGlobal: Double): Double;
+    { Value -> the axis' own coordinate: normalise over the mapping extent,
+      then linearMap onto the band extent, which hands back an end verbatim
+      at 0 and 1 -- and with AClamp, at and beyond them. }
+    function DataToLocal(AValue: Double; AClamp: Boolean = False): Double;
+    { Value -> px along this axis. Extrapolates outside the extent ON PURPOSE
+      unless clamped: clipping is the renderer's decision, not the coordinate
+      system's, and a clipped line still has to be drawn towards a real
+      off-band point. }
+    function DataToCoord(AValue: Double; AClamp: Boolean = False): Double;
     function CoordToData(ACoord: Double): Double;
     property Dim: string read FDim;
     property Scale: TTyScale read FScale;
     property Horizontal: Boolean read FHorizontal;
-    property PxStart: Double read FPxStart;
-    property PxStop: Double read FPxStop;
+    { Where the extent's start and stop land on the canvas with inverse NOT
+      applied: left and right on x, bottom and top on y. }
+    property PxStart: Double read GetPxStart;
+    property PxStop: Double read GetPxStop;
+    { The pixel length -- the grid's width or height itself. What a band is
+      measured against. }
+    property PxLength: Double read GetPxLength;
+    property PxMap: TTyAxisPxMap read FPxMap;
+    property PxBase: Double read FPxBase;
     { The width of one datum's band, DEVICE px. DERIVED, not stored: the pixel
       extent is written more than once per layout pass -- an approximate one off
       the raw grid rect, then the final one off the shrunk plot rect -- and a
@@ -122,6 +165,13 @@ type
       percentages rather than a boolean, and an ungated setter would band every
       value axis in the chart. }
     property OnBand: Boolean read FOnBand write SetOnBand;
+    { UPSTREAM'S discourageOnAxisZero. Set in phase B when a bar's half width
+      was added to this axis' mapping extent: its zero is no longer where the
+      eye expects the other axis to stand, so an axis whose onZero is `auto`
+      no longer sits on it. One that wrote `onZero: true` still does. Set even
+      when the widening moved no end. Never cleared: every build makes its
+      axes afresh. }
+    property ZeroDiscouraged: Boolean read FZeroDiscouraged write FZeroDiscouraged;
     { A stable name for this axis across the whole chart, for keying a map by.
 
       MainType plus ComponentIndex, because that pair is unique and never
@@ -145,13 +195,18 @@ type
       and an empty extent. }
     procedure SetCategories(const A: array of string);
 
-    { Where a value sits along this axis as a fraction of its BAND-ADJUSTED
-      pixel extent, 0 at the start and 1 at the stop.
+    { Where a value sits along this axis as a fraction of its WHOLE pixel
+      extent, 0 at the start and 1 at the stop -- with the half-band inset
+      and Inverse already applied, because it is DataToCoord's own answer.
 
-      Exists so the layout layer and the renderer cannot drift: the layout layer
-      wants fractions, DataToCoord applies Inverse and the half-band inset
-      internally, and a caller computing its own fraction from the raw extent
-      would silently disagree with where the datum is actually drawn. }
+      Exists so the layout layer and the renderer cannot drift: the layout
+      layer wants fractions of the plot it is laying out on, and a caller
+      computing its own fraction would silently disagree with where the
+      datum is actually drawn.
+      [Revised in batch 37: this was a fraction of the band-INSET extent,
+      which the layout then spread over the whole plot -- so the first of
+      seven category labels stood at the plot's edge and the last at the
+      other, a band's half-width wide of the bars they named.] }
     function NormalizedCoord(AValue: Double): Double;
 
     { Where the TICK MARKS go, in device px.
@@ -192,6 +247,9 @@ type
   private
     FAxes: array of TTyAxis;
     FRect: TTyRectF;
+    FXYWH: TTyXYWH;
+    FHasTransform, FHasInvTransform: Boolean;
+    FTransform, FInvTransform: TTyMat2D;
     FDividerWidth: Double;
     FOwnsAxes: Boolean;
     function MasterX: TTyAxis;
@@ -202,7 +260,33 @@ type
     destructor Destroy; override;
     { Takes ownership BY DEFAULT -- see OwnsAxes. }
     procedure AddAxis(AAxis: TTyAxis);
+    { The plot, as edges -- taken back into x, y, width and height. }
     procedure SetRect(const ARect: TTyRectF);
+    { The plot as upstream holds it. Every axis is laid over it, and the
+      affine matrix is dropped: it belongs to a final rect only. }
+    procedure SetRectXYWH(const ARect: TTyXYWH);
+    function GetXYWH: TTyXYWH;
+    { UPSTREAM'S calcAffineTransform, run once the rect is final and the
+      scales are: when both master axes are value or time, a matrix from the
+      per-axis answers at the ends of the two mapping extents, which every
+      finite datum is then placed through. Not a shortcut with the same
+      answer -- the last bits differ from the per-axis ones, and upstream
+      draws what the matrix gives. Its inverse too, when it has one. }
+    procedure CalcAffineTransform;
+    function Transform(out AM: TTyMat2D): Boolean;
+    function InvTransform(out AM: TTyMat2D): Boolean;
+    { upstream's getArea: the x axis' two ends on the canvas, the lesser one
+      and the distance to the other, and the same for y. What a bar is
+      clipped to. }
+    function GetArea: TTyXYWH;
+    { getArea(tolerance): the same widened by ATol on every side, in
+      upstream's order -- the lesser end less it, and the distance to the
+      greater end plus it }
+    function GetAreaTol(ATol: Double): TTyXYWH;
+    { With AClamp, a value past an end lands on it -- on the per-axis path
+      only, as upstream's: the matrix does not clamp. }
+    function DataToPointClamped(const AData: array of Double;
+      AClamp: Boolean): TTyPointF;
 
     function CoordSysName: string;
     function DimCount: Integer;
@@ -252,7 +336,19 @@ type
     property OwnsAxes: Boolean read FOwnsAxes write FOwnsAxes;
   end;
 
+{ THE VALUE A BAR STANDS ON, upstream's getValueAxisStart: the axis' resolved
+  startValue, or where it has none 1 on a log axis and 0 on any other -- NOT
+  the extent's start. The two agree only while the extent starts there: a
+  chart with a negative bar in it grows every bar from zero, up or down. }
+function TyValueAxisStart(AAxis: TTyAxis): Double;
+
 implementation
+
+function TyValueAxisStart(AAxis: TTyAxis): Double;
+begin
+  if AAxis.Scale.HasStartValue then Exit(AAxis.Scale.StartValue);
+  if AAxis.AxisType = atLog then Result := 1 else Result := 0;
+end;
 
 { ============================ TTyAxis ============================ }
 
@@ -262,8 +358,11 @@ begin
   FDim := ADim;
   FScale := AScale;
   FHorizontal := AHorizontal;
-  FPxStart := 0;
-  FPxStop := 1;
+  FPxMap := apmIdentity;
+  FIdent0 := 0;
+  FIdent1 := 1;
+  FPxLen := 1;
+  FPxBase := 0;
   FInverse := False;
   FMainType := '';
   FComponentIndex := -1;
@@ -301,8 +400,94 @@ end;
 
 procedure TTyAxis.SetPxExtent(AStart, AStop: Double);
 begin
-  FPxStart := AStart;
-  FPxStop := AStop;
+  FPxMap := apmIdentity;
+  FIdent0 := AStart;
+  FIdent1 := AStop;
+  FPxLen := Abs(AStop - AStart);
+  FPxBase := 0;
+end;
+
+procedure TTyAxis.SetLayoutExtent(ABase, ALength: Double; AVertical: Boolean);
+begin
+  if AVertical then FPxMap := apmY else FPxMap := apmX;
+  FPxLen := ALength;
+  FPxBase := ABase;
+  FIdent0 := 0;
+  FIdent1 := ALength;
+end;
+
+procedure TTyAxis.LocalExtent(out AStart, AStop: Double);
+begin
+  { upstream's updateAxisExtentTransByGridRect: inverse SWAPS the ends of
+    the extent -- it is not 1 - n, which rounds differently -- and the
+    extent's sum, which the y flip uses, is the same either way. }
+  if FInverse then
+  begin
+    AStart := FIdent1;
+    AStop := FIdent0;
+  end
+  else
+  begin
+    AStart := FIdent0;
+    AStop := FIdent1;
+  end;
+end;
+
+procedure TTyAxis.BandExtent(out AStart, AStop: Double);
+var
+  size, m: Double;
+  n: Integer;
+begin
+  LocalExtent(AStart, AStop);
+  if not FOnBand then Exit;
+  n := 0;
+  if FScale is TTyOrdinalScale then n := TTyOrdinalScale(FScale).Count;
+  if n <= 0 then Exit;
+  { SIGNED: an inverse axis runs [w, 0], the margin comes out negative, and
+    both ends still move inward. }
+  size := AStop - AStart;
+  m := size / n / 2;
+  AStart := AStart + m;
+  AStop := AStop - m;
+end;
+
+function TTyAxis.ToGlobal(ALocal: Double): Double;
+begin
+  case FPxMap of
+    apmX: Result := ALocal + FPxBase;
+    { (e0 + e1) - c + base, in that order: upstream's toGlobalCoord }
+    apmY: Result := (FIdent0 + FIdent1) - ALocal + FPxBase;
+  else
+    Result := ALocal;
+  end;
+end;
+
+function TTyAxis.ToLocal(AGlobal: Double): Double;
+begin
+  case FPxMap of
+    apmX: Result := AGlobal - FPxBase;
+    { upstream's toLocalCoord on y is the same expression as toGlobalCoord }
+    apmY: Result := (FIdent0 + FIdent1) - AGlobal + FPxBase;
+  else
+    Result := AGlobal;
+  end;
+end;
+
+function TTyAxis.GetPxStart: Double;
+begin
+  if FPxMap = apmIdentity then Result := FIdent0
+  else Result := ToGlobal(FIdent0);
+end;
+
+function TTyAxis.GetPxStop: Double;
+begin
+  if FPxMap = apmIdentity then Result := FIdent1
+  else Result := ToGlobal(FIdent1);
+end;
+
+function TTyAxis.GetPxLength: Double;
+begin
+  Result := FPxLen;
 end;
 
 procedure TTyAxis.SetOnBand(AValue: Boolean);
@@ -317,26 +502,6 @@ begin
   SetOnBand(FOnBand);
 end;
 
-procedure TTyAxis.BandPxExtent(out AStart, AStop: Double);
-var
-  m: Double;
-  n: Integer;
-begin
-  AStart := FPxStart;
-  AStop := FPxStop;
-  if not FOnBand then Exit;
-  n := 0;
-  if FScale is TTyOrdinalScale then n := TTyOrdinalScale(FScale).Count;
-  if n <= 0 then Exit;
-  { SIGNED, deliberately not Abs. On a vertical axis PxStop is above PxStart, so
-    the margin comes out negative and both ends still move INWARD -- which is
-    what makes a bottom-up or an inverse axis work. An Abs here would look right
-    on every horizontal test and be wrong on every vertical one. }
-  m := (AStop - AStart) / n / 2;
-  AStart := AStart + m;
-  AStop := AStop - m;
-end;
-
 function TTyAxis.BandWidth: Double;
 var
   span, pxSpan, len: Double;
@@ -349,7 +514,7 @@ begin
     exactly why they are computed in one place. }
   span := TyRangeSpan(FScale.GetExtent2(sekMapping));
   if IsNan(span) or IsInfinite(span) then Exit;
-  pxSpan := Abs(FPxStop - FPxStart);
+  pxSpan := FPxLen;
   len := span;
   if FOnBand then len := len + 1;
   { One category: span is 0 and the axis is one band wide. }
@@ -363,11 +528,24 @@ begin
 end;
 
 function TTyAxis.NormalizedCoord(AValue: Double): Double;
-var a, b: Double;
 begin
-  BandPxExtent(a, b);
-  if b = a then Exit(0.5);
-  Result := (DataToCoord(AValue) - a) / (b - a);
+  if PxStop = PxStart then Exit(0.5);
+  Result := (DataToCoord(AValue) - PxStart) / (PxStop - PxStart);
+end;
+
+{ The Level-0 members of a tick array, in order. }
+function TyMajorTicks(const ATicks: TTyScaleTickArray): TTyScaleTickArray;
+var i, n: Integer;
+begin
+  SetLength(Result, Length(ATicks));
+  n := 0;
+  for i := 0 to High(ATicks) do
+    if ATicks[i].Level = 0 then
+    begin
+      Result[n] := ATicks[i];
+      Inc(n);
+    end;
+  SetLength(Result, n);
 end;
 
 function TTyAxis.TickCoords(AAlignWithLabel: Boolean): TTyDoubleArray;
@@ -376,7 +554,14 @@ var
   i, n: Integer;
   bw, dir: Double;
 begin
-  ticks := FScale.GetTicks;
+  { MAJORS ONLY. GetTicks hands majors and minors back in ONE array with Level
+    saying which is which, and everything that reads this function -- the tick
+    marks, the split lines, the split-area band edges -- is asking about
+    majors. Taking the array whole meant `minorTick: { show: true }` drew the
+    minor grid a second time in the MAJOR style, and put a full-length tick
+    mark at every subdivision. The minor painters ask FScale.GetTicks
+    themselves and test Level the other way round. }
+  ticks := TyMajorTicks(TyDrawnTicks(FScale));
   n := Length(ticks);
   if n = 0 then Exit(nil);
 
@@ -395,7 +580,7 @@ begin
     vertical or inverse axis runs the other way and a bare subtraction would
     push the ticks off the wrong end. }
   bw := BandWidth;
-  if FPxStop >= FPxStart then dir := 1 else dir := -1;
+  if PxStop >= PxStart then dir := 1 else dir := -1;
   if FInverse then dir := -dir;
   SetLength(Result, n + 1);
   for i := 0 to n - 1 do
@@ -403,31 +588,73 @@ begin
   Result[n] := Result[n - 1] + dir * bw;
 end;
 
-function TTyAxis.DataToCoord(AValue: Double): Double;
-var n, a, b: Double;
+function TTyAxis.DataToLocal(AValue: Double; AClamp: Boolean): Double;
+var
+  n, r0, r1: Double;
+  e: TTyRange;
 begin
   if IsNan(AValue) then
-    Exit(NaN);
+  begin
+    { A GAP ON AN AXIS OF NO LENGTH lands in its middle: upstream's normalize
+      answers 0.5 for a flat extent before it looks at the value }
+    e := FScale.GetExtent2(sekMapping);
+    if not (IsNan(e.Start) or IsNan(e.Stop)) and (e.Start = e.Stop) then
+      n := 0.5
+    else
+      Exit(NaN);
+    BandExtent(r0, r1);
+    Exit((n - 0) / 1 * (r1 - r0) + r0);
+  end;
+  { THE SCALE'S parse FIRST: a time scale rounds to the millisecond, the way
+    Math.round does. It matters at the ends of a mapping extent, which half a
+    bar can leave fractional. }
+  if FScale is TTyTimeScale then AValue := TyJsRound(AValue)
+  { an ordinal one to a whole category, as Ordinal.parse rounds a number }
+  else if FScale is TTyOrdinalScale then AValue := TyJsRound(AValue);
   n := FScale.Normalize(AValue);
-  if FInverse then
-    n := 1 - n;
-  { The half-band inset is applied to the PIXEL extent, never to the value --
-    an ordinal 0 is still ordinal 0, it just lands on its band's centre. }
-  BandPxExtent(a, b);
-  Result := a + n * (b - a);
+  if IsNan(n) then
+    Exit(NaN);
+  BandExtent(r0, r1);
+  { linearMap(n, [0, 1], [r0, r1]): an end comes back as itself, not as the
+    arithmetic that would nearly reach it }
+  if AClamp then
+  begin
+    if n <= 0 then Exit(r0);
+    if n >= 1 then Exit(r1);
+  end
+  else
+  begin
+    if n = 0 then Exit(r0);
+    if n = 1 then Exit(r1);
+  end;
+  { AN INFINITY ONTO NO LENGTH is not-a-number, as JavaScript's
+    Infinity * 0 is; FPC raises on it instead }
+  if IsInfinite(n) and (r1 - r0 = 0) then Exit(NaN);
+  Result := (n - 0) / 1 * (r1 - r0) + r0;
+end;
+
+function TTyAxis.DataToCoord(AValue: Double; AClamp: Boolean): Double;
+begin
+  Result := ToGlobal(DataToLocal(AValue, AClamp));
 end;
 
 function TTyAxis.CoordToData(ACoord: Double): Double;
-var n, span, a, b: Double;
+var c, r0, r1, sub, t: Double;
 begin
-  BandPxExtent(a, b);
-  span := b - a;
-  if span = 0 then
-    Exit(FScale.GetExtent.Start);
-  n := (ACoord - a) / span;
-  if FInverse then
-    n := 1 - n;
-  Result := FScale.Denormalize(n);
+  if IsNan(ACoord) then
+    Exit(NaN);
+  c := ToLocal(ACoord);
+  BandExtent(r0, r1);
+  { linearMap(c, [r0, r1], [0, 1]): no length is the middle, and an end
+    comes back as itself }
+  sub := r1 - r0;
+  if sub = 0 then
+    t := (0 + 1) / 2
+  else if c = r0 then t := 0
+  else if c = r1 then t := 1
+  else
+    t := (c - r0) / sub * 1 + 0;
+  Result := FScale.Denormalize(t);
 end;
 
 { ============================ TTyCartesian2D ============================ }
@@ -436,7 +663,10 @@ constructor TTyCartesian2D.Create;
 begin
   inherited Create;
   FAxes := nil;
-  FRect := TyRectF(0, 0, 1, 1);
+  FXYWH := TyXYWH(0, 0, 1, 1);
+  FRect := TyRectOfXYWH(FXYWH);
+  FHasTransform := False;
+  FHasInvTransform := False;
   FDividerWidth := 0;
   FOwnsAxes := True;
 end;
@@ -462,8 +692,131 @@ end;
 
 procedure TTyCartesian2D.SetRect(const ARect: TTyRectF);
 begin
-  FRect := ARect;
+  SetRectXYWH(TyXYWHOfRect(ARect));
+end;
+
+procedure TTyCartesian2D.SetRectXYWH(const ARect: TTyXYWH);
+begin
+  FXYWH := ARect;
+  FRect := TyRectOfXYWH(ARect);
+  FHasTransform := False;
+  FHasInvTransform := False;
   ReflowAxes;
+end;
+
+function TTyCartesian2D.GetXYWH: TTyXYWH;
+begin
+  Result := FXYWH;
+end;
+
+function CanAffine(AAxis: TTyAxis): Boolean;
+begin
+  { upstream's canCalculateAffineTransform: an interval or a time scale --
+    not log, not ordinal. (Breaks too, which nothing here builds yet.) }
+  Result := (AAxis <> nil) and (AAxis.AxisType in [atValue, atTime])
+    and (AAxis.Scale is TTyIntervalScale);
+end;
+
+procedure TTyCartesian2D.CalcAffineTransform;
+var
+  ax, ay: TTyAxis;
+  xe, ye: TTyRange;
+  s0x, s0y, e1x, e1y, xSpan, ySpan, scaleX, scaleY, det: Double;
+  m: TTyMat2D;
+begin
+  FHasTransform := False;
+  FHasInvTransform := False;
+  ax := MasterX;
+  ay := MasterY;
+  if not (CanAffine(ax) and CanAffine(ay)) then Exit;
+  xe := ax.Scale.GetExtent2(sekMapping);
+  ye := ay.Scale.GetExtent2(sekMapping);
+  { per axis, with the matrix not yet there -- so a time end is rounded to
+    the millisecond first, as upstream's dataToPoint rounds it }
+  s0x := ax.DataToCoord(xe.Start);
+  s0y := ay.DataToCoord(ye.Start);
+  e1x := ax.DataToCoord(xe.Stop);
+  e1y := ay.DataToCoord(ye.Stop);
+  xSpan := xe.Stop - xe.Start;
+  ySpan := ye.Stop - ye.Start;
+  { `!span`: nought and not-a-number alike }
+  if IsNan(xSpan) or IsNan(ySpan) or (xSpan = 0) or (ySpan = 0) then Exit;
+  scaleX := (e1x - s0x) / xSpan;
+  scaleY := (e1y - s0y) / ySpan;
+  m[0] := scaleX;
+  m[1] := 0;
+  m[2] := 0;
+  m[3] := scaleY;
+  m[4] := s0x - xe.Start * scaleX;
+  m[5] := s0y - ye.Start * scaleY;
+  FTransform := m;
+  FHasTransform := True;
+  { zrender's invert, term for term }
+  det := m[0] * m[3] - m[1] * m[2];
+  if IsNan(det) or (det = 0) then Exit;
+  det := 1.0 / det;
+  FInvTransform[0] := m[3] * det;
+  FInvTransform[1] := -m[1] * det;
+  FInvTransform[2] := -m[2] * det;
+  FInvTransform[3] := m[0] * det;
+  FInvTransform[4] := (m[2] * m[5] - m[3] * m[4]) * det;
+  FInvTransform[5] := (m[1] * m[4] - m[0] * m[5]) * det;
+  FHasInvTransform := True;
+end;
+
+function TTyCartesian2D.Transform(out AM: TTyMat2D): Boolean;
+begin
+  AM := FTransform;
+  Result := FHasTransform;
+end;
+
+function TTyCartesian2D.InvTransform(out AM: TTyMat2D): Boolean;
+begin
+  AM := FInvTransform;
+  Result := FHasInvTransform;
+end;
+
+function TTyCartesian2D.GetAreaTol(ATol: Double): TTyXYWH;
+var
+  ax, ay: TTyAxis;
+  a, b, g0, g1: Double;
+begin
+  Result := FXYWH;
+  ax := MasterX;
+  ay := MasterY;
+  if (ax = nil) or (ay = nil) then Exit;
+  ax.LocalExtent(a, b);
+  g0 := ax.ToGlobal(a);
+  g1 := ax.ToGlobal(b);
+  Result.X := Min(g0, g1) - ATol;
+  Result.W := Max(g0, g1) - Result.X + ATol;
+  ay.LocalExtent(a, b);
+  g0 := ay.ToGlobal(a);
+  g1 := ay.ToGlobal(b);
+  Result.Y := Min(g0, g1) - ATol;
+  Result.H := Max(g0, g1) - Result.Y + ATol;
+end;
+
+function TTyCartesian2D.GetArea: TTyXYWH;
+var
+  ax, ay: TTyAxis;
+  a, b, g0, g1: Double;
+begin
+  Result := FXYWH;
+  ax := MasterX;
+  ay := MasterY;
+  if (ax = nil) or (ay = nil) then Exit;
+  { Cartesian2D.getArea: min of the two global ends, and max - min }
+  ax.LocalExtent(a, b);
+  g0 := ax.ToGlobal(a);
+  g1 := ax.ToGlobal(b);
+  Result.X := Min(g0, g1);
+  Result.W := Max(g0, g1) - Result.X;
+  ay.LocalExtent(a, b);
+  g0 := ay.ToGlobal(a);
+  g1 := ay.ToGlobal(b);
+  Result.Y := Min(g0, g1);
+  Result.H := Max(g0, g1) - Result.Y;
 end;
 
 procedure TTyCartesian2D.ReflowAxes;
@@ -474,9 +827,9 @@ begin
     decided, and it is why nothing downstream needs to remember to flip. }
   for i := 0 to High(FAxes) do
     if FAxes[i].Horizontal then
-      FAxes[i].SetPxExtent(FRect.Left, FRect.Right)
+      FAxes[i].SetLayoutExtent(FXYWH.X, FXYWH.W, False)
     else
-      FAxes[i].SetPxExtent(FRect.Bottom, FRect.Top);
+      FAxes[i].SetLayoutExtent(FXYWH.Y, FXYWH.H, True);
 end;
 
 function TTyCartesian2D.MasterX: TTyAxis;
@@ -570,14 +923,33 @@ begin
 end;
 
 function TTyCartesian2D.DataToPoint(const AData: array of Double): TTyPointF;
-var ax, ay: TTyAxis;
+begin
+  Result := DataToPointClamped(AData, False);
+end;
+
+function TTyCartesian2D.DataToPointClamped(const AData: array of Double;
+  AClamp: Boolean): TTyPointF;
+var
+  ax, ay: TTyAxis;
+  x, y: Double;
 begin
   ax := MasterX;
   ay := MasterY;
   if (ax = nil) or (ay = nil) or (Length(AData) < 2) then
     Exit(TyInvalidPointF);
-  Result.X := ax.DataToCoord(AData[0]);
-  Result.Y := ay.DataToCoord(AData[1]);
+  x := AData[0];
+  y := AData[1];
+  { THE MATRIX when there is one and both values are finite; one infinity
+    or gap sends BOTH down the per-axis path, as upstream's gate does }
+  if FHasTransform and not (IsNan(x) or IsInfinite(x) or IsNan(y)
+    or IsInfinite(y)) then
+  begin
+    Result.X := FTransform[0] * x + FTransform[2] * y + FTransform[4];
+    Result.Y := FTransform[1] * x + FTransform[3] * y + FTransform[5];
+    Exit;
+  end;
+  Result.X := ax.DataToCoord(x, AClamp);
+  Result.Y := ay.DataToCoord(y, AClamp);
 end;
 
 function TTyCartesian2D.DataToLayout(const AData: array of Double): TTyCoordLayout;
@@ -644,7 +1016,12 @@ begin
   end
   else
   begin
-    baseline := across.DataToCoord(across.Scale.GetExtent.Start);
+    { FROM WHERE A BAR STANDS, which is the value axis' start value and not
+      its min: a -3 on an axis from -4 to 6 runs down from 0, not up from -4.
+      A start the axis cannot place -- a log axis told to start at 0 -- is no
+      cell at all, as upstream draws no bar there. }
+    baseline := across.DataToCoord(TyValueAxisStart(across));
+    if IsNan(baseline) or IsInfinite(baseline) then Exit;
     aMin := Min(aAnchor, baseline);
     aMax := Max(aAnchor, baseline);
   end;
@@ -680,15 +1057,38 @@ begin
   if (ax = nil) or (ay = nil) then
     Exit(False);
   SetLength(AData, 2);
+  if FHasInvTransform then
+  begin
+    AData[0] := FInvTransform[0] * APoint.X + FInvTransform[2] * APoint.Y
+      + FInvTransform[4];
+    AData[1] := FInvTransform[1] * APoint.X + FInvTransform[3] * APoint.Y
+      + FInvTransform[5];
+    Exit(True);
+  end;
   AData[0] := ax.CoordToData(APoint.X);
   AData[1] := ay.CoordToData(APoint.Y);
   Result := True;
 end;
 
 function TTyCartesian2D.ContainPoint(const APoint: TTyPointF): Boolean;
+var
+  ax, ay: TTyAxis;
+  a, b, l: Double;
 begin
-  Result := (APoint.X >= FRect.Left) and (APoint.X <= FRect.Right)
-        and (APoint.Y >= FRect.Top) and (APoint.Y <= FRect.Bottom);
+  ax := MasterX;
+  ay := MasterY;
+  if (ax = nil) or (ay = nil) then
+    Exit((APoint.X >= FRect.Left) and (APoint.X <= FRect.Right)
+      and (APoint.Y >= FRect.Top) and (APoint.Y <= FRect.Bottom));
+  { upstream's containPoint: each axis takes the point into its own frame
+    and asks whether it falls in [0, w], both ends included }
+  ax.LocalExtent(a, b);
+  l := ax.ToLocal(APoint.X);
+  Result := (l >= Min(a, b)) and (l <= Max(a, b));
+  if not Result then Exit;
+  ay.LocalExtent(a, b);
+  l := ay.ToLocal(APoint.Y);
+  Result := (l >= Min(a, b)) and (l <= Max(a, b));
 end;
 
 end.

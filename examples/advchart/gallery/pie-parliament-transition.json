@@ -1,0 +1,43 @@
+{
+ "series": [
+  {
+   "type": "pie",
+   "id": "distribution",
+   "radius": [
+    "30%",
+    "80%"
+   ],
+   "label": {
+    "show": false
+   },
+   "universalTransition": true,
+   "animationDurationUpdate": 1000,
+   "data": [
+    {
+     "value": 800,
+     "name": "A"
+    },
+    {
+     "value": 635,
+     "name": "B"
+    },
+    {
+     "value": 580,
+     "name": "C"
+    },
+    {
+     "value": 484,
+     "name": "D"
+    },
+    {
+     "value": 300,
+     "name": "E"
+    },
+    {
+     "value": 200,
+     "name": "F"
+    }
+   ]
+  }
+ ]
+}

@@ -28,6 +28,9 @@ type
       is: Paint needs a handle and a message loop, and a headless test has
       neither. }
     procedure RenderLayered(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { MouseMove is protected on TControl, and every suite that wants to test
+      what the pointer is over needs it. One door rather than one per suite. }
+    procedure Hover(AX, AY: Integer);
     function TypeKey: string;
   end;
 
@@ -45,6 +48,7 @@ type
     function ManyCategories(ACount: Integer): string;
     function RedIn(AL, AT, AR, AB: Integer): Integer;
     function GreenIn(AL, AT, AR, AB: Integer): Integer;
+    function BlueIn(AL, AT, AR, AB: Integer): Integer;
     function InkDepth(const AP, ABg: TBGRAPixel): Integer;
   published
     procedure TestItHasItsOwnStyleKey;
@@ -62,6 +66,7 @@ type
     procedure TestAHiddenAxisIsNotDrawn;
     procedure TestTheAxisHonoursMinMaxAndInterval;
     procedure TestAnAxisWithNoDataStillObeysItsOptions;
+    procedure TestAnAxisWithNothingToGoOnDrawsNoTicksOrLabels;
     procedure TestMinorTicksDoNotGetLabels;
     procedure TestCategoriesCollectedFromSeriesDataReachTheAxis;
     procedure TestAnUnnaturalIntervalIsNotRoundedAway;
@@ -71,16 +76,35 @@ type
     procedure TestMinIntervalKeepsACountingAxisWhole;
     procedure TestMaxIntervalCapsTheStep;
     procedure TestAValueAxisBoundaryGapPadsTheExtent;
-    procedure TestACrowdedAxisThinsItsLabels;
+    procedure TestACrowdedValueAxisDrawsEveryLabelButItsEnds;
     procedure TestTheSeriesIsActuallyDrawnInTheThemesColour;
     procedure TestTheSecondSeriesTakesTheSecondSlotOfTheRamp;
+    procedure TestAPieIsDrawnOffItsOwnCentreWithAColourPerSector;
+    procedure TestTheBackingStripIsDrawnInTheThemesOwnColour;
+    procedure TestATitleIsDrawnWhereTheOptionPutIt;
+    procedure TestASeriesLabelIsDrawnAndTakesItsInkFromItsMark;
+    procedure TestAPieLabelsItsSlicesAndPointsAtThem;
+    procedure TestALegendNamesTheSeriesAlongTheBottom;
+    procedure TestSingleModeGreysEveryItemButOneBeforeAnyClick;
+    procedure TestEachLegendItemTakesItsOwnSeriesColourAndIconShape;
+    procedure TestALineSeriesGetsARuleWithARingOnItRatherThanABlock;
+    procedure TestASwitchedOffSeriesIsNotDrawnAndDoesNotSizeTheAxis;
+    procedure TestASwitchedOffSliceLeavesThePieAndTheRestKeepTheirColours;
+    procedure TestTheSeriesAboveAHiddenOneDropsOntoWhatIsLeft;
+    procedure TestAPieOffersItsSliceNamesAndAnswersToItsOwn;
+    procedure TestATableFeedsThreeSeriesAColumnEach;
+    procedure TestASeriesReadingATableNamesItselfAfterItsColumn;
+    procedure TestEncodeOverridesWhichColumnASeriesReads;
+    procedure TestAPieReadingATableNamesItsSlicesFromAColumn;
+    procedure TestACoordinateNobodyClaimedDrawsNothing;
+    procedure TestASeriesCanReadTheTableTheOtherWayRound;
     procedure TestTwoBarSeriesStandSideBySideInsteadOfOnTopOfEachOther;
     procedure TestAStackedBarStandsOnTheOneBelowIt;
     procedure TestALayeredFrameDrawsTheSamePictureAsAWholeOne;
     procedure TestAKeptStaticLayerDoesNoWorkAndInvalidateDropsIt;
     procedure TestTheLayoutOwnsTheThinningDecision;
     procedure TestTheGridThinsWithTheLabels;
-    procedure TestMinorTicksVanishWhenTheMajorsAreThinned;
+    procedure TestACrowdedValueAxisKeepsItsMinorTicks;
     procedure TestResizingRelaysOutTheAxes;
     procedure TestAnAxisNameIsDrawnInTheSpaceReservedForIt;
     procedure TestAThickerThemeBorderDrawsAThickerAxis;
@@ -99,6 +123,11 @@ procedure TChartProbe.RenderLayered(ACanvas: TCanvas; const ARect: TRect;
   APPI: Integer);
 begin
   RenderCached(ACanvas, ARect, APPI);
+end;
+
+procedure TChartProbe.Hover(AX, AY: Integer);
+begin
+  MouseMove([], AX, AY);
 end;
 
 function TChartProbe.TypeKey: string;
@@ -439,7 +468,12 @@ begin
     stayed green. }
   { No series: this counts vertical ink across the middle of the plot, and a
     bar is vertical ink. }
-  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C'', ''D''] },'
+  { SPLIT LINES ASKED FOR BY NAME. A category axis does not draw them by
+    default -- that is upstream's behaviour and item 15's headline finding --
+    so the vertical grid counted here exists because the option says so. The
+    subject is still WHERE the lines land, not whether they appear. }
+  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C'', ''D''],'
+    + ' splitLine: { show: true } },'
     + ' yAxis: { min: 0, max: 10 }, series: [] }';
   Draw;
   gb := FChart.Build.Grid(0);
@@ -517,9 +551,13 @@ begin
     pixels of ink -- and the axis LINE's own antialiasing, spread down the whole
     height of the plot, supplied them. It passed with every tick mark removed. }
   { No series -- see TestAValueAxisLabelsItsTicks: the background reference
-    comes from inside the plot. }
+    comes from inside the plot.
+
+    TICKS ASKED FOR BY NAME: a value axis' `axisTick.show` is `auto`, and
+    against a banded category x that resolves to no. }
   FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C''] },'
-    + ' yAxis: { min: 0, max: 30 }, series: [] }';
+    + ' yAxis: { min: 0, max: 30, axisTick: { show: true } },'
+    + ' series: [] }';
   Draw;
   gb := FChart.Build.Grid(0);
   left := Round(gb.PlotRect.Left);
@@ -653,7 +691,7 @@ begin
     Length(FChart.Build.Axis('yAxis', 0).Scale.GetTicks) <= 4);
 end;
 
-procedure TAdvanceChartTest.TestACrowdedAxisThinsItsLabels;
+procedure TAdvanceChartTest.TestACrowdedValueAxisDrawsEveryLabelButItsEnds;
 var
   x, y, ink, gutter, x0, yTop, yBot: Integer;
   p, bg: TBGRAPixel;
@@ -703,14 +741,25 @@ begin
   fewTicks := Bands;
   AssertTrue('a sparse axis drew some labels', fewTicks > 1);
 
-  { Same control, same height, a scale that wants far more ticks. }
+  { Same control, same height, a scale that wants far more ticks. A VALUE
+    AXIS IS NEVER THINNED BY INDEX: every interior label is drawn, crowded or
+    not, and only the two ends -- each crowding its neighbour -- give way.
+    [Revised in batch 39: this demanded fewer than 40 label bands, the port
+    thinning the value axis as it thins a category one.] }
   FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 3000,'
     + ' interval: 20 }, series: [{ type: ''bar'', data: [3000] }] }';
   Draw;
-  bg := PixelAt(200, 150);
-  manyTicks := Bands;
-  AssertTrue(Format('%d label bands for a scale asking for 150 ticks -- '
-    + 'nothing is thinning them', [manyTicks]), manyTicks < 40);
+  AssertEquals('151 labels', 151, Length(FChart.Build.Grid(0).SpecFor(
+    FChart.Build.Grid(0).YAxis(0))^.Placements));
+  manyTicks := 0;
+  for x := 0 to 150 do
+    if FChart.Build.Grid(0).SpecFor(FChart.Build.Grid(0).YAxis(0))^
+      .Placements[x].Shown then Inc(manyTicks);
+  AssertEquals('149 of them drawn', 149, manyTicks);
+  AssertFalse('not the first', FChart.Build.Grid(0).SpecFor(
+    FChart.Build.Grid(0).YAxis(0))^.Placements[0].Shown);
+  AssertFalse('nor the last', FChart.Build.Grid(0).SpecFor(
+    FChart.Build.Grid(0).YAxis(0))^.Placements[150].Shown);
 end;
 
 procedure TAdvanceChartTest.TestResizingRelaysOutTheAxes;
@@ -785,47 +834,82 @@ end;
 
 procedure TAdvanceChartTest.TestAnAxisNameIsDrawnInTheSpaceReservedForIt;
 
-  { Red pixels anywhere below the plot. Nothing else on the canvas is red, so
-    this counts the axis name and only the axis name.
+  { Red pixels on the canvas, and how many of them fall in the box the layout
+    gave the x axis' name. Nothing else on the canvas is red, so this counts
+    the axis name and only the axis name.
 
     Comparing TOTAL ink for a named axis against an unnamed one was the first
     attempt and it was fake-green: naming an axis MOVES THE PLOT, because the
     layout reserves the name's space whether or not anything draws into it, so
     the two runs differed for a reason unrelated to the name. Mutating the
     drawing out left the test green, which is how this was found. }
-  function RedBelowPlot(const AName: string): Integer;
+  function RedPixels(const AOption: string; out AInBox: Integer;
+    out APlace: TTyAxisNamePlacement): Integer;
   var
-    gb: TTyGridBuild;
+    spec: PTyAxisLayoutSpec;
+    box: TTyXYWH;
+    hasBox: Boolean;
     x, y: Integer;
     p: TBGRAPixel;
   begin
-    FChart.Option := '{ xAxis: { data: [''A'', ''B'']' + AName + ' },'
-      + ' yAxis: {}, series: [{ type: ''bar'', data: [1, 2] }] }';
+    FChart.Option := AOption;
     Draw;
-    gb := FChart.Build.Grid(0);
+    spec := FChart.Build.Grid(0).SpecFor(FChart.Build.Axis('xAxis', 0));
+    hasBox := (spec <> nil) and spec^.NamePlacement.Shown;
+    APlace := Default(TTyAxisNamePlacement);
+    if hasBox then
+    begin
+      APlace := spec^.NamePlacement;
+      box := APlace.Rect;
+    end;
     Result := 0;
-    for y := Round(gb.PlotRect.Bottom) + 1 to 299 do
+    AInBox := 0;
+    for y := 0 to 299 do
       for x := 0 to 399 do
       begin
         p := PixelAt(x, y);
-        if (p.red > p.green + 60) and (p.red > p.blue + 60) then Inc(Result);
+        if (p.red > p.green + 60) and (p.red > p.blue + 60) then
+        begin
+          Inc(Result);
+          { a pixel of slack round the box: the glyphs are anti-aliased }
+          if hasBox and (x >= box.X - 1) and (x <= box.X + box.W + 1)
+            and (y >= box.Y - 1) and (y <= box.Y + box.H + 1) then
+            Inc(AInBox);
+        end;
       end;
   end;
 
 var
-  named, unnamed: Integer;
+  named, unnamed, inBox: Integer;
+  place: TTyAxisNamePlacement;
 begin
-  { THE SPACE WAS ALREADY BEING RESERVED. Builder solves the grid with obcAll,
-    so TyAxisThickness charged every named axis for NameGap plus the name's
-    turned extent -- and nothing drew into it. Setting `name` shrank the plot by
-    the width of a string that was not on screen, and every other assertion in
-    this file stayed green because they all sample INSIDE the plot. }
+  { THE SPACE WAS ALREADY BEING RESERVED, and nothing drew into it: setting
+    `name` shrank the plot by the width of a string that was not on screen,
+    and every other assertion in this file stayed green because they all
+    sample INSIDE the plot. Then it was drawn beside the band rather than in
+    it, the paint pass working out a place of its own. Now the layout puts
+    the name -- at the end of the axis, by default -- and every red pixel
+    has to be inside the box it put it in.
+    [Revised in batch 38: this counted red pixels below the plot, which an
+    end name on the axis line only half is.] }
   FCtl.StyleOverride := 'TyAdvChartAxisName { color: #FF0000; }';
-  unnamed := RedBelowPlot('');
-  named := RedBelowPlot(', name: ''WWWWWWWW''');
+  unnamed := RedPixels('{ xAxis: { data: [''A'', ''B''] }, yAxis: {},'
+    + ' series: [{ type: ''bar'', data: [1, 2] }] }', inBox, place);
   AssertEquals('nothing is red when the axis has no name', 0, unnamed);
-  AssertTrue(Format('a named axis put %d red pixels below the plot -- the name '
+  named := RedPixels('{ xAxis: { data: [''A'', ''B''], name: ''WWWWWWWW'' },'
+    + ' yAxis: {}, series: [{ type: ''bar'', data: [1, 2] }] }', inBox, place);
+  AssertTrue(Format('a named axis put %d red pixels on the canvas -- the name '
     + 'is not being drawn', [named]), named > 30);
+  AssertEquals('every one of them in the box the layout gave it', named, inBox);
+  { AND A MIDDLE NAME, under the labels -- set down on them by its gap of
+    nought and MOVED clear of them, so it is drawn where the move put it and
+    not where the gap did }
+  named := RedPixels('{ xAxis: { data: [''A'', ''B''], name: ''WWWWWWWW'','
+    + ' nameLocation: ''middle'', nameGap: 0 }, yAxis: {},'
+    + ' series: [{ type: ''bar'', data: [1, 2] }] }', inBox, place);
+  AssertTrue(Format('moved by %.1f', [place.MovedY]), place.MovedY > 10);
+  AssertTrue(Format('a middle name drew %d', [named]), named > 30);
+  AssertEquals('in its box too', named, inBox);
 end;
 
 procedure TAdvanceChartTest.TestAThickerThemeBorderDrawsAThickerAxis;
@@ -929,7 +1013,8 @@ begin
     whatever the accent happens to be. Alone that row was fine; in the full run
     it found one wide red band instead of four narrow ones. The SetUp comment in
     this file records the same trap for the tick-mark test. }
-  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C'', ''D''] },'
+  FChart.Option := '{ xAxis: { data: [''A'', ''B'', ''C'', ''D''],'
+    + ' splitLine: { show: true } },'
     + ' yAxis: { min: 0, max: 100 },'
     + ' series: [{ type: ''bar'', data: [1, 1, 1, 1] }] }';
   Draw;
@@ -1050,6 +1135,71 @@ begin
   AssertEquals('and so is max', 150.0, e.Stop, 1e-9);
 end;
 
+procedure TAdvanceChartTest.TestAnAxisWithNothingToGoOnDrawsNoTicksOrLabels;
+const
+  cBlank = '{ xAxis: { data: [''A'', ''B''] }, yAxis: { %s'
+    + ' minorTick: { show: true }, minorSplitLine: { show: true } }, series: [] }';
+var
+  gb: TTyGridBuild;
+  spec: PTyAxisLayoutSpec;
+  ax: TTyAxis;
+  r: TTyRectF;
+  bg: TBGRAPixel;
+
+  function Inside: Integer;
+  begin
+    r := gb.PlotRect;
+    { the ground just above the plot, which nothing draws on }
+    bg := PixelAt(Round((r.Left + r.Right) / 2), Round(r.Top) - 6);
+    Result := InkIn(Round(r.Left) + 3, Round(r.Top) + 3,
+      Round(r.Right) - 3, Round(r.Bottom) - 3, bg);
+  end;
+
+  { The gutter left of the axis, clear of the control's frame and of the
+    axis line: where only a label or a tick mark puts ink. }
+  function Gutter: Integer;
+  begin
+    r := gb.PlotRect;
+    bg := PixelAt(Round((r.Left + r.Right) / 2), Round(r.Top) - 6);
+    Result := InkIn(8, Round(r.Top) - 4, Round(r.Left) - 2,
+      Round(r.Bottom) + 4, bg);
+  end;
+
+begin
+  { UPSTREAM'S isBlank. A value axis with no data and no usable min or max is
+    still niced to [0, 1], with ticks -- upstream's is too, and the oracle
+    compares them -- but none of it is DRAWN: no labels, no tick marks, no
+    minor ticks, no split lines. The port labelled 0, 0.2 ... 1 on an empty
+    chart. A max alone is still nothing to go on; a min and a max are. }
+  FChart.Option := Format(cBlank, ['']);
+  Draw;
+  gb := FChart.Build.Grid(0);
+  ax := gb.YAxis(0);
+  AssertTrue('nothing to go on: blank', ax.Scale.Blank);
+  AssertTrue('its ticks still exist', Length(ax.Scale.GetTicks) > 0);
+  spec := gb.SpecFor(ax);
+  AssertTrue('the axis has a layout spec', spec <> nil);
+  AssertEquals('no labels', 0, Length(spec^.Labels));
+  AssertTrue('no tick marks, split lines or split areas', ax.TickCoords = nil);
+  AssertEquals('and nothing inside the plot, minor lines included', 0, Inside);
+  AssertEquals('nor in the gutter', 0, Gutter);
+
+  FChart.Option := Format(cBlank, ['max: 100,']);
+  Draw;
+  AssertTrue('a max alone is still blank', FChart.Build.Grid(0).YAxis(0).Scale.Blank);
+
+  FChart.Option := Format(cBlank, ['min: 0, max: 100,']);
+  Draw;
+  gb := FChart.Build.Grid(0);
+  ax := gb.YAxis(0);
+  AssertFalse('a min and a max are something', ax.Scale.Blank);
+  spec := gb.SpecFor(ax);
+  AssertEquals('0, 20 ... 100', 6, Length(spec^.Labels));
+  AssertTrue('with tick marks', ax.TickCoords <> nil);
+  AssertTrue('and lines inside the plot', Inside > 0);
+  AssertTrue('and numbers in the gutter', Gutter > 0);
+end;
+
 procedure TAdvanceChartTest.TestMinorTicksDoNotGetLabels;
 var
   gb: TTyGridBuild;
@@ -1151,16 +1301,24 @@ begin
   AssertEquals('and the extent is the unpadded one', bare.Start,
     padded.Start, 1e-9);
 
-  { A BARE NUMERIC STRING IS REFUSED, and that is the case that says the '%'
-    check is doing something: '50' could mean fifty units or fifty per cent,
-    ECharts documents neither, and choosing one would pad by a number the
-    author never asked for. A number belongs in the option as a number. }
+  { [Revised in batch 33: this used to refuse a bare numeric string, reasoning
+    that ECharts documents neither reading. Its code does choose one.]
+    A BARE NUMERIC STRING IS A RATIO, exactly as the number is: parsePercent
+    parseFloats a string without a '%', and the gap is that times the data's
+    span. '50' pads by fifty spans, which is what `50` does. }
+  FChart.Option := '{ xAxis: { data: [''A'', ''B''] },'
+    + ' yAxis: { boundaryGap: [50, 50] },'
+    + ' series: [{ type: ''line'', data: [10, 20] }] }';
+  Draw;
+  bare := FChart.Build.Grid(0).YAxis(0).Scale.GetExtent;
   FChart.Option := '{ xAxis: { data: [''A'', ''B''] },'
     + ' yAxis: { boundaryGap: [''50'', ''50''] },'
     + ' series: [{ type: ''line'', data: [10, 20] }] }';
   Draw;
   padded := FChart.Build.Grid(0).YAxis(0).Scale.GetExtent;
-  AssertEquals('a bare numeric string pads nothing', bare.Start,
+  AssertTrue(Format('fifty spans down (%.1f)', [padded.Start]),
+    padded.Start <= 10 - 50 * 10);
+  AssertEquals('the string pads as the number does', bare.Start,
     padded.Start, 1e-9);
   AssertEquals('at either end', bare.Stop, padded.Stop, 1e-9);
 end;
@@ -1335,7 +1493,8 @@ begin
     count is of split lines and nothing else. }
   FCtl.StyleOverride := 'TyAdvChartSplitLine { border-color: #FF0000;'
     + ' border-width: 1px; }';
-  FChart.Option := '{ xAxis: { data: [' + ManyCategories(120) + '] },'
+  FChart.Option := '{ xAxis: { data: [' + ManyCategories(120) + '],'
+    + ' splitLine: { show: true } },'
     + ' yAxis: { min: 0, max: 100 },'
     + ' series: [{ type: ''bar'', data: [1] }] }';
   Draw;
@@ -1378,7 +1537,7 @@ begin
   end;
 end;
 
-procedure TAdvanceChartTest.TestMinorTicksVanishWhenTheMajorsAreThinned;
+procedure TAdvanceChartTest.TestACrowdedValueAxisKeepsItsMinorTicks;
 
   { Red runs in the band BELOW the major ticks, where only a minor tick reaches.
     The minor-tick key alone is overridden, so the count is of minor ticks. }
@@ -1426,13 +1585,16 @@ begin
   AssertTrue(Format('an uncrowded axis shows its minor ticks (%d runs)',
     [roomy]), roomy > 2);
 
+  { A VALUE AXIS IS NEVER THINNED BY INDEX, so however crowded, its majors
+    all stand and so do the minors between them -- upstream draws 1200 here.
+    [Revised in batch 39: the port thinned the value axis and drew none.] }
   crowded := MinorRuns('{ xAxis: { min: 0, max: 4000, interval: 10,'
     + ' minorTick: { show: true, splitNumber: 4 } }, yAxis: {},'
     + ' series: [{ type: ''line'', data: [1] }] }');
   gb := FChart.Build.Grid(0);
-  AssertTrue('the crowded fixture really thins',
-    gb.SpecFor(gb.XAxis(0))^.LabelStep > 1);
-  AssertEquals('and then it draws no minor ticks at all', 0, crowded);
+  AssertEquals('not thinned', 1, gb.SpecFor(gb.XAxis(0))^.LabelStep);
+  AssertTrue(Format('and its minor ticks are drawn (%d runs)', [crowded]),
+    crowded > 0);
 end;
 
 procedure TAdvanceChartTest.TestALayeredFrameDrawsTheSamePictureAsAWholeOne;
@@ -1626,6 +1788,303 @@ end;
 { Pixels in a rectangle that are strongly red. Used where the fixture has
   overridden a series colour to red, so the count is of that series and of
   nothing else on the canvas. }
+procedure TAdvanceChartTest.TestAPieLabelsItsSlicesAndPointsAtThem;
+var
+  outside_, none_: Integer;
+begin
+  { A PIE IS LABELLED BY ITS OWN PASS, not by the one that labels bars -- and
+    the two reach the canvas by different routes, so a bar test cannot stand in
+    for this one. `label.show` defaults TRUE on a pie, which is the other half
+    of the difference: a pie that says nothing about labels still gets them.
+
+    Counted OUTSIDE the disc, where only an outer label and its leader can be:
+    the pie is centred with a radius of a quarter of the shorter side, so the
+    top strip of the chart is bare but for the labels. }
+  FCtl.StyleOverride := 'TyAdvChartLabel { color: #FF0000; }';
+  FChart.Option := '{ series: [{ type: ''pie'', radius: ''30%'', data: ['
+    + ' { value: 1, name: ''Alpha'' }, { value: 1, name: ''Beta'' } ] }] }';
+  Draw(400, 300);
+  outside_ := RedIn(0, 0, 399, 299);
+  AssertTrue(Format('the slices are labelled (%d px)', [outside_]),
+    outside_ > 20);
+
+  { AND SWITCHED OFF IT DRAWS NONE, which is what says the option is read
+    rather than labels being drawn unconditionally. }
+  FChart.Option := '{ series: [{ type: ''pie'', radius: ''30%'','
+    + ' label: { show: false }, data: ['
+    + ' { value: 1, name: ''Alpha'' }, { value: 1, name: ''Beta'' } ] }] }';
+  Draw(400, 300);
+  none_ := RedIn(0, 0, 399, 299);
+  AssertEquals('none at all', 0, none_);
+end;
+
+procedure TAdvanceChartTest.TestASeriesLabelIsDrawnAndTakesItsInkFromItsMark;
+var
+  gb: TTyGridBuild;
+  l, t, r, b, inside_, outside_, unlabelled, neither, one, both: Integer;
+begin
+  { LABELS ARE OFF UNLESS ASKED, so the same chart drawn twice -- once with a
+    label block and once without -- is the cleanest thing to count. Anything
+    that appears only in the first render is the label.
+
+    The ink is a THEME KEY, and overriding it red is what proves the label is
+    not drawn in the series colour by accident: the bar itself is overridden
+    green, so red pixels can only be glyphs. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #00FF00; }'
+    + ' TyAdvChartLabelOnLight { color: #FF0000; }'
+    + ' TyAdvChartLabelOnMid { color: #FF0000; }'
+    + ' TyAdvChartLabelOnDark { color: #FF0000; }';
+
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', data: [80] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  l := Round(gb.PlotRect.Left);
+  t := Round(gb.PlotRect.Top);
+  r := Round(gb.PlotRect.Right);
+  b := Round(gb.PlotRect.Bottom);
+  unlabelled := RedIn(l, t, r, b);
+  AssertEquals('no label block, no glyphs', 0, unlabelled);
+
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', label: { show: true }, data: [80] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  inside_ := RedIn(Round(gb.PlotRect.Left), Round(gb.PlotRect.Top),
+                   Round(gb.PlotRect.Right), Round(gb.PlotRect.Bottom));
+  AssertTrue(Format('the label is drawn (%d px)', [inside_]), inside_ > 10);
+
+  { AND WHERE THE OPTION PUT IT -- which also changes WHICH THEME KEY it takes.
+    `inside` reads the three contrast bands; `bottom` is outside the mark and
+    reads TyAdvChartLabel instead, because an outside label is never derived
+    from the thing it names. The override above deliberately covers only the
+    inside keys, so this next render finds no red until the outside key is
+    overridden too -- which is the assertion. }
+  AssertEquals('the inside keys do not reach an outside label', 0,
+    RedIn(Round(gb.PlotRect.Left), Round(gb.PlotRect.Bottom) - 20,
+          Round(gb.PlotRect.Right), Round(gb.PlotRect.Bottom) + 30));
+  FCtl.StyleOverride := FCtl.StyleOverride
+    + ' TyAdvChartLabel { color: #FF0000; }';
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', label: { show: true, position: ''bottom'' },'
+    + ' data: [80] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  b := Round(gb.PlotRect.Bottom);
+  outside_ := RedIn(Round(gb.PlotRect.Left), b + 1,
+                    Round(gb.PlotRect.Right), b + 30);
+  { COUNTED AS `THERE, AND NOT IN THE MIDDLE` rather than as a pixel count.
+    Two digits at the theme's own size are a dozen pixels over the red
+    threshold and the exact number is the font's business, not this test's.
+    What the test is for is WHERE they went: below the bar's foot, and no
+    longer across its middle where `inside` had put them. }
+  AssertTrue(Format('`bottom` puts it under the bar (%d px)', [outside_]),
+    outside_ > 0);
+  AssertEquals('and no longer inside it', 0,
+    RedIn(Round(gb.PlotRect.Left), Round(gb.PlotRect.Top),
+          Round(gb.PlotRect.Right), b - 10));
+
+  { EACH SERIES KEEPS ITS OWN SPEC, and only two series can say so: with one,
+    an index bug that filed every spec under slot zero would read back the same
+    answer either way.
+
+    Counted as a ladder -- neither labelled, one labelled, both labelled -- so
+    the middle case has to land strictly between the other two. A version that
+    shared one spec across the chart would draw the middle case as one of the
+    ends. }
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', data: [80] },'
+    + ' { type: ''bar'', data: [60] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  l := Round(gb.PlotRect.Left);
+  t := Round(gb.PlotRect.Top);
+  r := Round(gb.PlotRect.Right);
+  b := Round(gb.PlotRect.Bottom);
+  neither := RedIn(l, t, r, b);
+
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', data: [80] },'
+    + ' { type: ''bar'', label: { show: true }, data: [60] }] }';
+  Draw;
+  one := RedIn(l, t, r, b);
+
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', label: { show: true }, data: [80] },'
+    + ' { type: ''bar'', label: { show: true }, data: [60] }] }';
+  Draw;
+  both := RedIn(l, t, r, b);
+
+  AssertEquals('neither series labelled', 0, neither);
+  AssertTrue(Format('one of them is (%d px)', [one]), one > 0);
+  AssertTrue(Format('and two is more than one (%d vs %d)', [both, one]),
+    both > one);
+
+  { A FORMATTER CHANGES THE WORDS, which is the only way to tell that the
+    template ran at all -- the default text for a bar is the value, and a
+    formatter of {c} would draw exactly the same pixels. A longer string draws
+    more of them. }
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', label: { show: true,'
+    + ' formatter: ''{c} kilograms'' }, data: [80] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  AssertTrue('a longer label is more ink',
+    RedIn(Round(gb.PlotRect.Left), Round(gb.PlotRect.Top),
+          Round(gb.PlotRect.Right), Round(gb.PlotRect.Bottom)) > inside_);
+end;
+
+procedure TAdvanceChartTest.TestATitleIsDrawnWhereTheOptionPutIt;
+var
+  centre, leftSide, top_, bottom_, titleOnly: Integer;
+begin
+  { A title floats over the container and reserves nothing, so the only thing
+    that can say it was drawn is ink where nothing else paints. The chart here
+    has no series and no axes: everything counted below is the title.
+
+    THE COLOUR IS A THEME KEY, and the override is what proves it -- upstream
+    hard-codes 18px bold in its primary colour, and a port that did the same
+    would put a black title on a dark skin. }
+  FCtl.StyleOverride := 'TyAdvChartTitle { color: #FF0000; }';
+  FChart.Option := '{ title: { text: ''Referer'' } }';
+  Draw(400, 300);
+  top_ := RedIn(0, 0, 399, 60);
+  bottom_ := RedIn(0, 200, 399, 299);
+  AssertTrue(Format('the title is near the top (%d px)', [top_]), top_ > 20);
+  AssertEquals('and nowhere else', 0, bottom_);
+
+  { CENTRED BY DEFAULT, which is the one placement rule a reader would notice
+    immediately if it were wrong. }
+  centre := RedIn(150, 0, 250, 60);
+  leftSide := RedIn(0, 0, 100, 60);
+  AssertTrue(Format('centred (%d px)', [centre]), centre > 20);
+  AssertEquals('not against the left edge', 0, leftSide);
+
+  { AND left MOVES IT, so the option is read rather than the default drawn
+    twice. }
+  FChart.Option := '{ title: { text: ''Referer'', left: 0 } }';
+  Draw(400, 300);
+  AssertTrue(Format('now against the left edge (%d px)',
+    [RedIn(0, 0, 100, 60)]), RedIn(0, 0, 100, 60) > 20);
+
+  { A SUBTITLE IS A SECOND LINE, in its own theme key. }
+  FCtl.StyleOverride := 'TyAdvChartTitle { color: #FF0000; }'
+    + ' TyAdvChartSubtitle { color: #00FF00; }';
+  FChart.Option := '{ title: { text: ''Referer'' } }';
+  Draw(400, 300);
+  titleOnly := RedIn(0, 0, 399, 120);
+  FChart.Option := '{ title: { text: ''Referer'', subtext: ''Fake Data'' } }';
+  Draw(400, 300);
+  AssertTrue(Format('the subtitle is drawn too (%d px)',
+    [GreenIn(0, 0, 399, 120)]), GreenIn(0, 0, 399, 120) > 20);
+  AssertTrue('and below the title', GreenIn(0, 0, 399, 25) = 0);
+
+  { IN ITS OWN KEY, which is the point of there being two: a subtitle drawn
+    from the title's style would come out red.
+
+    COUNTED AS `THE RED DID NOT GROW` rather than as `no red below line 30`,
+    which is what this asserted first. The title's own descenders reach
+    somewhere around there, and exactly where depends on the font the process
+    ended up with -- so that version passed alone and failed in the full run,
+    which is this repo's oldest-shaped false alarm. The title sits in the same
+    place in both renders below, so its red is the same number in both. }
+  AssertEquals('the second line added no red', titleOnly,
+    RedIn(0, 0, 399, 120));
+
+  { SWITCHED OFF DRAWS NOTHING. }
+  FChart.Option := '{ title: { text: ''Referer'', show: false } }';
+  Draw(400, 300);
+  AssertEquals('nothing at all', 0, RedIn(0, 0, 399, 299));
+end;
+
+procedure TAdvanceChartTest.TestTheBackingStripIsDrawnInTheThemesOwnColour;
+var
+  gb: TTyGridBuild;
+  high_, low_: Integer;
+begin
+  { showBackground reaches the canvas, and its colour comes from a THEME KEY
+    rather than from upstream's hard-coded rgba(180,180,180,0.2). A pale grey
+    band is wrong on a dark skin, and this library's rule is that a visual
+    value a theme cannot reach is a bug.
+
+    Measured in the TOP of the plot, where a bar of 5 out of 100 cannot reach
+    -- so green there is the strip and nothing else. }
+  FCtl.StyleOverride := 'TyAdvChartBarBackground { background: #00FF00; }';
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', showBackground: true, data: [5] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  high_ := GreenIn(Round(gb.PlotRect.Left), Round(gb.PlotRect.Top),
+                   Round(gb.PlotRect.Right),
+                   Round(gb.PlotRect.Top) +
+                   Round((gb.PlotRect.Bottom - gb.PlotRect.Top) / 4));
+  AssertTrue(Format('the strip reaches the top of the plot (%d px)', [high_]),
+    high_ > 100);
+
+  { AND NOT WHEN NOBODY ASKED, which is what says the strip is the option's
+    doing and not something every bar chart now carries. }
+  FChart.Option := '{ xAxis: { data: [''A''] }, yAxis: { min: 0, max: 100 },'
+    + ' series: [{ type: ''bar'', data: [5] }] }';
+  Draw;
+  gb := FChart.Build.Grid(0);
+  low_ := GreenIn(Round(gb.PlotRect.Left), Round(gb.PlotRect.Top),
+                  Round(gb.PlotRect.Right),
+                  Round(gb.PlotRect.Top) +
+                  Round((gb.PlotRect.Bottom - gb.PlotRect.Top) / 4));
+  AssertEquals('no strip without the option', 0, low_);
+end;
+
+procedure TAdvanceChartTest.TestAPieIsDrawnOffItsOwnCentreWithAColourPerSector;
+var
+  left, right, corner, total: Integer;
+begin
+  { THE FIRST SERIES THAT IS NOT ON A COORDINATE SYSTEM, and the whole reason
+    this test is at the CONTROL rather than in the pie unit: the layout and the
+    sectors were both green in isolation while the control still skipped the
+    series entirely -- it filled no store for a series with no axes, and its
+    mark builder returns at the first line for one with no cartesian. Nothing
+    below is about arithmetic; it is about whether any of it runs. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }';
+  FChart.Option := '{ series: [{ type: ''pie'', data: [1, 1] }] }';
+  Draw(400, 300);
+
+  { Default start is twelve o''clock running clockwise, so the first datum takes
+    the RIGHT half and the second the left. A pie that came out in one colour
+    would fail here and nowhere else -- colorBy is ''data'' for this type alone. }
+  right := RedIn(210, 60, 290, 240);
+  left := GreenIn(110, 60, 190, 240);
+  AssertTrue(Format('the first sector fills the right half (%d px)', [right]),
+    right > 3000);
+  AssertTrue(Format('the second takes the left (%d px)', [left]), left > 3000);
+  AssertEquals('and neither is on the wrong side', 0, GreenIn(210, 60, 290, 240));
+  AssertEquals('either way', 0, RedIn(110, 60, 190, 240));
+
+  { A DISC, not a rectangle: the corners of the control are untouched. }
+  corner := RedIn(0, 0, 60, 60) + GreenIn(0, 0, 60, 60);
+  AssertEquals('nothing in the corner', 0, corner);
+
+  { AND IT IS THE RIGHT SIZE. radius defaults to [0, ''50%''] of HALF the shorter
+    side -- 75 px on a 300-tall control -- so the disc reaches y = 75 and no
+    further. The ''75%'' this library''s own option catalog still carries would
+    put it at 112.5 and paint this strip solid. }
+  total := RedIn(190, 20, 210, 60) + GreenIn(190, 20, 210, 60);
+  AssertEquals('the disc stops where a 50% radius stops', 0, total);
+  total := RedIn(190, 90, 210, 130) + GreenIn(190, 90, 210, 130);
+  AssertTrue(Format('but it does reach inside that (%d px)', [total]),
+    total > 200);
+
+  { ONE DATUM IS THE CASE THAT VANISHES IF A WHOLE TURN IS TREATED AS NO TURN.
+    Its sector sweeps exactly 2*Pi, and an arc primitive that normalises the
+    sweep before drawing would answer with an empty path -- a pie of one slice
+    is a disc, and the failure looks like the series was never drawn. }
+  FChart.Option := '{ series: [{ type: ''pie'', data: [1] }] }';
+  Draw(400, 300);
+  AssertTrue('a single datum is a whole disc, left',
+    RedIn(130, 140, 170, 160) > 200);
+  AssertTrue('and right', RedIn(230, 140, 270, 160) > 200);
+end;
+
 procedure TAdvanceChartTest.TestTheSecondSeriesTakesTheSecondSlotOfTheRamp;
 var
   gb: TTyGridBuild;
@@ -1656,6 +2115,608 @@ begin
     red > 100);
   AssertTrue(Format('and the second in slot 2, not slot 1 again (%d px)',
     [green]), green > 100);
+end;
+
+procedure TAdvanceChartTest.TestALegendNamesTheSeriesAlongTheBottom;
+var
+  bottom_, top_: Integer;
+begin
+  { A legend floats over the container and reserves nothing, exactly like the
+    title -- so the thing that says it was drawn is ink where nothing else
+    paints. The WORDS carry a theme key of their own, and overriding it is
+    what proves the key is consulted rather than a colour written into the
+    control. }
+  FCtl.StyleOverride := 'TyAdvChartLegend { color: #FF0000; }';
+  FChart.Option := '{ legend: {}, series: [{ type: ''bar'', '
+    + 'name: ''Alpha'', data: [5] }] }';
+  Draw(400, 300);
+  bottom_ := RedIn(0, 250, 399, 299);
+  top_ := RedIn(0, 0, 399, 120);
+  AssertTrue(Format('the legend is along the bottom (%d px)', [bottom_]),
+    bottom_ > 10);
+  AssertEquals('and nowhere near the top', 0, top_);
+
+  { AND `top` MOVES IT, so the option is read rather than the default drawn
+    twice. }
+  FChart.Option := '{ legend: { top: 0 }, series: [{ type: ''bar'', '
+    + 'name: ''Alpha'', data: [5] }] }';
+  Draw(400, 300);
+  top_ := RedIn(0, 0, 399, 60);
+  AssertTrue(Format('now at the top (%d px)', [top_]), top_ > 10);
+  AssertEquals('and no longer at the bottom', 0, RedIn(0, 250, 399, 299));
+
+  { THE WORDS TAKE THE LEGEND'S OWN FONT KEY. Overriding the SIZE is what
+    proves it: every other text key in this theme is the same size, so a
+    colour override alone cannot tell which key was read. }
+  FCtl.StyleOverride := 'TyAdvChartLegend { color: #FF0000; font-size: 20px; }';
+  FChart.Option := '{ legend: { top: 0 }, series: [{ type: ''bar'', '
+    + 'name: ''Alpha'', data: [5] }] }';
+  Draw(400, 300);
+  AssertTrue(Format('bigger words make more ink (%d px)',
+    [RedIn(0, 0, 399, 60)]), RedIn(0, 0, 399, 60) > top_);
+
+  { A SERIES WITH NO NAME OFFERS NOTHING, so the legend has nothing to list
+    and draws nothing at all. }
+  FChart.Option := '{ legend: {}, series: [{ type: ''bar'', data: [5] }] }';
+  Draw(400, 300);
+  AssertEquals('an unnamed series puts no words in the legend', 0,
+    RedIn(0, 0, 399, 299));
+end;
+
+procedure TAdvanceChartTest.TestSingleModeGreysEveryItemButOneBeforeAnyClick;
+var
+  live, dead: Integer;
+begin
+  { `selectedMode: 'single'` is resolved AT LOAD -- upstream forces exactly
+    one item on before anything is drawn, so this is a first-frame difference
+    and not an interaction one. Four corpus examples depend on it.
+
+    TWO SERIES AND TWO COLOURS, because a chart where every item ends up the
+    same colour cannot tell `one of them is greyed` from `all of them are`. }
+  FCtl.StyleOverride := 'TyAdvChartLegend { color: #FF0000; }'
+    + ' TyAdvChartLegendInactive { color: #00FF00; }';
+  FChart.Option := '{ legend: {}, series: ['
+    + '{ type: ''bar'', name: ''Alpha'', data: [5] },'
+    + '{ type: ''bar'', name: ''Beta'', data: [3] }] }';
+  Draw(400, 300);
+  live := RedIn(0, 250, 399, 299);
+  AssertTrue(Format('both names are drawn live (%d px)', [live]), live > 20);
+  AssertEquals('and none of them greyed', 0, GreenIn(0, 250, 399, 299));
+
+  FChart.Option := '{ legend: { selectedMode: ''single'' }, series: ['
+    + '{ type: ''bar'', name: ''Alpha'', data: [5] },'
+    + '{ type: ''bar'', name: ''Beta'', data: [3] }] }';
+  Draw(400, 300);
+  dead := GreenIn(0, 250, 399, 299);
+  AssertTrue(Format('one of the two is now greyed (%d px)', [dead]),
+    dead > 10);
+  AssertTrue(Format('and the other is still live (%d px)',
+    [RedIn(0, 250, 399, 299)]), RedIn(0, 250, 399, 299) > 10);
+  AssertTrue('with less live ink than before',
+    RedIn(0, 250, 399, 299) < live);
+
+  { `selected` says the same thing without the mode, and names WHICH one. }
+  FChart.Option := '{ legend: { selected: { Alpha: false } }, series: ['
+    + '{ type: ''bar'', name: ''Alpha'', data: [5] },'
+    + '{ type: ''bar'', name: ''Beta'', data: [3] }] }';
+  Draw(400, 300);
+  AssertTrue(Format('the named item is greyed (%d px)',
+    [GreenIn(0, 250, 399, 299)]), GreenIn(0, 250, 399, 299) > 10);
+end;
+
+procedure TAdvanceChartTest.TestEachLegendItemTakesItsOwnSeriesColourAndIconShape;
+var
+  widest, y, span, x: Integer;
+  p: TBGRAPixel;
+begin
+  { TWO SERIES, TWO OVERRIDDEN RAMP SLOTS, and the probe restricted to the
+    legend band -- the grid's own bottom edge is 80 px up from it, so nothing
+    but the legend paints down here. A legend that matched every name against
+    the FIRST series would put slot one's colour on both icons. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }';
+  FChart.Option := '{ legend: {}, series: ['
+    + '{ type: ''bar'', name: ''Alpha'', data: [5] },'
+    + '{ type: ''bar'', name: ''Beta'', data: [3] }] }';
+  Draw(400, 300);
+  AssertTrue(Format('the first item is the first slot (%d px)',
+    [RedIn(0, 250, 399, 299)]), RedIn(0, 250, 399, 299) > 10);
+  AssertTrue(Format('the second is the second (%d px)',
+    [GreenIn(0, 250, 399, 299)]), GreenIn(0, 250, 399, 299) > 10);
+
+  { AND THE SHAPE IS A ROUNDED RECTANGLE, filled: a bar publishes no symbol, so
+    the chain lands on roundRect and the icon is a solid 25-wide block. The
+    WIDEST UNBROKEN RUN is what tells that from a ring or a circle -- a 14 px
+    tall ring can never manage more than 14 across. }
+  widest := 0;
+  for y := 250 to 299 do
+  begin
+    span := 0;
+    for x := 0 to 399 do
+    begin
+      p := PixelAt(x, y);
+      if (p.red > 180) and (p.green < 80) and (p.blue < 80) then
+      begin
+        Inc(span);
+        if span > widest then widest := span;
+      end
+      else
+        span := 0;
+    end;
+  end;
+  AssertTrue(Format('a solid block, not a marker (%d px across)', [widest]),
+    widest >= 20);
+end;
+
+procedure TAdvanceChartTest.TestALineSeriesGetsARuleWithARingOnItRatherThanABlock;
+var
+  x0, x1, y0, y1, runs: Integer;
+  wasRed, isRed: Boolean;
+
+  { REDDER THAN ITS SURROUNDINGS, not saturated red. A line icon's box starts
+    on a half-pixel -- the marker's pen overhangs its own geometry, so the
+    block's top edge is fractional -- and every edge of it is anti-aliased. A
+    `red > 180, green < 80` probe reads a half-covered red pixel as background
+    and would find most of the icon missing. }
+  function Red(AX, AY: Integer): Boolean;
+  var q: TBGRAPixel;
+  begin
+    q := PixelAt(AX, AY);
+    Result := (q.red > q.green + 40) and (q.red > q.blue + 40);
+  end;
+
+  { The ink's bounding box in the legend band, and the number of separate
+    vertical runs down the middle of it. }
+  { FPC will not let a nested routine drive a for-loop with the enclosing
+    one's variable, so the counters are local here. }
+  procedure Measure;
+  var xx, yy: Integer;
+  begin
+    x0 := 9999; x1 := -1; y0 := 9999; y1 := -1;
+    for yy := 250 to 299 do
+      for xx := 0 to 399 do
+        if Red(xx, yy) then
+        begin
+          if xx < x0 then x0 := xx;
+          if xx > x1 then x1 := xx;
+          if yy < y0 then y0 := yy;
+          if yy > y1 then y1 := yy;
+        end;
+    runs := 0;
+    wasRed := False;
+    for yy := y0 to y1 do
+    begin
+      isRed := Red((x0 + x1) div 2, yy);
+      if isRed and not wasRed then Inc(runs);
+      wasRed := isRed;
+    end;
+  end;
+
+begin
+  { A LINE SERIES DRAWS ITS OWN LEGEND ICON and nothing else does: a rule
+    across the whole item box with a RING sitting on it, four fifths of the
+    box's height. Two things can go wrong and they look different:
+
+      - forget that a line draws its own, and the icon collapses to a single
+        `emptyCircle` in the 25 x 14 box -- a ring of radius 7 and no rule,
+        so the ink is 14 wide instead of 26;
+      - forget which icon the series publishes, and the marker loses its
+        `empty` and comes out a solid dot, so the middle of the icon fills in.
+
+    THE RULE IS BROKEN IN THE MIDDLE, and that is not a defect: the ring is
+    drawn over it and an `empty` symbol is FILLED with the chart's own ground,
+    so the rule survives as two stubs either side. Upstream draws it the same
+    way, for the same reason. Measuring the widest unbroken run would therefore
+    find six pixels where the rule is twenty-five wide -- the ink's BOUNDING
+    BOX is what answers `is there a rule', and the number of separate runs down
+    its middle is what answers `is the marker a ring'. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }';
+  FChart.Option := '{ legend: {}, xAxis: { type: ''category'', '
+    + 'data: [''a'', ''b''] }, yAxis: {}, series: [{ type: ''line'', '
+    + 'name: ''Alpha'', data: [5, 3] }] }';
+  Draw(400, 300);
+  Measure;
+  AssertTrue(Format('the rule spans the item box (%d px wide)', [x1 - x0 + 1]),
+    x1 - x0 + 1 >= 24);
+  AssertTrue(Format('and the marker on it is a RING (%d runs down the middle)',
+    [runs]), runs >= 2);
+
+  { A BAR IS THE OTHER HALF OF THE SAME RULE: no symbol at all, so no rule and
+    no ring -- one solid rounded block, as wide as the item box and solid all
+    the way down its middle. }
+  FChart.Option := '{ legend: {}, series: [{ type: ''bar'', '
+    + 'name: ''Alpha'', data: [5] }] }';
+  Draw(400, 300);
+  Measure;
+  AssertTrue(Format('a bar icon is as wide as the box too (%d px)',
+    [x1 - x0 + 1]), x1 - x0 + 1 >= 24);
+  AssertEquals('but solid through and through', 1, runs);
+end;
+
+procedure TAdvanceChartTest.TestASwitchedOffSeriesIsNotDrawnAndDoesNotSizeTheAxis;
+var
+  redAlone, redBoth, greenBoth: Integer;
+begin
+  { TWO SERIES A HUNDRED TIMES APART. With both drawn the axis is sized by the
+    big one and the small one is a sliver; switch the big one off and the axis
+    re-scales to what is left, so the SAME data draws a full-height bar.
+
+    That second half is the point. A legend that only stopped drawing the
+    series would leave the axis at 500 and the survivor at a sliver -- which
+    is what a reader would call `it did not work`. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }';
+  FChart.Option := '{ legend: {}, xAxis: { type: ''category'', '
+    + 'data: [''a'', ''b''] }, yAxis: {}, series: ['
+    + '{ type: ''bar'', name: ''Small'', data: [5, 5] },'
+    + '{ type: ''bar'', name: ''Large'', data: [500, 500] }] }';
+  Draw(400, 300);
+  redBoth := RedIn(0, 0, 399, 219);
+  greenBoth := GreenIn(0, 0, 399, 219);
+  AssertTrue(Format('both are drawn (%d red, %d green)',
+    [redBoth, greenBoth]), (redBoth > 0) and (greenBoth > 0));
+
+  FChart.Option := '{ legend: { selected: { Large: false } }, '
+    + 'xAxis: { type: ''category'', data: [''a'', ''b''] }, yAxis: {}, series: ['
+    + '{ type: ''bar'', name: ''Small'', data: [5, 5] },'
+    + '{ type: ''bar'', name: ''Large'', data: [500, 500] }] }';
+  Draw(400, 300);
+  AssertEquals('the switched-off series is gone from the plot', 0,
+    GreenIn(0, 0, 399, 219));
+  redAlone := RedIn(0, 0, 399, 219);
+  AssertTrue(Format('and the axis re-scaled around the survivor '
+    + '(%d px, was %d)', [redAlone, redBoth]), redAlone > redBoth * 4);
+end;
+
+procedure TAdvanceChartTest.TestASwitchedOffSliceLeavesThePieAndTheRestKeepTheirColours;
+var
+  blueBefore: Integer;
+begin
+  { A PIE'S LEGEND NAMES SLICES, so the filter is per ROW and not per series.
+    Three equal slices in three overridden ramp slots; switch the middle one
+    off and it must leave the circle -- and the third must STAY BLUE.
+
+    That last clause is the whole reason this commit touched PieVisual. The
+    fills used to be keyed on the sector's POSITION, so dropping a slice slid
+    every later one down a colour: the third slice would come back GREEN,
+    wearing the colour of the slice that had just been switched off. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }'
+    + ' TyAdvChartSeries3 { background: #0000FF; }';
+  FChart.Option := '{ legend: {}, series: [{ type: ''pie'', label: '
+    + '{ show: false }, data: ['
+    + '{ name: ''A'', value: 1 }, { name: ''B'', value: 1 },'
+    + '{ name: ''C'', value: 1 }] }] }';
+  Draw(400, 300);
+  blueBefore := BlueIn(0, 0, 399, 245);
+  AssertTrue(Format('three slices, three colours (%d, %d, %d)',
+    [RedIn(0, 0, 399, 245), GreenIn(0, 0, 399, 245), blueBefore]),
+    (RedIn(0, 0, 399, 245) > 100) and (GreenIn(0, 0, 399, 245) > 100)
+    and (blueBefore > 100));
+
+  FChart.Option := '{ legend: { selected: { B: false } }, series: '
+    + '[{ type: ''pie'', label: { show: false }, data: ['
+    + '{ name: ''A'', value: 1 }, { name: ''B'', value: 1 },'
+    + '{ name: ''C'', value: 1 }] }] }';
+  Draw(400, 300);
+  AssertEquals('the switched-off slice left the circle', 0,
+    GreenIn(0, 0, 399, 245));
+  AssertTrue(Format('the third slice is still blue (%d px)',
+    [BlueIn(0, 0, 399, 245)]), BlueIn(0, 0, 399, 245) > blueBefore);
+  AssertTrue('and the first still red', RedIn(0, 0, 399, 245) > 100);
+end;
+
+procedure TAdvanceChartTest.TestTheSeriesAboveAHiddenOneDropsOntoWhatIsLeft;
+begin
+  { THE STACK IS THE ONE THING THE INDEX CANNOT DO FOR US. The axis extents
+    and the bar widths both take their populations from the axis-to-series
+    index, so leaving a hidden series out of THAT covers them both -- but the
+    stack solver never sees the index, and a hidden member left in the group
+    would go on holding the one above it up in the air.
+
+    Two bars of five in one stack. With both drawn the upper one occupies the
+    TOP half of the plot and the lower half is the other colour; switch the
+    lower one off and the upper one must come all the way down to the
+    baseline, which puts its colour where it has never been. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }';
+  FChart.Option := '{ legend: {}, xAxis: { type: ''category'', '
+    + 'data: [''a''] }, yAxis: {}, series: ['
+    + '{ type: ''bar'', name: ''Bottom'', stack: ''s'', data: [5] },'
+    + '{ type: ''bar'', name: ''Top'', stack: ''s'', data: [5] }] }';
+  Draw(400, 300);
+  AssertTrue(Format('the upper series is in the top half (%d px)',
+    [GreenIn(0, 70, 399, 135)]), GreenIn(0, 70, 399, 135) > 100);
+  AssertEquals('and nowhere near the baseline', 0,
+    GreenIn(0, 160, 399, 215));
+
+  FChart.Option := '{ legend: { selected: { Bottom: false } }, '
+    + 'xAxis: { type: ''category'', data: [''a''] }, yAxis: {}, series: ['
+    + '{ type: ''bar'', name: ''Bottom'', stack: ''s'', data: [5] },'
+    + '{ type: ''bar'', name: ''Top'', stack: ''s'', data: [5] }] }';
+  Draw(400, 300);
+  AssertEquals('the hidden one is gone', 0, RedIn(0, 70, 399, 215));
+  AssertTrue(Format('and the one above it came down to the baseline (%d px)',
+    [GreenIn(0, 160, 399, 215)]), GreenIn(0, 160, 399, 215) > 100);
+end;
+
+procedure TAdvanceChartTest.TestAPieOffersItsSliceNamesAndAnswersToItsOwn;
+var
+  x0, x1: Integer;
+
+  { Local counters: FPC will not let a nested routine drive a for-loop with
+    the enclosing one's variable. }
+  function Wide: Integer;
+  var q: TBGRAPixel; xx, yy: Integer;
+  begin
+    x0 := 9999; x1 := -1;
+    for yy := 250 to 299 do
+      for xx := 0 to 399 do
+      begin
+        q := PixelAt(xx, yy);
+        if (q.red > 180) and (q.green < 80) and (q.blue < 80) then
+        begin
+          if xx < x0 then x0 := xx;
+          if xx > x1 then x1 := xx;
+        end;
+      end;
+    if x1 < x0 then Result := 0 else Result := x1 - x0 + 1;
+  end;
+
+begin
+  { A PIE'S LEGEND NAMES ITS SLICES AND NOT THE SERIES, so a pie with two
+    slices makes a legend with two items -- and the pie's own name, however
+    long, must not turn up as a third. Twenty characters long on purpose: an
+    extra item carrying it would roughly triple the block's width, which no
+    amount of font variation can explain away. }
+  FCtl.StyleOverride := 'TyAdvChartLegend { color: #FF0000; }';
+  FChart.Option := '{ legend: {}, series: [{ type: ''pie'', '
+    + 'name: ''ZZZZZZZZZZZZZZZZZZZZ'', label: { show: false }, data: ['
+    + '{ name: ''A'', value: 1 }, { name: ''B'', value: 1 }] }] }';
+  Draw(400, 300);
+  { Two one-character items measure about fifty across; a third carrying
+    that twenty-character name measures about two hundred. The bound sits
+    between them with room for any font either side. }
+  AssertTrue(Format('two items and no third (%d px across)', [Wide]),
+    (Wide > 20) and (Wide < 120));
+
+  { BUT IT STILL ANSWERS TO ITS OWN NAME. Upstream pushes every raw series'
+    name into the AVAILABLE list unconditionally, before it ever asks a
+    provider for data names -- so an author who writes the pie's own name into
+    `legend.data` gets a live item. Without that push the item would grey out
+    for a reason that has nothing to do with the option: the chart would be
+    claiming it cannot produce a name that is written on one of its series. }
+  FCtl.StyleOverride := 'TyAdvChartLegend { color: #FF0000; }'
+    + ' TyAdvChartLegendInactive { color: #00FF00; }';
+  FChart.Option := '{ legend: { data: [''Zzz''] }, series: [{ type: ''pie'', '
+    + 'name: ''Zzz'', label: { show: false }, data: ['
+    + '{ name: ''A'', value: 1 }, { name: ''B'', value: 1 }] }] }';
+  Draw(400, 300);
+  AssertTrue(Format('the item is live (%d px)', [RedIn(0, 250, 399, 299)]),
+    RedIn(0, 250, 399, 299) > 5);
+  AssertEquals('and not greyed', 0, GreenIn(0, 250, 399, 299));
+end;
+
+procedure TAdvanceChartTest.TestATableFeedsThreeSeriesAColumnEach;
+var
+  redTop, greenTop: Integer;
+begin
+  { THE CANONICAL DATASET, and the reason the feature exists: one table, two
+    bar series, NO `data` and NO `encode` anywhere. The category column is
+    shared and the value columns are handed out one per series by a counter
+    that advances -- so the second series must read column 2 and not column 1.
+
+    THE TWO COLUMNS RUN OPPOSITE WAYS ON PURPOSE: 10/20 against 90/80. A
+    series that read the wrong column would still draw two bars of plausible
+    height, and only the ORDER tells them apart. So the probe asks which
+    colour is the tall one. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }';
+  FChart.Option := '{ "dataset": { "source": ['
+    + '["product","2015","2016"],'
+    + '["a", 10, 90],'
+    + '["b", 20, 80]] },'
+    + '"xAxis": { "type": "category" }, "yAxis": {},'
+    + '"series": [{"type":"bar"},{"type":"bar"}] }';
+  Draw(400, 300);
+  AssertTrue(Format('both series drew (%d red, %d green)',
+    [RedIn(0, 0, 399, 219), GreenIn(0, 0, 399, 219)]),
+    (RedIn(0, 0, 399, 219) > 100) and (GreenIn(0, 0, 399, 219) > 100));
+
+  { The top sixth of the plot is reached only by a bar near the axis maximum,
+    which on a 10..90 table is the SECOND column's bar. }
+  redTop := RedIn(0, 70, 399, 100);
+  greenTop := GreenIn(0, 70, 399, 100);
+  AssertEquals('the first series took the low column', 0, redTop);
+  AssertTrue(Format('and the second took the high one (%d px)', [greenTop]),
+    greenTop > 20);
+end;
+
+procedure TAdvanceChartTest.TestASeriesReadingATableNamesItselfAfterItsColumn;
+var
+  withNames, without: Integer;
+begin
+  { A SERIES THAT NAMED ITSELF NOTHING TAKES THE NAME OF ITS COLUMN, and that
+    is the whole reason `legend: {}` works on a dataset chart: the legend has
+    entries to list only because the series have names to give it.
+
+    Measured as ink in the legend band against the same chart with no legend:
+    a chart whose series are all nameless has nothing to draw there. }
+  FCtl.StyleOverride := 'TyAdvChartLegend { color: #FF0000; }';
+  FChart.Option := '{ "dataset": { "source": ['
+    + '["product","2015","2016"],'
+    + '["a", 10, 90],'
+    + '["b", 20, 80]] },'
+    + '"xAxis": { "type": "category" }, "yAxis": {}, "legend": {},'
+    + '"series": [{"type":"bar"},{"type":"bar"}] }';
+  Draw(400, 300);
+  withNames := RedIn(0, 250, 399, 299);
+  AssertTrue(Format('the legend found names to list (%d px)', [withNames]),
+    withNames > 20);
+
+  { The same table read by series that DO name themselves proves the ink is
+    the legend's and not something else in the band. }
+  FChart.Option := '{ "dataset": { "source": ['
+    + '["product","2015","2016"],'
+    + '["a", 10, 90],'
+    + '["b", 20, 80]] },'
+    + '"xAxis": { "type": "category" }, "yAxis": {}, "legend": {},'
+    + '"series": [{"type":"bar","name":"Own"},{"type":"bar"}] }';
+  Draw(400, 300);
+  without := RedIn(0, 250, 399, 299);
+  AssertTrue(Format('a written name is still a name (%d px)', [without]),
+    without > 20);
+end;
+
+procedure TAdvanceChartTest.TestEncodeOverridesWhichColumnASeriesReads;
+var
+  red, green: Integer;
+begin
+  { AN ENCODE NAMES A COLUMN BY NAME and takes the series out of the counter.
+
+    THE PROBE IS A RATIO, not a position: with one column 10/20 and the other
+    90/80, a series reading the high one draws several times the ink of one
+    reading the low one. Asking instead whether a bar reaches the top of the
+    plot would test the AXIS -- which re-scales around whatever is left -- and
+    a single low series would reach the top too.
+
+    TWO SERIES IN BOTH CHARTS, so the axis is the same in both and the only
+    difference is which column the second one read. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }';
+  FChart.Option := '{ "dataset": { "source": ['
+    + '["product","2015","2016"],'
+    + '["a", 10, 90],'
+    + '["b", 20, 80]] },'
+    + '"xAxis": { "type": "category" }, "yAxis": {},'
+    + '"series": [{"type":"bar"},{"type":"bar"}] }';
+  Draw(400, 300);
+  red := RedIn(0, 0, 399, 219);
+  green := GreenIn(0, 0, 399, 219);
+  AssertTrue(Format('by default the second takes the HIGH column '
+    + '(%d red, %d green)', [red, green]), green > red * 2);
+
+  { Now name the low column for the second series. It leaves the counter, the
+    first series still takes column 1 from it, and the two draw the same
+    height -- so the ratio collapses. }
+  FChart.Option := '{ "dataset": { "source": ['
+    + '["product","2015","2016"],'
+    + '["a", 10, 90],'
+    + '["b", 20, 80]] },'
+    + '"xAxis": { "type": "category" }, "yAxis": {},'
+    + '"series": [{"type":"bar"},'
+    + '{"type":"bar","encode":{"x":"product","y":"2015"}}] }';
+  Draw(400, 300);
+  red := RedIn(0, 0, 399, 219);
+  green := GreenIn(0, 0, 399, 219);
+  AssertTrue(Format('named by name, it reads the low one instead '
+    + '(%d red, %d green)', [red, green]),
+    (green < red * 2) and (red < green * 2));
+end;
+
+procedure TAdvanceChartTest.TestAPieReadingATableNamesItsSlicesFromAColumn;
+var
+  red, green: Integer;
+begin
+  { A PIE OVER A TABLE ASKS TWO QUESTIONS the other series do not: which column
+    is the NUMBER and which is the LABEL. It gets them from the other defaulter
+    -- the one that guesses rather than counts -- and if that never ran the pie
+    would have no value column at all and draw nothing.
+
+    THE SLICE NAMES ARE THE TEST for the second half: a pie's legend lists its
+    SLICES, so a legend with entries proves the rows were named off a column.
+    Nothing else in this chart can name them -- a dataset row has no `name`
+    field to fall back on. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }'
+    + ' TyAdvChartLegend { color: #0000FF; }';
+  FChart.Option := '{ "dataset": { "source": ['
+    + '["product","2015","2016"],'
+    + '["a", 10, 90],'
+    + '["b", 20, 80]] },'
+    + '"legend": {},'
+    + '"series": [{"type":"pie","label":{"show":false}}] }';
+  Draw(400, 300);
+  red := RedIn(0, 0, 399, 245);
+  green := GreenIn(0, 0, 399, 245);
+  AssertTrue(Format('two slices, one per row (%d, %d)', [red, green]),
+    (red > 100) and (green > 100));
+  AssertTrue(Format('and the legend found names for them (%d px)',
+    [BlueIn(0, 250, 399, 299)]), BlueIn(0, 250, 399, 299) > 10);
+end;
+
+procedure TAdvanceChartTest.TestACoordinateNobodyClaimedDrawsNothing;
+begin
+  { `encode: { x: -1 }` opts the coordinate out, and a bar with no category is
+    not a bar at the origin -- it is no bar.
+
+    IT IS THE X THAT IS OPTED OUT AND NOT THE Y, which matters: a reader that
+    treated `unclaimed` as `column 0` would land on the PRODUCT column, which
+    is exactly the category column a bar wants -- so the two answers would
+    agree and the fixture would prove nothing. Opting the Y out instead lands
+    the fallback on a column of words, which parses to no number and draws
+    nothing either way. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }';
+  FChart.Option := '{ "dataset": { "source": ['
+    + '["product","2015","2016"],'
+    + '["a", 10, 90],'
+    + '["b", 20, 80]] },'
+    + '"xAxis": { "type": "category" }, "yAxis": {},'
+    + '"series": [{"type":"bar","encode":{"x":-1,"y":"2016"}},'
+    + '{"type":"bar"}] }';
+  Draw(400, 300);
+  AssertEquals('the opted-out series draws nothing', 0,
+    RedIn(0, 0, 399, 219));
+  AssertTrue(Format('while its neighbour draws (%d px)',
+    [GreenIn(0, 0, 399, 219)]), GreenIn(0, 0, 399, 219) > 100);
+end;
+
+procedure TAdvanceChartTest.TestASeriesCanReadTheTableTheOtherWayRound;
+var
+  red, green: Integer;
+begin
+  { `seriesLayoutBy` IS A SERIES' OPTION AS WELL AS A DATASET'S, and the
+    series' answer wins -- so two series can read one table in two directions.
+    A corpus example does exactly that, seven bars over one table with three of
+    them transposed and the dataset saying nothing.
+
+    THE TABLE IS NOT SQUARE, on purpose, and its first column starts with a
+    word and continues with numbers -- so the two readings disagree about the
+    header as well as about the direction. A reader that ignored the override
+    would draw the same picture twice. }
+  FCtl.StyleOverride := 'TyAdvChartSeries1 { background: #FF0000; }'
+    + ' TyAdvChartSeries2 { background: #00FF00; }';
+  FChart.Option := '{ "dataset": { "source": ['
+    + '["p", "q", "r"],'
+    + '[1, 2, 3],'
+    + '[40, 50, 60]] },'
+    + '"xAxis": { "type": "category" }, "yAxis": {},'
+    + '"series": [{"type":"bar"},'
+    + '{"type":"bar","seriesLayoutBy":"row"}] }';
+  Draw(400, 300);
+  red := RedIn(0, 0, 399, 219);
+  green := GreenIn(0, 0, 399, 219);
+  AssertTrue(Format('both drew (%d red, %d green)', [red, green]),
+    (red > 50) and (green > 50));
+  { WHAT EACH ONE ACTUALLY GOT, which is worth spelling out because the answer
+    is not the obvious one:
+
+      read DOWN, the header is the first ROW, so the columns are p/q/r and the
+      first series takes the category from p and its values from q -- 2 and 50,
+      one of them the largest number on the chart;
+
+      read ACROSS, the header is the first COLUMN, whose cells are `p`, 1 and
+      40 -- a string then a number, so there is NO header at all, the three
+      rows become three dimensions, and the transposed series takes its values
+      from the second of them: 1, 2, 3.
+
+    So the axis is sized by the 50 and the transposed series' three bars are
+    slivers beside it. Ignore the override and that series would read column 2
+    instead -- 3 and 60 -- and carry MORE ink than its neighbour, not less, so
+    the ratio does not merely shrink but flips. }
+  AssertTrue(Format('and the transposed one read a different shape '
+    + '(%d red, %d green)', [red, green]), red > green * 2);
 end;
 
 procedure TAdvanceChartTest.TestTwoBarSeriesStandSideBySideInsteadOfOnTopOfEachOther;
@@ -1771,6 +2832,18 @@ begin
     begin
       p := PixelAt(x, y);
       if (p.red > 180) and (p.green < 80) and (p.blue < 80) then Inc(Result);
+    end;
+end;
+
+function TAdvanceChartTest.BlueIn(AL, AT, AR, AB: Integer): Integer;
+var x, y: Integer; p: TBGRAPixel;
+begin
+  Result := 0;
+  for y := AT to AB do
+    for x := AL to AR do
+    begin
+      p := PixelAt(x, y);
+      if (p.blue > 180) and (p.red < 80) and (p.green < 80) then Inc(Result);
     end;
 end;
 

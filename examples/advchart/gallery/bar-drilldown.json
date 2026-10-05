@@ -1,0 +1,34 @@
+{
+ "xAxis": {
+  "data": [
+   "Animals",
+   "Fruits",
+   "Cars"
+  ]
+ },
+ "yAxis": {},
+ "dataGroupId": "",
+ "animationDurationUpdate": 500,
+ "series": {
+  "type": "bar",
+  "id": "sales",
+  "data": [
+   {
+    "value": 5,
+    "groupId": "animals"
+   },
+   {
+    "value": 2,
+    "groupId": "fruits"
+   },
+   {
+    "value": 4,
+    "groupId": "cars"
+   }
+  ],
+  "universalTransition": {
+   "enabled": true,
+   "divideShape": "clone"
+  }
+ }
+}

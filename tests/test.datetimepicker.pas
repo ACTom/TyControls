@@ -15,7 +15,8 @@ uses
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base,
-  tyControls.DefaultTheme, tyControls.DateTimePicker, tyControls.Calendar;
+  tyControls.DefaultTheme, tyControls.DateTimePicker, tyControls.Calendar,
+  tyControls.StrConsts;
 
 type
   { Tests for TyFormatDateTime, TyDateTimeSegments, TySegmentStep,
@@ -306,7 +307,7 @@ type
   end;
 
   { Month & weekday names in the FIELD TEXT follow TyDateTimeNames (the
-    app-language seam in tyControls.Calendar), not raw DefaultFormatSettings.
+    app-language seam in tyControls.StrConsts), not raw DefaultFormatSettings.
     The precedence machinery itself is tested beside the seam in test.calendar;
     here the two tiers are FORCED and the assertions read the control's own
     output -- FormattedText and the preferred width -- so a BuildDisplay or

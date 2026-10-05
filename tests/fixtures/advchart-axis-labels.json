@@ -1,0 +1,6492 @@
+{
+ "source": "ECharts 6.1.0",
+ "ticks": [
+  {
+   "name": "0..1234567",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       1234567
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "0000000000000000",
+    "41086a0000000000",
+    "41186a0000000000",
+    "41224f8000000000",
+    "41286a0000000000",
+    "412e848000000000",
+    "41324f8000000000",
+    "41355cc000000000"
+   ],
+   "valuesText": [
+    "0",
+    "200000",
+    "400000",
+    "600000",
+    "800000",
+    "1000000",
+    "1200000",
+    "1400000"
+   ],
+   "labels": [
+    "0",
+    "200,000",
+    "400,000",
+    "600,000",
+    "800,000",
+    "1,000,000",
+    "1,200,000",
+    "1,400,000"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "-5000..5000",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       -5000,
+       5000
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "c0b7700000000000",
+    "c0af400000000000",
+    "c09f400000000000",
+    "0000000000000000",
+    "409f400000000000",
+    "40af400000000000",
+    "40b7700000000000"
+   ],
+   "valuesText": [
+    "-6000",
+    "-4000",
+    "-2000",
+    "0",
+    "2000",
+    "4000",
+    "6000"
+   ],
+   "labels": [
+    "-6,000",
+    "-4,000",
+    "-2,000",
+    "0",
+    "2,000",
+    "4,000",
+    "6,000"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "-2500000..100",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       -2500000,
+       100
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "c14312d000000000",
+    "c13e848000000000",
+    "c136e36000000000",
+    "c12e848000000000",
+    "c11e848000000000",
+    "0000000000000000",
+    "411e848000000000"
+   ],
+   "valuesText": [
+    "-2500000",
+    "-2000000",
+    "-1500000",
+    "-1000000",
+    "-500000",
+    "0",
+    "500000"
+   ],
+   "labels": [
+    "-2,500,000",
+    "-2,000,000",
+    "-1,500,000",
+    "-1,000,000",
+    "-500,000",
+    "0",
+    "500,000"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "0.1..0.7",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0.1,
+       0.7
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "0000000000000000",
+    "3fb999999999999a",
+    "3fc999999999999a",
+    "3fd3333333333333",
+    "3fd999999999999a",
+    "3fe0000000000000",
+    "3fe3333333333333",
+    "3fe6666666666666"
+   ],
+   "valuesText": [
+    "0",
+    "0.1",
+    "0.2",
+    "0.3",
+    "0.4",
+    "0.5",
+    "0.6",
+    "0.7"
+   ],
+   "labels": [
+    "0",
+    "0.1",
+    "0.2",
+    "0.3",
+    "0.4",
+    "0.5",
+    "0.6",
+    "0.7"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "-0.35..0.05",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       -0.35,
+       0.05
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "bfd999999999999a",
+    "bfd3333333333333",
+    "bfc999999999999a",
+    "bfb999999999999a",
+    "0000000000000000",
+    "3fb999999999999a"
+   ],
+   "valuesText": [
+    "-0.4",
+    "-0.3",
+    "-0.2",
+    "-0.1",
+    "0",
+    "0.1"
+   ],
+   "labels": [
+    "-0.4",
+    "-0.3",
+    "-0.2",
+    "-0.1",
+    "0",
+    "0.1"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "-2.5..-0.5",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       -2.5,
+       -0.5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "c004000000000000",
+    "c000000000000000",
+    "bff8000000000000",
+    "bff0000000000000",
+    "bfe0000000000000",
+    "0000000000000000"
+   ],
+   "valuesText": [
+    "-2.5",
+    "-2",
+    "-1.5",
+    "-1",
+    "-0.5",
+    "0"
+   ],
+   "labels": [
+    "-2.5",
+    "-2",
+    "-1.5",
+    "-1",
+    "-0.5",
+    "0"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "-0.0035..-0.0005",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       -0.0035,
+       -0.0005
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "bf70624dd2f1a9fc",
+    "bf689374bc6a7efa",
+    "bf60624dd2f1a9fc",
+    "bf50624dd2f1a9fc",
+    "0000000000000000"
+   ],
+   "valuesText": [
+    "-0.004",
+    "-0.003",
+    "-0.002",
+    "-0.001",
+    "0"
+   ],
+   "labels": [
+    "-0.004",
+    "-0.003",
+    "-0.002",
+    "-0.001",
+    "0"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "min 1.2345 max 9.87",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 1.2345,
+     "max": 9.87
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       3,
+       7
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "3ff3c083126e978d",
+    "4000000000000000",
+    "4010000000000000",
+    "4018000000000000",
+    "4020000000000000",
+    "4023bd70a3d70a3d"
+   ],
+   "valuesText": [
+    "1.2345",
+    "2",
+    "4",
+    "6",
+    "8",
+    "9.87"
+   ],
+   "labels": [
+    "1.2345",
+    "2",
+    "4",
+    "6",
+    "8",
+    "9.87"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "min 3.7, 5..50",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 3.7
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       5,
+       50
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "400d99999999999a",
+    "4024000000000000",
+    "4034000000000000",
+    "403e000000000000",
+    "4044000000000000",
+    "4049000000000000"
+   ],
+   "valuesText": [
+    "3.7",
+    "10",
+    "20",
+    "30",
+    "40",
+    "50"
+   ],
+   "labels": [
+    "3.7",
+    "10",
+    "20",
+    "30",
+    "40",
+    "50"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "dataMin on 1/3..2",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": "dataMin"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0.3333333333333333,
+       2
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "3fd5555555555555",
+    "3fe3333333333333",
+    "3feccccccccccccd",
+    "3ff3333333333333",
+    "3ff8000000000000",
+    "3ffccccccccccccd",
+    "4000cccccccccccd"
+   ],
+   "valuesText": [
+    "0.3333333333333333",
+    "0.6",
+    "0.9",
+    "1.2",
+    "1.5",
+    "1.8",
+    "2.1"
+   ],
+   "labels": [
+    "0.3333333333333333",
+    "0.6",
+    "0.9",
+    "1.2",
+    "1.5",
+    "1.8",
+    "2.1"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "dataMin on 0.0007695205211639404..0.002",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": "dataMin"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0.0007695205211639404,
+       0.002
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "3f493734bc6a7efa",
+    "3f4a36e2eb1c432d",
+    "3f50624dd2f1a9fc",
+    "3f53a92a30553261",
+    "3f56f0068db8bac7",
+    "3f5a36e2eb1c432d",
+    "3f5d7dbf487fcb92",
+    "3f60624dd2f1a9fc"
+   ],
+   "valuesText": [
+    "0.0007695205211639404",
+    "0.0008",
+    "0.001",
+    "0.0012",
+    "0.0014",
+    "0.0016",
+    "0.0018",
+    "0.002"
+   ],
+   "labels": [
+    "0.0007695205211639404",
+    "0.0008",
+    "0.001",
+    "0.0012",
+    "0.0014",
+    "0.0016",
+    "0.0018",
+    "0.002"
+   ],
+   "drawnInNode": [
+    false,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "0..7e-7",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       7e-7
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "0000000000000000",
+    "3e7ad7f29abcaf48",
+    "3e8ad7f29abcaf48",
+    "3e9421f5f40d8376",
+    "3e9ad7f29abcaf48",
+    "3ea0c6f7a0b5ed8d",
+    "3ea421f5f40d8376",
+    "3ea77cf44765195f"
+   ],
+   "valuesText": [
+    "0",
+    "1e-7",
+    "2e-7",
+    "3e-7",
+    "4e-7",
+    "5e-7",
+    "6e-7",
+    "7e-7"
+   ],
+   "labels": [
+    "0",
+    "0.0000001",
+    "0.0000002",
+    "0.0000003",
+    "0.0000004",
+    "0.0000005",
+    "0.0000006",
+    "0.0000007"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "0..3.5e-8",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       3.5e-8
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "0000000000000000",
+    "3e45798ee2308c3a",
+    "3e55798ee2308c3a",
+    "3e601b2b29a4692b",
+    "3e65798ee2308c3a"
+   ],
+   "valuesText": [
+    "0",
+    "1e-8",
+    "2e-8",
+    "3e-8",
+    "4e-8"
+   ],
+   "labels": [
+    "0",
+    "0.00000001",
+    "0.00000002",
+    "0.00000003",
+    "0.00000004"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "-3e-9..0",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       -3e-9,
+       0
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "be29c511dc3a41df",
+    "be25798ee2308c3a",
+    "be212e0be826d695",
+    "be19c511dc3a41df",
+    "be112e0be826d695",
+    "be012e0be826d695",
+    "0000000000000000"
+   ],
+   "valuesText": [
+    "-3e-9",
+    "-2.5e-9",
+    "-2e-9",
+    "-1.5e-9",
+    "-1e-9",
+    "-5e-10",
+    "0"
+   ],
+   "labels": [
+    "-0.000000003",
+    "-0.0000000025",
+    "-0.000000002",
+    "-0.0000000015",
+    "-0.000000001",
+    "-0.0000000005",
+    "0"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "dataMin dataMax on 1e9..1000000000.0000002",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": "dataMin",
+     "max": "dataMax"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1000000000,
+       1000000000.0000002
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "41cdcd6500000000",
+    "41cdcd6500000002"
+   ],
+   "valuesText": [
+    "1000000000",
+    "1000000000.0000002"
+   ],
+   "labels": [
+    "1,000,000,000",
+    "1,000,000,000.0000002"
+   ],
+   "drawnInNode": [
+    true,
+    true
+   ]
+  },
+  {
+   "name": "0..3e20",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       3e+20
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "0000000000000000",
+    "4405af1d78b58c40",
+    "4415af1d78b58c40",
+    "442043561a882930",
+    "4425af1d78b58c40",
+    "442b1ae4d6e2ef50",
+    "443043561a882930"
+   ],
+   "valuesText": [
+    "0",
+    "50000000000000000000",
+    "100000000000000000000",
+    "150000000000000000000",
+    "200000000000000000000",
+    "250000000000000000000",
+    "300000000000000000000"
+   ],
+   "labels": [
+    "0",
+    "50,000,000,000,000,000,000",
+    "100,000,000,000,000,000,000",
+    "150,000,000,000,000,000,000",
+    "200,000,000,000,000,000,000",
+    "250,000,000,000,000,000,000",
+    "300,000,000,000,000,000,000"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "0..5e21",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5e+21
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "0000000000000000",
+    "444b1ae4d6e2ef50",
+    "445b1ae4d6e2ef50",
+    "4464542ba12a337c",
+    "446b1ae4d6e2ef50",
+    "4470f0cf064dd592"
+   ],
+   "valuesText": [
+    "0",
+    "1e+21",
+    "2e+21",
+    "3e+21",
+    "4e+21",
+    "5e+21"
+   ],
+   "labels": [
+    "0",
+    "1e+21",
+    "2e+21",
+    "3e+21",
+    "4e+21",
+    "5e+21"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "0..5e27",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5e+27
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "0000000000000000",
+    "4589d971e4fe8402",
+    "4599d971e4fe8402",
+    "45a363156bbee302",
+    "45a9d971e4fe8402",
+    "45b027e72f1f1281"
+   ],
+   "valuesText": [
+    "0",
+    "1e+27",
+    "2e+27",
+    "3.0000000000000003e+27",
+    "4e+27",
+    "5e+27"
+   ],
+   "labels": [
+    "0",
+    "1e+27",
+    "2e+27",
+    "3.0000000000000003e+27",
+    "4e+27",
+    "5e+27"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "log 1..1e5",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "log"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1,
+       100000
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "3ff0000000000000",
+    "4024000000000000",
+    "4059000000000000",
+    "408f400000000000",
+    "40c3880000000000",
+    "40f86a0000000000"
+   ],
+   "valuesText": [
+    "1",
+    "10",
+    "100",
+    "1000",
+    "10000",
+    "100000"
+   ],
+   "labels": [
+    "1",
+    "10",
+    "100",
+    "1,000",
+    "10,000",
+    "100,000"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "log base 2, 1..1000",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "log",
+     "logBase": 2
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1,
+       1000
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "3ff0000000000000",
+    "4000000000000000",
+    "4010000000000000",
+    "4020000000000000",
+    "4030000000000000",
+    "4040000000000000",
+    "4050000000000000",
+    "4060000000000000",
+    "4070000000000000",
+    "4080000000000000",
+    "4090000000000000"
+   ],
+   "valuesText": [
+    "1",
+    "2",
+    "4",
+    "8",
+    "16",
+    "32",
+    "64",
+    "128",
+    "256",
+    "512",
+    "1024"
+   ],
+   "labels": [
+    "1",
+    "2",
+    "4",
+    "8",
+    "16",
+    "32",
+    "64",
+    "128",
+    "256",
+    "512",
+    "1,024"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "log dataMin dataMax 3.7..7777.7",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "log",
+     "min": "dataMin",
+     "max": "dataMax"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       3.7,
+       7777.7
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "400d99999999999a",
+    "4024000000000000",
+    "4059000000000000",
+    "408f400000000000",
+    "40be61b333333333"
+   ],
+   "valuesText": [
+    "3.7",
+    "10",
+    "100",
+    "1000",
+    "7777.7"
+   ],
+   "labels": [
+    "3.7",
+    "10",
+    "100",
+    "1,000",
+    "7,777.7"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "log 1e-7..1",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "log"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1e-7,
+       1
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "3e7ad7f29abcaf48",
+    "3eb0c6f7a0b5ed8d",
+    "3ee4f8b588e368f0",
+    "3f1a36e2eb1c432c",
+    "3f50624dd2f1a9fc",
+    "3f847ae147ae147b",
+    "3fb999999999999a",
+    "3ff0000000000000"
+   ],
+   "valuesText": [
+    "1e-7",
+    "0.000001",
+    "0.000009999999999999999",
+    "0.00009999999999999999",
+    "0.001",
+    "0.01",
+    "0.1",
+    "1"
+   ],
+   "labels": [
+    "0.0000001",
+    "0.000001",
+    "0.00001000000000000000",
+    "0.00009999999999999999",
+    "0.001",
+    "0.01",
+    "0.1",
+    "1"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "log 1..1e25",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "log"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1,
+       1e+25
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "3ff0000000000000",
+    "4202a05f20000000",
+    "4415af1d78b58c40",
+    "46293e5939a08cea"
+   ],
+   "valuesText": [
+    "1",
+    "10000000000",
+    "100000000000000000000",
+    "1e+30"
+   ],
+   "labels": [
+    "1",
+    "10,000,000,000",
+    "100,000,000,000,000,000,000",
+    "1e+30"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "log 1..1e25 interval 1",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "log",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1,
+       1e+25
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "3ff0000000000000",
+    "4024000000000000",
+    "4059000000000000",
+    "408f400000000000",
+    "40c3880000000000",
+    "40f86a0000000000",
+    "412e848000000000",
+    "416312d000000000",
+    "4197d78400000000",
+    "41cdcd6500000000",
+    "4202a05f20000000",
+    "42374876e8000000",
+    "426d1a94a2000000",
+    "42a2309ce5400000",
+    "42d6bcc41e900000",
+    "430c6bf526340000",
+    "4341c37937e08000",
+    "4376345785d8a000",
+    "43abc16d674ec800",
+    "43e158e460913d00",
+    "4415af1d78b58c40",
+    "444b1ae4d6e2ef50",
+    "4480f0cf064dd592",
+    "44b52d02c7e14af6",
+    "44ea784379d99db4",
+    "45208b2a2c280291",
+    "4554adf4b7320334",
+    "4589d971e4fe8402",
+    "45c027e72f1f1281",
+    "45f431e0fae6d722",
+    "46293e5939a08cea"
+   ],
+   "valuesText": [
+    "1",
+    "10",
+    "100",
+    "1000",
+    "10000",
+    "100000",
+    "1000000",
+    "10000000",
+    "100000000",
+    "1000000000",
+    "10000000000",
+    "100000000000",
+    "1000000000000",
+    "10000000000000",
+    "100000000000000",
+    "1000000000000000",
+    "10000000000000000",
+    "100000000000000000",
+    "1000000000000000000",
+    "10000000000000000000",
+    "100000000000000000000",
+    "1e+21",
+    "1e+22",
+    "1e+23",
+    "1e+24",
+    "1e+25",
+    "9.999999999999999e+25",
+    "1e+27",
+    "1e+28",
+    "1.0000000000000001e+29",
+    "1e+30"
+   ],
+   "labels": [
+    "1",
+    "10",
+    "100",
+    "1,000",
+    "10,000",
+    "100,000",
+    "1,000,000",
+    "10,000,000",
+    "100,000,000",
+    "1,000,000,000",
+    "10,000,000,000",
+    "100,000,000,000",
+    "1,000,000,000,000",
+    "10,000,000,000,000",
+    "100,000,000,000,000",
+    "1,000,000,000,000,000",
+    "10,000,000,000,000,000",
+    "100,000,000,000,000,000",
+    "1,000,000,000,000,000,000",
+    "10,000,000,000,000,000,000",
+    "100,000,000,000,000,000,000",
+    "1e+21",
+    "1e+22",
+    "1e+23",
+    "1e+24",
+    "1e+25",
+    "9.999999999999999e+25",
+    "1e+27",
+    "1e+28",
+    "1.0000000000000001e+29",
+    "1e+30"
+   ],
+   "drawnInNode": [
+    false,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    false
+   ]
+  },
+  {
+   "name": "x: hbar 0..1234567",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       0,
+       1234567
+      ]
+     }
+    ]
+   },
+   "axis": "x",
+   "values": [
+    "0000000000000000",
+    "41086a0000000000",
+    "41186a0000000000",
+    "41224f8000000000",
+    "41286a0000000000",
+    "412e848000000000",
+    "41324f8000000000",
+    "41355cc000000000"
+   ],
+   "valuesText": [
+    "0",
+    "200000",
+    "400000",
+    "600000",
+    "800000",
+    "1000000",
+    "1200000",
+    "1400000"
+   ],
+   "labels": [
+    "0",
+    "200,000",
+    "400,000",
+    "600,000",
+    "800,000",
+    "1,000,000",
+    "1,200,000",
+    "1,400,000"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "x: scatter 0..1234567",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        0,
+        1
+       ],
+       [
+        1234567,
+        2
+       ]
+      ]
+     }
+    ]
+   },
+   "axis": "x",
+   "values": [
+    "0000000000000000",
+    "41086a0000000000",
+    "41186a0000000000",
+    "41224f8000000000",
+    "41286a0000000000",
+    "412e848000000000",
+    "41324f8000000000",
+    "41355cc000000000"
+   ],
+   "valuesText": [
+    "0",
+    "200000",
+    "400000",
+    "600000",
+    "800000",
+    "1000000",
+    "1200000",
+    "1400000"
+   ],
+   "labels": [
+    "0",
+    "200,000",
+    "400,000",
+    "600,000",
+    "800,000",
+    "1,000,000",
+    "1,200,000",
+    "1,400,000"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "template {value} kg",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "formatter": "{value} kg"
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       1234567
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "0000000000000000",
+    "41086a0000000000",
+    "41186a0000000000",
+    "41224f8000000000",
+    "41286a0000000000",
+    "412e848000000000",
+    "41324f8000000000",
+    "41355cc000000000"
+   ],
+   "valuesText": [
+    "0",
+    "200000",
+    "400000",
+    "600000",
+    "800000",
+    "1000000",
+    "1200000",
+    "1400000"
+   ],
+   "labels": [
+    "0 kg",
+    "200,000 kg",
+    "400,000 kg",
+    "600,000 kg",
+    "800,000 kg",
+    "1,000,000 kg",
+    "1,200,000 kg",
+    "1,400,000 kg"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "template, first {value} only",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "formatter": "{value} kg / {value}"
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       1234567
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "0000000000000000",
+    "41086a0000000000",
+    "41186a0000000000",
+    "41224f8000000000",
+    "41286a0000000000",
+    "412e848000000000",
+    "41324f8000000000",
+    "41355cc000000000"
+   ],
+   "valuesText": [
+    "0",
+    "200000",
+    "400000",
+    "600000",
+    "800000",
+    "1000000",
+    "1200000",
+    "1400000"
+   ],
+   "labels": [
+    "0 kg / {value}",
+    "200,000 kg / {value}",
+    "400,000 kg / {value}",
+    "600,000 kg / {value}",
+    "800,000 kg / {value}",
+    "1,000,000 kg / {value}",
+    "1,200,000 kg / {value}",
+    "1,400,000 kg / {value}"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "template empty",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "formatter": ""
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       1234567
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "0000000000000000",
+    "41086a0000000000",
+    "41186a0000000000",
+    "41224f8000000000",
+    "41286a0000000000",
+    "412e848000000000",
+    "41324f8000000000",
+    "41355cc000000000"
+   ],
+   "valuesText": [
+    "0",
+    "200000",
+    "400000",
+    "600000",
+    "800000",
+    "1000000",
+    "1200000",
+    "1400000"
+   ],
+   "labels": [
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    ""
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "template with a line break",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "formatter": "{value}\nkg"
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       1234567
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "0000000000000000",
+    "41086a0000000000",
+    "41186a0000000000",
+    "41224f8000000000",
+    "41286a0000000000",
+    "412e848000000000",
+    "41324f8000000000",
+    "41355cc000000000"
+   ],
+   "valuesText": [
+    "0",
+    "200000",
+    "400000",
+    "600000",
+    "800000",
+    "1000000",
+    "1200000",
+    "1400000"
+   ],
+   "labels": [
+    "0\nkg",
+    "200,000\nkg",
+    "400,000\nkg",
+    "600,000\nkg",
+    "800,000\nkg",
+    "1,000,000\nkg",
+    "1,200,000\nkg",
+    "1,400,000\nkg"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "template with dollar patterns",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "formatter": "$$ {value} $& $1"
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       1234567
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "0000000000000000",
+    "41086a0000000000",
+    "41186a0000000000",
+    "41224f8000000000",
+    "41286a0000000000",
+    "412e848000000000",
+    "41324f8000000000",
+    "41355cc000000000"
+   ],
+   "valuesText": [
+    "0",
+    "200000",
+    "400000",
+    "600000",
+    "800000",
+    "1000000",
+    "1200000",
+    "1400000"
+   ],
+   "labels": [
+    "$$ 0 $& $1",
+    "$$ 200,000 $& $1",
+    "$$ 400,000 $& $1",
+    "$$ 600,000 $& $1",
+    "$$ 800,000 $& $1",
+    "$$ 1,000,000 $& $1",
+    "$$ 1,200,000 $& $1",
+    "$$ 1,400,000 $& $1"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "template, only the exact {value}",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLabel": {
+      "formatter": "{VALUE}|{ value }|{value}"
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       1234567
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "0000000000000000",
+    "41086a0000000000",
+    "41186a0000000000",
+    "41224f8000000000",
+    "41286a0000000000",
+    "412e848000000000",
+    "41324f8000000000",
+    "41355cc000000000"
+   ],
+   "valuesText": [
+    "0",
+    "200000",
+    "400000",
+    "600000",
+    "800000",
+    "1000000",
+    "1200000",
+    "1400000"
+   ],
+   "labels": [
+    "{VALUE}|{ value }|0",
+    "{VALUE}|{ value }|200,000",
+    "{VALUE}|{ value }|400,000",
+    "{VALUE}|{ value }|600,000",
+    "{VALUE}|{ value }|800,000",
+    "{VALUE}|{ value }|1,000,000",
+    "{VALUE}|{ value }|1,200,000",
+    "{VALUE}|{ value }|1,400,000"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "log dataMin dataMax 3.7..7777.7, template",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "log",
+     "min": "dataMin",
+     "max": "dataMax",
+     "axisLabel": {
+      "formatter": "{value} ms"
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       3.7,
+       7777.7
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "400d99999999999a",
+    "4024000000000000",
+    "4059000000000000",
+    "408f400000000000",
+    "40be61b333333333"
+   ],
+   "valuesText": [
+    "3.7",
+    "10",
+    "100",
+    "1000",
+    "7777.7"
+   ],
+   "labels": [
+    "3.7 ms",
+    "10 ms",
+    "100 ms",
+    "1,000 ms",
+    "7,777.7 ms"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "interval 0.7 on 0..5",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 0.7
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "0000000000000000",
+    "3fe6666666666666",
+    "3ff6666666666666",
+    "4000cccccccccccd",
+    "4006666666666666",
+    "400c000000000000",
+    "4010cccccccccccd",
+    "401399999999999a",
+    "4014000000000000"
+   ],
+   "valuesText": [
+    "0",
+    "0.7",
+    "1.4",
+    "2.1",
+    "2.8",
+    "3.5",
+    "4.2",
+    "4.9",
+    "5"
+   ],
+   "labels": [
+    "0",
+    "0.7",
+    "1.4",
+    "2.1",
+    "2.8",
+    "3.5",
+    "4.2",
+    "4.9",
+    "5"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    false
+   ]
+  },
+  {
+   "name": "min 0 max 5 interval 0.7",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 5,
+     "interval": 0.7
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "0000000000000000",
+    "3fe6666666666666",
+    "3ff6666666666666",
+    "4000cccccccccccd",
+    "4006666666666666",
+    "400c000000000000",
+    "4010cccccccccccd",
+    "401399999999999a",
+    "4014000000000000"
+   ],
+   "valuesText": [
+    "0",
+    "0.7",
+    "1.4",
+    "2.1",
+    "2.8",
+    "3.5",
+    "4.2",
+    "4.9",
+    "5"
+   ],
+   "labels": [
+    "0",
+    "0.7",
+    "1.4",
+    "2.1",
+    "2.8",
+    "3.5",
+    "4.2",
+    "4.9",
+    "5"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    false
+   ]
+  },
+  {
+   "name": "scale 1000..1000.5",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1000,
+       1000.5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "408f400000000000",
+    "408f40cccccccccd",
+    "408f41999999999a",
+    "408f426666666666",
+    "408f433333333333",
+    "408f440000000000"
+   ],
+   "valuesText": [
+    "1000",
+    "1000.1",
+    "1000.2",
+    "1000.3",
+    "1000.4",
+    "1000.5"
+   ],
+   "labels": [
+    "1,000",
+    "1,000.1",
+    "1,000.2",
+    "1,000.3",
+    "1,000.4",
+    "1,000.5"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  },
+  {
+   "name": "scale 1234567.5..1234568",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1234567.5,
+       1234568
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "values": [
+    "4132d68780000000",
+    "4132d6879999999a",
+    "4132d687b3333333",
+    "4132d687cccccccd",
+    "4132d687e6666666",
+    "4132d68800000000"
+   ],
+   "valuesText": [
+    "1234567.5",
+    "1234567.6",
+    "1234567.7",
+    "1234567.8",
+    "1234567.9",
+    "1234568"
+   ],
+   "labels": [
+    "1,234,567.5",
+    "1,234,567.6",
+    "1,234,567.7",
+    "1,234,567.8",
+    "1,234,567.9",
+    "1,234,568"
+   ],
+   "drawnInNode": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  }
+ ],
+ "getLabel": [
+  {
+   "name": "interval 1: null 0",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "0000000000000000",
+   "valueText": "0",
+   "precision": null,
+   "text": "0"
+  },
+  {
+   "name": "interval 1: null -0",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "8000000000000000",
+   "valueText": "-0",
+   "precision": null,
+   "text": "0"
+  },
+  {
+   "name": "interval 1: null 1.005",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3ff0147ae147ae14",
+   "valueText": "1.005",
+   "precision": null,
+   "text": "1.005"
+  },
+  {
+   "name": "interval 1: null 2.5",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "4004000000000000",
+   "valueText": "2.5",
+   "precision": null,
+   "text": "2.5"
+  },
+  {
+   "name": "interval 1: null -2.5",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "c004000000000000",
+   "valueText": "-2.5",
+   "precision": null,
+   "text": "-2.5"
+  },
+  {
+   "name": "interval 1: null 0.125",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3fc0000000000000",
+   "valueText": "0.125",
+   "precision": null,
+   "text": "0.125"
+  },
+  {
+   "name": "interval 1: null 1e-7",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3e7ad7f29abcaf48",
+   "valueText": "1e-7",
+   "precision": null,
+   "text": "0.0000001"
+  },
+  {
+   "name": "interval 1: null 1.23456789e-7",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3e8091f16677e7af",
+   "valueText": "1.23456789e-7",
+   "precision": null,
+   "text": "0.000000123456789"
+  },
+  {
+   "name": "interval 1: null 37.246964",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "40429f9c842fa509",
+   "valueText": "37.246964",
+   "precision": null,
+   "text": "37.246964"
+  },
+  {
+   "name": "interval 1: null 1234.4",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "409349999999999a",
+   "valueText": "1234.4",
+   "precision": null,
+   "text": "1,234.4"
+  },
+  {
+   "name": "interval 1: null 552941.17647",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "4120dfda5a5a469d",
+   "valueText": "552941.17647",
+   "precision": null,
+   "text": "552,941.17647"
+  },
+  {
+   "name": "interval 1: null -0.0001",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "bf1a36e2eb1c432d",
+   "valueText": "-0.0001",
+   "precision": null,
+   "text": "-0.0001"
+  },
+  {
+   "name": "interval 1: null 1e+21",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "444b1ae4d6e2ef50",
+   "valueText": "1e+21",
+   "precision": null,
+   "text": "1e+21"
+  },
+  {
+   "name": "interval 1: null 1.5e+21",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "4454542ba12a337c",
+   "valueText": "1.5e+21",
+   "precision": null,
+   "text": "1.5e+21"
+  },
+  {
+   "name": "interval 1: null 3.3e+25",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "453b4c0595a86aa2",
+   "valueText": "3.3e+25",
+   "precision": null,
+   "text": "3.3e+25"
+  },
+  {
+   "name": "interval 1: \"auto\" 0",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "0000000000000000",
+   "valueText": "0",
+   "precision": "auto",
+   "text": "0.00"
+  },
+  {
+   "name": "interval 1: \"auto\" -0",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "8000000000000000",
+   "valueText": "-0",
+   "precision": "auto",
+   "text": "0.00"
+  },
+  {
+   "name": "interval 1: \"auto\" 1.005",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3ff0147ae147ae14",
+   "valueText": "1.005",
+   "precision": "auto",
+   "text": "1.00"
+  },
+  {
+   "name": "interval 1: \"auto\" 2.5",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "4004000000000000",
+   "valueText": "2.5",
+   "precision": "auto",
+   "text": "2.50"
+  },
+  {
+   "name": "interval 1: \"auto\" -2.5",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "c004000000000000",
+   "valueText": "-2.5",
+   "precision": "auto",
+   "text": "-2.50"
+  },
+  {
+   "name": "interval 1: \"auto\" 0.125",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3fc0000000000000",
+   "valueText": "0.125",
+   "precision": "auto",
+   "text": "0.13"
+  },
+  {
+   "name": "interval 1: \"auto\" 1e-7",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3e7ad7f29abcaf48",
+   "valueText": "1e-7",
+   "precision": "auto",
+   "text": "0.00"
+  },
+  {
+   "name": "interval 1: \"auto\" 1.23456789e-7",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3e8091f16677e7af",
+   "valueText": "1.23456789e-7",
+   "precision": "auto",
+   "text": "0.00"
+  },
+  {
+   "name": "interval 1: \"auto\" 37.246964",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "40429f9c842fa509",
+   "valueText": "37.246964",
+   "precision": "auto",
+   "text": "37.25"
+  },
+  {
+   "name": "interval 1: \"auto\" 1234.4",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "409349999999999a",
+   "valueText": "1234.4",
+   "precision": "auto",
+   "text": "1,234.40"
+  },
+  {
+   "name": "interval 1: \"auto\" 552941.17647",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "4120dfda5a5a469d",
+   "valueText": "552941.17647",
+   "precision": "auto",
+   "text": "552,941.18"
+  },
+  {
+   "name": "interval 1: \"auto\" -0.0001",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "bf1a36e2eb1c432d",
+   "valueText": "-0.0001",
+   "precision": "auto",
+   "text": "-0.00"
+  },
+  {
+   "name": "interval 1: \"auto\" 1e+21",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "444b1ae4d6e2ef50",
+   "valueText": "1e+21",
+   "precision": "auto",
+   "text": "1e+21"
+  },
+  {
+   "name": "interval 1: \"auto\" 1.5e+21",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "4454542ba12a337c",
+   "valueText": "1.5e+21",
+   "precision": "auto",
+   "text": "1.5e+21"
+  },
+  {
+   "name": "interval 1: \"auto\" 3.3e+25",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "453b4c0595a86aa2",
+   "valueText": "3.3e+25",
+   "precision": "auto",
+   "text": "3.3e+25"
+  },
+  {
+   "name": "interval 0.5: \"auto\" 0",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 0.5
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "0000000000000000",
+   "valueText": "0",
+   "precision": "auto",
+   "text": "0.000"
+  },
+  {
+   "name": "interval 0.5: \"auto\" 2.5",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 0.5
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "4004000000000000",
+   "valueText": "2.5",
+   "precision": "auto",
+   "text": "2.500"
+  },
+  {
+   "name": "interval 0.5: \"auto\" 0.125",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 0.5
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3fc0000000000000",
+   "valueText": "0.125",
+   "precision": "auto",
+   "text": "0.125"
+  },
+  {
+   "name": "interval 0.5: \"auto\" 37.246964",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 0.5
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "40429f9c842fa509",
+   "valueText": "37.246964",
+   "precision": "auto",
+   "text": "37.247"
+  },
+  {
+   "name": "interval 0.5: \"auto\" 1234.4",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 0.5
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "409349999999999a",
+   "valueText": "1234.4",
+   "precision": "auto",
+   "text": "1,234.400"
+  },
+  {
+   "name": "interval 0.5: \"auto\" -0.0001",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 0.5
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "bf1a36e2eb1c432d",
+   "valueText": "-0.0001",
+   "precision": "auto",
+   "text": "-0.000"
+  },
+  {
+   "name": "interval 0.05: \"auto\" 1.005",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 0.05
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       0.3
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3ff0147ae147ae14",
+   "valueText": "1.005",
+   "precision": "auto",
+   "text": "1.0050"
+  },
+  {
+   "name": "interval 0.05: \"auto\" 0.125",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 0.05
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       0.3
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3fc0000000000000",
+   "valueText": "0.125",
+   "precision": "auto",
+   "text": "0.1250"
+  },
+  {
+   "name": "interval 0.05: \"auto\" 37.246964",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 0.05
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       0.3
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "40429f9c842fa509",
+   "valueText": "37.246964",
+   "precision": "auto",
+   "text": "37.2470"
+  },
+  {
+   "name": "interval 0.05: \"auto\" 552941.17647",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 0.05
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       0.3
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "4120dfda5a5a469d",
+   "valueText": "552941.17647",
+   "precision": "auto",
+   "text": "552,941.1765"
+  },
+  {
+   "name": "interval 0.05: \"auto\" -0.0001",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 0.05
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       0.3
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "bf1a36e2eb1c432d",
+   "valueText": "-0.0001",
+   "precision": "auto",
+   "text": "-0.0001"
+  },
+  {
+   "name": "interval 1e-7: \"auto\" 0",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1e-7
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5e-7
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "0000000000000000",
+   "valueText": "0",
+   "precision": "auto",
+   "text": "0.000000000"
+  },
+  {
+   "name": "interval 1e-7: \"auto\" 0.125",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1e-7
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5e-7
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3fc0000000000000",
+   "valueText": "0.125",
+   "precision": "auto",
+   "text": "0.125000000"
+  },
+  {
+   "name": "interval 1e-7: \"auto\" 1e-7",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1e-7
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5e-7
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3e7ad7f29abcaf48",
+   "valueText": "1e-7",
+   "precision": "auto",
+   "text": "0.000000100"
+  },
+  {
+   "name": "interval 1e-7: \"auto\" 1.23456789e-7",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1e-7
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5e-7
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3e8091f16677e7af",
+   "valueText": "1.23456789e-7",
+   "precision": "auto",
+   "text": "0.000000123"
+  },
+  {
+   "name": "interval 1: 0 -0",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "8000000000000000",
+   "valueText": "-0",
+   "precision": 0,
+   "text": "0"
+  },
+  {
+   "name": "interval 1: 0 2.5",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "4004000000000000",
+   "valueText": "2.5",
+   "precision": 0,
+   "text": "3"
+  },
+  {
+   "name": "interval 1: 0 -2.5",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "c004000000000000",
+   "valueText": "-2.5",
+   "precision": 0,
+   "text": "-3"
+  },
+  {
+   "name": "interval 1: 0 0.125",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3fc0000000000000",
+   "valueText": "0.125",
+   "precision": 0,
+   "text": "0"
+  },
+  {
+   "name": "interval 1: 0 -0.0001",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "bf1a36e2eb1c432d",
+   "valueText": "-0.0001",
+   "precision": 0,
+   "text": "-0"
+  },
+  {
+   "name": "interval 1: 0 552941.17647",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "4120dfda5a5a469d",
+   "valueText": "552941.17647",
+   "precision": 0,
+   "text": "552,941"
+  },
+  {
+   "name": "interval 1: 0 1e+21",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "444b1ae4d6e2ef50",
+   "valueText": "1e+21",
+   "precision": 0,
+   "text": "1e+21"
+  },
+  {
+   "name": "interval 1: 1 1.005",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3ff0147ae147ae14",
+   "valueText": "1.005",
+   "precision": 1,
+   "text": "1.0"
+  },
+  {
+   "name": "interval 1: 1 0.125",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3fc0000000000000",
+   "valueText": "0.125",
+   "precision": 1,
+   "text": "0.1"
+  },
+  {
+   "name": "interval 1: 1 -0.0001",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "bf1a36e2eb1c432d",
+   "valueText": "-0.0001",
+   "precision": 1,
+   "text": "-0.0"
+  },
+  {
+   "name": "interval 1: 1 37.246964",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "40429f9c842fa509",
+   "valueText": "37.246964",
+   "precision": 1,
+   "text": "37.2"
+  },
+  {
+   "name": "interval 1: 1 1.5e+21",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "4454542ba12a337c",
+   "valueText": "1.5e+21",
+   "precision": 1,
+   "text": "1.5e+21"
+  },
+  {
+   "name": "interval 1: 3 1.005",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3ff0147ae147ae14",
+   "valueText": "1.005",
+   "precision": 3,
+   "text": "1.005"
+  },
+  {
+   "name": "interval 1: 3 1234.4",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "409349999999999a",
+   "valueText": "1234.4",
+   "precision": 3,
+   "text": "1,234.400"
+  },
+  {
+   "name": "interval 1: 3 1.23456789e-7",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3e8091f16677e7af",
+   "valueText": "1.23456789e-7",
+   "precision": 3,
+   "text": "0.000"
+  },
+  {
+   "name": "interval 1: 3 3.3e+25",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "453b4c0595a86aa2",
+   "valueText": "3.3e+25",
+   "precision": 3,
+   "text": "3.3e+25"
+  },
+  {
+   "name": "interval 1: 20 1.005",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3ff0147ae147ae14",
+   "valueText": "1.005",
+   "precision": 20,
+   "text": "1.00499999999999989342"
+  },
+  {
+   "name": "interval 1: 20 0.125",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3fc0000000000000",
+   "valueText": "0.125",
+   "precision": 20,
+   "text": "0.12500000000000000000"
+  },
+  {
+   "name": "interval 1: 20 1e-7",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3e7ad7f29abcaf48",
+   "valueText": "1e-7",
+   "precision": 20,
+   "text": "0.00000010000000000000"
+  },
+  {
+   "name": "interval 1: 20 1e+21",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "444b1ae4d6e2ef50",
+   "valueText": "1e+21",
+   "precision": 20,
+   "text": "1e+21"
+  },
+  {
+   "name": "interval 1: 20 3.3e+25",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "453b4c0595a86aa2",
+   "valueText": "3.3e+25",
+   "precision": 20,
+   "text": "3.3e+25"
+  },
+  {
+   "name": "interval 1: 25 1.005",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3ff0147ae147ae14",
+   "valueText": "1.005",
+   "precision": 25,
+   "text": "1.00499999999999989342"
+  },
+  {
+   "name": "interval 1: 25 2.5",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "4004000000000000",
+   "valueText": "2.5",
+   "precision": 25,
+   "text": "2.50000000000000000000"
+  },
+  {
+   "name": "interval 1: 25 1.23456789e-7",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3e8091f16677e7af",
+   "valueText": "1.23456789e-7",
+   "precision": 25,
+   "text": "0.00000012345678900000"
+  },
+  {
+   "name": "interval 1: -1 2.5",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "4004000000000000",
+   "valueText": "2.5",
+   "precision": -1,
+   "text": "3"
+  },
+  {
+   "name": "interval 1: -1 37.246964",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "40429f9c842fa509",
+   "valueText": "37.246964",
+   "precision": -1,
+   "text": "37"
+  },
+  {
+   "name": "interval 1: -1 1234.4",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "409349999999999a",
+   "valueText": "1234.4",
+   "precision": -1,
+   "text": "1,234"
+  },
+  {
+   "name": "interval 1: 2.7 -2.5",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "c004000000000000",
+   "valueText": "-2.5",
+   "precision": 2.7,
+   "text": "-2.50"
+  },
+  {
+   "name": "interval 1: 2.7 1.005",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3ff0147ae147ae14",
+   "valueText": "1.005",
+   "precision": 2.7,
+   "text": "1.00"
+  },
+  {
+   "name": "interval 1: 2.7 37.246964",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "40429f9c842fa509",
+   "valueText": "37.246964",
+   "precision": 2.7,
+   "text": "37.25"
+  },
+  {
+   "name": "interval 1: \"3\" 1.005",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3ff0147ae147ae14",
+   "valueText": "1.005",
+   "precision": "3",
+   "text": "1.005"
+  },
+  {
+   "name": "interval 1: \"3\" 1234.4",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "409349999999999a",
+   "valueText": "1234.4",
+   "precision": "3",
+   "text": "1,234.400"
+  },
+  {
+   "name": "interval 1: \"abc\" -0",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "8000000000000000",
+   "valueText": "-0",
+   "precision": "abc",
+   "text": "0"
+  },
+  {
+   "name": "interval 1: \"abc\" 1.005",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3ff0147ae147ae14",
+   "valueText": "1.005",
+   "precision": "abc",
+   "text": "1.005"
+  },
+  {
+   "name": "interval 1: \"abc\" 1234.4",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "409349999999999a",
+   "valueText": "1234.4",
+   "precision": "abc",
+   "text": "1,234.4"
+  },
+  {
+   "name": "interval 1: \"abc\" 1e+21",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 1
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "444b1ae4d6e2ef50",
+   "valueText": "1e+21",
+   "precision": "abc",
+   "text": "1e+21"
+  },
+  {
+   "name": "log 1..1e4: null 3.7",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "log"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1,
+       10000
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "400d99999999999a",
+   "valueText": "3.7",
+   "precision": null,
+   "text": "3.7"
+  },
+  {
+   "name": "log 1..1e4: null 12345.678",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "log"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1,
+       10000
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "40c81cd6c8b43958",
+   "valueText": "12345.678",
+   "precision": null,
+   "text": "12,345.678"
+  },
+  {
+   "name": "log 1..1e4: \"auto\" 3.7",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "log"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1,
+       10000
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "400d99999999999a",
+   "valueText": "3.7",
+   "precision": "auto",
+   "text": "3.70"
+  },
+  {
+   "name": "log 1..1e4: \"auto\" 12345.678",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "log"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1,
+       10000
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "40c81cd6c8b43958",
+   "valueText": "12345.678",
+   "precision": "auto",
+   "text": "12,345.68"
+  },
+  {
+   "name": "log 1..1e4: \"auto\" 10000",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "log"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1,
+       10000
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "40c3880000000000",
+   "valueText": "10000",
+   "precision": "auto",
+   "text": "10,000.00"
+  },
+  {
+   "name": "log interval 0.5: \"auto\" 3.7",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "log",
+     "interval": 0.5
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1,
+       100
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "400d99999999999a",
+   "valueText": "3.7",
+   "precision": "auto",
+   "text": "3.700"
+  },
+  {
+   "name": "log interval 0.5: \"auto\" 12345.678",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "log",
+     "interval": 0.5
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1,
+       100
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "40c81cd6c8b43958",
+   "valueText": "12345.678",
+   "precision": "auto",
+   "text": "12,345.678"
+  }
+ ],
+ "pointer": [
+  {
+   "name": "0..100, 37.246964",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": 37.246964,
+      "label": {
+       "show": true
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       100
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "40429f9c842fa509",
+   "valueText": "37.246964",
+   "text": "37.25"
+  },
+  {
+   "name": "0..5, 3",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": 3,
+      "label": {
+       "show": true
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "4008000000000000",
+   "valueText": "3",
+   "text": "3.00"
+  },
+  {
+   "name": "0..5000, 1234.4",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": 1234.4,
+      "label": {
+       "show": true
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5000
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "409349999999999a",
+   "valueText": "1234.4",
+   "text": "1,234.40"
+  },
+  {
+   "name": "0..1234567, 552941.17647",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": 552941.17647,
+      "label": {
+       "show": true
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       1234567
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "4120dfda5a5a469d",
+   "valueText": "552941.17647",
+   "text": "552,941.18"
+  },
+  {
+   "name": "step 0.05 (0..0.3), 0.123",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": 0.123,
+      "label": {
+       "show": true
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       0.3
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3fbf7ced916872b0",
+   "valueText": "0.123",
+   "text": "0.1230"
+  },
+  {
+   "name": "step 1e-7 (0..5e-7), 1.23456789e-7",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": 1.23456789e-7,
+      "label": {
+       "show": true
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5e-7
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3e8091f16677e7af",
+   "valueText": "1.23456789e-7",
+   "text": "0.000000123"
+  },
+  {
+   "name": "log 1..1e4, 3.7",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "log",
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": 3.7,
+      "label": {
+       "show": true
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1,
+       10000
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "400d99999999999a",
+   "valueText": "3.7",
+   "text": "3.70"
+  },
+  {
+   "name": "log 1..1e4, 12345.678",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "log",
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": 12345.678,
+      "label": {
+       "show": true
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1,
+       10000
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "40c81cd6c8b43958",
+   "valueText": "12345.678",
+   "text": "10,000.00"
+  },
+  {
+   "name": "0..100, 150 past the max",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": 150,
+      "label": {
+       "show": true
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       100
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "4062c00000000000",
+   "valueText": "150",
+   "text": "100.00"
+  },
+  {
+   "name": "0..100, -5 under the min",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": -5,
+      "label": {
+       "show": true
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       100
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "c014000000000000",
+   "valueText": "-5",
+   "text": "0.00"
+  },
+  {
+   "name": "log interval 0.5, 3.7",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "log",
+     "interval": 0.5,
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": 3.7,
+      "label": {
+       "show": true
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1,
+       100
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "400d99999999999a",
+   "valueText": "3.7",
+   "text": "3.700"
+  },
+  {
+   "name": "interval 0.7 (0..5), 1.23456",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "interval": 0.7,
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": 1.23456,
+      "label": {
+       "show": true
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "3ff3c0c1fc8f3238",
+   "valueText": "1.23456",
+   "text": "1.235"
+  },
+  {
+   "name": "precision 0",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": 37.246964,
+      "label": {
+       "show": true,
+       "precision": 0
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       100
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "40429f9c842fa509",
+   "valueText": "37.246964",
+   "text": "37"
+  },
+  {
+   "name": "precision 3",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": 37.246964,
+      "label": {
+       "show": true,
+       "precision": 3
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       100
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "40429f9c842fa509",
+   "valueText": "37.246964",
+   "text": "37.247"
+  },
+  {
+   "name": "precision 25",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": 37.246964,
+      "label": {
+       "show": true,
+       "precision": 25
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       100
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "40429f9c842fa509",
+   "valueText": "37.246964",
+   "text": "37.24696399999999840702"
+  },
+  {
+   "name": "precision 'abc'",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": 37.246964,
+      "label": {
+       "show": true,
+       "precision": "abc"
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       100
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "40429f9c842fa509",
+   "valueText": "37.246964",
+   "text": "37.246964"
+  },
+  {
+   "name": "formatter, first {value} only",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": 37.246964,
+      "label": {
+       "show": true,
+       "formatter": "v={value} {value}"
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       100
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "40429f9c842fa509",
+   "valueText": "37.246964",
+   "text": "v=37.25 {value}"
+  },
+  {
+   "name": "formatter empty, ignored",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": 37.246964,
+      "label": {
+       "show": true,
+       "formatter": ""
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       100
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "40429f9c842fa509",
+   "valueText": "37.246964",
+   "text": "37.25"
+  },
+  {
+   "name": "cascade: tooltip precision 1 under the axis null",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": 37.246964,
+      "label": {
+       "show": true,
+       "precision": null
+      }
+     }
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        0,
+        1
+       ],
+       [
+        100,
+        2
+       ]
+      ]
+     }
+    ],
+    "tooltip": {
+     "trigger": "axis",
+     "axisPointer": {
+      "label": {
+       "precision": 1
+      }
+     }
+    }
+   },
+   "axis": "x",
+   "value": "40429f9c842fa509",
+   "valueText": "37.246964",
+   "text": "37.2"
+  },
+  {
+   "name": "cascade: root axisPointer precision 3",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": 37.246964,
+      "label": {
+       "show": true
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       100
+      ]
+     }
+    ],
+    "axisPointer": {
+     "label": {
+      "precision": 3
+     }
+    }
+   },
+   "axis": "y",
+   "value": "40429f9c842fa509",
+   "valueText": "37.246964",
+   "text": "37.247"
+  },
+  {
+   "name": "0..5e21, 1e21",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": 1e+21,
+      "label": {
+       "show": true
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       0,
+       5e+21
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "444b1ae4d6e2ef50",
+   "valueText": "1e+21",
+   "text": "1e+21"
+  },
+  {
+   "name": "-1..1, -0.0001",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisPointer": {
+      "show": true,
+      "status": "show",
+      "value": -0.0001,
+      "label": {
+       "show": true
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       -1,
+       1
+      ]
+     }
+    ]
+   },
+   "axis": "y",
+   "value": "bf1a36e2eb1c432d",
+   "valueText": "-0.0001",
+   "text": "-0.000"
+  }
+ ],
+ "header": [
+  {
+   "name": "0..10, 3.25",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        5
+       ],
+       [
+        3.25,
+        6
+       ],
+       [
+        7,
+        2
+       ]
+      ]
+     }
+    ],
+    "tooltip": {
+     "trigger": "axis",
+     "renderMode": "richText"
+    }
+   },
+   "axis": "x",
+   "value": "400a000000000000",
+   "valueText": "3.25",
+   "text": "3.25",
+   "noHeader": false
+  },
+  {
+   "name": "0..10 interval 0.5, 3.25",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10,
+     "interval": 0.5
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        5
+       ],
+       [
+        3.25,
+        6
+       ],
+       [
+        7,
+        2
+       ]
+      ]
+     }
+    ],
+    "tooltip": {
+     "trigger": "axis",
+     "renderMode": "richText"
+    }
+   },
+   "axis": "x",
+   "value": "400a000000000000",
+   "valueText": "3.25",
+   "text": "3.250",
+   "noHeader": false
+  },
+  {
+   "name": "xAxis formatter x={value}",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10,
+     "axisPointer": {
+      "label": {
+       "formatter": "x={value}"
+      }
+     }
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        5
+       ],
+       [
+        3.25,
+        6
+       ],
+       [
+        7,
+        2
+       ]
+      ]
+     }
+    ],
+    "tooltip": {
+     "trigger": "axis",
+     "renderMode": "richText"
+    }
+   },
+   "axis": "x",
+   "value": "400a000000000000",
+   "valueText": "3.25",
+   "text": "x=3.25",
+   "noHeader": false
+  },
+  {
+   "name": "tooltip formatter <{value}>",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        5
+       ],
+       [
+        3.25,
+        6
+       ],
+       [
+        7,
+        2
+       ]
+      ]
+     }
+    ],
+    "tooltip": {
+     "axisPointer": {
+      "label": {
+       "formatter": "<{value}>"
+      }
+     },
+     "trigger": "axis",
+     "renderMode": "richText"
+    }
+   },
+   "axis": "x",
+   "value": "400a000000000000",
+   "valueText": "3.25",
+   "text": "<3.25>",
+   "noHeader": false
+  },
+  {
+   "name": "root formatter R{value}",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        5
+       ],
+       [
+        3.25,
+        6
+       ],
+       [
+        7,
+        2
+       ]
+      ]
+     }
+    ],
+    "axisPointer": {
+     "label": {
+      "formatter": "R{value}"
+     }
+    },
+    "tooltip": {
+     "trigger": "axis",
+     "renderMode": "richText"
+    }
+   },
+   "axis": "x",
+   "value": "400a000000000000",
+   "valueText": "3.25",
+   "text": "R3.25",
+   "noHeader": false
+  },
+  {
+   "name": "formatter of blanks, no header",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10,
+     "axisPointer": {
+      "label": {
+       "formatter": "   "
+      }
+     }
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        5
+       ],
+       [
+        3.25,
+        6
+       ],
+       [
+        7,
+        2
+       ]
+      ]
+     }
+    ],
+    "tooltip": {
+     "trigger": "axis",
+     "renderMode": "richText"
+    }
+   },
+   "axis": "x",
+   "value": "400a000000000000",
+   "valueText": "3.25",
+   "text": "   ",
+   "noHeader": true
+  },
+  {
+   "name": "root precision 3",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        5
+       ],
+       [
+        3.25,
+        6
+       ],
+       [
+        7,
+        2
+       ]
+      ]
+     }
+    ],
+    "axisPointer": {
+     "label": {
+      "precision": 3
+     }
+    },
+    "tooltip": {
+     "trigger": "axis",
+     "renderMode": "richText"
+    }
+   },
+   "axis": "x",
+   "value": "400a000000000000",
+   "valueText": "3.25",
+   "text": "3.250",
+   "noHeader": false
+  },
+  {
+   "name": "xAxis precision 0 over tooltip 1",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10,
+     "axisPointer": {
+      "label": {
+       "precision": 0
+      }
+     }
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        5
+       ],
+       [
+        3.25,
+        6
+       ],
+       [
+        7,
+        2
+       ]
+      ]
+     }
+    ],
+    "tooltip": {
+     "axisPointer": {
+      "label": {
+       "precision": 1
+      }
+     },
+     "trigger": "axis",
+     "renderMode": "richText"
+    }
+   },
+   "axis": "x",
+   "value": "400a000000000000",
+   "valueText": "3.25",
+   "text": "3",
+   "noHeader": false
+  },
+  {
+   "name": "xAxis precision null under tooltip 1",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10,
+     "axisPointer": {
+      "label": {
+       "precision": null
+      }
+     }
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        5
+       ],
+       [
+        3.25,
+        6
+       ],
+       [
+        7,
+        2
+       ]
+      ]
+     }
+    ],
+    "tooltip": {
+     "axisPointer": {
+      "label": {
+       "precision": 1
+      }
+     },
+     "trigger": "axis",
+     "renderMode": "richText"
+    }
+   },
+   "axis": "x",
+   "value": "400a000000000000",
+   "valueText": "3.25",
+   "text": "3.3",
+   "noHeader": false
+  },
+  {
+   "name": "0..1234567, 552941.17647",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        0,
+        1
+       ],
+       [
+        552941.17647,
+        2
+       ],
+       [
+        1234567,
+        3
+       ]
+      ]
+     }
+    ],
+    "tooltip": {
+     "trigger": "axis",
+     "renderMode": "richText"
+    }
+   },
+   "axis": "x",
+   "value": "4120dfda5a5a469d",
+   "valueText": "552941.17647",
+   "text": "552,941.18",
+   "noHeader": false
+  },
+  {
+   "name": "log 1..1e4, 3.7",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "log"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        1
+       ],
+       [
+        3.7,
+        2
+       ],
+       [
+        10000,
+        3
+       ]
+      ]
+     }
+    ],
+    "tooltip": {
+     "trigger": "axis",
+     "renderMode": "richText"
+    }
+   },
+   "axis": "x",
+   "value": "400d99999999999a",
+   "valueText": "3.7",
+   "text": "3.70",
+   "noHeader": false
+  }
+ ]
+}

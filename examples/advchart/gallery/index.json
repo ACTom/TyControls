@@ -1,0 +1,5230 @@
+{
+ "source": "apache/echarts-examples",
+ "total": 273,
+ "converted": 244,
+ "entries": [
+  {
+   "id": "area-basic",
+   "title": "Basic area chart",
+   "titleCN": "基础面积图",
+   "category": "line",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 330
+  },
+  {
+   "id": "area-pieces",
+   "title": "Area Pieces",
+   "titleCN": "折线图区域高亮",
+   "category": "'line, visualMap'",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "xAxis",
+    "yAxis",
+    "visualMap"
+   ],
+   "callbacks": 0,
+   "bytes": 1208
+  },
+  {
+   "id": "area-rainfall",
+   "title": "Rainfall",
+   "titleCN": "雨量流量关系图",
+   "category": "line",
+   "difficulty": 5,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataZoom",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 131215
+  },
+  {
+   "id": "area-simple",
+   "title": "Large scale area chart",
+   "titleCN": "大数据量面积图",
+   "category": "'line, dataZoom'",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "dataZoom",
+    "toolbox"
+   ],
+   "callbacks": 1,
+   "bytes": 499717
+  },
+  {
+   "id": "area-stack-gradient",
+   "title": "Gradient Stacked Area Chart",
+   "titleCN": "渐变堆叠面积图",
+   "category": "line",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 3666
+  },
+  {
+   "id": "area-stack",
+   "title": "Stacked Area Chart",
+   "titleCN": "堆叠面积图",
+   "category": "line",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 1724
+  },
+  {
+   "id": "area-time-axis",
+   "title": "Area Chart with Time Axis",
+   "titleCN": "时间轴折线图",
+   "category": "line",
+   "difficulty": 5,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "dataZoom",
+    "toolbox"
+   ],
+   "callbacks": 1,
+   "bytes": 847545
+  },
+  {
+   "id": "bar-animation-delay",
+   "title": "Animation Delay",
+   "titleCN": "柱状图动画延迟",
+   "category": "bar",
+   "difficulty": 5,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "toolbox"
+   ],
+   "callbacks": 3,
+   "bytes": 6273
+  },
+  {
+   "id": "bar-background",
+   "title": "Bar with Background",
+   "titleCN": "带背景色的柱状图",
+   "category": "bar",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 377
+  },
+  {
+   "id": "bar-breaks-brush",
+   "title": "Bar Chart with Axis Breaks (Brush-enabled)",
+   "titleCN": "断轴上的柱状图（可刷选）",
+   "category": "bar",
+   "difficulty": 8,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 1624
+  },
+  {
+   "id": "bar-breaks-simple",
+   "title": "Bar Chart with Axis Breaks",
+   "titleCN": "断轴上的柱状图",
+   "category": "bar",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 1591
+  },
+  {
+   "id": "bar-brush",
+   "title": "Brush Select on Column Chart",
+   "titleCN": "柱状图框选",
+   "category": "bar",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "toolbox",
+    "brush"
+   ],
+   "callbacks": 0,
+   "bytes": 1867
+  },
+  {
+   "id": "bar-data-color",
+   "title": "Set Style of Single Bar.",
+   "titleCN": "自定义单个柱子颜色",
+   "category": "bar",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 355
+  },
+  {
+   "id": "bar-drilldown",
+   "title": "Bar Chart Drilldown Animation",
+   "titleCN": "柱状图下钻动画",
+   "category": "bar",
+   "difficulty": 5,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 434
+  },
+  {
+   "id": "bar-gradient",
+   "title": "Clickable Column Chart with Gradient",
+   "titleCN": "特性示例：渐变色 阴影 点击缩放",
+   "category": "bar",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "title",
+    "xAxis",
+    "yAxis",
+    "dataZoom"
+   ],
+   "callbacks": 0,
+   "bytes": 1622
+  },
+  {
+   "id": "bar-histogram",
+   "title": "Histogram with Custom Series",
+   "titleCN": "直方图（自定义系列）",
+   "category": "custom",
+   "difficulty": 0,
+   "ok": false,
+   "reason": "ecStat is not defined",
+   "seriesTypes": [],
+   "components": [],
+   "callbacks": 0
+  },
+  {
+   "id": "bar-label-rotation",
+   "title": "Bar Label Rotation",
+   "titleCN": "柱状图标签旋转",
+   "category": "bar",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 2429
+  },
+  {
+   "id": "bar-large",
+   "title": "Large Scale Bar Chart",
+   "titleCN": "大数据量柱图",
+   "category": "bar",
+   "difficulty": 5,
+   "ok": false,
+   "reason": "converted, but 10.5 MB is too large to bundle",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataZoom",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 11000676,
+   "tooBig": true
+  },
+  {
+   "id": "bar-multi-drilldown",
+   "title": "Bar Chart Multi-level Drilldown Animation",
+   "titleCN": "柱状图多层下钻动画",
+   "category": "bar",
+   "difficulty": 6,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "xAxis",
+    "yAxis",
+    "graphic"
+   ],
+   "callbacks": 1,
+   "bytes": 761
+  },
+  {
+   "id": "bar-negative",
+   "title": "Bar Chart with Negative Value",
+   "titleCN": "正负条形图",
+   "category": "bar",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 1129
+  },
+  {
+   "id": "bar-negative2",
+   "title": "Bar Chart with Negative Value",
+   "titleCN": "交错正负轴标签",
+   "category": "bar",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 1247
+  },
+  {
+   "id": "bar-polar-label-radial",
+   "title": "Radial Polar Bar Label Position",
+   "titleCN": "极坐标柱状图标签",
+   "category": "bar",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "polar",
+    "angleAxis",
+    "radiusAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 505
+  },
+  {
+   "id": "bar-polar-label-tangential",
+   "title": "Tangential Polar Bar Label Position",
+   "titleCN": "极坐标柱状图标签",
+   "category": "bar",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "polar",
+    "angleAxis",
+    "radiusAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 488
+  },
+  {
+   "id": "bar-polar-real-estate",
+   "title": "Bar Chart on Polar",
+   "titleCN": "极坐标系下的柱状图",
+   "category": "bar",
+   "difficulty": 7,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "grid",
+    "polar",
+    "angleAxis",
+    "radiusAxis"
+   ],
+   "callbacks": 1,
+   "bytes": 1961
+  },
+  {
+   "id": "bar-polar-stack-radial",
+   "title": "Stacked Bar Chart on Polar(Radial)",
+   "titleCN": "极坐标系下的堆叠柱状图",
+   "category": "bar",
+   "difficulty": 7,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "legend",
+    "polar",
+    "angleAxis",
+    "radiusAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 859
+  },
+  {
+   "id": "bar-polar-stack",
+   "title": "Stacked Bar Chart on Polar",
+   "titleCN": "极坐标系下的堆叠柱状图",
+   "category": "bar",
+   "difficulty": 7,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "legend",
+    "polar",
+    "angleAxis",
+    "radiusAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 777
+  },
+  {
+   "id": "bar-race-country",
+   "title": "Bar Race",
+   "titleCN": "动态排序柱状图 - 人均收入",
+   "category": "bar",
+   "difficulty": 6,
+   "ok": false,
+   "reason": "CDN_PATH is not defined",
+   "seriesTypes": [],
+   "components": [],
+   "callbacks": 0
+  },
+  {
+   "id": "bar-race",
+   "title": "Bar Race",
+   "titleCN": "动态排序柱状图",
+   "category": "bar",
+   "difficulty": 5,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "legend",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 616
+  },
+  {
+   "id": "bar-rich-text",
+   "title": "Weather Statistics",
+   "titleCN": "天气统计（富文本）",
+   "category": "'bar, rich'",
+   "difficulty": 6,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "toolbox"
+   ],
+   "callbacks": 1,
+   "bytes": 2571
+  },
+  {
+   "id": "bar-simple",
+   "title": "Basic Bar",
+   "titleCN": "基础柱状图",
+   "category": "bar",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 280
+  },
+  {
+   "id": "bar-stack-borderRadius",
+   "title": "Stacked Bar with borderRadius",
+   "titleCN": "带圆角的堆积柱状图",
+   "category": "bar",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 5109
+  },
+  {
+   "id": "bar-stack-normalization-and-variation",
+   "title": "Stacked Bar Normalization and Variation",
+   "titleCN": "堆叠柱状图的归一化和变化",
+   "category": "bar",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "legend",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "graphic"
+   ],
+   "callbacks": 5,
+   "bytes": 15909
+  },
+  {
+   "id": "bar-stack-normalization",
+   "title": "Stacked Bar Normalization",
+   "titleCN": "堆叠柱状图的归一化",
+   "category": "bar",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "legend",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 5,
+   "bytes": 1807
+  },
+  {
+   "id": "bar-stack",
+   "title": "Stacked Column Chart",
+   "titleCN": "堆叠柱状图",
+   "category": "bar",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 2232
+  },
+  {
+   "id": "bar-tick-align",
+   "title": "Axis Align with Tick",
+   "titleCN": "坐标轴刻度与标签对齐",
+   "category": "bar",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 571
+  },
+  {
+   "id": "bar-waterfall",
+   "title": "Waterfall Chart",
+   "titleCN": "瀑布图（柱状图模拟）",
+   "category": "bar",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 1,
+   "bytes": 1035
+  },
+  {
+   "id": "bar-waterfall2",
+   "title": "Waterfall Chart",
+   "titleCN": "阶梯瀑布图（柱状图模拟）",
+   "category": "bar",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 1,
+   "bytes": 1433
+  },
+  {
+   "id": "bar-y-category-stack",
+   "title": "Stacked Horizontal Bar",
+   "titleCN": "堆叠条形图",
+   "category": "bar",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 1445
+  },
+  {
+   "id": "bar-y-category",
+   "title": "World Population",
+   "titleCN": "世界人口总量 - 条形图",
+   "category": "bar",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 624
+  },
+  {
+   "id": "bar1",
+   "title": "Rainfall and Evaporation",
+   "titleCN": "某地区蒸发量和降水量",
+   "category": "bar",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 1692
+  },
+  {
+   "id": "boxplot-light-velocity",
+   "title": "Boxplot Light Velocity",
+   "titleCN": "基础盒须图",
+   "category": "boxplot",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "boxplot",
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataset"
+   ],
+   "callbacks": 0,
+   "bytes": 2194
+  },
+  {
+   "id": "boxplot-light-velocity2",
+   "title": "Boxplot Light Velocity2",
+   "titleCN": "垂直方向盒须图",
+   "category": "boxplot",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "boxplot",
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataset"
+   ],
+   "callbacks": 1,
+   "bytes": 2142
+  },
+  {
+   "id": "boxplot-multi",
+   "title": "Multiple Categories",
+   "titleCN": "多系列盒须图",
+   "category": "boxplot",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "boxplot"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataZoom",
+    "dataset"
+   ],
+   "callbacks": 0,
+   "bytes": 134057
+  },
+  {
+   "id": "bubble-gradient",
+   "title": "Bubble Chart",
+   "titleCN": "气泡图",
+   "category": "scatter",
+   "difficulty": 6,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 4,
+   "bytes": 4674
+  },
+  {
+   "id": "bump-chart",
+   "title": "Bump Chart (Ranking)",
+   "titleCN": "凹凸图",
+   "category": "line",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 3510
+  },
+  {
+   "id": "calendar-charts",
+   "title": "Calendar Charts",
+   "titleCN": "日历图",
+   "category": "'calendar, scatter'",
+   "difficulty": 11,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "effectScatter",
+    "graph",
+    "heatmap",
+    "scatter"
+   ],
+   "components": [
+    "tooltip",
+    "visualMap",
+    "calendar"
+   ],
+   "callbacks": 2,
+   "bytes": 62426
+  },
+  {
+   "id": "calendar-effectscatter",
+   "title": "Calendar EffectScatter",
+   "titleCN": "热力特效散点图",
+   "category": "calendar",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "effectScatter",
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "calendar"
+   ],
+   "callbacks": 4,
+   "bytes": 33970
+  },
+  {
+   "id": "calendar-graph",
+   "title": "Calendar Graph",
+   "titleCN": "日历关系图",
+   "category": "'calendar, graph'",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "graph",
+    "heatmap"
+   ],
+   "components": [
+    "tooltip",
+    "visualMap",
+    "calendar"
+   ],
+   "callbacks": 0,
+   "bytes": 16627
+  },
+  {
+   "id": "calendar-heatmap",
+   "title": "Calendar Heatmap",
+   "titleCN": "日历热力图",
+   "category": "'calendar, heatmap'",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "heatmap"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "visualMap",
+    "calendar"
+   ],
+   "callbacks": 0,
+   "bytes": 14372
+  },
+  {
+   "id": "calendar-horizontal",
+   "title": "Calendar Heatmap Horizontal",
+   "titleCN": "横向日历图",
+   "category": "calendar",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "heatmap"
+   ],
+   "components": [
+    "tooltip",
+    "visualMap",
+    "calendar"
+   ],
+   "callbacks": 0,
+   "bytes": 45584
+  },
+  {
+   "id": "calendar-lunar",
+   "title": "Calendar Lunar",
+   "titleCN": "农历日历图",
+   "category": "calendar",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "heatmap",
+    "scatter"
+   ],
+   "components": [
+    "tooltip",
+    "visualMap",
+    "calendar"
+   ],
+   "callbacks": 3,
+   "bytes": 64781
+  },
+  {
+   "id": "calendar-pie",
+   "title": "Calendar Pie",
+   "titleCN": "日历饼图",
+   "category": "'calendar, pie'",
+   "difficulty": 6,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pie",
+    "scatter"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "calendar"
+   ],
+   "callbacks": 1,
+   "bytes": 12350
+  },
+  {
+   "id": "calendar-simple",
+   "title": "Simple Calendar",
+   "titleCN": "基础日历图",
+   "category": "calendar",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "heatmap"
+   ],
+   "components": [
+    "visualMap",
+    "calendar"
+   ],
+   "callbacks": 0,
+   "bytes": 14011
+  },
+  {
+   "id": "calendar-vertical",
+   "title": "Calendar Heatmap Vertical",
+   "titleCN": "纵向日历图",
+   "category": "'calendar, heatmap'",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "heatmap"
+   ],
+   "components": [
+    "tooltip",
+    "visualMap",
+    "calendar"
+   ],
+   "callbacks": 1,
+   "bytes": 45616
+  },
+  {
+   "id": "candlestick-brush",
+   "title": "Candlestick Brush",
+   "titleCN": "K 线图刷选",
+   "category": "candlestick",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar",
+    "candlestick",
+    "line"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataZoom",
+    "visualMap",
+    "toolbox",
+    "axisPointer",
+    "brush"
+   ],
+   "callbacks": 1,
+   "bytes": 722157
+  },
+  {
+   "id": "candlestick-large",
+   "title": "Large Scale Candlestick",
+   "titleCN": "大数据量K线图",
+   "category": "candlestick",
+   "difficulty": 3,
+   "ok": false,
+   "reason": "converted, but 17.3 MB is too large to bundle",
+   "seriesTypes": [
+    "bar",
+    "candlestick"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataZoom",
+    "visualMap",
+    "toolbox",
+    "dataset"
+   ],
+   "callbacks": 0,
+   "bytes": 18089738,
+   "tooBig": true
+  },
+  {
+   "id": "candlestick-sh-2015",
+   "title": "'ShangHai Index, 2015'",
+   "titleCN": "2015 年上证指数",
+   "category": "candlestick",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "candlestick",
+    "line"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataZoom"
+   ],
+   "callbacks": 0,
+   "bytes": 41130
+  },
+  {
+   "id": "candlestick-sh",
+   "title": "ShangHai Index",
+   "titleCN": "上证指数",
+   "category": "candlestick",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "candlestick",
+    "line"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataZoom"
+   ],
+   "callbacks": 2,
+   "bytes": 16151
+  },
+  {
+   "id": "candlestick-simple",
+   "title": "Basic Candlestick",
+   "titleCN": "基础 K 线图",
+   "category": "candlestick",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "candlestick"
+   ],
+   "components": [
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 374
+  },
+  {
+   "id": "candlestick-touch",
+   "title": "Axis Pointer Link and Touch",
+   "titleCN": "触屏上的坐标轴指示器",
+   "category": "candlestick",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar",
+    "candlestick",
+    "line"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataZoom",
+    "graphic",
+    "axisPointer"
+   ],
+   "callbacks": 2,
+   "bytes": 15375
+  },
+  {
+   "id": "chord-lineStyle-color",
+   "title": "Chord lineStyle.color",
+   "titleCN": "和弦图边的颜色",
+   "category": "chord",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "chord"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 2638
+  },
+  {
+   "id": "chord-minAngle",
+   "title": "Chord minAngle",
+   "titleCN": "和弦图 minAngle",
+   "category": "chord",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "chord"
+   ],
+   "components": [
+    "legend",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 559
+  },
+  {
+   "id": "chord-simple",
+   "title": "Basic Chord",
+   "titleCN": "基础和弦图",
+   "category": "chord",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "chord"
+   ],
+   "components": [
+    "legend",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 550
+  },
+  {
+   "id": "chord-style",
+   "title": "Chord Style",
+   "titleCN": "和弦图样式",
+   "category": "chord",
+   "difficulty": 10,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "chord"
+   ],
+   "components": [
+    "legend",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 1735
+  },
+  {
+   "id": "confidence-band",
+   "title": "Confidence Band",
+   "titleCN": "置信带",
+   "category": "line",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 4,
+   "bytes": 7798
+  },
+  {
+   "id": "custom-bar-trend",
+   "title": "Custom Bar Trend",
+   "titleCN": "使用自定义系列添加柱状图趋势",
+   "category": "custom",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar",
+    "custom"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "dataZoom"
+   ],
+   "callbacks": 1,
+   "bytes": 7660
+  },
+  {
+   "id": "custom-calendar-icon",
+   "title": "Custom Calendar Icon",
+   "titleCN": "日历图自定义图标",
+   "category": "'custom, calendar'",
+   "difficulty": 7,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "custom"
+   ],
+   "components": [
+    "tooltip",
+    "calendar"
+   ],
+   "callbacks": 1,
+   "bytes": 16210
+  },
+  {
+   "id": "custom-cartesian-polygon",
+   "title": "Custom Cartesian Polygon",
+   "titleCN": "自定义多边形图",
+   "category": "custom",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "custom"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "dataZoom"
+   ],
+   "callbacks": 1,
+   "bytes": 695
+  },
+  {
+   "id": "custom-error-bar",
+   "title": "Error Bar on Catesian",
+   "titleCN": "使用自定系列给柱状图添加误差范围",
+   "category": "custom",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar",
+    "custom"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "dataZoom"
+   ],
+   "callbacks": 1,
+   "bytes": 9833
+  },
+  {
+   "id": "custom-error-scatter",
+   "title": "Error Scatter on Catesian",
+   "titleCN": "使用自定系列给散点图添加误差范围",
+   "category": "'custom, dataZoom'",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "custom",
+    "scatter"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataZoom"
+   ],
+   "callbacks": 1,
+   "bytes": 5157
+  },
+  {
+   "id": "custom-ohlc",
+   "title": "OHLC Chart",
+   "titleCN": "OHLC 图（使用自定义系列）",
+   "category": "candlestick",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "custom"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataZoom",
+    "toolbox",
+    "axisPointer"
+   ],
+   "callbacks": 2,
+   "bytes": 364505
+  },
+  {
+   "id": "custom-polar-heatmap",
+   "title": "Polar Heatmap",
+   "titleCN": "极坐标热力图（自定义系列）",
+   "category": "custom",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "custom"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "polar",
+    "visualMap",
+    "angleAxis",
+    "radiusAxis"
+   ],
+   "callbacks": 1,
+   "bytes": 7099
+  },
+  {
+   "id": "custom-profit",
+   "title": "Profit",
+   "titleCN": "利润分布直方图",
+   "category": "custom",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "custom"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 1,
+   "bytes": 1205
+  },
+  {
+   "id": "custom-wind",
+   "title": "Use custom series to draw wind vectors",
+   "titleCN": "使用自定义系列绘制风场",
+   "category": "custom",
+   "difficulty": 7,
+   "ok": false,
+   "reason": "loads its data at runtime (__ROOT__/data-gl/asset/data/winds.json)",
+   "seriesTypes": [],
+   "components": [],
+   "callbacks": 0
+  },
+  {
+   "id": "data-transform-filter",
+   "title": "Data Transform Filter",
+   "titleCN": "数据过滤",
+   "category": "line",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "dataset"
+   ],
+   "callbacks": 0,
+   "bytes": 121745
+  },
+  {
+   "id": "data-transform-multiple-pie",
+   "title": "Partition Data to Pies",
+   "titleCN": "分割数据到数个饼图",
+   "category": "dataset, pie, transform",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pie"
+   ],
+   "components": [
+    "dataset"
+   ],
+   "callbacks": 0,
+   "bytes": 2513
+  },
+  {
+   "id": "data-transform-sort-bar",
+   "title": "Sort Data in Bar Chart",
+   "titleCN": "柱状图排序",
+   "category": "dataset, bar, transform",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "xAxis",
+    "yAxis",
+    "dataset"
+   ],
+   "callbacks": 0,
+   "bytes": 1249
+  },
+  {
+   "id": "dataset-default",
+   "title": "Default arrangement",
+   "titleCN": "默认 encode 设置",
+   "category": "'dataset, pie'",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pie"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "dataset"
+   ],
+   "callbacks": 0,
+   "bytes": 1095
+  },
+  {
+   "id": "dataset-encode0",
+   "title": "Simple Encode",
+   "titleCN": "指定数据到坐标轴的映射",
+   "category": "'dataset, bar'",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "grid",
+    "xAxis",
+    "yAxis",
+    "visualMap",
+    "dataset"
+   ],
+   "callbacks": 0,
+   "bytes": 992
+  },
+  {
+   "id": "dataset-encode1",
+   "title": "Encode and Matrix",
+   "titleCN": "指定数据到坐标轴的映射",
+   "category": "dataset",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "toolbox",
+    "dataset"
+   ],
+   "callbacks": 0,
+   "bytes": 111867
+  },
+  {
+   "id": "dataset-link",
+   "title": "Share Dataset",
+   "titleCN": "联动和共享数据集",
+   "category": "'dataset, line, pie'",
+   "difficulty": 5,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line",
+    "pie"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataset"
+   ],
+   "callbacks": 0,
+   "bytes": 1456
+  },
+  {
+   "id": "dataset-series-layout-by",
+   "title": "Series Layout By Column or Row",
+   "titleCN": "系列按行和按列排布",
+   "category": "'dataset, bar'",
+   "difficulty": 5,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataset"
+   ],
+   "callbacks": 0,
+   "bytes": 1040
+  },
+  {
+   "id": "dataset-simple0",
+   "title": "Simple Example of Dataset",
+   "titleCN": "最简单的数据集（dataset）",
+   "category": "'dataset, bar'",
+   "difficulty": 5,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "dataset"
+   ],
+   "callbacks": 0,
+   "bytes": 512
+  },
+  {
+   "id": "dataset-simple1",
+   "title": "Dataset in Object Array",
+   "titleCN": "对象数组的输入格式",
+   "category": "'dataset, bar'",
+   "difficulty": 5,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "dataset"
+   ],
+   "callbacks": 0,
+   "bytes": 660
+  },
+  {
+   "id": "dynamic-data",
+   "title": "Dynamic Data",
+   "titleCN": "动态数据",
+   "category": "bar",
+   "difficulty": 6,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar",
+    "line"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "dataZoom",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 1449
+  },
+  {
+   "id": "dynamic-data2",
+   "title": "Dynamic Data + Time Axis",
+   "titleCN": "动态数据 + 时间坐标轴",
+   "category": "line",
+   "difficulty": 5,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 1,
+   "bytes": 125185
+  },
+  {
+   "id": "effectScatter-bmap",
+   "title": "Air Quality - Baidu Map",
+   "titleCN": "全国主要城市空气质量 - 百度地图",
+   "category": "'scatter, map'",
+   "difficulty": 10,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "effectScatter",
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "tooltip"
+   ],
+   "callbacks": 2,
+   "bytes": 21064
+  },
+  {
+   "id": "effectScatter-map",
+   "title": "Air Quality",
+   "titleCN": "全国主要城市空气质量",
+   "category": "scatter",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "effectScatter",
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "geo"
+   ],
+   "callbacks": 2,
+   "bytes": 19439
+  },
+  {
+   "id": "flame-graph",
+   "title": "Flame graph",
+   "titleCN": "火焰图",
+   "category": "custom",
+   "difficulty": 4,
+   "ok": false,
+   "reason": "structuredClone is not defined",
+   "seriesTypes": [],
+   "components": [],
+   "callbacks": 0
+  },
+  {
+   "id": "funnel-align",
+   "title": "Funnel Compare",
+   "titleCN": "漏斗图(对比)",
+   "category": "funnel",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "funnel"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 2303
+  },
+  {
+   "id": "funnel-customize",
+   "title": "Customized Funnel",
+   "titleCN": "漏斗图",
+   "category": "funnel",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "funnel"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 1646
+  },
+  {
+   "id": "funnel-mutiple",
+   "title": "Multiple Funnels",
+   "titleCN": "多漏斗图",
+   "category": "funnel",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "funnel"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 2213
+  },
+  {
+   "id": "funnel",
+   "title": "Funnel Chart",
+   "titleCN": "漏斗图",
+   "category": "funnel",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "funnel"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 1153
+  },
+  {
+   "id": "gauge-barometer",
+   "title": "Gauge Barometer chart",
+   "titleCN": "气压表",
+   "category": "gauge",
+   "difficulty": 6,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "gauge"
+   ],
+   "components": [],
+   "callbacks": 0,
+   "bytes": 2233
+  },
+  {
+   "id": "gauge-car",
+   "title": "Gauge Car",
+   "titleCN": "汽车仪表盘",
+   "category": "gauge",
+   "difficulty": 8,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "gauge"
+   ],
+   "components": [
+    "tooltip",
+    "toolbox"
+   ],
+   "callbacks": 2,
+   "bytes": 12524
+  },
+  {
+   "id": "gauge-clock",
+   "title": "Clock",
+   "titleCN": "时钟仪表盘",
+   "category": "gauge",
+   "difficulty": 7,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "gauge"
+   ],
+   "components": [],
+   "callbacks": 1,
+   "bytes": 5375
+  },
+  {
+   "id": "gauge-grade",
+   "title": "Grade Gauge",
+   "titleCN": "等级仪表盘",
+   "category": "gauge",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "gauge"
+   ],
+   "components": [],
+   "callbacks": 2,
+   "bytes": 1307
+  },
+  {
+   "id": "gauge-multi-title",
+   "title": "Multi Title Gauge",
+   "titleCN": "多标题仪表盘",
+   "category": "gauge",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "gauge"
+   ],
+   "components": [],
+   "callbacks": 0,
+   "bytes": 1446
+  },
+  {
+   "id": "gauge-progress",
+   "title": "Progress Gauge",
+   "titleCN": "进度仪表盘",
+   "category": "gauge",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "gauge"
+   ],
+   "components": [],
+   "callbacks": 0,
+   "bytes": 726
+  },
+  {
+   "id": "gauge-ring",
+   "title": "Ring Gauge",
+   "titleCN": "得分环",
+   "category": "gauge",
+   "difficulty": 5,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "gauge"
+   ],
+   "components": [],
+   "callbacks": 0,
+   "bytes": 1564
+  },
+  {
+   "id": "gauge-simple",
+   "title": "Simple Gauge",
+   "titleCN": "带标签数字动画的基础仪表盘",
+   "category": "gauge",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "gauge"
+   ],
+   "components": [
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 310
+  },
+  {
+   "id": "gauge-speed",
+   "title": "Speed Gauge",
+   "titleCN": "速度仪表盘",
+   "category": "gauge",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "gauge"
+   ],
+   "components": [],
+   "callbacks": 1,
+   "bytes": 1997
+  },
+  {
+   "id": "gauge-stage",
+   "title": "Stage Speed Gauge",
+   "titleCN": "阶段速度仪表盘",
+   "category": "gauge",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "gauge"
+   ],
+   "components": [],
+   "callbacks": 0,
+   "bytes": 828
+  },
+  {
+   "id": "gauge-temperature",
+   "title": "Temperature Gauge chart",
+   "titleCN": "气温仪表盘",
+   "category": "gauge",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "gauge"
+   ],
+   "components": [],
+   "callbacks": 0,
+   "bytes": 1653
+  },
+  {
+   "id": "gauge",
+   "title": "Gauge Basic chart",
+   "titleCN": "基础仪表盘",
+   "category": "gauge",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "gauge"
+   ],
+   "components": [
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 242
+  },
+  {
+   "id": "geo-beef-cuts",
+   "title": "GEO Beef Cuts",
+   "titleCN": "庖丁解牛",
+   "category": "map",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "map"
+   ],
+   "components": [
+    "tooltip",
+    "visualMap"
+   ],
+   "callbacks": 0,
+   "bytes": 2243
+  },
+  {
+   "id": "geo-choropleth-scatter",
+   "title": "Geo Choropleth and Scatter",
+   "titleCN": "地理坐标系上的等值区划图和散点图",
+   "category": "map, scatter",
+   "difficulty": 5,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "map",
+    "scatter"
+   ],
+   "components": [
+    "tooltip",
+    "geo",
+    "visualMap"
+   ],
+   "callbacks": 0,
+   "bytes": 1761
+  },
+  {
+   "id": "geo-graph",
+   "title": "Geo Graph",
+   "titleCN": "地理坐标系上的关系图",
+   "category": "map, graph",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "graph"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "geo"
+   ],
+   "callbacks": 0,
+   "bytes": 2124
+  },
+  {
+   "id": "geo-seatmap-flight",
+   "title": "Flight Seatmap with SVG",
+   "titleCN": "航班选座（SVG）",
+   "category": "map",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [],
+   "components": [
+    "tooltip",
+    "geo"
+   ],
+   "callbacks": 0,
+   "bytes": 2519
+  },
+  {
+   "id": "geo-svg-custom-effect",
+   "title": "GEO SVG with Customized Effect",
+   "titleCN": "自定义特效",
+   "category": "custom",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "custom"
+   ],
+   "components": [
+    "tooltip",
+    "geo"
+   ],
+   "callbacks": 1,
+   "bytes": 604
+  },
+  {
+   "id": "geo-svg-lines",
+   "title": "GEO SVG Lines",
+   "titleCN": "GEO 路径图（SVG）",
+   "category": "map",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "lines"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "geo"
+   ],
+   "callbacks": 0,
+   "bytes": 2584
+  },
+  {
+   "id": "geo-svg-map",
+   "title": "GEO SVG Map",
+   "titleCN": "地图（SVG）",
+   "category": "map",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "geo"
+   ],
+   "callbacks": 2,
+   "bytes": 2544
+  },
+  {
+   "id": "geo-svg-scatter-simple",
+   "title": "GEO SVG Scatter",
+   "titleCN": "散点图（SVG）",
+   "category": "map",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "effectScatter"
+   ],
+   "components": [
+    "tooltip",
+    "geo"
+   ],
+   "callbacks": 1,
+   "bytes": 675
+  },
+  {
+   "id": "geo-svg-traffic",
+   "title": "GEO SVG Traffic",
+   "titleCN": "交通（SVG）",
+   "category": "map",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "lines"
+   ],
+   "components": [
+    "tooltip",
+    "geo"
+   ],
+   "callbacks": 0,
+   "bytes": 7467
+  },
+  {
+   "id": "graph-circular-layout",
+   "title": "Les Miserables",
+   "titleCN": "悲惨世界人物关系图(环形布局)",
+   "category": "graph",
+   "difficulty": 5,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "graph"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 31715
+  },
+  {
+   "id": "graph-force-dynamic",
+   "title": "Graph Dynamic",
+   "titleCN": "动态增加图节点",
+   "category": "graph",
+   "difficulty": 6,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "graph"
+   ],
+   "components": [],
+   "callbacks": 0,
+   "bytes": 289
+  },
+  {
+   "id": "graph-force",
+   "title": "Force Layout",
+   "titleCN": "力引导布局",
+   "category": "graph",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "graph"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 26923
+  },
+  {
+   "id": "graph-force2",
+   "title": "Force Layout",
+   "titleCN": "力引导布局",
+   "category": "graph",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "graph"
+   ],
+   "components": [],
+   "callbacks": 0,
+   "bytes": 16122
+  },
+  {
+   "id": "graph-grid",
+   "title": "Graph on Cartesian",
+   "titleCN": "笛卡尔坐标系上的 Graph",
+   "category": "graph",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "graph"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 953
+  },
+  {
+   "id": "graph-label-overlap",
+   "title": "Hide Overlapped Label",
+   "titleCN": "关系图自动隐藏重叠标签",
+   "category": "graph",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "graph"
+   ],
+   "components": [
+    "legend",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 28214
+  },
+  {
+   "id": "graph-life-expectancy",
+   "title": "Graph Life Expectancy",
+   "titleCN": "预期寿命",
+   "category": "graph",
+   "difficulty": 7,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "graph"
+   ],
+   "components": [
+    "legend",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataZoom",
+    "visualMap",
+    "toolbox"
+   ],
+   "callbacks": 19,
+   "bytes": 494092
+  },
+  {
+   "id": "graph-npm",
+   "title": "NPM Dependencies",
+   "titleCN": "NPM 依赖关系图",
+   "category": "graph",
+   "difficulty": 9,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "graph"
+   ],
+   "components": [
+    "title"
+   ],
+   "callbacks": 0,
+   "bytes": 195196
+  },
+  {
+   "id": "graph-simple",
+   "title": "Simple Graph",
+   "titleCN": "Graph 简单示例",
+   "category": "graph",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "graph"
+   ],
+   "components": [
+    "title",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 1398
+  },
+  {
+   "id": "graph-webkit-dep",
+   "title": "Graph Webkit Dep",
+   "titleCN": "WebKit 模块关系依赖图",
+   "category": "graph",
+   "difficulty": 8,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "graph"
+   ],
+   "components": [
+    "legend"
+   ],
+   "callbacks": 0,
+   "bytes": 90471
+  },
+  {
+   "id": "graph",
+   "title": "Les Miserables",
+   "titleCN": "悲惨世界人物关系图",
+   "category": "graph",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "graph"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 31777
+  },
+  {
+   "id": "graphic-loading",
+   "title": "Customized Loading Animation",
+   "titleCN": "加载动画",
+   "category": "graphic",
+   "difficulty": 6,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [],
+   "components": [
+    "graphic"
+   ],
+   "callbacks": 0,
+   "bytes": 3848
+  },
+  {
+   "id": "graphic-stroke-animation",
+   "title": "Stroke Animation",
+   "titleCN": "关键帧描边动画",
+   "category": "graphic",
+   "difficulty": 5,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [],
+   "components": [
+    "graphic"
+   ],
+   "callbacks": 0,
+   "bytes": 830
+  },
+  {
+   "id": "grid-multiple",
+   "title": "Rainfall vs Evaporation",
+   "titleCN": "雨量蒸发量关系图",
+   "category": "line",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataZoom",
+    "toolbox",
+    "axisPointer"
+   ],
+   "callbacks": 0,
+   "bytes": 166180
+  },
+  {
+   "id": "heatmap-cartesian",
+   "title": "Heatmap on Cartesian",
+   "titleCN": "笛卡尔坐标系上的热力图",
+   "category": "heatmap",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "heatmap"
+   ],
+   "components": [
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "visualMap"
+   ],
+   "callbacks": 0,
+   "bytes": 7242
+  },
+  {
+   "id": "heatmap-large-piecewise",
+   "title": "Heatmap - Discrete Mapping of Color",
+   "titleCN": "热力图 - 颜色的离散映射",
+   "category": "heatmap",
+   "difficulty": 2,
+   "ok": false,
+   "reason": "converted, but 1.1 MB is too large to bundle",
+   "seriesTypes": [
+    "heatmap"
+   ],
+   "components": [
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "visualMap"
+   ],
+   "callbacks": 0,
+   "bytes": 1121097,
+   "tooBig": true
+  },
+  {
+   "id": "heatmap-large",
+   "title": "Heatmap - 20K data",
+   "titleCN": "热力图 - 2w 数据",
+   "category": "heatmap",
+   "difficulty": 2,
+   "ok": false,
+   "reason": "converted, but 1.1 MB is too large to bundle",
+   "seriesTypes": [
+    "heatmap"
+   ],
+   "components": [
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "visualMap"
+   ],
+   "callbacks": 0,
+   "bytes": 1119214,
+   "tooBig": true
+  },
+  {
+   "id": "intraday-breaks-1",
+   "title": "Intraday Chart with Breaks",
+   "titleCN": "断轴上的日内走势图",
+   "category": "candlestick, line",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataZoom"
+   ],
+   "callbacks": 1,
+   "bytes": 73229
+  },
+  {
+   "id": "intraday-breaks-2",
+   "title": "Intraday Chart with Breaks (II)",
+   "titleCN": "断轴上的日内走势图 (II)",
+   "category": "candlestick, line",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "dataZoom"
+   ],
+   "callbacks": 1,
+   "bytes": 11909
+  },
+  {
+   "id": "line-aqi",
+   "title": "Beijing AQI",
+   "titleCN": "北京 AQI 可视化",
+   "category": "line",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataZoom",
+    "visualMap",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 121304
+  },
+  {
+   "id": "line-draggable",
+   "title": "Draggable Points",
+   "titleCN": "可拖拽点",
+   "category": "'line, graphic'",
+   "difficulty": 12,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataZoom"
+   ],
+   "callbacks": 1,
+   "bytes": 957
+  },
+  {
+   "id": "line-easing",
+   "title": "Line Easing Visualizing",
+   "titleCN": "缓动函数可视化",
+   "category": "line",
+   "difficulty": 8,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 78086
+  },
+  {
+   "id": "line-fisheye-lens",
+   "title": "Fisheye Lens on Line Chart",
+   "titleCN": "折线图鱼眼放大",
+   "category": "line",
+   "difficulty": 8,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 35714
+  },
+  {
+   "id": "line-function",
+   "title": "Function Plot",
+   "titleCN": "函数绘图",
+   "category": "line",
+   "difficulty": 5,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataZoom"
+   ],
+   "callbacks": 0,
+   "bytes": 248452
+  },
+  {
+   "id": "line-gradient",
+   "title": "Line Gradient",
+   "titleCN": "折线图的渐变",
+   "category": "line",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "visualMap"
+   ],
+   "callbacks": 0,
+   "bytes": 3486
+  },
+  {
+   "id": "line-graphic",
+   "title": "Custom Graphic Component",
+   "titleCN": "自定义图形组件",
+   "category": "line, graphic",
+   "difficulty": 9,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "graphic"
+   ],
+   "callbacks": 0,
+   "bytes": 2226
+  },
+  {
+   "id": "line-in-cartesian-coordinate-system",
+   "title": "Line Chart in Cartesian Coordinate System",
+   "titleCN": "双数值轴折线图",
+   "category": "line",
+   "difficulty": 7,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 182
+  },
+  {
+   "id": "line-log",
+   "title": "Log Axis",
+   "titleCN": "对数轴示例",
+   "category": "line",
+   "difficulty": 7,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 998
+  },
+  {
+   "id": "line-marker",
+   "title": "Temperature Change in the Coming Week",
+   "titleCN": "未来一周气温变化",
+   "category": "line",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 1623
+  },
+  {
+   "id": "line-markline",
+   "title": "Line with Marklines",
+   "titleCN": "折线图的标记线",
+   "category": "line",
+   "difficulty": 6,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 5884
+  },
+  {
+   "id": "line-pen",
+   "title": "Click to Add Points",
+   "titleCN": "点击添加折线图拐点",
+   "category": "line",
+   "difficulty": 9,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 1,
+   "bytes": 629
+  },
+  {
+   "id": "line-polar",
+   "title": "Two Value-Axes in Polar",
+   "titleCN": "极坐标双数值轴",
+   "category": "line",
+   "difficulty": 10,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "polar",
+    "angleAxis",
+    "radiusAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 5474
+  },
+  {
+   "id": "line-polar2",
+   "title": "Two Value-Axes in Polar",
+   "titleCN": "极坐标双数值轴",
+   "category": "line",
+   "difficulty": 10,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "polar",
+    "angleAxis",
+    "radiusAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 17710
+  },
+  {
+   "id": "line-race",
+   "title": "Line Race",
+   "titleCN": "动态排序折线图",
+   "category": "line",
+   "difficulty": 5,
+   "ok": false,
+   "reason": "echarts.util.each is not a function",
+   "seriesTypes": [],
+   "components": [],
+   "callbacks": 0
+  },
+  {
+   "id": "line-sections",
+   "title": "Distribution of Electricity",
+   "titleCN": "一天用电量分布",
+   "category": "line",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "visualMap",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 1669
+  },
+  {
+   "id": "line-simple",
+   "title": "Basic Line Chart",
+   "titleCN": "基础折线图",
+   "category": "line",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 283
+  },
+  {
+   "id": "line-smooth",
+   "title": "Smoothed Line Chart",
+   "titleCN": "基础平滑折线图",
+   "category": "line",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 305
+  },
+  {
+   "id": "line-stack",
+   "title": "Stacked Line Chart",
+   "titleCN": "堆叠折线图",
+   "category": "line",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 1298
+  },
+  {
+   "id": "line-step",
+   "title": "Step Line",
+   "titleCN": "阶梯折线图",
+   "category": "line",
+   "difficulty": 7,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 936
+  },
+  {
+   "id": "line-style",
+   "title": "Line Style and Item Style",
+   "titleCN": "自定义折线图样式",
+   "category": "line",
+   "difficulty": 6,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 510
+  },
+  {
+   "id": "line-tooltip-touch",
+   "title": "Tooltip and DataZoom on Mobile",
+   "titleCN": "移动端上的 dataZoom 和 tooltip",
+   "category": "'line, dataZoom'",
+   "difficulty": 10,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataZoom",
+    "toolbox"
+   ],
+   "callbacks": 2,
+   "bytes": 2778
+  },
+  {
+   "id": "line-y-category",
+   "title": "Line Y Category",
+   "titleCN": "垂直折线图（Y轴为类目轴）",
+   "category": "line",
+   "difficulty": 8,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 975
+  },
+  {
+   "id": "lines-airline",
+   "title": "65k+ Airline",
+   "titleCN": "65k+ 飞机航线",
+   "category": "'map, lines'",
+   "difficulty": 0,
+   "ok": false,
+   "reason": "converted, but 6.8 MB is too large to bundle",
+   "seriesTypes": [
+    "lines"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "geo"
+   ],
+   "callbacks": 1,
+   "bytes": 7087381,
+   "tooBig": true
+  },
+  {
+   "id": "lines-bmap-bus",
+   "title": "Bus Lines of Beijing - Baidu Map",
+   "titleCN": "北京公交路线 - 百度地图",
+   "category": "'map, lines'",
+   "difficulty": 0,
+   "ok": false,
+   "reason": "converted, but 4.5 MB is too large to bundle",
+   "seriesTypes": [
+    "lines"
+   ],
+   "components": [],
+   "callbacks": 0,
+   "bytes": 4727065,
+   "tooBig": true
+  },
+  {
+   "id": "lines-bmap-effect",
+   "title": "Bus Lines of Beijing - Line Effect",
+   "titleCN": "北京公交路线 - 线特效",
+   "category": "'map, lines'",
+   "difficulty": 0,
+   "ok": false,
+   "reason": "converted, but 9.2 MB is too large to bundle",
+   "seriesTypes": [
+    "lines"
+   ],
+   "components": [],
+   "callbacks": 0,
+   "bytes": 9699016,
+   "tooBig": true
+  },
+  {
+   "id": "lines-bmap",
+   "title": "A Hiking Trail in Hangzhou - Baidu Map",
+   "titleCN": "杭州热门步行路线 - 百度地图",
+   "category": "'map, lines'",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "lines"
+   ],
+   "components": [],
+   "callbacks": 0,
+   "bytes": 364838
+  },
+  {
+   "id": "lines-ny",
+   "title": "Use lines to draw 1 million New York streets",
+   "titleCN": "使用线图绘制近100万纽约街道数据",
+   "category": "'map, lines'",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "lines"
+   ],
+   "components": [
+    "geo"
+   ],
+   "callbacks": 0,
+   "bytes": 584
+  },
+  {
+   "id": "map-HK",
+   "title": "Population Density of HongKong (2011)",
+   "titleCN": "香港18区人口密度 （2011）",
+   "category": "map",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "map"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "visualMap",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 2276
+  },
+  {
+   "id": "map-bar-morph",
+   "title": "Morphing between Map and Bar",
+   "titleCN": "地图柱状图变形动画",
+   "category": "map, animation",
+   "difficulty": 0,
+   "ok": false,
+   "reason": "the file defines no option object",
+   "seriesTypes": [],
+   "components": [],
+   "callbacks": 0
+  },
+  {
+   "id": "map-iceland-pie",
+   "title": "Pie Charts on GEO Map",
+   "titleCN": "在地图上显示饼图",
+   "category": "map, pie",
+   "difficulty": 5,
+   "ok": false,
+   "reason": "Cannot read properties of undefined (reading 'split')",
+   "seriesTypes": [],
+   "components": [],
+   "callbacks": 0
+  },
+  {
+   "id": "map-usa-projection",
+   "title": "USA Choropleth Map with Projection",
+   "titleCN": "自定义地图投影",
+   "category": "map",
+   "difficulty": 0,
+   "ok": false,
+   "reason": "CDN_PATH is not defined",
+   "seriesTypes": [],
+   "components": [],
+   "callbacks": 0
+  },
+  {
+   "id": "map-usa",
+   "title": "USA Population Estimates (2012)",
+   "titleCN": "2012 年美国人口统计",
+   "category": "map",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "map"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "visualMap",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 4122
+  },
+  {
+   "id": "matrix-confusion",
+   "title": "Confusion Matrix",
+   "titleCN": "混淆矩阵",
+   "category": "matrix",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "custom"
+   ],
+   "components": [
+    "graphic",
+    "matrix"
+   ],
+   "callbacks": 2,
+   "bytes": 1379
+  },
+  {
+   "id": "matrix-correlation-heatmap",
+   "title": "Correlation Matrix (Heatmap)",
+   "titleCN": "相关矩阵（热力图）",
+   "category": "matrix",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "heatmap"
+   ],
+   "components": [
+    "visualMap",
+    "matrix"
+   ],
+   "callbacks": 1,
+   "bytes": 2719
+  },
+  {
+   "id": "matrix-correlation-scatter",
+   "title": "Correlation Matrix (Scatter)",
+   "titleCN": "相关矩阵（散点图）",
+   "category": "matrix",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "visualMap",
+    "matrix"
+   ],
+   "callbacks": 1,
+   "bytes": 4466
+  },
+  {
+   "id": "matrix-covariance",
+   "title": "Covariance Matrix",
+   "titleCN": "协方差矩阵",
+   "category": "matrix",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "heatmap"
+   ],
+   "components": [
+    "tooltip",
+    "visualMap",
+    "matrix"
+   ],
+   "callbacks": 1,
+   "bytes": 34716
+  },
+  {
+   "id": "matrix-graph",
+   "title": "Graph Chart in Matrix",
+   "titleCN": "矩阵布局下的关系图",
+   "category": "matrix",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "graph"
+   ],
+   "components": [
+    "title",
+    "graphic",
+    "matrix"
+   ],
+   "callbacks": 1,
+   "bytes": 2299
+  },
+  {
+   "id": "matrix-mbti",
+   "title": "MBTI Partner Compatibility",
+   "titleCN": "MBTI 伴侣相容性",
+   "category": "matrix",
+   "difficulty": 11,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "heatmap",
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "visualMap",
+    "matrix"
+   ],
+   "callbacks": 2,
+   "bytes": 171448
+  },
+  {
+   "id": "matrix-mini-bar-data-collection",
+   "title": "Matrix Header Data Collection (Mini Bar)",
+   "titleCN": "矩阵坐标系表头数据自动收集（以微型条形图为例）",
+   "category": "matrix",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "custom"
+   ],
+   "components": [
+    "dataset",
+    "matrix"
+   ],
+   "callbacks": 3,
+   "bytes": 1442
+  },
+  {
+   "id": "matrix-mini-bar-geo",
+   "title": "Mini Bars and Geo in Matrix",
+   "titleCN": "矩阵坐标系下的微型条形图和地图",
+   "category": "matrix, bar, geo",
+   "difficulty": 6,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "geo",
+    "matrix"
+   ],
+   "callbacks": 0,
+   "bytes": 35635
+  },
+  {
+   "id": "matrix-periodic-table",
+   "title": "Periodic Table",
+   "titleCN": "元素周期表",
+   "category": "matrix",
+   "difficulty": 10,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "custom"
+   ],
+   "components": [
+    "matrix"
+   ],
+   "callbacks": 2,
+   "bytes": 8327
+  },
+  {
+   "id": "matrix-pie",
+   "title": "Pie Charts in Matrix",
+   "titleCN": "矩阵布局下的饼图",
+   "category": "matrix",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pie"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "matrix"
+   ],
+   "callbacks": 0,
+   "bytes": 19432
+  },
+  {
+   "id": "matrix-simple",
+   "title": "Simple Matrix",
+   "titleCN": "简单的矩阵图",
+   "category": "matrix",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "heatmap"
+   ],
+   "components": [
+    "visualMap",
+    "matrix"
+   ],
+   "callbacks": 0,
+   "bytes": 777
+  },
+  {
+   "id": "matrix-stock",
+   "title": "Matrix Stock Application",
+   "titleCN": "股市矩阵图",
+   "category": "'matrix, candlestick'",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar",
+    "line"
+   ],
+   "components": [
+    "title",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "graphic",
+    "matrix"
+   ],
+   "callbacks": 0,
+   "bytes": 136952
+  },
+  {
+   "id": "mix-line-bar",
+   "title": "Mixed Line and Bar",
+   "titleCN": "折柱混合",
+   "category": "bar",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar",
+    "line"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "toolbox"
+   ],
+   "callbacks": 3,
+   "bytes": 1631
+  },
+  {
+   "id": "mix-zoom-on-value",
+   "title": "Mix Zoom On Value",
+   "titleCN": "多数值轴轴缩放",
+   "category": "bar",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataZoom",
+    "toolbox"
+   ],
+   "callbacks": 1,
+   "bytes": 34715
+  },
+  {
+   "id": "multiple-x-axis",
+   "title": "Multiple X Axes",
+   "titleCN": "多 X 轴",
+   "category": "line",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 2,
+   "bytes": 1603
+  },
+  {
+   "id": "multiple-y-axis",
+   "title": "Multiple Y Axes",
+   "titleCN": "多 Y 轴示例",
+   "category": "bar",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar",
+    "line"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 2044
+  },
+  {
+   "id": "parallel-aqi",
+   "title": "Parallel Aqi",
+   "titleCN": "AQI 分布（平行坐标）",
+   "category": "parallel",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "parallel"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "visualMap",
+    "parallel"
+   ],
+   "callbacks": 0,
+   "bytes": 10091
+  },
+  {
+   "id": "parallel-nutrients",
+   "title": "Parallel Nutrients",
+   "titleCN": "营养结构（平行坐标）",
+   "category": "parallel",
+   "difficulty": 4,
+   "ok": false,
+   "reason": "converted, but 1.9 MB is too large to bundle",
+   "seriesTypes": [
+    "parallel"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "visualMap",
+    "parallel"
+   ],
+   "callbacks": 0,
+   "bytes": 2032593,
+   "tooBig": true
+  },
+  {
+   "id": "parallel-simple",
+   "title": "Basic Parallel",
+   "titleCN": "基础平行坐标",
+   "category": "parallel",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "parallel"
+   ],
+   "components": [],
+   "callbacks": 0,
+   "bytes": 523
+  },
+  {
+   "id": "pictorialBar-bar-transition",
+   "title": "Transition between pictorialBar and bar",
+   "titleCN": "象形主图变形为柱状图",
+   "category": "pictorialBar, animation",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pictorialBar"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 2,
+   "bytes": 23095
+  },
+  {
+   "id": "pictorialBar-body-fill",
+   "title": "Water Content",
+   "titleCN": "人体含水量",
+   "category": "pictorialBar",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pictorialBar"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 1,
+   "bytes": 33740
+  },
+  {
+   "id": "pictorialBar-dotted",
+   "title": "Dotted bar",
+   "titleCN": "虚线柱状图效果",
+   "category": "pictorialBar",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar",
+    "line",
+    "pictorialBar"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 3915
+  },
+  {
+   "id": "pictorialBar-forest",
+   "title": "Expansion of forest",
+   "titleCN": "森林的增长",
+   "category": "pictorialBar",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pictorialBar"
+   ],
+   "components": [
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 5178
+  },
+  {
+   "id": "pictorialBar-hill",
+   "title": "Wish List and Mountain Height",
+   "titleCN": "圣诞愿望清单和山峰高度",
+   "category": "pictorialBar",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pictorialBar"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 1,
+   "bytes": 5066
+  },
+  {
+   "id": "pictorialBar-spirit",
+   "title": "Spirits",
+   "titleCN": "精灵",
+   "category": "pictorialBar",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pictorialBar"
+   ],
+   "components": [
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 1,
+   "bytes": 28002
+  },
+  {
+   "id": "pictorialBar-vehicle",
+   "title": "Vehicles",
+   "titleCN": "交通工具",
+   "category": "pictorialBar",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pictorialBar"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 22920
+  },
+  {
+   "id": "pictorialBar-velocity",
+   "title": "Velocity of Christmas Reindeers",
+   "titleCN": "驯鹿的速度",
+   "category": "pictorialBar",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pictorialBar"
+   ],
+   "components": [
+    "tooltip",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 1,
+   "bytes": 16233
+  },
+  {
+   "id": "pie-alignTo",
+   "title": "Pie Label Align",
+   "titleCN": "饼图标签对齐",
+   "category": "pie",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pie"
+   ],
+   "components": [
+    "title"
+   ],
+   "callbacks": 0,
+   "bytes": 2369
+  },
+  {
+   "id": "pie-borderRadius",
+   "title": "Doughnut Chart with Rounded Corner",
+   "titleCN": "圆角环形图",
+   "category": "pie",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pie"
+   ],
+   "components": [
+    "legend",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 845
+  },
+  {
+   "id": "pie-custom",
+   "title": "Customized Pie",
+   "titleCN": "饼图自定义样式",
+   "category": "pie",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pie"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "visualMap"
+   ],
+   "callbacks": 1,
+   "bytes": 1149
+  },
+  {
+   "id": "pie-doughnut",
+   "title": "Doughnut Chart",
+   "titleCN": "环形图",
+   "category": "pie",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pie"
+   ],
+   "components": [
+    "legend",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 749
+  },
+  {
+   "id": "pie-half-donut",
+   "title": "Half Doughnut Chart",
+   "titleCN": "半环形图",
+   "category": "pie",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pie"
+   ],
+   "components": [
+    "legend",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 586
+  },
+  {
+   "id": "pie-labelLine-adjust",
+   "title": "Label Line Adjust",
+   "titleCN": "饼图引导线调整",
+   "category": "pie",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pie"
+   ],
+   "components": [
+    "title"
+   ],
+   "callbacks": 3,
+   "bytes": 2815
+  },
+  {
+   "id": "pie-legend",
+   "title": "Pie with Scrollable Legend",
+   "titleCN": "可滚动的图例",
+   "category": "pie",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pie"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 3760
+  },
+  {
+   "id": "pie-nest",
+   "title": "Nested Pies",
+   "titleCN": "嵌套环形图",
+   "category": "'pie, rich'",
+   "difficulty": 5,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pie"
+   ],
+   "components": [
+    "legend",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 2001
+  },
+  {
+   "id": "pie-padAngle",
+   "title": "Pie with padAngle",
+   "titleCN": "饼图扇区间隙",
+   "category": "pie",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pie"
+   ],
+   "components": [
+    "legend",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 814
+  },
+  {
+   "id": "pie-parliament-transition",
+   "title": "Transition of Parliament and Pie Chart",
+   "titleCN": "自定义议会图与饼图过渡动画",
+   "category": "custom, animtion",
+   "difficulty": 10,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pie"
+   ],
+   "components": [],
+   "callbacks": 0,
+   "bytes": 529
+  },
+  {
+   "id": "pie-pattern",
+   "title": "Texture on Pie Chart",
+   "titleCN": "饼图纹理",
+   "category": "pie",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pie"
+   ],
+   "components": [
+    "title",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 70173
+  },
+  {
+   "id": "pie-rich-text",
+   "title": "Pie Special Label",
+   "titleCN": "富文本标签",
+   "category": "'pie, rich'",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pie"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 2980
+  },
+  {
+   "id": "pie-roseType-simple",
+   "title": "Nightingale Chart",
+   "titleCN": "基础南丁格尔玫瑰图",
+   "category": "pie",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pie"
+   ],
+   "components": [
+    "legend",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 934
+  },
+  {
+   "id": "pie-roseType",
+   "title": "Nightingale Chart",
+   "titleCN": "南丁格尔玫瑰图",
+   "category": "pie",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pie"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 1976
+  },
+  {
+   "id": "pie-simple",
+   "title": "Referer of a Website",
+   "titleCN": "某站点用户访问来源",
+   "category": "pie",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pie"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 719
+  },
+  {
+   "id": "polar-endAngle",
+   "title": "Polar endAngle",
+   "titleCN": "极坐标系 endAngle",
+   "category": "bar",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "tooltip",
+    "polar",
+    "angleAxis",
+    "radiusAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 670
+  },
+  {
+   "id": "polar-roundCap",
+   "title": "Rounded Bar on Polar",
+   "titleCN": "圆角环形图",
+   "category": "bar",
+   "difficulty": 7,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "legend",
+    "polar",
+    "angleAxis",
+    "radiusAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 812
+  },
+  {
+   "id": "radar-aqi",
+   "title": "AQI - Radar Chart",
+   "titleCN": "AQI - 雷达图",
+   "category": "radar",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "radar"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "radar"
+   ],
+   "callbacks": 0,
+   "bytes": 9083
+  },
+  {
+   "id": "radar-custom",
+   "title": "Customized Radar Chart",
+   "titleCN": "自定义雷达图",
+   "category": "radar",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "radar"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "radar"
+   ],
+   "callbacks": 1,
+   "bytes": 2721
+  },
+  {
+   "id": "radar-multiple",
+   "title": "Multiple Radar",
+   "titleCN": "多雷达图",
+   "category": "radar",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "radar"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "radar"
+   ],
+   "callbacks": 0,
+   "bytes": 2583
+  },
+  {
+   "id": "radar",
+   "title": "Basic Radar Chart",
+   "titleCN": "基础雷达图",
+   "category": "radar",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "radar"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "radar"
+   ],
+   "callbacks": 0,
+   "bytes": 884
+  },
+  {
+   "id": "radar2",
+   "title": "Proportion of Browsers",
+   "titleCN": "浏览器占比变化",
+   "category": "radar",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "radar"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "radar",
+    "visualMap"
+   ],
+   "callbacks": 0,
+   "bytes": 9300
+  },
+  {
+   "id": "sankey-energy",
+   "title": "Gradient Edge",
+   "titleCN": "桑基图渐变色边",
+   "category": "sankey",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "sankey"
+   ],
+   "components": [
+    "title",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 8858
+  },
+  {
+   "id": "sankey-itemstyle",
+   "title": "Specify ItemStyle for Each Node in Sankey",
+   "titleCN": "桑基图节点自定义样式",
+   "category": "sankey",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "sankey"
+   ],
+   "components": [
+    "title",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 23154
+  },
+  {
+   "id": "sankey-levels",
+   "title": "Sankey with Levels Setting",
+   "titleCN": "桑基图层级自定义样式",
+   "category": "sankey",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "sankey"
+   ],
+   "components": [
+    "title",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 14087
+  },
+  {
+   "id": "sankey-nodeAlign-left",
+   "title": "Node Align Left in Sankey",
+   "titleCN": "桑基图左对齐布局",
+   "category": "sankey",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "sankey"
+   ],
+   "components": [
+    "title",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 8881
+  },
+  {
+   "id": "sankey-nodeAlign-right",
+   "title": "Node Align Right in Sankey",
+   "titleCN": "桑基图右对齐布局",
+   "category": "sankey",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "sankey"
+   ],
+   "components": [
+    "title",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 8904
+  },
+  {
+   "id": "sankey-simple",
+   "title": "Basic Sankey",
+   "titleCN": "基础桑基图",
+   "category": "sankey",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "sankey"
+   ],
+   "components": [],
+   "callbacks": 0,
+   "bytes": 692
+  },
+  {
+   "id": "sankey-vertical",
+   "title": "Sankey Orient Vertical",
+   "titleCN": "垂直方向的桑基图",
+   "category": "sankey",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "sankey"
+   ],
+   "components": [
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 975
+  },
+  {
+   "id": "scatter-aggregate-bar",
+   "title": "Aggregate Scatter to Bar",
+   "titleCN": "散点图聚合为柱状图动画",
+   "category": "scatter, animation",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 2,
+   "bytes": 17770
+  },
+  {
+   "id": "scatter-anscombe-quartet",
+   "title": "Anscomb's quartet",
+   "titleCN": "安斯库姆四重奏",
+   "category": "scatter",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 4553
+  },
+  {
+   "id": "scatter-aqi-color",
+   "title": "Scatter Aqi Color",
+   "titleCN": "AQI 气泡图",
+   "category": "scatter",
+   "difficulty": 7,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "visualMap"
+   ],
+   "callbacks": 1,
+   "bytes": 10597
+  },
+  {
+   "id": "scatter-clustering",
+   "title": "Clustering Process",
+   "titleCN": "数据聚合",
+   "category": "scatter",
+   "difficulty": 1,
+   "ok": false,
+   "reason": "ecStat is not defined",
+   "seriesTypes": [],
+   "components": [],
+   "callbacks": 0
+  },
+  {
+   "id": "scatter-effect",
+   "title": "Effect Scatter Chart",
+   "titleCN": "涟漪特效散点图",
+   "category": "scatter",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "effectScatter",
+    "scatter"
+   ],
+   "components": [
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 9180
+  },
+  {
+   "id": "scatter-exponential-regression",
+   "title": "Exponential Regression",
+   "titleCN": "指数回归（使用统计插件）",
+   "category": "scatter",
+   "difficulty": 1,
+   "ok": false,
+   "reason": "ecStat is not defined",
+   "seriesTypes": [],
+   "components": [],
+   "callbacks": 0
+  },
+  {
+   "id": "scatter-jitter",
+   "title": "Scatter with Jittering",
+   "titleCN": "带抖动的散点图",
+   "category": "scatter",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 485901
+  },
+  {
+   "id": "scatter-label-align-right",
+   "title": "Align Label on the Top",
+   "titleCN": "散点图标签顶部对齐",
+   "category": "scatter",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 3,
+   "bytes": 1950
+  },
+  {
+   "id": "scatter-label-align-top",
+   "title": "Align Label on the Top",
+   "titleCN": "散点图标签顶部对齐",
+   "category": "scatter",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 2,
+   "bytes": 1941
+  },
+  {
+   "id": "scatter-large",
+   "title": "Large Scatter",
+   "titleCN": "大规模散点图",
+   "category": "scatter",
+   "difficulty": 5,
+   "ok": false,
+   "reason": "converted, but 64.0 MB is too large to bundle",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "dataZoom",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "bytes": 67146100,
+   "tooBig": true
+  },
+  {
+   "id": "scatter-linear-regression",
+   "title": "Linear Regression",
+   "titleCN": "线性回归（使用统计插件）",
+   "category": "scatter",
+   "difficulty": 2,
+   "ok": false,
+   "reason": "ecStat is not defined",
+   "seriesTypes": [],
+   "components": [],
+   "callbacks": 0
+  },
+  {
+   "id": "scatter-logarithmic-regression",
+   "title": "Logarithmic Regression",
+   "titleCN": "对数回归（使用统计插件）",
+   "category": "scatter",
+   "difficulty": 16,
+   "ok": false,
+   "reason": "ecStat is not defined",
+   "seriesTypes": [],
+   "components": [],
+   "callbacks": 0
+  },
+  {
+   "id": "scatter-map-brush",
+   "title": "Scatter Map Brush",
+   "titleCN": "Scatter Map Brush",
+   "category": "scatter",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar",
+    "effectScatter",
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "geo",
+    "toolbox",
+    "brush"
+   ],
+   "callbacks": 2,
+   "bytes": 20841
+  },
+  {
+   "id": "scatter-matrix",
+   "title": "Scatter Matrix",
+   "titleCN": "散点矩阵和平行坐标",
+   "category": "'parallel, scatter'",
+   "difficulty": 10,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "parallel",
+    "scatter"
+   ],
+   "components": [
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "visualMap",
+    "brush",
+    "parallel"
+   ],
+   "callbacks": 0,
+   "bytes": 157029
+  },
+  {
+   "id": "scatter-nebula",
+   "title": "Scatter Nebula",
+   "titleCN": "大规模星云散点图",
+   "category": "scatter",
+   "difficulty": 5,
+   "ok": false,
+   "reason": "the file defines no option object",
+   "seriesTypes": [],
+   "components": [],
+   "callbacks": 0
+  },
+  {
+   "id": "scatter-nutrients-matrix",
+   "title": "Scatter Nutrients Matrix",
+   "titleCN": "营养分布散点矩阵",
+   "category": "scatter",
+   "difficulty": 7,
+   "ok": false,
+   "reason": "myChart.getZr(...).configLayer is not a function",
+   "seriesTypes": [],
+   "components": [],
+   "callbacks": 0
+  },
+  {
+   "id": "scatter-nutrients",
+   "title": "Scatter Nutrients",
+   "titleCN": "营养分布散点图",
+   "category": "scatter",
+   "difficulty": 7,
+   "ok": false,
+   "reason": "myChart.getZr(...).configLayer is not a function",
+   "seriesTypes": [],
+   "components": [],
+   "callbacks": 0
+  },
+  {
+   "id": "scatter-painter-choice",
+   "title": "Master Painter Color Choices Throughout History",
+   "titleCN": "历代绘画大师的色彩运用",
+   "category": "scatter",
+   "difficulty": 9,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 3,
+   "bytes": 132153
+  },
+  {
+   "id": "scatter-polar-punchCard",
+   "title": "Punch Card of Github",
+   "titleCN": "GitHub 打卡气泡图（极坐标）",
+   "category": "scatter",
+   "difficulty": 8,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "polar",
+    "angleAxis",
+    "radiusAxis"
+   ],
+   "callbacks": 3,
+   "bytes": 7039
+  },
+  {
+   "id": "scatter-polynomial-regression",
+   "title": "Polynomial Regression",
+   "titleCN": "多项式回归（使用统计插件）",
+   "category": "scatter",
+   "difficulty": 2,
+   "ok": false,
+   "reason": "ecStat is not defined",
+   "seriesTypes": [],
+   "components": [],
+   "callbacks": 0
+  },
+  {
+   "id": "scatter-punchCard",
+   "title": "Punch Card of Github",
+   "titleCN": "GitHub 打卡气泡图",
+   "category": "scatter",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 3,
+   "bytes": 7050
+  },
+  {
+   "id": "scatter-simple",
+   "title": "Basic Scatter Chart",
+   "titleCN": "基础散点图",
+   "category": "scatter",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 845
+  },
+  {
+   "id": "scatter-single-axis",
+   "title": "Scatter on Single Axis",
+   "titleCN": "单轴散点图",
+   "category": "scatter",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "singleAxis"
+   ],
+   "callbacks": 7,
+   "bytes": 9408
+  },
+  {
+   "id": "scatter-stream-visual",
+   "title": "Visual interaction with stream",
+   "titleCN": "流式渲染和视觉映射操作",
+   "category": "scatter",
+   "difficulty": 5,
+   "ok": false,
+   "reason": "the file defines no option object",
+   "seriesTypes": [],
+   "components": [],
+   "callbacks": 0
+  },
+  {
+   "id": "scatter-symbol-morph",
+   "title": "Symbol Shape Morph",
+   "titleCN": "散点图变形动画",
+   "category": "scatter",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 4202
+  },
+  {
+   "id": "scatter-weibo",
+   "title": "Sign in of weibo",
+   "titleCN": "微博签到数据点亮中国",
+   "category": "scatter",
+   "difficulty": 0,
+   "ok": false,
+   "reason": "converted, but 5.1 MB is too large to bundle",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "geo"
+   ],
+   "callbacks": 0,
+   "bytes": 5299919,
+   "tooBig": true
+  },
+  {
+   "id": "scatter-weight",
+   "title": "Distribution of Height and Weight",
+   "titleCN": "男性女性身高体重分布",
+   "category": "scatter",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "toolbox",
+    "brush"
+   ],
+   "callbacks": 1,
+   "bytes": 19915
+  },
+  {
+   "id": "sunburst-borderRadius",
+   "title": "Sunburst with Rounded Corner",
+   "titleCN": "圆角旭日图",
+   "category": "sunburst",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "sunburst"
+   ],
+   "components": [],
+   "callbacks": 0,
+   "bytes": 1127
+  },
+  {
+   "id": "sunburst-drink",
+   "title": "Drink Flavors",
+   "titleCN": "饮品风味分类",
+   "category": "sunburst",
+   "difficulty": 5,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "sunburst"
+   ],
+   "components": [
+    "title"
+   ],
+   "callbacks": 0,
+   "bytes": 14596
+  },
+  {
+   "id": "sunburst-label-rotate",
+   "title": "Sunburst Label Rotate",
+   "titleCN": "旭日图标签旋转",
+   "category": "sunburst",
+   "difficulty": 2,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "sunburst"
+   ],
+   "components": [],
+   "callbacks": 1,
+   "bytes": 1401
+  },
+  {
+   "id": "sunburst-monochrome",
+   "title": "Monochrome Sunburst",
+   "titleCN": "单色旭日图",
+   "category": "sunburst",
+   "difficulty": 3,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "sunburst"
+   ],
+   "components": [],
+   "callbacks": 0,
+   "bytes": 4421
+  },
+  {
+   "id": "sunburst-simple",
+   "title": "Basic Sunburst",
+   "titleCN": "基础旭日图",
+   "category": "sunburst",
+   "difficulty": 1,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "sunburst"
+   ],
+   "components": [],
+   "callbacks": 0,
+   "bytes": 1067
+  },
+  {
+   "id": "sunburst-visualMap",
+   "title": "Sunburst VisualMap",
+   "titleCN": "旭日图使用视觉编码",
+   "category": "sunburst",
+   "difficulty": 4,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "sunburst"
+   ],
+   "components": [
+    "visualMap"
+   ],
+   "callbacks": 0,
+   "bytes": 1794
+  },
+  {
+   "id": "themeRiver-basic",
+   "title": "ThemeRiver",
+   "titleCN": "主题河流图",
+   "category": "themeRiver",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "themeRiver"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "singleAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 7157
+  },
+  {
+   "id": "themeRiver-lastfm",
+   "title": "ThemeRiver Lastfm",
+   "titleCN": "Lastfm 主题河流图",
+   "category": "themeRiver",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "themeRiver"
+   ],
+   "components": [
+    "singleAxis"
+   ],
+   "callbacks": 0,
+   "bytes": 23385
+  },
+  {
+   "id": "tree-basic",
+   "title": "From Left to Right Tree",
+   "titleCN": "从左到右树状图",
+   "category": "tree",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "tree"
+   ],
+   "components": [
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 21052
+  },
+  {
+   "id": "tree-legend",
+   "title": "Multiple Trees",
+   "titleCN": "多棵树",
+   "category": "tree",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "tree"
+   ],
+   "components": [
+    "legend",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 8849
+  },
+  {
+   "id": "tree-orient-bottom-top",
+   "title": "From Bottom to Top Tree",
+   "titleCN": "从下到上树状图",
+   "category": "tree",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "tree"
+   ],
+   "components": [
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 20938
+  },
+  {
+   "id": "tree-orient-right-left",
+   "title": "From Right to Left Tree",
+   "titleCN": "从右到左树状图",
+   "category": "tree",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "tree"
+   ],
+   "components": [
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 21052
+  },
+  {
+   "id": "tree-polyline",
+   "title": "Tree with Polyline Edge",
+   "titleCN": "折线树图",
+   "category": "tree",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "tree"
+   ],
+   "components": [
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 7101
+  },
+  {
+   "id": "tree-radial",
+   "title": "Radial Tree",
+   "titleCN": "径向树状图",
+   "category": "tree",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "tree"
+   ],
+   "components": [
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 20670
+  },
+  {
+   "id": "tree-vertical",
+   "title": "From Top to Bottom Tree",
+   "titleCN": "从上到下树状图",
+   "category": "tree",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "tree"
+   ],
+   "components": [
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 20916
+  },
+  {
+   "id": "treemap-disk",
+   "title": "Disk Usage",
+   "titleCN": "磁盘占用",
+   "category": "treemap",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "treemap"
+   ],
+   "components": [
+    "title",
+    "tooltip"
+   ],
+   "callbacks": 1,
+   "bytes": 522049
+  },
+  {
+   "id": "treemap-drill-down",
+   "title": "ECharts Option Query",
+   "titleCN": "ECharts 配置项查询分布",
+   "category": "treemap",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "treemap"
+   ],
+   "components": [
+    "title",
+    "tooltip"
+   ],
+   "callbacks": 0,
+   "bytes": 530652
+  },
+  {
+   "id": "treemap-obama",
+   "title": "How $3.7 Trillion is Spent",
+   "titleCN": "3.7 万亿美元支出构成",
+   "category": "treemap",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "treemap"
+   ],
+   "components": [
+    "title",
+    "legend",
+    "tooltip"
+   ],
+   "callbacks": 6,
+   "bytes": 276278
+  },
+  {
+   "id": "treemap-show-parent",
+   "title": "Show Parent Labels",
+   "titleCN": "显示父层级标签",
+   "category": "treemap",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "treemap"
+   ],
+   "components": [
+    "title",
+    "tooltip"
+   ],
+   "callbacks": 1,
+   "bytes": 522349
+  },
+  {
+   "id": "treemap-simple",
+   "title": "Basic Treemap",
+   "titleCN": "基础矩形树图",
+   "category": "treemap",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "treemap"
+   ],
+   "components": [],
+   "callbacks": 0,
+   "bytes": 503
+  },
+  {
+   "id": "treemap-sunburst-transition",
+   "title": "Transition between Treemap and Sunburst",
+   "titleCN": "矩形树图和旭日图的动画过渡",
+   "category": "treemap",
+   "difficulty": 4,
+   "ok": false,
+   "reason": "the file defines no option object",
+   "seriesTypes": [],
+   "components": [],
+   "callbacks": 0
+  },
+  {
+   "id": "treemap-visual",
+   "title": "Gradient Mapping",
+   "titleCN": "映射为渐变色",
+   "category": "treemap",
+   "difficulty": 0,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "treemap"
+   ],
+   "components": [
+    "title",
+    "tooltip"
+   ],
+   "callbacks": 1,
+   "bytes": 103579
+  },
+  {
+   "id": "watermark",
+   "title": "Watermark - ECharts Download",
+   "titleCN": "水印 - ECharts 下载统计",
+   "category": "bar",
+   "difficulty": 6,
+   "ok": false,
+   "reason": "ctx.translate is not a function",
+   "seriesTypes": [],
+   "components": [],
+   "callbacks": 0
+  },
+  {
+   "id": "wind-barb",
+   "title": "Wind Barb",
+   "titleCN": "风向图",
+   "category": "'custom, dataZoom'",
+   "difficulty": 5,
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "custom",
+    "line"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataZoom",
+    "visualMap"
+   ],
+   "callbacks": 4,
+   "bytes": 30501
+  }
+ ]
+}

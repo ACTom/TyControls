@@ -1,0 +1,6370 @@
+{
+ "source": "D:/Projects/echarts/dist/echarts.js",
+ "version": "6.1.0",
+ "W": 600,
+ "H": 400,
+ "notes": [
+  "TooltipView under node: env.node off, getDom stubbed; richText content on the zrender canvas.",
+  "position: TooltipRichContent.getSize is replaced by the case size; result = the moveTo argument (the box top-left, before the border and shadow offset moveTo adds to the text element).",
+  "shouldTooltipConfine: confine != null ? !!confine : the RAW renderMode option === 'richText' (default 'auto': false).",
+  "timers: a virtual clock; setTimeout / clearTimeout replaced for the run.",
+  "content: the richText lines parsed by segment style (width -> marker, weight 400 -> name, 900 -> value)."
+ ],
+ "component": [
+  {
+   "id": "cmp-none",
+   "note": "no tooltip key at all",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ]
+   },
+   "at": [
+    259,
+    269
+   ],
+   "shown": false
+  },
+  {
+   "id": "cmp-empty",
+   "note": "tooltip: {}",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {}
+   },
+   "at": [
+    259,
+    269
+   ],
+   "shown": true
+  },
+  {
+   "id": "cmp-array-empty",
+   "note": "tooltip: [] -- no component",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": []
+   },
+   "at": [
+    259,
+    269
+   ],
+   "shown": false
+  },
+  {
+   "id": "cmp-array-one",
+   "note": "tooltip: [{}]",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": [
+     {}
+    ]
+   },
+   "at": [
+    259,
+    269
+   ],
+   "shown": true
+  },
+  {
+   "id": "cmp-show-false",
+   "note": "tooltip: {show: false}",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "show": false
+    }
+   },
+   "at": [
+    259,
+    269
+   ],
+   "shown": false
+  },
+  {
+   "id": "cmp-string",
+   "note": "tooltip: 'abc' at the root -- no component",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": "abc"
+   },
+   "at": [
+    259,
+    269
+   ],
+   "shown": false
+  },
+  {
+   "id": "cmp-null",
+   "note": "tooltip: null",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": null
+   },
+   "at": [
+    259,
+    269
+   ],
+   "shown": false
+  },
+  {
+   "id": "cmp-series-only",
+   "note": "a series tooltip and no root one",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ],
+      "tooltip": {
+       "show": true,
+       "formatter": "x"
+      }
+     }
+    ]
+   },
+   "at": [
+    259,
+    269
+   ],
+   "shown": false
+  }
+ ],
+ "position": [
+  {
+   "id": "pos-default",
+   "note": "no position: 20 down and right of the pointer",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "4071700000000000",
+    "4072100000000000"
+   ]
+  },
+  {
+   "id": "pos-flip-x",
+   "note": "no position, too wide for the right: flipped left",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    484,
+    218
+   ],
+   "size": [
+    200,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 3
+   },
+   "rect": [
+    "407bcf0000000000",
+    "405d000000000000",
+    "4053680000000000",
+    "4069800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "4070800000000000",
+    "406dc00000000000"
+   ]
+  },
+  {
+   "id": "pos-flip-y",
+   "note": "no position, too tall below: flipped up",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    146,
+    313
+   ],
+   "size": [
+    100,
+    120
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 0
+   },
+   "rect": [
+    "405adc0000000000",
+    "4070d00000000000",
+    "4053680000000000",
+    "4049800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "4064c00000000000",
+    "4065a00000000000"
+   ]
+  },
+  {
+   "id": "pos-plus2",
+   "note": "x + w + 20 fits exactly, + 2 does not: flipped",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    479,
+    200
+   ],
+   "size": [
+    100,
+    40
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 3
+   },
+   "rect": [
+    "407bcf0000000000",
+    "405d000000000000",
+    "4053680000000000",
+    "4069800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "4076700000000000",
+    "406b800000000000"
+   ]
+  },
+  {
+   "id": "pos-plus2-fits",
+   "note": "x + w + 22 = 600: fits",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    478,
+    200
+   ],
+   "size": [
+    100,
+    40
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 3
+   },
+   "rect": [
+    "407bcf0000000000",
+    "405d000000000000",
+    "4053680000000000",
+    "4069800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "407f200000000000",
+    "406b800000000000"
+   ]
+  },
+  {
+   "id": "pos-oversized",
+   "note": "a box wider than the view: flipped, then confined to x 0",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    700,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "0000000000000000",
+    "4072100000000000"
+   ]
+  },
+  {
+   "id": "conf-rt-null",
+   "note": "renderMode 'richText', confine unset: confined",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": [
+      550,
+      380
+     ]
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    100,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "407f400000000000",
+    "4075e00000000000"
+   ]
+  },
+  {
+   "id": "conf-auto-null",
+   "note": "renderMode unset ('auto'), confine unset: NOT confined",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "position": [
+      550,
+      380
+     ]
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    100,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "4081300000000000",
+    "4077c00000000000"
+   ]
+  },
+  {
+   "id": "conf-false",
+   "note": "confine false",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "confine": false,
+     "position": [
+      550,
+      380
+     ]
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    100,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "4081300000000000",
+    "4077c00000000000"
+   ]
+  },
+  {
+   "id": "conf-true",
+   "note": "confine true, renderMode auto",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "confine": true,
+     "position": [
+      -40,
+      -30
+     ]
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    100,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "0000000000000000",
+    "0000000000000000"
+   ]
+  },
+  {
+   "id": "conf-default-edge",
+   "note": "confined after the flip: a box taller than the room above",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    146,
+    295
+   ],
+   "size": [
+    100,
+    380
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 0
+   },
+   "rect": [
+    "405adc0000000000",
+    "4070d00000000000",
+    "4053680000000000",
+    "4049800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "4064c00000000000",
+    "0000000000000000"
+   ]
+  },
+  {
+   "id": "arr-px",
+   "note": "position [10, 20]",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": [
+      10,
+      20
+     ]
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "4024000000000000",
+    "4034000000000000"
+   ]
+  },
+  {
+   "id": "arr-pct",
+   "note": "position ['50%', '10%']",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": [
+      "50%",
+      "10%"
+     ]
+    }
+   },
+   "trigger": "item",
+   "at": [
+    371,
+    244
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 2
+   },
+   "rect": [
+    "4074c70000000000",
+    "4064e00000000000",
+    "4053680000000000",
+    "4063200000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "4072c00000000000",
+    "4044000000000000"
+   ]
+  },
+  {
+   "id": "arr-words",
+   "note": "position ['center', 'middle'] (parsePercent's words)",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": [
+      "center",
+      "middle"
+     ]
+    }
+   },
+   "trigger": "item",
+   "at": [
+    146,
+    295
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 0
+   },
+   "rect": [
+    "405adc0000000000",
+    "4070d00000000000",
+    "4053680000000000",
+    "4049800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "4072c00000000000",
+    "4069000000000000"
+   ]
+  },
+  {
+   "id": "arr-text",
+   "note": "position ['30px', ' 25% '] (parseFloat, a trimmed %)",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": [
+      "30px",
+      " 25% "
+     ]
+    }
+   },
+   "trigger": "item",
+   "at": [
+    146,
+    295
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 0
+   },
+   "rect": [
+    "405adc0000000000",
+    "4070d00000000000",
+    "4053680000000000",
+    "4049800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "403e000000000000",
+    "4059000000000000"
+   ]
+  },
+  {
+   "id": "arr-axis",
+   "note": "position [100, 60] under an axis trigger",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "trigger": "axis",
+     "position": [
+      100,
+      60
+     ]
+    }
+   },
+   "trigger": "axis",
+   "at": [
+    250,
+    200
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": null,
+   "rect": null,
+   "border": 1,
+   "calls": [],
+   "result": [
+    "4059000000000000",
+    "404e000000000000"
+   ]
+  },
+  {
+   "id": "str-inside",
+   "note": "position 'inside'",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": "inside"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    371,
+    244
+   ],
+   "size": [
+    80,
+    40
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 2
+   },
+   "rect": [
+    "4074c70000000000",
+    "4064e00000000000",
+    "4053680000000000",
+    "4063200000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "4074b40000000000",
+    "406bf00000000000"
+   ]
+  },
+  {
+   "id": "str-top",
+   "note": "position 'top'",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": "top"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    371,
+    244
+   ],
+   "size": [
+    80,
+    40
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 2
+   },
+   "rect": [
+    "4074c70000000000",
+    "4064e00000000000",
+    "4053680000000000",
+    "4063200000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "4074b40000000000",
+    "405d400000000000"
+   ]
+  },
+  {
+   "id": "str-bottom",
+   "note": "position 'bottom'",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": "bottom"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    80,
+    40
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "406b580000000000",
+    "4074a00000000000"
+   ]
+  },
+  {
+   "id": "str-left",
+   "note": "position 'left'",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": "left"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    371,
+    244
+   ],
+   "size": [
+    80,
+    40
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 2
+   },
+   "rect": [
+    "4074c70000000000",
+    "4064e00000000000",
+    "4053680000000000",
+    "4063200000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "406e4e0000000000",
+    "406bf00000000000"
+   ]
+  },
+  {
+   "id": "str-right",
+   "note": "position 'right' with borderWidth 3 (offset ceil(3 sqrt 2) + 8)",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": "right",
+     "borderWidth": 3
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    80,
+    40
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 3,
+   "calls": [],
+   "result": [
+    "4073690000000000",
+    "406f200000000000"
+   ]
+  },
+  {
+   "id": "str-unknown",
+   "note": "position 'middle': no case matches, (0, 0)",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": "middle"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    80,
+    40
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "0000000000000000",
+    "0000000000000000"
+   ]
+  },
+  {
+   "id": "str-axis",
+   "note": "position 'top' under an axis trigger: no element, the default",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "trigger": "axis",
+     "position": "top"
+    }
+   },
+   "trigger": "axis",
+   "at": [
+    250,
+    200
+   ],
+   "size": [
+    80,
+    40
+   ],
+   "hit": null,
+   "rect": null,
+   "border": 1,
+   "calls": [],
+   "result": [
+    "4070e00000000000",
+    "406b800000000000"
+   ]
+  },
+  {
+   "id": "str-series",
+   "note": "the series' position 'bottom' over the global 'top'",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ],
+      "tooltip": {
+       "position": "bottom"
+      }
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": "top"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    371,
+    244
+   ],
+   "size": [
+    80,
+    40
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 2
+   },
+   "rect": [
+    "4074c70000000000",
+    "4064e00000000000",
+    "4053680000000000",
+    "4063200000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "4074b40000000000",
+    "4074a00000000000"
+   ]
+  },
+  {
+   "id": "str-null-falls-through",
+   "note": "the series' position null: the global 'top' (a null falls through)",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ],
+      "tooltip": {
+       "position": null
+      }
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": "top"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    371,
+    244
+   ],
+   "size": [
+    80,
+    40
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 2
+   },
+   "rect": [
+    "4074c70000000000",
+    "4064e00000000000",
+    "4053680000000000",
+    "4063200000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "4074b40000000000",
+    "405d400000000000"
+   ]
+  },
+  {
+   "id": "str-item",
+   "note": "a data item's position 'left' over the series' and the global",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       {
+        "value": 60,
+        "tooltip": {
+         "position": "left"
+        }
+       },
+       80
+      ],
+      "tooltip": {
+       "position": "bottom"
+      }
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": "top"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    371,
+    244
+   ],
+   "size": [
+    80,
+    40
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 2
+   },
+   "rect": [
+    "4074c70000000000",
+    "4064e00000000000",
+    "4053680000000000",
+    "4063200000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "406e4e0000000000",
+    "406bf00000000000"
+   ]
+  },
+  {
+   "id": "obj-lt",
+   "note": "position {left: 10, top: 10}",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": {
+      "left": 10,
+      "top": 10
+     }
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "4024000000000000",
+    "4024000000000000"
+   ]
+  },
+  {
+   "id": "obj-rb",
+   "note": "position {right: 10, bottom: '10%'}",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": {
+      "right": 10,
+      "bottom": "10%"
+     }
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "407d600000000000",
+    "4073600000000000"
+   ]
+  },
+  {
+   "id": "obj-centre",
+   "note": "position {left: 'center', top: 'middle'}",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": {
+      "left": "center",
+      "top": "middle"
+     }
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "406e000000000000",
+    "4065e00000000000"
+   ]
+  },
+  {
+   "id": "obj-right-word",
+   "note": "position {left: 'right', top: 'bottom'}",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": {
+      "left": "right",
+      "top": "bottom"
+     }
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "407e000000000000",
+    "4075e00000000000"
+   ]
+  },
+  {
+   "id": "obj-empty",
+   "note": "position {} (left and top from nothing: 0)",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": {}
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "0000000000000000",
+    "0000000000000000"
+   ]
+  },
+  {
+   "id": "obj-align",
+   "note": "position {left: 100, top: 50} with align 'right': align ignored",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": {
+      "left": 100,
+      "top": 50
+     },
+     "align": "right",
+     "verticalAlign": "bottom"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "4059000000000000",
+    "4049000000000000"
+   ]
+  },
+  {
+   "id": "align-default",
+   "note": "no position, align 'center', verticalAlign 'middle': no gap, centred",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "align": "center",
+     "verticalAlign": "middle"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "4068e00000000000",
+    "406e800000000000"
+   ]
+  },
+  {
+   "id": "align-right-only",
+   "note": "no position, align 'right' only: the vertical gap stays",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "align": "right"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    371,
+    244
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 2
+   },
+   "rect": [
+    "4074c70000000000",
+    "4064e00000000000",
+    "4053680000000000",
+    "4063200000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "406f600000000000",
+    "4070800000000000"
+   ]
+  },
+  {
+   "id": "align-array",
+   "note": "position [300, 200], align 'right', verticalAlign 'bottom'",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": [
+      300,
+      200
+     ],
+     "align": "right",
+     "verticalAlign": "bottom"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "4066800000000000",
+    "4062c00000000000"
+   ]
+  },
+  {
+   "id": "align-string",
+   "note": "position 'top', align 'center' (applied after the string's place)",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": "top",
+     "align": "center"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    80,
+    40
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 1,
+   "calls": [],
+   "result": [
+    "4066580000000000",
+    "4065000000000000"
+   ]
+  },
+  {
+   "id": "fn-args",
+   "note": "a handler answering an array from its arguments",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": "@PosArgs"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 1,
+   "calls": [
+    {
+     "point": [
+      "4070300000000000",
+      "4070d00000000000"
+     ],
+     "params": {
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "rect": [
+      "406b7e0000000000",
+      "406b400000000000",
+      "4053680000000000",
+      "4059800000000000"
+     ],
+     "viewSize": [
+      "4082c00000000000",
+      "4079000000000000"
+     ],
+     "contentSize": [
+      "405e000000000000",
+      "4049000000000000"
+     ]
+    }
+   ],
+   "result": [
+    "4068e00000000000",
+    "4065000000000000"
+   ]
+  },
+  {
+   "id": "fn-pct",
+   "note": "a handler answering ['10%', '50%']",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": "@PosPct"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    371,
+    244
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 2
+   },
+   "rect": [
+    "4074c70000000000",
+    "4064e00000000000",
+    "4053680000000000",
+    "4063200000000000"
+   ],
+   "border": 1,
+   "calls": [
+    {
+     "point": [
+      "4077300000000000",
+      "406e800000000000"
+     ],
+     "params": {
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "rect": [
+      "4074c70000000000",
+      "4064e00000000000",
+      "4053680000000000",
+      "4063200000000000"
+     ],
+     "viewSize": [
+      "4082c00000000000",
+      "4079000000000000"
+     ],
+     "contentSize": [
+      "405e000000000000",
+      "4049000000000000"
+     ]
+    }
+   ],
+   "result": [
+    "404e000000000000",
+    "4069000000000000"
+   ]
+  },
+  {
+   "id": "fn-top",
+   "note": "a handler answering 'top'",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": "@PosTop"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    371,
+    244
+   ],
+   "size": [
+    80,
+    40
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 2
+   },
+   "rect": [
+    "4074c70000000000",
+    "4064e00000000000",
+    "4053680000000000",
+    "4063200000000000"
+   ],
+   "border": 1,
+   "calls": [
+    {
+     "point": [
+      "4077300000000000",
+      "406e800000000000"
+     ],
+     "params": {
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "rect": [
+      "4074c70000000000",
+      "4064e00000000000",
+      "4053680000000000",
+      "4063200000000000"
+     ],
+     "viewSize": [
+      "4082c00000000000",
+      "4079000000000000"
+     ],
+     "contentSize": [
+      "4054000000000000",
+      "4044000000000000"
+     ]
+    }
+   ],
+   "result": [
+    "4074b40000000000",
+    "405d400000000000"
+   ]
+  },
+  {
+   "id": "fn-box",
+   "note": "a handler answering {right: 10, bottom: '10%'}",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": "@PosBox"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 1,
+   "calls": [
+    {
+     "point": [
+      "4070300000000000",
+      "4070d00000000000"
+     ],
+     "params": {
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "rect": [
+      "406b7e0000000000",
+      "406b400000000000",
+      "4053680000000000",
+      "4059800000000000"
+     ],
+     "viewSize": [
+      "4082c00000000000",
+      "4079000000000000"
+     ],
+     "contentSize": [
+      "405e000000000000",
+      "4049000000000000"
+     ]
+    }
+   ],
+   "result": [
+    "407d600000000000",
+    "4073600000000000"
+   ]
+  },
+  {
+   "id": "fn-null",
+   "note": "a handler answering null: the default",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": "@PosNull"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    259,
+    269
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "rect": [
+    "406b7e0000000000",
+    "406b400000000000",
+    "4053680000000000",
+    "4059800000000000"
+   ],
+   "border": 1,
+   "calls": [
+    {
+     "point": [
+      "4070300000000000",
+      "4070d00000000000"
+     ],
+     "params": {
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "rect": [
+      "406b7e0000000000",
+      "406b400000000000",
+      "4053680000000000",
+      "4059800000000000"
+     ],
+     "viewSize": [
+      "4082c00000000000",
+      "4079000000000000"
+     ],
+     "contentSize": [
+      "405e000000000000",
+      "4049000000000000"
+     ]
+    }
+   ],
+   "result": [
+    "4071700000000000",
+    "4072100000000000"
+   ]
+  },
+  {
+   "id": "fn-far",
+   "note": "a handler answering a point off the view: confined",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "position": "@PosFar"
+    }
+   },
+   "trigger": "item",
+   "at": [
+    146,
+    295
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": {
+    "seriesIndex": 0,
+    "dataIndex": 0
+   },
+   "rect": [
+    "405adc0000000000",
+    "4070d00000000000",
+    "4053680000000000",
+    "4049800000000000"
+   ],
+   "border": 1,
+   "calls": [
+    {
+     "point": [
+      "4062400000000000",
+      "4072700000000000"
+     ],
+     "params": {
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "rect": [
+      "405adc0000000000",
+      "4070d00000000000",
+      "4053680000000000",
+      "4049800000000000"
+     ],
+     "viewSize": [
+      "4082c00000000000",
+      "4079000000000000"
+     ],
+     "contentSize": [
+      "405e000000000000",
+      "4049000000000000"
+     ]
+    }
+   ],
+   "result": [
+    "407e000000000000",
+    "0000000000000000"
+   ]
+  },
+  {
+   "id": "fn-axis",
+   "note": "a handler under an axis trigger: params a list, rect undefined",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     },
+     {
+      "type": "line",
+      "name": "Cost",
+      "data": [
+       10,
+       30,
+       50,
+       70
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "trigger": "axis",
+     "position": "@PosArgs"
+    }
+   },
+   "trigger": "axis",
+   "at": [
+    380,
+    150
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": null,
+   "rect": null,
+   "border": 1,
+   "calls": [
+    {
+     "point": [
+      "4077c00000000000",
+      "4062c00000000000"
+     ],
+     "params": [
+      {
+       "seriesIndex": 0,
+       "dataIndex": 2
+      },
+      {
+       "seriesIndex": 1,
+       "dataIndex": 2
+      }
+     ],
+     "rect": null,
+     "viewSize": [
+      "4082c00000000000",
+      "4079000000000000"
+     ],
+     "contentSize": [
+      "405e000000000000",
+      "4049000000000000"
+     ]
+    }
+   ],
+   "result": [
+    "4074000000000000",
+    "4061800000000000"
+   ]
+  },
+  {
+   "id": "fn-axis-top",
+   "note": "a handler answering 'top' under an axis trigger: no element, the default",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "trigger": "axis",
+     "position": "@PosTop"
+    }
+   },
+   "trigger": "axis",
+   "at": [
+    380,
+    150
+   ],
+   "size": [
+    120,
+    50
+   ],
+   "hit": null,
+   "rect": null,
+   "border": 1,
+   "calls": [
+    {
+     "point": [
+      "4077c00000000000",
+      "4062c00000000000"
+     ],
+     "params": [
+      {
+       "seriesIndex": 0,
+       "dataIndex": 2
+      }
+     ],
+     "rect": null,
+     "viewSize": [
+      "4082c00000000000",
+      "4079000000000000"
+     ],
+     "contentSize": [
+      "405e000000000000",
+      "4049000000000000"
+     ]
+    }
+   ],
+   "result": [
+    "4079000000000000",
+    "4065400000000000"
+   ]
+  }
+ ],
+ "timers": [
+  {
+   "id": "tm-default",
+   "note": "showDelay 0, hideDelay 100 (the defaults): onto bar 1, off onto nothing, wait",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    }
+   },
+   "steps": [
+    {
+     "t": 0,
+     "type": "move",
+     "at": [
+      259,
+      269
+     ],
+     "visible": true,
+     "show": true,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 10,
+     "type": "move",
+     "at": [
+      300,
+      30
+     ],
+     "visible": true,
+     "show": false,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 60,
+     "type": "wait",
+     "visible": true,
+     "show": false,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 109,
+     "type": "wait",
+     "visible": true,
+     "show": false,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 110,
+     "type": "wait",
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    }
+   ]
+  },
+  {
+   "id": "tm-hide0",
+   "note": "hideDelay 0: hidden at once",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "hideDelay": 0
+    }
+   },
+   "steps": [
+    {
+     "t": 0,
+     "type": "move",
+     "at": [
+      259,
+      269
+     ],
+     "visible": true,
+     "show": true,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 10,
+     "type": "move",
+     "at": [
+      300,
+      30
+     ],
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    },
+    {
+     "t": 11,
+     "type": "wait",
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    }
+   ]
+  },
+  {
+   "id": "tm-hide-not-rearmed",
+   "note": "off the bar twice: the second hide arms nothing (_show is already false), so the first timer stands",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    }
+   },
+   "steps": [
+    {
+     "t": 0,
+     "type": "move",
+     "at": [
+      259,
+      269
+     ],
+     "visible": true,
+     "show": true,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 10,
+     "type": "move",
+     "at": [
+      300,
+      30
+     ],
+     "visible": true,
+     "show": false,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 60,
+     "type": "move",
+     "at": [
+      310,
+      30
+     ],
+     "visible": true,
+     "show": false,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 109,
+     "type": "wait",
+     "visible": true,
+     "show": false,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 110,
+     "type": "wait",
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    }
+   ]
+  },
+  {
+   "id": "tm-leave-before-show",
+   "note": "showDelay 50, the pointer leaves the canvas at 20: the show still comes at 50 and stays",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "showDelay": 50
+    }
+   },
+   "steps": [
+    {
+     "t": 0,
+     "type": "move",
+     "at": [
+      259,
+      269
+     ],
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    },
+    {
+     "t": 20,
+     "type": "leave",
+     "at": [
+      300,
+      -1
+     ],
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    },
+    {
+     "t": 49,
+     "type": "wait",
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    },
+    {
+     "t": 50,
+     "type": "wait",
+     "visible": true,
+     "show": true,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 400,
+     "type": "wait",
+     "visible": true,
+     "show": true,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    }
+   ]
+  },
+  {
+   "id": "tm-late-move",
+   "note": "the hide armed at 10 is due at 110: a move at 200 over nothing finds the box already gone",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    }
+   },
+   "steps": [
+    {
+     "t": 0,
+     "type": "move",
+     "at": [
+      259,
+      269
+     ],
+     "visible": true,
+     "show": true,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 10,
+     "type": "move",
+     "at": [
+      300,
+      30
+     ],
+     "visible": true,
+     "show": false,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 200,
+     "type": "move",
+     "at": [
+      310,
+      30
+     ],
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    }
+   ]
+  },
+  {
+   "id": "tm-late-move-delay",
+   "note": "showDelay 50: a second move at 100 finds the first show done (anchor of the first), and waits again",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "showDelay": 50
+    }
+   },
+   "steps": [
+    {
+     "t": 0,
+     "type": "move",
+     "at": [
+      259,
+      269
+     ],
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    },
+    {
+     "t": 100,
+     "type": "move",
+     "at": [
+      259,
+      273
+     ],
+     "visible": true,
+     "show": true,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 150,
+     "type": "wait",
+     "visible": true,
+     "show": true,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      273
+     ]
+    }
+   ]
+  },
+  {
+   "id": "tm-hide-back",
+   "note": "hide pending, back onto another bar before it fires: the show clears it",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "hideDelay": 100
+    }
+   },
+   "steps": [
+    {
+     "t": 0,
+     "type": "move",
+     "at": [
+      259,
+      269
+     ],
+     "visible": true,
+     "show": true,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 10,
+     "type": "move",
+     "at": [
+      300,
+      30
+     ],
+     "visible": true,
+     "show": false,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 50,
+     "type": "move",
+     "at": [
+      371,
+      244
+     ],
+     "visible": true,
+     "show": true,
+     "which": "item:0:2",
+     "anchor": [
+      371,
+      244
+     ]
+    },
+    {
+     "t": 200,
+     "type": "wait",
+     "visible": true,
+     "show": true,
+     "which": "item:0:2",
+     "anchor": [
+      371,
+      244
+     ]
+    }
+   ]
+  },
+  {
+   "id": "tm-show-delay",
+   "note": "showDelay 50: every move restarts the wait; the box shows where the LAST move was",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "showDelay": 50
+    }
+   },
+   "steps": [
+    {
+     "t": 0,
+     "type": "move",
+     "at": [
+      259,
+      269
+     ],
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    },
+    {
+     "t": 30,
+     "type": "move",
+     "at": [
+      259,
+      273
+     ],
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    },
+    {
+     "t": 79,
+     "type": "wait",
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    },
+    {
+     "t": 80,
+     "type": "wait",
+     "visible": true,
+     "show": true,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      273
+     ]
+    },
+    {
+     "t": 100,
+     "type": "move",
+     "at": [
+      371,
+      244
+     ],
+     "visible": true,
+     "show": true,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      273
+     ]
+    },
+    {
+     "t": 149,
+     "type": "wait",
+     "visible": true,
+     "show": true,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      273
+     ]
+    },
+    {
+     "t": 150,
+     "type": "wait",
+     "visible": true,
+     "show": true,
+     "which": "item:0:2",
+     "anchor": [
+      371,
+      244
+     ]
+    }
+   ]
+  },
+  {
+   "id": "tm-show-then-leave",
+   "note": "showDelay 50, off the bar before it fires: hideLater does nothing (not shown yet) and the box shows at 50 and stays",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "showDelay": 50
+    }
+   },
+   "steps": [
+    {
+     "t": 0,
+     "type": "move",
+     "at": [
+      259,
+      269
+     ],
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    },
+    {
+     "t": 20,
+     "type": "move",
+     "at": [
+      300,
+      30
+     ],
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    },
+    {
+     "t": 50,
+     "type": "wait",
+     "visible": true,
+     "show": true,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 400,
+     "type": "wait",
+     "visible": true,
+     "show": true,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 410,
+     "type": "move",
+     "at": [
+      310,
+      30
+     ],
+     "visible": true,
+     "show": false,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 509,
+     "type": "wait",
+     "visible": true,
+     "show": false,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 510,
+     "type": "wait",
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    }
+   ]
+  },
+  {
+   "id": "tm-always",
+   "note": "alwaysShowContent: never hidden, not by nothing and not by leaving the chart",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "alwaysShowContent": true
+    }
+   },
+   "steps": [
+    {
+     "t": 0,
+     "type": "move",
+     "at": [
+      259,
+      269
+     ],
+     "visible": true,
+     "show": true,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 10,
+     "type": "move",
+     "at": [
+      300,
+      30
+     ],
+     "visible": true,
+     "show": true,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 500,
+     "type": "wait",
+     "visible": true,
+     "show": true,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 510,
+     "type": "leave",
+     "at": [
+      300,
+      -1
+     ],
+     "visible": true,
+     "show": true,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 900,
+     "type": "wait",
+     "visible": true,
+     "show": true,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 910,
+     "type": "move",
+     "at": [
+      371,
+      244
+     ],
+     "visible": true,
+     "show": true,
+     "which": "item:0:2",
+     "anchor": [
+      371,
+      244
+     ]
+    }
+   ]
+  },
+  {
+   "id": "tm-leave",
+   "note": "leaving the chart: hidden after hideDelay",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "hideDelay": 40
+    }
+   },
+   "steps": [
+    {
+     "t": 0,
+     "type": "move",
+     "at": [
+      259,
+      269
+     ],
+     "visible": true,
+     "show": true,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 5,
+     "type": "leave",
+     "at": [
+      -1,
+      200
+     ],
+     "visible": true,
+     "show": false,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 44,
+     "type": "wait",
+     "visible": true,
+     "show": false,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 45,
+     "type": "wait",
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    }
+   ]
+  },
+  {
+   "id": "tm-axis",
+   "note": "an axis trigger: across categories, out of the grid, hideDelay 100",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "trigger": "axis"
+    }
+   },
+   "steps": [
+    {
+     "t": 0,
+     "type": "move",
+     "at": [
+      130,
+      200
+     ],
+     "visible": true,
+     "show": true,
+     "which": "axis:A",
+     "anchor": [
+      130,
+      200
+     ]
+    },
+    {
+     "t": 20,
+     "type": "move",
+     "at": [
+      400,
+      200
+     ],
+     "visible": true,
+     "show": true,
+     "which": "axis:C",
+     "anchor": [
+      400,
+      200
+     ]
+    },
+    {
+     "t": 30,
+     "type": "move",
+     "at": [
+      400,
+      5
+     ],
+     "visible": true,
+     "show": false,
+     "which": "axis:C",
+     "anchor": [
+      400,
+      200
+     ]
+    },
+    {
+     "t": 129,
+     "type": "wait",
+     "visible": true,
+     "show": false,
+     "which": "axis:C",
+     "anchor": [
+      400,
+      200
+     ]
+    },
+    {
+     "t": 130,
+     "type": "wait",
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    }
+   ]
+  },
+  {
+   "id": "tm-axis-show-delay",
+   "note": "an axis trigger with showDelay 60",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ]
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "trigger": "axis",
+     "showDelay": 60
+    }
+   },
+   "steps": [
+    {
+     "t": 0,
+     "type": "move",
+     "at": [
+      130,
+      200
+     ],
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    },
+    {
+     "t": 59,
+     "type": "wait",
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    },
+    {
+     "t": 60,
+     "type": "wait",
+     "visible": true,
+     "show": true,
+     "which": "axis:A",
+     "anchor": [
+      130,
+      200
+     ]
+    },
+    {
+     "t": 70,
+     "type": "move",
+     "at": [
+      400,
+      200
+     ],
+     "visible": true,
+     "show": true,
+     "which": "axis:A",
+     "anchor": [
+      130,
+      200
+     ]
+    },
+    {
+     "t": 130,
+     "type": "wait",
+     "visible": true,
+     "show": true,
+     "which": "axis:C",
+     "anchor": [
+      400,
+      200
+     ]
+    }
+   ]
+  },
+  {
+   "id": "tm-series-delay",
+   "note": "a series' showDelay 80 over the global 0 (the item's cascade); hideDelay is the global's",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ],
+      "tooltip": {
+       "showDelay": 80,
+       "hideDelay": 500
+      }
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "hideDelay": 30
+    }
+   },
+   "steps": [
+    {
+     "t": 0,
+     "type": "move",
+     "at": [
+      259,
+      269
+     ],
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    },
+    {
+     "t": 79,
+     "type": "wait",
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    },
+    {
+     "t": 80,
+     "type": "wait",
+     "visible": true,
+     "show": true,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 90,
+     "type": "move",
+     "at": [
+      300,
+      30
+     ],
+     "visible": true,
+     "show": false,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 119,
+     "type": "wait",
+     "visible": true,
+     "show": false,
+     "which": "item:0:1",
+     "anchor": [
+      259,
+      269
+     ]
+    },
+    {
+     "t": 120,
+     "type": "wait",
+     "visible": false,
+     "show": false,
+     "which": null,
+     "anchor": null
+    }
+   ]
+  }
+ ],
+ "content": [
+  {
+   "id": "mk-point-max",
+   "note": "markPoint {type: 'max', name: 'Max'} on a named bar series",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ],
+      "markPoint": {
+       "data": [
+        {
+         "type": "max",
+         "name": "Max"
+        }
+       ],
+       "itemStyle": {
+        "color": "#ff0000"
+       }
+      }
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    }
+   },
+   "at": [
+    484,
+    94
+   ],
+   "hit": {
+    "componentType": "markPoint",
+    "seriesType": "bar",
+    "seriesIndex": 0,
+    "dataIndex": 0,
+    "dataType": null,
+    "mainType": "markPoint"
+   },
+   "template": false,
+   "lines": [
+    {
+     "marker": null,
+     "name": "Sales",
+     "value": null
+    },
+    {
+     "marker": null,
+     "name": "Max",
+     "value": "80"
+    }
+   ],
+   "text": "Sales\nMax80",
+   "border": "#ff0000"
+  },
+  {
+   "id": "mk-point-coord",
+   "note": "markPoint by coord with a value and no name; an unnamed host series (the auto name heads the box)",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ],
+      "markPoint": {
+       "data": [
+        {
+         "coord": [
+          "B",
+          70
+         ],
+         "value": 1234.5
+        }
+       ],
+       "itemStyle": {
+        "color": "#00aa00"
+       }
+      }
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    }
+   },
+   "at": [
+    259,
+    120
+   ],
+   "hit": {
+    "componentType": "markPoint",
+    "seriesType": "bar",
+    "seriesIndex": 0,
+    "dataIndex": 0,
+    "dataType": null,
+    "mainType": "markPoint"
+   },
+   "template": false,
+   "lines": [
+    {
+     "marker": null,
+     "name": "series\u00000",
+     "value": null
+    },
+    {
+     "marker": null,
+     "name": "B",
+     "value": "1,234.5"
+    }
+   ],
+   "text": "series\u00000\nB1,234.5",
+   "border": "#00aa00"
+  },
+  {
+   "id": "mk-point-novalue",
+   "note": "markPoint by x / y pixels: no value, a name",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ],
+      "markPoint": {
+       "data": [
+        {
+         "x": 300,
+         "y": 100,
+         "name": "Pinned"
+        }
+       ]
+      }
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    }
+   },
+   "at": [
+    300,
+    78
+   ],
+   "hit": {
+    "componentType": "markPoint",
+    "seriesType": "bar",
+    "seriesIndex": 0,
+    "dataIndex": 0,
+    "dataType": null,
+    "mainType": "markPoint"
+   },
+   "template": false,
+   "lines": [
+    {
+     "marker": null,
+     "name": "Sales",
+     "value": null
+    },
+    {
+     "marker": null,
+     "name": "Pinned",
+     "value": null
+    }
+   ],
+   "text": "Sales\nPinned",
+   "border": "#5070dd"
+  },
+  {
+   "id": "mk-line-average",
+   "note": "markLine {type: 'average', name: 'Avg'}",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ],
+      "markLine": {
+       "data": [
+        {
+         "type": "average",
+         "name": "Avg"
+        }
+       ],
+       "lineStyle": {
+        "color": "#0000ff",
+        "width": 4
+       }
+      }
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    }
+   },
+   "at": [
+    315,
+    193
+   ],
+   "hit": {
+    "componentType": "markLine",
+    "seriesType": "bar",
+    "seriesIndex": 0,
+    "dataIndex": 0,
+    "dataType": null,
+    "mainType": "markLine"
+   },
+   "template": false,
+   "lines": [
+    {
+     "marker": null,
+     "name": "Sales",
+     "value": null
+    },
+    {
+     "marker": null,
+     "name": "Avg",
+     "value": "50"
+    }
+   ],
+   "text": "Sales\nAvg50",
+   "border": "#0000ff"
+  },
+  {
+   "id": "mk-line-y",
+   "note": "markLine {yAxis: 90}: a value, no name",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ],
+      "markLine": {
+       "data": [
+        {
+         "yAxis": 90
+        }
+       ],
+       "lineStyle": {
+        "width": 4
+       }
+      }
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    }
+   },
+   "at": [
+    315,
+    91
+   ],
+   "hit": {
+    "componentType": "markLine",
+    "seriesType": "bar",
+    "seriesIndex": 0,
+    "dataIndex": 0,
+    "dataType": null,
+    "mainType": "markLine"
+   },
+   "template": false,
+   "lines": [
+    {
+     "marker": null,
+     "name": "Sales",
+     "value": null
+    },
+    {
+     "marker": null,
+     "name": null,
+     "value": "90"
+    }
+   ],
+   "text": "Sales\n90",
+   "border": "#5070dd"
+  },
+  {
+   "id": "mk-area",
+   "note": "markArea [{name: 'Zone', yAxis: 85}, {yAxis: 95}]: no value",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ],
+      "markArea": {
+       "data": [
+        [
+         {
+          "name": "Zone",
+          "yAxis": 85
+         },
+         {
+          "yAxis": 95
+         }
+        ]
+       ],
+       "itemStyle": {
+        "color": "#ffcc00"
+       }
+      }
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    }
+   },
+   "at": [
+    315,
+    91
+   ],
+   "hit": {
+    "componentType": "markArea",
+    "seriesType": "bar",
+    "seriesIndex": 0,
+    "dataIndex": 0,
+    "dataType": null,
+    "mainType": "markArea"
+   },
+   "template": false,
+   "lines": [
+    {
+     "marker": null,
+     "name": "Sales",
+     "value": null
+    },
+    {
+     "marker": null,
+     "name": "Zone",
+     "value": null
+    }
+   ],
+   "text": "Sales\nZone",
+   "border": "#ffcc00"
+  },
+  {
+   "id": "mk-template",
+   "note": "a global template formatter over a markPoint: '{a}|{b}|{c}'",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ],
+      "markPoint": {
+       "data": [
+        {
+         "type": "max",
+         "name": "Max"
+        }
+       ]
+      }
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "formatter": "{a}|{b}|{c}"
+    }
+   },
+   "at": [
+    484,
+    94
+   ],
+   "hit": {
+    "componentType": "markPoint",
+    "seriesType": "bar",
+    "seriesIndex": 0,
+    "dataIndex": 0,
+    "dataType": null,
+    "mainType": "markPoint"
+   },
+   "template": true,
+   "lines": [],
+   "text": "Sales|Max|80",
+   "border": "#5070dd"
+  },
+  {
+   "id": "mk-axis-trigger",
+   "note": "a global trigger 'axis' over a markPoint outside the grid: no box -- the marker model's default trigger 'item' is not in its option, so the cascade reads the global 'axis'",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ],
+      "markPoint": {
+       "data": [
+        {
+         "x": 300,
+         "y": 40,
+         "name": "Pinned",
+         "value": 7
+        }
+       ]
+      }
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "trigger": "axis"
+    }
+   },
+   "at": [
+    300,
+    18
+   ],
+   "none": true,
+   "hit": {
+    "componentType": null,
+    "seriesType": null,
+    "seriesIndex": 0,
+    "dataIndex": 0,
+    "dataType": null,
+    "mainType": "markPoint"
+   },
+   "template": false,
+   "lines": [],
+   "text": "",
+   "border": ""
+  },
+  {
+   "id": "mk-axis-trigger-own",
+   "note": "the same with markPoint.tooltip.trigger 'item' written: the marker's box",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ],
+      "markPoint": {
+       "tooltip": {
+        "trigger": "item"
+       },
+       "data": [
+        {
+         "x": 300,
+         "y": 40,
+         "name": "Pinned",
+         "value": 7
+        }
+       ]
+      }
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText",
+     "trigger": "axis"
+    }
+   },
+   "at": [
+    300,
+    18
+   ],
+   "hit": {
+    "componentType": "markPoint",
+    "seriesType": "bar",
+    "seriesIndex": 0,
+    "dataIndex": 0,
+    "dataType": null,
+    "mainType": "markPoint"
+   },
+   "template": false,
+   "lines": [
+    {
+     "marker": null,
+     "name": "Sales",
+     "value": null
+    },
+    {
+     "marker": null,
+     "name": "Pinned",
+     "value": "7"
+    }
+   ],
+   "text": "Sales\nPinned7",
+   "border": "#5070dd"
+  },
+  {
+   "id": "mk-own-tooltip",
+   "note": "markPoint.tooltip.formatter '{b}!' and a data item's own 'item {c}'",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ],
+      "markPoint": {
+       "tooltip": {
+        "formatter": "{b}!"
+       },
+       "data": [
+        {
+         "x": 200,
+         "y": 60,
+         "name": "One",
+         "value": 1
+        },
+        {
+         "x": 400,
+         "y": 60,
+         "name": "Two",
+         "value": 2,
+         "tooltip": {
+          "formatter": "item {c}"
+         }
+        }
+       ]
+      }
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    }
+   },
+   "at": [
+    400,
+    38
+   ],
+   "hit": {
+    "componentType": "markPoint",
+    "seriesType": "bar",
+    "seriesIndex": 0,
+    "dataIndex": 1,
+    "dataType": null,
+    "mainType": "markPoint"
+   },
+   "template": true,
+   "lines": [],
+   "text": "item 2",
+   "border": "#5070dd"
+  },
+  {
+   "id": "mk-own-tooltip-0",
+   "note": "the same: item 0 takes markPoint.tooltip's '{b}!'",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ],
+      "markPoint": {
+       "tooltip": {
+        "formatter": "{b}!"
+       },
+       "data": [
+        {
+         "x": 200,
+         "y": 60,
+         "name": "One",
+         "value": 1
+        },
+        {
+         "x": 400,
+         "y": 60,
+         "name": "Two",
+         "value": 2,
+         "tooltip": {
+          "formatter": "item {c}"
+         }
+        }
+       ]
+      }
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    }
+   },
+   "at": [
+    200,
+    38
+   ],
+   "hit": {
+    "componentType": "markPoint",
+    "seriesType": "bar",
+    "seriesIndex": 0,
+    "dataIndex": 0,
+    "dataType": null,
+    "mainType": "markPoint"
+   },
+   "template": true,
+   "lines": [],
+   "text": "One!",
+   "border": "#5070dd"
+  },
+  {
+   "id": "mk-host-tooltip",
+   "note": "the host series' tooltip formatter does NOT reach its marker",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Sales",
+      "data": [
+       20,
+       40,
+       60,
+       80
+      ],
+      "tooltip": {
+       "formatter": "host {c}"
+      },
+      "markPoint": {
+       "data": [
+        {
+         "x": 300,
+         "y": 60,
+         "name": "P",
+         "value": 3
+        }
+       ]
+      }
+     }
+    ],
+    "tooltip": {
+     "renderMode": "richText"
+    }
+   },
+   "at": [
+    300,
+    38
+   ],
+   "hit": {
+    "componentType": "markPoint",
+    "seriesType": "bar",
+    "seriesIndex": 0,
+    "dataIndex": 0,
+    "dataType": null,
+    "mainType": "markPoint"
+   },
+   "template": false,
+   "lines": [
+    {
+     "marker": null,
+     "name": "Sales",
+     "value": null
+    },
+    {
+     "marker": null,
+     "name": "P",
+     "value": "3"
+    }
+   ],
+   "text": "Sales\nP3",
+   "border": "#5070dd"
+  },
+  {
+   "id": "hm-named",
+   "note": "a heatmap cell on two category axes, a named series",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "x",
+      "y"
+     ]
+    },
+    "visualMap": {
+     "show": false,
+     "min": 0,
+     "max": 10,
+     "inRange": {
+      "color": [
+       "#ffffff",
+       "#ff0000"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "name": "Heat",
+      "data": [
+       [
+        0,
+        0,
+        5
+       ],
+       [
+        1,
+        0,
+        1234.5
+       ],
+       [
+        2,
+        1,
+        9
+       ]
+      ]
+     }
+    ]
+   },
+   "at": [
+    315,
+    256
+   ],
+   "hit": {
+    "componentType": "series",
+    "seriesType": "heatmap",
+    "seriesIndex": 0,
+    "dataIndex": 1,
+    "dataType": null,
+    "mainType": null
+   },
+   "template": false,
+   "lines": [
+    {
+     "marker": null,
+     "name": "Heat",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "b",
+     "value": "1,234.5"
+    }
+   ],
+   "text": "Heat\n  b1,234.5",
+   "border": "rgba(255,0,0,1)"
+  },
+  {
+   "id": "hm-unnamed",
+   "note": "a heatmap cell, unnamed series, a cell with a name",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "x",
+      "y"
+     ]
+    },
+    "visualMap": {
+     "show": false,
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "data": [
+       [
+        0,
+        0,
+        5
+       ],
+       {
+        "value": [
+         2,
+         1,
+         9
+        ],
+        "name": "hot"
+       }
+      ]
+     }
+    ]
+   },
+   "at": [
+    465,
+    129
+   ],
+   "hit": {
+    "componentType": "series",
+    "seriesType": "heatmap",
+    "seriesIndex": 0,
+    "dataIndex": 1,
+    "dataType": null,
+    "mainType": null
+   },
+   "template": false,
+   "lines": [
+    {
+     "marker": "item",
+     "name": "hot",
+     "value": "9"
+    }
+   ],
+   "text": "  hot9",
+   "border": "rgba(93,123,224,1)"
+  },
+  {
+   "id": "hm-value-axes",
+   "note": "a heatmap on value axes is not drawn by upstream (cartesian needs categories); on category x and value y? -- category x / category y with a dash value",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "x",
+      "y"
+     ]
+    },
+    "visualMap": {
+     "show": false,
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "name": "H",
+      "data": [
+       [
+        0,
+        0,
+        3
+       ],
+       [
+        1,
+        1,
+        "-"
+       ]
+      ]
+     }
+    ]
+   },
+   "at": [
+    203,
+    256
+   ],
+   "hit": {
+    "componentType": "series",
+    "seriesType": "heatmap",
+    "seriesIndex": 0,
+    "dataIndex": 0,
+    "dataType": null,
+    "mainType": null
+   },
+   "template": false,
+   "lines": [
+    {
+     "marker": null,
+     "name": "H",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "a",
+     "value": "3"
+    }
+   ],
+   "text": "H\n  a3",
+   "border": "rgba(172,188,239,1)"
+  },
+  {
+   "id": "sb-leaf",
+   "note": "a sunburst leaf, a named series",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "series": [
+     {
+      "type": "sunburst",
+      "name": "Sun",
+      "radius": [
+       0,
+       "90%"
+      ],
+      "data": [
+       {
+        "name": "Root A",
+        "children": [
+         {
+          "name": "A1",
+          "value": 4
+         },
+         {
+          "name": "A2",
+          "value": 6
+         }
+        ]
+       },
+       {
+        "name": "Root B",
+        "value": 5,
+        "children": [
+         {
+          "name": "B1",
+          "value": 3
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "at": [
+    275,
+    313
+   ],
+   "hit": {
+    "componentType": "series",
+    "seriesType": "sunburst",
+    "seriesIndex": 0,
+    "dataIndex": 2,
+    "dataType": "main",
+    "mainType": null
+   },
+   "template": false,
+   "lines": [
+    {
+     "marker": null,
+     "name": "Sun",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "A1",
+     "value": "4"
+    }
+   ],
+   "text": "Sun\n  A14",
+   "border": "rgba(123,147,229,1)"
+  },
+  {
+   "id": "sb-parent",
+   "note": "a sunburst parent without its own value, an unnamed series",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "series": [
+     {
+      "type": "sunburst",
+      "radius": [
+       0,
+       "90%"
+      ],
+      "data": [
+       {
+        "name": "Root A",
+        "children": [
+         {
+          "name": "A1",
+          "value": 4
+         },
+         {
+          "name": "A2",
+          "value": 6
+         }
+        ]
+       },
+       {
+        "name": "Root B",
+        "value": 5,
+        "children": [
+         {
+          "name": "B1",
+          "value": 3
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "at": [
+    306,
+    200
+   ],
+   "hit": {
+    "componentType": "series",
+    "seriesType": "sunburst",
+    "seriesIndex": 0,
+    "dataIndex": 1,
+    "dataType": "main",
+    "mainType": null
+   },
+   "template": false,
+   "lines": [
+    {
+     "marker": "item",
+     "name": "Root A",
+     "value": "10"
+    }
+   ],
+   "text": "  Root A10",
+   "border": "#5070dd"
+  },
+  {
+   "id": "tm-leaf",
+   "note": "a treemap leaf",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "series": [
+     {
+      "type": "treemap",
+      "name": "Tree",
+      "data": [
+       {
+        "name": "Big",
+        "value": 60
+       },
+       {
+        "name": "Small",
+        "value": 1234.5
+       },
+       {
+        "value": 20
+       }
+      ]
+     }
+    ]
+   },
+   "at": [
+    283,
+    200
+   ],
+   "hit": {
+    "componentType": "series",
+    "seriesType": "treemap",
+    "seriesIndex": 0,
+    "dataIndex": 2,
+    "dataType": "main",
+    "mainType": null
+   },
+   "template": false,
+   "lines": [
+    {
+     "marker": null,
+     "name": "Small",
+     "value": "1,234.5"
+    }
+   ],
+   "text": "Small1,234.5",
+   "border": "#5070dd"
+  },
+  {
+   "id": "tm-noname",
+   "note": "a treemap leaf without a name: the name reads -",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "series": [
+     {
+      "type": "treemap",
+      "name": "Tree",
+      "data": [
+       {
+        "name": "Big",
+        "value": 60
+       },
+       {
+        "name": "Small",
+        "value": 10
+       },
+       {
+        "value": 30
+       }
+      ]
+     }
+    ]
+   },
+   "at": [
+    468,
+    163
+   ],
+   "hit": {
+    "componentType": "series",
+    "seriesType": "treemap",
+    "seriesIndex": 0,
+    "dataIndex": 3,
+    "dataType": "main",
+    "mainType": null
+   },
+   "template": false,
+   "lines": [
+    {
+     "marker": null,
+     "name": "-",
+     "value": "30"
+    }
+   ],
+   "text": "-30",
+   "border": "#b6d634"
+  },
+  {
+   "id": "tm-array",
+   "note": "a treemap leaf whose value is an array [v, extra]",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "series": [
+     {
+      "type": "treemap",
+      "name": "Tree",
+      "data": [
+       {
+        "name": "Big",
+        "value": [
+         60,
+         7
+        ]
+       },
+       {
+        "name": "Small",
+        "value": [
+         20,
+         3
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "at": [
+    230,
+    200
+   ],
+   "hit": {
+    "componentType": "series",
+    "seriesType": "treemap",
+    "seriesIndex": 0,
+    "dataIndex": 1,
+    "dataType": "main",
+    "mainType": null
+   },
+   "template": false,
+   "lines": [
+    {
+     "marker": null,
+     "name": "Big",
+     "value": "60  7"
+    }
+   ],
+   "text": "Big60  7",
+   "border": "#5070dd"
+  },
+  {
+   "id": "sk-node",
+   "note": "a sankey node: its layout value (the flow)",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "series": [
+     {
+      "type": "sankey",
+      "name": "Flow",
+      "data": [
+       {
+        "name": "a"
+       },
+       {
+        "name": "b"
+       },
+       {
+        "name": "c"
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b",
+        "value": 5
+       },
+       {
+        "source": "a",
+        "target": "c",
+        "value": 1234.5
+       },
+       {
+        "source": "b",
+        "target": "c",
+        "value": 2
+       }
+      ]
+     }
+    ]
+   },
+   "at": [
+    40,
+    200
+   ],
+   "hit": {
+    "componentType": "series",
+    "seriesType": "sankey",
+    "seriesIndex": 0,
+    "dataIndex": 0,
+    "dataType": "node",
+    "mainType": null
+   },
+   "template": false,
+   "lines": [
+    {
+     "marker": null,
+     "name": "a",
+     "value": "1,239.5"
+    }
+   ],
+   "text": "a1,239.5",
+   "border": "rgba(63,190,149,1)"
+  },
+  {
+   "id": "sk-node-own",
+   "note": "a sankey node whose own value is larger than its flow",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "series": [
+     {
+      "type": "sankey",
+      "name": "Flow",
+      "data": [
+       {
+        "name": "a",
+        "value": 50
+       },
+       {
+        "name": "b"
+       },
+       {
+        "name": "c"
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b",
+        "value": 5
+       },
+       {
+        "source": "a",
+        "target": "c",
+        "value": 3
+       },
+       {
+        "source": "b",
+        "target": "c",
+        "value": 2
+       }
+      ]
+     }
+    ]
+   },
+   "at": [
+    40,
+    200
+   ],
+   "hit": {
+    "componentType": "series",
+    "seriesType": "sankey",
+    "seriesIndex": 0,
+    "dataIndex": 0,
+    "dataType": "node",
+    "mainType": null
+   },
+   "template": false,
+   "lines": [
+    {
+     "marker": null,
+     "name": "a",
+     "value": "50"
+    }
+   ],
+   "text": "a50",
+   "border": "rgba(63,190,149,1)"
+  },
+  {
+   "id": "sk-edge",
+   "note": "a sankey edge: 'a -- c'",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "renderMode": "richText"
+    },
+    "series": [
+     {
+      "type": "sankey",
+      "name": "Flow",
+      "data": [
+       {
+        "name": "a"
+       },
+       {
+        "name": "b"
+       },
+       {
+        "name": "c"
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b",
+        "value": 5
+       },
+       {
+        "source": "a",
+        "target": "c",
+        "value": 30
+       },
+       {
+        "source": "b",
+        "target": "c",
+        "value": 2
+       }
+      ]
+     }
+    ]
+   },
+   "at": [
+    246,
+    173
+   ],
+   "hit": {
+    "componentType": "series",
+    "seriesType": "sankey",
+    "seriesIndex": 0,
+    "dataIndex": 1,
+    "dataType": "edge",
+    "mainType": null
+   },
+   "template": false,
+   "lines": [
+    {
+     "marker": null,
+     "name": "a -- c",
+     "value": "30"
+    }
+   ],
+   "text": "a -- c30",
+   "border": "undefined"
+  }
+ ],
+ "guards": [
+  {
+   "name": "no tooltip key: no box",
+   "ok": true
+  },
+  {
+   "name": "tooltip: {} shows",
+   "ok": true
+  },
+  {
+   "name": "tooltip: [], 'abc', null: no component",
+   "ok": true
+  },
+  {
+   "name": "a series tooltip alone: no component, no box",
+   "ok": true
+  },
+  {
+   "name": "the default hangs 20 right and 20 down",
+   "ok": true
+  },
+  {
+   "name": "the +2 flips a box that fits exactly",
+   "ok": true
+  },
+  {
+   "name": "confine null under 'richText' confines",
+   "ok": true
+  },
+  {
+   "name": "confine null under 'auto' does not",
+   "ok": true
+  },
+  {
+   "name": "confine true clamps to 0",
+   "ok": true
+  },
+  {
+   "name": "an unknown position word with an element is (0, 0)",
+   "ok": true
+  },
+  {
+   "name": "'right' offsets by ceil(sqrt2 * borderWidth) + 8",
+   "ok": true
+  },
+  {
+   "name": "a word under an axis trigger is the default placement",
+   "ok": true
+  },
+  {
+   "name": "an axis handler gets a list of params and no rect",
+   "ok": true
+  },
+  {
+   "name": "hideDelay 100: shown at 109, hidden at 110",
+   "ok": true
+  },
+  {
+   "name": "showDelay restarts on every move",
+   "ok": true
+  },
+  {
+   "name": "a show due after leaving still shows and stays",
+   "ok": true
+  },
+  {
+   "name": "a second hide does not re-arm the timer",
+   "ok": true
+  },
+  {
+   "name": "alwaysShowContent survives leaving the chart",
+   "ok": true
+  },
+  {
+   "name": "a marker heads its box with the host series name",
+   "ok": true
+  },
+  {
+   "name": "the host series' formatter does not reach its marker",
+   "ok": true
+  },
+  {
+   "name": "a treemap row has no marker and no header",
+   "ok": true
+  },
+  {
+   "name": "a sankey edge reads 'source -- target'",
+   "ok": true
+  }
+ ]
+}

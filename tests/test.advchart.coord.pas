@@ -15,6 +15,7 @@ type
     function MakeCategoryCartesian(const ARect: TTyRectF; ACount: Integer): TTyCartesian2D;
   published
     procedure TestDataToPointCorners;
+    procedure TestABarStandsOnTheStartValueNotTheMin;
     procedure TestYAxisIsInverted;
     procedure TestRoundTripWithinHalfPixel;
     procedure TestContainPointMatchesRect;
@@ -72,6 +73,29 @@ begin
   Result.AddAxis(TTyAxis.Create('x', sx, True));
   Result.AddAxis(TTyAxis.Create('y', sy, False));
   Result.SetRect(ARect);
+end;
+
+procedure TAdvChartCartesianTest.TestABarStandsOnTheStartValueNotTheMin;
+var
+  sv: TTyIntervalScale;
+  ax: TTyAxis;
+begin
+  { upstream's getValueAxisStart: the resolved startValue, or with none 0 --
+    and 1 on a log axis, where 0 is nowhere. Never the extent's start. }
+  sv := TTyIntervalScale.Create;
+  sv.SetExtent(TyRange(-4, 6));
+  ax := TTyAxis.Create('y', sv, False);
+  try
+    AssertEquals('none written: zero', 0.0, TyValueAxisStart(ax), 0);
+    ax.AxisType := atLog;
+    AssertEquals('none written, a log axis: one', 1.0, TyValueAxisStart(ax), 0);
+    sv.StartValue := 2.5;
+    AssertEquals('written: as written', 2.5, TyValueAxisStart(ax), 0);
+    sv.StartValue := NaN;
+    AssertEquals('taken away again: one', 1.0, TyValueAxisStart(ax), 0);
+  finally
+    ax.Free;
+  end;
 end;
 
 procedure TAdvChartCartesianTest.TestDataToPointCorners;

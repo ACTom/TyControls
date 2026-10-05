@@ -234,6 +234,11 @@ begin
     '  --advchart-minor-tick-length: 3px;' + LineEnding +
     '  --advchart-name-gap: 15px;' + LineEnding +
     '  --advchart-tick-length: 5px;' + LineEnding +
+    '  --advchart-axispointer-margin: 3px;' + LineEnding +
+    '  --advchart-tooltip-gap: 20px;' + LineEnding +
+    '  --advchart-tooltip-gutter: 20px;' + LineEnding +
+    '  --advchart-tooltip-marker: 10px;' + LineEnding +
+    '  --advchart-tooltip-marker-gap: 6px;' + LineEnding +
     '  --alert-close-gap: 8px;' + LineEnding +
     '  --alert-close-size: 14px;' + LineEnding +
     '  --alert-icon-gap: 8px;' + LineEnding +
@@ -1292,6 +1297,7 @@ begin
     'TyAdvChartSeries6 { background: mix(var(--accent), var(--on-surface), 65%); }' + LineEnding +
     'TyAdvChartSeries7 { background: lighten(var(--accent), 38%); }' + LineEnding +
     'TyAdvChartSeries8 { background: darken(var(--accent), 34%); }' + LineEnding +
+    'TyAdvChartSeries9 { background: mix(var(--accent), var(--on-surface), 15%); }' + LineEnding +
     '' + LineEnding +
     '/* AdvChart: the axis domain. Eight keys and four metrics, and the COUNT is part' + LineEnding +
     '   of the design -- twelve things can be checked by eye across seventeen themes' + LineEnding +
@@ -1315,6 +1321,12 @@ begin
     '   already alpha over --on-surface, so it follows a dark theme by itself. */' + LineEnding +
     'TyAdvChartAxisLabel { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
     'TyAdvChartAxisName  { color: var(--on-surface); font-size: var(--font-size-base); }' + LineEnding +
+    '/* The heavier label a TIME axis gives its coarse ticks -- the `Mar` in a run' + LineEnding +
+    '   of day numbers. Upstream carries it as a rich-text style on the time axis''' + LineEnding +
+    '   own defaults; here it is a key of its own so a skin can make the level' + LineEnding +
+    '   marker darker, or larger, or nothing special at all. */' + LineEnding +
+    'TyAdvChartAxisLabelPrimary { color: var(--muted); font-size: var(--font-size-base);' + LineEnding +
+    '                             font-weight: var(--font-weight-bold); }' + LineEnding +
     '/* Alpha over --border, NEVER over --surface. On an image theme a translucent' + LineEnding +
     '   surface reads as a bright halo instead of a faint line -- this library has' + LineEnding +
     '   shipped that bug once already. */' + LineEnding +
@@ -1324,6 +1336,184 @@ begin
     'TyAdvChartSplitArea { background: alpha(var(--on-surface), 0.04); }' + LineEnding +
     'TyAdvChartMinorTick { border-color: alpha(var(--border), 0.4); border-width: 1px; }' + LineEnding +
     'TyAdvChartMinorSplitLine { border-color: alpha(var(--border), 0.35); border-width: 1px; }' + LineEnding +
+    '/* The ring a pie draws when it has no data at all. Upstream hard-codes' + LineEnding +
+    '   lightgray; alpha over the ink instead, so it stays faint on either mode. */' + LineEnding +
+    'TyAdvChartEmptyCircle { background: alpha(var(--on-surface), 0.10); }' + LineEnding +
+    '/* showBackground: the strip behind a bar, the height of the plot. Upstream' + LineEnding +
+    '   writes rgba(180,180,180,0.2) into the series default, which is a pale grey' + LineEnding +
+    '   band across a dark skin; alpha over the ink darkens one and lightens the' + LineEnding +
+    '   other from the same declaration. */' + LineEnding +
+    'TyAdvChartBarBackground { background: alpha(var(--on-surface), 0.10); }' + LineEnding +
+    '/* A TREE''S NODES AND EDGES. Upstream names the colours in the series''' + LineEnding +
+    '   defaults -- lightsteelblue for a node, a light grey for an edge -- and a' + LineEnding +
+    '   tree takes no palette slot; here they are keys, so a skin gives its trees' + LineEnding +
+    '   its own accent and its own line ink. */' + LineEnding +
+    'TyAdvChartTreeNode { background: alpha(var(--accent), 0.55); }' + LineEnding +
+    'TyAdvChartTreeEdge { border-color: var(--border); border-width: 1px; }' + LineEnding +
+    '/* A TREEMAP''S LABELS AND ITS BREADCRUMB. Upstream writes the label white --' + LineEnding +
+    '   a fixed ink over palette fills, which do not change with the mode, so' + LineEnding +
+    '   neither does this -- and draws the breadcrumb as a pale chip with' + LineEnding +
+    '   secondary text: here the chip is alpha over the ink and the text muted,' + LineEnding +
+    '   so a dark skin gets a dark chip. */' + LineEnding +
+    'TyAdvChartTreemapLabel { color: #FFFFFF; font-size: var(--font-size-base); }' + LineEnding +
+    'TyAdvChartBreadcrumb { background: alpha(var(--on-surface), 0.08); color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
+    '/* A SANKEY''S LINKS. Upstream fills them a mid grey at 0.2 opacity; here the' + LineEnding +
+    '   grey is the ink''s own muted tone, so a dark skin''s links stay grey on' + LineEnding +
+    '   its ground. */' + LineEnding +
+    'TyAdvChartSankeyLink { background: var(--muted); }' + LineEnding +
+    '/* The chart''s own title and subtitle. Upstream draws them at 18/bold and' + LineEnding +
+    '   12/regular; the sizes come from the type scale here so a dense skin gets a' + LineEnding +
+    '   proportionate title instead of an 18px one on 11px axis labels. */' + LineEnding +
+    'TyAdvChartTitle { color: var(--on-surface); font-size: var(--font-size-title); font-weight: 700; }' + LineEnding +
+    'TyAdvChartSubtitle { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
+    '/* A label OUTSIDE its mark: the theme''s own ink, not anything derived from the' + LineEnding +
+    '   thing it names. Upstream picks #333 or #ccc by mode; this is the same idea' + LineEnding +
+    '   said in the theme''s vocabulary. */' + LineEnding +
+    'TyAdvChartLabel { color: var(--on-surface); font-size: var(--font-size-base); }' + LineEnding +
+    '/* A label INSIDE its mark is a three-band table, not a light/dark pair, and the' + LineEnding +
+    '   order reads backwards until you see why: on a mid-dark fill you want maximum' + LineEnding +
+    '   contrast, but on a nearly black one the brightest ink glares and the dimmer' + LineEnding +
+    '   one is easier to read. Band 1 is therefore LIGHTER than band 2.' + LineEnding +
+    '     band 0 -- a light mark, so dark ink' + LineEnding +
+    '     band 1 -- a mid mark, so the brightest ink' + LineEnding +
+    '     band 2 -- a dark mark, so a softer light ink' + LineEnding +
+    '   FIXED VALUES, NOT THE SURFACE PAIR: the band is chosen by the MARK''s fill,' + LineEnding +
+    '   which does not change with the mode -- so the ink must not either, or a' + LineEnding +
+    '   dark skin puts light ink on a light bar. Upstream''s #333, #eee, #ccc. */' + LineEnding +
+    'TyAdvChartLabelOnLight { color: #333333; }' + LineEnding +
+    'TyAdvChartLabelOnMid   { color: #EEEEEE; }' + LineEnding +
+    'TyAdvChartLabelOnDark  { color: #CCCCCC; }' + LineEnding +
+    '/* The legend. Upstream inks the words with tokens.color.secondary and greys a' + LineEnding +
+    '   deselected item with tokens.color.disabled. This vocabulary has no disabled' + LineEnding +
+    '   INK token -- only a disabled OPACITY -- so a switched-off item is the chart''s' + LineEnding +
+    '   own ink faded far enough to read as off on either mode. The frame is drawn' + LineEnding +
+    '   only when the option asks for one, so the last two are dormant on almost' + LineEnding +
+    '   every chart. */' + LineEnding +
+    'TyAdvChartLegend { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
+    'TyAdvChartLegendInactive { color: alpha(var(--on-surface), 0.25); }' + LineEnding +
+    'TyAdvChartLegendBorder { border-color: var(--border); border-width: 1px; }' + LineEnding +
+    'TyAdvChartLegendBackground { background: var(--surface); }' + LineEnding +
+    '/* The legend''s selector buttons (All / Inv) and the scrolling legend''s pager.' + LineEnding +
+    '   Upstream draws a button as tertiary ink in a pale rounded frame that turns' + LineEnding +
+    '   the lighter quaternary ink under the pointer, the page arrows in its accent' + LineEnding +
+    '   with a pale accent for one that cannot go further, and the page count in' + LineEnding +
+    '   the tertiary ink. Here the ink is the chart''s muted one (fainter when' + LineEnding +
+    '   hovered), the frame the border, and the arrows the skin''s own accent. */' + LineEnding +
+    'TyAdvChartLegendSelector { color: var(--muted); border-color: var(--border); font-size: var(--font-size-base); }' + LineEnding +
+    'TyAdvChartLegendSelector:hover { color: alpha(var(--on-surface), 0.35); border-color: var(--border); font-size: var(--font-size-base); }' + LineEnding +
+    'TyAdvChartLegendPageIcon { color: var(--accent); }' + LineEnding +
+    'TyAdvChartLegendPageIconInactive { color: alpha(var(--accent), 0.25); }' + LineEnding +
+    'TyAdvChartLegendPageText { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
+    '/* A visualMap''s own picture. Upstream inks its texts with tokens.color.' + LineEnding +
+    '   secondary, the bar''s inactive stretch and the frame with a pale grey, the' + LineEnding +
+    '   handles'' rims white and the box transparent. The inactive stretch is the' + LineEnding +
+    '   chart''s own ink faded, like a switched-off legend item; the rim is the' + LineEnding +
+    '   surface, so a handle reads as cut out of whatever it sits on. The frame is' + LineEnding +
+    '   drawn only when the option gives it a width. */' + LineEnding +
+    'TyAdvChartVisualMap { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
+    'TyAdvChartVisualMapInactive { color: alpha(var(--on-surface), 0.2); }' + LineEnding +
+    'TyAdvChartVisualMapBorder { border-color: var(--border); }' + LineEnding +
+    'TyAdvChartVisualMapBackground { background: transparent; }' + LineEnding +
+    'TyAdvChartVisualMapHandle { border-color: var(--surface); }' + LineEnding +
+    '/* A slider dataZoom. Upstream tints the whole component from its accent: a' + LineEnding +
+    '   pale frame, the window filled with the accent at a fifth, handles white' + LineEnding +
+    '   with a pale rim, the brush''s move bar the accent at half with a white' + LineEnding +
+    '   grip, and the data shadow grey outside the window and bluer inside it.' + LineEnding +
+    '   Here the accent is the skin''s own, the grey is the ink faded, and white' + LineEnding +
+    '   is the surface. The labels beside the handles take the muted ink. */' + LineEnding +
+    'TyAdvChartDataZoom { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
+    'TyAdvChartDataZoomBorder { border-color: var(--border); }' + LineEnding +
+    'TyAdvChartDataZoomBackground { background: transparent; }' + LineEnding +
+    'TyAdvChartDataZoomFiller { background: alpha(var(--accent), 0.2); }' + LineEnding +
+    'TyAdvChartDataZoomHandle { background: var(--surface); border-color: alpha(var(--accent), 0.35); }' + LineEnding +
+    'TyAdvChartDataZoomMoveHandle { background: alpha(var(--accent), 0.5); color: var(--surface); }' + LineEnding +
+    'TyAdvChartDataZoomShadow { background: alpha(var(--on-surface), 0.06); border-color: alpha(var(--on-surface), 0.3); }' + LineEnding +
+    'TyAdvChartDataZoomShadowSelected { background: alpha(var(--accent), 0.12); border-color: alpha(var(--accent), 0.55); }' + LineEnding +
+    '/* Under the pointer (or while a handle is dragged) a handle''s rim darkens' + LineEnding +
+    '   and the move bar firms up; a brush across the body is the accent faded. */' + LineEnding +
+    'TyAdvChartDataZoomHandle:hover { background: var(--surface); border-color: alpha(var(--accent), 0.55); }' + LineEnding +
+    'TyAdvChartDataZoomMoveHandle:hover { background: alpha(var(--accent), 0.8); color: var(--surface); }' + LineEnding +
+    'TyAdvChartDataZoomBrush { background: alpha(var(--accent), 0.3); }' + LineEnding +
+    '/* The hover tooltip. TWO keys, because upstream''s whole typographic hierarchy' + LineEnding +
+    '   inside the box is one weight difference -- the name at 400 and the value at' + LineEnding +
+    '   900, in the same grey -- and one style set cannot say two weights. Said here' + LineEnding +
+    '   in this vocabulary''s own terms instead: the name is the muted ink a label' + LineEnding +
+    '   takes, the value is full ink and bold.' + LineEnding +
+    '' + LineEnding +
+    '   The chart paints NO box without a background on the first key (no surface =' + LineEnding +
+    '   nothing to draw on), which is the same rule TyChartTooltip follows, and it' + LineEnding +
+    '   is why both live in the base layer for every theme to inherit. A skin' + LineEnding +
+    '   wanting the box to float adds `shadow:`; the base stays flat like the rest' + LineEnding +
+    '   of light. The BORDER here is only the fallback -- an item tooltip tints its' + LineEnding +
+    '   border with the colour of the datum under the pointer, which is what makes' + LineEnding +
+    '   an ECharts tooltip look attached to the thing it describes. */' + LineEnding +
+    'TyAdvChartTooltip {' + LineEnding +
+    '  background: var(--surface);' + LineEnding +
+    '  color: var(--muted);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
+    '  border-radius: var(--radius-sm);' + LineEnding +
+    '  padding: var(--pad-tooltip);' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '}' + LineEnding +
+    'TyAdvChartTooltipValue {' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '  font-weight: var(--font-weight-bold);' + LineEnding +
+    '}' + LineEnding +
+    '/* The axis pointer: the line that follows the cursor along an axis, the band' + LineEnding +
+    '   a `shadow` draws instead, and the label at the axis end.' + LineEnding +
+    '' + LineEnding +
+    '   The line reads like a split line and not like an axis line -- it is a' + LineEnding +
+    '   reading aid over the plot, not a piece of the frame -- so it takes the same' + LineEnding +
+    '   --border it does. The BAND is alpha over the ink for the reason every other' + LineEnding +
+    '   band in this chart is: it darkens a light theme and lightens a dark one from' + LineEnding +
+    '   one declaration, where upstream''s literal rgba grey does neither.' + LineEnding +
+    '' + LineEnding +
+    '   The LABEL is the one piece here that is meant to stand out: upstream inks it' + LineEnding +
+    '   white on an indigo chip, which is a colour this vocabulary already has a' + LineEnding +
+    '   name for. Accent, therefore -- so a re-skinned chart labels its pointer in' + LineEnding +
+    '   the skin''s own colour instead of ECharts''. */' + LineEnding +
+    '/* A candlestick''s two directions. NOT "positive and negative" however they are' + LineEnding +
+    '   usually described: both compare a datum against ITSELF -- close above open' + LineEnding +
+    '   against open above close -- and either can happen in a rising market.' + LineEnding +
+    '' + LineEnding +
+    '   Upstream writes #eb5454 and #47b262, which is the East Asian convention' + LineEnding +
+    '   (red up, green down) and the opposite of the North American one. This' + LineEnding +
+    '   library has a --success and a --danger already and they carry exactly the' + LineEnding +
+    '   right meaning in either convention, so a theme that wants the other way' + LineEnding +
+    '   round swaps two lines here instead of restyling a chart. */' + LineEnding +
+    '/* A GAUGE''S READING: the headline number under the needle, and the only thing' + LineEnding +
+    '   in this vocabulary that had no donor. The chart''s own title key is bold but' + LineEnding +
+    '   is sized off the title scale -- a gauge''s reading is the picture, not a' + LineEnding +
+    '   heading over it -- and every label key is base size. Upstream writes 30px' + LineEnding +
+    '   and a literal here is the right place for a literal: a skin that wants a' + LineEnding +
+    '   quieter dial changes this one line. The gauge''s name caption takes' + LineEnding +
+    '   TyAdvChartLabel, its scale takes TyAdvChartAxisLabel, its major ticks take' + LineEnding +
+    '   TyAdvChartAxisTick and its minor ones TyAdvChartMinorTick, so this is the' + LineEnding +
+    '   only key the whole series added. */' + LineEnding +
+    'TyAdvChartGaugeDetail { color: var(--on-surface); font-size: 30px;' + LineEnding +
+    '                        font-weight: var(--font-weight-bold); }' + LineEnding +
+    'TyAdvChartCandleUp { background: var(--danger); }' + LineEnding +
+    'TyAdvChartCandleDown { background: var(--success); }' + LineEnding +
+    'TyAdvChartAxisPointer { border-color: var(--border); border-width: 1px; }' + LineEnding +
+    'TyAdvChartAxisPointerShadow { background: alpha(var(--on-surface), 0.10); }' + LineEnding +
+    'TyAdvChartAxisPointerLabel {' + LineEnding +
+    '  background: var(--accent);' + LineEnding +
+    '  color: var(--on-accent);' + LineEnding +
+    '  border-radius: var(--radius-sm);' + LineEnding +
+    '  padding: 5px 7px;' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '}' + LineEnding +
+    '/* The loading effect (showLoading): the mask over the chart, its words, and' + LineEnding +
+    '   the turning arc. Upstream writes a white mask at 0.8, its darkest neutral' + LineEnding +
+    '   for the words and the first palette colour for the arc -- on a light skin' + LineEnding +
+    '   exactly this, and on a dark one a mask of its own surface instead of a' + LineEnding +
+    '   white sheet over a dark chart. The arc''s width and radius are geometry the' + LineEnding +
+    '   cfg sets (5 and 10 by default); only its colour is the skin''s. */' + LineEnding +
+    'TyAdvChartLoading { background: alpha(var(--surface), 0.8); color: var(--on-surface);' + LineEnding +
+    '                    font-size: var(--font-size-base); }' + LineEnding +
+    'TyAdvChartLoadingSpinner { border-color: var(--accent); }' + LineEnding +
     '' + LineEnding +
     '/* ── ListGroupPanel (navigation accordion; own keys, not the tree column header''s) ────── */' + LineEnding +
     '/* A modern sider: group rows carry NO fill (just muted ink + a right chevron; the OPEN group' + LineEnding +

@@ -1,0 +1,369 @@
+{
+ "animation": false,
+ "textStyle": {
+  "fontSize": 14
+ },
+ "xAxis": {
+  "data": [
+   "A",
+   "B",
+   "C",
+   "D",
+   "E"
+  ],
+  "boundaryGap": true,
+  "splitArea": {
+   "show": true
+  }
+ },
+ "yAxis": {
+  "max": 2
+ },
+ "series": [
+  {
+   "name": "line",
+   "type": "line",
+   "stack": "all",
+   "symbolSize": 6,
+   "data": [
+    0.3,
+    1.4,
+    1.2,
+    1,
+    0.6
+   ],
+   "markLine": {
+    "data": [
+     {
+      "name": "start",
+      "yAxis": 1.8,
+      "label": {
+       "formatter": "{b}",
+       "position": "start"
+      }
+     },
+     [
+      {
+       "name": "start: start",
+       "coord": [
+        0,
+        0.3
+       ],
+       "label": {
+        "formatter": "start",
+        "position": "start"
+       }
+      },
+      {
+       "name": "end: start",
+       "coord": [
+        3,
+        1
+       ]
+      }
+     ],
+     {
+      "name": "middle",
+      "yAxis": 1.8,
+      "label": {
+       "formatter": "{b}",
+       "position": "middle"
+      }
+     },
+     {
+      "name": "end",
+      "yAxis": 1.8,
+      "label": {
+       "formatter": "{b}",
+       "position": "end"
+      }
+     },
+     [
+      {
+       "name": "start: end",
+       "coord": [
+        0,
+        0.3
+       ],
+       "label": {
+        "formatter": "end",
+        "position": "end"
+       }
+      },
+      {
+       "name": "end: end",
+       "coord": [
+        3,
+        1
+       ]
+      }
+     ],
+     {
+      "name": "insideStart",
+      "yAxis": 1.6,
+      "label": {
+       "formatter": "{b}",
+       "position": "insideStart"
+      }
+     },
+     [
+      {
+       "name": "start: insideStart",
+       "coord": [
+        0,
+        0.3
+       ],
+       "label": {
+        "formatter": "insideStart",
+        "position": "insideStart"
+       }
+      },
+      {
+       "name": "end: insideStart",
+       "coord": [
+        3,
+        1
+       ]
+      }
+     ],
+     {
+      "name": "insideStartTop",
+      "yAxis": 1.6,
+      "label": {
+       "formatter": "{b}",
+       "position": "insideStartTop"
+      }
+     },
+     [
+      {
+       "name": "start: insideStartTop",
+       "coord": [
+        0,
+        0.3
+       ],
+       "label": {
+        "formatter": "insideStartTop",
+        "position": "insideStartTop"
+       }
+      },
+      {
+       "name": "end: insideStartTop",
+       "coord": [
+        3,
+        1
+       ]
+      }
+     ],
+     {
+      "name": "insideStartBottom",
+      "yAxis": 1.6,
+      "label": {
+       "formatter": "{b}",
+       "position": "insideStartBottom"
+      }
+     },
+     [
+      {
+       "name": "start: insideStartBottom",
+       "coord": [
+        0,
+        0.3
+       ],
+       "label": {
+        "formatter": "insideStartBottom",
+        "position": "insideStartBottom"
+       }
+      },
+      {
+       "name": "end: insideStartBottom",
+       "coord": [
+        3,
+        1
+       ]
+      }
+     ],
+     {
+      "name": "insideMiddle",
+      "yAxis": 1.4,
+      "label": {
+       "formatter": "{b}",
+       "position": "insideMiddle"
+      }
+     },
+     [
+      {
+       "name": "start: insideMiddle",
+       "coord": [
+        0,
+        0.3
+       ],
+       "label": {
+        "formatter": "insideMiddle / middle",
+        "position": "insideMiddle"
+       }
+      },
+      {
+       "name": "end: insideMiddle",
+       "coord": [
+        3,
+        1
+       ]
+      }
+     ],
+     {
+      "name": "insideMiddleTop",
+      "yAxis": 1.4,
+      "label": {
+       "formatter": "{b}",
+       "position": "insideMiddleTop"
+      }
+     },
+     [
+      {
+       "name": "start: insideMiddleTop",
+       "coord": [
+        0,
+        0.3
+       ],
+       "label": {
+        "formatter": "insideMiddleTop",
+        "position": "insideMiddleTop"
+       }
+      },
+      {
+       "name": "end: insideMiddleTop",
+       "coord": [
+        3,
+        1
+       ]
+      }
+     ],
+     {
+      "name": "insideMiddleBottom",
+      "yAxis": 1.4,
+      "label": {
+       "formatter": "{b}",
+       "position": "insideMiddleBottom"
+      }
+     },
+     [
+      {
+       "name": "start: insideMiddleBottom",
+       "coord": [
+        0,
+        0.3
+       ],
+       "label": {
+        "formatter": "insideMiddleBottom",
+        "position": "insideMiddleBottom"
+       }
+      },
+      {
+       "name": "end: insideMiddleBottom",
+       "coord": [
+        3,
+        1
+       ]
+      }
+     ],
+     {
+      "name": "insideEnd",
+      "yAxis": 1.2,
+      "label": {
+       "formatter": "{b}",
+       "position": "insideEnd"
+      }
+     },
+     [
+      {
+       "name": "start: insideEnd",
+       "coord": [
+        0,
+        0.3
+       ],
+       "label": {
+        "formatter": "insideEnd",
+        "position": "insideEnd"
+       }
+      },
+      {
+       "name": "end: insideEnd",
+       "coord": [
+        3,
+        1
+       ]
+      }
+     ],
+     {
+      "name": "insideEndTop",
+      "yAxis": 1.2,
+      "label": {
+       "formatter": "{b}",
+       "position": "insideEndTop"
+      }
+     },
+     [
+      {
+       "name": "start: insideEndTop",
+       "coord": [
+        0,
+        0.3
+       ],
+       "label": {
+        "formatter": "insideEndTop",
+        "position": "insideEndTop"
+       }
+      },
+      {
+       "name": "end: insideEndTop",
+       "coord": [
+        3,
+        1
+       ]
+      }
+     ],
+     {
+      "name": "insideEndBottom",
+      "yAxis": 1.2,
+      "label": {
+       "formatter": "{b}",
+       "position": "insideEndBottom"
+      }
+     },
+     [
+      {
+       "name": "start: insideEndBottom",
+       "coord": [
+        0,
+        0.3
+       ],
+       "label": {
+        "formatter": "insideEndBottom",
+        "position": "insideEndBottom"
+       }
+      },
+      {
+       "name": "end: insideEndBottom",
+       "coord": [
+        3,
+        1
+       ]
+      }
+     ]
+    ],
+    "label": {
+     "distance": [
+      20,
+      8
+     ]
+    }
+   }
+  }
+ ],
+ "grid": {
+  "top": 30,
+  "left": 60,
+  "right": 60,
+  "bottom": 40
+ }
+}

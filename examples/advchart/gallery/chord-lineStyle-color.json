@@ -1,0 +1,209 @@
+{
+ "tooltip": {},
+ "legend": {},
+ "series": [
+  {
+   "type": "chord",
+   "label": {
+    "show": true
+   },
+   "center": [
+    "16.666666666666664%",
+    "50%"
+   ],
+   "radius": [
+    "28%",
+    "32%"
+   ],
+   "lineStyle": {
+    "color": "source"
+   },
+   "data": [
+    {
+     "name": "A"
+    },
+    {
+     "name": "B"
+    },
+    {
+     "name": "C"
+    },
+    {
+     "name": "D"
+    }
+   ],
+   "links": [
+    {
+     "source": "A",
+     "target": "B",
+     "value": 30
+    },
+    {
+     "source": "A",
+     "target": "C",
+     "value": 20
+    },
+    {
+     "source": "B",
+     "target": "D",
+     "value": 10
+    },
+    {
+     "source": "C",
+     "target": "A",
+     "value": 15
+    },
+    {
+     "source": "D",
+     "target": "A",
+     "value": 25
+    }
+   ]
+  },
+  {
+   "type": "chord",
+   "label": {
+    "show": true
+   },
+   "center": [
+    "50%",
+    "50%"
+   ],
+   "radius": [
+    "28%",
+    "32%"
+   ],
+   "lineStyle": {
+    "color": "target"
+   },
+   "data": [
+    {
+     "name": "A"
+    },
+    {
+     "name": "B"
+    },
+    {
+     "name": "C"
+    },
+    {
+     "name": "D"
+    }
+   ],
+   "links": [
+    {
+     "source": "A",
+     "target": "B",
+     "value": 30
+    },
+    {
+     "source": "A",
+     "target": "C",
+     "value": 20
+    },
+    {
+     "source": "B",
+     "target": "D",
+     "value": 10
+    },
+    {
+     "source": "C",
+     "target": "A",
+     "value": 15
+    },
+    {
+     "source": "D",
+     "target": "A",
+     "value": 25
+    }
+   ]
+  },
+  {
+   "type": "chord",
+   "label": {
+    "show": true
+   },
+   "center": [
+    "83.33333333333334%",
+    "50%"
+   ],
+   "radius": [
+    "28%",
+    "32%"
+   ],
+   "lineStyle": {
+    "color": "gradient"
+   },
+   "data": [
+    {
+     "name": "A"
+    },
+    {
+     "name": "B"
+    },
+    {
+     "name": "C"
+    },
+    {
+     "name": "D"
+    }
+   ],
+   "links": [
+    {
+     "source": "A",
+     "target": "B",
+     "value": 30
+    },
+    {
+     "source": "A",
+     "target": "C",
+     "value": 20
+    },
+    {
+     "source": "B",
+     "target": "D",
+     "value": 10
+    },
+    {
+     "source": "C",
+     "target": "A",
+     "value": 15
+    },
+    {
+     "source": "D",
+     "target": "A",
+     "value": 25
+    }
+   ]
+  }
+ ],
+ "title": [
+  {
+   "text": "lineStyle.color",
+   "textStyle": {
+    "fontSize": 24
+   }
+  },
+  {
+   "text": "source",
+   "left": "16.666666666666664%",
+   "top": "25%",
+   "textAlign": "center",
+   "padding": 0
+  },
+  {
+   "text": "target",
+   "left": "50%",
+   "top": "25%",
+   "textAlign": "center",
+   "padding": 0
+  },
+  {
+   "text": "gradient",
+   "left": "83.33333333333334%",
+   "top": "25%",
+   "textAlign": "center",
+   "padding": 0
+  }
+ ]
+}

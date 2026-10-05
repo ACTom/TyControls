@@ -4,6 +4,8 @@ unit tyControls.StrConsts;
 
 interface
 
+uses SysUtils;
+
 { Central resourcestring table for the tyControls RUNTIME package — every user-facing
   diagnostic (ThemeLint warnings, CSS parser / value / StyleModel errors). English is the
   msgid; translations live in languages/tycontrols.strconsts.<lang>.po. See
@@ -441,9 +443,30 @@ resourcestring
   // Both reach the user through the chart's diagnostics list, so they are as
   // user-facing as any caption.
   rsTyChartNoSuchHandler = 'No formatter named ''%s'' is registered.';
+  rsTyOptTooDeep = 'The option is nested more than %d levels deep.';
   rsTyOptFunctionValue =
     'JavaScript functions cannot be used here. Write a template string such as '
   + '''{b}: {c}'', or the name of a registered handler such as ''@MyFormatter''.';
+  rsTyOptMergeNotObject = 'An option to merge must be an object.';
+  rsTyOptDuplicateId = 'Two %s components carry the id "%s".';
+  rsTyOptReplaceMergeBadType = 'replaceMerge names "%s", which is not a component main type.';
+  rsTyOptSetOptsNotObject = 'The setOption options must be an object.';
+
+  // --- AdvanceChart: the legend's selector buttons (ECharts' locale
+  // legend.selector.all / inverse; upstream's English is 'All' / 'Inv') ---
+  rsTyChartLegendSelectAll = 'All';
+  rsTyChartLegendSelectInverse = 'Inv';
+
+  // --- AdvanceChart: export and loading [Batch 106] ---
+  // The loading effect's default text. Upstream's is 'loading' and ECharts
+  // does not translate it; a control in a translated application should not
+  // be the one English word on the form, so this one is a resourcestring --
+  // and the English stays upstream's, so an untranslated build lays the
+  // effect out exactly as upstream does.
+  rsTyChartLoading = 'loading';
+  // What the export and loading calls raise for options that are not JSON.
+  rsTyChartExportOptsBad = 'The export options are not valid JSON.';
+  rsTyChartLoadingCfgBad = 'The loading options are not valid JSON.';
 
   // --- AdvanceChart: what the build could not honour ---
   // These reach the user through the chart's diagnostics list and through the
@@ -457,9 +480,11 @@ resourcestring
   rsTyChartYAxisNoGrid = 'yAxis[%d] names no grid, so it is not drawn';
   rsTyChartGridOneDirection =
     'grid[%d] has axes in only one direction, so it draws nothing';
+  rsTyChartPolarNoAxis = 'polar[%d] has no %s, so it is not drawn';
   rsTyChartSeriesNoType = 'series[%d] has no type, so it is not drawn';
   rsTyChartSeriesBadType = 'series[%d]: "%s" is not a series type';
   rsTyChartSeriesCoordSys = 'series[%d]: coordinateSystem "%s" is not built yet';
+  rsTyChartSeriesNoRenderer = 'series[%d]: the "%s" series type is not drawn yet';
   rsTyChartSeriesNoAxis = 'series[%d] names an axis that does not exist';
   rsTyChartSeriesAxesSplit =
     'series[%d]: xAxis[%d] and yAxis[%d] are not on one grid';
@@ -499,6 +524,129 @@ resourcestring
     + 'draw.';
   rsTyOptDiagMoreRows = 'and %d more like these.';
 
+{ ==================== which language the names come from ==================== }
+
+{ MOVED HERE FROM tyControls.Calendar, and the move is the point: a time AXIS
+  writes month names too, and the chart units are deliberately free of the LCL.
+  Left where it was, either the chart would have dragged Controls and BGRABitmap
+  into a pure scale unit, or it would have grown a second name table -- and a
+  library whose calendar says 八月 while its chart says Aug is worse than one
+  that says Aug twice. The names were always here; now the rule that picks them
+  is too. }
+
+type
+  { Where the calendar and the date-time picker take their month & weekday names
+    from. The two sources can legitimately disagree -- the OS locale is the
+    MACHINE's language, a loaded catalogue is the APP's -- and 3.0's bug was
+    picking the machine unconditionally: an app translated to English still
+    titled its calendar 八月 on a Chinese-locale Windows.
+
+      dnAuto         names follow a loaded translation when one is loaded,
+                     the OS locale otherwise (the default; see TyDateTimeNames)
+      dnLocale       always DefaultFormatSettings -- the pre-3.0 behaviour
+      dnTranslation  always the library resourcestrings (compile-time English
+                     until a catalogue patches them)
+
+    An app that wants names NEITHER source has (say, its own abbreviations)
+    already holds both pens: write DefaultFormatSettings and force dnLocale, or
+    ship a tycontrols catalogue and let dnAuto see it. There is deliberately no
+    third name store to keep in sync with those two. }
+  TTyDateTimeNameSource = (dnAuto, dnLocale, dnTranslation);
+
+var
+  { The app's explicit choice -- tier 1 of the precedence, set once at startup
+    (or on a language switch; the controls re-resolve on every paint). A global
+    and not a property because the app's language is one fact, not 40 per-form
+    facts -- same shape as TyLocaleFirstDayOfWeek and TyFallbackFontName. }
+  TyDateTimeNameSource: TTyDateTimeNameSource = dnAuto;
+
+const
+  { rsTyDateTimeNamesLang's COMPILE-TIME value, for comparing against its current
+    one. The comparison is the whole load-detector, so the two literals must stay
+    identical -- test.calendar pins them. Public so tests and diagnostic code name
+    the marker instead of repeating the string. }
+  TyDateTimeNamesUntranslatedMark = '__locale__';
+
+{ True when TyDateTimeNames will take the names from the resourcestrings rather
+  than from DefaultFormatSettings. Under dnAuto this is "has any catalogue been
+  loaded": every shipped tycontrols catalogue (including the English one, whose
+  name entries equal their msgids) translates the rsTyDateTimeNamesLang sentinel
+  to its language code, so the sentinel differing from its compile-time value is
+  proof of a deliberate load. It cannot false-positive -- nothing else in the
+  process writes resourcestrings -- and a hand-rolled catalogue that omits the
+  sentinel keeps OS-locale names, which is the documented opt-out. }
+function TyDateTimeNamesTranslated: Boolean;
+
+{ The format settings the calendar and the picker RENDER with: the process
+  DefaultFormatSettings, with the month/weekday names replaced from the library
+  resourcestrings when TyDateTimeNamesTranslated says so. Everything that is a
+  CONVENTION rather than a language -- separators, date order, the short-date
+  pattern an empty DateFormat falls back to -- always stays the locale's: a
+  Chinese-locale machine forced to English still writes 2026/8/7, it just says
+  'August' where a name is asked for. Resolved at call time, never cached, so a
+  catalogue loaded (or switched) after startup is honoured by the next paint. }
+function TyDateTimeNames: TFormatSettings;
+
+
 implementation
+
+function TyDateTimeNamesTranslated: Boolean;
+begin
+  case TyDateTimeNameSource of
+    dnLocale:      Result := False;
+    dnTranslation: Result := True;
+  else // dnAuto
+    { Read the resourcestring EVERY time, never a copy taken at unit init:
+      catalogues load from the program body, long after this unit initialised,
+      and an init-time copy would freeze the English default forever. }
+    Result := rsTyDateTimeNamesLang <> TyDateTimeNamesUntranslatedMark;
+  end;
+end;
+
+{ TyDateTimeNames }
+
+function TyDateTimeNames: TFormatSettings;
+begin
+  Result := DefaultFormatSettings;
+  if not TyDateTimeNamesTranslated then Exit;
+  Result.LongMonthNames[1]   := rsTyLongMonth1;
+  Result.LongMonthNames[2]   := rsTyLongMonth2;
+  Result.LongMonthNames[3]   := rsTyLongMonth3;
+  Result.LongMonthNames[4]   := rsTyLongMonth4;
+  Result.LongMonthNames[5]   := rsTyLongMonth5;
+  Result.LongMonthNames[6]   := rsTyLongMonth6;
+  Result.LongMonthNames[7]   := rsTyLongMonth7;
+  Result.LongMonthNames[8]   := rsTyLongMonth8;
+  Result.LongMonthNames[9]   := rsTyLongMonth9;
+  Result.LongMonthNames[10]  := rsTyLongMonth10;
+  Result.LongMonthNames[11]  := rsTyLongMonth11;
+  Result.LongMonthNames[12]  := rsTyLongMonth12;
+  Result.ShortMonthNames[1]  := rsTyShortMonth1;
+  Result.ShortMonthNames[2]  := rsTyShortMonth2;
+  Result.ShortMonthNames[3]  := rsTyShortMonth3;
+  Result.ShortMonthNames[4]  := rsTyShortMonth4;
+  Result.ShortMonthNames[5]  := rsTyShortMonth5;
+  Result.ShortMonthNames[6]  := rsTyShortMonth6;
+  Result.ShortMonthNames[7]  := rsTyShortMonth7;
+  Result.ShortMonthNames[8]  := rsTyShortMonth8;
+  Result.ShortMonthNames[9]  := rsTyShortMonth9;
+  Result.ShortMonthNames[10] := rsTyShortMonth10;
+  Result.ShortMonthNames[11] := rsTyShortMonth11;
+  Result.ShortMonthNames[12] := rsTyShortMonth12;
+  Result.LongDayNames[1]     := rsTyLongDay1;
+  Result.LongDayNames[2]     := rsTyLongDay2;
+  Result.LongDayNames[3]     := rsTyLongDay3;
+  Result.LongDayNames[4]     := rsTyLongDay4;
+  Result.LongDayNames[5]     := rsTyLongDay5;
+  Result.LongDayNames[6]     := rsTyLongDay6;
+  Result.LongDayNames[7]     := rsTyLongDay7;
+  Result.ShortDayNames[1]    := rsTyShortDay1;
+  Result.ShortDayNames[2]    := rsTyShortDay2;
+  Result.ShortDayNames[3]    := rsTyShortDay3;
+  Result.ShortDayNames[4]    := rsTyShortDay4;
+  Result.ShortDayNames[5]    := rsTyShortDay5;
+  Result.ShortDayNames[6]    := rsTyShortDay6;
+  Result.ShortDayNames[7]    := rsTyShortDay7;
+end;
 
 end.

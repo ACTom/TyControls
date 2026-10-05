@@ -1,0 +1,1506 @@
+{
+ "legend": {
+  "show": true,
+  "bottom": 40
+ },
+ "matrix": {
+  "x": {
+   "data": [
+    {
+     "value": "Primary School",
+     "children": [
+      "Grade 1",
+      "Grade 2",
+      "Grade 3",
+      "Grade 4",
+      "Grade 5"
+     ]
+    },
+    {
+     "value": "High School",
+     "children": [
+      "Grade 6",
+      "Grade 7",
+      "Grade 8",
+      "Grade 9"
+     ]
+    }
+   ]
+  },
+  "y": {
+   "data": [
+    "Class 1",
+    "Class 2",
+    "Class 3",
+    "Class 4",
+    "Class 5",
+    "Class 6"
+   ]
+  },
+  "top": 80,
+  "bottom": 80
+ },
+ "series": [
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 1",
+    "Class 1"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 20,
+     "name": "Male"
+    },
+    {
+     "value": 11,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 1",
+    "Class 2"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 20,
+     "name": "Male"
+    },
+    {
+     "value": 19,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 1",
+    "Class 3"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 16,
+     "name": "Male"
+    },
+    {
+     "value": 12,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 1",
+    "Class 4"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 12,
+     "name": "Male"
+    },
+    {
+     "value": 13,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 1",
+    "Class 5"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 11,
+     "name": "Male"
+    },
+    {
+     "value": 11,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 1",
+    "Class 6"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 14,
+     "name": "Male"
+    },
+    {
+     "value": 14,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 2",
+    "Class 1"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 17,
+     "name": "Male"
+    },
+    {
+     "value": 20,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 2",
+    "Class 2"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 18,
+     "name": "Male"
+    },
+    {
+     "value": 14,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 2",
+    "Class 3"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 15,
+     "name": "Male"
+    },
+    {
+     "value": 14,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 2",
+    "Class 4"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 16,
+     "name": "Male"
+    },
+    {
+     "value": 15,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 2",
+    "Class 5"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 16,
+     "name": "Male"
+    },
+    {
+     "value": 15,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 2",
+    "Class 6"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 15,
+     "name": "Male"
+    },
+    {
+     "value": 16,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 3",
+    "Class 1"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 11,
+     "name": "Male"
+    },
+    {
+     "value": 16,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 3",
+    "Class 2"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 18,
+     "name": "Male"
+    },
+    {
+     "value": 19,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 3",
+    "Class 3"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 12,
+     "name": "Male"
+    },
+    {
+     "value": 19,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 3",
+    "Class 4"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 16,
+     "name": "Male"
+    },
+    {
+     "value": 11,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 3",
+    "Class 5"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 13,
+     "name": "Male"
+    },
+    {
+     "value": 19,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 3",
+    "Class 6"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 13,
+     "name": "Male"
+    },
+    {
+     "value": 20,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 4",
+    "Class 1"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 13,
+     "name": "Male"
+    },
+    {
+     "value": 18,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 4",
+    "Class 2"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 10,
+     "name": "Male"
+    },
+    {
+     "value": 18,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 4",
+    "Class 3"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 19,
+     "name": "Male"
+    },
+    {
+     "value": 13,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 4",
+    "Class 4"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 14,
+     "name": "Male"
+    },
+    {
+     "value": 19,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 4",
+    "Class 5"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 11,
+     "name": "Male"
+    },
+    {
+     "value": 17,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 4",
+    "Class 6"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 11,
+     "name": "Male"
+    },
+    {
+     "value": 15,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 5",
+    "Class 1"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 20,
+     "name": "Male"
+    },
+    {
+     "value": 11,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 5",
+    "Class 2"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 11,
+     "name": "Male"
+    },
+    {
+     "value": 19,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 5",
+    "Class 3"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 17,
+     "name": "Male"
+    },
+    {
+     "value": 17,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 5",
+    "Class 4"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 13,
+     "name": "Male"
+    },
+    {
+     "value": 18,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 5",
+    "Class 5"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 20,
+     "name": "Male"
+    },
+    {
+     "value": 14,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 5",
+    "Class 6"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 17,
+     "name": "Male"
+    },
+    {
+     "value": 16,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 6",
+    "Class 1"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 15,
+     "name": "Male"
+    },
+    {
+     "value": 16,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 6",
+    "Class 2"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 12,
+     "name": "Male"
+    },
+    {
+     "value": 19,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 6",
+    "Class 3"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 17,
+     "name": "Male"
+    },
+    {
+     "value": 11,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 6",
+    "Class 4"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 16,
+     "name": "Male"
+    },
+    {
+     "value": 17,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 6",
+    "Class 5"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 12,
+     "name": "Male"
+    },
+    {
+     "value": 13,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 6",
+    "Class 6"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 15,
+     "name": "Male"
+    },
+    {
+     "value": 15,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 7",
+    "Class 1"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 11,
+     "name": "Male"
+    },
+    {
+     "value": 17,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 7",
+    "Class 2"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 13,
+     "name": "Male"
+    },
+    {
+     "value": 11,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 7",
+    "Class 3"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 11,
+     "name": "Male"
+    },
+    {
+     "value": 19,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 7",
+    "Class 4"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 16,
+     "name": "Male"
+    },
+    {
+     "value": 20,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 7",
+    "Class 5"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 19,
+     "name": "Male"
+    },
+    {
+     "value": 18,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 7",
+    "Class 6"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 14,
+     "name": "Male"
+    },
+    {
+     "value": 12,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 8",
+    "Class 1"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 15,
+     "name": "Male"
+    },
+    {
+     "value": 10,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 8",
+    "Class 2"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 18,
+     "name": "Male"
+    },
+    {
+     "value": 16,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 8",
+    "Class 3"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 11,
+     "name": "Male"
+    },
+    {
+     "value": 12,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 8",
+    "Class 4"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 11,
+     "name": "Male"
+    },
+    {
+     "value": 13,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 8",
+    "Class 5"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 12,
+     "name": "Male"
+    },
+    {
+     "value": 14,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 8",
+    "Class 6"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 11,
+     "name": "Male"
+    },
+    {
+     "value": 14,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 9",
+    "Class 1"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 14,
+     "name": "Male"
+    },
+    {
+     "value": 19,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 9",
+    "Class 2"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 11,
+     "name": "Male"
+    },
+    {
+     "value": 13,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 9",
+    "Class 3"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 14,
+     "name": "Male"
+    },
+    {
+     "value": 11,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 9",
+    "Class 4"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 13,
+     "name": "Male"
+    },
+    {
+     "value": 19,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 9",
+    "Class 5"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 13,
+     "name": "Male"
+    },
+    {
+     "value": 14,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  },
+  {
+   "type": "pie",
+   "coordinateSystem": "matrix",
+   "center": [
+    "Grade 9",
+    "Class 6"
+   ],
+   "radius": 18,
+   "data": [
+    {
+     "value": 18,
+     "name": "Male"
+    },
+    {
+     "value": 19,
+     "name": "Female"
+    }
+   ],
+   "label": {
+    "show": false
+   },
+   "emphasis": {
+    "label": {
+     "show": false
+    }
+   }
+  }
+ ],
+ "tooltip": {
+  "show": true
+ }
+}

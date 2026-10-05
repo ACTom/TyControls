@@ -1,11 +1,11 @@
 object MainForm: TMainForm
-  Left = 220
-  Height = 620
-  Top = 100
-  Width = 980
+  Left = 180
+  Height = 720
+  Top = 90
+  Width = 1180
   Caption = 'TyControls — advchart (TTyAdvanceChart)'
-  ClientHeight = 620
-  ClientWidth = 980
+  ClientHeight = 720
+  ClientWidth = 1180
   Font.Height = -12
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -13,20 +13,20 @@ object MainForm: TMainForm
   TitleBar = TitleBar1
   object Surface: TTyFormSurface
     Left = 0
-    Height = 620
+    Height = 720
     Top = 0
-    Width = 980
+    Width = 1180
     Align = alClient
     object TitleBar1: TTyTitleBar
       Left = 0
       Height = 34
       Top = 0
-      Width = 980
+      Width = 1180
       Align = alTop
-      Caption = 'TTyAdvanceChart  ·  TyControls'
+      Caption = 'TTyAdvanceChart  ·  the Apache ECharts gallery'
       TitleAlignment = taLeftJustify
       object DarkSwitch: TTyToggleSwitch
-        Left = 632
+        Left = 832
         Height = 24
         Top = 5
         Width = 74
@@ -35,7 +35,7 @@ object MainForm: TMainForm
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
-        Left = 714
+        Left = 914
         Height = 26
         Top = 4
         Width = 120
@@ -43,55 +43,66 @@ object MainForm: TMainForm
         OnChange = ThemeComboChange
       end
     end
-    object BtnBars: TTyButton
-      Left = 16
-      Height = 30
-      Top = 46
-      Width = 96
-      Caption = 'Bars'
-      OnClick = BtnBarsClick
+    object CatTabs: TTyTabSet
+      Left = 0
+      Height = 32
+      Top = 34
+      Width = 1180
+      Anchors = [akTop, akLeft, akRight]
+      MultiLine = True
+      OnChange = CatTabsChange
     end
-    object BtnTwoAxes: TTyButton
-      Left = 120
-      Height = 30
-      Top = 46
-      Width = 132
-      Caption = 'Two y axes'
-      OnClick = BtnTwoAxesClick
-    end
-    object BtnApply: TTyButton
-      Left = 260
-      Height = 30
-      Top = 46
-      Width = 96
-      Caption = 'Apply'
-      OnClick = BtnApplyClick
+    object ExampleList: TTyListBox
+      Left = 12
+      Height = 590
+      Top = 78
+      Width = 250
+      Anchors = [akTop, akLeft, akBottom]
+      OnChange = ExampleListChange
     end
     object OptionMemo: TTyMemo
-      Left = 16
-      Height = 420
-      Top = 88
-      Width = 400
+      Left = 272
+      Height = 460
+      Top = 78
+      Width = 330
       Anchors = [akTop, akLeft, akBottom]
       ScrollBars = ssAutoBoth
       WordWrap = False
     end
-    object LblError: TTyLabel
-      Left = 16
-      Height = 84
-      Top = 520
-      Width = 400
+    object BtnApply: TTyButton
+      Left = 272
+      Height = 30
+      Top = 548
+      Width = 100
       Anchors = [akLeft, akBottom]
+      Caption = 'Apply'
+      OnClick = BtnApplyClick
+    end
+    object BtnShot: TTyButton
+      Left = 380
+      Height = 30
+      Top = 548
+      Width = 120
+      Anchors = [akLeft, akBottom]
+      Caption = 'Save PNG'
+      OnClick = BtnShotClick
+    end
+    object Chart: TTyAdvanceChart
+      Left = 612
+      Height = 460
+      Top = 78
+      Width = 556
+      Anchors = [akTop, akLeft, akRight, akBottom]
+    end
+    object LblStatus: TTyLabel
+      Left = 612
+      Height = 120
+      Top = 548
+      Width = 556
+      Anchors = [akLeft, akRight, akBottom]
       AutoSize = False
       Caption = ''
       WordWrap = True
-    end
-    object Chart: TTyAdvanceChart
-      Left = 432
-      Height = 516
-      Top = 88
-      Width = 532
-      Anchors = [akTop, akLeft, akRight, akBottom]
     end
   end
 end

@@ -1,0 +1,9487 @@
+{
+ "source": "ECharts 6.1.0",
+ "seed": 2463534242,
+ "cases": [
+  {
+   "name": "no legend at all",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 78,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 78,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 360,
+       "py": 158,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 216,
+       "cpy": 54,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 184,
+       "cpy": 182,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [],
+   "resized": null
+  },
+  {
+   "name": "a legend of everything",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "legend": {}
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 78,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 78,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 360,
+       "py": 158,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 216,
+       "cpy": 54,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 184,
+       "cpy": 182,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "X",
+      "Y"
+     ],
+     "selected": [
+      true,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "Y switched off",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "legend": {
+     "selected": {
+      "Y": false
+     }
+    }
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 78,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 360,
+       "py": 158,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "X",
+      "Y"
+     ],
+     "selected": [
+      true,
+      false
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "X switched off",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "legend": {
+     "selected": {
+      "X": false
+     }
+    }
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 78,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "X",
+      "Y"
+     ],
+     "selected": [
+      false,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "X off without being listed",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "legend": {
+     "data": [
+      "Y"
+     ],
+     "selected": {
+      "X": false
+     }
+    }
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 78,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "Y"
+     ],
+     "selected": [
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "off by every falsy word",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "legend": {
+     "selected": {
+      "X": null,
+      "Y": 0
+     }
+    }
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "X",
+      "Y"
+     ],
+     "selected": [
+      false,
+      false
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "a hidden legend still filters",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "legend": {
+     "show": false,
+     "selected": {
+      "X": false
+     }
+    }
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 78,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "X",
+      "Y"
+     ],
+     "selected": [
+      false,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "two legends, one says no",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "legend": [
+     {},
+     {
+      "selected": {
+       "Y": false
+      }
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 78,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 360,
+       "py": 158,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "X",
+      "Y"
+     ],
+     "selected": [
+      true,
+      true
+     ]
+    },
+    {
+     "names": [
+      "X",
+      "Y"
+     ],
+     "selected": [
+      true,
+      false
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "single mode keeps the first",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "legend": {
+     "selectedMode": "single"
+    }
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 78,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 360,
+       "py": 158,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "X",
+      "Y"
+     ],
+     "selected": [
+      true,
+      false
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "single mode with a nameless first category",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {},
+       {
+        "name": "X"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "legend": {
+     "selectedMode": "single"
+    }
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 78,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 360,
+       "py": 158,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "",
+       "fill": "#111111"
+      },
+      {
+       "name": "X",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "",
+      "X"
+     ],
+     "selected": [
+      true,
+      false
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "an index past the end and a name nobody declared",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 5
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": "Nope"
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "legend": {}
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 78,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "X",
+      "Y"
+     ],
+     "selected": [
+      true,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "the same, with no legend",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 5
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": "Nope"
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 78,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 78,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 360,
+       "py": 158,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 216,
+       "cpy": 54,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 184,
+       "cpy": 182,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [],
+   "resized": null
+  },
+  {
+   "name": "a numeric string category is a name",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": "1"
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "legend": {}
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 78,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 360,
+       "py": 158,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "X",
+      "Y"
+     ],
+     "selected": [
+      true,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "categories written as bare strings",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       "X",
+       "Y"
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": "X"
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "legend": {}
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 78,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 360,
+       "py": 158,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "",
+       "fill": "#111111"
+      },
+      {
+       "name": "",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      ""
+     ],
+     "selected": [
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "no categories and a legend",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "legend": {}
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": []
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "G"
+     ],
+     "selected": [
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "a numeric category name",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": 5
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": "5"
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "legend": {
+     "selected": {
+      "5": false
+     }
+    }
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 78,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "5",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "5",
+      "Y"
+     ],
+     "selected": [
+      false,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "a category naming the series itself",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": "G"
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "legend": {}
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 78,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 78,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 360,
+       "py": 158,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 216,
+       "cpy": 54,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 184,
+       "cpy": 182,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "X",
+      "Y"
+     ],
+     "selected": [
+      true,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "two categories of one name",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X",
+        "itemStyle": {
+         "color": "#ff0000"
+        }
+       },
+       {
+        "name": "X"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": "X"
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 1
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "legend": {
+     "selected": {
+      "X": false
+     }
+    }
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#ff0000"
+      },
+      {
+       "name": "X",
+       "fill": "#111111"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "X"
+     ],
+     "selected": [
+      false
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "duplicates by name colour by the last",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X",
+        "itemStyle": {
+         "color": "#ff0000"
+        }
+       },
+       {
+        "name": "X"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": "X"
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 1
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 78,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 78,
+       "fill": "#ff0000",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 360,
+       "py": 158,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 216,
+       "cpy": 54,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 184,
+       "cpy": 182,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#ff0000"
+      },
+      {
+       "name": "X",
+       "fill": "#111111"
+      }
+     ]
+    }
+   ],
+   "legends": [],
+   "resized": null
+  },
+  {
+   "name": "a category colour, a node colour, a category symbol",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": false,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y",
+        "symbol": "rect",
+        "symbolSize": 20
+       }
+      ],
+      "data": [
+       {
+        "name": "n0",
+        "x": 0,
+        "y": 0,
+        "category": 1,
+        "itemStyle": {
+         "color": "#ff0000"
+        }
+       },
+       {
+        "name": "n1",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "n2",
+        "x": 20,
+        "y": 5,
+        "category": 0
+       },
+       {
+        "name": "n3",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       }
+      ],
+      "lineStyle": {
+       "color": "source"
+      }
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 78,
+       "fill": "#ff0000",
+       "symbol": "rect"
+      },
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 78,
+       "fill": "#222222",
+       "symbol": "rect"
+      },
+      {
+       "raw": 2,
+       "px": 360,
+       "py": 158,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#222222"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#222222"
+      }
+     ],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [],
+   "resized": null
+  },
+  {
+   "name": "edges coloured by their target",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": false,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "n0",
+        "x": 0,
+        "y": 0,
+        "category": 1,
+        "itemStyle": {
+         "color": "#ff0000"
+        }
+       },
+       {
+        "name": "n1",
+        "x": 10,
+        "y": 0,
+        "category": 0
+       }
+      ],
+      "links": [
+       {
+        "source": 1,
+        "target": 0
+       }
+      ],
+      "lineStyle": {
+       "color": "target"
+      }
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 150,
+       "fill": "#ff0000",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 360,
+       "py": 150,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#222222"
+      }
+     ],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [],
+   "resized": null
+  },
+  {
+   "name": "the series palette before the chart one",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y",
+        "itemStyle": {
+         "color": "#0000ff"
+        }
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ],
+      "color": [
+       "#aa0000",
+       "#00aa00"
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#aa0000",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 78,
+       "fill": "#aa0000",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 78,
+       "fill": "#0000ff",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 360,
+       "py": 158,
+       "fill": "#aa0000",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#aa0000",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 216,
+       "cpy": 54,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 184,
+       "cpy": 182,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#aa0000"
+      },
+      {
+       "name": "Y",
+       "fill": "#0000ff"
+      }
+     ]
+    }
+   ],
+   "legends": [],
+   "resized": null
+  },
+  {
+   "name": "a series itemStyle colours every category",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ],
+      "itemStyle": {
+       "color": "#abcdef"
+      }
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#abcdef",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 78,
+       "fill": "#abcdef",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 78,
+       "fill": "#abcdef",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 360,
+       "py": 158,
+       "fill": "#abcdef",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#abcdef",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 216,
+       "cpy": 54,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 184,
+       "cpy": 182,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#abcdef"
+      },
+      {
+       "name": "Y",
+       "fill": "#abcdef"
+      }
+     ]
+    }
+   ],
+   "legends": [],
+   "resized": null
+  },
+  {
+   "name": "two graphs share one palette cursor",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333",
+     "#444444"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G1",
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 1,
+        "y": 1,
+        "category": 1
+       }
+      ]
+     },
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G2",
+      "categories": [
+       {
+        "name": "Z"
+       },
+       {
+        "name": "X"
+       }
+      ],
+      "data": [
+       {
+        "name": "c",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 1,
+        "y": 1,
+        "category": 1
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 80,
+       "py": 30,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 320,
+       "py": 270,
+       "fill": "#222222",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    },
+    {
+     "index": 1,
+     "seriesFill": "#222222",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 80,
+       "py": 30,
+       "fill": "#333333",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 320,
+       "py": 270,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "Z",
+       "fill": "#333333"
+      },
+      {
+       "name": "X",
+       "fill": "#111111"
+      }
+     ]
+    }
+   ],
+   "legends": [],
+   "resized": null
+  },
+  {
+   "name": "a graph switched off takes no slot",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333",
+     "#444444"
+    ],
+    "legend": {
+     "data": [
+      "G1",
+      "Z",
+      "W"
+     ],
+     "selected": {
+      "G1": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G1",
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 1,
+        "y": 1,
+        "category": 1
+       }
+      ]
+     },
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G2",
+      "categories": [
+       {
+        "name": "Z"
+       },
+       {
+        "name": "W"
+       }
+      ],
+      "data": [
+       {
+        "name": "c",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 1,
+        "y": 1,
+        "category": 1
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 1,
+     "seriesFill": "#222222",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 80,
+       "py": 30,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 320,
+       "py": 270,
+       "fill": "#222222",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "Z",
+       "fill": "#111111"
+      },
+      {
+       "name": "W",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "G1",
+      "Z",
+      "W"
+     ],
+     "selected": [
+      false,
+      true,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "nameless categories take fresh slots",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333",
+     "#444444"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "categories": [
+       {},
+       {},
+       {
+        "name": "X"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 1,
+        "y": 1,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 2,
+        "y": 0,
+        "category": 2
+       }
+      ]
+     },
+     {
+      "type": "graph",
+      "layout": "none",
+      "categories": [
+       {}
+      ],
+      "data": [
+       {
+        "name": "d",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 70,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 230,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 360,
+       "py": 70,
+       "fill": "#333333",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "",
+       "fill": "#111111"
+      },
+      {
+       "name": "",
+       "fill": "#222222"
+      },
+      {
+       "name": "X",
+       "fill": "#333333"
+      }
+     ]
+    },
+    {
+     "index": 1,
+     "seriesFill": "#222222",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 200,
+       "py": 150,
+       "fill": "#444444",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "",
+       "fill": "#444444"
+      }
+     ]
+    }
+   ],
+   "legends": [],
+   "resized": null
+  },
+  {
+   "name": "a long palette then a short one",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#aaaaaa",
+     "#bbbbbb"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "color": [
+       "#111111",
+       "#222222",
+       "#333333",
+       "#444444",
+       "#555555"
+      ],
+      "categories": [
+       {
+        "name": "P"
+       },
+       {
+        "name": "Q"
+       },
+       {
+        "name": "R"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 1,
+        "y": 1,
+        "category": 2
+       }
+      ]
+     },
+     {
+      "type": "graph",
+      "layout": "none",
+      "categories": [
+       {
+        "name": "S"
+       }
+      ],
+      "data": [
+       {
+        "name": "c",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 80,
+       "py": 30,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 320,
+       "py": 270,
+       "fill": "#333333",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "P",
+       "fill": "#111111"
+      },
+      {
+       "name": "Q",
+       "fill": "#222222"
+      },
+      {
+       "name": "R",
+       "fill": "#333333"
+      }
+     ]
+    },
+    {
+     "index": 1,
+     "seriesFill": "#aaaaaa",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 200,
+       "py": 150,
+       "fill": null,
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "S",
+       "fill": null
+      }
+     ]
+    }
+   ],
+   "legends": [],
+   "resized": null
+  },
+  {
+   "name": "a pie slice and a category share a name",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333",
+     "#444444"
+    ],
+    "legend": {
+     "selected": {
+      "X": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     },
+     {
+      "type": "pie",
+      "data": [
+       {
+        "name": "X",
+        "value": 1
+       },
+       {
+        "name": "Q",
+        "value": 2
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 78,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "X",
+      "Y",
+      "Q"
+     ],
+     "selected": [
+      false,
+      true,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "a graph off by its series name, which the legend does not list",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333",
+     "#444444"
+    ],
+    "legend": {
+     "data": [
+      "Z",
+      "W"
+     ],
+     "selected": {
+      "G1": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G1",
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 0
+       }
+      ]
+     },
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G2",
+      "categories": [
+       {
+        "name": "Z"
+       },
+       {
+        "name": "W"
+       }
+      ],
+      "data": [
+       {
+        "name": "c",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 1,
+        "y": 1,
+        "category": 1
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 1,
+     "seriesFill": "#222222",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 80,
+       "py": 30,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 320,
+       "py": 270,
+       "fill": "#222222",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "Z",
+       "fill": "#111111"
+      },
+      {
+       "name": "W",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "Z",
+      "W"
+     ],
+     "selected": [
+      true,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "a series-level category",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": null
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9,
+        "category": "X"
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ],
+      "category": 1
+     }
+    ],
+    "legend": {
+     "selected": {
+      "Y": false
+     }
+    }
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 78,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "X",
+      "Y"
+     ],
+     "selected": [
+      true,
+      false
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "a series-level category by name",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ],
+      "category": "Y"
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 110,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 110,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 360,
+       "py": 190,
+       "fill": "#222222",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 216,
+       "cpy": 86,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 184,
+       "cpy": 214,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [],
+   "resized": null
+  },
+  {
+   "name": "a root-level category",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "category": 1,
+    "legend": {}
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 110,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 110,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 360,
+       "py": 190,
+       "fill": "#222222",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 216,
+       "cpy": 86,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 184,
+       "cpy": 214,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "X",
+      "Y"
+     ],
+     "selected": [
+      true,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "a root itemStyle colours every category",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "itemStyle": {
+     "color": "#abcdef"
+    }
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 150,
+       "fill": "#abcdef",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 360,
+       "py": 150,
+       "fill": "#abcdef",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#abcdef"
+      },
+      {
+       "name": "Y",
+       "fill": "#abcdef"
+      }
+     ]
+    }
+   ],
+   "legends": [],
+   "resized": null
+  },
+  {
+   "name": "a series colour beats a root one",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ],
+      "itemStyle": {
+       "color": "#123456"
+      }
+     }
+    ],
+    "itemStyle": {
+     "color": "#abcdef"
+    }
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#123456",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 150,
+       "fill": "#123456",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 360,
+       "py": 150,
+       "fill": "#123456",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#123456"
+      },
+      {
+       "name": "Y",
+       "fill": "#123456"
+      }
+     ]
+    }
+   ],
+   "legends": [],
+   "resized": null
+  },
+  {
+   "name": "a gradient category takes no slot",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X",
+        "itemStyle": {
+         "color": {
+          "type": "linear",
+          "x": 0,
+          "y": 0,
+          "x2": 1,
+          "y2": 0,
+          "colorStops": [
+           {
+            "offset": 0,
+            "color": "#00ff00"
+           },
+           {
+            "offset": 1,
+            "color": "#0000ff"
+           }
+          ]
+         }
+        }
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "legend": {}
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 150,
+       "fill": "#00ff00",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 360,
+       "py": 150,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#00ff00"
+      },
+      {
+       "name": "Y",
+       "fill": "#111111"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "X",
+      "Y"
+     ],
+     "selected": [
+      true,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "a gradient series colour colours every category",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ],
+      "itemStyle": {
+       "color": {
+        "type": "radial",
+        "x": 0.5,
+        "y": 0.5,
+        "r": 0.5,
+        "colorStops": [
+         {
+          "offset": 0,
+          "color": "#ff00ff"
+         },
+         {
+          "offset": 1,
+          "color": "#000000"
+         }
+        ]
+       }
+      }
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#ff00ff",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 150,
+       "fill": "#ff00ff",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 360,
+       "py": 150,
+       "fill": "#ff00ff",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#ff00ff"
+      },
+      {
+       "name": "Y",
+       "fill": "#ff00ff"
+      }
+     ]
+    }
+   ],
+   "legends": [],
+   "resized": null
+  },
+  {
+   "name": "a category painted none",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X",
+        "itemStyle": {
+         "color": "none"
+        }
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "legend": {}
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 150,
+       "fill": "none",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 360,
+       "py": 150,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "none"
+      },
+      {
+       "name": "Y",
+       "fill": "#111111"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "X",
+      "Y"
+     ],
+     "selected": [
+      true,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "a category colour nobody can paint takes no slot",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X",
+        "itemStyle": {
+         "color": "reddish"
+        }
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "legend": {}
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 150,
+       "fill": "reddish",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 360,
+       "py": 150,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "reddish"
+      },
+      {
+       "name": "Y",
+       "fill": "#111111"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "X",
+      "Y"
+     ],
+     "selected": [
+      true,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "a falsy category colour goes to the palette",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X",
+        "itemStyle": {
+         "color": ""
+        }
+       },
+       {
+        "name": "Y",
+        "itemStyle": {
+         "color": 0
+        }
+       },
+       {
+        "name": "Z"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 5,
+        "y": 5,
+        "category": 2
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ],
+      "itemStyle": {
+       "color": "#abcdef"
+      }
+     }
+    ],
+    "legend": {}
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#abcdef",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 70,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 360,
+       "py": 70,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 200,
+       "py": 230,
+       "fill": "#abcdef",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 152,
+       "cpy": 118,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 88,
+       "cpy": 182,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      },
+      {
+       "name": "Z",
+       "fill": "#abcdef"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "X",
+      "Y",
+      "Z"
+     ],
+     "selected": [
+      true,
+      true,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "a null category colour asks the series",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X",
+        "itemStyle": {
+         "color": null
+        }
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ],
+      "itemStyle": {
+       "color": "#abcdef"
+      }
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#abcdef",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 150,
+       "fill": "#abcdef",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 360,
+       "py": 150,
+       "fill": "#abcdef",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#abcdef"
+      },
+      {
+       "name": "Y",
+       "fill": "#abcdef"
+      }
+     ]
+    }
+   ],
+   "legends": [],
+   "resized": null
+  },
+  {
+   "name": "a failed pick is remembered by name",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#aaaaaa",
+     "#bbbbbb"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "color": [
+       "#111111",
+       "#222222",
+       "#333333",
+       "#444444",
+       "#555555"
+      ],
+      "categories": [
+       {
+        "name": "P"
+       },
+       {
+        "name": "Q"
+       },
+       {
+        "name": "R"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 1,
+        "y": 1,
+        "category": 2
+       }
+      ]
+     },
+     {
+      "type": "graph",
+      "layout": "none",
+      "color": [
+       "#a10000",
+       "#a20000"
+      ],
+      "categories": [
+       {
+        "name": "S"
+       },
+       {}
+      ],
+      "data": [
+       {
+        "name": "c",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 1,
+        "y": 1,
+        "category": 1
+       }
+      ]
+     },
+     {
+      "type": "graph",
+      "layout": "none",
+      "categories": [
+       {
+        "name": "S"
+       },
+       {
+        "name": "T"
+       }
+      ],
+      "data": [
+       {
+        "name": "e",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "f",
+        "x": 1,
+        "y": 1,
+        "category": 1
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 80,
+       "py": 30,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 320,
+       "py": 270,
+       "fill": "#333333",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "P",
+       "fill": "#111111"
+      },
+      {
+       "name": "Q",
+       "fill": "#222222"
+      },
+      {
+       "name": "R",
+       "fill": "#333333"
+      }
+     ]
+    },
+    {
+     "index": 1,
+     "seriesFill": "#a10000",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 80,
+       "py": 30,
+       "fill": null,
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 320,
+       "py": 270,
+       "fill": "#a10000",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "S",
+       "fill": null
+      },
+      {
+       "name": "",
+       "fill": "#a10000"
+      }
+     ]
+    },
+    {
+     "index": 2,
+     "seriesFill": "#aaaaaa",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 80,
+       "py": 30,
+       "fill": null,
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 320,
+       "py": 270,
+       "fill": "#bbbbbb",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "S",
+       "fill": null
+      },
+      {
+       "name": "T",
+       "fill": "#bbbbbb"
+      }
+     ]
+    }
+   ],
+   "legends": [],
+   "resized": null
+  },
+  {
+   "name": "a nameless pick past a short own palette asks the chart",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#aaaaaa",
+     "#bbbbbb",
+     "#cccccc"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "color": [
+       "#111111",
+       "#222222",
+       "#333333",
+       "#444444",
+       "#555555"
+      ],
+      "categories": [
+       {
+        "name": "P"
+       },
+       {
+        "name": "Q"
+       },
+       {
+        "name": "R"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 1,
+        "y": 1,
+        "category": 2
+       }
+      ]
+     },
+     {
+      "type": "graph",
+      "layout": "none",
+      "color": [
+       "#a10000",
+       "#a20000"
+      ],
+      "categories": [
+       {},
+       {
+        "name": "S"
+       }
+      ],
+      "data": [
+       {
+        "name": "c",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "d",
+        "x": 1,
+        "y": 1,
+        "category": 1
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 80,
+       "py": 30,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 320,
+       "py": 270,
+       "fill": "#333333",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "P",
+       "fill": "#111111"
+      },
+      {
+       "name": "Q",
+       "fill": "#222222"
+      },
+      {
+       "name": "R",
+       "fill": "#333333"
+      }
+     ]
+    },
+    {
+     "index": 1,
+     "seriesFill": "#a10000",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 80,
+       "py": 30,
+       "fill": "#aaaaaa",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 320,
+       "py": 270,
+       "fill": "#a20000",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "",
+       "fill": "#aaaaaa"
+      },
+      {
+       "name": "S",
+       "fill": "#a20000"
+      }
+     ]
+    }
+   ],
+   "legends": [],
+   "resized": null
+  },
+  {
+   "name": "a node's own colour follows its row through the filter",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0,
+        "itemStyle": {
+         "color": "#ff0000"
+        }
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 1,
+        "itemStyle": {
+         "color": "#00ff00"
+        }
+       },
+       {
+        "name": "d",
+        "x": 5,
+        "y": 9
+       }
+      ],
+      "links": [
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ],
+      "lineStyle": {
+       "color": "target"
+      }
+     }
+    ],
+    "legend": {
+     "selected": {
+      "X": false
+     }
+    }
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 78,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 360,
+       "py": 158,
+       "fill": "#00ff00",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 120,
+       "py": 222,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#222222"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#111111"
+      }
+     ],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "X",
+      "Y"
+     ],
+     "selected": [
+      false,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "an empty category name finds the last nameless one",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "itemStyle": {
+         "color": "#ff0000"
+        }
+       },
+       {
+        "name": "X"
+       },
+       {
+        "itemStyle": {
+         "color": "#00ff00"
+        }
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": ""
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": 1
+       },
+       {
+        "name": "c",
+        "x": 5,
+        "y": 5,
+        "category": false
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 70,
+       "fill": "#00ff00",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 360,
+       "py": 70,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 200,
+       "py": 230,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 152,
+       "cpy": 118,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 88,
+       "cpy": 182,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "",
+       "fill": "#ff0000"
+      },
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "",
+       "fill": "#00ff00"
+      }
+     ]
+    }
+   ],
+   "legends": [],
+   "resized": null
+  },
+  {
+   "name": "a boolean category goes when there is a legend",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "name": "G",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "X"
+       },
+       {
+        "name": "Y"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": true
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 0,
+        "category": false
+       },
+       {
+        "name": "c",
+        "x": 20,
+        "y": 5,
+        "category": 0
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "a",
+        "target": "c"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ]
+     }
+    ],
+    "legend": {}
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 2,
+       "px": 360,
+       "py": 190,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "X",
+       "fill": "#111111"
+      },
+      {
+       "name": "Y",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "X",
+      "Y"
+     ],
+     "selected": [
+      true,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "a ring measures the average of a pair",
+   "width": 600,
+   "height": 400,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "circular",
+      "categories": [
+       {
+        "name": "A",
+        "symbolSize": [
+         60,
+         10
+        ]
+       },
+       {
+        "name": "B",
+        "symbolSize": [
+         30
+        ]
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "category": 0
+       },
+       {
+        "name": "b",
+        "category": 0
+       },
+       {
+        "name": "c",
+        "category": 1
+       },
+       {
+        "name": "d"
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 407.88338581098606,
+       "py": 318.1574164661615,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 172.5429426835707,
+       "py": 296.7196905507687,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 201.6943752371518,
+       "py": 73.76211289796518,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 416.7994023394999,
+       "py": 90.64781843449298,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [],
+   "resized": null
+  },
+  {
+   "name": "a ring of pairs from the series",
+   "width": 600,
+   "height": 400,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "circular",
+      "symbolSize": [
+       80,
+       20
+      ],
+      "data": [
+       {
+        "name": "a",
+        "symbolSize": 10
+       },
+       {
+        "name": "b"
+       },
+       {
+        "name": "c"
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 391.3119001852358,
+       "py": 331.3854515711749,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 141.2611279883905,
+       "py": 220.04920229041204,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 374.12859087545866,
+       "py": 58.20806787825032,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": []
+    }
+   ],
+   "legends": [],
+   "resized": null
+  },
+  {
+   "name": "a ring of one-element pairs from the series",
+   "width": 600,
+   "height": 400,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "circular",
+      "symbolSize": [
+       80
+      ],
+      "data": [
+       {
+        "name": "a",
+        "symbolSize": 40
+       },
+       {
+        "name": "b"
+       },
+       {
+        "name": "c"
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 368.75966687083917,
+       "py": 344.4718249757067,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 141.133021856221,
+       "py": 180.99254737046405,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 385.4355116466968,
+       "py": 64.71964906289185,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": []
+    }
+   ],
+   "legends": [],
+   "resized": null
+  },
+  {
+   "name": "a stale control point from nodes nobody placed",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {
+     "selected": {
+      "B": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "force",
+      "autoCurveness": true,
+      "force": {
+       "layoutAnimation": false,
+       "initLayout": "none"
+      },
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "name": "p",
+        "category": 0
+       },
+       {
+        "name": "q",
+        "category": 0
+       },
+       {
+        "name": "x",
+        "category": 1
+       }
+      ],
+      "links": [
+       {
+        "source": "x",
+        "target": "p"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "q",
+        "target": "p"
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 214.6948734191933,
+       "py": 146.78148841652984,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 185.2978522405813,
+       "py": 153.21912093613093,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "nancurve",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 201.2838893338075,
+       "cpy": 155.8797089120528,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      true,
+      false
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "the same stale point with an arrow",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {
+     "selected": {
+      "B": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "force",
+      "autoCurveness": true,
+      "edgeSymbol": [
+       "none",
+       "arrow"
+      ],
+      "force": {
+       "layoutAnimation": false,
+       "initLayout": "none"
+      },
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "name": "p",
+        "category": 0
+       },
+       {
+        "name": "q",
+        "category": 0
+       },
+       {
+        "name": "x",
+        "category": 1
+       }
+      ],
+      "links": [
+       {
+        "source": "x",
+        "target": "p"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "q",
+        "target": "p"
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 214.6948734191933,
+       "py": 146.78148841652984,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 185.2978522405813,
+       "py": 153.21912093613093,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "nancurve",
+       "ends": false,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 201.2838893338075,
+       "cpy": 155.8797089120528,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      true,
+      false
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "curveness, none, the removed node before, all on",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {},
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "name": "x",
+        "x": 50,
+        "y": 50,
+        "category": 1
+       },
+       {
+        "name": "p",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "q",
+        "x": 100,
+        "y": 0,
+        "category": 0
+       }
+      ],
+      "links": [
+       {
+        "source": "x",
+        "target": "p"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "q",
+        "target": "p"
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 200,
+       "py": 230,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 40,
+       "py": 70,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 360,
+       "py": 70,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 200,
+       "cpy": 6,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 200,
+       "cpy": 134,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      true,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "curveness, none, the removed node before, B off",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {
+     "selected": {
+      "B": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "name": "x",
+        "x": 50,
+        "y": 50,
+        "category": 1
+       },
+       {
+        "name": "p",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "q",
+        "x": 100,
+        "y": 0,
+        "category": 0
+       }
+      ],
+      "links": [
+       {
+        "source": "x",
+        "target": "p"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "q",
+        "target": "p"
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 1,
+       "px": 40,
+       "py": 70,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 360,
+       "py": 70,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      true,
+      false
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "curveness, none, the removed node after, all on",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {},
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "name": "p",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "q",
+        "x": 100,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "x",
+        "x": 50,
+        "y": 50,
+        "category": 1
+       }
+      ],
+      "links": [
+       {
+        "source": "x",
+        "target": "p"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "q",
+        "target": "p"
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 70,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 360,
+       "py": 70,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 200,
+       "py": 230,
+       "fill": "#222222",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 200,
+       "cpy": 6,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 200,
+       "cpy": 134,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      true,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "curveness, none, the removed node after, B off",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {
+     "selected": {
+      "B": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "name": "p",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "q",
+        "x": 100,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "x",
+        "x": 50,
+        "y": 50,
+        "category": 1
+       }
+      ],
+      "links": [
+       {
+        "source": "x",
+        "target": "p"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "q",
+        "target": "p"
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 40,
+       "py": 70,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 360,
+       "py": 70,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 200,
+       "cpy": 6,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 200,
+       "cpy": 134,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      true,
+      false
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "curveness, circular, the removed node before, all on",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {},
+    "series": [
+     {
+      "type": "graph",
+      "layout": "circular",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "name": "x",
+        "x": 50,
+        "y": 50,
+        "category": 1
+       },
+       {
+        "name": "p",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "q",
+        "x": 100,
+        "y": 0,
+        "category": 0
+       }
+      ],
+      "links": [
+       {
+        "source": "x",
+        "target": "p"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "q",
+        "target": "p"
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 240,
+       "py": 219.2820323027551,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 120,
+       "py": 150,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 240.00000000000009,
+       "py": 80.71796769724494,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 168.00000000000009,
+       "cpy": 94.57437415779594,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 192.00000000000003,
+       "cpy": 136.143593539449,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      true,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "curveness, circular, the removed node before, B off",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {
+     "selected": {
+      "B": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "circular",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "name": "x",
+        "x": 50,
+        "y": 50,
+        "category": 1
+       },
+       {
+        "name": "p",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "q",
+        "x": 100,
+        "y": 0,
+        "category": 0
+       }
+      ],
+      "links": [
+       {
+        "source": "x",
+        "target": "p"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "q",
+        "target": "p"
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 230,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 200,
+       "py": 70,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      true,
+      false
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "curveness, circular, the removed node after, all on",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {},
+    "series": [
+     {
+      "type": "graph",
+      "layout": "circular",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "name": "p",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "q",
+        "x": 100,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "x",
+        "x": 50,
+        "y": 50,
+        "category": 1
+       }
+      ],
+      "links": [
+       {
+        "source": "x",
+        "target": "p"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "q",
+        "target": "p"
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 240,
+       "py": 219.2820323027551,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 120,
+       "py": 150,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 240.00000000000009,
+       "py": 80.71796769724494,
+       "fill": "#222222",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 168,
+       "cpy": 205.42562584220408,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 192,
+       "cpy": 163.856406460551,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      true,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "curveness, circular, the removed node after, B off",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {
+     "selected": {
+      "B": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "circular",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "name": "p",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "q",
+        "x": 100,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "x",
+        "x": 50,
+        "y": 50,
+        "category": 1
+       }
+      ],
+      "links": [
+       {
+        "source": "x",
+        "target": "p"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "q",
+        "target": "p"
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 200,
+       "py": 230,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 70,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 200,
+       "cpy": 150,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 200,
+       "cpy": 150,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      true,
+      false
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "curveness, force, the removed node before, all on",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {},
+    "series": [
+     {
+      "type": "graph",
+      "layout": "force",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "name": "x",
+        "x": 50,
+        "y": 50,
+        "category": 1
+       },
+       {
+        "name": "p",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "q",
+        "x": 100,
+        "y": 0,
+        "category": 0
+       }
+      ],
+      "links": [
+       {
+        "source": "x",
+        "target": "p"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "q",
+        "target": "p"
+       }
+      ],
+      "force": {
+       "layoutAnimation": false
+      }
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 164.60567207681896,
+       "py": 205.84226062046125,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 251.4890571452071,
+       "py": 157.12240658306115,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 183.90527077797378,
+       "py": 87.03118737077307,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 203.67892011913284,
+       "cpy": 135.59355425036375,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 231.71540780404806,
+       "cpy": 108.56003970347044,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      true,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "curveness, force, the removed node before, B off",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {
+     "selected": {
+      "B": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "force",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "name": "x",
+        "x": 50,
+        "y": 50,
+        "category": 1
+       },
+       {
+        "name": "p",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "q",
+        "x": 100,
+        "y": 0,
+        "category": 0
+       }
+      ],
+      "links": [
+       {
+        "source": "x",
+        "target": "p"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "q",
+        "target": "p"
+       }
+      ],
+      "force": {
+       "layoutAnimation": false
+      }
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 1,
+       "px": 248.14984521866054,
+       "py": 149.99585457429504,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 151.85015478133974,
+       "py": 149.99585457429504,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      true,
+      false
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "curveness, force, the removed node after, all on",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {},
+    "series": [
+     {
+      "type": "graph",
+      "layout": "force",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "name": "p",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "q",
+        "x": 100,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "x",
+        "x": 50,
+        "y": 50,
+        "category": 1
+       }
+      ],
+      "links": [
+       {
+        "source": "x",
+        "target": "p"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "q",
+        "target": "p"
+       }
+      ],
+      "force": {
+       "layoutAnimation": false
+      }
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 251.4890571452072,
+       "py": 157.12240658306098,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 183.90527077797364,
+       "py": 87.03118737077315,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 164.60567207681913,
+       "py": 205.84226062046127,
+       "fill": "#222222",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 203.67892011913287,
+       "cpy": 135.5935542503638,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 231.715407804048,
+       "cpy": 108.56003970347035,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      true,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "curveness, force, the removed node after, B off",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {
+     "selected": {
+      "B": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "force",
+      "autoCurveness": true,
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "name": "p",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "q",
+        "x": 100,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "x",
+        "x": 50,
+        "y": 50,
+        "category": 1
+       }
+      ],
+      "links": [
+       {
+        "source": "x",
+        "target": "p"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "q",
+        "target": "p"
+       }
+      ],
+      "force": {
+       "layoutAnimation": false
+      }
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 248.14984521866054,
+       "py": 149.99585457429504,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 151.85015478133974,
+       "py": 149.99585457429504,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 200,
+       "cpy": 6,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 200.00000000000014,
+       "cpy": 169.2557926617592,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      true,
+      false
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "a stale control point, and a resize that drops it",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {
+     "selected": {
+      "B": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "force",
+      "autoCurveness": true,
+      "force": {
+       "layoutAnimation": false
+      },
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "name": "p",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "q",
+        "x": 100,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "x",
+        "x": 50,
+        "y": 50,
+        "category": 1
+       }
+      ],
+      "links": [
+       {
+        "source": "x",
+        "target": "p"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "q",
+        "target": "p"
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 248.14984521866054,
+       "py": 149.99585457429504,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 151.85015478133974,
+       "py": 149.99585457429504,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 200,
+       "cpy": 6,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 200.00000000000014,
+       "cpy": 169.2557926617592,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      true,
+      false
+     ]
+    }
+   ],
+   "resized": {
+    "width": 500,
+    "height": 400,
+    "graphs": [
+     {
+      "index": 0,
+      "seriesFill": "#111111",
+      "nodes": [
+       {
+        "raw": 0,
+        "px": 310.1873065233257,
+        "py": 199.9999997314913,
+        "fill": "#111111",
+        "symbol": "circle"
+       },
+       {
+        "raw": 1,
+        "px": 189.81269347667467,
+        "py": 199.9999997314913,
+        "fill": "#111111",
+        "symbol": "circle"
+       }
+      ],
+      "edges": [
+       {
+        "raw": 1,
+        "bend": "straight",
+        "ends": true,
+        "cpx": null,
+        "cpy": null,
+        "stroke": "#86878c"
+       },
+       {
+        "raw": 2,
+        "bend": "straight",
+        "ends": true,
+        "cpx": null,
+        "cpy": null,
+        "stroke": "#86878c"
+       },
+       {
+        "raw": 3,
+        "bend": "curve",
+        "ends": true,
+        "cpx": 250.00000000000017,
+        "cpy": 224.0749223408215,
+        "stroke": "#86878c"
+       }
+      ],
+      "cats": [
+       {
+        "name": "A",
+        "fill": "#111111"
+       },
+       {
+        "name": "B",
+        "fill": "#222222"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "a stale control point from a ring",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {
+     "selected": {
+      "B": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "force",
+      "autoCurveness": true,
+      "force": {
+       "layoutAnimation": false,
+       "initLayout": "circular"
+      },
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "name": "p",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "q",
+        "x": 100,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "x",
+        "x": 50,
+        "y": 50,
+        "category": 1
+       }
+      ],
+      "links": [
+       {
+        "source": "x",
+        "target": "p"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "p",
+        "target": "q"
+       },
+       {
+        "source": "q",
+        "target": "p"
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 200,
+       "py": 198.14984521866037,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 200,
+       "py": 101.8501547813396,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 2,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 200,
+       "cpy": 150,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 3,
+       "bend": "curve",
+       "ends": true,
+       "cpx": 180.74006191253585,
+       "cpy": 150,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      true,
+      false
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "force with a category off",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {
+     "selected": {
+      "B": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "force",
+      "force": {
+       "layoutAnimation": false
+      },
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "category": 0,
+        "value": 1
+       },
+       {
+        "name": "b",
+        "category": 1,
+        "value": 5
+       },
+       {
+        "name": "c",
+        "category": 0,
+        "value": 3
+       },
+       {
+        "name": "d",
+        "value": 2
+       },
+       {
+        "name": "e",
+        "category": 1,
+        "value": 4
+       }
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       },
+       {
+        "source": 2,
+        "target": 3
+       },
+       {
+        "source": 3,
+        "target": 4
+       },
+       {
+        "source": 0,
+        "target": 3
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 190.75399202102682,
+       "py": 129.51658476355868,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 187.90856227913505,
+       "py": 171.27923016954296,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 212.10769349608825,
+       "py": 149.92677615279985,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 2,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 4,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      true,
+      false
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "force from a ring with a category off",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {
+     "selected": {
+      "A": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "force",
+      "force": {
+       "layoutAnimation": false,
+       "initLayout": "circular"
+      },
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "category": 0,
+        "value": 1
+       },
+       {
+        "name": "b",
+        "category": 1,
+        "value": 5
+       },
+       {
+        "name": "c",
+        "category": 1,
+        "value": 3
+       },
+       {
+        "name": "d",
+        "value": 2
+       }
+      ],
+      "links": [
+       {
+        "source": 1,
+        "target": 2
+       },
+       {
+        "source": 2,
+        "target": 3
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 1,
+       "px": 195.42588822634949,
+       "py": 174.45064761477695,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 193.85110241631355,
+       "py": 142.72893038862847,
+       "fill": "#222222",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 222.5206140878712,
+       "py": 138.71737776317866,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [
+      {
+       "raw": 0,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      },
+      {
+       "raw": 1,
+       "bend": "straight",
+       "ends": true,
+       "cpx": null,
+       "cpy": null,
+       "stroke": "#86878c"
+      }
+     ],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      false,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "a ring re-spaced by a big category switched off",
+   "width": 600,
+   "height": 400,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {
+     "selected": {
+      "B": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "circular",
+      "categories": [
+       {
+        "name": "A",
+        "symbolSize": 10
+       },
+       {
+        "name": "B",
+        "symbolSize": 80
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "category": 0
+       },
+       {
+        "name": "b",
+        "category": 0
+       },
+       {
+        "name": "c",
+        "category": 0
+       },
+       {
+        "name": "x",
+        "category": 1
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 380,
+       "py": 338.56406460551017,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 140,
+       "py": 200.00000000000003,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 379.9999999999999,
+       "py": 61.435935394489746,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      true,
+      false
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "the same ring with everything on",
+   "width": 600,
+   "height": 400,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {},
+    "series": [
+     {
+      "type": "graph",
+      "layout": "circular",
+      "categories": [
+       {
+        "name": "A",
+        "symbolSize": 10
+       },
+       {
+        "name": "B",
+        "symbolSize": 80
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "category": 0
+       },
+       {
+        "name": "b",
+        "category": 0
+       },
+       {
+        "name": "c",
+        "category": 0
+       },
+       {
+        "name": "x",
+        "category": 1
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 419.22343659228875,
+       "py": 306.704133786487,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 207.12173565144266,
+       "py": 330.2828768933182,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 2,
+       "px": 160.25296551538366,
+       "py": 122.0848772525163,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 3,
+       "px": 392.8782643485574,
+       "py": 69.71712310668187,
+       "fill": "#222222",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      true,
+      true
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "the view does not re-fit when the far node goes",
+   "width": 600,
+   "height": 400,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {
+     "selected": {
+      "B": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "b",
+        "x": 100,
+        "y": 50,
+        "category": 0
+       },
+       {
+        "name": "far",
+        "x": 1000,
+        "y": 500,
+        "category": 1
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [
+      {
+       "raw": 0,
+       "px": 60,
+       "py": 80,
+       "fill": "#111111",
+       "symbol": "circle"
+      },
+      {
+       "raw": 1,
+       "px": 108,
+       "py": 104,
+       "fill": "#111111",
+       "symbol": "circle"
+      }
+     ],
+     "edges": [],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      true,
+      false
+     ]
+    }
+   ],
+   "resized": null
+  },
+  {
+   "name": "every category off",
+   "width": 400,
+   "height": 300,
+   "colours": true,
+   "option": {
+    "animation": false,
+    "color": [
+     "#111111",
+     "#222222",
+     "#333333"
+    ],
+    "legend": {
+     "selected": {
+      "A": false,
+      "B": false
+     }
+    },
+    "series": [
+     {
+      "type": "graph",
+      "layout": "force",
+      "force": {
+       "layoutAnimation": false
+      },
+      "categories": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "category": 0
+       },
+       {
+        "name": "b",
+        "category": 1
+       }
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       }
+      ]
+     }
+    ]
+   },
+   "graphs": [
+    {
+     "index": 0,
+     "seriesFill": "#111111",
+     "nodes": [],
+     "edges": [],
+     "cats": [
+      {
+       "name": "A",
+       "fill": "#111111"
+      },
+      {
+       "name": "B",
+       "fill": "#222222"
+      }
+     ]
+    }
+   ],
+   "legends": [
+    {
+     "names": [
+      "A",
+      "B"
+     ],
+     "selected": [
+      false,
+      false
+     ]
+    }
+   ],
+   "resized": null
+  }
+ ]
+}

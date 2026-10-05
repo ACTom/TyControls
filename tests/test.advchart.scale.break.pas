@@ -146,7 +146,7 @@ begin
 end;
 
 procedure TAdvChartBreakTest.TestScaleAcceptsBreakDecoratorWithoutKnowingIt;
-var s: TTyIntervalScale; brk: TTyBreakScaleMapper;
+var s: TTyIntervalScale; brk: TTyBreakScaleMapper; ticks: TTyScaleTickArray; i: Integer;
 begin
   s := TTyIntervalScale.Create;
   try
@@ -157,7 +157,16 @@ begin
     s.Mapper := brk;
     { TTyIntervalScale contains no reference to breaks whatsoever, yet: }
     AssertEquals('collapsed', 0.05, s.Normalize(80) - s.Normalize(20), Eps);
-    AssertTrue('ticks still generate', Length(s.GetTicks) >= 3);
+    ticks := s.GetTicks;
+    AssertTrue('ticks still generate', Length(ticks) >= 3);
+    { [Batch 33] And they are still VALUES, in order and inside the extent.
+      The step walked the decorator's collapsed space as if it were a log
+      axis' decades for a while: 0, 20, 97.89, 117.89, 137.89, 100. }
+    for i := 1 to High(ticks) do
+      AssertTrue(Format('tick %d follows tick %d', [i, i - 1]),
+        ticks[i].Value > ticks[i - 1].Value);
+    AssertTrue('the first is the extent''s start', ticks[0].Value >= 0);
+    AssertTrue('the last is inside it', ticks[High(ticks)].Value <= 100);
   finally
     s.Free;
   end;
