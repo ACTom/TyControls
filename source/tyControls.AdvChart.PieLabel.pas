@@ -110,6 +110,9 @@ type
   TTyPieLabelPlacement = record
     Valid: Boolean;
     X, Y: Double;
+    { label.x / y before the offset, and the offset (device px): what the
+      label layout starts from [Batch 103] }
+    BaseX, BaseY, OffX, OffY: Double;
     AnchorH: TTyTextAnchorH;
     AnchorV: TTyTextAnchorV;
     RotationRad: Double;
@@ -177,7 +180,8 @@ function TyPieBleedMargin(const AViewRect: TTyRectF): Double;
 
 implementation
 
-uses tyControls.AdvChart.RichStyle, tyControls.AdvChart.JsMath;
+uses tyControls.AdvChart.RichStyle, tyControls.AdvChart.JsMath,
+  tyControls.AdvChart.LabelLayout;
 
 const
   cRadian = Pi / 180;
@@ -417,6 +421,7 @@ var
   lineLen, lineLen2, distToLine, edgeDist, nudge: Double;
   viewW, viewL: Double;
   rad: Double;
+  m: TTyMat2D;
 begin
   Result := Default(TTyPieLabelPlacement);
   Result.AnchorH := tahCentre;
@@ -572,16 +577,30 @@ begin
     Result.RotationRad := rad - Pi;
   end;
 
-  { OFFSET LAST, after everything else has placed the words. Upstream applies
-    it INSIDE the rotation -- it moves the rotation origin too, so a rotated
-    label's offset runs along the rotated axes. This applies it in screen
-    axes, because the painter rotates about the anchor and has no separate
-    origin to move. The two agree whenever the label is not rotated, which is
-    the default. }
+  { OFFSET LAST, after everything else has placed the words, and INSIDE the
+    rotation: zrender adds it to label.x / y and sets the origin to minus it,
+    so a turned label's offset runs along the turned axes. The transform's
+    translation is the point the painter hangs and turns the words at.
+    [Batch 103: it was added in screen axes.] }
+  Result.BaseX := Result.X;
+  Result.BaseY := Result.Y;
+  Result.OffX := 0;
+  Result.OffY := 0;
   if APPI > 0 then
   begin
-    Result.X := Result.X + ASpec.OffsetXLogical * scale;
-    Result.Y := Result.Y + ASpec.OffsetYLogical * scale;
+    Result.OffX := ASpec.OffsetXLogical * scale;
+    Result.OffY := ASpec.OffsetYLogical * scale;
+    if TyLabelLocalTransform(Result.BaseX + Result.OffX, Result.BaseY + Result.OffY,
+      -Result.OffX, -Result.OffY, Result.RotationRad, 1, 1, m) then
+    begin
+      Result.X := m[4];
+      Result.Y := m[5];
+    end
+    else
+    begin
+      Result.X := 0;
+      Result.Y := 0;
+    end;
   end;
 
   Result.Valid := True;
@@ -725,6 +744,25 @@ begin
     el.Caption.AnchorV := place.AnchorV;
     el.Caption.RotationRad := place.RotationRad;
     el.Caption.Truncate := ASpec.Overflow = tloTruncate;
+    { WHAT THE LABEL LAYOUT READS: a pie label is placed at label.x / y (its
+      host's position is null) with its style's alignment; the host is found
+      by the datum [Batch 103] }
+    el.Caption.LmKind := 2;
+    el.Caption.LmBaseX := place.BaseX;
+    el.Caption.LmBaseY := place.BaseY;
+    el.Caption.LmOffX := place.OffX;
+    el.Caption.LmOffY := place.OffY;
+    el.Caption.LmPosAH := place.AnchorH;
+    el.Caption.LmPosAV := tavMiddle;
+    el.Caption.LmStyleHasAH := True;
+    el.Caption.LmStyleHasAV := True;
+    el.Caption.LmStyleAH := place.AnchorH;
+    el.Caption.LmStyleAV := tavMiddle;
+    el.Caption.LmTextW := w;
+    el.Caption.LmTextH := h;
+    el.Caption.LmInkFill := fill;
+    el.Caption.LmInkHasFill := True;
+    el.Caption.LmInkInside := ASpec.Position = tplInside;
     el.Silent := False;
     { `row` is the RAW index -- see TyBuildPieMarks for why a pie needs both. }
     el.Datum := TyChartDatum(ABinding.SeriesIndex,

@@ -1998,12 +1998,16 @@ var
             begin
               p := OldProxy(AOld, AOldRow, 'label');
               if p <> nil then Carry(p, s, r);
-              { the count, or a pie's words from their old layout [Batch 92] }
+              { the count, or a pie's words from their old layout [Batch 92]
+                -- and any label a labelLayout put at its own x / y, which
+                LabelManager moves from its old layout the same way
+                [Batch 103] }
               if AC.Enabled then
               begin
                 if AEl.Caption.ValAnim then
                   CountOn(p, oe, AEl, s, r, 'label', AC.Model)
-                else if (AEl.Anim.HostPlus1 = 0) and (AC.SeriesType = 'pie') then
+                else if (AEl.Anim.HostPlus1 = 0)
+                  and ((AC.SeriesType = 'pie') or AEl.Caption.LmFree) then
                   MoveLabel(p, oe, AEl, s, r, AC.Model);
               end;
               Exit;

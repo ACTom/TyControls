@@ -48,8 +48,11 @@ unit tyControls.AdvChart.Labels;
       `offset` is applied outside it, unconditionally.
     - the nine SECTOR positions. They serve polar bars, which this port has no
       renderer for; building them now would be a table nothing reads.
-    - de-collision. Upstream can hide a label that overlaps another; this
-      cannot, and will draw them on top of each other where ECharts hides one.
+    - de-collision. That is the label layout's (AdvChart.LabelLayout,
+      [Batch 103]), which runs over the captions this pass makes: each one
+      carries what LabelManager keeps (its host, the anchor before the
+      offset, the offset, the alignment its position implies and the one its
+      style sets, the host's rect, the margins, the measured box).
 
   PURE: SysUtils, Math and the AdvChart units. Fonts and colours arrive
   resolved; text is measured through the injected measurer. }
@@ -199,6 +202,12 @@ type
     ValueAnim: Boolean;
     HasPrecision: Boolean;
     Precision: Double;
+    { `minMargin` (MarginType 1: half of it on every side of the label's
+      global rect) or `textMargin` (2: CSS order, round its own rect) --
+      what the label layout grows a label by before it weighs an overlap.
+      [top, right, bottom, left], LOGICAL px. [Batch 103] }
+    MarginType: Integer;
+    MarginLogical: array[0..3] of Double;
   end;
   TTyLabelSpecArray = array of TTyLabelSpec;
   TTyLabelSpecTable = array of TTyLabelSpecArray;
@@ -345,7 +354,8 @@ procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
 
 implementation
 
-uses tyControls.AdvChart.Style, tyControls.AdvChart.RichStyle;
+uses tyControls.AdvChart.Style, tyControls.AdvChart.RichStyle,
+  tyControls.AdvChart.LabelLayout;
 
 function TyLabelBlockPieces(const ASpec: TTyLabelSpec; const AText: string;
   AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
@@ -862,10 +872,16 @@ var
   pos: TTyLabelPosition;
   bounds, box: TTyRectF;
   x, y, w, h, scale, dist, sw, atX, atY, inflate: Double;
-  ah: TTyTextAnchorH;
-  av: TTyTextAnchorV;
+  ah, posAH: TTyTextAnchorH;
+  av, posAV: TTyTextAnchorV;
   autoSpec: TTyLabelSpec;
   pieces: TTyRtPieceArray;
+  raw: TTyRectF;
+  hostRect, hbox: TTyXYWH;
+  hasHostRect, hasBox: Boolean;
+  baseX, baseY, offX, offY, rot: Double;
+  m: TTyMat2D;
+  k: Integer;
 begin
   if (AList = nil) or (AMeasurer = nil) then Exit;
   if APPI > 0 then scale := APPI / 96 else scale := 1;
@@ -895,10 +911,14 @@ begin
     if spec.Position = tlpNone then Continue;
 
     bounds := TyShapeBounds(host.Shape);
-    if host.Caption.HasHostBox then
-      bounds := TyRectF(host.Caption.HostBox.X, host.Caption.HostBox.Y,
-        host.Caption.HostBox.X + host.Caption.HostBox.W,
-        host.Caption.HostBox.Y + host.Caption.HostBox.H);
+    raw := bounds;
+    { THE RECT THE LABEL HANGS OFF: a mark's own (HostBox), a symbol's
+      (SymBox), else the shape's bounds }
+    hasBox := host.Caption.HasHostBox or host.Caption.HasSymBox;
+    if host.Caption.HasHostBox then hbox := host.Caption.HostBox
+    else hbox := host.Caption.SymBox;
+    if hasBox then
+      bounds := TyRectF(hbox.X, hbox.Y, hbox.X + hbox.W, hbox.Y + hbox.H);
     { a fixed anchor needs no host rect -- a sankey node whose column
       overflowed has a rect of negative height and still its label }
     if not TyRectFIsValid(bounds) and not host.Caption.HasFixedAnchor then Continue;
@@ -907,17 +927,32 @@ begin
       each side. A label outside a bordered cell sits past the border.
       [Batch 68] }
     inflate := 0;
+    { THE HOST'S RECT AS LABELMANAGER TAKES IT -- Path.getBoundingRect, the
+      stroke added to the width and half of it taken off the corner, in that
+      order; the priority is its area [Batch 103] }
+    hasHostRect := TyRectFIsValid(raw) or hasBox;
+    if hasBox then hostRect := hbox
+    else hostRect := TyXYWH(raw.Left, raw.Top, raw.Right - raw.Left, raw.Bottom - raw.Top);
     if (host.Style.StrokeWidthLogical > 0) and (host.Style.StrokeColor <> 0)
       and not host.Caption.HasHostBox then
     begin
       sw := host.Style.StrokeWidthLogical;
       if not host.Style.HasFill then sw := Max(sw, 5.0);
       sw := sw * scale;
+      { the enter animation follows the shape's bounds grown by this }
       inflate := sw / 2;
-      bounds.Left := bounds.Left - sw / 2;
-      bounds.Top := bounds.Top - sw / 2;
-      bounds.Right := bounds.Right + sw / 2;
-      bounds.Bottom := bounds.Bottom + sw / 2;
+      { a symbol's box has its stroke in it already }
+      if not host.Caption.HasSymBox then
+      begin
+        bounds.Left := bounds.Left - sw / 2;
+        bounds.Top := bounds.Top - sw / 2;
+        bounds.Right := bounds.Right + sw / 2;
+        bounds.Bottom := bounds.Bottom + sw / 2;
+        hostRect.W := hostRect.W + sw;
+        hostRect.H := hostRect.H + sw;
+        hostRect.X := hostRect.X - sw / 2;
+        hostRect.Y := hostRect.Y - sw / 2;
+      end;
     end;
 
     { THE BLOCK IS MEASURED WHERE IT IS LAID OUT, below; the one-run
@@ -946,11 +981,11 @@ begin
     else atX := spec.AtX * scale;
     if spec.AtYIsPercent then atY := spec.AtY * (bounds.Bottom - bounds.Top)
     else atY := spec.AtY * scale;
-    if host.Caption.HasHostBox then
+    if hasBox then
     begin
-      if spec.AtXIsPercent then atX := spec.AtX * host.Caption.HostBox.W;
-      if spec.AtYIsPercent then atY := spec.AtY * host.Caption.HostBox.H;
-      TyLabelAnchorXYWH(host.Caption.HostBox, pos, dist, atX, atY, x, y, ah, av);
+      if spec.AtXIsPercent then atX := spec.AtX * hbox.W;
+      if spec.AtYIsPercent then atY := spec.AtY * hbox.H;
+      TyLabelAnchorXYWH(hbox, pos, dist, atX, atY, x, y, ah, av);
     end
     else
       TyLabelAnchor(bounds, pos, dist, atX, atY, x, y, ah, av);
@@ -962,16 +997,44 @@ begin
       ah := host.Caption.FixedAH;
       av := host.Caption.FixedAV;
     end;
+    { the alignment the position implies, before the style's }
+    posAH := ah;
+    posAV := av;
     { a fixed anchor's alignment is the mark's: it has already weighed the
       author's in (a sunburst flips it, a radial tree takes it) }
     if spec.HasAlignH and not host.Caption.HasFixedAnchor then ah := spec.AlignH;
     if spec.HasAlignV and not host.Caption.HasFixedAnchor then av := spec.AlignV;
-    { OFFSET AFTER THE POSITION, which is upstream's order. Upstream also
-      applies it INSIDE the rotation, so a rotated label's offset runs along
-      the rotated axes; this applies it in screen axes and says so, because the
-      painter rotates around the anchor and has no separate origin to move. }
-    x := x + spec.OffsetXLogical * scale;
-    y := y + spec.OffsetYLogical * scale;
+    { OFFSET AFTER THE POSITION, and INSIDE THE ROTATION: zrender adds the
+      offset to the point and sets the origin to minus it, so the label turns
+      about the anchor and its offset runs along the turned axes. The
+      transform's translation is where the painter hangs and turns the words,
+      so it is taken whole -- getLocalTransform's own order of operations.
+      [Batch 103: it was added in screen axes.] }
+    baseX := x;
+    baseY := y;
+    offX := spec.OffsetXLogical * scale;
+    offY := spec.OffsetYLogical * scale;
+    if host.Caption.HasFixedAnchor then rot := host.Caption.FixedRotationRad
+    else rot := spec.RotationRad;
+    if host.Caption.HasFixedAnchor then
+    begin
+      { A MARK THAT FIXED ITS OWN ANCHOR set its own origin too (a radial
+        tree's is the box's centre: textConfig.origin 'center'), and an
+        origin of its own keeps zrender from moving it to minus the offset
+        -- the offset is then a plain translation }
+      x := baseX + offX;
+      y := baseY + offY;
+    end
+    else if TyLabelLocalTransform(baseX + offX, baseY + offY, -offX, -offY, rot, 1, 1, m) then
+    begin
+      x := m[4];
+      y := m[5];
+    end
+    else
+    begin
+      x := 0;
+      y := 0;
+    end;
 
     hostFill := host.Style.FillColor;
     hostHasFill := host.Style.HasFill;
@@ -1001,10 +1064,7 @@ begin
       if Length(pieces) = 0 then Continue;
       { THE BOX IS THE UNION OF WHAT IT DRAWS, turned as it is drawn --
         zrender's getBoundingRect, which the label layout reads }
-      if host.Caption.HasFixedAnchor then
-        box := TyRtDeviceBox(pieces, x, y, host.Caption.FixedRotationRad, scale)
-      else
-        box := TyRtDeviceBox(pieces, x, y, spec.RotationRad, scale);
+      box := TyRtDeviceBox(pieces, x, y, rot, scale);
     end
     else
     { The box the caption occupies, from the anchor and the pinned edge. This
@@ -1015,6 +1075,40 @@ begin
 
     cap := TyChartElement(TyShapeRect(box));
     cap.Caption := host.Caption;
+    { WHAT THE LABEL LAYOUT READS [Batch 103] }
+    if host.Caption.HasFixedAnchor then cap.Caption.LmKind := 2
+    else cap.Caption.LmKind := 1;
+    cap.Caption.LmHostPlus1 := i + 1;
+    cap.Caption.LmBaseX := baseX;
+    cap.Caption.LmBaseY := baseY;
+    cap.Caption.LmOffX := offX;
+    cap.Caption.LmOffY := offY;
+    { textConfig.rotation is there when the label wrote `rotate`; nought is
+      the same turn either way }
+    cap.Caption.LmHasAttachedRot := (not host.Caption.HasFixedAnchor) and (rot <> 0);
+    cap.Caption.LmAttachedRot := rot;
+    cap.Caption.LmPosAH := posAH;
+    cap.Caption.LmPosAV := posAV;
+    cap.Caption.LmStyleHasAH := spec.HasAlignH or host.Caption.HasFixedAnchor;
+    cap.Caption.LmStyleHasAV := spec.HasAlignV or host.Caption.HasFixedAnchor;
+    cap.Caption.LmStyleAH := ah;
+    cap.Caption.LmStyleAV := av;
+    cap.Caption.LmHasHostRect := hasHostRect;
+    cap.Caption.LmHostRect := hostRect;
+    cap.Caption.LmMarginType := spec.MarginType;
+    for k := 0 to 3 do cap.Caption.LmMargin[k] := spec.MarginLogical[k] * scale;
+    cap.Caption.LmTextW := w;
+    cap.Caption.LmTextH := h;
+    { A WRITTEN text border is counted in the text's rect; the automatic
+      halo is not (Text.ts _updatePlainTexts) }
+    cap.Caption.LmStrokeW := 0;
+    if spec.HasBorderColour and not spec.BorderColourNone and spec.HasBorderWidth
+      and (spec.BorderWidthLogical > 0) then
+      cap.Caption.LmStrokeW := spec.BorderWidthLogical * scale;
+    cap.Caption.LmInkFill := hostFill;
+    cap.Caption.LmInkHasFill := hostHasFill;
+    cap.Caption.LmInkGradient := host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone);
+    cap.Caption.LmInkInside := TyLabelIsInside(pos);
     { NO FILL AND NO STROKE. The rectangle is there so the pointer can find
       the words, not so anything is painted in it -- a filled one would draw a
       solid block behind every label. }
