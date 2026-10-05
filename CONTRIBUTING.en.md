@@ -72,7 +72,7 @@ Bug fixes should come with a test that fails without the fix.
 
 - Visual values (colors, sizes, radii) come from theme tokens, never hard-coded.
 - No native LCL controls (`TEdit`, `TButton`, …) inside owner-drawn UI.
-- Add new units to `tycontrols.lpk` (design-time ones to `tycontrols_dt.lpk`).
+- Add new units to `tycontrols.lpk` (design-time ones to `tycontrols_dt.lpk`; units that bring a new dependency get a package of their own, as the data-aware controls have `tycontrols_db.lpk`).
 - A new control is split from the start: `TTyCustomXxx` holds the implementation, `TTyXxx` is just a `published` section (see [docs/subclassing.en.md](docs/subclassing.en.md)). A control that is not split goes in `CNotSplit` in `tests/test.customclasses.pas` with its reason, or the tests fail. Add the split class to `CSplit` in the same file, then do two more steps and read each diff:
   - Run `python scripts/gen-mimic.py` to regenerate `tests/test.customclasses.mimic.pas` (the third-party mimics). The diff should only add the new class. The script copies each final class's *current* published section, so if lines change for any other class, that class's publish order was changed by accident; regenerating copies the wrong order, it doesn't fix it.
   - From `tests/`, run `TY_WRITE_FRESH_STREAMS=1 ./tytests --suite=TTyCustomClassesGuardTest.TestFreshFormFileTextUnchanged` (in PowerShell, set `$env:TY_WRITE_FRESH_STREAMS='1'` first) to add the new class to `tests/fixtures/customclasses/fresh-streams.txt`. The diff should only add the new class's section; a changed line under any other class means what a fresh instance of it writes to a form file has changed.

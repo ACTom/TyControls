@@ -149,6 +149,12 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyCalendar](calendar.md) | 日历：日 / 月 / 年下钻、Min/MaxDate |
 | [TTyDateTimePicker](datetimepicker.md) | 日期时间选择器：下拉日历 + 时间分段微调 |
 
+## 数据感知控件
+
+| 控件 | 说明 |
+|------|------|
+| [数据感知控件](dbcontrols.md) | `tycontrols_db` 包的 21 个控件：`TTyDBEdit`、`TTyDBNavigator`、查找下拉等，绑 `TDataSource` 的字段即用 |
+
 ## 范围与进度
 
 | 控件 | 说明 |
