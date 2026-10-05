@@ -1,0 +1,223 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-dbcontrols_example 3.1\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (msgid=English source) ---
+
+#: tmainform.caption
+msgid "Data-aware controls example"
+msgstr "数据感知控件示例"
+
+#: tmainform.bar.caption
+msgid "Data-aware controls  ·  TyControls"
+msgstr "数据感知控件  ·  TyControls"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.cbautoedit.caption
+msgid "Auto edit"
+msgstr "自动编辑"
+
+#: tmainform.cbreadonly.caption
+msgid "Read only"
+msgstr "只读"
+
+#: tmainform.btnclearphoto.caption
+msgid "Clear photo"
+msgstr "清除照片"
+
+#: tmainform.lblname.caption
+msgid "Name  ·  DBEdit"
+msgstr "姓名  ·  DBEdit"
+
+#: tmainform.lblphone.caption
+msgid "Phone  ·  DBMaskEdit"
+msgstr "电话  ·  DBMaskEdit"
+
+#: tmainform.lbldept.caption
+msgid "Department  ·  DBComboBox"
+msgstr "部门  ·  DBComboBox"
+
+#: tmainform.lblsalary.caption
+msgid "Salary  ·  DBCurrencyEdit"
+msgstr "月薪  ·  DBCurrencyEdit"
+
+#: tmainform.lblhours.caption
+msgid "Hours a week  ·  DBNumericEdit"
+msgstr "每周工时  ·  DBNumericEdit"
+
+#: tmainform.lblheight.caption
+msgid "Height (m)  ·  DBFloatSpinEdit"
+msgstr "身高（米）  ·  DBFloatSpinEdit"
+
+#: tmainform.lblyears.caption
+msgid "Years here  ·  DBSpinEdit"
+msgstr "工龄  ·  DBSpinEdit"
+
+#: tmainform.lblborn.caption
+msgid "Born  ·  DBDateTimePicker"
+msgstr "出生日期  ·  DBDateTimePicker"
+
+#: tmainform.lblcity.caption
+msgid "City  ·  DBLookupComboBox"
+msgstr "城市  ·  DBLookupComboBox"
+
+#: tmainform.lblactive.caption
+msgid "Active  ·  DBCheckBox"
+msgstr "在职  ·  DBCheckBox"
+
+#: tmainform.cbactive.caption
+msgid "Currently employed"
+msgstr "目前在职"
+
+#: tmainform.lblremote.caption
+msgid "Remote  ·  DBToggleSwitch"
+msgstr "远程  ·  DBToggleSwitch"
+
+#: tmainform.swremote.caption
+msgid "Works remotely"
+msgstr "远程办公"
+
+#: tmainform.lbllevel.caption
+msgid "Level  ·  DBSegmented"
+msgstr "级别  ·  DBSegmented"
+
+#: tmainform.lblstars.caption
+msgid "Review  ·  DBRating"
+msgstr "评价  ·  DBRating"
+
+#: tmainform.lblnote.caption
+msgid "Note  ·  DBMemo"
+msgstr "备注  ·  DBMemo"
+
+#: tmainform.rgshift.caption
+msgid "Shift  ·  DBRadioGroup"
+msgstr "班次  ·  DBRadioGroup"
+
+#: tmainform.lblskill.caption
+msgid "Main skill  ·  DBListBox"
+msgstr "主要技能  ·  DBListBox"
+
+#: tmainform.lblcitylist.caption
+msgid "City  ·  DBLookupListBox"
+msgstr "城市  ·  DBLookupListBox"
+
+#: tmainform.lbljoined.caption
+msgid "Joined  ·  DBCalendar"
+msgstr "入职日期  ·  DBCalendar"
+
+#: tmainform.lblphoto.caption
+msgid "Photo  ·  DBImage"
+msgstr "照片  ·  DBImage"
+
+#: tmainform.lblraw.caption
+msgid "Raw field values  ·  DBText"
+msgstr "字段原始值  ·  DBText"
+
+#: tmainform.lblrawid.caption
+msgid "ID"
+msgstr "ID"
+
+#: tmainform.lblrawname.caption
+msgid "Name"
+msgstr "Name"
+
+#: tmainform.lblrawphone.caption
+msgid "Phone"
+msgstr "Phone"
+
+#: tmainform.lblrawdept.caption
+msgid "Dept"
+msgstr "Dept"
+
+#: tmainform.lblrawsalary.caption
+msgid "Salary"
+msgstr "Salary"
+
+#: tmainform.lblrawhours.caption
+msgid "Hours"
+msgstr "Hours"
+
+#: tmainform.lblrawheight.caption
+msgid "Height"
+msgstr "Height"
+
+#: tmainform.lblrawyears.caption
+msgid "Years"
+msgstr "Years"
+
+#: tmainform.lblrawborn.caption
+msgid "Born"
+msgstr "Born"
+
+#: tmainform.lblrawcityid.caption
+msgid "CityID"
+msgstr "CityID"
+
+#: tmainform.lblrawactive.caption
+msgid "Active"
+msgstr "Active"
+
+#: tmainform.lblrawremote.caption
+msgid "Remote"
+msgstr "Remote"
+
+#: tmainform.lblrawlevel.caption
+msgid "Level"
+msgstr "Level"
+
+#: tmainform.lblrawstars.caption
+msgid "Stars"
+msgstr "Stars"
+
+#: tmainform.lblrawshift.caption
+msgid "Shift"
+msgstr "Shift"
+
+#: tmainform.lblrawskill.caption
+msgid "Skill"
+msgstr "Skill"
+
+#: tmainform.lblrawjoined.caption
+msgid "Joined"
+msgstr "Joined"
+
+#: tmainform.lblstatus.caption
+msgid "State: closed"
+msgstr "状态：已关闭"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsstatusfmt
+#, object-pascal-format
+msgid "State: %s  ·  record %d of %d"
+msgstr "状态：%s  ·  第 %d 条，共 %d 条"
+
+#: umain.rsstateinactive
+msgid "closed"
+msgstr "已关闭"
+
+#: umain.rsstatebrowse
+msgid "browsing"
+msgstr "浏览"
+
+#: umain.rsstateedit
+msgid "editing"
+msgstr "编辑中"
+
+#: umain.rsstateinsert
+msgid "inserting"
+msgstr "插入中"
+
+#: umain.rsstateother
+msgid "busy"
+msgstr "忙"

@@ -1,0 +1,1289 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols 2.0\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: tycontrols.strconsts.rsdlgaddcustomcolor
+msgid "Add to custom colors"
+msgstr "添加到自定义颜色"
+
+#: tycontrols.strconsts.rsdlgcustomcolors
+msgid "Custom colors"
+msgstr "自定义颜色"
+
+#: tycontrols.strconsts.rsdlgentirescope
+msgid "Entire scope"
+msgstr "整个范围"
+
+#: tycontrols.strconsts.rsdlgfontapply
+msgid "Apply"
+msgstr "应用"
+
+#: tycontrols.strconsts.rsdlgpromptonreplace
+msgid "Prompt on replace"
+msgstr "替换前提示"
+
+#: tycontrols.strconsts.rsfdcreateprompt
+#, object-pascal-format
+msgid ""
+"\"%s\" does not exist.\n"
+"Do you want to create it?"
+msgstr ""
+"\"%s\" 不存在。\n"
+"要创建吗？"
+
+#: tycontrols.strconsts.rsfdnotwritable
+#, object-pascal-format
+msgid "\"%s\" is not writable."
+msgstr "\"%s\" 不可写。"
+
+#: tycontrols.strconsts.rsfdpathmustexist
+#, object-pascal-format
+msgid "The folder \"%s\" does not exist."
+msgstr "文件夹 \"%s\" 不存在。"
+
+#: tycontrols.strconsts.rsgridgrouprow
+#, object-pascal-format
+msgid "%s  (%d)"
+msgstr "%s  (%d)"
+
+#: tycontrols.strconsts.rslintundefinedvar
+#, object-pascal-format
+msgid "undefined variable --%s"
+msgstr "未定义的变量 --%s"
+
+#: tycontrols.strconsts.rslintmissingasset
+#, object-pascal-format
+msgid "missing asset '%s'"
+msgstr "资源缺失 '%s'"
+
+#: tycontrols.strconsts.rslintlowcontrast
+#, object-pascal-format
+msgid "low contrast on '%s'"
+msgstr "'%s' 上的对比度过低"
+
+#: tycontrols.strconsts.rslintimporttoodeep
+#, object-pascal-format
+msgid "import nesting too deep (> %d)"
+msgstr "@import 嵌套层级过深 (> %d)"
+
+#: tycontrols.strconsts.rslintemptyimportpath
+msgid "empty @import path"
+msgstr "@import 路径为空"
+
+#: tycontrols.strconsts.rslintmissingimport
+#, object-pascal-format
+msgid "missing @import '%s'"
+msgstr "@import 目标缺失 '%s'"
+
+#: tycontrols.strconsts.rslintimportcycle
+#, object-pascal-format
+msgid "@import cycle '%s'"
+msgstr "@import 循环引用 '%s'"
+
+#: tycontrols.strconsts.rslintunreadableimport
+#, object-pascal-format
+msgid "unreadable @import '%s'"
+msgstr "无法读取的 @import '%s'"
+
+#: tycontrols.strconsts.rslintimportparseerror
+#, object-pascal-format
+msgid "parse error in @import '%s': %s"
+msgstr "@import '%s' 解析错误：%s"
+
+#: tycontrols.strconsts.rslintunknownproperty
+#, object-pascal-format
+msgid "unknown property '%s'"
+msgstr "未知属性 '%s'"
+
+#: tycontrols.strconsts.rslintparseerror
+#, object-pascal-format
+msgid "parse error: %s"
+msgstr "解析错误：%s"
+
+#: tycontrols.strconsts.rscsserrorframe
+#, object-pascal-format
+msgid "%s at line %d, col %d (got \"%s\")"
+msgstr "%s（位于第 %d 行，第 %d 列；实际为 \"%s\"）"
+
+#: tycontrols.strconsts.rscssunexpectedtoken
+msgid "Unexpected token"
+msgstr "Unexpected token"
+
+#: tycontrols.strconsts.rscssunknownpseudoclass
+#, object-pascal-format
+msgid "Unknown pseudo-class \"%s\""
+msgstr "Unknown pseudo-class \"%s\""
+
+#: tycontrols.strconsts.rscssunterminatedrootblock
+msgid "Unterminated :root block"
+msgstr "Unterminated :root block"
+
+#: tycontrols.strconsts.rscssexpectedvariablename
+msgid "Expected --variable name"
+msgstr "Expected --variable name"
+
+#: tycontrols.strconsts.rscssunterminatedruleblock
+msgid "Unterminated rule block"
+msgstr "Unterminated rule block"
+
+#: tycontrols.strconsts.rscssimportmustprecederules
+msgid "An @import must precede all style rules"
+msgstr "@import 必须位于所有样式规则之前"
+
+#: tycontrols.strconsts.rscssexpectedpathinurl
+msgid "Expected a path inside url() for @import"
+msgstr "Expected a path inside url() for @import"
+
+#: tycontrols.strconsts.rscssexpectedpathafterimport
+msgid "Expected a quoted path or url() after @import"
+msgstr "Expected a quoted path or url() after @import"
+
+#: tycontrols.strconsts.rscssexpectedmodename
+msgid "Expected a mode name after \"@mode\""
+msgstr "Expected a mode name after \"@mode\""
+
+#: tycontrols.strconsts.rscssunterminatedmodeblock
+msgid "Unterminated @mode block"
+msgstr "Unterminated @mode block"
+
+#: tycontrols.strconsts.rscssexpectedrootinmode
+msgid "Expected \"root\" after \":\" inside @mode"
+msgstr "Expected \"root\" after \":\" inside @mode"
+
+#: tycontrols.strconsts.rscssonlyrootinmode
+msgid "Only :root blocks are allowed inside @mode"
+msgstr "Only :root blocks are allowed inside @mode"
+
+#: tycontrols.strconsts.rscssexpectedatrulename
+msgid "Expected an at-rule name after \"@\""
+msgstr "Expected an at-rule name after \"@\""
+
+#: tycontrols.strconsts.rscssunknownatrule
+#, object-pascal-format
+msgid "Unknown at-rule \"@%s\""
+msgstr "Unknown at-rule \"@%s\""
+
+#: tycontrols.strconsts.rscssexpectedrootaftercolon
+msgid "Expected \"root\" after \":\""
+msgstr "Expected \"root\" after \":\""
+
+#: tycontrols.strconsts.rscssexpectedselectororroot
+msgid "Expected selector or :root"
+msgstr "Expected selector or :root"
+
+#: tycontrols.strconsts.rscssinvalidcolorliteral
+#, object-pascal-format
+msgid "Invalid color literal: %s"
+msgstr "Invalid color literal: %s"
+
+#: tycontrols.strconsts.rscssinvalidcolorlength
+#, object-pascal-format
+msgid "Invalid color length: %s"
+msgstr "Invalid color length: %s"
+
+#: tycontrols.strconsts.rscssinvalidhexincolor
+#, object-pascal-format
+msgid "Invalid hex in color: %s"
+msgstr "Invalid hex in color: %s"
+
+#: tycontrols.strconsts.rscssundefinedvariable
+#, object-pascal-format
+msgid "Undefined variable: --%s"
+msgstr "Undefined variable: --%s"
+
+#: tycontrols.strconsts.rscssemptycolorexpression
+msgid "Empty color expression"
+msgstr "Empty color expression"
+
+#: tycontrols.strconsts.rscssunknowncolorfunction
+#, object-pascal-format
+msgid "Unknown color function: %s/%d"
+msgstr "Unknown color function: %s/%d"
+
+#: tycontrols.strconsts.rscsscannotevaluatecolor
+#, object-pascal-format
+msgid "Cannot evaluate color: %s"
+msgstr "Cannot evaluate color: %s"
+
+#: tycontrols.strconsts.rssminvalidpadding
+#, object-pascal-format
+msgid "Invalid padding: %s"
+msgstr "Invalid padding: %s"
+
+#: tycontrols.strconsts.rssminvalidlineargradient
+#, object-pascal-format
+msgid "Invalid linear-gradient: %s"
+msgstr "Invalid linear-gradient: %s"
+
+#: tycontrols.strconsts.rssmbackgroundimageneedsurl
+#, object-pascal-format
+msgid "background-image needs url(): %s"
+msgstr "background-image needs url(): %s"
+
+#: tycontrols.strconsts.rssmbackgroundimageneedsslice
+#, object-pascal-format
+msgid "background-image needs slice(): %s"
+msgstr "background-image needs slice(): %s"
+
+#: tycontrols.strconsts.rssmsliceneeds4values
+#, object-pascal-format
+msgid "slice() needs 4 values: %s"
+msgstr "slice() needs 4 values: %s"
+
+#: tycontrols.strconsts.rssminvalidshadow
+#, object-pascal-format
+msgid "Invalid shadow: %s"
+msgstr "Invalid shadow: %s"
+
+#: tycontrols.strconsts.rssmborderradiusneeds1or4
+#, object-pascal-format
+msgid "border-radius needs 1 or 4 values: %s"
+msgstr "border-radius needs 1 or 4 values: %s"
+
+#: tycontrols.strconsts.rssmimportnestingtoodeep
+#, object-pascal-format
+msgid "@import nesting too deep (> %d)"
+msgstr "@import 嵌套层级过深（> %d）"
+
+#: tycontrols.strconsts.rssmimportemptypath
+msgid "@import has an empty path"
+msgstr "@import 的路径为空"
+
+#: tycontrols.strconsts.rssmimporttargetnotfound
+#, object-pascal-format
+msgid "@import target not found: \"%s\""
+msgstr "未找到 @import 目标：\"%s\""
+
+#: tycontrols.strconsts.rssmimportcycledetected
+#, object-pascal-format
+msgid "@import cycle detected: \"%s\""
+msgstr "检测到 @import 循环引用：\"%s\""
+
+#: tycontrols.strconsts.rssmtypekeyconflict
+#, object-pascal-format
+msgid "Type key \"%s\" already has parent \"%s\" (not \"%s\")"
+msgstr "typeKey \"%s\" 已登记父键 \"%s\"（不是 \"%s\"）"
+
+#: tycontrols.strconsts.rssmtypekeycycle
+#, object-pascal-format
+msgid "Type key chain cycle: \"%s\" -> \"%s\""
+msgstr "typeKey 链成环：\"%s\" -> \"%s\""
+
+#: tycontrols.strconsts.rssmtypekeyinvalidname
+#, object-pascal-format
+msgid "Invalid type key name: \"%s\""
+msgstr "无效的 typeKey 名：\"%s\""
+
+#: tycontrols.strconsts.rssmtypekeytoodeep
+#, object-pascal-format
+msgid "Type key chain too deep (more than %d keys) at \"%s\""
+msgstr "typeKey 链过深（超过 %d 个键），位于 \"%s\""
+
+#: tycontrols.strconsts.rsmsgbtnyes
+msgid "Yes"
+msgstr "是"
+
+#: tycontrols.strconsts.rsmsgbtnno
+msgid "No"
+msgstr "否"
+
+#: tycontrols.strconsts.rsmsgbtnok
+msgid "OK"
+msgstr "确定"
+
+#: tycontrols.strconsts.rsmsgbtncancel
+msgid "Cancel"
+msgstr "取消"
+
+#: tycontrols.strconsts.rsmsgbtnabort
+msgid "Abort"
+msgstr "中止"
+
+#: tycontrols.strconsts.rsmsgbtnretry
+msgid "Retry"
+msgstr "重试"
+
+#: tycontrols.strconsts.rsmsgbtnignore
+msgid "Ignore"
+msgstr "忽略"
+
+#: tycontrols.strconsts.rsmsgbtnall
+msgctxt "tycontrols.strconsts.rsmsgbtnall"
+msgid "All"
+msgstr "全部"
+
+#: tycontrols.strconsts.rsmsgbtnnotoall
+msgid "No to All"
+msgstr "全部否"
+
+#: tycontrols.strconsts.rsmsgbtnyestoall
+msgid "Yes to All"
+msgstr "全部是"
+
+#: tycontrols.strconsts.rsmsgbtnhelp
+msgid "Help"
+msgstr "帮助"
+
+#: tycontrols.strconsts.rsmsgbtnclose
+msgid "Close"
+msgstr "关闭"
+
+#: tycontrols.strconsts.rsmsgtypewarning
+msgid "Warning"
+msgstr "警告"
+
+#: tycontrols.strconsts.rsmsgtypeerror
+msgid "Error"
+msgstr "错误"
+
+#: tycontrols.strconsts.rsmsgtypeconfirm
+msgid "Confirm"
+msgstr "确认"
+
+#: tycontrols.strconsts.rsmsgtypeinformation
+msgid "Information"
+msgstr "信息"
+
+#: tycontrols.strconsts.rsdlgnewfolder
+msgid "New Folder"
+msgstr "新建文件夹"
+
+#: tycontrols.strconsts.rsdlgnewfolderprompt
+msgid "Folder name:"
+msgstr "文件夹名称："
+
+#: tycontrols.strconsts.rsdlgcreatefoldererr
+#, object-pascal-format
+msgid "Could not create folder: %s"
+msgstr "无法创建文件夹：%s"
+
+#: tycontrols.strconsts.rsdlghex
+msgid "Hex"
+msgstr "十六进制"
+
+#: tycontrols.strconsts.rsdlgalpha
+msgid "Alpha"
+msgstr "透明度"
+
+#: tycontrols.strconsts.rsdlgpreview
+msgid "Preview"
+msgstr "预览"
+
+#: tycontrols.strconsts.rsdlgbasiccolors
+msgid "Basic colors"
+msgstr "基本颜色"
+
+#: tycontrols.strconsts.rsdlgfontfamily
+msgid "Family"
+msgstr "字体"
+
+#: tycontrols.strconsts.rsdlgfontsize
+msgid "Size"
+msgstr "字号"
+
+#: tycontrols.strconsts.rsdlgfontbold
+msgid "Bold"
+msgstr "粗体"
+
+#: tycontrols.strconsts.rsdlgfontitalic
+msgid "Italic"
+msgstr "斜体"
+
+#: tycontrols.strconsts.rsdlgfontunderline
+msgid "Underline"
+msgstr "下划线"
+
+#: tycontrols.strconsts.rsdlgfontstrike
+msgid "Strikeout"
+msgstr "删除线"
+
+#: tycontrols.strconsts.rsdlgfontcolor
+msgid "Color"
+msgstr "颜色"
+
+#: tycontrols.strconsts.rsdlgfontsample
+msgid "AaBbYyZz 0123"
+msgstr "AaBbYyZz 0123"
+
+#: tycontrols.strconsts.rsdlgfindwhat
+msgid "Find what:"
+msgstr "查找内容："
+
+#: tycontrols.strconsts.rsdlgreplacewith
+msgid "Replace with:"
+msgstr "替换为："
+
+#: tycontrols.strconsts.rsdlgmatchcase
+msgid "Match case"
+msgstr "区分大小写"
+
+#: tycontrols.strconsts.rsdlgwholeword
+msgid "Whole word"
+msgstr "全字匹配"
+
+#: tycontrols.strconsts.rsdlgsearchup
+msgid "Search up"
+msgstr "向上查找"
+
+#: tycontrols.strconsts.rsdlgfindnext
+msgid "Find Next"
+msgstr "查找下一个"
+
+#: tycontrols.strconsts.rsdlgreplace
+msgid "Replace"
+msgstr "替换"
+
+#: tycontrols.strconsts.rsdlgreplaceall
+msgid "Replace All"
+msgstr "全部替换"
+
+#: tycontrols.strconsts.rsdlgselectpathtitle
+msgid "Select Folder"
+msgstr "选择文件夹"
+
+#: tycontrols.strconsts.rsdlgcolortitle
+msgid "Color"
+msgstr "颜色"
+
+#: tycontrols.strconsts.rsdlgfonttitle
+msgid "Font"
+msgstr "字体"
+
+#: tycontrols.strconsts.rsdlgfindtitle
+msgid "Find"
+msgstr "查找"
+
+#: tycontrols.strconsts.rsdlgreplacetitle
+msgid "Replace"
+msgstr "替换"
+
+#: tycontrols.strconsts.rsdlgfolderpath
+msgid "Folder path (type or paste, then Enter)"
+msgstr "文件夹路径(输入或粘贴后回车)"
+
+#: tycontrols.strconsts.rsdlgabouttitle
+msgid "About"
+msgstr "关于"
+
+#: tycontrols.strconsts.rsfdallfilesfilter
+msgid "All Files (*.*)|*.*"
+msgstr "所有文件 (*.*)|*.*"
+
+#: tycontrols.strconsts.rsfdbtnopen
+msgctxt "tycontrols.strconsts.rsfdbtnopen"
+msgid "Open"
+msgstr "打开"
+
+#: tycontrols.strconsts.rsfdbtnsave
+msgid "Save"
+msgstr "保存"
+
+#: tycontrols.strconsts.rsfdcommonfilter
+msgid "Common Formats (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini)|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini|All Files (*.*)|*.*"
+msgstr "常用格式 (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini)|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini|所有文件 (*.*)|*.*"
+
+#: tycontrols.strconsts.rsfdfilenamelbl
+msgid "File name:"
+msgstr "文件名:"
+
+#: tycontrols.strconsts.rsfdfiletypelbl
+msgid "File type:"
+msgstr "文件类型:"
+
+#: tycontrols.strconsts.rsfdlookin
+msgid "Look in:"
+msgstr "查找范围:"
+
+#: tycontrols.strconsts.rsfdmustexist
+#, object-pascal-format
+msgid "The file \"%s\" does not exist."
+msgstr "文件 \"%s\" 不存在。"
+
+#: tycontrols.strconsts.rsfdopentitle
+msgctxt "tycontrols.strconsts.rsfdopentitle"
+msgid "Open"
+msgstr "打开"
+
+#: tycontrols.strconsts.rsfdoverwriteprompt
+#, object-pascal-format
+msgid ""
+"The file \"%s\" already exists.\n"
+"Do you want to replace it?"
+msgstr ""
+"文件 \"%s\" 已存在。\n"
+"是否替换?"
+
+#: tycontrols.strconsts.rsfdpicturefilter
+msgid "Images (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All Files (*.*)|*.*"
+msgstr "图片 (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif|所有文件 (*.*)|*.*"
+
+#: tycontrols.strconsts.rsfdsavetitle
+msgid "Save As"
+msgstr "另存为"
+
+#: tycontrols.strconsts.rsfdup
+msgid "Up"
+msgstr "上一级"
+
+#: tycontrols.strconsts.rsfdviewdetails
+msgid "Details"
+msgstr "详细信息"
+
+#: tycontrols.strconsts.rsfdviewlist
+msgid "List"
+msgstr "列表"
+
+#: tycontrols.strconsts.rsfdviewsmallicon
+msgid "Small icons"
+msgstr "小图标"
+
+#: tycontrols.strconsts.rsfdviewlargeicon
+msgid "Large icons"
+msgstr "大图标"
+
+#: tycontrols.strconsts.rsfdviewtile
+msgid "Tiles"
+msgstr "平铺"
+
+#: tycontrols.strconsts.rspvcannotpreview
+msgid "Cannot preview this file"
+msgstr "无法预览此文件"
+
+#: tycontrols.strconsts.rstygraphiccontrolonform
+#, object-pascal-format
+msgid ""
+"The graphic control \"%s\" was placed directly on the form.\n"
+"Windowless (graphic) controls paint onto the form itself and will be HIDDEN behind the \n"
+"content area. Move it into the Surface content container so it stays visible."
+msgstr ""
+"图形控件 \"%s\" 被直接放在了窗体上。\n"
+"无窗口的图形控件绘制在窗体自身上,会被内容区遮挡而看不见。\n"
+"请把它移进 Surface 内容容器,它才会显示。"
+
+#: tycontrols.strconsts.rstysurfacepurpose
+msgid "TTyForm content host — click for details"
+msgstr "TTyForm 内容宿主 —— 点击查看说明"
+
+#: tycontrols.strconsts.rstysurfacedeleted
+msgid ""
+"You just deleted the form's content host (Surface) — and with it every control it hosted.\n"
+"\n"
+"Press Ctrl+Z to undo.\n"
+"\n"
+"If undo does not restore it, close this form WITHOUT saving and reopen it — the Surface is not on the component palette, so it cannot be dropped back."
+msgstr ""
+"你刚刚删除了窗体的内容宿主(Surface)—— 它承载的所有控件也随之一起被删除了。\n"
+"\n"
+"请按 Ctrl+Z 撤销。\n"
+"\n"
+"如果撤销没能恢复,请不要保存、直接关闭这个窗体再重新打开 —— Surface 不在组件面板上,拖不回来。"
+
+#: tycontrols.strconsts.rsbadgeoverflow
+msgid "99+"
+msgstr "99+"
+
+#: tycontrols.strconsts.rsemptydescription
+msgid "No data"
+msgstr "暂无数据"
+
+#: tycontrols.strconsts.rsgridsumprefix
+msgid "Sum "
+msgstr "合计 "
+
+#: tycontrols.strconsts.rsgridavgprefix
+msgid "Avg "
+msgstr "均值 "
+
+#: tycontrols.strconsts.rsgridminprefix
+msgid "Min "
+msgstr "最小 "
+
+#: tycontrols.strconsts.rsgridmaxprefix
+msgid "Max "
+msgstr "最大 "
+
+#: tycontrols.strconsts.rsgridcheckedword
+msgid "yes"
+msgstr "是"
+
+#: tycontrols.strconsts.rsgridcountprefix
+msgid "Count "
+msgstr "计数 "
+
+#: tycontrols.strconsts.rsgridpickcolor
+msgid "Select colour"
+msgstr "选择颜色"
+
+#: tycontrols.strconsts.rsgridfilterblank
+msgid "(Blanks)"
+msgstr "(空白)"
+
+#: tycontrols.strconsts.rsgridfiltercancel
+msgctxt "tycontrols.strconsts.rsgridfiltercancel"
+msgid "Cancel"
+msgstr "取消"
+
+#: tycontrols.strconsts.rsgridfilterok
+msgctxt "tycontrols.strconsts.rsgridfilterok"
+msgid "OK"
+msgstr "确定"
+
+#: tycontrols.strconsts.rsgridfiltersearchhint
+msgid "Search"
+msgstr "搜索"
+
+#: tycontrols.strconsts.rsgridfilterselectall
+msgid "(Select all)"
+msgstr "(全选)"
+
+#: tycontrols.strconsts.rsterminalmenuclear
+msgctxt "tycontrols.strconsts.rsterminalmenuclear"
+msgid "Clear"
+msgstr "清屏"
+
+#: tycontrols.strconsts.rstermschemebadcolor
+#, object-pascal-format
+msgid "\"%s\" is not a colour (#rgb or #rrggbb): %s"
+msgstr "「%s」不是颜色（#rgb 或 #rrggbb）：%s"
+
+#: tycontrols.strconsts.rstermschemebadjson
+#, object-pascal-format
+msgid "Not valid JSON: %s"
+msgstr "不是合法的 JSON：%s"
+
+#: tycontrols.strconsts.rstermschememissingkeys
+#, object-pascal-format
+msgid "Missing colours: %s"
+msgstr "缺少颜色：%s"
+
+#: tycontrols.strconsts.rstermschemeneedname
+#, object-pascal-format
+msgid "The text has several colour schemes; choose one: %s"
+msgstr "文本里有多套配色方案，请指定一个：%s"
+
+#: tycontrols.strconsts.rstermschemenoname
+msgid "The colour scheme has no name"
+msgstr "配色方案没有名字"
+
+#: tycontrols.strconsts.rstermschemenonevalid
+msgid "The text has no complete colour scheme (a name and all 16 colours)"
+msgstr "文本里没有完整的配色方案（要有名字和全部 16 色）"
+
+#: tycontrols.strconsts.rstermschemenotfound
+#, object-pascal-format
+msgid "No colour scheme named \"%s\". Schemes in the text: %s"
+msgstr "没有名为「%s」的配色方案。文本里有：%s"
+
+#: tycontrols.strconsts.rstermschemenotfoundnone
+#, object-pascal-format
+msgid "No colour scheme named \"%s\", and the text has no complete colour scheme"
+msgstr "没有名为「%s」的配色方案，文本里也没有完整的配色方案"
+
+#: tycontrols.strconsts.rstermschemenotfoundunnamed
+#, object-pascal-format
+msgid "No colour scheme named \"%s\"; the scheme in the text has no name"
+msgstr "没有名为「%s」的配色方案；文本里的那一套没有名字"
+
+#: tycontrols.strconsts.rstermschemenotobject
+msgid "Expected a colour scheme object or a settings file with \"schemes\""
+msgstr "需要一个配色方案对象，或带 \"schemes\" 的设置文件"
+
+#: tycontrols.strconsts.rstermschemeschemesnotarray
+msgid "\"schemes\" is not an array"
+msgstr "\"schemes\" 不是数组"
+
+#: tycontrols.strconsts.rstermschemetoobig
+#, object-pascal-format
+msgid "The file is larger than %d MB; a colour scheme file is far smaller"
+msgstr "文件超过 %d MB；配色方案文件远没有这么大"
+
+#: tycontrols.strconsts.rstermschemetoodeep
+#, object-pascal-format
+msgid "nested more than %d levels deep"
+msgstr "嵌套超过 %d 层"
+
+#: tycontrols.strconsts.rstermschemeutf16
+msgid "UTF-16 text is not supported; save the file as UTF-8"
+msgstr "不支持 UTF-16 文本，请把文件存成 UTF-8"
+
+#: tycontrols.strconsts.rstextmenucopy
+msgid "Copy"
+msgstr "复制"
+
+#: tycontrols.strconsts.rstextmenucut
+msgid "Cut"
+msgstr "剪切"
+
+#: tycontrols.strconsts.rstextmenupaste
+msgid "Paste"
+msgstr "粘贴"
+
+#: tycontrols.strconsts.rstextmenuredo
+msgid "Redo"
+msgstr "重做"
+
+#: tycontrols.strconsts.rstextmenuselectall
+msgid "Select All"
+msgstr "全选"
+
+#: tycontrols.strconsts.rstextmenuundo
+msgid "Undo"
+msgstr "撤销"
+
+#: tycontrols.strconsts.rstoolbarmorecommands
+msgid "More commands"
+msgstr "更多命令"
+
+#: tycontrols.strconsts.rstytoolwindowactionsextra
+msgid "Unused actions area"
+msgstr "多余的操作区"
+
+#: tycontrols.strconsts.rstytoolwindowactionsorphan
+msgid "Not in a tool window"
+msgstr "不在工具窗口里"
+
+#: tycontrols.strconsts.rstytoolwindowbarconflict
+msgid "Same Placement as another bar"
+msgstr "与另一条栏的 Placement 相同"
+
+#: tycontrols.strconsts.rstytoolwindowbarempty
+msgid "Add a tool window"
+msgstr "添加工具窗口"
+
+#: tycontrols.strconsts.rstytoolwindowbarstray
+msgid "Not a tool window: hidden at run time"
+msgstr "不是工具窗口，运行时隐藏"
+
+#: tycontrols.strconsts.rstytoolwindowcollapse
+msgid "Hide"
+msgstr "收起"
+
+#: tycontrols.strconsts.rstytoolwindowcrossbarmove
+msgid "A tool window cannot move between a side bar and a bottom bar"
+msgstr "工具窗口不能在侧栏和底栏之间直接移动"
+
+#: tycontrols.strconsts.rstytoolwindowdropleft
+msgid "Drop here to show the left side bar"
+msgstr "放到左侧栏"
+
+#: tycontrols.strconsts.rstytoolwindowdropright
+msgid "Drop here to show the right side bar"
+msgstr "放到右侧栏"
+
+#: tycontrols.strconsts.rstytoolwindowmaximize
+msgid "Maximize"
+msgstr "最大化"
+
+#: tycontrols.strconsts.rstytoolwindowmore
+msgid "More"
+msgstr "更多"
+
+#: tycontrols.strconsts.rstytoolwindoworphan
+msgid "Not in a tool window bar: hidden at run time"
+msgstr "不在工具窗口栏里，运行时隐藏"
+
+#: tycontrols.strconsts.rstytoolwindowrestore
+msgid "Restore"
+msgstr "还原"
+
+#: tycontrols.strconsts.rstyupdownalreadyassociated
+#, object-pascal-format
+msgid "\"%s\" is already associated with the up-down \"%s\"."
+msgstr "\"%s\" 已经绑定到上下按钮对 \"%s\" 上了。"
+
+# The entry below is a LOAD MARKER, not prose: its being translated at all is
+# how the library knows a catalogue was deliberately loaded, which switches
+# TTyCalendar / TTyDateTimePicker month & weekday names from the OS locale to
+# this catalogue's language (tyControls.Calendar.TyDateTimeNames). Set it to
+# this catalogue's language code; never copy '__locale__' through. Leaving it
+# untranslated is the deliberate opt-out that keeps OS-locale names.
+#: tycontrols.strconsts.rstydatetimenameslang
+msgid "__locale__"
+msgstr "zh_CN"
+
+#: tycontrols.strconsts.rstylongmonth1
+msgid "January"
+msgstr "一月"
+
+#: tycontrols.strconsts.rstylongmonth2
+msgid "February"
+msgstr "二月"
+
+#: tycontrols.strconsts.rstylongmonth3
+msgid "March"
+msgstr "三月"
+
+#: tycontrols.strconsts.rstylongmonth4
+msgid "April"
+msgstr "四月"
+
+#: tycontrols.strconsts.rstylongmonth5
+msgid "May"
+msgstr "五月"
+
+#: tycontrols.strconsts.rstylongmonth6
+msgid "June"
+msgstr "六月"
+
+#: tycontrols.strconsts.rstylongmonth7
+msgid "July"
+msgstr "七月"
+
+#: tycontrols.strconsts.rstylongmonth8
+msgid "August"
+msgstr "八月"
+
+#: tycontrols.strconsts.rstylongmonth9
+msgid "September"
+msgstr "九月"
+
+#: tycontrols.strconsts.rstylongmonth10
+msgid "October"
+msgstr "十月"
+
+#: tycontrols.strconsts.rstylongmonth11
+msgid "November"
+msgstr "十一月"
+
+#: tycontrols.strconsts.rstylongmonth12
+msgid "December"
+msgstr "十二月"
+
+#: tycontrols.strconsts.rstyshortmonth1
+msgid "Jan"
+msgstr "1月"
+
+#: tycontrols.strconsts.rstyshortmonth2
+msgid "Feb"
+msgstr "2月"
+
+#: tycontrols.strconsts.rstyshortmonth3
+msgid "Mar"
+msgstr "3月"
+
+#: tycontrols.strconsts.rstyshortmonth4
+msgid "Apr"
+msgstr "4月"
+
+#: tycontrols.strconsts.rstyshortmonth5
+msgid "May"
+msgstr "5月"
+
+#: tycontrols.strconsts.rstyshortmonth6
+msgid "Jun"
+msgstr "6月"
+
+#: tycontrols.strconsts.rstyshortmonth7
+msgid "Jul"
+msgstr "7月"
+
+#: tycontrols.strconsts.rstyshortmonth8
+msgid "Aug"
+msgstr "8月"
+
+#: tycontrols.strconsts.rstyshortmonth9
+msgid "Sep"
+msgstr "9月"
+
+#: tycontrols.strconsts.rstyshortmonth10
+msgid "Oct"
+msgstr "10月"
+
+#: tycontrols.strconsts.rstyshortmonth11
+msgid "Nov"
+msgstr "11月"
+
+#: tycontrols.strconsts.rstyshortmonth12
+msgid "Dec"
+msgstr "12月"
+
+#: tycontrols.strconsts.rstylongday1
+msgid "Sunday"
+msgstr "星期日"
+
+#: tycontrols.strconsts.rstylongday2
+msgid "Monday"
+msgstr "星期一"
+
+#: tycontrols.strconsts.rstylongday3
+msgid "Tuesday"
+msgstr "星期二"
+
+#: tycontrols.strconsts.rstylongday4
+msgid "Wednesday"
+msgstr "星期三"
+
+#: tycontrols.strconsts.rstylongday5
+msgid "Thursday"
+msgstr "星期四"
+
+#: tycontrols.strconsts.rstylongday6
+msgid "Friday"
+msgstr "星期五"
+
+#: tycontrols.strconsts.rstylongday7
+msgid "Saturday"
+msgstr "星期六"
+
+#: tycontrols.strconsts.rstyshortday1
+msgid "Sun"
+msgstr "周日"
+
+#: tycontrols.strconsts.rstyshortday2
+msgid "Mon"
+msgstr "周一"
+
+#: tycontrols.strconsts.rstyshortday3
+msgid "Tue"
+msgstr "周二"
+
+#: tycontrols.strconsts.rstyshortday4
+msgid "Wed"
+msgstr "周三"
+
+#: tycontrols.strconsts.rstyshortday5
+msgid "Thu"
+msgstr "周四"
+
+#: tycontrols.strconsts.rstyshortday6
+msgid "Fri"
+msgstr "周五"
+
+#: tycontrols.strconsts.rstyshortday7
+msgid "Sat"
+msgstr "周六"
+
+#: tycontrols.strconsts.rsdlgiconbrowsertitle
+msgid "Icon Browser"
+msgstr "图标浏览器"
+
+#: tycontrols.strconsts.rsdlgimgcoltitle
+msgid "Images"
+msgstr "图像"
+
+#: tycontrols.strconsts.rsdlgimgcoladd
+msgid "Add…"
+msgstr "添加…"
+
+#: tycontrols.strconsts.rsdlgimgcolreplace
+msgid "Replace…"
+msgstr "替换…"
+
+#: tycontrols.strconsts.rsdlgimgcoldelete
+msgid "Delete"
+msgstr "删除"
+
+#: tycontrols.strconsts.rsdlgimgcolrename
+msgid "Rename…"
+msgstr "重命名…"
+
+#: tycontrols.strconsts.rsdlgimgcolup
+msgid "Move Up"
+msgstr "上移"
+
+#: tycontrols.strconsts.rsdlgimgcoldown
+msgid "Move Down"
+msgstr "下移"
+
+#: tycontrols.strconsts.rsdlgimgcolclear
+msgctxt "tycontrols.strconsts.rsdlgimgcolclear"
+msgid "Clear"
+msgstr "清空"
+
+#: tycontrols.strconsts.rsdlgimgcolrenameprompt
+msgid "New name:"
+msgstr "新名称:"
+
+#: tycontrols.strconsts.rsdlglgetitle
+msgid "Groups"
+msgstr "分组"
+
+#: tycontrols.strconsts.rsdlglgeaddgroup
+msgid "Add Group"
+msgstr "加分组"
+
+#: tycontrols.strconsts.rsdlglgeadditem
+msgid "Add Item"
+msgstr "加条目"
+
+#: tycontrols.strconsts.rsdlglgedelete
+msgid "Delete"
+msgstr "删除"
+
+#: tycontrols.strconsts.rsdlglgeup
+msgid "Move Up"
+msgstr "上移"
+
+#: tycontrols.strconsts.rsdlglgedown
+msgid "Move Down"
+msgstr "下移"
+
+#: tycontrols.strconsts.rsdlgnodestitle
+msgid "Nodes"
+msgstr "节点"
+
+#: tycontrols.strconsts.rsdlgcasctitle
+msgid "Options"
+msgstr "选项"
+
+#: tycontrols.strconsts.rsdlgnodesaddnode
+msgid "Add Node"
+msgstr "加节点"
+
+#: tycontrols.strconsts.rsdlgnodesaddchild
+msgid "Add Child"
+msgstr "加子节点"
+
+#: tycontrols.strconsts.rsdlgnodesdelete
+msgid "Delete"
+msgstr "删除"
+
+#: tycontrols.strconsts.rsdlgnodesup
+msgid "Move Up"
+msgstr "上移"
+
+#: tycontrols.strconsts.rsdlgnodesdown
+msgid "Move Down"
+msgstr "下移"
+
+#: tycontrols.strconsts.rsdlgiconcount
+#, object-pascal-format
+msgid "%d icons"
+msgstr "%d 个图标"
+
+#: tycontrols.strconsts.rsdlgiconnomatches
+msgid "No icons match"
+msgstr "没有匹配的图标"
+
+#: tycontrols.strconsts.rsdlgiconsearchhint
+msgid "Search icons by name"
+msgstr "按名称搜索图标"
+
+#: tycontrols.strconsts.rsdlgiconnameandindex
+#, object-pascal-format
+msgid "%s   (ImageIndex %d)"
+msgstr "%s   (ImageIndex %d)"
+
+#: tycontrols.strconsts.rstychartlegendselectall
+msgctxt "tycontrols.strconsts.rstychartlegendselectall"
+msgid "All"
+msgstr "全选"
+
+#: tycontrols.strconsts.rstychartlegendselectinverse
+msgid "Inv"
+msgstr "反选"
+
+#: tycontrols.strconsts.rstychartloading
+msgid "loading"
+msgstr "加载中"
+
+#: tycontrols.strconsts.rstychartexportoptsbad
+msgid "The export options are not valid JSON."
+msgstr "导出选项不是合法的 JSON。"
+
+#: tycontrols.strconsts.rstychartloadingcfgbad
+msgid "The loading options are not valid JSON."
+msgstr "加载选项不是合法的 JSON。"
+
+#: tycontrols.strconsts.rstychartnosuchhandler
+#, object-pascal-format
+msgid "No formatter named '%s' is registered."
+msgstr "没有注册名为 '%s' 的格式化器。"
+
+#: tycontrols.strconsts.rstyopttoodeep
+#, object-pascal-format
+msgid "The option is nested more than %d levels deep."
+msgstr "选项的嵌套超过了 %d 层。"
+
+#: tycontrols.strconsts.rstyoptfunctionvalue
+msgid "JavaScript functions cannot be used here. Write a template string such as '{b}: {c}', or the name of a registered handler such as '@MyFormatter'."
+msgstr "这里不能写 JavaScript 函数。请改用模板串，例如 '{b}: {c}'，或已注册的处理器名，例如 '@MyFormatter'。"
+
+#: tycontrols.strconsts.rstyoptmergenotobject
+msgid "An option to merge must be an object."
+msgstr "要合并的选项必须是一个对象。"
+
+#: tycontrols.strconsts.rstyoptduplicateid
+#, object-pascal-format
+msgid "Two %s components carry the id \"%s\"."
+msgstr "有两个 %s 组件用了同一个 id \"%s\"。"
+
+#: tycontrols.strconsts.rstyoptreplacemergebadtype
+#, object-pascal-format
+msgid "replaceMerge names \"%s\", which is not a component main type."
+msgstr "replaceMerge 里的 \"%s\" 不是组件主类型。"
+
+#: tycontrols.strconsts.rstyoptsetoptsnotobject
+msgid "The setOption options must be an object."
+msgstr "setOption 的选项必须是一个对象。"
+
+#: tycontrols.strconsts.rstychartaxistypeunknown
+#, object-pascal-format
+msgid "%s[%d].type: \"%s\" is not one of value, category, time or log; treated as value"
+msgstr "%s[%d].type：“%s”不是 value、category、time 或 log 之一，按 value 处理"
+
+#: tycontrols.strconsts.rstychartaxiswithoutpair
+msgid "xAxis or yAxis without the other: no grid was created, so neither is drawn"
+msgstr "xAxis 与 yAxis 只有一个：没有生成 grid，两条轴都不会画"
+
+#: tycontrols.strconsts.rstychartxaxisnogrid
+#, object-pascal-format
+msgid "xAxis[%d] names no grid, so it is not drawn"
+msgstr "xAxis[%d] 没有指向任何 grid，因此不会画"
+
+#: tycontrols.strconsts.rstychartyaxisnogrid
+#, object-pascal-format
+msgid "yAxis[%d] names no grid, so it is not drawn"
+msgstr "yAxis[%d] 没有指向任何 grid，因此不会画"
+
+#: tycontrols.strconsts.rstychartgridonedirection
+#, object-pascal-format
+msgid "grid[%d] has axes in only one direction, so it draws nothing"
+msgstr "grid[%d] 只有一个方向上有轴，因此什么都不会画"
+
+#: tycontrols.strconsts.rstychartpolarnoaxis
+#, object-pascal-format
+msgid "polar[%d] has no %s, so it is not drawn"
+msgstr "polar[%d] 没有 %s，因此不会画"
+
+#: tycontrols.strconsts.rstychartseriesnotype
+#, object-pascal-format
+msgid "series[%d] has no type, so it is not drawn"
+msgstr "series[%d] 没有 type，因此不会画"
+
+#: tycontrols.strconsts.rstychartseriesbadtype
+#, object-pascal-format
+msgid "series[%d]: \"%s\" is not a series type"
+msgstr "series[%d]：“%s”不是一种 series 类型"
+
+#: tycontrols.strconsts.rstychartseriescoordsys
+#, object-pascal-format
+msgid "series[%d]: coordinateSystem \"%s\" is not built yet"
+msgstr "series[%d]：coordinateSystem“%s”尚未实现"
+
+#: tycontrols.strconsts.rstychartseriesnorenderer
+#, object-pascal-format
+msgid "series[%d]: the \"%s\" series type is not drawn yet"
+msgstr "series[%d]：“%s”这个系列类型还画不出来"
+
+#: tycontrols.strconsts.rstychartseriesnoaxis
+#, object-pascal-format
+msgid "series[%d] names an axis that does not exist"
+msgstr "series[%d] 指向了一条不存在的轴"
+
+#: tycontrols.strconsts.rstychartseriesaxessplit
+#, object-pascal-format
+msgid "series[%d]: xAxis[%d] and yAxis[%d] are not on one grid"
+msgstr "series[%d]：xAxis[%d] 与 yAxis[%d] 不在同一个 grid 上"
+
+#: tycontrols.strconsts.rstyoptsummarydefault
+#, object-pascal-format
+msgid "default %s"
+msgstr "默认 %s"
+
+#: tycontrols.strconsts.rstyoptsummaryrange
+#, object-pascal-format
+msgid "range %s..%s"
+msgstr "取值 %s..%s"
+
+#: tycontrols.strconsts.rstyoptsummarysince
+#, object-pascal-format
+msgid "since %s"
+msgstr "始于 %s"
+
+#: tycontrols.strconsts.rstyoptstatusroot
+msgid "(the option root)"
+msgstr "（option 根）"
+
+#: tycontrols.strconsts.rstyoptstatusneedstype
+msgid "write a type first -- what is under here depends on which one"
+msgstr "先写 type —— 这里面有什么取决于它是哪一种"
+
+#: tycontrols.strconsts.rstyoptdiagunknown
+#, object-pascal-format
+msgid "%s is not an option ECharts 6.1 knows."
+msgstr "%s 不是 ECharts 6.1 认识的 option。"
+
+#: tycontrols.strconsts.rstyoptdiagdidyoumean
+#, object-pascal-format
+msgid "Did you mean \"%s\"?"
+msgstr "你是想写 “%s” 吗？"
+
+#: tycontrols.strconsts.rstyoptdiagbadenum
+#, object-pascal-format
+msgid "%s: \"%s\" is not one of %s."
+msgstr "%s：“%s” 不在 %s 之中。"
+
+#: tycontrols.strconsts.rstyoptdiagnotype
+#, object-pascal-format
+msgid "%s[%d] has no type yet, so nothing under it can be checked. One of: %s."
+msgstr "%s[%d] 还没写 type，所以它下面的东西无从校验。可选：%s。"
+
+#: tycontrols.strconsts.rstyoptdiagnothingpaintsyet
+msgid "The option is understood. Series marks are not painted yet, so this draws its axes and nothing else."
+msgstr "option 已读懂。series 图元尚未实现，所以现在只画得出坐标轴。"
+
+#: tycontrols.strconsts.rstyfilesizebytes
+msgid "B"
+msgstr "B"
+
+#: tycontrols.strconsts.rstyfilesizegb
+msgid "GB"
+msgstr "GB"
+
+#: tycontrols.strconsts.rstyfilesizekb
+msgid "KB"
+msgstr "KB"
+
+#: tycontrols.strconsts.rstyfilesizemb
+msgid "MB"
+msgstr "MB"
+
+#: tycontrols.strconsts.rstyfilesizetb
+msgid "TB"
+msgstr "TB"
+
+#: tycontrols.strconsts.rstyoptdiagmorerows
+#, object-pascal-format
+msgid "and %d more like these."
+msgstr "另有 %d 条同类。"
+
+#: tycontrols.strconsts.rstyoptdiagallclear
+msgid "The option is understood."
+msgstr "option 没有问题。"
+
+#: tycontrols.strconsts.rstyoptdiagsomenotpainted
+#, object-pascal-format
+msgid "The option is understood. Not painted yet: %s."
+msgstr "option 没有问题。还画不出来的：%s。"
+
+#: tycontrols.strconsts.rstyoptdiagnomarksatall
+msgid "The option is understood. Series marks are not painted yet, and this chart has no axes, so nothing is drawn."
+msgstr "option 没有问题。series 的图元还没有实现绘制，而这张图也没有坐标轴，所以画面上不会有任何东西。"
+
+#: tycontrols.strconsts.rstyoptdiagnoseries
+msgid "The option is understood. There are no series, so only the axes would draw."
+msgstr "option 没有问题。没有任何 series，所以只会画出坐标轴。"
+
+#: tycontrols.strconsts.rstywindowmenuclose
+msgid "&Close"
+msgstr "关闭(&C)"
+
+#: tycontrols.strconsts.rstywindowmenumaximize
+msgid "Ma&ximize"
+msgstr "最大化(&X)"
+
+#: tycontrols.strconsts.rstywindowmenuminimize
+msgid "Mi&nimize"
+msgstr "最小化(&N)"
+
+#: tycontrols.strconsts.rstywindowmenurestore
+msgid "&Restore"
+msgstr "还原(&R)"

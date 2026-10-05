@@ -1,0 +1,713 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 700
+  Top = 0
+  Width = 1200
+  Caption = 'Data-aware controls example'
+  ClientHeight = 700
+  ClientWidth = 1200
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  TitleHeight = 34
+  object Surface: TTyFormSurface
+    Left = 0
+    Height = 700
+    Top = 0
+    Width = 1200
+    TabOrder = 0
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 1200
+      TabOrder = 0
+      Caption = 'Data-aware controls  ·  TyControls'
+      Align = alTop
+      object DarkSwitch: TTyToggleSwitch
+        Left = 852
+        Height = 24
+        Top = 5
+        Width = 74
+        TabOrder = 0
+        TabStop = True
+        Caption = 'Dark'
+        OnChange = DarkSwitchChange
+        Anchors = [akTop, akRight]
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 934
+        Height = 26
+        Top = 4
+        Width = 120
+        TabOrder = 1
+        ItemIndex = -1
+        OnChange = ThemeComboChange
+        Anchors = [akTop, akRight]
+      end
+    end
+    object Navigator: TTyDBNavigator
+      Left = 16
+      Height = 30
+      Top = 46
+      Width = 300
+      TabOrder = 1
+      DataSource = PeopleSrc
+    end
+    object CbAutoEdit: TTyCheckBox
+      Left = 336
+      Height = 24
+      Top = 49
+      Width = 120
+      TabOrder = 2
+      Checked = True
+      Caption = 'Auto edit'
+      OnChange = CbAutoEditChange
+    end
+    object CbReadOnly: TTyCheckBox
+      Left = 466
+      Height = 24
+      Top = 49
+      Width = 120
+      TabOrder = 3
+      Caption = 'Read only'
+      OnChange = CbReadOnlyChange
+    end
+    object BtnClearPhoto: TTyButton
+      Left = 600
+      Height = 30
+      Top = 46
+      Width = 130
+      TabOrder = 4
+      OnClick = BtnClearPhotoClick
+      Caption = 'Clear photo'
+    end
+    object LblName: TTyLabel
+      Left = 16
+      Height = 28
+      Top = 90
+      Width = 196
+      Caption = 'Name  ·  DBEdit'
+    end
+    object EdName: TTyDBEdit
+      Left = 216
+      Height = 28
+      Top = 90
+      Width = 200
+      TabOrder = 5
+      DataField = 'Name'
+      DataSource = PeopleSrc
+    end
+    object LblPhone: TTyLabel
+      Left = 16
+      Height = 28
+      Top = 126
+      Width = 196
+      Caption = 'Phone  ·  DBMaskEdit'
+    end
+    object EdPhone: TTyDBMaskEdit
+      Left = 216
+      Height = 28
+      Top = 126
+      Width = 200
+      TabOrder = 6
+      DataField = 'Phone'
+      DataSource = PeopleSrc
+    end
+    object LblDept: TTyLabel
+      Left = 16
+      Height = 28
+      Top = 162
+      Width = 196
+      Caption = 'Department  ·  DBComboBox'
+    end
+    object CmbDept: TTyDBComboBox
+      Left = 216
+      Height = 26
+      Top = 163
+      Width = 200
+      TabOrder = 7
+      Items.Strings = (
+        'Engineering'
+        'Sales'
+        'Support'
+        'Finance'
+      )
+      Style = csDropDown
+      DataField = 'Dept'
+      DataSource = PeopleSrc
+    end
+    object LblSalary: TTyLabel
+      Left = 16
+      Height = 28
+      Top = 198
+      Width = 196
+      Caption = 'Salary  ·  DBCurrencyEdit'
+    end
+    object EdSalary: TTyDBCurrencyEdit
+      Left = 216
+      Height = 28
+      Top = 198
+      Width = 200
+      TabOrder = 8
+      DataField = 'Salary'
+      DataSource = PeopleSrc
+    end
+    object LblHours: TTyLabel
+      Left = 16
+      Height = 28
+      Top = 234
+      Width = 196
+      Caption = 'Hours a week  ·  DBNumericEdit'
+    end
+    object EdHours: TTyDBNumericEdit
+      Left = 216
+      Height = 28
+      Top = 234
+      Width = 200
+      TabOrder = 9
+      Decimals = 1
+      DataField = 'Hours'
+      DataSource = PeopleSrc
+    end
+    object LblHeight: TTyLabel
+      Left = 16
+      Height = 28
+      Top = 270
+      Width = 196
+      Caption = 'Height (m)  ·  DBFloatSpinEdit'
+    end
+    object EdHeight: TTyDBFloatSpinEdit
+      Left = 216
+      Height = 28
+      Top = 270
+      Width = 200
+      TabOrder = 10
+      MinValue = 0.5
+      MaxValue = 2.5
+      Increment = 0.01
+      DataField = 'Height'
+      DataSource = PeopleSrc
+    end
+    object LblYears: TTyLabel
+      Left = 16
+      Height = 28
+      Top = 306
+      Width = 196
+      Caption = 'Years here  ·  DBSpinEdit'
+    end
+    object EdYears: TTyDBSpinEdit
+      Left = 216
+      Height = 28
+      Top = 306
+      Width = 200
+      TabOrder = 11
+      MaxValue = 50
+      DataField = 'Years'
+      DataSource = PeopleSrc
+    end
+    object LblBorn: TTyLabel
+      Left = 16
+      Height = 28
+      Top = 342
+      Width = 196
+      Caption = 'Born  ·  DBDateTimePicker'
+    end
+    object DtBorn: TTyDBDateTimePicker
+      Left = 216
+      Height = 24
+      Top = 344
+      Width = 200
+      TabOrder = 12
+      DataField = 'Born'
+      DataSource = PeopleSrc
+    end
+    object LblCity: TTyLabel
+      Left = 16
+      Height = 28
+      Top = 378
+      Width = 196
+      Caption = 'City  ·  DBLookupComboBox'
+    end
+    object CmbCity: TTyDBLookupComboBox
+      Left = 216
+      Height = 26
+      Top = 379
+      Width = 200
+      TabOrder = 13
+      DataField = 'CityID'
+      DataSource = PeopleSrc
+      KeyField = 'ID'
+      ListField = 'Name'
+      ListSource = CitySrc
+    end
+    object LblActive: TTyLabel
+      Left = 16
+      Height = 28
+      Top = 414
+      Width = 196
+      Caption = 'Active  ·  DBCheckBox'
+    end
+    object CbActive: TTyDBCheckBox
+      Left = 216
+      Height = 22
+      Top = 417
+      Width = 200
+      TabOrder = 14
+      Caption = 'Currently employed'
+      DataField = 'Active'
+      DataSource = PeopleSrc
+    end
+    object LblRemote: TTyLabel
+      Left = 16
+      Height = 28
+      Top = 450
+      Width = 196
+      Caption = 'Remote  ·  DBToggleSwitch'
+    end
+    object SwRemote: TTyDBToggleSwitch
+      Left = 216
+      Height = 24
+      Top = 452
+      Width = 200
+      TabOrder = 15
+      Caption = 'Works remotely'
+      DataField = 'Remote'
+      DataSource = PeopleSrc
+      ValueChecked = 'Y'
+      ValueUnchecked = 'N'
+    end
+    object LblLevel: TTyLabel
+      Left = 16
+      Height = 28
+      Top = 486
+      Width = 196
+      Caption = 'Level  ·  DBSegmented'
+    end
+    object SegLevel: TTyDBSegmented
+      Left = 216
+      Height = 30
+      Top = 485
+      Width = 200
+      TabOrder = 16
+      Items.Strings = (
+        'Junior'
+        'Middle'
+        'Senior'
+      )
+      DataField = 'Level'
+      DataSource = PeopleSrc
+    end
+    object LblStars: TTyLabel
+      Left = 16
+      Height = 28
+      Top = 522
+      Width = 196
+      Caption = 'Review  ·  DBRating'
+    end
+    object RtStars: TTyDBRating
+      Left = 216
+      Height = 24
+      Top = 524
+      Width = 200
+      TabOrder = 17
+      AllowHalf = True
+      DataField = 'Stars'
+      DataSource = PeopleSrc
+    end
+    object LblNote: TTyLabel
+      Left = 16
+      Height = 28
+      Top = 558
+      Width = 196
+      Caption = 'Note  ·  DBMemo'
+    end
+    object MmNote: TTyDBMemo
+      Left = 216
+      Height = 96
+      Top = 558
+      Width = 200
+      TabOrder = 18
+      DataField = 'Note'
+      DataSource = PeopleSrc
+    end
+    object RgShift: TTyDBRadioGroup
+      Left = 440
+      Height = 110
+      Top = 90
+      Width = 230
+      TabOrder = 19
+      Caption = 'Shift  ·  DBRadioGroup'
+      Items.Strings = (
+        'Day'
+        'Night'
+        'Flexible'
+      )
+      DataField = 'Shift'
+      DataSource = PeopleSrc
+      Values.Strings = (
+        'D'
+        'N'
+        'F'
+      )
+    end
+    object LblSkill: TTyLabel
+      Left = 440
+      Height = 22
+      Top = 212
+      Width = 230
+      Caption = 'Main skill  ·  DBListBox'
+    end
+    object LbSkill: TTyDBListBox
+      Left = 440
+      Height = 110
+      Top = 236
+      Width = 230
+      TabOrder = 20
+      Items.Strings = (
+        'Pascal'
+        'C++'
+        'Python'
+        'SQL'
+        'Go'
+        'Rust'
+      )
+      DataField = 'Skill'
+      DataSource = PeopleSrc
+    end
+    object LblCityList: TTyLabel
+      Left = 440
+      Height = 22
+      Top = 358
+      Width = 230
+      Caption = 'City  ·  DBLookupListBox'
+    end
+    object LbCity: TTyDBLookupListBox
+      Left = 440
+      Height = 100
+      Top = 382
+      Width = 230
+      TabOrder = 21
+      DataField = 'CityID'
+      DataSource = PeopleSrc
+      KeyField = 'ID'
+      ListField = 'Name'
+      ListSource = CitySrc
+    end
+    object LblJoined: TTyLabel
+      Left = 694
+      Height = 22
+      Top = 90
+      Width = 240
+      Caption = 'Joined  ·  DBCalendar'
+    end
+    object CalJoined: TTyDBCalendar
+      Left = 694
+      Height = 220
+      Top = 114
+      Width = 240
+      TabOrder = 22
+      DataField = 'Joined'
+      DataSource = PeopleSrc
+    end
+    object LblPhoto: TTyLabel
+      Left = 694
+      Height = 22
+      Top = 346
+      Width = 240
+      Caption = 'Photo  ·  DBImage'
+    end
+    object ImgPhoto: TTyDBImage
+      Left = 694
+      Height = 120
+      Top = 370
+      Width = 120
+      Stretch = True
+      Proportional = True
+      Center = True
+      DataField = 'Photo'
+      DataSource = PeopleSrc
+    end
+    object LblRaw: TTyLabel
+      Left = 958
+      Height = 22
+      Top = 90
+      Width = 224
+      Caption = 'Raw field values  ·  DBText'
+    end
+    object LblRawID: TTyLabel
+      Left = 958
+      Height = 22
+      Top = 118
+      Width = 70
+      Caption = 'ID'
+    end
+    object TxtID: TTyDBText
+      Left = 1032
+      Height = 22
+      Top = 118
+      Width = 150
+      DataField = 'ID'
+      DataSource = PeopleSrc
+    end
+    object LblRawName: TTyLabel
+      Left = 958
+      Height = 22
+      Top = 142
+      Width = 70
+      Caption = 'Name'
+    end
+    object TxtName: TTyDBText
+      Left = 1032
+      Height = 22
+      Top = 142
+      Width = 150
+      DataField = 'Name'
+      DataSource = PeopleSrc
+    end
+    object LblRawPhone: TTyLabel
+      Left = 958
+      Height = 22
+      Top = 166
+      Width = 70
+      Caption = 'Phone'
+    end
+    object TxtPhone: TTyDBText
+      Left = 1032
+      Height = 22
+      Top = 166
+      Width = 150
+      DataField = 'Phone'
+      DataSource = PeopleSrc
+    end
+    object LblRawDept: TTyLabel
+      Left = 958
+      Height = 22
+      Top = 190
+      Width = 70
+      Caption = 'Dept'
+    end
+    object TxtDept: TTyDBText
+      Left = 1032
+      Height = 22
+      Top = 190
+      Width = 150
+      DataField = 'Dept'
+      DataSource = PeopleSrc
+    end
+    object LblRawSalary: TTyLabel
+      Left = 958
+      Height = 22
+      Top = 214
+      Width = 70
+      Caption = 'Salary'
+    end
+    object TxtSalary: TTyDBText
+      Left = 1032
+      Height = 22
+      Top = 214
+      Width = 150
+      DataField = 'Salary'
+      DataSource = PeopleSrc
+    end
+    object LblRawHours: TTyLabel
+      Left = 958
+      Height = 22
+      Top = 238
+      Width = 70
+      Caption = 'Hours'
+    end
+    object TxtHours: TTyDBText
+      Left = 1032
+      Height = 22
+      Top = 238
+      Width = 150
+      DataField = 'Hours'
+      DataSource = PeopleSrc
+    end
+    object LblRawHeight: TTyLabel
+      Left = 958
+      Height = 22
+      Top = 262
+      Width = 70
+      Caption = 'Height'
+    end
+    object TxtHeight: TTyDBText
+      Left = 1032
+      Height = 22
+      Top = 262
+      Width = 150
+      DataField = 'Height'
+      DataSource = PeopleSrc
+    end
+    object LblRawYears: TTyLabel
+      Left = 958
+      Height = 22
+      Top = 286
+      Width = 70
+      Caption = 'Years'
+    end
+    object TxtYears: TTyDBText
+      Left = 1032
+      Height = 22
+      Top = 286
+      Width = 150
+      DataField = 'Years'
+      DataSource = PeopleSrc
+    end
+    object LblRawBorn: TTyLabel
+      Left = 958
+      Height = 22
+      Top = 310
+      Width = 70
+      Caption = 'Born'
+    end
+    object TxtBorn: TTyDBText
+      Left = 1032
+      Height = 22
+      Top = 310
+      Width = 150
+      DataField = 'Born'
+      DataSource = PeopleSrc
+    end
+    object LblRawCityID: TTyLabel
+      Left = 958
+      Height = 22
+      Top = 334
+      Width = 70
+      Caption = 'CityID'
+    end
+    object TxtCityID: TTyDBText
+      Left = 1032
+      Height = 22
+      Top = 334
+      Width = 150
+      DataField = 'CityID'
+      DataSource = PeopleSrc
+    end
+    object LblRawActive: TTyLabel
+      Left = 958
+      Height = 22
+      Top = 358
+      Width = 70
+      Caption = 'Active'
+    end
+    object TxtActive: TTyDBText
+      Left = 1032
+      Height = 22
+      Top = 358
+      Width = 150
+      DataField = 'Active'
+      DataSource = PeopleSrc
+    end
+    object LblRawRemote: TTyLabel
+      Left = 958
+      Height = 22
+      Top = 382
+      Width = 70
+      Caption = 'Remote'
+    end
+    object TxtRemote: TTyDBText
+      Left = 1032
+      Height = 22
+      Top = 382
+      Width = 150
+      DataField = 'Remote'
+      DataSource = PeopleSrc
+    end
+    object LblRawLevel: TTyLabel
+      Left = 958
+      Height = 22
+      Top = 406
+      Width = 70
+      Caption = 'Level'
+    end
+    object TxtLevel: TTyDBText
+      Left = 1032
+      Height = 22
+      Top = 406
+      Width = 150
+      DataField = 'Level'
+      DataSource = PeopleSrc
+    end
+    object LblRawStars: TTyLabel
+      Left = 958
+      Height = 22
+      Top = 430
+      Width = 70
+      Caption = 'Stars'
+    end
+    object TxtStars: TTyDBText
+      Left = 1032
+      Height = 22
+      Top = 430
+      Width = 150
+      DataField = 'Stars'
+      DataSource = PeopleSrc
+    end
+    object LblRawShift: TTyLabel
+      Left = 958
+      Height = 22
+      Top = 454
+      Width = 70
+      Caption = 'Shift'
+    end
+    object TxtShift: TTyDBText
+      Left = 1032
+      Height = 22
+      Top = 454
+      Width = 150
+      DataField = 'Shift'
+      DataSource = PeopleSrc
+    end
+    object LblRawSkill: TTyLabel
+      Left = 958
+      Height = 22
+      Top = 478
+      Width = 70
+      Caption = 'Skill'
+    end
+    object TxtSkill: TTyDBText
+      Left = 1032
+      Height = 22
+      Top = 478
+      Width = 150
+      DataField = 'Skill'
+      DataSource = PeopleSrc
+    end
+    object LblRawJoined: TTyLabel
+      Left = 958
+      Height = 22
+      Top = 502
+      Width = 70
+      Caption = 'Joined'
+    end
+    object TxtJoined: TTyDBText
+      Left = 1032
+      Height = 22
+      Top = 502
+      Width = 150
+      DataField = 'Joined'
+      DataSource = PeopleSrc
+    end
+    object LblStatus: TTyLabel
+      Left = 16
+      Height = 24
+      Top = 664
+      Width = 900
+      Caption = 'State: closed'
+    end
+  end
+  object PeopleSrc: TDataSource
+    OnStateChange = PeopleSrcStateChange
+    OnDataChange = PeopleSrcDataChange
+    Left = 40
+    Top = 620
+  end
+  object CitySrc: TDataSource
+    Left = 120
+    Top = 620
+  end
+end
