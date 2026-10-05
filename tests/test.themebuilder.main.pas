@@ -76,6 +76,7 @@ type
     procedure TestTheSeedsFollowTheText;
     procedure TestCtrlClickGoesToTheRule;
     procedure TestCtrlClickAddsARule;
+    procedure TestCtrlClickFollowsATypeKeyChain;
     procedure TestTheCoverageCheckReadsTheDocument;
     procedure TestTheExportTakesTheSavedBytes;
     procedure TestTheSnippetsNameTheFile;
@@ -1224,6 +1225,47 @@ begin
   AssertEquals('F34: indented', 3, FForm.Editor.LogicalCaretXY.X);
   FForm.Editor.Undo;
   AssertEquals('F34: one undo takes it away', t, TrimmedLines(FForm.Editor.Lines.Text));
+end;
+
+{ #14: a control whose key a package registered into a type key chain (here TbPickChild under
+  TyTag, TbPickPlain under TyButton) is styled by its parent's rules until it has its own.
+  Ctrl+click goes to its own rule when the document has one, else to the nearest one up the
+  chain -- what styles it now; with none anywhere it adds the control's own. Without the
+  chain the parent's rule is not the control's: a rule of its own is added. }
+procedure TTbMainFormTests.TestCtrlClickFollowsATypeKeyChain;
+const
+  cDoc = 'TyTag.danger { }'#10'TyButton { }'#10;
+begin
+  TyRegisterTypeKeyParent('TbPickChild', 'TyTag');
+  TyRegisterTypeKeyParent('TbPickPlain', 'TyButton');
+  try
+    FForm.Editor.Lines.Text := cDoc;
+    FForm.RefreshNow;
+    FForm.JumpToRule('TbPickChild', 'danger');
+    AssertEquals('F40: the parent''s variant rule (text unchanged)', cDoc,
+      StringReplace(FForm.Editor.Lines.Text, #13#10, #10, [rfReplaceAll]));
+    AssertEquals('F40: on it (y)', 1, FForm.Editor.LogicalCaretXY.Y);
+    AssertEquals('F40: on it (x)', 1, FForm.Editor.LogicalCaretXY.X);
+    FForm.JumpToRule('TbPickPlain', '');
+    AssertEquals('F40: the parent''s plain rule (y)', 2, FForm.Editor.LogicalCaretXY.Y);
+    FForm.Editor.Lines.Text := cDoc + 'TbPickChild.danger { }'#10;
+    FForm.RefreshNow;
+    FForm.JumpToRule('TbPickChild', 'danger');
+    AssertEquals('F40: its own rule first (y)', 3, FForm.Editor.LogicalCaretXY.Y);
+    FForm.Editor.Lines.Text := cDoc;
+    FForm.RefreshNow;
+    FForm.JumpToRule('TbPickChild', 'ghost');
+    AssertTrue('F40: none up the chain: its own is added',
+      Pos('TbPickChild.ghost {', FForm.Editor.Lines.Text) > 0);
+  finally
+    TyUnregisterTypeKeyParent('TbPickChild');
+    TyUnregisterTypeKeyParent('TbPickPlain');
+  end;
+  FForm.Editor.Lines.Text := cDoc;
+  FForm.RefreshNow;
+  FForm.JumpToRule('TbPickChild', 'danger');
+  AssertTrue('F40: without the chain: a rule of its own',
+    Pos('TbPickChild.danger {', FForm.Editor.Lines.Text) > 0);
 end;
 
 procedure TTbMainFormTests.TestTheCoverageCheckReadsTheDocument;

@@ -50,6 +50,7 @@ type
   published
     procedure TestTheBaseKeys;
     procedure TestTheTwoLists;
+    procedure TestTheListsFollowATypeKeyChain;
     procedure TestWhatThePreviewShows;
     procedure TestThePartTableMatchesTheSources;
     procedure TestEndToEnd;
@@ -63,7 +64,7 @@ implementation
 
 uses
   ExtCtrls, tyControls.Base, tyControls.Button, tyControls.Dialogs, tyControls.Notification,
-  tyControls.Css.Catalog, tbpick, tbsamplewin, tbcssscan, tbcoverage, tbcoverageform, tbtemplates,
+  tyControls.Css.Catalog, tyControls.StyleModel, tbpick, tbsamplewin, tbcssscan, tbcoverage, tbcoverageform, tbtemplates,
   test.themebuilder.golden;
 
 type
@@ -370,6 +371,55 @@ begin
     TbCoverageLists(doc, prev, base, notShown, def);
     AssertEquals('CV2: not shown', 'TyButon,TyRibbon', notShown.CommaText);
     AssertEquals('CV2: the default look', 'TyFormSurface', def.CommaText);
+  finally
+    doc.Free;
+    prev.Free;
+    base.Free;
+    notShown.Free;
+    def.Free;
+  end;
+end;
+
+{ #14: a key a package registered into a type key chain takes its parent's rules first. A
+  preview control with such a key (TbCovChild, under TyButton) is styled when the document
+  or the base styles its parent, so it is not in the default-look list; a rule for a key up
+  a shown key's chain (TbCovRoot, the parent of TbCovMid, the parent of TbCovLeaf) reaches
+  a drawn control, so it is not in the not-shown list; and both keys are known, not typos.
+  Without the chain: back in the lists, and unknown. }
+procedure TTbCoverageTests.TestTheListsFollowATypeKeyChain;
+var
+  doc, prev, base, notShown, def: TStringList;
+begin
+  doc := NewList;
+  prev := NewList;
+  base := NewList;
+  notShown := TStringList.Create;
+  def := TStringList.Create;
+  try
+    doc.CommaText := 'TbCovRoot,TbCovElse';
+    prev.CommaText := 'TbCovChild,TbCovLeaf,TbCovAlone';
+    base.CommaText := 'TyButton';
+    TyRegisterTypeKeyParent('TbCovChild', 'TyButton');
+    TyRegisterTypeKeyParent('TbCovMid', 'TbCovRoot');
+    TyRegisterTypeKeyParent('TbCovLeaf', 'TbCovMid');
+    try
+      TbCoverageLists(doc, prev, base, notShown, def);
+      AssertEquals('CV10: a parent''s rule reaches the drawn child', 'TbCovElse', notShown.CommaText);
+      AssertEquals('CV10: styled through the parent', 'TbCovAlone', def.CommaText);
+      AssertTrue('CV10: a registered key is known', TbIsKnownTypeKey('tbcovchild', nil));
+      AssertTrue('CV10: so is a parent of one', TbIsKnownTypeKey('TbCovRoot', nil));
+      AssertTrue('CV10: and one in the middle', TbIsKnownTypeKey('TbCovMid', nil));
+    finally
+      TyUnregisterTypeKeyParent('TbCovChild');
+      TyUnregisterTypeKeyParent('TbCovMid');
+      TyUnregisterTypeKeyParent('TbCovLeaf');
+    end;
+    TbCoverageLists(doc, prev, base, notShown, def);
+    AssertEquals('CV10: without the chain', 'TbCovElse,TbCovRoot', notShown.CommaText);
+    AssertEquals('CV10: without the chain (default look)', 'TbCovAlone,TbCovChild,TbCovLeaf',
+      def.CommaText);
+    AssertFalse('CV10: an unregistered key is not known', TbIsKnownTypeKey('TbCovChild', nil));
+    AssertFalse('CV10: nor an unregistered parent', TbIsKnownTypeKey('TbCovRoot', nil));
   finally
     doc.Free;
     prev.Free;

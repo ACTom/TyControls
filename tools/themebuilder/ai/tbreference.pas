@@ -6,8 +6,9 @@ unit tbreference;
   from the engine are English anyway) and ASCII only.
 
   Put together at run time, once, rather than generated into a file at build time (as the
-  spec first had it): half of it is lists the library already holds -- TyCatalogTypeKeys,
-  TyCatalogTokens, TyKnownStyleProps, TyStyleValueHints, TyKnownColorFns,
+  spec first had it): half of it is lists the library already holds -- the typeKeys a
+  selector may name (TyCssSelectorTypeKeys: the catalog's, then any a package registered
+  into a type key chain, marked with the key they inherit from), TyCatalogTokens, TyKnownStyleProps, TyStyleValueHints, TyKnownColorFns,
   TyKnownPseudoStates, and the base theme itself (TyBuiltinThemeCss('default'), parsed:
   the seeds and derived variables of its light and dark @mode blocks, the variants of its
   rules) -- so that half cannot drift from the engine. A generator would have had to read
@@ -39,12 +40,13 @@ function TbColorFnSignature(const AFn: string): string;  { '' when none }
 function TbReferenceClaims: TTbRefClaims;       { FOR THE TESTS }
 function TbNotedProperties: TStringArray;       { FOR THE TESTS }
 function TbSignedColorFns: TStringArray;        { FOR THE TESTS }
+procedure TbForgetReference;                    { FOR THE TESTS: the next TbReferenceText builds anew }
 
 implementation
 
 uses
-  tyControls.Css.Catalog, tyControls.Css.Parser, tyControls.Css.Values, tyControls.StyleModel,
-  tyControls.BuiltinThemes, tbseeds;
+  tyControls.Css.Catalog, tyControls.Css.Complete, tyControls.Css.Parser, tyControls.Css.Values,
+  tyControls.StyleModel, tyControls.BuiltinThemes, tbseeds;
 
 type
   TNote = record
@@ -319,12 +321,14 @@ var
   parser: TTyCssParser;
   light, dark: TTyCssModeBlock;
   sb: TStringList;
-  listed, variants, hints: TStringList;
+  listed, variants, hints, keys: TStringList;
   i, j, k: Integer;
   name, line, hint, others: string;
   rule: TTyCssRule;
   sel: TTyCssSelector;
+  inherits: Boolean;
 begin
+  keys := TStringList.Create;
   sb := TStringList.Create;
   listed := TStringList.Create;
   variants := TStringList.Create;
@@ -438,14 +442,24 @@ begin
       end;
     end;
     sb.Add('## TypeKeys');
-    sb.Add('The controls and their parts; in brackets the variants the base theme styles (a variant is any StyleClass word, these are the usual ones).');
+    TyCssSelectorTypeKeys(keys);
+    inherits := False;
+    for i := 0 to keys.Count - 1 do
+      if TyTypeKeyParent(keys[i]) <> '' then
+        inherits := True;
+    if inherits then
+      sb.Add('The controls and their parts; in brackets the variants the base theme styles (a variant is any StyleClass word, these are the usual ones). A key marked [inherits X] takes every rule of X first, variants and states too, and its own rules on top, property by property: write a rule for it only where it should differ from X.')
+    else
+      sb.Add('The controls and their parts; in brackets the variants the base theme styles (a variant is any StyleClass word, these are the usual ones).');
     line := '';
-    for i := 0 to High(TyCatalogTypeKeys) do
+    for i := 0 to keys.Count - 1 do
     begin
-      name := TyCatalogTypeKeys[i];
+      name := keys[i];
       k := variants.IndexOfName(LowerCase(name));
       if k >= 0 then
         name := name + '(' + variants.ValueFromIndex[k] + ')';
+      if TyTypeKeyParent(keys[i]) <> '' then
+        name := name + ' [inherits ' + TyTypeKeyParent(keys[i]) + ']';
       if line <> '' then line := line + ', ';
       line := line + name;
     end;
@@ -464,6 +478,7 @@ begin
     variants.Free;
     listed.Free;
     sb.Free;
+    keys.Free;
   end;
 end;
 
@@ -475,6 +490,12 @@ begin
     GBuilt := True;
   end;
   Result := GText;
+end;
+
+procedure TbForgetReference;
+begin
+  GBuilt := False;
+  GText := '';
 end;
 
 function TbReferenceApproxTokens: Integer;

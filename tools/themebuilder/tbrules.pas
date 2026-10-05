@@ -19,7 +19,12 @@ unit tbrules;
   only this typeKey's selectors, in the base's order -- and the control looks as it did.
   They go before the document's first rule for the typeKey (a `TyEdit:focus` the document
   already has must still come after the base's `TyEdit:focus` it was written over), else
-  at the end. A variant rule (`TyButton.primary`) takes nothing away and is added empty. }
+  at the end. A variant rule (`TyButton.primary`) takes nothing away and is added empty.
+
+  The rule Ctrl+click goes to (TbFindPickRule): the control's own, for the first of its
+  classes the document has one for -- else, for a key a package registered into a type key
+  chain (#14), the nearest key up the chain that has one, which is what styles the control
+  now. When none has, the one to add is the control's own key's. }
 {$mode objfpc}{$H+}
 interface
 uses
@@ -31,6 +36,13 @@ function TbFindRuleSelectors(AScan: TTbCssScan; const ATypeKey, AVariant: string
 { offsets of every selector for ATypeKey, whatever its variant and state, text order (the
   coverage check: "the document has a rule for it" is any of these) }
 function TbFindTypeSelectors(AScan: TTbCssScan; const ATypeKey: string): TTbOffsets;
+{ The rule a Ctrl+click on a control of ATypeKey with the classes AClasses goes to: for each
+  key of its type key chain (TyTypeKeyChain: itself first), the selectors of the first class
+  the document has a rule for, or with no class the plain ones; the first key with any wins.
+  AKey and AVariant: that key and class. None found: no offsets, AKey = ATypeKey and
+  AVariant = the first class ('' without one) -- the rule to add. }
+function TbFindPickRule(AScan: TTbCssScan; const ATypeKey: string; const AClasses: TStringArray;
+  out AKey, AVariant: string): TTbOffsets;
 { an empty rule at the end; ACaret: where the caret goes in TbApplyEdits(AScan.Text, Result) }
 function TbNewRuleEdits(AScan: TTbCssScan; const AEol, ATypeKey, AVariant: string;
   out ACaret: Integer): TTbTextEdits;
@@ -49,7 +61,7 @@ function TbOwnRuleEdits(AScan: TTbCssScan; const AEol, ATypeKey: string;
 implementation
 
 uses
-  tyControls.DefaultTheme;
+  tyControls.DefaultTheme, tyControls.StyleModel;
 
 var
   GBaseScan: TTbCssScan = nil;   { TyBuiltinThemeCss, scanned once }
@@ -200,6 +212,44 @@ begin
         Result[High(Result)] := blk.Selectors[s].Start;
       end;
   end;
+end;
+
+function TbFindPickRule(AScan: TTbCssScan; const ATypeKey: string; const AClasses: TStringArray;
+  out AKey, AVariant: string): TTbOffsets;
+var
+  chain: TStringArray;
+  c, i: Integer;
+begin
+  chain := TyTypeKeyChain(ATypeKey);
+  for c := 0 to High(chain) do
+  begin
+    if Length(AClasses) = 0 then
+    begin
+      Result := TbFindRuleSelectors(AScan, chain[c], '');
+      if Length(Result) > 0 then
+      begin
+        AKey := chain[c];
+        AVariant := '';
+        Exit;
+      end;
+    end;
+    for i := 0 to High(AClasses) do
+    begin
+      Result := TbFindRuleSelectors(AScan, chain[c], AClasses[i]);
+      if Length(Result) > 0 then
+      begin
+        AKey := chain[c];
+        AVariant := AClasses[i];
+        Exit;
+      end;
+    end;
+  end;
+  Result := nil;
+  AKey := ATypeKey;
+  if Length(AClasses) > 0 then
+    AVariant := AClasses[0]
+  else
+    AVariant := '';
 end;
 
 function TbFindTypeSelectors(AScan: TTbCssScan; const ATypeKey: string): TTbOffsets;

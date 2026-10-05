@@ -1345,8 +1345,8 @@ var
   scan: TTbCssScan;
   classes: TStringArray;
   hits: TTbOffsets;
-  i, caret: Integer;
-  variant, key, src: string;
+  caret: Integer;
+  variant, key, src, ruleKey: string;
   edits: TTbTextEdits;
 begin
   if ATypeKey = '' then Exit;
@@ -1355,26 +1355,13 @@ begin
   scan := TbScanCss(src);
   try
     classes := SplitClasses(AStyleClass);
-    hits := nil;
-    variant := '';
-    { a control with several classes: the first one the document has a rule for }
-    for i := 0 to High(classes) do
-    begin
-      hits := TbFindRuleSelectors(scan, ATypeKey, classes[i]);
-      if Length(hits) > 0 then
-      begin
-        variant := classes[i];
-        Break;
-      end;
-    end;
-    if (Length(hits) = 0) and (Length(classes) = 0) then
-      hits := TbFindRuleSelectors(scan, ATypeKey, '');
-    if (Length(hits) = 0) and (Length(classes) > 0) then
-      variant := classes[0];
+    { a control with several classes: the first one the document has a rule for; a key
+      registered into a type key chain: else the nearest one up the chain (tbrules) }
+    hits := TbFindPickRule(scan, ATypeKey, classes, ruleKey, variant);
     if Length(hits) > 0 then
     begin
       { the same control again: the next rule of that name, round and round }
-      key := LowerCase(TbSelectorText(ATypeKey, variant));
+      key := LowerCase(TbSelectorText(ruleKey, variant));
       if key = FJumpKey then
         FJumpIndex := (FJumpIndex + 1) mod Length(hits)
       else

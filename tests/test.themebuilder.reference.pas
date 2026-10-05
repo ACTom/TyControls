@@ -24,6 +24,8 @@ type
     procedure TestItIsBuiltOnce;                 { R10 }
     { after the phase 3 reviews }
     procedure TestWhatReplacesTheBase;           { R11 }
+    { after the merge of 4.0 }
+    procedure TestARegisteredTypeKeyIsListed;    { R12 }
   end;
 
 implementation
@@ -476,6 +478,30 @@ begin
     Pos('A rule with a variant or a state (TyButton.primary, TyEdit:focus', ref) > 0);
   AssertTrue('R11: the example shows it', Pos('TyEdit:focus { border-color: var(--accent); }', TbReferenceExample) > 0);
   AssertTrue('R11: the rules say it', Pos('A rule with a variant or a state replaces nothing', TbSystemPrompt) > 0);
+end;
+
+{ R12: the typeKeys the model is given are the ones a selector may name (TyCssSelectorTypeKeys):
+  a key a package registered into a type key chain (#14) is listed after the catalog's, with
+  the key it inherits from, and the list's sentence says what that means; without it,
+  neither. Red when the reference reads the catalog alone. }
+procedure TTbReferenceTests.TestARegisteredTypeKeyIsListed;
+var
+  ref: string;
+begin
+  TyRegisterTypeKeyParent('TbRefTagButton', 'TyButton');
+  try
+    TbForgetReference;
+    ref := TbReferenceText;
+    AssertTrue('R12: listed, with its parent', Pos('TbRefTagButton [inherits TyButton]', ref) > 0);
+    AssertTrue('R12: after the catalog''s', Pos('TbRefTagButton', ref) > Pos('TyValueListEditorRow', ref));
+    AssertTrue('R12: and explained', Pos('A key marked [inherits X]', ref) > 0);
+  finally
+    TyUnregisterTypeKeyParent('TbRefTagButton');
+    TbForgetReference;
+  end;
+  ref := TbReferenceText;
+  AssertFalse('R12: gone with the chain', Pos('TbRefTagButton', ref) > 0);
+  AssertFalse('R12: and so is the sentence', Pos('[inherits', ref) > 0);
 end;
 
 initialization

@@ -23,7 +23,14 @@ unit tbcoverage;
 
   TTbCoverageTests.TestThePartTableMatchesTheSources holds the table to the sources: every
   typeKey a unit names in a string literal (comments stripped) is in its row; what a row
-  adds by hand (keys built by concatenation: ...Fill, ...Star) must be a catalogue key. }
+  adds by hand (keys built by concatenation: ...Fill, ...Star) must be a catalogue key.
+
+  The type key chain (#14, StyleModel.TyRegisterTypeKeyParent): a key a package registered
+  resolves its parent's rules first, then its own. So a key on the chain of a shown key is
+  shown too (a rule for the parent reaches the child's control: not list 1), a shown key
+  some key up its chain has a rule for is styled (not list 2), and a registered key, or the
+  parent of one, is a typeKey the library resolves (TbIsKnownTypeKey). With nothing
+  registered all of this is what it was. }
 {$mode objfpc}{$H+}
 interface
 uses
@@ -35,19 +42,21 @@ function TbPartKeysOfUnit(const AUnit: string): string;       { comma list, '' w
 procedure TbPartKeysOfClass(AClass: TClass; ADest: TStrings); { its unit's row and every ancestor's }
 function TbPartKeyUnits: TStringArray;                          { FOR THE TESTS }
 { A typeKey something in the library resolves: a catalogue key, a key of the base theme's
-  rules, a key of the part table (every row), or one of APreview (nil: none). The coverage
+  rules, a key of the part table (every row), a key registered into a type key chain or the
+  parent of one, or one of APreview (nil: none). The coverage
   check marks the rest "not a known typeKey" -- most often a typo. The catalogue alone is
   not enough: it is generated from light.tycss and leaves out what the base deliberately
   does not define (TyFormSurface, TyGridPanel). }
 function TbIsKnownTypeKey(const AKey: string; APreview: TStrings): Boolean;
-{ ANotShown: in ADoc, not in APreview. ADefaultLook: in APreview, in neither ADoc nor ABase.
+{ ANotShown: in ADoc, not in APreview nor up the type key chain of a key in it.
+  ADefaultLook: in APreview, and neither it nor any key up its chain in ADoc or ABase.
   Both cleared, then filled in alphabetical order. }
 procedure TbCoverageLists(ADoc, APreview, ABase, ANotShown, ADefaultLook: TStrings);
 
 implementation
 
 uses
-  tyControls.Css.Parser, tyControls.Css.Catalog, tyControls.DefaultTheme;
+  tyControls.Css.Parser, tyControls.Css.Catalog, tyControls.DefaultTheme, tyControls.StyleModel;
 
 type
   TTbPartRow = record
@@ -263,6 +272,40 @@ end;
 var
   GKnownKeys: TStringList = nil;   { catalogue + base + part table, lower case, sorted }
 
+{ registered into a type key chain, or the parent of a key that is: read live, a package
+  registers in its initialization and may unregister in its finalization }
+function IsChainKey(const AKey: string): Boolean;
+var
+  reg: TStringList;
+  i: Integer;
+begin
+  if TyTypeKeyParent(AKey) <> '' then
+    Exit(True);
+  Result := False;
+  reg := TStringList.Create;
+  try
+    TyGetRegisteredTypeKeys(reg);
+    for i := 0 to reg.Count - 1 do
+      if SameText(TyTypeKeyParent(reg[i]), AKey) then
+        Exit(True);
+  finally
+    reg.Free;
+  end;
+end;
+
+{ AKey or any key up its type key chain is in AList }
+function ChainInList(AList: TStrings; const AKey: string): Boolean;
+var
+  chain: TStringArray;
+  i: Integer;
+begin
+  chain := TyTypeKeyChain(AKey);
+  for i := 0 to High(chain) do
+    if IndexOfKey(AList, chain[i]) >= 0 then
+      Exit(True);
+  Result := False;
+end;
+
 function TbIsKnownTypeKey(const AKey: string; APreview: TStrings): Boolean;
 var
   i, j, n: Integer;
@@ -292,6 +335,8 @@ begin
   end;
   if GKnownKeys.IndexOf(LowerCase(AKey)) >= 0 then
     Exit(True);
+  if IsChainKey(AKey) then
+    Exit(True);
   Result := (APreview <> nil) and (IndexOfKey(APreview, AKey) >= 0);
 end;
 
@@ -312,15 +357,32 @@ end;
 
 procedure TbCoverageLists(ADoc, APreview, ABase, ANotShown, ADefaultLook: TStrings);
 var
-  i: Integer;
+  i, c: Integer;
+  shown: TStringList;
+  chain: TStringArray;
 begin
   ANotShown.Clear;
   ADefaultLook.Clear;
-  for i := 0 to ADoc.Count - 1 do
-    if (IndexOfKey(APreview, ADoc[i]) < 0) and (IndexOfKey(ANotShown, ADoc[i]) < 0) then
-      ANotShown.Add(ADoc[i]);
+  { what the preview draws: its keys and every key up their chains }
+  shown := TStringList.Create;
+  try
+    shown.CaseSensitive := False;
+    shown.Sorted := True;
+    shown.Duplicates := dupIgnore;
+    for i := 0 to APreview.Count - 1 do
+    begin
+      chain := TyTypeKeyChain(APreview[i]);
+      for c := 0 to High(chain) do
+        shown.Add(chain[c]);
+    end;
+    for i := 0 to ADoc.Count - 1 do
+      if (shown.IndexOf(ADoc[i]) < 0) and (IndexOfKey(ANotShown, ADoc[i]) < 0) then
+        ANotShown.Add(ADoc[i]);
+  finally
+    shown.Free;
+  end;
   for i := 0 to APreview.Count - 1 do
-    if (IndexOfKey(ADoc, APreview[i]) < 0) and (IndexOfKey(ABase, APreview[i]) < 0)
+    if not ChainInList(ADoc, APreview[i]) and not ChainInList(ABase, APreview[i])
        and (IndexOfKey(ADefaultLook, APreview[i]) < 0) then
       ADefaultLook.Add(APreview[i]);
   SortKeys(ANotShown);

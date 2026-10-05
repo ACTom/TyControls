@@ -44,6 +44,7 @@ type
     procedure TestAVariableCycleDoesNotBringItDown;
     procedure TestTheProbeStillCatchesWhatAPaintWouldRaise;
     procedure TestTheFastProbeAgreesWithTheResolveWalk;
+    procedure TestBothProbesFollowATypeKeyChain;
     procedure TestTheDropDownButtonDropsTheSampleMenu;
     procedure TestADensityTheDocumentCannotTakeIsRefused;
     procedure TestAOneModeDocumentIsNotShownDark;
@@ -526,6 +527,57 @@ begin
   finally
     docs.Free;
   end;
+end;
+
+{ #14: a key registered into a type key chain is one a paint asks for (a package's control
+  reports it), and resolving a key walks its chain. So a rule for a registered key, and a
+  rule for a key that only sits up some key's chain, are evaluated by a paint: both probes
+  must refuse a document whose such rule raises in the shown mode, and agree on it; with
+  the chain gone, both let it through (nothing asks for those keys any more). Red when the
+  fast probe reads the catalog alone (it says clean, the walk refuses) and when the walk
+  resolves the catalog alone (the fast probe refuses, the walk lets it through). }
+procedure TTbPreviewTests.TestBothProbesFollowATypeKeyChain;
+const
+  cModes = '@mode light { :root { --q: #ffffff; } } @mode dark { :root { --w: #000000; } } ';
+  cDocs: array[0..2] of string = (
+    cModes + 'TbProbeChild { color: var(--w); }',
+    cModes + 'TbProbeChild.primary:hover { background: var(--w); }',
+    cModes + 'TbProbeRoot { color: var(--w); }');
+
+  { the two verdicts in light mode, which must agree; True = let through }
+  function Verdict(const ADoc: string): Boolean;
+  var
+    model: TTyStyleModel;
+    fast: TTbFastProbe;
+    err: string;
+  begin
+    model := TTyStyleModel.Create;
+    try
+      model.LoadFromCss(ADoc);
+      model.SetMode('light');
+      fast := TbFastProbe(model, ADoc, False);
+      Result := TbProbeResolve(model, err);
+      AssertTrue('the fast probe could tell: ' + ADoc, fast <> tfpUnknown);
+      AssertEquals('the same verdict: ' + ADoc + ' / ' + err, Result, fast = tfpClean);
+    finally
+      model.Free;
+    end;
+  end;
+
+var
+  i: Integer;
+begin
+  TyRegisterTypeKeyParent('TbProbeChild', 'TyButton');
+  TyRegisterTypeKeyParent('TyTag', 'TbProbeRoot');
+  try
+    for i := 0 to High(cDocs) do
+      AssertFalse('refused with the chain: ' + cDocs[i], Verdict(cDocs[i]));
+  finally
+    TyUnregisterTypeKeyParent('TbProbeChild');
+    TyUnregisterTypeKeyParent('TyTag');
+  end;
+  for i := 0 to High(cDocs) do
+    AssertTrue('let through without it: ' + cDocs[i], Verdict(cDocs[i]));
 end;
 
 { A variable that leads back to itself used to recurse until the stack ran out -- in the

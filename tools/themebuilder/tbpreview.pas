@@ -17,8 +17,9 @@ unit tbpreview;
   that leads back to itself. So after every load (and every light / dark switch) the
   document is probed (TbProbeDocument): every declaration a paint could evaluate is
   evaluated once against the mode's variables (TbFastProbe), and if that raises, every
-  catalog typeKey is resolved with all its variants and states (TbProbeResolve), which has
-  the last word and names the typeKey. A failure puts the last version that worked back.
+  typeKey a paint can ask for (the catalog's, and any registered into a type key chain) is
+  resolved with all its variants and states (TbProbeResolve), which has the last word and
+  names the typeKey. A failure puts the last version that worked back.
 
   Ctrl+click (tbpick): every control under Root, and the sample window when it is built, has
   its WindowProc hooked; a left press made with Ctrl held (Command on a Mac) never reaches
@@ -334,8 +335,10 @@ function TbProbeDocument(AModel: TTyStyleModel; const AText: string; AModern: Bo
   variables for its current mode -- without going through ResolveStyle. tfpUnknown for a
   document with @import (its rules are not all in AText). }
 function TbFastProbe(AModel: TTyStyleModel; const AText: string; AModern: Boolean): TTbFastProbe;
-{ every catalog typeKey, once, with all its variants and every state: every declaration
-  any combination would evaluate. False and AError (typeKey[.variant]: why) on a raise }
+{ every typeKey a paint can ask for (TyCssSelectorTypeKeys: the catalog's, then the keys a
+  package registered into a type key chain), once, with all its variants and every state:
+  every declaration any combination would evaluate. False and AError (typeKey[.variant]:
+  why) on a raise }
 function TbProbeResolve(AModel: TTyStyleModel; out AError: string): Boolean;
 
 implementation
@@ -343,14 +346,14 @@ implementation
 {$R *.lfm}
 
 uses
-  tyControls.Css.Catalog, tyControls.Css.Parser, tyControls.DefaultTheme,
+  tyControls.Css.Catalog, tyControls.Css.Complete, tyControls.Css.Parser, tyControls.DefaultTheme,
   tyControls.DensityPack, tyControls.ThemeBundle, tyControls.Columns, tbthemesource,
   tbcoverage, tbproblems;
 
 var
   GBaseSheet: TTyCssStylesheet = nil;   { the model's base layer, parsed once }
   GDensitySheet: TTyCssStylesheet = nil;
-  GCatalog: TStringList = nil;          { the catalog typeKeys, lower case, sorted }
+  GCatalog: TStringList = nil;          { the catalog typeKeys, lower case, sorted (ProbeKeys) }
 
 procedure TbApplyController(ARoot: TWinControl; AController: TTyCustomStyleController);
 
@@ -421,21 +424,26 @@ end;
   apply -- so every declaration that could ever be evaluated for the typeKey is evaluated
   here once, against the mode's variables (a missing one, a cycle, a bad value all raise).
   Resolving each variant and each state set on its own evaluated the type's rules
-  (1 + variants) x 6 times over and took 0.6 to 1.1 s cold; see TestTheProbeIsQuick. }
+  (1 + variants) x 6 times over and took 0.6 to 1.1 s cold; see TestTheProbeIsQuick.
+  The keys are the catalog's plus the ones registered into a type key chain (#14): a control
+  of a package that registered one asks for its own key, and the resolve of a key walks its
+  chain, so whatever rule the chain reaches is evaluated here too. }
 function TbProbeResolve(AModel: TTyStyleModel; out AError: string): Boolean;
 const
   cEveryState: TTyStateSet = [tysSelected, tysHover, tysFocused, tysActive, tysDisabled];
 var
   k, v: Integer;
-  variants: TStringList;
+  variants, keys: TStringList;
   key, cls: string;
 begin
   AError := '';
   variants := TStringList.Create;
+  keys := TStringList.Create;
   try
-    for k := 0 to High(TyCatalogTypeKeys) do
+    TyCssSelectorTypeKeys(keys);
+    for k := 0 to keys.Count - 1 do
     begin
-      key := TyCatalogTypeKeys[k];
+      key := keys[k];
       variants.Clear;
       AModel.GetVariantsForType(key, variants);
       cls := '';
@@ -459,6 +467,7 @@ begin
     end;
   finally
     variants.Free;
+    keys.Free;
   end;
   Result := True;
 end;
@@ -509,6 +518,52 @@ begin
   FIndex.AddObject(AName, TObject(PtrInt(Result)));
 end;
 
+{ The typeKeys whose rules some paint's resolve evaluates, lower case, sorted: every key a
+  paint can ask for (TyCssSelectorTypeKeys -- the catalog's, then the ones registered into a
+  type key chain) and every key up its chain, since ResolveStyle walks the chain (#14) and
+  evaluates each key's rules the way it does the root's: the user layer's, and the base
+  layer's unless the user layer has a plain rule for that key. With nothing registered that
+  is the catalog, built once (GCatalog, AOwned False); otherwise a list the caller frees. }
+function ProbeKeys(out AOwned: Boolean): TStringList;
+var
+  reg, keys: TStringList;
+  i, c: Integer;
+  chain: TStringArray;
+begin
+  if GCatalog = nil then
+  begin
+    GCatalog := TStringList.Create;
+    for i := 0 to High(TyCatalogTypeKeys) do
+      GCatalog.Add(LowerCase(TyCatalogTypeKeys[i]));
+    GCatalog.Sorted := True;
+  end;
+  AOwned := False;
+  reg := TStringList.Create;
+  try
+    TyGetRegisteredTypeKeys(reg);
+    if reg.Count = 0 then
+      Exit(GCatalog);
+  finally
+    reg.Free;
+  end;
+  AOwned := True;
+  Result := TStringList.Create;
+  Result.Sorted := True;
+  Result.Duplicates := dupIgnore;
+  keys := TStringList.Create;
+  try
+    TyCssSelectorTypeKeys(keys);
+    for i := 0 to keys.Count - 1 do
+    begin
+      chain := TyTypeKeyChain(keys[i]);
+      for c := 0 to High(chain) do
+        Result.Add(LowerCase(chain[c]));
+    end;
+  finally
+    keys.Free;
+  end;
+end;
+
 function ParseCss(const ACss: string): TTyCssStylesheet;
 var
   p: TTyCssParser;
@@ -536,12 +591,17 @@ end;
   shared base rules once per typeKey and scans every rule list per variant and state).
   Clean is trusted. Raised is not taken on its own word: TbProbeDocument lets the resolve
   walk decide, so a variable this reading got wrong can cost time, never refuse a theme
-  the engine takes. test.themebuilder.preview holds the two to the same verdict. }
+  the engine takes. test.themebuilder.preview holds the two to the same verdict.
+  "For a catalog typeKey" is, since the type key chain (#14), "for a key some paint's
+  resolve reaches" (ProbeKeys): a registered key and every key up its chain. Each key on a
+  chain takes or drops its base rules by the same test as a root (LayerChainChildren), so
+  the per-key test below stands. }
 function TbFastProbe(AModel: TTyStyleModel; const AText: string; AModern: Boolean): TTbFastProbe;
 var
   doc: TTyCssStylesheet;
   vars: TTbVarList;
-  userBase, seen: TStringList;
+  userBase, seen, keys: TStringList;
+  ownKeys: Boolean;
 
   procedure AddUserBase(ASheet: TTyCssStylesheet);
   var
@@ -573,7 +633,7 @@ var
       for s := 0 to High(rule.Selectors) do
       begin
         t := LowerCase(rule.Selectors[s].TypeName);
-        if (GCatalog.IndexOf(t) >= 0)
+        if (keys.IndexOf(t) >= 0)
            and not (AIsBase and not AModel.PropertyCascade and (userBase.IndexOf(t) >= 0)) then
         begin
           applies := True;
@@ -592,16 +652,7 @@ var
     end;
   end;
 
-var
-  k: Integer;
 begin
-  if GCatalog = nil then
-  begin
-    GCatalog := TStringList.Create;
-    for k := 0 to High(TyCatalogTypeKeys) do
-      GCatalog.Add(LowerCase(TyCatalogTypeKeys[k]));
-    GCatalog.Sorted := True;
-  end;
   if GBaseSheet = nil then
     GBaseSheet := ParseCss(TyBuiltinThemeCss + LineEnding + TyBuiltinBaseModeCss);
   if AModern and (GDensitySheet = nil) then
@@ -614,6 +665,7 @@ begin
   vars := TTbVarList.Create(AModel);
   userBase := TStringList.Create;
   seen := TStringList.Create;
+  keys := ProbeKeys(ownKeys);
   try
     if Length(doc.Imports) > 0 then
       Exit(tfpUnknown);
@@ -637,6 +689,8 @@ begin
     vars.Free;
     userBase.Free;
     seen.Free;
+    if ownKeys then
+      keys.Free;
     doc.Free;
   end;
 end;
