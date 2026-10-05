@@ -2592,7 +2592,7 @@ shape 层完全理解它——墨水和命中测试描述的是同一个矩形�
 
 ### 不在这一批里
 
-**[第 109 批：已做，见 §144；被挪过的引导线的转角限制归 B14]** **去重叠求解器**。上游能把外侧标签沿一侧上下挪、在椭圆上重解 x、向邻居借空间、
+**[第 112 批：转角限制已做，每条引导线都过，见 §147]** **[第 109 批：已做，见 §144；被挪过的引导线的转角限制归 B14]** **去重叠求解器**。上游能把外侧标签沿一侧上下挪、在椭圆上重解 x、向邻居借空间、
 按视图矩形截断。这些**一个都不需要**就能把**一个**标签放对,
 而它们**全都**是为了让**几个**标签不打架。头注释里写明:
 在它落地之前,密集的饼图外侧标签会叠在一起,而 ECharts 会把它们分开。
@@ -7992,7 +7992,7 @@ H1–H4b 完成:直角坐标热力图、日历坐标系与它的画面、日历�
 - 新单元 `tyControls.AdvChart.Tree`:`TyHierarchyOf`(显式栈的先序,行号即上游 dataIndex)、`TyTreeFillStore`(每行一个去掉 `children` 的浅拷贝交给 Builder 新导出的 `TyFillSeriesStoreArray`)、`TyTreeSpecOf`(盒子沿用日历的 `TyCalMergeLayoutParam`)、`TyTreeApplyExpand`(JS 的真值与 `>= 0` 语义)、`TyTreeSolve`(Walker 算法按行号实现,四个朝向)、`TyTreeLabelSpecs`、`TyBuildTreeMarks`(真正的三次曲线路径命令,不采样)。
 - 控件:存储分支(在日历分支之前)、`SolveTrees`、`TreeInk`、`BuildSeriesList` 里在展开标签之前画、色板里给树一个不占位的分支;标签的主题部分抽成 `LabelBaseFor`,树的标签默认显示、默认文字是名字。
 - 主题:新键 `TyAdvChartTreeNode`(强调色的浅版,代替 lightsteelblue)和 `TyAdvChartTreeEdge`(边框墨);重新生成 DefaultTheme 与目录。
-- **标签框**:`TySymbolLabelBox` 按 zrender 的算法算符号标签的参照框(单位框、描边在单位空间撑开、完整变换,pin 有自己的单位框);标题新增 `HasHostBox/HostBox`,展开标签时有它就用它、并用新的 `TyLabelAnchorXYWH` 按 x+w/2 的形式算锚点——原来按 Left/Right 反算宽度,会差最后一位。这一批只给树用;散点、关系图、标注各自的现有测试不受影响。
+- **[第 112 批：arrow、line、path:// 的单位框改成真实的路径框，不空心的 line 符号按有填充、线宽 1 撑开，pin 的 inside 标签在框高 0.4 处，见 §147]** **标签框**:`TySymbolLabelBox` 按 zrender 的算法算符号标签的参照框(单位框、描边在单位空间撑开、完整变换,pin 有自己的单位框);标题新增 `HasHostBox/HostBox`,展开标签时有它就用它、并用新的 `TyLabelAnchorXYWH` 按 x+w/2 的形式算锚点——原来按 Left/Right 反算宽度,会差最后一位。这一批只给树用;散点、关系图、标注各自的现有测试不受影响。
 - **顺带修的真缺陷**:`TySymbolDefault` 逐字段填、新加的百分比偏移字段没写就是垃圾值——没写 `symbolOffset` 的系列可能被随机偏移。现在先 `Default()` 清零。
 
 ### 基准
@@ -8568,7 +8568,7 @@ A4 做了引擎,这一批把它接上:`rich`、背景框、边框、圆角、pad
 
 ### 做法
 
-- **新单元 `tyControls.AdvChart.States`**（纯，已进 `.lpk`）：`TTyStElement`（标志、三种声明的状态对象、rest 与当前值、当前列表、是否装了代理）、`TTyStItem`（宿主、标签、引导线）、`TyStUseStates`（上面那套 useStates 与默认代理）、`TyStApplyItem`（applyElementStates）、进出 emphasis 与 hbo 位；选中模型 `TTySelModel` 与 select/unselect/toggle/isSelected/indices/initFromData/mapJson，JS 键序在 `MapSet` 里。能变的键：fill、stroke、lineWidth、opacity、z2、平移 x/y、扇形半径、符号缩放、ignore；几何是设备 px，颜色打包。
+- **[第 112 批：能变的键加了引导线的 smooth（`stkSmooth`），见 §147]** **新单元 `tyControls.AdvChart.States`**（纯，已进 `.lpk`）：`TTyStElement`（标志、三种声明的状态对象、rest 与当前值、当前列表、是否装了代理）、`TTyStItem`（宿主、标签、引导线）、`TyStUseStates`（上面那套 useStates 与默认代理）、`TyStApplyItem`（applyElementStates）、进出 emphasis 与 hbo 位；选中模型 `TTySelModel` 与 select/unselect/toggle/isSelected/indices/initFromData/mapJson，JS 键序在 `MapSet` 里。能变的键：fill、stroke、lineWidth、opacity、z2、平移 x/y、扇形半径、符号缩放、ignore；几何是设备 px，颜色打包。
 - **控件**：`FSt` 按系列下标、按**原始**下标存每项的状态（过滤不搬家），每次建完显示列表 `StSync` 认元素（宿主、已摆好的标签、引导线、折线与面积）、刷新 rest 和声明、同步 selected 标志、应用标志，再 `StWrite` 把当前值写回元素。**帧 = 下一次绘制**：标志变了只记脏，`RenderTo`/`RenderCached` 开头 `StApplyChanged`，有元素变了就丢静态层——一次点击（移动、按下、松开、click）之间没有帧，和上游一样只算一帧，z2 不多爬。`Relayout`（Invalidate、换尺寸）算上游的整体更新：先回 rest、套旧列表、再套标志。
 - **悬停搬到标志上**：柱、饼、折线/散点（笛卡尔，日历和雷达之外）。在 A3 的 mouseout/mouseover 判定处离开/进入 emphasis（`TTyChartEventTarget` 多了派发者 `HdKind/HdSeries/HdRow`），emphasis 禁用的不是派发者，hbo 非零的不理会；画在静态层。覆盖层不再画这几类的项悬停；坐标轴触发的整列高亮仍走覆盖层，跳过已经由标志点亮的项。其余系列类型的悬停原样留在覆盖层。
 - **公开接口**：`DispatchAction(JSON)`（select/unselect/toggleSelect/highlight/downplay，batch 与未知类型答 False）、`SelectedDataIndices`、`SelectedMapText`、`ItemStates`、`LineStates`。事件走 A3 的路：`TTyChartEvent.Payload` 是动作事件的 JSON，查询对它们不过滤（上游 eventInfo 为空）；`TyChartEventTypeOf` 认这十二种。highlight/downplay 只做事件和 hbo 位（highlightKey 按首次使用编号），模糊是 B2 的。
@@ -9680,8 +9680,8 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 
 ### 推迟与偏差
 
-- **给了 x / y 时不重算标签线**（`needsUpdateLabelLine` → `updateLabelLinePoints`：`nearestPointOnPath` 投到宿主路径、`limitTurnAngle`）：饼标签被挪走后线还指着原来的位置。`labelLinePoints` 是照设的。基准里没有饼 + x / y 的用例。
-- **其他系列的 `labelLine.show`**（散点、柱子上的引导线）端口本来就没有，这一批也没加；LabelManager 对它们的 `_updateLabelLine` 不移植。
+- **[第 112 批：已做，从饼留下的锚点重新走线、过 `minTurnAngle`，见 §147]** **给了 x / y 时不重算标签线**（`needsUpdateLabelLine` → `updateLabelLinePoints`：`nearestPointOnPath` 投到宿主路径、`limitTurnAngle`）：饼标签被挪走后线还指着原来的位置。`labelLinePoints` 是照设的。基准里没有饼 + x / y 的用例。
+- **[第 112 批：已做，散点、涟漪散点、折线符号、柱子，见 §147]** **其他系列的 `labelLine.show`**（散点、柱子上的引导线）端口本来就没有，这一批也没加；LabelManager 对它们的 `_updateLabelLine` 不移植。
 - **`width` / `height`** 读进来了，不应用（上游写到 style 上，只在 overflow / 背景下影响框）；**`draggable`** 不做（没有拖动）。
 - **只进清单的是端口的系列标签**：折线的 `endLabel`、漏斗标签、关系图的边标签不进（上游会进）；矩形树图本来就 `disableLabelLayout`。自己定锚的标记（树、旭日图、桑基图、关系图的环形旋转）按「放在 label.x / y 上」处理，没有逐一核对它们的 textConfig。
 - **饼的富文本标签**改了对齐或字号时不重排（系列标签会）。
@@ -10112,7 +10112,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
   - 这一半的每个标签：`dx = sqrt(|(1 − dy²/rB²)·rA²|)`，新 x = `cx + (dx + len2)·dir`；可用宽减去 x 的移动量（`target − Δx·dir`），**强制** `constrainTextWidth`，再写 x。
 - **`constrainTextWidth`**：作者写了宽度的不动。旧外宽 = 框宽（没背景时加左右内边距）；可用宽小于它、或者强制时：`overflow` 含 `break` 的走换行那一支；否则宽度设成「可用宽 − 内边距」——不够时一定设，强制而够时**比原始宽度还宽就取消**（设 null，避免背景留白），不够原始宽度仍设；然后重量框。
 - **截断**是 zrender 画的时候做的：`style.width` 加上饼的默认 `overflow: 'truncate'`，每行按 `truncateSingleLine`（容器宽减 1、省略号放不下就不要、按字宽累加再按比例两轮）。没有宽度就不截——饼的标签只在求解器给了宽度时才会被截。截后的框宽是截后文字的宽（不是 style.width）；有背景时背景框宽是 `width + padding`。
-- **最后**：`label.setStyle({align: textAlign})`，x 或 y 是 NaN 的隐藏；引导线过 `limitTurnAngle` / `limitSurfaceAngle`（默认 90° / 90°）——标签被挪过之后，这两步会再把中点掰回来（路线图 B14）。之后才是 LabelManager 的 `hideOverlap`。
+- **[第 112 批：两步已做；没动过的线也过，`minTurnAngle` 大于 90 时同样会掰，见 §147]** **最后**：`label.setStyle({align: textAlign})`，x 或 y 是 NaN 的隐藏；引导线过 `limitTurnAngle` / `limitSurfaceAngle`（默认 90° / 90°）——标签被挪过之后，这两步会再把中点掰回来（路线图 B14）。之后才是 LabelManager 的 `hideOverlap`。
 
 ### port 以前
 
@@ -10133,9 +10133,9 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 
 ### 基准
 
-- `tools/advchart-oracle/pie-avoid.js`（真 dist，node SSR）：饼的标签布局是模块内的函数，所以经 `Module._compile` 载入 dist，在调用 `avoidOverlap` 的那一句前后加两个只读钩子（正则必须恰好命中一次）：进入时记清单（每项的选项、label.x / y、转角、框、原始宽、作者宽度、内边距、背景、边距、引导线）和系列的 cx / cy / r / 视图 / `hasLabelRotate`，退出时记 label.x / y、框、引导线（转角限制之前）、`style.width`、可用宽。渲染一次 SVG 之后记每个饼标签画出的各段文字、是否截断、是否被 hideOverlap 藏起、变换、对齐、画出来的引导线。56 个用例：一侧挤满（大块在前、在后）、两侧都挤、`labelLayout: null`、挤不下（squeeze 再 bail-out 再藏）、稀疏、一侧一个；`alignTo` 的 `labelLine`（挤、稀疏）、`edge`（默认 25%、20 px、10%）；`bleedMargin` 60、小视图的默认 2、窄图截断（none / edge / labelLine）、作者 `label.width`；`length` / `length2`（px、百分比）、`distanceToLabelLine`、不画引导线；玫瑰图两种、`startAngle` 0 / 200、逆时针、中心偏移、环形、自己的视图矩形；富文本、窄图里的富文本、带背景和内边距、`minMargin`、`label.offset`、`position: 'top'`、`minShowLabelAngle`、`center`、`outside` + `labelLine`、带背景的 `edge`、只有内边距的 `edge`、`ellipsis: '~'`（普通对齐与 `edge`）；带背景的稀疏饼（宽度只设一次）、宽松与 `bleedMargin` 30 的带背景标签、`offset` 加挤满、`minMargin` 关掉求解器只靠 hideOverlap、`textMargin` 开着求解器、视图矩形离开顶部又挤满（上界是视图的）、大饼的几个标签只是越过视图边界（只靠 squeeze 挪动、也算动过）；对照：`avoidLabelOverlap: false`（挤、窄）、`rotate: 'radial'`、inside、两个饼。57 个饼、1347 个清单项，741 个被挪过，278 个被设了宽度，223 个画出来被截断，192 个被藏起，95 条引导线被转角限制又掰过（B14 的事，只计数）。
+- **[第 112 批：清单项多记两个限制与法向，画出来的引导线逐位比，见 §147]** `tools/advchart-oracle/pie-avoid.js`（真 dist，node SSR）：饼的标签布局是模块内的函数，所以经 `Module._compile` 载入 dist，在调用 `avoidOverlap` 的那一句前后加两个只读钩子（正则必须恰好命中一次）：进入时记清单（每项的选项、label.x / y、转角、框、原始宽、作者宽度、内边距、背景、边距、引导线）和系列的 cx / cy / r / 视图 / `hasLabelRotate`，退出时记 label.x / y、框、引导线（转角限制之前）、`style.width`、可用宽。渲染一次 SVG 之后记每个饼标签画出的各段文字、是否截断、是否被 hideOverlap 藏起、变换、对齐、画出来的引导线。56 个用例：一侧挤满（大块在前、在后）、两侧都挤、`labelLayout: null`、挤不下（squeeze 再 bail-out 再藏）、稀疏、一侧一个；`alignTo` 的 `labelLine`（挤、稀疏）、`edge`（默认 25%、20 px、10%）；`bleedMargin` 60、小视图的默认 2、窄图截断（none / edge / labelLine）、作者 `label.width`；`length` / `length2`（px、百分比）、`distanceToLabelLine`、不画引导线；玫瑰图两种、`startAngle` 0 / 200、逆时针、中心偏移、环形、自己的视图矩形；富文本、窄图里的富文本、带背景和内边距、`minMargin`、`label.offset`、`position: 'top'`、`minShowLabelAngle`、`center`、`outside` + `labelLine`、带背景的 `edge`、只有内边距的 `edge`、`ellipsis: '~'`（普通对齐与 `edge`）；带背景的稀疏饼（宽度只设一次）、宽松与 `bleedMargin` 30 的带背景标签、`offset` 加挤满、`minMargin` 关掉求解器只靠 hideOverlap、`textMargin` 开着求解器、视图矩形离开顶部又挤满（上界是视图的）、大饼的几个标签只是越过视图边界（只靠 squeeze 挪动、也算动过）；对照：`avoidLabelOverlap: false`（挤、窄）、`rotate: 'radial'`、inside、两个饼。57 个饼、1347 个清单项，741 个被挪过，278 个被设了宽度，223 个画出来被截断，192 个被藏起，95 条引导线被转角限制又掰过（B14 的事，只计数）。
 - 转写（`avoidOverlap` 一整套，框由带着入口样式拷贝的 zrender Text 量）对每个饼逐位复现退出状态；23 条守卫（不平移、不重算 x、横半轴用 r、新 x 不加 length2、上下半共用一个椭圆、不减 bleedMargin、edge 不减 edgeDistance、labelLine 不对齐最远处、不设宽度、重算时不强制、强制时从不取消宽度、edge 的引导线照 none 算、中点不保持距离、末段不随标签的 y、内边距不算、minMargin 不压左右、center 也挪、`outside` 也对齐最远处、有背景的真实宽再加一次内边距、有背景的旧外宽再加一次内边距、框不带 offset、只有第一遍推开才算动过、上界用图的顶而不是视图的）各自改变点名的用例；两次生成逐字节一致 → `tests/fixtures/advchart-pie-avoid.json`。
-- `label-layout.js`（B8）加三个求解器开着的饼用例（`pie.avoid`、`pie.avoid.many`（90 块，挤过之后藏掉 42 个，含两个高亮）、`pie.avoid.labelLine`），转角限制关掉（`minTurnAngle` / `maxSurfaceAngle` 为 0）以便比画出来的引导线；原有 55 个用例的记录逐字节不变，只有守卫的 `changed` 名单多了新用例。
+- **[第 112 批：又加三个用例，默认限制下也能比引导线，见 §147]** `label-layout.js`（B8）加三个求解器开着的饼用例（`pie.avoid`、`pie.avoid.many`（90 块，挤过之后藏掉 42 个，含两个高亮）、`pie.avoid.labelLine`），转角限制关掉（`minTurnAngle` / `maxSurfaceAngle` 为 0）以便比画出来的引导线；原有 55 个用例的记录逐字节不变，只有守卫的 `changed` 名单多了新用例。
 - `test.advchart.pieavoid`（新，4 个测试）：
   - **求解器**：每个普通文字的饼，把记下的清单直接喂 `TyPieAvoidOverlap`，框用 zrender 的 SSR 宽度表量（先核入口框逐位相同），逐位比退出的 label.x / y、框、宽度、可用宽、引导线三点（块的框要选项里的样式，留给接线层）。
   - **接线**：控件渲染每个选项，逐位比每个清单项的 label.x / y（`LmBaseX/Y`）和引导线（求解器的答案，转角限制之前），每个画出的标签的 ignore、画出的文字（普通的按行，块按各段）、变换六个数和说明的 X / Y、对齐、引导线的 ignore；什么都不画的标签（截成空串、被 `minShowLabelAngle` 挡掉）这里没有元素。断言各类数量下限，并确认看到了被转角限制掰过的线。
@@ -10171,7 +10171,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 
 ### 推迟与偏差
 
-- **转角限制**（`limitTurnAngle` / `limitSurfaceAngle`）是 B14：被挪过的标签的引导线，上游会再把中点掰回来，端口画的是求解器给的三点。基准里 87 条线这样。
+- **[第 112 批：已做，见 §147]** **转角限制**（`limitTurnAngle` / `limitSurfaceAngle`）是 B14：被挪过的标签的引导线，上游会再把中点掰回来，端口画的是求解器给的三点。基准里 87 条线这样。
 - **`overflow: 'break'` / `'breakAll'`**：上游走换行那一支（去掉背景量内框、宽度取 `ceil`）；端口的普通文字不换行、不截，块照块自己的规则。没有用例。
 - **NaN 的数据**：上游的 NaN 扇区仍进清单，x 是 NaN，落到右边，把最右的 x 变成 NaN（`labelLine` 的可用宽随之 NaN），排序里比较也是 NaN；端口的无效扇区不出标签，不进清单。
 - **只在状态里显示的标签**（`label.show: false` 而 `emphasis.label.show: true`）：上游仍进清单、占位置；端口 `show: false` 时整个饼不出标签（原有偏差）。
@@ -10192,3 +10192,127 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - 没有新单元，`.lpk` 不变；没有新的 resourcestring。
 
 全量 **8181 个测试，0 错误，0 失败**（新增 `test.advchart.pieavoid` 4 个）。中途的一次全量红了两个：`TAdvChartPieLabelTest` 的 formatter 用例（400 px 的视图里 `Rent!` 被求解器截了，见上）和 `TAdvChartHandlerWiringOracleTest` 的三个饼百分比用例（真字体量字下标签被截，于是加了 `LmText`）；修完之后单跑与最后一次全量都绿。
+
+## 147. Tier 1 第一百一十二批：引导线走线（B14，2026-10-05）
+
+路线图 B14：labelLine 自动走线——`nearestPointOnPath`、`limitTurnAngle`、`limitSurfaceAngle`、`smooth`。§138 的 B8 把 LabelManager 的布局搬了过来，但「推迟与偏差」里留着两条：饼标签给了 x / y 之后引导线不重算（还指着原来的地方），散点、柱子上的 `labelLine.show` 端口根本没有。§144 的 B13 把饼的求解器补齐了，最后一遍的两个转角限制却只计了数：基准里 95 条引导线上游又掰过一次，端口画的是求解器给的三点；B8 基准的饼用例为了能比引导线，干脆把两个限制关成 0。这一批把引导线从走线到画出来、到各状态，整条按上游补齐。
+
+### 上游的做法（`label/labelGuideHelper.ts` 的 `updateLabelLinePoints` / `nearestPointOnPath` / `projectPointToArc` / `projectPointToLine` / `projectPointToRect` / `limitTurnAngle` / `limitSurfaceAngle` / `setLabelLineStyle` / `buildLabelLinePath`、`label/LabelManager.ts` 的 `processLabelsOverall` / `_updateLabelLine`、`chart/pie/labelLayout.ts` 的最后一遍、zrender 的 `curve.ts` `cubicProjectPoint` / `quadraticProjectPoint`、`Point`、`matrix.invert` / `mul`、`Text.getComputedTransform`、`symbol.ts` 逐行核过，全部在真 dist 上由基准确认）
+
+- **谁走线**：`series:layoutlabels` 在 `layout()` 之后跑 `processLabelsOverall`，遍历每个系列视图的 group（被 ignore 的宿主连同子孙跳过）。视图的 `ignoreLabelLineUpdate` 为真的（饼、漏斗——它们自己画线）只在标签的 `needsUpdateLabelLine` 为真时走：`updateLayoutConfig` 里给了 x 或 y 就是真，再给了 `labelLinePoints`（且宿主有线）又变回假。其余系列的每个元素都走，只要它有文字和 `dataIndex`。
+- **`_updateLabelLine`**：先 `setLabelLineStyle`（下面），再 `updateLabelLinePoints(el, itemModel.getModel('labelLine'))`。线的默认描边是数据项视觉样式里按 `drawType` 取的那个颜色：散点、柱是 `fill`，折线是 `stroke`——也就是数据项的颜色，空心符号也一样（符号的填充是地色，不是它）。
+- **`setLabelLineStyle`**：没有文字就删线。按 normal、emphasis、blur、select 四个状态逐个看：标签在这个状态里隐藏（normal 看 `label.ignore`，其余看 `label.states[状态].ignore`，没写就是 normal 的），或者这个状态的 `labelLine.show`（没写取 normal 的）是假，这个状态的线就 ignore（线已经有了才设）；否则没有线就建一条（建的时候如果 normal 不显示，先把 normal 设成 ignore），这个状态 ignore 为假。**每个状态都设 `shape.smooth`**：`true` 是 0.3，其余 `Math.max(+smooth, 0) || 0`——状态没写 smooth 就是 0，于是平滑的线一悬停就变直；样式是这个状态 `lineStyle` 的 `getLineStyle()`（只有写了的键）。`showAbove` 决定 `updateZ` 里线的 z2 是宿主的 maxZ2 加一还是减一。
+- **`updateLabelLinePoints`**：
+  - 标签框是 `label.getBoundingRect()` **在** `label.getComputedTransform()` **之前**读的，再经后者变换。`getComputedTransform` 会让宿主 `updateInnerText(true)`，宿主按 position 给的默认对齐这时才落到文字上——所以**没进 LabelManager 清单的标签**（系列没写 labelLayout），框是按 style 上的对齐量的，没写就是左上（`scatter.plain` 的框是 `[0, 0, w, h]`，画出来却是居中的）；进了清单、`layout()` 里重算过几何的，框已经是布局之后的对齐；清单里常态隐藏的（只在状态里显示），框还是加进清单时宿主给的那个对齐。
+  - 候选锚点按 top、right、bottom、left 的顺序：框边中点，距离 0；每个沿外法向推出 `labelLine.length2 || 0`（字符串在乘法里按 `Number` 转，`'10%'` 是 NaN）；推出来的点经宿主计算变换的逆（`invert`，行列式为 0 时是 null，点就不变换）进宿主自己的坐标系，在那里量：有 `textGuideLineConfig.anchor`（饼）就量到锚点的距离，宿主是 Path 就 `nearestPointOnPath`，否则投到宿主的局部框上。**严格更近**才换（平局留前一个），换的时候把推出点和宿主上的点经宿主变换送回全局：线是 `[宿主上的点, 推出点, 框边中点]`。最后 `limitTurnAngle(points, minTurnAngle)`——普通系列默认没有 `minTurnAngle`，饼的默认是 90。
+  - 宿主上的点是模块级的 `pt2`：有锚点时只在循环前拷一次，之后每次换候选都再乘一次宿主变换；没有锚点时是 `nearestPointOnPath` 写进去的，一个更近的段都没有就不写，留着上一次的值。
+- **`nearestPointOnPath`**：按 PathProxy 的数据数组走命令（M 1、L 2、C 3、Q 4、A 5、Z 6、R 7）。**第一个命令**不管是什么，都用紧跟在命令码后的两个数当当前点和子路径起点。L 是夹在两端之间的投影；C、Q 用 zrender 的 `cubicProjectPoint` / `quadraticProjectPoint`（按 0.05 的步长累加采 20 个点，再在 0.005 起的区间上二分，最多 32 步，区间小于 1e-4 停）；R 先把负的宽高翻正再夹；Z 量回子路径起点那一段；A 见下。每段严格更近才写出点。量出来的是**宿主坐标系里的距离**——非均匀缩放的符号（`symbolSize: [30, 12]`）是在压扁的空间里比远近的。
+- **`projectPointToArc`**（照抄，以下几处读着像 bug）：点先减圆心、**除以到圆心的距离 d**，圆上的点是单位方向乘 r；起止角差（取模 2π）小于 1e-4 就当整圆，答 `d − r`——**点在圆里时是负数**，于是离圆心最近的候选反而「最近」（`scatter.plain` 里赢的是 left）。不是整圆时：逆时针把起止对调、各自 `normalizeRadian`，起大于止就止加 2π；方向角在弧上（或加 2π 后在）也答 `d − r`；否则取两端里近的那个，但比较和答出的距离用的是**单位方向**，不是点本身。弧的命令里 x 先按 `ry / rx` 缩放再量（zrender 用缩放画椭圆），找到的点不缩回去；弧之后的当前点是 `cos(θ + Δθ)·rx + cx`。
+- **符号作为宿主**：`createSymbol(type, -1, -1, 2, 2)` 的单位路径；`symbolPath` 的局部变换是缩放 `symbolSize / 2`、转 `(symbolRotate || 0) * Math.PI / 180 || 0`、移到 `symbolOffset`，父组在点上，计算变换是 `mul(父, 局部)`（局部不需要变换时就是父的）。`path://` 图标不保持纵横比时按 `'cover'` 铺满单位框（`resizePath`），而且多于 11 个数的数据存成 Float32。柱子是 `Rect`：有圆角是 roundRect 的路径，否则一条 R 命令，宽高带着布局的正负号。
+- **`limitTurnAngle`**：`minTurnAngle` 不在 (0, 180] 里（字符串按比较的转换，NaN、`null`、0 都不在）就不动。两段任一短于 1e-3 不动。两段夹角的余弦大于 `cos(minTurnAngle)`（转得不够）时，把起点投到第二段所在的直线上（不夹端点），再沿第二段方向挪 `d / tan(π − minTurnAngle)`，按参数夹在第二段两端之间（参数是 NaN 就放弃），写回中点。
+- **`limitSurfaceAngle`**（只有饼的最后一遍用）：第一段与扇区法向 `(cos 中角, sin 中角)` 的夹角余弦小于 `cos(maxSurfaceAngle)` 时，同样先投影；新角 `π/2 + acos(第二段·法向) − maxSurfaceAngle` 不小于 π/2 就直接取终点（平行），否则挪 `d / tan(π/2 − 新角)` 再夹。
+- **饼的最后一遍**：**每条**有点的引导线都过这两步，不管标签动没动——默认 90° / 90° 对没动过的线是空操作（转角余弦是 −|nx|），`minTurnAngle` 大于 90 时没动过的线也会被掰（`pie.unmoved.150`）。然后 `textGuideLineConfig = {anchor: linePoints[0]}`：之后 LabelManager 要给它重新走线时，量的是到这个锚点的距离。
+- **`buildLabelLinePath`**：smooth 大于 0 且至少三个点时，两段长度有一个是 0（或 NaN）就画直；否则 `moveLen = min(len1, len2) × smooth`，在中点两侧沿各段退回 `moveLen` 得 m0、m2，m1 是两者中点，画 `C(m0, m0, m1)`、`C(m2, m2, p2)`——只用前三个点。其余情况把点连起来。
+
+### port 以前
+
+- 饼标签给了 x / y，引导线还是原来那三点，指着标签原来的位置。
+- 散点、涟漪散点、折线符号、柱子上的 `labelLine` 一个字段都不读，没有线。
+- 饼的引导线不过转角限制（B13 只计数），`labelLine.smooth`、`minTurnAngle`、`maxSurfaceAngle` 不读；引导线的状态只有 select 的平移和 hideOverlap 藏起后 emphasis 的重新显示。
+- 顺带发现的标签定位偏差（§107 的符号标签框 `TySymbolLabelBox`）：`arrow` 的单位框当成了 −1..1（它的尖在中心、身子往下一整个高度：`[−4/3, 0, 8/3, 2]`），`line` 的高当成了 2（是 0），`path://` 图标当成了 −1..1（拟合后再存成 Float32，差 1e-7 量级）；`pin` 的 inside 标签放在框中心，上游的 `SymbolClz.calculateTextPosition` 把它放在框高的 0.4 处；不空心的 `line` 符号的框按「没有填充的 2 px 笔」撑开（至少 5），上游的路径留着数据项的填充、线宽是边框宽或 zrender 的 1。
+
+### 做法
+
+- **新单元 `tyControls.AdvChart.LabelGuide`**（纯）：
+  - 投影：`TyGuideProjectToLine` / `ToRect` / `ToArc`（照抄上面那几处）、`TyCubicProjectPoint` / `TyQuadraticProjectPoint`、`TyNearestPointOnPath`（走 PathProxy 的数据数组，命令码一起，越界读是 NaN）、`TyNearestPointOnRect`、`TyGuidePathData`（ZrPath 的命令转成数据数组）。
+  - 走线：`TyLabelLineRoute`（`updateLabelLinePoints` 到限制之前：框经标签变换、四个候选、宿主的逆变换与回送、`pt2` 的保留）；`TyLimitTurnAngle`、`TyLimitSurfaceAngle`；`TyLabelLineCmds`（`buildLabelLinePath` 的两段三次曲线，画直时为空，画家照点连线）。
+  - 读法：`TyLabelLineSmoothOf`（`setLabelLineState` 的 smooth）、`TyGuideJsNumber`（比较与乘法里的 `ToNumber`）、`TyGuideLength2`（`length2 || 0`）。
+  - 宿主：`TyGuideSymbolName`、`TyGuideSymbolHost`（单位路径、局部变换与父组按 `getLocalTransform` / `mul`）、`TyGuideRectHost`、`TyGuideHostOf`（从宿主说明上读）、`TyGuideMatInvert` / `TyGuideMatMul`。
+  - **浮点陷阱**：上游的算术里有 0/0（点正好在弧的圆心上）、NaN 的比较；公开的函数都在屏蔽陷阱的区间里算（照 Graph 的 `MaskFP` / `UnmaskFP`，恢复之前清 MXCSR 的粘滞位），内部互相调用走不屏蔽的原函数。比较一律经 `JLess` / `JLessEq`（NaN 为假），`Math.max` / `min` 有 NaN 赢和 ±0 的规则。
+- **说明（`TTyElementCaption`）多了 `Lg*`**：宿主上记下引导线要量的东西——种类（符号 / 矩形）、符号的 zrender 类型名与 `symbolKeepAspect`、尺寸 / 转角 / 偏移 / 点，或矩形带正负号的布局与四个圆角；线的默认颜色 `LgColor`（数据项的颜色：空心符号和 `line` 符号取描边，其余取填充，柱取填充）；线上记 `LgSmooth`（常态的 smooth）。
+- **Marks**：散点、涟漪散点、折线的符号和柱子写上 `Lg*`。
+- **ZrPath**：`TyZrMakePathCover`（`makePath` 的 `'cover'`）。**Symbol**：`TySymbolLabelBox` 的 `arrow`、`line`、`path://`（按 `symbolKeepAspect` 拟合后量 `TyZrBBox`）单位框。**Labels**：`pin` 的 inside 标签放在框高 0.4 处。**Marks** 的 `GuideLineSymBox`：不空心的 `line` 符号的标签框按有填充、线宽取原来的边框宽（没有就是 1）撑开；画出来的笔照旧（见偏差）。
+- **PieLabel**：读 `labelLine.minTurnAngle` / `maxSurfaceAngle`（没写是 90，`ToNumber`）、`smooth`、走线用的 `length2`（`RouteLength2`）；摆放记下法向 `NX` / `NY`；`TyBuildPieLabels` 出引导线之前过 `TyLimitTurnAngle` / `TyLimitSurfaceAngle`，smooth 的线带上 `Cmds`。`TyPlacePieLabel`（一个标签）照旧不带这两步。
+- **控件**：
+  - `LayoutSeriesLabels` 记下每个清单项的引导线元素（`FLmGuides`）和 `needsUpdateLabelLine`（`FLmRoute`）。
+  - 新的 `RouteLabelLines` 接在它后面：饼——`FLmRoute` 为真的，以引导线现在的第一个点为锚点，标签框取清单的 `RawLocal`、变换取布局写回的 `LmM`，`length2`（默认 30）与 `minTurnAngle`（默认 90）按数据项→系列读，过 `TyLimitTurnAngle`，换点、按自己的 smooth 重建 `Cmds`；其余——每个挂在宿主上的标签（`LmKind = 1`），宿主有 `Lg*`、某个状态的 `labelLine.show` 为真的，按上面三种情况取标签框（清单里的用 `RawLocal`；不在清单里的按 style 的对齐、否则左上，块重新排；清单里常态隐藏的按宿主给的对齐），变换取布局的或挂在宿主上的那个，走线、限制，建一条线：`lineStyle` 的颜色（否则 `LgColor`）、宽（默认 1）、不透明度、`type`；silent、`IsGuide`、带标签的 datum、`carGuide`；z 同宿主，z2 是宿主的减一（`showAbove` 加一）；常态 ignore = 标签隐藏或常态不显示。
+  - **状态**（`StDeclareItem` 的引导线部分）：每个状态显式写 ignore——标签在这个状态里隐藏（标签的状态声明，没有就取常态：饼、漏斗取 hideOverlap 之前的，因为它们的视图在布局之前设线；其余取布局之后的）或者状态的 `labelLine.show`（没写取常态的；饼、漏斗常态默认显示）为假；写 smooth（新的状态键 `stkSmooth`，状态没写就是 0）和 `lineStyle` 的颜色、宽。rest 加上描边色、线宽、smooth。`StWriteGuide` 写颜色、线宽，smooth 和 rest 不同时按点重建 `Cmds`。饼原来「hideOverlap 藏起的线 emphasis 重新显示」的规则是这条的特例（藏之前标签是显示的）。
+  - **动画**：引导线的点在动的时候按 `LgSmooth` 重建曲线；描入（`strokePercent` 小于 1）时画直的前缀。
+
+### 基准
+
+- `tools/advchart-oracle/label-line.js`（新，真 dist，node SSR，600×400）：经 `Module._compile` 载入 dist，加三处只读的补丁（正则各自恰好命中一次）：把 `nearestPointOnPath`、两个限制、`buildLabelLinePath`、`createSymbol` 交给 `globalThis` 供规则记录；`updateLabelLinePoints` 里在读框之后留一份**变换之前**的框，`limitTurnAngle` 前后各记一次（宿主类型、框、标签变换、宿主变换、路径数据、锚点、`length2`、`minTurnAngle`、限制前后的三点）；饼最后一遍的两个限制前后（限制值、法向、前后三点）。渲染一次 SVG 之后记每条画出来的引导线（ignore、点、smooth、`buildLabelLinePath` 的调用、描边、线宽、不透明度、`lineDash`、z2 和宿主的 z2、三个状态的 ignore / smooth / 描边 / 线宽）；带 `hover` 的用例派发 `highlight`（或 `select`）、跑一帧再记一遍。
+  - **规则**：22 条路径（扇区：四分之一、四分之三环、逆时针细片、整环、跨 0 度的逆时针环；矩形、负宽高的矩形、圆角矩形；折线、多边形；带三次与二次曲线的 svg、svg 椭圆弧两种；八种内置符号的单位路径；一个以 L 开头的数据数组，第一个命令自己给出当前点）各 50 个查询点上的 `nearestPointOnPath`（1100 条，一条什么都没写）；随机三点上的 `limitTurnAngle` / `limitSurfaceAngle` 各 360 条（角度轮着取：缺省、0、1、30、60、90、120、150、179、180、200、`'120'`；有重合点、竖直的第二段、极短的第二段；分别掰了 171 / 98 条）；`buildLabelLinePath` 361 条（smooth 0.3、0.5、1、2、0.05、0，含两点的线；283 条画曲线）。
+  - **用例**（85 个）：散点的引导线——没有 labelLayout（框按左上量）、dx / dy、`length2` 12 与字符串 `'9'`、`position: 'right'`、全部放到一个 x / y、函数逐个放 x / y、style 的 align、转过的标签、富文本带背景（没有 labelLayout 与函数挪动）；符号——rect、roundRect、triangle、diamond、pin、arrow、`path://`（三次 + 二次曲线、Float32）、emptyCircle、`[30, 12]`、转 35°、偏移、尺寸 2（不需要局部变换）、line（标签在里面与在上面）；`minTurnAngle` 30 / 90 / 150 / 180 / 0 / 200 / `'120'`；smooth `true` / 0.6 / 2 / −1 / `'0.4'` / `length2` 为 0 时；柱——在上面给 y、在里面挪出来、负值、横向、圆角、没有 labelLayout、带边框；折线符号（挪动与不挪）；涟漪散点；hideOverlap 藏掉的线与悬停重新显示；`lineStyle` 的颜色 / 宽 / 虚线 / 不透明度、只写宽、`showAbove`；状态——emphasis 的 `lineStyle` 与 smooth、`emphasis.labelLine.show: false`、只在 emphasis 显示的标签、常态不显示而 emphasis 显示的线（这两种再各加一个选中：线仍隐藏）、hideOverlap 藏起的标签被选中（线仍隐藏）、平滑的线悬停变直、select 的颜色；饼——x 85%、y 30、x / y 加 `minTurnAngle` 150、函数给 x / y 加 `length2` 10、函数给 `labelLinePoints`（不重新走线）、函数同时给 x 和 `labelLinePoints`（也不走线）、函数给 x / y 加 `minTurnAngle` 179 与 `length2` 40（走过的线被掰）、x 85% 的平滑饼（重新走线后仍画曲线）、只给 dy（不走线、仍过限制）、挤满时 `minTurnAngle` 120 / 45 / 0、`maxSurfaceAngle` 45 / 150 / 180、求解器挪过（默认限制、edge、labelLine）、没动过而 `minTurnAngle` 150、smooth `true` / 0.7、平滑的线悬停、emphasis 的 `lineStyle`、hideOverlap 藏起的扇区被选中（**它的线显示出来**：线的 select 状态在藏之前就写成了不隐藏）。852 次走线调用（96 次量到锚点，55 次被 `minTurnAngle` 掰过），543 次饼的限制调用（163 条被掰），1299 条画出来的线（92 条隐藏、117 条曲线），730 条状态下的线。
+  - 转写（投影、曲线投影、走线、两个限制、`buildLabelLinePath`）对每条规则、每次调用逐位复现；16 条守卫（`|d − r|`、第一个命令不给当前点、弧端点按点本身量、椭圆弧不缩放、线段不夹端点、不量闭合段、矩形不翻正、曲线只二分 4 步、平局取后者、候选换序、不推 `length2`、不进宿主坐标系、框不变换、限制不夹、`limitSurfaceAngle` 没有平行那一支、smooth 取长段）各自改变点名的规则或用例；锚点：散点每个标签都有线、给了 x 的饼量到锚点、`labelLinePoints` 不重新走线、只给 dy 不走线但饼仍掰、默认限制掰挪过的饼线、150 掰没动过的、`minTurnAngle` 掰散点的线、hideOverlap 藏线、smooth 画曲线、悬停变直、只在 emphasis 显示的线常态隐藏、没有 labelLayout 的框按左上、x 加 `labelLinePoints` 不走线、179 掰走过的饼线、走线后的平滑饼线画曲线；两次生成逐字节一致 → `tests/fixtures/advchart-label-line.json`。
+- `pie-avoid.js`（B13）：清单项多记 `minTurnAngle`、`maxSurfaceAngle`（选项原样）和 `normal`（法向）；原有记录只多了这三个字段（逐行 diff 只有新增行）。
+- `label-layout.js`（B8）：加三个用例——`pie.avoid.turn`（求解器开着、**默认**限制、60 块）、`pie.x.line`（饼给 x 85%：引导线从锚点重新走）、`scatter.labelLine`（散点 dx / dy + hideOverlap + `labelLine.show`，含两个高亮）；原有 58 个用例的记录不变，守卫的 `changed` 名单多了新用例。
+- `test.advchart.labelline`（新，9 个测试）：
+  - **规则**：投影（距离与写出的点，或者什么都没写）、内置符号的单位路径（端口 ZrPath 建的与上游逐数相同）、两个限制、平滑路径（`Cmds` 对 `buildLabelLinePath` 的调用；画直时按点连线）。
+  - **走线**：每次调用的输入直接喂 `TyLabelLineRoute`，逐位比限制前后；饼的每次限制调用逐位比。
+  - **接线**：控件渲染每个选项（zrender SSR 宽度表量字），每条上游画出来的线找到端口的（`carGuide`、系列与数据下标）逐位比 ignore、三点、`Cmds`、smooth、线宽、不透明度、虚线，描边色——写了的逐位比，取调色板的比宿主的 `LgColor`（端口的调色板是皮肤的）——z2 相对宿主的方向，以及宿主的路径数据和计算变换（与上游量的逐数相同）；端口多出来的线必须是隐藏的；悬停 / 选中之后逐条比 ignore、是否画曲线、写了的描边色、线宽。断言各类数量下限。
+  - 手写：读法（smooth、`length2`、角度的 `ToNumber`）；没写颜色的线取数据项的颜色——空心符号、折线符号取描边，带边框的柱取填充（接线层的调色板映射读的就是这个，单独钉住）。
+- `test.advchart.pieavoid`：接线层的引导线改成「求解器的三点过两个限制」逐位比；画出来的线（原来只数被掰的）逐位比全部三点；新测试 `TestTheLimitsBendTheSolversLines`：每条记录的求解器线过两个限制，逐位等于画出来的线（1333 条有线的标签）。
+- `test.advchart.labellayout`：新的三个用例原样通过（清单、标签与引导线、高亮下的状态）。
+
+### 变异测试
+
+`b14_mut.py`（草稿目录）：逐个改源码、重编、依次跑 `TAdvChartLabelLineTest`、`TAdvChartPieAvoidTest`、`TAdvChartLabelLayoutTest`、`TAdvChartPieLabelTest`、`TAdvChartFunnelDrawTest`、`TAdvChartSelectOracleTest`（任何一个红就算杀死），按原字节还原。首轮 108 个，第二轮加 1 个：
+
+- `projectPointToArc`（9）：整圆与弧上答 `|d − r|`（两处）、两端比较反过来、没有整圆分支、逆时针不对调、不加 2π、不看加 2π 后的方向、椭圆不缩放 x、弧后的当前点用起角；
+- `nearestPointOnPath`（9）：线段不夹端点、不量闭合段、矩形不翻正、第一个命令不给当前点、平局取后者、曲线二分 4 步、采样步长 0.1、二分不看前一点、二次曲线当三次算；
+- 走线（9）：候选倒序、平局取后者、不进宿主坐标系、推出点不送回、不推 `length2`、框不经标签变换、不认锚点、宿主点每个候选清零、bottom 用框中线；
+- 限制（10）：没有 180 的上限、转角比较反过来、`tan(minTurnAngle)`、不判短段、不夹到线段上、参数 NaN 不放弃、表面角比较反过来、没有平行分支、法向取反、`tan(新角)`；
+- 平滑与读法（7）：取长段、m1 取 m0、`true` 是 0.5、负的 smooth 留着、零长段也画曲线、`length2` 的字符串当 0、`ToNumber` 不读字符串；
+- 宿主（6）：`path://` 不按 cover、转角不换弧度、不乘父组、圆角不建弧、逆矩阵总是 null、矩阵乘反；
+- Marks / Symbol / Labels / ZrPath（12，第二轮再加最后一个）：符号的偏移、转角丢了，空心符号与折线符号的颜色取填充（两处），柱的圆角丢了、高取绝对值、颜色取描边，arrow / line / `path://` 的单位框退回 −1..1，pin 的 inside 回到中心，cover 保持纵横比，`line` 符号的框按没有填充的笔；
+- 饼（8）：不过 `limitTurnAngle`、不过 `limitSurfaceAngle`、法向分量对调、`minTurnAngle` 默认 0、两个限制不读、smooth 不建曲线、smooth 不读；
+- 控件的走线（24）：饼不走线、有 `labelLinePoints` 也走、只给 dy 也走、`length2` 默认 15、走线后不过限制、走线后丢掉曲线，普通系列：清单里的不用 `RawLocal`、不在清单里的用画出来的对齐（横、竖两处）、无视 style 的对齐、块不重排、清单里的用挂在宿主上的变换、`length2` / `minTurnAngle` / smooth 不读、`lineStyle` 的颜色 / 宽 / 不透明度 / 虚线不读、`showAbove` 不读、总在宿主之上、常态 ignore 不看标签、不看 `labelLine.show`、只看常态的 show；
+- 状态（14）：状态的 ignore 不看标签、不看状态的 show、没写的 show 当真、常态的 show 不读、饼取藏之后的标签、普通系列取藏之前的、标签的状态声明不读、smooth / 描边 / 线宽不声明、rest 的 smooth 当 0、写回时 smooth / 描边 / 线宽不写。
+
+首轮 108 个里杀死 96 个，存活 12 个：
+
+- **等价 2 个**：宿主点每个候选清零——只在一个段都量不出来时才看得出，真实的宿主路径总有段；参数 NaN 不放弃——参数只在第二段长度为 0 时是 NaN，而短于 1e-3 的段早就返回了。
+- **补用例后杀死 10 个**：
+  - 第一个命令不给当前点：所有真实路径都以 M 或 R 开头，它们自己设当前点。加规则路径 `raw.lineFirst`（以 L 开头的数据数组）和对应的守卫 `noSeed`，杀死。
+  - `line` 的单位框退回 −1..1：标签在里面时框中心不变。加 `sym.line.top`——随之发现端口的 `line` 符号框按「没有填充的 2 px 笔」撑开（上游有填充、线宽 1），差 2 px；修成 `GuideLineSymBox`，并加变异 `lineSymBoxStroke`（第二轮杀死）。
+  - 有 `labelLinePoints` 也走：`pie.points` 只给点不给 x。加 `pie.points.xy`（函数同时给 x 和点），杀死。
+  - 走线后不过限制：给了 x / y 的饼线，赢的候选总让两段近乎拉直，150 也掰不动。加 `pie.xy.turn179`（179、`length2` 40），杀死。
+  - 走线后丢掉曲线：没有平滑饼走线的用例。加 `pie.x.smooth`，杀死。
+  - 只看常态的 show：变异把循环体删空，`Continue` 落进了循环（变异写坏了）；改成 `showAny := showAny` 重跑，杀死。
+  - 状态的 ignore 不看标签、没写的 show 当真、饼取藏之后的、普通系列取藏之前的：悬停只走了 emphasis，这几条只在 select / blur 上不同。加 `emph.only.select`、`line.emph.only.select`、`hide.select`（选中 hideOverlap 藏起的散点标签：线仍隐藏）、`pie.hide.select`（选中被藏的扇区：线显示），全部杀死。
+
+第二轮重跑 12 个存活加新变异 `lineSymBoxStroke`：11 个杀死，2 个等价（宿主点清零、参数 NaN）。合计 109 个，107 个杀死，2 个等价。
+
+### 推迟与偏差
+
+- **框的对齐取首次渲染的**：没进 LabelManager 清单的标签，上游读框时宿主的默认对齐还没落到文字上（首次渲染是左上）；之后任何一次更新（resize、setOption）读到的是上一次绘制留下的对齐。端口每次都按首次渲染算。同样，canvas 渲染器画过一次之后路径数据会变成 Float32（多于 11 个数），之后的走线量的是单精度的路径；端口按首次（SSR）算。
+- **`pt2` 的跨调用残留**：一个段都量不出来（路径全是 move，或距离全是 NaN）时上游的宿主点是上一次调用留下的；端口从 (0, 0) 开始。
+- **系列范围**：只给散点、涟漪散点、折线符号、直角坐标系的柱子建线（宿主带 `Lg*` 的）。热力图格子、象形柱、K 线、关系图、树、旭日、桑基图、雷达、日历上的散点等上游也会建线的元素没有接；漏斗自己的线不重新走线（上游也不）。
+- **数据项级的 `labelLine`**：普通系列按数据项→系列读（状态读法的节点链）；饼的 `smooth` / 两个限制仍只读系列这一级（原有约定），走线时的 `length2` / `minTurnAngle` 按数据项→系列读。`null` 在节点链里落到下一级（上游的 `null` 在系列选项里留着，算 0）。
+- **状态的过渡**：线的颜色、线宽、smooth 在状态切换时直接换，不补间；同时处于多个状态时，smooth 按状态合并的顺序（select、emphasis、blur，后者赢）。
+- **描入动画**中平滑的线画直的前缀（`strokePercent` 对曲线按长度截，端口没做）。
+- **`lineStyle`** 只读 `color`、`width`、`opacity`、`type`（`dashed` / `dotted` / 数组）；阴影、`cap`、`join`、`dashOffset` 不读。饼的引导线仍是扇区色、宽 1（`labelLine.lineStyle` 不读，原有偏差）；它的状态 `lineStyle` 读。
+- **饼的 `labelLine.show: false` 而 `emphasis.labelLine.show: true`**：上游建一条只在 emphasis 显示的线，端口不建（原有偏差）。
+- **饼、漏斗的 blur / select 状态**：线的 ignore 取 hideOverlap 之前标签的显示——被 hideOverlap 藏起的饼标签，选中它的扇区时线显示、文字不显示（`pie.hide.select` 确认；blur 同理，没有基准用例）。端口照做。
+- **`line` 符号画出来的笔**：端口仍画成没有填充的 2 px 笔（上游是数据项的填充加线宽 1 的笔）；这一批只把标签框改成上游的。
+- **设备像素**：`length2` 按 PPI 缩放，宿主路径和变换都在设备像素里。96 PPI 下与上游逐位一致。
+
+### 落地
+
+- `source/tyControls.AdvChart.LabelGuide.pas`（新，进 `tycontrols.lpk` 与 `tycontrols.pas`）。
+- `source/tyControls.AdvChart.Paint.pas`：说明的 `Lg*` 字段。
+- `source/tyControls.AdvChart.Marks.pas`：符号与柱子的 `Lg*`；`GuideLineSymBox`。
+- `source/tyControls.AdvChart.ZrPath.pas`：`TyZrMakePathCover`。
+- `source/tyControls.AdvChart.Symbol.pas`：`arrow`、`line`、`path://` 的单位框。
+- `source/tyControls.AdvChart.Labels.pas`：`pin` 的 inside 标签。
+- `source/tyControls.AdvChart.PieLabel.pas`：限制、smooth、走线的 `length2`、法向；单元头注释。
+- `source/tyControls.AdvChart.States.pas`：状态键 `stkSmooth`。
+- `source/tyControls.AdvChart.AnimView.pas`：动画中的平滑线。
+- `source/tyControls.AdvanceChart.pas`：`FLmGuides` / `FLmRoute`、`RouteLabelLines`、引导线的状态声明、rest 与写回。
+- `tools/advchart-oracle/label-line.js`、`tests/fixtures/advchart-label-line.json`、`tests/test.advchart.labelline.pas`（新，注册在 `tests/tytests.lpr`）。
+- `tools/advchart-oracle/pie-avoid.js`、`tests/fixtures/advchart-pie-avoid.json`、`tests/test.advchart.pieavoid.pas`：限制的字段、逐位比画出来的线。
+- `tools/advchart-oracle/label-layout.js`、`tests/fixtures/advchart-label-layout.json`：三个用例。
+- 没有新的 resourcestring。
+
+全量 **8191 个测试，0 错误，0 失败**（新增 `test.advchart.labelline` 9 个、`test.advchart.pieavoid` 1 个；第一次全量 8190 个也全绿，之后加了颜色的手写测试、补了用例与 `line` 符号的框）。

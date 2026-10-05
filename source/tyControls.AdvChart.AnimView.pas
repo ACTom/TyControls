@@ -420,7 +420,8 @@ implementation
 
 uses tyControls.AdvChart.Labels, tyControls.AdvChart.Data, tyControls.AdvChart.Color,
   tyControls.AdvChart.LinePath, tyControls.AdvChart.JsMath,
-  tyControls.AdvChart.Scale, tyControls.AdvChart.MarkerView;
+  tyControls.AdvChart.Scale, tyControls.AdvChart.MarkerView,
+  tyControls.AdvChart.LabelGuide;
 
 { ==================== the proxy ==================== }
 
@@ -2998,6 +2999,13 @@ begin
         end;
         a := NumOr(AProxy, 'style.strokePercent', 1);
         AEl.Shape.Points := TyPolylinePrefix(AEl.Shape.Points, a);
+        { A SMOOTH LINE follows its moving points; drawing in, it is drawn
+          straight [Batch 112] }
+        if Length(AEl.Shape.Cmds) > 0 then
+        begin
+          if a < 1 then AEl.Shape.Cmds := nil
+          else AEl.Shape.Cmds := TyLabelLineCmds(AEl.Shape.Points, AEl.Caption.LgSmooth);
+        end;
         if Length(AEl.Shape.Points) < 2 then MakeInkless(AEl);
       end;
     carGaugeDetail:

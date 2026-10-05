@@ -72,6 +72,10 @@ procedure TyZrTransform(var APath: TTyZrPath; const M: TTyMat2D;
 { graphic.makePath(str, no options, ABox, 'center'): the path fitted into the box
   keeping its aspect, the fit baked into the data }
 function TyZrMakePathCenter(const S: string; const ABox: TTyXYWH): TTyZrPath;
+{ the same with the layout 'cover' (resizePath): the path stretched over the
+  whole box -- a symbol's path:// icon when symbolKeepAspect is not set
+  [Batch 112] }
+function TyZrMakePathCover(const S: string; const ABox: TTyXYWH): TTyZrPath;
 
 { symbol.ts's built-in names this port builds as zrender does }
 function TyZrIsBuiltinSymbol(const AType: string): Boolean;
@@ -918,6 +922,29 @@ begin
   m[4] := m[4] * sx; m[5] := m[5] * sy;
   m[4] := m[4] + fit.X;
   m[5] := m[5] + fit.Y;
+  TyZrTransform(Result, m, f32);
+end;
+
+function TyZrMakePathCover(const S: string; const ABox: TTyXYWH): TTyZrPath;
+var
+  f32: Boolean;
+  r: TTyXYWH;
+  sx, sy: Double;
+  m: TTyMat2D;
+begin
+  Result := TyZrParseSvg(S, f32);
+  r := TyZrBBox(Result);
+  { BoundingRect.calculateTransform onto the box itself }
+  sx := ABox.W / r.W;
+  sy := ABox.H / r.H;
+  m[0] := 1; m[1] := 0; m[2] := 0; m[3] := 1;
+  m[4] := 0 + -r.X;
+  m[5] := 0 + -r.Y;
+  m[0] := m[0] * sx; m[1] := m[1] * sy;
+  m[2] := m[2] * sx; m[3] := m[3] * sy;
+  m[4] := m[4] * sx; m[5] := m[5] * sy;
+  m[4] := m[4] + ABox.X;
+  m[5] := m[5] + ABox.Y;
   TyZrTransform(Result, m, f32);
 end;
 

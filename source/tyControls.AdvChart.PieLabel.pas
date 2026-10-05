@@ -34,8 +34,10 @@ unit tyControls.AdvChart.PieLabel;
   label again. It runs over the whole series' list before the marks are
   built, so it lives in TyBuildPieLabels; TyPlacePieLabel places ONE label
   and keeps only the last step, which is all one label sees of it.
-  NOT HERE: the turn limits that bend a moved label's line again
-  (limitTurnAngle / limitSurfaceAngle, roadmap B14).
+  THE TURN LIMITS (limitTurnAngle / limitSurfaceAngle, AdvChart.LabelGuide)
+  bend every line the build draws -- moved or not -- after the solver, and
+  a smooth line draws two cubics [Batch 112, roadmap B14]; TyPlacePieLabel
+  leaves them out.
 
   PORTED FROM src/chart/pie/labelLayout.ts, ECharts 6.1.0.
 
@@ -113,6 +115,12 @@ type
     { `label.ellipsis`, '...' unless written: what a label the solver cuts
       ends with [Batch 109] }
     Ellipsis: string;
+    { labelLine.minTurnAngle / maxSurfaceAngle (degrees, as JavaScript's
+      ToNumber reads them; 90 unless written, nought or not a number: no
+      limit), smooth (setLabelLineState's number) and length2 as a label
+      layout routing the line reads it (`length2 || 0`, logical px; a
+      percentage is not a number there) [Batch 112] }
+    MinTurnAngle, MaxSurfaceAngle, Smooth, RouteLength2: Double;
   end;
 
   { One placed label, DEVICE px. AnchorV is always the middle -- upstream forces
@@ -134,6 +142,9 @@ type
     { what the overlap solver reads, device px: labelLine's length and
       length2, distanceToLabelLine, edgeDistance [Batch 109] }
     LineLen, LineLen2, DistToLine, EdgeDist: Double;
+    { the slice's normal (cos, sin of its middle angle): limitSurfaceAngle's
+      surface [Batch 112] }
+    NX, NY: Double;
   end;
 
 { ==== THE OVERLAP SOLVER (avoidOverlap) [Batch 109, roadmap B13] ====
@@ -266,7 +277,7 @@ function TyPieBleedMargin(const AViewRect: TTyRectF): Double;
 implementation
 
 uses tyControls.AdvChart.RichStyle, tyControls.AdvChart.JsMath,
-  tyControls.AdvChart.LabelLayout;
+  tyControls.AdvChart.LabelLayout, tyControls.AdvChart.LabelGuide;
 
 const
   cRadian = Pi / 180;
@@ -294,6 +305,10 @@ begin
   Result.EdgeDistance := TyBoxPercent(25);    { :277 }
   Result.BleedMargin := NaN;
   Result.ShowLine := True;                    { :288 }
+  Result.MinTurnAngle := 90;                  { :295 }
+  Result.MaxSurfaceAngle := 90;               { :296 }
+  Result.Smooth := 0;                         { :294 }
+  Result.RouteLength2 := 30;
   Result.MinShowLabelDeg := 0;
   Result.OffsetXLogical := 0;
   Result.OffsetYLogical := 0;
@@ -504,6 +519,13 @@ begin
       Result.ShowLine := d.AsBoolean;
     Result.LineLength := LengthIn(line, 'length', Result.LineLength);
     Result.LineLength2 := LengthIn(line, 'length2', Result.LineLength2);
+    { the limits and the smooth [Batch 112] }
+    Result.MinTurnAngle := TyGuideJsNumber(line.Find('minTurnAngle'), Result.MinTurnAngle);
+    Result.MaxSurfaceAngle := TyGuideJsNumber(line.Find('maxSurfaceAngle'),
+      Result.MaxSurfaceAngle);
+    if line.Find('smooth') <> nil then
+      Result.Smooth := TyLabelLineSmoothOf(line.Find('smooth'));
+    Result.RouteLength2 := TyGuideLength2(line.Find('length2'), Result.RouteLength2);
   end;
 end;
 
@@ -592,6 +614,8 @@ begin
     update moves it from its old place [Batch 92] }
   nx := TyJsCos(mid);
   ny := TyJsSin(mid);
+  Result.NX := nx;
+  Result.NY := ny;
 
   if ASpec.Position = tplCentre then
   begin
@@ -1372,7 +1396,13 @@ begin
         pts[0] := place.P1;
         pts[1] := place.P2;
         pts[2] := place.P3;
+        { THE LAST PASS BENDS EVERY LINE, moved or not: the turn, then the
+          angle to the slice's surface (labelLayout.ts:579-583) [Batch 112] }
+        TyLimitTurnAngle(pts, ASpec.MinTurnAngle);
+        TyLimitSurfaceAngle(pts, place.NX, place.NY, ASpec.MaxSurfaceAngle);
         el := TyChartElement(TyShapePolyline(pts));
+        el.Shape.Cmds := TyLabelLineCmds(pts, ASpec.Smooth);
+        el.Caption.LgSmooth := ASpec.Smooth;
         el.Style.StrokeColor := fill;
         el.Style.StrokeWidthLogical := AInk.LineWidthLogical;
         { SILENT. A leader line is a pointer at the slice, not a target of its

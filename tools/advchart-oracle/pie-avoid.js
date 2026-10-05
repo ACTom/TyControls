@@ -46,6 +46,8 @@
 //         textAlign, offset [hex, hex] (the host's textConfig.offset),
 //         labelStyleWidth (hex | null), padding ([4 hex] | null),
 //         background, overflow, ellipsis, marginType, margin,
+//         minTurnAngle, maxSurfaceAngle (the labelLine's, as JSON),
+//         normal ([hex, hex]: the slice's surface normal),
 //         entry {labelX, labelY, rotation, rect, unconstrainedWidth (hex),
 //                line}
 //         exit  {labelX, labelY, rect, line (before limitTurnAngle /
@@ -181,6 +183,11 @@ globalThis.__pieAvoidHook = function (phase, seriesModel, list, cx, cy, r, viewR
         ellipsis: st.ellipsis == null ? null : st.ellipsis,
         marginType: st.__marginType == null ? null : st.__marginType,
         margin: st.margin ? Array.from(st.margin).map(hex) : null,
+        // the two limits the last pass bends the line by, and the slice's
+        // normal [Batch 112]
+        minTurnAngle: it.minTurnAngle === undefined ? null : it.minTurnAngle,
+        maxSurfaceAngle: it.maxSurfaceAngle === undefined ? null : it.maxSurfaceAngle,
+        normal: [hex(it.surfaceNormal.x), hex(it.surfaceNormal.y)],
         entry: {
           labelX: hex(label.x), labelY: hex(label.y), rotation: hex(label.rotation),
           rect: rect4(it.rect), unconstrainedWidth: hex(it.unconstrainedWidth),

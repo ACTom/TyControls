@@ -586,6 +586,14 @@ const CASES = [
   // ---- other series ----
   { id: 'effectScatter.hide', note: 'an effectScatter\'s labels',
     option: scatter([Object.assign(sc({ labelLayout: { hideOverlap: true }, data: pts(20, 7, 13) }), { type: 'effectScatter' })]) },
+  // ---- label lines routed after the layout [Batch 112] ----
+  { id: 'pie.avoid.turn', note: 'the solver on with the default turn limits: the moved labels\' lines bend',
+    option: pie({ avoidLabelOverlap: true, data: pieData(60, i => (i * 7) % 11 + 1) }) },
+  { id: 'pie.x.line', note: 'a pie given an x: each line routed from its slice\'s anchor to the moved label',
+    option: pie({ labelLayout: { x: '85%', hideOverlap: true } }) },
+  { id: 'scatter.labelLine', note: 'labelLine.show on a scatter moved by dx / dy and thinned: every line routed, the hidden ones hidden',
+    option: scatter([sc({ labelLine: { show: true, length2: 6 }, labelLayout: { dx: 24, dy: -18, hideOverlap: true }, data: pts(30, 7, 13) })]),
+    hover: [{ type: 'highlight', seriesIndex: 0, dataIndex: 3 }, { type: 'highlight', seriesIndex: 0, dataIndex: 7 }] },
 ];
 
 // ---------- one case ----------

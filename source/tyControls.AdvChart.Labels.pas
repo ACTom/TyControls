@@ -986,6 +986,10 @@ begin
       if spec.AtXIsPercent then atX := spec.AtX * hbox.W;
       if spec.AtYIsPercent then atY := spec.AtY * hbox.H;
       TyLabelAnchorXYWH(hbox, pos, dist, atX, atY, x, y, ah, av);
+      { A PIN'S INSIDE LABEL sits at 40 % of its rect's height, in its head
+        (symbol.ts' SymbolClz.calculateTextPosition) [Batch 112] }
+      if (pos = tlpInside) and host.Caption.HasSymBox and (host.Caption.LgSymbol = 'pin') then
+        y := hbox.Y + hbox.H * Double(0.4);
     end
     else
       TyLabelAnchor(bounds, pos, dist, atX, atY, x, y, ah, av);

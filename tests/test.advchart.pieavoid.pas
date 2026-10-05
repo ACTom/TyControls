@@ -17,14 +17,17 @@ unit test.advchart.pieavoid;
       block's rect needs the option's styles, which the wiring has);
     - THE WIRING: the control renders each option and its pie labels are
       compared -- the label's x / y, the words drawn, the transform, the
-      alignment, hidden or not, and the line as the solver left it (the turn
-      limits that bend it again are roadmap B14). }
+      alignment, hidden or not, and the line: the solver's, bent by the two
+      turn limits [Batch 112: they were only counted];
+    - THE LIMITS: each recorded solver line bent by limitTurnAngle and
+      limitSurfaceAngle (AdvChart.LabelGuide) against the line drawn.
+      [Batch 112, roadmap B14] }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller, tyControls.FontUnits,
      tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.LabelLayout, tyControls.AdvChart.Pie, tyControls.AdvChart.PieLabel, tyControls.AdvChart.Labels, tyControls.AdvChart.RichStyle,
+     tyControls.AdvChart.LabelLayout, tyControls.AdvChart.LabelGuide, tyControls.AdvChart.Pie, tyControls.AdvChart.PieLabel, tyControls.AdvChart.Labels, tyControls.AdvChart.RichStyle,
      tyControls.AdvChart.Measure, tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
@@ -58,7 +61,7 @@ type
     FBmp: TBGRABitmap;
     FSsr: ITyTextMeasurer;
     FBad, FCompared: Integer;
-    FPies, FItems, FMoved, FCut, FHidden, FLabels, FLines, FBent, FRich, FEmpty: Integer;
+    FPies, FItems, FMoved, FCut, FHidden, FLabels, FLines, FBent, FRich, FEmpty, FDrawn: Integer;
     FReport, FName: string;
     procedure Miss(const AWhat: string);
     procedure Num(const AWhat: string; AGot: Double; const AHex: string);
@@ -77,6 +80,7 @@ type
     procedure TestTheChartAsUpstream;
     procedure TestTheGuardsWereKept;
     procedure TestOneLabelSeesOnlyTheLastStep;
+    procedure TestTheLimitsBendTheSolversLines;
   end;
 
 implementation
@@ -444,13 +448,31 @@ begin
   end;
 end;
 
-{ the solver's answers on the elements: label.x / y and the line }
+{ an item's exit line bent as the last pass bends it }
+function BentLine(AItem: TJSONObject): TTyGuidePoints;
+var
+  ln: TJSONArray;
+  k: Integer;
+begin
+  ln := AItem.Objects['exit'].Arrays['line'];
+  for k := 0 to 2 do
+    Result[k] := TyPointF(FromHex(TJSONArray(ln.Items[k]).Strings[0]),
+      FromHex(TJSONArray(ln.Items[k]).Strings[1]));
+  TyLimitTurnAngle(Result, TyGuideJsNumber(AItem.Find('minTurnAngle'), NaN));
+  TyLimitSurfaceAngle(Result, FromHex(AItem.Arrays['normal'].Strings[0]),
+    FromHex(AItem.Arrays['normal'].Strings[1]),
+    TyGuideJsNumber(AItem.Find('maxSurfaceAngle'), NaN));
+end;
+
+{ the solver's answers on the elements: label.x / y and the line, bent by
+  the two limits [Batch 112] }
 procedure TAdvChartPieAvoidTest.CheckPie(ACase, APie: TJSONObject);
 var
-  its, ln: TJSONArray;
+  its: TJSONArray;
   i, e, g, k, s: Integer;
   it, x: TJSONObject;
   el: TTyChartElement;
+  bent: TTyGuidePoints;
 begin
   its := APie.Arrays['items'];
   s := APie.Integers['s'];
@@ -482,7 +504,7 @@ begin
       Continue;
     end;
     Inc(FLines);
-    ln := x.Arrays['line'];
+    bent := BentLine(it);
     Inc(FCompared);
     if Length(FChart.List.Element(g).Shape.Points) <> 3 then
     begin
@@ -491,10 +513,13 @@ begin
     end;
     for k := 0 to 2 do
     begin
-      Num('line x' + IntToStr(k), FChart.List.Element(g).Shape.Points[k].X,
-        TJSONArray(ln.Items[k]).Strings[0]);
-      Num('line y' + IntToStr(k), FChart.List.Element(g).Shape.Points[k].Y,
-        TJSONArray(ln.Items[k]).Strings[1]);
+      Inc(FCompared, 2);
+      if not SameNum(FChart.List.Element(g).Shape.Points[k].X, bent[k].X) then
+        Miss(Format('line x%d: %s bent, %s here', [k, Fmt(bent[k].X),
+          Fmt(FChart.List.Element(g).Shape.Points[k].X)]));
+      if not SameNum(FChart.List.Element(g).Shape.Points[k].Y, bent[k].Y) then
+        Miss(Format('line y%d: %s bent, %s here', [k, Fmt(bent[k].Y),
+          Fmt(FChart.List.Element(g).Shape.Points[k].Y)]));
     end;
   end;
 end;
@@ -589,8 +614,8 @@ begin
     end
     else
       Num('local.w', el.Caption.LmTextW, lb.Arrays['local'].Strings[2]);
-    { the line's ignore follows hideOverlap; its points as drawn are bent by
-      the turn limits where a label moved (B14) -- only counted here }
+    { the line's ignore follows hideOverlap; its points as drawn, bent by
+      the turn limits [Batch 112: they were only counted] }
     if not IsNull(lb.Find('guide')) then
     begin
       g := FindGuide(FChart.List, lb.Integers['s'], lb.Integers['d']);
@@ -599,10 +624,19 @@ begin
         Same('guide ignore', FChart.List.Element(g).Ignore,
           lb.Objects['guide'].Booleans['ignore']);
         pts := lb.Objects['guide'].Arrays['points'];
-        if (pts.Count = 3) and (Length(FChart.List.Element(g).Shape.Points) = 3)
-          and not SameNum(FChart.List.Element(g).Shape.Points[1].X,
-            FromHex(TJSONArray(pts.Items[1]).Strings[0])) then
-          Inc(FBent);
+        Inc(FCompared);
+        if Length(FChart.List.Element(g).Shape.Points) <> pts.Count then
+          Miss(Format('%d drawn line points upstream, %d here', [pts.Count,
+            Length(FChart.List.Element(g).Shape.Points)]))
+        else
+          for k := 0 to pts.Count - 1 do
+          begin
+            Num('drawn line x' + IntToStr(k), FChart.List.Element(g).Shape.Points[k].X,
+              TJSONArray(pts.Items[k]).Strings[0]);
+            Num('drawn line y' + IntToStr(k), FChart.List.Element(g).Shape.Points[k].Y,
+              TJSONArray(pts.Items[k]).Strings[1]);
+          end;
+        Inc(FDrawn);
       end;
     end;
   end;
@@ -629,9 +663,63 @@ begin
   AssertTrue(Format('hidden labels compared (%d)', [FHidden]), FHidden >= 30);
   AssertTrue(Format('block labels compared (%d)', [FRich]), FRich >= 50);
   AssertTrue(Format('labels drawing nothing (%d)', [FEmpty]), FEmpty >= 10);
-  { the lines upstream bends again where a label moved (B14's): seen, not
-    yet compared }
-  AssertTrue(Format('lines the turn limits bend (%d)', [FBent]), FBent > 0);
+  { every drawn line, the bent ones among them [Batch 112] }
+  AssertTrue(Format('drawn label lines compared (%d)', [FDrawn]), FDrawn >= 700);
+end;
+
+{ THE LAST PASS (labelLayout.ts:579-583): each solver line, bent by
+  limitTurnAngle and limitSurfaceAngle with the item's limits and its
+  slice's normal, is the line drawn [Batch 112] }
+procedure TAdvChartPieAvoidTest.TestTheLimitsBendTheSolversLines;
+var
+  c, p, i, j, k: Integer;
+  cs, pie, it, lb: TJSONObject;
+  its, labs, pts: TJSONArray;
+  bent: TTyGuidePoints;
+begin
+  for c := 0 to Cases.Count - 1 do
+  begin
+    cs := Cases.Objects[c];
+    labs := cs.Arrays['labels'];
+    for p := 0 to cs.Arrays['pies'].Count - 1 do
+    begin
+      pie := cs.Arrays['pies'].Objects[p];
+      its := pie.Arrays['items'];
+      for i := 0 to its.Count - 1 do
+      begin
+        it := its.Objects[i];
+        if IsNull(it.Objects['exit'].Find('line')) then Continue;
+        for j := 0 to labs.Count - 1 do
+        begin
+          lb := labs.Objects[j];
+          if (lb.Integers['s'] <> pie.Integers['s']) or (lb.Integers['d'] <> it.Integers['d'])
+            or IsNull(lb.Find('guide')) then Continue;
+          FName := Format('%s s%d d%d', [cs.Strings['id'], lb.Integers['s'], lb.Integers['d']]);
+          bent := BentLine(it);
+          pts := lb.Objects['guide'].Arrays['points'];
+          Inc(FCompared);
+          if pts.Count <> 3 then
+          begin
+            Miss(Format('%d drawn points', [pts.Count]));
+            Break;
+          end;
+          for k := 0 to 2 do
+          begin
+            Num('x' + IntToStr(k), bent[k].X, TJSONArray(pts.Items[k]).Strings[0]);
+            Num('y' + IntToStr(k), bent[k].Y, TJSONArray(pts.Items[k]).Strings[1]);
+          end;
+          Inc(FLines);
+          if TJSONArray(pts.Items[1]).AsJSON
+            <> TJSONArray(it.Objects['exit'].Arrays['line'].Items[1]).AsJSON then
+            Inc(FBent);
+          Break;
+        end;
+      end;
+    end;
+  end;
+  Finish(7000);
+  AssertTrue(Format('lines compared (%d)', [FLines]), FLines >= 700);
+  AssertTrue(Format('lines the limits bent (%d)', [FBent]), FBent >= 80);
 end;
 
 { the oracle's own mutations of its transcription each changed the cases
@@ -723,6 +811,7 @@ begin
   FLabels := 0;
   FLines := 0;
   FBent := 0;
+  FDrawn := 0;
   FRich := 0;
   FEmpty := 0;
 end;
