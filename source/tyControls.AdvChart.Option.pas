@@ -22,6 +22,13 @@ unit tyControls.AdvChart.Option;
   may name main types for replaceMerge, whose unmatched models leave index
   HOLES -- a null entry in the tree, no model in Keys [Batch 97].
 
+  MEDIA [Batch 107]: an option's `baseOption` / `media` are read apart
+  (tyControls.AdvChart.Media) -- the tree is the base, the units are kept in
+  Media -- and every setOption merges, after its base, the units the view
+  size meets, each a merge of its own. MediaRecheck is the resize: the
+  units merged again only when the set that applies has changed. The view
+  size is the host's to keep current (SetViewSize, CSS px).
+
   A REJECTED OPTION LEAVES NO OPTION. The tree goes and Error says why, so the
   chart is blank rather than showing something the option no longer says. The
   earlier rule kept the last good tree, for an editor that re-applied text on
@@ -32,7 +39,7 @@ unit tyControls.AdvChart.Option;
   LCL-free: SysUtils, Classes and fcl-json only. }
 interface
 uses SysUtils, Classes, fpjson, jsonparser, jsonscanner,
-  tyControls.AdvChart.OptionMerge;
+  tyControls.AdvChart.OptionMerge, tyControls.AdvChart.Media;
 
 type
   TTyOptionError = record
@@ -43,6 +50,10 @@ type
     Line, Col: Integer;
   end;
 
+  { Called after every merge one setOption or one resize does -- the base,
+    then each media unit -- with that merge's report. [Batch 107] }
+  TTyMergePassEvent = procedure(const AReport: TTyMergeReport) of object;
+
   TTyChartOption = class
   private
     FRoot: TJSONData;
@@ -51,6 +62,20 @@ type
     FKeys: TTyOptionKeys;
     { the option the last merge took in, kept for its report }
     FMerged: TJSONData;
+    { [Batch 107] the media units and the indices last merged; the view
+      size they are asked about (CSS px); the media options the last
+      setOption or resize merged in, kept for their reports }
+    FMedia: TTyMediaManager;
+    FViewW, FViewH: Double;
+    FMediaMerged: array of TJSONData;
+    procedure DropMerged;
+    { LegendModel.init: `selected` made after the keys it was given -- at
+      the init, so a media merge in the same setOption lands after it }
+    procedure LegendInitSelected(AIndex: Integer);
+    procedure LegendsNewIn(const AReport: TTyMergeReport);
+    { getMediaOption and the merges of what it hands over }
+    function MergeMedia(const AReplaceMerge: array of string;
+      ABefore: TTyMergeBeforeComponent; AAfter: TTyMergePassEvent): Boolean;
     procedure SetError(const AMsg: string; ALine, ACol: Integer);
     procedure ClearError;
     { AText parsed, or False with Error set and AParsed nil }
@@ -64,7 +89,12 @@ type
       the tree is DROPPED -- there is no option until one parses -- and Error
       describes what went wrong. FText keeps its last parsed value; the control
       is what remembers the text a host wrote. }
-    function SetOptionText(const AText: string): Boolean;
+    function SetOptionText(const AText: string): Boolean; overload;
+    { the same, its media merged with AReplaceMerge (upstream hands the
+      setOption's replaceMerge to every merge after the init) and each
+      merge reported to AAfter [Batch 107] }
+    function SetOptionText(const AText: string; const AReplaceMerge: array of string;
+      AAfter: TTyMergePassEvent): Boolean; overload;
     procedure Clear;
 
     { MERGE AText into the option, as upstream's setOption without notMerge
@@ -81,6 +111,21 @@ type
       only an id keeps a model, the rest leave holes [Batch 97] }
     function MergeOptionText(const AText: string; const AReplaceMerge: array of string;
       ABefore: TTyMergeBeforeComponent; out AReport: TTyMergeReport): Boolean; overload;
+    { the same, every merge it does -- the base, then the media units that
+      apply -- reported to AAfter; AReport is the base's [Batch 107] }
+    function MergeOptionText(const AText: string; const AReplaceMerge: array of string;
+      ABefore: TTyMergeBeforeComponent; AAfter: TTyMergePassEvent;
+      out AReport: TTyMergeReport): Boolean; overload;
+    { THE VIEW SIZE the media queries are asked about, CSS px [Batch 107] }
+    procedure SetViewSize(AWidth, AHeight: Double);
+    property ViewWidth: Double read FViewW;
+    property ViewHeight: Double read FViewH;
+    { A RESIZE (resetOption('media')): the units that apply at the view size
+      merged, in order, when they are not the set merged last. True when
+      anything was merged. [Batch 107] }
+    function MediaRecheck(ABefore: TTyMergeBeforeComponent;
+      AAfter: TTyMergePassEvent): Boolean;
+    property Media: TTyMediaManager read FMedia;
     { False, with Error saying which, when a name is no component main type
       -- upstream asserts on it before it touches anything; the option is
       left as it was. [Batch 97] }
@@ -222,14 +267,91 @@ begin
   inherited Create;
   FRoot := nil;
   FText := '';
+  FMedia := TTyMediaManager.Create;
   ClearError;
 end;
 
 destructor TTyChartOption.Destroy;
 begin
   FreeAndNil(FRoot);
-  FreeAndNil(FMerged);
+  DropMerged;
+  FreeAndNil(FMedia);
   inherited Destroy;
+end;
+
+procedure TTyChartOption.DropMerged;
+var i: Integer;
+begin
+  FreeAndNil(FMerged);
+  for i := 0 to High(FMediaMerged) do FMediaMerged[i].Free;
+  FMediaMerged := nil;
+end;
+
+procedure TTyChartOption.LegendInitSelected(AIndex: Integer);
+var
+  node: TJSONData;
+  k: Integer;
+begin
+  node := ComponentAt('legend', AIndex);
+  if not (node is TJSONObject) then Exit;
+  if TJSONObject(node).Find('selected') is TJSONObject then Exit;
+  k := TJSONObject(node).IndexOfName('selected');
+  if k >= 0 then TJSONObject(node).Delete(k);
+  TJSONObject(node).Add('selected', TJSONObject.Create);
+end;
+
+procedure TTyChartOption.LegendsNewIn(const AReport: TTyMergeReport);
+var si, j: Integer;
+begin
+  si := TyMergeSlotsIndex(AReport, 'legend');
+  if si < 0 then Exit;
+  for j := 0 to High(AReport.Slots[si].Fate) do
+    if AReport.Slots[si].Fate[j] = mfNew then LegendInitSelected(j);
+end;
+
+procedure TTyChartOption.SetViewSize(AWidth, AHeight: Double);
+begin
+  FViewW := AWidth;
+  FViewH := AHeight;
+end;
+
+function TTyChartOption.MergeMedia(const AReplaceMerge: array of string;
+  ABefore: TTyMergeBeforeComponent; AAfter: TTyMergePassEvent): Boolean;
+var
+  pend: TTyMediaPendingArray;
+  i, n: Integer;
+  rep: TTyMergeReport;
+  err: string;
+begin
+  Result := False;
+  if not (FRoot is TJSONObject) then Exit;
+  pend := FMedia.Take(FViewW, FViewH);
+  for i := 0 to High(pend) do
+  begin
+    { kept: the report's NewOpt points into it }
+    n := Length(FMediaMerged);
+    SetLength(FMediaMerged, n + 1);
+    FMediaMerged[n] := pend[i].Option;
+    { the ids were checked when the unit was read; the replaceMerge names
+      when the setOption came in }
+    if TyOptionMerge(TJSONObject(FRoot), FKeys, pend[i].Option, AReplaceMerge,
+      not pend[i].IsDefault, ABefore, rep, err) then
+    begin
+      Result := True;
+      LegendsNewIn(rep);
+      if Assigned(AAfter) then AAfter(rep);
+    end;
+  end;
+end;
+
+function TTyChartOption.MediaRecheck(ABefore: TTyMergeBeforeComponent;
+  AAfter: TTyMergePassEvent): Boolean;
+var i: Integer;
+begin
+  { the options the last call merged in go: this one's reports are new }
+  for i := 0 to High(FMediaMerged) do FMediaMerged[i].Free;
+  FMediaMerged := nil;
+  Result := MergeMedia([], ABefore, AAfter);
 end;
 
 procedure TTyChartOption.ClearError;
@@ -251,7 +373,8 @@ end;
 procedure TTyChartOption.Clear;
 begin
   FreeAndNil(FRoot);
-  FreeAndNil(FMerged);
+  DropMerged;
+  FMedia.Clear;
   FText := '';
   FKeys := nil;
   ClearError;
@@ -572,8 +695,17 @@ begin
 end;
 
 function TTyChartOption.SetOptionText(const AText: string): Boolean;
+begin
+  Result := SetOptionText(AText, [], nil);
+end;
+
+function TTyChartOption.SetOptionText(const AText: string;
+  const AReplaceMerge: array of string; AAfter: TTyMergePassEvent): Boolean;
 var
   parsed: TJSONData;
+  base: TJSONObject;
+  mset: TTyMediaSet;
+  i: Integer;
 begin
   Result := False;
   if Trim(AText) = '' then
@@ -601,17 +733,32 @@ begin
       is a worse signal than a blank chart next to an error. }
     FreeAndNil(FRoot);
     FKeys := nil;
+    FMedia.Clear;
     Exit(False);
   end;
   FreeAndNil(FRoot);
-  FreeAndNil(FMerged);
+  DropMerged;
+  { A NEW MANAGER (notMerge): the base is the tree, the units the
+    manager's [Batch 107] }
+  mset := Default(TTyMediaSet);
+  if parsed is TJSONObject then
+  begin
+    base := TJSONObject(parsed);
+    TyParseRawOption(base, mset);
+    parsed := base;
+  end;
+  FMedia.Reset(mset);
   FRoot := parsed;
   FText := AText;
   { initBase seeds the series' list: a null entry takes no index [Batch 97] }
   TyOptionCompactSeries(FRoot);
   { new models: every id made afresh [Batch 95] }
   TyOptionKeysOfTree(FRoot, FKeys);
+  for i := 0 to ComponentCount('legend') - 1 do LegendInitSelected(i);
   ClearError;
+  { and the media that apply, merged over the fresh models: nothing kept
+    outside the tree to write back }
+  MergeMedia(AReplaceMerge, nil, AAfter);
   Result := True;
 end;
 
@@ -637,8 +784,17 @@ end;
 function TTyChartOption.MergeOptionText(const AText: string;
   const AReplaceMerge: array of string; ABefore: TTyMergeBeforeComponent;
   out AReport: TTyMergeReport): Boolean;
+begin
+  Result := MergeOptionText(AText, AReplaceMerge, ABefore, nil, AReport);
+end;
+
+function TTyChartOption.MergeOptionText(const AText: string;
+  const AReplaceMerge: array of string; ABefore: TTyMergeBeforeComponent;
+  AAfter: TTyMergePassEvent; out AReport: TTyMergeReport): Boolean;
 var
   parsed: TJSONData;
+  base: TJSONObject;
+  mset: TTyMediaSet;
   err: string;
 begin
   AReport := Default(TTyMergeReport);
@@ -646,11 +802,11 @@ begin
   { THE FIRST setOption is an init whatever its flag says }
   if not (FRoot is TJSONObject) then
   begin
-    Result := SetOptionText(AText);
+    Result := SetOptionText(AText, AReplaceMerge, AAfter);
     Exit;
   end;
   Result := False;
-  FreeAndNil(FMerged);
+  DropMerged;
   if Trim(AText) = '' then parsed := TJSONObject.Create
   else if not ParseText(AText, parsed) then Exit(False);
   if not (parsed is TJSONObject) then
@@ -659,14 +815,26 @@ begin
     SetError(rsTyOptMergeNotObject, 0, 0);
     Exit(False);
   end;
-  FMerged := parsed;
-  if not TyOptionMerge(TJSONObject(FRoot), FKeys, TJSONObject(parsed), AReplaceMerge,
+  { the base and the units apart [Batch 107] }
+  base := TJSONObject(parsed);
+  TyParseRawOption(base, mset);
+  FMerged := base;
+  if not TyOptionMerge(TJSONObject(FRoot), FKeys, base, AReplaceMerge,
     ABefore, AReport, err) then
   begin
+    TyMediaSetFree(mset);
     SetError(err, 0, 0);
     Exit(False);
   end;
+  { the list substituted where the option has one, the default where it
+    has one; the indices forgotten (mountOption) -- so what applies is
+    merged again over the merged base }
+  FMedia.Adopt(mset);
+  FMedia.Mount;
   ClearError;
+  LegendsNewIn(AReport);
+  if Assigned(AAfter) then AAfter(AReport);
+  MergeMedia(AReplaceMerge, ABefore, AAfter);
   Result := True;
 end;
 

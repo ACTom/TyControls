@@ -77,6 +77,11 @@ function TyRtLayout(const AText: string; const AStyle: TTyRtStyle;
   const ARichStyles: TTyRtRich; ARich: Boolean; const ADefault: TTyRtDefault;
   ABaseX, ABaseY: Double; const AMeasurer: ITyTextMeasurer): TTyRtResult;
 
+{ WHETHER THE TEXT HOLDS A TAG zrender's parser takes -- a name of letters,
+  digits and underscores, a bar, and a closing brace somewhere after it. A
+  text without one lays out the same rich or plain. [Batch 104] }
+function TyRtHasMarkup(const AText: string): Boolean;
+
 implementation
 
 uses tyControls.FontUnits, tyControls.AdvChart.Labels;
@@ -441,6 +446,23 @@ begin
   if lastIndex <= Length(AText) then
     PushTokens(ABlock, Copy(AText, lastIndex, MaxInt), AStyle, ARich, AWrap, -1, '',
       AMeasurer);
+end;
+
+function TyRtHasMarkup(const AText: string): Boolean;
+var pos, k, close: Integer;
+begin
+  Result := False;
+  for pos := 1 to Length(AText) do
+  begin
+    if AText[pos] <> '{' then Continue;
+    k := pos + 1;
+    while (k <= Length(AText)) and (AText[k] in ['a'..'z', 'A'..'Z', '0'..'9', '_']) do
+      Inc(k);
+    if (k = pos + 1) or (k > Length(AText)) or (AText[k] <> '|') then Continue;
+    close := k + 1;
+    while (close <= Length(AText)) and (AText[close] <> '}') do Inc(close);
+    if close <= Length(AText) then Exit(True);
+  end;
 end;
 
 function ParseRich(const AText: string; const AStyle: TTyRtStyle;

@@ -28,6 +28,7 @@ uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      tyControls.AdvChart.Time, tyControls.AdvChart.Scale,
      tyControls.AdvChart.Coord, tyControls.AdvChart.Builder,
      tyControls.AdvChart.Layout, tyControls.AdvanceChart, tyControls.StrConsts,
+     tyControls.AdvChart.Paint, tyControls.AdvChart.RichStyle, fpjson, jsonparser,
      test.advancechart;
 type
   { The calendar and the formatter, with no chart anywhere near them. }
@@ -113,7 +114,8 @@ type
     label is an emphasised one -- a year marker among month names. }
   TAdvChartTimeMeasureTest = class(TTestCase)
   private
-    function YearAmongMonths(AEmphasisWeight: Integer): TTyAxisLayoutSpec;
+    function YearAmongMonths(const AMeasurer: ITyTextMeasurer;
+      AEmphasisWeight: Integer): TTyAxisLayoutSpec;
   published
     procedure TestAnEmphasisedLabelIsMeasuredInItsOwnWeight;
   end;
@@ -727,11 +729,20 @@ begin
 end;
 
 function TAdvChartTimeAxisTest.FirstLabel: string;
-var s: string; p: Integer;
+var p: PTyAxisLayoutSpec; i: Integer;
 begin
-  s := ShownLabels;
-  p := Pos('|', s);
-  if p > 0 then Result := Copy(s, 1, p - 1) else Result := s;
+  Result := '';
+  p := XSpec;
+  if p = nil then Exit;
+  for i := 0 to High(p^.Placements) do
+    if p^.Placements[i].Shown then
+    begin
+      Result := p^.Placements[i].Text;
+      { WHAT IT READS: a coarse tick says `{primary|Mar}` [Batch 104] }
+      if (Pos('{primary|', Result) = 1) and (Result[Length(Result)] = '}') then
+        Result := Copy(Result, 10, Length(Result) - 10);
+      Exit;
+    end;
 end;
 
 const
@@ -778,8 +789,9 @@ begin
     if s <> '' then s := s + '|';
     s := s + p^.Labels[i];
   end;
+  { the coarser levels in upstream's `{primary|...}` [Batch 104] }
   AssertEquals('and it reads as dates down the side',
-    'Mar|06:00|12:00|18:00|2|06:00|12:00|18:00|3', s);
+    '{primary|Mar}|06:00|12:00|18:00|{primary|2}|06:00|12:00|18:00|{primary|3}', s);
 end;
 
 procedure TAdvChartTimeAxisTest.TestATimeAxisDoesNotStretchBackToNineteenSeventy;
@@ -873,21 +885,28 @@ begin
 end;
 
 procedure TAdvChartTimeAxisTest.TestTheCoarseTicksAreEmphasised;
-var p: PTyAxisLayoutSpec; i: Integer; any: Boolean;
+var p: PTyAxisLayoutSpec; i, k: Integer; any, heavy: Boolean;
 begin
   { `Mar` among a run of day numbers is drawn heavier, which is upstream's
     `rich: { primary: { fontWeight: 'bold' } }` on the time axis' defaults --
-    and it is what makes the levels legible rather than merely present. }
+    and it is what makes the levels legible rather than merely present. The
+    label says `{primary|3}` and its piece is in the skin's primary weight.
+    [Revised in batch 104: a flag on the placement.] }
   Draw(cTwoDays);
   p := XSpec;
-  AssertTrue('there is a weight to give them', p^.EmphasisFontWeight > 400);
   any := False;
   for i := 0 to High(p^.Placements) do
-    if p^.Placements[i].Emphasis then
+    if Pos('{primary|', p^.Placements[i].Text) = 1 then
     begin
       any := True;
       AssertTrue('an emphasised label is a day marker and not an hour',
                  Pos(':', p^.Placements[i].Text) = 0);
+      if not p^.Placements[i].Shown then Continue;
+      heavy := False;
+      for k := 0 to High(p^.Placements[i].Rt) do
+        if (p^.Placements[i].Rt[k].Kind = rpkText)
+          and (p^.Placements[i].Rt[k].FontWeight > 400) then heavy := True;
+      AssertTrue('and its piece is heavier', heavy);
     end
     else
       AssertTrue('a plain label is one of the hours',
@@ -1043,20 +1062,32 @@ begin
   Result := AText;
 end;
 
-function TAdvChartTimeMeasureTest.YearAmongMonths(
+function TAdvChartTimeMeasureTest.YearAmongMonths(const AMeasurer: ITyTextMeasurer;
   AEmphasisWeight: Integer): TTyAxisLayoutSpec;
+var node: TJSONData; g: TTyRtGlobal;
 begin
   Result := Default(TTyAxisLayoutSpec);
   Result.Side := asLeft;
   Result.ShowLabels := True;
   { `2024` is both the WIDEST label and the emphasised one, which is what
-    makes the weight decide the axis' thickness. }
-  Result.Labels := TTyStringArray.Create('2024', 'Mar');
+    makes the weight decide the axis' thickness. The emphasis is the time
+    axis' own: a `{primary|...}` tag in the rich style the builder gives
+    every time axis. [Revised in batch 104: a flag per label.] }
+  Result.Labels := TTyStringArray.Create('{primary|2024}', 'Mar');
   Result.Positions := TTyDoubleArray.Create(0, 1);
-  Result.LabelEmphasis := TTyBoolArray.Create(True, False);
   Result.FontSizeLogical := 12;
   Result.FontWeight := 400;
-  Result.EmphasisFontWeight := AEmphasisWeight;
+  g := TyRtGlobalOf(nil, 'sans-serif', 12, 400);
+  node := GetJSON(Format('{"rich":{"primary":{"fontWeight":%d}}}', [AEmphasisWeight]));
+  try
+    Result.LabelRt := TyRtResolve([TJSONObject(node)], g, TyRtResolveOpt(False));
+  finally
+    node.Free;
+  end;
+  Result.LabelRt.Needed := True;
+  Result.RtGlobal := g;
+  Result.RtScale := 1;
+  Result.LabelMeter := TyRtBlockMeasurer(AMeasurer, Result.LabelRt, g, 1);
 end;
 
 procedure TAdvChartTimeMeasureTest.TestAnEmphasisedLabelIsMeasuredInItsOwnWeight;
@@ -1065,8 +1096,8 @@ begin
   { Bold is wider, and a label measured light and drawn bold is how an axis
     comes to overlap the one thing the measuring was for. }
   m := TWeightedMeasurer.Create;
-  plain := TyAxisThickness(YearAmongMonths(0), m, 96, obcAxisLabel);
-  bold := TyAxisThickness(YearAmongMonths(700), m, 96, obcAxisLabel);
+  plain := TyAxisThickness(YearAmongMonths(m, 400), m, 96, obcAxisLabel);
+  bold := TyAxisThickness(YearAmongMonths(m, 700), m, 96, obcAxisLabel);
   AssertTrue('an emphasised axis reserves more room', bold > plain + 1);
 end;
 

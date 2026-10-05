@@ -151,6 +151,50 @@ type
     { minorTick.show as written, on any axis: shown minor ticks keep every
       major tick, even one whose label was hidden }
     MinorTickOption: Boolean;
+    { THE ARROWS [Batch 101]: axisLine.symbol at the start and the end ('' for
+      none -- 'none', null, anything but a string), symbolSize as a width and
+      a height (upstream's [10, 15] unless written), and symbolOffset along
+      the line at each end, already resolved -- a percent of the WIDTH at the
+      start and of the HEIGHT at the end, as normalizeSymbolOffset reads it.
+      LOGICAL px. }
+    ArrowTypes: array[0..1] of string;
+    ArrowW, ArrowH: Double;
+    ArrowOffset: array[0..1] of Double;
+    { THE AUTHOR'S SPLIT COLOURS [Batch 101]: splitLine.lineStyle.color and
+      splitArea.areaStyle.color, empty when not written; the count upstream's
+      area cache works in }
+    SplitLineInks, SplitAreaInks: TTyAxisInkArray;
+    SplitAreaInkCount: Integer;
+  end;
+
+  { WHAT UPSTREAM KEEPS ON AN AXIS FROM ONE RENDER TO THE NEXT [Batch 101]:
+    calculateCategoryInterval's store on the axis MODEL -- the last auto
+    interval, the category count and the pixel extent it was taken at -- and
+    the split area's colour by tick value, which the axis VIEW keeps. Both
+    live as long as the axis' model: a merge keeps them, a notMerge or a new
+    axis in the slot starts them over. Keyed by the axis' main type and
+    component index (`xAxis0`). }
+  TTyAxisMemory = record
+    Key: string;
+    HasInterval: Boolean;
+    LastInterval: Double;
+    LastCount: Integer;
+    Extent0, Extent1: Double;
+    HasAreas: Boolean;
+    AreaValues: TTyDoubleArray;
+    AreaColours: TTyIntegerArray;
+  end;
+  PTyAxisMemory = ^TTyAxisMemory;
+
+  TTyAxisMemoryStore = class
+  private
+    FItems: array of TTyAxisMemory;
+  public
+    procedure Clear;
+    procedure Forget(const AKey: string);
+    { The entry for AKey; nil when there is none and ACreate is False. The
+      pointer holds until the next call that creates one. }
+    function Find(const AKey: string; ACreate: Boolean): PTyAxisMemory;
   end;
 
 
@@ -280,7 +324,34 @@ function TyBuildGrids(AOption: TTyChartOption; const AViewport: TTyRectF): TTyCh
   the final pixel extents. Safe to call more than once. }
 procedure TyLayoutGrids(ABuild: TTyChartBuild; AOption: TTyChartOption;
   const AMeasurer: ITyTextMeasurer; APPI: Integer;
-  const AText: TTyAxisTextStyle);
+  const AText: TTyAxisTextStyle; AMemory: TTyAxisMemoryStore = nil);
+
+{ ---- the finishing touches [Batch 101] ---- }
+
+{ calculateCategoryIntervalDealCache: the interval a category axis of
+  ACount categories is built with on its final rect. ARaw unless AMem holds
+  the last one and keeps it -- one more than ARaw, the count within one of
+  the last, the pixel extent the same -- which stops a zoom window near a
+  step from flickering between two intervals. AMem is written only when it
+  is not kept, so the hold lasts one step. nil: ARaw. }
+function TyCategoryIntervalHold(AMem: PTyAxisMemory; ARaw: Double;
+  ACount: Integer; AExtent0, AExtent1: Double): Double;
+
+{ rectCoordAxisBuildSplitArea's colours: each band's index into a list of
+  ACount, on the mark it starts from -- 0 for the first band, or, when AMem
+  knows a tick of the last render, the index that keeps that tick's band its
+  colour ((c + (ACount - 1) * i) mod ACount from the first tick it knows) --
+  then one more per band. AMem is rewritten with this render's. }
+procedure TySplitAreaColours(var AMarks: TTyAxisMarkArray; ACount: Integer;
+  AMem: PTyAxisMemory);
+
+{ The axis line's arrows (AxisBuilder.ts axisLine) in AFrame, the axis
+  group's: the line's two ends through the group's matrix, each arrow at the
+  smaller end of the local extent plus its distance along the axis -- the
+  line's length for the end one -- plus its offset, turned a quarter
+  either side of the axis. }
+function TyAxisArrows(const AFrame: TTyAxisNameFrame;
+  const AFurn: TTyAxisFurniture; APPI: Integer): TTyAxisArrowArray;
 
 { ---- the axis furniture ---- }
 
@@ -442,7 +513,9 @@ uses
     the AdvChart layer. }
   tyControls.StrConsts, tyControls.AdvChart.AxisName, tyControls.AdvChart.RichStyle,
   tyControls.AdvChart.AxisLabels, tyControls.AdvChart.Handlers,
-  tyControls.AdvChart.Paint, tyControls.AdvChart.Color;
+  tyControls.AdvChart.Paint, tyControls.AdvChart.Color,
+  tyControls.AdvChart.JsMath, tyControls.AdvChart.Marker,
+  tyControls.AdvChart.Labels, tyControls.AdvChart.RichText;
 
 const
   { GridModel's defaultOption. Percentages are of the FULL container extent, not
@@ -1325,6 +1398,51 @@ begin
     ASpec.RtScale, AMeasurer);
 end;
 
+{ THE TIME AXIS' LABEL BLOCK [Batch 104]: the author's axisLabel over the time
+  axis' own default, `rich: { primary: { fontWeight: 'bold' } }`
+  (coord/axisDefault.ts) -- the weight the skin's primary label rule gives,
+  bold where it gives none. A tag the author, the root textStyle and the label
+  all leave without a colour takes the skin's primary colour where it has one:
+  upstream's falls to the label's own, and the label's own here is the skin's.
+
+  An author's `rich` that is there and not an object -- false, null -- keeps
+  the default out: the model's merge never overwrites a key the option has, so
+  upstream's labels then have no rich at all. }
+function TimeAxisRtOf(ANode: TJSONObject; const AText: TTyAxisTextStyle;
+  AHasLabelColour: Boolean): TTyRtBlockStyle;
+var
+  def, rich, prim: TJSONObject;
+  d: TJSONData;
+  i: Integer;
+begin
+  def := TJSONObject.Create;
+  try
+    d := FindIn(ANode, 'rich');
+    if (d = nil) or (d is TJSONObject) then
+    begin
+      prim := TJSONObject.Create;
+      if AText.EmphasisFontWeight > 0 then
+        prim.Add('fontWeight', AText.EmphasisFontWeight)
+      else
+        prim.Add('fontWeight', 'bold');
+      rich := TJSONObject.Create;
+      rich.Add('primary', prim);
+      def.Add('rich', rich);
+    end;
+    Result := TyRtResolve([ANode, def], AText.RtGlobal, TyRtResolveOpt(False));
+  finally
+    def.Free;
+  end;
+  if AText.HasEmphasisColour and not AHasLabelColour then
+    for i := 0 to High(Result.Rich) do
+      if (Result.Rich[i].Name = 'primary') and not Result.Rich[i].Style.HasFill then
+      begin
+        Result.Rich[i].Style.HasFill := True;
+        Result.Rich[i].Style.FillInherit := False;
+        Result.Rich[i].Style.Fill := TTyChartColor(AText.EmphasisColour);
+      end;
+end;
+
 { axisLabel.formatter, when it is a string. }
 function LabelFormatterIn(ANode: TJSONObject; out AFormatter: string): Boolean;
 var sub: TJSONData;
@@ -1388,15 +1506,156 @@ begin
     Result := StringReplace(AFormatter, '{value}', Result, []);
 end;
 
+{ A COLOUR LIST AS WRITTEN at ANode.AName.AStyle.color [Batch 101]: a
+  string is a list of one, whose count is the string's own length -- what
+  upstream's `areaColors.length` reads before it wraps the string; a list is
+  itself. An empty list, or a colour that is not a string or cannot be read,
+  is an ink that draws nothing. Nothing written: empty. }
+procedure InksIn(ANode: TJSONObject; const AName, AStyle: string;
+  out AInks: TTyAxisInkArray; out ACount: Integer);
+var
+  d: TJSONData;
+  a: TJSONArray;
+  c: TTyChartColor;
+  k: Integer;
+begin
+  AInks := nil;
+  ACount := 0;
+  d := FindIn(ObjOf(FindIn(ObjOf(FindIn(ANode, AName)), AStyle)), 'color');
+  if d = nil then Exit;
+  if d.JSONType = jtString then
+  begin
+    SetLength(AInks, 1);
+    AInks[0].Ok := TyTryParseChartColor(d.AsString, c);
+    AInks[0].Colour := c;
+    ACount := Length(UTF8Decode(d.AsString));
+  end
+  else if d is TJSONArray then
+  begin
+    a := TJSONArray(d);
+    ACount := a.Count;
+    SetLength(AInks, Max(a.Count, 1));
+    AInks[0].Ok := False;
+    for k := 0 to a.Count - 1 do
+    begin
+      AInks[k].Ok := (a.Items[k].JSONType = jtString)
+        and TyTryParseChartColor(a.Items[k].AsString, c);
+      if AInks[k].Ok then AInks[k].Colour := c;
+    end;
+  end;
+end;
+
+{ axisLine's symbol, symbolSize and symbolOffset (AxisBuilder.ts axisLine)
+  [Batch 101] }
+procedure ArrowsIn(ANode: TJSONObject; var AFurn: TTyAxisFurniture);
+var
+  line: TJSONObject;
+  d: TJSONData;
+  a: TJSONArray;
+  k: Integer;
+
+  function SymbolOf(AData: TJSONData): string;
+  begin
+    Result := '';
+    if (AData <> nil) and (AData.JSONType = jtString) and (AData.AsString <> 'none') then
+      Result := AData.AsString;
+  end;
+
+  function SizeOf_(AData: TJSONData): Double;
+  begin
+    if AData = nil then Exit(NaN);
+    case AData.JSONType of
+      jtNumber: Result := AData.AsFloat;
+      jtString: Result := TyJsParseFloat(AData.AsString);
+    else
+      Result := NaN;
+    end;
+  end;
+
+  { parsePercent(v, ABase) || 0 }
+  function OffsetOf(AData: TJSONData; ABase: Double): Double;
+  begin
+    Result := TyMkParsePercent(AData, ABase);
+    if IsNan(Result) then Result := 0;
+  end;
+
+begin
+  AFurn.ArrowTypes[0] := '';
+  AFurn.ArrowTypes[1] := '';
+  AFurn.ArrowW := 10;
+  AFurn.ArrowH := 15;
+  AFurn.ArrowOffset[0] := 0;
+  AFurn.ArrowOffset[1] := 0;
+  line := ObjOf(FindIn(ANode, 'axisLine'));
+  if line = nil then Exit;
+  { a string for both ends; a list end by end }
+  d := line.Find('symbol');
+  if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    AFurn.ArrowTypes[0] := SymbolOf(d);
+    AFurn.ArrowTypes[1] := SymbolOf(d);
+  end
+  else if d is TJSONArray then
+  begin
+    a := TJSONArray(d);
+    for k := 0 to 1 do
+      if k < a.Count then AFurn.ArrowTypes[k] := SymbolOf(a.Items[k]);
+  end;
+  { a number (or a string) for both sides; a list as written }
+  d := line.Find('symbolSize');
+  if (d <> nil) and (d.JSONType in [jtNumber, jtString]) then
+  begin
+    AFurn.ArrowW := SizeOf_(d);
+    AFurn.ArrowH := AFurn.ArrowW;
+  end
+  else if d is TJSONArray then
+  begin
+    a := TJSONArray(d);
+    AFurn.ArrowW := NaN;
+    AFurn.ArrowH := NaN;
+    if a.Count > 0 then AFurn.ArrowW := SizeOf_(a.Items[0]);
+    if a.Count > 1 then AFurn.ArrowH := SizeOf_(a.Items[1]);
+  end;
+  { `|| 0`, then normalizeSymbolOffset: the start's a percent of the width,
+    the end's of the height, the end's falling back to the start's }
+  d := line.Find('symbolOffset');
+  if (d = nil) or (d.JSONType = jtNull)
+    or ((d.JSONType = jtBoolean) and not d.AsBoolean)
+    or ((d.JSONType = jtNumber) and (IsNan(d.AsFloat) or (d.AsFloat = 0)))
+    or ((d.JSONType = jtString) and (d.AsString = '')) then
+    Exit;
+  if d is TJSONArray then
+  begin
+    a := TJSONArray(d);
+    if a.Count = 0 then Exit;
+    AFurn.ArrowOffset[0] := OffsetOf(a.Items[0], AFurn.ArrowW);
+    if (a.Count > 1) and (a.Items[1].JSONType <> jtNull) then
+      AFurn.ArrowOffset[1] := OffsetOf(a.Items[1], AFurn.ArrowH)
+    else
+      AFurn.ArrowOffset[1] := OffsetOf(a.Items[0], AFurn.ArrowH);
+  end
+  else
+  begin
+    AFurn.ArrowOffset[0] := OffsetOf(d, AFurn.ArrowW);
+    AFurn.ArrowOffset[1] := OffsetOf(d, AFurn.ArrowH);
+  end;
+end;
+
 function TyAxisFurnitureOf(ANode: TJSONObject; AAxis: TTyAxis;
   AOtherIsValue: Boolean): TTyAxisFurniture;
 var
   cat, tickAuto: Boolean;
   d, sub: TJSONData;
+  n: Integer;
 begin
   Result := Default(TTyAxisFurniture);
   if AAxis = nil then Exit;
   cat := AAxis.AxisType = atCategory;
+  { the finishing touches [Batch 101] }
+  ArrowsIn(ANode, Result);
+  InksIn(ANode, 'splitLine', 'lineStyle', Result.SplitLineInks, n);
+  InksIn(ANode, 'splitArea', 'areaStyle', Result.SplitAreaInks,
+    Result.SplitAreaInkCount);
 
   { THE TICK'S `auto` HAS A SECOND CLAUSE, and it is the reason a plain bar
     chart has no ticks under its categories: a banded category axis suppresses
@@ -2222,9 +2481,161 @@ begin
   end;
 end;
 
+{ ---- the finishing touches [Batch 101] ---- }
+
+procedure TTyAxisMemoryStore.Clear;
+begin
+  FItems := nil;
+end;
+
+procedure TTyAxisMemoryStore.Forget(const AKey: string);
+var i, k: Integer;
+begin
+  for i := 0 to High(FItems) do
+    if FItems[i].Key = AKey then
+    begin
+      for k := i to High(FItems) - 1 do FItems[k] := FItems[k + 1];
+      SetLength(FItems, Length(FItems) - 1);
+      Exit;
+    end;
+end;
+
+function TTyAxisMemoryStore.Find(const AKey: string; ACreate: Boolean): PTyAxisMemory;
+var i: Integer;
+begin
+  for i := 0 to High(FItems) do
+    if FItems[i].Key = AKey then Exit(@FItems[i]);
+  Result := nil;
+  if not ACreate then Exit;
+  SetLength(FItems, Length(FItems) + 1);
+  FItems[High(FItems)] := Default(TTyAxisMemory);
+  FItems[High(FItems)].Key := AKey;
+  Result := @FItems[High(FItems)];
+end;
+
+function TyCategoryIntervalHold(AMem: PTyAxisMemory; ARaw: Double;
+  ACount: Integer; AExtent0, AExtent1: Double): Double;
+begin
+  Result := ARaw;
+  if AMem = nil then Exit;
+  { kept: within one either way, never smaller -- the bigger one always, so
+    the step falls at the same place zooming in and out -- and only when the
+    axis has not changed size, so a resize can show what it hid }
+  if AMem^.HasInterval
+    and (Abs(AMem^.LastInterval - ARaw) <= 1)
+    and (Abs(AMem^.LastCount - ACount) <= 1)
+    and (AMem^.LastInterval > ARaw)
+    and (AMem^.Extent0 = AExtent0) and (AMem^.Extent1 = AExtent1) then
+    Exit(AMem^.LastInterval);
+  { written only when not kept: otherwise the hold would never let go }
+  AMem^.HasInterval := True;
+  AMem^.LastInterval := ARaw;
+  AMem^.LastCount := ACount;
+  AMem^.Extent0 := AExtent0;
+  AMem^.Extent1 := AExtent1;
+end;
+
+procedure TySplitAreaColours(var AMarks: TTyAxisMarkArray; ACount: Integer;
+  AMem: PTyAxisMemory);
+var
+  ci, i, k: Integer;
+  vals: TTyDoubleArray;
+  cols: TTyIntegerArray;
+begin
+  if Length(AMarks) = 0 then Exit;
+  if ACount < 1 then ACount := 1;
+  ci := 0;
+  { the first tick the last render knew, and the band before it counted
+    back from its colour }
+  if (AMem <> nil) and AMem^.HasAreas then
+    for i := 0 to High(AMarks) do
+    begin
+      k := 0;
+      while (k <= High(AMem^.AreaValues)) and (AMem^.AreaValues[k] <> AMarks[i].Value) do
+        Inc(k);
+      if k <= High(AMem^.AreaValues) then
+      begin
+        ci := (AMem^.AreaColours[k] + (ACount - 1) * i) mod ACount;
+        Break;
+      end;
+    end;
+  SetLength(vals, Length(AMarks) - 1);
+  SetLength(cols, Length(AMarks) - 1);
+  for i := 1 to High(AMarks) do
+  begin
+    AMarks[i - 1].ColourIndex := ci;
+    vals[i - 1] := AMarks[i - 1].Value;
+    cols[i - 1] := ci;
+    ci := (ci + 1) mod ACount;
+  end;
+  if AMem <> nil then
+  begin
+    AMem^.HasAreas := True;
+    AMem^.AreaValues := vals;
+    AMem^.AreaColours := cols;
+  end;
+end;
+
+function TyAxisArrows(const AFrame: TTyAxisNameFrame;
+  const AFurn: TTyAxisFurniture; APPI: Integer): TTyAxisArrowArray;
+var
+  M: TTyMat2D;
+  zero, x1, y1, x2, y2, px, py, r, sw, sh, c, s: Double;
+  k: Integer;
+  one: TTyAxisArrow;
+begin
+  Result := nil;
+  if (AFurn.ArrowTypes[0] = '') and (AFurn.ArrowTypes[1] = '') then Exit;
+  sw := AxisScaleF(AFurn.ArrowW, APPI);
+  sh := AxisScaleF(AFurn.ArrowH, APPI);
+  if IsNan(sw) or IsNan(sh) or IsInfinite(sw) or IsInfinite(sh) then Exit;
+  { the line's ends through the axis group's matrix, as v2ApplyTransform
+    takes them }
+  M := TyMatLocal(AFrame.PosX, AFrame.PosY, AFrame.Rotation);
+  zero := 0;
+  x1 := M[0] * AFrame.Ext0 + M[2] * zero + M[4];
+  y1 := M[1] * AFrame.Ext0 + M[3] * zero + M[5];
+  x2 := M[0] * AFrame.Ext1 + M[2] * zero + M[4];
+  y2 := M[1] * AFrame.Ext1 + M[3] * zero + M[5];
+  { FROM THE SMALLER END, whichever way the axis runs: an inverse axis'
+    start arrow is still at its left (bottom) end }
+  if AFrame.Ext0 > AFrame.Ext1 then
+  begin
+    px := x2;
+    py := y2;
+  end
+  else
+  begin
+    px := x1;
+    py := y1;
+  end;
+  c := TyJsCos(AFrame.Rotation);
+  s := TyJsSin(AFrame.Rotation);
+  for k := 0 to 1 do
+  begin
+    if AFurn.ArrowTypes[k] = '' then Continue;
+    if k = 0 then
+      r := 0 + AxisScaleF(AFurn.ArrowOffset[0], APPI)
+    else
+      r := Sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2))
+        + AxisScaleF(AFurn.ArrowOffset[1], APPI);
+    one := Default(TTyAxisArrow);
+    one.End_ := k;
+    one.SymbolType := AFurn.ArrowTypes[k];
+    one.W := sw;
+    one.H := sh;
+    one.X := px + r * c;
+    one.Y := py - r * s;
+    if k = 0 then one.Rotation := AFrame.Rotation + Pi / 2
+    else one.Rotation := AFrame.Rotation - Pi / 2;
+    SetLength(Result, Length(Result) + 1);
+    Result[High(Result)] := one;
+  end;
+end;
+
 procedure TyLayoutGrids(ABuild: TTyChartBuild; AOption: TTyChartOption;
   const AMeasurer: ITyTextMeasurer; APPI: Integer;
-  const AText: TTyAxisTextStyle);
+  const AText: TTyAxisTextStyle; AMemory: TTyAxisMemoryStore);
 var
   g, i, j, t: Integer;
   specs: TTyAxisLayoutSpecArray;
@@ -2262,6 +2673,12 @@ var
     else Result := AGrid.YAxis(AIndex - AGrid.XAxisCount);
   end;
 
+  { the key an axis' memory is kept under: its model's [Batch 101] }
+  function AxisMemoryKey(AAxis: TTyAxis): string;
+  begin
+    Result := AAxis.MainType + IntToStr(AAxis.ComponentIndex);
+  end;
+
   { THE FURNITURE ON THE FINAL RECT. A category axis' tick marks, split
     lines and split areas each walk their own interval -- the labels' when
     they say nothing, whether or not the labels are drawn -- and, on a
@@ -2277,6 +2694,7 @@ var
     labelIv: Double;
     n, k, i: Integer;
     ticks: TTyScaleTickArray;
+    mem: PTyAxisMemory;
 
     function CategoryMarks(AOptInterval: Double; AAlign: Boolean): TTyAxisMarkArray;
     var
@@ -2361,6 +2779,44 @@ var
         and not ((k = High(ASpec.SplitLineMarks)) and not AFurn.ShowMaxLine);
     for k := 0 to High(ASpec.SplitAreaMarks) do
       ASpec.SplitAreaMarks[k].Drawn := AFurn.ShowSplitArea;
+    { THE COLOURS [Batch 101]. A split line counts the lines DRAWN before it,
+      so a denied min line does not use up the first colour. A split area
+      band keeps the colour it had at the last render, by its tick's value --
+      upstream's axis view keeps that map so a zoom does not repaint every
+      stripe -- and only an axis whose areas are shown keeps or rewrites it. }
+    ASpec.SplitLineInks := AFurn.SplitLineInks;
+    ASpec.SplitAreaInks := AFurn.SplitAreaInks;
+    ASpec.SplitAreaInkCount := AFurn.SplitAreaInkCount;
+    if Length(ASpec.SplitAreaInks) = 0 then ASpec.SplitAreaInkCount := 2;
+    i := 0;
+    for k := 0 to High(ASpec.SplitLineMarks) do
+      if ASpec.SplitLineMarks[k].Drawn then
+      begin
+        ASpec.SplitLineMarks[k].ColourIndex := i mod Max(1, Length(ASpec.SplitLineInks));
+        Inc(i);
+      end;
+    if AFurn.ShowSplitArea and AAxis.Visible then
+    begin
+      mem := nil;
+      if AMemory <> nil then mem := AMemory.Find(AxisMemoryKey(AAxis), True);
+      TySplitAreaColours(ASpec.SplitAreaMarks, ASpec.SplitAreaInkCount, mem);
+    end;
+  end;
+
+  { calculateCategoryInterval on the final rect, through the store }
+  procedure HoldInterval(AAxis: TTyAxis; var ASpec: TTyAxisLayoutSpec);
+  var raw, used: Double;
+  begin
+    if (AAxis = nil) or not AAxis.Visible or AAxis.Scale.Blank then Exit;
+    if (ASpec.LabelKind <> lakCategory) or (ASpec.ForcedLabelStep > 0) then Exit;
+    { one category: upstream answers 0 before it measures or asks }
+    if Length(ASpec.Labels) < 2 then Exit;
+    raw := TyCategoryLabelInterval(ASpec, gb.FPlotRect, AMeasurer, APPI);
+    used := TyCategoryIntervalHold(AMemory.Find(AxisMemoryKey(AAxis), True),
+      raw, Length(ASpec.Labels), ASpec.NameFrame.Ext0, ASpec.NameFrame.Ext1);
+    if (not IsNan(used)) and (not IsInfinite(used)) and (used >= 0)
+      and (used < MaxInt - 1) then
+      ASpec.ForcedLabelStep := Trunc(used) + 1;
   end;
 
   { ONE BOUND OF grid.outerBounds on the canvas: upstream merges it into
@@ -2556,6 +3012,49 @@ var
     ASpec.NameRt.Style.Width := 0;
     ASpec.NameRt.Style.Overflow := rtoNone;
     ASpec.NameRt.Needed := TyRtNeedsBlock(ASpec.NameRt);
+    { nameTruncate [Batch 101]: a written maxWidth -- a number -- and the
+      ellipsis, '...' unless a string is written. A block cuts inside its own
+      layout, at the block's width; a plain name is cut here, once, so the
+      layout measures and the paint draws the same cut text. }
+    ASpec.HasNameTrunc := False;
+    ASpec.NameTruncEllipsis := '...';
+    st := ObjOf(FindIn(ANode, 'nameTruncate'));
+    if st <> nil then
+    begin
+      d := st.Find('maxWidth');
+      if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then
+      begin
+        ASpec.HasNameTrunc := True;
+        ASpec.NameTruncWidth := d.AsFloat;
+      end;
+      d := st.Find('ellipsis');
+      if (d <> nil) and (d.JSONType = jtString) then
+        ASpec.NameTruncEllipsis := d.AsString;
+    end;
+    if ASpec.HasNameTrunc and ASpec.NameRt.Needed then
+    begin
+      ASpec.NameRt.Style.WidthKind := rtwNumber;
+      ASpec.NameRt.Style.Width := ASpec.NameTruncWidth;
+      ASpec.NameRt.Style.Overflow := rtoTruncate;
+      ASpec.NameRt.Style.HasEllipsis := True;
+      ASpec.NameRt.Style.Ellipsis := ASpec.NameTruncEllipsis;
+    end
+    else if ASpec.HasNameTrunc and (ASpec.Name <> '') and (AMeasurer <> nil) then
+    begin
+      if ASpec.NameFontSizeLogical > 0 then
+        ASpec.Name := string.Join(#10, TyZrPlainTextLines(ASpec.Name,
+          AxisScaleF(ASpec.NameTruncWidth, APPI), MaxDouble, 0,
+          ASpec.NameTruncEllipsis, AMeasurer, ASpec.NameFontName,
+          ASpec.NameFontSizeLogical, ASpec.NameFontWeight))
+      else
+        ASpec.Name := string.Join(#10, TyZrPlainTextLines(ASpec.Name,
+          AxisScaleF(ASpec.NameTruncWidth, APPI), MaxDouble, 0,
+          ASpec.NameTruncEllipsis, AMeasurer, ASpec.FontName,
+          ASpec.FontSizeLogical, ASpec.FontWeight));
+      { a name cut to nothing is no name }
+      if Trim(StringReplace(ASpec.Name, #10, '', [rfReplaceAll])) = '' then
+        ASpec.Name := '';
+    end;
     if ASpec.NameRt.Needed then
     begin
       if APPI > 0 then ASpec.RtScale := APPI / 96 else ASpec.RtScale := 1;
@@ -2634,8 +3133,8 @@ var
     q, kept: Integer;
     lbl, wd: TJSONData;
     ovf: string;
-    isTime: Boolean;
-    tt: TTyTimeTick;
+    isTime, marked: Boolean;
+    tfmt: TTyTimeLabelFormatter;
   begin
     ASpec := Default(TTyAxisLayoutSpec);
     ASpec.Side := AAxis.Side;
@@ -2793,43 +3292,39 @@ var
     begin
       SetLength(ASpec.LabelNotNice, Length(ticks));
       SetLength(ASpec.LabelLevel, Length(ticks));
-      SetLength(ASpec.LabelEmphasis, Length(ticks));
-      { its coarse ticks are the ones that carry the weight }
-      ASpec.EmphasisFontWeight := AText.EmphasisFontWeight;
+      { parseTimeAxisLabelFormatter, once per axis [Batch 104] }
+      tfmt := TyTimeLabelFormatterOf(FindIn(ObjOf(FindIn(ANode, 'axisLabel')),
+        'formatter'));
     end;
+    marked := False;
     kept := 0;
     for q := 0 to High(ticks) do
     begin
       if ticks[q].Level <> 0 then Continue;
       if isTime then
       begin
-        tt.Value := ticks[q].Value;
-        tt.Unit_ := ticks[q].TimeUnit;
-        tt.Level := ticks[q].TimeLevel;
-        tt.NotNice := ticks[q].NotNice;
         { A NAMED HANDLER ANSWERS A TEMPLATE, not the text: upstream's
           leveledFormat runs whatever the function returns through the same
           time format a string formatter goes through. A string formatter is
-          that template for every level. }
-        if AFurn.HasLabelFormatter and TyChartIsHandlerRef(AFurn.LabelFormatter) then
+          that template for every level; the dictionary (the default too)
+          gives each tick the template of its own unit at its own level --
+          `{primary|Feb}` among the days, where nobody wrote a unit.
+          [Batch 104] }
+        if tfmt.Kind = tfkHandler then
           ASpec.Labels[kept] := TyFormatTime(ticks[q].Value,
-            TyChartRunHandler(AFurn.LabelFormatter, TyChartOneParams(
+            TyChartRunHandler(tfmt.Template, TyChartOneParams(
               AxisLabelParams(AAxis, ticks[q].Value, q, '', True,
               ticks[q].TimeLevel))), TTyTimeScale(AAxis.Scale).UTC)
-        else if AFurn.HasLabelFormatter then
-          ASpec.Labels[kept] := TyFormatTime(ticks[q].Value, AFurn.LabelFormatter,
-            TTyTimeScale(AAxis.Scale).UTC)
         else
-          ASpec.Labels[kept] := TyTimeLabel(tt, TTyTimeScale(AAxis.Scale).UTC);
+          ASpec.Labels[kept] := TyTimeLeveledLabel(tfmt, ticks[q].Value,
+            ticks[q].TimeUnit, ticks[q].TimeLevel, TTyTimeScale(AAxis.Scale).UTC);
+        if TyRtHasMarkup(ASpec.Labels[kept]) then marked := True;
         { THE TWO RAGGED ENDS. The extent of a time axis is the data's own,
           never rounded outwards, so its first and last ticks are wherever
           the data happens to start and stop; labelling those puts a `07:13`
           hard against the first round hour -- unless the author asks. }
         ASpec.LabelNotNice[kept] := ticks[q].NotNice;
         ASpec.LabelLevel[kept] := ticks[q].TimeLevel;
-        { Every level above the finest is emphasised, which is what makes an
-          axis read `12 13 14 Feb 2 3` rather than as six equal numbers. }
-        ASpec.LabelEmphasis[kept] := ticks[q].TimeLevel >= 1;
       end
       else
         { UPSTREAM'S getLabel, grouped and to the tick's own decimals --
@@ -2874,7 +3369,19 @@ var
     begin
       SetLength(ASpec.LabelNotNice, kept);
       SetLength(ASpec.LabelLevel, kept);
-      SetLength(ASpec.LabelEmphasis, kept);
+      { A TIME AXIS' LABELS ARE ALWAYS RICH upstream -- its defaults carry
+        `rich.primary` -- so a tag in one is a style and not text. The block
+        is needed where a label holds a tag, or the author asked for a box;
+        a label with neither lays out the same either way and keeps the
+        one-run caption. [Batch 104] }
+      ASpec.LabelRt := TimeAxisRtOf(ObjOf(FindIn(ANode, 'axisLabel')), AText,
+        ASpec.HasLabelColour);
+      ASpec.LabelRt.Needed := marked
+        or TyRtNodeWantsBlock(ObjOf(FindIn(ANode, 'axisLabel')));
+      ASpec.LabelMeter := nil;
+      if ASpec.LabelRt.Needed then
+        ASpec.LabelMeter := TyRtBlockMeasurer(AMeasurer, ASpec.LabelRt,
+          ASpec.RtGlobal, ASpec.RtScale);
     end;
   end;
 
@@ -2994,6 +3501,17 @@ begin
       end;
     end;
 
+    { THE INTERVAL THE LAST RENDER LEFT [Batch 101]. A category axis' auto
+      interval is measured again on the final rect and then handed to the
+      axis model's store, which keeps the last one when this one is a step
+      smaller and nothing else moved -- so a zoom window near a step does
+      not flicker between two. Fixed here, for the labels, the ticks, the
+      names and the line symbols alike. The estimate never asks the store,
+      as upstream's never does. }
+    if AMemory <> nil then
+      for t := 0 to High(specs) do
+        HoldInterval(AxisAt(gb, t), specs[t]);
+
     { THE THINNING AND THE PLACEMENTS, DECIDED HERE. Both are derived by
       measuring every label, and the paint pass used to derive them itself on
       every frame -- ten thousand measurements per frame at 5,000 categories, to
@@ -3030,14 +3548,10 @@ begin
         for i := 0 to High(gb.FSpecs[t].Placements) do
           if gb.FSpecs[t].Placements[i].Shown then
           begin
-            if gb.FSpecs[t].Placements[i].Emphasis
-              and (gb.FSpecs[t].EmphasisFontWeight > 0) then
-              j := gb.FSpecs[t].EmphasisFontWeight
-            else
-              j := gb.FSpecs[t].FontWeight;
             gb.FSpecs[t].Placements[i].Rt := AxisRtPieces(gb.FSpecs[t],
               gb.FSpecs[t].LabelRt, gb.FSpecs[t].Placements[i].Text,
-              gb.FSpecs[t].FontName, gb.FSpecs[t].FontSizeLogical, j,
+              gb.FSpecs[t].FontName, gb.FSpecs[t].FontSizeLogical,
+              gb.FSpecs[t].FontWeight,
               gb.FSpecs[t].HasLabelColour, gb.FSpecs[t].LabelColour,
               gb.FSpecs[t].Placements[i].AnchorH,
               gb.FSpecs[t].Placements[i].AnchorV, AMeasurer);
@@ -3064,6 +3578,15 @@ begin
     { AND THE FURNITURE, on the same final rect }
     for t := 0 to High(gb.FSpecs) do
       AxisMarks(gb, AxisAt(gb, t), gb.FSpecs[t], gb.FFurniture[t]);
+    { THE ARROWS, in the frame the line is drawn in -- only where the line
+      is [Batch 101] }
+    for t := 0 to High(gb.FSpecs) do
+    begin
+      gb.FSpecs[t].Arrows := nil;
+      if AxisAt(gb, t).Visible and gb.FFurniture[t].ShowLine then
+        gb.FSpecs[t].Arrows := TyAxisArrows(gb.FSpecs[t].NameFrame,
+          gb.FFurniture[t], APPI);
+    end;
   end;
 end;
 

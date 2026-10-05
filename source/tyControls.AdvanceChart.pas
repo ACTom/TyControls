@@ -29,6 +29,7 @@ uses
   BGRABitmap,
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.StyleModel,
   tyControls.AdvChart.Types, tyControls.AdvChart.Option, tyControls.AdvChart.OptionMerge,
+  tyControls.AdvChart.Media,
   tyControls.AdvChart.Data, tyControls.AdvChart.Scale,
   tyControls.AdvChart.Time,
   tyControls.AdvChart.Coord, tyControls.AdvChart.Layout,
@@ -59,6 +60,7 @@ uses
   tyControls.AdvChart.Anim, tyControls.AdvChart.AnimOpt,
   tyControls.AdvChart.AnimView, tyControls.AdvChart.AnimAxis,
   tyControls.AdvChart.AxisLabels, tyControls.AdvChart.LabelLayout,
+  tyControls.AdvChart.Export, tyControls.AdvChart.Loading,
   fpjson, contnrs, tyControls.SubPixel;
 
 const
@@ -289,6 +291,11 @@ type
     FOption: TTyChartOption;
     FBuild: TTyChartBuild;
     FIndex: TTyAxisSeriesIndex;
+    { WHAT EACH AXIS KEEPS FROM ONE RENDER TO THE NEXT [Batch 101]: the
+      category interval's hysteresis store and the split areas' colours by
+      tick value. Lives as long as the axis' model: a notMerge clears it, a
+      merge forgets only the axes it brought in new. }
+    FAxisMemory: TTyAxisMemoryStore;
     FBindings: TTySeriesBindingArray;
     FStores: array of TTyDataStore;
     { Every bar's width and offset, index-parallel to FBindings. Solved in
@@ -563,8 +570,21 @@ type
       writes `itemStyle: { color: '#fff', borderColor: 'auto' }` is white
       with a border in the palette colour -- so both numbers exist at once
       and one field could not hold them. }
-    FSeriesPalette: array of TTyChartColor;
-    FSeriesPaletteKnown: array of Boolean;
+    FSeriesPick: array of TTyPalettePick;
+    FSeriesPickAsked: array of Boolean;
+    { the fill IS the pick: unwritten, or written `auto` [Batch 105] }
+    FSeriesFromPick: array of Boolean;
+    { upstream's colorFromPalette: the colour was UNWRITTEN -- `auto` asks
+      the palette and still is not, so its rows take no per-datum slot }
+    FSeriesColorFromPalette: array of Boolean;
+    { THE PER-DATUM PALETTE, colorBy other than 'series' [Batch 105]: per
+      binding slot, per RAW row, what dataColorPaletteTask gave the row --
+      Asked False where the row kept the series' colour (its own colour, a
+      visual channel's, a series colour that was written). Solved after the
+      filters, with one scope per `type-colorBy` shared by every series of
+      that kind. }
+    FDatumPicks: array of array of TTyPalettePick;
+    FDatumAsked: array of array of Boolean;
     FDirty: Boolean;
     FLastRect: TTyRectF;
     FOptionText: string;
@@ -642,6 +662,8 @@ type
     FTipNow: Double;
     FTipTimer: TTimer;
     FTipBox, FTipRect: TTyRectF;
+    { [Batch 104] what the last paint's string or handler formatter said }
+    FTipFormatterText: string;
     { [Batch 100] the option's own `status: 'show'` pointers are gone: the
       first pointer event rewrites every status, and an option set brings
       them back }
@@ -728,13 +750,63 @@ type
       the size the marks are drawn at. }
     FPaintListPPI: Integer;
     FPaintListValid: Boolean;
+    { ---- export and loading [Batch 106] ----
+      AN EXPORT IS A RENDER WITH THREE THINGS SWITCHED: FExporting draws the
+      finished picture (no animation frame, no proxy, no hover), FExportBare
+      leaves the skin's frame out for a background the options chose, and
+      FExportExclude hides the views excludeComponents names. FViewsDrawn is
+      what the last full render drew, by view. }
+    FExporting: Boolean;
+    FExportBare: Boolean;
+    FExportExclude: TTyChartViews;
+    FViewsDrawn: TTyChartViews;
+    { THE LOADING EFFECT: shown or not, its cfg, and the spinner -- an arc
+      element on a driver of its own (the axis pointer's way), so a loading
+      chart never takes its series out of the static layer. FLoadGeo is the
+      geometry the last paint used, CSS px. }
+    FLoadShown: Boolean;
+    FLoadCfg: TTyLoadingCfg;
+    FLoadAnim: TTyAnimation;
+    FLoadArc: TTyAnimBag;
+    FLoadGeo: TTyLoadingGeometry;
+    FLoadGeoValid: Boolean;
+    function ViewHidden(AView: TTyChartView): Boolean;
+    procedure ViewDrew(AView: TTyChartView);
+    function LoadLive: Boolean;
+    procedure LoadDrop;
+    procedure PaintLoading(APainter: TTyPainter; const ARect: TRect;
+      APPI: Integer; const AMeasurer: ITyTextMeasurer);
+    procedure ExportOptsOrRaise(const AJson: string; out AOpts: TTyChartExportOpts);
+    function RenderExport(const AOpts: TTyChartExportOpts): TBGRABitmap;
+    procedure WriteExport(AStream: TStream; ABmp: TBGRABitmap;
+      AType: TTyExportImageType);
     procedure SetOptionText(const AValue: string);
     function GetOptionText: string;
     { ---- setOption [Batch 95] ---- }
     { the notMerge setOption: the text is the option, every model is new }
-    procedure ApplyNotMerge(const AValue: string);
+    procedure ApplyNotMerge(const AValue: string); overload;
+    { the same, the media merged after the init in AReplace's replaceMerge
+      [Batch 107] }
+    procedure ApplyNotMerge(const AValue: string; const AReplace: array of string); overload;
     { the merge setOption, AReplace's main types in replaceMerge mode }
     function DoMerge(const AJson: string; const AReplace: array of string): Boolean;
+  private
+    { ---- media [Batch 107] ---- }
+    { the merges of one setOption or one resize: the views the old render
+      had (read before the first), whether the first is still to come, and
+      whether a resize does them -- which snaps, as upstream's resize update
+      runs with duration 0 }
+    FMergeOldKeys, FMergeOldAxes: TTyStringArray;
+    FMergeFirst, FMergeResize: Boolean;
+    { the size the media queries are asked about: the client area in CSS px
+      (logical px at the font's PPI) }
+    procedure MediaViewSize;
+    { after each merge of a merge setOption or a resize: what DoMerge did
+      with its one report }
+    procedure MergePass(const AReport: TTyMergeReport);
+    { after each media merge of a notMerge: a brand new series asks for a
+      new view }
+    procedure NotMergePass(const AReport: TTyMergeReport);
     { what every setOption ends with: the `updated` event now, or with the
       next render when lazy [Batch 97] }
     procedure AfterSetOption(ALazy, ASilent: Boolean);
@@ -833,6 +905,9 @@ type
     function PtrProps(const AHit: TTyAxisHit; AAt: Double): TTyAnimProps;
     { where the pointer of AHit is drawn: its proxy's place, AAt without one }
     function PtrAt(const AHit: TTyAxisHit; AAt: Double): Double;
+    { the shadow of AHit as it is drawn now: its proxy's rect while that
+      moves, the shape upstream builds otherwise [Batch 101] }
+    function PtrShadowNow(const AHit: TTyAxisHit; out AShape: TTyXYWH): Boolean;
     function PtrLive: Boolean;
     { the frame's continuous part (AContinuous) or the rest }
     function AnimPart(AContinuous: Boolean): TTyPaintList;
@@ -935,6 +1010,27 @@ type
     function ThemeRampColor(ASlot: Integer): TTyColor;
     { What `auto` means on this series: the palette's pick for it. }
     function SeriesPaletteColor(ASeriesIndex: Integer): TTyColor;
+    { what a palette answer paints: the author's colour, the theme's slot, or
+      nothing (an undefined pick) [Batch 105] }
+    function PickColor(const APick: TTyPalettePick): TTyColor;
+    { dataColorPaletteTask, after the filters [Batch 105] }
+    procedure SolveDatumPalette;
+    { the JSON item of a series' own `data` at a raw row, nil when the data
+      came from elsewhere or the item is no object }
+    function RawItemNode(ASlot, ARaw: Integer): TJSONObject;
+    { a row's own colour object -- a gradient or a pattern in the item's
+      itemStyle.color -- for the row fills a renderer reads [Batch 105] }
+    function RowObjectFill(ASlot, ARaw: Integer; out AColor: TTyOptColor): Boolean;
+    { the row fills a series' renderer reads: palette picks and object
+      colours, by raw row [Batch 105] }
+    function SeriesRowFills(ASlot: Integer): TTyRowFillArray;
+    { a per-datum renderer's object fill for a raw row: the datum's own
+      gradient or pattern, else the series' -- unless a visual channel, a
+      string colour of the datum's own or the per-datum palette coloured the
+      row [Batch 105] }
+    function DatumObjectFill(ASlot, ARaw: Integer): TTyChartObjFill;
+    { the series' own fill as an object, `auto` aside [Batch 105] }
+    function SeriesObjectFill(ASlot: Integer): TTyChartObjFill;
     { What the author wrote on this series' style blocks, laid over the
       palette colour the visual already carries. }
     procedure ApplyOptStyle(var AVisual: TTySeriesVisual; ASlot: Integer);
@@ -1251,7 +1347,10 @@ type
       out against upstream's -- can stand in for the fonts. }
     function NewTextMeasurer(APPI: Integer): ITyTextMeasurer; virtual;
     function GetStyleTypeKey: string; override;
+    { A RESIZE ASKS THE MEDIA QUERIES AGAIN (upstream's resize ->
+      resetOption('media')) [Batch 107] }
     procedure Resize; override;
+    procedure Loaded; override;
     { Protected and non-virtual, exactly as every other control in the library:
       a headless test renders through it onto an offscreen bitmap, and it
       bypasses the on-screen paint path entirely. }
@@ -1262,6 +1361,16 @@ type
       named. This one is what a WINDOW wants, and works in client space:
       TTyPaintCache.Blit draws at the canvas origin. }
     procedure RenderCached(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { WHAT THE LAST FULL RENDER DREW, by view -- RenderTo's, an export's, a
+      static layer's. [Batch 106] }
+    function LastViewsDrawn: TTyChartViews;
+    { THE LOADING EFFECT AS THE LAST PAINT LAID IT OUT, CSS px (False before
+      one), its cfg, the spinner's angles now and the clips its driver runs.
+      [Batch 106] }
+    function LoadingGeometry(out AGeo: TTyLoadingGeometry): Boolean;
+    function LoadingCfg: TTyLoadingCfg;
+    function LoadingArcAngles(out AStart, AEnd: Double): Boolean;
+    function LoadingClipCount: Integer;
     { THE POINTER MOVED, AND THE PICTURE DID NOT. Hover, press, release and
       focus all arrive here; the base class answers them with Invalidate, and
       this control's Invalidate rebuilds the stores, re-measures every label
@@ -1298,10 +1407,11 @@ type
       richInheritPlainLabel, and the chart's global text font -- the skin's
       label font with the root textStyle's over it [Batch 86] }
     function RtGlobal: TTyRtGlobal;
-    { the styles an axis' labels (plain and emphasised) and name are painted
-      in: the theme's, with the family, size, weight and colour the layout
-      measured them in -- the author's where written [Batch 83] }
-    procedure AxisTextStyles(ASpec: PTyAxisLayoutSpec; out ALabel, APrimary,
+    { the styles an axis' labels and name are painted in: the theme's, with
+      the family, size, weight and colour the layout measured them in -- the
+      author's where written [Batch 83]. A time axis' heavier `{primary|...}`
+      part is a rich piece of the label's block [Batch 104]. }
+    procedure AxisTextStyles(ASpec: PTyAxisLayoutSpec; out ALabel,
       AName: TTyStyleSet);
     procedure AxisTextOver(var AStyle: TTyStyleSet; const AName: string;
       ASize, AWeight: Integer; AHasColour: Boolean; AColour: Cardinal;
@@ -1322,6 +1432,20 @@ type
       with snap on, the cursor with it off, clamped by PointerAt. The tooltip
       header is not this -- it always describes the snapped row. }
     function PointerValue(const AHit: TTyAxisHit): Double;
+    { THE SHADOW'S RECT as upstream's CartesianAxisPointer builds it
+      [Batch 101]: makeRectShape([min, other0], [max - min, otherSpan]) --
+      x, y, width, height, the width (on a y axis the height) negative or
+      not as the other axis' extent runs. The band is a category's (at least
+      1px), or on a value, log or time axis the largest positive gap of the
+      bar, pictorial bar, candlestick or boxplot statistics holding a hovered
+      series (taken on that series' base axis, whichever axis the pointer is
+      on), four fifths of the axis for a lone value, else 1px; the ends
+      clamped to the axis. False when the hit has no axis or no value. }
+    function PointerShadowShape(const AHit: TTyAxisHit;
+      out AShape: TTyXYWH): Boolean;
+    { the same about the pixel AAt rather than the hit's own value }
+    function PointerShadowShapeAt(const AHit: TTyAxisHit; AAt: Double;
+      out AShape: TTyXYWH): Boolean;
     { WHAT THE TOOLTIP WOULD SAY, in four answerable pieces rather than one
       procedure that draws. PROTECTED for the same reason RenderTo is: a
       headless test has no window and no pointer, and a content rule tested
@@ -1338,6 +1462,10 @@ type
       const ASpec: TTyTooltipSpec): TTyTooltipBlock;
     { hit -> the record a formatter is given. }
     function TooltipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
+    { [Batch 104] THE TEXT THE LAST PAINT'S FORMATTER GAVE THE BOX -- a
+      template after the time format and formatTpl, or a handler's answer --
+      '' when the box was not drawn or had no formatter. }
+    function TooltipFormatterText: string;
     { [Batch 100] THE BOX'S SIZE AS MEASURED, device px, just before it is
       placed. Nothing here; a test that compares a placement against
       upstream's -- whose sizes come from another measurer -- answers the
@@ -1524,6 +1652,46 @@ type
       NOT a form-image grab: capturing a windowed control that way returns black
       on some widgetsets, which this library has already been caught by. }
     procedure SaveToPng(const AFileName: string);
+    { EXPORT, as getDataURL does it [Batch 106]. AOptsJson is upstream's
+      options object -- `type`, `pixelRatio`, `backgroundColor`,
+      `excludeComponents` -- '' for none; see tyControls.AdvChart.Export for
+      what each one does. The picture is the FINISHED chart: an animation
+      running in the window is drawn where it will rest, and the pointer's
+      own state -- the tooltip box, a hovered axis pointer, a hover's
+      highlight -- is left out (an option's own pointers are drawn). The
+      loading effect, when shown, is in it, as upstream's is.
+
+      A PNG, or a JPEG for `type: 'jpeg'` (composited onto black, as a
+      canvas makes a JPEG of transparency, at quality 92). Raises
+      EArgumentException for options that are not JSON. An image with no
+      pixels writes nothing. }
+    procedure SaveToStream(AStream: TStream; const AOptsJson: string = '');
+    function SaveToBytes(const AOptsJson: string = ''): TBytes;
+    { The type is the options' `type` when they write one, else the file's
+      extension (.jpg / .jpeg are a JPEG), else PNG. }
+    procedure SaveToFile(const AFileName: string; const AOptsJson: string = '');
+    { 'data:image/png;base64,...' (or image/jpeg); 'data:,' for an image with
+      no pixels, as a canvas answers. }
+    function GetDataURL(const AOptsJson: string = ''): string;
+    { renderToCanvas: the picture, unencoded. The caller frees it; nil for an
+      image with no pixels. }
+    function RenderToBitmap(const AOptsJson: string = ''): TBGRABitmap;
+    { THE LOADING EFFECT, showLoading's `default` [Batch 106]: a mask over
+      the chart, the text and a turning arc. ACfgJson is upstream's cfg
+      (`text`, `textColor`, `color`, `maskColor`, `fontSize`, `fontWeight`,
+      `fontFamily`, `showSpinner`, `spinnerRadius`, `lineWidth`); the
+      colours and the font default to the theme (TyAdvChartLoading,
+      TyAdvChartLoadingSpinner), the text to rsTyChartLoading. Raises
+      EArgumentException for a cfg that is not JSON.
+
+      A NAME other than 'default' (or '') shows nothing -- and, as upstream,
+      has already hidden the effect shown before. The spinner turns on the
+      control's timer whatever the option's `animation` says, as upstream's
+      does; AnimationMode camOff holds it still. }
+    procedure ShowLoading(const ACfgJson: string = ''); overload;
+    procedure ShowLoading(const AName, ACfgJson: string); overload;
+    procedure HideLoading;
+    property LoadingShown: Boolean read FLoadShown;
     { WHAT THE POINTER IS OVER, in the control's own coordinates.
 
       The chart's first interactive question, and the first production caller
@@ -1559,6 +1727,13 @@ type
       out ARow: TTyVisualRow): Boolean;
     function VisualMetas(ASeriesIndex: Integer): TTyVisualMetaArray;
     function VisualLineFill(ASeriesIndex: Integer): TTyVisualLineFill;
+    { THE PALETTE AS THE LAST BUILD SOLVED IT [Batch 105]: the colour series
+      ASeriesIndex takes (its written one, its palette pick, 0 for none), and
+      the colour its datum at ARawIndex takes before any element draws it --
+      the series', a visual channel's, the datum's own or the per-datum
+      palette's, in upstream's stage order. }
+    function PaletteSeriesColour(ASeriesIndex: Integer): TTyChartColor;
+    function PaletteDatumColour(ASeriesIndex, ARawIndex: Integer): TTyChartColor;
     { THE COMPONENT AIndex AS THE LAST RENDER LAID IT OUT: Valid is False
       when it is hidden, piecewise, or nothing has rendered. }
     function VisualMapLayout(AIndex: Integer): TTyVisualMapLayout;
@@ -1600,6 +1775,10 @@ type
       chart at once and publish legendselectchanged, legendselected,
       legendunselected, legendselectall or legendinverseselect. }
     function DispatchAction(const APayloadJson: string): Boolean;
+    { What each axis keeps from one render to the next: the category
+      interval's store and the split areas' colours [Batch 101]. Read-only
+      to a host; a test reads it. }
+    property AxisMemory: TTyAxisMemoryStore read FAxisMemory;
     { getSelectedDataIndices: the RAW indices of series ASeriesIndex's
       selection, in the order the names entered it }
     function SelectedDataIndices(ASeriesIndex: Integer): TTyIntegerArray;
@@ -1812,6 +1991,13 @@ type
     function ComponentModelId(const AMainType: string; AIndex: Integer): string;
     function ComponentModelName(const AMainType: string; AIndex: Integer): string;
     function ComponentModelSubType(const AMainType: string; AIndex: Integer): string;
+    { THE MEDIA UNITS the last merge applied: their indices in the option's
+      `media` list as read (-1 the default); empty when none applies or the
+      option has none. upstream's _currentMediaIndices. [Batch 107] }
+    function MediaIndices: TTyMediaIndices;
+    { the queries are asked again at the control's size now -- what a
+      resize does; True when units were merged }
+    function MediaRecheck: Boolean;
   published
     { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
       RTTI order is the 3.0 order. }
@@ -1920,7 +2106,8 @@ uses
     rest of the AdvChart family keeps, invisible to a host. }
   tyControls.StrConsts,
   tyControls.AdvChart.RichStyle, tyControls.AdvChart.JsMath,
-  tyControls.AdvChart.LinePath;
+  tyControls.AdvChart.LinePath,
+  BGRABitmapTypes, FPImage, FPWriteJPEG, base64;
 
 { ==================== construction ==================== }
 
@@ -1931,6 +2118,7 @@ begin
   FLegendSelHoverLegend := -1;
   FLegendSelHoverIdx := -1;
   FIndex := TTyAxisSeriesIndex.Create;
+  FAxisMemory := TTyAxisMemoryStore.Create;
   FDirty := True;
   FTipDatum := TyChartNoDatum;
   FTipElement := -1;
@@ -1957,6 +2145,7 @@ begin
   DropBuild;
   FreeAndNil(FPaintList);
   FreeAndNil(FIndex);
+  FreeAndNil(FAxisMemory);
   FreeAndNil(FOption);
   { The static layer owns a TBitmap. TTyPaintCache.Drop only marks it stale --
     it keeps the surface deliberately, for reuse -- so dropping is not freeing. }
@@ -1977,6 +2166,9 @@ begin
   FreeAndNil(FPtrAnim);
   LegAnimDrop;
   FreeAndNil(FLegAnim);
+  { THE ARC BEFORE ITS DRIVER, as every proxy [Batch 106] }
+  LoadDrop;
+  FreeAndNil(FLoadAnim);
   FreeAndNil(FAnimOldBuild);
   inherited Destroy;
 end;
@@ -2117,6 +2309,12 @@ begin
 end;
 
 procedure TTyAdvanceChart.ApplyNotMerge(const AValue: string);
+begin
+  ApplyNotMerge(AValue, []);
+end;
+
+procedure TTyAdvanceChart.ApplyNotMerge(const AValue: string;
+  const AReplace: array of string);
 var i: Integer;
 begin
   FOptionText := AValue;
@@ -2144,7 +2342,12 @@ begin
   FAnimMerge := False;
   FAnimFreshAxes := nil;
   FAnimHasPayload := False;
-  FOption.SetOptionText(AValue);
+  { the media are asked at the control's size [Batch 107] }
+  MediaViewSize;
+  FOption.SetOptionText(AValue, AReplace, @NotMergePass);
+  { new axis models and views: nothing kept from the last render
+    [Batch 101] }
+  FAxisMemory.Clear;
   FGraphForce := nil;
   { notMerge: new series models, so no roam survives either, nor a toggle. }
   FGraphRoam := nil;
@@ -2209,7 +2412,7 @@ begin
     and an init ignores replaceMerge (initBase merges with no opts) }
   if AOpts.NotMerge or not (FOption.Root is TJSONObject) then
   begin
-    ApplyNotMerge(AJson);
+    ApplyNotMerge(AJson, AOpts.ReplaceMerge);
     Result := not FOption.Error.Failed;
   end
   else
@@ -2244,61 +2447,124 @@ function TTyAdvanceChart.DoMerge(const AJson: string;
   const AReplace: array of string): Boolean;
 var
   rep: TTyMergeReport;
-  oldKeys, oldAxes: TTyStringArray;
-  si, s, t: Integer;
 begin
   { the old views, before the merge renames anything }
-  oldKeys := AnimViewKeys;
-  oldAxes := AxisViewKeys;
-  if not FOption.MergeOptionText(AJson, AReplace, @MergeBefore, rep) then Exit(False);
-  { the views the next update pairs with: the last render's -- unless an
-    update already waits (an old render kept) or a lazy one does }
-  if not FAnimPrev.Valid and not FLazyPending then
-  begin
-    FAnimOldViewKeys := oldKeys;
-    FAnimFresh := nil;
-    FAnimOldAxisKeys := oldAxes;
-    FAnimFreshAxes := nil;
-  end;
-  { A MERGE KEEPS ITS MODELS, and their views [Batch 99] -- unless a
-    notMerge waits: then the models are new against the render it starts
-    from, and so is every component view }
-  if not FAnimPending or FAnimFull or FAnimMerge then FAnimMerge := True;
-  { an axis brought in by index is brand new: a new view }
-  for t := 0 to 1 do
-  begin
-    if t = 0 then si := TyMergeSlotsIndex(rep, 'xAxis')
-    else si := TyMergeSlotsIndex(rep, 'yAxis');
-    if si < 0 then Continue;
-    for s := 0 to High(rep.Slots[si].Brand) do
-      if rep.Slots[si].Brand[s] then
-      begin
-        SetLength(FAnimFreshAxes, Length(FAnimFreshAxes) + 1);
-        if t = 0 then FAnimFreshAxes[High(FAnimFreshAxes)] := 'xAxis' + IntToStr(s)
-        else FAnimFreshAxes[High(FAnimFreshAxes)] := 'yAxis' + IntToStr(s);
-      end;
-  end;
-  { THE STATE RECORDS a reused element keeps: its hoverState, its
-    __highByOuter bits, its select (the model keeps its selectedMap)
-    [Batch 99] -- by the old view keys, read before the merge }
-  StCarryTake(oldKeys);
-  { A BRAND NEW MODEL ASKS FOR A NEW VIEW, whatever id it made (a removed
-    model's, often) -- until the update that pairs the views [Batch 97] }
-  si := TyMergeSlotsIndex(rep, 'series');
-  if si >= 0 then
-    for s := 0 to High(rep.Slots[si].Brand) do
-      if rep.Slots[si].Brand[s] then
-      begin
-        if s > High(FAnimFresh) then SetLength(FAnimFresh, s + 1);
-        FAnimFresh[s] := True;
-      end;
+  FMergeOldKeys := AnimViewKeys;
+  FMergeOldAxes := AxisViewKeys;
+  FMergeFirst := True;
+  FMergeResize := False;
+  { the media are asked at the control's size [Batch 107] }
+  MediaViewSize;
+  { THE MERGES: the base, then every media unit that applies, each
+    reported to MergePass [Batch 107] }
+  if not FOption.MergeOptionText(AJson, AReplace, @MergeBefore, @MergePass, rep) then
+    Exit(False);
   FOptionText := FOption.OptionJson;
-  MergeKeepStates(rep);
   { AN UPDATE: the series keep their views where their ids and types do }
   FAnimPending := True;
   FDirty := True;
   Invalidate;
   Result := True;
+end;
+
+procedure TTyAdvanceChart.MergePass(const AReport: TTyMergeReport);
+var si, s, t: Integer;
+begin
+  if FMergeFirst then
+  begin
+    FMergeFirst := False;
+    if not FMergeResize then
+    begin
+      { the views the next update pairs with: the last render's -- unless an
+        update already waits (an old render kept) or a lazy one does }
+      if not FAnimPrev.Valid and not FLazyPending then
+      begin
+        FAnimOldViewKeys := FMergeOldKeys;
+        FAnimFresh := nil;
+        FAnimOldAxisKeys := FMergeOldAxes;
+        FAnimFreshAxes := nil;
+      end;
+      { A MERGE KEEPS ITS MODELS, and their views [Batch 99] -- unless a
+        notMerge waits: then the models are new against the render it starts
+        from, and so is every component view }
+      if not FAnimPending or FAnimFull or FAnimMerge then FAnimMerge := True;
+    end;
+    { THE STATE RECORDS a reused element keeps: its hoverState, its
+      __highByOuter bits, its select (the model keeps its selectedMap)
+      [Batch 99] -- by the old view keys, read before the merge }
+    StCarryTake(FMergeOldKeys);
+  end;
+  { an axis brought in by index is brand new: a new view }
+  for t := 0 to 1 do
+  begin
+    if t = 0 then si := TyMergeSlotsIndex(AReport, 'xAxis')
+    else si := TyMergeSlotsIndex(AReport, 'yAxis');
+    if si < 0 then Continue;
+    for s := 0 to High(AReport.Slots[si].Brand) do
+      if AReport.Slots[si].Brand[s] then
+      begin
+        { a new model in the slot: its memory starts over [Batch 101] }
+        if t = 0 then FAxisMemory.Forget('xAxis' + IntToStr(s))
+        else FAxisMemory.Forget('yAxis' + IntToStr(s));
+        SetLength(FAnimFreshAxes, Length(FAnimFreshAxes) + 1);
+        if t = 0 then FAnimFreshAxes[High(FAnimFreshAxes)] := 'xAxis' + IntToStr(s)
+        else FAnimFreshAxes[High(FAnimFreshAxes)] := 'yAxis' + IntToStr(s);
+      end;
+  end;
+  { A BRAND NEW MODEL ASKS FOR A NEW VIEW, whatever id it made (a removed
+    model's, often) -- until the update that pairs the views [Batch 97] }
+  NotMergePass(AReport);
+  MergeKeepStates(AReport);
+end;
+
+procedure TTyAdvanceChart.NotMergePass(const AReport: TTyMergeReport);
+var si, s: Integer;
+begin
+  si := TyMergeSlotsIndex(AReport, 'series');
+  if si >= 0 then
+    for s := 0 to High(AReport.Slots[si].Brand) do
+      if AReport.Slots[si].Brand[s] then
+      begin
+        if s > High(FAnimFresh) then SetLength(FAnimFresh, s + 1);
+        FAnimFresh[s] := True;
+      end;
+end;
+
+procedure TTyAdvanceChart.MediaViewSize;
+var ppi: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  FOption.SetViewSize(ClientWidth * 96 / ppi, ClientHeight * 96 / ppi);
+end;
+
+function TTyAdvanceChart.MediaRecheck: Boolean;
+begin
+  Result := False;
+  if (FOption = nil) or (csDestroying in ComponentState) then Exit;
+  { nothing to ask: no media, or nothing parsed }
+  if (FOption.Media.UnitCount = 0) and not FOption.Media.HasDefault then Exit;
+  MediaViewSize;
+  FMergeOldKeys := AnimViewKeys;
+  FMergeOldAxes := AxisViewKeys;
+  FMergeFirst := True;
+  FMergeResize := True;
+  try
+    Result := FOption.MediaRecheck(@MergeBefore, @MergePass);
+  finally
+    FMergeResize := False;
+  end;
+  if not Result then Exit;
+  { A RESIZE'S UPDATE: the models kept, merged; nothing armed -- upstream
+    runs it with duration 0 -- and the Option property keeps the text
+    the host wrote (its media with it) }
+  FDirty := True;
+  Invalidate;
+end;
+
+function TTyAdvanceChart.MediaIndices: TTyMediaIndices;
+begin
+  Result := Copy(FOption.Media.Current);
 end;
 
 procedure TTyAdvanceChart.AfterSetOption(ALazy, ASilent: Boolean);
@@ -2456,8 +2722,10 @@ begin
     end;
   end;
   { EVERY SERIES IS VISITED (backwardCompat writes `series` into every
-    option) and re-creates its data: a tree's expand state is the data's }
-  FTreeToggled := nil;
+    option) and re-creates its data: a tree's expand state is the data's --
+    every option the preprocessors saw; the media default they never see
+    visits the series only where it writes them [Batch 107] }
+  if si >= 0 then FTreeToggled := nil;
 
   { ---- by dataZoom: an action's window stays unless the merge wrote over
     it (MergeBefore); a new model has none ---- }
@@ -2491,7 +2759,7 @@ begin
   FStDirty := False;
   { THE LEGEND IS VISITED (it depends on the series): optionUpdated
     resolves single mode again; `selected` itself is in the tree, merged }
-  FLegendLoaded := False;
+  if TyMergeSlotsIndex(AReport, 'legend') >= 0 then FLegendLoaded := False;
 end;
 
 function TTyAdvanceChart.DiagnosticCount: Integer;
@@ -2559,6 +2827,16 @@ procedure TTyAdvanceChart.Resize;
 begin
   inherited Resize;
   FDirty := True;
+  { upstream's resize: resetOption('media') [Batch 107] }
+  MediaRecheck;
+end;
+
+procedure TTyAdvanceChart.Loaded;
+begin
+  inherited Loaded;
+  { the option streamed in before the size may have: asked again at the
+    size loaded [Batch 107] }
+  MediaRecheck;
 end;
 
 { ==================== the pipeline ==================== }
@@ -2841,6 +3119,227 @@ begin
   DzRenderStates;
   TyApplyAxisExtents(FOption, FBuild, FBindings, FStores, FStacks, FIndex,
     FLastPPI, FAxisZooms);
+  { LAST, ON THE VIEWS THE FILTERS LEFT: dataColorPaletteTask is a visual
+    stage (4600), after every processor -- a row the legend or a dataZoom
+    took out reads the series' colorFromPalette, a row still in reads its
+    own. [Batch 105] }
+  SolveDatumPalette;
+end;
+
+{ dataColorPaletteTask [Batch 105]. eachSeries -- the series the legend kept
+  -- whose getColorBy() is not 'series', ONE SCOPE PER `type-colorBy` shared
+  by every such series in the chart: a second pie continues where the first
+  stopped, and a name the first one coloured comes out the same colour.
+  Every RAW row in raw order, so a row a filter took out still takes its
+  slot and the colours stay put across a legend click; a row asks only while
+  its colour is the palette's -- the series' was unwritten (`auto` is
+  written) and, while it is in view, neither its own itemStyle colour nor a
+  visual channel coloured it. Out of view its own colour is not seen: the
+  item style task only met the rows in view. The palette is the series' own
+  `color` / `colorLayer`, else the chart's, both over the shared scope, asked
+  with the RAW count. }
+procedure TTyAdvanceChart.SolveDatumPalette;
+type
+  TKeyedScope = record
+    Key: string;
+    Scope: TTyPaletteScope;
+  end;
+var
+  scopes: array of TKeyedScope;
+  i, j, k, si, rawN, sIdx: Integer;
+  cb, typ, nm: string;
+  chartPal, ownPal: TTyPalette;
+  chartLayers, ownLayers: TTyPaletteLayers;
+  sc: TTyPaletteScope;
+  item: TJSONObject;
+  d: TJSONData;
+  own: Boolean;
+begin
+  FDatumPicks := nil;
+  FDatumAsked := nil;
+  SetLength(FDatumPicks, Length(FBindings));
+  SetLength(FDatumAsked, Length(FBindings));
+  if FOption = nil then Exit;
+  chartPal := TyChartRootPalette(FOption);
+  chartLayers := TyChartPaletteLayersOf(FOption, -1);
+  scopes := nil;
+  for i := 0 to High(FBindings) do
+  begin
+    if FBindings[i].Hidden then Continue;
+    if (i > High(FStores)) or (FStores[i] = nil) then Continue;
+    si := FBindings[i].SeriesIndex;
+    typ := FBindings[i].SeriesType;
+    { THE TYPES WHOSE ROWS THIS PORT PAINTS ONE BY ONE. A graph, a tree, a
+      treemap, a sunburst and a sankey colour their own nodes; a candlestick's
+      and a boxplot's defaults write the colour. }
+    if not ((typ = 'bar') or (typ = 'line') or (typ = 'scatter')
+      or (typ = 'effectScatter') or (typ = 'pictorialBar')
+      or (typ = TyPieSeriesTypeName) or (typ = 'funnel') or (typ = 'gauge')
+      or (typ = 'radar')) then Continue;
+    cb := TyChartColorByOf(FOption, si, typ);
+    if cb = 'series' then Continue;
+    { the scope first, whether or not a row asks: upstream hands every such
+      series its scope before any of them picks }
+    sIdx := -1;
+    for j := 0 to High(scopes) do
+      if scopes[j].Key = typ + '-' + cb then sIdx := j;
+    if sIdx < 0 then
+    begin
+      SetLength(scopes, Length(scopes) + 1);
+      sIdx := High(scopes);
+      scopes[sIdx].Key := typ + '-' + cb;
+      scopes[sIdx].Scope := Default(TTyPaletteScope);
+    end;
+    { a written series colour leaves no row from the palette }
+    if (si < 0) or (si > High(FSeriesColorFromPalette))
+      or not FSeriesColorFromPalette[si] then Continue;
+    rawN := FStores[i].RawCount;
+    SetLength(FDatumPicks[i], rawN);
+    SetLength(FDatumAsked[i], rawN);
+    ownPal := TySeriesOwnPalette(FOption, si);
+    ownLayers := TyChartPaletteLayersOf(FOption, si);
+    sc := scopes[sIdx].Scope;
+    for k := 0 to rawN - 1 do
+    begin
+      if FStores[i].IndexOfRawIndex(k) >= 0 then
+      begin
+        { ITS OWN COLOUR: the key present and not null, an object included }
+        item := RawItemNode(i, k);
+        own := False;
+        if item <> nil then
+        begin
+          d := item.Find(TyStyleAccessPath(typ));
+          if d is TJSONObject then
+          begin
+            d := TJSONObject(d).Find('color');
+            own := (d <> nil) and (d.JSONType <> jtNull);
+          end;
+        end;
+        if own then Continue;
+        { a visual channel's }
+        if (i <= High(FVisualRows)) and (k <= High(FVisualRows[i]))
+          and FVisualRows[i][k].ColorSet then Continue;
+      end;
+      nm := FStores[i].GetNameByRaw(k);
+      if nm = '' then nm := IntToStr(k);
+      FDatumPicks[i][k] := TySeriesPaletteFrom(ownPal, ownLayers, chartPal,
+        chartLayers, nm, sc, sc, rawN);
+      FDatumAsked[i][k] := True;
+    end;
+    scopes[sIdx].Scope := sc;
+  end;
+end;
+
+function TTyAdvanceChart.RawItemNode(ASlot, ARaw: Integer): TJSONObject;
+var d: TJSONData;
+begin
+  Result := nil;
+  if (FOption = nil) or (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  { a dataset's rows are no option items }
+  if (ASlot <= High(FSeriesDataset)) and (FSeriesDataset[ASlot] >= 0) then Exit;
+  d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if not (d is TJSONObject) then Exit;
+  d := TJSONObject(d).Find('data');
+  if not (d is TJSONArray) then Exit;
+  if (ARaw < 0) or (ARaw >= TJSONArray(d).Count) then Exit;
+  d := TJSONArray(d).Items[ARaw];
+  if d is TJSONObject then Result := TJSONObject(d);
+end;
+
+function TTyAdvanceChart.RowObjectFill(ASlot, ARaw: Integer;
+  out AColor: TTyOptColor): Boolean;
+var st: TTyOptStyle;
+begin
+  AColor := Default(TTyOptColor);
+  st := TyReadOptStyle(RawItemNode(ASlot, ARaw), 'itemStyle');
+  Result := st.Color.Written
+    and ((st.Color.Gradient.Kind <> cgkNone) or st.Color.Pattern.Present);
+  if Result then AColor := st.Color;
+end;
+
+function TTyAdvanceChart.DatumObjectFill(ASlot, ARaw: Integer): TTyChartObjFill;
+var
+  item: TJSONObject;
+  d: TJSONData;
+  st: TTyOptStyle;
+begin
+  Result := Default(TTyChartObjFill);
+  if (ASlot < 0) or (ASlot > High(FBindings)) or (FOption = nil) then Exit;
+  if (ASlot <= High(FVisualRows)) and (ARaw >= 0) and (ARaw <= High(FVisualRows[ASlot]))
+    and FVisualRows[ASlot][ARaw].ColorSet then Exit;
+  if (ASlot <= High(FDatumAsked)) and (ARaw >= 0) and (ARaw <= High(FDatumAsked[ASlot]))
+    and FDatumAsked[ASlot][ARaw] then Exit;
+  item := RawItemNode(ASlot, ARaw);
+  if item <> nil then
+  begin
+    d := item.Find('itemStyle');
+    if (d is TJSONObject) and (TJSONObject(d).Find('color') <> nil)
+      and (TJSONObject(d).Find('color').JSONType <> jtNull) then
+    begin
+      { the datum wrote its own: an object is the fill, a string is not one }
+      st := TyReadOptStyle(item, 'itemStyle');
+      if (st.Color.Gradient.Kind <> cgkNone) or st.Color.Pattern.Present then
+      begin
+        Result.Present := True;
+        Result.Gradient := st.Color.Gradient;
+        Result.Pattern := st.Color.Pattern;
+      end;
+      Exit;
+    end;
+  end;
+  Result := SeriesObjectFill(ASlot);
+end;
+
+function TTyAdvanceChart.SeriesObjectFill(ASlot: Integer): TTyChartObjFill;
+var
+  d: TJSONData;
+  st: TTyOptStyle;
+begin
+  Result := Default(TTyChartObjFill);
+  if (ASlot < 0) or (ASlot > High(FBindings)) or (FOption = nil) then Exit;
+  d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if not (d is TJSONObject) then Exit;
+  st := TyReadOptStyle(TJSONObject(d), 'itemStyle');
+  if st.Color.IsAuto then Exit;
+  if (st.Color.Gradient.Kind <> cgkNone) or st.Color.Pattern.Present then
+  begin
+    Result.Present := True;
+    Result.Gradient := st.Color.Gradient;
+    Result.Pattern := st.Color.Pattern;
+  end;
+end;
+
+function TTyAdvanceChart.SeriesRowFills(ASlot: Integer): TTyRowFillArray;
+var
+  k, n: Integer;
+  any: Boolean;
+  oc: TTyOptColor;
+begin
+  Result := nil;
+  if (ASlot < 0) or (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
+  n := FStores[ASlot].RawCount;
+  SetLength(Result, n);
+  any := False;
+  for k := 0 to n - 1 do
+  begin
+    if (ASlot <= High(FDatumAsked)) and (k <= High(FDatumAsked[ASlot]))
+      and FDatumAsked[ASlot][k] then
+    begin
+      Result[k].PaletteSet := True;
+      Result[k].PaletteNone := FDatumPicks[ASlot][k].Kind = ppkNone;
+      Result[k].Palette := TTyChartColor(PickColor(FDatumPicks[ASlot][k]));
+      any := True;
+    end;
+    if RowObjectFill(ASlot, k, oc) then
+    begin
+      Result[k].ObjSet := True;
+      Result[k].ObjSolid := oc.Color;
+      Result[k].ObjGradient := oc.Gradient;
+      Result[k].ObjPattern := oc.Pattern;
+      any := True;
+    end;
+  end;
+  if not any then Result := nil;
 end;
 
 procedure TTyAdvanceChart.SolveSampling;
@@ -3115,8 +3614,12 @@ begin
   txt.FontName := labelS.FontName;
   txt.FontSizeLogical := ResolveFontSize(labelS);
   txt.FontWeight := labelS.FontWeight;
-  txt.EmphasisFontWeight := ActiveController.Model.ResolveStyle(
-    'TyAdvChartAxisLabelPrimary', '', []).FontWeight;
+  { THE TIME AXIS' `rich.primary` DEFAULT, from the skin's primary rule: its
+    weight, and its colour where it has one [Batch 104] }
+  labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisLabelPrimary', '', []);
+  txt.EmphasisFontWeight := labelS.FontWeight;
+  txt.HasEmphasisColour := tpTextColor in labelS.Present;
+  txt.EmphasisColour := Cardinal(labelS.TextColor);
   txt.LabelMarginLogical := ActiveController.Metric(TyAdvChartLabelMarginVar,
     TyAdvChartLabelMargin);
   txt.TickLengthLogical := ActiveController.Metric(TyAdvChartTickLenVar,
@@ -3143,7 +3646,7 @@ begin
   { Measuring goes through the painter behind an interface rather than being
     called directly, so the layout layer stays free of the painter and a test
     can hand it a deterministic measurer instead of this machine's fonts. }
-  TyLayoutGrids(FBuild, FOption, AMeasurer, APPI, txt);
+  TyLayoutGrids(FBuild, FOption, AMeasurer, APPI, txt, FAxisMemory);
   { AFTER phase C, for the reason on FBarCols. }
   FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex);
   { AFTER THE BARS: a marker on a bar series sits on its own bar }
@@ -3179,7 +3682,7 @@ var
   lx, ly: Double;
   model: TTyStyleModel;
   lineS, tickStyle, labelS, splitS: TTyStyleSet;
-  lblStyle, primaryS: TTyStyleSet;
+  lblStyle: TTyStyleSet;
   minorTickS, minorSplitS, nameS: TTyStyleSet;
   i: Integer;
   tickLen, minorLen, at, along, x1, y1, x2, y2: Double;
@@ -3192,6 +3695,11 @@ var
   furn: TTyAxisFurniture;
   areaS: TTyStyleSet;
   bandLo, bandHi: Double;
+  { the split colours [Batch 101] }
+  ink: Integer;
+  areaFill: TTyFill;
+  inkStyle: TTyStyleSet;
+  view: TTyChartView;
 
   { THE BOX IS THE TRANSLATION. The layout layer says "this point, with the
     text hanging off it this way"; the painter aligns text INSIDE a rectangle.
@@ -3304,6 +3812,45 @@ var
     nothing -- while StrokePath wants the LOGICAL width and scales it itself.
     Handing the scaled width to both is a double scale that 96 DPI hides
     completely, which is how the first version of this passed. }
+  { one arrow of the axis line: the symbol in its box about (0, 0), turned
+    and moved as the element is [Batch 101] }
+  procedure PaintAxisArrow(P: TTyPainter; const AArrow: TTyAxisArrow;
+    const ALineStyle: TTyStyleSet);
+  var
+    el: TTyChartElement;
+    path: TTyZrPath;
+    t: string;
+    empty: Boolean;
+  begin
+    t := AArrow.SymbolType;
+    empty := Copy(t, 1, 5) = 'empty';
+    path := TyZrSymbol(t, -AArrow.W / 2, -AArrow.H / 2, AArrow.W, AArrow.H);
+    if Length(path) = 0 then Exit;
+    el := Default(TTyChartElement);
+    el.Style.Alpha := 1;
+    el.Shape := TyMkZrShape(path, TyZrLocal(1, 1, AArrow.Rotation, AArrow.X,
+      AArrow.Y), True);
+    if empty then
+    begin
+      el.Style.HasFill := True;
+      el.Style.FillColor := TTyChartColor(model.ResolveStyle(
+        'TyAdvChartEmptyCircle', '', []).Background.Color);
+      el.Style.StrokeColor := TTyChartColor(ALineStyle.BorderColor);
+      el.Style.StrokeWidthLogical := 2;
+    end
+    else if t = 'line' then
+    begin
+      el.Style.StrokeColor := TTyChartColor(ALineStyle.BorderColor);
+      el.Style.StrokeWidthLogical := 1;
+    end
+    else
+    begin
+      el.Style.HasFill := True;
+      el.Style.FillColor := TTyChartColor(ALineStyle.BorderColor);
+    end;
+    TyRenderElement(P, el);
+  end;
+
   procedure BatchLine(AX1, AY1, AX2, AY2: Double; AWidthLogical: Double);
   begin
     TySubPixelLine(AX1, AY1, AX2, AY2, APainter.ScaleF(AWidthLogical));
@@ -3355,6 +3902,13 @@ begin
   { `show: false` means "do not draw me". The axis still exists and its series
     still map to pixels; only the domain, ticks, labels and split lines go. }
   if not AAxis.Visible then Exit;
+  { a cartesian axis' view: hidden by excludeComponents, else drawn
+    [Batch 106] }
+  if TyChartViewOf(AAxis.MainType, view) and (view in [cvXAxis, cvYAxis]) then
+  begin
+    if ViewHidden(view) then Exit;
+    ViewDrew(view);
+  end;
   model := ActiveController.Model;
   { A foreign typeKey is resolved by asking the model directly -- there is no
     per-part helper in this library and inventing one here would be a second
@@ -3395,7 +3949,7 @@ begin
   spec := nil;
   if AGrid <> nil then spec := AGrid.SpecFor(AAxis);
   { DRAWN IN WHAT IT WAS MEASURED IN [Batch 83] }
-  AxisTextStyles(spec, labelS, primaryS, nameS);
+  AxisTextStyles(spec, labelS, nameS);
   { WHAT THIS AXIS ACTUALLY DRAWS. Resolved once by the builder, from the
     option AND from upstream's per-type defaults -- which is where most of
     the answers come from: on a chart with no axis option written at all, the
@@ -3466,23 +4020,39 @@ begin
     the labels' unless it says otherwise.
     [Revised in batch 40: between every band edge, whatever the labels
     were doing.] }
-  if ABelow and furn.ShowSplitArea and (tpBackground in areaS.Present)
-    and (spec <> nil) then
+  { IN THE COLOUR THE LAYOUT GAVE EACH BAND [Batch 101]: the author's list
+    in turn, or the skin's colour and none in turn -- upstream's default is
+    a tint and a transparent -- and a band keeps the colour it had at the
+    last render, so the stripes do not swap under a zoom.
+    [Revised in batch 101: every other band in the skin's colour, from the
+    first band of each render.] }
+  if ABelow and furn.ShowSplitArea and (spec <> nil) then
   begin
     for i := 0 to High(spec^.SplitAreaMarks) - 1 do
     begin
-      if i mod 2 <> 0 then Continue;
       if not spec^.SplitAreaMarks[i].Drawn then Continue;
+      ink := spec^.SplitAreaMarks[i].ColourIndex;
+      areaFill := areaS.Background;
+      if Length(spec^.SplitAreaInks) > 0 then
+      begin
+        { a string is one colour for every band, whatever its count says }
+        if ink > High(spec^.SplitAreaInks) then ink := 0;
+        if not spec^.SplitAreaInks[ink].Ok then Continue;
+        areaFill.Kind := tfkSolid;
+        areaFill.Color := TTyColor(spec^.SplitAreaInks[ink].Colour);
+      end
+      else if (ink <> 0) or not (tpBackground in areaS.Present) then
+        Continue;
       bandLo := spec^.SplitAreaMarks[i].Coord;
       bandHi := spec^.SplitAreaMarks[i + 1].Coord;
       if horiz then
         APainter.FillBackground(
           Rect(Round(bandLo), Round(APlot.Top),
-               Round(bandHi), Round(APlot.Bottom)), areaS.Background, 0)
+               Round(bandHi), Round(APlot.Bottom)), areaFill, 0)
       else
         APainter.FillBackground(
           Rect(Round(APlot.Left), Round(bandLo),
-               Round(APlot.Right), Round(bandHi)), areaS.Background, 0);
+               Round(APlot.Right), Round(bandHi)), areaFill, 0);
     end;
   end;
 
@@ -3512,21 +4082,35 @@ begin
     [Revised in batch 40: every tickStep-th band edge, the stride of
     axisTick.interval when there was one, and no closing edge unless the
     count suited it.] }
-  if ABelow and furn.ShowSplitLine and (tpBorderColor in splitS.Present)
-    and (spec <> nil) then
+  { ONE STROKE PER COLOUR OF THE AUTHOR'S LIST, each line in the colour its
+    count among the drawn lines gives it; the skin's one colour when none
+    was written [Batch 101] }
+  if ABelow and furn.ShowSplitLine and (spec <> nil)
+    and ((tpBorderColor in splitS.Present) or (Length(spec^.SplitLineInks) > 0)) then
   begin
-    APainter.BeginPath;
-    for i := 0 to High(spec^.SplitLineMarks) do
+    for ink := 0 to Max(0, High(spec^.SplitLineInks)) do
     begin
-      if not spec^.SplitLineMarks[i].Drawn then Continue;
-      if ProxLine('line_' + TyJsNumberToString(spec^.SplitLineMarks[i].Value)) then Continue;
-      along := spec^.SplitLineMarks[i].Coord;
-      if horiz then
-        BatchLine(along, APlot.Top, along, APlot.Bottom, LineWidth(splitS))
-      else
-        BatchLine(APlot.Left, along, APlot.Right, along, LineWidth(splitS));
+      inkStyle := splitS;
+      if Length(spec^.SplitLineInks) > 0 then
+      begin
+        if not spec^.SplitLineInks[ink].Ok then Continue;
+        inkStyle.BorderColor := TTyColor(spec^.SplitLineInks[ink].Colour);
+      end;
+      APainter.BeginPath;
+      for i := 0 to High(spec^.SplitLineMarks) do
+      begin
+        if not spec^.SplitLineMarks[i].Drawn then Continue;
+        if (Length(spec^.SplitLineInks) > 0)
+          and (spec^.SplitLineMarks[i].ColourIndex <> ink) then Continue;
+        if ProxLine('line_' + TyJsNumberToString(spec^.SplitLineMarks[i].Value)) then Continue;
+        along := spec^.SplitLineMarks[i].Coord;
+        if horiz then
+          BatchLine(along, APlot.Top, along, APlot.Bottom, LineWidth(splitS))
+        else
+          BatchLine(APlot.Left, along, APlot.Right, along, LineWidth(splitS));
+      end;
+      StrokeBatch(inkStyle);
     end;
-    StrokeBatch(splitS);
   end;
 
   { EVERYTHING ABOVE THIS LINE IS THE GRID and everything below it is the
@@ -3554,6 +4138,12 @@ begin
     else
       BatchLine(at, APlot.Top, at, APlot.Bottom, LineWidth(lineS));
     StrokeBatch(lineS);
+    { THE ARROWS, over the line (z2 11 to its 1), in its colour: a symbol's
+      setColor fills it -- strokes a `line`, rings an `empty` one round the
+      skin's empty-symbol ground [Batch 101] }
+    if spec <> nil then
+      for i := 0 to High(spec^.Arrows) do
+        PaintAxisArrow(APainter, spec^.Arrows[i], lineS);
   end;
 
   { ALIGNED WITH THE LABELS OR WITH THE BAND EDGES. On a banded category axis
@@ -3670,13 +4260,11 @@ begin
     begin
       if not places[i].Shown then Continue;
       if places[i].Text = '' then Continue;
-      { THE WEIGHT THE LAYOUT MEASURED IT IN. A time axis marks its coarse
-        ticks for emphasis -- the `Mar` in a run of day numbers -- and the
-        layout already reserved the wider box that bold needs. Resolving it
-        again here from anything but the placement is how the box and the
-        glyphs come to disagree. }
+      { THE STYLE THE LAYOUT MEASURED IT IN. A time axis' heavier `Mar` in a
+        run of day numbers is a `{primary|Mar}` tag, drawn from its pieces
+        below in the weight the block was measured in. [Revised in batch
+        104: a whole label marked emphasised and drawn in a second style.] }
       lblStyle := labelS;
-      if places[i].Emphasis then lblStyle := primaryS;
       { where its groupTransition has it now [Batch 96] }
       lx := places[i].X;
       ly := places[i].Y;
@@ -3792,19 +4380,26 @@ begin
     chart the moment it took focus. }
   boxStyle := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass,
     [tysNormal]);
-  { Mandatory first draw, and it does more than a fill: parent backdrop,
-    opacity, shadow, background, border, and the corner gaps a windowed
-    control cannot get from a shadow it is not allowed to cast. }
-  DrawFrame(APainter, ARect, boxStyle);
-  { THE OPTION'S backgroundColor OVER THE SKIN'S GROUND, inside the frame's
-    corners -- 'transparent' and anything unreadable leave the skin's
-    [Batch 83] }
-  if AuthorBackground(bg) then
+  { what this render draws, view by view [Batch 106] }
+  FViewsDrawn := [];
+  { AN EXPORT WHOSE OPTIONS CHOSE THE BACKGROUND has painted it already, over
+    the whole image: no frame [Batch 106] }
+  if not FExportBare then
   begin
-    fill := Default(TTyFill);
-    fill.Kind := tfkSolid;
-    fill.Color := TTyColor(bg);
-    APainter.FillBackground(ARect, fill, boxStyle.Radius);
+    { Mandatory first draw, and it does more than a fill: parent backdrop,
+      opacity, shadow, background, border, and the corner gaps a windowed
+      control cannot get from a shadow it is not allowed to cast. }
+    DrawFrame(APainter, ARect, boxStyle);
+    { THE OPTION'S backgroundColor OVER THE SKIN'S GROUND, inside the frame's
+      corners -- 'transparent' and anything unreadable leave the skin's
+      [Batch 83] }
+    if AuthorBackground(bg) then
+    begin
+      fill := Default(TTyFill);
+      fill.Kind := tfkSolid;
+      fill.Color := TTyColor(bg);
+      APainter.FillBackground(ARect, fill, boxStyle.Radius);
+    end;
   end;
 
   plotF := TyRectF(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom);
@@ -3817,8 +4412,8 @@ begin
   end;
 
   { WHILE THEIR groupTransition RUNS the axes are the dynamic layer's, as
-    the series are [Batch 96] }
-  if not AxesDynamic then PaintAxes(APainter, APPI, AMeasurer, False);
+    the series are [Batch 96] -- an export draws them at rest [Batch 106] }
+  if FExporting or not AxesDynamic then PaintAxes(APainter, APPI, AMeasurer, False);
 
   { AFTER THE AXES, so a bar sits on the grid rather than under it. Within the
     series, the paint list decides the order. }
@@ -3827,7 +4422,7 @@ begin
     room, so anything it overlaps it is meant to overlap. While the series
     move the title goes with them into the dynamic layer, so it stays over
     them [Batch 89]. }
-  if not FAnimLive or FAnimContinuous then PaintTitles(APainter);
+  if FExporting or not FAnimLive or FAnimContinuous then PaintTitles(APainter);
 end;
 
 procedure TTyAdvanceChart.PaintAxes(APainter: TTyPainter; APPI: Integer;
@@ -3942,31 +4537,46 @@ procedure TTyAdvanceChart.SolveSeriesColors;
   end;
 
 var
-  i, n: Integer;
-  declared: Boolean;
-  cur, own: TTyPaletteCursor;
-  ownPal: TTyChartColorArray;
+  i, n, count: Integer;
+  chartScope, ownScope: TTyPaletteScope;
+  chartPal, ownPal: TTyPalette;
+  chartLayers, ownLayers: TTyPaletteLayers;
   node: TJSONObject;
   d: TJSONData;
   st: string;
   style: TTyOptStyle;
   key, other: TTyOptColor;
   hasAuto: Boolean;
-  c: TTyChartColor;
 begin
   FSeriesColors := nil;
   FSeriesColorKnown := nil;
   FSeriesColorNone := nil;
-  FSeriesPalette := nil;
-  FSeriesPaletteKnown := nil;
+  FSeriesPick := nil;
+  FSeriesPickAsked := nil;
+  FSeriesFromPick := nil;
+  FSeriesColorFromPalette := nil;
   if FOption = nil then Exit;
   n := FOption.ComponentCount('series');
   SetLength(FSeriesColors, n);
   SetLength(FSeriesColorKnown, n);
   SetLength(FSeriesColorNone, n);
-  SetLength(FSeriesPalette, n);
-  SetLength(FSeriesPaletteKnown, n);
-  cur := TyPaletteStart(TyChartPaletteOf(FOption, -1, declared));
+  SetLength(FSeriesPick, n);
+  SetLength(FSeriesPickAsked, n);
+  SetLength(FSeriesFromPick, n);
+  SetLength(FSeriesColorFromPalette, n);
+  { THE THEME STANDS WHERE UPSTREAM'S DEFAULT PALETTE STANDS, through the same
+    cursor: a written colour takes no slot from it and two series of one name
+    share one, exactly as with an authored list. [Batch 105: the theme ramp
+    was read by series index, so the series after a written colour skipped a
+    slot.] }
+  chartPal := TyChartRootPalette(FOption);
+  chartLayers := TyChartPaletteLayersOf(FOption, -1);
+  chartScope := Default(TTyPaletteScope);
+  { getSeriesCount(): the series MODELS, so an index hole is not counted --
+    the count is what chooses a colorLayer }
+  count := 0;
+  for i := 0 to n - 1 do
+    if FOption.ComponentAt('series', i) is TJSONObject then Inc(count);
 
   { DECLARATION ORDER, AND EVERY SLOT. A series the legend switched off still
     takes its colour, and so does one whose type has no renderer -- that is the
@@ -3981,11 +4591,8 @@ begin
       series after it pick on from the palette [Batch 97] }
     if node = nil then Continue;
     st := '';
-    if node <> nil then
-    begin
-      d := node.Find('type');
-      if (d <> nil) and (d.JSONType = jtString) then st := d.AsString;
-    end;
+    d := node.Find('type');
+    if (d <> nil) and (d.JSONType = jtString) then st := d.AsString;
 
     { WHICH KEY SUPPRESSES THE PALETTE depends on what the series draws with.
       Nearly everything fills, so it is `itemStyle.color`; a boxplot draws with
@@ -4051,51 +4658,31 @@ begin
       Continue;
     end;
 
-    { A SERIES WITH ITS OWN `color` ARRAY runs its own cursor over it from
-      nought, and never touches the chart-wide one. }
-    ownPal := TyChartPaletteOf(FOption, i, declared);
-    if Length(ownPal) > 0 then
+    { SeriesModel.getColorFromPalette(name, null, getSeriesCount()): the
+      series' own `color` / `colorLayer` over a scope of its own, and when
+      that answers nothing the chart's over the chart's scope. `auto` asks as
+      surely as writing nothing does -- it means `the palette colour`, so it
+      has to have one. [Batch 105: colorLayer] }
+    ownPal := TySeriesOwnPalette(FOption, i);
+    ownLayers := TyChartPaletteLayersOf(FOption, i);
+    ownScope := Default(TTyPaletteScope);
+    FSeriesPick[i] := TySeriesPaletteFrom(ownPal, ownLayers, chartPal,
+      chartLayers, NameFor(i), ownScope, chartScope, count);
+    FSeriesPickAsked[i] := True;
+    FSeriesColorFromPalette[i] := not key.Written;
+    { THE PICK IS NOT ALWAYS THE FILL. It becomes the fill only when the
+      fill was left unwritten, or was written as `auto`; a series that
+      named its fill and asked for `auto` somewhere else keeps the name
+      it gave. }
+    if (not key.Written) or key.IsAuto then
+      FSeriesFromPick[i] := True
+    else if not key.IsNone then
     begin
-      own := TyPaletteStart(ownPal);
-      if TyPaletteTake(own, NameFor(i), c) then
-      begin
-        FSeriesPalette[i] := c;
-        FSeriesPaletteKnown[i] := True;
-        if (not key.Written) or key.IsAuto then
-        begin
-          FSeriesColors[i] := c;
-          FSeriesColorKnown[i] := True;
-        end
-        else if not key.IsNone then
-        begin
-          FSeriesColors[i] := key.Color;
-          FSeriesColorKnown[i] := True;
-        end;
-      end;
-      Continue;
-    end;
-
-    { `auto` takes a slot as surely as writing nothing does -- it means `the
-      palette colour`, so it has to have one. }
-    if TyPaletteTake(cur, NameFor(i), c) then
-    begin
-      FSeriesPalette[i] := c;
-      FSeriesPaletteKnown[i] := True;
-      { THE PICK IS NOT ALWAYS THE FILL. It becomes the fill only when the
-        fill was left unwritten, or was written as `auto`; a series that
-        named its fill and asked for `auto` somewhere else keeps the name
-        it gave. }
-      if (not key.Written) or key.IsAuto then
-      begin
-        FSeriesColors[i] := c;
-        FSeriesColorKnown[i] := True;
-      end
-      else if not key.IsNone then
-      begin
-        FSeriesColors[i] := key.Color;
-        FSeriesColorKnown[i] := True;
-      end;
-    end;
+      FSeriesColors[i] := key.Color;
+      FSeriesColorKnown[i] := True;
+    end
+    else
+      FSeriesColorNone[i] := True;
   end;
 end;
 
@@ -4224,6 +4811,9 @@ var
   metas: TTyVisualMetaArray;
   origin, len: Double;
 begin
+  { the per-datum palette and the datums' object colours ride along with the
+    visual rows: every caller that asks for these asks for those [Batch 105] }
+  AVisual.RowFills := SeriesRowFills(ASlot);
   if (ASlot < 0) or (ASlot > High(FVisualRows)) then Exit;
   AVisual.VisualRows := FVisualRows[ASlot];
   if APPI <= 0 then Exit;
@@ -5886,6 +6476,38 @@ begin
   Result := FMarkPointPics[slot];
 end;
 
+function TTyAdvanceChart.PaletteSeriesColour(ASeriesIndex: Integer): TTyChartColor;
+begin
+  Result := TTyChartColor(SeriesColor(ASeriesIndex));
+end;
+
+function TTyAdvanceChart.PaletteDatumColour(ASeriesIndex,
+  ARawIndex: Integer): TTyChartColor;
+var
+  slot, view: Integer;
+  per: TTyChartColorArray;
+  v: TTySeriesVisual;
+  typ: string;
+begin
+  Result := 0;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Exit;
+  typ := FBindings[slot].SeriesType;
+  if (typ = TyPieSeriesTypeName) or (typ = 'funnel') or (typ = 'gauge')
+    or (typ = 'radar') then
+  begin
+    per := PerDatumColours(slot);
+    if (ARawIndex >= 0) and (ARawIndex <= High(per)) then Result := per[ARawIndex];
+    Exit;
+  end;
+  v := TySeriesVisual(TTyChartColor(SeriesColor(ASeriesIndex)));
+  ApplyOptStyle(v, ASeriesIndex);
+  ApplyVisualMaps(v, slot, 0);
+  view := FStores[slot].IndexOfRawIndex(ARawIndex);
+  if view >= 0 then Result := TyRowFill(v, FStores[slot], view)
+  else Result := v.Fill;
+end;
+
 function TTyAdvanceChart.MarkAreaPictures(ASeriesIndex: Integer): TTyMkAreaPicArray;
 var slot: Integer;
 begin
@@ -5898,7 +6520,7 @@ end;
 function TTyAdvanceChart.BuildMarkers(const AMeasurer: ITyTextMeasurer;
   AList: TTyPaintList): Integer;
 var
-  i: Integer;
+  i, n: Integer;
   ink: TTyMkInk;
   st: TTyStyleSet;
   dark: Boolean;
@@ -5917,18 +6539,32 @@ begin
   ink.Inside[2] := TTyChartColor(
     ActiveController.Model.ResolveStyle('TyAdvChartLabelOnDark', '', []).TextColor);
   ink.RtGlobal := RtGlobal;
-  for i := 0 to High(FMarkAreaPics) do
-    if (i <= High(FMarkers)) and FMarkers[i].Blocks[mkArea].Present then
-      Inc(Result, TyBuildMarkAreas(FMarkAreaPics[i], FMarkers[i].Blocks[mkArea], ink,
-        AMeasurer, AList, FMarkers[i].SeriesIndex));
-  for i := 0 to High(FMarkPointPics) do
-    if (i <= High(FMarkers)) and FMarkers[i].Blocks[mkPoint].Present then
-      Inc(Result, TyBuildMarkPoints(FMarkPointPics[i], FMarkers[i].Blocks[mkPoint], ink,
-        AMeasurer, AList, FMarkers[i].SeriesIndex));
-  for i := 0 to High(FMarkLinePics) do
-    if (i <= High(FMarkers)) and FMarkers[i].Blocks[mkLine].Present then
-      Inc(Result, TyBuildMarkLines(FMarkLinePics[i], FMarkers[i].Blocks[mkLine], ink,
-        AMeasurer, AList, FMarkers[i].SeriesIndex));
+  { ONE VIEW PER MARKER TYPE, as upstream's -- excludeComponents hides all of
+    a type at once [Batch 106] }
+  n := 0;
+  if not ViewHidden(cvMarkArea) then
+    for i := 0 to High(FMarkAreaPics) do
+      if (i <= High(FMarkers)) and FMarkers[i].Blocks[mkArea].Present then
+        Inc(n, TyBuildMarkAreas(FMarkAreaPics[i], FMarkers[i].Blocks[mkArea], ink,
+          AMeasurer, AList, FMarkers[i].SeriesIndex));
+  if n > 0 then ViewDrew(cvMarkArea);
+  Inc(Result, n);
+  n := 0;
+  if not ViewHidden(cvMarkPoint) then
+    for i := 0 to High(FMarkPointPics) do
+      if (i <= High(FMarkers)) and FMarkers[i].Blocks[mkPoint].Present then
+        Inc(n, TyBuildMarkPoints(FMarkPointPics[i], FMarkers[i].Blocks[mkPoint], ink,
+          AMeasurer, AList, FMarkers[i].SeriesIndex));
+  if n > 0 then ViewDrew(cvMarkPoint);
+  Inc(Result, n);
+  n := 0;
+  if not ViewHidden(cvMarkLine) then
+    for i := 0 to High(FMarkLinePics) do
+      if (i <= High(FMarkers)) and FMarkers[i].Blocks[mkLine].Present then
+        Inc(n, TyBuildMarkLines(FMarkLinePics[i], FMarkers[i].Blocks[mkLine], ink,
+          AMeasurer, AList, FMarkers[i].SeriesIndex));
+  if n > 0 then ViewDrew(cvMarkLine);
+  Inc(Result, n);
 end;
 
 function TTyAdvanceChart.DataZoomCount: Integer;
@@ -6066,6 +6702,7 @@ begin
     legend swatch and a tooltip marker go on working unchanged. }
   AVisual.FillGradient := item.Color.Gradient;
   AVisual.StrokeGradient := item.BorderColor.Gradient;
+  AVisual.FillPattern := item.Color.Pattern;
 
   { A LINE READS ITS OWN BLOCK FOR THE PEN, and only for the pen. Its
     palette colour came from `itemStyle` -- that is the trap in this whole
@@ -6120,11 +6757,22 @@ begin
   Result := st.TextColor;
 end;
 
+function TTyAdvanceChart.PickColor(const APick: TTyPalettePick): TTyColor;
+begin
+  case APick.Kind of
+    ppkColor: Result := TTyColor(APick.Color);
+    ppkTheme: Result := ThemeRampColor(APick.Slot);
+  else
+    { undefined: no fill at all }
+    Result := 0;
+  end;
+end;
+
 function TTyAdvanceChart.SeriesPaletteColor(ASeriesIndex: Integer): TTyColor;
 begin
-  if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSeriesPaletteKnown))
-    and FSeriesPaletteKnown[ASeriesIndex] then
-    Exit(TTyColor(FSeriesPalette[ASeriesIndex]));
+  if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSeriesPickAsked))
+    and FSeriesPickAsked[ASeriesIndex] then
+    Exit(PickColor(FSeriesPick[ASeriesIndex]));
   Result := ThemeRampColor(ASeriesIndex);
 end;
 
@@ -6139,6 +6787,11 @@ begin
   if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSeriesColorNone))
     and FSeriesColorNone[ASeriesIndex] then
     Exit(0);
+  { the palette's answer, the theme's slot through the shared cursor
+    included [Batch 105] }
+  if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSeriesFromPick))
+    and FSeriesFromPick[ASeriesIndex] then
+    Exit(PickColor(FSeriesPick[ASeriesIndex]));
 
   Result := ThemeRampColor(ASeriesIndex);
 end;
@@ -7794,10 +8447,14 @@ begin
 end;
 
 function TTyAdvanceChart.FunnelVisual(ASlot: Integer): TTyFunnelVisual;
-var st: TTyStyleSet;
+var st: TTyStyleSet; k: Integer;
 begin
   Result := TyFunnelVisual;
   Result.Fills := PerDatumColours(ASlot);
+  { the object fills by raw row [Batch 105] }
+  SetLength(Result.Objs, Length(Result.Fills));
+  for k := 0 to High(Result.Objs) do
+    Result.Objs[k] := DatumObjectFill(ASlot, k);
   { THE BAND'S OUTLINE IS THE CHART'S OWN GROUND, which is what separates two
     adjacent bands of nearly the same colour. Upstream writes neutral00 -- its
     white -- and on a dark skin that is a white grid over a dark funnel; the
@@ -7835,69 +8492,34 @@ end;
 
 function TTyAdvanceChart.PerDatumColours(ASlot: Integer): TTyChartColorArray;
 var
-  k, rawN: Integer;
-  c: TTyChartColor;
+  k, rawN, si: Integer;
+  c, base: TTyChartColor;
   ov: TTyDataValue;
-  pal: TTyChartColorArray;
-  cur: TTyPaletteCursor;
-  declared: Boolean;
-  nm: string;
-  d: TJSONData;
-  st: TTyOptStyle;
-  mapped: array of Boolean;
-  asked: Integer;
 begin
-  { colorBy: 'data'. Each DATUM takes the next slot of the same nine-colour
-    ramp a bar series cycles across series -- which is what makes a pie or a
-    funnel read at all, and what makes it re-skin with the accent like
-    everything else.
-
-    KEYED ON THE DATUM'S NAME, so two charts over the same categories agree
-    about which category is which colour, and a repeated name inside one chart
-    shares a colour rather than taking a second slot. }
+  { ONE COLOUR PER RAW ROW, in the order upstream's stages write it: the
+    series' colour (its written one, its palette pick -- `auto` included --
+    or none), then a visualMap's over it (4000), then the datum's own
+    itemStyle colour (4500), then the per-datum palette for the rows still
+    the palette's (4600, colorBy other than 'series'; SolveDatumPalette).
+    [Batch 105: the palette ran from nought for every series, took a slot
+    for rows that had their own colour, and a pie by series was still
+    coloured by datum.] }
   Result := nil;
-  pal := TyChartPaletteOf(FOption, ASlot, declared);
-  if Length(pal) = 0 then pal := TyChartPaletteOf(FOption, -1, declared);
-  cur := TyPaletteStart(pal);
   rawN := 0;
   if (ASlot <= High(FStores)) and (FStores[ASlot] <> nil) then
     rawN := FStores[ASlot].RawCount;
   SetLength(Result, rawN);
-  SetLength(mapped, rawN);
-  { A visualMap's colour FIRST: upstream's per-data palette runs after the
-    encoding (priority 4500) and passes over any datum a colour channel
-    wrote, so only the rest ask the palette -- in the order they ask, not
-    by row. [Batch 57: the palette went to every row by row index.] }
-  asked := 0;
+  si := FBindings[ASlot].SeriesIndex;
+  base := TTyChartColor(SeriesColor(si));
   for k := 0 to rawN - 1 do
   begin
-    mapped[k] := (ASlot <= High(FVisualRows)) and (k <= High(FVisualRows[ASlot]))
-      and FVisualRows[ASlot][k].ColorSet;
-    if mapped[k] then
-    begin
-      Result[k] := TyVisualToChart(FVisualRows[ASlot][k].Color);
-      Continue;
-    end;
-    Result[k] := TTyChartColor(ThemeRampColor(asked));
-    Inc(asked);
-    if Length(pal) = 0 then Continue;
-    nm := FStores[ASlot].GetNameByRaw(k);
-    if nm = '' then nm := IntToStr(k);
-    if TyPaletteTake(cur, nm, c) then Result[k] := c;
-  end;
-  { THE SERIES' OWN `itemStyle.color` beats the ramp for every datum -- it is
-    the parent of each datum's style. [Revised in batch 47: it was not read,
-    and every slice kept the ramp's colour.] }
-  d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
-  if d is TJSONObject then
-  begin
-    st := TyReadOptStyle(TJSONObject(d), 'itemStyle');
-    if st.Color.Written and not st.Color.IsAuto then
-      for k := 0 to rawN - 1 do
-        { the visual colour was worked out FROM this one; it stands }
-        if mapped[k] then Continue
-        else if st.Color.IsNone then Result[k] := 0
-        else Result[k] := st.Color.Color;
+    Result[k] := base;
+    if (ASlot <= High(FVisualRows)) and (k <= High(FVisualRows[ASlot]))
+      and FVisualRows[ASlot][k].ColorSet then
+      Result[k] := TyVisualToChart(FVisualRows[ASlot][k].Color)
+    else if (ASlot <= High(FDatumAsked)) and (k <= High(FDatumAsked[ASlot]))
+      and FDatumAsked[ASlot][k] then
+      Result[k] := TTyChartColor(PickColor(FDatumPicks[ASlot][k]));
   end;
   { AND A DATUM THAT NAMED ITS OWN COLOUR KEEPS IT. `data: [{ value: 5,
     itemStyle: { color: '#c23531' } }]` is the commonest thing anybody writes
@@ -7916,6 +8538,7 @@ function TTyAdvanceChart.PieVisual(ASlot: Integer): TTyPieVisual;
 var
   k, n, raw: Integer;
   perRaw: TTyChartColorArray;
+  bst: TTyOptStyle;
 begin
   Result := TyPieVisual(0);
   { colorBy:''data''. Each SECTOR takes the next slot of the same nine-colour
@@ -7940,6 +8563,24 @@ begin
   n := Length(FPies[ASlot].Sectors);
   if n < 1 then n := 1;
   SetLength(Result.Fills, n);
+  { THE OBJECT FILLS, per sector by its raw row [Batch 105] }
+  SetLength(Result.Objs, n);
+  for k := 0 to n - 1 do
+    if k <= High(FPies[ASlot].Sectors) then
+      Result.Objs[k] := DatumObjectFill(ASlot, FPies[ASlot].Sectors[k].RawIndex);
+  { AND THE BORDER the series wrote: PieSeries' itemStyle is borderWidth 1
+    with no colour, so nothing is stroked until a colour is written [Batch
+    105: it was never read] }
+  bst := TyReadOptStyle(TJSONObject(FOption.ComponentAt('series',
+    FBindings[ASlot].SeriesIndex)), 'itemStyle');
+  if bst.BorderColor.Written and not bst.BorderColor.IsNone
+    and not bst.BorderColor.IsAuto then
+  begin
+    Result.Stroke := bst.BorderColor.Color;
+    if IsNan(bst.BorderWidthLogical) then Result.StrokeWidthLogical := 1
+    else Result.StrokeWidthLogical := bst.BorderWidthLogical;
+  end;
+  if FLastPPI > 0 then Result.PxScale := FLastPPI / 96;
   { AND A visualMap's OPACITY, which a pie keeps (a funnel does not) }
   SetLength(Result.Alphas, n);
   for k := 0 to n - 1 do
@@ -8025,6 +8666,7 @@ var
 
 begin
   if Length(FTitles) = 0 then Exit;
+  if ViewHidden(cvTitle) then Exit;
   st := ActiveController.Model.ResolveStyle('TyAdvChartTitle', '', []);
   subSt := ActiveController.Model.ResolveStyle('TyAdvChartSubtitle', '',
     []);
@@ -8032,6 +8674,7 @@ begin
   begin
     lay := FTitles[i];
     if not lay.Valid then Continue;
+    ViewDrew(cvTitle);
     { The frame first, and only when the option asked for one: ECharts gives
       the title a transparent background by default, and painting the surface
       colour instead would put a visible plate behind every title on an image
@@ -8247,6 +8890,7 @@ begin
       Result[i].Found := True;
       Result[i].SeriesType := FBindings[j].SeriesType;
       Result[i].Colour := TTyChartColor(SeriesColor(FBindings[j].SeriesIndex));
+      Result[i].Obj := SeriesObjectFill(j);
       Result[i].DefaultIcon := TyLegendDefaultIcon(FBindings[j].SeriesType,
         SeriesSymbolWord(j));
       Result[i].OwnIcon := TyLegendDrawsOwnIcon(FBindings[j].SeriesType);
@@ -8342,6 +8986,7 @@ begin
             Result[i].Colour := perRaw[k]
           else
             Result[i].Colour := TTyChartColor(SeriesColor(k));
+          Result[i].Obj := DatumObjectFill(j, k);
           { A TRANSPARENT DATUM IS SHOWN AT A FIFTH, as the category chip
             above is -- but the swatch still carries the datum's own opacity,
             so a slice a visualMap put out of range (colour and opacity both
@@ -9640,7 +10285,7 @@ function TTyAdvanceChart.BuildSeriesList(const AMeasurer: ITyTextMeasurer;
   APPI: Integer): Integer;
 var
   list: TTyPaintList;
-  i, drawn: Integer;
+  i, drawn, furniture, n: Integer;
   v: TTySeriesVisual;
   pv: TTyPieVisual;
   fv: TTyFunnelVisual;
@@ -9675,13 +10320,21 @@ begin
     written and no series at all is a legitimate chart, and an empty one is
     the first thing anybody sees while they are still typing. }
   drawn := 0;
-  for i := 0 to High(FRadars) do
-    Inc(drawn, TyBuildRadarGrid(FRadars[i], RadarInk, AMeasurer, APPI, list));
+  { a view excludeComponents names is not built, and one that builds
+    something is drawn [Batch 106] }
+  if not ViewHidden(cvRadar) then
+    for i := 0 to High(FRadars) do
+      Inc(drawn, TyBuildRadarGrid(FRadars[i], RadarInk, AMeasurer, APPI, list));
+  if drawn > 0 then ViewDrew(cvRadar);
   { THE CALENDARS' TOO, before any series: at the same z a series is drawn
     at, the order is decided by z2 -- day cell 0, heatmap cell 1, month line
     20, names 30 -- and ties by insertion, components first. [Batch 69] }
-  for i := 0 to High(FCalendars) do
-    Inc(drawn, TyBuildCalendar(FCalendars[i], CalendarInk, AMeasurer, APPI, list));
+  furniture := drawn;
+  if not ViewHidden(cvCalendar) then
+    for i := 0 to High(FCalendars) do
+      Inc(drawn, TyBuildCalendar(FCalendars[i], CalendarInk, AMeasurer, APPI, list));
+  if drawn > furniture then ViewDrew(cvCalendar);
+  furniture := drawn;
   if Length(FBindings) = 0 then Exit;
   begin
     for i := 0 to High(FBindings) do
@@ -9988,6 +10641,7 @@ begin
       caption's geometry is frozen from its host at this moment and the list
       has no update path, so a mark added later would have no label and a mark
       moved later would leave its label behind. }
+    if drawn > furniture then ViewDrew(cvSeries);
     if drawn > 0 then
       TyExpandLabels(list, specs, itemSpecs, AMeasurer, APPI);
     { THE LABEL LAYOUT, over the finished labels [Batch 103] }
@@ -10012,9 +10666,24 @@ begin
     { MARKERS arrive as answers too: their labels are placed by Line.ts's own
       table, not by the expansion }
     Inc(drawn, BuildMarkers(AMeasurer, list));
-    Inc(drawn, BuildLegends(APPI, list, AMeasurer));
-    Inc(drawn, BuildVisualMaps(list));
-    Inc(drawn, BuildDataZooms(list));
+    if not ViewHidden(cvLegend) then
+    begin
+      n := BuildLegends(APPI, list, AMeasurer);
+      if n > 0 then ViewDrew(cvLegend);
+      Inc(drawn, n);
+    end;
+    if not ViewHidden(cvVisualMap) then
+    begin
+      n := BuildVisualMaps(list);
+      if n > 0 then ViewDrew(cvVisualMap);
+      Inc(drawn, n);
+    end;
+    if not ViewHidden(cvDataZoom) then
+    begin
+      n := BuildDataZooms(list);
+      if n > 0 then ViewDrew(cvDataZoom);
+      Inc(drawn, n);
+    end;
     Result := drawn;
   end;
 end;
@@ -10475,6 +11144,13 @@ var drawn: Integer;
 begin
   { BUILD, THEN DRAW. The list stays afterwards -- see FPaintList. }
   drawn := BuildSeriesList(AMeasurer, APPI);
+  { AN EXPORT DRAWS THE LIST AS LAID OUT: the finished chart, nothing armed,
+    bound or stepped -- the proxies are the window's [Batch 106] }
+  if FExporting then
+  begin
+    if drawn > 0 then TyRenderPaintList(APainter, FPaintList);
+    Exit;
+  end;
   AnimAfterBuild;
   { the states on their proxies, then the armed option's flush [Batch 94] }
   StAnimSync;
@@ -11367,19 +12043,15 @@ begin
 end;
 
 procedure TTyAdvanceChart.AxisTextStyles(ASpec: PTyAxisLayoutSpec;
-  out ALabel, APrimary, AName: TTyStyleSet);
+  out ALabel, AName: TTyStyleSet);
 var model: TTyStyleModel;
 begin
   model := ActiveController.Model;
   ALabel := model.ResolveStyle('TyAdvChartAxisLabel', '', []);
-  APrimary := model.ResolveStyle('TyAdvChartAxisLabelPrimary', '', []);
   AName := model.ResolveStyle('TyAdvChartAxisName', '', []);
   if ASpec = nil then Exit;
   AxisTextOver(ALabel, ASpec^.FontName, ASpec^.FontSizeLogical, ASpec^.FontWeight,
     ASpec^.HasLabelColour, ASpec^.LabelColour, False);
-  { the emphasised label keeps the theme's heavier weight }
-  AxisTextOver(APrimary, ASpec^.FontName, ASpec^.FontSizeLogical, ASpec^.FontWeight,
-    ASpec^.HasLabelColour, ASpec^.LabelColour, True);
   AxisTextOver(AName, ASpec^.NameFontName, ASpec^.NameFontSizeLogical,
     ASpec^.NameFontWeight, ASpec^.HasNameColour, ASpec^.NameColour, False);
 end;
@@ -11557,7 +12229,7 @@ var
   axObj: TTyAxis;
   spec: PTyAxisLayoutSpec;
   meas: ITyTextMeasurer;
-  lblS, priS, nameS: TTyStyleSet;
+  lblS, nameS: TTyStyleSet;
   fw, fh: Double;
   kind: TTyMarkerKind;
   mk: TTyMkBlock;
@@ -11786,7 +12458,7 @@ begin
       if not TriggersEvent(FOption.ComponentAt(mainT, axObj.ComponentIndex)) then Continue;
       spec := gb.SpecFor(axObj);
       if spec = nil then Continue;
-      AxisTextStyles(spec, lblS, priS, nameS);
+      AxisTextStyles(spec, lblS, nameS);
       Result.Model.Valid := True;
       Result.Model.MainType := mainT;
       case axObj.AxisType of
@@ -11815,14 +12487,24 @@ begin
       for q := 0 to High(spec^.Placements) do
       begin
         if not spec^.Placements[q].Shown then Continue;
-        if meas = nil then meas := NewTextMeasurer(FPaintListPPI);
-        fw := 0;
-        fh := 0;
-        if meas <> nil then
-          meas.MeasureLine(spec^.Placements[q].Text, lblS.FontName,
-            ResolveFontSize(lblS), lblS.FontWeight, fw, fh);
-        if not Inside(Boxed(spec^.Placements[q].X, spec^.Placements[q].Y, fw, fh,
-          spec^.Placements[q].AnchorH, spec^.Placements[q].AnchorV)) then Continue;
+        { A BLOCK IS HIT WHERE ITS PIECES ARE: measuring the text of a
+          `{primary|Feb}` would box the tag as well [Batch 104] }
+        if Length(spec^.Placements[q].Rt) > 0 then
+        begin
+          if not Inside(TyRtDeviceBox(spec^.Placements[q].Rt, spec^.Placements[q].X,
+            spec^.Placements[q].Y, spec^.RotationRad, spec^.RtScale)) then Continue;
+        end
+        else
+        begin
+          if meas = nil then meas := NewTextMeasurer(FPaintListPPI);
+          fw := 0;
+          fh := 0;
+          if meas <> nil then
+            meas.MeasureLine(spec^.Placements[q].Text, lblS.FontName,
+              ResolveFontSize(lblS), lblS.FontWeight, fw, fh);
+          if not Inside(Boxed(spec^.Placements[q].X, spec^.Placements[q].Y, fw, fh,
+            spec^.Placements[q].AnchorH, spec^.Placements[q].AnchorV)) then Continue;
+        end;
         Result.Id := -(100000 + g * 10000 + a * 1000 + q);
         Result.HasData := True;
         Result.Params.TargetType := 'axisLabel';
@@ -15117,6 +15799,122 @@ begin
   Result := PointerAt(AHit.Axis, Result);
 end;
 
+function TTyAdvanceChart.PointerShadowShape(const AHit: TTyAxisHit;
+  out AShape: TTyXYWH): Boolean;
+begin
+  AShape := Default(TTyXYWH);
+  if AHit.Axis = nil then Exit(False);
+  { CLAMPED, as the pointer asks the axis: dataToCoord(value, true) }
+  Result := PointerShadowShapeAt(AHit,
+    AHit.Axis.DataToCoord(PointerValue(AHit), True), AShape);
+end;
+
+function TTyAdvanceChart.PointerShadowShapeAt(const AHit: TTyAxisHit;
+  AAt: Double; out AShape: TTyXYWH): Boolean;
+var
+  ax, other, base: TTyAxis;
+  bw, px, span, gap, best, lo, hi, t0, t1, o0, o1: Double;
+  ext: TTyRange;
+  g, j, k, s: Integer;
+  gb: TTyGridBuild;
+  cart: TTyCartesian2D;
+  only: Boolean;
+  typ: string;
+begin
+  Result := False;
+  AShape := Default(TTyXYWH);
+  ax := AHit.Axis;
+  if (ax = nil) or IsNan(AAt) or (FBuild = nil) then Exit;
+  { THE BAND (calcAxisPointerShadowBandWidth, at least 1px). A category's
+    own; on any other axis upstream asks the axis statistics -- the
+    smallest positive gap between the values of the bars (pictorial bars,
+    candlesticks, boxplots) sharing a hovered series' key on its BASE axis,
+    the largest such gap over the hovered series -- and spans it over this
+    axis' mapping extent, even when this is not the axis it was measured
+    on. One value alone is four fifths of the axis; nothing at all, 1px. }
+  { getExtent, upstream's order: an inverse axis runs from its far end }
+  ax.LocalExtent(t0, t1);
+  px := Abs(t1 - t0);
+  if ax.Scale is TTyOrdinalScale then
+    bw := ax.BandWidth
+  else
+  begin
+    ext := ax.Scale.LinearExtent2(sekMapping);
+    span := ext.Stop - ext.Start;
+    best := NegInfinity;
+    only := False;
+    for k := 0 to High(AHit.Slots) do
+    begin
+      s := AHit.Slots[k];
+      if (s < 0) or (s > High(FBindings)) then Continue;
+      typ := FBindings[s].SeriesType;
+      if (typ <> 'bar') and (typ <> 'pictorialBar') and (typ <> 'candlestick')
+        and (typ <> 'boxplot') then Continue;
+      if FBindings[s].CoordSysName <> 'cartesian2d' then Continue;
+      base := FBindings[s].BaseAxis;
+      if (base = nil) or (base.Scale is TTyOrdinalScale) then Continue;
+      gap := TyLiPosMinGap(FStores,
+        FIndex.SeriesOnAxisOfKey(base, TySeriesStatKey(typ, 'cartesian2d')), base);
+      if gap > 0 then
+      begin
+        if gap > best then best := gap;
+        only := False;
+      end
+      else if gap = cTyMinGapSingle then
+        only := True;
+    end;
+    bw := NaN;
+    if (not IsNan(span)) and (not IsInfinite(span)) and (span > 0)
+      and (not IsInfinite(best)) and (not IsNan(best)) then
+      bw := px / span * best
+    else if only then
+      bw := px * 0.8;
+  end;
+  if IsNan(bw) or IsInfinite(bw) then bw := 1
+  else bw := Math.Max(Double(1), bw);
+  { THE ENDS, each clamped to the axis on its own (calcAxisPointerShadowEnds) }
+  t0 := ax.ToGlobal(t0);
+  t1 := ax.ToGlobal(t1);
+  lo := Math.Max(Math.Min(t0, t1), AAt - bw / 2);
+  hi := Math.Min(AAt + bw / 2, Math.Max(t0, t1));
+  { ACROSS THE OTHER AXIS of the first cartesian holding this one, from its
+    first end as its extent runs }
+  other := nil;
+  for g := 0 to FBuild.GridCount - 1 do
+  begin
+    gb := FBuild.Grid(g);
+    for j := 0 to gb.CartesianCount - 1 do
+    begin
+      cart := gb.CartesianByIndex(j);
+      if cart.AxisByDim(ax.Dim) = ax then
+      begin
+        other := cart.GetOtherAxis(ax);
+        Break;
+      end;
+    end;
+    if other <> nil then Break;
+  end;
+  if other = nil then Exit;
+  other.LocalExtent(o0, o1);
+  o0 := other.ToGlobal(o0);
+  o1 := other.ToGlobal(o1);
+  if ax.Dim = 'x' then
+  begin
+    AShape.X := lo;
+    AShape.Y := o0;
+    AShape.W := hi - lo;
+    AShape.H := o1 - o0;
+  end
+  else
+  begin
+    AShape.X := o0;
+    AShape.Y := lo;
+    AShape.W := o1 - o0;
+    AShape.H := hi - lo;
+  end;
+  Result := True;
+end;
+
 { THE POINTER'S LABEL, and the axis tooltip's header. A named handler is
   given upstream's getValueLabel params: first the axis itself (its dimension,
   index and the value), then one entry per series the pointer collected --
@@ -15163,20 +15961,18 @@ end;
 
 function TTyAdvanceChart.AxisValueText(AAxis: TTyAxis; AValue: Double;
   const ALabel: TTyAxisPointerLabelSpec): string;
-var tt: TTyTimeTick;
 begin
   Result := '';
   if AAxis = nil then Exit;
   if AAxis.Scale is TTyOrdinalScale then
     Result := TTyOrdinalScale(AAxis.Scale).GetLabel(AValue)
   else if AAxis.Scale is TTyTimeScale then
-  begin
-    tt.Value := AValue;
-    tt.Unit_ := TyTimeUnitOf(AValue, TTyTimeScale(AAxis.Scale).UTC);
-    tt.Level := 0;
-    tt.NotNice := False;
-    Result := TyTimeLabel(tt, TTyTimeScale(AAxis.Scale).UTC);
-  end
+    { getValueLabel asks the scale's getLabel: the full date, to the day
+      over years and months and to the second below -- never the axis'
+      short level template, which would head a tooltip with a bare `2`.
+      [Revised in batch 104: TyTimeLabel, the label seed of the tick's
+      unit.] }
+    Result := TTyTimeScale(AAxis.Scale).GetLabel(AValue)
   else if ALabel.HasPrecision then
     Result := TyScaleValueLabel(AAxis.Scale, AValue, ALabel.Precision)
   else
@@ -15284,7 +16080,16 @@ var
       narrower than the plot -- an `offset`, or a second pair sharing the
       grid -- and a guard that is redundant only by coincidence is still the
       guard that has to be there when the coincidence ends. }
-    if not TyRangeContains(AAxis.Scale.GetExtent2(sekEffective), value) then Exit;
+    { OVER THE MAPPING EXTENT on a value or time axis, as upstream's
+      scale.contain: a bar's half width that containShape added is part of
+      the axis a pointer can stand on [Batch 101]
+      [Revised in batch 101: the effective extent, so the outer half of the
+      first and last bar on a value axis took no pointer.] }
+    if AAxis.AxisType in [atValue, atTime] then
+    begin
+      if not TyRangeContains(AAxis.Scale.GetExtent2(sekMapping), value) then Exit;
+    end
+    else if not TyRangeContains(AAxis.Scale.GetExtent2(sekEffective), value) then Exit;
     { AND ON A CATEGORY AXIS, A CATEGORY: upstream's contain asks for one
       that exists, so a min or max reaching past the list leaves positions
       that take no pointer; and a blank axis takes none anywhere. }
@@ -15300,7 +16105,12 @@ var
       for s := 0 to High(FBindings) do
       begin
         if FBindings[s].Hidden then Continue;
-        if FBindings[s].BaseAxis <> AAxis then Continue;
+        { EVERY SERIES ON THIS AXIS, base or not: upstream's collectSeriesInfo
+          takes a series into an axis' list when its coordinate system's axis
+          of that dimension is this one -- so a pointer on a bar chart's value
+          axis finds the bar nearest in value [Batch 101]
+          [Revised in batch 101: only the series whose base axis this is.] }
+        if (FBindings[s].XAxis <> AAxis) and (FBindings[s].YAxis <> AAxis) then Continue;
         if not NearestOnAxis(s, AAxis, value, maxDist, rows) then Continue;
         v := FStores[s].Get(FStores[s].DimIndexOf(AAxis.Dim), rows[0]);
         if IsNan(v) or IsInfinite(v) then Continue;
@@ -16101,6 +16911,7 @@ var
   box: TRect;
   corners: TTyCorners;
   surface: TTyFill;
+  sh: TTyXYWH;
 begin
   lineS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointer', '', []);
   shadowS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerShadow',
@@ -16129,27 +16940,18 @@ begin
     case hit.Spec.PointerType of
       aptShadow:
         begin
-          { THE BAND IS THE CATEGORY'S OWN WIDTH, and only a category axis has
-            one. Upstream derives a numeric axis' band from a statistics pass
-            over the hovered series' minimum positive gap; this port has no
-            such pass, so a shadow on a value axis draws NOTHING rather than
-            the one-pixel sliver the missing statistic would produce. A
-            deliberate restriction, recorded rather than approximated. }
-          w := hit.Axis.BandWidth;
-          if w <= 0 then Continue;
+          { THE BAND upstream draws [Batch 101]: a category's, or on a value,
+            log or time axis the hovered bars' gap -- 1px for a line --
+            clamped to the axis and across the other one. While its proxy
+            moves, the proxy's rect.
+            [Revised in batch 101: nothing at all on a value axis, the
+            statistic having no port.] }
           if not (tpBackground in shadowS.Present) then Continue;
-          if hit.Axis.Horizontal then
-          begin
-            if not TyAxisPointerBand(at, w, hit.Plot.Left, hit.Plot.Right,
-              lo, hi) then Continue;
-            band := TyRectF(lo, hit.Plot.Top, hi, hit.Plot.Bottom);
-          end
-          else
-          begin
-            if not TyAxisPointerBand(at, w, hit.Plot.Top, hit.Plot.Bottom,
-              lo, hi) then Continue;
-            band := TyRectF(hit.Plot.Left, lo, hit.Plot.Right, hi);
-          end;
+          if not PtrShadowNow(hit, sh) then Continue;
+          band := TyRectF(Math.Min(sh.X, sh.X + sh.W), Math.Min(sh.Y, sh.Y + sh.H),
+            Math.Max(sh.X, sh.X + sh.W), Math.Max(sh.Y, sh.Y + sh.H));
+          if (band.Right - band.Left <= 0) or (band.Bottom - band.Top <= 0) then
+            Continue;
           colour := shadowS.Background.Color;
           if hit.Spec.HasShadowColour then colour := TTyColor(hit.Spec.ShadowColour);
           surface := shadowS.Background;
@@ -16749,6 +17551,11 @@ begin
   Result := FTipShown;
 end;
 
+function TTyAdvanceChart.TooltipFormatterText: string;
+begin
+  Result := FTipFormatterText;
+end;
+
 function TTyAdvanceChart.TooltipShownWhich: string;
 const
   cMk: array[TTyChartTargetKind] of string = ('item', 'markPoint', 'markLine',
@@ -17173,7 +17980,9 @@ var
   lines: TTyTooltipLineArray;
   st: TTyStyleSet;
   params: TTyChartParams;
-  tipText: string;
+  tipText, fmtText: string;
+  k, m: Integer;
+  hasSeries: Boolean;
   w, h, lineH, gap, cx, cy: Double;
   padL, padT, padR, padB, radius, borderW: Double;
   box: TTyRectF;
@@ -17189,6 +17998,7 @@ var
 begin
   FTipBox := TyInvalidRectF;
   FTipRect := TyInvalidRectF;
+  FTipFormatterText := '';
   { [Batch 100] WHAT IS SHOWN, NOT WHAT IS HOVERED: the box's own state
     decides -- a show waiting out showDelay is not drawn yet, a hide waiting
     out hideDelay still is, at the place and with the content of the show }
@@ -17232,10 +18042,32 @@ begin
       if onAxis then params := AxisTooltipParams(snap.Hits)
       else params[0] := TooltipParams(snap.Datum);
       if Length(params) = 0 then Exit;
-      if not TyChartResolveText(spec.Formatter, params, tipText) then
+      fmtText := spec.Formatter;
+      { A TEMPLATE UNDER A TIME AXIS IS A TIME TEMPLATE FIRST: TooltipView
+        runs the string through util/time.ts format at the first series'
+        axis value before formatTpl sees it -- so `{a}` there is am / pm and
+        `{d}` the day, never the series name or the percent. Only an axis
+        trigger's params carry an axis type, and only an axis trigger has
+        sections to walk: an item tooltip is left alone. [Batch 104] }
+      if not TyChartIsHandlerRef(fmtText) then
+        for k := 0 to High(snap.Hits) do
+        begin
+          { params[0] is the first series of the first section that has one }
+          hasSeries := False;
+          for m := 0 to High(snap.Hits[k].Slots) do
+            if (snap.Hits[k].Slots[m] >= 0)
+              and (snap.Hits[k].Slots[m] <= High(FBindings)) then hasSeries := True;
+          if snap.Hits[k].Cross or not hasSeries then Continue;
+          if (snap.Hits[k].Axis <> nil) and (snap.Hits[k].Axis.Scale is TTyTimeScale) then
+            fmtText := TyFormatTime(snap.Hits[k].SnapValue, fmtText,
+              TTyTimeScale(snap.Hits[k].Axis.Scale).UTC);
+          Break;
+        end;
+      if not TyChartResolveText(fmtText, params, tipText) then
         { A named handler that is not registered says so rather than drawing
           nothing -- TyChartResolveText puts the message in the text. }
         ;
+      FTipFormatterText := tipText;
       if Trim(tipText) = '' then Exit;
       block := TTyTooltipBlock.CreateSection('', True);
       { THE WHOLE STRING AS ONE NAME. A formatter's output is words, not a
@@ -17555,6 +18387,8 @@ begin
     DropStatic;
     inherited Invalidate;
   end;
+  { the spinner stops under camOff and turns again out of it [Batch 106] }
+  if FLoadShown then AnimArmTimer;
 end;
 
 procedure TTyAdvanceChart.AnimDropAll;
@@ -18211,7 +19045,7 @@ end;
 
 procedure TTyAdvanceChart.AnimArmTimer;
 begin
-  if (FAnimLive or PtrLive or LegLive) and IsNan(FAnimNow)
+  if (FAnimLive or PtrLive or LegLive or LoadLive) and IsNan(FAnimNow)
     and not (csDesigning in ComponentState) then
   begin
     if FAnimTimer = nil then
@@ -18253,6 +19087,12 @@ begin
     DropStatic;
     InvalidateFrame;
     if not LegLive and not FAnimLive then AnimArmTimer;
+  end;
+  { the spinner's own driver: a frame of the dynamic layer [Batch 106] }
+  if LoadLive then
+  begin
+    FLoadAnim.Update(ANowMs);
+    InvalidateFrame;
   end;
   if FAnim = nil then Exit;
   FAnim.Update(ANowMs);
@@ -18386,23 +19226,20 @@ begin
 end;
 
 function TTyAdvanceChart.PtrProps(const AHit: TTyAxisHit; AAt: Double): TTyAnimProps;
-var w: Double;
+var sh: TTyXYWH;
 begin
   { CartesianAxisPointer's shapes: a line across the other axis' extent, or
-    the category's band }
+    the band -- clamped to the axis, across the other axis as its extent
+    runs [Batch 101]
+    [Revised in batch 101: a category's band about the value, unclamped,
+    from the plot's bottom (left) edge.] }
   if AHit.Spec.PointerType = aptShadow then
   begin
-    w := Max(Double(1), AHit.Axis.BandWidth);
-    if AHit.Axis.Horizontal then
-      Result := TyAnimProps([TyAnimProp('shape.x', TyAnimNum(AAt - w / 2)),
-        TyAnimProp('shape.y', TyAnimNum(AHit.Plot.Bottom)),
-        TyAnimProp('shape.width', TyAnimNum(w)),
-        TyAnimProp('shape.height', TyAnimNum(AHit.Plot.Top - AHit.Plot.Bottom))])
-    else
-      Result := TyAnimProps([TyAnimProp('shape.x', TyAnimNum(AHit.Plot.Left)),
-        TyAnimProp('shape.y', TyAnimNum(AAt - w / 2)),
-        TyAnimProp('shape.width', TyAnimNum(AHit.Plot.Right - AHit.Plot.Left)),
-        TyAnimProp('shape.height', TyAnimNum(w))]);
+    if not PointerShadowShapeAt(AHit, AAt, sh) then sh := Default(TTyXYWH);
+    Result := TyAnimProps([TyAnimProp('shape.x', TyAnimNum(sh.X)),
+      TyAnimProp('shape.y', TyAnimNum(sh.Y)),
+      TyAnimProp('shape.width', TyAnimNum(sh.W)),
+      TyAnimProp('shape.height', TyAnimNum(sh.H))]);
   end
   else if AHit.Axis.Horizontal then
     Result := TyAnimProps([TyAnimProp('shape.x1', TyAnimNum(AAt)),
@@ -18475,6 +19312,34 @@ begin
   AnimArmTimer;
 end;
 
+function TTyAdvanceChart.PtrShadowNow(const AHit: TTyAxisHit;
+  out AShape: TTyXYWH): Boolean;
+var
+  k: Integer;
+  p: TTyChartAnimProxy;
+  key: string;
+begin
+  { an export draws the pointer where it rests [Batch 106] }
+  if (FPtrProxies <> nil) and (AHit.Axis <> nil) and not FExporting then
+  begin
+    key := PtrKeyOf(AHit.Axis);
+    for k := 0 to FPtrProxies.Count - 1 do
+    begin
+      p := TTyChartAnimProxy(FPtrProxies[k]);
+      if p.Role <> key then Continue;
+      if p.AtFinal then Break;
+      AShape.X := p.Num('shape.x');
+      AShape.Y := p.Num('shape.y');
+      AShape.W := p.Num('shape.width');
+      AShape.H := p.Num('shape.height');
+      if not (IsNan(AShape.X) or IsNan(AShape.Y) or IsNan(AShape.W)
+        or IsNan(AShape.H)) then Exit(True);
+      Break;
+    end;
+  end;
+  Result := PointerShadowShape(AHit, AShape);
+end;
+
 function TTyAdvanceChart.PtrAt(const AHit: TTyAxisHit; AAt: Double): Double;
 var
   k: Integer;
@@ -18482,7 +19347,7 @@ var
   key: string;
 begin
   Result := AAt;
-  if (FPtrProxies = nil) or (AHit.Axis = nil) then Exit;
+  if (FPtrProxies = nil) or (AHit.Axis = nil) or FExporting then Exit;
   key := PtrKeyOf(AHit.Axis);
   for k := 0 to FPtrProxies.Count - 1 do
   begin
@@ -18655,6 +19520,15 @@ end;
 procedure TTyAdvanceChart.PaintDynamic(APainter: TTyPainter; const ARect: TRect;
   APPI: Integer; const AMeasurer: ITyTextMeasurer);
 begin
+  { AN EXPORT'S: the finished picture has no frame of an animation and no
+    hover -- an option's own pointers, and the loading effect over all
+    [Batch 106] }
+  if FExporting then
+  begin
+    PaintAxisPointers(APainter, ARect, APPI, AMeasurer, OptionPointerHits);
+    PaintLoading(APainter, ARect, APPI, AMeasurer);
+    Exit;
+  end;
   { WHAT IS DRAWN HERE IS COMPOSITED OVER the blitted static layer: BeginPaint
     fills its bitmap transparent and EndPaint blends it (TBGRABitmap.Draw with
     AOpaque = False), so an overlay painter adds ink without erasing what is
@@ -18690,6 +19564,9 @@ begin
   { THE POINTER FIRST, THE BOX OVER IT. A tooltip with the pointer's own line
     drawn across it would read as two things at one depth. }
   PaintTooltip(APainter, ARect, APPI, AMeasurer);
+  { THE LOADING EFFECT OVER EVERYTHING: upstream's mask is z 10000
+    [Batch 106] }
+  PaintLoading(APainter, ARect, APPI, AMeasurer);
 end;
 
 function TTyAdvanceChart.HasDynamicContent: Boolean;
@@ -18701,7 +19578,7 @@ begin
     "would the tooltip draw": resolving the option cascade and the theme to
     find out costs more than the pass it would save. }
   Result := TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0)
-    or FAnimLive or FTipShown
+    or FAnimLive or FTipShown or FLoadShown
     or ((not FOptPtrGone) and (Length(OptionPointerHits) > 0));
 end;
 
@@ -18797,16 +19674,453 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SaveToPng(const AFileName: string);
-var bmp: TBGRABitmap;
+{ ==================== export and loading [Batch 106] ==================== }
+
+function TTyAdvanceChart.ViewHidden(AView: TTyChartView): Boolean;
 begin
+  Result := FExporting and (AView in FExportExclude);
+end;
+
+procedure TTyAdvanceChart.ViewDrew(AView: TTyChartView);
+begin
+  Include(FViewsDrawn, AView);
+end;
+
+function TTyAdvanceChart.LastViewsDrawn: TTyChartViews;
+begin
+  Result := FViewsDrawn;
+end;
+
+procedure TTyAdvanceChart.ExportOptsOrRaise(const AJson: string;
+  out AOpts: TTyChartExportOpts);
+begin
+  if not TyExportOptsOf(AJson, AOpts) then
+    raise EArgumentException.Create(rsTyChartExportOptsBad);
+end;
+
+{ getDataURL's render. The background first -- the options', else the
+  option's, else the skin's frame -- then the chart as an export draws it,
+  straight onto a 32-bit bitmap so the alpha a transparent background leaves
+  survives. A render at another size or PPI than the window's lays the chart
+  out at that size, and the window's layout is put back afterwards: the
+  legend, the dataZoom and the hit test answer from it. }
+function TTyAdvanceChart.RenderExport(const AOpts: TTyChartExportOpts): TBGRABitmap;
+var
+  w, h, ppi, ppi0: Integer;
+  bg: TTyExportBg;
+  chosen, owned: TJSONData;
+  P: TTyPainter;
+  R: TRect;
+  measurer: ITyTextMeasurer;
+  el: TTyChartElement;
+  drawn: TTyChartViews;
+  scratch: TBGRABitmap;
+begin
+  Result := nil;
   if (Width <= 0) or (Height <= 0) then Exit;
-  bmp := TBGRABitmap.Create(Width, Height);
+  ppi0 := Font.PixelsPerInch;
+  if ppi0 <= 0 then ppi0 := 96;
+  TyExportImageSize(Width, Height, ppi0, AOpts.PixelRatio, w, h, ppi);
+  if (w <= 0) or (h <= 0) then Exit;
+  { `opts.backgroundColor || model.get('backgroundColor')`, and then the
+    painter's own: the skin's }
+  owned := nil;
+  chosen := nil;
   try
-    RenderTo(bmp.Canvas, Rect(0, 0, Width, Height), Font.PixelsPerInch);
-    bmp.SaveToFile(AFileName);
+    if AOpts.HasBackground then
+    begin
+      owned := GetJSON(AOpts.BackgroundJson);
+      chosen := owned;
+    end
+    else if FOption <> nil then
+    begin
+      chosen := FOption.Find('backgroundColor');
+      if not TyJsTruthy(chosen) then chosen := nil;
+    end;
+    bg := TyExportBackgroundOf(chosen);
+  finally
+    owned.Free;
+  end;
+  Result := TBGRABitmap.Create(w, h, BGRAPixelTransparent);
+  R := Rect(0, 0, w, h);
+  measurer := NewTextMeasurer(ppi);
+  P := TTyPainter.Create;
+  FExporting := True;
+  FExportBare := bg.Kind <> ebkTheme;
+  FExportExclude := AOpts.Exclude;
+  try
+    StApplyChanged;
+    P.BeginPaintOn(nil, R, ppi, Result);
+    { Layer.clear: the whole image, before anything is drawn }
+    case bg.Kind of
+      ebkSolid, ebkBlack:
+        begin
+          if bg.Kind = ebkBlack then bg.Color := $FF000000;
+          P.BeginPath;
+          P.RectPath(0, 0, w, h);
+          P.FillPath(TTyColor(bg.Color));
+        end;
+      ebkGradient, ebkPattern:
+        begin
+          el := TyChartElement(TyShapeRect(TyRectF(0, 0, w, h)));
+          el.Style.HasFill := True;
+          el.Style.Alpha := 1;
+          if bg.Kind = ebkGradient then el.Style.FillGradient := bg.Gradient
+          else el.Style.FillPattern := bg.Pattern;
+          TyRenderElement(P, el);
+        end;
+    end;
+    PaintStatic(P, R, ppi, measurer);
+    PaintDynamic(P, R, ppi, measurer);
+    P.EndPaint;
+  finally
+    FExportExclude := [];
+    P.Free;
+    { and back: FExporting stays on through the window's own layout below,
+      so that render arms, binds and steps nothing either }
+    drawn := FViewsDrawn;
+    try
+      if (w <> Width) or (h <> Height) or (ppi <> ppi0) then
+      begin
+        FExportBare := True;
+        scratch := TBGRABitmap.Create(Width, Height);
+        P := TTyPainter.Create;
+        try
+          measurer := NewTextMeasurer(ppi0);
+          P.BeginPaintOn(nil, Rect(0, 0, Width, Height), ppi0, scratch);
+          PaintStatic(P, Rect(0, 0, Width, Height), ppi0, measurer);
+          P.EndPaint;
+        finally
+          P.Free;
+          scratch.Free;
+        end;
+        { the list is the window's again; the cached picture is not }
+        if FStatic <> nil then FStatic.Drop;
+      end
+      else
+        { the list was built for the export (its views excluded, nothing bound):
+          the window builds its own }
+        DropStatic;
+    finally
+      FExporting := False;
+      FExportBare := False;
+      FViewsDrawn := drawn;
+    end;
+    InvalidateFrame;
+  end;
+end;
+
+procedure TTyAdvanceChart.WriteExport(AStream: TStream; ABmp: TBGRABitmap;
+  AType: TTyExportImageType);
+var
+  jpg: TBGRABitmap;
+  writer: TFPWriterJPEG;
+begin
+  if AType <> eitJpeg then
+  begin
+    ABmp.SaveToStreamAsPng(AStream);
+    Exit;
+  end;
+  { A CANVAS MAKES A JPEG OF ITS PIXELS OVER OPAQUE BLACK -- the format has
+    no alpha -- at its default quality, 0.92 }
+  jpg := TBGRABitmap.Create(ABmp.Width, ABmp.Height, BGRABlack);
+  writer := TFPWriterJPEG.Create;
+  try
+    jpg.PutImage(0, 0, ABmp, dmDrawWithTransparency);
+    writer.CompressionQuality := 92;
+    TFPCustomImage(jpg).SaveToStream(AStream, writer);
+  finally
+    writer.Free;
+    jpg.Free;
+  end;
+end;
+
+function TTyAdvanceChart.RenderToBitmap(const AOptsJson: string): TBGRABitmap;
+var o: TTyChartExportOpts;
+begin
+  ExportOptsOrRaise(AOptsJson, o);
+  Result := RenderExport(o);
+end;
+
+procedure TTyAdvanceChart.SaveToStream(AStream: TStream; const AOptsJson: string);
+var
+  o: TTyChartExportOpts;
+  bmp: TBGRABitmap;
+begin
+  ExportOptsOrRaise(AOptsJson, o);
+  bmp := RenderExport(o);
+  if bmp = nil then Exit;
+  try
+    WriteExport(AStream, bmp, o.ImageType);
   finally
     bmp.Free;
+  end;
+end;
+
+function TTyAdvanceChart.SaveToBytes(const AOptsJson: string): TBytes;
+var ms: TMemoryStream;
+begin
+  Result := nil;
+  ms := TMemoryStream.Create;
+  try
+    SaveToStream(ms, AOptsJson);
+    SetLength(Result, ms.Size);
+    if ms.Size > 0 then Move(ms.Memory^, Result[0], ms.Size);
+  finally
+    ms.Free;
+  end;
+end;
+
+procedure TTyAdvanceChart.SaveToFile(const AFileName: string; const AOptsJson: string);
+var
+  o: TTyChartExportOpts;
+  bmp: TBGRABitmap;
+  fs: TFileStream;
+  ext: string;
+begin
+  ExportOptsOrRaise(AOptsJson, o);
+  if not o.HasType then
+  begin
+    ext := LowerCase(ExtractFileExt(AFileName));
+    if (ext = '.jpg') or (ext = '.jpeg') then o.ImageType := eitJpeg;
+  end;
+  bmp := RenderExport(o);
+  if bmp = nil then Exit;
+  try
+    fs := TFileStream.Create(AFileName, fmCreate);
+    try
+      WriteExport(fs, bmp, o.ImageType);
+    finally
+      fs.Free;
+    end;
+  finally
+    bmp.Free;
+  end;
+end;
+
+function TTyAdvanceChart.GetDataURL(const AOptsJson: string): string;
+var
+  o: TTyChartExportOpts;
+  bmp: TBGRABitmap;
+  ms: TMemoryStream;
+  raw: RawByteString;
+begin
+  ExportOptsOrRaise(AOptsJson, o);
+  bmp := RenderExport(o);
+  if bmp = nil then Exit('data:,');
+  ms := TMemoryStream.Create;
+  try
+    WriteExport(ms, bmp, o.ImageType);
+    SetLength(raw, ms.Size);
+    if ms.Size > 0 then Move(ms.Memory^, raw[1], ms.Size);
+  finally
+    ms.Free;
+    bmp.Free;
+  end;
+  if o.ImageType = eitJpeg then Result := 'data:image/jpeg;base64,'
+  else Result := 'data:image/png;base64,';
+  Result := Result + EncodeStringBase64(raw);
+end;
+
+procedure TTyAdvanceChart.SaveToPng(const AFileName: string);
+var
+  o: TTyChartExportOpts;
+  bmp: TBGRABitmap;
+  fs: TFileStream;
+begin
+  { the export with no options, a PNG whatever the name says }
+  o := Default(TTyChartExportOpts);
+  o.ImageType := eitPng;
+  bmp := RenderExport(o);
+  if bmp = nil then Exit;
+  try
+    fs := TFileStream.Create(AFileName, fmCreate);
+    try
+      WriteExport(fs, bmp, eitPng);
+    finally
+      fs.Free;
+    end;
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ ---- the loading effect ---- }
+
+function TTyAdvanceChart.LoadLive: Boolean;
+begin
+  Result := FLoadShown and (FLoadAnim <> nil) and (FLoadAnim.ClipCount > 0)
+    and (FAnimMode <> camOff);
+end;
+
+procedure TTyAdvanceChart.LoadDrop;
+begin
+  { freeing the element takes its clips off the driver }
+  FreeAndNil(FLoadArc);
+end;
+
+procedure TTyAdvanceChart.ShowLoading(const ACfgJson: string);
+begin
+  ShowLoading('', ACfgJson);
+end;
+
+procedure TTyAdvanceChart.ShowLoading(const AName, ACfgJson: string);
+var cfg: TTyLoadingCfg;
+begin
+  if not TyLoadingCfgOf(ACfgJson, rsTyChartLoading, cfg) then
+    raise EArgumentException.Create(rsTyChartLoadingCfgBad);
+  { hideLoading first, then the name: an unknown one has hidden the old
+    effect and shows nothing }
+  HideLoading;
+  if (AName <> '') and (AName <> 'default') then Exit;
+  FLoadCfg := cfg;
+  FLoadShown := True;
+  if FLoadCfg.ShowSpinner then
+  begin
+    if FLoadAnim = nil then FLoadAnim := TTyAnimation.Create;
+    FLoadArc := TTyAnimBag.Create;
+    FLoadArc.Animation := FLoadAnim;
+    { the clips start at their first step: the next tick, upstream's next
+      frame }
+    TyLoadingStartSpinner(FLoadArc);
+  end;
+  AnimArmTimer;
+  InvalidateFrame;
+end;
+
+procedure TTyAdvanceChart.HideLoading;
+begin
+  if not FLoadShown and (FLoadArc = nil) then Exit;
+  LoadDrop;
+  FLoadShown := False;
+  FLoadGeoValid := False;
+  AnimArmTimer;
+  InvalidateFrame;
+end;
+
+function TTyAdvanceChart.LoadingGeometry(out AGeo: TTyLoadingGeometry): Boolean;
+begin
+  AGeo := FLoadGeo;
+  Result := FLoadShown and FLoadGeoValid;
+end;
+
+function TTyAdvanceChart.LoadingCfg: TTyLoadingCfg;
+begin
+  Result := FLoadCfg;
+end;
+
+function TTyAdvanceChart.LoadingArcAngles(out AStart, AEnd: Double): Boolean;
+begin
+  AStart := NaN;
+  AEnd := NaN;
+  Result := FLoadShown and (FLoadArc <> nil);
+  if not Result then Exit;
+  AStart := FLoadArc.Num('shape.startAngle');
+  AEnd := FLoadArc.Num('shape.endAngle');
+end;
+
+function TTyAdvanceChart.LoadingClipCount: Integer;
+begin
+  if FLoadAnim = nil then Result := 0 else Result := FLoadAnim.ClipCount;
+end;
+
+{ default.ts, drawn: the mask over the whole chart, the text hung left /
+  middle off its anchor, the arc clockwise from its start to its end with
+  round caps. Measured in device px and laid out in CSS px, as upstream's
+  numbers are -- at 96 PPI the two are the same bits. }
+procedure TTyAdvanceChart.PaintLoading(APainter: TTyPainter; const ARect: TRect;
+  APPI: Integer; const AMeasurer: ITyTextMeasurer);
+var
+  st, spin: TTyStyleSet;
+  s, devW, devH, tw, th, cx, cy, r, sweep, a0: Double;
+  fontName: string;
+  fontSize, weight: Integer;
+  ink: TTyColor;
+  path: TTyZrPath;
+  box: TRect;
+begin
+  if not FLoadShown then Exit;
+  st := ActiveController.Model.ResolveStyle('TyAdvChartLoading', '', []);
+  spin := ActiveController.Model.ResolveStyle('TyAdvChartLoadingSpinner', '', []);
+  fontName := st.FontName;
+  if FLoadCfg.FontFamily <> '' then fontName := FLoadCfg.FontFamily;
+  fontSize := ResolveFontSize(st);
+  if FLoadCfg.HasFontSize then fontSize := FLoadCfg.FontSizeLogical;
+  weight := st.FontWeight;
+  if FLoadCfg.HasFontWeight then weight := FLoadCfg.FontWeight;
+  if APPI > 0 then s := APPI / 96 else s := 1;
+  devW := ARect.Right - ARect.Left;
+  devH := ARect.Bottom - ARect.Top;
+  tw := 0;
+  th := 0;
+  if FLoadCfg.Text <> '' then
+    AMeasurer.MeasureLine(FLoadCfg.Text, fontName, fontSize, weight, tw, th);
+  TyLoadingLayout(devW / s, devH / s, tw / s, FLoadCfg.ShowSpinner,
+    FLoadCfg.SpinnerRadius, FLoadGeo);
+  FLoadGeoValid := True;
+
+  { the mask }
+  case FLoadCfg.MaskColor.Kind of
+    likColour: ink := TTyColor(FLoadCfg.MaskColor.Colour);
+    likNone: ink := 0;
+  else
+    if tpBackground in st.Present then ink := st.Background.Color else ink := 0;
+  end;
+  if TyAlphaOf(ink) > 0 then
+  begin
+    APainter.BeginPath;
+    APainter.RectPath(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom);
+    APainter.FillPath(ink);
+  end;
+
+  { the text, its left edge on the anchor and its middle on the line }
+  case FLoadCfg.TextColor.Kind of
+    likColour: ink := TTyColor(FLoadCfg.TextColor.Colour);
+    likNone: ink := 0;
+  else
+    ink := st.TextColor;
+  end;
+  if (FLoadCfg.Text <> '') and (TyAlphaOf(ink) > 0) then
+  begin
+    box.Left := ARect.Left + Round(FLoadGeo.TextX * s);
+    box.Top := ARect.Top + Round(FLoadGeo.TextY * s - th / 2);
+    { to the edge: a left-aligned run needs no right, and a box one pixel
+      short would cut its last glyph }
+    box.Right := Max(box.Left + Ceil(tw) + 1, ARect.Right);
+    box.Bottom := box.Top + Ceil(th);
+    APainter.DrawText(box, TyInkText(FLoadCfg.Text), fontName, fontSize, weight,
+      ink, taLeftJustify, tlCenter, False, 0, False, Pos(#10, FLoadCfg.Text) > 0);
+  end;
+
+  { the spinner: PathProxy's arc, its angles normalised as a canvas takes
+    them -- an end behind the start goes the long way round }
+  if (not FLoadCfg.ShowSpinner) or (FLoadArc = nil) then Exit;
+  case FLoadCfg.Color.Kind of
+    likColour: ink := TTyColor(FLoadCfg.Color.Colour);
+    likNone: ink := 0;
+  else
+    if tpBorderColor in spin.Present then ink := spin.BorderColor else ink := 0;
+  end;
+  r := FLoadGeo.R * s;
+  if (TyAlphaOf(ink) = 0) or (FLoadCfg.LineWidth <= 0) or not (r > 0) then Exit;
+  cx := ARect.Left + FLoadGeo.CX * s;
+  cy := ARect.Top + FLoadGeo.CY * s;
+  path := nil;
+  TyZrArc(path, cx, cy, r, FLoadArc.Num('shape.startAngle'),
+    FLoadArc.Num('shape.endAngle'), False);
+  if Length(path) = 0 then Exit;
+  a0 := path[0].V[4];
+  sweep := path[0].V[5];
+  if IsNan(a0) or IsNan(sweep) then Exit;
+  APainter.SaveState;
+  try
+    APainter.SetLineDash([]);
+    APainter.SetLineCap(tlcRound);
+    APainter.BeginPath;
+    APainter.ArcTo(cx, cy, r, a0, a0 + sweep, False);
+    APainter.StrokePath(ink, FLoadCfg.LineWidth);
+  finally
+    APainter.RestoreState;
   end;
 end;
 

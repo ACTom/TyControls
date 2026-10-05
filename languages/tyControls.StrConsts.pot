@@ -707,6 +707,10 @@ msgstr ""
 msgid "xAxis or yAxis without the other: no grid was created, so neither is drawn"
 msgstr ""
 
+#: tycontrols.strconsts.rstychartexportoptsbad
+msgid "The export options are not valid JSON."
+msgstr ""
+
 #: tycontrols.strconsts.rstychartgridonedirection
 #, object-pascal-format
 msgid "grid[%d] has axes in only one direction, so it draws nothing"
@@ -719,6 +723,14 @@ msgstr ""
 
 #: tycontrols.strconsts.rstychartlegendselectinverse
 msgid "Inv"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartloading
+msgid "loading"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartloadingcfgbad
+msgid "The loading options are not valid JSON."
 msgstr ""
 
 #: tycontrols.strconsts.rstychartnosuchhandler

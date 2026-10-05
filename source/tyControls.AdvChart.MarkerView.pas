@@ -259,6 +259,9 @@ type
     Points: array[0..3] of TTyPointF;
     Path: TTyZrPath;
     BBox, Rect: TTyXYWH;
+    { the box a local gradient normalises against on the device: Rect, with
+      the stroke in device px [Batch 105] }
+    GradBox: TTyXYWH;
     LineWidth, Opacity, DashOffset: Double;
     Dash: TJSONData;
     LineCap, LineJoin: string;
@@ -2693,6 +2696,8 @@ begin
         and (P.LineWidth > 0);
       hasFill := P.HasFill and (P.Fill <> 'none');
       P.Rect := TyZrStrokeRect(P.BBox, Length(P.Path), hasStroke, hasFill, P.LineWidth, 1);
+      P.GradBox := TyZrStrokeRect(P.BBox, Length(P.Path), hasStroke, hasFill,
+        P.LineWidth * s, 1);
       { Math.max(z2 || 0, maxZ2) -- a clipped area does not count }
       if IsNan(P.Z2) then z2v := 0 else z2v := P.Z2;
       if z2v > maxZ2 then maxZ2 := z2v;
@@ -2749,6 +2754,8 @@ var
   el: TTyChartElement;
   c: TTyChartColor;
   pts: TTyPointFArray;
+  g: TTyChartGradient;
+  pat: TTyChartPattern;
 begin
   Result := 0;
   if AList = nil then Exit;
@@ -2772,6 +2779,23 @@ begin
     begin
       el.Style.HasFill := True;
       el.Style.FillColor := c;
+    end
+    else if APics[i].HasFill and (APics[i].FillData <> nil) then
+    begin
+      { A GRADIENT OR A PATTERN -- the item's, or the series colour as it is.
+        [Batch 105: an object fill drew no fill at all.] }
+      if TyTryReadGradient(APics[i].FillData, g) then
+      begin
+        el.Style.HasFill := True;
+        el.Style.FillColor := TyGradientSolid(g);
+        el.Style.FillGradient := g;
+      end
+      else if TyTryReadPattern(APics[i].FillData, pat) then
+      begin
+        el.Style.HasFill := True;
+        el.Style.FillColor := 0;
+        el.Style.FillPattern := pat;
+      end;
     end;
     if (APics[i].LineWidth > 0) and (APics[i].Stroke <> '') and (APics[i].Stroke <> 'none')
       and TyTryParseChartColor(APics[i].Stroke, c) then
@@ -2779,7 +2803,18 @@ begin
       el.Style.StrokeColor := c;
       el.Style.StrokeWidthLogical := APics[i].LineWidth;
       el.Style.DashLogical := ResolveDash(APics[i].Dash, APics[i].LineWidth);
+    end
+    else if (APics[i].LineWidth > 0) and (APics[i].Stroke = '')
+      and (APics[i].StrokeData <> nil) and TyTryReadGradient(APics[i].StrokeData, g) then
+    begin
+      el.Style.StrokeColor := TyGradientSolid(g);
+      el.Style.StrokeGradient := g;
+      el.Style.StrokeWidthLogical := APics[i].LineWidth;
+      el.Style.DashLogical := ResolveDash(APics[i].Dash, APics[i].LineWidth);
     end;
+    { getBoundingRect: the polygon's box grown by its stroke [Batch 105] }
+    el.Style.GradBoxSet := True;
+    el.Style.GradBox := APics[i].GradBox;
     if not IsNan(APics[i].Opacity) then
       el.Style.Alpha := Max(0.0, Min(1.0, APics[i].Opacity));
     AList.Add(el);

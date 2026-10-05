@@ -145,10 +145,16 @@ type
     hand over as many as it likes. }
   TTyPieVisual = record
     Fills: array of TTyChartColor;
+    { per sector: the fill as an object -- a gradient or a pattern, the
+      series' or the datum's own -- or nothing [Batch 105] }
+    Objs: TTyChartObjFillArray;
     { per sector: a visualMap's opacity, NaN where none was written }
     Alphas: TTyDoubleArray;
     Stroke: TTyChartColor;
     StrokeWidthLogical: Double;
+    { device px per logical px: a border grows a gradient's box by its
+      width on the device [Batch 105] }
+    PxScale: Double;
     { showEmptyCircle's ring, drawn when nothing else is. }
     EmptyFill: TTyChartColor;
     Z, Z2: Integer;
@@ -160,6 +166,13 @@ const
     store and again when it reads it back. }
   TyPieSeriesTypeName = 'pie';
   TyPieValueDim = 'value';
+
+{ THE BOX A SECTOR'S LOCAL GRADIENT NORMALISES AGAINST: the bounding rect of
+  the path roundSector.buildPath draws (no corners) -- the arc's own extent
+  with the centre or the inner arc, not the whole disc -- in zrender's
+  bbox arithmetic and with JavaScript's trigonometry. [Batch 105] }
+function TyPieSectorPathBox(ACX, ACY, AR0, AR, AStart, AEnd: Double;
+  AClockwise: Boolean): TTyXYWH;
 
 { ---- the option ---- }
 { Upstream's defaults, all of them from PieSeries.ts rather than the docs. }
@@ -222,7 +235,68 @@ function TyPieVisual(AFill: TTyChartColor): TTyPieVisual;
 
 implementation
 
-uses tyControls.AdvChart.Scale;
+uses tyControls.AdvChart.Scale, tyControls.AdvChart.ZrPath,
+     tyControls.AdvChart.JsMath;
+
+function TyPieSectorPathBox(ACX, ACY, AR0, AR, AStart, AEnd: Double;
+  AClockwise: Boolean): TTyXYWH;
+const
+  cE = 1e-4;
+var
+  p: TTyZrPath;
+  radius, inner, t, arc, m: Double;
+begin
+  Result := Default(TTyXYWH);
+  p := nil;
+  radius := Math.Max(AR, 0);
+  inner := Math.Max(AR0, 0);
+  if (radius <= 0) and (inner <= 0) then Exit;
+  if radius <= 0 then
+  begin
+    radius := inner;
+    inner := 0;
+  end;
+  if inner > radius then
+  begin
+    t := radius;
+    radius := inner;
+    inner := t;
+  end;
+  if IsNan(AStart) or IsNan(AEnd) then Exit;
+  arc := Abs(AEnd - AStart);
+  if arc > 2 * Pi then
+  begin
+    m := arc - Int(arc / (2 * Pi)) * (2 * Pi);
+    if m > cE then arc := m;
+  end;
+  if not (radius > cE) then
+    TyZrMoveTo(p, ACX, ACY)
+  else if arc > 2 * Pi - cE then
+  begin
+    TyZrMoveTo(p, ACX + radius * TyJsCos(AStart), ACY + radius * TyJsSin(AStart));
+    TyZrArc(p, ACX, ACY, radius, AStart, AEnd, not AClockwise);
+    if inner > cE then
+    begin
+      TyZrMoveTo(p, ACX + inner * TyJsCos(AEnd), ACY + inner * TyJsSin(AEnd));
+      TyZrArc(p, ACX, ACY, inner, AEnd, AStart, AClockwise);
+    end;
+  end
+  else
+  begin
+    if not (arc > cE) then
+      TyZrMoveTo(p, ACX + radius * TyJsCos(AStart), ACY + radius * TyJsSin(AStart))
+    else
+    begin
+      TyZrMoveTo(p, ACX + radius * TyJsCos(AStart), ACY + radius * TyJsSin(AStart));
+      TyZrArc(p, ACX, ACY, radius, AStart, AEnd, not AClockwise);
+    end;
+    TyZrLineTo(p, ACX + inner * TyJsCos(AEnd), ACY + inner * TyJsSin(AEnd));
+    if (inner > cE) and (arc > cE) then
+      TyZrArc(p, ACX, ACY, inner, AEnd, AStart, AClockwise);
+  end;
+  TyZrClose(p);
+  Result := TyZrBBox(p);
+end;
 
 const
   cRadian = Pi / 180;
@@ -471,6 +545,7 @@ begin
   Result.Fills[0] := AFill;
   Result.Stroke := 0;
   Result.StrokeWidthLogical := 0;
+  Result.PxScale := 1;
   Result.EmptyFill := AFill;
   { upstream's series z }
   Result.Z := 2;
@@ -910,6 +985,20 @@ begin
       el.Style.FillColor := AVisual.EmptyFill;
     el.Style.StrokeColor := AVisual.Stroke;
     el.Style.StrokeWidthLogical := AVisual.StrokeWidthLogical;
+    { A GRADIENT OR A PATTERN, normalised against the sector's PATH box --
+      the arc's extent -- grown by the border when there is one [Batch 105] }
+    if (i <= High(AVisual.Objs)) and AVisual.Objs[i].Present then
+    begin
+      el.Style.FillGradient := AVisual.Objs[i].Gradient;
+      el.Style.FillPattern := AVisual.Objs[i].Pattern;
+      el.Style.GradBoxSet := True;
+      el.Style.GradBox := TyPieSectorPathBox(ALayout.Sectors[i].CX,
+        ALayout.Sectors[i].CY, ALayout.Sectors[i].R0, ALayout.Sectors[i].R1,
+        ALayout.Sectors[i].StartRad, ALayout.Sectors[i].EndRad, ALayout.Clockwise);
+      if (AVisual.StrokeWidthLogical > 0) and ((AVisual.Stroke shr 24) > 0) then
+        el.Style.GradBox := TyGrowByStroke(el.Style.GradBox, True,
+          AVisual.StrokeWidthLogical * AVisual.PxScale);
+    end;
     if (i <= High(AVisual.Alphas)) and not IsNan(AVisual.Alphas[i]) then
       el.Style.Alpha := Min(Double(1), Max(Double(0), AVisual.Alphas[i]));
     el.Z := AVisual.Z;

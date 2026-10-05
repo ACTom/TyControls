@@ -132,6 +132,22 @@ type
     BorderWidthLogical: Double;
   end;
 
+  { ONE RAW ROW'S FILL, decided outside the builder [Batch 105]: what the
+    per-datum palette (colorBy other than 'series') gave the row, and the
+    row's own colour when it is an OBJECT -- a gradient or a pattern in the
+    item's itemStyle.color, which the per-point overrides do not park. }
+  TTyRowFill = record
+    PaletteSet: Boolean;
+    { the palette answered undefined: no fill }
+    PaletteNone: Boolean;
+    Palette: TTyChartColor;
+    ObjSet: Boolean;
+    ObjSolid: TTyChartColor;
+    ObjGradient: TTyChartGradient;
+    ObjPattern: TTyChartPattern;
+  end;
+  TTyRowFillArray = array of TTyRowFill;
+
   TTySeriesVisual = record
     Fill: TTyChartColor;
     Stroke: TTyChartColor;
@@ -234,6 +250,12 @@ type
       targets this series. Applied before the datum's own itemStyle.color,
       which still wins, and its opacity REPLACES the series' Alpha. }
     VisualRows: TTyVisualRowArray;
+    { THE ROWS' OWN FILLS by raw index, nil when none [Batch 105]: the
+      per-datum palette after the visual channels, an object colour of the
+      datum's own with its other own colours }
+    RowFills: TTyRowFillArray;
+    { the series' fill as an image [Batch 105] }
+    FillPattern: TTyChartPattern;
     { A LINE'S PEN AND AREA when a visualMap gave it a visualMeta on x or y:
       one colour or a global gradient in device px, instead of the series
       colour. The two flags say which of them take it -- an authored
@@ -725,6 +747,7 @@ end;
 function RowVisual(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
   ARow: Integer): TTySeriesVisual;
 var v: TTyDataValue; c: TTyChartColor; raw: Integer; vr: TTyVisualRow;
+  rf: TTyRowFill;
 begin
   Result := AVisual;
   if AStore = nil then Exit;
@@ -742,10 +765,35 @@ begin
       begin
         Result.Fill := TyVisualToChart(vr.Color);
         Result.FillGradient := Default(TTyChartGradient);
+        Result.FillPattern := Default(TTyChartPattern);
       end;
       if vr.OpacitySet and not IsNan(vr.Opacity) then
         Result.Alpha := Min(Double(1), Max(Double(0), vr.Opacity));
     end;
+  end;
+  { THE PER-DATUM PALETTE (stage 4600, after the encoding and the item
+    style): only a row neither of them coloured was asked, so it cannot meet
+    either here. An undefined answer paints nothing. [Batch 105] }
+  rf := Default(TTyRowFill);
+  if AVisual.RowFills <> nil then
+  begin
+    raw := AStore.GetRawIndex(ARow);
+    if (raw >= 0) and (raw <= High(AVisual.RowFills)) then
+      rf := AVisual.RowFills[raw];
+  end;
+  if rf.PaletteSet then
+  begin
+    if rf.PaletteNone then Result.Fill := 0 else Result.Fill := rf.Palette;
+    Result.FillGradient := Default(TTyChartGradient);
+    Result.FillPattern := Default(TTyChartPattern);
+  end;
+  { A DATUM'S OWN COLOUR THAT IS AN OBJECT replaces whatever the series had,
+    as a string one does below [Batch 105] }
+  if rf.ObjSet then
+  begin
+    Result.Fill := rf.ObjSolid;
+    Result.FillGradient := rf.ObjGradient;
+    Result.FillPattern := rf.ObjPattern;
   end;
   { THE ITEM'S OWN OPACITY REPLACES the series' and the visualMap's alike --
     upstream extends the item style over both. [Batch 54: it was not read.] }
@@ -761,9 +809,19 @@ begin
   if TyChartColorIsNone(v.Text) then
   begin
     Result.Fill := 0;
+    Result.FillGradient := Default(TTyChartGradient);
+    Result.FillPattern := Default(TTyChartPattern);
     Exit;
   end;
-  if TyTryParseChartColor(v.Text, c) then Result.Fill := c;
+  if TyTryParseChartColor(v.Text, c) then
+  begin
+    { A STRING REPLACES the series' object: extend(itemStyle, own) writes
+      `fill` over the gradient. [Batch 105: the series' gradient stayed and
+      the datum's colour was only its legend swatch.] }
+    Result.Fill := c;
+    Result.FillGradient := Default(TTyChartGradient);
+    Result.FillPattern := Default(TTyChartPattern);
+  end;
 end;
 
 { THE SYMBOL A visualMap WROTE ON THIS ROW over the series' own: its name,
@@ -823,7 +881,11 @@ function MarkElement(const AShape: TTyChartShape; const AVisual: TTySeriesVisual
   ASeries, ARow: Integer): TTyChartElement;
 begin
   Result := TyChartElement(AShape);
-  Result.Style.HasFill := AVisual.Fill <> 0;
+  { AN OBJECT FILL IS A FILL whatever its solid is: a gradient that starts
+    transparent, and a pattern, whose solid is transparent by definition
+    [Batch 105] }
+  Result.Style.HasFill := (AVisual.Fill <> 0)
+    or (AVisual.FillGradient.Kind <> cgkNone) or AVisual.FillPattern.Present;
   Result.Style.FillColor := AVisual.Fill;
   Result.Style.StrokeColor := AVisual.Stroke;
   Result.Style.StrokeWidthLogical := AVisual.StrokeWidthLogical;
@@ -836,6 +898,7 @@ begin
   Result.Style.Alpha := AVisual.Alpha;
   Result.Style.FillGradient := AVisual.FillGradient;
   Result.Style.StrokeGradient := AVisual.StrokeGradient;
+  Result.Style.FillPattern := AVisual.FillPattern;
   Result.Z := AVisual.Z;
   Result.Z2 := AVisual.Z2;
   Result.Silent := False;
@@ -1252,6 +1315,10 @@ var
     if rs.Empty or (rs.Kind = tsyLine) then
     begin
       sv.Stroke := sv.Fill;
+      { the colour object goes to the pen too [Batch 105] }
+      if sv.FillGradient.Kind <> cgkNone then sv.StrokeGradient := sv.FillGradient;
+      sv.FillGradient := Default(TTyChartGradient);
+      sv.FillPattern := Default(TTyChartPattern);
       if sv.StrokeWidthLogical <= 0 then sv.StrokeWidthLogical := 2;
       if rs.Kind = tsyLine then sv.Fill := 0
       else sv.Fill := AVisual.EmptyFill;
@@ -1645,6 +1712,7 @@ var
           it: an area that named a gradient is that gradient, whatever the
           bars beside it are doing. }
         v.FillGradient := spec.AreaGradient;
+        v.FillPattern := Default(TTyChartPattern);
         v.StrokeGradient := Default(TTyChartGradient);
         { A visualMap's gradient, unless the area named its own colour. }
         if AVisual.VisualLineArea then ApplyVisualLine(v, True);
@@ -1669,6 +1737,7 @@ var
       v.Fill := 0;
       { A LINE IS A STROKE, so the ramp moves across with the colour. }
       v.FillGradient := Default(TTyChartGradient);
+      v.FillPattern := Default(TTyChartPattern);
       if v.StrokeWidthLogical <= 0 then v.StrokeWidthLogical := 2;
       if v.Stroke = 0 then v.Stroke := AVisual.Fill;
       if (v.StrokeGradient.Kind = cgkNone)
@@ -1908,6 +1977,9 @@ begin
   if rs.Empty or (rs.Kind = tsyLine) then
   begin
     v.Stroke := v.Fill;
+    if v.FillGradient.Kind <> cgkNone then v.StrokeGradient := v.FillGradient;
+    v.FillGradient := Default(TTyChartGradient);
+    v.FillPattern := Default(TTyChartPattern);
     if v.StrokeWidthLogical <= 0 then v.StrokeWidthLogical := 2;
     if rs.Kind = tsyLine then v.Fill := 0
     else v.Fill := AVisual.EmptyFill;
@@ -2714,6 +2786,9 @@ begin
     if sym.Empty or (sym.Kind = tsyLine) then
     begin
       v.Stroke := v.Fill;
+      if v.FillGradient.Kind <> cgkNone then v.StrokeGradient := v.FillGradient;
+      v.FillGradient := Default(TTyChartGradient);
+      v.FillPattern := Default(TTyChartPattern);
       if v.StrokeWidthLogical <= 0 then v.StrokeWidthLogical := 2;
       if sym.Kind = tsyLine then v.Fill := 0
       else v.Fill := AVisual.EmptyFill;

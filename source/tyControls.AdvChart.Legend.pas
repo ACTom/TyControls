@@ -175,6 +175,9 @@ type
     { The series' colour, or -- for a pie -- the DATUM's, because a pie legend
       names slices rather than series. }
     Colour: TTyChartColor;
+    { and the same as an object -- a gradient or a pattern -- which the icon
+      is painted with, as upstream's is [Batch 105] }
+    Obj: TTyChartObjFill;
     { The `legendIcon` visual: the series' own symbol where it has one, and ''
       where it has none. A bar and a pie have none, which is the whole reason
       the default legend icon is a rounded rectangle. A line's is 'emptyCircle'
@@ -288,6 +291,7 @@ type
     Icon: string;
     OwnIcon: Boolean;
     Colour: TTyChartColor;
+    Obj: TTyChartObjFill;
     LineColour: TTyChartColor;
     LineWidthLogical: Double;
     { The box createSymbol is handed: itemWidth x itemHeight, scaled. }
@@ -2431,6 +2435,7 @@ begin
     if src.Greyed then it.Selected := False;
     ResolveIcon(ASpec, AEntries[i], src, it.Icon, it.OwnIcon);
     it.Colour := src.Colour;
+    it.Obj := src.Obj;
     it.LineColour := src.LineColour;
     it.HasOpacity := src.HasOpacity;
     it.Opacity := src.Opacity;
@@ -2695,6 +2700,12 @@ var
     begin
       Result.Style.HasFill := True;
       Result.Style.FillColor := colour;
+      { an object colour paints the icon as it paints the mark [Batch 105] }
+      if it.Selected and it.Obj.Present then
+      begin
+        Result.Style.FillGradient := it.Obj.Gradient;
+        Result.Style.FillPattern := it.Obj.Pattern;
+      end;
       { THE PEN [Batch 93]: the series' stroke while selected,
         inactiveBorderColor while not -- the width resolved by the layout }
       if (it.IconPen > 0) and ((not it.Selected) or it.HasStroke) then

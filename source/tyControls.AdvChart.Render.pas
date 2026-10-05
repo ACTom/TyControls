@@ -14,6 +14,7 @@ uses
   tyControls.AdvChart.Types, tyControls.AdvChart.Shape, tyControls.AdvChart.Paint,
   tyControls.Types,     // TTyColor: the render side speaks the library's colour type
   tyControls.AdvChart.Measure,  // the anchor-to-LCL-alignment converters
+  BGRABitmap,
   tyControls.Painter;
 
 { Trace one shape into the painter's current path. Does NOT begin the path: a
@@ -22,6 +23,17 @@ procedure TyTraceShape(P: TTyPainter; const AShape: TTyChartShape);
 
 { Draw one element: its shape, filled and/or stroked per its style. }
 procedure TyRenderElement(P: TTyPainter; const AElement: TTyChartElement);
+
+{ THE BOX A LOCAL GRADIENT ON THIS ELEMENT NORMALISES AGAINST, device px at
+  APPI: the builder's own when it set one, else the shape's bounds grown by
+  the stroke -- upstream's getBoundingRect. [Batch 105] }
+function TyElementGradientBox(const AElement: TTyChartElement;
+  APPI: Integer): TTyXYWH;
+
+{ A pattern's image: a `data:` URL with base64 content, decoded once and
+  kept; nil for anything else or anything that does not decode. Owned by the
+  cache. [Batch 105] }
+function TyPatternImage(const ASource: string): TBGRABitmap;
 
 { Draw the whole list in paint order. }
 procedure TyRenderPaintList(P: TTyPainter; AList: TTyPaintList);
@@ -37,6 +49,69 @@ procedure TyRenderRtPieces(P: TTyPainter; const APieces: TTyRtPieceArray;
   AInk: TTyColor);
 
 implementation
+
+uses base64;
+
+var
+  GPatternCache: TStringList = nil;
+
+function TyPatternImage(const ASource: string): TBGRABitmap;
+var
+  k, comma: Integer;
+  head, raw: string;
+  ms: TStringStream;
+  bmp: TBGRABitmap;
+begin
+  Result := nil;
+  if Copy(ASource, 1, 5) <> 'data:' then Exit;
+  if GPatternCache = nil then
+  begin
+    GPatternCache := TStringList.Create;
+    GPatternCache.OwnsObjects := True;
+    GPatternCache.Sorted := True;
+    GPatternCache.CaseSensitive := True;
+  end;
+  if GPatternCache.Find(ASource, k) then
+    Exit(TBGRABitmap(GPatternCache.Objects[k]));
+  comma := Pos(',', ASource);
+  if comma <= 0 then Exit;
+  head := LowerCase(Copy(ASource, 1, comma - 1));
+  if (Length(head) < 7) or (Copy(head, Length(head) - 6, 7) <> ';base64') then Exit;
+  bmp := nil;
+  try
+    raw := DecodeStringBase64(Copy(ASource, comma + 1, MaxInt));
+    ms := TStringStream.Create(raw);
+    try
+      bmp := TBGRABitmap.Create(ms);
+    finally
+      ms.Free;
+    end;
+  except
+    FreeAndNil(bmp);
+  end;
+  { kept even when it failed, so a broken image is not decoded every frame;
+    a long-running chart cycling through patterns does not grow forever }
+  if GPatternCache.Count >= 64 then GPatternCache.Clear;
+  GPatternCache.AddObject(ASource, bmp);
+  Result := bmp;
+end;
+
+function TyElementGradientBox(const AElement: TTyChartElement;
+  APPI: Integer): TTyXYWH;
+begin
+  if AElement.Style.GradBoxSet then Exit(AElement.Style.GradBox);
+  Result := TyRectToXYWH(TyShapeBounds(AElement.Shape));
+  { Path.getBoundingRect grows by the stroke when there is one: a fill-less
+    path by max(width, 5) }
+  if (AElement.Style.StrokeWidthLogical > 0)
+    and (((AElement.Style.StrokeColor shr 24) > 0)
+      or (AElement.Style.StrokeGradient.Kind <> cgkNone)) then
+  begin
+    if APPI <= 0 then APPI := 96;
+    Result := TyGrowByStroke(Result, AElement.Style.HasFill,
+      AElement.Style.StrokeWidthLogical * APPI / 96);
+  end;
+end;
 
 procedure TyTraceShape(P: TTyPainter; const AShape: TTyChartShape);
 var
@@ -441,6 +516,8 @@ var
   gx1, gy1, gx2, gy2, gr: Double;
   gi: Integer;
   stops: array of TTyGradStop;
+  img: TBGRABitmap;
+  pm: TTyDoubleArray;
 begin
   if P = nil then Exit;
   { Nothing to draw is not an error -- a placeholder element with neither fill
@@ -476,8 +553,8 @@ begin
           not the plot and not the series. So every bar ramps over itself and
           a two-stop gradient reads the same on all of them, and a stacked
           segment restarts per segment. }
-        TyResolveGradient(AElement.Style.FillGradient,
-          TyShapeBounds(AElement.Shape), gx1, gy1, gx2, gy2, gr);
+        TyResolveGradientXYWH(AElement.Style.FillGradient,
+          TyElementGradientBox(AElement, P.PPI), gx1, gy1, gx2, gy2, gr);
         SetLength(stops, Length(AElement.Style.FillGradient.Stops));
         for gi := 0 to High(stops) do
         begin
@@ -487,6 +564,20 @@ begin
         end;
         P.FillPathGradient(stops, gx1, gy1, gx2, gy2, gr, rule);
       end
+      else if AElement.Style.FillPattern.Present then
+      begin
+        { THE IMAGE, IN THE CANVAS'S SPACE: the pattern matrix in css px,
+          scaled to the device. No image -- a URL, or one that does not
+          decode -- fills nothing, which is upstream's `hasFill = false`
+          while the image is not ready. [Batch 105] }
+        img := TyPatternImage(AElement.Style.FillPattern.Image);
+        if img <> nil then
+        begin
+          TyPatternMatrix(AElement.Style.FillPattern, pm);
+          for gi := 0 to 5 do pm[gi] := pm[gi] * P.PPI / 96;
+          P.FillPathPattern(img, AElement.Style.FillPattern.Repetition, pm, rule);
+        end;
+      end
       else
         P.FillPath(TTyColor(AElement.Style.FillColor), rule);
     end;
@@ -494,8 +585,8 @@ begin
     begin
       if AElement.Style.StrokeGradient.Kind <> cgkNone then
       begin
-        TyResolveGradient(AElement.Style.StrokeGradient,
-          TyShapeBounds(AElement.Shape), gx1, gy1, gx2, gy2, gr);
+        TyResolveGradientXYWH(AElement.Style.StrokeGradient,
+          TyElementGradientBox(AElement, P.PPI), gx1, gy1, gx2, gy2, gr);
         SetLength(stops, Length(AElement.Style.StrokeGradient.Stops));
         for gi := 0 to High(stops) do
         begin
@@ -534,5 +625,8 @@ begin
     if not AList.Element(AList.PaintOrder(i)).Ignore then
       TyRenderElement(P, AList.Element(AList.PaintOrder(i)));
 end;
+
+finalization
+  FreeAndNil(GPatternCache);
 
 end.

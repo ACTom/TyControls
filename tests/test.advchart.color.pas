@@ -683,8 +683,11 @@ procedure TAdvChartColorTest.TestAPieSliceCanNameItsOwnColour;
 var fills: TTyChartColorArray;
 begin
   { The commonest thing anybody writes on a pie. The other two slices are
-    asserted as well, because a per-slice colour that also consumed a
-    palette slot would move them. }
+    asserted as well: a slice with its own colour takes NO palette slot
+    (dataColorPaletteTask asks only for the rows still the palette's), so
+    the third takes the SECOND colour. [Batch 105: this asserted the third
+    kept the third colour, which pinned the port's slot-burning bug;
+    advchart-palette-fill colorby-item-own is upstream's answer.] }
   fills := PieFills('{ color: [''#ff0000'', ''#00ff00'', ''#0000ff''],'
     + ' series: [{ type: ''pie'', radius: ''70%'','
     + ' label: { show: false },'
@@ -693,7 +696,7 @@ begin
     + ' { name: ''c'', value: 1 }] }] }', 3);
   AssertEquals('the first is untouched', $FFFF0000, fills[0]);
   AssertEquals('the second is its own', $FF808080, fills[1]);
-  AssertEquals('and the third did not move', $FF0000FF, fills[2]);
+  AssertEquals('and the third takes the slot the second left', $FF00FF00, fills[2]);
 end;
 
 procedure TAdvChartColorTest.TestWhatDoesNotCountAsAWrittenColour;

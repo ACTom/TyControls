@@ -97,6 +97,8 @@ type
     funnel colours by datum, exactly as a pie does. }
   TTyFunnelVisual = record
     Fills: array of TTyChartColor;
+    { per RAW row: the fill as an object, or nothing [Batch 105] }
+    Objs: TTyChartObjFillArray;
     Stroke: TTyChartColor;
     StrokeWidthLogical: Double;
     Alpha: Double;
@@ -615,6 +617,14 @@ begin
       el.Style.FillColor := AVisual.Fills[ALayout.Items[i].RawIndex]
     else
       el.Style.FillColor := 0;
+    { a gradient or a pattern, the band's own box [Batch 105] }
+    if (ALayout.Items[i].RawIndex >= 0)
+      and (ALayout.Items[i].RawIndex <= High(AVisual.Objs))
+      and AVisual.Objs[ALayout.Items[i].RawIndex].Present then
+    begin
+      el.Style.FillGradient := AVisual.Objs[ALayout.Items[i].RawIndex].Gradient;
+      el.Style.FillPattern := AVisual.Objs[ALayout.Items[i].RawIndex].Pattern;
+    end;
     el.Style.StrokeColor := AVisual.Stroke;
     el.Style.StrokeWidthLogical := AVisual.StrokeWidthLogical;
     el.Style.Alpha := AVisual.Alpha;

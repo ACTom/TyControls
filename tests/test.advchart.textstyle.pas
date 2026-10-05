@@ -41,7 +41,7 @@ type
     Measurer: ITyTextMeasurer;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function List: TTyPaintList;
-    procedure PaintStyles(ASpec: PTyAxisLayoutSpec; out ALabel, APrimary,
+    procedure PaintStyles(ASpec: PTyAxisLayoutSpec; out ALabel,
       AName: TTyStyleSet);
   end;
 
@@ -102,10 +102,10 @@ begin
   Result := SeriesList;
 end;
 
-procedure TTsProbe.PaintStyles(ASpec: PTyAxisLayoutSpec; out ALabel, APrimary,
+procedure TTsProbe.PaintStyles(ASpec: PTyAxisLayoutSpec; out ALabel,
   AName: TTyStyleSet);
 begin
-  AxisTextStyles(ASpec, ALabel, APrimary, AName);
+  AxisTextStyles(ASpec, ALabel, AName);
 end;
 
 { ==================== plumbing ==================== }
@@ -541,7 +541,7 @@ procedure TAdvChartTextStyleOracleTest.TestTheAxisIsPaintedInWhatItWasMeasuredIn
 var
   gb: TTyGridBuild;
   spec: PTyAxisLayoutSpec;
-  l, p, n: TTyStyleSet;
+  l, n: TTyStyleSet;
 begin
   FChart.Option := '{"animation":false,"textStyle":{"fontWeight":"bold"},'
     + '"xAxis":{"type":"category","data":["a","b"],"name":"N",'
@@ -552,12 +552,11 @@ begin
   FChart.Render(FBmp.Canvas, Rect(0, 0, 600, 400), 96);
   gb := FChart.Build.Grid(0);
   spec := gb.SpecFor(gb.XAxis(0));
-  FChart.PaintStyles(spec, l, p, n);
+  FChart.PaintStyles(spec, l, n);
   AssertEquals('label size', 17.0, TyFontPxOf(l.FontSize), 1e-9);
   AssertEquals('label family', 'serif', l.FontName);
   AssertEquals('label weight from the root', 700, l.FontWeight);
   AssertEquals('label colour', Integer(TTyColor($FFC23531)), Integer(l.TextColor));
-  AssertEquals('an emphasised label the same size', 17.0, TyFontPxOf(p.FontSize), 1e-9);
   AssertEquals('name size', 19.0, TyFontPxOf(n.FontSize), 1e-9);
   AssertEquals('name colour', Integer(TTyColor($FF123456)), Integer(n.TextColor));
 end;

@@ -898,6 +898,18 @@ msgstr "全选"
 msgid "Inv"
 msgstr "反选"
 
+#: tycontrols.strconsts.rstychartloading
+msgid "loading"
+msgstr "加载中"
+
+#: tycontrols.strconsts.rstychartexportoptsbad
+msgid "The export options are not valid JSON."
+msgstr "导出选项不是合法的 JSON。"
+
+#: tycontrols.strconsts.rstychartloadingcfgbad
+msgid "The loading options are not valid JSON."
+msgstr "加载选项不是合法的 JSON。"
+
 #: tycontrols.strconsts.rstychartnosuchhandler
 #, object-pascal-format
 msgid "No formatter named '%s' is registered."

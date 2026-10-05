@@ -239,11 +239,17 @@ type
     FontName: string;
     FontSizeLogical: Integer;
     FontWeight: Integer;
-    { The weight an EMPHASISED label is drawn in -- a time axis' coarse
-      ticks. Resolved from the theme by the caller, like everything else in
-      this record, because a weight is a visual value and this library does
-      not put those in control code. }
+    { THE TIME AXIS' `rich.primary`, from the skin: the weight (and the
+      colour, where the skin gives one) its coarse ticks' `{primary|...}`
+      tags are drawn in -- upstream's default is `fontWeight: 'bold'`. An
+      author's axisLabel.rich.primary is laid over it. Resolved from the theme
+      by the caller, like everything else in this record, because these are
+      visual values and this library does not put those in control code.
+      [Revised in batch 104: the weight of a whole label marked emphasised;
+      now the default of a rich style, so only the tagged part is heavier.] }
     EmphasisFontWeight: Integer;
+    HasEmphasisColour: Boolean;
+    EmphasisColour: Cardinal;
     LabelMarginLogical: Double;
     TickLengthLogical: Double;
     NameGapLogical: Double;
@@ -297,10 +303,6 @@ type
     { a category axis' end that the interval did not land on }
     OffInterval: Boolean;
     Shown: Boolean;
-    { Drawn in the heavier weight. Carried on the PLACEMENT and not looked up
-      again at paint time, because the measurement that reserved room for this
-      label was made in that same weight. }
-    Emphasis: Boolean;
     { THE LABEL'S MATRIX AS ZRENDER ENDS UP WITH IT: the axis group's times
       the label's own turn, decomposed into props and recomposed from them --
       which is not the turn asked for, by a few units in the last place, and
@@ -337,8 +339,33 @@ type
     OffInterval: Boolean;
     OnBand: Boolean;
     Drawn: Boolean;
+    { WHICH COLOUR OF ITS LIST [Batch 101]: a split line's is the count of
+      the lines drawn before it, a split area mark's the colour of the band
+      that starts at it -- carried from the last render by tick value, as
+      upstream's axis view keeps it. Nought on a tick. }
+    ColourIndex: Integer;
   end;
   TTyAxisMarkArray = array of TTyAxisMark;
+
+  { AN ARROW AT ONE END OF THE AXIS LINE [Batch 101]: axisLine.symbol at that
+    end, its box (-W/2, -H/2, W, H) about (X, Y), turned by Rotation
+    (counter-clockwise, as zrender turns it) -- AxisBuilder's element as it
+    stands. End_ is 0 for the start, which is the SMALLER end of the axis'
+    local extent whichever way the axis runs, and 1 for the other. }
+  TTyAxisArrow = record
+    End_: Integer;
+    SymbolType: string;
+    X, Y, Rotation, W, H: Double;
+  end;
+  TTyAxisArrowArray = array of TTyAxisArrow;
+
+  { ONE COLOUR OF AN AUTHOR'S SPLIT LINE OR SPLIT AREA LIST [Batch 101]. Ok
+    False is a colour the port cannot read: nothing is drawn in it. }
+  TTyAxisInk = record
+    Ok: Boolean;
+    Colour: Cardinal;
+  end;
+  TTyAxisInkArray = array of TTyAxisInk;
 
   { nameLocation: 'end' is upstream's default and so the zero value;
     'center' is 'middle'. }
@@ -485,12 +512,6 @@ type
     { A time label's level, which is its priority under hideOverlap: the
       coarser ticks are kept first. }
     LabelLevel: TTyIntegerArray;
-    { Which labels carry the heavier weight: on a time axis the coarse ticks,
-      the ones that say `Mar` among a run of day numbers. }
-    LabelEmphasis: TTyBoolArray;
-    { The weight those get. Nought means the spec's own weight, so an axis
-      that marks no label for emphasis need not name one. }
-    EmphasisFontWeight: Integer;
     { THE RULES THIS AXIS' LABELS ARE PICKED BY. Only a category axis is
       thinned by index; upstream never drops a value, log or time label for its
       position, only for crowding.
@@ -597,6 +618,30 @@ type
     TickMarks: TTyAxisMarkArray;
     SplitLineMarks: TTyAxisMarkArray;
     SplitAreaMarks: TTyAxisMarkArray;
+
+    { ---- the finishing touches [Batch 101] ---- }
+
+    { THE AXIS LINE'S ARROWS on the final rect, in the order upstream adds
+      them (the start first); empty when the line is not drawn }
+    Arrows: TTyAxisArrowArray;
+    { THE AUTHOR'S SPLIT COLOURS: splitLine.lineStyle.color and
+      splitArea.areaStyle.color, a string as a list of one. Empty is the
+      skin's -- one line colour, and for the areas the skin's colour and
+      none in turn, which is upstream's default pair (a tint and a
+      transparent). Each mark's ColourIndex picks from it. }
+    SplitLineInks: TTyAxisInkArray;
+    SplitAreaInks: TTyAxisInkArray;
+    { the length upstream's split-area cache counts in: the list's, a
+      string's own (each band then falls back to the one colour), 2 for the
+      skin's pair }
+    SplitAreaInkCount: Integer;
+    { nameTruncate [Batch 101]: whether a maxWidth was written, the width
+      and the ellipsis; applied to Name by the builder. A flag and not a
+      sentinel width: the zero value has to be `no cut`, and 0 is a width
+      upstream honours (it leaves nothing). }
+    HasNameTrunc: Boolean;
+    NameTruncWidth: Double;
+    NameTruncEllipsis: string;
   end;
   TTyAxisLayoutSpecArray = array of TTyAxisLayoutSpec;
   PTyAxisLayoutSpec = ^TTyAxisLayoutSpec;
@@ -1229,14 +1274,6 @@ begin
   else Result := AMeasurer;
 end;
 
-function WeightAt(const ASpec: TTyAxisLayoutSpec; AIndex: Integer): Integer;
-begin
-  Result := ASpec.FontWeight;
-  if (ASpec.EmphasisFontWeight > 0) and (AIndex >= 0)
-    and (AIndex <= High(ASpec.LabelEmphasis)) and ASpec.LabelEmphasis[AIndex]
-    then Result := ASpec.EmphasisFontWeight;
-end;
-
 { ONE LABEL'S BOX, as zrender holds it: the text's box hung by its anchor,
   with axisLabel.textMargin round it (AMargin) and without (ABare), placed by
   the label's point and turn. The end rules weigh the bare one unless the
@@ -1247,7 +1284,7 @@ procedure LabelBoxes(const ASpec: TTyAxisLayoutSpec;
 var w, h, x0, y0, padH, padV: Double;
 begin
   LabelMeterOf(ASpec, AMeasurer).MeasureLine(APlace.Text, ASpec.FontName,
-    ASpec.FontSizeLogical, WeightAt(ASpec, APlace.Index), w, h);
+    ASpec.FontSizeLogical, ASpec.FontWeight, w, h);
   { zrender's adjustTextX / adjustTextY }
   x0 := 0;
   case APlace.AnchorH of
@@ -1363,11 +1400,12 @@ begin
   SetLength(AAlongEach, Length(ASpec.Labels));
   for i := 0 to High(ASpec.Labels) do
   begin
-    { MEASURED IN THE WEIGHT IT WILL BE DRAWN IN. Bold is wider, and a label
-      measured light and drawn bold is how an axis comes to overlap the one
-      thing the measuring was for. }
+    { MEASURED AS IT WILL BE DRAWN: a time axis' `{primary|...}` part is
+      bold, and the label meter lays the tags out in their own weight -- a
+      label measured light and drawn bold is how an axis comes to overlap the
+      one thing the measuring was for. }
     LabelMeterOf(ASpec, AMeasurer).MeasureLine(ASpec.Labels[i], ASpec.FontName,
-      ASpec.FontSizeLogical, WeightAt(ASpec, i), w, h);
+      ASpec.FontSizeLogical, ASpec.FontWeight, w, h);
     RotatedExtent(w, h, ASpec.RotationRad, rw, rh);
     if horiz then
     begin
@@ -2305,9 +2343,6 @@ begin
     Result[i].Built := False;
     Result[i].OffInterval := False;
     Result[i].Shown := False;
-    Result[i].Emphasis := (ASpec.EmphasisFontWeight > 0)
-                          and (i <= High(ASpec.LabelEmphasis))
-                          and ASpec.LabelEmphasis[i];
     { THE ANCHOR POINT is the side's business; WHICH POINT OF THE TEXT sits
       on it is AnchorsFor's, for all four alike. }
     Result[i].AnchorH := ah;
