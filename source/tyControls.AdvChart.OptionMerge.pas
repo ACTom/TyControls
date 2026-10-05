@@ -57,9 +57,15 @@ unit tyControls.AdvChart.OptionMerge;
   takes no index (TyOptionCompactSeries). The other main types are seen
   for the first time there: replaceAll, holes kept.
 
-  WHAT IT DOES NOT DO: timeline / media / baseOption (and with them the
-  replaceAll of a whole option, which without them is the notMerge); the
-  box merge of calendar, singleAxis, geo, parallel, matrix, timeline,
+  AN OPTION THE PREPROCESSORS NEVER SAW [Batch 107]: parseRawOption runs
+  them over the base and over every media option with a query -- but not
+  over the media DEFAULT. Merged with APreprocessed False, an option visits
+  only what it writes and what depends on that, and makes no preprocessor
+  model.
+
+  WHAT IT DOES NOT DO: timeline (and with it the replaceAll of a whole
+  option, which without it is the notMerge; media and baseOption are
+  tyControls.AdvChart.Media's [Batch 107]); the box merge of calendar, singleAxis, geo, parallel, matrix, timeline,
   thumbnail, the slider dataZoom and the map series; upstream's
   preprocessors otherwise.
 
@@ -150,6 +156,18 @@ function TyOptionMerge(ARoot: TJSONObject; var AKeys: TTyOptionKeys;
   ANew: TJSONObject; const AReplaceMerge: array of string;
   ABefore: TTyMergeBeforeComponent;
   out AReport: TTyMergeReport; out AError: string): Boolean; overload;
+
+{ THE SAME, for an option the preprocessors did not see -- the media
+  default [Batch 107]: APreprocessed False visits only the written main types
+  and their dependents, and makes no preprocessor model. }
+function TyOptionMerge(ARoot: TJSONObject; var AKeys: TTyOptionKeys;
+  ANew: TJSONObject; const AReplaceMerge: array of string; APreprocessed: Boolean;
+  ABefore: TTyMergeBeforeComponent;
+  out AReport: TTyMergeReport; out AError: string): Boolean; overload;
+
+{ whether two of ANew's components of one main type carry the same id --
+  the merge upstream asserts on [Batch 107] }
+function TyOptionHasDuplicateId(ANew: TJSONObject): Boolean;
 
 { '' when every name is a component main type, else the first that is not }
 function TyOptionBadReplaceType(const AReplaceMerge: array of string): string;
@@ -278,7 +296,7 @@ begin
     end;
 end;
 
-function TyOptionVisited(const AWritten: array of string): TStringArray;
+function VisitedOf(const AWritten: array of string; ASeeded: Boolean): TStringArray;
 var
   i: Integer;
   grew: Boolean;
@@ -288,9 +306,12 @@ begin
   Result := nil;
   for i := 0 to High(AWritten) do AddTo(Result, AWritten[i]);
   { backwardCompat writes `series`, the axisPointer preprocessor
-    `axisPointer`, into every option }
-  AddTo(Result, 'series');
-  AddTo(Result, 'axisPointer');
+    `axisPointer`, into every option they see }
+  if ASeeded then
+  begin
+    AddTo(Result, 'series');
+    AddTo(Result, 'axisPointer');
+  end;
   repeat
     grew := False;
     for i := 0 to High(cMainTypes) do
@@ -306,6 +327,11 @@ begin
         end;
     end;
   until not grew;
+end;
+
+function TyOptionVisited(const AWritten: array of string): TStringArray;
+begin
+  Result := VisitedOf(AWritten, True);
 end;
 
 { ==================== small JavaScript ==================== }
@@ -1304,6 +1330,30 @@ function TyOptionMerge(ARoot: TJSONObject; var AKeys: TTyOptionKeys;
   ANew: TJSONObject; const AReplaceMerge: array of string;
   ABefore: TTyMergeBeforeComponent;
   out AReport: TTyMergeReport; out AError: string): Boolean;
+begin
+  Result := TyOptionMerge(ARoot, AKeys, ANew, AReplaceMerge, True, ABefore,
+    AReport, AError);
+end;
+
+function TyOptionHasDuplicateId(ANew: TJSONObject): Boolean;
+var
+  i: Integer;
+  k, dupId: string;
+begin
+  Result := False;
+  if ANew = nil then Exit;
+  for i := 0 to ANew.Count - 1 do
+  begin
+    k := ANew.Names[i];
+    if TyOptionIsComponentType(k) and Given(ANew.Items[i])
+      and DuplicateId(ComponentsOf(ANew.Items[i]), dupId) then Exit(True);
+  end;
+end;
+
+function TyOptionMerge(ARoot: TJSONObject; var AKeys: TTyOptionKeys;
+  ANew: TJSONObject; const AReplaceMerge: array of string; APreprocessed: Boolean;
+  ABefore: TTyMergeBeforeComponent;
+  out AReport: TTyMergeReport; out AError: string): Boolean;
 var
   i, j, ki, si: Integer;
   k, mt, sub, dupId: string;
@@ -1371,7 +1421,7 @@ begin
   end;
 
   { ---- the components ---- }
-  visited := TyOptionVisited(written);
+  visited := VisitedOf(written, APreprocessed);
   AReport.Visited := visited;
   pool := TBoxPool.Create;
   try
@@ -1513,7 +1563,7 @@ begin
   finally
     pool.Free;
   end;
-  PreprocessorModels(ANew, AKeys);
+  if APreprocessed then PreprocessorModels(ANew, AKeys);
   Result := True;
 end;
 

@@ -9027,10 +9027,10 @@ Q7 在 3.1 承诺了「入场动画和状态过渡」。AN2–AN4 把前一半�
 
 ### 推迟与偏差
 
-- **A11**：replaceMerge（只按 id 映射、未匹配的已有模型被移除留下空洞、`brandNew` 强制新视图）、整份选项的 replaceAll、空洞在系列下标、图例数据、dataZoom 目标里的跳过；`SetOption` 的选项对象形式（`{notMerge, replaceMerge, lazyUpdate, silent, transition}`）。接口已留好：keys 的列表、映射函数的模式参数、报告里每个位置的命运。（第 97 批：已做，见 §132；整份选项的 replaceAll 只在 timeline / media 里用，端口没有它们，它等同 notMerge，不单独提供。）
+- **A11**：replaceMerge（只按 id 映射、未匹配的已有模型被移除留下空洞、`brandNew` 强制新视图）、整份选项的 replaceAll、空洞在系列下标、图例数据、dataZoom 目标里的跳过；`SetOption` 的选项对象形式（`{notMerge, replaceMerge, lazyUpdate, silent, transition}`）。接口已留好：keys 的列表、映射函数的模式参数、报告里每个位置的命运。（第 97 批：已做，见 §132；整份选项的 replaceAll 只在 timeline / media 里用，端口没有它们，它等同 notMerge，不单独提供。）**[第 107 批：media 已做（§142），但它走的是 `resetOption('media')`——一项一次普通合并，不是整份的 replaceAll；`resetOption('recreate')` 只有 setTheme 与工具箱的 restore 用，仍不提供。]**
 - **notMerge 下系列的 null 项不压缩**：上游 initBase 给 series 预置了列表，所以 `[bar, null, line]` 的 line 是系列 1（虚名 `series\u00001`）；端口的 notMerge 树照写的下标，line 是系列 2。只影响写了 null 系列项的选项，合并时按端口的下标找。（第 97 批：已修正，notMerge 与第一次 setOption 都压缩系列，见 §132。）
 - 盒子写回只做端口实际布局的那几种；calendar（与 cellSize 联动的二次合并）、singleAxis、geo、parallel、matrix、timeline、thumbnail、slider dataZoom、map 系列、grid 的 `outerBounds` 只做深合并——合并没有碰盒子键时与上游相同。
-- 预处理器只模拟了它们建的模型（axisPointer、grid）；markPoint/markLine/markArea 的根组件、axisPointer 的 `link` 归一、graphic 的包装、backwardCompat 的旧写法转换、timeline / media / baseOption 都不做（notMerge 下也不做）。
+- 预处理器只模拟了它们建的模型（axisPointer、grid）；markPoint/markLine/markArea 的根组件、axisPointer 的 `link` 归一、graphic 的包装、backwardCompat 的旧写法转换、timeline / media / baseOption 都不做（notMerge 下也不做）。**[第 107 批：media 与 baseOption 已做，见 §142——预处理器跑基础选项与列表里的项，不跑默认项；timeline 的各帧（`options`）仍不做，只按 `parseRawOption` 从根上拿掉。]**
 - `emphasis.label.show` 上游只在 init 时由 `label.show` 补（defaultEmphasis），合并改了 `label.show` 之后它保持 init 时的值；端口在读的时候从当前的 `label.show` 补。
 - 系列从 dataset 维度自动取的名字（autoSeriesName）不进 keys；合并时按名字找人用的是写过的名字或虚名，维度名变了以后与上游可能不同。
 - 选中：合并后留下来的系列保留选中模型，但 `selectedMode` 的改变和新数据里 `selected: true` 的补选（`_initSelectedMapFromData`）不重读。
@@ -9115,7 +9115,7 @@ AN2–AN4、AN3b 之后，同一个 Option 上的整体更新仍然一帧切过�
 - **brandNew 与视图**：新模型带 `__requireNewView`，`doPrepare` 里 `!requireNewView && viewMap[viewId]`——即使 viewId 相同也建新视图，读完即清，**只生效一次**。被 id 认领回来的模型照常合并、照常保留视图。
 - **init 忽略 replaceMerge**：`_resetOption` 在还没有 option 时走 `initBase`，它调 `_mergeOption(baseOption, null)`；notMerge 是新建一个 GlobalModel 再 init。所以第一次 setOption、notMerge 都不看 `replaceMerge`（探针：notMerge 带 `replaceMerge: ['series', 'title']`，`getOption` 里没有 title，系列也没有新视图的要求）。
 - **notMerge 压缩系列**：`initBase` 预置了 `{series: []}`，第一次 / notMerge 的系列是空列表上的 normalMerge——null、数字这类不是对象的项不占位置（`[bar, null, 5, line]` 的 line 是系列 1，虚名 `series\u00001`）。其余主类型第一次出现是 replaceAll，空洞保留（§130 已做）。
-- **replaceAll**：只在主类型第一次被访问时（§130 已做），以及 `resetOption('recreate')`——timeline / media 用，它就是对存着的原始选项重做一次 `initBase`。
+- **replaceAll**：只在主类型第一次被访问时（§130 已做），以及 `resetOption('recreate')`——timeline / media 用，它就是对存着的原始选项重做一次 `initBase`。**[第 107 批：这里说错了。timeline 用 `resetOption('timeline')`、media 用 `resetOption('media')`，都是普通合并；`'recreate'` 的调用者是 setTheme 和工具箱的 restore（`Restore.ts`），见 §142。]**
 - **空洞处处跳过**：`eachComponent`、`eachSeries`、`eachRawSeries` 都跳过 `undefined`；`getSeriesCount` 只数有模型的；`componentIndex` 是位置下标。于是：
   - 系列颜色按 `eachSeries` 的顺序从调色板取：A、C 之间的 B 被移除后，C 取第二个颜色；
   - 图例的默认数据只来自剩下的系列；被移除的图例不过滤任何系列（被它点掉的 B 重新显示）；
@@ -9180,7 +9180,7 @@ AN2–AN4、AN3b 之后，同一个 Option 上的整体更新仍然一帧切过�
 - **系列落在空洞轴上**：上游抛错；端口这个系列解析失败、不画，给诊断，其余照画。
 - **`updated` 只发给为它注册的处理器**：通配的 `OnChartEvent` 不算（和 legacy 的选中事件一样），否则每次派发都多一个事件。resize、换主题不发（上游会发）；派发的 `silent` 选项端口没有（`DispatchAction` 只接受载荷）；lazy 更新期间排队的动作端口也没有。dataZoom、roam、树的动作不带走等着的 lazy 更新（上游 dataZoom 等会带走）——只影响 lazy 之后、渲染之前派发这些动作时 `updated` 的个数。
 - **lazy 的“下一帧”是下一次布局的渲染**：端口的构建本来就在渲染时做，lazy 与否只差 `updated` 的时机和旧视图键的取法；查询类接口（`SeriesStore`、命中测试）一直读的是上一次渲染的结果，这一点 lazy 与否都一样，和上游同步 setOption 之后立刻就能查不同（§130 之前就是如此）。
-- **整份选项的 replaceAll**（`resetOption('recreate')`）不单独提供：它只服务 timeline / media，端口没有这两样；没有它们时它就是 notMerge。
+- **整份选项的 replaceAll**（`resetOption('recreate')`）不单独提供：它只服务 timeline / media，端口没有这两样；没有它们时它就是 notMerge。**[第 107 批：理由不成立——media 已做（§142），而且 media 与 timeline 都不走 `'recreate'`；它服务的是 setTheme 与工具箱的 restore（C16），结论（不单独提供）暂时不变。]**
 - **内部组件**（`'\0_ec_\0'` 开头的 id，工具箱的 dataZoom）：上游在两种模式下都不让它们参与映射；端口的工具箱 dataZoom 不进 keys，不涉及。
 - **[第 99 批：被替换的轴是新视图，叶子当场出现、不过渡；留下的轴照常过渡，见 §134。]** **被移除的系列当帧消失**，和上游一样没有离场动画；被移除的组件（轴、图例、标题）同样直接消失。
 - 空洞网格仍按默认盒子算了一个外框（只是不收轴、不画），`Build.Grid(i)` 的下标因此与组件下标一致；上游那里没有网格。
@@ -9883,3 +9883,93 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - 自检清单第 7 条、§118、§124 在原处标注。
 
 全量 **8157 个测试，0 错误，0 失败**（新增 `test.advchart.exportloading` 15 个；改了 `SaveToPng` 的实现，现有测试全绿）。
+
+## 142. Tier 1 第一百零七批：media 查询（B12，2026-10-05）
+
+路线图 B12：media 的查询键、`baseOption` + `media` 的合并、resize 时重新判定。以前控件读到 `media` / `baseOption` 一律当普通的根键：`media` 原样留在树里、`GetOptionJson` 照吐，`baseOption` 里的东西一样都不生效（§130 的推迟）。这一批对着 `model/OptionManager.ts`（`setOption` / `mountOption` / `getMediaOption` / `parseRawOption` / `applyMediaQuery` / `compare` / `indicesEquals`）、`model/Global.ts` 的 `_resetOption`、`core/echarts.ts` 的 `setOption` 与 `resize`、`animation/basicTransition.ts` 的 `getAnimationConfig` 逐行核过，在真 dist 上跑基准。§130、§132 里几处推迟在原处标注。
+
+### 上游的做法
+
+- **查询键是六个，不是九个**：`QUERY_REG = /^(min|max)?(.+)$/`，但紧跟着 `if (!matched || !matched[1] || !matched[2]) return;`——**没有前缀的键直接跳过**，`compare` 里那条相等分支永远走不到。前缀区分大小写（`MinWidth` 跳过），其余部分 `toLowerCase()` 后在 `{width, height, aspectratio}` 里查（`minWIDTH` 是宽度）；查不到的（`minFoo`、`minconstructor`）是 `undefined` 对数比较，永远不成立。所以实际有效的就是 `minWidth` / `maxWidth` / `minHeight` / `maxHeight` / `minAspectRatio` / `maxAspectRatio`，路线图的“6 个”是对的。`min` 是 `>=`、`max` 是 `<=`，**两端都含**；宽高是图表的 CSS px（`api.getWidth()`），宽高比是 `宽 / 高`（高为 0 时是 `Infinity` 或 `NaN`）。
+- **值按 JS 的关系比较转换**：字符串走 `Number()`（`'600'`、`'0x258'`、`' 600 '` 都是 600，`'600px'` 是 NaN），`null` 是 0，`true` 是 1，数组先 `join`（`[600]`、`[['600']]` 是 600，`[]` 是 0，两项以上带逗号是 NaN），对象是 NaN。任何一边是 NaN 都不成立。
+- **查询本身**：zrender 的 `each` 遍历——对象逐键；数组和字符串按下标遍历，下标是数字、没有 `match`，**非空就抛 TypeError**，空的什么都不查（成立）；数字、布尔没有键（成立）；对象如果有数字型的 `length` 键也被当成类数组：`length ≤ 0` 什么都不查（成立），否则同样抛错。换行符让 `.+` 匹配失败，那个键跳过。
+- **`parseRawOption`**：`baseOption` 为真时它就是基础选项，根上只读 `media`，以及 ec2 兼容的根上 `timeline`（基础选项自己没有真值的 `timeline` 时写进去，没有就是 `undefined`）——**根上其余的键一概不看**。没有 `baseOption` 时根就是基础选项，有 media 或 timeline（`options`、`timeline` 为真）时把 `options` 和 `media` 置 null。`media` 为真但不是数组：开发版报错，什么都不读，但仍然从根上拿掉；为假（`media: 0`）就是一个普通的根键，`getOption` 里有它。数组里每一项：不是对象或 `option` 为假的跳过；`query` 为真进列表，否则**第一个**这样的项是默认项（`query: 0` 也算默认）。**预处理器跑基础选项和列表里的每一项，不跑默认项。**
+- **`getMediaOption`**：列表按顺序逐项判定，成立的下标升序；一个都没有且有默认项时是 `[-1]`。**下标非空且和上次合并的不同**才交出这些项的克隆（后写的覆盖先写的），否则什么都不交；下标无论如何都记下。所以从“某项成立”缩到“什么都不成立”且没有默认项时，下标变成 `[]`、什么都不合并——**那一项改过的东西留在模型里**（源码里的 FIXME 说的就是这个），之后再回到这一项，下标 `[0]` 和 `[]` 不同，又合并一次。
+- **`_resetOption`**：setOption（`type` 为空）先 `mountOption`——下标清空——把基础选项合并进去（第一次是 `initBase`），再把成立的各项**一项一个 `_mergeOption`** 合并上去，带着这次 setOption 的 `replaceMerge`。所以**每次 setOption 都把成立的项重新合并一遍**，合并模式下的普通选项改了 media 也写的键，最后赢的是 media。notMerge 与第一次 setOption 的基础选项走 `initBase`（不看 replaceMerge），**之后的 media 合并照样带着 replaceMerge**（探针：`replaceMerge: ['series']` 合并一个只写 grid 的 media 项，系列 `b` 被这一次合并当成没写而移除）。
+- **合并模式下的 media**：新选项的列表非空才替换旧列表，有默认项才替换旧默认项——`media: []` 什么也不换；从不合并两份列表。notMerge 是新的 `OptionManager`，旧的全忘。
+- **`resize`**：`resetOption('media')`——`restoreData`，然后只调 `getMediaOption`，有东西才逐项合并（**不重新合并基础选项**）；之后一次 `type: 'resize'` 的更新，载荷 `animation: {duration: 0}`，`getAnimationConfig` 里载荷的时长优先：**断点跨过去，元素直接跳到新位置**，不过渡。
+- **默认项不经预处理器**，于是它只访问自己写的主类型和依赖它们的：不写 series 就不访问系列，树图的展开状态留着；列表里的项经过 backwardCompat，总是访问系列，展开状态丢失（基准 `default-visits-no-series` 两种都录到了）。
+
+### 做法
+
+- **新单元 `tyControls.AdvChart.Media`**（纯 fpjson）：`TyParseRawOption`（就地把原始选项变成基础选项，`baseOption` 被摘下、旧对象释放；读出 `TTyMediaSet`：列表与默认项，各自是克隆）、`TyMediaQueryApplies`（上面的全部规则：六个键、前缀大小写、换行、`length` 怪癖、数组 / 字符串查询非空不成立、NaN 先判）、`TyMediaJsNumber`（关系比较的 ToNumber，字符串用 `TyJsToNumber`）、`TyMediaIndicesOf` / `TyMediaIndicesEqual`，以及 `TTyMediaManager`（`Reset` = 新管理器、`Adopt` = 合并模式的替换规则、`Mount` = 清下标、`Take` = `getMediaOption`）。
+- **`OptionMerge`**：`TyOptionMerge` 多一个重载带 `APreprocessed`——为假时访问集合不种 series / axisPointer、不建预处理器的模型（默认项用）；`TyOptionHasDuplicateId`。
+- **`TTyChartOption`**：
+  - `SetOptionText(text, replaceMerge, AAfter)`：解析 → `TyParseRawOption` → 树是基础选项、`Media.Reset` → 压缩系列、建 keys → **在视图尺寸上合并成立的各项**（每项一次 `TyOptionMerge`，带 replaceMerge，默认项不预处理）。
+  - `MergeOptionText(…, ABefore, AAfter, out AReport)`：基础选项先合并（拒绝时 media 不动），然后 `Media.Adopt` + `Media.Mount`，再合并成立的各项。**每一次合并**都报给 `AAfter`（`TTyMergePassEvent`）——控件对每份报告做原来对一份报告做的事。
+  - `MediaRecheck(ABefore, AAfter)`：resize，只合并 `Take` 交出来的。`SetViewSize` 由控件维护。
+  - 合并进来的 media 选项留到下一次设置（报告的 `NewOpt` 指着它们）。
+  - **图例的 `selected` 提前到 init 时建**（`LegendInitSelected`：init 之后每个图例、每次合并里新建的图例）：上游 `LegendModel.init` 写 `selected`，键序排在 init 收到的键之后；以前端口在第一次布局时才补，中间没有别的合并时位置一样，可现在同一次 setOption 里 media 紧接着合并，`selected` 必须已经在那里（基准里图例的键序就是这样对出来的）。
+- **控件**：
+  - 视图尺寸是**客户区的 CSS px**：`ClientWidth × 96 / Font.PixelsPerInch`（高同理），每次 setOption、合并、resize 前写给选项。
+  - `DoMerge` 拆成两半：合并前取旧的视图键，合并后 `MergePass` 对每份报告做——第一份时布防更新动画、取状态记录（`StCarryTake`），每份都处理品牌新轴、品牌新系列、`MergeKeepStates`。notMerge 的 media 合并走 `NotMergePass`（只记品牌新系列）。
+  - `MergeKeepStates`：树图展开状态只在**这次合并访问了系列**时清掉，图例只在访问了图例时重新加载（默认项不访问它们）。
+  - `Resize` 与 `Loaded` 调 `MediaRecheck`：没有 media 时直接返回；有合并时 `FDirty` + `Invalidate`，**不布防动画**（上游 `duration: 0`）、**不改 `Option` 属性**——属性仍是宿主写的那段文本（带着它的 media），存进 .lfm 不会丢；同样的文本再赋一次仍不是变化。
+  - 公开 `MediaIndices`（上游的 `_currentMediaIndices`）与 `MediaRecheck`。
+
+### 基准
+
+`tools/advchart-oracle/media.js`（真 dist，node SSR，`chart.resize({width, height})`，最后 `process.exit()`）→ `tests/fixtures/advchart-media.json`：
+
+- **原始合并层**照 `option-merge.js` 的钩子录（`init` / `mergeOption` 包住、`mergeLayoutParam` 写回的方向）；根上的非组件键按 `_mergeOption` 的规则，从脚本自己对原始选项转写的 `parseRawOption` 结果和**实际被合并的那些项**里取——哪些项被合并，是在 `OptionManager` 原型的 `getMediaOption` 上挂钩子，读它返回了几项、`_currentMediaIndices` 是什么；项的内容取脚本自己那份**预处理之前**的副本。replaceMerge 的类型只在有合并真的跑了时算“写过”（notMerge 之后的 media 合并也算）。
+- 每步记：尺寸、`_currentMediaIndices`、合并了几项、原始合并层、模型的 id / 名字 / 子类型、画面（每个系列的行数、是否显示、有图形的项数、柱子形状、树图展开；网格矩形；标题框；图例的名字、视图组位置、**内容组的绝对范围**）、系列视图编号。
+- **54 个用例、134 步**：六个键各自在边界上来回（599 / 600 / 601，宽高比 1.5 与相邻的双精度），`7/3` 这种除不尽的宽高比，宽高比区间，两个键同时；正则与比较的边角：无前缀的 `width` / `aspectRatio`、`MinWidth`、`minWIDTH`、`minFoo`、单独的 `min` / `max`、字符串 / 十六进制串 / 带单位的串、`null`（min 与 max 两种）、`true`、数组（一项、嵌套、两项、空）、对象、空查询、数字 / 布尔 / 空数组查询、`{length: 0}`、带换行的键；`query: 0` 是默认项、第一个默认项胜出、没有 `option` 的项；多项按顺序（后写的赢，下一次只剩一项时只合并那一项）；同一集合不重复合并、缩到无项时什么都不撤销；默认项来回；默认项不访问系列（树图展开）；同一集合的 resize 不合并、所以动作留下的展开状态还在（变异补的）；三个断点下图例方向 / 位置、网格、柱宽来回八步；`baseOption` 形式（根上的 title 不读）；合并后重新合并 media、合并带新列表 / 只带默认项 / 带 `media: []`、合并带 `baseOption`；replaceMerge 波及 media 合并（两个系列都被移除）、第一次 setOption 带 replaceMerge 时 media 按 id 留住系列；notMerge 忘掉 media、notMerge 带新 media；`media` 不是数组、`media: 0` 留在根上、`options` 被拿掉；media 项追加系列；一个 media 项建出图例、同一次 setOption 的下一项合并进去（`selected` 在第二项的键之前，变异补的）；从 320×480 起步。
+- **查询表 25 条**：直接调管理器的 `getMediaOption`（临时换掉 `api.getWidth/getHeight`），覆盖用例里到不了的尺寸：小数宽高、0×0 与 600×0 的宽高比、`'Infinity'`、`'-Infinity'`、`''`、`'1e3'`、`'0b1'`、`maxwidth`（小写前缀之后的部分）、`minHeIght`、`minconstructor`、`false`、`[null]`、`[true]`，以及 `maxFoo: 1`、`minconstructor: -1`（不认识的属性是 `undefined`，不是 0——max 也不成立；变异补的）。
+- 守卫（任一失败不写文件）：每一步的原始合并层是上游 `getOption()` 的子集；每个用例按源码写的期望（含边界两端、后写的赢、默认项只在无项时、同一集合不合并、缩到无项不撤销、合并后重新合并、notMerge 忘掉、默认项不访问系列等 20 余条）；查询表与转写的 `applyMediaQuery` 一致；两次生成逐字节相同。
+
+测试 `test.advchart.media`（新，10 个，注册在 `tytests.lpr`）：
+
+- **查询表**逐条过 `TyMediaQueryApplies`。
+- **重放全部用例**：真控件、`Font.PixelsPerInch = 96`、zrender SSR 量字；setOption 照录、resize 是 `SetBounds`（`Resize` 里重新判定）；每步渲染后比：尺寸、`MediaIndices`、`GetOptionJson`（组件内键序也比）、模型、行数 / 显示 / 柱子（1e-9）、树图展开、网格、标题框、图例名字与内容范围（1e-9）；**视图配对**：上游这一步保留了某系列的视图 ⇔ 端口的配对键（模型 id + 类型）没变。九千余项。
+- 手写：resize 跨断点后 `AnimClipCount` 为 0、网格当场到位，同样的网格用合并就在补间；属性是宿主的文本（resize 后不变，再赋同样的文本不复位，回到默认项照常）；尺寸是 CSS px（192 PPI 下 1000 px 是 500，1001 px 不是）；同一主类型里重复 id 的项被丢掉、下标按留下的算；`TyParseRawOption` 的边角（根上的 timeline 补进 `baseOption`、自带的不动、为假的被清掉、不是对象的 `baseOption` 当空、`media: []` 与 `options` 被拿掉、为假的 `media` / `options` 留着、不是数组的 media 拿掉但什么都不读、不是对象的 `option` 当 `{}`）；不带 media 的合并保留列表并重新合并、notMerge 忘掉；没有 media 时 resize 什么都不合并；上游会抛错的查询（非空数组、非空字符串、`length > 0` 的对象）端口不成立，空的成立（钉住偏差，变异补的）。
+
+### 变异测试
+
+变异脚本（草稿目录的 `mut.py`）：逐个改源码、重编、跑 `TAdvChartMediaTest`（图例与报告相关的三个另跑 `TAdvChartOptionMergeTest` / `TAdvChartAnimMergeTest`）、按原字节还原。51 个：
+
+- 查询键与比较 20 个：min 用 `>`、max 用 `<`、宽读高、高读宽、宽高比倒过来、前缀不分大小写、属性不转小写、无前缀的键不成立、不认识的属性当 0、去掉 NaN 判断、字符串当 NaN、null 当 NaN、一项数组当 NaN、空数组当 NaN、去掉 `length` 怪癖、数组查询成立、字符串查询成立、0×0 的宽高比当无穷、不看换行、一个键成立就成立；
+- 顺序与默认项 6 个：下标倒序、总用默认项、从不用默认项、最后一个默认项、同一集合也合并、空集合不记下；
+- 合并、notMerge 与 resize 15 个：合并不清下标、空列表也替换、新默认项不替换、notMerge 不换管理器、默认项也预处理、media 合并不带 replaceMerge、`Resize` 不重新判定、尺寸不折算 CSS px、resize 布防动画、树图展开总是清掉、基础选项的报告不交给控件、resize 改写属性、media 倒序合并、合并不接 media、notMerge 不接 media；
+- 解析与图例 10 个：`baseOption` 不读、`media` 键留着、`options` 键留着、不补 timeline、只有 media 时不拿掉键、为假的查询进列表、为假的 option 留下、重复 id 不丢、init 时不建图例 `selected`、media 新建的图例不建 `selected`。
+
+首轮杀死 46 个，存活 5 个：
+
+- **不认识的属性当 0**：用例里的 `minFoo: 1` 对 0 和对 NaN 一样不成立。查询表补 `maxFoo: 1`、`minconstructor: -1`，杀死。
+- **数组查询成立、字符串查询成立**：上游这两种抛错，基准录不到；补手写测试钉住端口的规则（非空不成立、空的成立），杀死。
+- **同一集合也合并**：重新合并同一项，树和画面都一样。补 `same-set-keeps-state`：动作展开树节点之后 resize 到同一集合，上游不合并、展开状态还在，变异重新合并、数据重建、展开丢失，杀死。
+- **media 新建的图例不建 `selected`**：用例里新图例之后没有同一次 setOption 的第二项再合并进去，第一次布局补的位置碰巧一样。补 `legend-made-by-media`（第一项建图例、第二项写 `itemGap`），键序不同，杀死。
+
+补完重跑这 5 个，全部杀死。51 个全部杀死。
+
+### 已知偏差
+
+- **会抛错的查询**：上游对非空的数组 / 字符串查询、`length > 0` 的对象查询在 `getMediaOption` 里抛 TypeError（setOption 中途，模型已合并一半）；端口当作不成立。
+- **重复 id 的 media 项**：上游在合并它时断言抛错；端口读的时候就丢掉，`MediaIndices` 按留下的项编号。
+- **`option` 为真但不是对象**：上游把原始值交给 `_mergeOption`（什么都不写，但仍占默认项的位置、仍是一次合并；列表项还会让预处理器碰原始值）；端口当 `{}`。不是对象的 `baseOption`（上游写 `timeline` 时在严格模式下抛错）当空对象。
+- **timeline**：`options` 只按 `parseRawOption` 从根上拿掉，时间轴的各帧选项（C21）不读；根上的 `timeline` 照规则补进 `baseOption`，组件本身端口不画。
+- **尺寸来源**：上游是容器的 CSS 尺寸；端口是客户区按字体 PPI 折算的逻辑 px。`RenderTo` 用别的矩形渲染（导出）不改变查询的答案，和上游导出不改尺寸一样。
+- **何时重新判定**：上游只在宿主调 `resize()` 时；端口在每次 `Resize`（LCL 改变边界）和 `Loaded` 时——相当于宿主总在尺寸变化后调 `resize()`。只改 PPI 而逻辑尺寸不变时什么都不合并。
+- **resize 的其余部分**：`updated` 事件（§132 已记）、`restoreData` 不做。setOption 之后、渲染之前就 resize 的，端口仍按那次 setOption 的更新补间（布防在下一次布局时才消费），上游 setOption 已经同步渲染、随后的 resize 以 0 时长跳到终态。
+- **属性与合并**：merge 之后 `Option` 属性是合并后的选项（§130），**不含 media**；再把它赋回属性是一次没有 media 的 notMerge。resize 的 media 合并不改属性。
+- 原有偏差照旧：`GetOptionJson` 是原始合并层，没有主题默认值、没有访问过但没写的主类型（上游 `getOption` 里那一串 `[]`）。
+
+### 落地
+
+- `source/tyControls.AdvChart.Media.pas`（新，已登记 `tycontrols.lpk` 与 `tycontrols.pas`）。
+- `source/tyControls.AdvChart.OptionMerge.pas`：`APreprocessed` 重载、`TyOptionHasDuplicateId`、单元注释。
+- `source/tyControls.AdvChart.Option.pas`：media 管理器、视图尺寸、`SetOptionText` / `MergeOptionText` 的新重载、`MediaRecheck`、`TTyMergePassEvent`、图例 `selected` 提前建。
+- `source/tyControls.AdvanceChart.pas`：`MediaViewSize`、`MergePass` / `NotMergePass`（`DoMerge` 拆开）、`MediaRecheck` / `MediaIndices`、`Resize` / `Loaded`、`MergeKeepStates` 按访问集合清状态、`ApplyNotMerge` 带 replaceMerge。
+- `tools/advchart-oracle/media.js`、`tests/fixtures/advchart-media.json`、`tests/test.advchart.media.pas`（新，注册在 `tytests.lpr`）。
+- §130、§132 在原处标注。没有新的 resourcestring。
+
+全量 **8167 个测试，0 错误，0 失败**（新增 `test.advchart.media` 10 个；图例 `selected` 提前建、`DoMerge` 拆开之后，现有测试全绿）。

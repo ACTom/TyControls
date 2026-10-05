@@ -29,6 +29,7 @@ uses
   BGRABitmap,
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.StyleModel,
   tyControls.AdvChart.Types, tyControls.AdvChart.Option, tyControls.AdvChart.OptionMerge,
+  tyControls.AdvChart.Media,
   tyControls.AdvChart.Data, tyControls.AdvChart.Scale,
   tyControls.AdvChart.Time,
   tyControls.AdvChart.Coord, tyControls.AdvChart.Layout,
@@ -777,9 +778,29 @@ type
     function GetOptionText: string;
     { ---- setOption [Batch 95] ---- }
     { the notMerge setOption: the text is the option, every model is new }
-    procedure ApplyNotMerge(const AValue: string);
+    procedure ApplyNotMerge(const AValue: string); overload;
+    { the same, the media merged after the init in AReplace's replaceMerge
+      [Batch 107] }
+    procedure ApplyNotMerge(const AValue: string; const AReplace: array of string); overload;
     { the merge setOption, AReplace's main types in replaceMerge mode }
     function DoMerge(const AJson: string; const AReplace: array of string): Boolean;
+  private
+    { ---- media [Batch 107] ---- }
+    { the merges of one setOption or one resize: the views the old render
+      had (read before the first), whether the first is still to come, and
+      whether a resize does them -- which snaps, as upstream's resize update
+      runs with duration 0 }
+    FMergeOldKeys, FMergeOldAxes: TTyStringArray;
+    FMergeFirst, FMergeResize: Boolean;
+    { the size the media queries are asked about: the client area in CSS px
+      (logical px at the font's PPI) }
+    procedure MediaViewSize;
+    { after each merge of a merge setOption or a resize: what DoMerge did
+      with its one report }
+    procedure MergePass(const AReport: TTyMergeReport);
+    { after each media merge of a notMerge: a brand new series asks for a
+      new view }
+    procedure NotMergePass(const AReport: TTyMergeReport);
     { what every setOption ends with: the `updated` event now, or with the
       next render when lazy [Batch 97] }
     procedure AfterSetOption(ALazy, ASilent: Boolean);
@@ -1310,7 +1331,10 @@ type
       out against upstream's -- can stand in for the fonts. }
     function NewTextMeasurer(APPI: Integer): ITyTextMeasurer; virtual;
     function GetStyleTypeKey: string; override;
+    { A RESIZE ASKS THE MEDIA QUERIES AGAIN (upstream's resize ->
+      resetOption('media')) [Batch 107] }
     procedure Resize; override;
+    procedure Loaded; override;
     { Protected and non-virtual, exactly as every other control in the library:
       a headless test renders through it onto an offscreen bitmap, and it
       bypasses the on-screen paint path entirely. }
@@ -1951,6 +1975,13 @@ type
     function ComponentModelId(const AMainType: string; AIndex: Integer): string;
     function ComponentModelName(const AMainType: string; AIndex: Integer): string;
     function ComponentModelSubType(const AMainType: string; AIndex: Integer): string;
+    { THE MEDIA UNITS the last merge applied: their indices in the option's
+      `media` list as read (-1 the default); empty when none applies or the
+      option has none. upstream's _currentMediaIndices. [Batch 107] }
+    function MediaIndices: TTyMediaIndices;
+    { the queries are asked again at the control's size now -- what a
+      resize does; True when units were merged }
+    function MediaRecheck: Boolean;
   published
     { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
       RTTI order is the 3.0 order. }
@@ -2262,6 +2293,12 @@ begin
 end;
 
 procedure TTyAdvanceChart.ApplyNotMerge(const AValue: string);
+begin
+  ApplyNotMerge(AValue, []);
+end;
+
+procedure TTyAdvanceChart.ApplyNotMerge(const AValue: string;
+  const AReplace: array of string);
 var i: Integer;
 begin
   FOptionText := AValue;
@@ -2289,7 +2326,9 @@ begin
   FAnimMerge := False;
   FAnimFreshAxes := nil;
   FAnimHasPayload := False;
-  FOption.SetOptionText(AValue);
+  { the media are asked at the control's size [Batch 107] }
+  MediaViewSize;
+  FOption.SetOptionText(AValue, AReplace, @NotMergePass);
   { new axis models and views: nothing kept from the last render
     [Batch 101] }
   FAxisMemory.Clear;
@@ -2357,7 +2396,7 @@ begin
     and an init ignores replaceMerge (initBase merges with no opts) }
   if AOpts.NotMerge or not (FOption.Root is TJSONObject) then
   begin
-    ApplyNotMerge(AJson);
+    ApplyNotMerge(AJson, AOpts.ReplaceMerge);
     Result := not FOption.Error.Failed;
   end
   else
@@ -2392,34 +2431,61 @@ function TTyAdvanceChart.DoMerge(const AJson: string;
   const AReplace: array of string): Boolean;
 var
   rep: TTyMergeReport;
-  oldKeys, oldAxes: TTyStringArray;
-  si, s, t: Integer;
 begin
   { the old views, before the merge renames anything }
-  oldKeys := AnimViewKeys;
-  oldAxes := AxisViewKeys;
-  if not FOption.MergeOptionText(AJson, AReplace, @MergeBefore, rep) then Exit(False);
-  { the views the next update pairs with: the last render's -- unless an
-    update already waits (an old render kept) or a lazy one does }
-  if not FAnimPrev.Valid and not FLazyPending then
+  FMergeOldKeys := AnimViewKeys;
+  FMergeOldAxes := AxisViewKeys;
+  FMergeFirst := True;
+  FMergeResize := False;
+  { the media are asked at the control's size [Batch 107] }
+  MediaViewSize;
+  { THE MERGES: the base, then every media unit that applies, each
+    reported to MergePass [Batch 107] }
+  if not FOption.MergeOptionText(AJson, AReplace, @MergeBefore, @MergePass, rep) then
+    Exit(False);
+  FOptionText := FOption.OptionJson;
+  { AN UPDATE: the series keep their views where their ids and types do }
+  FAnimPending := True;
+  FDirty := True;
+  Invalidate;
+  Result := True;
+end;
+
+procedure TTyAdvanceChart.MergePass(const AReport: TTyMergeReport);
+var si, s, t: Integer;
+begin
+  if FMergeFirst then
   begin
-    FAnimOldViewKeys := oldKeys;
-    FAnimFresh := nil;
-    FAnimOldAxisKeys := oldAxes;
-    FAnimFreshAxes := nil;
+    FMergeFirst := False;
+    if not FMergeResize then
+    begin
+      { the views the next update pairs with: the last render's -- unless an
+        update already waits (an old render kept) or a lazy one does }
+      if not FAnimPrev.Valid and not FLazyPending then
+      begin
+        FAnimOldViewKeys := FMergeOldKeys;
+        FAnimFresh := nil;
+        FAnimOldAxisKeys := FMergeOldAxes;
+        FAnimFreshAxes := nil;
+      end;
+      { A MERGE KEEPS ITS MODELS, and their views [Batch 99] -- unless a
+        notMerge waits: then the models are new against the render it starts
+        from, and so is every component view }
+      if not FAnimPending or FAnimFull or FAnimMerge then FAnimMerge := True;
+    end;
+    { THE STATE RECORDS a reused element keeps: its hoverState, its
+      __highByOuter bits, its select (the model keeps its selectedMap)
+      [Batch 99] -- by the old view keys, read before the merge }
+    StCarryTake(FMergeOldKeys);
   end;
-  { A MERGE KEEPS ITS MODELS, and their views [Batch 99] -- unless a
-    notMerge waits: then the models are new against the render it starts
-    from, and so is every component view }
-  if not FAnimPending or FAnimFull or FAnimMerge then FAnimMerge := True;
   { an axis brought in by index is brand new: a new view }
   for t := 0 to 1 do
   begin
-    if t = 0 then si := TyMergeSlotsIndex(rep, 'xAxis')
-    else si := TyMergeSlotsIndex(rep, 'yAxis');
+    if t = 0 then si := TyMergeSlotsIndex(AReport, 'xAxis')
+    else si := TyMergeSlotsIndex(AReport, 'yAxis');
     if si < 0 then Continue;
-    for s := 0 to High(rep.Slots[si].Brand) do
-      if rep.Slots[si].Brand[s] then
+    for s := 0 to High(AReport.Slots[si].Brand) do
+      if AReport.Slots[si].Brand[s] then
       begin
         { a new model in the slot: its memory starts over [Batch 101] }
         if t = 0 then FAxisMemory.Forget('xAxis' + IntToStr(s))
@@ -2429,27 +2495,60 @@ begin
         else FAnimFreshAxes[High(FAnimFreshAxes)] := 'yAxis' + IntToStr(s);
       end;
   end;
-  { THE STATE RECORDS a reused element keeps: its hoverState, its
-    __highByOuter bits, its select (the model keeps its selectedMap)
-    [Batch 99] -- by the old view keys, read before the merge }
-  StCarryTake(oldKeys);
   { A BRAND NEW MODEL ASKS FOR A NEW VIEW, whatever id it made (a removed
     model's, often) -- until the update that pairs the views [Batch 97] }
-  si := TyMergeSlotsIndex(rep, 'series');
+  NotMergePass(AReport);
+  MergeKeepStates(AReport);
+end;
+
+procedure TTyAdvanceChart.NotMergePass(const AReport: TTyMergeReport);
+var si, s: Integer;
+begin
+  si := TyMergeSlotsIndex(AReport, 'series');
   if si >= 0 then
-    for s := 0 to High(rep.Slots[si].Brand) do
-      if rep.Slots[si].Brand[s] then
+    for s := 0 to High(AReport.Slots[si].Brand) do
+      if AReport.Slots[si].Brand[s] then
       begin
         if s > High(FAnimFresh) then SetLength(FAnimFresh, s + 1);
         FAnimFresh[s] := True;
       end;
-  FOptionText := FOption.OptionJson;
-  MergeKeepStates(rep);
-  { AN UPDATE: the series keep their views where their ids and types do }
-  FAnimPending := True;
+end;
+
+procedure TTyAdvanceChart.MediaViewSize;
+var ppi: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  FOption.SetViewSize(ClientWidth * 96 / ppi, ClientHeight * 96 / ppi);
+end;
+
+function TTyAdvanceChart.MediaRecheck: Boolean;
+begin
+  Result := False;
+  if (FOption = nil) or (csDestroying in ComponentState) then Exit;
+  { nothing to ask: no media, or nothing parsed }
+  if (FOption.Media.UnitCount = 0) and not FOption.Media.HasDefault then Exit;
+  MediaViewSize;
+  FMergeOldKeys := AnimViewKeys;
+  FMergeOldAxes := AxisViewKeys;
+  FMergeFirst := True;
+  FMergeResize := True;
+  try
+    Result := FOption.MediaRecheck(@MergeBefore, @MergePass);
+  finally
+    FMergeResize := False;
+  end;
+  if not Result then Exit;
+  { A RESIZE'S UPDATE: the models kept, merged; nothing armed -- upstream
+    runs it with duration 0 -- and the Option property keeps the text
+    the host wrote (its media with it) }
   FDirty := True;
   Invalidate;
-  Result := True;
+end;
+
+function TTyAdvanceChart.MediaIndices: TTyMediaIndices;
+begin
+  Result := Copy(FOption.Media.Current);
 end;
 
 procedure TTyAdvanceChart.AfterSetOption(ALazy, ASilent: Boolean);
@@ -2607,8 +2706,10 @@ begin
     end;
   end;
   { EVERY SERIES IS VISITED (backwardCompat writes `series` into every
-    option) and re-creates its data: a tree's expand state is the data's }
-  FTreeToggled := nil;
+    option) and re-creates its data: a tree's expand state is the data's --
+    every option the preprocessors saw; the media default they never see
+    visits the series only where it writes them [Batch 107] }
+  if si >= 0 then FTreeToggled := nil;
 
   { ---- by dataZoom: an action's window stays unless the merge wrote over
     it (MergeBefore); a new model has none ---- }
@@ -2642,7 +2743,7 @@ begin
   FStDirty := False;
   { THE LEGEND IS VISITED (it depends on the series): optionUpdated
     resolves single mode again; `selected` itself is in the tree, merged }
-  FLegendLoaded := False;
+  if TyMergeSlotsIndex(AReport, 'legend') >= 0 then FLegendLoaded := False;
 end;
 
 function TTyAdvanceChart.DiagnosticCount: Integer;
@@ -2710,6 +2811,16 @@ procedure TTyAdvanceChart.Resize;
 begin
   inherited Resize;
   FDirty := True;
+  { upstream's resize: resetOption('media') [Batch 107] }
+  MediaRecheck;
+end;
+
+procedure TTyAdvanceChart.Loaded;
+begin
+  inherited Loaded;
+  { the option streamed in before the size may have: asked again at the
+    size loaded [Batch 107] }
+  MediaRecheck;
 end;
 
 { ==================== the pipeline ==================== }
