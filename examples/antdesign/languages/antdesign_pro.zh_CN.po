@@ -1190,3 +1190,47 @@ msgstr "部门 %s · 区域 %s · 通知 %d 人"
 #: umain.rstoastsubmitted
 msgid "Work order submitted"
 msgstr "工单已提交"
+
+#: tmainform.casregion.items.zhejiang
+msgid "Zhejiang"
+msgstr "浙江"
+
+#: tmainform.casregion.items.hangzhou
+msgid "Hangzhou"
+msgstr "杭州"
+
+#: tmainform.casregion.items.jiangsu
+msgid "Jiangsu"
+msgstr "江苏"
+
+#: tmainform.casregion.items.nanjing
+msgid "Nanjing"
+msgstr "南京"
+
+#: tmainform.casregion.items.beijing
+msgid "Beijing"
+msgstr "北京"
+
+#: tmainform.casregion.items.chaoyang
+msgid "Chaoyang District"
+msgstr "朝阳区"
+
+#: tmainform.casregion.items.haidian
+msgid "Haidian District"
+msgstr "海淀区"
+
+#: tmainform.casregion.items.southchina
+msgid "South China"
+msgstr "华南"
+
+#: tmainform.casregion.items.guangdong
+msgid "Guangdong"
+msgstr "广东"
+
+#: tmainform.casregion.items.guangzhou
+msgid "Guangzhou"
+msgstr "广州"
+
+#: tmainform.casregion.items.shenzhen
+msgid "Shenzhen"
+msgstr "深圳"

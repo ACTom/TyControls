@@ -493,3 +493,23 @@ msgstr "发布版本"
 #: umain.rstaskreport
 msgid "Write report"
 msgstr "写报告"
+
+#: tmainform.lblalignscroll.caption
+msgid "TTyScrollBox with ALIGNED children"
+msgstr "TTyScrollBox 里放按 Align 对齐的子控件"
+
+#: tmainform.asbtn1.caption
+msgid "alTop row 1"
+msgstr "alTop 第 1 行"
+
+#: tmainform.asbtn2.caption
+msgid "alTop row 2"
+msgstr "alTop 第 2 行"
+
+#: tmainform.asbtn3.caption
+msgid "alTop row 3"
+msgstr "alTop 第 3 行"
+
+#: tmainform.asbtn4.caption
+msgid "alTop row 4"
+msgstr "alTop 第 4 行"
