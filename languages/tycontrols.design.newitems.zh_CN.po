@@ -22,7 +22,7 @@ msgid "TyControls Main Form"
 msgstr "TyControls 主窗体"
 
 #: tycontrols.design.newitems.rsdtmainformdescription
-msgid "A themed TTyForm carrying its own TTyStyleController, with the form and the title bar already associated to it — the root window for a TyControls application."
+msgid "A themed TTyForm carrying its own TTyStyleController, with the form and the title bar already associated to it —the root window for a TyControls application."
 msgstr "一个带有自身 TTyStyleController 的主题化 TTyForm，窗体与标题栏均已关联到它——TyControls 应用程序的根窗口。"
 
 #: tycontrols.design.newitems.rsdtdialogname
@@ -30,7 +30,7 @@ msgid "TyControls Dialog"
 msgstr "TyControls 对话框"
 
 #: tycontrols.design.newitems.rsdtdialogdescription
-msgid "A themed custom-drawn modal dialog (TTyDialog): borderless, close-only, non-resizable, centered — design your own dialog content and buttons."
+msgid "A themed custom-drawn modal dialog (TTyDialog): borderless, close-only, non-resizable, centered —design your own dialog content and buttons."
 msgstr "一个主题化的自绘模态对话框（TTyDialog）：无边框、仅含关闭按钮、不可缩放、居中显示——在其中设计你自己的对话框内容与按钮。"
 
 #: tycontrols.design.newitems.rsdtappname

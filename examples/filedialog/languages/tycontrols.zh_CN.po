@@ -477,3 +477,13 @@ msgstr "大图标"
 #: tycontrols.strconsts.rsfdviewtile
 msgid "Tiles"
 msgstr "平铺"
+
+#: tycontrols.strconsts.rsfdpathmustexist
+#, object-pascal-format
+msgid "The path \"%s\" does not exist."
+msgstr "路径 \"%s\" 不存在。"
+
+#: tycontrols.strconsts.rsfdoverwriteprompt
+#, object-pascal-format
+msgid "The file \"%s\" already exists.\nDo you want to replace it?"
+msgstr "文件 \"%s\" 已存在。\n是否替换?"

@@ -892,3 +892,23 @@ msgstr "按名称搜索图标"
 #, object-pascal-format
 msgid "%s   (ImageIndex %d)"
 msgstr "%s   (ImageIndex %d)"
+
+#: tycontrols.strconsts.rstyfilesizebytes
+msgid "B"
+msgstr "B"
+
+#: tycontrols.strconsts.rstyfilesizegb
+msgid "GB"
+msgstr "GB"
+
+#: tycontrols.strconsts.rstyfilesizekb
+msgid "KB"
+msgstr "KB"
+
+#: tycontrols.strconsts.rstyfilesizemb
+msgid "MB"
+msgstr "MB"
+
+#: tycontrols.strconsts.rstyfilesizetb
+msgid "TB"
+msgstr "TB"

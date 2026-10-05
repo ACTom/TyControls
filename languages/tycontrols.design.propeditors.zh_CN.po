@@ -28,7 +28,7 @@ msgstr "修改版 LGPL（与 LCL 兼容的链接例外）"
 
 #: tycontrols.design.propeditors.rsdtsurfacepurposetext
 msgid ""
-"TyFormSurface is the content host of a TTyForm — the panel every control on the form lives on.\n"
+"TyFormSurface is the content host of a TTyForm —the panel every control on the form lives on.\n"
 "\n"
 "A borderless, resizable window cannot paint its own outermost pixels: the compositor gives it a backing surface smaller than the window, which leaves an unpainted band along the right and bottom edges. A CHILD window has no such limit and paints edge to edge, so TTyForm renders its themed background onto this surface instead of onto itself.\n"
 "\n"
