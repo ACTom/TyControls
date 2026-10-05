@@ -362,6 +362,8 @@ Also the image theme `green` (shipped as a file) and curated palettes under `the
 
 Writing your own theme: [docs/themes.en.md](docs/themes.en.md). The `.tycss` language reference: [docs/tycss-reference.en.md](docs/tycss-reference.en.md).
 
+The repository also has a theme editor, `tools/themebuilder`: the preview follows as you type, and a language model can draft or change a theme from a sentence. See [docs/themebuilder.en.md](docs/themebuilder.en.md).
+
 ---
 
 ## Examples

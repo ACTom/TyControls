@@ -33,6 +33,7 @@ type
     procedure TestEvalFloat;
     procedure TestEvalBareVarColor;
     procedure TestEvalLightenBareVar;
+    procedure TestAVariableCycleRaises;
   end;
 
   { Phase 0 (theme v2): transparent keyword + mode-aware funcs luminance/elevate/on }
@@ -229,6 +230,49 @@ begin
   AssertEquals('lighten 0 red',   $3B, TyRedOf(c));
   AssertEquals('lighten 0 green', $82, TyGreenOf(c));
   AssertEquals('lighten 0 blue',  $F6, TyBlueOf(c));
+end;
+
+{ A variable that leads back to itself raises a plain exception naming it -- it used to
+  recurse until the stack ran out and took the process with it. Red (a crash) without the
+  path guard in EvalColor / EvalLength / EvalFloat. }
+procedure TTestCssValuesEval.TestAVariableCycleRaises;
+
+  procedure Expect(const ALabel, AName, AWhat: string);
+  var
+    msg: string;
+  begin
+    msg := '';
+    try
+      if AWhat = 'color' then
+        TyEvalColor('var(--' + AName + ')', FVars)
+      else if AWhat = 'bare' then
+        TyEvalColor('darken(--' + AName + ', 5%)', FVars)
+      else if AWhat = 'length' then
+        TyEvalLength('var(--' + AName + ')', FVars)
+      else
+        TyEvalFloat('var(--' + AName + ')', FVars);
+    except
+      on E: Exception do
+        msg := E.Message;
+    end;
+    AssertEquals(ALabel, Format(TyCssVarCycleMsg, [AName]), msg);
+  end;
+
+begin
+  FVars.Values['self'] := 'var(--self)';
+  FVars.Values['ping'] := 'lighten(var(--pong), 5%)';
+  FVars.Values['pong'] := 'mix(var(--accent), var(--ping), 50%)';
+  FVars.Values['bare'] := '--bare';
+  FVars.Values['len'] := '--len2';
+  FVars.Values['len2'] := '--len';
+  FVars.Values['twice'] := 'mix(var(--accent), var(--accent), 50%)';
+  Expect('a variable that is itself', 'self', 'color');
+  Expect('two that are each other', 'ping', 'color');
+  Expect('a bare leaf', 'bare', 'bare');
+  Expect('a length', 'len', 'length');
+  Expect('a float', 'len', 'float');
+  { the same variable twice side by side is not a cycle }
+  AssertEquals('one variable used twice', TyParseColor('#3B82F6'), TyEvalColor('var(--twice)', FVars));
 end;
 
 procedure TTestCssValuesPhase0.TestTransparentKeyword;

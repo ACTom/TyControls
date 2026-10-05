@@ -1,0 +1,6 @@
+: hand-written after https://platform.openai.com/docs/api-reference/chat-streaming (2026-10-01)
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1,"model":"gpt-5","choices":[{"index":0,"delta":{"content":"Here"},"finish_reason":null}]}
+
+data: {"error":{"message":"The server had an error while processing your request.","type":"server_error"}}
+

@@ -1,0 +1,1 @@
+{"id":"chatcmpl-2","object":"chat.completion","created":1,"model":"gpt-5","choices":[{"index":0,"message":{"role":"assistant","content":"Done.\n```tycss\n:root { --accent: #7C3AED; }\n```"},"finish_reason":"stop"}]}

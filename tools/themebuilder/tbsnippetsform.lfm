@@ -1,0 +1,170 @@
+object TbSnippetsForm: TTbSnippetsForm
+  Left = 0
+  Height = 520
+  Top = 0
+  Width = 680
+  Caption = 'Use it in a program'
+  ClientHeight = 520
+  ClientWidth = 680
+  Position = poOwnerFormCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  object Surface: TTyFormSurface
+    Left = 0
+    Height = 520
+    Top = 0
+    Width = 680
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 680
+      Align = alTop
+      Caption = 'Use it in a program'
+    end
+    object Pages: TTyPageControl
+      Left = 0
+      Height = 436
+      Top = 34
+      Width = 680
+      Anchors = [akTop, akLeft, akRight, akBottom]
+      ActivePageIndex = 0
+      object TabFile: TTyTabSheet
+        Left = 0
+        Height = 404
+        Top = 32
+        Width = 680
+        Caption = 'From a file'
+        object LblFile: TTyLabel
+          Left = 12
+          Height = 20
+          Top = 10
+          Width = 656
+          Anchors = [akTop, akLeft, akRight]
+          Caption = 'Put the .tycss file next to your program.'
+        end
+        object MemoFile: TTyMemo
+          Left = 12
+          Height = 316
+          Top = 34
+          Width = 656
+          Anchors = [akTop, akLeft, akRight, akBottom]
+          ReadOnly = True
+          ScrollBars = ssBoth
+        end
+        object BtnCopyFile: TTyButton
+          Left = 576
+          Height = 30
+          Top = 360
+          Width = 92
+          Anchors = [akRight, akBottom]
+          Caption = 'Copy'
+          OnClick = BtnCopyClick
+        end
+      end
+      object TabBundle: TTyTabSheet
+        Left = 0
+        Height = 404
+        Top = 32
+        Width = 680
+        Caption = 'From a theme bundle'
+        object LblFolder: TTyLabel
+          Left = 12
+          Height = 20
+          Top = 8
+          Width = 656
+          Anchors = [akTop, akLeft, akRight]
+          Caption = 'A folder bundle, exported next to your program:'
+        end
+        object MemoFolder: TTyMemo
+          Left = 12
+          Height = 136
+          Top = 30
+          Width = 656
+          Anchors = [akTop, akLeft, akRight]
+          ReadOnly = True
+          ScrollBars = ssBoth
+        end
+        object BtnCopyFolder: TTyButton
+          Left = 576
+          Height = 28
+          Top = 170
+          Width = 92
+          Anchors = [akTop, akRight]
+          Caption = 'Copy'
+          OnClick = BtnCopyClick
+        end
+        object LblZip: TTyLabel
+          Left = 12
+          Height = 20
+          Top = 204
+          Width = 656
+          Anchors = [akTop, akLeft, akRight]
+          Caption = 'A zip bundle (a theme that refers to no other file):'
+        end
+        object MemoZip: TTyMemo
+          Left = 12
+          Height = 136
+          Top = 226
+          Width = 656
+          Anchors = [akTop, akLeft, akRight, akBottom]
+          ReadOnly = True
+          ScrollBars = ssBoth
+        end
+        object BtnCopyZip: TTyButton
+          Left = 576
+          Height = 28
+          Top = 368
+          Width = 92
+          Anchors = [akRight, akBottom]
+          Caption = 'Copy'
+          OnClick = BtnCopyClick
+        end
+      end
+      object TabRegister: TTyTabSheet
+        Left = 0
+        Height = 404
+        Top = 32
+        Width = 680
+        Caption = 'Registered by name'
+        object LblRegister: TTyLabel
+          Left = 12
+          Height = 20
+          Top = 10
+          Width = 656
+          Anchors = [akTop, akLeft, akRight]
+          Caption = 'The theme compiled into your program, no file needed:'
+        end
+        object MemoRegister: TTyMemo
+          Left = 12
+          Height = 316
+          Top = 34
+          Width = 656
+          Anchors = [akTop, akLeft, akRight, akBottom]
+          ReadOnly = True
+          ScrollBars = ssBoth
+        end
+        object BtnCopyRegister: TTyButton
+          Left = 576
+          Height = 30
+          Top = 360
+          Width = 92
+          Anchors = [akRight, akBottom]
+          Caption = 'Copy'
+          OnClick = BtnCopyClick
+        end
+      end
+    end
+    object BtnClose: TTyButton
+      Left = 576
+      Height = 30
+      Top = 480
+      Width = 92
+      Anchors = [akRight, akBottom]
+      Caption = 'Close'
+      ModalResult = 2
+    end
+  end
+end

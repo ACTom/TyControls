@@ -1,0 +1,144 @@
+object TbCompareForm: TTbCompareForm
+  Left = 0
+  Height = 640
+  Top = 0
+  Width = 1100
+  Caption = 'Compare the AI''s version'
+  ClientHeight = 640
+  ClientWidth = 1100
+  KeyPreview = True
+  Position = poOwnerFormCenter
+  LCLVersion = '4.4.0.0'
+  OnClose = FormClose
+  OnCreate = FormCreate
+  OnDestroy = FormDestroy
+  OnKeyDown = FormKeyDown
+  OnResize = FormResize
+  TitleBar = Bar
+  object Surface: TTyFormSurface
+    Left = 0
+    Height = 640
+    Top = 0
+    Width = 1100
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 1100
+      Align = alTop
+      Caption = 'Compare the AI''s version'
+    end
+    object Summary: TTyLabel
+      Left = 10
+      Height = 20
+      Top = 40
+      Width = 1080
+      Align = alTop
+      BorderSpacing.Left = 10
+      BorderSpacing.Top = 6
+      BorderSpacing.Right = 10
+      BorderSpacing.Bottom = 4
+      WordWrap = True
+    end
+    object Headers: TTyPanel
+      Left = 0
+      Height = 24
+      Top = 64
+      Width = 1100
+      Align = alTop
+      object LeftTitle: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 2
+        Width = 400
+        Caption = 'Now'
+      end
+      object RightTitle: TTyLabel
+        Left = 560
+        Height = 20
+        Top = 2
+        Width = 400
+        Caption = 'AI''s version'
+      end
+    end
+    object Buttons: TTyPanel
+      Left = 0
+      Height = 44
+      Top = 596
+      Width = 1100
+      Align = alBottom
+      object BtnDiscard: TTyButton
+        Left = 1002
+        Height = 28
+        Top = 8
+        Width = 90
+        Align = alRight
+        AutoSize = True
+        BorderSpacing.Around = 8
+        Caption = 'Discard'
+        ModalResult = 2
+      end
+      object BtnAccept: TTyButton
+        Left = 904
+        Height = 28
+        Top = 8
+        Width = 90
+        Align = alRight
+        AutoSize = True
+        BorderSpacing.Around = 8
+        StyleClass = 'primary'
+        Caption = 'Accept'
+        ModalResult = 1
+        OnClick = BtnAcceptClick
+      end
+      object TrialCheck: TTyCheckBox
+        Left = 10
+        Height = 24
+        Top = 10
+        Width = 876
+        Align = alClient
+        BorderSpacing.Around = 10
+        Caption = 'Try it in the preview'
+        OnChange = TrialCheckChange
+      end
+    end
+    object IssuesList: TTyListBox
+      Left = 0
+      Height = 96
+      Top = 500
+      Width = 1100
+      Align = alBottom
+      Visible = False
+    end
+    object LeftEdit: TSynEdit
+      Left = 0
+      Height = 412
+      Top = 88
+      Width = 547
+      Align = alLeft
+      Gutter.Visible = False
+      ReadOnly = True
+      OnSpecialLineMarkup = EditSpecialLineMarkup
+      OnStatusChange = EditStatusChange
+    end
+    object Splitter: TTySplitter
+      Left = 547
+      Height = 412
+      Top = 88
+      Width = 6
+      Align = alLeft
+    end
+    object RightEdit: TSynEdit
+      Left = 553
+      Height = 412
+      Top = 88
+      Width = 547
+      Align = alClient
+      Gutter.Visible = False
+      ReadOnly = True
+      OnSpecialLineMarkup = EditSpecialLineMarkup
+      OnStatusChange = EditStatusChange
+    end
+  end
+end

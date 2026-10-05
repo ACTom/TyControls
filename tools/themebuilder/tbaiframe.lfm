@@ -1,0 +1,215 @@
+object AiFrame: TTbAiFrame
+  Left = 0
+  Height = 600
+  Top = 0
+  Width = 280
+  ClientHeight = 600
+  ClientWidth = 280
+  TabOrder = 0
+  DesignLeft = 0
+  DesignTop = 0
+  object TopRow: TTyPanel
+    Left = 0
+    Height = 36
+    Top = 0
+    Width = 280
+    Align = alTop
+    object BtnSettings: TTySpeedButton
+      Left = 244
+      Height = 28
+      Top = 4
+      Width = 30
+      Align = alRight
+      BorderSpacing.Around = 4
+      StyleClass = 'ghost'
+      Hint = 'AI settings'
+      ShowHint = True
+      IconFont = AiIconFont
+      GlyphName = 'settings'
+      OnClick = BtnSettingsClick
+    end
+    object ProfileCombo: TTyComboBox
+      Left = 6
+      Height = 28
+      Top = 4
+      Width = 234
+      Align = alClient
+      BorderSpacing.Left = 6
+      BorderSpacing.Top = 4
+      BorderSpacing.Bottom = 4
+      OnChange = ProfileComboChange
+    end
+  end
+  object PlainHttpAlert: TTyAlert
+    Left = 8
+    Height = 52
+    Top = 38
+    Width = 264
+    Align = alTop
+    AutoSize = True
+    BorderSpacing.Left = 8
+    BorderSpacing.Top = 2
+    BorderSpacing.Right = 8
+    AlertType = atWarning
+    Visible = False
+  end
+  object LblDescribe: TTyLabel
+    Left = 8
+    Height = 36
+    Top = 40
+    Width = 264
+    Align = alTop
+    AutoSize = True
+    BorderSpacing.Left = 8
+    BorderSpacing.Top = 4
+    BorderSpacing.Right = 8
+    WordWrap = True
+    Caption = 'Describe the theme or the change, for example: warm colours, rounder corners.'
+  end
+  object EdtPrompt: TTyMemo
+    Left = 8
+    Height = 72
+    Top = 80
+    Width = 264
+    Align = alTop
+    BorderSpacing.Left = 8
+    BorderSpacing.Top = 4
+    BorderSpacing.Right = 8
+    WordWrap = True
+  end
+  object ChkProblems: TTyCheckBox
+    Left = 8
+    Height = 24
+    Top = 156
+    Width = 264
+    Align = alTop
+    AutoSize = True
+    BorderSpacing.Left = 8
+    BorderSpacing.Top = 4
+    BorderSpacing.Right = 8
+    Caption = 'Include the problem list'
+    OnChange = ChkProblemsChange
+  end
+  object ButtonRow: TTyPanel
+    Left = 0
+    Height = 40
+    Top = 184
+    Width = 280
+    Align = alTop
+    object BtnGenerate: TTyButton
+      Left = 8
+      Height = 28
+      Top = 6
+      Width = 80
+      Align = alLeft
+      AutoSize = True
+      BorderSpacing.Left = 8
+      BorderSpacing.Top = 6
+      BorderSpacing.Bottom = 6
+      StyleClass = 'primary'
+      Caption = 'Generate'
+      OnClick = GenerateClick
+    end
+    object BtnStop: TTyButton
+      Left = 94
+      Height = 28
+      Top = 6
+      Width = 60
+      Align = alLeft
+      AutoSize = True
+      BorderSpacing.Left = 6
+      BorderSpacing.Top = 6
+      BorderSpacing.Bottom = 6
+      Enabled = False
+      Caption = 'Stop'
+      OnClick = StopClick
+    end
+    object BtnNewChat: TTyButton
+      Left = 160
+      Height = 28
+      Top = 6
+      Width = 110
+      Align = alLeft
+      AutoSize = True
+      BorderSpacing.Left = 6
+      BorderSpacing.Top = 6
+      BorderSpacing.Bottom = 6
+      StyleClass = 'ghost'
+      Caption = 'New conversation'
+      OnClick = BtnNewChatClick
+    end
+  end
+  object LblStatus: TTyLabel
+    Left = 8
+    Height = 20
+    Top = 228
+    Width = 264
+    Align = alTop
+    AutoSize = True
+    BorderSpacing.Left = 8
+    BorderSpacing.Top = 2
+    BorderSpacing.Right = 8
+    WordWrap = True
+  end
+  object LblConversation: TTyLabel
+    Left = 8
+    Height = 20
+    Top = 250
+    Width = 264
+    Align = alTop
+    AutoSize = True
+    BorderSpacing.Left = 8
+    BorderSpacing.Top = 2
+    BorderSpacing.Right = 8
+    WordWrap = True
+  end
+  object BottomRow: TTyPanel
+    Left = 0
+    Height = 64
+    Top = 536
+    Width = 280
+    Align = alBottom
+    object LblSentTo: TTyLabel
+      Left = 8
+      Height = 20
+      Top = 4
+      Width = 264
+      Align = alTop
+      AutoSize = True
+      BorderSpacing.Left = 8
+      BorderSpacing.Top = 4
+      BorderSpacing.Right = 8
+      WordWrap = True
+    end
+    object BtnShowCompare: TTyButton
+      Left = 8
+      Height = 28
+      Top = 30
+      Width = 150
+      AutoSize = True
+      Enabled = False
+      Caption = 'Show the comparison...'
+      OnClick = BtnShowCompareClick
+    end
+  end
+  object OutputMemo: TTyMemo
+    Left = 8
+    Height = 254
+    Top = 276
+    Width = 264
+    Align = alClient
+    BorderSpacing.Around = 8
+    ReadOnly = True
+  end
+  object AiIconFont: TTyLucideIconFont
+    Left = 200
+    Top = 400
+  end
+  object FlushTimer: TTimer
+    Enabled = False
+    Interval = 150
+    OnTimer = FlushTimerTimer
+    Left = 140
+    Top = 400
+  end
+end

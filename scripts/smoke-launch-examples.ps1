@@ -24,12 +24,14 @@
 # USAGE
 #   powershell -File scripts/smoke-launch-examples.ps1
 #   powershell -File scripts/smoke-launch-examples.ps1 -TimeoutSec 30   # slow machine
+#   powershell -File scripts/smoke-launch-examples.ps1 -Dirs examples,tools\themebuilder
+#     (-Dirs: the folders to search for executables, relative to the repo; default examples)
 #
 # Exit code 1 and one line per suspect if anything failed to show a window.
 #
 # NOTE: processes are killed BY PID, never by image name. `taskkill /im` is
 # machine-wide and will kill other people's (and other agents') runs.
-param([int]$TimeoutSec = 20)
+param([int]$TimeoutSec = 20, [string[]]$Dirs = @('examples'))
 
 Add-Type @"
 using System;
@@ -40,8 +42,9 @@ public class TySmokeWin {
 "@
 
 $root = Split-Path -Parent $PSScriptRoot
-$exes = Get-ChildItem -Path (Join-Path $root 'examples') -Recurse -Filter *.exe |
-        Sort-Object FullName
+$exes = @($Dirs | ForEach-Object {
+          Get-ChildItem -Path (Join-Path $root $_) -Recurse -Filter *.exe
+        } | Sort-Object FullName)
 
 if ($exes.Count -eq 0) {
   Write-Output "No example executables found. Build them first:"

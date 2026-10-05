@@ -362,6 +362,8 @@ CharImage1.GlyphName := 'house';
 
 写自己的主题见 [docs/themes.md](docs/themes.md),`.tycss` 语言参考见 [docs/tycss-reference.md](docs/tycss-reference.md)。
 
+写主题可以用仓库里的主题编辑器 `tools/themebuilder`:边写边看预览,也可以接大模型用一句话起草或修改。用法见 [docs/themebuilder.md](docs/themebuilder.md)。
+
 ---
 
 ## 示例

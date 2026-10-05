@@ -1,0 +1,320 @@
+object TbAiSettingsForm: TTbAiSettingsForm
+  Left = 0
+  Height = 580
+  Top = 0
+  Width = 780
+  Caption = 'AI settings'
+  ClientHeight = 580
+  ClientWidth = 780
+  Position = poOwnerFormCenter
+  LCLVersion = '4.4.0.0'
+  OnClose = FormClose
+  OnCreate = FormCreate
+  OnDestroy = FormDestroy
+  TitleBar = Bar
+  object Surface: TTyFormSurface
+    Left = 0
+    Height = 580
+    Top = 0
+    Width = 780
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 780
+      Align = alTop
+      Caption = 'AI settings'
+    end
+    object BottomBar: TTyPanel
+      Left = 0
+      Height = 48
+      Top = 532
+      Width = 780
+      Align = alBottom
+      object BtnCancel: TTyButton
+        Left = 682
+        Height = 30
+        Top = 9
+        Width = 90
+        Align = alRight
+        AutoSize = True
+        BorderSpacing.Around = 8
+        Caption = 'Cancel'
+        ModalResult = 2
+      end
+      object BtnOk: TTyButton
+        Left = 584
+        Height = 30
+        Top = 9
+        Width = 90
+        Align = alRight
+        AutoSize = True
+        BorderSpacing.Around = 8
+        StyleClass = 'primary'
+        Caption = 'OK'
+        ModalResult = 1
+        OnClick = BtnOkClick
+      end
+    end
+    object LeftPane: TTyPanel
+      Left = 0
+      Height = 498
+      Top = 34
+      Width = 220
+      Align = alLeft
+      object PaneButtons: TTyPanel
+        Left = 0
+        Height = 44
+        Top = 454
+        Width = 220
+        Align = alBottom
+        object BtnAdd: TTyMenuButton
+          Left = 8
+          Height = 28
+          Top = 8
+          Width = 90
+          Align = alLeft
+          AutoSize = True
+          BorderSpacing.Around = 8
+          Caption = 'Add'
+          DropDownMenu = PresetMenu
+        end
+        object BtnRemove: TTyButton
+          Left = 106
+          Height = 28
+          Top = 8
+          Width = 90
+          Align = alLeft
+          AutoSize = True
+          BorderSpacing.Around = 8
+          Caption = 'Remove'
+          OnClick = BtnRemoveClick
+        end
+      end
+      object ProfileList: TTyListBox
+        Left = 8
+        Height = 438
+        Top = 8
+        Width = 204
+        Align = alClient
+        BorderSpacing.Around = 8
+        OnClick = ProfileListClick
+      end
+    end
+    object Fields: TTyPanel
+      Left = 220
+      Height = 498
+      Top = 34
+      Width = 560
+      Align = alClient
+      object LblName: TTyLabel
+        Left = 16
+        Height = 36
+        Top = 14
+        Width = 180
+        AutoSize = False
+        WordWrap = True
+        Caption = 'Name'
+      end
+      object EdtName: TTyEdit
+        Left = 204
+        Height = 28
+        Top = 10
+        Width = 340
+        Anchors = [akTop, akLeft, akRight]
+        OnChange = FieldChange
+      end
+      object LblFormat: TTyLabel
+        Left = 16
+        Height = 36
+        Top = 50
+        Width = 180
+        AutoSize = False
+        WordWrap = True
+        Caption = 'Format'
+      end
+      object CmbFormat: TTyComboBox
+        Left = 204
+        Height = 28
+        Top = 46
+        Width = 220
+        OnChange = FormatChange
+      end
+      object LblUrl: TTyLabel
+        Left = 16
+        Height = 36
+        Top = 86
+        Width = 180
+        AutoSize = False
+        WordWrap = True
+        Caption = 'Address'
+      end
+      object EdtUrl: TTyEdit
+        Left = 204
+        Height = 28
+        Top = 82
+        Width = 340
+        Anchors = [akTop, akLeft, akRight]
+        OnChange = UrlChange
+      end
+      object LblModel: TTyLabel
+        Left = 16
+        Height = 36
+        Top = 122
+        Width = 180
+        AutoSize = False
+        WordWrap = True
+        Caption = 'Model'
+      end
+      object EdtModel: TTyEdit
+        Left = 204
+        Height = 28
+        Top = 118
+        Width = 340
+        Anchors = [akTop, akLeft, akRight]
+        OnChange = FieldChange
+      end
+      object LblKey: TTyLabel
+        Left = 16
+        Height = 36
+        Top = 158
+        Width = 180
+        AutoSize = False
+        WordWrap = True
+        Caption = 'Key'
+      end
+      object EdtKey: TTyEdit
+        Left = 204
+        Height = 28
+        Top = 154
+        Width = 340
+        Anchors = [akTop, akLeft, akRight]
+        PasswordChar = '*'
+        TextHint = 'Not needed for a local model'
+        OnChange = KeyChange
+      end
+      object LblMaxOutput: TTyLabel
+        Left = 16
+        Height = 36
+        Top = 194
+        Width = 180
+        AutoSize = False
+        WordWrap = True
+        Caption = 'Maximum output (tokens, 0 = not sent)'
+      end
+      object SpnMaxOutput: TTySpinEdit
+        Left = 204
+        Height = 28
+        Top = 194
+        Width = 140
+        MaxValue = 1000000
+        Increment = 1024
+        OnChange = FieldChange
+      end
+      object LblTimeout: TTyLabel
+        Left = 16
+        Height = 36
+        Top = 236
+        Width = 180
+        AutoSize = False
+        WordWrap = True
+        Caption = 'Timeout (seconds without data)'
+      end
+      object SpnTimeout: TTySpinEdit
+        Left = 204
+        Height = 28
+        Top = 236
+        Width = 140
+        MinValue = 5
+        MaxValue = 3600
+        Value = 120
+        OnChange = FieldChange
+      end
+      object LblHint: TTyLabel
+        AnchorSideTop.Control = PlainHttpAlert
+        AnchorSideTop.Side = asrBottom
+        Left = 16
+        Height = 54
+        Top = 274
+        Width = 528
+        Anchors = [akTop, akLeft, akRight]
+        AutoSize = True
+        BorderSpacing.Top = 10
+        WordWrap = True
+        Visible = False
+      end
+      object PlainHttpAlert: TTyAlert
+        AnchorSideTop.Control = SpnTimeout
+        AnchorSideTop.Side = asrBottom
+        Left = 16
+        Height = 52
+        Top = 274
+        Width = 528
+        Anchors = [akTop, akLeft, akRight]
+        BorderSpacing.Top = 10
+        AlertType = atWarning
+        Visible = False
+      end
+      object BtnTest: TTyButton
+        AnchorSideTop.Control = LblHint
+        AnchorSideTop.Side = asrBottom
+        Left = 16
+        Height = 30
+        Top = 338
+        Width = 130
+        AutoSize = True
+        BorderSpacing.Top = 10
+        Caption = 'Test connection'
+        OnClick = BtnTestClick
+      end
+      object LblTest: TTyLabel
+        AnchorSideTop.Control = BtnTest
+        Left = 160
+        Height = 44
+        Top = 338
+        Width = 384
+        Anchors = [akTop, akLeft, akRight]
+        AutoSize = False
+        WordWrap = True
+      end
+      object LblPrivacy: TTyLabel
+        Left = 16
+        Height = 70
+        Top = 420
+        Width = 528
+        Anchors = [akLeft, akRight, akBottom]
+        AutoSize = False
+        WordWrap = True
+      end
+    end
+  end
+  object PresetMenu: TTyPopupMenu
+    Left = 40
+    Top = 440
+    object MiOpenAI: TMenuItem
+      Caption = 'OpenAI'
+      OnClick = PresetClick
+    end
+    object MiDeepSeek: TMenuItem
+      Tag = 1
+      Caption = 'DeepSeek'
+      OnClick = PresetClick
+    end
+    object MiAnthropic: TMenuItem
+      Tag = 2
+      Caption = 'Anthropic'
+      OnClick = PresetClick
+    end
+    object MiOllama: TMenuItem
+      Tag = 3
+      Caption = 'Local (Ollama)'
+      OnClick = PresetClick
+    end
+    object MiCustom: TMenuItem
+      Tag = 4
+      Caption = 'Custom'
+      OnClick = PresetClick
+    end
+  end
+end

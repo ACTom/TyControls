@@ -1,0 +1,345 @@
+object TbMainForm: TTbMainForm
+  Left = 0
+  Height = 680
+  Top = 0
+  Width = 1480
+  Caption = 'Theme Builder'
+  ClientHeight = 680
+  ClientWidth = 1480
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCloseQuery = FormCloseQuery
+  OnCreate = FormCreate
+  OnDestroy = FormDestroy
+  TitleBar = Bar
+  MenuBar = MainMenuBar
+  object Surface: TTyFormSurface
+    Left = 0
+    Height = 680
+    Top = 0
+    Width = 1480
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 1480
+      Align = alTop
+      Caption = 'Theme Builder  · TyControls'
+      TitleAlignment = taCenter
+      ShowIcon = True
+      object MainMenuBar: TTyMenuBar
+        Left = 30
+        Height = 26
+        Top = 4
+        Width = 160
+        BorderSpacing.Top = 4
+        BorderSpacing.Bottom = 4
+        Menu = MainMenu1
+        AutoSizeWidth = True
+        Align = alLeft
+      end
+    end
+    object Status: TTyStatusBar
+      Left = 0
+      Height = 24
+      Top = 656
+      Width = 1480
+      Panels = <
+        item
+          Width = 840
+        end
+        item
+          Width = 140
+        end
+        item
+          Width = 0
+        end>
+    end
+    object SideBar: TTyToolWindowBar
+      Left = 0
+      Height = 622
+      Top = 34
+      ExpandedSize = 280
+      Images = Icons
+      ShowHint = True
+      ActiveIndex = 0
+      object SeedsWin: TTyToolWindow
+        Caption = 'Seeds'
+        ImageName = 'palette'
+        StripHint = 'Seeds'
+        object SeedsHost: TTyPanel
+          Left = 0
+          Height = 400
+          Top = 34
+          Width = 240
+          Align = alClient
+        end
+      end
+      object ProblemsWin: TTyToolWindow
+        Caption = 'Problems'
+        ImageName = 'circle-alert'
+        StripHint = 'Problems'
+        ShowBadge = True
+        object ProblemsList: TTyListBox
+          Left = 0
+          Height = 400
+          Top = 34
+          Width = 240
+          Align = alClient
+          OnDblClick = ProblemsListDblClick
+        end
+      end
+      object AiWin: TTyToolWindow
+        Caption = 'AI'
+        ImageName = 'sparkles'
+        StripHint = 'AI'
+        object AiHost: TTyPanel
+          Left = 0
+          Height = 400
+          Top = 34
+          Width = 240
+          Align = alClient
+        end
+      end
+    end
+    object PreviewHost: TTyPanel
+      Left = 920
+      Height = 622
+      Top = 34
+      Width = 560
+      Align = alRight
+    end
+    object PreviewSplitter: TTySplitter
+      Left = 914
+      Height = 622
+      Top = 34
+      Width = 6
+      Align = alRight
+    end
+    object EditorHost: TTyPanel
+      Left = 280
+      Height = 622
+      Top = 34
+      Width = 634
+      Align = alClient
+      object Editor: TSynEdit
+        Left = 0
+        Height = 622
+        Top = 0
+        Width = 634
+        Align = alClient
+        Gutter.Visible = True
+        OnChange = EditorChange
+        OnStatusChange = EditorStatusChange
+        OnSpecialLineMarkup = EditorSpecialLineMarkup
+      end
+    end
+  end
+  object Icons: TTyLucideImageList
+    Names.Strings = (
+      'circle-alert'
+      'palette'
+      'sparkles'
+    )
+    Left = 360
+    Top = 160
+  end
+  object GutterIcons: TTyLucideImageList
+    Names.Strings = (
+      'circle-x'
+      'triangle-alert'
+    )
+    Left = 420
+    Top = 160
+  end
+  object MainMenu1: TMainMenu
+    Left = 480
+    Top = 160
+    object MnuFile: TMenuItem
+      Caption = '&File'
+      object MnuNew: TMenuItem
+        Caption = '&New'
+        object MnuNewMinimal: TMenuItem
+          Caption = 'Minimal theme'
+          ShortCut = 16462
+          OnClick = MnuNewMinimalClick
+        end
+        object MnuNewSep: TMenuItem
+          Caption = '-'
+        end
+      end
+      object MnuOpen: TMenuItem
+        Caption = '&Open...'
+        ShortCut = 16463
+        OnClick = MnuOpenClick
+      end
+      object MnuRecent: TMenuItem
+        Caption = 'Open &recent'
+      end
+      object MnuSave: TMenuItem
+        Caption = '&Save'
+        ShortCut = 16467
+        OnClick = MnuSaveClick
+      end
+      object MnuSaveAs: TMenuItem
+        Caption = 'Save &as...'
+        ShortCut = 24659
+        OnClick = MnuSaveAsClick
+      end
+      object MnuExportSep: TMenuItem
+        Caption = '-'
+      end
+      object MnuExport: TMenuItem
+        Caption = '&Export theme bundle...'
+        OnClick = MnuExportClick
+      end
+      object MnuSnippets: TMenuItem
+        Caption = '&Use it in a program...'
+        OnClick = MnuSnippetsClick
+      end
+      object MnuFileSep: TMenuItem
+        Caption = '-'
+      end
+      object MnuExit: TMenuItem
+        Caption = 'E&xit'
+        OnClick = MnuExitClick
+      end
+    end
+    object MnuEdit: TMenuItem
+      Caption = '&Edit'
+      OnClick = MnuEditClick
+      object MnuUndo: TMenuItem
+        Caption = '&Undo'
+        ShortCut = 16474
+        OnClick = MnuUndoClick
+      end
+      object MnuRedo: TMenuItem
+        Caption = '&Redo'
+        ShortCut = 24666
+        OnClick = MnuRedoClick
+      end
+      object MnuEditSep1: TMenuItem
+        Caption = '-'
+      end
+      object MnuCut: TMenuItem
+        Caption = 'Cu&t'
+        ShortCut = 16472
+        OnClick = MnuCutClick
+      end
+      object MnuCopy: TMenuItem
+        Caption = '&Copy'
+        ShortCut = 16451
+        OnClick = MnuCopyClick
+      end
+      object MnuPaste: TMenuItem
+        Caption = '&Paste'
+        ShortCut = 16470
+        OnClick = MnuPasteClick
+      end
+      object MnuDelete: TMenuItem
+        Caption = '&Delete'
+        ShortCut = 46
+        OnClick = MnuDeleteClick
+      end
+      object MnuSelectAll: TMenuItem
+        Caption = 'Select &all'
+        ShortCut = 16449
+        OnClick = MnuSelectAllClick
+      end
+      object MnuEditSep2: TMenuItem
+        Caption = '-'
+      end
+      object MnuFormatDoc: TMenuItem
+        Caption = 'F&ormat document'
+        ShortCut = 24646
+        OnClick = MnuFormatDocClick
+      end
+      object MnuFormatSel: TMenuItem
+        Caption = 'Format &selection'
+        OnClick = MnuFormatSelClick
+      end
+      object MnuEditSep3: TMenuItem
+        Caption = '-'
+      end
+      object MnuFind: TMenuItem
+        Caption = '&Find...'
+        ShortCut = 16454
+        OnClick = MnuFindClick
+      end
+      object MnuFindNext: TMenuItem
+        Caption = 'Find &next'
+        ShortCut = 114
+        OnClick = MnuFindNextClick
+      end
+      object MnuFindPrev: TMenuItem
+        Caption = 'Find pre&vious'
+        ShortCut = 8306
+        OnClick = MnuFindPrevClick
+      end
+      object MnuReplace: TMenuItem
+        Caption = 'R&eplace...'
+        ShortCut = 16456
+        OnClick = MnuReplaceClick
+      end
+    end
+    object MnuView: TMenuItem
+      Caption = '&View'
+      object MnuAppearance: TMenuItem
+        Caption = 'Editor &appearance'
+      end
+      object MnuEditorDark: TMenuItem
+        AutoCheck = True
+        Caption = '&Dark editor'
+        OnClick = MnuEditorDarkClick
+      end
+      object MnuViewSep: TMenuItem
+        Caption = '-'
+      end
+      object MnuSeeds: TMenuItem
+        Caption = '&Seeds'
+        OnClick = MnuSeedsClick
+      end
+      object MnuProblems: TMenuItem
+        Caption = '&Problems'
+        OnClick = MnuProblemsClick
+      end
+      object MnuAi: TMenuItem
+        Caption = 'A&I'
+        OnClick = MnuAiClick
+      end
+      object MnuViewSep2: TMenuItem
+        Caption = '-'
+      end
+      object MnuCoverage: TMenuItem
+        Caption = '&Coverage check...'
+        OnClick = MnuCoverageClick
+      end
+      object MnuAiSettings: TMenuItem
+        Caption = 'AI se&ttings...'
+        OnClick = MnuAiSettingsClick
+      end
+    end
+  end
+  object DlgOpen: TTyOpenDialog
+    Left = 540
+    Top = 160
+  end
+  object DlgSave: TTySaveDialog
+    Left = 600
+    Top = 160
+  end
+  object RefreshTimer: TTimer
+    Enabled = False
+    Interval = 300
+    OnTimer = RefreshTimerTimer
+    Left = 660
+    Top = 160
+  end
+  object WatchTimer: TTimer
+    Interval = 1000
+    OnTimer = WatchTimerTimer
+    Left = 720
+    Top = 160
+  end
+end
