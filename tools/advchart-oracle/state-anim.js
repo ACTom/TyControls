@@ -525,6 +525,23 @@ const NOTMERGE = [
       { at: 800, type: 'action', payload: { type: 'downplay', seriesIndex: 0, dataIndex: 2 } }] },
 ];
 
+// [batch 108] appended after every other case and after their guards, so
+// nothing earlier moves: a boxplot box highlighted (the border 1 -> 2, the
+// white fill lifted, z2 + 10; the shadow is set but this port draws none),
+// and the other boxes blurred by focus 'self'
+const LATE_TYPES = [
+  { id: 'boxplot-action', note: "boxplot: highlight the second box at 0 (border 2, lift, focus 'self' blurs the others), downplay at 500",
+    option: { color: [C0], xAxis: { type: 'category', data: ['a', 'b', 'c'] }, yAxis: { type: 'value', min: 0, max: 60 },
+      series: [{ type: 'boxplot', emphasis: { focus: 'self' },
+        data: [[10, 20, 25, 32, 45], [5, 18, 22, 30, 40], [15, 24, 30, 36, 52]] }] },
+    events: hl(0, 1, 0, 500) },
+  { id: 'boxplot-enter-hover', live: true, note: 'highlight a box 300 ms into its enter (the points grow from the median, 800 ms): '
+    + 'the border transition runs beside the shape tween on the same element; downplay at 600',
+    option: { color: [C0], xAxis: { type: 'category', data: ['a', 'b', 'c'] }, yAxis: { type: 'value', min: 0, max: 60 },
+      series: [{ type: 'boxplot', data: [[10, 20, 25, 32, 45], [5, 18, 22, 30, 40], [15, 24, 30, 36, 52]] }] },
+    events: hl(0, 1, 300, 600) },
+];
+
 // ---------- the compact writer of animation.js ----------
 const LINE = 250;
 function oneLine(v) {
@@ -620,6 +637,22 @@ function generate() {
       events: r.events, clips: r.clips, elements: r.elements });
   }
   const gs = guards(cases);
+  for (const c of LATE_TYPES) {
+    const r = runCase(c);
+    cases.push({ id: c.id, note: c.note, live: !!c.live, first: c.first || null, option: c.option,
+      events: r.events, clips: r.clips, elements: r.elements });
+  }
+  {
+    const c = byId(cases, 'boxplot-action');
+    const box = elOf(c, 'series0:boxplot/1');
+    const lw = box && box.track ? box.track['style.lineWidth'] : null;
+    must(c.clips[c.clips.length - 1] === 0, 'guard settled-boxplot-action');
+    must(!!(lw && box.transition && box.transition.every(x => x === '300/cubicOut/')),
+      'guard boxplot-border: ' + JSON.stringify(lw));
+    gs.push('settled-boxplot-action', 'boxplot-border');
+    must(byId(cases, 'boxplot-enter-hover').clips.slice(-1)[0] === 0, 'guard settled-boxplot-enter-hover');
+    gs.push('settled-boxplot-enter-hover');
+  }
   return {
     source: 'ECharts 6.1.0 dist (' + DIST.replace(/\\/g, '/') + ') + zrender 6.1.0, node SSR (svg), controlled clock',
     note: 'AN3b: state transitions. A case sets `option` at T0 and settles (a live case: `first` settled at T0, `option` at '

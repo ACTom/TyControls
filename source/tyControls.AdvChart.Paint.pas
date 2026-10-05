@@ -458,7 +458,10 @@ type
     carMarkLineFrom, carMarkLineTo, carMarkLineLabel, carEndLabel,
     { [Batch 99, AN6] a markPoint's label: it rides its symbol's group when
       a kept marker view moves it (the markPoint's proxy) }
-    carMarkPointLabel);
+    carMarkPointLabel,
+    { [Batch 108] a boxplot's path: its fourteen points in Pts, the median's
+      value coordinate in G[0], G[1] 1 on a horizontal layout }
+    carBoxplot);
 
   TTyChartAnim = record
     Role: TTyChartAnimRole;

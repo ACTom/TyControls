@@ -460,6 +460,16 @@ begin
         else Result.Role := 'effectSymbol';
       end;
     end
+    else if stype = 'boxplot' then
+    begin
+      { one path per box [Batch 108] }
+      if di >= 0 then
+      begin
+        Result.Kind := aukModel;
+        Result.Role := 'boxplot';
+        Result.Index := di;
+      end;
+    end
     else if stype = 'gauge' then
     begin
       Result.Kind := aukModel;

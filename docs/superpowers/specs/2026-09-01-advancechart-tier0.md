@@ -2929,6 +2929,7 @@ consistent when toggling legend.」
 **`dataset.transform`**。它是一门语言而不是一个设置:一套过滤表达式文法、
 一个排序、一个 boxplot 归约器,外加数据集互相串联。14 个里有 6 个用到它。
 **上游自己就发布了「有 dataset、没有 transform」的构建**,所以这条线是它先划的。
+**[第 108 批：boxplot 归约器与数据集串联（`fromDatasetIndex` / `fromDatasetId` / `fromTransformResult`、管道）已做，见 §143；过滤和排序仍待 D2。]**
 
 还有 typed array(过不了 JSON)和列式对象(语料零使用)——两个都能正确识别,
 然后答「没有行」。
@@ -6190,7 +6191,7 @@ containShape → 类目轴 `min` / `max` → 线图符号跟着标签间隔 → 
   - G9 的 8 条只比轴、不比盒子。下一批做。
   **[第四十二批已做,见 §76。containshape 的盒子、刻度、G9 现在全部逐位比较。]**
 - **对数轴的 pow**:mapping 端点是 10 的小数次幂,FPC 的 `Power` 和 V8 的 `Math.pow` 差 6–7 ulp(10^2.5、log 2/3/50 的上端)。审计估计的 4 ulp 不够,容差放到 8。要逐位一致,得移植 fdlibm 的 `pow` / `log`。
-- **candlestick 和 boxplot** 也会让 ctnShp 为真,上游值轴上的 candlestick 也会放宽(mapping [-0.5, 4.5]);port 的 K 线在非类目轴上是固定的 8 px,这批不管。用例 deferred。
+- **candlestick 和 boxplot** 也会让 ctnShp 为真,上游值轴上的 candlestick 也会放宽(mapping [-0.5, 4.5]);port 的 K 线在非类目轴上是固定的 8 px,这批不管。用例 deferred。**[第 108 批：已做。K 线按基轴的带宽（值轴、时间轴取基值的最小正间隔）定宽，值基轴上基值是元素的第一个数；这个用例在 containshape 测试里重新比较，见 §143。]**
 - alignTicks、dataZoom(`zoomFixMM`)、axisPointer 的钳位与阴影宽:port 还没有这些功能,用例 deferred。
 - 时间轴平的范围仍是前后各一天,和上游一样,不走 [-1, 1]。
 
@@ -6291,7 +6292,7 @@ containShape → 类目轴 `min` / `max` → 线图符号跟着标签间隔 → 
   **[第四十三批已做,见 §77。]**
 - **axisPointer**:值的钳位仍按有效范围;clamp 的像素已经有了(`DataToCoord(v, True)`),指针还没改用。
   **[第四十三批:指针像素已改用 clamp。]**
-- **K 线**:仍逐轴,没有 subPixelOptimize。
+- **K 线**:仍逐轴,没有 subPixelOptimize。**[第 108 批：已做。K 线的点走坐标系的 `dataToPoint`（含仿射快路径），实体两侧与脊线 subPixelOptimize，见 §143。]**
 - **轴断裂**:port 不建断裂,矩阵门控没查断裂。
 - title / legend 的 box 选项还没按 mergeLayoutParam 合并,只做了 grid。**[第五十二批已做,见 §86。]**
 
@@ -6918,7 +6919,7 @@ tooltip 子行 → 旋转标签矩形的分解重组(连同 V8 的 `tan`)、titl
 - D9 解析对齐(`'   '`、`'0x10'`、`'Infinity'`):单独一批。
 - 仪表盘 `splitNumber: 0`:有意保留。
 - 不带时区的日期文本按**本地时间**解析(上游也是),`useUTC` 只管输出;所以这类用例依赖机器时区,fixture 在 UTC+8 下生成。
-- 极坐标、热力图的默认维度(port 没有这两种);`encode.y` 等列表只用第一个;`tooltip.valueFormatter`;箱线图的渲染和物品 tooltip。
+- 极坐标、热力图的默认维度(port 没有这两种);`encode.y` 等列表只用第一个;`tooltip.valueFormatter`;箱线图的渲染和物品 tooltip。**[第 108 批：箱线图的渲染与 tooltip 已做；被命名的维不再进类型声明的 tooltip 维，见 §143。]**
 - 两层带头的轴 section(gap level 2)没有用例覆盖,行为没动。
 
 ### 变异测试
@@ -8644,7 +8645,7 @@ AN1 有了引擎，没有一个系列用它。这一批把驱动接进控件，�
 
 `test.advchart.animenter`（8 个测试）：
 
-- **时间线**：fixture 里 57 个 enter/threshold 用例（effectScatter 除外），真控件 400×300、zrender 的 SSR 量字、`camAlways`、时钟停在 T0 = 1700000000000 渲染（这次渲染就是第 0 个采样），然后 `AnimTick` 到每个采样。fixture 的元素按 id/role/type 映射到代理（`series0:bar/3` → (0, 3, bar)，`0.k.0#label` → 符号 k 的标签，`1#clip` → 裁剪矩形，`k#guide` → 引导线……），每个采样比：每个被记录的键**逐位比**，终值也算在内；唯一的例外是 K 线实体两侧的横坐标——上游做了 subPixelOptimize、端口没有，上下游都不动——比**权重** `(v − from)/(to − from)`（全程为 0，到 1e-9）；fixture 没追踪的键必须不动；代理的动画器数等于元素的；clip 数等于上游的减去推迟元素的动画器数。4668 个元素采样全部对上，其中 576 个按权重。
+- **时间线**：fixture 里 57 个 enter/threshold 用例（effectScatter 除外），真控件 400×300、zrender 的 SSR 量字、`camAlways`、时钟停在 T0 = 1700000000000 渲染（这次渲染就是第 0 个采样），然后 `AnimTick` 到每个采样。fixture 的元素按 id/role/type 映射到代理（`series0:bar/3` → (0, 3, bar)，`0.k.0#label` → 符号 k 的标签，`1#clip` → 裁剪矩形，`k#guide` → 引导线……），每个采样比：每个被记录的键**逐位比**，终值也算在内；唯一的例外是 K 线实体两侧的横坐标——上游做了 subPixelOptimize、端口没有，上下游都不动——比**权重** `(v − from)/(to − from)`（全程为 0，到 1e-9）**[第 108 批：端口也对齐了，例外取消，逐位比，见 §143]**；fixture 没追踪的键必须不动；代理的动画器数等于元素的；clip 数等于上游的减去推迟元素的动画器数。4668 个元素采样全部对上，其中 576 个按权重。
 - **静止**：clip 清零后不再 live；每个键要么等于布局值，要么正好是 `(to − from) × 1 + from`；再渲染一次，凡代理静止在布局上的元素，帧与静态列表逐位相同。
 - 手写：无头 `camAuto` 不布防而 `camAlways` 布防；`camOff`、`animation: false`、中途切到 `camOff`；动态层（t = 0 时最高那根柱子三分之一处是地色，结束后是柱色）；柱顶标签跟着柱子走、半透明；热力图只有标签在动；新选项再动一次、改尺寸直接到终值；clip:false 的上游怪癖（见下）。
 
@@ -8662,7 +8663,7 @@ AN1 有了引擎，没有一个系列用它。这一批把驱动接进控件，�
 
 - **AN4**：仪表盘读数的数值滚动（`valueAnimation`，fixture 的 `style.text`）、`bar-label` 的标签数值滚动、折线的 `endLabel`、markPoint/markLine/markArea、effectScatter（符号以更新时序缩放 + 涟漪）。测试里这些元素的动画器从上游 clip 数里扣掉。
 - **AN3**：同一系列的更新、离场，饼的后续扇区只扫 endAngle，折线的数据差分；现在第二次 setOption 当作新的入场。
-- 这一批没接：象形柱、箱线图、关系图/树/矩形树图/旭日图/桑基图的入场；它们的标签也不淡入（LabelManager 的淡入只给柱、散点、热力图、饼、漏斗）。雷达符号的标签端口本来不画。K 线 simple 模式（实体窄于 1.3 px）不动；部分出界的 K 线没有静态裁剪。
+- 这一批没接：象形柱、箱线图、关系图/树/矩形树图/旭日图/桑基图的入场；它们的标签也不淡入（LabelManager 的淡入只给柱、散点、热力图、饼、漏斗）。雷达符号的标签端口本来不画。K 线 simple 模式（实体窄于 1.3 px）不动；部分出界的 K 线没有静态裁剪。**[第 108 批：箱线图的入场与更新已接；部分出界的 K 线、箱线图挂裁剪，整个出界的不画，见 §143。K 线 simple 模式仍不动。]**
 - 悬停高亮在动画中画的是静止几何（`PaintEmphasis` 读列表）；命中测试已经跟着帧走。
 - 饼在端口里先滤掉负值，视图行号与上游的 dataIndex 在有负值时不一致（延迟函数拿到的序号不同）。
 - 一帧仍要开一张控件大小的 BGRA 位图画动态层（Q7 那 13 ms 的底价）；动画期间所有系列、图例、标题都在动态层，不按元素是否在动细分。
@@ -8708,7 +8709,7 @@ B1 把悬停、选中、动作高亮搬上了标志加状态代理的模型，�
 
 - **桑基图**（adjacency/trajectory）**没做**：它的 focus 是 `{node: [...], edge: [...]}` 两套下标，边是另一份数据（`dataType: 'edge'`），状态模型目前只有节点一套行（B1 起就跳过 `IsEdge`）。要做：`TTyStSeries` 加一套按边下标的行、`StItemAt` 认 dataType、`TTyStFocus` 带两套下标、`StBlurSeries` 分别离开 blur，再给 fixture 加桑基的记录（`getData('edge')`）与转写。
 - **关系图、树、矩形树图**保留各自的原地重样式（第 46、81 批），不接共享模型：关系图的 adjacency、树的 ancestor/descendant 已有逐项基准；搬过来要先给它们的节点/边建状态行（同上），而且它们的悬停由提示框的 datum 驱动、按帧重建，和标志模型是两条路。因此它们与共享模型之间**不互相淡化**（笛卡尔上的关系图连带柱子、global 范围跨类型），highlight/downplay 动作对它们只发事件、不改样子。
-- **仪表盘、雷达**仍在覆盖层：仪表盘的指针和进度条是两个各自的派发者（`z2EmphasisLift = 0`），雷达的项是组（折线、面积、每个符号各有状态，标签按维度）；需要「一项多派发者」与「组的多路径」两种结构，Parts 只解决后者的一半。箱线图端口没有渲染器；极坐标上的柱/线端口没有。
+- **仪表盘、雷达**仍在覆盖层：仪表盘的指针和进度条是两个各自的派发者（`z2EmphasisLift = 0`），雷达的项是组（折线、面积、每个符号各有状态，标签按维度）；需要「一项多派发者」与「组的多路径」两种结构，Parts 只解决后者的一半。箱线图端口没有渲染器；极坐标上的柱/线端口没有。**[第 108 批：箱线图有了渲染器，接上状态机（`sskBox`，emphasis 边框 2），见 §143。]**
 - 面积在端口里是 silent（拿不到指针），所以「悬停面积只有面积 emphasis」的分支写了但到不了；悬停折线时面积跟着走与上游一致。
 - 折线 `showSymbol: false` 时上游会为单点高亮临时建一个符号，端口不建（只设折线状态）。
 - 漏斗常态隐藏标签时不建标签，上游默认的 emphasis 标签显示因此看不到（标签只在常态显示时才建，和 B1 的饼一样）；fixture 的漏斗用例标签常态显示。
@@ -9973,3 +9974,108 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - §130、§132 在原处标注。没有新的 resourcestring。
 
 全量 **8167 个测试，0 错误，0 失败**（新增 `test.advchart.media` 10 个；图例 `selected` 提前建、`DoMerge` 拆开之后，现有测试全绿）。
+
+## 143. Tier 2 第一百零八批：K 线收尾与箱线图（C1，2026-10-05）
+
+路线图 C1：candlestick 收尾（barWidth / barMaxWidth / barMinWidth、containShape、subPixelOptimize）＋ boxplot 渲染器、统计变换（dataset transform `'boxplot'` / prepareBoxplotData）与 tooltip。以前 K 线的实体一律半个带宽，值轴、时间轴上是写死的 4 px（带宽取不到就当 8），基轴是值轴时元素的第一个数被当成开盘价、行号当成基值；实体两侧和脊线不做 subPixelOptimize；部分出界的 K 线不裁、整个出界的照画；箱线图注册了、能进 store，但没有渲染器（诊断说「没有渲染器」），`dataset.transform` 一概不认。这一批对着 `chart/candlestick/candlestickLayout.ts`、`CandlestickView.ts`、`candlestickVisual.ts`、`chart/boxplot/`（`BoxplotSeries.ts`、`boxplotLayout.ts`、`BoxplotView.ts`、`boxplotTransform.ts`、`prepareBoxplotData.ts`）、`chart/helper/whiskerBoxCommon.ts`、`coord/axisBand.ts`、`data/helper/sourceManager.ts` / `transform.ts` / `createDimensions.ts` / `dimensionHelper.ts` 逐行核过，在真 dist 上跑基准。§47、§75、§76、§84、§124、§125 里的推迟在原处标注。
+
+### 上游的做法
+
+- **基轴**（`whiskerBoxCommon.getInitialData`）：x 是类目轴就是 `'horizontal'`、y 是类目轴就是 `'vertical'`，**不管 `layout` 写了什么**（x 优先）；都不是类目轴时看 `layout`（任何真值、除了 `'horizontal'` 都当竖排），没写时 y 是时间轴就竖排、否则横排。不是坐标系自己的基轴规则——那条偏向时间 x，两根时间轴、写了 `layout` 的两根值轴上答案不同。
+- **行号前插**只在类目基轴上、且系列的 `encode` 没写基轴那一维时发生（`addOrdinal = !_hasEncodeRule(dim)`）；值轴、时间轴上基值就是元素的第一个数，后面四个（五个）是值。
+- **带宽**（`calcBandWidth(baseAxis, {fromStat: {key}, min: 1})`）：类目轴是映射范围的跨度（`onBand` 时加 1，0 当 1）分像素；值轴、时间轴取该类型在这根基轴上所有系列基值的最小正间隔，按映射范围（containShape 放宽过的）换成像素，只有一个值时是轴长的 0.8；结果不是有限数就是 1，否则至少 1。containShape 也用同一个统计（K 线、箱线图和柱、象形柱一样会放宽自己的值基轴）。
+- **K 线的宽**（`calculateCandleWidth`）：`barWidth` 写了（不是 null）就是 `parsePercent(barWidth, band)`；否则 `max(min(band / 2, barMaxWidth), barMinWidth)`，`barMaxWidth` 缺省是带宽、`barMinWidth` 缺省是 1——下限在最外层，蜡烛重叠也看得见。`parsePercent` 是 `parsePositionOption`：串以 `%` 结尾（先 trim）取 `parseFloat / 100 × band`，别的串 `parseFloat`，`'center'` 等位置词先换成百分比，数字原样，`null` 是 NaN，其余 `+x`。宽不大于 1.3 时是 simple box：整条路径只是最高到最低一笔。
+- **K 线的点**：每个点是坐标系的 `dataToPoint`（值轴 × 值轴有仿射快路径），基值或值是 NaN 时整点 NaN。实体：开盘收盘较高的那端两点、较低那端两点，沿基轴 `±candleWidth / 2` 后各自 `subPixelOptimize`——加的那侧 `positiveOrNegative = false`、减的那侧 `true`（向内、向外各半像素）；影线四点（最高、实体高端、最低、实体低端）只把基轴坐标 `subPixelOptimize(x, 1)`（第三个参数不写 = false）。**值方向的坐标不对齐**：开盘等于收盘时实体是一条高度为零的闭合路径，描边画成一条线，不额外补一个像素。入场从开盘价的像素长出。
+- **涨跌**（`getSign`）：开大于收是 -1、小于是 1；相等时写了 `borderColorDoji` 就是 0，否则和**视图里上一行**的收盘比（`上一行 <= 本行` 为 1，上一行是 NaN 时比较为假，是 -1），第一行是 1。颜色：sign > 0 取 `color`，否则（**含 0**）取 `color0`；描边 0 取 `borderColorDoji`、正取 `borderColor`、负取 `borderColor0`，缺就用填充色。
+- **裁剪**（`resolveNormalBoxClipping`）：`clip` 为真（缺省）时数点在 `getArea()` 里（含边）的个数：一个都没有就不画，部分在外就挂 `createGridClipPath` 的矩形（这两类系列没有 `lineStyle.width`，于是不外扩，宽向上取整，左边有小数时向下取整并把宽加 1），全在里面不挂。`hasValue` 要求基值和全部值都不是 NaN。
+- **箱线图的宽**（`boxplotLayout.calculateBase`）：一根基轴上所有（未被图例关掉的）箱线图系列共享带宽：可用宽 `band × 0.8 − 2`，间隔 `可用宽 / n × 0.3`，每个宽 `(可用宽 − 间隔 × (n − 1)) / n`，偏移从 `宽 / 2 − 可用宽 / 2` 起每个加 `(间隔 + 宽)`；每个系列的宽再夹在自己的 `boxWidth` 里（缺省 `[7, 50]`，不是数组时上下限相同，`parsePercent(…, band) || 0`），**先下限后上限**。
+- **箱线图的点**（14 个）：Q1 端与 Q3 端各两点围成箱子，两根须（最小到 Q1、最大到 Q3），三根横线（最小、最大、中位）；基轴坐标加偏移，**不做 subPixelOptimize**。`BoxPath` 先闭合箱子，再逐段画须和横线。入场从中位数的像素长出，`animationDuration` 缺省 800；更新时留下的从原处补间、新来的入场、走掉的当即消失。
+- **样式**：`visualDrawType: 'stroke'`——`itemStyle.color`（缺省 `tokens.color.neutral00`，浅色主题是 `#fff`）是填充，`itemStyle.borderColor` 缺省是色板色，`borderWidth` 缺省 1，数据项的 `itemStyle` 叠在上面。emphasis 缺省 `borderWidth 2` 加阴影（模糊 5、偏移 1/1、`rgba(0,0,0,0.2)`），默认抬亮（白色抬亮还是白），z2 从 100 到 110。
+- **transform**：数据集有真值的 `transform` 或 `fromTransformResult` 时没有自己的 `source`：上游数据集是 `fromDatasetIndex`，否则 `fromDatasetId`，都没写就是 0；取它的第 `fromTransformResult || 0` 个结果（写了却没有就抛错）。有 transform 就逐级管道（空数组抛错），没有就原样克隆那个结果。`'boxplot'` 要求上游是数组行、按列排（否则抛错），`getRawData()` 是**整个** `data`（表头行也算进去）。结果 0 是 `['ItemName', 'Low', 'Q1', 'Q2', 'Q3', 'High']` 命名的箱子表，结果 1 是不命名的离群点表 `[name, value]`，两个都没有表头行。
+- **prepareBoxplotData**：每行 `slice` 后用 `a - b` 排序；`quantile` 是 `H = (n − 1)p + 1`，取 `floor(H)` 处的值，`H` 有小数部分时往下一个插值，越界读 `undefined`（于是空行全是 NaN）；`boundIQR` 缺省 1.5，`'none'` 和数字 0 用最小最大值，否则 `boundIQR × (Q3 − Q1)` 外扩后再和最小最大值夹（`'1'` 这种串被乘法转成数）；`itemNameFormatter` 是串时只替换**第一个** `{value}`，否则名字是行号；样本落在 `[low, high]` 外的进离群点表。
+- **tooltip 维**：类型声明的 `defaultTooltip`（K 线 open…highest、箱线图 min…max）只在**没人给这一维起名**时生效（`createDimensions` 只在 `resultItem.name == null` 时套类型的维度定义）。数据集表头、`dataset.dimensions`、系列 `dimensions`、transform 的结果给了名字，这些子行就没了，tooltip 跟标签走——最后一个适合当标签的坐标维（transform 出来的箱子只显示 High）。
+
+### 做法
+
+- **新单元 `tyControls.AdvChart.WhiskerBox`**（纯）：`TTyWhiskerLayout`（解出的 K 线宽、箱宽与偏移、`clip`，以及控件填的箱线图填充 / 描边 / 线宽）、`TyWhiskerParsePercent`、`TyCandleWidthOf`、`TyBoxWidthBounds`、`TyBoxplotBase`、`TyWhiskerBand`（类目轴取 `BandWidth`，否则 `TyBandFromMinGap` 配 `TyLiPosMinGap` 与映射范围，至少 1）、`TyCandleEndsOf` / `TyBoxEndsOf`（`Cart.DataToPoint`、实体两侧与脊线 `TySubPixelOptimize`、开盘价 / 中位数基线）、`TyWhiskerClipOf` / `TyWhiskerClipRect`、`TySolveWhiskerLayouts`（K 线逐系列、箱线图逐轴，跳过隐藏系列）。
+- **`Series`**：`TySeriesWhiskerBaseIsX`，绑定时 K 线和箱线图按它选基轴（索引、统计、containShape 跟着走）。
+- **`Dataset`**：`TTyDatasetCache`——每个数据集的结果是一个 `TySourceOf` 本来就会读的节点（`source` / `dimensions` / `sourceHeader` / `seriesLayoutBy`）：根数据集借自己的节点，transform 的结果是缓存造的节点（随缓存释放），`fromTransformResult` 的克隆就是上游的节点；解析中的标记挡住自引用和环。`TySourceOf` 多一个缓存参数，遇到计算出来的数据集就读缓存给的节点（系列自己的 `seriesLayoutBy` / `sourceHeader` / `dimensions` 照旧优先）。注册表只有 `'boxplot'`（`ApplyOne`），D2 的 filter / sort 加在同一处。`TyQuantile`、`TyPrepareBoxplotData` 公开。
+- **`Marks`**：`TTySeriesVisual.Whisker`。`BuildCandlestick` 重写落位：宽取解出的（没解时退回半个带宽），八个点来自 `TyCandleEndsOf`，实体是四点的包围盒、影线是两段，入场的数存对齐后的；sign 0 取 `color0`、上一行收盘是 NaN 时为跌；`hasValue` 要五个数都在；部分出界挂裁剪、全部出界不画；影线与实体的命中带半个线宽；去掉零高实体补的一个像素。新 `BuildBoxplot`：每行一个带 `Cmds` 的多边形（`TyBoxplotShape`：命中多边形是箱子，路径是箱子加五段），数据项 `itemStyle` 的 color / borderColor / borderWidth / opacity 叠上去，入场与更新的数（14 点、中位数基线、方向）放在 `Anim.Pts` / `G`，命中带半个线宽，裁剪同 K 线。渲染器表加 `boxplot`；没解时（纯单元调用）用单系列的缺省布局。
+- **`Shape`**：`TyBoxplotShape`；多边形带 `Cmds` 时命中检测再看路径里的直线段（须和横线）。
+- **控件**：`FWhiskers` 在柱布局之后解；`BoxplotStyle` 填填充（`itemStyle.color`，缺省是主题的图表底色——上游的 `neutral00`，不写死 `#fff`）、描边（`borderColor`，缺省系列色）、线宽；`FDatasetCache` 每次建 store 时清空并传给 `TySourceOf`；`MultiValueDims` 只在类目基轴且 `encode` 没写基轴时前插行号，否则基值是元素第一个；`ResolveTextDims` 被命名的维不进类型的 tooltip 维。
+- **状态**：新的 `sskBox`——一项一个元素当宿主，emphasis 没写 `borderWidth` 时是 2；状态跑在入场 / 更新的同一个代理上（`carBoxplot` 加进「上游同一个元素」的名单）。
+- **动画**：新角色 `carBoxplot`（代理 `'boxplot'`）：入场按方向把 14 点的值坐标放到中位数上、`initProps` 带行号；更新时留下的 `updateProps` 带新行号，新来的走入场；帧里由点重建路径。删除照旧当即消失。K 线帧里也去掉了零高实体的一个像素。
+
+### 基准
+
+`tools/advchart-oracle/candle-boxplot.js`（真 dist，node SSR，600×400，`animation: false`，TooltipView 照 tooltip-finish.js 的办法在 node 下打开，最后 `process.exit()`）→ `tests/fixtures/advchart-candle-boxplot.json`：**67 个用例**，每个记网格面积、两根轴的有效与映射范围；每个 K 线 / 箱线图项的 `hasValue`、是否画、是否裁剪（裁剪路径的矩形）、布局点、样式与 z2（K 线还有 sign、simple box）；散点的点；数据集每个结果的表（数字逐位、串原样）；指定项的 tooltip 行；高亮后的样式与状态。
+
+- K 线：缺省、`barWidth` 13 / `'33%'` / 0、`barMaxWidth` 9 / `'15%'`、`barMinWidth` 11（40 个类目）/ `'70%'`、上限 6 下限 10、300 个类目的 simple box、小数带宽（7 个类目 503 px）与 `barWidth: 7.3`、`boundaryGap: false`、值基轴（含 `containShape: false`、单值、两个系列共享间隔）、时间基轴、y 类目（横躺）、两根值轴上 `layout: 'vertical'`、类目 x 压过 `layout`、裁剪（部分出界、整个出界）与 `clip: false`、正好压在上下边上的不裁、绘图区左边是小数时的裁剪矩形、`'-'` 与 null、收盘是 `'-'` 之后的 doji、`borderColorDoji`、间隔 0.001 的值基轴（带宽不足一像素按一像素，`barMinWidth: 0`）、`encode` 写了 x（不前插）、item tooltip（含 `borderWidth: 4` 时远离实体的影线上）与 axis tooltip。
+- 箱线图：一个、两个、三个系列，`boxWidth` `[20, 30]` / `['20%', '40%']` / 15 / `[140, 150]` / `[60, 20]`（先下限后上限），40 个类目两系列（下限 7 重叠），小数带宽，y 类目，值基轴，两根值轴竖排，裁剪（含整个出界），系列与数据项的样式，null 行；transform：`itemNameFormatter`、`boundIQR` `'none'` / 0 / 0.5 / `'1'`、无 config、`'{value}/{value}'`、1/2/4/5/0 个样本、y 轴范围；item tooltip（含 `borderWidth: 4` 时须上）、两系列 axis tooltip、transform 箱子与离群点的 tooltip；高亮（缺省、声明的 emphasis 样式、`focus: 'self'`）。
+- 51 条守卫（按源码写的期望：半个带宽、`barWidth` 原样、百分比、0 是 simple box、上下限的次序、对齐到半像素、值基轴有映射范围而 `containShape: false` 没有、裁剪三态、`'-'` 不画、doji 的 sign 0、三种基轴选择、箱宽公式与上下限、14 个点、白填充、transform 的维度名 / 名字格式 / 离群点表是克隆 / 只替换第一个 / `'none'` 与 0 一样 / 单样本 / 空行 NaN、高亮的线宽 2 与 z2 110、`focus: 'self'` 淡化其余、上限压过下限、整个出界不画、压边不裁、小数左边的裁剪矩形、不足一像素的带宽、NaN 收盘之后为跌），两次生成逐字节一致。
+- **入场与更新**：`animation.js` 在所有原有用例**之后**追加 `boxplot` 的三个入场变体、`boxplot-update.default`（P 出、S 进、Q R 移）与 `.override`（更新延迟按新行号），加一条守卫（800 ms、三个箱子、有 clip）；原有 67 个用例与 6 条守卫逐字节不变。`animation-update.js` 重新生成，`twins` 末尾多了这两个更新用例的 notMerge 版本，原有 11 个 twin 与 11 个用例不变。
+- **状态过渡**：`state-anim.js` 在原有用例和守卫**之后**追加 `boxplot-action`（高亮第二个箱子，`focus: 'self'`）与 `boxplot-enter-hover`（入场 300 ms 时高亮），三条守卫追加在末尾；原有 35 个用例与守卫逐字节不变。
+
+测试 `test.advchart.candleboxplot`（新，9 个，注册在 `tytests.lpr`）：
+
+- **布局**：每个用例真控件渲染后比网格面积、两根轴的有效与映射范围（上游没有映射范围的端口也不能有）；每项是否画、是否裁剪（裁剪矩形对着上游录下的裁剪路径逐位）；K 线实体是四个实体点的包围盒、影线是两段（零长的不画）、simple box 是最高到最低一笔、入场的脊线是对齐后的；箱线图 `Anim.Pts` 是 14 个点、路径命令次序；样式：选项写了的颜色逐位，上游的缺省色映到主题（K 线涨跌、图表底色、色板色），线宽与不透明度逐位，影线的笔就是实体的笔。一万五千余项。
+- **表**：每个数据集的每个结果过 `TTyDatasetCache`：维度名、结果 0 的 `StartIndex`、逐格（数字逐位，NaN 只认 NaN——JS 里只有一个 NaN）。
+- **tooltip**：指针放到基准的点上，比显示的是哪一项、各行（axis 触发走 `AxisTooltipContent`）。
+- **高亮**：`DispatchAction` 之后比线宽、不透明度、z2 的抬升、写了的填充逐位，没写的比「动没动」。
+- 手写 5 个：`TyQuantile` 的插值与边界；不是数的样本从不算离群点（这里对 NaN 做有序比较会抛异常）、不是数组的行什么都不做；没注册的 transform、空管道、上游不存在、对象行、根数据集只有一个结果、没缓存时计算出来的数据集无效；互相引用的两个数据集都没有表也不死循环；K 线宽的规则。
+
+另外：`test.advchart.animenter` 的 K 线横向坐标不再按权重比，全部逐位（例外取消）；`animenter` / `animupdate` / `animstate` 的映射认 `boxplot` / `boxplotBoxPath`；`test.advchart.containshape` 重新比较原先推迟的「值基轴上的 K 线」用例；`test.advchart.candlestick` 的两个像素测试改读影线那一列（零高实体的线落在两行之间，半透明，方向要从影线读）。
+
+### 变异测试
+
+`mut108.py`（草稿目录）：逐个改源码、重编、跑相关的套件（本批的 `TAdvChartCandleBoxplotTest`，动画与状态的另跑 `AnimEnter` / `AnimUpdate` / `AnimState`，前插另跑 `ContainShape`，encode 另跑原始值、子行、系列文字三套）、按原字节还原。53 个：
+
+- K 线宽 4 个：`barWidth` 不读、下限放进上限里面、下限缺省 0、百分比不乘带宽；
+- 箱宽与带宽 7 个：间隔比例 0.25、可用宽不减 2、先上限后下限、起点不加半个宽、标量只当下限、带宽不夹到 1、带宽按有效范围量；
+- 落位 6 个：两侧对齐方向对调、脊线向正方向对齐、脊线不对齐、开盘基线反了、箱子不加偏移、最小与最大的横线对调；
+- 裁剪 3 个：边上不算在里面、裁剪矩形不向下取整、`clip` 缺省为假；
+- 基轴 2 个：`layout` 不读、类目 x 不强制；
+- 控件 8 个：总是前插行号、`encode` 不看、被命名的维照进 tooltip、箱子填系列色、emphasis 没有边框 2、状态用自己的代理、箱线图没有状态种类、不传缓存；
+- 构建器 9 个：doji 填涨色、上一行 NaN 当涨、只看开收、影线不带命中、K 线不挂裁剪、数据项描边不读、箱子不带命中、箱子不挂裁剪、整个出界照画；
+- transform 9 个：总插值、0 不当极值、缺省 1、全部替换、离群点含端点、结果没有维度名、上游没有缺省、不排序、`fromTransformResult` 的克隆丢了；
+- 动画 4 个与命中 1 个：入场方向反了、新来的不入场、更新不带行号、入场不带行号；路径的直线段不参与命中。
+
+首轮杀死 40 个，存活 13 个：
+
+- **先上限后下限**：只在下限大于上限时有区别。补 `b-bw-inverted`（`[60, 20]`），杀死。
+- **带宽不夹到 1**：类目带宽总被 `barMinWidth` 的 1 挡住。补 `k-tiny-gap`（值基轴间隔 0.001、`barMinWidth: 0`），杀死。
+- **边上不算在里面**（原先改的是 x，没有点压在 x 边上，改成 y）与 **裁剪矩形不向下取整**：补 `k-clip-edge`（上下正好压边）、`k-clip-frac`（左边 57.5）；而且测试原来拿端口自己的 `TyWhiskerClipRect` 算期望——**期望出自被测代码本身**——改成基准录下上游裁剪路径的矩形、测试对着它比，杀死。
+- **`encode` 不看**：补 `k-encode`，杀死。
+- **上一行 NaN 当涨**：补 `k-doji-after-gap`。新用例一跑就**抛了 EInvalidOp**：`prevClose <= closeV` 对 NaN 做有序比较，在这里会抛异常——真 bug，改成先判 NaN（同样的比较在离群点判定和裁剪计数里一并改掉，补手写测试）；之后杀死。
+- **影线、须不带命中**与**路径直线段不参与命中**：原来 tooltip 的点落在实体 / 箱子里面（实体的命中带也盖住了点）。补 `k-tip-wick` 与 `b-tip-whisker`（`borderWidth: 4`，指针在远离实体的影线 / 须上），杀死。
+- **整个出界照画**：补 `b-clip-out`，杀死。
+- **新来的不入场、更新不带行号**：箱线图的更新用例只在主 fixture 里，`AnimUpdate` 跑的是 `animation-update.js` 的 notMerge twin——重新生成后有了 twin；再补带延迟函数的 `.override`，两个都杀死。
+- **状态用自己的代理**：等价。上游同一个元素上入场动的是 `shape.points`、状态动的是 `style.*`，键不相交，`saveTo` / `stopTracks` 互不影响；补了 `boxplot-enter-hover`（入场途中高亮）也比不出来。
+
+补完重跑这 13 个（以及判定改成先判 NaN、针变了的「离群点含端点」，仍杀死），12 个杀死，1 个等价。
+
+### 已知偏差
+
+- **阴影**：箱线图 emphasis 的阴影（模糊 5、偏移 1/1）不画，元素没有阴影；测试不比阴影。
+- **命中**：K 线、箱线图按「填充内或描边半个线宽内」近似 zrender 的 contain（实体按外扩的矩形，箱子按多边形加直线段），线帽、斜接处不逐像素；挂了裁剪的元素命中不看裁剪（上游看）。
+- **K 线逐项颜色**：数据项自己的 `itemStyle`（以及 `borderColorDoji` 只写在某一项上）不读；`borderColorDoji` 只认系列上的。
+- **K 线 large 模式**：600 个以上时上游走 large 路径（C8），端口仍逐项画。
+- **新来的 K 线**在更新中仍是直接到终值（AN3 的旧行为，没有基准）；新来的箱子按上游入场。
+- **transform**：只有 `'boxplot'`；filter、sort（D2）以及任何没注册的类型、空管道、上游不是数组行或按行排、`fromTransformResult` 指向不存在的结果——上游抛错让整个 setOption 失败，端口只是这个数据集没有表、读它的系列什么都不画，也没有诊断。样本不是数时按 JS 的 `ToNumber` 转（数组、对象当 NaN），含 NaN 时的排序用稳定插入排序，不保证与 V8 的 TimSort 在不一致比较下的结果相同；`useExtreme` 时上游把原始样本（可能是串）放进表，端口放转过的数。`itemNameFormatter` 写成函数不支持（当成非串，名字是行号）。
+- **箱线图的 visualMap** 与逐数据取色不接；图例图标沿用原有规则，没有按上游（白填充、系列色描边）建模。
+- **`encode` 写了基轴时的系列自带数据**只是不前插行号，`encode` 的其余映射走原有的 `SeriesDataEncode`。
+
+### 落地
+
+- `source/tyControls.AdvChart.WhiskerBox.pas`（新，已登记 `tycontrols.lpk` 与 `tycontrols.pas`）。
+- `source/tyControls.AdvChart.Dataset.pas`：`TTyDatasetCache`、`TyDatasetTruthy`、`TyQuantile`、`TyPrepareBoxplotData`、`TySourceOf` 的缓存参数、单元注释。
+- `source/tyControls.AdvChart.Series.pas`：`TySeriesWhiskerBaseIsX`、绑定时的基轴。
+- `source/tyControls.AdvChart.Marks.pas`：`Whisker`、`BuildCandlestick` 重写落位、`BuildBoxplot`、渲染器表。
+- `source/tyControls.AdvChart.Shape.pas`：`TyBoxplotShape`、`CmdLinesNear`。
+- `source/tyControls.AdvChart.Paint.pas`：`carBoxplot`。
+- `source/tyControls.AdvChart.AnimView.pas`：箱线图的入场、更新、帧；K 线帧不补像素。
+- `source/tyControls.AdvanceChart.pas`：`FWhiskers`、`FDatasetCache`、`BoxplotStyle`、`MultiValueDims`、`ResolveTextDims`、`sskBox`、状态代理名单。
+- `tools/advchart-oracle/candle-boxplot.js`、`tests/fixtures/advchart-candle-boxplot.json`、`tests/test.advchart.candleboxplot.pas`（新，注册在 `tytests.lpr`）；`animation.js` / `state-anim.js` 追加用例，连同 `animation-update.js` 重新生成三份 fixture；`test.advchart.animenter`、`animupdate`、`animstate`、`containshape`、`candlestick` 如上。
+- §47、§75、§76、§84、§124、§125 在原处标注。没有新的 resourcestring。
+
+全量 **8176 个测试，0 错误，0 失败**（新增 `test.advchart.candleboxplot` 9 个；基轴、前插、tooltip 维、零高实体的改动之后，现有测试除上面说的 `candlestick` 两个像素测试改读影线外全绿）。

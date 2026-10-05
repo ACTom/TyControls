@@ -657,7 +657,7 @@ begin
   begin
     if AEl.Find('dataIndex').JSONType = jtNull then Exit;
     if (typ <> 'rect') and (typ <> 'sector') and (typ <> 'path') and (typ <> 'polygon')
-      and (typ <> 'normalCandlestickBox') then Exit;
+      and (typ <> 'normalCandlestickBox') and (typ <> 'boxplotBoxPath') then Exit;
     { a pictorial bar's rect is its inkless hit box; an effect symbol's
       ripples are paths of its own group (0.k.1.j) }
     if (typ = 'rect') and (Pos('pictorialBar', owner) > 0) then Exit;

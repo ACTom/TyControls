@@ -214,6 +214,15 @@ function TySeriesLegendByDatum(const AType: string): Boolean;
 
 function TySeriesStatKey(const ASeriesType, ACoordSysName: string): string;
 
+{ A CANDLESTICK'S OR A BOXPLOT'S BASE AXIS is x (True) or y -- upstream's
+  whiskerBoxCommon, not the cartesian's own rule: a category x forces
+  'horizontal' and a category y 'vertical' whatever `layout` says; with
+  neither, a written layout decides (any truthy value but 'horizontal' is
+  vertical), and failing that a time y is vertical and anything else
+  horizontal. [Batch 108] }
+function TySeriesWhiskerBaseIsX(AXType, AYType: TTyAxisType;
+  ALayout: TJSONData): Boolean;
+
 { Build the index over a whole set of bindings. }
 procedure TyIndexSeries(const ABindings: TTySeriesBindingArray;
   AIndex: TTyAxisSeriesIndex);
@@ -670,6 +679,16 @@ begin
     b.XAxis := ABuild.Axis('xAxis', xi);
     b.YAxis := ABuild.Axis('yAxis', yi);
     b.BaseAxis := b.Cart.GetBaseAxis;
+    { A WHISKER BOX CHOOSES ITS OWN [Batch 108] }
+    if ((b.SeriesType = 'candlestick') or (b.SeriesType = 'boxplot'))
+      and (b.XAxis <> nil) and (b.YAxis <> nil) then
+    begin
+      if TySeriesWhiskerBaseIsX(b.XAxis.AxisType, b.YAxis.AxisType,
+        node.Find('layout')) then
+        b.BaseAxis := b.XAxis
+      else
+        b.BaseAxis := b.YAxis;
+    end;
     b.ValueAxis := b.Cart.GetOtherAxis(b.BaseAxis);
     b.Resolved := True;
     b.HasAxes := True;
@@ -692,6 +711,26 @@ end;
 function TySeriesStatKey(const ASeriesType, ACoordSysName: string): string;
 begin
   Result := ASeriesType + StatDelim + ACoordSysName;
+end;
+
+function TySeriesWhiskerBaseIsX(AXType, AYType: TTyAxisType;
+  ALayout: TJSONData): Boolean;
+var truthy: Boolean;
+begin
+  if AXType = atCategory then Exit(True);
+  if AYType = atCategory then Exit(False);
+  truthy := False;
+  if ALayout <> nil then
+    case ALayout.JSONType of
+      jtString: truthy := ALayout.AsString <> '';
+      jtNumber: truthy := (ALayout.AsFloat <> 0) and not IsNan(ALayout.AsFloat);
+      jtBoolean: truthy := ALayout.AsBoolean;
+      jtArray, jtObject: truthy := True;
+    end;
+  { `if (!layout) layout = yAxisType === 'time' ? 'vertical' : 'horizontal'`,
+    then `layout === 'horizontal' ? x : y` }
+  if not truthy then Exit(AYType <> atTime);
+  Result := (ALayout.JSONType = jtString) and (ALayout.AsString = 'horizontal');
 end;
 
 function TTyAxisSeriesIndex.IndexOf(const AAxisUid, AKey: string): Integer;

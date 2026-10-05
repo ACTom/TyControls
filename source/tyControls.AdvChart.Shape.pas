@@ -127,6 +127,10 @@ function TySectorRadii(const AValues: array of Double): TTyCornerRadii;
 
 function TyShapePolyline(const APoints: array of TTyPointF): TTyChartShape;
 function TyShapePolygon(const APoints: array of TTyPointF): TTyChartShape;
+{ A BOXPLOT'S PATH from its fourteen points (x0, y0, x1, y1, ...): the box
+  closed, then the two whiskers and the three caps as open segments; the hit
+  polygon is the box. [Batch 108] }
+function TyBoxplotShape(const APts: array of Double): TTyChartShape;
 function TyShapePath(const APathData: string; const ABounds: TTyRectF): TTyChartShape; overload;
 { A path TURNED about a point. The upright form is the overload above. }
 function TyShapePath(const APathData: string; const ABounds: TTyRectF;
@@ -924,6 +928,43 @@ begin
   Result.RotCY := ARotCY;
 end;
 
+function TyBoxplotShape(const APts: array of Double): TTyChartShape;
+var
+  k, n: Integer;
+
+  function P(AIdx: Integer): TTyPointF;
+  begin
+    Result := TyPointF(APts[AIdx * 2], APts[AIdx * 2 + 1]);
+  end;
+
+  procedure Cmd(AKind: TTyPathCmdKind; AIdx: Integer);
+  begin
+    n := Length(Result.Cmds);
+    SetLength(Result.Cmds, n + 1);
+    Result.Cmds[n] := Default(TTyPathCmd);
+    Result.Cmds[n].Kind := AKind;
+    Result.Cmds[n].X := APts[AIdx * 2];
+    Result.Cmds[n].Y := APts[AIdx * 2 + 1];
+  end;
+
+begin
+  Result := TyShapePolygon([P(0), P(1), P(2), P(3)]);
+  if Length(APts) < 28 then Exit;
+  Result.Cmds := nil;
+  Cmd(pckMove, 0);
+  Cmd(pckLine, 1);
+  Cmd(pckLine, 2);
+  Cmd(pckLine, 3);
+  Cmd(pckClose, 0);
+  k := 4;
+  while k < 13 do
+  begin
+    Cmd(pckMove, k);
+    Cmd(pckLine, k + 1);
+    Inc(k, 2);
+  end;
+end;
+
 function TyShapePolygon(const APoints: array of TTyPointF): TTyChartShape;
 begin
   Result := EmptyShape(cskPolygon);
@@ -1134,6 +1175,52 @@ begin
   end;
 end;
 
+{ the straight segments of a path -- each line from where the pen is -- near
+  a point; curves are not asked }
+function CmdLinesNear(const ACmds: TTyPathCmdArray; AX, AY, ASlop: Double): Boolean;
+var
+  i: Integer;
+  px, py, sx, sy: Double;
+  have: Boolean;
+begin
+  Result := False;
+  have := False;
+  px := 0;
+  py := 0;
+  sx := 0;
+  sy := 0;
+  for i := 0 to High(ACmds) do
+    case ACmds[i].Kind of
+      pckMove:
+        begin
+          px := ACmds[i].X;
+          py := ACmds[i].Y;
+          sx := px;
+          sy := py;
+          have := True;
+        end;
+      pckLine:
+        begin
+          if have and not (IsNan(px) or IsNan(py) or IsNan(ACmds[i].X) or IsNan(ACmds[i].Y))
+            and (TyDistanceToSegment(AX, AY, px, py, ACmds[i].X, ACmds[i].Y) <= ASlop) then
+            Exit(True);
+          px := ACmds[i].X;
+          py := ACmds[i].Y;
+          have := True;
+        end;
+      pckCurve:
+        begin
+          px := ACmds[i].X;
+          py := ACmds[i].Y;
+        end;
+      pckClose:
+        begin
+          px := sx;
+          py := sy;
+        end;
+    end;
+end;
+
 function PolygonContains(const APoints: TTyPointFArray; AX, AY: Double): Boolean;
 var
   i, j: Integer;
@@ -1281,6 +1368,10 @@ begin
           closed[n] := AShape.Points[0];
           Result := PolylineNear(closed, AX, AY, ASlopPx);
         end;
+        { AND THE PATH'S OWN STRAIGHT SEGMENTS, where it carries open ones
+          past its outline -- a boxplot's whiskers and caps [Batch 108] }
+        if (not Result) and (ASlopPx > 0) and (Length(AShape.Cmds) > 0) then
+          Result := CmdLinesNear(AShape.Cmds, AX, AY, ASlopPx);
       end;
     cskPath:
       { Bounds, not the path itself: resolving arbitrary SVG path data exactly

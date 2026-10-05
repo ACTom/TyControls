@@ -12,11 +12,10 @@ unit test.advchart.animenter;
   each sample with AnimTick, and compares:
 
     - every animated element the port models: its proxy's value of every
-      tracked key, BIT FOR BIT, final value included; the one exception is a
-      candle's across coordinate (upstream sub-pixel-optimises the body's
-      sides, the port does not), which must hold still on both sides and is
-      compared by its animation WEIGHT; keys the fixture does not track must
-      hold still;
+      tracked key, BIT FOR BIT, final value included [Batch 108: a
+      candle's across coordinate too -- it was compared by its animation
+      WEIGHT while the port did not sub-pixel-optimise the body's sides];
+      keys the fixture does not track must hold still;
     - the proxy's animator count against the element's;
     - the clip count against upstream's, all of it [Batch 92: the counts,
       the markers and the ripples are modelled -- nothing is subtracted];
@@ -534,6 +533,13 @@ begin
       Result.Kind := amkModel;
       Result.Role := 'candle';
       Result.Index := di;
+    end
+    else if stype = 'boxplot' then
+    begin
+      { one path per box, its fourteen points [Batch 108] }
+      Result.Kind := amkModel;
+      Result.Role := 'boxplot';
+      Result.Index := di;
     end;
   finally
     parts.Free;
@@ -718,7 +724,6 @@ var
   up, upF, up0, got, gotF: TTyDoubleArray;
   got0: array of array of TTyDoubleArray;
   exact: Boolean;
-  wu, wp: Double;
   lst, frm: TTyPaintList;
   a, b: TTyChartElement;
 begin
@@ -854,26 +859,14 @@ begin
                 [name, samples.Items[s].AsString, el.Strings['id'], key, j,
                  Fmt(got[j]), Fmt(up[j])]), name + el.Strings['id'] + key);
           end
-          else if (m.Role <> 'candle') or not SameBits(up0[j], upF[j]) then
-            { A DIFFERENT FINAL VALUE IS A DIFFERENT ANSWER, except where the
-              port's layout is known to differ and the number does not move }
+          else
+            { A DIFFERENT FINAL VALUE IS A DIFFERENT ANSWER. [Batch 108: a
+              candle's across coordinate was compared by its weight -- the
+              port did not snap the body's sides; it does now, and every key
+              is held to the bit.] }
             Miss(Format('%s t=%s %s: %s[%d] rests at %s here, %s upstream',
               [name, samples.Items[s].AsString, el.Strings['id'], key, j,
-               Fmt(gotF[j]), Fmt(upF[j])]), name + el.Strings['id'] + key + 'final')
-          else
-          begin
-            { A CANDLE'S ACROSS COORDINATE: upstream sub-pixel-optimises the
-              body's sides and the port does not -- neither moves, which is
-              what the weight (nought throughout) says }
-            Inc(FWeighed);
-            if upF[j] = up0[j] then wu := 0 else wu := (up[j] - up0[j]) / (upF[j] - up0[j]);
-            if gotF[j] = got0[e][k][j] then wp := 0
-            else wp := (got[j] - got0[e][k][j]) / (gotF[j] - got0[e][k][j]);
-            if Abs(wu - wp) > 1e-9 then
-              Miss(Format('%s t=%s %s: %s[%d] weight %s here, %s upstream',
-                [name, samples.Items[s].AsString, el.Strings['id'], key, j,
-                 Fmt(wp), Fmt(wu)]), name + el.Strings['id'] + key + 'w');
-          end;
+               Fmt(gotF[j]), Fmt(upF[j])]), name + el.Strings['id'] + key + 'final');
         end;
       end;
     end;

@@ -507,7 +507,11 @@ begin
   for c := 0 to cases.Count - 1 do
   begin
     cs := cases.Objects[c];
-    if Flag(cs, 'deferred') then Continue;
+    { [Batch 108: the candlestick's own deferral is overturned -- it lays its
+      candles out on the band its base values make, and widens its value
+      base by half of it. The others still wait.] }
+    if Flag(cs, 'deferred') and (Pos('candlestick widens', cs.Strings['why']) <> 1) then
+      Continue;
     w := cs.Integers['W'];
     h := cs.Integers['H'];
     FChart.Option := cs.Objects['option'].AsJSON;

@@ -86,6 +86,24 @@
    "clips": [16,16,16,16,16,15,2,2,2,0,0,0],
    "seriesSame": true,
    "componentsStill": true
+  },
+  {
+   "id": "boxplot-update.default",
+   "merged": {"xAxis":{"type":"category","data":["Q","R","S"]},"yAxis":{"type":"value"},"series":[{"type":"boxplot","data":[[6,17,23,31,42],[12,20,28,34,50],[8,12,16,22,30]]}]},
+   "clips": [3,3,3,3,3,3,1,1,0,0,0,0],
+   "seriesSame": true,
+   "componentsStill": true
+  },
+  {
+   "id": "boxplot-update.override",
+   "merged": {
+    "xAxis": {"type":"category","data":["Q","R","S"]},
+    "yAxis": {"type":"value"},
+    "series": [{"type":"boxplot","data":[[6,17,23,31,42],[12,20,28,34,50],[8,12,16,22,30]],"animationDurationUpdate":300,"animationEasingUpdate":"linear","animationDelayUpdate":{"$fn":"idx*30"}}]
+   },
+   "clips": [3,3,3,3,3,3,1,1,0,0,0,0],
+   "seriesSame": true,
+   "componentsStill": true
   }
  ],
  "cases": [

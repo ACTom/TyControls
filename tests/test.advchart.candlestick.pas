@@ -20,7 +20,7 @@ uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      tyControls.AdvChart.Types, tyControls.AdvChart.Data,
      tyControls.AdvChart.Option, tyControls.AdvChart.Marks,
      tyControls.AdvChart.Builder, tyControls.AdvChart.Coord,
-     tyControls.AdvChart.Scale,
+     tyControls.AdvChart.Scale, tyControls.AdvChart.AnimAxis,
      tyControls.AdvanceChart, test.advancechart;
 type
   TAdvChartCandleRuleTest = class(TTestCase)
@@ -46,6 +46,7 @@ type
     procedure TearDown; override;
     procedure Draw(const AOption: string);
     function CentreColour(ACat: Integer; AValue: Double): TBGRAPixel;
+    function WickColour(ACat: Integer; AValue: Double): TBGRAPixel;
     function Diagnostics: string;
   published
     procedure TestARisingCandleAndAFallingOneAreDifferentColours;
@@ -237,6 +238,19 @@ begin
                           Round(g.YAxis(0).DataToCoord(AValue)));
 end;
 
+{ THE WICK'S PIXEL: the spine is snapped to the half pixel, so a one-pixel
+  pen covers the column under it whole. [Batch 108: a doji's body is a line
+  of no height now, stroked where its value falls -- off the pixel grid, and
+  so half on each of two rows. Its direction is read off its wick.] }
+function TAdvChartCandleDrawTest.WickColour(ACat: Integer;
+  AValue: Double): TBGRAPixel;
+var g: TTyGridBuild;
+begin
+  g := FChart.Build.Grid(0);
+  Result := FBmp.GetPixel(Floor(TySubPixelOptimize(g.XAxis(0).DataToCoord(ACat), 1, False)),
+                          Round(g.YAxis(0).DataToCoord(AValue)));
+end;
+
 function TAdvChartCandleDrawTest.Diagnostics: string;
 var i: Integer;
 begin
@@ -281,8 +295,8 @@ begin
   AssertTrue('up and down are different to begin with',
              (rose.red <> fell.red) or (rose.green <> fell.green));
 
-  dojiDown := CentreColour(1, 10);
-  dojiUp := CentreColour(3, 10);
+  dojiDown := WickColour(1, 20);
+  dojiUp := WickColour(3, 20);
   AssertTrue('both dojis drew', (dojiDown.alpha > 0) and (dojiUp.alpha > 0));
   AssertEquals('after a higher close, a doji is down', fell.red, dojiDown.red);
   AssertEquals('', fell.green, dojiDown.green);
@@ -302,7 +316,7 @@ begin
        '"yAxis":{"type":"value","min":0,"max":60},' +
        '"series":[{"type":"candlestick","name":"D","data":[' +
        '[20,20,5,35],[10,30,5,35]]}]}');
-  first := CentreColour(0, 20);
+  first := WickColour(0, 30);
   rising := CentreColour(1, 20);
   AssertTrue('the doji drew', first.alpha > 0);
   AssertEquals('and it is the rising colour', rising.red, first.red);

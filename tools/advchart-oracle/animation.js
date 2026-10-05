@@ -581,8 +581,8 @@ function newChart() {
   return chart;
 }
 
-function enterCase(chartName, variantName, v) {
-  const option = applyVariant(BASE[chartName](), v);
+function enterCase(chartName, variantName, v, build) {
+  const option = applyVariant((build || BASE[chartName])(), v);
   NOW = T_BASE;
   rngState = SEED;
   const chart = newChart();
@@ -708,6 +708,32 @@ function thresholdCases() {
   o = six();
   o.series[0].animationDuration = 0;
   out.push(run('zeroDuration', 'series animationDuration 0 -> getAnimationConfig duration 0 -> attr() at once', o));
+  return out;
+}
+
+// [batch 108] THE BOXPLOT: BoxplotView's enter (transInit: every point's value
+// coordinate on the median's, initProps at the row, animationDuration 800 by
+// the series' default) in the three variants, and an update where the window
+// slides by one category (P leaves at once, S enters, Q and R move from where
+// they were at the new row)
+const LATE = {
+  boxplot: () => ({
+    xAxis: { type: 'category', data: ['P', 'Q', 'R'] }, yAxis: { type: 'value' },
+    series: [{ type: 'boxplot', data: [[10, 20, 25, 32, 45], [5, 18, 22, 30, 40], [15, 24, 30, 36, 52]] }],
+  }),
+};
+function boxplotCases() {
+  const out = [];
+  for (const vn of Object.keys(VARIANTS)) out.push(enterCase('boxplot', vn, VARIANTS[vn], LATE.boxplot));
+  out.push(updateCase('boxplot-update.default', 'boxplot', 'categories P-R -> Q-S: box P goes at once, S enters, Q and R move',
+    LATE.boxplot(),
+    { xAxis: { data: ['Q', 'R', 'S'] }, series: [{ type: 'boxplot', data: [[6, 17, 23, 31, 42], [12, 20, 28, 34, 50], [8, 12, 16, 22, 30]] }] }));
+  // the update timing at the NEW row: Q and R move with a delay by their new index
+  const updO = { animationDurationUpdate: 300, animationEasingUpdate: 'linear', animationDelayUpdate: { $fn: 'idx*30' } };
+  const withO = o => { o.series.forEach(s => Object.assign(s, JSON.parse(JSON.stringify(updO)))); return o; };
+  out.push(updateCase('boxplot-update.override', 'boxplot', 'as boxplot-update.default with the update override (300 / linear / delay idx * 30)',
+    withO(LATE.boxplot()),
+    withO({ xAxis: { data: ['Q', 'R', 'S'] }, series: [{ type: 'boxplot', data: [[6, 17, 23, 31, 42], [12, 20, 28, 34, 50], [8, 12, 16, 22, 30]] }] })));
   return out;
 }
 
@@ -881,6 +907,15 @@ function check(gen) {
     guards.push({ id: 'threshold', ok, detail: 'above clips ' + above.clips.join(',') + '; equal clips ' + equal.clips.join(',')
       + '; rootOff clips ' + off.clips.join(',') });
   }
+  // G5b: the boxplot's enter is 800 ms by its series default, from the median
+  {
+    const c = gen.cases.find(x => x.id === 'boxplot.default');
+    const boxes = c.elements.filter(e => e.type === 'boxplotBoxPath');
+    const ok = c.resolved[0].duration === 800 && boxes.length === 3 && boxes.every(b => b.track && b.track['shape.points'])
+      && c.clips[0] > 0;
+    guards.push({ id: 'boxplot-enter', ok, detail: 'duration ' + JSON.stringify(c.resolved[0].duration) + ', ' + boxes.length
+      + ' boxes, clips ' + c.clips.join(',') });
+  }
   // G6: every enter case with a series element tracked ends at its final value at t = 1500
   {
     const bad = [];
@@ -911,6 +946,8 @@ function generate() {
   }
   updateCases().forEach(c => cases.push(c));
   thresholdCases().forEach(c => cases.push(c));
+  // [batch 108] appended after everything else, so no earlier case moves
+  boxplotCases().forEach(c => cases.push(c));
   const easings = {
     ts: easingsRaw.ts, tsText: easingsRaw.tsText, tsNote: easingsRaw.tsNote, names: easingsRaw.names,
     table: easingsRaw.table.map(r => ({ name: r.name, kind: r.kind, resolved: r.resolved, values: r.values, valuesText: r.valuesText })),

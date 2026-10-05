@@ -39,6 +39,9 @@ unit tyControls.AdvChart.AnimView;
     radarArea    where nothing fills it (RadarView.ts:106-130)
     candle       shape.points: every point's value coordinate out of the
                  open price's (CandlestickView.ts:117-128, 326-332)
+    boxplot      shape.points: the fourteen points' value coordinates out of
+                 the median's, at the row (BoxplotView.ts:59-75, 191-235)
+                 [Batch 108]
     label        LabelManager's first appearance: style.opacity 0 -> 1 at
                  the row, for a series that animates and a label that does
                  not count its value; a line symbol's own, 300 ms from 0,
@@ -947,6 +950,7 @@ begin
     carRadarLine: Result := 'radarLine';
     carRadarArea: Result := 'radarArea';
     carCandleBody, carCandleWickHigh, carCandleWickLow: Result := 'candle';
+    carBoxplot: Result := 'boxplot';
     carLabel: Result := 'label';
     carGuide: Result := 'guide';
     carGaugeDetail: Result := 'gaugeDetail';
@@ -1488,6 +1492,24 @@ begin
         p.SetAnimProp('shape.points', TyAnimArr(from, 2));
         Start(props, TyAnimCallAt(idx));
       end;
+    carBoxplot:
+      begin
+        { transInit: every point's value coordinate on the median's -- y on
+          a horizontal layout, x on a vertical one -- then initProps at the
+          row [Batch 108] }
+        if Length(AEl.Anim.Pts) < 28 then Exit;
+        p := Make(AEl.Anim.Series, idx, 'boxplot');
+        ring := Copy(AEl.Anim.Pts, 0, 28);
+        from := Copy(ring, 0, 28);
+        for k := 0 to 13 do
+          if AEl.Anim.G[1] <> 0 then from[k * 2 + 1] := AEl.Anim.G[0]
+          else from[k * 2] := AEl.Anim.G[0];
+        props := TyAnimProps([TyAnimProp('shape.points', TyAnimArr(ring, 2))]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetAnimProp('shape.points', TyAnimArr(from, 2));
+        Start(props, TyAnimCallAt(idx));
+      end;
     carLabel:
       begin
         host := Default(TTyChartElement);
@@ -1981,6 +2003,28 @@ var
               TyAnimArr(CandleRing(oe, AC.BaseHoriz), 2))])
           else oprops := nil;
           p := Take(AOld, AOldRow, s, r, 'candle', oprops, props, hasOld);
+          p.SetFinal(props);
+          TyUpdateProps(p, props, AC.Model, TyAnimCallAt(r));
+        end;
+      carBoxplot:
+        begin
+          { BoxplotView: an added box enters (createNormalBox with isInit); a
+            kept one updateProps its points from where they are, at the new
+            row [Batch 108] }
+          if AOldRow < 0 then
+          begin
+            ArmOne(AList, AAt, AEl, AC, True);
+            Exit;
+          end;
+          if Length(AEl.Anim.Pts) < 28 then Exit;
+          ring := Copy(AEl.Anim.Pts, 0, 28);
+          props := TyAnimProps([TyAnimProp('shape.points', TyAnimArr(ring, 2))]);
+          hasOld := OldEl(AOld, AOldRow, 'boxplot', oe) and (Length(oe.Anim.Pts) >= 28);
+          if hasOld then
+            oprops := TyAnimProps([TyAnimProp('shape.points',
+              TyAnimArr(Copy(oe.Anim.Pts, 0, 28), 2))])
+          else oprops := nil;
+          p := Take(AOld, AOldRow, s, r, 'boxplot', oprops, props, hasOld);
           p.SetFinal(props);
           TyUpdateProps(p, props, AC.Model, TyAnimCallAt(r));
         end;
@@ -2938,9 +2982,9 @@ begin
         begin
           if AEl.Anim.Role = carCandleBody then
           begin
+            { [Batch 108: no whole pixel for a doji, as the static body] }
             r := TyRectF(v.Arr[0], Min(v.Arr[1], v.Arr[5]), v.Arr[2],
               Max(v.Arr[1], v.Arr[5]));
-            if r.Bottom - r.Top < 1 then r.Bottom := r.Top + 1;
             AEl.Shape := TyShapeRect(r);
           end
           else if AEl.Anim.Role = carCandleWickHigh then
@@ -2956,7 +3000,6 @@ begin
           begin
             r := TyRectF(Min(v.Arr[0], v.Arr[4]), v.Arr[1], Max(v.Arr[0], v.Arr[4]),
               v.Arr[3]);
-            if r.Right - r.Left < 1 then r.Right := r.Left + 1;
             AEl.Shape := TyShapeRect(r);
           end
           else if AEl.Anim.Role = carCandleWickHigh then
@@ -2966,6 +3009,14 @@ begin
             AEl.Shape.Points := [TyPointF(v.Arr[12], v.Arr[13]),
               TyPointF(v.Arr[14], v.Arr[15])];
         end;
+      end;
+    carBoxplot:
+      begin
+        { the path again from the fourteen points: the box, then the
+          whiskers and the caps [Batch 108] }
+        v := AProxy.GetAnimProp('shape.points');
+        if Length(v.Arr) < 28 then Exit;
+        AEl.Shape := TyBoxplotShape(v.Arr);
       end;
     carLabel:
       begin

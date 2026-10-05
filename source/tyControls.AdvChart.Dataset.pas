@@ -30,11 +30,15 @@ unit tyControls.AdvChart.Dataset;
 
   WHAT IS NOT HERE:
 
-    `dataset.transform`. Six of the fourteen corpus datasets use one, and it is
-    a language rather than a setting -- a filter expression grammar, a sort, a
-    boxplot reducer, and a chain of datasets feeding each other. Upstream itself
-    ships builds with `dataset` and without `transform`, so the line is one it
-    already draws.
+    `dataset.transform` BEYOND THE BOXPLOT REDUCER. Six of the fourteen corpus
+    datasets use one, and it is a language rather than a setting -- a filter
+    expression grammar, a sort, a boxplot reducer, and a chain of datasets
+    feeding each other. [Batch 108: the chain (`fromDatasetIndex`,
+    `fromDatasetId`, `fromTransformResult`, a piped list) and the one
+    transform the boxplot series registers, 'boxplot', are here --
+    TTyDatasetCache below; 'filter' and 'sort' are D2's, and a transform of a
+    type nobody registered leaves the dataset without a source, where
+    upstream throws.]
 
     TYPED ARRAYS, which cannot survive a trip through JSON, and KEYED COLUMNS
     (`{ product: [...], 2015: [...] }`), which no corpus example uses. Both
@@ -44,7 +48,7 @@ unit tyControls.AdvChart.Dataset;
   PURE: SysUtils, Math, fpjson and the AdvChart units. }
 interface
 uses
-  SysUtils, Math, fpjson,
+  SysUtils, Classes, Math, fpjson,
   tyControls.AdvChart.Types, tyControls.AdvChart.Option;
 
 type
@@ -140,8 +144,85 @@ type
   end;
   TTyEncodeCursorArray = array of TTyEncodeCursor;
 
+type
+  { THE DATASETS THAT ARE COMPUTED RATHER THAN WRITTEN [Batch 108].
+
+    A dataset with a `transform` (or a `fromTransformResult`) has no `source`
+    of its own: it reads another dataset's result -- `fromDatasetIndex`, else
+    `fromDatasetId`, else dataset 0 -- and runs it through the transform,
+    which may answer SEVERAL results; a dataset naming `fromTransformResult`
+    without a transform takes that one result of its upstream as it is.
+    upstream's SourceManager, and the order is its order.
+
+    WHAT THIS HOLDS is a JSON node per result in the shape TySourceOf already
+    reads -- `source`, `dimensions`, `sourceHeader`, `seriesLayoutBy` -- so a
+    computed table is read by exactly the code that reads a written one. A
+    root dataset's result is its own node, borrowed; a transform's result is
+    a node made here and freed with the cache; a `fromTransformResult` clone
+    is the upstream's node again. The cache must therefore outlive every
+    source read through it: the control holds one and clears it when it
+    builds its stores again.
+
+    A REGISTRY OF ONE. 'boxplot' is the only transform a stock ECharts build
+    registers outside the transform component; D2's 'filter' and 'sort' join
+    it in ApplyOne. Anything upstream throws on -- an unknown type, an empty
+    pipe, an upstream that is not a table of arrays or is laid out by row, a
+    result index that is not there, a dataset that reads itself -- answers
+    nil here, and the series reading it draws nothing. }
+  TTyJSONObjectArray = array of TJSONObject;
+
+  TTyDatasetCache = class
+  private
+    FOption: TTyChartOption;
+    { per dataset: its results (nil when it has none) }
+    FResults: array of array of TJSONObject;
+    { per dataset: 0 not looked at, 1 being resolved, 2 resolved }
+    FState: array of Byte;
+    FOwned: TFPList;
+    procedure Reset(AOption: TTyChartOption);
+    procedure Resolve(AIndex: Integer);
+    function UpstreamOf(ANode: TJSONObject): Integer;
+    function ApplyPipe(ATransform: TJSONData; AUp: TJSONObject;
+      out AResults: TTyJSONObjectArray): Boolean;
+    function ApplyOne(ATransform: TJSONData; const AUps: TTyJSONObjectArray;
+      out AResults: TTyJSONObjectArray): Boolean;
+    function Own(ANode: TJSONObject): TJSONObject;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    procedure Clear;
+    { The node result AResult of dataset AIndex is read from, or nil. }
+    function ResultNode(AOption: TTyChartOption; AIndex, AResult: Integer): TJSONObject;
+  end;
+
 { How many `dataset` components the option carries. }
 function TyDatasetCount(AOption: TTyChartOption): Integer;
+
+{ JavaScript's truthiness of an option value: absent, null, false, 0, NaN
+  and '' are false; every object and array, empty or not, is true. }
+function TyDatasetTruthy(AData: TJSONData): Boolean;
+
+{ upstream's quantile (util/number.ts) over a list ALREADY ASCENDING: the
+  position H = (n - 1) p + 1, the value at floor(H) and, when H has a
+  fraction, that much of the way to the next. A position past either end
+  reads not-a-number -- an empty list answers not-a-number, as upstream's
+  `undefined` arithmetic does. [Batch 108] }
+function TyQuantile(const AAsc: array of Double; AP: Double): Double;
+
+{ prepareBoxplotData: for every row of ARaw (a list of samples) the box
+  [name, low, Q1, Q2, Q3, high] and, for every sample outside [low, high],
+  an outlier [name, sample].
+
+  boundIQR from AConfig: absent or null is 1.5; 'none' and 0 use the extremes
+  (low and high are the minimum and maximum); anything else multiplies the
+  interquartile range, coerced the way `*` coerces. itemNameFormatter: a
+  string with its FIRST value placeholder replaced by the row index;
+  anything else, the index. A sample is a number as JavaScript's subtraction reads it.
+
+  False, with nothing made, when a row is not an array -- upstream's
+  `.slice()` throws there. The two arrays are the caller's. [Batch 108] }
+function TyPrepareBoxplotData(ARaw: TJSONArray; AConfig: TJSONObject;
+  out ABoxes, AOutliers: TJSONArray): Boolean;
 
 { The shape of a `dataset.source`, by the rules in Source.ts:256-294: the
   container's runtime type, then the type of its FIRST NON-NULL item.
@@ -163,9 +244,12 @@ function TyDetectSourceFormat(AData: TJSONData): TTySourceFormat;
   looks like to anyone who did not ask for anything.
 
   Answers Valid = False when there is no such dataset or its source is a
-  shape with no reader. }
+  shape with no reader.
+
+  [Batch 108] A dataset with a transform is read through ACache, which makes
+  and keeps its table; without a cache such a dataset answers Valid = False. }
 function TySourceOf(AOption: TTyChartOption; AIndex: Integer;
-  ASeriesIndex: Integer = -1): TTyChartSource;
+  ASeriesIndex: Integer = -1; ACache: TTyDatasetCache = nil): TTyChartSource;
 
 { How many rows of DATA the table has -- the header is already excluded. }
 function TySourceRowCount(const ASource: TTyChartSource): Integer;
@@ -250,6 +334,8 @@ function TyEncodeCursorFor(var AList: TTyEncodeCursorArray;
 
 implementation
 
+uses tyControls.AdvChart.Data;
+
 const
   { Source.ts:351 -- `10 is an experience number, avoid long loop.` }
   cHeaderScan = 10;
@@ -277,6 +363,423 @@ begin
   Result := 0;
   if AOption = nil then Exit;
   Result := AOption.ComponentCount('dataset');
+end;
+
+function TyDatasetTruthy(AData: TJSONData): Boolean;
+begin
+  Result := False;
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtNull: Result := False;
+    jtBoolean: Result := AData.AsBoolean;
+    jtNumber: Result := (not IsNan(AData.AsFloat)) and (AData.AsFloat <> 0);
+    jtString: Result := AData.AsString <> '';
+  else
+    Result := True;
+  end;
+end;
+
+{ ==================== the boxplot reducer [Batch 108] ==================== }
+
+{ A sample as `a - b` and `+x` read it. A string through Number(); true 1,
+  false and null 0; an array or an object not-a-number (upstream's [] is 0
+  and [5] is 5 -- tables of samples do not hold them). }
+function SampleOf(AData: TJSONData): Double;
+begin
+  Result := NaN;
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtNumber: Result := AData.AsFloat;
+    jtString: Result := TyJsToNumber(AData.AsString);
+    jtBoolean: if AData.AsBoolean then Result := 1 else Result := 0;
+    jtNull: Result := 0;
+  end;
+end;
+
+{ Math.max / Math.min: not-a-number wins, and +0 is above -0 }
+function JsMax2(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if A > B then Result := A
+  else if B > A then Result := B
+  else if (A = 0) and (B = 0) then
+  begin
+    if (PQWord(@A)^ shr 63 = 0) then Result := A else Result := B;
+  end
+  else Result := A;
+end;
+
+function JsMin2(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if A < B then Result := A
+  else if B < A then Result := B
+  else if (A = 0) and (B = 0) then
+  begin
+    if (PQWord(@A)^ shr 63 = 1) then Result := A else Result := B;
+  end
+  else Result := A;
+end;
+
+{ asc(): Array.prototype.sort with (a, b) => a - b, which is STABLE -- a
+  comparison that is not-a-number counts as equal. An insertion sort keeps
+  equal samples (a -0 beside a 0) in the order they came. }
+procedure SortAsc(var A: TTyDoubleArray);
+var i, j: Integer; t, d: Double;
+begin
+  for i := 1 to High(A) do
+  begin
+    t := A[i];
+    j := i - 1;
+    while j >= 0 do
+    begin
+      d := A[j] - t;
+      if IsNan(d) or not (d > 0) then Break;
+      A[j + 1] := A[j];
+      Dec(j);
+    end;
+    A[j + 1] := t;
+  end;
+end;
+
+function TyQuantile(const AAsc: array of Double; AP: Double): Double;
+var
+  hh, e, v, nx: Double;
+  h: Int64;
+
+  function At(AIdx: Int64): Double;
+  begin
+    if (AIdx < 0) or (AIdx > High(AAsc)) then Result := NaN
+    else Result := AAsc[AIdx];
+  end;
+
+begin
+  hh := (Length(AAsc) - 1) * AP + 1;
+  if IsNan(hh) or IsInfinite(hh) then Exit(NaN);
+  h := Floor(hh);
+  v := At(h - 1);
+  e := hh - h;
+  { `e ? v + e * (ascArr[h] - v) : v` -- a nought fraction is the value }
+  if (e <> 0) and not IsNan(e) then
+  begin
+    nx := At(h);
+    Result := v + e * (nx - v);
+  end
+  else
+    Result := v;
+end;
+
+function TyPrepareBoxplotData(ARaw: TJSONArray; AConfig: TJSONObject;
+  out ABoxes, AOutliers: TJSONArray): Boolean;
+const
+  cDefaultBound: Double = 1.5;
+  cP1: Double = 0.25;
+  cP2: Double = 0.5;
+  cP3: Double = 0.75;
+var
+  i, j, k: Integer;
+  row: TJSONArray;
+  asc: TTyDoubleArray;
+  q1, q2, q3, mn, mx, bound, lo, hi, boundIqr: Double;
+  useExtreme, boundGiven: Boolean;
+  d, fmt: TJSONData;
+  name: string;
+  box, outlier: TJSONArray;
+begin
+  Result := False;
+  ABoxes := nil;
+  AOutliers := nil;
+  if ARaw = nil then Exit;
+  { every row has to be a list before anything is made }
+  for i := 0 to ARaw.Count - 1 do
+    if not (ARaw.Items[i] is TJSONArray) then Exit;
+
+  { boundIQR: 'none' and 0 (a NUMBER nought; '0' is not) use the extremes }
+  d := nil;
+  fmt := nil;
+  if AConfig <> nil then
+  begin
+    d := AConfig.Find('boundIQR');
+    fmt := AConfig.Find('itemNameFormatter');
+  end;
+  boundGiven := (d <> nil) and (d.JSONType <> jtNull);
+  useExtreme := boundGiven and (((d.JSONType = jtString) and (d.AsString = 'none'))
+    or ((d.JSONType = jtNumber) and (d.AsFloat = 0)));
+  if boundGiven then boundIqr := SampleOf(d) else boundIqr := cDefaultBound;
+  { an array or an object multiplies to not-a-number }
+  if boundGiven and (d.JSONType in [jtArray, jtObject]) then boundIqr := NaN;
+
+  ABoxes := TJSONArray.Create;
+  AOutliers := TJSONArray.Create;
+  for i := 0 to ARaw.Count - 1 do
+  begin
+    row := TJSONArray(ARaw.Items[i]);
+    SetLength(asc, row.Count);
+    for k := 0 to row.Count - 1 do asc[k] := SampleOf(row.Items[k]);
+    SortAsc(asc);
+    q1 := TyQuantile(asc, cP1);
+    q2 := TyQuantile(asc, cP2);
+    q3 := TyQuantile(asc, cP3);
+    if Length(asc) > 0 then
+    begin
+      mn := asc[0];
+      mx := asc[High(asc)];
+    end
+    else
+    begin
+      mn := NaN;
+      mx := NaN;
+    end;
+    bound := boundIqr * (q3 - q1);
+    if useExtreme then
+    begin
+      lo := mn;
+      hi := mx;
+    end
+    else
+    begin
+      lo := JsMax2(mn, q1 - bound);
+      hi := JsMin2(mx, q3 + bound);
+    end;
+    { the FIRST placeholder only -- String.prototype.replace with a string }
+    if (fmt <> nil) and (fmt.JSONType = jtString) then
+    begin
+      name := fmt.AsString;
+      k := Pos('{value}', name);
+      if k > 0 then
+        name := Copy(name, 1, k - 1) + IntToStr(i) + Copy(name, k + 7, MaxInt);
+    end
+    else
+      name := IntToStr(i);
+    box := TJSONArray.Create;
+    box.Add(name);
+    box.Add(TJSONFloatNumber.Create(lo));
+    box.Add(TJSONFloatNumber.Create(q1));
+    box.Add(TJSONFloatNumber.Create(q2));
+    box.Add(TJSONFloatNumber.Create(q3));
+    box.Add(TJSONFloatNumber.Create(hi));
+    ABoxes.Add(box);
+    { a comparison with not-a-number is false (and would raise here) }
+    for j := 0 to High(asc) do
+      if not IsNan(asc[j]) and ((not IsNan(lo) and (asc[j] < lo))
+        or (not IsNan(hi) and (asc[j] > hi))) then
+      begin
+        outlier := TJSONArray.Create;
+        outlier.Add(name);
+        outlier.Add(TJSONFloatNumber.Create(asc[j]));
+        AOutliers.Add(outlier);
+      end;
+  end;
+  Result := True;
+end;
+
+{ ==================== the computed datasets [Batch 108] ==================== }
+
+constructor TTyDatasetCache.Create;
+begin
+  inherited Create;
+  FOwned := TFPList.Create;
+end;
+
+destructor TTyDatasetCache.Destroy;
+begin
+  Clear;
+  FOwned.Free;
+  inherited Destroy;
+end;
+
+procedure TTyDatasetCache.Clear;
+var i: Integer;
+begin
+  for i := 0 to FOwned.Count - 1 do TObject(FOwned[i]).Free;
+  FOwned.Clear;
+  FResults := nil;
+  FState := nil;
+  FOption := nil;
+end;
+
+procedure TTyDatasetCache.Reset(AOption: TTyChartOption);
+var n: Integer;
+begin
+  Clear;
+  FOption := AOption;
+  n := TyDatasetCount(AOption);
+  SetLength(FResults, n);
+  SetLength(FState, n);
+end;
+
+function TTyDatasetCache.Own(ANode: TJSONObject): TJSONObject;
+begin
+  FOwned.Add(ANode);
+  Result := ANode;
+end;
+
+function TTyDatasetCache.ResultNode(AOption: TTyChartOption;
+  AIndex, AResult: Integer): TJSONObject;
+begin
+  Result := nil;
+  if AOption = nil then Exit;
+  { A DIFFERENT OPTION, or one grown since, starts afresh }
+  if (AOption <> FOption) or (Length(FResults) <> TyDatasetCount(AOption)) then
+    Reset(AOption);
+  if (AIndex < 0) or (AIndex > High(FResults)) then Exit;
+  Resolve(AIndex);
+  if (AResult < 0) or (AResult > High(FResults[AIndex])) then Exit;
+  Result := FResults[AIndex][AResult];
+end;
+
+{ queryDatasetUpstreamDatasetModels: fromDatasetIndex, else fromDatasetId,
+  else dataset 0 -- SINGLE_REFERRING's default; -1 for one naming nothing }
+function TTyDatasetCache.UpstreamOf(ANode: TJSONObject): Integer;
+var
+  d, idd: TJSONData;
+  i, n: Integer;
+  ds: TJSONObject;
+begin
+  Result := -1;
+  n := Length(FResults);
+  d := ANode.Find('fromDatasetIndex');
+  if (d <> nil) and (d.JSONType = jtNumber) then
+  begin
+    Result := TyRoundOpt(d.AsFloat);
+    if (Result < 0) or (Result >= n) then Result := -1;
+    Exit;
+  end;
+  d := ANode.Find('fromDatasetId');
+  if (d <> nil) and (d.JSONType in [jtString, jtNumber]) then
+  begin
+    for i := 0 to n - 1 do
+    begin
+      ds := ObjOf(FOption.ComponentAt('dataset', i));
+      if ds = nil then Continue;
+      idd := ds.Find('id');
+      if (idd <> nil) and (idd.JSONType in [jtString, jtNumber])
+        and (idd.AsString = d.AsString) then Exit(i);
+    end;
+    Exit(-1);
+  end;
+  Result := 0;
+end;
+
+procedure TTyDatasetCache.Resolve(AIndex: Integer);
+var
+  node, upNode: TJSONObject;
+  tr, ftr: TJSONData;
+  up, ri: Integer;
+  outs: TTyJSONObjectArray;
+  r: Double;
+begin
+  if FState[AIndex] <> 0 then Exit;
+  FState[AIndex] := 1;
+  try
+    FResults[AIndex] := nil;
+    node := ObjOf(FOption.ComponentAt('dataset', AIndex));
+    if node = nil then Exit;
+    tr := node.Find('transform');
+    ftr := node.Find('fromTransformResult');
+    { A ROOT DATASET: `!transform && !fromTransformResult` -- a
+      fromTransformResult of 0 alone is a root one too }
+    if not (TyDatasetTruthy(tr) or TyDatasetTruthy(ftr)) then
+    begin
+      SetLength(FResults[AIndex], 1);
+      FResults[AIndex][0] := node;
+      Exit;
+    end;
+    up := UpstreamOf(node);
+    if (up < 0) or (up = AIndex) then Exit;
+    Resolve(up);
+    { getSource(fromTransformResult || 0) }
+    ri := 0;
+    if (ftr <> nil) and (ftr.JSONType <> jtNull) then
+    begin
+      r := SampleOf(ftr);
+      if IsNan(r) or IsInfinite(r) or (Frac(r) <> 0) then Exit;
+      if r <> 0 then ri := Trunc(r);
+    end;
+    if (ri < 0) or (ri > High(FResults[up])) then Exit;
+    upNode := FResults[up][ri];
+    if upNode = nil then Exit;
+    if TyDatasetTruthy(tr) then
+    begin
+      if not ApplyPipe(tr, upNode, outs) then Exit;
+      FResults[AIndex] := outs;
+    end
+    else
+    begin
+      { cloneSourceShallow: the upstream's own table and rules }
+      SetLength(FResults[AIndex], 1);
+      FResults[AIndex][0] := upNode;
+    end;
+  finally
+    FState[AIndex] := 2;
+  end;
+end;
+
+{ applyDataTransform: a list is a pipe, each step fed the one before's
+  results (only its FIRST read by a single-input transform); an empty pipe
+  throws }
+function TTyDatasetCache.ApplyPipe(ATransform: TJSONData; AUp: TJSONObject;
+  out AResults: TTyJSONObjectArray): Boolean;
+var
+  ups: TTyJSONObjectArray;
+  i: Integer;
+begin
+  Result := False;
+  AResults := nil;
+  SetLength(ups, 1);
+  ups[0] := AUp;
+  if ATransform is TJSONArray then
+  begin
+    if TJSONArray(ATransform).Count = 0 then Exit;
+    for i := 0 to TJSONArray(ATransform).Count - 1 do
+    begin
+      if not ApplyOne(TJSONArray(ATransform).Items[i], ups, AResults) then Exit;
+      ups := AResults;
+    end;
+  end
+  else if not ApplyOne(ATransform, ups, AResults) then Exit;
+  Result := Length(AResults) > 0;
+end;
+
+{ applySingleDataTransform for the transforms this port registers: the
+  upstream must be a table of arrays laid out by column (createExternalSource
+  and boxplotTransform both throw otherwise); 'boxplot' answers the boxes,
+  named, and the outliers, unnamed -- neither carries a header line }
+function TTyDatasetCache.ApplyOne(ATransform: TJSONData;
+  const AUps: TTyJSONObjectArray; out AResults: TTyJSONObjectArray): Boolean;
+var
+  t, up, box, outs: TJSONObject;
+  d, src: TJSONData;
+  boxes, outliers: TJSONArray;
+begin
+  Result := False;
+  AResults := nil;
+  if (Length(AUps) = 0) or (AUps[0] = nil) then Exit;
+  t := ObjOf(ATransform);
+  if t = nil then Exit;
+  d := t.Find('type');
+  if (d = nil) or (d.JSONType <> jtString) or (d.AsString <> 'boxplot') then Exit;
+  up := AUps[0];
+  d := up.Find('seriesLayoutBy');
+  if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'row') then Exit;
+  src := up.Find('source');
+  if TyDetectSourceFormat(src) <> tsfArrayRows then Exit;
+  if not (src is TJSONArray) then Exit;
+  d := t.Find('config');
+  if not TyPrepareBoxplotData(TJSONArray(src), ObjOf(d), boxes, outliers) then Exit;
+  box := Own(TJSONObject.Create);
+  box.Add('source', boxes);
+  box.Add('dimensions', TJSONArray.Create(['ItemName', 'Low', 'Q1', 'Q2', 'Q3', 'High']));
+  box.Add('sourceHeader', 0);
+  box.Add('seriesLayoutBy', 'column');
+  outs := Own(TJSONObject.Create);
+  outs.Add('source', outliers);
+  outs.Add('sourceHeader', 0);
+  outs.Add('seriesLayoutBy', 'column');
+  SetLength(AResults, 2);
+  AResults[0] := box;
+  AResults[1] := outs;
+  Result := True;
 end;
 
 { ==================== the source ==================== }
@@ -469,7 +972,7 @@ begin
 end;
 
 function TySourceOf(AOption: TTyChartOption; AIndex: Integer;
-  ASeriesIndex: Integer): TTyChartSource;
+  ASeriesIndex: Integer; ACache: TTyDatasetCache): TTyChartSource;
 var
   node, snode: TJSONObject;
   d: TJSONData;
@@ -492,6 +995,16 @@ begin
   if AOption = nil then Exit;
   node := ObjOf(AOption.ComponentAt('dataset', AIndex));
   if node = nil then Exit;
+  { A COMPUTED TABLE is read from the node its result is held in -- its own
+    rows, dimensions and header rule, never the dataset's (upstream reads
+    those off a root dataset only) [Batch 108] }
+  if TyDatasetTruthy(node.Find('transform'))
+    or TyDatasetTruthy(node.Find('fromTransformResult')) then
+  begin
+    if ACache = nil then Exit;
+    node := ACache.ResultNode(AOption, AIndex, 0);
+    if node = nil then Exit;
+  end;
   snode := nil;
   if ASeriesIndex >= 0 then
     snode := ObjOf(AOption.ComponentAt('series', ASeriesIndex));

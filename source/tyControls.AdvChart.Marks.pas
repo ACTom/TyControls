@@ -45,7 +45,8 @@ uses
   tyControls.AdvChart.Paint, tyControls.AdvChart.Series,
   tyControls.AdvChart.BarLayout, tyControls.AdvChart.Symbol,
   tyControls.AdvChart.Layout, tyControls.AdvChart.Pictorial,
-  tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt;
+  tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
+  tyControls.AdvChart.WhiskerBox;
 
 type
   { Where a stepped line turns. ECharts spells `step: true` as 'start'. }
@@ -176,6 +177,11 @@ type
       `Down` beside `Fill` would invite every other builder to wonder which of
       the three it should be reading. }
     Candle: TTyCandleSpec;
+    { A CANDLESTICK'S OR A BOXPLOT'S solved width, offset and clip, and a
+      boxplot's style -- solved across every series of the type on the base
+      axis, so it arrives like the bar column does. Unsolved: a candle half
+      a band wide, unclipped [Batch 108] }
+    Whisker: TTyWhiskerLayout;
     { Where this bar sits in its band, solved across every bar series sharing
       the base axis -- which is why it arrives rather than being computed here.
       Unsolved means no solver ran (a pure-unit caller with one series), and
@@ -2222,8 +2228,8 @@ function BuildCandlestick(const ABinding: TTySeriesBinding; AStore: TTyDataStore
   AList: TTyPaintList; AColX, AColY: Integer): Integer;
 var
   i, colBase, colOpen, colClose, colLow, colHigh: Integer;
-  baseHoriz, simple: Boolean;
-  band, width, at, openV, closeV, lowV, highV, bodyLo, bodyHi, prevClose: Double;
+  baseHoriz, simple, clipOn: Boolean;
+  band, width, at, openV, closeV, lowV, highV, prevClose: Double;
   sign: Integer;
   fill, border: TTyChartColor;
   v: TTySeriesVisual;
@@ -2231,42 +2237,45 @@ var
   el: TTyChartElement;
   { the enter animation's numbers, shared by the body and its two wicks }
   anim: TTyChartAnim;
+  ce: TTyCandleEnds;
+  area: TTyXYWH;
+  clipKind: TTyWhiskerClip;
+  clipR: TTyRectF;
 
-  { Where one of the four values lands, along the value axis. }
-  function ValueCoord(AValue: Double): Double;
+  procedure Clip(var AEl: TTyChartElement);
   begin
-    Result := NaN;
-    if ABinding.ValueAxis = nil then Exit;
-    Result := ABinding.ValueAxis.DataToCoord(AValue);
+    if clipKind <> wcPartial then Exit;
+    AEl.HasClip := True;
+    AEl.ClipRect := clipR;
   end;
 
-  procedure Wick(AFrom, ATo: Double; ARole: TTyChartAnimRole);
+  procedure Wick(const AFrom, ATo: TTyPointF; ARole: TTyChartAnimRole);
   var w: TTySeriesVisual; wel: TTyChartElement;
   begin
-    if IsNan(AFrom) or IsNan(ATo) or (AFrom = ATo) then Exit;
+    if IsNan(AFrom.X) or IsNan(AFrom.Y) or IsNan(ATo.X) or IsNan(ATo.Y) then Exit;
+    if (AFrom.X = ATo.X) and (AFrom.Y = ATo.Y) then Exit;
     w := v;
     w.Fill := 0;
     w.Stroke := border;
     w.StrokeWidthLogical := AVisual.Candle.BorderWidthLogical;
     if w.StrokeWidthLogical <= 0 then w.StrokeWidthLogical := 1;
-    if baseHoriz then
-      wel := MarkElement(TyShapePolyline([TyPointF(at, AFrom),
-        TyPointF(at, ATo)]), w, ABinding.SeriesIndex, i)
-    else
-      wel := MarkElement(TyShapePolyline([TyPointF(AFrom, at),
-        TyPointF(ATo, at)]), w, ABinding.SeriesIndex, i);
+    wel := MarkElement(TyShapePolyline([AFrom, ATo]), w, ABinding.SeriesIndex, i);
+    { the path's stroke answers within half the pen, as zrender's
+      containStroke does for a filled path [Batch 108] }
+    wel.HitSlopLogical := w.StrokeWidthLogical / 2;
     if ARole <> carNone then
     begin
       wel.Anim := anim;
       wel.Anim.Role := ARole;
     end;
+    Clip(wel);
     AList.Add(wel);
     Inc(Result);
   end;
 
 begin
   Result := 0;
-  if (AStore = nil) or (ABinding.BaseAxis = nil) then Exit;
+  if (AStore = nil) or (ABinding.BaseAxis = nil) or (ABinding.Cart = nil) then Exit;
   baseHoriz := ABinding.BaseAxis.Horizontal;
   colBase := AColX;
   if not baseHoriz then colBase := AColY;
@@ -2276,49 +2285,60 @@ begin
   colHigh := AStore.DimIndexOf('highest');
   if (colOpen < 0) or (colClose < 0) or (colLow < 0) or (colHigh < 0) then Exit;
 
-  { THE BODY IS HALF A BAND WIDE, and that is the candlestick's own rule --
-    not the bar layouter's. Upstream solves it as `max(min(band/2, barMaxWidth),
-    barMinWidth)` with the two limits defaulting to the band and to one pixel,
-    which collapses to half a band and a floor of one. It does NOT share the
-    band with bar series: a candlestick beside a bar overlaps it deliberately,
-    because the two are reading the same thing. }
-  band := ABinding.BaseAxis.BandWidth;
-  if band <= 0 then band := 8;
-  width := Max(Double(1), band / 2);
+  { THE BODY'S WIDTH, solved across the base axis (candlestickLayout's
+    calculateCandleWidth): `barWidth`, else half a band between
+    `barMinWidth` and `barMaxWidth`, the floor outermost. It does NOT share
+    the band with bar series: a candlestick beside a bar overlaps it
+    deliberately, because the two are reading the same thing.
+    [Batch 108: it was always half a band, and on a value axis 4 px.] }
+  if AVisual.Whisker.Solved then
+    width := AVisual.Whisker.CandleWidth
+  else
+  begin
+    band := ABinding.BaseAxis.BandWidth;
+    if band <= 0 then band := 8;
+    width := Max(Double(1), band / 2);
+  end;
   { A CANDLE NARROWER THAN A PEN IS A LINE. Upstream calls it a simple box and
     switches at 1.3 px -- below that the body has no inside to fill and the
     wick and the body are the same stroke. }
   simple := width <= 1.3;
+  clipOn := (not AVisual.Whisker.Solved) or AVisual.Whisker.Clip;
+  area := ABinding.Cart.GetArea;
+  clipR := TyWhiskerClipRect(area);
 
-  prevClose := NaN;
   for i := 0 to AStore.Count - 1 do
   begin
     openV := AStore.Get(colOpen, i);
     closeV := AStore.Get(colClose, i);
     lowV := AStore.Get(colLow, i);
     highV := AStore.Get(colHigh, i);
-    at := ABinding.BaseAxis.DataToCoord(AStore.Get(colBase, i));
-    if IsNan(at) or IsNan(openV) or IsNan(closeV) then
-    begin
-      prevClose := closeV;
+    at := AStore.Get(colBase, i);
+    { data.hasValue: the base and all four, or nothing is drawn }
+    if IsNan(at) or IsNan(openV) or IsNan(closeV) or IsNan(lowV) or IsNan(highV) then
       Continue;
-    end;
 
     { THE SIGN, and the third case is the one a port forgets. Open above close
       is down, close above open is up -- and EQUAL is a doji, which upstream
       resolves against the PREVIOUS row's close so a flat bar takes the
-      direction of the move that led into it. The first row has no previous
+      direction of the move that led into it; a previous close that is not
+      a number compares false, and is down. The first row has no previous
       and is up. Only a written `borderColorDoji` gives it a colour of its
-      own. }
+      own -- sign 0, whose fill is `color0`. }
     if openV > closeV then sign := -1
     else if openV < closeV then sign := 1
     else if AVisual.Candle.HasDojiBorder then sign := 0
-    else if IsNan(prevClose) then sign := 1
-    else if prevClose <= closeV then sign := 1
-    else sign := -1;
-    prevClose := closeV;
+    else if i = 0 then sign := 1
+    else
+    begin
+      prevClose := AStore.Get(colClose, i - 1);
+      { an ordered comparison with not-a-number raises here; upstream's is
+        false }
+      if (not IsNan(prevClose)) and (prevClose <= closeV) then sign := 1
+      else sign := -1;
+    end;
 
-    if sign >= 0 then
+    if sign > 0 then
     begin
       fill := AVisual.Candle.Up;
       border := AVisual.Candle.UpBorder;
@@ -2336,57 +2356,69 @@ begin
     v.Stroke := border;
     v.StrokeWidthLogical := AVisual.Candle.BorderWidthLogical;
 
-    bodyLo := ValueCoord(Min(openV, closeV));
-    bodyHi := ValueCoord(Max(openV, closeV));
-    if IsNan(bodyLo) or IsNan(bodyHi) then Continue;
+    { THE LAYOUT'S EIGHT POINTS: the body's sides snapped to the half pixel
+      apart, the spine to the half pixel [Batch 108] }
+    ce := TyCandleEndsOf(ABinding.Cart, baseHoriz, at, openV, closeV, lowV,
+      highV, width);
+    { resolveNormalBoxClipping over all eight: none inside is not drawn,
+      some outside is drawn through the plot }
+    if clipOn then clipKind := TyWhiskerClipOf(area, ce.Ends) else clipKind := wcNone;
+    if clipKind = wcFull then Continue;
 
     if simple then
-      { No body to speak of: one stroke from lowest to highest. }
-      Wick(ValueCoord(lowV), ValueCoord(highV), carNone)
+    begin
+      { No body to speak of: one stroke from highest to lowest. }
+      anim := Default(TTyChartAnim);
+      Wick(ce.Ends[4], ce.Ends[6], carNone);
+    end
     else
     begin
-      if baseHoriz then
-        r := TyRectF(at - width / 2, Min(bodyLo, bodyHi),
-                     at + width / 2, Max(bodyLo, bodyHi))
-      else
-        r := TyRectF(Min(bodyLo, bodyHi), at - width / 2,
-                     Max(bodyLo, bodyHi), at + width / 2);
+      r := TyRectF(Min(Min(ce.Ends[0].X, ce.Ends[1].X), Min(ce.Ends[2].X, ce.Ends[3].X)),
+                   Min(Min(ce.Ends[0].Y, ce.Ends[1].Y), Min(ce.Ends[2].Y, ce.Ends[3].Y)),
+                   Max(Max(ce.Ends[0].X, ce.Ends[1].X), Max(ce.Ends[2].X, ce.Ends[3].X)),
+                   Max(Max(ce.Ends[0].Y, ce.Ends[1].Y), Max(ce.Ends[2].Y, ce.Ends[3].Y)));
       { THE ENTER ANIMATION'S NUMBERS: where the open price lands (every
         point grows out of it, candlestickLayout.ts:128), the body's two
         ends, the two wick ends, the spine and the body's two sides across
-        it [Batch 89] }
+        it -- the snapped ones [Batch 89; Batch 108] }
       anim := Default(TTyChartAnim);
       anim.Series := ABinding.SeriesIndex;
       anim.Index := i;
-      anim.G[0] := ValueCoord(openV);
-      anim.G[1] := bodyHi;
-      anim.G[2] := bodyLo;
-      anim.G[3] := ValueCoord(highV);
-      anim.G[4] := ValueCoord(lowV);
-      anim.G[5] := at;
+      anim.G[0] := ce.InitBaseline;
       if baseHoriz then
       begin
-        anim.G[6] := r.Left;
-        anim.G[7] := r.Right;
+        anim.G[1] := ce.Ends[0].Y;
+        anim.G[2] := ce.Ends[3].Y;
+        anim.G[3] := ce.Ends[4].Y;
+        anim.G[4] := ce.Ends[6].Y;
+        anim.G[5] := ce.Ends[4].X;
+        anim.G[6] := ce.Ends[0].X;
+        anim.G[7] := ce.Ends[1].X;
       end
       else
       begin
-        anim.G[6] := r.Top;
-        anim.G[7] := r.Bottom;
+        anim.G[1] := ce.Ends[0].X;
+        anim.G[2] := ce.Ends[3].X;
+        anim.G[3] := ce.Ends[4].X;
+        anim.G[4] := ce.Ends[6].X;
+        anim.G[5] := ce.Ends[4].Y;
+        anim.G[6] := ce.Ends[0].Y;
+        anim.G[7] := ce.Ends[1].Y;
       end;
       { THE WICK IS TWO SEGMENTS, not one line behind the body. They look the
         same under an opaque candle and not at all the same under a hollow
         one -- and a hollow candle is how half the world draws a rising bar. }
-      Wick(ValueCoord(highV), bodyHi, carCandleWickHigh);
-      Wick(ValueCoord(lowV), bodyLo, carCandleWickLow);
-      { A DOJI HAS NO BODY AT ALL -- open equals close, so the rect is a line.
-        Given a whole pixel so the stroke has something to sit on, which is
-        what upstream's own sub-pixel pass does for the same case. }
-      if baseHoriz and (r.Bottom - r.Top < 1) then r.Bottom := r.Top + 1;
-      if (not baseHoriz) and (r.Right - r.Left < 1) then r.Right := r.Left + 1;
+      Wick(ce.Ends[4], ce.Ends[5], carCandleWickHigh);
+      Wick(ce.Ends[6], ce.Ends[7], carCandleWickLow);
+      { A DOJI HAS NO BODY AT ALL -- open equals close, so the rect is a
+        line, stroked as upstream's closed path of no height is.
+        [Batch 108: it was given a whole pixel, which upstream's sub-pixel
+        pass does not do -- the value coordinate is never snapped.] }
       el := MarkElement(TyShapeRect(r), v, ABinding.SeriesIndex, i);
+      if v.StrokeWidthLogical > 0 then el.HitSlopLogical := v.StrokeWidthLogical / 2;
       el.Anim := anim;
       el.Anim.Role := carCandleBody;
+      Clip(el);
       { NO CAPTION. Upstream's candlestick view never builds a label, whatever
         label.show says -- the option is accepted and draws nothing. }
       AList.Add(el);
@@ -2395,6 +2427,156 @@ begin
   end;
   { AStack and AColY are read only on the paths above; naming them keeps the
     builder's signature the one the table holds. }
+  if AStack.Stacked and (AColY < -1) then ;
+end;
+
+{ ==================== the boxplot [Batch 108] ==================== }
+
+{ One path per row, upstream's BoxPath: the box closed, then the two
+  whiskers and the three caps as open segments -- filled with the series'
+  fill (the theme's surface unless written) and stroked with its colour.
+  Laid out across every boxplot series on the base axis (TTyWhiskerLayout:
+  the width and the offset from the base point), not snapped, clipped as a
+  candle is. The hit target is the box: the polygon of the first four
+  points. }
+function BuildBoxplot(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
+  const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
+  AList: TTyPaintList; AColX, AColY: Integer): Integer;
+const
+  cNames: array[0..4] of string = ('min', 'Q1', 'median', 'Q3', 'max');
+var
+  i, k, colBase: Integer;
+  cols: array[0..4] of Integer;
+  vals: array[0..4] of Double;
+  baseHoriz, clipOn, skip: Boolean;
+  at: Double;
+  be: TTyBoxEnds;
+  area: TTyXYWH;
+  clipKind: TTyWhiskerClip;
+  clipR: TTyRectF;
+  shape: TTyChartShape;
+  v: TTySeriesVisual;
+  el: TTyChartElement;
+  dv: TTyDataValue;
+  c: TTyChartColor;
+  pts: array[0..27] of Double;
+  wl: TTyWhiskerLayout;
+  band: Double;
+  ws, os: TTyDoubleArray;
+begin
+  Result := 0;
+  if (AStore = nil) or (ABinding.BaseAxis = nil) or (ABinding.Cart = nil) then Exit;
+  wl := AVisual.Whisker;
+  if not wl.Solved then
+  begin
+    { NO SOLVER RAN (a pure-unit caller with one series): the lone series'
+      answer over the axis' own band, the series colour's pen on the
+      visual's empty fill, clipped }
+    band := ABinding.BaseAxis.BandWidth;
+    if band <= 0 then band := 8;
+    TyBoxplotBase(band, [7], [50], ws, os);
+    wl.BoxWidth := ws[0];
+    wl.BoxOffset := os[0];
+    wl.Clip := True;
+    wl.BoxFill := AVisual.EmptyFill;
+    wl.BoxStroke := AVisual.Fill;
+    wl.BoxLineWidthLogical := 1;
+  end;
+  baseHoriz := ABinding.BaseAxis.Horizontal;
+  colBase := AColX;
+  if not baseHoriz then colBase := AColY;
+  for k := 0 to 4 do
+  begin
+    cols[k] := AStore.DimIndexOf(cNames[k]);
+    { `vDims.length < 5`: no layout at all }
+    if cols[k] < 0 then Exit;
+  end;
+  clipOn := wl.Clip;
+  area := ABinding.Cart.GetArea;
+  clipR := TyWhiskerClipRect(area);
+
+  for i := 0 to AStore.Count - 1 do
+  begin
+    at := AStore.Get(colBase, i);
+    skip := IsNan(at);
+    for k := 0 to 4 do
+    begin
+      vals[k] := AStore.Get(cols[k], i);
+      if IsNan(vals[k]) then skip := True;
+    end;
+    { data.hasValue }
+    if skip then Continue;
+    be := TyBoxEndsOf(ABinding.Cart, baseHoriz, at, vals, wl.BoxOffset, wl.BoxWidth);
+    if clipOn then clipKind := TyWhiskerClipOf(area, be.Ends) else clipKind := wcNone;
+    if clipKind = wcFull then Continue;
+
+    for k := 0 to 13 do
+    begin
+      pts[k * 2] := be.Ends[k].X;
+      pts[k * 2 + 1] := be.Ends[k].Y;
+    end;
+    shape := TyBoxplotShape(pts);
+
+    { THE STYLE: the series', then the item's own itemStyle over it }
+    v := AVisual;
+    v.Fill := wl.BoxFill;
+    v.Stroke := wl.BoxStroke;
+    v.StrokeWidthLogical := wl.BoxLineWidthLogical;
+    v.FillGradient := Default(TTyChartGradient);
+    v.StrokeGradient := Default(TTyChartGradient);
+    v.FillPattern := Default(TTyChartPattern);
+    if AStore.HasOverride(i, TyOverrideKey('itemStyle.color')) then
+    begin
+      dv := AStore.GetOverride(i, TyOverrideKey('itemStyle.color'));
+      if dv.Kind = dvkText then
+      begin
+        if TyChartColorIsNone(dv.Text) then v.Fill := 0
+        else if TyTryParseChartColor(dv.Text, c) then v.Fill := c;
+      end;
+    end;
+    if AStore.HasOverride(i, TyOverrideKey('itemStyle.borderColor')) then
+    begin
+      dv := AStore.GetOverride(i, TyOverrideKey('itemStyle.borderColor'));
+      if dv.Kind = dvkText then
+      begin
+        if TyChartColorIsNone(dv.Text) then v.Stroke := 0
+        else if TyTryParseChartColor(dv.Text, c) then v.Stroke := c;
+      end;
+    end;
+    if AStore.HasOverride(i, TyOverrideKey('itemStyle.borderWidth')) then
+    begin
+      dv := AStore.GetOverride(i, TyOverrideKey('itemStyle.borderWidth'));
+      if (dv.Kind = dvkNumber) and not IsNan(dv.Num) then v.StrokeWidthLogical := dv.Num;
+    end;
+    if AStore.HasOverride(i, TyOverrideKey('itemStyle.opacity')) then
+    begin
+      dv := AStore.GetOverride(i, TyOverrideKey('itemStyle.opacity'));
+      if (dv.Kind = dvkNumber) and not IsNan(dv.Num) then
+        v.Alpha := Min(Double(1), Max(Double(0), dv.Num));
+    end;
+
+    el := MarkElement(shape, v, ABinding.SeriesIndex, i);
+    { THE WHISKERS AND CAPS ANSWER TOO, within half the pen of their
+      segments (the box by its inside as well) }
+    if v.StrokeWidthLogical > 0 then el.HitSlopLogical := v.StrokeWidthLogical / 2;
+    { the enter and update animations: every point, and the median's value
+      coordinate they grow from }
+    el.Anim := Default(TTyChartAnim);
+    el.Anim.Role := carBoxplot;
+    el.Anim.Series := ABinding.SeriesIndex;
+    el.Anim.Index := i;
+    el.Anim.G[0] := be.InitBaseline;
+    if baseHoriz then el.Anim.G[1] := 1 else el.Anim.G[1] := 0;
+    SetLength(el.Anim.Pts, 28);
+    for k := 0 to 27 do el.Anim.Pts[k] := pts[k];
+    if clipKind = wcPartial then
+    begin
+      el.HasClip := True;
+      el.ClipRect := clipR;
+    end;
+    AList.Add(el);
+    Inc(Result);
+  end;
   if AStack.Stacked and (AColY < -1) then ;
 end;
 
@@ -2824,7 +3006,7 @@ const
     ECharts' names are case-sensitive, so a series typed 'Bar' never resolves
     and never reaches this unit. A lenient match here would answer yes for a
     chart that draws nothing. }
-  cRenderers: array[0..6] of record
+  cRenderers: array[0..7] of record
     Name: string;
     Build: TTyMarkBuilder;
   end = (
@@ -2832,6 +3014,8 @@ const
     (Name: 'line';                      Build: @BuildLine),
     (Name: 'scatter';                   Build: @BuildScatter),
     (Name: 'candlestick';               Build: @BuildCandlestick),
+    { [Batch 108] }
+    (Name: 'boxplot';                   Build: @BuildBoxplot),
     (Name: TyPictorialSeriesTypeName;   Build: @BuildPictorialBar),
     (Name: 'heatmap';                   Build: @BuildHeatmap),
     (Name: 'effectScatter';             Build: @BuildScatter));

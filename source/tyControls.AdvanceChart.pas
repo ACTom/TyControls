@@ -56,7 +56,7 @@ uses
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
   tyControls.AdvChart.PieLabel, tyControls.AdvChart.Legend,
   tyControls.AdvChart.Tooltip, tyControls.AdvChart.AxisPointer,
-  tyControls.AdvChart.Dataset,
+  tyControls.AdvChart.Dataset, tyControls.AdvChart.WhiskerBox,
   tyControls.AdvChart.Anim, tyControls.AdvChart.AnimOpt,
   tyControls.AdvChart.AnimView, tyControls.AdvChart.AnimAxis,
   tyControls.AdvChart.Export, tyControls.AdvChart.Loading,
@@ -180,7 +180,9 @@ type
     host's changes), a pictorial bar (its glyphs, the first the host, the
     rest PARTS with states of their own) }
   TTyStKind = (sskNone, sskBar, sskPie, sskSymbol, sskRect, sskFunnel,
-    sskCandle, sskPictorial, sskSunburst);
+    sskCandle, sskPictorial, sskSunburst,
+    { [Batch 108] a boxplot's path: one element, the host }
+    sskBox);
   TTyStNodeArray = array of TJSONObject;
   TTyStSeries = record
     Kind: TTyStKind;
@@ -303,6 +305,13 @@ type
       before that is the wrong width -- silently, since nothing raises and the
       bars merely come out slightly off. }
     FBarCols: TTyBarColumnArray;
+    { EVERY CANDLESTICK'S AND BOXPLOT'S width, offset and clip, index-parallel
+      to FBindings, solved beside FBarCols for its reason [Batch 108] }
+    FWhiskers: TTyWhiskerLayoutArray;
+    { THE COMPUTED DATASETS (a transform's results) the sources read: kept
+      as long as FSources borrow from it, cleared when the stores are built
+      again [Batch 108] }
+    FDatasetCache: TTyDatasetCache;
     { Which series accumulate onto which, and into which columns. Solved in
       Rebuild, between filling the stores and sizing the axes: the totals have
       to exist before the value axis is asked how far it must reach. }
@@ -1162,6 +1171,8 @@ type
     { The four colours a candle falls back on, from the theme, with whatever
       the option wrote laid over them. }
     function CandleVisual(ASlot: Integer): TTyCandleSpec;
+    { a boxplot's fill, pen and width onto AVisual.Whisker [Batch 108] }
+    procedure BoxplotStyle(ASlot: Integer; var AVisual: TTySeriesVisual);
     { An axis' dimension name, '' for no axis. }
     function AxisDimOf(AAxis: TTyAxis): string;
     { Rewrite ADims for a series type that declares more than one value per
@@ -1170,7 +1181,8 @@ type
       out AEnc: TTySeriesEncode);
     { upstream's defaultedLabel and defaultedTooltip for one axis series,
       into its store as raw positions. }
-    procedure ResolveTextDims(const AEnc: TTySeriesEncode; AStore: TTyDataStore);
+    procedure ResolveTextDims(const AEnc: TTySeriesEncode; AStore: TTyDataStore;
+      const ASource: TTyChartSource);
     { a heatmap's tooltip dimension: its generated `value` coordinate, the
       third element -- upstream's defaultedLabel, x and y being categories
       [Batch 100] }
@@ -2130,6 +2142,8 @@ begin
   FreeAndNil(FPaintList);
   FreeAndNil(FIndex);
   FreeAndNil(FAxisMemory);
+  FSources := nil;
+  FreeAndNil(FDatasetCache);
   FreeAndNil(FOption);
   { The static layer owns a TBitmap. TTyPaintCache.Drop only marks it stale --
     it keeps the surface deliberately, for reuse -- so dropping is not freeing. }
@@ -2164,6 +2178,7 @@ begin
     FStores[i].Free;
   FStores := nil;
   FBarCols := nil;
+  FWhiskers := nil;
   FStacks := nil;
 end;
 
@@ -2853,9 +2868,13 @@ begin
       FBuild.Note(Format(rsTyChartSeriesNoRenderer,
         [FBindings[i].SeriesIndex, FBindings[i].SeriesType]));
   SetLength(FStores, Length(FBindings));
+  { the previous build's sources go before the tables they borrow }
+  FSources := nil;
   SetLength(FSources, Length(FBindings));
   SetLength(FSeriesDataset, Length(FBindings));
   SetLength(FEncodes, Length(FBindings));
+  if FDatasetCache = nil then FDatasetCache := TTyDatasetCache.Create
+  else FDatasetCache.Clear;
   cursors := nil;
   for i := 0 to High(FBindings) do
   begin
@@ -2867,7 +2886,7 @@ begin
     if FSeriesDataset[i] >= 0 then
     begin
       FSources[i] := TySourceOf(FOption, FSeriesDataset[i],
-        FBindings[i].SeriesIndex);
+        FBindings[i].SeriesIndex, FDatasetCache);
       if not FSources[i].Valid then FSeriesDataset[i] := -1;
     end;
     if not FBindings[i].HasAxes then
@@ -3021,7 +3040,7 @@ begin
     begin
       SeriesDataEncode(i, dims, enc);
       TyFillSeriesStore(FOption, i, dims, st);
-      ResolveTextDims(enc, st);
+      ResolveTextDims(enc, st, TySeriesDimsSource(FOption, FBindings[i].SeriesIndex));
       HeatmapTipDims(i, enc, st);
       Continue;
     end;
@@ -3055,7 +3074,7 @@ begin
     if enc.Given then TyEncodeFillUnclaimed(enc, FSources[i].DimCount);
     FEncodes[i] := enc;
     TyFillStoreFromSource(FSources[i], enc, dims, st);
-    ResolveTextDims(enc, st);
+    ResolveTextDims(enc, st, FSources[i]);
     HeatmapTipDims(i, enc, st);
     Continue;
   end;
@@ -3633,6 +3652,8 @@ begin
   TyLayoutGrids(FBuild, FOption, AMeasurer, APPI, txt, FAxisMemory);
   { AFTER phase C, for the reason on FBarCols. }
   FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex);
+  { AND THE CANDLES AND BOXES, by the same band [Batch 108] }
+  FWhiskers := TySolveWhiskerLayouts(FOption, FBindings, FStores, FIndex);
   { AFTER THE BARS: a marker on a bar series sits on its own bar }
   SolveMarkers(APPI);
   { BEFORE THE PIES: a pie on a calendar is laid out in a day's cell
@@ -9221,7 +9242,7 @@ begin
 end;
 
 procedure TTyAdvanceChart.ResolveTextDims(const AEnc: TTySeriesEncode;
-  AStore: TTyDataStore);
+  AStore: TTyDataStore; const ASource: TTyChartSource);
 var
   k, p, best: Integer;
   lab, tip: TTyIntegerArray;
@@ -9267,13 +9288,18 @@ begin
     end;
   end;
   { THE TOOLTIP: `encode.tooltip`; else the columns a type marks as its
-    tooltip -- a candlestick's four values; else the label's. }
+    tooltip -- a candlestick's four values; else the label's.
+    [Batch 108: a column the table or the series' `dimensions` NAMED is not
+    one of the type's: createDimensions gives a dimension its defaultTooltip
+    only with the type's own name, when nobody named it. A boxplot read from
+    the transform's ItemName / Low / ... / High says only its High.] }
   tip := nil;
   if Length(AEnc.Tooltip) > 0 then tip := Copy(AEnc.Tooltip)
   else
   begin
     for k := 0 to AStore.DimCount - 1 do
-      if (AStore.DimCoord(k) <> '') and (AStore.RawDimPos(k) >= 0) then
+      if (AStore.DimCoord(k) <> '') and (AStore.RawDimPos(k) >= 0)
+        and (TySourceDimName(ASource, AStore.RawDimPos(k)) = '') then
         AddSorted(tip, AStore.RawDimPos(k));
     if Length(tip) = 0 then tip := Copy(lab);
   end;
@@ -9498,6 +9524,9 @@ procedure TTyAdvanceChart.MultiValueDims(const ABinding: TTySeriesBinding;
 var
   info: TTySeriesTypeInfo;
   i, n: Integer;
+  prepend: Boolean;
+  node: TJSONObject;
+  d: TJSONData;
 begin
   if (ABinding.BaseAxis = nil) or (ABinding.ValueAxis = nil) then Exit;
   if not TySeriesFindType(ABinding.SeriesType, info) then Exit;
@@ -9513,28 +9542,47 @@ begin
   { THE CATEGORY IS THE ROW NUMBER. Upstream's default encode for these types
     puts every element of the item on the value axis, which leaves the base
     axis nothing to read -- so it counts rows instead. The column keeps the
-    base axis' own name and kind so category interning still works. }
+    base axis' own name and kind so category interning still works.
+
+    [Batch 108: ONLY ON A CATEGORY BASE, and only when the series' encode
+    says nothing about the base dimension -- whiskerBoxCommon's
+    `addOrdinal = !this._hasEncodeRule(dim)`. On a value or a time base
+    nothing is put in front: the base is the item's FIRST element and the
+    values the ones after it. It read the row number there too, so a
+    candlestick on a value axis stood its candles on 0, 1, 2 and took its
+    open from the base.] }
+  prepend := ABinding.BaseAxis.AxisType = atCategory;
+  if prepend and (FOption <> nil) then
+  begin
+    node := nil;
+    d := FOption.ComponentAt('series', ABinding.SeriesIndex);
+    if d is TJSONObject then node := TJSONObject(d);
+    if node <> nil then d := node.Find('encode') else d := nil;
+    if (d is TJSONObject) then
+    begin
+      d := TJSONObject(d).Find(ABinding.BaseAxis.Dim);
+      if (d <> nil) and (d.JSONType <> jtNull) then prepend := False;
+    end;
+  end;
   ADims[0].Name := ABinding.BaseAxis.Dim;
   if ABinding.BaseAxis.AxisType = atCategory then
   begin
     ADims[0].Kind := ddtOrdinal;
     ADims[0].Axis := ABinding.BaseAxis;
-    ADims[0].FromRowIndex := True;
   end
   else if ABinding.BaseAxis.AxisType = atTime then
   begin
     ADims[0].Kind := ddtTime;
     ADims[0].Axis := nil;
-    ADims[0].FromRowIndex := True;
   end
   else
   begin
     ADims[0].Kind := ddtFloat;
     ADims[0].Axis := nil;
-    ADims[0].FromRowIndex := True;
   end;
+  ADims[0].FromRowIndex := prepend;
   ADims[0].Coord := '';
-  ADims[0].SourceSlot := 0;
+  if prepend then ADims[0].SourceSlot := 0 else ADims[0].SourceSlot := 1;
 
   for i := 1 to n - 1 do
   begin
@@ -9542,8 +9590,9 @@ begin
     ADims[i].Kind := ddtFloat;
     ADims[i].Axis := nil;
     { ELEMENT i-1 OF THE ITEM: the base took no element at all, so the values
-      start at the beginning of the row rather than one in from it. }
-    ADims[i].SourceSlot := i;
+      start at the beginning of the row rather than one in from it -- or
+      element i, past the base, when the base is in the row [Batch 108] }
+    if prepend then ADims[i].SourceSlot := i else ADims[i].SourceSlot := i + 1;
     { AND EVERY ONE OF THEM FEEDS THE VALUE AXIS. This is the whole reason
       the store learned that a coordinate is a LIST of columns. }
     ADims[i].Coord := ABinding.ValueAxis.Dim;
@@ -9553,6 +9602,37 @@ end;
 function TTyAdvanceChart.AxisDimOf(AAxis: TTyAxis): string;
 begin
   if AAxis = nil then Result := '' else Result := AAxis.Dim;
+end;
+
+procedure TTyAdvanceChart.BoxplotStyle(ASlot: Integer; var AVisual: TTySeriesVisual);
+var
+  d: TJSONData;
+  st: TTyOptStyle;
+  si: Integer;
+begin
+  si := FBindings[ASlot].SeriesIndex;
+  AVisual.Whisker.BoxFill := AVisual.EmptyFill;
+  AVisual.Whisker.BoxStroke := TTyChartColor(SeriesColor(si));
+  AVisual.Whisker.BoxLineWidthLogical := 1;
+  if FOption = nil then Exit;
+  d := FOption.ComponentAt('series', si);
+  if not (d is TJSONObject) then Exit;
+  st := TyReadOptStyle(TJSONObject(d), 'itemStyle');
+  if st.Color.Written then
+  begin
+    if st.Color.IsNone then AVisual.Whisker.BoxFill := 0
+    else if st.Color.IsAuto then AVisual.Whisker.BoxFill := TTyChartColor(SeriesPaletteColor(si))
+    else AVisual.Whisker.BoxFill := st.Color.Color;
+  end;
+  if st.BorderColor.Written then
+  begin
+    if st.BorderColor.IsNone then AVisual.Whisker.BoxStroke := 0
+    else if st.BorderColor.IsAuto then
+      AVisual.Whisker.BoxStroke := TTyChartColor(SeriesPaletteColor(si))
+    else AVisual.Whisker.BoxStroke := st.BorderColor.Color;
+  end;
+  if not IsNan(st.BorderWidthLogical) then
+    AVisual.Whisker.BoxLineWidthLogical := st.BorderWidthLogical;
 end;
 
 function TTyAdvanceChart.CandleVisual(ASlot: Integer): TTyCandleSpec;
@@ -10528,6 +10608,13 @@ begin
       v.EmptyFill := TTyChartColor(
         ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass,
           [tysNormal]).Background.Color);
+      { A CANDLESTICK'S OR A BOXPLOT'S solved layout, and a boxplot's style:
+        itemStyle.color over the theme's surface (upstream's
+        tokens.color.neutral00), itemStyle.borderColor over the series
+        colour -- a boxplot draws with its stroke -- and borderWidth over 1
+        [Batch 108] }
+      if i <= High(FWhiskers) then v.Whisker := FWhiskers[i];
+      if FBindings[i].SeriesType = 'boxplot' then BoxplotStyle(i, v);
 
       { showBackground's strip. Its own key rather than the split area's: the
         two are faint for different reasons and a theme has to be able to move
@@ -12460,7 +12547,8 @@ begin
   else if t = 'funnel' then Result := sskFunnel
   else if t = 'candlestick' then Result := sskCandle
   else if t = TyPictorialSeriesTypeName then Result := sskPictorial
-  else if t = TySunburstSeriesTypeName then Result := sskSunburst;
+  else if t = TySunburstSeriesTypeName then Result := sskSunburst
+  else if t = 'boxplot' then Result := sskBox;
   { a line on a calendar is not drawn at all }
   if (FBindings[ASlot].CalendarIndex >= 0) and (t = 'line') then Result := sskNone;
 end;
@@ -12560,6 +12648,10 @@ begin
   item^.Host.Decl[stnEmphasis] := TyStReadStyle(nodes, 'emphasis', 'itemStyle', bolder);
   item^.Host.Decl[stnBlur] := TyStReadStyle(nodes, 'blur', 'itemStyle', bolder);
   if FSt[s].Kind = sskCandle then StDeclareCandle(ASlot, ARaw, nodes, item^.Host);
+  { a boxplot's emphasis border is 2 wide unless declared (BoxplotSeries.ts
+    emphasis.itemStyle); its shadow is not drawn here [Batch 108] }
+  if (FSt[s].Kind = sskBox) and not item^.Host.Decl[stnEmphasis].Has[stkLineWidth] then
+    TyStSetNum(item^.Host.Decl[stnEmphasis], stkLineWidth, 2);
   { a sunburst blurs to 0.2 unless told (SunburstSeries.ts:274-279) [Batch 90] }
   if (FSt[s].Kind = sskSunburst) and not item^.Host.Decl[stnBlur].Has[stkOpacity] then
     TyStSetNum(item^.Host.Decl[stnBlur], stkOpacity, 0.2);
@@ -13441,7 +13533,8 @@ begin
     on; anything else (a line symbol's group is not its path, a clip is not
     its polyline) a proxy of the states' own }
   if (role <> nil) and (el.Anim.Role in [carBar, carSymbol, carSector, carFunnel,
-    carCandleBody, carCandleWickHigh, carCandleWickLow, carLabel, carGuide]) then
+    carCandleBody, carCandleWickHigh, carCandleWickLow, carLabel, carGuide,
+    carBoxplot]) then
     p := role
   else
   begin
