@@ -524,6 +524,8 @@ type
     procedure SetMinValue(const AValue: Double);
     procedure SetMaxValue(const AValue: Double);
     procedure SetRange(AMin, AMax: Double);
+    function GetDecimals: Integer;
+    procedure SetDecimals(AValue: Integer);
     procedure DataChange(Sender: TObject);
     procedure UpdateData(Sender: TObject);
     procedure ValueChanged(Sender: TObject);
@@ -550,6 +552,9 @@ type
       user changes the control (plan D6). }
     property MinValue: Double read GetMinValue write SetMinValue;
     property MaxValue: Double read GetMaxValue write SetMaxValue;
+    { The same for a Decimals set after binding: the display is rounded again, the field is
+      not edited. An untouched control shows the field again at the new precision. }
+    property Decimals: Integer read GetDecimals write SetDecimals default 2;
     property Text stored False;
   end;
 
@@ -653,6 +658,8 @@ type
     procedure SetMinValue(const AValue: Double);
     procedure SetMaxValue(const AValue: Double);
     procedure SetRange(AMin, AMax: Double);
+    function GetDecimals: Integer;
+    procedure SetDecimals(AValue: Integer);
     procedure DataChange(Sender: TObject);
     procedure UpdateData(Sender: TObject);
     procedure ValueChanged(Sender: TObject);
@@ -679,6 +686,9 @@ type
       user changes the control (plan D6). }
     property MinValue: Double read GetMinValue write SetMinValue;
     property MaxValue: Double read GetMaxValue write SetMaxValue;
+    { The same for a Decimals set after binding: the display is rounded again, the field is
+      not edited. An untouched control shows the field again at the new precision. }
+    property Decimals: Integer read GetDecimals write SetDecimals default 2;
     property Text stored False;
   end;
 
@@ -784,6 +794,8 @@ type
     procedure SetMinValue(const AValue: Double);
     procedure SetMaxValue(const AValue: Double);
     procedure SetRange(AMin, AMax: Double);
+    function GetDecimals: Integer;
+    procedure SetDecimals(AValue: Integer);
     procedure DataChange(Sender: TObject);
     procedure UpdateData(Sender: TObject);
     procedure ValueChanged(Sender: TObject);
@@ -812,6 +824,9 @@ type
       user changes the control (plan D6). }
     property MinValue: Double read GetMinValue write SetMinValue;
     property MaxValue: Double read GetMaxValue write SetMaxValue;
+    { The same for a Decimals set after binding: the display is rounded again, the field is
+      not edited. An untouched control shows the field again at the new precision. }
+    property Decimals: Integer read GetDecimals write SetDecimals default 2;
     property Text stored False;
   end;
 
@@ -1935,6 +1950,34 @@ begin
   FLoaded := TyDBLoadedNumber(Value, IsBlank);
 end;
 
+function TTyCustomDBNumericEdit.GetDecimals: Integer;
+begin
+  Result := TTyCustomNumericEdit(Self).Decimals;
+end;
+
+{ The base control rounds the display to the new number of places and fires its change
+  notification: the program's doing, like a range (SetRange), so it is taken as a load. A
+  control the user has not changed shows the field again at the new precision -- not its old
+  display rounded once more -- and that is what the user's edits are compared with next. }
+procedure TTyCustomDBNumericEdit.SetDecimals(AValue: Integer);
+var
+  was, untouched: Boolean;
+begin
+  untouched := (FDataLink.Field <> nil) and (IsBlank = FLoaded.IsNull)
+    and (IsBlank or (Value = FLoaded.Number));
+  was := FLoading;
+  FLoading := True;
+  try
+    TTyCustomNumericEdit(Self).Decimals := AValue;
+  finally
+    FLoading := was;
+  end;
+  if untouched then
+    DataChange(nil)
+  else
+    FLoaded := TyDBLoadedNumber(Value, IsBlank);
+end;
+
 procedure TTyCustomDBNumericEdit.DataChange(Sender: TObject);
 begin
   if FInUserEdit then Exit;
@@ -2157,6 +2200,34 @@ begin
   FLoaded := TyDBLoadedNumber(Value, IsBlank);
 end;
 
+function TTyCustomDBCurrencyEdit.GetDecimals: Integer;
+begin
+  Result := TTyCustomNumericEdit(Self).Decimals;
+end;
+
+{ The base control rounds the display to the new number of places and fires its change
+  notification: the program's doing, like a range (SetRange), so it is taken as a load. A
+  control the user has not changed shows the field again at the new precision -- not its old
+  display rounded once more -- and that is what the user's edits are compared with next. }
+procedure TTyCustomDBCurrencyEdit.SetDecimals(AValue: Integer);
+var
+  was, untouched: Boolean;
+begin
+  untouched := (FDataLink.Field <> nil) and (IsBlank = FLoaded.IsNull)
+    and (IsBlank or (Value = FLoaded.Number));
+  was := FLoading;
+  FLoading := True;
+  try
+    TTyCustomNumericEdit(Self).Decimals := AValue;
+  finally
+    FLoading := was;
+  end;
+  if untouched then
+    DataChange(nil)
+  else
+    FLoaded := TyDBLoadedNumber(Value, IsBlank);
+end;
+
 procedure TTyCustomDBCurrencyEdit.DataChange(Sender: TObject);
 begin
   if FInUserEdit then Exit;
@@ -2377,6 +2448,34 @@ begin
     FLoading := was;
   end;
   FLoaded := TyDBLoadedNumber(Value, IsBlank);
+end;
+
+function TTyCustomDBFloatSpinEdit.GetDecimals: Integer;
+begin
+  Result := TTyCustomNumericEdit(Self).Decimals;
+end;
+
+{ The base control rounds the display to the new number of places and fires its change
+  notification: the program's doing, like a range (SetRange), so it is taken as a load. A
+  control the user has not changed shows the field again at the new precision -- not its old
+  display rounded once more -- and that is what the user's edits are compared with next. }
+procedure TTyCustomDBFloatSpinEdit.SetDecimals(AValue: Integer);
+var
+  was, untouched: Boolean;
+begin
+  untouched := (FDataLink.Field <> nil) and (IsBlank = FLoaded.IsNull)
+    and (IsBlank or (Value = FLoaded.Number));
+  was := FLoading;
+  FLoading := True;
+  try
+    TTyCustomNumericEdit(Self).Decimals := AValue;
+  finally
+    FLoading := was;
+  end;
+  if untouched then
+    DataChange(nil)
+  else
+    FLoaded := TyDBLoadedNumber(Value, IsBlank);
 end;
 
 procedure TTyCustomDBFloatSpinEdit.DataChange(Sender: TObject);

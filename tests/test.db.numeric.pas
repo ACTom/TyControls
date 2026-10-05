@@ -59,10 +59,12 @@ type
     procedure Commit; override;
     function Shown: string; override;
     procedure PutAmount(AValue: Double);
+    procedure PutBound(AValue: Double);
   published
     procedure TestEmptiedFieldWritesNull;
     procedure TestValueIsWrittenAsANumberWhateverTheDecimalSeparator;
     procedure TestRangeSetAfterBindingIsNotAnEdit;
+    procedure TestDecimalsSetAfterBindingIsNotAnEdit;
   end;
 
   TDBNumericEditTest = class(TDBNumberEditTestBase)
@@ -206,6 +208,13 @@ begin
   FFix.DS.Post;
 end;
 
+procedure TDBNumberEditTestBase.PutBound(AValue: Double);
+begin
+  FFix.DS.Edit;
+  BoundField.AsFloat := AValue;
+  FFix.DS.Post;
+end;
+
 { D5 }
 procedure TDBNumberEditTestBase.TestEmptiedFieldWritesNull;
 begin
@@ -268,6 +277,34 @@ begin
   FFix.DS.Post;
   AssertEquals('a Post elsewhere does not write the clamped value', before,
     BoundField.AsFloat, 0);
+end;
+
+{ Decimals set from code after binding is the program's doing too: the base control rounds the
+  display to the new number of places and fires its change notification, and that is no edit.
+  Fewer places first -- the display changes (checked, so a setting that rounded nothing cannot
+  pass) -- then a focus round trip and a Post made elsewhere leave the field as it was. More
+  places again show the FIELD at the new precision, not the rounded display padded with zeros. }
+procedure TDBNumberEditTestBase.TestDecimalsSetAfterBindingIsNotAnEdit;
+const
+  CValue = 1234.5678;
+begin
+  PutBound(CValue);
+  Bind(FieldName);
+  AssertTrue('two places: ' + Shown, Pos('234.57', Shown) > 0);
+  SetOrdProp(FCtl, 'Decimals', 0);
+  AssertTrue('no places: the display changed: ' + Shown,
+    (Pos('235', Shown) > 0) and (Pos('.', Shown) = 0));
+  AssertBrowsing('Decimals set from code');
+  EnterControl;
+  LeaveControl;
+  AssertBrowsing('a focus round trip under the new Decimals');
+  FFix.DS.Edit;              // someone else edits the record
+  FFix.DS.Post;
+  AssertEquals('a Post elsewhere does not write the rounded value', CValue,
+    BoundField.AsFloat, 1e-9);
+  SetOrdProp(FCtl, 'Decimals', 4);
+  AssertTrue('four places: the field''s own digits: ' + Shown, Pos('234.5678', Shown) > 0);
+  AssertBrowsing('more places');
 end;
 
 { ============================================================= TDBNumericEditTest ========= }
