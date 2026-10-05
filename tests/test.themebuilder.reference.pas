@@ -487,7 +487,18 @@ end;
 procedure TTbReferenceTests.TestARegisteredTypeKeyIsListed;
 var
   ref: string;
+  others: TStringList;
+  othersRegistered: Boolean;
 begin
+  { Keys other units registered before this test (the data-aware package's TyDBXxx keys, when
+    it is linked in) are listed too, and keep the sentence; only this test's key has to go. }
+  others := TStringList.Create;
+  try
+    TyGetRegisteredTypeKeys(others);
+    othersRegistered := others.Count > 0;
+  finally
+    others.Free;
+  end;
   TyRegisterTypeKeyParent('TbRefTagButton', 'TyButton');
   try
     TbForgetReference;
@@ -501,7 +512,8 @@ begin
   end;
   ref := TbReferenceText;
   AssertFalse('R12: gone with the chain', Pos('TbRefTagButton', ref) > 0);
-  AssertFalse('R12: and so is the sentence', Pos('[inherits', ref) > 0);
+  AssertEquals('R12: and so is the sentence, unless other keys are registered',
+    othersRegistered, Pos('A key marked [inherits X]', ref) > 0);
 end;
 
 initialization
