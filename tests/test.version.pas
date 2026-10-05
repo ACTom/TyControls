@@ -20,6 +20,7 @@ uses
   tyControls.Dialogs.Font, tyControls.Dialogs.Progress, tyControls.Dialogs.SelectPath,
   tyControls.Dialogs.IconBrowser,
   tyControls.DB.Edits, tyControls.DB.Choices, tyControls.DB.Lists, tyControls.DB.Image,
+  tyControls.DB.DateTime,
   tyControls.Divider, tyControls.DropButtons, tyControls.Edit, tyControls.Empty,
   tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit,
   tyControls.FontComboBox,
@@ -483,7 +484,7 @@ initialization
   RegisterClasses([TTyDBEdit, TTyDBMaskEdit, TTyDBMemo, TTyDBText, TTyDBNumericEdit,
     TTyDBCurrencyEdit, TTyDBSpinEdit, TTyDBFloatSpinEdit, TTyDBCheckBox, TTyDBToggleSwitch,
     TTyDBRadioGroup, TTyDBSegmented, TTyDBRating, TTyDBComboBox, TTyDBListBox,
-    TTyDBLookupComboBox, TTyDBLookupListBox, TTyDBImage]);
+    TTyDBLookupComboBox, TTyDBLookupListBox, TTyDBImage, TTyDBDateTimePicker, TTyDBCalendar]);
   RegisterTest(TVersionTest);
 
 finalization

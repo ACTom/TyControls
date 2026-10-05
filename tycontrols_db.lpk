@@ -24,6 +24,10 @@
         <UnitName Value="tyControls.DB.Common"/>
       </Item>
       <Item>
+        <Filename Value="source/db/tyControls.DB.DateTime.pas"/>
+        <UnitName Value="tyControls.DB.DateTime"/>
+      </Item>
+      <Item>
         <Filename Value="source/db/tyControls.DB.Edits.pas"/>
         <UnitName Value="tyControls.DB.Edits"/>
       </Item>

@@ -41,6 +41,8 @@ type
 function TyDBLoadedText(const AText: string): TTyDBLoadedValue;
 function TyDBLoadedNumber(AValue: Double; AIsNull: Boolean): TTyDBLoadedValue;
 function TyDBLoadedIndex(AIndex: Integer): TTyDBLoadedValue;
+{ A date, or NULL (AValue is then ignored, so two NULLs compare equal). }
+function TyDBLoadedDate(AValue: TDateTime; AIsNull: Boolean): TTyDBLoadedValue;
 
 { The user changed the control's value: put the dataset in dsEdit and mark the link modified,
   so UpdateData writes it back (on EditingDone, on leaving the control, or on a Post made
@@ -125,6 +127,14 @@ begin
   Result := Default(TTyDBLoadedValue);
   Result.Kind := lvIndex;
   Result.Index := AIndex;
+end;
+
+function TyDBLoadedDate(AValue: TDateTime; AIsNull: Boolean): TTyDBLoadedValue;
+begin
+  Result := Default(TTyDBLoadedValue);
+  Result.Kind := lvDate;
+  Result.IsNull := AIsNull;
+  if not AIsNull then Result.Date := AValue;
 end;
 
 { ALink.Edit with the control's DataChange held off (see TyDBUserChanged). }

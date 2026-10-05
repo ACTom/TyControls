@@ -26,23 +26,24 @@ uses
   tyControls.ColorButton, tyControls.ColorComboBox, tyControls.ColorGrid, tyControls.ColorListBox,
   tyControls.ComboBox, tyControls.ComboBoxEx, tyControls.ComboEdit, tyControls.ControlBar,
   tyControls.Controller, tyControls.CoolBar, tyControls.CurrencyEdit, tyControls.DB.Choices,
-  tyControls.DB.Edits, tyControls.DB.Image, tyControls.DB.Lists, tyControls.DateTimePicker,
-  tyControls.Dial, tyControls.Dialogs, tyControls.Dialogs.About, tyControls.Dialogs.IconBrowser,
-  tyControls.Dialogs.Progress, tyControls.Divider, tyControls.DropButtons, tyControls.Edit,
-  tyControls.Empty, tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit,
-  tyControls.FontComboBox, tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.Form,
-  tyControls.FormSurface, tyControls.Gauge, tyControls.GearActivityIndicator, tyControls.GearDial,
-  tyControls.GlowLabel, tyControls.GlyphButtons, tyControls.GlyphImageList, tyControls.Grid,
-  tyControls.GridPanel, tyControls.GroupBox, tyControls.HSColorPicker, tyControls.HeaderControl,
-  tyControls.Hint, tyControls.HtmlLabel, tyControls.IconFont, tyControls.Icons.Lucide,
-  tyControls.Image, tyControls.ImageCollection, tyControls.ImageView, tyControls.LColorPicker,
-  tyControls.LevelMeter, tyControls.LinkLabel, tyControls.ListBox, tyControls.ListGroupPanel,
-  tyControls.ListView, tyControls.MRUComboBox, tyControls.MaskEdit, tyControls.Memo,
-  tyControls.Menu, tyControls.Meter, tyControls.NativeStyler, tyControls.Notification,
-  tyControls.NumericEdit, tyControls.OfficeComboBox, tyControls.OfficeListBox,
-  tyControls.PageControl, tyControls.Pagination, tyControls.PaintPanel, tyControls.Panel,
-  tyControls.Popover, tyControls.PreviewBox, tyControls.ProgressBar, tyControls.RadioGroup,
-  tyControls.Rating, tyControls.RelativePanel, tyControls.Ribbon, tyControls.RibbonAppMenu,
+  tyControls.DB.DateTime, tyControls.DB.Edits, tyControls.DB.Image, tyControls.DB.Lists,
+  tyControls.DateTimePicker, tyControls.Dial, tyControls.Dialogs, tyControls.Dialogs.About,
+  tyControls.Dialogs.IconBrowser, tyControls.Dialogs.Progress, tyControls.Divider,
+  tyControls.DropButtons, tyControls.Edit, tyControls.Empty, tyControls.ExPanel,
+  tyControls.FilterComboBox, tyControls.FloatSpinEdit, tyControls.FontComboBox,
+  tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.Form, tyControls.FormSurface,
+  tyControls.Gauge, tyControls.GearActivityIndicator, tyControls.GearDial, tyControls.GlowLabel,
+  tyControls.GlyphButtons, tyControls.GlyphImageList, tyControls.Grid, tyControls.GridPanel,
+  tyControls.GroupBox, tyControls.HSColorPicker, tyControls.HeaderControl, tyControls.Hint,
+  tyControls.HtmlLabel, tyControls.IconFont, tyControls.Icons.Lucide, tyControls.Image,
+  tyControls.ImageCollection, tyControls.ImageView, tyControls.LColorPicker, tyControls.LevelMeter,
+  tyControls.LinkLabel, tyControls.ListBox, tyControls.ListGroupPanel, tyControls.ListView,
+  tyControls.MRUComboBox, tyControls.MaskEdit, tyControls.Memo, tyControls.Menu, tyControls.Meter,
+  tyControls.NativeStyler, tyControls.Notification, tyControls.NumericEdit,
+  tyControls.OfficeComboBox, tyControls.OfficeListBox, tyControls.PageControl,
+  tyControls.Pagination, tyControls.PaintPanel, tyControls.Panel, tyControls.Popover,
+  tyControls.PreviewBox, tyControls.ProgressBar, tyControls.RadioGroup, tyControls.Rating,
+  tyControls.RelativePanel, tyControls.Ribbon, tyControls.RibbonAppMenu,
   tyControls.RibbonBackstage, tyControls.RibbonGallery, tyControls.RibbonQuickAccess,
   tyControls.ScrollBar, tyControls.ScrollBox, tyControls.ScrollContent, tyControls.ScrollPanel,
   tyControls.Segmented, tyControls.ShadowLabel, tyControls.Shape, tyControls.ShellComboBox,
@@ -2393,6 +2394,79 @@ type
     property SymbolBefore;
   end;
 
+  TGenDBCalendar = class(TTyCustomDBCalendar)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Date;
+    property DateTime;
+    property MinDate;
+    property MaxDate;
+    property FirstDayOfWeek;
+    property DisplaySettings;
+    property WeekNumbers;
+    property ShowToday;
+    property ReadOnly;
+    property OnChange;
+    property OnDayChanged;
+    property OnMonthChanged;
+    property OnYearChanged;
+    property OnAccept;
+    property OnViewChange;
+    property Align;
+    property Anchors;
+    property DataField;
+    property DataSource;
+  end;
+
   TGenDBCheckBox = class(TTyCustomDBCheckBox)
   published
     property Version;
@@ -2609,6 +2683,86 @@ type
     property MaxValue;
     property CurrencySymbol;
     property SymbolBefore;
+    property DataField;
+    property DataSource;
+  end;
+
+  TGenDBDateTimePicker = class(TTyCustomDBDateTimePicker)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property DateTime;
+    property Kind;
+    property DateFormat;
+    property TimeFormat;
+    property MinDate;
+    property MaxDate;
+    property ReadOnly;
+    property ShowCheckBox;
+    property Checked;
+    property DroppedDown;
+    property Alignment;
+    property LeadingZeros;
+    property CenturyFrom;
+    property Options;
+    property DateMode;
+    property NullInputAllowed;
+    property TextForNullDate;
+    property OnChange;
+    property OnDropDown;
+    property OnCloseUp;
+    property OnChecked;
+    property OnCheckBoxChange;
+    property Align;
+    property Anchors;
     property DataField;
     property DataSource;
   end;
@@ -10834,7 +10988,7 @@ type
 
 const
   { (mimic, final class) }
-  CGenMimics: array[0..175, 0..1] of TClass = (
+  CGenMimics: array[0..177, 0..1] of TClass = (
     (TGenAboutDialog, TTyAboutDialog),
     (TGenActivityBar, TTyActivityBar),
     (TGenActivityIndicator, TTyActivityIndicator),
@@ -10873,9 +11027,11 @@ const
     (TGenControlBar, TTyControlBar),
     (TGenCoolBar, TTyCoolBar),
     (TGenCurrencyEdit, TTyCurrencyEdit),
+    (TGenDBCalendar, TTyDBCalendar),
     (TGenDBCheckBox, TTyDBCheckBox),
     (TGenDBComboBox, TTyDBComboBox),
     (TGenDBCurrencyEdit, TTyDBCurrencyEdit),
+    (TGenDBDateTimePicker, TTyDBDateTimePicker),
     (TGenDBEdit, TTyDBEdit),
     (TGenDBFloatSpinEdit, TTyDBFloatSpinEdit),
     (TGenDBImage, TTyDBImage),
