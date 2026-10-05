@@ -67,11 +67,21 @@ type
 implementation
 
 uses
-  Math, Forms, tyControls.Css.Complete;
+  Math, Forms, tyControls.Css.Complete, tyControls.FontFamilies;
 
+{ installed, by the library's one list of installed families (TyGetFontFamilies) }
 function FontInstalled(const AName: string): Boolean;
+var
+  families: TStringList;
 begin
-  Result := (Screen <> nil) and (Screen.Fonts.IndexOf(AName) >= 0);
+  if Screen = nil then Exit(False);
+  families := TStringList.Create;
+  try
+    TyGetFontFamilies(families, False);
+    Result := families.IndexOf(AName) >= 0;
+  finally
+    families.Free;
+  end;
 end;
 
 function TyCssEditFontName: string;
