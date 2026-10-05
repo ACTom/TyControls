@@ -2334,3 +2334,12 @@ RadioGroup / CheckGroup 的错误消息用 `ClassName`（V8），实例类名不
 - `check-lfm-props.py`：通过（0 误报）；`check-example-po.py`：0 问题。
 - 冒烟：逐个启动 49 个示例并枚举可见窗口类，全部只有主窗体、没有 `#32770` 错误框（`scripts/smoke-launch-examples.ps1` 不认错误框，主控另用按窗口类判断的脚本）。
 - 已通知 AdvChart 会话摘取 `e4f3c648`；已告知 3.0 会话拆分后的移植规矩。审查用的临时工作树 `split-mut` 已删除。
+
+### 附录 B 补拆签收（2026-10-05）
+
+`feat/advancechart` 合进 main（`4b93e2aa`）后补拆 `TTyCalendar`、`TTyDateTimePicker`；`TTyAdvanceChart` 用户定为图表做完再考虑，留在 `CNotSplit`，`docs/subclassing.md` 表里改成「等它稳定下来再拆」。
+
+- 可见性照 D3：Calendar 的自有属性放 public（`TCustomCalendar` 全是 public），DateTimePicker 的放 protected（`TCustomDateTimePicker` 全是 protected）；两者的 `TabStop default True` 照库里惯例放 public。`TTyDateTimePicker.Date` / `Time` 原本就是 public，不动。
+- 没有恢复快照守卫，改用 G10 交叉验证：拆分后的程序用 `TY_WRITE_FRESH_STREAMS=1` 补写这两个类的段落（只加 19 行，其他类一行没动），再在拆分前的代码（`eb45df06`）上只换守卫清单和夹具跑 `TestFreshFormFileTextUnchanged`，通过——拆分前后写进窗体文件的文本相同。同一次运行里 G1 / G4 / G9 等 4 项在拆分前的代码上按预期变红，说明守卫确实覆盖到这两个类。
+- `gen-mimic.py` 的改动只有两个新镜像类与 uses 行。
+- 全量 10584：拆分前后都只有已知的 H6 计时失败（另开任务追），G10 补段后 0 失败。

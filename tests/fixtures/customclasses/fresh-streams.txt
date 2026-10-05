@@ -113,6 +113,14 @@
     Width = 224
     TabOrder = 0
   end
+# TTyCalendar
+    Left = 0
+    Height = 220
+    Top = 0
+    Width = 240
+    TabOrder = 0
+    Date =  3.6526000000000000E+004
+  end
 # TTyCard
     Left = 0
     Height = 160
@@ -280,6 +288,17 @@
     Text = <from the locale>
     Alignment = taRightJustify
     CurrencySymbol = '$'
+  end
+# TTyDateTimePicker
+    Cursor = crArrow
+    Left = 0
+    Height = 24
+    Top = 0
+    Width = 130
+    TabOrder = 0
+    DateTime =  3.6526500000000000E+004
+    DroppedDown = False
+    TextForNullDate = 'NULL'
   end
 # TTyDial
     Left = 0

@@ -20,13 +20,13 @@ uses
   tyControls.AdvancedListBox, tyControls.Alert, tyControls.AnalogClock, tyControls.Arrow,
   tyControls.Badge, tyControls.BalloonHint, tyControls.Bevel, tyControls.Breadcrumb,
   tyControls.Button, tyControls.ButtonGroup, tyControls.CalcCurrencyEdit, tyControls.CalcEdit,
-  tyControls.Calculator, tyControls.Card, tyControls.Cascader, tyControls.CharImage,
-  tyControls.Chart, tyControls.CheckBox, tyControls.CheckComboBox, tyControls.CheckGroup,
-  tyControls.CheckListBox, tyControls.CircularProgress, tyControls.ColorBox,
+  tyControls.Calculator, tyControls.Calendar, tyControls.Card, tyControls.Cascader,
+  tyControls.CharImage, tyControls.Chart, tyControls.CheckBox, tyControls.CheckComboBox,
+  tyControls.CheckGroup, tyControls.CheckListBox, tyControls.CircularProgress, tyControls.ColorBox,
   tyControls.ColorButton, tyControls.ColorComboBox, tyControls.ColorGrid, tyControls.ColorListBox,
   tyControls.ComboBox, tyControls.ComboBoxEx, tyControls.ComboEdit, tyControls.ControlBar,
-  tyControls.Controller, tyControls.CoolBar, tyControls.CurrencyEdit, tyControls.Dial,
-  tyControls.Dialogs, tyControls.Dialogs.About, tyControls.Dialogs.IconBrowser,
+  tyControls.Controller, tyControls.CoolBar, tyControls.CurrencyEdit, tyControls.DateTimePicker,
+  tyControls.Dial, tyControls.Dialogs, tyControls.Dialogs.About, tyControls.Dialogs.IconBrowser,
   tyControls.Dialogs.Progress, tyControls.Divider, tyControls.DropButtons, tyControls.Edit,
   tyControls.Empty, tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit,
   tyControls.FontComboBox, tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.Form,
@@ -938,6 +938,77 @@ type
     property Value;
     property OnChange;
     property OnResult;
+    property Align;
+    property Anchors;
+  end;
+
+  TGenCalendar = class(TTyCustomCalendar)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Date;
+    property DateTime;
+    property MinDate;
+    property MaxDate;
+    property FirstDayOfWeek;
+    property DisplaySettings;
+    property WeekNumbers;
+    property ShowToday;
+    property ReadOnly;
+    property OnChange;
+    property OnDayChanged;
+    property OnMonthChanged;
+    property OnYearChanged;
+    property OnAccept;
+    property OnViewChange;
     property Align;
     property Anchors;
   end;
@@ -2319,6 +2390,84 @@ type
     property MaxValue;
     property CurrencySymbol;
     property SymbolBefore;
+  end;
+
+  TGenDateTimePicker = class(TTyCustomDateTimePicker)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property DateTime;
+    property Kind;
+    property DateFormat;
+    property TimeFormat;
+    property MinDate;
+    property MaxDate;
+    property ReadOnly;
+    property ShowCheckBox;
+    property Checked;
+    property DroppedDown;
+    property Alignment;
+    property LeadingZeros;
+    property CenturyFrom;
+    property Options;
+    property DateMode;
+    property NullInputAllowed;
+    property TextForNullDate;
+    property OnChange;
+    property OnDropDown;
+    property OnCloseUp;
+    property OnChecked;
+    property OnCheckBoxChange;
+    property Align;
+    property Anchors;
   end;
 
   TGenDial = class(TTyCustomDial)
@@ -9401,7 +9550,7 @@ type
 
 const
   { (mimic, final class) }
-  CGenMimics: array[0..155, 0..1] of TClass = (
+  CGenMimics: array[0..157, 0..1] of TClass = (
     (TGenAboutDialog, TTyAboutDialog),
     (TGenActivityBar, TTyActivityBar),
     (TGenActivityIndicator, TTyActivityIndicator),
@@ -9419,6 +9568,7 @@ const
     (TGenCalcCurrencyEdit, TTyCalcCurrencyEdit),
     (TGenCalcEdit, TTyCalcEdit),
     (TGenCalculator, TTyCalculator),
+    (TGenCalendar, TTyCalendar),
     (TGenCard, TTyCard),
     (TGenCascader, TTyCascader),
     (TGenCharImage, TTyCharImage),
@@ -9439,6 +9589,7 @@ const
     (TGenControlBar, TTyControlBar),
     (TGenCoolBar, TTyCoolBar),
     (TGenCurrencyEdit, TTyCurrencyEdit),
+    (TGenDateTimePicker, TTyDateTimePicker),
     (TGenDial, TTyDial),
     (TGenDivider, TTyDivider),
     (TGenDrawGrid, TTyDrawGrid),

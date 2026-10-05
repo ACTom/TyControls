@@ -271,7 +271,7 @@ These have no `TTyCustomXxx`. To derive one, derive from the class on the palett
 | Dialogs: `TTySelectPathDialog`, `TTyColorDialog`, `TTyFontDialog`, `TTyFindDialog`, `TTyReplaceDialog`, `TTyOpenDialog`, `TTySaveDialog`, `TTyOpenPictureDialog`, `TTySavePictureDialog`, `TTyOpenPreviewDialog`, `TTySavePreviewDialog` | LCL's `TCommonDialog` family (`TOpenDialog`, `TColorDialog`…) publishes at every level | Derive directly | No, as in LCL |
 | `TTyForm`, `TTyDialog` | They play the part of `TForm`: your forms already derive from them | New Form as usual, or `class(TTyForm)` | No |
 | `TTyToolWindowManager` | There is a `TTyCustomToolWindowManager` (it publishes nothing), but moving windows across bars, the move queue and layout saving live in the final class, for unit dependencies | Derive from `TTyToolWindowManager`, not from `TTyCustomToolWindowManager` — the latter fits a bar's `Manager` but cannot move windows or save a layout | Once the implementation can move into the custom class; not scheduled |
-| `TTyAdvanceChart`, `TTyCalendar`, `TTyDateTimePicker` | Another branch is still changing them | Derive directly | After that branch merges |
+| `TTyAdvanceChart` | The chart is still under heavy development and its declaration keeps changing | Derive directly | Once it settles |
 
 Ty's own eight dialogs (`TTyMessage`, `TTyInputDialog`, `TTyPasswordDialog`, `TTyTextDialog`, `TTySelectValueDialog`, `TTyProgressDialog`, `TTyAboutDialog`, `TTyIconBrowserDialog`) are split, as LCL splits `TCustomTaskDialog` / `TTaskDialog`.
 

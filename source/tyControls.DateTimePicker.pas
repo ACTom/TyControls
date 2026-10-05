@@ -300,7 +300,7 @@ type
 { TTyDateTimePicker — field render + segment editing (Task C2).
   Dropdown/time-spin/ShowCheckBox behavior is wired in Task C3. }
 type
-  TTyDateTimePicker = class(TTyCustomControl)
+  TTyCustomDateTimePicker = class(TTyCustomControl)
   private
     FKind:        TTyDateTimeKind;
     FDateTime:    TDateTime;
@@ -553,65 +553,10 @@ type
     property Popup:       TTyDropdownPopup read FPopup;
     property Calendar:    TTyCalendar      read FCalendar;
 
-  published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
-    property Version;
-    property Enabled;
-    property Visible;
-    property Font;
-    property ShowHint;
-    property TabOrder;
+  public
     property TabStop default True;
-    property OnClick;
-    property OnDblClick;
-    property OnMouseDown;
-    property OnMouseUp;
-    property OnMouseMove;
-    property OnMouseEnter;
-    property OnMouseLeave;
-    property OnMouseWheel;
-    property OnMouseWheelUp;
-    property OnMouseWheelDown;
-    property OnContextPopup;
-    property OnResize;
-    property OnChangeBounds;
-    { Off by default, unlike LCL's picker (datetimepicker.pas:394 publishes it True):
-      turning it on for everyone would resize every field on every existing form. On,
-      the control measures its own text, checkbox and button and grows to fit -- which
-      is what a skin with a larger font or fatter padding needs, and what the fixed
-      130px width could not do. }
-    property AutoSize;
-    property BorderWidth;
-    property ChildSizing;
-    property DragMode;
-    property DragKind;
-    property DragCursor;
-    property OnDragOver;
-    property OnDragDrop;
-    property OnStartDrag;
-    property OnEndDrag;
-    property OnMouseWheelHorz;
-    property OnMouseWheelLeft;
-    property OnMouseWheelRight;
-    property OnShowHint;
-    property PopupMenu;
-    property Constraints;
-    property BorderSpacing;
-    property ParentShowHint;
-    property Action;
-    property OnPaint;
-    property OnKeyDown;
-    property OnKeyUp;
-    property OnKeyPress;
-    property OnUTF8KeyPress;
-    property OnEnter;
-    property OnExit;
-    property OnEditingDone;
-    property StyleClass;
-    property StyleOverride;
-    property Controller;
-    { Published so DateTime appears in the Object Inspector and is streamed. }
+  protected
+    { The value. TTyDateTimePicker publishes it, so it streams and shows in the Object Inspector. }
     property DateTime:    TDateTime       read FDateTime    write SetDateTime;
     property Kind:         TTyDateTimeKind read FKind        write SetKind        default dtkDate;
     property DateFormat:   string          read FDateFormat  write SetDateFormat;
@@ -664,6 +609,90 @@ type
       names, so a ported form's `OnCheckBoxChange = Handler` streams instead of leaving
       the handler silently orphaned. OnChecked stays the persisted one. }
     property OnCheckBoxChange: TNotifyEvent read FOnChecked  write FOnChecked stored False;
+  end;
+
+  { TTyDateTimePicker publishes TTyCustomDateTimePicker's properties; everything lives in TTyCustomDateTimePicker. }
+  TTyDateTimePicker = class(TTyCustomDateTimePicker)
+  published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    { Off by default, unlike LCL's picker (datetimepicker.pas:394 publishes it True):
+      turning it on for everyone would resize every field on every existing form. On,
+      the control measures its own text, checkbox and button and grows to fit -- which
+      is what a skin with a larger font or fatter padding needs, and what the fixed
+      130px width could not do. }
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property DateTime;
+    property Kind;
+    property DateFormat;
+    property TimeFormat;
+    property MinDate;
+    property MaxDate;
+    property ReadOnly;
+    property ShowCheckBox;
+    property Checked;
+    property DroppedDown;
+    property Alignment;
+    property LeadingZeros;
+    property CenturyFrom;
+    property Options;
+    property DateMode;
+    property NullInputAllowed;
+    property TextForNullDate;
+    property OnChange;
+    property OnDropDown;
+    property OnCloseUp;
+    property OnChecked;
+    property OnCheckBoxChange;
     property Align;
     property Anchors;
   end;
@@ -1350,7 +1379,7 @@ end;
 
 { ── TTyDateTimePicker ────────────────────────────────────────────────────── }
 
-constructor TTyDateTimePicker.Create(AOwner: TComponent);
+constructor TTyCustomDateTimePicker.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TabStop        := True;
@@ -1382,7 +1411,7 @@ begin
   RebuildSegments;
 end;
 
-destructor TTyDateTimePicker.Destroy;
+destructor TTyCustomDateTimePicker.Destroy;
 begin
   { Free the popup helper first: it hides the form and fires OnClose
     (PopupClosed), which accesses FPopup.CloseUpTick.  Detach the handler
@@ -1396,14 +1425,14 @@ begin
   inherited Destroy;
 end;
 
-function TTyDateTimePicker.GetStyleTypeKey: string;
+function TTyCustomDateTimePicker.GetStyleTypeKey: string;
 begin
   Result := 'TyDateTimePicker';
 end;
 
 { ── Active format resolution ─────────────────────────────────────────────── }
 
-function TTyDateTimePicker.ActiveFormat: string;
+function TTyCustomDateTimePicker.ActiveFormat: string;
 begin
   { The fallback PATTERNS deliberately stay DefaultFormatSettings even when a
     translation is loaded: field order (2026/8/7 vs 8/7/2026) and separators are
@@ -1427,7 +1456,7 @@ begin
   end;
 end;
 
-function TTyDateTimePicker.EffectiveFormat: string;
+function TTyCustomDateTimePicker.EffectiveFormat: string;
 { Returns a normalized version of ActiveFormat where every single-letter
   field specifier is doubled (m→mm, d→dd, etc.) to guarantee fixed-width
   rendering so that format positions == rendered text positions. }
@@ -1435,7 +1464,7 @@ begin
   Result := TyEffectiveFormat(ActiveFormat);
 end;
 
-procedure TTyDateTimePicker.RebuildSegments;
+procedure TTyCustomDateTimePicker.RebuildSegments;
 begin
   { Scan the AUTHOR'S format, not the doubled one. The doubling existed only to make
     format offsets equal rendered offsets; BuildDisplay now reports the rendered
@@ -1449,14 +1478,14 @@ begin
   FDigitBuffer := '';
 end;
 
-function TTyDateTimePicker.FormattedText: string;
+function TTyCustomDateTimePicker.FormattedText: string;
 var
   Spans: TTySegmentArray;
 begin
   BuildDisplay(Result, Spans);
 end;
 
-function TTyDateTimePicker.SegmentDigitWidth(const ASeg: TTySegment): Integer;
+function TTyCustomDateTimePicker.SegmentDigitWidth(const ASeg: TTySegment): Integer;
 begin
   case ASeg.Kind of
     skYear:     if ASeg.LenCh >= 3 then Result := 4 else Result := 2;
@@ -1466,7 +1495,7 @@ begin
   end;
 end;
 
-procedure TTyDateTimePicker.BuildDisplay(out AText: string;
+procedure TTyCustomDateTimePicker.BuildDisplay(out AText: string;
   out ASpans: TTySegmentArray);
 var
   BufText: string;
@@ -1527,7 +1556,7 @@ end;
 
 { ── Pixel measurement helper ─────────────────────────────────────────────── }
 
-function TTyDateTimePicker.TextOriginX(const ATextR: TRect;
+function TTyCustomDateTimePicker.TextOriginX(const ATextR: TRect;
   const AText, AFontName: string;
   AFontSizePx, AFontWeight, APPI: Integer): Integer;
 var
@@ -1574,7 +1603,7 @@ begin
     if Result < ATextR.Left then Result := ATextR.Left;
 end;
 
-function TTyDateTimePicker.MeasureCharX(const AText, AFontName: string;
+function TTyCustomDateTimePicker.MeasureCharX(const AText, AFontName: string;
   ACharIdx, AFontSizePx, AFontWeight, APPI: Integer): Integer;
 var
   Bmp: TBGRABitmap;
@@ -1598,7 +1627,7 @@ end;
 
 { ── Digit buffer accumulation ────────────────────────────────────────────── }
 
-function TTyDateTimePicker.AccumulateDigit(ADigit: Char): Boolean;
+function TTyCustomDateTimePicker.AccumulateDigit(ADigit: Char): Boolean;
 { Append ADigit to FDigitBuffer without writing FDateTime.
   Returns True when the segment is "full" (auto-advance condition):
     - MaxDigits reached, OR
@@ -1633,7 +1662,7 @@ end;
 
 { ── Buffer finalization ──────────────────────────────────────────────────── }
 
-procedure TTyDateTimePicker.FinalizeBuffer(AOldVal: TDateTime; AAdvance: Boolean);
+procedure TTyCustomDateTimePicker.FinalizeBuffer(AOldVal: TDateTime; AAdvance: Boolean);
 { Parse FDigitBuffer, clamp to segment range, write FDateTime, commit.
   AAdvance = True means also increment FActiveSeg (auto-advance path). }
 var
@@ -1723,7 +1752,7 @@ end;
 
 { ── Commit / step ────────────────────────────────────────────────────────── }
 
-procedure TTyDateTimePicker.CommitAndFire(AOldVal: TDateTime);
+procedure TTyCustomDateTimePicker.CommitAndFire(AOldVal: TDateTime);
 { Clamp FDateTime to [MinDate,MaxDate] and fire OnChange if the value
   actually changed relative to AOldVal. }
 var
@@ -1768,7 +1797,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyDateTimePicker.StepActiveSeg(ADelta: Integer);
+procedure TTyCustomDateTimePicker.StepActiveSeg(ADelta: Integer);
 var
   OldVal: TDateTime;
 begin
@@ -1795,7 +1824,7 @@ end;
 
 { Hour of the day, 0..23 -- so the A/P keys can tell whether the meridiem already reads
   what was pressed and step only when it does not. }
-function TTyDateTimePicker.HourOf(AValue: TDateTime): Integer;
+function TTyCustomDateTimePicker.HourOf(AValue: TDateTime): Integer;
 var
   h, m, sec, ms: Word;
 begin
@@ -1807,7 +1836,7 @@ begin
   Result := h;
 end;
 
-function TTyDateTimePicker.TwelveHourFormat: Boolean;
+function TTyCustomDateTimePicker.TwelveHourFormat: Boolean;
 var
   i: Integer;
 begin
@@ -1816,18 +1845,18 @@ begin
     if FSegments[i].Kind = skAMPM then Exit(True);
 end;
 
-function TTyDateTimePicker.HasDropDownButton: Boolean;
+function TTyCustomDateTimePicker.HasDropDownButton: Boolean;
 begin
   Result := (FDateMode = dmComboBox) and (FKind = dtkDate);
 end;
 
-function TTyDateTimePicker.HasSpinButtons: Boolean;
+function TTyCustomDateTimePicker.HasSpinButtons: Boolean;
 begin
   Result := (FDateMode = dmUpDown) or
             ((FDateMode = dmComboBox) and (FKind = dtkTime));
 end;
 
-function TTyDateTimePicker.ButtonColumnLogical: Integer;
+function TTyCustomDateTimePicker.ButtonColumnLogical: Integer;
 begin
   if FDateMode = dmNone then
     Result := 0
@@ -1835,12 +1864,12 @@ begin
     Result := ActiveController.Metric('--field-button-width', TyFieldButtonWidth);
 end;
 
-function TTyDateTimePicker.ButtonWidthDev: Integer;
+function TTyCustomDateTimePicker.ButtonWidthDev: Integer;
 begin
   Result := MulDiv(ButtonColumnLogical, Font.PixelsPerInch, 96);
 end;
 
-function TTyDateTimePicker.IsInert: Boolean;
+function TTyCustomDateTimePicker.IsInert: Boolean;
 begin
   { dtpoEnabledIfUnchecked keeps the field editable while the box is clear -- LCL's
     flag of the same name (datetimepicker.pas:1024). Without it an unchecked picker
@@ -1849,7 +1878,7 @@ begin
             not (dtpoEnabledIfUnchecked in FOptions);
 end;
 
-procedure TTyDateTimePicker.FieldLayout(const ALocal: TRect; APPI: Integer;
+procedure TTyCustomDateTimePicker.FieldLayout(const ALocal: TRect; APPI: Integer;
   out ARects: TTyDateTimeRects; out AStyle: TTyStyleSet;
   out AFontSizePx: Integer; out AText: string;
   out ASpans: TTySegmentArray; out AOriginX: Integer);
@@ -1868,7 +1897,7 @@ begin
                    AStyle.FontWeight, APPI);
 end;
 
-function TTyDateTimePicker.SegmentSpanX(const AText: string;
+function TTyCustomDateTimePicker.SegmentSpanX(const AText: string;
   const ASpans: TTySegmentArray; AOriginX, AIndex: Integer;
   const AFontName: string; AFontSizePx, AFontWeight, APPI: Integer;
   out AX1, AX2: Integer): Boolean;
@@ -1887,7 +1916,7 @@ begin
   if AX2 <= AX1 then AX2 := AX1 + MulDiv(8, APPI, 96);  // degenerate guard
 end;
 
-function TTyDateTimePicker.SegmentAtX(const AText: string;
+function TTyCustomDateTimePicker.SegmentAtX(const AText: string;
   const ASpans: TTySegmentArray; AOriginX, AX: Integer;
   const AFontName: string; AFontSizePx, AFontWeight, APPI: Integer): Integer;
 var
@@ -1923,7 +1952,7 @@ end;
 
 { ── Dropdown helpers (dtkDate) ───────────────────────────────────────────── }
 
-procedure TTyDateTimePicker.EnsurePopup;
+procedure TTyCustomDateTimePicker.EnsurePopup;
 begin
   if FPopup <> nil then Exit;
 
@@ -1946,7 +1975,7 @@ begin
   FPopup.Form.OnKeyDown  := @PopupFormKeyDown;
 end;
 
-procedure TTyDateTimePicker.OpenDropDown;
+procedure TTyCustomDateTimePicker.OpenDropDown;
 var
   CalStyle: TTyStyleSet;
   Radius: Integer;
@@ -1985,7 +2014,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyDateTimePicker.SeedPopupCalendar;
+procedure TTyCustomDateTimePicker.SeedPopupCalendar;
 begin
   if FCalendar = nil then Exit;
 
@@ -2021,7 +2050,7 @@ begin
   FCalendar.Controller    := ActiveController;
 end;
 
-procedure TTyDateTimePicker.CloseDropDown;
+procedure TTyCustomDateTimePicker.CloseDropDown;
 begin
   if (FPopup <> nil) and FPopup.IsOpen then
     FPopup.Close
@@ -2034,7 +2063,7 @@ begin
   end;
 end;
 
-procedure TTyDateTimePicker.PopupClosed(Sender: TObject);
+procedure TTyCustomDateTimePicker.PopupClosed(Sender: TObject);
 begin
   if FPopup <> nil then
     FCloseUpTick := FPopup.CloseUpTick;
@@ -2042,7 +2071,7 @@ begin
   if Assigned(FOnCloseUp) then FOnCloseUp(Self);
 end;
 
-procedure TTyDateTimePicker.PopupFormKeyDown(Sender: TObject; var Key: Word;
+procedure TTyCustomDateTimePicker.PopupFormKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
   if Key = VK_ESCAPE then
@@ -2052,7 +2081,7 @@ begin
   end;
 end;
 
-procedure TTyDateTimePicker.CalendarChange(Sender: TObject);
+procedure TTyCustomDateTimePicker.CalendarChange(Sender: TObject);
 { OnChange: arrow-key navigation inside the popup.  Update the date part of
   FDateTime so the picker text follows live, but do NOT close the popup. }
 var
@@ -2075,7 +2104,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyDateTimePicker.CalendarAccepted(Sender: TObject);
+procedure TTyCustomDateTimePicker.CalendarAccepted(Sender: TObject);
 { OnAccept: user clicked a day cell or pressed Enter.  Commit the date and
   close the popup.  SetDateTime handles clamping + OnChange.
   Uses CloseDropDown so both the real-window path (fires PopupClosed→OnCloseUp)
@@ -2107,7 +2136,7 @@ end;
 
 { ── Focus ────────────────────────────────────────────────────────────────── }
 
-procedure TTyDateTimePicker.DoEnter;
+procedure TTyCustomDateTimePicker.DoEnter;
 begin
   inherited DoEnter;
   { Snapshot on the way in: this is the value Escape restores, so it has to be taken
@@ -2120,7 +2149,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyDateTimePicker.DoExit;
+procedure TTyCustomDateTimePicker.DoExit;
 var SavedDT: TDateTime;
 begin
   inherited DoExit;
@@ -2135,7 +2164,7 @@ end;
 
 { ── Rendering ────────────────────────────────────────────────────────────── }
 
-procedure TTyDateTimePicker.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomDateTimePicker.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P:         TTyPainter;
   S:         TTyStyleSet;
@@ -2242,12 +2271,12 @@ begin
   end;
 end;
 
-procedure TTyDateTimePicker.Paint;
+procedure TTyCustomDateTimePicker.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-procedure TTyDateTimePicker.CalculatePreferredSize(
+procedure TTyCustomDateTimePicker.CalculatePreferredSize(
   var PreferredWidth, PreferredHeight: Integer; WithThemeSpace: Boolean);
 var
   S: TTyStyleSet;
@@ -2309,7 +2338,7 @@ end;
 
 { ── Keyboard ─────────────────────────────────────────────────────────────── }
 
-procedure TTyDateTimePicker.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomDateTimePicker.KeyDown(var Key: Word; Shift: TShiftState);
 var OldVal: TDateTime;
 begin
   if not Enabled then Exit;
@@ -2437,7 +2466,7 @@ begin
   end;
 end;
 
-procedure TTyDateTimePicker.UTF8KeyPress(var UTF8Key: TUTF8Char);
+procedure TTyCustomDateTimePicker.UTF8KeyPress(var UTF8Key: TUTF8Char);
 var
   OldVal:   TDateTime;
   AutoAdv:  Boolean;
@@ -2495,7 +2524,7 @@ end;
 
 { ── Mouse wheel ──────────────────────────────────────────────────────────── }
 
-function TTyDateTimePicker.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+function TTyCustomDateTimePicker.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 begin
   if not Enabled then Exit(False);
@@ -2511,7 +2540,7 @@ end;
 
 { ── Mouse down — segment hit-test + button clicks ────────────────────────── }
 
-procedure TTyDateTimePicker.Click;
+procedure TTyCustomDateTimePicker.Click;
 begin
   inherited Click;
   if FMouseDownOnButton then
@@ -2526,7 +2555,7 @@ begin
   end;
 end;
 
-procedure TTyDateTimePicker.MouseDown(Button: TMouseButton; Shift: TShiftState;
+procedure TTyCustomDateTimePicker.MouseDown(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
   S:        TTyStyleSet;
@@ -2611,14 +2640,14 @@ end;
 { Everything that changes what the field RENDERS also changes what it needs to be wide
   enough for, so each of these re-measures. Leaving that out is how AutoSize ends up
   "implemented" but never actually growing: the first measurement would stand forever. }
-procedure TTyDateTimePicker.ContentChanged;
+procedure TTyCustomDateTimePicker.ContentChanged;
 begin
   InvalidatePreferredSize;
   AdjustSize;
   Invalidate;
 end;
 
-procedure TTyDateTimePicker.SetKind(AValue: TTyDateTimeKind);
+procedure TTyCustomDateTimePicker.SetKind(AValue: TTyDateTimeKind);
 begin
   if FKind = AValue then Exit;
   FKind := AValue;
@@ -2636,7 +2665,7 @@ end;
   no flag to turn it off. If your handler genuinely wants to run on code writes, put
   dtpoDoChangeOnSetDateTime in Options; if it wants to run on user edits only -- which
   is what OnChange means everywhere else -- you now get that for free. }
-procedure TTyDateTimePicker.SetDateTime(AValue: TDateTime);
+procedure TTyCustomDateTimePicker.SetDateTime(AValue: TDateTime);
 begin
   { The empty value is checked BEFORE any clamp, and normalised to exactly TyNullDate.
     Order is the whole of it: the sentinel is above the ceiling by construction, so a
@@ -2668,12 +2697,12 @@ begin
   Invalidate;
 end;
 
-procedure TTyDateTimePicker.ConfirmChanges;
+procedure TTyCustomDateTimePicker.ConfirmChanges;
 begin
   FConfirmedDateTime := FDateTime;
 end;
 
-procedure TTyDateTimePicker.UndoChanges;
+procedure TTyCustomDateTimePicker.UndoChanges;
 begin
   FDigitBuffer := '';
   { TyEqualDateTime, not `<>`: restoring an EMPTY snapshot over a date has to count as a
@@ -2700,7 +2729,7 @@ end;
   empty value has no halves. Trunc and Frac of the sentinel are meaningless at best, and
   the number they produce would go straight into the host's record. Each of these three
   cases exists in LCL for the same reason (SetDate, datetimepicker.pas:1194-1200). }
-procedure TTyDateTimePicker.SetDate(AValue: TDateTime);
+procedure TTyCustomDateTimePicker.SetDate(AValue: TDateTime);
 begin
   if TyDateIsNull(AValue) then
     SetDateTime(TyNullDate)
@@ -2712,13 +2741,13 @@ begin
     SetDateTime(Trunc(AValue) + Frac(FDateTime));
 end;
 
-function TTyDateTimePicker.GetDate: TDateTime;
+function TTyCustomDateTimePicker.GetDate: TDateTime;
 begin
   if DateIsNull then Result := TyNullDate
   else Result := Trunc(FDateTime);
 end;
 
-procedure TTyDateTimePicker.SetTime(AValue: TDateTime);
+procedure TTyCustomDateTimePicker.SetTime(AValue: TDateTime);
 begin
   if TyDateIsNull(AValue) then
     SetDateTime(TyNullDate)
@@ -2730,13 +2759,13 @@ begin
     SetDateTime(Trunc(FDateTime) + Frac(AValue));
 end;
 
-function TTyDateTimePicker.GetTime: TDateTime;
+function TTyCustomDateTimePicker.GetTime: TDateTime;
 begin
   if DateIsNull then Result := TyNullDate
   else Result := Frac(FDateTime);
 end;
 
-procedure TTyDateTimePicker.SetDateFormat(const AValue: string);
+procedure TTyCustomDateTimePicker.SetDateFormat(const AValue: string);
 begin
   if FDateFormat = AValue then Exit;
   FDateFormat := AValue;
@@ -2744,7 +2773,7 @@ begin
   ContentChanged;
 end;
 
-procedure TTyDateTimePicker.SetTimeFormat(const AValue: string);
+procedure TTyCustomDateTimePicker.SetTimeFormat(const AValue: string);
 begin
   if FTimeFormat = AValue then Exit;
   FTimeFormat := AValue;
@@ -2767,7 +2796,7 @@ end;
   raw would go straight through here. The normalisation is what makes it unreachable and
   the normalisation is pinned (test.datetimepicker,
   TheProgrammaticSetterKeepsTheValueEmpty). }
-procedure TTyDateTimePicker.SetMinDate(AValue: TDateTime);
+procedure TTyCustomDateTimePicker.SetMinDate(AValue: TDateTime);
 begin
   if FMinDate = AValue then Exit;
   FMinDate := AValue;
@@ -2776,7 +2805,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyDateTimePicker.SetMaxDate(AValue: TDateTime);
+procedure TTyCustomDateTimePicker.SetMaxDate(AValue: TDateTime);
 begin
   if FMaxDate = AValue then Exit;
   FMaxDate := AValue;
@@ -2785,14 +2814,14 @@ begin
   Invalidate;
 end;
 
-procedure TTyDateTimePicker.SetReadOnly(AValue: Boolean);
+procedure TTyCustomDateTimePicker.SetReadOnly(AValue: Boolean);
 begin
   if FReadOnly = AValue then Exit;
   FReadOnly := AValue;
   Invalidate;
 end;
 
-procedure TTyDateTimePicker.SetShowCheckBox(AValue: Boolean);
+procedure TTyCustomDateTimePicker.SetShowCheckBox(AValue: Boolean);
 begin
   if FShowCheckBox = AValue then Exit;
   FShowCheckBox := AValue;
@@ -2804,7 +2833,7 @@ end;
   path had been given the state change and not the event. LCL fires CheckBoxChange from
   its own setter too (datetimepicker.pas:1011-1020), deliberately unlike OnChange:
   a checkbox has no "user vs code" distinction worth drawing. }
-procedure TTyDateTimePicker.SetChecked(AValue: Boolean);
+procedure TTyCustomDateTimePicker.SetChecked(AValue: Boolean);
 begin
   if FChecked = AValue then Exit;
   FChecked := AValue;
@@ -2812,14 +2841,14 @@ begin
   if Assigned(FOnChecked) then FOnChecked(Self);
 end;
 
-procedure TTyDateTimePicker.SetAlignment(AValue: TAlignment);
+procedure TTyCustomDateTimePicker.SetAlignment(AValue: TAlignment);
 begin
   if FAlignment = AValue then Exit;
   FAlignment := AValue;
   Invalidate;
 end;
 
-procedure TTyDateTimePicker.SetLeadingZeros(AValue: Boolean);
+procedure TTyCustomDateTimePicker.SetLeadingZeros(AValue: Boolean);
 begin
   if FLeadingZeros = AValue then Exit;
   FLeadingZeros := AValue;
@@ -2830,13 +2859,13 @@ begin
   ContentChanged;
 end;
 
-procedure TTyDateTimePicker.SetCenturyFrom(AValue: Word);
+procedure TTyCustomDateTimePicker.SetCenturyFrom(AValue: Word);
 begin
   if FCenturyFrom = AValue then Exit;
   FCenturyFrom := AValue;
 end;
 
-procedure TTyDateTimePicker.SetDateMode(AValue: TTyDTDateMode);
+procedure TTyCustomDateTimePicker.SetDateMode(AValue: TTyDTDateMode);
 begin
   if FDateMode = AValue then Exit;
   { Close first: switching away from dmComboBox with the calendar down would leave a
@@ -2847,7 +2876,7 @@ begin
   ContentChanged;
 end;
 
-procedure TTyDateTimePicker.SetNullInputAllowed(AValue: Boolean);
+procedure TTyCustomDateTimePicker.SetNullInputAllowed(AValue: Boolean);
 begin
   { Storage only, exactly as LCL (datetimepicker.pas:1171): turning the permission off
     does not retroactively fill in a field that is already empty -- the host would have
@@ -2856,7 +2885,7 @@ begin
   FNullInputAllowed := AValue;
 end;
 
-procedure TTyDateTimePicker.SetTextForNullDate(const AValue: TCaption);
+procedure TTyCustomDateTimePicker.SetTextForNullDate(const AValue: TCaption);
 begin
   if FTextForNullDate = AValue then Exit;
   FTextForNullDate := AValue;
@@ -2866,7 +2895,7 @@ begin
   ContentChanged;
 end;
 
-function TTyDateTimePicker.NullSeedDate: TDateTime;
+function TTyCustomDateTimePicker.NullSeedDate: TDateTime;
 begin
   Result := Trunc(SysUtils.Date);
   if (FMinDate <> 0) and (Result < FMinDate) then Result := FMinDate;
@@ -2875,17 +2904,17 @@ begin
   if Result > TyTheBiggestDate  then Result := TyTheBiggestDate;
 end;
 
-function TTyDateTimePicker.DateIsNull: Boolean;
+function TTyCustomDateTimePicker.DateIsNull: Boolean;
 begin
   Result := TyDateIsNull(FDateTime);
 end;
 
-function TTyDateTimePicker.GetDroppedDown: Boolean;
+function TTyCustomDateTimePicker.GetDroppedDown: Boolean;
 begin
   Result := (FPopup <> nil) and FPopup.IsOpen;
 end;
 
-procedure TTyDateTimePicker.SetDroppedDown(AValue: Boolean);
+procedure TTyCustomDateTimePicker.SetDroppedDown(AValue: Boolean);
 begin
   if AValue then
     OpenDropDown
