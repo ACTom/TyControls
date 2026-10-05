@@ -26,8 +26,8 @@ uses
   tyControls.ColorButton, tyControls.ColorComboBox, tyControls.ColorGrid, tyControls.ColorListBox,
   tyControls.ComboBox, tyControls.ComboBoxEx, tyControls.ComboEdit, tyControls.ControlBar,
   tyControls.Controller, tyControls.CoolBar, tyControls.CurrencyEdit, tyControls.DB.Choices,
-  tyControls.DB.Edits, tyControls.DB.Lists, tyControls.DateTimePicker, tyControls.Dial,
-  tyControls.Dialogs, tyControls.Dialogs.About, tyControls.Dialogs.IconBrowser,
+  tyControls.DB.Edits, tyControls.DB.Image, tyControls.DB.Lists, tyControls.DateTimePicker,
+  tyControls.Dial, tyControls.Dialogs, tyControls.Dialogs.About, tyControls.Dialogs.IconBrowser,
   tyControls.Dialogs.Progress, tyControls.Divider, tyControls.DropButtons, tyControls.Edit,
   tyControls.Empty, tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit,
   tyControls.FontComboBox, tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.Form,
@@ -2757,6 +2757,74 @@ type
     property EditorEnabled;
     property DataField;
     property DataSource;
+  end;
+
+  TGenDBImage = class(TTyCustomDBImage)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Picture;
+    property Stretch;
+    property Proportional;
+    property Center;
+    property Transparent;
+    property StretchOutEnabled;
+    property StretchInEnabled;
+    property KeepOriginXWhenClipped;
+    property KeepOriginYWhenClipped;
+    property AntialiasingMode;
+    property Images;
+    property ImageName;
+    property ImageIndex;
+    property ImageWidth;
+    property OnPictureChanged;
+    property Align;
+    property Anchors;
+    property AutoDisplay;
+    property DataField;
+    property DataSource;
+    property QuickDraw;
+    property ReadOnly;
+    property WriteHeader;
+    property OnDBImageRead;
+    property OnDBImageWrite;
   end;
 
   TGenDBListBox = class(TTyCustomDBListBox)
@@ -10766,7 +10834,7 @@ type
 
 const
   { (mimic, final class) }
-  CGenMimics: array[0..174, 0..1] of TClass = (
+  CGenMimics: array[0..175, 0..1] of TClass = (
     (TGenAboutDialog, TTyAboutDialog),
     (TGenActivityBar, TTyActivityBar),
     (TGenActivityIndicator, TTyActivityIndicator),
@@ -10810,6 +10878,7 @@ const
     (TGenDBCurrencyEdit, TTyDBCurrencyEdit),
     (TGenDBEdit, TTyDBEdit),
     (TGenDBFloatSpinEdit, TTyDBFloatSpinEdit),
+    (TGenDBImage, TTyDBImage),
     (TGenDBListBox, TTyDBListBox),
     (TGenDBLookupComboBox, TTyDBLookupComboBox),
     (TGenDBLookupListBox, TTyDBLookupListBox),

@@ -245,7 +245,8 @@ uses
   test.db.edits,
   test.db.numeric,
   test.db.choices,
-  test.db.lists;
+  test.db.lists,
+  test.db.image;
 
 type
   TTyTestRunner = class(TTestRunner)

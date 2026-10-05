@@ -311,6 +311,9 @@ procedure TDBControlTestBase.Key(AKey: Word; AShift: TShiftState);
 var
   k: Word;
 begin
+  { KeyDown is TWinControl's: through the cast a graphic control would run whatever sits in
+    that slot of its VMT. }
+  AssertTrue('keys go to a windowed control', FCtl is TWinControl);
   k := AKey;
   TInputAccess(FCtl).KeyDown(k, AShift);
 end;
@@ -442,6 +445,14 @@ begin
   before := BoundField.AsString;
   UserEdit;
   AssertTrue('the edit took', Shown <> ExpectedFocused(1));
+  if not (FCtl is TWinControl) then
+  begin
+    { A graphic control (the image) takes no focus and no keys: there is no Escape to
+      press, and what was done stays done. }
+    AssertFalse('a control without keys has no Escape to restore with', EscapeRestores);
+    AssertFieldHoldsEdit;
+    Exit;
+  end;
   if not EscapeRestores then
   begin
     Key(VK_ESCAPE);
