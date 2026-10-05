@@ -96,19 +96,6 @@ const
   { Registered with RegisterClass only: not on the palette, but streamed in .lfm files. }
   CStreamOnly: array[0..0] of string = ('TTyScrollContent');
 
-  { Split, in CSplit, and not on the palette YET: the data-aware controls (issue #34) are split
-    and guarded as they are written, and reach designtime/tyControls.Design.pas together, with
-    their palette page (plan Task 11). Until then the population (what Design.pas registers)
-    does not hold them -- so neither does G10's fixture -- and check (4) of
-    TestEveryRegisteredClassIsAccountedFor lets them through. A class registered since is
-    reported, so this list empties itself rather than going stale. }
-  CNotYetOnThePalette: array[0..20] of string = (
-    'TTyDBEdit', 'TTyDBMaskEdit', 'TTyDBMemo', 'TTyDBText', 'TTyDBNumericEdit',
-    'TTyDBCurrencyEdit', 'TTyDBSpinEdit', 'TTyDBFloatSpinEdit', 'TTyDBCheckBox',
-    'TTyDBToggleSwitch', 'TTyDBRadioGroup', 'TTyDBSegmented', 'TTyDBRating', 'TTyDBComboBox',
-    'TTyDBListBox', 'TTyDBLookupComboBox', 'TTyDBLookupListBox', 'TTyDBImage',
-    'TTyDBDateTimePicker', 'TTyDBCalendar', 'TTyDBNavigator');
-
   { G7: where each derived control's custom class must hang (plan appendix C-0), plus the
     intermediate classes. Columns: subject, expected parent, the class whose split activates
     the row. A final-class row checks Subject.ClassParent.ClassParent (the custom class's
@@ -603,13 +590,10 @@ begin
       if InList(n, CNotSplit) and IsSplitShape(c) then
         bad := bad + ' ' + n + '(split but still listed as not split)';
     end;
-    { (4): every split class is in the population -- or is on its way there. }
+    { (4): every split class is in the population. }
     for i := 0 to GSplit.Count - 1 do
-      if (pop.IndexOf(GSplit[i]) < 0) and not InList(GSplit[i], CNotYetOnThePalette) then
+      if pop.IndexOf(GSplit[i]) < 0 then
         bad := bad + ' ' + GSplit[i] + '(in CSplit but not registered)';
-    for i := Low(CNotYetOnThePalette) to High(CNotYetOnThePalette) do
-      if pop.IndexOf(CNotYetOnThePalette[i]) >= 0 then
-        bad := bad + ' ' + CNotYetOnThePalette[i] + '(registered now: drop it from CNotYetOnThePalette)';
   finally
     pop.Free;
   end;

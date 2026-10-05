@@ -70,6 +70,9 @@ uses
   tyControls.ListView, tyControls.ShellListView, tyControls.ShellTreeView,
   tyControls.FilterComboBox, tyControls.ShellComboBox,
   tyControls.AdvanceChart,
+  { The data-aware controls (the tycontrols_db package). }
+  tyControls.DB.Edits, tyControls.DB.Choices, tyControls.DB.Lists, tyControls.DB.Image,
+  tyControls.DB.DateTime, tyControls.DB.Navigator,
   { The manager's registration needs its own unit (spec §16 step 7). }
   tyControls.ToolWindows, tyControls.ToolWindows.Manager,
   { The vocabulary source of the theme dropdowns, published into the IDE process here. }
@@ -187,6 +190,12 @@ begin
     [TTyTreeView, TTyListView, TTyShellListView, TTyShellTreeView, TTyPreviewBox, TTyImageView,
      TTyCalendar, TTyDateTimePicker,
      TTyDrawGrid, TTyStringGrid]);
+  // Data-aware controls (tycontrols_db).
+  RegisterComponents('TyControls Data Controls',
+    [TTyDBNavigator, TTyDBText, TTyDBEdit, TTyDBMaskEdit, TTyDBNumericEdit, TTyDBCurrencyEdit,
+     TTyDBSpinEdit, TTyDBFloatSpinEdit, TTyDBMemo, TTyDBCheckBox, TTyDBToggleSwitch,
+     TTyDBRadioGroup, TTyDBSegmented, TTyDBRating, TTyDBComboBox, TTyDBLookupComboBox,
+     TTyDBListBox, TTyDBLookupListBox, TTyDBImage, TTyDBDateTimePicker, TTyDBCalendar]);
   // Menus.
   RegisterComponents('TyControls Menus',
     [TTyMenuBar, TTyPopupMenu, TTyImagesMenu, TTyMenuEx]);

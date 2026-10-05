@@ -470,6 +470,12 @@ initialization
   Reg([
     TTyGridCell, TTyFormSurface, TTyForm, TTyDialog,
     TTyToolWindowBar, TTyToolWindowManager, TTyToolWindow, TTyToolWindowActions]);
+  { The data-aware controls (tycontrols_db). }
+  Reg([
+    TTyDBNavigator, TTyDBText, TTyDBEdit, TTyDBMaskEdit, TTyDBNumericEdit, TTyDBCurrencyEdit,
+    TTyDBSpinEdit, TTyDBFloatSpinEdit, TTyDBMemo, TTyDBCheckBox, TTyDBToggleSwitch,
+    TTyDBRadioGroup, TTyDBSegmented, TTyDBRating, TTyDBComboBox, TTyDBLookupComboBox,
+    TTyDBListBox, TTyDBLookupListBox, TTyDBImage, TTyDBDateTimePicker, TTyDBCalendar]);
   { The BASE classes the Version property editor is registered on. They are never dropped on
     a form, so nothing else registers them — but InheritsFromAnEditorBase resolves them by
     name, and an unresolvable base would make that check quietly answer False for everything
@@ -478,14 +484,6 @@ initialization
     TTyGraphicControl, TTyCustomControl, TTyComponent,
     { 4.0: the image list's editor sits on its custom class, which TTyLucideImageList shares. }
     TTyCustomVirtualImageList]);
-  { The data-aware controls (tycontrols_db, issue #34). They reach the palette with the design-time
-    page; until Design.pas registers them they are not in the parse Reg() is checked against, so
-    they are registered plainly here -- the custom-class guards resolve their split by name. }
-  RegisterClasses([TTyDBEdit, TTyDBMaskEdit, TTyDBMemo, TTyDBText, TTyDBNumericEdit,
-    TTyDBCurrencyEdit, TTyDBSpinEdit, TTyDBFloatSpinEdit, TTyDBCheckBox, TTyDBToggleSwitch,
-    TTyDBRadioGroup, TTyDBSegmented, TTyDBRating, TTyDBComboBox, TTyDBListBox,
-    TTyDBLookupComboBox, TTyDBLookupListBox, TTyDBImage, TTyDBDateTimePicker, TTyDBCalendar,
-    TTyDBNavigator]);
   RegisterTest(TVersionTest);
 
 finalization

@@ -18,7 +18,7 @@ uses
   tyControls.Dialogs.SelectPath, tyControls.Dialogs.FileDialog,
   tyControls.ShellComboBox, tyControls.ShellListView, tyControls.ShellTreeView,
   tyControls.FilterComboBox, tyControls.CharImage, tyControls.GlyphButtons,
-  tyControls.AdvanceChart, tyControls.ToolWindows,
+  tyControls.AdvanceChart, tyControls.ToolWindows, tyControls.DB.Lists, DBPropEdits,
   { The SynEdit-backed tycss editor for StyleOverride (design-time only). }
   tyControls.Design.Css.Editor, tyControls.Design.AdvChart.Editor;
 
@@ -782,6 +782,15 @@ begin
   RegisterPropertyEditor(TypeInfo(string), TTyCustomShellComboBox, 'Directory', TDirectoryPropertyEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyCustomShellListView, 'Directory', TDirectoryPropertyEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyCustomShellTreeView, 'Directory', TDirectoryPropertyEditor);
+  { Field names. DataField needs nothing here: the IDE's DBPropEdits registers its field-name
+    list (TFieldProperty) for a string DataField on any TComponent, and it lists the fields of
+    the component's own DataSource. A lookup's KeyField and ListField name fields of ListSource
+    instead, and DBPropEdits gives that editor (TLookupFieldProperty) to LCL's two lookup
+    controls only -- so ours are named here, on the custom classes (plan D2). }
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomDBLookupComboBox, 'KeyField', TLookupFieldProperty);
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomDBLookupComboBox, 'ListField', TLookupFieldProperty);
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomDBLookupListBox, 'KeyField', TLookupFieldProperty);
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomDBLookupListBox, 'ListField', TLookupFieldProperty);
   // Version: read-only version display + design-time About dialog, on every registered class.
   // FIVE base classes cover the whole library through inheritance: the two control bases take
   // every visual control, TTyComponent every non-visual one (TTyStyleController included —
