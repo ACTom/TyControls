@@ -447,7 +447,9 @@ begin
   end;
   Key(VK_ESCAPE);
   AssertEquals('Escape shows the field again', ExpectedFocused(1), Shown);
-  FFix.DS.Post;
+  { A combo box that began the edit cancels the record (LCL's EditingSource rule); then there
+    is nothing to post. }
+  if FFix.DS.State in dsEditModes then FFix.DS.Post;
   AssertEquals('and nothing is written', before, BoundField.AsString);
 end;
 

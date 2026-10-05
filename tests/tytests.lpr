@@ -244,7 +244,8 @@ uses
   test.corehooks,
   test.db.edits,
   test.db.numeric,
-  test.db.choices;
+  test.db.choices,
+  test.db.lists;
 
 type
   TTyTestRunner = class(TTestRunner)

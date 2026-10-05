@@ -28,6 +28,10 @@
         <UnitName Value="tyControls.DB.Edits"/>
       </Item>
       <Item>
+        <Filename Value="source/db/tyControls.DB.Lists.pas"/>
+        <UnitName Value="tyControls.DB.Lists"/>
+      </Item>
+      <Item>
         <Filename Value="source/db/tyControls.DB.StrConsts.pas"/>
         <UnitName Value="tyControls.DB.StrConsts"/>
       </Item>
