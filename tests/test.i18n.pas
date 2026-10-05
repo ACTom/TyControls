@@ -140,14 +140,12 @@ end;
   just is not there.
 
   Failing entries are reported by name so the fix is either "add it to the .pot" or "give it
-  a non-empty English baseline", decided per string. }
+  a non-empty English baseline", decided per string.
+
+  Both packages' string units: tycontrols' StrConsts and tycontrols_db's DB.StrConsts. }
 procedure TI18NTest.TestEveryStrConstsResourcestringIsInThePot;
 var
-  src, pot: TStringList;
-  i, k, eq, depth: Integer;
-  root, line, id, missing: string;
-  inBlock: Boolean;
-  potText: string;
+  root: string;
 
   { A valid Pascal identifier and nothing else -- the guard that keeps prose out. }
   function IsIdent(const S: string): Boolean;
@@ -160,63 +158,80 @@ var
       if not (S[j] in ['A'..'Z', 'a'..'z', '0'..'9', '_']) then Exit(False);
   end;
 
+  { AUnitPath: the unit under the repo root; AUnit: its name, which is also the .pot's. }
+  procedure CheckUnit(const AUnitPath, AUnit: string);
+  var
+    src, pot: TStringList;
+    i, k, eq, depth, seen: Integer;
+    line, id, missing, potText: string;
+    inBlock: Boolean;
+  begin
+    AssertTrue('found the .pot', FileExists(root + 'languages' + PathDelim + AUnit + '.pot'));
+
+    pot := TStringList.Create;
+    src := TStringList.Create;
+    try
+      pot.LoadFromFile(root + 'languages' + PathDelim + AUnit + '.pot');
+      potText := LowerCase(pot.Text);
+      src.LoadFromFile(root + AUnitPath);
+
+      inBlock := False;
+      depth   := 0;
+      seen    := 0;
+      missing := '';
+      for i := 0 to src.Count - 1 do
+      begin
+        line := src[i];
+        (* Brace depth FIRST, and it is what makes this readable at all: this unit documents
+           nearly every string in a multi-line brace comment, and a comment's CONTINUATION
+           lines do not start with an opening brace. Skipping only lines that BEGIN with one
+           let the tail of a comment through as if it were code -- the first run of this test
+           reported "LCL refuses it (customupdown.inc:380-389). %s" as an untranslated
+           resourcestring. *)
+        if depth > 0 then
+        begin
+          for k := 1 to Length(line) do
+            if line[k] = '}' then Dec(depth) else if line[k] = '{' then Inc(depth);
+          Continue;
+        end;
+        for k := 1 to Length(line) do
+          if line[k] = '{' then Inc(depth) else if line[k] = '}' then Dec(depth);
+        if depth > 0 then Continue;      { a comment opened on this line and did not close }
+
+        line := Trim(line);
+        if LowerCase(line) = 'resourcestring' then begin inBlock := True; Continue; end;
+        if not inBlock then Continue;
+        if (LowerCase(line) = 'implementation') or (LowerCase(line) = 'type')
+           or (LowerCase(line) = 'var') or (LowerCase(line) = 'const') then
+        begin
+          inBlock := False;
+          Continue;
+        end;
+        if (line = '') or (Copy(line, 1, 2) = '//') then Continue;
+        eq := Pos('=', line);
+        if eq < 2 then Continue;
+        id := Trim(Copy(line, 1, eq - 1));
+        if not IsIdent(id) then Continue;
+        Inc(seen);
+        if Pos('#: ' + LowerCase(AUnit) + '.' + LowerCase(id) + LineEnding, potText) = 0 then
+          missing := missing + LineEnding + '  ' + id;
+      end;
+
+      { A parse that matched nothing would pass the assertion below vacuously. }
+      AssertTrue(AUnit + ': found its resourcestrings at all', seen > 0);
+      AssertEquals('resourcestrings declared in ' + AUnit + ' with no .pot entry -- nobody '
+        + 'can translate these:' + missing, '', missing);
+    finally
+      src.Free;
+      pot.Free;
+    end;
+  end;
+
 begin
   root := ExtractFilePath(ParamStr(0)) + '..' + PathDelim;
-  AssertTrue('found the .pot', FileExists(root + 'languages' + PathDelim + 'tyControls.StrConsts.pot'));
-
-  pot := TStringList.Create;
-  src := TStringList.Create;
-  try
-    pot.LoadFromFile(root + 'languages' + PathDelim + 'tyControls.StrConsts.pot');
-    potText := LowerCase(pot.Text);
-    src.LoadFromFile(root + 'source' + PathDelim + 'tyControls.StrConsts.pas');
-
-    inBlock := False;
-    depth   := 0;
-    missing := '';
-    for i := 0 to src.Count - 1 do
-    begin
-      line := src[i];
-      (* Brace depth FIRST, and it is what makes this readable at all: this unit documents
-         nearly every string in a multi-line brace comment, and a comment's CONTINUATION
-         lines do not start with an opening brace. Skipping only lines that BEGIN with one
-         let the tail of a comment through as if it were code -- the first run of this test
-         reported "LCL refuses it (customupdown.inc:380-389). %s" as an untranslated
-         resourcestring. *)
-      if depth > 0 then
-      begin
-        for k := 1 to Length(line) do
-          if line[k] = '}' then Dec(depth) else if line[k] = '{' then Inc(depth);
-        Continue;
-      end;
-      for k := 1 to Length(line) do
-        if line[k] = '{' then Inc(depth) else if line[k] = '}' then Dec(depth);
-      if depth > 0 then Continue;      { a comment opened on this line and did not close }
-
-      line := Trim(line);
-      if LowerCase(line) = 'resourcestring' then begin inBlock := True; Continue; end;
-      if not inBlock then Continue;
-      if (LowerCase(line) = 'implementation') or (LowerCase(line) = 'type')
-         or (LowerCase(line) = 'var') or (LowerCase(line) = 'const') then
-      begin
-        inBlock := False;
-        Continue;
-      end;
-      if (line = '') or (Copy(line, 1, 2) = '//') then Continue;
-      eq := Pos('=', line);
-      if eq < 2 then Continue;
-      id := Trim(Copy(line, 1, eq - 1));
-      if not IsIdent(id) then Continue;
-      if Pos('#: tycontrols.strconsts.' + LowerCase(id) + LineEnding, potText) = 0 then
-        missing := missing + LineEnding + '  ' + id;
-    end;
-
-    AssertEquals('resourcestrings declared in StrConsts.pas with no .pot entry -- nobody '
-      + 'can translate these:' + missing, '', missing);
-  finally
-    src.Free;
-    pot.Free;
-  end;
+  CheckUnit('source' + PathDelim + 'tyControls.StrConsts.pas', 'tyControls.StrConsts');
+  CheckUnit('source' + PathDelim + 'db' + PathDelim + 'tyControls.DB.StrConsts.pas',
+    'tyControls.DB.StrConsts');
 end;
 
 { End to end, against the catalogue that actually ships.

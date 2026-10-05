@@ -130,7 +130,7 @@ begin
     expression in the other. }
   bad := '';
   found := 0;
-  files := FindAllFiles(RepoRoot + 'source', '*.pas', False);
+  files := LibrarySourceFiles;
   src := TStringList.Create;
   try
     for i := 0 to files.Count - 1 do

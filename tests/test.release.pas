@@ -393,6 +393,7 @@ begin
   try
     CollectLpkFiles('tycontrols.lpk', named);
     CollectLpkFiles('tycontrols_dt.lpk', named);
+    CollectLpkFiles('tycontrols_db.lpk', named);
     AssertTrue('the .lpk files name some units', named.Count > 50);
     bad := '';
     for i := 0 to named.Count - 1 do
@@ -497,7 +498,7 @@ procedure TReleaseManifestTest.EveryUnitOnDiskIsListedInItsPackage;
       end;
       for i := 0 to found.Count - 1 do
       begin
-        rel := ADir + '/' + found[i];
+        rel := Slashes(ADir) + '/' + found[i];   { the .lpk's spelling }
         if listed.IndexOf(rel) < 0 then
           ABad.Add(rel + '  (not listed in ' + ALpk + ')');
       end;
@@ -523,6 +524,7 @@ begin
   try
     CheckDir('source', 'tycontrols.lpk', bad);
     CheckDir('designtime', 'tycontrols_dt.lpk', bad);
+    CheckDir('source' + PathDelim + 'db', 'tycontrols_db.lpk', bad);
     AssertEquals('units on disk that no package lists -- they compile via the '
       + 'search path and then go missing from the installed package:'
       + LineEnding + bad.Text, '', bad.Text);

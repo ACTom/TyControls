@@ -239,7 +239,8 @@ uses
   test.themebuilder.edit,
   test.customclasses, test.customclasses.p1, test.customclasses.p2, test.customclasses.p3,
   test.customclasses.p4,
-  test.typekeychain;
+  test.typekeychain,
+  test.db.common;
 
 type
   TTyTestRunner = class(TTestRunner)

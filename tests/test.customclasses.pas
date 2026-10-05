@@ -500,7 +500,7 @@ var
 begin
   bad := '';
   l := SplitClasses;
-  files := FindAllFiles(RepoRoot + 'source', '*.pas', False);
+  files := LibrarySourceFiles;
   lines := TStringList.Create;
   try
     { (b) source: the final class declaration is nothing but `published` and `property X;`. }
@@ -533,7 +533,7 @@ begin
         if found then Break;
       end;
       if not found then
-        bad := bad + LineEnding + '  ' + cname + ': declaration `' + header + '` not found in source/';
+        bad := bad + LineEnding + '  ' + cname + ': declaration `' + header + '` not found in source/ or source/db/';
     end;
     AssertEquals('final classes must hold only `property X;` lines:' + bad, '', bad);
   finally

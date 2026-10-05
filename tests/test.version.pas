@@ -374,6 +374,8 @@ begin
     core, PackageVersion('tycontrols.lpk'));
   AssertEquals('tycontrols_dt.lpk version must match TyVersion''s release number',
     core, PackageVersion('tycontrols_dt.lpk'));
+  AssertEquals('tycontrols_db.lpk version must match TyVersion''s release number',
+    core, PackageVersion('tycontrols_db.lpk'));
 end;
 
 { The design-time-reachability check in the sweep answers "does ACls descend from a class the

@@ -30,6 +30,7 @@ backup/
 # lazbuild 从 .lpk 自动生成的包注册单元（构建时重新生成）
 /tycontrols.pas
 /tycontrols_dt.pas
+/tycontrols_db.pas
 
 # Lazarus IDE 全局包链接缓存（机器相关，lazbuild --pcp 写出，不应入库）
 packagefiles.xml

@@ -61,9 +61,11 @@ LCL_ROOTS = ('TControl', 'TWinControl', 'TCustomControl', 'TGraphicControl')
 
 
 def declared_properties():
-    """Every identifier declared as a `property` anywhere in source/."""
+    """Every identifier declared as a `property` anywhere in source/ or source/db/ (the
+    tycontrols_db package)."""
     names = set()
-    for path in glob.glob(os.path.join(ROOT, 'source', '*.pas')):
+    for path in (glob.glob(os.path.join(ROOT, 'source', '*.pas'))
+                 + glob.glob(os.path.join(ROOT, 'source', 'db', '*.pas'))):
         text = io.open(path, encoding='utf-8', errors='replace').read()
         for m in re.finditer(r'\bproperty\s+([A-Za-z_]\w*)', text):
             names.add(m.group(1).lower())
