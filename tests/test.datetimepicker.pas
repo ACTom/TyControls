@@ -325,6 +325,24 @@ type
     procedure ThePreferredWidthMeasuresTheSameNamesTheFieldRenders;
   end;
 
+  { ReadOnly = True blocked keys, wheel, spin buttons and the check box, but the dropdown still
+    opened, and picking a day in it changed the value. As LCL's TDateTimePicker, a read-only
+    picker drops no calendar at all; and a calendar left open when ReadOnly is set edits
+    nothing. }
+  TDateTimePickerReadOnlyTest = class(TTestCase)
+  private
+    FReached, FChanges, FCloseUps: Integer;
+    procedure DropReached(Sender: TObject);
+    procedure Changed(Sender: TObject);
+    procedure ClosedUp(Sender: TObject);
+    function NewPicker: TTyDateTimePickerProbeC3;
+    function TryToDrop(APicker: TTyDateTimePicker): Boolean;
+  published
+    procedure TestAReadOnlyPickerDropsNoCalendar;
+    procedure TestPickingADayInAReadOnlyPickerChangesNothing;
+    procedure TestMovingThroughTheCalendarOfAReadOnlyPickerChangesNothing;
+  end;
+
 implementation
 
 { ── helpers ──────────────────────────────────────────────────────────────── }
@@ -2310,6 +2328,103 @@ begin
   AssertFalse('and five is not', Toggles(168, 5));
 end;
 
+{ TDateTimePickerReadOnlyTest }
+
+type
+  { Raised from OnDropDown: OpenDropDown got as far as dropping the calendar. It stops the call
+    there, before the popup window -- which a headless run cannot show -- would be created. }
+  EDropReached = class(Exception);
+
+procedure TDateTimePickerReadOnlyTest.DropReached(Sender: TObject);
+begin
+  Inc(FReached);
+  raise EDropReached.Create('the calendar would drop now');
+end;
+
+procedure TDateTimePickerReadOnlyTest.Changed(Sender: TObject);
+begin
+  Inc(FChanges);
+end;
+
+procedure TDateTimePickerReadOnlyTest.ClosedUp(Sender: TObject);
+begin
+  Inc(FCloseUps);
+end;
+
+function TDateTimePickerReadOnlyTest.NewPicker: TTyDateTimePickerProbeC3;
+begin
+  Result := TTyDateTimePickerProbeC3.Create(nil);
+  Result.Kind := dtkDate;
+  Result.DateTime := EncodeDate(2026, 6, 15);
+  Result.OnDropDown := @DropReached;
+  Result.OnChange := @Changed;
+  Result.OnCloseUp := @ClosedUp;
+  FReached := 0;
+  FChanges := 0;
+  FCloseUps := 0;
+end;
+
+{ What a click on the dropdown button, F4 and Alt+Down all do. True when the calendar would
+  have dropped. }
+function TDateTimePickerReadOnlyTest.TryToDrop(APicker: TTyDateTimePicker): Boolean;
+begin
+  FReached := 0;
+  try
+    APicker.DroppedDown := True;
+  except
+    on EDropReached do ;
+  end;
+  Result := FReached > 0;
+end;
+
+procedure TDateTimePickerReadOnlyTest.TestAReadOnlyPickerDropsNoCalendar;
+var p: TTyDateTimePickerProbeC3;
+begin
+  p := NewPicker;
+  try
+    AssertTrue('setup: a picker that may be edited gets as far as dropping its calendar',
+      TryToDrop(p));
+  finally p.Free; end;
+  p := NewPicker;
+  try
+    p.ReadOnly := True;
+    AssertFalse('a read-only picker drops no calendar', TryToDrop(p));
+    AssertFalse('so it is not dropped down', p.DroppedDown);
+    AssertEquals('and its value has not moved', EncodeDate(2026, 6, 15), p.DateTimeForTest);
+  finally p.Free; end;
+end;
+
+procedure TDateTimePickerReadOnlyTest.TestPickingADayInAReadOnlyPickerChangesNothing;
+var p: TTyDateTimePickerProbeC3;
+begin
+  p := NewPicker;
+  try
+    p.EnsurePopupForTest;   // the calendar was open ...
+    p.ReadOnly := True;     // ... when the program made the picker read-only
+    FChanges := 0;
+    FCloseUps := 0;
+    p.SimCalendarAccept(EncodeDate(2026, 7, 20));
+    AssertEquals('the picked day is not taken', EncodeDate(2026, 6, 15), p.DateTimeForTest);
+    AssertEquals('and nobody is told of a change', 0, FChanges);
+    AssertTrue('the click still closes the calendar', FCloseUps >= 1);
+  finally p.Free; end;
+end;
+
+procedure TDateTimePickerReadOnlyTest.TestMovingThroughTheCalendarOfAReadOnlyPickerChangesNothing;
+var p: TTyDateTimePickerProbeC3;
+begin
+  p := NewPicker;
+  try
+    p.EnsurePopupForTest;
+    p.ReadOnly := True;
+    FChanges := 0;
+    p.Calendar.Date := EncodeDate(2026, 6, 16);   // the arrow keys inside the open calendar
+    p.Calendar.OnChange(p.Calendar);
+    AssertEquals('the value does not follow the calendar', EncodeDate(2026, 6, 15), p.DateTimeForTest);
+    AssertEquals('and nobody is told of a change', 0, FChanges);
+  finally p.Free; end;
+end;
+
 initialization
   RegisterTest(TDateTimePickerPureTest);
   RegisterTest(TDateTimeNullTest);
@@ -2318,6 +2433,7 @@ initialization
   RegisterTest(TDateTimePickerControlTest);
   RegisterTest(TDateTimePickerPixelTest);
   RegisterTest(TDateTimePickerC3Test);
+  RegisterTest(TDateTimePickerReadOnlyTest);
   RegisterTest(TDateTimePickerNameSourceTest);
 
 end.

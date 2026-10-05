@@ -1902,6 +1902,10 @@ var
   calSize: TSize;
 begin
   if IsInert then Exit;
+  { A read-only picker drops no calendar, as LCL's does not (DropDownCalendarForm): keys,
+    wheel, spin buttons and the check box already refused to edit it, and picking a day was
+    the one way left to change its value. }
+  if FReadOnly then Exit;
   { DateMode, not Kind, decides whether there is a calendar to drop. }
   if not HasDropDownButton then Exit;
   if (FPopup <> nil) and FPopup.IsOpen then Exit;
@@ -2008,6 +2012,9 @@ var
   OldVal: TDateTime;
 begin
   if FCalendar = nil then Exit;
+  { The calendar is open over a read-only picker only when ReadOnly was set while it was
+    open. Moving through it then edits nothing. }
+  if FReadOnly then Exit;
   OldVal    := FDateTime;
   { Keep the time part; replace only the date part -- except that an EMPTY field has no
     time part, and Frac of the sentinel is not one. Navigating the calendar over an empty
@@ -2033,6 +2040,12 @@ var
   NewDate, OldVal: TDateTime;
 begin
   if FCalendar = nil then Exit;
+  { ReadOnly set while the calendar was open: the click still closes it, and changes nothing. }
+  if FReadOnly then
+  begin
+    CloseDropDown;
+    Exit;
+  end;
   { Same as CalendarChange: no time part to keep when the field is empty. Picking a day
     is the gesture that fills an empty field. }
   if TyDateIsNull(FDateTime) then
