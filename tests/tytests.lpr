@@ -240,7 +240,8 @@ uses
   test.customclasses, test.customclasses.p1, test.customclasses.p2, test.customclasses.p3,
   test.customclasses.p4,
   test.typekeychain,
-  test.db.common;
+  test.db.common,
+  test.corehooks;
 
 type
   TTyTestRunner = class(TTestRunner)
