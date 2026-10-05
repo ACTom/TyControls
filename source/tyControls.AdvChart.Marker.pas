@@ -57,6 +57,13 @@ type
   TTyMkContext = record
     Store: TTyDataStore;
     Cart: TTyCartesian2D;
+    { OR A POLAR [Batch 113]: the TTyPolar (a plain object here -- this unit
+      does not name the class), XAxis its radius and YAxis its angle. Its
+      markers place by Polar.dataToPoint; a bar's getMarkerPosition answers
+      not-a-number there (a polar has no clampData); a markLine is never
+      stretched to the axis' ends; markArea is not built (upstream throws,
+      clampData again). }
+    Polar: TObject;
     XAxis, YAxis: TTyAxis;
     { seriesModel.getBaseAxis().dim, and whether the COORDINATE SYSTEM's
       base axis is horizontal (the bar offset's direction) }
@@ -189,6 +196,8 @@ function TyMarkerSolve(AKind: TTyMarkerKind; ASeries, ATop: TJSONObject;
   const ACtx: TTyMkContext): TTyMkBlock;
 
 implementation
+
+uses tyControls.AdvChart.Polar;
 
 var
   GDefaults: array[TTyMarkerKind] of TJSONObject;
@@ -622,10 +631,12 @@ type
     procedure SolveAreas(AData: TJSONArray; var ABlock: TTyMkBlock);
   end;
 
+{ the axis of a coordinate dimension: x / y, or a polar's radius / angle
+  [Batch 113] }
 function TMkSolver.AxisOf(const ADim: string): TTyAxis;
 begin
-  if ADim = 'x' then Result := C.XAxis
-  else if ADim = 'y' then Result := C.YAxis
+  if (C.XAxis <> nil) and (ADim = C.XAxis.Dim) then Result := C.XAxis
+  else if (C.YAxis <> nil) and (ADim = C.YAxis.Dim) then Result := C.YAxis
   else Result := nil;
 end;
 
@@ -846,9 +857,9 @@ begin
     for i := 0 to 1 do
       if (AIt.Coord[i].Kind = mvkStr) and IsCalc(AIt.Coord[i].Str) then
         if i = 0 then
-          AIt.Coord[i] := TyMkNum(TyMkNumCalculate(C.Store, MapDim('x'), AIt.Coord[i].Str))
+          AIt.Coord[i] := TyMkNum(TyMkNumCalculate(C.Store, MapDim(C.XAxis.Dim), AIt.Coord[i].Str))
         else
-          AIt.Coord[i] := TyMkNum(TyMkNumCalculate(C.Store, MapDim('y'), AIt.Coord[i].Str));
+          AIt.Coord[i] := TyMkNum(TyMkNumCalculate(C.Store, MapDim(C.YAxis.Dim), AIt.Coord[i].Str));
   end;
 end;
 
@@ -952,6 +963,15 @@ var
   m: TTyMat2D;
   x, y: Double;
 begin
+  { Polar.dataToPoint: the radius and the angle through their axes'
+    dataToCoord, then coordToPoint [Batch 113] }
+  if C.Polar <> nil then
+  begin
+    Result := TTyPolar(C.Polar).CoordToPoint(
+      C.XAxis.DataToCoord(Parse(C.XAxis, A0), AClamp),
+      C.YAxis.DataToCoord(Parse(C.YAxis, A1), AClamp));
+    Exit;
+  end;
   if C.Cart.Transform(m) and (not Nullish(A0)) and (not Nullish(A1)) then
   begin
     x := TyMkJsNumber(A0);
@@ -1078,6 +1098,14 @@ function TMkSolver.MarkerPosition(const A0, A1: TTyMkVal; ADims: Integer;
   AStartingAtTick: Boolean): TTyPointF;
 var cx, cy: Double;
 begin
+  { BaseBarSeries.getMarkerPosition on a polar: no clampData, [NaN, NaN]
+    [Batch 113] }
+  if C.Polar <> nil then
+  begin
+    Result.X := NaN;
+    Result.Y := NaN;
+    Exit;
+  end;
   ClampData(A0, A1, cx, cy);
   Result := DataToPoint(TyMkNum(cx), TyMkNum(cy), False);
   if AStartingAtTick then
@@ -1101,6 +1129,8 @@ procedure TMkSolver.InfinityToExtent(var APoint: TTyPointF; const AX, AY: TTyMkV
   AXFirst, AYFirst: Boolean);
 var s0, s1: Double;
 begin
+  { the cartesian's alone (updateSingleMarkerEndLayout) [Batch 113] }
+  if C.Polar <> nil then Exit;
   if JsIsInfinity(AX) then
   begin
     C.XAxis.LocalExtent(s0, s1);
@@ -1123,6 +1153,16 @@ var
   area: TTyXYWH;
   v: Double;
 begin
+  { a polar has no getRect: relative to it is relative to nothing -- a width
+    and a height of 0, no corner [Batch 113] }
+  if ARelToCoord and (C.Polar <> nil) then
+  begin
+    if AIsX then
+      Result := C.OriginX + C.Scale * TyMkParsePercent(A, 0)
+    else
+      Result := C.OriginY + C.Scale * TyMkParsePercent(A, 0);
+    Exit;
+  end;
   if ARelToCoord then
   begin
     area := C.Cart.GetArea;
@@ -1239,6 +1279,8 @@ var
   function OnlyDim(ADim: Integer): Boolean;
   var o: Integer;
   begin
+    { markLineFilter's 1D rescue is the cartesian's [Batch 113] }
+    if C.Polar <> nil then Exit(False);
     o := 1 - ADim;
     Result := JsIsInfinity(n0.Coord[o]) and JsIsInfinity(n1.Coord[o])
       and StrictEq(n0.Coord[ADim], n1.Coord[ADim]);
@@ -1587,8 +1629,11 @@ var
 begin
   Result := Default(TTyMkBlock);
   Result.Kind := AKind;
-  if (ASeries = nil) or (ACtx.Store = nil) or (ACtx.Cart = nil)
+  if (ASeries = nil) or (ACtx.Store = nil) or ((ACtx.Cart = nil) and (ACtx.Polar = nil))
     or (ACtx.XAxis = nil) or (ACtx.YAxis = nil) then Exit;
+  { markArea on a polar: upstream throws in its layout (no clampData) and
+    the chart is not drawn; here the area is simply not built [Batch 113] }
+  if (AKind = mkArea) and (ACtx.Polar <> nil) then Exit;
   own := ASeries.Find(TyMarkerKey[AKind]);
   if (own = nil) or (own.JSONType <> jtObject) then Exit;
   { no `data`, no marker model for this series }

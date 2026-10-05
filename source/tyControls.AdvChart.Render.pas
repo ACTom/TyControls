@@ -113,6 +113,33 @@ begin
   end;
 end;
 
+{ util/shape/sausage.ts on the shape's ordered sweep (clockwise from
+  StartRad to EndRad): the ring with a half disc on either end [Batch 113] }
+procedure TraceSausage(P: TTyPainter; const AShape: TTyChartShape);
+var r0, r, dr, rc, sa, ea: Double;
+begin
+  r0 := Max(Double(0), AShape.R0);
+  r := Max(Double(0), AShape.R1);
+  dr := (r - r0) * 0.5;
+  rc := r0 + dr;
+  sa := AShape.StartRad;
+  ea := AShape.EndRad;
+  if ea - sa < 2 * Pi then
+  begin
+    P.MoveTo(Cos(sa) * r0 + AShape.CX, Sin(sa) * r0 + AShape.CY);
+    P.ArcTo(Cos(sa) * rc + AShape.CX, Sin(sa) * rc + AShape.CY, dr, -Pi + sa, sa, False);
+  end
+  else
+  begin
+    sa := ea - 2 * Pi;
+    P.MoveTo(Cos(sa) * r + AShape.CX, Sin(sa) * r + AShape.CY);
+  end;
+  P.ArcTo(AShape.CX, AShape.CY, r, sa, ea, False);
+  P.ArcTo(Cos(ea) * rc + AShape.CX, Sin(ea) * rc + AShape.CY, dr, ea - 2 * Pi, ea - Pi, False);
+  if r0 <> 0 then P.ArcTo(AShape.CX, AShape.CY, r0, ea, sa, True);
+  P.ClosePath;
+end;
+
 procedure TyTraceShape(P: TTyPainter; const AShape: TTyChartShape);
 var
   i, n: Integer;
@@ -166,6 +193,9 @@ begin
     cskEllipse:
       P.EllipsePath(AShape.CX, AShape.CY, AShape.R0, AShape.R1);
     cskSector:
+      if AShape.Sausage then
+        TraceSausage(P, AShape)
+      else
       begin
         { THE PATH IS COMPUTED SOMEWHERE ELSE and merely replayed here. Rounding
           a sector's corners is a hundred lines of trig, and pixels are a poor
@@ -510,6 +540,32 @@ begin
   end;
 end;
 
+{ the sector an element's HasClipSector names, run forward as zrender's arc
+  runs it from ClipSA to ClipEA in its direction }
+function TyClipSectorShape(const AElement: TTyChartElement): TTyChartShape;
+var st, en, t: Double;
+begin
+  Result := TyShapeSector(AElement.ClipCX, AElement.ClipCY, AElement.ClipR0,
+    AElement.ClipR1, 0, 1);
+  st := AElement.ClipSA;
+  en := AElement.ClipEA;
+  if AElement.ClipCW then
+  begin
+    if en - st >= 2 * Pi then en := st + 2 * Pi
+    else if st > en then en := st + (2 * Pi - (st - en - Floor((st - en) / (2 * Pi)) * 2 * Pi));
+  end
+  else
+  begin
+    if st - en >= 2 * Pi then en := st - 2 * Pi
+    else if st < en then en := st - (2 * Pi - (en - st - Floor((en - st) / (2 * Pi)) * 2 * Pi));
+    t := st;
+    st := en;
+    en := t;
+  end;
+  Result.StartRad := st;
+  Result.EndRad := en;
+end;
+
 procedure TyRenderElement(P: TTyPainter; const AElement: TTyChartElement);
 var
   rule: TTyFillRule;
@@ -536,6 +592,14 @@ begin
     if AElement.HasClip then
       P.ClipRect(Rect(Floor(AElement.ClipRect.Left), Floor(AElement.ClipRect.Top),
         Ceil(AElement.ClipRect.Right), Ceil(AElement.ClipRect.Bottom)));
+    { A POLAR LINE'S SECTOR, traced as zrender's arc takes it [Batch 113] }
+    if AElement.HasClipSector then
+    begin
+      P.BeginPath;
+      TyTraceShape(P, TyClipSectorShape(AElement));
+      P.ClipPath(tfrNonZero);
+      P.BeginPath;
+    end;
     if AElement.Style.Alpha < 1 then
       P.SetElementAlpha(AElement.Style.Alpha);
     P.SetLineDash(AElement.Style.DashLogical);

@@ -87,6 +87,10 @@ type
     Cmds: TTyPathCmdArray;
     HasCmdBounds: Boolean;
     CmdBounds: TTyRectF;
+    { A SECTOR DRAWN AS A SAUSAGE (util/shape/sausage.ts): a polar bar with
+      roundCap -- the ring between R0 and R1 over the sweep, with a half
+      disc of the ring's half thickness on either end. [Batch 113] }
+    Sausage: Boolean;
   end;
 
 { ---- constructors, so a caller never has to remember which fields a kind uses ---- }
@@ -1352,7 +1356,20 @@ begin
         Result := ndx * ndx + ndy * ndy <= 1;
       end;
     cskSector:
-      Result := SectorContains(AShape, AX, AY, ASlopPx);
+      begin
+        Result := SectorContains(AShape, AX, AY, ASlopPx);
+        { a sausage's two round ends, discs of the ring's half thickness
+          about the middle of each end [Batch 113] }
+        if (not Result) and AShape.Sausage then
+        begin
+          rx := (AShape.R1 - AShape.R0) / 2;
+          ry := AShape.R0 + rx;
+          Result := (Sqrt(Sqr(AX - (AShape.CX + ry * Cos(AShape.StartRad)))
+              + Sqr(AY - (AShape.CY + ry * Sin(AShape.StartRad)))) <= rx + ASlopPx)
+            or (Sqrt(Sqr(AX - (AShape.CX + ry * Cos(AShape.EndRad)))
+              + Sqr(AY - (AShape.CY + ry * Sin(AShape.EndRad)))) <= rx + ASlopPx);
+        end;
+      end;
     cskPolyline:
       Result := PolylineNear(AShape.Points, AX, AY, ASlopPx);
     cskPolygon:

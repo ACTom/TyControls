@@ -46,7 +46,8 @@ uses
   tyControls.AdvChart.BarLayout, tyControls.AdvChart.Symbol,
   tyControls.AdvChart.Layout, tyControls.AdvChart.Pictorial,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
-  tyControls.AdvChart.WhiskerBox, tyControls.AdvChart.Jitter;
+  tyControls.AdvChart.WhiskerBox, tyControls.AdvChart.Jitter,
+  tyControls.AdvChart.PolarBar;
 
 type
   { Where a stepped line turns. ECharts spells `step: true` as 'start'. }
@@ -202,6 +203,9 @@ type
     Z, Z2: Integer;
     { The line-shaped options, ignored by every other renderer. }
     Line: TTyLineSpec;
+    { A BAR ON A POLAR, solved across every bar on its base axis like the
+      grid's column (AdvChart.PolarBar) [Batch 113] }
+    PolarBar: TTyPolarBarLayout;
     { The symbol a datum is drawn as. Scatter draws nothing else; a line will
       draw these on top of itself once showSymbol lands. }
     Symbol: TTySymbolSpec;
@@ -345,7 +349,40 @@ function TyBuildSeriesMarks(const ABinding: TTySeriesBinding;
 implementation
 
 uses tyControls.AdvChart.JsMath, tyControls.AdvChart.AxisLabels,
-     tyControls.AdvChart.LinePath, tyControls.AdvChart.LabelGuide;
+     tyControls.AdvChart.LinePath, tyControls.AdvChart.LabelGuide,
+     tyControls.AdvChart.Polar, tyControls.AdvChart.ZrPath;
+
+{ THE POLAR A SERIES IS ON, nil on a cartesian [Batch 113] }
+function PolarOf(const ABinding: TTySeriesBinding): TTyPolar;
+begin
+  if ABinding.Polar is TTyPolar then Result := TTyPolar(ABinding.Polar)
+  else Result := nil;
+end;
+
+{ datum -> point on whichever system the series is on }
+function SysPoint(const ABinding: TTySeriesBinding; const AData: array of Double): TTyPointF;
+var pol: TTyPolar;
+begin
+  pol := PolarOf(ABinding);
+  if pol <> nil then Result := pol.DataToPoint(AData)
+  else Result := ABinding.Cart.DataToPoint(AData);
+end;
+
+{ Polar.getArea's contain: the ring between the radius extent's ends, a
+  ten-thousandth either way on the squares, nothing when the two are one
+  (the angles do not matter) }
+function PolarRingContains(APolar: TTyPolar; AX, AY: Double): Boolean;
+var
+  r0, r1, lo, hi, dx, dy, d2: Double;
+begin
+  APolar.AxisExtent(APolar.RadiusAxis, r0, r1);
+  lo := Min(r0, r1);
+  hi := Max(r0, r1);
+  dx := AX - APolar.CX;
+  dy := AY - APolar.CY;
+  d2 := dx * dx + dy * dy;
+  Result := (hi <> lo) and (d2 - 1e-4 <= hi * hi) and (d2 + 1e-4 >= lo * lo);
+end;
 
 { THE SYMBOL'S LABEL RECT. A `line` symbol (not empty) is drawn here as a
   2 px pen without fill, but upstream's path keeps the item's fill and its
@@ -1351,6 +1388,12 @@ var
   { the whole series' layout points, stacked-on points and data values,
     flattened, for an update's lineAnimationDiff [Batch 90] }
   animPts, animBase, animVals: TTyDoubleArray;
+  { ON A POLAR [Batch 113]: the polar, its clip sector (createPolarClipPath:
+    the centre and the radii to one decimal, the angles getArea's) and
+    whether a symbol must stand in its ring }
+  pol: TTyPolar;
+  pcx, pcy, pr0, pr1, psa, pea, symCur, ar0, ar1: Double;
+  pcw: Boolean;
 
   { One marker, answering for its own row. False when the symbol draws
     nothing. }
@@ -1410,6 +1453,24 @@ var
       shrinks it to nought (Symbol.fadeOut) [Batch 90] }
     el.Anim.G[7] := rs.WidthPx / 2;
     el.Anim.G[8] := rs.HeightPx / 2;
+    { ON A POLAR the pop-in is timed along the clip's angles (an angle base)
+      or radii (a radius base): G[2] and G[3] are getArea's start and end,
+      G[9] where the symbol is -- minus its angle in radians, or its radius
+      -- from pointToCoord [Batch 113] }
+    if pol <> nil then
+    begin
+      if ABinding.BaseAxis = pol.AngleAxis then
+      begin
+        el.Anim.G[2] := psa;
+        el.Anim.G[3] := pea;
+      end
+      else
+      begin
+        el.Anim.G[2] := ar0;
+        el.Anim.G[3] := ar1;
+      end;
+      el.Anim.G[9] := symCur;
+    end;
     ItemCaption(AVisual, AStore, ARow, el.Caption);
     { the rect zrender places the label against and LabelManager weighs
       [Batch 103] }
@@ -1436,6 +1497,18 @@ var
     AEl.Anim.G[3] := clipH;
     AEl.Anim.G[4] := clipEx;
     AEl.Anim.G[5] := animFlags;
+    { A POLAR'S CLIP IS A SECTOR [Batch 113]: the centre, the radii, the two
+      angles (G[4] the start, G[11] the end) and in the flags 8 (polar), 16
+      (clockwise), 32 (the base is the angle: the sweep grows, else r) }
+    if pol <> nil then
+    begin
+      AEl.Anim.G[0] := pcx;
+      AEl.Anim.G[1] := pcy;
+      AEl.Anim.G[2] := pr0;
+      AEl.Anim.G[3] := pr1;
+      AEl.Anim.G[4] := psa;
+      AEl.Anim.G[11] := pea;
+    end;
     { WHAT AN UPDATE DIFFS: the run's place among the series' runs, the
       whole series' points, the value start an added point's base falls
       to, and how the path is drawn [Batch 90] }
@@ -1471,6 +1544,8 @@ var
     offs: TTyBoolArray;
   begin
     thin := False;
+    { not on a polar: LineView's isIgnoreFunc is cartesian's [Batch 113] }
+    if pol <> nil then Exit;
     if AVisual.Line.ShowAllSymbol = sasYes then Exit;
     if ABinding.BaseAxis = nil then Exit;
     if not (ABinding.BaseAxis.Scale is TTyOrdinalScale) then Exit;
@@ -1507,8 +1582,48 @@ var
   procedure PrepareClip;
   var
     area: TTyXYWH;
-    lw, x, y, w, h, ex: Double;
+    lw, x, y, w, h, ex, e0, e1: Double;
   begin
+    if pol <> nil then
+    begin
+      { createPolarClipPath: Sector(round(cx, 1), round(cy, 1), round(r0, 1),
+        round(r, 1), getArea's angles and clockwise) -- `clip: false` does not
+        widen it }
+      pol.AxisExtent(pol.RadiusAxis, e0, e1);
+      pcx := TyJsToFixed(pol.CX, 1);
+      pcy := TyJsToFixed(pol.CY, 1);
+      pr0 := TyJsToFixed(Min(e0, e1), 1);
+      pr1 := TyJsToFixed(Max(e0, e1), 1);
+      if IsNan(e0) or IsNan(e1) then
+      begin
+        pr0 := NaN;
+        pr1 := NaN;
+      end;
+      pol.AxisExtent(pol.AngleAxis, e0, e1);
+      psa := -e0 * (Pi / 180);
+      pea := -e1 * (Pi / 180);
+      pcw := pol.AngleInverse;
+      { the flags anew: 8 polar, 16 clockwise, 32 an angle base, 4 the base
+        axis inverse (the polar's own flag) }
+      animFlags := 8;
+      if pcw then animFlags := animFlags + 16;
+      if ABinding.BaseAxis = pol.AngleAxis then
+      begin
+        animFlags := animFlags + 32;
+        if pol.AngleInverse then animFlags := animFlags + 4;
+      end
+      else if pol.RadiusInverse then animFlags := animFlags + 4;
+      { the pop-in's own extent is getArea's, unrounded }
+      pol.AxisExtent(pol.RadiusAxis, e0, e1);
+      ar0 := Min(e0, e1);
+      ar1 := Max(e0, e1);
+      clipX := 0;
+      clipY := 0;
+      clipW := 0;
+      clipH := 0;
+      clipEx := 0;
+      Exit;
+    end;
     area := ABinding.Cart.GetArea;
     lw := AVisual.StrokeWidthLogical;
     if lw <= 0 then lw := 2;
@@ -1555,6 +1670,10 @@ var
   function InSymbolArea(const AP: TTyPointF): Boolean;
   begin
     if not spec.Clip then Exit(True);
+    { a polar's clipShapeForSymbol is its getArea, whose contain is the ring
+      -- the rect padding LineView gives it (it has a width) moves nothing
+      the ring reads [Batch 113] }
+    if pol <> nil then Exit(PolarRingContains(pol, AP.X, AP.Y));
     Result := (AP.X >= symbolArea.X) and (AP.X <= symbolArea.X + symbolArea.W)
       and (AP.Y >= symbolArea.Y) and (AP.Y <= symbolArea.Y + symbolArea.H);
   end;
@@ -1620,6 +1739,35 @@ var
     end;
   end;
 
+  { the run's clip: the plot's rect, or a polar's sector }
+  procedure SetClip(var AEl: TTyChartElement);
+  begin
+    if pol = nil then
+    begin
+      AEl.HasClip := True;
+      AEl.ClipRect := lineClip;
+      Exit;
+    end;
+    AEl.HasClipSector := True;
+    AEl.ClipCX := pcx;
+    AEl.ClipCY := pcy;
+    AEl.ClipR0 := pr0;
+    AEl.ClipR1 := pr1;
+    AEl.ClipSA := psa;
+    AEl.ClipEA := pea;
+    AEl.ClipCW := pcw;
+  end;
+
+  { where a symbol stands on the polar, for the pop-in: pointToCoord, the
+    angle as minus radians (an angle base) or the radius }
+  procedure SymbolCoord(const AP: TTyPointF);
+  var r, a: Double;
+  begin
+    pol.PointToCoord(AP.X, AP.Y, r, a);
+    if ABinding.BaseAxis = pol.AngleAxis then symCur := -a / 180 * Pi
+    else symCur := r;
+  end;
+
   { The run's own path from upstream's, when the runs line up: drawn from
     the commands, and bounded by them when they curve }
   procedure AttachPath(var AShape: TTyChartShape; const ARuns: TTyPathCmdArray2;
@@ -1668,7 +1816,7 @@ var
       pp := TyPointF(NaN, NaN);
       if not (IsNan(px) or IsNan(py)) then
       begin
-        pp := ABinding.Cart.DataToPoint([px, py]);
+        pp := SysPoint(ABinding, [px, py]);
         pp := TyPointF(TyJsFround(pp.X), TyJsFround(pp.Y));
       end;
       fullP[k] := pp;
@@ -1685,9 +1833,9 @@ var
       qq := TyPointF(NaN, NaN);
       if baseHoriz then
       begin
-        if not IsNan(px) then qq := ABinding.Cart.DataToPoint([px, lv]);
+        if not IsNan(px) then qq := SysPoint(ABinding, [px, lv]);
       end
-      else if not IsNan(py) then qq := ABinding.Cart.DataToPoint([lv, py]);
+      else if not IsNan(py) then qq := SysPoint(ABinding, [lv, py]);
       if not (IsNan(qq.X) or IsNan(qq.Y)) then
         qq := TyPointF(TyJsFround(qq.X), TyJsFround(qq.Y));
       fullB[k] := qq;
@@ -1790,8 +1938,7 @@ var
         { SILENT: the fill is decoration behind the line, and a pointer landing
           on it should find the line, not the shading. }
         el.Silent := True;
-        el.HasClip := True;
-        el.ClipRect := lineClip;
+        SetClip(el);
         TagClip(el, carLineArea);
         AList.Add(el);
         Inc(Result);
@@ -1824,8 +1971,7 @@ var
         el.HitSlopLogical := v.StrokeWidthLogical / 2
       else
         el.HitSlopLogical := cLineContainThreshold / 2;
-      el.HasClip := True;
-      el.ClipRect := lineClip;
+      SetClip(el);
       TagClip(el, carLineRun);
       AList.Add(el);
       Inc(Result);
@@ -1838,9 +1984,11 @@ var
       line between two markers cannot. }
     if spec.ShowSymbol then
       for k := 0 to n - 1 do
-        if SymbolKept(rows[k]) and InSymbolArea(pts[k])
-          and EmitSymbol(pts[k], rows[k]) then
-          Inc(Result);
+        if SymbolKept(rows[k]) and InSymbolArea(pts[k]) then
+        begin
+          if pol <> nil then SymbolCoord(pts[k]);
+          if EmitSymbol(pts[k], rows[k]) then Inc(Result);
+        end;
     Inc(runIdx);
   end;
 
@@ -1849,6 +1997,11 @@ begin
   baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
   stacked := AStack.Stacked and (AStack.ResultCol >= 0);
   spec := AVisual.Line;
+  pol := PolarOf(ABinding);
+  symCur := 0;
+  { step does not run on a polar (LineView: `!isCoordSysPolar ? step : false`)
+    [Batch 113] }
+  if pol <> nil then spec.Step := lstNone;
   startV := AreaStartValue(ABinding.ValueAxis, spec);
   animFlags := 0;
   if baseHoriz then animFlags := animFlags + 2;
@@ -1883,7 +2036,7 @@ begin
       that array says }
     if not gap then
     begin
-      p := ABinding.Cart.DataToPoint([x, y]);
+      p := SysPoint(ABinding, [x, y]);
       p := TyPointF(TyJsFround(p.X), TyJsFround(p.Y));
       gap := Illegal(p);
     end;
@@ -1898,8 +2051,8 @@ begin
       if AStack.Stacked and (AStack.OverCol >= 0) then
         lowV := AStore.Get(AStack.OverCol, i);
       if IsNan(lowV) then lowV := startV;
-      if baseHoriz then q := ABinding.Cart.DataToPoint([x, lowV])
-                   else q := ABinding.Cart.DataToPoint([lowV, y]);
+      if baseHoriz then q := SysPoint(ABinding, [x, lowV])
+                   else q := SysPoint(ABinding, [lowV, y]);
       q := TyPointF(TyJsFround(q.X), TyJsFround(q.Y));
       gap := Illegal(q);
     end;
@@ -2127,11 +2280,16 @@ var
   spec: TTySymbolSpec;
   baseHoriz, stacked: Boolean;
   area: TTyXYWH;
+  pol: TTyPolar;
 begin
   Result := 0;
   spec := AVisual.Symbol;
   if spec.Kind = tsyNone then Exit;
-  area := ABinding.Cart.GetAreaTol(0.1);
+  { ON A POLAR the clip is getArea(.1), whose contain is the ring -- the
+    tolerance is not read there [Batch 113] }
+  pol := PolarOf(ABinding);
+  if pol = nil then area := ABinding.Cart.GetAreaTol(0.1)
+  else area := Default(TTyXYWH);
   baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
   stacked := AStack.Stacked and (AStack.ResultCol >= 0);
 
@@ -2160,7 +2318,7 @@ begin
       symbol will be drawn [Batch 110] }
     if AVisual.Jitter <> nil then
     begin
-      p := ABinding.Cart.DataToPoint([x, y]);
+      p := SysPoint(ABinding, [x, y]);
       if AVisual.JitterOnX then
         p.X := AVisual.Jitter.Fix(p.Y, p.X, ScatterRowRadius(AVisual, AStore, i, spec, sizeCol))
       else
@@ -2168,12 +2326,17 @@ begin
     end;
     if IsNan(x) or IsNan(y) then Continue;
     if AVisual.Jitter = nil then
-      p := ABinding.Cart.DataToPoint([x, y]);
+      p := SysPoint(ABinding, [x, y]);
     if IsNan(p.X) or IsNan(p.Y)
       or IsInfinite(p.X) or IsInfinite(p.Y) then Continue;
     { OUTSIDE THE PLOT, WITH CLIP ON, NO MARKER: upstream's getArea(0.1) }
-    if AVisual.Line.Clip and not ((p.X >= area.X) and (p.X <= area.X + area.W)
-      and (p.Y >= area.Y) and (p.Y <= area.Y + area.H)) then Continue;
+    if AVisual.Line.Clip then
+      if pol <> nil then
+      begin
+        if not PolarRingContains(pol, p.X, p.Y) then Continue;
+      end
+      else if not ((p.X >= area.X) and (p.X <= area.X + area.W)
+        and (p.Y >= area.Y) and (p.Y <= area.Y + area.H)) then Continue;
 
     if sizeCol >= 0 then
     begin
@@ -3112,6 +3275,161 @@ begin
   end;
 end;
 
+{ ==================== bars on a polar [Batch 113] ====================
+
+  BarView's polar half over the solved layout (AdvChart.PolarBar): every row
+  with a layout gets its background first (showBackground: silent, z2 as
+  the bar's, upstream's 0 against the bar's 1 kept by the order); a row
+  whose value or layout is not a number gets nothing more; the layout is
+  clipped to the polar's radii (clip.polar: r and r0 only, an angle is
+  clamped by the layout already) and a bar clipped past itself is built
+  IGNORED -- upstream keeps the element and sets ignore; a Sector, or a
+  Sausage for a tangential bar with roundCap; the corners getSectorCornerRadius
+  gives unless roundCap; a sector of no sweep (isZeroOnPolar) paints no fill
+  and no stroke. The label hangs off the sector: a sector position's own
+  anchor, else a built-in position on the path's rect; its turn
+  setSectorTextRotation's. }
+function BuildPolarBars(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
+  const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
+  AList: TTyPaintList; AColX, AColY: Integer): Integer;
+var
+  L: TTyPolarBarLayout;
+  i, raw: Integer;
+  s, bgS: TTyPolarSector;
+  clipped, zero, sausage: Boolean;
+  corners: TTyDoubleArray;
+  el, bgEl: TTyChartElement;
+  rv: TTySeriesVisual;
+  zp: TTyZrPath;
+  box: TTyXYWH;
+  ask: TTyPolarLabelAsk;
+  word: string;
+  spos: TTySectorTextPos;
+  spec: TTyLabelSpec;
+  ax, ay: Double;
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
+begin
+  Result := 0;
+  L := AVisual.PolarBar;
+  if not L.Solved then Exit;
+  sausage := (not L.IsRadial) and L.RoundCap;
+  for i := 0 to Math.Min(High(L.Rows), AStore.Count - 1) do
+  begin
+    s := L.Rows[i];
+    if L.ShowBackground then
+    begin
+      bgS := TyPolarBarBackground(L, s);
+      bgEl := TyChartElement(TyPolarSectorShape(bgS, TyPolarCornerRaw(L.BgCorner), False));
+      bgEl.Style.HasFill := True;
+      bgEl.Style.FillColor := AVisual.BackgroundFill;
+      bgEl.Style.Alpha := 1;
+      bgEl.Z := AVisual.Z;
+      bgEl.Z2 := AVisual.Z2;
+      bgEl.Silent := True;
+      { no role and no datum -- nothing animates it and nothing hits it --
+        but which row's it is, and its sector, for a reader of the list }
+      bgEl.Anim.Series := ABinding.SeriesIndex;
+      bgEl.Anim.Index := i;
+      bgEl.Anim.G[0] := bgS.CX;
+      bgEl.Anim.G[1] := bgS.CY;
+      bgEl.Anim.G[2] := bgS.R0;
+      bgEl.Anim.G[3] := bgS.R;
+      bgEl.Anim.G[4] := bgS.SA;
+      bgEl.Anim.G[5] := bgS.EA;
+      AList.Add(bgEl);
+      Inc(Result);
+    end;
+    if not L.Valid[i] then Continue;
+    clipped := False;
+    if L.Clip then clipped := TyPolarBarClip(L.AreaR0, L.AreaR, s);
+    { updateStyle: the corners only on a Sector without roundCap; a
+      roundCap Sector keeps its default 0 }
+    if L.RoundCap then
+    begin
+      SetLength(corners, 1);
+      corners[0] := 0;
+    end
+    else
+      corners := TyPolarCornerList(L.Corners[i], s);
+    rv := RowVisual(AVisual, AStore, i);
+    el := MarkElement(TyPolarSectorShape(s, corners, sausage), rv,
+      ABinding.SeriesIndex, i);
+    zero := TyPolarZero(s);
+    if zero then
+    begin
+      el.Style.HasFill := False;
+      el.Style.FillGradient := Default(TTyChartGradient);
+      el.Style.FillPattern := Default(TTyChartPattern);
+      el.Style.StrokeWidthLogical := 0;
+    end;
+    el.Ignore := clipped;
+    { THE ENTER ANIMATION'S NUMBERS: upstream's layout as drawn -- the
+      centre, r0, r and the two angles, clockwise, whether the bar is radial
+      (it grows r, else the end angle), whether a sausage; G[9] a sector of
+      no sweep }
+    el.Anim.Role := carPolarBar;
+    el.Anim.Series := ABinding.SeriesIndex;
+    el.Anim.Index := i;
+    el.Anim.G[0] := s.CX;
+    el.Anim.G[1] := s.CY;
+    el.Anim.G[2] := s.R0;
+    el.Anim.G[3] := s.R;
+    el.Anim.G[4] := s.SA;
+    el.Anim.G[5] := s.EA;
+    if s.CW then el.Anim.G[6] := 1 else el.Anim.G[6] := 0;
+    if L.IsRadial then el.Anim.G[7] := 1 else el.Anim.G[7] := 0;
+    if sausage then el.Anim.G[8] := 1 else el.Anim.G[8] := 0;
+    if zero then el.Anim.G[9] := 1 else el.Anim.G[9] := 0;
+    ItemCaption(AVisual, AStore, i, el.Caption);
+    { a clipped bar's label is not drawn: its host is ignored }
+    if clipped then el.Caption.Text := '';
+    if el.Caption.Text <> '' then
+    begin
+      spec := AVisual.Label_;
+      raw := AStore.GetRawIndex(i);
+      if (raw >= 0) and (raw <= High(AVisual.HasItemLabel)) and AVisual.HasItemLabel[raw] then
+        spec := AVisual.ItemLabels[raw];
+      ask := L.Labels[i];
+      word := ask.Word;
+      { 'outside' is the bar's own: past the end it grows to }
+      if word = 'outside' then word := TyPolarOutsideWord(s, L.IsRadial);
+      { no position written is labelStyle's 'inside' (position || 'inside'),
+        which zrender's isInside reads: the inside ink }
+      if (word = '') and not ask.IsArray then word := 'inside';
+      el.Caption.SecHas := True;
+      { the path's rect, the stroke in it (Path.getBoundingRect) }
+      if sausage then zp := TyZrSausagePath(s) else zp := TyZrSectorPath(s, corners);
+      box := TyZrBBox(zp);
+      box := TyZrStrokeRect(box, TyZrDataLength(zp),
+        (el.Style.StrokeWidthLogical > 0) and (el.Style.StrokeColor <> 0),
+        el.Style.HasFill, el.Style.StrokeWidthLogical * AVisual.PxScale, 1);
+      el.Caption.HasHostBox := True;
+      el.Caption.HostBox := box;
+      if ask.IsArray then spos := stpBuiltin
+      else spos := TySectorTextPosOf(word, L.IsRadial);
+      if spos <> stpBuiltin then
+      begin
+        TySectorLabelAnchor(s, spos, spec.DistanceLogical * AVisual.PxScale,
+          sausage, ax, ay, ah, av);
+        el.Caption.SecAnchor := True;
+        el.Caption.SecPos := Ord(spos);
+        el.Caption.SecDist := spec.DistanceLogical * AVisual.PxScale;
+        el.Caption.SecX := ax;
+        el.Caption.SecY := ay;
+        el.Caption.SecAH := ah;
+        el.Caption.SecAV := av;
+      end;
+      el.Caption.SecRot := TySectorLabelRotation(s, ask, word, L.IsRadial);
+      { textConfig.inside: true for 'middle', else 'inside' in the word }
+      el.Caption.SecInside := (ask.Word = 'middle')
+        or ((not ask.IsArray) and (Pos('inside', word) > 0));
+    end;
+    AList.Add(el);
+    Inc(Result);
+  end;
+end;
+
 const
   { THE ONE LIST. Five of the twenty-three types draw; a renderer arrives as
     a row here and both the drawing and the published answer follow from it.
@@ -3194,6 +3512,24 @@ begin
   if (AList = nil) or (AStore = nil) then Exit;
   if not ABinding.Resolved then Exit;
   first := AList.Count;
+  { ON A POLAR [Batch 113]: a bar, a line, a scatter and an effectScatter
+    draw; a heatmap draws nothing there, upstream's HeatmapView knows no
+    polar }
+  if PolarOf(ABinding) <> nil then
+  begin
+    if (ABinding.XAxis = nil) or (ABinding.YAxis = nil) then Exit;
+    colX := FirstColumnOn(AStore, ABinding.XAxis);
+    colY := FirstColumnOn(AStore, ABinding.YAxis);
+    if (colX < 0) or (colY < 0) then Exit;
+    if ABinding.SeriesType = 'bar' then
+      Result := BuildPolarBars(ABinding, AStore, AStack, AVisual, AList, colX, colY)
+    else if ABinding.SeriesType = 'line' then
+      Result := BuildLine(ABinding, AStore, AStack, AVisual, AList, colX, colY)
+    else if (ABinding.SeriesType = 'scatter') or (ABinding.SeriesType = 'effectScatter') then
+      Result := BuildScatter(ABinding, AStore, AStack, AVisual, AList, colX, colY);
+  end
+  else
+  begin
   { No axes is a legitimate resolved state -- a pie is not on any -- and this
     unit only knows how to draw on a cartesian. }
   if (not ABinding.HasAxes) or (ABinding.Cart = nil) then Exit;
@@ -3219,6 +3555,7 @@ begin
   build := RendererFor(ABinding.SeriesType);
   if build <> nil then
     Result := build(ABinding, AStore, AStack, AVisual, AList, colX, colY);
+  end;
   { THE RAW ROW BESIDE THE VIEW ROW. The builders address the view; once a
     dataZoom has filtered the store the two differ, and a tooltip or a
     callback reading RawDataIndex would name the wrong datum. Filled here,

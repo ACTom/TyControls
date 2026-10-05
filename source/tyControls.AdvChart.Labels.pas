@@ -48,6 +48,10 @@ unit tyControls.AdvChart.Labels;
       `offset` is applied outside it, unconditionally.
     - the nine SECTOR positions. They serve polar bars, which this port has no
       renderer for; building them now would be a table nothing reads.
+      [Batch 113: the polar bars came, and their positions with them --
+      AdvChart.PolarBar works the anchor and the turn out on the sector and
+      hands them over on the caption (SecHas); the offset, the style's
+      alignment and the ink still run here.]
     - de-collision. That is the label layout's (AdvChart.LabelLayout,
       [Batch 103]), which runs over the captions this pass makes: each one
       carries what LabelManager keeps (its host, the anchor before the
@@ -859,6 +863,14 @@ begin
   TyExpandLabels(AList, ASpecs, nil, AMeasurer, APPI);
 end;
 
+{ zrender's isInside for the caption of AHost: a polar bar's says itself
+  (textConfig.inside or the word) [Batch 113] }
+function LabelInside(const AHost: TTyChartElement; APos: TTyLabelPosition): Boolean;
+begin
+  if AHost.Caption.SecHas then Result := AHost.Caption.SecInside
+  else Result := TyLabelIsInside(APos);
+end;
+
 procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
   const AItemSpecs: TTyLabelSpecTable; const AMeasurer: ITyTextMeasurer;
   APPI: Integer);
@@ -1001,6 +1013,15 @@ begin
       ah := host.Caption.FixedAH;
       av := host.Caption.FixedAV;
     end;
+    { A POLAR BAR'S SECTOR POSITION: the sector's own anchor and alignment
+      (a built-in position took the path's rect above) [Batch 113] }
+    if host.Caption.SecHas and host.Caption.SecAnchor then
+    begin
+      x := host.Caption.SecX;
+      y := host.Caption.SecY;
+      ah := host.Caption.SecAH;
+      av := host.Caption.SecAV;
+    end;
     { the alignment the position implies, before the style's }
     posAH := ah;
     posAV := av;
@@ -1019,6 +1040,7 @@ begin
     offX := spec.OffsetXLogical * scale;
     offY := spec.OffsetYLogical * scale;
     if host.Caption.HasFixedAnchor then rot := host.Caption.FixedRotationRad
+    else if host.Caption.SecHas then rot := host.Caption.SecRot
     else rot := spec.RotationRad;
     if host.Caption.HasFixedAnchor then
     begin
@@ -1064,7 +1086,7 @@ begin
       end;
       pieces := TyLabelBlockPieces(autoSpec, host.Caption.Text, hostFill,
         hostHasFill, host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
-        TyLabelIsInside(pos), ah, av, scale, AMeasurer);
+        LabelInside(host, pos), ah, av, scale, AMeasurer);
       if Length(pieces) = 0 then Continue;
       { THE BOX IS THE UNION OF WHAT IT DRAWS, turned as it is drawn --
         zrender's getBoundingRect, which the label layout reads }
@@ -1112,7 +1134,7 @@ begin
     cap.Caption.LmInkFill := hostFill;
     cap.Caption.LmInkHasFill := hostHasFill;
     cap.Caption.LmInkGradient := host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone);
-    cap.Caption.LmInkInside := TyLabelIsInside(pos);
+    cap.Caption.LmInkInside := LabelInside(host, pos);
     { NO FILL AND NO STROKE. The rectangle is there so the pointer can find
       the words, not so anything is painted in it -- a filled one would draw a
       solid block behind every label. }
@@ -1121,13 +1143,13 @@ begin
       a bar's `outside` is not inside. }
     TyLabelInk(spec, hostFill, hostHasFill,
       host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
-      TyLabelIsInside(pos), ink, stroke, strokeW);
+      LabelInside(host, pos), ink, stroke, strokeW);
     cap.Caption.Colour := ink;
     cap.Caption.StrokeColour := stroke;
     cap.Caption.StrokeWidthLogical := strokeW;
     TyLabelStampEmphasis(spec, hostFill, hostHasFill,
       host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
-      TyLabelIsInside(pos), cap.Caption);
+      LabelInside(host, pos), cap.Caption);
     cap.Style.Alpha := host.Style.Alpha;
     cap.Z := host.Z;
     { ABOVE ITS OWN MARK. Without the lift the two tie on (Z, Z2) and fall back
@@ -1162,6 +1184,12 @@ begin
       if spec.AtYIsPercent then cap.Anim.LabelAtY := spec.AtY
       else cap.Anim.LabelAtY := spec.AtY * scale;
       cap.Anim.LabelInflate := inflate;
+      { a polar bar's sector position, past the thirteen [Batch 113] }
+      if host.Caption.SecHas and host.Caption.SecAnchor then
+      begin
+        cap.Anim.LabelPos := 100 + host.Caption.SecPos;
+        cap.Anim.LabelDist := host.Caption.SecDist;
+      end;
     end;
     cap.Caption.FontName := spec.FontName;
     cap.Caption.FontSizeLogical := spec.FontSizeLogical;
@@ -1173,6 +1201,7 @@ begin
     cap.Caption.RotationRad := spec.RotationRad;
     if host.Caption.HasFixedAnchor then
       cap.Caption.RotationRad := host.Caption.FixedRotationRad;
+    if host.Caption.SecHas then cap.Caption.RotationRad := host.Caption.SecRot;
     cap.Caption.Truncate := spec.Overflow = tloTruncate;
     cap.Caption.RtPieces := pieces;
     cap.Caption.RtEmph := nil;

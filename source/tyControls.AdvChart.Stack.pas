@@ -277,7 +277,9 @@ begin
       stacked. Accumulate then takes each member from the first ADMITTING
       member below it, so the one above a hidden member lands on the next
       survivor down rather than floating where it was. }
-    if (st = nil) or (not b.Resolved) or (not b.HasAxes) or b.Hidden then
+    { A POLAR SERIES STACKS TOO, on the axes the polar gave it [Batch 113] }
+    if (st = nil) or (not b.Resolved) or ((not b.HasAxes) and (b.Polar = nil))
+      or b.Hidden then
       Continue;
     if (b.ValueAxis = nil) or (b.BaseAxis = nil) then Continue;
     if not TypeCanStack(b.SeriesType) then Continue;

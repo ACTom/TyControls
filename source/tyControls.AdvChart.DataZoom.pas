@@ -27,7 +27,8 @@ type
   TTyDzRangeMode = (dzmPercent, dzmValue);
   TTyDzFilterMode = (dzfFilter, dzfWeakFilter, dzfEmpty, dzfNone);
 
-  { One axis a dataZoom drives: 'x' or 'y', and the axis' component index. }
+  { One axis a dataZoom drives: 'x', 'y', 'radius' or 'angle' [Batch 113:
+    the polar's two], and the axis' component index. }
   TTyDzTarget = record
     Dim: string;
     AxisIndex: Integer;
@@ -297,13 +298,57 @@ end;
 { getReferringComponents(dim + 'Axis', MULTIPLE): False when neither the
   index nor the id is written. 'all' is every axis, 'none' and false none,
   a number or a list those that exist; an id the axes carrying it. }
-function Specified(ANode: TJSONObject; ABuild: TTyChartBuild; const ADim: string;
-  var ASpec: TTyDataZoomSpec): Boolean;
+{ A POLAR'S AXIS IS NOT IN THE BUILD: it is a component the option holds
+  [Batch 113] -- the model getReferringComponents finds }
+function AxisExists(AOption: TTyChartOption; ABuild: TTyChartBuild;
+  const AMain: string; AIndex: Integer): Boolean;
+begin
+  if (AMain = 'radiusAxis') or (AMain = 'angleAxis') then
+    Result := (AOption <> nil) and (AIndex >= 0)
+      and (AIndex < AOption.ComponentCount(AMain))
+      and (ObjOf(AOption.ComponentAt(AMain, AIndex)) <> nil)
+  else
+    Result := ABuild.Axis(AMain, AIndex) <> nil;
+end;
+
+function AxisCountOf(AOption: TTyChartOption; ABuild: TTyChartBuild;
+  const AMain: string): Integer;
+begin
+  if (AMain = 'radiusAxis') or (AMain = 'angleAxis') then
+  begin
+    if AOption = nil then Result := 0
+    else Result := AOption.ComponentCount(AMain);
+  end
+  else
+    Result := ABuild.AxisCount(AMain);
+end;
+
+function AxisIdOf(AOption: TTyChartOption; ABuild: TTyChartBuild;
+  const AMain: string; AIndex: Integer): string;
+var
+  ax: TTyAxis;
+  o: TJSONObject;
+  d: TJSONData;
+begin
+  Result := '';
+  if (AMain = 'radiusAxis') or (AMain = 'angleAxis') then
+  begin
+    o := ObjOf(AOption.ComponentAt(AMain, AIndex));
+    if o = nil then Exit;
+    d := o.Find('id');
+    if (d <> nil) and (d.JSONType in [jtString, jtNumber]) then Result := d.AsString;
+    Exit;
+  end;
+  ax := ABuild.Axis(AMain, AIndex);
+  if ax <> nil then Result := ax.Id;
+end;
+
+function Specified(AOption: TTyChartOption; ANode: TJSONObject; ABuild: TTyChartBuild;
+  const ADim: string; var ASpec: TTyDataZoomSpec): Boolean;
 var
   d, e: TJSONData;
   main: string;
   k, n: Integer;
-  ax: TTyAxis;
 
   procedure ByIndex(A: TJSONData);
   var ix: Integer;
@@ -311,17 +356,20 @@ var
     if (A = nil) or (A.JSONType <> jtNumber) then Exit;
     if Frac(A.AsFloat) <> 0 then Exit;
     ix := Trunc(A.AsFloat);
-    if (ix >= 0) and (ABuild.Axis(main, ix) <> nil) then AddTarget(ASpec, ADim, ix);
+    if (ix >= 0) and AxisExists(AOption, ABuild, main, ix) then AddTarget(ASpec, ADim, ix);
   end;
 
   procedure ById(A: TJSONData);
-  var k2: Integer;
+  var
+    k2: Integer;
+    id: string;
   begin
     if (A = nil) or not (A.JSONType in [jtString, jtNumber]) then Exit;
     for k2 := 0 to n - 1 do
     begin
-      ax := ABuild.Axis(main, k2);
-      if (ax <> nil) and (ax.Id <> '') and (ax.Id = A.AsString) then
+      if not AxisExists(AOption, ABuild, main, k2) then Continue;
+      id := AxisIdOf(AOption, ABuild, main, k2);
+      if (id <> '') and (id = A.AsString) then
         AddTarget(ASpec, ADim, k2);
     end;
   end;
@@ -333,13 +381,13 @@ begin
   if ((d = nil) or (d.JSONType = jtNull)) and ((e = nil) or (e.JSONType = jtNull)) then
     Exit(False);
   Result := True;
-  n := ABuild.AxisCount(main);
+  n := AxisCountOf(AOption, ABuild, main);
   if (d <> nil) and (d.JSONType <> jtNull) then
   begin
     if (d.JSONType = jtString) and (d.AsString = 'all') then
     begin
       for k := 0 to n - 1 do
-        if ABuild.Axis(main, k) <> nil then AddTarget(ASpec, ADim, k);
+        if AxisExists(AOption, ABuild, main, k) then AddTarget(ASpec, ADim, k);
       Exit;
     end;
     if ((d.JSONType = jtString) and (d.AsString = 'none'))
@@ -358,8 +406,10 @@ end;
 
 { _fillAutoTargetAxisByOrient for x / y: the first axis of that dim and
   every other axis of it in the same grid; failing that, the first category
-  axis }
-procedure AutoTargets(ABuild: TTyChartBuild; var ASpec: TTyDataZoomSpec);
+  axis -- of x, y, then the polar's radius and angle, by the type the option
+  writes [Batch 113] }
+procedure AutoTargets(AOption: TTyChartOption; ABuild: TTyChartBuild;
+  var ASpec: TTyDataZoomSpec);
 var
   dim, main: string;
   k, n, g: Integer;
@@ -398,6 +448,21 @@ begin
         Exit;
       end;
     end;
+  end;
+  if AOption = nil then Exit;
+  for d2 := 0 to 1 do
+  begin
+    if d2 = 0 then dim := 'radius' else dim := 'angle';
+    main := dim + 'Axis';
+    for k := 0 to AOption.ComponentCount(main) - 1 do
+      if (ObjOf(AOption.ComponentAt(main, k)) <> nil)
+        and (ObjOf(AOption.ComponentAt(main, k)).Find('type') <> nil)
+        and (ObjOf(AOption.ComponentAt(main, k)).Find('type').JSONType = jtString)
+        and (ObjOf(AOption.ComponentAt(main, k)).Find('type').AsString = 'category') then
+      begin
+        AddTarget(ASpec, dim, k);
+        Exit;
+      end;
   end;
 end;
 
@@ -477,21 +542,16 @@ begin
   anySpecified := False;
   if ABuild <> nil then
   begin
-    if Specified(node, ABuild, 'x', Result) then anySpecified := True;
-    if Specified(node, ABuild, 'y', Result) then anySpecified := True;
+    if Specified(AOption, node, ABuild, 'x', Result) then anySpecified := True;
+    if Specified(AOption, node, ABuild, 'y', Result) then anySpecified := True;
+    { the polar's two, in DATA_ZOOM_AXIS_DIMENSIONS' order [Batch 113] }
+    if Specified(AOption, node, ABuild, 'radius', Result) then anySpecified := True;
+    if Specified(AOption, node, ABuild, 'angle', Result) then anySpecified := True;
   end;
-  { a polar or single axis named is specified too -- and there are none of
-    those here }
-  for k := 0 to 2 do
-  begin
-    case k of
-      0: d := node.Find('radiusAxisIndex');
-      1: d := node.Find('angleAxisIndex');
-    else
-      d := node.Find('singleAxisIndex');
-    end;
-    if (d <> nil) and (d.JSONType <> jtNull) then anySpecified := True;
-  end;
+  { a single axis named is specified too -- and there are none of those
+    here }
+  d := node.Find('singleAxisIndex');
+  if (d <> nil) and (d.JSONType <> jtNull) then anySpecified := True;
   if anySpecified then
   begin
     if orientRaw <> '' then Result.Orient := orientRaw
@@ -503,7 +563,7 @@ begin
   else
   begin
     if orientRaw <> '' then Result.Orient := orientRaw else Result.Orient := 'horizontal';
-    if ABuild <> nil then AutoTargets(ABuild, Result);
+    if ABuild <> nil then AutoTargets(AOption, ABuild, Result);
   end;
   Result.NoTarget := Length(Result.Targets) = 0;
 end;
@@ -546,7 +606,7 @@ begin
     main := dim + 'Axis';
     { makeAxisFinder: neither index nor id written is 'all' }
     probe := Default(TTyDataZoomSpec);
-    if (dz = nil) or not Specified(dz, ABuild, dim, probe) then
+    if (dz = nil) or not Specified(AOption, dz, ABuild, dim, probe) then
       for k := 0 to ABuild.AxisCount(main) - 1 do
         if ABuild.Axis(main, k) <> nil then AddTarget(probe, dim, k);
     for k := 0 to High(probe.Targets) do

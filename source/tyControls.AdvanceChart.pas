@@ -62,7 +62,7 @@ uses
   tyControls.AdvChart.AxisLabels, tyControls.AdvChart.LabelLayout,
   tyControls.AdvChart.Export, tyControls.AdvChart.Loading,
   tyControls.AdvChart.Convert, tyControls.AdvChart.Jitter,
-  tyControls.AdvChart.Polar,
+  tyControls.AdvChart.Polar, tyControls.AdvChart.PolarBar,
   fpjson, contnrs, tyControls.SubPixel;
 
 const
@@ -323,6 +323,9 @@ type
       before that is the wrong width -- silently, since nothing raises and the
       bars merely come out slightly off. }
     FBarCols: TTyBarColumnArray;
+    { THE BARS ON A POLAR, index-parallel to FBindings, solved where FBarCols
+      is [Batch 113] }
+    FPolarBars: TTyPolarBarLayoutArray;
     { EVERY CANDLESTICK'S AND BOXPLOT'S width, offset and clip, index-parallel
       to FBindings, solved beside FBarCols for its reason [Batch 108] }
     FWhiskers: TTyWhiskerLayoutArray;
@@ -984,6 +987,7 @@ type
     procedure SolveSeriesColors;
     procedure SolveVisualMaps;
     procedure SolveDataZooms;
+    function DzAxis(const ADim: string; AIndex: Integer): TTyAxis;
     { series.sampling over every cartesian2d line and bar [Batch 102] }
     procedure SolveSampling;
     function WeakKeep(ARawIndex: Integer): Boolean;
@@ -1411,6 +1415,9 @@ type
     { What the bar solve gave a series -- its band, offset and width. An
       unsolved column (not a bar, or no such series) when there is none. }
     function BarColumnOf(ASeriesIndex: Integer): TTyBarColumn;
+    { What the polar bar solve gave a series [Batch 113]: unsolved where it
+      is not a bar on a polar. }
+    function PolarBarOf(ASeriesIndex: Integer): TTyPolarBarLayout;
     { What every render measures its text with: the painter's own, in the
       theme's fonts. Virtual so a text table -- zrender's, for a chart laid
       out against upstream's -- can stand in for the fonts. }
@@ -1520,6 +1527,10 @@ type
       value's text in the pointer label's font, padded, hung by
       getLabelPosition's point and alignment, kept inside the control (ARect).
       False when the hit is not a polar one. }
+    { calcAxisPointerShadowBandWidth on a polar axis [Batch 113]: a
+      category's band, else the bars' smallest gap among the hovered series
+      over this axis' mapping span -- at least 1 }
+    function PolarShadowBand(const AHit: TTyAxisHit): Double;
     function PolarPointerGeometry(const AHit: TTyAxisHit; const ARect: TRect;
       const AMeasurer: ITyTextMeasurer; APPI: Integer;
       out ADraw: TTyPolarPointerDraw): Boolean;
@@ -2297,6 +2308,7 @@ begin
     FStores[i].Free;
   FStores := nil;
   FBarCols := nil;
+  FPolarBars := nil;
   FWhiskers := nil;
   FStacks := nil;
 end;
@@ -2997,6 +3009,8 @@ begin
       Copy(polarMissing[i], j + 1, MaxInt)]));
   end;
   FBindings := TyBindSeries(FOption, FBuild);
+  { A SERIES ON A POLAR takes the polar's axes [Batch 113] }
+  TyAttachPolarSeries(FBindings, FPolars);
   { A TYPE THAT RESOLVED AND STILL DRAWS NOTHING HAS TO SAY SO. Binding knows
     the twenty-three names ECharts ships and says nothing about which of them
     this control can paint, so a `funnel` bound cleanly, laid out cleanly and
@@ -3032,7 +3046,7 @@ begin
         FBindings[i].SeriesIndex, FDatasetCache);
       if not FSources[i].Valid then FSeriesDataset[i] := -1;
     end;
-    if not FBindings[i].HasAxes then
+    if (not FBindings[i].HasAxes) and (FBindings[i].Polar = nil) then
     begin
       { A SERIES OFF EVERY COORDINATE SYSTEM HAS DATA TOO, and until now
         only a pie got any: the columns below are the coordinate system's
@@ -3146,7 +3160,12 @@ begin
       end;
       Continue;
     end;
-    dims := TySeriesCartesianDims(FBindings[i].Cart, 0);
+    { ON A POLAR: its two axes' columns, radius then angle (polarDimensions),
+      the store filled as a cartesian series' is [Batch 113] }
+    if FBindings[i].Polar <> nil then
+      dims := TySeriesCoordSysDims(TTyPolar(FBindings[i].Polar), 0)
+    else
+      dims := TySeriesCartesianDims(FBindings[i].Cart, 0);
     { A SERIES WHOSE TYPE DECLARES MORE THAN A PAIR gets those columns
       instead. A candlestick is four numbers on ONE axis and a category that
       is nowhere in the row at all; a coordinate-per-column store cannot hold
@@ -3265,8 +3284,10 @@ begin
   DzRenderStates;
   TyApplyAxisExtents(FOption, FBuild, FBindings, FStores, FStacks, FIndex,
     FLastPPI, FAxisZooms);
-  { AND THE POLARS' SCALES, the same nice step [Batch 111] }
-  TyPolarApplyExtents(FOption, FPolars);
+  { AND THE POLARS' SCALES, the same nice step [Batch 111] -- over the
+    series on them, the stacks and the dataZoom windows [Batch 113] }
+  TyPolarApplyExtents(FOption, FPolars, FBindings, FStores, FStacks, FIndex,
+    FAxisZooms);
   { LAST, ON THE VIEWS THE FILTERS LEFT: dataColorPaletteTask is a visual
     stage (4600), after every processor -- a row the legend or a dataZoom
     took out reads the series' colorFromPalette, a row still in reads its
@@ -3549,6 +3570,28 @@ begin
   Result := hasValue and leftOut and rightOut;
 end;
 
+{ A dataZoom target's axis: the grid's x / y, or a polar's radius / angle
+  -- the polar whose axis that component is [Batch 113] }
+function TTyAdvanceChart.DzAxis(const ADim: string; AIndex: Integer): TTyAxis;
+var
+  p: Integer;
+  ax: TTyAxis;
+begin
+  Result := nil;
+  if (ADim = TyPolarRadiusDim) or (ADim = TyPolarAngleDim) then
+  begin
+    for p := 0 to High(FPolars) do
+    begin
+      if FPolars[p] = nil then Continue;
+      if ADim = TyPolarRadiusDim then ax := FPolars[p].RadiusAxis
+      else ax := FPolars[p].AngleAxis;
+      if ax.ComponentIndex = AIndex then Exit(ax);
+    end;
+    Exit;
+  end;
+  if FBuild <> nil then Result := FBuild.Axis(ADim + 'Axis', AIndex);
+end;
+
 procedure TTyAdvanceChart.SolveDataZooms;
 var
   n, i, t, k, c, si, first: Integer;
@@ -3624,7 +3667,7 @@ begin
     for pass := 0 to 1 do
     for t := 0 to High(spec.Targets) do
     begin
-      ax := FBuild.Axis(spec.Targets[t].Dim + 'Axis', spec.Targets[t].AxisIndex);
+      ax := DzAxis(spec.Targets[t].Dim, spec.Targets[t].AxisIndex);
       if ax = nil then Continue;
       alignTo := TyAxisAlignTo(FOption, FBuild, ax);
       if (alignTo <> nil) and not TyDzTargets(spec, alignTo.Dim, alignTo.ComponentIndex) then
@@ -3653,9 +3696,10 @@ begin
       z.Raw := TyAxisNoZoomExtent(FOption, FBindings, FStores, FStacks, FIndex,
         ax, spec.Targets[t].Dim + 'Axis', any);
       z.Any := any;
-      { the axis' pixel span as the grid's own box lays it out, CSS px }
+      { the axis' pixel span as the grid's own box lays it out, CSS px -- an
+        angle axis' extent is degrees, which no PPI scales [Batch 113] }
       px := ax.PxLength;
-      if FLastPPI > 0 then px := px * 96 / FLastPPI;
+      if (FLastPPI > 0) and (ax.MainType <> 'angleAxis') then px := px * 96 / FLastPPI;
       win := TyDzCalculateWindow(use, ax, z.Raw.Lo, z.Raw.Hi, px);
       z.ZoomLo := NaN;
       z.ZoomHi := NaN;
@@ -3682,7 +3726,9 @@ begin
       begin
         si := feeders[c];
         if (si < 0) or (si > High(FStores)) or (FStores[si] = nil) then Continue;
-        if FBindings[si].CoordSysName <> 'cartesian2d' then Continue;
+        { a polar's series too [Batch 113] }
+        if (FBindings[si].CoordSysName <> 'cartesian2d')
+          and (FBindings[si].Polar = nil) then Continue;
         if si <= High(FStacks) then
           cols := TyAxisDataDims(FStores[si], ax, FBindings[si], FStacks[si])
         else
@@ -3801,6 +3847,8 @@ begin
     FAxisMemory);
   { AFTER phase C, for the reason on FBarCols. }
   FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex);
+  { AND THE BARS ON A POLAR [Batch 113] }
+  FPolarBars := TySolvePolarBars(FOption, FBindings, FStores, FStacks, FIndex, FPolars);
   { AND THE CANDLES AND BOXES, by the same band [Batch 108] }
   FWhiskers := TySolveWhiskerLayouts(FOption, FBindings, FStores, FIndex);
   { AFTER THE BARS: a marker on a bar series sits on its own bar }
@@ -5157,7 +5205,7 @@ begin
   first := nil;
   for t := 0 to High(spec.Targets) do
   begin
-    ax := FBuild.Axis(spec.Targets[t].Dim + 'Axis', spec.Targets[t].AxisIndex);
+    ax := DzAxis(spec.Targets[t].Dim, spec.Targets[t].AxisIndex);
     if ax = nil then Continue;
     first := ax;
     Break;
@@ -5165,6 +5213,13 @@ begin
   rep := DzRepresentative(AIndex);
   if (first = nil) or (rep < 0) then Exit;
   AIn.Inverse := first.Inverse;
+  { a polar axis keeps inverse on its polar; the slider reads the model's
+    option (targetAxisModel.get('inverse')) [Batch 113] }
+  if (first.MainType = 'radiusAxis') or (first.MainType = 'angleAxis') then
+    AIn.Inverse := (FOption.ComponentAt(first.MainType, first.ComponentIndex) is TJSONObject)
+      and (TJSONObject(FOption.ComponentAt(first.MainType, first.ComponentIndex)).Find('inverse') <> nil)
+      and (TJSONObject(FOption.ComponentAt(first.MainType, first.ComponentIndex)).Find('inverse').JSONType = jtBoolean)
+      and TJSONObject(FOption.ComponentAt(first.MainType, first.ComponentIndex)).Booleans['inverse'];
   { the first target's grid, as the labels left it }
   for g := 0 to FBuild.GridCount - 1 do
   begin
@@ -5260,7 +5315,7 @@ begin
   for t := 0 to High(spec.Targets) do
   begin
     if found then Break;
-    ax := FBuild.Axis(spec.Targets[t].Dim + 'Axis', spec.Targets[t].AxisIndex);
+    ax := DzAxis(spec.Targets[t].Dim, spec.Targets[t].AxisIndex);
     if ax = nil then Continue;
     feeders := FIndex.SeriesOnAxis(ax);
     for c := 0 to High(feeders) do
@@ -5367,7 +5422,7 @@ begin
   firstRec := -1;
   for t := 0 to High(spec.Targets) do
   begin
-    ax := FBuild.Axis(spec.Targets[t].Dim + 'Axis', spec.Targets[t].AxisIndex);
+    ax := DzAxis(spec.Targets[t].Dim, spec.Targets[t].AxisIndex);
     if ax = nil then Continue;
     for k := 0 to High(FAxisZooms) do
       if FAxisZooms[k].Axis = ax then
@@ -5474,8 +5529,7 @@ begin
     if (FZoomSpecs[i].SubType <> 'inside') or FZoomSpecs[i].NoTarget then Continue;
     for t := 0 to High(FZoomSpecs[i].Targets) do
     begin
-      ax := FBuild.Axis(FZoomSpecs[i].Targets[t].Dim + 'Axis',
-        FZoomSpecs[i].Targets[t].AxisIndex);
+      ax := DzAxis(FZoomSpecs[i].Targets[t].Dim, FZoomSpecs[i].Targets[t].AxisIndex);
       if (ax <> nil) and (ax.GridIndex = gi) then
       begin
         SetLength(Result, Length(Result) + 1);
@@ -5848,8 +5902,7 @@ begin
     axis := nil;
     for t := 0 to High(FZoomSpecs[d].Targets) do
     begin
-      ax := FBuild.Axis(FZoomSpecs[d].Targets[t].Dim + 'Axis',
-        FZoomSpecs[d].Targets[t].AxisIndex);
+      ax := DzAxis(FZoomSpecs[d].Targets[t].Dim, FZoomSpecs[d].Targets[t].AxisIndex);
       if (ax <> nil) and (ax.GridIndex = FBuild.Grid(AGrid).ComponentIndex) then
       begin
         axis := ax;
@@ -6446,18 +6499,20 @@ begin
     for kind := Low(TTyMarkerKind) to High(TTyMarkerKind) do
       FMarkers[i].Blocks[kind].Kind := kind;
     { A SERIES THE LEGEND SWITCHED OFF DRAWS NO MARKERS -- upstream's
-      marker views walk only the series the filter kept. Polar markers are
-      not ported. }
-    if (not b.Resolved) or (b.Cart = nil) or b.Hidden or (i > High(FStores))
-      or (FStores[i] = nil) then Continue;
+      marker views walk only the series the filter kept. [Batch 113: a
+      polar's markers are; they were not ported.] }
+    if (not b.Resolved) or ((b.Cart = nil) and (b.Polar = nil)) or b.Hidden
+      or (i > High(FStores)) or (FStores[i] = nil) then Continue;
     node := FOption.ComponentAt('series', b.SeriesIndex);
     if (node = nil) or (node.JSONType <> jtObject) then Continue;
     ctx := Default(TTyMkContext);
     ctx.Store := FStores[i];
     ctx.Cart := b.Cart;
+    { a polar's markers [Batch 113] }
+    ctx.Polar := b.Polar;
     ctx.XAxis := b.XAxis;
     ctx.YAxis := b.YAxis;
-    ax := b.Cart.GetBaseAxis;
+    if b.Cart <> nil then ax := b.Cart.GetBaseAxis else ax := b.BaseAxis;
     if ax <> nil then
     begin
       ctx.BaseDim := ax.Dim;
@@ -8011,6 +8066,50 @@ begin
   end;
 end;
 
+function TTyAdvanceChart.PolarShadowBand(const AHit: TTyAxisHit): Double;
+var
+  ax, base: TTyAxis;
+  k, s: Integer;
+  t0, t1, px, span, gap, best, bw: Double;
+  only: Boolean;
+  ext: TTyRange;
+begin
+  ax := AHit.Axis;
+  if (ax = nil) or (ax.Scale is TTyOrdinalScale) then Exit(TyPolarPointerBand(ax));
+  ax.LocalExtent(t0, t1);
+  px := Abs(t1 - t0);
+  ext := ax.Scale.LinearExtent2(sekMapping);
+  span := ext.Stop - ext.Start;
+  best := NegInfinity;
+  only := False;
+  for k := 0 to High(AHit.Slots) do
+  begin
+    s := AHit.Slots[k];
+    if (s < 0) or (s > High(FBindings)) then Continue;
+    { on a polar only the bar keeps the statistic }
+    if (FBindings[s].SeriesType <> 'bar') or (FBindings[s].Polar = nil) then Continue;
+    base := FBindings[s].BaseAxis;
+    if (base = nil) or (base.Scale is TTyOrdinalScale) then Continue;
+    gap := TyLiPosMinGap(FStores,
+      FIndex.SeriesOnAxisOfKey(base, TySeriesStatKey('bar', TyPolarCoordSysName)), base);
+    if gap > 0 then
+    begin
+      if gap > best then best := gap;
+      only := False;
+    end
+    else if gap = cTyMinGapSingle then
+      only := True;
+  end;
+  bw := NaN;
+  if (not IsNan(span)) and (not IsInfinite(span)) and (span > 0)
+    and (not IsInfinite(best)) and (not IsNan(best)) then
+    bw := px / span * best
+  else if only then
+    bw := px * 0.8;
+  if IsNan(bw) or IsInfinite(bw) then Result := 1
+  else Result := Math.Max(Double(1), bw);
+end;
+
 function TTyAdvanceChart.PolarPointerGeometry(const AHit: TTyAxisHit;
   const ARect: TRect; const AMeasurer: ITyTextMeasurer; APPI: Integer;
   out ADraw: TTyPolarPointerDraw): Boolean;
@@ -8033,7 +8132,7 @@ begin
     aptLine: ADraw.Shape := TyPolarPointerShape(AHit.Polar, AHit.Axis, coord,
       TyPolarPointerBand(AHit.Axis), False);
     aptShadow: ADraw.Shape := TyPolarPointerShape(AHit.Polar, AHit.Axis, coord,
-      TyPolarPointerBand(AHit.Axis), True);
+      PolarShadowBand(AHit), True);
   end;
   if not AHit.Spec.LabelSpec.Show or (AMeasurer = nil) then Exit;
   ADraw.Text := PointerLabelText(AHit, pv);
@@ -11093,6 +11192,14 @@ begin
   Result := TTyPainterTextMeasurer.Create(APPI);
 end;
 
+function TTyAdvanceChart.PolarBarOf(ASeriesIndex: Integer): TTyPolarBarLayout;
+var slot: Integer;
+begin
+  Result := Default(TTyPolarBarLayout);
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot >= 0) and (slot <= High(FPolarBars)) then Result := FPolarBars[slot];
+end;
+
 function TTyAdvanceChart.BarColumnOf(ASeriesIndex: Integer): TTyBarColumn;
 begin
   Result := Default(TTyBarColumn);
@@ -11338,6 +11445,7 @@ begin
       ApplyOptStyle(v, FBindings[i].SeriesIndex);
       ApplyVisualMaps(v, i, APPI);
       if i <= High(FBarCols) then v.Bar := FBarCols[i];
+      if i <= High(FPolarBars) then v.PolarBar := FPolarBars[i];
       v.Line := TyLineSpecOf(FOption, FBindings[i].SeriesIndex);
       { the area's base is smoothed as the series it stands on is }
       if (i <= High(FStacks)) and (FStacks[i].OnSlot >= 0)
@@ -11464,7 +11572,8 @@ begin
       end;
       Inc(drawn, TyBuildSeriesMarks(FBindings[i], FStores[i],
         StackFor(i), v, list));
-      if FBindings[i].SeriesType = 'line' then
+      { no end label on a polar (LineView warns and draws none) }
+      if (FBindings[i].SeriesType = 'line') and (FBindings[i].Polar = nil) then
         Inc(drawn, BuildEndLabel(i, v, AMeasurer, APPI, list));
     end;
     { THE EXPANSION RUNS ONCE, HERE, AND NOTHING IS APPENDED AFTER IT. Each
@@ -14996,7 +15105,7 @@ begin
   { UPSTREAM'S SAME ELEMENT: the proxy its enter and update animations run
     on; anything else (a line symbol's group is not its path, a clip is not
     its polyline) a proxy of the states' own }
-  if (role <> nil) and (el.Anim.Role in [carBar, carSymbol, carSector, carFunnel,
+  if (role <> nil) and (el.Anim.Role in [carBar, carPolarBar, carSymbol, carSector, carFunnel,
     carCandleBody, carCandleWickHigh, carCandleWickLow, carLabel, carGuide,
     carBoxplot]) then
     p := role
@@ -15223,6 +15332,9 @@ begin
     else
       Result := 'cart' + IntToStr(PtrUInt(FBindings[ASlot].Cart));
   end
+  else if FBindings[ASlot].Polar <> nil then
+    { a polar is its own master [Batch 113] }
+    Result := 'polar' + IntToStr(FBindings[ASlot].PolarIndex)
   else if FBindings[ASlot].CalendarIndex >= 0 then
     Result := 'calendar' + IntToStr(FBindings[ASlot].CalendarIndex)
   else if FBindings[ASlot].RadarIndex >= 0 then
@@ -16440,11 +16552,17 @@ begin
         if Result.Kind <> cvkNone then Exit;
       end;
     { THE POLARS [Batch 111]: getCoordSys -- the polar named, else the
-      series' own (a series on a polar arrives with C4) }
+      series' own [Batch 113: a series on a polar] }
     for c := 0 to High(FPolars) do
     begin
       if FPolars[c] = nil then Continue;
       target := TyFinderModel(pf, 'polar');
+      if (target < 0) and (s >= 0) then
+      begin
+        slot := SlotOfSeries(s);
+        if (slot >= 0) and (FBindings[slot].Polar <> nil) then
+          target := FBindings[slot].PolarIndex;
+      end;
       if target <> c then Continue;
       Result := ConvertOnPolar(FPolars[c], AValue, AFrom);
       if Result.Kind <> cvkNone then Exit;
@@ -16499,6 +16617,8 @@ begin
   if slot < 0 then Exit;
   b := FBindings[slot];
   if b.Cart <> nil then Exit(TyCartesianContainJson(b.Cart, APoint));
+  { a polar's containPoint [Batch 113] }
+  if b.Polar <> nil then Exit(TyPolarContainJson(TTyPolar(b.Polar), APoint));
   if (b.CalendarIndex >= 0) or (b.RadarIndex >= 0) then Exit;
   pt := TyJsonPoint(APoint);
   if IsNan(pt.X) or IsNan(pt.Y) then Exit;

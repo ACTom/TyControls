@@ -377,6 +377,26 @@ type
     FixedAH: TTyTextAnchorH;
     FixedAV: TTyTextAnchorV;
     FixedRotationRad: Double;
+    { A POLAR BAR'S LABEL [Batch 113, C4]: the sector calculates its own
+      text position (sectorLabel.ts) -- SecAnchor: one of the sector
+      positions, its anchor and the alignment it implies; else a built-in
+      position on the path's rect (HostBox) -- and always its own turn
+      (setSectorTextRotation, which a numeric `rotate` reaches as it is
+      written, not in radians). The offset, the style's alignment and the
+      ink run as for any label; SecInside is zrender's isInside for it
+      (textConfig.inside, set for 'middle', else 'inside' in the word). }
+    SecHas: Boolean;
+    SecAnchor: Boolean;
+    SecX, SecY: Double;
+    SecAH: TTyTextAnchorH;
+    SecAV: TTyTextAnchorV;
+    SecRot: Double;
+    SecInside: Boolean;
+    { the sector position (Ord of PolarBar's TTySectorTextPos) and its
+      distance, device px -- a label following its bar through the enter
+      animation is placed again on the bar as drawn }
+    SecPos: Integer;
+    SecDist: Double;
     { THE CAPTION'S OWN z2, when the mark knows it: a treemap label's is the
       running maximum over the walk plus two, not its host's plus two.
       [Batch 76] }
@@ -535,7 +555,12 @@ type
     carMarkPointLabel,
     { [Batch 108] a boxplot's path: its fourteen points in Pts, the median's
       value coordinate in G[0], G[1] 1 on a horizontal layout }
-    carBoxplot);
+    carBoxplot,
+    { [Batch 113, C4] a bar on a polar: its Sector or Sausage, the layout in
+      G[0..5] (cx, cy, r0, r, the start and end angles), G[6] clockwise,
+      G[7] radial (r grows, else the end angle), G[8] a sausage, G[9] of no
+      sweep }
+    carPolarBar);
 
   TTyChartAnim = record
     Role: TTyChartAnimRole;
@@ -603,6 +628,14 @@ type
       half of a glyph survived the cut. }
     HasClip: Boolean;
     ClipRect: TTyRectF;
+    { A SECTOR CLIP, a polar line's (createPolarClipPath) [Batch 113]: the
+      ink is cut to the ring between ClipR0 and ClipR1 over the sweep from
+      ClipSA to ClipEA (radians clockwise on screen; ClipCW zrender's
+      clockwise), about (ClipCX, ClipCY). Ignored by the hit test, as the
+      rect is. }
+    HasClipSector: Boolean;
+    ClipCX, ClipCY, ClipR0, ClipR1, ClipSA, ClipEA: Double;
+    ClipCW: Boolean;
     Datum: TTyChartDatumRef;
     { zrender's `ignore`: neither drawn nor hit. A label that only a state
       shows (`select.label.show` over a hidden normal label) is built

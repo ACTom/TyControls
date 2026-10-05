@@ -1999,7 +1999,7 @@ sizes: SizeOf(Max(cOne,d))=8  SizeOf(Max(0,d))=4  SizeOf(d)=8
 `areaStyle`(堆叠折线底下那条带子,`stackedOver` 列就是给它准备的)、
 symbol、`smooth` / `step`,以及 `showBackground` 和四角 `borderRadius`,都是各自的行。
 图例过滤会改变堆叠成员(上游正因为这个才把结果写进计算列而从不碰原始数据)——
-还没有图例。极坐标的柱子用的是第三套机制(像素累加器,不是这两列)——也还没有极坐标。
+还没有图例。极坐标的柱子用的是第三套机制(像素累加器,不是这两列)——也还没有极坐标。**[第 113 批：极坐标柱子有了，用的正是这第三套——按基值、按符号记上一根柱到达的坐标（`lastStackCoords`，含 barMinHeight），不读结果列，见 §148。]**
 
 ---
 
@@ -2331,7 +2331,7 @@ JS 的优先级让它读成 `r || (0 - r0) || 0`,r 非零时结果就是 **r**,�
 
 ## 41. Tier 1 第八批:扇区的圆角(2026-09-10)
 
-`pie-borderRadius` 和 `pie-padAngle` 都要它,后面极坐标柱状也要。
+`pie-borderRadius` 和 `pie-padAngle` 都要它,后面极坐标柱状也要。**[第 113 批：极坐标柱的圆角用了它画；量标签框另有一份 zrender 原样的 `roundSector`（V8 的三角函数、带方向），见 §148。]**
 这是 zrender 的 `roundSector`(其实是 d3 的 arc),一百来行三角。
 
 ### 路径改成「一串图元」而不是一串画笔调用
@@ -2551,7 +2551,7 @@ shape 层完全理解它——墨水和命中测试描述的是同一个矩形�
 - **饼图的标签**。`PieView` 把 textConfig 的几何整个丢掉,
   `labelLayout.ts` 自己算 x/y/rotation——所以 `distance` 和 `offset` 在饼上是**真的无效**,
   上面那十三个位置也不适用。**它是另一套算法,单独一批。**
-- **九个扇区位置**。它们服务极坐标柱状,而这个移植还没有极坐标渲染器;
+- **九个扇区位置**。它们服务极坐标柱状,而这个移植还没有极坐标渲染器;**[第 113 批：做了——`PolarBar` 算锚点与转角，经说明的 `Sec*` 交给标签展开，见 §148。]**
   现在建就是一张没人读的表。
 - **[第 103 批：系列标签的 hideOverlap / moveOverlap 已做，见 §138]** **去重叠**。上游能把压住别人的标签整个隐藏,这里不能,会画成叠在一起。头注释里写明了。
 
@@ -6919,7 +6919,7 @@ tooltip 子行 → 旋转标签矩形的分解重组(连同 V8 的 `tan`)、titl
 - D9 解析对齐(`'   '`、`'0x10'`、`'Infinity'`):单独一批。
 - 仪表盘 `splitNumber: 0`:有意保留。
 - 不带时区的日期文本按**本地时间**解析(上游也是),`useUTC` 只管输出;所以这类用例依赖机器时区,fixture 在 UTC+8 下生成。
-- 极坐标、热力图的默认维度(port 没有这两种);`encode.y` 等列表只用第一个;`tooltip.valueFormatter`;箱线图的渲染和物品 tooltip。**[第 108 批：箱线图的渲染与 tooltip 已做；被命名的维不再进类型声明的 tooltip 维，见 §143。]**
+- 极坐标、热力图的默认维度(port 没有这两种);**[第 113 批：极坐标的两维（radius、angle）有了，装载同直角坐标，见 §148。]**`encode.y` 等列表只用第一个;`tooltip.valueFormatter`;箱线图的渲染和物品 tooltip。**[第 108 批：箱线图的渲染与 tooltip 已做；被命名的维不再进类型声明的 tooltip 维，见 §143。]**
 - 两层带头的轴 section(gap level 2)没有用例覆盖,行为没动。
 
 ### 变异测试
@@ -7594,7 +7594,7 @@ dataZoom 做完后按画廊重数缺口:还不画的系列类型里 custom 13(`r
 ### 已知偏差
 
 - 画廊里有几张图(bump-chart、几张 K 线的均线、line-graphic 等)坐标轴标签的测量和上游不同,网格跟着移,这些系列的路径不比较(按首点判定,测试限定不超过 30 条)。
-- 极坐标折线还没有移植。
+- 极坐标折线还没有移植。**[第 113 批：移植了——点、面积底边、裁剪扇区、符号的环形裁剪；极坐标上没有 step，见 §148。]**
 - 单点面积上游是退化的 `M L Z`,这里不发元素(都画不出东西)。
 - 上游 canvas 在画之前把路径数字再取一次 float32(`toStatic`),这里按双精度画,差别在亚像素以下。
 
@@ -7647,7 +7647,7 @@ dataZoom 做完后按画廊重数缺口:还不画的系列类型里 custom 13(`r
 
 ### 已知偏差
 
-- 极坐标的标注没有移植。
+- 极坐标的标注没有移植。**[第 113 批：markPoint、markLine 在极坐标上按 `polar.dataToPoint` 放，柱上的落在 NaN；markArea 上游抛错，端口不建，见 §148。]**
 - 上游遇到不认识的元素整张图渲染失败,这里跳过那个元素。
 - `Time.parse` 对数字取整;dataZoom 那边的 `TyDzParse` 对时间轴数字不取整(本批的标注按上游取整)。
 
@@ -8709,7 +8709,7 @@ B1 把悬停、选中、动作高亮搬上了标志加状态代理的模型，�
 
 - **桑基图**（adjacency/trajectory）**没做**：它的 focus 是 `{node: [...], edge: [...]}` 两套下标，边是另一份数据（`dataType: 'edge'`），状态模型目前只有节点一套行（B1 起就跳过 `IsEdge`）。要做：`TTyStSeries` 加一套按边下标的行、`StItemAt` 认 dataType、`TTyStFocus` 带两套下标、`StBlurSeries` 分别离开 blur，再给 fixture 加桑基的记录（`getData('edge')`）与转写。
 - **关系图、树、矩形树图**保留各自的原地重样式（第 46、81 批），不接共享模型：关系图的 adjacency、树的 ancestor/descendant 已有逐项基准；搬过来要先给它们的节点/边建状态行（同上），而且它们的悬停由提示框的 datum 驱动、按帧重建，和标志模型是两条路。因此它们与共享模型之间**不互相淡化**（笛卡尔上的关系图连带柱子、global 范围跨类型），highlight/downplay 动作对它们只发事件、不改样子。
-- **仪表盘、雷达**仍在覆盖层：仪表盘的指针和进度条是两个各自的派发者（`z2EmphasisLift = 0`），雷达的项是组（折线、面积、每个符号各有状态，标签按维度）；需要「一项多派发者」与「组的多路径」两种结构，Parts 只解决后者的一半。箱线图端口没有渲染器；极坐标上的柱/线端口没有。**[第 108 批：箱线图有了渲染器，接上状态机（`sskBox`，emphasis 边框 2），见 §143。]**
+- **仪表盘、雷达**仍在覆盖层：仪表盘的指针和进度条是两个各自的派发者（`z2EmphasisLift = 0`），雷达的项是组（折线、面积、每个符号各有状态，标签按维度）；需要「一项多派发者」与「组的多路径」两种结构，Parts 只解决后者的一半。箱线图端口没有渲染器；极坐标上的柱/线端口没有。**[第 113 批：极坐标上的柱、线有了，接上状态机（柱的代理表、blurScope 的 polar 键），见 §148。]****[第 108 批：箱线图有了渲染器，接上状态机（`sskBox`，emphasis 边框 2），见 §143。]**
 - 面积在端口里是 silent（拿不到指针），所以「悬停面积只有面积 emphasis」的分支写了但到不了；悬停折线时面积跟着走与上游一致。
 - 折线 `showSymbol: false` 时上游会为单点高亮临时建一个符号，端口不建（只设折线状态）。
 - 漏斗常态隐藏标签时不建标签，上游默认的 emphasis 标签显示因此看不到（标签只在常态显示时才建，和 B1 的饼一样）；fixture 的漏斗用例标签常态显示。
@@ -10374,7 +10374,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **随机数**：上游的 jitter 用 `Math.random`，每次渲染不同；端口用固定种子的 xorshift32，同一幅图永远一样。同一张图里既有力导向 graph 又有 jitter 时，上游两者共用一条 `Math.random`，端口各用各的种子。
 - **large 散点**（`largeThreshold` 以上走 Float32Array）不在这一批（C8）。
 - **finder 是数组**：上游对数组 finder 的数字键调 `match` 会抛错；端口当成什么都没找到。containPixel 的点是 null 时上游抛错，端口答 false。
-- **matrix、polar、singleAxis、geo、parallel** 坐标系不在（polar 是 C3、singleAxis 是 C10、geo 是 D14）；finder 指到它们时端口什么都答不出，containPixel 答 false。分派里给 polar、singleAxis 留了位置。**[第 111 批：polar 坐标系有了——finder 指 polar 时照上游换算，containPixel 照 containPoint；极坐标系列的 finder 随 C4，见 §146。]**
+- **matrix、polar、singleAxis、geo、parallel** 坐标系不在（polar 是 C3、singleAxis 是 C10、geo 是 D14）；finder 指到它们时端口什么都答不出，containPixel 答 false。分派里给 polar、singleAxis 留了位置。**[第 111 批：polar 坐标系有了——finder 指 polar 时照上游换算，containPixel 照 containPoint；极坐标系列的 finder 随 C4，见 §146。]** **[第 113 批：系列 finder 在它的 polar 上换算，containPixel 认极坐标系列，见 §148。]**
 - **桑基图**的 containPixel 按它的盒子（端口没有桑基图的 roam）；旭日图从不包含（上游不下钻时也是如此，端口没有下钻）。
 - **类目轴的自动间隔**：量的是主题字体，不是上游的 12px sans-serif；60 个 `'category N'` 标签上端口算出 10、上游 9（和有没有 customValues 无关，是原有的偏差）。基准里拥挤的类目用例把间隔写明。
 - **customValues 写成对象或串**：对象取值、串逐字符，照 `zrUtil.each` 的行为；没有基准。
@@ -10464,7 +10464,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 
 ### 已知偏差
 
-- **极坐标上的系列**是 C4：轴的范围还不并入系列的数据，指针不吸附、不找最近的系列，`seriesIndex` finder 不认极坐标系列，数值轴的阴影带宽总是 1（没有系列统计）。
+- **极坐标上的系列**是 C4：轴的范围还不并入系列的数据，指针不吸附、不找最近的系列，`seriesIndex` finder 不认极坐标系列，数值轴的阴影带宽总是 1（没有系列统计）。**[第 113 批：都做了——范围并入系列与窗口，指针按轴找系列，系列 finder 认 polar，阴影带宽取柱的统计，见 §148。]**
 - **提示框**：没有系列时上游不发 showTip；端口照直角坐标原有的做法记一个没有分节的轴提示（`TooltipShownWhich` 是 `'axis:'`），不画框。
 - **指针不做移动动画**（上游在吸附或类目轴上做，角度轴的阈值是 π/18）；`axisPointer.status` / `value` 预设的指针（`OptionPointerHits`）只在直角坐标上。
 - **`polar.tooltip`**（坐标系级的提示选项）不读，只看全局的。
@@ -10472,7 +10472,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **`center` 不是数组**时上游按串的字符取下标；端口当作没有中心（NaN）。
 - **subPixelOptimize 的线宽**取选项的 `lineStyle.width`（缺省 1，按 PPI 换算），绘制用主题的线宽；主题线宽不是 1 时吸附和描边差半个像素。
 - **角度轴的类目间隔**按 CSS px 量字高（屏幕 PPI 不是 96 时除回去），和上游一致；7 也是 CSS px。
-- **`coordinateSystemUsage: 'box'`**（polar 放在 calendar / matrix 的格子里）、`dataZoom` 控制极坐标轴是以后的事（后者是 C4）。
+- **`coordinateSystemUsage: 'box'`**（polar 放在 calendar / matrix 的格子里）、`dataZoom` 控制极坐标轴是以后的事（后者是 C4）。**[第 113 批：dataZoom 控制极坐标轴做了（`radiusAxisIndex` / `angleAxisIndex`、自动目标、过滤、slider 的位置）；在 polar 上漫游没有，见 §148。]**
 
 ### 落地
 
@@ -10611,3 +10611,156 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - 没有新的 resourcestring。
 
 全量 **8191 个测试，0 错误，0 失败**（新增 `test.advchart.labelline` 9 个、`test.advchart.pieavoid` 1 个；第一次全量 8190 个也全绿，之后加了颜色的手写测试、补了用例与 `line` 符号的框）。
+
+
+## 148. Tier 2 第一百一十三批：极坐标上的系列（C4，2026-10-06）
+
+路线图 C4：polar P2——极坐标上的 line / bar / scatter / effectScatter / heatmap、九个扇区标签位置、roundCap（Sausage）与柱扇区圆角、极坐标堆叠与标注、dataZoom 目标。§146 的 C3 把坐标系和两根轴搭起来，留下五件事：极坐标上的系列、指针吸附与找最近的系列、`seriesIndex` finder 认极坐标系列、数值轴阴影带宽取自系列、dataZoom 控制极坐标轴。这一批对着 `layout/barPolar.ts`（`calcRadialBar`、`layoutPerAxisPerSeries`）、`chart/bar/BarView.ts` 的极坐标一半（`clip.polar`、`elementCreator.polar`、`getLayout.polar`、`isValidLayout`、`isZeroOnPolar`、`createBackgroundShape`、`updateStyle` 的圆角与标签）、`chart/helper/sectorHelper.ts`、`util/shape/sausage.ts`、zrender 的 `roundSector.ts` 与 `PathProxy.arc` / `getBoundingRect`、`label/sectorLabel.ts`、`chart/line/LineView.ts`（极坐标的分支）与 `chart/line/helper.ts`、`chart/helper/createClipPathFromCoordSys.ts`、`chart/heatmap/HeatmapView.ts`、`coord/polar/Polar.ts`（`getArea`、`containData`、`dataToPoint`）与 `polarCreator.ts` 的系列部分、`component/marker/MarkPointView.ts` / `MarkLineView.ts` / `markerHelper.ts` 与 `BaseBarSeries.getMarkerPosition`、`component/dataZoom/DataZoomModel.ts`（`_fillSpecifiedTargetAxis`、`_fillAutoTargetAxisByOrient`）与 `SliderZoomView._findCoordRect`、`component/axisPointer/viewHelper.ts` 的 `calcAxisPointerShadowBandWidth`、`coord/axisBand.ts`、`coord/scaleRawExtentInfo.ts`（`determineRequireContainShape`、`__requireStartValue`）与 `component/polar/install.ts` 逐行核过，在真 dist 上跑基准。§35、§41、§43、§84、§97、§98、§125、§145、§146 的推迟在原处标注。
+
+### 上游的做法
+
+- **绑定**：`coordinateSystem: 'polar'` 的系列按 `polarIndex` / `polarId` 找 polar（`SINGLE_REFERRING`，都没写是第一个）；`polarCreator` 把**任何**这样的系列挂上去、和两根轴关联，不看类型。数据的两维是 `polarDimensions` 的次序 `['radius', 'angle']`——`data: [3, 5]` 配类目角度轴时，角度是行号、半径是值。
+- **轴范围**：两根轴各自并入挂在上面的系列（堆叠的系列并入和），柱子要求值轴含起点（`__requireStartValue`：基轴之外的那根）；dataZoom 的窗口照直角坐标的规则钉住两端。`containShape` 只在基轴上、只有柱登记了它（`registerBarPolarAxisHandlers`）；**角度轴的模型缺省 `containShape: false`**（「圆轴一般不适合」），半径轴用通用缺省（没有带时为真），所以数值半径轴上的切向柱会把映射范围撑开半根柱。
+- **柱的列**（`calcRadialBar`，每根基轴一次）：带宽是 `calcBandWidth(axis, {fromStat, min: 1})`——类目轴是像素（角度轴是度）跨度除以 `映射跨度 +（有带时 1）`，其余轴是柱子基值的最小正间隔乘像素与映射跨度之比，只有一个值时是跨度的 0.8，最后不小于 1。列按 `stack`（否则 `'__ec_stack_' + seriesIndex`）分；`barWidth` 每列第一个写了的算数、不超过剩余，`barMaxWidth`、`barGap`、`barCategoryGap` 后写的赢；**类目间隙缺省 20%、柱间隙缺省 30%**（直角坐标是算出来的间隙和 10%），自动宽度算两遍，没有 `barMinWidth`。
+- **柱的布局**（`layoutPerAxisPerSeries`）：值是值维的原值（不是堆叠结果列），起点是值轴的 `dataToCoord(startValue)`。堆叠时按**基值**、按符号（`value >= 0`，NaN 算负）记上一根柱到达的坐标（`lastStackCoords`，含 barMinHeight 撑开的长度）。径向柱（基轴是角度）：`r0 = 起点`、`r = 起点 + (dataToCoord(value) − 起点)`，太短时撑到 `barMinHeight`；`startAngle = 角度 − offset`、`endAngle = startAngle − width`。切向柱（基轴是半径）：角度差用 `dataToCoord(value, clampLayout)`——**夹到角度轴的范围里**，除非 roundCap 且基轴是半径——太小时撑到 `barMinAngle`；`r0 = 半径 + offset`、`r = r0 + width`、`startAngle = 起点`。布局的角是度取负换成弧度（`-deg * PI / 180`），`clockwise = startDeg >= endDeg`：方向由终点决定，和直角坐标的柱一样。
+- **视图**：值不是数（`hasValue`）或布局不是有限数（`isValidLayout`：cx、cy、r、两个角）的行没有元素；`showBackground` 的背景在这之前就建了（每个有布局的行一个，silent、z2 0）：径向柱的背景是半径范围整环、柱的两个角，切向柱是柱的两个半径、整圈 0..2π，圆角是 `backgroundStyle.borderRadius || 0` 原样（不按百分比）。`clip`（缺省真）只裁 r、r0 到 `getArea` 的半径范围（按柱自己的方向），裁空了元素照样建、`ignore`；角度不裁（切向柱的角度已经被夹过）。元素是 Sector，切向柱开 roundCap 时是 Sausage（两端半圆，半径是环厚的一半）；径向柱开 roundCap 仍是 Sector、而且不设圆角。圆角是 `getSectorCornerRadius(itemStyle, shape, zeroIfNull)`：没写是 0，标量展成四个，每个按 zrender 的 `parsePercent` 对 `Math.abs(shape.r || 0 - shape.r0 || 0)` 取百分比——运算符的结合让它读成 `|r|`（r 是非零数时），不是环厚。两角相等（`isZeroOnPolar`）的扇区填充和描边都是 `'none'`，各状态也是：零值的切向柱不画，零值的径向柱（两角不等、半径相等）照样有填充。
+- **标签**：位置词先映射——`start`、`insideStart`、`end`、`insideEnd` 在径向柱上加 `Arc`、切向柱上加 `Angle`；`'outside'` 由 `setLabelStyle` 换成柱的外侧：径向柱 `r >= r0` 是 `endArc` 否则 `startArc`，切向柱 `endAngle >= startAngle`（弧度）是 `endAngle` 否则 `startAngle`。扇区自己的 `calculateTextPosition` 认九个：`startArc` / `insideStartArc` / `endArc` / `insideEndArc` 在中角上的 `r0 ∓ d` / `r ± d`，`startAngle` / `insideStartAngle` / `endAngle` / `insideEndAngle` 在两端的中半径上沿切向偏 `±d`（roundCap 再加环厚的一半），`middle` 在中角中半径；各自给出对齐。其余的词（`inside`、`top`、`insideTopLeft`……）和数组形式走通用的 `calculateTextPosition`，量的是**路径的包围盒**（`Path.getBoundingRect`，有描边时加上）。`distance` 缺省 5；`offset`、样式自己的 `align` / `verticalAlign` 照常。转角是 `setSectorTextRotation` 的：`rotate` 是数时**原样当弧度用**（上游没有乘 π/180——`rotate: 30` 是 30 弧度），数组形式是 0，否则 `1.5π − 锚角`（锚角是中角、起角或终角，按 clockwise 取），`middle` 在 (π/2, 1.5π) 里再减 π 好读。`textConfig.inside` 只为 `middle` 设真，其余按词里有没有 `inside`。
+- **折线**：点是 `polar.dataToPoint`（Float32），堆叠的面积底边是 `getStackedOnPoint`（值轴是半径时 `baseDataOffset = 1`）；**极坐标上没有 step**（`!isCoordSysPolar ? step : false`），不抽稀符号（`isIgnoreFunc` 只在直角坐标），没有末端标签。裁剪是 `createPolarClipPath`：中心和两个半径用 `round(x, 1)`（`toFixed(1)`）取一位小数，角是 `getArea` 的（`-角度范围 · RADIAN`），`clockwise` 是角度轴的 inverse；`clip: false` 不放大它（只有符号不裁）。符号的裁剪是 `getArea()`：它有 `width`，于是 LineView 走的是**直角坐标的**留边分支（x、y 减 0.1，宽高加 0.2），r0、r 没动，而 `contain` 只看环：`r !== r0 && d² − 1e-4 <= r² && d² + 1e-4 >= r0²`。
+- **散点、涟漪散点**：`getArea(.1)` 的 `contain`，同样只看环（容差不读）。
+- **热力图**：`HeatmapView` 只认 cartesian2d、calendar、matrix 和 geo，极坐标上什么都不画；但它照样挂在两根轴上，数据照样撑轴。
+- **标注**：markPoint、markLine 的端点是 `polar.dataToPoint`；`radiusAxis` / `angleAxis` 两个键和 `coord` 一样；柱的 `getMarkerPosition` 要 `clampData`，极坐标没有，于是柱上的标注落在 NaN、不画；markLine 的一维写法（`type: 'average'`、`yAxis` ……）在极坐标上不走直角坐标的「只有一维」放行，`containData` 拒掉带 ±Infinity 的端点——整条丢掉；**markArea 在极坐标上抛错**（`clampData` 不是函数），整个 setOption 失败。
+- **dataZoom**：`radiusAxisIndex` / `angleAxisIndex`（及 Id）按 `x, y, radius, angle, single` 的次序指定；都没写时，平行轴找不到就取第一根类目轴，也看 polar 的两根。过滤照直角坐标的三种模式作用在极坐标系列上。slider 找坐标矩形时 polar 没有 `getRect`，取画布中间五分之三。
+- **指针与提示框**：轴触发时，挂在这根轴上的系列照直角坐标的规则找最近的行（类目轴半个像素、数值轴不限），提示框列的就是它们；阴影指针在数值轴上的带宽是 `calcAxisPointerShadowBandWidth`：悬停的柱系列在其基轴上的最小间隔，乘这根轴的像素（度）与映射跨度之比，至少 1。
+- **换算**：`getCoordSys(finder)`：先看 polar finder，再看系列 finder 的系列所在的坐标系；`containPixel` 对极坐标系列是 `containPoint`。
+- **状态**：focus `'series'`、blurScope `'coordinateSystem'` 的范围是这个 polar。
+- **动画**：径向柱的 `shape.r` 从 `r0` 长出，切向柱（Sausage 也是）的 `shape.endAngle` 从 `startAngle` 扫出；创建器先做一次不带行号的 `initProps`，`:307` 再做一次带行号的，前者被停掉，净效果是一个按行计时的动画。折线的裁剪扇区 `initProps({endAngle, r})`，按系列、不带行号：基轴是角度时扫角，否则长半径；符号的弹出延迟按它在裁剪扇区上的角（`-coord[1]/180·π`，`pointToCoord`）或半径的比例。
+
+### port 以前
+
+- `coordinateSystem: 'polar'` 的系列不解析（「坐标系不支持」的诊断），什么都不画；polar 的两根轴不看系列（§146 的偏差）。
+- 九个扇区标签位置没有（§43）；roundSector 只有端口自己画饼的那份（三角函数不是 V8 的，不分方向）。
+- 指针不吸附、不找系列，阴影带宽是 1；`seriesIndex` finder 不认极坐标系列；dataZoom 只认 x、y。
+
+### 做法
+
+- **新单元 `tyControls.AdvChart.PolarBar`**（纯）：
+  - `TySolvePolarBars`：按 polar 的两根轴、按 `bar\0polar` 统计键取柱，`calcRadialBar` 和 `layoutPerAxisPerSeries` 照抄（`PctOf` 是 `parsePositionOption`，`JMin` / `JMax` 有 NaN 赢的规则，`lastStackCoords` 按基值比较、0 与 −0 同键、NaN 同键）；每个槽一个 `TTyPolarBarLayout`：视图行的扇区（`TTyPolarSector`：cx、cy、r0、r、两个弧度角、clockwise）、`Valid`、每行的圆角写法（`TTyPolarCornerSpec`，数据项的压过系列的）与标签的问法（位置词、数组形式、`rotate` 是不是数），以及 roundCap、clip、背景和 `getArea` 的半径。
+  - 视图的算术：`TyPolarSectorValid`、`TyPolarBarClip`、`TyPolarZero`、`TyPolarBarBackground`、`TyPolarCornerList`（`getSectorCornerRadius`，包括 `|r|` 那处）、`TyPolarCornerRaw`、`TyPolarCornerFour`（`normalizeCornerRadius`）。
+  - zrender 的路径：`TyZrSectorPath`（`roundSector.buildPath` 逐行，`computeCornerTangents` 带 clockwise，JsMath 的三角函数）、`TyZrSausagePath`；`TyZrBBox` 量包围盒。`TyPolarSectorShape` 给画家和命中测试用的形状记录：按 zrender 的 `normalizeArcAngles` 把方向转成正向的扫角，方向翻过来时起止两端的圆角对调，带上 Sausage 标志。
+  - 标签：`TySectorTextPosOf`（映射）、`TyPolarOutsideWord`、`TySectorLabelAnchor`（`createSectorCalculateTextPosition`）、`TySectorLabelRotation`（`setSectorTextRotation`，数字原样）。
+- **绑定**（`Series`）：`TTySeriesBinding` 多 `PolarIndex` 和 `Polar`（`TTyPolar`，这里只能是 `TObject`）。`TyBindSeries` 认 `'polar'`：解析 `polarIndex` / `polarId`（跳过 replaceMerge 的空洞），找不到照旧诊断；解析成功是 `Resolved`、`HasAxes` 仍为假（它说的是直角坐标那一对）。`Polar` 单元的 `TyAttachPolarSeries` 在建好 polar 之后填上 `XAxis`（半径）、`YAxis`（角度）、`BaseAxis`、`ValueAxis`——这一步就让极坐标系列进了轴索引、堆叠、范围、指针的找系列，不必另走一条路。`Stack` 放行有 `Polar` 的绑定。
+- **范围**：`TyPolarApplyExtents` 多一个带绑定、存储、堆叠、索引和 dataZoom 窗口的重载：原始范围是 `TyAxisNoZoomExtent`（直角坐标的那个），有窗口时照 `DoAxis` 钉住两端；`containShape` 从 `TyApplyAxisExtents` 里提出来成为 `TyAxisWantsContainShape` / `TyAxisApplyContainShape`（带坐标系名，统计键随之），角度轴没写就是假。
+- **存储**：`Builder` 的 `TySeriesCoordSysDims` 按任意坐标系的轴次序给维（半径、角度）；`Rebuild` 里有 `Polar` 的绑定和直角坐标的走同一条装载路径（`data`、dataset、encode）。
+- **Marks**：
+  - 柱：`BuildPolarBars` 按上面的视图规则建元素——背景（silent，`Anim` 记行号与扇区）、`Valid` 才有柱、裁剪后 `Ignore`、Sector 或 Sausage、圆角（roundCap 时 0）、零扫角去掉填充和描边。新角色 `carPolarBar`，`G[0..5]` 是画出来的扇区，`G[6]` clockwise、`G[7]` 径向、`G[8]` Sausage、`G[9]` 零扫角。标签：说明的新字段 `Sec*`——扇区位置时是锚点、对齐、位置序号和距离（`SecAnchor`），内置位置时 `HostBox` 是路径的包围盒（按 `TyZrStrokeRect` 加描边），`SecRot` 是转角，`SecInside` 是 isInside；被裁空的柱不出标签。
+  - 折线：`BuildLine` 在极坐标上换用 `polar.DataToPoint`（`SysPoint`）、不做 step、不抽稀；`PrepareClip` 算 `createPolarClipPath` 的扇区（`TyJsToFixed(·, 1)`），元素带 `HasClipSector`；符号按环判断（`PolarRingContains`）；动画的标志多 8（极坐标）、16（clockwise）、32（角度基轴），4 改成 polar 自己的 inverse；符号的 `G[2]`、`G[3]` 是 `getArea` 的两角或两半径（不取整）、`G[9]` 是它在扇区上的角（负弧度）或半径。
+  - 散点、涟漪散点：`BuildScatter` 换用 `SysPoint`，裁剪按环。
+  - `TyBuildSeriesMarks` 对极坐标系列分派：bar、line、scatter、effectScatter；热力图什么都不画。
+- **说明与画**：`Paint` 的元素多 `HasClipSector` 和七个 `Clip*`，`Render` 先按 zrender 的方向把扇区描成路径再 `ClipPath`；`Shape` 的形状记录多 `Sausage`，`Render` 画两端半圆，命中测试把两端的半圆当整圆算（在扇区里那一半本来就算）。`Labels` 的 `TyExpandLabels` 认 `Sec*`：锚点和对齐、转角、isInside；跟随动画时扇区位置记 `LabelPos = 100 + 位置序号`。
+- **标注**（`Marker`）：上下文多 `Polar`；`DataToPoint` 走 `polar.dataToPoint`，柱的 `MarkerPosition` 是 NaN，`InfinityToExtent` 和 markLine 的「只有一维」放行只在直角坐标，相对坐标系的 x / y 在 polar 上没有矩形；`AxisOf` 和统计用的维按轴自己的 `Dim` 找（以前写死 `'x'` / `'y'`）；markArea 在极坐标上不建。
+- **dataZoom**（`DataZoom`）：`Specified` 认 `radius` / `angle`（轴是否存在问选项里的组件），自动目标多看 polar 的类目轴。控件的 `DzAxis` 把目标换成轴（x、y 问 grid，radius、angle 问 polar），六处查找都改用它；过滤放行极坐标系列；窗口的像素跨度在角度轴上是度，不按 PPI 换算；slider 的 `inverse` 取 polar 轴的选项。
+- **控件**：`FPolarBars`（`Relayout` 里在 `FBarCols` 之后解）、`PolarBarOf`；`ConvertDispatch` 的 polar 一段在没有 polar finder 时取系列的 polar，`ContainSeries` 认极坐标系列；`StCoordKey` 给 polar 自己的键（blurScope）；`PolarShadowBand`（`calcAxisPointerShadowBandWidth`，极坐标上只有柱的统计）给阴影指针；状态的代理表放进 `carPolarBar`；极坐标折线不做末端标签。
+- **动画**（`AnimView`）：`carPolarBar` 的代理叫 `'bar'`，键是 cx、cy、r0、r、两个角；进场时径向柱的 r 置为 r0、切向柱的终角置为起角，按行 `initProps`；更新照柱的规则（新行进场，保留的从原处 `updateProps`）；帧里按代理重建扇区，`G` 和标签框跟着走，扇区位置的标签按当前扇区重新算锚点。折线裁剪在极坐标上的代理是扇区的六个键，`initProps({endAngle, r})` 不带行号；符号弹出按 `G[2..3]` 与 `G[9]` 的比例。
+
+### 基准
+
+`tools/advchart-oracle/polar-series.js`（真 dist，node SSR，TZ=UTC，zrender 的宽度表量字，最后 `process.exit()`）→ `tests/fixtures/advchart-polar-series.json`：**92 个静态用例**（600×400，`animation: false`）加 **9 个动画用例**（400×300，animation.js 的时钟钩子：替换 `Date`，`chart._ssr = false`，用例运行时 `env.node = false`，同样的采样时刻）。状态用例照 select-legend.js 先把 `_ssr` 关掉、每个动作后跑一帧（`_onframe`）。
+
+- 柱 34 个：径向、切向、两个系列并排（barGap / barCategoryGap）、三个径向堆叠带负值、切向堆叠加另一摞、切向 roundCap、径向 roundCap（仍是 Sector、圆角不设）、扇区圆角（标量、四个、两个百分比）、径向圆角与数据项自己的、裁剪（半径范围窄于数据，一个被裁空、`clip: false` 不裁）、切向的角度被夹、barMinHeight / barMinAngle（两个 polar）、背景（径向与切向、圆角背景）、数值角度轴上的径向柱（最小间隔定带宽）、数值半径轴上的切向柱（containShape 撑开）、零值（切向与径向各一）、barWidth 50% 与 barMaxWidth、反向半径加逆时针角度、圆环、对数半径、半圈的切向柱、带边框（标签 `insideBottom`）；以及第二轮补的十一个：barGap / barCategoryGap 后写的系列说了算、barWidth 150% 只拿剩下的带、barMaxWidth 封顶自动宽度、径向基轴上的 roundCap（角度不夹，Sausage 越过最大值）、一个值与三个值的圆角列表（`[v, v, 0, 0]`、`[a, b, c, c]`）、逆时针切向柱的圆角（标签在路径框里）、窄楔上的大圆角（被两边交点限住）、数值角度 0..100 上相距 0.1 的径向柱（带宽保底 1 度）、`boundaryGap: false` 的类目半径上的切向柱（containShape 撑开半个带）、时间半径上的切向柱（按最小间隔）、数值角度写了 `containShape: true` 的径向柱。
+- 标签 25 个：十种位置（`start`、`insideStart`、`middle`、`insideEnd`、`end`、`outside`、`inside`、`top`、`insideTopLeft`、数组）× 径向 / 切向，每个用例两个系列（第二个 `rotate: 30`）、都有负值；`distance` 与 `offset`；样式自己的对齐；roundCap 的角度位置；堆叠的中间；数据项自己的位置与转角。
+- 折线 9 个：类目角度上带符号、标签和空值；两条堆叠的面积；圆环且半径最大值低于数据（过界的符号去掉）；类目半径；平滑加面积；两根数值轴、`clip: false`；step（被忽略）；逆时针角度加反向半径的面积；小数尺寸的 polar（裁剪扇区取一位小数，低于半径最小值的点落在洞里）。
+- 散点 5 个：两根数值轴（一个过界）、类目角度、`clip: false`、涟漪散点、极坐标上的热力图（不画）。
+- 标注 4 个：折线上的 markPoint（max、min、coord、两个轴键、average）与 markLine（average 被丢、两点、min 到 max）、柱上的（NaN）、散点上的（`valueIndex`、坐标、过界的点）、markArea（上游抛错，记下错误）。
+- dataZoom 7 个：类目角度上的 inside 20%–80%、类目半径与数值角度上的两个 slider、数值半径上 `filterMode: 'empty'`、数值角度上 `weakFilter`；数值角度上的百分比两端（按度数跨度取整）；写了 containShape 的数值角度加 inside 窗口 20..80（钉住的两端不再撑开）；同样的百分比两端放在半圈上（跨度 180 度，`getPixelPrecision` 少一位：两端是 48 而不是 48.1）。
+- 指针 5 个、每个 39 个探针：类目角度上的柱与折线（轴触发）、数值角度上的柱（阴影带宽取自柱）、两根数值轴上的散点（cross）、类目半径上的两个柱系列（阴影）、两根数值轴上的折线（值轴吸附）。记下每个探针上显示的轴（值、元素、标签）和 showTip 载荷里每根轴列出的系列行。
+- 换算 1 个：grid 加两个 polar，`seriesIndex`、`seriesId`、`seriesName`、裸词 `'series'`、列表、指向 grid 系列的 finder；to / from / contain。
+- 状态 2 个：径向柱的 emphasis（颜色、边框）、select（单选，颜色、边框）、另一系列 focus `'series'` 的 blur；切向 roundCap 柱的多选。每个动作后记下每根柱的状态表、填充、描边、线宽、不透明度。
+- 动画 9 个：径向柱（缺省、`delay(idx) = idx·50`）、切向柱（带负值）、roundCap 的 Sausage（600 ms 线性延迟 100）、堆叠的径向柱带中间标签、类目角度上带面积的折线、类目半径上的折线（600 ms 线性延迟 100）、圆环上的折线、小数圆环上的折线（符号弹出读未取整的半径）。
+
+每个记录都由按上游源码抄写的 recipe 重算一遍并逐位比较：柱的布局（`calcRadialBar` + `layoutPerAxisPerSeries`，类目基轴）、裁剪、扇区标签的位置与转角、折线的裁剪扇区、符号是否在环里；另有 38 条具名守卫（径向柱从起点长 r、切向柱从起角扫、roundCap 切向是 Sausage、径向 roundCap 是无圆角的 Sector、负的切向柱逆时针、裁剪切到边、整根出界的被藏、`clip: false` 不裁、切向的角度被夹不被裁、零值切向柱无填充而径向有、百分比圆角按 |r| 算、barMinHeight 撑到 12、径向背景是整环、数字 `rotate` 当弧度、`middle` 翻转、负径向柱的 `outside` 是 `startArc`、`inside` 量路径的框、热力图不画、markArea 抛错、柱上的标注没有位置、折线上的标注有、一维 markLine 被丢、符号裁剪按矩形留边（r0 不动）、过界的符号不画、step 被忽略、inside 角度缩放过滤柱子、指针报出系列、数值角度的阴影宽于 1 度、系列 finder 在它的 polar 上换算、emphasis 上色、select 上色，以及动画的径向长 r、切向扫终角、Sausage 扫终角、角度裁剪扫角、半径裁剪长 r、1500 ms 内都结束），两次生成逐字节一致。
+
+### 测试
+
+`test.advchart.polarseries`（新，13 个，注册在 `tytests.lpr`）。柱的比较跑**每个用例**的每个柱系列（不只柱与标签两组）：dataZoom 钉住的两端、指针与状态用例里的柱，都只在柱落在哪里、标签算不算 inside 上看得出来。
+
+- **polar**：每个用例每个 polar 的中心、两根轴的范围与 inverse、刻度范围——现在由系列、堆叠、起点、窗口和 containShape 决定，逐位。
+- **柱**：每个柱系列已解（`PolarBarOf`），径向与否；每行的布局（未裁剪）与 clockwise、有没有元素 / 被藏 / 画、原始行号、画出来的扇区与 clockwise、Sector 或 Sausage、零扫角（且不画）；**元素自己带的四个圆角**对上游的 `cornerRadius`——按 `roundSector` 的读法归一（一个数是四个角，`[v]` 是 `[v, v, 0, 0]`……），逆时针时两端对调，负数当没有；由这四个角建的 zrender 路径的包围盒；标签（词、锚点加偏移、锚点上挂的转角与最终画的转角、isInside、位置的对齐与最终对齐）；背景每行的扇区。
+- **折线与散点**：整条的布局点（Float32）、只有一段的折线**画出来的顶点**（step 会多出顶点）、面积的底边、裁剪扇区（是扇区、中心、两半径、两角、方向）、每个符号画不画、在哪、它的标签；极坐标折线没有末端标签元素。
+- **热力图**：不画。
+- **标注**：每个幸存的 markPoint 点、markLine 两端，逐位（NaN 也比）；markArea 在端口里没有建。
+- **dataZoom**：slider 的位置与长宽、方向；每个系列留下的行（原始行号）。
+- **指针**：每个探针上每根显示的极坐标轴的值、元素形状（线、圆、扇形——阴影的扇形用系列的带宽）、标签；showTip 里每根轴的系列行与吸附后的值。
+- **换算**：每个探针按精确 Double 重放。
+- **状态**：每个动作经 `DispatchAction` 后，每根柱的状态表（`ItemStates`）、填充、描边与线宽（描边是 null 时端口不描）、不透明度。
+- 手写 4 个：柱子画出来了、命中测试找得到（径向扇区的中点、Sausage 端头的半圆里）；折线在环里画、环外被裁掉；指向不存在的 polar 的系列给诊断、不解、不占别人的带；悬停极坐标柱子出数据项提示框。
+
+`test.advchart.animenter`：新测试 `TestPolarEnterTimelinesAsUpstream` 读同一个夹具的 `anim`，用原有的 `RunCase` 重放（类型 `sector` / `sausage` 映射到柱的代理）；最终值的比较对 ±0 放宽一处（上游最后一帧是 `(to − from)·1 + from`，会把布局的 −0 变成 +0；每个采样仍逐位比）。另一个新测试 `TestAPolarBarAndItsLabelGrowInTheFrame` 在半途画一帧：径向柱的扇区真的按代理的 r 画（不是终态），标签跟着走。
+
+### 变异测试
+
+`c4_mut.py`（草稿目录）：逐个改源码、重编，依次跑 `TAdvChartPolarSeriesTest`、`TestPolarEnterTimelinesAsUpstream`、`TestAPolarBarAndItsLabelGrowInTheFrame`（共用代码的变异再加上点名的套件），按原字节还原。105 个：
+
+- 绑定 5 个：不认 `'polar'`、`polarIndex` 总取 0、基轴取角度轴、两根轴对调、堆叠不放行极坐标系列；
+- 轴范围 6 个：范围不并入系列、角度轴的 containShape 缺省不为假、极坐标从不 containShape、窗口钉住的一端不算钉住、窗口被忽略、containShape 的键按直角坐标找；
+- `calcRadialBar` 9 个：带宽没有 1 的下限、`onBand` 不加 1、类目间隔 10%、柱间隔 10%、间隔先写的说了算、barWidth 不被剩下的带夹住、barMaxWidth 被忽略、偏移不减最后一个间隔、堆叠 id 共用；
+- `layoutPerAxisPerSeries` 14 个：没有 barMinHeight、没有 barMinAngle、正负共用一个堆叠基、堆叠不记下、切向不夹、roundCap 的径向基轴也夹、径向的终点与起点加偏移、切向的 r0 不加偏移、clockwise 反了、起点不取 startValue、hasValue 不看、数据项的圆角与标签被忽略；
+- 视图 15 个：裁剪不带符号、裁剪不动 r0、整根出界从不藏、零值从不判、径向背景用自己的半径、切向背景只到一半、百分比圆角按厚度算、`[v]` 当四个角、两个值的列表对调、扇形没有圆角、扇形圆角不看方向、没有窄楔的限制、内弧与外弧同向、Sausage 没有起点的端头、Sausage 没有内弧；
+- 标签 12 个：径向与切向的映射对调、径向的 `outside` 总是终点、切向的 `outside` 翻转、`startArc` 加距离、`endArc` 顶对齐、roundCap 不加额外距离、x 偏移的符号、`rotate` 换成弧度、数组位置也自动转、转角不看方向、`middle` 不翻、转角加 15 度；
+- 系列视图 17 个：柱不裁、roundCap 也给圆角、径向也做 Sausage、零值留填充、`outside` 不解析、宿主框不含描边、`inside` 不看 `middle`、裁剪扇区不取一位小数（半径、中心两个）、裁剪的方向反了、符号不按环裁、环不带容差、环没有内半径、极坐标上做 step、散点按矩形裁、符号弹出不读坐标、弹出读取整后的半径；
+- 标签展开 3 个：扇区锚点、转角、isInside 被忽略；
+- 标注 3 个：柱上的标注有位置、`onlyDim` 在极坐标上也用、`AxisOf` 写死 x / y；
+- dataZoom 4 个：不认 `radiusAxisIndex`、不认 `angleAxisIndex`、角度的度数也按 PPI 换、过滤只认直角坐标；
+- 控件 8 个：换算不认系列、contain 不认极坐标、blur 的范围不认 polar、阴影带宽不取系列、阴影按像素、标注不走极坐标、柱不解、极坐标折线出末端标签；
+- 动画 6 个：进场长终点、进场不按行延迟、裁剪长 r、裁剪按行延迟、弹出按矩形算、帧不认 `carPolarBar`；
+- 画与命中 3 个：裁剪扇区不画、标签缺省位置不当 `inside`（第二轮补的，见下）、Sausage 的端头不算命中。
+
+首轮 104 个，杀死 76 个，存活 28 个，其中 4 个等价：
+
+- **hasValue 不看**：值为 NaN 时布局本身就无效（`isValidLayout` 先拦下），两道门答案相同。
+- **Sausage 没有内弧**：内弧永远在外弧与两端半圆围成的范围里，包围盒不变；画家不用 zrender 的路径。
+- **数组位置也自动转**：数组位置上游走 `setSectorTextRotation` 的 `else` 分支，转角也是 0。
+- **裁剪按行延迟**：极坐标折线的裁剪只有一个元素，`delay(null)` 与 `delay(0)` 在固定的处理表里相同。
+
+其余 24 个是测试够不到。补的东西：
+
+- 夹具补十四个静态用例、一个动画用例（见「基准」）：`bar-band-min`（带宽下限）、`bar-gap-last`（后写的间隔）、`bar-width-over`（夹到剩下的带）、`bar-maxwidth`、`bar-roundcap-over`（径向基轴上不夹）、`bar-corner-one` / `bar-corner-negative` / `bar-corner-narrow`（一个值的列表、逆时针对调、窄楔的限制）、`bar-cat-radius-nogap` / `bar-time-radius` / `bar-angle-contain` / `zoom-contain-pinned`（containShape 与它的键、窗口钉住的端）、`line-fraction`（裁剪取一位小数，中心与两半径；落在洞里的点）、`zoom-angle-percent`，动画 `polar-line-fraction.default`（弹出读未取整的半径）；`bar-border` 加 `insideBottom` 标签（宿主框含描边）。
+- 测试：圆角改为比**元素自己带的**四个角（原来比的是测试里重算的列表，变异两边一起变）；标签比锚点上挂的转角和 isInside；只有一段的折线比画出来的顶点（step 多出顶点）；极坐标折线不许有末端标签元素；新测试 `TestAPolarBarAndItsLabelGrowInTheFrame` 半途画一帧（帧不认柱时扇区停在终态）。
+
+第二轮重跑这 24 个，杀死 22 个，存活 2 个：
+
+- **窗口钉住的一端不算钉住**：`zoom-contain-pinned` 的两端只改变柱的映射范围，而柱的比较只跑柱与标签两组。改为每个用例的柱都比，杀死。改完马上红了一处**真 bug**：`state-bar` 的标签没写位置，上游的 `labelStyle` 取 `position || 'inside'`，zrender 的 isInside 为真；端口的词是空串，isInside 为假——没写位置的极坐标柱子标签会用外侧的颜色。`BuildPolarBars` 里空词当 `'inside'`（空串与 `'inside'` 都走内置位置、不自动转，只改 isInside），并加变异「标签缺省位置不当 `inside`」，杀死。
+- **角度的度数也按 PPI 换**：变异把跨度翻倍，而一整圈 360 与 720 度的 `round(log10)` 都是 3，精度不变。补 `zoom-angle-half`（半圈：180 度是 2、360 度是 3），杀死。
+
+最终 105 个杀死 101 个，4 个等价。
+
+### 已知偏差
+
+- **动画开着时的两个创建时刻值**：上游在 `updateStyle` 里读的是**创建器已经改过的**形状（径向柱 `r = r0`、切向柱 `endAngle = startAngle`）——百分比圆角按那时的 `|r|` 算，`setSectorTextRotation` 的自动转角按那时的角算（之后不再改）。动画关掉时与端口一致；动画开着时，径向柱的百分比圆角和切向柱扇区位置（中角、终角）的自动转角，端口按终态算。
+- **markArea 在极坐标上**：上游抛错、整张图不出；端口只是不建标注区域，其余照画。
+- **inside dataZoom 的漫游**：窗口（选项、`dataZoom` 动作）作用在极坐标轴上，但在 polar 上滚轮、拖动不触发（端口的漫游按 grid 找控制器）。slider 的数据阴影在极坐标目标上没有对过基准。
+- **更新动画**：极坐标柱的更新（保留的从原处补间、新增的进场、删去的淡出）走柱的通用路径，没有对过上游；roundCap 在更新中开关时上游淡出旧元素再长出新的，端口当成同一根柱补间。
+- **画家的扇形**：画的仍是端口自己的 `TySectorPath`（三角函数不是 V8 的），只有量标签框用 zrender 原样的路径；Sausage 的命中测试把两端半圆当整圆。
+- **标签的引导线**：极坐标柱子没有 `Lg*`，`labelLine` 不走线（B14 的系列范围外）。
+- **其余系列类型**：pictorialBar、candlestick、boxplot 等写了 `coordinateSystem: 'polar'` 时端口不画（上游这些视图只认直角坐标，多数会出错）；热力图与上游一样不画。
+- **折线的 visualMap 渐变**、**末端标签**在极坐标上没有（上游也不支持）。
+- **`polar.tooltip`**、**数据项的 `cursor`**不读，与 §146 相同。
+
+### 落地
+
+- `source/tyControls.AdvChart.PolarBar.pas`（新，进 `tycontrols.lpk` 与 `tycontrols.pas`）。
+- `source/tyControls.AdvChart.Series.pas`：绑定的 `PolarIndex` / `Polar`、`'polar'` 的解析、`PolarIds` / `PolarHoles`；`TyAxisWantsContainShape` / `TyAxisApplyContainShape`（从 `TyApplyAxisExtents` 提出来，带坐标系名）。
+- `source/tyControls.AdvChart.Polar.pas`：`TyAttachPolarSeries`、带系列与窗口的 `TyPolarApplyExtents`、角度轴的 containShape 缺省；接口 uses 多 `Data`、`Series`。
+- `source/tyControls.AdvChart.Stack.pas`：放行极坐标系列。
+- `source/tyControls.AdvChart.Builder.pas`：`TySeriesCoordSysDims`。
+- `source/tyControls.AdvChart.Marks.pas`：`TTySeriesVisual.PolarBar`、`BuildPolarBars`（没写位置的标签当 `inside` 算 isInside）、`PolarOf` / `SysPoint` / `PolarRingContains`，`BuildLine` / `BuildScatter` 的极坐标分支，`TyBuildSeriesMarks` 的分派。
+- `source/tyControls.AdvChart.Paint.pas`：说明的 `Sec*`、元素的 `HasClipSector` / `Clip*`、角色 `carPolarBar`。
+- `source/tyControls.AdvChart.Shape.pas`：`Sausage` 与它的命中测试；`source/tyControls.AdvChart.Render.pas`：扇区裁剪、`TraceSausage`。
+- `source/tyControls.AdvChart.Labels.pas`：扇区锚点、转角、isInside，跟随动画的扇区位置；单元头注释标注。
+- `source/tyControls.AdvChart.Marker.pas`：上下文的 `Polar`、极坐标的 `DataToPoint`、柱的 NaN、直角坐标专属的两处、`AxisOf` 按 `Dim`、不建 markArea。
+- `source/tyControls.AdvChart.DataZoom.pas`：`radius` / `angle` 目标、自动目标。
+- `source/tyControls.AdvChart.AnimView.pas`：`carPolarBar` 的进场、更新、帧、残影，极坐标折线裁剪，符号弹出。
+- `source/tyControls.AdvanceChart.pas`：`FPolarBars` / `PolarBarOf`、`TyAttachPolarSeries` 与存储、范围的接线、`DzAxis` 与六处、`PolarShadowBand`、换算与 contain、`StCoordKey`、标注上下文、状态代理表、极坐标折线不出末端标签。
+- `tools/advchart-oracle/polar-series.js`、`tests/fixtures/advchart-polar-series.json`、`tests/test.advchart.polarseries.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.animenter.pas`：`TestPolarEnterTimelinesAsUpstream`、柱的类型映射、±0 的最终值。
+- §35、§41、§43、§84、§97、§98、§125、§145、§146 在原处标注。没有新的主题键，没有新的 resourcestring。
+
+全量 **10599 个测试，0 错误，0 失败**（新增 `test.advchart.polarseries` 13 个、`test.advchart.animenter` 2 个；第一次全量 10598 个也全绿，之后加了半途画一帧的测试、补了用例、修了没写位置的标签的 isInside）。

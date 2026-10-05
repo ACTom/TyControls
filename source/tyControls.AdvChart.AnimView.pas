@@ -424,7 +424,8 @@ implementation
 uses tyControls.AdvChart.Labels, tyControls.AdvChart.Data, tyControls.AdvChart.Color,
   tyControls.AdvChart.LinePath, tyControls.AdvChart.JsMath,
   tyControls.AdvChart.Scale, tyControls.AdvChart.MarkerView,
-  tyControls.AdvChart.LabelGuide;
+  tyControls.AdvChart.LabelGuide, tyControls.AdvChart.PolarBar,
+  tyControls.AdvChart.ZrPath;
 
 { ==================== the proxy ==================== }
 
@@ -940,7 +941,7 @@ end;
 function TyChartAnimProxyRole(ARole: TTyChartAnimRole): string;
 begin
   case ARole of
-    carBar: Result := 'bar';
+    carBar, carPolarBar: Result := 'bar';
     carSymbol: Result := 'symbol';
     carLineSymbol: Result := 'lineSymbol';
     carLineRun, carLineArea: Result := 'lineClip';
@@ -1016,7 +1017,17 @@ begin
   hasClip := (flags and 1) <> 0;
   { undefined === undefined: no clip is a ratio of nought }
   ratio := 0;
-  if hasClip then
+  if hasClip and ((flags and 8) <> 0) then
+  begin
+    { a polar: getArea's start and end -- the angles, or the radii -- and
+      where the symbol is, the builder's [Batch 113] }
+    start := AEl.Anim.G[2];
+    stop := AEl.Anim.G[3];
+    cur := AEl.Anim.G[9];
+    if stop = start then ratio := 0
+    else ratio := (cur - start) / (stop - start);
+  end
+  else if hasClip then
   begin
     if (flags and 2) <> 0 then
     begin
@@ -1059,6 +1070,16 @@ begin
     Num1('shape.height', AEl.Anim.G[3])]);
 end;
 
+{ a bar on a polar: its sector, as BarView's polar creator gives it
+  [Batch 113] }
+function PolarBarProps(const AEl: TTyChartElement): TTyAnimProps;
+begin
+  Result := TyAnimProps([Num1('shape.cx', AEl.Anim.G[0]),
+    Num1('shape.cy', AEl.Anim.G[1]), Num1('shape.r0', AEl.Anim.G[2]),
+    Num1('shape.r', AEl.Anim.G[3]), Num1('shape.startAngle', AEl.Anim.G[4]),
+    Num1('shape.endAngle', AEl.Anim.G[5])]);
+end;
+
 function SectorProps(const AEl: TTyChartElement): TTyAnimProps;
 begin
   Result := TyAnimProps([Num1('shape.cx', AEl.Anim.G[0]),
@@ -1077,6 +1098,15 @@ end;
 
 { the line's clip rect as the static layer draws it: widened by `clip:
   false` }
+{ a polar line's clip sector [Batch 113] }
+function PolarClipProps(const AEl: TTyChartElement): TTyAnimProps;
+begin
+  Result := TyAnimProps([Num1('shape.cx', AEl.Anim.G[0]),
+    Num1('shape.cy', AEl.Anim.G[1]), Num1('shape.r0', AEl.Anim.G[2]),
+    Num1('shape.r', AEl.Anim.G[3]), Num1('shape.startAngle', AEl.Anim.G[4]),
+    Num1('shape.endAngle', AEl.Anim.G[11])]);
+end;
+
 function ClipProps(const AEl: TTyChartElement): TTyAnimProps;
 var
   x, y, w, h, ex: Double;
@@ -1338,6 +1368,22 @@ begin
         end;
         Start(props, TyAnimCallAt(idx));
       end;
+    carPolarBar:
+      begin
+        { the polar creator: a radial bar's r from r0, a tangential one's end
+          angle from its start; its own initProps without a row is stopped
+          by the one with it, so one animation at the row [Batch 113] }
+        p := Make(AEl.Anim.Series, idx, 'bar');
+        props := PolarBarProps(AEl);
+        p.Attr(props);
+        p.SetFinal(props);
+        if AC.Enabled then
+        begin
+          if AEl.Anim.G[7] <> 0 then p.SetNum('shape.r', AEl.Anim.G[2])
+          else p.SetNum('shape.endAngle', AEl.Anim.G[4]);
+        end;
+        Start(props, TyAnimCallAt(idx));
+      end;
     carSymbol:
       begin
         p := Make(AEl.Anim.Series, idx, 'symbol');
@@ -1362,6 +1408,23 @@ begin
         p.AnimateTo(props, cfg);
       end;
     carLineRun, carLineArea:
+      if (Round(AEl.Anim.G[5]) and 8) <> 0 then
+      begin
+        { createPolarClipPath: the sweep from its start (an angle base) or
+          r from r0, initProps({endAngle, r}) on the series, no row
+          [Batch 113] }
+        p := Make(AEl.Anim.Series, -1, 'lineClip');
+        props := PolarClipProps(AEl);
+        p.Attr(props);
+        p.SetFinal(props);
+        if (Round(AEl.Anim.G[5]) and 32) <> 0 then
+          p.SetNum('shape.endAngle', AEl.Anim.G[4])
+        else
+          p.SetNum('shape.r', AEl.Anim.G[2]);
+        Start(TyAnimProps([Num1('shape.endAngle', AEl.Anim.G[11]),
+          Num1('shape.r', AEl.Anim.G[3])]), TyAnimCallNoIndex);
+      end
+      else
       begin
         p := Make(AEl.Anim.Series, -1, 'lineClip');
         x := AEl.Anim.G[0];
@@ -1841,6 +1904,26 @@ var
           p.SetFinal(props);
           TyUpdateProps(p, props, AC.Model, TyAnimCallAt(r));
         end;
+      carPolarBar:
+        begin
+          if AOldRow < 0 then
+          begin
+            ArmOne(AList, AAt, AEl, AC, True);
+            Exit;
+          end;
+          props := PolarBarProps(AEl);
+          hasOld := OldEl(AOld, AOldRow, 'bar', oe) and (oe.Anim.Role = carPolarBar);
+          hadProxy := OldProxy(AOld, AOldRow, 'bar') <> nil;
+          if hasOld then oprops := PolarBarProps(oe) else oprops := nil;
+          p := Take(AOld, AOldRow, s, r, 'bar', oprops, props, hasOld);
+          if (not hasOld) and (not hadProxy) and AC.Enabled then
+          begin
+            if AEl.Anim.G[7] <> 0 then p.SetNum('shape.r', AEl.Anim.G[2])
+            else p.SetNum('shape.endAngle', AEl.Anim.G[4]);
+          end;
+          p.SetFinal(props);
+          TyUpdateProps(p, props, AC.Model, TyAnimCallAt(r));
+        end;
       carSymbol:
         begin
           hasOld := (AOldRow >= 0) and OldEl(AOld, AOldRow, 'symbol', oe);
@@ -1882,9 +1965,18 @@ var
           { the clip: once a series, to the new rect at ENTER timing, no row
             (LineView.ts:772-783) }
           if Find(s, -1, 'lineClip') <> nil then Exit;
-          props := ClipProps(AEl);
-          hasOld := OldEl(AOld, -1, 'lineClip', oe);
-          if hasOld then oprops := ClipProps(oe) else oprops := nil;
+          if (Round(AEl.Anim.G[5]) and 8) <> 0 then
+          begin
+            props := PolarClipProps(AEl);
+            hasOld := OldEl(AOld, -1, 'lineClip', oe) and ((Round(oe.Anim.G[5]) and 8) <> 0);
+            if hasOld then oprops := PolarClipProps(oe) else oprops := nil;
+          end
+          else
+          begin
+            props := ClipProps(AEl);
+            hasOld := OldEl(AOld, -1, 'lineClip', oe) and ((Round(oe.Anim.G[5]) and 8) = 0);
+            if hasOld then oprops := ClipProps(oe) else oprops := nil;
+          end;
           p := Take(AOld, -1, s, -1, 'lineClip', oprops, props, hasOld);
           p.SetFinal(props);
           { no during in an update: the end label stands where it ends
@@ -2811,6 +2903,48 @@ begin
   if v.Kind in [avkNumber, avkBool] then Result := v.Num else Result := AOr;
 end;
 
+{ a polar bar as its proxy has it: the sector, its corners and its
+  sausage kept; the layout numbers (G) and the label's rect follow
+  [Batch 113] }
+procedure PolarBarFrom(var AEl: TTyChartElement; P: TTyChartAnimProxy);
+var
+  s: TTyPolarSector;
+  radii: TTyCornerRadii;
+  sausage: Boolean;
+  zp: TTyZrPath;
+  list: TTyDoubleArray;
+  k: Integer;
+begin
+  s.CX := NumOr(P, 'shape.cx', AEl.Anim.G[0]);
+  s.CY := NumOr(P, 'shape.cy', AEl.Anim.G[1]);
+  s.R0 := NumOr(P, 'shape.r0', AEl.Anim.G[2]);
+  s.R := NumOr(P, 'shape.r', AEl.Anim.G[3]);
+  s.SA := NumOr(P, 'shape.startAngle', AEl.Anim.G[4]);
+  s.EA := NumOr(P, 'shape.endAngle', AEl.Anim.G[5]);
+  s.CW := AEl.Anim.G[6] <> 0;
+  radii := AEl.Shape.SectorRadii;
+  sausage := AEl.Shape.Sausage;
+  AEl.Shape := TyPolarSectorShape(s, nil, sausage);
+  AEl.Shape.SectorRadii := radii;
+  AEl.Anim.G[0] := s.CX;
+  AEl.Anim.G[1] := s.CY;
+  AEl.Anim.G[2] := s.R0;
+  AEl.Anim.G[3] := s.R;
+  AEl.Anim.G[4] := s.SA;
+  AEl.Anim.G[5] := s.EA;
+  if AEl.Caption.SecHas and AEl.Caption.HasHostBox then
+  begin
+    if sausage then zp := TyZrSausagePath(s)
+    else
+    begin
+      SetLength(list, 4);
+      for k := 0 to 3 do list[k] := radii[k];
+      zp := TyZrSectorPath(s, list);
+    end;
+    AEl.Caption.HostBox := TyZrBBox(zp);
+  end;
+end;
+
 procedure BarFrom(var AEl: TTyChartElement; P: TTyChartAnimProxy);
 var
   x, y, w, h: Double;
@@ -2926,7 +3060,20 @@ begin
           MoveSymbol(AEl, NumOr(AProxy, 'x', AEl.Anim.G[0]) - AEl.Anim.G[0],
             NumOr(AProxy, 'y', AEl.Anim.G[1]) - AEl.Anim.G[1]);
       end;
+    carPolarBar:
+      PolarBarFrom(AEl, AProxy);
     carLineRun, carLineArea:
+      if (Round(AEl.Anim.G[5]) and 8) <> 0 then
+      begin
+        AEl.HasClipSector := True;
+        AEl.ClipCX := NumOr(AProxy, 'shape.cx', AEl.ClipCX);
+        AEl.ClipCY := NumOr(AProxy, 'shape.cy', AEl.ClipCY);
+        AEl.ClipR0 := NumOr(AProxy, 'shape.r0', AEl.ClipR0);
+        AEl.ClipR1 := NumOr(AProxy, 'shape.r', AEl.ClipR1);
+        AEl.ClipSA := NumOr(AProxy, 'shape.startAngle', AEl.ClipSA);
+        AEl.ClipEA := NumOr(AProxy, 'shape.endAngle', AEl.ClipEA);
+      end
+      else
       begin
         x := AProxy.Num('shape.x');
         y := AProxy.Num('shape.y');
@@ -3397,6 +3544,8 @@ begin
   case AEl.Anim.Role of
     carBar:
       if G.GetAnimProp('shape.x').Kind = avkNumber then BarFrom(AEl, G);
+    carPolarBar:
+      if G.GetAnimProp('shape.cx').Kind = avkNumber then PolarBarFrom(AEl, G);
     carSector:
       if G.GetAnimProp('shape.cx').Kind = avkNumber then AEl.Shape := SectorFrom(AEl, G);
     carSymbol:
@@ -3432,12 +3581,27 @@ end;
 procedure AnchorOn(const AHost: TTyChartElement; const ALabel: TTyChartElement;
   out AX, AY: Double);
 var
+  sec: TTyPolarSector;
   b: TTyRectF;
   atX, atY: Double;
   ah: TTyTextAnchorH;
   av: TTyTextAnchorV;
   box: TTyXYWH;
 begin
+  { a polar bar's sector position, on the sector as drawn [Batch 113] }
+  if AHost.Caption.SecHas and (ALabel.Anim.LabelPos >= 100) then
+  begin
+    sec.CX := AHost.Anim.G[0];
+    sec.CY := AHost.Anim.G[1];
+    sec.R0 := AHost.Anim.G[2];
+    sec.R := AHost.Anim.G[3];
+    sec.SA := AHost.Anim.G[4];
+    sec.EA := AHost.Anim.G[5];
+    sec.CW := AHost.Anim.G[6] <> 0;
+    TySectorLabelAnchor(sec, TTySectorTextPos(ALabel.Anim.LabelPos - 100),
+      ALabel.Anim.LabelDist, AHost.Anim.G[8] <> 0, AX, AY, ah, av);
+    Exit;
+  end;
   if AHost.Caption.HasHostBox then
   begin
     box := AHost.Caption.HostBox;

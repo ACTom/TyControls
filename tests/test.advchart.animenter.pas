@@ -84,10 +84,12 @@ type
   published
     procedure TestEnterTimelinesAsUpstream;
     procedure TestAn4EnterTimelinesAsUpstream;
+    procedure TestPolarEnterTimelinesAsUpstream;
     procedure TestHeadlessRenderDoesNotAnimateByDefault;
     procedure TestOffModeAndOptionOff;
     procedure TestSeriesMoveInTheDynamicLayer;
     procedure TestABarLabelRidesItsBar;
+    procedure TestAPolarBarAndItsLabelGrowInTheFrame;
     procedure TestHeatmapCellsNeverAnimate;
     procedure TestANewOptionAnimatesAgainAndAResizeSnaps;
     procedure TestClipFalseLosesItsWideningWhenAnimated;
@@ -102,6 +104,26 @@ const
 var
   GFixture: TJSONData = nil;
   GAn4: TJSONData = nil;
+  GPolar: TJSONData = nil;
+
+{ tests/fixtures/advchart-polar-series.json's `anim`: tools/advchart-oracle/
+  polar-series.js, the same harness, clock and samples [Batch 113] }
+function PolarFixture: TJSONObject;
+var sl: TStringList;
+begin
+  if GPolar = nil then
+  begin
+    sl := TStringList.Create;
+    try
+      sl.LoadFromFile(ExtractFilePath(ParamStr(0)) + 'fixtures' + PathDelim
+        + 'advchart-polar-series.json');
+      GPolar := GetJSON(sl.Text);
+    finally
+      sl.Free;
+    end;
+  end;
+  Result := TJSONObject(GPolar).Objects['anim'];
+end;
 
 { tests/fixtures/advchart-animation-an4.json: tools/advchart-oracle/
   animation-an4.js, the same harness, clock and samples [Batch 92] }
@@ -435,8 +457,9 @@ begin
         Result.Role := 'label';
         Result.Index := StrToIntDef(parts[0], -1);
       end
-      else if typ = 'rect' then
+      else if (typ = 'rect') or (typ = 'sector') or (typ = 'sausage') then
       begin
+        { a polar's bar is a Sector or a Sausage [Batch 113] }
         Result.Kind := amkModel;
         Result.Role := 'bar';
         Result.Index := di;
@@ -841,7 +864,11 @@ begin
         end;
         for j := 0 to High(got) do
         begin
-          exact := SameBits(gotF[j], upF[j]);
+          { A ZERO IS A ZERO: upstream's last frame is (to - from) * 1 + from,
+            which turns a layout's -0 into +0 -- the port's final is the
+            layout's own; every sample is still held to the bit below
+            [Batch 113: a tangential bar ending on 0 degrees] }
+          exact := SameBits(gotF[j], upF[j]) or ((gotF[j] = 0) and (upF[j] = 0));
           { A RIPPLE NEVER RESTS: its last sample is mid-loop, its layout
             value the first frame of a ripple -- the samples speak }
           if Pos('ripple', m.Role) = 1 then
@@ -1108,6 +1135,34 @@ end;
   at start / insideEndTop / end and a smaller markPoint; markers switched off
   (their own animation, the host's); ripples of another period, scale,
   number and brush; showEffectOn 'emphasis' (no ripple). }
+{ THE POLAR'S ENTER [Batch 113]: a radial bar's r from r0, a tangential
+  one's end angle from its start (a Sausage's too), a polar line's clip
+  sector -- its sweep on an angle base, r on a radius base -- and its
+  symbols popping in as the sweep reaches them }
+procedure TAdvChartAnimEnterTest.TestPolarEnterTimelinesAsUpstream;
+var
+  cases: TJSONArray;
+  cs: TJSONObject;
+  c, ran: Integer;
+begin
+  AssertEquals('the same clock', T0, PolarFixture.Objects['clock'].Floats['T0'], 0);
+  AssertEquals('the same samples', Fixture.Arrays['samplesMs'].AsJSON,
+    PolarFixture.Arrays['samplesMs'].AsJSON);
+  cases := PolarFixture.Arrays['cases'];
+  ran := 0;
+  for c := 0 to cases.Count - 1 do
+  begin
+    cs := cases.Objects[c];
+    if cs.Strings['kind'] <> 'enter' then Continue;
+    RunCase(cs);
+    Inc(ran);
+  end;
+  AssertTrue(Format('%d mismatches over %d element samples:%s',
+    [FBad, FCompared, FReport]), FBad = 0);
+  AssertTrue(Format('only %d cases ran', [ran]), ran >= 8);
+  AssertTrue(Format('only %d element samples', [FCompared]), FCompared >= 400);
+end;
+
 procedure TAdvChartAnimEnterTest.TestAn4EnterTimelinesAsUpstream;
 var
   cases: TJSONArray;
@@ -1214,6 +1269,54 @@ end;
 
 { A BAR'S 'top' LABEL RIDES THE BAR: half way, the label stands over the bar's
   current top, not its final one; and it is half faded in. }
+{ THE FRAME DRAWS THE POLAR BAR AS ITS PROXY HAS IT [Batch 113]: half way
+  through a linear enter a radial bar's sector reaches half its length, and
+  its middle label sits on the middle of the sector as drawn }
+procedure TAdvChartAnimEnterTest.TestAPolarBarAndItsLabelGrowInTheFrame;
+var
+  frm, lst: TTyPaintList;
+  i: Integer;
+  e, bar, lbl, barS, lblS: TTyChartElement;
+  r, a: Double;
+begin
+  NewChart(camAlways);
+  Load('{"polar":{},"angleAxis":{"type":"category","data":["A","B","C"]},"radiusAxis":{},'
+    + '"series":[{"type":"bar","coordinateSystem":"polar","animationEasing":"linear",'
+    + '"label":{"show":true,"position":"middle"},"data":[10,30,20]}]}');
+  FChart.AnimTick(T0 + 500);
+  lst := FChart.List;
+  frm := FChart.Frame;
+  bar := Default(TTyChartElement);
+  lbl := Default(TTyChartElement);
+  barS := bar;
+  lblS := lbl;
+  for i := 0 to frm.Count - 1 do
+  begin
+    e := frm.Element(i);
+    if (e.Anim.Index = 1) and (e.Anim.Role = carPolarBar) then
+    begin
+      bar := e;
+      barS := lst.Element(i);
+    end;
+    if (e.Anim.Index = 1) and (e.Anim.Role = carLabel) then
+    begin
+      lbl := e;
+      lblS := lst.Element(i);
+    end;
+  end;
+  AssertTrue('the bar is found', bar.Anim.Role = carPolarBar);
+  AssertTrue('the label is found', lbl.Anim.Role = carLabel);
+  AssertEquals('half the length drawn', (barS.Shape.R1 - barS.Shape.R0) / 2,
+    bar.Shape.R1 - bar.Shape.R0, 1e-9);
+  AssertEquals('the angles held', barS.Shape.StartRad, bar.Shape.StartRad, 1e-12);
+  { the middle of the sector as drawn }
+  r := (bar.Shape.R0 + bar.Shape.R1) / 2;
+  a := (bar.Anim.G[4] + bar.Anim.G[5]) / 2;
+  AssertEquals('the label moved to the drawn middle (x)',
+    bar.Anim.G[0] + r * Cos(a) - (barS.Anim.G[0] + (barS.Shape.R0 + barS.Shape.R1) / 2 * Cos(a)),
+    lbl.Caption.X - lblS.Caption.X, 1e-6);
+end;
+
 procedure TAdvChartAnimEnterTest.TestABarLabelRidesItsBar;
 var
   frm, lst: TTyPaintList;
@@ -1351,4 +1454,5 @@ initialization
 finalization
   FreeAndNil(GFixture);
   FreeAndNil(GAn4);
+  FreeAndNil(GPolar);
 end.

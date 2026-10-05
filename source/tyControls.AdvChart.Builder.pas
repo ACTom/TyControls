@@ -443,6 +443,10 @@ type
   is where a scatter's third number or a tooltip's extra field lives. }
 function TySeriesCartesianDims(ACart: TTyCartesian2D;
   AExtraCount: Integer): TTySeriesDimArray;
+{ THE SAME over any coordinate system's axes, in its own order -- a polar's
+  radius then angle [Batch 113] }
+function TySeriesCoordSysDims(const ACoord: ITyCoordSys;
+  AExtraCount: Integer): TTySeriesDimArray;
 
 { How many columns the DATA declares, read from item 0 LITERALLY -- a leading
   null counts as a scalar and gives 1.
@@ -1815,6 +1819,39 @@ begin
       if (d <> nil) and (d.JSONType = jtNumber) then
         Result.OnZeroAxisIndex := TyTruncOpt(d.AsFloat, -1);
     end;
+  end;
+end;
+
+function TySeriesCoordSysDims(const ACoord: ITyCoordSys;
+  AExtraCount: Integer): TTySeriesDimArray;
+var
+  i, n: Integer;
+  ax: TTyAxis;
+begin
+  Result := nil;
+  if ACoord = nil then Exit;
+  n := ACoord.AxisCount;
+  if AExtraCount < 0 then AExtraCount := 0;
+  SetLength(Result, n + AExtraCount);
+  for i := 0 to n - 1 do
+  begin
+    ax := ACoord.GetAxis(i);
+    Result[i] := Default(TTySeriesDim);
+    Result[i].Name := ax.Dim;
+    case ax.AxisType of
+      atCategory: Result[i].Kind := ddtOrdinal;
+      atTime: Result[i].Kind := ddtTime;
+    else
+      Result[i].Kind := ddtFloat;
+    end;
+    if Result[i].Kind = ddtOrdinal then Result[i].Axis := ax else Result[i].Axis := nil;
+  end;
+  for i := 0 to AExtraCount - 1 do
+  begin
+    Result[n + i] := Default(TTySeriesDim);
+    if i = 0 then Result[n].Name := 'value'
+    else Result[n + i].Name := 'value' + IntToStr(i - 1);
+    Result[n + i].Kind := ddtFloat;
   end;
 end;
 

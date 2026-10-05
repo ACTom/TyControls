@@ -115,6 +115,18 @@ type
       calendar is laid out by the control, after binding. Resolved with
       HasAxes False, like a radar. [Batch 70] }
     CalendarIndex: Integer;
+    { WHICH POLAR, or -1 [Batch 113, C4]. Resolved with HasAxes False, like a
+      radar or a calendar -- HasAxes means the cartesian pair -- but once the
+      control has built its polars (TyAttachPolarSeries) the axes ARE filled
+      in: XAxis is the polar's radius axis and YAxis its angle axis, the
+      store's two columns in upstream's polarDimensions order, BaseAxis and
+      ValueAxis as getBaseAxis gives them. That is what puts a polar series
+      into the axis index, the stack, the extents and the pointer's search
+      with no second path. Polar is the TTyPolar itself, as a plain object
+      (this unit cannot name the class); nil until attached, and nil when the
+      polar named was not built. }
+    PolarIndex: Integer;
+    Polar: TObject;
     { SWITCHED OFF BY A LEGEND. Set by the control after the stores are
       filled and before anything is counted; every solver downstream skips
       such a binding, so the axis extents, the stack groups and the bar
@@ -314,6 +326,16 @@ procedure TyApplyAxisExtents(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
   const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex;
   APPI: Integer; const AZooms: TTyAxisZoomArray); overload;
+
+{ containShape, shared by the grid's axes and the polar's [Batch 113]:
+  whether AAxis widens for the bars laid out along it on ACoordSys, and the
+  widening (its mapping extent) once its effective extent is final }
+function TyAxisWantsContainShape(AAxis: TTyAxis; ANode: TJSONObject;
+  const ABindings: TTySeriesBindingArray; const ACoordSys: string): Boolean;
+procedure TyAxisApplyContainShape(AAxis: TTyAxis;
+  const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
+  AIndex: TTyAxisSeriesIndex; const ACoordSys: string;
+  AZoomFixLo, AZoomFixHi: Boolean);
 
 { ONE AXIS' SCALE FROM ITS RAW EXTENT, as the grid's axes get it [Batch 111]:
   a time axis with nothing at all on it shows today; splitNumber, interval,
@@ -541,6 +563,42 @@ begin
   end;
 end;
 
+{ Each polar component's `id`, '' where it has none. }
+function PolarIds(AOption: TTyChartOption): TTyStringArray;
+var
+  k: Integer;
+  d: TJSONData;
+begin
+  Result := nil;
+  SetLength(Result, AOption.ComponentCount('polar'));
+  for k := 0 to High(Result) do
+  begin
+    Result[k] := '';
+    d := AOption.ComponentAt('polar', k);
+    if (d <> nil) and (d.JSONType = jtObject) then
+    begin
+      d := TJSONObject(d).Find('id');
+      if (d <> nil) and (d.JSONType = jtString) then Result[k] := d.AsString
+      else if (d <> nil) and (d.JSONType = jtNumber) then Result[k] := d.AsString;
+    end;
+  end;
+end;
+
+{ replaceMerge's holes in the polar family }
+function PolarHoles(AOption: TTyChartOption): TTyBoolArray;
+var
+  k: Integer;
+  d: TJSONData;
+begin
+  Result := nil;
+  SetLength(Result, AOption.ComponentCount('polar'));
+  for k := 0 to High(Result) do
+  begin
+    d := AOption.ComponentAt('polar', k);
+    Result[k] := (d <> nil) and (d.JSONType <> jtObject);
+  end;
+end;
+
 function TyBindSeries(AOption: TTyChartOption; ABuild: TTyChartBuild): TTySeriesBindingArray;
 var
   i, n, xi, yi: Integer;
@@ -558,6 +616,8 @@ begin
   begin
     b := Default(TTySeriesBinding);
     b.SeriesIndex := i;
+    { no polar, even for a hole that leaves below [Batch 113] }
+    b.PolarIndex := -1;
     Result[i] := b;
 
     node := ObjAt(AOption, 'series', i);
@@ -595,6 +655,8 @@ begin
     b.Usage := info.Usage;
     b.RadarIndex := -1;
     b.CalendarIndex := -1;
+    b.PolarIndex := -1;
+    b.Polar := nil;
 
     if (sys = '') or (sys = 'none') then
     begin
@@ -646,6 +708,27 @@ begin
       Continue;
     end;
 
+    if sys = 'polar' then
+    begin
+      { A POLAR [Batch 113, C4]: which one, by polarIndex or polarId
+        (getReferringComponents, SINGLE_REFERRING: neither written is the
+        first). Its axes are the polar's, filled in once the polars are
+        built (TyAttachPolarSeries). Upstream throws on a polar that is not
+        there; here the series resolves to nothing and says so. }
+      b.PolarIndex := TyResolveComponentRef(node, 'polarIndex', 'polarId',
+        AOption.ComponentCount('polar'), PolarIds(AOption), PolarHoles(AOption));
+      if b.PolarIndex < 0 then
+      begin
+        ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
+        Result[i] := b;
+        Continue;
+      end;
+      b.Resolved := True;
+      b.HasAxes := False;
+      Result[i] := b;
+      Continue;
+    end;
+
     if sys = 'view' then
     begin
       { THE THIRD SYSTEM, AND THE ONE WITH NOTHING TO LOOK UP. A radar names
@@ -661,8 +744,8 @@ begin
 
     if sys <> 'cartesian2d' then
     begin
-      { The two-step shape is here; only cartesian and radar have a system to
-        ask yet. A series naming polar resolves to nothing rather than
+      { The two-step shape is here. A series naming a system this port does
+        not have (geo, singleAxis, ...) resolves to nothing rather than
         silently falling back to the cartesian it did not ask for. }
       ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
       Result[i] := b;
@@ -1764,6 +1847,143 @@ begin
   end;
 end;
 
+{ ==================== containShape ==================== }
+
+{ A BAR OF THIS TYPE IS LAID OUT ALONG AAxis on ACoordSys -- upstream's
+  statistics key, which exists for a series the legend has switched off and
+  for one with no rows. The index skips the first, so the bindings are asked
+  directly. [Batch 113: out of TyApplyAxisExtents, for the polar too.] }
+function KeyOnAxis(AAxis: TTyAxis; const AType: string;
+  const ABindings: TTySeriesBindingArray; const ACoordSys: string): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to High(ABindings) do
+    if (ABindings[i].BaseAxis = AAxis) and (ABindings[i].SeriesType = AType)
+      and (ABindings[i].CoordSysName = ACoordSys) then Exit(True);
+end;
+
+{ UPSTREAM'S ctnShp. `containShape` as written, JavaScript-truthy; absent,
+  it is on unless the axis has bands, where the bar already sits inside
+  one. And only on the base axis of a series that registers the handler:
+  the axis a bar stands on is its value axis, and that one is never
+  widened.
+
+  [Batch 64: FOUR types register it, not two -- bar and pictorialBar
+  (layout/barGrid.ts) and candlestick and boxplot (their layouts), all with
+  the same band-width handler. A zoomed candlestick on a category axis
+  without boundaryGap (candlestick-sh) mapped its candles half a band too
+  wide; its markers showed it.] [Batch 113: on a polar only the bar
+  registers it (barPolar.ts registerBarPolarAxisHandlers), and no other
+  type binds to one.] }
+function TyAxisWantsContainShape(AAxis: TTyAxis; ANode: TJSONObject;
+  const ABindings: TTySeriesBindingArray; const ACoordSys: string): Boolean;
+var
+  d: TJSONData;
+  opt: Boolean;
+begin
+  d := nil;
+  if ANode <> nil then d := ANode.Find('containShape');
+  if (d = nil) or (d.JSONType = jtNull) then opt := not AAxis.OnBand
+  else opt := JsTruthyOf(d);
+  Result := opt and (KeyOnAxis(AAxis, 'bar', ABindings, ACoordSys)
+    or KeyOnAxis(AAxis, 'pictorialBar', ABindings, ACoordSys)
+    or KeyOnAxis(AAxis, 'candlestick', ABindings, ACoordSys)
+    or KeyOnAxis(AAxis, 'boxplot', ABindings, ACoordSys));
+end;
+
+{ THE MAPPING EXTENT: the effective one, widened by half a bar each way so
+  the bars at its ends are drawn inside the plot. Run once the effective
+  extent is final. Ticks, labels and split lines stay on the effective
+  extent; only where values land moves.
+
+  The half bar is measured in data space, from the axis' pixel length AS
+  THE LAYOUT OPTIONS GAVE IT -- phase A's extent, before labels shrank the
+  plot. Upstream does the same, because its nice step runs on a freshly
+  made coordinate system that has not been shrunk yet. }
+procedure TyAxisApplyContainShape(AAxis: TTyAxis;
+  const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
+  AIndex: TTyAxisSeriesIndex; const ACoordSys: string;
+  AZoomFixLo, AZoomFixHi: Boolean);
+const
+  cSingleRatio: Double = 0.8;
+var
+  e, lin: TTyRange;
+  a, b, span, px, w2, gap, sup0, sup1, lo, hi: Double;
+  haveSup, ordinal: Boolean;
+  k: Integer;
+  typ: string;
+begin
+  ordinal := AAxis.Scale is TTyOrdinalScale;
+  { A band already holds its bar: no half width to add. }
+  if ordinal and AAxis.OnBand then Exit;
+  e := AAxis.Scale.GetExtent;
+  a := AAxis.Scale.Mapper.TransformIn(e.Start);
+  b := AAxis.Scale.Mapper.TransformIn(e.Stop);
+  { the span in the linear space as the scale KEEPS it -- a log axis' nice
+    decades -- while the ends the half bar is added to are taken through
+    the logarithm, as upstream's transformIn takes them }
+  lin := AAxis.Scale.LinearExtent2(sekEffective);
+  span := lin.Stop - lin.Start;
+  px := AAxis.PxLength;
+  haveSup := False;
+  sup0 := 0;
+  sup1 := 0;
+  for k := 0 to 3 do
+  begin
+    case k of
+      0: typ := 'bar';
+      1: typ := 'pictorialBar';
+      2: typ := 'candlestick';
+    else
+      typ := 'boxplot';
+    end;
+    if not KeyOnAxis(AAxis, typ, ABindings, ACoordSys) then Continue;
+    w2 := NaN;
+    if ordinal then
+    begin
+      { One category's width in categories -- 1, give or take the last bit,
+        which upstream's round trip through pixels decides. }
+      if (span <> 0) and (px <> 0) and not IsNan(span) then
+        w2 := px / span * span / px;
+    end
+    else
+    begin
+      gap := TyLiPosMinGap(AStores,
+        AIndex.SeriesOnAxisOfKey(AAxis, TySeriesStatKey(typ, ACoordSys)),
+        AAxis);
+      if (not IsNan(span)) and (not IsInfinite(span)) and (span > 0)
+        and (gap > 0) then
+        w2 := gap
+      else if (gap = cTyMinGapSingle) and (px > 0) then
+        { ONE VALUE: the band is four fifths of the axis, and the round
+          trip through pixels is upstream's -- 0.8 * span parts from it in
+          the last bit a third of the time. }
+        w2 := px * cSingleRatio * span / px;
+    end;
+    if IsNan(w2) or IsInfinite(w2) then Continue;
+    haveSup := True;
+    sup0 := Min(sup0, -w2 / 2);
+    sup1 := Max(sup1, w2 / 2);
+    AAxis.ZeroDiscouraged := True;
+  end;
+  if not haveSup then Exit;
+  if ordinal then
+    AAxis.Scale.SetExtent2(sekMapping,
+      TyRange(Min(e.Start, e.Start + sup0), Max(e.Stop, e.Stop + sup1)))
+  else
+  begin
+    { AN END A dataZoom PINNED IS NOT WIDENED: the axis ends exactly at the
+      window, and a bar past it is clipped }
+    if AZoomFixLo then lo := e.Start
+    else lo := Min(e.Start, AAxis.Scale.Mapper.TransformOut(a + sup0));
+    if AZoomFixHi then hi := e.Stop
+    else hi := Max(e.Stop, AAxis.Scale.Mapper.TransformOut(b + sup1));
+    if (lo < e.Start) or (hi > e.Stop) then
+      AAxis.Scale.SetExtent2(sekMapping, TyRange(lo, hi));
+  end;
+end;
+
 procedure TyApplyAxisExtents(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
   const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex;
@@ -1785,132 +2005,6 @@ var
   { the axis being done: its ends a dataZoom pinned (zoomFixMM) }
   zoomFixLo, zoomFixHi: Boolean;
 
-  { A BAR OF THIS TYPE IS LAID OUT ALONG AAxis -- upstream's statistics key,
-    which exists for a series the legend has switched off and for one with no
-    rows. The index skips the first, so the bindings are asked directly. }
-  function KeyOnAxis(AAxis: TTyAxis; const AType: string): Boolean;
-  var i: Integer;
-  begin
-    Result := False;
-    for i := 0 to High(ABindings) do
-      if (ABindings[i].BaseAxis = AAxis) and (ABindings[i].SeriesType = AType)
-        and (ABindings[i].CoordSysName = 'cartesian2d') then Exit(True);
-  end;
-
-  { UPSTREAM'S ctnShp. `containShape` as written, JavaScript-truthy; absent,
-    it is on unless the axis has bands, where the bar already sits inside
-    one. And only on the base axis of a series that registers the handler:
-    the axis a bar stands on is its value axis, and that one is never
-    widened.
-
-    [Batch 64: FOUR types register it, not two -- bar and pictorialBar
-    (layout/barGrid.ts) and candlestick and boxplot (their layouts), all with
-    the same band-width handler. A zoomed candlestick on a category axis
-    without boundaryGap (candlestick-sh) mapped its candles half a band too
-    wide; its markers showed it.] }
-  function WantsContainShape(AAxis: TTyAxis; ANode: TJSONObject): Boolean;
-  var
-    d: TJSONData;
-    opt: Boolean;
-  begin
-    d := nil;
-    if ANode <> nil then d := ANode.Find('containShape');
-    if (d = nil) or (d.JSONType = jtNull) then opt := not AAxis.OnBand
-    else opt := JsTruthyOf(d);
-    Result := opt and (KeyOnAxis(AAxis, 'bar')
-      or KeyOnAxis(AAxis, 'pictorialBar') or KeyOnAxis(AAxis, 'candlestick')
-      or KeyOnAxis(AAxis, 'boxplot'));
-  end;
-
-  { THE MAPPING EXTENT: the effective one, widened by half a bar each way so
-    the bars at its ends are drawn inside the plot. Run once the effective
-    extent is final. Ticks, labels and split lines stay on the effective
-    extent; only where values land moves.
-
-    The half bar is measured in data space, from the axis' pixel length AS
-    THE LAYOUT OPTIONS GAVE IT -- phase A's extent, before labels shrank the
-    plot. Upstream does the same, because its nice step runs on a freshly
-    made coordinate system that has not been shrunk yet. }
-  procedure ApplyContainShape(AAxis: TTyAxis);
-  const
-    cSingleRatio: Double = 0.8;
-  var
-    e, lin: TTyRange;
-    a, b, span, px, w2, gap, sup0, sup1, lo, hi: Double;
-    haveSup, ordinal: Boolean;
-    k: Integer;
-    typ: string;
-  begin
-    ordinal := AAxis.Scale is TTyOrdinalScale;
-    { A band already holds its bar: no half width to add. }
-    if ordinal and AAxis.OnBand then Exit;
-    e := AAxis.Scale.GetExtent;
-    a := AAxis.Scale.Mapper.TransformIn(e.Start);
-    b := AAxis.Scale.Mapper.TransformIn(e.Stop);
-    { the span in the linear space as the scale KEEPS it -- a log axis' nice
-      decades -- while the ends the half bar is added to are taken through
-      the logarithm, as upstream's transformIn takes them }
-    lin := AAxis.Scale.LinearExtent2(sekEffective);
-    span := lin.Stop - lin.Start;
-    px := AAxis.PxLength;
-    haveSup := False;
-    sup0 := 0;
-    sup1 := 0;
-    for k := 0 to 3 do
-    begin
-      case k of
-        0: typ := 'bar';
-        1: typ := 'pictorialBar';
-        2: typ := 'candlestick';
-      else
-        typ := 'boxplot';
-      end;
-      if not KeyOnAxis(AAxis, typ) then Continue;
-      w2 := NaN;
-      if ordinal then
-      begin
-        { One category's width in categories -- 1, give or take the last bit,
-          which upstream's round trip through pixels decides. }
-        if (span <> 0) and (px <> 0) and not IsNan(span) then
-          w2 := px / span * span / px;
-      end
-      else
-      begin
-        gap := TyLiPosMinGap(AStores,
-          AIndex.SeriesOnAxisOfKey(AAxis, TySeriesStatKey(typ, 'cartesian2d')),
-          AAxis);
-        if (not IsNan(span)) and (not IsInfinite(span)) and (span > 0)
-          and (gap > 0) then
-          w2 := gap
-        else if (gap = cTyMinGapSingle) and (px > 0) then
-          { ONE VALUE: the band is four fifths of the axis, and the round
-            trip through pixels is upstream's -- 0.8 * span parts from it in
-            the last bit a third of the time. }
-          w2 := px * cSingleRatio * span / px;
-      end;
-      if IsNan(w2) or IsInfinite(w2) then Continue;
-      haveSup := True;
-      sup0 := Min(sup0, -w2 / 2);
-      sup1 := Max(sup1, w2 / 2);
-      AAxis.ZeroDiscouraged := True;
-    end;
-    if not haveSup then Exit;
-    if ordinal then
-      AAxis.Scale.SetExtent2(sekMapping,
-        TyRange(Min(e.Start, e.Start + sup0), Max(e.Stop, e.Stop + sup1)))
-    else
-    begin
-      { AN END A dataZoom PINNED IS NOT WIDENED: the axis ends exactly at the
-        window, and a bar past it is clipped }
-      if zoomFixLo then lo := e.Start
-      else lo := Min(e.Start, AAxis.Scale.Mapper.TransformOut(a + sup0));
-      if zoomFixHi then hi := e.Stop
-      else hi := Max(e.Stop, AAxis.Scale.Mapper.TransformOut(b + sup1));
-      if (lo < e.Start) or (hi > e.Stop) then
-        AAxis.Scale.SetExtent2(sekMapping, TyRange(lo, hi));
-    end;
-  end;
-
   procedure DoAxis(AAxis: TTyAxis; const AMainType: string;
     AAlignTo: TTyAxis; AAlignPx: Double);
   var
@@ -1922,7 +2016,7 @@ var
   begin
     if AAxis = nil then Exit;
     node := ObjAt(AOption, AMainType, AAxis.ComponentIndex);
-    ctnShp := WantsContainShape(AAxis, node);
+    ctnShp := TyAxisWantsContainShape(AAxis, node, ABindings, 'cartesian2d');
     zoomFixLo := False;
     zoomFixHi := False;
     zi := -1;
@@ -1962,12 +2056,14 @@ var
       { a band already holds its bar, and a blank axis has none }
       if (AAxis.Scale is TTyOrdinalScale) and ctnShp
         and not AAxis.Scale.MarkedBlank then
-        ApplyContainShape(AAxis);
+        TyAxisApplyContainShape(AAxis, ABindings, AStores, AIndex,
+          'cartesian2d', zoomFixLo, zoomFixHi);
       Exit;
     end;
     { AFTER the effective extent is final: the half bar widens what the
       nice step left, pins and all. }
-    if ctnShp then ApplyContainShape(AAxis);
+    if ctnShp then TyAxisApplyContainShape(AAxis, ABindings, AStores, AIndex,
+          'cartesian2d', zoomFixLo, zoomFixHi);
   end;
 
   function InList(AAxis: TTyAxis): Boolean;
