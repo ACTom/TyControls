@@ -50,8 +50,27 @@ type
       the list's 96-PPI image width (SubMenuImagesWidth / ImagesWidth; 0 = natural). }
     LCLImages: TCustomImageList;
     LCLImagesWidth: Integer;
+    { The item is a TTyGlyphMenuItem: its theme glyph fills the icon slot when nothing
+      else (a check, an image) claims it. False on a zeroed row, so a plain item has none. }
+    HasThemeGlyph: Boolean;
+    ThemeGlyph: TTyGlyphKind;
+    ThemeGlyphToken: string;   // the theme's override token for ThemeGlyph
   end;
   TTyMenuRowArray = array of TTyMenuRow;
+
+  { A menu item whose icon is one of the library's own vector glyphs, drawn in the row's
+    text colour and replaceable by the theme through GlyphToken (the same --glyph-* tokens
+    the caption buttons read). An image the item gets from an image list still wins. The
+    title bar's window menu is built from these, so its Minimize / Close marks match the
+    buttons on the bar. Not streamed: code creates these. }
+  TTyGlyphMenuItem = class(TMenuItem)
+  private
+    FGlyphKind: TTyGlyphKind;
+    FGlyphToken: string;
+  public
+    property GlyphKind: TTyGlyphKind read FGlyphKind write FGlyphKind;
+    property GlyphToken: string read FGlyphToken write FGlyphToken;
+  end;
 
 { Whether AItem's icon may be drawn at all, per TMenuItem.GlyphShowMode. This mirrors the
   private CanShowIcon nested in LCL's TMenuItem.HasIcon; HasIcon ITSELF cannot be used,
@@ -780,6 +799,12 @@ begin
       if imgList = nil then imgW := 0;
       Result[n].LCLImages := imgList;
       Result[n].LCLImagesWidth := imgW;
+      if mi is TTyGlyphMenuItem then
+      begin
+        Result[n].HasThemeGlyph := True;
+        Result[n].ThemeGlyph := TTyGlyphMenuItem(mi).GlyphKind;
+        Result[n].ThemeGlyphToken := TTyGlyphMenuItem(mi).GlyphToken;
+      end;
     end;
     Inc(n);
   end;
@@ -1335,7 +1360,7 @@ procedure TTyMenuView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integ
 var
   P: TTyPainter;
   S, RowStyle, BannerStyle: TTyStyleSet;
-  R, RowRect, TextRect: TRect;
+  R, RowRect, TextRect, GlyphBox: TRect;
   i, rowT, rowH, padL, padR, leftSlot, rightSlot, capWeight, iconSz, bannerPx: Integer;
   RowStates: TTyStateSet;
   SepFill: TTyFill;
@@ -1539,6 +1564,20 @@ begin
         TyBlitImage(P.Bitmap, FImages, FRows[i].ImageIndex,
           Slot.Left + ((Slot.Right - Slot.Left) - iconSz) div 2,
           RowRect.Top + (rowH - iconSz) div 2, iconSz, APPI, False);
+      end
+      else if FRows[i].GlyphVisible and FRows[i].HasThemeGlyph then
+      begin
+        { The same square an image would get. A 3px pad leaves the mark the size it has on
+          an 18px caption button (pad 4), so the menu and the bar read as one set. In the
+          row's text colour, which the disabled state already greys. }
+        iconSz := leftSlot - P.Scale(2);
+        if iconSz < P.Scale(8) then iconSz := P.Scale(8);
+        GlyphBox.Left := Slot.Left + ((Slot.Right - Slot.Left) - iconSz) div 2;
+        GlyphBox.Top := RowRect.Top + (rowH - iconSz) div 2;
+        GlyphBox.Right := GlyphBox.Left + iconSz;
+        GlyphBox.Bottom := GlyphBox.Top + iconSz;
+        TyDrawGlyph(P, ActiveController, GlyphBox, FRows[i].ThemeGlyphToken,
+          FRows[i].ThemeGlyph, RowStyle.TextColor, 1, 3);
       end;
 
       // Caption: left-aligned after the check slot, ellipsized before the right slot.

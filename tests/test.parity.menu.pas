@@ -15,7 +15,8 @@ uses
   Classes, SysUtils, Math, Types, Controls, Graphics, Forms, Menus, ImgList,
   LCLType, LCLIntf, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller, tyControls.ImageCollection, tyControls.Menu;
+  tyControls.Types, tyControls.Controller, tyControls.ImageCollection, tyControls.Menu,
+  tyControls.Painter;
 
 type
   { Probe subclass: exposes the protected render/geometry seams plus a mouse-up injector,
@@ -60,6 +61,21 @@ type
     procedure TestNeverDrawsNoIcon;
     procedure TestGlyphVisibleFollowsTheModeAndTheApplication;
     procedure TestBuildRowsCarriesGlyphVisible;
+  end;
+
+  { TTyGlyphMenuItem: a library vector glyph in the icon slot, in the row's text colour.
+    The rows ink GREEN here, so glyph ink left of the caption is countable. }
+  TMenuThemeGlyphTest = class(TMenuParityFixture)
+  private
+    { One item captioned 'Close' -- a TTyGlyphMenuItem (tgClose) when AGlyph, else a plain
+      TMenuItem -- with the given glyph mode, rendered. }
+    function RenderOne(AGlyph: Boolean; AMode: TGlyphShowMode): TBGRABitmap;
+  protected
+    procedure SetUp; override;
+  published
+    procedure TestThemeGlyphPaintsInTheIconSlot;
+    procedure TestThemeGlyphHonoursGlyphShowMode;
+    procedure TestBuildRowsCarriesTheThemeGlyph;
   end;
 
   TMenuSubMenuImagesTest = class(TMenuParityFixture)
@@ -418,6 +434,109 @@ begin
   rows := TyBuildMenuRows(FMenu.Items);
   AssertTrue ('gsmAlways row carries GlyphVisible', rows[0].GlyphVisible);
   AssertFalse('gsmNever row does not', rows[1].GlyphVisible);
+end;
+
+{ ---- TMenuThemeGlyphTest ------------------------------------------------- }
+
+const
+  { The icon slot ends at view pad 4 + row pad 4 + check slot 18 = 26; the caption starts
+    there. Anything green left of this is the glyph, never the caption. }
+  GlyphSlotRight = 25;
+
+function CountGreenLeftOf(ABmp: TBGRABitmap; AMaxX: Integer): Integer;
+var
+  x, y: Integer;
+begin
+  Result := 0;
+  for y := 0 to ABmp.Height - 1 do
+    for x := 0 to Min(ABmp.Width, AMaxX) - 1 do
+      if IsGreenInk(ABmp.GetPixel(x, y)) then Inc(Result);
+end;
+
+procedure TMenuThemeGlyphTest.SetUp;
+begin
+  inherited SetUp;
+  FCtl.LoadThemeCss(
+    'TyMenuView { background: #000000; color: #00FF00; padding: 4px; '
+    + 'border-width: 0px; border-radius: 0px; }'
+    + 'TyMenuPopup { background: #000000; border-radius: 0px; }'
+    + 'TyMenuItem { background: alpha(#FFFFFF, 0); color: #00FF00; '
+    + 'border-color: #00FF00; border-radius: 0px; padding: 4px; font-size: 12px; }');
+end;
+
+function TMenuThemeGlyphTest.RenderOne(AGlyph: Boolean; AMode: TGlyphShowMode): TBGRABitmap;
+var
+  it: TMenuItem;
+begin
+  FMenu.Items.Clear;
+  if AGlyph then
+  begin
+    it := TTyGlyphMenuItem.Create(FMenu);
+    TTyGlyphMenuItem(it).GlyphKind := tgClose;
+    TTyGlyphMenuItem(it).GlyphToken := '--glyph-close';
+  end
+  else
+    it := TMenuItem.Create(FMenu);
+  it.Caption := 'Close';
+  it.GlyphShowMode := AMode;
+  FMenu.Items.Add(it);
+  FView.SetRows(TyBuildMenuRows(FMenu.Items));
+  Result := Render(ViewW, ViewH);
+end;
+
+procedure TMenuThemeGlyphTest.TestThemeGlyphPaintsInTheIconSlot;
+var
+  Img: TBGRABitmap;
+begin
+  Img := RenderOne(False, gsmAlways);
+  try
+    AssertEquals('a plain item leaves the icon slot empty', 0,
+      CountGreenLeftOf(Img, GlyphSlotRight));
+    AssertTrue('...while its caption does ink (the probe sees this colour)', CountInk(Img, 0) > 20);
+  finally
+    Img.Free;
+  end;
+  Img := RenderOne(True, gsmAlways);
+  try
+    AssertTrue('a glyph item draws its mark in the icon slot',
+      CountGreenLeftOf(Img, GlyphSlotRight) > 8);
+  finally
+    Img.Free;
+  end;
+end;
+
+procedure TMenuThemeGlyphTest.TestThemeGlyphHonoursGlyphShowMode;
+var
+  Img: TBGRABitmap;
+begin
+  // The window menu has no icons on a desktop that turns menu icons off; same switch.
+  Img := RenderOne(True, gsmNever);
+  try
+    AssertEquals('gsmNever: no glyph', 0, CountGreenLeftOf(Img, GlyphSlotRight));
+  finally
+    Img.Free;
+  end;
+end;
+
+procedure TMenuThemeGlyphTest.TestBuildRowsCarriesTheThemeGlyph;
+var
+  g: TTyGlyphMenuItem;
+  plain: TMenuItem;
+  rows: TTyMenuRowArray;
+begin
+  g := TTyGlyphMenuItem.Create(FMenu);
+  g.Caption := 'Minimize';
+  g.GlyphKind := tgMinimize;
+  g.GlyphToken := '--glyph-minimize';
+  FMenu.Items.Add(g);
+  plain := TMenuItem.Create(FMenu);
+  plain.Caption := 'Other';
+  FMenu.Items.Add(plain);
+  rows := TyBuildMenuRows(FMenu.Items);
+  AssertTrue('glyph item row carries a glyph', rows[0].HasThemeGlyph);
+  AssertEquals('the kind', Ord(tgMinimize), Ord(rows[0].ThemeGlyph));
+  AssertEquals('the token', '--glyph-minimize', rows[0].ThemeGlyphToken);
+  AssertFalse('a plain row has none', rows[1].HasThemeGlyph);
 end;
 
 { ---- TMenuSubMenuImagesTest ---------------------------------------------- }
@@ -1068,6 +1187,7 @@ end;
 
 initialization
   RegisterTest(TMenuGlyphShowModeTest);
+  RegisterTest(TMenuThemeGlyphTest);
   RegisterTest(TMenuSubMenuImagesTest);
   RegisterTest(TMenuTrackButtonTest);
   RegisterTest(TMenuOwnerDrawTest);

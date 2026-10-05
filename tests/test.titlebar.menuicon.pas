@@ -13,7 +13,7 @@ uses
   BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
   tyControls.Types, tyControls.Controller, tyControls.StyleModel, tyControls.Form,
-  tyControls.Menu, tyControls.Button;
+  tyControls.Menu, tyControls.Button, tyControls.Painter;
 
 type
   { Pure rules, and the menu as a title bar builds, refreshes, opens and runs it. }
@@ -34,6 +34,7 @@ type
     procedure TestDefaultMenuFollowsBorderIcons;
     procedure TestDefaultMenuFollowsTheMaximizedChrome;
     procedure TestCloseItemShowsAltF4;
+    procedure TestItemsCarryTheCaptionButtonGlyphs;
     procedure TestMenuItemsClickTheCaptionButtons;
     procedure TestRightClickPopsTheDefaultMenu;
     procedure TestUserPopupMenuWins;
@@ -393,6 +394,40 @@ begin
       Item(b, TyWindowMenuCloseIndex).ShortCut);
     {$ENDIF}
     AssertEquals('the separator is a line', cLineCaption, Item(b, TyWindowMenuSeparatorIndex).Caption);
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TTitleBarWindowMenuTest.TestItemsCarryTheCaptionButtonGlyphs;
+var
+  b: TMenuProbeBar;
+
+  procedure Check(AIndex: Integer; AKind: TTyGlyphKind; const AToken, AName: string);
+  var it: TMenuItem;
+  begin
+    it := Item(b, AIndex);
+    AssertTrue(AName + ' is a glyph item', it is TTyGlyphMenuItem);
+    AssertEquals(AName + ' glyph', Ord(AKind), Ord(TTyGlyphMenuItem(it).GlyphKind));
+    AssertEquals(AName + ' token: the caption button''s', AToken, TTyGlyphMenuItem(it).GlyphToken);
+  end;
+
+begin
+  b := NewProbe(nil);
+  try
+    Check(TyWindowMenuRestoreIndex, tgRestore, '--glyph-restore', 'Restore');
+    Check(TyWindowMenuMinimizeIndex, tgMinimize, '--glyph-minimize', 'Minimize');
+    Check(TyWindowMenuMaximizeIndex, tgMaximize, '--glyph-maximize', 'Maximize');
+    Check(TyWindowMenuCloseIndex, tgClose, '--glyph-close', 'Close');
+    AssertFalse('the separator draws no glyph',
+      Item(b, TyWindowMenuSeparatorIndex) is TTyGlyphMenuItem);
+    {$IFDEF WINDOWS}
+    AssertTrue('Close is the bold default item, as in the Windows system menu',
+      Item(b, TyWindowMenuCloseIndex).Default);
+    AssertFalse('...and only Close', Item(b, TyWindowMenuMinimizeIndex).Default);
+    {$ELSE}
+    AssertFalse('no bold default item off Windows', Item(b, TyWindowMenuCloseIndex).Default);
+    {$ENDIF}
   finally
     b.Free;
   end;

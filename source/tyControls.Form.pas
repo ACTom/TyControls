@@ -1833,25 +1833,40 @@ end;
 
 procedure TTyCustomTitleBar.BuildWindowMenu;
 
-  function Add(AHandler: TNotifyEvent): TMenuItem;
+  { Each item carries the glyph of the caption button it stands for, under the same theme
+    token, so a theme that redraws the Close button redraws the menu's Close with it. }
+  function Add(AHandler: TNotifyEvent; AGlyph: TTyGlyphKind;
+    const AToken: string): TMenuItem;
+  var
+    it: TTyGlyphMenuItem;
   begin
-    Result := TMenuItem.Create(FWindowMenu);
-    Result.OnClick := AHandler;
-    FWindowMenu.Items.Add(Result);
+    it := TTyGlyphMenuItem.Create(FWindowMenu);
+    it.OnClick := AHandler;
+    it.GlyphKind := AGlyph;
+    it.GlyphToken := AToken;
+    FWindowMenu.Items.Add(it);
+    Result := it;
   end;
 
+var
+  sep, closeItem: TMenuItem;
 begin
   if FWindowMenu <> nil then Exit;
   FWindowMenu := TTyPopupMenu.Create(nil);
   FWindowMenu.OnClose := @WindowMenuClosed;     // the bar's own menu: nobody else's handler
-  Add(@WindowMenuRestoreClick);                // TyWindowMenuRestoreIndex
-  Add(@WindowMenuMinimizeClick);               // TyWindowMenuMinimizeIndex
-  Add(@WindowMenuMaximizeClick);               // TyWindowMenuMaximizeIndex
-  Add(nil).Caption := cLineCaption;            // TyWindowMenuSeparatorIndex
-  {$IFDEF DARWIN}
-  Add(@WindowMenuCloseClick);                  // a mac window closes with Cmd+W, not Alt+F4
-  {$ELSE}
-  Add(@WindowMenuCloseClick).ShortCut := Menus.ShortCut(VK_F4, [ssAlt]);
+  Add(@WindowMenuRestoreClick, tgRestore, '--glyph-restore');     // TyWindowMenuRestoreIndex
+  Add(@WindowMenuMinimizeClick, tgMinimize, '--glyph-minimize');  // TyWindowMenuMinimizeIndex
+  Add(@WindowMenuMaximizeClick, tgMaximize, '--glyph-maximize');  // TyWindowMenuMaximizeIndex
+  sep := TMenuItem.Create(FWindowMenu);                           // TyWindowMenuSeparatorIndex
+  sep.Caption := cLineCaption;
+  FWindowMenu.Items.Add(sep);
+  closeItem := Add(@WindowMenuCloseClick, tgClose, '--glyph-close');  // TyWindowMenuCloseIndex
+  {$IFNDEF DARWIN}
+  closeItem.ShortCut := Menus.ShortCut(VK_F4, [ssAlt]);   // a mac window closes with Cmd+W
+  {$ENDIF}
+  {$IFDEF WINDOWS}
+  { Bold, as in the Windows system menu: Close is what double-clicking the icon does. }
+  closeItem.Default := True;
   {$ENDIF}
 end;
 
