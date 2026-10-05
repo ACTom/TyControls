@@ -59,6 +59,7 @@ uses
   tyControls.AdvChart.Dataset, tyControls.AdvChart.WhiskerBox,
   tyControls.AdvChart.Anim, tyControls.AdvChart.AnimOpt,
   tyControls.AdvChart.AnimView, tyControls.AdvChart.AnimAxis,
+  tyControls.AdvChart.AxisLabels, tyControls.AdvChart.LabelLayout,
   tyControls.AdvChart.Export, tyControls.AdvChart.Loading,
   fpjson, contnrs, tyControls.SubPixel;
 
@@ -748,6 +749,11 @@ type
       `updated` event with it [Batch 97] }
     FLazyPending, FLazySilent: Boolean;
     FPaintList: TTyPaintList;
+    { THE LABEL LAYOUT'S LIST as the last build left it: one item per label
+      of a series with a labelLayout, in LabelManager's order, and the
+      label's element index beside it [Batch 103] }
+    FLmItems: TTyLabelLayoutItemArray;
+    FLmEls: TTyIntegerArray;
     { The PPI the list was built at. The hit test scales HitSlopLogical by it,
       so a list built for 96 and interrogated at 192 would give targets half
       the size the marks are drawn at. }
@@ -1207,6 +1213,13 @@ type
       many elements the builders reported adding. }
     function BuildSeriesList(const AMeasurer: ITyTextMeasurer;
       APPI: Integer): Integer;
+    { SERIES LABEL LAYOUT -- LabelManager over every series that writes a
+      labelLayout (AdvChart.LabelLayout): the layout applied to each label,
+      then moveOverlap and hideOverlap across all of them. Runs on the
+      finished list, after the expansion. [Batch 103] }
+    procedure LayoutSeriesLabels(AList: TTyPaintList;
+      const ASpecs: TTyLabelSpecArray; const AItemSpecs: TTyLabelSpecTable;
+      const AMeasurer: ITyTextMeasurer; APPI: Integer);
     { The binding slot holding a given series index, or -1. FBindings is
       index-parallel to the option's series array only while nothing failed to
       resolve, and a hole makes the two disagree. }
@@ -1329,6 +1342,9 @@ type
     { The elements the last render built, series and labels -- the list the
       hit test walks and the painter draws, read-only. }
     property SeriesList: TTyPaintList read FPaintList;
+    { the label layout's list and each item's element [Batch 103] }
+    property LabelLayoutItems: TTyLabelLayoutItemArray read FLmItems;
+    property LabelLayoutEls: TTyIntegerArray read FLmEls;
     { what zrender's hover holds now, with its dispatcher [Batch 88] }
     property EvHover: TTyChartEventTarget read FEvHover;
     { THE LIST AS IT STANDS THIS FRAME: every animated element read from its
@@ -10715,6 +10731,11 @@ begin
     if drawn > furniture then ViewDrew(cvSeries);
     if drawn > 0 then
       TyExpandLabels(list, specs, itemSpecs, AMeasurer, APPI);
+    { THE LABEL LAYOUT, over the finished labels [Batch 103] }
+    FLmItems := nil;
+    FLmEls := nil;
+    if drawn > 0 then
+      LayoutSeriesLabels(list, specs, itemSpecs, AMeasurer, APPI);
     { A SILENT SERIES TAKES NO POINTER: nothing of it -- marks, labels -- is
       hit, hovered or clicked (upstream's series `silent`) [Batch 84] }
     if drawn > 0 then SilenceSeries(list);
@@ -10752,6 +10773,456 @@ begin
     end;
     Result := drawn;
   end;
+end;
+
+{ ==================== the label layout [Batch 103] ==================== }
+
+{ what a label's style holds, as zrender prints it }
+function LmAlignName(AH: TTyTextAnchorH): string;
+begin
+  case AH of
+    tahCentre: Result := 'center';
+    tahRight: Result := 'right';
+  else
+    Result := 'left';
+  end;
+end;
+
+function LmVAlignName(AV: TTyTextAnchorV): string;
+begin
+  case AV of
+    tavMiddle: Result := 'middle';
+    tavBottom: Result := 'bottom';
+  else
+    Result := 'top';
+  end;
+end;
+
+{ a written align, as Text's normalizeStyle reads it }
+function LmAlignOf(const S: string): TTyTextAnchorH;
+begin
+  if (S = 'center') or (S = 'middle') then Result := tahCentre
+  else if S = 'right' then Result := tahRight
+  else Result := tahLeft;
+end;
+
+function LmVAlignOf(const S: string): TTyTextAnchorV;
+begin
+  if (S = 'middle') or (S = 'center') then Result := tavMiddle
+  else if S = 'bottom' then Result := tavBottom
+  else Result := tavTop;
+end;
+
+{ A ONE-RUN LABEL'S BOX in its own frame: the TSpan's (adjustTextX /
+  adjustTextY about nought, a written border round it) unioned with itself,
+  as ZRText.getBoundingRect unions its children }
+function LmPlainRect(AW, AH, AStroke: Double; AAH: TTyTextAnchorH;
+  AAV: TTyTextAnchorV): TTyXYWH;
+var x, y, w, h: Double;
+begin
+  x := 0;
+  case AAH of
+    tahRight: x := 0 - AW;
+    tahCentre: x := 0 - AW / 2;
+  end;
+  y := 0;
+  case AAV of
+    tavBottom: y := 0 - AH;
+    tavMiddle: y := 0 - AH / 2;
+  end;
+  w := AW;
+  h := AH;
+  if AStroke > 0 then
+  begin
+    x := x - AStroke / 2;
+    y := y - AStroke / 2;
+    w := w + AStroke;
+    h := h + AStroke;
+  end;
+  Result := TyXYWH(x, y, (x + w) - x, (y + h) - y);
+end;
+
+{ a block's box in its own frame, device px }
+function LmBlockRect(const APieces: TTyRtPieceArray; AScale: Double): TTyXYWH;
+var b: TTyXYWH;
+begin
+  b := TyRtBounds(APieces);
+  if AScale = 1 then Exit(b);
+  Result := TyXYWH(b.X * AScale, b.Y * AScale, b.W * AScale, b.H * AScale);
+end;
+
+{ the element of a role for one datum: a pie label's slice and line }
+function LmFindRole(AList: TTyPaintList; ARole: TTyChartAnimRole;
+  ASeries, AIndex: Integer): Integer;
+var i: Integer;
+begin
+  for i := 0 to AList.Count - 1 do
+    if (AList.Element(i).Anim.Role = ARole) and (AList.Element(i).Anim.Series = ASeries)
+      and (AList.Element(i).Anim.Index = AIndex) then
+      Exit(i);
+  Result := -1;
+end;
+
+procedure TTyAdvanceChart.LayoutSeriesLabels(AList: TTyPaintList;
+  const ASpecs: TTyLabelSpecArray; const AItemSpecs: TTyLabelSpecTable;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer);
+type
+  TLmRef = record
+    El, Guide: Integer;
+    Layout: TTyChartLabelLayout;
+    AH: TTyTextAnchorH;
+    AV: TTyTextAnchorV;
+    FontSize: Integer;
+    TextW, TextH: Double;
+    Pieces: TTyRtPieceArray;
+    Relaid: Boolean;
+  end;
+var
+  scale, ox, oy, cssW, cssH, defX, defY, defRot, defSx, defSy: Double;
+  lx, ly, offX, offY, rot, sw, w, h, x, y: Double;
+  slots, cand, keys: array of Integer;
+  i, j, k, n, e, hi, gi, slot, si, r, t: Integer;
+  d: TJSONData;
+  node: TJSONObject;
+  lay: TTyLabelLayoutSpec;
+  refs: array of TLmRef;
+  items: TTyLabelLayoutItemArray;
+  el, host, guide: TTyChartElement;
+  c: TTyElementCaption;
+  m0, m: TTyMat2D;
+  hasM0, hasM, isFree, hasHost, isPie, styleHasH, styleHasV: Boolean;
+  raw0, hostRect, labelRect: TTyXYWH;
+  args: TTyChartLabelLayoutArgs;
+  lo: TTyChartLabelLayout;
+  styleAH, ah: TTyTextAnchorH;
+  styleAV, av: TTyTextAnchorV;
+  spec: TTyLabelSpec;
+  fsz: Integer;
+  it: TTyLabelLayoutItem;
+begin
+  if (AList = nil) or (FOption = nil) or (AMeasurer = nil) then Exit;
+  if APPI > 0 then scale := APPI / 96 else scale := 1;
+  ox := FLastRect.Left;
+  oy := FLastRect.Top;
+  cssW := (FLastRect.Right - FLastRect.Left) / scale;
+  cssH := (FLastRect.Bottom - FLastRect.Top) / scale;
+  { THE SERIES IN SERIES ORDER -- updatedSeries is eachSeries' }
+  SetLength(slots, Length(FBindings));
+  n := 0;
+  for i := 0 to High(FBindings) do
+  begin
+    if FBindings[i].Hidden then Continue;
+    j := n - 1;
+    while (j >= 0) and (FBindings[slots[j]].SeriesIndex > FBindings[i].SeriesIndex) do
+    begin
+      slots[j + 1] := slots[j];
+      Dec(j);
+    end;
+    slots[j + 1] := i;
+    Inc(n);
+  end;
+  SetLength(slots, n);
+  refs := nil;
+  items := nil;
+  for k := 0 to High(slots) do
+  begin
+    slot := slots[k];
+    si := FBindings[slot].SeriesIndex;
+    d := FOption.ComponentAt('series', si);
+    if (d = nil) or (d.JSONType <> jtObject) then Continue;
+    node := TJSONObject(d);
+    isPie := FBindings[slot].SeriesType = TyPieSeriesTypeName;
+    { `labelLayout`, a pie's default merged under it }
+    lay := TyLabelLayoutSpecOf(node.Find('labelLayout'),
+      node.IndexOfName('labelLayout') >= 0, isPie);
+    if lay.Kind = tlkNone then Continue;
+    { THE SERIES' LABELS IN THEIR HOSTS' ORDER -- the group's traverse }
+    cand := nil;
+    keys := nil;
+    for e := 0 to AList.Count - 1 do
+    begin
+      el := AList.Element(e);
+      if (el.Caption.LmKind = 0) or (el.Datum.SeriesIndex <> si) then Continue;
+      hi := el.Caption.LmHostPlus1 - 1;
+      if hi < 0 then hi := LmFindRole(AList, carSector, si, el.Anim.Index);
+      if hi < 0 then hi := e;
+      n := Length(cand);
+      SetLength(cand, n + 1);
+      SetLength(keys, n + 1);
+      j := n - 1;
+      while (j >= 0) and (keys[j] > hi) do
+      begin
+        cand[j + 1] := cand[j];
+        keys[j + 1] := keys[j];
+        Dec(j);
+      end;
+      cand[j + 1] := e;
+      keys[j + 1] := hi;
+    end;
+    for t := 0 to High(cand) do
+    begin
+      e := cand[t];
+      el := AList.Element(e);
+      c := el.Caption;
+      hi := keys[t];
+      gi := -1;
+      if isPie then gi := LmFindRole(AList, carGuide, si, el.Anim.Index);
+      { ---- what LabelManager keeps when it adds the label ---- }
+      hasHost := False;
+      hostRect := TyXYWH(0, 0, 0, 0);
+      if isPie then
+      begin
+        if (hi >= 0) and (hi <> e) and (slot <= High(FPies)) then
+        begin
+          host := AList.Element(hi);
+          hostRect := TySectorPathRect(host.Anim.G[0], host.Anim.G[1], host.Anim.G[2],
+            host.Anim.G[3], host.Anim.G[4], host.Anim.G[5], FPies[slot].Clockwise);
+          if (host.Style.StrokeWidthLogical > 0) and (host.Style.StrokeColor <> 0) then
+          begin
+            sw := host.Style.StrokeWidthLogical;
+            if not host.Style.HasFill then sw := Max(sw, 5.0);
+            sw := sw * scale;
+            hostRect.W := hostRect.W + sw;
+            hostRect.H := hostRect.H + sw;
+            hostRect.X := hostRect.X - sw / 2;
+            hostRect.Y := hostRect.Y - sw / 2;
+          end;
+          hasHost := True;
+        end;
+      end
+      else
+      begin
+        hasHost := c.LmHasHostRect;
+        hostRect := c.LmHostRect;
+      end;
+      { the label's first transform, decomposed }
+      hasM0 := TyLabelLocalTransform(c.LmBaseX + c.LmOffX, c.LmBaseY + c.LmOffY,
+        -c.LmOffX, -c.LmOffY, c.RotationRad, 1, 1, m0);
+      TyLabelDecompose(m0, hasM0, defX, defY, defRot, defSx, defSy);
+      if Length(c.RtPieces) > 0 then raw0 := LmBlockRect(c.RtPieces, c.RtScale)
+      else raw0 := LmPlainRect(c.LmTextW, c.LmTextH, c.LmStrokeW, c.AnchorH, c.AnchorV);
+      if hasM0 then labelRect := TyRectApplyMat(raw0, m0) else labelRect := raw0;
+      { ---- the layout for this label: the object, or the function's answer ---- }
+      if lay.Kind = tlkHandler then
+      begin
+        args := Default(TTyChartLabelLayoutArgs);
+        args.DataIndex := el.Datum.DataIndex;
+        args.SeriesIndex := si;
+        args.DataType := '';
+        args.Text := c.Text;
+        args.HasRect := hasHost;
+        args.RectX := hostRect.X;
+        args.RectY := hostRect.Y;
+        args.RectW := hostRect.W;
+        args.RectH := hostRect.H;
+        args.LabelRectX := labelRect.X;
+        args.LabelRectY := labelRect.Y;
+        args.LabelRectW := labelRect.W;
+        args.LabelRectH := labelRect.H;
+        if c.LmStyleHasAH then args.Align := LmAlignName(c.LmStyleAH);
+        if c.LmStyleHasAV then args.VerticalAlign := LmVAlignName(c.LmStyleAV);
+        if gi >= 0 then args.LabelLinePoints := Copy(AList.Element(gi).Shape.Points);
+        TyChartRunLabelLayoutHandler(lay.Handler, args, lo);
+      end
+      else
+        lo := lay.Obj;
+      { ---- updateLayoutConfig ---- }
+      isFree := (lo.X.Kind <> cpvAbsent) or (lo.Y.Kind <> cpvAbsent) or (c.LmKind = 2);
+      if lo.X.Kind <> cpvAbsent then lx := ox + scale * TyLabelLayoutPos(lo.X, cssW)
+      else lx := defX;
+      if lo.Y.Kind <> cpvAbsent then ly := oy + scale * TyLabelLayoutPos(lo.Y, cssH)
+      else ly := defY;
+      { [dx || 0, dy || 0] replaces the host's offset }
+      offX := 0;
+      if lo.HasDx and not IsNan(lo.Dx) and (lo.Dx <> 0) then offX := lo.Dx * scale;
+      offY := 0;
+      if lo.HasDy and not IsNan(lo.Dy) and (lo.Dy <> 0) then offY := lo.Dy * scale;
+      if lo.HasRotate then rot := TyLabelLayoutRad(lo.Rotate)
+      else if c.LmHasAttachedRot then rot := c.LmAttachedRot
+      else rot := defRot;
+      styleHasH := c.LmStyleHasAH;
+      styleAH := c.LmStyleAH;
+      if lo.HasAlign then
+      begin
+        styleHasH := True;
+        styleAH := LmAlignOf(lo.Align);
+      end;
+      styleHasV := c.LmStyleHasAV;
+      styleAV := c.LmStyleAV;
+      if lo.HasVerticalAlign then
+      begin
+        styleHasV := True;
+        styleAV := LmVAlignOf(lo.VerticalAlign);
+      end;
+      { style.align || the position's || left }
+      if styleHasH then ah := styleAH
+      else if isFree then ah := tahLeft
+      else ah := c.LmPosAH;
+      if styleHasV then av := styleAV
+      else if isFree then av := tavTop
+      else av := c.LmPosAV;
+      fsz := c.FontSizeLogical;
+      if lo.HasFontSize and (lo.FontSize > 0) then fsz := TyFontSizeFromPx(lo.FontSize);
+      r := Length(refs);
+      SetLength(refs, r + 1);
+      refs[r].El := e;
+      refs[r].Guide := gi;
+      refs[r].Layout := lo;
+      refs[r].AH := ah;
+      refs[r].AV := av;
+      refs[r].FontSize := fsz;
+      refs[r].Relaid := False;
+      refs[r].Pieces := c.RtPieces;
+      it := Default(TTyLabelLayoutItem);
+      if Length(c.RtPieces) = 0 then
+      begin
+        w := c.LmTextW;
+        h := c.LmTextH;
+        if fsz <> c.FontSizeLogical then
+          AMeasurer.MeasureLine(c.Text, c.FontName, fsz, c.FontWeight, w, h);
+        refs[r].TextW := w;
+        refs[r].TextH := h;
+        it.RawLocal := LmPlainRect(w, h, c.LmStrokeW, ah, av);
+      end
+      else
+      begin
+        { A BLOCK IS LAID OUT AGAIN where its alignment or size changed (a
+          series label's: the spec is at hand) }
+        if ((ah <> c.AnchorH) or (av <> c.AnchorV) or (fsz <> c.FontSizeLogical))
+          and (c.LmKind = 1) and (si <= High(ASpecs)) then
+        begin
+          spec := ASpecs[si];
+          if (c.ItemSpec > 0) and (si <= High(AItemSpecs))
+            and (c.ItemSpec - 1 <= High(AItemSpecs[si])) then
+            spec := AItemSpecs[si][c.ItemSpec - 1];
+          spec.FontSizeLogical := fsz;
+          spec.Rt.Style.Align := rtaNone;
+          spec.Rt.Style.VAlign := rtvNone;
+          refs[r].Pieces := TyLabelBlockPieces(spec, c.Text, c.LmInkFill,
+            c.LmInkHasFill, c.LmInkGradient, c.LmInkInside, ah, av, c.RtScale, AMeasurer);
+          refs[r].Relaid := True;
+        end;
+        it.RawLocal := LmBlockRect(refs[r].Pieces, c.RtScale);
+      end;
+      { ---- the item ---- }
+      if hasHost then it.Priority := hostRect.W * hostRect.H else it.Priority := 0;
+      it.DefIgnore := el.Ignore;
+      it.HasGuide := gi >= 0;
+      if gi >= 0 then it.DefGuideIgnore := AList.Element(gi).Ignore;
+      it.Move := TyLabelMoveOf(lo);
+      it.HideOverlap := lo.HideOverlap;
+      it.Free := isFree;
+      it.MarginType := c.LmMarginType;
+      for j := 0 to 3 do it.Margin[j] := c.LmMargin[j];
+      if isFree then
+      begin
+        it.InnerX := lx + offX;
+        it.InnerY := ly + offY;
+      end
+      else
+      begin
+        { the position puts it at its anchor again; label.x / y are the
+          decomposed ones, which nothing draws }
+        it.InnerX := c.LmBaseX + offX;
+        it.InnerY := c.LmBaseY + offY;
+        lx := defX;
+        ly := defY;
+      end;
+      it.OriginX := -offX;
+      it.OriginY := -offY;
+      it.Rotation := rot;
+      it.ScaleX := defSx;
+      it.ScaleY := defSy;
+      it.OffX := offX;
+      it.OffY := offY;
+      it.LabelX := lx;
+      it.LabelY := ly;
+      n := Length(items);
+      SetLength(items, n + 1);
+      items[n] := it;
+    end;
+  end;
+  if Length(items) = 0 then Exit;
+
+  { ---- layout(): the shifts, then hideOverlap ---- }
+  TyLayoutLabels(items, ox, oy, FLastRect.Right, FLastRect.Bottom);
+
+  { ---- the answers onto the elements ---- }
+  SetLength(FLmEls, Length(refs));
+  for r := 0 to High(refs) do
+  begin
+    FLmEls[r] := refs[r].El;
+    el := AList.Element(refs[r].El);
+    if items[r].Free then
+    begin
+      x := items[r].LabelX + items[r].OffX;
+      y := items[r].LabelY + items[r].OffY;
+    end
+    else
+    begin
+      x := items[r].InnerX;
+      y := items[r].InnerY;
+    end;
+    hasM := TyLabelLocalTransform(x, y, items[r].OriginX, items[r].OriginY,
+      items[r].Rotation, items[r].ScaleX, items[r].ScaleY, m);
+    if hasM then
+    begin
+      el.Caption.X := m[4];
+      el.Caption.Y := m[5];
+    end
+    else
+    begin
+      el.Caption.X := 0;
+      el.Caption.Y := 0;
+    end;
+    el.Caption.LmHasM := hasM;
+    el.Caption.LmM := m;
+    el.Caption.RotationRad := items[r].Rotation;
+    el.Caption.AnchorH := refs[r].AH;
+    el.Caption.AnchorV := refs[r].AV;
+    el.Caption.FontSizeLogical := refs[r].FontSize;
+    if Length(refs[r].Pieces) > 0 then
+    begin
+      el.Caption.RtPieces := refs[r].Pieces;
+      if refs[r].Relaid then
+        el.Caption.RtEmph := TyRtReink(refs[r].Pieces, el.Caption.EmphColour, True,
+          el.Caption.EmphStrokeColour, el.Caption.EmphStrokeWidthLogical);
+      el.Shape := TyShapeRect(TyRtDeviceBox(refs[r].Pieces, el.Caption.X,
+        el.Caption.Y, el.Caption.RotationRad, el.Caption.RtScale));
+    end
+    else
+      el.Shape := TyShapeRect(TyAnchorBox(el.Caption.X, el.Caption.Y,
+        refs[r].TextW, refs[r].TextH, refs[r].AH, refs[r].AV));
+    el.Ignore := items[r].Ignore;
+    el.Caption.LmOverlapHidden := items[r].Ignore and not items[r].DefIgnore;
+    el.Caption.LmEmphShow := items[r].EmphShow;
+    { PLACED AT label.x / y, it no longer rides its host }
+    if items[r].Free then
+    begin
+      el.Caption.LmFree := True;
+      el.Anim.HostPlus1 := 0;
+    end;
+    AList.SetElement(refs[r].El, el);
+    if refs[r].Guide >= 0 then
+    begin
+      guide := AList.Element(refs[r].Guide);
+      guide.Ignore := items[r].GuideIgnore;
+      guide.Caption.LmOverlapHidden := items[r].GuideIgnore and not items[r].DefGuideIgnore;
+      guide.Caption.LmEmphShow := items[r].GuideEmphShow;
+      { labelLinePoints set the line as given }
+      if refs[r].Layout.HasLabelLinePoints then
+      begin
+        SetLength(guide.Shape.Points, Length(refs[r].Layout.LabelLinePoints));
+        for j := 0 to High(refs[r].Layout.LabelLinePoints) do
+        begin
+          guide.Shape.Points[j].X := refs[r].Layout.LabelLinePoints[j].X;
+          guide.Shape.Points[j].Y := refs[r].Layout.LabelLinePoints[j].Y;
+        end;
+      end;
+      AList.SetElement(refs[r].Guide, guide);
+    end;
+  end;
+  FLmItems := items;
 end;
 
 procedure TTyAdvanceChart.PaintSeries(APainter: TTyPainter;
@@ -12779,13 +13250,20 @@ begin
     item^.Label_.Proxy := not disabled;
     for n := Low(TTyStName) to High(TTyStName) do item^.Label_.HasState[n] := True;
     item^.Label_.Rest := StLabelRestOf(cap);
-    normalShow := not cap.Ignore;
+    { NORMAL SHOW AS THE LABEL WAS STYLED: hideOverlap hides it later, and
+      that is no `show: false` [Batch 103] }
+    normalShow := (not cap.Ignore) or cap.Caption.LmOverlapHidden;
     for n := Low(TTyStName) to High(TTyStName) do
     begin
       obj := TyStNoObject;
       { ignore = !show only when the state's show differs from the normal one }
       stShow := TyStReadBool(nodes, [cStNames[n], 'label', 'show'], has);
       if has and (stShow <> normalShow) then TyStSetNum(obj, stkIgnore, Ord(not stShow));
+      { hideOverlap's hideEl: a label it hid shows again under emphasis,
+        unless that state already says (LabelLayoutHelper.ts hideOverlap)
+        [Batch 103] }
+      if (n = stnEmphasis) and cap.Caption.LmEmphShow and not obj.Has[stkIgnore] then
+        TyStSetNum(obj, stkIgnore, 0);
       txt := TyStReadString(nodes, [cStNames[n], 'label', 'color'], has);
       if has and (txt <> 'inherit') and (txt <> 'auto')
         and TyTryParseChartColor(txt, c) then
@@ -12829,6 +13307,9 @@ begin
     item^.Guide.Rest := StGuideRestOf(guide);
     for n := Low(TTyStName) to High(TTyStName) do
       item^.Guide.Decl[n] := TyStNoObject;
+    { a line hideOverlap hid with its label comes back with it [Batch 103] }
+    if guide.Caption.LmEmphShow then
+      TyStSetNum(item^.Guide.Decl[stnEmphasis], stkIgnore, 0);
     TyStSetNum(item^.Guide.Decl[stnSelect], stkX, dx);
     TyStSetNum(item^.Guide.Decl[stnSelect], stkY, dy);
     if not was then

@@ -354,6 +354,16 @@ begin
             move, which for a radial label includes its turn about the box }
           lx := Num(lb.Objects['inner'].Find('x'));
           ly := Num(lb.Objects['inner'].Find('y'));
+          { A TURNED LABEL WITH AN OFFSET is drawn at the transform's move:
+            the offset runs along the turn (origin = -offset), which the
+            inner point does not show [Batch 103: the port added the offset
+            in screen axes, and this compared the inner point] }
+          if (not radial) and not IsNull(lb.Find('transform'))
+            and (Num(lb.Objects['inner'].Find('rotation')) <> 0) then
+          begin
+            lx := Num(lb.Arrays['transform'].Items[4]);
+            ly := Num(lb.Arrays['transform'].Items[5]);
+          end;
           if radial then
           begin
             lx := Num(lb.Arrays['transform'].Items[4]);

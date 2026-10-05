@@ -857,6 +857,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.Sampling"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.LabelLayout.pas"/>
+        <UnitName Value="tyControls.AdvChart.LabelLayout"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Export.pas"/>
         <UnitName Value="tyControls.AdvChart.Export"/>
       </Item>

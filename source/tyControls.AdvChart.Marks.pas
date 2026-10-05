@@ -1355,6 +1355,11 @@ var
     el.Anim.G[7] := rs.WidthPx / 2;
     el.Anim.G[8] := rs.HeightPx / 2;
     ItemCaption(AVisual, AStore, ARow, el.Caption);
+    { the rect zrender places the label against and LabelManager weighs
+      [Batch 103] }
+    el.Caption.HasSymBox := True;
+    el.Caption.SymBox := TySymbolLabelBox(rs, AP.X, AP.Y, el.Style.StrokeWidthLogical,
+      (el.Style.StrokeWidthLogical > 0) and (el.Style.StrokeColor <> 0), el.Style.HasFill);
     AList.Add(el);
     Result := True;
   end;
@@ -2011,6 +2016,11 @@ begin
     el.Anim.G[6] := AP.Y;
   end;
   ItemCaption(AVisual, AStore, ARow, el.Caption);
+  { the rect zrender places the label against and LabelManager weighs
+    [Batch 103] }
+  el.Caption.HasSymBox := True;
+  el.Caption.SymBox := TySymbolLabelBox(rs, AP.X, AP.Y, el.Style.StrokeWidthLogical,
+    (el.Style.StrokeWidthLogical > 0) and (el.Style.StrokeColor <> 0), el.Style.HasFill);
   AList.Add(el);
   Inc(Result);
 end;

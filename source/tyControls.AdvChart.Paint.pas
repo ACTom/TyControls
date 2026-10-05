@@ -360,6 +360,12 @@ type
       height, the form upstream adds to, so the anchor is exact. [Batch 73] }
     HasHostBox: Boolean;
     HostBox: TTyXYWH;
+    { A SCATTER'S OR A LINE'S SYMBOL: the same rect (TySymbolLabelBox), for
+      the label's anchor and the label layout's priority -- but the enter
+      animation still follows the shape's own bounds as the symbol grows,
+      so it is not a HostBox. [Batch 103] }
+    HasSymBox: Boolean;
+    SymBox: TTyXYWH;
     { AN ANCHOR THE MARK WORKED OUT ITSELF -- a radial tree's label, turned
       about its box's centre (textConfig origin 'center'), which no position
       in the expansion's table can say. The expansion takes it as given, with
@@ -435,6 +441,51 @@ type
     ValTpl: string;
     ValHasPrec: Boolean;
     ValPrec: Double;
+    { ==== THE LABEL MANAGER'S VIEW of a series label [Batch 103] ====
+      LmKind 0, the zero value, is a caption the label layout never sees
+      (an axis', a legend's, a marker's, a funnel's, an end label); 1 a label
+      its host's textConfig position places (ATTACHED); 2 one placed at
+      label.x / y (a pie's, or a mark that fixed its own anchor). LmHostPlus1
+      is the host's list index + 1 (0: found by the datum -- a pie slice). All
+      geometry in device px:
+        LmBaseX / Y   the point before the offset (the position's anchor, or
+                      label.x / y);
+        LmOffX / Y    the offset (textConfig.offset);
+        LmHasAttachedRot / LmAttachedRot  the host's textConfig.rotation;
+        LmPosAH / AV  the alignment the position implies (the host's default
+                      text style);
+        LmStyleHas*   whether the label's STYLE sets an alignment, and which;
+        LmHostRect    the host's rect through its transform, as LabelManager
+                      takes it (the priority is its area);
+        LmMarginType / LmMargin  minMargin (1) or textMargin (2),
+                      [top, right, bottom, left];
+        LmTextW / H   a one-run caption's measured box, LmStrokeW the written
+                      text border its rect counts;
+        LmInk*        what the block was laid out over (to lay it out again).
+      Set by the layout: LmFree (drawn where label.x / y put it, no longer
+      following the host), LmOverlapHidden (hideOverlap hid it), LmEmphShow
+      (and so the emphasis state shows it again), LmM (the transform, when
+      LmHasM). }
+    LmKind: Integer;
+    LmHostPlus1: Integer;
+    LmBaseX, LmBaseY, LmOffX, LmOffY: Double;
+    LmHasAttachedRot: Boolean;
+    LmAttachedRot: Double;
+    LmPosAH: TTyTextAnchorH;
+    LmPosAV: TTyTextAnchorV;
+    LmStyleHasAH, LmStyleHasAV: Boolean;
+    LmStyleAH: TTyTextAnchorH;
+    LmStyleAV: TTyTextAnchorV;
+    LmHasHostRect: Boolean;
+    LmHostRect: TTyXYWH;
+    LmMarginType: Integer;
+    LmMargin: array[0..3] of Double;
+    LmTextW, LmTextH, LmStrokeW: Double;
+    LmInkFill: TTyChartColor;
+    LmInkHasFill, LmInkGradient, LmInkInside: Boolean;
+    LmFree, LmOverlapHidden, LmEmphShow: Boolean;
+    LmHasM: Boolean;
+    LmM: TTyMat2D;
   end;
 
   { WHAT AN ELEMENT IS TO THE ENTER ANIMATION [Batch 89, AN2]: which of

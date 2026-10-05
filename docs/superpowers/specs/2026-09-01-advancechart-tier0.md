@@ -2245,7 +2245,7 @@ Free Pascal 会直接抛异常。**加的是除法的护栏,不是行为的改�
   **同一个读取器、同一个洞、第三次**(前两次是 §38 的 `showSymbol`、更早的 symbol)。
   补的测试把 `minShowLabelAngle` / `percentPrecision` / `roseType: true` / `center: "center"`
   一起从 option 里读出来断言。
-- **modPI2 的那个四舍五入是等价变异体。** zrender 的注释说「按 N 取模比按 PI 稳」,
+- **[第 103 批：那时 `Round(...) / 1e8` 是 Int64 除以 Single 常量，按单精度算，角度差到 1e-7 量级——量出来的「更好但不保证」有一部分是这个；改成 Double 之后扇形路径与上游逐位一致，见 §138]** **modPI2 的那个四舍五入是等价变异体。** zrender 的注释说「按 N 取模比按 PI 稳」,
   我照抄了,还差点在注释里把它写成「这样整圈就精确了」。
   **量了一下**:360 个整度起始角里,带舍入 273 个落在精确整圈上,不带舍入 215 个——
   更好,但不是保证,而默认的 90 两种都精确。落不到的那些差 7×10^15 分之一,
@@ -2515,7 +2515,7 @@ shape 层完全理解它——墨水和命中测试描述的是同一个矩形�
   中等深的底要最大对比,接近全黑的底上最亮的墨反而晃眼、柔一点的更好读。
   压成明/暗两段,深色那头就是错的。
 
-另外两条:**`label.offset` 是在定位之后加的**(只抄 switch 会静默丢掉它);
+**[第 103 批：而且加在旋转之内（origin = −offset），端口以前在屏幕轴上加；写了 labelLayout 时挂在宿主上的标签的 offset 换成 [dx, dy]，见 §138]** 另外两条:**`label.offset` 是在定位之后加的**(只抄 switch 会静默丢掉它);
 **默认文字柱是「值」、饼是「名字」**——两者用同一个默认值,
 每个没写 formatter 的饼图标签都会渲染成一个数字。
 
@@ -2553,7 +2553,7 @@ shape 层完全理解它——墨水和命中测试描述的是同一个矩形�
   上面那十三个位置也不适用。**它是另一套算法,单独一批。**
 - **九个扇区位置**。它们服务极坐标柱状,而这个移植还没有极坐标渲染器;
   现在建就是一张没人读的表。
-- **去重叠**。上游能把压住别人的标签整个隐藏,这里不能,会画成叠在一起。头注释里写明了。
+- **[第 103 批：系列标签的 hideOverlap / moveOverlap 已做，见 §138]** **去重叠**。上游能把压住别人的标签整个隐藏,这里不能,会画成叠在一起。头注释里写明了。
 
 ---
 
@@ -2570,7 +2570,7 @@ shape 层完全理解它——墨水和命中测试描述的是同一个矩形�
 `PieView` 只重置 `position` 和 `rotation`,而且 `setTextConfig` 是**合并不是替换**——
 所以通用读取器早先写进去的 distance 和 offset **都活着进了 zrender**。
 `distance` 只在「有 position」那道门**里面**被读,null 的 position 把门关上了;
-`offset` 在门**外面**无条件生效。
+**[第 103 批：饼的默认 labelLayout 又把 offset 换成 [0, 0]，但饼标签的 x / y 是分解出来的、已含 offset，画面不变，见 §138]** `offset` 在门**外面**无条件生效。
 
 改了代码,也改了上一批的头注释,并注明是审计发现的。
 
@@ -8788,7 +8788,7 @@ AN2、AN3 之后还有一圈动画没接：柱子标签的数值滚动、仪表�
 
 ### 上游的做法（`wf86/anim.md` 3A §A5、3B §B3/B11–B13；源码逐行核过，几处在真 dist 上探针确认）
 
-- **LabelManager 的旧布局**：`_animateLabels` 对每个有 `oldLayout` 的文字先 `attr(oldLayout)`，再以更新时序、带 dataIndex `updateProps({x, y, rotation})`。挂在宿主上的标签（柱、符号）自身的 x/y 恒为 0，什么也不发生；真正会挪的是饼标签，它们由 `pieLabelLayout` 直接写 `label.x/y`。`oldLayout` 是**上一次布局的终值**，不是当前值：动画进行中再来一次 Option，标签先跳回上一次的终点再出发（新 fixture `pie-update.inflight` 确认）。引导线同理，`shape.points` 从旧点补间，**不带 dataIndex**。漏斗标签靠 `style.x/y` 定位，不走这条路。
+- **[第 103 批：写了 labelLayout 的标签 x / y 不再恒为 0（LabelManager 写回分解出的位置）；给了 x / y 的标签不跟宿主，更新时同样从旧布局滑过去，见 §138]** **LabelManager 的旧布局**：`_animateLabels` 对每个有 `oldLayout` 的文字先 `attr(oldLayout)`，再以更新时序、带 dataIndex `updateProps({x, y, rotation})`。挂在宿主上的标签（柱、符号）自身的 x/y 恒为 0，什么也不发生；真正会挪的是饼标签，它们由 `pieLabelLayout` 直接写 `label.x/y`。`oldLayout` 是**上一次布局的终值**，不是当前值：动画进行中再来一次 Option，标签先跳回上一次的终点再出发（新 fixture `pie-update.inflight` 确认）。引导线同理，`shape.points` 从旧点补间，**不带 dataIndex**。漏斗标签靠 `style.x/y` 定位，不走这条路。
 - **数值滚动**：只有 BarView 和 GaugeView 调 `setLabelValueAnimation`，别的系列写了 `label.valueAnimation` 也照样淡入。`animateLabelValue` 在值没变（`prevValue === value`）时什么都不做（进行中的那条接着跑）；否则先置 `percent = 0`，以 `percent: 1` 为目标，没有旧值时 `initProps`（入场时序）、有旧值时 `updateProps`（更新时序），during 里用 `interpolateRawValues` 算当前值写字。起点是**进行中那条的插值**，否则是旧值；`source || 0`。数值的精度：写了 `precision` 用它，否则取 `max(getPrecision(起点), getPrecision(终点))`，再 `toFixed`，打印用 `Number#toString`（`-0` 打成 `0`）。文字：没有 formatter 是值本身；模板里 `{c}` 换成插值，其余照常。数值滚动的标签不淡入。
 - **折线末端标签**：`endLabel` 是折线 polyline 的 textContent。裁剪矩形入场时，`_endLabelOnDuring` 是裁剪动画的 during：取裁剪矩形的前沿（横向基轴是 `x + width`，inverse 取另一侧），`getIndexRange` 在布局点里找跨过前沿的那一段——跨在空值上（`connectNulls` 关）停在空值前一点；找到就用 `polyline.getPointOn`（直线段线性、曲线段用 `cubicRootAt` 解三次方程）定位、值在两端之间按比例插值；没找到时取第一个点，**直到动画记录里有过一次有效区间**（或 percent 为 1）才取最后一个。创建时先 `during(1)` 设到终态，done 时回到第一次记下的位置。默认 `valueAnimation: true`、`distance: 8`，横向基轴左对齐垂直居中。**更新时裁剪矩形 initProps 不带 during**，末端标签直接站在终点。
 - **标注**：markPoint 是 SymbolDraw 的新符号（缩放 0 → size/2、不透明度 0 → 自己的），markLine 是 `Line._createLine`（`shape.percent` 0 → 1，然后 `beforeUpdate` 每帧按 percent 放两端符号——缩放 = percent，终点 = `pointAt(percent)`——和标签：`d = normalize(终点 − 起点)`，percent 为 0 时 d 是零向量，`end` 位置的标签居中）。时序走标注自己的模型链（`markLine` 的 easing 默认 `linear`），**系列的 animationDuration 管不到它**；开关是 `MarkerModel.isAnimationEnabled` = 标注的 `animation` 且宿主系列 `isAnimationEnabled()`。markArea 默认 `animation: false`。探针确认：**notMerge 下标注是新视图**，每次设 Option 都重新入场；markArea 的更新补间在 notMerge 下根本到不了。
@@ -9589,6 +9589,126 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - `source/tyControls.AdvanceChart.pas`：`SolveSampling`，接在 `SolveDataZooms` 之后。
 - `tycontrols.lpk`、`tycontrols.pas`：新单元。
 - `tools/advchart-oracle/sampling.js`、`tests/fixtures/advchart-sampling.json`、`tests/test.advchart.sampling.pas`（注册进 `tests/tytests.lpr`）；`tests/test.advchart.datazoomwindow.pas` 去掉豁免。
+
+### 下一批
+
+（按路线图）
+
+## 138. Tier 1 第一百零三批：标签去碰撞（B8，2026-10-05）
+
+路线图 B8：系列 `labelLayout` 的 `hideOverlap`（AABB / OBB）和 `moveOverlap`（`shiftLayoutOnXY`），`labelLayout` 的 x / y / dx / dy / rotate，以及函数形式（`'@Name'`）。在这之前端口的系列标签完全不去碰撞：§43 的「不在这一批里」写着「会画成叠在一起」，路线图那一行是 PARTIAL（只有坐标轴标签的 hideOverlap，§73）。饼图的默认 `labelLayout: {hideOverlap: true}` 也一直没有生效。
+
+### 上游的做法（`label/LabelManager.ts`、`label/labelLayoutHelper.ts`、`label/installLabelLayout.ts`、`labelStyle.ts` 的状态与边距、zrender 的 `Element.updateInnerText` / `Transformable.getLocalTransform` / `Text._updatePlainTexts` / `OrientedBoundingRect` / `PathProxy.getBoundingRect` 逐行核过，全部在真 dist 上由基准确认）
+
+- **谁进清单**：`series:layoutlabels` 里按 `eachSeries` 的顺序 `addLabelsOfSeries`；系列的 `labelLayout` 是函数，或者是 `keys(...)` 非空的值才进（`{x: null}` 算，`{}` 不算；字符串 `'abc'` 的 keys 是三个下标，也算，什么字段都没有地跑一遍）。只读**系列**这一级，数据项上写的 `labelLayout` 没人读。饼图的默认选项里有 `labelLayout: {hideOverlap: true}`：没写就是它，写了对象就合并在下面（作者写的键留着），写了 `null` 就关掉。遍历视图的 group：被 ignore 的宿主连同子孙跳过，`getTextContent()` 有字、没有 `disableLabelLayout`（只有矩形树图设）的都加进来——包括 `show: false`、只在状态里显示的标签（`defaultAttr.ignore` 为真）。
+- **加进来时记下的**：标签的计算变换用 `setLocalTransform` 分解——x、y、`normalizeRadian` 过的转角，**还有缩放**：转过的标签分解出来是 `0.9999999999999999`，之后 `label.scaleX/Y` 就是这个数，变换矩阵跟着带上；宿主的包围盒穿过宿主的计算变换（`Path.getBoundingRect`：有描边时宽高加线宽、左上减一半，没填充时至少 5；符号是单位路径框、`strokeNoScale` 除以线缩放）；**优先级就是这个框的面积**；标签当时的全局框（回调的 `labelRect`）；style 上的 align / verticalAlign / fontSize；宿主 textConfig 的 position 和 rotation。
+- **`updateLayoutConfig`**（对清单里每个标签，包括 ignore 的）：
+  - 函数形式每个标签调一次，参数是 `dataIndex`（`ecData.dataIndex`，视图下标）、`dataType`、`seriesIndex`、`text`、`rect`（宿主框）、`labelRect`、`align` / `verticalAlign`（**标签 style 上的**，挂在宿主上、作者没写 `label.align` 的是 `undefined`）、`labelLinePoints`（标签线点的拷贝）；返回什么都不是就当 `{}`。
+  - 宿主的 textConfig：`position` 在给了 x 或 y 时变 `null`，否则是原来的；`rotation` 是 `rotate * (Math.PI / 180)`（先算因子）或原来的 textConfig.rotation；**`offset` 一律换成 `[dx || 0, dy || 0]`**——作者的 `label.offset` 在挂在宿主上的标签上就此消失（`cfg.offset.dropped`）。饼标签的 position 本来就是 null，它的 x / y 是分解出来的、已经含着 offset，所以画面不变（`pie.offset`）。
+  - x / y：`parsePercent(x, 图宽)`（数、`'50%'`、`'200'`、`'center'` 这些词），没给的那一维用分解出的值；给了就把 style.x / y 清零。转角 = `rotate` 的，或 textConfig.rotation，或分解出的。缩放 = 分解出的。align / verticalAlign / width / height / fontSize 有就写到 style 上，没有就写回原值；Text 归一化：`'middle'` 对齐是 `'center'`，`'center'` 垂直是 `'middle'`。
+  - **origin 是 −offset**：`updateInnerText` 把 offset 加到点上、origin 设成 −offset，于是标签绕锚点转，**dx / dy 沿转过的轴走**（`cfg.rotate.dxdy`）。position 为 null 时文字的默认对齐是 undefined，所以只剩 style 的或 left / top（`cfg.y.only`：给了 y 的 insideTop 标签变成左上对齐）。
+  - `labelLinePoints` 直接设成标签线的点；给了 x / y 才重算标签线（`needsUpdateLabelLine`）。
+- **`layout()`**：只看 `defaultAttr.ignore` 为假的标签。`moveOverlap === 'shiftX' / 'shiftY'`（区分大小写）的两组各自 `shiftLayoutOnXY`（界是 `[0, 图宽]` / `[0, 图高]`）：按框的起点稳定排序，依次推开；两端出界时先把间隙最多挤掉 80%，再借另一端的空隙整体平移、不够再挤，最后还不够就每个挪 `ceil(差 / (n − 1))`、允许重叠（交给 hideOverlap）。挪的是 `label.x / y` 和框。
+- **挂在宿主上的标签挪了也白挪**：宿主的 position 每次算变换都重新定位，`label.x / y` 不进画面（`shiftY.attached.hide` 里画出来的位置与没有 shiftY 时逐位相同）。
+- **`hideOverlap`**：`restoreIgnore`，按 `suggestIgnore`（系列标签没有）再按优先级**降序**、稳定排序；每个标签先 `ensureLabelLayoutWithGeometry`——计算几何时留着 OBB 脏位，而判脏用的是全掩码，所以**每个标签都按它此刻的样子重算几何**：挂在宿主上的回到宿主给的位置（shift 对它也不算数），给了 x / y 的按挪过的 x / y。已 ignore 的跳过；和已留下的任何一个相交就隐藏：先比两个框各缩 0.05 之后的 AABB，两个都不转（`isBoundingRectAxisAligned`，含 90° 这种分量小于 1e-5 的）就算相交，否则比 OBB（SAT，同样缩 0.05）。隐藏时 `hideEl`：标签原本没 ignore 的，emphasis 状态的 `ignore` 为 null 才设成 false——**悬停时又显示**，除非作者写了 `emphasis.label.show: false`（`labelStyle` 已经在状态上写了 `ignore: true`）；标签线跟着隐藏（饼图的标签线 emphasis 本来就是 false）。
+- **边距**：`label.minMargin`（数，否则 0）的一半加在全局框四周；没有 minMargin 时 `label.textMargin`（`normalizeCssArray`）加在局部框上，随标签一起转。两者都走模型链。
+- **局部框**：平文字是 TSpan 的框（`adjustTextX` / `adjustTextY` 后宽 = 内容宽、高 = 行高），**写了的** `textBorderColor` + 宽度算进去，自动描边不算；Text 把子框和自己做 union，所以宽是 `(x + w) − x`。富文本、带背景 / 内边距的是各块的并（A4 的 `TyRtBounds`）。
+- **扇形的包围盒**：`roundSector.buildPath` 没有圆角时是 moveTo 外弧起点 → `arc`（`normalizeArcAngles` 把起角按 1e-8 个半圈取整）→ lineTo 内弧终点或圆心 →（内弧）→ closePath；`PathProxy.getBoundingRect` 取弧的两端和经过的四分点，moveTo 那一点用的是没取整的角。
+- **状态与动画**：`series:layoutlabels` 在 `updateZ` 之前，z 不参与排序。`_animateLabels` 只动没 ignore 的文字；挂在宿主上的标签 `label.x / y` 补间但不进画面，给了 x / y 的标签从上一次的布局滑到新位置（和饼标签一样）。
+- **坐标轴标签**的 `hideOverlap` 也是 `labelLayoutHelper.hideOverlap`（AxisBuilder 调用），§73 已移植，用的是同一个相交判断。
+
+### port 以前
+
+- 系列标签不去碰撞；饼图的默认 hideOverlap 不生效。`labelLayout` 一个字段都不读。
+- 标签的 offset 在屏幕轴上加（§43 自己写着是偏差）：转过的标签差一截。
+- `TyModTwoPi`（`normalizeArcAngles` 里的 modPI2）的 `Round(...) / 1e8` 在 FPC 里是 Int64 除以 Single 常量，按单精度算，角度差到 1e-7 量级。
+- 散点、折线符号的标签按形状的包围盒 `(cx ± r)` 定锚，宽度是 `(cx + r) − (cx − r)`，与上游的 `2·sx` 差一个 ulp 的时候锚点也差一个 ulp。
+
+### 做法
+
+- **新单元 `tyControls.AdvChart.LabelLayout`**（纯单元）：
+  - 读法：`TyLabelLayoutSpecOf`（无 / 对象 / 句柄，饼的默认合并在下）、`TyLabelLayoutOfObject`、`TyLabelMoveOf`、`TyLabelLayoutPos`（parsePercent）、`TyLabelLayoutRad`。
+  - 几何：`TyLabelLocalTransform`（`getLocalTransform` 的运算顺序：origin、缩放、`matrix.rotate`、平移；`needLocalTransform` 的 5e-5 判据）、`TyLabelGeometry`（`computeLabelGeometry`，两种边距）、`TyLabelDecompose`（`setLocalTransform` + `normalizeRadian`）、`TySectorPathRect`（用 ZrPath 的 `TyZrArc` / `TyZrBBox` 建扇形路径量框）。
+  - 布局：`TyShiftLabelsOnXY`、`TyHideOverlapLabels`（重算几何、稳定排序、复用 §73 的 `TyLabelBoxesIntersect`、`hideEl` 的 emphasis 规则）、`TyLayoutLabels`。
+- **Handlers**：`TTyChartLabelLayoutArgs` / `TTyChartLabelLayout` / `TTyChartLabelLayoutHandler` 和一套注册表（同 B5 的 position 句柄）；`TyChartRunLabelLayoutHandler`，没注册的名字是空布局。
+- **标签的说明（caption）多了 LabelManager 要的东西**（`Lm*`）：种类（1 挂在宿主上、2 放在 label.x / y 上——饼、自己定锚的标记）、宿主下标、偏移之前的点、偏移、textConfig.rotation、position 给的对齐与 style 上的对齐、宿主框、边距、平文字的量宽、写了的描边宽、排版用的宿主墨色。布局之后：`LmFree`、`LmOverlapHidden`、`LmEmphShow`、变换矩阵 `LmM`。
+- **展开（`TyExpandLabels`）与饼标签（`TyPlacePieLabel`）**：offset 按 `getLocalTransform` 加在旋转之内（origin = −offset），说明里的 X / Y 就是矩阵的平移——退掉 §43 的屏幕轴偏差。宿主框按 `Path.getBoundingRect` 的顺序加描边。
+- **符号的标签框**：散点 / effectScatter / 折线的符号带上 `SymBox`（§73 已有的 `TySymbolLabelBox`），展开用它定锚、算宿主框；动画仍跟着形状的包围盒走（所以不是 `HostBox`）。
+- **控件**：`LayoutSeriesLabels` 接在 `TyExpandLabels` 之后、`StSync` 之前：按系列下标排序，读 `labelLayout`，按宿主顺序收集标签（饼按数据下标找扇形和标签线），逐个算默认值、调句柄、应用配置（对齐 / 字号改了就重量、富文本重排），然后 `TyLayoutLabels`，再把矩阵、对齐、字号、形状、ignore 写回元素，标签线跟着 ignore、`labelLinePoints` 设点。`LabelLayoutItems` / `LabelLayoutEls`（protected）留给测试。
+- **状态**：标签的「正常时显示」按排版时的 show（被 hideOverlap 藏起来的不算 `show: false`）；`LmEmphShow` 而 emphasis 没写 ignore 的，emphasis 的 ignore 设 0；被一起藏起来的标签线同样。
+- **动画**：`LmFree` 的标签不再跟宿主（`HostPlus1 = 0`），更新时与饼标签一样 `MoveLabel`。
+- **LabelOpt**：读 `minMargin` / `textMargin`；`label.rotate` 改成 `r * (Pi / 180)`。
+- **顺带修的**：`TyModTwoPi` 的除数改成 Double。
+
+### 基准
+
+- `tools/advchart-oracle/label-layout.js`（真 dist，node SSR，600×400）：经图表的 ExtensionAPI 拿到 LabelManager，包装原型的 `layout`——进入时记下清单（宿主框、优先级、labelRect、defaultAttr、解析后的布局、原始局部框、边距、inner transformable、label.x / y、position、offset、emphasis 状态），退出时记下 ignore、标签线 ignore、label.x / y、emphasis；渲染一次 SVG 后记下每个系列标签的计算变换、局部框、画出来的对齐、字号、标签线的点；函数形式记下每次调用的参数；三个用例派发 `highlight`（之后跑一帧 `_onframe`，状态在那里应用）读标签。55 个用例：hideOverlap（密集散点、无 labelLayout、不同符号大小、60 个类目的折线、60 根柱子、转 90° 的柱标签、转 45° 的 OBB、labelLayout.rotate、贴边的 0.05 阈值）、多系列（大符号优先、等大按系列顺序、只有一个系列写、柱 + 线）、状态（只在 emphasis 显示、只在 emphasis 显示的不参与 shift、悬停重新显示、`emphasis.label.show: false` 保持隐藏）、文字样式（带背景框、两行富文本、写了的描边、1.7 的细描边、minMargin、textMargin）、饼（默认隐藏连同标签线、悬停一个没藏的和一个藏起来的、inside、`labelLayout: null`、dx / dy、shiftY、函数改 `labelLinePoints`、`label.offset`）、moveOverlap（x 85% + shiftY、y 30 + shiftX、挂在宿主上的 shiftY + hideOverlap、放在 x 500 上挤过图高再隐藏、挤压与放弃、右端出界借左边的空隙）、配置（dx / dy、rotate 覆盖 label.rotate、rotate 23（因子先算才逐位对）、没有 labelLayout 时 label.rotate 41 + offset、rotate + dx / dy、x / y 居中、百分比、只给 y、offset 被丢、fontSize、`'middle'` / `'center'`、字符串 x 与 `'center'` y、label.align 保留）、函数（dx 与隔一个隐藏、宿主右侧 + shiftY、什么都不返回、读 `params.align` 的两个系列、按文字长度旋转）、effectScatter。转写（`computeLabelGeometry` 的边距、`shiftLayoutOnXY`、`restoreIgnore`、`hideOverlap` 与重算几何、AABB + OBB、`getLocalTransform`）对每个用例逐位复现上游；15 条守卫（升序、不排序、平局倒序、只用 AABB、阈值 0、hideOverlap 读挪过的框、ignore 的参与布局、标签线不跟着藏、不设 emphasis、不挤、不放弃、不借空隙、没有 minMargin、没有 textMargin、offset 在旋转之外）全部改变点名的用例；两次生成逐字节一致 → `tests/fixtures/advchart-label-layout.json`。
+- `test.advchart.labellayout`（新，10 个测试）：
+  - **规则**：每个用例的清单入口直接喂 `TyLabelLocalTransform` / `TyLabelGeometry`（矩阵、局部框、全局框、是否轴对齐逐位比）和 `TyLayoutLabels`，逐位比出口的 ignore、标签线 ignore、label.x / y 与 emphasis 状态。
+  - **接线**：控件渲染每个选项（zrender SSR 宽度表量字），逐位比清单（顺序、标签、优先级、原始局部框、转角、缩放、origin、inner、label.x / y、ignore、emphasis）、每个系列标签（ignore、矩阵六个数、说明的 X / Y、对齐、字号、标签线的点和 ignore）、Pascal 句柄收到的参数（顺序、下标、文字、宿主框、labelRect、align、标签线点）、高亮下各标签与标签线的 ignore；断言各类比较的数量下限。
+  - 手写：选项的读法（饼的默认、`null`、`{}`、`{x: null}`、句柄、字符串、布尔、数字、各字段、moveOverlap 区分大小写）、扇形包围盒（整圆、顺逆时针的四分之一、环）、没注册的句柄是空布局（offset 被丢）、百分比的词、offset 沿转角走、挂在宿主上的 shift 不进画面、`normalizeArcAngles` 按双精度取整（node 量出的位）、给了 x 的标签在更新里从旧布局滑过去（`camAlways`，中途在两端之间）。
+- `test.advchart.tree`：L-rotate 的非径向标签（转 30°、offset [4, −6]）原来比的是 inner 点——那是端口在屏幕轴上加 offset 时碰巧对上的；改成转过的标签比变换的平移（`[Batch 103]`）。
+
+### 被推翻的旧说法
+
+- §43「不在这一批里」的「去重叠」：系列标签的 hideOverlap / moveOverlap 已做。
+- §43「`label.offset` 是在定位之后加的」：还加在旋转之内；以前在屏幕轴上加，转过的标签有偏差。
+- §39 的「modPI2 的那个四舍五入是等价变异体」：那时的除法是单精度的。
+- §127「挂在宿主上的标签自身的 x / y 恒为 0」：写了 labelLayout 的不再是 0；给了 x / y 的标签也会从旧布局滑过去。
+
+### 变异测试
+
+`b8mut.py`：每次改一处源码、重编、跑 `test.advchart.labellayout`，然后还原。54 个变异：
+- 排序与优先级：升序、平局倒序、面积改周长、符号的宿主框退回形状包围盒、扇形弧反向、modPI2 退回单精度。
+- 相交：只用 AABB、阈值 0、hideOverlap 不重算几何、放在 x / y 上的标签不按挪过的位置、没有 minMargin、没有 textMargin、minMargin 不减半、写了的描边不进框、局部框不和自己 union。
+- shift：不排序、不挤、放弃时用 floor、不借另一端、y 的界用图宽、ignore 的参与。
+- hideEl 与状态：标签线不跟着藏、不设 emphasis、无视作者写的 emphasis、正常显示按藏后的、标签线不重新显示。
+- 配置：给了 x / y 仍挂在宿主上、没给的一维用锚点、百分比按图高、保留 label.offset、忽略 dx、origin 为 0、展开时 offset 在旋转之外、不用 textConfig.rotation、缩放当 1、放在 x / y 上仍用 position 的对齐、不应用 align、不应用 fontSize、rotate 与 label.rotate 的因子后乘、偏移前的点记成偏移后的。
+- 读法：饼没有默认、`{}` 也算、`null` 仍用饼的默认、moveOverlap 不分大小写。
+- 函数形式：答案被丢、labelRect 不转、align 参数总是给、不给标签线点、不设 labelLinePoints、rect 参数加 1；饼的标签线找不到。
+- 动画：放在 x / y 上的标签不滑、仍跟着宿主。
+
+首轮 46 个杀死，存活 8 个：
+- **modPI2 退回单精度**：扇形包围盒已经改用 ZrPath 自己的 modPI2，`TyModTwoPi` 不在这条路上了；补了手写测试（node 量出的取整位）后杀死。
+- **放在 x / y 上的标签不按挪过的位置**：基准里挪过又隐藏的只有挂在宿主上的；加了 `shiftY.free.hide`（x 500、40 个 14px 标签挤过图高、hideOverlap）后杀死。
+- **标签线不重新显示**：饼的悬停用例高亮的是没藏的那块；加了一个高亮被藏起来的第 11 块后杀死。
+- **展开时 offset 在旋转之外**：写了 labelLayout 的标签 offset 都被换掉，看不出；加了 `offset.rotate.nolayout`（label.rotate 41 + offset，没有 labelLayout）后杀死。
+- **rotate 与 label.rotate 的因子后乘**：基准的角度 30、40、45、70、90 两种乘法逐位相同（1–89 度里只有 19 个不同）；加了 rotate 23 与 label.rotate 41 后杀死。
+- **moveOverlap 不分大小写**：手写测试用的是 'shifty'，变异只改了 shiftX 那一行；补了 'shiftx' 后杀死。
+- **局部框不和自己 union**：等价。平文字的框 x 在 [−w − lw/2, 0] 里，`(x + w) − x` 在这个范围内总是精确等于 w（按常见宽度和 0.1–3.3 的描边宽度量过一遍，没有一个不同）；加的 `text.border.thin` 也没能区分。照上游写法保留。
+
+第二轮 8 个里 7 个杀死，53/54，剩下的是上面那个等价变异。
+
+### 推迟与偏差
+
+- **给了 x / y 时不重算标签线**（`needsUpdateLabelLine` → `updateLabelLinePoints`：`nearestPointOnPath` 投到宿主路径、`limitTurnAngle`）：饼标签被挪走后线还指着原来的位置。`labelLinePoints` 是照设的。基准里没有饼 + x / y 的用例。
+- **其他系列的 `labelLine.show`**（散点、柱子上的引导线）端口本来就没有，这一批也没加；LabelManager 对它们的 `_updateLabelLine` 不移植。
+- **`width` / `height`** 读进来了，不应用（上游写到 style 上，只在 overflow / 背景下影响框）；**`draggable`** 不做（没有拖动）。
+- **只进清单的是端口的系列标签**：折线的 `endLabel`、漏斗标签、关系图的边标签不进（上游会进）；矩形树图本来就 `disableLabelLayout`。自己定锚的标记（树、旭日图、桑基图、关系图的环形旋转）按「放在 label.x / y 上」处理，没有逐一核对它们的 textConfig。
+- **饼的富文本标签**改了对齐或字号时不重排（系列标签会）。
+- **minMargin / textMargin 不读饼标签上的**（饼的 avoidLabelOverlap 自己的 marginForce 归 B13）。
+- **饼的 avoidLabelOverlap 求解器（B13）还没有**：默认 true 时上游先挪标签再隐藏，端口直接隐藏叠着的。基准的饼用例都写了 `avoidLabelOverlap: false`。
+- **设备像素**：x / y 的百分比与 shift 的界按控件矩形（设备像素）算；上游是 CSS 像素。96 PPI 下一致；其他 PPI 下 bail-out 的 `ceil` 步长会不同。
+- **转过的标签的缩放**（0.9999999999999999）进了矩阵，画家仍按转角画，不缩放（差 1e-16）。
+- **`'@Name'` 句柄的 `DataType`** 一律是空串；关系图的边不进清单，所以用不到。
+- **关系图的节点**仍按形状的包围盒算宿主框（没有 `SymBox`），等大节点的优先级可能差一个 ulp，平局的先后不一定和上游相同。
+- **自己定锚的标记**（径向树等，textConfig 有自己的 origin）：offset 仍是平移，不进旋转——那是上游的（有 origin 时不设成 −offset）；但它们进了 labelLayout 时，默认值按 origin = −offset 分解，没有核对。
+
+### 落地
+
+- `source/tyControls.AdvChart.LabelLayout.pas`（新）。
+- `source/tyControls.AdvChart.Handlers.pas`：labelLayout 句柄的类型与注册表。
+- `source/tyControls.AdvChart.Paint.pas`：说明的 `SymBox` 与 `Lm*` 字段。
+- `source/tyControls.AdvChart.Labels.pas`：offset 在旋转之内、`SymBox`、宿主框、`Lm*`；`TTyLabelSpec` 的边距。
+- `source/tyControls.AdvChart.LabelOpt.pas`：`minMargin` / `textMargin`、rotate 的因子。
+- `source/tyControls.AdvChart.PieLabel.pas`：offset 在旋转之内、`Lm*`。
+- `source/tyControls.AdvChart.Marks.pas`：散点与折线符号的 `SymBox`。
+- `source/tyControls.AdvChart.Shape.pas`：`TyModTwoPi` 的除数。
+- `source/tyControls.AdvChart.AnimView.pas`：`LmFree` 的标签从旧布局滑。
+- `source/tyControls.AdvanceChart.pas`：`LayoutSeriesLabels`、状态里的 emphasis 规则、`LabelLayoutItems` / `LabelLayoutEls`。
+- `tycontrols.lpk`、`tycontrols.pas`：新单元。
+- `tools/advchart-oracle/label-layout.js`、`tests/fixtures/advchart-label-layout.json`、`tests/test.advchart.labellayout.pas`（注册进 `tests/tytests.lpr`）。
+- `tests/test.advchart.tree.pas`：转过的非径向标签比变换的平移。
 
 ### 下一批
 

@@ -36,7 +36,7 @@ interface
 uses
   SysUtils, Classes, Math,
   tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
-  tyControls.AdvChart.Data;
+  tyControls.AdvChart.Data, tyControls.AdvChart.Shape;
 
 type
   { What a handler is given, and what a template expands from. Modelled on
@@ -165,6 +165,61 @@ type
   TTyChartPositionHandler = function(
     const AArgs: TTyChartTooltipPosArgs): TTyChartTooltipPos of object;
 
+  { ==== series.labelLayout as a function [Batch 103] ====
+
+    LabelManager calls `labelLayout(params)` once per label on every layout
+    pass and reads what comes back as the option object it stands for: x / y
+    (px or a percent of the chart, through parsePercent), dx / dy, rotate
+    (degrees), align / verticalAlign, fontSize, width / height, moveOverlap,
+    hideOverlap, draggable and labelLinePoints. Nothing at all is an empty
+    layout. The answer is a value, so this has its own type and registry. }
+
+  { What the function is given, in device px of the chart: the label's
+    datum (DataIndex is ecData.dataIndex, the index into the data as SHOWN),
+    its series and dataType, its text, its host's rect (HasRect False where
+    there is none), the label's own rect as it was laid out before the layout
+    (LabelRectX..H), the label STYLE's align / verticalAlign ('' when the
+    label did not set one -- an attached label's alignment comes from its
+    position, which is not the style's), and a copy of its label line's
+    points (empty without one). }
+  TTyChartLabelLayoutArgs = record
+    DataIndex, SeriesIndex: Integer;
+    DataType: string;
+    Text: string;
+    HasRect: Boolean;
+    RectX, RectY, RectW, RectH: Double;
+    LabelRectX, LabelRectY, LabelRectW, LabelRectH: Double;
+    Align, VerticalAlign: string;
+    LabelLinePoints: TTyPointFArray;
+  end;
+
+  { WHAT A labelLayout SAYS -- the object form read off the option, or a
+    function's answer. Every field is "absent" in the zero value: X / Y
+    absent (cpvAbsent), no dx, dy, rotate or font size, '' for the words. }
+  TTyChartLabelLayout = record
+    X, Y: TTyChartPosValue;
+    HasDx, HasDy: Boolean;
+    Dx, Dy: Double;
+    HasRotate: Boolean;
+    { degrees }
+    Rotate: Double;
+    HasAlign, HasVerticalAlign: Boolean;
+    Align, VerticalAlign: string;
+    HasFontSize: Boolean;
+    FontSize: Double;
+    HasWidth, HasHeight: Boolean;
+    Width, Height: Double;
+    { 'shiftX', 'shiftY' or anything else (no move) }
+    MoveOverlap: string;
+    HideOverlap: Boolean;
+    Draggable: Boolean;
+    HasLabelLinePoints: Boolean;
+    LabelLinePoints: TTyPointFArray;
+  end;
+
+  TTyChartLabelLayoutHandler = function(
+    const AArgs: TTyChartLabelLayoutArgs): TTyChartLabelLayout of object;
+
 { ---- the registry ---- }
 { Registering the same name twice REPLACES, so a form reopened at design time
   does not accumulate stale handlers. }
@@ -188,6 +243,20 @@ procedure TyChartClearPositionHandlers;
   APos -- when nobody registered it. }
 function TyChartRunPositionHandler(const ASpec: string;
   const AArgs: TTyChartTooltipPosArgs; out APos: TTyChartTooltipPos): Boolean;
+{ ---- labelLayout handlers [Batch 103] ----
+  The same rules again: a name, registered once, replaced when registered
+  again. }
+procedure TyChartRegisterLabelLayoutHandler(const AName: string;
+  AHandler: TTyChartLabelLayoutHandler);
+procedure TyChartUnregisterLabelLayoutHandler(const AName: string);
+function TyChartFindLabelLayoutHandler(const AName: string;
+  out AHandler: TTyChartLabelLayoutHandler): Boolean;
+procedure TyChartClearLabelLayoutHandlers;
+{ Runs the handler '@Name' names. False -- and an empty layout in
+  ALayout -- when nobody registered it. }
+function TyChartRunLabelLayoutHandler(const ASpec: string;
+  const AArgs: TTyChartLabelLayoutArgs; out ALayout: TTyChartLabelLayout): Boolean;
+
 { Building an answer: a number, a text ('50%', 'center'), nothing. }
 function TyChartPosNum(AValue: Double): TTyChartPosValue;
 function TyChartPosText(const AText: string): TTyChartPosValue;
@@ -337,6 +406,76 @@ begin
   if not TyChartIsHandlerRef(ASpec) then Exit;
   if not TyChartFindPositionHandler(Copy(ASpec, 2, MaxInt), h) then Exit;
   APos := h(AArgs);
+  Result := True;
+end;
+
+type
+  TLabelLayoutEntry = record
+    Name: string;
+    Handler: TTyChartLabelLayoutHandler;
+  end;
+
+var
+  GLabelLayouts: array of TLabelLayoutEntry;
+
+function IndexOfLabelLayout(const AName: string): Integer;
+var i: Integer;
+begin
+  for i := 0 to High(GLabelLayouts) do
+    if SameText(GLabelLayouts[i].Name, AName) then
+      Exit(i);
+  Result := -1;
+end;
+
+procedure TyChartRegisterLabelLayoutHandler(const AName: string;
+  AHandler: TTyChartLabelLayoutHandler);
+var i: Integer;
+begin
+  if AName = '' then Exit;
+  i := IndexOfLabelLayout(AName);
+  if i < 0 then
+  begin
+    i := Length(GLabelLayouts);
+    SetLength(GLabelLayouts, i + 1);
+    GLabelLayouts[i].Name := AName;
+  end;
+  GLabelLayouts[i].Handler := AHandler;
+end;
+
+procedure TyChartUnregisterLabelLayoutHandler(const AName: string);
+var i, j: Integer;
+begin
+  i := IndexOfLabelLayout(AName);
+  if i < 0 then Exit;
+  for j := i to High(GLabelLayouts) - 1 do
+    GLabelLayouts[j] := GLabelLayouts[j + 1];
+  SetLength(GLabelLayouts, Length(GLabelLayouts) - 1);
+end;
+
+function TyChartFindLabelLayoutHandler(const AName: string;
+  out AHandler: TTyChartLabelLayoutHandler): Boolean;
+var i: Integer;
+begin
+  AHandler := nil;
+  i := IndexOfLabelLayout(AName);
+  Result := (i >= 0) and Assigned(GLabelLayouts[i].Handler);
+  if Result then AHandler := GLabelLayouts[i].Handler;
+end;
+
+procedure TyChartClearLabelLayoutHandlers;
+begin
+  GLabelLayouts := nil;
+end;
+
+function TyChartRunLabelLayoutHandler(const ASpec: string;
+  const AArgs: TTyChartLabelLayoutArgs; out ALayout: TTyChartLabelLayout): Boolean;
+var h: TTyChartLabelLayoutHandler;
+begin
+  ALayout := Default(TTyChartLabelLayout);
+  Result := False;
+  if not TyChartIsHandlerRef(ASpec) then Exit;
+  if not TyChartFindLabelLayoutHandler(Copy(ASpec, 2, MaxInt), h) then Exit;
+  ALayout := h(AArgs);
   Result := True;
 end;
 

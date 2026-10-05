@@ -278,6 +278,7 @@ var
   known: Boolean;
   pos: TTyLabelPosition;
   s: string;
+  v: Double;
 begin
   Result := ABase;
   series := ASeries;
@@ -363,8 +364,10 @@ begin
       point OVERFLOW, raised out of the paint. A turn is periodic anyway, so
       nothing outside a full circle either way says anything a value inside
       one does not. }
+    { `labelRotate *= Math.PI / 180`: the factor first [Batch 103: it was
+      (r * Pi) / 180, an ulp off] }
     Result.RotationRad :=
-      Max(Double(-360), Min(Double(360), d.AsFloat)) * Pi / 180;
+      Max(Double(-360), Min(Double(360), d.AsFloat)) * (Pi / 180);
 
   { align / verticalAlign (baseline its old name), normalised as zrender's
     Text normalizeStyle does }
@@ -386,6 +389,46 @@ begin
     if (s = 'middle') or (s = 'center') then Result.AlignV := tavMiddle
     else if s = 'bottom' then Result.AlignV := tavBottom
     else Result.AlignV := tavTop;
+  end;
+
+  { minMargin over textMargin, each through the model chain: a minMargin
+    the base read stays over this node's textMargin (labelStyle.ts:465-480)
+    [Batch 103] }
+  d := node.Find('minMargin');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    Result.MarginType := 1;
+    { `!isNumber(minMargin) ? 0 : minMargin / 2` }
+    if d.JSONType = jtNumber then v := d.AsFloat / 2 else v := 0;
+    for k := 0 to 3 do Result.MarginLogical[k] := v;
+  end
+  else if Result.MarginType <> 1 then
+  begin
+    d := node.Find('textMargin');
+    if (d <> nil) and (d.JSONType <> jtNull) then
+    begin
+      Result.MarginType := 2;
+      { normalizeCssArray }
+      if d.JSONType = jtNumber then
+        for k := 0 to 3 do Result.MarginLogical[k] := d.AsFloat
+      else if d is TJSONArray then
+      begin
+        arr := TJSONArray(d);
+        for k := 0 to 3 do Result.MarginLogical[k] := NaN;
+        for k := 0 to Min(arr.Count, 4) - 1 do
+          if arr.Items[k].JSONType = jtNumber then
+            Result.MarginLogical[k] := arr.Items[k].AsFloat;
+        if arr.Count = 2 then
+        begin
+          Result.MarginLogical[2] := Result.MarginLogical[0];
+          Result.MarginLogical[3] := Result.MarginLogical[1];
+        end
+        else if arr.Count = 3 then
+          Result.MarginLogical[3] := Result.MarginLogical[1];
+      end
+      else
+        Result.MarginType := 0;
+    end;
   end;
 
   s := StrIn(node, 'overflow');

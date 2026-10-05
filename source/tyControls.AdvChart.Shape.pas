@@ -298,7 +298,9 @@ begin
     given. `Int` on a Double has no Int64 to overflow. }
   if IsNan(ARadian) or IsInfinite(ARadian) then Exit(0);
   ARadian := ARadian - Int(ARadian / (2 * Pi)) * (2 * Pi);
-  n := Round(ARadian / Pi * 1e8) / 1e8;
+  { the divisor a Double: `Int64 / 1e8` is a Single division in FPC, a
+    tenth of a millionth of a turn off [Batch 103] }
+  n := Round(ARadian / Pi * 1e8) / Double(1e8);
   { FMod, not the integer Mod: n is not whole. }
   Result := (n - Int(n / 2) * 2) * Pi;
 end;
