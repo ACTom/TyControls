@@ -4762,7 +4762,7 @@ x/y 的包围盒——而 `circular` 和 `force` 的图**一个节点都不写**
 **另外两条等价体**,也记在原处:裁边函数开头那句"两端都没有符号就直接返回"
 ——不返回也不会动任何东西;以及上面那条 `left` 的洗白。
 
-**已知偏差,都记在原处**:曲线边是**采样成折线**的(形状记录里没有贝塞尔,
+**[第 114 批：拖动做了——none / circular / force 三种，裁边用此刻的补偿缩放，见 §149。]** **已知偏差,都记在原处**:曲线边是**采样成折线**的(形状记录里没有贝塞尔,
 饼图的弧和 pin 符号早就是这么做的),但标签和箭头仍然用真正的 t 点和切线;
 `nodeScaleRatio` 与 roam 的补偿缩放没做(没有 roam),所以裁边的 scale 恒为 1。
 **[第四十五批已做:补偿缩放、数据空间裁边,见 §79。]**
@@ -4919,7 +4919,7 @@ x/y 的包围盒——而 `circular` 和 `force` 的图**一个节点都不写**
 
 ### 已知偏差
 
-- **不动画**。`layoutAnimation: true`(默认)在上游是 510 帧、约八秒;这里一次算完,
+- **[第 114 批：拖动时重新退火也按 `false` 的样子——被拖节点不跟指针走，见 §149。]** **不动画**。`layoutAnimation: true`(默认)在上游是 510 帧、约八秒;这里一次算完,
   等于上游 `layoutAnimation: false`。Q7 只承诺了进入动画和状态过渡。
 - 随机数有种子;步数封顶;无穷摩擦只走两步;同一矩形复用上次答案;
   超过一千屏的点、控制点、符号尺寸按上面的规则处理。
@@ -6556,7 +6556,7 @@ view 上的 graph 以前只有一个"数据矩形贴进框"的缩放加平移,`c
 - 上游放标签前把宿主的包围盒按描边加宽,这里的标签不算描边,带边框的符号标签差半个边框。所有系列都如此,与 roam 无关(另立任务)。
 - 只读系列级 `label`;节点自己的 `label` 不读。
 - 给 `Option` 赋和现在一样的文本什么也不做,不等于上游的 notMerge 重置。（第 95 批修正：属性是声明，同一文本不算变化是对的；上游的 notMerge 是 `SetOption(text, True)`，同一文本也重来；合并是 `MergeOption`。见 §130。）
-- 双指缩放、光标样式、拖动节点、roam 动画、拖动后抑制点击:不做。拖动期间悬停命中要等下一次重画才恢复。
+- **[第 114 批：拖动节点做了，按下可拖动的节点开始拖动、不平移，见 §149。]** 双指缩放、光标样式、拖动节点、roam 动画、拖动后抑制点击:不做。拖动期间悬停命中要等下一次重画才恢复。
 
 ### 变异测试
 
@@ -6626,8 +6626,8 @@ view 上的 graph 以前只有一个"数据矩形贴进框"的缩放加平移,`c
 ### 已知偏差
 
 - 其他系列的 blur 和 focus 仍没有做:它们照旧用叠加的 emphasis,`self` / `series` 也不会让别的柱子、扇区变暗。graph 和非 graph 系列之间的互相 blur(笛卡尔上 graph 连带柱子)不做。
-- highlight / downplay 动作、悬停图例联动高亮、`emphasis.label`(`label.show: false` 时悬停显示标签)、边标签、状态动画:不做。
-- 节点的 `itemStyle.opacity`、逐边的 `lineStyle`(除曲度外)仍不读,属于 normal 状态的欠账。
+- **[第 114 批：边标签画了，跟着边的 blur 走，见 §149。]** highlight / downplay 动作、悬停图例联动高亮、`emphasis.label`(`label.show: false` 时悬停显示标签)、边标签、状态动画:不做。
+- **[第 114 批：逐边的宽度、类型、透明度、颜色与两端符号读了，见 §149。]** 节点的 `itemStyle.opacity`、逐边的 `lineStyle`(除曲度外)仍不读,属于 normal 状态的欠账。
 - 边的命中容差是 4 个逻辑像素,不是 zrender 的描边阈值。
 - 坐标轴触发(`trigger: 'axis'`)时 graph 元素不再做叠加高亮。
 
@@ -8221,7 +8221,7 @@ FPC 3.2.2 的 jsonreader 每进一层数组或对象就递归一次,几十万层
 
 - NaN/无穷几何不输出(上游输出但不可见)。
 - 渐变连线的包围盒不含描边外扩(只在 `lineStyle.borderColor` 与 `'gradient'` 同时出现时有差别)。
-- 边标签、强调/聚焦、拖动、提示框、`zoom`/`center` 之后再做。
+- **[第 114 批：边标签、聚焦（状态机）、拖动、roam 做了；提示框在第 100 批，见 §149。]** 边标签、强调/聚焦、拖动、提示框、`zoom`/`center` 之后再做。
 
 ## 115. Tier 1 第八十批:矩形树图的下钻、按值着色与多系列(M4 + M5 + M6,2026-09-30)
 
@@ -8326,7 +8326,7 @@ FPC 3.2.2 的 jsonreader 每进一层数组或对象就递归一次,几十万层
 
 ### 已知偏差
 
-- 关系图、桑基图的**边标签**本来就没画(第 46、79 批),对应的上游文字不比。
+- **[第 114 批：画了，rich 走同一条块路径，见 §149。]** 关系图、桑基图的**边标签**本来就没画(第 46、79 批),对应的上游文字不比。
 - 雷达系列标签没移植(第 35 批),该用例跳过。
 - 矩形树图用例:~~作者字号按磅读导致文字更宽被截断,等 A2 修字号后放开~~ **[第 83 批更正:理由不对——这个用例没写字号;是这个测试用真字体量字、上游用 SSR 估算,截断位置不同。矩形树图的文字由 `test.advchart.treemap` 用 zrender 的量字表比,那边已全部放开。]**
 - `axisPointer.status: 'show'` 与 `value` 写在选项里时的初始指针没移植,归 B5。
@@ -8707,8 +8707,8 @@ B1 把悬停、选中、动作高亮搬上了标志加状态代理的模型，�
 
 ### 推迟与偏差
 
-- **桑基图**（adjacency/trajectory）**没做**：它的 focus 是 `{node: [...], edge: [...]}` 两套下标，边是另一份数据（`dataType: 'edge'`），状态模型目前只有节点一套行（B1 起就跳过 `IsEdge`）。要做：`TTyStSeries` 加一套按边下标的行、`StItemAt` 认 dataType、`TTyStFocus` 带两套下标、`StBlurSeries` 分别离开 blur，再给 fixture 加桑基的记录（`getData('edge')`）与转写。
-- **关系图、树、矩形树图**保留各自的原地重样式（第 46、81 批），不接共享模型：关系图的 adjacency、树的 ancestor/descendant 已有逐项基准；搬过来要先给它们的节点/边建状态行（同上），而且它们的悬停由提示框的 datum 驱动、按帧重建，和标志模型是两条路。因此它们与共享模型之间**不互相淡化**（笛卡尔上的关系图连带柱子、global 范围跨类型），highlight/downplay 动作对它们只发事件、不改样子。
+- **[第 114 批：照这里写的做了——两套行、两套下标、`dataType: 'edge'`，见 §149。]** **桑基图**（adjacency/trajectory）**没做**：它的 focus 是 `{node: [...], edge: [...]}` 两套下标，边是另一份数据（`dataType: 'edge'`），状态模型目前只有节点一套行（B1 起就跳过 `IsEdge`）。要做：`TTyStSeries` 加一套按边下标的行、`StItemAt` 认 dataType、`TTyStFocus` 带两套下标、`StBlurSeries` 分别离开 blur，再给 fixture 加桑基的记录（`getData('edge')`）与转写。
+- **[第 114 批：关系图仍保留，理由补在 §149 的「做法」。]** **关系图、树、矩形树图**保留各自的原地重样式（第 46、81 批），不接共享模型：关系图的 adjacency、树的 ancestor/descendant 已有逐项基准；搬过来要先给它们的节点/边建状态行（同上），而且它们的悬停由提示框的 datum 驱动、按帧重建，和标志模型是两条路。因此它们与共享模型之间**不互相淡化**（笛卡尔上的关系图连带柱子、global 范围跨类型），highlight/downplay 动作对它们只发事件、不改样子。
 - **仪表盘、雷达**仍在覆盖层：仪表盘的指针和进度条是两个各自的派发者（`z2EmphasisLift = 0`），雷达的项是组（折线、面积、每个符号各有状态，标签按维度）；需要「一项多派发者」与「组的多路径」两种结构，Parts 只解决后者的一半。箱线图端口没有渲染器；极坐标上的柱/线端口没有。**[第 108 批：箱线图有了渲染器，接上状态机（`sskBox`，emphasis 边框 2），见 §143。]**
 - 面积在端口里是 silent（拿不到指针），所以「悬停面积只有面积 emphasis」的分支写了但到不了；悬停折线时面积跟着走与上游一致。
 - 折线 `showSymbol: false` 时上游会为单点高亮临时建一个符号，端口不建（只设折线状态）。
@@ -9684,7 +9684,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **[第 112 批：已做，从饼留下的锚点重新走线、过 `minTurnAngle`，见 §147]** **给了 x / y 时不重算标签线**（`needsUpdateLabelLine` → `updateLabelLinePoints`：`nearestPointOnPath` 投到宿主路径、`limitTurnAngle`）：饼标签被挪走后线还指着原来的位置。`labelLinePoints` 是照设的。基准里没有饼 + x / y 的用例。
 - **[第 112 批：已做，散点、涟漪散点、折线符号、柱子，见 §147]** **其他系列的 `labelLine.show`**（散点、柱子上的引导线）端口本来就没有，这一批也没加；LabelManager 对它们的 `_updateLabelLine` 不移植。
 - **`width` / `height`** 读进来了，不应用（上游写到 style 上，只在 overflow / 背景下影响框）；**`draggable`** 不做（没有拖动）。
-- **只进清单的是端口的系列标签**：折线的 `endLabel`、漏斗标签、关系图的边标签不进（上游会进）；矩形树图本来就 `disableLabelLayout`。自己定锚的标记（树、旭日图、桑基图、关系图的环形旋转）按「放在 label.x / y 上」处理，没有逐一核对它们的 textConfig。
+- **[第 114 批：关系图的边标签有了，以固定锚点进清单，没有逐一核对，见 §149。]** **只进清单的是端口的系列标签**：折线的 `endLabel`、漏斗标签、关系图的边标签不进（上游会进）；矩形树图本来就 `disableLabelLayout`。自己定锚的标记（树、旭日图、桑基图、关系图的环形旋转）按「放在 label.x / y 上」处理，没有逐一核对它们的 textConfig。
 - **饼的富文本标签**改了对齐或字号时不重排（系列标签会）。
 - **[第 109 批：已读，求解器的框和 LabelManager 都算它们，见 §144]** **minMargin / textMargin 不读饼标签上的**（饼的 avoidLabelOverlap 自己的 marginForce 归 B13）。
 - **[第 109 批：已做，先挪后藏；B8 基准加了三个求解器开着的饼用例，见 §144]** **饼的 avoidLabelOverlap 求解器（B13）还没有**：默认 true 时上游先挪标签再隐藏，端口直接隐藏叠着的。基准的饼用例都写了 `avoidLabelOverlap: false`。
@@ -10375,7 +10375,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **large 散点**（`largeThreshold` 以上走 Float32Array）不在这一批（C8）。
 - **finder 是数组**：上游对数组 finder 的数字键调 `match` 会抛错；端口当成什么都没找到。containPixel 的点是 null 时上游抛错，端口答 false。
 - **matrix、polar、singleAxis、geo、parallel** 坐标系不在（polar 是 C3、singleAxis 是 C10、geo 是 D14）；finder 指到它们时端口什么都答不出，containPixel 答 false。分派里给 polar、singleAxis 留了位置。**[第 111 批：polar 坐标系有了——finder 指 polar 时照上游换算，containPixel 照 containPoint；极坐标系列的 finder 随 C4，见 §146。]**
-- **桑基图**的 containPixel 按它的盒子（端口没有桑基图的 roam）；旭日图从不包含（上游不下钻时也是如此，端口没有下钻）。
+- **[第 114 批：有了 roam，问 View（盒子经 overall），见 §149。]** **桑基图**的 containPixel 按它的盒子（端口没有桑基图的 roam）；旭日图从不包含（上游不下钻时也是如此，端口没有下钻）。
 - **类目轴的自动间隔**：量的是主题字体，不是上游的 12px sans-serif；60 个 `'category N'` 标签上端口算出 10、上游 9（和有没有 customValues 无关，是原有的偏差）。基准里拥挤的类目用例把间隔写明。
 - **customValues 写成对象或串**：对象取值、串逐字符，照 `zrUtil.each` 的行为；没有基准。
 - **网格收缩时的自定义标签**：基准都用 `outerBoundsMode: 'none'`；自定义标签参与收缩估算的规则照原来的类目轴 / 数值轴走，没有单独的基准。
@@ -10611,3 +10611,112 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - 没有新的 resourcestring。
 
 全量 **8191 个测试，0 错误，0 失败**（新增 `test.advchart.labelline` 9 个、`test.advchart.pieavoid` 1 个；第一次全量 8190 个也全绿，之后加了颜色的手写测试、补了用例与 `line` 符号的框）。
+
+## 149. Tier 2 第一百一十四批：关系图与桑基图交互（C5，2026-10-06）
+
+路线图 C5：graph / sankey 的交互——节点拖动、sankey 的 tooltip / 边标签 / roam、graph 的边标签与逐边 lineStyle。以前关系图的节点按下去只是「不平移」（§79 留的口子），桑基图根本不能拖；两种系列的边标签都没画（§117 记过）；关系图的边只读系列级的 `lineStyle`，边自己写的宽度、类型、透明度、颜色、`symbol` 都不读（§80 记的欠账）；桑基图没有 roam，`containPixel` 只按盒子答（§145）；桑基图的悬停走覆盖层，`focus: 'adjacency'` / `'trajectory'` 不做（§125 留的接口）。这一批对着 `chart/graph/GraphView.ts`（拖动处理器、`_startForceLayoutIteration`、`updateLayout`）、`graph/forceHelper.ts` 与 `forceLayout.ts`（`warmUp` / `setFixed` / `setUnfixed`、`beforeStep` / `afterStep`）、`circularLayoutHelper.ts`（带拖动节点的 `circularLayout`）、`simpleLayoutHelper.ts`、`adjustEdge.ts`、`edgeVisual.ts`、`GraphSeries.ts`（`resolveParentPath`、默认选项）、`chart/helper/Line.ts`（`_updateCommonStl`、`beforeUpdate`）、`helper/LinePath.ts`、`chart/sankey/SankeyView.ts`、`SankeySeries.ts`、`sankey/install.ts`（`dragNode` 动作）、`data/Graph.ts`（`getAdjacentDataIndices` / `getTrajectoryDataIndices`）、`component/helper/roamHelper.ts`、`RoamController.ts`（按下时沿 `draggable` 往上找）、`coord/View.ts`、`util/states.ts` 的 `blurSeries`，以及 zrender 的 `mixin/Draggable.ts`、`Element.drift`、`Transformable.decomposeTransform` / `getLocalTransform` / `updateTransform`、`core/matrix.ts`、`shape/Line.ts` / `BezierCurve.ts`、`canvas/dashStyle.ts` 逐行核过，在真 dist 上跑基准。§63、§64、§79、§80、§114、§117、§125、§138、§145 的推迟在原处标注。
+
+### 上游的做法
+
+- **谁接按下**：zrender 的 Draggable 在 mousedown 上从命中的元素沿 `parent || __hostTarget` 找第一个 `draggable` 的（节点的标签的宿主就是节点，按在标签上也拖节点）；RoamController 的 mousedown 走同一条链，碰到 `draggable` 就不武装平移。所以「拖动赢过平移」是两边各查一次得出的，不是谁抢谁。之后每个 mousemove 都 `drift(dx, dy)` 一次再发 `drag`，dx、dy 是相对上一次指针位置的整数差；dx、dy 都是 0 也照样 drift、照样发。
+- **关系图的拖动**（`GraphView.render` 给 `draggable` 的节点挂处理器）：
+  - **drift 在全局空间做**：Symbol 组的路径把 `drift` 转给组，组的 `transform`（上一帧按 x、y、scale 算好的全局矩阵 = 主组的 overall `[osx 0 0 osy ox oy]` 乘自己的 `[s 0 0 s x y]`）的平移加上 dx、dy，再经父组的逆矩阵分解回局部：`x' = inv0·(osx·x + 0·y + ox + dx) + inv2·m5 + inv4`，`inv2` 是 `-0·det`。分解顺带把组的 scale 重新求一遍：`|inv0·(osx·s)|`——常常差一个 ulp，被拖过的节点从此画得和别的节点不一样大（基准里第一次拖动就让 0.34375000000000006 变成 0.3437500000000001）。
+  - **`none`**：节点的布局就是 drift 的落点；`simpleLayoutEdge` 把每条边按原来的曲度重新出点，`updateLayout` 再 `adjustEdge`——裁边用的是**此刻**的 `getNodeGlobalScale`，不是节点画出来用的那个（平移之后两者不同）。
+  - **`circular`**：先记 drift 的落点，再 `setLayout({fixed: true}, true)`，然后带着拖动节点重跑 `circularLayout`：指针经 overall 的逆矩阵回到数据空间，沿它与环心的方向投到环上（`normalize` 再乘半径，`cx + v0`），其余没有 `fixed` 的节点按符号大小重新分角度（缩放取此刻的值）；拖过的节点在这次数据的生命里一直 `fixed`，下一次整体更新（resize、merge）重建数据，`fixed` 和位置都没了。
+  - **`force`**：每次 `drag` 先 `warmUp`（摩擦 = 选项的摩擦 × 0.8），没在迭代就开始迭代，然后 `setFixed(idx)`，再把节点的布局设成组当前的位置；`dragend` 时 `setUnfixed`——选项里 `fixed` 的节点拖过一次也被放开。`layoutAnimation: false` 时迭代是同步递归：一口气走到摩擦低于百分之一，每一步之后 `updateLayout` 把组放回布局。于是**第一次移动时节点还没 fixed**，跟着别的节点一起被力推动，drift 被跑完的迭代覆盖；第二次起它是 fixed 的，`beforeStep` 把它的 p 拷成布局——还是上一次的位置，迭代结束组又被放回去。结论：`layoutAnimation: false` 下拖动一个力导向节点，节点不跟指针走，每动一下其余节点从 0.8 倍摩擦重新退火一遍；`fixed` 只决定它自己参不参与。默认的 `layoutAnimation: true` 是定时器一步一步走，节点跟着指针，那是另一种画面。
+  - 力导向实例（p、pp、边、摩擦）在两次拖动之间保留；整体更新时 `graphForceLayout` 重新建一个，从 `preservedPoints` 出发、摩擦复原，`fixed` 只剩选项的。
+- **关系图的边**（`edgeVisual.ts`）：系列 `lineStyle` 的 `getLineStyle()` 上叠边自己 item model 的 `getLineStyle()`——每个键沿边 → 系列取，所以边写了的键赢，没写的是系列的；`stroke` 是 `'source'` / `'target'` 时取那一端节点的样式 fill。`symbol` / `symbolSize` 用 `getShallow(key, true)` 只读边自己的，规范成一对，**每一端为真才覆盖**（大小 0 是假，保留系列的）。`type` 是虚线词或数组，画的时候 `normalizeLineDash` 按线宽换成长度（`'dashed'` 是 `[4w, 2w]`，`'dotted'` 是 `[w]`）。边是 `strokeNoScale`，roam 不改线宽。
+- **关系图的边标签**（`Line.ts`）：
+  - 文字：边的 `label`（`resolveParentPath` 把边 item 上的 `label` 接到系列的 `edgeLabel`）的 formatter，模板按**边**的参数（a 系列名、b 边数据的名字、c 边的原始值）；没有 formatter 时默认文字是 `seriesModel.getRawValue(idx)` ——**读的是节点数据**，即边下标处那个节点的原始值，有限数时 `round(v, 10)`，null 时才用边数据的名字。边数据的名字是 link 的 `id`，否则 `source + ' > ' + target`（原始值相加），**不是** link 的 `name`。
+  - 位置（`beforeUpdate`，`textConfig.local: true`）：在线自己的空间里，按 `pointAt(0)` / `pointAt(1)` / 中点的切线与法线，十二种位置各有锚点、`originX/Y`（转动的支点）、对齐；中间类的位置转到切线方向，终点在起点左边时再加 π；`start` / `end` 按方向向量是否超过 ±0.8 选对齐。标签的 scale 是 `1 / 每个祖先的 scaleX`（主组的 osx），`distance` 两个分量都乘它。最后的全局矩阵是主组的 overall 乘标签自己的局部变换（`getLocalTransform`：先按 origin 平移和缩放，再 `rotate`，最后加上 `origin + 位置`）。`pointAt` 直线是 `x1(1-t) + x2·t`，二次曲线是 `(1-t)((1-t)p0 + 2t·p1) + t²p2`，和展开的多项式舍入不同。
+- **桑基图的拖动**（`SankeyView.render` 给 `draggable`——沿 item → level → 系列，**默认 true**——的节点矩形改写 `drift`）：`shape.x += dx; shape.y += dy`（主组的局部单位，roam 的缩放不乘），然后 `dispatchAction({type: 'dragNode', seriesId, dataIndex: 原始下标, localX: shape.x / width, localY: shape.y / height})`，`width/height` 是那次渲染的盒子。动作 `update: 'update'` 整体更新：`setNodePosition` 把 localX / localY 写进系列选项的节点项，下一次渲染节点矩形和连到它的带都按 `localX·width` 摆。Draggable 手里拿的还是被删掉的旧矩形，它的 shape 接着累加——所以 localX 是按下时的位置加上所有增量，不是从新矩形读回来的。
+- **桑基图的 roam**（6.1 有）：`roam` 默认 false，`roamTrigger` 默认 `'global'`；`createViewCoordSysSimply` 建一个数据矩形与视图矩形都是盒子的 View（`center` / `scaleLimit` 往根上找，`zoom` 不找），overall 设到**系列视图组**上，主组仍在盒子的左上角——主组的全局矩阵是 `mul(组, [1 0 0 1 bx by])`。手势和动作都是 `sankeyRoam`，写回 `center` / `zoom` 的规则和 graphRoam 一样。`containPixel` 问 View：数据矩形经 overall 后的包围盒。
+- **桑基图的边标签**：`edgeLabel`（item → level(源节点深度) → 系列，默认 `show: false`）；文字是 `retrieve3(状态的 formatter, 普通的 formatter, '' + value)` ——默认文字本身也被当成**模板**交给 `getFormattedLabel`；位置被 `setTextConfig({position: 'inside'})` 钉死：带自己的包围盒（`bbox.fromCubic` 两条三次曲线）经主组矩阵后的中心，居中对齐。
+- **桑基图的状态**（`toggleHoverEmphasis`）：节点矩形与带各是一个派发者；`focus` 为 `'adjacency'` / `'trajectory'` 时换成 `{node: [...], edge: [...]}` 两套下标，`blurSeries` 先让范围内所有元素进 blur，再对每种数据类型的下标离开 blur。节点的邻接集是它的每条边（按边序，`node.edges`）和每条边的两端——自己只作为某条边的端点出现；边的是自己和两端。轨迹集从节点的每条边（或那条边）出发，源端沿入边广度优先往上，目标端沿出边往下。带的状态样式是 `getItemStyle` 读 `[状态].lineStyle`（color 是 fill），`'source'` / `'target'` 经 `applyCurveStyle` 换成节点色；系列默认 `emphasis.lineStyle.opacity: 0.5`，emphasis 没写颜色时代理把 fill 提亮。桑基图没有坐标系 master，`blurScope` 缺省时只和自己同系。highlight / downplay 写 `dataType: 'edge'` 时按边数据找元素。
+
+### port 以前
+
+- 关系图：按在可拖动节点上只是不平移；边一律用系列的宽度、透明度、颜色和两端符号；节点项写成数组的 `symbolSize`（`[24, 12]`）存储不收（只收标量叶子），节点按系列大小画、按系列大小裁边；边标签不画。
+- 桑基图：不能拖，没有 roam，`containPixel` 按盒子；边标签不画；悬停是覆盖层上的提亮副本，focus 一概不做；连线的元素 B1 起就被状态机跳过。
+
+### 做法
+
+- `Graph`：
+  - 边多了自己写的 lineStyle（宽度、透明度、颜色或两个词、`type`）、两端的 `symbol` / `symbolSize`、边数据的名字和值的文字；`TyGraphEdgeWidth` / `Opacity` / `Symbol` / `SymbolSize` / `HasSymbol` / `Dash` 合成「边的或系列的」，构建器、`TyGraphTrimInView`、`TyGraphEdgeStroke` 都改走它们；系列多读 `lineStyle.type`。零值是「没写」——一条没读过的边保持系列的样子（第一次把未设的大小当成 NaN 哨兵，现有的 `Default(TTyGraphEdge)` 测试立刻红了）。
+  - 节点项的数组 `symbolSize` 从选项的节点表直接读（`ReadItemSizePairs`）。
+  - 边标签：`TyGraphLabelPosOf`、`TyGraphEdgeLabelPlace`（`Line.beforeUpdate` 逐句：`ZrLineAt` / `ZrQuadAt` / `ZrQuadDerivAt` / `ZrNormalize`，`getLocalTransform` 连零项一起算，`TyJsSin/Cos/Atan2`，再乘线的 frame）、`TyGraphEdgeDefaultText`。构建器把锚点、转角、对齐写成边元素自己的固定锚点 caption，`ItemSpec` 指向边标签的 spec。
+  - 拖动：节点多了 `HasDragScale / DragScaleX/Y`；`TyGraphDrift`（R1）、`TyGraphDragStep`（三种布局）、`TyGraphDragEnd`。力导向的求解拆成 `ForceStep`（beforeStep、弹簧、重力、斥力、移动、afterStep）和 `ForceAnswer`，实例（p、pp、布局 L、fixed、边、初始摩擦、重力、中心、随机数状态）留在 `TTyGraphForceState` 里，拖动时接着走；原来的整段算术原样搬过去，现有的力导向基准逐位不变。
+- `Sankey`：`TTySankeyLocal`（dragNode 写的 localX/Y，压过节点项自己的）、主组矩阵 `M0 / M3 / M4 / M5`（`TySankeyFrame`：组的 overall 在 5e-5 以内当作没有变换，`needLocalTransform` 的规则），矩形四角、带的路径命令、命中多边形、节点标签的宿主框都经它；边标签 `TySankeyEdgeLabels` / `TySankeyEdgeLabelSpecs`；`TySankeyDraggable`、`TySankeyLevel`、`TySankeyFocusSets`（R8）。
+- `States`：`TTyStFocus.EdgeIndices`；`TyStReadStyle` 多一个块名 `'lineStyle:item'`（用 itemStyle 的键读 lineStyle 块）。
+- 控件：
+  - 拖动：`FGraphDrag*` / `FSankeyDrag*`；MouseDown 在可拖动的节点上开始拖动（只在 view 上的关系图），MouseMove 先于悬停做一步，MouseUp / CaptureChanged 结束（力导向 `setUnfixed`）。关系图的一步不重新布局，只丢静态层重画（和 roam 一样）；桑基图的一步是 dragNode 动作：写 `FSankeyLocal`、发 `dragnode` 事件、整体更新。
+  - 桑基 roam：`FSankeyViews` / `FSankeySpecs` / `FSankeyRoam`、`SankeyViewOf`、`SankeyDispatchRoam` / `SankeyRoam` / `SankeyZoom`、`OnSankeyRoam`；`RoamSeriesAt` 与滚轮认桑基；`containPixel` 问 View。merge 时 roam 照 `MergeRoamOverride`，写了节点表的 merge 清掉 dragNode 的位置，notMerge 全清。
+  - `DispatchAction` 认 `dragNode`、`sankeyRoam`、`graphRoam`（按 `seriesIndex/Id/Name` 查，不写就是全部）；`dragnode` 进事件表。
+  - 边标签：`GraphEdgeLabels` 按边读 spec、显示、位置词、`distance`（数或一对）、文字；`BuildSeriesList` 把它们放进展开阶段的 item spec 行。
+  - 桑基上状态机：`sskSankey`，`TTyStSeries` 多一套 `EdgeRows / EdgeHostIdx / EdgeLabelIdx`；`StSync` 认带与带的标签、`StDeclareEdge` 声明带的三个状态、节点的链是 item → level → 系列（选中边框取主色）；`StItemFocus` / `StEdgeFocus` 把两个词换成两套下标；`StBlurSeries` / `StAllLeaveBlur` / `StWrite` / `StApplyChanged` 走两套行；`StDispatcher` 认带；highlight / downplay 认 `dataType: 'edge'`；`SankeyEdgeStates`、`GraphForceState` 给测试。
+- **关系图不上共享状态模型**，理由照旧（§125）：它的 adjacency 有逐项基准，悬停由提示框的 datum 驱动、在静态层原地重样式；搬过来要给节点和边各建状态行、把 `ApplyGraphHover` 的 blur 规则（声明的透明度、disabled 只吃声明值、标签跟节点）改写进标志模型，并重放 §80 的整份基准——是一批的量，和这一批的拖动、边标签互不依赖。边标签作为 caption 跟着边的 blur 走（`ApplyGraphHover` 本来按 datum 处理 caption）。
+
+### 基准
+
+`tools/advchart-oracle/graph-sankey-interact.js`（真 dist，node SSR，`chart._ssr = false`，每个用例 `animation: false`、力导向 `layoutAnimation: false`，定时器不跑，随机数是端口的 xorshift32，每步之后 `_onframe()` + `renderToSVGString()`，最后 `process.exit()`）→ `tests/fixtures/advchart-graph-sankey-interact.json`：**41 个用例、128 个状态**。指针步走 zrender 自己的 Handler，每个 up 后面跟一个 click；依赖画面的步（按在哪个节点上）先跑一遍再生成。
+
+- **关系图拖动** 6 个：`none`（两次移动）、先缩放 1.7 再平移再拖、系列不可拖而节点可拖（另一个节点按下去平移）、自动曲度下拖动、环（两个节点先后拖、再 resize 回到重新布局）、力导向（两次移动、松开、resize）。
+- **边标签** 17 个：十二种位置（直边、曲边、向左的边、`distance` 一对与标量）、小数坐标上的曲边（中点的导数与弦舍入不同）、模板 formatter 与边自己的 `label`（位置、显示、formatter）、默认文字（节点的值，2/3 取十位；节点没有值时是边名）、缩放过的视图（`insideStartTop`）、直角坐标上的关系图（`insideEnd`）。
+- **逐边样式** 3 个：宽度、`dashed` / `dotted` / 数组、透明度、字面色与 `'source'` / `'target'`、逐边曲度、`symbol` 一对与标量、`symbolSize` 0；每个节点一个类别（两端颜色不同）下的两个词；系列 `'source'` 下边改 `'target'` 与字面色。
+- **桑基拖动、边标签与 roam** 7 个：拖动（两次移动）、竖排（同一节点拖两次，接着上次的 localX/Y，边标签打开）、系列不可拖而节点可拖（按在不可拖的节点上平移）、边标签的模板（系列的、level 的、一条连线自己关掉；一条连线有 `id`）、手写的 dragNode 动作、roam（空白处平移、两次滚轮、再拖节点——缩放后拖动）、`sankeyRoam` 动作（绕点缩放、平移、`roam: 'move'` 不接滚轮、resize）；每个状态记 containPixel 的 8 个探针。
+- **桑基聚焦** 8 个：`adjacency`、`trajectory`、`self`、`none`（悬停节点、悬停连线、离开画布）、四层的 `trajectory`（悬停节点的轨迹比邻接多一条）、声明的 blur 透明度与 emphasis 线色、状态线色写成 `'target'` / `'source'`、highlight / downplay `dataType: 'edge'`（含下标数组）。
+
+自检（任何一条不过就不写文件、退出 1）：R1 拖动的 drift 公式与重求的 scale 逐位复现、R2 环上的拖动节点 fixed 且 resize 后没有 fixed、R3 力导向第二次移动起被拖节点不动而其余节点重新退火、R4 dragNode 的 localX/Y 等于按下时的 shape 加增量再除盒子、R5 桑基 roam 的 overall 由 graphRoam 的 recipe 逐位复现（含 resize）、R6 每个可见的关系图边标签的全局矩阵与对齐由 `Line.beforeUpdate` 的抄写逐位复现、R7 桑基边标签在带包围盒经主组矩阵后的中心、R8 邻接 / 轨迹集从 Graph.ts 重算与 hoverState 一致；16 个区分计数都 ≥ 1（拖动改了 scale、标签转了 π、`end` 不居中、曲边标签、中点的弦与导数舍入不同、缩放下的标签、逐边虚线、词颜色、两端颜色不同的词、桑基缩放、dragNode 动作、sankeyRoam 动作、环上 fixed、力导向重新退火、边与节点的轨迹集各比邻接集大）；两次生成逐字节一致；没有 `\u0000`；写出的 JSON 能读回。
+
+测试 `test.advchart.graphsankeyinteract`（新，注册在 `tytests.lpr`）：
+
+- **基准重放**：每个用例新建一个控件（同一个控件上换 notMerge 选项会把上一个用例的状态记录按复用的行带过来——这是上游 notMerge 的样子，但基准每个用例是新图），按步调 `MouseDown / MouseMove / MouseUp / DoMouseWheel`、`DispatchAction`、`SetBounds`，每步后无头渲染一次，逐位比较：关系图的 overall、每个节点的数据位置与像素（环上 1e-9）、Symbol 组的 scale（拖过的比 `DragScale`，其余比控件的补偿缩放）、环的 fixed，每条边裁好的两端与控制点（数据空间）、宽度、透明度、两端符号与大小、虚线（按词换成长度后比）、逐边样式用例里实际画的描边色、边标签的文字、锚点（全局矩阵的平移）、转角、对齐、透明度，没有标签的边不许有 caption；桑基的主组矩阵、View 的 overall 与区域、8 个探针的 containPixel、dragNode 写的 localX/Y、每个节点矩形的四边与标签、每条带的路径命令（基准的局部形状经基准的矩阵）与标签；聚焦用例里每个节点和每条带的 hoverState、状态列表、画出来的透明度、z2、填充；每个手势发出的 dragNode（dataIndex、localX/Y）与 roam（平移或缩放的各个数）。共比较约一万五千项。
+- 手写 11 个：按下可拖动的节点不平移且节点移动、带上 drift 的 scale；丢了捕获结束拖动；力导向第一次移动后 fixed、松开后放开；merge 不写节点表时保留 dragNode 的位置、写了就清掉；notMerge 清掉 dragNode 的位置与 roam；dragNode 没有 dataIndex 或越界不做、只给 localX 只写 x 并发一次事件；`sankeyRoam` 拒绝 0、负数、NaN 的缩放；边自己的 `label` 接在系列 `edgeLabel` 下（位置是边的、`distance` 一对是系列的）；rich 边标签走块路径（文字原样、有片段）；桑基边标签的 spec 走源节点深度的 level（level 的墨色只给从它出发的连线）；节点的 `borderRadius` 随缩放（缩放 2 时 6）。
+
+首跑：一处不对——`[24, 12]` 的节点裁边按 10 裁（上面「port 以前」的存储缺口），补了 `ReadItemSizePairs`；重放器本身改过一次（每个用例新建控件，见上）。全量套件又抓到一处：`test.advchart.handlerwiring` 原来把基准里 `|edge` 结尾的格式器调用滤掉（「连线的标签没画」），现在端口画了，交给处理器的正是上游那两组参数（关系图的 `n1 > n2|0|9|-|edge`、桑基的 `a > b|0|5|-|edge`），把过滤去掉、原处标注。
+
+### 变异测试
+
+`c5_mut.py`（草稿目录）：逐个改源码、重编、依次跑本批两套、力导向两套、桑基基准、graph roam 基准，被杀即停，按原字节还原。62 个：
+
+- 关系图拖动 15 个：drift 不经逆矩阵、不记 drift 的 scale、scale 不重求、裁边用画出来的缩放（×2）、拖动后不重新出边、环上不 fixed、不投到环上、不归一化、力导向不 warmUp、第一次移动就 fixed、从不 fixed、松开不 unfix、衰减 0.99、afterStep 不写布局、节点的数组 `symbolSize` 不读；
+- 逐边样式 8 个：宽度、透明度、颜色只取系列的，两个词对调，虚线只取系列的，符号只取系列的，大小 0 当真，裁边按系列的起点符号；
+- 边标签 14 个：直线 `pointAt` 写成插值、曲线写成展开式、向左不加 π、`end` 的阈值 0.5、忽略 origin、distance 不乘 invScale、上下对调、`insideEnd` 的对齐对调、曲边的切线取弦、默认文字不取十位、边名用 `->`、默认文字取边的值、系列的 `edgeLabel` 压过边自己的 `label`、`distance` 一对的第二个取第一个；
+- 指针 6 个：拖动的同时也武装平移、桑基拖动的增量不更新起点、localX 不除盒子、`roamTrigger` 缺省不是 global、containPixel 按盒子、桑基的滚轮交给关系图；
+- 桑基的矩阵、标签与拖动 9 个：组的变换被忽略、主组的平移不乘组的缩放、节点标签的宿主框不缩放、边标签的框不变换、默认文字不当模板、level 的 `edgeLabel` spec 被跳过、dragNode 的位置不读、`draggable` 缺省假、圆角不随缩放；
+- 桑基聚焦 10 个：节点的邻接集不带边、轨迹不往上游走、节点的轨迹当邻接、emphasis 透明度缺省 0.5 不加、状态线色的词不换、连线不进 blur、边的下标不离开 blur、连线不是派发者、`dataType: 'edge'` 不认、`'lineStyle:item'` 的颜色落到描边。
+
+首轮杀死 56 个，存活 6 个：
+
+- **两个词对调**：`gs-per-edge` 的节点都是系列色，源和目标一样。补 `gs-category-words`（每个节点一个类别），杀死。
+- **曲边的切线取弦**：二次曲线中点的导数与弦同向，整数坐标下逐位相同。先在 node 里扫出两种写法舍入不同的坐标，补 `gl-curved-fraction`（`(0.1, 0.1)` 到 `(50.1, 71.7)`，曲度 0.3），杀死。
+- **level 的 `edgeLabel` spec 被跳过**：spec 只管字体和墨色，基准不比这些（文字走另一条链）。补手写「level 的墨色只给从它出发的连线」，杀死。
+- **圆角不随缩放**：基准没有圆角的节点。补手写「缩放 2 时圆角 6」，杀死。
+- **节点的轨迹当邻接**：三层的图里悬停 b 的轨迹正好等于邻接。补 `sf-trajectory-deep`（多一层 d → f），并把 R8 改成按用例自己的数据重算，杀死。
+- **曲线写成展开式**：**等价**。`Line.beforeUpdate` 只问 t = 0、1/2、1，乘的都是 2 的幂，与舍入可交换，两种写法逐位相同；原处写了注释。
+
+第二轮重跑这 6 个（另加「裁边用画出来的缩放、不乘 2」——平移之后两个缩放差一个 ulp，看基准能不能分出来）：除展开式外全部杀死，「不乘 2」那个也被杀。
+
+### 推迟与偏差
+
+- **力导向的拖动按 `layoutAnimation: false` 的样子**：端口没有逐帧退火，拖动时被拖节点不跟指针走、每次移动重新退火一遍（上游在默认 `true` 下节点跟着走）。带「旧控制点」的边（§64：曲度为假但初始布局留了点）在拖动重新退火时，上游用的是上一次 `adjustEdge` **裁过**的那个点，端口仍用原来的；基准里没有这种边。
+- 只拖 view 上的关系图；直角坐标、日历上的关系图按下可拖动的节点只是不平移。zrender 的 Draggable 不看按键，右键按在节点上也会拖；端口只认左键。
+- 被拖节点的 `half`（符号的半宽）不比较：上游悬停会把路径放大，基准的按下点就在节点上。
+- `dragNode` 的事件载荷写 `seriesIndex`（上游是带 `\0` 的自动 `seriesId`）。
+- 桑基 `roamTrigger` 不是 `'global'` 时，上游按主组内容的包围盒判断是否在里面，端口按 View 的区域（盒子经 overall）。
+- 边标签：`edgeLabel.rotate` / `offset`（会进 textConfig 再被 Line 覆盖一部分）不读；未知的位置词按上游落到线组原点，没有用例；边标签进标签布局（`labelLayout`）时按「放在 label.x / y」处理，没有核对；状态里的 `edgeLabel.show` 不读（`defaultEmphasis` 让它默认等于普通的）。
+- 桑基 highlight / downplay 不写下标（只写 `dataType: 'edge'`）时上游点亮整个视图组，端口什么都不做；带有渐变填充时 emphasis 不提亮（全局既有偏差）。
+- 关系图仍不上共享状态模型（上面「做法」的理由），它与桑基图之间不互相淡化。
+
+### 落地
+
+- `source/tyControls.AdvChart.Graph.pas`：逐边样式与符号、边标签、`ReadItemSizePairs`、拖动、力导向实例。
+- `source/tyControls.AdvChart.Sankey.pas`：主组矩阵、dragNode 的位置、边标签、`TySankeyDraggable` / `TySankeyLevel` / `TySankeyFocusSets`。
+- `source/tyControls.AdvChart.States.pas`：`EdgeIndices`、`'lineStyle:item'`。
+- `source/tyControls.AdvChart.Events.pas`：`dragnode`。
+- `source/tyControls.AdvanceChart.pas`：拖动、桑基 roam 与视图、`DoViewAction`、`GraphEdgeLabels`、桑基上的状态机、merge 与 notMerge 的状态。
+- `tools/advchart-oracle/graph-sankey-interact.js`、`tests/fixtures/advchart-graph-sankey-interact.json`、`tests/test.advchart.graphsankeyinteract.pas`（新，注册在 `tytests.lpr`）。
+- `tests/test.advchart.handlerwiring.pas`：不再滤掉连线标签的格式器调用（原处标注）。
+- 没有新单元、新主题键或新资源串。
+
+全量 **10596 个测试，0 失败、0 错误**（变异轮之前是 10594 个，同样全绿；多出的 2 个是变异补的手写测试）。新增 `test.advchart.graphsankeyinteract` 12 个（基准 1 个、手写 11 个）；力导向的求解拆成实例以后，现有的力导向、roam、聚焦、图例基准逐位不变。
