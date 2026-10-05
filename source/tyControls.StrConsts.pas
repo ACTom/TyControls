@@ -385,6 +385,7 @@ resourcestring
   rsTyChartYAxisNoGrid = 'yAxis[%d] names no grid, so it is not drawn';
   rsTyChartGridOneDirection =
     'grid[%d] has axes in only one direction, so it draws nothing';
+  rsTyChartPolarNoAxis = 'polar[%d] has no %s, so it is not drawn';
   rsTyChartSeriesNoType = 'series[%d] has no type, so it is not drawn';
   rsTyChartSeriesBadType = 'series[%d]: "%s" is not a series type';
   rsTyChartSeriesCoordSys = 'series[%d]: coordinateSystem "%s" is not built yet';

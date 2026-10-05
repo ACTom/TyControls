@@ -62,6 +62,7 @@ uses
   tyControls.AdvChart.AxisLabels, tyControls.AdvChart.LabelLayout,
   tyControls.AdvChart.Export, tyControls.AdvChart.Loading,
   tyControls.AdvChart.Convert, tyControls.AdvChart.Jitter,
+  tyControls.AdvChart.Polar,
   fpjson, contnrs, tyControls.SubPixel;
 
 const
@@ -136,8 +137,20 @@ type
       option. }
     Slots: TTyIntegerArray;
     Rows: TTyIntegerArray;
+    { THE POLAR the axis belongs to; nil on a grid [Batch 111] }
+    Polar: TTyPolar;
   end;
   TTyAxisHitArray = array of TTyAxisHit;
+
+  { WHAT A POLAR POINTER DRAWS [Batch 111]: its shape, and its label's text
+    and padded box (top-left, after the align and the confinement to the
+    control) when the label is shown. }
+  TTyPolarPointerDraw = record
+    Shape: TTyPolarPointerShape;
+    HasLabel: Boolean;
+    Text: string;
+    X, Y, W, H: Double;
+  end;
 
   { A TREE NODE EXPANDED OR COLLAPSED, as upstream's
     `treeexpandandcollapse` action reports it: from a click and from the API
@@ -299,6 +312,9 @@ type
       tick value. Lives as long as the axis' model: a notMerge clears it, a
       merge forgets only the axes it brought in new. }
     FAxisMemory: TTyAxisMemoryStore;
+    { THE POLARS of the last build, indexed by component index (a hole or a
+      polar missing an axis is nil) [Batch 111] }
+    FPolars: TTyPolarArray;
     FBindings: TTySeriesBindingArray;
     FStores: array of TTyDataStore;
     { Every bar's width and offset, index-parallel to FBindings. Solved in
@@ -1102,6 +1118,14 @@ type
     procedure FreeCalendars;
     function CalendarInk: TTyCalendarInk;
     procedure FreeRadars;
+    { the polars go with the build [Batch 111] }
+    procedure FreePolars;
+    { both axis views of every polar: the grid layer (split areas and lines)
+      with ABelow, the axis lines, ticks, labels and names without }
+    procedure PaintPolars(APainter: TTyPainter; APPI: Integer;
+      const AMeasurer: ITyTextMeasurer; ABelow: Boolean);
+    procedure PaintPolarPointer(APainter: TTyPainter; const ARect: TRect;
+      APPI: Integer; const AMeasurer: ITyTextMeasurer; const AHit: TTyAxisHit);
     procedure SolveGraphs(APPI: Integer);
     procedure FreeGraphs;
     procedure SolveTrees(APPI: Integer);
@@ -1241,6 +1265,8 @@ type
     function ConvertOnCalendar(ACal: TTyCalendar; AValue: TJSONData;
       AFrom: Boolean): TTyConvertResult;
     function ConvertOnView(AView: TTyGraphView; AValue: TJSONData;
+      AFrom: Boolean): TTyConvertResult;
+    function ConvertOnPolar(APolar: TTyPolar; AValue: TJSONData;
       AFrom: Boolean): TTyConvertResult;
     function ContainSeries(ASeriesIndex: Integer; APoint: TJSONData): Boolean;
     { Which row of a series a point is over, asked of the BASE axis.
@@ -1477,6 +1503,14 @@ type
     { the same about the pixel AAt rather than the hit's own value }
     function PointerShadowShapeAt(const AHit: TTyAxisHit; AAt: Double;
       out AShape: TTyXYWH): Boolean;
+    { A POLAR HIT'S POINTER as it is drawn [Batch 111]: PolarAxisPointer's
+      line, circle or sector at the pointer's value, and its label -- the
+      value's text in the pointer label's font, padded, hung by
+      getLabelPosition's point and alignment, kept inside the control (ARect).
+      False when the hit is not a polar one. }
+    function PolarPointerGeometry(const AHit: TTyAxisHit; const ARect: TRect;
+      const AMeasurer: ITyTextMeasurer; APPI: Integer;
+      out ADraw: TTyPolarPointerDraw): Boolean;
     { WHAT THE TOOLTIP WOULD SAY, in four answerable pieces rather than one
       procedure that draws. PROTECTED for the same reason RenderTo is: a
       headless test has no window and no pointer, and a content rule tested
@@ -1970,6 +2004,10 @@ type
     function RadarLayout(AIndex: Integer): TTyRadar;
     { Calendar component AIndex as the last render laid it out, or nil. }
     function CalendarLayout(AIndex: Integer): TTyCalendar;
+    { Polar component AIndex as the last render laid it out -- its centre,
+      its two axes and both axis views -- or nil [Batch 111]. }
+    function PolarCount: Integer;
+    function PolarLayout(AIndex: Integer): TTyPolar;
     { The legends as the last render placed them. }
     function LegendLayoutCount: Integer;
     function LegendLayout(AIndex: Integer): TTyLegendLayout;
@@ -2269,6 +2307,7 @@ begin
   FreeCalendars;
   FreeGraphs;
   FreeTreeViews;
+  FreePolars;
   FTrees := nil;
   FSunbursts := nil;
   FTreemaps := nil;
@@ -2577,6 +2616,19 @@ begin
         SetLength(FAnimFreshAxes, Length(FAnimFreshAxes) + 1);
         if t = 0 then FAnimFreshAxes[High(FAnimFreshAxes)] := 'xAxis' + IntToStr(s)
         else FAnimFreshAxes[High(FAnimFreshAxes)] := 'yAxis' + IntToStr(s);
+      end;
+  end;
+  { a polar axis brought in new starts its memory over too [Batch 111] }
+  for t := 0 to 1 do
+  begin
+    if t = 0 then si := TyMergeSlotsIndex(AReport, 'angleAxis')
+    else si := TyMergeSlotsIndex(AReport, 'radiusAxis');
+    if si < 0 then Continue;
+    for s := 0 to High(AReport.Slots[si].Brand) do
+      if AReport.Slots[si].Brand[s] then
+      begin
+        if t = 0 then FAxisMemory.Forget('angleAxis' + IntToStr(s))
+        else FAxisMemory.Forget('radiusAxis' + IntToStr(s));
       end;
   end;
   { A BRAND NEW MODEL ASKS FOR A NEW VIEW, whatever id it made (a removed
@@ -2919,9 +2971,19 @@ var
   enc: TTySeriesEncode;
   typeInfo: TTySeriesTypeInfo;
   radarSpec: TTyRadarSpec;
+  polarMissing: TTyStringArray;
 begin
   DropBuild;
   FBuild := TyBuildGrids(FOption, FLastRect);
+  { THE POLARS beside the grids: their axes, extents and centres
+    [Batch 111] }
+  FPolars := TyBuildPolars(FOption, FLastRect, polarMissing);
+  for i := 0 to High(polarMissing) do
+  begin
+    j := Pos(':', polarMissing[i]);
+    FBuild.Note(Format(rsTyChartPolarNoAxis, [StrToIntDef(Copy(polarMissing[i], 1, j - 1), -1),
+      Copy(polarMissing[i], j + 1, MaxInt)]));
+  end;
   FBindings := TyBindSeries(FOption, FBuild);
   { A TYPE THAT RESOLVED AND STILL DRAWS NOTHING HAS TO SAY SO. Binding knows
     the twenty-three names ECharts ships and says nothing about which of them
@@ -3191,6 +3253,8 @@ begin
   DzRenderStates;
   TyApplyAxisExtents(FOption, FBuild, FBindings, FStores, FStacks, FIndex,
     FLastPPI, FAxisZooms);
+  { AND THE POLARS' SCALES, the same nice step [Batch 111] }
+  TyPolarApplyExtents(FOption, FPolars);
   { LAST, ON THE VIEWS THE FILTERS LEFT: dataColorPaletteTask is a visual
     stage (4600), after every processor -- a row the legend or a dataZoom
     took out reads the series' colorFromPalette, a row still in reads its
@@ -3719,6 +3783,10 @@ begin
     called directly, so the layout layer stays free of the painter and a test
     can hand it a deterministic measurer instead of this machine's fonts. }
   TyLayoutGrids(FBuild, FOption, AMeasurer, APPI, txt, FAxisMemory);
+  { THE POLAR AXIS VIEWS, in the same fonts and gaps [Batch 111] }
+  TyLayoutPolars(FPolars, FOption, AMeasurer, APPI, txt,
+    ActiveController.Metric(TyAdvChartMinorTickLenVar, TyAdvChartMinorTickLen),
+    FAxisMemory);
   { AFTER phase C, for the reason on FBarCols. }
   FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex);
   { AND THE CANDLES AND BOXES, by the same band [Batch 108] }
@@ -4506,6 +4574,9 @@ var
   gb: TTyGridBuild;
 begin
   if FBuild = nil then Exit;
+  { THE POLARS' GRIDS, then their axes [Batch 111] }
+  PaintPolars(APainter, APPI, AMeasurer, True);
+  PaintPolars(APainter, APPI, AMeasurer, False);
   for g := 0 to FBuild.GridCount - 1 do
   begin
     gb := FBuild.Grid(g);
@@ -7501,6 +7572,609 @@ function TTyAdvanceChart.RadarLayout(AIndex: Integer): TTyRadar;
 begin
   Result := nil;
   if (AIndex >= 0) and (AIndex <= High(FRadars)) then Result := FRadars[AIndex];
+end;
+
+{ ==================== the polars [Batch 111] ==================== }
+
+procedure TTyAdvanceChart.FreePolars;
+var i: Integer;
+begin
+  for i := 0 to High(FPolars) do
+    FPolars[i].Free;
+  FPolars := nil;
+end;
+
+function TTyAdvanceChart.PolarCount: Integer;
+begin
+  Result := Length(FPolars);
+end;
+
+function TTyAdvanceChart.PolarLayout(AIndex: Integer): TTyPolar;
+begin
+  if (AIndex < 0) or (AIndex > High(FPolars)) then Exit(nil);
+  Result := FPolars[AIndex];
+end;
+
+{ WHAT THE TWO VIEWS DRAW, in the skin's axis styles -- the same keys the
+  grid's axes draw in, because upstream's polar axes share axisDefault with
+  every other axis. The geometry is the layout's, already on the pixel grid
+  where upstream puts it there (the radius line and ticks). }
+procedure TTyAdvanceChart.PaintPolars(APainter: TTyPainter; APPI: Integer;
+  const AMeasurer: ITyTextMeasurer; ABelow: Boolean);
+var
+  i, k, ink: Integer;
+  p: TTyPolar;
+  model: TTyStyleModel;
+  lineS, tickS, splitS, areaS, minorTickS, minorSplitS, labelS, nameS,
+    inkStyle: TTyStyleSet;
+  areaColour: TTyColor;
+  lblW, lblH: Integer;
+  view: TTyChartView;
+
+  function LineWidth(const AStyle: TTyStyleSet): Double;
+  begin
+    if tpBorderWidth in AStyle.Present then Result := AStyle.BorderWidth
+    else Result := 1;
+    if Result < 0.05 then Result := 0.05;
+  end;
+
+  function AnchorAlign(AH2: TTyTextAnchorH): TAlignment;
+  begin
+    case AH2 of
+      tahLeft: Result := taLeftJustify;
+      tahRight: Result := taRightJustify;
+    else Result := taCenter;
+    end;
+  end;
+
+  function AnchorLayout(AV: TTyTextAnchorV): TTextLayout;
+  begin
+    case AV of
+      tavTop: Result := tlTop;
+      tavBottom: Result := tlBottom;
+    else Result := tlCenter;
+    end;
+  end;
+
+  function AnchorBox(AX, AY: Double; AW, AH: Integer;
+    AH2: TTyTextAnchorH; AV: TTyTextAnchorV): TRect;
+  begin
+    case AH2 of
+      tahLeft: begin Result.Left := Round(AX); Result.Right := Round(AX) + AW; end;
+      tahRight: begin Result.Left := Round(AX) - AW; Result.Right := Round(AX); end;
+    else
+      begin
+        Result.Left := Round(AX - AW / 2);
+        Result.Right := Result.Left + AW;
+      end;
+    end;
+    case AV of
+      tavTop: begin Result.Top := Round(AY); Result.Bottom := Round(AY) + AH; end;
+      tavBottom: begin Result.Top := Round(AY) - AH; Result.Bottom := Round(AY); end;
+    else
+      begin
+        Result.Top := Round(AY - AH / 2);
+        Result.Bottom := Result.Top + AH;
+      end;
+    end;
+  end;
+
+  procedure TextSizeOf(const AText: string; const AStyle: TTyStyleSet;
+    out AW, AH: Integer);
+  var w, h: Double;
+  begin
+    AW := 0;
+    AH := 0;
+    if AMeasurer = nil then Exit;
+    AMeasurer.MeasureLine(AText, AStyle.FontName, ResolveFontSize(AStyle),
+      AStyle.FontWeight, w, h);
+    AW := Round(w);
+    AH := Round(h);
+  end;
+
+  { the lines of AInk (every one when AInk < 0), one path, one stroke }
+  procedure StrokeLines(const ALines: TTyPolarLineArray; const AStyle: TTyStyleSet;
+    AInk: Integer);
+  var q, n: Integer;
+  begin
+    if not (tpBorderColor in AStyle.Present) then Exit;
+    n := 0;
+    APainter.BeginPath;
+    for q := 0 to High(ALines) do
+    begin
+      if not ALines[q].Drawn then Continue;
+      if (AInk >= 0) and (ALines[q].ColourIndex <> AInk) then Continue;
+      APainter.MoveTo(ALines[q].X1, ALines[q].Y1);
+      APainter.LineTo(ALines[q].X2, ALines[q].Y2);
+      Inc(n);
+    end;
+    if n > 0 then APainter.StrokePath(AStyle.BorderColor, LineWidth(AStyle));
+  end;
+
+  { zrender's buildPath of a circle, an arc, a ring or a sector with no
+    corners, onto the current path }
+  procedure ArcPath(const A: TTyPolarArc);
+  var r, r0, t, arcLen: Double;
+  begin
+    case A.Kind of
+      pakCircle:
+        begin
+          APainter.MoveTo(A.CX + A.R, A.CY);
+          APainter.ArcTo(A.CX, A.CY, A.R, 0, 2 * Pi, False);
+        end;
+      pakArc:
+        begin
+          r := Math.Max(A.R, 0);
+          APainter.MoveTo(TyJsCos(A.StartAngle) * r + A.CX,
+            TyJsSin(A.StartAngle) * r + A.CY);
+          APainter.ArcTo(A.CX, A.CY, r, A.StartAngle, A.EndAngle, not A.Clockwise);
+        end;
+      pakRing:
+        begin
+          APainter.MoveTo(A.CX + A.R, A.CY);
+          APainter.ArcTo(A.CX, A.CY, A.R, 0, 2 * Pi, False);
+          APainter.MoveTo(A.CX + A.R0, A.CY);
+          APainter.ArcTo(A.CX, A.CY, A.R0, 2 * Pi, 0, True);
+        end;
+      pakSector:
+        begin
+          r := Math.Max(A.R, 0);
+          r0 := Math.Max(A.R0, 0);
+          if (r <= 0) and (r0 <= 0) then Exit;
+          if r <= 0 then
+          begin
+            r := r0;
+            r0 := 0;
+          end;
+          if r0 > r then
+          begin
+            t := r0;
+            r0 := r;
+            r := t;
+          end;
+          if IsNan(A.StartAngle) or IsNan(A.EndAngle) then Exit;
+          arcLen := Abs(A.EndAngle - A.StartAngle);
+          APainter.MoveTo(A.CX + r * TyJsCos(A.StartAngle),
+            A.CY + r * TyJsSin(A.StartAngle));
+          APainter.ArcTo(A.CX, A.CY, r, A.StartAngle, A.EndAngle, not A.Clockwise);
+          if arcLen > 2 * Pi - 1e-4 then
+          begin
+            if r0 > 1e-4 then
+            begin
+              APainter.MoveTo(A.CX + r0 * TyJsCos(A.EndAngle),
+                A.CY + r0 * TyJsSin(A.EndAngle));
+              APainter.ArcTo(A.CX, A.CY, r0, A.EndAngle, A.StartAngle, A.Clockwise);
+            end;
+          end
+          else if r0 > 1e-4 then
+          begin
+            APainter.LineTo(A.CX + r0 * TyJsCos(A.EndAngle),
+              A.CY + r0 * TyJsSin(A.EndAngle));
+            APainter.ArcTo(A.CX, A.CY, r0, A.EndAngle, A.StartAngle, A.Clockwise);
+          end
+          else
+            APainter.LineTo(A.CX, A.CY);
+          APainter.ClosePath;
+        end;
+    end;
+  end;
+
+  procedure StrokeArcs(const AArcs: TTyPolarArcArray; const AStyle: TTyStyleSet;
+    AInk: Integer);
+  var q, n: Integer;
+  begin
+    if not (tpBorderColor in AStyle.Present) then Exit;
+    n := 0;
+    APainter.BeginPath;
+    for q := 0 to High(AArcs) do
+    begin
+      if (AInk >= 0) and (AArcs[q].ColourIndex <> AInk) then Continue;
+      ArcPath(AArcs[q]);
+      Inc(n);
+    end;
+    if n > 0 then APainter.StrokePath(AStyle.BorderColor, LineWidth(AStyle));
+  end;
+
+  { the split areas in their colours: the author's list, or the skin's
+    colour and none in turn }
+  procedure FillAreas(const AView: TTyPolarAxisView);
+  var q: Integer;
+  begin
+    for q := 0 to High(AView.SplitAreas) do
+    begin
+      ink := AView.SplitAreas[q].ColourIndex;
+      if Length(AView.Furn.SplitAreaInks) > 0 then
+      begin
+        if ink > High(AView.Furn.SplitAreaInks) then ink := 0;
+        if not AView.Furn.SplitAreaInks[ink].Ok then Continue;
+        areaColour := TTyColor(AView.Furn.SplitAreaInks[ink].Colour);
+      end
+      else if (ink <> 0) or not (tpBackground in areaS.Present) then
+        Continue
+      else
+        areaColour := areaS.Background.Color;
+      APainter.BeginPath;
+      ArcPath(AView.SplitAreas[q]);
+      APainter.FillPath(areaColour);
+    end;
+  end;
+
+  { the split lines (or circles) in their colours }
+  procedure SplitLinesOf(const AView: TTyPolarAxisView; ACircles: Boolean);
+  var q: Integer;
+  begin
+    if not ((tpBorderColor in splitS.Present)
+      or (Length(AView.Furn.SplitLineInks) > 0)) then Exit;
+    for q := 0 to Math.Max(0, High(AView.Furn.SplitLineInks)) do
+    begin
+      inkStyle := splitS;
+      if Length(AView.Furn.SplitLineInks) > 0 then
+      begin
+        if not AView.Furn.SplitLineInks[q].Ok then Continue;
+        inkStyle.BorderColor := TTyColor(AView.Furn.SplitLineInks[q].Colour);
+        Include(inkStyle.Present, tpBorderColor);
+        if ACircles then StrokeArcs(AView.SplitCircles, inkStyle, q)
+        else StrokeLines(AView.SplitLines, inkStyle, q);
+      end
+      else if ACircles then StrokeArcs(AView.SplitCircles, inkStyle, -1)
+      else StrokeLines(AView.SplitLines, inkStyle, -1);
+    end;
+  end;
+
+  procedure PaintArrow(const AArrow: TTyAxisArrow);
+  var
+    el: TTyChartElement;
+    path: TTyZrPath;
+    t: string;
+  begin
+    t := AArrow.SymbolType;
+    path := TyZrSymbol(t, -AArrow.W / 2, -AArrow.H / 2, AArrow.W, AArrow.H);
+    if Length(path) = 0 then Exit;
+    el := Default(TTyChartElement);
+    el.Style.Alpha := 1;
+    el.Shape := TyMkZrShape(path, TyZrLocal(1, 1, AArrow.Rotation, AArrow.X,
+      AArrow.Y), True);
+    if Copy(t, 1, 5) = 'empty' then
+    begin
+      el.Style.HasFill := True;
+      el.Style.FillColor := TTyChartColor(model.ResolveStyle(
+        'TyAdvChartEmptyCircle', '', []).Background.Color);
+      el.Style.StrokeColor := TTyChartColor(lineS.BorderColor);
+      el.Style.StrokeWidthLogical := 2;
+    end
+    else if t = 'line' then
+    begin
+      el.Style.StrokeColor := TTyChartColor(lineS.BorderColor);
+      el.Style.StrokeWidthLogical := 1;
+    end
+    else
+    begin
+      el.Style.HasFill := True;
+      el.Style.FillColor := TTyChartColor(lineS.BorderColor);
+    end;
+    TyRenderElement(APainter, el);
+  end;
+
+  procedure PaintRadius(const AView: TTyPolarAxisView);
+  var
+    q: Integer;
+    sp: TTyAxisLayoutSpec;
+    pl: TTyAxisNamePlacement;
+  begin
+    sp := AView.Spec;
+    if AView.HasLine and (tpBorderColor in lineS.Present) then
+    begin
+      APainter.BeginPath;
+      APainter.MoveTo(AView.Line.X1, AView.Line.Y1);
+      APainter.LineTo(AView.Line.X2, AView.Line.Y2);
+      APainter.StrokePath(lineS.BorderColor, LineWidth(lineS));
+      for q := 0 to High(sp.Arrows) do PaintArrow(sp.Arrows[q]);
+    end;
+    StrokeLines(AView.Ticks, tickS, -1);
+    StrokeLines(AView.MinorTicks, minorTickS, -1);
+    AxisTextStyles(@sp, labelS, nameS);
+    pl := sp.NamePlacement;
+    if pl.Shown and (tpTextColor in nameS.Present) then
+    begin
+      if Length(pl.Rt) > 0 then
+        TyRenderRtPieces(APainter, pl.Rt, pl.X, pl.Y, pl.RotationRad, sp.RtScale,
+          1, True, nameS.TextColor)
+      else if Abs(pl.RotationRad) < 1e-9 then
+      begin
+        TextSizeOf(pl.Text, nameS, lblW, lblH);
+        APainter.DrawText(AnchorBox(pl.X, pl.Y, lblW, lblH, pl.AnchorH, pl.AnchorV),
+          pl.Text, nameS.FontName, ResolveFontSize(nameS), nameS.FontWeight,
+          nameS.TextColor, taCenter, tlCenter, False, 0, False, Pos(#10, pl.Text) > 0);
+      end
+      else
+        APainter.DrawTextRotated(pl.Text, nameS.FontName, ResolveFontSize(nameS),
+          nameS.FontWeight, nameS.TextColor, pl.X, pl.Y, pl.RotationRad,
+          AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV));
+    end;
+    if not (tpTextColor in labelS.Present) then Exit;
+    for q := 0 to High(sp.Placements) do
+    begin
+      if not sp.Placements[q].Shown or (sp.Placements[q].Text = '') then Continue;
+      if Length(sp.Placements[q].Rt) > 0 then
+      begin
+        TyRenderRtPieces(APainter, sp.Placements[q].Rt, sp.Placements[q].X,
+          sp.Placements[q].Y, sp.RotationRad, sp.RtScale, 1, True, labelS.TextColor);
+        Continue;
+      end;
+      if sp.RotationRad <> 0 then
+      begin
+        APainter.DrawTextRotated(sp.Placements[q].Text, labelS.FontName,
+          ResolveFontSize(labelS), labelS.FontWeight, labelS.TextColor,
+          sp.Placements[q].X, sp.Placements[q].Y, sp.RotationRad,
+          AnchorAlign(sp.Placements[q].AnchorH), AnchorLayout(sp.Placements[q].AnchorV));
+        Continue;
+      end;
+      TextSizeOf(sp.Placements[q].Text, labelS, lblW, lblH);
+      APainter.DrawText(AnchorBox(sp.Placements[q].X, sp.Placements[q].Y, lblW,
+        lblH, sp.Placements[q].AnchorH, sp.Placements[q].AnchorV),
+        sp.Placements[q].Text, labelS.FontName, ResolveFontSize(labelS),
+        labelS.FontWeight, labelS.TextColor, taCenter, tlCenter, False, 0, False,
+        Pos(#10, sp.Placements[q].Text) > 0);
+    end;
+  end;
+
+  procedure PaintAngle(const AView: TTyPolarAxisView);
+  var
+    q: Integer;
+    sp: TTyAxisLayoutSpec;
+  begin
+    sp := AView.Spec;
+    if AView.HasLine and (tpBorderColor in lineS.Present) then
+    begin
+      APainter.BeginPath;
+      ArcPath(AView.LineArc);
+      APainter.StrokePath(lineS.BorderColor, LineWidth(lineS));
+    end;
+    StrokeLines(AView.Ticks, tickS, -1);
+    StrokeLines(AView.MinorTicks, minorTickS, -1);
+    AxisTextStyles(@sp, labelS, nameS);
+    if not (tpTextColor in labelS.Present) then Exit;
+    for q := 0 to High(AView.Labels) do
+    begin
+      if AView.Labels[q].Text = '' then Continue;
+      if Length(AView.Labels[q].Rt) > 0 then
+      begin
+        TyRenderRtPieces(APainter, AView.Labels[q].Rt, AView.Labels[q].X,
+          AView.Labels[q].Y, 0, sp.RtScale, 1, True, labelS.TextColor);
+        Continue;
+      end;
+      TextSizeOf(AView.Labels[q].Text, labelS, lblW, lblH);
+      APainter.DrawText(AnchorBox(AView.Labels[q].X, AView.Labels[q].Y, lblW,
+        lblH, AView.Labels[q].AnchorH, AView.Labels[q].AnchorV),
+        AView.Labels[q].Text, labelS.FontName, ResolveFontSize(labelS),
+        labelS.FontWeight, labelS.TextColor, taCenter, tlCenter, False, 0, False,
+        Pos(#10, AView.Labels[q].Text) > 0);
+    end;
+  end;
+
+begin
+  if Length(FPolars) = 0 then Exit;
+  model := ActiveController.Model;
+  lineS := model.ResolveStyle('TyAdvChartAxisLine', '', []);
+  tickS := model.ResolveStyle('TyAdvChartAxisTick', '', []);
+  splitS := model.ResolveStyle('TyAdvChartSplitLine', '', []);
+  areaS := model.ResolveStyle('TyAdvChartSplitArea', '', []);
+  minorTickS := model.ResolveStyle('TyAdvChartMinorTick', '', []);
+  minorSplitS := model.ResolveStyle('TyAdvChartMinorSplitLine', '', []);
+  for i := 0 to High(FPolars) do
+  begin
+    p := FPolars[i];
+    if p = nil then Continue;
+    for k := 0 to 1 do
+    begin
+      if k = 0 then view := cvAngleAxis else view := cvRadiusAxis;
+      if ViewHidden(view) then Continue;
+      if k = 0 then
+      begin
+        if not p.AngleView.Shown then Continue;
+        ViewDrew(view);
+        if ABelow then
+        begin
+          FillAreas(p.AngleView);
+          StrokeLines(p.AngleView.MinorSplitLines, minorSplitS, -1);
+          SplitLinesOf(p.AngleView, False);
+        end
+        else
+          PaintAngle(p.AngleView);
+      end
+      else
+      begin
+        if not p.RadiusView.Shown then Continue;
+        ViewDrew(view);
+        if ABelow then
+        begin
+          FillAreas(p.RadiusView);
+          StrokeArcs(p.RadiusView.MinorSplitCircles, minorSplitS, -1);
+          SplitLinesOf(p.RadiusView, True);
+        end
+        else
+          PaintRadius(p.RadiusView);
+      end;
+    end;
+  end;
+end;
+
+function TTyAdvanceChart.PolarPointerGeometry(const AHit: TTyAxisHit;
+  const ARect: TRect; const AMeasurer: ITyTextMeasurer; APPI: Integer;
+  out ADraw: TTyPolarPointerDraw): Boolean;
+var
+  pv, coord, margin, tw, th, padL, padT, padR, padB, x, y, vw, vh: Double;
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
+  labelS: TTyStyleSet;
+  scale: Double;
+begin
+  ADraw := Default(TTyPolarPointerDraw);
+  ADraw.Shape.Kind := plpkNone;
+  Result := False;
+  if (AHit.Polar = nil) or (AHit.Axis = nil) then Exit;
+  Result := True;
+  pv := PointerValue(AHit);
+  { dataToCoord(value) -- no clamp: the value is one the axis contains }
+  coord := AHit.Axis.DataToCoord(pv);
+  case AHit.Spec.PointerType of
+    aptLine: ADraw.Shape := TyPolarPointerShape(AHit.Polar, AHit.Axis, coord,
+      TyPolarPointerBand(AHit.Axis), False);
+    aptShadow: ADraw.Shape := TyPolarPointerShape(AHit.Polar, AHit.Axis, coord,
+      TyPolarPointerBand(AHit.Axis), True);
+  end;
+  if not AHit.Spec.LabelSpec.Show or (AMeasurer = nil) then Exit;
+  ADraw.Text := PointerLabelText(AHit, pv);
+  labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
+  AMeasurer.MeasureLine(ADraw.Text, labelS.FontName, ResolveFontSize(labelS),
+    labelS.FontWeight, tw, th);
+  if APPI > 0 then scale := APPI / 96 else scale := 1;
+  if AHit.Spec.LabelSpec.HasPadding then
+  begin
+    padL := AHit.Spec.LabelSpec.PadLeft * scale;
+    padT := AHit.Spec.LabelSpec.PadTop * scale;
+    padR := AHit.Spec.LabelSpec.PadRight * scale;
+    padB := AHit.Spec.LabelSpec.PadBottom * scale;
+  end
+  else
+  begin
+    padL := labelS.Padding.Left * scale;
+    padT := labelS.Padding.Top * scale;
+    padR := labelS.Padding.Right * scale;
+    padB := labelS.Padding.Bottom * scale;
+  end;
+  margin := ActiveController.Metric(TyAdvChartAxisPointerMarginVar,
+    TyAdvChartAxisPointerMargin);
+  if AHit.Spec.LabelSpec.MarginLogical <> 3 then
+    margin := AHit.Spec.LabelSpec.MarginLogical;
+  margin := margin * scale;
+  { getLabelPosition, then buildLabelElOption's align and confineInContainer }
+  TyPolarPointerLabelAnchor(AHit.Polar, AHit.Axis, coord, margin,
+    AHit.Polar.RadiusView.Furn.LabelRotateDeg * Pi / 180, x, y, ah, av);
+  ADraw.W := tw + padR + padL;
+  ADraw.H := th + padT + padB;
+  if ah = tahRight then x := x - ADraw.W;
+  if ah = tahCentre then x := x - ADraw.W / 2;
+  if av = tavBottom then y := y - ADraw.H;
+  if av = tavMiddle then y := y - ADraw.H / 2;
+  vw := ARect.Right - ARect.Left;
+  vh := ARect.Bottom - ARect.Top;
+  x := Math.Min(x + ADraw.W, vw) - ADraw.W;
+  y := Math.Min(y + ADraw.H, vh) - ADraw.H;
+  x := Math.Max(x, Double(0));
+  y := Math.Max(y, Double(0));
+  ADraw.X := x;
+  ADraw.Y := y;
+  ADraw.HasLabel := True;
+end;
+
+procedure TTyAdvanceChart.PaintPolarPointer(APainter: TTyPainter;
+  const ARect: TRect; APPI: Integer; const AMeasurer: ITyTextMeasurer;
+  const AHit: TTyAxisHit);
+var
+  d: TTyPolarPointerDraw;
+  lineS, shadowS, labelS: TTyStyleSet;
+  colour: TTyColor;
+  w: Double;
+  dash: TTyDoubleArray;
+  box: TRect;
+  corners: TTyCorners;
+  surface: TTyFill;
+  s: TTyPolarPointerShape;
+begin
+  if not PolarPointerGeometry(AHit, ARect, AMeasurer, APPI, d) then Exit;
+  lineS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointer', '', []);
+  shadowS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerShadow', '', []);
+  labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
+  s := d.Shape;
+  case s.Kind of
+    plpkLine, plpkCircle:
+      if tpBorderColor in lineS.Present then
+      begin
+        colour := lineS.BorderColor;
+        if AHit.Spec.HasLineColour then colour := TTyColor(AHit.Spec.LineColour);
+        w := lineS.BorderWidth;
+        if AHit.Spec.HasLineWidth then w := AHit.Spec.LineWidthLogical;
+        if w > 0 then
+        begin
+          dash := TyDashPattern(AHit.Spec.LineDash, AHit.Spec.LineDashExplicit, w);
+          APainter.SetLineDash(dash);
+          APainter.BeginPath;
+          if s.Kind = plpkLine then
+          begin
+            APainter.MoveTo(s.X1, s.Y1);
+            APainter.LineTo(s.X2, s.Y2);
+          end
+          else
+          begin
+            APainter.MoveTo(s.CX + s.R, s.CY);
+            APainter.ArcTo(s.CX, s.CY, Math.Max(s.R, 0), 0, 2 * Pi, False);
+          end;
+          APainter.StrokePath(colour, w);
+          APainter.SetLineDash([]);
+        end;
+      end;
+    plpkSector:
+      if tpBackground in shadowS.Present then
+      begin
+        colour := shadowS.Background.Color;
+        if AHit.Spec.HasShadowColour then colour := TTyColor(AHit.Spec.ShadowColour);
+        APainter.BeginPath;
+        if Abs(s.EndAngle - s.StartAngle) > 2 * Pi - 1e-4 then
+        begin
+          APainter.MoveTo(s.CX + s.R, s.CY);
+          APainter.ArcTo(s.CX, s.CY, Math.Max(s.R, 0), 0, 2 * Pi, False);
+          if s.R0 > 1e-4 then
+          begin
+            APainter.MoveTo(s.CX + s.R0, s.CY);
+            APainter.ArcTo(s.CX, s.CY, s.R0, 2 * Pi, 0, True);
+          end;
+        end
+        else
+        begin
+          APainter.MoveTo(s.CX + s.R * TyJsCos(s.StartAngle),
+            s.CY + s.R * TyJsSin(s.StartAngle));
+          APainter.ArcTo(s.CX, s.CY, Math.Max(s.R, 0), s.StartAngle, s.EndAngle, False);
+          if s.R0 > 1e-4 then
+          begin
+            APainter.LineTo(s.CX + s.R0 * TyJsCos(s.EndAngle),
+              s.CY + s.R0 * TyJsSin(s.EndAngle));
+            APainter.ArcTo(s.CX, s.CY, s.R0, s.EndAngle, s.StartAngle, True);
+          end
+          else
+            APainter.LineTo(s.CX, s.CY);
+          APainter.ClosePath;
+        end;
+        APainter.FillPath(colour);
+      end;
+  end;
+  if not d.HasLabel or (d.Text = '') then Exit;
+  if not (tpBackground in labelS.Present) then Exit;
+  box := Rect(Round(d.X), Round(d.Y), Round(d.X + d.W), Round(d.Y + d.H));
+  corners := TyEffectiveCorners(labelS);
+  if AHit.Spec.LabelSpec.HasBorderRadius then
+    corners := TyCorners(Round(AHit.Spec.LabelSpec.BorderRadiusLogical),
+      Round(AHit.Spec.LabelSpec.BorderRadiusLogical),
+      Round(AHit.Spec.LabelSpec.BorderRadiusLogical),
+      Round(AHit.Spec.LabelSpec.BorderRadiusLogical));
+  surface := labelS.Background;
+  if AHit.Spec.LabelSpec.HasBackground then
+  begin
+    surface.Kind := tfkSolid;
+    surface.Color := TTyColor(AHit.Spec.LabelSpec.Background);
+  end;
+  APainter.FillBackground(box, surface, corners);
+  if AHit.Spec.LabelSpec.HasBorderColour and AHit.Spec.LabelSpec.HasBorderWidth
+    and (AHit.Spec.LabelSpec.BorderWidthLogical > 0) then
+    APainter.StrokeBorder(box, corners,
+      Round(AHit.Spec.LabelSpec.BorderWidthLogical),
+      TTyColor(AHit.Spec.LabelSpec.BorderColour))
+  else if TyBorderVisible(labelS) then
+    APainter.StrokeBorder(box, corners, labelS.BorderWidth, labelS.BorderColor);
+  colour := labelS.TextColor;
+  if AHit.Spec.LabelSpec.HasColour then colour := TTyColor(AHit.Spec.LabelSpec.Colour);
+  APainter.DrawText(box, d.Text, labelS.FontName, ResolveFontSize(labelS),
+    labelS.FontWeight, colour, taCenter, tlCenter, False);
 end;
 
 function TTyAdvanceChart.CalendarLayout(AIndex: Integer): TTyCalendar;
@@ -15513,7 +16187,17 @@ begin
         Result := ConvertOnView(FGraphs[slot], AValue, AFrom);
         if Result.Kind <> cvkNone then Exit;
       end;
-    { polar (C3) and singleAxis (C10) take their turn here }
+    { THE POLARS [Batch 111]: getCoordSys -- the polar named, else the
+      series' own (a series on a polar arrives with C4) }
+    for c := 0 to High(FPolars) do
+    begin
+      if FPolars[c] = nil then Continue;
+      target := TyFinderModel(pf, 'polar');
+      if target <> c then Continue;
+      Result := ConvertOnPolar(FPolars[c], AValue, AFrom);
+      if Result.Kind <> cvkNone then Exit;
+    end;
+    { singleAxis (C10) takes its turn here }
     for c := 0 to High(FCalendars) do
     begin
       if FCalendars[c] = nil then Continue;
@@ -15541,6 +16225,15 @@ end;
   cartesian's area, a graph's, tree's or sankey's view; a calendar's and a
   radar's are always false -- or, with none, its view's: a pie's ring of
   its first item }
+{ Polar.convertToPixel / convertFromPixel: dataToPoint of [radius, angle],
+  or pointToData of a pixel [Batch 111] }
+function TTyAdvanceChart.ConvertOnPolar(APolar: TTyPolar; AValue: TJSONData;
+  AFrom: Boolean): TTyConvertResult;
+begin
+  if AFrom then Result := TyPolarFromPixel(APolar, AValue)
+  else Result := TyPolarToPixel(APolar, AValue);
+end;
+
 function TTyAdvanceChart.ContainSeries(ASeriesIndex: Integer; APoint: TJSONData): Boolean;
 var
   slot, k: Integer;
@@ -15615,10 +16308,19 @@ begin
               and TyCartesianContainJson(gb.CartesianByIndex(0), APoint) then
               Exit(True);
           end;
+        end
+        { Polar.containPoint: the radius and the angle each in their
+          extent [Batch 111] }
+        else if mt = 'polar' then
+        begin
+          g := pf.Types[t].Models[k];
+          if (g >= 0) and (g <= High(FPolars)) and (FPolars[g] <> nil)
+            and TyPolarContainJson(FPolars[g], APoint) then
+            Exit(True);
         end;
         { a calendar's and a radar's containPoint are not implemented
-          upstream (false); an axis has no coordinate system; polar,
-          singleAxis and geo are not here yet }
+          upstream (false); an axis has no coordinate system; singleAxis
+          and geo are not here yet }
       end;
     end;
   except
@@ -16737,6 +17439,8 @@ var
   cart: TTyCartesian2D;
   baseAxis, otherAxis: TTyAxis;
   seen: array of TTyAxis;
+  wantPolar: string;
+  pol: TTyPolar;
 
   function AlreadySeen(AAxis: TTyAxis): Boolean;
   var j: Integer;
@@ -16748,8 +17452,10 @@ var
     Result := False;
   end;
 
-  { One axis, resolved and appended when it has something to say. }
-  procedure Consider(AAxis: TTyAxis; const APlot: TTyRectF; ACross: Boolean);
+  { One axis, resolved and appended when it has something to say. On a
+    polar the value is the axis' own half of pointToData [Batch 111]. }
+  procedure Consider(AAxis: TTyAxis; const APlot: TTyRectF; ACross: Boolean;
+    APolar: TTyPolar = nil);
   var
     hit: TTyAxisHit;
     coord, value, snapTo, v, diff, dist, minDist, minDiff, maxDist: Double;
@@ -16764,13 +17470,19 @@ var
     hit.Axis := AAxis;
     hit.Plot := APlot;
     hit.Cross := ACross;
+    hit.Polar := APolar;
     hit.Spec := TyAxisPointerSpecOf(FOption, AAxis.MainType,
       AAxis.ComponentIndex, isCat, True,
       (tipSpec.Trigger = tttAxis) and not ACross, crossType);
     if hit.Spec.Show = apsNo then Exit;
 
-    if AAxis.Horizontal then coord := AX else coord := AY;
-    value := AAxis.CoordToData(coord);
+    if APolar <> nil then
+      value := APolar.AxisPointToData(AAxis, AX, AY)
+    else
+    begin
+      if AAxis.Horizontal then coord := AX else coord := AY;
+      value := AAxis.CoordToData(coord);
+    end;
     if IsNan(value) then Exit;
     { THE CONTAINMENT TEST IS WHAT REJECTS AN OUT-OF-RANGE POINT, not a clamp.
       CoordToData extrapolates on purpose, so a pointer forty pixels past the
@@ -16893,6 +17605,21 @@ begin
         Consider(otherAxis, gb.PlotRect, True);
       end;
     end;
+  end;
+  { THE POLARS, after the grids as the coordinate system manager lists
+    them: one that holds the point (Polar.containPoint) takes a pointer on
+    its tooltip axis -- `tooltip.axisPointer.axis` 'radius' or 'angle', else
+    getBaseAxis -- and with a cross on the other [Batch 111] }
+  wantPolar := TyTooltipPolarPointerAxis(FOption);
+  for g := 0 to High(FPolars) do
+  begin
+    pol := FPolars[g];
+    if (pol = nil) or not pol.ContainXY(AX, AY) then Continue;
+    if wantPolar <> '' then baseAxis := pol.AxisByDim(wantPolar)
+    else baseAxis := pol.BaseAxis;
+    Consider(baseAxis, Default(TTyRectF), False, pol);
+    if crossType and (baseAxis <> nil) then
+      Consider(pol.OtherAxis(baseAxis), Default(TTyRectF), True, pol);
   end;
 end;
 
@@ -17627,6 +18354,12 @@ begin
   begin
     hit := AHits[i];
     if hit.Axis = nil then Continue;
+    { a polar's pointer is its own shape [Batch 111] }
+    if hit.Polar <> nil then
+    begin
+      PaintPolarPointer(APainter, ARect, APPI, AMeasurer, hit);
+      Continue;
+    end;
     { SNAP MOVES THE POINTER, not the content. With snap off the line stays
       under the cursor while the tooltip still describes the nearest row --
       upstream splits them at exactly this branch. }
@@ -19975,6 +20708,8 @@ begin
   begin
     hit := FTipHits[i];
     if (hit.Axis = nil) or (hit.Spec.PointerType = aptNone) then Continue;
+    { a polar pointer does not slide [Batch 111] }
+    if hit.Polar <> nil then Continue;
     at := hit.Axis.DataToCoord(PointerValue(hit), True);
     if IsNan(at) then Continue;
     key := PtrKeyOf(hit.Axis);

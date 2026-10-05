@@ -42,7 +42,7 @@ uses SysUtils, Classes, Math, fpjson,
      tyControls.AdvChart.Types, tyControls.AdvChart.Option,
      tyControls.AdvChart.Data, tyControls.AdvChart.Scale,
      tyControls.AdvChart.Time,
-  tyControls.AdvChart.Dataset,
+  tyControls.AdvChart.Dataset, tyControls.AdvChart.Paint,
      tyControls.AdvChart.Coord, tyControls.AdvChart.Layout;
 
 type
@@ -320,6 +320,17 @@ type
 function TyBuildGrids(AOption: TTyChartOption; const AViewport: TTyRectF): TTyChartBuild;
 
 { ---- phase C ---- }
+{ ONE AXIS' LAYOUT SPEC from its option: the labels (each tick's text, value,
+  place in the axis' own frame and proportion), the fonts and text blocks,
+  the gaps, the name and its options, as a grid lays them out. ANegate-
+  Rotation turns axisLabel.rotate the other way (a top axis not on the
+  other's zero); AContainLabel is legacy containLabel, which keeps the name
+  from moving. Shared by every coordinate system with AxisBuilder axes --
+  the grid's and the polar's radius axis [Batch 111]. }
+procedure TyFillAxisLayoutSpec(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
+  ANode: TJSONObject; const AFurn: TTyAxisFurniture;
+  const AText: TTyAxisTextStyle; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; ANegateRotation, AContainLabel: Boolean);
 { Shrink every grid rect by the room its axes' labels and names need, then write
   the final pixel extents. Safe to call more than once. }
 procedure TyLayoutGrids(ABuild: TTyChartBuild; AOption: TTyChartOption;
@@ -363,7 +374,26 @@ function TyAxisArrows(const AFrame: TTyAxisNameFrame;
   because upstream walks every cartesian in the grid and asks each one for
   its opposite-dimension axis whether or not this axis is in it. }
 function TyAxisFurnitureOf(ANode: TJSONObject; AAxis: TTyAxis;
-  AOtherIsValue: Boolean): TTyAxisFurniture;
+  AOtherIsValue: Boolean; APolar: Boolean = False): TTyAxisFurniture;
+{ AN AXIS MADE FROM ITS OPTION, as every coordinate system's axis is: the
+  type (an unknown one is a value axis, its name in AUnknown), the scale (a
+  log axis' base), the categories, the band (a category axis' boundaryGap),
+  `show`, the id and the name, its main type and index. Not its inverse,
+  which each coordinate system reads its own way. [Batch 111] }
+function TyCreateAxis(AOption: TTyChartOption; const AMainType: string;
+  AIndex: Integer; const ADim: string; AHorizontal: Boolean;
+  out AUnknown: string): TTyAxis;
+{ axisLabel / axisTick customValues under AModel [Batch 110]: AHas when the
+  option is truthy, then the values parsed, in the extent, deduplicated and
+  ascending. }
+function TyCustomValuesOf(AModel: TJSONObject; AAxis: TTyAxis;
+  out AHas: Boolean): TTyDoubleArray;
+{ One axis text's rich pieces about its anchor (a label's, a name's) in the
+  font the layout measured it in [Batch 86]. }
+function TyAxisRtPieces(const ASpec: TTyAxisLayoutSpec; const ABlock: TTyRtBlockStyle;
+  const AText, AFontName: string; AFontSize, AWeight: Integer; AHasColour: Boolean;
+  AColour: Cardinal; AH: TTyTextAnchorH; AV: TTyTextAnchorV;
+  const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
 
 { One tick's label as upstream's makeLabelFormatter makes it for a category,
   value or log axis: the scale's own label -- the category, or the number as
@@ -513,7 +543,7 @@ uses
     the AdvChart layer. }
   tyControls.StrConsts, tyControls.AdvChart.AxisName, tyControls.AdvChart.RichStyle,
   tyControls.AdvChart.AxisLabels, tyControls.AdvChart.Handlers,
-  tyControls.AdvChart.Paint, tyControls.AdvChart.Color,
+  tyControls.AdvChart.Color,
   tyControls.AdvChart.JsMath, tyControls.AdvChart.Marker,
   tyControls.AdvChart.Labels, tyControls.AdvChart.RichText,
   tyControls.AdvChart.Convert;
@@ -1033,6 +1063,44 @@ begin
   end;
 end;
 
+function TyCreateAxis(AOption: TTyChartOption; const AMainType: string;
+  AIndex: Integer; const ADim: string; AHorizontal: Boolean;
+  out AUnknown: string): TTyAxis;
+var
+  nd: TJSONObject;
+  t: TTyAxisType;
+  a: TTyAxis;
+  d: TJSONData;
+begin
+  nd := ObjOf(AOption.ComponentAt(AMainType, AIndex));
+  TyResolveAxisType(nd, t, AUnknown);
+  a := TTyAxis.Create(ADim, MakeScale(t, nd), AHorizontal);
+  { `useUTC` IS A ROOT OPTION, not an axis one -- upstream reads it once
+    off the top of the tree and every time axis in the chart obeys it. }
+  if a.Scale is TTyTimeScale then
+    TTyTimeScale(a.Scale).UTC := AOption.GetBool('useUTC', False);
+  a.MainType := AMainType;
+  a.ComponentIndex := AIndex;
+  d := AOption.ComponentAt(AMainType, AIndex);
+  a.Hole := (d <> nil) and (d.JSONType <> jtObject);
+  a.Id := StrIn(nd, 'id', '');
+  a.Name := AxisNameIn(nd);
+  a.AxisType := t;
+  if t = atCategory then
+    ReadCategories(nd, a);
+  { Category axes band by default; the setter refuses to band anything
+    else, so a value axis' boundaryGap -- which is a pair of percentages,
+    not a boolean -- cannot turn this on by accident. }
+  a.OnBand := (t = atCategory) and BoolIn(nd, 'boundaryGap', True);
+  { `show` decides whether the axis is DRAWN, not whether it exists: series
+    bound to a hidden axis still get their extents and their coordinates.
+    Read here so the flag reaches the renderer -- before this it was read
+    only into the layout spec, where it shrank the reserved thickness and
+    the axis was then drawn anyway. }
+  a.Visible := BoolIn(nd, 'show', True);
+  Result := a;
+end;
+
 function TyBuildGrids(AOption: TTyChartOption; const AViewport: TTyRectF): TTyChartBuild;
 var
   build: TTyChartBuild;
@@ -1063,39 +1131,17 @@ var
     q: Integer;
     nd: TJSONObject;
     a: TTyAxis;
-    t: TTyAxisType;
     u: string;
   begin
     SetLength(ATarget, ACount);
     for q := 0 to ACount - 1 do
     begin
       nd := ObjOf(AOption.ComponentAt(AMainType, q));
-      if not TyResolveAxisType(nd, t, u) then
+      a := TyCreateAxis(AOption, AMainType, q, Copy(AMainType, 1, 1),
+        AHorizontal, u);
+      if u <> '' then
         build.Note(Format(rsTyChartAxisTypeUnknown, [AMainType, q, u]));
-      a := TTyAxis.Create(Copy(AMainType, 1, 1), MakeScale(t, nd), AHorizontal);
-      { `useUTC` IS A ROOT OPTION, not an axis one -- upstream reads it once
-        off the top of the tree and every time axis in the chart obeys it. }
-      if a.Scale is TTyTimeScale then
-        TTyTimeScale(a.Scale).UTC := AOption.GetBool('useUTC', False);
-      a.MainType := AMainType;
-      a.ComponentIndex := q;
-      a.Hole := IsHole(AMainType, q);
-      a.Id := StrIn(nd, 'id', '');
-      a.Name := AxisNameIn(nd);
-      a.AxisType := t;
-      if t = atCategory then
-        ReadCategories(nd, a);
-      { Category axes band by default; the setter refuses to band anything
-        else, so a value axis' boundaryGap -- which is a pair of percentages,
-        not a boolean -- cannot turn this on by accident. }
-      a.OnBand := (t = atCategory) and BoolIn(nd, 'boundaryGap', True);
       a.Inverse := BoolIn(nd, 'inverse', False);
-      { `show` decides whether the axis is DRAWN, not whether it exists: series
-        bound to a hidden axis still get their extents and their coordinates.
-        Read here so the flag reaches the renderer -- before this it was read
-        only into the layout spec, where it shrank the reserved thickness and
-        the axis was then drawn anyway. }
-      a.Visible := BoolIn(nd, 'show', True);
       ATarget[q] := a;
     end;
   end;
@@ -1399,6 +1445,15 @@ begin
     ASpec.RtScale, AMeasurer);
 end;
 
+function TyAxisRtPieces(const ASpec: TTyAxisLayoutSpec; const ABlock: TTyRtBlockStyle;
+  const AText, AFontName: string; AFontSize, AWeight: Integer; AHasColour: Boolean;
+  AColour: Cardinal; AH: TTyTextAnchorH; AV: TTyTextAnchorV;
+  const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
+begin
+  Result := AxisRtPieces(ASpec, ABlock, AText, AFontName, AFontSize, AWeight,
+    AHasColour, AColour, AH, AV, AMeasurer);
+end;
+
 { THE TIME AXIS' LABEL BLOCK [Batch 104]: the author's axisLabel over the time
   axis' own default, `rich: { primary: { fontWeight: 'bold' } }`
   (coord/axisDefault.ts) -- the weight the skin's primary label rule gives,
@@ -1643,7 +1698,7 @@ begin
 end;
 
 function TyAxisFurnitureOf(ANode: TJSONObject; AAxis: TTyAxis;
-  AOtherIsValue: Boolean): TTyAxisFurniture;
+  AOtherIsValue: Boolean; APolar: Boolean): TTyAxisFurniture;
 var
   cat, tickAuto: Boolean;
   d, sub: TJSONData;
@@ -1664,7 +1719,10 @@ begin
     bands points at nothing in particular. Take the boundary gap away --
     `boundaryGap: false` -- and the ticks come back. }
   tickAuto := AOtherIsValue;
-  if cat and AAxis.OnBand then tickAuto := False;
+  { A POLAR AXIS' `auto` IS PLAIN TRUTH: the angle view asks get(show) and
+    draws on any truthy answer, and the radius' AxisBuilder is given no
+    auto rule -- a banded category angle axis has its ticks [Batch 111] }
+  if cat and AAxis.OnBand and not APolar then tickAuto := False;
 
   { axisLine.show: `true` on a category axis, `auto` on every other kind. }
   Result.ShowLine := ShowIn(ANode, 'axisLine', True, not cat, AOtherIsValue);
@@ -2715,6 +2773,539 @@ begin
   Result := vals;
 end;
 
+{ nameTextStyle's own padding: textMargin, a number or upstream's css
+  array, or minMargin, which wins }
+procedure ReadNameMargin(var ASpec: TTyAxisLayoutSpec; AStyle: TJSONObject);
+var
+  d: TJSONData;
+  a: TJSONArray;
+  v: array[0..3] of Double;
+  k: Integer;
+begin
+  d := FindIn(AStyle, 'minMargin');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    ASpec.NameMarginKind := nmkMinMargin;
+    { `minMargin` only supports a number; anything else is none }
+    if (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then
+      ASpec.NameMinMarginLogical := d.AsFloat
+    else
+      ASpec.NameMinMarginLogical := 0;
+    Exit;
+  end;
+  d := FindIn(AStyle, 'textMargin');
+  if (d = nil) or (d.JSONType = jtNull) then Exit;
+  if d.JSONType = jtNumber then
+  begin
+    for k := 0 to 3 do v[k] := d.AsFloat;
+  end
+  else if (d is TJSONArray) and (TJSONArray(d).Count in [1..4]) then
+  begin
+    a := TJSONArray(d);
+    for k := 0 to a.Count - 1 do
+      if a.Items[k].JSONType <> jtNumber then Exit;
+    { normalizeCssArray: [a] [v, h] [t, h, b] [t, r, b, l] }
+    case a.Count of
+      1: for k := 0 to 3 do v[k] := a.Items[0].AsFloat;
+      2: begin
+           v[0] := a.Items[0].AsFloat; v[1] := a.Items[1].AsFloat;
+           v[2] := v[0]; v[3] := v[1];
+         end;
+      3: begin
+           v[0] := a.Items[0].AsFloat; v[1] := a.Items[1].AsFloat;
+           v[2] := a.Items[2].AsFloat; v[3] := v[1];
+         end;
+    else
+      for k := 0 to 3 do v[k] := a.Items[k].AsFloat;
+    end;
+  end
+  else
+    Exit;
+  ASpec.NameMarginKind := nmkTextMargin;
+  for k := 0 to 3 do ASpec.NameMargin[k] := v[k];
+end;
+
+{ EVERYTHING ABOUT THE NAME that the option says: where it goes, the gap,
+  the turn, the alignment and padding, and whether it moves out of the
+  labels' way. }
+procedure ReadName(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
+  ANode: TJSONObject; const AText: TTyAxisTextStyle;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer; AContainLabel: Boolean);
+var
+  d: TJSONData;
+  st: TJSONObject;
+  s: string;
+begin
+  ASpec.Inverse := AAxis.Inverse;
+  ASpec.NameFontName := AText.NameFontName;
+  ASpec.NameFontSizeLogical := AText.NameFontSizeLogical;
+  ASpec.NameFontWeight := AText.NameFontWeight;
+  ASpec.HasNameColour := AText.HasGlobalColour;
+  ASpec.NameColour := AText.GlobalColour;
+  { THE AUTHOR'S nameTextStyle over the theme and the root textStyle
+    [Batch 83] }
+  AuthorFont(ObjOf(FindIn(ANode, 'nameTextStyle')), ASpec.NameFontName,
+    ASpec.NameFontSizeLogical, ASpec.NameFontWeight, ASpec.HasNameColour,
+    ASpec.NameColour);
+  { THE NAME'S TEXT BLOCK [Batch 86] }
+  ASpec.NameRt := AxisRtOf(ObjOf(FindIn(ANode, 'nameTextStyle')), AText.RtGlobal);
+  { THE NAME'S WIDTH AND OVERFLOW ARE AxisBuilder's: `overflow: 'truncate'`
+    at nameTruncate's maxWidth, whatever nameTextStyle says (AxisBuilder.ts
+    852-930) -- and with no maxWidth, no width at all }
+  ASpec.NameRt.Style.WidthKind := rtwNone;
+  ASpec.NameRt.Style.Width := 0;
+  ASpec.NameRt.Style.Overflow := rtoNone;
+  ASpec.NameRt.Needed := TyRtNeedsBlock(ASpec.NameRt);
+  { nameTruncate [Batch 101]: a written maxWidth -- a number -- and the
+    ellipsis, '...' unless a string is written. A block cuts inside its own
+    layout, at the block's width; a plain name is cut here, once, so the
+    layout measures and the paint draws the same cut text. }
+  ASpec.HasNameTrunc := False;
+  ASpec.NameTruncEllipsis := '...';
+  st := ObjOf(FindIn(ANode, 'nameTruncate'));
+  if st <> nil then
+  begin
+    d := st.Find('maxWidth');
+    if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then
+    begin
+      ASpec.HasNameTrunc := True;
+      ASpec.NameTruncWidth := d.AsFloat;
+    end;
+    d := st.Find('ellipsis');
+    if (d <> nil) and (d.JSONType = jtString) then
+      ASpec.NameTruncEllipsis := d.AsString;
+  end;
+  if ASpec.HasNameTrunc and ASpec.NameRt.Needed then
+  begin
+    ASpec.NameRt.Style.WidthKind := rtwNumber;
+    ASpec.NameRt.Style.Width := ASpec.NameTruncWidth;
+    ASpec.NameRt.Style.Overflow := rtoTruncate;
+    ASpec.NameRt.Style.HasEllipsis := True;
+    ASpec.NameRt.Style.Ellipsis := ASpec.NameTruncEllipsis;
+  end
+  else if ASpec.HasNameTrunc and (ASpec.Name <> '') and (AMeasurer <> nil) then
+  begin
+    if ASpec.NameFontSizeLogical > 0 then
+      ASpec.Name := string.Join(#10, TyZrPlainTextLines(ASpec.Name,
+        AxisScaleF(ASpec.NameTruncWidth, APPI), MaxDouble, 0,
+        ASpec.NameTruncEllipsis, AMeasurer, ASpec.NameFontName,
+        ASpec.NameFontSizeLogical, ASpec.NameFontWeight))
+    else
+      ASpec.Name := string.Join(#10, TyZrPlainTextLines(ASpec.Name,
+        AxisScaleF(ASpec.NameTruncWidth, APPI), MaxDouble, 0,
+        ASpec.NameTruncEllipsis, AMeasurer, ASpec.FontName,
+        ASpec.FontSizeLogical, ASpec.FontWeight));
+    { a name cut to nothing is no name }
+    if Trim(StringReplace(ASpec.Name, #10, '', [rfReplaceAll])) = '' then
+      ASpec.Name := '';
+  end;
+  if ASpec.NameRt.Needed then
+  begin
+    if APPI > 0 then ASpec.RtScale := APPI / 96 else ASpec.RtScale := 1;
+    ASpec.RtGlobal := AText.RtGlobal;
+    ASpec.NameMeter := TyRtBlockMeasurer(AMeasurer, ASpec.NameRt,
+      AText.RtGlobal, ASpec.RtScale);
+  end;
+  { 'end' by default; 'center' is 'middle'. A location upstream does not
+    know takes its middle anchor and its end layout there -- here it is
+    simply 'end'. }
+  s := StrIn(ANode, 'nameLocation', 'end');
+  if s = 'start' then ASpec.NameLocation := anlStart
+  else if (s = 'middle') or (s = 'center') then ASpec.NameLocation := anlMiddle
+  else ASpec.NameLocation := anlEnd;
+  { `get('nameGap') || 0`: the theme's when absent, nought for null or
+    false, a negative gap kept }
+  d := FindIn(ANode, 'nameGap');
+  if d <> nil then
+  begin
+    if d.JSONType = jtNumber then
+    begin
+      if IsNan(d.AsFloat) then ASpec.NameGapLogical := 0
+      else ASpec.NameGapLogical := d.AsFloat;
+    end
+    else if (d.JSONType = jtNull)
+      or ((d.JSONType = jtBoolean) and not d.AsBoolean) then
+      ASpec.NameGapLogical := 0;
+  end;
+  d := FindIn(ANode, 'nameRotate');
+  if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then
+  begin
+    ASpec.HasNameRotate := True;
+    ASpec.NameRotateRad := d.AsFloat * Pi / 180;
+  end;
+  st := ObjOf(FindIn(ANode, 'nameTextStyle'));
+  if st <> nil then
+  begin
+    { a truthy string over the layout's own; zrender reads anything but
+      'right' and 'center' as left, anything but 'middle' and 'bottom' as
+      top }
+    s := StrIn(st, 'align', '');
+    if s <> '' then
+    begin
+      ASpec.HasNameAlignH := True;
+      if s = 'right' then ASpec.NameAlignH := tahRight
+      else if s = 'center' then ASpec.NameAlignH := tahCentre
+      else ASpec.NameAlignH := tahLeft;
+    end;
+    s := StrIn(st, 'verticalAlign', '');
+    if s <> '' then
+    begin
+      ASpec.HasNameAlignV := True;
+      if s = 'bottom' then ASpec.NameAlignV := tavBottom
+      else if s = 'middle' then ASpec.NameAlignV := tavMiddle
+      else ASpec.NameAlignV := tavTop;
+    end;
+    ReadNameMargin(ASpec, st);
+  end;
+  { nameMoveOverlap: null and 'auto' are the grid's -- off under legacy
+    containLabel, on otherwise; any other value is its truthiness }
+  d := FindIn(ANode, 'nameMoveOverlap');
+  if (d = nil) or (d.JSONType = jtNull)
+    or ((d.JSONType = jtString) and (d.AsString = 'auto')) then
+    ASpec.NameNoMove := AContainLabel
+  else if d.JSONType = jtBoolean then
+    ASpec.NameNoMove := not d.AsBoolean
+  else if d.JSONType = jtNumber then
+    ASpec.NameNoMove := IsNan(d.AsFloat) or (d.AsFloat = 0)
+  else if d.JSONType = jtString then
+    ASpec.NameNoMove := d.AsString = '';
+end;
+
+procedure TyFillAxisLayoutSpec(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
+  ANode: TJSONObject; const AFurn: TTyAxisFurniture;
+  const AText: TTyAxisTextStyle; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; ANegateRotation, AContainLabel: Boolean);
+var
+  ticks: TTyScaleTickArray;
+  q, kept, idx: Integer;
+  lbl, wd: TJSONData;
+  ovf: string;
+  isTime, marked, custom: Boolean;
+  tfmt: TTyTimeLabelFormatter;
+  cv: TTyDoubleArray;
+  v: Double;
+begin
+  ASpec := Default(TTyAxisLayoutSpec);
+  ASpec.Side := AAxis.Side;
+  { `axisLabel.show`, NOT the axis' own `show` -- the axis-level one is
+    handled at the bottom of this routine. Reading it here as well meant
+    `axisLabel: { show: false }` did nothing while a hidden axis was asked
+    about twice. }
+  ASpec.ShowLabels := AFurn.ShowLabels;
+  { legacy containLabel measures these even on a hidden axis }
+  ASpec.LegacyLabels := AFurn.ShowLabels;
+  ASpec.ShowTicks := AFurn.ShowTicks;
+  ASpec.ForcedLabelStep := AFurn.LabelStep;
+  ASpec.ShowAllLabels := AFurn.ShowAllLabels;
+  ASpec.HideOverlap := AFurn.HideOverlap;
+  ASpec.LabelRotateDeg := AFurn.LabelRotateDeg;
+  ASpec.OnBand := AAxis.OnBand;
+  if AAxis.AxisType = atCategory then ASpec.LabelKind := lakCategory
+  else if AAxis.AxisType = atTime then ASpec.LabelKind := lakTime
+  else ASpec.LabelKind := lakValue;
+  ASpec.TickStep := AFurn.TickStep;
+  ASpec.ShowMinLabel := AFurn.ShowMinLabel;
+  ASpec.ShowMaxLabel := AFurn.ShowMaxLabel;
+  ASpec.TickInside := AFurn.TickInside;
+  ASpec.LabelInside := AFurn.LabelInside;
+  { AN OFFSET AXIS HANGS FURTHER OUT, so the band it costs is its own
+    thickness PLUS the offset -- upstream builds the labels AT the offset
+    position and then shrinks the grid by however far they overflow the
+    canvas, which comes to the same thing for one axis on a side. }
+  ASpec.OffsetLogical := AFurn.OffsetLogical;
+  ASpec.Name := AAxis.Name;
+  { From the caller's resolved theme style, NOT from literals here: the paint
+    pass draws in the theme's font and gaps, so measuring in anything else
+    sizes the plot rect for a chart nobody will draw. }
+  ASpec.FontName := AText.FontName;
+  ASpec.FontSizeLogical := AText.FontSizeLogical;
+  ASpec.FontWeight := AText.FontWeight;
+  { a label's token colour is a default of its own: the root textStyle's
+    colour never reaches it -- only the name's does }
+  ASpec.HasLabelColour := False;
+  ASpec.LabelColour := 0;
+  { THE AUTHOR'S axisLabel font and colour over the theme's and the root
+    textStyle's [Batch 83]: measured in what it is drawn in }
+  AuthorFont(ObjOf(FindIn(ANode, 'axisLabel')), ASpec.FontName,
+    ASpec.FontSizeLogical, ASpec.FontWeight, ASpec.HasLabelColour,
+    ASpec.LabelColour);
+  { THE LABELS' TEXT BLOCK, and the measurer every measurement of a label
+    goes through [Batch 86] }
+  ASpec.RtGlobal := AText.RtGlobal;
+  if APPI > 0 then ASpec.RtScale := APPI / 96 else ASpec.RtScale := 1;
+  ASpec.LabelRt := AxisRtOf(ObjOf(FindIn(ANode, 'axisLabel')), AText.RtGlobal);
+  if ASpec.LabelRt.Needed then
+    ASpec.LabelMeter := TyRtBlockMeasurer(AMeasurer, ASpec.LabelRt,
+      ASpec.RtGlobal, ASpec.RtScale);
+  { THE THEME FIRST AND THE OPTION OVER IT. A gap is a geometric value and
+    an author is allowed to name one -- the same arrangement
+    `axisLabel.width` has already. Colours are the other kind and still
+    come from the theme alone. }
+  ASpec.LabelMarginLogical := AText.LabelMarginLogical;
+  if not IsNan(AFurn.LabelMarginLogical) then
+    ASpec.LabelMarginLogical := AFurn.LabelMarginLogical;
+  ASpec.TickLengthLogical := AText.TickLengthLogical;
+  if not IsNan(AFurn.TickLengthLogical) then
+    ASpec.TickLengthLogical := AFurn.TickLengthLogical;
+  ASpec.NameGapLogical := AText.NameGapLogical;
+  ReadName(ASpec, AAxis, ANode, AText, AMeasurer, APPI, AContainLabel);
+  { `xAxis.show: false` MUST GIVE THE GUTTER BACK. Upstream builds nothing
+    at all for a hidden axis and skips it again when it folds the shrink,
+    so the plot grows into the band. The port hid it at PAINT time only:
+    `yAxis: { show: false }` stopped drawing the numbers and went on
+    reserving room for them, which is a chart with an empty margin down
+    its left-hand side and no way to close it.
+
+    Zeroed rather than skipped because FSpecs is index-parallel to the
+    grid's axis lists -- SpecFor and FurnitureFor both walk them by
+    position -- and a spec that costs nothing is the same answer. }
+  if not AAxis.Visible then
+  begin
+    ASpec.ShowLabels := False;
+    ASpec.ShowTicks := False;
+    ASpec.Name := '';
+  end;
+  { DEGREES IN THE OPTION, RADIANS IN THE LAYOUT, and the same sign in both:
+    `rotate` is counter-clockwise positive upstream (AxisBuilder turns it
+    straight into the zrender element's `rotation`) and the painter's
+    DrawTextRotated is counter-clockwise positive too. Negating it here
+    turned every rotated label the wrong way -- invisible while nothing drew
+    the rotation at all, because the extent a turn costs is the same either
+    way round. }
+  { AND A TOP AXIS TURNS THE OTHER WAY, so that `rotate: 45` slants the
+    labels away from the plot on both edges instead of into it on one --
+    but only where the axis IS on top: one that sits on the other family's
+    zero is positioned 'onZero', which upstream never negates.
+    [Revised in batch 43: this negated for `position: top` alone, and a
+    top category axis over a value axis through zero slanted the wrong way
+    with the wrong alignment.] }
+  if ANegateRotation then
+    ASpec.RotationRad := -AFurn.LabelRotateDeg * Pi / 180
+  else
+    ASpec.RotationRad := AFurn.LabelRotateDeg * Pi / 180;
+  { MAJORS ONLY. GetTicks hands back majors and minors in one array with
+    Level saying which is which, and its own comment says a caller that wants
+    only the majors tests Level. This did not -- so `minorTick: { show: true
+    }`, which is applied earlier in the same rebuild, multiplied the label
+    count by the minor split and asked the layout to fit five times as many
+    strings as the axis has numbers. }
+  { axisLabel.width + overflow. `none` is ECharts' default and is what this
+    already did: no bound, and crowding handled by thinning the labels.
+
+    THE BROKEN TEXT IS PRODUCED HERE, once, and stored in the spec -- so the
+    layout measures exactly the string the paint draws. MeasureLine already
+    honours the breaks inside a string, so nothing downstream has to know that
+    wrapping happened at all. }
+  ASpec.LabelWidthLogical := 0;
+  ASpec.LabelOverflow := loNone;
+  { textMargin: [0, 3] unless the option says -- a number for all four
+    sides, or [vertical, horizontal] }
+  ASpec.TextMarginVLogical := 0;
+  ASpec.TextMarginHLogical := 3;
+  if ANode <> nil then
+  begin
+    lbl := FindIn(ANode, 'axisLabel');
+    if (lbl <> nil) and (lbl.JSONType = jtObject) then
+    begin
+      wd := FindIn(TJSONObject(lbl), 'textMargin');
+      if (wd <> nil) and (wd.JSONType = jtNumber) then
+      begin
+        ASpec.TextMarginVLogical := wd.AsFloat;
+        ASpec.TextMarginHLogical := wd.AsFloat;
+      end
+      else if (wd is TJSONArray) and (TJSONArray(wd).Count >= 2)
+        and (TJSONArray(wd).Items[0].JSONType = jtNumber)
+        and (TJSONArray(wd).Items[1].JSONType = jtNumber) then
+      begin
+        ASpec.TextMarginVLogical := TJSONArray(wd).Items[0].AsFloat;
+        ASpec.TextMarginHLogical := TJSONArray(wd).Items[1].AsFloat;
+      end;
+      wd := FindIn(TJSONObject(lbl), 'width');
+      if (wd <> nil) and (wd.JSONType = jtNumber) then
+        ASpec.LabelWidthLogical := wd.AsFloat;
+      ovf := LowerCase(StrIn(TJSONObject(lbl), 'overflow', ''));
+      if ovf = 'truncate' then ASpec.LabelOverflow := loTruncate
+      else if (ovf = 'break') or (ovf = 'breakall') then
+        ASpec.LabelOverflow := loBreak;
+    end;
+  end;
+
+  ticks := TyDrawnTicks(AAxis.Scale);
+  isTime := AAxis.Scale is TTyTimeScale;
+  SetLength(ASpec.Labels, Length(ticks));
+  SetLength(ASpec.Positions, Length(ticks));
+  SetLength(ASpec.TickValues, Length(ticks));
+  SetLength(ASpec.LocalCoords, Length(ticks));
+  SetLength(ASpec.Proportions, Length(ticks));
+  if isTime then
+  begin
+    SetLength(ASpec.LabelNotNice, Length(ticks));
+    SetLength(ASpec.LabelLevel, Length(ticks));
+    { parseTimeAxisLabelFormatter, once per axis [Batch 104] }
+    tfmt := TyTimeLabelFormatterOf(FindIn(ObjOf(FindIn(ANode, 'axisLabel')),
+      'formatter'));
+  end;
+  marked := False;
+  kept := 0;
+  for q := 0 to High(ticks) do
+  begin
+    if ticks[q].Level <> 0 then Continue;
+    if isTime then
+    begin
+      { A NAMED HANDLER ANSWERS A TEMPLATE, not the text: upstream's
+        leveledFormat runs whatever the function returns through the same
+        time format a string formatter goes through. A string formatter is
+        that template for every level; the dictionary (the default too)
+        gives each tick the template of its own unit at its own level --
+        `{primary|Feb}` among the days, where nobody wrote a unit.
+        [Batch 104] }
+      if tfmt.Kind = tfkHandler then
+        ASpec.Labels[kept] := TyFormatTime(ticks[q].Value,
+          TyChartRunHandler(tfmt.Template, TyChartOneParams(
+            AxisLabelParams(AAxis, ticks[q].Value, q, '', True,
+            ticks[q].TimeLevel))), TTyTimeScale(AAxis.Scale).UTC)
+      else
+        ASpec.Labels[kept] := TyTimeLeveledLabel(tfmt, ticks[q].Value,
+          ticks[q].TimeUnit, ticks[q].TimeLevel, TTyTimeScale(AAxis.Scale).UTC);
+      if TyRtHasMarkup(ASpec.Labels[kept]) then marked := True;
+      { THE TWO RAGGED ENDS. The extent of a time axis is the data's own,
+        never rounded outwards, so its first and last ticks are wherever
+        the data happens to start and stop; labelling those puts a `07:13`
+        hard against the first round hour -- unless the author asks. }
+      ASpec.LabelNotNice[kept] := ticks[q].NotNice;
+      ASpec.LabelLevel[kept] := ticks[q].TimeLevel;
+    end
+    else
+      { UPSTREAM'S getLabel, grouped and to the tick's own decimals --
+        '1,400,000', '0.0000001', '1e+21' -- and the one routine the paint
+        pass calls too, so the width measured here is the width of the string
+        drawn. Locale-free: no FormatFloat anywhere on the way. }
+      ASpec.Labels[kept] := TyAxisTickLabelAt(AAxis, ticks[q].Value, q,
+        AFurn.HasLabelFormatter, AFurn.LabelFormatter);
+    { The BAND-ADJUSTED, post-inverse fraction, so the layout layer and the
+      renderer cannot disagree about where a label goes. }
+    { Broken to the width the option asked for, through the measurer: this
+      unit is pure and CJK-aware wrapping lives in the painter. }
+    if (ASpec.LabelOverflow = loBreak) and (ASpec.LabelWidthLogical > 0)
+      and (AMeasurer <> nil) then
+      ASpec.Labels[kept] := AMeasurer.WrapToWidth(ASpec.Labels[kept],
+        ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight,
+        AxisScaleF(ASpec.LabelWidthLogical, APPI));
+    ASpec.Positions[kept] := AAxis.NormalizedCoord(ticks[q].Value);
+    { on the raw rect, which is what the estimate lays out on; the final
+      pass takes them again once the rect is final }
+    ASpec.TickValues[kept] := ticks[q].Value;
+    ASpec.LocalCoords[kept] := AAxis.DataToLocal(ticks[q].Value);
+    { the first category, which the stride is aligned from nought against }
+    if (kept = 0) and (AAxis.Scale is TTyOrdinalScale) then
+      ASpec.OrdinalStart := Round(TTyOrdinalScale(AAxis.Scale).TickToOrdinal(
+        ticks[q].Value));
+    { upstream's proportion: the tick in the scale's own extent -- an
+      ordinal's raw number, not band-adjusted and not inverted }
+    if AAxis.Scale is TTyOrdinalScale then
+      ASpec.Proportions[kept] := AAxis.Scale.Normalize(
+        TTyOrdinalScale(AAxis.Scale).TickToOrdinal(ticks[q].Value))
+    else
+      ASpec.Proportions[kept] := AAxis.Scale.Normalize(ticks[q].Value);
+    Inc(kept);
+  end;
+  SetLength(ASpec.Labels, kept);
+  SetLength(ASpec.Positions, kept);
+  SetLength(ASpec.TickValues, kept);
+  SetLength(ASpec.LocalCoords, kept);
+  SetLength(ASpec.Proportions, kept);
+  { axisLabel.customValues [Batch 110]: createAxisLabels' first branch --
+    the values listed, in the extent, deduplicated and ascending, each a
+    label made as a tick's would be (a time one at its own unit's first
+    template, level 0). A category axis keeps its own labels beside them:
+    its auto interval is still theirs. }
+  cv := TyCustomValuesOf(ObjOf(FindIn(ANode, 'axisLabel')), AAxis, custom);
+  if custom then
+  begin
+    ASpec.CustomLabels := True;
+    if ASpec.LabelKind = lakCategory then
+    begin
+      ASpec.CatLabels := Copy(ASpec.Labels);
+      ASpec.CatTickValues := Copy(ASpec.TickValues);
+      ASpec.CatLocalCoords := Copy(ASpec.LocalCoords);
+    end;
+    kept := Length(cv);
+    SetLength(ASpec.Labels, kept);
+    SetLength(ASpec.Positions, kept);
+    SetLength(ASpec.TickValues, kept);
+    SetLength(ASpec.LocalCoords, kept);
+    SetLength(ASpec.Proportions, kept);
+    if isTime then
+    begin
+      SetLength(ASpec.LabelNotNice, kept);
+      SetLength(ASpec.LabelLevel, kept);
+    end;
+    marked := False;
+    for q := 0 to kept - 1 do
+    begin
+      v := cv[q];
+      if isTime then
+      begin
+        { a custom tick has no time info: getUnitFromValue's unit, its
+          template's first level; a handler is told level 0 }
+        if tfmt.Kind = tfkHandler then
+          ASpec.Labels[q] := TyFormatTime(v,
+            TyChartRunHandler(tfmt.Template, TyChartOneParams(
+              AxisLabelParams(AAxis, v, q, '', True, 0))),
+            TTyTimeScale(AAxis.Scale).UTC)
+        else
+          ASpec.Labels[q] := TyTimeLeveledLabel(tfmt, v,
+            TyTimeUnitOf(v, TTyTimeScale(AAxis.Scale).UTC), 0,
+            TTyTimeScale(AAxis.Scale).UTC);
+        if TyRtHasMarkup(ASpec.Labels[q]) then marked := True;
+        ASpec.LabelNotNice[q] := False;
+        ASpec.LabelLevel[q] := 0;
+      end
+      else
+      begin
+        { a category formatter's index is the tick less the extent's
+          start, as upstream's; any other the label's place in the list }
+        idx := q;
+        if AAxis.Scale is TTyOrdinalScale then
+          idx := Round(v - AAxis.Scale.GetExtent.Start);
+        ASpec.Labels[q] := TyAxisTickLabelAt(AAxis, v, idx,
+          AFurn.HasLabelFormatter, AFurn.LabelFormatter);
+      end;
+      if (ASpec.LabelOverflow = loBreak) and (ASpec.LabelWidthLogical > 0)
+        and (AMeasurer <> nil) then
+        ASpec.Labels[q] := AMeasurer.WrapToWidth(ASpec.Labels[q],
+          ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight,
+          AxisScaleF(ASpec.LabelWidthLogical, APPI));
+      ASpec.Positions[q] := AAxis.NormalizedCoord(v);
+      ASpec.TickValues[q] := v;
+      ASpec.LocalCoords[q] := AAxis.DataToLocal(v);
+      if AAxis.Scale is TTyOrdinalScale then
+        ASpec.Proportions[q] := AAxis.Scale.Normalize(
+          TTyOrdinalScale(AAxis.Scale).TickToOrdinal(v))
+      else
+        ASpec.Proportions[q] := AAxis.Scale.Normalize(v);
+    end;
+  end;
+  if isTime then
+  begin
+    SetLength(ASpec.LabelNotNice, kept);
+    SetLength(ASpec.LabelLevel, kept);
+    { A TIME AXIS' LABELS ARE ALWAYS RICH upstream -- its defaults carry
+      `rich.primary` -- so a tag in one is a style and not text. The block
+      is needed where a label holds a tag, or the author asked for a box;
+      a label with neither lays out the same either way and keeps the
+      one-run caption. [Batch 104] }
+    ASpec.LabelRt := TimeAxisRtOf(ObjOf(FindIn(ANode, 'axisLabel')), AText,
+      ASpec.HasLabelColour);
+    ASpec.LabelRt.Needed := marked
+      or TyRtNodeWantsBlock(ObjOf(FindIn(ANode, 'axisLabel')));
+    ASpec.LabelMeter := nil;
+    if ASpec.LabelRt.Needed then
+      ASpec.LabelMeter := TyRtBlockMeasurer(AMeasurer, ASpec.LabelRt,
+        ASpec.RtGlobal, ASpec.RtScale);
+  end;
+end;
+
 procedure TyLayoutGrids(ABuild: TTyChartBuild; AOption: TTyChartOption;
   const AMeasurer: ITyTextMeasurer; APPI: Integer;
   const AText: TTyAxisTextStyle; AMemory: TTyAxisMemoryStore);
@@ -3060,533 +3651,15 @@ var
     estimated := True;
   end;
 
-  { nameTextStyle's own padding: textMargin, a number or upstream's css
-    array, or minMargin, which wins }
-  procedure ReadNameMargin(var ASpec: TTyAxisLayoutSpec; AStyle: TJSONObject);
-  var
-    d: TJSONData;
-    a: TJSONArray;
-    v: array[0..3] of Double;
-    k: Integer;
-  begin
-    d := FindIn(AStyle, 'minMargin');
-    if (d <> nil) and (d.JSONType <> jtNull) then
-    begin
-      ASpec.NameMarginKind := nmkMinMargin;
-      { `minMargin` only supports a number; anything else is none }
-      if (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then
-        ASpec.NameMinMarginLogical := d.AsFloat
-      else
-        ASpec.NameMinMarginLogical := 0;
-      Exit;
-    end;
-    d := FindIn(AStyle, 'textMargin');
-    if (d = nil) or (d.JSONType = jtNull) then Exit;
-    if d.JSONType = jtNumber then
-    begin
-      for k := 0 to 3 do v[k] := d.AsFloat;
-    end
-    else if (d is TJSONArray) and (TJSONArray(d).Count in [1..4]) then
-    begin
-      a := TJSONArray(d);
-      for k := 0 to a.Count - 1 do
-        if a.Items[k].JSONType <> jtNumber then Exit;
-      { normalizeCssArray: [a] [v, h] [t, h, b] [t, r, b, l] }
-      case a.Count of
-        1: for k := 0 to 3 do v[k] := a.Items[0].AsFloat;
-        2: begin
-             v[0] := a.Items[0].AsFloat; v[1] := a.Items[1].AsFloat;
-             v[2] := v[0]; v[3] := v[1];
-           end;
-        3: begin
-             v[0] := a.Items[0].AsFloat; v[1] := a.Items[1].AsFloat;
-             v[2] := a.Items[2].AsFloat; v[3] := v[1];
-           end;
-      else
-        for k := 0 to 3 do v[k] := a.Items[k].AsFloat;
-      end;
-    end
-    else
-      Exit;
-    ASpec.NameMarginKind := nmkTextMargin;
-    for k := 0 to 3 do ASpec.NameMargin[k] := v[k];
-  end;
-
-  { EVERYTHING ABOUT THE NAME that the option says: where it goes, the gap,
-    the turn, the alignment and padding, and whether it moves out of the
-    labels' way. }
-  procedure ReadName(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
-    ANode: TJSONObject);
-  var
-    d: TJSONData;
-    st: TJSONObject;
-    s: string;
-  begin
-    ASpec.Inverse := AAxis.Inverse;
-    ASpec.NameFontName := AText.NameFontName;
-    ASpec.NameFontSizeLogical := AText.NameFontSizeLogical;
-    ASpec.NameFontWeight := AText.NameFontWeight;
-    ASpec.HasNameColour := AText.HasGlobalColour;
-    ASpec.NameColour := AText.GlobalColour;
-    { THE AUTHOR'S nameTextStyle over the theme and the root textStyle
-      [Batch 83] }
-    AuthorFont(ObjOf(FindIn(ANode, 'nameTextStyle')), ASpec.NameFontName,
-      ASpec.NameFontSizeLogical, ASpec.NameFontWeight, ASpec.HasNameColour,
-      ASpec.NameColour);
-    { THE NAME'S TEXT BLOCK [Batch 86] }
-    ASpec.NameRt := AxisRtOf(ObjOf(FindIn(ANode, 'nameTextStyle')), AText.RtGlobal);
-    { THE NAME'S WIDTH AND OVERFLOW ARE AxisBuilder's: `overflow: 'truncate'`
-      at nameTruncate's maxWidth, whatever nameTextStyle says (AxisBuilder.ts
-      852-930) -- and with no maxWidth, no width at all }
-    ASpec.NameRt.Style.WidthKind := rtwNone;
-    ASpec.NameRt.Style.Width := 0;
-    ASpec.NameRt.Style.Overflow := rtoNone;
-    ASpec.NameRt.Needed := TyRtNeedsBlock(ASpec.NameRt);
-    { nameTruncate [Batch 101]: a written maxWidth -- a number -- and the
-      ellipsis, '...' unless a string is written. A block cuts inside its own
-      layout, at the block's width; a plain name is cut here, once, so the
-      layout measures and the paint draws the same cut text. }
-    ASpec.HasNameTrunc := False;
-    ASpec.NameTruncEllipsis := '...';
-    st := ObjOf(FindIn(ANode, 'nameTruncate'));
-    if st <> nil then
-    begin
-      d := st.Find('maxWidth');
-      if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then
-      begin
-        ASpec.HasNameTrunc := True;
-        ASpec.NameTruncWidth := d.AsFloat;
-      end;
-      d := st.Find('ellipsis');
-      if (d <> nil) and (d.JSONType = jtString) then
-        ASpec.NameTruncEllipsis := d.AsString;
-    end;
-    if ASpec.HasNameTrunc and ASpec.NameRt.Needed then
-    begin
-      ASpec.NameRt.Style.WidthKind := rtwNumber;
-      ASpec.NameRt.Style.Width := ASpec.NameTruncWidth;
-      ASpec.NameRt.Style.Overflow := rtoTruncate;
-      ASpec.NameRt.Style.HasEllipsis := True;
-      ASpec.NameRt.Style.Ellipsis := ASpec.NameTruncEllipsis;
-    end
-    else if ASpec.HasNameTrunc and (ASpec.Name <> '') and (AMeasurer <> nil) then
-    begin
-      if ASpec.NameFontSizeLogical > 0 then
-        ASpec.Name := string.Join(#10, TyZrPlainTextLines(ASpec.Name,
-          AxisScaleF(ASpec.NameTruncWidth, APPI), MaxDouble, 0,
-          ASpec.NameTruncEllipsis, AMeasurer, ASpec.NameFontName,
-          ASpec.NameFontSizeLogical, ASpec.NameFontWeight))
-      else
-        ASpec.Name := string.Join(#10, TyZrPlainTextLines(ASpec.Name,
-          AxisScaleF(ASpec.NameTruncWidth, APPI), MaxDouble, 0,
-          ASpec.NameTruncEllipsis, AMeasurer, ASpec.FontName,
-          ASpec.FontSizeLogical, ASpec.FontWeight));
-      { a name cut to nothing is no name }
-      if Trim(StringReplace(ASpec.Name, #10, '', [rfReplaceAll])) = '' then
-        ASpec.Name := '';
-    end;
-    if ASpec.NameRt.Needed then
-    begin
-      if APPI > 0 then ASpec.RtScale := APPI / 96 else ASpec.RtScale := 1;
-      ASpec.RtGlobal := AText.RtGlobal;
-      ASpec.NameMeter := TyRtBlockMeasurer(AMeasurer, ASpec.NameRt,
-        AText.RtGlobal, ASpec.RtScale);
-    end;
-    { 'end' by default; 'center' is 'middle'. A location upstream does not
-      know takes its middle anchor and its end layout there -- here it is
-      simply 'end'. }
-    s := StrIn(ANode, 'nameLocation', 'end');
-    if s = 'start' then ASpec.NameLocation := anlStart
-    else if (s = 'middle') or (s = 'center') then ASpec.NameLocation := anlMiddle
-    else ASpec.NameLocation := anlEnd;
-    { `get('nameGap') || 0`: the theme's when absent, nought for null or
-      false, a negative gap kept }
-    d := FindIn(ANode, 'nameGap');
-    if d <> nil then
-    begin
-      if d.JSONType = jtNumber then
-      begin
-        if IsNan(d.AsFloat) then ASpec.NameGapLogical := 0
-        else ASpec.NameGapLogical := d.AsFloat;
-      end
-      else if (d.JSONType = jtNull)
-        or ((d.JSONType = jtBoolean) and not d.AsBoolean) then
-        ASpec.NameGapLogical := 0;
-    end;
-    d := FindIn(ANode, 'nameRotate');
-    if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then
-    begin
-      ASpec.HasNameRotate := True;
-      ASpec.NameRotateRad := d.AsFloat * Pi / 180;
-    end;
-    st := ObjOf(FindIn(ANode, 'nameTextStyle'));
-    if st <> nil then
-    begin
-      { a truthy string over the layout's own; zrender reads anything but
-        'right' and 'center' as left, anything but 'middle' and 'bottom' as
-        top }
-      s := StrIn(st, 'align', '');
-      if s <> '' then
-      begin
-        ASpec.HasNameAlignH := True;
-        if s = 'right' then ASpec.NameAlignH := tahRight
-        else if s = 'center' then ASpec.NameAlignH := tahCentre
-        else ASpec.NameAlignH := tahLeft;
-      end;
-      s := StrIn(st, 'verticalAlign', '');
-      if s <> '' then
-      begin
-        ASpec.HasNameAlignV := True;
-        if s = 'bottom' then ASpec.NameAlignV := tavBottom
-        else if s = 'middle' then ASpec.NameAlignV := tavMiddle
-        else ASpec.NameAlignV := tavTop;
-      end;
-      ReadNameMargin(ASpec, st);
-    end;
-    { nameMoveOverlap: null and 'auto' are the grid's -- off under legacy
-      containLabel, on otherwise; any other value is its truthiness }
-    d := FindIn(ANode, 'nameMoveOverlap');
-    if (d = nil) or (d.JSONType = jtNull)
-      or ((d.JSONType = jtString) and (d.AsString = 'auto')) then
-      ASpec.NameNoMove := containLabel
-    else if d.JSONType = jtBoolean then
-      ASpec.NameNoMove := not d.AsBoolean
-    else if d.JSONType = jtNumber then
-      ASpec.NameNoMove := IsNan(d.AsFloat) or (d.AsFloat = 0)
-    else if d.JSONType = jtString then
-      ASpec.NameNoMove := d.AsString = '';
-  end;
-
+  { THE SPEC OF ONE AXIS: TyFillAxisLayoutSpec on this grid -- a top axis
+    that does not sit on the other family's zero turns its labels the other
+    way, and legacy containLabel keeps the name where it is }
   procedure FillSpec(var ASpec: TTyAxisLayoutSpec; AAxis: TTyAxis;
     ANode: TJSONObject; const AFurn: TTyAxisFurniture);
-  var
-    q, kept, idx: Integer;
-    lbl, wd: TJSONData;
-    ovf: string;
-    isTime, marked, custom: Boolean;
-    tfmt: TTyTimeLabelFormatter;
-    cv: TTyDoubleArray;
-    v: Double;
   begin
-    ASpec := Default(TTyAxisLayoutSpec);
-    ASpec.Side := AAxis.Side;
-    { `axisLabel.show`, NOT the axis' own `show` -- the axis-level one is
-      handled at the bottom of this routine. Reading it here as well meant
-      `axisLabel: { show: false }` did nothing while a hidden axis was asked
-      about twice. }
-    ASpec.ShowLabels := AFurn.ShowLabels;
-    { legacy containLabel measures these even on a hidden axis }
-    ASpec.LegacyLabels := AFurn.ShowLabels;
-    ASpec.ShowTicks := AFurn.ShowTicks;
-    ASpec.ForcedLabelStep := AFurn.LabelStep;
-    ASpec.ShowAllLabels := AFurn.ShowAllLabels;
-    ASpec.HideOverlap := AFurn.HideOverlap;
-    ASpec.LabelRotateDeg := AFurn.LabelRotateDeg;
-    ASpec.OnBand := AAxis.OnBand;
-    if AAxis.AxisType = atCategory then ASpec.LabelKind := lakCategory
-    else if AAxis.AxisType = atTime then ASpec.LabelKind := lakTime
-    else ASpec.LabelKind := lakValue;
-    ASpec.TickStep := AFurn.TickStep;
-    ASpec.ShowMinLabel := AFurn.ShowMinLabel;
-    ASpec.ShowMaxLabel := AFurn.ShowMaxLabel;
-    ASpec.TickInside := AFurn.TickInside;
-    ASpec.LabelInside := AFurn.LabelInside;
-    { AN OFFSET AXIS HANGS FURTHER OUT, so the band it costs is its own
-      thickness PLUS the offset -- upstream builds the labels AT the offset
-      position and then shrinks the grid by however far they overflow the
-      canvas, which comes to the same thing for one axis on a side. }
-    ASpec.OffsetLogical := AFurn.OffsetLogical;
-    ASpec.Name := AAxis.Name;
-    { From the caller's resolved theme style, NOT from literals here: the paint
-      pass draws in the theme's font and gaps, so measuring in anything else
-      sizes the plot rect for a chart nobody will draw. }
-    ASpec.FontName := AText.FontName;
-    ASpec.FontSizeLogical := AText.FontSizeLogical;
-    ASpec.FontWeight := AText.FontWeight;
-    { a label's token colour is a default of its own: the root textStyle's
-      colour never reaches it -- only the name's does }
-    ASpec.HasLabelColour := False;
-    ASpec.LabelColour := 0;
-    { THE AUTHOR'S axisLabel font and colour over the theme's and the root
-      textStyle's [Batch 83]: measured in what it is drawn in }
-    AuthorFont(ObjOf(FindIn(ANode, 'axisLabel')), ASpec.FontName,
-      ASpec.FontSizeLogical, ASpec.FontWeight, ASpec.HasLabelColour,
-      ASpec.LabelColour);
-    { THE LABELS' TEXT BLOCK, and the measurer every measurement of a label
-      goes through [Batch 86] }
-    ASpec.RtGlobal := AText.RtGlobal;
-    if APPI > 0 then ASpec.RtScale := APPI / 96 else ASpec.RtScale := 1;
-    ASpec.LabelRt := AxisRtOf(ObjOf(FindIn(ANode, 'axisLabel')), AText.RtGlobal);
-    if ASpec.LabelRt.Needed then
-      ASpec.LabelMeter := TyRtBlockMeasurer(AMeasurer, ASpec.LabelRt,
-        ASpec.RtGlobal, ASpec.RtScale);
-    { THE THEME FIRST AND THE OPTION OVER IT. A gap is a geometric value and
-      an author is allowed to name one -- the same arrangement
-      `axisLabel.width` has already. Colours are the other kind and still
-      come from the theme alone. }
-    ASpec.LabelMarginLogical := AText.LabelMarginLogical;
-    if not IsNan(AFurn.LabelMarginLogical) then
-      ASpec.LabelMarginLogical := AFurn.LabelMarginLogical;
-    ASpec.TickLengthLogical := AText.TickLengthLogical;
-    if not IsNan(AFurn.TickLengthLogical) then
-      ASpec.TickLengthLogical := AFurn.TickLengthLogical;
-    ASpec.NameGapLogical := AText.NameGapLogical;
-    ReadName(ASpec, AAxis, ANode);
-    { `xAxis.show: false` MUST GIVE THE GUTTER BACK. Upstream builds nothing
-      at all for a hidden axis and skips it again when it folds the shrink,
-      so the plot grows into the band. The port hid it at PAINT time only:
-      `yAxis: { show: false }` stopped drawing the numbers and went on
-      reserving room for them, which is a chart with an empty margin down
-      its left-hand side and no way to close it.
-
-      Zeroed rather than skipped because FSpecs is index-parallel to the
-      grid's axis lists -- SpecFor and FurnitureFor both walk them by
-      position -- and a spec that costs nothing is the same answer. }
-    if not AAxis.Visible then
-    begin
-      ASpec.ShowLabels := False;
-      ASpec.ShowTicks := False;
-      ASpec.Name := '';
-    end;
-    { DEGREES IN THE OPTION, RADIANS IN THE LAYOUT, and the same sign in both:
-      `rotate` is counter-clockwise positive upstream (AxisBuilder turns it
-      straight into the zrender element's `rotation`) and the painter's
-      DrawTextRotated is counter-clockwise positive too. Negating it here
-      turned every rotated label the wrong way -- invisible while nothing drew
-      the rotation at all, because the extent a turn costs is the same either
-      way round. }
-    { AND A TOP AXIS TURNS THE OTHER WAY, so that `rotate: 45` slants the
-      labels away from the plot on both edges instead of into it on one --
-      but only where the axis IS on top: one that sits on the other family's
-      zero is positioned 'onZero', which upstream never negates.
-      [Revised in batch 43: this negated for `position: top` alone, and a
-      top category axis over a value axis through zero slanted the wrong way
-      with the wrong alignment.] }
-    if (AAxis.Side = asTop) and (gb.OnZeroProviderFor(AAxis) = nil) then
-      ASpec.RotationRad := -AFurn.LabelRotateDeg * Pi / 180
-    else
-      ASpec.RotationRad := AFurn.LabelRotateDeg * Pi / 180;
-    { MAJORS ONLY. GetTicks hands back majors and minors in one array with
-      Level saying which is which, and its own comment says a caller that wants
-      only the majors tests Level. This did not -- so `minorTick: { show: true
-      }`, which is applied earlier in the same rebuild, multiplied the label
-      count by the minor split and asked the layout to fit five times as many
-      strings as the axis has numbers. }
-    { axisLabel.width + overflow. `none` is ECharts' default and is what this
-      already did: no bound, and crowding handled by thinning the labels.
-
-      THE BROKEN TEXT IS PRODUCED HERE, once, and stored in the spec -- so the
-      layout measures exactly the string the paint draws. MeasureLine already
-      honours the breaks inside a string, so nothing downstream has to know that
-      wrapping happened at all. }
-    ASpec.LabelWidthLogical := 0;
-    ASpec.LabelOverflow := loNone;
-    { textMargin: [0, 3] unless the option says -- a number for all four
-      sides, or [vertical, horizontal] }
-    ASpec.TextMarginVLogical := 0;
-    ASpec.TextMarginHLogical := 3;
-    if ANode <> nil then
-    begin
-      lbl := FindIn(ANode, 'axisLabel');
-      if (lbl <> nil) and (lbl.JSONType = jtObject) then
-      begin
-        wd := FindIn(TJSONObject(lbl), 'textMargin');
-        if (wd <> nil) and (wd.JSONType = jtNumber) then
-        begin
-          ASpec.TextMarginVLogical := wd.AsFloat;
-          ASpec.TextMarginHLogical := wd.AsFloat;
-        end
-        else if (wd is TJSONArray) and (TJSONArray(wd).Count >= 2)
-          and (TJSONArray(wd).Items[0].JSONType = jtNumber)
-          and (TJSONArray(wd).Items[1].JSONType = jtNumber) then
-        begin
-          ASpec.TextMarginVLogical := TJSONArray(wd).Items[0].AsFloat;
-          ASpec.TextMarginHLogical := TJSONArray(wd).Items[1].AsFloat;
-        end;
-        wd := FindIn(TJSONObject(lbl), 'width');
-        if (wd <> nil) and (wd.JSONType = jtNumber) then
-          ASpec.LabelWidthLogical := wd.AsFloat;
-        ovf := LowerCase(StrIn(TJSONObject(lbl), 'overflow', ''));
-        if ovf = 'truncate' then ASpec.LabelOverflow := loTruncate
-        else if (ovf = 'break') or (ovf = 'breakall') then
-          ASpec.LabelOverflow := loBreak;
-      end;
-    end;
-
-    ticks := TyDrawnTicks(AAxis.Scale);
-    isTime := AAxis.Scale is TTyTimeScale;
-    SetLength(ASpec.Labels, Length(ticks));
-    SetLength(ASpec.Positions, Length(ticks));
-    SetLength(ASpec.TickValues, Length(ticks));
-    SetLength(ASpec.LocalCoords, Length(ticks));
-    SetLength(ASpec.Proportions, Length(ticks));
-    if isTime then
-    begin
-      SetLength(ASpec.LabelNotNice, Length(ticks));
-      SetLength(ASpec.LabelLevel, Length(ticks));
-      { parseTimeAxisLabelFormatter, once per axis [Batch 104] }
-      tfmt := TyTimeLabelFormatterOf(FindIn(ObjOf(FindIn(ANode, 'axisLabel')),
-        'formatter'));
-    end;
-    marked := False;
-    kept := 0;
-    for q := 0 to High(ticks) do
-    begin
-      if ticks[q].Level <> 0 then Continue;
-      if isTime then
-      begin
-        { A NAMED HANDLER ANSWERS A TEMPLATE, not the text: upstream's
-          leveledFormat runs whatever the function returns through the same
-          time format a string formatter goes through. A string formatter is
-          that template for every level; the dictionary (the default too)
-          gives each tick the template of its own unit at its own level --
-          `{primary|Feb}` among the days, where nobody wrote a unit.
-          [Batch 104] }
-        if tfmt.Kind = tfkHandler then
-          ASpec.Labels[kept] := TyFormatTime(ticks[q].Value,
-            TyChartRunHandler(tfmt.Template, TyChartOneParams(
-              AxisLabelParams(AAxis, ticks[q].Value, q, '', True,
-              ticks[q].TimeLevel))), TTyTimeScale(AAxis.Scale).UTC)
-        else
-          ASpec.Labels[kept] := TyTimeLeveledLabel(tfmt, ticks[q].Value,
-            ticks[q].TimeUnit, ticks[q].TimeLevel, TTyTimeScale(AAxis.Scale).UTC);
-        if TyRtHasMarkup(ASpec.Labels[kept]) then marked := True;
-        { THE TWO RAGGED ENDS. The extent of a time axis is the data's own,
-          never rounded outwards, so its first and last ticks are wherever
-          the data happens to start and stop; labelling those puts a `07:13`
-          hard against the first round hour -- unless the author asks. }
-        ASpec.LabelNotNice[kept] := ticks[q].NotNice;
-        ASpec.LabelLevel[kept] := ticks[q].TimeLevel;
-      end
-      else
-        { UPSTREAM'S getLabel, grouped and to the tick's own decimals --
-          '1,400,000', '0.0000001', '1e+21' -- and the one routine the paint
-          pass calls too, so the width measured here is the width of the string
-          drawn. Locale-free: no FormatFloat anywhere on the way. }
-        ASpec.Labels[kept] := TyAxisTickLabelAt(AAxis, ticks[q].Value, q,
-          AFurn.HasLabelFormatter, AFurn.LabelFormatter);
-      { The BAND-ADJUSTED, post-inverse fraction, so the layout layer and the
-        renderer cannot disagree about where a label goes. }
-      { Broken to the width the option asked for, through the measurer: this
-        unit is pure and CJK-aware wrapping lives in the painter. }
-      if (ASpec.LabelOverflow = loBreak) and (ASpec.LabelWidthLogical > 0)
-        and (AMeasurer <> nil) then
-        ASpec.Labels[kept] := AMeasurer.WrapToWidth(ASpec.Labels[kept],
-          ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight,
-          AxisScaleF(ASpec.LabelWidthLogical, APPI));
-      ASpec.Positions[kept] := AAxis.NormalizedCoord(ticks[q].Value);
-      { on the raw rect, which is what the estimate lays out on; the final
-        pass takes them again once the rect is final }
-      ASpec.TickValues[kept] := ticks[q].Value;
-      ASpec.LocalCoords[kept] := AAxis.DataToLocal(ticks[q].Value);
-      { the first category, which the stride is aligned from nought against }
-      if (kept = 0) and (AAxis.Scale is TTyOrdinalScale) then
-        ASpec.OrdinalStart := Round(TTyOrdinalScale(AAxis.Scale).TickToOrdinal(
-          ticks[q].Value));
-      { upstream's proportion: the tick in the scale's own extent -- an
-        ordinal's raw number, not band-adjusted and not inverted }
-      if AAxis.Scale is TTyOrdinalScale then
-        ASpec.Proportions[kept] := AAxis.Scale.Normalize(
-          TTyOrdinalScale(AAxis.Scale).TickToOrdinal(ticks[q].Value))
-      else
-        ASpec.Proportions[kept] := AAxis.Scale.Normalize(ticks[q].Value);
-      Inc(kept);
-    end;
-    SetLength(ASpec.Labels, kept);
-    SetLength(ASpec.Positions, kept);
-    SetLength(ASpec.TickValues, kept);
-    SetLength(ASpec.LocalCoords, kept);
-    SetLength(ASpec.Proportions, kept);
-    { axisLabel.customValues [Batch 110]: createAxisLabels' first branch --
-      the values listed, in the extent, deduplicated and ascending, each a
-      label made as a tick's would be (a time one at its own unit's first
-      template, level 0). A category axis keeps its own labels beside them:
-      its auto interval is still theirs. }
-    cv := TyCustomValuesOf(ObjOf(FindIn(ANode, 'axisLabel')), AAxis, custom);
-    if custom then
-    begin
-      ASpec.CustomLabels := True;
-      if ASpec.LabelKind = lakCategory then
-      begin
-        ASpec.CatLabels := Copy(ASpec.Labels);
-        ASpec.CatTickValues := Copy(ASpec.TickValues);
-        ASpec.CatLocalCoords := Copy(ASpec.LocalCoords);
-      end;
-      kept := Length(cv);
-      SetLength(ASpec.Labels, kept);
-      SetLength(ASpec.Positions, kept);
-      SetLength(ASpec.TickValues, kept);
-      SetLength(ASpec.LocalCoords, kept);
-      SetLength(ASpec.Proportions, kept);
-      if isTime then
-      begin
-        SetLength(ASpec.LabelNotNice, kept);
-        SetLength(ASpec.LabelLevel, kept);
-      end;
-      marked := False;
-      for q := 0 to kept - 1 do
-      begin
-        v := cv[q];
-        if isTime then
-        begin
-          { a custom tick has no time info: getUnitFromValue's unit, its
-            template's first level; a handler is told level 0 }
-          if tfmt.Kind = tfkHandler then
-            ASpec.Labels[q] := TyFormatTime(v,
-              TyChartRunHandler(tfmt.Template, TyChartOneParams(
-                AxisLabelParams(AAxis, v, q, '', True, 0))),
-              TTyTimeScale(AAxis.Scale).UTC)
-          else
-            ASpec.Labels[q] := TyTimeLeveledLabel(tfmt, v,
-              TyTimeUnitOf(v, TTyTimeScale(AAxis.Scale).UTC), 0,
-              TTyTimeScale(AAxis.Scale).UTC);
-          if TyRtHasMarkup(ASpec.Labels[q]) then marked := True;
-          ASpec.LabelNotNice[q] := False;
-          ASpec.LabelLevel[q] := 0;
-        end
-        else
-        begin
-          { a category formatter's index is the tick less the extent's
-            start, as upstream's; any other the label's place in the list }
-          idx := q;
-          if AAxis.Scale is TTyOrdinalScale then
-            idx := Round(v - AAxis.Scale.GetExtent.Start);
-          ASpec.Labels[q] := TyAxisTickLabelAt(AAxis, v, idx,
-            AFurn.HasLabelFormatter, AFurn.LabelFormatter);
-        end;
-        if (ASpec.LabelOverflow = loBreak) and (ASpec.LabelWidthLogical > 0)
-          and (AMeasurer <> nil) then
-          ASpec.Labels[q] := AMeasurer.WrapToWidth(ASpec.Labels[q],
-            ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight,
-            AxisScaleF(ASpec.LabelWidthLogical, APPI));
-        ASpec.Positions[q] := AAxis.NormalizedCoord(v);
-        ASpec.TickValues[q] := v;
-        ASpec.LocalCoords[q] := AAxis.DataToLocal(v);
-        if AAxis.Scale is TTyOrdinalScale then
-          ASpec.Proportions[q] := AAxis.Scale.Normalize(
-            TTyOrdinalScale(AAxis.Scale).TickToOrdinal(v))
-        else
-          ASpec.Proportions[q] := AAxis.Scale.Normalize(v);
-      end;
-    end;
-    if isTime then
-    begin
-      SetLength(ASpec.LabelNotNice, kept);
-      SetLength(ASpec.LabelLevel, kept);
-      { A TIME AXIS' LABELS ARE ALWAYS RICH upstream -- its defaults carry
-        `rich.primary` -- so a tag in one is a style and not text. The block
-        is needed where a label holds a tag, or the author asked for a box;
-        a label with neither lays out the same either way and keeps the
-        one-run caption. [Batch 104] }
-      ASpec.LabelRt := TimeAxisRtOf(ObjOf(FindIn(ANode, 'axisLabel')), AText,
-        ASpec.HasLabelColour);
-      ASpec.LabelRt.Needed := marked
-        or TyRtNodeWantsBlock(ObjOf(FindIn(ANode, 'axisLabel')));
-      ASpec.LabelMeter := nil;
-      if ASpec.LabelRt.Needed then
-        ASpec.LabelMeter := TyRtBlockMeasurer(AMeasurer, ASpec.LabelRt,
-          ASpec.RtGlobal, ASpec.RtScale);
-    end;
+    TyFillAxisLayoutSpec(ASpec, AAxis, ANode, AFurn, AText, AMeasurer, APPI,
+      (AAxis.Side = asTop) and (gb.OnZeroProviderFor(AAxis) = nil),
+      containLabel);
   end;
 
 begin

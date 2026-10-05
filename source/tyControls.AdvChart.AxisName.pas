@@ -28,6 +28,10 @@ uses SysUtils, Math, tyControls.AdvChart.Types, tyControls.AdvChart.Layout,
 
 { upstream's remRadian: into [0, 2 pi), with JavaScript's exact remainder }
 function TyRemRadian(ARadian: Double): Double;
+{ AxisBuilder.innerTextLayout: how a text turned ATextRotation hangs off an
+  axis turned AAxisRotation, labels on the ADirection side [Batch 111] }
+procedure TyInnerTextLayout(AAxisRotation, ATextRotation: Double;
+  ADirection: Integer; out AH: TTyTextAnchorH; out AV: TTyTextAnchorV);
 
 { zrender's BoundingRect.intersect(A, B, mtv, opt) with a direction, one
   way only, and a touch threshold: whether the two, each shrunk by the threshold,
@@ -312,6 +316,15 @@ begin
     else if ADirection > 0 then Result.H := tahLeft
     else Result.H := tahRight;
   end;
+end;
+
+procedure TyInnerTextLayout(AAxisRotation, ATextRotation: Double;
+  ADirection: Integer; out AH: TTyTextAnchorH; out AV: TTyTextAnchorV);
+var lay: TTextLayout;
+begin
+  lay := InnerTextLayout(AAxisRotation, ATextRotation, ADirection);
+  AH := lay.H;
+  AV := lay.V;
 end;
 
 { AxisBuilder's endTextLayout -- a start or an end name }

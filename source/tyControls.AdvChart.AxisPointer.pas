@@ -130,6 +130,8 @@ function TyTooltipAxisPointerType(AOption: TTyChartOption): TTyAxisPointerType;
 { Which axis an 'axis' trigger points at: 'x', 'y', or '' for auto.
   `tooltip.axisPointer.axis`, default 'auto'. }
 function TyTooltipAxisPointerAxis(AOption: TTyChartOption): string;
+{ The same on a polar: 'radius', 'angle', or '' for auto [Batch 111] }
+function TyTooltipPolarPointerAxis(AOption: TTyChartOption): string;
 
 { The band a shadow covers, CLAMPED TO THE AXIS EXTENT rather than centred and
   overflowing -- so the band at the first or last category is HALF WIDTH, and
@@ -487,6 +489,23 @@ begin
   if (d = nil) or (d.JSONType <> jtString) then Exit;
   s := d.AsString;
   if (s = 'x') or (s = 'y') then Result := s;
+end;
+
+function TyTooltipPolarPointerAxis(AOption: TTyChartOption): string;
+var
+  tip, ap: TJSONObject;
+  d: TJSONData;
+  s: string;
+begin
+  Result := '';
+  tip := TooltipNode(AOption);
+  if tip = nil then Exit;
+  ap := PointerNodeIn(tip);
+  if ap = nil then Exit;
+  d := ap.Find('axis');
+  if (d = nil) or (d.JSONType <> jtString) then Exit;
+  s := d.AsString;
+  if (s = 'radius') or (s = 'angle') then Result := s;
 end;
 
 function TyAxisPointerSpecOf(AOption: TTyChartOption;

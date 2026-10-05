@@ -315,6 +315,24 @@ procedure TyApplyAxisExtents(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex;
   APPI: Integer; const AZooms: TTyAxisZoomArray); overload;
 
+{ ONE AXIS' SCALE FROM ITS RAW EXTENT, as the grid's axes get it [Batch 111]:
+  a time axis with nothing at all on it shows today; splitNumber, interval,
+  minInterval, maxInterval and the minor split read from ANode; a category
+  axis takes the raw ends (blank where one is not a number, or a window too
+  wide to walk); any other axis the raw extent ([0, 1] where blank, a flat
+  time range opened by a day), its pins and bounds, then aligned to AAlignTo
+  or niced. AToggleInverse says the raw extent ran backwards and the chart
+  did not ask for the legacy rule -- the caller inverts its axis its own
+  way. No containShape: the caller widens a mapping extent itself.
+  ADefaultSplit is the splitNumber the axis' model defaults to where the
+  option writes none -- not-a-number for a grid axis' own (6 on a time
+  axis, 5 elsewhere); a polar's angle axis says 12 and its radius 5. }
+procedure TyNiceAxisScale(AOption: TTyChartOption; AAxis: TTyAxis;
+  ANode: TJSONObject; var ARaw: TTyAxisRawExtent; AAny: Boolean;
+  AAlignTo: TTyAxis; AAlignPx: Double; AZoomFixLo, AZoomFixHi,
+  AContainShape: Boolean; out AToggleInverse: Boolean;
+  ADefaultSplit: Double = NaN);
+
 { axis.__alignTo: the axis AAxis aligns its ticks to, or nil -- per grid and
   direction, walking the number axes in reverse index order, the last that
   does not ask for alignTicks is the reference (the first to ask when all
@@ -1565,6 +1583,187 @@ begin
     AAxis, lo, hi, requireStart);
 end;
 
+{ ONE AXIS' SCALE FROM ITS RAW EXTENT -- what DoAxis does to every grid axis
+  once the raw extent is known, shared with the polar's two [Batch 111]. }
+procedure TyNiceAxisScale(AOption: TTyChartOption; AAxis: TTyAxis;
+  ANode: TJSONObject; var ARaw: TTyAxisRawExtent; AAny: Boolean;
+  AAlignTo: TTyAxis; AAlignPx: Double; AZoomFixLo, AZoomFixHi,
+  AContainShape: Boolean; out AToggleInverse: Boolean; ADefaultSplit: Double);
+const
+  cMaxWindow = 1048576;
+var
+  d: TJSONData;
+  ivl, split: Double;
+  minor: Integer;
+  minorSplit: Integer;
+  wantMinor: Boolean;
+  sub2: TJSONData;
+  lo, hi, minIvl, maxIvl: Double;
+  e: TTyRange;
+  blank: Boolean;
+begin
+  AToggleInverse := False;
+  if AAxis = nil then Exit;
+  if (not AAny) and (AAxis.AxisType = atTime) and ARaw.Blank then
+  begin
+    { A TIME AXIS WITH NOTHING ON IT SHOWS TODAY, which is upstream's
+      answer and the only one an author reads as empty rather than as
+      broken: 0..1 on a time axis is the first second of 1970, and a
+      chart that lost its data should not look like a chart about the
+      Apollo programme. }
+    ARaw.Hi := TyDateTimeToMs(Date, False);
+    ARaw.Lo := ARaw.Hi - 86400000;
+  end;
+
+  { SIX ON A TIME AXIS, five everywhere else -- the options' own two
+    defaults. The value is handed on as written; the nice step makes it a
+    whole number the way upstream does. }
+  if AAxis.AxisType = atTime then split := 6 else split := 5;
+  if not IsNan(ADefaultSplit) then split := ADefaultSplit;
+  ivl := NaN;
+  minIvl := 0;
+  maxIvl := 0;
+  minor := 0;
+  if ANode <> nil then
+  begin
+    d := ANode.Find('splitNumber');
+    if (d <> nil) and (d.JSONType = jtNumber) then split := d.AsFloat;
+    { `interval` AS WRITTEN, zero and negatives included: upstream draws no
+      ticks for either, and the scale says so rather than this. }
+    d := ANode.Find('interval');
+    if (d <> nil) and (d.JSONType = jtNumber) then ivl := d.AsFloat;
+    d := ANode.Find('minInterval');
+    if (d <> nil) and (d.JSONType = jtNumber) then minIvl := d.AsFloat;
+    d := ANode.Find('maxInterval');
+    if (d <> nil) and (d.JSONType = jtNumber) then maxIvl := d.AsFloat;
+
+    { THE SPLIT NUMBER IS NOT `minorTick.show`. Upstream's
+      getMinorTicksCoords reads `minorTick.splitNumber` and nothing else --
+      the two SHOW questions, one for the marks and one for the grid, are
+      asked later and separately, by the axis furniture.
+
+      Tying the coordinates to `minorTick.show` had two consequences. The
+      visible one: `minorSplitLine: { show: true }` on its own drew
+      nothing, because there were no minor ticks to draw it at. The other
+      was invisible and worse -- it made both furniture gates unobservable,
+      since a minor tick could not exist unless the same option that
+      created it had also asked to draw it. Mutating either gate away
+      changed no pixel anywhere, which is how this was found.
+
+      Still not computed unless SOMEBODY asked, though: upstream builds the
+      subdivisions of every value axis on every frame and this does not
+      need to. Either of the two options counts as asking. }
+    minorSplit := 5;
+    wantMinor := False;
+    d := ANode.Find('minorTick');
+    if (d <> nil) and (d.JSONType = jtObject) then
+    begin
+      sub2 := TJSONObject(d).Find('splitNumber');
+      if (sub2 <> nil) and (sub2.JSONType = jtNumber) then
+        minorSplit := TyTruncOpt(sub2.AsFloat, minorSplit);
+      sub2 := TJSONObject(d).Find('show');
+      wantMinor := (sub2 <> nil) and (sub2.JSONType = jtBoolean)
+                   and sub2.AsBoolean;
+    end;
+    d := ANode.Find('minorSplitLine');
+    if (d <> nil) and (d.JSONType = jtObject) then
+    begin
+      sub2 := TJSONObject(d).Find('show');
+      if (sub2 <> nil) and (sub2.JSONType = jtBoolean) and sub2.AsBoolean
+        then wantMinor := True;
+    end;
+    { Upstream's own guard on the number, verbatim: out of (0, 100) and it
+      goes back to five rather than subdividing an axis into nothing or
+      into a thousand. }
+    if (minorSplit <= 0) or (minorSplit >= 100) then minorSplit := 5;
+    if wantMinor then minor := minorSplit;
+  end;
+
+  { A BACKWARDS min AND max INVERT THE AXIS, unless the chart asked for the
+    old behaviour by name. }
+  AToggleInverse := ARaw.ToggleInverse and not ((AOption <> nil)
+    and (AOption.Root is TJSONObject)
+    and JsTruthyOf(TJSONObject(AOption.Root).Find('legacyMinMaxDontInverseAxis')));
+
+  if AAxis.AxisType = atCategory then
+  begin
+    if AAxis.Scale is TTyOrdinalScale then
+    begin
+      { the ends as rounded -- not a number where a bound named nothing,
+        which blanks the axis: no count, no ticks and no bars. And a window
+        of more categories than anything can draw is refused rather than
+        walked: min: 1e300 would build a label per category. }
+      e.Start := ARaw.Lo;
+      e.Stop := ARaw.Hi;
+      blank := ARaw.Blank;
+      if (not blank) and (ARaw.Hi - ARaw.Lo + 1 > cMaxWindow) then
+      begin
+        blank := True;
+        e.Start := NaN;
+        e.Stop := NaN;
+      end;
+      AAxis.Scale.SetExtent(e);
+      AAxis.Scale.MarkedBlank := blank;
+      { startValue has already moved the extent; nothing stands on this axis }
+      AAxis.Scale.StartValue := NaN;
+    end;
+    Exit;
+  end;
+
+  lo := ARaw.Lo;
+  hi := ARaw.Hi;
+  { A BLANK END IS NO EXTENT: upstream's nice step replaces the pair with
+    [0, 1] -- a max written beside no data included -- and the pins stay. }
+  if IsNan(lo) or IsNan(hi) then
+  begin
+    lo := 0;
+    hi := 1;
+  end;
+  { A FLAT TIME RANGE OPENS BY A DAY EACH WAY, on the scale -- upstream's
+    calcNiceForTimeScale. Opening it only where the ticks are made left the
+    extent flat, and every tick then normalised to the middle of the axis. }
+  if (AAxis.AxisType = atTime) and (lo = hi) then
+  begin
+    lo := lo - 86400000;
+    hi := hi + 86400000;
+  end;
+  AAxis.Scale.SetExtent(TyRange(lo, hi));
+  { NOTHING TO GO ON is still [0, 1] with ticks on it, as upstream's is; the
+    flag is what keeps them from being drawn. }
+  AAxis.Scale.MarkedBlank := ARaw.Blank;
+  { AND WHERE ITS BARS STAND. Written every build, not-a-number included, so
+    an axis that has lost its bars loses its start with them. }
+  if ARaw.HasStartValue then AAxis.Scale.StartValue := ARaw.StartValue
+  else AAxis.Scale.StartValue := NaN;
+  if AAxis.Scale is TTyIntervalScale then
+  begin
+    TTyIntervalScale(AAxis.Scale).FixMin := ARaw.FixLo;
+    TTyIntervalScale(AAxis.Scale).FixMax := ARaw.FixHi;
+    { BEFORE Niceify, because they bound the step it is about to choose. }
+    TTyIntervalScale(AAxis.Scale).MinInterval := minIvl;
+    TTyIntervalScale(AAxis.Scale).MaxInterval := maxIvl;
+    TTyIntervalScale(AAxis.Scale).ContainShape := AContainShape;
+    { NOT NICIED WHEN IT IS A CALENDAR. Niceify opens the extent out to
+      round numbers before picking a step, and the round number nearest a
+      week in March 2024 is somewhere in 1973. A time scale is handed the
+      tick count instead and snaps to the calendar itself. }
+    if AAxis.Scale is TTyTimeScale then
+      TTyTimeScale(AAxis.Scale).SplitNumber := TyValidSplitNumber(split, 10)
+    { ALIGNED TO ANOTHER AXIS' TICKS, over the grid's pixel span as its
+      option alone lays it out -- upstream aligns before the labels shrink
+      the grid. A reference with nothing to align to nices instead. }
+    else if (AAlignTo <> nil) and (AAlignTo.Scale is TTyIntervalScale)
+      and TTyIntervalScale(AAxis.Scale).AlignTo(
+        TTyIntervalScale(AAlignTo.Scale), ARaw.FixLo or AZoomFixLo or AZoomFixHi,
+        ARaw.FixHi or AZoomFixLo or AZoomFixHi, ARaw.Incl0, AAlignPx) then
+    else
+      TTyIntervalScale(AAxis.Scale).Niceify(split, ivl);
+    { AFTER Niceify: it is the major interval that gets subdivided, and
+      Niceify is what decides the major interval. }
+    TTyIntervalScale(AAxis.Scale).MinorSplitNumber := minor;
+  end;
+end;
+
 procedure TyApplyAxisExtents(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const ABindings: TTySeriesBindingArray; const AStores: array of TTyDataStore;
   const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex;
@@ -1712,50 +1911,14 @@ var
     end;
   end;
 
-  { A category axis' extent from its raw one: the ends as rounded -- not a
-    number where a bound named nothing, which blanks the axis: no count, no
-    ticks and no bars. And a window of more categories than anything can draw
-    is refused rather than walked: min: 1e300 would build a label per
-    category. }
-  procedure ApplyCategoryExtent(AAxis: TTyAxis; const ARaw: TTyAxisRawExtent;
-    ACtnShp: Boolean);
-  const
-    cMaxWindow = 1048576;
-  var
-    e: TTyRange;
-    blank: Boolean;
-  begin
-    e.Start := ARaw.Lo;
-    e.Stop := ARaw.Hi;
-    blank := ARaw.Blank;
-    if (not blank) and (ARaw.Hi - ARaw.Lo + 1 > cMaxWindow) then
-    begin
-      blank := True;
-      e.Start := NaN;
-      e.Stop := NaN;
-    end;
-    AAxis.Scale.SetExtent(e);
-    AAxis.Scale.MarkedBlank := blank;
-    { startValue has already moved the extent; nothing stands on this axis }
-    AAxis.Scale.StartValue := NaN;
-    if ACtnShp and not blank then ApplyContainShape(AAxis);
-  end;
-
   procedure DoAxis(AAxis: TTyAxis; const AMainType: string;
     AAlignTo: TTyAxis; AAlignPx: Double);
   var
     k, zi: Integer;
     node: TJSONObject;
-    d: TJSONData;
-    ivl, split: Double;
-    minor: Integer;
-    minorSplit: Integer;
-    wantMinor: Boolean;
-    sub2: TJSONData;
-    lo, hi, minIvl, maxIvl: Double;
     any: Boolean;
     raw: TTyAxisRawExtent;
-    ctnShp: Boolean;
+    ctnShp, toggle: Boolean;
   begin
     if AAxis = nil then Exit;
     node := ObjAt(AOption, AMainType, AAxis.ComponentIndex);
@@ -1789,145 +1952,18 @@ var
     else
       raw := TyAxisNoZoomExtent(AOption, ABindings, AStores, AStacks, AIndex,
         AAxis, AMainType, any);
-    if (not any) and (AAxis.AxisType = atTime) and raw.Blank then
-    begin
-      { A TIME AXIS WITH NOTHING ON IT SHOWS TODAY, which is upstream's
-        answer and the only one an author reads as empty rather than as
-        broken: 0..1 on a time axis is the first second of 1970, and a
-        chart that lost its data should not look like a chart about the
-        Apollo programme. }
-      raw.Hi := TyDateTimeToMs(Date, False);
-      raw.Lo := raw.Hi - 86400000;
-    end;
-
-    { SIX ON A TIME AXIS, five everywhere else -- the options' own two
-      defaults. The value is handed on as written; the nice step makes it a
-      whole number the way upstream does. }
-    if AAxis.AxisType = atTime then split := 6 else split := 5;
-    ivl := NaN;
-    minIvl := 0;
-    maxIvl := 0;
-    minor := 0;
-    if node <> nil then
-    begin
-      d := node.Find('splitNumber');
-      if (d <> nil) and (d.JSONType = jtNumber) then split := d.AsFloat;
-      { `interval` AS WRITTEN, zero and negatives included: upstream draws no
-        ticks for either, and the scale says so rather than this. }
-      d := node.Find('interval');
-      if (d <> nil) and (d.JSONType = jtNumber) then ivl := d.AsFloat;
-      d := node.Find('minInterval');
-      if (d <> nil) and (d.JSONType = jtNumber) then minIvl := d.AsFloat;
-      d := node.Find('maxInterval');
-      if (d <> nil) and (d.JSONType = jtNumber) then maxIvl := d.AsFloat;
-
-      { THE SPLIT NUMBER IS NOT `minorTick.show`. Upstream's
-        getMinorTicksCoords reads `minorTick.splitNumber` and nothing else --
-        the two SHOW questions, one for the marks and one for the grid, are
-        asked later and separately, by the axis furniture.
-
-        Tying the coordinates to `minorTick.show` had two consequences. The
-        visible one: `minorSplitLine: { show: true }` on its own drew
-        nothing, because there were no minor ticks to draw it at. The other
-        was invisible and worse -- it made both furniture gates unobservable,
-        since a minor tick could not exist unless the same option that
-        created it had also asked to draw it. Mutating either gate away
-        changed no pixel anywhere, which is how this was found.
-
-        Still not computed unless SOMEBODY asked, though: upstream builds the
-        subdivisions of every value axis on every frame and this does not
-        need to. Either of the two options counts as asking. }
-      minorSplit := 5;
-      wantMinor := False;
-      d := node.Find('minorTick');
-      if (d <> nil) and (d.JSONType = jtObject) then
-      begin
-        sub2 := TJSONObject(d).Find('splitNumber');
-        if (sub2 <> nil) and (sub2.JSONType = jtNumber) then
-          minorSplit := TyTruncOpt(sub2.AsFloat, minorSplit);
-        sub2 := TJSONObject(d).Find('show');
-        wantMinor := (sub2 <> nil) and (sub2.JSONType = jtBoolean)
-                     and sub2.AsBoolean;
-      end;
-      d := node.Find('minorSplitLine');
-      if (d <> nil) and (d.JSONType = jtObject) then
-      begin
-        sub2 := TJSONObject(d).Find('show');
-        if (sub2 <> nil) and (sub2.JSONType = jtBoolean) and sub2.AsBoolean
-          then wantMinor := True;
-      end;
-      { Upstream's own guard on the number, verbatim: out of (0, 100) and it
-        goes back to five rather than subdividing an axis into nothing or
-        into a thousand. }
-      if (minorSplit <= 0) or (minorSplit >= 100) then minorSplit := 5;
-      if wantMinor then minor := minorSplit;
-    end;
-
+    TyNiceAxisScale(AOption, AAxis, node, raw, any, AAlignTo, AAlignPx,
+      zoomFixLo, zoomFixHi, ctnShp, toggle);
     { A BACKWARDS min AND max INVERT THE AXIS, unless the chart asked for the
       old behaviour by name. }
-    if raw.ToggleInverse and not ((AOption <> nil)
-      and (AOption.Root is TJSONObject)
-      and JsTruthyOf(TJSONObject(AOption.Root).Find('legacyMinMaxDontInverseAxis'))) then
-      AAxis.Inverse := not AAxis.Inverse;
-
+    if toggle then AAxis.Inverse := not AAxis.Inverse;
     if AAxis.AxisType = atCategory then
     begin
-      if AAxis.Scale is TTyOrdinalScale then
-        ApplyCategoryExtent(AAxis, raw, ctnShp);
+      { a band already holds its bar, and a blank axis has none }
+      if (AAxis.Scale is TTyOrdinalScale) and ctnShp
+        and not AAxis.Scale.MarkedBlank then
+        ApplyContainShape(AAxis);
       Exit;
-    end;
-
-    lo := raw.Lo;
-    hi := raw.Hi;
-    { A BLANK END IS NO EXTENT: upstream's nice step replaces the pair with
-      [0, 1] -- a max written beside no data included -- and the pins stay. }
-    if IsNan(lo) or IsNan(hi) then
-    begin
-      lo := 0;
-      hi := 1;
-    end;
-    { A FLAT TIME RANGE OPENS BY A DAY EACH WAY, on the scale -- upstream's
-      calcNiceForTimeScale. Opening it only where the ticks are made left the
-      extent flat, and every tick then normalised to the middle of the axis. }
-    if (AAxis.AxisType = atTime) and (lo = hi) then
-    begin
-      lo := lo - 86400000;
-      hi := hi + 86400000;
-    end;
-    AAxis.Scale.SetExtent(TyRange(lo, hi));
-    { NOTHING TO GO ON is still [0, 1] with ticks on it, as upstream's is; the
-      flag is what keeps them from being drawn. }
-    AAxis.Scale.MarkedBlank := raw.Blank;
-    { AND WHERE ITS BARS STAND. Written every build, not-a-number included, so
-      an axis that has lost its bars loses its start with them. }
-    if raw.HasStartValue then AAxis.Scale.StartValue := raw.StartValue
-    else AAxis.Scale.StartValue := NaN;
-    if AAxis.Scale is TTyIntervalScale then
-    begin
-      TTyIntervalScale(AAxis.Scale).FixMin := raw.FixLo;
-      TTyIntervalScale(AAxis.Scale).FixMax := raw.FixHi;
-      { BEFORE Niceify, because they bound the step it is about to choose. }
-      TTyIntervalScale(AAxis.Scale).MinInterval := minIvl;
-      TTyIntervalScale(AAxis.Scale).MaxInterval := maxIvl;
-      TTyIntervalScale(AAxis.Scale).ContainShape := ctnShp;
-      { NOT NICIED WHEN IT IS A CALENDAR. Niceify opens the extent out to
-        round numbers before picking a step, and the round number nearest a
-        week in March 2024 is somewhere in 1973. A time scale is handed the
-        tick count instead and snaps to the calendar itself. }
-      if AAxis.Scale is TTyTimeScale then
-        TTyTimeScale(AAxis.Scale).SplitNumber := TyValidSplitNumber(split, 10)
-      { ALIGNED TO ANOTHER AXIS' TICKS, over the grid's pixel span as its
-        option alone lays it out -- upstream aligns before the labels shrink
-        the grid. A reference with nothing to align to nices instead. }
-      else if (AAlignTo <> nil) and (AAlignTo.Scale is TTyIntervalScale)
-        and TTyIntervalScale(AAxis.Scale).AlignTo(
-          TTyIntervalScale(AAlignTo.Scale), raw.FixLo or zoomFixLo or zoomFixHi,
-          raw.FixHi or zoomFixLo or zoomFixHi, raw.Incl0, AAlignPx) then
-      else
-        TTyIntervalScale(AAxis.Scale).Niceify(split, ivl);
-      { AFTER Niceify: it is the major interval that gets subdivided, and
-        Niceify is what decides the major interval. }
-      TTyIntervalScale(AAxis.Scale).MinorSplitNumber := minor;
     end;
     { AFTER the effective extent is final: the half bar widens what the
       nice step left, pins and all. }

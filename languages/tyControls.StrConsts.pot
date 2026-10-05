@@ -716,6 +716,11 @@ msgstr ""
 msgid "grid[%d] has axes in only one direction, so it draws nothing"
 msgstr ""
 
+#: tycontrols.strconsts.rstychartpolarnoaxis
+#, object-pascal-format
+msgid "polar[%d] has no %s, so it is not drawn"
+msgstr ""
+
 #: tycontrols.strconsts.rstychartlegendselectall
 msgctxt "tycontrols.strconsts.rstychartlegendselectall"
 msgid "All"

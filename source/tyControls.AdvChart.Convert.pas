@@ -115,6 +115,9 @@ function TyAxisFromPixel(AAxis: TTyAxis; AValue: TJSONData): TTyConvertResult;
 function TyCartesianContainJson(ACart: TTyCartesian2D; APoint: TJSONData): Boolean;
 { the two elements of a pixel as ToNumber reads them }
 function TyJsonPoint(APoint: TJSONData): TTyPointF;
+{ toGlobalCoord(dataToCoord(v)) of a parsed value, with Math.log's nought on
+  a log axis: an infinite pixel [Batch 111: exported for the polar] }
+function TyAxisCoordJs(AAxis: TTyAxis; AValue: Double): Double;
 
 implementation
 
@@ -565,7 +568,6 @@ begin
   end;
 end;
 
-function AxisCoordJs(AAxis: TTyAxis; AValue: Double): Double; forward;
 
 function TyCartesianToPixel(ACart: TTyCartesian2D; AValue: TJSONData): TTyConvertResult;
 var
@@ -600,8 +602,8 @@ begin
             Exit(TyConvertXY(p.X, p.Y));
           end;
         end;
-        Result := TyConvertXY(AxisCoordJs(ax, TyAxisParseJson(ax, xv)),
-          AxisCoordJs(ay, TyAxisParseJson(ay, yv)));
+        Result := TyConvertXY(TyAxisCoordJs(ax, TyAxisParseJson(ax, xv)),
+          TyAxisCoordJs(ay, TyAxisParseJson(ay, yv)));
       finally
         UnmaskFP(mask);
       end;
@@ -635,7 +637,7 @@ end;
   log 0 = -Infinity, normalised to an infinite fraction and mapped to an
   infinite pixel -- where the axis' own mapping, which the marks share,
   answers not-a-number }
-function AxisCoordJs(AAxis: TTyAxis; AValue: Double): Double;
+function TyAxisCoordJs(AAxis: TTyAxis; AValue: Double): Double;
 var a, b: Double;
 begin
   if (AAxis.AxisType = atLog) and (AValue = 0) then
@@ -654,7 +656,7 @@ begin
   if AAxis = nil then Exit;
   mask := MaskFP;
   try
-    Result := TyConvertNum(AxisCoordJs(AAxis, TyAxisParseJson(AAxis, AValue)));
+    Result := TyConvertNum(TyAxisCoordJs(AAxis, TyAxisParseJson(AAxis, AValue)));
   finally
     UnmaskFP(mask);
   end;

@@ -655,6 +655,14 @@ type
     HasNameTrunc: Boolean;
     NameTruncWidth: Double;
     NameTruncEllipsis: string;
+    { A FRAME OF ITS OWN [Batch 111]: an axis AxisBuilder lays out away from
+      a grid -- the polar's radius axis -- turned by NameFrame.Rotation, its
+      labels on the LabelDirection side of the line whatever axisLabel.inside
+      says (AxisBuilder reads no `inside`; a grid's helper flips the
+      direction before it gets there). False, the zero value, is a grid axis
+      on its Side. }
+    FreeFrame: Boolean;
+    LabelDirection: Integer;
   end;
   TTyAxisLayoutSpecArray = array of TTyAxisLayoutSpec;
   PTyAxisLayoutSpec = ^TTyAxisLayoutSpec;
@@ -2270,6 +2278,8 @@ var
   dir: Integer;
 begin
   if AxisIsHorizontal(ASpec.Side) then axisRot := 0 else axisRot := Pi / 2;
+  { an axis in a frame of its own is turned by it [Batch 111] }
+  if ASpec.FreeFrame then axisRot := ASpec.NameFrame.Rotation;
   { Into [0, 2*PI) by upstream's remRadian -- JavaScript's % twice, not a
     Floor, which is 1 ulp off -- and NOT the [-PI, PI) a reader expects. The
     interval matters: a quarter turn CLOCKWISE comes back as three quarters
@@ -2280,6 +2290,7 @@ begin
     other one, and every anchor follows. }
   if ASpec.Side in [asBottom, asRight] then dir := 1 else dir := -1;
   if ASpec.LabelInside then dir := -dir;
+  if ASpec.FreeFrame then dir := ASpec.LabelDirection;
 
   if Abs(diff) < cRadEps then
   begin
@@ -2343,7 +2354,12 @@ begin
     else fr := TyDefaultNameFrame(ASpec, APlot, APPI);
     t := AxisScaleF(ASpec.LabelMarginLogical, APPI);
     if ASpec.LabelInside then t := -t;
-    t := fr.LabelOffset + fr.NameDirection * t;
+    { cfg.labelOffset + cfg.labelDirection * margin: a grid's label
+      direction is its name direction, a frame of its own says [Batch 111] }
+    if ASpec.FreeFrame then
+      t := fr.LabelOffset + ASpec.LabelDirection * AxisScaleF(ASpec.LabelMarginLogical, APPI)
+    else
+      t := fr.LabelOffset + fr.NameDirection * t;
     g := TyMatLocal(fr.PosX, fr.PosY, fr.Rotation);
   end;
   { THE SAME SUM TyAxisThickness RESERVES, and it has to be: the thickness is

@@ -966,6 +966,11 @@ msgstr "yAxis[%d] 没有指向任何 grid，因此不会画"
 msgid "grid[%d] has axes in only one direction, so it draws nothing"
 msgstr "grid[%d] 只有一个方向上有轴，因此什么都不会画"
 
+#: tycontrols.strconsts.rstychartpolarnoaxis
+#, object-pascal-format
+msgid "polar[%d] has no %s, so it is not drawn"
+msgstr "polar[%d] 没有 %s，因此不会画"
+
 #: tycontrols.strconsts.rstychartseriesnotype
 #, object-pascal-format
 msgid "series[%d] has no type, so it is not drawn"

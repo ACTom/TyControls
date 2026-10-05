@@ -5885,7 +5885,7 @@ port 一直把名称居中画在标签外侧,y 轴的转 90°,位置由画的时
 - 主题没给名称文字色时,绘制不画,但布局照样给它留地方(以前就是这样)。
 - 转过的多行名称:`DrawTextRotated` 只画一行。
 - `TyAxisThickness` 已没有产品代码调用,只剩测试用它量标签带;它里面的名称项是旧的临时规则。
-- 名称 tooltip、`triggerEvent`、极坐标/平行/单轴的名称、grid 不以画布为容器的布局:未做。
+- 名称 tooltip、`triggerEvent`、极坐标/平行/单轴的名称、grid 不以画布为容器的布局:未做。**[第 111 批：极坐标半径轴的名称做了——AxisBuilder 的名称布局，在半径轴自己的框架里，照样避开自己的标签，见 §146。]**
 
 ### 变异测试
 
@@ -9090,7 +9090,7 @@ AN2–AN4、AN3b 之后，同一个 Option 上的整体更新仍然一帧切过�
 
 ### 推迟与偏差
 
-- 轴名（`'name'`，挂在轴组的变换组下，x、y 是局部的）、次刻度（`'minorticks_'`）、次分隔线（`'minor_line_'`）、分隔区域（`'area_'`）不过渡，画在布局的位置；极坐标、单轴、平行坐标的轴端口没有。
+- 轴名（`'name'`，挂在轴组的变换组下，x、y 是局部的）、次刻度（`'minorticks_'`）、次分隔线（`'minor_line_'`）、分隔区域（`'area_'`）不过渡，画在布局的位置；极坐标、单轴、平行坐标的轴端口没有。**[第 111 批：极坐标的两根轴有了，也不做 groupTransition，直接画在布局的位置，见 §146。]**
 - 动画中的坐标轴叶子照代理的值原样画，中途不吸附像素；静止后静态层按布局画（与代理的终值最多差一个 ulp）。
 - `camAuto` 下窗口外的动作（图例点击、dataZoom 手势）留给下一次窗口绘制布防，起点是那次绘制的 flush，而不是下一帧——最多差一帧。
 - 悬停目标的重新指向只认数据项；悬停在折线本体上跨过 notMerge 时下一次移动仍会 out / over（没有用例）。
@@ -10222,7 +10222,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **新单元 `tyControls.AdvChart.Convert`**（纯）：`TyParseFinder`（对 `TTyChartOption.Keys`，即上游组件表的镜像，空洞照样是空洞）、`TyFinderModels` / `TyFinderModel`；JavaScript 的值：`TyJsonToNumber`、`TyJsonJsString`、`TyJsonElement`（数组元素、串的 UTF-16 字符、对象的属性 `"i"`；null 抛 `ETyConvertNull`）、`TyAxisParseJson`；`TyCartesianToPixel` / `TyCartesianFromPixel` / `TyAxisToPixel` / `TyAxisFromPixel` / `TyCartesianContainJson`。结果是 `TTyConvertResult`：`cvkNone`（undefined）、`cvkNumber`、`cvkArray`、`cvkError`（上游抛错的地方）。全部在屏蔽浮点陷阱下算（无穷乘零是 NaN，不抛）。
 - **新单元 `tyControls.AdvChart.Jitter`**（纯）：`TTyJitterPass`（随机状态和每根轴放下的点）、`TTyJitterAxis.Fix`（`fixJitter` 逐行抄）、`TyJitterIgnoreOverlaps`、`TyJitterPlace`、`TyJitterRandom`。随机数是力导向布局的 xorshift32，种子 `TyJitterSeed`（等于 `TyGraphForceSeed(0)`），**每次 `BuildSeriesList` 重新播种、清空放下的点**：重画同一幅图，抖动不变。
 - **`Marks`**：`TTySeriesVisual.Jitter` / `JitterOnX`；`BuildScatter` 对每一行（空行也算）先求点、按行的符号大小（`ScatterRowRadius`：数据项、visualMap、系列的大小，`[w, h]` 取平均，除以二）抖动，再判空行与裁剪。
-- **控件**：`JitterFor` 读基轴的 `jitter` / `jitterOverlap` / `jitterMargin`（像素按 PPI 换算），给 scatter 挂上那根轴的 `TTyJitterAxis`；`FJitter`。公开的 `ConvertToPixel` / `ConvertFromPixel` / `ContainPixel`：JSON 文本形式（finder 可以是 JSON 也可以是裸的主类型名；答案是 JSON：一个数、一对数，非有限数印成 null，没有答案或上游会抛错时是空串），类型化形式（`TTyConvertResult`，`array of Double` / 一个 `Double` / 两个坐标），以及 `...Data` 形式（直接给 `TJSONData`）。分派按上游的次序：各个 grid、graph 的 view、（polar、singleAxis 留了位置）、各个 calendar。布局脏了先重新布局（上游的 setOption 是同步的）；从没渲染过的图什么都答不出。
+- **控件**：`JitterFor` 读基轴的 `jitter` / `jitterOverlap` / `jitterMargin`（像素按 PPI 换算），给 scatter 挂上那根轴的 `TTyJitterAxis`；`FJitter`。公开的 `ConvertToPixel` / `ConvertFromPixel` / `ContainPixel`：JSON 文本形式（finder 可以是 JSON 也可以是裸的主类型名；答案是 JSON：一个数、一对数，非有限数印成 null，没有答案或上游会抛错时是空串），类型化形式（`TTyConvertResult`，`array of Double` / 一个 `Double` / 两个坐标），以及 `...Data` 形式（直接给 `TJSONData`）。分派按上游的次序：各个 grid、graph 的 view、（polar、singleAxis 留了位置）、各个 calendar。**[第 111 批：polar 接上了，在 graph 的 view 之后，见 §146。]**布局脏了先重新布局（上游的 setOption 是同步的）；从没渲染过的图什么都答不出。
 - **`Calendar`**：`PointToData` 对 NaN 和无穷照上游答（以前 `Floor(NaN)` 抛异常）。
 - **`Scale`**：`TyJsRound` 把舍到零的负数答成 -0，和 `Math.round` 一样。
 - **customValues**：`Builder` 的 `TyCustomValuesOf`（真值判断、parse、范围、去重、升序）；`FillSpec` 先做出类目自己的标签，有 `axisLabel.customValues` 时把它们挪进 `CatLabels` / `CatTickValues` / `CatLocalCoords`、换上自定义的标签（终矩形上一起重算坐标）；`AxisMarks` 有 `axisTick.customValues` 时刻度、分割线、分割区域都用它（类目轴各按自己的 `alignWithLabel` 走 `TyFixOnBandMarks`），刻度与被藏标签按值对上。`Layout`：`TTyAxisLayoutSpec.CustomLabels` 与三个 `Cat*` 数组、`TyCategoryLabelCount`；类目间隔在自定义标签下用类目自己的标签量（`IntervalSpec`）；自定义标签全部构建、不按间隔抽稀。`AxisLabels.TyFixMinMaxLabelShow` 多一个 `ACustomValues`。
@@ -10275,7 +10275,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **随机数**：上游的 jitter 用 `Math.random`，每次渲染不同；端口用固定种子的 xorshift32，同一幅图永远一样。同一张图里既有力导向 graph 又有 jitter 时，上游两者共用一条 `Math.random`，端口各用各的种子。
 - **large 散点**（`largeThreshold` 以上走 Float32Array）不在这一批（C8）。
 - **finder 是数组**：上游对数组 finder 的数字键调 `match` 会抛错；端口当成什么都没找到。containPixel 的点是 null 时上游抛错，端口答 false。
-- **matrix、polar、singleAxis、geo、parallel** 坐标系不在（polar 是 C3、singleAxis 是 C10、geo 是 D14）；finder 指到它们时端口什么都答不出，containPixel 答 false。分派里给 polar、singleAxis 留了位置。
+- **matrix、polar、singleAxis、geo、parallel** 坐标系不在（polar 是 C3、singleAxis 是 C10、geo 是 D14）；finder 指到它们时端口什么都答不出，containPixel 答 false。分派里给 polar、singleAxis 留了位置。**[第 111 批：polar 坐标系有了——finder 指 polar 时照上游换算，containPixel 照 containPoint；极坐标系列的 finder 随 C4，见 §146。]**
 - **桑基图**的 containPixel 按它的盒子（端口没有桑基图的 roam）；旭日图从不包含（上游不下钻时也是如此，端口没有下钻）。
 - **类目轴的自动间隔**：量的是主题字体，不是上游的 12px sans-serif；60 个 `'category N'` 标签上端口算出 10、上游 9（和有没有 customValues 无关，是原有的偏差）。基准里拥挤的类目用例把间隔写明。
 - **customValues 写成对象或串**：对象取值、串逐字符，照 `zrUtil.each` 的行为；没有基准。
@@ -10295,3 +10295,96 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - §68、§73、§74 在原处标注。没有新的 resourcestring。
 
 全量 **8196 个测试，0 失败**；唯一的错误是 `TTyStringGridTest.TestCtrlXGestureCutsAndReadOnlyDegradesToCopy` 的剪贴板被另一棵树的套件占着（已知的偶发），单跑 grid 套件 227 个全绿。新增 `test.advchart.convertjitter` 10 个；`TyJsRound` 的 -0、calendar 的 NaN 像素、FixMinMax 的新参数之后，现有测试全绿。
+
+## 146. Tier 2 第一百一十一批：极坐标系与极坐标轴（C3，2026-10-05）
+
+路线图 C3：polar P1——polar 坐标系、angleAxis / radiusAxis、轴与网格的绘制（axisLine / axisTick / axisLabel / splitLine / splitArea / minorTick）、极坐标的 axisPointer。以前 `polar`、`angleAxis`、`radiusAxis` 只是选项里认得的组件名（合并、replaceMerge 都按组件处理），没有坐标系，什么都不画；换算的分派里给 polar 留了位置（§145）。极坐标上的系列（bar / line / scatter……）、九个扇区标签位置、极坐标堆叠与标注、dataZoom 是 C4。这一批对着 `coord/polar/`（`Polar.ts`、`polarCreator.ts`、`AngleAxis.ts`、`RadiusAxis.ts`、`AxisModel.ts`、`PolarModel.ts`）、`component/polar/install.ts`（两根轴各自的默认选项）、`component/axis/AngleAxisView.ts`、`RadiusAxisView.ts`、`AxisBuilder.ts`、`AxisView.ts`、`component/axisPointer/PolarAxisPointer.ts`、`viewHelper.ts`、`BaseAxisPointer.ts`、`axisTrigger.ts`、`modelHelper.ts`、`coord/axisDefault.ts`、`coord/axisModelCreator.ts`、`coord/axisTickLabelBuilder.ts`、`coord/axisBand.ts`、`coord/scaleRawExtentInfo.ts`、`coord/axisNiceTicks.ts` 与 zrender 的 `Arc` / `Circle` / `Ring` / `Sector`（`roundSector`）逐行核过，在真 dist 上跑基准。§72、§131、§145 的推迟在原处标注。
+
+### 上游的做法
+
+- **建坐标系**（`polarCreator.create`）：每个 polar 组件一个；它的角度轴、半径轴是该族里**最后一个**指向它的（`findAxisModel` 遍历时后者覆盖前者；`polarIndex` / `polarId` 都没写就指向第一个 polar）。缺一根轴时上游直接抛错。
+- **两根轴的默认**（`axisModelCreator`）：`axisDefault[type]` 之上再叠各自的额外默认——角度轴 `startAngle: 90`、`clockwise: true`、`splitNumber: 12`、`containShape: false`、`axisLabel.rotate: 0`，半径轴 `splitNumber: 5`；所以时间轴放在角度上是 12 段、放在半径上是 5 段，都不是时间轴自己的 6。`axisLine.show` / `axisTick.show` 的 `'auto'` 在两根轴上都是真（角度视图问 `get(show)` 取真值，半径的 AxisBuilder 没有 auto 规则）——带边距的类目角度轴照样有刻度。
+- **范围**（`setAxis` / `resizePolar`）：角度轴的 `inverse` 是 `inverse !== clockwise`（缺省 `clockwise: true`，所以缺省就是反向的），范围是 `[startAngle, endAngle ?? startAngle ± 360]`（反向减、正向加），单位是度。中心是 `parsePercent(center[i], 容器宽/高) + 容器原点`；半径缺省 `'80%'`，`null` 是 `[0, '100%']`，标量是 `[0, r]`，各按容器短边的一半解析；半径轴反向时范围是 `[r1, r0]`。上游的 `Axis` 不把 `inverse` 用到范围上——范围是这里直接写好的。
+- **刻度**（`updatePolarScale`）：两根轴各自 `scaleRawExtentInfoCreate` + `scaleCalcNice`，和直角坐标同一条路径；原始范围倒着（min 大于 max）时翻转的是 `axis.inverse`，这时**范围已经设好了**，所以只影响读这个标志的地方（角度轴线的方向、`pointToCoord`、半径轴名称的间隔方向），刻度和坐标不动。之后没有边距的类目角度轴让出一个带：`extent[1] ∓= 360 / count`（反向加、正向减），最后一个类目不和第一个重合。
+- **坐标**：`coordToPoint(r, a)` 是 `(cos(a/180·π)·r + cx, −sin(a/180·π)·r + cy)`——角度逆时针为正、y 向下；`pointToCoord` 求距离和 `atan2(−dy, dx)/π·180`，再一圈一圈挪进 `[min, min + 360]`（反向时 `[max − 360, max]`）；圆心处没有方向，是 NaN。`containPoint` 是两根轴各自 `contain`（两端都闭）。`getBaseAxis`：类目轴（先角度后半径）、时间轴、否则角度轴。
+- **半径轴视图**是一个 AxisBuilder：组在圆心，转角是角度轴范围的起点，标签和刻度在 −1 一侧，名称在 +1 一侧；AxisBuilder 不读 `axisTick.inside` / `axisLabel.inside`。轴线、刻度做 subPixelOptimize；标签走直角坐标的整套规则（类目的通用间隔——轴转角当 0——和保持、fixMinMaxLabelShow、hideOverlap、旋转、按值把被藏标签的刻度一起藏）；名称按 AxisBuilder 的位置和 nameMoveOverlap 避开自己的标签。视图自己画：每个刻度一个分隔圆（不满一圈时是弧，起止角是角度范围取负的弧度，方向是角度轴的 `inverse`；半径不小于 0），相邻刻度之间一个分隔区域——**总是整圈的环**（0 到 2π）——每个次刻度一个整圆的次分隔线。颜色是第 i 条取列表的 `i mod 长度`（区域从第二个刻度起算，没有跨渲染的颜色缓存）。
+- **角度轴视图**不是 AxisBuilder：标签在 `r + margin`（r 是半径范围在 `inverse ? 0 : 1` 处的那一端），水平对齐看 `|x − cx| / r < 0.3` 居中、否则按左右，竖直同理；不做 fixMinMaxLabelShow、不做 hideOverlap；类目轴跳过区间外的两端（`offInterval`）。类目的自动间隔是**它自己的**：第一个类目**序号**的一行高（至少 7）除以一个带的度数，向下取整；它的缓存不看范围，比上次小一而类目数相差不超过一时保留上次的。刻度和标签列表里首尾相差 360 时去掉最后一个（`fixAngleOverlap`）。刻度是从 r 到 `r ± length` 的径向线（`inside` 取负），次刻度用 `minorTick.length`、方向仍由 `axisTick.inside` 决定；分隔线从外半径画到内半径；分隔区域是相邻刻度之间的扇形，最后一个绕回第一个，方向取选项 `clockwise` 本身。轴线：内半径是 0 时，整 360 度是圆、否则是弧；内半径不是 0 时**总是圆环**（不看角度范围）。除了轴线，别的部件都要求刻度不是空白。
+- **指针**（`PolarAxisPointer`）：值是该轴那一半的 `pointToData`，`axis.scale.isBlank()` 或 `!containData` 时不画；不夹到范围，坐标是 `dataToCoord(value)`。`line`：角度轴是从另一根轴范围的一端到另一端的径向线，半径轴是一个圆；`shadow`：角度轴是带宽（度）的扇形，`startAngle = (−c − bw/2)·π/180`，半径轴是夹在范围里的整圈环；带宽是 `calcBandWidth(min: 1)`——类目轴一个带，别的轴没有系列时是 1。标签：半径轴在 `rotate(轴转角)` 再平移到圆心的矩阵下的 `(c, −margin)`，对齐是 `innerTextLayout(轴转角, axisLabel.rotate, −1)`；角度轴在 `coordToPoint(半径范围[1] + margin, c)`，对齐同角度标签的规则；再按对齐减去带内边距的宽高，夹进容器。`tooltip.axisPointer.axis` 可以写 `'radius'` / `'angle'`，缺省是 `getBaseAxis`；cross 时另一根轴也画，带标签。
+- **换算**：`convertToPixel` / `convertFromPixel` 只认 finder 里的 polar（或系列自己的坐标系），值是 `[半径, 角度]`；值本身是 null 时取下标抛 TypeError；`containPixel` 是 `containPoint`。分派次序在 grid、graph 的 view 之后。
+
+### 做法
+
+- **新单元 `tyControls.AdvChart.Polar`**（纯）：`TTyPolar`（`ITyCoordSys`；两根 `TTyAxis`，像素映射是恒等的，`SetPxExtent` 写成度或像素；`TTyAxis.Inverse` 永远不设，两个 `inverse` 标志在 `TTyPolar` 上）；`CoordToPoint` / `PointToCoord` / `AxisPointToData` / `ContainXY` / `BaseAxis`；`TyBuildPolars`（建坐标系、找轴、中心与半径）、`TyPolarApplyExtents`（`TyNiceAxisScale`，翻转标志，类目角度轴让一个带）、`TyLayoutPolars`（两个视图：线、弧、环、扇形、标签的几何，记录的就是上游的元素）；指针的 `TyPolarPointerShape` / `TyPolarPointerBand` / `TyPolarPointerLabelAnchor`；换算的 `TyPolarToPixel` / `TyPolarFromPixel` / `TyPolarContainJson`。三角函数全用 JsMath，`Math.round` 的 subPixelOptimize 用 `TyZrSubPixelOptimize`。
+- **共用而不是另写**：`Builder` 的 `FillSpec` / `ReadName` / `ReadNameMargin` 从 `TyLayoutGrids` 里提出来成为 `TyFillAxisLayoutSpec`（直角坐标的嵌套 `FillSpec` 只剩一层转发）；新导出 `TyCreateAxis`（`BuildAxisFamily` 也走它）、`TyCustomValuesOf`、`TyAxisRtPieces`；`TyAxisFurnitureOf` 多一个 `APolar`（`'auto'` 就是真）。`Series` 的 `DoAxis` 里从「时间轴没有数据显示今天」到「次刻度分段」这一段提出来成为 `TyNiceAxisScale`（`ADefaultSplit` 给极坐标的 12 / 5；翻转只报告，由调用者翻自己的标志；containShape 仍由 `DoAxis` 做）。`Layout` 的 `TTyAxisLayoutSpec` 多 `FreeFrame` / `LabelDirection`：轴转角取 `NameFrame.Rotation`，标签方向由它给、不看 `inside`——半径轴的标签、名称、箭头、类目间隔、保持都走直角坐标的那几个函数。`AxisName` 导出 `TyInnerTextLayout`，`Convert` 导出 `TyAxisCoordJs`，`AxisPointer` 加 `TyTooltipPolarPointerAxis`。
+- **控件**：`FPolars`；`Rebuild` 建、`TyApplyAxisExtents` 之后定刻度；`Relayout` 在 `TyLayoutGrids` 之后排两个视图（同一套字体、间距、轴记忆）；`PaintAxes` 先画极坐标的网格层再画轴层，主题键全部和直角坐标轴共用（`TyAdvChartAxisLine`、`TyAdvChartAxisTick`、`TyAdvChartSplitLine`、`TyAdvChartSplitArea`、`TyAdvChartMinorTick`、`TyAdvChartMinorSplitLine`、`TyAdvChartAxisLabel` / `AxisName`、指针的三个键）——上游的两根极坐标轴本来就共用 `axisDefault`，没有新主题键。弧、环、扇形按 zrender 的 buildPath 画（`ArcTo` 的方向是 `!clockwise`）。`ResolveAxisPointers` 在 grid 之后问每个 polar；`TTyAxisHit.Polar`；`PolarPointerGeometry`（受保护，绘制和测试都用它）给出形状和标签框；极坐标指针不做移动动画。`ConvertDispatch` 在 graph 的 view 之后问 polar，`ContainPixelData` 认 `polar`。合并时新进来的 angleAxis / radiusAxis 忘掉轴记忆。缺轴的 polar 不建、给诊断（`rsTyChartPolarNoAxis`，有中文翻译）。导出的 `excludeComponents` 认 `angleAxis` / `radiusAxis`（新的 `cvAngleAxis` / `cvRadiusAxis`）。`PolarCount` / `PolarLayout` 公开。
+
+### 基准
+
+`tools/advchart-oracle/polar-axes.js`（真 dist，node SSR，`animation: false`，TZ=UTC，zrender 的宽度表量字，最后 `process.exit()`）→ `tests/fixtures/advchart-polar-axes.json`：**83 个用例**。合并路径（`graphic.mergePath`）不留形状，基准挂了 `Path.getUpdatedPathProxy`（合并时对每一片调用）和 `Path.createPathProxy`（对合并后的那条调用），在视图渲染时把每一片的形状读回来，按视图的构建次序分到各个部件，并用轴自己的刻度数核对片数。V8 的 NaN 符号两次运行不一定相同，一律写成 `7ff8…`。
+
+- **轴** 58 个：类目角度轴（五个、十二个月带分隔线和区域、无边距、六十个——角度自己的间隔、`interval: 3` 与 `axisTick.interval: 1`、`alignWithLabel`、逆时针从 0 度、反向、反向加逆时针）；数值角度轴（0..360 十二段去掉重合的末尾、空白、半圈的弧、半圈加内半径的环、从 30 度逆时针、次刻度与次分隔线、标签边距 20 与向内的 10 长刻度、min 大于 max、不整的范围）、时间角度轴（一年、十天）、对数角度轴；类目半径轴（五个、无边距带分隔、三十个——通用间隔、`interval: 0`、`alignWithLabel`）、数值半径轴（不整的范围、一百万二十段开 hideOverlap 与不开、showMinLabel false / showMaxLabel true）、时间与对数半径轴、反向半径（带区域与次刻度）、起始角 0 / 45 / 200（标签转 30）、标签转 90 与 −45、名称在末端 / 起点转 30 / 中间（避开标签）/ 反向轴末端、箭头、半径轴的标签边距与 `inside`（不起作用）、分隔线与分隔区域的颜色列表；二十天的时间半径（5 段，不是时间轴的 6 段）、带边距的类目半径藏起第一个标签（带边上的刻度留着）、离水平一点几度而中心在四分之一像素上的半径线（`Math.round` 决定吸附）、间隔为 0 的末端名称撞上最后一个标签（被挪开）；中心与半径（像素对、百分比对、标量、`null`、`['left', 'bottom']` 配 `'50%'` 在 500×300、混合）、两个 polar（按 `polarIndex` 与 `polarId` 找轴）、隐藏的半径轴与去掉线刻度标签的角度轴、去掉线刻度标签的半径轴。
+- **指针** 17 个、652 个探针点、678 条指针记录（403 个带标签）：类目角度轴的线、阴影，cross（两根轴都画、带标签），`axis: 'radius'` 的类目半径阴影，两根数值轴的阴影（1 度），cross 加标签 formatter 与 precision，半圈（弧外没有指针），环上的反向半径，角度轴自己的 `axisPointer`（阴影带标签），起始角 0 加半径标签转 30，无边距类目的最后一个带，两个 polar 各管各的点，类目半径对数值角度（基轴是半径），时间半径对数值角度（基轴是时间轴），没有边距的类目半径的阴影（第一个带夹到圆心），`axis: 'radius'` 压过角度基轴，半径 `'100%'` 时标签越过顶边被推回。每个显示的轴记下值、元素（线、圆、扇形）和标签的文字与框。
+- **换算** 8 个、683 个探针（to 181、from 251、contain 251；polar 答了 286 个，grid 8 个）：每种 polar finder（`polarIndex` 0 / 1、裸词 `'polar'`、`polarId`、`polarName`、指向没有 polar 的系列、`angleAxisIndex` / `radiusAxisIndex`——都答不出），值的各种写法（null 抛错、串、空数组、单元素、嵌套），类目名与序号，时间串与毫秒（含小数），对数轴的 0 与负数，反向半径加半圈，min 大于 max 的角度轴，无边距类目的最后一个带，grid 与两个 polar 并存（grid 先答、`'all'`、列表）。
+- 每个记录都由按上游源码抄写的 recipe 重算一遍并逐位比较（中心与半径的 parsePercent、角度标签的位置与对齐、轴线的种类、刻度与分隔线的形状、扇形、半径的圆与弧、指针的形状与标签位置、换算的 dataToPoint / pointToData），另有 38 条具名守卫（满一圈是圆、半圈是弧、有内半径就是环、缺省 clockwise 就是反向、反向加缺省 clockwise 抵消、反向加逆时针是反向、无边距类目让一个带、0..360 去掉末尾、空白轴只画线、min 大于 max 只翻标志、六十个类目隔二、跳过区间外的末端、半径的区域是整环、半径线做 subPixel、hideOverlap 藏标签、showMinLabel false、被藏标签带走刻度、第二个 polar 拿对轴、隐藏的半径轴什么都不画、角度轴的线指针、polar 外没有指针、阴影是扇形、cross 的半径是圆、cross 有标签、普通指针没有标签、轴自己的标签、半圈外没有指针、polar 能答换算、没有 polar 系列的 finder 答不出、null 值抛错、grid 先答、时间半径是基轴、半径阴影夹到圆心、`axis: 'radius'` 压过角度、带边的刻度留着、撞上的名称被挪开、类目半径是基轴、越界的标签夹在 0），两次生成逐字节一致。
+
+测试 `test.advchart.polaraxes`（新，12 个，注册在 `tytests.lpr`）：
+
+- **polar**：每个 polar 的中心、两根轴的范围、两个 inverse、类型、是否空白、刻度范围，逐位。
+- **半径轴**：线、箭头、刻度（值、两端、是否被藏）、次刻度、每个构建的标签（值、文字、锚点、分解后的转角、对齐、是否藏）、名称、分隔圆与弧（种类、起止角、方向、颜色序号）、次分隔圆、分隔环。
+- **角度轴**：线的种类与形状、刻度、次刻度、标签（值、文字、锚点、对齐）、分隔线（含颜色序号）、次分隔线、分隔扇形。
+- **指针**：每个探针点上每个显示的极坐标轴：值、元素形状、标签文字与框，逐位。
+- **换算**：每个探针用 `...Data` 形式按精确 Double 重放；不带时区的日期串只在 UTC 下比。
+- 手写 7 个：缺轴的 polar 不建并给诊断、轴取最后一个指向它的；轴真的画出来（圆、半径线、分隔区域的像素）；`PointToCoord` 一圈一圈挪进范围、圆心是 NaN 且不被包含；角度间隔经合并保留、`notMerge` 重来（AngleAxis 自己的缓存，不看范围）；半径的类目间隔经合并保留（二十二个到二十一个：仍隔七，重来是隔六——上游在 node 里的答案）；`LastViewsDrawn` 有两个新视图；悬停时指针画出来、没有系列时不画提示框。月份名钉在端口自己的英文资源串上（`dnTranslation`），和 time-format 的重放一样。
+
+### 变异测试
+
+`c3_mut.py`（草稿目录）：逐个改源码、重编、跑 `TAdvChartPolarAxesTest`、按原字节还原。69 个：
+
+- 建坐标系 9 个：inverse 不与 clockwise 异或、startAngle 缺省 0、endAngle 缺省值的符号反了、半径缺省 `'100%'`、`null` 半径当 `'80%'`、半径的基准取长边、反向半径不交换两端、找轴取第一个指向它的、中心的 y 读了 x 的值；
+- 刻度 6 个：翻转被忽略、角度轴 5 段、半径轴用类型自己的段数、类目角度轴让带的方向反了、有边距的类目也让带、`ADefaultSplit` 不起作用；
+- 算术 5 个：角度间隔用 round、首尾差一圈从不去掉、径向线不从外半径起、不做 subPixel、subPixel 的比较用 Pascal 的 Round（银行家舍入）；
+- 半径视图 12 个：刻度朝外、被藏标签不带走刻度、带边上的刻度也被带走、不满一圈也画整圆、弧的方向反了、分隔环只有半圈、分隔环的颜色从 1 起、标签在 +1 侧、轴转角取范围的终点、名称从不避让、类目间隔不经保持、次分隔圆的半径被抬到 1；
+- 角度视图 13 个：对齐阈值 0.3 改 0.2、竖直对齐上下反了、区间外的末端也画、总画圆不画环、外半径不看反向、分隔扇形的方向不看选项、绕回的扇形不回到第一个刻度、`inside` 不起作用、次刻度用主刻度的长度、间隔不经保持、字高不按 PPI 换回、分隔线颜色都取 0、标签不加 margin；
+- 坐标 5 个：`coordToPoint` 的 y 不取负、`pointToCoord` 的展开方向反了、`contain` 左端开、`dataToPoint` 两维对调、`getBaseAxis` 不看时间轴；
+- 指针 12 个：类目带宽总是 1、扇形的角不取负、半径阴影不夹到范围、角度标签用内半径、半径标签在 +margin 一侧、标签不夹进容器、右对齐当左对齐、基轴总是角度、cross 不画另一根、不认 `axis: 'radius'`、不问 `containPoint`、值取另一根轴的；
+- 换算 3 个：polar 从不答、任何 polar 都答第一个被指的、`containPixel` 不认 polar；
+- 共用的布局 4 个：`FreeFrame` 不转轴角、不用 `LabelDirection`、标签偏移不用 `LabelDirection`、`APolar` 不让 `'auto'` 为真。
+
+首轮杀死 61 个，存活 8 个，没有等价的：
+
+- **半径轴用类型自己的段数**：一周的时间半径 5 段和 6 段刻度一样。补 `time-radius-20d`（二十天：上游 6 个刻度，6 段时 11 个），杀死。补的时候先忘了 `useUTC`，基准在 UTC、端口在本机时区，日界不同——是用例的问题，不是端口的。
+- **subPixel 用 Pascal 的 Round**：没有一条线的坐标落在四分之一像素上。补 `radius-subpixel-half`（中心 `[300, 200.25]`、起始角 0.1 度），杀死。
+- **带边上的刻度也被带走**：没有带边距的轴藏过标签。补 `cat-radius-hide-min`，杀死。
+- **名称从不避让**：没有名称撞上自己的标签。补 `radius-name-collide`（`nameGap: 0`），杀死。
+- **类目间隔不经保持**：半径的类目轴没有跨渲染的用例。手写测试补二十二个到二十一个，杀死。
+- **`getBaseAxis` 不看时间轴**：指针用例里没有时间轴。补 `ptr-time-radius`，杀死。
+- **半径阴影不夹到范围**：半径阴影都没有越过圆心。补 `ptr-radius-nogap`，杀死。
+- **不认 `axis: 'radius'`**：唯一的 `'radius'` 用例的基轴本来就是半径。补 `ptr-want-radius`（类目角度、数值半径），杀死。
+
+补完重跑这 8 个：全部杀死。
+
+### 已知偏差
+
+- **极坐标上的系列**是 C4：轴的范围还不并入系列的数据，指针不吸附、不找最近的系列，`seriesIndex` finder 不认极坐标系列，数值轴的阴影带宽总是 1（没有系列统计）。
+- **提示框**：没有系列时上游不发 showTip；端口照直角坐标原有的做法记一个没有分节的轴提示（`TooltipShownWhich` 是 `'axis:'`），不画框。
+- **指针不做移动动画**（上游在吸附或类目轴上做，角度轴的阈值是 π/18）；`axisPointer.status` / `value` 预设的指针（`OptionPointerHits`）只在直角坐标上。
+- **`polar.tooltip`**（坐标系级的提示选项）不读，只看全局的。
+- **类目的单项 `textStyle`**（`data: [{value, textStyle}]`）不用，和直角坐标一样。
+- **`center` 不是数组**时上游按串的字符取下标；端口当作没有中心（NaN）。
+- **subPixelOptimize 的线宽**取选项的 `lineStyle.width`（缺省 1，按 PPI 换算），绘制用主题的线宽；主题线宽不是 1 时吸附和描边差半个像素。
+- **角度轴的类目间隔**按 CSS px 量字高（屏幕 PPI 不是 96 时除回去），和上游一致；7 也是 CSS px。
+- **`coordinateSystemUsage: 'box'`**（polar 放在 calendar / matrix 的格子里）、`dataZoom` 控制极坐标轴是以后的事（后者是 C4）。
+
+### 落地
+
+- `source/tyControls.AdvChart.Polar.pas`（新，已登记 `tycontrols.lpk` 与 `tycontrols.pas`）。
+- `source/tyControls.AdvanceChart.pas`：`FPolars`、`FreePolars`、`PaintPolars`、`PaintPolarPointer`、`PolarPointerGeometry`、`ConvertOnPolar`、`PolarCount` / `PolarLayout`、`TTyAxisHit.Polar`、`TTyPolarPointerDraw`，`Rebuild` / `Relayout` / `PaintAxes` / `ResolveAxisPointers` / `PaintAxisPointers` / `PtrAnimSync` / `ConvertDispatch` / `ContainPixelData` / `MergePass` 的接线。
+- `source/tyControls.AdvChart.Builder.pas`：`TyFillAxisLayoutSpec`（提出来的 FillSpec / ReadName / ReadNameMargin）、`TyCreateAxis`、`TyCustomValuesOf` 与 `TyAxisRtPieces` 导出、`TyAxisFurnitureOf` 的 `APolar`；`Paint` 进接口 uses。
+- `source/tyControls.AdvChart.Series.pas`：`TyNiceAxisScale`（提出来的 DoAxis 中段，`ADefaultSplit`）。
+- `source/tyControls.AdvChart.Layout.pas`：`FreeFrame` / `LabelDirection`。
+- `source/tyControls.AdvChart.AxisName.pas`：`TyInnerTextLayout`；`source/tyControls.AdvChart.Convert.pas`：`TyAxisCoordJs`；`source/tyControls.AdvChart.AxisPointer.pas`：`TyTooltipPolarPointerAxis`；`source/tyControls.AdvChart.Export.pas`：`cvAngleAxis` / `cvRadiusAxis`。
+- `source/tyControls.StrConsts.pas`、`languages/tyControls.StrConsts.pot`、`languages/tycontrols.strconsts.zh_CN.po`：`rsTyChartPolarNoAxis`。
+- `tools/advchart-oracle/polar-axes.js`、`tests/fixtures/advchart-polar-axes.json`、`tests/test.advchart.polaraxes.pas`（新，注册在 `tytests.lpr`）。
+- §72、§131、§145 在原处标注。没有新的主题键。
+
+全量 **8208 个测试，0 失败、0 错误**（变异轮之前是 8207 个，同样全绿）。新增 `test.advchart.polaraxes` 12 个；直角坐标的 FillSpec、DoAxis 提出来以后，现有测试全绿。
