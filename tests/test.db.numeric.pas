@@ -65,6 +65,8 @@ type
     procedure TestValueIsWrittenAsANumberWhateverTheDecimalSeparator;
     procedure TestRangeSetAfterBindingIsNotAnEdit;
     procedure TestDecimalsSetAfterBindingIsNotAnEdit;
+    procedure TestWidenedRangeShowsTheFieldAgain;
+    procedure TestWidenedRangeKeepsTheUsersChange;
     procedure TestOldValuePutBackAfterAWriteIsWritten;
   end;
 
@@ -136,6 +138,8 @@ type
     procedure TestOutOfRangeValueShowsClampedAndIsNotWritten;
     procedure TestRangeSetAfterBindingIsNotAnEdit;
     procedure TestNullRowStaysBlankUnderANewRange;
+    procedure TestWidenedRangeShowsTheFieldAgain;
+    procedure TestWidenedRangeKeepsTheUsersChange;
     procedure TestRefusedStepFiresNoValueChange;
     procedure TestRefusedSpinButtonDoesNotStep;
     procedure TestOldValuePutBackAfterAWriteIsWritten;
@@ -307,6 +311,42 @@ begin
   SetOrdProp(FCtl, 'Decimals', 4);
   AssertTrue('four places: the field''s own digits: ' + Shown, Pos('234.5678', Shown) > 0);
   AssertBrowsing('more places');
+end;
+
+{ A range narrowed from code shows the field's 99 as 10; widening it again must show 99 -- the
+  field's value -- not the 10 the narrower range made of it, which is all the control has left
+  of it on screen. Nothing is edited on the way. }
+procedure TDBNumberEditTestBase.TestWidenedRangeShowsTheFieldAgain;
+begin
+  PutBound(99);
+  Bind(FieldName);
+  SetFloatProp(FCtl, 'MinValue', 0);
+  SetFloatProp(FCtl, 'MaxValue', 10);
+  AssertTrue('narrowed: shown clamped: ' + Shown, (Pos('10', Shown) > 0) and (Pos('99', Shown) = 0));
+  SetFloatProp(FCtl, 'MaxValue', 1000);
+  AssertTrue('widened: the field''s own value: ' + Shown, Pos('99', Shown) > 0);
+  AssertBrowsing('widening the range');
+  FFix.DS.Edit;              // someone else edits the record
+  FFix.DS.Post;
+  AssertEquals('the field', 99, BoundField.AsFloat, 0);
+end;
+
+{ The other side of it: a number the user typed is theirs, and a range set while it is there
+  does not put the field back over it. }
+procedure TDBNumberEditTestBase.TestWidenedRangeKeepsTheUsersChange;
+begin
+  PutBound(99);
+  Bind(FieldName);
+  SetFloatProp(FCtl, 'MinValue', 0);
+  SetFloatProp(FCtl, 'MaxValue', 10);
+  EnterControl;
+  Key(VK_A, [ssCtrl]);
+  TypeText('7');
+  AssertTrue('typing edits', FFix.DS.State = dsEdit);
+  SetFloatProp(FCtl, 'MaxValue', 1000);
+  AssertTrue('the user''s 7 stays: ' + Shown, (Pos('7', Shown) > 0) and (Pos('99', Shown) = 0));
+  Commit;
+  AssertEquals('and is written', 7, BoundField.AsFloat, 0);
 end;
 
 { Enter wrote the edit, so the field holds it now: putting the old number back -- one paste
@@ -692,6 +732,33 @@ begin
   AssertTrue('still blank', Spin.ValueEmpty);
   AssertEquals('nothing shown', '', Spin.Text);
   AssertBrowsing('a range set on the NULL row');
+end;
+
+{ As for the edits: widening the range again shows the field's value, not the old clamp. }
+procedure TDBSpinEditTest.TestWidenedRangeShowsTheFieldAgain;
+begin
+  Bind('Qty');
+  Spin.MinValue := 0;
+  Spin.MaxValue := 5;
+  AssertEquals('narrowed: shown clamped', '5', Spin.Text);
+  Spin.MaxValue := 1000;
+  AssertEquals('widened: the field''s own value', IntToStr(CFixQtys[1]), Spin.Text);
+  AssertBrowsing('widening the range');
+end;
+
+procedure TDBSpinEditTest.TestWidenedRangeKeepsTheUsersChange;
+begin
+  Bind('Qty');
+  Spin.MinValue := 0;
+  Spin.MaxValue := 5;
+  EnterControl;
+  Key(VK_DOWN);
+  AssertEquals('one step down from the clamp', '4', Spin.Text);
+  AssertTrue('a step edits', FFix.DS.State = dsEdit);
+  Spin.MaxValue := 1000;
+  AssertEquals('the user''s step stays', '4', Spin.Text);
+  Commit;
+  AssertEquals('and is written', 4, BoundField.AsInteger);
 end;
 
 { Refused before the value moves: a step that is undone afterwards would still have told the

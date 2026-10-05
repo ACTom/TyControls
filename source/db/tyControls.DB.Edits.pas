@@ -1935,13 +1935,16 @@ begin
 end;
 
 { The base control reformats to the clamped value and fires its change notification; that
-  is the display following the program's new range, so it is taken as a load. What is shown
-  now is what a later reformat (focus coming and going) shows again, so it becomes the value
-  the user's edits are compared with. }
+  is the display following the program's new range, so it is taken as a load. A control the
+  user has not changed shows the field again under the new range -- a range widened past what
+  an earlier one clamped shows the field's own value, not the old clamp -- and that is what the
+  user's edits are compared with next, as for Decimals (SetDecimals). }
 procedure TTyCustomDBNumericEdit.SetRange(AMin, AMax: Double);
 var
-  was: Boolean;
+  was, untouched: Boolean;
 begin
+  untouched := (FDataLink.Field <> nil) and (IsBlank = FLoaded.IsNull)
+    and (IsBlank or (Value = FLoaded.Number));
   was := FLoading;
   FLoading := True;
   try
@@ -1950,7 +1953,10 @@ begin
   finally
     FLoading := was;
   end;
-  FLoaded := TyDBLoadedNumber(Value, IsBlank);
+  if untouched then
+    DataChange(nil)
+  else
+    FLoaded := TyDBLoadedNumber(Value, IsBlank);
 end;
 
 function TTyCustomDBNumericEdit.GetDecimals: Integer;
@@ -2186,13 +2192,16 @@ begin
 end;
 
 { The base control reformats to the clamped value and fires its change notification; that
-  is the display following the program's new range, so it is taken as a load. What is shown
-  now is what a later reformat (focus coming and going) shows again, so it becomes the value
-  the user's edits are compared with. }
+  is the display following the program's new range, so it is taken as a load. A control the
+  user has not changed shows the field again under the new range -- a range widened past what
+  an earlier one clamped shows the field's own value, not the old clamp -- and that is what the
+  user's edits are compared with next, as for Decimals (SetDecimals). }
 procedure TTyCustomDBCurrencyEdit.SetRange(AMin, AMax: Double);
 var
-  was: Boolean;
+  was, untouched: Boolean;
 begin
+  untouched := (FDataLink.Field <> nil) and (IsBlank = FLoaded.IsNull)
+    and (IsBlank or (Value = FLoaded.Number));
   was := FLoading;
   FLoading := True;
   try
@@ -2201,7 +2210,10 @@ begin
   finally
     FLoading := was;
   end;
-  FLoaded := TyDBLoadedNumber(Value, IsBlank);
+  if untouched then
+    DataChange(nil)
+  else
+    FLoaded := TyDBLoadedNumber(Value, IsBlank);
 end;
 
 function TTyCustomDBCurrencyEdit.GetDecimals: Integer;
@@ -2437,13 +2449,16 @@ begin
 end;
 
 { The base control reformats to the clamped value and fires its change notification; that
-  is the display following the program's new range, so it is taken as a load. What is shown
-  now is what a later reformat (focus coming and going) shows again, so it becomes the value
-  the user's edits are compared with. }
+  is the display following the program's new range, so it is taken as a load. A control the
+  user has not changed shows the field again under the new range -- a range widened past what
+  an earlier one clamped shows the field's own value, not the old clamp -- and that is what the
+  user's edits are compared with next, as for Decimals (SetDecimals). }
 procedure TTyCustomDBFloatSpinEdit.SetRange(AMin, AMax: Double);
 var
-  was: Boolean;
+  was, untouched: Boolean;
 begin
+  untouched := (FDataLink.Field <> nil) and (IsBlank = FLoaded.IsNull)
+    and (IsBlank or (Value = FLoaded.Number));
   was := FLoading;
   FLoading := True;
   try
@@ -2452,7 +2467,10 @@ begin
   finally
     FLoading := was;
   end;
-  FLoaded := TyDBLoadedNumber(Value, IsBlank);
+  if untouched then
+    DataChange(nil)
+  else
+    FLoaded := TyDBLoadedNumber(Value, IsBlank);
 end;
 
 function TTyCustomDBFloatSpinEdit.GetDecimals: Integer;
@@ -2696,13 +2714,16 @@ begin
 end;
 
 { See TTyCustomDBNumericEdit.SetRange. The base re-clamps through its Value setter, which
-  ends the blank state; a NULL field is still NULL, so it stays blank. The loaded text is left
-  as it was: this control never reformats on its own, so only the user's own change can be
-  compared with it, and one that types the field's value back writes the field's value. }
+  ends the blank state; a NULL field is still NULL, so it stays blank. A control the user has
+  not changed shows the field again under the new range (a widened range brings back what an
+  earlier one clamped). Otherwise the loaded text is left as it was: this control never
+  reformats on its own, so only the user's own change can be compared with it, and one that
+  types the field's value back writes the field's value. }
 procedure TTyCustomDBSpinEdit.SetRange(AMin, AMax: Integer);
 var
-  was, blank: Boolean;
+  was, blank, untouched: Boolean;
 begin
+  untouched := (FDataLink.Field <> nil) and (Text = FLoaded.Text);
   was := FLoading;
   blank := ValueEmpty;
   FLoading := True;
@@ -2713,6 +2734,7 @@ begin
   finally
     FLoading := was;
   end;
+  if untouched then DataChange(nil);
 end;
 
 procedure TTyCustomDBSpinEdit.DataChange(Sender: TObject);
