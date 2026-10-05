@@ -241,7 +241,8 @@ uses
   test.customclasses.p4,
   test.typekeychain,
   test.db.common,
-  test.corehooks;
+  test.corehooks,
+  test.db.edits;
 
 type
   TTyTestRunner = class(TTestRunner)

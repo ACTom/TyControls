@@ -19,6 +19,7 @@ uses
   tyControls.Dialogs.Color, tyControls.Dialogs.FileDialog, tyControls.Dialogs.Find,
   tyControls.Dialogs.Font, tyControls.Dialogs.Progress, tyControls.Dialogs.SelectPath,
   tyControls.Dialogs.IconBrowser,
+  tyControls.DB.Edits,
   tyControls.Divider, tyControls.DropButtons, tyControls.Edit, tyControls.Empty,
   tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit,
   tyControls.FontComboBox,
@@ -476,6 +477,10 @@ initialization
     TTyGraphicControl, TTyCustomControl, TTyComponent,
     { 4.0: the image list's editor sits on its custom class, which TTyLucideImageList shares. }
     TTyCustomVirtualImageList]);
+  { The data-aware controls (tycontrols_db, issue #34). They reach the palette with the design-time
+    page; until Design.pas registers them they are not in the parse Reg() is checked against, so
+    they are registered plainly here -- the custom-class guards resolve their split by name. }
+  RegisterClasses([TTyDBEdit, TTyDBMaskEdit, TTyDBMemo, TTyDBText]);
   RegisterTest(TVersionTest);
 
 finalization
