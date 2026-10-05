@@ -512,3 +512,8 @@ msgid ""
 msgstr ""
 "\"%s\" 不存在。\n"
 "要创建吗？"
+
+#: tycontrols.strconsts.rsfdoverwriteprompt
+#, object-pascal-format
+msgid "The file \"%s\" already exists.\nDo you want to replace it?"
+msgstr "文件 \"%s\" 已存在。\n是否替换?"
