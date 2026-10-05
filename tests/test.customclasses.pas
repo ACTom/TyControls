@@ -102,8 +102,9 @@ const
     does not hold them -- so neither does G10's fixture -- and check (4) of
     TestEveryRegisteredClassIsAccountedFor lets them through. A class registered since is
     reported, so this list empties itself rather than going stale. }
-  CNotYetOnThePalette: array[0..3] of string = (
-    'TTyDBEdit', 'TTyDBMaskEdit', 'TTyDBMemo', 'TTyDBText');
+  CNotYetOnThePalette: array[0..7] of string = (
+    'TTyDBEdit', 'TTyDBMaskEdit', 'TTyDBMemo', 'TTyDBText', 'TTyDBNumericEdit',
+    'TTyDBCurrencyEdit', 'TTyDBSpinEdit', 'TTyDBFloatSpinEdit');
 
   { G7: where each derived control's custom class must hang (plan appendix C-0), plus the
     intermediate classes. Columns: subject, expected parent, the class whose split activates
@@ -1235,7 +1236,8 @@ initialization
     // after the AdvChart merge (plan appendix B)
     'TTyCalendar', 'TTyDateTimePicker',
     // DB
-    'TTyDBEdit', 'TTyDBMaskEdit', 'TTyDBMemo', 'TTyDBText']);
+    'TTyDBEdit', 'TTyDBMaskEdit', 'TTyDBMemo', 'TTyDBText', 'TTyDBNumericEdit', 'TTyDBCurrencyEdit',
+    'TTyDBSpinEdit', 'TTyDBFloatSpinEdit']);
 
   { CDemoted: base and intermediate classes that publish nothing beyond their LCL root. }
   AddAll(GDemoted, ['TTyCustomControl', 'TTyGraphicControl', 'TTyComponent', 'TTyGlyphButtonBase', 'TTyCustomTabStrip', 'TTyCustomGrid',

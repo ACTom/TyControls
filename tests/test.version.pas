@@ -480,7 +480,8 @@ initialization
   { The data-aware controls (tycontrols_db, issue #34). They reach the palette with the design-time
     page; until Design.pas registers them they are not in the parse Reg() is checked against, so
     they are registered plainly here -- the custom-class guards resolve their split by name. }
-  RegisterClasses([TTyDBEdit, TTyDBMaskEdit, TTyDBMemo, TTyDBText]);
+  RegisterClasses([TTyDBEdit, TTyDBMaskEdit, TTyDBMemo, TTyDBText, TTyDBNumericEdit,
+    TTyDBCurrencyEdit, TTyDBSpinEdit, TTyDBFloatSpinEdit]);
   RegisterTest(TVersionTest);
 
 finalization

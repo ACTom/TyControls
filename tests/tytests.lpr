@@ -242,7 +242,8 @@ uses
   test.typekeychain,
   test.db.common,
   test.corehooks,
-  test.db.edits;
+  test.db.edits,
+  test.db.numeric;
 
 type
   TTyTestRunner = class(TTestRunner)

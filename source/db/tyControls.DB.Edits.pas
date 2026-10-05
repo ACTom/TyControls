@@ -1,7 +1,10 @@
 unit tyControls.DB.Edits;
 {$mode objfpc}{$H+}
-{ The data-aware text controls (issue #34): TTyDBEdit, TTyDBMaskEdit, TTyDBMemo and TTyDBText,
-  LCL's TDBEdit / TDBMemo / TDBText on the library's own controls.
+{ The data-aware edits (issue #34). The text controls TTyDBEdit, TTyDBMaskEdit, TTyDBMemo and
+  TTyDBText are LCL's TDBEdit / TDBMemo / TDBText on the library's own controls; the numeric
+  ones -- TTyDBNumericEdit, TTyDBCurrencyEdit, TTyDBSpinEdit, TTyDBFloatSpinEdit -- have no LCL
+  counterpart (LCL can only bind a number field to a text edit) and read and write the field
+  as the number it is.
 
   Each is split the way the rest of the library is: TTyCustomDBXxx holds the data link and all
   the code, TTyDBXxx publishes the base control's list unchanged and the data properties after
@@ -29,6 +32,7 @@ interface
 uses
   Classes, SysUtils, Controls, LCLType, LMessages, DB, DBCtrls,
   tyControls.Edit, tyControls.MaskEdit, tyControls.Memo, tyControls.TyLabel,
+  tyControls.NumericEdit, tyControls.CurrencyEdit, tyControls.SpinEdit, tyControls.FloatSpinEdit,
   tyControls.DB.Common;
 
 type
@@ -493,10 +497,492 @@ type
     property DataSource;
   end;
 
+  { A number edit bound to a field. Loads and writes the field as a number (AsFloat, AsCurrency
+    or AsInteger by its type; never through Text, so the locale's DecimalSeparator does not
+    matter). NULL shows as an empty field and an emptied field writes NULL. A value outside
+    MinValue..MaxValue shows clamped; it is only written back if the user changes it. }
+  TTyCustomDBNumericEdit = class(TTyCustomNumericEdit)
+  private
+    FDataLink: TFieldDataLink;
+    FLoading: Boolean;
+    FInUserEdit: Boolean;
+    FLoaded: TTyDBLoadedValue;
+    { Between DoEnter and DoExit. A reload shows the raw (editing) form then -- the base
+      control asks Focused, which is not set yet while focus is still arriving. }
+    FFocusedDisplay: Boolean;
+    function GetDataField: string;
+    function GetDataSource: TDataSource;
+    function GetField: TField;
+    function GetReadOnly: Boolean;
+    procedure SetDataField(const AValue: string);
+    procedure SetDataSource(AValue: TDataSource);
+    procedure SetReadOnly(AValue: Boolean);
+    { No number in the field: the control's "no value", written back as NULL. }
+    function IsBlank: Boolean;
+    procedure DataChange(Sender: TObject);
+    procedure UpdateData(Sender: TObject);
+    procedure ValueChanged(Sender: TObject);
+    procedure CMGetDataLink(var Message: TLMessage); message CM_GETDATALINK;
+  protected
+    function GetStyleTypeKey: string; override;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+    procedure DoEnter; override;
+    procedure DoExit; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+    procedure EditingDone; override;
+    function ExecuteAction(AAction: TBasicAction): Boolean; override;
+    function UpdateAction(AAction: TBasicAction): Boolean; override;
+    property Field: TField read GetField;
+    property DataField: string read GetDataField write SetDataField;
+    property DataSource: TDataSource read GetDataSource write SetDataSource;
+    property ReadOnly: Boolean read GetReadOnly write SetReadOnly default False;
+    property Text stored False;
+  end;
+
+  { TTyDBNumericEdit publishes TTyCustomDBNumericEdit's properties; everything lives in TTyCustomDBNumericEdit. }
+  TTyDBNumericEdit = class(TTyCustomDBNumericEdit)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Text;
+    property ReadOnly;
+    property MaxLength;
+    property PasswordChar;
+    property EchoMode;
+    property HideSelection;
+    property AutoSelect;
+    property TextHint;
+    property Alignment;
+    property CharCase;
+    property NumbersOnly;
+    property Align;
+    property Anchors;
+    property OnChange;
+    property Decimals;
+    property UseThousands;
+    property MinValue;
+    property MaxValue;
+    property DataField;
+    property DataSource;
+  end;
+
+  { A currency edit bound to a field: TTyDBNumericEdit with the currency symbol on the
+    display. A currency field is read and written with AsCurrency. }
+  TTyCustomDBCurrencyEdit = class(TTyCustomCurrencyEdit)
+  private
+    FDataLink: TFieldDataLink;
+    FLoading: Boolean;
+    FInUserEdit: Boolean;
+    FLoaded: TTyDBLoadedValue;
+    { Between DoEnter and DoExit. A reload shows the raw (editing) form then -- the base
+      control asks Focused, which is not set yet while focus is still arriving. }
+    FFocusedDisplay: Boolean;
+    function GetDataField: string;
+    function GetDataSource: TDataSource;
+    function GetField: TField;
+    function GetReadOnly: Boolean;
+    procedure SetDataField(const AValue: string);
+    procedure SetDataSource(AValue: TDataSource);
+    procedure SetReadOnly(AValue: Boolean);
+    { No number in the field: the control's "no value", written back as NULL. }
+    function IsBlank: Boolean;
+    procedure DataChange(Sender: TObject);
+    procedure UpdateData(Sender: TObject);
+    procedure ValueChanged(Sender: TObject);
+    procedure CMGetDataLink(var Message: TLMessage); message CM_GETDATALINK;
+  protected
+    function GetStyleTypeKey: string; override;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+    procedure DoEnter; override;
+    procedure DoExit; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+    procedure EditingDone; override;
+    function ExecuteAction(AAction: TBasicAction): Boolean; override;
+    function UpdateAction(AAction: TBasicAction): Boolean; override;
+    property Field: TField read GetField;
+    property DataField: string read GetDataField write SetDataField;
+    property DataSource: TDataSource read GetDataSource write SetDataSource;
+    property ReadOnly: Boolean read GetReadOnly write SetReadOnly default False;
+    property Text stored False;
+  end;
+
+  { TTyDBCurrencyEdit publishes TTyCustomDBCurrencyEdit's properties; everything lives in TTyCustomDBCurrencyEdit. }
+  TTyDBCurrencyEdit = class(TTyCustomDBCurrencyEdit)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Text;
+    property ReadOnly;
+    property MaxLength;
+    property PasswordChar;
+    property EchoMode;
+    property HideSelection;
+    property AutoSelect;
+    property TextHint;
+    property Alignment;
+    property CharCase;
+    property NumbersOnly;
+    property Align;
+    property Anchors;
+    property OnChange;
+    property Decimals;
+    property UseThousands;
+    property MinValue;
+    property MaxValue;
+    property CurrencySymbol;
+    property SymbolBefore;
+    property DataField;
+    property DataSource;
+  end;
+
+  { A decimal spin edit bound to a field: TTyDBNumericEdit with the step buttons. A step is
+    an edit like a typed digit, refused the same way when the dataset cannot be edited. }
+  TTyCustomDBFloatSpinEdit = class(TTyCustomFloatSpinEdit)
+  private
+    FDataLink: TFieldDataLink;
+    FLoading: Boolean;
+    FInUserEdit: Boolean;
+    FLoaded: TTyDBLoadedValue;
+    { Between DoEnter and DoExit. A reload shows the raw (editing) form then -- the base
+      control asks Focused, which is not set yet while focus is still arriving. }
+    FFocusedDisplay: Boolean;
+    function GetDataField: string;
+    function GetDataSource: TDataSource;
+    function GetField: TField;
+    function GetReadOnly: Boolean;
+    procedure SetDataField(const AValue: string);
+    procedure SetDataSource(AValue: TDataSource);
+    procedure SetReadOnly(AValue: Boolean);
+    { No number in the field: the control's "no value", written back as NULL. }
+    function IsBlank: Boolean;
+    procedure DataChange(Sender: TObject);
+    procedure UpdateData(Sender: TObject);
+    procedure ValueChanged(Sender: TObject);
+    procedure CMGetDataLink(var Message: TLMessage); message CM_GETDATALINK;
+  protected
+    function GetStyleTypeKey: string; override;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+    procedure DoEnter; override;
+    procedure DoExit; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+    procedure EditingDone; override;
+    { A step is an edit: refused, like a key, when the dataset cannot be edited. }
+    procedure StepValue(ADelta: Double); override;
+    function ExecuteAction(AAction: TBasicAction): Boolean; override;
+    function UpdateAction(AAction: TBasicAction): Boolean; override;
+    property Field: TField read GetField;
+    property DataField: string read GetDataField write SetDataField;
+    property DataSource: TDataSource read GetDataSource write SetDataSource;
+    property ReadOnly: Boolean read GetReadOnly write SetReadOnly default False;
+    property Text stored False;
+  end;
+
+  { TTyDBFloatSpinEdit publishes TTyCustomDBFloatSpinEdit's properties; everything lives in TTyCustomDBFloatSpinEdit. }
+  TTyDBFloatSpinEdit = class(TTyCustomDBFloatSpinEdit)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Text;
+    property ReadOnly;
+    property MaxLength;
+    property PasswordChar;
+    property EchoMode;
+    property HideSelection;
+    property AutoSelect;
+    property TextHint;
+    property Alignment;
+    property CharCase;
+    property NumbersOnly;
+    property Align;
+    property Anchors;
+    property OnChange;
+    property Decimals;
+    property UseThousands;
+    property MinValue;
+    property MaxValue;
+    property Increment;
+    property EditorEnabled;
+    property DataField;
+    property DataSource;
+  end;
+
+  { An integer spin edit bound to a field, read and written as a number. NULL shows as an empty
+    field (ValueEmpty); the base control has no gesture that empties it, so the user cannot write
+    NULL back. A step (arrow key, wheel, button) and a typed digit are edits, refused when the
+    dataset cannot be edited -- before they move the value, so no OnValueChange fires for a
+    refused one. Enter writes the value back, as it does in the text edits. }
+  TTyCustomDBSpinEdit = class(TTyCustomSpinEdit)
+  private
+    FDataLink: TFieldDataLink;
+    FLoading: Boolean;
+    FInUserEdit: Boolean;
+    FLoaded: TTyDBLoadedValue;
+    function GetDataField: string;
+    function GetDataSource: TDataSource;
+    function GetField: TField;
+    function GetReadOnly: Boolean;
+    procedure SetDataField(const AValue: string);
+    procedure SetDataSource(AValue: TDataSource);
+    procedure SetReadOnly(AValue: Boolean);
+    { Is (X, Y) on the up or the down button? The same rects the base control hit-tests. }
+    function OnSpinButton(X, Y: Integer): Boolean;
+    procedure DataChange(Sender: TObject);
+    procedure UpdateData(Sender: TObject);
+    procedure CMGetDataLink(var Message: TLMessage); message CM_GETDATALINK;
+  protected
+    function GetStyleTypeKey: string; override;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    procedure DoChange; override;
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint): Boolean; override;
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure DoExit; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+    procedure EditingDone; override;
+    function ExecuteAction(AAction: TBasicAction): Boolean; override;
+    function UpdateAction(AAction: TBasicAction): Boolean; override;
+    property Field: TField read GetField;
+    property DataField: string read GetDataField write SetDataField;
+    property DataSource: TDataSource read GetDataSource write SetDataSource;
+    property ReadOnly: Boolean read GetReadOnly write SetReadOnly default False;
+    property Value stored False;
+  end;
+
+  { TTyDBSpinEdit publishes TTyCustomDBSpinEdit's properties; everything lives in TTyCustomDBSpinEdit. }
+  TTyDBSpinEdit = class(TTyCustomDBSpinEdit)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property MinValue;
+    property MaxValue;
+    property Value;
+    property Increment;
+    property ReadOnly;
+    property EditorEnabled;
+    property Alignment;
+    property MaxLength;
+    property ValueEmpty;
+    property TextHint;
+    property OnChange;
+    property OnValueChange;
+    property Align;
+    property Anchors;
+    property DataField;
+    property DataSource;
+  end;
+
 implementation
 
 uses
-  tyControls.StyleModel;
+  Types, tyControls.Types, tyControls.Controller, tyControls.StyleModel;
 
 const
   CStringFieldTypes = [ftString, ftFixedChar, ftWideString, ftFixedWideChar];
@@ -1302,6 +1788,785 @@ begin
     or ((FDataLink <> nil) and FDataLink.UpdateAction(AAction));
 end;
 
+{ ============================================================== TTyCustomDBNumericEdit == }
+
+constructor TTyCustomDBNumericEdit.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  EmptyAllowed := True;   // an empty field is NULL, and leaving it must not make it 0.00
+  ControlStyle := ControlStyle + [csReplicatable];
+  FDataLink := TFieldDataLink.Create;
+  FDataLink.Control := Self;
+  FDataLink.OnDataChange := @DataChange;
+  FDataLink.OnUpdateData := @UpdateData;
+  AddHandlerOnChange(@ValueChanged);
+  Text := '';             // unbound, there is no value to show
+end;
+
+destructor TTyCustomDBNumericEdit.Destroy;
+begin
+  FDataLink.OnDataChange := nil;
+  FDataLink.OnUpdateData := nil;
+  FreeAndNil(FDataLink);
+  inherited Destroy;
+end;
+
+function TTyCustomDBNumericEdit.GetStyleTypeKey: string;
+begin
+  Result := 'TyDBNumericEdit';
+end;
+
+function TTyCustomDBNumericEdit.GetDataField: string;
+begin
+  Result := FDataLink.FieldName;
+end;
+
+function TTyCustomDBNumericEdit.GetDataSource: TDataSource;
+begin
+  Result := FDataLink.DataSource;
+end;
+
+function TTyCustomDBNumericEdit.GetField: TField;
+begin
+  Result := FDataLink.Field;
+end;
+
+function TTyCustomDBNumericEdit.GetReadOnly: Boolean;
+begin
+  Result := FDataLink.ReadOnly;
+end;
+
+procedure TTyCustomDBNumericEdit.SetDataField(const AValue: string);
+begin
+  FDataLink.FieldName := AValue;
+end;
+
+procedure TTyCustomDBNumericEdit.SetDataSource(AValue: TDataSource);
+begin
+  ChangeDataSource(Self, FDataLink, AValue);
+end;
+
+procedure TTyCustomDBNumericEdit.SetReadOnly(AValue: Boolean);
+begin
+  TTyCustomEdit(Self).ReadOnly := AValue;
+  FDataLink.ReadOnly := AValue;
+end;
+
+function TTyCustomDBNumericEdit.IsBlank: Boolean;
+begin
+  Result := Trim(Text) = '';
+end;
+
+procedure TTyCustomDBNumericEdit.DataChange(Sender: TObject);
+begin
+  if FInUserEdit then Exit;
+  FLoading := True;
+  try
+    if (FDataLink.Field = nil) or FDataLink.Field.IsNull then
+      Text := ''
+    else
+    begin
+      Value := TyDBReadNumber(FDataLink.Field);   // clamped to MinValue..MaxValue, as typed
+      if FFocusedDisplay then Reformat(False);
+    end;
+    { What the control made of it -- rounded to Decimals, clamped -- since that is what a
+      reformat later shows again. }
+    FLoaded := TyDBLoadedNumber(Value, IsBlank);
+  finally
+    FLoading := False;
+  end;
+end;
+
+procedure TTyCustomDBNumericEdit.UpdateData(Sender: TObject);
+begin
+  if IsBlank then
+    FDataLink.Field.Clear
+  else
+    TyDBWriteNumber(FDataLink.Field, Value);
+end;
+
+procedure TTyCustomDBNumericEdit.ValueChanged(Sender: TObject);
+begin
+  if FLoading or FInUserEdit or (FDataLink = nil) or (FDataLink.Field = nil) then Exit;
+  { The text changes on every focus change (raw while focused, grouped after) without the value
+    moving; only a different number, or a number appearing or going, is an edit. }
+  if IsBlank = FLoaded.IsNull then
+    if IsBlank or (Value = FLoaded.Number) then Exit;
+  TyDBUserChanged(FDataLink, FInUserEdit);
+end;
+
+procedure TTyCustomDBNumericEdit.CMGetDataLink(var Message: TLMessage);
+begin
+  Message.Result := PtrUInt(FDataLink);
+end;
+
+procedure TTyCustomDBNumericEdit.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (FDataLink <> nil) and (AComponent = DataSource) then
+    DataSource := nil;
+end;
+
+procedure TTyCustomDBNumericEdit.KeyDown(var Key: Word; Shift: TShiftState);
+begin
+  if ((Key = VK_BACK) or (Key = VK_DELETE)) and not TyDBEditAllowed(FDataLink, FInUserEdit) then
+  begin
+    Key := 0;
+    Exit;
+  end;
+  inherited KeyDown(Key, Shift);
+  if (Key = VK_ESCAPE) and FDataLink.Editing then
+  begin
+    FDataLink.Reset;
+    SelectAll;
+    Key := 0;
+  end;
+end;
+
+procedure TTyCustomDBNumericEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
+begin
+  { Only for what this control would insert: any other character the base filter drops
+    without the dataset being asked. Not the field's IsValidChar -- a float field's takes the
+    locale's DecimalSeparator, this control always types a '.'. }
+  if (Length(UTF8Key) = 1) and (UTF8Key[1] in ['0'..'9', '-', '.'])
+    and not TyDBEditAllowed(FDataLink, FInUserEdit) then
+  begin
+    UTF8Key := '';
+    Exit;
+  end;
+  inherited UTF8KeyPress(UTF8Key);
+end;
+
+procedure TTyCustomDBNumericEdit.DoEnter;
+begin
+  FFocusedDisplay := True;
+  inherited DoEnter;
+end;
+
+procedure TTyCustomDBNumericEdit.DoExit;
+begin
+  FFocusedDisplay := False;
+  inherited DoExit;   // regroups and clamps first: what is written is what is shown
+  if (FDataLink = nil) or (csDestroying in ComponentState) then Exit;
+  if FDataLink.Editing then
+    FDataLink.UpdateRecord;
+end;
+
+procedure TTyCustomDBNumericEdit.EditingDone;
+begin
+  if (FDataLink <> nil) and FDataLink.Editing then
+    FDataLink.UpdateRecord;
+  inherited EditingDone;
+end;
+
+function TTyCustomDBNumericEdit.ExecuteAction(AAction: TBasicAction): Boolean;
+begin
+  Result := inherited ExecuteAction(AAction)
+    or ((FDataLink <> nil) and FDataLink.ExecuteAction(AAction));
+end;
+
+function TTyCustomDBNumericEdit.UpdateAction(AAction: TBasicAction): Boolean;
+begin
+  Result := inherited UpdateAction(AAction)
+    or ((FDataLink <> nil) and FDataLink.UpdateAction(AAction));
+end;
+
+{ ============================================================== TTyCustomDBCurrencyEdit == }
+
+constructor TTyCustomDBCurrencyEdit.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  EmptyAllowed := True;   // an empty field is NULL, and leaving it must not make it 0.00
+  ControlStyle := ControlStyle + [csReplicatable];
+  FDataLink := TFieldDataLink.Create;
+  FDataLink.Control := Self;
+  FDataLink.OnDataChange := @DataChange;
+  FDataLink.OnUpdateData := @UpdateData;
+  AddHandlerOnChange(@ValueChanged);
+  Text := '';             // unbound, there is no value to show
+end;
+
+destructor TTyCustomDBCurrencyEdit.Destroy;
+begin
+  FDataLink.OnDataChange := nil;
+  FDataLink.OnUpdateData := nil;
+  FreeAndNil(FDataLink);
+  inherited Destroy;
+end;
+
+function TTyCustomDBCurrencyEdit.GetStyleTypeKey: string;
+begin
+  Result := 'TyDBCurrencyEdit';
+end;
+
+function TTyCustomDBCurrencyEdit.GetDataField: string;
+begin
+  Result := FDataLink.FieldName;
+end;
+
+function TTyCustomDBCurrencyEdit.GetDataSource: TDataSource;
+begin
+  Result := FDataLink.DataSource;
+end;
+
+function TTyCustomDBCurrencyEdit.GetField: TField;
+begin
+  Result := FDataLink.Field;
+end;
+
+function TTyCustomDBCurrencyEdit.GetReadOnly: Boolean;
+begin
+  Result := FDataLink.ReadOnly;
+end;
+
+procedure TTyCustomDBCurrencyEdit.SetDataField(const AValue: string);
+begin
+  FDataLink.FieldName := AValue;
+end;
+
+procedure TTyCustomDBCurrencyEdit.SetDataSource(AValue: TDataSource);
+begin
+  ChangeDataSource(Self, FDataLink, AValue);
+end;
+
+procedure TTyCustomDBCurrencyEdit.SetReadOnly(AValue: Boolean);
+begin
+  TTyCustomEdit(Self).ReadOnly := AValue;
+  FDataLink.ReadOnly := AValue;
+end;
+
+function TTyCustomDBCurrencyEdit.IsBlank: Boolean;
+begin
+  Result := Trim(Text) = '';
+end;
+
+procedure TTyCustomDBCurrencyEdit.DataChange(Sender: TObject);
+begin
+  if FInUserEdit then Exit;
+  FLoading := True;
+  try
+    if (FDataLink.Field = nil) or FDataLink.Field.IsNull then
+      Text := ''
+    else
+    begin
+      Value := TyDBReadNumber(FDataLink.Field);   // clamped to MinValue..MaxValue, as typed
+      if FFocusedDisplay then Reformat(False);
+    end;
+    { What the control made of it -- rounded to Decimals, clamped -- since that is what a
+      reformat later shows again. }
+    FLoaded := TyDBLoadedNumber(Value, IsBlank);
+  finally
+    FLoading := False;
+  end;
+end;
+
+procedure TTyCustomDBCurrencyEdit.UpdateData(Sender: TObject);
+begin
+  if IsBlank then
+    FDataLink.Field.Clear
+  else
+    TyDBWriteNumber(FDataLink.Field, Value);
+end;
+
+procedure TTyCustomDBCurrencyEdit.ValueChanged(Sender: TObject);
+begin
+  if FLoading or FInUserEdit or (FDataLink = nil) or (FDataLink.Field = nil) then Exit;
+  { The text changes on every focus change (raw while focused, grouped after) without the value
+    moving; only a different number, or a number appearing or going, is an edit. }
+  if IsBlank = FLoaded.IsNull then
+    if IsBlank or (Value = FLoaded.Number) then Exit;
+  TyDBUserChanged(FDataLink, FInUserEdit);
+end;
+
+procedure TTyCustomDBCurrencyEdit.CMGetDataLink(var Message: TLMessage);
+begin
+  Message.Result := PtrUInt(FDataLink);
+end;
+
+procedure TTyCustomDBCurrencyEdit.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (FDataLink <> nil) and (AComponent = DataSource) then
+    DataSource := nil;
+end;
+
+procedure TTyCustomDBCurrencyEdit.KeyDown(var Key: Word; Shift: TShiftState);
+begin
+  if ((Key = VK_BACK) or (Key = VK_DELETE)) and not TyDBEditAllowed(FDataLink, FInUserEdit) then
+  begin
+    Key := 0;
+    Exit;
+  end;
+  inherited KeyDown(Key, Shift);
+  if (Key = VK_ESCAPE) and FDataLink.Editing then
+  begin
+    FDataLink.Reset;
+    SelectAll;
+    Key := 0;
+  end;
+end;
+
+procedure TTyCustomDBCurrencyEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
+begin
+  { Only for what this control would insert: any other character the base filter drops
+    without the dataset being asked. Not the field's IsValidChar -- a float field's takes the
+    locale's DecimalSeparator, this control always types a '.'. }
+  if (Length(UTF8Key) = 1) and (UTF8Key[1] in ['0'..'9', '-', '.'])
+    and not TyDBEditAllowed(FDataLink, FInUserEdit) then
+  begin
+    UTF8Key := '';
+    Exit;
+  end;
+  inherited UTF8KeyPress(UTF8Key);
+end;
+
+procedure TTyCustomDBCurrencyEdit.DoEnter;
+begin
+  FFocusedDisplay := True;
+  inherited DoEnter;
+end;
+
+procedure TTyCustomDBCurrencyEdit.DoExit;
+begin
+  FFocusedDisplay := False;
+  inherited DoExit;   // regroups and clamps first: what is written is what is shown
+  if (FDataLink = nil) or (csDestroying in ComponentState) then Exit;
+  if FDataLink.Editing then
+    FDataLink.UpdateRecord;
+end;
+
+procedure TTyCustomDBCurrencyEdit.EditingDone;
+begin
+  if (FDataLink <> nil) and FDataLink.Editing then
+    FDataLink.UpdateRecord;
+  inherited EditingDone;
+end;
+
+function TTyCustomDBCurrencyEdit.ExecuteAction(AAction: TBasicAction): Boolean;
+begin
+  Result := inherited ExecuteAction(AAction)
+    or ((FDataLink <> nil) and FDataLink.ExecuteAction(AAction));
+end;
+
+function TTyCustomDBCurrencyEdit.UpdateAction(AAction: TBasicAction): Boolean;
+begin
+  Result := inherited UpdateAction(AAction)
+    or ((FDataLink <> nil) and FDataLink.UpdateAction(AAction));
+end;
+
+{ ============================================================== TTyCustomDBFloatSpinEdit == }
+
+constructor TTyCustomDBFloatSpinEdit.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  EmptyAllowed := True;   // an empty field is NULL, and leaving it must not make it 0.00
+  ControlStyle := ControlStyle + [csReplicatable];
+  FDataLink := TFieldDataLink.Create;
+  FDataLink.Control := Self;
+  FDataLink.OnDataChange := @DataChange;
+  FDataLink.OnUpdateData := @UpdateData;
+  AddHandlerOnChange(@ValueChanged);
+  Text := '';             // unbound, there is no value to show
+end;
+
+destructor TTyCustomDBFloatSpinEdit.Destroy;
+begin
+  FDataLink.OnDataChange := nil;
+  FDataLink.OnUpdateData := nil;
+  FreeAndNil(FDataLink);
+  inherited Destroy;
+end;
+
+function TTyCustomDBFloatSpinEdit.GetStyleTypeKey: string;
+begin
+  Result := 'TyDBFloatSpinEdit';
+end;
+
+function TTyCustomDBFloatSpinEdit.GetDataField: string;
+begin
+  Result := FDataLink.FieldName;
+end;
+
+function TTyCustomDBFloatSpinEdit.GetDataSource: TDataSource;
+begin
+  Result := FDataLink.DataSource;
+end;
+
+function TTyCustomDBFloatSpinEdit.GetField: TField;
+begin
+  Result := FDataLink.Field;
+end;
+
+function TTyCustomDBFloatSpinEdit.GetReadOnly: Boolean;
+begin
+  Result := FDataLink.ReadOnly;
+end;
+
+procedure TTyCustomDBFloatSpinEdit.SetDataField(const AValue: string);
+begin
+  FDataLink.FieldName := AValue;
+end;
+
+procedure TTyCustomDBFloatSpinEdit.SetDataSource(AValue: TDataSource);
+begin
+  ChangeDataSource(Self, FDataLink, AValue);
+end;
+
+procedure TTyCustomDBFloatSpinEdit.SetReadOnly(AValue: Boolean);
+begin
+  TTyCustomEdit(Self).ReadOnly := AValue;
+  FDataLink.ReadOnly := AValue;
+end;
+
+function TTyCustomDBFloatSpinEdit.IsBlank: Boolean;
+begin
+  Result := Trim(Text) = '';
+end;
+
+procedure TTyCustomDBFloatSpinEdit.DataChange(Sender: TObject);
+begin
+  if FInUserEdit then Exit;
+  FLoading := True;
+  try
+    if (FDataLink.Field = nil) or FDataLink.Field.IsNull then
+      Text := ''
+    else
+    begin
+      Value := TyDBReadNumber(FDataLink.Field);   // clamped to MinValue..MaxValue, as typed
+      if FFocusedDisplay then Reformat(False);
+    end;
+    { What the control made of it -- rounded to Decimals, clamped -- since that is what a
+      reformat later shows again. }
+    FLoaded := TyDBLoadedNumber(Value, IsBlank);
+  finally
+    FLoading := False;
+  end;
+end;
+
+procedure TTyCustomDBFloatSpinEdit.UpdateData(Sender: TObject);
+begin
+  if IsBlank then
+    FDataLink.Field.Clear
+  else
+    TyDBWriteNumber(FDataLink.Field, Value);
+end;
+
+procedure TTyCustomDBFloatSpinEdit.ValueChanged(Sender: TObject);
+begin
+  if FLoading or FInUserEdit or (FDataLink = nil) or (FDataLink.Field = nil) then Exit;
+  { The text changes on every focus change (raw while focused, grouped after) without the value
+    moving; only a different number, or a number appearing or going, is an edit. }
+  if IsBlank = FLoaded.IsNull then
+    if IsBlank or (Value = FLoaded.Number) then Exit;
+  TyDBUserChanged(FDataLink, FInUserEdit);
+end;
+
+procedure TTyCustomDBFloatSpinEdit.CMGetDataLink(var Message: TLMessage);
+begin
+  Message.Result := PtrUInt(FDataLink);
+end;
+
+procedure TTyCustomDBFloatSpinEdit.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (FDataLink <> nil) and (AComponent = DataSource) then
+    DataSource := nil;
+end;
+
+procedure TTyCustomDBFloatSpinEdit.KeyDown(var Key: Word; Shift: TShiftState);
+begin
+  if ((Key = VK_BACK) or (Key = VK_DELETE)) and not TyDBEditAllowed(FDataLink, FInUserEdit) then
+  begin
+    Key := 0;
+    Exit;
+  end;
+  inherited KeyDown(Key, Shift);
+  if (Key = VK_ESCAPE) and FDataLink.Editing then
+  begin
+    FDataLink.Reset;
+    SelectAll;
+    Key := 0;
+  end;
+end;
+
+procedure TTyCustomDBFloatSpinEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
+begin
+  { Only for what this control would insert: any other character the base filter drops
+    without the dataset being asked. Not the field's IsValidChar -- a float field's takes the
+    locale's DecimalSeparator, this control always types a '.'. }
+  if (Length(UTF8Key) = 1) and (UTF8Key[1] in ['0'..'9', '-', '.'])
+    and not TyDBEditAllowed(FDataLink, FInUserEdit) then
+  begin
+    UTF8Key := '';
+    Exit;
+  end;
+  inherited UTF8KeyPress(UTF8Key);
+end;
+
+procedure TTyCustomDBFloatSpinEdit.DoEnter;
+begin
+  FFocusedDisplay := True;
+  inherited DoEnter;
+end;
+
+procedure TTyCustomDBFloatSpinEdit.DoExit;
+begin
+  FFocusedDisplay := False;
+  inherited DoExit;   // regroups and clamps first: what is written is what is shown
+  if (FDataLink = nil) or (csDestroying in ComponentState) then Exit;
+  if FDataLink.Editing then
+    FDataLink.UpdateRecord;
+end;
+
+procedure TTyCustomDBFloatSpinEdit.EditingDone;
+begin
+  if (FDataLink <> nil) and FDataLink.Editing then
+    FDataLink.UpdateRecord;
+  inherited EditingDone;
+end;
+
+procedure TTyCustomDBFloatSpinEdit.StepValue(ADelta: Double);
+begin
+  if not TyDBEditAllowed(FDataLink, FInUserEdit) then Exit;
+  inherited StepValue(ADelta);
+end;
+
+function TTyCustomDBFloatSpinEdit.ExecuteAction(AAction: TBasicAction): Boolean;
+begin
+  Result := inherited ExecuteAction(AAction)
+    or ((FDataLink <> nil) and FDataLink.ExecuteAction(AAction));
+end;
+
+function TTyCustomDBFloatSpinEdit.UpdateAction(AAction: TBasicAction): Boolean;
+begin
+  Result := inherited UpdateAction(AAction)
+    or ((FDataLink <> nil) and FDataLink.UpdateAction(AAction));
+end;
+
+{ =================================================================== TTyCustomDBSpinEdit == }
+
+constructor TTyCustomDBSpinEdit.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  ControlStyle := ControlStyle + [csReplicatable];
+  FDataLink := TFieldDataLink.Create;
+  FDataLink.Control := Self;
+  FDataLink.OnDataChange := @DataChange;
+  FDataLink.OnUpdateData := @UpdateData;
+end;
+
+destructor TTyCustomDBSpinEdit.Destroy;
+begin
+  FDataLink.OnDataChange := nil;
+  FDataLink.OnUpdateData := nil;
+  FreeAndNil(FDataLink);
+  inherited Destroy;
+end;
+
+function TTyCustomDBSpinEdit.GetStyleTypeKey: string;
+begin
+  Result := 'TyDBSpinEdit';
+end;
+
+function TTyCustomDBSpinEdit.GetDataField: string;
+begin
+  Result := FDataLink.FieldName;
+end;
+
+function TTyCustomDBSpinEdit.GetDataSource: TDataSource;
+begin
+  Result := FDataLink.DataSource;
+end;
+
+function TTyCustomDBSpinEdit.GetField: TField;
+begin
+  Result := FDataLink.Field;
+end;
+
+function TTyCustomDBSpinEdit.GetReadOnly: Boolean;
+begin
+  Result := FDataLink.ReadOnly;
+end;
+
+procedure TTyCustomDBSpinEdit.SetDataField(const AValue: string);
+begin
+  FDataLink.FieldName := AValue;
+end;
+
+procedure TTyCustomDBSpinEdit.SetDataSource(AValue: TDataSource);
+begin
+  ChangeDataSource(Self, FDataLink, AValue);
+end;
+
+procedure TTyCustomDBSpinEdit.SetReadOnly(AValue: Boolean);
+begin
+  TTyCustomSpinEdit(Self).ReadOnly := AValue;
+  FDataLink.ReadOnly := AValue;
+end;
+
+function TTyCustomDBSpinEdit.OnSpinButton(X, Y: Integer): Boolean;
+var
+  ppi, bw: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  bw := MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth), ppi, 96);
+  Result := PtInRect(TySpinUpButtonRect(ClientRect, ppi, bw), Point(X, Y))
+    or PtInRect(TySpinDownButtonRect(ClientRect, ppi, bw), Point(X, Y));
+end;
+
+procedure TTyCustomDBSpinEdit.DataChange(Sender: TObject);
+var
+  f: TField;
+begin
+  if FInUserEdit then Exit;
+  f := FDataLink.Field;
+  FLoading := True;
+  try
+    if (f = nil) or f.IsNull then
+    begin
+      Value := 0;
+      ValueEmpty := True;
+    end
+    else
+    begin
+      Value := Round(TyDBReadNumber(f));   // clamped to MinValue..MaxValue
+      ValueEmpty := False;                 // the same number as before the NULL row stays blank otherwise
+    end;
+    FLoaded := TyDBLoadedText(Text);
+  finally
+    FLoading := False;
+  end;
+end;
+
+procedure TTyCustomDBSpinEdit.UpdateData(Sender: TObject);
+begin
+  CommitEdit;   // what is typed, as the number it parses to -- what Enter or leaving would make of it
+  if ValueEmpty then
+    FDataLink.Field.Clear
+  else
+    TyDBWriteNumber(FDataLink.Field, Value);
+end;
+
+procedure TTyCustomDBSpinEdit.DoChange;
+begin
+  inherited DoChange;
+  if FLoading or FInUserEdit or (FDataLink = nil) or (FDataLink.Field = nil) then Exit;
+  if Text = FLoaded.Text then Exit;
+  TyDBUserChanged(FDataLink, FInUserEdit);
+end;
+
+procedure TTyCustomDBSpinEdit.CMGetDataLink(var Message: TLMessage);
+begin
+  Message.Result := PtrUInt(FDataLink);
+end;
+
+procedure TTyCustomDBSpinEdit.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (FDataLink <> nil) and (AComponent = DataSource) then
+    DataSource := nil;
+end;
+
+procedure TTyCustomDBSpinEdit.KeyDown(var Key: Word; Shift: TShiftState);
+var
+  wasReturn: Boolean;
+begin
+  case Key of
+    VK_ESCAPE:
+      { The base only puts back the last committed value; a step has already committed. }
+      if FDataLink.Editing then
+      begin
+        FDataLink.Reset;
+        Key := 0;
+        Exit;
+      end;
+    VK_UP, VK_DOWN, VK_BACK, VK_DELETE:
+      if not TyDBEditAllowed(FDataLink, FInUserEdit) then
+      begin
+        Key := 0;
+        Exit;
+      end;
+  end;
+  wasReturn := (Key = VK_RETURN) and (Shift = []);
+  inherited KeyDown(Key, Shift);
+  if wasReturn and FDataLink.Editing then
+    FDataLink.UpdateRecord;
+end;
+
+procedure TTyCustomDBSpinEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
+begin
+  if (Length(UTF8Key) = 1) and (UTF8Key[1] in ['0'..'9', '-'])
+    and not TyDBEditAllowed(FDataLink, FInUserEdit) then
+  begin
+    UTF8Key := '';
+    Exit;
+  end;
+  inherited UTF8KeyPress(UTF8Key);
+end;
+
+function TTyCustomDBSpinEdit.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+  MousePos: TPoint): Boolean;
+var
+  was: Boolean;
+begin
+  if TyDBEditAllowed(FDataLink, FInUserEdit) then
+    Exit(inherited DoMouseWheel(Shift, WheelDelta, MousePos));
+  { Refused: the base control's own read-only state turns the wheel away (and still gives the
+    application's OnMouseWheel its turn). }
+  was := TTyCustomSpinEdit(Self).ReadOnly;
+  TTyCustomSpinEdit(Self).ReadOnly := True;
+  try
+    Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
+  finally
+    TTyCustomSpinEdit(Self).ReadOnly := was;
+  end;
+end;
+
+procedure TTyCustomDBSpinEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  was: Boolean;
+begin
+  if (Button <> mbLeft) or not OnSpinButton(X, Y) or TyDBEditAllowed(FDataLink, FInUserEdit) then
+  begin
+    inherited MouseDown(Button, Shift, X, Y);
+    Exit;
+  end;
+  was := TTyCustomSpinEdit(Self).ReadOnly;   // refused: the press takes focus, the button does not step
+  TTyCustomSpinEdit(Self).ReadOnly := True;
+  try
+    inherited MouseDown(Button, Shift, X, Y);
+  finally
+    TTyCustomSpinEdit(Self).ReadOnly := was;
+  end;
+end;
+
+procedure TTyCustomDBSpinEdit.DoExit;
+begin
+  inherited DoExit;   // commits what was typed
+  if (FDataLink = nil) or (csDestroying in ComponentState) then Exit;
+  if FDataLink.Editing then
+    FDataLink.UpdateRecord;
+end;
+
+procedure TTyCustomDBSpinEdit.EditingDone;
+begin
+  if (FDataLink <> nil) and FDataLink.Editing then
+    FDataLink.UpdateRecord;
+  inherited EditingDone;
+end;
+
+function TTyCustomDBSpinEdit.ExecuteAction(AAction: TBasicAction): Boolean;
+begin
+  Result := inherited ExecuteAction(AAction)
+    or ((FDataLink <> nil) and FDataLink.ExecuteAction(AAction));
+end;
+
+function TTyCustomDBSpinEdit.UpdateAction(AAction: TBasicAction): Boolean;
+begin
+  Result := inherited UpdateAction(AAction)
+    or ((FDataLink <> nil) and FDataLink.UpdateAction(AAction));
+end;
+
 initialization
   { Each key falls back to its base control's, so a theme that never names a TyDBXxx key
     styles these exactly like their base controls; a theme can still write rules for them. }
@@ -1309,11 +2574,19 @@ initialization
   TyTryRegisterTypeKeyParent('TyDBMaskEdit', 'TyEdit');
   TyTryRegisterTypeKeyParent('TyDBMemo', 'TyMemo');
   TyTryRegisterTypeKeyParent('TyDBText', 'TyLabel');
+  TyTryRegisterTypeKeyParent('TyDBNumericEdit', 'TyEdit');
+  TyTryRegisterTypeKeyParent('TyDBCurrencyEdit', 'TyEdit');
+  TyTryRegisterTypeKeyParent('TyDBSpinEdit', 'TySpinEdit');
+  TyTryRegisterTypeKeyParent('TyDBFloatSpinEdit', 'TyEdit');
 
 finalization
   TyUnregisterTypeKeyParent('TyDBEdit');
   TyUnregisterTypeKeyParent('TyDBMaskEdit');
   TyUnregisterTypeKeyParent('TyDBMemo');
   TyUnregisterTypeKeyParent('TyDBText');
+  TyUnregisterTypeKeyParent('TyDBNumericEdit');
+  TyUnregisterTypeKeyParent('TyDBCurrencyEdit');
+  TyUnregisterTypeKeyParent('TyDBSpinEdit');
+  TyUnregisterTypeKeyParent('TyDBFloatSpinEdit');
 
 end.
