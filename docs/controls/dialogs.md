@@ -185,7 +185,7 @@ TyMessageDlgPos('操作已完成。', mtInformation, [mbOK], 0, 200, 150);
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Title` | `string` | `''` | 对话框标题；非空时覆盖类型自动标题 |
-| `Msg` | `string` | `''` | 消息正文 |
+| `Msg` | `TCaption` | `''` | 消息正文 |
 | `DlgType` | `TMsgDlgType` | `mtInformation` | 对话框语义类型（影响标题和图标） |
 | `Buttons` | `TMsgDlgButtons` | `[mbOK]` | 按钮集合 |
 

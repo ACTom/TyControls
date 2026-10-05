@@ -33,7 +33,7 @@ uses tyControls.StatusBar;
 |------|------|--------|------|
 | `Panels` | `TTyStatusPanels` | `[]`（空集合） | 面板集合；写入时对内部集合执行 `Assign`。每个面板是一个 `TTyStatusPanel`（见下表）。任何面板属性变化都会重绘状态栏。 |
 | `SimplePanel` | `Boolean` | `False` | 为 `True` 时切换到单一整条文本模式：忽略 `Panels`，改为绘制 `SimpleText`（左对齐、垂直居中）。 |
-| `SimpleText` | `string` | `''` | `SimplePanel = True` 时显示的整条文本。写入时仅当当前处于 `SimplePanel` 模式才触发重绘。 |
+| `SimpleText` | `TCaption` | `''` | `SimplePanel = True` 时显示的整条文本。写入时仅当当前处于 `SimplePanel` 模式才触发重绘。 |
 | `SizeGrip` | `Boolean` | `True` | 为 `True` 时在控件右下角绘制 3 个对角小点组成的尺寸手柄（`default True`）。 |
 | `AutoHint` | `Boolean` | `False` | 为 `True` 时把应用程序当前提示（`Application.Hint`）显示到状态栏：`SimplePanel` 模式写入 `SimpleText`，否则写入 `Panels[0].Text`。这正是"鼠标划过工具按钮 / 高亮菜单项，下面这条读出说明"的经典状态行；主题化菜单已经会把菜单项 `Hint` 发布到 `Application.Hint`，此前库内没有任何控件接收它。与 LCL `TStatusBar.AutoHint` 同名同义，默认同为 `False`（打开会接管 `SimpleText` / 0 号面板）。 |
 | `Align` | `TAlign` | `alBottom` | 停靠方式，**默认已重声明为 `alBottom`**（`property Align default alBottom;`），构造函数也显式设为 `alBottom`。 |

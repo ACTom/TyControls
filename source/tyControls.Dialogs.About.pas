@@ -60,7 +60,7 @@ type
     property Title: TCaption read FTitle write FTitle;
     property AppName: string read FAppName write FAppName;
     property Version: string read FVersion write FVersion;
-    property Description: string read FDescription write FDescription;
+    property Description: TCaption read FDescription write FDescription;
     property Copyright: string read FCopyright write FCopyright;
     property License: string read FLicense write FLicense;
     property Homepage: string read FHomepage write FHomepage;

@@ -1234,3 +1234,7 @@ msgstr "广州"
 #: tmainform.casregion.items.shenzhen
 msgid "Shenzhen"
 msgstr "深圳"
+
+#: tmainform.btncolor.dialogcaption
+msgid "Choose mark colour"
+msgstr "选择标记颜色"

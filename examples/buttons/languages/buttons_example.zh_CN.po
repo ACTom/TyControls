@@ -140,3 +140,7 @@ msgstr "无"
 #: umain.rssplitprimary
 msgid "Save: primary half clicked (the arrow half opens the menu)"
 msgstr "保存：点了主半区（箭头半区才弹菜单）"
+
+#: tmainform.btncolor.dialogcaption
+msgid "Pick a highlight colour"
+msgstr "选择高亮颜色"

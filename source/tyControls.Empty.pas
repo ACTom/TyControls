@@ -96,7 +96,7 @@ type
     FShowImage: Boolean;
     FShowDescription: Boolean;
     FShowAction: Boolean;
-    procedure SetDescription(const AValue: string);
+    procedure SetDescription(const AValue: TCaption);
     procedure SetShowImage(AValue: Boolean);
     procedure SetShowDescription(AValue: Boolean);
     procedure SetShowAction(AValue: Boolean);
@@ -137,7 +137,7 @@ type
     { The message. '' = the library's translated "no data" (see DisplayDescription); any
       other text overrides it. Drawn literally (no mnemonic parsing — a placeholder
       activates nothing), centred, ellipsised when it does not fit. }
-    property Description: string read FDescription write SetDescription;
+    property Description: TCaption read FDescription write SetDescription;
     { Whether the picture is drawn AND takes room in the stack. }
     property ShowImage: Boolean read FShowImage write SetShowImage default True;
     { Whether the message is drawn AND takes room in the stack. The flag is authoritative,
@@ -315,7 +315,7 @@ end;
 
 { ---- property setters ---- }
 
-procedure TTyEmpty.SetDescription(const AValue: string);
+procedure TTyEmpty.SetDescription(const AValue: TCaption);
 begin
   if FDescription = AValue then Exit;
   FDescription := AValue;

@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Graphics,
   tyControls.Types, tyControls.Painter, tyControls.StyleModel, tyControls.Base,
-  tyControls.ListBox, tyControls.ComboBox, tyControls.ColorBox, tyControls.Dialogs.Color;
+  tyControls.ListBox, tyControls.ComboBox, tyControls.ColorBox, tyControls.Dialogs.Color, LCLType;
 
 type
   { The drop-down list for TTyColorComboBox: like TTyColorPopupList, but a row whose colour
@@ -23,7 +23,7 @@ type
   private
     FMoreCaption: string;
     FPrevIndex: Integer;    // last real selection, to revert a cancelled "more…"
-    procedure SetMoreCaption(const AValue: string);
+    procedure SetMoreCaption(const AValue: TTranslateString);
     function IsMoreIndex(AIndex: Integer): Boolean;
     procedure RebuildMoreItem;
   protected
@@ -33,7 +33,7 @@ type
   public
     constructor Create(AOwner: TComponent); override;
   published
-    property MoreCaption: string read FMoreCaption write SetMoreCaption;
+    property MoreCaption: TTranslateString read FMoreCaption write SetMoreCaption;
   end;
 
 implementation
@@ -78,7 +78,7 @@ begin
   TyAddColorItem(Items, FMoreCaption, clNone);
 end;
 
-procedure TTyColorComboBox.SetMoreCaption(const AValue: string);
+procedure TTyColorComboBox.SetMoreCaption(const AValue: TTranslateString);
 begin
   if FMoreCaption = AValue then Exit;
   FMoreCaption := AValue;

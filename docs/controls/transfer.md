@@ -38,8 +38,8 @@ uses tyControls.Transfer;
 |------|------|--------|------|
 | `Items` | `TStrings` | 空 | **源池——就是左窗格自己的列表，不是副本**。直接编辑它没问题：轨道会从每一次编辑重新推导自己的 `Enabled`。写入时执行 `FLeftList.Items.Assign(AValue)`。 |
 | `Selected` | `TStrings` | 空 | **目标列表——就是右窗格自己的列表，不是副本**。向右移动的行按**源顺序追加**到这里；在窗体显示前给它塞值，就是让穿梭框「一开始就半满」的做法。 |
-| `LeftTitle` | `string` | `''` | 左窗格标题。用解析后的 `TyTransferTitle` 样式绘制（**不**读 LCL `Font.*`），放不下时省略号截断，**从不换行**，**不解析助记符**（标题不激活任何东西，`&` 是字面字符）。改它只 `Invalidate`，不重新布局。 |
-| `RightTitle` | `string` | `''` | 同上，右窗格标题。 |
+| `LeftTitle` | `TCaption` | `''` | 左窗格标题。用解析后的 `TyTransferTitle` 样式绘制（**不**读 LCL `Font.*`），放不下时省略号截断，**从不换行**，**不解析助记符**（标题不激活任何东西，`&` 是字面字符）。改它只 `Invalidate`，不重新布局。 |
+| `RightTitle` | `TCaption` | `''` | 同上，右窗格标题。 |
 | `TitleAlignment` | `TAlignment` | `taLeftJustify` | 两条标题带内文字的水平对齐（**两条共用一个值**）。 |
 | `ShowTitles` | `Boolean` | `True` | 是否绘制标题带**并**在窗格上方为它预留高度。**标志是权威，标题文字不是**：`LeftTitle` 为空时它的带**依然占位**，所以清空标题绝不会让窗格跳动（`TTyCard.ShowHeader` 的规则）。 |
 | `ShowMoveAll` | `Boolean` | `True` | 轨道是否提供两个双箭头「全部移动」按钮。关掉后只剩两个单箭头，并在轨道里**重新居中**。 |

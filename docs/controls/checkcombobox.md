@@ -35,7 +35,7 @@ uses tyControls.CheckComboBox;
 | `CheckedCount: Integer` | 已勾选项数(`cbChecked` 才算)。 |
 | `CheckedText: string` | 字段汇总(勾选项文本用 `Separator` 连接;为空时是 `EmptyText`)。 |
 | `Separator: string` | 汇总分隔符(默认 `', '`)。 |
-| `EmptyText: string` | 一个都没勾时字段显示的文字(默认 `''`)。`EmptyText` 也为空时回落到继承来的 `TextHint` 占位文字。 |
+| `EmptyText: TCaption` | 一个都没勾时字段显示的文字(默认 `''`)。`EmptyText` 也为空时回落到继承来的 `TextHint` 占位文字。 |
 | `AddItem(AItem; AState; AEnabled = True)` | **（API parity 新增）** 一次调用追加一行连同它的状态。从前要 `Items.Add` 再 `Checked[Items.Count-1]`——那个索引写错就勾到上一行去了。**重载**继承来的 `AddItem(text, TObject)`,不遮蔽它。 |
 | `AssignItems(AItems: TStrings)` | **（API parity 新增）** 批量装载,旧状态全部丢弃。 |
 | `DeleteItem(AIndex)` | **（API parity 新增）** 删一行(它的状态由池回收)。 |

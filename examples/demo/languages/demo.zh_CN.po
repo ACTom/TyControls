@@ -687,3 +687,15 @@ msgstr "TTyMemo 多行编辑器\r\n回车拆行;退格/Delete 跨行合并。\r\
 #: tdemomainform.statusbar1.panels.product
 msgid "TyControls demo"
 msgstr "TyControls 演示"
+
+#: tdemomainform.democolorbtn.dialogcaption
+msgid "Select Color"
+msgstr "选择颜色"
+
+#: tdemomainform.tymessage1.msg
+msgid "Hello World!"
+msgstr "你好,世界!"
+
+#: tdemomainform.tyaboutdlg.description
+msgid "A skinnable / styleable Lazarus component library"
+msgstr "可换肤、可定制样式的 Lazarus 控件库"

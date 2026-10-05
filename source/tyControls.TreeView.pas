@@ -1174,7 +1174,7 @@ type
     { C1: display properties }
     property Indent: Integer read FIndent write SetIndent default 16;
     property Images: TCustomImageList read FImages write SetImages;
-    property EmptyListMessage: string read FEmptyListMessage write FEmptyListMessage;
+    property EmptyListMessage: TCaption read FEmptyListMessage write FEmptyListMessage;
     property ShowButtons: Boolean read FShowButtons write SetShowButtons default True;
     property ShowTreeLines: Boolean read FShowTreeLines write SetShowTreeLines default True;
     property ShowRoot: Boolean read FShowRoot write SetShowRoot default True;

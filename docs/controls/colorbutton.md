@@ -33,7 +33,7 @@ uses tyControls.ColorButton;
 | `ButtonColor` | `TColor` | 同 `SelectedColor`（`stored False`，不写入 `.lfm`） | LCL 的名字和 LCL 的**类型**（`dialogs.pp:370`）。它是 `SelectedColor` 的第二个**视图**，不是第二个值：读写都换算（`TTyColor` 是 ARGB，`TColor` 不带 alpha，写入时保留当前 alpha）。`stored False` 是故意的——published 属性无论是否 `stored` 都能从 `.lfm` **读**进来，所以移植过来的 `ButtonColor = clRed` 能加载；不写出去则保证自家 `.lfm` 不会用两个名字存同一个颜色。 |
 | `Alignment` | `TAlignment` | `taLeftJustify` | 本类**重新声明**基类默认值（`TTyButton` 是 `taCenter`），构造函数同步设置。理由：标题画在色块**右侧剩下的那条**里，从那条的左缘起排才贴着色块。仍可设成 `taCenter` / `taRightJustify`，色块不动。 |
 | `ShowText` | `Boolean` | `False` | 为 `True` 时在色块右侧绘制 `#RRGGBB` 十六进制文字（取 `AStyle.TextColor`）；为 `False` 时色块占满内容区。**`Caption` 非空时它不起作用**——两者共用同一个文字位，`Caption` 优先。 |
-| `DialogCaption` | `string` | `'Select Color'` | 点击后弹出的取色对话框标题栏文字。 |
+| `DialogCaption` | `TCaption` | `'Select Color'` | 点击后弹出的取色对话框标题栏文字。 |
 | `OnColorChange` | `TNotifyEvent` | `nil` | `SelectedColor` **实际发生变化**时触发，不区分来源。 |
 | `OnColorChanged` | `TNotifyEvent` | `nil` | LCL 对同一个通知的叫法（`dialogs.pp:387-388`），和 `OnColorChange` 只差一个字母。两个都会触发，`OnColorChange` 在前。各自有独立字段，所以各自按自己的名字流式化，保存时不会把宿主的处理器悄悄改名。 |
 

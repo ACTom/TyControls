@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, StdCtrls,
   tyControls.Types, tyControls.Painter, tyControls.StyleModel, tyControls.Base,
-  tyControls.Controller, tyControls.ListBox, tyControls.ComboBox, tyControls.CheckListBox;
+  tyControls.Controller, tyControls.ListBox, tyControls.ComboBox, tyControls.CheckListBox, LCLType;
 
 type
   { Fired for the row that changed, on user toggles AND on programmatic writes. LCL spells
@@ -72,7 +72,7 @@ type
     procedure SetItemEnabled(AIndex: Integer; AValue: Boolean);
     function GetItemObject(AIndex: Integer): TObject;
     procedure SetItemObject(AIndex: Integer; AValue: TObject);
-    procedure SetEmptyText(const AValue: string);
+    procedure SetEmptyText(const AValue: TTranslateString);
     procedure PopupCheckClick(Sender: TObject);
   protected
     { Owns every state object ever created, so nothing leaks when the app deletes or clears
@@ -144,7 +144,7 @@ type
     // Joins the checked item texts in the field summary (default ', ').
     property Separator: string read FSeparator write FSeparator;
     // Shown in the field when nothing is checked (default '').
-    property EmptyText: string read FEmptyText write SetEmptyText;
+    property EmptyText: TTranslateString read FEmptyText write SetEmptyText;
     { Lets the user's toggle pass through cbGrayed. Off (LCL's default) the click cycle is
       the plain two-state one; Checked[] and CheckAll are unaffected either way. }
     property AllowGrayed: Boolean read FAllowGrayed write FAllowGrayed default False;
@@ -473,7 +473,7 @@ begin
   EnsureState(AIndex).Data := AValue;
 end;
 
-procedure TTyCheckComboBox.SetEmptyText(const AValue: string);
+procedure TTyCheckComboBox.SetEmptyText(const AValue: TTranslateString);
 begin
   if FEmptyText = AValue then Exit;
   FEmptyText := AValue;

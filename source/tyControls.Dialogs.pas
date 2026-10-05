@@ -129,7 +129,7 @@ type
     function Execute: TModalResult;
   published
     property Title: TCaption read FTitle write FTitle;
-    property Msg: string read FMsg write FMsg;
+    property Msg: TCaption read FMsg write FMsg;
     property DlgType: TMsgDlgType read FDlgType write FDlgType default mtInformation;
     property Buttons: TMsgDlgButtons read FButtons write FButtons default [mbOK];
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
@@ -154,7 +154,7 @@ type
     function Execute: Boolean;
   published
     property Caption: TCaption read FCaption write FCaption;
-    property Prompt: string read FPrompt write FPrompt;
+    property Prompt: TCaption read FPrompt write FPrompt;
     property Value: string read FValue write FValue;
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
@@ -179,7 +179,7 @@ type
     function Execute: Boolean;
   published
     property Caption: TCaption read FCaption write FCaption;
-    property Prompt: string read FPrompt write FPrompt;
+    property Prompt: TCaption read FPrompt write FPrompt;
     property Value: string read FValue write FValue;
     property PasswordChar: string read FPasswordChar write FPasswordChar;
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
@@ -214,7 +214,7 @@ type
     function Execute: Boolean;
   published
     property Caption: TCaption read FCaption write FCaption;
-    property Prompt: string read FPrompt write FPrompt;
+    property Prompt: TCaption read FPrompt write FPrompt;
     property Value: string read FValue write FValue;
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
@@ -276,7 +276,7 @@ type
     function SelectedText: string;
   published
     property Caption: TCaption read FCaption write FCaption;
-    property Prompt: string read FPrompt write FPrompt;
+    property Prompt: TCaption read FPrompt write FPrompt;
     property Items: TStrings read FItems write SetItems;
     property ItemIndex: Integer read FItemIndex write FItemIndex default -1;
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
