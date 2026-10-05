@@ -844,11 +844,6 @@ msgstr ""
 msgid "grid[%d] has axes in only one direction, so it draws nothing"
 msgstr ""
 
-#: tycontrols.strconsts.rstychartpolarnoaxis
-#, object-pascal-format
-msgid "polar[%d] has no %s, so it is not drawn"
-msgstr ""
-
 #: tycontrols.strconsts.rstychartlegendselectall
 msgctxt "tycontrols.strconsts.rstychartlegendselectall"
 msgid "All"
@@ -869,6 +864,11 @@ msgstr ""
 #: tycontrols.strconsts.rstychartnosuchhandler
 #, object-pascal-format
 msgid "No formatter named '%s' is registered."
+msgstr ""
+
+#: tycontrols.strconsts.rstychartpolarnoaxis
+#, object-pascal-format
+msgid "polar[%d] has no %s, so it is not drawn"
 msgstr ""
 
 #: tycontrols.strconsts.rstychartseriesaxessplit
@@ -1066,17 +1066,17 @@ msgstr ""
 msgid "%s is not an option ECharts 6.1 knows."
 msgstr ""
 
+#: tycontrols.strconsts.rstyoptduplicateid
+#, object-pascal-format
+msgid "Two %s components carry the id \"%s\"."
+msgstr ""
+
 #: tycontrols.strconsts.rstyoptfunctionvalue
 msgid "JavaScript functions cannot be used here. Write a template string such as '{b}: {c}', or the name of a registered handler such as '@MyFormatter'."
 msgstr ""
 
 #: tycontrols.strconsts.rstyoptmergenotobject
 msgid "An option to merge must be an object."
-msgstr ""
-
-#: tycontrols.strconsts.rstyoptduplicateid
-#, object-pascal-format
-msgid "Two %s components carry the id \"%s\"."
 msgstr ""
 
 #: tycontrols.strconsts.rstyoptreplacemergebadtype
