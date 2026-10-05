@@ -19,7 +19,7 @@ uses
   tyControls.Dialogs.Color, tyControls.Dialogs.FileDialog, tyControls.Dialogs.Find,
   tyControls.Dialogs.Font, tyControls.Dialogs.Progress, tyControls.Dialogs.SelectPath,
   tyControls.Dialogs.IconBrowser,
-  tyControls.DB.Edits,
+  tyControls.DB.Edits, tyControls.DB.Choices,
   tyControls.Divider, tyControls.DropButtons, tyControls.Edit, tyControls.Empty,
   tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit,
   tyControls.FontComboBox,
@@ -481,7 +481,8 @@ initialization
     page; until Design.pas registers them they are not in the parse Reg() is checked against, so
     they are registered plainly here -- the custom-class guards resolve their split by name. }
   RegisterClasses([TTyDBEdit, TTyDBMaskEdit, TTyDBMemo, TTyDBText, TTyDBNumericEdit,
-    TTyDBCurrencyEdit, TTyDBSpinEdit, TTyDBFloatSpinEdit]);
+    TTyDBCurrencyEdit, TTyDBSpinEdit, TTyDBFloatSpinEdit, TTyDBCheckBox, TTyDBToggleSwitch,
+    TTyDBRadioGroup, TTyDBSegmented, TTyDBRating]);
   RegisterTest(TVersionTest);
 
 finalization

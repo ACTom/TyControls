@@ -40,6 +40,7 @@ type
 
 function TyDBLoadedText(const AText: string): TTyDBLoadedValue;
 function TyDBLoadedNumber(AValue: Double; AIsNull: Boolean): TTyDBLoadedValue;
+function TyDBLoadedIndex(AIndex: Integer): TTyDBLoadedValue;
 
 { The user changed the control's value: put the dataset in dsEdit and mark the link modified,
   so UpdateData writes it back (on EditingDone, on leaving the control, or on a Post made
@@ -67,6 +68,19 @@ function TyDBEditAllowed(ALink: TFieldDataLink; var AInUserEdit: Boolean): Boole
   stand-in for "some non-ASCII character". }
 function TyDBKeyAllowed(ALink: TFieldDataLink; const AKey: string;
   var AInUserEdit: Boolean): Boolean;
+{ The user picked a value in a choice (a check box, a switch, a radio group, a segmented
+  control, a rating, a lookup list): TyDBUserChanged, and then the value goes into the record
+  at once, as LCL's TDBCheckBox and TDBLookupListBox write theirs. A choice has no half-typed
+  state to wait for, and the control that took it -- a radio group's child button -- is not
+  always the one that later gets EditingDone or loses focus. }
+procedure TyDBChoiceChanged(ALink: TFieldDataLink; var AInUserEdit: Boolean);
+
+{ ValueChecked / ValueUnchecked: words separated by ';'. Does the list hold AText (spaces
+  around a word ignored, case ignored, as LCL's TDBCheckBox matches)? An empty word matches
+  nothing, so an empty field is neither checked nor unchecked. }
+function TyDBWordListHas(const AWords, AText: string): Boolean;
+{ The word a choice writes back: the first in the list, trimmed. }
+function TyDBFirstWord(const AWords: string): string;
 
 { A number field's value, read and written as the number it is -- never through Text, whose
   form follows the locale's DecimalSeparator while the controls always show a '.'. Integer
@@ -76,6 +90,9 @@ function TyDBReadNumber(AField: TField): Double;
 procedure TyDBWriteNumber(AField: TField; AValue: Double);
 
 implementation
+
+uses
+  SysUtils, LazUTF8;
 
 function TyFieldIsEditable(AField: TField): Boolean;
 begin
@@ -101,6 +118,13 @@ begin
   Result.Kind := lvNumber;
   Result.Number := AValue;
   Result.IsNull := AIsNull;
+end;
+
+function TyDBLoadedIndex(AIndex: Integer): TTyDBLoadedValue;
+begin
+  Result := Default(TTyDBLoadedValue);
+  Result.Kind := lvIndex;
+  Result.Index := AIndex;
 end;
 
 { ALink.Edit with the control's DataChange held off (see TyDBUserChanged). }
@@ -134,6 +158,39 @@ var
 begin
   if Length(AKey) = 1 then ch := AKey[1] else ch := #255;
   Result := TyFieldCanAcceptKey(ALink.Field, ch) and StartEdit(ALink, AInUserEdit);
+end;
+
+procedure TyDBChoiceChanged(ALink: TFieldDataLink; var AInUserEdit: Boolean);
+begin
+  TyDBUserChanged(ALink, AInUserEdit);
+  if ALink.Editing then
+    ALink.UpdateRecord;
+end;
+
+function TyDBWordListHas(const AWords, AText: string): Boolean;
+var
+  rest, w: string;
+  p: Integer;
+begin
+  Result := False;
+  rest := AWords;
+  while rest <> '' do
+  begin
+    p := Pos(';', rest);
+    if p = 0 then p := Length(rest) + 1;
+    w := Trim(Copy(rest, 1, p - 1));
+    Delete(rest, 1, p);
+    if (w <> '') and (UTF8CompareText(w, Trim(AText)) = 0) then Exit(True);
+  end;
+end;
+
+function TyDBFirstWord(const AWords: string): string;
+var
+  p: Integer;
+begin
+  p := Pos(';', AWords);
+  if p = 0 then p := Length(AWords) + 1;
+  Result := Trim(Copy(AWords, 1, p - 1));
 end;
 
 function IsIntegerField(AField: TField): Boolean;

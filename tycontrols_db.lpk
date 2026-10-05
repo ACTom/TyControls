@@ -16,6 +16,10 @@
     <Version Major="3" Minor="1" Release="0"/>
     <Files>
       <Item>
+        <Filename Value="source/db/tyControls.DB.Choices.pas"/>
+        <UnitName Value="tyControls.DB.Choices"/>
+      </Item>
+      <Item>
         <Filename Value="source/db/tyControls.DB.Common.pas"/>
         <UnitName Value="tyControls.DB.Common"/>
       </Item>

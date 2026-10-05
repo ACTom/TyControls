@@ -243,7 +243,8 @@ uses
   test.db.common,
   test.corehooks,
   test.db.edits,
-  test.db.numeric;
+  test.db.numeric,
+  test.db.choices;
 
 type
   TTyTestRunner = class(TTestRunner)

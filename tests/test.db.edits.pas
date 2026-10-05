@@ -69,6 +69,12 @@ type
     function OtherShown: string; virtual; abstract;
     { False for a control the user cannot change (TTyDBText): C3-C6 do not apply. }
     function Editable: Boolean; virtual;
+    { What the control shows with no field at all. Default: what it shows for NULL (row 3) --
+      not so for a check box, which shows NULL grayed and no field unchecked, as LCL's does. }
+    function ExpectedUnbound: string; virtual;
+    { False for a choice, which writes its value into the record the moment it is made: there
+      Escape has nothing to take back, and C5 checks that it takes nothing. }
+    function EscapeRestores: Boolean; virtual;
     { The user, on row 1: focus the control and change its value by keys or clicks. }
     procedure UserEdit; virtual; abstract;
     { A change no key gate sees -- a paste. Default: none. }
@@ -252,6 +258,16 @@ begin
   Result := True;
 end;
 
+function TDBControlTestBase.ExpectedUnbound: string;
+begin
+  Result := ExpectedShown(3);
+end;
+
+function TDBControlTestBase.EscapeRestores: Boolean;
+begin
+  Result := True;
+end;
+
 procedure TDBControlTestBase.UserEditUnguarded;
 begin
 end;
@@ -423,6 +439,12 @@ begin
   before := BoundField.AsString;
   UserEdit;
   AssertTrue('the edit took', Shown <> ExpectedFocused(1));
+  if not EscapeRestores then
+  begin
+    Key(VK_ESCAPE);
+    AssertFieldHoldsEdit;   // a choice is in the record already; Escape is not its undo
+    Exit;
+  end;
   Key(VK_ESCAPE);
   AssertEquals('Escape shows the field again', ExpectedFocused(1), Shown);
   FFix.DS.Post;
@@ -491,7 +513,7 @@ begin
   Bind(FieldName);
   FFix.Src.Free;
   AssertNull('DataSource', ControlDataSource);
-  AssertEquals('an unbound control is empty', ExpectedShown(3), Shown);
+  AssertEquals('an unbound control is empty', ExpectedUnbound, Shown);
   if FCtl is TWinControl then
   begin
     EnterControl;
@@ -519,7 +541,7 @@ begin
     AssertEquals('bound', ExpectedShown(1), Shown);
     FForm.RemoveComponent(src);
     AssertNull('DataSource after opRemove', ControlDataSource);
-    AssertEquals('unbound, empty', ExpectedShown(3), Shown);
+    AssertEquals('unbound, empty', ExpectedUnbound, Shown);
   finally
     src.Free;
   end;

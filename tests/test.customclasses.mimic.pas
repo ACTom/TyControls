@@ -25,11 +25,11 @@ uses
   tyControls.CheckGroup, tyControls.CheckListBox, tyControls.CircularProgress, tyControls.ColorBox,
   tyControls.ColorButton, tyControls.ColorComboBox, tyControls.ColorGrid, tyControls.ColorListBox,
   tyControls.ComboBox, tyControls.ComboBoxEx, tyControls.ComboEdit, tyControls.ControlBar,
-  tyControls.Controller, tyControls.CoolBar, tyControls.CurrencyEdit, tyControls.DB.Edits,
-  tyControls.DateTimePicker, tyControls.Dial, tyControls.Dialogs, tyControls.Dialogs.About,
-  tyControls.Dialogs.IconBrowser, tyControls.Dialogs.Progress, tyControls.Divider,
-  tyControls.DropButtons, tyControls.Edit, tyControls.Empty, tyControls.ExPanel,
-  tyControls.FilterComboBox, tyControls.FloatSpinEdit, tyControls.FontComboBox,
+  tyControls.Controller, tyControls.CoolBar, tyControls.CurrencyEdit, tyControls.DB.Choices,
+  tyControls.DB.Edits, tyControls.DateTimePicker, tyControls.Dial, tyControls.Dialogs,
+  tyControls.Dialogs.About, tyControls.Dialogs.IconBrowser, tyControls.Dialogs.Progress,
+  tyControls.Divider, tyControls.DropButtons, tyControls.Edit, tyControls.Empty,
+  tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit, tyControls.FontComboBox,
   tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.Form, tyControls.FormSurface,
   tyControls.Gauge, tyControls.GearActivityIndicator, tyControls.GearDial, tyControls.GlowLabel,
   tyControls.GlyphButtons, tyControls.GlyphImageList, tyControls.Grid, tyControls.GridPanel,
@@ -2393,6 +2393,73 @@ type
     property SymbolBefore;
   end;
 
+  TGenDBCheckBox = class(TTyCustomDBCheckBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property State;
+    property AllowGrayed;
+    property Checked;
+    property Alignment;
+    property Caption;
+    property Align;
+    property Anchors;
+    property OnChange;
+    property DataField;
+    property DataSource;
+    property ReadOnly;
+    property ValueChecked;
+    property ValueUnchecked;
+  end;
+
   TGenDBCurrencyEdit = class(TTyCustomDBCurrencyEdit)
   published
     property Version;
@@ -2836,6 +2903,212 @@ type
     property DataSource;
   end;
 
+  TGenDBRadioGroup = class(TTyCustomDBRadioGroup)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Caption;
+    property Alignment;
+    property ClientWidth;
+    property ClientHeight;
+    property DockSite;
+    property UseDockManager;
+    property OnDockDrop;
+    property OnDockOver;
+    property OnUnDock;
+    property OnGetSiteInfo;
+    property OnGetDockCaption;
+    property OnStartDock;
+    property OnEndDock;
+    property Align;
+    property Anchors;
+    property Items;
+    property Columns;
+    property ColumnLayout;
+    property ItemIndex;
+    property OnSelectionChanged;
+    property OnItemEnter;
+    property OnItemExit;
+    property DataField;
+    property DataSource;
+    property ReadOnly;
+    property Values;
+  end;
+
+  TGenDBRating = class(TTyCustomDBRating)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Count;
+    property Value;
+    property AllowHalf;
+    property ReadOnly;
+    property OnChange;
+    property Align;
+    property Anchors;
+    property DataField;
+    property DataSource;
+  end;
+
+  TGenDBSegmented = class(TTyCustomDBSegmented)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property OnChange;
+    property Align;
+    property Anchors;
+    property DataField;
+    property DataSource;
+    property ReadOnly;
+    property Values;
+  end;
+
   TGenDBSpinEdit = class(TTyCustomDBSpinEdit)
   published
     property Version;
@@ -2957,6 +3230,70 @@ type
     property FocusControl;
     property DataField;
     property DataSource;
+  end;
+
+  TGenDBToggleSwitch = class(TTyCustomDBToggleSwitch)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Checked;
+    property Caption;
+    property OnChange;
+    property Align;
+    property Anchors;
+    property DataField;
+    property DataSource;
+    property ReadOnly;
+    property ValueChecked;
+    property ValueUnchecked;
   end;
 
   TGenDateTimePicker = class(TTyCustomDateTimePicker)
@@ -10117,7 +10454,7 @@ type
 
 const
   { (mimic, final class) }
-  CGenMimics: array[0..165, 0..1] of TClass = (
+  CGenMimics: array[0..170, 0..1] of TClass = (
     (TGenAboutDialog, TTyAboutDialog),
     (TGenActivityBar, TTyActivityBar),
     (TGenActivityIndicator, TTyActivityIndicator),
@@ -10156,14 +10493,19 @@ const
     (TGenControlBar, TTyControlBar),
     (TGenCoolBar, TTyCoolBar),
     (TGenCurrencyEdit, TTyCurrencyEdit),
+    (TGenDBCheckBox, TTyDBCheckBox),
     (TGenDBCurrencyEdit, TTyDBCurrencyEdit),
     (TGenDBEdit, TTyDBEdit),
     (TGenDBFloatSpinEdit, TTyDBFloatSpinEdit),
     (TGenDBMaskEdit, TTyDBMaskEdit),
     (TGenDBMemo, TTyDBMemo),
     (TGenDBNumericEdit, TTyDBNumericEdit),
+    (TGenDBRadioGroup, TTyDBRadioGroup),
+    (TGenDBRating, TTyDBRating),
+    (TGenDBSegmented, TTyDBSegmented),
     (TGenDBSpinEdit, TTyDBSpinEdit),
     (TGenDBText, TTyDBText),
+    (TGenDBToggleSwitch, TTyDBToggleSwitch),
     (TGenDateTimePicker, TTyDateTimePicker),
     (TGenDial, TTyDial),
     (TGenDivider, TTyDivider),
