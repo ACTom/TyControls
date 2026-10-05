@@ -65,6 +65,7 @@ type
     procedure TestValueIsWrittenAsANumberWhateverTheDecimalSeparator;
     procedure TestRangeSetAfterBindingIsNotAnEdit;
     procedure TestDecimalsSetAfterBindingIsNotAnEdit;
+    procedure TestOldValuePutBackAfterAWriteIsWritten;
   end;
 
   TDBNumericEditTest = class(TDBNumberEditTestBase)
@@ -137,6 +138,7 @@ type
     procedure TestNullRowStaysBlankUnderANewRange;
     procedure TestRefusedStepFiresNoValueChange;
     procedure TestRefusedSpinButtonDoesNotStep;
+    procedure TestOldValuePutBackAfterAWriteIsWritten;
   end;
 
 implementation
@@ -305,6 +307,25 @@ begin
   SetOrdProp(FCtl, 'Decimals', 4);
   AssertTrue('four places: the field''s own digits: ' + Shown, Pos('234.5678', Shown) > 0);
   AssertBrowsing('more places');
+end;
+
+{ Enter wrote the edit, so the field holds it now: putting the old number back -- one paste
+  over everything -- is an edit like any other, and EditingDone writes it. }
+procedure TDBNumberEditTestBase.TestOldValuePutBackAfterAWriteIsWritten;
+var
+  before: Double;
+begin
+  Bind(FieldName);
+  before := BoundField.AsFloat;
+  UserEdit;
+  Commit;
+  AssertFieldHoldsEdit;
+  SetClip(ExpectedFocused(1));
+  Key(VK_A, [ssCtrl]);
+  Key(VK_V, [ssCtrl]);
+  AssertEquals('the old value, back in one change', ExpectedFocused(1), Shown);
+  FCtl.EditingDone;
+  AssertEquals('EditingDone writes it', before, BoundField.AsFloat, 0);
 end;
 
 { ============================================================= TDBNumericEditTest ========= }
@@ -706,6 +727,21 @@ begin
   TNumInput(FCtl).MouseUp(mbLeft, [], c.X, c.Y);
   AssertEquals('allowed, it steps', CFixQtys[1] + 1, Spin.Value);
   AssertTrue('and edits', FFix.DS.State = dsEdit);
+end;
+
+{ Enter wrote the step, so the field holds it now: stepping back to the old number is an edit
+  like any other, and EditingDone writes it. }
+procedure TDBSpinEditTest.TestOldValuePutBackAfterAWriteIsWritten;
+begin
+  Bind('Qty');
+  EnterControl;
+  Key(VK_UP);
+  Key(VK_RETURN);
+  AssertEquals('Enter wrote the step', CFixQtys[1] + 1, BoundField.AsInteger);
+  Key(VK_DOWN);
+  AssertEquals('one step back: the old value', IntToStr(CFixQtys[1]), Spin.Text);
+  FCtl.EditingDone;
+  AssertEquals('EditingDone writes it', CFixQtys[1], BoundField.AsInteger);
 end;
 
 initialization

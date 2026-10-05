@@ -1153,6 +1153,7 @@ end;
 procedure TTyCustomDBEdit.UpdateData(Sender: TObject);
 begin
   FDataLink.Field.Text := Text;
+  FLoaded := TyDBLoadedText(Text);   // what the field holds now: changing back is an edit again
 end;
 
 procedure TTyCustomDBEdit.ValueChanged(Sender: TObject);
@@ -1396,6 +1397,7 @@ begin
     ValidateEdit;   // a half-filled mask raises here, before anything is written (LCL)
     FDataLink.Field.Text := MaskedValue;
   end;
+  FLoaded := TyDBLoadedText(Text);   // what the field holds now: changing back is an edit again
 end;
 
 procedure TTyCustomDBMaskEdit.ValueChanged(Sender: TObject);
@@ -1639,6 +1641,7 @@ begin
     FDataLink.Field.Text := MemoValue
   else
     FDataLink.Field.AsString := MemoValue;
+  FLoaded := TyDBLoadedText(Text);   // what the field holds now: changing back is an edit again
 end;
 
 procedure TTyCustomDBMemo.ValueChanged(Sender: TObject);
@@ -2004,6 +2007,7 @@ begin
     FDataLink.Field.Clear
   else
     TyDBWriteNumber(FDataLink.Field, Value);
+  FLoaded := TyDBLoadedNumber(Value, IsBlank);   // what the field holds now: changing back is an edit again
 end;
 
 procedure TTyCustomDBNumericEdit.ValueChanged(Sender: TObject);
@@ -2254,6 +2258,7 @@ begin
     FDataLink.Field.Clear
   else
     TyDBWriteNumber(FDataLink.Field, Value);
+  FLoaded := TyDBLoadedNumber(Value, IsBlank);   // what the field holds now: changing back is an edit again
 end;
 
 procedure TTyCustomDBCurrencyEdit.ValueChanged(Sender: TObject);
@@ -2504,6 +2509,7 @@ begin
     FDataLink.Field.Clear
   else
     TyDBWriteNumber(FDataLink.Field, Value);
+  FLoaded := TyDBLoadedNumber(Value, IsBlank);   // what the field holds now: changing back is an edit again
 end;
 
 procedure TTyCustomDBFloatSpinEdit.ValueChanged(Sender: TObject);
@@ -2740,6 +2746,7 @@ begin
     FDataLink.Field.Clear
   else
     TyDBWriteNumber(FDataLink.Field, Value);
+  FLoaded := TyDBLoadedText(Text);   // what the field holds now: changing back is an edit again
 end;
 
 procedure TTyCustomDBSpinEdit.DoChange;

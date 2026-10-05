@@ -134,6 +134,7 @@ type
     procedure TestBackspaceRefusedWhenNotEditable;
     procedure TestPasteRefusedWhenFieldIsReadOnly;
     procedure TestEmptyTextWritesNullToANumberField;
+    procedure TestOldValuePutBackAfterAWriteIsWritten;
   end;
 
   TDBMaskEditTest = class(TDBControlTestBase)
@@ -156,6 +157,7 @@ type
     procedure TestHashMaskIsNotAppliedAndDoesNotRaise;
     procedure TestCustomEditMaskKeepsTheControlsMask;
     procedure TestChangingTheMaskKeepsShowingTheField;
+    procedure TestOldValuePutBackAfterAWriteIsWritten;
   end;
 
   TDBMemoTest = class(TDBControlTestBase)
@@ -176,6 +178,7 @@ type
     procedure TestNothingIsTypedIntoTheUnloadedLabel;
     procedure TestLinesAddIsNotAnEdit;
     procedure TestNonBlobFieldShowsDisplayTextUnfocused;
+    procedure TestOldValuePutBackAfterAWriteIsWritten;
   end;
 
   TDBTextTest = class(TDBControlTestBase)
@@ -742,6 +745,22 @@ begin
   AssertTrue('NULL', FFix.DS.FieldByName('Qty').IsNull);
 end;
 
+{ Enter wrote the edit, so the field holds it now: putting the old value back -- one paste over
+  everything -- is an edit like any other, and EditingDone writes it. }
+procedure TDBEditTest.TestOldValuePutBackAfterAWriteIsWritten;
+begin
+  Bind('Name');
+  UserEdit;
+  Commit;
+  AssertFieldHoldsEdit;
+  Ed.Clip := CFixNames[1];
+  Key(VK_A, [ssCtrl]);
+  Key(VK_V, [ssCtrl]);
+  AssertEquals('the old value, back in one change', CFixNames[1], Shown);
+  FCtl.EditingDone;
+  AssertEquals('EditingDone writes it', CFixNames[1], BoundField.AsString);
+end;
+
 { ================================================================== TDBMaskEditTest ======= }
 
 function TDBMaskEditTest.NewControl: TControl;
@@ -864,6 +883,22 @@ begin
   AssertBrowsing('changing the mask');
 end;
 
+{ Enter wrote the edit, so the field holds it now: putting the old value back -- one paste over
+  everything -- is an edit like any other, and EditingDone writes it. }
+procedure TDBMaskEditTest.TestOldValuePutBackAfterAWriteIsWritten;
+begin
+  Bind('Name');
+  UserEdit;
+  Commit;
+  AssertFieldHoldsEdit;
+  Ed.Clip := CFixNames[1];
+  Key(VK_A, [ssCtrl]);
+  Key(VK_V, [ssCtrl]);
+  AssertEquals('the old value, back in one change', CFixNames[1], Shown);
+  FCtl.EditingDone;
+  AssertEquals('EditingDone writes it', CFixNames[1], BoundField.AsString);
+end;
+
 { ======================================================================= TDBMemoTest ======= }
 
 function TDBMemoTest.NewControl: TControl;
@@ -984,6 +1019,22 @@ begin
   finally
     DefaultFormatSettings := saved;
   end;
+end;
+
+{ Enter wrote the edit, so the field holds it now: putting the old value back -- one paste over
+  everything -- is an edit like any other, and EditingDone writes it. }
+procedure TDBMemoTest.TestOldValuePutBackAfterAWriteIsWritten;
+begin
+  Bind('Note');
+  UserEdit;
+  Commit;
+  AssertFieldHoldsEdit;
+  Memo.Clip := CFixNotes[1];
+  Key(VK_A, [ssCtrl]);
+  Key(VK_V, [ssCtrl]);
+  AssertEquals('the old value, back in one change', CFixNotes[1], Shown);
+  FCtl.EditingDone;
+  AssertEquals('EditingDone writes it', CFixNotes[1], BoundField.AsString);
 end;
 
 { ======================================================================= TDBTextTest ======= }
