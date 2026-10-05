@@ -78,7 +78,7 @@ type
     { Hide immediately (also called by the auto-hide timer). }
     procedure HideHint;
     property Title: TCaption read FTitle write FTitle;
-    property Description: string read FDescription write FDescription;
+    property Description: TCaption read FDescription write FDescription;
     property Icon: TTyBalloonIcon read FIcon write FIcon default biNone;
     { Auto-hide delay in ms (0 = stay until HideHint). Default 4000. }
     property HideInterval: Integer read FHideInterval write FHideInterval default 4000;

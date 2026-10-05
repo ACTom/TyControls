@@ -121,7 +121,7 @@ type
     FAutoMaxWidth: Boolean;
     FVisible: Boolean;
     procedure SetControl(AValue: TControl);
-    procedure SetText(const AValue: string);
+    procedure SetText(const AValue: TCaption);
     procedure SetBreak(AValue: Boolean);
     procedure SetWidth(AValue: Integer);
     procedure SetAutoMaxWidth(AValue: Boolean);
@@ -135,7 +135,7 @@ type
     { The control this band wraps. A band with no control still occupies its place -- that is
       how a caption-only separator band is expressed. }
     property Control: TControl read FControl write SetControl;
-    property Text: string read FText write SetText;
+    property Text: TCaption read FText write SetText;
     { Start a new row at this band even when it would fit on the current one. }
     property Break: Boolean read FBreak write SetBreak default False;
     { Assigned LOGICAL width; 0 = auto, meaning the hosted control's own width. The hosted
@@ -902,7 +902,7 @@ begin
   Changed(False);
 end;
 
-procedure TTyCoolBand.SetText(const AValue: string);
+procedure TTyCoolBand.SetText(const AValue: TCaption);
 begin
   if FText = AValue then Exit;
   FText := AValue;

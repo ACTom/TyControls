@@ -96,7 +96,7 @@ type
     // when False the swatch fills most of the content area.
     property ShowText: Boolean read FShowText write SetShowText default False;
     // Title bar text of the colour dialog opened on click.
-    property DialogCaption: string read FDialogCaption write FDialogCaption;
+    property DialogCaption: TTranslateString read FDialogCaption write FDialogCaption;
     // Fired whenever the colour actually changes, however it changed (see SetSelectedColor).
     property OnColorChange: TNotifyEvent read FOnColorChange write FOnColorChange;
     { LCL's name for the very same notification (dialogs.pp:387-388) -- one letter apart,

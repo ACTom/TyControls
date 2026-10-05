@@ -208,7 +208,7 @@ type
     property Images: TCustomImageList read FImages write FImages;
     { Decorative left banner (classic Office style): a themed accent strip BannerWidth px wide
       down the left, with BannerCaption drawn rotated. 0 width = no banner. Set per popup. }
-    property BannerCaption: string read FBannerCaption write FBannerCaption;
+    property BannerCaption: TCaption read FBannerCaption write FBannerCaption;
     property BannerWidth: Integer read FBannerWidth write FBannerWidth;
     { TPopupMenu.TrackButton, pushed here by the host each popup. }
     property TrackButton: TTrackButton read FTrackButton write FTrackButton;
@@ -342,7 +342,7 @@ type
     { Icon-column source (propagated to the view + submenu cascades). }
     property Images: TCustomImageList read FImages write FImages;
     { Decorative left banner on THIS level's view (root only — not propagated to submenus). }
-    property BannerCaption: string read FBannerCaption write FBannerCaption;
+    property BannerCaption: TCaption read FBannerCaption write FBannerCaption;
     property BannerWidth: Integer read FBannerWidth write FBannerWidth;
     { LCL owner-draw + track-button, forwarded to the view and to every submenu cascade
       (an owner-drawn menu is owner-drawn all the way down, as it is in the LCL). }
@@ -629,7 +629,7 @@ type
   published
     { Decorative left banner: a BannerWidth-px accent strip with BannerCaption drawn rotated
       down it (classic Office look). BannerWidth = 0 (default) = no banner. }
-    property BannerCaption: string read FBannerCaption write FBannerCaption;
+    property BannerCaption: TCaption read FBannerCaption write FBannerCaption;
     property BannerWidth: Integer read FBannerWidth write FBannerWidth default 0;
   end;
 

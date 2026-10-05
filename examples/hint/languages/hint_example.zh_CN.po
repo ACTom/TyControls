@@ -110,3 +110,23 @@ msgstr "已复制"
 #: tmainform.balloonsticky.title
 msgid "Sticky popover"
 msgstr "常驻气泡"
+
+#: tmainform.balloon.description
+msgid "The document has been written to disk."
+msgstr "文档已写入磁盘。"
+
+#: tmainform.balloonwarn.description
+msgid "Less than 1 GB remains on drive C:."
+msgstr "C: 盘剩余空间不足 1 GB。"
+
+#: tmainform.balloonerr.description
+msgid "The file is read-only."
+msgstr "该文件是只读的。"
+
+#: tmainform.balloonplain.description
+msgid "No icon - text only."
+msgstr "无图标 - 只有文字。"
+
+#: tmainform.balloonsticky.description
+msgid "HideInterval = 0 - this one stays until you dismiss it."
+msgstr "HideInterval = 0 - 这一个会一直显示,直到你把它关掉。"

@@ -38,7 +38,7 @@ uses tyControls.TreeView, tyControls.Columns;
 | `RootNodeCount` | `Cardinal` | `0` | 根级（顶层）节点数量。写入即创建这么多未初始化的根节点骨架 |
 | `Indent` | `Integer` | `16` | 每一层的缩进逻辑像素 |
 | `Images` | `TCustomImageList` | `nil` | 主列节点图标的图像列表，配合 `OnGetImageIndex` 使用。类型是 `TCustomImageList`（对齐 LCL），任何派生自它的列表都能赋值 |
-| `EmptyListMessage` | `string` | `''` | 树为空时在内容区居中显示的提示文字 |
+| `EmptyListMessage` | `TCaption` | `''` | 树为空时在内容区居中显示的提示文字 |
 | `ShowButtons` | `Boolean` | `True` | 是否绘制展开 / 折叠按钮（±方块） |
 | `ShowTreeLines` | `Boolean` | `True` | 是否绘制连接父子节点的树状连线 |
 | `ShowRoot` | `Boolean` | `True` | 根节点是否显示展开按钮 / 缩进（`False` 时根节点平铺无缩进） |

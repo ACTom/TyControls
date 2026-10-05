@@ -116,7 +116,7 @@ type
     property MinFontSize: Integer read FMinFontSize write FMinFontSize default 0;
     property MaxFontSize: Integer read FMaxFontSize write FMaxFontSize default 0;
     { The preview strip's text; empty = the built-in sample. }
-    property PreviewText: string read FPreviewText write FPreviewText;
+    property PreviewText: TCaption read FPreviewText write FPreviewText;
     property OnApplyClicked: TNotifyEvent read FOnApplyClicked write FOnApplyClicked;
   end;
 

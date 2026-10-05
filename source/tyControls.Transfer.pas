@@ -246,8 +246,8 @@ type
     function GetSelectedList: TStrings;
     procedure SetSelectedList(AValue: TStrings);
     function GetMoveButton(AMove: TTyTransferMove): TTyButton;
-    procedure SetLeftTitle(const AValue: string);
-    procedure SetRightTitle(const AValue: string);
+    procedure SetLeftTitle(const AValue: TCaption);
+    procedure SetRightTitle(const AValue: TCaption);
     procedure SetTitleAlignment(AValue: TAlignment);
     procedure SetShowTitles(AValue: Boolean);
     procedure SetShowMoveAll(AValue: Boolean);
@@ -333,8 +333,8 @@ type
     { The pane titles. Drawn with the resolved TyTransferTitle style (NOT the LCL Font.*),
       ellipsised when they do not fit, never wrapped, and not mnemonic-parsed (a title
       activates nothing, so '&' is literal). }
-    property LeftTitle: string read FLeftTitle write SetLeftTitle;
-    property RightTitle: string read FRightTitle write SetRightTitle;
+    property LeftTitle: TCaption read FLeftTitle write SetLeftTitle;
+    property RightTitle: TCaption read FRightTitle write SetRightTitle;
     property TitleAlignment: TAlignment read FTitleAlignment write SetTitleAlignment
       default taLeftJustify;
     { Whether the title bands are drawn AND reserved above the panes. The FLAG is
@@ -836,14 +836,14 @@ end;
 
 { --- property setters ------------------------------------------------------------------ }
 
-procedure TTyCustomTransfer.SetLeftTitle(const AValue: string);
+procedure TTyCustomTransfer.SetLeftTitle(const AValue: TCaption);
 begin
   if FLeftTitle = AValue then Exit;
   FLeftTitle := AValue;
   Invalidate;   // the band is reserved by ShowTitles, not by the text: no relayout
 end;
 
-procedure TTyCustomTransfer.SetRightTitle(const AValue: string);
+procedure TTyCustomTransfer.SetRightTitle(const AValue: TCaption);
 begin
   if FRightTitle = AValue then Exit;
   FRightTitle := AValue;

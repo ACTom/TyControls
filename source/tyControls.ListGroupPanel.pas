@@ -112,7 +112,7 @@ type
     FCaption: string;
     FImageIndex: Integer;
     FTag: PtrInt;
-    procedure SetCaption(const AValue: string);
+    procedure SetCaption(const AValue: TCaption);
     procedure SetImageIndex(AValue: Integer);
   protected
     function GetDisplayName: string; override;
@@ -120,7 +120,7 @@ type
     constructor Create(ACollection: TCollection); override;
     procedure Assign(ASource: TPersistent); override;
   published
-    property Caption: string read FCaption write SetCaption;
+    property Caption: TCaption read FCaption write SetCaption;
     property ImageIndex: Integer read FImageIndex write SetImageIndex default -1;
     { The stable routing key for click handlers: indexes drift when groups or items
       are added and removed, a Tag does not. Invisible, so no repaint on write. }
@@ -154,7 +154,7 @@ type
     FExpanded: Boolean;
     FItems: TTyListGroupItems;
     FTag: PtrInt;
-    procedure SetCaption(const AValue: string);
+    procedure SetCaption(const AValue: TCaption);
     procedure SetImageIndex(AValue: Integer);
     procedure SetExpanded(AValue: Boolean);
     procedure SetItems(AValue: TTyListGroupItems);
@@ -165,7 +165,7 @@ type
     destructor Destroy; override;
     procedure Assign(ASource: TPersistent); override;
   published
-    property Caption: string read FCaption write SetCaption;
+    property Caption: TCaption read FCaption write SetCaption;
     property ImageIndex: Integer read FImageIndex write SetImageIndex default -1;
     { Whether the group starts open. The designer default is open (an authored sider
       should show its rows); the AddGroup facade keeps its historical default of closed. }
@@ -444,7 +444,7 @@ begin
   if FCaption <> '' then Result := FCaption else Result := inherited GetDisplayName;
 end;
 
-procedure TTyListGroupItem.SetCaption(const AValue: string);
+procedure TTyListGroupItem.SetCaption(const AValue: TCaption);
 begin
   if FCaption = AValue then Exit;
   FCaption := AValue;
@@ -521,7 +521,7 @@ begin
   if FCaption <> '' then Result := FCaption else Result := inherited GetDisplayName;
 end;
 
-procedure TTyListGroup.SetCaption(const AValue: string);
+procedure TTyListGroup.SetCaption(const AValue: TCaption);
 begin
   if FCaption = AValue then Exit;
   FCaption := AValue;

@@ -427,3 +427,11 @@ msgstr "下划线"
 #: umain.rsvlewidth
 msgid "Width"
 msgstr "宽度"
+
+#: tmainform.fcolorcombo.morecaption
+msgid "More colours…"
+msgstr "更多颜色…"
+
+#: tmainform.fcheckcombo.emptytext
+msgid "(no style selected)"
+msgstr "(未选择样式)"

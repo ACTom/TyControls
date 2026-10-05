@@ -145,7 +145,7 @@ type
     FOvrValid: Boolean;
     procedure SetAlertType(AValue: TTyAlertType);
     procedure SetMessage(const AValue: TCaption);
-    procedure SetDescription(const AValue: string);
+    procedure SetDescription(const AValue: TCaption);
     procedure SetShowIcon(AValue: Boolean);
     procedure SetClosable(AValue: Boolean);
     { TTyGraphicControl has no ResolveFontSize helper (that lives on TTyCustomControl);
@@ -210,7 +210,7 @@ type
     property Message: TCaption read FMessage write SetMessage;
     { The optional second line. Setting it switches the banner to the taller two-line
       form; clearing it goes back to one line. Same drawing rules as Message. }
-    property Description: string read FDescription write SetDescription;
+    property Description: TCaption read FDescription write SetDescription;
     { Draw the type's status glyph in a slot at the left. On by default: the icon is what
       makes an alert readable at a glance, and it is the one thing AlertType exists for
       beyond colour. }
@@ -520,7 +520,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyCustomAlert.SetDescription(const AValue: string);
+procedure TTyCustomAlert.SetDescription(const AValue: TCaption);
 begin
   if FDescription = AValue then Exit;
   // '' <-> text is the one-line/two-line switch: a height change, not a repaint.

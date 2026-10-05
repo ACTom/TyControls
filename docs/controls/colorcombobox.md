@@ -27,7 +27,7 @@ uses tyControls.ColorComboBox;
 
 | 成员 | 说明 |
 |------|------|
-| `MoreCaption: string` | "更多…"行的文字(默认 `More…`);改动会重建该行。 |
+| `MoreCaption: TCaption` | "更多…"行的文字(默认 `More…`);改动会重建该行。 |
 
 另继承 [TTyCustomColorBox](colorbox.md) 的 `Selected` / `AddColor` / `ClearColors` / `ColorAt`。
 

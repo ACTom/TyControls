@@ -387,3 +387,7 @@ msgstr "第 3 层展开被否决（OnExpanding）—— 节点 %d 保持关闭"
 #, object-pascal-format
 msgid "Node %d  (L%d)"
 msgstr "节点 %d  (L%d)"
+
+#: tshowcaseform.dragtree.emptylistmessage
+msgid "Nothing here - press Rebuild to add the groups back."
+msgstr "这里空了 - 按“重建”把分组加回来。"

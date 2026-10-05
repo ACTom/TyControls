@@ -74,7 +74,7 @@ type
     FShowResizeCur: Boolean;
     procedure SetPanels(AValue: TTyStatusPanels);
     procedure SetSimplePanel(AValue: Boolean);
-    procedure SetSimpleText(const AValue: string);
+    procedure SetSimpleText(const AValue: TCaption);
     procedure SetSizeGrip(AValue: Boolean);
   protected
     function GetStyleTypeKey: string; override;
@@ -120,7 +120,7 @@ type
     function ExecuteAction(ExeAction: TBasicAction): Boolean; override;
     property Panels: TTyStatusPanels read FPanels write SetPanels;
     property SimplePanel: Boolean read FSimplePanel write SetSimplePanel default False;
-    property SimpleText: string read FSimpleText write SetSimpleText;
+    property SimpleText: TCaption read FSimpleText write SetSimpleText;
     property SizeGrip: Boolean read FSizeGrip write SetSizeGrip default True;
     { Show the application's current hint here as the pointer moves over hinted controls
       and highlighted menu items -- the classic status line. Off by default, as in LCL
@@ -340,7 +340,7 @@ begin
 end;
 procedure TTyCustomStatusBar.SetPanels(AValue: TTyStatusPanels); begin FPanels.Assign(AValue); end;
 procedure TTyCustomStatusBar.SetSimplePanel(AValue: Boolean); begin if FSimplePanel = AValue then Exit; FSimplePanel := AValue; Invalidate; end;
-procedure TTyCustomStatusBar.SetSimpleText(const AValue: string); begin if FSimpleText = AValue then Exit; FSimpleText := AValue; if FSimplePanel then Invalidate; end;
+procedure TTyCustomStatusBar.SetSimpleText(const AValue: TCaption); begin if FSimpleText = AValue then Exit; FSimpleText := AValue; if FSimplePanel then Invalidate; end;
 procedure TTyCustomStatusBar.SetSizeGrip(AValue: Boolean); begin if FSizeGrip = AValue then Exit; FSizeGrip := AValue; Invalidate; end;
 
 function TTyCustomStatusBar.GetStyleTypeKey: string;
