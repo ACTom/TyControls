@@ -10922,7 +10922,7 @@ begin
         args.DataIndex := el.Datum.DataIndex;
         args.SeriesIndex := si;
         args.DataType := '';
-        args.Text := c.Text;
+        if c.LmText <> '' then args.Text := c.LmText else args.Text := c.Text;
         args.HasRect := hasHost;
         args.RectX := hostRect.X;
         args.RectY := hostRect.Y;

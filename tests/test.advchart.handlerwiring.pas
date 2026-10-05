@@ -371,7 +371,12 @@ begin
   if lst <> nil then
     for i := 0 to lst.Count - 1 do
       if lst.Element(i).Caption.FontSizeLogical > 0 then
-        Take(lst.Element(i).Caption.Text);
+      begin
+        { the formatter's words, as upstream records style.text -- a pie
+          label the overlap solver cut draws fewer [Batch 109] }
+        if lst.Element(i).Caption.LmText <> '' then Take(lst.Element(i).Caption.LmText)
+        else Take(lst.Element(i).Caption.Text);
+      end;
   { the labels of the pointers the option shows before any pointer event
     [Batch 100] }
   hits := FChart.OptionPointers;

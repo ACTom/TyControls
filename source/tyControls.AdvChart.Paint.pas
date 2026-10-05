@@ -467,6 +467,11 @@ type
       (and so the emphasis state shows it again), LmM (the transform, when
       LmHasM). }
     LmKind: Integer;
+    { THE LABEL'S OWN TEXT (zrender's style.text) where the words drawn were
+      cut to a width -- a pie label the overlap solver gave one; empty when
+      Text is the label's text. What a labelLayout function is handed.
+      [Batch 109] }
+    LmText: string;
     LmHostPlus1: Integer;
     LmBaseX, LmBaseY, LmOffX, LmOffY: Double;
     LmHasAttachedRot: Boolean;
