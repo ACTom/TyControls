@@ -58,6 +58,7 @@ uses
   tyControls.AdvChart.Dataset,
   tyControls.AdvChart.Anim, tyControls.AdvChart.AnimOpt,
   tyControls.AdvChart.AnimView, tyControls.AdvChart.AnimAxis,
+  tyControls.AdvChart.Export, tyControls.AdvChart.Loading,
   fpjson, contnrs, tyControls.SubPixel;
 
 const
@@ -742,6 +743,36 @@ type
       the size the marks are drawn at. }
     FPaintListPPI: Integer;
     FPaintListValid: Boolean;
+    { ---- export and loading [Batch 106] ----
+      AN EXPORT IS A RENDER WITH THREE THINGS SWITCHED: FExporting draws the
+      finished picture (no animation frame, no proxy, no hover), FExportBare
+      leaves the skin's frame out for a background the options chose, and
+      FExportExclude hides the views excludeComponents names. FViewsDrawn is
+      what the last full render drew, by view. }
+    FExporting: Boolean;
+    FExportBare: Boolean;
+    FExportExclude: TTyChartViews;
+    FViewsDrawn: TTyChartViews;
+    { THE LOADING EFFECT: shown or not, its cfg, and the spinner -- an arc
+      element on a driver of its own (the axis pointer's way), so a loading
+      chart never takes its series out of the static layer. FLoadGeo is the
+      geometry the last paint used, CSS px. }
+    FLoadShown: Boolean;
+    FLoadCfg: TTyLoadingCfg;
+    FLoadAnim: TTyAnimation;
+    FLoadArc: TTyAnimBag;
+    FLoadGeo: TTyLoadingGeometry;
+    FLoadGeoValid: Boolean;
+    function ViewHidden(AView: TTyChartView): Boolean;
+    procedure ViewDrew(AView: TTyChartView);
+    function LoadLive: Boolean;
+    procedure LoadDrop;
+    procedure PaintLoading(APainter: TTyPainter; const ARect: TRect;
+      APPI: Integer; const AMeasurer: ITyTextMeasurer);
+    procedure ExportOptsOrRaise(const AJson: string; out AOpts: TTyChartExportOpts);
+    function RenderExport(const AOpts: TTyChartExportOpts): TBGRABitmap;
+    procedure WriteExport(AStream: TStream; ABmp: TBGRABitmap;
+      AType: TTyExportImageType);
     procedure SetOptionText(const AValue: string);
     function GetOptionText: string;
     { ---- setOption [Batch 95] ---- }
@@ -1290,6 +1321,16 @@ type
       named. This one is what a WINDOW wants, and works in client space:
       TTyPaintCache.Blit draws at the canvas origin. }
     procedure RenderCached(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { WHAT THE LAST FULL RENDER DREW, by view -- RenderTo's, an export's, a
+      static layer's. [Batch 106] }
+    function LastViewsDrawn: TTyChartViews;
+    { THE LOADING EFFECT AS THE LAST PAINT LAID IT OUT, CSS px (False before
+      one), its cfg, the spinner's angles now and the clips its driver runs.
+      [Batch 106] }
+    function LoadingGeometry(out AGeo: TTyLoadingGeometry): Boolean;
+    function LoadingCfg: TTyLoadingCfg;
+    function LoadingArcAngles(out AStart, AEnd: Double): Boolean;
+    function LoadingClipCount: Integer;
     { THE POINTER MOVED, AND THE PICTURE DID NOT. Hover, press, release and
       focus all arrive here; the base class answers them with Invalidate, and
       this control's Invalidate rebuilds the stores, re-measures every label
@@ -1571,6 +1612,46 @@ type
       NOT a form-image grab: capturing a windowed control that way returns black
       on some widgetsets, which this library has already been caught by. }
     procedure SaveToPng(const AFileName: string);
+    { EXPORT, as getDataURL does it [Batch 106]. AOptsJson is upstream's
+      options object -- `type`, `pixelRatio`, `backgroundColor`,
+      `excludeComponents` -- '' for none; see tyControls.AdvChart.Export for
+      what each one does. The picture is the FINISHED chart: an animation
+      running in the window is drawn where it will rest, and the pointer's
+      own state -- the tooltip box, a hovered axis pointer, a hover's
+      highlight -- is left out (an option's own pointers are drawn). The
+      loading effect, when shown, is in it, as upstream's is.
+
+      A PNG, or a JPEG for `type: 'jpeg'` (composited onto black, as a
+      canvas makes a JPEG of transparency, at quality 92). Raises
+      EArgumentException for options that are not JSON. An image with no
+      pixels writes nothing. }
+    procedure SaveToStream(AStream: TStream; const AOptsJson: string = '');
+    function SaveToBytes(const AOptsJson: string = ''): TBytes;
+    { The type is the options' `type` when they write one, else the file's
+      extension (.jpg / .jpeg are a JPEG), else PNG. }
+    procedure SaveToFile(const AFileName: string; const AOptsJson: string = '');
+    { 'data:image/png;base64,...' (or image/jpeg); 'data:,' for an image with
+      no pixels, as a canvas answers. }
+    function GetDataURL(const AOptsJson: string = ''): string;
+    { renderToCanvas: the picture, unencoded. The caller frees it; nil for an
+      image with no pixels. }
+    function RenderToBitmap(const AOptsJson: string = ''): TBGRABitmap;
+    { THE LOADING EFFECT, showLoading's `default` [Batch 106]: a mask over
+      the chart, the text and a turning arc. ACfgJson is upstream's cfg
+      (`text`, `textColor`, `color`, `maskColor`, `fontSize`, `fontWeight`,
+      `fontFamily`, `showSpinner`, `spinnerRadius`, `lineWidth`); the
+      colours and the font default to the theme (TyAdvChartLoading,
+      TyAdvChartLoadingSpinner), the text to rsTyChartLoading. Raises
+      EArgumentException for a cfg that is not JSON.
+
+      A NAME other than 'default' (or '') shows nothing -- and, as upstream,
+      has already hidden the effect shown before. The spinner turns on the
+      control's timer whatever the option's `animation` says, as upstream's
+      does; AnimationMode camOff holds it still. }
+    procedure ShowLoading(const ACfgJson: string = ''); overload;
+    procedure ShowLoading(const AName, ACfgJson: string); overload;
+    procedure HideLoading;
+    property LoadingShown: Boolean read FLoadShown;
     { WHAT THE POINTER IS OVER, in the control's own coordinates.
 
       The chart's first interactive question, and the first production caller
@@ -1978,7 +2059,8 @@ uses
     rest of the AdvChart family keeps, invisible to a host. }
   tyControls.StrConsts,
   tyControls.AdvChart.RichStyle, tyControls.AdvChart.JsMath,
-  tyControls.AdvChart.LinePath;
+  tyControls.AdvChart.LinePath,
+  BGRABitmapTypes, FPImage, FPWriteJPEG, base64;
 
 { ==================== construction ==================== }
 
@@ -2037,6 +2119,9 @@ begin
   FreeAndNil(FPtrAnim);
   LegAnimDrop;
   FreeAndNil(FLegAnim);
+  { THE ARC BEFORE ITS DRIVER, as every proxy [Batch 106] }
+  LoadDrop;
+  FreeAndNil(FLoadAnim);
   FreeAndNil(FAnimOldBuild);
   inherited Destroy;
 end;
@@ -3487,6 +3572,7 @@ var
   ink: Integer;
   areaFill: TTyFill;
   inkStyle: TTyStyleSet;
+  view: TTyChartView;
 
   { THE BOX IS THE TRANSLATION. The layout layer says "this point, with the
     text hanging off it this way"; the painter aligns text INSIDE a rectangle.
@@ -3689,6 +3775,13 @@ begin
   { `show: false` means "do not draw me". The axis still exists and its series
     still map to pixels; only the domain, ticks, labels and split lines go. }
   if not AAxis.Visible then Exit;
+  { a cartesian axis' view: hidden by excludeComponents, else drawn
+    [Batch 106] }
+  if TyChartViewOf(AAxis.MainType, view) and (view in [cvXAxis, cvYAxis]) then
+  begin
+    if ViewHidden(view) then Exit;
+    ViewDrew(view);
+  end;
   model := ActiveController.Model;
   { A foreign typeKey is resolved by asking the model directly -- there is no
     per-part helper in this library and inventing one here would be a second
@@ -4160,19 +4253,26 @@ begin
     chart the moment it took focus. }
   boxStyle := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass,
     [tysNormal]);
-  { Mandatory first draw, and it does more than a fill: parent backdrop,
-    opacity, shadow, background, border, and the corner gaps a windowed
-    control cannot get from a shadow it is not allowed to cast. }
-  DrawFrame(APainter, ARect, boxStyle);
-  { THE OPTION'S backgroundColor OVER THE SKIN'S GROUND, inside the frame's
-    corners -- 'transparent' and anything unreadable leave the skin's
-    [Batch 83] }
-  if AuthorBackground(bg) then
+  { what this render draws, view by view [Batch 106] }
+  FViewsDrawn := [];
+  { AN EXPORT WHOSE OPTIONS CHOSE THE BACKGROUND has painted it already, over
+    the whole image: no frame [Batch 106] }
+  if not FExportBare then
   begin
-    fill := Default(TTyFill);
-    fill.Kind := tfkSolid;
-    fill.Color := TTyColor(bg);
-    APainter.FillBackground(ARect, fill, boxStyle.Radius);
+    { Mandatory first draw, and it does more than a fill: parent backdrop,
+      opacity, shadow, background, border, and the corner gaps a windowed
+      control cannot get from a shadow it is not allowed to cast. }
+    DrawFrame(APainter, ARect, boxStyle);
+    { THE OPTION'S backgroundColor OVER THE SKIN'S GROUND, inside the frame's
+      corners -- 'transparent' and anything unreadable leave the skin's
+      [Batch 83] }
+    if AuthorBackground(bg) then
+    begin
+      fill := Default(TTyFill);
+      fill.Kind := tfkSolid;
+      fill.Color := TTyColor(bg);
+      APainter.FillBackground(ARect, fill, boxStyle.Radius);
+    end;
   end;
 
   plotF := TyRectF(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom);
@@ -4185,8 +4285,8 @@ begin
   end;
 
   { WHILE THEIR groupTransition RUNS the axes are the dynamic layer's, as
-    the series are [Batch 96] }
-  if not AxesDynamic then PaintAxes(APainter, APPI, AMeasurer, False);
+    the series are [Batch 96] -- an export draws them at rest [Batch 106] }
+  if FExporting or not AxesDynamic then PaintAxes(APainter, APPI, AMeasurer, False);
 
   { AFTER THE AXES, so a bar sits on the grid rather than under it. Within the
     series, the paint list decides the order. }
@@ -4195,7 +4295,7 @@ begin
     room, so anything it overlaps it is meant to overlap. While the series
     move the title goes with them into the dynamic layer, so it stays over
     them [Batch 89]. }
-  if not FAnimLive or FAnimContinuous then PaintTitles(APainter);
+  if FExporting or not FAnimLive or FAnimContinuous then PaintTitles(APainter);
 end;
 
 procedure TTyAdvanceChart.PaintAxes(APainter: TTyPainter; APPI: Integer;
@@ -6293,7 +6393,7 @@ end;
 function TTyAdvanceChart.BuildMarkers(const AMeasurer: ITyTextMeasurer;
   AList: TTyPaintList): Integer;
 var
-  i: Integer;
+  i, n: Integer;
   ink: TTyMkInk;
   st: TTyStyleSet;
   dark: Boolean;
@@ -6312,18 +6412,32 @@ begin
   ink.Inside[2] := TTyChartColor(
     ActiveController.Model.ResolveStyle('TyAdvChartLabelOnDark', '', []).TextColor);
   ink.RtGlobal := RtGlobal;
-  for i := 0 to High(FMarkAreaPics) do
-    if (i <= High(FMarkers)) and FMarkers[i].Blocks[mkArea].Present then
-      Inc(Result, TyBuildMarkAreas(FMarkAreaPics[i], FMarkers[i].Blocks[mkArea], ink,
-        AMeasurer, AList, FMarkers[i].SeriesIndex));
-  for i := 0 to High(FMarkPointPics) do
-    if (i <= High(FMarkers)) and FMarkers[i].Blocks[mkPoint].Present then
-      Inc(Result, TyBuildMarkPoints(FMarkPointPics[i], FMarkers[i].Blocks[mkPoint], ink,
-        AMeasurer, AList, FMarkers[i].SeriesIndex));
-  for i := 0 to High(FMarkLinePics) do
-    if (i <= High(FMarkers)) and FMarkers[i].Blocks[mkLine].Present then
-      Inc(Result, TyBuildMarkLines(FMarkLinePics[i], FMarkers[i].Blocks[mkLine], ink,
-        AMeasurer, AList, FMarkers[i].SeriesIndex));
+  { ONE VIEW PER MARKER TYPE, as upstream's -- excludeComponents hides all of
+    a type at once [Batch 106] }
+  n := 0;
+  if not ViewHidden(cvMarkArea) then
+    for i := 0 to High(FMarkAreaPics) do
+      if (i <= High(FMarkers)) and FMarkers[i].Blocks[mkArea].Present then
+        Inc(n, TyBuildMarkAreas(FMarkAreaPics[i], FMarkers[i].Blocks[mkArea], ink,
+          AMeasurer, AList, FMarkers[i].SeriesIndex));
+  if n > 0 then ViewDrew(cvMarkArea);
+  Inc(Result, n);
+  n := 0;
+  if not ViewHidden(cvMarkPoint) then
+    for i := 0 to High(FMarkPointPics) do
+      if (i <= High(FMarkers)) and FMarkers[i].Blocks[mkPoint].Present then
+        Inc(n, TyBuildMarkPoints(FMarkPointPics[i], FMarkers[i].Blocks[mkPoint], ink,
+          AMeasurer, AList, FMarkers[i].SeriesIndex));
+  if n > 0 then ViewDrew(cvMarkPoint);
+  Inc(Result, n);
+  n := 0;
+  if not ViewHidden(cvMarkLine) then
+    for i := 0 to High(FMarkLinePics) do
+      if (i <= High(FMarkers)) and FMarkers[i].Blocks[mkLine].Present then
+        Inc(n, TyBuildMarkLines(FMarkLinePics[i], FMarkers[i].Blocks[mkLine], ink,
+          AMeasurer, AList, FMarkers[i].SeriesIndex));
+  if n > 0 then ViewDrew(cvMarkLine);
+  Inc(Result, n);
 end;
 
 function TTyAdvanceChart.DataZoomCount: Integer;
@@ -8425,6 +8539,7 @@ var
 
 begin
   if Length(FTitles) = 0 then Exit;
+  if ViewHidden(cvTitle) then Exit;
   st := ActiveController.Model.ResolveStyle('TyAdvChartTitle', '', []);
   subSt := ActiveController.Model.ResolveStyle('TyAdvChartSubtitle', '',
     []);
@@ -8432,6 +8547,7 @@ begin
   begin
     lay := FTitles[i];
     if not lay.Valid then Continue;
+    ViewDrew(cvTitle);
     { The frame first, and only when the option asked for one: ECharts gives
       the title a transparent background by default, and painting the surface
       colour instead would put a visible plate behind every title on an image
@@ -10042,7 +10158,7 @@ function TTyAdvanceChart.BuildSeriesList(const AMeasurer: ITyTextMeasurer;
   APPI: Integer): Integer;
 var
   list: TTyPaintList;
-  i, drawn: Integer;
+  i, drawn, furniture, n: Integer;
   v: TTySeriesVisual;
   pv: TTyPieVisual;
   fv: TTyFunnelVisual;
@@ -10077,13 +10193,21 @@ begin
     written and no series at all is a legitimate chart, and an empty one is
     the first thing anybody sees while they are still typing. }
   drawn := 0;
-  for i := 0 to High(FRadars) do
-    Inc(drawn, TyBuildRadarGrid(FRadars[i], RadarInk, AMeasurer, APPI, list));
+  { a view excludeComponents names is not built, and one that builds
+    something is drawn [Batch 106] }
+  if not ViewHidden(cvRadar) then
+    for i := 0 to High(FRadars) do
+      Inc(drawn, TyBuildRadarGrid(FRadars[i], RadarInk, AMeasurer, APPI, list));
+  if drawn > 0 then ViewDrew(cvRadar);
   { THE CALENDARS' TOO, before any series: at the same z a series is drawn
     at, the order is decided by z2 -- day cell 0, heatmap cell 1, month line
     20, names 30 -- and ties by insertion, components first. [Batch 69] }
-  for i := 0 to High(FCalendars) do
-    Inc(drawn, TyBuildCalendar(FCalendars[i], CalendarInk, AMeasurer, APPI, list));
+  furniture := drawn;
+  if not ViewHidden(cvCalendar) then
+    for i := 0 to High(FCalendars) do
+      Inc(drawn, TyBuildCalendar(FCalendars[i], CalendarInk, AMeasurer, APPI, list));
+  if drawn > furniture then ViewDrew(cvCalendar);
+  furniture := drawn;
   if Length(FBindings) = 0 then Exit;
   begin
     for i := 0 to High(FBindings) do
@@ -10390,6 +10514,7 @@ begin
       caption's geometry is frozen from its host at this moment and the list
       has no update path, so a mark added later would have no label and a mark
       moved later would leave its label behind. }
+    if drawn > furniture then ViewDrew(cvSeries);
     if drawn > 0 then
       TyExpandLabels(list, specs, itemSpecs, AMeasurer, APPI);
     { A SILENT SERIES TAKES NO POINTER: nothing of it -- marks, labels -- is
@@ -10409,9 +10534,24 @@ begin
     { MARKERS arrive as answers too: their labels are placed by Line.ts's own
       table, not by the expansion }
     Inc(drawn, BuildMarkers(AMeasurer, list));
-    Inc(drawn, BuildLegends(APPI, list, AMeasurer));
-    Inc(drawn, BuildVisualMaps(list));
-    Inc(drawn, BuildDataZooms(list));
+    if not ViewHidden(cvLegend) then
+    begin
+      n := BuildLegends(APPI, list, AMeasurer);
+      if n > 0 then ViewDrew(cvLegend);
+      Inc(drawn, n);
+    end;
+    if not ViewHidden(cvVisualMap) then
+    begin
+      n := BuildVisualMaps(list);
+      if n > 0 then ViewDrew(cvVisualMap);
+      Inc(drawn, n);
+    end;
+    if not ViewHidden(cvDataZoom) then
+    begin
+      n := BuildDataZooms(list);
+      if n > 0 then ViewDrew(cvDataZoom);
+      Inc(drawn, n);
+    end;
     Result := drawn;
   end;
 end;
@@ -10422,6 +10562,13 @@ var drawn: Integer;
 begin
   { BUILD, THEN DRAW. The list stays afterwards -- see FPaintList. }
   drawn := BuildSeriesList(AMeasurer, APPI);
+  { AN EXPORT DRAWS THE LIST AS LAID OUT: the finished chart, nothing armed,
+    bound or stepped -- the proxies are the window's [Batch 106] }
+  if FExporting then
+  begin
+    if drawn > 0 then TyRenderPaintList(APainter, FPaintList);
+    Exit;
+  end;
   AnimAfterBuild;
   { the states on their proxies, then the armed option's flush [Batch 94] }
   StAnimSync;
@@ -17648,6 +17795,8 @@ begin
     DropStatic;
     inherited Invalidate;
   end;
+  { the spinner stops under camOff and turns again out of it [Batch 106] }
+  if FLoadShown then AnimArmTimer;
 end;
 
 procedure TTyAdvanceChart.AnimDropAll;
@@ -18304,7 +18453,7 @@ end;
 
 procedure TTyAdvanceChart.AnimArmTimer;
 begin
-  if (FAnimLive or PtrLive or LegLive) and IsNan(FAnimNow)
+  if (FAnimLive or PtrLive or LegLive or LoadLive) and IsNan(FAnimNow)
     and not (csDesigning in ComponentState) then
   begin
     if FAnimTimer = nil then
@@ -18346,6 +18495,12 @@ begin
     DropStatic;
     InvalidateFrame;
     if not LegLive and not FAnimLive then AnimArmTimer;
+  end;
+  { the spinner's own driver: a frame of the dynamic layer [Batch 106] }
+  if LoadLive then
+  begin
+    FLoadAnim.Update(ANowMs);
+    InvalidateFrame;
   end;
   if FAnim = nil then Exit;
   FAnim.Update(ANowMs);
@@ -18572,7 +18727,8 @@ var
   p: TTyChartAnimProxy;
   key: string;
 begin
-  if (FPtrProxies <> nil) and (AHit.Axis <> nil) then
+  { an export draws the pointer where it rests [Batch 106] }
+  if (FPtrProxies <> nil) and (AHit.Axis <> nil) and not FExporting then
   begin
     key := PtrKeyOf(AHit.Axis);
     for k := 0 to FPtrProxies.Count - 1 do
@@ -18599,7 +18755,7 @@ var
   key: string;
 begin
   Result := AAt;
-  if (FPtrProxies = nil) or (AHit.Axis = nil) then Exit;
+  if (FPtrProxies = nil) or (AHit.Axis = nil) or FExporting then Exit;
   key := PtrKeyOf(AHit.Axis);
   for k := 0 to FPtrProxies.Count - 1 do
   begin
@@ -18772,6 +18928,15 @@ end;
 procedure TTyAdvanceChart.PaintDynamic(APainter: TTyPainter; const ARect: TRect;
   APPI: Integer; const AMeasurer: ITyTextMeasurer);
 begin
+  { AN EXPORT'S: the finished picture has no frame of an animation and no
+    hover -- an option's own pointers, and the loading effect over all
+    [Batch 106] }
+  if FExporting then
+  begin
+    PaintAxisPointers(APainter, ARect, APPI, AMeasurer, OptionPointerHits);
+    PaintLoading(APainter, ARect, APPI, AMeasurer);
+    Exit;
+  end;
   { WHAT IS DRAWN HERE IS COMPOSITED OVER the blitted static layer: BeginPaint
     fills its bitmap transparent and EndPaint blends it (TBGRABitmap.Draw with
     AOpaque = False), so an overlay painter adds ink without erasing what is
@@ -18807,6 +18972,9 @@ begin
   { THE POINTER FIRST, THE BOX OVER IT. A tooltip with the pointer's own line
     drawn across it would read as two things at one depth. }
   PaintTooltip(APainter, ARect, APPI, AMeasurer);
+  { THE LOADING EFFECT OVER EVERYTHING: upstream's mask is z 10000
+    [Batch 106] }
+  PaintLoading(APainter, ARect, APPI, AMeasurer);
 end;
 
 function TTyAdvanceChart.HasDynamicContent: Boolean;
@@ -18818,7 +18986,7 @@ begin
     "would the tooltip draw": resolving the option cascade and the theme to
     find out costs more than the pass it would save. }
   Result := TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0)
-    or FAnimLive or FTipShown
+    or FAnimLive or FTipShown or FLoadShown
     or ((not FOptPtrGone) and (Length(OptionPointerHits) > 0));
 end;
 
@@ -18914,16 +19082,453 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SaveToPng(const AFileName: string);
-var bmp: TBGRABitmap;
+{ ==================== export and loading [Batch 106] ==================== }
+
+function TTyAdvanceChart.ViewHidden(AView: TTyChartView): Boolean;
 begin
+  Result := FExporting and (AView in FExportExclude);
+end;
+
+procedure TTyAdvanceChart.ViewDrew(AView: TTyChartView);
+begin
+  Include(FViewsDrawn, AView);
+end;
+
+function TTyAdvanceChart.LastViewsDrawn: TTyChartViews;
+begin
+  Result := FViewsDrawn;
+end;
+
+procedure TTyAdvanceChart.ExportOptsOrRaise(const AJson: string;
+  out AOpts: TTyChartExportOpts);
+begin
+  if not TyExportOptsOf(AJson, AOpts) then
+    raise EArgumentException.Create(rsTyChartExportOptsBad);
+end;
+
+{ getDataURL's render. The background first -- the options', else the
+  option's, else the skin's frame -- then the chart as an export draws it,
+  straight onto a 32-bit bitmap so the alpha a transparent background leaves
+  survives. A render at another size or PPI than the window's lays the chart
+  out at that size, and the window's layout is put back afterwards: the
+  legend, the dataZoom and the hit test answer from it. }
+function TTyAdvanceChart.RenderExport(const AOpts: TTyChartExportOpts): TBGRABitmap;
+var
+  w, h, ppi, ppi0: Integer;
+  bg: TTyExportBg;
+  chosen, owned: TJSONData;
+  P: TTyPainter;
+  R: TRect;
+  measurer: ITyTextMeasurer;
+  el: TTyChartElement;
+  drawn: TTyChartViews;
+  scratch: TBGRABitmap;
+begin
+  Result := nil;
   if (Width <= 0) or (Height <= 0) then Exit;
-  bmp := TBGRABitmap.Create(Width, Height);
+  ppi0 := Font.PixelsPerInch;
+  if ppi0 <= 0 then ppi0 := 96;
+  TyExportImageSize(Width, Height, ppi0, AOpts.PixelRatio, w, h, ppi);
+  if (w <= 0) or (h <= 0) then Exit;
+  { `opts.backgroundColor || model.get('backgroundColor')`, and then the
+    painter's own: the skin's }
+  owned := nil;
+  chosen := nil;
   try
-    RenderTo(bmp.Canvas, Rect(0, 0, Width, Height), Font.PixelsPerInch);
-    bmp.SaveToFile(AFileName);
+    if AOpts.HasBackground then
+    begin
+      owned := GetJSON(AOpts.BackgroundJson);
+      chosen := owned;
+    end
+    else if FOption <> nil then
+    begin
+      chosen := FOption.Find('backgroundColor');
+      if not TyJsTruthy(chosen) then chosen := nil;
+    end;
+    bg := TyExportBackgroundOf(chosen);
+  finally
+    owned.Free;
+  end;
+  Result := TBGRABitmap.Create(w, h, BGRAPixelTransparent);
+  R := Rect(0, 0, w, h);
+  measurer := NewTextMeasurer(ppi);
+  P := TTyPainter.Create;
+  FExporting := True;
+  FExportBare := bg.Kind <> ebkTheme;
+  FExportExclude := AOpts.Exclude;
+  try
+    StApplyChanged;
+    P.BeginPaintOn(nil, R, ppi, Result);
+    { Layer.clear: the whole image, before anything is drawn }
+    case bg.Kind of
+      ebkSolid, ebkBlack:
+        begin
+          if bg.Kind = ebkBlack then bg.Color := $FF000000;
+          P.BeginPath;
+          P.RectPath(0, 0, w, h);
+          P.FillPath(TTyColor(bg.Color));
+        end;
+      ebkGradient, ebkPattern:
+        begin
+          el := TyChartElement(TyShapeRect(TyRectF(0, 0, w, h)));
+          el.Style.HasFill := True;
+          el.Style.Alpha := 1;
+          if bg.Kind = ebkGradient then el.Style.FillGradient := bg.Gradient
+          else el.Style.FillPattern := bg.Pattern;
+          TyRenderElement(P, el);
+        end;
+    end;
+    PaintStatic(P, R, ppi, measurer);
+    PaintDynamic(P, R, ppi, measurer);
+    P.EndPaint;
+  finally
+    FExportExclude := [];
+    P.Free;
+    { and back: FExporting stays on through the window's own layout below,
+      so that render arms, binds and steps nothing either }
+    drawn := FViewsDrawn;
+    try
+      if (w <> Width) or (h <> Height) or (ppi <> ppi0) then
+      begin
+        FExportBare := True;
+        scratch := TBGRABitmap.Create(Width, Height);
+        P := TTyPainter.Create;
+        try
+          measurer := NewTextMeasurer(ppi0);
+          P.BeginPaintOn(nil, Rect(0, 0, Width, Height), ppi0, scratch);
+          PaintStatic(P, Rect(0, 0, Width, Height), ppi0, measurer);
+          P.EndPaint;
+        finally
+          P.Free;
+          scratch.Free;
+        end;
+        { the list is the window's again; the cached picture is not }
+        if FStatic <> nil then FStatic.Drop;
+      end
+      else
+        { the list was built for the export (its views excluded, nothing bound):
+          the window builds its own }
+        DropStatic;
+    finally
+      FExporting := False;
+      FExportBare := False;
+      FViewsDrawn := drawn;
+    end;
+    InvalidateFrame;
+  end;
+end;
+
+procedure TTyAdvanceChart.WriteExport(AStream: TStream; ABmp: TBGRABitmap;
+  AType: TTyExportImageType);
+var
+  jpg: TBGRABitmap;
+  writer: TFPWriterJPEG;
+begin
+  if AType <> eitJpeg then
+  begin
+    ABmp.SaveToStreamAsPng(AStream);
+    Exit;
+  end;
+  { A CANVAS MAKES A JPEG OF ITS PIXELS OVER OPAQUE BLACK -- the format has
+    no alpha -- at its default quality, 0.92 }
+  jpg := TBGRABitmap.Create(ABmp.Width, ABmp.Height, BGRABlack);
+  writer := TFPWriterJPEG.Create;
+  try
+    jpg.PutImage(0, 0, ABmp, dmDrawWithTransparency);
+    writer.CompressionQuality := 92;
+    TFPCustomImage(jpg).SaveToStream(AStream, writer);
+  finally
+    writer.Free;
+    jpg.Free;
+  end;
+end;
+
+function TTyAdvanceChart.RenderToBitmap(const AOptsJson: string): TBGRABitmap;
+var o: TTyChartExportOpts;
+begin
+  ExportOptsOrRaise(AOptsJson, o);
+  Result := RenderExport(o);
+end;
+
+procedure TTyAdvanceChart.SaveToStream(AStream: TStream; const AOptsJson: string);
+var
+  o: TTyChartExportOpts;
+  bmp: TBGRABitmap;
+begin
+  ExportOptsOrRaise(AOptsJson, o);
+  bmp := RenderExport(o);
+  if bmp = nil then Exit;
+  try
+    WriteExport(AStream, bmp, o.ImageType);
   finally
     bmp.Free;
+  end;
+end;
+
+function TTyAdvanceChart.SaveToBytes(const AOptsJson: string): TBytes;
+var ms: TMemoryStream;
+begin
+  Result := nil;
+  ms := TMemoryStream.Create;
+  try
+    SaveToStream(ms, AOptsJson);
+    SetLength(Result, ms.Size);
+    if ms.Size > 0 then Move(ms.Memory^, Result[0], ms.Size);
+  finally
+    ms.Free;
+  end;
+end;
+
+procedure TTyAdvanceChart.SaveToFile(const AFileName: string; const AOptsJson: string);
+var
+  o: TTyChartExportOpts;
+  bmp: TBGRABitmap;
+  fs: TFileStream;
+  ext: string;
+begin
+  ExportOptsOrRaise(AOptsJson, o);
+  if not o.HasType then
+  begin
+    ext := LowerCase(ExtractFileExt(AFileName));
+    if (ext = '.jpg') or (ext = '.jpeg') then o.ImageType := eitJpeg;
+  end;
+  bmp := RenderExport(o);
+  if bmp = nil then Exit;
+  try
+    fs := TFileStream.Create(AFileName, fmCreate);
+    try
+      WriteExport(fs, bmp, o.ImageType);
+    finally
+      fs.Free;
+    end;
+  finally
+    bmp.Free;
+  end;
+end;
+
+function TTyAdvanceChart.GetDataURL(const AOptsJson: string): string;
+var
+  o: TTyChartExportOpts;
+  bmp: TBGRABitmap;
+  ms: TMemoryStream;
+  raw: RawByteString;
+begin
+  ExportOptsOrRaise(AOptsJson, o);
+  bmp := RenderExport(o);
+  if bmp = nil then Exit('data:,');
+  ms := TMemoryStream.Create;
+  try
+    WriteExport(ms, bmp, o.ImageType);
+    SetLength(raw, ms.Size);
+    if ms.Size > 0 then Move(ms.Memory^, raw[1], ms.Size);
+  finally
+    ms.Free;
+    bmp.Free;
+  end;
+  if o.ImageType = eitJpeg then Result := 'data:image/jpeg;base64,'
+  else Result := 'data:image/png;base64,';
+  Result := Result + EncodeStringBase64(raw);
+end;
+
+procedure TTyAdvanceChart.SaveToPng(const AFileName: string);
+var
+  o: TTyChartExportOpts;
+  bmp: TBGRABitmap;
+  fs: TFileStream;
+begin
+  { the export with no options, a PNG whatever the name says }
+  o := Default(TTyChartExportOpts);
+  o.ImageType := eitPng;
+  bmp := RenderExport(o);
+  if bmp = nil then Exit;
+  try
+    fs := TFileStream.Create(AFileName, fmCreate);
+    try
+      WriteExport(fs, bmp, eitPng);
+    finally
+      fs.Free;
+    end;
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ ---- the loading effect ---- }
+
+function TTyAdvanceChart.LoadLive: Boolean;
+begin
+  Result := FLoadShown and (FLoadAnim <> nil) and (FLoadAnim.ClipCount > 0)
+    and (FAnimMode <> camOff);
+end;
+
+procedure TTyAdvanceChart.LoadDrop;
+begin
+  { freeing the element takes its clips off the driver }
+  FreeAndNil(FLoadArc);
+end;
+
+procedure TTyAdvanceChart.ShowLoading(const ACfgJson: string);
+begin
+  ShowLoading('', ACfgJson);
+end;
+
+procedure TTyAdvanceChart.ShowLoading(const AName, ACfgJson: string);
+var cfg: TTyLoadingCfg;
+begin
+  if not TyLoadingCfgOf(ACfgJson, rsTyChartLoading, cfg) then
+    raise EArgumentException.Create(rsTyChartLoadingCfgBad);
+  { hideLoading first, then the name: an unknown one has hidden the old
+    effect and shows nothing }
+  HideLoading;
+  if (AName <> '') and (AName <> 'default') then Exit;
+  FLoadCfg := cfg;
+  FLoadShown := True;
+  if FLoadCfg.ShowSpinner then
+  begin
+    if FLoadAnim = nil then FLoadAnim := TTyAnimation.Create;
+    FLoadArc := TTyAnimBag.Create;
+    FLoadArc.Animation := FLoadAnim;
+    { the clips start at their first step: the next tick, upstream's next
+      frame }
+    TyLoadingStartSpinner(FLoadArc);
+  end;
+  AnimArmTimer;
+  InvalidateFrame;
+end;
+
+procedure TTyAdvanceChart.HideLoading;
+begin
+  if not FLoadShown and (FLoadArc = nil) then Exit;
+  LoadDrop;
+  FLoadShown := False;
+  FLoadGeoValid := False;
+  AnimArmTimer;
+  InvalidateFrame;
+end;
+
+function TTyAdvanceChart.LoadingGeometry(out AGeo: TTyLoadingGeometry): Boolean;
+begin
+  AGeo := FLoadGeo;
+  Result := FLoadShown and FLoadGeoValid;
+end;
+
+function TTyAdvanceChart.LoadingCfg: TTyLoadingCfg;
+begin
+  Result := FLoadCfg;
+end;
+
+function TTyAdvanceChart.LoadingArcAngles(out AStart, AEnd: Double): Boolean;
+begin
+  AStart := NaN;
+  AEnd := NaN;
+  Result := FLoadShown and (FLoadArc <> nil);
+  if not Result then Exit;
+  AStart := FLoadArc.Num('shape.startAngle');
+  AEnd := FLoadArc.Num('shape.endAngle');
+end;
+
+function TTyAdvanceChart.LoadingClipCount: Integer;
+begin
+  if FLoadAnim = nil then Result := 0 else Result := FLoadAnim.ClipCount;
+end;
+
+{ default.ts, drawn: the mask over the whole chart, the text hung left /
+  middle off its anchor, the arc clockwise from its start to its end with
+  round caps. Measured in device px and laid out in CSS px, as upstream's
+  numbers are -- at 96 PPI the two are the same bits. }
+procedure TTyAdvanceChart.PaintLoading(APainter: TTyPainter; const ARect: TRect;
+  APPI: Integer; const AMeasurer: ITyTextMeasurer);
+var
+  st, spin: TTyStyleSet;
+  s, devW, devH, tw, th, cx, cy, r, sweep, a0: Double;
+  fontName: string;
+  fontSize, weight: Integer;
+  ink: TTyColor;
+  path: TTyZrPath;
+  box: TRect;
+begin
+  if not FLoadShown then Exit;
+  st := ActiveController.Model.ResolveStyle('TyAdvChartLoading', '', []);
+  spin := ActiveController.Model.ResolveStyle('TyAdvChartLoadingSpinner', '', []);
+  fontName := st.FontName;
+  if FLoadCfg.FontFamily <> '' then fontName := FLoadCfg.FontFamily;
+  fontSize := ResolveFontSize(st);
+  if FLoadCfg.HasFontSize then fontSize := FLoadCfg.FontSizeLogical;
+  weight := st.FontWeight;
+  if FLoadCfg.HasFontWeight then weight := FLoadCfg.FontWeight;
+  if APPI > 0 then s := APPI / 96 else s := 1;
+  devW := ARect.Right - ARect.Left;
+  devH := ARect.Bottom - ARect.Top;
+  tw := 0;
+  th := 0;
+  if FLoadCfg.Text <> '' then
+    AMeasurer.MeasureLine(FLoadCfg.Text, fontName, fontSize, weight, tw, th);
+  TyLoadingLayout(devW / s, devH / s, tw / s, FLoadCfg.ShowSpinner,
+    FLoadCfg.SpinnerRadius, FLoadGeo);
+  FLoadGeoValid := True;
+
+  { the mask }
+  case FLoadCfg.MaskColor.Kind of
+    likColour: ink := TTyColor(FLoadCfg.MaskColor.Colour);
+    likNone: ink := 0;
+  else
+    if tpBackground in st.Present then ink := st.Background.Color else ink := 0;
+  end;
+  if TyAlphaOf(ink) > 0 then
+  begin
+    APainter.BeginPath;
+    APainter.RectPath(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom);
+    APainter.FillPath(ink);
+  end;
+
+  { the text, its left edge on the anchor and its middle on the line }
+  case FLoadCfg.TextColor.Kind of
+    likColour: ink := TTyColor(FLoadCfg.TextColor.Colour);
+    likNone: ink := 0;
+  else
+    ink := st.TextColor;
+  end;
+  if (FLoadCfg.Text <> '') and (TyAlphaOf(ink) > 0) then
+  begin
+    box.Left := ARect.Left + Round(FLoadGeo.TextX * s);
+    box.Top := ARect.Top + Round(FLoadGeo.TextY * s - th / 2);
+    { to the edge: a left-aligned run needs no right, and a box one pixel
+      short would cut its last glyph }
+    box.Right := Max(box.Left + Ceil(tw) + 1, ARect.Right);
+    box.Bottom := box.Top + Ceil(th);
+    APainter.DrawText(box, TyInkText(FLoadCfg.Text), fontName, fontSize, weight,
+      ink, taLeftJustify, tlCenter, False, 0, False, Pos(#10, FLoadCfg.Text) > 0);
+  end;
+
+  { the spinner: PathProxy's arc, its angles normalised as a canvas takes
+    them -- an end behind the start goes the long way round }
+  if (not FLoadCfg.ShowSpinner) or (FLoadArc = nil) then Exit;
+  case FLoadCfg.Color.Kind of
+    likColour: ink := TTyColor(FLoadCfg.Color.Colour);
+    likNone: ink := 0;
+  else
+    if tpBorderColor in spin.Present then ink := spin.BorderColor else ink := 0;
+  end;
+  r := FLoadGeo.R * s;
+  if (TyAlphaOf(ink) = 0) or (FLoadCfg.LineWidth <= 0) or not (r > 0) then Exit;
+  cx := ARect.Left + FLoadGeo.CX * s;
+  cy := ARect.Top + FLoadGeo.CY * s;
+  path := nil;
+  TyZrArc(path, cx, cy, r, FLoadArc.Num('shape.startAngle'),
+    FLoadArc.Num('shape.endAngle'), False);
+  if Length(path) = 0 then Exit;
+  a0 := path[0].V[4];
+  sweep := path[0].V[5];
+  if IsNan(a0) or IsNan(sweep) then Exit;
+  APainter.SaveState;
+  try
+    APainter.SetLineDash([]);
+    APainter.SetLineCap(tlcRound);
+    APainter.BeginPath;
+    APainter.ArcTo(cx, cy, r, a0, a0 + sweep, False);
+    APainter.StrokePath(ink, FLoadCfg.LineWidth);
+  finally
+    APainter.RestoreState;
   end;
 end;
 

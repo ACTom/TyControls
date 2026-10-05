@@ -362,6 +362,17 @@ resourcestring
   rsTyChartLegendSelectAll = 'All';
   rsTyChartLegendSelectInverse = 'Inv';
 
+  // --- AdvanceChart: export and loading [Batch 106] ---
+  // The loading effect's default text. Upstream's is 'loading' and ECharts
+  // does not translate it; a control in a translated application should not
+  // be the one English word on the form, so this one is a resourcestring --
+  // and the English stays upstream's, so an untranslated build lays the
+  // effect out exactly as upstream does.
+  rsTyChartLoading = 'loading';
+  // What the export and loading calls raise for options that are not JSON.
+  rsTyChartExportOptsBad = 'The export options are not valid JSON.';
+  rsTyChartLoadingCfgBad = 'The loading options are not valid JSON.';
+
   // --- AdvanceChart: what the build could not honour ---
   // These reach the user through the chart's diagnostics list and through the
   // design-time editor, so they are as translatable as any caption. They were

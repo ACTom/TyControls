@@ -1106,6 +1106,7 @@ example 的两份 `.po` 也按其他 example 的样子补齐了（97 份全过 l
 6. 把图表和另一个**窗口化**控件摆成重叠：句柄咬平的那块 `RenderTo` 看不见。
 7. `SaveToPng` 存出来的 PNG 不是全透明。**这是控件唯一一段不走共享绘制路径的代码**
    （`TBGRABitmap.Canvas` → `TBitmapTracker.Changed` → `NotifyBitmapChange`，Win32 上验过是自动的）。
+   **[第 106 批：`SaveToPng` 改走导出路径——画家用 `BeginPaintOn` 直接画在 32 位位图上，不再经过 `TBGRABitmap.Canvas`，透明背景的 alpha 也因此留得住；这一条真机要验的东西没有了，换成「导出的 PNG 在看图软件里打开，主题底色、透明底各一张」。见 §141。]**
 8. 设计期：Lazarus 里从面板拖一个下来，图标在、且不报 Cannot read property。
 
 ### 金丝雀存活，而它揪出的是真洞不是坏脚手架
@@ -8349,7 +8350,7 @@ FPC 3.2.2 的 jsonreader 每进一层数组或对象就递归一次,几十万层
 - **新单元 `tyControls.FontUnits`**(纯,只用 SysUtils/Math;画家和图表的纯单元都用得上):逻辑字号仍是一个 Integer,像素字号编码为 `cTyFontPxBase + 百分之一像素`——仍为正,所有「字号 > 0 就是画出来的标题」的判断不受影响;`TyFontSizeFromPx`、`TyFontSizeIsPx`、`TyFontPxOf`。画家的两个字体配置过程解码:BGRA 的 `FontHeight = px × PPI/96`,测量画布的 `Font.Height` 在 96 DPI 下与同等磅值走 Size 路径的一致;高 DPI 下磅值路径先把字号取整到整磅(144 DPI 的 9pt 取成 14),像素路径不取整,更准。新单元已登记进 `.lpk`。
 - `TyOptFontSize`(Option 单元):数字/数字串/`'Npx'` → px 编码;全部 15 个读取点改用它。
 - 轴:`TTyAxisLayoutSpec` 多标签与轴名的颜色;Builder 的 `AuthorFont` 读 `axisLabel`、`nameTextStyle` 的 family/size/weight/color;画轴改走 `AxisTextStyles`——量和画用同一份。
-- 控件:`GlobalTextOver`/`GlobalInk` 带「取哪几样」(`TTyTextPick`),每个调用点按上游默认值挑;标题两行的字体 `TitleFontOf`(textStyle/subtextStyle)存在 `FTitleFonts`,布局与绘制共用;图例 `LegendTextOf`(textStyle);`backgroundColor` 在框内画、并作标签的地;`LabelGround` 按 darkMode 强制、按 `getOutsideStroke` 合成。
+- 控件:`GlobalTextOver`/`GlobalInk` 带「取哪几样」(`TTyTextPick`),每个调用点按上游默认值挑;标题两行的字体 `TitleFontOf`(textStyle/subtextStyle)存在 `FTitleFonts`,布局与绘制共用;图例 `LegendTextOf`(textStyle);`backgroundColor` 在框内画、并作标签的地 **[第 106 批：窗口里仍是这样；导出按上游的链走——写了 `'transparent'` 的导出是透明底，写了颜色的铺满整张图、不画皮肤的框，见 §141]**;`LabelGround` 按 darkMode 强制、按 `getOutsideStroke` 合成。
 - **顺带修的真缺陷**:矩形树图虚根没有补值,下钻后根标签的 `{c}` 是 undefined(放开字号用例后才露出来)。
 - 测试侧:`TZrSsrMeasurer` 认 px 编码,并照 platform.ts 对字体串含 `mono` 的按字符数量宽;`TPtToPxMeasurer` 让 px 直通;矩形树图测试删掉「写了 fontSize 就跳过文字」,11.3 万项全比。
 
@@ -8637,7 +8638,7 @@ AN1 有了引擎，没有一个系列用它。这一批把驱动接进控件，�
 
 ### 现有测试与无头渲染：只在窗口上动
 
-上游每次 setOption 都动。这里的控件还有第二种渲染：`RenderTo`——导出（`SaveToPng`）、设计器、以及几千个按静态版式断言的无头测试。**定为：`camAuto` 只在控件自己的窗口绘制（`Paint`）里布防**；无头渲染画完成态，选项留着等窗口的第一次绘制。设计器任何模式都不动（它没有定时器）。测试动画的地方显式 `camAlways`。没有给现有测试加一行 `animation: false`。示例截图工具（`scripts/make-gallery.ps1`）截的是窗口，要等动画结束（约 1.5 s）再截，或在示例上设 `camOff`。
+上游每次 setOption 都动。这里的控件还有第二种渲染：`RenderTo`——导出（`SaveToPng`）、设计器、以及几千个按静态版式断言的无头测试。**[第 106 批：导出不再走 `RenderTo`，有自己的 `FExporting` 渲染：窗口里正在播的动画也按完成态画，不布防、不绑定、不步进；见 §141。]** **定为：`camAuto` 只在控件自己的窗口绘制（`Paint`）里布防**；无头渲染画完成态，选项留着等窗口的第一次绘制。设计器任何模式都不动（它没有定时器）。测试动画的地方显式 `camAlways`。没有给现有测试加一行 `animation: false`。示例截图工具（`scripts/make-gallery.ps1`）截的是窗口，要等动画结束（约 1.5 s）再截，或在示例上设 `camOff`。
 
 ### 基准
 
@@ -9796,3 +9797,89 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - §49 的两条、§50、§91 的 `PerDatumColours`、§101 的推迟在原处标注。
 
 全量 **8142 个测试，0 错误，0 失败**（新增 `test.advchart.palettefill` 6 个；改了期望的 `test.advchart.color` 全绿）。
+
+## 141. Tier 1 第一百零六批：导出与加载（B11，2026-10-05）
+
+路线图 B11：导出的 `excludeComponents` / `backgroundColor` / `pixelRatio`、流与字节导出；`showLoading` / `hideLoading`，转圈用 A6 的帧驱动。以前控件只有一个 `SaveToPng`：窗口大小、经 `TBGRABitmap.Canvas` 走 `RenderTo`，什么选项都不收，也没有加载效果。这一批对着 `core/echarts.ts` 的 `getDataURL` / `renderToCanvas` / `showLoading` / `hideLoading`、`loading/default.ts`、zrender 的 `canvas/Painter.ts` `getRenderedCanvas`、`canvas/Layer.ts` `clear`、`contain/text.ts` `calculateTextPosition`、`animation/Clip.ts` 逐行核过，在真 dist 上跑基准。真机自检清单第 7 条、§118、§124 在原处标注。
+
+### 上游的做法
+
+- **`getDataURL(opts)`**：`excludeComponents` 里每个主类型的**每个组件模型**，把它的视图（`_componentsMap[__viewId]`）的 `group.ignore` 置真（已经是真的不碰），`renderToCanvas` 之后再把自己置过的放回去。够得着的只有**视图的组**：坐标轴指示器、richText 的提示框、加载效果都是直接 `zr.add` 的，排除不掉；grid、tooltip、axisPointer 组件自己的视图组里什么都没有。`'series'` 不是组件视图，`view.group` 抛 TypeError——而且抛在循环中途，**前面已经置真的视图永远不放回**（`full-legend-series`：图例从此不画）。不是数组的 `excludeComponents` 按类数组遍历：字符串是一个个字母，没有单字母的主类型，等于没写。
+- **背景**：`opts.backgroundColor || model.get('backgroundColor')`，再 `|| 画家自己的`（`zr.setBackgroundColor(model bg || 'transparent')`）。`Layer.clear` 先 `clearRect`，`clearColor && clearColor !== 'transparent'` 时 `fillRect`：渐变对 `{0, 0, 画布宽, 画布高}`（设备像素）；字符串直接给 `fillStyle`——**画布读不懂的值（`'none'`、`'notacolor'`、数字）被忽略，`fillStyle` 停在默认的 `#000000`，整张图涂黑**。`'transparent'` 按字面比，`rgba(0,0,0,0)` 要涂但涂的是透明。暗色主题的背景从模型来（`rgba(4,8,16,1)`）。
+- **像素比**：`opts.pixelRatio || getDevicePixelRatio()`，`0` 是假值。新图层的画布宽是 `画家宽 × dpr`，按 `unsigned long` 截断（`333 × 1.3 = 432.9` → 432）。
+- **类型**：`toDataURL('image/' + (type || 'png'))`。画布做不了的类型（`'svg'`、`'jpg'`）浏览器给 PNG；JPEG 没有 alpha，按规范合成到不透明的黑底上，默认质量 0.92。HTML 提示框是 DOM，从来不在画布导出里。
+- **`showLoading(name, cfg)`**：`name` 是对象就当 cfg；**先 `hideLoading()`**，再查名字，不认识的名字警告后返回——之前显示的那个已经没了。`default` 效果：`zrUtil.defaults` 补默认值（**键不存在或是 null 才补**，其他值原样留着；而且是直接写进传进来的那个对象），遮罩 Rect z 10000、文字是标签矩形的 `textContent`（`position: 'right'`、`distance: 10`）、弧 z 10001、`lineCap: 'round'`。默认值：`text 'loading'`、`textColor` 是 `tokens.color.primary`（#3c3c41）、`fontSize 12`、`maskColor 'rgba(255,255,255,0.8)'`、`color` 是 `tokens.color.theme[0]`（#5070dd）、`spinnerRadius 10`、`lineWidth 5`。
+- **布局（`resize`）**：`r = showSpinner ? spinnerRadius : 0`；`cx = (W − 2r − (showSpinner && tw ? 10 : 0) − tw) / 2 − (showSpinner && tw ? 0 : 5 + tw / 2) + (showSpinner ? 0 : tw / 2) + (tw ? 0 : r)`；`cy = H / 2`；标签矩形 `(cx − r, cy − r, 2r, 2r)`；文字锚点按 `calculateTextPosition` 的 `'right'`：`x = rect.x + (distance + width)`、`y = rect.y + height / 2`，左对齐、垂直居中。几个怪处原样保留：只有转圈时偏左 5 px，只有文字时文字起点偏右 5 px；图表比文字窄时 `cx` 是负的。`tw` 是 `getBoundingRect().width`：多行取最宽的一行。
+- **转圈**：弧从 `startAngle −π/2`、`endAngle −π/2 + 0.1` 起。两个循环动画：`animateShape(true).when(1000, {endAngle: 3π/2}).start('circularInOut')`，和同样的 `startAngle`，`.delay(300)`。时钟从**第一次 step** 起算（加载组加进 zr 之后的下一帧，不是 `showLoading` 那一刻）；延迟只在第一圈；一圈结束的那一步写终值，然后 `startTime = globalTime − elapsed % life`——**某一刻的角度取决于前面的帧落在哪里**。`hideLoading` 移除整组，动画跟着停；再显示是新弧、新时钟。上游的 `animation: false` 管不到它。
+
+### 做法
+
+- **新单元 `tyControls.AdvChart.Export`**（纯）：`TTyChartView`（端口画的视图，按上游的主类型名：title、legend、xAxis、yAxis、visualMap、dataZoom、markPoint、markLine、markArea、radar、calendar、series）、`TyChartViewOf` / `TyChartViewsText`、`TyJsTruthy`、`TyExportOptsOf`（只有 `'jpeg'` 是 JPEG；像素比只收正的有限数；`excludeComponents` 只收数组里认得的字符串；合法 JSON 但不是对象 = 没有选项）、`TyExportBackgroundOf`（`'transparent'` 与零 alpha 清空、颜色、渐变、图案、其余一律黑）、`TyExportImageSize`。
+- **新单元 `tyControls.AdvChart.Loading`**（纯）：`TyLoadingCfgOf`（`zrUtil.defaults` 的 null 语义；`text` 按 JS 的 `String()`：数字、布尔、数组 join、`[object Object]`；颜色是主题 / 颜色 / 不画三种，`'none'` 与读不懂的串都不画）、`TyLoadingLayout`（上面的式子，**四项按上游的顺序逐项算**）、`TyLoadingStartSpinner`（在一个 `TTyAnimBag` 上开两个循环动画器，AN1 的引擎）。
+- **控件**：
+  - 导出 API：`SaveToStream` / `SaveToBytes` / `SaveToFile`（选项写了 `type` 按选项，否则扩展名 `.jpg` / `.jpeg` 是 JPEG）/ `GetDataURL`（`data:image/png;base64,…`，没有像素时 `'data:,'`）/ `RenderToBitmap`（`renderToCanvas`，调用方释放）。`SaveToPng` 保留，就是不带选项的导出、永远 PNG。选项不是 JSON 抛 `EArgumentException`。
+  - `RenderExport`：尺寸与 PPI 按 `TyExportImageSize`；背景按链选——**选项与 option 都没写时是皮肤的底（窗口画的那个框），这是端口对上游 `'transparent'` 默认值的替代**；选中了值时 `FExportBare` 不画框，先把整张图按 `Layer.clear` 铺上。画家用 `BeginPaintOn` 直接画在透明的 32 位位图上，alpha 留得住。`FExporting` 期间：`PaintSeries` 直接画布局好的列表（不布防、不绑定、不步进代理）；坐标轴、标题照静态画；指示器不读滑动代理；动态层只画选项自己的指示器和加载效果——**悬停的提示框、指示器、强调都不进导出**。被排除的视图在构建处跳过：`ViewHidden` / `ViewDrew` 接在雷达、日历、系列、三种标注（一个类型一个视图，和上游一样一次全隐）、图例、visualMap、dataZoom、标题和每根直角坐标轴上；`FViewsDrawn` 记最后一次完整渲染画了哪些视图（`LastViewsDrawn`）。
+  - **窗口放回去**：导出尺寸或 PPI 和窗口不同时，导出时按导出尺寸重新布局了；导出完立刻在一张草稿位图上按窗口尺寸再排一次（也在 `FExporting` 下，什么都不动画），列表和布局又是窗口的，命中测试马上可用；静态缓存丢掉。尺寸相同时只丢静态缓存和列表，窗口下一帧自己重建。
+  - JPEG：先合成到黑底，`TFPWriterJPEG` 质量 92。PNG 走 BGRA 的写出器。
+  - 加载：`ShowLoading(cfg)` / `ShowLoading(name, cfg)` / `HideLoading` / `LoadingShown`。弧是自己驱动器（`FLoadAnim`，指示器的做法）上的一个 `TTyAnimBag`；`ShowLoading` 不步进，下一次 `AnimTick` 才是第一步。`AnimArmTimer` 多看 `LoadLive`，`AnimTick` 先步进它再 `InvalidateFrame`；`HasDynamicContent` 加上 `FLoadShown`，所以它在动态层里画、静态层不动。`camOff` 让它停住，切出 `camOff` 时重新布防计时器。`PaintLoading` 画在动态层最后（提示框之上）：遮罩填满、文字用量字器的宽度按 CSS px 排、弧经 `TyZrArc`（PathProxy 的角度归一化）顺时针描、圆头。
+  - 主题：新键 `TyAdvChartLoading`（遮罩 `alpha(var(--surface), 0.8)`、文字 `var(--on-surface)`、`font-size: var(--font-size-base)`）、`TyAdvChartLoadingSpinner`（`border-color: var(--accent)`）。浅色皮肤上与上游一致，深色皮肤上遮罩是它自己的表面色。重跑 `gen-defaulttheme.ps1`、`gen-tycss-catalog.ps1`，生成物只有增加。
+  - **默认文字本地化**：`rsTyChartLoading = 'loading'`，zh_CN 是「加载中」。上游不翻译这个词；这是原生控件库，翻译过的程序里不该只剩它一个英文词。英文 msgid 就是上游的字，没加载翻译时版式逐位和上游一样。另加两条异常文字（导出选项、加载选项不是 JSON）。
+
+### 基准
+
+`tools/advchart-oracle/export-loading.js`（真 dist，node SSR，受控时钟，`env.node = false`，最后 `process.exit()`）→ `tests/fixtures/advchart-export-loading.json`：
+
+- **导出 45 例**：SSR 的画家是 SVG 的，`getDataURL` 会走 SVG 分支——每例临时换一个替身画家（`type` / `getType()` 答 `'canvas'`），它的 `getRenderedCanvas` 记下 echarts.ts 交来的背景与像素比、**在那一刻**给每个视图拍快照（主类型、组件下标、视图类型、可画元素数、是否 ignore），`toDataURL` 记 mime；再转写 Painter / Layer 那两行得出最终清屏值、涂不涂、图像尺寸。用例：完整图（标题、图例、提示框、两个 dataZoom、visualMap、柱 + 折线、三种标注）下排除每种视图、两两组合、全部、不画东西的三个、不存在的类型、字符串、重复、`'series'` 与图例 + `'series'`（抛、卡住）；雷达、日历 + 分段 visualMap、只有坐标轴；背景 14 例（不写、opts 的 hex / rgba / transparent / none / 零 alpha / 空串 / 读不懂 / 渐变、option 的颜色、opts 压过 option、option 的 transparent、option 的渐变、暗色主题）；像素比 2、1.5、0、0.5、333×217 下 1.3、3；`type` jpeg / svg / png。
+- **加载 24 例**：默认、空文字、不转圈、都没有、全自定义、奇数尺寸、`'18px'`、`'14'`、数字文字、半径 0、小数半径、转圈的真值 1 与假值 0、中文、两行、全 null 的键、等宽字体、`zlevel`、对象当名字、`'default'`、不认识的名字（之前先显示一个）、显示后 resize、比文字还窄、`rect.x + (10 + w)` 与 `(rect.x + 10) + w` 不同位的尺寸（变异补的）。每例记遮罩、标签矩形、弧（圆心、半径、两个角、描边、线宽、线帽）、文字（串、变换的平移、对齐、字体串、tspan、包围盒）、z 与 zlevel。**脚本第一版的 cfg 被 `zrUtil.defaults` 原地写满了默认值，记下来的 `call` 全是显式写的——端口的「不写走主题」一条都没测到；改成每次传深拷贝。**
+- **时间线 5 条**：稀疏的步（含一圈结束后落在圈中的步：3333 → 3500、7777 → 7900）、每 16 ms、每 37 ms、隐藏后再显示、第一帧在显示后 40 ms。每步记两个角（hex）与 clip 数。
+- 转写（背景链、布局式、Clip.step 带余数与延迟、circularInOut）逐条复现全部记录；14 条守卫：option 压过 opts、不回落画家的、`'transparent'` 也涂、默认像素比 2、尺寸四舍五入、没有 10 px 间距、没有那 5 px、`cy` 取整、文字距离 5、文字锚点先加距离、文字从圆心起、`startAngle` 不延迟、一圈从结束那步重新起算、缓动线性——每条都改变指名的记录。两次生成逐字节一致。
+
+测试 `test.advchart.exportloading`（新，15 个，注册在 `tytests.lpr`；量字器是 zrender 的 SSR 表）：
+
+- 每个加载用例：遮罩、标签矩形、弧的圆心与半径、文字锚点、布局用的文字宽度**逐位**；弧的初始角逐位；文字串、字号（与字体串比）、线宽、cfg 写的三种颜色。
+- 每条时间线：每步之前按记录隐藏 / 显示，`AnimTick` 到那一刻，两个角逐位、clip 数、是否显示。
+- 每个导出用例（暗色主题的除外）：导出画了哪些视图（`TyChartViewsText(LastViewsDrawn)`）对上游的 `present`，图像尺寸对 `imageW` / `imageH`；`'series'` 两例按端口的规则（忽略 `'series'`，其余照排）；导出之后窗口再画，视图和导出前一样。
+- 每个背景用例：网格左边一个空像素——没选值时等于窗口画出来的皮肤底；不涂的 alpha 0；颜色逐通道（容差 1，含半透明）；渐变的左端是红；读不懂的是不透明黑。
+- 手写：只有坐标轴的图在透明底上排除两根轴，一个有墨的像素都没有（不排除时有）；排除标题与 `title.show: false`、排除图例与 `legend.show: false` 逐像素相同；2 倍像素比导出后**不重画就命中测试**仍命中原来的柱子、重画后窗口逐像素和导出前一样；悬停之后的导出和悬停之前逐像素相同；PNG 透明底解码后底 alpha 0、柱子不透明、两次字节相同；JPEG 解出来的底是黑；`'jpg'` 是 PNG；data URL 的前缀与解码；`SaveToFile` 按扩展名、`type` 优先；`SaveToPng` 不管扩展名都是 PNG；0×0 是 `'data:,'` 和空字节；遮罩按主题键的颜色经画家合成在柱子上、弧在初始角处是转圈色而底部不是、文字是主题墨色、隐藏后逐像素复原；cfg 的半透明黑遮罩、绿色弧、`'none'` 遮罩、不认识的名字、`text` 的四种 `String()`；加载效果在导出里且不受排除影响；`camOff` 下不转、切回后从第一步起算（对上基准 100 ms 处的值）；选项不是 JSON 抛异常；192 PPI 的控件 `pixelRatio: 1` 是一半大、不写是控件自己的大小；窗口的缓存路径（`RenderCached`）上遮罩在动态层里、隐藏后复原；2 倍导出后、重画前，窗口的列表里图例又是命中目标。
+
+### 变异测试
+
+`b11/mut.py`：逐个改源码、重编、跑 `TAdvChartExportLoadingTest`、按原字节还原。46 个：
+
+- 导出选项与背景 9 个：`'jpeg'` 不认、像素比不读、`excludeComponents` 不读、`'transparent'` 也涂、零 alpha 也涂、读不懂的清空而不是涂黑、尺寸四舍五入、尺寸不除 PPI、渐变背景不画。
+- 控件的导出 12 个：从不隐藏、图例不记、不放回窗口布局、导出画悬停、不读 option 的背景、总画皮肤框、JPEG 不合成到黑底、标注闸门去掉、坐标轴闸门去掉、标题闸门去掉、排除集不清、扩展名不看。
+- 加载 25 个：间距、5 px、只有文字那项、没有文字那项、文字锚点的加法顺序、`cy` 取整、不延迟、线性缓动、初始 `endAngle` 少 0.1、null 文字变空串、总转圈、`'none'` 当主题、半径不读、文字宽度当 0、`camOff` 不管、不步进、不认识的名字照显示、不认识的名字不先隐藏、不画遮罩、弧用文字色、`HasDynamicContent` 不看加载、遮罩用文字色、隐藏不释放弧、弧不做角度归一化、导出不画加载。
+
+首轮杀死 39 个，存活 7 个：
+
+- **尺寸不除 PPI**：所有测试都在 96 PPI 下，除以 1 和不除一样。补 192 PPI 控件的三个尺寸，杀死。
+- **排除集不清**：`ViewHidden` 还要求 `FExporting`，排除集留着只影响放回窗口布局那一次渲染——放回的列表里少了图例，下一次重画又有了，测试只在重画后看。改成导出后、重画前数列表里的图例项，杀死。
+- **文字锚点的加法顺序**：23 个加载用例里两种加法碰巧同位。脚本里搜出一个不同位的尺寸（315×200、半径 7.3）补进基准并加守卫，杀死。
+- **`HasDynamicContent` 不看加载**：无头的 `RenderTo` 总画动态层，只有窗口的缓存路径才看它。补经 `RenderCached` 的测试，杀死。
+- **`'transparent'` 也涂、零 alpha 也涂**：等价——`'transparent'` 解析出来就是零 alpha，零 alpha 的颜色涂上去也什么都不留，`FExportBare` 两边一样。
+- **弧不做角度归一化**：等价——BGRA 的 `arc` 本来就照 Canvas 的规则归一化，而转圈能到的角度里（`[−π/2, 3π/2]`，两端永远差不满 2π）两种写法画的是同一段弧。
+
+补完重跑这 7 个：前 4 个杀死，后 3 个如上，记为等价。
+
+### 已知偏差
+
+- **皮肤底代替 `'transparent'` 默认**：选项与 option 都没写背景时，导出画皮肤的框（底色、边框、圆角外的父底），不是透明图——控件本来就画在自己的底上，存下来的就是看到的。要透明写 `backgroundColor: 'transparent'`。
+- **窗口与导出对 `option.backgroundColor` 的不一致**：窗口里 `'transparent'` / 读不懂的值留皮肤底（§118），导出照上游——透明或涂黑。对象背景（渐变、图案）导出会画，窗口仍不画。
+- **悬停不进导出**：上游画布导出带着当前的悬停强调和坐标轴指示器（HTML 提示框本来就不在）。端口的悬停几何是按窗口尺寸排的，换了像素比就错位，所以导出一律不画悬停的提示框、指示器和强调，只画选项自己显示的指示器。正在播的动画也按完成态画（§124 的政策）。
+- **另一尺寸的导出会让窗口的动画收尾**：按导出尺寸重排是一次 Relayout，和改变控件大小一样会 `AnimDropAll`。
+- **像素比与 PPI**：上游的像素比相对 CSS px，端口相对逻辑 px（设备像素 × 96 / PPI），不写时是控件自己的大小和 PPI。图按 `floor(逻辑尺寸 × 比)` 开，排版在 `round(96 × 比)` 的整数 PPI 上，比不是 1/96 的整数倍时内容与画布差不到一个百分点；每边上限 16384 px。字符串形式的像素比（上游会被乘法转成数）不收。
+- **`'series'` 被忽略**：上游抛异常且把前面排除的视图卡住，端口不抛、照常排其余。
+- **类型**：只有 PNG 和 JPEG（FPImage 的写出器现成）；`'webp'` 之类浏览器会做的类型给 PNG。全局坐标的背景渐变按端口元素的规则换算，上游在 dpr ≠ 1 时用设备像素；图案背景在浏览器里第一次导出时图片多半还没解码好（会涂黑），端口直接画。
+- **加载**：`zlevel` 不读（总在最上）；`fontStyle` 不读（画家没有斜体）；读不懂的颜色不画（画布会沿用上一个 `fillStyle`）；`spinnerRadius` / `lineWidth` 只收数字（上游的字符串会被算术转换，个别式子会变成字符串拼接）；半径 0 不画（Chrome 的圆头会画一个点）；行高与多行文字的竖排按画家的行盒，基准只比了宽度和锚点；**遮罩不接管指针**——上游的遮罩是命中目标，会挡住数据项的悬停、点击和图例，但挡不住按坐标触发的提示框和 inside 缩放，端口什么都不挡。
+- 合成：画家的半透明填充是 BGRA 的混合，不是浏览器的 sRGB 线性混合；测试里遮罩颜色用同一个画家算期望值。
+
+### 落地
+
+- `source/tyControls.AdvChart.Export.pas`、`source/tyControls.AdvChart.Loading.pas`（新，已登记 `tycontrols.lpk` 与 `tycontrols.pas`）。
+- `source/tyControls.AdvanceChart.pas`：导出 API、`RenderExport` / `WriteExport`、`FExporting` / `FExportBare` / `FExportExclude` / `FViewsDrawn` 与各视图的闸门、加载的字段与方法、`PaintLoading`、计时器与 `AnimTick`、`SaveToPng` 改走导出。
+- `source/tyControls.StrConsts.pas`、`languages/tyControls.StrConsts.pot`、`languages/tycontrols.strconsts.zh_CN.po`：`rsTyChartLoading`、`rsTyChartExportOptsBad`、`rsTyChartLoadingCfgBad`。
+- `themes/light.tycss`、`source/tyControls.DefaultTheme.pas`、`source/tyControls.Css.Catalog.pas`：两个新键。
+- `tools/advchart-oracle/export-loading.js`、`tests/fixtures/advchart-export-loading.json`、`tests/test.advchart.exportloading.pas`（新，注册在 `tytests.lpr`）。
+- 自检清单第 7 条、§118、§124 在原处标注。
+
+全量 **8157 个测试，0 错误，0 失败**（新增 `test.advchart.exportloading` 15 个；改了 `SaveToPng` 的实现，现有测试全绿）。

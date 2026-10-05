@@ -1386,6 +1386,15 @@ begin
     '  padding: 5px 7px;' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
+    '/* The loading effect (showLoading): the mask over the chart, its words, and' + LineEnding +
+    '   the turning arc. Upstream writes a white mask at 0.8, its darkest neutral' + LineEnding +
+    '   for the words and the first palette colour for the arc -- on a light skin' + LineEnding +
+    '   exactly this, and on a dark one a mask of its own surface instead of a' + LineEnding +
+    '   white sheet over a dark chart. The arc''s width and radius are geometry the' + LineEnding +
+    '   cfg sets (5 and 10 by default); only its colour is the skin''s. */' + LineEnding +
+    'TyAdvChartLoading { background: alpha(var(--surface), 0.8); color: var(--on-surface);' + LineEnding +
+    '                    font-size: var(--font-size-base); }' + LineEnding +
+    'TyAdvChartLoadingSpinner { border-color: var(--accent); }' + LineEnding +
     '' + LineEnding +
     '/* ── ListGroupPanel (navigation accordion; own keys, not the tree column header''s) ────── */' + LineEnding +
     '/* A modern sider: group rows carry NO fill (just muted ink + a right chevron; the OPEN group' + LineEnding +
