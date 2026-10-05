@@ -32,8 +32,10 @@ begin
   SetDefaultLang('', LangDir);
   TranslateUnitResourceStringsEx('', LangDir, 'tycontrols', 'tyControls.StrConsts');
   { The data-aware controls keep their strings (the navigator's hints and its delete
-    question) in a catalogue of their own, beside the package. }
-  TranslateUnitResourceStringsEx('', LangDir, 'tycontrols.db', 'tyControls.DB.StrConsts');
+    question) in a catalogue of their own. No dot in the third argument: LCL takes what
+    follows a dot for an extension and swaps the language in for it, so 'tycontrols.db'
+    would load tycontrols.zh_CN.po, which has none of these strings. }
+  TranslateUnitResourceStringsEx('', LangDir, 'tycontrols_db', 'tyControls.DB.StrConsts');
   Application.CreateForm(TMainForm, MainForm);
   Application.Run;
 end.
