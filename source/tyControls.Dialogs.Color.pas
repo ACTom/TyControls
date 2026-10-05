@@ -5,8 +5,15 @@ uses Classes, SysUtils, Types, Math, Graphics, Controls, Forms, Dialogs, BGRABit
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.ColorMath,
   tyControls.Controller, tyControls.Dialogs, tyControls.Edit, tyControls.SpinEdit,
   tyControls.TyLabel, tyControls.ColorGrid, tyControls.Button, tyControls.Component,
-  tyControls.StrConsts;
+  tyControls.StrConsts, LCLVersion;
 type
+{$IF LCL_FULLVERSION < 4000000}
+  { LCL 4.0 added these to Dialogs. The same names in the same order, so an .lfm written
+    under either version reads under the other. }
+  TColorDialogOption = (cdFullOpen, cdPreventFullOpen, cdShowHelp, cdSolidColor, cdAnyColor);
+  TColorDialogOptions = set of TColorDialogOption;
+{$ENDIF}
+
   TTyHSVSquare = class(TTyCustomControl)
   private
     FHue, FSat, FVal: Single;
