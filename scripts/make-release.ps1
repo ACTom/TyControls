@@ -3,7 +3,7 @@
 
   Ships ONLY what a consumer needs to use the library — the runtime + design-time
   source, the Lazarus packages, themes, i18n catalogs, user docs and examples — laid out exactly
-  as in the repo so `tycontrols.lpk` / `tycontrols_dt.lpk` install unchanged.
+  as in the repo so `tycontrols.lpk` / `tycontrols_db.lpk` / `tycontrols_dt.lpk` install unchanged.
 
   EXCLUDED: tests, tools/ (icon generator, gallery capture), scripts/, docs/superpowers
   (specs/plans), docs/gallery* (the screenshot pages),
@@ -82,7 +82,7 @@ Write-Host '-- root + packages'
 # only consumers are the test suite and the generator, neither of which is in the archive).
 'README.md', 'README.en.md', 'CHANGELOG.md', 'CHANGELOG.en.md',
 'COPYING.LGPL.txt', 'COPYING.modifiedLGPL.txt', 'THIRD-PARTY-NOTICES.md',
-'tycontrols.lpk', 'tycontrols_dt.lpk' | ForEach-Object { Add-File $_ }
+'tycontrols.lpk', 'tycontrols_db.lpk', 'tycontrols_dt.lpk' | ForEach-Object { Add-File $_ }
 
 # source/ and designtime/ ship WHOLE. Both used to be filtered -- source/ by extension, and
 # designtime/ by two hardcoded file names -- and both filters were silent: a package .lfm, .lrs

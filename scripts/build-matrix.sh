@@ -18,6 +18,9 @@ echo "Widgetset override: ${WS:-<host default>}"
 echo "-- runtime package --"
 lazbuild $WS_ARG "$ROOT/tycontrols.lpk"
 
+echo "-- data-aware controls package --"
+lazbuild $WS_ARG "$ROOT/tycontrols_db.lpk"
+
 echo "-- design-time package --"
 lazbuild $WS_ARG "$ROOT/tycontrols_dt.lpk"
 
