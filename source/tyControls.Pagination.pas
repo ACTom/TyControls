@@ -194,7 +194,7 @@ type
     declares no variant enum of its own, so a theme may define as many as it likes without a
     code change, and the cells' own key is resolved with the SAME StyleClass appended to the
     cell's kind, so 'TyPaginationItem.page.small' can follow the strip. }
-  TTyPagination = class(TTyCustomControl)
+  TTyCustomPagination = class(TTyCustomControl)
   private
     FPageCount: Integer;
     FPageIndex: Integer;       // 0-based; -1 only while PageCount = 0
@@ -265,7 +265,7 @@ type
     function TyPaginationCellRect(AIndex: Integer): TRect;
     { The cell at client device (X, Y), or -1 (the gutters between cells included). }
     function TyPaginationCellAt(X, Y: Integer): Integer;
-  published
+    property TabStop default True;
     { How many pages the host has. 0 means "nothing to paginate" and the strip draws no
       cells at all (not even dead arrows). Shortening the run re-clamps PageIndex SILENTLY:
       setting PageCount is the host's own action, so announcing it back through OnChange
@@ -291,6 +291,31 @@ type
       the same page again is not a change and stays silent. This is where the host re-fills
       its list. }
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+  end;
+
+  { TTyPagination publishes TTyCustomPagination's properties; everything lives in TTyCustomPagination. }
+  TTyPagination = class(TTyCustomPagination)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
     { With AutoSize the strip hugs its current cells; off, it keeps the bounds it was given
       and lays the cells out from its left padding (a strip aligns itself through
       Align/Anchors, as every other control here does). Note that the cells are not
@@ -298,13 +323,43 @@ type
       '1 2 3' and '1 ... 97' -- the item COUNT is constant (see TyPaginationItems), the
       widths are not. }
     property AutoSize;
-    property TabStop default True;
-    property Align;
-    property Anchors;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property OnClick;
+    property PageCount;
+    property PageIndex;
+    property SiblingCount;
+    property BoundaryCount;
+    property ShowPrevNext;
+    property OnChange;
+    property Align;
+    property Anchors;
   end;
 
 implementation
@@ -548,9 +603,9 @@ begin
   if Result.Bottom > ACell.Bottom then Result.Bottom := ACell.Bottom;
 end;
 
-{ --- TTyPagination -------------------------------------------------------------------- }
+{ --- TTyCustomPagination -------------------------------------------------------------- }
 
-constructor TTyPagination.Create(AOwner: TComponent);
+constructor TTyCustomPagination.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   // One page, showing it: the resting state of a host that has data but only a screenful.
@@ -569,27 +624,27 @@ begin
   Height := TyDensityHeight(ActiveController, 32);
 end;
 
-function TTyPagination.GetStyleTypeKey: string;
+function TTyCustomPagination.GetStyleTypeKey: string;
 begin
   Result := 'TyPagination';
 end;
 
 { --- the item list -------------------------------------------------------------------- }
 
-function TTyPagination.TyPaginationItemList: TTyPaginationItems;
+function TTyCustomPagination.TyPaginationItemList: TTyPaginationItems;
 begin
   Result := TyPaginationItems(FPageCount, FPageIndex, FSiblingCount, FBoundaryCount,
     FShowPrevNext);
 end;
 
-function TTyPagination.ItemCount: Integer;
+function TTyCustomPagination.ItemCount: Integer;
 begin
   Result := Length(TyPaginationItemList);
 end;
 
 { --- properties ----------------------------------------------------------------------- }
 
-procedure TTyPagination.Refit;
+procedure TTyCustomPagination.Refit;
 begin
   // Every one of these properties changes the ITEM LIST, and the cells are not equal-width,
   // so an auto-sized strip must re-fit rather than merely repaint.
@@ -601,7 +656,7 @@ begin
   if not (csLoading in ComponentState) then Invalidate;
 end;
 
-procedure TTyPagination.SetPageCount(AValue: Integer);
+procedure TTyCustomPagination.SetPageCount(AValue: Integer);
 var
   valid: Integer;
 begin
@@ -621,7 +676,7 @@ begin
   Refit;
 end;
 
-procedure TTyPagination.SetPageIndex(AValue: Integer);
+procedure TTyCustomPagination.SetPageIndex(AValue: Integer);
 var
   valid: Integer;
 begin
@@ -641,7 +696,7 @@ begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTyPagination.SetSiblingCount(AValue: Integer);
+procedure TTyCustomPagination.SetSiblingCount(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   if FSiblingCount = AValue then Exit;
@@ -649,7 +704,7 @@ begin
   Refit;
 end;
 
-procedure TTyPagination.SetBoundaryCount(AValue: Integer);
+procedure TTyCustomPagination.SetBoundaryCount(AValue: Integer);
 begin
   // Below 1 the first and last pages would vanish behind an ellipsis with no way to reach
   // them -- the one thing a pagination must always offer.
@@ -659,7 +714,7 @@ begin
   Refit;
 end;
 
-procedure TTyPagination.SetShowPrevNext(AValue: Boolean);
+procedure TTyCustomPagination.SetShowPrevNext(AValue: Boolean);
 begin
   if FShowPrevNext = AValue then Exit;
   FShowPrevNext := AValue;
@@ -670,7 +725,7 @@ begin
   Refit;
 end;
 
-procedure TTyPagination.Loaded;
+procedure TTyCustomPagination.Loaded;
 var
   pending: Integer;
 begin
@@ -692,14 +747,14 @@ end;
 
 { --- state / style -------------------------------------------------------------------- }
 
-function TTyPagination.CellVariant(AKind: TTyPaginationItemKind): string;
+function TTyCustomPagination.CellVariant(AKind: TTyPaginationItemKind): string;
 begin
   Result := TyPaginationItemVariant(AKind);
   if Trim(StyleClass) <> '' then
     Result := Result + ' ' + Trim(StyleClass);
 end;
 
-function TTyPagination.CellStates(const AItem: TTyPaginationItem;
+function TTyCustomPagination.CellStates(const AItem: TTyPaginationItem;
   AIndex: Integer): TTyStateSet;
 begin
   Result := [];
@@ -734,14 +789,14 @@ begin
   if Result = [] then Include(Result, tysNormal);
 end;
 
-function TTyPagination.CellStyle(const AItem: TTyPaginationItem;
+function TTyCustomPagination.CellStyle(const AItem: TTyPaginationItem;
   AIndex: Integer): TTyStyleSet;
 begin
   Result := ActiveController.Model.ResolveStyle('TyPaginationItem', CellVariant(AItem.Kind),
     CellStates(AItem, AIndex));
 end;
 
-function TTyPagination.CellTextStyle(const AStrip, ACell: TTyStyleSet): TTyStyleSet;
+function TTyCustomPagination.CellTextStyle(const AStrip, ACell: TTyStyleSet): TTyStyleSet;
 { The label's ink and font: the cell's own where the theme sets them, the strip's otherwise.
   This is the house degradation rule (no colour => inherit the parent's ink) extended to the
   font by the same logic -- a theme that styles only TyPagination must still get legible,
@@ -772,7 +827,7 @@ end;
 
 { --- measurement + geometry ----------------------------------------------------------- }
 
-function TTyPagination.ContentWidthsWith(APainter: TTyPainter;
+function TTyCustomPagination.ContentWidthsWith(APainter: TTyPainter;
   const AList: TTyPaginationItems): TTyPaginationWidths;
 var
   cellS, stripS, txtS: TTyStyleSet;
@@ -807,7 +862,7 @@ begin
   end;
 end;
 
-function TTyPagination.CellRectsWith(APainter: TTyPainter; const AStrip: TTyStyleSet;
+function TTyCustomPagination.CellRectsWith(APainter: TTyPainter; const AStrip: TTyStyleSet;
   const AList: TTyPaginationItems; AWidth, AHeight: Integer): TTyPaginationRects;
 begin
   // APainter.Scale is the same logical->device conversion the painter applies to every themed
@@ -821,7 +876,7 @@ begin
     ContentWidthsWith(APainter, AList));
 end;
 
-function TTyPagination.CellRectsFor(AWidth, AHeight, APPI: Integer): TTyPaginationRects;
+function TTyCustomPagination.CellRectsFor(AWidth, AHeight, APPI: Integer): TTyPaginationRects;
 var
   P: TTyPainter;
 begin
@@ -836,7 +891,7 @@ begin
   end;
 end;
 
-function TTyPagination.TyPaginationCellRect(AIndex: Integer): TRect;
+function TTyCustomPagination.TyPaginationCellRect(AIndex: Integer): TRect;
 var
   rects: TTyPaginationRects;
 begin
@@ -845,13 +900,13 @@ begin
   if (AIndex >= 0) and (AIndex <= High(rects)) then Result := rects[AIndex];
 end;
 
-function TTyPagination.TyPaginationCellAt(X, Y: Integer): Integer;
+function TTyCustomPagination.TyPaginationCellAt(X, Y: Integer): Integer;
 begin
   Result := TyPaginationIndexAt(
     CellRectsFor(ClientWidth, ClientHeight, Font.PixelsPerInch), X, Y);
 end;
 
-procedure TTyPagination.CalculatePreferredSize(var PreferredWidth,
+procedure TTyCustomPagination.CalculatePreferredSize(var PreferredWidth,
   PreferredHeight: Integer; WithThemeSpace: Boolean);
 var
   P: TTyPainter;
@@ -894,7 +949,7 @@ end;
 
 { --- input ---------------------------------------------------------------------------- }
 
-procedure TTyPagination.MouseDown(Button: TMouseButton; Shift: TShiftState;
+procedure TTyCustomPagination.MouseDown(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
   lst: TTyPaginationItems;
@@ -915,7 +970,7 @@ begin
   if lst[hit].Page >= 0 then PageIndex := lst[hit].Page;
 end;
 
-procedure TTyPagination.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomPagination.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   hit: Integer;
 begin
@@ -931,7 +986,7 @@ begin
   end;
 end;
 
-procedure TTyPagination.MouseLeave;
+procedure TTyCustomPagination.MouseLeave;
 begin
   inherited MouseLeave;   // clears the strip's own hover
   if FHoverIndex <> -1 then
@@ -941,7 +996,7 @@ begin
   end;
 end;
 
-procedure TTyPagination.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomPagination.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
@@ -975,7 +1030,7 @@ end;
 
 { --- painting ------------------------------------------------------------------------- }
 
-procedure TTyPagination.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomPagination.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, cellS, txtS: TTyStyleSet;
@@ -1067,7 +1122,7 @@ begin
   end;
 end;
 
-procedure TTyPagination.Paint;
+procedure TTyCustomPagination.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

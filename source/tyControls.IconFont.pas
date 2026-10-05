@@ -34,7 +34,7 @@ uses
   tyControls.Types, tyControls.Component, tyControls.Painter;
 
 type
-  TTyIconFont = class(TTyComponent)
+  TTyCustomIconFont = class(TTyComponent)
   private
     FGlyphs: TStringList;      // 'name=HEX' entries
     FFontFamily: string;
@@ -95,6 +95,7 @@ type
       component would report Available = True purely because it has a family name, which is the
       exact lie Available exists to prevent. }
     procedure SetSourceState(ARequested, ALoaded: Boolean; const AError: string);
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -119,7 +120,7 @@ type
 
       OWNED BY THIS COMPONENT and rebuilt in place -- read it, do not free or modify it. A
       browser drawing two thousand cells asks per repaint, and minting a fresh list each time
-      would be two thousand string allocations a frame. It is rebuilt only when Version or the
+      would be two thousand string allocations a frame. It is rebuilt only when ChangeStamp or the
       lister generation has moved, so the steady-state cost is two integer comparisons. }
     property GlyphNames: TStrings read GetGlyphNames;
     { The same names copied into ANames (cleared first), for a caller that wants to keep, sort
@@ -166,13 +167,16 @@ type
     property LoadError: string read FLoadError;
     { Bumped by every change that alters what a glyph looks like -- the map, the family, the
       file. A consumer that caches rendered glyphs compares this instead of re-rendering; one
-      that does not can just add a handler below. }
-    property Version: Integer read FVersion;
+      that does not can just add a handler below.
+      Named ChangeStamp, not Version (it was `Version: Integer` up to 3.0): TTyComponent's
+      `Version: string` is the LIBRARY version, and since 4.0 it is public on the base and
+      published by each component itself -- a class cannot publish one Version and declare
+      another, so the counter took the name TTyImageCollection already uses for the same job. }
+    property ChangeStamp: Integer read FVersion;
     { Observe changes without taking the published OnChange away from the application. }
     procedure AddHandlerOnChange(const AHandler: TNotifyEvent; AsFirst: Boolean = False);
     procedure RemoveHandlerOnChange(const AHandler: TNotifyEvent);
     procedure RemoveAllHandlersOfObject(AnObject: TObject);
-  published
     { The font family name used to render (must match the registered/installed
       family). When FontFile is set, this is typically the file's family. }
     property FontFamily: string read FFontFamily write SetFontFamily;
@@ -186,6 +190,16 @@ type
       TTyGlyphImageList consumer and ribbon gallery showing the previous glyph until something
       else happened to invalidate them. }
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+  end;
+
+  { TTyIconFont publishes TTyCustomIconFont's properties; everything lives in TTyCustomIconFont. }
+  TTyIconFont = class(TTyCustomIconFont)
+  published
+    property Version;
+    property FontFamily;
+    property FontFile;
+    property Glyphs;
+    property OnChange;
   end;
 
   { An icon font whose bytes are EMBEDDED in the program: a bundled icon pack, dropped on a
@@ -202,7 +216,7 @@ type
     wasteful, and the registration must NOT belong to an instance -- freeing the first component
     would otherwise unregister the font out from under the others. The keeper lives in this
     unit and outlives every component. }
-  TTyIconPackFont = class(TTyIconFont)
+  TTyIconPackFont = class(TTyCustomIconFont)
   protected
     { The font file's bytes. Return a cached value: this is called per instance and the string
       is reference-counted, so a cached one costs a refcount and a fresh one costs a copy. }
@@ -499,7 +513,7 @@ begin
   Result := Cardinal(v);
 end;
 
-constructor TTyIconFont.Create(AOwner: TComponent);
+constructor TTyCustomIconFont.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FGlyphs := TStringList.Create;
@@ -514,7 +528,7 @@ begin
   {$ENDIF}
 end;
 
-destructor TTyIconFont.Destroy;
+destructor TTyCustomIconFont.Destroy;
 begin
   UnloadFontFile;
   FGlyphs.OnChange := nil;   { the list outlives nothing, but the handler must not fire
@@ -522,11 +536,14 @@ begin
   FGlyphs.Free;
   FIndex.Free;
   FNames.Free;
-  FChangeHandlers.Free;
+  { Nil, not just freed: the inherited destructor removes this font from its owner, the owner
+    tells every component it owns -- this one too -- and Notification then takes the dying
+    component's methods off this list. }
+  FreeAndNil(FChangeHandlers);
   inherited Destroy;
 end;
 
-function TTyIconFont.GetGlyphNames: TStrings;
+function TTyCustomIconFont.GetGlyphNames: TStrings;
 var
   i: Integer;
   nm: string;
@@ -564,13 +581,13 @@ begin
   Result := FNames;
 end;
 
-procedure TTyIconFont.GetGlyphNamesInto(ANames: TStrings);
+procedure TTyCustomIconFont.GetGlyphNamesInto(ANames: TStrings);
 begin
   if ANames = nil then Exit;
   ANames.Assign(GetGlyphNames);
 end;
 
-procedure TTyIconFont.SetSourceState(ARequested, ALoaded: Boolean; const AError: string);
+procedure TTyCustomIconFont.SetSourceState(ARequested, ALoaded: Boolean; const AError: string);
 begin
   FSourceRequested := ARequested;
   FSourceLoaded := ALoaded;
@@ -592,31 +609,31 @@ begin
   SetSourceState(True, ok, err);
 end;
 
-procedure TTyIconFont.GlyphsChanged(Sender: TObject);
+procedure TTyCustomIconFont.GlyphsChanged(Sender: TObject);
 begin
   FIndexValid := False;
   Changed;
 end;
 
-procedure TTyIconFont.Changed;
+procedure TTyCustomIconFont.Changed;
 begin
   Inc(FVersion);
   if FChangeHandlers <> nil then FChangeHandlers.CallNotifyEvents(Self);
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTyIconFont.AddHandlerOnChange(const AHandler: TNotifyEvent; AsFirst: Boolean);
+procedure TTyCustomIconFont.AddHandlerOnChange(const AHandler: TNotifyEvent; AsFirst: Boolean);
 begin
   if FChangeHandlers = nil then FChangeHandlers := TMethodList.Create;
   FChangeHandlers.Add(TMethod(AHandler), not AsFirst);
 end;
 
-procedure TTyIconFont.RemoveHandlerOnChange(const AHandler: TNotifyEvent);
+procedure TTyCustomIconFont.RemoveHandlerOnChange(const AHandler: TNotifyEvent);
 begin
   if FChangeHandlers <> nil then FChangeHandlers.Remove(TMethod(AHandler));
 end;
 
-procedure TTyIconFont.RemoveAllHandlersOfObject(AnObject: TObject);
+procedure TTyCustomIconFont.RemoveAllHandlersOfObject(AnObject: TObject);
 begin
   { An observer being freed must leave the list, or the next change calls a method on a dead
     object -- the same rule TTyEdit follows. (No inherited to chain: TTyComponent is not a
@@ -624,7 +641,18 @@ begin
   if FChangeHandlers <> nil then FChangeHandlers.RemoveAllMethodsOfObject(AnObject);
 end;
 
-procedure TTyIconFont.RebuildIndex;
+procedure TTyCustomIconFont.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  { A control that follows this font puts a method on the change list AND asks for a free
+    notification (TTyCharImage, TTyRibbonGallery), and the second is what brings it here when it
+    is freed, from whatever owner. Nothing took the method off before: free the control while the
+    font lived -- a child form closed with caFree, a control deleted in the designer -- and the
+    font's next change called into freed memory. }
+  if Operation = opRemove then RemoveAllHandlersOfObject(AComponent);
+end;
+
+procedure TTyCustomIconFont.RebuildIndex;
 var
   i: Integer;
   nm: string;
@@ -645,25 +673,25 @@ begin
   FIndexValid := True;
 end;
 
-procedure TTyIconFont.SetGlyphs(AValue: TStringList);
+procedure TTyCustomIconFont.SetGlyphs(AValue: TStringList);
 begin
   FGlyphs.Assign(AValue);   { fires GlyphsChanged }
 end;
 
-procedure TTyIconFont.SetFontFamily(const AValue: string);
+procedure TTyCustomIconFont.SetFontFamily(const AValue: string);
 begin
   if FFontFamily = AValue then Exit;
   FFontFamily := AValue;
   Changed;
 end;
 
-function TTyIconFont.GetAvailable: Boolean;
+function TTyCustomIconFont.GetAvailable: Boolean;
 begin
   Result := (FFontFamily <> '') and ((not FSourceRequested) or FSourceLoaded);
 end;
 
 {$IFDEF LCLGtk2}
-function TTyIconFont.SpillToTempFile(ADataPtr: Pointer; ASize: PtrUInt): string;
+function TTyCustomIconFont.SpillToTempFile(ADataPtr: Pointer; ASize: PtrUInt): string;
 { fontconfig's three app-font entry points are ALL path-based -- there is no memory API in the
   library at all -- so on GTK2 embedded bytes have to become a file. The discipline around that
   file is the fiddly part, and every rule here exists because the obvious version is wrong:
@@ -700,7 +728,7 @@ begin
 end;
 {$ENDIF}
 
-procedure TTyIconFont.LoadFontFromMemory(ADataPtr: Pointer; ASize: PtrUInt;
+procedure TTyCustomIconFont.LoadFontFromMemory(ADataPtr: Pointer; ASize: PtrUInt;
   const AFamily: string);
 { NOTE: LCLGtk2 is NOT in this var-block gate. GTK2's body (below) uses only the FTempFile
   FIELD, no local -- so including it would emit a `var` keyword with no declarations under it
@@ -786,18 +814,18 @@ begin
   Changed;
 end;
 
-procedure TTyIconFont.MapGlyph(const AName: string; ACodepoint: Cardinal);
+procedure TTyCustomIconFont.MapGlyph(const AName: string; ACodepoint: Cardinal);
 begin
   if AName = '' then Exit;
   FGlyphs.Values[AName] := IntToHex(ACodepoint, 1);
 end;
 
-procedure TTyIconFont.ClearGlyphs;
+procedure TTyCustomIconFont.ClearGlyphs;
 begin
   FGlyphs.Clear;
 end;
 
-function TTyIconFont.CodepointOf(const AName: string): Cardinal;
+function TTyCustomIconFont.CodepointOf(const AName: string): Cardinal;
 var
   i: Integer;
 begin
@@ -812,12 +840,12 @@ begin
     Result := 0;
 end;
 
-function TTyIconFont.HasGlyph(const AName: string): Boolean;
+function TTyCustomIconFont.HasGlyph(const AName: string): Boolean;
 begin
   Result := CodepointOf(AName) > 0;
 end;
 
-function TTyIconFont.GlyphText(const AName: string): string;
+function TTyCustomIconFont.GlyphText(const AName: string): string;
 var
   cp: Cardinal;
 begin
@@ -826,7 +854,7 @@ begin
   Result := UnicodeToUTF8(cp);
 end;
 
-function TTyIconFont.RenderGlyph(const AName: string; ASizePx: Integer;
+function TTyCustomIconFont.RenderGlyph(const AName: string; ASizePx: Integer;
   AColor: TTyColor): TBGRABitmap;
 var
   s: string;
@@ -845,7 +873,7 @@ begin
     TyColorToBGRA(AColor));
 end;
 
-function TTyIconFont.RenderCodepoint(ACodepoint: Cardinal; ASizePx: Integer;
+function TTyCustomIconFont.RenderCodepoint(ACodepoint: Cardinal; ASizePx: Integer;
   AColor: TTyColor): TBGRABitmap;
 var
   s: string;
@@ -864,7 +892,7 @@ begin
     TyColorToBGRA(AColor));
 end;
 
-procedure TTyIconFont.SetFontFile(const AValue: string);
+procedure TTyCustomIconFont.SetFontFile(const AValue: string);
 begin
   if FFontFile = AValue then Exit;
   UnloadFontFile;
@@ -877,7 +905,7 @@ begin
   Changed;
 end;
 
-procedure TTyIconFont.LoadFontFile(const APath: string);
+procedure TTyCustomIconFont.LoadFontFile(const APath: string);
 {$IF DEFINED(LCLWin32) OR DEFINED(LCLQt5) OR DEFINED(LCLQt6) OR DEFINED(LCLCocoa)}
 var
   {$IFDEF LCLWin32}
@@ -962,7 +990,7 @@ begin
   {$ENDIF}
 end;
 
-procedure TTyIconFont.UnloadFontFile;
+procedure TTyCustomIconFont.UnloadFontFile;
 {$IF DEFINED(LCLWin32) OR DEFINED(LCLCocoa)}
 var
   {$IFDEF LCLWin32}

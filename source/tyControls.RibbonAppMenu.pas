@@ -5,7 +5,7 @@ unit tyControls.RibbonAppMenu;
   TTyRibbonAppMenu — a prominent accent button (StyleClass 'primary') that drops a
   menu composed of the app's top COMMANDS plus an optional RECENT-ITEMS section.
 
-  It SUBCLASSES TTyMenuButton (unit tyControls.DropButtons): the whole button is the
+  It SUBCLASSES TTyCustomMenuButton (unit tyControls.DropButtons): the whole button is the
   drop trigger, it inherits the caption + trailing arrow drawing, and its Click fires
   OnDropDown then pops the inherited DropDownMenu when a window handle exists. It carries
   its OWN 'TyRibbonAppMenu' style token (see GetStyleTypeKey) — it is not a button but a
@@ -46,9 +46,10 @@ type
     is the 0-based index into RecentItems of the chosen entry. }
   TTyRecentItemEvent = procedure(Sender: TObject; AIndex: Integer) of object;
 
-  { The ribbon application ("File") button: an accent TTyMenuButton that composes the
-    user's Commands menu with an optional recent-items list into an internal dropdown. }
-  TTyRibbonAppMenu = class(TTyMenuButton)
+  { The ribbon application ("File") button: an accent menu button (TTyCustomMenuButton)
+    that composes the user's Commands menu with an optional recent-items list into an
+    internal dropdown. }
+  TTyCustomRibbonAppMenu = class(TTyCustomMenuButton)
   private
     { The internal menu the button actually drops. Owned by Self (created in Create,
       freed in Destroy); rebuilt from Commands + RecentItems on every drop. Never
@@ -59,11 +60,11 @@ type
     FCommands: TTyPopupMenu;
     FRecentItems: TStrings;
     FOnRecentItemClick: TTyRecentItemEvent;
-    FBackstage: TTyRibbonBackstage;
+    FBackstage: TTyCustomRibbonBackstage;
     FBackstageTopInset: Integer;
     procedure SetCommands(AValue: TTyPopupMenu);
     procedure SetRecentItems(AValue: TStrings);
-    procedure SetBackstage(AValue: TTyRibbonBackstage);
+    procedure SetBackstage(AValue: TTyCustomRibbonBackstage);
     { OnClick target on each RECENT item: map the clicked item back to its RecentItems
       index (carried in the item's Tag) and fire OnRecentItemClick. }
     procedure HandleRecentClick(Sender: TObject);
@@ -93,7 +94,6 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-  published
     { The user's command menu (their "File" items). Copied into the internal dropdown on
       each drop; never mutated. FreeNotification-tracked: freeing it nils this. }
     property Commands: TTyPopupMenu read FCommands write SetCommands;
@@ -104,17 +104,93 @@ type
     property OnRecentItemClick: TTyRecentItemEvent read FOnRecentItemClick write FOnRecentItemClick;
     { When assigned, clicking the button opens this FULL-WINDOW backstage (Office "File"
       view) instead of the small dropdown menu. FreeNotification-tracked. }
-    property Backstage: TTyRibbonBackstage read FBackstage write SetBackstage;
+    property Backstage: TTyCustomRibbonBackstage read FBackstage write SetBackstage;
     { Logical-px inset from the form top the backstage is shown below (= the title-bar
       height, so the backstage covers everything except the title bar). }
     property BackstageTopInset: Integer read FBackstageTopInset write FBackstageTopInset default 0;
   end;
 
+  { TTyRibbonAppMenu publishes TTyCustomRibbonAppMenu's properties; everything lives in TTyCustomRibbonAppMenu. }
+  TTyRibbonAppMenu = class(TTyCustomRibbonAppMenu)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property AnimationsEnabled;
+    property Default;
+    property Cancel;
+    property Down;
+    property ModalResult;
+    property Alignment;
+    property ShowAccelChar;
+    property ShowBadge;
+    property BadgeValue;
+    property BadgePosition;
+    property OnBadgeDisplay;
+    property Caption;
+    property Align;
+    property Anchors;
+    property DropDownMenu;
+    property OnDropDown;
+    property Commands;
+    property RecentItems;
+    property OnRecentItemClick;
+    property Backstage;
+    property BackstageTopInset;
+  end;
+
 implementation
 
-{ TTyRibbonAppMenu }
+{ TTyCustomRibbonAppMenu }
 
-constructor TTyRibbonAppMenu.Create(AOwner: TComponent);
+constructor TTyCustomRibbonAppMenu.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   // The internal dropped menu (owned by Self, freed in Destroy). Rebuilt on each drop;
@@ -132,7 +208,7 @@ begin
   Height := ActiveController.Metric('--ribbon-appmenu-height', TyRibbonAppMenuDefaultHeight);
 end;
 
-destructor TTyRibbonAppMenu.Destroy;
+destructor TTyCustomRibbonAppMenu.Destroy;
 begin
   FreeAndNil(FRecentItems);
   // FMenu is owned by Self (would be freed by DestroyComponents), but free it explicitly
@@ -141,12 +217,12 @@ begin
   inherited Destroy;
 end;
 
-function TTyRibbonAppMenu.GetStyleTypeKey: string;
+function TTyCustomRibbonAppMenu.GetStyleTypeKey: string;
 begin
   Result := 'TyRibbonAppMenu';
 end;
 
-procedure TTyRibbonAppMenu.SetCommands(AValue: TTyPopupMenu);
+procedure TTyCustomRibbonAppMenu.SetCommands(AValue: TTyPopupMenu);
 begin
   if FCommands = AValue then Exit;
   if FCommands <> nil then
@@ -157,7 +233,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyRibbonAppMenu.SetRecentItems(AValue: TStrings);
+procedure TTyCustomRibbonAppMenu.SetRecentItems(AValue: TStrings);
 begin
   // Own the storage; assign copies the caller's lines in (we keep our TStringList so the
   // OnChange -> Invalidate hook stays wired and we never alias a list the user may free).
@@ -168,12 +244,12 @@ begin
     FRecentItems.Assign(AValue);
 end;
 
-procedure TTyRibbonAppMenu.RecentItemsChanged(Sender: TObject);
+procedure TTyCustomRibbonAppMenu.RecentItemsChanged(Sender: TObject);
 begin
   Invalidate;
 end;
 
-procedure TTyRibbonAppMenu.HandleRecentClick(Sender: TObject);
+procedure TTyCustomRibbonAppMenu.HandleRecentClick(Sender: TObject);
 begin
   // The recent clone carries its RecentItems index in Tag; fire the public event with it.
   if not (Sender is TMenuItem) then Exit;
@@ -181,7 +257,7 @@ begin
     FOnRecentItemClick(Self, Integer(TMenuItem(Sender).Tag));
 end;
 
-procedure TTyRibbonAppMenu.RebuildMenu;
+procedure TTyCustomRibbonAppMenu.RebuildMenu;
 var
   i: Integer;
   SrcRoot, Src, Clone, Sep: TMenuItem;
@@ -242,12 +318,12 @@ begin
   end;
 end;
 
-function TTyRibbonAppMenu.DroppedMenuItemCount: Integer;
+function TTyCustomRibbonAppMenu.DroppedMenuItemCount: Integer;
 begin
   if FMenu = nil then Result := 0 else Result := FMenu.Items.Count;
 end;
 
-function TTyRibbonAppMenu.DroppedMenuItem(AIndex: Integer): TMenuItem;
+function TTyCustomRibbonAppMenu.DroppedMenuItem(AIndex: Integer): TMenuItem;
 begin
   if (FMenu = nil) or (AIndex < 0) or (AIndex >= FMenu.Items.Count) then
     Result := nil
@@ -255,7 +331,7 @@ begin
     Result := FMenu.Items[AIndex];
 end;
 
-procedure TTyRibbonAppMenu.SetBackstage(AValue: TTyRibbonBackstage);
+procedure TTyCustomRibbonAppMenu.SetBackstage(AValue: TTyCustomRibbonBackstage);
 begin
   if FBackstage = AValue then Exit;
   if FBackstage <> nil then FBackstage.RemoveFreeNotification(Self);
@@ -263,7 +339,7 @@ begin
   if FBackstage <> nil then FBackstage.FreeNotification(Self);
 end;
 
-procedure TTyRibbonAppMenu.DoDropDown;
+procedure TTyCustomRibbonAppMenu.DoDropDown;
 var
   Frm: TCustomForm;
 begin
@@ -286,7 +362,7 @@ begin
   inherited DoDropDown;
 end;
 
-procedure TTyRibbonAppMenu.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomRibbonAppMenu.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FCommands) then

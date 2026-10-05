@@ -12,7 +12,7 @@
 |------|-----|
 | 单元 | `tyControls.SpinEdit` |
 | typeKey | `TySpinEdit` |
-| 基类 | `TTyCustomControl`（继承自 `TCustomControl`） |
+| 基类 | `TTyCustomSpinEdit` → `TTyCustomControl`（继承自 `TCustomControl`） |
 | 默认尺寸 | 120 × 28（逻辑像素） |
 
 ```pascal
@@ -43,7 +43,7 @@ uses tyControls.SpinEdit;
 | `Align` | `TAlign` | — | 父容器内的停靠方式。 |
 | `Anchors` | `TAnchors` | — | 锚点布局。 |
 | `StyleClass` | `string` | `''` | CSS 变体类名。 |
-| `Controller` | `TTyStyleController` | `nil`（全局默认） | 关联的样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（全局默认） | 关联的样式控制器。 |
 | `OnClick` | `TNotifyEvent` | `nil` | 鼠标点击时触发。 |
 
 ### public 成员（不进 .lfm，代码可用）
@@ -63,7 +63,7 @@ uses tyControls.SpinEdit;
 
 TTySpinEdit 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机制。**基线事件集**（Tier A + Tier B，含 `OnEditingDone`）全部暴露——见 [../events.md](../events.md)。
 
-`AutoSize`（基类已 published）现在**有东西可问**了：控件实现了 `CalculatePreferredSize`，按主题字号 + padding + 边框算出**高度**（宽度返回 `0` = 该轴无意见，由窗体作者决定）。换一个字号更大或内距更厚的皮肤时，`AutoSize := True` 的微调框会长高而不是把数字裁掉。
+`AutoSize`（已发布）现在**有东西可问**了：控件实现了 `CalculatePreferredSize`，按主题字号 + padding + 边框算出**高度**（宽度返回 `0` = 该轴无意见，由窗体作者决定）。换一个字号更大或内距更厚的皮肤时，`AutoSize := True` 的微调框会长高而不是把数字裁掉。
 
 ---
 
@@ -96,8 +96,9 @@ function TySpinDownButtonRect(const ALocal: TRect; APPI: Integer): TRect;
 | `Esc` | **还原**：丢弃编辑缓冲，重新同步到当前 `Value`（`SyncBufferToValue`），重绘；`Value` 不动所以不触发 `OnValueChange`，但显示文字被改回去了，触发 `OnChange` |
 | `↑`（Up） | `Value += Increment`（到达 `MaxValue` 后停止），同步回填缓冲，消费按键 |
 | `↓`（Down） | `Value -= Increment`（到达 `MinValue` 后停止），同步回填缓冲，消费按键 |
-| 鼠标左键点击上箭头 | `Value += Increment`，同步回填缓冲 |
-| 鼠标左键点击下箭头 | `Value -= Increment`，同步回填缓冲 |
+| 鼠标移到上 / 下箭头上 | 光标变成普通箭头（文字区仍是 I 形）；指针下那一半显示悬停底色（`ReadOnly` 时不显示） |
+| 鼠标左键按下上箭头 | `Value += Increment`，同步回填缓冲；按住约 400 ms 后每 100 ms 再走一步，松开或移出控件即停；按住期间显示按下底色 |
+| 鼠标左键按下下箭头 | `Value -= Increment`，其余同上 |
 | 鼠标滚轮向上 | `Value += Increment`，同步回填缓冲 |
 | 鼠标滚轮向下 | `Value -= Increment`，同步回填缓冲 |
 | 失焦（`DoExit`） | 等同 `Enter`：自动提交当前缓冲 |
@@ -116,7 +117,9 @@ function TySpinDownButtonRect(const ALocal: TRect; APPI: Integer): TRect;
 | `:focus` | 获得键盘焦点 |
 | `:disabled` | `Enabled = False` |
 
-上/下箭头使用 `TTyPainter.DrawGlyph` 以 `tgArrowUp` / `tgArrowDown` 字形绘制（tier-b 单色字形），颜色取自解析样式的 `TextColor`。获得焦点时在编辑缓冲的光标位置绘制 1px 竖条光标，以约 530 ms 间隔**闪烁**（`TTimer` 懒创建，无头测试与设计器中光标保持静态）。
+上/下箭头使用 `TTyPainter.DrawGlyph` 以 `tgArrowUp` / `tgArrowDown` 字形绘制（tier-b 单色字形），颜色取自解析样式的 `TextColor`。
+
+两个箭头按钮各有悬停和按下状态：那一半铺 `TyButton:hover` / `TyButton:active` 的 `background`，箭头改用该状态的 `color`，和独立的 `TTyUpDown` 画法一致，皮肤不用另写规则。底色只铺在字段的边框和焦点环以内，外侧的角跟着字段圆角。`ReadOnly` 时按钮不响应，也就不显示这两个状态。获得焦点时在编辑缓冲的光标位置绘制 1px 竖条光标，以约 530 ms 间隔**闪烁**（`TTimer` 懒创建，无头测试与设计器中光标保持静态）。
 
 **数值文字字号由主题 `font-size` 决定（Batch ④）：** 数值文字与光标定位统一经 `ResolveFontSize(S)` 取字号——优先用主题 `TySpinEdit { font-size }`（内置 9px），其次 `Font.Size`，再退到默认 9。绘制（`DrawText`）与光标横坐标测量（`CaretPixelX`）共用同一字号，保证光标始终对齐。早前写死的孤立字号 12 已移除。
 

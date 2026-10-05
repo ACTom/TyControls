@@ -47,7 +47,7 @@ uses tyControls.Popover;
 | `CloseOnClickOutside` | `Boolean` | `True` | 点击别处(即弹窗窗口失活)时关闭。默认开——flyout 本该如此。**关掉它**用于「内容必须被回答」的弹窗:此时它只能靠 `Hide` 或 Escape 消失。 |
 | `CloseOnEscape` | `Boolean` | `True` | 按 Escape 关闭。**刻意与 `CloseOnClickOutside` 分开**:这样「必须回答」的弹窗仍然保留每个用户都期待的键盘退路,而不会有误触退路。 |
 | `StyleClass` | `string` | `''` | 变体入口:主题里的 `TyPopover.danger` 规则。**两个 typeKey 都用它解析**,所以 `TyPopoverTitle.danger` 能单独给危险弹窗的标题上色。 |
-| `Controller` | `TTyStyleController` | `nil`(用全局 `TyDefaultController`) | 指定样式控制器。被销毁时置 `nil` 并**回落到全局默认**,而不是悬垂。 |
+| `Controller` | `TTyCustomStyleController` | `nil`(用全局 `TyDefaultController`) | 指定样式控制器。被销毁时置 `nil` 并**回落到全局默认**,而不是悬垂。 |
 
 > **属性变更不会移动已经弹出的窗口。** `Placement` 改了只记下来(「活着的弹窗不跳:布局是在它弹起来时读的——在用户指针底下挪走它,正是用户够不到那个按钮的原因」)。`Title` / `ShowArrow` / `StyleClass` / `Controller` 改了只 `Invalidate` **重绘**:`Title` 的 `''` ↔ 有文字其实是**尺寸变化**(整条标题带),要重新测量、重新定位、重新给内容定界——新尺寸落在**下一次 `Show`**,那才是 popover 决定几何的时机。
 

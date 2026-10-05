@@ -37,7 +37,10 @@ type
     procedure SetUpMemo(const ACss: string; AWidth: Integer);
     procedure LoadLines(const AItems: array of string);
     // True if any pixel in horizontal band [X0..X1] at row Y is "light".
-    function BandHasLightPixel(ABmp: TBGRABitmap; Y, X0, X1, AThresh: Integer): Boolean;
+    { Any light pixel in rows Y0..Y1, columns X0..X1. A band of rows, not one scanline:
+      which row a glyph's ink starts on is the rasterizer's business (the x-height of a
+      14px face moved a row when Windows text stopped being drawn at six times its size). }
+    function BandHasLightPixel(ABmp: TBGRABitmap; Y0, Y1, X0, X1, AThresh: Integer): Boolean;
   protected
     procedure TearDown; override;
   published
@@ -140,21 +143,23 @@ begin
   end;
 end;
 
-function TTyMemoHScrollTest.BandHasLightPixel(ABmp: TBGRABitmap; Y, X0, X1, AThresh: Integer): Boolean;
+function TTyMemoHScrollTest.BandHasLightPixel(ABmp: TBGRABitmap; Y0, Y1, X0, X1, AThresh: Integer): Boolean;
 var
-  x: Integer;
+  x, y: Integer;
   Px: TBGRAPixel;
 begin
   Result := False;
-  if (Y < 0) or (Y >= ABmp.Height) then Exit;
+  if Y0 < 0 then Y0 := 0;
+  if Y1 >= ABmp.Height then Y1 := ABmp.Height - 1;
   if X0 < 0 then X0 := 0;
   if X1 >= ABmp.Width then X1 := ABmp.Width - 1;
-  for x := X0 to X1 do
-  begin
-    Px := ABmp.GetPixel(x, Y);
-    if (Px.red > AThresh) and (Px.green > AThresh) and (Px.blue > AThresh) then
-      Exit(True);
-  end;
+  for y := Y0 to Y1 do
+    for x := X0 to X1 do
+    begin
+      Px := ABmp.GetPixel(x, y);
+      if (Px.red > AThresh) and (Px.green > AThresh) and (Px.blue > AThresh) then
+        Exit(True);
+    end;
 end;
 
 procedure TTyMemoHScrollTest.TearDown;
@@ -238,7 +243,7 @@ procedure TTyMemoHScrollTest.TestRenderShiftsFirstGlyphOff;
 var
   Bmp: TBitmap;
   Reread: TBGRABitmap;
-  CW, LH, Y0, FirstGlyphW: Integer;
+  CW, LH, FirstGlyphW: Integer;
   W: TTyIntArray;
 begin
   SetUpMemo(NARROW_CSS, 80);
@@ -251,7 +256,7 @@ begin
   FMemo.ProbeSetCaret(0, UTF8Length(LONG_LINE));
   FMemo.ProbeEnsureCaretXVisible(96);
   AssertTrue('precondition: scrolled right', FMemo.ProbeScrollX > FirstGlyphW);
-  LH := 18;  // any LH; we read a band near the top text row
+  LH := 18;  // the first text line's band (font 14px @96): the only line there is
   if LH > 60 then LH := 60;
   Bmp := TBitmap.Create;
   try
@@ -262,17 +267,16 @@ begin
     FMemo.ProbeRenderTo(Bmp.Canvas, Rect(0, 0, 80, 120), 96);
     Reread := TBGRABitmap.Create(Bmp);
     try
-      Y0 := 6;  // a row inside the first text line's band (font 14px @96)
       // The leftmost columns [0..FirstGlyphW) would hold the FIRST glyph at
       // ScrollX=0. After scrolling right past the first word, those columns no
       // longer show the line's leading 'the' — they show a later (shifted) glyph,
       // so there must STILL be light text somewhere across the viewport.
       AssertTrue('tail text visible somewhere in the viewport after scroll',
-        BandHasLightPixel(Reread, Y0, 0, CW - 1, 120));
+        BandHasLightPixel(Reread, 0, LH - 1, 0, CW - 1, 120));
       // And the very last viewport column near the right edge has text (the tail
       // of the long line is now reachable, not clipped-off forever).
       AssertTrue('right portion of viewport shows shifted text',
-        BandHasLightPixel(Reread, Y0, CW div 2, CW - 1, 120));
+        BandHasLightPixel(Reread, 0, LH - 1, CW div 2, CW - 1, 120));
     finally
       Reread.Free;
     end;

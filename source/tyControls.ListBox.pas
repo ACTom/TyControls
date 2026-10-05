@@ -16,13 +16,20 @@ type
     "I am updating" boolean at every call site. }
   TTySelectionChangeEvent = procedure(Sender: TObject; AUser: Boolean) of object;
 
-  TTyListBox = class(TTyCustomControl)
+  TTyCustomListBox = class(TTyCustomControl, ITyScrollBarFrameHost)
   private
     FItems: TStringList;
     FItemIndex: Integer;
     FItemHeight: Integer;
     FItemHeightExplicit: Boolean;   { True once set; False = follow --item-height (density) }
     FTopIndex: Integer;
+    { ItemIndex / TopIndex as a form file gave them, kept for Loaded when they were read
+      before the Items they index. See SetItemIndex. }
+    FStreamedItemIndex: Integer;
+    FStreamedTopIndex: Integer;
+    FItemIndexWaits: Boolean;
+    FTopIndexWaits: Boolean;
+    FTopIndexStreamed: Boolean;
     FOnChange: TNotifyEvent;
     FHoverRow: Integer;       // -1 = none; set in MouseMove, cleared in MouseLeave
     FScrollBar: TTyScrollBar; // nil until first needed
@@ -36,6 +43,7 @@ type
     FHOffset: Integer;
     FHScrollBar: TTyScrollBar;
     FSyncingHScroll: Boolean;
+    FScrollBarAutoHide: TTyScrollBarAutoHide;
     FMultiSelect: Boolean;
     FSelected: array of Boolean;
     FSelAnchor: Integer;
@@ -62,6 +70,10 @@ type
       Sorted is on, an insert can reorder indices, so re-pin the selection. }
     procedure ItemsChanged(Sender: TObject);
     procedure SetItemIndex(const AValue: Integer);
+    { The TopIndex PROPERTY's writer: notes a value read from a form file, then goes through
+      SetTopIndex like every other scroll. Internal scrolls call SetTopIndex directly, so
+      they are never mistaken for the streamed value. }
+    procedure WriteTopIndex(const AValue: Integer);
     function GetItemHeight: Integer;
     procedure SetItemHeight(const AValue: Integer);
     function MaxTopIndex: Integer;
@@ -69,6 +81,9 @@ type
     procedure ScrollBarChange(Sender: TObject);
     procedure HScrollBarChange(Sender: TObject);
     procedure SetScrollWidth(const AValue: Integer);
+    procedure SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
+    { 把「指针在本控件身上」转发给两条内嵌条。见 MouseEnter。 }
+    procedure NoteHostHover(AHovered: Boolean);
     { A bar's thickness in device px -- the same '--scrollbar-size' metric for both, so the
       horizontal one is as thick as the vertical one is wide on every theme and density. }
     function ScrollBarThickness: Integer;
@@ -105,7 +120,19 @@ type
     function FSelAnchorOr(ADefault: Integer): Integer;
     procedure ApplyRangeSelection(ALo, AHi: Integer);
   protected
+    { False = do not write Items into the .lfm, the switch TTyCustomComboBox has (FItemsStreamed
+      there too). A subclass whose rows are BUILT rather than authored clears it:
+      TTyCustomColorListBox, whose palette comes from Style and whose colours a TStrings in a form
+      file cannot carry. READING an Items block is unaffected, so older .lfm files still load. }
+    FItemsStreamed: Boolean;
+    function ItemsStored: Boolean;
     function GetStyleTypeKey: string; override;
+    { 本控件画框用的样式 —— RenderTo 自己读它,贴边的内嵌条(ITyScrollBarFrameHost)也读它,
+      所以两边画出来的框是同一份。Wayland 弹层上的方角处理就在这里面,条替它画的那一截框
+      也跟着是方的。 }
+    function ScrollBarFrameStyle: TTyStyleSet;
+    { ITyScrollBarFrameHost:这两条是本控件自己的内嵌条(点它们焦点归本控件)。 }
+    function EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     // Per-item content paint (default: the item text). A subclass overrides to draw a
     // swatch / glyph / checkbox before the text. ARowRect is the full row; AStyle the
@@ -196,9 +223,14 @@ type
       new one, i.e. a gutter on one side and a bar on the other. Same defect and same fix as
       TTyRadioGroup.CMBiDiModeChanged. }
     procedure CMBiDiModeChanged(var Message: TLMessage); message CM_BIDIMODECHANGED;
+    { Applies an ItemIndex / TopIndex that was read before its Items. }
+    procedure Loaded; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    { 指针进/出本控件 = 内嵌滚动条显示 / 开始倒计时。规则见
+      docs/controls/scrollbar.md §7。 }
+    procedure MouseEnter; override;
     procedure MouseLeave; override;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
@@ -259,12 +291,12 @@ type
       ComboBox dropdown sets this on Wayland, where the popup window can't be shape-masked, so a
       square paint matches the square window. Default False — embedded listboxes keep their radius. }
     ForceSquareSurface: Boolean;
-  published
+    property TabStop default True;
     { Typed TStrings, as LCL types it (stdctrls.pp:435/:647). It was TStringList, which made
       `LB.Items := Memo.Lines` -- the everyday population idiom -- a compile error, because
       the ABSTRACT base is what every other TStrings source is. The backing store is still a
       TStringList (Sorted rides on it); assigning any TStrings copies into it. }
-    property Items: TStrings read GetItems write SetItems;
+    property Items: TStrings read GetItems write SetItems stored ItemsStored;
     property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
     property MultiSelect: Boolean read FMultiSelect write SetMultiSelect default False;
     { With MultiSelect on, WHICH multi-select discipline the mouse follows. True (LCL's
@@ -292,17 +324,84 @@ type
       application knows how it draws them (a row with a swatch or a glyph is wider than its
       text). An app that wants auto-fit measures its own widest row and assigns it here. }
     property ScrollWidth: Integer read FScrollWidth write SetScrollWidth default 0;
-    property TopIndex: Integer read FTopIndex write SetTopIndex default 0;
+    { 这个列表的两条滚动条要不要在没人用的时候淡出。转发给内嵌条，
+      语义见 TTyScrollBar.AutoHide。 }
+    property ScrollBarAutoHide: TTyScrollBarAutoHide
+      read FScrollBarAutoHide write SetScrollBarAutoHide default sbahDefault;
+    property TopIndex: Integer read FTopIndex write WriteTopIndex default 0;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     { LCL's name and shape for the same notification (stdctrls.pp:668). Fires alongside
       OnChange, never instead of it, so nothing that already listens has to move. }
     property OnSelectionChange: TTySelectionChangeEvent
       read FOnSelectionChange write FOnSelectionChange;
-    property TabStop default True;
+  end;
+
+  { TTyListBox publishes TTyCustomListBox's properties; everything lives in TTyCustomListBox. }
+  TTyListBox = class(TTyCustomListBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property MultiSelect;
+    property ExtendedSelect;
+    property Sorted;
+    property ItemHeight;
+    property ScrollWidth;
+    property ScrollBarAutoHide;
+    property TopIndex;
+    property OnChange;
+    property OnSelectionChange;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
   end;
 
 implementation
@@ -310,13 +409,14 @@ implementation
 function IfThenIdx(ACond: Boolean; ATrue, AFalse: Integer): Integer;
 begin if ACond then Result := ATrue else Result := AFalse; end;
 
-{ TTyListBox }
+{ TTyCustomListBox }
 
-constructor TTyListBox.Create(AOwner: TComponent);
+constructor TTyCustomListBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FItems := TStringList.Create;
   FItems.OnChange := @ItemsChanged;
+  FItemsStreamed := True;   // a plain list's Items IS the persisted row set
   FSorted := False;
   FSuppressItemsChanged := False;
   FItemIndex := -1;
@@ -330,6 +430,7 @@ begin
   FHOffset := 0;
   FHScrollBar := nil;
   FSyncingHScroll := False;
+  FScrollBarAutoHide := sbahDefault;   { 与 published 的 default 一致 }
   FSelAnchor := -1;
   FExtendedSelect := True;        { LCL's default discipline }
   FLockSelectionChange := 0;
@@ -339,34 +440,34 @@ begin
   Height := 120;
 end;
 
-destructor TTyListBox.Destroy;
+destructor TTyCustomListBox.Destroy;
 begin
   FItems.Free;
   // FScrollBar is owned by Self (via Create(Self)) so it is freed by TComponent
   inherited Destroy;
 end;
 
-function TTyListBox.GetStyleTypeKey: string;
+function TTyCustomListBox.GetStyleTypeKey: string;
 begin
   Result := 'TyListBox';
 end;
 
-function TTyListBox.GetItemStyleTypeKey: string;
+function TTyCustomListBox.GetItemStyleTypeKey: string;
 begin
   Result := 'TyListItem';
 end;
 
-function TTyListBox.ItemStatesFor(AIndex: Integer; ABaseStates: TTyStateSet): TTyStateSet;
+function TTyCustomListBox.ItemStatesFor(AIndex: Integer; ABaseStates: TTyStateSet): TTyStateSet;
 begin
   Result := ABaseStates;
 end;
 
-function TTyListBox.GetItems: TStrings;
+function TTyCustomListBox.GetItems: TStrings;
 begin
   Result := FItems;
 end;
 
-procedure TTyListBox.SetItems(const AValue: TStrings);
+procedure TTyCustomListBox.SetItems(const AValue: TStrings);
 begin
   // Drive the assignment ourselves; suppress the per-mutation ItemsChanged hook
   // so we do the clamping/selection bookkeeping exactly once below.
@@ -393,7 +494,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyListBox.SetSorted(const AValue: Boolean);
+procedure TTyCustomListBox.SetSorted(const AValue: Boolean);
 var
   SelTexts: TStringList;
 begin
@@ -420,7 +521,7 @@ begin
   Invalidate;
 end;
 
-function TTyListBox.SnapshotSelectedTexts: TStringList;
+function TTyCustomListBox.SnapshotSelectedTexts: TStringList;
 var
   i: Integer;
 begin
@@ -436,7 +537,7 @@ begin
     Result.Add(FItems[FItemIndex]);
 end;
 
-procedure TTyListBox.ResyncSelectionFromTexts(ASelTexts: TStringList);
+procedure TTyCustomListBox.ResyncSelectionFromTexts(ASelTexts: TStringList);
 var
   i, Idx: Integer;
 begin
@@ -465,7 +566,7 @@ begin
   end;
 end;
 
-procedure TTyListBox.ItemsChanged(Sender: TObject);
+procedure TTyCustomListBox.ItemsChanged(Sender: TObject);
 var
   SelTexts: TStringList;
 begin
@@ -492,15 +593,70 @@ begin
   Invalidate;
 end;
 
-procedure TTyListBox.SetItemIndex(const AValue: Integer);
+procedure TTyCustomListBox.SetItemIndex(const AValue: Integer);
 begin
+  { A form file can hold ItemIndex ahead of Items: a third party's TTyCustomListBox publishes
+    in whatever order it likes (the library's own list boxes publish Items first). Read then,
+    the index points past an empty list and would land on -1, losing the saved row. So it
+    waits, and Loaded applies it against the items that streamed in after it -- the way a
+    radio group and a tab strip hold theirs (LCL's TRadioGroup: FReading). }
+  if csLoading in ComponentState then
+  begin
+    if AValue >= FItems.Count then
+    begin
+      FStreamedItemIndex := AValue;
+      FItemIndexWaits := True;
+      Exit;
+    end;
+    FItemIndexWaits := False;   // a value that could be applied replaces a waiting one
+  end;
   SelectItem(AValue);
+end;
+
+procedure TTyCustomListBox.WriteTopIndex(const AValue: Integer);
+begin
+  { The same for TopIndex, which clamps against the rows there are: ahead of Items it would
+    clamp to 0. Noted even when it does apply, because a waiting ItemIndex applied in Loaded
+    scrolls its row into view, and the saved TopIndex has to win over that, as it does when
+    the items come first (ItemIndex scrolls, then TopIndex is read). }
+  if csLoading in ComponentState then
+  begin
+    FStreamedTopIndex := AValue;
+    FTopIndexStreamed := True;
+    FTopIndexWaits := AValue > MaxTopIndex;
+    if FTopIndexWaits then Exit;
+  end;
+  SetTopIndex(AValue);
+end;
+
+procedure TTyCustomListBox.Loaded;
+begin
+  inherited Loaded;
+  if not (FItemIndexWaits or FTopIndexWaits) then
+  begin
+    FTopIndexStreamed := False;
+    Exit;
+  end;
+  { Silently: reading a form is not a selection change, and a handler would run before the
+    form is whole. The order is the one the library's own list boxes stream in. }
+  if FItemIndexWaits then
+  begin
+    SetItemIndexSilent(FStreamedItemIndex);
+    EnsureSelectionVisible;
+  end;
+  if FTopIndexStreamed then
+    SetTopIndex(FStreamedTopIndex);
+  FItemIndexWaits := False;
+  FTopIndexWaits := False;
+  FTopIndexStreamed := False;
+  UpdateScrollBar;
+  Invalidate;
 end;
 
 { Effective row height: an explicit ItemHeight wins; otherwise follow --item-height,
   which the density pack raises for modern. Resolved live so a density toggle re-heights
   the rows on the next layout. }
-function TTyListBox.GetItemHeight: Integer;
+function TTyCustomListBox.GetItemHeight: Integer;
 begin
   if FItemHeightExplicit then
     Result := FItemHeight
@@ -508,7 +664,7 @@ begin
     Result := ActiveController.Metric('--item-height', 24);
 end;
 
-procedure TTyListBox.SetItemHeight(const AValue: Integer);
+procedure TTyCustomListBox.SetItemHeight(const AValue: Integer);
 begin
   FItemHeightExplicit := True;   { host pinned it, even at the fallback value }
   if FItemHeight = AValue then Exit;
@@ -518,7 +674,7 @@ begin
   Invalidate;
 end;
 
-function TTyListBox.MaxTopIndex: Integer;
+function TTyCustomListBox.MaxTopIndex: Integer;
 begin
   { The furthest TopIndex that still fills the box, counted from the LAST row backwards.
     With one height for every row this is Count - VisibleRows and always was; with per-row
@@ -529,7 +685,7 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-procedure TTyListBox.SetTopIndex(const AValue: Integer);
+procedure TTyCustomListBox.SetTopIndex(const AValue: Integer);
 var
   Clamped: Integer;
 begin
@@ -551,12 +707,12 @@ begin
   Invalidate;
 end;
 
-function TTyListBox.RowHeight(AIndex: Integer): Integer;
+function TTyCustomListBox.RowHeight(AIndex: Integer): Integer;
 begin
   Result := GetItemHeight;
 end;
 
-function TTyListBox.ScaledRowHeightAt(AIndex, APPI: Integer): Integer;
+function TTyCustomListBox.ScaledRowHeightAt(AIndex, APPI: Integer): Integer;
 begin
   Result := MulDiv(RowHeight(AIndex), APPI, 96);
   { A row of zero px would make every walker below spin forever, so the floor is not
@@ -565,12 +721,12 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-function TTyListBox.ScaledRowHeight(AIndex: Integer): Integer;
+function TTyCustomListBox.ScaledRowHeight(AIndex: Integer): Integer;
 begin
   Result := ScaledRowHeightAt(AIndex, Font.PixelsPerInch);
 end;
 
-function TTyListBox.ViewportHeight: Integer;
+function TTyCustomListBox.ViewportHeight: Integer;
 var
   S: TTyStyleSet;
   PPI: Integer;
@@ -595,7 +751,7 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-function TTyListBox.RowsFittingIn(AStart, AHeight: Integer): Integer;
+function TTyCustomListBox.RowsFittingIn(AStart, AHeight: Integer): Integer;
 var
   y, i: Integer;
 begin
@@ -620,7 +776,7 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-function TTyListBox.RowsFittingBackIn(AEnd, AHeight: Integer): Integer;
+function TTyCustomListBox.RowsFittingBackIn(AEnd, AHeight: Integer): Integer;
 var
   y, i: Integer;
 begin
@@ -637,7 +793,7 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-function TTyListBox.ContentFillsHeight(ALimit, APPI: Integer): Boolean;
+function TTyCustomListBox.ContentFillsHeight(ALimit, APPI: Integer): Boolean;
 var
   y, i: Integer;
 begin
@@ -651,12 +807,12 @@ begin
   Result := y >= ALimit;
 end;
 
-function TTyListBox.VisibleRows: Integer;
+function TTyCustomListBox.VisibleRows: Integer;
 begin
   Result := RowsFittingIn(FTopIndex, ViewportHeight);
 end;
 
-procedure TTyListBox.EnsureSelectionVisible;
+procedure TTyCustomListBox.EnsureSelectionVisible;
 var
   VR: Integer;
 begin
@@ -676,7 +832,7 @@ begin
   if FTopIndex > MaxTopIndex then FTopIndex := MaxTopIndex;
 end;
 
-procedure TTyListBox.SelectItem(AIndex: Integer);
+procedure TTyCustomListBox.SelectItem(AIndex: Integer);
 var
   NewIndex: Integer;
 begin
@@ -692,7 +848,12 @@ begin
   FireSelectionChanged;
 end;
 
-procedure TTyListBox.ScrollBarChange(Sender: TObject);
+function TTyCustomListBox.ItemsStored: Boolean;
+begin
+  Result := FItemsStreamed;
+end;
+
+procedure TTyCustomListBox.ScrollBarChange(Sender: TObject);
 begin
   if FSyncingScroll then Exit;
   FSyncingScroll := True;
@@ -703,7 +864,7 @@ begin
   end;
 end;
 
-procedure TTyListBox.HScrollBarChange(Sender: TObject);
+procedure TTyCustomListBox.HScrollBarChange(Sender: TObject);
 begin
   if FSyncingHScroll then Exit;
   FSyncingHScroll := True;
@@ -714,14 +875,14 @@ begin
   end;
 end;
 
-function TTyListBox.ScrollBarThickness: Integer;
+function TTyCustomListBox.ScrollBarThickness: Integer;
 begin
   Result := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize),
     Font.PixelsPerInch, 96);
   if Result < 1 then Result := 1;
 end;
 
-function TTyListBox.MaxHOffset: Integer;
+function TTyCustomListBox.MaxHOffset: Integer;
 var
   l, r: Integer;
 begin
@@ -732,7 +893,7 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-procedure TTyListBox.SetHOffset(AValue: Integer);
+procedure TTyCustomListBox.SetHOffset(AValue: Integer);
 var
   m: Integer;
 begin
@@ -757,7 +918,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyListBox.SetScrollWidth(const AValue: Integer);
+procedure TTyCustomListBox.SetScrollWidth(const AValue: Integer);
 begin
   if FScrollWidth = AValue then Exit;
   if AValue < 0 then FScrollWidth := 0 else FScrollWidth := AValue;
@@ -771,13 +932,24 @@ begin
   Invalidate;
 end;
 
-procedure TTyListBox.EnsureSelectedLen;
+procedure TTyCustomListBox.SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
+begin
+  if FScrollBarAutoHide = AValue then Exit;
+  FScrollBarAutoHide := AValue;
+  { 两条都是惰性创建的，建的时候也要带上——所以创建处同样要写一遍。
+    这里管「已经建好的」，创建处管「之后才建的」；只写这一半的话，
+    先设属性后滚动的用法(在 .lfm 里设好、运行时才填满)会静静丢值。 }
+  if FScrollBar <> nil then FScrollBar.AutoHide := AValue;
+  if FHScrollBar <> nil then FHScrollBar.AutoHide := AValue;
+end;
+
+procedure TTyCustomListBox.EnsureSelectedLen;
 begin
   if Length(FSelected) <> FItems.Count then
     SetLength(FSelected, FItems.Count);   // new slots default False
 end;
 
-function TTyListBox.GetSelected(AIndex: Integer): Boolean;
+function TTyCustomListBox.GetSelected(AIndex: Integer): Boolean;
 begin
   if (AIndex < 0) or (AIndex >= FItems.Count) then Exit(False);
   if FMultiSelect then
@@ -789,7 +961,7 @@ begin
     Result := (AIndex = FItemIndex);
 end;
 
-procedure TTyListBox.SetSelected(AIndex: Integer; AValue: Boolean);
+procedure TTyCustomListBox.SetSelected(AIndex: Integer; AValue: Boolean);
 begin
   if (AIndex < 0) or (AIndex >= FItems.Count) then Exit;
   if FMultiSelect then
@@ -809,7 +981,7 @@ begin
     SelectItem(-1);
 end;
 
-procedure TTyListBox.SetMultiSelect(AValue: Boolean);
+procedure TTyCustomListBox.SetMultiSelect(AValue: Boolean);
 var i: Integer;
 begin
   if FMultiSelect = AValue then Exit;
@@ -820,7 +992,7 @@ begin
   Invalidate;
 end;
 
-function TTyListBox.SelCount: Integer;
+function TTyCustomListBox.SelCount: Integer;
 var i: Integer;
 begin
   if FMultiSelect then
@@ -833,7 +1005,7 @@ begin
   else Result := 0;
 end;
 
-procedure TTyListBox.ClearSelection;
+procedure TTyCustomListBox.ClearSelection;
 var i: Integer; AnyChanged: Boolean;
 begin
   if not FMultiSelect then
@@ -855,7 +1027,7 @@ begin
   end;
 end;
 
-procedure TTyListBox.SelectAll;
+procedure TTyCustomListBox.SelectAll;
 var i: Integer; AnyChanged: Boolean;
 begin
   if not FMultiSelect then Exit;
@@ -870,7 +1042,7 @@ begin
   end;
 end;
 
-procedure TTyListBox.DoChangeSel;
+procedure TTyCustomListBox.DoChangeSel;
 begin
   FireSelectionChanged;
 end;
@@ -878,41 +1050,41 @@ end;
 { The User flag LCL carries is derived here, once, rather than plumbed through every
   mutator: FUserAction is non-zero only inside MouseDown/KeyDown, and a held lock demotes
   the flag exactly as customlistbox.inc:360 does. }
-procedure TTyListBox.FireSelectionChanged;
+procedure TTyCustomListBox.FireSelectionChanged;
 begin
   DoSelectionChange((FUserAction > 0) and (FLockSelectionChange = 0));
 end;
 
-procedure TTyListBox.DoSelectionChange(AUser: Boolean);
+procedure TTyCustomListBox.DoSelectionChange(AUser: Boolean);
 begin
   if Assigned(FOnChange) then FOnChange(Self);
   if Assigned(FOnSelectionChange) then FOnSelectionChange(Self, AUser);
 end;
 
-procedure TTyListBox.LockSelectionChange;
+procedure TTyCustomListBox.LockSelectionChange;
 begin
   Inc(FLockSelectionChange);
 end;
 
-procedure TTyListBox.UnlockSelectionChange;
+procedure TTyCustomListBox.UnlockSelectionChange;
 begin
   if FLockSelectionChange > 0 then Dec(FLockSelectionChange);
 end;
 
-procedure TTyListBox.ClearAllBits;
+procedure TTyCustomListBox.ClearAllBits;
 var i: Integer;
 begin
   EnsureSelectedLen;
   for i := 0 to High(FSelected) do FSelected[i] := False;
 end;
 
-function TTyListBox.FSelAnchorOr(ADefault: Integer): Integer;
+function TTyCustomListBox.FSelAnchorOr(ADefault: Integer): Integer;
 begin
   if (FSelAnchor >= 0) and (FSelAnchor < FItems.Count) then Result := FSelAnchor
   else Result := ADefault;
 end;
 
-procedure TTyListBox.ApplyRangeSelection(ALo, AHi: Integer);
+procedure TTyCustomListBox.ApplyRangeSelection(ALo, AHi: Integer);
 var i, t: Integer;
 begin
   EnsureSelectedLen;
@@ -924,7 +1096,7 @@ begin
   DoChangeSel;
 end;
 
-procedure TTyListBox.UpdateScrollBar;
+procedure TTyCustomListBox.UpdateScrollBar;
 var
   VR, MaxPos, MaxTop, pass, thick, availH, viewW, extentW, step, padW, padV, PPI,
   maxH: Integer;
@@ -944,6 +1116,10 @@ begin
   padW := MulDiv(S.Padding.Left, PPI, 96) + MulDiv(S.Padding.Right, PPI, 96);
   padV := MulDiv(S.Padding.Top, PPI, 96) + MulDiv(S.Padding.Bottom, PPI, 96);
   extentW := MulDiv(FScrollWidth, PPI, 96);
+  { 两条条都**贴边**摆,不为边框让一个像素:条是窗口化子控件,它盖住的那几个像素上的边框和
+    焦点环由条自己画回去(本控件实现 ITyScrollBarFrameHost,见 TTyScrollBar.RenderTo)。
+    从前按边框那一圈内缩、圆角上再把两端截短,真机的结论是「条飘着的,不够紧凑」。
+    gutter 与之无关,一直只扣 thick。 }
   { --- settle the TWO bars together ----------------------------------------------------
     Each bar's gutter comes out of the other's viewport, so one pass can decide "no
     horizontal bar" from a width the vertical bar has not given up yet, and the other way
@@ -983,6 +1159,7 @@ begin
       FHScrollBar.TabStop := False;
       FHScrollBar.OnChange := @HScrollBarChange;
       FHScrollBar.AnimationsEnabled := False;
+      FHScrollBar.AutoHide := FScrollBarAutoHide;   // the bar is born AFTER the property may have been set
       FHScrollBar.ControlStyle := FHScrollBar.ControlStyle + [csNoDesignVisible];
     end;
     { alBottom, and LCL aligns alBottom BEFORE alRight/alLeft -- so the horizontal bar takes
@@ -1012,6 +1189,7 @@ begin
       // Embedded scrollbar drives content scrolling: keep it instant (no thumb
       // glide) so scrolling never lags behind the wheel/keyboard.
       FScrollBar.AnimationsEnabled := False;
+      FScrollBar.AutoHide := FScrollBarAutoHide;   // the bar is born AFTER the property may have been set
       FScrollBar.ControlStyle := FScrollBar.ControlStyle + [csNoDesignVisible];   // internal: never a designable child
     end;
     { WHICH EDGE THE BAR DOCKS TO -- set on EVERY call, not once at creation, because it can
@@ -1019,6 +1197,8 @@ begin
       straight back here). LCL's alignment engine has no BiDi of its own, so alRight stays
       the right-hand edge on a mirrored form and the side has to be chosen explicitly; this
       is the one place that chooses it, and RowContentBounds insets the rows to match. }
+    { 贴边:RTL 下停在左边,条画出来的是本控件的**左**边和左边两个角。横条在的时候竖条的
+      下沿挨着横条(alBottom 先摆),角上那一格归横条。 }
     if RtlRowLayout then
       FScrollBar.Align := alLeft
     else
@@ -1078,7 +1258,7 @@ begin
   end;
 end;
 
-procedure TTyListBox.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomListBox.KeyDown(var Key: Word; Shift: TShiftState);
 var RowTotal, NewFocus, VR: Integer; Extend: Boolean;
   procedure MoveFocus(ATarget: Integer);
   begin
@@ -1148,7 +1328,7 @@ begin
   end;
 end;
 
-procedure TTyListBox.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomListBox.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   Row: Integer;
 begin
@@ -1209,7 +1389,7 @@ begin
   end;
 end;
 
-procedure TTyListBox.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomListBox.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   NewRow: Integer;
 begin
@@ -1222,9 +1402,27 @@ begin
   end;
 end;
 
-procedure TTyListBox.MouseLeave;
+procedure TTyCustomListBox.NoteHostHover(AHovered: Boolean);
+begin
+  { **两条都要告诉。** 只喂竖条的话，一个横向也溢出的列表指针进来时只亮一半
+    ——「转发只写了一半」是本库反复出过的那种故障。
+    两条都是惰性建的，nil 判断是真的会走到（内容还没撑出条的时候）。 }
+  if FScrollBar <> nil then FScrollBar.SetHostHovered(AHovered);
+  if FHScrollBar <> nil then FHScrollBar.SetHostHovered(AHovered);
+end;
+
+procedure TTyCustomListBox.MouseEnter;
+begin
+  { 必须 inherited：吞掉 LCL 那层的 hover 状态是本库出过好几次的故障。 }
+  inherited MouseEnter;
+  NoteHostHover(True);
+end;
+
+procedure TTyCustomListBox.MouseLeave;
 begin
   inherited MouseLeave;
+  { 只是起倒计时，不当场隐藏：指针从列表正文挪到条上时这里也会走一趟。 }
+  NoteHostHover(False);
   if FHoverRow <> -1 then
   begin
     FHoverRow := -1;
@@ -1232,7 +1430,7 @@ begin
   end;
 end;
 
-function TTyListBox.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+function TTyCustomListBox.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 var
   Delta: Integer;
@@ -1265,13 +1463,30 @@ begin
   Result := True;
 end;
 
-procedure TTyListBox.Resize;
+procedure TTyCustomListBox.Resize;
 begin
   inherited Resize;
   UpdateScrollBar;
 end;
 
-procedure TTyListBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+function TTyCustomListBox.ScrollBarFrameStyle: TTyStyleSet;
+begin
+  Result := CurrentStyle;
+  // Wayland popup: the window can't be shape-masked, so paint square corners to match it. Per-corner
+  // Radius wins in TyEffectiveCorners, so zero it AND BorderRadius (row caps key off BorderRadius).
+  if ForceSquareSurface then
+  begin
+    Result.BorderRadius := 0;
+    Result.Radius := Default(TTyCorners);
+  end;
+end;
+
+function TTyCustomListBox.EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
+begin
+  Result := (ABar = FScrollBar) or (ABar = FHScrollBar);
+end;
+
+procedure TTyCustomListBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   BoxStyle, RowStyle: TTyStyleSet;
@@ -1291,14 +1506,7 @@ begin
   try
     R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     P.BeginPaint(ACanvas, ARect, APPI);
-    BoxStyle := CurrentStyle;
-    // Wayland popup: the window can't be shape-masked, so paint square corners to match it. Per-corner
-    // Radius wins in TyEffectiveCorners, so zero it AND BorderRadius (row caps key off BorderRadius).
-    if ForceSquareSurface then
-    begin
-      BoxStyle.BorderRadius := 0;
-      BoxStyle.Radius := Default(TTyCorners);
-    end;
+    BoxStyle := ScrollBarFrameStyle;
     DrawFrame(P, R, BoxStyle);
 
     { Content area = full rect inset by the LISTBOX style's Padding, with the x edges coming
@@ -1335,17 +1543,10 @@ begin
     // there, so the chrome — drawn once by DrawFrame over the listbox background — keeps a
     // UNIFORM colour: the row fills never touch its anti-aliased inner edge (which otherwise
     // picked up the row colour at a hovered/selected row, tinting the border/ring there).
-    // insetLogical = the chrome's inner edge + 1px AA clearance; 0 when there is no chrome.
-    // The border and the focus ring (StrokeBorder) are both drawn INSIDE the edge: the border
-    // occupies [Left, Left+BorderWidth] and the ring [Left+OutlineOffset, +OutlineWidth]. The
-    // chrome's inner edge is therefore the LARGER of those (full widths, not half). Inset the
-    // rows one logical px PAST it so a thin background gap sits between the chrome and the fill
-    // and the chrome keeps a single uniform colour. No chrome => inset 0 (rows fill fully).
-    insetLogical := BoxStyle.BorderWidth;
-    if (tpOutline in BoxStyle.Present) and (BoxStyle.OutlineWidth > 0) then
-      if BoxStyle.OutlineOffset + BoxStyle.OutlineWidth > insetLogical then
-        insetLogical := BoxStyle.OutlineOffset + BoxStyle.OutlineWidth;
-    if insetLogical > 0 then Inc(insetLogical);
+    // How WIDE that band is: TyChromeInsetLogical. The formula was worked out here first and
+    // lives in Base.pas now. (The embedded bars no longer read it: they sit flush and repaint
+    // this band over their own rects -- see TTyScrollBar.RenderTo.)
+    insetLogical := TyChromeInsetLogical(BoxStyle);
     inset := P.Scale(insetLogical);
     savedClip := P.Bitmap.ClipRect;
     { The clip is what makes the horizontal scroll safe: RowContentBounds hands the rows a
@@ -1427,7 +1628,7 @@ begin
   end;
 end;
 
-procedure TTyListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
+procedure TTyCustomListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
 var
   textR: TRect;
@@ -1454,7 +1655,7 @@ begin
   );
 end;
 
-procedure TTyListBox.Clear;
+procedure TTyCustomListBox.Clear;
 begin
   { A convenience alias, and honestly nothing more: Items.Clear fires ItemsChanged, which
     already resizes the FSelected bitmap, clamps a now-out-of-range ItemIndex to -1 and
@@ -1466,17 +1667,17 @@ begin
   UpdateScrollBar;
 end;
 
-procedure TTyListBox.AddItem(const AItem: string; AnObject: TObject);
+procedure TTyCustomListBox.AddItem(const AItem: string; AnObject: TObject);
 begin
   FItems.AddObject(AItem, AnObject);
 end;
 
-function TTyListBox.Count: Integer;
+function TTyCustomListBox.Count: Integer;
 begin
   Result := FItems.Count;
 end;
 
-function TTyListBox.ItemRect(AIndex: Integer): TRect;
+function TTyCustomListBox.ItemRect(AIndex: Integer): TRect;
 var
   i, rowTop: Integer;
 begin
@@ -1492,12 +1693,12 @@ begin
   Result := Rect(0, rowTop, ClientWidth, rowTop + ScaledRowHeight(AIndex));
 end;
 
-function TTyListBox.GetIndexAtY(AY: Integer): Integer;
+function TTyCustomListBox.GetIndexAtY(AY: Integer): Integer;
 begin
   Result := RowAtY(AY);
 end;
 
-function TTyListBox.DeleteSelected: Integer;
+function TTyCustomListBox.DeleteSelected: Integer;
 var
   i: Integer;
 begin
@@ -1532,7 +1733,7 @@ begin
   end;
 end;
 
-procedure TTyListBox.SelectRange(ALow, AHigh: Integer; ASelected: Boolean);
+procedure TTyCustomListBox.SelectRange(ALow, AHigh: Integer; ASelected: Boolean);
 var
   i, lo, hi: Integer;
   moved: Boolean;
@@ -1557,7 +1758,7 @@ begin
   end;
 end;
 
-function TTyListBox.GetSelectedText: string;
+function TTyCustomListBox.GetSelectedText: string;
 var
   i: Integer;
 begin
@@ -1576,7 +1777,7 @@ begin
     Result := FItems[FItemIndex];
 end;
 
-function TTyListBox.RowAtY(AY: Integer): Integer;
+function TTyCustomListBox.RowAtY(AY: Integer): Integer;
 var
   d, h, idx: Integer;
 begin
@@ -1614,18 +1815,18 @@ begin
   if (Result < 0) or (Result >= FItems.Count) then Result := -1;
 end;
 
-function TTyListBox.ContentTopOffset: Integer;
+function TTyCustomListBox.ContentTopOffset: Integer;
 begin
   { Same scale RenderTo uses (P.Scale = MulDiv(x, APPI, 96)); Font.PixelsPerInch tracks APPI. }
   Result := MulDiv(CurrentStyle.Padding.Top, Font.PixelsPerInch, 96);
 end;
 
-function TTyListBox.RtlRowLayout: Boolean;
+function TTyCustomListBox.RtlRowLayout: Boolean;
 begin
   Result := IsRightToLeft;
 end;
 
-procedure TTyListBox.RowViewportBounds(AWidth, APPI: Integer; out ALeft, ARight: Integer);
+procedure TTyCustomListBox.RowViewportBounds(AWidth, APPI: Integer; out ALeft, ARight: Integer);
 var
   S: TTyStyleSet;
   sb: Integer;
@@ -1646,7 +1847,7 @@ begin
   if ARight < ALeft then ARight := ALeft;
 end;
 
-procedure TTyListBox.RowContentBounds(AWidth, APPI: Integer; out ALeft, ARight: Integer);
+procedure TTyCustomListBox.RowContentBounds(AWidth, APPI: Integer; out ALeft, ARight: Integer);
 var
   viewW, contentW: Integer;
 begin
@@ -1677,14 +1878,14 @@ begin
   end;
 end;
 
-procedure TTyListBox.CMBiDiModeChanged(var Message: TLMessage);
+procedure TTyCustomListBox.CMBiDiModeChanged(var Message: TLMessage);
 begin
   inherited;          // LCL invalidates, tells the children and calls AdjustSize
   UpdateScrollBar;    // and then the bar has to actually change edges
   Invalidate;
 end;
 
-procedure TTyListBox.SetItemIndexSilent(const AIndex: Integer);
+procedure TTyCustomListBox.SetItemIndexSilent(const AIndex: Integer);
 begin
   if (AIndex >= 0) and (AIndex < FItems.Count) then
     FItemIndex := AIndex
@@ -1692,12 +1893,12 @@ begin
     FItemIndex := -1;
 end;
 
-procedure TTyListBox.Paint;
+procedure TTyCustomListBox.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-procedure TTyListBox.SimulateKeyDown(AKey: Word);
+procedure TTyCustomListBox.SimulateKeyDown(AKey: Word);
 begin
   KeyDown(AKey, []);
 end;

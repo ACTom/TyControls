@@ -99,7 +99,7 @@ type
     declares no variant enum of its own, so a theme may define as many as it likes without
     a code change, and the segments' own key is resolved with the SAME StyleClass so
     'TySegmentedItem.small' can follow the track. }
-  TTySegmented = class(TTyCustomControl)
+  TTyCustomSegmented = class(TTyCustomControl)
   private
     FItems: TStrings;
     FItemIndex: Integer;
@@ -150,7 +150,7 @@ type
     function TySegmentRect(AIndex: Integer): TRect;
     { The segment at client device (X, Y), or -1 (the track's padding gutter included). }
     function TySegmentAt(X, Y: Integer): Integer;
-  published
+    property TabStop default True;
     { The segments, one per line. Editing them re-fits an auto-sized track; an edit that
       leaves ItemIndex out of range resets it to -1 SILENTLY (see SetItemIndex). }
     property Items: TStrings read FItems write SetItems;
@@ -160,16 +160,69 @@ type
     { Fires whenever ItemIndex actually changes — by click, by key, or from code. Setting
       the same index again is not a change and stays silent. }
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+  end;
+
+  { TTySegmented publishes TTyCustomSegmented's properties; everything lives in TTyCustomSegmented. }
+  TTySegmented = class(TTyCustomSegmented)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
     { With AutoSize the track hugs its widest label (every segment takes that width, plus
       the segment padding and the track's own inset); off, it keeps the bounds it was given
       and the segments split them evenly. }
     property AutoSize;
-    property TabStop default True;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property OnChange;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
-    property OnClick;
   end;
 
 implementation
@@ -258,9 +311,9 @@ begin
   Inc(Result, ACount * segW);
 end;
 
-{ --- TTySegmented --------------------------------------------------------------------- }
+{ --- TTyCustomSegmented --------------------------------------------------------------- }
 
-constructor TTySegmented.Create(AOwner: TComponent);
+constructor TTyCustomSegmented.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FItems := TStringList.Create;
@@ -274,7 +327,7 @@ begin
   Height := TyDensityMetric(ActiveController, 30, '--segmented-height');
 end;
 
-destructor TTySegmented.Destroy;
+destructor TTyCustomSegmented.Destroy;
 begin
   // Drop the change hook before freeing: the list fires OnChange as it clears.
   TStringList(FItems).OnChange := nil;
@@ -282,24 +335,24 @@ begin
   inherited Destroy;
 end;
 
-function TTySegmented.GetStyleTypeKey: string;
+function TTyCustomSegmented.GetStyleTypeKey: string;
 begin
   Result := 'TySegmented';
 end;
 
-function TTySegmented.Count: Integer;
+function TTyCustomSegmented.Count: Integer;
 begin
   Result := FItems.Count;
 end;
 
 { --- items / selection ---------------------------------------------------------------- }
 
-procedure TTySegmented.SetItems(AValue: TStrings);
+procedure TTyCustomSegmented.SetItems(AValue: TStrings);
 begin
   FItems.Assign(AValue);   // fires ItemsChanged
 end;
 
-procedure TTySegmented.ItemsChanged(Sender: TObject);
+procedure TTyCustomSegmented.ItemsChanged(Sender: TObject);
 var
   valid: Integer;
 begin
@@ -318,7 +371,7 @@ begin
   if not (csLoading in ComponentState) then Invalidate;
 end;
 
-procedure TTySegmented.SetItemIndex(AValue: Integer);
+procedure TTyCustomSegmented.SetItemIndex(AValue: Integer);
 var
   valid: Integer;
 begin
@@ -338,7 +391,7 @@ begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTySegmented.Loaded;
+procedure TTyCustomSegmented.Loaded;
 var
   pending: Integer;
 begin
@@ -358,7 +411,7 @@ end;
 
 { --- theme metrics -------------------------------------------------------------------- }
 
-function TTySegmented.PadPx(APPI: Integer): Integer;
+function TTyCustomSegmented.PadPx(APPI: Integer): Integer;
 begin
   if APPI <= 0 then APPI := 96;
   Result := ActiveController.Metric(TySegmentedPadVar, TySegmentedPad);
@@ -368,7 +421,7 @@ begin
   Result := MulDiv(Result, APPI, 96);
 end;
 
-function TTySegmented.MinWidthPx(APPI: Integer): Integer;
+function TTyCustomSegmented.MinWidthPx(APPI: Integer): Integer;
 begin
   if APPI <= 0 then APPI := 96;
   Result := ActiveController.Metric(TySegmentedMinWidthVar, TySegmentedMinWidth);
@@ -378,13 +431,13 @@ end;
 
 { --- geometry ------------------------------------------------------------------------- }
 
-function TTySegmented.TySegmentRect(AIndex: Integer): TRect;
+function TTyCustomSegmented.TySegmentRect(AIndex: Integer): TRect;
 begin
   Result := TySegmentedItemRect(ClientWidth, ClientHeight, FItems.Count,
     PadPx(Font.PixelsPerInch), AIndex);
 end;
 
-function TTySegmented.TySegmentAt(X, Y: Integer): Integer;
+function TTyCustomSegmented.TySegmentAt(X, Y: Integer): Integer;
 begin
   Result := TySegmentedIndexAt(ClientWidth, ClientHeight, FItems.Count,
     PadPx(Font.PixelsPerInch), X, Y);
@@ -392,7 +445,7 @@ end;
 
 { --- state / style -------------------------------------------------------------------- }
 
-function TTySegmented.ItemStates(AIndex: Integer): TTyStateSet;
+function TTyCustomSegmented.ItemStates(AIndex: Integer): TTyStateSet;
 begin
   Result := [];
   // The SAME resting state TTyButton.Down injects, so one ':selected' theme rule styles
@@ -421,13 +474,13 @@ begin
   if Result = [] then Include(Result, tysNormal);
 end;
 
-function TTySegmented.ItemStyle(AIndex: Integer): TTyStyleSet;
+function TTyCustomSegmented.ItemStyle(AIndex: Integer): TTyStyleSet;
 begin
   Result := ActiveController.Model.ResolveStyle('TySegmentedItem', StyleClass,
     ItemStates(AIndex));
 end;
 
-function TTySegmented.ItemTextStyle(const ATrack, AItem: TTyStyleSet): TTyStyleSet;
+function TTyCustomSegmented.ItemTextStyle(const ATrack, AItem: TTyStyleSet): TTyStyleSet;
 { The label's ink and font: the segment's own where the theme sets them, the track's
   otherwise. This is the house degradation rule (no colour => inherit the parent's ink)
   extended to the font by the same logic — a theme that styles only TySegmented must still
@@ -458,7 +511,7 @@ end;
 
 { --- measurement ---------------------------------------------------------------------- }
 
-procedure TTySegmented.MeasureItems(APPI: Integer; const AStyle: TTyStyleSet;
+procedure TTyCustomSegmented.MeasureItems(APPI: Integer; const AStyle: TTyStyleSet;
   out AWidestPx, ALineHeightPx: Integer);
 { Measures with a CANVAS-LESS painter — the TTyBadge idiom: BeginPaint(nil, ...) builds
   only the painter's internal bitmap and EndPaint frees it WITHOUT blitting, so this is
@@ -492,7 +545,7 @@ begin
   if ALineHeightPx < 1 then ALineHeightPx := 1;
 end;
 
-procedure TTySegmented.CalculatePreferredSize(var PreferredWidth,
+procedure TTyCustomSegmented.CalculatePreferredSize(var PreferredWidth,
   PreferredHeight: Integer; WithThemeSpace: Boolean);
 var
   segStyle: TTyStyleSet;   // not 'itemS'/'itemStyle': Pascal is case-insensitive, so those
@@ -523,7 +576,7 @@ end;
 
 { --- input ---------------------------------------------------------------------------- }
 
-procedure TTySegmented.MouseDown(Button: TMouseButton; Shift: TShiftState;
+procedure TTyCustomSegmented.MouseDown(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
   i: Integer;
@@ -543,7 +596,7 @@ begin
   if i >= 0 then ItemIndex := i;
 end;
 
-procedure TTySegmented.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomSegmented.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   i: Integer;
 begin
@@ -558,7 +611,7 @@ begin
   end;
 end;
 
-procedure TTySegmented.MouseLeave;
+procedure TTyCustomSegmented.MouseLeave;
 begin
   inherited MouseLeave;   // clears the track's own hover
   if FHoverIndex <> -1 then
@@ -568,7 +621,7 @@ begin
   end;
 end;
 
-procedure TTySegmented.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomSegmented.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   if not Enabled then Exit;
   if not (tpBackground in CurrentStyle.Present) then Exit;   // invisible track: inert
@@ -603,7 +656,7 @@ end;
 
 { --- painting ------------------------------------------------------------------------- }
 
-procedure TTySegmented.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomSegmented.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, segStyle, txtS: TTyStyleSet;
@@ -664,7 +717,7 @@ begin
   end;
 end;
 
-procedure TTySegmented.Paint;
+procedure TTyCustomSegmented.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

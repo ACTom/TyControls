@@ -13,7 +13,7 @@ type
     and the selection ring are all theme-driven (typeKey 'TyPanel' — reuses the panel
     surface, so no new .tycss rule). Selecting fires OnChange; setting Selected in code
     just repaints (no event). }
-  TTyColorGrid = class(TTyCustomControl)
+  TTyCustomColorGrid = class(TTyCustomControl)
   private
     FColors: array of TColor;
     FColumns: Integer;
@@ -32,31 +32,93 @@ type
     constructor Create(AOwner: TComponent); override;
     // Append a colour to the grid and repaint.
     procedure AddColor(AColor: TColor);
+    // Remove every colour (the built-in palette too) and the selection; repaint.
+    procedure ClearColors;
+    // The colour in cell AIndex; clNone outside the grid.
+    function ColorAt(AIndex: Integer): TColor;
+    // Repaint cell AIndex in AColor (ignored outside the grid). The selection stays on the
+    // cell, so a selected cell now stands for the new colour. No OnChange.
+    procedure SetColorAt(AIndex: Integer; AColor: TColor);
     // Number of colours in the grid (test seam).
     function ColorCount: Integer;
     // Cell index at device point (AX, AY), or -1 if the point is outside any cell
     // (empty grid, or the trailing gap on the last, partially-filled row). Test seam.
     function CellAt(AX, AY: Integer): Integer;
-  published
+    // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
+    property TabStop default True;
     // Number of columns; clamped to >= 1.
     property Columns: Integer read FColumns write SetColumns default 8;
     // The selected colour. Writing stores + repaints (no OnChange); a left-click on a
     // cell sets it AND fires OnChange.
     property Selected: TColor read GetSelected write SetSelected;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
-    // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
-    property TabStop default True;
+  end;
+
+  { TTyColorGrid publishes TTyCustomColorGrid's properties; everything lives in TTyCustomColorGrid. }
+  TTyColorGrid = class(TTyCustomColorGrid)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Columns;
+    property Selected;
+    property OnChange;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
   end;
 
 implementation
 
-{ TTyColorGrid }
+{ TTyCustomColorGrid }
 
-constructor TTyColorGrid.Create(AOwner: TComponent);
+constructor TTyCustomColorGrid.Create(AOwner: TComponent);
 var
   sl: TStringList;
   i: Integer;
@@ -84,7 +146,7 @@ begin
   Height := 120;
 end;
 
-function TTyColorGrid.GetStyleTypeKey: string;
+function TTyCustomColorGrid.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyPanel': a swatch matrix with a selection ring is not a panel surface.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
@@ -92,18 +154,18 @@ begin
   Result := 'TyColorGrid';
 end;
 
-function TTyColorGrid.ColorCount: Integer;
+function TTyCustomColorGrid.ColorCount: Integer;
 begin
   Result := Length(FColors);
 end;
 
-function TTyColorGrid.RowCount: Integer;
+function TTyCustomColorGrid.RowCount: Integer;
 begin
   // Ceil(ColorCount / Columns); FColumns is always >= 1.
   Result := (ColorCount + FColumns - 1) div FColumns;
 end;
 
-procedure TTyColorGrid.SetColumns(AValue: Integer);
+procedure TTyCustomColorGrid.SetColumns(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
   if FColumns = AValue then Exit;
@@ -111,7 +173,7 @@ begin
   Invalidate;
 end;
 
-function TTyColorGrid.GetSelected: TColor;
+function TTyCustomColorGrid.GetSelected: TColor;
 begin
   if (FSelectedIndex >= 0) and (FSelectedIndex <= High(FColors)) then
     Result := FColors[FSelectedIndex]
@@ -119,7 +181,7 @@ begin
     Result := clNone;
 end;
 
-procedure TTyColorGrid.SetSelected(const AValue: TColor);
+procedure TTyCustomColorGrid.SetSelected(const AValue: TColor);
 var
   i, idx: Integer;
 begin
@@ -136,14 +198,36 @@ begin
   Invalidate;   // programmatic set: repaint only, no OnChange
 end;
 
-procedure TTyColorGrid.AddColor(AColor: TColor);
+procedure TTyCustomColorGrid.AddColor(AColor: TColor);
 begin
   SetLength(FColors, Length(FColors) + 1);
   FColors[High(FColors)] := AColor;
   Invalidate;
 end;
 
-function TTyColorGrid.CellAt(AX, AY: Integer): Integer;
+procedure TTyCustomColorGrid.ClearColors;
+begin
+  FColors := nil;
+  FSelectedIndex := -1;
+  Invalidate;
+end;
+
+function TTyCustomColorGrid.ColorAt(AIndex: Integer): TColor;
+begin
+  if (AIndex >= 0) and (AIndex <= High(FColors)) then
+    Result := FColors[AIndex]
+  else
+    Result := clNone;
+end;
+
+procedure TTyCustomColorGrid.SetColorAt(AIndex: Integer; AColor: TColor);
+begin
+  if (AIndex < 0) or (AIndex > High(FColors)) then Exit;
+  FColors[AIndex] := AColor;
+  Invalidate;
+end;
+
+function TTyCustomColorGrid.CellAt(AX, AY: Integer): Integer;
 var
   cellW, cellH, rows, col, row, idx: Integer;
 begin
@@ -163,7 +247,7 @@ begin
   Result := idx;
 end;
 
-procedure TTyColorGrid.Paint;
+procedure TTyCustomColorGrid.Paint;
 var
   P: TTyPainter;
   st: TTyStyleSet;
@@ -196,7 +280,9 @@ begin
         if cellH > 0 then
         begin
           ctx := P.Bitmap.Canvas2D;
-          ringW := Math.Max(2, P.Scale(2));
+          { LOGICAL: StrokeBorder scales its width. P.Scale(2) here was scaled twice, a
+            7 px ring at 175%. }
+          ringW := 2;
           for i := 0 to ColorCount - 1 do
           begin
             col := i mod FColumns;
@@ -222,7 +308,7 @@ begin
   end;
 end;
 
-procedure TTyColorGrid.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomColorGrid.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   idx: Integer;
 begin

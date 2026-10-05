@@ -14,7 +14,7 @@ uses
   tyControls.Types, tyControls.Painter, tyControls.Base;
 
 type
-  TTySizeBox = class(TTyGraphicControl)
+  TTyCustomSizeBox = class(TTyGraphicControl)
   private
     FTarget: TControl;
     FDragging: Boolean;
@@ -32,14 +32,55 @@ type
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
   public
     constructor Create(AOwner: TComponent); override;
-  published
     { The control resized by dragging the grip. When nil, the grip resizes the owner
       form (if the owner is a TCustomForm) or, failing that, the Parent control. }
     property Target: TControl read FTarget write SetTarget;
-    property Anchors;
+  end;
+
+  { TTySizeBox publishes TTyCustomSizeBox's properties; everything lives in TTyCustomSizeBox. }
+  TTySizeBox = class(TTyCustomSizeBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
     property StyleClass;
     property StyleOverride;
     property Controller;
+    property Target;
+    property Anchors;
   end;
 
 { --- Pure geometry (headless-testable; no window handle needed) --------------- }
@@ -128,7 +169,7 @@ end;
 
 { --- control ----------------------------------------------------------------- }
 
-constructor TTySizeBox.Create(AOwner: TComponent);
+constructor TTyCustomSizeBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   Width := 16;
@@ -136,7 +177,7 @@ begin
   Cursor := crSizeNWSE;
 end;
 
-function TTySizeBox.GetStyleTypeKey: string;
+function TTyCustomSizeBox.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyPanel': the engraved size grip is a mark a panel never draws.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
@@ -144,7 +185,7 @@ begin
   Result := 'TySizeBox';
 end;
 
-procedure TTySizeBox.SetTarget(AValue: TControl);
+procedure TTyCustomSizeBox.SetTarget(AValue: TControl);
 begin
   if FTarget = AValue then Exit;
   if FTarget <> nil then FTarget.RemoveFreeNotification(Self);
@@ -152,14 +193,14 @@ begin
   if FTarget <> nil then FTarget.FreeNotification(Self);
 end;
 
-procedure TTySizeBox.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomSizeBox.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FTarget) then
     FTarget := nil;
 end;
 
-function TTySizeBox.ResolveTarget: TControl;
+function TTyCustomSizeBox.ResolveTarget: TControl;
 begin
   // Explicit target wins; else the owning form; else the immediate parent.
   if FTarget <> nil then
@@ -169,7 +210,7 @@ begin
   Result := Parent;
 end;
 
-procedure TTySizeBox.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomSizeBox.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   tgt: TControl;
 begin
@@ -186,7 +227,7 @@ begin
   FMouseStart := ClientToScreen(Point(X, Y));
 end;
 
-procedure TTySizeBox.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomSizeBox.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   tgt: TControl;
   scr: TPoint;
@@ -211,14 +252,14 @@ begin
   tgt.SetBounds(tgt.Left, tgt.Top, sz.cx, sz.cy);
 end;
 
-procedure TTySizeBox.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomSizeBox.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   if (Button = mbLeft) and FDragging then
     FDragging := False;
   inherited MouseUp(Button, Shift, X, Y);
 end;
 
-procedure TTySizeBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomSizeBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -267,7 +308,7 @@ begin
   end;
 end;
 
-procedure TTySizeBox.Paint;
+procedure TTyCustomSizeBox.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

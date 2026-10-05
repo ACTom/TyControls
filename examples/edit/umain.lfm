@@ -2,10 +2,10 @@ object MainForm: TMainForm
   Left = 0
   Height = 691
   Top = 0
-  Width = 460
+  Width = 487
   Caption = 'TTyEdit example'
   ClientHeight = 691
-  ClientWidth = 460
+  ClientWidth = 487
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
@@ -14,14 +14,14 @@ object MainForm: TMainForm
     Left = 0
     Height = 691
     Top = 0
-    Width = 460
+    Width = 487
     TabOrder = 0
     Align = alClient
     object Bar: TTyTitleBar
       Left = 0
       Height = 34
       Top = 0
-      Width = 460
+      Width = 487
       Align = alTop
       Caption = 'TTyEdit  ·  TyControls'
       TitleAlignment = taLeftJustify
@@ -261,7 +261,7 @@ object MainForm: TMainForm
       Left = 160
       Height = 30
       Top = 546
-      Width = 276
+      Width = 303
       Caption = 'Copy the password box (nothing leaves it)'
       OnClick = BtnCopyPwdClick
     end

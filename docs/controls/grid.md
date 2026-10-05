@@ -57,7 +57,7 @@ end;
 | `ShowFilterButtons` | 列头上显示筛选漏斗,点开是带搜索框与逐值计数的下拉 |
 | `MinEditorWidth` | 编辑器的最小宽度(逻辑像素)。0 = 完全跟着格走。设大于 0 后,窄列上的编辑器会向右加宽到这个宽度 —— 加宽的是**编辑器**,列宽一点没动,也不会越过网格右缘 |
 | `SelectionMode` | `gsmCell`(默认)/ `gsmRow` / `gsmColumn` |
-| `Images` | `gcdImage` 用的图像集(`TTyVirtualImageList`) |
+| `Images` | `gcdImage` 用的图像列表(`TCustomImageList`,本库的 `TTyVirtualImageList` 或 LCL 的 `TImageList` 都行) |
 | `OnGetRowHeight` | 逐行行高。**接了它才启用可变行高**;不接则全表等高,几何层走整除快路径(百万行时省下一个百万项的前缀和数组) |
 | `SortKind` | `gskText` 还是 `gskNumber`。数值列用文本排会得到 `'10' < '9'` |
 | `DefaultEditorKind` | 默认编辑器种类,见下表 |
@@ -68,6 +68,7 @@ end;
 | `VisibleColCount` | 视口里现在装得下几列,`VisibleRowCount` 的列轴对偶 |
 | `AutoFillColumns` | 让**每一列**分掉多余的宽度,按各自的 `SizePriority` 加权。与 `hoAutoResize` + `AutoSizeIndex` 的区别:那一对只让**指定的一列**吸收剩余宽度 |
 | `ScrollBars` | `ssNone` / `ssHorizontal` / `ssVertical` / `ssBoth` / `ssAuto*`。存储仍是 `VertScrollBarMode` / `HorzScrollBarMode` 那一对(现已 published),这个是 LCL 同名同类型的视图 |
+| `ScrollBarAutoHide` | 两条内嵌滚动条闲下来之后要不要淡出。属性在 `TTyCustomGrid` 上,`TTyStringGrid` 与 `TTyDrawGrid` 都有。默认 `sbahDefault` = 跟主题走,三个值的含义与主题令牌见 [scrollbar.md](scrollbar.md) §7 |
 | `ShowFocusCell` / `FocusRectVisible` | 焦点格要不要铺一层区分底色(`TyGridActiveCell`;同一个存储,后者是 LCL 的名字)。**默认 True** —— 两个属性一直都写着 `default True`,但构造函数从来没设过它,所以在此之前出厂的网格里这层底色是熄的;`Options` 的出厂值断言把它照了出来。`Options` 里的对应位是 `goDrawFocusSelected` |
 | `HideSelectionWhenInactive` / `FadeUnfocusedSelection` | 失去焦点时选区变淡(同上)。**现已 published** |
 | `Modified` | 自建表 / 上次装载以来有没有被改过。收口在 `Cells[]` 与结构性增删行,所以粘贴、填充柄、撤销、勾选框、CSV 装载都算数。存过盘之后宿主自己写 `False` 复位 |
@@ -117,6 +118,8 @@ end;
 | `OnGetCellText` | (`TTyDrawGrid`)虚拟模式下现取单元格文本 |
 | `OnSelectCell` | 光标即将移动;`ACanSelect := False` 可否决 |
 | `OnGetEditorKind` | **逐格**指定编辑器种类(比如金额列用 `gekNumeric`、主键列用 `gekNone`) |
+| `OnValidateCell` | 编辑**关闭前**;`AValid := False` 拒绝离开 —— 编辑器留在原格、光标不动,直到改对或按 `Esc` 放弃 |
+| `OnInvalidEditExit` | 焦点离开**整个网格**而编辑仍被拦着;`AKeep := True` 留住编辑器(默认放弃、回旧值)。可在此弹框让用户选 |
 | `OnCellEdited` | 编辑提交前;`AAccept := False` 可否决写回 |
 | `OnCompareCells` | 自定义排序比较;置 `AResult` 即接管该列 |
 | `OnGetPickList` | `gekPickList` 的候选项 |
@@ -124,12 +127,14 @@ end;
 | `OnDrawCell` | **完全接管**某格绘制(置 `AHandled`);背景与选中底色已由控件铺好 |
 | `OnGetCellHint` | 逐格提示文本(悬停显示);只在换格时回调 |
 
+`OnValidateCell` 管"能不能离开",`OnCellEdited` 管"写不写回",两者独立。校验只对**用户驱动**的关闭生效(回车 / `Tab` / 方向键 / 点别的格 / 编辑器失焦);排序、插删行列、载入 CSV、`EditorMode := False` 这类结构性关闭挡不住,但校验没过的值会被丢弃而不是写回 —— 非法值不管走哪条路都进不了单元格。没改过的格不会触发校验;同一段文本只问一次(单击别的格会经失焦和光标移动两条路到达校验)。焦点离开整个网格时,被拦下的编辑默认视同放弃、回到旧值,`OnInvalidEditExit` 可改为留住——用户回到网格再点任意一格,焦点会回到那个编辑器。
+
 ## 交互
 
 - **鼠标**:点选单元格;拖列头分隔条改列宽;滚轮纵向滚动(一格三行)
 - **键盘**:方向键 / `Home` / `End` / `PageUp` / `PageDown` 移动光标;`F2` 开始编辑
 - **区域多选**:`Shift+方向键` 或 `Shift+点击` 拉出矩形选区;普通方向键/点击收回一格
-- **排序**:列头选项加上 `hoHeaderClickAutoSort` 后,点列头即 升序 → 降序 → 取消
+- **排序**:列头选项加上 `hoHeaderClickAutoSort` 后,点列头即 升序 → 降序 → 取消。排序在**松开**时触发:按在分隔线上(改宽)、把列拖走、或松开在别的地方,都不算点了列头
 - **过滤**:`SetColumnFilter(列, 文本)` 做包含匹配(不区分大小写);`OnFilterRow` 可逐行否决
 - **剪贴板**:`Ctrl+C` / `Ctrl+X` / `Ctrl+V` / `Ctrl+A`。制表符分隔 = Excel 剪贴板格式,可直接互粘。`ReadOnly` 下 `Ctrl+V` 被拒、`Ctrl+C` 照常、`Ctrl+X` 退化为复制(剪贴板照拿选区,表里一格不清);剪切一片 = 一条撤销记录
 - **汇总**:`SetColumnAggregate(列, gagSum/gagAvg/gagMin/gagMax/gagCount)`;**只统计筛选后可见的行**,非数值格跳过

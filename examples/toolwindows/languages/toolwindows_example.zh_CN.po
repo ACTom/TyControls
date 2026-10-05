@@ -1,0 +1,301 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-toolwindows_example 3.1\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions / hints (msgid = English source) ---
+
+#: tmainform.caption
+msgid "Tool windows example"
+msgstr "工具窗口示例"
+
+#: tmainform.bar.caption
+msgid "Tool windows  · TyControls"
+msgstr "工具窗口  · TyControls"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.explorerwin.caption
+msgid "Explorer"
+msgstr "资源管理器"
+
+#: tmainform.explorerwin.striphint
+msgid "Explorer (files)"
+msgstr "资源管理器（文件）"
+
+#: tmainform.btnresetlayout.hint
+msgid "Reset layout"
+msgstr "恢复默认布局"
+
+#: tmainform.searchwin.caption
+msgid "Search"
+msgstr "搜索"
+
+#: tmainform.searchwin.striphint
+msgid "Search in files"
+msgstr "在文件中搜索"
+
+#: tmainform.searchedit.texthint
+msgid "Search"
+msgstr "搜索"
+
+#: tmainform.outlinewin.caption
+msgid "Outline"
+msgstr "大纲"
+
+#: tmainform.outlinewin.striphint
+msgid "Outline"
+msgstr "大纲"
+
+#: tmainform.btnoutlinemove.hint
+msgid "Move to the other side"
+msgstr "移到另一侧"
+
+#: tmainform.problemswin.caption
+msgid "Problems"
+msgstr "问题"
+
+#: tmainform.problemswin.striphint
+msgid "Problems (no actions area)"
+msgstr "问题（没有操作区）"
+
+#: tmainform.outputwin.caption
+msgid "Output"
+msgstr "输出"
+
+#: tmainform.outputwin.striphint
+msgid "Output (event log)"
+msgstr "输出（事件日志）"
+
+#: tmainform.outputfilter.texthint
+msgid "Filter"
+msgstr "筛选"
+
+#: tmainform.btnoutputclear.hint
+msgid "Clear"
+msgstr "清除"
+
+#: tmainform.terminalwin.caption
+msgid "Terminal"
+msgstr "终端"
+
+#: tmainform.terminalwin.striphint
+msgid "Terminal"
+msgstr "终端"
+
+#: tmainform.btntermnew.hint
+msgid "New terminal"
+msgstr "新建终端"
+
+#: tmainform.btntermclose.hint
+msgid "Close terminal"
+msgstr "关闭终端"
+
+#: tmainform.btntermmore.hint
+msgid "More"
+msgstr "更多"
+
+#: tmainform.mnufile.caption
+msgid "&File"
+msgstr "文件(&F)"
+
+#: tmainform.mnufileexit.caption
+msgid "E&xit"
+msgstr "退出(&X)"
+
+#: tmainform.mnuview.caption
+msgid "&View"
+msgstr "视图(&V)"
+
+#: tmainform.mnuviewbottom.caption
+msgid "&Bottom Panel"
+msgstr "底部面板(&B)"
+
+#: tmainform.mnuviewdensity.caption
+msgid "&Density"
+msgstr "密度(&D)"
+
+#: tmainform.mnudensityclassic.caption
+msgid "&Classic"
+msgstr "经典(&C)"
+
+#: tmainform.mnudensitymodern.caption
+msgid "&Modern"
+msgstr "现代(&M)"
+
+#: tmainform.mnulayout.caption
+msgid "&Layout"
+msgstr "布局(&L)"
+
+#: tmainform.mnulayoutsave.caption
+msgid "&Save Layout"
+msgstr "保存布局(&S)"
+
+#: tmainform.mnulayoutload.caption
+msgid "&Load Layout"
+msgstr "读取布局(&L)"
+
+#: tmainform.mnulayoutreset.caption
+msgid "&Reset Layout"
+msgstr "恢复默认布局(&R)"
+
+#: tmainform.mnudiag.caption
+msgid "&Diagnostics"
+msgstr "诊断(&D)"
+
+#: tmainform.mnudiagdialog.caption
+msgid "Show a &Dialog in 3 s"
+msgstr "3 秒后弹出对话框(&D)"
+
+#: tmainform.mnudiagmenu.caption
+msgid "Pop Up a &Menu in 3 s"
+msgstr "3 秒后弹出菜单(&M)"
+
+#: tmainform.mnudiagdisable.caption
+msgid "Disable &Output Page"
+msgstr "禁用输出页(&O)"
+
+#: tmainform.mnudiagdisablesearch.caption
+msgid "Disable &Search Window"
+msgstr "禁用搜索窗口(&S)"
+
+#: tmainform.mnudiagbadge.caption
+msgid "Add 45 &Problems"
+msgstr "问题数加 45(&P)"
+
+#: tmainform.mnustripmove.caption
+msgid "Move to Other Side"
+msgstr "移到另一侧"
+
+#: tmainform.mnupanelmax.caption
+msgid "Maximize"
+msgstr "最大化"
+
+#: tmainform.mnupanelhide.caption
+msgid "Hide Panel"
+msgstr "收起面板"
+
+# --- resourcestrings in umain.pas ---
+
+#: umain.rsready
+msgid "Ready"
+msgstr "就绪"
+
+#: umain.rsactivefmt
+#, object-pascal-format
+msgid "%s: active = %s"
+msgstr "%s：当前页 = %s"
+
+#: umain.rsnowindow
+msgid "(none)"
+msgstr "（无）"
+
+#: umain.rscollapsedfmt
+#, object-pascal-format
+msgid "%s: collapsed"
+msgstr "%s：已收起"
+
+#: umain.rsexpandedfmt
+#, object-pascal-format
+msgid "%s: expanded"
+msgstr "%s：已展开"
+
+#: umain.rsmovedfmt
+#, object-pascal-format
+msgid "moved %s from %s (#%d)"
+msgstr "%s 从 %s 移走（原序号 %d）"
+
+#: umain.rslayoutapplied
+msgid "layout applied"
+msgstr "布局已应用"
+
+#: umain.rslayoutsavedfmt
+#, object-pascal-format
+msgid "layout saved to %s"
+msgstr "布局已保存到 %s"
+
+#: umain.rslayoutmissing
+msgid "no saved layout yet"
+msgstr "还没有保存过布局"
+
+#: umain.rslayoutrejected
+msgid "the saved layout was not applied"
+msgstr "没能应用保存的布局"
+
+#: umain.rslayouterrorfmt
+#, object-pascal-format
+msgid "layout file error: %s"
+msgstr "布局文件出错：%s"
+
+#: umain.rsresetrejected
+msgid "ResetLayout returned False"
+msgstr "ResetLayout 返回 False"
+
+#: umain.rsmovecalledfmt
+#, object-pascal-format
+msgid "MoveWindow returned %s; Outline is in %s right now"
+msgstr "MoveWindow 返回 %s；此刻大纲还在 %s"
+
+#: umain.rsmovenotarget
+msgid "no usable bar on the other side"
+msgstr "另一侧没有可用的栏"
+
+#: umain.rsmaximize
+msgid "Maximize"
+msgstr "最大化"
+
+#: umain.rsrestore
+msgid "Restore"
+msgstr "还原"
+
+#: umain.rsdiagarmedfmt
+#, object-pascal-format
+msgid "in 3 s: %s -- start dragging an icon now and keep the button down"
+msgstr "3 秒后：%s —— 现在开始拖一个图标，别松手"
+
+#: umain.rsdiagdialogname
+msgid "a modal dialog"
+msgstr "一个模态对话框"
+
+#: umain.rsdiagmenuname
+msgid "a popup menu"
+msgstr "一个弹出菜单"
+
+#: umain.rsdiagdialog
+msgid "This dialog opened in the middle of whatever you were doing. A drag in progress should have been cancelled."
+msgstr "这个对话框是在你操作途中弹出来的。要是你正拖着图标，这时拖动应该已经取消了。"
+
+#: umain.rsdiagdisabledfmt
+#, object-pascal-format
+msgid "Output page enabled = %s"
+msgstr "输出页 Enabled = %s"
+
+#: umain.rsdiagsearchfmt
+#, object-pascal-format
+msgid "Search window enabled = %s"
+msgstr "搜索窗口 Enabled = %s"
+
+#: umain.rsdiagbadgefmt
+#, object-pascal-format
+msgid "Problems badge = %d"
+msgstr "问题角标 = %d"
+
+#: umain.rstermnew
+msgid "(a real app would open a new terminal here)"
+msgstr "（真实程序在这里新建一个终端）"
+
+#: umain.rstermclose
+msgid "(a real app would close this terminal here)"
+msgstr "（真实程序在这里关闭这个终端）"
+
+#: umain.rstermmore
+msgid "(a real app would show more terminal actions here)"
+msgstr "（真实程序在这里显示更多终端操作）"

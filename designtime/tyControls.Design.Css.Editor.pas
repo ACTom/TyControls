@@ -26,10 +26,11 @@ implementation
 
 uses
   Forms, Controls, StdCtrls, ExtCtrls, ComCtrls, Graphics, Dialogs, TypInfo,
-  SynEdit, SynEditTypes, SynCompletion, SynHighlighterCss,
+  SynEdit,
   tyControls.Types, tyControls.Base, tyControls.StyleModel,
   tyControls.Css.Values, tyControls.Css.Parser, tyControls.Css.Catalog,
-  tyControls.Css.Complete, tyControls.Controller, tyControls.Dialogs;
+  tyControls.Css.Complete, tyControls.Controller, tyControls.Dialogs,
+  tyControls.Design.CssEditKit;
 
 resourcestring
   rsCssEdTitle        = 'StyleOverride (tycss)';
@@ -49,31 +50,25 @@ type
   TTyStyleOverrideDialog = class(TForm)
   private
     FEdit: TSynEdit;
-    FComplete: TSynCompletion;
+    FKit: TTyCssEditKit;               // highlighter, completion, format-on-line-leave
     FList: TTreeView;
     FWarn: TLabel;
     FSelectorMode: Boolean;
-    FController: TTyStyleController;   // source of the theme's CURRENT value for an inserted prop
+    FController: TTyCustomStyleController;   // source of the theme's CURRENT value for an inserted prop
     FTypeKey: string;                 // the target control's typeKey ('' = controller level)
-    FLastLine: Integer;               // for format-on-line-leave
-    FFormatting: Boolean;             // reentrancy guard for the in-place line format
-    FWantComplete: Boolean;           // an ident key was typed -> pop completion after the insert
     procedure BuildRefList;
     procedure ListDblClick(Sender: TObject);
     procedure EditChange(Sender: TObject);
-    procedure EditStatusChange(Sender: TObject; Changes: TSynStatusChanges);
-    procedure EditKeyPress(Sender: TObject; var Key: char);
-    procedure CompletionExecute(Sender: TObject);
     procedure ValidateClick(Sender: TObject);
     procedure FormatClick(Sender: TObject);
     function DefaultValueFor(const AProp: string): string;
   public
-    constructor CreateFor(AController: TTyStyleController; const ATypeKey: string;
+    constructor CreateFor(AController: TTyCustomStyleController; const ATypeKey: string;
       ASelectorMode: Boolean); reintroduce;
     function Execute(var AText: string): Boolean;
   end;
 
-constructor TTyStyleOverrideDialog.CreateFor(AController: TTyStyleController;
+constructor TTyStyleOverrideDialog.CreateFor(AController: TTyCustomStyleController;
   const ATypeKey: string; ASelectorMode: Boolean);
 var
   panel: TPanel;
@@ -83,7 +78,6 @@ begin
   FSelectorMode := ASelectorMode;
   FController := AController;
   FTypeKey := ATypeKey;
-  FLastLine := 1;
   Caption := rsCssEdTitle;
   Width := 720; Height := 460;
   Position := poScreenCenter;
@@ -128,34 +122,26 @@ begin
   FEdit.Align := alClient;
   FEdit.Gutter.Visible := True;
   FEdit.OnChange := @EditChange;
-  FEdit.OnStatusChange := @EditStatusChange;   // format the line the caret just left
-  FEdit.OnKeyPress := @EditKeyPress;            // pop completion as an identifier is typed
-  { Clamp the caret to real text: clicking past a line's end puts it AT the last character, not in
-    virtual space past it (removing eoScrollPastEol). }
-  FEdit.Options := FEdit.Options - [eoScrollPastEol];
-  { tycss is a CSS dialect, so the stock CSS highlighter colours it well enough -- comments,
-    selectors, properties, values, braces, hex. The tycss-only bits (--tokens, darken()) fall
-    back to CSS's generic identifier/function colouring, which is fine. No custom highlighter
-    to write or keep in step with the grammar. }
-  FEdit.Highlighter := TSynCssSyn.Create(Self);
-
-  FComplete := TSynCompletion.Create(Self);
-  FComplete.Editor := FEdit;
-  FComplete.OnExecute := @CompletionExecute;
-  FComplete.ShortCut := 16416;   { Ctrl+Space }
-  { Typing any of these closes the popup (finished the token). Esc and selecting are built in. }
-  FComplete.EndOfTokenChr := '{}()[]:;,+*/\ ''"=<>!%';
+  { The shared tycss setup (also the theme builder's): the CSS highlighter, catalog completion
+    (Ctrl+Space and as an identifier is typed), the caret kept on real text, and the line the
+    caret leaves tidied. It chains to the OnChange above. }
+  FKit := TTyCssEditKit.Create(Self);
+  FKit.Attach(FEdit, ASelectorMode);
 
   BuildRefList;
 end;
 
 procedure TTyStyleOverrideDialog.BuildRefList;
-  procedure Cat(const ATitle: string; const AItems: array of string);
-  var node: TTreeNode; s: string;
+  function Cat(const ATitle: string; const AItems: array of string): TTreeNode;
+  var s: string;
   begin
-    node := FList.Items.Add(nil, ATitle);
-    for s in AItems do FList.Items.AddChild(node, s);
+    Result := FList.Items.Add(nil, ATitle);
+    for s in AItems do FList.Items.AddChild(Result, s);
   end;
+var
+  keysNode: TTreeNode;
+  keys: TStringList;
+  i: Integer;
 begin
   FList.Items.BeginUpdate;
   try
@@ -163,7 +149,17 @@ begin
     Cat(rsCssEdCatFuncs, TyKnownColorFns);
     if FSelectorMode then
     begin
-      Cat(rsCssEdCatTypeKeys, TyCatalogTypeKeys);
+      { #14: the catalogue's keys plus the ones a third-party package registered into a type
+        key chain -- the very list the completion offers (TyCssSelectorTypeKeys). }
+      keysNode := Cat(rsCssEdCatTypeKeys, []);
+      keys := TStringList.Create;
+      try
+        TyCssSelectorTypeKeys(keys);
+        for i := 0 to keys.Count - 1 do
+          FList.Items.AddChild(keysNode, keys[i]);
+      finally
+        keys.Free;
+      end;
       Cat(rsCssEdCatPseudo, TyKnownPseudoStates);
     end;
     Cat(rsCssEdCatTokens, TyCatalogTokens);
@@ -215,36 +211,6 @@ begin
   FEdit.SetFocus;
 end;
 
-procedure TTyStyleOverrideDialog.EditStatusChange(Sender: TObject; Changes: TSynStatusChanges);
-var
-  formatted: string;
-begin
-  { Format only the line the caret just LEFT -- replace that one line, never reflow the document
-    (which would flicker the whole editor). }
-  if FFormatting or not (scCaretY in Changes) then Exit;
-  if (FEdit.CaretY <> FLastLine) and (FLastLine >= 1) and (FLastLine <= FEdit.Lines.Count) then
-  begin
-    formatted := TyCssFormatLine(FEdit.Lines[FLastLine - 1]);
-    if formatted <> FEdit.Lines[FLastLine - 1] then
-    begin
-      FFormatting := True;
-      try
-        FEdit.Lines[FLastLine - 1] := formatted;
-      finally
-        FFormatting := False;
-      end;
-    end;
-  end;
-  FLastLine := FEdit.CaretY;
-end;
-
-procedure TTyStyleOverrideDialog.EditKeyPress(Sender: TObject; var Key: char);
-begin
-  { An identifier keystroke should pop the completion after it lands (done in EditChange, which
-    fires post-insert). A '-' also matters -- it starts a --token. }
-  FWantComplete := (Key in ['a'..'z', 'A'..'Z', '-']);
-end;
-
 procedure TTyStyleOverrideDialog.ValidateClick(Sender: TObject);
 var err: string;
 begin
@@ -262,44 +228,14 @@ end;
 
 procedure TTyStyleOverrideDialog.EditChange(Sender: TObject);
 var
-  u, before, word: string;
-  i: Integer;
-  p: TPoint;
+  u: string;
 begin
+  { the completion popping as an identifier is typed is the kit's; it calls this after }
   u := TyCssUnknownProps(FEdit.Text);
   if Trim(u) <> '' then
     FWarn.Caption := rsCssEdUnknownProps + LineEnding + u
   else
     FWarn.Caption := '';
-
-  { Auto-pop completion when an identifier was just typed (and it is not our own line-format edit,
-    nor already showing). The popup filters itself as typing continues, closes on Esc / a token-end
-    char (EndOfTokenChr) / selection. }
-  if FWantComplete and not FFormatting and (FComplete <> nil) and not FComplete.IsActive then
-  begin
-    FWantComplete := False;
-    { the identifier run ending at the caret -- the popup opens pre-filtered by it }
-    before := Copy(FEdit.LineText, 1, FEdit.CaretX - 1);
-    i := Length(before);
-    while (i >= 1) and (before[i] in ['a'..'z', 'A'..'Z', '0'..'9', '-', '_']) do Dec(i);
-    word := Copy(before, i + 1, MaxInt);
-    if word <> '' then
-    begin
-      { one row below the caret, in screen coords }
-      p := FEdit.ClientToScreen(FEdit.RowColumnToPixels(Point(FEdit.CaretX, FEdit.CaretY + 1)));
-      FComplete.Execute(word, p.X, p.Y);
-    end;
-  end;
-end;
-
-procedure TTyStyleOverrideDialog.CompletionExecute(Sender: TObject);
-var
-  before: string;
-begin
-  { Text of the doc up to the caret -- lines before, plus the current line's prefix. }
-  before := FEdit.Lines.Text;   { whole doc; good enough for brace-depth + boundary context }
-  FComplete.ItemList.Clear;
-  TyCssCompletionItems(before, FSelectorMode, FComplete.ItemList);
 end;
 
 function TTyStyleOverrideDialog.Execute(var AText: string): Boolean;
@@ -321,14 +257,14 @@ procedure TTyStyleOverrideProperty.Edit;
 var
   dlg: TTyStyleOverrideDialog;
   comp: TPersistent;
-  ctrl: TTyStyleController;
+  ctrl: TTyCustomStyleController;
   typeKey, s: string;
   selectorMode: Boolean;
   styleable: ITyStyleable;
 begin
   comp := GetComponent(0);
   ctrl := nil; typeKey := ''; selectorMode := False;
-  if comp is TTyStyleController then
+  if comp is TTyCustomStyleController then   { any controller, a third party's too }
     selectorMode := True   { controller level: full tycss with selectors, no single typeKey }
   else if Supports(comp, ITyStyleable, styleable) then
   begin

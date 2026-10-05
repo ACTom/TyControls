@@ -1,0 +1,2 @@
+/* imported by the lint position test */
+TyButton { frobnicate: 1px; }

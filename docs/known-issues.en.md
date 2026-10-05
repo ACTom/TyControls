@@ -22,3 +22,9 @@ GTK3 is fully functional under X11. The following issues appear only in **Waylan
 The cause is in LCL. GTK2 does read the real GTK style, but only once, when the widgetset is constructed, and never refreshes it; GTK3 hardcodes several system colours outright and the widgetset says so itself. A stale or hardcoded value is worse than admitting we do not know, so the library does not read them.
 
 **Recommendation:** use Qt5 / Qt6 if you need the app to follow the OS appearance — there the values come from the live Qt palette and track a desktop colour-scheme change.
+
+## Windows (several monitors at different scaling)
+
+A form dragged onto a monitor with different scaling lays itself out again for that monitor's DPI. Popups (dropdown lists, menus, hint balloons) do not follow: they are drawn at the DPI of the form they belong to, and come out too large or too small when they open on the other monitor.
+
+**Recommendation:** keep controls that open a popup away from the screen edge, so the popup lands on the same monitor as its form.

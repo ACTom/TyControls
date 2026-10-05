@@ -11,7 +11,7 @@ uses
   Classes, SysUtils, Forms, Controls, Dialogs, Menus, ClipBrd,
   PropEdits, PropEditUtils, ComponentEditors,
   tyControls.AdvanceChart, tyControls.Design.AdvChart.Editor,
-  tyControls.IconFont, tyControls.ImageCollection,
+  tyControls.IconFont, tyControls.Icons.Lucide, tyControls.ImageCollection,
   tyControls.Dialogs, tyControls.Dialogs.IconBrowser,
   tyControls.Dialogs.ImageCollectionEditor, tyControls.Dialogs.StructureEditor,
   tyControls.Dialogs.ListGroupsEditor, tyControls.Dialogs.TreeNodesEditor,
@@ -20,6 +20,14 @@ uses
   tyControls.Dialogs.Find, tyControls.Dialogs.Progress, tyControls.Dialogs.About,
   tyControls.ListGroupPanel, tyControls.PageControl, tyControls.TabSheet,
   tyControls.TreeView, tyControls.Cascader, tyControls.TreeSelect,
+  { The terminal's colour schemes: reading, choosing and the errors are in the runtime unit
+    (tested there); the editor below is only the IDE half. }
+  tyControls.Terminal, tyControls.Terminal.ColorScheme,
+  { Tool window bars / tool windows. Whether a verb applies, and the model half of each verb,
+    live in the runtime unit DesignRules (testable headless); this unit only does the IDE half. }
+  tyControls.ToolWindows, tyControls.ToolWindows.DesignRules,
+  { AddUndoAction takes its old / new values as variants. }
+  Variants,
   { rsDtIconNeedsFont is shared with the GlyphName property editor. }
   tyControls.Design.PropEditors;
 
@@ -33,8 +41,8 @@ type
     On a TTyVirtualImageList it is APPENDED to Names, which is the thing that list is for. }
   TTyIconBrowserComponentEditor = class(TComponentEditor)
   private
-    FPickTarget: TTyVirtualImageList;
-    function FontOf(out AOwnerList: TTyVirtualImageList): TTyIconFont;
+    FPickTarget: TTyCustomVirtualImageList;
+    function FontOf(out AOwnerList: TTyCustomVirtualImageList): TTyCustomIconFont;
     procedure HandlePickName(Sender: TObject; const AName: string);
   public
     function GetVerbCount: Integer; override;
@@ -125,6 +133,40 @@ type
     procedure PrepareItem(Index: Integer; const AnItem: TMenuItem); override;
   end;
 
+  { A tool window bar's context menu (spec §11): "New Tool Window" and "Show Window >".
+    TDefaultComponentEditor like TTyPageControlEditor: a double-click generates the default
+    event handler rather than running verb 0 (which would add a window on every double-click).
+    No "Delete Tool Window": Hook.DeletePersistent skips the inherited-component check, the
+    owner check and the undo record (designer.pp:3144-3179), so it could delete an inherited
+    window in a descendant form. The Delete key does it properly. }
+  TTyToolWindowBarEditor = class(TDefaultComponentEditor)
+  private
+    function Bar: TTyToolWindowBar;
+    procedure ShowWindowItemClick(Sender: TObject);
+  public
+    function GetVerbCount: Integer; override;
+    function GetVerb(Index: Integer): string; override;
+    procedure ExecuteVerb(Index: Integer); override;
+    procedure PrepareItem(Index: Integer; const AnItem: TMenuItem); override;
+  end;
+
+  { A tool window's context menu (spec §11): "Add Actions Area", "Move to Other Side Bar",
+    "Move Back into Bar >". Always the same three items, greyed when they do not apply, so the
+    menu does not shift under the user's hand. Whether an item applies and what it targets are
+    asked of tyControls.ToolWindows.DesignRules; nothing is decided here. }
+  TTyToolWindowEditor = class(TDefaultComponentEditor)
+  private
+    function Win: TTyToolWindow;
+    procedure MoveBackItemClick(Sender: TObject);
+    { One undo step for a reparent done by "Move to Other Side Bar" / "Move Back into Bar". }
+    procedure RecordParentUndo(AOldParent, ANewParent: TWinControl);
+  public
+    function GetVerbCount: Integer; override;
+    function GetVerb(Index: Integer): string; override;
+    procedure ExecuteVerb(Index: Integer); override;
+    procedure PrepareItem(Index: Integer; const AnItem: TMenuItem); override;
+  end;
+
   { Opens the node editor when a TTyTreeView is double-clicked in the designer.
 
     Descendants that own their own data (TTyShellTreeView) answer SupportsItemModel
@@ -169,6 +211,25 @@ type
     procedure ExecuteVerb(Index: Integer); override;
   end;
 
+  { A terminal's context menu (terminal phase 6): "Import Windows Terminal colour scheme..." and
+    "Export colour scheme...". Which schemes a file offers, reading one and writing one are
+    runtime calls (TyTermSchemeImportPlan, TryLoadFromText, SaveToFile); here are only the file
+    dialogs and the questions. TDefaultComponentEditor: a double-click still makes the default
+    event handler. }
+  TTyTerminalViewComponentEditor = class(TDefaultComponentEditor)
+  private
+    function Term: TTyTerminalView;
+    { paired: which of the two schemes (light = ColorScheme, dark = DarkColorScheme);
+      False when the user cancels }
+    function PickSide(const ATitle, APrompt: string; out ADark: Boolean): Boolean;
+    procedure ImportScheme;
+    procedure ExportScheme;
+  public
+    function GetVerbCount: Integer; override;
+    function GetVerb(Index: Integer): string; override;
+    procedure ExecuteVerb(Index: Integer); override;
+  end;
+
 { All RegisterComponentEditor calls of the package; called once from tyControls.Design.Register. }
 procedure RegisterComponentEditors;
 
@@ -194,18 +255,37 @@ resourcestring
   rsDtImgColEdit    = 'Edit images...';
   rsDtGroupsEdit    = 'Edit groups...';
   rsDtTreeEditNodes = 'Edit Nodes...';
+  { Tool window bars and tool windows (spec §11). Whether each verb applies is decided in the
+    runtime unit tyControls.ToolWindows.DesignRules, where it can be tested. }
+  rsDtTwNewWindow     = 'New Tool Window';
+  rsDtTwShowWindow    = 'Show Window';
+  rsDtTwAddActions    = 'Add Actions Area';
+  rsDtTwMoveOtherSide = 'Move to Other Side Bar';
+  rsDtTwMoveBack      = 'Move Back into Bar';
+  { The terminal's colour schemes (terminal phase 6) }
+  rsDtTermImport      = 'Import Windows Terminal colour scheme...';
+  rsDtTermExport      = 'Export colour scheme...';
+  rsDtTermFilter      = 'Windows Terminal colour schemes (*.json)|*.json|All files (*.*)|*.*';
+  rsDtTermWhichScheme = 'Which colour scheme?';
+  rsDtTermImportSide  = 'Write it into which scheme?';
+  rsDtTermExportSide  = 'Export which scheme?';
+  rsDtTermLight       = 'Light';
+  rsDtTermDark        = 'Dark';
+  rsDtTermUseScheme   = 'Use the custom colour scheme instead of the theme?';
 
 { TTyIconBrowserComponentEditor }
 
-function TTyIconBrowserComponentEditor.FontOf(out AOwnerList: TTyVirtualImageList): TTyIconFont;
+function TTyIconBrowserComponentEditor.FontOf(out AOwnerList: TTyCustomVirtualImageList): TTyCustomIconFont;
 begin
   AOwnerList := nil;
   Result := nil;
-  if Component is TTyIconFont then
-    Result := TTyIconFont(Component)          { covers TTyIconPackFont / TTyLucideIconFont }
-  else if Component is TTyVirtualImageList then
+  { The custom classes: since 4.0 the bundled packs (TTyLucideIconFont, TTyLucideImageList) hang
+    on TTyCustomIconFont / TTyCustomVirtualImageList, not under TTyIconFont / TTyVirtualImageList. }
+  if Component is TTyCustomIconFont then
+    Result := TTyCustomIconFont(Component)
+  else if Component is TTyCustomVirtualImageList then
   begin
-    AOwnerList := TTyVirtualImageList(Component);
+    AOwnerList := TTyCustomVirtualImageList(Component);
     Result := AOwnerList.IconFont;
   end;
 end;
@@ -223,8 +303,8 @@ end;
 
 procedure TTyIconBrowserComponentEditor.ExecuteVerb(Index: Integer);
 var
-  lst: TTyVirtualImageList;
-  fnt: TTyIconFont;
+  lst: TTyCustomVirtualImageList;
+  fnt: TTyCustomIconFont;
   dlg: TTyIconBrowserForm;
   nm: string;
 begin
@@ -574,6 +654,221 @@ begin
   end;
 end;
 
+{ TTyToolWindowBarEditor }
+
+function TTyToolWindowBarEditor.Bar: TTyToolWindowBar;
+begin
+  Result := Component as TTyToolWindowBar;
+end;
+
+function TTyToolWindowBarEditor.GetVerbCount: Integer;
+begin
+  Result := 2;
+end;
+
+function TTyToolWindowBarEditor.GetVerb(Index: Integer): string;
+begin
+  case Index of
+    0: Result := rsDtTwNewWindow;
+    1: Result := rsDtTwShowWindow;
+  else
+    Result := '';
+  end;
+end;
+
+procedure TTyToolWindowBarEditor.ShowWindowItemClick(Sender: TObject);
+var
+  i: Integer;
+  W: TTyCustomToolWindow;
+begin
+  if not (Sender is TMenuItem) then Exit;
+  { GetDesigner is just whatever the editor was created with (componenteditors.pas:670-673).
+    The IDE's two popups (the form designer's, the object inspector's component tree) always
+    pass one (designer.pp, objectinspector.pp:5043-5056), but nothing promises it;
+    without it there is nothing to select into. }
+  if GetDesigner = nil then Exit;
+  { The item carries only its position. Re-read the window list and bounds-check here instead
+    of trusting what PrepareItem saw. }
+  i := TMenuItem(Sender).MenuIndex;
+  if (i < 0) or (i >= Bar.WindowCount) then Exit;
+  W := Bar.Windows[i];
+  { Design time: activate only. The bar tells the designer and refreshes the inspector
+    itself (spec §5.1 step 6). }
+  Bar.ActiveWindow := W;
+  GetDesigner.SelectOnlyThisComponent(W);
+end;
+
+procedure TTyToolWindowBarEditor.PrepareItem(Index: Integer; const AnItem: TMenuItem);
+var
+  i: Integer;
+  W: TTyCustomToolWindow;
+  Item: TMenuItem;
+begin
+  inherited PrepareItem(Index, AnItem);
+  case Index of
+    0: AnItem.Enabled := TyToolWindowDesignCanAddWindow(Bar);
+    1: begin
+         AnItem.Enabled := Bar.WindowCount > 0;
+         for i := 0 to Bar.WindowCount - 1 do
+         begin
+           W := Bar.Windows[i];
+           Item := TMenuItem.Create(AnItem);
+           Item.Name := 'TyTwShow' + IntToStr(i);
+           Item.Caption := W.Name + ' "' + W.Caption + '"';
+           Item.OnClick := @ShowWindowItemClick;
+           AnItem.Add(Item);
+         end;
+       end;
+  end;
+end;
+
+procedure TTyToolWindowBarEditor.ExecuteVerb(Index: Integer);
+var
+  Hook: TPropertyEditorHook;
+  W: TTyToolWindow;
+begin
+  if Index <> 0 then Exit;     { "Show Window" is a submenu; its items do the work }
+  if not TyToolWindowDesignCanAddWindow(Bar) then Exit;
+  Hook := nil;
+  if not GetHook(Hook) then Exit;
+  W := TTyToolWindow.Create(Bar.Owner);
+  { Registering makes it the current page (the bar is not loading); a design-time switch
+    tells the designer. }
+  W.Parent := Bar;
+  W.Name := GetDesigner.CreateUniqueComponentName(W.ClassName);
+  W.Caption := W.Name;
+  Hook.PersistentAdded(W, True);
+  { PageControl's "Add Page" records no undo, so Ctrl+Z cannot take an added page away.
+    Dropping from the palette records it with this very call (designer.pp:788). }
+  GetDesigner.AddUndoAction(W, uopAdd, True, 'Name', '', W.Name);
+  Modified;
+end;
+
+{ TTyToolWindowEditor }
+
+function TTyToolWindowEditor.Win: TTyToolWindow;
+begin
+  Result := Component as TTyToolWindow;
+end;
+
+function TTyToolWindowEditor.GetVerbCount: Integer;
+begin
+  Result := 3;
+end;
+
+function TTyToolWindowEditor.GetVerb(Index: Integer): string;
+begin
+  case Index of
+    0: Result := rsDtTwAddActions;
+    1: Result := rsDtTwMoveOtherSide;
+    2: Result := rsDtTwMoveBack;
+  else
+    Result := '';
+  end;
+end;
+
+procedure TTyToolWindowEditor.RecordParentUndo(AOldParent, ANewParent: TWinControl);
+
+  { Undo / redo find the parent again by name: the root itself, or root.FindComponent
+    (designer.pp:1495-1498). Anything else (no parent at all, a control inside a frame
+    instance) would come back as nil. }
+  function Findable(AParent: TWinControl): Boolean;
+  begin
+    Result := (AParent <> nil) and (AParent.Name <> '')
+      and ((AParent = Win.Owner) or (AParent.Owner = Win.Owner));
+  end;
+
+begin
+  { The same record the component tree writes when it reparents a control
+    (componenttreeview.pas:409-410). Undo replays it as a plain Parent := <found by name>
+    (designer.pp:1487-1504), which goes through the bar's SetParent like any other design-time
+    reparent: the window comes back as the current page at the end of its old bar -- its old
+    position there is not restored. }
+  if not (Findable(AOldParent) and Findable(ANewParent)) then Exit;
+  GetDesigner.AddUndoAction(Win, uopChange, True, 'Parent', AOldParent.Name, ANewParent.Name);
+end;
+
+procedure TTyToolWindowEditor.MoveBackItemClick(Sender: TObject);
+var
+  targets: TTyToolWindowBarArray;
+  i: Integer;
+  oldParent: TWinControl;
+begin
+  if not (Sender is TMenuItem) then Exit;
+  { GetDesigner is just whatever the editor was created with (componenteditors.pas:670-673);
+    the IDE always passes one, but nothing promises it. }
+  if GetDesigner = nil then Exit;
+  { The item carries only its position. Recompute the candidates and bounds-check here instead
+    of trusting what PrepareItem saw, like TTyPageControlEditor.ShowPageMenuItemClick. }
+  targets := TyToolWindowDesignReturnTargets(Win);
+  i := TMenuItem(Sender).MenuIndex;
+  if (i < 0) or (i > High(targets)) then Exit;
+  oldParent := Win.Parent;
+  if TyToolWindowDesignReturnToBar(Win, targets[i]) then
+  begin
+    RecordParentUndo(oldParent, targets[i]);
+    Modified;
+    GetDesigner.SelectOnlyThisComponent(Win);
+  end;
+end;
+
+procedure TTyToolWindowEditor.PrepareItem(Index: Integer; const AnItem: TMenuItem);
+var
+  targets: TTyToolWindowBarArray;
+  i: Integer;
+  Item: TMenuItem;
+begin
+  inherited PrepareItem(Index, AnItem);
+  case Index of
+    0: AnItem.Enabled := TyToolWindowDesignCanAddActions(Win);
+    1: AnItem.Enabled := TyToolWindowDesignOtherSide(Win) <> nil;
+    2: begin
+         targets := TyToolWindowDesignReturnTargets(Win);
+         AnItem.Enabled := Length(targets) > 0;
+         for i := 0 to High(targets) do
+         begin
+           Item := TMenuItem.Create(AnItem);
+           Item.Name := 'TyTwBack' + IntToStr(i);
+           Item.Caption := targets[i].Name;
+           Item.OnClick := @MoveBackItemClick;
+           AnItem.Add(Item);
+         end;
+       end;
+  end;
+end;
+
+procedure TTyToolWindowEditor.ExecuteVerb(Index: Integer);
+var
+  Hook: TPropertyEditorHook;
+  A: TTyCustomToolWindowActions;
+  oldBar: TTyCustomToolWindowBar;
+begin
+  case Index of
+    0: begin
+         if not TyToolWindowDesignCanAddActions(Win) then Exit;
+         Hook := nil;
+         if not GetHook(Hook) then Exit;
+         A := Win.EnsureActions;
+         A.Name := GetDesigner.CreateUniqueComponentName(A.ClassName);
+         Hook.PersistentAdded(A, True);
+         GetDesigner.AddUndoAction(A, uopAdd, True, 'Name', '', A.Name);
+         Modified;
+       end;
+    1: begin
+         { MoveWindow notifies the designer itself at design time (spec §11, C-phase
+           correction), so no Modified here. }
+         if GetDesigner = nil then Exit;
+         oldBar := Win.Bar;
+         if TyToolWindowDesignMoveToOtherSide(Win) then
+         begin
+           RecordParentUndo(oldBar, Win.Bar);
+           GetDesigner.SelectOnlyThisComponent(Win);
+         end;
+       end;
+    { 2 is the "Move Back into Bar" submenu; its items do the work. }
+  end;
+end;
+
 { TTyTreeViewComponentEditor }
 
 function TTyTreeViewComponentEditor.Tree: TTyTreeView;
@@ -680,6 +975,171 @@ begin
   else if Component is TTyIconBrowserDialog then TTyIconBrowserDialog(Component).Execute;
 end;
 
+{ TTyTerminalViewComponentEditor }
+
+function TTyTerminalViewComponentEditor.Term: TTyTerminalView;
+begin
+  Result := Component as TTyTerminalView;
+end;
+
+function TTyTerminalViewComponentEditor.GetVerbCount: Integer;
+begin
+  Result := 2;
+end;
+
+function TTyTerminalViewComponentEditor.GetVerb(Index: Integer): string;
+begin
+  case Index of
+    0: Result := rsDtTermImport;
+    1: Result := rsDtTermExport;
+  else
+    Result := inherited GetVerb(Index);
+  end;
+end;
+
+procedure TTyTerminalViewComponentEditor.ExecuteVerb(Index: Integer);
+begin
+  case Index of
+    0: ImportScheme;
+    1: ExportScheme;
+  else
+    inherited ExecuteVerb(Index);
+  end;
+end;
+
+{ a verb as a dialog title: without its trailing ellipsis, written as three dots in English
+  and as one character (U+2026) in a translation }
+function VerbTitle(const AVerb: string): string;
+begin
+  Result := StringReplace(AVerb, '...', '', [rfReplaceAll]);
+  Result := Trim(StringReplace(Result, #$E2#$80#$A6, '', [rfReplaceAll]));
+end;
+
+function TTyTerminalViewComponentEditor.PickSide(const ATitle, APrompt: string; out ADark: Boolean): Boolean;
+var
+  pick: Integer;
+begin
+  ADark := False;
+  pick := InputCombo(VerbTitle(ATitle), APrompt, [rsDtTermLight, rsDtTermDark]);
+  Result := pick >= 0;
+  ADark := pick = 1;
+end;
+
+procedure TTyTerminalViewComponentEditor.ImportScheme;
+var
+  dlg: TOpenDialog;
+  fs: TFileStream;
+  txt, err, nm: string;
+  names: TStringArray;
+  list: TStringList;
+  i, pick: Integer;
+  dark: Boolean;
+  target: TTyTerminalColorScheme;
+begin
+  dlg := TOpenDialog.Create(nil);
+  try
+    dlg.Filter := rsDtTermFilter;
+    dlg.Options := dlg.Options + [ofFileMustExist];
+    if not dlg.Execute then Exit;
+    txt := '';
+    try
+      fs := TFileStream.Create(dlg.FileName, fmOpenRead or fmShareDenyWrite);
+      try
+        SetLength(txt, fs.Size);
+        if Length(txt) > 0 then fs.ReadBuffer(txt[1], Length(txt));
+      finally
+        fs.Free;
+      end;
+    except
+      on E: Exception do
+      begin
+        TyMessageDlg(E.Message, mtError, [mbOK]);
+        Exit;
+      end;
+    end;
+  finally
+    dlg.Free;
+  end;
+  if not TyTermSchemeImportPlan(txt, names, err) then
+  begin
+    TyMessageDlg(err, mtError, [mbOK]);
+    Exit;
+  end;
+  if Length(names) = 1 then
+    nm := names[0]
+  else
+  begin
+    list := TStringList.Create;
+    try
+      for i := 0 to High(names) do
+        list.Add(names[i]);
+      pick := InputCombo(VerbTitle(rsDtTermImport), rsDtTermWhichScheme, list);
+    finally
+      list.Free;
+    end;
+    if pick < 0 then Exit;
+    nm := names[pick];
+  end;
+  dark := False;
+  if Term.ColorSchemePaired and not PickSide(rsDtTermImport, rsDtTermImportSide, dark) then Exit;
+  if dark then
+    target := Term.DarkColorScheme
+  else
+    target := Term.ColorScheme;
+  if not target.TryLoadFromText(txt, nm, err) then
+  begin
+    TyMessageDlg(err, mtError, [mbOK]);
+    Exit;
+  end;
+  if (Term.ColorSource = tsrcTheme)
+    and (TyMessageDlg(rsDtTermUseScheme, mtConfirmation, [mbYes, mbNo]) = mrYes) then
+    Term.ColorSource := tsrcScheme;
+  Modified;
+end;
+
+procedure TTyTerminalViewComponentEditor.ExportScheme;
+var
+  dlg: TSaveDialog;
+  dark: Boolean;
+  src: TTyTerminalColorScheme;
+begin
+  dark := False;
+  if Term.ColorSchemePaired and not PickSide(rsDtTermExport, rsDtTermExportSide, dark) then Exit;
+  if dark then
+    src := Term.DarkColorScheme
+  else
+    src := Term.ColorScheme;
+  { a scheme with no name or a missing colour cannot be written: say so before asking where
+    to save it (SaveToFile would refuse it too, but only after the user picked a file) }
+  try
+    src.SaveToText;
+  except
+    on E: Exception do
+    begin
+      TyMessageDlg(E.Message, mtError, [mbOK]);
+      Exit;
+    end;
+  end;
+  dlg := TSaveDialog.Create(nil);
+  try
+    dlg.Filter := rsDtTermFilter;
+    dlg.DefaultExt := 'json';
+    dlg.Options := dlg.Options + [ofOverwritePrompt];
+    if src.Name <> '' then
+      dlg.FileName := src.Name + '.json';
+    if not dlg.Execute then Exit;
+    try
+      { a scheme with no name or a missing colour is refused before the file is created }
+      src.SaveToFile(dlg.FileName);
+    except
+      on E: Exception do
+        TyMessageDlg(E.Message, mtError, [mbOK]);
+    end;
+  finally
+    dlg.Free;
+  end;
+end;
+
 { ---- registration ---- }
 
 procedure RegisterComponentEditors;
@@ -690,15 +1150,22 @@ begin
   RegisterComponentEditor(TTyAdvanceChart, TTyAdvanceChartEditor);
   // Page management verbs (Add/Delete/Show Next/Prev) for the page control.
   RegisterComponentEditor(TTyPageControl, TTyPageControlEditor);
+  // Tool window bars: New Tool Window / Show Window; tool windows: Add Actions Area / Move to
+  // Other Side Bar / Move Back into Bar (spec §11). Double-click still makes the default event.
+  RegisterComponentEditor(TTyToolWindowBar, TTyToolWindowBarEditor);
+  RegisterComponentEditor(TTyToolWindow, TTyToolWindowEditor);
   // Double-click a tree in the designer to open its node editor, the way LCL's own
-  // TTreeView opens the "TreeView Items Editor". GetComponentEditor picks the
-  // most-derived registration, so this also covers TTyShellTreeView -- the editor asks
-  // SupportsItemModel and offers no verb there.
+  // TTreeView opens the "TreeView Items Editor". Since 4.0 TTyShellTreeView is no
+  // TTyTreeView (it hangs on TTyCustomTreeView, the LCL way), so it gets the default
+  // editor -- it never had a verb here anyway: the editor asks SupportsItemModel, and the
+  // shell tree builds its nodes from the file system.
   RegisterComponentEditor(TTyTreeView, TTyTreeViewComponentEditor);
-  { Right-click -> "Icon browser...". Registered on the BASE icon font, so every bundled pack
-    (TTyLucideIconFont and whatever follows it) inherits the verb without another line here;
-    GetComponentEditor picks the most-derived registration. }
-  RegisterComponentEditor([TTyIconFont, TTyVirtualImageList], TTyIconBrowserComponentEditor);
+  { Right-click -> "Icon browser...". Component editors stay on the final classes (a verb may
+    write a property a third-party subclass never published), and since 4.0 the bundled packs
+    are not TTyIconFont / TTyVirtualImageList descendants -- they hang on the custom classes --
+    so each is named here; a new pack adds its own line. }
+  RegisterComponentEditor([TTyIconFont, TTyLucideIconFont, TTyVirtualImageList, TTyLucideImageList],
+    TTyIconBrowserComponentEditor);
   RegisterComponentEditor(TTyImageCollection, TTyImageCollectionComponentEditor);
   RegisterComponentEditor(TTyListGroupPanel, TTyListGroupPanelComponentEditor);
   // Double-click a cascader to edit its nested option tree in one window.
@@ -706,6 +1173,8 @@ begin
   // Double-click a tree-select to edit its dropdown tree -- the same node editor,
   // aimed at the embedded tree the published Items forward to.
   RegisterComponentEditor(TTyTreeSelect, TTyTreeSelectComponentEditor);
+  // Right-click a terminal: import / export a Windows Terminal colour scheme.
+  RegisterComponentEditor(TTyTerminalView, TTyTerminalViewComponentEditor);
   // Double-click a dialog component in the designer to preview it (verb 0 = Preview),
   // mirroring LCL's TCommonDialogComponentEditor.
   RegisterComponentEditor(

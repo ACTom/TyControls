@@ -30,7 +30,7 @@ type
     property AlongY: Boolean read FAlongY write FAlongY;           // dash run direction (a tall bar dashes vertically)
   end;
 
-  TTySplitter = class(TTyCustomControl)
+  TTyCustomSplitter = class(TTyCustomControl)
   private
     FMinSize: Integer;
     FAutoSnap: Boolean;
@@ -70,7 +70,9 @@ type
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
   public
     constructor Create(AOwner: TComponent); override;
-  published
+    { LOGICAL px: the drag scales it by the splitter's PPI before it is compared with the
+      pane, whose size is device px. Raw, 30 meant a 30 px pane at every scaling -- at 175%
+      barely half of what it meant at 100%. }
     property MinSize: Integer read FMinSize write SetMinSize default 30;
     { Drag a pane past MinSize and it closes, instead of sticking at MinSize with the
       pointer running on without it. Without this there is NO gesture that collapses a
@@ -82,9 +84,68 @@ type
     property OnCanResize: TTySplitterCanResizeEvent read FOnCanResize write FOnCanResize;
     property OnMoved: TNotifyEvent read FOnMoved write FOnMoved;
     property Align default alLeft;
-    property Anchors;
+  end;
+
+  { TTySplitter publishes TTyCustomSplitter's properties; everything lives in TTyCustomSplitter. }
+  TTySplitter = class(TTyCustomSplitter)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
     property StyleClass;
+    property StyleOverride;
     property Controller;
+    property MinSize;
+    property AutoSnap;
+    property ResizeStyle;
+    property OnCanResize;
+    property OnMoved;
+    property Align;
+    property Anchors;
   end;
 
 { AAutoSnap: when the drag lands below AMinSize, collapse to 0 rather than pinning at
@@ -202,7 +263,7 @@ begin
   end;
 end;
 
-constructor TTySplitter.Create(AOwner: TComponent);
+constructor TTyCustomSplitter.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FMinSize := 30;
@@ -219,19 +280,19 @@ begin
   UpdateCursor;
 end;
 
-function TTySplitter.GetStyleTypeKey: string;
+function TTyCustomSplitter.GetStyleTypeKey: string;
 begin
   Result := 'TySplitter';
 end;
 
-function TTySplitter.Vertical: Boolean;
+function TTyCustomSplitter.Vertical: Boolean;
 begin
   // Returns True when the splitter BAR is vertical (Align in [alLeft, alRight]),
   // i.e. it resizes the neighbour's WIDTH via a horizontal drag.
   Result := Align in [alLeft, alRight];
 end;
 
-procedure TTySplitter.UpdateCursor;
+procedure TTyCustomSplitter.UpdateCursor;
 begin
   { A disabled splitter must not advertise a drag it will refuse. It kept showing the
     resize cursor, so the pointer promised a drag over a control that ignores MouseDown --
@@ -245,19 +306,19 @@ begin
     Cursor := crVSplit;
 end;
 
-procedure TTySplitter.CMEnabledChanged(var Message: TLMessage);
+procedure TTyCustomSplitter.CMEnabledChanged(var Message: TLMessage);
 begin
   inherited;
   UpdateCursor;
 end;
 
-procedure TTySplitter.Loaded;
+procedure TTyCustomSplitter.Loaded;
 begin
   inherited Loaded;
   UpdateCursor;
 end;
 
-procedure TTySplitter.MouseEnter;
+procedure TTyCustomSplitter.MouseEnter;
 begin
   inherited MouseEnter;
   { The cursor is derived from Align. Loaded covers streamed (.lfm) splitters, but a
@@ -267,13 +328,13 @@ begin
   UpdateCursor;
 end;
 
-procedure TTySplitter.SetMinSize(AValue: Integer);
+procedure TTyCustomSplitter.SetMinSize(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   FMinSize := AValue;
 end;
 
-function TTySplitter.AxisSize(AControl: TControl): Integer;
+function TTyCustomSplitter.AxisSize(AControl: TControl): Integer;
 begin
   if Vertical then Result := AControl.Width else Result := AControl.Height;
 end;
@@ -281,7 +342,7 @@ end;
 // Mirror TCustomSplitter: the resized control is the sibling immediately on the
 // anchored side of the splitter (left of an alLeft bar, above an alTop bar, etc.),
 // overlapping the perpendicular extent.
-function TTySplitter.FindResizeTarget: TControl;
+function TTyCustomSplitter.FindResizeTarget: TControl;
 var
   i: Integer;
   c, best: TControl;
@@ -311,7 +372,7 @@ end;
 { The clamp + OnCanResize negotiation, shared by the live resize and the deferred band.
   Factored out so the preview cannot drift from what release will actually commit: one
   clamp, one veto, one answer. False = no target, or the handler refused. }
-function TTySplitter.NegotiateSize(ADelta: Integer; out ANewSize: Integer): Boolean;
+function TTyCustomSplitter.NegotiateSize(ADelta: Integer; out ANewSize: Integer): Boolean;
 var
   maxSize: Integer;
   accept: Boolean;
@@ -322,13 +383,14 @@ begin
   if Vertical then maxSize := Parent.ClientWidth - Width else maxSize := Parent.ClientHeight - Height;
   { AutoSnap must reach the shared negotiator, or the band previews a size the release
     will not honour -- the preview and the commit have to come from one clamp. }
-  ANewSize := TySplitterNewSize(Align, FStartSize, ADelta, FMinSize, maxSize, FAutoSnap);
+  ANewSize := TySplitterNewSize(Align, FStartSize, ADelta,
+    MulDiv(FMinSize, Font.PixelsPerInch, 96), maxSize, FAutoSnap);
   accept := True;
   if Assigned(FOnCanResize) then FOnCanResize(Self, ANewSize, accept);
   Result := accept;
 end;
 
-procedure TTySplitter.ApplySize(ADelta: Integer);
+procedure TTyCustomSplitter.ApplySize(ADelta: Integer);
 var
   n: Integer;
 begin
@@ -336,7 +398,7 @@ begin
   if Vertical then FTarget.Width := n else FTarget.Height := n;
 end;
 
-procedure TTySplitter.ShowBand;
+procedure TTyCustomSplitter.ShowBand;
 var
   S: TTyStyleSet;
 begin
@@ -355,7 +417,7 @@ begin
   FBand.BringToFront;       // windowed panes would otherwise cover the preview
 end;
 
-procedure TTySplitter.MoveBand(ADelta: Integer);
+procedure TTyCustomSplitter.MoveBand(ADelta: Integer);
 var
   n: Integer;
   r: TRect;
@@ -370,12 +432,12 @@ begin
   FBand.BoundsRect := r;
 end;
 
-procedure TTySplitter.HideBand;
+procedure TTyCustomSplitter.HideBand;
 begin
   FreeAndNil(FBand);
 end;
 
-procedure TTySplitter.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomSplitter.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseDown(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
@@ -391,7 +453,7 @@ begin
   if FResizeStyle in [rsLine, rsPattern] then ShowBand;
 end;
 
-procedure TTySplitter.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomSplitter.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   delta: Integer;
 begin
@@ -411,7 +473,7 @@ begin
     MoveBand(delta);
 end;
 
-procedure TTySplitter.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomSplitter.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   delta: Integer;
 begin
@@ -436,12 +498,12 @@ begin
   inherited MouseUp(Button, Shift, X, Y);
 end;
 
-procedure TTySplitter.Paint;
+procedure TTyCustomSplitter.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-procedure TTySplitter.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomSplitter.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;

@@ -50,7 +50,7 @@ uses tyControls.Segmented;
 |------|------|--------|------|
 | `StyleClass` | `string` | `''` | **变体入口**：对应 `.tycss` 里 `TySegmented.<classname>`。解析分段时**带上同一个 `StyleClass`**，所以 `TySegmentedItem.small` 能跟着凹槽一起换。 |
 | `StyleOverride` | `string` | `''` | 单实例内联 CSS 声明块（可引用 `var(--...)` 令牌）。 |
-| `Controller` | `TTyStyleController` | `nil`（用全局 `TyDefaultController`） | 指定样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（用全局 `TyDefaultController`） | 指定样式控制器。 |
 | `TabStop` | `Boolean` | **`True`** | 默认参与 Tab 焦点链——按键导航是这个控件的立身之本。 |
 
 另暴露 `Enabled` / `Font` / `Align` / `Anchors` / `OnClick` 及 `TTyCustomControl` 基线事件集（含 `OnKeyDown` / `OnEnter` / `OnExit` 等），见 [../events.md](../events.md)。

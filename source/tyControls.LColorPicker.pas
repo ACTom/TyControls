@@ -18,7 +18,7 @@ type
     and border-color. The dialog's internal twins already own 'TyColorArea'
     (tyControls.Dialogs.Color), so the public picker wearing 'TyGauge' was simply
     inconsistent. }
-  TTyLColorPicker = class(TTyCustomControl)
+  TTyCustomLColorPicker = class(TTyCustomControl)
   private
     FHue: Single;         // 0..360
     FSat: Single;         // 0..1
@@ -43,17 +43,73 @@ type
     constructor Create(AOwner: TComponent); override;
     { The colour under the current Hue/Sat/Position (opaque). }
     property SelectedColor: TTyColor read GetSelectedColor;
-  published
+    // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
+    property TabStop default True;
     property Hue: Single read FHue write SetHue;
     property Sat: Single read FSat write SetSat;
     property Position: Single read FPosition write SetPosition;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
-    // Declared True to match the constructor, so a host's TabStop=False opt-out streams.
-    property TabStop default True;
+  end;
+
+  { TTyLColorPicker publishes TTyCustomLColorPicker's properties; everything lives in TTyCustomLColorPicker. }
+  TTyLColorPicker = class(TTyCustomLColorPicker)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Hue;
+    property Sat;
+    property Position;
+    property OnChange;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
   end;
 
 implementation
@@ -61,7 +117,7 @@ implementation
 const
   BarMargin = 3;   // logical-px inset of the gradient bar from the control edge
 
-constructor TTyLColorPicker.Create(AOwner: TComponent);
+constructor TTyCustomLColorPicker.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FHue := 0;
@@ -75,33 +131,33 @@ begin
   Height := 160;
 end;
 
-function TTyLColorPicker.GetStyleTypeKey: string;
+function TTyCustomLColorPicker.GetStyleTypeKey: string;
 begin
   { Its own key, not the gauge's: a colour-selection surface has only two levers, marker
     colour and frame, and the marker needs contrast the gauge's on-surface text can't give. }
   Result := 'TyLColorPicker';
 end;
 
-function TTyLColorPicker.GetSelectedColor: TTyColor;
+function TTyCustomLColorPicker.GetSelectedColor: TTyColor;
 begin
   Result := TyHSVToRGB(FHue, FSat, FPosition, 255);
 end;
 
-procedure TTyLColorPicker.SetHue(const AValue: Single);
+procedure TTyCustomLColorPicker.SetHue(const AValue: Single);
 begin
   if FHue = AValue then Exit;
   FHue := AValue;
   Invalidate;
 end;
 
-procedure TTyLColorPicker.SetSat(const AValue: Single);
+procedure TTyCustomLColorPicker.SetSat(const AValue: Single);
 begin
   if FSat = AValue then Exit;
   FSat := AValue;
   Invalidate;
 end;
 
-procedure TTyLColorPicker.SetPosition(const AValue: Single);
+procedure TTyCustomLColorPicker.SetPosition(const AValue: Single);
 var
   v: Single;
 begin
@@ -113,7 +169,7 @@ begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTyLColorPicker.BarMetrics(out ABarLeft, ABarTop, ABarWidth, ABarH: Integer);
+procedure TTyCustomLColorPicker.BarMetrics(out ABarLeft, ABarTop, ABarWidth, ABarH: Integer);
 var
   m: Integer;
 begin
@@ -127,7 +183,7 @@ begin
   if ABarH < 1 then ABarH := 1;
 end;
 
-procedure TTyLColorPicker.UpdateFromY(AY: Integer);
+procedure TTyCustomLColorPicker.UpdateFromY(AY: Integer);
 var
   barLeft, barTop, barWidth, barH: Integer;
 begin
@@ -141,7 +197,7 @@ begin
   Position := 1 - (AY - barTop) / (barH - 1);
 end;
 
-procedure TTyLColorPicker.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomLColorPicker.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
@@ -152,20 +208,20 @@ begin
   end;
 end;
 
-procedure TTyLColorPicker.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomLColorPicker.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   if not Enabled then Exit;
   inherited MouseMove(Shift, X, Y);
   if FDragging then UpdateFromY(Y);
 end;
 
-procedure TTyLColorPicker.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomLColorPicker.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
   if Button = mbLeft then FDragging := False;
 end;
 
-procedure TTyLColorPicker.Paint;
+procedure TTyCustomLColorPicker.Paint;
 var
   P: TTyPainter;
   bodyS: TTyStyleSet;

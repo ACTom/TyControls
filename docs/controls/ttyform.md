@@ -20,7 +20,7 @@ type
 - **`Surface: TTyFormSurface`**——铺满窗体（`alClient`）的内容承载容器，**每个窗体有且只有一个**，
   固定名为 `Surface`。它**不是构造时创建的**，而是从 `.lfm` 流式化出来的：File > New 的
   *TyControls Form / Application* 模板已经带好它，设计器里拖控件本来就落进它。
-- **`TitleBar: TTyTitleBar`**——可关联的标题栏，走的是 `Form.Menu` 那种「属性指向一个组件」的模式，
+- **`TitleBar: TTyCustomTitleBar`**——可关联的标题栏，走的是 `Form.Menu` 那种「属性指向一个组件」的模式，
   不是硬塞的子组件。它本身也放在 `Surface` 里。
 
 **你的应用控件都放在 `Surface` 里。** 尤其是 `TTyLabel`、`TTyShape` 这类**无窗口的图形控件**——
@@ -73,7 +73,7 @@ TTyChromeEngine（由 TTyForm 拥有/释放）     // 与窗体无关的窗口�
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `TitleHeight` | `Integer` | `32` | 标题栏高度（逻辑像素）。写入时重新布局顶部条带（`TitleBar.Height`）。 |
-| `BorderIcons` | `TBorderIcons` | `[biSystemMenu, biMinimize, biMaximize]` | 决定标题栏按钮：`biSystemMenu`→关闭、`biMinimize`→最小化、`biMaximize`→最大化（仅当 `Resizable`）。变更时即时同步到关联的标题栏。 |
+| `BorderIcons` | `TBorderIcons` | `[biSystemMenu, biMinimize, biMaximize]` | 决定窗口**提供**哪些标题栏按钮：`biSystemMenu`→关闭、`biMinimize`→最小化、`biMaximize`→最大化（仅当 `Resizable`）。变更时即时同步到关联的标题栏。标题栏自己的 `ShowMinimize`/`ShowMaximize`/`ShowClose` 是另一道门：按钮只在两边都允许时显示，这里的同步不覆盖它们。 |
 | `Resizable` | `Boolean` | `True` | 是否允许边缘拖拽缩放；同时门控最大化按钮（`False` 时即使含 `biMaximize` 也隐藏最大化）。 |
 | `BorderStyle` | `TFormBorderStyle` | `bsNone` | **锁定** `bsNone`（无边框自绘窗）：对象查看器中隐藏，赋任何值都归正为 `bsNone`。 |
 
@@ -83,7 +83,7 @@ TTyChromeEngine（由 TTyForm 拥有/释放）     // 与窗体无关的窗口�
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
-| `TitleBar` | `TTyTitleBar` | **可关联**的标题栏——指向窗体上某个 `TTyTitleBar` 实例（`Form.Menu` 模式），不是构造时硬创建的子组件。流式化的 `.lfm` **必须显式写 `TitleBar = <名字>`**，否则窗口拖不动。 |
+| `TitleBar` | `TTyCustomTitleBar` | **可关联**的标题栏——指向窗体上某个 `TTyTitleBar` 实例（`Form.Menu` 模式），不是构造时硬创建的子组件。4.0 起类型是 `TTyCustomTitleBar`：从它派生的第三方标题栏同样挂得上、放上窗体同样自动关联（`MenuBar` 同理是 `TTyCustomMenuBar`）。流式化的 `.lfm` **必须显式写 `TitleBar = <名字>`**，否则窗口拖不动。 |
 | `Surface` | `TTyFormSurface` | 内容承载容器（`alClient`，固定名 `Surface`）。由 `.lfm` 流式化，不在构造函数里创建。 |
 
 ### 继承的标准 TForm 生命周期事件
@@ -94,7 +94,7 @@ TTyChromeEngine（由 TTyForm 拥有/释放）     // 与窗体无关的窗口�
 
 ### public 方法
 
-#### `procedure ApplyChromeTheme(AController: TTyStyleController)`
+#### `procedure ApplyChromeTheme(AController: TTyCustomStyleController)`
 
 从 `TyForm` 主题令牌解析窗体背景：调用 `AController.Model.ResolveStyle('TyForm', '', [])`，若解析出 `tpBackground` 且为纯色（`tfkSolid`），将该颜色赋给窗体 `Color`/背景。用于让无边框窗体的背景与主题保持一致（遵守"视觉由主题令牌驱动"的硬性原则——背景不在控件代码里写死）。
 
@@ -119,6 +119,12 @@ end;
 | 最小化（Min） | `WindowState := wsMinimized` |
 | 最大化/还原（Max） | 引擎 `ToggleMaximize`（自绘无边框最大化/还原，避让任务栏工作区） |
 | 关闭（Close） | `Close`（走标准 `OnCloseQuery` → `OnClose` 流程） |
+
+### 窗口菜单与 Alt+Space
+
+右键标题栏弹出窗口菜单（还原、最小化、最大化、关闭），按 `BorderIcons`、`Resizable` 和是否已最大化决定哪些项显示、哪些灰掉；点菜单项等于点对应的标题按钮。窗体收到 **Alt+Space** 时也弹这个菜单，和原生窗口的系统菜单一样（macOS 除外，那里 Option+Space 是输入字符）。给 `TitleBar.PopupMenu` 设了自己的菜单，三处都换成你的。标题栏开了 `ShowIcon` 时，单击图标同样弹它，双击图标关闭窗口。规则细节见 [titlebar.md](titlebar.md)「窗口菜单」「图标」。
+
+**从 3.0 升级：** 右键标题栏不再冒泡到窗体的 `PopupMenu`——3.0 时给窗体设的右键菜单在标题栏上也会弹，4.0 起标题栏弹自己的窗口菜单。要旧行为，把 `TitleBar.PopupMenu` 设成窗体的菜单（`TitleBar.PopupMenu := PopupMenu;`），单击图标和 Alt+Space 也会跟着弹它。
 
 ### 右到左（`BiDiMode = bdRightToLeft`）
 
@@ -223,6 +229,8 @@ Form1.StyleOverride := '';                                         // 恢复主�
 6. **设计期标题栏皮肤未换肤：** 见第 6 节——这是 tyControls 全库一致的设计期行为，不是缺陷。
 7. **最大化避让任务栏：** 引擎 `ToggleMaximize` 使用当前显示器工作区（`Screen.MonitorFromWindow(...).WorkareaRect`），最大化窗口自然避让任务栏。
 8. **原生窗口行为：** Windows Aero Snap（贴边平铺 + 拖到顶端最大化）**已实现**——标题栏拖拽交给系统的原生标题栏移动循环，窗口样式也换成 shell 认可的普通顶层窗口样式；系统自己发起的最大化（Aero Snap / Win+↑ / 任务栏菜单）会被窗框采纳，最大化后仍可拖动（拖动即还原并继续跟随鼠标）。Vista/Win7 与固定尺寸（`Resizable := False`）窗口不参与。Windows DWM 原生投影阴影与圆角**已实现**（见第 8 节「窗口圆角与原生投影阴影」）。
+9. **设计期 `WindowState = wsMaximized` 走引擎最大化：** `.lfm` 里（或显示前代码里）设的 `wsMaximized`，首次显示时由窗框交给引擎的工作区最大化——和标题栏最大化按钮同一条路：避让任务栏、记住还原矩形、按钮变还原、圆角变方角——同时把 `WindowState` 复位成 `wsNormal`。不接管的话，widgetset 会对一个无边框 `WS_POPUP` 窗口发 `SW_SHOWMAXIMIZED`：Windows 上铺满整个显示器、连任务栏一起盖住，GTK/Qt 的窗口管理器则直接忽略。所以运行期读 `WindowState` 得到的是 `wsNormal`，与点按钮最大化后一致。`Resizable = False` 的窗口照旧不最大化（与按钮规则一致），只复位状态；设计器里不动这个值。
+10. **最大化手势跟着按钮走：** 双击标题栏、Windows 的贴顶 / Win+↑（`WS_MAXIMIZEBOX`）能不能最大化，判据和最大化按钮在不在是同一个（`CanMaximize`）：`Resizable`，且 `BorderIcons` 含 `biMaximize`，且标题栏 `ShowMaximize`。三者任一为否，按钮消失，手势也一并关闭，与原生窗口去掉最大化框的语义一致；已经最大化的窗口仍可还原，不会卡死。
 
 ## 11. 相关文档
 

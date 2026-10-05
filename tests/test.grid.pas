@@ -10,7 +10,7 @@ uses
   tyControls.Types, tyControls.Controller, tyControls.Columns, tyControls.Grid, tyControls.ComboBox,
   tyControls.Painter, tyControls.ImageCollection, tyControls.Edit, StdCtrls,
   tyControls.DateTimePicker, tyControls.CalcEdit,
-  tyControls.Grid.Layout;
+  tyControls.Grid.Layout, tyControls.Panel;
 
 type
   TTyGridControlTest = class(TTestCase)
@@ -199,6 +199,10 @@ type
     procedure TestValueFilterKeepsOnlyCheckedValues;
     procedure TestHeaderDividerDragResizesTheColumn;
     procedure TestHeaderDragReordersColumnsPastAThreshold;
+    procedure TestDividerDragThroughBodyDoesNotSelectCells;
+    procedure TestPressOnDividerDoesNotSort;
+    procedure TestHeaderSortFiresOnReleaseOverTheSameColumn;
+    procedure TestColumnDragDoesNotSort;
     procedure TestVariableRowHeightsShiftLaterRowsAndHitTest;
     procedure TestUniformGridAllocatesNoRowTopsArray;
     procedure TestFixedRowsStayPutWhileBodyRowsScroll;
@@ -312,6 +316,8 @@ type
     procedure TestFilterRowIsABandNotADataRow;
     procedure TestFilterRowFiltersAndClears;
     procedure TestClickingFilterRowOpensAnEditorThatFilters;
+    procedure TestFilterEditorSitsInTheBandThatIsPainted;
+    procedure TestFilterDropDownIsLaidOutInLogicalPx;
     procedure TestCsvStreamRoundTrip;
     procedure TestClearContentsRangeIsUndoable;
     procedure TestRangeLimitedExport;
@@ -387,7 +393,7 @@ type
     { 鼠标事件的桩(同样必须在 published 之外)。 }
     FSelChanges: Integer;
     FProbeLink: TTyGridEditLink;
-    FSizingCalls, FEndSizeCalls, FLastEndSize: Integer;
+    FSizingCalls, FEndSizeCalls, FLastEndSize, FMoveCalls: Integer;
     FCheckChanges: Integer;
     FEllipsisCalls: Integer;
     FEllipsisCancel: Boolean;
@@ -417,6 +423,8 @@ type
     procedure HookColumnSizing(Sender: TObject; AIndex: Integer;
       var ANewSize: Integer; var AAllow: Boolean);
     procedure HookEndColumnSize(Sender: TObject; AIndex, ANewSize: Integer);
+    procedure HookColumnMove(Sender: TObject; AFromCol, AToCol: Integer;
+      var AAllow: Boolean);
     procedure HookUpperCasePaste(Sender: TObject; ACol, ARow: Integer;
       var ANewText: string; var AAllow: Boolean);
     procedure HookCreateEditLink(Sender: TObject; ACol, ARow: Integer;
@@ -431,6 +439,12 @@ type
       var ABackground: TTyFill; var ATextColor: TTyColor;
       var AFontName: string; var AFontSize, AFontWeight: Integer;
       var AHAlign: TAlignment; var AVAlign: TTextLayout);
+  end;
+
+  { A freed grid takes everything it allocated with it. (#16) }
+  TTyStringGridLeakTest = class(TTestCase)
+  published
+    procedure TestCreatingAndFreeingGridsDoesNotGrowTheHeap;
   end;
 
 implementation
@@ -1267,6 +1281,48 @@ end;
 { ---- TTyStringGrid -------------------------------------------------------- }
 
 type
+  { 每一种编辑器都欠用户一个"放弃"手势。从前只有文本框和掩码框接了键盘处理,
+    另外七种(数值/滑块/备忘/计算器/下拉/日期)按 Esc 毫无反应 —— 今天只是别扭,
+    一旦加上"校验不过不让走",就变成用户被锁死在格子里出不来。 }
+  { 网格释放后什么也不留下。 }
+  TGridLifetimeTest = class(TTestCase)
+  published
+    procedure TestFreeingAGridLeavesNothingBehind;
+  end;
+
+  TGridEditorCancelTest = class(TTestCase)
+  published
+    procedure TestEveryEditorKindCanBeAbandoned;
+    procedure TestEscapeRestoresTheOldText;
+  end;
+
+  { 校验不过就不让离开 —— OnValidateCell。契约的每一条都钉一次:
+    拦得住用户导航,拦不住结构性关闭(但值不落盘),Esc 永远能走,走出网格视同放弃,
+    没改过的格不问,宿主看到的字符串就是会写回的那一个,同一次提交只问一遍。 }
+  TGridValidateCellTest = class(TTestCase)
+  private
+    FVerdict: Boolean;
+    FCalls: Integer;
+    FLastNew: string;
+    FKeepOnExit: Boolean;
+    procedure Validate(Sender: TObject; ACol, ARow: Integer;
+      const AOld, ANew: string; var AValid: Boolean);
+    procedure OnExitDecide(Sender: TObject; ACol, ARow: Integer;
+      const AText: string; var AKeep: Boolean);
+  published
+    procedure TestInvalidValueKeepsTheEditorOpen;
+    procedure TestInvalidValueBlocksNavigation;
+    procedure TestEscapeStillAbandonsAnInvalidValue;
+    procedure TestValidValueCommitsAndIsAskedOnce;
+    procedure TestUnchangedTextIsNotValidated;
+    procedure TestStructuralCloseDiscardsAnInvalidValue;
+    procedure TestLeavingTheGridAbandonsAnInvalidValue;
+    procedure TestHostSeesTheTextThatWouldBeWritten;
+    procedure TestDoubleClickOnTheEditedCellKeepsTheTyping;
+    procedure TestSameTextIsAskedOnlyOnce;
+    procedure TestLeavingTheGridCanKeepTheEdit;
+  end;
+
   TStrGridAccess = class(TTyStringGrid)
   public
     procedure ClickAt(X, Y: Integer);
@@ -1367,6 +1423,8 @@ type
     function  InkColumnOfFirstGlyph(ARow: Integer): Integer;
     function  FilterEditorVisible: Boolean;
     function  FilterEditorBounds: TRect;
+    { 列头筛选下拉的面板,只建不显示(显示要开真窗口)。 }
+    function  FilterDropDownPanelForTest: TTyPanel;
     procedure SetFilterEditorText(const AText: string);
     procedure PressKeyInFilterEditor(AKey: Word);
     property ScrollTop: Integer read GetScrollTop write SetScrollTop;
@@ -1558,6 +1616,12 @@ end;
 function TStrGridAccess.FilterEditorBounds: TRect;
 begin
   Result := FilterEditor.BoundsRect;
+end;
+
+function TStrGridAccess.FilterDropDownPanelForTest: TTyPanel;
+begin
+  EnsureFilterDropDown;
+  Result := FilterDropDownPanel;
 end;
 
 procedure TStrGridAccess.SetFilterEditorText(const AText: string);
@@ -1974,6 +2038,316 @@ begin
   Result.Header.Options := Result.Header.Options - [hoVisible];
   Result.DefaultRowHeight := 20;
   Result.RowCount := 10;
+end;
+
+procedure TGridValidateCellTest.Validate(Sender: TObject; ACol, ARow: Integer;
+  const AOld, ANew: string; var AValid: Boolean);
+begin
+  Inc(FCalls);
+  FLastNew := ANew;
+  AValid := FVerdict;
+end;
+
+{ Every test below: a text cell holding 'old', the editor opened on it, the validator
+  wired. FVerdict says what the validator answers. }
+procedure TGridValidateCellTest.TestInvalidValueKeepsTheEditorOpen;
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.Cells[1, 1] := 'old';
+    FVerdict := False; FCalls := 0;
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'bad';
+    g.PressKeyInEditor(VK_RETURN, []);
+    AssertEquals('the validator was asked', 1, FCalls);
+    AssertTrue('Enter was refused: still editing', g.EditorMode);
+    AssertEquals('the cell was not written', 'old', g.Cells[1, 1]);
+    AssertEquals('the editor still holds what was typed', 'bad', g.InlineEditor.Text);
+    AssertEquals('cursor row did not move', 1, g.Row);
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridValidateCellTest.TestInvalidValueBlocksNavigation;
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.Cells[1, 1] := 'old';
+    FVerdict := False;
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'bad';
+    { Arrow keys and cell clicks both funnel through MoveCursor; the grid's KeyDown is the
+      reachable seam. A refused commit must leave FCol/FRow where they were -- the same
+      "did not move" signal OnSelectCell already speaks. }
+    g.PressKey(VK_DOWN, []);
+    AssertEquals('cursor stayed on the invalid cell', 1, g.Row);
+    AssertTrue('and the editor is still open', g.EditorMode);
+    g.MoveCursor(2, 2);
+    AssertEquals('a direct MoveCursor is refused the same way (col)', 1, g.Col);
+    AssertEquals('a direct MoveCursor is refused the same way (row)', 1, g.Row);
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridValidateCellTest.TestEscapeStillAbandonsAnInvalidValue;
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.Cells[1, 1] := 'old';
+    FVerdict := False; FCalls := 0;
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'bad';
+    g.PressKeyInEditor(VK_ESCAPE, []);
+    AssertFalse('Esc closed the editor regardless of the validator', g.EditorMode);
+    AssertEquals('the old value is back', 'old', g.Cells[1, 1]);
+    AssertEquals('abandoning does not even ask the validator', 0, FCalls);
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridValidateCellTest.TestValidValueCommitsAndIsAskedOnce;
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.Cells[1, 1] := 'old';
+    FVerdict := True; FCalls := 0;
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'fine';
+    g.PressKeyInEditor(VK_RETURN, []);
+    AssertFalse('a valid value closes the editor', g.EditorMode);
+    AssertEquals('and is written', 'fine', g.Cells[1, 1]);
+    { TryEndEdit asks, then hands over to EndEdit, which must NOT ask again: a host validator
+      that shows a message box would otherwise show it twice per commit. }
+    AssertEquals('the validator was asked exactly once', 1, FCalls);
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridValidateCellTest.TestUnchangedTextIsNotValidated;
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.Cells[1, 1] := 'old';
+    FVerdict := False; FCalls := 0;   { would refuse -- but must never be asked }
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.PressKeyInEditor(VK_RETURN, []);
+    AssertFalse('an untouched cell can always be left', g.EditorMode);
+    AssertEquals('without the validator being consulted', 0, FCalls);
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridValidateCellTest.TestStructuralCloseDiscardsAnInvalidValue;
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.Cells[1, 1] := 'old';
+    FVerdict := False; FCalls := 0;
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'bad';
+    { EndEdit is what sorts, row deletes, CSV loads and EditorMode := False call. It cannot be
+      refused -- but the invalid value must not reach the cell by this door either. }
+    g.EndEdit(True);
+    AssertFalse('a structural close always closes', g.EditorMode);
+    AssertEquals('and discards the invalid value instead of writing it', 'old', g.Cells[1, 1]);
+    AssertEquals('the validator was asked once on the way', 1, FCalls);
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridValidateCellTest.TestLeavingTheGridAbandonsAnInvalidValue;
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.Cells[1, 1] := 'old';
+    FVerdict := False;
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'bad';
+    { Focus leaving to another control: LCL sends CM_EXIT to the editor (EditorExit ->
+      refused, editor stays) and then to the grid, whose DoExit is the "focus left the whole
+      grid" signal. Walking away is the same statement as Esc. }
+    g.PressKeyInEditor(VK_RETURN, []);
+    AssertTrue('precondition: the edit was refused and is still open', g.EditorMode);
+    g.DoExit;
+    AssertFalse('leaving the grid abandons the refused edit', g.EditorMode);
+    AssertEquals('the old value is back', 'old', g.Cells[1, 1]);
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridValidateCellTest.OnExitDecide(Sender: TObject; ACol, ARow: Integer;
+  const AText: string; var AKeep: Boolean);
+begin
+  AKeep := FKeepOnExit;
+end;
+
+procedure TGridValidateCellTest.TestDoubleClickOnTheEditedCellKeepsTheTyping;
+{ Reported from a real screen: with an invalid value pending, double-clicking another cell
+  put the OLD value back in the editor. The first click is refused (cursor stays), so the
+  double-click's BeginEdit lands on the cell already being edited -- and DoBeginEdit used to
+  re-run the editor setup, FEditor.Text := Cells[...] included. A latent bug on its own:
+  double-clicking the cell you are typing in threw the typing away. }
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.Cells[1, 1] := 'old';
+    FVerdict := False;
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'bad';
+    g.PressKey(VK_DOWN, []);                       { refused; cursor stays on (1,1) }
+    AssertTrue('BeginEdit on the cell being edited reports an edit in progress', g.BeginEdit);
+    AssertEquals('and does NOT reset what was typed', 'bad', g.InlineEditor.Text);
+    AssertTrue('still editing', g.EditorMode);
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridValidateCellTest.TestSameTextIsAskedOnlyOnce;
+{ A single click on another cell reaches validation twice -- once through the editor losing
+  focus, once through MoveCursor. Without a memo the host's message box would show twice per
+  click. The same text is refused silently the second time; a changed text is asked again. }
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.Cells[1, 1] := 'old';
+    FVerdict := False; FCalls := 0;
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'bad';
+    g.PressKeyInEditor(VK_RETURN, []);
+    g.PressKey(VK_DOWN, []);
+    g.PressKeyInEditor(VK_RETURN, []);
+    AssertEquals('three attempts with the same text asked the host once', 1, FCalls);
+    g.InlineEditor.Text := 'worse';
+    g.PressKeyInEditor(VK_RETURN, []);
+    AssertEquals('a different text is asked again', 2, FCalls);
+    AssertTrue('and is still refused', g.EditorMode);
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridValidateCellTest.TestLeavingTheGridCanKeepTheEdit;
+{ The default on leaving the grid is to abandon; OnInvalidEditExit lets the host keep the
+  editor instead (typically after asking the user). Kept means kept: still editing, typing
+  intact -- and Esc still abandons afterwards. }
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.OnInvalidEditExit := @OnExitDecide;
+    g.Cells[1, 1] := 'old';
+    FVerdict := False; FKeepOnExit := True;
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'bad';
+    g.PressKeyInEditor(VK_RETURN, []);
+    AssertTrue('precondition: refused and open', g.EditorMode);
+    g.DoExit;
+    AssertTrue('the host chose to keep: still editing', g.EditorMode);
+    AssertEquals('typing intact', 'bad', g.InlineEditor.Text);
+    AssertEquals('cell untouched', 'old', g.Cells[1, 1]);
+    g.PressKeyInEditor(VK_ESCAPE, []);
+    AssertFalse('Esc still abandons a kept edit', g.EditorMode);
+    AssertEquals('back to the old value', 'old', g.Cells[1, 1]);
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridValidateCellTest.TestHostSeesTheTextThatWouldBeWritten;
+var f: TForm; ctl: TTyStyleController; g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil); ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.OnValidateCell := @Validate;
+    g.Cells[1, 1] := 'old';
+    FVerdict := True; FLastNew := '';
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'exactly this';
+    g.PressKeyInEditor(VK_RETURN, []);
+    { One reader (PendingEditText) feeds both the validator and the write, so the string the
+      host judged is the string that landed -- they cannot drift apart. }
+    AssertEquals('what the host validated is what was written', g.Cells[1, 1], FLastNew);
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridEditorCancelTest.TestEveryEditorKindCanBeAbandoned;
+{ Walks the editor kinds that actually open a control and asserts each one carries a key
+  handler. The gap this pins is invisible from outside the grid -- OnKeyDown is protected on
+  TWinControl -- which is exactly why seven of the nine went unwired for so long. }
+const
+  KINDS: array[0..8] of TTyGridEditorKind =
+    (gekText, gekNumeric, gekPickList, gekDate, gekTime, gekSpin, gekSlider, gekMemo,
+     gekCalculator);
+var
+  f: TForm;
+  ctl: TTyStyleController;
+  g: TStrGridAccess;
+  i: Integer;
+begin
+  f := TForm.CreateNew(nil);
+  ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    for i := Low(KINDS) to High(KINDS) do
+    begin
+      g.EndEdit(False);
+      g.DefaultEditorKind := KINDS[i];
+      AssertTrue('editor opens for kind ' + IntToStr(Ord(KINDS[i])), g.BeginEditAt(1, 1));
+      AssertTrue('kind ' + IntToStr(Ord(KINDS[i])) + ' has a way to abandon the edit',
+        g.EditorCanCancelForTest);
+      g.EndEdit(False);
+    end;
+  finally ctl.Free; f.Free; end;
+end;
+
+procedure TGridEditorCancelTest.TestEscapeRestoresTheOldText;
+{ The behaviour behind the wiring: Esc leaves the cell as it was and closes the editor. }
+var
+  f: TForm;
+  ctl: TTyStyleController;
+  g: TStrGridAccess;
+begin
+  f := TForm.CreateNew(nil);
+  ctl := TTyStyleController.Create(nil);
+  try
+    g := MakeStrGrid(f, ctl);
+    g.DefaultEditorKind := gekText;
+    g.Cells[1, 1] := 'keep';
+    AssertTrue('editing started', g.BeginEditAt(1, 1));
+    g.InlineEditor.Text := 'typed over it';
+    g.PressKeyInEditor(VK_ESCAPE, []);
+    AssertFalse('the editor closed', g.EditorMode);
+    AssertEquals('and the cell kept its old value', 'keep', g.Cells[1, 1]);
+  finally ctl.Free; f.Free; end;
 end;
 
 procedure TTyStringGridTest.HandleReadOnlyCol2(Sender: TObject; ACol, ARow: Integer;
@@ -3230,6 +3604,134 @@ begin
   G.MoveMouseTo(G.ColLeft(1) + 20, 10);
   G.ReleaseMouse(G.ColLeft(1) + 20, 10);
   AssertTrue('拖过阈值后位置变了', c0.Position <> p0);
+end;
+
+{ 拖列宽时指针滑进正文:那是改宽,不是拖选。(QQ 群"彩太阳"反馈:拖着分隔线
+  路过表格区域,一大片格子被选上了 —— 从前拖选只看 ssLeft,不问按下来自哪儿。) }
+procedure TTyStringGridTest.TestDividerDragThroughBodyDoesNotSelectCells;
+var
+  G: TStrGridAccess;
+  edge, w0, bodyY: Integer;
+  r: TRect;
+  sel: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Header.Options := G.Header.Options + [hoVisible, hoColumnResize];
+  G.Header.Height := 24;
+  G.RowCount := 6;
+  G.Options := G.Options + [goRangeSelect];
+  { 光标先放到 (1,1):要是拖选错误地跑了,选区会从这里拉到别处,看得见。 }
+  r := G.RowRectAt(1);
+  G.FullClickAt(G.ColLeft(1) + 5, (r.Top + r.Bottom) div 2);
+  AssertEquals('前提:光标在第 1 列', 1, G.Col);
+  AssertEquals('前提:光标在第 1 行', 1, G.Row);
+
+  w0 := TTyColumn(G.Header.Columns.Items[0]).Width;
+  edge := G.ColLeft(0) + w0;
+  r := G.RowRectAt(4);
+  bodyY := (r.Top + r.Bottom) div 2;
+
+  G.PressMouseWithoutRelease(edge, 10);      { 按在分隔线上 }
+  G.MoveMouseTo(edge + 40, bodyY);           { 斜着拖进正文第 4 行 }
+  G.ReleaseMouse(edge + 40, bodyY);
+
+  AssertEquals('列宽照样增加了 40', w0 + 40, TTyColumn(G.Header.Columns.Items[0]).Width);
+  AssertEquals('光标列没动', 1, G.Col);
+  AssertEquals('光标行没动', 1, G.Row);
+  sel := G.Selection;
+  AssertTrue('选区仍只是那一格',
+    (sel.Left = 1) and (sel.Right = 1) and (sel.Top = 1) and (sel.Bottom = 1));
+end;
+
+{ 按在分隔线上是改宽,不是点列头。从前这一下先把表排了一遍、然后才开始拖
+  (子类在 inherited 之后用 CellAt 重新命中,一看是列头就排);双击分隔线自适应
+  列宽也顺带排一次。 }
+procedure TTyStringGridTest.TestPressOnDividerDoesNotSort;
+var
+  G: TStrGridAccess;
+  edge: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Header.Options := G.Header.Options + [hoVisible, hoColumnResize, hoHeaderClickAutoSort];
+  G.Header.Height := 24;
+  G.RowCount := 3;
+  { 边界内 1px:仍在分隔线的 ±4px 命中带里,但松开点明确归第 0 列 ——
+    压在正好的边界上时 CellAt 的归属不定,那样的测试对"错排到第 0 列"是盲的。 }
+  edge := G.ColLeft(0) + TTyColumn(G.Header.Columns.Items[0]).Width - 1;
+
+  G.PressMouseWithoutRelease(edge, 10);
+  AssertEquals('按在分隔线上不排序', -1, G.SortColumn);
+  G.MoveMouseTo(edge + 30, 10);
+  G.ReleaseMouse(edge + 30, 10);
+  AssertEquals('拖完松开也不排序', -1, G.SortColumn);
+
+  { 边界内 1px:仍在分隔线的 ±4px 命中带里,但松开点明确归第 0 列 ——
+    压在正好的边界上时 CellAt 的归属不定,那样的测试对"错排到第 0 列"是盲的。 }
+  edge := G.ColLeft(0) + TTyColumn(G.Header.Columns.Items[0]).Width - 1;
+  G.DoubleClickAt(edge, 10);
+  AssertEquals('双击分隔线不排序', -1, G.SortColumn);
+end;
+
+{ 点列头 = 按下并在**同一列头**上松开。按下本身不排;松开在别的列头或正文里不排。 }
+procedure TTyStringGridTest.TestHeaderSortFiresOnReleaseOverTheSameColumn;
+var
+  G: TStrGridAccess;
+  x0, x1: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  { 关掉 hoDrag:这里测的是"松开在别的列头上",不是列重排(那条见下一个测试)。 }
+  G.Header.Options := (G.Header.Options - [hoDrag]) + [hoVisible, hoHeaderClickAutoSort];
+  G.Header.Height := 24;
+  G.RowCount := 3;
+  x0 := G.ColLeft(0) + 20;
+  x1 := G.ColLeft(1) + 20;
+
+  G.PressMouseWithoutRelease(x0, 10);
+  AssertEquals('按下还没排序', -1, G.SortColumn);
+  G.ReleaseMouse(x0, 10);
+  AssertEquals('松开才排序', 0, G.SortColumn);
+  AssertEquals('第一次是升序', Ord(sdAscending), Ord(G.SortDirection));
+
+  G.PressMouseWithoutRelease(x1, 10);
+  G.MoveMouseTo(x0, 10);
+  G.ReleaseMouse(x0, 10);
+  AssertEquals('按第 1 列、松开在第 0 列:不算点击,排序列不变', 0, G.SortColumn);
+  AssertEquals('方向也不变', Ord(sdAscending), Ord(G.SortDirection));
+
+  G.PressMouseWithoutRelease(x1, 10);
+  G.ReleaseMouse(x1, 60);                    { 松开在正文里 }
+  AssertEquals('松开在正文里不排序', 0, G.SortColumn);
+end;
+
+{ 把列拖走再松开不是点击:列换位了,但不排序。 }
+procedure TTyStringGridTest.TestColumnDragDoesNotSort;
+var
+  G: TStrGridAccess;
+  c0: TTyColumn;
+  x0, x1: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Header.Options := (G.Header.Options - [hoColumnResize])
+    + [hoVisible, hoDrag, hoHeaderClickAutoSort];
+  G.Header.Height := 24;
+  G.RowCount := 3;
+  c0 := TTyColumn(G.Header.Columns.Items[0]);
+  c0.Options := c0.Options + [coDraggable];
+
+  { 拖到第 1 列上(换位),再拖回原处松开:指针底下就是按下的那一列,而且它回到了
+    原位。"松开须在同一列"挡不住这一下 —— 只有"拖过列就不算点击"这条守卫能挡。
+    (第一版是拖过去就在那儿松开:松开点换位后落在另一列上,先被同列检查挡了,
+    对守卫是盲的,变异没抓住。) }
+  G.OnColumnMove := @HookColumnMove;
+  FMoveCalls := 0;
+  x0 := G.ColLeft(0) + 20;
+  x1 := G.ColLeft(1) + 20;
+  G.PressMouseWithoutRelease(x0, 10);
+  G.MoveMouseTo(x1, 10);
+  G.MoveMouseTo(x0, 10);
+  G.ReleaseMouse(x0, 10);
+  AssertTrue('前提:拖动过程中换过位', FMoveCalls >= 1);
+  AssertEquals('拖过列再放回原处,仍然不是点击:不排序', -1, G.SortColumn);
 end;
 
 { 逐行行高:接了 OnGetRowHeight 就启用可变行高 —— 前面行变高,后面的行整体下移,
@@ -4934,9 +5436,10 @@ begin
 
   { 点分组标题不该触发排序。 }
   G.Header.Options := G.Header.Options + [hoHeaderClickAutoSort];
-  G.ClickAt(40, 8);
+  { 完整的点击(按下 + 松开):排序挂在松开上,只按不松不算点。 }
+  G.FullClickAt(40, 8);
   AssertEquals('点分组标题不排序', -1, G.Header.SortColumn);
-  G.ClickAt(40, 30);
+  G.FullClickAt(40, 30);
   AssertEquals('点叶子列头才排序', 0, G.Header.SortColumn);
 end;
 
@@ -5154,6 +5657,12 @@ procedure TTyStringGridTest.HookColumnSizing(Sender: TObject; AIndex: Integer;
   var ANewSize: Integer; var AAllow: Boolean);
 begin
   Inc(FSizingCalls);
+end;
+
+procedure TTyStringGridTest.HookColumnMove(Sender: TObject; AFromCol, AToCol: Integer;
+  var AAllow: Boolean);
+begin
+  Inc(FMoveCalls);
 end;
 
 procedure TTyStringGridTest.HookEndColumnSize(Sender: TObject; AIndex, ANewSize: Integer);
@@ -9843,6 +10352,136 @@ begin
   AssertEquals('原文也没被改掉', '>500', G.FilterText(1));
 end;
 
+{ 筛选编辑器要落在**画出来的**那条带里 —— 在 175% 下、在现代密度下都是。
+                                                              (ACTom/TyControls#2)
+  从前有两处各错一点,100% + 经典密度下两处都恰好看不出来:
+
+    * 带的位置按 ScaleI(Header.Height) 算。Header.Height 只是列头高度的**下限** ——
+      现代密度把它抬到 --header-height,自适应高度的标题也会把它撑高 —— 而筛选行是
+      画在**真实的**列头下面的。于是编辑器开在列头里,盖住了标题。
+    * 编辑器相对带内缩 2 px,写的是字面量。画的那个框也是字面量 2,所以两边一致地
+      错:175% 下框贴着带边,字却大了 1.75 倍。
+
+  带的位置用**命中测试**去找 —— 指针怎么认这条带,这里就怎么认 —— 不重算一遍公式:
+  重算一遍的测试只会跟着实现一起错。 }
+procedure TTyStringGridTest.TestFilterEditorSitsInTheBandThatIsPainted;
+var
+  G: TStrGridAccess;
+  r, y, bandTop, bandBottom, inset: Integer;
+  eb: TRect;
+begin
+  FCtl.LoadThemeCssAdditive(':root { --header-height: 36; }');
+  FCtl.Density := tdModern;
+  G := MakeStrGrid(FForm, FCtl);
+  G.Font.PixelsPerInch := 168;
+  G.SetBounds(0, 0, 700, 525);
+  G.Header.Options := G.Header.Options + [hoVisible];
+  G.RowCount := 10;
+  for r := 0 to 9 do
+    G.Cells[1, r] := IntToStr((r + 1) * 100);
+  G.ShowFilterRow := True;
+
+  bandTop := -1;
+  bandBottom := -1;
+  for y := 0 to G.Height - 1 do
+    if G.HitAt(G.ColLeft(1) + 10, y).Part = ghpFilterRow then
+    begin
+      if bandTop < 0 then bandTop := y;
+      bandBottom := y + 1;
+    end;
+  AssertTrue('前置:命中测试找得到筛选行', bandTop >= 0);
+  AssertTrue(Format('前置:现代密度下列头比 Header.Height 高(带顶 %d,ScaleI(Header.Height) = %d)',
+    [bandTop, G.ScaleForTest(G.Header.Height)]), bandTop > G.ScaleForTest(G.Header.Height));
+
+  G.ClickAt(G.ColLeft(1) + 10, (bandTop + bandBottom) div 2);
+  AssertTrue('点了就该开出筛选编辑器', G.FilterEditorVisible);
+  eb := G.FilterEditorBounds;
+  inset := G.ScaleForTest(2);
+  AssertEquals('前置:2 个逻辑像素在这块屏幕上是 4', 4, inset);
+  AssertEquals('编辑器的顶 = 带顶 + 2 逻辑像素', bandTop + inset, eb.Top);
+  AssertEquals('编辑器的左 = 列左 + 2 逻辑像素', G.ColLeft(1) + inset, eb.Left);
+  AssertTrue(Format('编辑器不越过带底(带 %d..%d,编辑器 %d..%d)',
+    [bandTop, bandBottom, eb.Top, eb.Bottom]), eb.Bottom <= bandBottom + 1);
+end;
+
+{ 列头筛选下拉是代码摆出来的:面板 232 x 306、按钮 68 x 26、间距 8 / 6 / 4 ——
+  全是 96 PPI 的设计值,而且是弹层**显示之后**才有父窗口,没有任何 DPI pass 碰得到它。
+  原样用的话,175% 下是一个 232 px 宽的面板装着 1.75 倍大的字。
+
+  这里量的是"175% 下的面板 = 100% 下的面板 x 1.75"。 }
+procedure TTyStringGridTest.TestFilterDropDownIsLaidOutInLogicalPx;
+
+  function Layout(APPI: Integer): TStringList;
+  var
+    G: TStrGridAccess;
+    p: TTyPanel;
+    i: Integer;
+  begin
+    Result := TStringList.Create;
+    G := MakeStrGrid(FForm, FCtl);
+    G.Font.PixelsPerInch := APPI;
+    p := G.FilterDropDownPanelForTest;
+    Result.Add(Format('panel|0|0|%d|%d', [p.Width, p.Height]));
+    for i := 0 to p.ControlCount - 1 do
+    begin
+      { 面板建好时还没有父窗口,它的 PPI 是自己出生时的 96;里面的控件跟着它。
+        不先把网格的 PPI 交给面板,这些控件就按 96 算自己的尺寸下限、按 96 画字,
+        直到弹层显示的那一刻才改过来 —— 而布局是在那之前摆的。 }
+      AssertEquals(p.Controls[i].ClassName + ' 要和网格同一个 PPI', APPI,
+        p.Controls[i].Font.PixelsPerInch);
+      Result.Add(Format('%s|%d|%d|%d|%d', [p.Controls[i].ClassName, p.Controls[i].Left,
+        p.Controls[i].Top, p.Controls[i].Width, p.Controls[i].Height]));
+    end;
+    G.Free;
+  end;
+
+var
+  lo, hi, a, b, bad: TStringList;
+  i, k, v, v2, want, tol: Integer;
+  what: string;
+const
+  CField: array[1..4] of string = ('x', 'y', 'w', 'h');
+begin
+  lo := Layout(96);
+  hi := Layout(168);
+  a := TStringList.Create;
+  b := TStringList.Create;
+  bad := TStringList.Create;
+  try
+    a.Delimiter := '|';
+    a.StrictDelimiter := True;
+    b.Delimiter := '|';
+    b.StrictDelimiter := True;
+    AssertEquals('前置:面板里有搜索框、全选、列表和两个按钮', 6, lo.Count);
+    AssertEquals('两种缩放下是同一批控件', lo.Count, hi.Count);
+    for i := 0 to lo.Count - 1 do
+    begin
+      a.DelimitedText := lo[i];
+      b.DelimitedText := hi[i];
+      what := '';
+      for k := 1 to 4 do
+      begin
+        v := StrToInt(a[k]);
+        v2 := StrToInt(b[k]);
+        want := MulDiv(v, 168, 96);
+        tol := 6;
+        if Abs(want) * 8 div 100 > tol then tol := Abs(want) * 8 div 100;
+        if Abs(v2 - want) > tol then
+          what := what + Format(' %s %d -> %d(应为 %d)', [CField[k], v, v2, want]);
+      end;
+      if what <> '' then bad.Add(a[0] + ':' + what);
+    end;
+    AssertEquals('168 PPI 下的筛选下拉不是 96 PPI 下那个的 1.75 倍:' + LineEnding + bad.Text,
+      0, bad.Count);
+  finally
+    bad.Free;
+    b.Free;
+    a.Free;
+    hi.Free;
+    lo.Free;
+  end;
+end;
+
 { P3.6:删一列要撤得回来 —— 连**那一列的全部身份**一起。
 
   从前列的结构进不了撤销栈(记录点是 SetCells / SetRowCount,而列改的是
@@ -11195,9 +11834,67 @@ begin
   AssertTrue('本批的开关宿主都设得了', G.HeaderAutoHeight);
 end;
 
+{ The constructor creates two lists for the column value filter (the values offered and the ones
+  checked), and the destructor freed every other list the grid owns but not those two: each grid
+  leaked them, which heaptrc reports on exit. Warm up first -- the first grids fill shared caches
+  (theme styles, measurement) that are not leaks -- then fifty more must leave the heap no
+  bigger: with the leak it grows by two string lists a grid. }
+procedure TTyStringGridLeakTest.TestCreatingAndFreeingGridsDoesNotGrowTheHeap;
+var
+  before, after: PtrUInt;
+  i: Integer;
+begin
+  for i := 0 to 4 do TTyStringGrid.Create(nil).Free;
+  before := GetFPCHeapStatus.CurrHeapUsed;
+  for i := 0 to 49 do TTyStringGrid.Create(nil).Free;
+  after := GetFPCHeapStatus.CurrHeapUsed;
+  AssertTrue(Format('the heap grew from %d to %d bytes over fifty grids', [before, after]),
+    after <= before);
+end;
+
+{ 建一张网格再释放,堆不涨。从前每个实例漏两个 TStringList(值筛选面板的全集与勾选集,
+  构造里建、析构里没放),一个窗体开关几次就漏几次。先热身一轮,把主题缓存之类的一次性分配
+  排除在外;之后每轮的增长必须小于一个 TStringList,而漏的时候每轮是两个。 }
+procedure TGridLifetimeTest.TestFreeingAGridLeavesNothingBehind;
+const
+  CRounds = 20;
+var
+  form: TForm;
+  g: TTyStringGrid;
+  before, after: PtrUInt;
+  i: Integer;
+begin
+  form := TForm.CreateNew(nil);
+  try
+    for i := 0 to 1 do
+    begin
+      g := TTyStringGrid.Create(form);
+      g.Parent := form;
+      g.Free;
+    end;
+    before := GetFPCHeapStatus.CurrHeapUsed;
+    for i := 1 to CRounds do
+    begin
+      g := TTyStringGrid.Create(form);
+      g.Parent := form;
+      g.Free;
+    end;
+    after := GetFPCHeapStatus.CurrHeapUsed;
+  finally
+    form.Free;
+  end;
+  AssertTrue(Format('the heap grew by %d bytes over %d grids (a TStringList is %d)',
+    [Int64(after) - Int64(before), CRounds, TStringList.InstanceSize]),
+    Int64(after) - Int64(before) < Int64(CRounds) * TStringList.InstanceSize);
+end;
+
 initialization
+  RegisterTest(TTyStringGridLeakTest);
+  RegisterTest(TGridLifetimeTest);
   RegisterTest(TTyGridControlTest);
   RegisterTest(TTyGridScrollBarNilWindowTest);
   RegisterTest(TTyDrawGridTest);
+  RegisterTest(TGridValidateCellTest);
+  RegisterTest(TGridEditorCancelTest);
   RegisterTest(TTyStringGridTest);
 end.

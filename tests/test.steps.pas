@@ -363,18 +363,29 @@ begin
   // Cell (0,0)-(100,60); marker 24, gap 8, title line 14, connector gap 8 / size 2.
   // Block = 24 + 8 + 14 = 46, centred in 60 -> top = (60-46) div 2 = 7.
   L := TyStepsItemLayout(Rect(0, 0, 100, 60), False, False, 24, 8, 14, 8, 2);
-  AssertEquals('marker at the cell''s left', 0, L.MarkerRect.Left);
+  { A horizontal rail stacks the title UNDER its marker and centres the title in the cell, so
+    the MARKER is centred in the cell too -- that is what puts the number over its own title
+    rather than over the title's first character. (100 - 24) div 2 = 38.
+    This assertion used to read 'marker at the cell''s left' and expect 0: the marker was
+    pinned left while the title spanned the cell, and the two only looked aligned because the
+    painter left-justified the text. That mismatch is the bug this pins the fix for. }
+  AssertEquals('marker centred in the cell', 38, L.MarkerRect.Left);
   AssertEquals('marker is square-sized', 24, L.MarkerRect.Right - L.MarkerRect.Left);
   AssertEquals('block centred: marker top', 7, L.MarkerRect.Top);
   AssertEquals('marker bottom', 31, L.MarkerRect.Bottom);
-  // The title sits UNDER the marker, a gap below it, spanning the whole cell width.
+  // The title sits UNDER the marker, a gap below it, spanning the whole cell width -- it is
+  // drawn CENTRED in that span, so its centre and the marker's coincide at the cell centre.
   AssertEquals('title starts a gap under the marker', 39, L.TitleRect.Top);
   AssertEquals('title is one line tall', 53, L.TitleRect.Bottom);
-  AssertEquals('title left-aligned with its marker', 0, L.TitleRect.Left);
-  AssertEquals('title spans the cell', 100, L.TitleRect.Right);
-  // The connector runs right from the marker, at the MARKER's centre (7 + 12 = 19).
-  AssertEquals('connector starts a gap right of the marker', 32, L.ConnectorRect.Left);
-  AssertEquals('connector stops a gap short of the cell edge', 92, L.ConnectorRect.Right);
+  AssertEquals('title spans the cell (left)', 0, L.TitleRect.Left);
+  AssertEquals('title spans the cell (right)', 100, L.TitleRect.Right);
+  AssertEquals('marker centre and title centre coincide',
+    (L.TitleRect.Left + L.TitleRect.Right) div 2,
+    (L.MarkerRect.Left + L.MarkerRect.Right) div 2);
+  { The connector now spans marker-to-marker: from this one's right edge across the cell
+    boundary to where the next cell's centred marker starts (cells tile evenly). }
+  AssertEquals('connector starts a gap right of the marker', 70, L.ConnectorRect.Left);
+  AssertEquals('connector reaches the next marker', 130, L.ConnectorRect.Right);
   AssertEquals('connector centred on the marker', 18, L.ConnectorRect.Top);
   AssertEquals('connector is the themed thickness', 2,
     L.ConnectorRect.Bottom - L.ConnectorRect.Top);

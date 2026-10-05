@@ -63,7 +63,40 @@ msgstr "TTyScrollBar  ·  TyControls"
 msgid "Animated thumb"
 msgstr "滑块动画"
 
+#: tmainform.lblautotitle.caption
+msgid "A bar nobody is using fades out; point at its list and it is back"
+msgstr "没人用的滚动条会淡出；鼠标指到列表上就回来"
+
+#: tmainform.rgautohide.caption
+msgid "AutoHide - both bars and the list"
+msgstr "AutoHide —— 两条滚动条和那个列表"
+
+#: tmainform.rgautohide.items
+msgid "sbahDefault - theme decides"
+msgstr "sbahDefault —— 听主题的"
+
+#: tmainform.rgautohide.items
+msgid "sbahNever - never fades"
+msgstr "sbahNever —— 从不淡出"
+
+#: tmainform.rgautohide.items
+msgid "sbahAuto - always fades"
+msgstr "sbahAuto —— 一定淡出"
+
+#: tmainform.lblautohint.caption
+msgid "Move the pointer over the list and its bar appears; take it away and the bar fades after the delay above. Only win11, macOS, fluent, material3, adwaita and ubuntu ship it on"
+msgstr "鼠标移到列表上，它的滚动条就出来；移开之后过了上面那个延时才淡出。出厂开着它的只有 win11、macOS、fluent、material3、adwaita、ubuntu"
+
 # --- code resourcestrings (msgid=Pascal source) ---
+
+#: umain.rsautohidemsfmt
+#, object-pascal-format
+msgid "%d ms"
+msgstr "%d 毫秒"
+
+#: umain.rsautohideoff
+msgid "-1, never fades"
+msgstr "-1，从不淡出"
 
 #: umain.rsbarsfmt
 #, object-pascal-format
@@ -75,6 +108,11 @@ msgstr "垂直：Position = %d   （Min %d / Max %d / PageSize %d / SmallChange 
 msgid "Horizontal:  Position = %d   (Min %d / Max %d / PageSize %d / SmallChange %d)"
 msgstr "水平：Position = %d   （Min %d / Max %d / PageSize %d / SmallChange %d）"
 
+#: umain.rseffectivefmt
+#, object-pascal-format
+msgid "Bar EffectiveAutoHideMs: %s"
+msgstr "本条 EffectiveAutoHideMs：%s"
+
 #: umain.rslinefmt
 #, object-pascal-format
 msgid "Line %.2d - scrollable content"
@@ -84,6 +122,11 @@ msgstr "第 %.2d 行 —— 可滚动内容"
 #, object-pascal-format
 msgid "%s OnScroll: %s -> %d"
 msgstr "%s OnScroll：%s -> %d"
+
+#: umain.rsthemetokenfmt
+#, object-pascal-format
+msgid "Theme --scrollbar-auto-hide: %s"
+msgstr "主题 --scrollbar-auto-hide：%s"
 
 #: umain.rsvetoedfmt
 #, object-pascal-format

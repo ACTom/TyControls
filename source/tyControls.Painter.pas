@@ -414,10 +414,61 @@ function TyVecPoint(AX, AY: Double): TTyVecPoint;
 
 function TyColorToBGRA(c: TTyColor): TBGRAPixel;
 
+{ The height, in DEVICE PIXELS, of a theme font size at APPI -- the character (em) height, the
+  number BGRA calls FontHeight and LCL calls a NEGATIVE Font.Height. The ONE place a font size
+  becomes pixels: the drawing side and the measuring side both take it from here, because they
+  did not use to, and that was the HiDPI defect reported as ACTom/TyControls#2.
+
+  Drawing always computed exactly this. Measuring wrote `Font.Size := MulDiv(size, APPI, 96)`
+  instead -- POINTS, which an LCL TFont turns into pixels with ITS OWN PixelsPerInch, and a
+  freshly created TBitmap's font is born at the SCREEN's PPI (font.inc, TFont.Create). So the
+  PPI went in twice. Measured, for a 9px theme size:
+
+      screen PPI   drawn   measured
+          96         12       12      the two agree, which is what hid it
+         144         18       28      150%: line pitch and wrap width 1.5x too large
+         168         21       37      175%: every size floor 1.75x too large
+          72         12        9      the headless test runner: 25% too SMALL
+
+  A pixel height has no PPI left in it to get wrong. }
+function TyFontHeightPx(AFontSizeLogical, APPI: Integer): Integer;
+
 // Shared font setup so text measurement (in controls) matches text drawing
 // (in TTyPainter.DrawText) exactly: same BGRA engine, same height semantics.
 procedure TyConfigureTextFont(ABmp: TBGRABitmap; const AFontName: string;
   AFontSizeLogical, AWeight, APPI: Integer);
+
+{ How TEXT is rasterized on this widgetset -- the one answer, for every surface that draws
+  words (the painter, the HTML label). Icons drawn from an icon font are pictures, not text,
+  and keep their own supersampled quality. See the implementation for why each branch. }
+function TyTextFontQuality: TBGRAFontQuality;
+
+{ Put the library's text renderer on ABmp. On Win32 that is a renderer that draws text the
+  way Windows lays it out and shapes it -- see TTyGdiTextRenderer; elsewhere it leaves BGRA's
+  own. TyConfigureTextFont calls it, so every bitmap configured for text has it; a surface
+  that configures a font by hand must call it too. }
+procedure TyUseTextRenderer(ABmp: TBGRABitmap);
+{ FOR THE TESTS: GDI bitmaps the Win32 text renderer has made or grown (it keeps one); 0
+  elsewhere. }
+function TyGdiTextBitmapsMade: Integer;
+{ FOR THE TESTS: drop shadows actually rendered (blurred) since start -- a draw served from
+  the shadow cache does not count. }
+function TyShadowsRendered: Integer;
+{ FOR THE TESTS: drop the cached shadows (the next draw of each renders again). }
+procedure TyClearShadowCache;
+{ Every pixel of ABmp has alpha 255 (stops at the first that does not). }
+function TyBitmapIsOpaque(ABmp: TBGRABitmap): Boolean;
+{ FOR THE TESTS, pure queries (0 / False elsewhere than Win32): the kept bitmap's handle
+  and size (0 when there is none); the bitmaps made for one run only (another thread's
+  run, a run too big to keep one for); the runs whose coverage went through a whole
+  conversion to BGRA instead of being read off the DIB. }
+function TyGdiTextKeptBitmapForTest(out AWidth, AHeight: Integer): THandle;
+function TyGdiTextOneOffBitmapsForTest: Integer;
+function TyGdiTextConversionsForTest: Integer;
+{ FOR THE TESTS: let go of the kept bitmap (the next run makes a new one); send every run
+  through the conversion (the path a bitmap that is not a DIB takes). }
+procedure TyGdiTextResetForTest;
+procedure TyGdiTextForceConversionForTest(AOn: Boolean);
 
 // Resolves the concrete font name to use: the style's font-family if set,
 // otherwise the TyFallbackFontName (when non-empty). Both BGRA config and the
@@ -460,9 +511,12 @@ function TyIsCJKCodepoint(AValue: Cardinal): Boolean;
   would eventually stop agreeing. }
 procedure TySplitTextLines(const AText: string; ALines: TStrings);
 { Put the font a resolved style asks for onto a MEASUREMENT canvas: the effective family
-  (theme font-family, else TyFallbackFontName), the PPI-scaled size, bold above weight 600.
-  Every MeasureCaption in the library carries its own copy of these four lines; they are the
-  reason a measured width matches the drawn glyphs, so they belong in one place. }
+  (theme font-family, else TyFallbackFontName), the pixel height TyFontHeightPx gives the
+  drawing side too, bold above weight 600.
+  EVERY caption measurement on an LCL canvas goes through here -- the twelve units that
+  used to carry their own copy of these lines now call it -- and tests/test.dpi.measurefont
+  scans source/ so that a copy cannot come back: a copy is how the measuring font and the
+  drawn font came to disagree at every PPI but 96. }
 procedure TyConfigureMeasureFont(ACanvas: TCanvas; const AFontName: string;
   AFontSizeLogical, AWeight, APPI: Integer);
 { The font's own line box on an already-configured canvas. Measured from a fixed reference
@@ -533,16 +587,19 @@ function TyMeasureRenderedTextWidth(const AText, AFontName: string;
                                     (tyControls.Controller.pas:602), so keying the raw
                                     parameter would be a genuine theme-staleness hole.
    10. the process font registry     NOT keyable -- see TyInvalidateTextMeasureCache.
-   11. the widgetset text engine     compile-time -- the LCLQt/LCLGtk conditional in
-                                    TyConfigureTextFont picks fqSystemClearType over
-                                    fqFineAntialiasing (see also
-                                    memory/bgra-small-text-blur-linux). Constant per
+   11. the widgetset text engine     compile-time -- TyTextFontQuality picks the
+                                    rasterizer per widgetset (fqSystem on Win32,
+                                    fqSystemClearType elsewhere). Constant per
                                     binary, so it cannot make an entry stale.
-   12. Screen.PixelsPerInch          reaches the LCL path through TFont.Size->Height on the
-                                    scratch TBitmap. LCL samples it once at startup and
-                                    never revises it, so it is a process constant. (It is
-                                    also the subject of the §5 latch in the DPI plan -- a
-                                    defect one layer BELOW this library, unchanged here.)
+   12. Screen.PixelsPerInch          NOT AN INPUT ANY MORE. It used to reach the LCL path
+                                    through TFont.Size->Height on the scratch TBitmap,
+                                    whose font is born at the screen's PPI -- and that was
+                                    the HiDPI defect of ACTom/TyControls#2, not a harmless
+                                    process constant. TyConfigureMeasureFont now writes a
+                                    pixel Height, which has no PPI left in it;
+                                    tests/test.dpi.measurefont varies ScreenInfo to pin it.
+                                    (The §5 latch in the DPI plan is a different path and
+                                    still reads it -- one layer BELOW this library.)
 
   FOLD OR KEY RAW -- the rule applied above, stated so the next edit follows it: key the
   RAW parameter when the parameter alone determines what the font engine is configured
@@ -582,6 +639,24 @@ procedure TyResetTextMeasureCacheStats;
   swallows the stray byte, so a pixel comparison cannot see it -- the real GUI draws a
   replacement glyph, which is what the maintainer saw. Assert the string, not the pixels. }
 function TyEllipsisPrefix(const AText: string; ACharCount: Integer): string;
+
+{ What single-line drawing shows of AText: up to its first line break, with '...' when there was
+  more. BGRA strips CR/LF before it measures or draws, so a multi-line text drawn on one line used
+  to come out with its lines glued together ("first linesecond line..."). A text without a break
+  comes back unchanged. }
+function TySingleLineText(const AText: string): string;
+
+{ AText fitted into AMaxWidthPx on ABmp's current font, the way DrawText fits a caption: whole if
+  it fits, else the longest prefix that fits with '...' after it (one codepoint at the least). A
+  text with a line break shows only its first line, with '...' (TySingleLineText). The one fit
+  DrawText and the grid share.
+
+  It used to cut one codepoint at a time and measure the whole remaining prefix each time --
+  quadratic in the text's length, with a bitmap and a GDI layout behind every measurement. A
+  300-line script in a tree cell (about 12k characters) took long enough to freeze the tree
+  (#18). Widths only grow with the prefix, so a binary search finds the same cut in about a
+  dozen measurements. }
+function TyEllipsisFit(ABmp: TBGRABitmap; const AText: string; AMaxWidthPx: Integer): string;
 { Clamp a device-px corner radius to half the shorter side of a WxH rect, so an oversized
   "pill" radius (e.g. border-radius:100 on a short progress track) renders as a rounded pill
   instead of overshooting the corner arcs into a pointed lens. Exposed for tests. }
@@ -641,7 +716,15 @@ var
     Flipping it to False never changes an answer, only how long it takes. }
   TyTextMeasureCacheEnabled: Boolean = True;
 
+  { Off switch for the drop-shadow cache (see TTyPainter.DropShadow). Like the memo's, it
+    never changes a pixel, only how long a shadow takes: the tests draw every shadow with it
+    off too and require the same bytes. }
+  TyShadowCacheEnabled: Boolean = True;
+
 implementation
+
+uses
+  LCLIntf, BGRAText;
 
 { THE TWO MEASUREMENT SURFACES, REUSED.
 
@@ -662,16 +745,21 @@ implementation
       the BGRA surface -- but TBGRADefaultBitmap.GetFontRenderer feeds FIVE
       fields to the renderer, and the fifth, FontOrientation, is never assigned
       here.
-    * TyConfigureMeasureFont sets Name, Size and Style on the LCL canvas, and
-      never Quality, Orientation, CharSet or Pitch.
+    * TyConfigureMeasureFont sets Name, Height and Style on the LCL canvas, and
+      never Quality, Orientation, CharSet or Pitch. (Nor PixelsPerInch, which
+      stays at the screen's as of the moment the surface was made -- and does not
+      matter, because the height it is given is a pixel count: see TyFontHeightPx.)
 
   What actually makes a shared surface safe is that NOTHING IN THIS LIBRARY EVER
   WRITES those fields on these two surfaces. FontOrientation has one would-be
   user, DrawTextRotated, and it passes its angle to TextOutAngle rather than
   setting it; grep source/ for Font.Orientation / Font.CharSet / Font.Pitch /
-  Font.Quality and there are no assignments at all. So every unassigned field
-  holds its construction default for the life of the surface -- which is what a
-  freshly created one would have held too. If a caller ever does set one of them,
+  Font.Quality and there are no assignments at all -- bar one that keeps the rule:
+  on Win32 TyConfigureTextFont also puts TTyGdiTextRenderer on the BGRA surface,
+  whose UpdateFont sets ITS OWN font's Quality to the same value on every call, so
+  no caller's state rides along in it. So every unassigned field holds its
+  construction default for the life of the surface -- which is what a freshly
+  created one would have held too. If a caller ever does set one of them,
   this stops being true and the reset has to become explicit, which is why the
   list above is written out rather than summarised.
 
@@ -879,6 +967,65 @@ begin
   Result := UTF8Copy(AText, 1, ACharCount);
 end;
 
+function TySingleLineText(const AText: string): string;
+var
+  i: Integer;
+begin
+  for i := 1 to Length(AText) do
+    if (AText[i] = #13) or (AText[i] = #10) then
+      Exit(Copy(AText, 1, i - 1) + '...');
+  Result := AText;
+end;
+
+function TyEllipsisFit(ABmp: TBGRABitmap; const AText: string; AMaxWidthPx: Integer): string;
+var
+  line: string;
+  cut: Boolean;
+  i, n, lo, hi, mid, best: Integer;
+begin
+  Result := AText;
+  if (ABmp = nil) or (AText = '') then Exit;
+  line := AText;
+  cut := False;
+  for i := 1 to Length(AText) do
+    if (AText[i] = #13) or (AText[i] = #10) then
+    begin
+      line := Copy(AText, 1, i - 1);
+      cut := True;
+      Break;
+    end;
+  if cut then
+  begin
+    { There is more than this line, so the ellipsis is always shown. }
+    if line = '' then Exit('...');
+    if ABmp.TextSize(line + '...').cx <= AMaxWidthPx then Exit(line + '...');
+  end
+  else
+  begin
+    if ABmp.TextSize(line).cx <= AMaxWidthPx then Exit(line);
+    if UTF8Length(line) <= 1 then Exit(line);   // a lone codepoint is never ellipsised
+  end;
+  { The longest prefix of at most n-1 codepoints that fits with '...', and one codepoint when
+    none does -- what the one-at-a-time loop found, top down. }
+  n := UTF8Length(line) - 1;
+  hi := n;
+  if hi < 1 then hi := 1;
+  lo := 1;
+  best := 1;
+  while lo <= hi do
+  begin
+    mid := (lo + hi) div 2;
+    if ABmp.TextSize(TyEllipsisPrefix(line, mid) + '...').cx <= AMaxWidthPx then
+    begin
+      best := mid;
+      lo := mid + 1;
+    end
+    else
+      hi := mid - 1;
+  end;
+  Result := TyEllipsisPrefix(line, best) + '...';
+end;
+
 procedure TyWrapSegmentCJK(const AText: string; AMaxWidthPx: Integer;
   ACanvas: TCanvas; ALines: TStrings; ABase: Integer);
 var
@@ -1048,6 +1195,18 @@ begin
   end;
 end;
 
+function TyFontHeightPx(AFontSizeLogical, APPI: Integer): Integer;
+begin
+  { an author size in CSS px (tyControls.FontUnits) is px at 96 PPI, not points }
+  if TyFontSizeIsPx(AFontSizeLogical) then
+    Result := Round(TyFontPxOf(AFontSizeLogical) * APPI / 96)
+  else
+    Result := MulDiv(Round(AFontSizeLogical * 96 / 72), APPI, 96);
+  { Never 0: an LCL Font.Height of 0 does not mean "invisible", it means "the default size",
+    which would measure a caption nobody is going to draw. }
+  if Result < 1 then Result := 1;
+end;
+
 procedure TyConfigureMeasureFont(ACanvas: TCanvas; const AFontName: string;
   AFontSizeLogical, AWeight, APPI: Integer);
 begin
@@ -1055,13 +1214,12 @@ begin
   // drawn -- TyConfigureTextFont falls back the same way on the drawing side.
   AFontSizeLogical := TyEffectiveFontSizeLogical(AFontSizeLogical);
   ACanvas.Font.Name := TyEffectiveFontName(AFontName);
-  { a pixel size lands where the point size px * 72/96 would: the same
-    Height the Size path gives, without the Size path's whole points }
-  if TyFontSizeIsPx(AFontSizeLogical) then
-    ACanvas.Font.Height := -Round(TyFontPxOf(AFontSizeLogical) * APPI
-      * ACanvas.Font.PixelsPerInch / 9216)
-  else
-    ACanvas.Font.Size := MulDiv(AFontSizeLogical, APPI, 96);
+  { Height, in pixels, NEGATIVE (= character height, what BGRA's FontHeight means) -- never
+    Size. Size is points, and the canvas font converts points with its own PixelsPerInch,
+    which is the screen's: see TyFontHeightPx for what that did at 150% and 175%.
+    Font.PixelsPerInch is deliberately left alone: TFont.SetPixelsPerInch RESCALES a non-zero
+    Height, so touching it after this line would put the PPI back in a second time. }
+  ACanvas.Font.Height := -TyFontHeightPx(AFontSizeLogical, APPI);
   if AWeight >= 600 then
     ACanvas.Font.Style := [fsBold]
   else
@@ -1163,30 +1321,378 @@ begin
   end;
 end;
 
+function TyTextFontQuality: TBGRAFontQuality;
+begin
+  { Qt, GTK and Cocoa: the native text renderer (fqSystemClearType). fqFineAntialiasing renders
+    BLANK on Qt/GTK (diagnostic on Windows+Qt6: fqFine=0 px vs fqSystemClearType=621), and on
+    Cocoa it silently drops to single-pass fqSystem for text > ~13px (SYSTEM_RENDERER_IS_FINE, see
+    DrawTextSupersampled below), so CJK came out jagged and thin. The native path is also the one
+    that runs the OS font-substitution cascade a Latin UI font (macOS San Francisco) needs to
+    fill CJK glyphs.
+
+    Win32: fqSystem, which TTyGdiTextRenderer turns into ClearType's shapes laid down in grey
+    -- see there. Rotated text is the one thing that renderer hands back to BGRA. }
+  {$IF DEFINED(LCLQt5) or DEFINED(LCLQt6) or DEFINED(LCLGtk2) or DEFINED(LCLGtk3) or DEFINED(LCLCocoa)}
+  Result := fqSystemClearType;
+  {$ELSE}
+  Result := fqSystem;
+  {$ENDIF}
+end;
+
+{$IFDEF LCLWin32}
+type
+  { TEXT ON WINDOWS, AS WINDOWS DRAWS IT.
+
+    Three ways to put a caption on a BGRA surface were tried against the text Windows draws in
+    the same window, and each was wrong in its own way:
+
+      fqFineAntialiasing   GDI at six times the size, box-filtered down. The hinting is done
+                           for a font six times too big, so no stem lands on the pixel grid:
+                           every stroke two grey pixels. Soft and light -- "blurry".
+      fqSystem             GDI's grayscale antialiasing at the real size. Crisp, but GDI then
+                           hints BOTH axes, and Microsoft YaHei's hinting is written for
+                           ClearType, which hints only the vertical: strokes snap sideways to
+                           whole pixels, their weights go uneven, the glyphs turn blocky.
+                           "Ugly", and rightly.
+      fqSystemClearType    the right shapes, but a SUBPIXEL mask: colour fringes on a coloured
+                           or translucent surface, and BGRA's compositing of it both fringes
+                           more and inks lighter than the OS's.
+
+    What Windows draws is the third one's SHAPES -- hinted vertically only, so horizontal
+    strokes are crisp and the glyph keeps its form -- at the weight ClearType gives them. This
+    renderer draws exactly that: GDI renders the run in ClearType in the ink's polarity --
+    dark ink black on white, light ink white on black -- the three subpixel coverages are
+    averaged into one grey, and that grey is laid down in the ink colour with the same
+    non-gamma blend GDI uses. The polarity is not a nicety: Windows weights the two
+    differently under the user's ClearType contrast. At the default (1400) they cover within
+    half a percent of each other; at 1200 a white-on-black line of 9pt Segoe UI inks 12% more
+    than the black-on-white one, and light text drawn from the dark-on-light coverage came out
+    a tenth lighter than the text Windows drew beside it.
+    Measured on a line of 9pt YaHei: the ink it lays down is the ink native ClearType lays
+    down (1403 against 1404 at 100%, 3697 against 3697 at 175%), and so is the share of solid
+    pixels; there is no colour, so a transparent surface or an accent button is safe.
+
+    Layout is GDI's own, and it is the layout the measuring side reports: the run is drawn by
+    the very DrawText call BGRA measures it with (DT_CALCRECT dropped), on the same font in the
+    same quality, so the kerning, the right-to-left reading and the mnemonic prefix a
+    TextSize or TextFitInfo answer includes are in the glyphs, and a caret placed on measured
+    advances sits on them. Not TCanvas.TextOut, which does not kern the pairs DrawText kerns;
+    not TCanvas.TextRect, which silently renames an unnamed font 'default' -- a different
+    face from the one measured, and a run a fifth wider than its caret positions. Rotated,
+    textured and self-underlined text go to BGRA's own path. }
+  TTyGdiTextRenderer = class(TLCLFontRenderer)
+  private
+    { ONE GDI bitmap the runs are drawn on, kept for every renderer (the main thread's):
+      a run used to cost a fresh TBitmap and a whole-bitmap conversion to BGRA, about as
+      much as drawing it. It grows in the direction a run needs, up to GdiKeptMaxPixels /
+      GdiKeptMaxWidth; each run clears the part it uses and its
+      coverage is read straight off the DIB. The counters are FOR THE TESTS. }
+    class var GShot: TBitmap;
+    class var GBitmapsMade, GOneOffs, GConversions: Integer;
+    class var GForceConversion: Boolean;
+  protected
+    procedure UpdateFont; override;
+    { The measuring side, answered for the run exactly as it is drawn. }
+    function RunStyle(ARightToLeft, AShowPrefix: Boolean): TTextStyle;
+    procedure InternalTextOutAngle(ADest: TBGRACustomBitmap; x, y: single;
+      AOrientation: integer; sUTF8: string; c: TBGRAPixel; texture: IBGRAScanner;
+      align: TAlignment; AShowPrefix: boolean = false; ARightToLeft: boolean = false); override;
+  end;
+
+  TTyCanvasAccess = class(TCanvas);
+  TTyBitmapAccess = class(TBitmap);        { GetRawImageDescriptionPtr is protected }
+
+const
+  { The kept bitmap stays at most this big (24-bit: 12 MB); a run that would need more
+    -- a very long unwrapped line, a huge title -- gets a bitmap of its own, freed after. }
+  GdiKeptMaxPixels = 4 * 1024 * 1024;
+  GdiKeptMaxWidth = 8192;
+
+function TyGdiFlush: LongBool; stdcall; external 'gdi32' name 'GdiFlush';
+
+function TTyGdiTextRenderer.RunStyle(ARightToLeft, AShowPrefix: Boolean): TTextStyle;
+begin
+  { BGRA's own Win32 run style (BGRADefaultTextOutStyle, which the unit does not export):
+    the one its TextSize measures every unrotated run with. }
+  FillChar(Result, SizeOf(Result), 0);
+  Result.SingleLine := True;
+  Result.Alignment := taLeftJustify;
+  Result.Layout := tlTop;
+  Result.RightToLeft := ARightToLeft;
+  Result.ShowPrefix := AShowPrefix;
+end;
+
+procedure TTyGdiTextRenderer.UpdateFont;
+begin
+  inherited UpdateFont;
+  { The measuring side reads this font too: TextSize and TextFitInfo must answer in the
+    advances the drawing side lays the glyphs out with. }
+  FFont.Quality := fqCleartypeNatural;
+end;
+
+procedure TTyGdiTextRenderer.InternalTextOutAngle(ADest: TBGRACustomBitmap; x, y: single;
+  AOrientation: integer; sUTF8: string; c: TBGRAPixel; texture: IBGRAScanner;
+  align: TAlignment; AShowPrefix: boolean; ARightToLeft: boolean);
+var
+  sz: TSize;
+  ofsX: Single;
+  ox, oy, mx, my, w, h, px, py, dy, cov, a: Integer;
+  flags: Cardinal;
+  r: TRect;
+  tmp: TBitmap;
+  shot: TBGRABitmap;
+  row: PBGRAPixel;
+  ink: TBGRAPixel;
+  kept, lightInk: Boolean;
+  ds: TDIBSection;
+  bits, line: PByte;
+  stride, bpp, nw, nh: Integer;
+  bottomUp: Boolean;
+begin
+  if sUTF8 = '' then Exit;
+  if (AOrientation mod 3600 <> 0) or (texture <> nil) or FOwnUnderline then
+  begin
+    inherited InternalTextOutAngle(ADest, x, y, AOrientation, sUTF8, c, texture, align,
+      AShowPrefix, ARightToLeft);
+    Exit;
+  end;
+  if c.alpha = 0 then Exit;
+  { Light ink is drawn white on black, as Windows draws light text: see the class comment. }
+  lightInk := (c.red * 30 + c.green * 59 + c.blue * 11) div 100 > 128;
+  UpdateFont;
+  sz := InternalTextSizeStyle(sUTF8, RunStyle(ARightToLeft, AShowPrefix), MaxLongint);
+  if (sz.cx <= 0) or (sz.cy <= 0) then Exit;
+  case align of
+    taCenter: ofsX := sz.cx / 2;
+    taRightJustify: ofsX := sz.cx;
+  else
+    ofsX := 0;
+  end;
+  { Rounded half up, as BGRA's own path places a run: a fractional pen position (a bidi
+    layout advances by fractions) lands on the pixel it always did. }
+  ox := Floor(x - ofsX + 0.5);
+  oy := Floor(y + 0.5);
+  { Room for what overhangs the advance box: an italic's lean, a swash, ClearType's bleed. }
+  mx := sz.cy div 2 + 2;
+  my := sz.cy div 4 + 2;
+  w := sz.cx + 2 * mx;
+  h := sz.cy + 2 * my;
+  { The kept bitmap (GShot) grows in the direction a run needs more room and stays within
+    GdiKeptMaxPixels / GdiKeptMaxWidth (it gives up height only to make room for width
+    under that cap, never otherwise); only the w x h the run uses is
+    cleared and read. A run too big for that, and a thread other than the main one, draw
+    on a bitmap of their own, freed after, as every run once did. }
+  kept := (GetCurrentThreadId = MainThreadID) and (w <= GdiKeptMaxWidth)
+    and (Int64(w) * h <= GdiKeptMaxPixels);
+  nw := 0;
+  nh := 0;
+  if kept then
+  begin
+    if GShot <> nil then
+    begin
+      nw := GShot.Width;
+      nh := GShot.Height;
+    end;
+    { half again as much as asked, in the direction that is short: a line a little
+      longer than the last does not reallocate, and a tall run after a wide one does not
+      widen it }
+    if nw < w then nw := Min(Max(w, nw + nw div 2), GdiKeptMaxWidth);
+    if nh < h then nh := Max(h, nh + nh div 2);
+    if Int64(nw) * nh > GdiKeptMaxPixels then
+    begin
+      { no room for the headroom: what the run needs (at most the width it has) }
+      nh := Max(h, GdiKeptMaxPixels div nw);
+      if Int64(nw) * nh > GdiKeptMaxPixels then
+        kept := False;
+    end;
+  end;
+  tmp := nil;
+  shot := nil;
+  try
+    if kept then
+    begin
+      if GShot = nil then
+      begin
+        GShot := TBitmap.Create;
+        GShot.PixelFormat := pf24bit;
+        GShot.SetSize(nw, nh);
+        Inc(GBitmapsMade);
+      end
+      else if (GShot.Width <> nw) or (GShot.Height <> nh) then
+      begin
+        GShot.SetSize(nw, nh);
+        Inc(GBitmapsMade);
+      end;
+      tmp := GShot;
+    end
+    else
+    begin
+      tmp := TBitmap.Create;
+      Inc(GOneOffs);
+      tmp.PixelFormat := pf24bit;
+      tmp.SetSize(w, h);
+    end;
+    if lightInk then tmp.Canvas.Brush.Color := clBlack else tmp.Canvas.Brush.Color := clWhite;
+    tmp.Canvas.FillRect(0, 0, w, h);
+    { A fresh canvas's font was born at the screen's PPI of the moment, and Assign takes
+      the pixel height across only between equal PPIs (Size otherwise): the kept canvas
+      is put back to that first, or a run at a changed screen PPI gets another height. }
+    tmp.Canvas.Font.PixelsPerInch := ScreenInfo.PixelsPerInchY;
+    tmp.Canvas.Font := FFont;
+    TTyCanvasAccess(tmp.Canvas).RequiredState([csHandleValid, csFontValid]);
+    SetBkMode(tmp.Canvas.Handle, TRANSPARENT);
+    if lightInk then SetTextColor(tmp.Canvas.Handle, $FFFFFF) else SetTextColor(tmp.Canvas.Handle, 0);
+    { The flags BGRA's BitmapTextExtentStyle measures RunStyle with, less DT_CALCRECT. }
+    flags := DT_SINGLELINE or DT_NOCLIP;
+    if ARightToLeft then flags := flags or DT_RTLREADING;
+    if not AShowPrefix then flags := flags or DT_NOPREFIX;
+    r := Rect(mx, my, w, h);
+    tmp.Canvas.Changing;
+    LCLIntf.DrawText(tmp.Canvas.Handle, PChar(sUTF8), Length(sUTF8), r, flags);
+    tmp.Canvas.Changed;   // what TCanvas's own text calls do: the image is read back next
+    { The coverage straight off the DIB section GDI drew into -- the bytes BGRA's
+      conversion of the whole bitmap used to copy out, without the copy. The row length is
+      the one GDI reports; the row order is LCL's own description of the DIB it made: GetObject
+      answers a POSITIVE height in dsBmih as in dsBm even for the top-down DIB LCL makes
+      (measured on Windows 10 19044), so the sign cannot tell. A bitmap that is not a 24-
+      or 32-bit DIB has its w x h copied into a BGRA bitmap, as the conversion did. }
+    bits := nil;
+    stride := 0;
+    bpp := 0;
+    if (not GForceConversion) and (LCLIntf.GetObject(tmp.Handle, SizeOf(ds), @ds) = SizeOf(ds))
+      and (ds.dsBm.bmBits <> nil) and ((ds.dsBm.bmBitsPixel = 24) or (ds.dsBm.bmBitsPixel = 32)) then
+    begin
+      TyGdiFlush;                          { GDI may still be batching the DrawText }
+      bottomUp := TTyBitmapAccess(tmp).GetRawImageDescriptionPtr^.LineOrder = riloBottomToTop;
+      bits := ds.dsBm.bmBits;
+      bpp := ds.dsBm.bmBitsPixel div 8;
+      stride := ds.dsBm.bmWidthBytes;
+    end
+    else
+    begin
+      Inc(GConversions);
+      shot := TBGRABitmap.Create(w, h);
+      shot.GetImageFromCanvas(tmp.Canvas, 0, 0);
+    end;
+    ink := c;
+    for py := 0 to h - 1 do
+    begin
+      dy := oy - my + py;
+      if (dy < ADest.ClipRect.Top) or (dy >= ADest.ClipRect.Bottom) then Continue;
+      if bits <> nil then
+      begin
+        if bottomUp then
+          line := bits + (ds.dsBm.bmHeight - 1 - py) * stride
+        else
+          line := bits + py * stride;
+        row := nil;
+      end
+      else
+      begin
+        line := nil;
+        row := shot.ScanLine[py];
+      end;
+      for px := 0 to w - 1 do
+      begin
+        if line <> nil then
+          cov := (line[px * bpp] + line[px * bpp + 1] + line[px * bpp + 2]) div 3
+        else
+          cov := (row[px].red + row[px].green + row[px].blue) div 3;
+        if not lightInk then cov := 255 - cov;
+        if cov > 0 then
+        begin
+          a := cov * c.alpha div 255;
+          if a > 0 then
+          begin
+            ink.alpha := a;
+            ADest.FastBlendPixel(ox - mx + px, dy, ink);   // clipped against ClipRect there
+          end;
+        end;
+      end;
+    end;
+  finally
+    shot.Free;
+    if not kept then
+      tmp.Free;
+  end;
+end;
+{$ENDIF}
+
+function TyGdiTextBitmapsMade: Integer;
+begin
+  {$IFDEF LCLWin32}
+  Result := TTyGdiTextRenderer.GBitmapsMade;
+  {$ELSE}
+  Result := 0;
+  {$ENDIF}
+end;
+
+function TyGdiTextKeptBitmapForTest(out AWidth, AHeight: Integer): THandle;
+begin
+  AWidth := 0;
+  AHeight := 0;
+  Result := 0;
+  {$IFDEF LCLWin32}
+  if TTyGdiTextRenderer.GShot = nil then Exit;
+  AWidth := TTyGdiTextRenderer.GShot.Width;
+  AHeight := TTyGdiTextRenderer.GShot.Height;
+  Result := TTyGdiTextRenderer.GShot.Handle;
+  {$ENDIF}
+end;
+
+function TyGdiTextOneOffBitmapsForTest: Integer;
+begin
+  {$IFDEF LCLWin32}
+  Result := TTyGdiTextRenderer.GOneOffs;
+  {$ELSE}
+  Result := 0;
+  {$ENDIF}
+end;
+
+function TyGdiTextConversionsForTest: Integer;
+begin
+  {$IFDEF LCLWin32}
+  Result := TTyGdiTextRenderer.GConversions;
+  {$ELSE}
+  Result := 0;
+  {$ENDIF}
+end;
+
+procedure TyGdiTextResetForTest;
+begin
+  {$IFDEF LCLWin32}
+  FreeAndNil(TTyGdiTextRenderer.GShot);
+  {$ENDIF}
+end;
+
+procedure TyGdiTextForceConversionForTest(AOn: Boolean);
+begin
+  {$IFDEF LCLWin32}
+  TTyGdiTextRenderer.GForceConversion := AOn;
+  {$ELSE}
+  if AOn then ;
+  {$ENDIF}
+end;
+
+procedure TyUseTextRenderer(ABmp: TBGRABitmap);
+begin
+  {$IFDEF LCLWin32}
+  if not (ABmp.FontRenderer is TTyGdiTextRenderer) then
+    ABmp.FontRenderer := TTyGdiTextRenderer.Create;
+  {$ELSE}
+  if ABmp = nil then ;
+  {$ENDIF}
+end;
+
 procedure TyConfigureTextFont(ABmp: TBGRABitmap; const AFontName: string;
   AFontSizeLogical, AWeight, APPI: Integer);
 begin
   // A missing font-size (0) would render invisible text; fall back to a visible default.
   AFontSizeLogical := TyEffectiveFontSizeLogical(AFontSizeLogical);
   ABmp.FontName := TyEffectiveFontName(AFontName);
-  if TyFontSizeIsPx(AFontSizeLogical) then
-    ABmp.FontHeight := Round(TyFontPxOf(AFontSizeLogical) * APPI / 96)
-  else
-    ABmp.FontHeight := MulDiv(Round(AFontSizeLogical * 96 / 72), APPI, 96);
-  // Text quality is a WIDGETSET choice. fqFineAntialiasing only stays crisp where BGRABitmap runs
-  // its OWN 3x supersampler -- the Win32 LCL font backend. On Qt/GTK it renders BLANK (diagnostic on
-  // Windows+Qt6: fqFine=0 px vs fqSystemClearType=621), and on Cocoa it silently drops to single-pass
-  // fqSystem for text > ~13px (see SYSTEM_RENDERER_IS_FINE by DrawTextSupersampled below), so CJK comes
-  // out jagged/thin with hairline strokes dropping. So ONLY Win32 keeps fqFineAntialiasing; every other
-  // widgetset -- Qt, GTK, and Cocoa -- uses the native text renderer (fqSystemClearType), which is also
-  // the path that runs the OS font-substitution cascade a Latin UI font (macOS San Francisco) needs to
-  // fill CJK glyphs. (Cocoa was previously grouped with Win32 on an assumption extrapolated from the
-  // Windows+Qt6 run, never tested on a Mac; a real macOS run shows that CJK jagged + glyphs missing.)
-  {$IF DEFINED(LCLQt5) or DEFINED(LCLQt6) or DEFINED(LCLGtk2) or DEFINED(LCLGtk3) or DEFINED(LCLCocoa)}
-  ABmp.FontQuality := fqSystemClearType;
-  {$ELSE}
-  ABmp.FontQuality := fqFineAntialiasing;
-  {$ENDIF}
+  ABmp.FontHeight := TyFontHeightPx(AFontSizeLogical, APPI);
+  ABmp.FontQuality := TyTextFontQuality;
+  TyUseTextRenderer(ABmp);
   if AWeight >= 600 then ABmp.FontStyle := [fsBold] else ABmp.FontStyle := [];
 end;
 
@@ -1660,11 +2166,81 @@ begin
   FBmp.PutImage(x, y, ABmp, dmDrawWithTransparency);
 end;
 
+type
+  { A rendered shadow, cropped to the pixels that carry any alpha, and where that crop sat
+    in the bitmap it was rendered on. }
+  TTyShadowEntry = class
+    Bmp: TBGRABitmap;
+    Origin: TPoint;
+    destructor Destroy; override;
+  end;
+
+destructor TTyShadowEntry.Destroy;
+begin
+  Bmp.Free;
+  inherited Destroy;
+end;
+
+const
+  { Pixels the shadow cache may hold, all entries together (4 bytes each: 16 MB). A shadow
+    bigger than that on its own is drawn every time, as before. }
+  ShadowCacheMaxPixels = 4 * 1024 * 1024;
+
+var
+  GShadowCache: TStringList = nil;   // sorted key -> TTyShadowEntry (OwnsObjects)
+  GShadowCachePixels: Int64 = 0;
+  GShadowsRendered: Integer = 0;
+
+function TyShadowsRendered: Integer;
+begin
+  Result := GShadowsRendered;
+end;
+
+procedure TyClearShadowCache;
+begin
+  if GShadowCache <> nil then GShadowCache.Clear;
+  GShadowCachePixels := 0;
+end;
+
+function TyBitmapIsOpaque(ABmp: TBGRABitmap): Boolean;
+var
+  y, x: Integer;
+  p: PBGRAPixel;
+begin
+  Result := False;
+  if ABmp = nil then Exit;
+  for y := 0 to ABmp.Height - 1 do
+  begin
+    p := ABmp.ScanLine[y];
+    for x := 0 to ABmp.Width - 1 do
+    begin
+      if p^.alpha <> 255 then Exit;
+      Inc(p);
+    end;
+  end;
+  Result := True;
+end;
+
+
+{ DROP SHADOWS ARE RENDERED ONCE PER LOOK.
+  A shadow is a blur of the control's outline over a bitmap the size of the control, redone
+  on every paint: 38 ms for a 400 x 300 card, 300 ms for 1200 x 800, so a shadowed card
+  (fluent's cards and buttons carry one) stalled on every hover. What it depends on is all
+  here -- the bitmap's size, the outline, the corner radius, the blur, the colour -- so it is
+  kept under exactly that key; the offset is applied when it is laid down. The cache holds
+  the blur cropped to its ink and puts it back where it came from: every pixel outside the
+  crop is fully transparent, which a transparent draw leaves alone, so the result is the
+  same bytes. Main thread only (another thread renders as before); bounded by
+  ShadowCacheMaxPixels, emptied whole when full. }
 procedure TTyPainter.DropShadow(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
 var
-  r, blur, ox, oy: Integer;
+  r, blur, ox, oy, idx: Integer;
   shadow, blurred: TBGRABitmap;
   px: TBGRAPixel;
+  key: string;
+  useCache: Boolean;
+  entry: TTyShadowEntry;
+  ink: TRect;
 begin
   if FBmp = nil then
     Exit;
@@ -1674,7 +2250,29 @@ begin
   ox := Scale(AOffsetLogical.X);
   oy := Scale(AOffsetLogical.Y);
   px := TyColorToBGRA(AColor);
+  useCache := TyShadowCacheEnabled and (GetCurrentThreadId = MainThreadID)
+    and (Int64(FBmp.Width) * FBmp.Height <= ShadowCacheMaxPixels);
+  key := '';
+  if useCache then
+  begin
+    key := Format('%d,%d|%d,%d,%d,%d|%d|%d|%.2x%.2x%.2x%.2x', [FBmp.Width, FBmp.Height,
+      ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, r, blur,
+      px.red, px.green, px.blue, px.alpha]);
+    if GShadowCache <> nil then
+    begin
+      idx := GShadowCache.IndexOf(key);
+      if idx >= 0 then
+      begin
+        entry := TTyShadowEntry(GShadowCache.Objects[idx]);
+        if entry.Bmp <> nil then
+          FBmp.PutImage(ox + entry.Origin.X, oy + entry.Origin.Y, entry.Bmp, dmDrawWithTransparency);
+        Exit;
+      end;
+    end;
+  end;
+  Inc(GShadowsRendered);
   shadow := TBGRABitmap.Create(FBmp.Width, FBmp.Height, BGRAPixelTransparent);
+  blurred := nil;
   try
     if r <= 0 then
       shadow.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, px, dmSet)
@@ -1683,16 +2281,42 @@ begin
     if blur > 0 then
     begin
       blurred := shadow.FilterBlurRadial(blur, rbFast) as TBGRABitmap;
-      try
-        FBmp.PutImage(ox, oy, blurred, dmDrawWithTransparency);
-      finally
-        blurred.Free;
-      end;
+      FBmp.PutImage(ox, oy, blurred, dmDrawWithTransparency);
     end
     else
       FBmp.PutImage(ox, oy, shadow, dmDrawWithTransparency);
+    if useCache then
+    begin
+      if blurred = nil then
+      begin
+        blurred := shadow;
+        shadow := nil;
+      end;
+      entry := TTyShadowEntry.Create;
+      ink := blurred.GetImageBounds;
+      if not IsRectEmpty(ink) then
+      begin
+        entry.Bmp := blurred.GetPart(ink) as TBGRABitmap;
+        entry.Origin := ink.TopLeft;
+      end;
+      if GShadowCache = nil then
+      begin
+        GShadowCache := TStringList.Create;
+        GShadowCache.Sorted := True;
+        GShadowCache.Duplicates := dupError;
+        GShadowCache.OwnsObjects := True;
+      end;
+      if entry.Bmp <> nil then
+      begin
+        if GShadowCachePixels + Int64(entry.Bmp.Width) * entry.Bmp.Height > ShadowCacheMaxPixels then
+          TyClearShadowCache;
+        Inc(GShadowCachePixels, Int64(entry.Bmp.Width) * entry.Bmp.Height);
+      end;
+      GShadowCache.AddObject(key, entry);
+    end;
   finally
     shadow.Free;
+    blurred.Free;
   end;
 end;
 
@@ -1819,10 +2443,9 @@ procedure TTyPainter.DrawTextLine(const ARect: TRect; const AText, AFontName: st
   AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment;
   AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer; ASmallCrisp: Boolean);
 var
-  n: Integer;
   style: TTextStyle;
   s: string;
-  sz, full: TSize;
+  full: TSize;
   px: TBGRAPixel;
   beforeW, charW, ux, uy, uth: Integer;
   rtl: Boolean;
@@ -1866,23 +2489,11 @@ begin
   TyConfigureTextFont(FBmp, AFontName, AFontSizeLogical, AWeight, FPPI);
   s := AText;
   if AEllipsis then
-  begin
-    { Shorten by one CODEPOINT at a time. Delete(s, Length(s), 1) took one BYTE, which for
-      any non-ASCII text cuts a UTF-8 sequence in half: every CJK character is three bytes, so
-      an ellipsised Chinese caption ended in a broken sequence and the renderer drew a '?'.
-      That is the one path nearly every control's text goes through -- title-bar captions,
-      button labels, list rows, tab headers -- so it showed up everywhere at once. }
-    n := UTF8Length(s);
-    sz := FBmp.TextSize(s);
-    while (n > 1) and (sz.cx > (ARect.Right - ARect.Left)) do
-    begin
-      Dec(n);
-      s := TyEllipsisPrefix(AText, n);
-      sz := FBmp.TextSize(s + '...');
-    end;
-    if s <> AText then
-      s := s + '...';
-  end;
+    { Cut by CODEPOINT, never by byte (a byte cut halves a CJK character and the renderer draws
+      a '?'), and in a bounded number of measurements: see TyEllipsisFit. That is the one path
+      nearly every control's text goes through -- title-bar captions, button labels, list rows,
+      tab headers, tree cells. }
+    s := TyEllipsisFit(FBmp, AText, ARect.Right - ARect.Left);
   if rtl then
   begin
     { The mnemonic is dropped for an ellipsised caption here for the same reason the legacy
@@ -2350,6 +2961,8 @@ begin
   end;
 end;
 
+function GetCachedImage(const APath: string; ABlurDev: Integer): TBGRABitmap; forward;
+
 procedure TTyPainter.NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect; ATile: Boolean);
 var
   src: TBGRABitmap;
@@ -2360,10 +2973,12 @@ var
 begin
   if FBmp = nil then
     Exit;
-  if not FileExists(AImagePath) then
+  { The image cache DrawImageFill uses (owned by it -- not freed here): the file was read
+    from disk on every paint. }
+  src := GetCachedImage(AImagePath, 0);
+  if src = nil then
     Exit;
-  src := TBGRABitmap.Create(AImagePath);
-  try
+  begin
     iw := src.Width;
     ih := src.Height;
     sl := AInsets.Left;
@@ -2388,8 +3003,6 @@ begin
     BlitRegion(src, Rect(0, syB, sxL, ih), Rect(dl, db - sb, dl + sl, db));
     BlitRegion(src, Rect(sxL, syB, sxR, ih), Rect(dl + sl, db - sb, dr - sr, db), ATile);
     BlitRegion(src, Rect(sxR, syB, iw, ih), Rect(dr - sr, db - sb, dr, db));
-  finally
-    src.Free;
   end;
 end;
 
@@ -2401,24 +3014,31 @@ procedure TTyPainter.FillImageSlice(const ARect: TRect; ASrc: TBGRABitmap;
 var
   w, h, ovL, ovT, ovR, ovB: Integer;
   part: TBGRABitmap;
-  oldClip: TRect;
+  oldClip, dst: TRect;
+  src: TPoint;
 begin
   if (FBmp = nil) or (ASrc = nil) then Exit;
-  w := ARect.Right - ARect.Left;
-  h := ARect.Bottom - ARect.Top;
+  { Only the part of ARect that lands on this bitmap is copied out of the backdrop. For a
+    control filling its own rect that is ARect itself and nothing below changes; it matters
+    for a child painting its HOST's backdrop, whose rect is mostly off the child's bitmap
+    (an embedded scroll bar), where copying the whole host-sized slice would be pure waste. }
+  if not IntersectRect(dst, ARect, Rect(0, 0, FBmp.Width, FBmp.Height)) then Exit;
+  src := Point(ASrcOffset.X + (dst.Left - ARect.Left), ASrcOffset.Y + (dst.Top - ARect.Top));
+  w := dst.Right - dst.Left;
+  h := dst.Bottom - dst.Top;
   if (w <= 0) or (h <= 0) then Exit;
-  ovL := ASrcOffset.X; if ovL < 0 then ovL := 0;
-  ovT := ASrcOffset.Y; if ovT < 0 then ovT := 0;
-  ovR := ASrcOffset.X + w; if ovR > ASrc.Width then ovR := ASrc.Width;
-  ovB := ASrcOffset.Y + h; if ovB > ASrc.Height then ovB := ASrc.Height;
+  ovL := src.X; if ovL < 0 then ovL := 0;
+  ovT := src.Y; if ovT < 0 then ovT := 0;
+  ovR := src.X + w; if ovR > ASrc.Width then ovR := ASrc.Width;
+  ovB := src.Y + h; if ovB > ASrc.Height then ovB := ASrc.Height;
   if (ovR <= ovL) or (ovB <= ovT) then Exit;
   oldClip := FBmp.ClipRect;
-  FBmp.ClipRect := ARect;
+  FBmp.ClipRect := dst;
   try
     part := ASrc.GetPart(Rect(ovL, ovT, ovR, ovB)) as TBGRABitmap;
     try
-      FBmp.PutImage(ARect.Left + (ovL - ASrcOffset.X),
-                    ARect.Top  + (ovT - ASrcOffset.Y), part, dmSet);
+      FBmp.PutImage(dst.Left + (ovL - src.X),
+                    dst.Top  + (ovT - src.Y), part, dmSet);
     finally
       part.Free;
     end;
@@ -2487,6 +3107,7 @@ procedure TTyPainter.FillCornerGaps(const ARect: TRect; const ACorners: TTyCorne
 var
   temp: TBGRABitmap;
   w, h, r: Integer;
+  vis: TRect;
   opts: TRoundRectangleOptions;
 begin
   if FBmp = nil then Exit;
@@ -2508,10 +3129,15 @@ begin
   if ACorners.BL <= 0 then Include(opts, rrBottomLeftSquare);
   // Build AColor everywhere, then erase the rounded interior (AA) so only the corner
   // gaps remain; composite that over FBmp to overwrite whatever (shadow) was there.
-  temp := TBGRABitmap.Create(w, h, TyColorToBGRA(AColor));
+  { Only over the part of ARect that is on the bitmap: the shape keeps its full geometry (the
+    erase is offset, not shrunk), so a control filling its own rect gets exactly what it got
+    before, and a child replaying its host's frame does not allocate a host-sized buffer. }
+  if not IntersectRect(vis, ARect, Rect(0, 0, FBmp.Width, FBmp.Height)) then Exit;
+  temp := TBGRABitmap.Create(vis.Right - vis.Left, vis.Bottom - vis.Top, TyColorToBGRA(AColor));
   try
-    temp.EraseRoundRectAntialias(0, 0, w - 1, h - 1, r, r, 255, opts);
-    FBmp.PutImage(ARect.Left, ARect.Top, temp, dmDrawWithTransparency);
+    temp.EraseRoundRectAntialias(ARect.Left - vis.Left, ARect.Top - vis.Top,
+      ARect.Left - vis.Left + w - 1, ARect.Top - vis.Top + h - 1, r, r, 255, opts);
+    FBmp.PutImage(vis.Left, vis.Top, temp, dmDrawWithTransparency);
   finally
     temp.Free;
   end;
@@ -2535,7 +3161,6 @@ var
   raw, bl: TBGRABitmap;
 begin
   Result := nil;
-  if not FileExists(APath) then Exit;
   if GImgCache = nil then
   begin
     GImgCache := TStringList.Create;
@@ -2545,6 +3170,8 @@ begin
   idx := GImgCache.IndexOf(key);
   if idx >= 0 then
     Exit(TBGRABitmap(GImgCache.Objects[idx]));
+  { Asked only on a miss: a hit costs no file-system call. }
+  if not FileExists(APath) then Exit;
   try
     raw := TBGRABitmap.Create(APath);
   except
@@ -3218,7 +3845,11 @@ initialization
   TyFallbackFontName := '';
 
 finalization
+  {$IFDEF LCLWin32}
+  FreeAndNil(TTyGdiTextRenderer.GShot);
+  {$ENDIF}
   FreeAndNil(GImgCache);  // OwnsObjects frees the cached bitmaps
+  FreeAndNil(GShadowCache);
   TyInvalidateTextMeasureCache;   // frees the boxed block measurements
   FreeAndNil(GBlockCache);
   FreeAndNil(GRenderCache);

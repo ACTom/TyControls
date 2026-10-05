@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Graphics,
   tyControls.Types, tyControls.Painter, tyControls.StyleModel, tyControls.Base,
-  tyControls.ListBox, tyControls.ComboBox, tyControls.ColorBox, tyControls.Dialogs.Color;
+  tyControls.ListBox, tyControls.ComboBox, tyControls.ColorBox, tyControls.Dialogs.Color, LCLType;
 
 type
   { The drop-down list for TTyColorComboBox: like TTyColorPopupList, but a row whose colour
@@ -15,25 +15,107 @@ type
       const AStyle: TTyStyleSet); override;
   end;
 
-  { TTyColorBox + a trailing "more…" row that opens the themed colour dialog; the picked
+  { A colour box (TTyCustomColorBox) + a trailing "more…" row that opens the themed colour dialog; the picked
     colour is inserted before "more" and selected. The "more…" item is marked by a clNone
     colour in Objects[], so it renders as plain text and is detected without a side flag.
     Kept last, so appended custom colours slot in above it. }
-  TTyColorComboBox = class(TTyColorBox)
+  TTyCustomColorComboBox = class(TTyCustomColorBox)
   private
     FMoreCaption: string;
     FPrevIndex: Integer;    // last real selection, to revert a cancelled "more…"
-    procedure SetMoreCaption(const AValue: string);
+    procedure SetMoreCaption(const AValue: TTranslateString);
     function IsMoreIndex(AIndex: Integer): Boolean;
     procedure RebuildMoreItem;
   protected
-    function CreatePopupList: TTyListBox; override;
+    function CreatePopupList: TTyCustomListBox; override;
     procedure PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet); override;
     procedure DoSelect; override;
   public
     constructor Create(AOwner: TComponent); override;
+    property MoreCaption: TTranslateString read FMoreCaption write SetMoreCaption;
+  end;
+
+  { TTyColorComboBox publishes TTyCustomColorComboBox's properties; everything lives in TTyCustomColorComboBox. }
+  TTyColorComboBox = class(TTyCustomColorComboBox)
   published
-    property MoreCaption: string read FMoreCaption write SetMoreCaption;
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property Text;
+    property DropDownCount;
+    property Sorted;
+    property MaxLength;
+    property CharCase;
+    property Style;
+    property ItemHeight;
+    property ItemWidth;
+    property TextHint;
+    property ReadOnly;
+    property OnDrawItem;
+    property OnMeasureItem;
+    property OnChange;
+    property OnSelect;
+    property OnDropDown;
+    property OnCloseUp;
+    property OnGetItems;
+    property Align;
+    property Anchors;
+    property Selected;
+    property ColorRectWidth;
+    property ColorRectOffset;
+    property DefaultColorColor;
+    property NoneColorColor;
+    property OnGetColors;
+    property MoreCaption;
   end;
 
 implementation
@@ -59,9 +141,9 @@ begin
     TyDrawColorRow(P, ARowRect, c, Items[AIndex], AStyle, ResolveFontSize(AStyle));
 end;
 
-{ TTyColorComboBox }
+{ TTyCustomColorComboBox }
 
-constructor TTyColorComboBox.Create(AOwner: TComponent);
+constructor TTyCustomColorComboBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);        // fills the 16-colour palette + selects index 0
   FMoreCaption := 'More…';
@@ -69,7 +151,7 @@ begin
   RebuildMoreItem;
 end;
 
-procedure TTyColorComboBox.RebuildMoreItem;
+procedure TTyCustomColorComboBox.RebuildMoreItem;
 var i: Integer;
 begin
   // Drop any existing "more…" (clNone) row, then append a fresh one at the end.
@@ -78,24 +160,24 @@ begin
   TyAddColorItem(Items, FMoreCaption, clNone);
 end;
 
-procedure TTyColorComboBox.SetMoreCaption(const AValue: string);
+procedure TTyCustomColorComboBox.SetMoreCaption(const AValue: TTranslateString);
 begin
   if FMoreCaption = AValue then Exit;
   FMoreCaption := AValue;
   RebuildMoreItem;
 end;
 
-function TTyColorComboBox.IsMoreIndex(AIndex: Integer): Boolean;
+function TTyCustomColorComboBox.IsMoreIndex(AIndex: Integer): Boolean;
 begin
   Result := (AIndex >= 0) and (AIndex < Items.Count) and (ColorAt(AIndex) = clNone);
 end;
 
-function TTyColorComboBox.CreatePopupList: TTyListBox;
+function TTyCustomColorComboBox.CreatePopupList: TTyCustomListBox;
 begin
   Result := TTyColorMorePopupList.Create(Self);
 end;
 
-procedure TTyColorComboBox.PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet);
+procedure TTyCustomColorComboBox.PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet);
 begin
   if (ItemIndex >= 0) and (ItemIndex < Items.Count) and not IsMoreIndex(ItemIndex) then
     TyDrawColorRow(P, ATextRect, ColorAt(ItemIndex), Items[ItemIndex], AStyle, ResolveFontSize(AStyle))
@@ -103,7 +185,7 @@ begin
     inherited PaintFieldContent(P, ATextRect, AStyle);   // "more…" / none -> plain text
 end;
 
-procedure TTyColorComboBox.DoSelect;
+procedure TTyCustomColorComboBox.DoSelect;
 var
   c: TColor;
   a: Byte;

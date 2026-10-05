@@ -6,7 +6,7 @@ uses
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
   tyControls.Accel;
 type
-  TTyLabel = class(TTyGraphicControl)
+  TTyCustomLabel = class(TTyGraphicControl)
   private
     FAlignment: TAlignment;
     FLayout: TTextLayout;
@@ -33,6 +33,10 @@ type
     procedure Paint; override;
     procedure Click; override;
     function DialogChar(var Message: TLMKey): Boolean; override;
+    { A WRAPPING label takes its width as given: the width is where the text wraps, and the
+      preferred size is only what that width makes of it. So its width is never re-fitted,
+      AutoSize or not, and LCL's DPI pass has to scale it -- see the base's declaration. }
+    procedure ShouldAutoAdjust(var AWidth, AHeight: Boolean); override;
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
     { Clamp the label so it can never be smaller than the text it must draw. A hand-set
@@ -86,26 +90,69 @@ type
       size before it can decide its own bounds — the message dialog does exactly that, and
       pinning a guessed box instead is how it used to cut every message past two lines. }
     procedure MeasureCaption(APPI, AAvailWidthPx: Integer; out AWidthPx, AHeightPx: Integer);
-  published
-    property Caption;
-    property Enabled;
-    property Font;
-    property Align;
-    property Anchors;
-    property StyleClass;
-    property Controller;
-    property OnClick;
+  protected
     property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
     property Layout: TTextLayout read FLayout write SetLayout default tlCenter;
     property WordWrap: Boolean read FWordWrap write SetWordWrap default False;
-    property AutoSize;
     property Transparent: Boolean read FTransparent write SetTransparent default True;
     property FocusControl: TWinControl read FFocusControl write SetFocusControl;
   end;
 
+  { TTyLabel publishes TTyCustomLabel's properties; everything lives in TTyCustomLabel. }
+  TTyLabel = class(TTyCustomLabel)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Caption;
+    property Align;
+    property Anchors;
+    property Alignment;
+    property Layout;
+    property WordWrap;
+    property Transparent;
+    property FocusControl;
+  end;
+
 implementation
 
-constructor TTyLabel.Create(AOwner: TComponent);
+constructor TTyCustomLabel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TyAccelRegister(Self);
@@ -120,13 +167,13 @@ begin
   AccessibleRole := larLabel;
 end;
 
-destructor TTyLabel.Destroy;
+destructor TTyCustomLabel.Destroy;
 begin
   TyAccelUnregister(Self);
   inherited Destroy;
 end;
 
-function TTyLabel.DialogChar(var Message: TLMKey): Boolean;
+function TTyCustomLabel.DialogChar(var Message: TLMKey): Boolean;
 begin
   if (FFocusControl <> nil) and TyIsAccelKey(Message, Caption) then
   begin
@@ -136,12 +183,12 @@ begin
   Result := inherited DialogChar(Message);
 end;
 
-function TTyLabel.GetStyleTypeKey: string;
+function TTyCustomLabel.GetStyleTypeKey: string;
 begin
   Result := 'TyLabel';
 end;
 
-function TTyLabel.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
+function TTyCustomLabel.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
 begin
   { TTyGraphicControl has no ResolveFontSize helper, so it delegates to the shared one —
     which recovers the theme's --font-size-base when a skin suppresses the typeKey font-size
@@ -149,21 +196,21 @@ begin
   Result := TyResolveFontSize(AStyle, ParentFont, Font.Size, ActiveController);
 end;
 
-procedure TTyLabel.SetAlignment(AValue: TAlignment);
+procedure TTyCustomLabel.SetAlignment(AValue: TAlignment);
 begin
   if FAlignment = AValue then Exit;
   FAlignment := AValue;
   Invalidate;
 end;
 
-procedure TTyLabel.SetLayout(AValue: TTextLayout);
+procedure TTyCustomLabel.SetLayout(AValue: TTextLayout);
 begin
   if FLayout = AValue then Exit;
   FLayout := AValue;
   Invalidate;
 end;
 
-procedure TTyLabel.SetWordWrap(AValue: Boolean);
+procedure TTyCustomLabel.SetWordWrap(AValue: Boolean);
 begin
   if FWordWrap = AValue then Exit;
   FWordWrap := AValue;
@@ -178,14 +225,14 @@ begin
   Invalidate;
 end;
 
-procedure TTyLabel.SetTransparent(AValue: Boolean);
+procedure TTyCustomLabel.SetTransparent(AValue: Boolean);
 begin
   if FTransparent = AValue then Exit;
   FTransparent := AValue;
   Invalidate;
 end;
 
-procedure TTyLabel.SetFocusControl(AValue: TWinControl);
+procedure TTyCustomLabel.SetFocusControl(AValue: TWinControl);
 begin
   if FFocusControl = AValue then Exit;
   if FFocusControl <> nil then
@@ -195,21 +242,21 @@ begin
     FFocusControl.FreeNotification(Self);
 end;
 
-procedure TTyLabel.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomLabel.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FFocusControl) then
     FFocusControl := nil;
 end;
 
-procedure TTyLabel.Click;
+procedure TTyCustomLabel.Click;
 begin
   inherited Click;
   if (FFocusControl <> nil) and FFocusControl.CanFocus then
     FFocusControl.SetFocus;
 end;
 
-procedure TTyLabel.DoUpdateSizeConstraints;
+procedure TTyCustomLabel.DoUpdateSizeConstraints;
 var
   S: TTyStyleSet;
   ppi, padH, w, h: Integer;
@@ -248,7 +295,7 @@ begin
   Constraints.MinWidth := 0;
 end;
 
-procedure TTyLabel.Invalidate;
+procedure TTyCustomLabel.Invalidate;
 begin
   inherited Invalidate;
   { A theme switch arrives as a bare Invalidate (the controller broadcasts one to every
@@ -266,7 +313,7 @@ begin
   end;
 end;
 
-procedure TTyLabel.TextChanged;
+procedure TTyCustomLabel.TextChanged;
 begin
   inherited TextChanged;
   UpdateSizeConstraints;   // the new caption needs a different floor
@@ -278,7 +325,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyLabel.DoSetBounds(ALeft, ATop, AWidth, AHeight: Integer);
+procedure TTyCustomLabel.DoSetBounds(ALeft, ATop, AWidth, AHeight: Integer);
 var
   WidthChanged: Boolean;
 begin
@@ -291,7 +338,7 @@ begin
   end;
 end;
 
-procedure TTyLabel.WrapText(const AText: string; AMaxWidthPx: Integer;
+procedure TTyCustomLabel.WrapText(const AText: string; AMaxWidthPx: Integer;
   ACanvas: TCanvas; ALines: TStrings);
 { Greedy CJK-aware wrap. The algorithm now lives in tyControls.Painter (TyWrapTextCJK)
   so TTyNotification shares the exact same line-breaking; kept as a method for the two
@@ -300,7 +347,7 @@ begin
   TyWrapTextCJK(AText, AMaxWidthPx, ACanvas, ALines);
 end;
 
-procedure TTyLabel.MeasureCaption(APPI, AAvailWidthPx: Integer;
+procedure TTyCustomLabel.MeasureCaption(APPI, AAvailWidthPx: Integer;
   out AWidthPx, AHeightPx: Integer);
 { The body of this used to live here: build a measuring bitmap, set the four font fields,
   split or wrap, widest line x line count. It is now TyMeasureTextBlock in tyControls.Painter,
@@ -309,7 +356,7 @@ procedure TTyLabel.MeasureCaption(APPI, AAvailWidthPx: Integer;
   Behaviour is unchanged: the same font, the same 'Ag' line box, the same wrap. }
 var
   S: TTyStyleSet;
-  mpos, wrapW: Integer;
+  mpos, wrapW, rw: Integer;
   disp: string;
 begin
   S := CurrentStyle;
@@ -320,9 +367,26 @@ begin
     wrapW := 0;
   TyMeasureTextBlock(disp, S.FontName, ResolveFontSize(S), S.FontWeight, APPI,
     wrapW, TyLineHeight(ActiveController), AWidthPx, AHeightPx);
+  { ...and, unwrapped, the renderer too, keeping the larger. The caption is drawn through the
+    painter, whose own advance widths decide where its ink ends; TyMeasureTextBlock measures on
+    an LCL canvas, and the two round differently. A label never ellipsises, so a canvas width
+    that came out short did not show as "...": the label's edge cut the last letter off. The
+    same remedy as TTyButton.MeasureCaption, per line like it. A wrapping label is left alone:
+    its width is the width it was given, not the text's. }
+  if not FWordWrap then
+  begin
+    rw := TyMeasureRenderedTextWidth(disp, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
+    if rw > AWidthPx then AWidthPx := rw;
+  end;
 end;
 
-procedure TTyLabel.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+procedure TTyCustomLabel.ShouldAutoAdjust(var AWidth, AHeight: Boolean);
+begin
+  inherited ShouldAutoAdjust(AWidth, AHeight);
+  if AutoSize and FWordWrap then AWidth := True;
+end;
+
+procedure TTyCustomLabel.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
   WithThemeSpace: Boolean);
 var
   S: TTyStyleSet;
@@ -350,7 +414,7 @@ begin
   if PreferredHeight < 1 then PreferredHeight := 1;
 end;
 
-procedure TTyLabel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomLabel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -443,7 +507,7 @@ begin
   end;
 end;
 
-procedure TTyLabel.Paint;
+procedure TTyCustomLabel.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

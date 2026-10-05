@@ -343,6 +343,111 @@ TyTextHint||1 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 
 TyTextHint||2 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyTextHint||3 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyTextHint||4 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminal||0 => pres[0,1,5,7,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=4,4,4,4 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminal||1 => pres[0,1,5,7,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=4,4,4,4 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminal||2 => pres[0,1,5,7,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=4,4,4,4 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminal||3 => pres[0,1,5,7,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=4,4,4,4 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminal||4 => pres[0,1,5,7,9,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=4,4,4,4 fnt=/9/0 op=500 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalCursor||0 => pres[0,1,] bg=k1/FF1F2937 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalCursor||1 => pres[0,1,] bg=k1/FF1F2937 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalCursor||2 => pres[0,1,] bg=k1/FF1F2937 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalCursor||3 => pres[0,1,] bg=k1/FF1F2937 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalCursor||4 => pres[0,1,] bg=k1/FF1F2937 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalSelection||0 => pres[0,] bg=k1/4C1F2937 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalSelection||1 => pres[0,] bg=k1/4C1F2937 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalSelection||2 => pres[0,] bg=k1/4C1F2937 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalSelection||3 => pres[0,] bg=k1/593B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalSelection||4 => pres[0,] bg=k1/4C1F2937 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi0||0 => pres[1,] bg=k0 ut=0 txt=FF2E3436 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi0||1 => pres[1,] bg=k0 ut=0 txt=FF2E3436 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi0||2 => pres[1,] bg=k0 ut=0 txt=FF2E3436 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi0||3 => pres[1,] bg=k0 ut=0 txt=FF2E3436 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi0||4 => pres[1,] bg=k0 ut=0 txt=FF2E3436 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi1||0 => pres[1,] bg=k0 ut=0 txt=FFCC0000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi1||1 => pres[1,] bg=k0 ut=0 txt=FFCC0000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi1||2 => pres[1,] bg=k0 ut=0 txt=FFCC0000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi1||3 => pres[1,] bg=k0 ut=0 txt=FFCC0000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi1||4 => pres[1,] bg=k0 ut=0 txt=FFCC0000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi2||0 => pres[1,] bg=k0 ut=0 txt=FF3F7C04 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi2||1 => pres[1,] bg=k0 ut=0 txt=FF3F7C04 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi2||2 => pres[1,] bg=k0 ut=0 txt=FF3F7C04 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi2||3 => pres[1,] bg=k0 ut=0 txt=FF3F7C04 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi2||4 => pres[1,] bg=k0 ut=0 txt=FF3F7C04 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi3||0 => pres[1,] bg=k0 ut=0 txt=FF8E7400 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi3||1 => pres[1,] bg=k0 ut=0 txt=FF8E7400 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi3||2 => pres[1,] bg=k0 ut=0 txt=FF8E7400 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi3||3 => pres[1,] bg=k0 ut=0 txt=FF8E7400 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi3||4 => pres[1,] bg=k0 ut=0 txt=FF8E7400 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi4||0 => pres[1,] bg=k0 ut=0 txt=FF3465A4 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi4||1 => pres[1,] bg=k0 ut=0 txt=FF3465A4 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi4||2 => pres[1,] bg=k0 ut=0 txt=FF3465A4 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi4||3 => pres[1,] bg=k0 ut=0 txt=FF3465A4 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi4||4 => pres[1,] bg=k0 ut=0 txt=FF3465A4 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi5||0 => pres[1,] bg=k0 ut=0 txt=FF75507B bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi5||1 => pres[1,] bg=k0 ut=0 txt=FF75507B bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi5||2 => pres[1,] bg=k0 ut=0 txt=FF75507B bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi5||3 => pres[1,] bg=k0 ut=0 txt=FF75507B bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi5||4 => pres[1,] bg=k0 ut=0 txt=FF75507B bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi6||0 => pres[1,] bg=k0 ut=0 txt=FF047A7C bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi6||1 => pres[1,] bg=k0 ut=0 txt=FF047A7C bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi6||2 => pres[1,] bg=k0 ut=0 txt=FF047A7C bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi6||3 => pres[1,] bg=k0 ut=0 txt=FF047A7C bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi6||4 => pres[1,] bg=k0 ut=0 txt=FF047A7C bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi7||0 => pres[1,] bg=k0 ut=0 txt=FFD3D7CF bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi7||1 => pres[1,] bg=k0 ut=0 txt=FFD3D7CF bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi7||2 => pres[1,] bg=k0 ut=0 txt=FFD3D7CF bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi7||3 => pres[1,] bg=k0 ut=0 txt=FFD3D7CF bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi7||4 => pres[1,] bg=k0 ut=0 txt=FFD3D7CF bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi8||0 => pres[1,] bg=k0 ut=0 txt=FF555753 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi8||1 => pres[1,] bg=k0 ut=0 txt=FF555753 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi8||2 => pres[1,] bg=k0 ut=0 txt=FF555753 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi8||3 => pres[1,] bg=k0 ut=0 txt=FF555753 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi8||4 => pres[1,] bg=k0 ut=0 txt=FF555753 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi9||0 => pres[1,] bg=k0 ut=0 txt=FFD72424 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi9||1 => pres[1,] bg=k0 ut=0 txt=FFD72424 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi9||2 => pres[1,] bg=k0 ut=0 txt=FFD72424 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi9||3 => pres[1,] bg=k0 ut=0 txt=FFD72424 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi9||4 => pres[1,] bg=k0 ut=0 txt=FFD72424 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi10||0 => pres[1,] bg=k0 ut=0 txt=FF50831C bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi10||1 => pres[1,] bg=k0 ut=0 txt=FF50831C bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi10||2 => pres[1,] bg=k0 ut=0 txt=FF50831C bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi10||3 => pres[1,] bg=k0 ut=0 txt=FF50831C bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi10||4 => pres[1,] bg=k0 ut=0 txt=FF50831C bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi11||0 => pres[1,] bg=k0 ut=0 txt=FF756D24 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi11||1 => pres[1,] bg=k0 ut=0 txt=FF756D24 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi11||2 => pres[1,] bg=k0 ut=0 txt=FF756D24 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi11||3 => pres[1,] bg=k0 ut=0 txt=FF756D24 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi11||4 => pres[1,] bg=k0 ut=0 txt=FF756D24 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi12||0 => pres[1,] bg=k0 ut=0 txt=FF517396 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi12||1 => pres[1,] bg=k0 ut=0 txt=FF517396 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi12||2 => pres[1,] bg=k0 ut=0 txt=FF517396 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi12||3 => pres[1,] bg=k0 ut=0 txt=FF517396 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi12||4 => pres[1,] bg=k0 ut=0 txt=FF517396 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi13||0 => pres[1,] bg=k0 ut=0 txt=FF8B6687 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi13||1 => pres[1,] bg=k0 ut=0 txt=FF8B6687 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi13||2 => pres[1,] bg=k0 ut=0 txt=FF8B6687 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi13||3 => pres[1,] bg=k0 ut=0 txt=FF8B6687 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi13||4 => pres[1,] bg=k0 ut=0 txt=FF8B6687 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi14||0 => pres[1,] bg=k0 ut=0 txt=FF1C8383 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi14||1 => pres[1,] bg=k0 ut=0 txt=FF1C8383 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi14||2 => pres[1,] bg=k0 ut=0 txt=FF1C8383 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi14||3 => pres[1,] bg=k0 ut=0 txt=FF1C8383 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi14||4 => pres[1,] bg=k0 ut=0 txt=FF1C8383 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi15||0 => pres[1,] bg=k0 ut=0 txt=FFEEEEEC bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi15||1 => pres[1,] bg=k0 ut=0 txt=FFEEEEEC bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi15||2 => pres[1,] bg=k0 ut=0 txt=FFEEEEEC bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi15||3 => pres[1,] bg=k0 ut=0 txt=FFEEEEEC bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalAnsi15||4 => pres[1,] bg=k0 ut=0 txt=FFEEEEEC bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalLink||0 => pres[1,] bg=k0 ut=0 txt=FF3B82F6 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalLink||1 => pres[1,] bg=k0 ut=0 txt=FF3B82F6 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalLink||2 => pres[1,] bg=k0 ut=0 txt=FF3B82F6 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalLink||3 => pres[1,] bg=k0 ut=0 txt=FF3B82F6 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalLink||4 => pres[1,] bg=k0 ut=0 txt=FF3B82F6 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalPreedit||0 => pres[0,1,2,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=FF3B82F6/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalPreedit||1 => pres[0,1,2,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=FF3B82F6/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalPreedit||2 => pres[0,1,2,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=FF3B82F6/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalPreedit||3 => pres[0,1,2,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=FF3B82F6/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTerminalPreedit||4 => pres[0,1,2,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=FF3B82F6/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyMenuBar||0 => pres[0,1,5,7,8,] bg=k1/00FFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=2,2,2,2 fnt=/9/400 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyMenuBar||1 => pres[0,1,5,7,8,] bg=k1/00FFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=2,2,2,2 fnt=/9/400 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyMenuBar||2 => pres[0,1,5,7,8,] bg=k1/00FFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=2,2,2,2 fnt=/9/400 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
@@ -1023,6 +1128,96 @@ TyGridSummaryRow||1 => pres[0,1,] bg=k0 ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/
 TyGridSummaryRow||2 => pres[0,1,] bg=k0 ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyGridSummaryRow||3 => pres[0,1,] bg=k0 ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyGridSummaryRow||4 => pres[0,1,] bg=k0 ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowBar||0 => pres[0,1,7,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowBar||1 => pres[0,1,7,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowBar||2 => pres[0,1,7,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowBar||3 => pres[0,1,7,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowBar||4 => pres[0,1,7,9,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=500 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindow||0 => pres[0,1,7,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindow||1 => pres[0,1,7,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindow||2 => pres[0,1,7,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindow||3 => pres[0,1,7,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindow||4 => pres[0,1,7,9,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=500 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStrip||0 => pres[0,1,2,3,] bg=k1/FFF0F0F0 ut=0 txt=801F2937 bd=FFD1D5DB/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStrip||1 => pres[0,1,2,3,] bg=k1/FFF0F0F0 ut=0 txt=801F2937 bd=FFD1D5DB/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStrip||2 => pres[0,1,2,3,] bg=k1/FFF0F0F0 ut=0 txt=801F2937 bd=FFD1D5DB/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStrip||3 => pres[0,1,2,3,] bg=k1/FFF0F0F0 ut=0 txt=801F2937 bd=FFD1D5DB/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStrip||4 => pres[0,1,2,3,] bg=k1/FFF0F0F0 ut=0 txt=801F2937 bd=FFD1D5DB/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripItem||0 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripItem||1 => pres[0,1,] bg=k1/1F1F2937 ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripItem||2 => pres[0,1,] bg=k1/331F2937 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripItem||3 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripItem||4 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripIndicator||0 => pres[0,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripIndicator||1 => pres[0,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripIndicator||2 => pres[0,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripIndicator||3 => pres[0,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowStripIndicator||4 => pres[0,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowEdge||0 => pres[2,3,] bg=k0 ut=0 txt=00000000 bd=FFD1D5DB/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowEdge||1 => pres[0,2,3,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=FFD1D5DB/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowEdge||2 => pres[0,2,3,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=FFD1D5DB/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowEdge||3 => pres[2,3,] bg=k0 ut=0 txt=00000000 bd=FFD1D5DB/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowEdge||4 => pres[2,3,] bg=k0 ut=0 txt=00000000 bd=FFD1D5DB/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowHeader||0 => pres[0,1,7,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowHeader||1 => pres[0,1,7,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowHeader||2 => pres[0,1,7,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowHeader||3 => pres[0,1,7,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowHeader||4 => pres[0,1,7,] bg=k1/FFFFFFFF ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowActions||0 => pres[0,] bg=k1/FFFFFFFF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowActions||1 => pres[0,] bg=k1/FFFFFFFF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowActions||2 => pres[0,] bg=k1/FFFFFFFF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowActions||3 => pres[0,] bg=k1/FFFFFFFF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowActions||4 => pres[0,] bg=k1/FFFFFFFF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTabRow||0 => pres[0,] bg=k1/FFFFFFFF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTabRow||1 => pres[0,] bg=k1/FFFFFFFF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTabRow||2 => pres[0,] bg=k1/FFFFFFFF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTabRow||3 => pres[0,] bg=k1/FFFFFFFF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTabRow||4 => pres[0,] bg=k1/FFFFFFFF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTab||0 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTab||1 => pres[1,] bg=k0 ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTab||2 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTab||3 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTab||4 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTabIndicator||0 => pres[0,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTabIndicator||1 => pres[0,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTabIndicator||2 => pres[0,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTabIndicator||3 => pres[0,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowTabIndicator||4 => pres[0,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowOverflow||0 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowOverflow||1 => pres[0,1,] bg=k1/1F1F2937 ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowOverflow||2 => pres[0,1,] bg=k1/331F2937 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowOverflow||3 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowOverflow||4 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowButton||0 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowButton||1 => pres[0,1,] bg=k1/1F1F2937 ut=0 txt=FF1F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowButton||2 => pres[0,1,] bg=k1/331F2937 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowButton||3 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowButton||4 => pres[1,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowSeparator||0 => pres[2,3,] bg=k0 ut=0 txt=00000000 bd=FFD1D5DB/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowSeparator||1 => pres[2,3,] bg=k0 ut=0 txt=00000000 bd=FFD1D5DB/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowSeparator||2 => pres[2,3,] bg=k0 ut=0 txt=00000000 bd=FFD1D5DB/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowSeparator||3 => pres[2,3,] bg=k0 ut=0 txt=00000000 bd=FFD1D5DB/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowSeparator||4 => pres[2,3,] bg=k0 ut=0 txt=00000000 bd=FFD1D5DB/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowDropIndicator||0 => pres[0,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowDropIndicator||1 => pres[0,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowDropIndicator||2 => pres[0,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowDropIndicator||3 => pres[0,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowDropIndicator||4 => pres[0,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowNote||0 => pres[1,7,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowNote||1 => pres[1,7,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowNote||2 => pres[1,7,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowNote||3 => pres[1,7,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowNote||4 => pres[1,7,] bg=k0 ut=0 txt=801F2937 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowBadge||0 => pres[0,1,4,5,7,8,] bg=k1/FF3B82F6 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=12/12,12,12,12 pad=4,0,4,0 fnt=/9/700 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowBadge||1 => pres[0,1,4,5,7,8,] bg=k1/FF3B82F6 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=12/12,12,12,12 pad=4,0,4,0 fnt=/9/700 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowBadge||2 => pres[0,1,4,5,7,8,] bg=k1/FF3B82F6 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=12/12,12,12,12 pad=4,0,4,0 fnt=/9/700 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowBadge||3 => pres[0,1,4,5,7,8,] bg=k1/FF3B82F6 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=12/12,12,12,12 pad=4,0,4,0 fnt=/9/700 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowBadge||4 => pres[0,1,4,5,7,8,] bg=k1/FF3B82F6 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=12/12,12,12,12 pad=4,0,4,0 fnt=/9/700 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowDropZone||0 => pres[0,1,2,3,] bg=k1/1A3B82F6 ut=0 txt=FF1F2937 bd=FF3B82F6/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowDropZone||1 => pres[0,1,2,3,] bg=k1/383B82F6 ut=0 txt=FF1F2937 bd=FF3B82F6/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowDropZone||2 => pres[0,1,2,3,] bg=k1/1A3B82F6 ut=0 txt=FF1F2937 bd=FF3B82F6/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowDropZone||3 => pres[0,1,2,3,] bg=k1/1A3B82F6 ut=0 txt=FF1F2937 bd=FF3B82F6/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToolWindowDropZone||4 => pres[0,1,2,3,] bg=k1/1A3B82F6 ut=0 txt=FF1F2937 bd=FF3B82F6/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 metric --alert-close-gap => 8
 metric --alert-close-size => 14
 metric --alert-icon-gap => 8
@@ -1125,7 +1320,26 @@ metric --tab-min-width => 48
 metric --tab-padding => 12
 metric --tag-close-size => 14
 metric --tag-gap => 4
+metric --terminal-cursor-width => 1
+metric --terminal-pad => 4
+metric --terminal-underline-width => 1
+metric --titlebar-icon-gap => 6
+metric --titlebar-icon-size => 16
 metric --titlebar-padding => 8
+metric --toolwindow-button-size => 22
+metric --toolwindow-content-min => 120
+metric --toolwindow-drop-size => 2
+metric --toolwindow-edge-size => 4
+metric --toolwindow-glyph-size => 16
+metric --toolwindow-header-gap => 4
+metric --toolwindow-header-height => 26
+metric --toolwindow-header-pad => 6
+metric --toolwindow-indicator-size => 2
+metric --toolwindow-strip-indicator-size => 2
+metric --toolwindow-strip-item-size => 36
+metric --toolwindow-strip-size => 36
+metric --toolwindow-tab-area-min => 50
+metric --toolwindow-tab-pad => 10
 metric --transfer-arrow-margin => 3
 metric --transfer-arrow-size => 12
 metric --transfer-button-gap => 6

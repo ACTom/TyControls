@@ -45,9 +45,9 @@ type
   public
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
     { Load the source into the working copy (the source itself stays untouched). }
-    procedure LoadFrom(ASource: TTyImageCollection);
+    procedure LoadFrom(ASource: TTyCustomImageCollection);
     { Write the working copy back -- the OK half of the contract. }
-    procedure CommitTo(ATarget: TTyImageCollection);
+    procedure CommitTo(ATarget: TTyCustomImageCollection);
 
     { Action seams (the buttons call these; tests call them directly). }
     function EntryCount: Integer;
@@ -72,20 +72,23 @@ type
   end;
 
 { Construct-only builder (no ShowModal), loaded from ASource; the test seam. }
-function TyBuildImageCollectionEditor(ASource: TTyImageCollection): TTyImageCollectionEditorForm;
+function TyBuildImageCollectionEditor(ASource: TTyCustomImageCollection): TTyImageCollectionEditorForm;
 
 { The one-liner: edit ACollection in place; True (and committed) on OK. }
-function TyEditImageCollection(ACollection: TTyImageCollection): Boolean;
+function TyEditImageCollection(ACollection: TTyCustomImageCollection): Boolean;
 
 implementation
 
-function TyBuildImageCollectionEditor(ASource: TTyImageCollection): TTyImageCollectionEditorForm;
+uses
+  Dialogs;   // TOpenOption (ofAllowMultiSelect)
+
+function TyBuildImageCollectionEditor(ASource: TTyCustomImageCollection): TTyImageCollectionEditorForm;
 begin
   Result := TTyImageCollectionEditorForm.CreateNew(nil);
   Result.LoadFrom(ASource);
 end;
 
-function TyEditImageCollection(ACollection: TTyImageCollection): Boolean;
+function TyEditImageCollection(ACollection: TTyCustomImageCollection): Boolean;
 var
   dlg: TTyImageCollectionEditorForm;
 begin
@@ -117,8 +120,10 @@ begin
   inherited CreateNew(AOwner, Num);
   Caption := rsDlgImgColTitle;
   Resizable := True;
-  Constraints.MinWidth := 480;
-  Constraints.MinHeight := 340;
+  { Every layout number in this form is a 96-PPI design number and goes through Px: see
+    TTyDialog.Px. }
+  Constraints.MinWidth := Px(480);
+  Constraints.MinHeight := Px(340);
 
   FWork := TTyImageCollection.Create(Self);
 
@@ -142,7 +147,7 @@ begin
 
   AddButton(rsMsgBtnOK, mrOK, True, False);
   AddButton(rsMsgBtnCancel, mrCancel, False, True);
-  AutoSizeToContent(620, 400);
+  AutoSizeToContent(Px(620), Px(400));
   LayoutContent;
 end;
 
@@ -157,13 +162,13 @@ var
 begin
   if FClearBtn = nil then Exit;    { Resize can fire before construction finishes }
   r := ContentRect;
-  btnH := TyDensityHeight(nil, TyDlgEditH);
-  listW := (r.Right - r.Left) - 2 * TyDlgPad - BtnW - Gap;
-  FList.SetBounds(r.Left + TyDlgPad, r.Top + TyDlgPad,
-    listW, (r.Bottom - r.Top) - 2 * TyDlgPad);
+  btnH := Px(TyDensityHeight(nil, TyDlgEditH));
+  listW := (r.Right - r.Left) - 2 * Px(TyDlgPad) - Px(BtnW) - Px(Gap);
+  FList.SetBounds(r.Left + Px(TyDlgPad), r.Top + Px(TyDlgPad),
+    listW, (r.Bottom - r.Top) - 2 * Px(TyDlgPad));
 
-  x := r.Left + TyDlgPad + listW + Gap;
-  y := r.Top + TyDlgPad;
+  x := r.Left + Px(TyDlgPad) + listW + Px(Gap);
+  y := r.Top + Px(TyDlgPad);
   btns[0] := FAddBtn; btns[1] := FReplaceBtn; btns[2] := FDeleteBtn;
   btns[3] := FRenameBtn; btns[4] := FUpBtn; btns[5] := FDownBtn; btns[6] := FClearBtn;
   { Step by what each button ACTUALLY became -- LCL raises a button to its theme-derived
@@ -172,19 +177,19 @@ begin
     a tight column beats buttons hidden behind the action strip. }
   for i := 0 to High(btns) do
   begin
-    btns[i].SetBounds(x, y, BtnW, btnH);
-    y := btns[i].Top + btns[i].Height + Gap div 2;
-    if y > r.Bottom - TyDlgPad then y := r.Bottom - TyDlgPad;
+    btns[i].SetBounds(x, y, Px(BtnW), btnH);
+    y := btns[i].Top + btns[i].Height + Px(Gap) div 2;
+    if y > r.Bottom - Px(TyDlgPad) then y := r.Bottom - Px(TyDlgPad);
   end;
 
   { The preview takes whatever is left under the button column. }
-  Inc(y, Gap);
-  FPreview.SetBounds(x, y, BtnW, (r.Bottom - TyDlgPad) - y);
+  Inc(y, Px(Gap));
+  FPreview.SetBounds(x, y, Px(BtnW), (r.Bottom - Px(TyDlgPad)) - y);
 end;
 
 { ---- model <-> view ---- }
 
-procedure TTyImageCollectionEditorForm.LoadFrom(ASource: TTyImageCollection);
+procedure TTyImageCollectionEditorForm.LoadFrom(ASource: TTyCustomImageCollection);
 begin
   if ASource <> nil then
     FWork.Images.Assign(ASource.Images)
@@ -193,7 +198,7 @@ begin
   RefreshList(0);
 end;
 
-procedure TTyImageCollectionEditorForm.CommitTo(ATarget: TTyImageCollection);
+procedure TTyImageCollectionEditorForm.CommitTo(ATarget: TTyCustomImageCollection);
 begin
   if ATarget <> nil then
     ATarget.Images.Assign(FWork.Images);
@@ -390,7 +395,7 @@ var
 begin
   dlg := TTyOpenPictureDialog.Create(Self);
   try
-    if AMulti then dlg.Options := dlg.Options + [fdoAllowMultiSelect];
+    if AMulti then dlg.Options := dlg.Options + [ofAllowMultiSelect];
     Result := dlg.Execute;
     if Result then
     begin

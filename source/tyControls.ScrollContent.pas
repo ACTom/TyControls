@@ -32,7 +32,7 @@ uses
   tyControls.Types, tyControls.Base;
 
 type
-  TTyScrollContent = class(TTyCustomControl)
+  TTyCustomScrollContent = class(TTyCustomControl)
   private
     FScrollOrigin: TPoint;
     FContentW, FContentH: Integer;
@@ -68,12 +68,67 @@ type
     procedure Paint; override;
   end;
 
+  { TTyScrollContent publishes TTyCustomScrollContent's properties; everything lives in TTyCustomScrollContent. }
+  TTyScrollContent = class(TTyCustomScrollContent)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+  end;
+
 implementation
 
 uses
   tyControls.Painter;
 
-constructor TTyScrollContent.Create(AOwner: TComponent);
+constructor TTyCustomScrollContent.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   { csDesignFixedBounds: the box owns this control's bounds -- they are the viewport, derived
@@ -83,7 +138,7 @@ begin
   SetInitialBounds(0, 0, 100, 100);
 end;
 
-procedure TTyScrollContent.SetScrollOrigin(const AOrigin: TPoint;
+procedure TTyCustomScrollContent.SetScrollOrigin(const AOrigin: TPoint;
   AContentW, AContentH: Integer);
 begin
   FScrollOrigin := AOrigin;
@@ -108,7 +163,7 @@ begin
     WITHOUT touching a child, put it back -- and add the scenario that catches it. }
 end;
 
-function TTyScrollContent.GetLogicalClientRect: TRect;
+function TTyCustomScrollContent.GetLogicalClientRect: TRect;
 var
   viewW, viewH: Integer;
 begin
@@ -123,7 +178,7 @@ begin
   if FContentH > viewH then Result.Bottom := Result.Top + FContentH;
 end;
 
-procedure TTyScrollContent.AdjustClientRect(var ARect: TRect);
+procedure TTyCustomScrollContent.AdjustClientRect(var ARect: TRect);
 begin
   inherited AdjustClientRect(ARect);
   { WHERE the children start. They are stored in SCROLLED coordinates (the box's ScrollBy
@@ -132,14 +187,14 @@ begin
   Types.OffsetRect(ARect, -FScrollOrigin.x, -FScrollOrigin.y);
 end;
 
-function TTyScrollContent.GetStyleTypeKey: string;
+function TTyCustomScrollContent.GetStyleTypeKey: string;
 begin
   { Its own key rather than borrowing TyScrollBox: a theme that dresses the box's frame must not
     have that frame resolved a second time for the viewport inside it. }
   Result := 'TyScrollContent';
 end;
 
-procedure TTyScrollContent.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomScrollContent.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -157,7 +212,7 @@ begin
   end;
 end;
 
-procedure TTyScrollContent.Paint;
+procedure TTyCustomScrollContent.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

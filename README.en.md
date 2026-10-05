@@ -1,6 +1,6 @@
 # TyControls
 
-A custom-drawn component library for Lazarus. All 163 controls are rendered with BGRABitmap and styled by `.tycss` text themes, so your UI looks exactly the same on Windows, Linux, and macOS.
+A custom-drawn component library for Lazarus. All 169 controls are rendered with BGRABitmap and styled by `.tycss` text themes, so your UI looks exactly the same on Windows, Linux, and macOS.
 
 > **中文:** [README.md](README.md) · **Changelog:** [CHANGELOG.en.md](CHANGELOG.en.md)
 
@@ -10,9 +10,9 @@ A custom-drawn component library for Lazarus. All 163 controls are rendered with
 
 | `classic` | `win11` | `material3` |
 |---|---|---|
-| ![classic theme](docs/images/antd-classic.png) | ![win11 theme](docs/images/antd-win11.png) | ![material3 theme](docs/images/antd-material3.png) |
+| ![classic theme](docs/images/skin-classic.png) | ![win11 theme](docs/images/skin-win11.png) | ![material3 theme](docs/images/skin-material3.png) |
 
-All four screenshots share one `.lfm` and one code base; only the theme name differs. Themes go beyond colors: under `classic`, buttons get 3D bevels, square corners, and a gradient header band.
+The three are one window and one code base; only the theme name differs. Themes go beyond colors: under `classic`, buttons get 3D bevels, square corners, and a gradient header band. Every built-in theme side by side: see the [gallery](docs/gallery.en.md).
 
 ### Light / dark / image themes
 
@@ -26,14 +26,17 @@ Light and dark are two `@mode` value sets in one theme file and can follow the O
 
 | | |
 |---|---|
-| **`TTyStringGrid`** frozen columns, row gutter, summary band<br>![data grid](docs/images/grid.png) | **`TTyTreeView`** virtual tree, multi-column, tri-state checks<br>![virtual tree](docs/images/treeview.png) |
-| **Rich input controls** numeric / currency / mask / slider / calculator<br>![rich input](docs/images/inputs.png) | **Custom-drawn dialogs** color picker<br>![color dialog](docs/images/colordialog.png) |
+| **`TTyStringGrid`** per-column editors: check box, rating, colour, button<br>![data grid](docs/images/grid.png) | **`TTyTreeView`** virtual tree, multi-column, tri-state checks<br>![virtual tree](docs/images/treeview.png) |
+| **Rich input controls** numeric / currency / mask / slider / calculator<br>![rich input](docs/images/inputs.png) | **`TTyChart`** line, bar, pie, donut<br>![chart](docs/images/chart.png) |
+| **`TTyRibbon`** ribbon, quick access toolbar, Alt key tips<br>![ribbon](docs/images/ribbon.png) | **`TTyCalendar`** week numbers, today highlight, selectable range<br>![calendar](docs/images/calendar.png) |
+
+Every example, every tab page, in light and dark: see the [gallery](docs/gallery.en.md).
 
 ---
 
 ## Features
 
-- **163 controls**: buttons, inputs, lists, data grid, virtual tree, Ribbon, calendar, shell file browsing, and 20 custom-drawn dialogs
+- **169 controls**: buttons, inputs, lists, data grid, virtual tree, Ribbon, calendar, shell file browsing, and 20 custom-drawn dialogs
 - **Identical on all three platforms**: fully custom-drawn, no native control wrapping — one code base renders the same UI everywhere
 - **Theming**: 17 built-in themes switched by a single property, with runtime hot-swap and OS light/dark and accent-color following; themes are text files, so restyling needs no recompile
 - **Classic and modern looks**: from Win95 / XP bevels to Win11 / Material flat design, with a switchable control-density scale
@@ -51,7 +54,7 @@ Light and dark are two `@mode` value sets in one theme file and can follow the O
 | Linux | GTK2, Qt5, Qt6; GTK3 partially supported ([known issues](docs/known-issues.en.md) under Wayland) |
 | macOS | Cocoa |
 
-Requires Lazarus 3.x+, FPC 3.2.2+, and BGRABitmap (OPM package `BGRABitmapPack`).
+Requires Lazarus 3.0+, FPC 3.2.2+, and BGRABitmap (OPM package `BGRABitmapPack`).
 
 ---
 
@@ -69,7 +72,7 @@ The template creates a main form with a custom-drawn title bar, the content cont
 
 **3. Switch themes**
 
-Select the `TTyStyleController` on the form and set `ThemeName` to any built-in theme name. The designer updates immediately; change the same property at runtime to hot-swap.
+Select the `TTyStyleController` on the form and set `ThemeName` to any built-in theme name. The designer updates immediately; change the same property at runtime to hot-swap. The template's `.lpr` already calls `TyRegisterBuiltinThemes` at startup; a project set up another way needs that line too, or a built-in theme picked by name shows only in the designer.
 
 Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 
@@ -77,7 +80,7 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 
 ## Control list
 
-163 controls across 16 palette pages. Per-control properties, events, and theme keys: **[docs/controls/](docs/controls/)**.
+169 controls across 16 palette pages. Per-control properties, events, and theme keys: **[docs/controls/](docs/controls/)**.
 
 ### Core · `TyControls` (2)
 
@@ -111,12 +114,13 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 | `TTyTag` | Closable tag pill |
 | `TTyBadge` | Numeric / dot badge that can attach to any control |
 
-### Text & numeric input · `TyControls Edits` (14)
+### Text & numeric input · `TyControls Edits` (15)
 
 | Control | Description |
 |---|---|
 | `TTyEdit` | Single-line edit: selection, clipboard, word navigation |
 | `TTyMemo` | Multi-line edit |
+| `TTyTerminalView` | Terminal: draws a program's output and encodes keys for the host, after xterm.js; its own colour scheme if wanted (reads and writes Windows Terminal's format); hooks for in-band protocols and for the parser (ZModem send and receive in the example) |
 | `TTySpinEdit` | Integer spinner |
 | `TTyFloatSpinEdit` | Decimal spinner; the step can be less than 1 |
 | `TTyNumericEdit` | Digits-only field, group-formatted on blur |
@@ -199,7 +203,7 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 |---|---|
 | `TTyTrackBar` | Slider |
 | `TTyProgressBar` | Progress bar |
-| `TTyScrollBar` | Scroll bar |
+| `TTyScrollBar` | Scroll bar; can fade out when idle, per theme or per control (`AutoHide`) |
 | `TTyStatusBar` | Status bar |
 | `TTyToolBar` | Toolbar |
 | `TTyToolButton` | Toolbar button: six styles (command / toggle / dropdown / grouped / separator, …) |
@@ -213,7 +217,7 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 | `TTyBreadcrumb` | Breadcrumb trail |
 | `TTyHeaderControl` | Standalone column header strip |
 
-### Containers & layout · `TyControls Containers` (20)
+### Containers & layout · `TyControls Containers` (22)
 
 | Control | Description |
 |---|---|
@@ -237,6 +241,8 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 | `TTyListGroupPanel` | List container with group headers |
 | `TTyTitleBar` | Custom-drawn title bar, pairs with `TTyForm` |
 | `TTyEmpty` | Empty state: illustration + text + action button |
+| `TTyToolWindowBar` | IDE-style side or bottom bar; tool windows move between sides and the layout can be saved |
+| `TTyToolWindowManager` | Links the bars: dragging windows across, saving and restoring the layout |
 
 ### Data views · `TyControls Data Views` (10)
 
@@ -274,15 +280,17 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 | `TTyRibbonGallery` | Gallery that expands into a popup grid |
 | `TTyRibbonBackstage` | Full-window backstage view |
 
-### Images & hints · `TyControls Images` (9)
+### Images & hints · `TyControls Images` (11)
 
 | Control | Description |
 |---|---|
 | `TTyIconFont` | Icon font: vector icons by codepoint or name, themed |
+| `TTyLucideIconFont` | The bundled Lucide icon font, ready to use |
 | `TTyCharImage` | Uses one icon-font glyph as an image |
 | `TTyImage` | Image control |
 | `TTyGlyphImageList` | Image list driven by an icon font |
 | `TTyImageCollection` | Multi-resolution image set, picked per DPI |
+| `TTyLucideImageList` | Image list of the bundled Lucide icons, picked by name |
 | `TTyVirtualImageList` | Renders any size on demand; it is a standard `TCustomImageList`, assignable to any control, addressable by image name |
 | `TTyHint` | Themed tooltip |
 | `TTyBalloonHint` | Balloon tooltip with a pointer |
@@ -297,7 +305,7 @@ CharImage1.GlyphName := 'house';
 
 The font is embedded in the unit — nothing to ship or install, and it costs nothing if you don't use it. `TTyLucideImageList` on the palette works as a drop-in image list. Licensed ISC / MIT with no attribution required at runtime; just ship [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) with your release.
 
-### Shapes & charts · `TyControls Shapes & Charts` (4)
+### Shapes & charts · `TyControls Shapes & Charts` (5)
 
 | Control | Description |
 |---|---|
@@ -354,6 +362,8 @@ Also the image theme `green` (shipped as a file) and curated palettes under `the
 
 Writing your own theme: [docs/themes.en.md](docs/themes.en.md). The `.tycss` language reference: [docs/tycss-reference.en.md](docs/tycss-reference.en.md).
 
+The repository also has a theme editor, `tools/themebuilder`: the preview follows as you type, and a language model can draft or change a theme from a sentence. See [docs/themebuilder.en.md](docs/themebuilder.en.md).
+
 ---
 
 ## Examples
@@ -376,6 +386,8 @@ Each example builds standalone: `lazbuild examples/<name>/<project>.lpi`.
 | [rtl](examples/rtl/) | Right-to-left mirroring and bidirectional text |
 | [icons](examples/icons/) | Icon fonts |
 | [transitions](examples/transitions/) | Slide / fade transitions |
+| [toolwindows](examples/toolwindows/) | IDE-style workbench: side bars and a bottom panel, drag windows across, save and restore the layout |
+| [terminal](examples/terminal/) | Terminal: asciicast replay, a real shell (ConPTY / PTY / pipes), ZModem send and receive, skins, colour schemes, a key-code panel |
 
 Thirty-plus single-control examples live under [examples/](examples/).
 
@@ -390,9 +402,11 @@ Thirty-plus single-control examples live under [examples/](examples/).
 | [themes.en.md](docs/themes.en.md) | Built-in themes and writing your own |
 | [tycss-reference.en.md](docs/tycss-reference.en.md) | The `.tycss` language reference |
 | [events.en.md](docs/events.en.md) | Common event conventions |
+| [subclassing.en.md](docs/subclassing.en.md) | Deriving your own controls from `TTyCustomXxx`; upgrading from 3.0 |
 | [rtl.md](docs/rtl.md) | Bidirectional text and right-to-left layout (Chinese) |
 | [known-issues.en.md](docs/known-issues.en.md) | Known issues |
 | [CHANGELOG.en.md](CHANGELOG.en.md) | Changelog |
+| [CONTRIBUTING.en.md](CONTRIBUTING.en.md) | Bug reports, feature requests, pull requests, roadmap |
 
 ---
 

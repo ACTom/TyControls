@@ -66,3 +66,6 @@ tests/golden/*.golden.txt.actual
 # `git add -A`. Named so, they are scratch, not deliverables.
 /m[0-9].txt
 /*.actual
+
+# scripts/make-gallery.ps1 的临时副本
+.gallery-build/

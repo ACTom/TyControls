@@ -27,7 +27,7 @@ type
     // The control the menu belongs to -- for ClientToScreen and PopupComponent.
     function TeControl: TControl;
     // The themed controller the popup resolves its .tycss tokens through (nil safe).
-    function TeController: TTyStyleController;
+    function TeController: TTyCustomStyleController;
     // Actions (each maps to the control's existing public method).
     procedure TeUndo;
     procedure TeRedo;
@@ -98,7 +98,7 @@ const
     the pixel tolerance below continues the sequence (2 -> word, 3 -> line); otherwise it
     restarts at 1. 500 ms is the common system double-click default and is portable. }
   TyMultiClickTimeMs   = 500;
-  TyMultiClickTolerPx  = 4;   // a few px of slop, per LCL's own drag-threshold order of magnitude
+  TyMultiClickTolerPx  = 4;   // a few LOGICAL px of slop, per LCL's own drag-threshold order of magnitude
 
 { The multi-click count for a press at (AX, AY). ADouble is `ssDouble in Shift` -- LCL's
   reliable marker for the 2nd press of a real double-click -- which is what makes this a
@@ -106,9 +106,11 @@ const
   False) is the TRIPLE, since no widgetset marks the third. Returns 1 = plain, 2 = word,
   3 = line. The four tracking vars are owned by the control (one set each). Keying the double
   off ssDouble (not time alone) means a lone press -- or a rapid same-spot sequence that is
-  NOT a real double -- stays a plain click, which is what the hit-test tests rely on. }
+  NOT a real double -- stays a plain click, which is what the hit-test tests rely on.
+  APPI is the control's: the slop is a distance on the screen, and 4 device px at 175% is a
+  little over half of the hand's width of it. }
 function TyMultiClickCount(ADouble: Boolean; AX, AY: Integer; var ALastX, ALastY: Integer;
-  var ALastTick: QWord; var ACount: Integer): Integer;
+  var ALastTick: QWord; var ACount: Integer; APPI: Integer = 96): Integer;
 
 implementation
 
@@ -120,11 +122,14 @@ begin
 end;
 
 function TyMultiClickCount(ADouble: Boolean; AX, AY: Integer; var ALastX, ALastY: Integer;
-  var ALastTick: QWord; var ACount: Integer): Integer;
+  var ALastTick: QWord; var ACount: Integer; APPI: Integer): Integer;
 var
   now: QWord;
+  slop: Integer;
 begin
   now := TThread.GetTickCount64;
+  if APPI <= 0 then APPI := 96;
+  slop := MulDiv(TyMultiClickTolerPx, APPI, 96);
   if ADouble then
   begin
     // LCL delivers the 2nd press of a double with ssDouble set -- the authoritative signal.
@@ -133,8 +138,8 @@ begin
   end
   else if (ACount = 2) and (ALastTick <> 0)
       and (now - ALastTick <= TyMultiClickTimeMs)
-      and (Abs(AX - ALastX) <= TyMultiClickTolerPx)
-      and (Abs(AY - ALastY) <= TyMultiClickTolerPx) then
+      and (Abs(AX - ALastX) <= slop)
+      and (Abs(AY - ALastY) <= slop) then
   begin
     // The press right after a double, close in time+position, is the triple.
     ACount := 3;

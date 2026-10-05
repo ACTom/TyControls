@@ -29,8 +29,10 @@ unit tyControls.Shape;
   from, so "clickable" and "visible" cannot drift apart. }
 interface
 uses
-  Classes, SysUtils, Types, Math, Controls, Graphics, Forms, LCLType, GraphType,
-  BGRABitmap, BGRABitmapTypes, BGRACanvas2D,
+  // LazRegions before GraphType: LCL before 4.0 declares TPointArray only in LazRegions,
+  // 4.0 moved it to GraphType and left LazRegions an alias of it.
+  Classes, SysUtils, Types, Math, Controls, Graphics, Forms, LCLType, LazRegions,
+  GraphType, BGRABitmap, BGRABitmapTypes, BGRACanvas2D,
   tyControls.Types, tyControls.Painter, tyControls.Base;
 
 type
@@ -97,7 +99,7 @@ type
     Winding: Boolean;
   end;
 
-  TTyShape = class(TTyGraphicControl)
+  TTyCustomShape = class(TTyGraphicControl)
   private
     FShape: TTyShapeKind;
     FOnShapeClick: TNotifyEvent;
@@ -144,7 +146,6 @@ type
       Without that half-pixel a 1px-bordered rectangle would lose its outermost pixel
       row and column, because the stroke is centred on a path inset by ceil(width/2). }
     function PtInShape(const APt: TPoint): Boolean;
-  published
     property Shape: TTyShapeKind read FShape write SetShape default tskRectangle;
     { Fires on a click that landed on the drawn shape rather than merely inside the
       control's rectangle. LCL: extctrls.pp:343. }
@@ -154,11 +155,55 @@ type
       and it is what makes those reachable from the DESIGNER rather than only from a
       hand-written TTyGraphicControl descendant. LCL: extctrls.pp:344. }
     property OnShapePoints: TTyShapePointsEvent read FOnShapePoints write SetOnShapePoints;
-    property Align;
-    property Anchors;
+  end;
+
+  { TTyShape publishes TTyCustomShape's properties; everything lives in TTyCustomShape. }
+  TTyShape = class(TTyCustomShape)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
     property StyleClass;
     property StyleOverride;
     property Controller;
+    property Shape;
+    property OnShapeClick;
+    property OnShapePoints;
+    property Align;
+    property Anchors;
   end;
 
 const
@@ -613,7 +658,7 @@ begin
   if AOnShape then Result := 0 else Result := 1;   // deliberately the inverse
 end;
 
-constructor TTyShape.Create(AOwner: TComponent);
+constructor TTyCustomShape.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FShape := tskRectangle;
@@ -621,7 +666,7 @@ begin
   Height := 80;
 end;
 
-function TTyShape.GetStyleTypeKey: string;
+function TTyCustomShape.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyPanel': a filled vector path is not a panel surface; a skin that restyles panels must not repaint every diagram shape.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
@@ -629,14 +674,14 @@ begin
   Result := 'TyShape';
 end;
 
-procedure TTyShape.SetShape(AValue: TTyShapeKind);
+procedure TTyCustomShape.SetShape(AValue: TTyShapeKind);
 begin
   if FShape = AValue then Exit;
   FShape := AValue;
   Invalidate;
 end;
 
-procedure TTyShape.SetOnShapePoints(AValue: TTyShapePointsEvent);
+procedure TTyCustomShape.SetOnShapePoints(AValue: TTyShapePointsEvent);
 begin
   if FOnShapePoints = AValue then Exit;
   FOnShapePoints := AValue;
@@ -645,7 +690,7 @@ begin
   if FShape = tskPolygon then Invalidate;
 end;
 
-function TTyShape.ResolveGeometry(const ARect: TRect; APPI: Integer): TTyShapeGeometry;
+function TTyCustomShape.ResolveGeometry(const ARect: TRect; APPI: Integer): TTyShapeGeometry;
 var
   S: TTyStyleSet;
   ppi: Integer;
@@ -676,37 +721,37 @@ begin
   end;
 end;
 
-function TTyShape.ShapeClickPoint: TPoint;
+function TTyCustomShape.ShapeClickPoint: TPoint;
 begin
   Result := ScreenToClient(Mouse.CursorPos);
 end;
 
-procedure TTyShape.Click;
+procedure TTyCustomShape.Click;
 begin
   inherited Click;
   if Assigned(FOnShapeClick) and PtInShape(ShapeClickPoint) then
     FOnShapeClick(Self);
 end;
 
-function TTyShape.ShapeGeometry: TTyShapeGeometry;
+function TTyCustomShape.ShapeGeometry: TTyShapeGeometry;
 begin
   Result := ResolveGeometry(ClientRect, Font.PixelsPerInch);
 end;
 
-function TTyShape.PtInShape(const APt: TPoint): Boolean;
+function TTyCustomShape.PtInShape(const APt: TPoint): Boolean;
 begin
   // +0.5 = the pixel CELL's centre. See the declaration for why the half matters.
   Result := TyPointInShape(ShapeGeometry, PointF(APt.X + 0.5, APt.Y + 0.5));
 end;
 
-procedure TTyShape.CMHitTest(var Message: TCMHitTest);
+procedure TTyCustomShape.CMHitTest(var Message: TCMHitTest);
 begin
   // The coordinates arrive control-relative (wincontrol.inc:5239 passes
   // Point(P.X - Left, P.Y - Top)), which for a graphic control is already client space.
   Message.Result := TyShapeHitTestAnswer(PtInShape(Point(Message.XPos, Message.YPos)));
 end;
 
-procedure TTyShape.CMMaskHitTest(var Message: TCMHitTest);
+procedure TTyCustomShape.CMMaskHitTest(var Message: TCMHitTest);
 var
   Frm: TCustomForm;
   P: TPoint;
@@ -724,7 +769,7 @@ begin
   Message.Result := TyShapeMaskHitTestAnswer(PtInShape(P));
 end;
 
-procedure TTyShape.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomShape.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -858,7 +903,7 @@ begin
   end;
 end;
 
-procedure TTyShape.Paint;
+procedure TTyCustomShape.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

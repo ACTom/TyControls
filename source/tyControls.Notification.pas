@@ -166,6 +166,7 @@ function TyNotificationExpired(AElapsedMs, ADurationMs: Integer): Boolean;
 
 type
   TTyNotification = class;
+  TTyCustomNotification = class;
 
   { The toast's window. Deliberately a plain borderless TForm (TTyBalloonHint's shell), NOT a
     TTyPopupSurface: a popup surface dismisses itself the moment it loses focus, which is the
@@ -177,7 +178,7 @@ type
     every gesture there, so the card is fully renderable and clickable with no window at all. }
   TTyNotificationWindow = class(TForm)
   private
-    FOwnerNote: TTyNotification;
+    FOwnerNote: TTyCustomNotification;
     { Cut the window to the card's themed rounded silhouette. Without it the pixels outside
       the radius show the form's Color as square corners. No-op on Wayland (no XShape — the
       card simply keeps square corners), which is TTyBalloonHint's rule verbatim. }
@@ -192,7 +193,7 @@ type
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); reintroduce;
   end;
 
-  TTyNotification = class(TTyComponent)
+  TTyCustomNotification = class(TTyComponent)
   private
     FTitle: TCaption;
     FMessage: TCaption;
@@ -202,7 +203,7 @@ type
     FClosable: Boolean;
     FShowIcon: Boolean;
     FPauseOnHover: Boolean;
-    FController: TTyStyleController;
+    FController: TTyCustomStyleController;
     FOnClose: TNotifyEvent;
     FOnClick: TNotifyEvent;
     FWin: TTyNotificationWindow;
@@ -219,7 +220,7 @@ type
     procedure SetPosition(AValue: TTyNotificationPosition);
     procedure SetClosable(AValue: Boolean);
     procedure SetShowIcon(AValue: Boolean);
-    procedure SetController(AValue: TTyStyleController);
+    procedure SetController(AValue: TTyCustomStyleController);
     { The theme metrics, in LOGICAL px (each call site scales). Named helpers rather than
       inline Metric() calls so a typo cannot strand one call site on the default. }
     function WidthLogical: Integer;
@@ -293,7 +294,7 @@ type
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     { The controller whose theme this toast resolves against — never FController directly: a
       toast themed by the global default has Controller = nil. }
-    function ActiveController: TTyStyleController;
+    function ActiveController: TTyCustomStyleController;
     { Move the live window onto the slot the rules give it. No-op with no window. }
     procedure PlaceWindow;
   public
@@ -327,7 +328,6 @@ type
     function CloseRectIn(AClientW, AClientH, APPI: Integer): TRect;
     { Whether the card is currently up. }
     property Showing: Boolean read FShowing;
-  published
     { The headline, drawn in the card font at --notification-title-weight. Empty = no title:
       the message then takes the whole text column. }
     property Title: TCaption read FTitle write SetTitle;
@@ -350,7 +350,7 @@ type
     { Freeze the countdown while the pointer is over the card, so a toast cannot expire out
       from under someone who is reading it (or reaching for its x). }
     property PauseOnHover: Boolean read FPauseOnHover write FPauseOnHover default True;
-    property Controller: TTyStyleController read FController write SetController;
+    property Controller: TTyCustomStyleController read FController write SetController;
     { Fired once per dismissal, whatever caused it: the countdown, the x, or Hide. NOT fired
       when the component is destroyed — a component going away is not a toast the user closed.
       Do NOT Free the toast from this handler: a timed-out dismissal reaches it from inside the
@@ -360,6 +360,23 @@ type
     { Fired when the CARD is clicked — never for a click on the x (that gesture is a close and
       nothing else). Does not dismiss: what a click means is the host's business. }
     property OnClick: TNotifyEvent read FOnClick write FOnClick;
+  end;
+
+  { TTyNotification publishes TTyCustomNotification's properties; everything lives in TTyCustomNotification. }
+  TTyNotification = class(TTyCustomNotification)
+  published
+    property Version;
+    property Title;
+    property Message;
+    property NotificationType;
+    property Duration;
+    property Position;
+    property Closable;
+    property ShowIcon;
+    property PauseOnHover;
+    property Controller;
+    property OnClose;
+    property OnClick;
   end;
 
 { Fire-and-forget toast: build one, show it, and let this unit own it. The house's global-
@@ -564,12 +581,12 @@ var
 procedure ReflowStack(APosition: TTyNotificationPosition);
 var
   i: Integer;
-  n: TTyNotification;
+  n: TTyCustomNotification;
 begin
   if UStack = nil then Exit;
   for i := 0 to UStack.Count - 1 do
   begin
-    n := TTyNotification(UStack[i]);
+    n := TTyCustomNotification(UStack[i]);
     if n.FShowing and (n.FPosition = APosition) then
       n.PlaceWindow;
   end;
@@ -641,9 +658,9 @@ begin
 end;
 
 // ---------------------------------------------------------------------------
-// TTyNotification — construction / theming
+// TTyCustomNotification — construction / theming
 // ---------------------------------------------------------------------------
-constructor TTyNotification.Create(AOwner: TComponent);
+constructor TTyCustomNotification.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FNotificationType := atInfo;
@@ -654,7 +671,7 @@ begin
   FPauseOnHover := True;
 end;
 
-destructor TTyNotification.Destroy;
+destructor TTyCustomNotification.Destroy;
 begin
   // Dismiss WITHOUT firing OnClose: a component being destroyed is not a notification the user
   // closed, and the handler's form may already be half torn down.
@@ -667,17 +684,17 @@ begin
   inherited Destroy;
 end;
 
-class function TTyNotification.StyleTypeKey: string;
+class function TTyCustomNotification.StyleTypeKey: string;
 begin
   Result := 'TyNotification';
 end;
 
-class function TTyNotification.CloseStyleTypeKey: string;
+class function TTyCustomNotification.CloseStyleTypeKey: string;
 begin
   Result := 'TyNotificationClose';
 end;
 
-function TTyNotification.ActiveController: TTyStyleController;
+function TTyCustomNotification.ActiveController: TTyCustomStyleController;
 begin
   if FController <> nil then
     Result := FController
@@ -685,35 +702,35 @@ begin
     Result := TyDefaultController;
 end;
 
-function TTyNotification.CurrentStates: TTyStateSet;
+function TTyCustomNotification.CurrentStates: TTyStateSet;
 begin
   Result := [];
   if FPointerInside then Include(Result, tysHover);
   if Result = [] then Include(Result, tysNormal);
 end;
 
-function TTyNotification.CardStyle: TTyStyleSet;
+function TTyCustomNotification.CardStyle: TTyStyleSet;
 begin
   Result := ActiveController.Model.ResolveStyle(StyleTypeKey,
     TyNotificationTypeClass(FNotificationType), CurrentStates);
 end;
 
-function TTyNotification.BaseStyle: TTyStyleSet;
+function TTyCustomNotification.BaseStyle: TTyStyleSet;
 begin
   Result := ActiveController.Model.ResolveStyle(StyleTypeKey, '', CurrentStates);
 end;
 
-function TTyNotification.MarkInk: TTyColor;
+function TTyCustomNotification.MarkInk: TTyColor;
 begin
   Result := CardStyle.TextColor;
 end;
 
-function TTyNotification.TextInk: TTyColor;
+function TTyCustomNotification.TextInk: TTyColor;
 begin
   Result := BaseStyle.TextColor;
 end;
 
-function TTyNotification.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
+function TTyCustomNotification.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
 begin
   Result := TyResolveFontSize(AStyle, True, 0, ActiveController);
 end;
@@ -721,43 +738,43 @@ end;
 // ---------------------------------------------------------------------------
 // Theme metrics
 // ---------------------------------------------------------------------------
-function TTyNotification.WidthLogical: Integer;
+function TTyCustomNotification.WidthLogical: Integer;
 begin
   Result := ActiveController.Metric(TyNotificationWidthVar, TyNotificationWidth);
   if Result < 1 then Result := 1;
 end;
 
-function TTyNotification.IconSizeLogical: Integer;
+function TTyCustomNotification.IconSizeLogical: Integer;
 begin
   Result := ActiveController.Metric(TyNotificationIconSizeVar, TyNotificationIconSize);
   if Result < 0 then Result := 0;
 end;
 
-function TTyNotification.CloseSizeLogical: Integer;
+function TTyCustomNotification.CloseSizeLogical: Integer;
 begin
   Result := ActiveController.Metric(TyNotificationCloseSizeVar, TyNotificationCloseSize);
   if Result < 0 then Result := 0;
 end;
 
-function TTyNotification.GapLogical: Integer;
+function TTyCustomNotification.GapLogical: Integer;
 begin
   Result := ActiveController.Metric(TyNotificationGapVar, TyNotificationGap);
   if Result < 0 then Result := 0;
 end;
 
-function TTyNotification.MarginLogical: Integer;
+function TTyCustomNotification.MarginLogical: Integer;
 begin
   Result := ActiveController.Metric(TyNotificationMarginVar, TyNotificationMargin);
   if Result < 0 then Result := 0;
 end;
 
-function TTyNotification.StackGapLogical: Integer;
+function TTyCustomNotification.StackGapLogical: Integer;
 begin
   Result := ActiveController.Metric(TyNotificationStackGapVar, TyNotificationStackGap);
   if Result < 0 then Result := 0;
 end;
 
-function TTyNotification.TitleWeight: Integer;
+function TTyCustomNotification.TitleWeight: Integer;
 begin
   // NOT scaled at any call site: this metric is a font WEIGHT, not a length. Metric() is
   // simply the theme's integer-token resolver, and a weight is the one number the single
@@ -769,12 +786,12 @@ end;
 // ---------------------------------------------------------------------------
 // Measurement + geometry
 // ---------------------------------------------------------------------------
-procedure TTyNotification.SplitMessage(ALines: TStrings);
+procedure TTyCustomNotification.SplitMessage(ALines: TStrings);
 begin
   ALines.Text := FMessage;   // splits on CR/LF; '' -> no lines at all
 end;
 
-procedure TTyNotification.WrapMessage(APPI, AColWidthPx: Integer; AOut: TStrings);
+procedure TTyCustomNotification.WrapMessage(APPI, AColWidthPx: Integer; AOut: TStrings);
 var
   S: TTyStyleSet;
   Meas: TBitmap;
@@ -791,12 +808,7 @@ begin
     // GDI measurement canvas carrying the card font — mirrors TTyLabel.MeasureCaption so the
     // wrap breaks at the same widths the painter later draws.
     Meas.SetSize(1, 1);
-    Meas.Canvas.Font.Name := TyEffectiveFontName(S.FontName);
-    Meas.Canvas.Font.Size := MulDiv(ResolveFontSize(S), APPI, 96);
-    if S.FontWeight >= 600 then
-      Meas.Canvas.Font.Style := [fsBold]
-    else
-      Meas.Canvas.Font.Style := [];
+    TyConfigureMeasureFont(Meas.Canvas, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
     raw.Text := FMessage;            // authored lines (CR/LF)
     for i := 0 to raw.Count - 1 do
     begin
@@ -808,7 +820,7 @@ begin
   end;
 end;
 
-function TTyNotification.LineHeightAt(APPI, AWeight: Integer): Integer;
+function TTyCustomNotification.LineHeightAt(APPI, AWeight: Integer): Integer;
 { Measured with a CANVAS-LESS painter — the TTyBadge idiom: BeginPaint(nil, ...) builds only
   the painter's internal bitmap and EndPaint frees it WITHOUT blitting, so this is safe outside
   a paint cycle and leaks nothing. It has to be the painter and not a TBitmap canvas: the card
@@ -831,12 +843,12 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-function TTyNotification.TitleHeightAt(APPI: Integer): Integer;
+function TTyCustomNotification.TitleHeightAt(APPI: Integer): Integer;
 begin
   Result := LineHeightAt(APPI, TitleWeight);
 end;
 
-function TTyNotification.MeasureAtPPI(APPI: Integer): TSize;
+function TTyCustomNotification.MeasureAtPPI(APPI: Integer): TSize;
 var
   Lines: TStringList;
   S: TTyStyleSet;
@@ -863,7 +875,7 @@ begin
   end;
 end;
 
-function TTyNotification.LayoutFor(AWidth, AHeight, APPI: Integer): TTyNotificationLayout;
+function TTyCustomNotification.LayoutFor(AWidth, AHeight, APPI: Integer): TTyNotificationLayout;
 var
   S: TTyStyleSet;
 begin
@@ -878,12 +890,12 @@ begin
     MulDiv(CloseSizeLogical, APPI, 96), TitleHeightAt(APPI));
 end;
 
-function TTyNotification.CloseRectIn(AClientW, AClientH, APPI: Integer): TRect;
+function TTyCustomNotification.CloseRectIn(AClientW, AClientH, APPI: Integer): TRect;
 begin
   Result := LayoutFor(AClientW, AClientH, APPI).CloseRect;
 end;
 
-function TTyNotification.PtOnClose(X, Y, AClientW, AClientH, APPI: Integer): Boolean;
+function TTyCustomNotification.PtOnClose(X, Y, AClientW, AClientH, APPI: Integer): Boolean;
 var
   R: TRect;
 begin
@@ -895,28 +907,28 @@ end;
 // ---------------------------------------------------------------------------
 // Stacking + placement
 // ---------------------------------------------------------------------------
-procedure TTyNotification.EnterStack;
+procedure TTyCustomNotification.EnterStack;
 begin
   if UStack = nil then UStack := TFPList.Create;
   if UStack.IndexOf(Self) < 0 then UStack.Add(Self);
 end;
 
-procedure TTyNotification.LeaveStack;
+procedure TTyCustomNotification.LeaveStack;
 begin
   if UStack <> nil then UStack.Remove(Self);
 end;
 
-function TTyNotification.PriorHeights(APPI: Integer): TTyNotificationHeights;
+function TTyCustomNotification.PriorHeights(APPI: Integer): TTyNotificationHeights;
 var
   i, n: Integer;
-  other: TTyNotification;
+  other: TTyCustomNotification;
 begin
   SetLength(Result, 0);
   if UStack = nil then Exit;
   n := 0;
   for i := 0 to UStack.Count - 1 do
   begin
-    other := TTyNotification(UStack[i]);
+    other := TTyCustomNotification(UStack[i]);
     if other = Self then Break;   // show order = stack order: everything past me is below me
     if other.FShowing and (other.FPosition = FPosition) then
     begin
@@ -927,7 +939,7 @@ begin
   end;
 end;
 
-function TTyNotification.SlotRectIn(const AWorkArea: TRect; APPI: Integer): TRect;
+function TTyCustomNotification.SlotRectIn(const AWorkArea: TRect; APPI: Integer): TRect;
 var
   sz: TSize;
 begin
@@ -938,7 +950,7 @@ begin
     TyNotificationStackOffset(PriorHeights(APPI), MulDiv(StackGapLogical, APPI, 96)));
 end;
 
-procedure TTyNotification.PlaceWindow;
+procedure TTyCustomNotification.PlaceWindow;
 var
   R: TRect;
   ppi: Integer;
@@ -950,12 +962,12 @@ begin
   FWin.SetBounds(R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top);
 end;
 
-procedure TTyNotification.InvalidateWindow;
+procedure TTyCustomNotification.InvalidateWindow;
 begin
   if (FWin <> nil) and FWin.Visible then FWin.Invalidate;
 end;
 
-procedure TTyNotification.Restyle;
+procedure TTyCustomNotification.Restyle;
 begin
   if not FShowing then Exit;
   PlaceWindow;
@@ -966,7 +978,7 @@ end;
 // ---------------------------------------------------------------------------
 // Lifetime
 // ---------------------------------------------------------------------------
-procedure TTyNotification.BeginShowing;
+procedure TTyCustomNotification.BeginShowing;
 begin
   FElapsedMs := 0;          // a re-Show restarts the countdown...
   if FShowing then Exit;    // ...but never stacks a second copy of the same toast
@@ -977,7 +989,7 @@ begin
   EnterStack;
 end;
 
-procedure TTyNotification.Show;
+procedure TTyCustomNotification.Show;
 var
   S: TTyStyleSet;
 begin
@@ -1005,7 +1017,7 @@ begin
   FTimer.Enabled := FDuration > 0;
 end;
 
-procedure TTyNotification.Hide;
+procedure TTyCustomNotification.Hide;
 var
   pos: TTyNotificationPosition;
 begin
@@ -1022,7 +1034,7 @@ begin
   if Assigned(FOnClose) then FOnClose(Self);
 end;
 
-procedure TTyNotification.EnsureTimer;
+procedure TTyCustomNotification.EnsureTimer;
 begin
   if FTimer = nil then
   begin
@@ -1033,7 +1045,7 @@ begin
   end;
 end;
 
-procedure TTyNotification.HandleTimer(Sender: TObject);
+procedure TTyCustomNotification.HandleTimer(Sender: TObject);
 begin
   // Ticks land ~Interval apart and a toast is measured in seconds: close enough, and it keeps
   // the countdown on the one steppable seam the tests drive. Nothing may follow this call:
@@ -1041,7 +1053,7 @@ begin
   AdvanceTime(Integer(FTimer.Interval));
 end;
 
-function TTyNotification.AdvanceTime(AMs: Integer): Boolean;
+function TTyCustomNotification.AdvanceTime(AMs: Integer): Boolean;
 begin
   Result := False;
   if not FShowing then Exit;
@@ -1056,7 +1068,7 @@ end;
 // ---------------------------------------------------------------------------
 // Gestures (driven by the window; the state lives here)
 // ---------------------------------------------------------------------------
-procedure TTyNotification.DoMouseMove(X, Y, AClientW, AClientH, APPI: Integer);
+procedure TTyCustomNotification.DoMouseMove(X, Y, AClientW, AClientH, APPI: Integer);
 var
   onCard, overClose: Boolean;   // NOT 'onClose': Pascal is case-insensitive, so it would
 begin                           // collide with this component's own OnClose property.
@@ -1070,13 +1082,13 @@ begin                           // collide with this component's own OnClose pro
   end;
 end;
 
-procedure TTyNotification.DoMouseDown(X, Y, AClientW, AClientH, APPI: Integer);
+procedure TTyCustomNotification.DoMouseDown(X, Y, AClientW, AClientH, APPI: Integer);
 begin
   FClosePressed := FClosable and PtOnClose(X, Y, AClientW, AClientH, APPI);
   if FClosePressed then InvalidateWindow;   // TyNotificationClose:active
 end;
 
-procedure TTyNotification.DoMouseUp(X, Y, AClientW, AClientH, APPI: Integer);
+procedure TTyCustomNotification.DoMouseUp(X, Y, AClientW, AClientH, APPI: Integer);
 var
   wasClose: Boolean;
 begin
@@ -1096,7 +1108,7 @@ begin
     FOnClick(Self);
 end;
 
-procedure TTyNotification.DoMouseLeave;
+procedure TTyCustomNotification.DoMouseLeave;
 begin
   if not (FPointerInside or FHoverClose) then Exit;
   FPointerInside := False;   // the countdown resumes
@@ -1107,7 +1119,7 @@ end;
 // ---------------------------------------------------------------------------
 // Painting
 // ---------------------------------------------------------------------------
-procedure TTyNotification.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomNotification.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, closeS: TTyStyleSet;
@@ -1205,28 +1217,28 @@ end;
 // ---------------------------------------------------------------------------
 // Property setters
 // ---------------------------------------------------------------------------
-procedure TTyNotification.SetTitle(const AValue: TCaption);
+procedure TTyCustomNotification.SetTitle(const AValue: TCaption);
 begin
   if FTitle = AValue then Exit;
   FTitle := AValue;
   Restyle;
 end;
 
-procedure TTyNotification.SetMessage(const AValue: TCaption);
+procedure TTyCustomNotification.SetMessage(const AValue: TCaption);
 begin
   if FMessage = AValue then Exit;
   FMessage := AValue;
   Restyle;
 end;
 
-procedure TTyNotification.SetNotificationType(AValue: TTyNotificationType);
+procedure TTyCustomNotification.SetNotificationType(AValue: TTyNotificationType);
 begin
   if FNotificationType = AValue then Exit;
   FNotificationType := AValue;
   Restyle;   // the type is a StyleClass: padding/font (hence the height) may change with it
 end;
 
-procedure TTyNotification.SetDuration(AValue: Integer);
+procedure TTyCustomNotification.SetDuration(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;   // "no duration" is 0; a negative one is a typo, not a rule
   if FDuration = AValue then Exit;
@@ -1237,7 +1249,7 @@ begin
   if FShowing and (FTimer <> nil) then FTimer.Enabled := FDuration > 0;
 end;
 
-procedure TTyNotification.SetPosition(AValue: TTyNotificationPosition);
+procedure TTyCustomNotification.SetPosition(AValue: TTyNotificationPosition);
 var
   old: TTyNotificationPosition;
 begin
@@ -1249,7 +1261,7 @@ begin
   ReflowStack(old);    // and let the corner it left close the gap
 end;
 
-procedure TTyNotification.SetClosable(AValue: Boolean);
+procedure TTyCustomNotification.SetClosable(AValue: Boolean);
 begin
   if FClosable = AValue then Exit;
   FClosable := AValue;
@@ -1263,14 +1275,14 @@ begin
   Restyle;
 end;
 
-procedure TTyNotification.SetShowIcon(AValue: Boolean);
+procedure TTyCustomNotification.SetShowIcon(AValue: Boolean);
 begin
   if FShowIcon = AValue then Exit;
   FShowIcon := AValue;
   Restyle;   // the mark is a height floor, so dropping it can shrink the card
 end;
 
-procedure TTyNotification.SetController(AValue: TTyStyleController);
+procedure TTyCustomNotification.SetController(AValue: TTyCustomStyleController);
 begin
   if FController = AValue then Exit;
   if FController <> nil then FController.RemoveFreeNotification(Self);
@@ -1279,7 +1291,7 @@ begin
   Restyle;
 end;
 
-procedure TTyNotification.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomNotification.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FController) then

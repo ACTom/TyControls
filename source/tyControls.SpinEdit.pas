@@ -7,8 +7,59 @@ uses
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Animation;
 type
-  TTySpinEdit = class(TTyCustomControl)
+  TTySpinStepEvent = procedure(ADir: Integer) of object;
+
+  { The pointer side of a pair of spin buttons, shared by TTySpinEdit and TTyFloatSpinEdit (they
+    cannot share an ancestor: one is its own control, the other hangs its buttons in TTyEdit's
+    trailing zone). Users found the buttons too small to hit. Their size is the theme's
+    (--field-button-width); what this adds is what a native spinner gives a small target:
+    - the arrow cursor over the buttons: the I-beam said "text" there;
+    - a hover and a pressed state on the half under the pointer, filled with TyButton's :hover /
+      :active background, as the stand-alone TTyUpDown fills its halves;
+    - hold to repeat: one step on the press, then after a delay one step per interval until the
+      release, as TTyUpDown and LCL's spin edit do.
+    A direction is +1 (up), -1 (down) or 0 (neither). }
+  TTySpinButtons = class
   private
+    FOwner: TWinControl;
+    FOnStep: TTySpinStepEvent;
+    FHot, FHeld: Integer;
+    FRepeatTimer: TTimer;
+    FRepeatFast: Boolean;      // False = still in the initial delay
+    FSavedCursor: TCursor;
+    FCursorOverridden: Boolean;
+    procedure SetHot(AValue: Integer);
+    procedure SetArrowCursor(AOn: Boolean);
+    procedure HandleRepeat(Sender: TObject);
+    procedure StopRepeat;
+  public
+    constructor Create(AOwner: TWinControl; AOnStep: TTySpinStepEvent);
+    destructor Destroy; override;
+    { AHit: the half under the pointer. AEnabled: the buttons may step (False while the value is
+      read-only). The cursor turns to an arrow over them either way, since they are not text,
+      but a button that will not respond does not light up. }
+    procedure MouseMove(AHit: Integer; AEnabled: Boolean);
+    { True when the press landed on a button. With AEnabled it has stepped once and is held. }
+    function MouseDown(AHit: Integer; AEnabled: Boolean): Boolean;
+    procedure MouseUp;
+    procedure MouseLeave;
+    { The state a half is drawn in: pressed while held, hovered under the pointer. }
+    function StateOf(ADir: Integer): TTyStateSet;
+    { Fill one half's hover / pressed background and return the ink for its arrow. The fill is
+      clipped to AInner, the field inside its frame (TySpinFrameInsetPx), and rounded only where it
+      meets the field's own rounded corner. In the normal state nothing is filled and the ink is
+      the field's. }
+    function PaintHalf(APainter: TTyPainter; AController: TTyCustomStyleController;
+      const AHalf, AInner: TRect; const AFieldStyle: TTyStyleSet; ADir: Integer): TTyColor;
+    property Hot: Integer read FHot;
+    property Held: Integer read FHeld;
+    { The hold-to-repeat timer, nil until the first held press on a control with a window. }
+    property RepeatTimer: TTimer read FRepeatTimer;
+  end;
+
+  TTyCustomSpinEdit = class(TTyCustomControl)
+  private
+    FSpin: TTySpinButtons;
     FMinValue, FMaxValue, FValue, FIncrement: Integer;
     FOnChange: TNotifyEvent;
     FOnValueChange: TNotifyEvent;
@@ -34,6 +85,8 @@ type
       Value write so Modified can tell "the user did this" from "the code did this" --
       both land in the same setter. }
     procedure StepValue(ADelta: Integer);
+    procedure SpinStep(ADir: Integer);
+    function SpinHitAt(X, Y: Integer): Integer;
   protected
     // Inline edit buffer (lightweight, no selection/clipboard). Protected so
     // headless access subclasses (tests) can reach the buffer + helpers.
@@ -79,6 +132,10 @@ type
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseLeave; override;
+    property SpinButtons: TTySpinButtons read FSpin;
     { Text/Caption read straight out of the edit buffer, as they do on every LCL edit
       (TCustomFloatSpinEdit routes both through RealGetText/RealSetText,
       include/spinedit.inc:52,60). Before this, the typed-but-uncommitted string was
@@ -117,7 +174,7 @@ type
       False in the resulting OnChange (include/spinedit.inc:38-42,163-165) -- so a host
       can drive enable-Save / prompt-on-close off it. }
     property Modified: Boolean read FModified write FModified;
-  published
+    property TabStop default True;
     property MinValue: Integer read FMinValue write SetMinValue default 0;
     { LCL's DefMaxValue is 0 (spin.pp:37) and Max <= Min means "no limit", so a freshly
       dropped spin edit accepts any integer. Ours shipped 100, which turned the same
@@ -156,18 +213,261 @@ type
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     { The committed Value moved (see DoValueChange). }
     property OnValueChange: TNotifyEvent read FOnValueChange write FOnValueChange;
+  end;
+
+  { TTySpinEdit publishes TTyCustomSpinEdit's properties; everything lives in TTyCustomSpinEdit. }
+  TTySpinEdit = class(TTyCustomSpinEdit)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property MinValue;
+    property MaxValue;
+    property Value;
+    property Increment;
+    property ReadOnly;
+    property EditorEnabled;
+    property Alignment;
+    property MaxLength;
+    property ValueEmpty;
+    property TextHint;
+    property OnChange;
+    property OnValueChange;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
-    property TabStop default True;
-    property OnClick;
   end;
 
 function TySpinUpButtonRect(const ALocal: TRect; APPI: Integer; ABtnWDev: Integer = 0): TRect;
 function TySpinDownButtonRect(const ALocal: TRect; APPI: Integer; ABtnWDev: Integer = 0): TRect;
+{ How far in from the control's edge the field's frame reaches: its border, or its focus ring when
+  that reaches further -- DrawFrame strokes the ring INSIDE the bounds, OutlineOffset in and
+  OutlineWidth wide. A spin button's hover / pressed fill stops there, so it never covers the
+  frame. TySpinFrameInset is in logical px (for corner radii), TySpinFrameInsetPx in device px,
+  scaled piece by piece the way DrawFrame scales them. }
+function TySpinFrameInset(const AFieldStyle: TTyStyleSet): Integer;
+function TySpinFrameInsetPx(APainter: TTyPainter; const AFieldStyle: TTyStyleSet): Integer;
 
 implementation
+
+const
+  cSpinRepeatDelayMs = 400;      // the hold before repeating starts: TTyUpDown's
+  cSpinRepeatIntervalMs = 100;   // then one step per this: TTyUpDown's and LCL's default
+
+{ TTySpinButtons }
+
+constructor TTySpinButtons.Create(AOwner: TWinControl; AOnStep: TTySpinStepEvent);
+begin
+  inherited Create;
+  FOwner := AOwner;
+  FOnStep := AOnStep;
+end;
+
+destructor TTySpinButtons.Destroy;
+begin
+  FreeAndNil(FRepeatTimer);   // first: its OnTimer must never fire into a half-freed control
+  inherited Destroy;
+end;
+
+procedure TTySpinButtons.SetHot(AValue: Integer);
+begin
+  if FHot = AValue then Exit;
+  FHot := AValue;
+  FOwner.Invalidate;
+end;
+
+{ Swap in the arrow over a button and put the control's own cursor back on the way out, the
+  way TTyHeaderControl swaps in its resize cursor. }
+procedure TTySpinButtons.SetArrowCursor(AOn: Boolean);
+begin
+  if AOn = FCursorOverridden then Exit;
+  if AOn then
+  begin
+    FSavedCursor := FOwner.Cursor;
+    FOwner.Cursor := crArrow;
+  end
+  else
+    FOwner.Cursor := FSavedCursor;
+  FCursorOverridden := AOn;
+end;
+
+procedure TTySpinButtons.StopRepeat;
+begin
+  if FRepeatTimer <> nil then FRepeatTimer.Enabled := False;
+  FRepeatFast := False;
+end;
+
+procedure TTySpinButtons.HandleRepeat(Sender: TObject);
+begin
+  if (FHeld = 0) or (not FOwner.Enabled) then
+  begin
+    StopRepeat;
+    Exit;
+  end;
+  if not FRepeatFast then
+  begin
+    FRepeatFast := True;
+    FRepeatTimer.Interval := cSpinRepeatIntervalMs;
+  end;
+  FOnStep(FHeld);
+end;
+
+procedure TTySpinButtons.MouseMove(AHit: Integer; AEnabled: Boolean);
+begin
+  SetArrowCursor(AHit <> 0);
+  if AEnabled then SetHot(AHit) else SetHot(0);
+end;
+
+function TTySpinButtons.MouseDown(AHit: Integer; AEnabled: Boolean): Boolean;
+begin
+  Result := AHit <> 0;
+  if (not Result) or (not AEnabled) then Exit;
+  FHeld := AHit;
+  FOnStep(AHit);   // one step at once
+  { Then repeat while held -- on a control with a window only, the rule the caret blink timer
+    keeps too: one without (a headless test, a control never shown) is pressed by code that may
+    never release it, and a timer left running would step into whatever comes next. }
+  if FOwner.HandleAllocated then
+  begin
+    if FRepeatTimer = nil then
+    begin
+      FRepeatTimer := TTimer.Create(nil);
+      FRepeatTimer.Enabled := False;
+      FRepeatTimer.OnTimer := @HandleRepeat;
+    end;
+    FRepeatFast := False;
+    FRepeatTimer.Interval := cSpinRepeatDelayMs;
+    FRepeatTimer.Enabled := True;
+  end;
+  FOwner.Invalidate;
+end;
+
+procedure TTySpinButtons.MouseUp;
+begin
+  StopRepeat;
+  if FHeld <> 0 then
+  begin
+    FHeld := 0;
+    FOwner.Invalidate;
+  end;
+end;
+
+procedure TTySpinButtons.MouseLeave;
+begin
+  MouseUp;
+  SetHot(0);
+  SetArrowCursor(False);
+end;
+
+function TTySpinButtons.StateOf(ADir: Integer): TTyStateSet;
+begin
+  if (ADir <> 0) and (FHeld = ADir) then
+    Result := [tysActive]
+  else if (ADir <> 0) and (FHeld = 0) and (FHot = ADir) then
+    Result := [tysHover]
+  else
+    Result := [tysNormal];
+end;
+
+function TTySpinButtons.PaintHalf(APainter: TTyPainter; AController: TTyCustomStyleController;
+  const AHalf, AInner: TRect; const AFieldStyle: TTyStyleSet; ADir: Integer): TTyColor;
+var
+  st: TTyStateSet;
+  hs: TTyStyleSet;
+  fillR: TRect;
+  c, fc: TTyCorners;
+begin
+  Result := AFieldStyle.TextColor;
+  st := StateOf(ADir);
+  if (st = [tysNormal]) or (not FOwner.Enabled) then Exit;
+  hs := AController.Model.ResolveStyle('TyButton', '', st);
+  Result := hs.TextColor;
+  if not IntersectRect(fillR, AHalf, AInner) then Exit;
+  { Square everywhere but the field's own outer corner: the up half meets it top right, the down
+    half bottom right, and a square fill there would poke through the rounding. }
+  c := TyEffectiveCorners(AFieldStyle);
+  fc := TyCorners(0, 0, 0, 0);
+  if fillR.Right >= AInner.Right then
+  begin
+    if fillR.Top <= AInner.Top then fc.TR := c.TR - TySpinFrameInset(AFieldStyle);
+    if fillR.Bottom >= AInner.Bottom then fc.BR := c.BR - TySpinFrameInset(AFieldStyle);
+    if fc.TR < 0 then fc.TR := 0;
+    if fc.BR < 0 then fc.BR := 0;
+  end;
+  APainter.FillBackground(fillR, hs.Background, fc);
+end;
+
+function TySpinFrameInset(const AFieldStyle: TTyStyleSet): Integer;
+var
+  ring: Integer;
+begin
+  Result := AFieldStyle.BorderWidth;
+  if (tpOutline in AFieldStyle.Present) and (AFieldStyle.OutlineWidth > 0) then
+  begin
+    ring := AFieldStyle.OutlineOffset + AFieldStyle.OutlineWidth;
+    if ring > Result then Result := ring;
+  end;
+  if Result < 0 then Result := 0;
+end;
+
+function TySpinFrameInsetPx(APainter: TTyPainter; const AFieldStyle: TTyStyleSet): Integer;
+var
+  ring: Integer;
+begin
+  Result := APainter.Scale(AFieldStyle.BorderWidth);
+  if (tpOutline in AFieldStyle.Present) and (AFieldStyle.OutlineWidth > 0) then
+  begin
+    ring := APainter.Scale(AFieldStyle.OutlineOffset) + APainter.Scale(AFieldStyle.OutlineWidth);
+    if ring > Result then Result := ring;
+  end;
+  if Result < 0 then Result := 0;
+end;
 
 function TySpinUpButtonRect(const ALocal: TRect; APPI: Integer; ABtnWDev: Integer = 0): TRect;
 var
@@ -195,10 +495,13 @@ begin
   Result := Rect(X0, HalfY, ALocal.Right, ALocal.Bottom);
 end;
 
-{ TTySpinEdit }
+{ TTyCustomSpinEdit }
 
-constructor TTySpinEdit.Create(AOwner: TComponent);
+constructor TTyCustomSpinEdit.Create(AOwner: TComponent);
 begin
+  { Before inherited, and freed after it in Destroy: anything the LCL routes here while the
+    control is being built or torn down (a paint, a mouse-leave) finds it there. }
+  FSpin := TTySpinButtons.Create(Self, @SpinStep);
   inherited Create(AOwner);
   TabStop := True;
   Cursor := crIBeam;
@@ -220,17 +523,19 @@ begin
   SyncBufferToValue;
 end;
 
-destructor TTySpinEdit.Destroy;
+destructor TTyCustomSpinEdit.Destroy;
 begin
-  // Free the timer first so its OnTimer callback can never fire mid-teardown.
+  // Stop the timers first so their OnTimer callbacks can never fire mid-teardown.
+  if FSpin <> nil then FSpin.MouseUp;   // ends a held press, and the repeat timer with it
   FreeAndNil(FBlinkTimer);
   FMeasureBmp.Free;
   inherited Destroy;
+  FreeAndNil(FSpin);
 end;
 
 // ---- Blinking caret (Task 10) ----
 
-procedure TTySpinEdit.EnsureBlinkTimer;
+procedure TTyCustomSpinEdit.EnsureBlinkTimer;
 begin
   if FBlinkTimer = nil then
   begin
@@ -241,20 +546,20 @@ begin
   end;
 end;
 
-procedure TTySpinEdit.HandleBlink(Sender: TObject);
+procedure TTyCustomSpinEdit.HandleBlink(Sender: TObject);
 begin
   Inc(FBlinkElapsedMs, FBlinkTimer.Interval);
   FCaretVisible := TyCaretVisible(FBlinkElapsedMs, FBlinkTimer.Interval);
   Invalidate;
 end;
 
-procedure TTySpinEdit.ResetCaretBlink;
+procedure TTyCustomSpinEdit.ResetCaretBlink;
 begin
   FCaretVisible := True;
   FBlinkElapsedMs := 0;
 end;
 
-procedure TTySpinEdit.DoEnter;
+procedure TTyCustomSpinEdit.DoEnter;
 begin
   inherited DoEnter;
   ResetCaretBlink;
@@ -265,22 +570,22 @@ begin
   end;
 end;
 
-function TTySpinEdit.GetStyleTypeKey: string;
+function TTyCustomSpinEdit.GetStyleTypeKey: string;
 begin
   Result := 'TySpinEdit';
 end;
 
-procedure TTySpinEdit.DoChange;
+procedure TTyCustomSpinEdit.DoChange;
 begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTySpinEdit.DoValueChange;
+procedure TTyCustomSpinEdit.DoValueChange;
 begin
   if Assigned(FOnValueChange) then FOnValueChange(Self);
 end;
 
-function TTySpinEdit.GetLimitedValue(const AValue: Integer): Integer;
+function TTyCustomSpinEdit.GetLimitedValue(const AValue: Integer): Integer;
 begin
   Result := AValue;
   { An empty range (Max <= Min) means "no limit", not "pin everything to Min". With the
@@ -294,19 +599,19 @@ begin
   end;
 end;
 
-function TTySpinEdit.ValueToStr(const AValue: Integer): string;
+function TTyCustomSpinEdit.ValueToStr(const AValue: Integer): string;
 begin
   Result := IntToStr(GetLimitedValue(AValue));
 end;
 
-function TTySpinEdit.StrToValue(const S: string): Integer;
+function TTyCustomSpinEdit.StrToValue(const S: string): Integer;
 begin
   // Unparseable text keeps the current value, as LCL's StrToValue does
   // (include/spinedit.inc:240-247), and the clamp runs on the way in.
   Result := GetLimitedValue(StrToIntDef(Trim(S), FValue));
 end;
 
-procedure TTySpinEdit.SetValue(const AValue: Integer);
+procedure TTyCustomSpinEdit.SetValue(const AValue: Integer);
 var
   Clamped: Integer;
   Moved: Boolean;
@@ -329,13 +634,35 @@ begin
   Invalidate;
 end;
 
-procedure TTySpinEdit.StepValue(ADelta: Integer);
+procedure TTyCustomSpinEdit.StepValue(ADelta: Integer);
 begin
   Value := FValue + ADelta;
   FModified := True;          // the arrows are the user editing, exactly like typing
 end;
 
-procedure TTySpinEdit.SetMinValue(const AValue: Integer);
+procedure TTyCustomSpinEdit.SpinStep(ADir: Integer);
+begin
+  { A held button repeats from a timer, and ReadOnly may have been switched on meanwhile;
+    every other route checks it before calling StepValue, so this one does too. }
+  if FReadOnly then Exit;
+  StepValue(ADir * FIncrement);
+end;
+
+function TTyCustomSpinEdit.SpinHitAt(X, Y: Integer): Integer;
+var
+  ppi, bw: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  bw := MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth), ppi, 96);
+  if PtInRect(TySpinUpButtonRect(ClientRect, ppi, bw), Point(X, Y)) then
+    Result := 1
+  else if PtInRect(TySpinDownButtonRect(ClientRect, ppi, bw), Point(X, Y)) then
+    Result := -1
+  else
+    Result := 0;
+end;
+
+procedure TTyCustomSpinEdit.SetMinValue(const AValue: Integer);
 begin
   if FMinValue = AValue then Exit;
   FMinValue := AValue;
@@ -346,14 +673,14 @@ begin
   SetValue(FValue);
 end;
 
-procedure TTySpinEdit.SetMaxValue(const AValue: Integer);
+procedure TTyCustomSpinEdit.SetMaxValue(const AValue: Integer);
 begin
   if FMaxValue = AValue then Exit;
   FMaxValue := AValue;
   SetValue(FValue);           // same re-clamp + notify path as SetMinValue
 end;
 
-procedure TTySpinEdit.SetIncrement(const AValue: Integer);
+procedure TTyCustomSpinEdit.SetIncrement(const AValue: Integer);
 begin
   if FIncrement = AValue then Exit;
   if AValue < 1 then
@@ -363,21 +690,21 @@ begin
   Invalidate;
 end;
 
-procedure TTySpinEdit.SetReadOnly(const AValue: Boolean);
+procedure TTyCustomSpinEdit.SetReadOnly(const AValue: Boolean);
 begin
   if FReadOnly = AValue then Exit;
   FReadOnly := AValue;
   Invalidate;
 end;
 
-procedure TTySpinEdit.SetEditorEnabled(const AValue: Boolean);
+procedure TTyCustomSpinEdit.SetEditorEnabled(const AValue: Boolean);
 begin
   if FEditorEnabled = AValue then Exit;
   FEditorEnabled := AValue;
   Invalidate;
 end;
 
-procedure TTySpinEdit.SetValueEmpty(const AValue: Boolean);
+procedure TTyCustomSpinEdit.SetValueEmpty(const AValue: Boolean);
 begin
   if FValueEmpty = AValue then Exit;
   FValueEmpty := AValue;
@@ -385,14 +712,14 @@ begin
   Invalidate;
 end;
 
-procedure TTySpinEdit.SetTextHint(const AValue: TCaption);
+procedure TTyCustomSpinEdit.SetTextHint(const AValue: TCaption);
 begin
   if FTextHint = AValue then Exit;
   FTextHint := AValue;
   Invalidate;
 end;
 
-procedure TTySpinEdit.SetCaretPos(const AValue: Integer);
+procedure TTyCustomSpinEdit.SetCaretPos(const AValue: Integer);
 var
   V, L: Integer;
 begin
@@ -406,12 +733,12 @@ begin
   Invalidate;
 end;
 
-function TTySpinEdit.RealGetText: TCaption;
+function TTyCustomSpinEdit.RealGetText: TCaption;
 begin
   Result := FEditText;
 end;
 
-procedure TTySpinEdit.RealSetText(const AValue: TCaption);
+procedure TTyCustomSpinEdit.RealSetText(const AValue: TCaption);
 var
   Parsed: Integer;
 begin
@@ -433,7 +760,7 @@ begin
   end;
 end;
 
-procedure TTySpinEdit.CalculatePreferredSize(var PreferredWidth,
+procedure TTyCustomSpinEdit.CalculatePreferredSize(var PreferredWidth,
   PreferredHeight: Integer; WithThemeSpace: Boolean);
 var
   S: TTyStyleSet;
@@ -454,7 +781,7 @@ begin
   if PreferredHeight < 1 then PreferredHeight := 1;
 end;
 
-procedure TTySpinEdit.SetAlignment(const AValue: TAlignment);
+procedure TTyCustomSpinEdit.SetAlignment(const AValue: TAlignment);
 begin
   if FAlignment = AValue then Exit;
   FAlignment := AValue;
@@ -462,7 +789,7 @@ begin
   Invalidate;
 end;
 
-procedure TTySpinEdit.SetMaxLength(const AValue: Integer);
+procedure TTyCustomSpinEdit.SetMaxLength(const AValue: Integer);
 var
   V: Integer;
 begin
@@ -473,7 +800,7 @@ begin
   Invalidate;
 end;
 
-procedure TTySpinEdit.SyncBufferToValue;
+procedure TTyCustomSpinEdit.SyncBufferToValue;
 var
   Old: string;
 begin
@@ -489,7 +816,7 @@ begin
   if FEditText <> Old then DoChange;
 end;
 
-function TTySpinEdit.AlignOffset(APPI: Integer): Integer;
+function TTyCustomSpinEdit.AlignOffset(APPI: Integer): Integer;
 { Horizontal shift applied to the text (and caret) so the caret tracks the
   DrawText H-alignment. 0 for taLeftJustify, or the slack inside the text rect
   for center/right. Mirrors RenderTo's TextR (Padding.Left .. Right-BtnW-Padding.Right). }
@@ -522,7 +849,7 @@ begin
   end;
 end;
 
-function TTySpinEdit.CaretPixelX(AIdx, APPI: Integer): Integer;
+function TTyCustomSpinEdit.CaretPixelX(AIdx, APPI: Integer): Integer;
 var
   S: TTyStyleSet;
   EffSize: Integer;
@@ -537,7 +864,7 @@ begin
   Result := Result + FMeasureBmp.TextSize(UTF8Copy(FEditText, 1, AIdx)).cx;
 end;
 
-procedure TTySpinEdit.CommitEdit;
+procedure TTyCustomSpinEdit.CommitEdit;
 var
   v: Integer;
   WasModified: Boolean;
@@ -552,7 +879,7 @@ begin
   Invalidate;
 end;
 
-procedure TTySpinEdit.InsertEditChar(const C: TUTF8Char);
+procedure TTyCustomSpinEdit.InsertEditChar(const C: TUTF8Char);
 var
   Before, After: string;
   L: Integer;
@@ -577,7 +904,7 @@ begin
   DoChange;                   // a typed character is a text change (the path that used to be silent)
 end;
 
-procedure TTySpinEdit.EditBackspace;
+procedure TTyCustomSpinEdit.EditBackspace;
 var
   Before, After: string;
   L: Integer;
@@ -595,7 +922,7 @@ begin
   DoChange;                   // a deleted character is a text change too
 end;
 
-procedure TTySpinEdit.EditDelete;
+procedure TTyCustomSpinEdit.EditDelete;
 var
   Before, After: string;
   L: Integer;
@@ -612,12 +939,13 @@ begin
   DoChange;
 end;
 
-procedure TTySpinEdit.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomSpinEdit.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
-  R, TextR, UpR, DownR, CaretRect: TRect;
-  BtnW, EffSize, cx: Integer;
+  R, TextR, UpR, DownR, CaretRect, Inner: TRect;
+  BtnW, EffSize, cx, bw: Integer;
+  UpInk, DownInk: TTyColor;
 begin
   P := TTyPainter.Create;
   try
@@ -645,11 +973,17 @@ begin
     else
       P.DrawText(TextR, FEditText, S.FontName, EffSize, S.FontWeight,
         S.TextColor, FAlignment, tlCenter, True);
+    { The hovered or pressed half first, inside the field's frame -- border and focus ring both
+      (TTySpinButtons.PaintHalf) -- and its arrow in the ink that state asks for. }
+    bw := TySpinFrameInsetPx(P, S);
+    Inner := Rect(R.Left + bw, R.Top + bw, R.Right - bw, R.Bottom - bw);
+    UpInk := FSpin.PaintHalf(P, ActiveController, UpR, Inner, S, 1);
+    DownInk := FSpin.PaintHalf(P, ActiveController, DownR, Inner, S, -1);
     { Filled triangles in a SQUARED half at pad 1 -- the Windows spin part's shape, and the
       only pad that leaves a readable mark: the raw half is 18 x 14 and the default pad of 4
       eats 9px per axis. See TySquareGlyphBox. (v3/C5 overridable.) }
-    TyDrawGlyph(P, ActiveController, TySquareGlyphBox(UpR),   tgTriangleUp,   S.TextColor, 2, 1);
-    TyDrawGlyph(P, ActiveController, TySquareGlyphBox(DownR), tgTriangleDown, S.TextColor, 2, 1);
+    TyDrawGlyph(P, ActiveController, TySquareGlyphBox(UpR),   tgTriangleUp,   UpInk, 2, 1);
+    TyDrawGlyph(P, ActiveController, TySquareGlyphBox(DownR), tgTriangleDown, DownInk, 2, 1);
     if Focused and FCaretVisible then
     begin
       cx := CaretPixelX(FCaret, APPI);
@@ -662,12 +996,12 @@ begin
   end;
 end;
 
-procedure TTySpinEdit.Paint;
+procedure TTyCustomSpinEdit.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-procedure TTySpinEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
+procedure TTyCustomSpinEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
 begin
   if not Enabled then Exit;
   inherited UTF8KeyPress(UTF8Key);
@@ -675,7 +1009,7 @@ begin
   Invalidate;
 end;
 
-procedure TTySpinEdit.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomSpinEdit.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
@@ -701,7 +1035,7 @@ begin
   end;
 end;
 
-procedure TTySpinEdit.DoExit;
+procedure TTyCustomSpinEdit.DoExit;
 begin
   inherited DoExit;
   CommitEdit;
@@ -710,7 +1044,7 @@ begin
   Invalidate;
 end;
 
-function TTySpinEdit.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+function TTyCustomSpinEdit.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 begin
   if not Enabled then Exit(False);
@@ -729,29 +1063,39 @@ begin
   Result := True;
 end;
 
-procedure TTySpinEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomSpinEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
-    // ReadOnly locks the value: the +/- buttons don't step (focus still allowed).
-    if not FReadOnly then
-    begin
-      if PtInRect(TySpinUpButtonRect(ClientRect, Font.PixelsPerInch,
-           MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth),
-             Font.PixelsPerInch, 96)), Point(X, Y)) then
-        StepValue(FIncrement)
-      else if PtInRect(TySpinDownButtonRect(ClientRect, Font.PixelsPerInch,
-           MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth),
-             Font.PixelsPerInch, 96)), Point(X, Y)) then
-        StepValue(-FIncrement);
-    end;
+    { A press on a button steps once and holds it, repeating until the release. ReadOnly locks
+      the value: there the buttons do not step, and the press only takes focus. }
+    FSpin.MouseDown(SpinHitAt(X, Y), not FReadOnly);
     try
       if CanFocus then SetFocus;
     except
     end;
   end;
+end;
+
+procedure TTyCustomSpinEdit.MouseMove(Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseMove(Shift, X, Y);
+  if not Enabled then Exit;
+  FSpin.MouseMove(SpinHitAt(X, Y), not FReadOnly);
+end;
+
+procedure TTyCustomSpinEdit.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseUp(Button, Shift, X, Y);
+  FSpin.MouseUp;
+end;
+
+procedure TTyCustomSpinEdit.MouseLeave;
+begin
+  inherited MouseLeave;
+  FSpin.MouseLeave;
 end;
 
 end.

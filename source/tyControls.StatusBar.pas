@@ -25,6 +25,9 @@ type
     constructor Create(ACollection: TCollection); override;
   published
     property Text: TCaption read FText write SetText;
+    { LOGICAL px, like every other size a designer types into this library: the bar scales
+      it by its PPI where it lays the panels out (TTyStatusBar.PanelWidthsPx). A value <= 0
+      still means "take what is left". }
     property Width: Integer read FWidth write SetWidth default 50;
     property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
     { psOwnerDraw makes this cell the application's: the bar paints the panel background and
@@ -34,6 +37,7 @@ type
     property Style: TTyStatusPanelStyle read FStyle write SetStyle default psText;
   end;
 
+  TTyCustomStatusBar = class;
   TTyStatusBar = class;
 
   TTyStatusPanels = class(TOwnedCollection)
@@ -54,10 +58,10 @@ type
     expects the handler to reach for StatusBar.Canvas.
 
     ARect is the panel's cell in the bar's device-px, paint-local coordinates. }
-  TTyDrawPanelEvent = procedure(AStatusBar: TTyStatusBar; APanel: TTyStatusPanel;
+  TTyDrawPanelEvent = procedure(AStatusBar: TTyCustomStatusBar; APanel: TTyStatusPanel;
     APainter: TTyPainter; const ARect: TRect) of object;
 
-  TTyStatusBar = class(TTyCustomControl)
+  TTyCustomStatusBar = class(TTyCustomControl)
   private
     FPanels: TTyStatusPanels;
     FSimplePanel: Boolean;
@@ -70,7 +74,7 @@ type
     FShowResizeCur: Boolean;
     procedure SetPanels(AValue: TTyStatusPanels);
     procedure SetSimplePanel(AValue: Boolean);
-    procedure SetSimpleText(const AValue: string);
+    procedure SetSimpleText(const AValue: TCaption);
     procedure SetSizeGrip(AValue: Boolean);
   protected
     function GetStyleTypeKey: string; override;
@@ -90,6 +94,9 @@ type
       paint a cell without stealing the application's event slot. }
     procedure DrawPanel(APanel: TTyStatusPanel; APainter: TTyPainter; const ARect: TRect); virtual;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { The panels' widths in DEVICE px at APPI -- what the paint and the hit test both lay
+      the cells out from. }
+    function PanelWidthsPx(APPI: Integer): TIntegerDynArray;
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -111,10 +118,9 @@ type
       Which is what makes the hint of a highlighted MENU ITEM visible: the themed menu
       publishes it to Application.Hint, and until now nothing in this library listened. }
     function ExecuteAction(ExeAction: TBasicAction): Boolean; override;
-  published
     property Panels: TTyStatusPanels read FPanels write SetPanels;
     property SimplePanel: Boolean read FSimplePanel write SetSimplePanel default False;
-    property SimpleText: string read FSimpleText write SetSimpleText;
+    property SimpleText: TCaption read FSimpleText write SetSimpleText;
     property SizeGrip: Boolean read FSizeGrip write SetSizeGrip default True;
     { Show the application's current hint here as the pointer moves over hinted controls
       and highlighted menu items -- the classic status line. Off by default, as in LCL
@@ -127,9 +133,70 @@ type
     { Paints a psOwnerDraw panel. See TTyDrawPanelEvent for the painter contract. }
     property OnDrawPanel: TTyDrawPanelEvent read FOnDrawPanel write FOnDrawPanel;
     property Align default alBottom;
-    property Anchors;
+  end;
+
+  { TTyStatusBar publishes TTyCustomStatusBar's properties; everything lives in TTyCustomStatusBar. }
+  TTyStatusBar = class(TTyCustomStatusBar)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
     property StyleClass;
+    property StyleOverride;
     property Controller;
+    property Panels;
+    property SimplePanel;
+    property SimpleText;
+    property SizeGrip;
+    property AutoHint;
+    property OnHint;
+    property OnDrawPanel;
+    property Align;
+    property Anchors;
   end;
 
 { ARightToLeft MIRRORS the finished tiling about the bar's vertical centre: panel 0 sits at
@@ -253,11 +320,11 @@ begin Result := TTyStatusPanel(inherited Add); end;
 procedure TTyStatusPanels.Update(Item: TCollectionItem);
 begin
   inherited Update(Item);
-  if GetOwner is TTyStatusBar then TTyStatusBar(GetOwner).Invalidate;
+  if GetOwner is TTyCustomStatusBar then TTyCustomStatusBar(GetOwner).Invalidate;
 end;
 
-{ TTyStatusBar }
-constructor TTyStatusBar.Create(AOwner: TComponent);
+{ TTyCustomStatusBar }
+constructor TTyCustomStatusBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FPanels := TTyStatusPanels.Create(Self, TTyStatusPanel);
@@ -266,20 +333,20 @@ begin
   Width := 200;
   Height := TyDensityHeight(ActiveController, 22);
 end;
-destructor TTyStatusBar.Destroy;
+destructor TTyCustomStatusBar.Destroy;
 begin
   FPanels.Free;
   inherited Destroy;
 end;
-procedure TTyStatusBar.SetPanels(AValue: TTyStatusPanels); begin FPanels.Assign(AValue); end;
-procedure TTyStatusBar.SetSimplePanel(AValue: Boolean); begin if FSimplePanel = AValue then Exit; FSimplePanel := AValue; Invalidate; end;
-procedure TTyStatusBar.SetSimpleText(const AValue: string); begin if FSimpleText = AValue then Exit; FSimpleText := AValue; if FSimplePanel then Invalidate; end;
-procedure TTyStatusBar.SetSizeGrip(AValue: Boolean); begin if FSizeGrip = AValue then Exit; FSizeGrip := AValue; Invalidate; end;
+procedure TTyCustomStatusBar.SetPanels(AValue: TTyStatusPanels); begin FPanels.Assign(AValue); end;
+procedure TTyCustomStatusBar.SetSimplePanel(AValue: Boolean); begin if FSimplePanel = AValue then Exit; FSimplePanel := AValue; Invalidate; end;
+procedure TTyCustomStatusBar.SetSimpleText(const AValue: TCaption); begin if FSimpleText = AValue then Exit; FSimpleText := AValue; if FSimplePanel then Invalidate; end;
+procedure TTyCustomStatusBar.SetSizeGrip(AValue: Boolean); begin if FSizeGrip = AValue then Exit; FSizeGrip := AValue; Invalidate; end;
 
-function TTyStatusBar.GetStyleTypeKey: string;
+function TTyCustomStatusBar.GetStyleTypeKey: string;
 begin Result := 'TyStatusBar'; end;
 
-function TTyStatusBar.DoHint: Boolean;
+function TTyCustomStatusBar.DoHint: Boolean;
 begin
   { LCL's rule (statusbar.inc:83-88): a handler is a TAKEOVER, not a notification -- when one
     is assigned the bar writes nothing of its own, because the handler's whole purpose is to
@@ -288,7 +355,7 @@ begin
   if Result then FOnHint(Self);
 end;
 
-function TTyStatusBar.DoSetApplicationHint(const AHintStr: string): Boolean;
+function TTyCustomStatusBar.DoSetApplicationHint(const AHintStr: string): Boolean;
 begin
   Result := DoHint;
   if Result then Exit;
@@ -299,7 +366,7 @@ begin
   Result := True;
 end;
 
-function TTyStatusBar.ExecuteAction(ExeAction: TBasicAction): Boolean;
+function TTyCustomStatusBar.ExecuteAction(ExeAction: TBasicAction): Boolean;
 begin
   { The LCL turns every Application.Hint change into a TCustomHintAction and executes it
     against the focused control's chain (application.inc:1544-1556); a status bar is where
@@ -311,44 +378,58 @@ begin
     Result := inherited ExecuteAction(ExeAction);
 end;
 
-procedure TTyStatusBar.DrawPanel(APanel: TTyStatusPanel; APainter: TTyPainter; const ARect: TRect);
+procedure TTyCustomStatusBar.DrawPanel(APanel: TTyStatusPanel; APainter: TTyPainter; const ARect: TRect);
 begin
   if Assigned(FOnDrawPanel) then FOnDrawPanel(Self, APanel, APainter, ARect);
 end;
 
-function TTyStatusBar.GetPanelIndexAt(X, Y: Integer): Integer;
+function TTyCustomStatusBar.GetPanelIndexAt(X, Y: Integer): Integer;
 begin
   Result := PanelAtPos(X, Y);
 end;
 
-function TTyStatusBar.PanelAtPos(X, Y: Integer): Integer;
+function TTyCustomStatusBar.PanelAtPos(X, Y: Integer): Integer;
 var
   rects: TTyRectArray;
-  ws: array of Integer;
+  ws: TIntegerDynArray;
   i: Integer;
 begin
   Result := -1;
   if FSimplePanel or (FPanels.Count = 0) then Exit;
   if (Y < 0) or (Y >= ClientHeight) then Exit;
-  SetLength(ws, FPanels.Count);
-  for i := 0 to FPanels.Count - 1 do ws[i] := FPanels[i].Width;
+  ws := PanelWidthsPx(Font.PixelsPerInch);
   rects := TyStatusPanelRects(ws, ClientWidth, MulDiv(CStatusBarPadX, Font.PixelsPerInch, 96),
     IsRightToLeft);
   for i := 0 to High(rects) do
     if (X >= rects[i].Left) and (X < rects[i].Right) then Exit(i);
 end;
 
-procedure TTyStatusBar.Paint;
+function TTyCustomStatusBar.PanelWidthsPx(APPI: Integer): TIntegerDynArray;
+var
+  i: Integer;
+begin
+  { ONE function for the hit test and the paint, so the cell that is drawn is the cell that
+    is pointed at. The panel widths are logical px and used to go in RAW beside a ClientWidth
+    and a padding that are device px -- the same number only at 96 PPI, so at 175% a panel
+    designed 120 wide stayed 120 px while its text grew to 1.75x and was cut off. }
+  Result := nil;
+  if APPI <= 0 then APPI := 96;
+  SetLength(Result, FPanels.Count);
+  for i := 0 to FPanels.Count - 1 do
+    Result[i] := MulDiv(FPanels[i].Width, APPI, 96);
+end;
+
+procedure TTyCustomStatusBar.Paint;
 begin RenderTo(Canvas, ClientRect, Font.PixelsPerInch); end;
 
-procedure TTyStatusBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomStatusBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
   W, H, i, padX, sepW, fs, bw, gx, gy, k: Integer;
   bg, grip: TTyFill;
   rects: TTyRectArray;
-  ws: array of Integer;
+  ws: TIntegerDynArray;
   rtl: Boolean;
   sep, gripBox: TRect;
 begin
@@ -383,8 +464,7 @@ begin
       P.DrawText(Rect(padX, 0, W - padX, H), FSimpleText, S.FontName, fs, S.FontWeight, S.TextColor, taLeftJustify, tlCenter, True)
     else
     begin
-      SetLength(ws, FPanels.Count);
-      for i := 0 to FPanels.Count - 1 do ws[i] := FPanels[i].Width;
+      ws := PanelWidthsPx(APPI);
       rects := TyStatusPanelRects(ws, W, padX, rtl);
       sepW := P.Scale(1); if sepW < 1 then sepW := 1;
       for i := 0 to High(rects) do
@@ -426,7 +506,7 @@ begin
         gy := gripBox.Bottom - P.Scale(3) - k*P.Scale(4);
         sep := Rect(gx, gy, gx + P.Scale(2), gy + P.Scale(2));
         if rtl then sep := BidiFlipRect(sep, gripBox, True);
-        P.FillBackground(sep, grip, P.Scale(1));
+        P.FillBackground(sep, grip, 1);   // the radius is LOGICAL: the painter scales it
       end;
     end;
     P.EndPaint;
@@ -435,7 +515,7 @@ begin
   end;
 end;
 
-function TTyStatusBar.ResizeHitAt(X, Y: Integer): Integer;
+function TTyCustomStatusBar.ResizeHitAt(X, Y: Integer): Integer;
 var
   zone, W, H: Integer;
   gripBox: TRect;
@@ -467,7 +547,7 @@ begin
   end;
 end;
 
-procedure TTyStatusBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomStatusBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   { The status bar covers the form's bottom edge, so the OS never sees a resize-border hit there.
     On the size grip / bottom edge, hand the drag to the OS window resize the way any custom resize
@@ -477,7 +557,7 @@ begin
   inherited MouseDown(Button, Shift, X, Y);
 end;
 
-procedure TTyStatusBar.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomStatusBar.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   cur: TCursor;
 begin
@@ -504,7 +584,7 @@ begin
   inherited MouseMove(Shift, X, Y);
 end;
 
-procedure TTyStatusBar.MouseLeave;
+procedure TTyCustomStatusBar.MouseLeave;
 begin
   if FShowResizeCur then
   begin

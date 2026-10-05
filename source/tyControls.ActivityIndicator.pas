@@ -18,7 +18,7 @@ type
     TRANSPARENT track — none of which was reachable while the ring was nailed to the
     gauge's sunk track token. Spins only when Active AND painted (has a parent handle);
     headless it is static. }
-  TTyActivityIndicator = class(TTyGraphicControl)
+  TTyCustomActivityIndicator = class(TTyGraphicControl)
   private
     FActive: Boolean;
     FThickness: Integer;
@@ -41,14 +41,58 @@ type
     function AdvanceAnimation(AMs: Integer): Boolean;
     // Read-only current rotation, for tests/introspection.
     property Angle: Double read FAngle;
-  published
     property Active: Boolean read FActive write SetActive default True;
     property Thickness: Integer read FThickness write SetThickness default 6;
     property Sweep: Integer read FSweep write SetSweep default 270;
+  end;
+
+  { TTyActivityIndicator publishes TTyCustomActivityIndicator's properties; everything lives in TTyCustomActivityIndicator. }
+  TTyActivityIndicator = class(TTyCustomActivityIndicator)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Active;
+    property Thickness;
+    property Sweep;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
   end;
 
 implementation
@@ -64,7 +108,7 @@ begin
   while Result < 0 do Result := Result + 360;
 end;
 
-constructor TTyActivityIndicator.Create(AOwner: TComponent);
+constructor TTyCustomActivityIndicator.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FActive := True;
@@ -75,20 +119,20 @@ begin
   Height := 32;
 end;
 
-destructor TTyActivityIndicator.Destroy;
+destructor TTyCustomActivityIndicator.Destroy;
 begin
   FreeAndNil(FTimer);
   inherited Destroy;
 end;
 
-function TTyActivityIndicator.GetStyleTypeKey: string;
+function TTyCustomActivityIndicator.GetStyleTypeKey: string;
 begin
   { Its own key, not the gauge's: a skin can now mute or fully clear the spinner's track
     (the flat look) without flattening every gauge track in the app. }
   Result := 'TyActivityIndicator';
 end;
 
-procedure TTyActivityIndicator.EnsureTimer;
+procedure TTyCustomActivityIndicator.EnsureTimer;
 begin
   if FTimer = nil then
   begin
@@ -99,19 +143,19 @@ begin
   end;
 end;
 
-function TTyActivityIndicator.AdvanceAnimation(AMs: Integer): Boolean;
+function TTyCustomActivityIndicator.AdvanceAnimation(AMs: Integer): Boolean;
 begin
   FAngle := TyActivityAdvance(FAngle, AMs, cPeriodMs);
   Result := True;
 end;
 
-procedure TTyActivityIndicator.HandleTimer(Sender: TObject);
+procedure TTyCustomActivityIndicator.HandleTimer(Sender: TObject);
 begin
   AdvanceAnimation(FTimer.Interval);
   Invalidate;
 end;
 
-procedure TTyActivityIndicator.UpdateRunning;
+procedure TTyCustomActivityIndicator.UpdateRunning;
 begin
   if FActive and (Parent <> nil) and Parent.HandleAllocated then
   begin
@@ -122,7 +166,7 @@ begin
     FTimer.Enabled := False;
 end;
 
-procedure TTyActivityIndicator.SetActive(const AValue: Boolean);
+procedure TTyCustomActivityIndicator.SetActive(const AValue: Boolean);
 begin
   if FActive = AValue then Exit;
   FActive := AValue;
@@ -130,14 +174,14 @@ begin
   Invalidate;
 end;
 
-procedure TTyActivityIndicator.SetThickness(const AValue: Integer);
+procedure TTyCustomActivityIndicator.SetThickness(const AValue: Integer);
 begin
   if FThickness = AValue then Exit;
   FThickness := Math.Max(1, AValue);
   Invalidate;
 end;
 
-procedure TTyActivityIndicator.SetSweep(const AValue: Integer);
+procedure TTyCustomActivityIndicator.SetSweep(const AValue: Integer);
 var v: Integer;
 begin
   v := AValue;
@@ -147,7 +191,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyActivityIndicator.Paint;
+procedure TTyCustomActivityIndicator.Paint;
 var
   P: TTyPainter;
   trackS, fillS: TTyStyleSet;

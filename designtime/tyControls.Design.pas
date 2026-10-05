@@ -47,7 +47,7 @@ uses
   tyControls.ToggleSwitch,
   tyControls.TrackBar, tyControls.GroupBox, tyControls.PageControl, tyControls.TabSheet,
   tyControls.SpinEdit, tyControls.FloatSpinEdit,
-  tyControls.Memo, tyControls.Menu, tyControls.NativeStyler,
+  tyControls.Memo, tyControls.Terminal, tyControls.Menu, tyControls.NativeStyler,
   tyControls.Splitter, tyControls.StatusBar, tyControls.ToolBar,
   tyControls.Calendar, tyControls.DateTimePicker, tyControls.TabSet,
   tyControls.TreeView, tyControls.Dialogs, tyControls.Dialogs.SelectPath,
@@ -70,6 +70,8 @@ uses
   tyControls.ListView, tyControls.ShellListView, tyControls.ShellTreeView,
   tyControls.FilterComboBox, tyControls.ShellComboBox,
   tyControls.AdvanceChart,
+  { The manager's registration needs its own unit (spec §16 step 7). }
+  tyControls.ToolWindows, tyControls.ToolWindows.Manager,
   { The vocabulary source of the theme dropdowns, published into the IDE process here. }
   tyControls.BuiltinThemes, tyControls.ThemeRegistry,
   { The three sibling units this trunk registers. }
@@ -141,7 +143,7 @@ begin
   RegisterComponents('TyControls Edits',
     [TTyEdit, TTyNumericEdit, TTyCurrencyEdit, TTyMaskEdit, TTyURLEdit, TTyComboEdit,
      TTyTrackEdit, TTyCalcEdit, TTyCalcCurrencyEdit, TTyCalculator,
-     TTyMemo, TTySpinEdit, TTyFloatSpinEdit, TTyUpDown]);
+     TTyMemo, TTyTerminalView, TTySpinEdit, TTyFloatSpinEdit, TTyUpDown]);
   // Checks / radios / switches + their groups.
   RegisterComponents('TyControls Choices',
     [TTyCheckBox, TTyRadioButton, TTyToggleSwitch, TTyRadioGroup, TTyCheckGroup, TTySegmented]);
@@ -172,10 +174,14 @@ begin
      TTyScrollBox, TTyScrollPanel, TTyExPanel, TTyGridPanel, TTyRelativePanel,
      TTyToolGroupPanel, TTyListGroupPanel,
      TTyPageControl, TTyTabSheet, TTyTabSet, TTyTitleBar,
-     TTyCard, TTyEmpty]);
+     TTyCard, TTyEmpty, TTyToolWindowBar, TTyToolWindowManager]);
   // Cells are created/owned by the grid, not dragged from the palette —register the
   // class (for streaming + OI selection) without a palette button.
   RegisterNoIcon([TTyGridCell]);
+  { Tool windows and their actions areas are made by the bar's / window's component editor
+    ("New Tool Window", "Add Actions Area"), never dragged from the palette. Registered so they
+    stream, select and survive undo-of-delete (undo pastes by class name), with no palette button. }
+  RegisterNoIcon([TTyToolWindow, TTyToolWindowActions]);
   // Data views + shell/file views + date/time.
   RegisterComponents('TyControls Data Views',
     [TTyTreeView, TTyListView, TTyShellListView, TTyShellTreeView, TTyPreviewBox, TTyImageView,

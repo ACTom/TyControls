@@ -143,6 +143,11 @@ begin
     '  --ribbon-appmenu-height: 36px;' + LineEnding +
     '  --ribbon-appmenu-width: 90px;' + LineEnding +
     '  --ribbon-caption-band-height: 25px;' + LineEnding +
+    { A ribbon TILE is a glyph stacked over a caption, not a single-line field, so it does
+      NOT follow --control-height -- that token is 38 here and would make a modern tile
+      SHORTER than its classic 64. 64 + the caption line's growth (9px -> 14px font) + the
+      roomier button padding (6 -> 10 per side). }
+    '  --ribbon-tile-height: 80px;' + LineEnding +
     '  --scrollbar-size: 17px;' + LineEnding +
     '  --segmented-pad: 4px;' + LineEnding +
     '  --segmented-height: 44px;' + LineEnding +
@@ -158,12 +163,29 @@ begin
     '  --tab-padding: 20px;' + LineEnding +
     '  --tag-close-size: 18px;' + LineEnding +
     '  --tag-gap: 6px;' + LineEnding +
+    '  --terminal-pad: 8px;' + LineEnding +
     { A title bar hosts controls, so it cannot BE one control tall: at --control-height
       (38) a hosted combo or menu button fills it edge to edge and any top offset spills
       out the bottom, which is how the Ant Design example's theme picker lost its lower
       edge. This leaves 5px of breathing room above and below a full-height control. }
     '  --titlebar-height: 48px;' + LineEnding +
+    '  --titlebar-icon-gap: 8px;' + LineEnding +
+    '  --titlebar-icon-size: 20px;' + LineEnding +
     '  --titlebar-padding: 12px;' + LineEnding +
+    '  --toolwindow-button-size: 28px;' + LineEnding +
+    '  --toolwindow-content-min: 144px;' + LineEnding +
+    '  --toolwindow-drop-size: 2px;' + LineEnding +
+    '  --toolwindow-edge-size: 4px;' + LineEnding +
+    '  --toolwindow-glyph-size: 20px;' + LineEnding +
+    '  --toolwindow-header-gap: 8px;' + LineEnding +
+    '  --toolwindow-header-height: 36px;' + LineEnding +
+    '  --toolwindow-header-pad: 8px;' + LineEnding +
+    '  --toolwindow-indicator-size: 2px;' + LineEnding +
+    '  --toolwindow-strip-indicator-size: 2px;' + LineEnding +
+    '  --toolwindow-strip-item-size: 48px;' + LineEnding +
+    '  --toolwindow-strip-size: 48px;' + LineEnding +
+    '  --toolwindow-tab-area-min: 60px;' + LineEnding +
+    '  --toolwindow-tab-pad: 12px;' + LineEnding +
     '  --transfer-arrow-margin: 4px;' + LineEnding +
     '  --transfer-arrow-size: 16px;' + LineEnding +
     '  --transfer-button-gap: 10px;' + LineEnding +

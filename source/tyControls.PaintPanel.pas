@@ -2,7 +2,7 @@ unit tyControls.PaintPanel;
 {$mode objfpc}{$H+}
 { TTyPaintPanel — an owner-draw surface panel.
 
-  A TTyPanel subclass (reuses the 'TyPanel' typeKey / theme) that, after painting the
+  A TTyCustomPanel descendant (reuses the 'TyPanel' typeKey / theme) that, after painting the
   themed frame and insetting the content by the theme padding, fires OnPaintSurface so the
   host application can draw straight into the SAME paint pass with the library painter
   (TTyPainter). The handler receives the live painter and the content rectangle (device px,
@@ -36,7 +36,7 @@ type
   TTyPaintSurfaceEvent = procedure(Sender: TObject; APainter: TTyPainter;
     const AContent: TRect) of object;
 
-  TTyPaintPanel = class(TTyPanel)
+  TTyCustomPaintPanel = class(TTyCustomPanel)
   private
     FOnPaintSurface: TTyPaintSurfaceEvent;
   protected
@@ -47,13 +47,82 @@ type
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
-  published
     { Draw the panel's surface yourself with the library painter, inside the panel's own
       paint pass. Called after the themed frame + padding inset; AContent is the content
       rect (device px). }
     property OnPaintSurface: TTyPaintSurfaceEvent read FOnPaintSurface write FOnPaintSurface;
+  end;
+
+  { TTyPaintPanel publishes TTyCustomPaintPanel's properties; everything lives in TTyCustomPaintPanel. }
+  TTyPaintPanel = class(TTyCustomPaintPanel)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     property Caption;
     property Alignment;
+    property VerticalAlignment;
+    property WordWrap;
+    property ShowAccelChar;
+    property DockSite;
+    property UseDockManager;
+    property OnDockDrop;
+    property OnDockOver;
+    property OnUnDock;
+    property OnGetSiteInfo;
+    property OnGetDockCaption;
+    property OnStartDock;
+    property OnEndDock;
+    property Align;
+    property Anchors;
+    property OnPaintSurface;
   end;
 
 { Pure geometry, exposed for headless tests: the content rect after the themed frame is
@@ -84,7 +153,7 @@ begin
   );
 end;
 
-constructor TTyPaintPanel.Create(AOwner: TComponent);
+constructor TTyCustomPaintPanel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   // Inherit TTyPanel's container behaviour (csAcceptsControls); an owner-draw surface is
@@ -97,7 +166,7 @@ begin
   Height := 105;
 end;
 
-procedure TTyPaintPanel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomPaintPanel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -130,7 +199,7 @@ begin
   end;
 end;
 
-procedure TTyPaintPanel.Paint;
+procedure TTyCustomPaintPanel.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

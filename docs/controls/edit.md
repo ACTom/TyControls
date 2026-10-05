@@ -82,12 +82,12 @@ uses tyControls.Edit;
 
 ### 继承的通用成员
 
-TTyEdit 继承自 `TTyCustomControl`（`tyControls.Base`），与其他 TyControls 控件共享以下 published 属性：
+TTyEdit 的实现在 `TTyCustomEdit`（继承自 `TTyCustomControl`，`tyControls.Base`），下列属性与其他 TyControls 控件相同：
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `StyleClass` | `string` | `''` | CSS 类名，对应 `.tycss` 选择器的 `.classname` 部分 |
-| `Controller` | `TTyStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定使用哪个样式控制器 |
+| `Controller` | `TTyCustomStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定使用哪个样式控制器 |
 
 **状态跟踪字段（protected，不 published）：**
 
@@ -346,4 +346,4 @@ end;
 
   **对左到右文本零代价**：判定走 `TyTextHasRTL` 字节扫描，且**每次文本变化只问一次**，之后每次光标查询只多一个布尔判断（实测 ≤ 0.2 µs，对比光标查询本身约 23 µs，落在噪声里）；它挡住的那份排版建一次约 3.3 ms。掩码（`PasswordChar`）字段按**显示串**判定，所以密码框永远走不到双向路径。
 
-  由本控件派生的 `TTyNumericEdit` / `TTyCurrencyEdit` / `TTyCalcEdit` / `TTyTrackEdit` / `TTyMaskEdit` / `TTyURLEdit` / `TTyComboEdit` / `TTyValueEdit` 都不覆写光标与绘制路径，因此一并生效。`TTyMemo` 尚未跟进，仍是逻辑序前缀和。详见 [rtl.md](../rtl.md)。
+  同一族的 `TTyNumericEdit` / `TTyCurrencyEdit` / `TTyCalcEdit` / `TTyTrackEdit` / `TTyMaskEdit` / `TTyURLEdit` / `TTyComboEdit` / `TTyValueEdit`（都挂在 `TTyCustomEdit` 下）都不覆写光标与绘制路径，因此一并生效。`TTyMemo` 尚未跟进，仍是逻辑序前缀和。详见 [rtl.md](../rtl.md)。

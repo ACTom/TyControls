@@ -1,0 +1,1631 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-themebuilder 3.1\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (msgid=English source) ---
+
+#: ttbmainform.caption
+msgid "Theme Builder"
+msgstr "Theme Builder"
+
+#: ttbmainform.bar.caption
+msgid "Theme Builder  · TyControls"
+msgstr "Theme Builder  · TyControls"
+
+#: ttbmainform.problemswin.caption
+msgid "Problems"
+msgstr "问题"
+
+#: ttbmainform.problemswin.striphint
+msgid "Problems"
+msgstr "问题"
+
+#: ttbmainform.mnufile.caption
+msgid "&File"
+msgstr "文件(&F)"
+
+#: ttbmainform.mnunew.caption
+msgid "&New"
+msgstr "新建(&N)"
+
+#: ttbmainform.mnunewminimal.caption
+msgid "Minimal theme"
+msgstr "极简主题"
+
+#: ttbmainform.mnunewsep.caption
+msgid "-"
+msgstr "-"
+
+#: ttbmainform.mnuopen.caption
+msgid "&Open..."
+msgstr "打开(&O)…"
+
+#: ttbmainform.mnurecent.caption
+msgid "Open &recent"
+msgstr "最近打开(&R)"
+
+#: ttbmainform.mnusave.caption
+msgid "&Save"
+msgstr "保存(&S)"
+
+#: ttbmainform.mnusaveas.caption
+msgid "Save &as..."
+msgstr "另存为(&A)…"
+
+#: ttbmainform.mnufilesep.caption
+msgid "-"
+msgstr "-"
+
+#: ttbmainform.mnuexit.caption
+msgid "E&xit"
+msgstr "退出(&X)"
+
+#: ttbmainform.mnuedit.caption
+msgid "&Edit"
+msgstr "编辑(&E)"
+
+#: ttbmainform.mnuundo.caption
+msgid "&Undo"
+msgstr "撤销(&U)"
+
+#: ttbmainform.mnuredo.caption
+msgid "&Redo"
+msgstr "重做(&R)"
+
+#: ttbmainform.mnueditsep1.caption
+msgid "-"
+msgstr "-"
+
+#: ttbmainform.mnucut.caption
+msgid "Cu&t"
+msgstr "剪切(&T)"
+
+#: ttbmainform.mnucopy.caption
+msgid "&Copy"
+msgstr "复制(&C)"
+
+#: ttbmainform.mnupaste.caption
+msgid "&Paste"
+msgstr "粘贴(&P)"
+
+#: ttbmainform.mnudelete.caption
+msgid "&Delete"
+msgstr "删除(&D)"
+
+#: ttbmainform.mnuselectall.caption
+msgid "Select &all"
+msgstr "全选(&A)"
+
+#: ttbmainform.mnueditsep2.caption
+msgid "-"
+msgstr "-"
+
+#: ttbmainform.mnuformatdoc.caption
+msgid "F&ormat document"
+msgstr "格式化文档(&O)"
+
+#: ttbmainform.mnuformatsel.caption
+msgid "Format &selection"
+msgstr "格式化选中部分(&S)"
+
+#: ttbmainform.mnueditsep3.caption
+msgid "-"
+msgstr "-"
+
+#: ttbmainform.mnufind.caption
+msgid "&Find..."
+msgstr "查找(&F)…"
+
+#: ttbmainform.mnufindnext.caption
+msgid "Find &next"
+msgstr "查找下一个(&N)"
+
+#: ttbmainform.mnufindprev.caption
+msgid "Find pre&vious"
+msgstr "查找上一个(&V)"
+
+#: ttbmainform.mnureplace.caption
+msgid "R&eplace..."
+msgstr "替换(&E)…"
+
+#: ttbmainform.mnuview.caption
+msgid "&View"
+msgstr "视图(&V)"
+
+#: ttbmainform.mnuappearance.caption
+msgid "Editor &appearance"
+msgstr "编辑器外观(&A)"
+
+#: ttbmainform.mnueditordark.caption
+msgid "&Dark editor"
+msgstr "暗色编辑器(&D)"
+
+#: ttbmainform.mnuviewsep.caption
+msgid "-"
+msgstr "-"
+
+#: ttbmainform.mnuproblems.caption
+msgid "&Problems"
+msgstr "问题(&P)"
+
+#: ttbpreviewframe.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: ttbpreviewframe.disableallcheck.caption
+msgid "Disable all"
+msgstr "全部禁用"
+
+#: ttbpreviewframe.tabbasic.caption
+msgid "Basic"
+msgstr "基础"
+
+#: ttbpreviewframe.btndefault.caption
+msgid "Default"
+msgstr "默认"
+
+#: ttbpreviewframe.btnprimary.caption
+msgid "Primary"
+msgstr "主要"
+
+#: ttbpreviewframe.btndanger.caption
+msgid "Danger"
+msgstr "危险"
+
+#: ttbpreviewframe.btnghost.caption
+msgid "Ghost"
+msgstr "幽灵"
+
+#: ttbpreviewframe.btndisabled.caption
+msgid "Disabled"
+msgstr "已禁用"
+
+#: ttbpreviewframe.btnprimarydisabled.caption
+msgid "Primary, disabled"
+msgstr "主要，已禁用"
+
+#: ttbpreviewframe.spdghost.caption
+msgid "Star"
+msgstr "星标"
+
+#: ttbpreviewframe.ddbmore.caption
+msgid "More"
+msgstr "更多"
+
+#: ttbpreviewframe.lblnormal.caption
+msgid "Label"
+msgstr "标签"
+
+#: ttbpreviewframe.lbldisabled.caption
+msgid "Disabled label"
+msgstr "禁用的标签"
+
+#: ttbpreviewframe.lnksample.caption
+msgid "Link"
+msgstr "链接"
+
+#: ttbpreviewframe.chkon.caption
+msgid "Checked"
+msgstr "已勾选"
+
+#: ttbpreviewframe.chkoff.caption
+msgid "Not checked"
+msgstr "未勾选"
+
+#: ttbpreviewframe.chkdisabled.caption
+msgid "Disabled"
+msgstr "已禁用"
+
+#: ttbpreviewframe.radon.caption
+msgid "Chosen"
+msgstr "已选中"
+
+#: ttbpreviewframe.radoff.caption
+msgid "Not chosen"
+msgstr "未选中"
+
+#: ttbpreviewframe.tglon.caption
+msgid "On"
+msgstr "开"
+
+#: ttbpreviewframe.tgloff.caption
+msgid "Off"
+msgstr "关"
+
+#: ttbpreviewframe.tagplain.caption
+msgid "Tag"
+msgstr "标签"
+
+#: ttbpreviewframe.tagaccent.caption
+msgid "Accent"
+msgstr "强调"
+
+#: ttbpreviewframe.tagdanger.caption
+msgid "Danger"
+msgstr "危险"
+
+#: ttbpreviewframe.divsample.caption
+msgid "Divider"
+msgstr "分隔线"
+
+#: ttbpreviewframe.tabinputs.caption
+msgid "Inputs"
+msgstr "输入"
+
+#: ttbpreviewframe.edttext.text
+msgid "Some text"
+msgstr "一段文字"
+
+#: ttbpreviewframe.edthint.texthint
+msgid "Placeholder"
+msgstr "占位提示"
+
+#: ttbpreviewframe.edtdisabled.text
+msgid "Disabled"
+msgstr "已禁用"
+
+#: ttbpreviewframe.edtreadonly.text
+msgid "Read only"
+msgstr "只读"
+
+#: ttbpreviewframe.tablists.caption
+msgid "Lists and trees"
+msgstr "列表与树"
+
+#: ttbpreviewframe.tabgrids.caption
+msgid "Grids"
+msgstr "表格"
+
+#: ttbpreviewframe.tabcontainers.caption
+msgid "Containers and tabs"
+msgstr "容器与页签"
+
+#: ttbpreviewframe.grpsample.caption
+msgid "Group"
+msgstr "分组"
+
+#: ttbpreviewframe.crdsample.title
+msgid "Card"
+msgstr "卡片"
+
+#: ttbpreviewframe.expsample.caption
+msgid "Expandable"
+msgstr "可展开"
+
+#: ttbpreviewframe.innerone.caption
+msgid "One"
+msgstr "一"
+
+#: ttbpreviewframe.innertwo.caption
+msgid "Two"
+msgstr "二"
+
+#: ttbpreviewframe.innerthree.caption
+msgid "Three"
+msgstr "三"
+
+#: ttbpreviewframe.tabmenus.caption
+msgid "Menus and toolbars"
+msgstr "菜单与工具栏"
+
+#: ttbpreviewframe.tbnone.caption
+msgid "Build"
+msgstr "构建"
+
+#: ttbpreviewframe.tbndown.caption
+msgid "Pinned"
+msgstr "已固定"
+
+#: ttbpreviewframe.tbnthree.caption
+msgid "Run"
+msgstr "运行"
+
+#: ttbpreviewframe.tbndisabled.caption
+msgid "Stop"
+msgstr "停止"
+
+#: ttbpreviewframe.btnpopup.caption
+msgid "Show a popup menu"
+msgstr "弹出菜单"
+
+#: ttbpreviewframe.tabchrome.caption
+msgid "Window chrome"
+msgstr "窗体外框"
+
+#: ttbpreviewframe.lblchromenote.caption
+msgid "The title bar, its buttons and the shadow are drawn on a real window."
+msgstr "标题栏、标题栏按钮和阴影要在真窗口上才看得到。"
+
+#: ttbpreviewframe.btnsamplewindow.caption
+msgid "Open a sample window"
+msgstr "打开样例窗口"
+
+#: ttbpreviewframe.tabfeedback.caption
+msgid "Feedback"
+msgstr "反馈"
+
+#: ttbpreviewframe.alrinfo.message
+msgid "Information: nothing needs doing."
+msgstr "提示：没有需要处理的事。"
+
+#: ttbpreviewframe.alrsuccess.message
+msgid "Success: the theme was saved."
+msgstr "成功：主题已保存。"
+
+#: ttbpreviewframe.alrwarning.message
+msgid "Warning: an image could not be found."
+msgstr "警告：有一张图片找不到。"
+
+#: ttbpreviewframe.alrerror.message
+msgid "Error: the theme did not load."
+msgstr "错误：主题没有载入。"
+
+#: ttbpreviewframe.empsample.description
+msgid "Nothing here yet"
+msgstr "这里还什么都没有"
+
+#: ttbpreviewframe.btnmessage.caption
+msgid "Message dialog"
+msgstr "消息对话框"
+
+#: ttbpreviewframe.btninput.caption
+msgid "Input dialog"
+msgstr "输入对话框"
+
+#: ttbpreviewframe.btnnotify.caption
+msgid "Notification"
+msgstr "通知"
+
+#: ttbpreviewframe.smfile.caption
+msgid "&File"
+msgstr "文件(&F)"
+
+#: ttbpreviewframe.smnew.caption
+msgid "&New"
+msgstr "新建(&N)"
+
+#: ttbpreviewframe.smopen.caption
+msgid "&Open..."
+msgstr "打开(&O)…"
+
+#: ttbpreviewframe.smsep.caption
+msgid "-"
+msgstr "-"
+
+#: ttbpreviewframe.smrecent.caption
+msgid "Open &recent"
+msgstr "最近打开(&R)"
+
+#: ttbpreviewframe.smrecentone.caption
+msgid "win11.tycss"
+msgstr "win11.tycss"
+
+#: ttbpreviewframe.smrecenttwo.caption
+msgid "auto.tycss"
+msgstr "auto.tycss"
+
+#: ttbpreviewframe.smedit.caption
+msgid "&Edit"
+msgstr "编辑(&E)"
+
+#: ttbpreviewframe.smundo.caption
+msgid "&Undo"
+msgstr "撤销(&U)"
+
+#: ttbpreviewframe.smwrap.caption
+msgid "&Word wrap"
+msgstr "自动换行(&W)"
+
+#: ttbpreviewframe.smpaste.caption
+msgid "&Paste"
+msgstr "粘贴(&P)"
+
+#: ttbpreviewframe.smview.caption
+msgid "&View"
+msgstr "视图(&V)"
+
+#: ttbpreviewframe.smzoom.caption
+msgid "&Zoom"
+msgstr "缩放(&Z)"
+
+#: ttbpreviewframe.spcut.caption
+msgid "Cu&t"
+msgstr "剪切(&T)"
+
+#: ttbpreviewframe.spcopy.caption
+msgid "&Copy"
+msgstr "复制(&C)"
+
+#: ttbpreviewframe.spsep.caption
+msgid "-"
+msgstr "-"
+
+#: ttbpreviewframe.spchecked.caption
+msgid "Show &hidden"
+msgstr "显示隐藏项(&H)"
+
+#: ttbpreviewframe.spdisabled.caption
+msgid "&Delete"
+msgstr "删除(&D)"
+
+#: ttbsampleform.caption
+msgid "Sample window"
+msgstr "样例窗口"
+
+#: ttbsampleform.bar.caption
+msgid "Sample window"
+msgstr "样例窗口"
+
+#: ttbsampleform.lbltext.caption
+msgid "A real window: title bar buttons, frame and shadow."
+msgstr "一个真窗口：标题栏按钮、边框和阴影。"
+
+#: ttbsampleform.edtname.texthint
+msgid "Your name"
+msgstr "你的名字"
+
+#: ttbsampleform.chkremember.caption
+msgid "Remember"
+msgstr "记住"
+
+#: ttbsampleform.btnok.caption
+msgid "OK"
+msgstr "确定"
+
+#: ttbsampleform.btncancel.caption
+msgid "Cancel"
+msgstr "取消"
+
+#: ttbmainform.seedswin.caption
+msgid "Seeds"
+msgstr "种子"
+
+#: ttbmainform.seedswin.striphint
+msgid "Seeds"
+msgstr "种子"
+
+#: ttbmainform.mnuexportsep.caption
+msgid "-"
+msgstr "-"
+
+#: ttbmainform.mnuexport.caption
+msgid "&Export theme bundle..."
+msgstr "导出主题包(&E)…"
+
+#: ttbmainform.mnusnippets.caption
+msgid "&Use it in a program..."
+msgstr "在程序里怎么用(&U)…"
+
+#: ttbmainform.mnuseeds.caption
+msgid "&Seeds"
+msgstr "种子(&S)"
+
+#: ttbmainform.mnuviewsep2.caption
+msgid "-"
+msgstr "-"
+
+#: ttbmainform.mnucoverage.caption
+msgid "&Coverage check..."
+msgstr "覆盖检查(&C)…"
+
+#: ttbseedsframe.splitbutton.caption
+msgid "Split into light and dark"
+msgstr "拆成明暗两套"
+
+#: ttbseedsframe.hdrleft.caption
+msgid "Light"
+msgstr "亮色"
+
+#: ttbseedsframe.hdrright.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: ttbseedsframe.lblaccent.caption
+msgid "--accent"
+msgstr "--accent"
+
+#: ttbseedsframe.lblsurface.caption
+msgid "--surface"
+msgstr "--surface"
+
+#: ttbseedsframe.lblonsurface.caption
+msgid "--on-surface"
+msgstr "--on-surface"
+
+#: ttbseedsframe.lblborder.caption
+msgid "--border"
+msgstr "--border"
+
+#: ttbseedsframe.lbldanger.caption
+msgid "--danger"
+msgstr "--danger"
+
+#: ttbseedsframe.lblradius.caption
+msgid "--radius"
+msgstr "--radius"
+
+#: ttbcoverageform.caption
+msgid "Coverage check"
+msgstr "覆盖检查"
+
+#: ttbcoverageform.bar.caption
+msgid "Coverage check"
+msgstr "覆盖检查"
+
+#: ttbcoverageform.lblnotshown.caption
+msgid "Styled in this theme but not in the preview:"
+msgstr "主题写了、预览里没有的："
+
+#: ttbcoverageform.lbldefault.caption
+msgid "In the preview, but neither this theme nor the base styles them (they keep their built-in look):"
+msgstr "预览里有、主题和底层都没写的（它们保持内置的样子）："
+
+#: ttbcoverageform.lblhint.caption
+msgid "Double-click an entry to go to its rule, or add one."
+msgstr "双击一项跳到它的规则，没有就添加一条。"
+
+#: ttbcoverageform.btnclose.caption
+msgid "Close"
+msgstr "关闭"
+
+#: ttbexportform.caption
+msgid "Export a theme bundle"
+msgstr "导出主题包"
+
+#: ttbexportform.bar.caption
+msgid "Export a theme bundle"
+msgstr "导出主题包"
+
+#: ttbexportform.lblname.caption
+msgid "Name:"
+msgstr "名称："
+
+#: ttbexportform.lblauthor.caption
+msgid "Author:"
+msgstr "作者："
+
+#: ttbexportform.lblversion.caption
+msgid "Version:"
+msgstr "版本："
+
+#: ttbexportform.radfolder.caption
+msgid "A folder"
+msgstr "文件夹"
+
+#: ttbexportform.radzip.caption
+msgid "A zip file"
+msgstr "zip 文件"
+
+#: ttbexportform.lbltarget.caption
+msgid "Export to:"
+msgstr "导出到："
+
+#: ttbexportform.btnbrowse.caption
+msgid "Browse..."
+msgstr "浏览…"
+
+#: ttbexportform.lblfiles.caption
+msgid "Files that go in with theme.tycss and theme.json:"
+msgstr "随 theme.tycss 和 theme.json 一起打包的文件："
+
+#: ttbexportform.btnexport.caption
+msgid "Export"
+msgstr "导出"
+
+#: ttbexportform.btncancel.caption
+msgid "Cancel"
+msgstr "取消"
+
+#: ttbsnippetsform.caption
+msgid "Use it in a program"
+msgstr "在程序里怎么用"
+
+#: ttbsnippetsform.bar.caption
+msgid "Use it in a program"
+msgstr "在程序里怎么用"
+
+#: ttbsnippetsform.tabfile.caption
+msgid "From a file"
+msgstr "从文件"
+
+#: ttbsnippetsform.lblfile.caption
+msgid "Put the .tycss file next to your program."
+msgstr "把 .tycss 文件放在程序旁边。"
+
+#: ttbsnippetsform.btncopyfile.caption
+msgid "Copy"
+msgstr "复制"
+
+#: ttbsnippetsform.tabbundle.caption
+msgid "From a theme bundle"
+msgstr "从主题包"
+
+#: ttbsnippetsform.lblfolder.caption
+msgid "A folder bundle, exported next to your program:"
+msgstr "文件夹主题包，导出到程序旁边："
+
+#: ttbsnippetsform.btncopyfolder.caption
+msgid "Copy"
+msgstr "复制"
+
+#: ttbsnippetsform.lblzip.caption
+msgid "A zip bundle (a theme that refers to no other file):"
+msgstr "zip 主题包（主题不引用其他文件时可用）："
+
+#: ttbsnippetsform.btncopyzip.caption
+msgid "Copy"
+msgstr "复制"
+
+#: ttbsnippetsform.tabregister.caption
+msgid "Registered by name"
+msgstr "注册成命名主题"
+
+#: ttbsnippetsform.lblregister.caption
+msgid "The theme compiled into your program, no file needed:"
+msgstr "主题编译进程序，不需要任何文件："
+
+#: ttbsnippetsform.btncopyregister.caption
+msgid "Copy"
+msgstr "复制"
+
+#: ttbsnippetsform.btnclose.caption
+msgid "Close"
+msgstr "关闭"
+
+#: ttbmainform.aiwin.caption
+msgid "AI"
+msgstr "AI"
+
+#: ttbmainform.aiwin.striphint
+msgid "AI"
+msgstr "AI"
+
+#: ttbmainform.mnuai.caption
+msgid "A&I"
+msgstr "AI(&I)"
+
+#: ttbmainform.mnuaisettings.caption
+msgid "AI se&ttings..."
+msgstr "AI 设置(&T)…"
+
+#: ttbcompareform.caption
+msgid "Compare the AI's version"
+msgstr "对比 AI 的版本"
+
+#: ttbcompareform.bar.caption
+msgid "Compare the AI's version"
+msgstr "对比 AI 的版本"
+
+#: ttbcompareform.lefttitle.caption
+msgid "Now"
+msgstr "现在"
+
+#: ttbcompareform.righttitle.caption
+msgid "AI's version"
+msgstr "AI 的版本"
+
+#: ttbcompareform.btndiscard.caption
+msgid "Discard"
+msgstr "放弃"
+
+#: ttbcompareform.btnaccept.caption
+msgid "Accept"
+msgstr "接受"
+
+#: ttbcompareform.trialcheck.caption
+msgid "Try it in the preview"
+msgstr "在预览里试看"
+
+#: ttbaisettingsform.caption
+msgid "AI settings"
+msgstr "AI 设置"
+
+#: ttbaisettingsform.bar.caption
+msgid "AI settings"
+msgstr "AI 设置"
+
+#: ttbaisettingsform.btncancel.caption
+msgid "Cancel"
+msgstr "取消"
+
+#: ttbaisettingsform.btnok.caption
+msgid "OK"
+msgstr "确定"
+
+#: ttbaisettingsform.btnadd.caption
+msgid "Add"
+msgstr "添加"
+
+#: ttbaisettingsform.btnremove.caption
+msgid "Remove"
+msgstr "删除"
+
+#: ttbaisettingsform.lblname.caption
+msgid "Name"
+msgstr "名称"
+
+#: ttbaisettingsform.lblformat.caption
+msgid "Format"
+msgstr "格式"
+
+#: ttbaisettingsform.lblurl.caption
+msgid "Address"
+msgstr "地址"
+
+#: ttbaisettingsform.lblmodel.caption
+msgid "Model"
+msgstr "模型"
+
+#: ttbaisettingsform.lblkey.caption
+msgid "Key"
+msgstr "密钥"
+
+#: ttbaisettingsform.edtkey.texthint
+msgid "Not needed for a local model"
+msgstr "本地模型不需要"
+
+#: ttbaisettingsform.lblmaxoutput.caption
+msgid "Maximum output (tokens, 0 = not sent)"
+msgstr "最大输出（token，0 = 不发送）"
+
+#: ttbaisettingsform.lbltimeout.caption
+msgid "Timeout (seconds without data)"
+msgstr "超时（多少秒收不到数据）"
+
+#: ttbaisettingsform.btntest.caption
+msgid "Test connection"
+msgstr "测试连接"
+
+#: ttbaisettingsform.miopenai.caption
+msgid "OpenAI"
+msgstr "OpenAI"
+
+#: ttbaisettingsform.mideepseek.caption
+msgid "DeepSeek"
+msgstr "DeepSeek"
+
+#: ttbaisettingsform.mianthropic.caption
+msgid "Anthropic"
+msgstr "Anthropic"
+
+#: ttbaisettingsform.miollama.caption
+msgid "Local (Ollama)"
+msgstr "本地（Ollama）"
+
+#: ttbaisettingsform.micustom.caption
+msgid "Custom"
+msgstr "自定义"
+
+#: ttbaiframe.btnsettings.hint
+msgid "AI settings"
+msgstr "AI 设置"
+
+#: ttbaiframe.lbldescribe.caption
+msgid "Describe the theme or the change, for example: warm colours, rounder corners."
+msgstr "描述想要的主题或改动，例如：暖色调，圆角大一点。"
+
+#: ttbaiframe.chkproblems.caption
+msgid "Include the problem list"
+msgstr "附上问题列表"
+
+#: ttbaiframe.btngenerate.caption
+msgid "Generate"
+msgstr "生成"
+
+#: ttbaiframe.btnstop.caption
+msgid "Stop"
+msgstr "停止"
+
+#: ttbaiframe.btnnewchat.caption
+msgid "New conversation"
+msgstr "新对话"
+
+#: ttbaiframe.btnshowcompare.caption
+msgid "Show the comparison..."
+msgstr "查看对比…"
+
+#: ttbfindbar.edtfind.texthint
+msgid "Find"
+msgstr "查找"
+
+#: ttbfindbar.btnprev.hint
+msgid "Previous (Shift+F3)"
+msgstr "上一个（Shift+F3）"
+
+#: ttbfindbar.btnnext.hint
+msgid "Next (F3)"
+msgstr "下一个（F3）"
+
+#: ttbfindbar.chkcase.caption
+msgid "Match case"
+msgstr "区分大小写"
+
+#: ttbfindbar.chkword.caption
+msgid "Whole word"
+msgstr "全字匹配"
+
+#: ttbfindbar.btnclose.hint
+msgid "Close (Esc)"
+msgstr "关闭（Esc）"
+
+#: ttbfindbar.edtreplace.texthint
+msgid "Replace with"
+msgstr "替换为"
+
+#: ttbfindbar.btnreplace.caption
+msgid "Replace"
+msgstr "替换"
+
+#: ttbfindbar.btnreplaceall.caption
+msgid "Replace all"
+msgstr "全部替换"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: tbmain.rstbconverted
+#, object-pascal-format
+msgid "Read as %s; it will be saved as UTF-8."
+msgstr "按 %s 读入，将存为 UTF-8。"
+
+#: tbmain.rstbfilter
+msgid "Theme files (*.tycss)|*.tycss|All files|*"
+msgstr "主题文件 (*.tycss)|*.tycss|所有文件|*"
+
+#: tbmain.rstblinecol
+#, object-pascal-format
+msgid "Ln %d, Col %d"
+msgstr "行 %d，列 %d"
+
+#: tbmain.rstbnoproblems
+msgid "No problems"
+msgstr "没有问题"
+
+#: tbmain.rstbopenfailed
+#, object-pascal-format
+msgid "Could not open %s: %s"
+msgstr "无法打开 %s：%s"
+
+#: tbmain.rstbparsekept
+msgid "Not loaded: the preview shows the last version that worked."
+msgstr "没有载入：预览显示的是上一版能用的样子。"
+
+#: tbmain.rstbpreviewkept
+#, object-pascal-format
+msgid "The preview kept the last version that worked: %s"
+msgstr "预览保持上一版能用的样子：%s"
+
+#: tbmain.rstbregenerate
+#, object-pascal-format
+msgid "Saved. This theme is compiled into the library: run scripts/%s."
+msgstr "已保存。这个主题编译进了库里：请运行 scripts/%s。"
+
+#: tbmain.rstbreload
+#, object-pascal-format
+msgid "The file %s was changed by another program. Reload it?"
+msgstr "文件 %s 已被其他程序修改。重新载入吗？"
+
+#: tbmain.rstbreloadloses
+msgid "Your unsaved changes will be lost."
+msgstr "未保存的改动会丢失。"
+
+#: tbmain.rstbsavechanges
+#, object-pascal-format
+msgid "Save the changes to %s?"
+msgstr "保存对 %s 的改动吗？"
+
+#: tbmain.rstbsaved
+msgid "Saved."
+msgstr "已保存。"
+
+#: tbmain.rstbsavefailed
+#, object-pascal-format
+msgid "Could not save %s: %s"
+msgstr "无法保存 %s：%s"
+
+#: tbmain.rstbtitle
+#, object-pascal-format
+msgid "%s%s - Theme Builder"
+msgstr "%s%s - 主题编辑器"
+
+#: tbmain.rstbuntitled
+msgid "Untitled"
+msgstr "未命名"
+
+#: tbpreview.rstbdensityclassic
+msgid "Classic"
+msgstr "经典"
+
+#: tbpreview.rstbdensitymodern
+msgid "Modern"
+msgstr "现代"
+
+#: tbpreview.rstbmodedark
+msgid "dark"
+msgstr "暗色"
+
+#: tbpreview.rstbmodefailed
+#, object-pascal-format
+msgid "In %s mode: %s"
+msgstr "%s模式下：%s"
+
+#: tbpreview.rstbmodelight
+msgid "light"
+msgstr "亮色"
+
+#: tbpreview.rstbsamplecolamount
+msgid "Amount"
+msgstr "金额"
+
+#: tbpreview.rstbsamplecolkind
+msgid "Kind"
+msgstr "类型"
+
+#: tbpreview.rstbsamplecolname
+msgid "Name"
+msgstr "名称"
+
+#: tbpreview.rstbsamplecolqty
+msgid "Quantity"
+msgstr "数量"
+
+#: tbpreview.rstbsamplecolregion
+msgid "Region"
+msgstr "地区"
+
+#: tbpreview.rstbsamplecolsize
+msgid "Size"
+msgstr "大小"
+
+#: tbpreview.rstbsamplecrumb1
+msgid "Home"
+msgstr "首页"
+
+#: tbpreview.rstbsamplecrumb2
+msgid "Themes"
+msgstr "主题"
+
+#: tbpreview.rstbsamplecrumb3
+msgid "My theme"
+msgstr "我的主题"
+
+#: tbpreview.rstbsampleeast
+msgid "East"
+msgstr "东区"
+
+#: tbpreview.rstbsamplefile1
+msgid "theme.tycss"
+msgstr "theme.tycss"
+
+#: tbpreview.rstbsamplefile2
+msgid "background.jpg"
+msgstr "background.jpg"
+
+#: tbpreview.rstbsamplefile3
+msgid "notes.txt"
+msgstr "notes.txt"
+
+#: tbpreview.rstbsampleinputprompt
+msgid "New name:"
+msgstr "新名字："
+
+#: tbpreview.rstbsampleinputtitle
+msgid "Rename"
+msgstr "重命名"
+
+#: tbpreview.rstbsampleitem1
+msgid "Apples"
+msgstr "苹果"
+
+#: tbpreview.rstbsampleitem2
+msgid "Pears"
+msgstr "梨"
+
+#: tbpreview.rstbsampleitem3
+msgid "Cherries"
+msgstr "樱桃"
+
+#: tbpreview.rstbsampleitem4
+msgid "Plums"
+msgstr "李子"
+
+#: tbpreview.rstbsampleitem5
+msgid "Grapes"
+msgstr "葡萄"
+
+#: tbpreview.rstbsamplekeyauthor
+msgid "Author"
+msgstr "作者"
+
+#: tbpreview.rstbsamplekeymodes
+msgid "Modes"
+msgstr "模式"
+
+#: tbpreview.rstbsamplekeyname
+msgid "Name"
+msgstr "名称"
+
+#: tbpreview.rstbsamplekeyversion
+msgid "Version"
+msgstr "版本"
+
+#: tbpreview.rstbsamplekindimage
+msgid "Image"
+msgstr "图片"
+
+#: tbpreview.rstbsamplekindtext
+msgid "Text"
+msgstr "文本"
+
+#: tbpreview.rstbsamplekindtheme
+msgid "Theme"
+msgstr "主题"
+
+#: tbpreview.rstbsamplememo1
+msgid "The first line of a memo."
+msgstr "多行文本框的第一行。"
+
+#: tbpreview.rstbsamplememo2
+msgid "A second line, a little longer than the first one."
+msgstr "第二行，比第一行稍长一点。"
+
+#: tbpreview.rstbsamplememo3
+msgid "A third."
+msgstr "第三行。"
+
+#: tbpreview.rstbsamplemessage
+msgid "Save the changes to this theme?"
+msgstr "保存对这个主题的改动吗？"
+
+#: tbpreview.rstbsamplenorth
+msgid "North"
+msgstr "北区"
+
+#: tbpreview.rstbsamplenotifytext
+msgid "The theme was saved."
+msgstr "主题已保存。"
+
+#: tbpreview.rstbsamplenotifytitle
+msgid "Saved"
+msgstr "已保存"
+
+#: tbpreview.rstbsamplesouth
+msgid "South"
+msgstr "南区"
+
+#: tbpreview.rstbsamplestatus1
+msgid "Ready"
+msgstr "就绪"
+
+#: tbpreview.rstbsamplestatus2
+msgid "Ln 1, Col 1"
+msgstr "行 1，列 1"
+
+#: tbpreview.rstbsamplestatus3
+msgid "UTF-8"
+msgstr "UTF-8"
+
+#: tbpreview.rstbsampletab1
+msgid "Overview"
+msgstr "概览"
+
+#: tbpreview.rstbsampletab2
+msgid "Details"
+msgstr "详情"
+
+#: tbpreview.rstbsampletab3
+msgid "History"
+msgstr "历史"
+
+#: tbpreview.rstbsampletotal
+msgid "Total"
+msgstr "合计"
+
+#: tbpreview.rstbsamplevalauthor
+msgid "Me"
+msgstr "我"
+
+#: tbpreview.rstbsamplevalmodes
+msgid "light, dark"
+msgstr "亮色、暗色"
+
+#: tbpreview.rstbsamplevalname
+msgid "My theme"
+msgstr "我的主题"
+
+#: tbpreview.rstbsamplewest
+msgid "West"
+msgstr "西区"
+
+#: tbpreview.rstbsinglemode
+msgid "One mode only"
+msgstr "只有一种模式"
+
+#: tbproblems.rstbsaveforassets
+msgid "Save the file first: url() paths are read from the file's folder."
+msgstr "请先保存文件：url() 的路径按文件所在的文件夹读取。"
+
+#: tbtemplates.rstbbasedon
+#, object-pascal-format
+msgid "Based on the built-in theme \"%s\"."
+msgstr "基于内置主题「%s」。"
+
+#: tbtemplates.rstbminimalheader
+msgid "A minimal theme: the six seeds, light and dark. Everything else comes from the base theme."
+msgstr "极简主题：只有明暗两套的六个种子，其余全部来自底层主题。"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: tbpreview.rstbdensityfailed
+#, object-pascal-format
+msgid "In the %s density: %s"
+msgstr "%s密度下：%s"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: tbcoverageform.rstbcovunknownkey
+msgid "(not a known typeKey)"
+msgstr "（不是已知的 typeKey）"
+
+#: tbexport.rstbexportabsolute
+msgid "an absolute path; move the file next to the theme"
+msgstr "绝对路径；请把文件挪到主题旁边"
+
+#: tbexport.rstbexportbadref
+#, object-pascal-format
+msgid "%s: %s"
+msgstr "%s：%s"
+
+#: tbexport.rstbexportfoldernotempty
+#, object-pascal-format
+msgid "%s is not an empty folder."
+msgstr "%s 不是空文件夹。"
+
+#: tbexport.rstbexportmissing
+msgid "not found"
+msgstr "找不到"
+
+#: tbexport.rstbexportnoparent
+#, object-pascal-format
+msgid "The folder %s does not exist."
+msgstr "文件夹 %s 不存在。"
+
+#: tbexport.rstbexportnotafile
+#, object-pascal-format
+msgid "%s is a folder."
+msgstr "%s 是一个文件夹。"
+
+#: tbexport.rstbexportnotarget
+msgid "Choose where to export to."
+msgstr "请选择导出到哪里。"
+
+#: tbexport.rstbexportoutside
+msgid "outside the theme's folder"
+msgstr "在主题所在文件夹之外"
+
+#: tbexport.rstbexportunsaved
+msgid "save the theme first: paths are read from its folder"
+msgstr "请先保存主题：路径按它所在的文件夹读取"
+
+#: tbexport.rstbexportverifyfailed
+msgid "The bundle did not load back"
+msgstr "导出的包读回来加载不了"
+
+#: tbexport.rstbexportziprefs
+msgid "A zip bundle cannot carry the files this theme refers to (the library reads neither @import nor images from a zip). Export a folder."
+msgstr "zip 包带不了这个主题引用的文件（库读 zip 时既不解析 @import，也不读里面的图片）。请导出成文件夹。"
+
+#: tbexportform.rstbexportonlytheme
+msgid "(none)"
+msgstr "（无）"
+
+#: tbexportform.rstbexportoverwrite
+#, object-pascal-format
+msgid "%s exists. Replace it?"
+msgstr "%s 已存在。替换它吗？"
+
+#: tbmain.rstbexported
+#, object-pascal-format
+msgid "Exported to %s."
+msgstr "已导出到 %s。"
+
+#: tbseedsframe.rstbseeddark
+msgid "Dark"
+msgstr "暗色"
+
+#: tbseedsframe.rstbseedexprask
+#, object-pascal-format
+msgid "%s is the expression %s. Replace it with %s?"
+msgstr "%s 现在是表达式 %s，改成 %s 吗？"
+
+#: tbseedsframe.rstbseedexpression
+msgid "expression"
+msgstr "表达式"
+
+#: tbseedsframe.rstbseedinherited
+msgid "inherited"
+msgstr "继承"
+
+#: tbseedsframe.rstbseedlight
+msgid "Light"
+msgstr "亮色"
+
+#: tbseedsframe.rstbseedsbroken
+msgid "Fix the errors in the problem list first."
+msgstr "先修好问题列表里的错误。"
+
+#: tbseedsframe.rstbseedshared
+msgid "from :root"
+msgstr "来自 :root"
+
+#: tbseedsframe.rstbseedsharedask
+#, object-pascal-format
+msgid "%s is set in :root and shared by light and dark. Yes: change it there (both modes). No: add it to %s only."
+msgstr "%s 写在 :root 里，亮暗共用。选「是」改 :root（两种模式都变），选「否」只给%s加一行。"
+
+#: tbseedsframe.rstbseedssinglemode
+msgid "One mode: the seeds of both light and dark."
+msgstr "单模式：明暗共用这一组种子。"
+
+#: tbseedsframe.rstbseedvalue
+msgid "Value"
+msgstr "值"
+
+#: tbsnippets.rstbsnippetwhere
+msgid "in your main form (a TTyForm):"
+msgstr "放在主窗体（TTyForm）里："
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: tbexport.rstbexportcaseclash
+#, object-pascal-format
+msgid "also written as %s: a system that tells capitals from small letters finds only one of the two -- write it the same way everywhere"
+msgstr "别处写成了 %s：区分大小写的系统上两种写法只找得到一个——请各处写成一样"
+
+#: tbexport.rstbexportentryclash
+#, object-pascal-format
+msgid "the bundle's own %s goes there -- rename this file"
+msgstr "包自己的 %s 要放在这个位置——请给这个文件改个名"
+
+#: tbexport.rstbexportmovefailed
+#, object-pascal-format
+msgid "Could not move the bundle to %s: %s"
+msgstr "没能把包挪到 %s：%s"
+
+#: tbseedsframe.rstbseedimported
+msgid "from an imported file"
+msgstr "来自导入的文件"
+
+#: tbseedsframe.rstbseedoverridden
+msgid "overridden by an imported @mode"
+msgstr "被导入文件的 @mode 盖过"
+
+#: tbseedsframe.rstbseedoverriddenhint
+#, object-pascal-format
+msgid ":root says %s, but an @mode block in an imported file wins over it. A change goes into this file's own @mode block, which wins over the import."
+msgstr ":root 里写的是 %s，但导入文件里的 @mode 块盖过了它。改动会写进本文件自己的 @mode 块，它在导入之后、盖得过导入。"
+
+#: tbseedsframe.rstbseedradiusask
+#, object-pascal-format
+msgid "The %s block has no --radius of its own. Yes: set it in :root, for light and dark (the modern density still puts its own radius over it). No: set it in the %s block only, where it also wins over the modern density's radius. Cancel: change nothing."
+msgstr "%s块没有自己的 --radius。选「是」写进 :root，亮暗两种模式都用（现代密度仍会用它自己的圆角盖过它）；选「否」只写进%s块，在那里它也会盖过现代密度的圆角；选「取消」不改。"
+
+#: tbseedsframe.rstbseedsharedexpression
+msgid "from :root, an expression"
+msgstr "来自 :root，是表达式"
+
+#: tbsnippetsform.rstbsnippetregisterneedsfiles
+#, object-pascal-format
+msgid "Not for this theme: a theme registered as text finds no %s. Load it from a file or a folder bundle."
+msgstr "这个主题用不了：注册成文本的主题找不到 %s。请从文件或文件夹包加载。"
+
+#: tbsnippetsform.rstbsnippetzipneedsfiles
+#, object-pascal-format
+msgid "Not for this theme: a zip cannot carry %s. Export a folder bundle."
+msgstr "这个主题用不了：zip 包带不了 %s。请导出成文件夹包。"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: tbaiclient.rstbaiauth
+#, object-pascal-format
+msgid "The key was refused (%d). Check the key in the AI settings."
+msgstr "密钥被拒绝（%d）。请检查 AI 设置里的密钥。"
+
+#: tbaiclient.rstbaibadformat
+msgid "The reply is not in the expected format."
+msgstr "回答的格式不对。"
+
+#: tbaiclient.rstbaibadrequest
+#, object-pascal-format
+msgid "The service refused the request (%d)."
+msgstr "服务拒绝了这个请求（%d）。"
+
+#: tbaiclient.rstbaibadurl
+#, object-pascal-format
+msgid "The service address is not a web address: %s"
+msgstr "服务地址不是网址：%s"
+
+#: tbaiclient.rstbaibroken
+#, object-pascal-format
+msgid "The connection to %s broke off before the reply was complete."
+msgstr "到 %s 的连接在回答完成之前断了。"
+
+#: tbaiclient.rstbaicancelled
+msgid "Stopped."
+msgstr "已停止。"
+
+#: tbaiclient.rstbaicannotconnect
+#, object-pascal-format
+msgid "Cannot connect to %s. Is the service running, or does it need a proxy?"
+msgstr "连不上 %s。服务开着吗？或者需要代理？"
+
+#: tbaiclient.rstbainamenotresolved
+#, object-pascal-format
+msgid "Cannot find the host %s. Check the address and the network."
+msgstr "找不到主机 %s。请检查地址和网络。"
+
+#: tbaiclient.rstbainotfound
+msgid "Wrong address or model name (404)."
+msgstr "地址或模型名不对（404）。"
+
+#: tbaiclient.rstbainotransport
+#, object-pascal-format
+msgid "AI is not available: %s"
+msgstr "AI 用不了：%s"
+
+#: tbaiclient.rstbaiother
+msgid "The request failed."
+msgstr "请求失败了。"
+
+#: tbaiclient.rstbairatelimit
+msgid "Too many requests (429). Wait a little and try again."
+msgstr "请求太多（429）。等一会儿再试。"
+
+#: tbaiclient.rstbairefused
+msgid "The model declined the request."
+msgstr "模型拒绝了这个请求。"
+
+#: tbaiclient.rstbaiserver
+#, object-pascal-format
+msgid "The service had a problem (%d). Try again later."
+msgstr "服务出了问题（%d）。请稍后再试。"
+
+#: tbaiclient.rstbaiservicesays
+#, object-pascal-format
+msgid "(%s)"
+msgstr "（%s）"
+
+#: tbaiclient.rstbaistreamerror
+msgid "The service stopped with an error."
+msgstr "服务中途报错，停下了。"
+
+#: tbaiclient.rstbaitimeout
+#, object-pascal-format
+msgid "No reply from %s for %d seconds."
+msgstr "%s 已经 %d 秒没有回应。"
+
+#: tbaiclient.rstbaitls
+#, object-pascal-format
+msgid "The secure connection to %s failed."
+msgstr "到 %s 的安全连接失败了。"
+
+#: tbaiclient.rstbaitruncated
+msgid "The reply reached the maximum output length and was cut off. Raise it in the AI settings."
+msgstr "回答到了最大输出长度，被截断了。请在 AI 设置里调大。"
+
+#: tbaiframe.rstbaiconversation
+#, object-pascal-format
+msgid "This conversation: %d requests."
+msgstr "本次对话：%d 条要求。"
+
+#: tbaiframe.rstbaidescribe
+msgid "Describe the theme or the change first."
+msgstr "先描述想要的主题或改动。"
+
+#: tbaiframe.rstbainoprofile
+msgid "Add a service in the AI settings first."
+msgstr "先在 AI 设置里添加一个服务。"
+
+#: tbaiframe.rstbairound
+#, object-pascal-format
+msgid "Round %d"
+msgstr "第 %d 轮"
+
+#: tbaiframe.rstbaisentto
+#, object-pascal-format
+msgid "Sent to: %s"
+msgstr "发送到：%s"
+
+#: tbaisession.rstbaichecking
+msgid "Checking the result..."
+msgstr "正在检查结果……"
+
+#: tbaisession.rstbaidoneclean
+msgid "Done."
+msgstr "完成。"
+
+#: tbaisession.rstbaidoneissues
+#, object-pascal-format
+msgid "Done, with %d problems left."
+msgstr "完成，还剩 %d 个问题。"
+
+#: tbaisession.rstbaimodeprobe
+#, object-pascal-format
+msgid "In %s mode: %s"
+msgstr "%s模式下：%s"
+
+#: tbaisession.rstbainoblock
+msgid "The reply has no tycss code block; its text is shown below."
+msgstr "回答里没有 tycss 代码块，原文在下面。"
+
+#: tbaisession.rstbainochange
+msgid "The model returned the file unchanged."
+msgstr "模型交回的文件和原来一样。"
+
+#: tbaisession.rstbaireceiving
+#, object-pascal-format
+msgid "Receiving: %d lines so far."
+msgstr "正在接收：已有 %d 行。"
+
+#: tbaisession.rstbairetrying
+#, object-pascal-format
+msgid "Found %d problems; asking the model to fix them (%d of %d)..."
+msgstr "发现 %d 个问题，正在请模型改（第 %d 次，最多 %d 次）……"
+
+#: tbaisession.rstbaisending
+#, object-pascal-format
+msgid "Sending to %s..."
+msgstr "正在发送到 %s……"
+
+#: tbaisession.rstbaithinking
+msgid "The model is thinking..."
+msgstr "模型在思考……"
+
+#: tbaisettings.rstbaipresetcustom
+msgid "Custom"
+msgstr "自定义"
+
+#: tbaisettings.rstbaipresetlocal
+msgid "Local (Ollama)"
+msgstr "本地（Ollama）"
+
+#: tbaisettingsform.rstbaiformatanthropic
+msgid "Anthropic"
+msgstr "Anthropic"
+
+#: tbaisettingsform.rstbaiformatopenai
+msgid "OpenAI-compatible"
+msgstr "OpenAI 兼容"
+
+#: tbaisettingsform.rstbaikeystoreunix
+msgid "Keys are stored in a file only you can read."
+msgstr "密钥存在只有你能读的文件里。"
+
+#: tbaisettingsform.rstbaikeystorewin
+msgid "Keys are stored encrypted for your Windows user."
+msgstr "密钥加密保存，只有你的 Windows 账户能解开。"
+
+#: tbaisettingsform.rstbaineedmaxoutput
+msgid "Anthropic needs a maximum output length above 0."
+msgstr "Anthropic 的最大输出必须大于 0。"
+
+#: tbaisettingsform.rstbaiollamahint
+msgid "Ollama keeps only a short context by default and cuts the start of a long request without saying so. Set OLLAMA_CONTEXT_LENGTH=32768 (or more) before starting Ollama."
+msgstr "Ollama 默认的上下文很短，请求太长时会悄悄截掉开头。启动 Ollama 之前先设 OLLAMA_CONTEXT_LENGTH=32768（或更大）。"
+
+#: tbaisettingsform.rstbaiprivacy
+msgid "The theme text and your descriptions are sent to the service set here. A local model (an address on localhost) keeps them on this computer."
+msgstr "主题文本和你的描述会发给这里设置的服务。本地模型（localhost 上的地址）不会让它们离开这台电脑。"
+
+#: tbaisettingsform.rstbairemoveask
+#, object-pascal-format
+msgid "Remove the service \"%s\" and its key?"
+msgstr "删除服务「%s」和它的密钥吗？"
+
+#: tbaisettingsform.rstbaitesting
+msgid "Testing..."
+msgstr "正在测试……"
+
+#: tbaisettingsform.rstbaitestok
+#, object-pascal-format
+msgid "Connected: %s is answering."
+msgstr "已连上：%s 有回应。"
+
+#: tbcompareform.rstbcomparesummary
+#, object-pascal-format
+msgid "%d changes. Problems left: %d."
+msgstr "%d 处改动。剩下的问题：%d 个。"
+
+#: tbcompareform.rstbcomparetrialfailed
+#, object-pascal-format
+msgid "The preview cannot show it: %s"
+msgstr "预览显示不了它：%s"
+
+#: tbhttp.rstbainocurl
+#, object-pascal-format
+msgid "libcurl was not found (tried %s). Install libcurl (for example the libcurl4 package) to use AI."
+msgstr "找不到 libcurl（试过 %s）。装上 libcurl（例如 libcurl4 包）就能用 AI。"
+
+#: tbmain.rstbaiaccepted
+msgid "Accepted the AI's version. Ctrl+Z undoes it."
+msgstr "已接受 AI 的版本。Ctrl+Z 可以撤回。"
+
+#: tbmain.rstbaieditedsince
+msgid "The editor changed after this was generated. Accepting replaces those changes too. Accept?"
+msgstr "生成之后编辑器里又改过。接受会把这些改动一起替换掉。接受吗？"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: tbaiclient.rstbaioption
+#, object-pascal-format
+msgid "The libcurl on this system does not accept an option the AI needs: %s. A newer libcurl is needed."
+msgstr "系统的 libcurl 不接受 AI 需要的一个选项：%s。需要新一点的 libcurl。"
+
+#: tbaiclient.rstbaiproxyauth
+msgid "The proxy asks for a user name and password (407). Set them in the system's proxy settings, or use a proxy that does not ask."
+msgstr "代理要求用户名和密码（407）。请在系统的代理设置里填上，或换一个不要密码的代理。"
+
+#: tbaiclient.rstbairedirect
+#, object-pascal-format
+msgid "The service answered with a redirect (%d) to %s. It was not followed: if that is the right address, put it in the AI settings."
+msgstr "服务返回了重定向（%d），指向 %s。没有跟过去：如果那是对的地址，请在 AI 设置里改成它。"
+
+#: tbaiframe.rstbaicomparewaits
+msgid "Use \"Show the comparison\" to look at it."
+msgstr "点「查看对比…」来看它。"
+
+#: tbaisession.rstbaiincomplete
+msgid "The reply is not complete: it ended inside its code block."
+msgstr "回答不完整：在代码块中间就结束了。"
+
+#: tbaisession.rstbaioutsideref
+#, object-pascal-format
+msgid "The AI added a reference outside the document's folder: %s. It was not read."
+msgstr "AI 加了文档所在文件夹之外的引用：%s。没有读取它。"
+
+#: tbaisettings.rstbaiplainhttp
+msgid "Not encrypted (http://)"
+msgstr "未加密（http://）"
+
+#: tbaisettings.rstbaiplainhttpmore
+msgid "This address uses http: the key and the theme text cross the network unencrypted."
+msgstr "这个地址用 http，密钥和主题文本会明文经过网络。"
+
+#: tbaisettingsform.rstbaisavefailed
+#, object-pascal-format
+msgid "The settings could not be saved (%s). Nothing was changed."
+msgstr "设置没能保存（%s），什么都没有改。"
+
+#: tbcompareform.rstbcompareeditedsince
+msgid "The editor changed after the request: \"Now\" shows it as it is now."
+msgstr "请求发出之后编辑器又改过：「现在」显示的是它此刻的样子。"
+
+# --- code resourcestrings (msgid=Pascal source) ---
+
+#: tbaiframe.rstbaiconversationone
+#, object-pascal-format
+msgid "This conversation: %d request."
+msgstr "本次对话：%d 条要求。"
+
+#: tbmain.rstbformatted
+msgid "Formatted. Ctrl+Z undoes it."
+msgstr "已格式化。Ctrl+Z 可以撤回。"
+
+#: tbmain.rstbalreadyformatted
+msgid "Nothing to format."
+msgstr "没有需要格式化的地方。"
+
+#: tbfindbar.rstbfindnotfound
+msgid "Not found"
+msgstr "找不到"
+
+#: tbfindbar.rstbfindreplaced
+#, object-pascal-format
+msgid "Replaced %d."
+msgstr "替换了 %d 处。"

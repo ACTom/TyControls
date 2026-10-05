@@ -19,7 +19,7 @@ type
     width (like the About-dialog homepage link). On hover the accent is brightened
     slightly. Clicking opens URL via OpenURL when AutoOpen and URL <> ''. Text
     colour/font come from CurrentStyle (typeKey 'TyLabel'), never hard-coded. }
-  TTyLinkLabel = class(TTyGraphicControl)
+  TTyCustomLinkLabel = class(TTyGraphicControl)
   private
     FAlignment: TAlignment;
     FLayout: TTextLayout;
@@ -60,24 +60,66 @@ type
     procedure Click; override;
   public
     constructor Create(AOwner: TComponent); override;
+  protected
+    property URL: string read FURL write SetURL;
+    property AutoOpen: Boolean read FAutoOpen write FAutoOpen default True;
+    property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
+    property Layout: TTextLayout read FLayout write SetLayout default tlCenter;
+  end;
+
+  { TTyLinkLabel publishes TTyCustomLinkLabel's properties; everything lives in TTyCustomLinkLabel. }
+  TTyLinkLabel = class(TTyCustomLinkLabel)
   published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
     { Off by default (a designed link keeps the width the .lfm gave it). Switch it on and the
       link WIDENS to hug its caption plus the theme's padding, so a caption that grows
       lengthens the control -- and with it the accent underline -- instead of being clipped.
       Height is left alone (see CalculatePreferredSize): it belongs to whoever lays out the row. }
     property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
     property Caption;
-    property Enabled;
-    property Font;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
-    property OnClick;
-    property URL: string read FURL write SetURL;
-    property AutoOpen: Boolean read FAutoOpen write FAutoOpen default True;
-    property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
-    property Layout: TTextLayout read FLayout write SetLayout default tlCenter;
+    property URL;
+    property AutoOpen;
+    property Alignment;
+    property Layout;
   end;
 
 implementation
@@ -106,9 +148,9 @@ begin
   Result := Rect(lx, uy, lx + tw, uy + 1);
 end;
 
-{ TTyLinkLabel }
+{ TTyCustomLinkLabel }
 
-constructor TTyLinkLabel.Create(AOwner: TComponent);
+constructor TTyCustomLinkLabel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FAlignment := taLeftJustify;
@@ -117,7 +159,7 @@ begin
   Cursor := crHandPoint;
 end;
 
-function TTyLinkLabel.GetStyleTypeKey: string;
+function TTyCustomLinkLabel.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyLabel': an always-on accent underline is a mark a plain label never draws.
     Added to 'TyLabel's rule block as an extra selector, so every resolved value is
@@ -125,12 +167,12 @@ begin
   Result := 'TyLinkLabel';
 end;
 
-function TTyLinkLabel.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
+function TTyCustomLinkLabel.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
 begin
   Result := TyResolveFontSize(AStyle, ParentFont, Font.Size, ActiveController);
 end;
 
-function TTyLinkLabel.LinkColor: TTyColor;
+function TTyCustomLinkLabel.LinkColor: TTyColor;
 var
   accentS: TTyStyleSet;
 begin
@@ -144,34 +186,34 @@ begin
     Result := TyLighten(Result, 15);   // brighten slightly on hover
 end;
 
-procedure TTyLinkLabel.SetAlignment(AValue: TAlignment);
+procedure TTyCustomLinkLabel.SetAlignment(AValue: TAlignment);
 begin
   if FAlignment = AValue then Exit;
   FAlignment := AValue;
   Invalidate;
 end;
 
-procedure TTyLinkLabel.SetLayout(AValue: TTextLayout);
+procedure TTyCustomLinkLabel.SetLayout(AValue: TTextLayout);
 begin
   if FLayout = AValue then Exit;
   FLayout := AValue;
   Invalidate;
 end;
 
-procedure TTyLinkLabel.SetURL(const AValue: string);
+procedure TTyCustomLinkLabel.SetURL(const AValue: string);
 begin
   if FURL = AValue then Exit;
   FURL := AValue;
 end;
 
-procedure TTyLinkLabel.Click;
+procedure TTyCustomLinkLabel.Click;
 begin
   inherited Click;   // fire OnClick first
   if FAutoOpen and (FURL <> '') then
     OpenURL(FURL);
 end;
 
-procedure TTyLinkLabel.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
+procedure TTyCustomLinkLabel.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
 var
   S: TTyStyleSet;
   Meas: TBitmap;
@@ -186,13 +228,8 @@ begin
   Meas := TBitmap.Create;
   try
     Meas.SetSize(1, 1);
-    Meas.Canvas.Font.Name := TyEffectiveFontName(S.FontName);
-    Meas.Canvas.Font.Size := MulDiv(ResolveFontSize(S), APPI, 96);
-    // TyConfigureTextFont (which the paint path goes through) bolds at weight >= 600.
-    if weight >= 600 then
-      Meas.Canvas.Font.Style := [fsBold]
-    else
-      Meas.Canvas.Font.Style := [];
+    // The measuring twin of TyConfigureTextFont, which the paint path goes through.
+    TyConfigureMeasureFont(Meas.Canvas, S.FontName, ResolveFontSize(S), weight, APPI);
     // Caption verbatim -- RenderTo never calls TyParseMnemonic, so an '&' is a drawn glyph.
     AWidth := Meas.Canvas.TextWidth(Caption);
     // A stable reference glyph: an empty caption still measures as one line.
@@ -204,7 +241,7 @@ begin
   end;
 end;
 
-procedure TTyLinkLabel.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+procedure TTyCustomLinkLabel.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
   WithThemeSpace: Boolean);
 var
   S: TTyStyleSet;
@@ -233,7 +270,7 @@ begin
   PreferredHeight := 0;
 end;
 
-procedure TTyLinkLabel.TextChanged;
+procedure TTyCustomLinkLabel.TextChanged;
 begin
   inherited TextChanged;
   // The new caption needs a different width, so an auto-sized link must re-fit.
@@ -245,7 +282,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyLinkLabel.Invalidate;
+procedure TTyCustomLinkLabel.Invalidate;
 begin
   inherited Invalidate;
   { A theme switch reaches every control as a bare Invalidate (TTyStyleController broadcasts
@@ -266,7 +303,7 @@ begin
   end;
 end;
 
-procedure TTyLinkLabel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomLinkLabel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -309,7 +346,7 @@ begin
   end;
 end;
 
-procedure TTyLinkLabel.Paint;
+procedure TTyCustomLinkLabel.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

@@ -477,3 +477,43 @@ msgstr "大图标"
 #: tycontrols.strconsts.rsfdviewtile
 msgid "Tiles"
 msgstr "平铺"
+
+#: tycontrols.strconsts.rstywindowmenurestore
+msgid "&Restore"
+msgstr "还原(&R)"
+
+#: tycontrols.strconsts.rstywindowmenuminimize
+msgid "Mi&nimize"
+msgstr "最小化(&N)"
+
+#: tycontrols.strconsts.rstywindowmenumaximize
+msgid "Ma&ximize"
+msgstr "最大化(&X)"
+
+#: tycontrols.strconsts.rstywindowmenuclose
+msgid "&Close"
+msgstr "关闭(&C)"
+
+#: tycontrols.strconsts.rsfdpathmustexist
+#, object-pascal-format
+msgid "The folder \"%s\" does not exist."
+msgstr "文件夹 \"%s\" 不存在。"
+
+#: tycontrols.strconsts.rsfdnotwritable
+#, object-pascal-format
+msgid "\"%s\" is not writable."
+msgstr "\"%s\" 不可写。"
+
+#: tycontrols.strconsts.rsfdcreateprompt
+#, object-pascal-format
+msgid ""
+"\"%s\" does not exist.\n"
+"Do you want to create it?"
+msgstr ""
+"\"%s\" 不存在。\n"
+"要创建吗？"
+
+#: tycontrols.strconsts.rsfdoverwriteprompt
+#, object-pascal-format
+msgid "The file \"%s\" already exists.\nDo you want to replace it?"
+msgstr "文件 \"%s\" 已存在。\n是否替换?"

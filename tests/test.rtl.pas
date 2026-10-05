@@ -506,8 +506,8 @@ type
     procedure Build(ARtl: Boolean; ACols: Integer = 3; AWidth: Integer = 400;
       APPI: Integer = 96);
     function  Shot(AWidth: Integer = 400; AHeight: Integer = 200): TBGRABitmap;
-    procedure OnText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
-    procedure OnImage(Sender: TTyTreeView; Node: PTyTreeNode; Kind: TTyVTImageKind;
+    procedure OnText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnImage(Sender: TTyCustomTreeView; Node: PTyTreeNode; Kind: TTyVTImageKind;
       Column: Integer; var Ghosted: Boolean; var ImageIndex: Integer);
     { Column index whose PAINTED cell contains device x, or NoColumn. Derived from
       GetCellRect, i.e. from the paint, never from the hit test being checked. }
@@ -3934,10 +3934,12 @@ begin
   Build(True, [60, 90, 50], 6, 200);
   FG.Header.Options := FG.Header.Options + [hoVisible, hoHeaderClickAutoSort];
   hdrY := 4;
-  { x deep inside the LEFTMOST painted header cell, which mirrored is column 2. Unmirrored
-    the same x is column 0 -- so this single assertion separates "mirrored" from "mirrored
-    in the paint only". }
-  FG.ClickAt(4, hdrY);
+  { x inside the LEFTMOST painted header cell, which mirrored is column 2. Unmirrored the
+    same x is column 0 -- so this single assertion separates "mirrored" from "mirrored in
+    the paint only". Clear of the grip: mirrored, column 2's resize grip is its LEFT edge
+    (x=0, +-4px), and a press on the grip is a resize, not a click -- x=4 used to sort only
+    because the sort ignored the resize arm. }
+  FG.ClickAt(25, hdrY);
   AssertEquals('the click sorted the column painted under it',
     2, FG.Header.SortColumn);
   FG.ClickAt(FG.ViewW - 4, hdrY);
@@ -4560,12 +4562,12 @@ const
     'TyListViewHeaderSection { color: #0000FF; }' +
     'TyListViewLine { background: #00FF00; }';
 
-procedure TRtlTreeViewTest.OnText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+procedure TRtlTreeViewTest.OnText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
 begin
   Text := 'n' + IntToStr(Node^.Index);
 end;
 
-procedure TRtlTreeViewTest.OnImage(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TRtlTreeViewTest.OnImage(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean; var ImageIndex: Integer);
 begin
   if Kind = ikNormal then ImageIndex := 0;
@@ -6128,6 +6130,11 @@ begin
          and (TTyScrollBar(G.Controls[i]).Kind = sbVertical) then
         bar := TTyScrollBar(G.Controls[i]);
     AssertNotNull('the grid shows a vertical bar', bar);
+    { 守的是**边** —— 镜像不该把条搬到左手边去。内嵌条又贴回边上了(它自己把宿主的边框
+      画回它盖住的那几个像素,见 TTyScrollBar.RenderTo),所以右沿重新等于 ClientWidth;
+      中间那几个月按边框内缩时这里是 ClientWidth - inset,旁边那句「没跳到左边」是那时
+      加的,留着。 }
+    AssertTrue('which has not jumped to the left-hand edge', bar.Left > G.ClientWidth div 2);
     AssertEquals('which is still docked against the right edge',
       G.ClientWidth, bar.Left + bar.Width);
   finally
@@ -6190,6 +6197,9 @@ begin
     AssertTrue('precondition: the content overflows, so a bar exists',
       (L.VBar <> nil) and L.VBar.Visible);
     AssertTrue('the form really is mirrored', L.Mirrors);
+    { 同 TheGridsVerticalBarStaysOnTheRight…:条贴回右边,右沿等于 ClientWidth。 }
+    AssertTrue('the vertical bar has not jumped to the left-hand edge',
+      L.VBar.Left > L.ClientWidth div 2);
     AssertEquals('the vertical bar still ends at the client''s right edge',
       L.ClientWidth, L.VBar.Left + L.VBar.Width);
     ax := L.Axis;
@@ -6600,8 +6610,11 @@ begin
     and not an align pass that headless never runs. }
   B := MakeBox(FForm, True, 100, 600);
   AssertTrue('the vertical bar is up', B.VBar.Visible);
-  AssertEquals('and it is docked at the LEFT edge, inside the frame',
-    B.Frame, B.VBar.Left);
+  { Flush against the left edge, like the other hosts' bars: the bar repaints the box's border
+    over its own rect (ITyScrollBarFrameHost), so it no longer stands one frame-width in. What
+    this pins is unchanged -- the LEFT edge, not the right one. }
+  AssertEquals('and it is docked at the LEFT edge', 0, B.VBar.Left);
+  AssertTrue('and not at the right one', B.VBar.Left + B.VBar.Width < B.Width div 2);
 end;
 
 procedure TRtlScrollBoxTest.TheHorizontalBarStartsAfterTheMirroredGutter;
@@ -6610,10 +6623,14 @@ var
 begin
   B := MakeBox(FForm, True, 800, 600);
   AssertTrue('both bars are up', B.VBar.Visible and B.HBar.Visible);
-  AssertEquals('the horizontal bar starts where the content does, past the vertical gutter',
-    B.Frame + B.VBar.Width, B.HBar.Left);
-  AssertEquals('and it still stops short of the corner, which has changed ends',
-    300 - B.Frame, B.HBar.Left + B.HBar.Width);
+  { Both bars sit flush now (they repaint the box's border over their own rects), so the
+    horizontal bar starts right at the mirrored vertical gutter rather than one frame-width
+    further in, and runs to the edge. The content viewport keeps its frame inset -- see
+    TheViewportStartsAfterTheMirroredGutter, unchanged. }
+  AssertEquals('the horizontal bar starts right past the mirrored vertical gutter',
+    B.VBar.Width, B.HBar.Left);
+  AssertEquals('and it runs to the right edge, the corner having changed ends',
+    300, B.HBar.Left + B.HBar.Width);
 end;
 
 procedure TRtlScrollBoxTest.TheViewportStartsAfterTheMirroredGutter;
@@ -6686,6 +6703,7 @@ end;
 procedure TRtlScrollBoxTest.ReDockingAfterAScrollKeepsTheBarsOnTheMirroredSide;
 var
   B: TBoxAccess;
+  vLeft, hLeft: Integer;
 begin
   { ScrollBy moves EVERY child, the two bars included, so the box puts them back straight
     afterwards. There is no longer a SECOND COPY of the placement to disagree with the first:
@@ -6699,13 +6717,23 @@ begin
     TheScrolledOriginStillFollowsTheOffsetWhenMirrored, which is B.Frame + B.VBar.Width)
     already said they were. So the file disagreed with itself: the bar sat one frame-width
     inside before a scroll and on the border line after one. That one-pixel jump, on every
-    scroll step, is the "flicker while dragging the thumb" from the forum thread. }
+    scroll step, is the "flicker while dragging the thumb" from the forum thread.
+
+    AND THEY CHANGED BACK, for a different reason: the bars sit flush again (Left=0 and
+    Left=VBar.Width), because they now repaint the box's border over their own rects instead
+    of standing inside it. The invariant this test exists for is untouched -- a scroll must not
+    move the bars -- so it now reads the docked position BEFORE the scroll and compares against
+    that, rather than restating the arithmetic a third time. }
   B := MakeBox(FForm, True, 800, 600);
+  vLeft := B.VBar.Left;
+  hLeft := B.HBar.Left;
+  AssertEquals('precondition: the vertical bar is docked on the mirrored (left) edge', 0, vLeft);
+  AssertEquals('precondition: the horizontal bar starts after its gutter', B.VBar.Width, hLeft);
   B.ScrollTo(60, 60);
-  AssertEquals('the vertical bar is still on the mirrored side, inside the frame, after a scroll',
-    B.Frame, B.VBar.Left);
+  AssertEquals('the vertical bar is still on the mirrored side after a scroll',
+    vLeft, B.VBar.Left);
   AssertEquals('and the horizontal bar still starts after its gutter',
-    B.Frame + B.VBar.Width, B.HBar.Left);
+    hLeft, B.HBar.Left);
 end;
 
 procedure TRtlScrollBoxTest.TheBoxsOwnHorizontalBarDoesNotMirrorItsOrigin;

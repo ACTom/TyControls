@@ -1,7 +1,8 @@
 unit tyControls.ToolBarEx;
 {$mode objfpc}{$H+}
 
-{ TTyToolBarEx — a TTyToolBar that adds an OVERFLOW chevron.
+{ TTyToolBarEx — a tool bar (on TTyCustomToolBar, so no TTyToolBar descendant since 4.0) that
+  adds an OVERFLOW chevron.
 
   When the bar is NOT wrapping (Wrapable = False) and its tool buttons are wider than
   the bar, the trailing buttons that don't fit are hidden and a "»" chevron button
@@ -27,7 +28,7 @@ uses
   tyControls.StrConsts, tyControls.PopupSurface, tyControls.ToolBar;
 
 type
-  TTyToolBarEx = class(TTyToolBar)
+  TTyCustomToolBarEx = class(TTyCustomToolBar)
   private
     FMoreBtn: TTyGlyphButton;            // the overflow chevron, drawn as a vector glyph
     FPopup: TTyPopupSurface;             // hosts the overflow buttons while open
@@ -59,8 +60,76 @@ type
     function OverflowCount: Integer;
     { True when the "»" chevron is currently shown. }
     function OverflowVisible: Boolean;
+  end;
+
+  { TTyToolBarEx publishes TTyCustomToolBarEx's properties; everything lives in TTyCustomToolBarEx. }
+  TTyToolBarEx = class(TTyCustomToolBarEx)
   published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property ButtonHeight;
+    property ButtonWidth;
+    property ButtonSpacing;
+    property DropDownWidth;
+    property Indent;
+    property List;
     property Wrapable;
+    property ShowCaptions;
+    property Flat;
+    property Images;
+    property HotImages;
+    property DisabledImages;
+    property Align;
+    property Anchors;
+    property OnPaintButton;
   end;
 
 { Pure overflow decision (device px, left-to-right): given each lead button's width and the
@@ -105,16 +174,16 @@ begin
 end;
 
 // ===========================================================================
-// TTyToolBarEx
+// TTyCustomToolBarEx
 // ===========================================================================
-constructor TTyToolBarEx.Create(AOwner: TComponent);
+constructor TTyCustomToolBarEx.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   // Overflow is the differentiator, so default to the non-wrapping mode where it applies.
   Wrapable := False;
 end;
 
-destructor TTyToolBarEx.Destroy;
+destructor TTyCustomToolBarEx.Destroy;
 var i: Integer;
 begin
   Application.RemoveAsyncCalls(Self);   // drop any queued DeferredClosePopup before we go
@@ -134,20 +203,20 @@ begin
   inherited Destroy;
 end;
 
-function TTyToolBarEx.ChevronWidthPx: Integer;
+function TTyCustomToolBarEx.ChevronWidthPx: Integer;
 begin
-  // The chevron's cell width, in the SAME units the base layout works in (ClientWidth /
-  // Indent / ButtonSpacing are all treated as logical px by TyToolbarLayout, and match
-  // device px at PPI 96). A compact fixed cell like the ribbon's "more" button.
-  Result := 30;
+  // The chevron's cell width in DEVICE px, as its name says: 30 logical, a compact fixed
+  // cell like the ribbon's "more" button. It used to be the bare 30, on the grounds that
+  // the layout "matches device px at PPI 96" -- which is the only PPI it matched at.
+  Result := MulDiv(30, LayoutPPI, 96);
 end;
 
-function TTyToolBarEx.IsInternalChild(AControl: TControl): Boolean;
+function TTyCustomToolBarEx.IsInternalChild(AControl: TControl): Boolean;
 begin
   Result := (AControl <> nil) and (AControl = FMoreBtn);
 end;
 
-procedure TTyToolBarEx.EnsureMoreButton;
+procedure TTyCustomToolBarEx.EnsureMoreButton;
 begin
   if FMoreBtn <> nil then Exit;
   FMoreBtn := TTyGlyphButton.Create(Self);  // owned by Self -> freed with the bar
@@ -170,14 +239,15 @@ begin
   FMoreBtn.Visible := False;
 end;
 
-procedure TTyToolBarEx.ClearOverflow;
+procedure TTyCustomToolBarEx.ClearOverflow;
 begin
   SetLength(FOverflow, 0);
 end;
 
-procedure TTyToolBarEx.AlignControls(AControl: TControl; var ARect: TRect);
+procedure TTyCustomToolBarEx.AlignControls(AControl: TControl; var ARect: TRect);
 var
   i, n, visCount, x, chevW, padY, rowH, rowTop, bottomBorder: Integer;
+  ppi, indentPx, spacingPx: Integer;
   kids: array of TControl;
   widths: array of Integer;
   ctl: TControl;
@@ -232,9 +302,9 @@ begin
         rule no skin defines AND leave a StyleClass on a control the host never styled. The
         base's ApplyToButton skips them for the same reason; this override has its own copy of
         the flat rule and so needs its own copy of the exception. }
-      if (kids[i] is TTyButton)
-         and not ((kids[i] is TTyToolButton)
-                  and (TTyToolButton(kids[i]).Style in [tbsSeparator, tbsDivider])) then
+      if (kids[i] is TTyCustomButton)
+         and not ((kids[i] is TTyCustomToolButton)
+                  and (TTyCustomToolButton(kids[i]).Style in [tbsSeparator, tbsDivider])) then
       begin
         { Only manage a class the bar itself put there -- the same rule TTyToolBar's
           ApplyToButton follows. Assigning unconditionally (which is what this did) wiped
@@ -244,12 +314,12 @@ begin
           ApplyToButton, kept the old line. }
         if Flat then
         begin
-          if TTyButton(kids[i]).StyleClass = '' then
-            TTyButton(kids[i]).StyleClass := 'ghost';
+          if TTyCustomButton(kids[i]).StyleClass = '' then
+            TTyCustomButton(kids[i]).StyleClass := 'ghost';
         end
         else
-          if TTyButton(kids[i]).StyleClass = 'ghost' then
-            TTyButton(kids[i]).StyleClass := '';
+          if TTyCustomButton(kids[i]).StyleClass = 'ghost' then
+            TTyCustomButton(kids[i]).StyleClass := '';
       end;
       { The base bar's ButtonWidth floor, through the base's own arbitration — the overflow
         fit must be decided over the widths the buttons will actually be laid out at, or a
@@ -259,8 +329,15 @@ begin
       widths[i] := EffectiveToolWidth(kids[i]);
     end;
 
+    { The same scaling the base layout does, for the same reason: Indent, ButtonSpacing,
+      ButtonHeight and the pad are logical px, the widths and ClientWidth beside them are
+      device px. }
+    ppi := LayoutPPI;
+    indentPx := MulDiv(Indent, ppi, 96);
+    spacingPx := MulDiv(ButtonSpacing, ppi, 96);
+
     chevW := ChevronWidthPx;
-    visCount := TyToolbarOverflowCount(widths, ClientWidth - Indent, chevW);
+    visCount := TyToolbarOverflowCount(widths, ClientWidth - indentPx, chevW);
     if visCount > n then visCount := n;
 
     // Place the lead (fitting) buttons; hide + record the overflow set.
@@ -268,7 +345,7 @@ begin
     { Indent is the LEADING gap, ContentPadY the vertical one -- the base stopped conflating
       the two and this override has to stop too, or a bar with a non-default Indent would sit
       its tools at one height here and another there. }
-    padY := ContentPadY;
+    padY := MulDiv(ContentPadY, ppi, 96);
 
     { ROW HEIGHT — ButtonHeight is what the bar ASKS for; a child may refuse to be that short.
       A control whose caption decides its size publishes Constraints.MinHeight and SetBounds
@@ -277,7 +354,7 @@ begin
       and so re-opened the very defect the base closed -- a clamped-taller button overflowed its
       slot downward and left the row ragged. Same bug shape as the StyleClass one above: the
       base was fixed, the override that duplicates its layout was not. }
-    rowH := ButtonHeight;
+    rowH := MulDiv(ButtonHeight, ppi, 96);
     for i := 0 to n - 1 do
       if kids[i].Constraints.MinHeight > rowH then rowH := kids[i].Constraints.MinHeight;
 
@@ -294,7 +371,7 @@ begin
       rowTop := ClientHeight - bottomBorder - rowH;
     if rowTop < 0 then rowTop := 0;
 
-    x := Indent;
+    x := indentPx;
     for i := 0 to n - 1 do
     begin
       kids[i].Align := alNone;
@@ -304,7 +381,7 @@ begin
         // base bar's SetBounds, and the two are equal until ButtonWidth is set.
         kids[i].SetBounds(x, rowTop, widths[i], rowH);
         kids[i].Visible := True;
-        Inc(x, widths[i] + ButtonSpacing);
+        Inc(x, widths[i] + spacingPx);
       end
       else
       begin
@@ -320,7 +397,7 @@ begin
       { The chevron shares the row's box, not its own -- it sat at (padY, ButtonHeight) while
         the tools beside it could be taller, so it drifted off the row's centre line the moment
         a caption forced the row up. }
-      FMoreBtn.SetBounds(ClientWidth - chevW - Indent, rowTop, chevW, rowH);
+      FMoreBtn.SetBounds(ClientWidth - chevW - indentPx, rowTop, chevW, rowH);
       FMoreBtn.Visible := True;
       FMoreBtn.BringToFront;
     end
@@ -331,9 +408,9 @@ begin
   end;
 end;
 
-procedure TTyToolBarEx.MoreClick(Sender: TObject);
+procedure TTyCustomToolBarEx.MoreClick(Sender: TObject);
 var
-  i, x, y, w, maxW, itemH, pad, gap: Integer;
+  i, x, y, w, maxW, itemH, pad, gap, ppi: Integer;
   tl: TPoint;
 begin
   if Length(FOverflow) = 0 then Exit;
@@ -352,15 +429,23 @@ begin
     FPopup.OnPopupClose := @PopupClosed;
   end;
 
-  pad := 4;
-  gap := ButtonSpacing;
-  itemH := ButtonHeight;
+  { Device px, like the row they came from. The stride has to be the height the items will
+    really HAVE: SetBounds clamps a button up to its own floor, so a flyout pitched at the
+    bare ButtonHeight stacked its items on top of one another as soon as the floor was the
+    taller of the two -- which at 175% it always is. }
+  ppi := LayoutPPI;
+  pad := MulDiv(4, ppi, 96);
+  gap := MulDiv(ButtonSpacing, ppi, 96);
+  itemH := MulDiv(ButtonHeight, ppi, 96);
+  for i := 0 to High(FPopupItems) do
+    if (FPopupItems[i] <> nil) and (FPopupItems[i].Constraints.MinHeight > itemH) then
+      itemH := FPopupItems[i].Constraints.MinHeight;
 
   // Stack the overflow buttons vertically in the popup; keep their own OnClick intact.
   maxW := 0;
   for i := 0 to High(FPopupItems) do
     if (FPopupItems[i] <> nil) and (FPopupItems[i].Width > maxW) then maxW := FPopupItems[i].Width;
-  if maxW <= 0 then maxW := 80;
+  if maxW <= 0 then maxW := MulDiv(80, ppi, 96);
 
   x := pad;
   y := pad;
@@ -374,10 +459,10 @@ begin
     FPopupItems[i].Visible := True;
     // Wrap the button's OnClick so picking an item runs its own handler THEN dismisses the flyout
     // (menu semantics). The original is stashed + restored on close.
-    if FPopupItems[i] is TTyButton then
+    if FPopupItems[i] is TTyCustomButton then
     begin
-      FSavedClicks[i] := TTyButton(FPopupItems[i]).OnClick;
-      TTyButton(FPopupItems[i]).OnClick := @PopupItemClick;
+      FSavedClicks[i] := TTyCustomButton(FPopupItems[i]).OnClick;
+      TTyCustomButton(FPopupItems[i]).OnClick := @PopupItemClick;
     end;
     Inc(y, itemH + gap);
   end;
@@ -389,7 +474,7 @@ begin
   FPopup.ShowAt(Rect(tl.x, tl.y, tl.x + w, tl.y + y + pad - gap), FMoreBtn);
 end;
 
-procedure TTyToolBarEx.PopupItemClick(Sender: TObject);
+procedure TTyCustomToolBarEx.PopupItemClick(Sender: TObject);
 var
   i: Integer;
   orig: TNotifyEvent;
@@ -408,12 +493,12 @@ begin
   Application.QueueAsyncCall(@DeferredClosePopup, 0);
 end;
 
-procedure TTyToolBarEx.DeferredClosePopup(Data: PtrInt);
+procedure TTyCustomToolBarEx.DeferredClosePopup(Data: PtrInt);
 begin
   if (FPopup <> nil) and FPopup.Visible then FPopup.ClosePopup;
 end;
 
-procedure TTyToolBarEx.PopupClosed(Sender: TObject);
+procedure TTyCustomToolBarEx.PopupClosed(Sender: TObject);
 var
   i: Integer;
 begin
@@ -426,8 +511,8 @@ begin
   for i := 0 to High(FPopupItems) do
     if FPopupItems[i] <> nil then
     begin
-      if (FPopupItems[i] is TTyButton) and (i <= High(FSavedClicks)) then
-        TTyButton(FPopupItems[i]).OnClick := FSavedClicks[i];
+      if (FPopupItems[i] is TTyCustomButton) and (i <= High(FSavedClicks)) then
+        TTyCustomButton(FPopupItems[i]).OnClick := FSavedClicks[i];
       FPopupItems[i].Parent := Self;
       FPopupItems[i].Visible := False;
     end;
@@ -436,7 +521,7 @@ begin
   Realign;    // recompute the fit now the popup is gone
 end;
 
-procedure TTyToolBarEx.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomToolBarEx.Notification(AComponent: TComponent; Operation: TOperation);
 var
   i, j: Integer;
 begin
@@ -461,12 +546,12 @@ begin
   end;
 end;
 
-function TTyToolBarEx.OverflowCount: Integer;
+function TTyCustomToolBarEx.OverflowCount: Integer;
 begin
   Result := Length(FOverflow);
 end;
 
-function TTyToolBarEx.OverflowVisible: Boolean;
+function TTyCustomToolBarEx.OverflowVisible: Boolean;
 begin
   Result := (FMoreBtn <> nil) and FMoreBtn.Visible;
 end;

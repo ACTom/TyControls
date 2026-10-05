@@ -39,7 +39,7 @@ type
     TTyColorGrid already makes. }
   TTyIconGrid = class(TTyCustomControl)
   private
-    FFont: TTyIconFont;
+    FFont: TTyCustomIconFont;
     FNames: TStringList;          // the FILTERED names, in display order
     FSelected: Integer;           // index into FNames; -1 = none
     FTopRow: Integer;
@@ -59,7 +59,7 @@ type
     FCacheName: array of string;
     FCacheSize: Integer;
     FCacheColor: TTyColor;
-    procedure SetFont(AValue: TTyIconFont);
+    procedure SetFont(AValue: TTyCustomIconFont);
     procedure SetCellSize(AValue: Integer);
     procedure SetSelected(AValue: Integer);
     procedure ScrollChanged(Sender: TObject);
@@ -98,7 +98,7 @@ type
     { Cell index at a device point, or -1 outside every cell (the trailing gap of a partly
       filled last row included). Test seam. }
     function CellAt(AX, AY: Integer): Integer;
-    property IconFont: TTyIconFont read FFont write SetFont;
+    property IconFont: TTyCustomIconFont read FFont write SetFont;
     property SelectedIndex: Integer read FSelected write SetSelected;
     property CellSize: Integer read FCellSize write SetCellSize;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
@@ -115,9 +115,9 @@ type
     FSearch: TTyEdit;
     FGrid: TTyIconGrid;
     FStatus: TTyLabel;
-    FFont: TTyIconFont;
+    FFont: TTyCustomIconFont;
     FAll: TStringList;            // every name the font offers, unfiltered
-    FIndexSource: TTyVirtualImageList;
+    FIndexSource: TTyCustomVirtualImageList;
     FOnPickName: TTyIconPickNameEvent;
     procedure SearchChanged(Sender: TObject);
     procedure GridChanged(Sender: TObject);
@@ -129,7 +129,7 @@ type
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
     destructor Destroy; override;
     { The font whose glyphs are shown. Setting it reloads the list. }
-    procedure SetIconFont(AValue: TTyIconFont);
+    procedure SetIconFont(AValue: TTyCustomIconFont);
     { Optional. When the browser is opened FROM an image list, this is that list: every icon
       already in it shows its ImageIndex in the corner, and the status line names the index of
       the selection. Consumers address icons by ImageIndex far more often than by name, so
@@ -137,7 +137,7 @@ type
 
       The number shown is the position in the LIST, never in the grid -- the grid is filtered,
       so its positions move as soon as anyone types in the search box. }
-    procedure SetIndexSource(AValue: TTyVirtualImageList);
+    procedure SetIndexSource(AValue: TTyCustomVirtualImageList);
     { The ImageIndex of the current selection in that list, or -1 (no list, or a glyph the list
       does not hold). Test seam. }
     function SelectedImageIndex: Integer;
@@ -163,41 +163,52 @@ type
 
 { Construct-only builder (no ShowModal), so a test can assert the finished dialog. }
 function TyBuildIconBrowserDialog(const ACaption: string;
-  AFont: TTyIconFont): TTyIconBrowserForm;
+  AFont: TTyCustomIconFont): TTyIconBrowserForm;
 { As above, plus the image list whose ImageIndex numbers the browser should show. }
-function TyBuildIconBrowserDialogFor(const ACaption: string; AFont: TTyIconFont;
-  AIndexSource: TTyVirtualImageList): TTyIconBrowserForm;
+function TyBuildIconBrowserDialogFor(const ACaption: string; AFont: TTyCustomIconFont;
+  AIndexSource: TTyCustomVirtualImageList): TTyIconBrowserForm;
 
 { The one-liner. LCL-parity var-param shape: AGlyphName is both the initial selection and the
   result, and it is left untouched when the user cancels. }
-function TyBrowseIcons(const ACaption: string; AFont: TTyIconFont;
+function TyBrowseIcons(const ACaption: string; AFont: TTyCustomIconFont;
   var AGlyphName: string): Boolean;
 
 type
   { The droppable wrapper, like every other dialog in this library. }
-  TTyIconBrowserDialog = class(TTyComponent)
+  TTyCustomIconBrowserDialog = class(TTyComponent)
   private
     FCaption: TCaption;
-    FIconFont: TTyIconFont;
+    FIconFont: TTyCustomIconFont;
     FGlyphName: string;
     FOnShow: TNotifyEvent;
     FOnClose: TCloseEvent;
     FOnCanClose: TCloseQueryEvent;
-    procedure SetIconFont(AValue: TTyIconFont);
+    procedure SetIconFont(AValue: TTyCustomIconFont);
   protected
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     function Execute: Boolean;
-  published
     property Caption: TCaption read FCaption write FCaption;
     { The font to browse. Without one the dialog opens empty and says so, rather than
       pretending the font has no icons. }
-    property IconFont: TTyIconFont read FIconFont write SetIconFont;
+    property IconFont: TTyCustomIconFont read FIconFont write SetIconFont;
     { Seeded into the dialog on Execute and written back when the user accepts. }
     property GlyphName: string read FGlyphName write FGlyphName;
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
+  end;
+
+  { TTyIconBrowserDialog publishes TTyCustomIconBrowserDialog's properties; everything lives in TTyCustomIconBrowserDialog. }
+  TTyIconBrowserDialog = class(TTyCustomIconBrowserDialog)
+  published
+    property Version;
+    property Caption;
+    property IconFont;
+    property GlyphName;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
   end;
 
 implementation
@@ -244,7 +255,7 @@ begin
   Result := 'TyListBox';
 end;
 
-procedure TTyIconGrid.SetFont(AValue: TTyIconFont);
+procedure TTyIconGrid.SetFont(AValue: TTyCustomIconFont);
 begin
   if FFont = AValue then Exit;
   if FFont <> nil then FFont.RemoveFreeNotification(Self);
@@ -590,8 +601,10 @@ begin
   inherited CreateNew(AOwner, Num);
   Caption := rsDlgIconBrowserTitle;
   Resizable := True;
-  Constraints.MinWidth := 420;
-  Constraints.MinHeight := 320;
+  { Every layout number in this form is a 96-PPI design number and goes through Px: see
+    TTyDialog.Px. }
+  Constraints.MinWidth := Px(420);
+  Constraints.MinHeight := Px(320);
   FAll := TStringList.Create;
 
   FSearch := TTyEdit.Create(Self);
@@ -611,7 +624,7 @@ begin
 
   AddButton(rsMsgBtnOK, mrOK, True, False);
   AddButton(rsMsgBtnCancel, mrCancel, False, True);
-  AutoSizeToContent(560, 420);
+  AutoSizeToContent(Px(560), Px(420));
   LayoutContent;
   UpdateStatus;
 end;
@@ -622,7 +635,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TTyIconBrowserForm.SetIconFont(AValue: TTyIconFont);
+procedure TTyIconBrowserForm.SetIconFont(AValue: TTyCustomIconFont);
 begin
   FFont := AValue;
   FGrid.IconFont := AValue;
@@ -631,7 +644,7 @@ begin
   ApplyFilter(FSearch.Text);
 end;
 
-procedure TTyIconBrowserForm.SetIndexSource(AValue: TTyVirtualImageList);
+procedure TTyIconBrowserForm.SetIndexSource(AValue: TTyCustomVirtualImageList);
 begin
   FIndexSource := AValue;
   if FIndexSource <> nil then FGrid.SetIndexNames(FIndexSource.Names)
@@ -752,20 +765,21 @@ var r: TRect; x, w, editH, statusH: Integer;
 begin
   if FGrid = nil then Exit;      { Resize can fire before construction finishes }
   r := ContentRect;
-  x := r.Left + TyDlgPad;
-  w := (r.Right - r.Left) - 2 * TyDlgPad;
-  editH := TyDensityHeight(nil, TyDlgEditH);
-  statusH := 20;
-  FSearch.SetBounds(x, r.Top + TyDlgPad, w, editH);
-  FStatus.SetBounds(x, r.Bottom - TyDlgPad - statusH, w, statusH);
-  FGrid.SetBounds(x, r.Top + TyDlgPad + editH + Gap, w,
-    (r.Bottom - r.Top) - 2 * TyDlgPad - editH - statusH - 2 * Gap);
+  x := r.Left + Px(TyDlgPad);
+  w := (r.Right - r.Left) - 2 * Px(TyDlgPad);
+  editH := Px(TyDensityHeight(nil, TyDlgEditH));
+  statusH := Px(20);
+  FSearch.SetBounds(x, r.Top + Px(TyDlgPad), w, editH);
+  editH := FSearch.Height;         // what it became: SetBounds clamps up to the field's floor
+  FStatus.SetBounds(x, r.Bottom - Px(TyDlgPad) - statusH, w, statusH);
+  FGrid.SetBounds(x, r.Top + Px(TyDlgPad) + editH + Px(Gap), w,
+    (r.Bottom - r.Top) - 2 * Px(TyDlgPad) - editH - statusH - 2 * Px(Gap));
 end;
 
 { ============================================================ entry points =========== }
 
-function TyBuildIconBrowserDialogFor(const ACaption: string; AFont: TTyIconFont;
-  AIndexSource: TTyVirtualImageList): TTyIconBrowserForm;
+function TyBuildIconBrowserDialogFor(const ACaption: string; AFont: TTyCustomIconFont;
+  AIndexSource: TTyCustomVirtualImageList): TTyIconBrowserForm;
 begin
   Result := TTyIconBrowserForm.CreateNew(Application);
   if ACaption <> '' then Result.Caption := ACaption
@@ -776,12 +790,12 @@ begin
 end;
 
 function TyBuildIconBrowserDialog(const ACaption: string;
-  AFont: TTyIconFont): TTyIconBrowserForm;
+  AFont: TTyCustomIconFont): TTyIconBrowserForm;
 begin
   Result := TyBuildIconBrowserDialogFor(ACaption, AFont, nil);
 end;
 
-function TyBrowseIcons(const ACaption: string; AFont: TTyIconFont;
+function TyBrowseIcons(const ACaption: string; AFont: TTyCustomIconFont;
   var AGlyphName: string): Boolean;
 var d: TTyIconBrowserForm;
 begin
@@ -795,9 +809,9 @@ begin
   end;
 end;
 
-{ ======================================================= TTyIconBrowserDialog ======== }
+{ ================================================= TTyCustomIconBrowserDialog ======== }
 
-procedure TTyIconBrowserDialog.SetIconFont(AValue: TTyIconFont);
+procedure TTyCustomIconBrowserDialog.SetIconFont(AValue: TTyCustomIconFont);
 begin
   if FIconFont = AValue then Exit;
   if FIconFont <> nil then FIconFont.RemoveFreeNotification(Self);
@@ -805,13 +819,13 @@ begin
   if FIconFont <> nil then FIconFont.FreeNotification(Self);
 end;
 
-procedure TTyIconBrowserDialog.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomIconBrowserDialog.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FIconFont) then FIconFont := nil;
 end;
 
-function TTyIconBrowserDialog.Execute: Boolean;
+function TTyCustomIconBrowserDialog.Execute: Boolean;
 var d: TTyIconBrowserForm;
 begin
   { Inlined rather than delegated to TyBrowseIcons so the wrapper's OnShow/OnClose/OnCanClose

@@ -5,9 +5,9 @@ unit test.painter;
 interface
 
 uses
-  Classes, SysUtils, Types, Graphics, LazUTF8, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, LCLType, LazUTF8, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter;
+  tyControls.Types, tyControls.Painter, tyControls.Grid;
 
 type
   TPainterTest = class(TTestCase)
@@ -34,6 +34,8 @@ type
     procedure TestBorderPixelColor;
     procedure TestDropShadowAlpha;
     procedure TestDrawTextRastersPixels;
+    procedure TestTextIsInkedAsWindowsInksIt;
+    procedure TestDrawnTextEndsWhereItWasMeasured;
     procedure TestDrawGlyphAllKinds;
     procedure TestChevronLeftIsTheApexMirrorOfChevronRight;
     procedure TestNineSliceCenterRegion;
@@ -53,6 +55,15 @@ type
     procedure TestMeasureTextBlockCountsAuthoredLines;
     procedure TestMeasureTextBlockLineHeightIsDerivedNotFloored;
     procedure TestMeasureTextBlockWrapsToAWidth;
+    procedure TestTheGdiRendererKeepsOneBitmap;
+    procedure TestTheKeptBitmapGrowsForATallerRun;
+    procedure TestATallRunAfterAWideOneKeepsTheWidth;
+    procedure TestARunTooBigForTheKeptBitmapGetsItsOwn;
+    procedure TestTheKeptBitmapIsClearedBetweenRuns;
+    procedure TestTheCoverageIsReadOffTheDib;
+    procedure TestAShadowIsRenderedOncePerLook;
+    procedure TestANineSliceImageIsReadOnce;
+    procedure TestAnImageFillIsServedWithoutTheDisk;
   end;
 
 implementation
@@ -227,6 +238,176 @@ begin
         Inc(hits);
     end;
   AssertTrue('glyph pixels rendered', hits > 0);
+end;
+
+{ TEXT IS INKED AS WINDOWS INKS IT.
+  Three renderings were shipped or tried and each looked wrong next to the text Windows
+  draws in the same window: six-times-and-shrink (soft and light), GDI grayscale at the real
+  size (crisp, but both axes hinted: Microsoft YaHei's strokes snapped sideways and turned
+  blocky), BGRA's ClearType (coloured, and lighter). What the eye compares is how much ink a
+  line lays down and how much of it is solid -- so that is what is compared, against GDI's
+  own ClearType drawing the same string in the same font, black on white and white on black.
+  Each of the three rejected renderings misses one of the two by far more than the margin.
+  The reference is GDI under THIS machine's ClearType settings, on purpose: away from the
+  default contrast Windows inks light-on-dark heavier than dark-on-light (12% for Segoe UI
+  at 1200), so a light-ink case going red where it was green is the renderer drifting from
+  what Windows draws on that desktop -- light ink drawn from dark-on-light coverage did
+  exactly that -- not an environment to be waved through. }
+procedure TPainterTest.TestTextIsInkedAsWindowsInksIt;
+
+  { Coverage of every pixel: 0 = paper, 1 = ink. }
+  procedure Measure(const ACov: array of Single; out AMass, ASolid: Double);
+  var
+    i, ink, solid: Integer;
+  begin
+    AMass := 0;
+    ink := 0;
+    solid := 0;
+    for i := 0 to High(ACov) do
+      if ACov[i] > 0.05 then
+      begin
+        AMass := AMass + ACov[i];
+        Inc(ink);
+        if ACov[i] > 0.75 then Inc(solid);
+      end;
+    if ink > 0 then ASolid := solid / ink else ASolid := 0;
+  end;
+
+  procedure Compare(const AFont: string; APPI: Integer; ALightInk: Boolean);
+  const
+    CText = 'Illuminate Tabs TStrings 按住 Alt 显示助记下划线 跳到对应标签';
+  var
+    w, h, x, y, n: Integer;
+    ours, theirs: array of Single;
+    b: TBitmap;
+    shot: TBGRABitmap;
+    p: TBGRAPixel;
+    m1, s1, m2, s2: Double;
+    ink: TTyColor;
+    what: string;
+  begin
+    w := MulDiv(700, APPI, 96);
+    h := MulDiv(28, APPI, 96);
+    SetLength(ours, w * h);
+    SetLength(theirs, w * h);
+    if ALightInk then ink := TyRGBA(255, 255, 255, 255) else ink := TyRGBA(0, 0, 0, 255);
+    { Ours: the painter, on its own transparent surface -- alpha IS coverage. }
+    MakePainter(w, h, APPI);
+    try
+      FPainter.DrawText(Rect(0, 0, w, h), CText, AFont, 9, 400, ink, taLeftJustify, tlCenter,
+        False);
+      for y := 0 to h - 1 do
+        for x := 0 to w - 1 do
+          ours[y * w + x] := PixelAt(x, y).alpha / 255;
+    finally
+      FreePainter;
+    end;
+    { Theirs: GDI's ClearType, in the same font at the same pixel height. }
+    b := TBitmap.Create;
+    try
+      b.PixelFormat := pf24bit;
+      b.SetSize(w, h);
+      if ALightInk then b.Canvas.Brush.Color := clBlack else b.Canvas.Brush.Color := clWhite;
+      b.Canvas.FillRect(0, 0, w, h);
+      b.Canvas.Font.Name := AFont;
+      b.Canvas.Font.Height := -TyFontHeightPx(9, APPI);
+      b.Canvas.Font.Quality := fqCleartypeNatural;
+      if ALightInk then b.Canvas.Font.Color := clWhite else b.Canvas.Font.Color := clBlack;
+      b.Canvas.Brush.Style := bsClear;
+      b.Canvas.TextOut(0, 2, CText);
+      shot := TBGRABitmap.Create(b);
+      try
+        for y := 0 to h - 1 do
+          for x := 0 to w - 1 do
+          begin
+            p := shot.GetPixel(x, y);
+            n := (p.red + p.green + p.blue) div 3;
+            if ALightInk then theirs[y * w + x] := n / 255
+            else theirs[y * w + x] := 1 - n / 255;
+          end;
+      finally
+        shot.Free;
+      end;
+    finally
+      b.Free;
+    end;
+    Measure(ours, m1, s1);
+    Measure(theirs, m2, s2);
+    what := Format('%s, %d PPI, %s ink: ours lays down %.0f of ink, %.2f of it solid;'
+      + ' Windows %.0f, %.2f', [AFont, APPI, BoolToStr(ALightInk, 'light', 'dark'),
+      m1, s1, m2, s2]);
+    AssertTrue('precondition: Windows drew the text -- ' + what, m2 > 100);
+    AssertTrue('as much ink as Windows lays down -- ' + what, Abs(m1 - m2) <= 0.08 * m2);
+    AssertTrue('as much of it solid -- ' + what, Abs(s1 - s2) <= 0.06);
+  end;
+
+begin
+  {$IFDEF LCLWin32}
+  Compare('Microsoft YaHei UI', 96, False);
+  Compare('Microsoft YaHei UI', 168, False);
+  Compare('Segoe UI', 96, False);
+  Compare('Segoe UI', 168, False);
+  Compare('Microsoft YaHei UI', 168, True);
+  Compare('Segoe UI', 96, True);
+  {$ELSE}
+  Ignore('the renderer is chosen per widgetset; this compares the Win32 one with GDI');
+  {$ENDIF}
+end;
+
+{ DRAWN TEXT ENDS WHERE IT WAS MEASURED.
+  Carets, ellipses and AutoSize widths are all laid out from MeasureText, so the glyphs have
+  to land on it. On Windows the measuring side asks GDI's DrawText, and a renderer can draw
+  the run with a call that lays it out differently: TextOut does not kern the pairs DrawText
+  kerns (a line of AV/To/Ty in Segoe UI: 145 px measured, 159 drawn), and TCanvas.TextRect
+  renames an unnamed font 'default', which is another face. So the line is kerned, and it is
+  drawn in a named font and in an unnamed one -- the test runner's own font. }
+procedure TPainterTest.TestDrawnTextEndsWhereItWasMeasured;
+
+  procedure Check(const AFont: string; APPI: Integer);
+  const
+    CText = 'AVAVAVAVAV To Ty Wa Yo LT';
+  var
+    sz: TSize;
+    w, h, x, y, right: Integer;
+  begin
+    w := MulDiv(400, APPI, 96);
+    h := MulDiv(30, APPI, 96);
+    MakePainter(w, h, APPI);
+    try
+      sz := FPainter.MeasureText(CText, AFont, 9, 400);
+      FPainter.DrawText(Rect(0, 0, w, h), CText, AFont, 9, 400, TyRGBA(0, 0, 0, 255),
+        taLeftJustify, tlCenter, False);
+      right := 0;
+      for y := 0 to h - 1 do
+        for x := 0 to w - 1 do
+          if (PixelAt(x, y).alpha > 60) and (x + 1 > right) then right := x + 1;
+    finally
+      FreePainter;
+    end;
+    AssertTrue(Format('precondition: "%s" at %d PPI measured inside the surface (%d of %d)',
+      [AFont, APPI, sz.cx, w]), (sz.cx > 0) and (sz.cx < w - 20));
+    AssertTrue(Format('"%s" at %d PPI: the ink ends at %d, the measured line at %d',
+      [AFont, APPI, right, sz.cx]), Abs(right - sz.cx) <= 2);
+  end;
+
+var
+  saved: string;
+begin
+  {$IFDEF LCLWin32}
+  saved := TyFallbackFontName;
+  TyFallbackFontName := '';
+  try
+    Check('Segoe UI', 96);
+    Check('Segoe UI', 168);
+    Check('', 96);
+    Check('', 168);
+  finally
+    TyFallbackFontName := saved;
+  end;
+  {$ELSE}
+  Ignore('the renderer is chosen per widgetset; this checks the Win32 one against GDI''s measure');
+  if saved = '' then ;
+  {$ENDIF}
 end;
 
 procedure TPainterTest.TestDrawGlyphAllKinds;
@@ -726,7 +907,569 @@ begin
     [hNarrow, hFull]), hNarrow >= 3 * hFull);
 end;
 
+{ The Win32 text renderer draws every run on ONE kept GDI bitmap (it grows when a run
+  needs more room) instead of a fresh TBitmap and a whole-bitmap conversion per run.
+  From a fresh start (no kept bitmap): the first run makes it, 200 runs no wider than it
+  keep the very same one, none gets a bitmap of its own, none is converted. The pixels
+  are held by TestTheCoverageIsReadOffTheDib and tools/painter-regress. }
+procedure TPainterTest.TestTheGdiRendererKeepsOneBitmap;
+var
+  made, own, conv, k, w, h: Integer;
+  kept: THandle;
+begin
+  {$IFNDEF LCLWin32}
+  Ignore('Win32 only: the other widgetsets draw text through BGRA');
+  {$ENDIF}
+  TyGdiTextResetForTest;
+  made := TyGdiTextBitmapsMade;
+  own := TyGdiTextOneOffBitmapsForTest;
+  conv := TyGdiTextConversionsForTest;
+  MakePainter(300, 60, 96);
+  FPainter.DrawText(Rect(0, 0, 300, 60), 'Run 200 文字 text', 'Segoe UI', 10, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+  kept := TyGdiTextKeptBitmapForTest(w, h);
+  AssertTrue('the first run made the kept bitmap', kept <> 0);
+  AssertEquals('one made', 1, TyGdiTextBitmapsMade - made);
+  for k := 1 to 200 do
+    FPainter.DrawText(Rect(0, 0, 300, 60), 'Run ' + IntToStr(k) + ' 文字 text', 'Segoe UI', 10, 400,
+      TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+  AssertTrue('200 runs on the same bitmap', kept = TyGdiTextKeptBitmapForTest(w, h));
+  AssertEquals('none made or grown', 1, TyGdiTextBitmapsMade - made);
+  AssertEquals('none drawn on a bitmap of its own', 0, TyGdiTextOneOffBitmapsForTest - own);
+  AssertEquals('none converted: the coverage read off the DIB', 0, TyGdiTextConversionsForTest - conv);
+end;
+
+{ The kept bitmap grows in each direction on its own: a wide run of small text first
+  (wide enough for what follows, not tall enough), then one very tall letter -- all of it
+  drawn, not cut at the height the wide run left (nor read past the bitmap's end). }
+procedure TPainterTest.TestTheKeptBitmapGrowsForATallerRun;
+var
+  top, bottom, rows, w, h: Integer;
+begin
+  {$IFNDEF LCLWin32}
+  Ignore('Win32 only: the other widgetsets draw text through BGRA');
+  {$ENDIF}
+  TyGdiTextResetForTest;
+  MakePainter(1400, 40, 96);
+  FPainter.DrawText(Rect(0, 0, 1400, 40), StringOfChar('m', 150), 'Segoe UI', 8, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+  FreePainter;
+  TyGdiTextKeptBitmapForTest(w, h);
+  AssertTrue(Format('the wide run left a short bitmap (%d rows)', [h]), h < 250);
+  MakePainter(1000, 900, 96);
+  FPainter.DrawText(Rect(0, 0, 1000, 900), 'W', 'Segoe UI', 300, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+  InkRows(top, bottom, rows);
+  AssertTrue(Format('the whole letter: %d rows of ink (%d..%d)', [rows, top, bottom]), rows >= 250);
+end;
+
+{ ...and only in the direction that is short: a tall letter after a wide run leaves the
+  width as the wide run made it (it used to widen by half on every growth of the height,
+  so a long line followed by a few big titles kept a bitmap of tens of megabytes). }
+procedure TPainterTest.TestATallRunAfterAWideOneKeepsTheWidth;
+var
+  w0, h0, w1, h1: Integer;
+begin
+  {$IFNDEF LCLWin32}
+  Ignore('Win32 only: the other widgetsets draw text through BGRA');
+  {$ENDIF}
+  TyGdiTextResetForTest;
+  MakePainter(1400, 40, 96);
+  FPainter.DrawText(Rect(0, 0, 1400, 40), StringOfChar('m', 150), 'Segoe UI', 8, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+  TyGdiTextKeptBitmapForTest(w0, h0);
+  FPainter.DrawText(Rect(0, 0, 1400, 40), 'W', 'Segoe UI', 72, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+  TyGdiTextKeptBitmapForTest(w1, h1);
+  AssertTrue(Format('taller (%d -> %d)', [h0, h1]), h1 > h0);
+  AssertEquals('as wide as the wide run made it', w0, w1);
+  FPainter.DrawText(Rect(0, 0, 1400, 40), 'W', 'Segoe UI', 200, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+  TyGdiTextKeptBitmapForTest(w1, h1);
+  AssertEquals('still as wide after a second growth', w0, w1);
+end;
+
+{ A run too big to keep a bitmap for (wider than 8192 pixels here) is drawn on a bitmap
+  of its own: the kept one stays as it was, and the run is still drawn. }
+procedure TPainterTest.TestARunTooBigForTheKeptBitmapGetsItsOwn;
+var
+  own, w0, h0, w1, h1, top, bottom, rows: Integer;
+  kept: THandle;
+begin
+  {$IFNDEF LCLWin32}
+  Ignore('Win32 only: the other widgetsets draw text through BGRA');
+  {$ENDIF}
+  TyGdiTextResetForTest;
+  MakePainter(400, 300, 96);
+  FPainter.DrawText(Rect(0, 0, 400, 300), 'small', 'Segoe UI', 10, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlTop, False);
+  kept := TyGdiTextKeptBitmapForTest(w0, h0);
+  own := TyGdiTextOneOffBitmapsForTest;
+  FreePainter;
+  MakePainter(400, 300, 96);
+  FPainter.DrawText(Rect(0, 0, 400, 300), StringOfChar('W', 60), 'Segoe UI', 120, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlTop, False);
+  AssertEquals('drawn on a bitmap of its own', 1, TyGdiTextOneOffBitmapsForTest - own);
+  AssertTrue('the kept bitmap is the same', kept = TyGdiTextKeptBitmapForTest(w1, h1));
+  AssertEquals('same width', w0, w1);
+  AssertEquals('same height', h0, h1);
+  InkRows(top, bottom, rows);
+  AssertTrue(Format('and the run was drawn (%d rows of ink)', [rows]), rows > 50);
+end;
+
+{ The kept bitmap holds the last run's ink: a long run of solid blocks, then a short run,
+  must come out as the short one does on a fresh bitmap. }
+procedure TPainterTest.TestTheKeptBitmapIsClearedBetweenRuns;
+var
+  a: TBGRABitmap;
+  x, y, diff: Integer;
+  p, q: TBGRAPixel;
+  Blocks: string;
+begin
+  Blocks := '';
+  for x := 1 to 40 do
+    Blocks := Blocks + '█';
+  {$IFNDEF LCLWin32}
+  Ignore('Win32 only: the other widgetsets draw text through BGRA');
+  {$ENDIF}
+  TyGdiTextResetForTest;
+  MakePainter(200, 60, 96);
+  FPainter.DrawText(Rect(0, 0, 200, 60), 'ab 字', 'Segoe UI', 12, 400,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+  a := FPainter.Bitmap.Duplicate as TBGRABitmap;
+  try
+    { text, not a box: a bitmap never cleared is black, and black reads as full ink }
+    diff := 0;
+    for y := 0 to 59 do
+      for x := 0 to 199 do
+        if a.GetPixel(x, y).alpha > 0 then Inc(diff);
+    AssertTrue(Format('the short run is drawn as text (%d inked pixels)', [diff]), (diff > 20) and (diff < 800));
+    FreePainter;
+    { solid ink where the small run's own part of the bitmap lies (the same size puts
+      both runs' margins in the same place) }
+    MakePainter(900, 60, 96);
+    FPainter.DrawText(Rect(0, 0, 900, 60), Blocks, 'Segoe UI', 12, 700,
+      TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+    FreePainter;
+    MakePainter(200, 60, 96);
+    FPainter.DrawText(Rect(0, 0, 200, 60), 'ab 字', 'Segoe UI', 12, 400,
+      TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+    diff := 0;
+    for y := 0 to 59 do
+      for x := 0 to 199 do
+      begin
+        p := a.GetPixel(x, y);
+        q := FPainter.Bitmap.GetPixel(x, y);
+        if (p.red <> q.red) or (p.green <> q.green) or (p.blue <> q.blue) or (p.alpha <> q.alpha) then
+          Inc(diff);
+      end;
+    AssertEquals('pixels left over from the big run', 0, diff);
+  finally
+    a.Free;
+  end;
+end;
+
+{ The coverage read straight off the DIB is the coverage the whole conversion to BGRA
+  gives (the old path, still the one for a bitmap that is not a DIB): every channel in
+  the average, the rows in the DIB's order, the DIB's own row length. Several sizes and
+  runs (CJK, a mnemonic ampersand, ligatures), byte for byte. }
+procedure TPainterTest.TestTheCoverageIsReadOffTheDib;
+const
+  Runs: array[0..3] of string = ('Hamburgefonstiv 0123', '中文与 English 混排', 'W&M ag', 'ffi fl é');
+  Sizes: array[0..2] of Integer = (8, 11, 23);
+var
+  a: TBGRABitmap;
+  r, s, x, y, diff, conv, inked: Integer;
+  p, q: TBGRAPixel;
+begin
+  {$IFNDEF LCLWin32}
+  Ignore('Win32 only: the other widgetsets draw text through BGRA');
+  {$ENDIF}
+  for r := 0 to High(Runs) do
+    for s := 0 to High(Sizes) do
+    begin
+      MakePainter(400, 80, 96);
+      conv := TyGdiTextConversionsForTest;
+      FPainter.DrawText(Rect(3, 0, 400, 80), Runs[r], 'Segoe UI', Sizes[s], 400,
+        TyRGBA(20, 40, 60, 255), taLeftJustify, tlCenter, False);
+      AssertEquals('read off the DIB', 0, TyGdiTextConversionsForTest - conv);
+      a := FPainter.Bitmap.Duplicate as TBGRABitmap;
+      try
+        FreePainter;
+        MakePainter(400, 80, 96);
+        TyGdiTextForceConversionForTest(True);
+        try
+          FPainter.DrawText(Rect(3, 0, 400, 80), Runs[r], 'Segoe UI', Sizes[s], 400,
+            TyRGBA(20, 40, 60, 255), taLeftJustify, tlCenter, False);
+        finally
+          TyGdiTextForceConversionForTest(False);
+        end;
+        AssertTrue('the other went through the conversion', TyGdiTextConversionsForTest - conv >= 1);
+        diff := 0;
+        inked := 0;
+        for y := 0 to 79 do
+          for x := 0 to 399 do
+          begin
+            p := a.GetPixel(x, y);
+            q := FPainter.Bitmap.GetPixel(x, y);
+            if p.alpha > 0 then Inc(inked);
+            if (p.red <> q.red) or (p.green <> q.green) or (p.blue <> q.blue) or (p.alpha <> q.alpha) then
+              Inc(diff);
+          end;
+        AssertTrue(Format('"%s" at %d pt: drawn at all', [Runs[r], Sizes[s]]), inked > 20);
+        AssertEquals(Format('"%s" at %d pt: pixels that differ', [Runs[r], Sizes[s]]), 0, diff);
+      finally
+        a.Free;
+        FreePainter;
+      end;
+    end;
+end;
+
+{ Every pixel, alpha included, of A and B. }
+procedure AssertSamePixels(const AMsg: string; A, B: TBGRABitmap);
+var
+  x, y, diff: Integer;
+  pa, pb: TBGRAPixel;
+begin
+  TAssert.AssertEquals(AMsg + ': width', B.Width, A.Width);
+  TAssert.AssertEquals(AMsg + ': height', B.Height, A.Height);
+  diff := 0;
+  for y := 0 to A.Height - 1 do
+    for x := 0 to A.Width - 1 do
+    begin
+      pa := A.GetPixel(x, y);
+      pb := B.GetPixel(x, y);
+      if (pa.red <> pb.red) or (pa.green <> pb.green) or (pa.blue <> pb.blue)
+         or (pa.alpha <> pb.alpha) then
+        Inc(diff);
+    end;
+  TAssert.AssertEquals(AMsg + ': pixels that differ', 0, diff);
+end;
+
+{ A SHADOW IS RENDERED ONCE PER LOOK (TTyPainter.DropShadow).
+  Each look is drawn with the cache off -- the reference, rendered the way every shadow
+  always was -- and then with it on, and the two must be the same bytes. The looks are drawn
+  in an order that makes the key matter: the first is kept, and every one after it differs
+  from it in ONE thing the shadow depends on (the bitmap's size, the outline, the radius, the
+  blur, the colour), so a key that left that thing out would hand back the first shadow.
+  The offset is not in the key -- it is applied when the shadow is laid down -- so the look
+  moved by an offset must come from the cache and still land where the reference does. One
+  outline runs off the bitmap's edge, where the blur is cut off. }
+procedure TPainterTest.TestAShadowIsRenderedOncePerLook;
+type
+  TLook = record
+    W, H: Integer;
+    R: TRect;
+    Rad, Blur: Integer;
+    C: TTyColor;
+    Ofs: TPoint;
+  end;
+
+  function Look(AW, AH: Integer; const AR: TRect; ARad, ABlur: Integer; AC: TTyColor;
+    const AOfs: TPoint): TLook;
+  begin
+    Result.W := AW; Result.H := AH; Result.R := AR; Result.Rad := ARad; Result.Blur := ABlur;
+    Result.C := AC; Result.Ofs := AOfs;
+  end;
+
+  function Draw(const L: TLook; ACache: Boolean): TBGRABitmap;
+  var
+    saved: Boolean;
+  begin
+    saved := TyShadowCacheEnabled;
+    TyShadowCacheEnabled := ACache;
+    try
+      MakePainter(L.W, L.H, 96);
+      try
+        FPainter.DropShadow(L.R, L.Rad, L.C, L.Blur, L.Ofs);
+        Result := FPainter.Bitmap.Duplicate as TBGRABitmap;
+      finally
+        FreePainter;
+      end;
+    finally
+      TyShadowCacheEnabled := saved;
+    end;
+  end;
+
+  procedure Check(const AMsg: string; const L: TLook; AExpectRender: Boolean);
+  var
+    want, got: TBGRABitmap;
+    before: Integer;
+  begin
+    want := Draw(L, False);
+    before := TyShadowsRendered;
+    got := Draw(L, True);
+    try
+      AssertSamePixels(AMsg, got, want);
+      if AExpectRender then
+        AssertEquals(AMsg + ': rendered, not taken from the cache', before + 1, TyShadowsRendered)
+      else
+        AssertEquals(AMsg + ': taken from the cache', before, TyShadowsRendered);
+    finally
+      want.Free;
+      got.Free;
+    end;
+  end;
+
+var
+  base: TLook;
+  shade: TTyColor;
+begin
+  TyClearShadowCache;
+  shade := TyRGBA(0, 0, 0, 90);
+  base := Look(160, 110, Rect(16, 14, 140, 92), 8, 10, shade, Point(0, 4));
+  Check('the first look', base, True);
+  Check('the same look again', base, False);
+  Check('the same look at another offset', Look(160, 110, Rect(16, 14, 140, 92), 8, 10, shade,
+    Point(3, -2)), False);
+  Check('a bitmap of another size', Look(170, 110, Rect(16, 14, 140, 92), 8, 10, shade,
+    Point(0, 4)), True);
+  Check('another outline', Look(160, 110, Rect(20, 14, 140, 92), 8, 10, shade, Point(0, 4)), True);
+  Check('another radius', Look(160, 110, Rect(16, 14, 140, 92), 3, 10, shade, Point(0, 4)), True);
+  Check('another blur', Look(160, 110, Rect(16, 14, 140, 92), 8, 4, shade, Point(0, 4)), True);
+  Check('another colour', Look(160, 110, Rect(16, 14, 140, 92), 8, 10, TyRGBA(200, 0, 0, 90),
+    Point(0, 4)), True);
+  Check('an outline off the edge', Look(160, 110, Rect(-6, 14, 150, 104), 8, 10, shade,
+    Point(0, 4)), True);
+  Check('no blur, and square', Look(160, 110, Rect(16, 14, 140, 92), 0, 0, shade, Point(0, 4)), True);
+  Check('no blur, and square, again', Look(160, 110, Rect(16, 14, 140, 92), 0, 0, shade,
+    Point(0, 4)), False);
+end;
+
+{ Writes a small picture with a different colour in each of its nine cells. }
+function WriteNineCellPng(const APath: string): Boolean;
+var
+  b: TBGRABitmap;
+  x, y: Integer;
+begin
+  b := TBGRABitmap.Create(9, 9);
+  try
+    for y := 0 to 8 do
+      for x := 0 to 8 do
+        b.SetPixel(x, y, BGRA(40 + 70 * (x div 3), 40 + 70 * (y div 3), 200, 255));
+    b.SaveToFile(APath);
+  finally
+    b.Free;
+  end;
+  Result := FileExists(APath);
+end;
+
+{ A NINE-SLICE IMAGE IS READ ONCE. NineSlice read its file from disk on every paint; it now
+  shares DrawImageFill's image cache. Drawn once, the file removed, drawn again: the second
+  picture is the first. }
+procedure TPainterTest.TestANineSliceImageIsReadOnce;
+var
+  path: string;
+  first, second: TBGRABitmap;
+begin
+  path := GetTempDir(False) + 'ty_nineslice_' + IntToStr(GetProcessID) + '_'
+    + IntToStr(GetTickCount64) + '.png';
+  AssertTrue('precondition: the picture was written', WriteNineCellPng(path));
+  MakePainter(60, 40, 96);
+  try
+    FPainter.NineSlice(Rect(0, 0, 60, 40), path, Rect(3, 3, 3, 3), False);
+    first := FPainter.Bitmap.Duplicate as TBGRABitmap;
+  finally
+    FreePainter;
+  end;
+  try
+    AssertTrue('precondition: the slices were drawn', first.GetPixel(30, 20).alpha = 255);
+    AssertTrue('precondition: the file is gone', DeleteFile(path));
+    MakePainter(60, 40, 96);
+    try
+      FPainter.NineSlice(Rect(0, 0, 60, 40), path, Rect(3, 3, 3, 3), False);
+      second := FPainter.Bitmap.Duplicate as TBGRABitmap;
+    finally
+      FreePainter;
+    end;
+    try
+      AssertSamePixels('the second paint, without the file', second, first);
+    finally
+      second.Free;
+    end;
+  finally
+    first.Free;
+  end;
+end;
+
+{ AN IMAGE FILL IS SERVED WITHOUT THE DISK. The image cache asked the file system whether the
+  file existed before it looked in the cache, on every paint; it now looks first. Drawn once,
+  the file removed, drawn again: the cached picture is still drawn. }
+procedure TPainterTest.TestAnImageFillIsServedWithoutTheDisk;
+var
+  path: string;
+  fill: TTyFill;
+  first, second: TBGRABitmap;
+begin
+  path := GetTempDir(False) + 'ty_imagefill_' + IntToStr(GetProcessID) + '_'
+    + IntToStr(GetTickCount64) + '.png';
+  AssertTrue('precondition: the picture was written', WriteNineCellPng(path));
+  FillChar(fill, SizeOf(fill), 0);
+  fill.Kind := tfkImage;
+  fill.ImagePath := path;
+  fill.ImageMode := timStretch;
+  MakePainter(45, 45, 96);
+  try
+    FPainter.FillBackground(Rect(0, 0, 45, 45), fill, 0);
+    first := FPainter.Bitmap.Duplicate as TBGRABitmap;
+  finally
+    FreePainter;
+  end;
+  try
+    AssertTrue('precondition: the picture was drawn', first.GetPixel(22, 22).alpha = 255);
+    AssertTrue('precondition: the file is gone', DeleteFile(path));
+    MakePainter(45, 45, 96);
+    try
+      FPainter.FillBackground(Rect(0, 0, 45, 45), fill, 0);
+      second := FPainter.Bitmap.Duplicate as TBGRABitmap;
+    finally
+      FreePainter;
+    end;
+    try
+      AssertSamePixels('the second paint, without the file', second, first);
+    finally
+      second.Free;
+    end;
+  finally
+    first.Free;
+  end;
+end;
+
+{ ---- the ellipsis fit DrawText and the grid share (#18) ---- }
+
+type
+  TEllipsisFitTest = class(TTestCase)
+  published
+    procedure TestTheFitIsTheOneAtATimeCut;
+    procedure TestAMultiLineTextShowsItsFirstLine;
+    procedure TestAHugeTextIsDrawnQuickly;
+  end;
+
+{ The cut as it was made before #18: one codepoint at a time, re-measuring the rest each time.
+  Quadratic, but its answers are the reference -- the bounded search must give the same ones. }
+function OneAtATimeFit(ABmp: TBGRABitmap; const AText: string; AW: Integer): string;
+var
+  n: Integer;
+  sz: TSize;
+begin
+  Result := AText;
+  if AText = '' then Exit;
+  n := UTF8Length(Result);
+  sz := ABmp.TextSize(Result);
+  while (n > 1) and (sz.cx > AW) do
+  begin
+    Dec(n);
+    Result := TyEllipsisPrefix(AText, n);
+    sz := ABmp.TextSize(Result + '...');
+  end;
+  if Result <> AText then Result := Result + '...';
+end;
+
+procedure TEllipsisFitTest.TestTheFitIsTheOneAtATimeCut;
+const
+  TEXTS: array[0..8] of string = ('Hello', 'Try it in the preview', 'Show hidden files',
+    '中文标题测试一下', 'Mixed 中英 text here', 'a', 'ab',
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWW', 'iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii');
+  FONTS: array[0..1] of string = ('Arial', 'Microsoft YaHei UI');
+  { Too narrow for anything, a few glyphs, and the widths where these captions get cut. }
+  WIDTHS: array[0..13] of Integer = (0, 1, 5, 10, 20, 30, 45, 60, 80, 100, 130, 160, 200, 240);
+var
+  bmp: TBGRABitmap;
+  f, i, k: Integer;
+  want, got: string;
+begin
+  bmp := TBGRABitmap.Create(1, 1);
+  try
+    for f := Low(FONTS) to High(FONTS) do
+    begin
+      TyConfigureTextFont(bmp, FONTS[f], 9, 400, 96);
+      for i := Low(TEXTS) to High(TEXTS) do
+      begin
+        for k := Low(WIDTHS) to High(WIDTHS) do
+        begin
+          want := OneAtATimeFit(bmp, TEXTS[i], WIDTHS[k]);
+          got := TyEllipsisFit(bmp, TEXTS[i], WIDTHS[k]);
+          AssertEquals(Format('%s, "%s" in %d px', [FONTS[f], TEXTS[i], WIDTHS[k]]), want, got);
+        end;
+      end;
+    end;
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ BGRA strips CR/LF before it measures or draws, so a multi-line text drawn on one line used to
+  come out with its lines glued together. One line now shows its first line, and says there is
+  more. }
+procedure TEllipsisFitTest.TestAMultiLineTextShowsItsFirstLine;
+var
+  bmp: TBGRABitmap;
+  s: string;
+begin
+  AssertEquals('the shown line of a multi-line text', 'First...',
+    TySingleLineText('First' + #13#10 + 'Second'));
+  AssertEquals('a text without a break is itself', 'First', TySingleLineText('First'));
+  bmp := TBGRABitmap.Create(1, 1);
+  try
+    TyConfigureTextFont(bmp, 'Arial', 9, 400, 96);
+    AssertEquals('room for it all: the first line and the ellipsis', 'First...',
+      TyEllipsisFit(bmp, 'First' + #13#10 + 'Second', 400));
+    AssertEquals('a bare LF counts too', 'First...', TyEllipsisFit(bmp, 'First' + #10 + 'Second', 400));
+    AssertEquals('a text that starts with a break shows the ellipsis alone', '...',
+      TyEllipsisFit(bmp, #10 + 'Second', 400));
+    s := TyEllipsisFit(bmp, 'A first line long enough to need cutting' + #10 + 'x', 60);
+    AssertTrue('narrow: a shorter prefix of the first line, with the ellipsis: ' + s,
+      (Pos('...', s) = Length(s) - 2) and (Pos('A first', s) = 1) and (Pos('x', s) = 0));
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ A 300-line script in a tree cell froze the tree: the old cut re-measured the whole remaining
+  text once per codepoint. Both shapes now cost about a dozen measurements of strings no longer
+  than the cell can show. The bound is generous on purpose; the old cut took far longer. }
+procedure TEllipsisFitTest.TestAHugeTextIsDrawnQuickly;
+var
+  host: TBitmap;
+  p: TTyPainter;
+  lines, one: string;
+  i: Integer;
+  t0, took: QWord;
+begin
+  lines := '';
+  one := '';
+  for i := 1 to 300 do
+  begin
+    lines := lines + Format('line %d: if value > limit then report(value, ''too high'');', [i]);
+    one := one + Format('part %d of a very long single line of text ', [i]);
+    if i < 300 then lines := lines + #13#10;
+  end;
+  AssertTrue('precondition: about 12k characters each', (Length(lines) > 10000) and (Length(one) > 10000));
+  host := TBitmap.Create;
+  p := TTyPainter.Create;
+  try
+    host.SetSize(220, 40);
+    p.BeginPaint(host.Canvas, Rect(0, 0, 220, 40), 96);
+    t0 := GetTickCount64;
+    p.DrawText(Rect(0, 0, 200, 20), lines, 'Arial', 9, 400, TyRGB(0, 0, 0), taLeftJustify,
+      tlCenter, True);
+    p.DrawText(Rect(0, 20, 200, 40), one, 'Arial', 9, 400, TyRGB(0, 0, 0), taLeftJustify,
+      tlCenter, True);
+    { The grid's cell fit is the same function; ask it too, so a grid that went back to its own
+      loop would show here. }
+    TyGridEllipsisFit(p.Bitmap, one, 200);
+    TyGridEllipsisFit(p.Bitmap, lines, 200);
+    took := GetTickCount64 - t0;
+    p.EndPaint;
+    AssertTrue(Format('the 12k-character texts ellipsised in %d ms', [took]), took < 1000);
+  finally
+    p.Free;
+    host.Free;
+  end;
+end;
+
 initialization
+  RegisterTest(TEllipsisFitTest);
   RegisterTest(TPainterTest);
 
 end.

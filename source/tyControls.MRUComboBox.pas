@@ -11,7 +11,7 @@ type
     and the list is capped at MaxItems (oldest entries fall off the tail).
     Picking a dropdown row re-promotes it via the overridden DoSelect. No custom
     item paint (entries are plain text) — reuses the 'TyComboBox' style key. }
-  TTyMRUComboBox = class(TTyComboBox)
+  TTyCustomMRUComboBox = class(TTyCustomComboBox)
   private
     FMaxItems: Integer;
     procedure SetMaxItems(AValue: Integer);
@@ -33,14 +33,90 @@ type
       is the base's AddHistoryItem, called with MaxItems and the case-insensitive,
       object-less arguments this narrower contract implies. }
     procedure AddToHistory(const S: string);
-  published
     { Maximum number of remembered entries (>= 1). Lowering it trims the tail. }
     property MaxItems: Integer read FMaxItems write SetMaxItems default 10;
   end;
 
+  { TTyMRUComboBox publishes TTyCustomMRUComboBox's properties; everything lives in TTyCustomMRUComboBox. }
+  TTyMRUComboBox = class(TTyCustomMRUComboBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property Text;
+    property DropDownCount;
+    property Sorted;
+    property MaxLength;
+    property CharCase;
+    property Style;
+    property ItemHeight;
+    property ItemWidth;
+    property TextHint;
+    property ReadOnly;
+    property OnDrawItem;
+    property OnMeasureItem;
+    property OnChange;
+    property OnSelect;
+    property OnDropDown;
+    property OnCloseUp;
+    property OnGetItems;
+    property Align;
+    property Anchors;
+    property MaxItems;
+  end;
+
 implementation
 
-constructor TTyMRUComboBox.Create(AOwner: TComponent);
+constructor TTyCustomMRUComboBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   Style := csDropDown;   // editable: the user types a value that gets remembered
@@ -48,7 +124,7 @@ begin
   FMaxItems := 10;
 end;
 
-procedure TTyMRUComboBox.SetMaxItems(AValue: Integer);
+procedure TTyCustomMRUComboBox.SetMaxItems(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
   if FMaxItems = AValue then Exit;
@@ -58,7 +134,7 @@ begin
     Items.Delete(Items.Count - 1);
 end;
 
-procedure TTyMRUComboBox.AddToHistory(const S: string);
+procedure TTyCustomMRUComboBox.AddToHistory(const S: string);
 var
   t: string;
 begin
@@ -89,13 +165,13 @@ begin
   ItemIndex := 0;
 end;
 
-procedure TTyMRUComboBox.DoSelect;
+procedure TTyCustomMRUComboBox.DoSelect;
 begin
   inherited DoSelect;
   AddToHistory(Text);
 end;
 
-procedure TTyMRUComboBox.DoEditorCommit;
+procedure TTyCustomMRUComboBox.DoEditorCommit;
 begin
   inherited DoEditorCommit;
   AddToHistory(Text);

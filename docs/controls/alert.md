@@ -38,7 +38,7 @@ uses tyControls.Alert;
 |------|------|--------|------|
 | `AlertType` | `TTyAlertType` | `atInfo` | `(atInfo, atSuccess, atWarning, atError)`。**同时**决定样式变体名（`'info'` / `'success'` / `'warning'` / `'error'`）和状态图标。改它会重新贴合自动尺寸的横条（主题可能给不同变体不同 `padding`）。 |
 | `Message` | `string` | `''` | 标题行。用解析后的 `TyAlert` 样式绘制（**不**读取 LCL `Font.*`），**左对齐**，放不下时省略号截断，**不换行**。**不解析助记符**：警告条不激活任何东西，`&` 就是字面字符。 |
-| `Description` | `string` | `''` | 可选的第二行。**一旦设置**，横条切换到更高的两行形态；清空则退回一行。绘制规则同 `Message`。 |
+| `Description` | `TCaption` | `''` | 可选的第二行。**一旦设置**，横条切换到更高的两行形态；清空则退回一行。绘制规则同 `Message`。 |
 | `ShowIcon` | `Boolean` | `True` | 在左侧槽位画出该类型的状态图标。默认开：图标是让警告条「一眼可读」的关键，也是 `AlertType` 除颜色之外存在的理由。 |
 | `Closable` | `Boolean` | `False` | 显示并启用关闭（`x`）字形。关掉时会一并清掉残留的悬停 / 按下状态。 |
 | `OnClose` | `TTyAlertCloseEvent` | `nil` | 见第 4 节。 |
@@ -52,7 +52,7 @@ uses tyControls.Alert;
 |------|------|--------|------|
 | `StyleClass` | `string` | `''` | **附加变体**，叠在类型自带的变体之上——见下方「`StyleClass` 与 `AlertType` 怎么相处」。 |
 | `StyleOverride` | `string` | `''` | 单实例内联 CSS 声明块（可引用 `var(--...)` 令牌）。 |
-| `Controller` | `TTyStyleController` | `nil`（用全局 `TyDefaultController`） | 指定样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（用全局 `TyDefaultController`） | 指定样式控制器。 |
 
 另暴露 `Enabled` / `Font` / `Align` / `Anchors` / `OnClick` 及 `TTyGraphicControl` 基线事件集，见 [../events.md](../events.md)。
 

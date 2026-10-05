@@ -5,6 +5,13 @@ uses Classes, SysUtils, fpcunit, testregistry, Forms,
   {$IFDEF LCLWin32}Windows,{$ENDIF}
   tyControls.Types, tyControls.StyleModel, tyControls.WindowEffects;
 type
+  { The frame/shadow trade, pinned on its own: the platform code that reads it cannot be
+    exercised headlessly, but the RULE can. }
+  TNcFrameEatTest = class(TTestCase)
+  published
+    procedure TestFrameIsKeptOnlyWhenAShadowWillActuallyAppear;
+  end;
+
   TWindowEffectsTest = class(TTestCase)
   published
     procedure TestWindowShadowParsesTrue;
@@ -43,6 +50,26 @@ begin
   if WidgetSetReady then Exit;
   Forms.Application.Initialize;
   WidgetSetReady := True;
+end;
+
+procedure TNcFrameEatTest.TestFrameIsKeptOnlyWhenAShadowWillActuallyAppear;
+{ The Win32 non-client calc keeps the left/right/bottom frame for ONE reason: the DWM hangs
+  the window shadow on it. On a version with NO DWM the frame is kept for a shadow that can
+  never be drawn, while the OS legacy-paints its own ring in those bands (XP's Luna blue) and
+  repaints a classic caption over our chrome whenever a dropdown steals activation.
+
+  The second argument is the OS VERSION test, NOT "is composition on" -- that distinction is
+  the point of this test. Vista and Win7 can run with composition switched off and still have
+  a DWM frame and the shell gestures that ride on WS_CAPTION, so they must keep the handling
+  they have; only the versions with no DWM at all change behaviour. }
+begin
+  AssertFalse('a wanted shadow on a DWM version keeps the frame -- Vista/7/10/11 unchanged',
+    TyNcFullFrameEat(True, False));
+  AssertTrue('a wanted shadow on a legacy-NC version eats the frame -- the XP case',
+    TyNcFullFrameEat(True, True));
+  AssertTrue('the theme opting out eats the frame on a DWM version, as it always did',
+    TyNcFullFrameEat(False, False));
+  AssertTrue('and on a legacy-NC version too', TyNcFullFrameEat(False, True));
 end;
 
 procedure TWindowEffectsTest.TestWindowShadowParsesTrue;
@@ -211,5 +238,6 @@ end;
 {$ENDIF}
 
 initialization
+  RegisterTest(TNcFrameEatTest);
   RegisterTest(TWindowEffectsTest);
 end.

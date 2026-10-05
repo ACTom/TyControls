@@ -2,7 +2,7 @@ unit tyControls.Dialogs;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Controls, Dialogs, Forms,
+  Classes, SysUtils, Types, Graphics, Controls, Dialogs, Forms, LCLType,
   tyControls.Types, tyControls.Form, tyControls.Base, tyControls.Controller,
   tyControls.Button, tyControls.Panel,
   tyControls.TyLabel, tyControls.Edit, tyControls.Memo, tyControls.Painter,
@@ -37,7 +37,7 @@ type
     // (TTyCustomControl / TTyGraphicControl — the two base classes share no common
     // ancestor exposing Controller, so test each separately), then recurse into any
     // TWinControl child. Invalidates as it goes so the new theme repaints.
-    procedure ApplyControllerToChildren(AParent: TWinControl; AController: TTyStyleController);
+    procedure ApplyControllerToChildren(AParent: TWinControl; AController: TTyCustomStyleController);
     // A resizable, custom-frame (bsNone) window resizes via WM_NCHITTEST on the form's own
     // HWND, but a child control at the very bottom edge (the button bar) steals those
     // messages, so the bottom sizing border is dead. Expose it by leaving this many px of
@@ -69,7 +69,21 @@ type
       ADefault: Boolean = False; ACancel: Boolean = False): TTyButton;
     procedure LayoutButtonBar;
     function ContentRect: TRect;
+    { AContentW / AContentH are DEVICE px, like everything a builder measures. }
     procedure AutoSizeToContent(AContentW, AContentH: Integer);
+    { A LOGICAL length in device px at this dialog's PPI.
+
+      A dialog is laid out by CODE, from numbers written for 96 PPI -- TyDlgPad, the 88 px
+      button, the 320 px edit -- and it is laid out AFTER its form was constructed, by which
+      time LCL has taken the (still empty) form to the monitor's PPI. So no DPI pass ever
+      sees those numbers: they have to be scaled where they are used. Every layout number
+      in a dialog goes through here; a measured one (a caption, a control's own floor) is
+      device px already and does not.
+
+      For a dialog that builds itself INSIDE its constructor the form is still at 96 and
+      this is the identity -- the pass that follows scales the finished layout, as it would
+      a designed form's. Either way the same code is right. }
+    function Px(ALogical: Integer): Integer;
     // Esc / programmatic cancel -> FCancelResult. (The title-bar X closes the
     // modal and returns mrCancel via LCL's default; it does not call this.)
     procedure CancelDialog;
@@ -102,7 +116,7 @@ function TyMessageDlg(const AMsg: string; ADlgType: TMsgDlgType; AButtons: TMsgD
 function TyMessageDlgPos(const AMsg: string; ADlgType: TMsgDlgType; AButtons: TMsgDlgButtons; AHelpCtx: Longint; X, Y: Integer): TModalResult;
 
 type
-  TTyMessage = class(TTyComponent)
+  TTyCustomMessage = class(TTyComponent)
   private
     FTitle, FMsg: string;
     FDlgType: TMsgDlgType;
@@ -113,14 +127,26 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     function Execute: TModalResult;
-  published
     property Title: TCaption read FTitle write FTitle;
-    property Msg: string read FMsg write FMsg;
+    property Msg: TCaption read FMsg write FMsg;
     property DlgType: TMsgDlgType read FDlgType write FDlgType default mtInformation;
     property Buttons: TMsgDlgButtons read FButtons write FButtons default [mbOK];
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
+  end;
+
+  { TTyMessage publishes TTyCustomMessage's properties; everything lives in TTyCustomMessage. }
+  TTyMessage = class(TTyCustomMessage)
+  published
+    property Version;
+    property Title;
+    property Msg;
+    property DlgType;
+    property Buttons;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
   end;
 
 { Input dialog — construct-only builder returns the dialog + its edit (out param). }
@@ -130,7 +156,7 @@ function TyInputQuery(const ACaption, APrompt: string; var AValue: string): Bool
 function TyInputBox(const ACaption, APrompt, ADefault: string): string;
 
 type
-  TTyInputDialog = class(TTyComponent)
+  TTyCustomInputDialog = class(TTyComponent)
   private
     FCaption, FPrompt, FValue: string;
     FOnShow: TNotifyEvent;
@@ -138,13 +164,24 @@ type
     FOnCanClose: TCloseQueryEvent;
   public
     function Execute: Boolean;
-  published
     property Caption: TCaption read FCaption write FCaption;
-    property Prompt: string read FPrompt write FPrompt;
+    property Prompt: TCaption read FPrompt write FPrompt;
     property Value: string read FValue write FValue;
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
+  end;
+
+  { TTyInputDialog publishes TTyCustomInputDialog's properties; everything lives in TTyCustomInputDialog. }
+  TTyInputDialog = class(TTyCustomInputDialog)
+  published
+    property Version;
+    property Caption;
+    property Prompt;
+    property Value;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
   end;
 
 { Password dialog — masked-edit delta on Input }
@@ -154,7 +191,7 @@ function TyPasswordBox(const ACaption, APrompt: string): string;
 function TyPasswordQuery(const ACaption, APrompt: string; var AValue: string): Boolean;
 
 type
-  TTyPasswordDialog = class(TTyComponent)
+  TTyCustomPasswordDialog = class(TTyComponent)
   private
     FCaption, FPrompt, FValue, FPasswordChar: string;
     FOnShow: TNotifyEvent;
@@ -163,14 +200,26 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     function Execute: Boolean;
-  published
     property Caption: TCaption read FCaption write FCaption;
-    property Prompt: string read FPrompt write FPrompt;
+    property Prompt: TCaption read FPrompt write FPrompt;
     property Value: string read FValue write FValue;
     property PasswordChar: string read FPasswordChar write FPasswordChar;
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
+  end;
+
+  { TTyPasswordDialog publishes TTyCustomPasswordDialog's properties; everything lives in TTyCustomPasswordDialog. }
+  TTyPasswordDialog = class(TTyCustomPasswordDialog)
+  published
+    property Version;
+    property Caption;
+    property Prompt;
+    property Value;
+    property PasswordChar;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
   end;
 
 { Text dialog — resizable multi-line memo input }
@@ -190,7 +239,7 @@ function TyBuildTextDialog(const ACaption, APrompt, ADefault: string; out AMemo:
 function TyTextQuery(const ACaption, APrompt: string; var AValue: string): Boolean;
 
 type
-  TTyTextDialog = class(TTyComponent)
+  TTyCustomTextDialog = class(TTyComponent)
   private
     FCaption, FPrompt, FValue: string;
     FOnShow: TNotifyEvent;
@@ -198,13 +247,24 @@ type
     FOnCanClose: TCloseQueryEvent;
   public
     function Execute: Boolean;
-  published
     property Caption: TCaption read FCaption write FCaption;
-    property Prompt: string read FPrompt write FPrompt;
+    property Prompt: TCaption read FPrompt write FPrompt;
     property Value: string read FValue write FValue;
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
+  end;
+
+  { TTyTextDialog publishes TTyCustomTextDialog's properties; everything lives in TTyCustomTextDialog. }
+  TTyTextDialog = class(TTyCustomTextDialog)
+  published
+    property Version;
+    property Caption;
+    property Prompt;
+    property Value;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
   end;
 
 { Shared layout constants — exported so sub-units (e.g. SelectPath) can
@@ -246,7 +306,7 @@ type
   end;
 
 type
-  TTySelectValueDialog = class(TTyComponent)
+  TTyCustomSelectValueDialog = class(TTyComponent)
   private
     FCaption, FPrompt: string;
     FItems: TStrings;
@@ -260,14 +320,26 @@ type
     destructor Destroy; override;
     function Execute: Boolean;
     function SelectedText: string;
-  published
     property Caption: TCaption read FCaption write FCaption;
-    property Prompt: string read FPrompt write FPrompt;
+    property Prompt: TCaption read FPrompt write FPrompt;
     property Items: TStrings read FItems write SetItems;
     property ItemIndex: Integer read FItemIndex write FItemIndex default -1;
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
+  end;
+
+  { TTySelectValueDialog publishes TTyCustomSelectValueDialog's properties; everything lives in TTyCustomSelectValueDialog. }
+  TTySelectValueDialog = class(TTyCustomSelectValueDialog)
+  published
+    property Version;
+    property Caption;
+    property Prompt;
+    property Items;
+    property ItemIndex;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
   end;
 
 implementation
@@ -433,6 +505,13 @@ begin
   FTitle.Align := alTop;              // dock as the top caption strip
   FTitle.Caption := Caption;          // seed (usually '' here; builders set Caption later)
   TitleBar := FTitle;                 // -> SetTitleBar: engine + close-button wiring
+  { The bar is born at its LOGICAL height, and whatever a builder places below it is placed
+    against the height it has. In a scaled application this form is still at 96 PPI here, so
+    this is the identity and LCL's pass takes the bar to the monitor's PPI with the rest. In
+    one that is not scaled the form is at the screen's PPI from the start and no pass ever
+    comes -- but ApplyChromeTheme does, at show time, and grew the bar over content that had
+    been laid out under a 32 px one. }
+  FTitle.Height := Px(FTitle.Height);
   FButtonBar := TTyPanel.Create(nil);
   FButtonBar.Parent := Self;
   FButtonBar.Align := alBottom;
@@ -448,7 +527,7 @@ begin
   if FTitle <> nil then FTitle.Caption := Caption;
 end;
 
-procedure TTyDialog.ApplyControllerToChildren(AParent: TWinControl; AController: TTyStyleController);
+procedure TTyDialog.ApplyControllerToChildren(AParent: TWinControl; AController: TTyCustomStyleController);
 var i: Integer; c: TControl;
 begin
   if (AParent = nil) or (AController = nil) then Exit;
@@ -474,7 +553,7 @@ begin
 end;
 
 procedure TTyDialog.ApplyOwnerController;
-var c: TTyStyleController; mf: TCustomForm; hBefore: Integer;
+var c: TTyCustomStyleController; mf: TCustomForm; hBefore: Integer;
 begin
   // Prefer the owner's controller (the form that spawned this dialog); else the app's
   // main form. A CreateNew dialog has Controller = nil, so without this it falls back to
@@ -532,6 +611,15 @@ begin
   LayoutButtonBar;
 end;
 
+function TTyDialog.Px(ALogical: Integer): Integer;
+var
+  ppi: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  Result := MulDiv(ALogical, ppi, 96);
+end;
+
 { The height one dialog button wants RIGHT NOW. Three inputs, largest wins:
 
     - cDlgBtnH, the classic box, so classic density under a lean theme is unchanged;
@@ -543,48 +631,68 @@ end;
   That third input is why a literal can never work here: LCL ENFORCES a control's constraint
   whatever we pass to SetBounds. Forcing 30 did not keep the button 30 -- it centred it as if
   it were 30 while LCL drew it taller, so a roomy skin (aero) at modern density hung the
-  button out of the bottom of the strip. Asking the button is the only honest input. }
+  button out of the bottom of the strip. Asking the button is the only honest input.
+
+  The first two are LOGICAL px and go through Px; the third is the button's own floor, which
+  it derived at its own PPI -- device px already. }
 function TTyDialog.ButtonHeight: Integer;
 var i: Integer;
 begin
-  Result := TyDensityHeight(Controller, cDlgBtnH);   // nil Controller -> the default one
+  Result := Px(TyDensityHeight(Controller, cDlgBtnH));   // nil Controller -> the default one
   for i := 0 to High(FButtons) do
-    if FButtons[i].Constraints.MinHeight > Result then
+    if FButtons[i].Visible and (FButtons[i].Constraints.MinHeight > Result) then
       Result := FButtons[i].Constraints.MinHeight;
 end;
 
 function TTyDialog.ButtonBarHeight: Integer;
 begin
-  Result := ButtonHeight + 2 * cDlgBarPadV;
+  Result := ButtonHeight + 2 * Px(cDlgBarPadV);
 end;
 
 procedure TTyDialog.LayoutButtonBar;
-var sizes: array of TSize; rects: TTyRectArray; i, y, h, w: Integer;
+var
+  sizes: array of TSize;
+  rects: TTyRectArray;
+  shown: array of TTyButton;
+  i, n, y, h, w: Integer;
 begin
   if Length(FButtons) = 0 then Exit;
   h := ButtonHeight;
   { The strip grows with what it has to hold. Guarded because assigning the height runs the
     form's align pass, which comes back through Resize -> here. }
-  if FButtonBar.Height <> h + 2 * cDlgBarPadV then
-    FButtonBar.Height := h + 2 * cDlgBarPadV;
-  sizes := nil;
-  SetLength(sizes, Length(FButtons));
+  if FButtonBar.Height <> h + 2 * Px(cDlgBarPadV) then
+    FButtonBar.Height := h + 2 * Px(cDlgBarPadV);
+  { Only the buttons that are showing take a slot: a dialog may keep a button it shows on some
+    runs only (the find dialog's Help, for one), and a hidden one must not leave a hole. }
+  shown := nil;
+  SetLength(shown, Length(FButtons));
+  n := 0;
   for i := 0 to High(FButtons) do
+    if FButtons[i].Visible then
+    begin
+      shown[n] := FButtons[i];
+      Inc(n);
+    end;
+  if n = 0 then Exit;
+  sizes := nil;
+  SetLength(sizes, n);
+  for i := 0 to n - 1 do
   begin
     { Width has the same three inputs; a long caption under a big font wants more than 88. }
-    w := cDlgBtnW;
-    if FButtons[i].Constraints.MinWidth > w then w := FButtons[i].Constraints.MinWidth;
+    w := Px(cDlgBtnW);
+    if shown[i].Constraints.MinWidth > w then w := shown[i].Constraints.MinWidth;
     sizes[i] := Size(w, h);
   end;
-  rects := TyDialogButtonBar(sizes, FButtonBar.ClientWidth, cDlgBarMargin, cDlgBarSpacing);
+  rects := TyDialogButtonBar(sizes, FButtonBar.ClientWidth, Px(cDlgBarMargin),
+    Px(cDlgBarSpacing));
   y := (FButtonBar.ClientHeight - h) div 2;
-  for i := 0 to High(FButtons) do
-    FButtons[i].SetBounds(rects[i].Left, y, rects[i].Right - rects[i].Left, h);
+  for i := 0 to n - 1 do
+    shown[i].SetBounds(rects[i].Left, y, rects[i].Right - rects[i].Left, h);
 end;
 
 function TTyDialog.BottomGutter: Integer;
 begin
-  if Resizable then Result := 2 else Result := 0;
+  if Resizable then Result := Px(2) else Result := 0;
 end;
 
 function TTyDialog.ContentRect: TRect;
@@ -601,11 +709,13 @@ begin
     feed the minimum window width -- both used to be computed from the literals the layout no
     longer uses, so a taller/wider button would have been sized out of the window. }
   LayoutButtonBar;
-  totalBtn := cDlgBarMargin;
-  for i := 0 to High(FButtons) do totalBtn := totalBtn + FButtons[i].Width + cDlgBarSpacing;
+  totalBtn := Px(cDlgBarMargin);
+  for i := 0 to High(FButtons) do
+    if FButtons[i].Visible then
+      totalBtn := totalBtn + FButtons[i].Width + Px(cDlgBarSpacing);
   w := AContentW; if totalBtn > w then w := totalBtn;
-  ClientWidth := w + 32;
-  ClientHeight := TitleHeight + AContentH + FButtonBar.Height + BottomGutter + 16;
+  ClientWidth := w + Px(32);
+  ClientHeight := TitleHeight + AContentH + FButtonBar.Height + BottomGutter + Px(16);
   LayoutButtonBar;   // re-place the buttons in the final width
 end;
 
@@ -659,15 +769,15 @@ begin
   else
     fill.Color := TyRGB(0, 112, 192);               // #0070C0 blue (info / confirm)
   end;
-  d := 28;                                          // ~28px circle
-  cx := 14;                                         // icon column left
-  cy := TitleHeight + 12;                           // aligns with the label top
+  d := Px(28);                                      // ~28px circle
+  cx := Px(14);                                     // icon column left
+  cy := TitleHeight + Px(12);                       // aligns with the label top
   circle := Rect(cx, cy, cx + d, cy + d);
   P := TTyPainter.Create;
   try
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
-    // Circle = square with a half-side radius.
-    P.FillBackground(circle, fill, TyUniformCorners(d div 2));
+    // Circle = square with a half-side radius. The RADIUS is logical: the painter scales it.
+    P.FillBackground(circle, fill, TyUniformCorners(28 div 2));
     // Symbol centred in white (contrast against every semantic colour above).
     P.DrawText(circle, FMsgSymbol, Font.Name, 14, 700, TyRGB(255, 255, 255),
       taCenter, tlCenter, False, 0, False);
@@ -755,17 +865,17 @@ begin
   // Wrap at the WIDEST column we allow, and see how wide the text actually turned out: mw is
   // the widest resulting line. That one measure gives the natural column for any message —
   // no px threshold, which would mean different things at 96 and 144 dpi.
-  lbl.MeasureCaption(ppi, cMsgTextMaxW, mw, mh);
+  lbl.MeasureCaption(ppi, Result.Px(cMsgTextMaxW), mw, mh);
   textW := mw;
-  if textW < cMsgTextMinW then textW := cMsgTextMinW;   // a one-liner keeps the familiar dialog
-  if textW > cMsgTextMaxW then textW := cMsgTextMaxW;
+  if textW < Result.Px(cMsgTextMinW) then textW := Result.Px(cMsgTextMinW);   // a one-liner keeps the familiar dialog
+  if textW > Result.Px(cMsgTextMaxW) then textW := Result.Px(cMsgTextMaxW);
   // Re-measure AT the chosen column: the wrap points move with the width, so the height is
   // not proportional and cannot be derived from the first measure.
   lbl.MeasureCaption(ppi, textW, mw, mh);
   textH := mh;
-  if textH > cMsgTextMaxH then textH := cMsgTextMaxH;
+  if textH > Result.Px(cMsgTextMaxH) then textH := Result.Px(cMsgTextMaxH);
   if textH < 1 then textH := 1;
-  lbl.SetBounds(cMsgIconCol, Result.TitleHeight + 12, textW, textH);
+  lbl.SetBounds(Result.Px(cMsgIconCol), Result.TitleHeight + Result.Px(12), textW, textH);
   def := ordered[0];
   // Esc / title-bar X both dismiss the message dialog to mrCancel (FCancelResult stays
   // the CreateNew default); ACancel is left for custom TTyDialog subclasses to use.
@@ -777,8 +887,8 @@ begin
   // Size the dialog to the text, not the other way round. The content is at least the icon
   // column tall; AutoSizeToContent already widens for the button bar when that is wider.
   contentH := textH;
-  if contentH < cMsgIconH then contentH := cMsgIconH;
-  Result.AutoSizeToContent(cMsgIconCol + textW + 4, contentH);
+  if contentH < Result.Px(cMsgIconH) then contentH := Result.Px(cMsgIconH);
+  Result.AutoSizeToContent(Result.Px(cMsgIconCol) + textW + Result.Px(4), contentH);
 end;
 
 // Show a built dialog modally and free it (leak-safe). Shared by the globals + the component.
@@ -807,16 +917,16 @@ end;
 procedure TyShowMessage(const AMsg: string);
 begin TyMessageDlg(AMsg, mtInformation, [mbOK]); end;
 
-{ TTyMessage }
+{ TTyCustomMessage }
 
-constructor TTyMessage.Create(AOwner: TComponent);
+constructor TTyCustomMessage.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FDlgType := mtInformation;
   FButtons := [mbOK];
 end;
 
-function TTyMessage.Execute: TModalResult;
+function TTyCustomMessage.Execute: TModalResult;
 var d: TTyDialog;
 begin
   d := TyBuildMessageDialog(FMsg, FDlgType, FButtons, FTitle);
@@ -827,7 +937,7 @@ end;
 { Input dialog }
 
 // Places a wrapped prompt label at the top of the content area (parented to ADlg).
-// Returns the y (in dialog client coords) just below the prompt.
+// Returns the y (in dialog client coords) just below the prompt. AWidth is device px.
 function TyPlacePrompt(ADlg: TTyDialog; const APrompt: string; AWidth: Integer): Integer;
 var lbl: TTyLabel; r: TRect;
 begin
@@ -839,22 +949,26 @@ begin
   { 20 is a floor, 6 the gap -- the row the NEXT control starts on is read back off the label,
     because a theme that gives TyLabel padding (or simply a bigger font) makes it taller than
     the 20 asked for while a literal 26 stride would not move, putting the input on top of it. }
-  Result := TyStackRow(lbl, r.Left + TyDlgPad, r.Top + TyDlgPad, AWidth, 20, 6);
+  Result := TyStackRow(lbl, r.Left + ADlg.Px(TyDlgPad), r.Top + ADlg.Px(TyDlgPad), AWidth,
+    ADlg.Px(20), ADlg.Px(6));
 end;
 
 function TyBuildInputDialog(const ACaption, APrompt, ADefault: string; out AEdit: TTyEdit): TTyDialog;
-var y: Integer;
+var y, pad, editW, editH: Integer;
 begin
   Result := TTyDialog.CreateNew(Application);
   Result.Caption := ACaption;
-  y := TyPlacePrompt(Result, APrompt, TyDlgEditW);
+  pad := Result.Px(TyDlgPad);
+  editW := Result.Px(TyDlgEditW);
+  editH := Result.Px(TyDlgEditH);
+  y := TyPlacePrompt(Result, APrompt, editW);
   AEdit := TTyEdit.Create(Result);
   AEdit.Parent := Result;
   AEdit.Text := ADefault;
-  AEdit.SetBounds(Result.ContentRect.Left + TyDlgPad, y, TyDlgEditW, TyDlgEditH);
+  AEdit.SetBounds(Result.ContentRect.Left + pad, y, editW, editH);
   Result.AddButton(rsMsgBtnOK, mrOK, True, False);
   Result.AddButton(rsMsgBtnCancel, mrCancel, False, True);
-  Result.AutoSizeToContent(TyDlgEditW + TyDlgPad, y + TyDlgEditH + TyDlgPad - Result.ContentRect.Top);
+  Result.AutoSizeToContent(editW + pad, y + editH + pad - Result.ContentRect.Top);
 end;
 
 function TyInputResult(AEdit: TTyEdit; const ADefault: string; AResult: TModalResult): string;
@@ -880,9 +994,9 @@ begin
   finally d.Free; end;
 end;
 
-{ TTyInputDialog }
+{ TTyCustomInputDialog }
 
-function TTyInputDialog.Execute: Boolean;
+function TTyCustomInputDialog.Execute: Boolean;
 var d: TTyDialog; e: TTyEdit;
 begin
   // Inline the build/show (rather than call TyInputQuery) so the wrapper's own
@@ -898,18 +1012,21 @@ end;
 { Password dialog }
 
 function TyBuildPasswordDialog(const ACaption, APrompt, APasswordChar: string; out AEdit: TTyEdit): TTyDialog;
-var y: Integer;
+var y, pad, editW, editH: Integer;
 begin
   Result := TTyDialog.CreateNew(Application);
   Result.Caption := ACaption;
-  y := TyPlacePrompt(Result, APrompt, TyDlgEditW);
+  pad := Result.Px(TyDlgPad);
+  editW := Result.Px(TyDlgEditW);
+  editH := Result.Px(TyDlgEditH);
+  y := TyPlacePrompt(Result, APrompt, editW);
   AEdit := TTyEdit.Create(Result);
   AEdit.Parent := Result;
   AEdit.PasswordChar := APasswordChar;
-  AEdit.SetBounds(Result.ContentRect.Left + TyDlgPad, y, TyDlgEditW, TyDlgEditH);
+  AEdit.SetBounds(Result.ContentRect.Left + pad, y, editW, editH);
   Result.AddButton(rsMsgBtnOK, mrOK, True, False);
   Result.AddButton(rsMsgBtnCancel, mrCancel, False, True);
-  Result.AutoSizeToContent(TyDlgEditW + TyDlgPad, y + TyDlgEditH + TyDlgPad - Result.ContentRect.Top);
+  Result.AutoSizeToContent(editW + pad, y + editH + pad - Result.ContentRect.Top);
 end;
 
 function TyPasswordBox(const ACaption, APrompt: string): string;
@@ -931,15 +1048,15 @@ begin
   finally d.Free; end;
 end;
 
-{ TTyPasswordDialog }
+{ TTyCustomPasswordDialog }
 
-constructor TTyPasswordDialog.Create(AOwner: TComponent);
+constructor TTyCustomPasswordDialog.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FPasswordChar := TyDefaultPasswordChar;
 end;
 
-function TTyPasswordDialog.Execute: Boolean;
+function TTyCustomPasswordDialog.Execute: Boolean;
 var d: TTyDialog; e: TTyEdit;
 begin
   d := TyBuildPasswordDialog(FCaption, FPrompt, FPasswordChar, e);
@@ -957,8 +1074,8 @@ var r: TRect;
 begin
   if FMemo = nil then Exit;
   r := ContentRect;
-  FMemo.SetBounds(r.Left + TyDlgPad, FPromptBottom,
-    (r.Right - r.Left) - 2*TyDlgPad, r.Bottom - FPromptBottom - TyDlgPad);
+  FMemo.SetBounds(r.Left + Px(TyDlgPad), FPromptBottom,
+    (r.Right - r.Left) - 2 * Px(TyDlgPad), r.Bottom - FPromptBottom - Px(TyDlgPad));
 end;
 
 { Text dialog free functions }
@@ -969,9 +1086,9 @@ begin
   Result := TTyTextDialogForm.CreateNew(Application);
   Result.Resizable := True;
   Result.Caption := ACaption;
-  Result.Constraints.MinWidth := 320;
-  Result.Constraints.MinHeight := 220;
-  y := TyPlacePrompt(Result, APrompt, 380);
+  Result.Constraints.MinWidth := Result.Px(320);
+  Result.Constraints.MinHeight := Result.Px(220);
+  y := TyPlacePrompt(Result, APrompt, Result.Px(380));
   Result.FPromptBottom := y;
   AMemo := TTyMemo.Create(Result);
   AMemo.Parent := Result;
@@ -979,7 +1096,7 @@ begin
   Result.FMemo := AMemo;
   Result.AddButton(rsMsgBtnOK, mrOK, True, False);
   Result.AddButton(rsMsgBtnCancel, mrCancel, False, True);
-  Result.AutoSizeToContent(420, 260 - Result.ContentRect.Top);  // roomy default
+  Result.AutoSizeToContent(Result.Px(420), Result.Px(260) - Result.ContentRect.Top);  // roomy default
   Result.LayoutContent;   // place the memo into the content area
 end;
 
@@ -993,9 +1110,9 @@ begin
   finally d.Free; end;
 end;
 
-{ TTyTextDialog }
+{ TTyCustomTextDialog }
 
-function TTyTextDialog.Execute: Boolean;
+function TTyCustomTextDialog.Execute: Boolean;
 var d: TTyTextDialogForm; m: TTyMemo;
 begin
   // Inline (rather than call TyTextQuery) so the wrapper's events forward before ShowModal.
@@ -1020,23 +1137,25 @@ end;
 
 function TyBuildSelectValueDialog(const ACaption, APrompt: string; AItems: TStrings;
   AInitialIndex: Integer; out AList: TTyListBox): TTyDialog;
-var f: TTySelectValueForm; y, listH: Integer;
+var f: TTySelectValueForm; y, listH, pad, editW: Integer;
 begin
   f := TTySelectValueForm.CreateNew(Application);
   Result := f;
   Result.Caption := ACaption;
-  y := TyPlacePrompt(Result, APrompt, TyDlgEditW);
+  pad := Result.Px(TyDlgPad);
+  editW := Result.Px(TyDlgEditW);
+  y := TyPlacePrompt(Result, APrompt, editW);
   AList := TTyListBox.Create(Result);
   AList.Parent := Result;
   if AItems <> nil then AList.Items.Assign(AItems);
   if (AInitialIndex >= 0) and (AInitialIndex < AList.Items.Count) then
     AList.ItemIndex := AInitialIndex;
-  listH := 160;
-  AList.SetBounds(Result.ContentRect.Left + TyDlgPad, y, TyDlgEditW, listH);
+  listH := Result.Px(160);
+  AList.SetBounds(Result.ContentRect.Left + pad, y, editW, listH);
   AList.OnDblClick := @f.ListDblClick;   // double-click a row confirms
   Result.AddButton(rsMsgBtnOK, mrOK, True, False);
   Result.AddButton(rsMsgBtnCancel, mrCancel, False, True);
-  Result.AutoSizeToContent(TyDlgEditW + TyDlgPad, y + listH + TyDlgPad - Result.ContentRect.Top);
+  Result.AutoSizeToContent(editW + pad, y + listH + pad - Result.ContentRect.Top);
 end;
 
 function TySelectValueResult(AList: TTyListBox; AInitialIndex: Integer;
@@ -1056,27 +1175,27 @@ begin
   finally d.Free; end;
 end;
 
-{ TTySelectValueDialog }
+{ TTyCustomSelectValueDialog }
 
-constructor TTySelectValueDialog.Create(AOwner: TComponent);
+constructor TTyCustomSelectValueDialog.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FItems := TStringList.Create;
   FItemIndex := -1;
 end;
 
-destructor TTySelectValueDialog.Destroy;
+destructor TTyCustomSelectValueDialog.Destroy;
 begin
   FItems.Free;
   inherited Destroy;
 end;
 
-procedure TTySelectValueDialog.SetItems(AValue: TStrings);
+procedure TTyCustomSelectValueDialog.SetItems(AValue: TStrings);
 begin
   FItems.Assign(AValue);
 end;
 
-function TTySelectValueDialog.SelectedText: string;
+function TTyCustomSelectValueDialog.SelectedText: string;
 begin
   if (FItemIndex >= 0) and (FItemIndex < FItems.Count) then
     Result := FItems[FItemIndex]
@@ -1084,7 +1203,7 @@ begin
     Result := '';
 end;
 
-function TTySelectValueDialog.Execute: Boolean;
+function TTyCustomSelectValueDialog.Execute: Boolean;
 var d: TTyDialog; lb: TTyListBox;
 begin
   // Inline (rather than call TySelectValue) so the wrapper's events forward before ShowModal.

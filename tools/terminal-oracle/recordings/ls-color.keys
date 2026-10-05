@@ -1,0 +1,8 @@
+mkdir -p d1 d2/sub && touch plain.txt notes.md script.sh archive.tar.gz image.png && chmod +x script.sh && ln -s plain.txt link && ln -s missing broken && mkfifo pipe
+clear
+ls --color=always -AgG
+#sleep 0.5
+ls --color=always -A
+#sleep 0.5
+ls --color=always -R d2
+#sleep 0.5

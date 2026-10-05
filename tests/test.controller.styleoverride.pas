@@ -20,7 +20,16 @@ type
     procedure OverrideWinsOverAnExplicitlyLoadedTheme;
     procedure OverrideSurvivesADensityChange;
     procedure ClearingTheOverrideRestoresTheBase;
-    procedure ClearingTheOverrideRestoresTheBaseOnANamedTheme;
+    { The three below name a theme that is NOT registered -- the state SetThemeName explicitly
+      allows (it retries when the name appears). ReloadThemeLayer had a branch that loaded
+      nothing for exactly that state, so layer-1 was never rebuilt and every patch stacked. The
+      clearing test above never saw it because its controller names no theme. }
+    procedure ClearingTheOverrideWorksUnderAnUnregisteredThemeName;
+    procedure AReplacedOverrideDoesNotStackUnderAnUnregisteredThemeName;
+    procedure DensityRoundTripDropsThePackUnderAnUnregisteredThemeName;
+    { The OTHER branch that could load nothing: a ThemeFile that has gone away
+      while the program runs, which is what an author gets the moment they
+      rename the .tycss they are working on. }
     procedure ClearingItWorksEvenIfTheThemeFileWentAway;
     procedure AccentSurvivesADensityChange;
     procedure AccentSurvivesAnOverrideChange;
@@ -74,6 +83,66 @@ begin
     c.StyleOverride := 'TyButton { border-width: 7px; }';
     c.Density := tdModern;   // reloads layer-1 + density pack; the override must re-apply on top
     AssertEquals('the override survived a density change', 7, ButtonBorderWidth(c));
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TControllerStyleOverrideTest.ClearingTheOverrideWorksUnderAnUnregisteredThemeName;
+var c: TTyStyleController; base: Integer;
+begin
+  c := TTyStyleController.Create(nil);
+  try
+    c.ThemeName := 'ty-test-theme-that-is-not-registered';   { silent: allowed to fail and retry }
+    base := ButtonBorderWidth(c);
+    c.StyleOverride := 'TyButton { border-width: 7px; }';
+    AssertEquals('override applied', 7, ButtonBorderWidth(c));
+    c.StyleOverride := '';
+    AssertEquals('clearing restored the base even though the name never resolved',
+      base, ButtonBorderWidth(c));
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TControllerStyleOverrideTest.AReplacedOverrideDoesNotStackUnderAnUnregisteredThemeName;
+var c: TTyStyleController; base: Integer;
+begin
+  c := TTyStyleController.Create(nil);
+  try
+    c.ThemeName := 'ty-test-theme-that-is-not-registered';
+    base := ButtonBorderWidth(c);
+    c.StyleOverride := 'TyButton { border-width: 7px; }';
+    AssertEquals('first override applied', 7, ButtonBorderWidth(c));
+    { A second patch that says nothing about border-width must REPLACE the first, not sit on
+      top of it: with layer-1 never rebuilt, the 7px rule stayed in FRules underneath.
+      NOT asserted equal to the base: a user-layer rule for TyButton suppresses the built-in
+      TyButton set as a whole (see UserHasTypeKey), so after a padding-only patch the resolved
+      border-width is 0, which is right -- what matters is that it is not the stale 7. }
+    c.StyleOverride := 'TyButton { padding: 3px; }';
+    AssertTrue('the earlier border-width (7) did not survive the replacement, got '
+      + IntToStr(ButtonBorderWidth(c)), ButtonBorderWidth(c) <> 7);
+    AssertTrue('sanity: the base itself is not 7', base <> 7);
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TControllerStyleOverrideTest.DensityRoundTripDropsThePackUnderAnUnregisteredThemeName;
+var c: TTyStyleController; classicH, modernH: Integer;
+begin
+  c := TTyStyleController.Create(nil);
+  try
+    c.ThemeName := 'ty-test-theme-that-is-not-registered';
+    classicH := c.Metric('--control-height', 0);
+    c.Density := tdModern;
+    modernH := c.Metric('--control-height', 0);
+    AssertTrue('precondition: modern really changes the token ('
+      + IntToStr(classicH) + ' -> ' + IntToStr(modernH) + ')', modernH <> classicH);
+    { Back to classic goes through the same reload; the additive modern pack can only be dropped
+      by rebuilding layer-1, which the no-load branch skipped. }
+    c.Density := tdClassic;
+    AssertEquals('the modern pack is gone again', classicH, c.Metric('--control-height', 0));
   finally
     c.Free;
   end;
@@ -177,37 +246,6 @@ begin
       ButtonBorderWidth(TyDefaultController));
   finally
     TyDefaultController.StyleOverride := saved;   { leave the shared singleton as we found it }
-  end;
-end;
-
-procedure TControllerStyleOverrideTest.ClearingTheOverrideRestoresTheBaseOnANamedTheme;
-var c: TTyStyleController; base: Integer;
-begin
-  { THE SAME THING ON A CONTROLLER THAT NAMES ITS THEME, which is what every
-    real one does -- and what ClearingTheOverrideRestoresTheBase above does
-    NOT: it leaves ThemeName empty, so ReloadThemeLayer takes the `else` branch
-    and clears layer-1 with an explicit LoadFromCss(''). A named theme takes a
-    different branch, and if the name does not resolve, that branch loads
-    nothing at all and the additive patch survives -- patches then accumulate
-    and the override can never be cleared or changed. }
-  c := TTyStyleController.Create(nil);
-  try
-    c.ThemeName := 'default';
-    base := ButtonBorderWidth(c);
-    c.StyleOverride := 'TyButton { border-width: 7px; }';
-    AssertEquals('override applied', 7, ButtonBorderWidth(c));
-    c.StyleOverride := '';
-    AssertEquals('clearing it restored the base', base, ButtonBorderWidth(c));
-
-    { AND A REPLACEMENT REPLACES rather than stacking on the old one, which is
-      the other half of the same defect: the patch was never dropped, so a
-      second override was appended to the first. }
-    c.StyleOverride := 'TyButton { border-width: 7px; }';
-    c.StyleOverride := 'TyButton { border-width: 3px; }';
-    AssertEquals('the second override replaced the first', 3,
-      ButtonBorderWidth(c));
-  finally
-    c.Free;
   end;
 end;
 

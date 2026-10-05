@@ -4,6 +4,8 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 全自绘、由 `.tycss` 文本主题统一着色。样式语言参考见 [../tycss-reference.md](../tycss-reference.md)，
 通用事件基线见 [../events.md](../events.md)。
 
+大多数控件都有一个对应的 `TTyCustomXxx` 父类（比如 `TTyCustomEdit`），实现全在那里，`TTyXxx` 只负责发布属性。想基于某个控件包一个只露部分属性的自己的控件，见 [../subclassing.md](../subclassing.md)。
+
 ## 窗口与镶边
 
 | 控件 | 说明 |
@@ -71,6 +73,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyFontListBox](fontlistbox.md) | 字体族列表框（FontComboBox 的列表版） |
 | [TTyFontSizeComboBox](fontsizecombobox.md) | 可编辑字号组合框（预设 6…72，也可手输） |
 | [TTyMemo](memo.md) | 多行编辑器：2D 导航、内嵌滚动条 |
+| [TTyTerminalView](terminal.md) | 终端：解析 + 缓冲 + 渲染，照 xterm.js；PTY 归宿主 |
 | [TTySpinEdit](spinedit.md) | 数值微调框（箭头 / 方向键 / 滚轮，Min/Max/Increment） |
 | [TTyFloatSpinEdit](floatspinedit.md) | 小数微调框（`Value: Double` + `Double` 步长，NumericEdit 派生，带完整文本引擎） |
 | [TTyUpDown](updown.md) | 独立上/下微调按钮对（按住连发，绑定到任意控件） |
@@ -111,6 +114,8 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyGroupBox](groupbox.md) | 带标题的分组框 |
 | [TTyPageControl](pagecontrol.md) | 多页签容器（含 `TTyTabSheet`） |
 | [TTyTabSet](tabset.md) | 纯标签条（非页容器） |
+| [TTyToolWindowBar](toolwindows.md) | IDE 式侧栏 / 底栏：图标条或标签切换工具窗口，可拉宽、收起 |
+| [TTyToolWindowManager](toolwindows.md) | 工具窗口跨侧拖动、`MoveWindow`、布局保存 |
 | [TTySplitter](splitter.md) | 面板间可拖拽分隔条 |
 | [TTyToolBar](toolbar.md) | 工具条 + `TTyToolSeparator` 分隔符 |
 | [TTyStatusBar](statusbar.md) | 底部多分区状态栏 |
@@ -128,7 +133,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyRelativePanel](relativepanel.md) | 相对布局（子控件按规则相对兄弟/父容器摆放,拓扑求解,环安全） |
 | [TTyToolBarEx](toolbarex.md) | 带溢出 `»` 折叠的工具条（非换行时尾部按钮收进弹出浮层） |
 | [TTyControlBar](controlbar.md) | 可停靠工具带宿主（子控件排成水平 band/行,带左侧抓手） |
-| [TTyCoolBar](coolbar.md) | Rebar：抓手拖拽移动band间的缝（改邻带宽度）、拖过邻带可换序、拖到行下另起一行（继承 TTyControlBar） |
+| [TTyCoolBar](coolbar.md) | Rebar：抓手拖拽移动band间的缝（改邻带宽度）、拖过邻带可换序、拖到行下另起一行（继承 TTyCustomControlBar） |
 | [TTyHeaderControl](headercontrol.md) | 独立列头条（分节:标题/宽度/对齐/排序,点击排序 + 拖边界调宽） |
 | [TTyListGroupPanel](listgrouppanel.md) | Outlook 式分组可展开列表（手风琴,`AddGroup`/`AddItem`） |
 | [TTyPreviewBox](previewbox.md) | 可复用预览控件（图片走 TTyImage / 文本走只读 TTyMemo / 占位 / 交出位图·文本自定义） |

@@ -13,7 +13,7 @@ type
     TTyPainter.DrawText -- first offset by (ShadowOffsetX, ShadowOffsetY) logical
     px in ShadowColor, then the main text at the normal position in the theme's
     TextColor. Offsets are PPI-scaled through P.Scale. }
-  TTyShadowLabel = class(TTyGraphicControl)
+  TTyCustomShadowLabel = class(TTyGraphicControl)
   private
     FAlignment: TAlignment;
     FLayout: TTextLayout;
@@ -54,20 +54,7 @@ type
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
-  published
-    { Off by default (a designed label keeps the width the .lfm gave it). Switch it on and the
-      label WIDENS to hug its caption plus the theme's padding and the shadow's throw, so a
-      caption that grows lengthens the label instead of being clipped. Height is left alone
-      (see CalculatePreferredSize): it belongs to whoever lays out the row. }
-    property AutoSize;
-    property Caption;
-    property Enabled;
-    property Font;
-    property Align;
-    property Anchors;
-    property StyleClass;
-    property Controller;
-    property OnClick;
+  protected
     property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
     property Layout: TTextLayout read FLayout write SetLayout default tlCenter;
     property ShadowColor: TTyColor read FShadowColor write SetShadowColor;
@@ -75,9 +62,65 @@ type
     property ShadowOffsetY: Integer read FShadowOffsetY write SetShadowOffsetY default 1;
   end;
 
+  { TTyShadowLabel publishes TTyCustomShadowLabel's properties; everything lives in TTyCustomShadowLabel. }
+  TTyShadowLabel = class(TTyCustomShadowLabel)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    { Off by default (a designed label keeps the width the .lfm gave it). Switch it on and the
+      label WIDENS to hug its caption plus the theme's padding and the shadow's throw, so a
+      caption that grows lengthens the label instead of being clipped. Height is left alone
+      (see CalculatePreferredSize): it belongs to whoever lays out the row. }
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Caption;
+    property Align;
+    property Anchors;
+    property Alignment;
+    property Layout;
+    property ShadowColor;
+    property ShadowOffsetX;
+    property ShadowOffsetY;
+  end;
+
 implementation
 
-constructor TTyShadowLabel.Create(AOwner: TComponent);
+constructor TTyCustomShadowLabel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FAlignment := taLeftJustify;
@@ -87,7 +130,7 @@ begin
   FShadowOffsetY := 1;
 end;
 
-function TTyShadowLabel.GetStyleTypeKey: string;
+function TTyCustomShadowLabel.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyLabel': it draws the caption twice, and the shadow pass is chrome a plain label has no notion of.
     Added to 'TyLabel's rule block as an extra selector, so every resolved value is
@@ -95,47 +138,47 @@ begin
   Result := 'TyShadowLabel';
 end;
 
-function TTyShadowLabel.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
+function TTyCustomShadowLabel.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
 begin
   Result := TyResolveFontSize(AStyle, ParentFont, Font.Size, ActiveController);
 end;
 
-procedure TTyShadowLabel.SetAlignment(AValue: TAlignment);
+procedure TTyCustomShadowLabel.SetAlignment(AValue: TAlignment);
 begin
   if FAlignment = AValue then Exit;
   FAlignment := AValue;
   Invalidate;
 end;
 
-procedure TTyShadowLabel.SetLayout(AValue: TTextLayout);
+procedure TTyCustomShadowLabel.SetLayout(AValue: TTextLayout);
 begin
   if FLayout = AValue then Exit;
   FLayout := AValue;
   Invalidate;
 end;
 
-procedure TTyShadowLabel.SetShadowColor(AValue: TTyColor);
+procedure TTyCustomShadowLabel.SetShadowColor(AValue: TTyColor);
 begin
   if FShadowColor = AValue then Exit;
   FShadowColor := AValue;
   Invalidate;
 end;
 
-procedure TTyShadowLabel.SetShadowOffsetX(AValue: Integer);
+procedure TTyCustomShadowLabel.SetShadowOffsetX(AValue: Integer);
 begin
   if FShadowOffsetX = AValue then Exit;
   FShadowOffsetX := AValue;
   Invalidate;
 end;
 
-procedure TTyShadowLabel.SetShadowOffsetY(AValue: Integer);
+procedure TTyCustomShadowLabel.SetShadowOffsetY(AValue: Integer);
 begin
   if FShadowOffsetY = AValue then Exit;
   FShadowOffsetY := AValue;
   Invalidate;
 end;
 
-procedure TTyShadowLabel.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
+procedure TTyCustomShadowLabel.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
 var
   S: TTyStyleSet;
   Meas: TBitmap;
@@ -146,13 +189,8 @@ begin
   Meas := TBitmap.Create;
   try
     Meas.SetSize(1, 1);
-    Meas.Canvas.Font.Name := TyEffectiveFontName(S.FontName);
-    Meas.Canvas.Font.Size := MulDiv(ResolveFontSize(S), APPI, 96);
-    // TyConfigureTextFont (which the paint path goes through) bolds at weight >= 600.
-    if S.FontWeight >= 600 then
-      Meas.Canvas.Font.Style := [fsBold]
-    else
-      Meas.Canvas.Font.Style := [];
+    // The measuring twin of TyConfigureTextFont, which the paint path goes through.
+    TyConfigureMeasureFont(Meas.Canvas, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
     // Caption verbatim -- RenderTo never calls TyParseMnemonic, so an '&' is a drawn glyph.
     AWidth := Meas.Canvas.TextWidth(Caption);
     // A stable reference glyph: an empty caption still measures as one line.
@@ -164,7 +202,7 @@ begin
   end;
 end;
 
-procedure TTyShadowLabel.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+procedure TTyCustomShadowLabel.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
   WithThemeSpace: Boolean);
 var
   S: TTyStyleSet;
@@ -193,7 +231,7 @@ begin
   PreferredHeight := 0;
 end;
 
-procedure TTyShadowLabel.TextChanged;
+procedure TTyCustomShadowLabel.TextChanged;
 begin
   inherited TextChanged;
   // The new caption needs a different width, so an auto-sized label must re-fit.
@@ -205,7 +243,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyShadowLabel.Invalidate;
+procedure TTyCustomShadowLabel.Invalidate;
 begin
   inherited Invalidate;
   { A theme switch reaches every control as a bare Invalidate (TTyStyleController broadcasts
@@ -227,7 +265,7 @@ begin
   end;
 end;
 
-procedure TTyShadowLabel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomShadowLabel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -269,7 +307,7 @@ begin
   end;
 end;
 
-procedure TTyShadowLabel.Paint;
+procedure TTyCustomShadowLabel.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

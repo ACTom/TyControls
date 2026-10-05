@@ -94,10 +94,10 @@ type
   { SPLIT drop-down button: caption (left, fires OnClick) + arrow zone (right, opens
     the menu), divided by a 1px line.
 
-    AutoSize(继承自 TTyButton,默认 False)在这里同样有效:打开后按钮的宽度 = 标题 +
+    AutoSize(继承自 TTyCustomButton,默认 False)在这里同样有效:打开后按钮的宽度 = 标题 +
     主题内边距 + ArrowWidth。换皮肤会改字体和内边距,基类的 Invalidate 会重新量一遍,
     所以按钮跟着皮肤长宽,而不是抱着上一套皮肤的宽度把标题省略掉。 }
-  TTyDropDownButton = class(TTyButton)
+  TTyCustomDropDownButton = class(TTyCustomButton)
   private
     FDropDownMenu: TTyPopupMenu;
     FArrowWidth: Integer;
@@ -152,7 +152,6 @@ type
     procedure DropDownForTest;
     { True after a DoDropDown that had a menu assigned (would have popped it). }
     property RequestedPopup: Boolean read FRequestedPopup;
-  published
     { The themed menu shown when the arrow zone is clicked. FreeNotification-tracked:
       freeing it nils this reference. }
     property DropDownMenu: TTyPopupMenu read FDropDownMenu write SetDropDownMenu;
@@ -162,14 +161,86 @@ type
     property OnDropDown: TNotifyEvent read FOnDropDown write FOnDropDown;
   end;
 
+  { TTyDropDownButton publishes TTyCustomDropDownButton's properties; everything lives in TTyCustomDropDownButton. }
+  TTyDropDownButton = class(TTyCustomDropDownButton)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property AnimationsEnabled;
+    property Default;
+    property Cancel;
+    property Down;
+    property ModalResult;
+    property Alignment;
+    property ShowAccelChar;
+    property ShowBadge;
+    property BadgeValue;
+    property BadgePosition;
+    property OnBadgeDisplay;
+    property Caption;
+    property Align;
+    property Anchors;
+    property DropDownMenu;
+    property ArrowWidth;
+    property OnDropDown;
+  end;
+
   { WHOLE-button drop-down: caption + trailing downward arrow; ANY click drops the
     menu (Click itself routes to the drop). No split, no divider.
 
-    AutoSize(继承自 TTyButton,默认仍是 False)在这里同样有效:宽度 = 标题 + 主题
+    AutoSize(继承自 TTyCustomButton,默认仍是 False)在这里同样有效:宽度 = 标题 + 主题
     内边距 + 尾部箭头区。皮肤换了字体/内边距/--drop-arrow-width 之后,基类的
     Invalidate 会重新量一遍,所以按钮跟着皮肤长宽,而不是抱着上一套皮肤的宽度把标题
     省略掉。 }
-  TTyMenuButton = class(TTyButton)
+  TTyCustomMenuButton = class(TTyCustomButton)
   private
     FDropDownMenu: TTyPopupMenu;
     FOnDropDown: TNotifyEvent;
@@ -205,9 +276,79 @@ type
     { Test seam mirroring TTyDropDownButton.DropDownForTest. }
     procedure DropDownForTest;
     property RequestedPopup: Boolean read FRequestedPopup;
-  published
     property DropDownMenu: TTyPopupMenu read FDropDownMenu write SetDropDownMenu;
     property OnDropDown: TNotifyEvent read FOnDropDown write FOnDropDown;
+  end;
+
+  { TTyMenuButton publishes TTyCustomMenuButton's properties; everything lives in TTyCustomMenuButton. }
+  TTyMenuButton = class(TTyCustomMenuButton)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property AnimationsEnabled;
+    property Default;
+    property Cancel;
+    property Down;
+    property ModalResult;
+    property Alignment;
+    property ShowAccelChar;
+    property ShowBadge;
+    property BadgeValue;
+    property BadgePosition;
+    property OnBadgeDisplay;
+    property Caption;
+    property Align;
+    property Anchors;
+    property DropDownMenu;
+    property OnDropDown;
   end;
 
 implementation
@@ -240,9 +381,9 @@ begin
   Result := (zoneLeft >= 0) and (AClickX >= zoneLeft) and (AClickX < AWidthPx);
 end;
 
-{ TTyDropDownButton }
+{ TTyCustomDropDownButton }
 
-constructor TTyDropDownButton.Create(AOwner: TComponent);
+constructor TTyCustomDropDownButton.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FArrowWidth := TyDefaultDropArrowWidth;
@@ -250,7 +391,7 @@ begin
   FRequestedPopup := False;
 end;
 
-procedure TTyDropDownButton.SetDropDownMenu(AValue: TTyPopupMenu);
+procedure TTyCustomDropDownButton.SetDropDownMenu(AValue: TTyPopupMenu);
 begin
   if FDropDownMenu = AValue then Exit;
   if FDropDownMenu <> nil then
@@ -261,7 +402,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyDropDownButton.SetArrowWidth(AValue: Integer);
+procedure TTyCustomDropDownButton.SetArrowWidth(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   if FArrowWidth = AValue then Exit;
@@ -269,21 +410,21 @@ begin
   Invalidate;
 end;
 
-procedure TTyDropDownButton.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomDropDownButton.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FDropDownMenu) then
     FDropDownMenu := nil;
 end;
 
-function TTyDropDownButton.ArrowZoneWidth(APPI: Integer): Integer;
+function TTyCustomDropDownButton.ArrowZoneWidth(APPI: Integer): Integer;
 begin
   // Logical -> device, same MulDiv convention the painter's Scale uses.
   Result := MulDiv(FArrowWidth, APPI, 96);
   if Result < 0 then Result := 0;
 end;
 
-function TTyDropDownButton.IsInArrowZone(AX: Integer): Boolean;
+function TTyCustomDropDownButton.IsInArrowZone(AX: Integer): Boolean;
 var
   ppi, cl, cr, zoneLeft: Integer;
 begin
@@ -301,7 +442,7 @@ begin
   Result := (zoneLeft >= 0) and (AX >= zoneLeft) and (AX < Width);
 end;
 
-procedure TTyDropDownButton.DoDropDown;
+procedure TTyCustomDropDownButton.DoDropDown;
 var
   p: TPoint;
 begin
@@ -317,12 +458,12 @@ begin
   end;
 end;
 
-procedure TTyDropDownButton.DropDownForTest;
+procedure TTyCustomDropDownButton.DropDownForTest;
 begin
   DoDropDown;
 end;
 
-procedure TTyDropDownButton.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomDropDownButton.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   // Remember WHERE the press landed; the native click that follows the mouse-up reads
   // it in Click to route arrow-zone presses to the drop-down. A non-left button leaves
@@ -331,7 +472,7 @@ begin
   inherited MouseDown(Button, Shift, X, Y);
 end;
 
-procedure TTyDropDownButton.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomDropDownButton.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
   // A release OUTSIDE the client suppresses the native Click that would otherwise
@@ -342,7 +483,7 @@ begin
     FDownX := -1;
 end;
 
-procedure TTyDropDownButton.Click;
+procedure TTyCustomDropDownButton.Click;
 var
   inArrow: Boolean;
 begin
@@ -358,7 +499,7 @@ begin
     inherited Click;
 end;
 
-procedure TTyDropDownButton.DrawContent(APainter: TTyPainter; const AContentRect: TRect;
+procedure TTyCustomDropDownButton.DrawContent(APainter: TTyPainter; const AContentRect: TRect;
   const AStyle: TTyStyleSet);
 var
   divX, zoneLeft: Integer;
@@ -410,7 +551,7 @@ begin
   TyDrawDropChevron(APainter, ActiveController, chevronRect, AStyle.TextColor);
 end;
 
-procedure TTyDropDownButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+procedure TTyCustomDropDownButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
   WithThemeSpace: Boolean);
 var
   ppi: Integer;
@@ -429,15 +570,15 @@ begin
     最后 LCL 以 "TControl.ChangeBounds loop detected" 收场。 }
 end;
 
-{ TTyMenuButton }
+{ TTyCustomMenuButton }
 
-constructor TTyMenuButton.Create(AOwner: TComponent);
+constructor TTyCustomMenuButton.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FRequestedPopup := False;
 end;
 
-procedure TTyMenuButton.SetDropDownMenu(AValue: TTyPopupMenu);
+procedure TTyCustomMenuButton.SetDropDownMenu(AValue: TTyPopupMenu);
 begin
   if FDropDownMenu = AValue then Exit;
   if FDropDownMenu <> nil then
@@ -448,14 +589,14 @@ begin
   Invalidate;
 end;
 
-procedure TTyMenuButton.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomMenuButton.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FDropDownMenu) then
     FDropDownMenu := nil;
 end;
 
-procedure TTyMenuButton.DoDropDown;
+procedure TTyCustomMenuButton.DoDropDown;
 var
   p: TPoint;
 begin
@@ -469,12 +610,12 @@ begin
   end;
 end;
 
-procedure TTyMenuButton.DropDownForTest;
+procedure TTyCustomMenuButton.DropDownForTest;
 begin
   DoDropDown;
 end;
 
-procedure TTyMenuButton.Click;
+procedure TTyCustomMenuButton.Click;
 begin
   if not Enabled then Exit;
   // A MenuButton's click IS the drop — do it FIRST, then run the base OnClick/
@@ -485,7 +626,7 @@ begin
   inherited Click;
 end;
 
-function TTyMenuButton.ArrowZoneWidth(APPI: Integer): Integer;
+function TTyCustomMenuButton.ArrowZoneWidth(APPI: Integer): Integer;
 begin
   // 与 DrawContent 里 APainter.Scale(Metric('--drop-arrow-width', ...)) 同值:同一个
   // 主题度量、同一个 96 基线换算。皮肤调了这个度量,两边一起动。
@@ -494,7 +635,7 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-procedure TTyMenuButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+procedure TTyCustomMenuButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
   WithThemeSpace: Boolean);
 var
   ppi: Integer;
@@ -508,7 +649,7 @@ begin
   // 高度保持基类的 0(无意见),理由同 TTyButton:高度是排版的事,不是控件的事。
 end;
 
-procedure TTyMenuButton.DrawContent(APainter: TTyPainter; const AContentRect: TRect;
+procedure TTyCustomMenuButton.DrawContent(APainter: TTyPainter; const AContentRect: TRect;
   const AStyle: TTyStyleSet);
 var
   arrowW: Integer;

@@ -1,6 +1,6 @@
 # TyControls
 
-Lazarus 自绘控件库。163 个控件全部由 BGRABitmap 绘制,外观由 `.tycss` 文本主题统一控制,在 Windows、Linux、macOS 上显示效果完全一致。
+Lazarus 自绘控件库。169 个控件全部由 BGRABitmap 绘制,外观由 `.tycss` 文本主题统一控制,在 Windows、Linux、macOS 上显示效果完全一致。
 
 > **English:** [README.en.md](README.en.md) · **更新日志:** [CHANGELOG.md](CHANGELOG.md)
 
@@ -10,9 +10,9 @@ Lazarus 自绘控件库。163 个控件全部由 BGRABitmap 绘制,外观由 `.t
 
 | `classic` | `win11` | `material3` |
 |---|---|---|
-| ![classic 主题](docs/images/antd-classic.png) | ![win11 主题](docs/images/antd-win11.png) | ![material3 主题](docs/images/antd-material3.png) |
+| ![classic 主题](docs/images/skin-classic.png) | ![win11 主题](docs/images/skin-win11.png) | ![material3 主题](docs/images/skin-material3.png) |
 
-四张图是同一份 `.lfm`、同一份代码,只改了主题名。主题不只换配色:`classic` 下按钮是立体边框、方角、渐变标题带。
+三张图是同一个窗口、同一份代码,只改了主题名。主题不只换配色:`classic` 下按钮是立体边框、方角、渐变标题带。全部内置主题的对照见[图库](docs/gallery.md)。
 
 ### 亮 / 暗 / 图片主题
 
@@ -26,14 +26,17 @@ Lazarus 自绘控件库。163 个控件全部由 BGRABitmap 绘制,外观由 `.t
 
 | | |
 |---|---|
-| **`TTyStringGrid`** 冻结列、行号槽、汇总带<br>![数据网格](docs/images/grid.png) | **`TTyTreeView`** 虚拟树、多列、三态复选<br>![虚拟树](docs/images/treeview.png) |
-| **富输入控件** 数值 / 货币 / 掩码 / 滑块 / 计算器<br>![富输入](docs/images/inputs.png) | **自绘对话框** 取色器<br>![取色对话框](docs/images/colordialog.png) |
+| **`TTyStringGrid`** 按列指定编辑器:复选、星级、取色、按钮<br>![数据网格](docs/images/grid.png) | **`TTyTreeView`** 虚拟树、多列、三态复选<br>![虚拟树](docs/images/treeview.png) |
+| **富输入控件** 数值 / 货币 / 掩码 / 滑块 / 计算器<br>![富输入](docs/images/inputs.png) | **`TTyChart`** 折线、柱状、饼图、环形图<br>![图表](docs/images/chart.png) |
+| **`TTyRibbon`** 功能区、快速访问栏、Alt 键提示<br>![功能区](docs/images/ribbon.png) | **`TTyCalendar`** 周数、今日高亮、可选日期范围<br>![日历](docs/images/calendar.png) |
+
+每个示例每个标签页的亮色、暗色截图都在[图库](docs/gallery.md)里。
 
 ---
 
 ## 特性
 
-- **163 个控件**:按钮、输入、列表、数据网格、虚拟树、Ribbon、日历、Shell 文件浏览、20 个自绘对话框,一套配齐
+- **169 个控件**:按钮、输入、列表、数据网格、虚拟树、Ribbon、日历、Shell 文件浏览、20 个自绘对话框,一套配齐
 - **三平台一致**:完全自绘,不包装原生控件,同一份代码在三个平台上渲染出同样的界面
 - **主题换肤**:17 个内置主题一个属性切换,支持运行时热切换、跟随系统明暗和强调色;主题是文本文件,改外观不用重编译
 - **经典与现代两种风格**:从 Win95 / XP 的立体风到 Win11 / Material 的扁平风都能做,控件密度也可整体切换
@@ -51,7 +54,7 @@ Lazarus 自绘控件库。163 个控件全部由 BGRABitmap 绘制,外观由 `.t
 | Linux | GTK2、Qt5、Qt6;GTK3 部分支持(Wayland 下有[已知问题](docs/known-issues.md)) |
 | macOS | Cocoa |
 
-依赖:Lazarus 3.x+、FPC 3.2.2+、BGRABitmap(OPM 包名 `BGRABitmapPack`)。
+依赖:Lazarus 3.0+、FPC 3.2.2+、BGRABitmap(OPM 包名 `BGRABitmapPack`)。
 
 ---
 
@@ -69,7 +72,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 
 **3. 换主题**
 
-选中窗体上的 `TTyStyleController`,把 `ThemeName` 改成任意内置主题名。设计器里立即生效,运行时改同一个属性即热切换。
+选中窗体上的 `TTyStyleController`,把 `ThemeName` 改成任意内置主题名。设计器里立即生效,运行时改同一个属性即热切换。模板生成的 `.lpr` 已在启动时调用 `TyRegisterBuiltinThemes`;用别的方式建的工程也要加上这一行,否则按名字选的内置主题只在设计器里生效。
 
 完整步骤见 [docs/getting-started.md](docs/getting-started.md)。
 
@@ -77,7 +80,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 
 ## 控件清单
 
-163 个控件,分 16 个组件面板分页。每个控件的属性、事件、主题键说明见 **[docs/controls/](docs/controls/)**。
+169 个控件,分 16 个组件面板分页。每个控件的属性、事件、主题键说明见 **[docs/controls/](docs/controls/)**。
 
 ### 核心 · `TyControls`(2)
 
@@ -111,12 +114,13 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 | `TTyTag` | 可关闭的标签胶囊 |
 | `TTyBadge` | 数字 / 圆点角标,可吸附到任意控件 |
 
-### 文本与数值输入 · `TyControls Edits`(14)
+### 文本与数值输入 · `TyControls Edits`(15)
 
 | 控件 | 说明 |
 |---|---|
 | `TTyEdit` | 单行文本框:选区、剪贴板、词级导航 |
 | `TTyMemo` | 多行文本框 |
+| `TTyTerminalView` | 终端:画程序输出、把按键编码交给宿主,照 xterm.js;可用独立配色方案(读写 Windows Terminal 格式);带内协议钩子与解析器钩子(示例里有 ZModem 收发) |
 | `TTySpinEdit` | 整数微调框 |
 | `TTyFloatSpinEdit` | 小数微调框,步长可小于 1 |
 | `TTyNumericEdit` | 只接受数字的输入框,失焦时千分位格式化 |
@@ -199,7 +203,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 |---|---|
 | `TTyTrackBar` | 滑块 |
 | `TTyProgressBar` | 进度条 |
-| `TTyScrollBar` | 滚动条 |
+| `TTyScrollBar` | 滚动条:可随主题或按控件设置闲置时自动淡出(`AutoHide`) |
 | `TTyStatusBar` | 状态栏 |
 | `TTyToolBar` | 工具条 |
 | `TTyToolButton` | 工具条按钮:命令 / 开关 / 下拉 / 分组 / 分隔等六种样式 |
@@ -213,7 +217,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 | `TTyBreadcrumb` | 面包屑导航 |
 | `TTyHeaderControl` | 独立列头条 |
 
-### 容器与布局 · `TyControls Containers`(20)
+### 容器与布局 · `TyControls Containers`(22)
 
 | 控件 | 说明 |
 |---|---|
@@ -237,6 +241,8 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 | `TTyListGroupPanel` | 带分组标题的列表容器 |
 | `TTyTitleBar` | 自绘标题栏,配合 `TTyForm` |
 | `TTyEmpty` | 空状态:插画 + 文案 + 操作按钮 |
+| `TTyToolWindowBar` | IDE 式侧栏 / 底栏,工具窗口可拖到另一侧、布局可保存 |
+| `TTyToolWindowManager` | 工具窗口的跨侧拖动和布局保存 |
 
 ### 数据视图 · `TyControls Data Views`(10)
 
@@ -274,15 +280,17 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 | `TTyRibbonGallery` | 图库,可展开成弹出网格 |
 | `TTyRibbonBackstage` | 全窗口后台视图 |
 
-### 图像与提示 · `TyControls Images`(9)
+### 图像与提示 · `TyControls Images`(11)
 
 | 控件 | 说明 |
 |---|---|
 | `TTyIconFont` | 图标字体:按码点或名字取矢量图标,随主题着色 |
+| `TTyLucideIconFont` | 内置的 Lucide 图标字体,放上就能用 |
 | `TTyCharImage` | 把一个图标字形当图片用 |
 | `TTyImage` | 图片控件 |
 | `TTyGlyphImageList` | 图标字体驱动的图像列表 |
 | `TTyImageCollection` | 多分辨率图像集,按 DPI 取图 |
+| `TTyLucideImageList` | 内置 Lucide 图标的图像列表,按名字选图 |
 | `TTyVirtualImageList` | 按需生成任意尺寸的图像列表;本身是标准 `TCustomImageList`,可赋给任何控件,支持按名字取图 |
 | `TTyHint` | 主题化提示气泡 |
 | `TTyBalloonHint` | 带箭头的气球提示 |
@@ -354,6 +362,8 @@ CharImage1.GlyphName := 'house';
 
 写自己的主题见 [docs/themes.md](docs/themes.md),`.tycss` 语言参考见 [docs/tycss-reference.md](docs/tycss-reference.md)。
 
+写主题可以用仓库里的主题编辑器 `tools/themebuilder`:边写边看预览,也可以接大模型用一句话起草或修改。用法见 [docs/themebuilder.md](docs/themebuilder.md)。
+
 ---
 
 ## 示例
@@ -376,6 +386,8 @@ CharImage1.GlyphName := 'house';
 | [rtl](examples/rtl/) | 从右往左镜像与双向文本 |
 | [icons](examples/icons/) | 图标字体 |
 | [transitions](examples/transitions/) | 滑入 / 淡入过渡 |
+| [toolwindows](examples/toolwindows/) | IDE 式工作台:左右侧栏 + 底栏、跨侧拖动、保存 / 恢复布局 |
+| [terminal](examples/terminal/) | 终端:asciicast 回放、真 shell(ConPTY / PTY / 管道)、ZModem 收发、换肤、配色方案、键码面板 |
 
 其余 30 多个单控件示例见 [examples/](examples/)。
 
@@ -390,9 +402,11 @@ CharImage1.GlyphName := 'house';
 | [themes.md](docs/themes.md) | 写自己的主题 |
 | [tycss-reference.md](docs/tycss-reference.md) | `.tycss` 语言参考 |
 | [events.md](docs/events.md) | 通用事件约定 |
+| [subclassing.md](docs/subclassing.md) | 从 `TTyCustomXxx` 派生自己的控件；从 3.0 升级 |
 | [rtl.md](docs/rtl.md) | 双向文本与右到左布局 |
 | [known-issues.md](docs/known-issues.md) | 已知问题 |
 | [CHANGELOG.md](CHANGELOG.md) | 更新日志 |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 报告问题、功能建议、提交代码、路线图 |
 
 ---
 

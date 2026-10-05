@@ -29,6 +29,42 @@ msgstr "显示页面"
 msgid "Show Previous Page"
 msgstr "显示上一页"
 
+#: tycontrols.design.compeditors.rsdttermdark
+msgid "Dark"
+msgstr "深色"
+
+#: tycontrols.design.compeditors.rsdttermexport
+msgid "Export colour scheme..."
+msgstr "导出配色…"
+
+#: tycontrols.design.compeditors.rsdttermexportside
+msgid "Export which scheme?"
+msgstr "导出哪一套？"
+
+#: tycontrols.design.compeditors.rsdttermfilter
+msgid "Windows Terminal colour schemes (*.json)|*.json|All files (*.*)|*.*"
+msgstr "Windows Terminal 配色方案 (*.json)|*.json|所有文件 (*.*)|*.*"
+
+#: tycontrols.design.compeditors.rsdttermimport
+msgid "Import Windows Terminal colour scheme..."
+msgstr "导入 Windows Terminal 配色…"
+
+#: tycontrols.design.compeditors.rsdttermimportside
+msgid "Write it into which scheme?"
+msgstr "写进哪一套？"
+
+#: tycontrols.design.compeditors.rsdttermlight
+msgid "Light"
+msgstr "浅色"
+
+#: tycontrols.design.compeditors.rsdttermusescheme
+msgid "Use the custom colour scheme instead of the theme?"
+msgstr "改成使用自定义方案？"
+
+#: tycontrols.design.compeditors.rsdttermwhichscheme
+msgid "Which colour scheme?"
+msgstr "导入哪一套？"
+
 #: tycontrols.design.compeditors.rsdttreeeditnodes
 msgid "Edit Nodes..."
 msgstr "编辑节点..."
@@ -52,3 +88,23 @@ msgstr "编辑分组..."
 #: tycontrols.design.compeditors.rsdtcascedit
 msgid "Edit options..."
 msgstr "编辑选项..."
+
+#: tycontrols.design.compeditors.rsdttwnewwindow
+msgid "New Tool Window"
+msgstr "新建工具窗口"
+
+#: tycontrols.design.compeditors.rsdttwshowwindow
+msgid "Show Window"
+msgstr "显示窗口"
+
+#: tycontrols.design.compeditors.rsdttwaddactions
+msgid "Add Actions Area"
+msgstr "添加操作区"
+
+#: tycontrols.design.compeditors.rsdttwmoveotherside
+msgid "Move to Other Side Bar"
+msgstr "移到另一侧栏"
+
+#: tycontrols.design.compeditors.rsdttwmoveback
+msgid "Move Back into Bar"
+msgstr "移回栏里"

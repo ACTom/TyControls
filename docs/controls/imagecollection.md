@@ -137,7 +137,7 @@ Coll.Images.Count;                     // -> 3(三张母版)
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Collection` | `TTyImageCollection` | `nil` | 光栅图像源。赋值时注册 `FreeNotification`,集合被先释放时引用自动置 `nil`。 |
+| `Collection` | `TTyCustomImageCollection` | `nil` | 光栅图像源。赋值时注册 `FreeNotification`,集合被先释放时引用自动置 `nil`。 |
 | `Names` | `TStrings` | 空 | 要暴露的图像**名字**(有序,每行一个)——每个都是 `Collection` 中的键。 |
 | `DefaultSize` | `Integer` | `16` | 默认项边长(**逻辑**像素),供不传尺寸的消费方使用。 |
 

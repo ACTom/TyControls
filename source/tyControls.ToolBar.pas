@@ -43,19 +43,72 @@ type
     tbsButtonDrop   // button with an ATTACHED arrow: any click drops the menu, no split
   );
 
+  TTyCustomToolBar = class;
   TTyToolBar = class;
 
-  TTyToolSeparator = class(TTyCustomControl)
+  TTyCustomToolSeparator = class(TTyCustomControl)
   protected
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
+  end;
+
+  { TTyToolSeparator publishes TTyCustomToolSeparator's properties; everything lives in TTyCustomToolSeparator. }
+  TTyToolSeparator = class(TTyCustomToolSeparator)
   published
-    property Align;
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
     property StyleClass;
+    property StyleOverride;
     property Controller;
+    property Align;
   end;
 
   { LCL's TToolButton (comctrls.pp:2103) — the toolbar's own button class.
@@ -72,7 +125,7 @@ type
     existing lend-Images / adopt-ShowCaptions machinery reaches it with no new code.
 
     NOT from TTySpeedButton, deliberately — see Grouped. }
-  TTyToolButton = class(TTyGlyphButtonBase)
+  TTyCustomToolButton = class(TTyGlyphButtonBase)
   private
     FStyle: TTyToolButtonStyle;
     FGrouped: Boolean;
@@ -118,7 +171,7 @@ type
     procedure SetImageIndex(AValue: Integer);
     function ImageIndexIsStored: Boolean;
     function GetIndex: Integer;
-    function GetToolBar: TTyToolBar;
+    function GetToolBar: TTyCustomToolBar;
     { Turn a pending ImageIndex into an ImageName as soon as a collection is available.
       Exactly TWO retry points, because each covers a case the other cannot:
         * TTyToolBar.ApplyToolProperties — the bar handing a collection over. It runs both when
@@ -246,8 +299,19 @@ type
       LCL publishes the same read-only property. }
     property Index: Integer read GetIndex;
     { The bar this button sits on, or nil. }
-    property ToolBar: TTyToolBar read GetToolBar;
-  published
+    property ToolBar: TTyCustomToolBar read GetToolBar;
+    { A tool button never takes focus — the point of a toolbar is that clicking it leaves the
+      caret where it was. Same call TTySpeedButton makes, and the declared default has to
+      agree with the constructor or the streamer writes TabStop into every .lfm. }
+    property TabStop default False;
+    { Re-declared for its STORAGE, not its meaning: the host bar's List pushes a layout onto
+      every tool that never chose one (AdoptGlyphLayout), so an ADOPTED layout must not
+      stream — reloading would turn it into an explicit choice and List could never move the
+      button again. `stored FGlyphLayoutExplicit` is ShowCaption's exact arrangement, and
+      `nodefault` removes the base's `default glLeft` for the same reason ShowCaption carries
+      no default: an EXPLICIT glLeft written on a List=False bar must survive the round trip,
+      and a default directive would suppress writing exactly that case. }
+    property GlyphLayout stored FGlyphLayoutExplicit nodefault;
     { Which of the six kinds this button is. Changing it to a space holder resizes the button
       to TyToolSeparatorWidth / TyToolDividerWidth, as LCL's SetStyle does. }
     property Style: TTyToolButtonStyle read FStyle write SetStyle default tbsButton;
@@ -319,23 +383,95 @@ type
       ALTERNATIVE to a menu, not a hook in front of it. If you need to run code BEFORE the
       menu pops (to build it, say), TTyDropDownButton.OnDropDown is that hook. }
     property OnArrowClick: TNotifyEvent read FOnArrowClick write FOnArrowClick;
-    { A tool button never takes focus — the point of a toolbar is that clicking it leaves the
-      caret where it was. Same call TTySpeedButton makes, and the declared default has to
-      agree with the constructor or the streamer writes TabStop into every .lfm. }
-    property TabStop default False;
-    { The resting pressed state. Inherited from TTyButton and re-listed only to say that on a
-      tbsCheck it is the CHECKED state a click flips (and that the group keeps exclusive), where
-      on the other styles it is just the ':selected' look. Caption / Enabled / Visible / Hint /
-      ShowHint / Align / Anchors / StyleClass / Controller / OnClick all come from the bases. }
+  end;
+
+  { TTyToolButton publishes TTyCustomToolButton's properties; everything lives in TTyCustomToolButton. }
+  TTyToolButton = class(TTyCustomToolButton)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property AnimationsEnabled;
+    property Default;
+    property Cancel;
+    { The resting pressed state, from TTyCustomButton: on a tbsCheck it is the CHECKED state a
+      click flips (and that the group keeps exclusive), where on the other styles it is just the
+      ':selected' look. }
     property Down;
-    { Re-declared for its STORAGE, not its meaning: the host bar's List pushes a layout onto
-      every tool that never chose one (AdoptGlyphLayout), so an ADOPTED layout must not
-      stream — reloading would turn it into an explicit choice and List could never move the
-      button again. `stored FGlyphLayoutExplicit` is ShowCaption's exact arrangement, and
-      `nodefault` removes the base's `default glLeft` for the same reason ShowCaption carries
-      no default: an EXPLICIT glLeft written on a List=False bar must survive the round trip,
-      and a default directive would suppress writing exactly that case. }
-    property GlyphLayout stored FGlyphLayoutExplicit nodefault;
+    property ModalResult;
+    property Alignment;
+    property ShowAccelChar;
+    property ShowBadge;
+    property BadgeValue;
+    property BadgePosition;
+    property OnBadgeDisplay;
+    property Caption;
+    property Align;
+    property Anchors;
+    property IconFont;
+    property GlyphName;
+    property GlyphKind;
+    property GlyphSize;
+    property GlyphColor;
+    property Images;
+    property ImageName;
+    property GlyphLayout;
+    property Spacing;
+    property ShowCaption;
+    property Style;
+    property Grouped;
+    property AllowAllUp;
+    property Wrap;
+    property ImageIndex;
+    property DropdownMenu;
+    property OnArrowClick;
   end;
 
   { LCL's TToolBarOnPaintButton (comctrls.pp:2253), member for member: the button, and the
@@ -344,9 +480,9 @@ type
     The canvas is NOT a parameter because LCL's is not, and here — unlike the combo rows,
     which are painted by a different control — Sender.Canvas IS the surface the handler must
     use, so the LCL-ported handler works unchanged. }
-  TTyToolBarOnPaintButton = procedure(Sender: TTyToolButton; AState: Integer) of object;
+  TTyToolBarOnPaintButton = procedure(Sender: TTyCustomToolButton; AState: Integer) of object;
 
-  TTyToolBar = class(TTyCustomControl)
+  TTyCustomToolBar = class(TTyCustomControl)
   private
     FButtonHeight: Integer;
     FButtonHeightExplicit: Boolean;
@@ -360,23 +496,23 @@ type
     FShowCaptions: Boolean;
     FFlat: Boolean;
     FOnPaintButton: TTyToolBarOnPaintButton;
-    FImages: TTyImageCollection;
+    FImages: TTyCustomImageCollection;
     { The collection this bar last LENT to its tools. A tool still holding it is one we
       handed it to, so we may re-point or take it back; anything else is the host's own
       choice and is left alone. Nil'd with FImages in Notification — a freed collection's
       address can be re-used, and a stale marker would make us adopt a stranger's. }
-    FLentImages: TTyImageCollection;
+    FLentImages: TTyCustomImageCollection;
     { Per-state ALTERNATES for FImages, looked up by the SAME ImageName. Deliberately NOT
       lent to the tools the way FImages is: lending exists so a tool can own its icon
       source, and these are the BAR's statement about the bar's own icons. A tool asks for
       them at paint time (TTyToolButton.GetGlyphSource) and only when it is drawing FImages. }
-    FHotImages: TTyImageCollection;
-    FDisabledImages: TTyImageCollection;
+    FHotImages: TTyCustomImageCollection;
+    FDisabledImages: TTyCustomImageCollection;
     FInLayout: Boolean;
     function GetButtonHeight: Integer;
     function GetButtonWidth: Integer;
     function GetButtonCount: Integer;
-    function GetButton(AIndex: Integer): TTyToolButton;
+    function GetButton(AIndex: Integer): TTyCustomToolButton;
     procedure SetButtonHeight(AValue: Integer);
     procedure SetButtonWidth(AValue: Integer);
     procedure SetButtonSpacing(AValue: Integer);
@@ -385,9 +521,9 @@ type
     procedure SetList(AValue: Boolean);
     procedure SetWrapable(AValue: Boolean);
     procedure SetShowCaptions(AValue: Boolean);
-    procedure SetImages(AValue: TTyImageCollection);
-    procedure SetHotImages(AValue: TTyImageCollection);
-    procedure SetDisabledImages(AValue: TTyImageCollection);
+    procedure SetImages(AValue: TTyCustomImageCollection);
+    procedure SetHotImages(AValue: TTyCustomImageCollection);
+    procedure SetDisabledImages(AValue: TTyCustomImageCollection);
     procedure SetFlat(AValue: Boolean);
     procedure SetOnPaintButton(AValue: TTyToolBarOnPaintButton);
     procedure Relayout;
@@ -398,6 +534,11 @@ type
       existing bar changes height. Protected because TTyToolBarEx lays its own row out and
       must use the SAME pad, or the two bars would sit their tools at different heights. }
     function ContentPadY: Integer;
+    { The PPI this bar lays its tools out at. ButtonHeight, ButtonWidth, ButtonSpacing,
+      Indent and ContentPadY are all LOGICAL px; the layout multiplies each by this over 96
+      before it meets a child's size, which is device px. One function because TTyToolBarEx
+      lays its own row out and must scale by the same number. }
+    function LayoutPPI: Integer;
     { The device-px height of the bottom hairline RenderTo strokes at APPI -- the bar's only
       painted border. Extracted from RenderTo (which is still its only caller for drawing) so
       the LAYOUT can read the same number: a tool button is a WINDOWED child, so it paints
@@ -408,7 +549,7 @@ type
     function BottomBorderPx(APPI: Integer): Integer;
     { Protected rather than private so a test can drive the one call a relayout makes
       without needing a window handle and a live align pass. }
-    procedure ApplyToButton(B: TTyButton);
+    procedure ApplyToButton(B: TTyCustomButton);
     { Push Images + ShowCaptions (and, to tool buttons, List's glyph layout) onto every tool
       that can draw an icon. Protected for the same reason. }
     procedure ApplyToolProperties;
@@ -437,10 +578,9 @@ type
       An out-of-range index answers nil rather than raising: callers here walk the list while
       a layout is moving under them. }
     property ButtonCount: Integer read GetButtonCount;
-    property Buttons[AIndex: Integer]: TTyToolButton read GetButton;
+    property Buttons[AIndex: Integer]: TTyCustomToolButton read GetButton;
     { Position of AButton in Buttons[], or -1 when it is not one of ours. }
-    function IndexOfButton(AButton: TTyToolButton): Integer;
-  published
+    function IndexOfButton(AButton: TTyCustomToolButton): Integer;
     { Density-aware: unset follows --control-height (classic 24 / modern 38). A host/.lfm value
       pins it (streamed only when explicitly set -- stored FButtonHeightExplicit). }
     property ButtonHeight: Integer read GetButtonHeight write SetButtonHeight stored FButtonHeightExplicit;
@@ -522,7 +662,7 @@ type
       the name-keyed BGRA collection (see tyControls.ImageCollection), so a TImageList here
       could never reach a tool button no matter what a host assigned — which is exactly why
       this property used to do nothing. }
-    property Images: TTyImageCollection read FImages write SetImages;
+    property Images: TTyCustomImageCollection read FImages write SetImages;
     { Per-state ALTERNATE artwork, keyed by the same ImageName as Images.
 
       LCL's pair (comctrls.pp: HotImages/DisabledImages) are parallel TImageLists indexed by
@@ -547,12 +687,9 @@ type
 
       Precedence when a button is both disabled and hot: DISABLED wins (LCL orders it the
       same way, and a disabled tool is not really hovered — it just has a pointer over it). }
-    property HotImages: TTyImageCollection read FHotImages write SetHotImages;
-    property DisabledImages: TTyImageCollection read FDisabledImages write SetDisabledImages;
+    property HotImages: TTyCustomImageCollection read FHotImages write SetHotImages;
+    property DisabledImages: TTyCustomImageCollection read FDisabledImages write SetDisabledImages;
     property Align default alTop;
-    property Anchors;
-    property StyleClass;
-    property Controller;
     { LCL's per-button owner draw (comctrls.pp:2416): while assigned, EVERY tool button's
       paint — all six styles, separators included, exactly as LCL routes it — is REPLACED by
       this handler; clearing it restores the themed default, so assigning it can never blank
@@ -564,6 +701,76 @@ type
       State lie about a disabled button; here AState is always the true state, and Flat
       keeps to the one lever it already pulls (the ghost StyleClass). }
     property OnPaintButton: TTyToolBarOnPaintButton read FOnPaintButton write SetOnPaintButton;
+  end;
+
+  { TTyToolBar publishes TTyCustomToolBar's properties; everything lives in TTyCustomToolBar. }
+  TTyToolBar = class(TTyCustomToolBar)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property ButtonHeight;
+    property ButtonWidth;
+    property ButtonSpacing;
+    property DropDownWidth;
+    property Indent;
+    property List;
+    property Wrapable;
+    property ShowCaptions;
+    property Flat;
+    property Images;
+    property HotImages;
+    property DisabledImages;
+    property Align;
+    property Anchors;
+    property OnPaintButton;
   end;
 
 { AIndent is the LEADING (horizontal) gap before the first tool on every row; ATopPad is the
@@ -809,7 +1016,7 @@ begin
 end;
 
 { A 1px hairline / rule fill. Factored out because `Default(TTyFill)` is NOT usable inside
-  TTyToolButton: TTyButton publishes a property named `Default`, which shadows the compiler
+  TTyToolButton: TTyCustomButton declares a property named `Default`, which shadows the compiler
   intrinsic of that name inside every method of a descendant, and the resulting error
   ("Incompatible types: got Boolean expected TTyFill") points at the assignment rather than at
   the shadowing. One helper, so no method of that class has to know. }
@@ -843,8 +1050,8 @@ begin
     TyToolRuleFill(TyToolRuleInk(AStyle, AFallbackAlpha)), 0);
 end;
 
-{ TTyToolSeparator }
-constructor TTyToolSeparator.Create(AOwner: TComponent);
+{ TTyCustomToolSeparator }
+constructor TTyCustomToolSeparator.Create(AOwner: TComponent);
 begin inherited Create(AOwner); Width := 8; Height := TyDensityHeight(ActiveController, 24); end;
 // Its own key, NOT the bar's. The separator draws ink the bar does not — an inset
 // vertical rule — and borrowing 'TyToolBar' made that rule the SAME colour as the bar's
@@ -852,9 +1059,9 @@ begin inherited Create(AOwner); Width := 8; Height := TyDensityHeight(ActiveCont
 // divider while keeping the bar's edge (the classic "lighter inset divider on a bordered
 // bar"). It needs background too: that fill is what keeps the separator seamless with
 // the bar it sits on.
-function TTyToolSeparator.GetStyleTypeKey: string; begin Result := 'TyToolSeparator'; end;
-procedure TTyToolSeparator.Paint; begin RenderTo(Canvas, ClientRect, Font.PixelsPerInch); end;
-procedure TTyToolSeparator.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+function TTyCustomToolSeparator.GetStyleTypeKey: string; begin Result := 'TyToolSeparator'; end;
+procedure TTyCustomToolSeparator.Paint; begin RenderTo(Canvas, ClientRect, Font.PixelsPerInch); end;
+procedure TTyCustomToolSeparator.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var P: TTyPainter; S: TTyStyleSet; W, H: Integer;
 begin
   P := TTyPainter.Create;
@@ -872,10 +1079,10 @@ begin
 end;
 
 { ========================================================================== }
-{ TTyToolButton                                                              }
+{ TTyCustomToolButton                                                        }
 { ========================================================================== }
 
-constructor TTyToolButton.Create(AOwner: TComponent);
+constructor TTyCustomToolButton.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FStyle := tbsButton;
@@ -895,7 +1102,7 @@ begin
   Height := TyDensityHeight(ActiveController, 22);
 end;
 
-procedure TTyToolButton.Loaded;
+procedure TTyCustomToolButton.Loaded;
 begin
   inherited Loaded;
   { The retry for the case the bar cannot reach: a button carrying its OWN Images in an .lfm.
@@ -906,7 +1113,7 @@ begin
   ResolveImageIndex;
 end;
 
-function TTyToolButton.GetStyleTypeKey: string;
+function TTyCustomToolButton.GetStyleTypeKey: string;
 begin
   if FStyle in [tbsSeparator, tbsDivider] then
     Result := 'TyToolSeparator'
@@ -914,26 +1121,26 @@ begin
     Result := inherited GetStyleTypeKey;   // 'TyButton'
 end;
 
-function TTyToolButton.GetToolBar: TTyToolBar;
+function TTyCustomToolButton.GetToolBar: TTyCustomToolBar;
 begin
-  if Parent is TTyToolBar then
-    Result := TTyToolBar(Parent)
+  if Parent is TTyCustomToolBar then
+    Result := TTyCustomToolBar(Parent)
   else
     Result := nil;
 end;
 
-function TTyToolButton.GetIndex: Integer;
+function TTyCustomToolButton.GetIndex: Integer;
 var
-  bar: TTyToolBar;
+  bar: TTyCustomToolBar;
 begin
   bar := GetToolBar;
   if bar = nil then Exit(-1);
   Result := bar.IndexOfButton(Self);
 end;
 
-procedure TTyToolButton.RequestBarRelayout;
+procedure TTyCustomToolButton.RequestBarRelayout;
 var
-  bar: TTyToolBar;
+  bar: TTyCustomToolBar;
 begin
   if csLoading in ComponentState then Exit;
   bar := GetToolBar;
@@ -942,7 +1149,7 @@ begin
   if bar <> nil then bar.Relayout;
 end;
 
-procedure TTyToolButton.SetStyle(AValue: TTyToolButtonStyle);
+procedure TTyCustomToolButton.SetStyle(AValue: TTyToolButtonStyle);
 begin
   if FStyle = AValue then Exit;
   FStyle := AValue;
@@ -961,7 +1168,7 @@ begin
   RequestBarRelayout;
 end;
 
-function TTyToolButton.SpaceHolderWidth: Integer;
+function TTyCustomToolButton.SpaceHolderWidth: Integer;
 begin
   case FStyle of
     tbsSeparator: Result := TyToolSeparatorWidth;
@@ -971,14 +1178,14 @@ begin
   end;
 end;
 
-procedure TTyToolButton.SetWrap(AValue: Boolean);
+procedure TTyCustomToolButton.SetWrap(AValue: Boolean);
 begin
   if FWrap = AValue then Exit;
   FWrap := AValue;
   RequestBarRelayout;   // the rows moved
 end;
 
-procedure TTyToolButton.SetDropdownMenu(AValue: TTyPopupMenu);
+procedure TTyCustomToolButton.SetDropdownMenu(AValue: TTyPopupMenu);
 begin
   if FDropdownMenu = AValue then Exit;
   if FDropdownMenu <> nil then FDropdownMenu.RemoveFreeNotification(Self);
@@ -987,7 +1194,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyToolButton.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomToolButton.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FDropdownMenu) then
@@ -996,7 +1203,7 @@ end;
 
 { ---- icon by position ----------------------------------------------------- }
 
-function TTyToolButton.GetImageIndex: Integer;
+function TTyCustomToolButton.GetImageIndex: Integer;
 var
   n: Integer;
 begin
@@ -1013,7 +1220,7 @@ begin
   Result := FImageIndex;
 end;
 
-procedure TTyToolButton.SetImageIndex(AValue: Integer);
+procedure TTyCustomToolButton.SetImageIndex(AValue: Integer);
 begin
   if AValue < -1 then AValue := -1;   // one "no icon" value, not a range of them
   FImageIndex := AValue;
@@ -1023,7 +1230,7 @@ begin
   ResolveImageIndex;
 end;
 
-procedure TTyToolButton.ResolveImageIndex;
+procedure TTyCustomToolButton.ResolveImageIndex;
 begin
   if not FImageIndexPending then Exit;   // nothing outstanding: never touch a host's ImageName
   if Images = nil then Exit;             // still not resolvable; a later retry will get it
@@ -1034,7 +1241,7 @@ begin
     ImageName := Images.NameOf(FImageIndex);   // '' when the index is past the end
 end;
 
-function TTyToolButton.ImageIndexIsStored: Boolean;
+function TTyCustomToolButton.ImageIndexIsStored: Boolean;
 begin
   // The NAME (inherited) is the durable state; the index streams only as the fallback a name
   // cannot hold -- a collection with no matching name, or plain index-only use. When a name IS
@@ -1044,7 +1251,7 @@ end;
 
 { ---- the bar's adopted defaults ------------------------------------------- }
 
-procedure TTyToolButton.SetGlyphLayout(AValue: TTyGlyphLayout);
+procedure TTyCustomToolButton.SetGlyphLayout(AValue: TTyGlyphLayout);
 begin
   { Mark BEFORE the base's no-change early-exit: writing the very value the bar happens to
     have adopted is still the host claiming the property, and must pin it — otherwise
@@ -1054,7 +1261,7 @@ begin
   inherited SetGlyphLayout(AValue);
 end;
 
-procedure TTyToolButton.AdoptGlyphLayout(AValue: TTyGlyphLayout);
+procedure TTyCustomToolButton.AdoptGlyphLayout(AValue: TTyGlyphLayout);
 begin
   if FGlyphLayoutExplicit then Exit;   // the host owns it; the container must not fight
   if FGlyphLayout = AValue then Exit;
@@ -1065,7 +1272,7 @@ begin
   Invalidate;
 end;
 
-function TTyToolButton.BarNaturalWidth: Integer;
+function TTyCustomToolButton.BarNaturalWidth: Integer;
 begin
   { Width still equal to what the bar lent -> the bar may re-derive from the remembered
     natural width; anything else means the HOST wrote Width since, and that write is the new
@@ -1077,7 +1284,7 @@ begin
     Result := Width;
 end;
 
-procedure TTyToolButton.RecordBarImposedWidth(AImposed: Integer);
+procedure TTyCustomToolButton.RecordBarImposedWidth(AImposed: Integer);
 var
   nat: Integer;
 begin
@@ -1093,9 +1300,9 @@ end;
 
 { ---- grouping ------------------------------------------------------------- }
 
-function TTyToolButton.GetGroupBounds(out AStart, AEnd: Integer): Boolean;
+function TTyCustomToolButton.GetGroupBounds(out AStart, AEnd: Integer): Boolean;
 var
-  bar: TTyToolBar;
+  bar: TTyCustomToolBar;
   n, i, me: Integer;
   groupFlags: array of Boolean;
   styles: array of TTyToolButtonStyle;
@@ -1120,10 +1327,10 @@ begin
   Result := TyToolGroupBounds(groupFlags, styles, me, AStart, AEnd);
 end;
 
-function TTyToolButton.GroupAllUpAllowed: Boolean;
+function TTyCustomToolButton.GroupAllUpAllowed: Boolean;
 var
   s, e, i: Integer;
-  bar: TTyToolBar;
+  bar: TTyCustomToolBar;
 begin
   if not GetGroupBounds(s, e) then Exit(True);   // ungrouped: nothing constrains it
   bar := GetToolBar;
@@ -1132,7 +1339,7 @@ begin
   Result := False;
 end;
 
-procedure TTyToolButton.ForceUp;
+procedure TTyCustomToolButton.ForceUp;
 begin
   FInGroupUpdate := True;
   try
@@ -1142,11 +1349,11 @@ begin
   end;
 end;
 
-procedure TTyToolButton.SetDown(AValue: Boolean);
+procedure TTyCustomToolButton.SetDown(AValue: Boolean);
 var
   s, e, i: Integer;
-  bar: TTyToolBar;
-  b: TTyToolButton;
+  bar: TTyCustomToolBar;
+  b: TTyCustomToolButton;
 begin
   if Down = AValue then Exit;
   { The group's own bookkeeping (ForceUp) goes straight through: the guard below exists to
@@ -1170,10 +1377,10 @@ begin
   end;
 end;
 
-procedure TTyToolButton.SetGrouped(AValue: Boolean);
+procedure TTyCustomToolButton.SetGrouped(AValue: Boolean);
 var
   s, e, i, j: Integer;
-  bar: TTyToolBar;
+  bar: TTyCustomToolBar;
 begin
   if FGrouped = AValue then Exit;
   FGrouped := AValue;
@@ -1194,10 +1401,10 @@ begin
     end;
 end;
 
-procedure TTyToolButton.SetAllowAllUp(AValue: Boolean);
+procedure TTyCustomToolButton.SetAllowAllUp(AValue: Boolean);
 var
   s, e, i: Integer;
-  bar: TTyToolBar;
+  bar: TTyCustomToolBar;
   anyDown: Boolean;
 begin
   if FAllowAllUp = AValue then Exit;
@@ -1219,10 +1426,10 @@ begin
   if not anyDown then Down := True;
 end;
 
-function TTyToolButton.GetGlyphSource(AStates: TTyStateSet): TTyGlyphSource;
+function TTyCustomToolButton.GetGlyphSource(AStates: TTyStateSet): TTyGlyphSource;
 var
-  bar: TTyToolBar;
-  alt: TTyImageCollection;
+  bar: TTyCustomToolBar;
+  alt: TTyCustomImageCollection;
 begin
   Result := inherited GetGlyphSource(AStates);
   bar := GetToolBar;
@@ -1247,9 +1454,9 @@ end;
 
 { ---- arrow zone / drop-down ----------------------------------------------- }
 
-function TTyToolButton.DropArrowLogicalWidth: Integer;
+function TTyCustomToolButton.DropArrowLogicalWidth: Integer;
 var
-  bar: TTyToolBar;
+  bar: TTyCustomToolBar;
 begin
   bar := GetToolBar;
   if (bar <> nil) and (bar.DropDownWidth > 0) then
@@ -1261,7 +1468,7 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-function TTyToolButton.ArrowZoneWidth(APPI: Integer): Integer;
+function TTyCustomToolButton.ArrowZoneWidth(APPI: Integer): Integer;
 begin
   if not (FStyle in [tbsDropDown, tbsButtonDrop]) then Exit(0);
   // The same 96-baseline conversion TTyMenuButton uses (and APainter.Scale IS this MulDiv),
@@ -1270,7 +1477,7 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-function TTyToolButton.IsInArrowZone(AX: Integer): Boolean;
+function TTyCustomToolButton.IsInArrowZone(AX: Integer): Boolean;
 var
   ppi, cl, cr, zoneLeft: Integer;
 begin
@@ -1289,12 +1496,12 @@ begin
   Result := (zoneLeft >= 0) and (AX >= zoneLeft) and (AX < Width);
 end;
 
-function TTyToolButton.PointInArrow(const X, Y: Integer): Boolean;
+function TTyCustomToolButton.PointInArrow(const X, Y: Integer): Boolean;
 begin
   Result := (Y >= 0) and (Y <= ClientHeight) and IsInArrowZone(X);
 end;
 
-function TTyToolButton.CheckMenuDropdown: Boolean;
+function TTyCustomToolButton.CheckMenuDropdown: Boolean;
 var
   p: TPoint;
 begin
@@ -1310,19 +1517,19 @@ begin
   end;
 end;
 
-procedure TTyToolButton.ArrowClick;
+procedure TTyCustomToolButton.ArrowClick;
 begin
   if Assigned(FOnArrowClick) then FOnArrowClick(Self);
 end;
 
-procedure TTyToolButton.DropDownForTest;
+procedure TTyCustomToolButton.DropDownForTest;
 begin
   CheckMenuDropdown;
 end;
 
 { ---- clicking ------------------------------------------------------------- }
 
-procedure TTyToolButton.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomToolButton.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   // Remember WHERE the press landed; the native Click that follows the mouse-up reads it to
   // route arrow-zone presses. A non-left button leaves the record cleared so it can never
@@ -1331,7 +1538,7 @@ begin
   inherited MouseDown(Button, Shift, X, Y);
 end;
 
-procedure TTyToolButton.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomToolButton.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
   // A release OUTSIDE the client suppresses the native Click that would otherwise consume
@@ -1340,7 +1547,7 @@ begin
   if (X < 0) or (Y < 0) or (X >= Width) or (Y >= Height) then FDownX := -1;
 end;
 
-procedure TTyToolButton.Click;
+procedure TTyCustomToolButton.Click;
 var
   inArrow: Boolean;
 begin
@@ -1382,7 +1589,7 @@ end;
 
 { ---- measuring + painting -------------------------------------------------- }
 
-function TTyToolButton.MeasureContentHeight(APPI: Integer): Integer;
+function TTyCustomToolButton.MeasureContentHeight(APPI: Integer): Integer;
 begin
   // A space holder stacks no ink. Reporting a caption line here would raise
   // Constraints.MinHeight above the bar's ButtonHeight and make every row that carries a
@@ -1391,7 +1598,7 @@ begin
   Result := inherited MeasureContentHeight(APPI);
 end;
 
-procedure TTyToolButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+procedure TTyCustomToolButton.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
   WithThemeSpace: Boolean);
 var
   ppi: Integer;
@@ -1415,7 +1622,7 @@ begin
   if PreferredWidth < 1 then PreferredWidth := 1;
 end;
 
-procedure TTyToolButton.DrawContent(APainter: TTyPainter; const AContentRect: TRect;
+procedure TTyCustomToolButton.DrawContent(APainter: TTyPainter; const AContentRect: TRect;
   const AStyle: TTyStyleSet);
 var
   divX, zoneLeft: Integer;
@@ -1468,7 +1675,7 @@ begin
   TyDrawDropChevron(APainter, ActiveController, arrowRect, AStyle.TextColor);
 end;
 
-procedure TTyToolButton.RenderSpaceHolder(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomToolButton.RenderSpaceHolder(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -1489,9 +1696,9 @@ begin
   end;
 end;
 
-procedure TTyToolButton.Paint;
+procedure TTyCustomToolButton.Paint;
 var
-  bar: TTyToolBar;
+  bar: TTyCustomToolBar;
 begin
   { LCL's OnPaintButton contract, whole: while the BAR's handler is assigned it REPLACES the
     default paint for every style — LCL calls it and exits before the themed draw, separators
@@ -1529,8 +1736,8 @@ begin
     inherited Paint;
 end;
 
-{ TTyToolBar }
-constructor TTyToolBar.Create(AOwner: TComponent);
+{ TTyCustomToolBar }
+constructor TTyCustomToolBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   ControlStyle := ControlStyle + [csAcceptsControls];   // hosts the tool buttons
@@ -1543,15 +1750,21 @@ begin
   Width := 300; Height := 30;
 end;
 
-function TTyToolBar.GetStyleTypeKey: string; begin Result := 'TyToolBar'; end;
+function TTyCustomToolBar.GetStyleTypeKey: string; begin Result := 'TyToolBar'; end;
 
-function TTyToolBar.ContentPadY: Integer;
+function TTyCustomToolBar.ContentPadY: Integer;
 begin
   Result := ActiveController.Metric('--toolbar-pad-y', 4);
   if Result < 0 then Result := 0;
 end;
 
-function TTyToolBar.BottomBorderPx(APPI: Integer): Integer;
+function TTyCustomToolBar.LayoutPPI: Integer;
+begin
+  Result := Font.PixelsPerInch;
+  if Result <= 0 then Result := 96;
+end;
+
+function TTyCustomToolBar.BottomBorderPx(APPI: Integer): Integer;
 var S: TTyStyleSet;
 begin
   { No border colour resolved -> RenderTo strokes nothing -> there is no strip to keep clear. }
@@ -1561,16 +1774,16 @@ begin
   if Result < 1 then Result := 1;              // RenderTo floors its own stroke at 1px
 end;
 
-function TTyToolBar.GetButtonCount: Integer;
+function TTyCustomToolBar.GetButtonCount: Integer;
 var
   i: Integer;
 begin
   Result := 0;
   for i := 0 to ControlCount - 1 do
-    if Controls[i] is TTyToolButton then Inc(Result);
+    if Controls[i] is TTyCustomToolButton then Inc(Result);
 end;
 
-function TTyToolBar.GetButton(AIndex: Integer): TTyToolButton;
+function TTyCustomToolBar.GetButton(AIndex: Integer): TTyCustomToolButton;
 var
   i, k: Integer;
 begin
@@ -1578,14 +1791,14 @@ begin
   if AIndex < 0 then Exit;
   k := 0;
   for i := 0 to ControlCount - 1 do
-    if Controls[i] is TTyToolButton then
+    if Controls[i] is TTyCustomToolButton then
     begin
-      if k = AIndex then Exit(TTyToolButton(Controls[i]));
+      if k = AIndex then Exit(TTyCustomToolButton(Controls[i]));
       Inc(k);
     end;
 end;
 
-function TTyToolBar.IndexOfButton(AButton: TTyToolButton): Integer;
+function TTyCustomToolBar.IndexOfButton(AButton: TTyCustomToolButton): Integer;
 var
   i, k: Integer;
 begin
@@ -1593,21 +1806,21 @@ begin
   if AButton = nil then Exit;
   k := 0;
   for i := 0 to ControlCount - 1 do
-    if Controls[i] is TTyToolButton then
+    if Controls[i] is TTyCustomToolButton then
     begin
       if Controls[i] = AButton then Exit(k);
       Inc(k);
     end;
 end;
 
-function TTyToolBar.GetButtonHeight: Integer;
+function TTyCustomToolBar.GetButtonHeight: Integer;
 begin
   if FButtonHeightExplicit then
     Result := FButtonHeight
   else
     Result := TyDensityMetric(ActiveController, 24, '--control-height');
 end;
-function TTyToolBar.GetButtonWidth: Integer;
+function TTyCustomToolBar.GetButtonWidth: Integer;
 begin
   // Unlike ButtonHeight there is no token to follow: unset means NO floor (0), because a
   // button's width here is a designed value — see the published property for the argument.
@@ -1616,8 +1829,8 @@ begin
   else
     Result := 0;
 end;
-procedure TTyToolBar.SetButtonHeight(AValue: Integer); begin FButtonHeightExplicit := True; if FButtonHeight = AValue then Exit; FButtonHeight := AValue; Relayout; end;
-procedure TTyToolBar.SetButtonWidth(AValue: Integer);
+procedure TTyCustomToolBar.SetButtonHeight(AValue: Integer); begin FButtonHeightExplicit := True; if FButtonHeight = AValue then Exit; FButtonHeight := AValue; Relayout; end;
+procedure TTyCustomToolBar.SetButtonWidth(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;   // one "no floor" value, not a range of them
   FButtonWidthExplicit := True;     // mark first — ButtonHeight's arrangement
@@ -1625,8 +1838,8 @@ begin
   FButtonWidth := AValue;
   Relayout;
 end;
-procedure TTyToolBar.SetButtonSpacing(AValue: Integer); begin if FButtonSpacing = AValue then Exit; FButtonSpacing := AValue; Relayout; end;
-procedure TTyToolBar.SetDropDownWidth(AValue: Integer);
+procedure TTyCustomToolBar.SetButtonSpacing(AValue: Integer); begin if FButtonSpacing = AValue then Exit; FButtonSpacing := AValue; Relayout; end;
+procedure TTyCustomToolBar.SetDropDownWidth(AValue: Integer);
 var
   i: Integer;
 begin
@@ -1637,21 +1850,21 @@ begin
   // RE-MEASURE, not just repaint — TTyButton.Invalidate is where the size floor re-runs
   // (the same reason a theme switch arrives as a bare Invalidate).
   for i := 0 to ControlCount - 1 do
-    if Controls[i] is TTyToolButton then Controls[i].Invalidate;
+    if Controls[i] is TTyCustomToolButton then Controls[i].Invalidate;
   Relayout;
 end;
-procedure TTyToolBar.SetIndent(AValue: Integer); begin if FIndent = AValue then Exit; FIndent := AValue; Relayout; end;
-procedure TTyToolBar.SetList(AValue: Boolean);
+procedure TTyCustomToolBar.SetIndent(AValue: Integer); begin if FIndent = AValue then Exit; FIndent := AValue; Relayout; end;
+procedure TTyCustomToolBar.SetList(AValue: Boolean);
 begin
   if FList = AValue then Exit;
   FList := AValue;
   ApplyToolProperties;   // adopt the new layout onto every tool that never chose its own
   Relayout;
 end;
-procedure TTyToolBar.SetWrapable(AValue: Boolean); begin if FWrapable = AValue then Exit; FWrapable := AValue; Relayout; end;
-procedure TTyToolBar.SetShowCaptions(AValue: Boolean); begin if FShowCaptions = AValue then Exit; FShowCaptions := AValue; ApplyToolProperties; Relayout; end;
-procedure TTyToolBar.SetFlat(AValue: Boolean); begin if FFlat = AValue then Exit; FFlat := AValue; Relayout; end;
-procedure TTyToolBar.SetOnPaintButton(AValue: TTyToolBarOnPaintButton);
+procedure TTyCustomToolBar.SetWrapable(AValue: Boolean); begin if FWrapable = AValue then Exit; FWrapable := AValue; Relayout; end;
+procedure TTyCustomToolBar.SetShowCaptions(AValue: Boolean); begin if FShowCaptions = AValue then Exit; FShowCaptions := AValue; ApplyToolProperties; Relayout; end;
+procedure TTyCustomToolBar.SetFlat(AValue: Boolean); begin if FFlat = AValue then Exit; FFlat := AValue; Relayout; end;
+procedure TTyCustomToolBar.SetOnPaintButton(AValue: TTyToolBarOnPaintButton);
 var
   i: Integer;
 begin
@@ -1661,10 +1874,10 @@ begin
     buttons are invalidated. }
   FOnPaintButton := AValue;
   for i := 0 to ControlCount - 1 do
-    if Controls[i] is TTyToolButton then Controls[i].Invalidate;
+    if Controls[i] is TTyCustomToolButton then Controls[i].Invalidate;
 end;
 
-procedure TTyToolBar.SetImages(AValue: TTyImageCollection);
+procedure TTyCustomToolBar.SetImages(AValue: TTyCustomImageCollection);
 begin
   if FImages = AValue then Exit;
   // FreeNotification, not just the Notification override: opRemove only reaches us for a
@@ -1678,7 +1891,7 @@ begin
   Relayout;
 end;
 
-procedure TTyToolBar.SetHotImages(AValue: TTyImageCollection);
+procedure TTyCustomToolBar.SetHotImages(AValue: TTyCustomImageCollection);
 begin
   if FHotImages = AValue then Exit;
   if FHotImages <> nil then FHotImages.RemoveFreeNotification(Self);
@@ -1690,7 +1903,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyToolBar.SetDisabledImages(AValue: TTyImageCollection);
+procedure TTyCustomToolBar.SetDisabledImages(AValue: TTyCustomImageCollection);
 begin
   if FDisabledImages = AValue then Exit;
   if FDisabledImages <> nil then FDisabledImages.RemoveFreeNotification(Self);
@@ -1699,13 +1912,13 @@ begin
   Invalidate;
 end;
 
-procedure TTyToolBar.ApplyToButton(B: TTyButton);
+procedure TTyCustomToolBar.ApplyToButton(B: TTyCustomButton);
 begin
   { A tbsSeparator / tbsDivider tool button is a SPACE HOLDER, not a button: it resolves the
     'TyToolSeparator' key and paints a rule, so stamping the button-family 'ghost' variant on
     it would ask the theme for a rule (TyToolSeparator.ghost) that no skin defines, and would
     also leave a StyleClass behind on a control the host never styled. }
-  if (B is TTyToolButton) and (TTyToolButton(B).Style in [tbsSeparator, tbsDivider]) then Exit;
+  if (B is TTyCustomToolButton) and (TTyCustomToolButton(B).Style in [tbsSeparator, tbsDivider]) then Exit;
   // Reuse the ghost/flat TTyButton look, but only over a class the bar itself put
   // there. Assigning unconditionally (which is what this did) meant every relayout
   // wiped a caller's StyleClass := 'primary' -- and a relayout runs on any metric
@@ -1722,7 +1935,7 @@ begin
   // the three moments they can actually change -- the two setters and a tool joining.
 end;
 
-procedure TTyToolBar.ApplyToolProperties;
+procedure TTyCustomToolBar.ApplyToolProperties;
 var
   i: Integer;
   G: TTyGlyphButtonBase;
@@ -1745,28 +1958,31 @@ begin
       request; the line above may just have handed it the collection that resolves it. (Private
       is unit-wide in Object Pascal, which is why the button can live in this unit and keep its
       retry out of the public surface.) }
-    if G is TTyToolButton then
+    if G is TTyCustomToolButton then
     begin
       { List reaches TOOL buttons only — LCL's List reaches only its FButtons — and through
         the same adopt contract ShowCaption uses: a tool whose GlyphLayout the host wrote is
         never touched. A TTySpeedButton on the bar keeps its own published GlyphLayout. }
-      TTyToolButton(G).AdoptGlyphLayout(TyToolListLayout[FList]);
-      TTyToolButton(G).ResolveImageIndex;
+      TTyCustomToolButton(G).AdoptGlyphLayout(TyToolListLayout[FList]);
+      TTyCustomToolButton(G).ResolveImageIndex;
     end;
   end;
   // Remember what a later pass must recognise as "ours to re-point or take back".
   FLentImages := FImages;
 end;
 
-function TTyToolBar.EffectiveToolWidth(ACtl: TControl): Integer;
+function TTyCustomToolBar.EffectiveToolWidth(ACtl: TControl): Integer;
 var
-  btn: TTyToolButton;
+  btn: TTyCustomToolButton;
   nat: Integer;
 begin
-  if not (ACtl is TTyToolButton) then Exit(ACtl.Width);   // LCL floors only tool buttons
-  btn := TTyToolButton(ACtl);
+  if not (ACtl is TTyCustomToolButton) then Exit(ACtl.Width);   // LCL floors only tool buttons
+  btn := TTyCustomToolButton(ACtl);
   nat := btn.BarNaturalWidth;
-  Result := TyToolFloorWidth(nat, GetButtonWidth, btn.Style, btn.AutoSize);
+  // ButtonWidth is logical px ("same units as ButtonHeight"); the width it floors is a
+  // child's real one, in device px.
+  Result := TyToolFloorWidth(nat, MulDiv(GetButtonWidth, LayoutPPI, 96), btn.Style,
+    btn.AutoSize);
   { Record the lend NOW, against the natural width just read — the SetBounds that applies
     Result follows in the same pass. For a button the pass then hides instead (the Ex bar's
     overflow set), Width keeps the natural value, the equality test fails, and the stale
@@ -1774,7 +1990,7 @@ begin
   btn.RecordBarImposedWidth(Result);
 end;
 
-procedure TTyToolBar.InsertControl(AControl: TControl; Index: Integer);
+procedure TTyCustomToolBar.InsertControl(AControl: TControl; Index: Integer);
 begin
   inherited InsertControl(AControl, Index);
   // A tool can join the bar long after Images/ShowCaptions were set (code that builds the
@@ -1786,14 +2002,14 @@ begin
   ApplyToolProperties;
 end;
 
-procedure TTyToolBar.Relayout;
+procedure TTyCustomToolBar.Relayout;
 begin
   if csDestroying in ComponentState then Exit;
   Realign;        // re-runs AlignControls over the children
   Invalidate;
 end;
 
-procedure TTyToolBar.AlignControls(AControl: TControl; var ARect: TRect);
+procedure TTyCustomToolBar.AlignControls(AControl: TControl; var ARect: TRect);
 var
   ih: Integer;
   i, n, rows: Integer;
@@ -1804,6 +2020,7 @@ var
   wrapAfter: array of Boolean;
   breaks: TBooleanDynArray;
   newH, bh, padY: Integer;
+  ppi, indentPx, spacingPx: Integer;
   rowShift, limitH, contentBottom, bottomBorder: Integer;
 begin
   // re-entrancy guard: Height assignment at the end triggers another AlignControls call
@@ -1820,7 +2037,9 @@ begin
     SetLength(kids, n); SetLength(sizes, n); SetLength(wrapAfter, n);
     for i := 0 to n - 1 do
     begin
-      if kids[i] is TTyButton then ApplyToButton(TTyButton(kids[i]));
+      { Every push button counts: a glyph, speed or tool button is a TTyCustomButton but no
+        longer a TTyButton (4.0 hangs them on the custom chain, the LCL way). }
+      if kids[i] is TTyCustomButton then ApplyToButton(TTyCustomButton(kids[i]));
       { The natural width, raised to ButtonWidth for a real tool button (LCL's floor).
         With ButtonWidth unset this is exactly kids[i].Width — no existing bar moves. }
       sizes[i].cx := EffectiveToolWidth(kids[i]);
@@ -1828,22 +2047,30 @@ begin
       { TToolButton.Wrap, collected over the VISIBLE tools only — an invisible tool is not laid
         out, so it has no row to end. Any other kind of child reads as False: only a tool button
         carries the flag. }
-      wrapAfter[i] := (kids[i] is TTyToolButton) and TTyToolButton(kids[i]).Wrap;
+      wrapAfter[i] := (kids[i] is TTyCustomToolButton) and TTyCustomToolButton(kids[i]).Wrap;
     end;
     { ButtonHeight is what the bar ASKS for; a child may refuse to be that short. Controls
       whose caption decides their size publish Constraints.MinHeight, and SetBounds clamps to
       it -- so a row sized purely from ButtonHeight left the child overflowing DOWNWARD out
       of its slot: it covered the bar's bottom border and stopped lining up with the children
       that did fit. Take the tallest floor in the row first, then lay out against that. }
-    bh := GetButtonHeight;
+    { The bar's own knobs are LOGICAL px -- ButtonHeight follows --control-height, the pad is
+      a theme token, Indent and ButtonSpacing are what the designer typed -- and everything
+      they meet below is DEVICE px: ClientWidth, a child's width, a child's floor. They used
+      to go in raw, which is the same number only at 96 PPI: at 175% the buttons stood 1.75x
+      taller in rows still pitched for 96. Scaled here, once, for the whole pass. }
+    ppi := LayoutPPI;
+    indentPx := MulDiv(FIndent, ppi, 96);
+    spacingPx := MulDiv(FButtonSpacing, ppi, 96);
+    bh := MulDiv(GetButtonHeight, ppi, 96);
     for i := 0 to n - 1 do
       if kids[i].Constraints.MinHeight > bh then bh := kids[i].Constraints.MinHeight;
-    padY := ContentPadY;
+    padY := MulDiv(ContentPadY, ppi, 96);
     { LCL's TRAILING Wrap -> the solver's LEADING break, through the one function that shift
       lives in. With no tool button carrying Wrap the result is all-False, which the solver
       reads exactly as the break-free overload did — so an existing bar does not move a pixel. }
     breaks := TyToolWrapToBreakBefore(wrapAfter);
-    rects := TyToolbarLayout(sizes, breaks, ClientWidth, FIndent, padY, FButtonSpacing, bh, FWrapable, rows);
+    rects := TyToolbarLayout(sizes, breaks, ClientWidth, indentPx, padY, spacingPx, bh, FWrapable, rows);
 
     { ROW SHIFT -- keep the LAST row out of the strip RenderTo strokes the bottom hairline into.
 
@@ -1862,7 +2089,7 @@ begin
       For an auto-growing bar those differ, and using the stale one would squeeze the rows up
       for one frame and let them spring back on the next -- a visible twitch on every relayout,
       and a single ForceLayout in a test would read the transient. }
-    newH := padY*2 + rows*bh + (rows-1)*FButtonSpacing;
+    newH := padY*2 + rows*bh + (rows-1)*spacingPx;
     limitH := ClientHeight;
     if (Align in [alTop, alBottom]) and (rows > 0) then
       Inc(limitH, newH - Height);      { the grow at the end of this pass, applied in advance }
@@ -1872,7 +2099,7 @@ begin
     begin
       { The last row's bottom: every child is centred INSIDE its row and clamped to bh (see the
         loop), so the row's own bottom bounds all of them. }
-      contentBottom := padY + rows*bh + (rows-1)*FButtonSpacing;
+      contentBottom := padY + rows*bh + (rows-1)*spacingPx;
       rowShift := contentBottom - (limitH - bottomBorder);
       if rowShift < 0 then rowShift := 0;
       { Never above the top edge. rects[0].Top is padY, so padY is the whole budget. When the
@@ -1909,7 +2136,7 @@ begin
   end;
 end;
 
-procedure TTyToolBar.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomToolBar.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if Operation = opRemove then
@@ -1925,8 +2152,8 @@ begin
   end;
 end;
 
-procedure TTyToolBar.Paint; begin RenderTo(Canvas, ClientRect, Font.PixelsPerInch); end;
-procedure TTyToolBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomToolBar.Paint; begin RenderTo(Canvas, ClientRect, Font.PixelsPerInch); end;
+procedure TTyCustomToolBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var P: TTyPainter; S: TTyStyleSet; W, H, bw: Integer; bg: TTyFill;
 begin
   P := TTyPainter.Create;

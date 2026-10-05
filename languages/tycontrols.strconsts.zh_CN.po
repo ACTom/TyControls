@@ -9,6 +9,45 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
+#: tycontrols.strconsts.rsdlgaddcustomcolor
+msgid "Add to custom colors"
+msgstr "添加到自定义颜色"
+
+#: tycontrols.strconsts.rsdlgcustomcolors
+msgid "Custom colors"
+msgstr "自定义颜色"
+
+#: tycontrols.strconsts.rsdlgentirescope
+msgid "Entire scope"
+msgstr "整个范围"
+
+#: tycontrols.strconsts.rsdlgfontapply
+msgid "Apply"
+msgstr "应用"
+
+#: tycontrols.strconsts.rsdlgpromptonreplace
+msgid "Prompt on replace"
+msgstr "替换前提示"
+
+#: tycontrols.strconsts.rsfdcreateprompt
+#, object-pascal-format
+msgid ""
+"\"%s\" does not exist.\n"
+"Do you want to create it?"
+msgstr ""
+"\"%s\" 不存在。\n"
+"要创建吗？"
+
+#: tycontrols.strconsts.rsfdnotwritable
+#, object-pascal-format
+msgid "\"%s\" is not writable."
+msgstr "\"%s\" 不可写。"
+
+#: tycontrols.strconsts.rsfdpathmustexist
+#, object-pascal-format
+msgid "The folder \"%s\" does not exist."
+msgstr "文件夹 \"%s\" 不存在。"
+
 #: tycontrols.strconsts.rsgridgrouprow
 #, object-pascal-format
 msgid "%s  (%d)"
@@ -226,6 +265,26 @@ msgstr "未找到 @import 目标：\"%s\""
 #, object-pascal-format
 msgid "@import cycle detected: \"%s\""
 msgstr "检测到 @import 循环引用：\"%s\""
+
+#: tycontrols.strconsts.rssmtypekeyconflict
+#, object-pascal-format
+msgid "Type key \"%s\" already has parent \"%s\" (not \"%s\")"
+msgstr "typeKey \"%s\" 已登记父键 \"%s\"（不是 \"%s\"）"
+
+#: tycontrols.strconsts.rssmtypekeycycle
+#, object-pascal-format
+msgid "Type key chain cycle: \"%s\" -> \"%s\""
+msgstr "typeKey 链成环：\"%s\" -> \"%s\""
+
+#: tycontrols.strconsts.rssmtypekeyinvalidname
+#, object-pascal-format
+msgid "Invalid type key name: \"%s\""
+msgstr "无效的 typeKey 名：\"%s\""
+
+#: tycontrols.strconsts.rssmtypekeytoodeep
+#, object-pascal-format
+msgid "Type key chain too deep (more than %d keys) at \"%s\""
+msgstr "typeKey 链过深（超过 %d 个键），位于 \"%s\""
 
 #: tycontrols.strconsts.rsmsgbtnyes
 msgid "Yes"
@@ -584,6 +643,76 @@ msgstr "搜索"
 msgid "(Select all)"
 msgstr "(全选)"
 
+#: tycontrols.strconsts.rsterminalmenuclear
+msgctxt "tycontrols.strconsts.rsterminalmenuclear"
+msgid "Clear"
+msgstr "清屏"
+
+#: tycontrols.strconsts.rstermschemebadcolor
+#, object-pascal-format
+msgid "\"%s\" is not a colour (#rgb or #rrggbb): %s"
+msgstr "「%s」不是颜色（#rgb 或 #rrggbb）：%s"
+
+#: tycontrols.strconsts.rstermschemebadjson
+#, object-pascal-format
+msgid "Not valid JSON: %s"
+msgstr "不是合法的 JSON：%s"
+
+#: tycontrols.strconsts.rstermschememissingkeys
+#, object-pascal-format
+msgid "Missing colours: %s"
+msgstr "缺少颜色：%s"
+
+#: tycontrols.strconsts.rstermschemeneedname
+#, object-pascal-format
+msgid "The text has several colour schemes; choose one: %s"
+msgstr "文本里有多套配色方案，请指定一个：%s"
+
+#: tycontrols.strconsts.rstermschemenoname
+msgid "The colour scheme has no name"
+msgstr "配色方案没有名字"
+
+#: tycontrols.strconsts.rstermschemenonevalid
+msgid "The text has no complete colour scheme (a name and all 16 colours)"
+msgstr "文本里没有完整的配色方案（要有名字和全部 16 色）"
+
+#: tycontrols.strconsts.rstermschemenotfound
+#, object-pascal-format
+msgid "No colour scheme named \"%s\". Schemes in the text: %s"
+msgstr "没有名为「%s」的配色方案。文本里有：%s"
+
+#: tycontrols.strconsts.rstermschemenotfoundnone
+#, object-pascal-format
+msgid "No colour scheme named \"%s\", and the text has no complete colour scheme"
+msgstr "没有名为「%s」的配色方案，文本里也没有完整的配色方案"
+
+#: tycontrols.strconsts.rstermschemenotfoundunnamed
+#, object-pascal-format
+msgid "No colour scheme named \"%s\"; the scheme in the text has no name"
+msgstr "没有名为「%s」的配色方案；文本里的那一套没有名字"
+
+#: tycontrols.strconsts.rstermschemenotobject
+msgid "Expected a colour scheme object or a settings file with \"schemes\""
+msgstr "需要一个配色方案对象，或带 \"schemes\" 的设置文件"
+
+#: tycontrols.strconsts.rstermschemeschemesnotarray
+msgid "\"schemes\" is not an array"
+msgstr "\"schemes\" 不是数组"
+
+#: tycontrols.strconsts.rstermschemetoobig
+#, object-pascal-format
+msgid "The file is larger than %d MB; a colour scheme file is far smaller"
+msgstr "文件超过 %d MB；配色方案文件远没有这么大"
+
+#: tycontrols.strconsts.rstermschemetoodeep
+#, object-pascal-format
+msgid "nested more than %d levels deep"
+msgstr "嵌套超过 %d 层"
+
+#: tycontrols.strconsts.rstermschemeutf16
+msgid "UTF-16 text is not supported; save the file as UTF-8"
+msgstr "不支持 UTF-16 文本，请把文件存成 UTF-8"
+
 #: tycontrols.strconsts.rstextmenucopy
 msgid "Copy"
 msgstr "复制"
@@ -611,6 +740,58 @@ msgstr "撤销"
 #: tycontrols.strconsts.rstoolbarmorecommands
 msgid "More commands"
 msgstr "更多命令"
+
+#: tycontrols.strconsts.rstytoolwindowactionsextra
+msgid "Unused actions area"
+msgstr "多余的操作区"
+
+#: tycontrols.strconsts.rstytoolwindowactionsorphan
+msgid "Not in a tool window"
+msgstr "不在工具窗口里"
+
+#: tycontrols.strconsts.rstytoolwindowbarconflict
+msgid "Same Placement as another bar"
+msgstr "与另一条栏的 Placement 相同"
+
+#: tycontrols.strconsts.rstytoolwindowbarempty
+msgid "Add a tool window"
+msgstr "添加工具窗口"
+
+#: tycontrols.strconsts.rstytoolwindowbarstray
+msgid "Not a tool window: hidden at run time"
+msgstr "不是工具窗口，运行时隐藏"
+
+#: tycontrols.strconsts.rstytoolwindowcollapse
+msgid "Hide"
+msgstr "收起"
+
+#: tycontrols.strconsts.rstytoolwindowcrossbarmove
+msgid "A tool window cannot move between a side bar and a bottom bar"
+msgstr "工具窗口不能在侧栏和底栏之间直接移动"
+
+#: tycontrols.strconsts.rstytoolwindowdropleft
+msgid "Drop here to show the left side bar"
+msgstr "放到左侧栏"
+
+#: tycontrols.strconsts.rstytoolwindowdropright
+msgid "Drop here to show the right side bar"
+msgstr "放到右侧栏"
+
+#: tycontrols.strconsts.rstytoolwindowmaximize
+msgid "Maximize"
+msgstr "最大化"
+
+#: tycontrols.strconsts.rstytoolwindowmore
+msgid "More"
+msgstr "更多"
+
+#: tycontrols.strconsts.rstytoolwindoworphan
+msgid "Not in a tool window bar: hidden at run time"
+msgstr "不在工具窗口栏里，运行时隐藏"
+
+#: tycontrols.strconsts.rstytoolwindowrestore
+msgid "Restore"
+msgstr "还原"
 
 #: tycontrols.strconsts.rstyupdownalreadyassociated
 #, object-pascal-format
@@ -812,6 +993,7 @@ msgid "Move Down"
 msgstr "下移"
 
 #: tycontrols.strconsts.rsdlgimgcolclear
+msgctxt "tycontrols.strconsts.rsdlgimgcolclear"
 msgid "Clear"
 msgstr "清空"
 
@@ -1089,3 +1271,19 @@ msgstr "option 没有问题。series 的图元还没有实现绘制，而这张�
 #: tycontrols.strconsts.rstyoptdiagnoseries
 msgid "The option is understood. There are no series, so only the axes would draw."
 msgstr "option 没有问题。没有任何 series，所以只会画出坐标轴。"
+
+#: tycontrols.strconsts.rstywindowmenuclose
+msgid "&Close"
+msgstr "关闭(&C)"
+
+#: tycontrols.strconsts.rstywindowmenumaximize
+msgid "Ma&ximize"
+msgstr "最大化(&X)"
+
+#: tycontrols.strconsts.rstywindowmenuminimize
+msgid "Mi&nimize"
+msgstr "最小化(&N)"
+
+#: tycontrols.strconsts.rstywindowmenurestore
+msgid "&Restore"
+msgstr "还原(&R)"

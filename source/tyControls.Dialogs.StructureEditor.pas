@@ -31,7 +31,7 @@ type
     FOnEdited: TNotifyEvent;
     FRebuilding: Boolean;
     procedure TreeSelectionChanged(Sender: TObject);
-    procedure TreeChange(Sender: TTyTreeView; ANode: PTyTreeNode);
+    procedure TreeChange(Sender: TTyCustomTreeView; ANode: PTyTreeNode);
     function NodeItemOf(AObject: TPersistent): TTyTreeNodeItem;
   protected
     { The window title's fixed half; SetSubject appends ' - <SubjectTitle>' to it.
@@ -88,8 +88,10 @@ constructor TTyStructureEditorForm.CreateNew(AOwner: TComponent; Num: Integer);
 begin
   inherited CreateNew(AOwner, Num);
   Resizable := True;
-  Constraints.MinWidth := 360;
-  Constraints.MinHeight := 300;
+  { Every layout number in this form is a 96-PPI design number and goes through Px: see
+    TTyDialog.Px. }
+  Constraints.MinWidth := Px(360);
+  Constraints.MinHeight := Px(300);
 
   FTree := TTyTreeView.Create(Self);
   FTree.Parent := Self;
@@ -112,7 +114,8 @@ end;
 
 procedure TTyStructureEditorForm.FinishCreation(AWidth, AHeight: Integer);
 begin
-  AutoSizeToContent(AWidth, AHeight);
+  { AWidth / AHeight are the designed content size, in 96-PPI px. }
+  AutoSizeToContent(Px(AWidth), Px(AHeight));
   LayoutContent;
 end;
 
@@ -126,22 +129,22 @@ var
 begin
   if (FTree = nil) or (Length(FButtons) = 0) then Exit;  { resize during construction }
   r := ContentRect;
-  btnH := TyDensityHeight(nil, TyDlgEditH);
-  treeW := (r.Right - r.Left) - 2 * TyDlgPad - BtnW - Gap;
-  FTree.SetBounds(r.Left + TyDlgPad, r.Top + TyDlgPad,
-    treeW, (r.Bottom - r.Top) - 2 * TyDlgPad);
+  btnH := Px(TyDensityHeight(nil, TyDlgEditH));
+  treeW := (r.Right - r.Left) - 2 * Px(TyDlgPad) - Px(BtnW) - Px(Gap);
+  FTree.SetBounds(r.Left + Px(TyDlgPad), r.Top + Px(TyDlgPad),
+    treeW, (r.Bottom - r.Top) - 2 * Px(TyDlgPad));
 
-  x := r.Left + TyDlgPad + treeW + Gap;
-  y := r.Top + TyDlgPad;
+  x := r.Left + Px(TyDlgPad) + treeW + Px(Gap);
+  y := r.Top + Px(TyDlgPad);
   { Step by what each button ACTUALLY became -- LCL raises a button to its theme-derived
     minimum inside SetBounds, so a literal btnH stride walks the column past the pane the
     moment a theme wants taller buttons. The clamp keeps the last ones reachable even then:
     a tight column beats buttons hidden behind the action strip. }
   for i := 0 to High(FButtons) do
   begin
-    FButtons[i].SetBounds(x, y, BtnW, btnH);
-    y := FButtons[i].Top + FButtons[i].Height + Gap div 2;
-    if y > r.Bottom - TyDlgPad then y := r.Bottom - TyDlgPad;
+    FButtons[i].SetBounds(x, y, Px(BtnW), btnH);
+    y := FButtons[i].Top + FButtons[i].Height + Px(Gap) div 2;
+    if y > r.Bottom - Px(TyDlgPad) then y := r.Bottom - Px(TyDlgPad);
   end;
 end;
 
@@ -248,7 +251,7 @@ begin
     NotifySelection;
 end;
 
-procedure TTyStructureEditorForm.TreeChange(Sender: TTyTreeView; ANode: PTyTreeNode);
+procedure TTyStructureEditorForm.TreeChange(Sender: TTyCustomTreeView; ANode: PTyTreeNode);
 begin
   if not FRebuilding then
     NotifySelection;

@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectOptions>
+    <Version Value="12"/>
+    <General>
+      <Flags>
+        <MainUnitHasCreateFormStatements Value="True"/>
+        <MainUnitHasTitleStatement Value="False"/>
+      </Flags>
+      <SessionStorage Value="InProjectDir"/>
+      <Title Value="Theme Builder"/>
+      <Scaled Value="True"/>
+      <UseXPManifest Value="True"/>
+      <XPManifest>
+        <DpiAware Value="True/PM_V2"/>
+      </XPManifest>
+      <Icon Value="0"/>
+    </General>
+    <i18n>
+      <EnableI18N Value="True"/>
+      <OutDir Value="languages"/>
+    </i18n>
+    <BuildModes Count="1"><Item1 Name="Default" Default="True"/></BuildModes>
+    <RequiredPackages Count="3">
+      <Item1><PackageName Value="LCL"/></Item1>
+      <Item2><PackageName Value="BGRABitmapPack"/></Item2>
+      <Item3><PackageName Value="SynEdit"/></Item3>
+    </RequiredPackages>
+    <Units Count="36">
+      <Unit0><Filename Value="themebuilder.lpr"/><IsPartOfProject Value="True"/></Unit0>
+      <Unit1><Filename Value="tbdocument.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbdocument"/></Unit1>
+      <Unit2><Filename Value="tbsettings.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbsettings"/></Unit2>
+      <Unit3><Filename Value="tbthemesource.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbthemesource"/></Unit3>
+      <Unit4><Filename Value="tbtemplates.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbtemplates"/></Unit4>
+      <Unit5><Filename Value="tbproblems.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbproblems"/></Unit5>
+      <Unit6><Filename Value="tbpreview.pas"/><IsPartOfProject Value="True"/><ComponentName Value="PreviewFrame"/><HasResources Value="True"/><ResourceBaseClass Value="Frame"/><UnitName Value="tbpreview"/></Unit6>
+      <Unit7><Filename Value="tbsamplewin.pas"/><IsPartOfProject Value="True"/><ComponentName Value="TbSampleForm"/><HasResources Value="True"/><ResourceBaseClass Value="Form"/><UnitName Value="tbsamplewin"/></Unit7>
+      <Unit8><Filename Value="tbmain.pas"/><IsPartOfProject Value="True"/><ComponentName Value="TbMainForm"/><HasResources Value="True"/><ResourceBaseClass Value="Form"/><UnitName Value="tbmain"/></Unit8>
+      <Unit9><Filename Value="tbeditorlook.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbeditorlook"/></Unit9>
+      <Unit10><Filename Value="tbcssscan.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbcssscan"/></Unit10>
+      <Unit11><Filename Value="tbseeds.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbseeds"/></Unit11>
+      <Unit12><Filename Value="tbseedsframe.pas"/><IsPartOfProject Value="True"/><ComponentName Value="SeedsFrame"/><HasResources Value="True"/><ResourceBaseClass Value="Frame"/><UnitName Value="tbseedsframe"/></Unit12>
+      <Unit13><Filename Value="tbrules.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbrules"/></Unit13>
+      <Unit14><Filename Value="tbpick.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbpick"/></Unit14>
+      <Unit15><Filename Value="tbcoverage.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbcoverage"/></Unit15>
+      <Unit16><Filename Value="tbcoverageform.pas"/><IsPartOfProject Value="True"/><ComponentName Value="TbCoverageForm"/><HasResources Value="True"/><ResourceBaseClass Value="Form"/><UnitName Value="tbcoverageform"/></Unit16>
+      <Unit17><Filename Value="tbexport.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbexport"/></Unit17>
+      <Unit18><Filename Value="tbexportform.pas"/><IsPartOfProject Value="True"/><ComponentName Value="TbExportForm"/><HasResources Value="True"/><ResourceBaseClass Value="Form"/><UnitName Value="tbexportform"/></Unit18>
+      <Unit19><Filename Value="tbsnippets.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbsnippets"/></Unit19>
+      <Unit20><Filename Value="tbsnippetsform.pas"/><IsPartOfProject Value="True"/><ComponentName Value="TbSnippetsForm"/><HasResources Value="True"/><ResourceBaseClass Value="Form"/><UnitName Value="tbsnippetsform"/></Unit20>
+      <Unit21><Filename Value="ai/tbhttp.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbhttp"/></Unit21>
+      <Unit22><Filename Value="ai/tbhttpwin.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbhttpwin"/></Unit22>
+      <Unit23><Filename Value="ai/tbhttpcurl.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbhttpcurl"/></Unit23>
+      <Unit24><Filename Value="ai/tbsse.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbsse"/></Unit24>
+      <Unit25><Filename Value="ai/tbaiformat.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbaiformat"/></Unit25>
+      <Unit26><Filename Value="ai/tbaiclient.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbaiclient"/></Unit26>
+      <Unit27><Filename Value="ai/tbaisettings.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbaisettings"/></Unit27>
+      <Unit28><Filename Value="ai/tbreference.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbreference"/></Unit28>
+      <Unit29><Filename Value="tbdiff.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbdiff"/></Unit29>
+      <Unit30><Filename Value="ai/tbaisession.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbaisession"/></Unit30>
+      <Unit31><Filename Value="tbcompareform.pas"/><IsPartOfProject Value="True"/><ComponentName Value="TbCompareForm"/><HasResources Value="True"/><ResourceBaseClass Value="Form"/><UnitName Value="tbcompareform"/></Unit31>
+      <Unit32><Filename Value="tbaisettingsform.pas"/><IsPartOfProject Value="True"/><ComponentName Value="TbAiSettingsForm"/><HasResources Value="True"/><ResourceBaseClass Value="Form"/><UnitName Value="tbaisettingsform"/></Unit32>
+      <Unit33><Filename Value="tbaiframe.pas"/><IsPartOfProject Value="True"/><ComponentName Value="AiFrame"/><HasResources Value="True"/><ResourceBaseClass Value="Frame"/><UnitName Value="tbaiframe"/></Unit33>
+      <Unit34><Filename Value="tbformat.pas"/><IsPartOfProject Value="True"/><UnitName Value="tbformat"/></Unit34>
+      <Unit35><Filename Value="tbfindbar.pas"/><IsPartOfProject Value="True"/><ComponentName Value="FindBar"/><HasResources Value="True"/><ResourceBaseClass Value="Frame"/><UnitName Value="tbfindbar"/></Unit35>
+    </Units>
+  </ProjectOptions>
+  <CompilerOptions>
+    <Version Value="11"/>
+    <Target>
+      <Filename Value="lib/$(TargetCPU)-$(TargetOS)/themebuilder"/>
+    </Target>
+    <SearchPaths>
+      <OtherUnitFiles Value=".;ai;../../source;../../designtime"/>
+      <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
+    </SearchPaths>
+    <SyntaxOptions><SyntaxMode Value="ObjFPC"/></SyntaxOptions>
+    <Linking>
+      <Options>
+        <Win32>
+          <GraphicApplication Value="True"/>
+        </Win32>
+      </Options>
+    </Linking>
+  </CompilerOptions>
+</CONFIG>

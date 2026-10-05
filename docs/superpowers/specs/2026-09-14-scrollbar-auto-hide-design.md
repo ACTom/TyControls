@@ -1,0 +1,318 @@
+# 滚动条自动隐藏 —— 设计定稿
+
+> 状态：已定稿（用户 2026-09-14 拍板）· 分支：`feat/3.1` · 需求来源：群友，经另一会话转交
+
+鼠标不在时滚动条淡出，用到时再出现（macOS / Win11 的现代手感）。
+本文锁范围与契约，实现步骤另拆到 `docs/superpowers/plans/`。
+
+---
+
+## 1. 已定的前提（不再讨论）
+
+| # | 决定 | 直接后果 |
+|---|------|----------|
+| 1 | **默认一直显示**，自动隐藏是 opt-in | 3.0 已发布，升到 3.1 现有程序界面不能自己变样 |
+| 2 | **槽保留**，隐藏后内容宽度不变 | 收益是少一条视觉噪音，不是省空间。6 个宿主的布局 / 命中 / z 序一行不用动 |
+| 3 | **真 overlay（内容铺满、条浮在上面）不做** | 窗口化子控件盖不住内容（重叠部分被句柄咬平），要做得改成宿主内联画条。单列 backlog |
+| 4 | **一个 token 承载开关与延时**，`-1` 表示关 | 一条轴没有歧义，见 §2 |
+| 5 | ~~鼠标在内容区上移动不触发显示~~ → **改为：指针在宿主上就显示且不计时** | **2026-09-15 真机推翻**。原判断依据「Win11 也是滚动才出现」，而 Fluent/UWP 恰恰是进入可滚动区域就显示细条。见 §4 |
+
+**不做清单**：跟随 OS 的「自动隐藏滚动条」系统设置（Windows / macOS 各有开关）——按 widgetset 各做一遍，且 GTK 下读不到系统设置，与跟随明暗同源。单列 backlog。
+
+---
+
+## 2. 主题 token
+
+走**已有的** `Metric` 机制（`tyControls.Controller.pas:631` → `FModel.ResolveMetric`），不给 tycss 加新值类型：
+
+```pascal
+const
+  TyScrollBarAutoHideVar = '--scrollbar-auto-hide';
+  TyScrollBarAutoHideDef = -1;     // 内置默认：关
+```
+
+| 值 | 含义 |
+|---|---|
+| `-1` | 关。滚动条一直显示（**内置主题的值**） |
+| `0` | 开，停手立即淡出 |
+| `N` | 开，停手 N 毫秒后淡出 |
+
+读法与现有控件一致，**必须走 `ActiveController` 而不是裸 `Controller`**：
+
+```pascal
+delayMs := ActiveController.Metric(TyScrollBarAutoHideVar, TyScrollBarAutoHideDef);
+```
+
+主题不定义这个变量时，`Metric` 回退到代码里的 `TyScrollBarAutoHideDef`（`-1`）——所以 `light.tycss` / `dark.tycss` 什么都不用写。**六个**现代皮肤在自己的 `:root` 里写 `1200`：`win11` / `macos` / `fluent` / `material3` / `adwaita` / `ubuntu`（后两个是实现期加的——GNOME/libadwaita 确实是 overlay 自动隐藏，Yaru 是 GTK，一根永远杵着的条反而不像）。其余九个不写，继承 `-1`。
+
+其中两个「看着像现代、故意不开」的值得记下来，免得下次有人当漏网之鱼补上：**`win10`** —— Win32 桌面滚动条从来不自动隐藏，只有 UWP 会；**`office`** —— 这个皮肤仿的是桌面版 Office，不是 Office 网页版。
+
+> **`-1` 可行，已查证（2026-09-14）**：`ResolveMetric`（`tyControls.StyleModel.pas:1156`）→ `TyEvalLength`（`tyControls.Css.Values.pas:361`）→ `ParsePctOrNum` → `StrToFloat`。
+> 中间那道「裸 `--name` 当变量引用」的判断要求**头两个字符都是 `-`**（`(E[1]='-') and (E[2]='-')`），`-1` 的第二个字符是 `1`，躲得过去；也不以 `px` 结尾，不会被剥尾。`StrToFloat` 接受负号，外层还有 `try/except` 回退默认值。
+> **求值代码一行都不用改。** §10 仍保留一条负号回归测试——这条链路上任何一环收紧了字符判断，都会静默把 `-1` 变成默认值。
+
+> **皮肤连锁**：15 个内置皮肤编译进 `BuiltinThemeData`，改了 `themes/builtin/*.tycss` 必须重跑 `scripts/gen-builtinthemes.ps1`。给现代皮肤加这个变量时一并处理。
+
+---
+
+## 3. 控件属性（压过主题）
+
+```pascal
+type
+  TTyScrollBarAutoHide = (sbahDefault, sbahNever, sbahAuto);
+```
+
+| 值 | 含义 |
+|---|---|
+| `sbahDefault` | 跟主题 token 走（**构造值 = published default**） |
+| `sbahNever` | 永远显示，压过主题 |
+| `sbahAuto` | 自动隐藏，压过主题（延时仍读 token；token 为 `-1` 时按 §5 的回退延时） |
+
+**必须是三态枚举，不能是 `Boolean`**：`Boolean` 一旦被碰过就永远脱离主题控制，换主题不跟着变——在一个主打换肤的库里这是硬伤。
+
+`TTyScrollBar.AutoHide` 声明为 published，**`default sbahDefault` 必须与构造函数赋的值一致**，否则 `.lfm` 写的值被当默认省略、加载后丢失。
+
+**延时不给属性。** 单控件要不同延时是臆想需求（YAGNI）。
+
+### 宿主转发
+
+内嵌滚动条用户拿不到，6 个宿主各暴露一个 `ScrollBarAutoHide`，同样三态、同样默认 `sbahDefault`，在创建内嵌条时转发：
+
+| 宿主 | 内嵌条创建处 |
+|---|---|
+| `TTyStringGrid` / `TTyDrawGrid` | `tyControls.Grid.pas:3909, 3918` |
+| `TTyListBox` | `tyControls.ListBox.pas:985, 1014` |
+| `TTyListView` | `tyControls.ListView.pas:1082, 1091` |
+| `TTyMemo` | `tyControls.Memo.pas:2358, 2420` |
+| `TTyScrollBox` | `tyControls.ScrollBox.pas:373, 385` |
+| `TTyTreeView` | `tyControls.TreeView.pas:3200, 3208` |
+
+**`TTyValueListEditor` 继承的是 `TTyListBox` 不是 Grid**（2026-09-15 查证，`tyControls.ValueListEditor.pas:116`：`class(TTyListBox)`）。本文原先写成 Grid，是错的。它因此继承的是**惰性**滚动条那一套，不是急切的——给它写测试必须先塞够内容把条撑出来，否则「找不到条」会被误读成「转发没生效」。不需要单独实现，但这个区别在写测试时是真的。
+
+---
+
+## 4. 什么算「还在用」
+
+**任一成立 → 显示且不计时；全不成立 → 起延时表，到点淡出。**
+
+1. `Position` 变化——滚轮 / 键盘 / 轨道点击 / 拖动 / **程序化赋值也算**
+2. 鼠标在**滚动条自身**上
+3. 拖动进行中（此时延时表根本不起）
+4. 滚动条有焦点——**只对独立摆放的条有效**：6 个宿主创建内嵌条时一律 `TabStop := False`（拖条不能把焦点从列表抢走），内嵌条永远拿不到焦点
+
+> **四条都是「显示**且**不计时」，不是只有不计时**（2026-09-14 澄清）。前三条的「显示」有现成通道（`MouseEnter` → `NoteActivity`；拖动必然先经过 enter；设计期从 1.0 起步且永不武装），唯独焦点没有——得单独加一个 `DoEnter` → `NoteActivity`。
+>
+> 少了这一半的后果是真的：独立条淡到 0、定时器停摆，用户 Tab 过来，**焦点就停在一个看不见的控件上**，而且连「按住不放」那条臂都没人去跑。键盘可达性上这是缺陷，不是小事。
+
+### ~~为什么鼠标在内容区上移动不算~~ —— **这条判断错了,已推翻(2026-09-15 真机)**
+
+原文的理由是：「macOS 与 Win11 的真实行为是滚动才出现，鼠标在内容上移动不出现」。
+**这句话对 macOS 成立，对 Win11 不成立**——Fluent / UWP 的滚动条正是
+**鼠标进入可滚动区域就显示细条**，移到条上再变宽。我拿一个错误的事实
+推翻了转交过来的原始需求，用户真机第一次用就撞上了：
+
+> 「鼠标移动到列表上的时候，scrollbar 并没有显示，只有用中键滚动，或者鼠标移动到 scrollbar 上面的时候，才会显示」
+
+**改正后的规则**：**指针在宿主内容区上 = 显示且不计时**；指针离开宿主 → 开始倒计时 → 淡出。
+
+当初推翻它时我担心的是「指针大部分时间停在内容区，于是永远不会 idle、条常驻」。
+那个担心建立在把「停手」理解成「停止滚动」上。**按「指针离开这个控件」来理解，
+矛盾就不存在了**：鼠标不在这个列表上的时候，条本来就该消失。
+
+**实现上要注意的那个陷阱仍然成立**：滚动条是窗口化子控件，指针从内容移到条上时
+宿主会收到 `MouseLeave`。所以**必须把「宿主被 hover」和「条被 hover」合起来判**，
+任一为真都算住手不计时，否则在交界处会来回抖。这也意味着
+**「6 个宿主的鼠标处理一行不用改」这句话不再成立**——宿主要把 hover 状态转发给它的条。
+
+---
+
+## 5. 淡入淡出
+
+| 参数 | 值 | 理由 |
+|---|---|---|
+| 淡入 | 120 ms | 与库内现有过渡时长一致。出现要快——用户正在找它 |
+| 淡出 | 200 ms | 消失要柔，不打扰 |
+| 隐藏态 opacity | `0` | 完全消失，不留幽灵 |
+| token 为 `-1` 但属性是 `sbahAuto` 时的回退延时 | 1200 ms | 属性明说要自动隐藏，主题没给延时，取 macOS 量级 |
+
+缓动复用 `TyAnimatorInit(ADurationMs, AEasing)`（`tyControls.Animation.pas:49`）。
+
+> **淡入淡出时长是代码常量，不走 token——这是决定，不是漏掉的**（2026-09-14）。硬规则说「视觉值必须走主题 token」，而时长算不算视觉值有争议；决定性的理由是**库里现有的过渡时长全是代码常量**（位置缓动的 120 ms 就写死在调用处），只给滚动条淡出开一个 token 会让这套东西一半在主题里一半在代码里。
+>
+> 要 token 化就**整体**做：把所有过渡时长一起搬进主题，那是一个独立的话题（motion token），不是这个特性该顺手开的头。在那之前，想调快调慢改常量。
+
+### 动画标志必须独立
+
+内嵌滚动条构造时被设 `AnimationsEnabled := False`，管的是**滑块位置**缓动，**有意为之**（滚动要跟手，缓动会让滑块与内容错位）。
+
+淡入淡出**不能共用这个标志**，否则内嵌条永远是跳变——而内嵌条正是这个特性的主场。→ 单开一个内部标志。
+
+---
+
+## 6. 隐藏怎么实现
+
+**用 `opacity`，不用 `Visible := False`。**
+
+- `Visible := False` 会让宿主重新布局把槽收掉，而前提 2 要留槽
+- 窗口化控件「不画」也不等于透明——它会露出自己的 LCL `Color`
+
+所以走 `opacity` → `TTyPainter.EndPaint` 铺父底色那条路（`tyControls.Painter.pas:1292`）。
+
+### 这条路的真实条件
+
+```pascal
+if (Opacity < 1.0) and (TyAlphaOf(OpacityBase) > 0) then   // 铺不透明父底色再叠
+  ... Exit;                                                 // （源码是早退，不是 else）
+if Opacity < 1.0 then
+  FBmp.ApplyGlobalOpacity(...);                             // 真透明
+```
+
+`OpacityBase` 全项目**只有一处**赋值（`tyControls.Base.pas:1321`），条件是 `TyResolveParentBg` 成功。滚动条的父是 `TTyCustomControl` 且有主题背景时成功——所以常规场景走的是第一条路。
+
+> **范围已缩小（2026-09-15，Task 5 审查）**：`opacity = 0` 是这条路的**退化点**——平板色会把 `TyFillParentBg` 辛苦画进 `FBmp` 的正确背景整个盖掉，而滚动条是窗口化控件，那块矩形没有别人会重画。**这是自动隐藏独有的新暴露**：既有的 opacity 消费者只有 `:disabled`，取值 0.5，**从来不到 0**。
+>
+> Task 5 因此在 `RenderTo` 里加了一条早退——**这一帧 opacity 为 0 就只铺父背景然后收工**，根本不进合成分支。于是：
+>
+> | 状态 | 走哪条路 | 还有没有平板色风险 |
+> |---|---|---|
+> | 完全隐藏（**常驻**） | 早退，只铺父背景 | **没有了**，背景像素级正确 |
+> | 淡入淡出途中（约 200 ms） | 合成分支 | 仍有，但只是一瞬 |
+> | 静止全可见 | 非合成分支（早退） | 不涉及 |
+>
+> 常驻态的平板色因此已经不存在了。剩下过渡期那 200 ms，Task 9 量过，见下面那张表。
+
+> **量过了（2026-09-15，Task 9）**：`TyResolveParentBg`（`tyControls.Base.pas:1223`）用 `TyFillCentreColor` 取**一个中心代表色**铺平；带 rect 的 `TyResolveParentBgFill`（`:1106`）注释早写了单色版会把渐变 "smeared flat"。照 Task 5 那条渐变夹具量了淡出途中的几帧——父控件 `TyPanel { background: linear-gradient(90deg, #000000, #FFFFFF) }`，16×160 的条，取第 4 行和第 155 行的绿通道：
+>
+> | `FadeLevel` | 走哪条路 | 顶 / 底 | 落差 |
+> |---|---|---|---|
+> | 0.502 | 合成分支 | 148 / 148 | **0** |
+> | 0.125 | 合成分支 | 164 / 164 | **0** |
+> | 0.000 | 早退（Task 5 加的） | 29 / 250 | 221 |
+>
+> 合成分支**确实**铺平板：真背景在这 160 个像素上走完一整条 ramp（落差 221），合成分支交出来的是一个色，上下一点不差。条身自己是不透明的 `#808080`，所以半透明时透出来的落差本该是 221 的一半上下（`FadeLevel 0.5` 约 110），实测是 0。但这只在淡出的那 200 ms 里看得见——停稳之后走早退，背景是像素级准确的。
+>
+> ### ~~决定：不修~~ —— **已作废，问题被最终方案顺带消掉（2026-09-17）**
+>
+> 真机验收时条的几何整个换了思路（见 §6 下文与 `cacaa815`）：条贴边全长，自己分三层重画宿主外框，
+> **本体的淡出叠在宿主真实背景上**，不再经过 `TyApplyStyleOpacity` 的单色中心采样。
+> 这张表量到的平色因此不复存在，也就不用去改那条全库共用的 opacity 路径了。下面保留原决定作记录。
+>
+> ### 决定：**不修**（2026-09-15）
+>
+> 最有分量的那条证据不是这张表，是**一个一直没被报过的既有缺陷**：`:disabled` 的半透明走的是同一条合成分支、同样会铺平板，而且它是**常驻**的——一个禁用的控件一直那样摆着。这个毛病在库里存在很久了，跨 17 个主题、包括图片主题，**没有一个人报过**。
+>
+> 常驻的都没人看出来，我们这个 200 ms 一闪而过的更不会。
+>
+> 修的代价则是实打实的：要动 `TyApplyStyleOpacity`（`tyControls.Base.pas:1313`）改走带 rect 的 `TyResolveParentBgFill`，而那条路是**所有用 opacity 的控件**共用的，回归面覆盖整个库；文件还和另外两个会话共享。拿这个去换一个经验上看不见的 200 ms，不划算。
+>
+> **什么时候会重新考虑**：
+> - Task 11 真机复核（`green` + 渐变底）肉眼真能看出闪色 → 推翻这条，按下面的办法修
+> - 哪天有人真的去修 `:disabled` 那个毛病 → 同一处改动**顺手就把这个也修了**，不用单独立项
+>
+> **真要修的话就一处**：`TyApplyStyleOpacity` 里把 `TyResolveParentBg`（单色中心）换成带 rect 的 `TyResolveParentBgFill`（渐变切片）。注意它返回的是 `TTyFill` 不是单色，`EndPaint` 的合成分支得跟着改成铺一个 fill 而不是铺一个 `TBGRAPixel`。
+>
+> **这一轮没改共享文件。** 修法是把 opacity 路径从单色版换成带 rect 的渐变切片版，会**顺带修好 `:disabled` 半透明在图片主题下的同一个毛病**（一直存在，没人报过）；代价是动 `Base.pas` / `Painter.pas`，而这两个文件当时另有两个会话在改。修不修是项目主人的决定，数据在上面这张表里。
+>
+> 也没往测试里留守卫：断言「顶 = 底」等于把这个缺陷钉成绿的——哪天谁把合成分支修对了，先红的反而是这条测试。
+
+### 隐藏态仍然可交互
+
+窗口化控件即使 `opacity = 0` 也照常收鼠标。这是**期望行为**：鼠标移到条的位置 → `MouseEnter` → 先显示出来，再谈点击。与 macOS 一致。
+
+### 与宿主的 `Visible` 正交
+
+Grid / ListView / ScrollBox / TreeView 建条时就 `Visible := False`，运行时按「内容装不装得下」开关它。自动隐藏**只动 opacity，绝不碰 `Visible`**：
+
+| 情形 | `Visible` | `FFadeLevel` |
+|---|---|---|
+| 内容装得下，不需要这条 | `False`（宿主管） | 不参与 |
+| 需要，正在用 | `True` | `1` |
+| 需要，已淡出 | `True`（**仍是 True**） | `0` |
+
+把淡出做成 `Visible := False` 会让宿主重新布局把槽收掉，与前提 2 冲突。
+
+---
+
+## 7. 设计期 / headless
+
+- **`csDesigning`：永不隐藏。** 设计器里看不见滚动条是不可接受的
+- **headless：不建 timer，由调用方驱动 `AutoHideTick`。**
+
+> **这条原来写的是「直接到终态，不跑动画」，是错的**（2026-09-14 纠正）。照字面实现会让整个测试套件变红——headless 恰恰是**唯一**能逐帧观察淡入淡出的地方，`FadingIgnoresAnimationsEnabled` 就是在无句柄的条上断言一个中间值。真正的规则是：**没有句柄就不创建 `TTimer`**（真机由 timer 推，headless 由测试推），动画本身照跑。
+
+### 初始状态：可见，直到第一次被用过才开始计时
+
+一条刚显示出来、还没人碰过的滚动条**保持完全可见**，不会自己淡出。
+
+macOS 是隐藏起步的，但那是 overlay 模式——条不占槽，藏起来什么也不留下。**我们占槽**（前提 2），隐藏起步只会让用户看见一条空着的槽，比看见滚动条更费解。自动隐藏的价值是「用完之后消失」，不是「一开始就不在」。
+
+代价是**一条从来没被滚动过的条会一直显示**。这是有意的，不是漏洞。
+
+---
+
+## 8. 纯主题档（不占开发量）
+
+「移到滚动条本身上才显示」不用改代码，一段 CSS 就够。补进 `docs/controls/scrollbar.md` 当菜谱：
+
+```css
+TyScrollBar { background: var(--chrome-bar-bg); color: var(--scroll-handle);
+  border-radius: var(--radius-scroll); opacity: 0.3; }
+TyScrollBar:hover  { color: var(--scroll-handle-hover); opacity: 1; }
+TyScrollBar:active { color: var(--accent); opacity: 1; }
+TyScrollBar:focus  { outline: 2px var(--focus-ring); }
+TyScrollBar:disabled { opacity: var(--disabled-opacity); }
+```
+
+**必须抄全整块**——用户层写了 `TyScrollBar` 任一条，内置那块（`themes/light.tycss:394-402`）就整体作废。
+
+文档里**必须带上 §6 那条限定**：渐变底 / 图片主题下，淡出的那 200 ms 会闪一块平色（常驻隐藏态不受影响，已量过）。不能只给菜谱不给边界。
+
+---
+
+## 9. 顺手修的 doc bug
+
+`docs/controls/scrollbar.md` 只说 `TTyListBox` 与 `TTyMemo` 的内嵌条是静态的，实际 Grid / ListView / ScrollBox / TreeView 也都设了 `AnimationsEnabled := False`。改成 6 个宿主全列。
+
+---
+
+## 10. 测试策略
+
+headless 可测的：
+
+- token 解析：`-1` / `0` / `N` 三种值各自的结果（**含负号能否解析这一条**）
+- 三态属性的优先级：`sbahNever` / `sbahAuto` 压过 token，`sbahDefault` 跟随 token
+- published default 与构造值一致（RTTI 守卫，库内已有同类）
+- 状态机：四个活跃信号各自能否把已隐藏的条唤回；全部撤去后是否进入延时
+- 拖动中不隐藏
+- `csDesigning` 下永不隐藏
+- 宿主转发：6 个宿主各自把属性传到了内嵌条上（**这条是重点——「建好没接线」是本项目的默认故障**）
+
+headless **测不到**、必须真机看的：
+
+- 淡入淡出的观感与时长
+- 淡出那 200 ms 的平色块肉眼看不看得出来（数值见 §6：`FadeLevel 0.5` 上本该约 110 的落差实测是 0）
+- 隐藏态下鼠标移过去能否唤回并点中
+
+---
+
+## 11. 验收
+
+1. 默认主题下行为与 3.0 完全一致（滚动条一直显示）
+2. 现代主题下：滚动出现、停手 1.2 s 淡出、鼠标移到条上持续显示
+3. `AutoHide := sbahNever` 能在自动隐藏的主题下强制常显
+4. 全局关掉:**`Controller.StyleOverride`** 里一行 `:root { --scrollbar-auto-hide: -1; }`。
+
+   > **这一条改了两次，两次的错法一样：静默失败**（2026-09-15 定稿）。
+   >
+   > 最初写的是往**类型规则**里塞 `--var`，改正过一次；但**载体也是错的**，改正时没看出来。`TTyForm.StyleOverride`（以及任何控件的）是一个**裸声明块**——`TyParseOverride`（`tyControls.Css.Parser.pas:517`）把文本包成 `_ovr{ … ;}` 交给 `ResolveOverride`，产出的只有一个 `TTyStyleSet`，**永远碰不到 `FMergedVars`**。喂给它一个 `:root { … }` 规则会解析失败、返回 `False`、留下一张空覆盖层，一声不吭。
+   >
+   > 能用的是**控制器**那一层（`tyControls.Controller.pas:128`）：它收的是**带选择器的完整 tycss**，走 `ApplyStyleOverride` → `LoadFromCssAdditive` → `FVars` → `FMergedVars`，而 `Metric` 读的正是 `FMergedVars`。
+   >
+   > ```pascal
+   > TyDefaultController.StyleOverride := ':root { --scrollbar-auto-hide: -1; }';
+   > ```
+   >
+   > **两次都是「没报错、看着像生效了、其实什么都没发生」**——照错版本去验收，签的字是一个 no-op。控件级 override 和控制器级 override 收的根本不是同一种文本，这个区别在别处也会咬人。
+
+5. 6 个宿主的内嵌条都听话
+6. 全量测试绿，无内存泄漏

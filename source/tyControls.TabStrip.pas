@@ -254,7 +254,7 @@ type
       Strip-only mode keeps the frame's TOP border as a baseline rail — the tabs must
       still sit on a line — and drops the rest of the box. }
     function HasPageBody: Boolean; virtual;
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     { Drops the Images reference when the list is freed. The setter also registers a
       FreeNotification, because opRemove only reaches us for a component we asked about:
       a list owned by another form (or created with Owner = nil) would be freed without a
@@ -521,7 +521,9 @@ type
       without a setter is one TWriter.WriteProperty skips and the Object Inspector reports as
       unreadable. }
     property RowCount: Integer read GetRowCount;
-  published
+    { TCustomTabControl publishes TabStop; ours is public (the custom class publishes
+      nothing beyond the LCL root), with the default a tab strip has. }
+    property TabStop default True;
     { The icon source for the tab headers, indexed by the per-tab image index.
 
       Typed TTyVirtualImageList, not LCL's TCustomImageList, and that is not a preference:
@@ -561,14 +563,11 @@ type
     property TabHeight: Integer read GetTabHeight write SetTabHeight stored FTabHeightExplicit;
     property TabsClosable: Boolean read FTabsClosable write SetTabsClosable default False;
     property OnTabClose: TTyTabCloseEvent read FOnTabClose write FOnTabClose;
-    property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property OnChanging: TTyTabChangingEvent read FOnChanging write FOnChanging;
     property OnReorder: TTyTabReorderEvent read FOnReorder write FOnReorder;
-    property TabStop default True;
-    property Align;
-    property Anchors;
-    property StyleClass;
-    property Controller;
+  protected
+    { Protected, as TCustomTabControl.OnChange is (comctrls.pp:472). }
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 
 implementation
@@ -759,7 +758,7 @@ end;
 
 { The header engine only needs the inherited controller wiring; a page-owning
   subclass overrides this to propagate the controller down to its child pages. }
-procedure TTyCustomTabStrip.SetController(AValue: TTyStyleController);
+procedure TTyCustomTabStrip.SetController(AValue: TTyCustomStyleController);
 begin
   inherited SetController(AValue);
 end;
@@ -802,8 +801,10 @@ begin
   MeasBmp := TBitmap.Create;
   try
     MeasBmp.SetSize(1, 1);
-    MeasBmp.Canvas.Font.Name := TyEffectiveFontName(AStyle.FontName);
-    MeasBmp.Canvas.Font.Size := MulDiv(ResolveFontSize(AStyle), APPI, 96);
+    // The weight too: the caption is DRAWN with TabStyle.FontWeight, and a bold caption
+    // measured as regular makes a tab narrower than its own ink.
+    TyConfigureMeasureFont(MeasBmp.Canvas, AStyle.FontName, ResolveFontSize(AStyle),
+      AStyle.FontWeight, APPI);
     Result := MeasBmp.Canvas.TextWidth(ACaption);
   finally
     MeasBmp.Free;

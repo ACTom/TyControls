@@ -37,16 +37,27 @@ uses
 type
   { The bundled pack as a COMPONENT. TTyIconPackFont registers the embedded bytes once
     per process, so any number of these on any number of forms cost one registration. }
-  TTyLucideIconFont = class(TTyIconPackFont)
+  TTyCustomLucideIconFont = class(TTyIconPackFont)
   private
     function GetLicense: string;
   protected
     class function PackData: RawByteString; override;
     class function PackFamily: string; override;
-  published
+  public
     { Attribution for the bundled icons -- same as TTyLucideImageList.License. Read-only;
       the design-time editor pops the full ISC + MIT text (TyLucideLicense). }
     property License: string read GetLicense stored False;
+  end;
+
+  { TTyLucideIconFont publishes TTyCustomLucideIconFont's properties; everything lives in TTyCustomLucideIconFont. }
+  TTyLucideIconFont = class(TTyCustomLucideIconFont)
+  published
+    property Version;
+    property FontFamily;
+    property FontFile;
+    property Glyphs;
+    property OnChange;
+    property License;
   end;
 
   { The bundled pack as a droppable IMAGE LIST -- the third way in, made possible by the
@@ -59,12 +70,11 @@ type
     and the optionality rule (test.lucide.NoCoreUnitReferencesTheBundledFont) forbids any
     OTHER source unit from doing so -- so the only home that keeps the font free-when-unused
     is here, inside the unit the reference cannot escape. }
-  TTyLucideImageList = class(TTyVirtualImageList)
+  TTyCustomLucideImageList = class(TTyCustomVirtualImageList)
   private
     function GetLicense: string;
   public
     constructor Create(AOwner: TComponent); override;
-  published
     { Always the bundled Lucide font. stored False: the constructor sets it, and a streamed
       reference to the unit-owned shared font (no owner, no name) would nil on load. }
     property IconFont stored False;
@@ -72,6 +82,19 @@ type
       required of YOUR end users at run time. Read-only: the value is the summary; the
       design-time editor pops the full ISC + MIT text (TyLucideLicense) in a Ty message box. }
     property License: string read GetLicense stored False;
+  end;
+
+  { TTyLucideImageList publishes TTyCustomLucideImageList's properties; everything lives in TTyCustomLucideImageList. }
+  TTyLucideImageList = class(TTyCustomLucideImageList)
+  published
+    property Collection;
+    property IconFont;
+    property Names;
+    property DefaultSize;
+    property MultiResolution;
+    property Version;
+    property GlyphColor;
+    property License;
   end;
 
 const
@@ -88,7 +111,7 @@ const
     above pins the INPUTS; this pins the TRANSFORMATION, so a hand-edit of this generated
     file -- or a generator change nobody re-ran -- is a red test instead of a silent
     mismatch between the script and its output. }
-  TyLucideGeneratorDigest = '95C4A7301BA8E45C58ED973D2A92DB580CBF3FBA';
+  TyLucideGeneratorDigest = 'A7D02AEB211B2208CA68F0473B0C4FAF6834DF02';
   { Icons in the bundled font (names plus upstream aliases). }
   TyLucideGlyphCount = 2022;
   { One-liner shown in the object inspector for TTyLucideImageList.License; the '...' pops
@@ -4894,17 +4917,17 @@ begin
   Result := GData;
 end;
 
-class function TTyLucideIconFont.PackData: RawByteString;
+class function TTyCustomLucideIconFont.PackData: RawByteString;
 begin
   Result := DecodeFont;   { cached -- this is a refcount, not an 833KB copy }
 end;
 
-class function TTyLucideIconFont.PackFamily: string;
+class function TTyCustomLucideIconFont.PackFamily: string;
 begin
   Result := TyLucideFamily;
 end;
 
-function TTyLucideIconFont.GetLicense: string;
+function TTyCustomLucideIconFont.GetLicense: string;
 begin
   Result := TyLucideLicenseSummary;
 end;
@@ -4917,14 +4940,14 @@ begin
   Result := GFont;
 end;
 
-constructor TTyLucideImageList.Create(AOwner: TComponent);
+constructor TTyCustomLucideImageList.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   { Wire the shared bundled font (one registration per process). Names stay empty. }
   IconFont := TyLucideFont;
 end;
 
-function TTyLucideImageList.GetLicense: string;
+function TTyCustomLucideImageList.GetLicense: string;
 begin
   Result := TyLucideLicenseSummary;
 end;

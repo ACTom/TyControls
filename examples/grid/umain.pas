@@ -114,13 +114,14 @@ type
     ChkAutoGrow, ChkFillSeries: TTyCheckBox;
 
     PgEvents: TTyTabSheet;
-    LblEvHint, LblEvTip: TTyLabel;
+    LblEvHint, LblEvTip, LblEvValidateTip: TTyLabel;
     TbEv1, TbEv2: TTyPanel;
     GridEvents: TTyStringGrid;
     ChkEvHint, ChkEvLockRow, ChkEvRightClick, ChkEvHeader, ChkEvSize,
       ChkEvColMove, ChkEvCheck, ChkEvClip,
       ChkEvRowMove, ChkEvEditorProp,
       ChkEvReturn, ChkEvScrollHint, ChkEvCanEdit, ChkEvEditChange,
+      ChkEvValidate,
       ChkEvCellEdited, ChkEvRowVeto, ChkEvSelectCell,
       ChkEvClick, ChkEvRating, ChkEvCanSort, ChkEvCompare,
       ChkEvFilterRow, ChkEvFilterVals, ChkEvPickList,
@@ -280,6 +281,10 @@ type
       var AAllow: Boolean);
     procedure EvEditChange(Sender: TObject; ACol, ARow: Integer;
       const AText: string);
+    procedure EvValidateCell(Sender: TObject; ACol, ARow: Integer;
+      const AOldText, ANewText: string; var AValid: Boolean);
+    procedure EvInvalidEditExit(Sender: TObject; ACol, ARow: Integer;
+      const AText: string; var AKeep: Boolean);
     procedure EvCellEdited(Sender: TObject; ACol, ARow: Integer;
       const AOldText, ANewText: string; var AAccept: Boolean);
     procedure EvCanInsertRow(Sender: TObject; ARow: Integer;
@@ -606,6 +611,9 @@ resourcestring
   rsTypingFmt    = 'Typing at (%d, %d): "%s" — fired on every keystroke, not on commit';
   rsCommitVetoFmt = '(%d, %d) may not be cleared — the commit was vetoed, the cell still holds "%s"';
   rsCellEditedFmt = '(%d, %d):「%s」→「%s」';
+  rsValidateRefusedFmt = 'Qty "%s" refused — a positive whole number is needed. Fix it, or press Esc to abandon';
+  rsValidateOkFmt = 'Qty at (%d, %d) accepted: %s';
+  rsValidateLeaveFmt = 'Qty "%s" is still invalid. Keep editing it? (No = discard and restore the old value)';
   rsInsertVetoed = 'Insertion vetoed — not a single row was inserted (in the plural version, if any row is vetoed the whole batch is skipped)';
   rsDeleteVetoed = 'Deletion vetoed';
   rsCol0NoCursor = 'The cursor cannot enter column 0 — the arrow keys skip straight over it';
@@ -1321,9 +1329,11 @@ end;
 procedure TMainForm.HandleEditorProp(Sender: TObject; ACol, ARow: Integer;
   AEditor: TControl);
 begin
-  if AEditor is TTyEdit then
+  { Any edit: the grid also builds calc and mask editors, which are TTyCustomEdit
+    descendants but not TTyEdit ones. }
+  if AEditor is TTyCustomEdit then
   begin
-    TTyEdit(AEditor).Font.Color := clRed;
+    TTyCustomEdit(AEditor).Font.Color := clRed;
     Status(Format(rsEditorPropFmt, [ACol, ARow]));
   end;
 end;
@@ -2705,6 +2715,17 @@ begin
   if ChkEvCellEdited.Checked then GridEvents.OnCellEdited := @EvCellEdited
   else GridEvents.OnCellEdited := nil;
 
+  if ChkEvValidate.Checked then
+  begin
+    GridEvents.OnValidateCell := @EvValidateCell;
+    GridEvents.OnInvalidEditExit := @EvInvalidEditExit;
+  end
+  else
+  begin
+    GridEvents.OnValidateCell := nil;
+    GridEvents.OnInvalidEditExit := nil;
+  end;
+
   if ChkEvRowVeto.Checked then
   begin
     GridEvents.OnCanInsertRow := @EvCanInsertRow;
@@ -2800,6 +2821,35 @@ begin
   end
   else
     Status(Format(rsCellEditedFmt, [ACol, ARow, AOldText, ANewText]));
+end;
+
+{ OnValidateCell gates LEAVING the cell, not writing it: answer AValid := False and the
+  editor stays where it is until the value is fixed or Esc abandons it. Only the Qty column
+  is judged here; every other column passes untouched. Clicking a control OUTSIDE the grid
+  counts as abandoning -- the old value comes back. }
+procedure TMainForm.EvValidateCell(Sender: TObject; ACol, ARow: Integer;
+  const AOldText, ANewText: string; var AValid: Boolean);
+var
+  n: Integer;
+begin
+  if ACol <> 3 then Exit;
+  AValid := TryStrToInt(Trim(ANewText), n) and (n > 0);
+  if AValid then
+    Status(Format(rsValidateOkFmt, [ACol, ARow, ANewText]))
+  else
+    Status(Format(rsValidateRefusedFmt, [ANewText]));
+end;
+
+{ Focus left the whole grid with an invalid Qty still pending. Let the person decide: keep
+  the editor (they will land back in it by clicking any cell) or throw the value away. A
+  modal box from inside a focus-loss notification swallows the click that caused it -- the
+  control they clicked does not get its Click -- which is how Excel's validation box behaves
+  too; the alternative is deciding without asking. }
+procedure TMainForm.EvInvalidEditExit(Sender: TObject; ACol, ARow: Integer;
+  const AText: string; var AKeep: Boolean);
+begin
+  AKeep := TyMessageDlg(Format(rsValidateLeaveFmt, [AText]), mtConfirmation,
+    [mbYes, mbNo]) = mrYes;
 end;
 
 procedure TMainForm.EvCanInsertRow(Sender: TObject; ARow: Integer;

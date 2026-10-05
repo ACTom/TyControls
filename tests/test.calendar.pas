@@ -33,6 +33,22 @@ type
 
   { B1: pure math tests (unchanged from the previous task) }
 
+  { One formula, two callers: the control's default size and a dropdown host's popup size.
+    These pin that they stay one, that classic is byte-identical, and that modern is roomier
+    -- the reported bug being a classic-sized drop under modern density, which squeezed six
+    14px-font rows into a 24px stride. }
+  TCalendarSizeTest = class(TTestCase)
+  private
+    FDensity: TTyDensity;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestClassicSizeIsUnchanged;
+    procedure TestModernIsRoomierThanClassic;
+    procedure TestControlDefaultAndHostSizeAgree;
+  end;
+
   TCalendarGeomTest = class(TTestCase)
   published
     { TyWeekdayOrder }
@@ -228,6 +244,58 @@ begin
 end;
 
 { TCalendarGeomTest — B1 pure math tests }
+
+procedure TCalendarSizeTest.SetUp;
+begin
+  FDensity := TyDefaultController.Density;
+end;
+
+procedure TCalendarSizeTest.TearDown;
+begin
+  TyDefaultController.Density := FDensity;
+end;
+
+procedure TCalendarSizeTest.TestClassicSizeIsUnchanged;
+{ The standing density rule: classic lands on exactly the box it always used, remainder and
+  all. A "tidier" classic number would move every existing calendar by a pixel. }
+var sz: TSize;
+begin
+  TyDefaultController.Density := tdClassic;
+  sz := TyCalendarSizeFor(TyDefaultController);
+  AssertEquals('classic width', TyCalendarClassicW, sz.cx);
+  AssertEquals('classic height', TyCalendarClassicH, sz.cy);
+end;
+
+procedure TCalendarSizeTest.TestModernIsRoomierThanClassic;
+var classic, modern: TSize;
+begin
+  TyDefaultController.Density := tdClassic;
+  classic := TyCalendarSizeFor(TyDefaultController);
+  TyDefaultController.Density := tdModern;
+  modern := TyCalendarSizeFor(TyDefaultController);
+  AssertTrue('modern asks for a taller box than classic ('
+    + IntToStr(modern.cy) + ' vs ' + IntToStr(classic.cy) + ')', modern.cy > classic.cy);
+  { And it must be the bands that grew, not a constant someone bumped. }
+  AssertEquals('modern height composes from the density tokens',
+    TyDensityMetric(TyDefaultController, 28, '--control-height')
+    + TyDensityMetric(TyDefaultController, 20, '--item-height')
+    + 6 * TyDensityMetric(TyDefaultController, 29, '--row-height'), modern.cy);
+end;
+
+procedure TCalendarSizeTest.TestControlDefaultAndHostSizeAgree;
+{ The point of exporting the formula: a calendar on a form and a calendar in a popup must be
+  the same size, or the drop crops its own content -- which a hardcoded 240x220 in the date
+  picker used to do. }
+var cal: TTyCalendar; sz: TSize;
+begin
+  TyDefaultController.Density := tdModern;
+  cal := TTyCalendar.Create(nil);
+  try
+    sz := cal.PreferredSize(96);
+    AssertEquals('host popup width matches the control default', cal.Width, sz.cx);
+    AssertEquals('host popup height matches the control default', cal.Height, sz.cy);
+  finally cal.Free; end;
+end;
 
 procedure TCalendarGeomTest.TestWeekdayOrderMonday;
 var
@@ -1484,6 +1552,7 @@ begin
 end;
 
 initialization
+  RegisterTest(TCalendarSizeTest);
   RegisterTest(TCalendarGeomTest);
   RegisterTest(TCalendarControlTest);
   RegisterTest(TCalendarPixelTest);

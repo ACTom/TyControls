@@ -58,6 +58,14 @@
 }
 }
 
+/* ── mode-invariant: 不随明暗翻转的标量 ── */
+:root {
+  /* 空闲 1200ms 后滚动条淡出。GNOME 本就是遮盖式滚动条（这个皮肤保留了滑道、
+     只做淡入淡出，win11/macos 同样是这个近似）。经典世代的皮肤不写这一行，
+     继承基础层的 -1。 */
+  --scrollbar-auto-hide: 1200;
+}
+
 /* --- window + chrome ----------------------------------------------------- */
 TyForm            { background: var(--window); }
 TyTitleBar, TyRibbonQuickAccess        { background: var(--header); color: var(--ink); border-bottom: 1px solid var(--border); border-radius: 0; }

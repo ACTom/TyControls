@@ -30,7 +30,7 @@ uses
   tyControls.Icons.Lucide,
   tyControls.Image, tyControls.ImageCollection, tyControls.ImageView, tyControls.LColorPicker,
   tyControls.LevelMeter, tyControls.LinkLabel, tyControls.ListBox, tyControls.ListGroupPanel,
-  tyControls.ListView, tyControls.MRUComboBox, tyControls.MaskEdit, tyControls.Memo,
+  tyControls.ListView, tyControls.MRUComboBox, tyControls.MaskEdit, tyControls.Memo, tyControls.Terminal,
   tyControls.Menu, tyControls.Meter, tyControls.NativeStyler, tyControls.Notification,
   tyControls.NumericEdit, tyControls.OfficeComboBox, tyControls.OfficeListBox,
   tyControls.PageControl, tyControls.Pagination, tyControls.PaintPanel, tyControls.Panel,
@@ -42,6 +42,7 @@ uses
   tyControls.ShellTreeView, tyControls.SizeBox, tyControls.Sparkline, tyControls.SpinEdit,
   tyControls.Splitter, tyControls.StarShape, tyControls.StatusBar, tyControls.Steps,
   tyControls.TabSet, tyControls.TabSheet, tyControls.Tag, tyControls.ToggleSwitch,
+  tyControls.ToolWindows, tyControls.ToolWindows.Manager,
   tyControls.ToolBar, tyControls.ToolBarEx, tyControls.ToolGroupPanel, tyControls.TrackBar,
   tyControls.TrackEdit, tyControls.Transfer, tyControls.TreeSelect, tyControls.TreeView,
   tyControls.TyLabel, tyControls.URLEdit, tyControls.UpDown, tyControls.ValueListEditor,
@@ -430,7 +431,7 @@ initialization
     TTySpeedButton, TTyDropDownButton, TTyMenuButton, TTyColorButton, TTyButtonGroup, TTyLabel,
     TTyHtmlLabel, TTyLinkLabel, TTyShadowLabel, TTyGlowLabel, TTyTag, TTyBadge, TTyEdit,
     TTyNumericEdit, TTyCurrencyEdit, TTyMaskEdit, TTyURLEdit, TTyComboEdit, TTyTrackEdit,
-    TTyCalcEdit, TTyCalcCurrencyEdit, TTyCalculator, TTyMemo, TTySpinEdit, TTyFloatSpinEdit,
+    TTyCalcEdit, TTyCalcCurrencyEdit, TTyCalculator, TTyMemo, TTyTerminalView, TTySpinEdit, TTyFloatSpinEdit,
     TTyUpDown,
     TTyCheckBox, TTyRadioButton, TTyToggleSwitch, TTyRadioGroup, TTyCheckGroup, TTySegmented,
     TTyComboBox, TTyMRUComboBox, TTyComboBoxEx, TTyOfficeComboBox]);
@@ -463,13 +464,16 @@ initialization
     TTySavePictureDialog, TTyOpenPreviewDialog, TTySavePreviewDialog, TTyNotification,
     TTyIconBrowserDialog]);
   Reg([
-    TTyGridCell, TTyFormSurface, TTyForm, TTyDialog]);
+    TTyGridCell, TTyFormSurface, TTyForm, TTyDialog,
+    TTyToolWindowBar, TTyToolWindowManager, TTyToolWindow, TTyToolWindowActions]);
   { The BASE classes the Version property editor is registered on. They are never dropped on
     a form, so nothing else registers them — but InheritsFromAnEditorBase resolves them by
     name, and an unresolvable base would make that check quietly answer False for everything
     below it. TestVersionEditorBasesResolve is what catches that. }
   RegisterClasses([
-    TTyGraphicControl, TTyCustomControl, TTyComponent]);
+    TTyGraphicControl, TTyCustomControl, TTyComponent,
+    { 4.0: the image list's editor sits on its custom class, which TTyLucideImageList shares. }
+    TTyCustomVirtualImageList]);
   RegisterTest(TVersionTest);
 
 finalization

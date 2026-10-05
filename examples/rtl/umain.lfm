@@ -893,12 +893,12 @@ object MainForm: TMainForm
           Height = 30
           Top = 218
           Width = 180
-          ItemIndex = 0
           Items.Strings = (
             'One'
             'Two'
             'Three'
           )
+          ItemIndex = 0
         end
         object LblGroupNote: TTyLabel
           Left = 210

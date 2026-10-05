@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyFontSizeComboBox 是**可编辑的字号组合框**:内置常用字号(6…72),可从下拉里选,也可以**直接键入**一个自定义字号。继承自 [TTyComboBox](combobox.md)(`csDropDown` 可编辑模式),`FontSize` 是数值。字号只是普通文本,**无需逐项自绘**——是 Phase-4 里最轻的一个。
+TTyFontSizeComboBox 是**可编辑的字号组合框**:内置常用字号(6…72),可从下拉里选,也可以**直接键入**一个自定义字号。继承自 [TTyCustomComboBox](combobox.md)(`csDropDown` 可编辑模式),`FontSize` 是数值。字号只是普通文本,**无需逐项自绘**——是 Phase-4 里最轻的一个。
 
 ---
 
@@ -27,7 +27,7 @@ uses tyControls.FontSizeComboBox;
 |------|------|------|
 | `FontSize` | `Integer` | 数值字号(从文本解析,非数字则 0);写入选中同值预设,否则填入自定义文本。 |
 
-另继承 `TTyComboBox` 的 `Items` / `Text` / `ItemIndex` / `OnChange` 等。默认预设:6,7,8,9,10,11,12,14,16,18,20,24,28,32,36,48,60,72。
+另继承 `TTyCustomComboBox` 的 `Items` / `Text` / `ItemIndex` / `OnChange` 等。默认预设:6,7,8,9,10,11,12,14,16,18,20,24,28,32,36,48,60,72。
 
 ---
 

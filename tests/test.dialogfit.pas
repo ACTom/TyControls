@@ -20,12 +20,21 @@ unit test.dialogfit;
   whole tree), so an aligned child's bounds here are not what a real window would show and any
   assertion on them would be fiction. alNone is also precisely where the hand-typed literals
   live, so the restriction costs nothing and keeps every failure real. Two questions per
-  container: does each child stay inside the band it was given, and do any two children overlap. }
+  container: does each child stay inside the band it was given, and do any two children overlap.
+
+  AND THE SAME AGAIN AT 175%. The literals are 96-PPI numbers and a dialog is built after LCL
+  has taken its form to the monitor's PPI, so each of them is scaled where it is used
+  (TTyDialog.Px) -- each of them, which is the kind of promise one forgotten literal breaks.
+  A row given 22 px at a scaling where its control's floor is 39 is this unit's defect exactly,
+  so the second sweep asks the same two questions on a simulated 168-PPI desktop
+  (ACTom/TyControls#2). tests/test.dpi.dialogs asks the other one, whether the dialog is its
+  96-PPI self times 1.75. }
 
 {$mode objfpc}{$H+}
 interface
 uses
   Classes, SysUtils, Types, Controls, Forms, Graphics, Dialogs, fpcunit, testregistry,
+  test.dpi.support,
   tyControls.Types, tyControls.Controller, tyControls.BuiltinThemes,
   tyControls.Dialogs, tyControls.Dialogs.About, tyControls.Dialogs.Color,
   tyControls.Dialogs.Find, tyControls.Dialogs.Font, tyControls.Dialogs.FileDialog,
@@ -52,6 +61,7 @@ type
     procedure TearDown; override;
   published
     procedure TestEveryDialogFitsAtEveryDensity;
+    procedure TestEveryDialogFitsAt175Percent;
   end;
 
 implementation
@@ -266,6 +276,32 @@ begin
       + ' { padding: 14px; }');
   if FFailures.Count > 0 then
     Fail(IntToStr(FFailures.Count) + ' dialog layout problem(s):' + LineEnding
+      + FFailures.Text);
+end;
+
+procedure TDialogFitTest.TestEveryDialogFitsAt175Percent;
+var
+  saveScreen: Integer;
+  saveScaled: Boolean;
+begin
+  saveScreen := TyTestScreenPPI;
+  saveScaled := Application.Scaled;
+  { Not a scaled application: a form then keeps the PPI it was born with, which is the
+    simulated screen's -- the state a real dialog is in when its builder starts placing
+    controls, LCL's pass over the empty form being behind it. }
+  Application.Scaled := False;
+  TyTestSimulateScreen(168);
+  try
+    SweepAt(tdClassic, 'default', '');
+    SweepAt(tdModern, 'default', '');
+    SweepAt(tdClassic, 'showcase', '');
+    SweepAt(tdModern, 'showcase', '');
+  finally
+    TyTestSimulateScreen(saveScreen);
+    Application.Scaled := saveScaled;
+  end;
+  if FFailures.Count > 0 then
+    Fail(IntToStr(FFailures.Count) + ' dialog layout problem(s) at 168 PPI:' + LineEnding
       + FFailures.Text);
 end;
 

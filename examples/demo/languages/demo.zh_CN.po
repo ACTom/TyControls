@@ -679,3 +679,23 @@ msgstr "主题监视已关"
 #, object-pascal-format
 msgid "Working… %d%%"
 msgstr "处理中… %d%%"
+
+#: tdemomainform.memo1.text
+msgid "TTyMemo multi-line editor\r\nEnter splits a line; Backspace/Delete merge across lines.\r\nArrows / Home / End move the caret; the wheel scrolls\r\nwhen the text overflows the visible rows.\r\n"
+msgstr "TTyMemo 多行编辑器\r\n回车拆行;退格/Delete 跨行合并。\r\n方向键 / Home / End 移动光标;文字超出可见行时\r\n可以用滚轮滚动。\r\n"
+
+#: tdemomainform.statusbar1.panels.product
+msgid "TyControls demo"
+msgstr "TyControls 演示"
+
+#: tdemomainform.democolorbtn.dialogcaption
+msgid "Select Color"
+msgstr "选择颜色"
+
+#: tdemomainform.tymessage1.msg
+msgid "Hello World!"
+msgstr "你好,世界!"
+
+#: tdemomainform.tyaboutdlg.description
+msgid "A skinnable / styleable Lazarus component library"
+msgstr "可换肤、可定制样式的 Lazarus 控件库"

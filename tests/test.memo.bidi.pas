@@ -95,9 +95,9 @@ type
       the read-out quietly lie. }
     procedure BandColumns(ARow: Integer; out ABand: array of Boolean);
     { Render FMemo and report, for each device x, whether visual row ARow has glyph INK
-      there -- read on a scanline through the middle of the glyph bodies. This is the one
-      read-out that does not go through the caret model at all, so it is what the guards
-      that must be able to fail against a self-consistent WRONG model are anchored to. }
+      anywhere in that column of the row's cell. This is the one read-out that does not go
+      through the caret model at all, so it is what the guards that must be able to fail
+      against a self-consistent WRONG model are anchored to. }
     procedure InkColumns(ARow: Integer; out AInk: array of Boolean);
     function BandRunCount(const A: array of Boolean): Integer;
     function FirstTrue(const A: array of Boolean): Integer;
@@ -414,11 +414,17 @@ var
   Bmp: TBitmap;
   Reread: TBGRABitmap;
   Px: TBGRAPixel;
-  x, y: Integer;
+  x, y, y0, y1: Integer;
 begin
-  { Halfway down the cell: through the body of every glyph in these fixtures, and clear of
-    the ascender line the band probe uses. }
-  y := cPad + ARow * FMemo.ProbeLineHeight(96) + FMemo.ProbeLineHeight(96) div 2;
+  { The whole cell, not one scanline through it. It used to be the scanline halfway down,
+    which is only "through the body of every glyph" for as long as the rasterizer puts the
+    glyphs where it did: text hinted at its real size sits two pixels lower in its cell than
+    text drawn six times too big and shrunk -- where Windows' own TextOut puts it -- and the
+    Hebrew letters, which have no ascenders, dropped clean below the line. The cell's top
+    row is left out: that is the band probe's scanline, and a band is not ink. }
+  y0 := cPad + ARow * FMemo.ProbeLineHeight(96) + 1;
+  y1 := cPad + (ARow + 1) * FMemo.ProbeLineHeight(96) - 1;
+  if y1 > cH - 1 then y1 := cH - 1;
   Bmp := TBitmap.Create;
   try
     Bmp.PixelFormat := pf32bit;
@@ -430,14 +436,22 @@ begin
     try
       for x := 0 to cW - 1 do
       begin
-        Px := Reread.GetPixel(x, y);
-        { 230, not 160. The Hebrew letters have thick vertical stems and come out solid,
-          but a lower-case Latin 'w' is two thin diagonals that BGRA antialiases to about
-          170-200 grey at this size -- so a stricter threshold reported the Latin tail as
-          BLANK and every 'where does the ink start' assertion built on it silently measured
-          the Hebrew instead. The background is pure white (255), so 230 still separates ink
-          from field with room to spare. }
-        AInk[x] := (Px.red < 230) and (Px.green < 230) and (Px.blue < 230);
+        AInk[x] := False;
+        for y := y0 to y1 do
+        begin
+          Px := Reread.GetPixel(x, y);
+          { 230, not 160. The Hebrew letters have thick vertical stems and come out solid,
+            but a lower-case Latin 'w' is two thin diagonals that BGRA antialiases to about
+            170-200 grey at this size -- so a stricter threshold reported the Latin tail as
+            BLANK and every 'where does the ink start' assertion built on it silently
+            measured the Hebrew instead. The background is pure white (255), so 230 still
+            separates ink from field with room to spare. }
+          if (Px.red < 230) and (Px.green < 230) and (Px.blue < 230) then
+          begin
+            AInk[x] := True;
+            Break;
+          end;
+        end;
       end;
     finally
       Reread.Free;

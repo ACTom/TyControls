@@ -1,0 +1,161 @@
+object FindBar: TTbFindBar
+  Left = 0
+  Height = 72
+  Top = 0
+  Width = 640
+  ClientHeight = 72
+  ClientWidth = 640
+  TabOrder = 0
+  DesignLeft = 0
+  DesignTop = 0
+  object FindRow: TTyPanel
+    Left = 0
+    Height = 36
+    Top = 0
+    Width = 640
+    Align = alTop
+    object EdtFind: TTyEdit
+      Left = 6
+      Height = 28
+      Top = 4
+      Width = 220
+      Align = alLeft
+      BorderSpacing.Left = 6
+      BorderSpacing.Top = 4
+      BorderSpacing.Bottom = 4
+      TextHint = 'Find'
+      OnChange = EdtFindChange
+    end
+    object BtnPrev: TTySpeedButton
+      Left = 230
+      Height = 28
+      Top = 4
+      Width = 30
+      Align = alLeft
+      BorderSpacing.Left = 4
+      BorderSpacing.Top = 4
+      BorderSpacing.Bottom = 4
+      StyleClass = 'ghost'
+      Hint = 'Previous (Shift+F3)'
+      ShowHint = True
+      IconFont = FindIconFont
+      GlyphName = 'chevron-up'
+      OnClick = BtnPrevClick
+    end
+    object BtnNext: TTySpeedButton
+      Left = 262
+      Height = 28
+      Top = 4
+      Width = 30
+      Align = alLeft
+      BorderSpacing.Left = 2
+      BorderSpacing.Top = 4
+      BorderSpacing.Bottom = 4
+      StyleClass = 'ghost'
+      Hint = 'Next (F3)'
+      ShowHint = True
+      IconFont = FindIconFont
+      GlyphName = 'chevron-down'
+      OnClick = BtnNextClick
+    end
+    object ChkCase: TTyCheckBox
+      Left = 302
+      Height = 28
+      Top = 4
+      Width = 124
+      Align = alLeft
+      BorderSpacing.Left = 10
+      BorderSpacing.Top = 4
+      BorderSpacing.Bottom = 4
+      Caption = 'Match case'
+      OnChange = OptionChange
+    end
+    object ChkWord: TTyCheckBox
+      Left = 436
+      Height = 28
+      Top = 4
+      Width = 124
+      Align = alLeft
+      BorderSpacing.Left = 10
+      BorderSpacing.Top = 4
+      BorderSpacing.Bottom = 4
+      Caption = 'Whole word'
+      OnChange = OptionChange
+    end
+    object BtnClose: TTySpeedButton
+      Left = 604
+      Height = 28
+      Top = 4
+      Width = 30
+      Align = alRight
+      BorderSpacing.Top = 4
+      BorderSpacing.Right = 6
+      BorderSpacing.Bottom = 4
+      StyleClass = 'ghost'
+      Hint = 'Close (Esc)'
+      ShowHint = True
+      IconFont = FindIconFont
+      GlyphName = 'x'
+      OnClick = BtnCloseClick
+    end
+    object LblInfo: TTyLabel
+      Left = 522
+      Height = 28
+      Top = 4
+      Width = 78
+      Align = alClient
+      BorderSpacing.Left = 10
+      BorderSpacing.Top = 4
+      BorderSpacing.Bottom = 4
+    end
+  end
+  object ReplaceRow: TTyPanel
+    Left = 0
+    Height = 36
+    Top = 36
+    Width = 640
+    Align = alTop
+    Visible = False
+    object EdtReplace: TTyEdit
+      Left = 6
+      Height = 28
+      Top = 4
+      Width = 220
+      Align = alLeft
+      BorderSpacing.Left = 6
+      BorderSpacing.Top = 4
+      BorderSpacing.Bottom = 4
+      TextHint = 'Replace with'
+    end
+    object BtnReplace: TTyButton
+      Left = 230
+      Height = 28
+      Top = 4
+      Width = 70
+      Align = alLeft
+      AutoSize = True
+      BorderSpacing.Left = 4
+      BorderSpacing.Top = 4
+      BorderSpacing.Bottom = 4
+      Caption = 'Replace'
+      OnClick = BtnReplaceClick
+    end
+    object BtnReplaceAll: TTyButton
+      Left = 306
+      Height = 28
+      Top = 4
+      Width = 90
+      Align = alLeft
+      AutoSize = True
+      BorderSpacing.Left = 6
+      BorderSpacing.Top = 4
+      BorderSpacing.Bottom = 4
+      Caption = 'Replace all'
+      OnClick = BtnReplaceAllClick
+    end
+  end
+  object FindIconFont: TTyLucideIconFont
+    Left = 560
+    Top = 40
+  end
+end

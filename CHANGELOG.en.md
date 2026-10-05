@@ -7,6 +7,75 @@ Linux and macOS.
 
 > 中文版见 [CHANGELOG.md](CHANGELOG.md)。
 
+## [3.0.0] — 2026-09-30
+
+TyControls 3.0, the first stable release. Only the changes below since RC3; everything that changed from 2.2 to 3.0 is in the 3.0.0-Beta through 3.0.0-RC3 sections.
+
+### Added
+
+- A gallery ([docs/gallery.en.md](docs/gallery.en.md)): every example and every tab page in light and dark, and all built-in themes side by side.
+
+### Fixed
+
+- On Windows with a non-default ClearType contrast, light text on dark themes came out lighter than the text Windows draws.
+- The grid example's tab captions lost their `&`.
+
+### Performance
+
+- Text draws faster on Windows: text-heavy controls such as the grid and the memo take about a third less time for their first paint.
+
+## [3.0.0-RC3] — 2026-09-28
+
+Fixes a batch of layout errors under high-DPI scaling (150%, 175%; [#2](https://github.com/ACTom/TyControls/issues/2)) and blurry text on Windows. Still a release candidate: if nothing new comes in, this content becomes 3.0.0 final.
+
+### Changed
+
+- Text on Windows advances by whole pixels: in a Chinese font with no bold face of its own, bold text is 1 px wider per character, so a button with a hardcoded width may need widening or `AutoSize`.
+
+### Fixed
+
+- Text in every control on Windows looked softer and lighter than the text Windows draws; it is now as crisp and as heavy as the system's ClearType, without the colour fringes.
+- At 150% and 175% scaling, text was measured at twice the DPI: labels spread their lines too far apart and wrapped early, and buttons and other controls came out taller and wider than designed, so rows of them overlapped. Controls created in code were affected too.
+- At high DPI, a control with `AutoSize` on scaled in one direction only: a button's height and a wrapping label's width stayed at 100%, and the label wrapped into twice as many lines.
+- A tool bar's `Indent` / `ButtonSpacing` / `ButtonHeight` / `ButtonWidth`, `TTyToolBarEx`'s overflow button and flyout, the `Spacing` of tool group, grid and relative panels, a status panel's `Width` and a splitter's `MinSize` did not scale at high DPI, so children crowded together or ran into each other.
+- `TTyCoolBar`: at high DPI a band snapped back to its 100% width as soon as its gripper was touched, the seam lagged behind the pointer while dragging, and `AutoMaxWidth` stopped a band at just over half its content.
+- The built-in dialogs kept 100% margins, columns and gaps at high DPI: the file dialog's navigation buttons lay over its file list, the font dialog's check boxes over its colour button, the editors' buttons ran out of the window, and messages wrapped at half their width.
+- `TTyStringGrid`: the column filter drop-down did not scale at high DPI, and under modern density the filter row's editor opened over the column captions.
+- `TTyShellListView` gave most of its width to the first column at high DPI and pushed the last two out of view.
+- At high DPI, the figure in a gauge or circular progress was too big and stood out of the ring, and the calendar's today ring, the colour grid's selection ring, the list view's sort arrow, the ribbon's key tips, the status bar's grip and the tree's radio mark were drawn too thick or too large.
+- The window's resize border, the smallest size a manual resize leaves, the drag threshold on a title bar, and the tolerance of a triple click and of the date picker's check box were only a little over half as forgiving at 175% as at 100%.
+
+## [3.0.0-RC2] — 2026-09-27
+
+Every issue reported against the RC has been addressed. Still a release candidate: if nothing new comes in, this content becomes 3.0.0 final.
+
+### Added
+
+- `TTyStringGrid` input validation: when `OnValidateCell` refuses a value the editor stays on its cell until the value is fixed or abandoned with `Esc`; when focus leaves the grid altogether, `OnInvalidEditExit` decides whether to abandon or keep the edit (abandon by default). Demonstrated on the grid example's Events page.
+- The `system` theme follows the desktop's light/dark scheme and accent on Qt5 / Qt6 builds; GTK builds do not probe and keep the default look.
+
+### Changed
+
+- `TTyTransfer`'s middle buttons now draw chevrons (`>` / `>>` / `<` / `<<`), the doubled mark reading as one glyph.
+
+### Fixed
+
+- Switching to the `system` theme on Linux raised `List index out of bounds`.
+- Following the system appearance on macOS no longer spawns a subprocess every 750 ms.
+- Under modern density and skins with taller buttons (aero, for one), a message dialog's buttons hung out of the bottom strip; the file dialog's navigation buttons overlapped; rows laid out at a fixed stride in the find, font, colour, path, image-collection and structure editors clipped or overlapped.
+- `TTyDateTimePicker`'s dropdown calendar was hardcoded to the classic 240×220, cramped under modern density and at high DPI; it now follows the theme's row height.
+- `TTySteps` centres a horizontal step's title under its own marker, and the connector runs marker to marker.
+- `TTyRibbon`'s large tiles were only an edit box tall under modern density; they now have their own theme size, `--ribbon-tile-height`.
+- Windows XP: the system's blue frame on the left, right and bottom edges is gone, and opening a menu or dropdown no longer flashes the system caption over the window.
+- `TTyStringGrid`'s spin, slider, memo, calculator, pick-list and date editors can now be abandoned with `Esc` (only the text and mask editors could).
+- On a controller with a `ThemeName`, clearing or replacing `StyleOverride` had no effect, and the modern density pack stayed after switching back to classic.
+- `TTySparkline`'s baseline floated up when the minimum was a large positive value.
+- `TTyStringGrid`: dragging a column divider through the body selected a block of cells; pressing on a divider, or double-clicking it, sorted as well. Sorting now fires on release, and a press on a divider, a release elsewhere, or a column drag does not count as a click.
+- `TTyTreeView`: double-clicking a column header expanded, collapsed or edited the last node clicked; a header click now sorts only when pressed and released on the same section.
+- `WindowState = wsMaximized` set in the designer had no effect at run time (on Windows it could fill the whole monitor over the taskbar; on Linux nothing happened); the first show now maximizes to the work area, exactly as the caption button does.
+- A title bar's `ShowMinimize` / `ShowMaximize` / `ShowClose` set to False in the designer still showed the buttons at start-up; they are now a second gate beside the form's `BorderIcons`, either one hides the button, and the form's sync no longer overwrites the bar's setting.
+- With the maximize button hidden, a title-bar double-click, Aero Snap to the top edge and Win+Up still maximized; if any of `Resizable`, `biMaximize` in `BorderIcons` or the bar's `ShowMaximize` is off, all of them are now off too, while a maximized window can still restore.
+
 ## [3.0.0-RC] — 2026-08-31
 
 Every issue reported against the Beta has been addressed; this is the release candidate for 3.0. From here the 3.0 line takes bug fixes only (the `3.0-fixes` branch).

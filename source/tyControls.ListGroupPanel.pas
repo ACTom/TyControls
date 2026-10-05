@@ -96,7 +96,7 @@ function TyListGroupHitTest(const AParts: TTyListGroupParts; const APt: TPoint):
 function TyListGroupRailChar(const ACaption: string): string;
 
 type
-  TTyListGroupPanel = class;
+  TTyCustomListGroupPanel = class;
 
   { The sider's model: NESTED collections, matching how the sider is authored -- add
     Groups, then add each group's Items under it (real-machine feedback: the flat
@@ -112,7 +112,7 @@ type
     FCaption: string;
     FImageIndex: Integer;
     FTag: PtrInt;
-    procedure SetCaption(const AValue: string);
+    procedure SetCaption(const AValue: TCaption);
     procedure SetImageIndex(AValue: Integer);
   protected
     function GetDisplayName: string; override;
@@ -120,7 +120,7 @@ type
     constructor Create(ACollection: TCollection); override;
     procedure Assign(ASource: TPersistent); override;
   published
-    property Caption: string read FCaption write SetCaption;
+    property Caption: TCaption read FCaption write SetCaption;
     property ImageIndex: Integer read FImageIndex write SetImageIndex default -1;
     { The stable routing key for click handlers: indexes drift when groups or items
       are added and removed, a Tag does not. Invisible, so no repaint on write. }
@@ -154,7 +154,7 @@ type
     FExpanded: Boolean;
     FItems: TTyListGroupItems;
     FTag: PtrInt;
-    procedure SetCaption(const AValue: string);
+    procedure SetCaption(const AValue: TCaption);
     procedure SetImageIndex(AValue: Integer);
     procedure SetExpanded(AValue: Boolean);
     procedure SetItems(AValue: TTyListGroupItems);
@@ -165,7 +165,7 @@ type
     destructor Destroy; override;
     procedure Assign(ASource: TPersistent); override;
   published
-    property Caption: string read FCaption write SetCaption;
+    property Caption: TCaption read FCaption write SetCaption;
     property ImageIndex: Integer read FImageIndex write SetImageIndex default -1;
     { Whether the group starts open. The designer default is open (an authored sider
       should show its rows); the AddGroup facade keeps its historical default of closed. }
@@ -178,7 +178,7 @@ type
 
   TTyListGroups = class(TOwnedCollection)
   private
-    FPanel: TTyListGroupPanel;
+    FPanel: TTyCustomListGroupPanel;
     function GetGroup(AIndex: Integer): TTyListGroup;
     procedure SetGroup(AIndex: Integer; AValue: TTyListGroup);
   protected
@@ -187,7 +187,7 @@ type
       Update ONLY (see TTyListGroupItems.Update). }
     procedure Update(AItem: TCollectionItem); override;
   public
-    constructor Create(APanel: TTyListGroupPanel);
+    constructor Create(APanel: TTyCustomListGroupPanel);
     function Add: TTyListGroup;
     property Groups[AIndex: Integer]: TTyListGroup read GetGroup write SetGroup; default;
   end;
@@ -222,7 +222,7 @@ type
     -icon-size / -icon-gap / -item-inset), each falling back to a named constant / the published
     HeaderHeight/ItemHeight. All colours and sizes are theme-driven. }
 
-  TTyListGroupPanel = class(TTyCustomControl)
+  TTyCustomListGroupPanel = class(TTyCustomControl)
   private
     FGroups: TTyListGroups;
     FImages: TCustomImageList;      // per-row icon source (nil = no icons); any list works
@@ -314,7 +314,7 @@ type
 
     { Current vertical scroll offset (device px, 0..MaxScrollOffset); wheel-driven. }
     property ScrollOffset: Integer read FScrollOffset;
-  published
+    property TabStop default True;
     { Sider collapse (QQ-group request). Collapsed narrows the panel to an icon rail
       (captions, group chevrons and hierarchy indent are dropped; icons stay clickable)
       and expanding restores the width the runtime collapse captured. ShowCollapseTrigger
@@ -344,11 +344,74 @@ type
     { The second press of a double-click on an item row (headers keep toggling).
       OnItemClick has already fired for the pair's first press. }
     property OnItemDblClick: TTyListGroupItemEvent read FOnItemDblClick write FOnItemDblClick;
+  end;
+
+  { TTyListGroupPanel publishes TTyCustomListGroupPanel's properties; everything lives in TTyCustomListGroupPanel. }
+  TTyListGroupPanel = class(TTyCustomListGroupPanel)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Collapsed;
+    property ShowCollapseTrigger;
+    property CollapsedWidth;
+    property OnCollapsedChange;
+    property Groups;
+    property HeaderHeight;
+    property ItemHeight;
+    property Images;
+    property OnGroupToggle;
+    property OnItemClick;
+    property OnItemDblClick;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
-    property TabStop default True;
   end;
 
 implementation
@@ -381,7 +444,7 @@ begin
   if FCaption <> '' then Result := FCaption else Result := inherited GetDisplayName;
 end;
 
-procedure TTyListGroupItem.SetCaption(const AValue: string);
+procedure TTyListGroupItem.SetCaption(const AValue: TCaption);
 begin
   if FCaption = AValue then Exit;
   FCaption := AValue;
@@ -458,7 +521,7 @@ begin
   if FCaption <> '' then Result := FCaption else Result := inherited GetDisplayName;
 end;
 
-procedure TTyListGroup.SetCaption(const AValue: string);
+procedure TTyListGroup.SetCaption(const AValue: TCaption);
 begin
   if FCaption = AValue then Exit;
   FCaption := AValue;
@@ -484,7 +547,7 @@ begin
   FItems.Assign(AValue);
 end;
 
-constructor TTyListGroups.Create(APanel: TTyListGroupPanel);
+constructor TTyListGroups.Create(APanel: TTyCustomListGroupPanel);
 begin
   inherited Create(APanel, TTyListGroup);
   FPanel := APanel;
@@ -611,9 +674,9 @@ begin
     end;
 end;
 
-{ ---- TTyListGroupPanel ---- }
+{ ---- TTyCustomListGroupPanel ---- }
 
-constructor TTyListGroupPanel.Create(AOwner: TComponent);
+constructor TTyCustomListGroupPanel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FHeaderHeight := TyListGroupDefaultHeaderHeight;
@@ -630,18 +693,18 @@ begin
   Height := 260;
 end;
 
-destructor TTyListGroupPanel.Destroy;
+destructor TTyCustomListGroupPanel.Destroy;
 begin
   FGroups.Free;
   inherited Destroy;
 end;
 
-procedure TTyListGroupPanel.SetGroups(AValue: TTyListGroups);
+procedure TTyCustomListGroupPanel.SetGroups(AValue: TTyListGroups);
 begin
   FGroups.Assign(AValue);
 end;
 
-procedure TTyListGroupPanel.GroupsChanged;
+procedure TTyCustomListGroupPanel.GroupsChanged;
 begin
   if (FSelGroup >= GroupCount)
     or ((FSelGroup >= 0) and (FSelItem >= ItemCount(FSelGroup))) then
@@ -654,7 +717,7 @@ begin
   Invalidate;
 end;
 
-function TTyListGroupPanel.GetStyleTypeKey: string;
+function TTyCustomListGroupPanel.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyPanel': it already owns its header/item keys; the box it sits in deserves the same reachability.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
@@ -668,17 +731,17 @@ end;
   EffItemHPx); these just evaluate it at the control's own PPI, the PPI mouse coords are in.
   (The earlier bug: paint used the token, these still used FHeaderHeight/FItemHeight, so under a
   skin that sets --listgroup-item-height the two diverged.) }
-function TTyListGroupPanel.ScaledHeaderHeight: Integer;
+function TTyCustomListGroupPanel.ScaledHeaderHeight: Integer;
 begin
   Result := EffHeaderHPx(Font.PixelsPerInch);
 end;
 
-function TTyListGroupPanel.ScaledItemHeight: Integer;
+function TTyCustomListGroupPanel.ScaledItemHeight: Integer;
 begin
   Result := EffItemHPx(Font.PixelsPerInch);
 end;
 
-function TTyListGroupPanel.BuildShapes: TTyListGroupShapes;
+function TTyCustomListGroupPanel.BuildShapes: TTyListGroupShapes;
 var
   g: Integer;
 begin
@@ -690,12 +753,12 @@ begin
   end;
 end;
 
-function TTyListGroupPanel.BuildLayout: TTyListGroupParts;
+function TTyCustomListGroupPanel.BuildLayout: TTyListGroupParts;
 begin
   Result := TyListGroupLayout(BuildShapes, ScaledHeaderHeight, ScaledItemHeight, Width);
 end;
 
-function TTyListGroupPanel.MaxScrollOffset: Integer;
+function TTyCustomListGroupPanel.MaxScrollOffset: Integer;
 var
   contentH, bw: Integer;
 begin
@@ -710,7 +773,7 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-procedure TTyListGroupPanel.ClampScroll;
+procedure TTyCustomListGroupPanel.ClampScroll;
 var
   m: Integer;
 begin
@@ -719,14 +782,14 @@ begin
   if FScrollOffset < 0 then FScrollOffset := 0;
 end;
 
-function TTyListGroupPanel.EffCollapsedWPx(APPI: Integer): Integer;
+function TTyCustomListGroupPanel.EffCollapsedWPx(APPI: Integer): Integer;
 begin
   Result := MulDiv(ActiveController.Metric(TyListGroupCollapsedWidthVar, FCollapsedWidth),
     APPI, 96);
   if Result < 1 then Result := 1;
 end;
 
-function TTyListGroupPanel.EffTriggerHPx(APPI: Integer): Integer;
+function TTyCustomListGroupPanel.EffTriggerHPx(APPI: Integer): Integer;
 begin
   if not FShowCollapseTrigger then Exit(0);
   Result := MulDiv(ActiveController.Metric(TyListGroupTriggerHeightVar,
@@ -734,7 +797,7 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-procedure TTyListGroupPanel.SetCollapsed(AValue: Boolean);
+procedure TTyCustomListGroupPanel.SetCollapsed(AValue: Boolean);
 begin
   if FCollapsed = AValue then Exit;
   FCollapsed := AValue;
@@ -756,7 +819,7 @@ begin
   end;
 end;
 
-procedure TTyListGroupPanel.SetShowCollapseTrigger(AValue: Boolean);
+procedure TTyCustomListGroupPanel.SetShowCollapseTrigger(AValue: Boolean);
 begin
   if FShowCollapseTrigger = AValue then Exit;
   FShowCollapseTrigger := AValue;
@@ -764,7 +827,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyListGroupPanel.SetCollapsedWidth(AValue: Integer);
+procedure TTyCustomListGroupPanel.SetCollapsedWidth(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
   if FCollapsedWidth = AValue then Exit;
@@ -773,7 +836,7 @@ begin
     Width := EffCollapsedWPx(Font.PixelsPerInch);
 end;
 
-procedure TTyListGroupPanel.SetHeaderHeight(AValue: Integer);
+procedure TTyCustomListGroupPanel.SetHeaderHeight(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
   if FHeaderHeight = AValue then Exit;
@@ -782,7 +845,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyListGroupPanel.SetItemHeight(AValue: Integer);
+procedure TTyCustomListGroupPanel.SetItemHeight(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
   if FItemHeight = AValue then Exit;
@@ -791,7 +854,7 @@ begin
   Invalidate;
 end;
 
-function TTyListGroupPanel.AddGroup(const ACaption: string; AImageIndex: Integer): Integer;
+function TTyCustomListGroupPanel.AddGroup(const ACaption: string; AImageIndex: Integer): Integer;
 var
   g: TTyListGroup;
 begin
@@ -807,7 +870,7 @@ begin
   Result := g.Index;
 end;
 
-procedure TTyListGroupPanel.SetImages(AValue: TCustomImageList);
+procedure TTyCustomListGroupPanel.SetImages(AValue: TCustomImageList);
 begin
   if FImages = AValue then Exit;
   if FImages <> nil then FImages.RemoveFreeNotification(Self);
@@ -816,25 +879,25 @@ begin
   Invalidate;
 end;
 
-procedure TTyListGroupPanel.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomListGroupPanel.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FImages) then FImages := nil;
 end;
 
-function TTyListGroupPanel.EffHeaderHPx(APPI: Integer): Integer;
+function TTyCustomListGroupPanel.EffHeaderHPx(APPI: Integer): Integer;
 begin
   Result := MulDiv(ActiveController.Metric(TyListGroupHeaderHeightVar, FHeaderHeight), APPI, 96);
   if Result < 1 then Result := 1;
 end;
 
-function TTyListGroupPanel.EffItemHPx(APPI: Integer): Integer;
+function TTyCustomListGroupPanel.EffItemHPx(APPI: Integer): Integer;
 begin
   Result := MulDiv(ActiveController.Metric(TyListGroupItemHeightVar, FItemHeight), APPI, 96);
   if Result < 1 then Result := 1;
 end;
 
-function TTyListGroupPanel.DrawRowIcon(P: TTyPainter; AX, ATop, ARowH, AIndex: Integer): Integer;
+function TTyCustomListGroupPanel.DrawRowIcon(P: TTyPainter; AX, ATop, ARowH, AIndex: Integer): Integer;
 var
   sz: Integer;
 begin
@@ -848,7 +911,7 @@ begin
   Result := AX + sz + P.Scale(ActiveController.Metric(TyListGroupIconGapVar, TyListGroupDefaultIconGap));
 end;
 
-function TTyListGroupPanel.AddItem(AGroupIndex: Integer; const ACaption: string;
+function TTyCustomListGroupPanel.AddItem(AGroupIndex: Integer; const ACaption: string;
   AImageIndex: Integer): Integer;
 var
   it: TTyListGroupItem;
@@ -865,7 +928,7 @@ begin
   Result := it.Index;
 end;
 
-procedure TTyListGroupPanel.Clear;
+procedure TTyCustomListGroupPanel.Clear;
 begin
   FGroups.Clear;
   FSelGroup := -1;
@@ -876,18 +939,18 @@ begin
   Invalidate;
 end;
 
-function TTyListGroupPanel.GroupCount: Integer;
+function TTyCustomListGroupPanel.GroupCount: Integer;
 begin
   Result := FGroups.Count;
 end;
 
-function TTyListGroupPanel.ItemCount(AGroupIndex: Integer): Integer;
+function TTyCustomListGroupPanel.ItemCount(AGroupIndex: Integer): Integer;
 begin
   if (AGroupIndex < 0) or (AGroupIndex >= FGroups.Count) then Exit(0);
   Result := FGroups[AGroupIndex].Items.Count;
 end;
 
-function TTyListGroupPanel.ItemCaption(AGroupIndex, AItemIndex: Integer): string;
+function TTyCustomListGroupPanel.ItemCaption(AGroupIndex, AItemIndex: Integer): string;
 begin
   Result := '';
   if (AGroupIndex < 0) or (AGroupIndex >= FGroups.Count) then Exit;
@@ -895,7 +958,7 @@ begin
   Result := FGroups[AGroupIndex].Items[AItemIndex].Caption;
 end;
 
-function TTyListGroupPanel.ItemImageIndex(AGroupIndex, AItemIndex: Integer): Integer;
+function TTyCustomListGroupPanel.ItemImageIndex(AGroupIndex, AItemIndex: Integer): Integer;
 begin
   Result := -1;
   if (AGroupIndex < 0) or (AGroupIndex >= FGroups.Count) then Exit;
@@ -903,13 +966,13 @@ begin
   Result := FGroups[AGroupIndex].Items[AItemIndex].ImageIndex;
 end;
 
-function TTyListGroupPanel.GroupExpanded(AGroup: Integer): Boolean;
+function TTyCustomListGroupPanel.GroupExpanded(AGroup: Integer): Boolean;
 begin
   if (AGroup < 0) or (AGroup >= FGroups.Count) then Exit(False);
   Result := FGroups[AGroup].Expanded;
 end;
 
-procedure TTyListGroupPanel.SetGroupExpanded(AGroup: Integer; AValue: Boolean);
+procedure TTyCustomListGroupPanel.SetGroupExpanded(AGroup: Integer; AValue: Boolean);
 begin
   if (AGroup < 0) or (AGroup >= FGroups.Count) then Exit;
   if FGroups[AGroup].Expanded = AValue then Exit;
@@ -919,26 +982,26 @@ begin
   if Assigned(FOnGroupToggle) then FOnGroupToggle(Self, AGroup);
 end;
 
-function TTyListGroupPanel.GetGroupCaption(AGroup: Integer): string;
+function TTyCustomListGroupPanel.GetGroupCaption(AGroup: Integer): string;
 begin
   Result := '';
   if (AGroup < 0) or (AGroup >= FGroups.Count) then Exit;
   Result := FGroups[AGroup].Caption;
 end;
 
-procedure TTyListGroupPanel.SetGroupCaption(AGroup: Integer; const AValue: string);
+procedure TTyCustomListGroupPanel.SetGroupCaption(AGroup: Integer; const AValue: string);
 begin
   if (AGroup < 0) or (AGroup >= FGroups.Count) then Exit;
   FGroups[AGroup].Caption := AValue;    // the setter funnels the repaint
 end;
 
-procedure TTyListGroupPanel.ToggleGroup(AGroupIndex: Integer);
+procedure TTyCustomListGroupPanel.ToggleGroup(AGroupIndex: Integer);
 begin
   if (AGroupIndex < 0) or (AGroupIndex >= GroupCount) then Exit;
   SetGroupExpanded(AGroupIndex, not GroupExpanded(AGroupIndex));
 end;
 
-procedure TTyListGroupPanel.SelectItem(AGroupIndex, AItemIndex: Integer);
+procedure TTyCustomListGroupPanel.SelectItem(AGroupIndex, AItemIndex: Integer);
 var
   valid: Boolean;
 begin
@@ -956,17 +1019,17 @@ begin
   if valid and Assigned(FOnItemClick) then FOnItemClick(Self, AGroupIndex, AItemIndex);
 end;
 
-procedure TTyListGroupPanel.SetSelGroup(AValue: Integer);
+procedure TTyCustomListGroupPanel.SetSelGroup(AValue: Integer);
 begin
   SelectItem(AValue, FSelItem);
 end;
 
-procedure TTyListGroupPanel.SetSelItem(AValue: Integer);
+procedure TTyCustomListGroupPanel.SetSelItem(AValue: Integer);
 begin
   SelectItem(FSelGroup, AValue);
 end;
 
-procedure TTyListGroupPanel.ClearHover;
+procedure TTyCustomListGroupPanel.ClearHover;
 begin
   if (FHoverGroup <> -1) or (FHoverItem <> -1) then
   begin
@@ -976,7 +1039,7 @@ begin
   end;
 end;
 
-procedure TTyListGroupPanel.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomListGroupPanel.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   parts: TTyListGroupParts;
   hit: TTyListGroupHit;
@@ -1021,7 +1084,7 @@ begin
   end;
 end;
 
-procedure TTyListGroupPanel.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomListGroupPanel.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   parts: TTyListGroupParts;
   hit: TTyListGroupHit;
@@ -1053,13 +1116,13 @@ begin
   end;
 end;
 
-procedure TTyListGroupPanel.MouseLeave;
+procedure TTyCustomListGroupPanel.MouseLeave;
 begin
   inherited MouseLeave;
   ClearHover;
 end;
 
-function TTyListGroupPanel.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+function TTyCustomListGroupPanel.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 var
   step, m, old: Integer;
@@ -1080,13 +1143,13 @@ begin
   Result := True;
 end;
 
-procedure TTyListGroupPanel.Resize;
+procedure TTyCustomListGroupPanel.Resize;
 begin
   inherited Resize;
   ClampScroll;
 end;
 
-procedure TTyListGroupPanel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomListGroupPanel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   BoxStyle, HdrStyle, ItemStyle: TTyStyleSet;
@@ -1287,7 +1350,7 @@ begin
   end;
 end;
 
-procedure TTyListGroupPanel.Paint;
+procedure TTyCustomListGroupPanel.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

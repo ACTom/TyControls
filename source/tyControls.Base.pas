@@ -2,10 +2,20 @@ unit tyControls.Base;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LMessages, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, LMessages, LCLType, LCLVersion,
   BGRABitmap, BGRABitmapTypes, BGRAGradientScanner,
   tyControls.Types, tyControls.Controller, tyControls.StyleModel,
   tyControls.Css.Values, tyControls.Painter, tyControls.IconFont;
+const
+  { The PPI every size in this library is WRITTEN at: a theme metric, the Width and Height
+    a constructor gives its control, the numbers a designer stores in a form file. It is
+    also the PPI a control is born at -- see SetParent on TTyGraphicControl. }
+  TyDesignPPI = 96;
+{$IF LCL_FULLVERSION < 4000000}
+  { Same value as LCL 4.0, which added it. Older designers never send it, so a handler
+    for it just stays idle there. }
+  CM_MASKHITTEST = CM_BASE + 89;
+{$ENDIF}
 type
   ITyStyleable = interface
     ['{A1B2C3D4-0001-0002-0003-000000000001}']
@@ -69,7 +79,7 @@ type
   TTyGraphicControl = class(TGraphicControl, ITyStyleable)
   private
     FStyleClass: string;
-    FController: TTyStyleController;
+    FController: TTyCustomStyleController;
     { A9 per-instance StyleOverride: a bare CSS decl block layered on top of the resolved
       theme style. FOvrCache holds the parsed+evaluated set; recomputed only when the text
       or the model's ThemeVersion changes (so var(--...) re-binds on a theme switch). }
@@ -80,14 +90,14 @@ type
     FOvrCacheValid: Boolean;
     procedure SetStyleClass(const AValue: string);
     procedure SetStyleOverride(const AValue: string);
-    procedure SetController(AValue: TTyStyleController);
+    procedure SetController(AValue: TTyCustomStyleController);
   protected
     FHover, FPressed: Boolean;
     FDpiAdjusting: Boolean;
     function _AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function _Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function GetStyleTypeKey: string; virtual; abstract;
-    function ActiveController: TTyStyleController;
+    function ActiveController: TTyCustomStyleController;
     function CurrentStates: TTyStateSet; virtual;
     function CurrentStyle: TTyStyleSet;
     { ===== PER-MONITOR DPI: the size floor (see the twin on TTyCustomControl, and
@@ -181,6 +191,52 @@ type
       through CM_PARENTFONTCHANGED, and TyResolveFontSize ignores Font.Size entirely while
       ParentFont is True -- but see the plan before assuming that stays true. }
     procedure ScaleFontsPPI(const AToPPI: Integer; const AProportion: Double); override;
+    { ===== HiDPI: THE PPI A CONTROL IS BORN AT, AND WHEN IT LEARNS BETTER =========
+      (ACTom/TyControls#2, the second half. Twin on TTyCustomControl.)
+
+      This library scales with Font.PixelsPerInch, and LCL creates every TFont carrying the
+      SCREEN's PPI (font.inc, TFont.Create). Whatever a control works out from that font
+      before somebody corrects it is worked out at the screen's scale -- while the numbers
+      it is applied to are still 96-PPI numbers: the Width and Height its own constructor
+      wrote, the bounds a caller is about to give it, the form it is about to join (a
+      scaled form stays in its design space until TCustomForm.AfterConstruction runs the
+      DPI pass).
+
+      At 96 PPI the two agree and nothing shows. At 175% a button's constructor worked out
+      a 42 px height floor for a box it had just made 30 px tall, LCL clamped the box to
+      42, and the DPI pass then multiplied the CLAMPED box by 1.75: 74 px where 53 was
+      meant. A scroll bar multiplied its 12 px thickness by 1.75 in the constructor and the
+      pass multiplied it again. A form read from a file escaped -- LCL does not clamp while
+      reading and puts every font back at the design PPI when the read is complete
+      (TCustomForm.Loaded, FixDesignFontsPPIWithChildren) -- but whatever CODE created did
+      not, and that includes every internal child a composite builds in its constructor.
+
+      Two rules, and both are what LCL itself does for a form's own font:
+        - a control is BORN in the design space: its font starts at 96, silently
+          (TCustomDesignControl.Create does the same for a scaled form's);
+        - it takes its PARENT's PPI when it is parented. LCL already does that for a
+          ParentFont child (CM_PARENTFONTCHANGED, "PixelsPerInch isn't assigned");
+          SetParent covers the child whose font was touched, which would otherwise sit at
+          96 on a form that was scaled long ago.
+      From there on LCL's DPI pass is the only thing that moves it. }
+    procedure SetParent(AParent: TWinControl); override;
+    { ===== HiDPI: WHICH AXES THE DPI PASS SCALES ON AN AUTO-SIZED CONTROL ========
+      (Twin on TTyCustomControl.)
+
+      LCL's pass leaves an AutoSize control's Width and Height alone, on the grounds that
+      the control is about to re-fit itself at the new PPI (TControl.ShouldAutoAdjust). That
+      is true of an axis AutoSize decides -- and most controls here decide only ONE. A push
+      button, a check box, a toggle switch propose a width and answer 0 for the height,
+      because the height belongs to whoever lays the row out; a wrapping label takes its
+      width as given and works out only how tall that makes it. The axis nobody re-fits was
+      simply never scaled: at 175% an auto-sized button stayed 30 px tall beside 53 px
+      neighbours, and an auto-sized wrapping label kept its 96-PPI width, broke its text
+      into twice the lines and ran into whatever stood below it.
+
+      So the question is put to the control: an axis it has no preferred size on is an
+      axis the pass has to scale. LCL makes the same split by hand for the controls it
+      knows (TCustomEdit and TCustomComboBox scale their width whatever AutoSize says). }
+    procedure ShouldAutoAdjust(var AWidth, AHeight: Boolean); override;
     procedure DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
     { THE POINTER MOVED -- not the model, not the theme, not the layout.
 
@@ -207,85 +263,18 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function GetVersion: string;
-  published
+    { 4.0: published by every final class, not here (LCL TControl publishes none of these).
+      The universal properties (Enabled, Font, OnClick, ...) stay at their LCL visibility;
+      these four are the library's own and live in public. }
     { Read-only library version (TyVersion); the design-time editor for this property opens
       the About dialog. }
     property Version: string read GetVersion;
-    property Enabled;
-    { Visible was never published anywhere in this library, on either base class, so
-      no TTy control could be hidden from the designer or from a .lfm -- only from
-      code. TControl.Visible is public, which is exactly why it went unnoticed: it
-      works everywhere except the one place you look for it. Default True, so it
-      streams only where someone actually hid something. }
-    property Visible;
-    property Font;
-    property Hint;
-    property ShowHint;
-    { Tier A universal events/props (published; dispatch intact via inherited). }
-    property OnClick;
-    property OnDblClick;
-    property OnMouseDown;
-    property OnMouseUp;
-    property OnMouseMove;
-    property OnMouseEnter;
-    property OnMouseLeave;
-    property OnMouseWheel;
-    property OnMouseWheelUp;
-    property OnMouseWheelDown;
-    property OnContextPopup;
-    property OnResize;
-    property OnChangeBounds;
-    { AutoSize, republished. 21 controls here already override CalculatePreferredSize --
-      the whole point of which is to answer "how big do I want to be" -- and TControl's
-      AutoSize is what asks. It was reachable from code and absent from the designer, so
-      the measurement work was done and could not be switched on where forms are built.
-      Default False, so no existing form changes; a control that does NOT implement a
-      preferred size simply keeps its bounds, exactly as in the LCL. }
-    property AutoSize;
-    { Drag-and-drop, republished. Every one of these is a TControl member with the
-      dispatch already implemented by the LCL -- DragMode := dmAutomatic and
-      OnDragOver/OnDragDrop work on a self-drawn control exactly as on a native one,
-      because dragging is decided above the paint layer. They were simply never
-      republished on either base class, so NO control in this library could be made a
-      drag source or a drop target from the designer or a .lfm. Like Visible, the gap
-      was invisible from the code side: TControl declares them public, so
-      `Ctl.DragMode := dmAutomatic` always compiled. It was the Object Inspector and
-      the streamed form that had nothing. }
-    property DragMode;
-    property DragKind;
-    property DragCursor;
-    property OnDragOver;
-    property OnDragDrop;
-    property OnStartDrag;
-    property OnEndDrag;
-    { Horizontal / tilt wheel. The vertical three were already here; these are what a
-      side-scrolling control (a non-wrapping memo, a wide grid, a long header strip) is
-      driven by, and a tilt wheel or a trackpad's horizontal gesture arrives through
-      them and nowhere else. }
-    property OnMouseWheelHorz;
-    property OnMouseWheelLeft;
-    property OnMouseWheelRight;
-    { Per-instance hint customisation -- the seam for a row-dependent tooltip, which is
-      the only way to say "this hint depends on what the pointer is over". }
-    property OnShowHint;
-    property PopupMenu;
-    property Constraints;
-    property BorderSpacing;
-    property Cursor;
-    property ParentShowHint;
-    property Action;
-    { Fired AFTER the control has finished drawing itself, with the control's own Canvas --
-      the seam for one badge, one overlay, one debug rectangle, without subclassing. It is
-      NOT an owner-draw replacement: the themed control is already on the canvas when the
-      handler runs, and the handler draws over it. Ordering is the whole property, and it is
-      why the fire site is WMPaint rather than Paint -- see the body. }
-    property OnPaint;
     property StyleClass: string read FStyleClass write SetStyleClass;
     { A9: a per-instance CSS declaration block (e.g. 'border-color: var(--accent);')
       applied on top of the theme for THIS control only. May reference var(--...) tokens,
       which resolve against the active theme. A malformed value is skipped, never fatal. }
     property StyleOverride: string read FStyleOverride write SetStyleOverride;
-    property Controller: TTyStyleController read FController write SetController;
+    property Controller: TTyCustomStyleController read FController write SetController;
   end;
 
   TTyCustomControl = class(TCustomControl, ITyStyleable)
@@ -295,7 +284,7 @@ type
     FInEraseRefresh: Boolean;
     {$ENDIF}
     FStyleClass: string;
-    FController: TTyStyleController;
+    FController: TTyCustomStyleController;
     { A9 per-instance StyleOverride (mirrors the TTyGraphicControl twin — the two base
       classes share no ancestor, so the field + setter + cache are duplicated). }
     FStyleOverride: string;
@@ -308,11 +297,11 @@ type
   protected
     FHover, FPressed: Boolean;
     FDpiAdjusting: Boolean;
-    procedure SetController(AValue: TTyStyleController); virtual;
+    procedure SetController(AValue: TTyCustomStyleController); virtual;
     function _AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function _Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function GetStyleTypeKey: string; virtual; abstract;
-    function ActiveController: TTyStyleController;
+    function ActiveController: TTyCustomStyleController;
     function CurrentStates: TTyStateSet; virtual;
     function CurrentStyle: TTyStyleSet;
     { ===== PER-MONITOR DPI: the size floor ===================================
@@ -328,14 +317,27 @@ type
       const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer); override;
     { The SECOND latch. Twin of the one on TTyGraphicControl -- read it there. }
     procedure ScaleFontsPPI(const AToPPI: Integer; const AProportion: Double); override;
+    { Born in the design space, the parent's PPI on parenting. Twin of the one on
+      TTyGraphicControl -- read it there. }
+    procedure SetParent(AParent: TWinControl); override;
+    { The axes AutoSize does not decide are scaled by the DPI pass. Twin of the one on
+      TTyGraphicControl -- read it there. }
+    procedure ShouldAutoAdjust(var AWidth, AHeight: Boolean); override;
     {$IFDEF LCLGTK3}
     { LCL-GTK3 is the only widgetset that never clears a damaged region -- see the body. This
       hands its remaining clear a colour to work with, ONCE per theme change. }
     procedure RefreshGtk3EraseColor;
+    {$ENDIF}
+    { 这个子控件在自己的矩形上**替父控件画了一截框**(边框、焦点环、父控件的底色)。
+      答 True 的子控件在父控件 Invalidate 时跟着重画 —— 父控件的框变了(获得焦点出了焦点环、
+      悬停换了边框色、禁用、换 StyleClass),而窗口化子控件那块矩形父控件自己画不进去,
+      不跟着重画就会留着上一帧的框。默认 False。今天只有贴边的内嵌滚动条答 True。 }
+    function PaintsParentFrame: Boolean; virtual;
   public
+    { 见 PaintsParentFrame:父控件的框一变,替它画框的子控件一起重画。GTK3 下还要先给
+      擦除色一次机会(见 RefreshGtk3EraseColor)。 }
     procedure Invalidate; override;
   protected
-    {$ENDIF}
     function ResolveFontSize(const AStyle: TTyStyleSet): Integer;
     procedure DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
     { Paint ARect with the form's sharp photo slice ONLY when an image-backed glass
@@ -362,103 +364,18 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function GetVersion: string;
-  published
+    { 4.0: published by every final class, not here (LCL TControl publishes none of these).
+      The universal properties (Enabled, Font, OnClick, ...) stay at their LCL visibility;
+      these four are the library's own and live in public. }
     { Read-only library version (TyVersion); the design-time editor for this property opens
       the About dialog. }
     property Version: string read GetVersion;
-    property Enabled;
-    { Visible was never published anywhere in this library, on either base class, so
-      no TTy control could be hidden from the designer or from a .lfm -- only from
-      code. TControl.Visible is public, which is exactly why it went unnoticed: it
-      works everywhere except the one place you look for it. Default True, so it
-      streams only where someone actually hid something. }
-    property Visible;
-    property Font;
-    property Hint;
-    property ShowHint;
-    property TabOrder;
-    property TabStop;
-    { Tier A universal events/props (published; dispatch intact via inherited). }
-    property OnClick;
-    property OnDblClick;
-    property OnMouseDown;
-    property OnMouseUp;
-    property OnMouseMove;
-    property OnMouseEnter;
-    property OnMouseLeave;
-    property OnMouseWheel;
-    property OnMouseWheelUp;
-    property OnMouseWheelDown;
-    property OnContextPopup;
-    property OnResize;
-    property OnChangeBounds;
-    { AutoSize, republished. 21 controls here already override CalculatePreferredSize --
-      the whole point of which is to answer "how big do I want to be" -- and TControl's
-      AutoSize is what asks. It was reachable from code and absent from the designer, so
-      the measurement work was done and could not be switched on where forms are built.
-      Default False, so no existing form changes; a control that does NOT implement a
-      preferred size simply keeps its bounds, exactly as in the LCL. }
-    property AutoSize;
-    { Container geometry, republished for the windowed base only -- both are TWinControl
-      members and meaningless on a graphic control that hosts nothing.
-      BorderWidth insets the child area; ChildSizing is the LCL's per-container child
-      layout engine (Layout, ControlsPerLine, the spacings, EnlargeHorizontal and friends),
-      already fully implemented in TWinControl's align pass. Neither was published, so a
-      TTy container could not be given either from the designer. }
-    property BorderWidth;
-    property ChildSizing;
-    { Drag-and-drop, republished. Every one of these is a TControl member with the
-      dispatch already implemented by the LCL -- DragMode := dmAutomatic and
-      OnDragOver/OnDragDrop work on a self-drawn control exactly as on a native one,
-      because dragging is decided above the paint layer. They were simply never
-      republished on either base class, so NO control in this library could be made a
-      drag source or a drop target from the designer or a .lfm. Like Visible, the gap
-      was invisible from the code side: TControl declares them public, so
-      `Ctl.DragMode := dmAutomatic` always compiled. It was the Object Inspector and
-      the streamed form that had nothing. }
-    property DragMode;
-    property DragKind;
-    property DragCursor;
-    property OnDragOver;
-    property OnDragDrop;
-    property OnStartDrag;
-    property OnEndDrag;
-    { Horizontal / tilt wheel. The vertical three were already here; these are what a
-      side-scrolling control (a non-wrapping memo, a wide grid, a long header strip) is
-      driven by, and a tilt wheel or a trackpad's horizontal gesture arrives through
-      them and nowhere else. }
-    property OnMouseWheelHorz;
-    property OnMouseWheelLeft;
-    property OnMouseWheelRight;
-    { Per-instance hint customisation -- the seam for a row-dependent tooltip, which is
-      the only way to say "this hint depends on what the pointer is over". }
-    property OnShowHint;
-    property PopupMenu;
-    property Constraints;
-    property BorderSpacing;
-    property Cursor;
-    property ParentShowHint;
-    property Action;
-    { Fired AFTER the control has finished drawing itself, with the control's own Canvas.
-      Same contract as the graphic base's -- see there. On a CACHED container (TTyPanel and
-      friends) the handler runs after the cache blit, so its output is never baked into the
-      cache: a child's damage still costs a blit, and the overlay is still redrawn on top of
-      it. That is the reason the hook is outside RenderTo and not merely after EndPaint. }
-    property OnPaint;
-    { Tier B focusable events (TWinControl-declared; custom control only). }
-    property OnKeyDown;
-    property OnKeyUp;
-    property OnKeyPress;
-    property OnUTF8KeyPress;
-    property OnEnter;
-    property OnExit;
-    property OnEditingDone;
     property StyleClass: string read FStyleClass write SetStyleClass;
     { A9: per-instance CSS declaration block applied on top of the theme for THIS control
       only. May reference var(--...) tokens (resolved against the active theme); a
       malformed value is skipped, never fatal. }
     property StyleOverride: string read FStyleOverride write SetStyleOverride;
-    property Controller: TTyStyleController read FController write SetController;
+    property Controller: TTyCustomStyleController read FController write SetController;
   end;
 
 { Shared font-size resolution for every ty control (windowed AND graphic — the label family
@@ -474,7 +391,7 @@ type
   the skin load (vars merge separately), and ty controls are theme-locked, so their size follows
   the theme, not the inherited system font. (Headless masks the bug: rootless Font.Size is 0.) }
 function TyResolveFontSize(const AStyle: TTyStyleSet; AParentFont: Boolean;
-  AControlFontSize: Integer; AController: TTyStyleController): Integer;
+  AControlFontSize: Integer; AController: TTyCustomStyleController): Integer;
 
 { Resolve the background a windowed child should composite onto (it does not inherit its
   parent's painted bg, so corner-gaps / transparent fills would otherwise show the child's
@@ -525,16 +442,16 @@ procedure TyApplyStyleOpacity(AControl: TControl; APainter: TTyPainter;
   DEDICATED slot from a size token: 4+4 (+1 for the inclusive right edge) eats 9 logical px, so
   a 12px slot leaves a 3px mark — an unreadable smudge, not an arrow. Such callers pass a small
   pad so the slot's token size means the MARK's size. ~12px is otherwise the practical floor. }
-procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
+procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyCustomStyleController;
   const ARect: TRect; const ATokenName: string; AVectorKind: TTyGlyphKind;
   AColor: TTyColor; AThickness: Integer; APadLogical: Integer = 4); overload;
-procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
+procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyCustomStyleController;
   const ARect: TRect; AVectorKind: TTyGlyphKind; AColor: TTyColor; AThickness: Integer;
   APadLogical: Integer = 4); overload;
 { v3/C5. Try to draw a theme glyph override into ARect; True = drawn (icon path), False =
   unset/malformed so the CALLER draws its own default (used where the default isn't a plain
   vector kind, e.g. the drop chevron). And the canonical token for a vector kind. }
-function TyTryDrawGlyphOverride(APainter: TTyPainter; AController: TTyStyleController;
+function TyTryDrawGlyphOverride(APainter: TTyPainter; AController: TTyCustomStyleController;
   const ARect: TRect; const ATokenName: string; AColor: TTyColor): Boolean;
 function TyGlyphKindToken(AKind: TTyGlyphKind): string;
 { The largest CENTRED SQUARE inside ARect. A spinner's button half is wide and short (18 x 14
@@ -548,7 +465,7 @@ function TySquareGlyphBox(const ARect: TRect): TRect;
   read from --glyph-chevron-size in ONE place rather than at nine call sites; it was a literal
   default on TTyPainter.DrawDropChevron that no caller overrode, which made it the only visual
   value in this path a skin or a density axis could not reach. }
-procedure TyDrawDropChevron(APainter: TTyPainter; AController: TTyStyleController;
+procedure TyDrawDropChevron(APainter: TTyPainter; AController: TTyCustomStyleController;
   const AZoneRect: TRect; AColor: TTyColor);
 
 { Contextual styling for a control hosted ON a title bar. A title bar is a container, and
@@ -564,6 +481,53 @@ function TyOnTitleBar(AControl: TControl): Boolean;
   a title bar stays a ghost button and only its ink moves. A theme that says nothing about
   .on-titlebar is unaffected: the variant matches no rule. }
 function TyStyleClassFor(AControl: TControl; const AStyleClass: string): string;
+
+{ 边框 + 焦点环占掉的那一圈有多宽,单位是逻辑像素(还没按 DPI 缩放),没有 chrome 时是 0。
+
+  DrawFrame 把边框和焦点环都画在控件矩形的**最外**一圈:边框占 [Left, Left+BorderWidth],
+  焦点环占 [Left+OutlineOffset, +OutlineWidth],所以这条带的内沿是两者中较大的那个(取全宽,
+  两者都画在边内侧)。再 +1 是抗锯齿留量:实测 1px 的边会把墨落到**两列**上(160 宽的控件
+  里 x=158 和 159 都变了色),只让开 1 列照样会被压掉一层。
+
+  用它的是内容(行/格):内容不许画到这条带上 —— 否则悬停或选中的填充会染到边框抗锯齿的
+  内沿,那一段边框跟着变色。
+
+  它**不再**决定内嵌滚动条摆在哪。那条路走过两回(先按这条带内缩、再为圆角把两端各截掉
+  几像素),真机的结论是「条飘着的,感觉不够紧凑」:只要前提是「把条的窗口缩小去躲边框」,
+  圆角上就一定得截短条。现在条贴边摆,由条自己把宿主的边框画回它盖住的那几个像素上 ——
+  见 TyDrawFrameChrome 和 TTyScrollBar.RenderTo。
+
+  传进来的是**状态解析后**的样式,所以宿主获得焦点时这个数会大一档(焦点环比边框宽):让开
+  的正好是当下真画出来的那一圈。 }
+function TyChromeInsetLogical(const AStyle: TTyStyleSet): Integer;
+
+{ ======================= DrawFrame,拆成可以「替别人画」的三段 =======================
+  TTyCustomControl.DrawFrame 就是这三段按顺序调一遍(再加一句 TyApplyStyleOpacity),
+  所以它们与 DrawFrame 不会各长各的。
+
+  拆开是为了**贴边的内嵌滚动条**:条是窗口化子控件,它那块矩形上宿主一个像素都画不进去,
+  于是条要自己把「宿主在这几个像素上本来是什么样」画出来 —— 底下是宿主背后的背景和宿主
+  自己的底色,中间是条身,最上面是宿主的边框和焦点环。条的坐标系里,宿主的矩形是
+  Rect(-Left, -Top, 宿主宽 - Left, 宿主高 - Top),大半落在条的位图外面,画的时候自然被裁掉。
+
+  三段都**只拿样式和矩形说话**,不读 Self 的 RTL/DPI/半径:DPI 在画笔上,半径在样式上。
+  唯一需要一个控件的地方是「宿主背后是什么」,由调用方显式传进来。 }
+
+{ TyFillParentBg 的一般形式:ARect 在 AControl 自己的坐标系里,画到画笔坐标系的
+  ARect + AOrigin 上。AOrigin = (0,0) 时与 TyFillParentBg 一字不差(后者就是这么调的)。
+  子控件替宿主铺背景时,AControl 是**宿主**、AOrigin 是宿主原点在子控件画笔里的位置
+  (-子.Left, -子.Top)—— 这样渐变父背景给出的是宿主那一片的切片,图片主题取样的是宿主
+  在窗体上的偏移,都不会因为「是子控件在画」而错位。 }
+procedure TyFillParentBgAt(AControl: TControl; APainter: TTyPainter; const ARect: TRect;
+  const AOrigin: TPoint; const AStyle: TTyStyleSet);
+{ DrawFrame 铺在内容**下面**的那一段:阴影 + 背景填充(render-style 展开之后的)。
+  不含父背景、不含 opacity。 }
+procedure TyDrawFrameUnderlay(APainter: TTyPainter; const ARect: TRect;
+  const AStyle: TTyStyleSet);
+{ DrawFrame 盖在内容**上面**的那一段:边框(含 3D 斜面)、有阴影时补四个角外的缺口、
+  焦点环。AOwner 只用来回答「角外缺口铺什么色」—— 传框的主人(宿主),不是替它画的子控件。 }
+procedure TyDrawFrameChrome(AOwner: TControl; APainter: TTyPainter; const ARect: TRect;
+  const AStyle: TTyStyleSet);
 
 implementation
 
@@ -590,13 +554,83 @@ begin
   else Result := Result + ' on-titlebar';
 end;
 
+function TyChromeInsetLogical(const AStyle: TTyStyleSet): Integer;
+begin
+  Result := AStyle.BorderWidth;
+  if Result < 0 then Result := 0;
+  if (tpOutline in AStyle.Present) and (AStyle.OutlineWidth > 0) then
+    if AStyle.OutlineOffset + AStyle.OutlineWidth > Result then
+      Result := AStyle.OutlineOffset + AStyle.OutlineWidth;
+  if Result > 0 then Inc(Result);   { 抗锯齿留量;完全没有 chrome 就一寸都不让 }
+end;
+
 
 { TTyGraphicControl }
+
+{ Put a just-created control's font in the design space WITHOUT telling anyone: with the
+  handler off there is no FontChanged, so ParentFont keeps its default and nothing is
+  invalidated or measured on the way. The height is still 0 ("no size chosen") this early,
+  so there is nothing for the PPI change to rescale either. }
+procedure TyBornAtDesignPPI(AFont: TFont);
+var
+  saved: TNotifyEvent;
+begin
+  if AFont.PixelsPerInch = TyDesignPPI then Exit;
+  saved := AFont.OnChange;
+  AFont.OnChange := nil;
+  try
+    AFont.PixelsPerInch := TyDesignPPI;
+  finally
+    AFont.OnChange := saved;
+  end;
+end;
+
+{ The PPI a child should take from AParent on being parented, or 0 for "leave it".
+  Not while reading: a form file's controls are all put at the design PPI by
+  TCustomForm.Loaded, in one go, and a parent met half-way through the read may not have
+  been yet. }
+function TyParentPPIToAdopt(AChild: TControl; AParent: TWinControl): Integer;
+begin
+  Result := 0;
+  if AParent = nil then Exit;
+  if AChild.ComponentState * [csLoading, csReading, csDestroying] <> [] then Exit;
+  if AParent.Font.PixelsPerInch <= 0 then Exit;
+  if AParent.Font.PixelsPerInch = AChild.Font.PixelsPerInch then Exit;
+  Result := AParent.Font.PixelsPerInch;
+end;
 
 constructor TTyGraphicControl.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  TyBornAtDesignPPI(Font);     // see SetParent's declaration
   ActiveController.RegisterStyleable(Self);
+end;
+
+procedure TTyGraphicControl.SetParent(AParent: TWinControl);
+var
+  ppi: Integer;
+begin
+  inherited SetParent(AParent);
+  { A ParentFont child has its parent's PPI already -- TWinControl.InsertControl sent it
+    CM_PARENTFONTCHANGED -- so this only ever acts on a child whose font was touched. }
+  ppi := TyParentPPIToAdopt(Self, AParent);
+  if ppi > 0 then
+    Font.PixelsPerInch := ppi;
+end;
+
+procedure TTyGraphicControl.ShouldAutoAdjust(var AWidth, AHeight: Boolean);
+var
+  pw, ph: Integer;
+begin
+  inherited ShouldAutoAdjust(AWidth, AHeight);     // both: not AutoSize
+  if not AutoSize then Exit;
+  { Only whether there IS an opinion is read, never what it says, so it does not matter
+    that the font is half-way through the pass when this is asked. }
+  pw := 0;
+  ph := 0;
+  CalculatePreferredSize(pw, ph, True);
+  if pw <= 0 then AWidth := True;
+  if ph <= 0 then AHeight := True;
 end;
 
 function TTyGraphicControl.GetVersion: string;
@@ -641,7 +675,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyGraphicControl.SetController(AValue: TTyStyleController);
+procedure TTyGraphicControl.SetController(AValue: TTyCustomStyleController);
 begin
   if FController = AValue then Exit;
   { Unregister from current active controller and remove free-notification }
@@ -667,7 +701,7 @@ begin
     FController := nil;
 end;
 
-function TTyGraphicControl.ActiveController: TTyStyleController;
+function TTyGraphicControl.ActiveController: TTyCustomStyleController;
 begin
   if FController <> nil then
     Result := FController
@@ -1096,7 +1130,7 @@ end;
 function TyThemedFormGradient(AChild: TControl; const APR, ACR: TRect;
   out AFill: TTyFill): Boolean;
 var
-  ctrl: TTyStyleController;
+  ctrl: TTyCustomStyleController;
   st: TTyStyleSet;
 begin
   Result := False;
@@ -1296,12 +1330,23 @@ end;
 
 procedure TyFillParentBg(AControl: TControl; APainter: TTyPainter; const ARect: TRect;
   const AStyle: TTyStyleSet);
+begin
+  TyFillParentBgAt(AControl, APainter, ARect, Point(0, 0), AStyle);
+end;
+
+procedure TyFillParentBgAt(AControl: TControl; APainter: TTyPainter; const ARect: TRect;
+  const AOrigin: TPoint; const AStyle: TTyStyleSet);
 var
   host: ITyGlassHost;
   off: TPoint;
-  c: TTyColor;
   f: TTyFill;
+  dst: TRect;
 begin
+  { ARect 说的是「AControl 的哪一片」,dst 说的是「画到画笔的哪儿」。两者从前是同一个矩形,
+    只有替别人画(内嵌条替宿主铺背景)时才分开;AOrigin = (0,0) 时下面每一句都与原来一字
+    不差。 }
+  dst := Rect(ARect.Left + AOrigin.X, ARect.Top + AOrigin.Y,
+              ARect.Right + AOrigin.X, ARect.Bottom + AOrigin.Y);
   if TyResolveGlassHost(AControl, host, off) then
   begin
     // Image-backed form: the SHARP photo slice is the opaque base for EVERY control,
@@ -1309,20 +1354,21 @@ begin
     // fill. Glass controls then get the round-clipped blurred pane + tint on top.
     // ARect may be a sub-rect (group-box frame below its caption, tab content frame
     // below the header), so fold its origin into the backdrop sample — the painter
-    // puts ASrcOffset at FBmp(ARect.Left,ARect.Top), and FBmp(cx,cy) must show
-    // backdrop(off.X+cx, off.Y+cy) for the photo to stay seamless across the frame.
-    APainter.FillImageSlice(ARect, host.GlassSharpBackdrop,
+    // puts ASrcOffset at FBmp(dst.Left,dst.Top), and that pixel must show
+    // backdrop(off.X+ARect.Left, off.Y+ARect.Top) for the photo to stay seamless.
+    APainter.FillImageSlice(dst, host.GlassSharpBackdrop,
       Point(off.X + ARect.Left, off.Y + ARect.Top));
     if tpGlass in AStyle.Present then
-      APainter.FillGlass(ARect, host.GlassBackdrop,
+      APainter.FillGlass(dst, host.GlassBackdrop,
         Point(off.X + ARect.Left, off.Y + ARect.Top),
         AStyle.Background.GlassTint, TyEffectiveCorners(AStyle));
   end
-  { Not the single-colour resolver: the fill comes back already re-expressed in THIS rect's
+  { Not the single-colour resolver: the fill comes back already re-expressed in ARect's
     space, so a gradient parent hands down the slice of its sweep that ARect covers instead
-    of one representative colour smeared flat across it. }
+    of one representative colour smeared flat across it. A gradient resolves against the
+    rect it is FILLED into, and dst is ARect moved, not resized -- so the slice is the same. }
   else if TyResolveParentBgFill(AControl, ARect, f) then
-    APainter.FillBackground(ARect, f, 0);
+    APainter.FillBackground(dst, f, 0);
 end;
 
 procedure TyApplyStyleOpacity(AControl: TControl; APainter: TTyPainter;
@@ -1352,7 +1398,7 @@ begin
     APainter.DrawEdge(ARect, AStyle.BorderWidth, light, dark);  // raised (outset): TL light, BR dark
 end;
 
-function TyTryDrawGlyphOverride(APainter: TTyPainter; AController: TTyStyleController;
+function TyTryDrawGlyphOverride(APainter: TTyPainter; AController: TTyCustomStyleController;
   const ARect: TRect; const ATokenName: string; AColor: TTyColor): Boolean;
 { v3/C5 core. If the theme sets ATokenName to a valid glyph override, render that icon-font
   glyph into ARect and return True (honoured even if it renders blank — the theme asked for
@@ -1410,10 +1456,10 @@ begin
   end;
 end;
 
-procedure TyDrawDropChevron(APainter: TTyPainter; AController: TTyStyleController;
+procedure TyDrawDropChevron(APainter: TTyPainter; AController: TTyCustomStyleController;
   const AZoneRect: TRect; AColor: TTyColor);
 var
-  ctrl: TTyStyleController;
+  ctrl: TTyCustomStyleController;
 begin
   if AController <> nil then ctrl := AController else ctrl := TyDefaultController;
   APainter.DrawDropChevron(AZoneRect, AColor,
@@ -1434,7 +1480,7 @@ begin
   Result := Rect(ARect.Left + dx, ARect.Top + dy, ARect.Left + dx + s, ARect.Top + dy + s);
 end;
 
-procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
+procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyCustomStyleController;
   const ARect: TRect; const ATokenName: string; AVectorKind: TTyGlyphKind;
   AColor: TTyColor; AThickness: Integer; APadLogical: Integer = 4);
 begin
@@ -1444,7 +1490,7 @@ begin
     APainter.DrawGlyph(ARect, AVectorKind, AColor, AThickness, APadLogical);
 end;
 
-procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
+procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyCustomStyleController;
   const ARect: TRect; AVectorKind: TTyGlyphKind; AColor: TTyColor; AThickness: Integer;
   APadLogical: Integer = 4);
 { v3/C5. Convenience: the override token is derived from the kind (--glyph-<kind>). }
@@ -1479,6 +1525,62 @@ begin
     Include(AStyle.Present, tpBorderColor);
   end;
   ACorners := TyUniformCorners(0);   // 3D bevels are square
+end;
+
+procedure TyDrawFrameUnderlay(APainter: TTyPainter; const ARect: TRect;
+  const AStyle: TTyStyleSet);
+var
+  corners: TTyCorners;
+  effStyle: TTyStyleSet;
+begin
+  if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0) then
+    APainter.DropShadow(ARect, AStyle.BorderRadius, AStyle.ShadowColor, AStyle.ShadowBlur, AStyle.ShadowOffset);
+  corners := TyEffectiveCorners(AStyle);
+  effStyle := AStyle;
+  TyApplyRenderStyle(effStyle, corners);   // v3/D: expand a render-style family preset
+  if tpBackground in effStyle.Present then
+    APainter.FillBackground(ARect, effStyle.Background, corners);
+end;
+
+procedure TyDrawFrameChrome(AOwner: TControl; APainter: TTyPainter; const ARect: TRect;
+  const AStyle: TTyStyleSet);
+var
+  corners, ringCorners: TTyCorners;
+  off: Integer;
+  ringRect: TRect;
+  pc: TTyColor;
+  gHost: ITyGlassHost;
+  gOff: TPoint;
+  effStyle: TTyStyleSet;
+begin
+  corners := TyEffectiveCorners(AStyle);
+  effStyle := AStyle;
+  TyApplyRenderStyle(effStyle, corners);   // the same expansion the underlay saw
+  if TyBorderVisible(effStyle) then
+    if effStyle.BorderStyle in [tbsOutset, tbsInset] then
+      TyDrawBevelBorder(APainter, ARect, effStyle)   // v3/B2 two-tone 3D bevel
+    else
+      APainter.StrokeBorder(ARect, corners, effStyle.BorderWidth, effStyle.BorderColor);
+  // A windowed control paints into its own opaque bitmap, so a drop shadow's blur bleeds
+  // into the corner gaps OUTSIDE the rounded background — it can't cast onto the parent, so
+  // it just leaves a dirty patch there. Re-paint those gaps with the flat parent background
+  // to keep the rounded silhouette clean. Only when there IS a shadow + a solid (non-glass)
+  // parent — the glass path already shows the form photo through the corners. (The shadow
+  // INSIDE the rounded shape, e.g. a checkbox box, is untouched.)
+  if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0)
+     and not TyResolveGlassHost(AOwner, gHost, gOff) and TyResolveParentBg(AOwner, pc) then
+    APainter.FillCornerGaps(ARect, corners, pc);
+  // Focus ring: only present when a ':focus { outline: ... }' rule resolved.
+  if (tpOutline in AStyle.Present) and (AStyle.OutlineWidth > 0) then
+  begin
+    off := APainter.Scale(AStyle.OutlineOffset);
+    ringRect := Rect(ARect.Left + off, ARect.Top + off, ARect.Right - off, ARect.Bottom - off);
+    ringCorners.TL := corners.TL - AStyle.OutlineOffset; if ringCorners.TL < 0 then ringCorners.TL := 0;
+    ringCorners.TR := corners.TR - AStyle.OutlineOffset; if ringCorners.TR < 0 then ringCorners.TR := 0;
+    ringCorners.BR := corners.BR - AStyle.OutlineOffset; if ringCorners.BR < 0 then ringCorners.BR := 0;
+    ringCorners.BL := corners.BL - AStyle.OutlineOffset; if ringCorners.BL < 0 then ringCorners.BL := 0;
+    APainter.StrokeBorder(ringRect, ringCorners, AStyle.OutlineWidth, AStyle.OutlineColor);
+  end;
 end;
 
 procedure TTyGraphicControl.DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
@@ -1605,11 +1707,37 @@ end;
 constructor TTyCustomControl.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  TyBornAtDesignPPI(Font);     // see SetParent's declaration on TTyGraphicControl
   // Render to one offscreen buffer and blit once: eliminates the background-erase
   // flash on every repaint (notably the 530ms caret-blink Invalidate). Pixel output
   // is unchanged; only the on-screen WMPaint path is affected (RenderTo bypasses it).
   DoubleBuffered := True;
   ActiveController.RegisterStyleable(Self);
+end;
+
+procedure TTyCustomControl.SetParent(AParent: TWinControl);
+var
+  ppi: Integer;
+begin
+  inherited SetParent(AParent);
+  // See the TTyGraphicControl twin.
+  ppi := TyParentPPIToAdopt(Self, AParent);
+  if ppi > 0 then
+    Font.PixelsPerInch := ppi;
+end;
+
+procedure TTyCustomControl.ShouldAutoAdjust(var AWidth, AHeight: Boolean);
+var
+  pw, ph: Integer;
+begin
+  // See the TTyGraphicControl twin.
+  inherited ShouldAutoAdjust(AWidth, AHeight);
+  if not AutoSize then Exit;
+  pw := 0;
+  ph := 0;
+  CalculatePreferredSize(pw, ph, True);
+  if pw <= 0 then AWidth := True;
+  if ph <= 0 then AHeight := True;
 end;
 
 function TTyCustomControl.GetVersion: string;
@@ -1654,13 +1782,38 @@ begin
   Invalidate;
 end;
 
-{$IFDEF LCLGTK3}
-procedure TTyCustomControl.Invalidate;
+function TTyCustomControl.PaintsParentFrame: Boolean;
 begin
-  RefreshGtk3EraseColor;
-  inherited Invalidate;
+  Result := False;
 end;
 
+procedure TTyCustomControl.Invalidate;
+var
+  i: Integer;
+  c: TControl;
+begin
+  {$IFDEF LCLGTK3}
+  RefreshGtk3EraseColor;
+  {$ENDIF}
+  inherited Invalidate;
+  { 替本控件画了一截框的子控件跟着重画。为什么挂在 Invalidate 上、而不是挂在「获得焦点」
+    「悬停」这几个事件上:框会变的理由有一长串(焦点、悬停、按下、禁用、StyleClass、
+    StyleOverride、换 controller),它们**全部**以一句 Invalidate 收尾,这是唯一不会漏掉
+    其中某一个的地方。逐个事件去接,漏一个就是「焦点环在条那一段没出来」,而无头测试
+    看不见窗口重画,漏了也是绿的。
+
+    开销:没有子控件的控件(绝大多数)在 ControlCount 上就出去了;有子控件的每个只多一次
+    类型判断和一次虚调用。条的重画本身很小(一条 12px 宽的位图)。 }
+  if csDestroying in ComponentState then Exit;
+  for i := 0 to ControlCount - 1 do
+  begin
+    c := Controls[i];
+    if c.Visible and (c is TTyCustomControl) and TTyCustomControl(c).PaintsParentFrame then
+      c.Invalidate;
+  end;
+end;
+
+{$IFDEF LCLGTK3}
 procedure TTyCustomControl.RefreshGtk3EraseColor;
 var
   st: TTyStyleSet;
@@ -1708,7 +1861,7 @@ begin
 end;
 {$ENDIF}
 
-procedure TTyCustomControl.SetController(AValue: TTyStyleController);
+procedure TTyCustomControl.SetController(AValue: TTyCustomStyleController);
 begin
   if FController = AValue then Exit;
   { Unregister from current active controller and remove free-notification }
@@ -1734,7 +1887,7 @@ begin
     FController := nil;
 end;
 
-function TTyCustomControl.ActiveController: TTyStyleController;
+function TTyCustomControl.ActiveController: TTyCustomStyleController;
 begin
   if FController <> nil then
     Result := FController
@@ -1826,7 +1979,7 @@ begin
 end;
 
 function TyResolveFontSize(const AStyle: TTyStyleSet; AParentFont: Boolean;
-  AControlFontSize: Integer; AController: TTyStyleController): Integer;
+  AControlFontSize: Integer; AController: TTyCustomStyleController): Integer;
 var
   base: Integer;
 begin
@@ -1851,49 +2004,13 @@ begin
 end;
 
 procedure TTyCustomControl.DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
-var
-  corners, ringCorners: TTyCorners;
-  off: Integer;
-  ringRect: TRect;
-  pc: TTyColor;
-  gHost: ITyGlassHost;
-  gOff: TPoint;
-  effStyle: TTyStyleSet;
 begin
+  { 与拆开之前一步不差:父背景 -> opacity -> 阴影+底色 -> 边框 -> 角外缺口 -> 焦点环。
+    拆成三段是为了让贴边的内嵌滚动条能把**同一份**框画在自己那块矩形上(见声明处)。 }
   TyFillParentBg(Self, APainter, ARect, AStyle);
   TyApplyStyleOpacity(Self, APainter, AStyle);
-  if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0) then
-    APainter.DropShadow(ARect, AStyle.BorderRadius, AStyle.ShadowColor, AStyle.ShadowBlur, AStyle.ShadowOffset);
-  corners := TyEffectiveCorners(AStyle);
-  effStyle := AStyle;
-  TyApplyRenderStyle(effStyle, corners);   // v3/D: expand a render-style family preset
-  if tpBackground in effStyle.Present then
-    APainter.FillBackground(ARect, effStyle.Background, corners);
-  if TyBorderVisible(effStyle) then
-    if effStyle.BorderStyle in [tbsOutset, tbsInset] then
-      TyDrawBevelBorder(APainter, ARect, effStyle)   // v3/B2 two-tone 3D bevel
-    else
-      APainter.StrokeBorder(ARect, corners, effStyle.BorderWidth, effStyle.BorderColor);
-  // A windowed control paints into its own opaque bitmap, so a drop shadow's blur bleeds
-  // into the corner gaps OUTSIDE the rounded background — it can't cast onto the parent, so
-  // it just leaves a dirty patch there. Re-paint those gaps with the flat parent background
-  // to keep the rounded silhouette clean. Only when there IS a shadow + a solid (non-glass)
-  // parent — the glass path already shows the form photo through the corners. (The shadow
-  // INSIDE the rounded shape, e.g. a checkbox box, is untouched.)
-  if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0)
-     and not TyResolveGlassHost(Self, gHost, gOff) and TyResolveParentBg(Self, pc) then
-    APainter.FillCornerGaps(ARect, corners, pc);
-  // Focus ring: only present when a ':focus { outline: ... }' rule resolved.
-  if (tpOutline in AStyle.Present) and (AStyle.OutlineWidth > 0) then
-  begin
-    off := APainter.Scale(AStyle.OutlineOffset);
-    ringRect := Rect(ARect.Left + off, ARect.Top + off, ARect.Right - off, ARect.Bottom - off);
-    ringCorners.TL := corners.TL - AStyle.OutlineOffset; if ringCorners.TL < 0 then ringCorners.TL := 0;
-    ringCorners.TR := corners.TR - AStyle.OutlineOffset; if ringCorners.TR < 0 then ringCorners.TR := 0;
-    ringCorners.BR := corners.BR - AStyle.OutlineOffset; if ringCorners.BR < 0 then ringCorners.BR := 0;
-    ringCorners.BL := corners.BL - AStyle.OutlineOffset; if ringCorners.BL < 0 then ringCorners.BL := 0;
-    APainter.StrokeBorder(ringRect, ringCorners, AStyle.OutlineWidth, AStyle.OutlineColor);
-  end;
+  TyDrawFrameUnderlay(APainter, ARect, AStyle);
+  TyDrawFrameChrome(Self, APainter, ARect, AStyle);
 end;
 
 function TTyCustomControl.FillSharpBackdrop(APainter: TTyPainter; const ARect: TRect): Boolean;

@@ -69,7 +69,7 @@ type
     Lead, Trail: TTyIntArray;    // length = row codepoints + 1
   end;
 
-  TTyMemo = class(TTyCustomControl, ITyTextEditActions, ITyImeEditable)
+  TTyCustomMemo = class(TTyCustomControl, ITyTextEditActions, ITyImeEditable, ITyScrollBarFrameHost)
   protected
     // Pixel x where text begins (left padding scaled). Promoted from private so
     // the horizontal-scroll geometry is testable through the access subclass.
@@ -78,6 +78,7 @@ type
     // Logical text model: one TStrings line per logical line. Exposed (read-only
     // direction) via the published Lines:TStrings; writes go through SetLines.
     FLines: TStringList;
+    FInActionChange: Boolean;   // see ActionChange
     // 2D caret. FCaretLine in 0..LineCountLogical-1; FCaretCol is a codepoint
     // index in 0..UTF8Length(line). FDesiredCol remembers the column for
     // vertical motion across short lines (used by later tasks).
@@ -160,6 +161,7 @@ type
     // Reentrancy guard: TopLine->scrollbar.Position and scrollbar OnChange->
     // SetTopLine would otherwise ping-pong. Shared by both bars.
     FSyncingScroll: Boolean;
+    FScrollBarAutoHide: TTyScrollBarAutoHide;
     // Lazy measuring bitmap (freed in Destroy). Shared by all per-line measures.
     FMeasureBmp: TBGRABitmap;
     // Per-line width cache (line content -> cumulative prefix widths). The hot path: a keystroke makes
@@ -284,6 +286,9 @@ type
     procedure SetWantTabs(AValue: Boolean);
     procedure SetWantReturns(AValue: Boolean);
     procedure SetScrollBars(AValue: TScrollStyle);
+    procedure SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
+    { 把「指针在本控件身上」转发给两条内嵌条。见 MouseEnter。 }
+    procedure NoteHostHover(AHovered: Boolean);
     procedure SetAlignment(AValue: TAlignment);
     procedure SetCharCase(AValue: TEditCharCase);
     { Fold AStr per CharCase (identical rule to TTyEdit.ApplyCharCase). '' passes through. }
@@ -681,6 +686,10 @@ type
     // [StartX+Margin, ViewRight-Margin]. No-op (clamped to 0) when WordWrap=True or
     // when the caret already fits (so fitting text never leaves ScrollX = 0).
     procedure EnsureCaretXVisible(APPI: Integer);
+    { ITyScrollBarFrameHost:两条内嵌条贴边摆,由它们把本控件的框画回自己那块矩形上。 }
+    function ScrollBarFrameStyle: TTyStyleSet;
+    { ITyScrollBarFrameHost:这两条是本控件自己的内嵌条(点它们焦点归本控件)。 }
+    function EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
     // Paint into ACanvas at ARect (RenderTo convention: draw local Rect(0,0,W,H),
     // EndPaint blits at ARect origin). APPI scales padding/line metrics.
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -707,11 +716,23 @@ type
     // End the drag on left-button release (no Enabled guard, matching TTyEdit).
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState;
       X, Y: Integer); override;
+    { 指针进/出本控件 = 内嵌滚动条显示 / 开始倒计时。规则见
+      docs/controls/scrollbar.md §7。 }
+    procedure MouseEnter; override;
+    procedure MouseLeave; override;
     // Wheel scrolls +/-3 logical lines via SetTopLine (after the user's handler).
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
     // Keep the scrollbar in sync when the control is resized.
     procedure Resize; override;
+    { Caption IS Text, as on LCL's TCustomMemo (TCustomEdit.RealGetText / RealSetText,
+      customedit.inc:534-562): code holding the memo as a TControl -- TTyUpDown's Associate when
+      the memo does not publish Text, an action link -- reaches the document. }
+    function RealGetText: TCaption; override;
+    procedure RealSetText(const AValue: TCaption); override;
+    { TControl.ActionChange copies a linked action's Caption into Caption on every change;
+      routed to Text that would replace the document. The memo keeps it. }
+    procedure ActionChange(Sender: TObject; CheckDefaults: Boolean); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -770,7 +791,7 @@ type
     // --- ITyTextEditActions: the seam the shared default context menu drives (thin
     // delegates to the public API above; see tyControls.TextMenu). ---
     function TeControl: TControl;
-    function TeController: TTyStyleController;
+    function TeController: TTyCustomStyleController;
     procedure TeUndo;
     procedure TeRedo;
     procedure TeCut;
@@ -844,7 +865,13 @@ type
     procedure AddHandlerOnChange(const AnOnChangeEvent: TNotifyEvent; AsFirst: Boolean = False);
     procedure RemoveHandlerOnChange(const AnOnChangeEvent: TNotifyEvent);
     procedure RemoveAllHandlersOfObject(AnObject: TObject); override;
-  published
+    // Standard control properties/events re-published to match TMemo (all inherited; the key/mouse
+    // overrides call inherited so the events fire). Color/BorderStyle are intentionally NOT published:
+    // this control is theme-/self-drawn. BidiMode stays out of scope -- RTL is realized by the
+    // widgetset on a native EDIT handle, so there is nothing for a self-drawn control to inherit.
+    // (Alignment and CharCase used to be listed here as out of scope too. Alignment was a real
+    // capability gap and CharCase was one method away from the sibling Edit; both are above now.)
+    property TabStop default True;
     property Lines: TStrings read GetLines write SetLines;
     // Whole-document text as one string with platform line breaks (TStrings.Text
     // get/set). Writing replaces all lines, collapses the caret to the origin and
@@ -863,6 +890,10 @@ type
     // The horizontal bar only applies when WordWrap=False (wrap mode never scrolls horizontally).
     property ScrollBars: TScrollStyle read FScrollBars write SetScrollBars
       default ssAutoVertical;
+    { 这个备忘录的两条滚动条要不要在没人用的时候淡出。转发给内嵌条，
+      语义见 TTyScrollBar.AutoHide。 }
+    property ScrollBarAutoHide: TTyScrollBarAutoHide
+      read FScrollBarAutoHide write SetScrollBarAutoHide default sbahDefault;
     // Soft word-wrap toggle. Default False (no wrap; long lines scroll horizontally instead).
     // True wraps long logical lines into multiple visual rows at word boundaries.
     property WordWrap: Boolean read FWordWrap write SetWordWrap default False;
@@ -885,60 +916,92 @@ type
     // Caps total content codepoints (typing blocked at the cap; paste truncated
     // to the remaining room). 0 = unlimited. Default 0.
     property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
-    property Enabled;
-    property Font;
-    property Align;
-    property Anchors;
-    property StyleClass;
-    property Controller;
-    property OnClick;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     // Fired when the caret position or selection range changes without a text
     // mutation (arrow keys, click, shift-select, programmatic SetCaret) and after
     // edits that move the caret. Self-guarded: a no-op move never fires.
     property OnSelectionChange: TNotifyEvent read FOnSelectionChange write FOnSelectionChange;
-    // Standard control properties/events re-published to match TMemo (all inherited; the key/mouse
-    // overrides call inherited so the events fire). Color/BorderStyle are intentionally NOT published:
-    // this control is theme-/self-drawn. BidiMode stays out of scope -- RTL is realized by the
-    // widgetset on a native EDIT handle, so there is nothing for a self-drawn control to inherit.
-    // (Alignment and CharCase used to be listed here as out of scope too. Alignment was a real
-    // capability gap and CharCase was one method away from the sibling Edit; both are above now.)
-    property TabStop default True;
-    property TabOrder;
+  end;
+
+  { TTyMemo publishes TTyCustomMemo's properties; everything lives in TTyCustomMemo. }
+  TTyMemo = class(TTyCustomMemo)
+  published
+    property Version;
+    property Enabled;
     property Visible;
-    property PopupMenu;
+    property Font;
     property ShowHint;
-    property ParentShowHint;
-    property Constraints;
-    property BorderSpacing;
-    property DragCursor;
-    property DragKind;
-    property DragMode;
-    property OnContextPopup;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
     property OnDblClick;
-    property OnDragDrop;
-    property OnDragOver;
-    property OnEndDrag;
-    property OnStartDrag;
-    property OnEditingDone;
-    property OnEnter;
-    property OnExit;
-    property OnKeyDown;
-    property OnKeyPress;
-    property OnKeyUp;
     property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
     property OnMouseEnter;
     property OnMouseLeave;
-    property OnMouseMove;
-    property OnMouseUp;
     property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Lines;
+    property Text;
+    property WantTabs;
+    property WantReturns;
+    property ScrollBars;
+    property ScrollBarAutoHide;
+    property WordWrap;
+    property ReadOnly;
+    property HideSelection;
+    property Alignment;
+    property CharCase;
+    property MaxLength;
+    property Align;
+    property Anchors;
+    property OnChange;
+    property OnSelectionChange;
   end;
 
 implementation
 
-constructor TTyMemo.Create(AOwner: TComponent);
+constructor TTyCustomMemo.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  { Not csSetCaption: Caption reads the document now (RealGetText), and LCL's SetName would
+    otherwise write a fresh memo's Name into it the first time it is named. }
+  ControlStyle := ControlStyle - [csSetCaption];
   TabStop := True;
   Cursor := crIBeam;
   FLines := TStringList.Create;
@@ -971,6 +1034,7 @@ begin
   FScrollBar := nil;
   FHScrollBar := nil;
   FSyncingScroll := False;
+  FScrollBarAutoHide := sbahDefault;   { 与 published 的 default 一致 }
   FMeasureBmp := nil;
   FLineWidthCache := specialize TDictionary<string, TTyIntArray>.Create;
   FLineTotalWidthCache := specialize TDictionary<string, Integer>.Create;
@@ -1019,7 +1083,7 @@ begin
   Height := 120;
 end;
 
-destructor TTyMemo.Destroy;
+destructor TTyCustomMemo.Destroy;
 begin
   // The default context menu holds only an interface reference back to Self (TComponent
   // interface calls do not reference-count), so freeing it here touches nothing else.
@@ -1042,20 +1106,20 @@ end;
 
 // ---- Multicast OnChange (LCL customedit.inc:91-97) ----
 
-procedure TTyMemo.AddHandlerOnChange(const AnOnChangeEvent: TNotifyEvent;
+procedure TTyCustomMemo.AddHandlerOnChange(const AnOnChangeEvent: TNotifyEvent;
   AsFirst: Boolean = False);
 begin
   if FOnChangeHandlers = nil then FOnChangeHandlers := TMethodList.Create;
   FOnChangeHandlers.Add(TMethod(AnOnChangeEvent), not AsFirst);
 end;
 
-procedure TTyMemo.RemoveHandlerOnChange(const AnOnChangeEvent: TNotifyEvent);
+procedure TTyCustomMemo.RemoveHandlerOnChange(const AnOnChangeEvent: TNotifyEvent);
 begin
   if FOnChangeHandlers <> nil then
     FOnChangeHandlers.Remove(TMethod(AnOnChangeEvent));
 end;
 
-procedure TTyMemo.RemoveAllHandlersOfObject(AnObject: TObject);
+procedure TTyCustomMemo.RemoveAllHandlersOfObject(AnObject: TObject);
 begin
   inherited RemoveAllHandlersOfObject(AnObject);
   if FOnChangeHandlers <> nil then
@@ -1064,7 +1128,7 @@ end;
 
 // ---- Blinking caret (Task 10) ----
 
-procedure TTyMemo.EnsureBlinkTimer;
+procedure TTyCustomMemo.EnsureBlinkTimer;
 begin
   if FBlinkTimer = nil then
   begin
@@ -1075,20 +1139,20 @@ begin
   end;
 end;
 
-procedure TTyMemo.HandleBlink(Sender: TObject);
+procedure TTyCustomMemo.HandleBlink(Sender: TObject);
 begin
   Inc(FBlinkElapsedMs, FBlinkTimer.Interval);
   FCaretVisible := TyCaretVisible(FBlinkElapsedMs, FBlinkTimer.Interval);
   Invalidate;
 end;
 
-procedure TTyMemo.ResetCaretBlink;
+procedure TTyCustomMemo.ResetCaretBlink;
 begin
   FCaretVisible := True;
   FBlinkElapsedMs := 0;
 end;
 
-procedure TTyMemo.DoEnter;
+procedure TTyCustomMemo.DoEnter;
 begin
   inherited DoEnter;
   ResetCaretBlink;
@@ -1101,7 +1165,7 @@ begin
   Invalidate;   // show caret + (HideSelection) the selection band immediately on focus-gain
 end;
 
-procedure TTyMemo.DoExit;
+procedure TTyCustomMemo.DoExit;
 begin
   inherited DoExit;
   TyImeSetFocus(FImeHook, False);   // GTK2: stop our IM context composing (no-op elsewhere)
@@ -1110,14 +1174,14 @@ begin
   Invalidate;
 end;
 
-function TTyMemo.GetStyleTypeKey: string;
+function TTyCustomMemo.GetStyleTypeKey: string;
 begin
   Result := 'TyMemo';
 end;
 
 // ---- Undo/redo machinery ----
 
-function TTyMemo.CaptureState: string;
+function TTyCustomMemo.CaptureState: string;
 // Header line: 'caretLine,caretCol,anchorLine,anchorCol,lineCount'#10, then the
 // raw FLines joined by #10. We serialize Count (not FLines.Text) so a document
 // ending in an empty logical line round-trips exactly: RestoreState rebuilds the
@@ -1136,7 +1200,7 @@ begin
   end;
 end;
 
-procedure TTyMemo.RestoreState(const S: string);
+procedure TTyCustomMemo.RestoreState(const S: string);
 var
   NL, FieldStart, i, LineCount: Integer;
   Header, Body: string;
@@ -1206,72 +1270,72 @@ begin
   AfterEdit(Font.PixelsPerInch);
 end;
 
-procedure TTyMemo.BeginUndoStep(AKind: Byte);
+procedure TTyCustomMemo.BeginUndoStep(AKind: Byte);
 begin
   if FSuspendUndo then Exit;
   FUndoStack.Push(CaptureState, AKind);
 end;
 
-procedure TTyMemo.BreakCoalescing;
+procedure TTyCustomMemo.BreakCoalescing;
 begin
   FUndoStack.BreakCoalescing;
 end;
 
-procedure TTyMemo.Undo;
+procedure TTyCustomMemo.Undo;
 begin
   if not Enabled then Exit;
   if FUndoStack.CanUndo then
     RestoreState(FUndoStack.Undo(CaptureState));
 end;
 
-procedure TTyMemo.Redo;
+procedure TTyCustomMemo.Redo;
 begin
   if not Enabled then Exit;
   if FUndoStack.CanRedo then
     RestoreState(FUndoStack.Redo(CaptureState));
 end;
 
-function TTyMemo.CanUndo: Boolean;
+function TTyCustomMemo.CanUndo: Boolean;
 begin
   Result := FUndoStack.CanUndo;
 end;
 
-function TTyMemo.CanRedo: Boolean;
+function TTyCustomMemo.CanRedo: Boolean;
 begin
   Result := FUndoStack.CanRedo;
 end;
 
-procedure TTyMemo.SetReadOnly(AValue: Boolean);
+procedure TTyCustomMemo.SetReadOnly(AValue: Boolean);
 begin
   if FReadOnly = AValue then Exit;
   FReadOnly := AValue;
   Invalidate;
 end;
 
-procedure TTyMemo.SetHideSelection(AValue: Boolean);
+procedure TTyCustomMemo.SetHideSelection(AValue: Boolean);
 begin
   if FHideSelection = AValue then Exit;
   FHideSelection := AValue;
   if not Focused then Invalidate;   // only changes the unfocused appearance
 end;
 
-procedure TTyMemo.SetMaxLength(AValue: Integer);
+procedure TTyCustomMemo.SetMaxLength(AValue: Integer);
 begin
   if FMaxLength = AValue then Exit;
   FMaxLength := AValue;
 end;
 
-procedure TTyMemo.SetWantTabs(AValue: Boolean);
+procedure TTyCustomMemo.SetWantTabs(AValue: Boolean);
 begin
   FWantTabs := AValue;
 end;
 
-procedure TTyMemo.SetWantReturns(AValue: Boolean);
+procedure TTyCustomMemo.SetWantReturns(AValue: Boolean);
 begin
   FWantReturns := AValue;
 end;
 
-procedure TTyMemo.SetScrollBars(AValue: TScrollStyle);
+procedure TTyCustomMemo.SetScrollBars(AValue: TScrollStyle);
 begin
   if FScrollBars = AValue then Exit;
   FScrollBars := AValue;
@@ -1280,9 +1344,41 @@ begin
   Invalidate;
 end;
 
+procedure TTyCustomMemo.NoteHostHover(AHovered: Boolean);
+begin
+  { **两条都要告诉**——转发只写一半是本库反复出过的那种故障。
+    两条都是惰性建的，nil 判断是真的会走到（内容还没撑出条的时候）。 }
+  if FScrollBar <> nil then FScrollBar.SetHostHovered(AHovered);
+  if FHScrollBar <> nil then FHScrollBar.SetHostHovered(AHovered);
+end;
+
+procedure TTyCustomMemo.MouseEnter;
+begin
+  { 必须 inherited：吞掉 LCL 那层的 hover 状态是本库出过好几次的故障。 }
+  inherited MouseEnter;
+  NoteHostHover(True);
+end;
+
+procedure TTyCustomMemo.MouseLeave;
+begin
+  inherited MouseLeave;
+  { 只是起倒计时，不当场隐藏：指针从正文挪到条上时这里也会走一趟。 }
+  NoteHostHover(False);
+end;
+
+procedure TTyCustomMemo.SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
+begin
+  if FScrollBarAutoHide = AValue then Exit;
+  FScrollBarAutoHide := AValue;
+  { 两条都是惰性创建的，建的时候也要带上——所以创建处同样要写一遍。
+    这里管「已经建好的」，创建处管「之后才建的」。 }
+  if FScrollBar <> nil then FScrollBar.AutoHide := AValue;
+  if FHScrollBar <> nil then FHScrollBar.AutoHide := AValue;
+end;
+
 // ---- Flat codepoint-offset <-> (line,col) mapping ----
 
-function TTyMemo.TextLineBreak: string;
+function TTyCustomMemo.TextLineBreak: string;
 // Reproduce TStrings.GetTextStr's separator choice exactly (it calls the private
 // GetLineBreakCharLBS): an assigned LineBreak overrides, otherwise the style glyph.
 // GetText is FLines.Text, so this IS the separator sitting between two lines in Text.
@@ -1297,7 +1393,7 @@ begin
   end;
 end;
 
-function TTyMemo.LineBreakCodepoints: Integer;
+function TTyCustomMemo.LineBreakCodepoints: Integer;
 begin
   Result := UTF8Length(TextLineBreak);
   // A zero-width separator would make two adjacent lines share offsets and break
@@ -1305,7 +1401,7 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-function TTyMemo.LineColToFlat(ALine, ACol: Integer): Integer;
+function TTyCustomMemo.LineColToFlat(ALine, ACol: Integer): Integer;
 // Sum of (LineLen + separator width) for every line strictly above ALine, plus ACol.
 // Clamped into the model so out-of-range inputs map to a valid offset.
 var
@@ -1323,7 +1419,7 @@ begin
   Inc(Result, ACol);
 end;
 
-procedure TTyMemo.FlatToLineCol(AOffset: Integer; out ALine, ACol: Integer);
+procedure TTyCustomMemo.FlatToLineCol(AOffset: Integer; out ALine, ACol: Integer);
 // Walk lines accumulating (LineLen + separator width) until AOffset lands within a
 // line's [0..LineLen] span (the trailing slot is the position before that line's
 // separator). Clamps a negative offset to (0,0) and an over-large offset to the end
@@ -1363,25 +1459,25 @@ begin
   ACol := LineLen(MaxLine);
 end;
 
-function TTyMemo.GetSelStart: Integer;
+function TTyCustomMemo.GetSelStart: Integer;
 begin
   // Flat offset of the ORDERED selection start (lexicographically smaller end).
   Result := LineColToFlat(SelStartLine, SelStartCol);
 end;
 
-function TTyMemo.GetSelLength: Integer;
+function TTyCustomMemo.GetSelLength: Integer;
 begin
   // |flat(caret) - flat(anchor)| = the codepoint span of the selection.
   Result := Abs(LineColToFlat(FCaretLine, FCaretCol)
     - LineColToFlat(FSelAnchorLine, FSelAnchorCol));
 end;
 
-function TTyMemo.GetCaretPos: Integer;
+function TTyCustomMemo.GetCaretPos: Integer;
 begin
   Result := LineColToFlat(FCaretLine, FCaretCol);
 end;
 
-procedure TTyMemo.SetSelStart(AValue: Integer);
+procedure TTyCustomMemo.SetSelStart(AValue: Integer);
 var
   L, C: Integer;
 begin
@@ -1402,7 +1498,7 @@ begin
   DoSelectionChange;
 end;
 
-procedure TTyMemo.SetSelLength(AValue: Integer);
+procedure TTyCustomMemo.SetSelLength(AValue: Integer);
 var
   SS, L, C: Integer;
 begin
@@ -1427,7 +1523,7 @@ begin
   DoSelectionChange;
 end;
 
-procedure TTyMemo.SetSelText(const AValue: string);
+procedure TTyCustomMemo.SetSelText(const AValue: string);
 var
   HadChange: Boolean;
 begin
@@ -1451,7 +1547,7 @@ begin
     AfterEdit(Font.PixelsPerInch);
 end;
 
-procedure TTyMemo.SetCaretPos(AValue: Integer);
+procedure TTyCustomMemo.SetCaretPos(AValue: Integer);
 var
   L, C: Integer;
 begin
@@ -1459,13 +1555,34 @@ begin
   SetCaret(L, C);  // collapses the selection onto the caret (native semantics)
 end;
 
-function TTyMemo.GetText: TCaption;
+function TTyCustomMemo.GetText: TCaption;
 begin
   // Whole-document string with platform line breaks (TStrings.Text semantics).
   Result := FLines.Text;
 end;
 
-procedure TTyMemo.SetText(const AValue: TCaption);
+function TTyCustomMemo.RealGetText: TCaption;
+begin
+  Result := GetText;
+end;
+
+procedure TTyCustomMemo.RealSetText(const AValue: TCaption);
+begin
+  if FInActionChange then Exit;
+  SetText(AValue);
+end;
+
+procedure TTyCustomMemo.ActionChange(Sender: TObject; CheckDefaults: Boolean);
+begin
+  FInActionChange := True;
+  try
+    inherited ActionChange(Sender, CheckDefaults);
+  finally
+    FInActionChange := False;
+  end;
+end;
+
+procedure TTyCustomMemo.SetText(const AValue: TCaption);
 begin
   // Replace all lines from the string (split on line breaks by TStrings.Text),
   // collapse the caret/selection to the origin, refresh layout + fire OnChange.
@@ -1487,19 +1604,19 @@ begin
   FModified := False;
 end;
 
-function TTyMemo.ContentCodepointCount: Integer;
+function TTyCustomMemo.ContentCodepointCount: Integer;
 var i: Integer;
 begin
   Result := 0;
   for i := 0 to FLines.Count - 1 do Inc(Result, UTF8Length(FLines[i]));
 end;
 
-function TTyMemo.GetLines: TStrings;
+function TTyCustomMemo.GetLines: TStrings;
 begin
   Result := FLines;
 end;
 
-procedure TTyMemo.LinesChanged(Sender: TObject);
+procedure TTyCustomMemo.LinesChanged(Sender: TObject);
 begin
   { Lines is handed out bare, so a mutation THROUGH it -- Lines.Add, Lines.Delete, Lines[i] :=,
     Lines.Text := -- never reached the control: only the Lines SETTER invalidated. It looked
@@ -1521,7 +1638,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyMemo.SetLines(AValue: TStrings);
+procedure TTyCustomMemo.SetLines(AValue: TStrings);
 begin
   // Capture a fresh (non-typing) undo step only when the assignment actually
   // changes the content, so a no-op reassign does not push a spurious step and
@@ -1545,7 +1662,7 @@ begin
   Invalidate;
 end;
 
-function TTyMemo.LineCountLogical: Integer;
+function TTyCustomMemo.LineCountLogical: Integer;
 begin
   // An empty model is still one visible line (caret can sit on line 0).
   Result := FLines.Count;
@@ -1553,7 +1670,7 @@ begin
     Result := 1;
 end;
 
-procedure TTyMemo.ClampCaret;
+procedure TTyCustomMemo.ClampCaret;
 var
   MaxLine, CurLen: Integer;
 begin
@@ -1567,7 +1684,7 @@ begin
   if FDesiredCol < 0 then FDesiredCol := 0;
 end;
 
-function TTyMemo.RowBaseAbsX(AVisualRow, APPI: Integer): Integer;
+function TTyCustomMemo.RowBaseAbsX(AVisualRow, APPI: Integer): Integer;
 // Absolute (full-line) device-x at which visual row AVisualRow's segment BEGINS,
 // i.e. ColPixelXAt(line, StartCol). A continuation segment is drawn shifted left by
 // this minus TextStartX so its first codepoint sits at the content left; the
@@ -1586,7 +1703,7 @@ begin
   Result := ColPixelXAt(Line, FVisualRows[AVisualRow].StartCol, APPI);
 end;
 
-procedure TTyMemo.UpdateDesiredX(APPI: Integer);
+procedure TTyCustomMemo.UpdateDesiredX(APPI: Integer);
 var
   CW, VRow, CaretAbsX: Integer;
 begin
@@ -1602,7 +1719,7 @@ begin
   if FDesiredX < 0 then FDesiredX := 0;
 end;
 
-procedure TTyMemo.MoveCaretByVisualRow(ADelta, APPI: Integer);
+procedure TTyCustomMemo.MoveCaretByVisualRow(ADelta, APPI: Integer);
 var
   CW, CurRow, CaretAbsX, TargetRow, MaxRow, TargetAbsX, NewLine, NewCol: Integer;
 begin
@@ -1631,7 +1748,7 @@ begin
   // FDesiredX intentionally NOT refreshed: a run of Up/Down tracks the original x.
 end;
 
-function TTyMemo.MoveCaretVisualH(ADir, APPI: Integer): Boolean;
+function TTyCustomMemo.MoveCaretVisualH(ADir, APPI: Integer): Boolean;
 var
   CW, VRow, X, RS, RowCol, r, q, j, TargetRow, EdgeCol: Integer;
   RB: TTyMemoRowBidi;
@@ -1697,7 +1814,7 @@ begin
   FCaretAfterPrev := EdgeAfterPrev;
 end;
 
-function TTyMemo.VerticalMoveNeedsX(ATargetLine: Integer): Boolean;
+function TTyCustomMemo.VerticalMoveNeedsX(ATargetLine: Integer): Boolean;
 var
   Cur, Tgt: string;
 begin
@@ -1716,7 +1833,7 @@ begin
   Result := LineHasRTL(Cur) or LineHasRTL(Tgt);
 end;
 
-function TTyMemo.CaretRowStartCol(APPI: Integer): Integer;
+function TTyCustomMemo.CaretRowStartCol(APPI: Integer): Integer;
 var
   CW, VRow, CaretX: Integer;
 begin
@@ -1729,7 +1846,7 @@ begin
     Result := 0;
 end;
 
-function TTyMemo.CaretRowEndCol(APPI: Integer): Integer;
+function TTyCustomMemo.CaretRowEndCol(APPI: Integer): Integer;
 var
   CW, VRow, CaretX: Integer;
 begin
@@ -1742,7 +1859,7 @@ begin
     Result := LineLen(FCaretLine);
 end;
 
-procedure TTyMemo.SetAlignment(AValue: TAlignment);
+procedure TTyCustomMemo.SetAlignment(AValue: TAlignment);
 begin
   if FAlignment = AValue then Exit;
   FAlignment := AValue;
@@ -1752,7 +1869,7 @@ begin
   Invalidate;
 end;
 
-function TTyMemo.ApplyCharCase(const AStr: string): string;
+function TTyCustomMemo.ApplyCharCase(const AStr: string): string;
 begin
   case FCharCase of
     ecUppercase: Result := UTF8UpperCase(AStr);
@@ -1762,7 +1879,7 @@ begin
   end;
 end;
 
-procedure TTyMemo.RefoldAllLines;
+procedure TTyCustomMemo.RefoldAllLines;
 var
   i: Integer;
   folded: string;
@@ -1791,7 +1908,7 @@ begin
   end;
 end;
 
-procedure TTyMemo.SetCharCase(AValue: TEditCharCase);
+procedure TTyCustomMemo.SetCharCase(AValue: TEditCharCase);
 begin
   if FCharCase = AValue then Exit;
   FCharCase := AValue;
@@ -1802,7 +1919,7 @@ begin
   RefoldAllLines;
 end;
 
-function TTyMemo.RowAlignOffset(AVisualRow, AContentWidth, APPI: Integer): Integer;
+function TTyCustomMemo.RowAlignOffset(AVisualRow, AContentWidth, APPI: Integer): Integer;
 var
   RL, RS, RE, w: Integer;
   Line: string;
@@ -1829,17 +1946,17 @@ begin
     Result := AContentWidth - w;
 end;
 
-function TTyMemo.CaretLine: Integer;
+function TTyCustomMemo.CaretLine: Integer;
 begin
   Result := FCaretLine;
 end;
 
-function TTyMemo.CaretCol: Integer;
+function TTyCustomMemo.CaretCol: Integer;
 begin
   Result := FCaretCol;
 end;
 
-procedure TTyMemo.SetCaret(ALine, ACol: Integer);
+procedure TTyCustomMemo.SetCaret(ALine, ACol: Integer);
 begin
   FCaretLine := ALine;
   FCaretCol := ACol;
@@ -1862,7 +1979,7 @@ begin
   DoSelectionChange;
 end;
 
-procedure TTyMemo.SetSelAnchor(ALine, ACol: Integer);
+procedure TTyCustomMemo.SetSelAnchor(ALine, ACol: Integer);
 var
   MaxLine, CurLen: Integer;
 begin
@@ -1880,12 +1997,12 @@ end;
 
 // ---- 2D selection read/mutate helpers ----
 
-function TTyMemo.HasSelection: Boolean;
+function TTyCustomMemo.HasSelection: Boolean;
 begin
   Result := (FSelAnchorLine <> FCaretLine) or (FSelAnchorCol <> FCaretCol);
 end;
 
-procedure TTyMemo.GetOrderedSel(out SL, SC, EL, EC: Integer);
+procedure TTyCustomMemo.GetOrderedSel(out SL, SC, EL, EC: Integer);
 var
   AnchorFirst: Boolean;
 begin
@@ -1904,7 +2021,7 @@ begin
   end;
 end;
 
-function TTyMemo.SelStartLine: Integer;
+function TTyCustomMemo.SelStartLine: Integer;
 var
   SL, SC, EL, EC: Integer;
 begin
@@ -1912,7 +2029,7 @@ begin
   Result := SL;
 end;
 
-function TTyMemo.SelStartCol: Integer;
+function TTyCustomMemo.SelStartCol: Integer;
 var
   SL, SC, EL, EC: Integer;
 begin
@@ -1920,7 +2037,7 @@ begin
   Result := SC;
 end;
 
-function TTyMemo.SelEndLine: Integer;
+function TTyCustomMemo.SelEndLine: Integer;
 var
   SL, SC, EL, EC: Integer;
 begin
@@ -1928,7 +2045,7 @@ begin
   Result := EL;
 end;
 
-function TTyMemo.SelEndCol: Integer;
+function TTyCustomMemo.SelEndCol: Integer;
 var
   SL, SC, EL, EC: Integer;
 begin
@@ -1936,7 +2053,7 @@ begin
   Result := EC;
 end;
 
-function TTyMemo.GetSelText: string;
+function TTyCustomMemo.GetSelText: string;
 var
   SL, SC, EL, EC, i: Integer;
   Head, Tail, NL: string;
@@ -1975,19 +2092,19 @@ begin
   Result := Result + NL + Head;
 end;
 
-procedure TTyMemo.Append(const AValue: string);
+procedure TTyCustomMemo.Append(const AValue: string);
 begin
   { Straight through Lines, so it picks up the change hook and the visual-row cache
     invalidation rather than reimplementing either. }
   FLines.Add(AValue);
 end;
 
-procedure TTyMemo.Clear;
+procedure TTyCustomMemo.Clear;
 begin
   FLines.Clear;
 end;
 
-procedure TTyMemo.SelectAll;
+procedure TTyCustomMemo.SelectAll;
 var
   LastLine: Integer;
 begin
@@ -2006,7 +2123,7 @@ begin
   DoSelectionChange;
 end;
 
-procedure TTyMemo.ClearSelection;
+procedure TTyCustomMemo.ClearSelection;
 begin
   { Deletes, as LCL does. DeleteSelection already carries the undo step, the caret move
     and the change notification. }
@@ -2016,7 +2133,7 @@ begin
     CollapseSelection;
 end;
 
-procedure TTyMemo.CollapseSelection;
+procedure TTyCustomMemo.CollapseSelection;
 begin
   FSelAnchorLine := FCaretLine;
   FSelAnchorCol := FCaretCol;
@@ -2027,14 +2144,14 @@ begin
   DoSelectionChange;
 end;
 
-procedure TTyMemo.SetForceFocused(AValue: Boolean);
+procedure TTyCustomMemo.SetForceFocused(AValue: Boolean);
 begin
   if FForceFocused = AValue then Exit;
   FForceFocused := AValue;
   Invalidate;
 end;
 
-function TTyMemo.LineLen(ALineIndex: Integer): Integer;
+function TTyCustomMemo.LineLen(ALineIndex: Integer): Integer;
 begin
   if (ALineIndex >= 0) and (ALineIndex < FLines.Count) then
     Result := UTF8Length(FLines[ALineIndex])
@@ -2042,7 +2159,7 @@ begin
     Result := 0;  // synthetic empty line (model has zero lines)
 end;
 
-procedure TTyMemo.DoChange;
+procedure TTyCustomMemo.DoChange;
 begin
   { Dirty-flag bookkeeping at the one point every completed mutation passes, reading the
     by-code guard exactly as LCL's Change does (include/customedit.inc:613-616). }
@@ -2054,7 +2171,7 @@ begin
     FOnChangeHandlers.CallNotifyEvents(Self);
 end;
 
-procedure TTyMemo.DoSelectionChange;
+procedure TTyCustomMemo.DoSelectionChange;
 begin
   // Self-guard: only fire when the caret OR the anchor actually moved since the
   // last fire. This lets every caret/selection funnel call DoSelectionChange
@@ -2071,7 +2188,7 @@ begin
     FOnSelectionChange(Self);
 end;
 
-procedure TTyMemo.EnsureCaretLineVisible(APPI: Integer);
+procedure TTyCustomMemo.EnsureCaretLineVisible(APPI: Integer);
 var
   VR, MaxTop, CaretVR: Integer;
 begin
@@ -2099,7 +2216,7 @@ end;
 // that fits, neither method ever raises FScrollX above 0, so the no-wrap render
 // stays byte-identical to today (FScrollX = 0 collapses every X term).
 
-function TTyMemo.WidestLineWidth(APPI: Integer): Integer;
+function TTyCustomMemo.WidestLineWidth(APPI: Integer): Integer;
 // Widest logical line, in px. Only each line's TOTAL width is needed, so this uses the O(L) cheap
 // total-width path (one TextSize per line) instead of the O(L^2) per-character MeasureLineWidths —
 // loading N KB no longer re-measures every character-prefix of every line (the ~10s file-preview
@@ -2126,7 +2243,7 @@ begin
   FWidestWidthSig := sig;
 end;
 
-procedure TTyMemo.ClampScrollX(APPI: Integer);
+procedure TTyCustomMemo.ClampScrollX(APPI: Integer);
 var
   ViewWidth, MaxScroll: Integer;
 begin
@@ -2144,7 +2261,7 @@ begin
   if FScrollX < 0 then FScrollX := 0;
 end;
 
-procedure TTyMemo.EnsureCaretXVisible(APPI: Integer);
+procedure TTyCustomMemo.EnsureCaretXVisible(APPI: Integer);
 var
   StartX, ViewWidth, ViewRight, Margin, MaxScroll, CaretPx: Integer;
   CaretLineStr: string;
@@ -2193,7 +2310,7 @@ end;
 // ---- Vertical scrolling (sections 3-6 lifted from TTyListBox; FItems.Count ->
 // LineCountLogical, ScaledItemHeight -> LineHeight) ----
 
-function TTyMemo.VisibleRows: Integer;
+function TTyCustomMemo.VisibleRows: Integer;
 var
   S: TTyStyleSet;
   PPI, LH: Integer;
@@ -2216,14 +2333,14 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-function TTyMemo.TotalVisualRows(APPI: Integer): Integer;
+function TTyCustomMemo.TotalVisualRows(APPI: Integer): Integer;
 begin
   EnsureVisualRows(APPI);
   Result := Length(FVisualRows);
   if Result < 1 then Result := 1;   // a non-empty model always has >= 1 row
 end;
 
-function TTyMemo.MaxTopLine: Integer;
+function TTyCustomMemo.MaxTopLine: Integer;
 begin
   // Row-based: TotalVisualRows - VisibleRows. For WordWrap=False this equals the
   // old LineCountLogical - VisibleRows (one visual row per logical line).
@@ -2231,12 +2348,12 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-function TTyMemo.TopRow: Integer;
+function TTyCustomMemo.TopRow: Integer;
 begin
   Result := FTopRow;
 end;
 
-function TTyMemo.TopLine: Integer;
+function TTyCustomMemo.TopLine: Integer;
 begin
   // Map the top visual row back to its logical line. WordWrap=False: FTopRow is
   // the top logical line (identity). Guard against a stale/empty cache.
@@ -2247,7 +2364,7 @@ begin
     Result := 0;
 end;
 
-function TTyMemo.CaretVisualRow(APPI: Integer): Integer;
+function TTyCustomMemo.CaretVisualRow(APPI: Integer): Integer;
 var
   CW, VRow, CaretX: Integer;
 begin
@@ -2257,7 +2374,7 @@ begin
   Result := VRow;
 end;
 
-procedure TTyMemo.SetTopLine(AValue: Integer);
+procedure TTyCustomMemo.SetTopLine(AValue: Integer);
 var
   Clamped: Integer;
 begin
@@ -2279,7 +2396,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyMemo.ScrollBarChange(Sender: TObject);
+procedure TTyCustomMemo.ScrollBarChange(Sender: TObject);
 begin
   if FSyncingScroll then Exit;
   FSyncingScroll := True;
@@ -2290,7 +2407,7 @@ begin
   end;
 end;
 
-procedure TTyMemo.HScrollBarChange(Sender: TObject);
+procedure TTyCustomMemo.HScrollBarChange(Sender: TObject);
 begin
   if FSyncingScroll then Exit;
   FSyncingScroll := True;
@@ -2302,7 +2419,7 @@ begin
   end;
 end;
 
-function TTyMemo.HScrollBarHeight: Integer;
+function TTyCustomMemo.HScrollBarHeight: Integer;
 begin
   if (FHScrollBar <> nil) and FHScrollBar.Visible then
     Result := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), Font.PixelsPerInch, 96)
@@ -2310,9 +2427,19 @@ begin
     Result := 0;
 end;
 
-procedure TTyMemo.UpdateScrollBar;
+function TTyCustomMemo.ScrollBarFrameStyle: TTyStyleSet;
+begin
+  Result := CurrentStyle;   // RenderTo draws its frame with exactly this
+end;
+
+function TTyCustomMemo.EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
+begin
+  Result := (ABar = FScrollBar) or (ABar = FHScrollBar);
+end;
+
+procedure TTyCustomMemo.UpdateScrollBar;
 var
-  PPI, LH, VR, MaxPos, MaxTop, Total, SBW, viewW, hMax, fw, PadV: Integer;
+  PPI, LH, VR, MaxPos, MaxTop, Total, SBW, viewW, hMax, PadV: Integer;
   StyleS: TTyStyleSet;
   WasVisible, WantV, WantH: Boolean;
 begin
@@ -2323,10 +2450,11 @@ begin
   StyleS := CurrentStyle;
   PadV := MulDiv(StyleS.Padding.Top, PPI, 96) + MulDiv(StyleS.Padding.Bottom, PPI, 96);
   SBW := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), PPI, 96);   // both bars' thickness
-  // Frame inset: the scrollbars sit flush to the edge and would cover the border + focus ring
-  // DrawFrame paints at the OUTER edge (the memo's ring looked clipped by the vbar). Pull both
-  // bars in by ~the ring width so the frame stays visible around them, like a native memo.
-  fw := MulDiv(2, PPI, 96); if fw < 1 then fw := 1;
+  { Both bars sit FLUSH to the edge. The memo used to pull them in by the border/focus-ring band
+    (its ring looked clipped by the vbar), and later by more at rounded corners; on a real
+    machine that read as a bar floating off the edge ("条飘着的,感觉不够紧凑"). The bars now
+    repaint this memo's border and focus ring over their own rects instead (ITyScrollBarFrameHost,
+    see TTyScrollBar.RenderTo), so the ring is whole under a visible bar too. }
   Total := TotalVisualRows(PPI);
 
   // ---- 1) Decide + apply the VERTICAL bar FIRST, from the full height (its overflow is row-count
@@ -2356,14 +2484,10 @@ begin
       FScrollBar.TabStop := False;
       FScrollBar.OnChange := @ScrollBarChange;
       FScrollBar.AnimationsEnabled := False;   // instant: scrolling never lags the wheel/keyboard
+      FScrollBar.AutoHide := FScrollBarAutoHide;   // the bar is born AFTER the property may have been set
       FScrollBar.ControlStyle := FScrollBar.ControlStyle + [csNoDesignVisible];   // internal: never a designable child
     end;
     FScrollBar.Width := SBW;
-    // Inset the vertical bar inside the frame (Align=alRight honours BorderSpacing) so the
-    // border + focus ring drawn at the outer edge are not covered by it.
-    FScrollBar.BorderSpacing.Right  := fw;
-    FScrollBar.BorderSpacing.Top    := fw;
-    FScrollBar.BorderSpacing.Bottom := fw;
     FScrollBar.Controller := Self.Controller;
     FScrollBar.Visible := True;
     // WordWrap: a newly-visible vbar steals SBW from the content width -> narrower wrap -> MORE rows.
@@ -2418,13 +2542,14 @@ begin
       FHScrollBar.TabStop := False;  // embedded: never take the caret off the memo (see the vbar)
       FHScrollBar.OnChange := @HScrollBarChange;
       FHScrollBar.AnimationsEnabled := False;
+      FHScrollBar.AutoHide := FScrollBarAutoHide;   // the bar is born AFTER the property may have been set
       FHScrollBar.ControlStyle := FHScrollBar.ControlStyle + [csNoDesignVisible];   // internal: hide in the designer
     end;
     FHScrollBar.Height := SBW;
     FHScrollBar.Controller := Self.Controller;
     FHScrollBar.Visible := True;
-    // Inset like the vertical bar: left/bottom by fw, and stop before the (also-inset) vbar.
-    FHScrollBar.SetBounds(fw, Height - SBW - fw, Width - 2*fw - (Ord(WantV) * SBW), SBW);
+    // Flush along the bottom edge, stopping before the vbar (which owns the bottom-right corner).
+    FHScrollBar.SetBounds(0, Height - SBW, Width - (Ord(WantV) * SBW), SBW);
     viewW := ContentWidthFor(PPI);
     hMax := WidestLineWidth(PPI) - viewW; if hMax < 0 then hMax := 0;
     if FScrollX > hMax then FScrollX := hMax;
@@ -2448,41 +2573,41 @@ begin
   end;
 end;
 
-function TTyMemo.ScrollBarVisible: Boolean;
+function TTyCustomMemo.ScrollBarVisible: Boolean;
 begin
   Result := (FScrollBar <> nil) and FScrollBar.Visible;
 end;
 
 // ---- ITyTextEditActions (default context-menu seam; thin delegates) ----
 
-function TTyMemo.TeControl: TControl;              begin Result := Self; end;
-function TTyMemo.TeController: TTyStyleController;  begin Result := ActiveController; end;
-procedure TTyMemo.TeUndo;                           begin Undo; end;
-procedure TTyMemo.TeRedo;                           begin Redo; end;
-procedure TTyMemo.TeCut;                            begin CutToClipboard; end;
-procedure TTyMemo.TeCopy;                           begin CopyToClipboard; end;
-procedure TTyMemo.TePaste;                          begin PasteFromClipboard; end;
-procedure TTyMemo.TeSelectAll;                      begin SelectAll; end;
-function TTyMemo.TeCanUndo: Boolean;                begin Result := CanUndo; end;
-function TTyMemo.TeCanRedo: Boolean;                begin Result := CanRedo; end;
-function TTyMemo.TeHasSelection: Boolean;           begin Result := HasSelection; end;
+function TTyCustomMemo.TeControl: TControl;              begin Result := Self; end;
+function TTyCustomMemo.TeController: TTyCustomStyleController;  begin Result := ActiveController; end;
+procedure TTyCustomMemo.TeUndo;                           begin Undo; end;
+procedure TTyCustomMemo.TeRedo;                           begin Redo; end;
+procedure TTyCustomMemo.TeCut;                            begin CutToClipboard; end;
+procedure TTyCustomMemo.TeCopy;                           begin CopyToClipboard; end;
+procedure TTyCustomMemo.TePaste;                          begin PasteFromClipboard; end;
+procedure TTyCustomMemo.TeSelectAll;                      begin SelectAll; end;
+function TTyCustomMemo.TeCanUndo: Boolean;                begin Result := CanUndo; end;
+function TTyCustomMemo.TeCanRedo: Boolean;                begin Result := CanRedo; end;
+function TTyCustomMemo.TeHasSelection: Boolean;           begin Result := HasSelection; end;
 // Route through the virtual ReadClipboardText so headless tests can stub the clipboard.
-function TTyMemo.TeCanPaste: Boolean;               begin Result := ReadClipboardText <> ''; end;
-function TTyMemo.TeHasText: Boolean;
+function TTyCustomMemo.TeCanPaste: Boolean;               begin Result := ReadClipboardText <> ''; end;
+function TTyCustomMemo.TeHasText: Boolean;
 begin
   Result := (FLines.Count > 1) or ((FLines.Count = 1) and (FLines[0] <> ''));
 end;
-function TTyMemo.TeIsReadOnly: Boolean;             begin Result := FReadOnly; end;
+function TTyCustomMemo.TeIsReadOnly: Boolean;             begin Result := FReadOnly; end;
 
 // ---- ITyImeEditable (macOS IME composition seam; see tyControls.CocoaWS) ----
 
-function  TTyMemo.ImeTargetControl: TWinControl;    begin Result := Self; end;
-function  TTyMemo.ImeIsReadOnly: Boolean;           begin Result := FReadOnly or (not Enabled); end;
-function  TTyMemo.ImeCaretBoundClient: TRect;       begin Result := GetImeCaretRect; end;
-function  TTyMemo.ImeCaretIndex: Integer;           begin Result := SelStart; end;
+function  TTyCustomMemo.ImeTargetControl: TWinControl;    begin Result := Self; end;
+function  TTyCustomMemo.ImeIsReadOnly: Boolean;           begin Result := FReadOnly or (not Enabled); end;
+function  TTyCustomMemo.ImeCaretBoundClient: TRect;       begin Result := GetImeCaretRect; end;
+function  TTyCustomMemo.ImeCaretIndex: Integer;           begin Result := SelStart; end;
 // Bracket the WHOLE composition in one undo step (mirrors HandleImeCommit): BeginUndoStep captures the
 // pre-composition text, FSuspendUndo then swallows every per-keystroke push until End fires.
-procedure TTyMemo.ImeSessionBegin;
+procedure TTyCustomMemo.ImeSessionBegin;
 begin
   BeginUndoStep(uskTyping);
   FSuspendUndo := True;
@@ -2490,8 +2615,8 @@ begin
   // not our control's), so delete it here before the first intermediate text lands at the caret.
   if HasSelection then DeleteSelection;
 end;
-procedure TTyMemo.ImeSessionEnd;                    begin FSuspendUndo := False; DoChange; end;
-procedure TTyMemo.ImeReplace(AStart, ALen: Integer; const AText: string);
+procedure TTyCustomMemo.ImeSessionEnd;                    begin FSuspendUndo := False; DoChange; end;
+procedure TTyCustomMemo.ImeReplace(AStart, ALen: Integer; const AText: string);
 begin
   // Replace [AStart, AStart+ALen) with AText, then relayout (AfterEdit), as HandleImeCommit does.
   if ALen > 0 then
@@ -2513,7 +2638,7 @@ begin
 end;
 
 {$IFDEF LCLCocoa}
-procedure TTyMemo.CocoaImComposition(var Message: TLMessage);
+procedure TTyCustomMemo.CocoaImComposition(var Message: TLMessage);
 begin
   // WParam 0 = IM_MESSAGE_WPARAM_GET_IME_HANDLER (LCL-Cocoa wants our ICocoaIMEControl); 1 = lookup-word (unused).
   if Message.WParam = 0 then Message.Result := PtrInt(FCocoaIme)
@@ -2523,7 +2648,7 @@ end;
 
 { Double-click primitive: select the same-class run (a word run, or a punctuation/space run)
   around column ACol on line ALine. Mirrors TTyEdit.SelectWordAt but on one logical line. }
-procedure TTyMemo.SelectWordAtLineCol(ALine, ACol: Integer);
+procedure TTyCustomMemo.SelectWordAtLineCol(ALine, ACol: Integer);
 var
   lineText: string;
   Len, p, ws, we: Integer;
@@ -2560,7 +2685,7 @@ end;
 
 { Triple-click primitive: select the whole logical line ALine (col 0 .. end of line;
   the trailing newline is NOT part of the line, matching SelectAll's boundary). }
-procedure TTyMemo.SelectLine(ALine: Integer);
+procedure TTyCustomMemo.SelectLine(ALine: Integer);
 begin
   BreakCoalescing;
   if (ALine < 0) or (ALine >= FLines.Count) then Exit;
@@ -2574,7 +2699,7 @@ end;
 
 { Right-click: the user's PopupMenu wins if set; otherwise show the default themed menu
   (tyControls.TextMenu) and consume the event. Identical to TTyEdit.DoContextPopup. }
-procedure TTyMemo.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
+procedure TTyCustomMemo.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
 begin
   inherited DoContextPopup(MousePos, Handled);   // fires OnContextPopup (may set Handled)
   if Handled then Exit;
@@ -2584,7 +2709,7 @@ begin
   Handled := True;
 end;
 
-procedure TTyMemo.MouseDown(Button: TMouseButton; Shift: TShiftState;
+procedure TTyCustomMemo.MouseDown(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
   APPI, LH, Row, CW, NewLine, NewCol, Clicks, Dy: Integer;
@@ -2636,7 +2761,8 @@ begin
   end
   else
   begin
-    Clicks := TyMultiClickCount(ssDouble in Shift, X, Y, FLastClickX, FLastClickY, FLastClickTick, FClickCount);
+    Clicks := TyMultiClickCount(ssDouble in Shift, X, Y, FLastClickX, FLastClickY,
+      FLastClickTick, FClickCount, Font.PixelsPerInch);
     if Clicks = 2 then
     begin
       SelectWordAtLineCol(FCaretLine, FCaretCol);   // double-click: word under the pointer
@@ -2668,7 +2794,7 @@ begin
   DoSelectionChange;
 end;
 
-procedure TTyMemo.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomMemo.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   APPI, LH, Row, CW, NewLine, NewCol, Dy: Integer;
 begin
@@ -2700,7 +2826,7 @@ begin
   DoSelectionChange;
 end;
 
-procedure TTyMemo.MouseUp(Button: TMouseButton; Shift: TShiftState;
+procedure TTyCustomMemo.MouseUp(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
@@ -2708,7 +2834,7 @@ begin
     FMouseSelecting := False;
 end;
 
-function TTyMemo.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+function TTyCustomMemo.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 var
   Delta: Integer;
@@ -2730,7 +2856,7 @@ begin
   Result := True;
 end;
 
-procedure TTyMemo.Resize;
+procedure TTyCustomMemo.Resize;
 begin
   inherited Resize;
   // A width change alters the wrap layout (EnsureVisualRows also re-checks the
@@ -2742,7 +2868,7 @@ begin
   ClampScrollX(Font.PixelsPerInch);
 end;
 
-procedure TTyMemo.ScrollBy(DeltaX, DeltaY: Integer);
+procedure TTyCustomMemo.ScrollBy(DeltaX, DeltaY: Integer);
 // Text-view scroll (see the declaration for why this must NOT be TWinControl's
 // child-mover, and why overriding is safe on this class but not on TTyScrollBox).
 var
@@ -2784,7 +2910,7 @@ begin
   end;
 end;
 
-procedure TTyMemo.AfterEdit(APPI: Integer);
+procedure TTyCustomMemo.AfterEdit(APPI: Integer);
 begin
   ClampCaret;
   { A completed edit parks the affinity, because that is what an insertion point means:
@@ -2815,7 +2941,7 @@ begin
   DoSelectionChange;
 end;
 
-procedure TTyMemo.AfterCaretMove(APPI: Integer);
+procedure TTyCustomMemo.AfterCaretMove(APPI: Integer);
 begin
   ClampCaret;
   EnsureCaretLineVisible(APPI);
@@ -2838,7 +2964,7 @@ end;
 
 // ---- Model mutators (pure UTF8 splice on FLines) ----
 
-procedure TTyMemo.DoInsertText(const AStr: string);
+procedure TTyCustomMemo.DoInsertText(const AStr: string);
 // Splice AStr into the current line at FCaretCol (codepoint index); advance the
 // caret past the inserted text. Mirrors TTyEdit.InjectStringAt per-line.
 var
@@ -2862,7 +2988,7 @@ begin
   FCaretCol := FCaretCol + UTF8Length(Ins);
 end;
 
-procedure TTyMemo.DoSplitLine;
+procedure TTyCustomMemo.DoSplitLine;
 // Split the current line at FCaretCol into two logical lines; caret moves to the
 // start of the new (lower) line.
 var
@@ -2882,7 +3008,7 @@ begin
   FCaretCol := 0;
 end;
 
-procedure TTyMemo.DoBackspace;
+procedure TTyCustomMemo.DoBackspace;
 // At col>0: delete the previous codepoint on the current line.
 // At col 0, line>0: merge the current line onto the end of the previous line,
 // caret landing at the join. At (0,0): no-op (caller checks and skips OnChange).
@@ -2922,7 +3048,7 @@ begin
   end;
 end;
 
-procedure TTyMemo.DoDelete;
+procedure TTyCustomMemo.DoDelete;
 // Before line end: delete the next codepoint on the current line.
 // At line end with a following line: merge the next line up (caret stays).
 // At the very end of the document: no-op (caller checks and skips OnChange).
@@ -2950,7 +3076,7 @@ end;
 
 // ---- Per-line word-boundary helpers (ported from TTyEdit) ----
 
-function TTyMemo.IsWordCodepoint(const CP: string): Boolean;
+function TTyCustomMemo.IsWordCodepoint(const CP: string): Boolean;
 // Verbatim from TTyEdit.IsWordCodepoint. A word codepoint is anything that is
 // not whitespace and not ASCII punctuation. Whitespace: #32, #9, U+00A0. ASCII
 // punctuation: ! " # $ % & ' ( ) * + , - . / : ; < = > ? @ [ \ ] ^ ` { | } ~
@@ -2970,7 +3096,7 @@ begin
   Result := True;
 end;
 
-function TTyMemo.NextWordBoundary(const ALine: string; AIdx: Integer): Integer;
+function TTyCustomMemo.NextWordBoundary(const ALine: string; AIdx: Integer): Integer;
 // TTyEdit.NextWordBoundary generalised to a passed line string.
 var
   i, Len: Integer;
@@ -2987,7 +3113,7 @@ begin
   Result := i;
 end;
 
-function TTyMemo.PrevWordBoundary(const ALine: string; AIdx: Integer): Integer;
+function TTyCustomMemo.PrevWordBoundary(const ALine: string; AIdx: Integer): Integer;
 // TTyEdit.PrevWordBoundary generalised to a passed line string.
 var
   i, Len: Integer;
@@ -3006,7 +3132,7 @@ end;
 
 // ---- Pure visual-row model ----
 
-function TTyMemo.BuildVisualRows(AContentWidth, APPI: Integer): TTyVisualRowArray;
+function TTyCustomMemo.BuildVisualRows(AContentWidth, APPI: Integer): TTyVisualRowArray;
 // Greedy wrap. For each logical line, when WordWrap=False emit one full-width
 // row [0,LineLen). When WordWrap=True pack codepoints into the content width:
 //   - measure cumulative prefix widths once per line;
@@ -3117,7 +3243,7 @@ begin
     AddRow(0, 0, 0);
 end;
 
-function TTyMemo.ContentWidthFor(APPI: Integer): Integer;
+function TTyCustomMemo.ContentWidthFor(APPI: Integer): Integer;
 var
   S: TTyStyleSet;
   SBWidth: Integer;
@@ -3134,7 +3260,7 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-procedure TTyMemo.EnsureVisualRows(APPI: Integer);
+procedure TTyCustomMemo.EnsureVisualRows(APPI: Integer);
 var
   CW: Integer;
 begin
@@ -3145,7 +3271,7 @@ begin
   FVisualRowsValid := True;
 end;
 
-procedure TTyMemo.InvalidateVisualRows;
+procedure TTyCustomMemo.InvalidateVisualRows;
 begin
   FVisualRowsValid := False;
   // Every text mutation funnels through here -- edits, undo/redo (AfterEdit), the Lines setter,
@@ -3157,14 +3283,14 @@ begin
   FWidestWidthValid := False;
 end;
 
-function TTyMemo.RowsFor(AContentWidth, APPI: Integer): TTyVisualRowArray;
+function TTyCustomMemo.RowsFor(AContentWidth, APPI: Integer): TTyVisualRowArray;
 begin
   if FVisualRowsValid and (FVisualRowsWidth = AContentWidth) then
     Exit(FVisualRows);
   Result := BuildVisualRows(AContentWidth, APPI);
 end;
 
-procedure TTyMemo.CaretToVisual(ALine, ACol, AContentWidth, APPI: Integer;
+procedure TTyCustomMemo.CaretToVisual(ALine, ACol, AContentWidth, APPI: Integer;
   out AVisualRow, AX: Integer);
 begin
   { The DEFAULT affinity, which is what a caller that does not know about glyphs means: the
@@ -3173,7 +3299,7 @@ begin
   CaretToVisualEx(ALine, ACol, True, AContentWidth, APPI, AVisualRow, AX);
 end;
 
-procedure TTyMemo.CaretToVisualEx(ALine, ACol: Integer; AAfterPrev: Boolean;
+procedure TTyCustomMemo.CaretToVisualEx(ALine, ACol: Integer; AAfterPrev: Boolean;
   AContentWidth, APPI: Integer; out AVisualRow, AX: Integer);
 var
   Rows: TTyVisualRowArray;
@@ -3226,7 +3352,7 @@ begin
   end;
 end;
 
-procedure TTyMemo.VisualToCaret(AVisualRow, AX, AContentWidth, APPI: Integer;
+procedure TTyCustomMemo.VisualToCaret(AVisualRow, AX, AContentWidth, APPI: Integer;
   out ALine, ACol: Integer);
 var
   Ignored: Boolean;
@@ -3234,7 +3360,7 @@ begin
   VisualToCaretEx(AVisualRow, AX, AContentWidth, APPI, ALine, ACol, Ignored);
 end;
 
-procedure TTyMemo.VisualToCaretEx(AVisualRow, AX, AContentWidth, APPI: Integer;
+procedure TTyCustomMemo.VisualToCaretEx(AVisualRow, AX, AContentWidth, APPI: Integer;
   out ALine, ACol: Integer; out AAfterPrev: Boolean);
 var
   Rows: TTyVisualRowArray;
@@ -3305,7 +3431,7 @@ end;
 // ---- Word-delete mutators (pure UTF8 splice on the caret line; fall back to the
 // cross-line merge at the line boundary). Callers route through AfterEdit. ----
 
-procedure TTyMemo.DeleteWordBackward;
+procedure TTyCustomMemo.DeleteWordBackward;
 var
   Cur, Before, After: string;
   t, L: Integer;
@@ -3328,7 +3454,7 @@ begin
     DoBackspace;
 end;
 
-procedure TTyMemo.DeleteWordForward;
+procedure TTyCustomMemo.DeleteWordForward;
 var
   Cur, Before, After: string;
   t, L: Integer;
@@ -3350,7 +3476,7 @@ begin
     DoDelete;
 end;
 
-procedure TTyMemo.DeleteSelection;
+procedure TTyCustomMemo.DeleteSelection;
 // 2D generalisation of TTyEdit.DeleteSelection. Single line: splice within the
 // line. Multi-line: keep SL's head (codepoints 1..SC) + EL's tail (codepoints
 // EC+1..end), drop the interior lines. Caret -> SelStart; anchor collapses.
@@ -3389,17 +3515,17 @@ end;
 // Virtual hooks lifted verbatim from TTyEdit so headless tests can override them
 // with an in-memory string.
 
-function TTyMemo.ReadClipboardText: string;
+function TTyCustomMemo.ReadClipboardText: string;
 begin
   Result := Clipboard.AsText;
 end;
 
-procedure TTyMemo.WriteClipboardText(const S: string);
+procedure TTyCustomMemo.WriteClipboardText(const S: string);
 begin
   Clipboard.AsText := S;
 end;
 
-procedure TTyMemo.CopyToClipboard;
+procedure TTyCustomMemo.CopyToClipboard;
 begin
   // Identical to TTyEdit.CopyToClipboard: SelText is already LineEnding-joined,
   // so the multi-line case needs no special handling here.
@@ -3409,7 +3535,7 @@ begin
   BreakCoalescing;
 end;
 
-procedure TTyMemo.CutToClipboard;
+procedure TTyCustomMemo.CutToClipboard;
 begin
   // ReadOnly: a cut may not delete; degrade to a plain copy.
   if FReadOnly then begin CopyToClipboard; Exit; end;
@@ -3428,7 +3554,7 @@ begin
   AfterEdit(Font.PixelsPerInch);
 end;
 
-procedure TTyMemo.InsertTextMultiline(const AStr: string);
+procedure TTyCustomMemo.InsertTextMultiline(const AStr: string);
 // Pure mutator: normalise CR/LF in AStr, split into segments, and splice them in
 // at the caret. A single segment is a plain in-line insert; multiple segments
 // split the caret line (head before caret / tail after) and insert the interior
@@ -3496,7 +3622,7 @@ begin
   end;
 end;
 
-procedure TTyMemo.PasteFromClipboard;
+procedure TTyCustomMemo.PasteFromClipboard;
 // Multi-line paste: read the clipboard, normalise line breaks, split into
 // segments and splice them into the model. A truly-empty clipboard is a full
 // no-op (mirrors TTyEdit). A non-empty-but-CRLF-only clipboard (e.g. #10) still
@@ -3543,14 +3669,14 @@ begin
   end;
 end;
 
-function TTyMemo.EffectiveFontSize(const S: TTyStyleSet): Integer;
+function TTyCustomMemo.EffectiveFontSize(const S: TTyStyleSet): Integer;
 begin
   // Verbatim from TTyEdit.EffectiveFontSize: route through the shared resolver so a skin that
   // suppresses the font-size gets the theme's --font-size-base, not a hardcoded 12pt.
   Result := ResolveFontSize(S);
 end;
 
-function TTyMemo.TextStartX(APPI: Integer): Integer;
+function TTyCustomMemo.TextStartX(APPI: Integer): Integer;
 var
   S: TTyStyleSet;
 begin
@@ -3558,7 +3684,7 @@ begin
   Result := MulDiv(S.Padding.Left, APPI, 96);
 end;
 
-procedure TTyMemo.SetWordWrap(AValue: Boolean);
+procedure TTyCustomMemo.SetWordWrap(AValue: Boolean);
 begin
   if FWordWrap = AValue then Exit;
   FWordWrap := AValue;
@@ -3570,7 +3696,7 @@ begin
   Invalidate;
 end;
 
-function TTyMemo.LineHeight(APPI: Integer): Integer;
+function TTyCustomMemo.LineHeight(APPI: Integer): Integer;
 var
   S: TTyStyleSet;
   EffSize: Integer;
@@ -3588,7 +3714,7 @@ begin
     Result := 1;
 end;
 
-function TTyMemo.MeasureLineWidths(const ALine: string; APPI: Integer): TTyIntArray;
+function TTyCustomMemo.MeasureLineWidths(const ALine: string; APPI: Integer): TTyIntArray;
 // Cumulative prefix x positions (px), length = UTF8Length(ALine)+1, measured on
 // the shared lazy bitmap. Lifted from TTyEdit.MeasureCodepointWidths. CACHED by line
 // content + font signature: a keystroke then re-measures only the edited line, not every
@@ -3659,7 +3785,7 @@ begin
   FLineWidthCache.AddOrSetValue(ALine, Result);
 end;
 
-function TTyMemo.MeasureLineTotalWidth(const ALine: string; APPI: Integer): Integer;
+function TTyCustomMemo.MeasureLineTotalWidth(const ALine: string; APPI: Integer): Integer;
 // Cheap O(L) total width: a SINGLE TextSize(whole line), cached by content. Equivalent to
 // MeasureLineWidths(ALine)[High] (the last prefix IS the whole line, same font config) but without
 // the O(L^2) per-character prefix loop. Same font-signature drop discipline as FLineWidthCache so a
@@ -3706,7 +3832,7 @@ begin
   FLineTotalWidthCache.AddOrSetValue(ALine, Result);
 end;
 
-function TTyMemo.ColPixelXAt(const ALine: string; ACol, APPI: Integer): Integer;
+function TTyCustomMemo.ColPixelXAt(const ALine: string; ACol, APPI: Integer): Integer;
 var
   Widths: TTyIntArray;
   Len: Integer;
@@ -3757,7 +3883,7 @@ end;
 // through TTyPainter.TextCaretX and requires the same pixel for every column the painter can
 // express, so the two cannot drift apart in silence.
 
-function TTyMemo.LineHasRTL(const ALine: string): Boolean;
+function TTyCustomMemo.LineHasRTL(const ALine: string): Boolean;
 begin
   { The memo is one slot deep on purpose. The caret asks about the SAME line on every blink,
     every keystroke and every mouse move of a drag-select, so one slot catches nearly all of
@@ -3777,7 +3903,7 @@ begin
   Result := FBidiGateAnswer;
 end;
 
-function TTyMemo.RowSegmentOf(AVisualRow: Integer): string;
+function TTyCustomMemo.RowSegmentOf(AVisualRow: Integer): string;
 var
   Line: string;
 begin
@@ -3791,7 +3917,7 @@ begin
     FVisualRows[AVisualRow].EndCol - FVisualRows[AVisualRow].StartCol);
 end;
 
-function TTyMemo.EnsureRowBidi(const ASeg: string; APPI: Integer;
+function TTyCustomMemo.EnsureRowBidi(const ASeg: string; APPI: Integer;
   out ARB: TTyMemoRowBidi): Boolean;
 var
   S: TTyStyleSet;
@@ -3904,7 +4030,7 @@ begin
   Result := ARB.Active;
 end;
 
-function TTyMemo.RowBidi(AVisualRow, APPI: Integer; out ARB: TTyMemoRowBidi): Boolean;
+function TTyCustomMemo.RowBidi(AVisualRow, APPI: Integer; out ARB: TTyMemoRowBidi): Boolean;
 var
   Line: string;
 begin
@@ -3921,7 +4047,7 @@ begin
   Result := EnsureRowBidi(RowSegmentOf(AVisualRow), APPI, ARB);
 end;
 
-function TTyMemo.RowBidiEdgeX(const ARB: TTyMemoRowBidi; ARun, AIndex: Integer): Integer;
+function TTyCustomMemo.RowBidiEdgeX(const ARB: TTyMemoRowBidi; ARun, AIndex: Integer): Integer;
 begin
   { At the run's logical END only Trail was written from this run; everywhere else Lead was.
     (Both arrays hold the same number except at a direction boundary.) }
@@ -3931,7 +4057,7 @@ begin
     Result := ARB.Lead[AIndex];
 end;
 
-function TTyMemo.RowBidiCaretRun(const ARB: TTyMemoRowBidi; AIndex: Integer;
+function TTyCustomMemo.RowBidiCaretRun(const ARB: TTyMemoRowBidi; AIndex: Integer;
   AAfterPrev: Boolean): Integer;
 var
   r: Integer;
@@ -3951,7 +4077,7 @@ begin
   Result := -1;
 end;
 
-function TTyMemo.RowBidiNeighbourRun(const ARB: TTyMemoRowBidi;
+function TTyCustomMemo.RowBidiNeighbourRun(const ARB: TTyMemoRowBidi;
   ARun, ADir: Integer): Integer;
 var
   i: Integer;
@@ -3970,7 +4096,7 @@ begin
     end;
 end;
 
-function TTyMemo.RowCaretRelX(AVisualRow, ARowCol: Integer; AAfterPrev: Boolean;
+function TTyCustomMemo.RowCaretRelX(AVisualRow, ARowCol: Integer; AAfterPrev: Boolean;
   APPI: Integer): Integer;
 var
   RB: TTyMemoRowBidi;
@@ -4006,7 +4132,7 @@ begin
   Result := Widths[RS + ARowCol] - Widths[RS];
 end;
 
-procedure TTyMemo.RowVisualEdge(AVisualRow, ASide, APPI: Integer;
+procedure TTyCustomMemo.RowVisualEdge(AVisualRow, ASide, APPI: Integer;
   out ACol: Integer; out AAfterPrev: Boolean);
 var
   RB: TTyMemoRowBidi;
@@ -4045,12 +4171,12 @@ begin
   AAfterPrev := j > RB.Runs[r].First;
 end;
 
-procedure TTyMemo.DefaultCaretAffinity;
+procedure TTyCustomMemo.DefaultCaretAffinity;
 begin
   FCaretAfterPrev := True;
 end;
 
-function TTyMemo.CaretOwningRow(ALine, ACol: Integer): Integer;
+function TTyCustomMemo.CaretOwningRow(ALine, ACol: Integer): Integer;
 var
   i: Integer;
 begin
@@ -4066,7 +4192,7 @@ begin
       Exit(i);
 end;
 
-function TTyMemo.CaretDrawXAt(ALine, ACol: Integer; AAfterPrev: Boolean;
+function TTyCustomMemo.CaretDrawXAt(ALine, ACol: Integer; AAfterPrev: Boolean;
   APPI: Integer): Integer;
 var
   VRow: Integer;
@@ -4099,12 +4225,12 @@ begin
     + RowCaretRelX(VRow, ACol - FVisualRows[VRow].StartCol, AAfterPrev, APPI);
 end;
 
-function TTyMemo.CaretDrawX(APPI: Integer): Integer;
+function TTyCustomMemo.CaretDrawX(APPI: Integer): Integer;
 begin
   Result := CaretDrawXAt(FCaretLine, FCaretCol, FCaretAfterPrev, APPI);
 end;
 
-function TTyMemo.UsesBidiCaret(APPI: Integer): Boolean;
+function TTyCustomMemo.UsesBidiCaret(APPI: Integer): Boolean;
 var
   CW, VRow, X: Integer;
   RB: TTyMemoRowBidi;
@@ -4115,7 +4241,7 @@ begin
   Result := RowBidi(VRow, APPI, RB);
 end;
 
-function TTyMemo.ColIndexAtX(const ALine: string; AX, APPI: Integer): Integer;
+function TTyCustomMemo.ColIndexAtX(const ALine: string; AX, APPI: Integer): Integer;
 // Midpoint-nearest codepoint boundary (lifted from TTyEdit.CaretIndexAtX). AX is a
 // device x in control coordinates; add FScrollX so a click while horizontally
 // scrolled resolves to the correct (scrolled-away) column. FScrollX is 0 when the
@@ -4142,7 +4268,7 @@ begin
   end;
 end;
 
-procedure TTyMemo.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomMemo.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 // Visible visual-ROW loop + static caret. Each painted row is one TTyVisualRow
 // segment [StartCol,EndCol) of a logical line: when WordWrap=False the cache holds
 // exactly one full-width row (StartCol=0, EndCol=LineLen) per logical line, so the
@@ -4413,14 +4539,14 @@ begin
   end;
 end;
 
-procedure TTyMemo.Paint;
+procedure TTyCustomMemo.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
 // ---- Input handlers ----
 
-procedure TTyMemo.UTF8KeyPress(var UTF8Key: TUTF8Char);
+procedure TTyCustomMemo.UTF8KeyPress(var UTF8Key: TUTF8Char);
 var
   imeFull: string;
 begin
@@ -4469,7 +4595,7 @@ end;
 { Insert a FULL input-method commit (Qt6). LCL's UTF8KeyPress caps a commit at TUTF8Char (String[7],
   ~2 CJK chars); our Qt event filter (tyControls.QtWS) calls this with the whole commitString. Mirrors
   PasteFromClipboard: MaxLength trim, one undo step, replace selection, splice via InsertTextMultiline. }
-procedure TTyMemo.HandleImeCommit(const ACommitUtf8: string);
+procedure TTyCustomMemo.HandleImeCommit(const ACommitUtf8: string);
 var
   S: string;
   Room: Integer;
@@ -4497,14 +4623,14 @@ begin
   end;
 end;
 
-function TTyMemo.GetImeCaretRect: TRect;
+function TTyCustomMemo.GetImeCaretRect: TRect;
 begin
   if (not HandleAllocated) or (not Focused) then
     Exit(Rect(0, 0, 0, 0));   // decline -> Qt's default candidate position stands
   Result := FImeCaretRect;
 end;
 
-procedure TTyMemo.InitializeWnd;
+procedure TTyCustomMemo.InitializeWnd;
 begin
   inherited InitializeWnd;
   TyImeUninstall(FImeHook);   // defensive: drop any prior hook if the handle is recreated
@@ -4513,13 +4639,13 @@ begin
   FImeHook := TyImeInstall(Self, @HandleImeCommit, @GetImeCaretRect);
 end;
 
-procedure TTyMemo.DestroyWnd;
+procedure TTyCustomMemo.DestroyWnd;
 begin
   TyImeUninstall(FImeHook);
   inherited DestroyWnd;
 end;
 
-procedure TTyMemo.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomMemo.KeyDown(var Key: Word; Shift: TShiftState);
 var
   APPI, L, MaxLine, WordT: Integer;
   CtrlLike, Extending: Boolean;
@@ -4933,7 +5059,7 @@ end;
 
 // ---- Headless input helpers ----
 
-procedure TTyMemo.InjectChar(const AChar: TUTF8Char);
+procedure TTyCustomMemo.InjectChar(const AChar: TUTF8Char);
 var
   K: TUTF8Char;
 begin
@@ -4942,7 +5068,7 @@ begin
   UTF8KeyPress(K);
 end;
 
-procedure TTyMemo.InjectKey(AKey: Word; AShift: TShiftState);
+procedure TTyCustomMemo.InjectKey(AKey: Word; AShift: TShiftState);
 var
   K: Word;
 begin
@@ -4950,13 +5076,13 @@ begin
   KeyDown(K, AShift);
 end;
 
-procedure TTyMemo.InjectBackspace;
+procedure TTyCustomMemo.InjectBackspace;
 begin
   if FReadOnly then Exit;            // ReadOnly: block backspace edit
   InjectKey(VK_BACK, []);
 end;
 
-procedure TTyMemo.InjectDelete;
+procedure TTyCustomMemo.InjectDelete;
 begin
   if FReadOnly then Exit;            // ReadOnly: block delete edit
   InjectKey(VK_DELETE, []);

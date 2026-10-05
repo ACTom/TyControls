@@ -37,7 +37,12 @@ var e: TTyCalcEdit;
 begin
   e := TTyCalcEdit.Create(nil);
   try
-    AssertTrue('is a numeric edit', e is TTyNumericEdit);
+    AssertTrue('is a numeric edit', e is TTyCustomNumericEdit);
+    { 4.0 hangs the derived edits on the custom chain, the LCL way: a calc edit is a
+      TTyCustomNumericEdit and no longer a TTyNumericEdit (an intended incompatibility, see
+      docs/subclassing.md). TObject() because the compiler rejects `is` between classes it
+      can see are unrelated -- which is exactly the point being pinned. }
+    AssertFalse('and no longer a TTyNumericEdit', TObject(e) is TTyNumericEdit);
     e.Value := 42.5;
     AssertEquals('value round-trips', 42.5, e.Value, 1e-9);
   finally e.Free; end;
@@ -57,7 +62,8 @@ var e: TTyCalcCurrencyEdit;
 begin
   e := TTyCalcCurrencyEdit.Create(nil);
   try
-    AssertTrue('is a currency edit', e is TTyCurrencyEdit);
+    AssertTrue('is a currency edit', e is TTyCustomCurrencyEdit);
+    AssertFalse('and no longer a TTyCurrencyEdit', TObject(e) is TTyCurrencyEdit);
     e.Value := 1234.5;
     AssertEquals('value round-trips', 1234.5, e.Value, 1e-9);
   finally e.Free; end;

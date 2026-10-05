@@ -36,7 +36,7 @@ type
     FCtl:  TTyStyleController;
     FForm: TForm;
     FTree: TTyTreeView;
-    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
     procedure BuildTree(AColumns: Boolean);
     procedure Layout;
   protected
@@ -67,12 +67,12 @@ type
     FCancelledFired:  Integer;
     FCancelledNode:   PTyTreeNode;
     FCancelledColumn: Integer;
-    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
-    procedure OnEditing(Sender: TTyTreeView; Node: PTyTreeNode; Column: Integer;
+    procedure OnGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnEditing(Sender: TTyCustomTreeView; Node: PTyTreeNode; Column: Integer;
       var Allowed: Boolean);
-    procedure OnNewText(Sender: TTyTreeView; Node: PTyTreeNode; Column: Integer;
+    procedure OnNewText(Sender: TTyCustomTreeView; Node: PTyTreeNode; Column: Integer;
       const NewText: string);
-    procedure OnEditCancelled(Sender: TTyTreeView; Node: PTyTreeNode; Column: Integer);
+    procedure OnEditCancelled(Sender: TTyCustomTreeView; Node: PTyTreeNode; Column: Integer);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -99,10 +99,10 @@ type
     FNewTextFired:   Integer;
     FNewTextValue:   string;
     FCancelledFired: Integer;
-    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
-    procedure OnNewText(Sender: TTyTreeView; Node: PTyTreeNode; Column: Integer;
+    procedure OnGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnNewText(Sender: TTyCustomTreeView; Node: PTyTreeNode; Column: Integer;
       const NewText: string);
-    procedure OnEditCancelled(Sender: TTyTreeView; Node: PTyTreeNode; Column: Integer);
+    procedure OnEditCancelled(Sender: TTyCustomTreeView; Node: PTyTreeNode; Column: Integer);
     function  NodeAt(AIndex: Integer): PTyTreeNode;
     procedure Layout;
   protected
@@ -134,7 +134,7 @@ type
     FForm: TForm;
     FTree: TTyTreeView;
     FNode0: PTyTreeNode;
-    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
   protected
     procedure TearDown; override;
   published
@@ -156,8 +156,8 @@ type
     FForm: TForm;
     FTree: TTyTreeView;
     FImages: TImageList;
-    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
-    procedure OnGetImageIndex(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure OnGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnGetImageIndex(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean;
       var ImageIndex: Integer);
     procedure Build(APPI: Integer);
@@ -191,8 +191,8 @@ type
     FTree:   TTyTreeView;
     FImages: TImageList;
     FChecked, FPlain: PTyTreeNode;   { two level-1 siblings; only FChecked has a box }
-    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
-    procedure OnGetImageIndex(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure OnGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnGetImageIndex(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean;
       var ImageIndex: Integer);
     procedure Build(APPI: Integer);
@@ -331,7 +331,7 @@ end;
   E3 — triggers (MouseDown column tracking, double-click-to-edit, F2)
   ---------------------------------------------------------------------------- }
 
-procedure TTreeEditE3Test.OnGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeEditE3Test.OnGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   var Text: string);
 begin
   Text := 'row' + IntToStr(Node^.Index);
@@ -483,20 +483,20 @@ end;
   E2 fixture
   ---------------------------------------------------------------------------- }
 
-procedure TTreeEditE2Test.OnGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeEditE2Test.OnGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   var Text: string);
 begin
   Text := 'row' + IntToStr(Node^.Index);
 end;
 
-procedure TTreeEditE2Test.OnEditing(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeEditE2Test.OnEditing(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   Column: Integer; var Allowed: Boolean);
 begin
   Inc(FEditingFired);
   Allowed := FEditingAllow;
 end;
 
-procedure TTreeEditE2Test.OnNewText(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeEditE2Test.OnNewText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   Column: Integer; const NewText: string);
 begin
   Inc(FNewTextFired);
@@ -505,7 +505,7 @@ begin
   FNewTextValue  := NewText;
 end;
 
-procedure TTreeEditE2Test.OnEditCancelled(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeEditE2Test.OnEditCancelled(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   Column: Integer);
 begin
   Inc(FCancelledFired);
@@ -710,20 +710,20 @@ end;
   option-off, focus-loss / Enter / Esc)
   ---------------------------------------------------------------------------- }
 
-procedure TTreeEditE4Test.OnGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeEditE4Test.OnGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   var Text: string);
 begin
   Text := 'row' + IntToStr(Node^.Index);
 end;
 
-procedure TTreeEditE4Test.OnNewText(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeEditE4Test.OnNewText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   Column: Integer; const NewText: string);
 begin
   Inc(FNewTextFired);
   FNewTextValue := NewText;
 end;
 
-procedure TTreeEditE4Test.OnEditCancelled(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeEditE4Test.OnEditCancelled(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   Column: Integer);
 begin
   Inc(FCancelledFired);
@@ -995,7 +995,7 @@ end;
   E5 — theme-on-child (the overlay editor is themed by the tree's controller)
   ---------------------------------------------------------------------------- }
 
-procedure TTreeEditE5ThemeTest.OnGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeEditE5ThemeTest.OnGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   var Text: string);
 begin
   Text := 'row' + IntToStr(Node^.Index);
@@ -1080,13 +1080,13 @@ end;
   bare cell band.
   ---------------------------------------------------------------------------- }
 
-procedure TTreeEditFix1Test.OnGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TTreeEditFix1Test.OnGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   var Text: string);
 begin
   Text := 'row' + IntToStr(Node^.Index);
 end;
 
-procedure TTreeEditFix1Test.OnGetImageIndex(Sender: TTyTreeView;
+procedure TTreeEditFix1Test.OnGetImageIndex(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; Kind: TTyVTImageKind; Column: Integer;
   var Ghosted: Boolean; var ImageIndex: Integer);
 begin
@@ -1257,13 +1257,13 @@ end;
   The check box's share of the caption x
   ============================================================================ }
 
-procedure TTreeCheckCaptionXTest.OnGetText(Sender: TTyTreeView;
+procedure TTreeCheckCaptionXTest.OnGetText(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var Text: string);
 begin
   Text := 'n' + IntToStr(Node^.Index);
 end;
 
-procedure TTreeCheckCaptionXTest.OnGetImageIndex(Sender: TTyTreeView;
+procedure TTreeCheckCaptionXTest.OnGetImageIndex(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; Kind: TTyVTImageKind; Column: Integer;
   var Ghosted: Boolean; var ImageIndex: Integer);
 begin

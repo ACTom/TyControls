@@ -15,9 +15,9 @@ function TyTrackEditThumbX(AValue, AMin, AMax: Double; ALeft, ARight: Integer): 
 type
   { A numeric edit with an inline mini-slider in its reserved right zone: drag the thumb
     to set Value across [MinValue,MaxValue] (default 0..100), and the number echoes it.
-    Subclasses TTyNumericEdit (Value / input filter / formatting) and paints + drives the
+    Descends from TTyCustomNumericEdit (Value / input filter / formatting) and paints + drives the
     slider through the TTyEdit RightReserve/PaintTrailing hooks. }
-  TTyTrackEdit = class(TTyNumericEdit)
+  TTyCustomTrackEdit = class(TTyCustomNumericEdit)
   private
     FSliderWidth: Integer;   // logical px of the slider zone
     FDragging: Boolean;
@@ -31,6 +31,79 @@ type
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
   public
     constructor Create(AOwner: TComponent); override;
+  end;
+
+  { TTyTrackEdit publishes TTyCustomTrackEdit's properties; everything lives in TTyCustomTrackEdit. }
+  TTyTrackEdit = class(TTyCustomTrackEdit)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Text;
+    property ReadOnly;
+    property MaxLength;
+    property PasswordChar;
+    property EchoMode;
+    property HideSelection;
+    property AutoSelect;
+    property TextHint;
+    property Alignment;
+    property CharCase;
+    property NumbersOnly;
+    property Align;
+    property Anchors;
+    property OnChange;
+    property Decimals;
+    property UseThousands;
+    property MinValue;
+    property MaxValue;
   end;
 
 implementation
@@ -53,7 +126,7 @@ begin
   Result := ALeft + Round(frac * (ARight - ALeft));
 end;
 
-constructor TTyTrackEdit.Create(AOwner: TComponent);
+constructor TTyCustomTrackEdit.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FSliderWidth := 74;
@@ -62,12 +135,12 @@ begin
   Decimals := 0;    // track values read as whole numbers by default
 end;
 
-function TTyTrackEdit.RightReserve(APPI: Integer): Integer;
+function TTyCustomTrackEdit.RightReserve(APPI: Integer): Integer;
 begin
   Result := MulDiv(FSliderWidth, APPI, 96);
 end;
 
-procedure TTyTrackEdit.TrackSpan(out ALeft, ARight, AMidY: Integer);
+procedure TTyCustomTrackEdit.TrackSpan(out ALeft, ARight, AMidY: Integer);
 var zone: TRect; margin: Integer;
 begin
   zone := TrailingZone(Font.PixelsPerInch);
@@ -77,7 +150,7 @@ begin
   AMidY := (zone.Top + zone.Bottom) div 2;
 end;
 
-procedure TTyTrackEdit.PaintTrailing(APainter: TTyPainter; const AZone: TRect; const AStyle: TTyStyleSet);
+procedure TTyCustomTrackEdit.PaintTrailing(APainter: TTyPainter; const AZone: TRect; const AStyle: TTyStyleSet);
 var
   accentS: TTyStyleSet;
   margin, tl, tr, midY, thumbX, r, halfTrack: Integer;
@@ -109,7 +182,7 @@ begin
   APainter.FillBackground(Rect(thumbX - r, midY - r, thumbX + r, midY + r), thumbFill, 5);
 end;
 
-procedure TTyTrackEdit.SetFromX(AX: Integer);
+procedure TTyCustomTrackEdit.SetFromX(AX: Integer);
 var tl, tr, midY: Integer;
 begin
   TrackSpan(tl, tr, midY);
@@ -117,7 +190,7 @@ begin
     Value := TyTrackEditValueAt(AX, tl, tr, MinValue, MaxValue);
 end;
 
-procedure TTyTrackEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomTrackEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   if (Button = mbLeft) and PtInRect(TrailingZone(Font.PixelsPerInch), Point(X, Y)) then
   begin
@@ -128,7 +201,7 @@ begin
   inherited MouseDown(Button, Shift, X, Y);
 end;
 
-procedure TTyTrackEdit.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomTrackEdit.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   if FDragging then
   begin
@@ -138,7 +211,7 @@ begin
   inherited MouseMove(Shift, X, Y);
 end;
 
-procedure TTyTrackEdit.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomTrackEdit.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   if FDragging then
   begin

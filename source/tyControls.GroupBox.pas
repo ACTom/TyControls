@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType, LMessages,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Accel;
 type
-  TTyGroupBox = class(TTyCustomControl)
+  TTyCustomGroupBox = class(TTyCustomControl)
   private
     FCaption: TCaption;
     FAlignment: TAlignment;
@@ -23,20 +23,71 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-  published
     property Caption: TCaption read FCaption write SetCaption;
     { NOTE: this is the CAPTION's alignment in the band, and it has no LCL counterpart --
       TGroupBox/TRadioGroup/TCheckGroup publish no Alignment at all. It is emphatically NOT
       TCustomCheckBox.Alignment, which is a TLeftRight naming the side the INDICATOR sits on
       (see TTyCheckBox.Alignment). Same word, two subjects; recorded so nobody unifies them. }
     property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
-    { AutoSize is NOT republished here, and that is not an oversight: TTyCustomControl
-      already publishes it (tyControls.Base.pas), so it has always been in the Object
-      Inspector for this control and every other one. The audit claim that a ty group box
-      "cannot be made to hug its contents" was wrong on the facts -- TWinControl computes a
-      container's preferred size from its children, and AdjustClientRect above already
-      reserves the caption band plus the themed padding, so the whole path was live.
-      Restating the publication would have looked like a fix and changed nothing. }
+  end;
+
+  { TTyGroupBox publishes TTyCustomGroupBox's properties; everything lives in TTyCustomGroupBox. }
+  TTyGroupBox = class(TTyCustomGroupBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    { AutoSize hugs the contents: TWinControl computes a container's preferred size from its
+      children, and AdjustClientRect reserves the caption band plus the themed padding. }
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Caption;
+    property Alignment;
     { The size of the space INSIDE the frame. On a group box the client and the outer bounds
       differ by the caption band and the themed padding, which is exactly what makes "I need
       this much room inside" the natural thing to say -- and it was unsayable in the designer
@@ -69,8 +120,6 @@ type
     property OnEndDock;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
   end;
 
 { TyGroupRowPitch — PURE, and the shared row-pitch rule of every item-grid group that hosts
@@ -111,16 +160,16 @@ begin
   if Result < 1 then Result := 1;   // a zero pitch would stack every row on row 0
 end;
 
-{ TTyGroupBox }
+{ TTyCustomGroupBox }
 
-function TTyGroupBox.CapHAtPPI(APPI: Integer): Integer;
+function TTyCustomGroupBox.CapHAtPPI(APPI: Integer): Integer;
 begin
   // v3/C2: caption-band height is a skin-tunable metric (default 16 logical px).
   Result := MulDiv(ActiveController.Metric('--groupbox-caption-height', 16), APPI, 96);
   if Result < 1 then Result := 1;
 end;
 
-procedure TTyGroupBox.AdjustClientRect(var ARect: TRect);
+procedure TTyCustomGroupBox.AdjustClientRect(var ARect: TRect);
 var
   S: TTyStyleSet;
   ppi: Integer;
@@ -141,7 +190,7 @@ begin
   if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
 end;
 
-constructor TTyGroupBox.Create(AOwner: TComponent);
+constructor TTyCustomGroupBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TyAccelRegister(Self);
@@ -154,13 +203,13 @@ begin
   Height := 105;
 end;
 
-destructor TTyGroupBox.Destroy;
+destructor TTyCustomGroupBox.Destroy;
 begin
   TyAccelUnregister(Self);
   inherited Destroy;
 end;
 
-function TTyGroupBox.DialogChar(var Message: TLMKey): Boolean;
+function TTyCustomGroupBox.DialogChar(var Message: TLMKey): Boolean;
 var pf: TCustomForm;
 begin
   if Enabled and TyIsAccelKey(Message, FCaption) then
@@ -172,26 +221,26 @@ begin
   Result := inherited DialogChar(Message);
 end;
 
-function TTyGroupBox.GetStyleTypeKey: string;
+function TTyCustomGroupBox.GetStyleTypeKey: string;
 begin
   Result := 'TyGroupBox';
 end;
 
-procedure TTyGroupBox.SetCaption(const AValue: TCaption);
+procedure TTyCustomGroupBox.SetCaption(const AValue: TCaption);
 begin
   if FCaption = AValue then Exit;
   FCaption := AValue;
   Invalidate;
 end;
 
-procedure TTyGroupBox.SetAlignment(AValue: TAlignment);
+procedure TTyCustomGroupBox.SetAlignment(AValue: TAlignment);
 begin
   if FAlignment = AValue then Exit;
   FAlignment := AValue;
   Invalidate;
 end;
 
-procedure TTyGroupBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomGroupBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -242,10 +291,10 @@ begin
       MeasBmp := TBitmap.Create;
       try
         MeasBmp.SetSize(1, 1);
-        MeasBmp.Canvas.Font.Name := TyEffectiveFontName(S.FontName);
-        // Measure with the same effective size the caption is drawn at, so the
+        // Measure with the same effective size AND weight the caption is drawn at, so the
         // erased band matches the now-readable text (ResolveFontSize fallback).
-        MeasBmp.Canvas.Font.Size := MulDiv(ResolveFontSize(S), APPI, 96);
+        TyConfigureMeasureFont(MeasBmp.Canvas, S.FontName, ResolveFontSize(S),
+          S.FontWeight, APPI);
         TextW := MeasBmp.Canvas.TextWidth(disp);
       finally
         MeasBmp.Free;
@@ -282,7 +331,7 @@ begin
   end;
 end;
 
-procedure TTyGroupBox.Paint;
+procedure TTyCustomGroupBox.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

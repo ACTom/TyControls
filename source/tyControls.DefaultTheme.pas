@@ -91,9 +91,71 @@ begin
     '  --info:             var(--accent);          /* "info" is the brand colour, not a seed of its own */' + LineEnding +
     '  --on-info:          var(--on-accent);' + LineEnding +
     '' + LineEnding +
+    '  /* 工具窗口(IDE 侧栏/底栏)。底色只引用皮肤已经定义好的 surface / chrome 令牌,' + LineEnding +
+    '     绝不在这里自己写 darken(--surface, ...) —— 那会绕过白底皮肤自定义的 chrome 值。 */' + LineEnding +
+    '  --toolwindow-bg:                  var(--surface);' + LineEnding +
+    '  --toolwindow-header-bg:           var(--toolwindow-bg);' + LineEnding +
+    '  --toolwindow-ink:                 var(--on-surface);' + LineEnding +
+    '  --toolwindow-caption-ink:         var(--on-surface);' + LineEnding +
+    '  --toolwindow-tab-ink:             var(--muted);' + LineEnding +
+    '  --toolwindow-tab-ink-selected:    var(--on-surface);' + LineEnding +
+    '  --toolwindow-indicator-color:     var(--accent);' + LineEnding +
+    '  --toolwindow-strip-bg:            var(--chrome-bar-bg);' + LineEnding +
+    '  --toolwindow-strip-ink:           var(--muted);' + LineEnding +
+    '  --toolwindow-strip-ink-selected:  var(--on-surface);' + LineEnding +
+    '  --toolwindow-strip-indicator-color: var(--accent);' + LineEnding +
+    '  --toolwindow-edge-color:          var(--border);' + LineEnding +
+    '  --toolwindow-edge-color-hover:    var(--accent);' + LineEnding +
+    '  --toolwindow-drop-color:          var(--accent);' + LineEnding +
+    '  --toolwindow-badge-bg:            var(--accent);' + LineEnding +
+    '  --toolwindow-badge-ink:           var(--on-accent);' + LineEnding +
+    '  --toolwindow-dropzone-bg:         alpha(var(--toolwindow-drop-color), 0.10);' + LineEnding +
+    '  --toolwindow-dropzone-bg-hover:   alpha(var(--toolwindow-drop-color), 0.22);' + LineEnding +
+    '  --toolwindow-overlay-hover:       var(--overlay-hover);' + LineEnding +
+    '  --toolwindow-overlay-active:      alpha(var(--on-surface), 0.20);' + LineEnding +
+    '' + LineEnding +
+    '  /* 终端(TTyTerminalView)。底色只引用皮肤已经定义好的 surface 令牌。16 色每个只写一处,' + LineEnding +
+    '     用三参数 on():底色亮(Rec.601 亮度 > 0.5)取第二个,暗取第三个。暗底是 xterm.js 的' + LineEnding +
+    '     Tango 原值;亮底那套由 tools/terminal-oracle/light-palette.js 用 xterm.js 自己的' + LineEnding +
+    '     ensureContrastRatio 把同一色相压暗到对白底 4.5:1(0、7、8、15 不动),那个脚本的' + LineEnding +
+    '     --check 守着这里的数。字体族两个令牌只给控件用 RawVar 读(font-family 不求值 var()),' + LineEnding +
+    '     monospace / monospace-wide 由控件换成平台字体;不要在规则里 var() 引用它们。' + LineEnding +
+    '     字号没有自己的令牌:长度的 var() 只解一层(令牌的值再是 var() 就成了字面串),规则直接' + LineEnding +
+    '     写 var(--font-size-base),跟着密度走;皮肤要单调终端字号就写 TyTerminal 的 font-size。 */' + LineEnding +
+    '  --terminal-bg:                    var(--surface);' + LineEnding +
+    '  --terminal-fg:                    var(--on-surface);' + LineEnding +
+    '  --terminal-cursor:                var(--on-surface);' + LineEnding +
+    '  --terminal-cursor-ink:            var(--terminal-bg);' + LineEnding +
+    '  --terminal-selection-bg:          alpha(var(--accent), 0.35);' + LineEnding +
+    '  --terminal-selection-bg-inactive: alpha(var(--on-surface), 0.3);' + LineEnding +
+    '  --terminal-link:                  var(--accent);' + LineEnding +
+    '  --terminal-ansi-0:  on(var(--terminal-bg), #2e3436, #2e3436);' + LineEnding +
+    '  --terminal-ansi-1:  on(var(--terminal-bg), #cc0000, #cc0000);' + LineEnding +
+    '  --terminal-ansi-2:  on(var(--terminal-bg), #3f7c04, #4e9a06);' + LineEnding +
+    '  --terminal-ansi-3:  on(var(--terminal-bg), #8e7400, #c4a000);' + LineEnding +
+    '  --terminal-ansi-4:  on(var(--terminal-bg), #3465a4, #3465a4);' + LineEnding +
+    '  --terminal-ansi-5:  on(var(--terminal-bg), #75507b, #75507b);' + LineEnding +
+    '  --terminal-ansi-6:  on(var(--terminal-bg), #047a7c, #06989a);' + LineEnding +
+    '  --terminal-ansi-7:  on(var(--terminal-bg), #d3d7cf, #d3d7cf);' + LineEnding +
+    '  --terminal-ansi-8:  on(var(--terminal-bg), #555753, #555753);' + LineEnding +
+    '  --terminal-ansi-9:  on(var(--terminal-bg), #d72424, #ef2929);' + LineEnding +
+    '  --terminal-ansi-10: on(var(--terminal-bg), #50831c, #8ae234);' + LineEnding +
+    '  --terminal-ansi-11: on(var(--terminal-bg), #756d24, #fce94f);' + LineEnding +
+    '  --terminal-ansi-12: on(var(--terminal-bg), #517396, #729fcf);' + LineEnding +
+    '  --terminal-ansi-13: on(var(--terminal-bg), #8b6687, #ad7fa8);' + LineEnding +
+    '  --terminal-ansi-14: on(var(--terminal-bg), #1c8383, #34e2e2);' + LineEnding +
+    '  --terminal-ansi-15: on(var(--terminal-bg), #eeeeec, #eeeeec);' + LineEnding +
+    '  --terminal-font-family:           monospace;' + LineEnding +
+    '  --terminal-font-family-wide:      monospace-wide;' + LineEnding +
+    '' + LineEnding +
     '  /* ── COMPONENT: scalars ── */' + LineEnding +
     '  --input-border-width: 1px;' + LineEnding +
     '  --radius-sm: 3px; --radius-pill: 8px; --radius-round: 12px; --radius-scroll: 4px;' + LineEnding +
+    '  /* 贴边内嵌滚动条(列表框、备忘录、网格、列表视图、树、滚动框自己的条)的滑道圆角。' + LineEnding +
+    '     0 = 方角:条是宿主边上的一条带,内容侧圆了会在两端露出宿主底色的缺口。想要圆滑道的' + LineEnding +
+    '     皮肤写非零值,接受两端的缺口。独立摆放的条和滑块仍用 --radius-scroll。' + LineEnding +
+    '     值必须等于代码里的 TyScrollBarEmbeddedRadiusDef。 */' + LineEnding +
+    '  --radius-scroll-embedded: 0px;' + LineEnding +
     '  --font-size-base: 9px; --font-size-title: 9px;' + LineEnding +
     '  /* Tool-bar 1px rules — TTyToolSeparator''s inset line and the tbsDropDown split divider —' + LineEnding +
     '     when the variant''s border-color resolves FULLY transparent. That is the `ghost` case a' + LineEnding +
@@ -260,6 +322,14 @@ begin
     '  --ribbon-appmenu-height: 26px;' + LineEnding +
     '  --ribbon-appmenu-width: 64px;' + LineEnding +
     '  --ribbon-caption-band-height: 18px;' + LineEnding +
+    '  /* 滚动条的自动淡出延时，单位毫秒。-1 = 永不淡出（出厂值，和代码里的' + LineEnding +
+    '     TyScrollBarAutoHideDef 一致）；0 = 停手即淡出；N = 空闲 N 毫秒后淡出。' + LineEnding +
+    '     这里写出来不是为了改行为——代码里的 Def 已经是 -1——而是为了让它成为' + LineEnding +
+    '     tycss 词汇的一员：StyleOverride 编辑器的补全走 TyCatalogTokens，而那份' + LineEnding +
+    '     目录是从本文件生成的。平台上真用遮盖式滚动条的那六个皮肤' + LineEnding +
+    '     （win11/macos/fluent/material3/adwaita/ubuntu）各自把它调成 1200；其余的' + LineEnding +
+    '     不写，继承这里的 -1。 */' + LineEnding +
+    '  --scrollbar-auto-hide: -1;' + LineEnding +
     '  --scrollbar-size: 12px;' + LineEnding +
     '  --segmented-pad: 2px;' + LineEnding +
     '  --steps-connector-gap: 8px;' + LineEnding +
@@ -274,7 +344,26 @@ begin
     '  --tab-padding: 12px;' + LineEnding +
     '  --tag-close-size: 14px;' + LineEnding +
     '  --tag-gap: 4px;' + LineEnding +
+    '  --terminal-cursor-width: 1px;' + LineEnding +
+    '  --terminal-pad: 4px;' + LineEnding +
+    '  --terminal-underline-width: 1px;' + LineEnding +
+    '  --titlebar-icon-gap: 6px;' + LineEnding +
+    '  --titlebar-icon-size: 16px;' + LineEnding +
     '  --titlebar-padding: 8px;' + LineEnding +
+    '  --toolwindow-button-size: 22px;' + LineEnding +
+    '  --toolwindow-content-min: 120px;' + LineEnding +
+    '  --toolwindow-drop-size: 2px;' + LineEnding +
+    '  --toolwindow-edge-size: 4px;' + LineEnding +
+    '  --toolwindow-glyph-size: 16px;' + LineEnding +
+    '  --toolwindow-header-gap: 4px;' + LineEnding +
+    '  --toolwindow-header-height: 26px;' + LineEnding +
+    '  --toolwindow-header-pad: 6px;' + LineEnding +
+    '  --toolwindow-indicator-size: 2px;' + LineEnding +
+    '  --toolwindow-strip-indicator-size: 2px;' + LineEnding +
+    '  --toolwindow-strip-item-size: 36px;' + LineEnding +
+    '  --toolwindow-strip-size: 36px;' + LineEnding +
+    '  --toolwindow-tab-area-min: 50px;' + LineEnding +
+    '  --toolwindow-tab-pad: 10px;' + LineEnding +
     '  --transfer-arrow-margin: 3px;' + LineEnding +
     '  --transfer-arrow-size: 12px;' + LineEnding +
     '  --transfer-button-gap: 6px;' + LineEnding +
@@ -692,6 +781,36 @@ begin
     'TyMemo:hover    { border-color: var(--input-border-hover); }' + LineEnding +
     'TyMemo:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
     'TyMemo:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    '' + LineEnding +
+    '/* 终端。默认无边框,所以没有 :focus 规则;选区前景不写(spec §11「写了才用」)。 */' + LineEnding +
+    'TyTerminal {' + LineEnding +
+    '  background: var(--terminal-bg);' + LineEnding +
+    '  color: var(--terminal-fg);' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '  padding: var(--terminal-pad);' + LineEnding +
+    '}' + LineEnding +
+    'TyTerminal:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    'TyTerminalCursor { background: var(--terminal-cursor); color: var(--terminal-cursor-ink); }' + LineEnding +
+    'TyTerminalSelection { background: var(--terminal-selection-bg-inactive); }' + LineEnding +
+    'TyTerminalSelection:focus { background: var(--terminal-selection-bg); }' + LineEnding +
+    'TyTerminalAnsi0 { color: var(--terminal-ansi-0); }' + LineEnding +
+    'TyTerminalAnsi1 { color: var(--terminal-ansi-1); }' + LineEnding +
+    'TyTerminalAnsi2 { color: var(--terminal-ansi-2); }' + LineEnding +
+    'TyTerminalAnsi3 { color: var(--terminal-ansi-3); }' + LineEnding +
+    'TyTerminalAnsi4 { color: var(--terminal-ansi-4); }' + LineEnding +
+    'TyTerminalAnsi5 { color: var(--terminal-ansi-5); }' + LineEnding +
+    'TyTerminalAnsi6 { color: var(--terminal-ansi-6); }' + LineEnding +
+    'TyTerminalAnsi7 { color: var(--terminal-ansi-7); }' + LineEnding +
+    'TyTerminalAnsi8 { color: var(--terminal-ansi-8); }' + LineEnding +
+    'TyTerminalAnsi9 { color: var(--terminal-ansi-9); }' + LineEnding +
+    'TyTerminalAnsi10 { color: var(--terminal-ansi-10); }' + LineEnding +
+    'TyTerminalAnsi11 { color: var(--terminal-ansi-11); }' + LineEnding +
+    'TyTerminalAnsi12 { color: var(--terminal-ansi-12); }' + LineEnding +
+    'TyTerminalAnsi13 { color: var(--terminal-ansi-13); }' + LineEnding +
+    'TyTerminalAnsi14 { color: var(--terminal-ansi-14); }' + LineEnding +
+    'TyTerminalAnsi15 { color: var(--terminal-ansi-15); }' + LineEnding +
+    'TyTerminalLink { color: var(--terminal-link); }' + LineEnding +
+    'TyTerminalPreedit { background: var(--terminal-bg); color: var(--terminal-fg); border-color: var(--accent); }' + LineEnding +
     '' + LineEnding +
     'TyTextSelection { background: var(--selection); }' + LineEnding +
     'TyTextHint      { color: var(--muted); }' + LineEnding +
@@ -1409,6 +1528,69 @@ begin
     'TyListGroupItem:hover    { background: var(--surface-hover); }' + LineEnding +
     'TyListGroupItem:active   { background: var(--selection); color: var(--accent); }   /* selected: soft accent pill */' + LineEnding +
     'TyListGroupItem:disabled { color: var(--muted); }' + LineEnding +
+    '' + LineEnding +
+    '/* ── ToolWindow (IDE 侧栏 / 底栏) ──────────────────────────────────────── */' + LineEnding +
+    '/* 容器键写全整套属性 —— 皮肤只要给某个 typeKey 写了基础规则(无 variant、无 state),' + LineEnding +
+    '   基础层这一整个键(含 variant)就被压掉,所以容器不能只写半套;只带墨色的子部件' + LineEnding +
+    '   故意不写 background,好让绘制代码回落到容器的表面。 */' + LineEnding +
+    'TyToolWindowBar    { background: var(--toolwindow-bg); color: var(--toolwindow-ink);' + LineEnding +
+    '                     font-size: var(--font-size-base); }' + LineEnding +
+    'TyToolWindowBar:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    'TyToolWindow       { background: var(--toolwindow-bg); color: var(--toolwindow-ink);' + LineEnding +
+    '                     font-size: var(--font-size-base); }' + LineEnding +
+    'TyToolWindow:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    '/* 图标条要有自己的界线: 有四个内置皮肤把 --chrome-bar-bg 调成了 --surface,' + LineEnding +
+    '   只靠底色的话条子在那四个皮肤上整个看不见。写法照 TyStatusBar / TyToolBar。 */' + LineEnding +
+    'TyToolWindowStrip  { background: var(--toolwindow-strip-bg); color: var(--toolwindow-strip-ink);' + LineEnding +
+    '                     border-color: var(--border); border-width: var(--input-border-width); }' + LineEnding +
+    'TyToolWindowStripItem          { color: var(--toolwindow-strip-ink); }' + LineEnding +
+    'TyToolWindowStripItem:hover    { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-strip-ink-selected); }' + LineEnding +
+    'TyToolWindowStripItem:selected { color: var(--toolwindow-strip-ink-selected); }' + LineEnding +
+    'TyToolWindowStripItem:active   { background: var(--toolwindow-overlay-active); }' + LineEnding +
+    'TyToolWindowStripItem:disabled { color: var(--muted); }' + LineEnding +
+    'TyToolWindowStripIndicator     { background: var(--toolwindow-strip-indicator-color); }' + LineEnding +
+    '/* 边缘区平时不单独填色(底色同内容区),只在靠编辑区那一侧画一条细线 —— 写法照 TyStatusBar' + LineEnding +
+    '   的顶线:border-color 是线色、border-width 是粗细。悬停和拉宽中整块填色,那条线收掉。 */' + LineEnding +
+    'TyToolWindowEdge        { border-color: var(--toolwindow-edge-color); border-width: var(--input-border-width); }' + LineEnding +
+    'TyToolWindowEdge:hover  { background: var(--toolwindow-edge-color-hover); border-width: 0; }' + LineEnding +
+    'TyToolWindowEdge:active { background: var(--toolwindow-edge-color-hover); border-width: 0; }' + LineEnding +
+    '/* 可选的底线(spec §12):皮肤给这里写 border-color + border-width 就画;基础主题不设。' + LineEnding +
+    '   标题行的内距由代码读 --toolwindow-header-pad,不走 padding。 */' + LineEnding +
+    'TyToolWindowHeader      { background: var(--toolwindow-header-bg); color: var(--toolwindow-caption-ink);' + LineEnding +
+    '                          font-size: var(--font-size-base); }' + LineEnding +
+    'TyToolWindowActions     { background: var(--toolwindow-header-bg); }' + LineEnding +
+    'TyToolWindowTabRow      { background: var(--toolwindow-header-bg); }' + LineEnding +
+    '/* 标签的内距由代码读 --toolwindow-tab-pad,不走 padding。禁用时(栏或它的父控件被禁用)' + LineEnding +
+    '   选中的那一个也按禁用墨色画,:disabled 排在 :selected 后面(同图标条)。 */' + LineEnding +
+    'TyToolWindowTab          { color: var(--toolwindow-tab-ink); }' + LineEnding +
+    'TyToolWindowTab:hover    { color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
+    'TyToolWindowTab:selected { color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
+    'TyToolWindowTab:disabled { color: var(--muted); }' + LineEnding +
+    'TyToolWindowTabIndicator { background: var(--toolwindow-indicator-color); }' + LineEnding +
+    'TyToolWindowOverflow          { color: var(--toolwindow-tab-ink); }' + LineEnding +
+    'TyToolWindowOverflow:hover    { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
+    'TyToolWindowOverflow:active   { background: var(--toolwindow-overlay-active); }' + LineEnding +
+    'TyToolWindowOverflow:disabled { color: var(--muted); }' + LineEnding +
+    'TyToolWindowButton          { color: var(--toolwindow-tab-ink); }' + LineEnding +
+    'TyToolWindowButton:hover    { background: var(--toolwindow-overlay-hover); color: var(--toolwindow-tab-ink-selected); }' + LineEnding +
+    'TyToolWindowButton:active   { background: var(--toolwindow-overlay-active); }' + LineEnding +
+    'TyToolWindowButton:disabled { color: var(--muted); }' + LineEnding +
+    '/* 标签行的竖分隔线是「线」:border-color 是线色、border-width 是线宽(同边缘区的写法);' + LineEnding +
+    '   槽宽 = 2 × --toolwindow-header-gap + 线宽,由代码算。 */' + LineEnding +
+    'TyToolWindowSeparator     { border-color: var(--border); border-width: 1px; }' + LineEnding +
+    'TyToolWindowDropIndicator { background: var(--toolwindow-drop-color); }' + LineEnding +
+    'TyToolWindowNote          { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
+    '/* 工具窗口的角标(图标右上角、标签标题后面的胶囊)。写法照 TyBadge,默认值也是那套通用 token;' + LineEnding +
+    '   自己一个键,皮肤调 --toolwindow-badge-* 或直接写这个键。尺寸 token 共用 --badge-*。 */' + LineEnding +
+    'TyToolWindowBadge { background: var(--toolwindow-badge-bg); color: var(--toolwindow-badge-ink);' + LineEnding +
+    '                    border-radius: var(--radius-round); font-size: var(--font-size-base);' + LineEnding +
+    '                    font-weight: var(--font-weight-bold); padding: var(--pad-badge); }' + LineEnding +
+    '/* 隐藏侧栏的放置预览(拖动时出现)。底色带透明度:预览是不透明的子窗口,代码先铺栏的底色再叠' + LineEnding +
+    '   这一层。:hover = 指针在里面、它是此刻的目标。 */' + LineEnding +
+    'TyToolWindowDropZone       { background: var(--toolwindow-dropzone-bg); color: var(--toolwindow-ink);' + LineEnding +
+    '                             border-color: var(--toolwindow-drop-color);' + LineEnding +
+    '                             border-width: var(--input-border-width); }' + LineEnding +
+    'TyToolWindowDropZone:hover { background: var(--toolwindow-dropzone-bg-hover); }' + LineEnding +
     '' + LineEnding +
     '/* ── Keys the CODE resolves that this file deliberately does NOT define ─────────────────' + LineEnding +
     '   Not drift — each of these is an OPT-IN hook whose painter has an explicit fallback, and' + LineEnding +

@@ -72,7 +72,7 @@ uses tyControls.Shape;
 |------|------|------|
 | `StyleClass` | `string` | `.tycss` 类名(作用于 `TyShape` 解析)。 |
 | `StyleOverride` | `string` | 每实例 CSS 覆盖块(可用 `var(--...)`),用于单独设置本形状的填充 / 边框色。 |
-| `Controller` | `TTyStyleController` | 指定样式控制器(nil 时用全局默认)。 |
+| `Controller` | `TTyCustomStyleController` | 指定样式控制器(nil 时用全局默认)。 |
 | `Align` / `Anchors` | — | 布局。 |
 
 **枚举:** `TTyShapeKind = (tskRectangle, tskRoundRect, tskSquare, tskEllipse, tskCircle, tskTriangle, tskDiamond, tskLine)`。

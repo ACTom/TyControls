@@ -353,7 +353,7 @@ object MainForm: TMainForm
       Left = 248
       Height = 32
       Top = 646
-      Width = 220
+      Width = 240
       Caption = 'Try Points = 1, InnerRatio = 2.0'
       OnClick = BtnClampClick
     end
@@ -422,7 +422,7 @@ object MainForm: TMainForm
       Caption = 'tadDown'
     end
     object ArrowBig: TTyArrow
-      Left = 604
+      Left = 624
       Height = 120
       Top = 582
       Width = 250
@@ -449,14 +449,14 @@ object MainForm: TMainForm
       OnChange = TrackHeadChange
     end
     object LblShaft: TTyLabel
-      Left = 872
+      Left = 892
       Height = 18
       Top = 646
       Width = 284
       Caption = 'Shaft-width ratio ShaftRatio = 0.50'
     end
     object TrackShaft: TTyTrackBar
-      Left = 872
+      Left = 892
       Height = 28
       Top = 670
       Width = 284

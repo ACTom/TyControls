@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectOptions>
+    <Version Value="12"/>
+    <General>
+      <Flags>
+        <MainUnitHasCreateFormStatements Value="True"/>
+        <MainUnitHasTitleStatement Value="False"/>
+      </Flags>
+      <Title Value="Terminal"/>
+      <Scaled Value="True"/>
+      <UseXPManifest Value="True"/>
+      <XPManifest>
+        <DpiAware Value="True/PM_V2"/>
+      </XPManifest>
+      <Icon Value="0"/>
+    </General>
+    <i18n>
+      <EnableI18N Value="True"/>
+      <OutDir Value="languages"/>
+    </i18n>
+    <BuildModes Count="1">
+      <Item1 Name="Default" Default="True"/>
+    </BuildModes>
+    <RequiredPackages Count="2">
+      <Item1><PackageName Value="LCL"/></Item1>
+      <Item2><PackageName Value="tycontrols"/></Item2>
+    </RequiredPackages>
+    <Units Count="12">
+      <Unit0>
+        <Filename Value="terminal_example.lpr"/>
+        <IsPartOfProject Value="True"/>
+      </Unit0>
+      <Unit1>
+        <Filename Value="umain.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="umain"/>
+      </Unit1>
+      <Unit2>
+        <Filename Value="uasciicast.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="uasciicast"/>
+      </Unit2>
+      <Unit3>
+        <Filename Value="uptysession.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="uptysession"/>
+      </Unit3>
+      <Unit4>
+        <Filename Value="uptywin.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="uptywin"/>
+      </Unit4>
+      <Unit5>
+        <Filename Value="uptyunix.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="uptyunix"/>
+      </Unit5>
+      <Unit6>
+        <Filename Value="ushell.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="ushell"/>
+      </Unit6>
+      <Unit7>
+        <Filename Value="uzmodem.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="uzmodem"/>
+      </Unit7>
+      <Unit8>
+        <Filename Value="uzmodemsession.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="uzmodemsession"/>
+      </Unit8>
+      <Unit9>
+        <Filename Value="uzmodemterm.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="uzmodemterm"/>
+      </Unit9>
+      <Unit10>
+        <Filename Value="uwslresize.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="uwslresize"/>
+      </Unit10>
+      <Unit11>
+        <Filename Value="uwslpipe.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="uwslpipe"/>
+      </Unit11>
+    </Units>
+  </ProjectOptions>
+  <CompilerOptions>
+    <Version Value="11"/>
+    <SearchPaths>
+      <OtherUnitFiles Value=".;../../source"/>
+      <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
+    </SearchPaths>
+    <SyntaxOptions>
+      <SyntaxMode Value="ObjFPC"/>
+    </SyntaxOptions>
+    <Linking>
+      <Options>
+        <Win32>
+          <GraphicApplication Value="True"/>
+        </Win32>
+      </Options>
+    </Linking>
+  </CompilerOptions>
+</CONFIG>

@@ -35,7 +35,7 @@ type
     component auto-creates. A separate unit would make an IDE-dropped grid's auto-generated
     cell fields fail to compile ("Identifier not found TTyGridCell"). Same unit = one uses
     entry covers both. (tyControls.GridCell remains as a thin re-export for older code.) }
-  TTyGridCell = class(TTyCustomControl)
+  TTyCustomGridCell = class(TTyCustomControl)
   private
     FPadding: Integer;
     FCol: Integer;
@@ -57,31 +57,87 @@ type
       a constructor default. A streamed load discards these once real cells arrive (see
       TTyGridPanel.Loaded); a designer drop / code path keeps them. }
     property Provisional: Boolean read FProvisional write FProvisional;
-  published
-    { Set by the owning grid; published so a streamed form re-seats the cell. }
+    { Set by the owning grid; TTyGridCell publishes them so a streamed form re-seats the cell. }
     property Col: Integer read FCol write FCol;
     property Row: Integer read FRow write FRow;
     property Padding: Integer read FPadding write SetPadding default 0;
+  end;
+
+  { TTyGridCell publishes TTyCustomGridCell's properties; everything lives in TTyCustomGridCell. }
+  TTyGridCell = class(TTyCustomGridCell)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Col;
+    property Row;
+    property Padding;
     property Align;
     property Anchors;
-    property BorderSpacing;
-    property Visible;
-    property Constraints;
   end;
 
   { TTyGridPanel — a droppable N×M grid of form-owned TTyGridCell containers.
 
-    Subclasses TTyPanel (reuses the 'TyPanel' typeKey; NO new .tycss). Setting
+    Descends from TTyCustomPanel (reuses the 'TyPanel' typeKey; NO new .tycss). Setting
     ColumnCount × RowCount materialises that many TTyGridCell child containers, each
     owned by the form and parented to the grid (mirrors TTyPageControl/TTyTabSheet);
     a control dropped into a cell is constrained (alClient) to that cell. Track sizes
     come from the published ColumnSizes/RowSizes strings (empty = all-star / equal),
     solved by the pure TyGridTrackSizes/TyGridTrackOrigins/TyGridCellRect. No spanning. }
-  TTyGridCellArray = array of TObject;   // TTyGridCell; TObject avoids a cyclic uses
+  TTyGridCellArray = array of TObject;   // TTyCustomGridCell (see FCells)
 
-  TTyGridPanel = class(TTyPanel)
+  TTyCustomGridPanel = class(TTyCustomPanel)
   private
-    FCells: array of TObject;        // flat, one TTyGridCell per (col,row); index = row*Cols+col
+    { Flat, one cell per (col,row); index = row*Cols+col. Any TTyCustomGridCell: the panel
+      makes TTyGridCell, and a third party's cell class registers itself here too (C11-1). }
+    FCells: array of TObject;
     FColumnCount: Integer;
     FRowCount: Integer;
     FColumnSizes: string;
@@ -95,14 +151,20 @@ type
     procedure SetColumnSizes(const AValue: string);
     procedure SetRowSizes(const AValue: string);
     procedure SetSpacing(AValue: Integer);
-    function  GetCell(ACol, ARow: Integer): TObject;   // returns TTyGridCell or nil
+    function  GetCell(ACol, ARow: Integer): TObject;   // a TTyCustomGridCell, or nil
     function  CellIndex(ACol, ARow: Integer): Integer;
     procedure EnsureCells;           // create/destroy cells to match Count, preserve in-bounds
     procedure DiscardProvisionalCells;  // free the constructor-seeded default cells
+    { The tracks of both axes, solved for AClient in DEVICE px. Spacing and an absolute
+      track are logical px ("a fixed logical-px length"); the client rect they are solved
+      against is device px, so both are scaled by the panel's PPI first. ONE solver for the
+      layout and for the design-time guides, so the guides are drawn where the cells are. }
+    procedure SolveTracks(const AClient: TRect;
+      out AColW, ARowH, AColX, ARowY: TTyGridIntArray);
     procedure Relayout;
   protected
     function  GetStyleTypeKey: string; override;
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Resize; override;
     procedure Loaded; override;
@@ -110,20 +172,96 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-    { Public so TTyGridCell.SetParent (a different unit) can self-register. Idempotent. }
+    { Public so a cell's SetParent -- any TTyCustomGridCell, a third party's included -- can
+      self-register. Idempotent. }
     procedure RegisterCell(ACell: TObject);
     procedure UnregisterCell(ACell: TObject; AFree: Boolean);
     function  CellCount: Integer;
     { Test/iteration accessor: the i-th registered cell (registration order), or nil. }
     function  CellAt(AIndex: Integer): TObject;
-    { Cell at (col,row), or nil. Cast the result to TTyGridCell in cell-aware code. }
+    { Cell at (col,row), or nil. Cast the result to TTyCustomGridCell in cell-aware code. }
     property  Cells[ACol, ARow: Integer]: TObject read GetCell;
-  published
     property ColumnCount: Integer read FColumnCount write SetColumnCount default 2;
     property RowCount: Integer read FRowCount write SetRowCount default 2;
     property ColumnSizes: string read FColumnSizes write SetColumnSizes;
     property RowSizes: string read FRowSizes write SetRowSizes;
     property Spacing: Integer read FSpacing write SetSpacing default 4;
+  end;
+
+  { TTyGridPanel publishes TTyCustomGridPanel's properties; everything lives in TTyCustomGridPanel. }
+  TTyGridPanel = class(TTyCustomGridPanel)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Caption;
+    property Alignment;
+    property VerticalAlignment;
+    property WordWrap;
+    property ShowAccelChar;
+    property DockSite;
+    property UseDockManager;
+    property OnDockDrop;
+    property OnDockOver;
+    property OnUnDock;
+    property OnGetSiteInfo;
+    property OnGetDockCaption;
+    property OnStartDock;
+    property OnEndDock;
+    property Align;
+    property Anchors;
+    property ColumnCount;
+    property RowCount;
+    property ColumnSizes;
+    property RowSizes;
+    property Spacing;
   end;
 
 { --- Pure, headless-tested grid math --------------------------------------------- }
@@ -357,9 +495,9 @@ begin
   Result.Bottom := ARowY[lastRow] + ARowH[lastRow];
 end;
 
-{ TTyGridPanel }
+{ TTyCustomGridPanel }
 
-constructor TTyGridPanel.Create(AOwner: TComponent);
+constructor TTyCustomGridPanel.Create(AOwner: TComponent);
 var i: Integer;
 begin
   inherited Create(AOwner);
@@ -376,16 +514,16 @@ begin
     a designer palette-drop / code path keeps them. }
   EnsureCells;
   for i := 0 to High(FCells) do
-    TTyGridCell(FCells[i]).Provisional := True;
+    TTyCustomGridCell(FCells[i]).Provisional := True;
 end;
 
-destructor TTyGridPanel.Destroy;
+destructor TTyCustomGridPanel.Destroy;
 begin
   FDestroying := True;
   inherited Destroy;                // cells owned by the form (or Self) freed normally
 end;
 
-function TTyGridPanel.GetStyleTypeKey: string;
+function TTyCustomGridPanel.GetStyleTypeKey: string;
 begin
   { Its OWN key, deliberately left undefined by the shipped themes. The grid is a LAYOUT host:
     with no themed background, DrawFrame's TyFillParentBg makes it take the parent's colour, so
@@ -396,53 +534,53 @@ begin
   Result := 'TyGridPanel';
 end;
 
-procedure TTyGridPanel.SetController(AValue: TTyStyleController);
+procedure TTyCustomGridPanel.SetController(AValue: TTyCustomStyleController);
 var i: Integer;
 begin
   inherited SetController(AValue);
   { Re-propagate to existing cells (mirrors TTyPageControl.SetController). }
   for i := 0 to High(FCells) do
     if FCells[i] <> nil then
-      TTyGridCell(FCells[i]).Controller := AValue;
+      TTyCustomGridCell(FCells[i]).Controller := AValue;
 end;
 
-function TTyGridPanel.CellIndex(ACol, ARow: Integer): Integer;
-var i: Integer; c: TTyGridCell;
+function TTyCustomGridPanel.CellIndex(ACol, ARow: Integer): Integer;
+var i: Integer; c: TTyCustomGridCell;
 begin
   Result := -1;
   for i := 0 to High(FCells) do
   begin
-    c := TTyGridCell(FCells[i]);
+    c := TTyCustomGridCell(FCells[i]);
     if (c <> nil) and (c.Col = ACol) and (c.Row = ARow) then Exit(i);
   end;
 end;
 
-function TTyGridPanel.GetCell(ACol, ARow: Integer): TObject;
+function TTyCustomGridPanel.GetCell(ACol, ARow: Integer): TObject;
 var idx: Integer;
 begin
   idx := CellIndex(ACol, ARow);
   if idx >= 0 then Result := FCells[idx] else Result := nil;
 end;
 
-function TTyGridPanel.CellCount: Integer;
+function TTyCustomGridPanel.CellCount: Integer;
 begin
   Result := Length(FCells);
 end;
 
-function TTyGridPanel.CellAt(AIndex: Integer): TObject;
+function TTyCustomGridPanel.CellAt(AIndex: Integer): TObject;
 begin
   if (AIndex >= 0) and (AIndex <= High(FCells)) then Result := FCells[AIndex]
   else Result := nil;
 end;
 
-procedure TTyGridPanel.RegisterCell(ACell: TObject);
+procedure TTyCustomGridPanel.RegisterCell(ACell: TObject);
 var i: Integer;
 begin
   for i := 0 to High(FCells) do
     if FCells[i] = ACell then Exit;         // idempotent
   SetLength(FCells, Length(FCells) + 1);
   FCells[High(FCells)] := ACell;
-  TTyGridCell(ACell).Controller := Self.Controller;
+  TTyCustomGridCell(ACell).Controller := Self.Controller;
   { A cell registering while the GRID is csLoading is a STREAMED cell — the
     constructor's provisional seed registers with csLoading clear. Note it so Loaded
     can drop the provisional defaults in favour of the streamed cells. }
@@ -451,7 +589,7 @@ begin
   if not (csLoading in ComponentState) then Relayout;
 end;
 
-procedure TTyGridPanel.UnregisterCell(ACell: TObject; AFree: Boolean);
+procedure TTyCustomGridPanel.UnregisterCell(ACell: TObject; AFree: Boolean);
 var idx, j: Integer;
 begin
   idx := -1;
@@ -460,17 +598,17 @@ begin
   if idx < 0 then Exit;
   for j := idx to High(FCells) - 1 do FCells[j] := FCells[j + 1];
   SetLength(FCells, Length(FCells) - 1);
-  if AFree and (ACell <> nil) then TTyGridCell(ACell).Free;
+  if AFree and (ACell <> nil) then TTyCustomGridCell(ACell).Free;
   if not (csDestroying in ComponentState) then Relayout;
 end;
 
-procedure TTyGridPanel.DiscardProvisionalCells;
-var i: Integer; cell: TTyGridCell;
+procedure TTyCustomGridPanel.DiscardProvisionalCells;
+var i: Integer; cell: TTyCustomGridCell;
 begin
   i := 0;
   while i <= High(FCells) do
   begin
-    cell := TTyGridCell(FCells[i]);
+    cell := TTyCustomGridCell(FCells[i]);
     if (cell <> nil) and cell.Provisional then
       UnregisterCell(cell, True)   // frees + shrinks FCells; do not Inc(i)
     else
@@ -478,13 +616,13 @@ begin
   end;
 end;
 
-procedure TTyGridPanel.EnsureCells;
+procedure TTyCustomGridPanel.EnsureCells;
 var
   col, row: Integer;
-  cell: TTyGridCell;
+  cell: TTyCustomGridCell;
   cellOwner: TComponent;
   i: Integer;
-  wanted: TTyGridCell;
+  wanted: TTyCustomGridCell;
 begin
   if csLoading in ComponentState then Exit;   // Loaded reconciles instead
   if Owner <> nil then cellOwner := Owner else cellOwner := Self;
@@ -492,7 +630,7 @@ begin
   i := 0;
   while i <= High(FCells) do
   begin
-    cell := TTyGridCell(FCells[i]);
+    cell := TTyCustomGridCell(FCells[i]);
     if (cell = nil) or (cell.Col >= FColumnCount) or (cell.Row >= FRowCount)
        or (cell.Col < 0) or (cell.Row < 0) then
       UnregisterCell(cell, True)               // shrinks FCells; do not Inc(i)
@@ -503,7 +641,7 @@ begin
   for row := 0 to FRowCount - 1 do
     for col := 0 to FColumnCount - 1 do
     begin
-      wanted := TTyGridCell(GetCell(col, row));
+      wanted := TTyCustomGridCell(GetCell(col, row));
       if wanted = nil then
       begin
         cell := TTyGridCell.Create(cellOwner);
@@ -515,7 +653,7 @@ begin
   Relayout;
 end;
 
-procedure TTyGridPanel.SetColumnCount(AValue: Integer);
+procedure TTyCustomGridPanel.SetColumnCount(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
   if FColumnCount = AValue then Exit;
@@ -523,7 +661,7 @@ begin
   EnsureCells;
 end;
 
-procedure TTyGridPanel.SetRowCount(AValue: Integer);
+procedure TTyCustomGridPanel.SetRowCount(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
   if FRowCount = AValue then Exit;
@@ -531,21 +669,21 @@ begin
   EnsureCells;
 end;
 
-procedure TTyGridPanel.SetColumnSizes(const AValue: string);
+procedure TTyCustomGridPanel.SetColumnSizes(const AValue: string);
 begin
   if FColumnSizes = AValue then Exit;
   FColumnSizes := AValue;
   Relayout;
 end;
 
-procedure TTyGridPanel.SetRowSizes(const AValue: string);
+procedure TTyCustomGridPanel.SetRowSizes(const AValue: string);
 begin
   if FRowSizes = AValue then Exit;
   FRowSizes := AValue;
   Relayout;
 end;
 
-procedure TTyGridPanel.SetSpacing(AValue: Integer);
+procedure TTyCustomGridPanel.SetSpacing(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   if FSpacing = AValue then Exit;
@@ -553,21 +691,21 @@ begin
   Relayout;
 end;
 
-procedure TTyGridPanel.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomGridPanel.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if FDestroying then Exit;
-  if (Operation = opRemove) and (AComponent is TTyGridCell) then
+  if (Operation = opRemove) and (AComponent is TTyCustomGridCell) then
     UnregisterCell(AComponent, False);        // LCL already freeing it
 end;
 
-procedure TTyGridPanel.Resize;
+procedure TTyCustomGridPanel.Resize;
 begin
   inherited Resize;
   Relayout;
 end;
 
-procedure TTyGridPanel.Loaded;
+procedure TTyCustomGridPanel.Loaded;
 begin
   inherited Loaded;
   { Cells self-registered via SetParent during streaming; FCells now holds the streamed
@@ -580,13 +718,35 @@ begin
   EnsureCells;
 end;
 
-procedure TTyGridPanel.Relayout;
+procedure TTyCustomGridPanel.SolveTracks(const AClient: TRect;
+  out AColW, ARowH, AColX, ARowY: TTyGridIntArray);
+var
+  cols, rows: TTyGridTracks;
+  ppi, spacingPx, i: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  cols := TyParseGridTracks(FColumnSizes, FColumnCount);
+  rows := TyParseGridTracks(FRowSizes, FRowCount);
+  { Only the ABSOLUTE tracks carry a length; a percentage and a star share are ratios of
+    whatever the client is, and the client is device px already. }
+  for i := 0 to High(cols) do
+    if cols[i].Kind = tgtAbsolute then cols[i].Value := MulDiv(cols[i].Value, ppi, 96);
+  for i := 0 to High(rows) do
+    if rows[i].Kind = tgtAbsolute then rows[i].Value := MulDiv(rows[i].Value, ppi, 96);
+  spacingPx := MulDiv(FSpacing, ppi, 96);
+  AColW := TyGridTrackSizes(AClient.Right - AClient.Left, spacingPx, cols);
+  ARowH := TyGridTrackSizes(AClient.Bottom - AClient.Top, spacingPx, rows);
+  AColX := TyGridTrackOrigins(AColW, spacingPx);
+  ARowY := TyGridTrackOrigins(ARowH, spacingPx);
+end;
+
+procedure TTyCustomGridPanel.Relayout;
 var
   cr: TRect;
-  cols, rows: TTyGridTracks;
   colW, rowH, colX, rowY: TTyGridIntArray;
   i: Integer;
-  cell: TTyGridCell;
+  cell: TTyCustomGridCell;
   cellR: TRect;
 begin
   if csDestroying in ComponentState then Exit;
@@ -595,15 +755,10 @@ begin
   FInLayout := True;
   try
     cr := ClientRect;
-    cols := TyParseGridTracks(FColumnSizes, FColumnCount);
-    rows := TyParseGridTracks(FRowSizes, FRowCount);
-    colW := TyGridTrackSizes(cr.Right - cr.Left, FSpacing, cols);
-    rowH := TyGridTrackSizes(cr.Bottom - cr.Top, FSpacing, rows);
-    colX := TyGridTrackOrigins(colW, FSpacing);
-    rowY := TyGridTrackOrigins(rowH, FSpacing);
+    SolveTracks(cr, colW, rowH, colX, rowY);
     for i := 0 to High(FCells) do
     begin
-      cell := TTyGridCell(FCells[i]);
+      cell := TTyCustomGridCell(FCells[i]);
       if cell = nil then Continue;
       if (cell.Col < 0) or (cell.Col >= Length(colW)) then Continue;
       if (cell.Row < 0) or (cell.Row >= Length(rowH)) then Continue;
@@ -618,22 +773,16 @@ begin
   Invalidate;
 end;
 
-procedure TTyGridPanel.Paint;
+procedure TTyCustomGridPanel.Paint;
 var
   cr: TRect;
-  cols, rows: TTyGridTracks;
   colW, rowH, colX, rowY: TTyGridIntArray;
   i, x, y: Integer;
 begin
   inherited Paint;
   if not (csDesigning in ComponentState) then Exit;   // guides are design-time only
   cr := ClientRect;
-  cols := TyParseGridTracks(FColumnSizes, FColumnCount);
-  rows := TyParseGridTracks(FRowSizes, FRowCount);
-  colW := TyGridTrackSizes(cr.Right - cr.Left, FSpacing, cols);
-  rowH := TyGridTrackSizes(cr.Bottom - cr.Top, FSpacing, rows);
-  colX := TyGridTrackOrigins(colW, FSpacing);
-  rowY := TyGridTrackOrigins(rowH, FSpacing);
+  SolveTracks(cr, colW, rowH, colX, rowY);
   Canvas.Pen.Style := psDot;
   Canvas.Pen.Color := clGray;
   for i := 0 to High(colX) do
@@ -650,9 +799,9 @@ begin
   end;
 end;
 
-{ TTyGridCell ------------------------------------------------------------------- }
+{ TTyCustomGridCell ------------------------------------------------------------- }
 
-constructor TTyGridCell.Create(AOwner: TComponent);
+constructor TTyCustomGridCell.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   ControlStyle := ControlStyle + [csAcceptsControls, csDesignFixedBounds, csNoFocus];
@@ -661,7 +810,7 @@ begin
   FRow := -1;
 end;
 
-function TTyGridCell.GetStyleTypeKey: string;
+function TTyCustomGridCell.GetStyleTypeKey: string;
 begin
   { Its OWN key, and NOT 'TyGridCell' — that name belongs to the DATA grid's body cell
     (TTyGrid; themes/light.tycss defines it, plus :hover/:selected/padding). Two unrelated
@@ -678,7 +827,7 @@ begin
   Result := 'TyGridPanelCell';
 end;
 
-procedure TTyGridCell.SetPadding(AValue: Integer);
+procedure TTyCustomGridCell.SetPadding(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   if FPadding = AValue then Exit;
@@ -687,7 +836,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyGridCell.AdjustClientRect(var ARect: TRect);
+procedure TTyCustomGridCell.AdjustClientRect(var ARect: TRect);
 var pad: Integer;
 begin
   inherited AdjustClientRect(ARect);
@@ -700,16 +849,16 @@ begin
   if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
 end;
 
-procedure TTyGridCell.SetParent(AParent: TWinControl);
+procedure TTyCustomGridCell.SetParent(AParent: TWinControl);
 begin
   inherited SetParent(AParent);
   { Self-register with the hosting grid. Fires for grid-created cells, a designer drop,
     and a streamed load when Parent is applied — cell list rebuilt in all paths. }
-  if (AParent <> nil) and (AParent is TTyGridPanel) then
-    TTyGridPanel(AParent).RegisterCell(Self);
+  if (AParent <> nil) and (AParent is TTyCustomGridPanel) then
+    TTyCustomGridPanel(AParent).RegisterCell(Self);
 end;
 
-procedure TTyGridCell.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomGridCell.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   R: TRect;
@@ -744,7 +893,7 @@ begin
   end;
 end;
 
-procedure TTyGridCell.Paint;
+procedure TTyCustomGridCell.Paint;
 begin
   { Design-time grid guides are painted by the parent TTyGridPanel, not per-cell. }
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);

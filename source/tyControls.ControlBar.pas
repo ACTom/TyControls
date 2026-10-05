@@ -12,7 +12,7 @@ unit tyControls.ControlBar;
   mirrors the layout of the classic Delphi/VCL TControlBar / an Office rebar, not its drag.
   (TTyCoolBar is the one that does implement band dragging.)
 
-  It subclasses TTyPanel (GetStyleTypeKey='TyPanel') — reusing the panel's themed frame —
+  It descends from TTyCustomPanel (GetStyleTypeKey='TyPanel') — reusing the panel's themed frame —
   and adds the band packing. The PACKING is a pure unit-level function (TyControlBarPack)
   the tests exercise directly with no window handle; the control is a thin shell that runs
   the solver in AlignControls and SetBounds()s each child. Live drag-to-reband is a
@@ -31,8 +31,8 @@ uses
   tyControls.Panel;
 
 type
-  { TTyControlBar — a dockable band host (subclass of TTyPanel). }
-  TTyControlBar = class(TTyPanel)
+  { TTyControlBar — a dockable band host (descends from TTyCustomPanel). }
+  TTyCustomControlBar = class(TTyCustomPanel)
   private
     FBandHeight: Integer;
     { True once a host/.lfm pins BandHeight; False = follow the theme's --header-control-height
@@ -91,7 +91,6 @@ type
     { The band index a child currently sits on (-1 when the control is not a child / not yet
       laid out). Read-only view of the packer's result. }
     function BandIndexOf(AControl: TControl): Integer;
-  published
     { The uniform pixel height of each band (row). Every child is forced to this height when
       packed. Changing it re-lays the bands. RowSize is a VCL-familiar alias. Left unset it
       follows the theme's --header-control-height token, so bands pack denser at classic
@@ -103,6 +102,81 @@ type
     property GripperWidth: Integer read FGripperWidth write SetGripperWidth default 12;
     { Vertical gap between consecutive bands. }
     property BandSpacing: Integer read FBandSpacing write SetBandSpacing default 3;
+  end;
+
+  { TTyControlBar publishes TTyCustomControlBar's properties; everything lives in TTyCustomControlBar. }
+  TTyControlBar = class(TTyCustomControlBar)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Caption;
+    property Alignment;
+    property VerticalAlignment;
+    property WordWrap;
+    property ShowAccelChar;
+    property DockSite;
+    property UseDockManager;
+    property OnDockDrop;
+    property OnDockOver;
+    property OnUnDock;
+    property OnGetSiteInfo;
+    property OnGetDockCaption;
+    property OnStartDock;
+    property OnEndDock;
+    property Align;
+    property Anchors;
+    property BandHeight;
+    property RowSize;
+    property GripperWidth;
+    property BandSpacing;
   end;
 
 { Pure packing: place each child (widths+heights in AChildSizes, device px) left-to-right
@@ -187,9 +261,9 @@ begin
 end;
 
 // ===========================================================================
-// TTyControlBar
+// TTyCustomControlBar
 // ===========================================================================
-constructor TTyControlBar.Create(AOwner: TComponent);
+constructor TTyCustomControlBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   // TTyPanel already sets csAcceptsControls; keep the band host a designer container.
@@ -201,7 +275,7 @@ begin
   Height := TyDensityHeight(ActiveController, 32);
 end;
 
-function TTyControlBar.GetStyleTypeKey: string;
+function TTyCustomControlBar.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyPanel': the per-band grippers are marks a panel never draws.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
@@ -213,7 +287,7 @@ end;
   theme's --header-control-height token, whose classic value (26) equals the original constant
   byte-for-byte and which the density pack raises for modern density. Resolved live (not
   cached) so toggling Controller.Density re-heights the bands on the next layout. }
-function TTyControlBar.GetBandHeight: Integer;
+function TTyCustomControlBar.GetBandHeight: Integer;
 begin
   if FBandHeightExplicit then
     Result := FBandHeight
@@ -221,7 +295,7 @@ begin
     Result := ActiveController.Metric('--header-control-height', 26);
 end;
 
-procedure TTyControlBar.SetBandHeight(AValue: Integer);
+procedure TTyCustomControlBar.SetBandHeight(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
   FBandHeightExplicit := True;   { even if it equals the classic default, the host pinned it }
@@ -230,7 +304,7 @@ begin
   Relayout;
 end;
 
-procedure TTyControlBar.SetGripperWidth(AValue: Integer);
+procedure TTyCustomControlBar.SetGripperWidth(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   if FGripperWidth = AValue then Exit;
@@ -238,7 +312,7 @@ begin
   Relayout;
 end;
 
-procedure TTyControlBar.SetBandSpacing(AValue: Integer);
+procedure TTyCustomControlBar.SetBandSpacing(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   if FBandSpacing = AValue then Exit;
@@ -246,7 +320,7 @@ begin
   Relayout;
 end;
 
-function TTyControlBar.PackBands(const ABands: array of TControl; const ASizes: array of TSize;
+function TTyCustomControlBar.PackBands(const ABands: array of TControl; const ASizes: array of TSize;
   AAvail, ABandHeight, AGripperW, ASpacing: Integer): TTyRectArray;
 begin
   { A ControlBar reserves ONE gripper per row, at the row's LEADING edge -- its left, or its
@@ -255,7 +329,7 @@ begin
   Result := TyControlBarPack(ASizes, AAvail, ABandHeight, AGripperW, ASpacing, IsRightToLeft);
 end;
 
-procedure TTyControlBar.PaintGrippers(APainter: TTyPainter; const AStyle: TTyStyleSet;
+procedure TTyCustomControlBar.PaintGrippers(APainter: TTyPainter; const AStyle: TTyStyleSet;
   ABandCount, ABandHeight, AGripperW, ASpacing: Integer);
 var
   i, bandTop: Integer;
@@ -277,14 +351,14 @@ begin
   end;
 end;
 
-procedure TTyControlBar.Relayout;
+procedure TTyCustomControlBar.Relayout;
 begin
   if csDestroying in ComponentState then Exit;
   Realign;
   Invalidate;
 end;
 
-function TTyControlBar.FrameInsetPx: Integer;
+function TTyCustomControlBar.FrameInsetPx: Integer;
 var
   S: TTyStyleSet;
 begin
@@ -296,7 +370,7 @@ begin
   if Result < 0 then Result := 0;
 end;
 
-function TTyControlBar.BandContentRect: TRect;
+function TTyCustomControlBar.BandContentRect: TRect;
 var
   ins: Integer;
 begin
@@ -310,7 +384,7 @@ begin
   if Result.Bottom < Result.Top then Result.Bottom := Result.Top;
 end;
 
-function TTyControlBar.BandIndexOf(AControl: TControl): Integer;
+function TTyCustomControlBar.BandIndexOf(AControl: TControl): Integer;
 var
   I: Integer;
 begin
@@ -320,7 +394,7 @@ begin
 end;
 
 // The number of distinct bands currently occupied (derived from the stored assignments).
-function TTyControlBar.BandCount: Integer;
+function TTyCustomControlBar.BandCount: Integer;
 var
   I: Integer;
 begin
@@ -329,7 +403,7 @@ begin
     if FAssignBand[I] + 1 > Result then Result := FAssignBand[I] + 1;
 end;
 
-procedure TTyControlBar.AlignControls(AControl: TControl; var ARect: TRect);
+procedure TTyCustomControlBar.AlignControls(AControl: TControl; var ARect: TRect);
 var
   I, N, bands: Integer;
   list: array of TControl;
@@ -409,7 +483,7 @@ begin
   end;
 end;
 
-procedure TTyControlBar.CMBiDiModeChanged(var Message: TLMessage);
+procedure TTyCustomControlBar.CMBiDiModeChanged(var Message: TLMessage);
 var
   r: TRect;
 begin
@@ -425,7 +499,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyControlBar.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomControlBar.Notification(AComponent: TComponent; Operation: TOperation);
 var
   I, J: Integer;
 begin
@@ -454,7 +528,7 @@ end;
   gripper column, which the caller has already placed on the band's leading edge (its left, or
   its right on a mirrored bar) -- in the theme's border colour (falls back to text colour).
   Symmetric within the column, so this function has nothing of its own to mirror. }
-procedure TTyControlBar.DrawGripper(P: TTyPainter; const ABandRect: TRect;
+procedure TTyCustomControlBar.DrawGripper(P: TTyPainter; const ABandRect: TRect;
   const AStyle: TTyStyleSet);
 var
   railColor: TTyColor;
@@ -482,7 +556,7 @@ begin
   P.FillBackground(Rect(cx + railGap, y0, cx + railGap + railW, y1), fill, 0);
 end;
 
-procedure TTyControlBar.Paint;
+procedure TTyCustomControlBar.Paint;
 var
   P: TTyPainter;
   S: TTyStyleSet;

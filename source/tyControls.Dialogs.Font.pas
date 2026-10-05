@@ -2,7 +2,7 @@ unit tyControls.Dialogs.Font;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Controls, Forms,
+  Classes, SysUtils, Types, Graphics, Controls, Forms, StdCtrls, Dialogs,
   tyControls.Dialogs, tyControls.ListBox, tyControls.FontListBox, tyControls.SpinEdit,
   tyControls.CheckBox, tyControls.Button, tyControls.TyLabel,
   tyControls.Painter, tyControls.ColorMath,
@@ -25,17 +25,43 @@ type
     FPreviewRect: TRect;
     FSeedDisplay: Integer;   // display value shown in the spin at seed time
     FSeedSize: Integer;      // caller's original Size (may be <= 0 for "default")
+    FSeedClamped: Boolean;   // fdLimitSize moved the seed display (Configure)
     FSeedName: string;       // caller's family; the preview falls back to it (see PreviewFamily)
     FPreviewChanges: Integer;  // test seam, see PreviewChangeCount
+    FSeedStyle: TFontStyles;   // the caller's styles: what a grey (untouched) box stands for
+    FOptions: TFontDialogOptions;   // [fdEffects] until Configure says otherwise
+    FPreviewText: string;
+    FApplyBtn: TTyButton;
+    FOnApply: TNotifyEvent;
     procedure ColorBtnClick(Sender: TObject);
+    procedure ApplyClick(Sender: TObject);
     procedure PreviewChanged(Sender: TObject);
+    { The style a box stands for: its own state, or -- grey, under fdNoStyleSel, never touched --
+      the caller's. }
+    function EffectiveStyle(ABox: TTyCheckBox; AStyle: TFontStyle): Boolean;
+    function PreviewSize: Integer;
   protected
     procedure LayoutContent; override;
     procedure Paint; override;             // preview
   public
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
     procedure SeedFrom(AFont: TFont; AFamilies: TStrings);
+    { LCL's TFontDialog options, applied after SeedFrom (the no-preselection ones undo what
+      SeedFrom selected). AMinSize / AMaxSize count only under fdLimitSize, and only when > 0.
+      APreviewText replaces the sample when not empty. Without a call the form behaves as with
+      [fdEffects], LCL's default. }
+    procedure Configure(AOptions: TFontDialogOptions; AMinSize, AMaxSize: Integer;
+      const APreviewText: string);
+    { Writes the choice into AFont. Whatever the user could not see or did not touch stays as
+      AFont has it: the family when none is selected, the size when the box is blank, a grey
+      style box, and -- without fdEffects -- underline, strikeout and colour. Under fdLimitSize
+      the size written is always inside the limits. }
     procedure WriteTo(AFont: TFont);
+    { The Apply button (fdApplyButton): fires OnApply; the dialog stays open. }
+    procedure DoApply;
+    property OnApply: TNotifyEvent read FOnApply write FOnApply;
+    { The text the preview strip shows: PreviewText, or the built-in sample. }
+    function SampleText: string;
     // test seams:
     function SizeValue: Integer;
     function BoldChecked: Boolean; function ItalicChecked: Boolean;
@@ -55,22 +81,48 @@ type
     FOnShow: TNotifyEvent;
     FOnClose: TCloseEvent;
     FOnCanClose: TCloseQueryEvent;
+    FOptions: TFontDialogOptions;
+    FMinFontSize, FMaxFontSize: Integer;
+    FPreviewText: string;
+    FOnApplyClicked: TNotifyEvent;
     procedure SetFont(AValue: TFont);
+    procedure FormApply(Sender: TObject);
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    { Builds the dialog Execute would show -- families, seed, options, the Apply wiring and the
+      three forwarded events -- without showing it. The caller frees it. }
+    function BuildForm: TTyFontForm;
     function Execute: Boolean;
+    { The Apply button was clicked: Font already holds the current choice. Fires
+      OnApplyClicked; LCL's TFontDialog.ApplyClicked. }
+    procedure ApplyClicked; virtual;
   published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
     property Caption: TCaption read FCaption write FCaption;
     property Font: TFont read FFont write SetFont;
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
+    { LCL's TFontDialogOptions. fdEffects (underline, strikeout, colour), fdFixedPitchOnly,
+      fdScalableOnly, fdLimitSize, fdNoFaceSel, fdNoSizeSel, fdNoStyleSel and fdApplyButton do
+      what they say; the Windows ChooseFont leftovers (fdAnsiOnly, fdTrueTypeOnly, fdNoOEMFonts,
+      fdNoSimulations, fdNoVectorFonts, fdWysiwyg, fdShowHelp, fdForceFontExist) are accepted
+      and have no effect -- see docs/controls/dialogs.md. }
+    property Options: TFontDialogOptions read FOptions write FOptions default [fdEffects];
+    { The size range under fdLimitSize; 0 = no limit on that side. }
+    property MinFontSize: Integer read FMinFontSize write FMinFontSize default 0;
+    property MaxFontSize: Integer read FMaxFontSize write FMaxFontSize default 0;
+    { The preview strip's text; empty = the built-in sample. }
+    property PreviewText: TCaption read FPreviewText write FPreviewText;
+    property OnApplyClicked: TNotifyEvent read FOnApplyClicked write FOnApplyClicked;
   end;
 
 implementation
 
-uses Math;
+uses Math, tyControls.FontFamilies;
 
 function TyFontStyleToChecks(AStyle: TFontStyles): TTyFontChecks;
 begin
@@ -117,16 +169,16 @@ var
     Result := TTyLabel.Create(Self);
     Result.Parent := Self;
     Result.Caption := ACaption;
-    Result.SetBounds(ALeft, ATop, AWidth, cLabelH);
+    Result.SetBounds(ALeft, ATop, AWidth, Px(cLabelH));
   end;
 
   { The y under ALabel -- its real bottom plus the gap, never tighter than the designed
     cLabelH + cLabelGap, so a lean theme keeps the original spacing exactly. }
   function LabelBottom(ALabel: TTyLabel; ATop: Integer): Integer;
   begin
-    Result := ATop + cLabelH + cLabelGap;
-    if (ALabel <> nil) and (ALabel.Top + ALabel.Height + cLabelGap > Result) then
-      Result := ALabel.Top + ALabel.Height + cLabelGap;
+    Result := ATop + Px(cLabelH) + Px(cLabelGap);
+    if (ALabel <> nil) and (ALabel.Top + ALabel.Height + Px(cLabelGap) > Result) then
+      Result := ALabel.Top + ALabel.Height + Px(cLabelGap);
   end;
 
   function MkCheck(const ACaption: string; ALeft, ATop: Integer): TTyCheckBox;
@@ -134,48 +186,51 @@ var
     Result := TTyCheckBox.Create(Self);
     Result.Parent := Self;
     Result.Caption := ACaption;
-    Result.SetBounds(ALeft, ATop, cColW, cCheckH);
+    Result.SetBounds(ALeft, ATop, Px(cColW), Px(cCheckH));
   end;
 
   { Where the row after AControl starts: its real bottom, but never tighter than the
     designed stride, so a lean theme keeps the original spacing exactly. }
   function NextRow(AControl: TControl; ACurrentY: Integer): Integer;
   begin
-    Result := AControl.Top + AControl.Height + (cCheckStep - cCheckH);
-    if Result < ACurrentY + cCheckStep then Result := ACurrentY + cCheckStep;
+    Result := AControl.Top + AControl.Height + (Px(cCheckStep) - Px(cCheckH));
+    if Result < ACurrentY + Px(cCheckStep) then Result := ACurrentY + Px(cCheckStep);
   end;
 
 begin
   inherited CreateNew(AOwner, Num);
   Resizable := True;
-  Constraints.MinWidth := 460;
-  Constraints.MinHeight := 360;
+  { Every layout number in this form is a 96-PPI design number and goes through Px: see
+    TTyDialog.Px. }
+  Constraints.MinWidth := Px(460);
+  Constraints.MinHeight := Px(360);
   FColorValue := clWindowText;
+  FOptions := [fdEffects];   // LCL's default; Configure replaces it
 
   r := ContentRect;
-  x0 := r.Left + TyDlgPad;
-  y0 := r.Top + TyDlgPad;
-  colX := x0 + cListW + cColGap;
+  x0 := r.Left + Px(TyDlgPad);
+  y0 := r.Top + Px(TyDlgPad);
+  colX := x0 + Px(cListW) + Px(cColGap);
 
   // Left column: family label + list. Height is finalized in LayoutContent so it
   // stretches to just above the preview strip; seed a reasonable initial height.
-  FFamilyLabel := MkLabel(rsDlgFontFamily, x0, y0, cListW);
+  FFamilyLabel := MkLabel(rsDlgFontFamily, x0, y0, Px(cListW));
   FList := TTyFontListBox.Create(Self);
   FList.Parent := Self;
   { The list starts under the label the same way -- read back, floored at the designed gap. }
-  FList.SetBounds(x0, LabelBottom(FFamilyLabel, y0), cListW, cListMinH);
+  FList.SetBounds(x0, LabelBottom(FFamilyLabel, y0), Px(cListW), Px(cListMinH));
 
   // Right column, top group: "Size" label + spin on one baseline-aligned row.
   y := y0;
-  MkLabel(rsDlgFontSize, colX, y + ((TyDlgEditH - cLabelH) div 2), cSizeLblW);
+  MkLabel(rsDlgFontSize, colX, y + ((Px(TyDlgEditH) - Px(cLabelH)) div 2), Px(cSizeLblW));
   FSize := TTySpinEdit.Create(Self);
   FSize.Parent := Self;
   FSize.MinValue := 1;
   FSize.MaxValue := 999;
-  FSize.SetBounds(colX + cSizeLblW + 8, y, cSizeSpinW, TyDlgEditH);
+  FSize.SetBounds(colX + Px(cSizeLblW) + Px(8), y, Px(cSizeSpinW), Px(TyDlgEditH));
 
   // Right column, style group: four checks with an even vertical rhythm.
-  Inc(y, TyDlgEditH + cSectionGap);
+  Inc(y, Px(TyDlgEditH) + Px(cSectionGap));
   { cCheckStep is a MINIMUM stride, not the stride: TTyCheckBox floors its height on the
     theme's font, padding and --checkbox-size, LCL enforces that floor inside SetBounds, and a
     box taller than 28 would land under the next one. Step by whatever the box actually is. }
@@ -188,18 +243,18 @@ begin
   FStrike := MkCheck(rsDlgFontStrike, colX, y);
 
   // Right column, color group.
-  Inc(y, cCheckH + cSectionGap);
+  Inc(y, Px(cCheckH) + Px(cSectionGap));
   FColorBtn := TTyButton.Create(Self);
   FColorBtn.Parent := Self;
   FColorBtn.Caption := rsDlgFontColor;
-  FColorBtn.SetBounds(colX, y, cColW, cBtnH);
+  FColorBtn.SetBounds(colX, y, Px(cColW), Px(cBtnH));
   FColorBtn.OnClick := @ColorBtnClick;
 
   // Preview strip spans the full content width along the bottom (finalized by
   // LayoutContent); seed it here so AutoSizeToContent can size the form.
-  FPreviewRect := Rect(x0, y0 + cLabelH + cLabelGap + cListMinH + cSectionGap,
-    r.Right - TyDlgPad,
-    y0 + cLabelH + cLabelGap + cListMinH + cSectionGap + cPreviewH);
+  FPreviewRect := Rect(x0, y0 + Px(cLabelH) + Px(cLabelGap) + Px(cListMinH) + Px(cSectionGap),
+    r.Right - Px(TyDlgPad),
+    y0 + Px(cLabelH) + Px(cLabelGap) + Px(cListMinH) + Px(cSectionGap) + Px(cPreviewH));
 
   // The sample text is drawn by the FORM's Paint, so a child control invalidating
   // itself repaints none of it — every input that feeds the sample has to ask the
@@ -218,8 +273,8 @@ begin
 
   // Content extents: left list column + gap + right column vs. the preview strip
   // running the full width; whichever is taller/wider drives the form size.
-  contentW := cListW + cColGap + cColW;
-  contentH := (FPreviewRect.Bottom - y0) + TyDlgPad;
+  contentW := Px(cListW) + Px(cColGap) + Px(cColW);
+  contentH := (FPreviewRect.Bottom - y0) + Px(TyDlgPad);
   AutoSizeToContent(contentW, contentH);
   LayoutContent;
 end;
@@ -234,6 +289,7 @@ begin
   FSeedDisplay := FSize.Value;     // what the user sees
   FSeedSize := AFont.Size;         // the caller's original (may be <= 0)
   FSeedName := AFont.Name;         // survives a family that isn't installed (list stays unselected)
+  FSeedStyle := AFont.Style;
   ch := TyFontStyleToChecks(AFont.Style);
   FBold.Checked := ch.Bold;
   FItalic.Checked := ch.Italic;
@@ -243,18 +299,119 @@ begin
   Invalidate;
 end;
 
+procedure TTyFontForm.Configure(AOptions: TFontDialogOptions; AMinSize, AMaxSize: Integer;
+  const APreviewText: string);
+var shown: Integer;
+begin
+  FOptions := AOptions;
+  FPreviewText := APreviewText;
+  if fdLimitSize in AOptions then
+  begin
+    { The spin re-clamps its value on each range write; the clamped value is what the user
+      sees, so it is the new "untouched" mark. }
+    shown := FSize.Value;
+    if AMaxSize > 0 then FSize.MaxValue := AMaxSize;
+    if AMinSize > 0 then FSize.MinValue := AMinSize;
+    FSeedDisplay := FSize.Value;
+    FSeedClamped := FSeedDisplay <> shown;
+  end;
+  if fdNoFaceSel in AOptions then FList.ItemIndex := -1;
+  if fdNoSizeSel in AOptions then FSize.ValueEmpty := True;
+  if fdNoStyleSel in AOptions then
+  begin
+    { ChooseFont's style list is weight + slant; underline and strikeout are effects. }
+    FBold.State := cbGrayed;
+    FItalic.State := cbGrayed;
+  end;
+  if not (fdEffects in AOptions) then
+  begin
+    FUnderline.Visible := False;
+    FStrike.Visible := False;
+    FColorBtn.Visible := False;
+  end;
+  if (fdApplyButton in AOptions) and (FApplyBtn = nil) then
+  begin
+    FApplyBtn := AddButton(rsDlgFontApply, mrNone);   // mrNone: the dialog stays open
+    FApplyBtn.OnClick := @ApplyClick;
+  end;
+  Invalidate;
+end;
+
 procedure TTyFontForm.WriteTo(AFont: TFont);
-var ch: TTyFontChecks;
+var
+  st: TFontStyles;
+  restore: Boolean;
+
+  procedure Put(ABox: TTyCheckBox; AStyle: TFontStyle);
+  begin
+    case ABox.State of
+      cbChecked:   Include(st, AStyle);
+      cbUnchecked: Exclude(st, AStyle);
+    else
+      ;   // grey: never touched under fdNoStyleSel -> the caller's bit stays
+    end;
+  end;
+
 begin
   if SelectedFamily <> '' then AFont.Name := SelectedFamily;
-  if FSize.Value = FSeedDisplay then AFont.Size := FSeedSize  // untouched → restore original (0 stays 0)
-  else AFont.Size := FSize.Value;                             // user changed the size → apply it
-  ch.Bold := FBold.Checked;
-  ch.Italic := FItalic.Checked;
-  ch.Underline := FUnderline.Checked;
-  ch.Strikeout := FStrike.Checked;
-  AFont.Style := TyChecksToFontStyle(ch);
-  AFont.Color := FColorValue;
+  if not FSize.ValueEmpty then   // blank (fdNoSizeSel, untouched) -> the caller's size stays
+  begin
+    { Untouched -> the caller's original (0 stays 0) -- unless fdLimitSize clamped it, in
+      which case the clamped value is the answer. A "default" size (<= 0) is shown as 9; it
+      stays 0 only when the limits left that 9 alone, otherwise the size written would be
+      outside them. }
+    restore := (FSize.Value = FSeedDisplay)
+      and (not (fdLimitSize in FOptions) or ((FSeedSize <= 0) and not FSeedClamped)
+           or (FSeedSize = FSeedDisplay));
+    if restore then AFont.Size := FSeedSize
+    else AFont.Size := FSize.Value;
+  end;
+  st := AFont.Style;
+  Put(FBold, fsBold);
+  Put(FItalic, fsItalic);
+  if fdEffects in FOptions then
+  begin
+    Put(FUnderline, fsUnderline);
+    Put(FStrike, fsStrikeOut);
+  end;
+  AFont.Style := st;
+  if fdEffects in FOptions then AFont.Color := FColorValue;
+end;
+
+procedure TTyFontForm.ApplyClick(Sender: TObject);
+begin
+  DoApply;
+end;
+
+procedure TTyFontForm.DoApply;
+begin
+  if Assigned(FOnApply) then FOnApply(Self);
+end;
+
+function TTyFontForm.SampleText: string;
+begin
+  if FPreviewText <> '' then Result := FPreviewText
+  else Result := rsDlgFontSample;
+end;
+
+function TTyFontForm.EffectiveStyle(ABox: TTyCheckBox; AStyle: TFontStyle): Boolean;
+begin
+  case ABox.State of
+    cbChecked: Result := True;
+    cbUnchecked: Result := False;
+  else
+    Result := AStyle in FSeedStyle;
+  end;
+  { Without fdEffects the boxes are hidden: the caller's underline / strikeout is what
+    WriteTo keeps, so it is what the sample shows. }
+  if (not (fdEffects in FOptions)) and (AStyle in [fsUnderline, fsStrikeOut]) then
+    Result := AStyle in FSeedStyle;
+end;
+
+function TTyFontForm.PreviewSize: Integer;
+begin
+  if FSize.ValueEmpty then Result := FSeedDisplay   // blank box: the caller's size
+  else Result := FSize.Value;
 end;
 
 procedure TTyFontForm.ColorBtnClick(Sender: TObject);
@@ -285,16 +442,16 @@ begin
   r := ContentRect;
   // Anchor the preview strip to the bottom of the content area and stretch the
   // family list down to sit just above it, keeping a clear separating gap.
-  FPreviewRect := Rect(r.Left + TyDlgPad, r.Bottom - TyDlgPad - cPreviewH,
-    r.Right - TyDlgPad, r.Bottom - TyDlgPad);
+  FPreviewRect := Rect(r.Left + Px(TyDlgPad), r.Bottom - Px(TyDlgPad) - Px(cPreviewH),
+    r.Right - Px(TyDlgPad), r.Bottom - Px(TyDlgPad));
   { The runtime relayout has to honour the same read-back rule the constructor does, or it
     quietly puts the literal stride back and drops the list onto its own label. }
-  listTop := r.Top + TyDlgPad + cLabelH + cLabelGap;
+  listTop := r.Top + Px(TyDlgPad) + Px(cLabelH) + Px(cLabelGap);
   if (FFamilyLabel <> nil)
-     and (FFamilyLabel.Top + FFamilyLabel.Height + cLabelGap > listTop) then
-    listTop := FFamilyLabel.Top + FFamilyLabel.Height + cLabelGap;
-  FList.SetBounds(r.Left + TyDlgPad, listTop,
-    cListW, Max(cListMinH, FPreviewRect.Top - listTop - cSectionGap));
+     and (FFamilyLabel.Top + FFamilyLabel.Height + Px(cLabelGap) > listTop) then
+    listTop := FFamilyLabel.Top + FFamilyLabel.Height + Px(cLabelGap);
+  FList.SetBounds(r.Left + Px(TyDlgPad), listTop,
+    Px(cListW), Max(Px(cListMinH), FPreviewRect.Top - listTop - Px(cSectionGap)));
 end;
 
 procedure TTyFontForm.Paint;
@@ -314,20 +471,20 @@ begin
   P := TTyPainter.Create;
   try
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
-    TyConfigureTextFont(P.Bitmap, PreviewFamily, FSize.Value,
-      IfThen(FBold.Checked, 700, 400), Font.PixelsPerInch);
+    TyConfigureTextFont(P.Bitmap, PreviewFamily, PreviewSize,
+      IfThen(EffectiveStyle(FBold, fsBold), 700, 400), Font.PixelsPerInch);
     extra := [];
-    if FItalic.Checked then Include(extra, fsItalic);
-    if FUnderline.Checked then Include(extra, fsUnderline);
-    if FStrike.Checked then Include(extra, fsStrikeOut);
+    if EffectiveStyle(FItalic, fsItalic) then Include(extra, fsItalic);
+    if EffectiveStyle(FUnderline, fsUnderline) then Include(extra, fsUnderline);
+    if EffectiveStyle(FStrike, fsStrikeOut) then Include(extra, fsStrikeOut);
     P.Bitmap.FontStyle := P.Bitmap.FontStyle + extra;
     style := Default(TTextStyle);
     style.Alignment := taLeftJustify;
     style.Layout := tlTop;
     style.SingleLine := True;
     style.Clipping := True;
-    P.Bitmap.TextRect(FPreviewRect, FPreviewRect.Left + 4, FPreviewRect.Top + 4,
-      rsDlgFontSample, style, TyColorToBGRA(TyColorFromLCL(FColorValue, 255)));
+    P.Bitmap.TextRect(FPreviewRect, FPreviewRect.Left + Px(4), FPreviewRect.Top + Px(4),
+      SampleText, style, TyColorToBGRA(TyColorFromLCL(FColorValue, 255)));
     P.EndPaint;
   finally P.Free; end;
 end;
@@ -387,9 +544,13 @@ begin
 end;
 
 function TyFontDialog(AFont: TFont): Boolean;
-var d: TTyFontForm;
+var d: TTyFontForm; fams: TStringList;
 begin
-  d := TyBuildFontDialog('', AFont, Screen.Fonts);
+  fams := TStringList.Create;
+  try
+    TyGetFontFamilies(fams, False);   // Screen.Fonts without the vertical "@" variants
+    d := TyBuildFontDialog('', AFont, fams);
+  finally fams.Free; end;
   try
     if d.ShowModal = mrOK then
     begin
@@ -407,6 +568,7 @@ constructor TTyFontDialog.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FFont := TFont.Create;
+  FOptions := [fdEffects];
 end;
 
 destructor TTyFontDialog.Destroy;
@@ -420,18 +582,44 @@ begin
   FFont.Assign(AValue);
 end;
 
+function TTyFontDialog.BuildForm: TTyFontForm;
+var fams: TStringList;
+begin
+  { The same list the font combo box shows: Screen.Fonts without the vertical "@" variants,
+    filtered further when an option asks. Taken on each build, but from Screen.Fonts, which LCL
+    fills once per process: a font installed while the program runs shows up after a restart. }
+  fams := TStringList.Create;
+  try
+    TyGetFontFamilies(fams, fdFixedPitchOnly in FOptions, fdScalableOnly in FOptions);
+    Result := TyBuildFontDialog(FCaption, FFont, fams);
+  finally
+    fams.Free;
+  end;
+  Result.Configure(FOptions, FMinFontSize, FMaxFontSize, FPreviewText);
+  Result.OnApply := @FormApply;
+  // The wrapper's OnShow/OnClose/OnCanClose forward onto the form before it shows.
+  TyForwardDialogEvents(Result, FOnShow, FOnClose, FOnCanClose);
+end;
+
 function TTyFontDialog.Execute: Boolean;
 var d: TTyFontForm;
 begin
-  // Inline the build/show (rather than call TyFontDialog) so the wrapper's
-  // OnShow/OnClose/OnCanClose forward onto the form before ShowModal, and so the
-  // component's Caption is honoured.
-  d := TyBuildFontDialog(FCaption, FFont, Screen.Fonts);
+  d := BuildForm;
   try
-    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
     Result := (d.ShowModal = mrOK);
     if Result then d.WriteTo(FFont);
   finally d.Free; end;
+end;
+
+procedure TTyFontDialog.FormApply(Sender: TObject);
+begin
+  (Sender as TTyFontForm).WriteTo(FFont);
+  ApplyClicked;
+end;
+
+procedure TTyFontDialog.ApplyClicked;
+begin
+  if Assigned(FOnApplyClicked) then FOnApplyClicked(Self);
 end;
 
 end.

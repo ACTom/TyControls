@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-`TTyColorButton` 是一个显示**颜色色块**的按钮控件，继承自 [[TTyButton]]。点击时弹出主题化的取色对话框（`TySelectColor`，见 [dialogs.md](dialogs.md) §9.1），用户选定颜色后色块随之更新。典型用途：让用户在窗体上直接挑选前景色 / 填充色 / 高亮色等。
+`TTyColorButton` 是一个显示**颜色色块**的按钮控件，继承自 [[TTyCustomButton]]。点击时弹出主题化的取色对话框（`TySelectColor`，见 [dialogs.md](dialogs.md) §9.1），用户选定颜色后色块随之更新。典型用途：让用户在窗体上直接挑选前景色 / 填充色 / 高亮色等。
 
 它复用 `TTyButton` 的所有能力（状态、悬停淡入、角标、默认 / 取消键、`ModalResult` 等），只是把按钮内容从居中文字换成了色块（可选附带 `#RRGGBB` 十六进制文字）。
 
@@ -31,9 +31,9 @@ uses tyControls.ColorButton;
 |------|------|--------|------|
 | `SelectedColor` | `TTyColor` | `$FF3B82F6`（accent 蓝，`TyRGB(59,130,246)`） | 当前色块颜色。**任何**方式的变更（代码赋值、对话框接受）都会重绘并触发 `OnColorChange`；仅流式载入期间（`csLoading`）抑制，否则每次载入 `.lfm` 都会在窗体建成前发一次事件。 |
 | `ButtonColor` | `TColor` | 同 `SelectedColor`（`stored False`，不写入 `.lfm`） | LCL 的名字和 LCL 的**类型**（`dialogs.pp:370`）。它是 `SelectedColor` 的第二个**视图**，不是第二个值：读写都换算（`TTyColor` 是 ARGB，`TColor` 不带 alpha，写入时保留当前 alpha）。`stored False` 是故意的——published 属性无论是否 `stored` 都能从 `.lfm` **读**进来，所以移植过来的 `ButtonColor = clRed` 能加载；不写出去则保证自家 `.lfm` 不会用两个名字存同一个颜色。 |
-| `Alignment` | `TAlignment` | `taLeftJustify` | 本类**重新声明**基类默认值（`TTyButton` 是 `taCenter`），构造函数同步设置。理由：标题画在色块**右侧剩下的那条**里，从那条的左缘起排才贴着色块。仍可设成 `taCenter` / `taRightJustify`，色块不动。 |
+| `Alignment` | `TAlignment` | `taLeftJustify` | 本类**重新声明**基类默认值（`TTyCustomButton` 是 `taCenter`），构造函数同步设置。理由：标题画在色块**右侧剩下的那条**里，从那条的左缘起排才贴着色块。仍可设成 `taCenter` / `taRightJustify`，色块不动。 |
 | `ShowText` | `Boolean` | `False` | 为 `True` 时在色块右侧绘制 `#RRGGBB` 十六进制文字（取 `AStyle.TextColor`）；为 `False` 时色块占满内容区。**`Caption` 非空时它不起作用**——两者共用同一个文字位，`Caption` 优先。 |
-| `DialogCaption` | `string` | `'Select Color'` | 点击后弹出的取色对话框标题栏文字。 |
+| `DialogCaption` | `TCaption` | `'Select Color'` | 点击后弹出的取色对话框标题栏文字。 |
 | `OnColorChange` | `TNotifyEvent` | `nil` | `SelectedColor` **实际发生变化**时触发，不区分来源。 |
 | `OnColorChanged` | `TNotifyEvent` | `nil` | LCL 对同一个通知的叫法（`dialogs.pp:387-388`），和 `OnColorChange` 只差一个字母。两个都会触发，`OnColorChange` 在前。各自有独立字段，所以各自按自己的名字流式化，保存时不会把宿主的处理器悄悄改名。 |
 
@@ -43,7 +43,7 @@ uses tyControls.ColorButton;
 |------|------|------|
 | `ContentText` | `string` | 这个按钮**实际会画出来**的那串文字：`Caption` 非空时返回 `Caption`，否则 `ShowText` 时返回 `#RRGGBB`，两者都没有则为空串（纯色块）。`AutoSize` 的宽度测量量的就是它——画什么就量什么，否则被裁掉的正是用户唯一填过的那个属性。 |
 
-### 继承自 [[TTyButton]] 的成员
+### 继承自 [[TTyCustomButton]] 的成员
 
 `Caption`、`Default`、`Cancel`、`ModalResult`、`AnimationsEnabled`、`Down`、`ShowBadge` / `BadgeValue` / `BadgePosition`、`Enabled`、`Font`、`Align`、`Anchors`、`StyleClass`、`Controller`、`OnClick` 等一律可用，语义与 [[TTyButton]] 一致。`Caption` 非空时画在色块右侧，并**优先于** `ShowText` 的 `#RRGGBB`（两者共用同一个文字位；`ShowText` 只在没有 `Caption` 时才起作用）。注意：本控件的点击**即为"打开取色对话框"**，`OnClick` 在**对话框弹出之前**触发。
 
@@ -103,6 +103,6 @@ function TyColorHex(AColor: TTyColor): string;   // 返回 '#RRGGBB'（大写，
 
 ## 相关
 
-- [[TTyButton]] — 父类，提供全部按钮能力。
+- [[TTyCustomButton]] — 父类，提供全部按钮能力。
 - [对话框子系统](dialogs.md) — `TySelectColor` 取色对话框（§9.1）。
 - **右到左镜像：** `BiDiMode := bdRightToLeft` 时色块移到右侧、标题移到它左边。宽度计算不变（`CalculatePreferredSize` 无需分支），只是同样的三段换了顺序。

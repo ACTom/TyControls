@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyComboEdit 是**带下拉按钮的编辑框**,继承自 [TTyEdit](edit.md)。右侧保留一小块区域画下拉箭头;点击按钮(或调用 `DropDown`)触发 `OnDropDown`,由调用方在事件里弹出**任意 popup**(颜色格 / 计算器 / 日期选择器 …)并把选择写回 `Text`。它是各种"组合式编辑框"的**基座**。复用 TTyEdit 文本引擎 + `'TyEdit'` 主题,靠 `RightReserve` / `PaintTrailing` 钩子预留 + 绘制按钮。
+TTyComboEdit 是**带下拉按钮的编辑框**,继承自 [TTyCustomEdit](edit.md)。右侧保留一小块区域画下拉箭头;点击按钮(或调用 `DropDown`)触发 `OnDropDown`,由调用方在事件里弹出**任意 popup**(颜色格 / 计算器 / 日期选择器 …)并把选择写回 `Text`。它是各种"组合式编辑框"的**基座**。复用 TTyCustomEdit 文本引擎 + `'TyEdit'` 主题,靠 `RightReserve` / `PaintTrailing` 钩子预留 + 绘制按钮。
 
 ---
 
@@ -23,7 +23,7 @@ uses tyControls.ComboEdit;
 
 ## 3. 属性 / 方法 / 事件
 
-继承 [TTyEdit](edit.md) 的全部已发布属性。
+继承 [TTyCustomEdit](edit.md) 的全部已发布属性。
 
 | 成员 | 类型 | 说明 |
 |------|------|------|

@@ -114,6 +114,10 @@ msgstr ""
 msgid "About"
 msgstr ""
 
+#: tycontrols.strconsts.rsdlgaddcustomcolor
+msgid "Add to custom colors"
+msgstr ""
+
 #: tycontrols.strconsts.rsdlgalpha
 msgid "Alpha"
 msgstr ""
@@ -136,6 +140,14 @@ msgstr ""
 msgid "Could not create folder: %s"
 msgstr ""
 
+#: tycontrols.strconsts.rsdlgcustomcolors
+msgid "Custom colors"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgentirescope
+msgid "Entire scope"
+msgstr ""
+
 #: tycontrols.strconsts.rsdlgfindnext
 msgid "Find Next"
 msgstr ""
@@ -150,6 +162,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsdlgfolderpath
 msgid "Folder path (type or paste, then Enter)"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgfontapply
+msgid "Apply"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgfontbold
@@ -220,6 +236,7 @@ msgid "Add…"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgimgcolclear
+msgctxt "tycontrols.strconsts.rsdlgimgcolclear"
 msgid "Clear"
 msgstr ""
 
@@ -324,6 +341,10 @@ msgstr ""
 msgid "Preview"
 msgstr ""
 
+#: tycontrols.strconsts.rsdlgpromptonreplace
+msgid "Prompt on replace"
+msgstr ""
+
 #: tycontrols.strconsts.rsdlgreplace
 msgctxt "tycontrols.strconsts.rsdlgreplace"
 msgid "Replace"
@@ -375,6 +396,13 @@ msgstr ""
 msgid "Common Formats (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini)|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini|All Files (*.*)|*.*"
 msgstr ""
 
+#: tycontrols.strconsts.rsfdcreateprompt
+#, object-pascal-format
+msgid ""
+"\"%s\" does not exist.\n"
+"Do you want to create it?"
+msgstr ""
+
 #: tycontrols.strconsts.rsfdfilenamelbl
 msgid "File name:"
 msgstr ""
@@ -392,6 +420,11 @@ msgstr ""
 msgid "The file \"%s\" does not exist."
 msgstr ""
 
+#: tycontrols.strconsts.rsfdnotwritable
+#, object-pascal-format
+msgid "\"%s\" is not writable."
+msgstr ""
+
 #: tycontrols.strconsts.rsfdopentitle
 msgctxt "tycontrols.strconsts.rsfdopentitle"
 msgid "Open"
@@ -402,6 +435,11 @@ msgstr ""
 msgid ""
 "The file \"%s\" already exists.\n"
 "Do you want to replace it?"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdpathmustexist
+#, object-pascal-format
+msgid "The folder \"%s\" does not exist."
 msgstr ""
 
 #: tycontrols.strconsts.rsfdpicturefilter
@@ -668,6 +706,96 @@ msgstr ""
 #: tycontrols.strconsts.rssmsliceneeds4values
 #, object-pascal-format
 msgid "slice() needs 4 values: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rssmtypekeyconflict
+#, object-pascal-format
+msgid "Type key \"%s\" already has parent \"%s\" (not \"%s\")"
+msgstr ""
+
+#: tycontrols.strconsts.rssmtypekeycycle
+#, object-pascal-format
+msgid "Type key chain cycle: \"%s\" -> \"%s\""
+msgstr ""
+
+#: tycontrols.strconsts.rssmtypekeyinvalidname
+#, object-pascal-format
+msgid "Invalid type key name: \"%s\""
+msgstr ""
+
+#: tycontrols.strconsts.rssmtypekeytoodeep
+#, object-pascal-format
+msgid "Type key chain too deep (more than %d keys) at \"%s\""
+msgstr ""
+
+#: tycontrols.strconsts.rsterminalmenuclear
+msgctxt "tycontrols.strconsts.rsterminalmenuclear"
+msgid "Clear"
+msgstr ""
+
+#: tycontrols.strconsts.rstermschemebadcolor
+#, object-pascal-format
+msgid "\"%s\" is not a colour (#rgb or #rrggbb): %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstermschemebadjson
+#, object-pascal-format
+msgid "Not valid JSON: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstermschememissingkeys
+#, object-pascal-format
+msgid "Missing colours: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstermschemeneedname
+#, object-pascal-format
+msgid "The text has several colour schemes; choose one: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstermschemenoname
+msgid "The colour scheme has no name"
+msgstr ""
+
+#: tycontrols.strconsts.rstermschemenonevalid
+msgid "The text has no complete colour scheme (a name and all 16 colours)"
+msgstr ""
+
+#: tycontrols.strconsts.rstermschemenotfound
+#, object-pascal-format
+msgid "No colour scheme named \"%s\". Schemes in the text: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstermschemenotfoundnone
+#, object-pascal-format
+msgid "No colour scheme named \"%s\", and the text has no complete colour scheme"
+msgstr ""
+
+#: tycontrols.strconsts.rstermschemenotfoundunnamed
+#, object-pascal-format
+msgid "No colour scheme named \"%s\"; the scheme in the text has no name"
+msgstr ""
+
+#: tycontrols.strconsts.rstermschemenotobject
+msgid "Expected a colour scheme object or a settings file with \"schemes\""
+msgstr ""
+
+#: tycontrols.strconsts.rstermschemeschemesnotarray
+msgid "\"schemes\" is not an array"
+msgstr ""
+
+#: tycontrols.strconsts.rstermschemetoobig
+#, object-pascal-format
+msgid "The file is larger than %d MB; a colour scheme file is far smaller"
+msgstr ""
+
+#: tycontrols.strconsts.rstermschemetoodeep
+#, object-pascal-format
+msgid "nested more than %d levels deep"
+msgstr ""
+
+#: tycontrols.strconsts.rstermschemeutf16
+msgid "UTF-16 text is not supported; save the file as UTF-8"
 msgstr ""
 
 #: tycontrols.strconsts.rstextmenucopy
@@ -1078,8 +1206,76 @@ msgstr ""
 msgid "TTyForm content host — click for details"
 msgstr ""
 
+#: tycontrols.strconsts.rstytoolwindowactionsextra
+msgid "Unused actions area"
+msgstr ""
+
+#: tycontrols.strconsts.rstytoolwindowactionsorphan
+msgid "Not in a tool window"
+msgstr ""
+
+#: tycontrols.strconsts.rstytoolwindowbarconflict
+msgid "Same Placement as another bar"
+msgstr ""
+
+#: tycontrols.strconsts.rstytoolwindowbarempty
+msgid "Add a tool window"
+msgstr ""
+
+#: tycontrols.strconsts.rstytoolwindowbarstray
+msgid "Not a tool window: hidden at run time"
+msgstr ""
+
+#: tycontrols.strconsts.rstytoolwindowcollapse
+msgid "Hide"
+msgstr ""
+
+#: tycontrols.strconsts.rstytoolwindowcrossbarmove
+msgid "A tool window cannot move between a side bar and a bottom bar"
+msgstr ""
+
+#: tycontrols.strconsts.rstytoolwindowdropleft
+msgid "Drop here to show the left side bar"
+msgstr ""
+
+#: tycontrols.strconsts.rstytoolwindowdropright
+msgid "Drop here to show the right side bar"
+msgstr ""
+
+#: tycontrols.strconsts.rstytoolwindowmaximize
+msgid "Maximize"
+msgstr ""
+
+#: tycontrols.strconsts.rstytoolwindowmore
+msgid "More"
+msgstr ""
+
+#: tycontrols.strconsts.rstytoolwindoworphan
+msgid "Not in a tool window bar: hidden at run time"
+msgstr ""
+
+#: tycontrols.strconsts.rstytoolwindowrestore
+msgid "Restore"
+msgstr ""
+
 #: tycontrols.strconsts.rstyupdownalreadyassociated
 #, object-pascal-format
 msgid "\"%s\" is already associated with the up-down \"%s\"."
+msgstr ""
+
+#: tycontrols.strconsts.rstywindowmenuclose
+msgid "&Close"
+msgstr ""
+
+#: tycontrols.strconsts.rstywindowmenumaximize
+msgid "Ma&ximize"
+msgstr ""
+
+#: tycontrols.strconsts.rstywindowmenuminimize
+msgid "Mi&nimize"
+msgstr ""
+
+#: tycontrols.strconsts.rstywindowmenurestore
+msgid "&Restore"
 msgstr ""
 

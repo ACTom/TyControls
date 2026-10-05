@@ -34,6 +34,7 @@ uses tyControls.ListBox;
 | `ItemHeight` | `Integer` | `24` | 每行条目的逻辑像素高度（最小为 1）；写入时触发滚动条更新和重绘。实际像素高度在绘制时按 PPI 缩放。**逐行不同高度**见下面的 `RowHeight`。 |
 | `ScrollWidth` | `Integer` | `0` | **（LCL 同名，`stdctrls.pp:676`）** 一行内容的**逻辑像素宽度**。`0` = 行与列表框等宽，不横向滚动；比列表框**宽**时底部出现横向滚动条，可以把行里放不下的那一段滚进来；比列表框窄时无效（行不会比它所在的框还窄）。<br>**这是一个你自己设的数，不是量出来的**：LCL 与本控件都不会去遍历条目找最长的一条，因为字符串是应用的，只有应用知道自己怎么画（带色块或图标的行比它的文字宽）。要自适应就自己量出最宽的一行赋进来。 |
 | `TopIndex` | `Integer` | `0` | 当前最顶部可见行的索引，范围 `[0, MaxTopIndex]`，写入时自动夹紧。直接改 `Items` 后 `TopIndex` 会在下次更新时自动收敛。 |
+| `ScrollBarAutoHide` | `TTyScrollBarAutoHide` | `sbahDefault` | 内嵌的那一条（或两条）滚动条闲下来之后要不要淡出，转发给它们。默认跟主题走，三个值的含义与主题令牌见 [scrollbar.md](scrollbar.md) §7。`TTyValueListEditor` 从本控件继承，同样有这个属性。 |
 | `Sorted` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时 `Items` 保持升序（不区分大小写）。切换时按**文本**快照当前选择（单选 / 多选均支持），重排后再依文本重新定位选中项——保持同一逻辑选择且**不**触发 `OnChange`。 |
 | `OnChange` | `TNotifyEvent` | `nil` | 选中行变化时触发（`SelectItem` 中，仅当 `ItemIndex` 真正变化时触发）。 |
 | `OnSelectionChange` | `TTySelectionChangeEvent` | `nil` | **（LCL 同名同形,`stdctrls.pp:668`）** `(Sender; AUser: Boolean)`。与 `OnChange` **并行**触发（不是取代它，已有的监听者不必迁移），多带一个 `AUser`：鼠标 / 键盘引起的为 True，代码写 `ItemIndex` / `Selected[]` 等引起的为 False。双向绑定的处理器靠它区分「用户改的」和「我自己刚写进去的」，不必再在每个调用点挂私有的 updating 布尔。 |
@@ -42,7 +43,7 @@ uses tyControls.ListBox;
 | `Align` | `TAlign` | — | 父容器内的停靠方式。 |
 | `Anchors` | `TAnchors` | — | 锚点布局。 |
 | `StyleClass` | `string` | `''` | CSS 变体类名。 |
-| `Controller` | `TTyStyleController` | `nil`（全局默认） | 关联的样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（全局默认） | 关联的样式控制器。 |
 
 ### 继承的通用成员
 

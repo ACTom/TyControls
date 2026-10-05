@@ -1950,6 +1950,7 @@ procedure TTyDateTimePicker.OpenDropDown;
 var
   CalStyle: TTyStyleSet;
   Radius: Integer;
+  calSize: TSize;
 begin
   if IsInert then Exit;
   { DateMode, not Kind, decides whether there is a calendar to drop. }
@@ -1974,7 +1975,13 @@ begin
   { Show the popup below (or above) the picker control -- hanging from the edge the
     field reads FROM, so a mirrored picker drops its calendar under its own reading
     start rather than trailing off the far side of the control. }
-  FPopup.Popup(Self, 240, 220, IsRightToLeft);
+  { Ask the calendar what it needs instead of typing a box. 240x220 is the CLASSIC calendar,
+    and it was handed over unscaled: under modern density the same box divided into a 24px day
+    row under a 38px weekday band carrying 14px text, which is the cramped grid that got
+    reported -- and at 144 dpi it was simply small. PreferredSize composes the bands from the
+    same expressions the calendar's own layout uses, in device px. }
+  calSize := FCalendar.PreferredSize(Font.PixelsPerInch);
+  FPopup.Popup(Self, calSize.cx, calSize.cy, IsRightToLeft);
   Invalidate;
 end;
 
@@ -2293,8 +2300,11 @@ begin
   Inc(PreferredWidth, MulDiv(EffSize, PPI, 96) div 2 + 2);
 
   PreferredHeight := MulDiv(S.Padding.Top + S.Padding.Bottom, PPI, 96) + TextH;
-  if PreferredHeight < TyDensityHeight(ActiveController, 24) then
-    PreferredHeight := TyDensityHeight(ActiveController, 24);
+  { The density height is LOGICAL px and everything it is compared with here is device px.
+    Raw, the floor was the same 24 px at every scaling: at 200% an auto-sized picker came
+    out 40 tall -- the height of its text -- beside fields that were 48. }
+  if PreferredHeight < MulDiv(TyDensityHeight(ActiveController, 24), PPI, 96) then
+    PreferredHeight := MulDiv(TyDensityHeight(ActiveController, 24), PPI, 96);
 end;
 
 { ── Keyboard ─────────────────────────────────────────────────────────────── }
@@ -2540,9 +2550,9 @@ begin
     { ── Checkbox area click ─────────────────────────────────────────────── }
     if FShowCheckBox then
     begin
-      { Expand hit area slightly (easy to miss tiny box) }
-      CbBoxR := Rect(L.CheckBox.Left - 2, L.CheckBox.Top - 2,
-                     L.CheckBox.Right + 2, L.CheckBox.Bottom + 2);
+      { Expand hit area slightly (easy to miss tiny box): 2 LOGICAL px a side. }
+      CbBoxR := L.CheckBox;
+      InflateRect(CbBoxR, MulDiv(2, Font.PixelsPerInch, 96), MulDiv(2, Font.PixelsPerInch, 96));
       if PtInRect(CbBoxR, Point(X, Y)) then
       begin
         { Through the property, so the notification happens in one place. }

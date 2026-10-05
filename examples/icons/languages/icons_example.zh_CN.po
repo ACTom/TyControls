@@ -97,3 +97,19 @@ msgstr "点击了：%s"
 #: umain.rsfontfilter
 msgid "Font files|*.ttf;*.otf|All files|*.*"
 msgstr "字体文件|*.ttf;*.otf|所有文件|*.*"
+
+#: tmainform.lblpack.caption
+msgid "Bundled pack — 2000+ icons compiled in, opt-in: they cost nothing until you use the unit."
+msgstr "内置图标包 — 2000 多个图标编进程序,按需引用:不引用这个单元就不占任何空间。"
+
+#: tmainform.btnbrowse.caption
+msgid "Icon browser…"
+msgstr "图标浏览器…"
+
+#: tmainform.packname.texthint
+msgid "A Lucide glyph name…"
+msgstr "Lucide 图标名…"
+
+#: tmainform.lblchain.caption
+msgid "The bundled pack drops on the form; a TTyVirtualImageList names the icons it wants; it IS an image list, so it goes straight to the tree's Images. The tree below is fed that way."
+msgstr "把内置图标包放到窗体上,由 TTyVirtualImageList 点名要哪些图标;它本身就是图像列表,可以直接交给树的 Images。下面这棵树就是这样接的。"

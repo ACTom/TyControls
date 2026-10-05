@@ -25,9 +25,9 @@ uses
   tyControls.AdvancedListBox, tyControls.CheckListBox, tyControls.ColorListBox,
   tyControls.FontListBox, tyControls.OfficeListBox, tyControls.ValueListEditor,
   tyControls.ShellListView, tyControls.ShellTreeView,
-  tyControls.PageControl, tyControls.TabSet,
+  tyControls.PageControl, tyControls.TabSet, tyControls.ToolWindows,
   tyControls.Calendar, tyControls.DateTimePicker, tyControls.Dial, tyControls.GearDial,
-  tyControls.Rating, tyControls.TrackBar, tyControls.Pagination, tyControls.Memo,
+  tyControls.Rating, tyControls.TrackBar, tyControls.Pagination, tyControls.Memo, tyControls.Terminal,
   tyControls.TreeSelect, tyControls.Cascader, tyControls.RibbonGallery,
   tyControls.ListGroupPanel, tyControls.RibbonAppMenu,
   { non-focusable side }
@@ -225,6 +225,8 @@ begin
     TTyShellListView, TTyShellTreeView,
     { value pickers and data controls, each of which handles its own keys }
     TTyCalendar, TTyDateTimePicker, TTyMemo, TTyTrackBar, TTyDial, TTyGearDial,
+    { 终端自己吞 Tab,焦点只经鼠标或宿主放行的键离开(spec §9.4) }
+    TTyTerminalView,
     TTyRating, TTyPagination, TTyTreeSelect, TTyCascader, TTyRadioButton,
 
     { ----- entries that need their reason stated, because the name suggests otherwise ----
@@ -247,8 +249,8 @@ begin
       TabStop=False (tyControls.RibbonGallery.pas:224) for the same one-stop-per-widget
       reason the combos have. }
     TTyRibbonGallery,
-    { TTyRibbonAppMenu is a TTyMenuButton — a button that opens the application menu, and a
-      button is a tab stop. }
+    { TTyRibbonAppMenu is a menu button (a TTyCustomMenuButton since the custom-class split) —
+      a button that opens the application menu, and a button is a tab stop. }
     TTyRibbonAppMenu);
 end;
 
@@ -323,7 +325,12 @@ begin
       expects `class(TParent)` walks straight past an interface list. The completeness guard
       below found it on the first run. That is the argument for deriving the population at
       run time in one line rather than parsing sources cleverly. }
-    TTyTitleBar);
+    TTyTitleBar,
+    { The tool window workbench. The bar is chrome whose icon strip is deliberately not a tab
+      stop (spec §6.7: every action has an API, there is no keyboard strip); a tool window is a
+      page (csNoFocus, like TTyTabSheet) whose body holds the real controls; the actions area
+      is a row that hosts buttons. }
+    TTyToolWindowBar, TTyToolWindow, TTyToolWindowActions);
 end;
 
 procedure TTyFocusTabStopTest.SetUp;

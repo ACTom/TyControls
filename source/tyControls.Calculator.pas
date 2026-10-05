@@ -14,7 +14,7 @@ type
     'B' (backspace), 'N' (negate the trailing number). Value / Display / Expression expose the
     state; OnChange on any key, OnResult on '='. Locale-independent '.' parsing. The keypad is
     TTyButton children; usable standalone or as a drop-down (see TTyCalcEdit). }
-  TTyCalculator = class(TTyCustomControl)
+  TTyCustomCalculator = class(TTyCustomControl)
   private
     FExpr: string;          // the expression being built, e.g. '333*222'
     FResult: string;        // last evaluated result text (shown after '=')
@@ -39,7 +39,7 @@ type
     procedure SetValue(const AValue: Double);
   protected
     function GetStyleTypeKey: string; override;   // 'TyPanel'
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     procedure Paint; override;
     procedure Resize; override;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
@@ -54,16 +54,71 @@ type
     property Expression: string read FExpr;
     // True while in the error state (divide-by-zero / overflow / malformed); sticky until C / CE / ←.
     property IsError: Boolean read FError;
-  published
+    property TabStop default True;
     // The current numeric value (0 while in the error state). Setting it seeds the expression.
     property Value: Double read GetValue write SetValue;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property OnResult: TNotifyEvent read FOnResult write FOnResult;
+  end;
+
+  { TTyCalculator publishes TTyCustomCalculator's properties; everything lives in TTyCustomCalculator. }
+  TTyCalculator = class(TTyCustomCalculator)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Value;
+    property OnChange;
+    property OnResult;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
-    property TabStop default True;
   end;
 
 { Pure expression evaluator for + − × ÷ with precedence + unary minus (locale-independent '.').
@@ -185,9 +240,9 @@ begin
   Result := ok;
 end;
 
-{ ---- TTyCalculator ---- }
+{ ---- TTyCustomCalculator ---- }
 
-constructor TTyCalculator.Create(AOwner: TComponent);
+constructor TTyCustomCalculator.Create(AOwner: TComponent);
 var
   i: Integer;
   b: TTyButton;
@@ -221,7 +276,7 @@ begin
   Height := MulDiv(320, TyDensityHeight(ActiveController, 30), 30);
 end;
 
-function TTyCalculator.GetStyleTypeKey: string;
+function TTyCustomCalculator.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyPanel': the keypad's display band is not a panel surface — it even reached for TTyEdit's key to draw it.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
@@ -229,7 +284,7 @@ begin
   Result := 'TyCalculator';
 end;
 
-procedure TTyCalculator.SetController(AValue: TTyStyleController);
+procedure TTyCustomCalculator.SetController(AValue: TTyCustomStyleController);
 var i: Integer;
 begin
   inherited SetController(AValue);
@@ -237,13 +292,13 @@ begin
     if FButtons[i] <> nil then FButtons[i].Controller := AValue;
 end;
 
-function TTyCalculator.FormatVal(AValue: Double): string;
+function TTyCustomCalculator.FormatVal(AValue: Double): string;
 begin
   if IsInfinite(AValue) or IsNaN(AValue) then Exit('Error');
   Result := FloatToStrF(AValue, ffGeneral, 15, 0, CalcFmt);
 end;
 
-function TTyCalculator.TrailingNumberStart: Integer;
+function TTyCustomCalculator.TrailingNumberStart: Integer;
 var i: Integer;
 begin
   i := Length(FExpr);
@@ -267,7 +322,7 @@ begin
     Dec(Result);
 end;
 
-function TTyCalculator.BottomText: string;
+function TTyCustomCalculator.BottomText: string;
 begin
   { The large line = the current ENTRY being typed (or the result after '='); the full expression
     lives on the small top line. }
@@ -280,14 +335,14 @@ begin
     Result := '0';   // just after an operator: the entry is empty
 end;
 
-procedure TTyCalculator.InputDigit(ACh: Char);
+procedure TTyCustomCalculator.InputDigit(ACh: Char);
 begin
   if FError then Exit;                       // sticky error: ignore until C / CE / ←
   if FJustEval then begin FExpr := ''; FJustEval := False; end;
   FExpr := FExpr + ACh;
 end;
 
-procedure TTyCalculator.InputDot;
+procedure TTyCustomCalculator.InputDot;
 var p: Integer;
 begin
   if FError then Exit;
@@ -300,7 +355,7 @@ begin
     FExpr := FExpr + '.';
 end;
 
-procedure TTyCalculator.InputOp(AOp: Char);
+procedure TTyCustomCalculator.InputOp(AOp: Char);
 begin
   if FError then Exit;
   if FJustEval then begin FExpr := FResult; FJustEval := False; end;
@@ -316,7 +371,7 @@ begin
     FExpr := FExpr + AOp;
 end;
 
-procedure TTyCalculator.InputEquals;
+procedure TTyCustomCalculator.InputEquals;
 var r: Double;
 begin
   if FError or (FExpr = '') then Exit;
@@ -332,14 +387,14 @@ begin
   end;
 end;
 
-procedure TTyCalculator.Backspace;
+procedure TTyCustomCalculator.Backspace;
 begin
   if FError then begin Clear; Exit; end;
   if FJustEval then begin FExpr := FResult; FJustEval := False; end;
   if FExpr <> '' then Delete(FExpr, Length(FExpr), 1);
 end;
 
-procedure TTyCalculator.ClearEntry;
+procedure TTyCustomCalculator.ClearEntry;
 begin
   if FError then begin Clear; Exit; end;
   if FJustEval then begin Clear; Exit; end;
@@ -348,7 +403,7 @@ begin
     FExpr := Copy(FExpr, 1, TrailingNumberStart - 1);
 end;
 
-procedure TTyCalculator.Negate;
+procedure TTyCustomCalculator.Negate;
 var p: Integer;
 begin
   if FError then Exit;
@@ -361,7 +416,7 @@ begin
     Insert('-', FExpr, p);                     // insert a unary '-'
 end;
 
-procedure TTyCalculator.Clear;
+procedure TTyCustomCalculator.Clear;
 begin
   FExpr := '';
   FResult := '0';
@@ -369,7 +424,7 @@ begin
   FError := False;
 end;
 
-procedure TTyCalculator.PressKey(ACmd: Char);
+procedure TTyCustomCalculator.PressKey(ACmd: Char);
 begin
   case ACmd of
     '0'..'9': InputDigit(ACmd);
@@ -388,7 +443,7 @@ begin
   if (ACmd = '=') and Assigned(FOnResult) then FOnResult(Self);
 end;
 
-function TTyCalculator.GetValue: Double;
+function TTyCustomCalculator.GetValue: Double;
 var r: Double; e: string;
 begin
   if FError then Exit(0);
@@ -403,7 +458,7 @@ begin
   if (e <> '') and TyEvalExpr(e, r) then Result := r else Result := 0;
 end;
 
-procedure TTyCalculator.SetValue(const AValue: Double);
+procedure TTyCustomCalculator.SetValue(const AValue: Double);
 begin
   FExpr := '';
   FResult := FormatVal(AValue);
@@ -412,13 +467,13 @@ begin
   Invalidate;
 end;
 
-procedure TTyCalculator.ButtonClick(Sender: TObject);
+procedure TTyCustomCalculator.ButtonClick(Sender: TObject);
 begin
   if Sender is TControl then
     PressKey(CKeys[TControl(Sender).Tag].Cmd);
 end;
 
-procedure TTyCalculator.Resize;
+procedure TTyCustomCalculator.Resize;
 var
   i, r, c, gap, cellW, cellH, x, y: Integer;
 begin
@@ -442,7 +497,7 @@ begin
   end;
 end;
 
-procedure TTyCalculator.Paint;
+procedure TTyCustomCalculator.Paint;
 var
   P: TTyPainter;
   st, es: TTyStyleSet;
@@ -483,7 +538,7 @@ begin
   end;
 end;
 
-procedure TTyCalculator.UTF8KeyPress(var UTF8Key: TUTF8Char);
+procedure TTyCustomCalculator.UTF8KeyPress(var UTF8Key: TUTF8Char);
 var ch: Char;
 begin
   if Length(UTF8Key) = 1 then
@@ -498,7 +553,7 @@ begin
   inherited UTF8KeyPress(UTF8Key);
 end;
 
-procedure TTyCalculator.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomCalculator.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   case Key of
     VK_BACK:   begin PressKey('B'); Key := 0; Exit; end;

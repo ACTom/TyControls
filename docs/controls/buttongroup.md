@@ -17,7 +17,7 @@
 |------|-----|
 | 单元 | `tyControls.ButtonGroup` |
 | `GetStyleTypeKey` 返回值 | `'TyButtonGroup'`（**自有键**） |
-| 基类 | `TTyCustomControl`（`tyControls.Base`） |
+| 基类 | `TTyCustomButtonGroup` → `TTyCustomControl`（`tyControls.Base`） |
 | 默认尺寸 | 240 × 30（逻辑像素，`Create` 中设置） |
 
 > **自有 `TyButtonGroup` 键：** 从前它返回 `'TyButton'`，于是「一个按钮」和「一条选择条」在主题层是同一样东西——皮肤给按钮设了胶囊圆角，这条分段条就变成两头圆、接缝方，而皮肤**没有任何选择器**能纠正它。现在每段解析的都是 `TyButtonGroup`：选中段 `TyButtonGroup:selected`（等价 `:checked`），悬停段 `TyButtonGroup:hover`，`Enabled = False` 时全段 `TyButtonGroup:disabled`。`themes/light.tycss` 把 `TyButtonGroup` 并列写进了 `TyButton` 那条规则的选择器列表，所以默认外观与从前一致；但**要调它的外观请写 `TyButtonGroup`，不要改 `TyButton`**——那会改掉全应用的每一个按钮。
@@ -50,12 +50,12 @@ uses tyControls.ButtonGroup;
 
 ### 继承的通用成员
 
-`TTyButtonGroup` 从 `TTyCustomControl` 继承以下 published 属性：
+下面两个属性声明在 `TTyCustomControl`（public），由 `TTyButtonGroup` 发布：
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `StyleClass` | `string` | `''` | CSS 类名，对应 `.tycss` 选择器的 `.classname` 部分；作用于**整条**（每段都用同一变体，如 `'primary'` 让全部分段用主色按钮主题） |
-| `Controller` | `TTyStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定使用哪个样式控制器；为 `nil` 时回退到全局默认 |
+| `Controller` | `TTyCustomStyleController` | `nil`（使用全局 `TyDefaultController`） | 指定使用哪个样式控制器；为 `nil` 时回退到全局默认 |
 
 ### 状态跟踪字段（protected，不 published）
 

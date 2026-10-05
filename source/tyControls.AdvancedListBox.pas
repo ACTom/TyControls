@@ -49,7 +49,7 @@ type
   { A list box whose rows are image + bold title + dim subtitle. Build it with
     AddItem(title, subtitle, imageIndex); read the parts back with TitleOf / SubtitleOf /
     ImageIndexOf. The image source is the Images (TTyVirtualImageList). }
-  TTyAdvancedListBox = class(TTyListBox)
+  TTyCustomAdvancedListBox = class(TTyCustomListBox)
   private
     FImages: TCustomImageList;
     procedure SetImages(const AValue: TCustomImageList);
@@ -68,10 +68,78 @@ type
     function SubtitleOf(AIndex: Integer): string;
     { The image index stored for row AIndex, or -1 when it has no image / is out of range. }
     function ImageIndexOf(AIndex: Integer): Integer;
-  published
     { The raster image source (index-addressed). A FreeNotification nils this reference
       automatically if the list is freed first. }
     property Images: TCustomImageList read FImages write SetImages;
+  end;
+
+  { TTyAdvancedListBox publishes TTyCustomAdvancedListBox's properties; everything lives in TTyCustomAdvancedListBox. }
+  TTyAdvancedListBox = class(TTyCustomAdvancedListBox)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property MultiSelect;
+    property ExtendedSelect;
+    property Sorted;
+    property ItemHeight;
+    property ScrollWidth;
+    property ScrollBarAutoHide;
+    property TopIndex;
+    property OnChange;
+    property OnSelectionChange;
+    property Align;
+    property Anchors;
+    property Images;
   end;
 
 implementation
@@ -113,7 +181,7 @@ begin
   if (AImages <> nil) and (AImageIndex >= 0) and (AImageIndex < TyImageCount(AImages)) then
   begin
     sz := rowH - P.Scale(8);
-    if sz < 8 then sz := 8;
+    if sz < P.Scale(8) then sz := P.Scale(8);
     TyBlitImage(P.Bitmap, AImages, AImageIndex, x, ARect.Top + ((rowH - sz) div 2), sz,
       P.Scale(96), False);
     x := x + sz + pad;
@@ -146,15 +214,15 @@ begin
   end;
 end;
 
-{ TTyAdvancedListBox }
+{ TTyCustomAdvancedListBox }
 
-constructor TTyAdvancedListBox.Create(AOwner: TComponent);
+constructor TTyCustomAdvancedListBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   ItemHeight := 40;   // taller rows to fit two lines
 end;
 
-procedure TTyAdvancedListBox.SetImages(const AValue: TCustomImageList);
+procedure TTyCustomAdvancedListBox.SetImages(const AValue: TCustomImageList);
 begin
   if FImages = AValue then Exit;
   if FImages <> nil then
@@ -165,21 +233,21 @@ begin
   Invalidate;
 end;
 
-procedure TTyAdvancedListBox.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomAdvancedListBox.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FImages) then
     FImages := nil;
 end;
 
-procedure TTyAdvancedListBox.AddItem(const ATitle, ASubtitle: string; AImageIndex: Integer);
+procedure TTyCustomAdvancedListBox.AddItem(const ATitle, ASubtitle: string; AImageIndex: Integer);
 begin
   // Join the two lines so both survive Sorted/Delete in one entry; the image index rides
   // in Objects[] (offset by +1 so 0 = no image) — copied by Items.Assign, never a side array.
   Items.AddObject(ATitle + LineEnding + ASubtitle, TObject(PtrInt(AImageIndex + 1)));
 end;
 
-function TTyAdvancedListBox.TitleOf(AIndex: Integer): string;
+function TTyCustomAdvancedListBox.TitleOf(AIndex: Integer): string;
 var
   t, s: string;
 begin
@@ -192,7 +260,7 @@ begin
     Result := '';
 end;
 
-function TTyAdvancedListBox.SubtitleOf(AIndex: Integer): string;
+function TTyCustomAdvancedListBox.SubtitleOf(AIndex: Integer): string;
 var
   t, s: string;
 begin
@@ -205,7 +273,7 @@ begin
     Result := '';
 end;
 
-function TTyAdvancedListBox.ImageIndexOf(AIndex: Integer): Integer;
+function TTyCustomAdvancedListBox.ImageIndexOf(AIndex: Integer): Integer;
 begin
   if (AIndex >= 0) and (AIndex < Items.Count) then
     Result := PtrInt(Items.Objects[AIndex]) - 1
@@ -213,7 +281,7 @@ begin
     Result := -1;
 end;
 
-procedure TTyAdvancedListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
+procedure TTyCustomAdvancedListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
 begin
   TyDrawAdvancedRow(P, ARowRect, Items[AIndex], ImageIndexOf(AIndex), FImages, AStyle,

@@ -121,6 +121,7 @@ type
     procedure TestClickColumnByX;
     procedure TestDoubleClickSelectsWord;
     procedure TestTripleClickSelectsLine;
+    procedure TestTripleClickHasLogicalSlop;
     procedure TestClickWithScroll;
     procedure TestClickPastLastLineClamps;
     procedure TestDisabledMouseIgnored;
@@ -1166,6 +1167,23 @@ begin
   FMemo.ProbeMouseDownShift(px, 1, [ssDouble]);       // 2nd press -> word
   FMemo.ProbeMouseDownShift(px, 1, []);               // 3rd press -> the whole line
   AssertEquals('triple-click selects the current logical line', 'Line one', FMemo.SelText);
+end;
+
+{ The third press counts within 4 LOGICAL px of the second -- 7 px at 168 PPI -- and it is
+  the memo that has to say which screen it is on. (ACTom/TyControls#2) }
+procedure TTyMemoTest.TestTripleClickHasLogicalSlop;
+var
+  px: Integer;
+begin
+  SetUpWithPadding(4);
+  FMemo.Font.PixelsPerInch := 168;
+  LoadLines(['Line one', 'Line two']);
+  FMemo.ProbeSetTopLine(0);
+  px := FMemo.ProbeColPixelXAt('Line one', 3, 168);
+  FMemo.ProbeMouseDownShift(px, 1, [ssDouble]);
+  FMemo.ProbeMouseDownShift(px + 6, 1, []);          // the hand wandered 6 px: 3.4 logical
+  AssertEquals('6 px away on a 168-PPI screen is still the third press', 'Line one',
+    FMemo.SelText);
 end;
 
 procedure TTyMemoTest.TestClickColumnByX;

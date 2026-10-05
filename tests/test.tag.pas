@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Controller, tyControls.Tag;
+  tyControls.Controller, tyControls.Tag, test.captionfit;
 
 type
   { Pure-geometry tests: TyTagLayout / TyTagPreferredWidth take only integers, so they
@@ -56,6 +56,7 @@ type
     procedure TestPreferredHeightClearsCloseSlot;
     procedure TestPillRendersThemeBackground;
     procedure TestCloseGlyphRendersThemeInk;
+    procedure TestAutoSizedTagDrawsItsWholeCaption;
   end;
 
 implementation
@@ -696,6 +697,31 @@ begin
     AssertEquals('a press on the visible x closes, despite :active padding', 1, FClosed);
   finally
     T.Free;
+  end;
+end;
+
+{ An AutoSize pill draws the caption it measured, whole: see test.captionfit for why the
+  canvas alone answered short and the pill showed "Try it in the previ...". The caption is
+  centred in the pill, hence ACentred. }
+procedure TTyTagControlTest.TestAutoSizedTagDrawsItsWholeCaption;
+var
+  Ctl: TTyStyleController;
+  Form: TForm;
+  T: TTagAccess;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  try
+    Form.Color := clWhite;   // the pill composites onto its parent: match the white ground
+    T := TTagAccess.Create(Form);
+    T.Parent := Form;
+    T.Controller := Ctl;
+    T.Font.PixelsPerInch := 96;
+    T.AutoSize := True;
+    CheckAutoSizeDrawsWholeCaption(Ctl, T, 'TyTag', @T.RenderTo, True);
+  finally
+    Form.Free;
+    Ctl.Free;
   end;
 end;
 

@@ -1,0 +1,1968 @@
+unit test.customclasses.p1;
+{$mode objfpc}{$H+}
+
+{ Custom-class split, phase 1 (input and display controls). Three kinds of test live here:
+
+  * THIRD-PARTY MIMICS. A class the way issue #8 wants to write one: derived from a
+    TTyCustomXxx, publishing two properties of its own choosing and nothing else. Each is held
+    to the same checks -- it can be created on a form (T-a), it publishes exactly its LCL root's
+    names plus the two (T-b), those two survive a stream round trip while a property it did NOT
+    publish stays out of the text (T-c), it resolves the same theme type key -- and where the
+    family has a RenderTo, paints the same pixels -- as the library's own final class (T-d), a
+    fresh instance streams neither of its two properties, i.e. their declared defaults match the
+    constructor (T-e), and a property the plan puts in public is reachable through a
+    TTyCustomXxx reference (T-v, a compile-time check).
+  * DERIVED CONTROLS SEEN BY THEIR FAMILY. From 4.0 on a TTyGlyphButton is a TTyCustomButton but
+    no longer a TTyButton, the LCL way. Library code that meant "any button" had to change its
+    `is TTyButton` to the custom class; each such change has a test here that fails when the
+    check is put back.
+  * CHECKS WIDENED FOR THIRD PARTIES. Grouping and ownership checks that now accept any
+    TTyCustomXxx descendant, proven with a mimic in the group. }
+
+interface
+
+uses
+  Classes, SysUtils, TypInfo, Controls, Forms, Graphics, LCLType, LMessages, ActnList, fpcunit,
+  testregistry,
+  test.customclasses,
+  tyControls.Base, tyControls.Button, tyControls.GlyphButtons, tyControls.ToolBar,
+  tyControls.ToolBarEx, tyControls.TyLabel, tyControls.Tag, tyControls.TextMenu, tyControls.Edit,
+  tyControls.MaskEdit, tyControls.Memo, tyControls.UpDown, tyControls.NumericEdit,
+  tyControls.FloatSpinEdit, tyControls.CheckBox, tyControls.ListBox, tyControls.ComboBox,
+  tyControls.ComboBoxEx, tyControls.ColorBox, tyControls.ColorComboBox, tyControls.ShellComboBox,
+  tyControls.ProgressBar, tyControls.Gauge, tyControls.TrackBar, tyControls.ButtonGroup;
+
+type
+  { The fixture (a bare TForm.CreateNew) and the T-b / T-c / T-d / T-e checks that every
+    phase's suite shares (test.customclasses.p2 derives from it too). }
+  TTyCustomClassesPhaseCase = class(TTestCase)
+  protected
+    FForm: TForm;
+    procedure SetUp; override;
+    procedure TearDown; override;
+    { T-b: AClass publishes its LCL root's names plus ANames, nothing else. }
+    procedure CheckPublishesOnly(AClass: TClass; const ANames: array of string);
+    { T-c: AShown appear in the streamed text of AComp, AHidden does not. }
+    procedure CheckStreamText(AComp: TComponent; const AShown: array of string;
+      const AHidden: string);
+    { T-e: a fresh instance of AClass streams none of ANames; an ordinal one also reads back its
+      declared default. }
+    procedure CheckFreshDefaults(AClass: TComponentClass; const ANames: array of string);
+    { T-d: both resolve the same theme type key. }
+    procedure CheckSameTypeKey(AThird, AFinal: TComponent);
+  end;
+
+  TTyCustomClassesP1Test = class(TTyCustomClassesPhaseCase)
+  private
+    FDrawCalls: Integer;
+    FChanges: Integer;
+    procedure CountChange(Sender: TObject);
+    procedure CountDraw(Sender: TObject; ACanvas: TCanvas; Index: Integer; ARect: TRect;
+      AState: TOwnerDrawState);
+  published
+    { Task 2: buttons }
+    procedure TestFlatToolBarGhostsGlyphAndSpeedButtons;
+    procedure TestFlatToolBarExGhostsGlyphAndSpeedButtons;
+    procedure TestSpeedButtonGroupTakesAThirdPartyMember;
+    procedure TestThirdButton;
+    procedure TestThirdSpeedButton;
+    { Task 3: labels }
+    procedure TestThirdLabel;
+    procedure TestThirdTag;
+    { Task 4: edits I }
+    procedure TestThirdEdit;
+    procedure TestThirdMaskEdit;
+    procedure TestNumericValueSurvivesAnyPublishingOrder;
+    { Task 5: edits II }
+    procedure TestThirdMemo;
+    procedure TestThirdUpDown;
+    procedure TestUpDownAssociationIsExclusiveAcrossThirdParties;
+    procedure TestUpDownDrivesAThirdPartyEditThatDoesNotPublishText;
+    procedure TestCaptionIsTextOnEditMemoAndCombo;
+    procedure TestFloatSpinEditKeepsItsUseThousandsDefault;
+    { Task 6: choice }
+    procedure TestThirdCheckBox;
+    procedure TestThirdRadioButton;
+    procedure TestRadioGroupTakesAThirdPartyMember;
+    { Task 7: combo boxes I }
+    procedure TestDerivedComboPopupReachesTheOwnerDraw;
+    procedure TestThirdComboBoxExItemsDriveTheList;
+    procedure TestThirdComboBox;
+    procedure TestButtonGroupIndexReadBeforeItsItemsWaits;
+    { Task 8: combo boxes II }
+    procedure TestColorBoxPopupUsesItsOwnSwatchGeometry;
+    procedure TestThirdColorBox;
+    procedure TestThirdShellComboBox;
+    { Task 9: progress and indicators }
+    procedure TestThirdProgressBar;
+    procedure TestThirdGauge;
+    { Task 10: dials and sliders }
+    procedure TestThirdTrackBar;
+    { T-d for the families whose mimic test did not render: pixel for pixel. }
+    procedure TestMimicsPaintLikeTheirFinalClass;
+    { Real input, one per family: the message a widgetset delivers, not a property write. }
+    procedure TestInputThirdButtonClicksOnPressAndRelease;
+    procedure TestInputThirdLabelClicksOnPressAndRelease;
+    procedure TestInputThirdEditTakesTypingAndBackspace;
+    procedure TestInputThirdMemoTakesTypingAndReturn;
+    procedure TestInputThirdCheckBoxTogglesOnSpaceAndClick;
+    procedure TestInputThirdComboBoxStepsOnArrowKeys;
+    procedure TestInputThirdProgressBarClicks;
+    procedure TestInputThirdTrackBarStepsOnArrowKeys;
+  end;
+
+  { --- third-party mimics ------------------------------------------------------------ }
+
+  TThirdButton = class(TTyCustomButton)
+  published
+    property Caption;
+    property Down;
+  end;
+
+  TThirdSpeedButton = class(TTyCustomSpeedButton)
+  published
+    property GroupIndex;
+    property Down;
+  end;
+
+  TThirdLabel = class(TTyCustomLabel)
+  published
+    property Caption;
+    property WordWrap;
+  end;
+
+  TThirdTag = class(TTyCustomTag)
+  published
+    property Caption;
+    property Closable;
+  end;
+
+  TThirdEdit = class(TTyCustomEdit)
+  published
+    property Text;
+    property ReadOnly;
+  end;
+
+  { Mask rather than EditMask: EditMask is the LCL-spelled alias and is `stored False`, so it
+    could not show up in a streamed text. }
+  TThirdMaskEdit = class(TTyCustomMaskEdit)
+  published
+    property Mask;
+    property Text;
+  end;
+
+  { Value BEFORE Decimals, and Value before the range: the order a third party might well
+    publish in. Value is held as the text it formats to, so read first it used to be rounded to
+    the default two places (and clamped by half a range) before the rest arrived. }
+  TThirdNumericEdit = class(TTyCustomNumericEdit)
+  published
+    property Value;
+    property Decimals;
+  end;
+
+  TThirdNumericRange = class(TTyCustomNumericEdit)
+  published
+    property Value;
+    property MaxValue;
+    property MinValue;
+  end;
+
+  TThirdMemo = class(TTyCustomMemo)
+  published
+    property Lines;
+    property ReadOnly;
+  end;
+
+  { An edit that publishes no Text at all: TTyUpDown cannot find a published Text on it and
+    falls back to Caption, which reaches the field only because the custom edit routes
+    Caption to Text (RealGetText / RealSetText). }
+  TThirdEditNoText = class(TTyCustomEdit)
+  published
+    property ReadOnly;
+  end;
+
+  TThirdUpDown = class(TTyCustomUpDown)
+  published
+    property Associate;
+    property Position;
+  end;
+
+  TThirdCheckBox = class(TTyCustomCheckBox)
+  published
+    property Checked;
+    property Caption;
+  end;
+
+  TThirdRadioButton = class(TTyCustomRadioButton)
+  published
+    property Checked;
+    property GroupIndex;
+  end;
+
+  { LCL's order: TComboBox publishes ItemIndex ahead of Items (stdctrls.pp:474-475), so a
+    ported combo reads the index before there is anything for it to point at. }
+  TThirdComboBox = class(TTyCustomComboBox)
+  published
+    property ItemIndex;
+    property Items;
+  end;
+
+  { The same order on the button group. }
+  TIdxButtonGroup = class(TTyCustomButtonGroup)
+  published
+    property ItemIndex;
+    property Items;
+  end;
+
+  TThirdComboBoxEx = class(TTyCustomComboBoxEx)
+  published
+    property ItemsEx;
+    property Images;
+  end;
+
+  TThirdColorBox = class(TTyCustomColorBox)
+  published
+    property Selected;
+    property Style;
+  end;
+
+  TThirdShellComboBox = class(TTyCustomShellComboBox)
+  published
+    property Directory;
+    property Items;
+  end;
+
+  { Max before Position on purpose: the order a descendant publishes in is the order its .lfm
+    is written in. }
+  TThirdProgressBar = class(TTyCustomProgressBar)
+  published
+    property Max;
+    property Position;
+  end;
+
+  { Max before Value: the reader applies properties in the order they were published, and a
+    Value read before its Max is clamped to the default Max of 100. }
+  TThirdGauge = class(TTyCustomGauge)
+  published
+    property Max;
+    property Value;
+  end;
+
+  TThirdTrackBar = class(TTyCustomTrackBar)
+  published
+    property Position;
+    property Max;
+  end;
+
+const
+  { The ground a render starts from; a pixel still this colour was never painted. }
+  CSentinel = TColor($00FF00FF);
+
+{ The streamed text of AComp (ObjectBinaryToText of WriteComponent). }
+function StreamedText(AComp: TComponent): string;
+{ Stream ASrc and read it back into ADst. }
+procedure StreamInto(ASrc, ADst: TComponent);
+{ Fill with a sentinel, then compare every pixel. }
+function SameBitmaps(A, B: TBitmap; out AFirstDiff: string): Boolean;
+{ A pf32bit bitmap of the given size filled with CSentinel. }
+function NewSentinelBitmap(AW, AH: Integer): TBitmap;
+{ `Name = value` or `Name.Strings = (` in a streamed text. }
+function HasProp(const AText, AName: string): Boolean;
+{ Bring the LCL widgetset up once, for the tests that need a window handle. }
+procedure NeedWidgetSet;
+{ The lParam the widgetset packs a click position into. }
+function MousePos(X, Y: Integer): PtrInt;
+
+implementation
+
+type
+  TP1ButtonCracker = class(TTyCustomButton)
+  public
+    procedure DoRender(ACanvas: TCanvas; const ARect: TRect);
+  end;
+
+  { Reaches the label's protected layout properties (D3: protected, as in TCustomLabel) and
+    its renderer. }
+  TP1LabelCracker = class(TTyCustomLabel)
+  public
+    procedure DoRender(ACanvas: TCanvas; const ARect: TRect);
+    procedure SetLayoutTo(AValue: TTextLayout);
+    function LayoutNow: TTextLayout;
+  end;
+
+  { SpaceChar is protected on the custom class (TCustomMaskEdit keeps it protected). }
+  TP1MaskCracker = class(TTyCustomMaskEdit)
+  public
+    procedure SetSpace(AValue: Char);
+    function SpaceNow: Char;
+  end;
+
+  { The up-down's own properties are protected (TCustomUpDown keeps them protected). }
+  TP1UpDownCracker = class(TTyCustomUpDown)
+  public
+    procedure SetIncrementTo(AValue: Integer);
+    function IncrementNow: Integer;
+  end;
+
+  { CreatePopupList is protected: this builds the list a combo would drop. }
+  TP1ComboCracker = class(TTyCustomComboBox)
+  public
+    function MakePopupList: TTyCustomListBox;
+  end;
+
+  { RenderTo is protected on every family; one cracker each reaches it. }
+  TP1TagRender = class(TTyCustomTag);
+  TP1EditRender = class(TTyCustomEdit);
+  TP1MemoRender = class(TTyCustomMemo);
+  TP1CheckBoxRender = class(TTyCustomCheckBox);
+  TP1RadioRender = class(TTyCustomRadioButton);
+  TP1ComboRender = class(TTyCustomComboBox);
+  TP1ProgressRender = class(TTyCustomProgressBar);
+  TP1TrackRender = class(TTyCustomTrackBar);
+
+  { Two descendants that publish nothing but TabStop: on the bare base it carries LCL's
+    `default False`; on the track bar's custom class it carries the redeclared True. }
+  TP1BareTabStop = class(TTyCustomControl)
+  protected
+    function GetStyleTypeKey: string; override;
+  published
+    property TabStop;
+  end;
+
+  TP1TrackBarTabStop = class(TTyCustomTrackBar)
+  published
+    property TabStop;
+  end;
+
+  { The same for the other families whose final class redeclares a default. Each publishes
+    only the one property, so what it reads is what the custom class declares -- the default a
+    third party's .lfm is written against. }
+  TP1ButtonTabStop = class(TTyCustomButton)
+  published
+    property TabStop;
+  end;
+
+  TP1SpeedButtonTabStop = class(TTyCustomSpeedButton)
+  published
+    property TabStop;
+  end;
+
+  TP1EditTabStop = class(TTyCustomEdit)
+  published
+    property TabStop;
+  end;
+
+  TP1CheckBoxTabStop = class(TTyCustomCheckBox)
+  published
+    property TabStop;
+  end;
+
+  TP1ComboBoxTabStop = class(TTyCustomComboBox)
+  published
+    property TabStop;
+  end;
+
+  TP1NumericThousands = class(TTyCustomNumericEdit)
+  published
+    property UseThousands;
+  end;
+
+  TP1FloatSpinThousands = class(TTyCustomFloatSpinEdit)
+  published
+    property UseThousands;
+  end;
+
+  TP1ToolBar = class(TTyToolBar)
+  public
+    procedure ForceLayout;
+  end;
+
+  TP1ToolBarEx = class(TTyToolBarEx)
+  public
+    procedure ForceLayout;
+  end;
+
+{ The console runner registers no window classes until the LCL widgetset is up, and a handle
+  then fails with error 1407. The same lazy bootstrap test.focus.tabstop uses; only the tests
+  that send real input messages need a handle. }
+var
+  GP1WidgetSet: Boolean = False;
+
+procedure NeedWidgetSet;
+begin
+  if GP1WidgetSet then Exit;
+  Forms.Application.Initialize;
+  GP1WidgetSet := True;
+end;
+
+function MousePos(X, Y: Integer): PtrInt;
+begin
+  Result := PtrInt((Y shl 16) or (X and $FFFF));
+end;
+
+procedure TP1ButtonCracker.DoRender(ACanvas: TCanvas; const ARect: TRect);
+begin
+  RenderTo(ACanvas, ARect, 96);
+end;
+
+procedure TP1LabelCracker.DoRender(ACanvas: TCanvas; const ARect: TRect);
+begin
+  RenderTo(ACanvas, ARect, 96);
+end;
+
+procedure TP1LabelCracker.SetLayoutTo(AValue: TTextLayout);
+begin
+  Layout := AValue;
+end;
+
+function TP1LabelCracker.LayoutNow: TTextLayout;
+begin
+  Result := Layout;
+end;
+
+procedure TP1MaskCracker.SetSpace(AValue: Char);
+begin
+  SpaceChar := AValue;
+end;
+
+function TP1MaskCracker.SpaceNow: Char;
+begin
+  Result := SpaceChar;
+end;
+
+procedure TP1UpDownCracker.SetIncrementTo(AValue: Integer);
+begin
+  Increment := AValue;
+end;
+
+function TP1UpDownCracker.IncrementNow: Integer;
+begin
+  Result := Increment;
+end;
+
+function TP1ComboCracker.MakePopupList: TTyCustomListBox;
+begin
+  Result := CreatePopupList;
+end;
+
+function TP1BareTabStop.GetStyleTypeKey: string;
+begin
+  Result := 'TyPanel';
+end;
+
+procedure TP1ToolBar.ForceLayout;
+var r: TRect;
+begin
+  r := Rect(0, 0, Width, Height);
+  AlignControls(nil, r);
+end;
+
+procedure TP1ToolBarEx.ForceLayout;
+var r: TRect;
+begin
+  r := Rect(0, 0, Width, Height);
+  AlignControls(nil, r);
+end;
+
+function StreamedText(AComp: TComponent): string;
+var
+  ms: TMemoryStream;
+  ss: TStringStream;
+begin
+  ms := TMemoryStream.Create;
+  ss := TStringStream.Create('');
+  try
+    ms.WriteComponent(AComp);
+    ms.Position := 0;
+    ObjectBinaryToText(ms, ss);
+    Result := ss.DataString;
+  finally
+    ms.Free;
+    ss.Free;
+  end;
+end;
+
+procedure StreamInto(ASrc, ADst: TComponent);
+var
+  ms: TMemoryStream;
+begin
+  ms := TMemoryStream.Create;
+  try
+    ms.WriteComponent(ASrc);
+    ms.Position := 0;
+    ms.ReadComponent(ADst);
+  finally
+    ms.Free;
+  end;
+end;
+
+function SameBitmaps(A, B: TBitmap; out AFirstDiff: string): Boolean;
+var
+  x, y: Integer;
+begin
+  AFirstDiff := '';
+  if (A.Width <> B.Width) or (A.Height <> B.Height) then
+  begin
+    AFirstDiff := 'sizes differ';
+    Exit(False);
+  end;
+  for y := 0 to A.Height - 1 do
+    for x := 0 to A.Width - 1 do
+      if A.Canvas.Pixels[x, y] <> B.Canvas.Pixels[x, y] then
+      begin
+        AFirstDiff := Format('(%d,%d): %.6x vs %.6x', [x, y, A.Canvas.Pixels[x, y],
+          B.Canvas.Pixels[x, y]]);
+        Exit(False);
+      end;
+  Result := True;
+end;
+
+function NewSentinelBitmap(AW, AH: Integer): TBitmap;
+begin
+  Result := TBitmap.Create;
+  Result.PixelFormat := pf32bit;
+  Result.SetSize(AW, AH);
+  Result.Canvas.Brush.Color := CSentinel;
+  Result.Canvas.FillRect(0, 0, AW, AH);
+end;
+
+function HasProp(const AText, AName: string): Boolean;
+begin
+  { `Name = value`, or `Name.Strings = (` for a TStrings property. }
+  Result := (Pos(' ' + AName + ' = ', AText) > 0) or (Pos(' ' + AName + '.', AText) > 0);
+end;
+
+{ ------------------------------------------------------------------ fixture }
+
+procedure TTyCustomClassesPhaseCase.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+  FForm.SetBounds(0, 0, 600, 400);
+end;
+
+procedure TTyCustomClassesPhaseCase.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+procedure TTyCustomClassesP1Test.CountChange(Sender: TObject);
+begin
+  Inc(FChanges);
+end;
+
+procedure TTyCustomClassesP1Test.CountDraw(Sender: TObject; ACanvas: TCanvas; Index: Integer;
+  ARect: TRect; AState: TOwnerDrawState);
+begin
+  Inc(FDrawCalls);
+end;
+
+procedure TTyCustomClassesPhaseCase.CheckPublishesOnly(AClass: TClass; const ANames: array of string);
+var
+  want, got: TStringList;
+  i: Integer;
+begin
+  want := PublishedNames(LclRootOf(AClass.ClassParent));
+  got := PublishedNames(AClass);
+  try
+    for i := Low(ANames) to High(ANames) do
+      want.Add(ANames[i]);
+    AssertEquals('T-b: ' + AClass.ClassName + ' publishes its LCL root''s names plus its own',
+      want.CommaText, got.CommaText);
+  finally
+    want.Free;
+    got.Free;
+  end;
+end;
+
+procedure TTyCustomClassesPhaseCase.CheckStreamText(AComp: TComponent; const AShown: array of string;
+  const AHidden: string);
+var
+  txt: string;
+  i: Integer;
+begin
+  txt := StreamedText(AComp);
+  for i := Low(AShown) to High(AShown) do
+    AssertTrue('T-c: ' + AComp.ClassName + ' streams ' + AShown[i] + ':' + LineEnding + txt,
+      HasProp(txt, AShown[i]));
+  if AHidden <> '' then
+    AssertFalse('T-c: ' + AComp.ClassName + ' did not publish ' + AHidden + ', so it must not '
+      + 'stream it:' + LineEnding + txt, HasProp(txt, AHidden));
+end;
+
+procedure TTyCustomClassesPhaseCase.CheckFreshDefaults(AClass: TComponentClass;
+  const ANames: array of string);
+var
+  inst: TComponent;
+  txt: string;
+  i: Integer;
+  pi: PPropInfo;
+begin
+  inst := AClass.Create(FForm);
+  try
+    if inst is TControl then TControl(inst).Parent := FForm;
+    txt := StreamedText(inst);
+    for i := Low(ANames) to High(ANames) do
+    begin
+      AssertFalse('T-e: a fresh ' + AClass.ClassName + ' streams ' + ANames[i]
+        + ' -- its declared default disagrees with the constructor:' + LineEnding + txt,
+        HasProp(txt, ANames[i]));
+      pi := GetPropInfo(inst, ANames[i]);
+      AssertTrue('T-e: ' + ANames[i] + ' is published', pi <> nil);
+      if (pi^.PropType^.Kind in [tkInteger, tkChar, tkEnumeration, tkSet, tkWChar, tkBool])
+         and (pi^.Default <> Low(LongInt)) then
+        AssertEquals('T-e: ' + AClass.ClassName + '.' + ANames[i] + ' reads its declared default',
+          pi^.Default, GetOrdProp(inst, pi));
+    end;
+  finally
+    inst.Free;
+  end;
+end;
+
+procedure TTyCustomClassesPhaseCase.CheckSameTypeKey(AThird, AFinal: TComponent);
+var
+  a, b: ITyStyleable;
+begin
+  AssertTrue('T-d: ' + AThird.ClassName + ' is styleable', Supports(AThird, ITyStyleable, a));
+  AssertTrue('T-d: ' + AFinal.ClassName + ' is styleable', Supports(AFinal, ITyStyleable, b));
+  AssertEquals('T-d: ' + AThird.ClassName + ' resolves the same theme rules as '
+    + AFinal.ClassName, b.GetStyleTypeKey, a.GetStyleTypeKey);
+end;
+
+{ ------------------------------------------------------------------ Task 2: buttons }
+
+{ S2-1. A flat bar dresses every push button on it in the 'ghost' variant. Before 4.0 the bar
+  asked `is TTyButton`, which every glyph, speed and tool button answered True; on the custom
+  chain they answer False, and only `is TTyCustomButton` still finds them. }
+procedure TTyCustomClassesP1Test.TestFlatToolBarGhostsGlyphAndSpeedButtons;
+var
+  bar: TP1ToolBar;
+  g: TTyGlyphButton;
+  s: TTySpeedButton;
+begin
+  bar := TP1ToolBar.Create(FForm);
+  bar.Parent := FForm;
+  bar.Align := alNone;
+  bar.SetBounds(0, 0, 400, 40);
+  AssertTrue('the bar is flat (or this proves nothing)', bar.Flat);
+  g := TTyGlyphButton.Create(FForm);
+  g.Parent := bar;
+  s := TTySpeedButton.Create(FForm);
+  s.Parent := bar;
+  AssertFalse('a glyph button is not a TTyButton since 4.0 (or this proves nothing)',
+    TObject(g) is TTyButton);
+  AssertEquals('precondition: unstyled', '', g.StyleClass);
+  bar.ForceLayout;
+  AssertEquals('the flat bar ghosts a glyph button', 'ghost', g.StyleClass);
+  AssertEquals('and a speed button', 'ghost', s.StyleClass);
+end;
+
+{ S2-2. TTyToolBarEx keeps its own copy of the flat rule (it never calls ApplyToButton). }
+procedure TTyCustomClassesP1Test.TestFlatToolBarExGhostsGlyphAndSpeedButtons;
+var
+  bar: TP1ToolBarEx;
+  g: TTyGlyphButton;
+  s: TTySpeedButton;
+begin
+  bar := TP1ToolBarEx.Create(FForm);
+  bar.Parent := FForm;
+  bar.Align := alNone;
+  bar.Wrapable := False;
+  bar.SetBounds(0, 0, 400, 40);
+  AssertTrue('the bar is flat (or this proves nothing)', bar.Flat);
+  g := TTyGlyphButton.Create(FForm);
+  g.Parent := bar;
+  g.Width := 60;
+  s := TTySpeedButton.Create(FForm);
+  s.Parent := bar;
+  bar.ForceLayout;
+  AssertEquals('the flat Ex bar ghosts a glyph button', 'ghost', g.StyleClass);
+  AssertEquals('and a speed button', 'ghost', s.StyleClass);
+end;
+
+{ S1-1. A third party's speed button joins a group of the library's own: pressing either
+  releases the other, both ways. }
+procedure TTyCustomClassesP1Test.TestSpeedButtonGroupTakesAThirdPartyMember;
+var
+  own: TTySpeedButton;
+  third: TThirdSpeedButton;
+  find: function: TTyCustomSpeedButton of object;
+begin
+  own := TTySpeedButton.Create(FForm);
+  own.Parent := FForm;
+  own.GroupIndex := 1;
+  third := TThirdSpeedButton.Create(FForm);
+  third.Parent := FForm;
+  third.GroupIndex := 1;
+  own.Down := True;
+  third.Down := True;
+  AssertFalse('pressing the third-party member releases the library''s', own.Down);
+  own.Down := True;
+  AssertFalse('and the other way round', third.Down);
+  AssertTrue('FindDownButton sees the group across both', own.FindDownButton = own);
+  { The pressed member may be the third party's, so FindDownButton answers the custom class
+    (LCL: TCustomSpeedButton, buttons.pp:409), never a TTySpeedButton cast of something that
+    is not one. The procedure variable pins the declared result type at compile time: with a
+    TTySpeedButton result this line does not compile. }
+  third.Down := True;
+  find := @own.FindDownButton;
+  AssertTrue('FindDownButton answers the third party''s pressed member',
+    find() = TTyCustomSpeedButton(third));
+  AssertFalse('which is not a TTySpeedButton, and the answer does not pretend it is',
+    find() is TTySpeedButton);
+end;
+
+procedure TTyCustomClassesP1Test.TestThirdButton;
+var
+  third, back: TThirdButton;
+  own: TTyButton;
+  c: TTyCustomButton;
+  bmA, bmB: TBitmap;
+  diff: string;
+begin
+  { T-a }
+  third := TThirdButton.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(10, 10, 88, 30);
+  { T-b }
+  CheckPublishesOnly(TThirdButton, ['Caption', 'Down']);
+  { T-c: ModalResult is public on the custom class, so the mimic did not publish it. }
+  third.Caption := 'Hello';
+  third.Down := True;
+  third.ModalResult := mrOk;
+  CheckStreamText(third, ['Caption', 'Down'], 'ModalResult');
+  back := TThirdButton.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Caption round-trips', 'Hello', back.Caption);
+  AssertTrue('T-c: Down round-trips', back.Down);
+  { T-d }
+  own := TTyButton.Create(FForm);
+  own.Parent := FForm;
+  own.SetBounds(10, 50, 88, 30);
+  own.Caption := 'Hello';
+  third.Down := False;
+  CheckSameTypeKey(third, own);
+  bmA := NewSentinelBitmap(88, 30);
+  bmB := NewSentinelBitmap(88, 30);
+  try
+    TP1ButtonCracker(third).DoRender(bmA.Canvas, Rect(0, 0, 88, 30));
+    TP1ButtonCracker(own).DoRender(bmB.Canvas, Rect(0, 0, 88, 30));
+    AssertTrue('T-d: the mimic paints exactly what TTyButton paints: ' + diff,
+      SameBitmaps(bmA, bmB, diff));
+  finally
+    bmA.Free;
+    bmB.Free;
+  end;
+  { T-e }
+  CheckFreshDefaults(TThirdButton, ['Caption', 'Down']);
+  { T-v: ModalResult and AllowAllUp are public on the custom classes (TCustomButton). }
+  c := third;
+  c.ModalResult := mrCancel;
+  AssertEquals('T-v: public through a TTyCustomButton reference', Ord(mrCancel), Ord(c.ModalResult));
+end;
+
+procedure TTyCustomClassesP1Test.TestThirdSpeedButton;
+var
+  third, back: TThirdSpeedButton;
+  own: TTySpeedButton;
+  c: TTyCustomSpeedButton;
+begin
+  third := TThirdSpeedButton.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdSpeedButton, ['GroupIndex', 'Down']);
+  third.GroupIndex := 2;
+  third.Down := True;
+  third.AllowAllUp := True;
+  CheckStreamText(third, ['GroupIndex', 'Down'], 'AllowAllUp');
+  back := TThirdSpeedButton.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: GroupIndex round-trips', 2, back.GroupIndex);
+  AssertTrue('T-c: Down round-trips', back.Down);
+  own := TTySpeedButton.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  AssertEquals('T-d: and it is the speed button''s own key', 'TySpeedButton',
+    (own as ITyStyleable).GetStyleTypeKey);
+  CheckFreshDefaults(TThirdSpeedButton, ['GroupIndex', 'Down']);
+  { A speed button stays out of the tab cycle; the redeclared default lives in the custom
+    class, so the mimic gets it too. }
+  AssertFalse('T-e: the mimic is not a tab stop, like TTySpeedButton', third.TabStop);
+  AssertEquals('precondition: the custom button it descends from declares TabStop True', 1,
+    GetPropInfo(TP1ButtonTabStop, 'TabStop')^.Default);
+  AssertEquals('T-e: a descendant of the custom speed button publishing TabStop reads default '
+    + 'False', 0, GetPropInfo(TP1SpeedButtonTabStop, 'TabStop')^.Default);
+  c := third;
+  c.AllowAllUp := False;
+  AssertFalse('T-v: AllowAllUp is public through a TTyCustomSpeedButton reference', c.AllowAllUp);
+end;
+
+{ ------------------------------------------------------------------ Task 3: labels }
+
+procedure TTyCustomClassesP1Test.TestThirdLabel;
+var
+  third, back: TThirdLabel;
+  own: TTyLabel;
+  c: TTyCustomLabel;
+  bmA, bmB: TBitmap;
+  diff: string;
+begin
+  third := TThirdLabel.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(10, 10, 120, 20);
+  CheckPublishesOnly(TThirdLabel, ['Caption', 'WordWrap']);
+  third.Caption := 'Hello';
+  third.WordWrap := True;
+  { Layout is protected on the custom class, as on TCustomLabel: the mimic reaches it only
+    through a subclass of its own, and did not publish it. }
+  TP1LabelCracker(third).SetLayoutTo(tlBottom);
+  CheckStreamText(third, ['Caption', 'WordWrap'], 'Layout');
+  back := TThirdLabel.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Caption round-trips', 'Hello', back.Caption);
+  AssertTrue('T-c: WordWrap round-trips', back.WordWrap);
+  AssertTrue('T-c: the unpublished Layout stayed at its default',
+    TP1LabelCracker(back).LayoutNow = tlCenter);
+  { T-d: the label is theme-locked and drawn entirely by the custom class, so a mimic with the
+    same caption and bounds is the same picture. }
+  own := TTyLabel.Create(FForm);
+  own.Parent := FForm;
+  own.SetBounds(10, 40, 120, 20);
+  own.Caption := 'Hello';
+  third.WordWrap := False;
+  TP1LabelCracker(third).SetLayoutTo(tlCenter);
+  CheckSameTypeKey(third, own);
+  bmA := NewSentinelBitmap(120, 20);
+  bmB := NewSentinelBitmap(120, 20);
+  try
+    TP1LabelCracker(third).DoRender(bmA.Canvas, Rect(0, 0, 120, 20));
+    TP1LabelCracker(own).DoRender(bmB.Canvas, Rect(0, 0, 120, 20));
+    AssertTrue('T-d: the mimic paints exactly what TTyLabel paints: ' + diff,
+      SameBitmaps(bmA, bmB, diff));
+  finally
+    bmA.Free;
+    bmB.Free;
+  end;
+  CheckFreshDefaults(TThirdLabel, ['Caption', 'WordWrap']);
+  { T-v: Caption is public (TControl); the label's own properties are protected (TCustomLabel),
+    which is what the cracker above is for. }
+  c := third;
+  c.Caption := 'via the custom class';
+  AssertEquals('T-v', 'via the custom class', third.Caption);
+end;
+
+procedure TTyCustomClassesP1Test.TestThirdTag;
+var
+  third, back: TThirdTag;
+  own: TTyTag;
+  c: TTyCustomTag;
+begin
+  third := TThirdTag.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdTag, ['Caption', 'Closable']);
+  third.Caption := 'beta';
+  third.Closable := True;
+  third.Align := alTop;   // TTyTag publishes Align; the mimic does not
+  CheckStreamText(third, ['Caption', 'Closable'], 'Align');
+  back := TThirdTag.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Caption round-trips', 'beta', back.Caption);
+  AssertTrue('T-c: Closable round-trips', back.Closable);
+  own := TTyTag.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdTag, ['Caption', 'Closable']);
+  c := third;
+  c.Closable := False;
+  AssertFalse('T-v: Closable is public through a TTyCustomTag reference', third.Closable);
+end;
+
+{ ------------------------------------------------------------------ Task 4: edits I }
+
+procedure TTyCustomClassesP1Test.TestThirdEdit;
+var
+  third, back: TThirdEdit;
+  own: TTyEdit;
+  c: TTyCustomEdit;
+  ime: ITyImeEditable;
+  acts: ITyTextEditActions;
+begin
+  third := TThirdEdit.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdEdit, ['Text', 'ReadOnly']);
+  third.Text := 'abc';
+  third.ReadOnly := True;
+  third.MaxLength := 5;
+  CheckStreamText(third, ['Text', 'ReadOnly'], 'MaxLength');
+  back := TThirdEdit.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Text round-trips', 'abc', back.Text);
+  AssertTrue('T-c: ReadOnly round-trips', back.ReadOnly);
+  AssertEquals('T-c: the unpublished MaxLength stayed at its default', 0, back.MaxLength);
+  own := TTyEdit.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdEdit, ['Text', 'ReadOnly']);
+  { The edit is a tab stop and says so in its declared default; that redeclaration lives in
+    the custom class, so a mimic that publishes TabStop gets the same default. }
+  AssertTrue('T-e: the mimic is a tab stop, like TTyEdit', third.TabStop);
+  AssertEquals('precondition: on the bare base TabStop declares LCL''s default False', 0,
+    GetPropInfo(TP1BareTabStop, 'TabStop')^.Default);
+  AssertEquals('T-e: a descendant of the custom edit publishing TabStop reads default True', 1,
+    GetPropInfo(TP1EditTabStop, 'TabStop')^.Default);
+  { T-f: the edit interfaces are on the custom class's header, so the mimic has them -- the
+    shared right-click menu and the IME bridge both find a third party's edit. }
+  AssertTrue('T-f: ITyImeEditable', Supports(third, ITyImeEditable, ime));
+  AssertTrue('T-f: ITyTextEditActions', Supports(third, ITyTextEditActions, acts));
+  ime := nil;
+  acts := nil;
+  c := third;
+  c.MaxLength := 3;
+  AssertEquals('T-v: MaxLength is public through a TTyCustomEdit reference', 3, third.MaxLength);
+end;
+
+procedure TTyCustomClassesP1Test.TestThirdMaskEdit;
+var
+  third, back: TThirdMaskEdit;
+  own: TTyMaskEdit;
+begin
+  third := TThirdMaskEdit.Create(FForm);
+  third.Parent := FForm;
+  own := TTyMaskEdit.Create(FForm);
+  own.Parent := FForm;
+  CheckPublishesOnly(TThirdMaskEdit, ['Mask', 'Text']);
+  { Text's masked setter is the redeclaration `property Text write SetMaskedText`; it sits in
+    the custom class, so assigning through the mimic is filtered exactly like TTyMaskEdit. }
+  third.Mask := '00/00/0000';
+  own.Mask := '00/00/0000';
+  third.Text := '12345678';
+  own.Text := '12345678';
+  AssertEquals('the mimic''s Text goes through the masked setter', own.Text, third.Text);
+  AssertEquals('which lays the digits into the mask', '12/34/5678', third.Text);
+  TP1MaskCracker(third).SetSpace('*');
+  CheckStreamText(third, ['Mask', 'Text'], 'SpaceChar');
+  back := TThirdMaskEdit.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Mask round-trips', '00/00/0000', back.Mask);
+  AssertEquals('T-c: Text round-trips', '12/34/5678', back.Text);
+  AssertEquals('T-c: the unpublished SpaceChar stayed at its default', TyMaskDefaultBlank,
+    TP1MaskCracker(back).SpaceNow);
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdMaskEdit, ['Mask', 'Text']);
+end;
+
+{ The numeric edit applies a streamed Value in Loaded, after every other property has arrived,
+  so a descendant's publishing order cannot cut the value short. }
+procedure TTyCustomClassesP1Test.TestNumericValueSurvivesAnyPublishingOrder;
+var
+  n, back: TThirdNumericEdit;
+  r, rback: TThirdNumericRange;
+  txt: string;
+begin
+  n := TThirdNumericEdit.Create(FForm);
+  n.Decimals := 4;
+  n.Value := 3.14159;
+  AssertEquals('precondition: four places', '3.1416', n.Text);
+  txt := StreamedText(n);
+  AssertTrue('precondition: Value is written before Decimals (or this proves nothing):'
+    + LineEnding + txt, (Pos(' Value = ', txt) > 0)
+    and (Pos(' Value = ', txt) < Pos(' Decimals = ', txt)));
+  back := TThirdNumericEdit.Create(FForm);
+  StreamInto(n, back);
+  AssertEquals('Decimals round-trips', 4, back.Decimals);
+  AssertEquals('Value keeps its four places', 3.1416, back.Value, 1e-9);
+  AssertEquals('and so does the field', '3.1416', back.Text);
+
+  r := TThirdNumericRange.Create(FForm);
+  r.MinValue := -10;
+  r.MaxValue := 100;
+  r.Value := -5;
+  { No owner: a second unnamed root read into the same owner would collide on the name the
+    reader makes up for it. }
+  rback := TThirdNumericRange.Create(nil);
+  try
+    StreamInto(r, rback);
+    AssertEquals('a value inside the final range is not clamped by half of it', -5, rback.Value,
+      1e-9);
+  finally
+    rback.Free;
+  end;
+end;
+
+{ ------------------------------------------------------------------ Task 5: edits II }
+
+procedure TTyCustomClassesP1Test.TestThirdMemo;
+var
+  third, back: TThirdMemo;
+  own: TTyMemo;
+  c: TTyCustomMemo;
+begin
+  third := TThirdMemo.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdMemo, ['Lines', 'ReadOnly']);
+  third.Lines.Text := 'one' + LineEnding + 'two';
+  third.ReadOnly := True;
+  third.WantTabs := True;
+  CheckStreamText(third, ['Lines', 'ReadOnly'], 'WantTabs');
+  back := TThirdMemo.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Lines round-trip', 2, back.Lines.Count);
+  AssertEquals('T-c: line two', 'two', back.Lines[1]);
+  AssertTrue('T-c: ReadOnly round-trips', back.ReadOnly);
+  AssertFalse('T-c: the unpublished WantTabs stayed at its default', back.WantTabs);
+  own := TTyMemo.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdMemo, ['Lines', 'ReadOnly']);
+  c := third;
+  c.WantTabs := False;
+  AssertFalse('T-v: WantTabs is public through a TTyCustomMemo reference', third.WantTabs);
+end;
+
+{ Associate is a component reference and so is not part of the stream check here (a lone
+  up-down streamed as its own root has no owner to resolve it against); S4-2 below drives it. }
+procedure TTyCustomClassesP1Test.TestThirdUpDown;
+var
+  third, back: TThirdUpDown;
+  own: TTyUpDown;
+begin
+  third := TThirdUpDown.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdUpDown, ['Associate', 'Position']);
+  third.Position := 40;
+  TP1UpDownCracker(third).SetIncrementTo(5);
+  CheckStreamText(third, ['Position'], 'Increment');
+  back := TThirdUpDown.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Position round-trips', 40, back.Position);
+  AssertEquals('T-c: the unpublished Increment stayed at its default', 1,
+    TP1UpDownCracker(back).IncrementNow);
+  own := TTyUpDown.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdUpDown, ['Associate', 'Position']);
+  { T-v: everything the up-down adds is protected (TCustomUpDown), hence the cracker. }
+end;
+
+{ S4-2. One field, one stepper: a second up-down that tries to drive a field a sibling already
+  drives is refused -- and a third party's up-down is a sibling like any other. }
+procedure TTyCustomClassesP1Test.TestUpDownAssociationIsExclusiveAcrossThirdParties;
+var
+  ed: TTyEdit;
+  own: TTyUpDown;
+  third: TThirdUpDown;
+  raised: Boolean;
+begin
+  ed := TTyEdit.Create(FForm);
+  ed.Name := 'Field';
+  ed.Parent := FForm;
+  own := TTyUpDown.Create(FForm);
+  own.Name := 'OwnUpDown';
+  own.Parent := FForm;
+  third := TThirdUpDown.Create(FForm);
+  third.Name := 'ThirdUpDown';
+  third.Parent := FForm;
+  own.Associate := ed;
+  raised := False;
+  try
+    third.Associate := ed;
+  except
+    raised := True;
+  end;
+  AssertTrue('a third-party up-down cannot take a field the library''s already drives', raised);
+  own.Associate := nil;
+  third.Associate := ed;
+  raised := False;
+  try
+    own.Associate := ed;
+  except
+    raised := True;
+  end;
+  AssertTrue('and the library''s cannot take one the third party drives', raised);
+end;
+
+{ The up-down writes Position into its field and reads it back from there. A field that does
+  not publish Text is driven through Caption, LCL's way; before Caption was routed to Text a
+  click wrote the number into the edit's invisible native caption and the field the user sees
+  never moved. Driven with a real press and release on the upper half of the up-down. }
+procedure TTyCustomClassesP1Test.TestUpDownDrivesAThirdPartyEditThatDoesNotPublishText;
+var
+  ed: TThirdEditNoText;
+  ud: TTyUpDown;
+
+  procedure ClickUp;
+  begin
+    ud.Perform(LM_LBUTTONDOWN, MK_LBUTTON, MousePos(ud.Width div 2, 2));
+    ud.Perform(LM_LBUTTONUP, 0, MousePos(ud.Width div 2, 2));
+  end;
+
+begin
+  NeedWidgetSet;
+  FForm.HandleNeeded;
+  ed := TThirdEditNoText.Create(FForm);
+  ed.Name := 'NoTextField';
+  ed.Parent := FForm;
+  ed.SetBounds(10, 10, 100, 28);
+  AssertTrue('precondition: the edit publishes no Text (or this proves nothing)',
+    GetPropInfo(ed, 'Text') = nil);
+  ud := TTyUpDown.Create(FForm);
+  ud.Parent := FForm;
+  ud.Associate := ed;
+  AssertEquals('binding writes Position into the field the user sees', '0', ed.Text);
+  ClickUp;
+  AssertEquals('a click on the upper half steps the field', '1', ed.Text);
+  AssertEquals('and Position', 1, ud.Position);
+  ed.Text := '41';
+  ClickUp;
+  AssertEquals('Position is read back from the field before the step', '42', ed.Text);
+  AssertEquals('Position follows', 42, ud.Position);
+end;
+
+{ Caption IS Text on the edit, memo and combo families, as on LCL's (TCustomEdit.RealGetText /
+  RealSetText) -- and nothing a 3.0 form relied on moves: naming a control does not put the
+  name into its text (csSetCaption is off), a linked action does not overwrite the text, a
+  Caption write fires OnChange once like a Text write, and Caption is not published. }
+procedure TTyCustomClassesP1Test.TestCaptionIsTextOnEditMemoAndCombo;
+var
+  e: TTyEdit;
+  m: TTyMemo;
+  c: TTyComboBox;
+  me: TTyMaskEdit;
+  act: TAction;
+  al: TActionList;
+begin
+  e := TTyEdit.Create(FForm);
+  e.Name := 'NamedField';
+  AssertEquals('naming an edit leaves its text alone', '', e.Text);
+  e.Parent := FForm;
+  e.OnChange := @CountChange;
+  FChanges := 0;
+  TControl(e).Caption := 'abc';
+  AssertEquals('Caption writes the edit''s text', 'abc', e.Text);
+  AssertEquals('one OnChange, as for a Text write', 1, FChanges);
+  e.Text := 'xyz';
+  AssertEquals('Caption reads it back', 'xyz', TControl(e).Caption);
+  AssertEquals('a Text write still fires once', 2, FChanges);
+  AssertTrue('Caption is not published on the edit', GetPropInfo(e, 'Caption') = nil);
+
+  al := TActionList.Create(FForm);
+  act := TAction.Create(FForm);
+  act.ActionList := al;
+  act.Caption := 'Do it';
+  e.Text := 'typed';
+  e.Action := act;
+  AssertEquals('linking an action leaves the text alone', 'typed', e.Text);
+  act.Enabled := False;
+  AssertEquals('so does a change of the linked action', 'typed', e.Text);
+  AssertFalse('while the rest of the link still works', e.Enabled);
+
+  me := TTyMaskEdit.Create(FForm);
+  me.Parent := FForm;
+  me.Mask := '00/00';
+  TControl(me).Caption := '1234';
+  AssertEquals('a Caption write is judged by the mask, like a Text write', '12/34', me.Text);
+
+  m := TTyMemo.Create(FForm);
+  m.Name := 'NamedMemo';
+  AssertEquals('naming a memo leaves its document alone', 0, m.Lines.Count);
+  m.Parent := FForm;
+  TControl(m).Caption := 'one' + LineEnding + 'two';
+  AssertEquals('Caption writes the memo''s document', 2, m.Lines.Count);
+  AssertEquals('and reads it back', m.Text, TControl(m).Caption);
+  m.Action := act;
+  act.Enabled := True;
+  AssertEquals('a linked action leaves the document alone', 2, m.Lines.Count);
+
+  c := TTyComboBox.Create(FForm);
+  c.Name := 'NamedCombo';
+  AssertEquals('naming a combo leaves its field alone', '', c.Text);
+  c.Parent := FForm;
+  TControl(c).Caption := 'pick';
+  AssertEquals('Caption writes the combo''s field', 'pick', c.Text);
+  c.Action := act;
+  act.Caption := 'Done';
+  AssertEquals('a linked action leaves the field alone', 'pick', c.Text);
+end;
+
+{ TTyFloatSpinEdit groups no thousands by default although the numeric edit it descends from
+  does. The `default False` redeclaration lives on TTyCustomFloatSpinEdit, so a descendant of
+  the custom class that publishes UseThousands reads it -- asked of the third party's class,
+  not of TTyFloatSpinEdit, whose own answer would be the same wherever the line sat. }
+procedure TTyCustomClassesP1Test.TestFloatSpinEditKeepsItsUseThousandsDefault;
+var
+  e: TP1FloatSpinThousands;
+begin
+  AssertEquals('precondition: a descendant of the custom numeric edit reads True', 1,
+    GetPropInfo(TP1NumericThousands, 'UseThousands')^.Default);
+  AssertEquals('a descendant of the custom float spin edit reads False', 0,
+    GetPropInfo(TP1FloatSpinThousands, 'UseThousands')^.Default);
+  e := TP1FloatSpinThousands.Create(FForm);
+  AssertFalse('and its constructor agrees', e.UseThousands);
+end;
+
+{ ------------------------------------------------------------------ Task 6: choice }
+
+procedure TTyCustomClassesP1Test.TestThirdCheckBox;
+var
+  third, back: TThirdCheckBox;
+  own: TTyCheckBox;
+  c: TTyCustomCheckBox;
+begin
+  third := TThirdCheckBox.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdCheckBox, ['Checked', 'Caption']);
+  third.Checked := True;
+  third.Caption := 'Agree';
+  third.AllowGrayed := True;
+  CheckStreamText(third, ['Checked', 'Caption'], 'AllowGrayed');
+  back := TThirdCheckBox.Create(FForm);
+  StreamInto(third, back);
+  AssertTrue('T-c: Checked round-trips', back.Checked);
+  AssertEquals('T-c: Caption round-trips', 'Agree', back.Caption);
+  AssertFalse('T-c: the unpublished AllowGrayed stayed at its default', back.AllowGrayed);
+  own := TTyCheckBox.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdCheckBox, ['Checked', 'Caption']);
+  AssertTrue('T-e: the mimic is a tab stop, like TTyCheckBox', third.TabStop);
+  AssertEquals('precondition: on the bare base TabStop declares LCL''s default False', 0,
+    GetPropInfo(TP1BareTabStop, 'TabStop')^.Default);
+  AssertEquals('T-e: a descendant of the custom check box publishing TabStop reads default True',
+    1, GetPropInfo(TP1CheckBoxTabStop, 'TabStop')^.Default);
+  { T-v: AllowGrayed is public (TCustomCheckBox); Checked is protected there, as in LCL, which
+    is why the mimic publishes it. }
+  c := third;
+  c.AllowGrayed := False;
+  AssertFalse('T-v: AllowGrayed is public through a TTyCustomCheckBox reference', third.AllowGrayed);
+end;
+
+procedure TTyCustomClassesP1Test.TestThirdRadioButton;
+var
+  third, back: TThirdRadioButton;
+  own: TTyRadioButton;
+  c: TTyCustomRadioButton;
+begin
+  third := TThirdRadioButton.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdRadioButton, ['Checked', 'GroupIndex']);
+  third.GroupIndex := 3;
+  third.Checked := True;
+  third.Alignment := taLeftJustify;   // public, not published by the mimic
+  CheckStreamText(third, ['Checked', 'GroupIndex'], 'Alignment');
+  back := TThirdRadioButton.Create(FForm);
+  StreamInto(third, back);
+  AssertTrue('T-c: Checked round-trips', back.Checked);
+  AssertEquals('T-c: GroupIndex round-trips', 3, back.GroupIndex);
+  own := TTyRadioButton.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdRadioButton, ['Checked', 'GroupIndex']);
+  c := third;
+  c.GroupIndex := 4;
+  AssertEquals('T-v: GroupIndex is public through a TTyCustomRadioButton reference', 4,
+    third.GroupIndex);
+end;
+
+{ S5-1. Same parent, same GroupIndex: checking one radio unchecks the other, whichever of the
+  two is the third party's. }
+procedure TTyCustomClassesP1Test.TestRadioGroupTakesAThirdPartyMember;
+var
+  own: TTyRadioButton;
+  third: TThirdRadioButton;
+begin
+  own := TTyRadioButton.Create(FForm);
+  own.Parent := FForm;
+  own.GroupIndex := 1;
+  third := TThirdRadioButton.Create(FForm);
+  third.Parent := FForm;
+  third.GroupIndex := 1;
+  own.Checked := True;
+  third.Checked := True;
+  AssertFalse('checking the third-party radio unchecks the library''s', own.Checked);
+  own.Checked := True;
+  AssertFalse('and the other way round', third.Checked);
+end;
+
+{ ------------------------------------------------------------------ Task 7: combo boxes I }
+
+{ S7-1. A combo's drop-down list finds its combo through Owner to hand rows to the host's
+  OnDrawItem. Every derived combo -- TTyComboBoxEx here -- is a TTyCustomComboBox and, since 4.0,
+  not a TTyComboBox; the lookup that asked for TTyComboBox left every one of their lists painting
+  their own rows behind the host's back. }
+procedure TTyCustomClassesP1Test.TestDerivedComboPopupReachesTheOwnerDraw;
+var
+  c: TTyComboBoxEx;
+  l: TTyCustomListBox;
+  bmp: TBitmap;
+begin
+  c := TTyComboBoxEx.Create(FForm);
+  c.Items.Add('Alpha');
+  c.Items.Add('Beta');
+  c.OnDrawItem := @CountDraw;
+  c.Style := csOwnerDrawFixed;
+  l := TP1ComboCracker(c).MakePopupList;
+  AssertTrue('the Ex combo drops a TTyComboPopupList (or this proves nothing)',
+    l is TTyComboPopupList);
+  l.Parent := FForm;
+  l.Font.PixelsPerInch := 96;
+  l.ItemHeight := 24;
+  l.SetBounds(0, 0, 160, 80);
+  l.Items.Assign(c.Items);
+  l.TopIndex := 0;
+  bmp := NewSentinelBitmap(160, 80);
+  try
+    FDrawCalls := 0;
+    TTyComboPopupList(l).RenderWithOwnerDraw(bmp.Canvas, Rect(0, 0, 160, 80), 96);
+    AssertEquals('the host''s OnDrawItem ran once per row of the derived combo''s list', 2,
+      FDrawCalls);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ S7-2. ItemsEx is the item source: the collection tells its combo when it changes, and the
+  combo rebuilds Items. The collection finds that combo through its owner, which for a third
+  party's TTyCustomComboBoxEx descendant is not a TTyComboBoxEx. }
+procedure TTyCustomClassesP1Test.TestThirdComboBoxExItemsDriveTheList;
+var
+  third: TThirdComboBoxEx;
+begin
+  third := TThirdComboBoxEx.Create(FForm);
+  CheckPublishesOnly(TThirdComboBoxEx, ['ItemsEx', 'Images']);
+  third.ItemsEx.AddItem('Save', 3);
+  third.ItemsEx.AddItem('Open', 4);
+  AssertEquals('the collection reached the painted list', 2, third.Items.Count);
+  third.ItemsEx[0].Caption := 'Store';
+  AssertEquals('so does a caption edit', 'Store', third.Items[0]);
+  { Images only: TWriter writes a collection property whenever there is no ancestor to compare
+    with, empty or not (writer.inc), so ItemsEx = <> is in every fresh stream. }
+  CheckFreshDefaults(TThirdComboBoxEx, ['Images']);
+end;
+
+{ ItemIndex ahead of Items on a button group: it waits for Loaded. }
+procedure TTyCustomClassesP1Test.TestButtonGroupIndexReadBeforeItsItemsWaits;
+var
+  src, back: TIdxButtonGroup;
+begin
+  src := TIdxButtonGroup.Create(FForm);
+  src.Parent := FForm;
+  src.Items.CommaText := 'day,week,month';
+  src.ItemIndex := 2;
+  back := TIdxButtonGroup.Create(FForm);
+  back.Parent := FForm;
+  StreamInto(src, back);
+  AssertEquals('the items came back', 3, back.Items.Count);
+  AssertEquals('ItemIndex read before Items lands on the saved segment', 2, back.ItemIndex);
+end;
+
+procedure TTyCustomClassesP1Test.TestThirdComboBox;
+var
+  third, back: TThirdComboBox;
+  own: TTyComboBox;
+  c: TTyCustomComboBox;
+begin
+  third := TThirdComboBox.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdComboBox, ['ItemIndex', 'Items']);
+  third.Items.Add('one');
+  third.Items.Add('two');
+  third.ItemIndex := 1;
+  third.DropDownCount := 3;
+  CheckStreamText(third, ['ItemIndex', 'Items'], 'DropDownCount');
+  back := TThirdComboBox.Create(FForm);
+  FChanges := 0;
+  back.OnChange := @CountChange;
+  StreamInto(third, back);
+  AssertEquals('T-c: Items round-trip', 2, back.Items.Count);
+  AssertEquals('T-c: ItemIndex round-trips, though it is read before the items', 1,
+    back.ItemIndex);
+  AssertEquals('T-c: and the field shows that item', 'two', back.Text);
+  AssertEquals('T-c: applied without OnChange -- reading a form is not a change', 0, FChanges);
+  back.OnChange := nil;
+  AssertEquals('T-c: the unpublished DropDownCount stayed at its default', 8, back.DropDownCount);
+  own := TTyComboBox.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  { Items only: ItemIndex has no declared default on TTyComboBox either, so a fresh combo
+    writes ItemIndex = -1 (the 3.0 snapshot records the same). }
+  CheckFreshDefaults(TThirdComboBox, ['Items']);
+  AssertTrue('T-e: the mimic is a tab stop, like TTyComboBox', third.TabStop);
+  AssertEquals('precondition: on the bare base TabStop declares LCL''s default False', 0,
+    GetPropInfo(TP1BareTabStop, 'TabStop')^.Default);
+  AssertEquals('T-e: a descendant of the custom combo publishing TabStop reads default True', 1,
+    GetPropInfo(TP1ComboBoxTabStop, 'TabStop')^.Default);
+  c := third;
+  c.DropDownCount := 5;
+  AssertEquals('T-v: DropDownCount is public through a TTyCustomComboBox reference', 5,
+    third.DropDownCount);
+end;
+
+{ ------------------------------------------------------------------ Task 8: combo boxes II }
+
+{ The combo's own drop-down list, built and rendered off-screen. }
+function RenderColorComboList(AForm: TForm; ACombo: TTyCustomComboBox): TBitmap;
+var
+  l: TTyCustomListBox;
+begin
+  l := TP1ComboCracker(ACombo).MakePopupList;
+  l.Parent := AForm;
+  l.Font.PixelsPerInch := 96;
+  l.ItemHeight := 24;
+  l.SetBounds(0, 0, 160, 80);
+  l.Items.Assign(ACombo.Items);
+  l.TopIndex := 0;
+  Result := NewSentinelBitmap(160, 80);
+  TTyComboPopupList(l).RenderWithOwnerDraw(Result.Canvas, Rect(0, 0, 160, 80), 96);
+  l.Free;
+end;
+
+{ S8-1. The colour list's rows take the swatch geometry and pseudo-row colours from the box
+  that owns them, which they find through Owner. A third party's colour box is a
+  TTyCustomColorBox and not a TTyColorBox; a lookup that asked for TTyColorBox left its
+  drop-down ignoring ColorRectWidth. (The library's own TTyColorComboBox drops a list of its
+  own that never consulted the owner's geometry, in 3.0 as now -- so it is not the witness.) }
+procedure TTyCustomClassesP1Test.TestColorBoxPopupUsesItsOwnSwatchGeometry;
+var
+  narrow, wide: TThirdColorBox;
+  a, b: TBitmap;
+  diff: string;
+begin
+  narrow := TThirdColorBox.Create(FForm);
+  narrow.ColorRectWidth := 8;
+  wide := TThirdColorBox.Create(FForm);
+  wide.ColorRectWidth := 40;
+  AssertFalse('the mimic is not a TTyColorBox (or this proves nothing)',
+    TObject(narrow) is TTyColorBox);
+  a := RenderColorComboList(FForm, narrow);
+  b := RenderColorComboList(FForm, wide);
+  try
+    AssertFalse('the drop-down rows follow the box''s own ColorRectWidth',
+      SameBitmaps(a, b, diff));
+  finally
+    a.Free;
+    b.Free;
+  end;
+end;
+
+procedure TTyCustomClassesP1Test.TestThirdColorBox;
+var
+  third, back: TThirdColorBox;
+  own: TTyColorBox;
+  c: TTyCustomColorBox;
+begin
+  third := TThirdColorBox.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdColorBox, ['Selected', 'Style']);
+  third.Style := [cbStandardColors];
+  third.Selected := clRed;
+  third.ColorRectWidth := 30;
+  CheckStreamText(third, ['Selected', 'Style'], 'ColorRectWidth');
+  back := TThirdColorBox.Create(FForm);
+  StreamInto(third, back);
+  AssertTrue('T-c: Style round-trips', back.Style = [cbStandardColors]);
+  AssertEquals('T-c: Selected round-trips', clRed, back.Selected);
+  AssertEquals('T-c: the unpublished ColorRectWidth stayed at its default', 0, back.ColorRectWidth);
+  own := TTyColorBox.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  { Style only: Selected has no default on TTyColorBox either (a fresh box streams it). }
+  CheckFreshDefaults(TThirdColorBox, ['Style']);
+  { T-v: the colour box's own properties are public (TCustomColorBox), and Style through the
+    custom class is the PALETTE set -- the redeclaration lives there, not on TTyColorBox. }
+  c := third;
+  c.ColorRectWidth := 12;
+  AssertEquals('T-v: ColorRectWidth is public through a TTyCustomColorBox reference', 12,
+    third.ColorRectWidth);
+  AssertTrue('T-v: and Style on the custom class is the palette', c.Style = [cbStandardColors]);
+end;
+
+procedure TTyCustomClassesP1Test.TestThirdShellComboBox;
+var
+  third: TThirdShellComboBox;
+  own: TTyShellComboBox;
+  dir, diff: string;
+  a, b: TBitmap;
+begin
+  third := TThirdShellComboBox.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdShellComboBox, ['Directory', 'Items']);
+  dir := ExcludeTrailingPathDelimiter(GetTempDir);
+  third.Directory := dir;
+  CheckStreamText(third, ['Directory'], '');
+  own := TTyShellComboBox.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  { S8-2. The drop-down draws each folder with its glyph and indent, asking its owner for them;
+    a third party's shell combo is a TTyCustomShellComboBox, so its rows look the same. }
+  own.Directory := dir;
+  AssertTrue('the folder chain has rows (or this proves nothing)', own.Items.Count > 0);
+  a := RenderColorComboList(FForm, third);
+  b := RenderColorComboList(FForm, own);
+  try
+    AssertTrue('the mimic''s drop-down rows are the library''s: ' + diff, SameBitmaps(a, b, diff));
+  finally
+    a.Free;
+    b.Free;
+  end;
+  CheckFreshDefaults(TThirdShellComboBox, ['Directory']);
+end;
+
+{ ------------------------------------------------------------------ Task 9: progress }
+
+procedure TTyCustomClassesP1Test.TestThirdProgressBar;
+var
+  third, back: TThirdProgressBar;
+  own: TTyProgressBar;
+  c: TTyCustomProgressBar;
+  txt: string;
+begin
+  third := TThirdProgressBar.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdProgressBar, ['Max', 'Position']);
+  third.Max := 50;
+  third.Position := 40;
+  third.Step := 5;
+  CheckStreamText(third, ['Max', 'Position'], 'Step');
+  txt := StreamedText(third);
+  AssertTrue('T-c: Max is written before Position, the order the mimic published them in',
+    Pos(' Max = ', txt) < Pos(' Position = ', txt));
+  back := TThirdProgressBar.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Max round-trips', 50, back.Max);
+  AssertEquals('T-c: Position round-trips (not clamped by a default Max)', 40, back.Position);
+  AssertEquals('T-c: the unpublished Step stayed at its default', 10, back.Step);
+  own := TTyProgressBar.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdProgressBar, ['Max', 'Position']);
+  c := third;
+  c.Step := 2;
+  AssertEquals('T-v: Step is public through a TTyCustomProgressBar reference', 2, third.Step);
+end;
+
+procedure TTyCustomClassesP1Test.TestThirdGauge;
+var
+  third, back: TThirdGauge;
+  own: TTyGauge;
+begin
+  third := TThirdGauge.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdGauge, ['Max', 'Value']);
+  third.Max := 200;
+  third.Value := 150;
+  third.Thickness := 20;
+  CheckStreamText(third, ['Max', 'Value'], 'Thickness');
+  back := TThirdGauge.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Max round-trips', 200, back.Max, 1e-9);
+  AssertEquals('T-c: Value round-trips', 150, back.Value, 1e-9);
+  own := TTyGauge.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  { Value only: Max is a Double with no default on TTyGauge too, so a fresh gauge writes it. }
+  CheckFreshDefaults(TThirdGauge, ['Value']);
+end;
+
+{ ------------------------------------------------------------------ Task 10: dials and sliders }
+
+procedure TTyCustomClassesP1Test.TestThirdTrackBar;
+var
+  third, back: TThirdTrackBar;
+  own: TTyTrackBar;
+  c: TTyCustomTrackBar;
+begin
+  third := TThirdTrackBar.Create(FForm);
+  third.Parent := FForm;
+  CheckPublishesOnly(TThirdTrackBar, ['Position', 'Max']);
+  third.Max := 20;
+  third.Position := 7;
+  third.TickMarks := ttmBoth;
+  CheckStreamText(third, ['Position', 'Max'], 'TickMarks');
+  back := TThirdTrackBar.Create(FForm);
+  StreamInto(third, back);
+  AssertEquals('T-c: Max round-trips', 20, back.Max);
+  AssertEquals('T-c: Position round-trips', 7, back.Position);
+  own := TTyTrackBar.Create(FForm);
+  own.Parent := FForm;
+  CheckSameTypeKey(third, own);
+  CheckFreshDefaults(TThirdTrackBar, ['Position', 'Max']);
+  { T-e, TabStop: a track bar is a tab stop out of the constructor, and the declaration that
+    says so must travel with the custom class -- a descendant that publishes TabStop has to
+    read default True, or a .lfm that switches it off loses the setting. }
+  AssertTrue('T-e: the mimic is a tab stop', third.TabStop);
+  AssertEquals('precondition: on the bare base TabStop declares LCL''s default False', 0,
+    GetPropInfo(TP1BareTabStop, 'TabStop')^.Default);
+  AssertEquals('T-e: a descendant of the custom track bar publishing TabStop reads default True',
+    1, GetPropInfo(TP1TrackBarTabStop, 'TabStop')^.Default);
+  c := third;
+  c.TickMarks := ttmTopLeft;
+  AssertTrue('T-v: TickMarks is public through a TTyCustomTrackBar reference (Q6: public, not '
+    + 'LCL''s published)', third.TickMarks = ttmTopLeft);
+end;
+
+{ ------------------------------------------------------------------ T-d, the remaining families }
+
+{ Paint AControl through its family's RenderTo onto a sentinel-filled bitmap of its size. }
+function RenderFamily(AControl: TControl): TBitmap;
+var
+  r: TRect;
+begin
+  Result := NewSentinelBitmap(AControl.Width, AControl.Height);
+  r := Rect(0, 0, AControl.Width, AControl.Height);
+  if AControl is TTyCustomTag then TP1TagRender(AControl).RenderTo(Result.Canvas, r, 96)
+  else if AControl is TTyCustomEdit then TP1EditRender(AControl).RenderTo(Result.Canvas, r, 96)
+  else if AControl is TTyCustomMemo then TP1MemoRender(AControl).RenderTo(Result.Canvas, r, 96)
+  else if AControl is TTyCustomCheckBox then
+    TP1CheckBoxRender(AControl).RenderTo(Result.Canvas, r, 96)
+  else if AControl is TTyCustomRadioButton then
+    TP1RadioRender(AControl).RenderTo(Result.Canvas, r, 96)
+  else if AControl is TTyCustomComboBox then TP1ComboRender(AControl).RenderTo(Result.Canvas, r, 96)
+  else if AControl is TTyCustomProgressBar then
+    TP1ProgressRender(AControl).RenderTo(Result.Canvas, r, 96)
+  else if AControl is TTyCustomTrackBar then TP1TrackRender(AControl).RenderTo(Result.Canvas, r, 96)
+  else raise Exception.Create('no renderer for ' + AControl.ClassName);
+end;
+
+{ Each pair is set up the same way -- same size, same values, unfocused -- and must paint the
+  same pixels: the drawing, the state it reads and the theme rules it resolves all live in the
+  custom class, where the third party gets them. }
+procedure TTyCustomClassesP1Test.TestMimicsPaintLikeTheirFinalClass;
+
+  procedure Same(AThird, AOwn: TControl; AW, AH: Integer);
+  var
+    a, b: TBitmap;
+    diff: string;
+    x, y, painted: Integer;
+  begin
+    AThird.Parent := FForm;
+    AOwn.Parent := FForm;
+    AThird.SetBounds(0, 0, AW, AH);
+    AOwn.SetBounds(0, AH + 10, AW, AH);
+    a := RenderFamily(AThird);
+    b := RenderFamily(AOwn);
+    try
+      painted := 0;
+      for y := 0 to a.Height - 1 do
+        for x := 0 to a.Width - 1 do
+          if a.Canvas.Pixels[x, y] <> CSentinel then Inc(painted);
+      AssertTrue('T-d: ' + AThird.ClassName + ' painted something (or this proves nothing)',
+        painted > 0);
+      AssertTrue('T-d: ' + AThird.ClassName + ' paints exactly what ' + AOwn.ClassName
+        + ' paints: ' + diff, SameBitmaps(a, b, diff));
+    finally
+      a.Free;
+      b.Free;
+    end;
+  end;
+
+var
+  tg: TThirdTag;
+  otg: TTyTag;
+  ed: TThirdEdit;
+  oed: TTyEdit;
+  me: TThirdMemo;
+  ome: TTyMemo;
+  cb: TThirdCheckBox;
+  ocb: TTyCheckBox;
+  rb: TThirdRadioButton;
+  orb: TTyRadioButton;
+  co: TThirdComboBox;
+  oco: TTyComboBox;
+  pb: TThirdProgressBar;
+  opb: TTyProgressBar;
+  tb: TThirdTrackBar;
+  otb: TTyTrackBar;
+begin
+  tg := TThirdTag.Create(FForm);
+  otg := TTyTag.Create(FForm);
+  tg.Caption := 'beta';
+  otg.Caption := 'beta';
+  tg.Closable := True;
+  otg.Closable := True;
+  Same(tg, otg, 80, 24);
+
+  ed := TThirdEdit.Create(FForm);
+  oed := TTyEdit.Create(FForm);
+  ed.Text := 'abc';
+  oed.Text := 'abc';
+  Same(ed, oed, 140, 28);
+
+  me := TThirdMemo.Create(FForm);
+  ome := TTyMemo.Create(FForm);
+  me.Lines.Text := 'one' + LineEnding + 'two';
+  ome.Lines.Text := 'one' + LineEnding + 'two';
+  Same(me, ome, 160, 80);
+
+  cb := TThirdCheckBox.Create(FForm);
+  ocb := TTyCheckBox.Create(FForm);
+  cb.Caption := 'Agree';
+  ocb.Caption := 'Agree';
+  cb.Checked := True;
+  ocb.Checked := True;
+  Same(cb, ocb, 120, 24);
+
+  rb := TThirdRadioButton.Create(FForm);
+  orb := TTyRadioButton.Create(FForm);
+  rb.GroupIndex := 7;
+  orb.GroupIndex := 8;
+  rb.Checked := True;
+  orb.Checked := True;
+  Same(rb, orb, 120, 24);
+
+  co := TThirdComboBox.Create(FForm);
+  oco := TTyComboBox.Create(FForm);
+  co.Items.CommaText := 'one,two';
+  oco.Items.CommaText := 'one,two';
+  co.ItemIndex := 1;
+  oco.ItemIndex := 1;
+  Same(co, oco, 145, 28);
+
+  pb := TThirdProgressBar.Create(FForm);
+  opb := TTyProgressBar.Create(FForm);
+  pb.Max := 50;
+  opb.Max := 50;
+  pb.Position := 40;
+  opb.Position := 40;
+  Same(pb, opb, 160, 20);
+
+  tb := TThirdTrackBar.Create(FForm);
+  otb := TTyTrackBar.Create(FForm);
+  tb.Max := 20;
+  otb.Max := 20;
+  tb.Position := 7;
+  otb.Position := 7;
+  Same(tb, otb, 160, 32);
+end;
+
+{ ------------------------------------------------------------------ real input, per family
+
+  Each family's mimic gets the messages a widgetset delivers -- LM_LBUTTONDOWN / LM_LBUTTONUP,
+  CN_KEYDOWN, IntfUTF8KeyPress -- next to the library's own final class, and must answer the
+  same. The handlers live in the custom class; these prove a third party gets them, not only
+  the published surface. }
+
+procedure TypeInto(C: TWinControl; const S: string);
+var
+  i: Integer;
+  k: TUTF8Char;
+begin
+  for i := 1 to Length(S) do
+  begin
+    k := S[i];
+    C.IntfUTF8KeyPress(k, 1, False);
+  end;
+end;
+
+procedure PressAndRelease(C: TControl; X, Y: Integer);
+begin
+  C.Perform(LM_LBUTTONDOWN, MK_LBUTTON, MousePos(X, Y));
+  C.Perform(LM_LBUTTONUP, 0, MousePos(X, Y));
+end;
+
+procedure TTyCustomClassesP1Test.TestInputThirdButtonClicksOnPressAndRelease;
+var
+  third: TThirdButton;
+  own: TTyButton;
+  a: Integer;
+begin
+  NeedWidgetSet;
+  third := TThirdButton.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 80, 28);
+  third.HandleNeeded;
+  own := TTyButton.Create(FForm);
+  own.Parent := FForm;
+  own.SetBounds(0, 40, 80, 28);
+  own.HandleNeeded;
+  third.OnClick := @CountChange;
+  own.OnClick := @CountChange;
+  FChanges := 0;
+  PressAndRelease(third, 10, 10);
+  a := FChanges;
+  FChanges := 0;
+  PressAndRelease(own, 10, 10);
+  AssertEquals('the mimic clicks once on press + release', 1, a);
+  AssertEquals('as TTyButton does', FChanges, a);
+end;
+
+procedure TTyCustomClassesP1Test.TestInputThirdLabelClicksOnPressAndRelease;
+var
+  third: TThirdLabel;
+  own: TTyLabel;
+  a: Integer;
+begin
+  NeedWidgetSet;
+  FForm.HandleNeeded;
+  third := TThirdLabel.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 80, 20);
+  third.Caption := 'Hello';
+  own := TTyLabel.Create(FForm);
+  own.Parent := FForm;
+  own.SetBounds(0, 40, 80, 20);
+  own.Caption := 'Hello';
+  third.OnClick := @CountChange;
+  own.OnClick := @CountChange;
+  FChanges := 0;
+  PressAndRelease(third, 5, 5);
+  a := FChanges;
+  FChanges := 0;
+  PressAndRelease(own, 5, 5);
+  AssertEquals('the label mimic clicks once', 1, a);
+  AssertEquals('as TTyLabel does', FChanges, a);
+end;
+
+procedure TTyCustomClassesP1Test.TestInputThirdEditTakesTypingAndBackspace;
+var
+  third: TThirdEdit;
+  own: TTyEdit;
+begin
+  NeedWidgetSet;
+  third := TThirdEdit.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 120, 28);
+  third.HandleNeeded;
+  own := TTyEdit.Create(FForm);
+  own.Parent := FForm;
+  own.SetBounds(0, 40, 120, 28);
+  own.HandleNeeded;
+  TypeInto(third, 'abc');
+  TypeInto(own, 'abc');
+  AssertEquals('typing reaches the mimic', 'abc', third.Text);
+  AssertEquals('as it reaches TTyEdit', own.Text, third.Text);
+  third.Perform(CN_KEYDOWN, VK_BACK, 0);
+  own.Perform(CN_KEYDOWN, VK_BACK, 0);
+  AssertEquals('backspace', 'ab', third.Text);
+  AssertEquals('backspace as on TTyEdit', own.Text, third.Text);
+end;
+
+procedure TTyCustomClassesP1Test.TestInputThirdMemoTakesTypingAndReturn;
+var
+  third: TThirdMemo;
+  own: TTyMemo;
+begin
+  NeedWidgetSet;
+  third := TThirdMemo.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 200, 100);
+  third.HandleNeeded;
+  own := TTyMemo.Create(FForm);
+  own.Parent := FForm;
+  own.SetBounds(0, 110, 200, 100);
+  own.HandleNeeded;
+  TypeInto(third, 'ab');
+  TypeInto(own, 'ab');
+  third.Perform(CN_KEYDOWN, VK_RETURN, 0);
+  own.Perform(CN_KEYDOWN, VK_RETURN, 0);
+  TypeInto(third, 'c');
+  TypeInto(own, 'c');
+  AssertEquals('Return breaks the line in the mimic', 2, third.Lines.Count);
+  AssertEquals('the same document as TTyMemo', own.Lines.Text, third.Lines.Text);
+end;
+
+procedure TTyCustomClassesP1Test.TestInputThirdCheckBoxTogglesOnSpaceAndClick;
+var
+  third: TThirdCheckBox;
+  own: TTyCheckBox;
+begin
+  NeedWidgetSet;
+  third := TThirdCheckBox.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 120, 24);
+  third.HandleNeeded;
+  own := TTyCheckBox.Create(FForm);
+  own.Parent := FForm;
+  own.SetBounds(0, 30, 120, 24);
+  own.HandleNeeded;
+  third.Perform(CN_KEYDOWN, VK_SPACE, 0);
+  own.Perform(CN_KEYDOWN, VK_SPACE, 0);
+  AssertTrue('Space checks the mimic', third.Checked);
+  AssertEquals('as it checks TTyCheckBox', own.Checked, third.Checked);
+  PressAndRelease(third, 5, 10);
+  PressAndRelease(own, 5, 10);
+  AssertFalse('a press + release unchecks it', third.Checked);
+  AssertEquals('as on TTyCheckBox', own.Checked, third.Checked);
+end;
+
+procedure TTyCustomClassesP1Test.TestInputThirdComboBoxStepsOnArrowKeys;
+var
+  third: TThirdComboBox;
+  own: TTyComboBox;
+begin
+  NeedWidgetSet;
+  third := TThirdComboBox.Create(FForm);
+  third.Parent := FForm;
+  third.HandleNeeded;
+  own := TTyComboBox.Create(FForm);
+  own.Parent := FForm;
+  own.HandleNeeded;
+  third.Items.CommaText := 'x,y,z';
+  own.Items.CommaText := 'x,y,z';
+  third.Perform(CN_KEYDOWN, VK_DOWN, 0);
+  third.Perform(CN_KEYDOWN, VK_DOWN, 0);
+  own.Perform(CN_KEYDOWN, VK_DOWN, 0);
+  own.Perform(CN_KEYDOWN, VK_DOWN, 0);
+  AssertEquals('Down twice steps the mimic to the second item', 1, third.ItemIndex);
+  AssertEquals('as on TTyComboBox', own.ItemIndex, third.ItemIndex);
+  third.Perform(CN_KEYDOWN, VK_END, 0);
+  own.Perform(CN_KEYDOWN, VK_END, 0);
+  AssertEquals('End goes to the last item', 2, third.ItemIndex);
+  AssertEquals('End as on TTyComboBox', own.ItemIndex, third.ItemIndex);
+end;
+
+{ A progress bar takes no keys; the click is the only input its family answers. }
+procedure TTyCustomClassesP1Test.TestInputThirdProgressBarClicks;
+var
+  third: TThirdProgressBar;
+  own: TTyProgressBar;
+  a: Integer;
+begin
+  NeedWidgetSet;
+  FForm.HandleNeeded;
+  third := TThirdProgressBar.Create(FForm);
+  third.Parent := FForm;
+  third.SetBounds(0, 0, 120, 20);
+  own := TTyProgressBar.Create(FForm);
+  own.Parent := FForm;
+  own.SetBounds(0, 30, 120, 20);
+  third.OnClick := @CountChange;
+  own.OnClick := @CountChange;
+  FChanges := 0;
+  PressAndRelease(third, 10, 10);
+  a := FChanges;
+  FChanges := 0;
+  PressAndRelease(own, 10, 10);
+  AssertEquals('the progress bar mimic clicks once', 1, a);
+  AssertEquals('as TTyProgressBar does', FChanges, a);
+end;
+
+procedure TTyCustomClassesP1Test.TestInputThirdTrackBarStepsOnArrowKeys;
+var
+  third: TThirdTrackBar;
+  own: TTyTrackBar;
+begin
+  NeedWidgetSet;
+  third := TThirdTrackBar.Create(FForm);
+  third.Parent := FForm;
+  third.HandleNeeded;
+  own := TTyTrackBar.Create(FForm);
+  own.Parent := FForm;
+  own.HandleNeeded;
+  third.Position := 10;
+  own.Position := 10;
+  third.Perform(CN_KEYDOWN, VK_RIGHT, 0);
+  own.Perform(CN_KEYDOWN, VK_RIGHT, 0);
+  AssertTrue('Right moves the mimic', third.Position > 10);
+  AssertEquals('as it moves TTyTrackBar', own.Position, third.Position);
+  third.Perform(CN_KEYDOWN, VK_END, 0);
+  own.Perform(CN_KEYDOWN, VK_END, 0);
+  AssertEquals('End goes to Max', third.Max, third.Position);
+  AssertEquals('End as on TTyTrackBar', own.Position, third.Position);
+end;
+
+initialization
+  RegisterClasses([TThirdNumericEdit, TThirdNumericRange, TThirdEditNoText]);
+  RegisterClasses([TThirdButton, TThirdSpeedButton, TThirdLabel, TThirdTag, TThirdEdit,
+    TThirdMaskEdit, TThirdMemo, TThirdUpDown, TThirdCheckBox, TThirdRadioButton,
+    TThirdComboBox, TIdxButtonGroup, TThirdComboBoxEx, TThirdColorBox, TThirdShellComboBox, TThirdProgressBar,
+    TThirdGauge, TThirdTrackBar]);
+  RegisterTest(TTyCustomClassesP1Test);
+end.

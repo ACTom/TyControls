@@ -199,7 +199,7 @@ procedure TyStepsPreferredSize(ACount, AWidestTitle, ATitleHeight, AMarkerSize, 
 function TyStepsStepIndex(ACurrent, ACount, ADelta: Integer): Integer;
 
 type
-  TTySteps = class(TTyCustomControl)
+  TTyCustomSteps = class(TTyCustomControl)
   private
     FItems: TStrings;
     FStepIndex: Integer;
@@ -276,7 +276,6 @@ type
     function TyStepLayout(AIndex: Integer): TTyStepsLayout;
     { The step at client device (X, Y), or -1 (the strip's padding gutter included). }
     function TyStepAt(X, Y: Integer): Integer;
-  published
     { The steps, one TITLE per line. Title-only, deliberately: Ant's per-step `description`
       would need a second string per item, and the only way to carry one on a TStrings is
       the Objects[] pointer — which would make the host own a heap object per line, leak it
@@ -312,14 +311,71 @@ type
       the same index again is not a change and stays silent. Not fired while the .lfm is
       streaming: loading a form is not a step change. }
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+  end;
+
+  { TTySteps publishes TTyCustomSteps's properties; everything lives in TTyCustomSteps. }
+  TTySteps = class(TTyCustomSteps)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
     { With AutoSize the rail hugs its natural size in BOTH axes: the main axis is one
       natural cell per step, the cross axis the marker + title block. }
     property AutoSize;
-    property Align;
-    property Anchors;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
     property StyleClass;
     property StyleOverride;
     property Controller;
+    property Items;
+    property StepIndex;
+    property ErrorIndex;
+    property Orientation;
+    property Clickable;
+    property OnChange;
+    property Align;
+    property Anchors;
   end;
 
 implementation
@@ -426,7 +482,7 @@ end;
 function TyStepsItemLayout(const ACell: TRect; AVertical, AIsLast: Boolean;
   AMarkerSize, AGap, ATitleHeight, AConnectorGap, AConnectorSize: Integer): TTyStepsLayout;
 var
-  cellW, cellH, blockH, blockT, centreY, centreX: Integer;
+  cellW, cellH, blockH, blockT, centreY, centreX, markLeft: Integer;
   markEnd, markBottom, runLo, runHi, bandLo, bandHi: Integer;
 begin
   Result.MarkerRect := Rect(0, 0, 0, 0);
@@ -478,13 +534,20 @@ begin
     blockH := AMarkerSize + AGap + ATitleHeight;
     blockT := ACell.Top + (cellH - blockH) div 2;
     if blockT < ACell.Top then blockT := ACell.Top;   // a block taller than its cell starts at the top
-    markEnd := ACell.Left + AMarkerSize;
+    { The marker is CENTRED in the cell, because the title under it is centred in the cell:
+      a marker pinned to the cell's left put the number over the title's first character
+      instead of over the title. (The vertical rail above is the other arrangement -- marker
+      beside the title -- and there left is right.) }
+    markLeft := ACell.Left + (cellW - AMarkerSize) div 2;
+    if markLeft < ACell.Left then markLeft := ACell.Left;
+    markEnd := markLeft + AMarkerSize;
     if markEnd > ACell.Right then markEnd := ACell.Right;
     markBottom := blockT + AMarkerSize;
     if markBottom > ACell.Bottom then markBottom := ACell.Bottom;
-    if (markEnd > ACell.Left) and (markBottom > blockT) then
-      Result.MarkerRect := Rect(ACell.Left, blockT, markEnd, markBottom);
+    if (markEnd > markLeft) and (markBottom > blockT) then
+      Result.MarkerRect := Rect(markLeft, blockT, markEnd, markBottom);
     centreY := blockT + AMarkerSize div 2;
+    centreX := markLeft + AMarkerSize div 2;
 
     // --- the title: under the marker, spanning the cell so it ellipsises at the
     //     next step's marker rather than running into it ---------------------------
@@ -497,12 +560,16 @@ begin
         Result.TitleRect := Rect(ACell.Left, runLo, ACell.Right, runHi);
     end;
 
-    // --- the connector: right from the marker, at the MARKER's centre height, so it
-    //     passes above the title instead of through it ----------------------------
+    // --- the connector: from this marker across to the NEXT one, at the MARKER's centre
+    //     height so it passes above the title instead of through it ----------------
     if (not AIsLast) and (AConnectorSize > 0) then
     begin
-      runLo := ACell.Left + AMarkerSize + AConnectorGap;
-      runHi := ACell.Right - AConnectorGap;
+      { Now that the markers sit at their cells' centres, the run between two of them spans
+        the second half of this cell and the first half of the next. Cells tile evenly (see
+        TyStepsCellRect), so the next marker's left edge is one cell width along from this
+        one's -- no need to know the next cell to reach it. }
+      runLo := markEnd + AConnectorGap;
+      runHi := markLeft + cellW - AConnectorGap;
       if (runHi > runLo)
          and StepsBand(centreY, AConnectorSize, ACell.Top, ACell.Bottom, bandLo, bandHi) then
         Result.ConnectorRect := Rect(runLo, bandLo, runHi, bandHi);
@@ -561,9 +628,9 @@ begin
   if Result > ACount - 1 then Result := ACount - 1;
 end;
 
-{ --- TTySteps ------------------------------------------------------------------------- }
+{ --- TTyCustomSteps ------------------------------------------------------------------- }
 
-constructor TTySteps.Create(AOwner: TComponent);
+constructor TTyCustomSteps.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FItems := TStringList.Create;
@@ -580,7 +647,7 @@ begin
   Height := 56;
 end;
 
-destructor TTySteps.Destroy;
+destructor TTyCustomSteps.Destroy;
 begin
   // Drop the change hook before freeing: the list fires OnChange as it clears.
   TStringList(FItems).OnChange := nil;
@@ -588,7 +655,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TTySteps.Loaded;
+procedure TTyCustomSteps.Loaded;
 begin
   inherited Loaded;
   { SetClickable skips the TabStop coupling while csLoading is set, on the theory that the
@@ -605,24 +672,24 @@ begin
   if FClickable then TabStop := True;
 end;
 
-function TTySteps.GetStyleTypeKey: string;
+function TTyCustomSteps.GetStyleTypeKey: string;
 begin
   Result := 'TySteps';
 end;
 
-function TTySteps.Count: Integer;
+function TTyCustomSteps.Count: Integer;
 begin
   Result := FItems.Count;
 end;
 
-function TTySteps.IsVertical: Boolean;
+function TTyCustomSteps.IsVertical: Boolean;
 begin
   Result := FOrientation = soVertical;
 end;
 
 { --- items / cursor ------------------------------------------------------------------- }
 
-procedure TTySteps.Refit;
+procedure TTyCustomSteps.Refit;
 begin
   // Every visual value here is theme-derived, so a change that can move the measured size
   // (a step more, the other orientation) must re-fit an auto-sized rail, not just repaint.
@@ -634,12 +701,12 @@ begin
   if not (csLoading in ComponentState) then Invalidate;
 end;
 
-procedure TTySteps.SetItems(AValue: TStrings);
+procedure TTyCustomSteps.SetItems(AValue: TStrings);
 begin
   FItems.Assign(AValue);   // fires ItemsChanged
 end;
 
-procedure TTySteps.ItemsChanged(Sender: TObject);
+procedure TTyCustomSteps.ItemsChanged(Sender: TObject);
 begin
   { StepIndex is deliberately NOT re-validated here (TTySegmented re-validates its
     ItemIndex at exactly this point). A cursor of 3 on a 3-step rail means "finished", and
@@ -648,7 +715,7 @@ begin
   Refit;
 end;
 
-procedure TTySteps.SetStepIndex(AValue: Integer);
+procedure TTyCustomSteps.SetStepIndex(AValue: Integer);
 begin
   if FStepIndex = AValue then Exit;
   FStepIndex := AValue;
@@ -660,7 +727,7 @@ begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTySteps.SetErrorIndex(AValue: Integer);
+procedure TTyCustomSteps.SetErrorIndex(AValue: Integer);
 begin
   if FErrorIndex = AValue then Exit;
   FErrorIndex := AValue;
@@ -670,7 +737,7 @@ begin
   if not (csLoading in ComponentState) then Invalidate;
 end;
 
-procedure TTySteps.SetOrientation(AValue: TTyStepsOrientation);
+procedure TTyCustomSteps.SetOrientation(AValue: TTyStepsOrientation);
 begin
   if FOrientation = AValue then Exit;
   FOrientation := AValue;
@@ -679,7 +746,7 @@ begin
   Refit;   // the two layouts have completely different natural sizes
 end;
 
-procedure TTySteps.SetClickable(AValue: Boolean);
+procedure TTyCustomSteps.SetClickable(AValue: Boolean);
 begin
   if FClickable = AValue then Exit;
   FClickable := AValue;
@@ -701,7 +768,7 @@ end;
 
 { --- theme metrics -------------------------------------------------------------------- }
 
-function TTySteps.MetricPx(const AName: string; ADefault, APPI: Integer): Integer;
+function TTyCustomSteps.MetricPx(const AName: string; ADefault, APPI: Integer): Integer;
 begin
   if APPI <= 0 then APPI := 96;
   Result := ActiveController.Metric(AName, ADefault);
@@ -711,7 +778,7 @@ begin
   Result := MulDiv(Result, APPI, 96);
 end;
 
-function TTySteps.RestStrip: TTyStyleSet;
+function TTyCustomSteps.RestStrip: TTyStyleSet;
 begin
   // [tysNormal], not CurrentStates: the rail's cell tiling and its measured size must not
   // move because the control took focus or the pointer entered it. (TTySegmented dodges
@@ -722,12 +789,12 @@ end;
 
 { --- state / style -------------------------------------------------------------------- }
 
-function TTySteps.StepStatus(AIndex: Integer): TTyStepStatus;
+function TTyCustomSteps.StepStatus(AIndex: Integer): TTyStepStatus;
 begin
   Result := TyStepStatus(AIndex, FStepIndex, FErrorIndex, FItems.Count);
 end;
 
-function TTySteps.ItemStates(AIndex: Integer): TTyStateSet;
+function TTyCustomSteps.ItemStates(AIndex: Integer): TTyStateSet;
 begin
   Result := TyStepStates(AIndex, FStepIndex, FItems.Count);
   if not Enabled then
@@ -753,7 +820,7 @@ begin
     focusable control here. }
 end;
 
-function TTySteps.StepVariant(AIndex: Integer): string;
+function TTyCustomSteps.StepVariant(AIndex: Integer): string;
 begin
   // The 'error' token goes FIRST and the user's StyleClass after it, so ResolveLayer (which
   // applies variant tokens in textual order, later token winning per property) lets an
@@ -768,13 +835,13 @@ begin
     Result := TyStepsErrorVariant + ' ' + Result;
 end;
 
-function TTySteps.ItemStyle(AIndex: Integer): TTyStyleSet;
+function TTyCustomSteps.ItemStyle(AIndex: Integer): TTyStyleSet;
 begin
   Result := ActiveController.Model.ResolveStyle('TyStepsItem', StepVariant(AIndex),
     ItemStates(AIndex));
 end;
 
-function TTySteps.TitleStyle(AIndex: Integer): TTyStyleSet;
+function TTyCustomSteps.TitleStyle(AIndex: Integer): TTyStyleSet;
 var
   st: TTyStateSet;
 begin
@@ -793,7 +860,7 @@ begin
   Result := ActiveController.Model.ResolveStyle('TyStepsItem', StepVariant(AIndex), st);
 end;
 
-function TTySteps.ConnectorStyle(AIndex: Integer): TTyStyleSet;
+function TTyCustomSteps.ConnectorStyle(AIndex: Integer): TTyStyleSet;
 begin
   { The connector after step AIndex takes the states of the step it LEADS TO, not of the one
     it leaves. That single choice is what makes the trail light up exactly as far as the
@@ -812,7 +879,7 @@ begin
     ItemStates(AIndex + 1));
 end;
 
-function TTySteps.InheritText(const AStrip, AStep: TTyStyleSet): TTyStyleSet;
+function TTyCustomSteps.InheritText(const AStrip, AStep: TTyStyleSet): TTyStyleSet;
 { A step's ink and font: its own where TyStepsItem sets them, the STRIP's otherwise. This is
   the house degradation rule (no colour => inherit the parent's ink) extended to the font by
   the same logic — a theme that styles only TySteps must still get legible, correctly-sized
@@ -843,7 +910,7 @@ end;
 
 { --- measurement ---------------------------------------------------------------------- }
 
-function TTySteps.LineHeightWith(APainter: TTyPainter; const AStyle: TTyStyleSet): Integer;
+function TTyCustomSteps.LineHeightWith(APainter: TTyPainter; const AStyle: TTyStyleSet): Integer;
 begin
   // A stable reference glyph: an empty title still sizes its band to a line.
   Result := APainter.MeasureText('Ag', AStyle.FontName, ResolveFontSize(AStyle),
@@ -851,7 +918,7 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-procedure TTySteps.MeasureTitles(APPI: Integer; out AWidestPx, ALineHeightPx: Integer);
+procedure TTyCustomSteps.MeasureTitles(APPI: Integer; out AWidestPx, ALineHeightPx: Integer);
 { Measures with a CANVAS-LESS painter — the TTyBadge / TTyAlert idiom: BeginPaint(nil, ...)
   builds only the painter's internal bitmap and EndPaint frees it WITHOUT blitting, so this
   is safe outside a paint cycle and leaks nothing. It has to be the painter and not an LCL
@@ -888,7 +955,7 @@ begin
   if ALineHeightPx < 1 then ALineHeightPx := 1;
 end;
 
-procedure TTySteps.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+procedure TTyCustomSteps.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
   WithThemeSpace: Boolean);
 var
   stripS: TTyStyleSet;
@@ -910,7 +977,7 @@ end;
 
 { --- geometry ------------------------------------------------------------------------- }
 
-function TTySteps.TyStepRect(AIndex: Integer): TRect;
+function TTyCustomSteps.TyStepRect(AIndex: Integer): TRect;
 var
   stripS: TTyStyleSet;
   ppi: Integer;
@@ -923,7 +990,7 @@ begin
     MulDiv(stripS.Padding.Right, ppi, 96), MulDiv(stripS.Padding.Bottom, ppi, 96));
 end;
 
-function TTySteps.TyStepLayout(AIndex: Integer): TTyStepsLayout;
+function TTyCustomSteps.TyStepLayout(AIndex: Integer): TTyStepsLayout;
 var
   P: TTyPainter;
   ppi, lineH: Integer;
@@ -952,7 +1019,7 @@ begin
     MetricPx(TyStepsConnectorSizeVar, TyStepsConnectorSize, ppi));
 end;
 
-function TTySteps.TyStepAt(X, Y: Integer): Integer;
+function TTyCustomSteps.TyStepAt(X, Y: Integer): Integer;
 var
   stripS: TTyStyleSet;
   ppi: Integer;
@@ -967,7 +1034,7 @@ end;
 
 { --- input ---------------------------------------------------------------------------- }
 
-procedure TTySteps.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomSteps.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   hit: Integer;
 begin
@@ -983,7 +1050,7 @@ begin
   if hit >= 0 then StepIndex := hit;
 end;
 
-procedure TTySteps.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomSteps.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   hit: Integer;
 begin
@@ -999,7 +1066,7 @@ begin
   end;
 end;
 
-procedure TTySteps.MouseLeave;
+procedure TTyCustomSteps.MouseLeave;
 begin
   inherited MouseLeave;   // clears the strip's own hover
   if FHoverIndex <> -1 then
@@ -1009,7 +1076,7 @@ begin
   end;
 end;
 
-procedure TTySteps.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomSteps.KeyDown(var Key: Word; Shift: TShiftState);
 var
   back, fwd: Word;
 begin
@@ -1055,10 +1122,11 @@ end;
 
 { --- painting ------------------------------------------------------------------------- }
 
-procedure TTySteps.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomSteps.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, markS, markTxtS, titleS, connS: TTyStyleSet;
+  titleAlign: TAlignment;
   R, cellR: TRect;
   lay: TTyStepsLayout;
   i, lineH, markerPx, gapPx, connGapPx, connSizePx: Integer;
@@ -1163,8 +1231,13 @@ begin
       if lay.TitleRect.Right > lay.TitleRect.Left then
       begin
         titleS := InheritText(S, TitleStyle(i));
+        { Horizontal rails stack the title UNDER its marker, and both are centred in the
+          cell, so the text is centred too -- left-justifying it here is what used to leave
+          the number sitting over the title's first character. The vertical rail puts the
+          title BESIDE its marker, where left-justified is the whole point. }
+        if IsVertical then titleAlign := taLeftJustify else titleAlign := taCenter;
         P.DrawText(lay.TitleRect, FItems[i], titleS.FontName, ResolveFontSize(titleS),
-          titleS.FontWeight, titleS.TextColor, taLeftJustify, tlCenter, True);
+          titleS.FontWeight, titleS.TextColor, titleAlign, tlCenter, True);
       end;
     end;
 
@@ -1174,7 +1247,7 @@ begin
   end;
 end;
 
-procedure TTySteps.Paint;
+procedure TTyCustomSteps.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

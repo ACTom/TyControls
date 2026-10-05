@@ -41,7 +41,7 @@ uses tyControls.ProgressBar;
 | `Align` | `TAlign` | — | 父容器内的停靠方式。 |
 | `Anchors` | `TAnchors` | — | 锚点布局。 |
 | `StyleClass` | `string` | `''` | CSS 变体类名。 |
-| `Controller` | `TTyStyleController` | `nil`（全局默认） | 关联的样式控制器。 |
+| `Controller` | `TTyCustomStyleController` | `nil`（全局默认） | 关联的样式控制器。 |
 
 > **注意：** `TTyProgressBar` 本身无键盘 / 鼠标交互（纯展示控件），但**（API parity 新增）** 现提供 `OnChange` 事件，于 `Position` / `Min` / `Max` 实际变化时触发。它继承自 `TTyGraphicControl`，因此仅暴露 **Tier A** 基线事件（鼠标 / 通用），**无** Tier B 键盘 / 焦点事件——见 [../events.md](../events.md)。
 

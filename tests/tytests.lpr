@@ -3,14 +3,14 @@ program tytests;
 {$mode objfpc}{$H+}
 
 uses
-  Interfaces, consoletestrunner, tyControls.Painter, tyControls.Controller,
+  Interfaces, consoletestrunner, Graphics, Forms, tyControls.Painter, tyControls.Controller,
   tyControls.Calendar,
   test.Types, test.Css.Tokens, test.Css.Lexer, test.Css.Parser,
   test.Css.Values, test.StyleModel, test.accent, test.gradient, test.bevelborder, test.nineslice, test.metric, test.glyph, test.skins, test.fontcascade, test.darktext, test.painter, test.controller,
   test.controller.hotreload, test.base,
   test.baseevents,
   test.eventfiring,
-  test.base.drawframe, test.formgradientbg, test.button, test.skinfit, test.englishfit, test.utf8, test.designeditors, test.focus.tabstop, test.tylabel, test.edit, test.edit.word, test.edit.undo, test.numericedit, test.currencyedit, test.maskedit, test.urledit, test.comboedit, test.trackedit, test.colorbox, test.colorcombobox, test.colorlistbox, test.fontcombobox, test.fontlistbox, test.fontsizecombobox, test.checklistbox,
+  test.base.drawframe, test.formgradientbg, test.button, test.skinfit, test.englishfit, test.utf8, test.designeditors, test.focus.tabstop, test.tylabel, test.edit, test.edit.word, test.edit.undo, test.numericedit, test.currencyedit, test.maskedit, test.urledit, test.comboedit, test.trackedit, test.colorbox, test.colorcombobox, test.colorlistbox, test.fontcombobox, test.fontlistbox, test.fontfamilies, test.fontsizecombobox, test.checklistbox,
   test.mrucombobox, test.comboboxex, test.officelistbox, test.officecombobox, test.colorgrid, test.lcolorpicker,
   test.hscolorpicker, test.advancedlistbox, test.advancedcombobox, test.checkcombobox, test.valuelisteditor,
   test.calculator, test.calcedit,
@@ -23,7 +23,10 @@ uses
   test.listgrouppanel.editor, test.structureeditors,
   test.checkbox,
   test.radiobutton, test.controls.panel, test.controls.combobox,
-  test.controls.scrollbar, test.form, test.formsurface, test.edgepassthrough, test.release, test.themes,
+  test.controls.scrollbar,
+  test.scrollbar.autohide,
+  test.scrollbar.hostframe,
+  test.form, test.titlebar.menuicon, test.formsurface, test.formsurface.cache, test.newproject, test.edgepassthrough, test.release, test.themes,
   test.listbox, test.listbox.scroll,
   test.progressbar,
   test.toggleswitch,
@@ -31,7 +34,7 @@ uses
   test.groupbox,
   test.tabstrip, test.tabstrip.axis, test.tabstrip.multiline,
   test.defaulttheme, test.spinedit, test.memo, test.memo.selection, test.memo.undo,
-  test.floatspinedit,
+  test.floatspinedit, test.spinbuttons, test.freewhileownerlives, test.danglingrefs, test.translatable, test.componentleaks, test.examplelfm,
   test.memo.props,
   test.memo.visualrows,
   test.memo.hscroll,
@@ -165,6 +168,15 @@ uses
   test.advchart.series,
   test.advchart.style,
   test.advancechart,
+  test.unicode.width,
+  test.terminal.oracle, test.terminal.parser, test.terminal.buffer, test.terminal.core,
+  test.terminal.keyboard, test.terminal.render, test.terminal.view, test.terminal.view.paint,
+  test.terminal.view.input, test.terminal.view.theme, test.terminal.example,
+  test.terminal.selection, test.terminal.links, test.terminal.view.mouse,
+  test.terminal.view.links, test.terminal.pty, test.terminal.reflow, test.terminal.perf,
+  test.terminal.colorscheme, test.terminal.view.scheme,
+  test.terminal.stream, test.terminal.hooks, test.terminal.view.stream, test.terminal.zmodem, test.terminal.zmodem.wsl,
+  test.terminal.view.flicker,
   test.transitions,
   test.htmllabel,
   test.shape,
@@ -194,8 +206,40 @@ uses
   test.alert, test.notification, test.empty, test.segmented,
   test.pagination, test.steps, test.breadcrumb, test.transfer,
   test.treeselect, test.cascader, test.popover,
-  test.dpi.fontlatch,
-  test.parity.datetime;
+  test.toolwindow.geometry, test.toolwindow.theme, test.toolwindow.window,
+  test.toolwindow.actions, test.toolwindow.bar, test.toolwindow.images,
+  test.toolwindow.focus, test.toolwindow.strip, test.toolwindow.edge,
+  test.toolwindow.reorder, test.toolwindow.bottom, test.toolwindow.manager,
+  test.toolwindow.crossdrag, test.toolwindow.layouttext, test.toolwindow.layoutapply,
+  test.toolwindow.design, test.toolwindow.disabled, test.toolwindow.badge,
+  test.toolwindow.hide,
+  test.dpi.fontlatch, test.dpi.measurefont, test.dpi.containers, test.dpi.controls,
+  test.dpi.dialogs, test.dpi.snapshot,
+  test.parity.datetime,
+  test.themebuilder.golden,
+  test.themebuilder.parser,
+  test.themebuilder.lint,
+  test.themebuilder.editkit,
+  test.themebuilder.doc,
+  test.themebuilder.problems,
+  test.themebuilder.preview,
+  test.themebuilder.main,
+  test.themebuilder.scan,
+  test.themebuilder.seeds,
+  test.themebuilder.pick,
+  test.themebuilder.export,
+  test.themebuilder.snippets,
+  test.themebuilder.http,
+  test.themebuilder.sse,
+  test.themebuilder.aiclient,
+  test.themebuilder.reference,
+  test.themebuilder.diff,
+  test.themebuilder.aisession,
+  test.themebuilder.compare,
+  test.themebuilder.edit,
+  test.customclasses, test.customclasses.p1, test.customclasses.p2, test.customclasses.p3,
+  test.customclasses.p4,
+  test.typekeychain;
 
 type
   TTyTestRunner = class(TTestRunner)
@@ -234,6 +278,16 @@ begin
   // restore, as test.chart does for the numeric separators. Both knobs are
   // plain globals precisely so tests can inject them.
   TyLocaleFirstDayOfWeek := wdSunday;
+  // FOURTH: the SCREEN. LCL creates every TFont at ScreenInfo's PPI, a form built with
+  // CreateNew keeps the one it was born with, and its ParentFont children take it over --
+  // so the screen decides the PPI of every control a test did not pin. Nothing in this
+  // console process ever initialises ScreenInfo, which left it at the LCL default of 72:
+  // a desktop nobody has, on which every unpinned form laid itself out at 75%. Make it the
+  // 96-PPI desktop the expectations in these suites are written for. A test that is ABOUT
+  // another scaling sets these itself and puts them back (tests/test.dpi.measurefont).
+  ScreenInfo.PixelsPerInchX := 96;
+  ScreenInfo.PixelsPerInchY := 96;
+  Screen.UpdateScreen;
   Application := TTyTestRunner.Create(nil);
   Application.Initialize;
   Application.Title := 'TyControls Test Runner';

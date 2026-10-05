@@ -21,7 +21,7 @@ type
     procedure AvailableIsTrueWithJustAFamily;
     procedure AvailableIsFalseAndLoadErrorNamesTheMissingFile;
     procedure LoadErrorClearsWhenTheFileIsCleared;
-    procedure VersionBumpsOnMapFamilyAndFile;
+    procedure ChangeStampBumpsOnMapFamilyAndFile;
     procedure ChangeHandlerFiresAndCanBeRemoved;
     procedure ChangeHandlersDropAFreedObject;
     procedure LookupIsCaseInsensitive;
@@ -192,20 +192,20 @@ begin
   finally f.Free; end;
 end;
 
-procedure TIconFontTest.VersionBumpsOnMapFamilyAndFile;
+procedure TIconFontTest.ChangeStampBumpsOnMapFamilyAndFile;
 var f: TTyIconFont; v0, v1, v2: Integer;
 begin
   f := TTyIconFont.Create(nil);
   try
-    v0 := f.Version;
+    v0 := f.ChangeStamp;
     f.MapGlyph('save', $F0C7);
-    v1 := f.Version;
+    v1 := f.ChangeStamp;
     AssertTrue('the map changed', v1 > v0);
     f.FontFamily := 'TestIcons';
-    v2 := f.Version;
+    v2 := f.ChangeStamp;
     AssertTrue('the family changed', v2 > v1);
     f.FontFile := 'Z:' + PathDelim + 'nope.ttf';
-    AssertTrue('the file changed', f.Version > v2);
+    AssertTrue('the file changed', f.ChangeStamp > v2);
   finally f.Free; end;
 end;
 
@@ -238,7 +238,7 @@ begin
     f.RemoveAllHandlersOfObject(spy);
     FreeAndNil(spy);
     f.MapGlyph('save', $F0C7);   { must not touch the dead observer }
-    AssertTrue('survived a change after the observer was freed', f.Version > 0);
+    AssertTrue('survived a change after the observer was freed', f.ChangeStamp > 0);
   finally spy.Free; f.Free; end;
 end;
 

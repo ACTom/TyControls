@@ -107,6 +107,10 @@ type
     procedure Invalidate; override;
     function ClientTopInset: Integer;
     property Repaints: Integer read FRepaints write FRepaints;
+  published
+    { TTyCustomTabStrip publishes nothing since 4.0 (TCustomTabControl keeps TabHeight public);
+      a probe that streams it publishes it itself, as any descendant of the strip does. }
+    property TabHeight;
   end;
 
   TTabHeightSentinelTest = class(TTestCase)

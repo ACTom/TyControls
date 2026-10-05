@@ -479,7 +479,7 @@ object MainForm: TMainForm
           Caption = 'Form / entry'
           object CardForm: TTyCard
             Left = 12
-            Height = 690
+            Height = 708
             Top = 12
             Width = 514
             TabOrder = 0
@@ -651,7 +651,7 @@ object MainForm: TMainForm
             object BtnSubmit: TTyButton
               Left = 12
               Height = 40
-              Top = 642
+              Top = 657
               Width = 88
               TabOrder = 10
               OnClick = SubmitClick
@@ -661,7 +661,7 @@ object MainForm: TMainForm
             object BtnReset: TTyButton
               Left = 108
               Height = 40
-              Top = 642
+              Top = 657
               Width = 88
               TabOrder = 11
               OnClick = ResetClick
@@ -835,22 +835,22 @@ object MainForm: TMainForm
               Left = 12
               Height = 38
               Top = 74
-              Width = 110
+              Width = 114
               TabOrder = 0
               OnClick = MsgClick
               Caption = 'Message prompt'
             end
             object BtnConfirm: TTyButton
-              Left = 130
+              Left = 134
               Height = 38
               Top = 74
-              Width = 110
+              Width = 114
               TabOrder = 1
               OnClick = ConfirmClick
               Caption = 'Confirm dialog'
             end
             object BtnInput: TTyButton
-              Left = 248
+              Left = 256
               Height = 38
               Top = 74
               Width = 110
@@ -916,22 +916,24 @@ object MainForm: TMainForm
           end
           object CardInline: TTyCard
             Left = 12
-            Height = 348
+            Height = 468
             Top = 294
             Width = 514
             TabOrder = 2
             Title = 'Inline alert bar (TTyAlert)'
             object AlertInfo: TTyAlert
               Left = 12
-              Height = 40
+              Height = 57
               Top = 74
+              AutoSize = True
               Width = 490
               Message = 'The system will undergo routine maintenance tonight from 23:00 to 23:30.'
             end
             object AlertSuccess: TTyAlert
               Left = 12
-              Height = 40
-              Top = 122
+              Height = 57
+              Top = 141
+              AutoSize = True
               Width = 490
               AlertType = atSuccess
               Message = 'Work order TY-2041 published.'
@@ -940,8 +942,9 @@ object MainForm: TMainForm
             end
             object AlertWarning: TTyAlert
               Left = 12
-              Height = 56
-              Top = 170
+              Height = 93
+              Top = 208
+              AutoSize = True
               Width = 490
               AlertType = atWarning
               Message = 'Archive disk usage has reached 86%'
@@ -949,8 +952,9 @@ object MainForm: TMainForm
             end
             object AlertError: TTyAlert
               Left = 12
-              Height = 40
-              Top = 234
+              Height = 57
+              Top = 311
+              AutoSize = True
               Width = 490
               AlertType = atError
               Message = 'The connection to the settlement service has been lost.'
@@ -960,7 +964,7 @@ object MainForm: TMainForm
             object LblAlertNote: TTyLabel
               Left = 12
               Height = 66
-              Top = 282
+              Top = 378
               Width = 490
               Caption = 'The alert bar stays on the page without interrupting; each of the four meanings picks its own icon + theme variant. Clicking × fires OnClose first, and it only hides if not vetoed.'
               Layout = tlTop
@@ -978,13 +982,13 @@ object MainForm: TMainForm
               Left = 12
               Height = 38
               Top = 74
-              Width = 126
+              Width = 135
               TabOrder = 0
               OnClick = ToastClick
               Caption = 'Show notification'
             end
             object BtnToastErr: TTyButton
-              Left = 149
+              Left = 158
               Height = 38
               Top = 74
               Width = 150
@@ -1045,14 +1049,14 @@ object MainForm: TMainForm
                 Left = 10
                 Height = 38
                 Top = 70
-                Width = 114
+                Width = 121
                 TabOrder = 0
                 OnClick = PopOkClick
                 StyleClass = 'primary'
                 Caption = 'Confirm publish'
               end
               object BtnPopCancel: TTyButton
-                Left = 134
+                Left = 141
                 Height = 38
                 Top = 70
                 Width = 96

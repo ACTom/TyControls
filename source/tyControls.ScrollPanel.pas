@@ -1,8 +1,8 @@
 unit tyControls.ScrollPanel;
 {$mode objfpc}{$H+}
 
-// TTyScrollPanel — an auto-panning scroll container. It is a THIN subclass of
-// TTyScrollBox (the batch's scrolling container): it inherits the whole viewport
+// TTyScrollPanel — an auto-panning scroll container. It is a THIN descendant of
+// TTyCustomScrollBox (the batch's scrolling container): it inherits the whole viewport
 // + embedded-scrollbar + child-offset machinery and adds ONE behaviour — edge
 // AUTO-PAN. While the user drags (a rubber-band, a moved child, a drag-and-drop
 // payload) and the pointer enters an EdgeMargin band next to a viewport edge, the
@@ -15,7 +15,7 @@ unit tyControls.ScrollPanel;
 // ticks it and the drag/DnD wiring that feeds it a live pointer are real-machine
 // (a TTimer drives AutoPanTick at runtime; see the notes at the bottom).
 //
-// typeKey: inherited 'TyScrollBox' (GetStyleTypeKey NOT overridden past TTyScrollBox).
+// typeKey: inherited 'TyScrollBox' (GetStyleTypeKey NOT overridden past TTyCustomScrollBox).
 // An auto-panning scroll panel IS a scroll well — it adds a gesture, not a surface — so
 // it deliberately shares the well's key and restyles with it.
 
@@ -33,7 +33,7 @@ const
   TyAutoPanIntervalMs  = 16;   // ~60fps auto-pan timer tick
 
 type
-  TTyScrollPanel = class(TTyScrollBox)
+  TTyCustomScrollPanel = class(TTyCustomScrollBox)
   private
     FAutoPan: Boolean;
     FEdgeMargin: Integer;
@@ -76,9 +76,8 @@ type
     procedure StopAutoPan;
     { True while the auto-pan timer is live. }
     property AutoPanActive: Boolean read FAutoPanActive;
-  published
     { Master switch for the EDGE AUTO-PAN. When False AutoPanTo is a no-op (the panel
-      still scrolls by wheel / scrollbar exactly like its TTyScrollBox base). Default True.
+      still scrolls by wheel / scrollbar exactly like a TTyScrollBox). Default True.
 
       BREAKING: this was called AutoScroll. On every scrolling container in the LCL,
       AutoScroll means "manage the scrollbars automatically" -- a completely different
@@ -94,6 +93,82 @@ type
       edge; the delta ramps from 0 at the band's inner boundary up to this. Default 16. }
     property MaxSpeed: Integer read FMaxSpeed write SetMaxSpeed
       default TyAutoPanMaxSpeed;
+  end;
+
+  { TTyScrollPanel publishes TTyCustomScrollPanel's properties; everything lives in TTyCustomScrollPanel. }
+  TTyScrollPanel = class(TTyCustomScrollPanel)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Caption;
+    property Alignment;
+    property VerticalAlignment;
+    property WordWrap;
+    property ShowAccelChar;
+    property DockSite;
+    property UseDockManager;
+    property OnDockDrop;
+    property OnDockOver;
+    property OnUnDock;
+    property OnGetSiteInfo;
+    property OnGetDockCaption;
+    property OnStartDock;
+    property OnEndDock;
+    property Align;
+    property Anchors;
+    property OnConstrainedResize;
+    property ScrollBarAutoHide;
+    property AutoPan;
+    property EdgeMargin;
+    property MaxSpeed;
   end;
 
 { TyEdgeAutoPan — the pure auto-pan kernel (headless-tested).
@@ -178,9 +253,9 @@ begin
     AEdgeMargin, AMaxSpeed);
 end;
 
-{ ---- TTyScrollPanel ------------------------------------------------------- }
+{ ---- TTyCustomScrollPanel ------------------------------------------------- }
 
-constructor TTyScrollPanel.Create(AOwner: TComponent);
+constructor TTyCustomScrollPanel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FAutoPan := True;
@@ -190,7 +265,7 @@ begin
   FPanTimer := nil;
 end;
 
-destructor TTyScrollPanel.Destroy;
+destructor TTyCustomScrollPanel.Destroy;
 begin
   // FPanTimer is owned by Self, but free it explicitly first so its OnTimer can
   // never fire mid-teardown (mirrors TTyScrollBar's timer teardown).
@@ -198,40 +273,40 @@ begin
   inherited Destroy;
 end;
 
-procedure TTyScrollPanel.SetEdgeMargin(AValue: Integer);
+procedure TTyCustomScrollPanel.SetEdgeMargin(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   if FEdgeMargin = AValue then Exit;
   FEdgeMargin := AValue;
 end;
 
-procedure TTyScrollPanel.SetMaxSpeed(AValue: Integer);
+procedure TTyCustomScrollPanel.SetMaxSpeed(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   if FMaxSpeed = AValue then Exit;
   FMaxSpeed := AValue;
 end;
 
-procedure TTyScrollPanel.SetAutoPan(AValue: Boolean);
+procedure TTyCustomScrollPanel.SetAutoPan(AValue: Boolean);
 begin
   if FAutoPan = AValue then Exit;
   FAutoPan := AValue;
   if not FAutoPan then StopAutoPan;   // turning it off stops any live pan
 end;
 
-function TTyScrollPanel.ScaledEdgeMargin: Integer;
+function TTyCustomScrollPanel.ScaledEdgeMargin: Integer;
 begin
   Result := MulDiv(FEdgeMargin, Font.PixelsPerInch, 96);
   if Result < 0 then Result := 0;
 end;
 
-function TTyScrollPanel.ScaledMaxSpeed: Integer;
+function TTyCustomScrollPanel.ScaledMaxSpeed: Integer;
 begin
   Result := MulDiv(FMaxSpeed, Font.PixelsPerInch, 96);
   if Result < 0 then Result := 0;
 end;
 
-function TTyScrollPanel.AutoPanViewport: TRect;
+function TTyCustomScrollPanel.AutoPanViewport: TRect;
 begin
   // The scrollable client area, in client coords (same space as the pointer that
   // AutoPanTo is fed). ClientRect is the natural viewport; a subclass narrows it
@@ -245,7 +320,7 @@ begin
   Types.OffsetRect(Result, LeadingInset, 0);
 end;
 
-function TTyScrollPanel.ApplyAutoPanDelta(ADx, ADy: Integer): Boolean;
+function TTyCustomScrollPanel.ApplyAutoPanDelta(ADx, ADy: Integer): Boolean;
 var
   ox, oy: Integer;
 begin
@@ -258,7 +333,7 @@ begin
   Result := (ScrollX <> ox) or (ScrollY <> oy);
 end;
 
-function TTyScrollPanel.AutoPanStep(const AClientPos: TPoint): Boolean;
+function TTyCustomScrollPanel.AutoPanStep(const AClientPos: TPoint): Boolean;
 var
   d: TPoint;
 begin
@@ -269,7 +344,7 @@ begin
   Result := ApplyAutoPanDelta(d.X, d.Y);
 end;
 
-procedure TTyScrollPanel.EnsurePanTimer;
+procedure TTyCustomScrollPanel.EnsurePanTimer;
 begin
   if FPanTimer = nil then
   begin
@@ -280,7 +355,7 @@ begin
   end;
 end;
 
-procedure TTyScrollPanel.PanTimerTick(Sender: TObject);
+procedure TTyCustomScrollPanel.PanTimerTick(Sender: TObject);
 begin
   // Keep panning from the last pointer position. If the pointer has left every edge
   // band the step yields (0,0): we DON'T stop the timer here (the drag is still live
@@ -290,7 +365,7 @@ begin
   AutoPanStep(FLastPanPos);
 end;
 
-procedure TTyScrollPanel.AutoPanTo(const AClientPos: TPoint);
+procedure TTyCustomScrollPanel.AutoPanTo(const AClientPos: TPoint);
 var
   d: TPoint;
 begin
@@ -314,7 +389,7 @@ begin
       FPanTimer.Enabled := False;
 end;
 
-procedure TTyScrollPanel.StopAutoPan;
+procedure TTyCustomScrollPanel.StopAutoPan;
 begin
   FAutoPanActive := False;
   if FPanTimer <> nil then

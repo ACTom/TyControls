@@ -21,7 +21,7 @@ type
     procedure AddRow(const AText: string; ASize, AWeight: Integer; ALink: Boolean);
     procedure DoLayout;                       // (re)build FRows for the current fields + size the form
     function  BandHeight: Integer;
-    function  EffectiveController: TTyStyleController;   // Controller, else the global default (nil-safe)
+    function  EffectiveController: TTyCustomStyleController;   // Controller, else the global default (nil-safe)
   protected
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -48,7 +48,7 @@ type
     the design-time editor registered for (string, TTyComponent, 'Version') attach to
     this app-version field and pop the TyControls About box from it, which is exactly
     backwards. The name belongs to the app here, so this class stays on TComponent. }
-  TTyAboutDialog = class(TComponent)
+  TTyCustomAboutDialog = class(TComponent)
   private
     FTitle, FAppName, FVersion, FDescription, FCopyright, FLicense, FHomepage: string;
     FOnShow: TNotifyEvent;
@@ -56,11 +56,10 @@ type
     FOnCanClose: TCloseQueryEvent;
   public
     procedure Execute;
-  published
     property Title: TCaption read FTitle write FTitle;
     property AppName: string read FAppName write FAppName;
     property Version: string read FVersion write FVersion;
-    property Description: string read FDescription write FDescription;
+    property Description: TCaption read FDescription write FDescription;
     property Copyright: string read FCopyright write FCopyright;
     property License: string read FLicense write FLicense;
     property Homepage: string read FHomepage write FHomepage;
@@ -69,8 +68,25 @@ type
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
   end;
 
+  { TTyAboutDialog publishes TTyCustomAboutDialog's properties; everything lives in TTyCustomAboutDialog. }
+  TTyAboutDialog = class(TTyCustomAboutDialog)
+  published
+    property Title;
+    property AppName;
+    property Version;
+    property Description;
+    property Copyright;
+    property License;
+    property Homepage;
+    property OnShow;
+    property OnClose;
+    property OnCanClose;
+  end;
+
 implementation
 
+{ 96-PPI design numbers. The lengths go through Px where they are used (see TTyDialog.Px);
+  the font sizes do not -- the painter takes a logical size and scales it itself. }
 const
   cAboutW   = 380;   // fixed content width (like the other dialogs' fixed geometry)
   cBandPadV = 14;    // band top/bottom padding
@@ -95,7 +111,7 @@ begin
   AddButton(rsMsgBtnClose, mrCancel, True, True);   // Close = default + cancel (Enter/Esc/X)
 end;
 
-function TTyAboutForm.EffectiveController: TTyStyleController;
+function TTyAboutForm.EffectiveController: TTyCustomStyleController;
 begin
   Result := Controller;
   if Result = nil then Result := TyDefaultController;
@@ -103,8 +119,8 @@ end;
 
 function TTyAboutForm.BandHeight: Integer;
 begin
-  Result := 2 * cBandPadV + cNameH;
-  if FVersion <> '' then Inc(Result, cVerH);
+  Result := 2 * Px(cBandPadV) + Px(cNameH);
+  if FVersion <> '' then Inc(Result, Px(cVerH));
 end;
 
 procedure TTyAboutForm.AddRow(const AText: string; ASize, AWeight: Integer; ALink: Boolean);
@@ -140,9 +156,9 @@ begin
 
   contentH := BandHeight;
   if Length(FRows) > 0 then
-    contentH := contentH + cHeadGap + Length(FRows) * cRowH + (Length(FRows) - 1) * cBodyGap;
-  contentH := contentH + cBotPad;
-  AutoSizeToContent(cAboutW, contentH);
+    contentH := contentH + Px(cHeadGap) + Length(FRows) * Px(cRowH) + (Length(FRows) - 1) * Px(cBodyGap);
+  contentH := contentH + Px(cBotPad);
+  AutoSizeToContent(Px(cAboutW), contentH);
 end;
 
 function TTyAboutForm.RowCount: Integer;
@@ -207,9 +223,9 @@ begin
     if nm = '' then nm := Caption;
     if FVersion <> '' then
     begin
-      P.DrawText(Rect(band.Left, band.Top + cBandPadV, band.Right, band.Top + cBandPadV + cNameH),
+      P.DrawText(Rect(band.Left, band.Top + Px(cBandPadV), band.Right, band.Top + Px(cBandPadV) + Px(cNameH)),
         nm, Font.Name, cNameSz, 700, onAccent, taCenter, tlCenter, True);
-      P.DrawText(Rect(band.Left, band.Bottom - cBandPadV - cVerH, band.Right, band.Bottom - cBandPadV),
+      P.DrawText(Rect(band.Left, band.Bottom - Px(cBandPadV) - Px(cVerH), band.Right, band.Bottom - Px(cBandPadV)),
         FVersion, Font.Name, cVerSz, 400, onAccent, taCenter, tlCenter, True);
     end
     else
@@ -217,10 +233,10 @@ begin
 
     { Body rows. }
     FLinkRect := Rect(0, 0, 0, 0);
-    y := r.Top + BandHeight + cHeadGap;
+    y := r.Top + BandHeight + Px(cHeadGap);
     for i := 0 to High(FRows) do
     begin
-      rowR := Rect(r.Left + cBotPad, y, r.Right - cBotPad, y + cRowH);
+      rowR := Rect(r.Left + Px(cBotPad), y, r.Right - Px(cBotPad), y + Px(cRowH));
       if FRows[i].Link then
       begin
         P.DrawText(rowR, FRows[i].Text, Font.Name, FRows[i].Size, FRows[i].Weight,
@@ -229,7 +245,7 @@ begin
         tw := P.MeasureText(FRows[i].Text, Font.Name, FRows[i].Size, FRows[i].Weight).cx;
         if tw > (rowR.Right - rowR.Left) then tw := rowR.Right - rowR.Left;
         lx := (rowR.Left + rowR.Right - tw) div 2;
-        uy := rowR.Bottom - 3;
+        uy := rowR.Bottom - Px(3);
         fill.Color := accent;
         P.FillBackground(Rect(lx, uy, lx + tw, uy + 1), fill, TyUniformCorners(0));
         FLinkRect := rowR;
@@ -237,7 +253,7 @@ begin
       else
         P.DrawText(rowR, FRows[i].Text, Font.Name, FRows[i].Size, FRows[i].Weight,
           bodyCol, taCenter, tlCenter, True);
-      Inc(y, cRowH + cBodyGap);
+      Inc(y, Px(cRowH) + Px(cBodyGap));
     end;
 
     P.EndPaint;
@@ -284,9 +300,9 @@ begin
   end;
 end;
 
-{ TTyAboutDialog }
+{ TTyCustomAboutDialog }
 
-procedure TTyAboutDialog.Execute;
+procedure TTyCustomAboutDialog.Execute;
 var d: TTyAboutForm;
 begin
   d := TyBuildAboutDialog(FTitle, FAppName, FVersion, FDescription, FCopyright, FLicense, FHomepage);

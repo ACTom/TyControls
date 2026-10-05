@@ -3,7 +3,9 @@
 # The built-in default theme (TyBuiltinThemeCss) must equal light.tycss byte-for-byte
 # (enforced by test.defaulttheme's sync test). This makes light.tycss the SINGLE
 # SOURCE: edit light.tycss, then re-run this script — DefaultTheme.pas is generated,
-# never hand-maintained. Run from the repo root: powershell -File scripts/gen-defaulttheme.ps1
+# never hand-maintained. Run from anywhere: powershell -File scripts/gen-defaulttheme.ps1 --
+# the paths are the repository this script lives in (see gen-builtinthemes.ps1 for why relative
+# ones were not safe: [IO.File] resolves them against the process's directory, not Set-Location's).
 #
 # The unit also exports TyBuiltinBaseModeCss, which is NOT derived from light.tycss (a
 # single-mode theme has no @mode blocks). It is carried verbatim below, because this
@@ -11,7 +13,8 @@
 # it, it deletes it — and the unit then fails to compile (StyleModel calls it).
 $ErrorActionPreference = 'Stop'
 $enc = New-Object System.Text.UTF8Encoding($false)   # UTF-8, no BOM (light.tycss has an em-dash)
-$src = [IO.File]::ReadAllText('themes\light.tycss', $enc)
+$root = Split-Path $PSScriptRoot -Parent
+$src = [IO.File]::ReadAllText((Join-Path $root 'themes\light.tycss'), $enc)
 $lines = $src -split "`r`n|`n"
 if ($lines.Count -gt 0 -and $lines[-1] -eq '') { $lines = $lines[0..($lines.Count - 2)] }  # drop trailing empty
 
@@ -46,5 +49,5 @@ for ($i = 0; $i -lt $lines.Count; $i++) {
 }
 [void]$sb.Append("end;`r`n`r`nend.`r`n")
 
-[IO.File]::WriteAllText('source\tyControls.DefaultTheme.pas', $sb.ToString(), $enc)
+[IO.File]::WriteAllText((Join-Path $root 'source\tyControls.DefaultTheme.pas'), $sb.ToString(), $enc)
 Write-Output ("Regenerated DefaultTheme.pas from light.tycss (" + $lines.Count + " content lines)")

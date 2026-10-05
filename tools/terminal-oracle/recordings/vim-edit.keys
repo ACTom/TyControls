@@ -1,0 +1,28 @@
+for i in $(seq 1 50); do echo "line $i: the quick brown fox jumps over the lazy dog"; done > f.txt
+clear
+vim -u DEFAULTS -i NONE -N f.txt
+#sleep 1
+#key C-f
+#sleep 0.5
+#key C-f
+#sleep 0.5
+#key C-b
+#key G
+#sleep 0.5
+#raw ggjjjO
+#raw inserted line one
+#key Escape
+#raw oinserted line two with some text
+#key Escape
+#raw :syntax on
+#key Enter
+#raw :colorscheme habamax
+#key Enter
+#sleep 0.3
+#raw /fox
+#key Enter
+#raw nn
+#sleep 0.5
+#raw :q!
+#key Enter
+#sleep 0.5

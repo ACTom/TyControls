@@ -1,0 +1,163 @@
+object TbExportForm: TTbExportForm
+  Left = 0
+  Height = 480
+  Top = 0
+  Width = 560
+  Caption = 'Export a theme bundle'
+  ClientHeight = 480
+  ClientWidth = 560
+  Position = poOwnerFormCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  object Surface: TTyFormSurface
+    Left = 0
+    Height = 480
+    Top = 0
+    Width = 560
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 560
+      Align = alTop
+      Caption = 'Export a theme bundle'
+    end
+    object LblName: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 48
+      Width = 108
+      Caption = 'Name:'
+    end
+    object EdtName: TTyEdit
+      Left = 130
+      Height = 28
+      Top = 44
+      Width = 414
+      Anchors = [akTop, akLeft, akRight]
+    end
+    object LblAuthor: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 84
+      Width = 108
+      Caption = 'Author:'
+    end
+    object EdtAuthor: TTyEdit
+      Left = 130
+      Height = 28
+      Top = 80
+      Width = 414
+      Anchors = [akTop, akLeft, akRight]
+    end
+    object LblVersion: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 120
+      Width = 108
+      Caption = 'Version:'
+    end
+    object EdtVersion: TTyEdit
+      Left = 130
+      Height = 28
+      Top = 116
+      Width = 120
+    end
+    object RadFolder: TTyRadioButton
+      Left = 130
+      Height = 24
+      Top = 152
+      Width = 160
+      AutoSize = True
+      Caption = 'A folder'
+      OnChange = FormatChange
+    end
+    object RadZip: TTyRadioButton
+      AnchorSideLeft.Control = RadFolder
+      AnchorSideLeft.Side = asrBottom
+      Left = 302
+      Height = 24
+      Top = 152
+      Width = 160
+      AutoSize = True
+      BorderSpacing.Left = 16
+      Caption = 'A zip file'
+      OnChange = FormatChange
+    end
+    object LblTarget: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 188
+      Width = 108
+      Caption = 'Export to:'
+    end
+    object EdtTarget: TTyEdit
+      Left = 130
+      Height = 28
+      Top = 184
+      Width = 312
+      Anchors = [akTop, akLeft, akRight]
+    end
+    object BtnBrowse: TTyButton
+      Left = 452
+      Height = 28
+      Top = 184
+      Width = 92
+      Anchors = [akTop, akRight]
+      Caption = 'Browse...'
+      OnClick = BtnBrowseClick
+    end
+    object LblFiles: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 222
+      Width = 528
+      Anchors = [akTop, akLeft, akRight]
+      Caption = 'Files that go in with theme.tycss and theme.json:'
+    end
+    object LstFiles: TTyListBox
+      Left = 16
+      Height = 110
+      Top = 244
+      Width = 528
+      Anchors = [akTop, akLeft, akRight, akBottom]
+    end
+    object LblNote: TTyLabel
+      Left = 16
+      Height = 64
+      Top = 362
+      Width = 528
+      Anchors = [akLeft, akRight, akBottom]
+      WordWrap = True
+    end
+    object BtnExport: TTyButton
+      Left = 352
+      Height = 30
+      Top = 434
+      Width = 92
+      Anchors = [akRight, akBottom]
+      StyleClass = 'primary'
+      Caption = 'Export'
+      OnClick = BtnExportClick
+    end
+    object BtnCancel: TTyButton
+      Left = 452
+      Height = 30
+      Top = 434
+      Width = 92
+      Anchors = [akRight, akBottom]
+      Caption = 'Cancel'
+      ModalResult = 2
+    end
+  end
+  object DlgFolder: TTySelectPathDialog
+    Left = 40
+    Top = 420
+  end
+  object DlgZip: TTySaveDialog
+    Left = 100
+    Top = 420
+  end
+end

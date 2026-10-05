@@ -43,7 +43,7 @@ const
   TyQatDefaultWidth = 120;
 
 type
-  TTyRibbonQuickAccess = class(TTyCustomControl)
+  TTyCustomRibbonQuickAccess = class(TTyCustomControl)
   private
     FIndent: Integer;
     FSpacing: Integer;
@@ -60,7 +60,6 @@ type
       and return it. Grows ControlCount by one. The returned button is owned by
       Self's Owner (this control), so it is freed with the QAT. }
     function AddButton(const ACaption: string): TTyGlyphButton;
-  published
     { Left/top inset before the first item (logical px). Purely advisory for a
       host that sizes the strip via TyQatContentWidth; child Align=alLeft packs
       flush to the client edge, so Indent does not itself move the buttons. }
@@ -68,10 +67,65 @@ type
     { Advisory inter-item spacing (logical px) used by TyQatContentWidth when a
       host measures the packed width. }
     property Spacing: Integer read FSpacing write SetSpacing default 2;
+  end;
+
+  { TTyRibbonQuickAccess publishes TTyCustomRibbonQuickAccess's properties; everything lives in TTyCustomRibbonQuickAccess. }
+  TTyRibbonQuickAccess = class(TTyCustomRibbonQuickAccess)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Indent;
+    property Spacing;
     property Align;
     property Anchors;
-    property StyleClass;
-    property Controller;
   end;
 
 { Pure helper: total packed width (device/logical px, caller-consistent) of
@@ -99,9 +153,9 @@ begin
   end;
 end;
 
-{ TTyRibbonQuickAccess }
+{ TTyCustomRibbonQuickAccess }
 
-constructor TTyRibbonQuickAccess.Create(AOwner: TComponent);
+constructor TTyCustomRibbonQuickAccess.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   ControlStyle := ControlStyle + [csAcceptsControls];   // hosts the small command controls
@@ -113,7 +167,7 @@ begin
   Height := ActiveController.Metric('--qat-height', TyQatDefaultHeight);
 end;
 
-function TTyRibbonQuickAccess.GetStyleTypeKey: string;
+function TTyCustomRibbonQuickAccess.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyTitleBar': the QAT is not the title bar; borrowing it meant the QAT inherited the window chrome's shadow, radius and border stroke.
     Added to 'TyTitleBar's rule block as an extra selector, so every resolved value is
@@ -121,7 +175,7 @@ begin
   Result := 'TyRibbonQuickAccess';
 end;
 
-procedure TTyRibbonQuickAccess.SetIndent(AValue: Integer);
+procedure TTyCustomRibbonQuickAccess.SetIndent(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   if FIndent = AValue then Exit;
@@ -129,7 +183,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyRibbonQuickAccess.SetSpacing(AValue: Integer);
+procedure TTyCustomRibbonQuickAccess.SetSpacing(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   if FSpacing = AValue then Exit;
@@ -137,7 +191,7 @@ begin
   Invalidate;
 end;
 
-function TTyRibbonQuickAccess.AddButton(const ACaption: string): TTyGlyphButton;
+function TTyCustomRibbonQuickAccess.AddButton(const ACaption: string): TTyGlyphButton;
 begin
   Result := TTyGlyphButton.Create(Self);
   Result.Parent := Self;
@@ -147,12 +201,12 @@ begin
   Result.Align := alLeft;
 end;
 
-procedure TTyRibbonQuickAccess.Paint;
+procedure TTyCustomRibbonQuickAccess.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-procedure TTyRibbonQuickAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomRibbonQuickAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;

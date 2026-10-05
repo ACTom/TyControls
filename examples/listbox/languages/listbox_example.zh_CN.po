@@ -83,3 +83,7 @@ msgstr "多选：已选 %d 项 —— %s"
 #: umain.rsnoneshort
 msgid "(none)"
 msgstr "（无）"
+
+#: tmainform.btnwide.caption
+msgid "Wide content on/off"
+msgstr "宽内容 开/关"

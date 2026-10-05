@@ -61,14 +61,14 @@ type
   public
     Count, LastIndex: Integer;
     constructor Create;
-    procedure Handle(AHeader: TTyHeaderControl; AIndex: Integer);
+    procedure Handle(AHeader: TTyCustomHeaderControl; AIndex: Integer);
   end;
 
   TResizeProbe = class
   public
     Count, LastIndex, LastWidth: Integer;
     constructor Create;
-    procedure Handle(AHeader: TTyHeaderControl; AIndex, AWidth: Integer);
+    procedure Handle(AHeader: TTyCustomHeaderControl; AIndex, AWidth: Integer);
   end;
 
   { OnSectionTrack carries the drag PHASE as well; the phase-level guards live in
@@ -78,7 +78,7 @@ type
     Count, LastIndex, LastWidth: Integer;
     LastState: TTyHeaderTrackState;
     constructor Create;
-    procedure Handle(AHeader: TTyHeaderControl; AIndex, AWidth: Integer;
+    procedure Handle(AHeader: TTyCustomHeaderControl; AIndex, AWidth: Integer;
       AState: TTyHeaderTrackState);
   end;
 
@@ -118,7 +118,7 @@ begin
   Count := 0; LastIndex := -99;
 end;
 
-procedure TClickProbe.Handle(AHeader: TTyHeaderControl; AIndex: Integer);
+procedure TClickProbe.Handle(AHeader: TTyCustomHeaderControl; AIndex: Integer);
 begin
   Inc(Count); LastIndex := AIndex;
 end;
@@ -129,7 +129,7 @@ begin
   Count := 0; LastIndex := -99; LastWidth := -99;
 end;
 
-procedure TResizeProbe.Handle(AHeader: TTyHeaderControl; AIndex, AWidth: Integer);
+procedure TResizeProbe.Handle(AHeader: TTyCustomHeaderControl; AIndex, AWidth: Integer);
 begin
   Inc(Count); LastIndex := AIndex; LastWidth := AWidth;
 end;
@@ -140,7 +140,7 @@ begin
   Count := 0; LastIndex := -99; LastWidth := -99; LastState := tsTrackBegin;
 end;
 
-procedure TTrackProbe.Handle(AHeader: TTyHeaderControl; AIndex, AWidth: Integer;
+procedure TTrackProbe.Handle(AHeader: TTyCustomHeaderControl; AIndex, AWidth: Integer;
   AState: TTyHeaderTrackState);
 begin
   Inc(Count); LastIndex := AIndex; LastWidth := AWidth; LastState := AState;

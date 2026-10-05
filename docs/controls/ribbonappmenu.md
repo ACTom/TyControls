@@ -4,7 +4,7 @@
 
 `TTyRibbonAppMenu` 是 Ribbon 左上角那颗醒目的应用（「文件 / File」）按钮：一颗**强调色按钮**，点击后弹出一份由**顶层命令**加上可选的**最近项目**区段组合而成的菜单。
 
-它继承自 [[TTyMenuButton]]（单元 `tyControls.DropButtons`）——整颗按钮即下拉触发器，天然获得标题 + 尾随箭头的绘制，`Click` 会先触发 `OnDropDown` 再（有窗口句柄时）弹出下拉菜单。
+它继承自 [[TTyCustomMenuButton]]（单元 `tyControls.DropButtons`）——整颗按钮即下拉触发器，天然获得标题 + 尾随箭头的绘制，`Click` 会先触发 `OnDropDown` 再（有窗口句柄时）弹出下拉菜单。
 
 > **它有自己的 typeKey `TyRibbonAppMenu`**（3.0 起；此前借用 `'TyButton'`）。构造时默认
 > `Caption := 'File'`、`StyleClass := 'primary'`、尺寸约 64×26（逻辑像素，随 PPI 缩放）。
@@ -28,14 +28,14 @@
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.RibbonAppMenu` |
-| 类 | `TTyRibbonAppMenu`（继承 [[TTyMenuButton]]） |
+| 类 | `TTyRibbonAppMenu`（继承 [[TTyCustomMenuButton]]） |
 | `GetStyleTypeKey` 返回值 | `'TyRibbonAppMenu'`（自己的键；3.0 前借 `'TyButton'`） |
 
 | typeKey | 画什么 |
 |---|---|
 | `TyRibbonAppMenu` | 按钮外框：背景 / 边框 / 圆角 / 文字色 / 各状态。支持与 `TyButton` 相同的变体与伪类（`.primary` / `.danger` / `.ghost` × `:hover` / `:active` / `:focus` / `:disabled` / `:selected`），随库主题里两个键同规则同值 |
 
-> 尾随的下拉箭头与标题由继承来的 [[TTyMenuButton]] 绘制路径画出，取的是**本键**解析出的
+> 尾随的下拉箭头与标题由继承来的 [[TTyCustomMenuButton]] 绘制路径画出，取的是**本键**解析出的
 > `TextColor`——不再是 `TyButton` 的。箭头字形本身目前没有独立子部件键。
 
 ```pascal
@@ -58,7 +58,7 @@ uses tyControls.Menu, tyControls.DropButtons, tyControls.RibbonAppMenu;
 TTyRecentItemEvent = procedure(Sender: TObject; AIndex: Integer) of object;
 ```
 
-> 继承自 [[TTyButton]] / [[TTyMenuButton]] 的常用成员（`Caption`、`Enabled`、`Font`、`StyleClass`、`Controller`、`OnClick`、`ShowBadge`/`BadgeValue`… 以及 `DropDownMenu`/`OnDropDown`）依旧可用，细节见 [button.md](button.md) 与 [dropbuttons.md](dropbuttons.md)。**注意**：`DropDownMenu` 由本控件在下拉时内部接管（指向内部组合菜单），不要手工设置它。
+> 继承自 [[TTyCustomButton]] / [[TTyCustomMenuButton]] 的常用成员（`Caption`、`Enabled`、`Font`、`StyleClass`、`Controller`、`OnClick`、`ShowBadge`/`BadgeValue`… 以及 `DropDownMenu`/`OnDropDown`）依旧可用，细节见 [button.md](button.md) 与 [dropbuttons.md](dropbuttons.md)。**注意**：`DropDownMenu` 由本控件在下拉时内部接管（指向内部组合菜单），不要手工设置它。
 
 ---
 
@@ -134,6 +134,6 @@ end;
 
 ## 相关
 
-- [[TTyMenuButton]] —— 基类，整按钮下拉；提供标题 + 尾随箭头绘制、`DoDropDown`、`DropDownMenu`/`OnDropDown`（见 [dropbuttons.md](dropbuttons.md)）。
+- [[TTyCustomMenuButton]] —— 基类，整按钮下拉；提供标题 + 尾随箭头绘制、`DoDropDown`、`DropDownMenu`/`OnDropDown`（见 [dropbuttons.md](dropbuttons.md)）。
 - [[菜单|menu]] —— `TTyPopupMenu` 主题化弹出菜单（`PopUp(X, Y)` 渲染菜单树）。
 - [[TTyRibbon]] —— 命令带宿主；应用菜单按钮通常停靠在其左上角（见 [ribbon.md](ribbon.md)）。

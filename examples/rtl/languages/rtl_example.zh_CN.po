@@ -450,3 +450,51 @@ msgstr "第三层"
 #: tmainform.popshortcut.caption
 msgid "Shortcut moves to the left"
 msgstr "快捷键文字移到左边"
+
+#: tmainform.dropbtn.caption
+msgid "Save"
+msgstr "保存"
+
+#: tmainform.grid.header.columns.name
+msgid "Name"
+msgstr "名称"
+
+#: tmainform.grid.header.columns.region
+msgid "Region"
+msgstr "地区"
+
+#: tmainform.grid.header.columns.qty
+msgid "Qty"
+msgstr "数量"
+
+#: tmainform.grid.header.columns.settled
+msgid "Settled"
+msgstr "已结算"
+
+#: tmainform.grid.header.columns.action
+msgid "Action"
+msgstr "操作"
+
+#: tmainform.lv.header.columns.size
+msgid "Size"
+msgstr "大小"
+
+#: tmainform.lv.header.columns.kind
+msgid "Kind"
+msgstr "类型"
+
+#: tmainform.tree.header.columns.node
+msgid "Node"
+msgstr "节点"
+
+#: tmainform.statusbar1.panels.ready
+msgid "Ready"
+msgstr "就绪"
+
+#: tmainform.statusbar1.panels.direction
+msgid "left-to-right"
+msgstr "从左到右"
+
+#: tmainform.statusbar1.panels.grip
+msgid "drag the grip ->"
+msgstr "拖动手柄 ->"

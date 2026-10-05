@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyOfficeComboBox 是**下拉列表带分组标题行的组合框**(Office 风格分组组合框)。继承自 [TTyComboBox](combobox.md),用一个自绘弹出列表(`TTyOfficeComboPopupList`)把**标题行**画成着色带 + 加粗文字,**普通行**同 `TTyListBox`。某行是不是标题,存在 `Items.Objects[i]`(`1`=标题,`0`=普通条目),排序 / 删除都跟着走;弹出列表的 Items 由 `Assign` 从组合框拷贝,标志随之带过去。用 `AddHeader` / `AddItem` 构建列表。
+TTyOfficeComboBox 是**下拉列表带分组标题行的组合框**(Office 风格分组组合框)。继承自 [TTyCustomComboBox](combobox.md),用一个自绘弹出列表(`TTyOfficeComboPopupList`)把**标题行**画成着色带 + 加粗文字,**普通行**同 `TTyListBox`。某行是不是标题,存在 `Items.Objects[i]`(`1`=标题,`0`=普通条目),排序 / 删除都跟着走;弹出列表的 Items 由 `Assign` 从组合框拷贝,标志随之带过去。用 `AddHeader` / `AddItem` 构建列表。
 
 ---
 
@@ -29,7 +29,7 @@ uses tyControls.OfficeComboBox;
 | `AddItem(const S)` | 追加一条普通条目行(可选)。 |
 | `IsHeader(AIndex): Boolean` | 第 i 行是否为标题行。 |
 
-另继承 `TTyComboBox` 的 `Items` / `ItemIndex` / `Text` / `Sorted` / `OnChange` / `OnSelect` 等。
+另继承 `TTyCustomComboBox` 的 `Items` / `ItemIndex` / `Text` / `Sorted` / `OnChange` / `OnSelect` 等。
 
 ---
 

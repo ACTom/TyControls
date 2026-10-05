@@ -2,7 +2,7 @@ unit tyControls.ComboBoxEx;
 {$mode objfpc}{$H+}
 
 { TTyComboBoxEx — a combo whose items carry per-item image, indent and payload, drawn
-  beside the text in BOTH the field and the drop-down. Subclasses TTyComboBox, injecting
+  beside the text in BOTH the field and the drop-down. Descends from TTyCustomComboBox, injecting
   an image-drawing popup list (CreatePopupList) and an image field (PaintFieldContent).
 
   The per-row extras live in a design-time COLLECTION, ItemsEx (TTyComboExItems of
@@ -155,7 +155,7 @@ type
 
   { A combo of image + text items. Build rows through ItemsEx (design time or code), or
     with AddItem(text, imageIndex) / Add / Insert. The image source is Images. }
-  TTyComboBoxEx = class(TTyComboBox)
+  TTyCustomComboBoxEx = class(TTyCustomComboBox)
   private
     FImages: TCustomImageList;
     FItemsEx: TTyComboExItems;
@@ -173,7 +173,7 @@ type
     { Items -> ItemsEx: give every row an entry, drop entries no row references. }
     procedure ReconcileFromItems;
   protected
-    function CreatePopupList: TTyListBox; override;
+    function CreatePopupList: TTyCustomListBox; override;
     procedure PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure DoItemsChanged; override;
@@ -214,12 +214,89 @@ type
       stamps OverlayImageIndex on top. Falls back to DrawImageText when AItem is nil. }
     procedure DrawExItem(P: TTyPainter; const ARect: TRect; AItem: TTyComboExItem;
       ASelected: Boolean; const AStyle: TTyStyleSet);
-  published
     { The raster image source (index-addressed). A FreeNotification nils this reference
       automatically if the list is freed first. }
     property Images: TCustomImageList read FImages write SetImages;
     { Declared BEFORE any property that depends on the row set so it streams first. }
     property ItemsEx: TTyComboExItems read FItemsEx write SetItemsEx;
+  end;
+
+  { TTyComboBoxEx publishes TTyCustomComboBoxEx's properties; everything lives in TTyCustomComboBoxEx. }
+  TTyComboBoxEx = class(TTyCustomComboBoxEx)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Items;
+    property ItemIndex;
+    property Text;
+    property DropDownCount;
+    property Sorted;
+    property MaxLength;
+    property CharCase;
+    property Style;
+    property ItemHeight;
+    property ItemWidth;
+    property TextHint;
+    property ReadOnly;
+    property OnDrawItem;
+    property OnMeasureItem;
+    property OnChange;
+    property OnSelect;
+    property OnDropDown;
+    property OnCloseUp;
+    property OnGetItems;
+    property Align;
+    property Anchors;
+    property Images;
+    property ItemsEx;
   end;
 
 implementation
@@ -422,7 +499,7 @@ function TTyComboExItems.OwnerImages: TCustomImageList;
 var own: TPersistent;
 begin
   own := GetOwner;   // a class may call its own inherited protected GetOwner
-  if own is TTyComboBoxEx then Result := TTyComboBoxEx(own).Images else Result := nil;
+  if own is TTyCustomComboBoxEx then Result := TTyCustomComboBoxEx(own).Images else Result := nil;
 end;
 
 function TTyComboExItems.GetComboItem(AIndex: Integer): TTyComboExItem;
@@ -554,7 +631,7 @@ begin
     only add a rebuild per item in the middle of a BeginUpdate batch, which is precisely
     what BeginUpdate exists to avoid. }
   inherited Update(Item);
-  if Owner is TTyComboBoxEx then TTyComboBoxEx(Owner).ItemsExChanged;
+  if Owner is TTyCustomComboBoxEx then TTyCustomComboBoxEx(Owner).ItemsExChanged;
 end;
 
 { TTyComboBoxExPopupList }
@@ -571,16 +648,16 @@ begin
   { The Owner is the combo (Create(Self) in CreatePopupList); it owns the shared draw
     method and the Images reference. The row entry rides in Objects[] (copied from the
     combo via Items.Assign), so field and popup read the same object. }
-  if Owner is TTyComboBoxEx then
-    TTyComboBoxEx(Owner).DrawExItem(P, ARowRect,
-      TTyComboBoxEx(Owner).ItemEx(AIndex), AIndex = ItemIndex, AStyle)
+  if Owner is TTyCustomComboBoxEx then
+    TTyCustomComboBoxEx(Owner).DrawExItem(P, ARowRect,
+      TTyCustomComboBoxEx(Owner).ItemEx(AIndex), AIndex = ItemIndex, AStyle)
   else
     inherited PaintItemContent(P, ARowRect, AIndex, AStyle);
 end;
 
-{ TTyComboBoxEx }
+{ TTyCustomComboBoxEx }
 
-constructor TTyComboBoxEx.Create(AOwner: TComponent);
+constructor TTyCustomComboBoxEx.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FItemsEx := TTyComboExItems.Create(Self);
@@ -590,7 +667,7 @@ begin
   FItemsStreamed := False;
 end;
 
-destructor TTyComboBoxEx.Destroy;
+destructor TTyCustomComboBoxEx.Destroy;
 begin
   { Free the collection before the inherited destructor drops Items: nothing must read a
     half-torn-down pair, and the projection hook must stop firing first. }
@@ -599,7 +676,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TTyComboBoxEx.SetImages(const AValue: TCustomImageList);
+procedure TTyCustomComboBoxEx.SetImages(const AValue: TCustomImageList);
 var i: Integer;
 begin
   if FImages = AValue then Exit;
@@ -616,26 +693,26 @@ begin
   Invalidate;
 end;
 
-procedure TTyComboBoxEx.SetItemsEx(const AValue: TTyComboExItems);
+procedure TTyCustomComboBoxEx.SetItemsEx(const AValue: TTyComboExItems);
 begin
   { Assign, never replace: the collection instance is ours and the Object Inspector holds
     a reference to it. }
   FItemsEx.Assign(AValue);
 end;
 
-procedure TTyComboBoxEx.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomComboBoxEx.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FImages) then
     FImages := nil;
 end;
 
-procedure TTyComboBoxEx.ItemsExChanged;
+procedure TTyCustomComboBoxEx.ItemsExChanged;
 begin
   SyncItemsFromEx;
 end;
 
-procedure TTyComboBoxEx.SyncItemsFromEx;
+procedure TTyCustomComboBoxEx.SyncItemsFromEx;
 var
   i: Integer;
   InOrder: Boolean;
@@ -675,7 +752,7 @@ begin
   end;
 end;
 
-procedure TTyComboBoxEx.ReconcileFromItems;
+procedure TTyCustomComboBoxEx.ReconcileFromItems;
 var
   i: Integer;
   it: TTyComboExItem;
@@ -712,13 +789,13 @@ begin
   end;
 end;
 
-procedure TTyComboBoxEx.DoItemsChanged;
+procedure TTyCustomComboBoxEx.DoItemsChanged;
 begin
   inherited DoItemsChanged;
   ReconcileFromItems;
 end;
 
-procedure TTyComboBoxEx.SelectItem(AIndex: Integer);
+procedure TTyCustomComboBoxEx.SelectItem(AIndex: Integer);
 begin
   { During streaming the ancestor's ItemIndex arrives before this class's ItemsEx block,
     so the list is still empty and AIndex would clamp to -1 and be lost. Remember it. }
@@ -726,35 +803,35 @@ begin
   inherited SelectItem(AIndex);
 end;
 
-procedure TTyComboBoxEx.Loaded;
+procedure TTyCustomComboBoxEx.Loaded;
 begin
   inherited Loaded;
   if (FLoadedItemIndex >= 0) and (FLoadedItemIndex < Items.Count) and (ItemIndex < 0) then
     ItemIndex := FLoadedItemIndex;
 end;
 
-procedure TTyComboBoxEx.AddItem(const S: string; AImageIndex: Integer);
+procedure TTyCustomComboBoxEx.AddItem(const S: string; AImageIndex: Integer);
 begin
   FItemsEx.AddItem(S, AImageIndex);
 end;
 
-procedure TTyComboBoxEx.AddItem(const AItem: string; AnObject: TObject);
+procedure TTyCustomComboBoxEx.AddItem(const AItem: string; AnObject: TObject);
 begin
   FItemsEx.AddItem(AItem, -1, -1, -1, -1, AnObject);
 end;
 
-function TTyComboBoxEx.Add: Integer;
+function TTyCustomComboBoxEx.Add: Integer;
 begin
   Result := FItemsEx.Add.Index;
 end;
 
-procedure TTyComboBoxEx.Add(const ACaption: string; AIndent: Integer; AImgIdx: Integer;
+procedure TTyCustomComboBoxEx.Add(const ACaption: string; AIndent: Integer; AImgIdx: Integer;
   AOverlayImgIdx: Integer; ASelectedImgIdx: Integer);
 begin
   FItemsEx.AddItem(ACaption, AImgIdx, AOverlayImgIdx, ASelectedImgIdx, AIndent);
 end;
 
-procedure TTyComboBoxEx.Insert(AIndex: Integer; const ACaption: string; AIndent: Integer;
+procedure TTyCustomComboBoxEx.Insert(AIndex: Integer; const ACaption: string; AIndent: Integer;
   AImgIdx: Integer; AOverlayImgIdx: Integer; ASelectedImgIdx: Integer);
 var it: TTyComboExItem;
 begin
@@ -773,12 +850,12 @@ begin
   end;
 end;
 
-procedure TTyComboBoxEx.Delete(AIndex: Integer);
+procedure TTyCustomComboBoxEx.Delete(AIndex: Integer);
 begin
   if (AIndex >= 0) and (AIndex < FItemsEx.Count) then FItemsEx.Delete(AIndex);
 end;
 
-procedure TTyComboBoxEx.DeleteSelected;
+procedure TTyCustomComboBoxEx.DeleteSelected;
 var it: TTyComboExItem;
 begin
   { Delete the SELECTED ROW, which under Sorted is not the collection entry at the same
@@ -787,7 +864,7 @@ begin
   if it <> nil then FItemsEx.Delete(it.Index);
 end;
 
-procedure TTyComboBoxEx.AssignItemsEx(AItems: TStrings);
+procedure TTyCustomComboBoxEx.AssignItemsEx(AItems: TStrings);
 var i: Integer;
 begin
   if AItems = nil then Exit;
@@ -801,13 +878,13 @@ begin
   end;
 end;
 
-procedure TTyComboBoxEx.AssignItemsEx(AItemsEx: TTyComboExItems);
+procedure TTyCustomComboBoxEx.AssignItemsEx(AItemsEx: TTyComboExItems);
 begin
   if AItemsEx = nil then Exit;
   FItemsEx.Assign(AItemsEx);
 end;
 
-function TTyComboBoxEx.ItemEx(AIndex: Integer): TTyComboExItem;
+function TTyCustomComboBoxEx.ItemEx(AIndex: Integer): TTyComboExItem;
 var raw: TObject;
 begin
   Result := nil;
@@ -816,14 +893,14 @@ begin
   if raw is TTyComboExItem then Result := TTyComboExItem(raw);
 end;
 
-function TTyComboBoxEx.ImageIndexOf(AIndex: Integer): Integer;
+function TTyCustomComboBoxEx.ImageIndexOf(AIndex: Integer): Integer;
 var it: TTyComboExItem;
 begin
   it := ItemEx(AIndex);
   if it <> nil then Result := it.ImageIndex else Result := -1;
 end;
 
-procedure TTyComboBoxEx.DrawImageText(P: TTyPainter; const ARect: TRect; const S: string;
+procedure TTyCustomComboBoxEx.DrawImageText(P: TTyPainter; const ARect: TRect; const S: string;
   AImageIndex: Integer; const AStyle: TTyStyleSet);
 var
   x, sz: Integer;
@@ -833,7 +910,7 @@ begin
   if (FImages <> nil) and (AImageIndex >= 0) and (AImageIndex < TyImageCount(FImages)) then
   begin
     sz := (ARect.Bottom - ARect.Top) - P.Scale(6);
-    if sz < 8 then sz := 8;
+    if sz < P.Scale(8) then sz := P.Scale(8);
     TyBlitImage(P.Bitmap, FImages, AImageIndex,
       x, ARect.Top + ((ARect.Bottom - ARect.Top - sz) div 2), sz, P.Scale(96), False);
     x := x + sz + P.Scale(4);
@@ -843,7 +920,7 @@ begin
     AStyle.TextColor, taLeftJustify, tlCenter, True);
 end;
 
-procedure TTyComboBoxEx.DrawExItem(P: TTyPainter; const ARect: TRect;
+procedure TTyCustomComboBoxEx.DrawExItem(P: TTyPainter; const ARect: TRect;
   AItem: TTyComboExItem; ASelected: Boolean; const AStyle: TTyStyleSet);
 var
   imgIdx, sz, x, y: Integer;
@@ -866,13 +943,13 @@ begin
   if (FImages = nil) or (imgIdx < 0) or (imgIdx >= TyImageCount(FImages)) then Exit;
   if (AItem.OverlayImageIndex < 0) or (AItem.OverlayImageIndex >= TyImageCount(FImages)) then Exit;
   sz := (R.Bottom - R.Top) - P.Scale(6);
-  if sz < 8 then sz := 8;
+  if sz < P.Scale(8) then sz := P.Scale(8);
   x := R.Left + P.Scale(4);
   y := R.Top + ((R.Bottom - R.Top - sz) div 2);
   TyBlitImage(P.Bitmap, FImages, AItem.OverlayImageIndex, x, y, sz, P.Scale(96), False);
 end;
 
-procedure TTyComboBoxEx.PaintFieldContent(P: TTyPainter; const ATextRect: TRect;
+procedure TTyCustomComboBoxEx.PaintFieldContent(P: TTyPainter; const ATextRect: TRect;
   const AStyle: TTyStyleSet);
 var it: TTyComboExItem;
 begin
@@ -884,7 +961,7 @@ begin
     inherited PaintFieldContent(P, ATextRect, AStyle);   // empty field -> the TextHint
 end;
 
-function TTyComboBoxEx.CreatePopupList: TTyListBox;
+function TTyCustomComboBoxEx.CreatePopupList: TTyCustomListBox;
 begin
   Result := TTyComboBoxExPopupList.Create(Self);
 end;

@@ -30,6 +30,10 @@
         <UnitName Value="tyControls.Design.AdvChart.Editor"/>
       </Item>
       <Item>
+        <Filename Value="designtime/tyControls.Design.CssEditKit.pas"/>
+        <UnitName Value="tyControls.Design.CssEditKit"/>
+      </Item>
+      <Item>
         <Filename Value="designtime/tyControls.Design.Css.Editor.pas"/>
         <UnitName Value="tyControls.Design.Css.Editor"/>
       </Item>

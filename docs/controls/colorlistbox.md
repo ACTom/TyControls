@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyColorListBox 是**命名颜色列表框**——[TTyColorBox](colorbox.md) 的列表版。每一行显示一个颜色色块 + 名称。继承自 [TTyListBox](listbox.md),覆写 `PaintItemContent` 钩子画色块;颜色存在 `Items.Objects[i]`,与名称天然对齐(排序 / 删除都跟着走)。与 ColorBox 共用同一套自由函数(`TyAddDefaultColorPalette` / `TyAddColorItem` / `TySelectColorIndex` / `TyDrawColorRow`),选色/追加逻辑只有一份。
+TTyColorListBox 是**命名颜色列表框**——[TTyColorBox](colorbox.md) 的列表版。每一行显示一个颜色色块 + 名称。继承自 [TTyCustomListBox](listbox.md),覆写 `PaintItemContent` 钩子画色块;颜色存在 `Items.Objects[i]`,与名称天然对齐(排序 / 删除都跟着走)。与 ColorBox 共用同一套自由函数(`TyAddDefaultColorPalette` / `TyAddColorItem` / `TySelectColorIndex` / `TyDrawColorRow`),选色/追加逻辑只有一份。
 
 ---
 
@@ -36,7 +36,7 @@ uses tyControls.ColorListBox;
 | `ClearColors` | 清空。 |
 | `ColorAt(AIndex): TColor` | 第 i 行的色(越界 `clNone`)。 |
 
-默认色板 = 16 色 VGA(由 `Style` 的默认值组合出来,不再写死在构造函数里);另继承 `TTyListBox` 的 `ItemIndex` / `OnChange` / 多选等。
+默认色板 = 16 色 VGA(由 `Style` 的默认值组合出来,不再写死在构造函数里);另继承 `TTyCustomListBox` 的 `ItemIndex` / `OnChange` / 多选等。
 
 > 若 `Style` 里含 `cbIncludeNone`,`Selected := clNone` 会**选中那一行**而不是清空选择——毕竟你专门要了这一行。
 > 没有这一行时,`clNone` 仍是「清空」。
@@ -61,6 +61,7 @@ CL.Selected := clNavy;
 
 - **组合 vs 列表:** 收起式选色用 [TTyColorBox](colorbox.md);要常驻列表用本控件。
 - **颜色随名同步:** 颜色在 `Items.Objects[i]`,`Sorted` / `Delete` 不会错位(见 [colorbox.md](colorbox.md) 的同一机制)。
+- **色板不存进 `.lfm`:** `Items` 不写进窗体文件,读窗体时按 `Style` 重建色板,再选中 `Selected`;设计器里手填的 `Items` 不会保存。自定义色板用 `cbCustomColors` + `OnGetColors` 或运行时 `AddColor`(同 [colorbox.md](colorbox.md))。
 
 ---
 

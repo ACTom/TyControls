@@ -588,7 +588,7 @@ begin
 end;
 
 const
-  GGRID: array[0..204] of string = (
+  GGRID: array[0..243] of string = (
     'TyForm|', 'TyButton|', 'TyButton|primary', 'TyButton|danger', 'TyLabel|',
     'TyEdit|', 'TyCheckBox|', 'TyRadioButton|', 'TyPanel|', 'TyComboBox|',
     'TyScrollBar|', 'TyScrollThumb|', 'TyTitleBar|', 'TyCaptionButton|',
@@ -601,6 +601,12 @@ const
     'TyGroupBox|', 'TyTabControl|', 'TyPageControl|', 'TyTabSheet|',
     'TyTab|', 'TyTabClose|', 'TySpinEdit|',
     'TyMemo|', 'TyTextSelection|', 'TyTextHint|',
+    { the terminal (phase 3): its own box, the cursor, the selection, the 16 colours, links,
+      the input method's marked text }
+    'TyTerminal|', 'TyTerminalCursor|', 'TyTerminalSelection|',
+    'TyTerminalAnsi0|', 'TyTerminalAnsi1|', 'TyTerminalAnsi2|', 'TyTerminalAnsi3|', 'TyTerminalAnsi4|', 'TyTerminalAnsi5|', 'TyTerminalAnsi6|', 'TyTerminalAnsi7|',
+    'TyTerminalAnsi8|', 'TyTerminalAnsi9|', 'TyTerminalAnsi10|', 'TyTerminalAnsi11|', 'TyTerminalAnsi12|', 'TyTerminalAnsi13|', 'TyTerminalAnsi14|', 'TyTerminalAnsi15|',
+    'TyTerminalLink|', 'TyTerminalPreedit|',
     'TyMenuBar|', 'TyMenuItem|', 'TyMenuPopup|', 'TyMenuView|',
     'TySplitter|', 'TyStatusBar|', 'TyToolBar|',
     'TyCalendar|', 'TyCalendarTitle|', 'TyCalendarWeekday|', 'TyCalendarCell|',
@@ -669,9 +675,16 @@ const
     'TyListViewLine|', 'TyListViewMarquee|',
     'TyValueListEditor|', 'TyValueListEditorRow|', 'TyValueListEditorKey|',
     'TyValueListEditorValue|', 'TyValueListEditorDivider|', 'TyValueListEditorExpander|',
-    'TyGridGroupRow|', 'TyGridSummaryRow|');
+    'TyGridGroupRow|', 'TyGridSummaryRow|',
+    { TyToolWindow* —— IDE 工作台侧栏 / 底栏 }
+    'TyToolWindowBar|', 'TyToolWindow|', 'TyToolWindowStrip|', 'TyToolWindowStripItem|',
+    'TyToolWindowStripIndicator|', 'TyToolWindowEdge|', 'TyToolWindowHeader|',
+    'TyToolWindowActions|', 'TyToolWindowTabRow|', 'TyToolWindowTab|',
+    'TyToolWindowTabIndicator|', 'TyToolWindowOverflow|', 'TyToolWindowButton|',
+    'TyToolWindowSeparator|', 'TyToolWindowDropIndicator|', 'TyToolWindowNote|',
+    'TyToolWindowBadge|', 'TyToolWindowDropZone|');
 
-  GMETRICS: array[0..110] of string = (
+  GMETRICS: array[0..129] of string = (
     '--alert-close-gap',
     '--alert-close-size',
     '--alert-icon-gap',
@@ -774,7 +787,26 @@ const
     '--tab-padding',
     '--tag-close-size',
     '--tag-gap',
+    '--terminal-cursor-width',
+    '--terminal-pad',
+    '--terminal-underline-width',
+    '--titlebar-icon-gap',
+    '--titlebar-icon-size',
     '--titlebar-padding',
+    '--toolwindow-button-size',
+    '--toolwindow-content-min',
+    '--toolwindow-drop-size',
+    '--toolwindow-edge-size',
+    '--toolwindow-glyph-size',
+    '--toolwindow-header-gap',
+    '--toolwindow-header-height',
+    '--toolwindow-header-pad',
+    '--toolwindow-indicator-size',
+    '--toolwindow-strip-indicator-size',
+    '--toolwindow-strip-item-size',
+    '--toolwindow-strip-size',
+    '--toolwindow-tab-area-min',
+    '--toolwindow-tab-pad',
     '--transfer-arrow-margin',
     '--transfer-arrow-size',
     '--transfer-button-gap',

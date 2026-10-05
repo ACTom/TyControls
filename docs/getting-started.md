@@ -24,7 +24,7 @@ TyControls 是一套面向 Lazarus 的**皮肤控件库**,让你的应用在 Win
 
 | 项目 | 要求 |
 |---|---|
-| Lazarus | 3.x+ |
+| Lazarus | 3.0+ |
 | FPC | 3.2.2+ |
 | 第三方依赖 | BGRABitmap(仅运行期) |
 | 目标平台 | Windows / Linux / macOS |
@@ -192,6 +192,20 @@ TyControls 内置了一套**默认皮肤**(浅色,与 `themes/light.tycss` 一�
 | `themes/light.tycss` | 浅色主题(白底,蓝色强调色) |
 | `themes/dark.tycss` | 深色主题 |
 | `themes/builtin/showcase.tycss` | 门面展示主题,突出库的外观辨识度 |
+
+### 按名字选内置主题
+
+17 套内置主题编译在库里。启动时注册一次,之后在对象查看器或代码里按名字选:
+
+```pascal
+uses tyControls.BuiltinThemes;
+
+TyRegisterBuiltinThemes;                    // 启动时调用一次,在创建第一个窗体之前
+TyDefaultController.ThemeName := 'win11';
+TyDefaultController.Mode := 'dark';         // 'light' | 'dark'
+```
+
+用 **文件 → 新建… → 工程 → TyControls Application** 建的工程,`.lpr` 里已经有这一行。少了它,设计器里选的 `ThemeName` 只在设计器里显示(IDE 自己注册了主题),运行起来仍是默认外观。
 
 ### 加载主题
 

@@ -99,6 +99,7 @@ type
     procedure TestMouseDragSelects;
     procedure TestDoubleClickSelectsAll;
     procedure TestTripleClickSelectsAll;
+    procedure TestTripleClickHasLogicalSlop;
     procedure TestShiftClickExtendsSelection;
     procedure TestContextMenuStateSeam;
     procedure TestCopyToClipboard;
@@ -900,6 +901,37 @@ begin
   end;
 end;
 
+procedure TEditTest.TestTripleClickHasLogicalSlop;
+{ The third press counts when it lands within 4 LOGICAL px of the second: 7 px on a 168-PPI
+  screen. The helper is tested where it lives (test.dpi.controls); this is that the EDIT
+  tells it which screen it is on. (ACTom/TyControls#2) }
+
+  function SelectedAfter(APPI, AAway: Integer): Integer;
+  var
+    F: TCustomForm;
+    E: TTyEditAccess;
+  begin
+    F := TCustomForm.CreateNew(nil);
+    try
+      E := TTyEditAccess.Create(F);
+      E.Parent := F;
+      E.Font.PixelsPerInch := APPI;
+      E.SetBounds(0, 0, MulDiv(200, APPI, 96), MulDiv(30, APPI, 96));
+      E.Text := 'Hello World';
+      E.SimulateMouseDown(9, 9, [ssDouble]);
+      E.SimulateMouseDown(9 + AAway, 9, []);
+      Result := E.SelLength;
+    finally
+      F.Free;
+    end;
+  end;
+
+begin
+  AssertEquals('precondition: 6 px away is a new click at 96 PPI', 0, SelectedAfter(96, 6));
+  AssertEquals('6 px away on a 168-PPI screen is the third press: the whole line', 11,
+    SelectedAfter(168, 6));
+end;
+
 procedure TEditTest.TestShiftClickExtendsSelection;
 var
   F: TCustomForm;
@@ -1690,10 +1722,15 @@ begin
 end;
 
 procedure TEditTest.TestRenderedTextShiftsWithScroll;
-{ Narrow edit (80px), long text (40×'W'), white background, black text.
+{ Narrow edit (80px), long text, white background, black text.
   Render at HOME (scroll=0) and after END (scrolled).
   The two bitmaps must differ in the content area (scroll shifted content).
-  Also verify effective caret is within visible range after END. }
+  Also verify effective caret is within visible range after END.
+
+  The text is NOT one letter forty times. A run of identical glyphs is periodic, and once
+  text is hinted at its real size every 'W' advances by a whole number of pixels -- so a
+  scroll that happens to be a multiple of that advance draws exactly the picture it
+  started from, and "the render changed" fails for a scroll that worked. }
 var
   F: TCustomForm;
   E: TTyEditAccess;
@@ -1714,7 +1751,7 @@ begin
     E.Parent := F;
     E.Controller := Ctl;
     E.SetBounds(0, 0, 80, 24);
-    E.Text := StringOfChar('W', 40);
+    E.Text := 'W0a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8s9';
     E.CaretPos := 0;
     AssertEquals('Pre: ScrollX = 0 at HOME', 0, E.ScrollX);
 

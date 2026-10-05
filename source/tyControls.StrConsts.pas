@@ -85,6 +85,11 @@ resourcestring
   rsSmImportEmptyPath           = '@import has an empty path';
   rsSmImportTargetNotFound      = '@import target not found: "%s"';
   rsSmImportCycleDetected       = '@import cycle detected: "%s"';
+  // #14 type key chain registration (translated)
+  rsSmTypeKeyInvalidName        = 'Invalid type key name: "%s"';
+  rsSmTypeKeyCycle              = 'Type key chain cycle: "%s" -> "%s"';
+  rsSmTypeKeyTooDeep            = 'Type key chain too deep (more than %d keys) at "%s"';
+  rsSmTypeKeyConflict           = 'Type key "%s" already has parent "%s" (not "%s")';
 
   // --- Message dialogs (button captions + type titles) — user-facing, translated ---
   rsMsgBtnYes          = 'Yes';
@@ -154,6 +159,8 @@ resourcestring
   rsDlgAlpha           = 'Alpha';
   rsDlgPreview         = 'Preview';
   rsDlgBasicColors     = 'Basic colors';
+  rsDlgCustomColors    = 'Custom colors';
+  rsDlgAddCustomColor  = 'Add to custom colors';
 
   // --- Font picker dialog (S3) — section labels, user-facing, translated ---
   rsDlgFontFamily      = 'Family';
@@ -164,6 +171,7 @@ resourcestring
   rsDlgFontStrike      = 'Strikeout';
   rsDlgFontColor       = 'Color';
   rsDlgFontSample      = 'AaBbYyZz 0123';
+  rsDlgFontApply       = 'Apply';
 
   // --- Find/Replace dialog (S4) — user-facing, translated ---
   rsDlgFindWhat        = 'Find what:';
@@ -174,6 +182,8 @@ resourcestring
   rsDlgFindNext        = 'Find Next';
   rsDlgReplace         = 'Replace';
   rsDlgReplaceAll      = 'Replace All';
+  rsDlgEntireScope     = 'Entire scope';
+  rsDlgPromptOnReplace = 'Prompt on replace';
 
   // --- File dialogs (TTyOpen/Save[Picture/Preview]Dialog) ---
   rsFdOpenTitle      = 'Open';
@@ -191,6 +201,9 @@ resourcestring
   rsFdViewTile       = 'Tiles';
   rsFdOverwritePrompt = 'The file "%s" already exists.'#10'Do you want to replace it?';
   rsFdMustExist      = 'The file "%s" does not exist.';
+  rsFdPathMustExist  = 'The folder "%s" does not exist.';
+  rsFdNotWritable    = '"%s" is not writable.';
+  rsFdCreatePrompt   = '"%s" does not exist.'#10'Do you want to create it?';
   rsFdAllFilesFilter = 'All Files (*.*)|*.*';
   rsFdPictureFilter  = 'Images (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|' +
                        '*.png;*.jpg;*.jpeg;*.bmp;*.gif|All Files (*.*)|*.*';
@@ -262,6 +275,37 @@ resourcestring
   rsTextMenuPaste     = 'Paste';
   rsTextMenuSelectAll = 'Select All';
 
+  { --- TTyTerminalView context menu ------------------------------------------
+    The terminal's own four-item menu reuses Copy / Paste / Select All above; this is
+    its fourth item, which clears the scrollback. }
+  rsTerminalMenuClear = 'Clear';
+
+  { --- TTyTerminalColorScheme ---------------------------------------------------
+    Reading and writing a Windows Terminal colour scheme (tyControls.Terminal.ColorScheme).
+    %s in the name lists = up to 20 names joined with ', '. }
+  rsTermSchemeUtf16 = 'UTF-16 text is not supported; save the file as UTF-8';
+  { %s = fpjson's message, which carries the line and column }
+  rsTermSchemeBadJson = 'Not valid JSON: %s';
+  rsTermSchemeNotObject = 'Expected a colour scheme object or a settings file with "schemes"';
+  rsTermSchemeSchemesNotArray = '"schemes" is not an array';
+  { %s = the name asked for, %s = the complete schemes in the text }
+  rsTermSchemeNotFound = 'No colour scheme named "%s". Schemes in the text: %s';
+  { %s = the name asked for; the text has no complete scheme to list }
+  rsTermSchemeNotFoundNone = 'No colour scheme named "%s", and the text has no complete colour scheme';
+  { %s = the name asked for; the text is a single scheme object without a name }
+  rsTermSchemeNotFoundUnnamed = 'No colour scheme named "%s"; the scheme in the text has no name';
+  { inside rsTermSchemeBadJson; %d = the most levels of brackets and braces allowed }
+  rsTermSchemeTooDeep = 'nested more than %d levels deep';
+  { %d = the largest file read, in MB }
+  rsTermSchemeTooBig = 'The file is larger than %d MB; a colour scheme file is far smaller';
+  rsTermSchemeNeedName = 'The text has several colour schemes; choose one: %s';
+  rsTermSchemeNoneValid = 'The text has no complete colour scheme (a name and all 16 colours)';
+  { %s = the missing keys, as Windows Terminal names them }
+  rsTermSchemeMissingKeys = 'Missing colours: %s';
+  { %s = the key, %s = the value as written }
+  rsTermSchemeBadColor = '"%s" is not a colour (#rgb or #rrggbb): %s';
+  rsTermSchemeNoName = 'The colour scheme has no name';
+
   { --- TTyUpDown -------------------------------------------------------------
     Raised when a second up-down is pointed at a control another one already drives.
     Two steppers writing one field is not a configuration, it is a fight, and the
@@ -276,6 +320,57 @@ resourcestring
     'The graphic control "%s" was placed directly on the form.'#10 +
     'Windowless (graphic) controls paint onto the form itself and will be HIDDEN behind the '#10 +
     'content area. Move it into the Surface content container so it stays visible.';
+  { Drawn inside a TTyToolWindowActions at design time when its window will not use it:
+    a second actions area in the same tool window (a paste), or one that is not in a tool
+    window at all (undo of a delete re-creates it on the form). Both are hidden at run time.
+    Kept to a glance-sized reminder on purpose: the area is sized to fit the note, and a
+    side bar is only 240px wide by default. The why belongs in the control docs. }
+  rsTyToolWindowActionsExtra =
+    'Unused actions area';
+  rsTyToolWindowActionsOrphan =
+    'Not in a tool window';
+  { Drawn by TTyToolWindowBar at design time: in the content area of a bar with no tool
+    windows, and in a line reserved at the bottom of the content area when a control that is
+    not a tool window got into the bar (a paste). Such a control is hidden at run time. }
+  rsTyToolWindowBarEmpty =
+    'Add a tool window';
+  rsTyToolWindowBarStray =
+    'Not a tool window: hidden at run time';
+  { Drawn at design time along the top of a TTyToolWindow whose parent is not a tool window
+    bar: undo of a delete re-creates it on the form, a paste can drop it anywhere. It stays
+    hidden at run time. Right-click it -> "Move Back into Bar" puts it back. }
+  rsTyToolWindowOrphan =
+    'Not in a tool window bar: hidden at run time';
+  { Drawn at design time in a line reserved at the bottom of a bar's content area when
+    another bar on the same TTyToolWindowManager has the same Placement. Every such bar is
+    left out of cross-bar drags, MoveWindow and layout strings; reordering inside it still
+    works. Short on purpose: a side bar is 240px wide by default. }
+  rsTyToolWindowBarConflict =
+    'Same Placement as another bar';
+  { Hints on the bottom bar's tab row (TTyToolWindowBar.HeaderHint): the maximize button
+    (its two states), the hide button that collapses the whole bottom bar, and the
+    overflow button that lists the tabs that did not fit. }
+  rsTyToolWindowMaximize = 'Maximize';
+  rsTyToolWindowRestore  = 'Restore';
+  rsTyToolWindowCollapse = 'Hide';
+  rsTyToolWindowMore     = 'More';
+  { Raised (EInvalidOperation) when code moves a tool window straight from a side bar to a
+    bottom bar or back at run time (TTyToolWindow.SetParent): the header mode and the layout
+    key differ between the two kinds. }
+  rsTyToolWindowCrossBarMove =
+    'A tool window cannot move between a side bar and a bottom bar';
+  { Drawn in the drop zone that stands in for a hidden (empty) side bar while a tool window is
+    being dragged: releasing inside it moves the window there and the bar appears. Must fit a
+    side bar's default width (240 logical px). }
+  rsTyToolWindowDropLeft  = 'Drop here to show the left side bar';
+  rsTyToolWindowDropRight = 'Drop here to show the right side bar';
+
+  // --- Title bar: the window menu (right-click, the icon, Alt+Space) ---
+  // The same items, order and mnemonics as the Windows system menu.
+  rsTyWindowMenuRestore  = '&Restore';
+  rsTyWindowMenuMinimize = 'Mi&nimize';
+  rsTyWindowMenuMaximize = 'Ma&ximize';
+  rsTyWindowMenuClose    = '&Close';
 
   { --- Calendar / DateTimePicker: month & weekday names ----------------------
     The names TTyCalendar and TTyDateTimePicker render ('August', 'Sun', ...).

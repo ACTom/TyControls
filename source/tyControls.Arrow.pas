@@ -67,7 +67,7 @@ type
     shaft, sized by an apex angle -- reachable now for a ported form or a plain pointer. }
   TTyArrowShape = (tasBlock, tasTriangle);
 
-  TTyArrow = class(TTyGraphicControl)
+  TTyCustomArrow = class(TTyGraphicControl)
   private
     FDirection: TTyArrowDirection;
     FShape: TTyArrowShape;
@@ -85,7 +85,6 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     function GetStyleTypeKey: string; override;
-  published
     property Direction: TTyArrowDirection read FDirection write SetDirection default tadRight;
     { Which of the two glyphs to draw. HeadRatio / ShaftRatio shape the block arrow only;
       ArrowPointerAngle shapes the triangle only. Each is inert in the other mode. }
@@ -98,11 +97,57 @@ type
       default TyArrowDefPointerAngle;
     property HeadRatio: Single read FHeadRatio write SetHeadRatio;
     property ShaftRatio: Single read FShaftRatio write SetShaftRatio;
-    property Align;
-    property Anchors;
+  end;
+
+  { TTyArrow publishes TTyCustomArrow's properties; everything lives in TTyCustomArrow. }
+  TTyArrow = class(TTyCustomArrow)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
     property StyleClass;
     property StyleOverride;
     property Controller;
+    property Direction;
+    property Shape;
+    property ArrowPointerAngle;
+    property HeadRatio;
+    property ShaftRatio;
+    property Align;
+    property Anchors;
   end;
 
 { Pure geometry: the 7 vertices of a block arrow inscribed in ARect, pointing ADir.
@@ -312,7 +357,7 @@ begin
   end;
 end;
 
-constructor TTyArrow.Create(AOwner: TComponent);
+constructor TTyCustomArrow.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FDirection := tadRight;
@@ -324,7 +369,7 @@ begin
   Height := 64;
 end;
 
-function TTyArrow.GetStyleTypeKey: string;
+function TTyCustomArrow.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyPanel': a directional marker on a diagram is not a panel surface.
     Added to 'TyPanel's rule block as an extra selector, so every resolved value is
@@ -332,21 +377,21 @@ begin
   Result := 'TyArrow';
 end;
 
-procedure TTyArrow.SetDirection(AValue: TTyArrowDirection);
+procedure TTyCustomArrow.SetDirection(AValue: TTyArrowDirection);
 begin
   if FDirection = AValue then Exit;
   FDirection := AValue;
   Invalidate;
 end;
 
-procedure TTyArrow.SetShape(AValue: TTyArrowShape);
+procedure TTyCustomArrow.SetShape(AValue: TTyArrowShape);
 begin
   if FShape = AValue then Exit;
   FShape := AValue;
   Invalidate;
 end;
 
-procedure TTyArrow.SetPointerAngle(AValue: Integer);
+procedure TTyCustomArrow.SetPointerAngle(AValue: Integer);
 begin
   // Clamp on assignment for the same reason the ratios do: otherwise the property reads
   // back (and streams to .lfm) an angle the arrow never draws.
@@ -356,7 +401,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyArrow.SetHeadRatio(AValue: Single);
+procedure TTyCustomArrow.SetHeadRatio(AValue: Single);
 begin
   // Clamp on assignment, not just at render time: otherwise the property reads back (and
   // streams to .lfm) a value the arrow never draws.
@@ -366,7 +411,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyArrow.SetShaftRatio(AValue: Single);
+procedure TTyCustomArrow.SetShaftRatio(AValue: Single);
 begin
   AValue := ClampRatio(AValue);
   if FShaftRatio = AValue then Exit;
@@ -374,7 +419,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyArrow.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomArrow.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -442,7 +487,7 @@ begin
   end;
 end;
 
-procedure TTyArrow.Paint;
+procedure TTyCustomArrow.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

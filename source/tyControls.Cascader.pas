@@ -450,7 +450,7 @@ type
   end;
 
   { A combo-like field that drops a multi-column cascading panel. }
-  TTyCascader = class(TTyCustomControl)
+  TTyCustomCascader = class(TTyCustomControl)
   private
     FNodes: TTyCascaderNodes;
     FPath: TTyCascaderPath;
@@ -486,7 +486,7 @@ type
       click-while-open reopen race (TTyComboBox's, same mechanics). }
     FCloseUpTick: QWord;
     function GetStyleTypeKey: string; override;
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     function LayoutFor(AWidth, AHeight, APPI: Integer): TTyCascaderFieldLayout;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -534,7 +534,7 @@ type
       for the TTyCascader static type, the way TTyComboBox.Text already does; LCL code, which
       sees the control as a TControl, still gets the inherited Caption text. }
     property Text: TCaption read GetPathText;
-  published
+    property TabStop default True;
     { The option tree. Editing it anywhere re-validates the selection SILENTLY (see
       NodesChanged) and re-lays an open panel. }
     property Nodes: TTyCascaderNodes read FNodes write SetNodes;
@@ -550,12 +550,69 @@ type
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property OnDropDown: TNotifyEvent read FOnDropDown write FOnDropDown;
     property OnCloseUp: TNotifyEvent read FOnCloseUp write FOnCloseUp;
-    property TabStop default True;
-    property Align;
-    property Anchors;
+  end;
+
+  { TTyCascader publishes TTyCustomCascader's properties; everything lives in TTyCustomCascader. }
+  TTyCascader = class(TTyCustomCascader)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
     property StyleClass;
     property StyleOverride;
     property Controller;
+    property Nodes;
+    property Separator;
+    property DropDownRows;
+    property OnChange;
+    property OnDropDown;
+    property OnCloseUp;
+    property Align;
+    property Anchors;
   end;
 
 implementation
@@ -1689,9 +1746,9 @@ begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-{ --- TTyCascader ---------------------------------------------------------------------- }
+{ --- TTyCustomCascader ---------------------------------------------------------------- }
 
-constructor TTyCascader.Create(AOwner: TComponent);
+constructor TTyCustomCascader.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FNodes := TTyCascaderNodes.Create(Self);
@@ -1708,7 +1765,7 @@ begin
   Height := TyDensityHeight(ActiveController, 26);
 end;
 
-destructor TTyCascader.Destroy;
+destructor TTyCustomCascader.Destroy;
 begin
   // Cancel any queued async close so it cannot fire into a freed field.
   Application.RemoveAsyncCalls(Self);
@@ -1721,12 +1778,12 @@ begin
   inherited Destroy;
 end;
 
-function TTyCascader.GetStyleTypeKey: string;
+function TTyCustomCascader.GetStyleTypeKey: string;
 begin
   Result := 'TyCascader';
 end;
 
-procedure TTyCascader.SetController(AValue: TTyStyleController);
+procedure TTyCustomCascader.SetController(AValue: TTyCustomStyleController);
 begin
   inherited SetController(AValue);
   // Keep an already-created panel themed by the same controller; otherwise it would keep the
@@ -1737,12 +1794,12 @@ end;
 
 { --- options / value ------------------------------------------------------------------ }
 
-procedure TTyCascader.SetNodes(AValue: TTyCascaderNodes);
+procedure TTyCustomCascader.SetNodes(AValue: TTyCascaderNodes);
 begin
   FNodes.Assign(AValue);   // fires NodesChanged
 end;
 
-procedure TTyCascader.NodesChanged(Sender: TObject);
+procedure TTyCustomCascader.NodesChanged(Sender: TObject);
 var
   valid: TTyCascaderPath;
 begin
@@ -1762,12 +1819,12 @@ begin
   if not (csLoading in ComponentState) then Invalidate;
 end;
 
-function TTyCascader.GetPath: TTyCascaderPath;
+function TTyCustomCascader.GetPath: TTyCascaderPath;
 begin
   Result := TyCascaderCopyPath(FPath);
 end;
 
-procedure TTyCascader.SetPath(const AValue: TTyCascaderPath);
+procedure TTyCustomCascader.SetPath(const AValue: TTyCascaderPath);
 var
   norm: TTyCascaderPath;
 begin
@@ -1778,14 +1835,14 @@ begin
   DoChange;
 end;
 
-procedure TTyCascader.SetSeparator(const AValue: string);
+procedure TTyCustomCascader.SetSeparator(const AValue: string);
 begin
   if FSeparator = AValue then Exit;
   FSeparator := AValue;
   Invalidate;   // the joined Text is what the field draws
 end;
 
-procedure TTyCascader.SetDropDownRows(AValue: Integer);
+procedure TTyCustomCascader.SetDropDownRows(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;   // a popup with no rows shows nothing (TTyComboBox's clamp)
   if FDropDownRows = AValue then Exit;
@@ -1794,12 +1851,12 @@ begin
   // window out from under a click is worse than waiting for the next open.
 end;
 
-function TTyCascader.GetPathText: TCaption;
+function TTyCustomCascader.GetPathText: TCaption;
 begin
   Result := TyCascaderPathText(FNodes, FPath, FSeparator);
 end;
 
-procedure TTyCascader.Clear;
+procedure TTyCustomCascader.Clear;
 var
   empty: TTyCascaderPath;
 begin
@@ -1807,17 +1864,17 @@ begin
   Path := empty;   // -> SetPath: silent when nothing was selected, OnChange when it was
 end;
 
-function TTyCascader.SelectedNode: TTyCascaderNode;
+function TTyCustomCascader.SelectedNode: TTyCascaderNode;
 begin
   Result := TyCascaderNodeAt(FNodes, FPath, Length(FPath));
 end;
 
-function TTyCascader.PathDepth: Integer;
+function TTyCustomCascader.PathDepth: Integer;
 begin
   Result := Length(FPath);
 end;
 
-function TTyCascader.SelectByText(const AText: string): Boolean;
+function TTyCustomCascader.SelectByText(const AText: string): Boolean;
 var
   found: TTyCascaderPath;
 begin
@@ -1829,7 +1886,7 @@ end;
 
 { --- geometry ------------------------------------------------------------------------- }
 
-function TTyCascader.ButtonWidthPx(APPI: Integer): Integer;
+function TTyCustomCascader.ButtonWidthPx(APPI: Integer): Integer;
 begin
   if APPI <= 0 then APPI := 96;
   Result := ActiveController.Metric(TyCascaderButtonWidthVar, TyCascaderButtonWidth);
@@ -1837,7 +1894,7 @@ begin
   Result := MulDiv(Result, APPI, 96);
 end;
 
-function TTyCascader.LayoutFor(AWidth, AHeight, APPI: Integer): TTyCascaderFieldLayout;
+function TTyCustomCascader.LayoutFor(AWidth, AHeight, APPI: Integer): TTyCascaderFieldLayout;
 var
   S: TTyStyleSet;
 begin
@@ -1849,19 +1906,19 @@ begin
     ButtonWidthPx(APPI));
 end;
 
-function TTyCascader.TyCascaderTextRect: TRect;
+function TTyCustomCascader.TyCascaderTextRect: TRect;
 begin
   Result := LayoutFor(ClientWidth, ClientHeight, Font.PixelsPerInch).TextRect;
 end;
 
-function TTyCascader.TyCascaderButtonRect: TRect;
+function TTyCustomCascader.TyCascaderButtonRect: TRect;
 begin
   Result := LayoutFor(ClientWidth, ClientHeight, Font.PixelsPerInch).ButtonRect;
 end;
 
 { --- the popup ------------------------------------------------------------------------ }
 
-procedure TTyCascader.EnsurePopup;
+procedure TTyCustomCascader.EnsurePopup;
 begin
   if FPopup <> nil then Exit;
   // Neither of these touches a window handle: TTyDropdownPopup only constructs its TForm
@@ -1877,7 +1934,7 @@ begin
   FPopup.Form.OnKeyDown := @PopupKeyDown;
 end;
 
-procedure TTyCascader.SyncPanel;
+procedure TTyCustomCascader.SyncPanel;
 begin
   { ActiveController, not the raw published Controller: a field themed by the global default
     has Controller = nil, and handing nil to the popup helper makes ApplyRegion skip its
@@ -1896,19 +1953,19 @@ begin
   FPanel.Path := FPath;   // seed the DRAFT from the committed value
 end;
 
-function TTyCascader.DropDownPanel: TTyCascaderPanel;
+function TTyCustomCascader.DropDownPanel: TTyCascaderPanel;
 begin
   EnsurePopup;
   SyncPanel;
   Result := FPanel;
 end;
 
-function TTyCascader.DroppedDown: Boolean;
+function TTyCustomCascader.DroppedDown: Boolean;
 begin
   Result := (FPopup <> nil) and FPopup.IsOpen;
 end;
 
-procedure TTyCascader.DropDown;
+procedure TTyCustomCascader.DropDown;
 var
   S: TTyStyleSet;
   sz: TSize;
@@ -1927,7 +1984,7 @@ begin
   DoDropDown;
 end;
 
-procedure TTyCascader.CloseUp;
+procedure TTyCustomCascader.CloseUp;
 begin
   if (FPopup <> nil) and FPopup.IsOpen then
   begin
@@ -1941,19 +1998,19 @@ begin
   DoCloseUp;
 end;
 
-procedure TTyCascader.DeferredCloseUp(Data: PtrInt);
+procedure TTyCustomCascader.DeferredCloseUp(Data: PtrInt);
 begin
   CloseUp;
 end;
 
-procedure TTyCascader.PopupClosed(Sender: TObject);
+procedure TTyCustomCascader.PopupClosed(Sender: TObject);
 begin
   if FPopup <> nil then FCloseUpTick := FPopup.CloseUpTick;
   Invalidate;
   DoCloseUp;
 end;
 
-procedure TTyCascader.PanelColumnsChanged(Sender: TObject);
+procedure TTyCustomCascader.PanelColumnsChanged(Sender: TObject);
 var
   sz: TSize;
 begin
@@ -1966,7 +2023,7 @@ begin
   FPopup.Resize(sz.cx, sz.cy);
 end;
 
-procedure TTyCascader.PanelPick(Sender: TObject);
+procedure TTyCustomCascader.PanelPick(Sender: TObject);
 begin
   // The panel edits a DRAFT. Only a LEAF is a complete answer: a branch pick just opened the
   // next column and the value stays what it was, so dismissing the popup mid-browse cannot
@@ -1979,7 +2036,7 @@ begin
   Application.QueueAsyncCall(@DeferredCloseUp, 0);
 end;
 
-procedure TTyCascader.PopupKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+procedure TTyCustomCascader.PopupKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
   { The panel is TabStop=False so the popup FORM holds focus; its KeyPreview routes every key
     here. That is deliberate — one keyboard, in the control that owns the value, rather than
@@ -2012,7 +2069,7 @@ end;
 
 { --- input ---------------------------------------------------------------------------- }
 
-procedure TTyCascader.Click;
+procedure TTyCustomCascader.Click;
 begin
   if not Enabled then Exit;
   inherited Click;
@@ -2026,7 +2083,7 @@ begin
     DropDown;
 end;
 
-procedure TTyCascader.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomCascader.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
@@ -2045,24 +2102,24 @@ begin
   end;
 end;
 
-procedure TTyCascader.DoChange;
+procedure TTyCustomCascader.DoChange;
 begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTyCascader.DoDropDown;
+procedure TTyCustomCascader.DoDropDown;
 begin
   if Assigned(FOnDropDown) then FOnDropDown(Self);
 end;
 
-procedure TTyCascader.DoCloseUp;
+procedure TTyCustomCascader.DoCloseUp;
 begin
   if Assigned(FOnCloseUp) then FOnCloseUp(Self);
 end;
 
 { --- painting ------------------------------------------------------------------------- }
 
-procedure TTyCascader.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomCascader.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -2112,7 +2169,7 @@ begin
   end;
 end;
 
-procedure TTyCascader.Paint;
+procedure TTyCustomCascader.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

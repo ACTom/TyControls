@@ -2,10 +2,10 @@ object MainForm: TMainForm
   Left = 0
   Height = 720
   Top = 0
-  Width = 560
+  Width = 820
   Caption = 'Scrollbar example'
   ClientHeight = 720
-  ClientWidth = 560
+  ClientWidth = 820
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
@@ -14,18 +14,18 @@ object MainForm: TMainForm
     Left = 0
     Height = 720
     Top = 0
-    Width = 560
+    Width = 820
     Align = alClient
     object Bar: TTyTitleBar
       Left = 0
       Height = 34
       Top = 0
-      Width = 560
+      Width = 820
       Align = alTop
       Caption = 'TTyScrollBar  ·  TyControls'
       TitleAlignment = taLeftJustify
       object DarkSwitch: TTyToggleSwitch
-        Left = 212
+        Left = 472
         Height = 24
         Top = 5
         Width = 74
@@ -34,7 +34,7 @@ object MainForm: TMainForm
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
-        Left = 294
+        Left = 554
         Height = 26
         Top = 4
         Width = 120
@@ -60,6 +60,7 @@ object MainForm: TMainForm
       Position = 100
       PageSize = 20
       SmallChange = 5
+      AutoHide = sbahAuto
       OnChange = BarChange
       OnScroll = BarScroll
     end
@@ -74,6 +75,7 @@ object MainForm: TMainForm
       Position = 25
       PageSize = 10
       SmallChange = 2
+      AutoHide = sbahAuto
       OnChange = BarChange
       OnScroll = BarScroll
     end
@@ -180,6 +182,53 @@ object MainForm: TMainForm
       Position = 0
       PageSize = 10
       SmallChange = 1
+    end
+    object LblAutoTitle: TTyLabel
+      Left = 560
+      Height = 64
+      Top = 48
+      Width = 236
+      WordWrap = True
+      Layout = tlTop
+      Caption = 'A bar nobody is using fades out; point at its list and it is back'
+    end
+    object RgAutoHide: TTyRadioGroup
+      Left = 560
+      Height = 140
+      Top = 116
+      Width = 236
+      Caption = 'AutoHide - both bars and the list'
+      Items.Strings = (
+        'sbahDefault - theme decides'
+        'sbahNever - never fades'
+        'sbahAuto - always fades'
+      )
+      ItemIndex = 2
+      OnSelectionChanged = RgAutoHideSelectionChanged
+    end
+    object LblAutoMs: TTyLabel
+      Left = 560
+      Height = 88
+      Top = 264
+      Width = 236
+      WordWrap = True
+      Layout = tlTop
+    end
+    object AutoList: TTyListBox
+      Left = 560
+      Height = 216
+      Top = 360
+      Width = 236
+      ScrollBarAutoHide = sbahAuto
+    end
+    object LblAutoHint: TTyLabel
+      Left = 560
+      Height = 116
+      Top = 584
+      Width = 236
+      WordWrap = True
+      Layout = tlTop
+      Caption = 'Move the pointer over the list and its bar appears; take it away and the bar fades after the delay above. Only win11, macOS, fluent, material3, adwaita and ubuntu ship it on'
     end
   end
 end

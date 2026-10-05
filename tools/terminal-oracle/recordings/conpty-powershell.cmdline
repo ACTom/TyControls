@@ -1,0 +1,1 @@
+powershell.exe -NoLogo -NoProfile -NonInteractive -Command "Write-Host 'tyterm-ps 中文与 English 混排'; Write-Host -ForegroundColor Green 'green'; Write-Host -ForegroundColor Red -BackgroundColor Yellow 'red on yellow'; 1..30 | ForEach-Object { 'row ' + $_ }; Write-Host -NoNewline 'no newline at the end'"

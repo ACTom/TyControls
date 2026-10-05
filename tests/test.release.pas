@@ -61,18 +61,24 @@ type
     procedure EveryFileThePackagesNameIsShipped;
     procedure EveryDesignTimeUnitIsShipped;
     procedure TheThirdPartyNoticeShipsWithTheFontItLicenses;
+    procedure TheThirdPartyNoticeCoversTheUnicodeWidthPort;
+    procedure TheThirdPartyNoticeCoversTheTerminalPort;
     procedure EveryAssetAShippedThemeReferencesIsShipped;
     procedure BothScriptsShipTheSameTrees;
     procedure TheChartOptionEditorStaysAShell;
     procedure EveryUnitOnDiskIsListedInItsPackage;
     procedure EveryTestUnitThatRegistersTestsIsLinked;
     procedure TheControlDocsIndexLinksEveryPageAndOnlyRealOnes;
+    procedure TheExampleRecordingsMatchTheOracle;
+    procedure TheExampleColourSchemesAreCoveredByTheNotice;
+    { 7 期: the example's ZModem is our own, written from the public-domain protocol }
+    procedure TheExampleZmodemUnitsAreOurOwn;
   end;
 
 implementation
 
 uses
-  FileUtil, test.designregistry;
+  FileUtil, test.designregistry, tyControls.Terminal.ColorScheme;
 
 { ---------------------------------------------------------------- helpers ---------------- }
 
@@ -542,6 +548,91 @@ begin
   AssertTrue('and the notice file exists', FileExists(RepoRoot + 'THIRD-PARTY-NOTICES.md'));
 end;
 
+procedure TReleaseManifestTest.TheThirdPartyNoticeCoversTheUnicodeWidthPort;
+var
+  notice: string;
+begin
+  { Hardcoded on purpose, for the same reason as the Lucide guard above: no manifest
+    declares a licence obligation. tyControls.Unicode.Width is ported from xterm.js (MIT)
+    and its generated .inc carries a table derived from the Unicode Character Database
+    (Unicode License v3); shipping them obliges THIRD-PARTY-NOTICES.md to carry both
+    texts. The commit is checked too, so a notice left behind by a later re-pin shows. }
+  AssertTrue('the width unit ships (ps1)', IsShipped(FPs1, 'source/tyControls.Unicode.Width.pas'));
+  AssertTrue('the width unit ships (sh)', IsShipped(FSh, 'source/tyControls.Unicode.Width.pas'));
+  AssertTrue('its generated tables ship (ps1)', IsShipped(FPs1, 'source/tyControls.Unicode.Width.Data.inc'));
+  AssertTrue('its generated tables ship (sh)', IsShipped(FSh, 'source/tyControls.Unicode.Width.Data.inc'));
+  notice := ReadScript(RepoRoot + 'THIRD-PARTY-NOTICES.md');
+  AssertTrue('so the notice has an xterm.js section', Pos('## xterm.js', notice) > 0);
+  AssertTrue('and the Unicode License v3 text', Pos('UNICODE LICENSE V3', notice) > 0);
+  AssertTrue('and names the pinned xterm.js commit', Pos('c58ea36', notice) > 0);
+  { The join rules and the '15' data reach xterm.js from unicode-properties (MIT,
+    "Copyright 2018"); its copyright line has to travel with the others. }
+  AssertTrue('and carries the unicode-properties copyright line',
+    Pos('Copyright 2018 (unicode-properties', notice) > 0);
+end;
+
+procedure TReleaseManifestTest.TheThirdPartyNoticeCoversTheTerminalPort;
+const
+  { phase 3: the keyboard port, the renderer (colour resolution and drawn glyphs after
+    xterm.js) and the glyph table dumped from addon-webgl; phase 4: the selection and the
+    links, ported from the browser layer and the web-links / clipboard addons; phase 5:
+    the reflow include and the luminance table generated from upstream's formula }
+  Units: array[0..13] of string = ('source/tyControls.Terminal.Parser.pas',
+    'source/tyControls.Terminal.Buffer.pas', 'source/tyControls.Terminal.Buffer.Reflow.inc',
+    'source/tyControls.Terminal.Luminance.inc', 'source/tyControls.Terminal.Core.pas',
+    'source/tyControls.Terminal.Core.Services.inc', 'source/tyControls.Terminal.Core.InputHandler.inc',
+    'source/tyControls.Terminal.Core.WriteQueue.inc', 'source/tyControls.Terminal.Charsets.inc',
+    'source/tyControls.Terminal.Keyboard.pas', 'source/tyControls.Terminal.Render.pas',
+    'source/tyControls.Terminal.CustomGlyphs.inc', 'source/tyControls.Terminal.Selection.pas',
+    'source/tyControls.Terminal.Links.pas');
+  { the view (tyControls.Terminal.pas) is our own code that follows upstream's logic, not a
+    port, so neither it nor the five includes it was split into are in the heading; they
+    still have to ship, or the view does not compile }
+  ViewIncludes: array[0..4] of string = ('source/tyControls.Terminal.View.Mouse.inc',
+    'source/tyControls.Terminal.View.Links.inc', 'source/tyControls.Terminal.View.Osc52.inc',
+    'source/tyControls.Terminal.View.Menu.inc', 'source/tyControls.Terminal.View.Selection.inc');
+  { phase 7: the core's stream and parser hooks are our own code too (spec 19): they
+    ship and are on disk, and the xterm.js heading does NOT name them }
+  CoreOwnIncludes: array[0..0] of string = ('source/tyControls.Terminal.Core.Stream.inc');
+var
+  notice, heading: string;
+  i, p: Integer;
+begin
+  for i := 0 to High(ViewIncludes) do
+  begin
+    AssertTrue(ViewIncludes[i] + ' ships (ps1)', IsShipped(FPs1, ViewIncludes[i]));
+    AssertTrue(ViewIncludes[i] + ' ships (sh)', IsShipped(FSh, ViewIncludes[i]));
+    AssertTrue(ViewIncludes[i] + ' is on disk', FileExists(RepoRoot + ViewIncludes[i]));
+  end;
+  { Hardcoded for the same reason as the width guard above: nothing declares the licence
+    obligation. The three terminal units are ported from xterm.js (MIT) and the charset
+    include is dumped from it; both release scripts ship source/ whole today, so this
+    guards against a later filter that would ship the units without their notice -- or
+    a notice whose heading forgets a unit. The test-fixtures note credits the escape
+    sequence files the oracle feeds (spec 14). }
+  for i := 0 to High(Units) do
+  begin
+    AssertTrue(Units[i] + ' ships (ps1)', IsShipped(FPs1, Units[i]));
+    AssertTrue(Units[i] + ' ships (sh)', IsShipped(FSh, Units[i]));
+  end;
+  notice := ReadScript(RepoRoot + 'THIRD-PARTY-NOTICES.md');
+  p := Pos('## xterm.js', notice);
+  AssertTrue('the notice has an xterm.js section', p > 0);
+  heading := Copy(notice, p, Pos(#10, Copy(notice, p, MaxInt)));
+  { every file of the port by name, the generated charset tables included }
+  for i := 0 to High(Units) do
+    AssertTrue('its heading names ' + Units[i], Pos(ExtractFileName(Units[i]), heading) > 0);
+  for i := 0 to High(CoreOwnIncludes) do
+  begin
+    AssertTrue(CoreOwnIncludes[i] + ' ships (ps1)', IsShipped(FPs1, CoreOwnIncludes[i]));
+    AssertTrue(CoreOwnIncludes[i] + ' ships (sh)', IsShipped(FSh, CoreOwnIncludes[i]));
+    AssertTrue(CoreOwnIncludes[i] + ' is on disk', FileExists(RepoRoot + CoreOwnIncludes[i]));
+    AssertEquals(CoreOwnIncludes[i] + ' is ours: not in the xterm.js heading', 0,
+      Pos(ExtractFileName(CoreOwnIncludes[i]), heading));
+  end;
+  AssertTrue('the notice credits the test fixtures', Pos('### Test fixtures', notice) > 0);
+end;
+
 procedure TReleaseManifestTest.EveryAssetAShippedThemeReferencesIsShipped;
 var
   css: TStringList;
@@ -653,6 +744,109 @@ begin
   end;
 end;
 
+{ The terminal example ships colour schemes copied from Windows Terminal's defaults.json
+  (terminal phase 6). Every scheme file there must fall under a notice section whose heading
+  names the directory; every scheme in them must be one of the seven whose licences were
+  checked (Windows Terminal MIT; Solarized, One Half MIT; Tango public domain) -- a scheme
+  added later without its licence looked up turns this red; and none may hold the U+0000
+  escape, which fpjson drops. }
+procedure TReleaseManifestTest.TheExampleColourSchemesAreCoveredByTheNotice;
+const
+  Dir = 'examples/terminal/colorschemes/';
+  Checked: array[0..6] of string = ('Campbell', 'One Half Dark', 'One Half Light',
+    'Solarized Dark', 'Solarized Light', 'Tango Dark', 'Tango Light');
+var
+  files, notice: TStringList;
+  i, j, k, schemes: Integer;
+  heading, body: string;
+  names: TStringArray;
+  known: Boolean;
+begin
+  files := FindAllFiles(RepoRoot + 'examples' + PathDelim + 'terminal' + PathDelim + 'colorschemes', '*.json', False);
+  notice := TStringList.Create;
+  try
+    AssertTrue('the example has colour scheme files', files.Count > 0);
+    notice.Text := ReadScript(RepoRoot + 'THIRD-PARTY-NOTICES.md');
+    heading := '';
+    for i := 0 to notice.Count - 1 do
+      if (Pos('## ', notice[i]) = 1) and (Pos(Dir, notice[i]) > 0) then
+        heading := notice[i];
+    AssertTrue('a notice section is headed with ' + Dir, heading <> '');
+    schemes := 0;
+    for i := 0 to files.Count - 1 do
+    begin
+      body := ReadScript(files[i]);
+      AssertEquals(ExtractFileName(files[i]) + ' holds no U+0000 escape', 0, Pos('\' + 'u0000', body));
+      names := TTyTerminalColorScheme.ListSchemeNames(body);
+      AssertTrue(ExtractFileName(files[i]) + ' has schemes', Length(names) > 0);
+      for j := 0 to High(names) do
+      begin
+        known := False;
+        for k := 0 to High(Checked) do
+          if names[j] = Checked[k] then known := True;
+        AssertTrue(ExtractFileName(files[i]) + ': "' + names[j]
+          + '" is one of the seven whose licence was checked', known);
+        Inc(schemes);
+      end;
+    end;
+    AssertTrue('schemes checked', schemes >= Length(Checked));
+  finally
+    notice.Free;
+    files.Free;
+  end;
+end;
+
+procedure TReleaseManifestTest.TheExampleRecordingsMatchTheOracle;
+var
+  oracle, example: TStringList;
+  i, same: Integer;
+  a, b: TMemoryStream;
+  first, dir: string;
+begin
+  { The terminal example ships copies of the oracle's recordings (tools/terminal-oracle/
+    recordings) so the release package is self-contained. A copy that drifts -- one side
+    re-recorded, the other not -- would replay something the fixtures no longer hold.
+    Every example recording must also be asciicast v2 and free of \u0000: the example's
+    reader (fpjson) drops that escape. }
+  dir := RepoRoot + 'examples' + PathDelim + 'terminal' + PathDelim + 'recordings' + PathDelim;
+  oracle := FindAllFiles(RepoRoot + 'tools' + PathDelim + 'terminal-oracle' + PathDelim + 'recordings', '*.cast', False);
+  example := FindAllFiles(dir, '*.cast', False);
+  a := TMemoryStream.Create;
+  b := TMemoryStream.Create;
+  try
+    AssertTrue('the oracle has recordings', oracle.Count >= 8);
+    same := 0;
+    for i := 0 to oracle.Count - 1 do
+    begin
+      AssertTrue(ExtractFileName(oracle[i]) + ' is copied into the example',
+        FileExists(dir + ExtractFileName(oracle[i])));
+      a.LoadFromFile(oracle[i]);
+      b.LoadFromFile(dir + ExtractFileName(oracle[i]));
+      AssertTrue(ExtractFileName(oracle[i]) + ': the two copies are byte for byte the same',
+        (a.Size = b.Size) and CompareMem(a.Memory, b.Memory, a.Size));
+      Inc(same);
+    end;
+    AssertEquals('every oracle recording compared', oracle.Count, same);
+    AssertTrue('the example has its own recordings too', example.Count > oracle.Count);
+    for i := 0 to example.Count - 1 do
+      with TStringList.Create do
+      try
+        LoadFromFile(example[i]);
+        if Count > 0 then first := Strings[0] else first := '';
+        AssertTrue(ExtractFileName(example[i]) + ' starts with an asciicast v2 header',
+          Pos('"version": 2', first) > 0);
+        AssertEquals(ExtractFileName(example[i]) + ' holds no \u0000', 0, Pos('\u0000', Text));
+      finally
+        Free;
+      end;
+  finally
+    a.Free;
+    b.Free;
+    oracle.Free;
+    example.Free;
+  end;
+end;
+
 procedure TReleaseManifestTest.TheControlDocsIndexLinksEveryPageAndOnlyRealOnes;
 var
   pages, linked: TStringList;
@@ -716,7 +910,32 @@ begin
   end;
 end;
 
+{ The example's ZModem (spec 19.10): written from Forsberg's protocol description,
+  which is public domain, with no code from lrzsz -- whose licence (GPL) the library's
+  must not take on. So: the three units ship with the example, none of them says
+  anything under that licence (the word itself included: a copied header would), and
+  each names its source. }
+procedure TReleaseManifestTest.TheExampleZmodemUnitsAreOurOwn;
+const
+  ZmUnits: array[0..2] of string = ('examples/terminal/uzmodem.pas',
+    'examples/terminal/uzmodemsession.pas', 'examples/terminal/uzmodemterm.pas');
+var
+  i: Integer;
+  body, head: string;
+begin
+  for i := 0 to High(ZmUnits) do
+  begin
+    AssertTrue(ZmUnits[i] + ' ships (ps1)', IsShipped(FPs1, ZmUnits[i]));
+    AssertTrue(ZmUnits[i] + ' ships (sh)', IsShipped(FSh, ZmUnits[i]));
+    AssertTrue(ZmUnits[i] + ' is on disk', FileExists(RepoRoot + ZmUnits[i]));
+    body := ReadScript(RepoRoot + ZmUnits[i]);
+    AssertEquals(ZmUnits[i] + ': no "General Public License"', 0, Pos('General Public License', body));
+    AssertEquals(ZmUnits[i] + ': no "GPL"', 0, Pos('GPL', body));
+    head := Copy(body, 1, 1500);
+    AssertTrue(ZmUnits[i] + ': the header names the protocol''s source', Pos('Forsberg', head) > 0);
+  end;
+end;
+
 initialization
   RegisterTest(TReleaseManifestTest);
-
 end.

@@ -75,7 +75,13 @@ const
   TyTransferButtonGap    = 6;    // vertical gap between two move buttons
   TyTransferTitleHeight  = 26;   // the title band above each pane
   TyTransferArrowSize    = 12;   // one arrow glyph's square slot
-  TyTransferArrowGap     = 1;    // gap between the two arrows of a "move all" button
+  { The STEP between the two marks of a "move all" button, measured slot-to-slot -- and it is
+    NEGATIVE on purpose. Each mark is drawn inside a SQUARE slot, but a chevron's ink only
+    spans the middle ~50% of that slot (tgChevronRight runs from 0.3w to 0.8w), so two slots
+    laid edge to edge leave a hole wider than the marks themselves. Overlapping the slots by
+    about a third closes the side bearings and makes '>>' read as one doubled mark instead of
+    two marks with a gap. A theme that swaps in a full-bleed glyph would set this back to 0. }
+  TyTransferArrowGap     = -4;
   TyTransferArrowMargin  = 3;    // icon inset from the button's OWN edges (NOT the text padding)
 
   { The metric token each constant backs. Named constants rather than inline literals because
@@ -207,7 +213,7 @@ type
     property Move: TTyTransferMove read FMove write FMove;
   end;
 
-  TTyTransfer = class(TTyCustomControl)
+  TTyCustomTransfer = class(TTyCustomControl)
   private
     FLeftList: TTyListBox;
     FRightList: TTyListBox;
@@ -240,8 +246,8 @@ type
     function GetSelectedList: TStrings;
     procedure SetSelectedList(AValue: TStrings);
     function GetMoveButton(AMove: TTyTransferMove): TTyButton;
-    procedure SetLeftTitle(const AValue: string);
-    procedure SetRightTitle(const AValue: string);
+    procedure SetLeftTitle(const AValue: TCaption);
+    procedure SetRightTitle(const AValue: TCaption);
     procedure SetTitleAlignment(AValue: TAlignment);
     procedure SetShowTitles(AValue: Boolean);
     procedure SetShowMoveAll(AValue: Boolean);
@@ -273,7 +279,7 @@ type
     function LayoutAtPPI(const AClient: TRect; APPI: Integer): TTyTransferLayout;
     { Keep the panes and the rail on our controller, so a controller assigned AFTER the
       children exist still themes them (TTyRadioGroup.SetController's rule). }
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     procedure Loaded; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -312,7 +318,6 @@ type
       host can give them Hints (an arrow says the direction, not the meaning) or a StyleClass.
       Their Enabled is derived from the selection and WILL be overwritten. }
     property MoveButton[AMove: TTyTransferMove]: TTyButton read GetMoveButton;
-  published
     { The SOURCE pool — the left pane's list, live and not a copy. Editing it directly is
       fine; the rail re-derives its Enabled from every edit. }
     property Items: TStrings read GetItems write SetItems;
@@ -328,8 +333,8 @@ type
     { The pane titles. Drawn with the resolved TyTransferTitle style (NOT the LCL Font.*),
       ellipsised when they do not fit, never wrapped, and not mnemonic-parsed (a title
       activates nothing, so '&' is literal). }
-    property LeftTitle: string read FLeftTitle write SetLeftTitle;
-    property RightTitle: string read FRightTitle write SetRightTitle;
+    property LeftTitle: TCaption read FLeftTitle write SetLeftTitle;
+    property RightTitle: TCaption read FRightTitle write SetRightTitle;
     property TitleAlignment: TAlignment read FTitleAlignment write SetTitleAlignment
       default taLeftJustify;
     { Whether the title bands are drawn AND reserved above the panes. The FLAG is
@@ -339,11 +344,71 @@ type
     { Whether the rail offers the two doubled "move everything" arrows. Off leaves the two
       plain arrows, re-centred in the rail. }
     property ShowMoveAll: Boolean read FShowMoveAll write SetShowMoveAll default True;
-    property Align;
-    property Anchors;
+  end;
+
+  { TTyTransfer publishes TTyCustomTransfer's properties; everything lives in TTyCustomTransfer. }
+  TTyTransfer = class(TTyCustomTransfer)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
     property StyleClass;
     property StyleOverride;
     property Controller;
+    property Items;
+    property Selected;
+    property OnChange;
+    property LeftTitle;
+    property RightTitle;
+    property TitleAlignment;
+    property ShowTitles;
+    property ShowMoveAll;
+    property Align;
+    property Anchors;
   end;
 
 implementation
@@ -444,7 +509,9 @@ begin
   contentH := AContent.Bottom - AContent.Top;
   if (contentW <= 0) or (contentH <= 0) then Exit;
   if ASize <= 0 then Exit;
-  if AGap < 0 then AGap := 0;
+  { AGap may be NEGATIVE -- the slots of a doubled mark overlap on purpose (see
+    TyTransferArrowGap). Only the total is floored, below, so an absurd overlap cannot
+    invert the row. }
 
   // Shrink to fit rather than vanish: the arrow IS the button's content, and the content rect
   // is whatever the theme's TyButton padding left of a rail-width-wide button. The gaps are
@@ -457,6 +524,7 @@ begin
   if size_ < 1 then Exit;
 
   rowW := ACount * size_ + (ACount - 1) * AGap;
+  if rowW < size_ then rowW := size_;   { a negative gap can never collapse the row below one mark }
   left_ := AContent.Left + (contentW - rowW) div 2 + AIndex * (size_ + AGap);
   top_ := AContent.Top + (contentH - size_) div 2;
   Result := Rect(left_, top_, left_ + size_, top_ + size_);
@@ -555,10 +623,20 @@ var
   cell, iconArea: TRect;
   arrows, i, sizePx, gapPx, marginPx: Integer;
 begin
-  if TyTransferMoveIsRightward(FMove) then kind := tgArrowRight else kind := tgArrowLeft;
-  // "All" is TWO of the same arrow rather than a double-chevron mark of its own: the doubled
-  // arrow is the classic '>>' idiom, it stays symmetric with its leftward twin (the painter
-  // has no chevron-LEFT), and it needs no glyph the library does not already own.
+  if TyTransferMoveIsRightward(FMove) then kind := tgChevronRight else kind := tgChevronLeft;
+  // CHEVRONS, not arrows. The idiom this rail is drawing is the shuttle box's '>' / '>>', and
+  // a chevron IS that mark; an arrow is a chevron plus a shaft. The shaft is what went wrong:
+  // in a 12px slot two of them sit 1px apart and the shafts run together into one bar, so
+  // "move all" read as a smear rather than as two marks. It also matches what this control is
+  // modelled on -- Ant Design's Transfer uses chevron icons -- and the library's own rule that
+  // a glyph's SHAPE follows its ROLE (a stepper gets a solid triangle, a disclosure gets a V).
+  //
+  // Arrows were chosen originally for one reason, recorded here as "the painter has no
+  // chevron-LEFT". It has had one since; the pair is what the calendar's month nav, the grid
+  // and the sider collapse all draw with. Nothing but this call site was left behind.
+  //
+  // "All" is still TWO of the same mark rather than a glyph of its own: it keeps the leftward
+  // and rightward buttons one shape, and needs no vocabulary the library does not own.
   if TyTransferMoveIsAll(FMove) then arrows := 2 else arrows := 1;
   sizePx := APainter.Scale(ActiveController.Metric(TyTransferArrowSizeVar, TyTransferArrowSize));
   gapPx := APainter.Scale(ActiveController.Metric(TyTransferArrowGapVar, TyTransferArrowGap));
@@ -587,9 +665,9 @@ begin
   end;
 end;
 
-{ --- TTyTransfer ----------------------------------------------------------------------- }
+{ --- TTyCustomTransfer ----------------------------------------------------------------- }
 
-constructor TTyTransfer.Create(AOwner: TComponent);
+constructor TTyCustomTransfer.Create(AOwner: TComponent);
 
   function NewPane: TTyListBox;
   begin
@@ -653,7 +731,7 @@ begin
   UpdateMoveButtons;
 end;
 
-destructor TTyTransfer.Destroy;
+destructor TTyCustomTransfer.Destroy;
 begin
   // Give each pane its OWN Items hook back before the teardown: a string list fires OnChange
   // as it clears, and our handler reads fields (and sibling children) that the inherited
@@ -672,46 +750,46 @@ begin
   inherited Destroy;
 end;
 
-function TTyTransfer.GetStyleTypeKey: string;
+function TTyCustomTransfer.GetStyleTypeKey: string;
 begin
   Result := 'TyTransfer';
 end;
 
 { --- panes: hooks + data --------------------------------------------------------------- }
 
-procedure TTyTransfer.LeftItemsChanged(Sender: TObject);
+procedure TTyCustomTransfer.LeftItemsChanged(Sender: TObject);
 begin
   if Assigned(FLeftInnerChange) then FLeftInnerChange(Sender);   // the pane's own bookkeeping first
   if FMoving then Exit;
   UpdateMoveButtons;
 end;
 
-procedure TTyTransfer.RightItemsChanged(Sender: TObject);
+procedure TTyCustomTransfer.RightItemsChanged(Sender: TObject);
 begin
   if Assigned(FRightInnerChange) then FRightInnerChange(Sender);
   if FMoving then Exit;
   UpdateMoveButtons;
 end;
 
-procedure TTyTransfer.PaneSelectionChanged(Sender: TObject);
+procedure TTyCustomTransfer.PaneSelectionChanged(Sender: TObject);
 begin
   // A pane's highlight moved: the two plain arrows live or die by it.
   if FMoving then Exit;
   UpdateMoveButtons;
 end;
 
-procedure TTyTransfer.MoveButtonClick(Sender: TObject);
+procedure TTyCustomTransfer.MoveButtonClick(Sender: TObject);
 begin
   if Sender is TTyTransferArrowButton then
     DoMove(TTyTransferArrowButton(Sender).Move);
 end;
 
-function TTyTransfer.GetItems: TStrings;
+function TTyCustomTransfer.GetItems: TStrings;
 begin
   Result := FLeftList.Items;
 end;
 
-procedure TTyTransfer.SetItems(AValue: TStrings);
+procedure TTyCustomTransfer.SetItems(AValue: TStrings);
 begin
   // Assign the LIST, not the listbox's Items property: the property setter suppresses the
   // pane's own change hook while it copies and then does its bookkeeping by hand, which would
@@ -720,33 +798,33 @@ begin
   UpdateMoveButtons;
 end;
 
-function TTyTransfer.GetSelectedList: TStrings;
+function TTyCustomTransfer.GetSelectedList: TStrings;
 begin
   Result := FRightList.Items;
 end;
 
-procedure TTyTransfer.SetSelectedList(AValue: TStrings);
+procedure TTyCustomTransfer.SetSelectedList(AValue: TStrings);
 begin
   FRightList.Items.Assign(AValue);
   UpdateMoveButtons;
 end;
 
-function TTyTransfer.GetMoveButton(AMove: TTyTransferMove): TTyButton;
+function TTyCustomTransfer.GetMoveButton(AMove: TTyTransferMove): TTyButton;
 begin
   Result := FButtons[AMove];
 end;
 
-function TTyTransfer.SourcePane(AMove: TTyTransferMove): TTyListBox;
+function TTyCustomTransfer.SourcePane(AMove: TTyTransferMove): TTyListBox;
 begin
   if TyTransferMoveIsRightward(AMove) then Result := FLeftList else Result := FRightList;
 end;
 
-function TTyTransfer.TargetPane(AMove: TTyTransferMove): TTyListBox;
+function TTyCustomTransfer.TargetPane(AMove: TTyTransferMove): TTyListBox;
 begin
   if TyTransferMoveIsRightward(AMove) then Result := FRightList else Result := FLeftList;
 end;
 
-function TTyTransfer.HighlightOf(APane: TTyListBox): TBooleanDynArray;
+function TTyCustomTransfer.HighlightOf(APane: TTyListBox): TBooleanDynArray;
 var
   i: Integer;
 begin
@@ -758,28 +836,28 @@ end;
 
 { --- property setters ------------------------------------------------------------------ }
 
-procedure TTyTransfer.SetLeftTitle(const AValue: string);
+procedure TTyCustomTransfer.SetLeftTitle(const AValue: TCaption);
 begin
   if FLeftTitle = AValue then Exit;
   FLeftTitle := AValue;
   Invalidate;   // the band is reserved by ShowTitles, not by the text: no relayout
 end;
 
-procedure TTyTransfer.SetRightTitle(const AValue: string);
+procedure TTyCustomTransfer.SetRightTitle(const AValue: TCaption);
 begin
   if FRightTitle = AValue then Exit;
   FRightTitle := AValue;
   Invalidate;
 end;
 
-procedure TTyTransfer.SetTitleAlignment(AValue: TAlignment);
+procedure TTyCustomTransfer.SetTitleAlignment(AValue: TAlignment);
 begin
   if FTitleAlignment = AValue then Exit;
   FTitleAlignment := AValue;
   Invalidate;
 end;
 
-procedure TTyTransfer.SetShowTitles(AValue: Boolean);
+procedure TTyCustomTransfer.SetShowTitles(AValue: Boolean);
 begin
   if FShowTitles = AValue then Exit;
   FShowTitles := AValue;
@@ -787,7 +865,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyTransfer.SetShowMoveAll(AValue: Boolean);
+procedure TTyCustomTransfer.SetShowMoveAll(AValue: Boolean);
 begin
   if FShowMoveAll = AValue then Exit;
   FShowMoveAll := AValue;
@@ -795,7 +873,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyTransfer.SetController(AValue: TTyStyleController);
+procedure TTyCustomTransfer.SetController(AValue: TTyCustomStyleController);
 var
   m: TTyTransferMove;
 begin
@@ -808,7 +886,7 @@ end;
 
 { --- geometry -------------------------------------------------------------------------- }
 
-function TTyTransfer.MetricPx(const AName: string; ADefault, APPI: Integer): Integer;
+function TTyCustomTransfer.MetricPx(const AName: string; ADefault, APPI: Integer): Integer;
 begin
   if APPI <= 0 then APPI := 96;
   Result := ActiveController.Metric(AName, ADefault);
@@ -818,7 +896,7 @@ begin
   Result := MulDiv(Result, APPI, 96);
 end;
 
-function TTyTransfer.LayoutAtPPI(const AClient: TRect; APPI: Integer): TTyTransferLayout;
+function TTyCustomTransfer.LayoutAtPPI(const AClient: TRect; APPI: Integer): TTyTransferLayout;
 var
   S: TTyStyleSet;
   inner: TRect;
@@ -842,7 +920,7 @@ begin
     MetricPx(TyTransferRailWidthVar, TyTransferRailWidth, APPI), titleH);
 end;
 
-function TTyTransfer.CurrentLayout: TTyTransferLayout;
+function TTyCustomTransfer.CurrentLayout: TTyTransferLayout;
 begin
   // Width/Height, not ClientRect: LCL's client rect lags behind SetBounds while the control
   // has no handle (every headless test), and for this borderless custom control the two are
@@ -850,27 +928,27 @@ begin
   Result := LayoutAtPPI(Rect(0, 0, Width, Height), Font.PixelsPerInch);
 end;
 
-function TTyTransfer.LeftTitleRect: TRect;
+function TTyCustomTransfer.LeftTitleRect: TRect;
 begin
   Result := CurrentLayout.LeftTitleRect;
 end;
 
-function TTyTransfer.RightTitleRect: TRect;
+function TTyCustomTransfer.RightTitleRect: TRect;
 begin
   Result := CurrentLayout.RightTitleRect;
 end;
 
-function TTyTransfer.RailRect: TRect;
+function TTyCustomTransfer.RailRect: TRect;
 begin
   Result := CurrentLayout.RailRect;
 end;
 
-function TTyTransfer.VisibleMoveCount: Integer;
+function TTyCustomTransfer.VisibleMoveCount: Integer;
 begin
   if FShowMoveAll then Result := 4 else Result := 2;
 end;
 
-function TTyTransfer.MoveSlot(AMove: TTyTransferMove): Integer;
+function TTyCustomTransfer.MoveSlot(AMove: TTyTransferMove): Integer;
 var
   m: TTyTransferMove;
 begin
@@ -887,7 +965,7 @@ begin
   end;
 end;
 
-procedure TTyTransfer.LayoutChildren;
+procedure TTyCustomTransfer.LayoutChildren;
 var
   lay: TTyTransferLayout;
   m: TTyTransferMove;
@@ -929,13 +1007,13 @@ begin
   end;
 end;
 
-procedure TTyTransfer.SetBounds(ALeft, ATop, AWidth, AHeight: Integer);
+procedure TTyCustomTransfer.SetBounds(ALeft, ATop, AWidth, AHeight: Integer);
 begin
   inherited SetBounds(ALeft, ATop, AWidth, AHeight);
   LayoutChildren;
 end;
 
-procedure TTyTransfer.Loaded;
+procedure TTyCustomTransfer.Loaded;
 begin
   inherited Loaded;
   // The .lfm has just finished streaming Items/Selected/ShowTitles/ShowMoveAll: only now is
@@ -946,7 +1024,7 @@ end;
 
 { --- moves ----------------------------------------------------------------------------- }
 
-function TTyTransfer.CanMove(AMove: TTyTransferMove): Boolean;
+function TTyCustomTransfer.CanMove(AMove: TTyTransferMove): Boolean;
 var
   pane: TTyListBox;
 begin
@@ -954,7 +1032,7 @@ begin
   Result := TyTransferCanMove(pane.SelCount, pane.Items.Count, TyTransferMoveIsAll(AMove));
 end;
 
-procedure TTyTransfer.UpdateMoveButtons;
+procedure TTyCustomTransfer.UpdateMoveButtons;
 var
   m: TTyTransferMove;
 begin
@@ -968,7 +1046,7 @@ begin
       FButtons[m].Enabled := CanMove(m);
 end;
 
-procedure TTyTransfer.DoMove(AMove: TTyTransferMove);
+procedure TTyCustomTransfer.DoMove(AMove: TTyTransferMove);
 var
   src, dst: TTyListBox;
   idx: TTyTransferIndices;
@@ -996,29 +1074,29 @@ begin
   if (n > 0) and Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTyTransfer.MoveRight;
+procedure TTyCustomTransfer.MoveRight;
 begin
   DoMove(tmMoveRight);
 end;
 
-procedure TTyTransfer.MoveAllRight;
+procedure TTyCustomTransfer.MoveAllRight;
 begin
   DoMove(tmMoveAllRight);
 end;
 
-procedure TTyTransfer.MoveLeft;
+procedure TTyCustomTransfer.MoveLeft;
 begin
   DoMove(tmMoveLeft);
 end;
 
-procedure TTyTransfer.MoveAllLeft;
+procedure TTyCustomTransfer.MoveAllLeft;
 begin
   DoMove(tmMoveAllLeft);
 end;
 
 { --- painting -------------------------------------------------------------------------- }
 
-procedure TTyTransfer.PaintTitleBand(APainter: TTyPainter; const ABand: TRect;
+procedure TTyCustomTransfer.PaintTitleBand(APainter: TTyPainter; const ABand: TRect;
   const AText: string; const AFrameStyle, ATitleStyle: TTyStyleSet);
 var
   sepT: Integer;
@@ -1072,7 +1150,7 @@ begin
       ATitleStyle.FontWeight, ink, FTitleAlignment, tlCenter, True);
 end;
 
-procedure TTyTransfer.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomTransfer.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, titleS: TTyStyleSet;
@@ -1113,7 +1191,7 @@ begin
   end;
 end;
 
-procedure TTyTransfer.Paint;
+procedure TTyCustomTransfer.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;

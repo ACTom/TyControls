@@ -120,6 +120,15 @@ begin
     AssertBg('TyTreeView', []);
     AssertBg('TyTreeHeader', []);
     AssertBg('TyTreeCheckBox', []);
+    AssertBg('TyToolWindow', []);
+    AssertBg('TyToolWindowBar', []);
+    AssertBg('TyToolWindowStrip', []);
+    AssertBg('TyToolWindowBadge', []);
+    AssertBg('TyToolWindowDropZone', []);
+    AssertBg('TyTerminal', []);
+    AssertBg('TyTerminalCursor', []);
+    AssertBg('TyTerminalSelection', []);
+    AssertBg('TyTerminalPreedit', []);
   finally
     m.Free;
   end;

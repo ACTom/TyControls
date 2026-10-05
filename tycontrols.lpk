@@ -129,6 +129,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.ColorListBox"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.FontFamilies.pas"/>
+        <UnitName Value="tyControls.FontFamilies"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.FontComboBox.pas"/>
         <UnitName Value="tyControls.FontComboBox"/>
       </Item>
@@ -661,6 +665,26 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.ListGroupPanel"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.ToolWindows.pas"/>
+        <UnitName Value="tyControls.ToolWindows"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ToolWindows.Layout.pas"/>
+        <UnitName Value="tyControls.ToolWindows.Layout"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ToolWindows.LayoutText.pas"/>
+        <UnitName Value="tyControls.ToolWindows.LayoutText"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ToolWindows.Manager.pas"/>
+        <UnitName Value="tyControls.ToolWindows.Manager"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ToolWindows.DesignRules.pas"/>
+        <UnitName Value="tyControls.ToolWindows.DesignRules"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.Shape.pas"/>
         <UnitName Value="tyControls.Shape"/>
       </Item>
@@ -1096,6 +1120,46 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.AdvanceChart.pas"/>
         <UnitName Value="tyControls.AdvanceChart"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.Unicode.Width.pas"/>
+        <UnitName Value="tyControls.Unicode.Width"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Terminal.Parser.pas"/>
+        <UnitName Value="tyControls.Terminal.Parser"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Terminal.Buffer.pas"/>
+        <UnitName Value="tyControls.Terminal.Buffer"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Terminal.Core.pas"/>
+        <UnitName Value="tyControls.Terminal.Core"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Terminal.Keyboard.pas"/>
+        <UnitName Value="tyControls.Terminal.Keyboard"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Terminal.Render.pas"/>
+        <UnitName Value="tyControls.Terminal.Render"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Terminal.pas"/>
+        <UnitName Value="tyControls.Terminal"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Terminal.Selection.pas"/>
+        <UnitName Value="tyControls.Terminal.Selection"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Terminal.Links.pas"/>
+        <UnitName Value="tyControls.Terminal.Links"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Terminal.ColorScheme.pas"/>
+        <UnitName Value="tyControls.Terminal.ColorScheme"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>
@@ -1107,6 +1171,7 @@ Homepage: https://github.com/ACTom/TyControls"/>
       </Item>
       <Item>
         <PackageName Value="LCL"/>
+        <MinVersion Major="3" Valid="True"/>
       </Item>
     </RequiredPkgs>
     <UsageOptions>

@@ -31,14 +31,16 @@ uses
   tyControls.Button, tyControls.KeyTips;
 
 type
+  TTyCustomRibbonPage = class;
   TTyRibbonPage = class;
+  TTyCustomRibbonGroup = class;
   TTyRibbonGroup = class;
 
   { The ribbon host. Extends the tab-header engine; adds page management (identical
     in shape to TTyPageControl). }
-  TTyRibbon = class(TTyCustomTabStrip)
+  TTyCustomRibbon = class(TTyCustomTabStrip)
   private
-    FPages: array of TTyRibbonPage;         // ALL pages, in child order
+    FPages: array of TTyCustomRibbonPage;         // ALL pages, in child order
     FVisible: array of Integer;             // visible tab index -> FPages index
     FActiveContexts: TStringList;           // active context names (case-insensitive)
     FDestroying: Boolean;
@@ -48,7 +50,7 @@ type
     FFileTabCaption: TCaption;
     FFileTabWidth: Integer;                 // logical px
     FFileTabWidthExplicit: Boolean;         // True once a host/.lfm pins FileTabWidth; else follow --ribbon-file-tab-width
-    FBackstage: TTyRibbonBackstage;
+    FBackstage: TTyCustomRibbonBackstage;
     FShowCollapseBtn: Boolean;
     FFlyout: TTyPopupSurface;        // transient page band shown while Minimized
     FKeyTips: Boolean;
@@ -71,22 +73,22 @@ type
     procedure SetFileTabCaption(const AValue: TCaption);
     procedure SetFileTabWidth(AValue: Integer);
     function  GetFileTabWidth: Integer;
-    procedure SetBackstage(AValue: TTyRibbonBackstage);
+    procedure SetBackstage(AValue: TTyCustomRibbonBackstage);
     procedure SetShowCollapseButton(AValue: Boolean);
     function FileTabWidthPx: Integer;
     function CollapseRectPx: TRect;
     procedure DrawFileTab;
     procedure DrawCollapseButton;
-    function GetPage(AIndex: Integer): TTyRibbonPage;
-    function GetActivePage: TTyRibbonPage;
-    procedure SetActivePage(AValue: TTyRibbonPage);
+    function GetPage(AIndex: Integer): TTyCustomRibbonPage;
+    function GetActivePage: TTyCustomRibbonPage;
+    procedure SetActivePage(AValue: TTyCustomRibbonPage);
     procedure ShowOnlyVisible(AVisIdx: Integer);
     procedure RebuildVisible;
     function  PageVisible(APageIdx: Integer): Boolean;
     { Re-derive the visible tab list + re-anchor the active tab on the SAME page object
       (AOldActive) it had before the change, clamping to the first visible tab when that
       page became hidden/removed. Callers capture AOldActive BEFORE mutating FPages. }
-    procedure ReconcileVisibleFrom(AOldActive: TTyRibbonPage; AFireChange: Boolean);
+    procedure ReconcileVisibleFrom(AOldActive: TTyCustomRibbonPage; AFireChange: Boolean);
   protected
     function  GetTabCount: Integer; override;
     function  GetTabCaption(AIndex: Integer): string; override;
@@ -130,11 +132,11 @@ type
     procedure AdjustClientRect(var ARect: TRect); override;
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
-    procedure SetController(AValue: TTyStyleController); override;
+    procedure SetController(AValue: TTyCustomStyleController); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Loaded; override;
     procedure CreateWnd; override;
-    procedure UnregisterPage(APage: TTyRibbonPage; AFree: Boolean);
+    procedure UnregisterPage(APage: TTyCustomRibbonPage; AFree: Boolean);
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -144,7 +146,7 @@ type
     procedure ShowKeyTips;
     procedure HideKeyTips;
     procedure ToggleKeyTips;
-    procedure RegisterPage(APage: TTyRibbonPage);
+    procedure RegisterPage(APage: TTyCustomRibbonPage);
     function AddPage(const ACaption: string): TTyRibbonPage;
     procedure RemovePage(AIndex: Integer);
     function PageCount: Integer;
@@ -156,9 +158,9 @@ type
     function  IsContextActive(const AName: string): Boolean;
     { Called by a page whose Context changed (same unit). }
     procedure PageContextChanged;
-    property Pages[AIndex: Integer]: TTyRibbonPage read GetPage;
-    property ActivePage: TTyRibbonPage read GetActivePage write SetActivePage;
-  published
+    property Pages[AIndex: Integer]: TTyCustomRibbonPage read GetPage;
+    property ActivePage: TTyCustomRibbonPage read GetActivePage write SetActivePage;
+    property Align default alTop;
     property ActivePageIndex: Integer read FTabIndex write SetTabIndex default -1;
     { When True the group band collapses so only the tab strip shows (the ribbon's
       Height shrinks to the tab-header height); setting it back restores the previous
@@ -184,7 +186,7 @@ type
       --ribbon-file-tab-width token (density-aware); set it explicitly and that value wins
       and is streamed. Streamed only when explicitly set (stored FFileTabWidthExplicit). }
     property FileTabWidth: Integer read GetFileTabWidth write SetFileTabWidth stored FFileTabWidthExplicit;
-    property Backstage: TTyRibbonBackstage read FBackstage write SetBackstage;
+    property Backstage: TTyCustomRibbonBackstage read FBackstage write SetBackstage;
     { A collapse/expand chevron at the RIGHT end of the tab strip that toggles Minimized
       (like Office). Double-clicking any tab also toggles Minimized. }
     property ShowCollapseButton: Boolean read FShowCollapseBtn write SetShowCollapseButton default True;
@@ -192,16 +194,90 @@ type
       tabs (Office KeyTips); typing a badge's letter switches to that tab, Escape hides them. }
     property KeyTips: Boolean read FKeyTips write SetKeyTips default True;
     property OnFileTab: TNotifyEvent read FOnFileTab write FOnFileTab;
-    property Align default alTop;
+  end;
+
+  { TTyRibbon publishes TTyCustomRibbon's properties; everything lives in TTyCustomRibbon. }
+  TTyRibbon = class(TTyCustomRibbon)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Images;
+    property ImagesWidth;
+    property OnGetImageIndex;
+    property TabHeight;
+    property TabsClosable;
+    property OnTabClose;
+    property OnChange;
+    property OnChanging;
+    property OnReorder;
+    property Align;
+    property Anchors;
+    property ActivePageIndex;
+    property Minimized;
+    property FileTab;
+    property FileTabCaption;
+    property FileTabWidth;
+    property Backstage;
+    property ShowCollapseButton;
+    property KeyTips;
+    property OnFileTab;
   end;
 
   { One ribbon tab page — hosts groups. }
-  TTyRibbonPage = class(TTyCustomControl)
+  TTyCustomRibbonPage = class(TTyCustomControl)
   private
     FCaption: TCaption;
     FContext: string;
     // Group-overflow (F3): the trailing groups that don't fit collapse into a "more" popup.
-    FVisualGroups: array of TTyRibbonGroup;   // groups in stable left-to-right (visual) order
+    FVisualGroups: array of TTyCustomRibbonGroup;   // groups in stable left-to-right (visual) order
     FMoreBtn: TTyButton;                       // the "»" overflow button
     FPopup: TTyPopupSurface;                    // hosts the overflow groups while open
     FOverflowFrom: Integer;                     // FVisualGroups index where the overflow set begins
@@ -226,20 +302,74 @@ type
     procedure AlignControls(AControl: TControl; var ARect: TRect); override;
   public
     constructor Create(AOwner: TComponent); override;
-  published
     property Caption: TCaption read FCaption write SetCaption;
     { When non-empty, this page is a CONTEXTUAL tab: shown only while its host ribbon's
       context of this name is active (TTyRibbon.ShowContext/HideContext). Empty = a
       normal always-visible tab. }
     property Context: string read FContext write SetContext;
-    property StyleClass;
-    property Controller;
   end;
 
-  TTyRibbonLauncherEvent = procedure(Sender: TTyRibbonGroup) of object;
+  { TTyRibbonPage publishes TTyCustomRibbonPage's properties; everything lives in TTyCustomRibbonPage. }
+  TTyRibbonPage = class(TTyCustomRibbonPage)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Caption;
+    property Context;
+  end;
+
+  TTyRibbonLauncherEvent = procedure(Sender: TTyCustomRibbonGroup) of object;
 
   { A labelled group box inside a ribbon page. }
-  TTyRibbonGroup = class(TTyCustomControl)
+  TTyCustomRibbonGroup = class(TTyCustomControl)
   private
     FCaption: TCaption;
     FShowCaption: Boolean;
@@ -265,7 +395,6 @@ type
       match). A plain one-shot Width set -- unlike LCL AutoSize it cannot re-enter the page's
       overflow layout, so there is no ChangeBounds loop. }
     procedure FitToContent;
-  published
     property Caption: TCaption read FCaption write SetCaption;
     { Show the bottom caption band (the group name). False = the content fills the full
       height and no caption/launcher is drawn (a caption-less group). }
@@ -274,8 +403,66 @@ type
     property ShowDialogLauncher: Boolean read FShowDialogLauncher write SetShowDialogLauncher default False;
     property OnDialogLauncher: TTyRibbonLauncherEvent read FOnDialogLauncher write FOnDialogLauncher;
     property Align default alLeft;
+  end;
+
+  { TTyRibbonGroup publishes TTyCustomRibbonGroup's properties; everything lives in TTyCustomRibbonGroup. }
+  TTyRibbonGroup = class(TTyCustomRibbonGroup)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
     property StyleClass;
+    property StyleOverride;
     property Controller;
+    property Caption;
+    property ShowCaption;
+    property ShowDialogLauncher;
+    property OnDialogLauncher;
+    property Align;
   end;
 
 const
@@ -361,9 +548,9 @@ begin
 end;
 
 // ===========================================================================
-// TTyRibbon
+// TTyCustomRibbon
 // ===========================================================================
-constructor TTyRibbon.Create(AOwner: TComponent);
+constructor TTyCustomRibbon.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FActiveContexts := TStringList.Create;
@@ -384,7 +571,7 @@ begin
   TabStop := True;
 end;
 
-destructor TTyRibbon.Destroy;
+destructor TTyCustomRibbon.Destroy;
 begin
   FDestroying := True;
   UnhookForm;
@@ -392,23 +579,23 @@ begin
   inherited Destroy;   // pages owned by the form are freed normally
 end;
 
-function TTyRibbon.GetStyleTypeKey: string;
+function TTyCustomRibbon.GetStyleTypeKey: string;
 begin
   Result := 'TyRibbon';
 end;
 
-function TTyRibbon.PageCount: Integer;
+function TTyCustomRibbon.PageCount: Integer;
 begin
   Result := Length(FPages);
 end;
 
 // The tab strip enumerates only the VISIBLE pages (context-active or context-less).
-function TTyRibbon.GetTabCount: Integer;
+function TTyCustomRibbon.GetTabCount: Integer;
 begin
   Result := Length(FVisible);
 end;
 
-function TTyRibbon.GetTabCaption(AIndex: Integer): string;
+function TTyCustomRibbon.GetTabCaption(AIndex: Integer): string;
 begin
   if (AIndex >= 0) and (AIndex < Length(FVisible)) then
     Result := FPages[FVisible[AIndex]].Caption
@@ -416,7 +603,7 @@ begin
     Result := '';
 end;
 
-function TTyRibbon.GetPage(AIndex: Integer): TTyRibbonPage;
+function TTyCustomRibbon.GetPage(AIndex: Integer): TTyCustomRibbonPage;
 begin
   if (AIndex >= 0) and (AIndex < Length(FPages)) then
     Result := FPages[AIndex]
@@ -426,7 +613,7 @@ end;
 
 // ActivePageIndex is the VISIBLE tab index (= the page index when no context hides a
 // page); map it to the page object.
-function TTyRibbon.GetActivePage: TTyRibbonPage;
+function TTyCustomRibbon.GetActivePage: TTyCustomRibbonPage;
 begin
   if (FTabIndex >= 0) and (FTabIndex < Length(FVisible)) then
     Result := FPages[FVisible[FTabIndex]]
@@ -434,7 +621,7 @@ begin
     Result := nil;
 end;
 
-procedure TTyRibbon.SetActivePage(AValue: TTyRibbonPage);
+procedure TTyCustomRibbon.SetActivePage(AValue: TTyCustomRibbonPage);
 var
   I: Integer;
 begin
@@ -446,12 +633,12 @@ begin
     end;
 end;
 
-function TTyRibbon.PageVisible(APageIdx: Integer): Boolean;
+function TTyCustomRibbon.PageVisible(APageIdx: Integer): Boolean;
 begin
   Result := (FPages[APageIdx].Context = '') or IsContextActive(FPages[APageIdx].Context);
 end;
 
-procedure TTyRibbon.RebuildVisible;
+procedure TTyCustomRibbon.RebuildVisible;
 var
   I: Integer;
 begin
@@ -466,7 +653,7 @@ end;
 
 // Show the page at VISIBLE index AVisIdx; hide every other page (context-hidden pages
 // are hidden here too, since they are never the shown one).
-procedure TTyRibbon.ShowOnlyVisible(AVisIdx: Integer);
+procedure TTyCustomRibbon.ShowOnlyVisible(AVisIdx: Integer);
 var
   I, ActivePageIdx: Integer;
 begin
@@ -487,7 +674,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyRibbon.ReconcileVisibleFrom(AOldActive: TTyRibbonPage; AFireChange: Boolean);
+procedure TTyCustomRibbon.ReconcileVisibleFrom(AOldActive: TTyCustomRibbonPage; AFireChange: Boolean);
 var
   I, NewIdx: Integer;
 begin
@@ -514,14 +701,14 @@ begin
     OnChange(Self);
 end;
 
-procedure TTyRibbon.DoSelectTab(AIndex: Integer);
+procedure TTyCustomRibbon.DoSelectTab(AIndex: Integer);
 begin
   ShowOnlyVisible(AIndex);
 end;
 
-procedure TTyRibbon.DoReorderTabs(AFromIndex, AToIndex: Integer);
+procedure TTyCustomRibbon.DoReorderTabs(AFromIndex, AToIndex: Integer);
 var
-  Moved: TTyRibbonPage;
+  Moved: TTyCustomRibbonPage;
   FromPage, ToPage, I: Integer;
 begin
   // The header engine reorders by VISIBLE index; map both ends to page indices, move
@@ -540,24 +727,28 @@ begin
   RebuildVisible;
 end;
 
-procedure TTyRibbon.RegisterPage(APage: TTyRibbonPage);
+procedure TTyCustomRibbon.RegisterPage(APage: TTyCustomRibbonPage);
 var
   I: Integer;
-  OldActive: TTyRibbonPage;
+  OldActive: TTyCustomRibbonPage;
 begin
   for I := 0 to High(FPages) do
     if FPages[I] = APage then Exit;   // idempotent
   OldActive := GetActivePage;         // BEFORE appending (append keeps old indices valid)
   SetLength(FPages, Length(FPages) + 1);
   FPages[High(FPages)] := APage;
+  { Ask to hear about the page's destruction ourselves: Notification(opRemove) reaches us on
+    its own only when we share its owner, so a page owned by anything else (or by nothing)
+    would be freed while still in FPages, and the next caption lookup reads a dead object. }
+  APage.FreeNotification(Self);
   APage.Controller := Self.Controller;
   ReconcileVisibleFrom(OldActive, False);   // no OnChange on add
 end;
 
-procedure TTyRibbon.UnregisterPage(APage: TTyRibbonPage; AFree: Boolean);
+procedure TTyCustomRibbon.UnregisterPage(APage: TTyCustomRibbonPage; AFree: Boolean);
 var
   Idx, J: Integer;
-  OldActive: TTyRibbonPage;
+  OldActive: TTyCustomRibbonPage;
 begin
   Idx := -1;
   for J := 0 to High(FPages) do
@@ -566,24 +757,25 @@ begin
   OldActive := GetActivePage;         // capture BEFORE mutating FPages
   for J := Idx to High(FPages) - 1 do FPages[J] := FPages[J + 1];
   SetLength(FPages, Length(FPages) - 1);
+  APage.RemoveFreeNotification(Self);   // the other half of RegisterPage's
   if AFree and (APage <> nil) then
     APage.Free;
   ReconcileVisibleFrom(OldActive, True);    // fires OnChange when the active page moved
 end;
 
-procedure TTyRibbon.RemoveTabData(AIndex: Integer);
+procedure TTyCustomRibbon.RemoveTabData(AIndex: Integer);
 begin
   // AIndex is a VISIBLE tab index (the header engine's space).
   if (AIndex >= 0) and (AIndex < Length(FVisible)) then
     UnregisterPage(FPages[FVisible[AIndex]], True);
 end;
 
-procedure TTyRibbon.RemovePage(AIndex: Integer);
+procedure TTyCustomRibbon.RemovePage(AIndex: Integer);
 begin
   RemoveTabData(AIndex);
 end;
 
-function TTyRibbon.AddPage(const ACaption: string): TTyRibbonPage;
+function TTyCustomRibbon.AddPage(const ACaption: string): TTyRibbonPage;
 var
   PageOwner: TComponent;
 begin
@@ -593,14 +785,14 @@ begin
   Result.Parent := Self;     // SetParent -> RegisterPage
 end;
 
-function TTyRibbon.IsContextActive(const AName: string): Boolean;
+function TTyCustomRibbon.IsContextActive(const AName: string): Boolean;
 begin
   Result := (AName <> '') and (FActiveContexts.IndexOf(AName) >= 0);
 end;
 
-procedure TTyRibbon.ShowContext(const AName: string);
+procedure TTyCustomRibbon.ShowContext(const AName: string);
 var
-  OldActive: TTyRibbonPage;
+  OldActive: TTyCustomRibbonPage;
 begin
   if (AName = '') or IsContextActive(AName) then Exit;
   OldActive := GetActivePage;
@@ -608,10 +800,10 @@ begin
   ReconcileVisibleFrom(OldActive, True);
 end;
 
-procedure TTyRibbon.HideContext(const AName: string);
+procedure TTyCustomRibbon.HideContext(const AName: string);
 var
   Idx: Integer;
-  OldActive: TTyRibbonPage;
+  OldActive: TTyCustomRibbonPage;
 begin
   Idx := FActiveContexts.IndexOf(AName);
   if Idx < 0 then Exit;
@@ -620,15 +812,18 @@ begin
   ReconcileVisibleFrom(OldActive, True);
 end;
 
-procedure TTyRibbon.PageContextChanged;
+procedure TTyCustomRibbon.PageContextChanged;
 begin
   ReconcileVisibleFrom(GetActivePage, True);
 end;
 
-procedure TTyRibbon.SetMinimized(AValue: Boolean);
+procedure TTyCustomRibbon.SetMinimized(AValue: Boolean);
 begin
   if FMinimized = AValue then Exit;
   FMinimized := AValue;
+  { While a form is read, Height is the one the form stored and TabHeight may not have been
+    read yet (a descendant can publish Minimized first): Loaded collapses the band. }
+  if csLoading in ComponentState then Exit;
   if FMinimized then
   begin
     FExpandedHeight := Height;                          // remember the full height
@@ -639,37 +834,37 @@ begin
   Invalidate;
 end;
 
-function TTyRibbon.FileTabWidthPx: Integer;
+function TTyCustomRibbon.FileTabWidthPx: Integer;
 begin
   Result := MulDiv(GetFileTabWidth, Font.PixelsPerInch, 96);
 end;
 
-function TTyRibbon.DesignTabClicksEnabled: Boolean;
+function TTyCustomRibbon.DesignTabClicksEnabled: Boolean;
 begin
   Result := True;
 end;
 
-function TTyRibbon.HeaderLeftInset: Integer;
+function TTyCustomRibbon.HeaderLeftInset: Integer;
 begin
   if FShowFileTab then Result := FileTabWidthPx else Result := 0;
 end;
 
-function TTyRibbon.HeaderRightToLeft: Boolean;
+function TTyCustomRibbon.HeaderRightToLeft: Boolean;
 begin
   Result := False;   // see the declaration: the ribbon's own chrome is not mirrored yet
 end;
 
-function TTyRibbon.HeaderTabPosition: TTabPosition;
+function TTyCustomRibbon.HeaderTabPosition: TTabPosition;
 begin
   Result := tpTop;   // see the declaration: the ribbon's own chrome is pinned to the top
 end;
 
-function TTyRibbon.HeaderMultiLine: Boolean;
+function TTyCustomRibbon.HeaderMultiLine: Boolean;
 begin
   Result := False;   // see the declaration: the ribbon's own chrome is one row tall
 end;
 
-procedure TTyRibbon.AdjustClientRect(var ARect: TRect);
+procedure TTyCustomRibbon.AdjustClientRect(var ARect: TRect);
 var
   ppi: Integer;
 begin
@@ -687,7 +882,7 @@ begin
   if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
 end;
 
-procedure TTyRibbon.SetShowFileTab(AValue: Boolean);
+procedure TTyCustomRibbon.SetShowFileTab(AValue: Boolean);
 begin
   if FShowFileTab = AValue then Exit;
   FShowFileTab := AValue;
@@ -695,14 +890,14 @@ begin
   Invalidate;
 end;
 
-procedure TTyRibbon.SetFileTabCaption(const AValue: TCaption);
+procedure TTyCustomRibbon.SetFileTabCaption(const AValue: TCaption);
 begin
   if FFileTabCaption = AValue then Exit;
   FFileTabCaption := AValue;
   Invalidate;
 end;
 
-procedure TTyRibbon.SetFileTabWidth(AValue: Integer);
+procedure TTyCustomRibbon.SetFileTabWidth(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   FFileTabWidthExplicit := True;   // even if equal to the fallback, the host meant to pin it
@@ -712,7 +907,7 @@ begin
   Invalidate;
 end;
 
-function TTyRibbon.GetFileTabWidth: Integer;
+function TTyCustomRibbon.GetFileTabWidth: Integer;
 begin
   if FFileTabWidthExplicit then
     Result := FFileTabWidth
@@ -720,7 +915,7 @@ begin
     Result := ActiveController.Metric('--ribbon-file-tab-width', 52);
 end;
 
-procedure TTyRibbon.SetBackstage(AValue: TTyRibbonBackstage);
+procedure TTyCustomRibbon.SetBackstage(AValue: TTyCustomRibbonBackstage);
 begin
   if FBackstage = AValue then Exit;
   if FBackstage <> nil then FBackstage.RemoveFreeNotification(Self);
@@ -728,14 +923,14 @@ begin
   if FBackstage <> nil then FBackstage.FreeNotification(Self);
 end;
 
-procedure TTyRibbon.SetShowCollapseButton(AValue: Boolean);
+procedure TTyCustomRibbon.SetShowCollapseButton(AValue: Boolean);
 begin
   if FShowCollapseBtn = AValue then Exit;
   FShowCollapseBtn := AValue;
   Invalidate;
 end;
 
-function TTyRibbon.CollapseRectPx: TRect;
+function TTyCustomRibbon.CollapseRectPx: TRect;
 begin
   if not FShowCollapseBtn then Exit(Rect(0, 0, 0, 0));
   Result := TyRibbonCollapseRect(ClientWidth, MulDiv(TabHeight, Font.PixelsPerInch, 96));
@@ -743,7 +938,7 @@ end;
 
 { Draw the collapse/expand chevron at the right of the tab strip: an up chevron when the
   ribbon is expanded (click to collapse), a down chevron when minimized (click to expand). }
-procedure TTyRibbon.DrawCollapseButton;
+procedure TTyCustomRibbon.DrawCollapseButton;
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -766,7 +961,7 @@ end;
 
 { Draw the accent File tab in the reserved left inset (its own small paint pass, sized
   to the tab rect so it does not blit over the base's tab-strip drawing). }
-procedure TTyRibbon.DrawFileTab;
+procedure TTyCustomRibbon.DrawFileTab;
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -795,9 +990,9 @@ end;
 { Show the active page's group band in a transient flyout just below the tab strip
   (used while Minimized). The real page control is temporarily re-parented into the
   popup so its live command buttons keep working; closing restores it to the ribbon. }
-procedure TTyRibbon.ShowFlyout;
+procedure TTyCustomRibbon.ShowFlyout;
 var
-  pg: TTyRibbonPage;
+  pg: TTyCustomRibbonPage;
   stripH, bandHpx: Integer;
   tl: TPoint;
 begin
@@ -817,7 +1012,7 @@ begin
   FFlyout.ShowAt(Rect(tl.x, tl.y, tl.x + Width, tl.y + bandHpx));
 end;
 
-procedure TTyRibbon.FlyoutClosed(Sender: TObject);
+procedure TTyCustomRibbon.FlyoutClosed(Sender: TObject);
 begin
   // The popup already released the page back to the ribbon; re-lay the (minimized) band.
   if not (csDestroying in ComponentState) then
@@ -827,14 +1022,14 @@ end;
 // ---------------------------------------------------------------------------
 // KeyTips (Alt access-key overlay)
 // ---------------------------------------------------------------------------
-procedure TTyRibbon.SetKeyTips(AValue: Boolean);
+procedure TTyCustomRibbon.SetKeyTips(AValue: Boolean);
 begin
   if FKeyTips = AValue then Exit;
   FKeyTips := AValue;
   if not FKeyTips then HideKeyTips;
 end;
 
-procedure TTyRibbon.RebuildKeyTipKeys;
+procedure TTyCustomRibbon.RebuildKeyTipKeys;
 var
   caps: array of string;
   i: Integer;
@@ -845,7 +1040,7 @@ begin
   FKeyTipKeys := TyAssignKeyTips(caps);
 end;
 
-procedure TTyRibbon.ShowKeyTips;
+procedure TTyCustomRibbon.ShowKeyTips;
 begin
   if not FKeyTips then Exit;
   RebuildKeyTipKeys;
@@ -853,19 +1048,19 @@ begin
   Invalidate;
 end;
 
-procedure TTyRibbon.HideKeyTips;
+procedure TTyCustomRibbon.HideKeyTips;
 begin
   if not FKeyTipsActive then Exit;
   FKeyTipsActive := False;
   Invalidate;
 end;
 
-procedure TTyRibbon.ToggleKeyTips;
+procedure TTyCustomRibbon.ToggleKeyTips;
 begin
   if FKeyTipsActive then HideKeyTips else ShowKeyTips;
 end;
 
-procedure TTyRibbon.HookForm;
+procedure TTyCustomRibbon.HookForm;
 var
   frm: TCustomForm;
 begin
@@ -880,7 +1075,7 @@ begin
   frm.OnKeyDown := @FormKeyDown;
 end;
 
-procedure TTyRibbon.UnhookForm;
+procedure TTyCustomRibbon.UnhookForm;
 begin
   if FHookedForm = nil then Exit;
   // Only restore if OUR handler is still installed (don't clobber a later hook).
@@ -892,7 +1087,7 @@ begin
   FHookedForm := nil;
 end;
 
-procedure TTyRibbon.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+procedure TTyCustomRibbon.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 var
   i: Integer;
   ch: Char;
@@ -923,7 +1118,7 @@ begin
   if Assigned(FSavedFormKeyDown) then FSavedFormKeyDown(Sender, Key, Shift);
 end;
 
-procedure TTyRibbon.DrawKeyTips;
+procedure TTyCustomRibbon.DrawKeyTips;
 var
   P: TTyPainter;
   chipS: TTyStyleSet;
@@ -947,7 +1142,7 @@ begin
       bx := (hr.Left + hr.Right) div 2 - cw div 2;
       by := hr.Bottom - P.Scale(2) - cw;          // a small chip near the tab's bottom
       if tpBackground in chipS.Present then
-        P.FillBackground(Rect(bx, by, bx + cw, by + cw), chipS.Background, P.Scale(3));
+        P.FillBackground(Rect(bx, by, bx + cw, by + cw), chipS.Background, 3);   // the radius is LOGICAL
       P.DrawText(Rect(bx, by, bx + cw, by + cw), key, chipS.FontName, 8,
         chipS.FontWeight, chipS.TextColor, taCenter, tlCenter, False);
     end;
@@ -957,7 +1152,7 @@ begin
   end;
 end;
 
-procedure TTyRibbon.Paint;
+procedure TTyCustomRibbon.Paint;
 begin
   inherited Paint;   // base draws the tab strip (shifted right by HeaderLeftInset) + frame
   DrawFileTab;
@@ -965,13 +1160,13 @@ begin
   DrawKeyTips;
 end;
 
-procedure TTyRibbon.CreateWnd;
+procedure TTyCustomRibbon.CreateWnd;
 begin
   inherited CreateWnd;
   HookForm;   // the parent form exists by now -> install the Alt key hook
 end;
 
-procedure TTyRibbon.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomRibbon.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   w, h: Integer;
   Frm: TCustomForm;
@@ -1032,7 +1227,7 @@ begin
   end;
 end;
 
-procedure TTyRibbon.SetController(AValue: TTyStyleController);
+procedure TTyCustomRibbon.SetController(AValue: TTyCustomStyleController);
 var
   I: Integer;
 begin
@@ -1042,17 +1237,19 @@ begin
       FPages[I].Controller := AValue;
 end;
 
-procedure TTyRibbon.Notification(AComponent: TComponent; Operation: TOperation);
+procedure TTyCustomRibbon.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FBackstage) then
     FBackstage := nil;
   if FDestroying then Exit;
-  if (Operation = opRemove) and (AComponent is TTyRibbonPage) then
-    UnregisterPage(TTyRibbonPage(AComponent), False);
+  if (Operation = opRemove) and (AComponent is TTyCustomRibbonPage) then
+    UnregisterPage(TTyCustomRibbonPage(AComponent), False);
 end;
 
-procedure TTyRibbon.Loaded;
+procedure TTyCustomRibbon.Loaded;
+var
+  collapsed: Integer;
 begin
   inherited Loaded;
   // Build the visible-tab list from the streamed pages (each self-registered during
@@ -1063,13 +1260,26 @@ begin
     SetTabIndex(FPendingTabIndex);
     FPendingTabIndex := -1;
   end;
+  { A Minimized read from the form collapses here, against the final TabHeight, whichever was
+    read first. A ribbon saved minimised stored its COLLAPSED height, so the expanded one is not
+    in the form: expanding falls back to the theme's ribbon height (what a new ribbon gets)
+    rather than to the strip it was saved as. A form that gives the full height keeps it. }
+  if FMinimized then
+  begin
+    collapsed := MulDiv(TabHeight, Font.PixelsPerInch, 96);
+    if Height > collapsed then
+      FExpandedHeight := Height
+    else
+      FExpandedHeight := ActiveController.Metric('--ribbon-height', TyRibbonDefaultHeight);
+    Height := collapsed;
+  end;
   Invalidate;
 end;
 
 // ===========================================================================
-// TTyRibbonPage
+// TTyCustomRibbonPage
 // ===========================================================================
-constructor TTyRibbonPage.Create(AOwner: TComponent);
+constructor TTyCustomRibbonPage.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   ControlStyle := ControlStyle + [csAcceptsControls, csDesignFixedBounds,
@@ -1079,12 +1289,12 @@ begin
   FCaption := '';
 end;
 
-function TTyRibbonPage.GetStyleTypeKey: string;
+function TTyCustomRibbonPage.GetStyleTypeKey: string;
 begin
   Result := 'TyRibbon';
 end;
 
-procedure TTyRibbonPage.SetCaption(const AValue: TCaption);
+procedure TTyCustomRibbonPage.SetCaption(const AValue: TCaption);
 begin
   if FCaption = AValue then Exit;
   FCaption := AValue;
@@ -1092,23 +1302,38 @@ begin
     Parent.Invalidate;   // the tab label changed — re-lay the host strip
 end;
 
-procedure TTyRibbonPage.SetContext(const AValue: string);
+procedure TTyCustomRibbonPage.SetContext(const AValue: string);
 begin
   if FContext = AValue then Exit;
   FContext := AValue;
   // A changed Context may show/hide this page as a tab — ask the host to re-lay.
-  if (Parent <> nil) and (Parent is TTyRibbon) then
-    TTyRibbon(Parent).PageContextChanged;
+  if (Parent <> nil) and (Parent is TTyCustomRibbon) then
+    TTyCustomRibbon(Parent).PageContextChanged;
 end;
 
-procedure TTyRibbonPage.SetParent(AParent: TWinControl);
+procedure TTyCustomRibbonPage.SetParent(AParent: TWinControl);
+var
+  Old: TWinControl;
 begin
+  Old := Parent;
   inherited SetParent(AParent);
-  if (AParent <> nil) and (AParent is TTyRibbon) then
-    TTyRibbon(AParent).RegisterPage(Self);
+  { LEAVING a ribbon is as much a page-list event as joining one (the TTyCustomTabSheet rule):
+    a page moved to another ribbon, or taken out of this one, must leave the list, or the old
+    ribbon goes on counting it, drawing its tab and handing it out from Pages[]. Two exceptions:
+    while either side is being torn down (the free path is the FreeNotification RegisterPage
+    asked for, and the old host may be half-destroyed), and the ribbon's OWN fly-out -- a
+    minimised ribbon lends its active page to a popup it owns (ShowFlyout -> AdoptContent) and
+    takes it back on close; the page never stops being that ribbon's. }
+  if (Old <> AParent) and (Old is TTyCustomRibbon)
+     and not ((AParent is TTyPopupSurface) and (AParent.Owner = Old))
+     and not (csDestroying in ComponentState)
+     and not (csDestroying in Old.ComponentState) then
+    TTyCustomRibbon(Old).UnregisterPage(Self, False);
+  if (AParent <> nil) and (AParent is TTyCustomRibbon) then
+    TTyCustomRibbon(AParent).RegisterPage(Self);
 end;
 
-procedure TTyRibbonPage.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomRibbonPage.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -1135,10 +1360,10 @@ begin
   end;
 end;
 
-procedure TTyRibbonPage.DrawGroupDividers(P: TTyPainter; APPI: Integer);
+procedure TTyCustomRibbonPage.DrawGroupDividers(P: TTyPainter; APPI: Integer);
 var
   i, x, y1, y2, w: Integer;
-  g, nx: TTyRibbonGroup;
+  g, nx: TTyCustomRibbonGroup;
   divS: TTyStyleSet;
   divFill: TTyFill;
 begin
@@ -1166,39 +1391,39 @@ begin
   end;
 end;
 
-procedure TTyRibbonPage.Paint;
+procedure TTyCustomRibbonPage.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-procedure TTyRibbonPage.AlignControls(AControl: TControl; var ARect: TRect);
+procedure TTyCustomRibbonPage.AlignControls(AControl: TControl; var ARect: TRect);
 begin
   inherited AlignControls(AControl, ARect);   // first pass lays the alLeft groups
   LayoutOverflow;                             // then apply overflow collapse (page owns layout)
 end;
 
-procedure TTyRibbonPage.CaptureGroups;
+procedure TTyCustomRibbonPage.CaptureGroups;
 var
   i, j, n, maxLeft: Integer;
-  tmp: TTyRibbonGroup;
+  tmp: TTyCustomRibbonGroup;
 begin
   n := 0;
   for i := 0 to ControlCount - 1 do
-    if Controls[i] is TTyRibbonGroup then Inc(n);
+    if Controls[i] is TTyCustomRibbonGroup then Inc(n);
   if n = 0 then Exit;
   // Capture only once the groups have actually been laid out (distinct Lefts). Before the
   // first layout every Left is 0 and CHILD order is the REVERSE of the visual order, so a
   // premature capture would scramble the group order.
   maxLeft := 0;
   for i := 0 to ControlCount - 1 do
-    if (Controls[i] is TTyRibbonGroup) and (Controls[i].Left > maxLeft) then
+    if (Controls[i] is TTyCustomRibbonGroup) and (Controls[i].Left > maxLeft) then
       maxLeft := Controls[i].Left;
   if (n > 1) and (maxLeft = 0) then Exit;
   SetLength(FVisualGroups, n);
   j := 0;
   for i := 0 to ControlCount - 1 do
-    if Controls[i] is TTyRibbonGroup then
-    begin FVisualGroups[j] := TTyRibbonGroup(Controls[i]); Inc(j); end;
+    if Controls[i] is TTyCustomRibbonGroup then
+    begin FVisualGroups[j] := TTyCustomRibbonGroup(Controls[i]); Inc(j); end;
   // Insertion sort by current Left -> stable left-to-right (visual) order.
   for i := 1 to n - 1 do
   begin
@@ -1211,7 +1436,7 @@ begin
   FCaptured := True;
 end;
 
-procedure TTyRibbonPage.EnsureMoreButton;
+procedure TTyCustomRibbonPage.EnsureMoreButton;
 begin
   if FMoreBtn <> nil then Exit;
   FMoreBtn := TTyButton.Create(Self);
@@ -1225,7 +1450,7 @@ begin
   FMoreBtn.OnClick := @MoreClick;
 end;
 
-procedure TTyRibbonPage.LayoutOverflow;
+procedure TTyCustomRibbonPage.LayoutOverflow;
 var
   i, n, x, moreW, visCount, bandH, total, gap: Integer;
   widths: array of Integer;
@@ -1282,7 +1507,7 @@ begin
   end;
 end;
 
-procedure TTyRibbonPage.MoreClick(Sender: TObject);
+procedure TTyCustomRibbonPage.MoreClick(Sender: TObject);
 var
   i, x, bandH: Integer;
   tl: TPoint;
@@ -1309,7 +1534,7 @@ begin
   FPopup.ShowAt(Rect(tl.x, tl.y, tl.x + x, tl.y + bandH));
 end;
 
-procedure TTyRibbonPage.OverflowPopupClosed(Sender: TObject);
+procedure TTyCustomRibbonPage.OverflowPopupClosed(Sender: TObject);
 var
   i: Integer;
 begin
@@ -1323,9 +1548,9 @@ begin
 end;
 
 // ===========================================================================
-// TTyRibbonGroup
+// TTyCustomRibbonGroup
 // ===========================================================================
-constructor TTyRibbonGroup.Create(AOwner: TComponent);
+constructor TTyCustomRibbonGroup.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   ControlStyle := ControlStyle + [csAcceptsControls, csNoFocus];
@@ -1336,19 +1561,19 @@ begin
   FShowDialogLauncher := False;
 end;
 
-function TTyRibbonGroup.GetStyleTypeKey: string;
+function TTyCustomRibbonGroup.GetStyleTypeKey: string;
 begin
   Result := 'TyRibbonGroup';
 end;
 
-procedure TTyRibbonGroup.SetCaption(const AValue: TCaption);
+procedure TTyCustomRibbonGroup.SetCaption(const AValue: TCaption);
 begin
   if FCaption = AValue then Exit;
   FCaption := AValue;
   Invalidate;
 end;
 
-procedure TTyRibbonGroup.SetShowCaption(AValue: Boolean);
+procedure TTyCustomRibbonGroup.SetShowCaption(AValue: Boolean);
 begin
   if FShowCaption = AValue then Exit;
   FShowCaption := AValue;
@@ -1356,14 +1581,14 @@ begin
   Invalidate;
 end;
 
-procedure TTyRibbonGroup.SetShowDialogLauncher(AValue: Boolean);
+procedure TTyCustomRibbonGroup.SetShowDialogLauncher(AValue: Boolean);
 begin
   if FShowDialogLauncher = AValue then Exit;
   FShowDialogLauncher := AValue;
   Invalidate;
 end;
 
-procedure TTyRibbonGroup.AdjustClientRect(var ARect: TRect);
+procedure TTyCustomRibbonGroup.AdjustClientRect(var ARect: TRect);
 begin
   inherited AdjustClientRect(ARect);
   // No right reservation for a divider any more: the divider lives in the BorderSpacing.Right
@@ -1376,7 +1601,7 @@ begin
   if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
 end;
 
-procedure TTyRibbonGroup.FitToContent;
+procedure TTyCustomRibbonGroup.FitToContent;
 var
   i, r, maxR, want: Integer;
   c: TControl;
@@ -1399,7 +1624,7 @@ begin
   if want <> Width then Width := want;
 end;
 
-procedure TTyRibbonGroup.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomRibbonGroup.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -1450,14 +1675,14 @@ begin
   end;
 end;
 
-procedure TTyRibbonGroup.Paint;
+procedure TTyCustomRibbonGroup.Paint;
 begin
   // Paint the FULL bounds (ClientRect would exclude the reserved caption band, misplacing
   // the caption band Y on any widgetset where GetClientRect honors AdjustClientRect).
   RenderTo(Canvas, Rect(0, 0, Width, Height), Font.PixelsPerInch);
 end;
 
-function TTyRibbonGroup.LauncherRectPx: TRect;
+function TTyCustomRibbonGroup.LauncherRectPx: TRect;
 var
   bandPx: Integer;
 begin
@@ -1466,7 +1691,7 @@ begin
   Result := Rect(ClientWidth - bandPx, ClientHeight - bandPx, ClientWidth, ClientHeight);
 end;
 
-procedure TTyRibbonGroup.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomRibbonGroup.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   R: TRect;
 begin

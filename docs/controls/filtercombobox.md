@@ -2,11 +2,11 @@
 
 ## 概述
 
-`TTyFilterComboBox` 是一个列出**过滤预设**的下拉框(`TTyComboBox` 子类)。把一条 LCL 过滤串
+`TTyFilterComboBox` 是一个列出**过滤预设**的下拉框(`TTyCustomComboBox` 子类)。把一条 LCL 过滤串
 (`'文本 (*.txt)|*.txt|所有文件|*.*'`)解析成若干段,每段的 Caption 作为一行;选中某段后,该段的
 模式串就是生效的 `Mask` —— 文件列表读它:`List.Mask := FilterCombo.Mask`。
 
-锁 `csDropDownList`(选择型,不可编辑)。**零新增主题 token**(继承 `TTyComboBox`)。
+锁 `csDropDownList`(选择型,不可编辑)。**零新增主题 token**(继承 `TTyCustomComboBox`)。
 
 ## 用法
 

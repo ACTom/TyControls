@@ -133,7 +133,7 @@ type
     FDrawn: Integer;
     FLastRect: TRect;
     FLastPanel: TTyStatusPanel;
-    procedure HandleDrawPanel(AStatusBar: TTyStatusBar; APanel: TTyStatusPanel;
+    procedure HandleDrawPanel(AStatusBar: TTyCustomStatusBar; APanel: TTyStatusPanel;
       APainter: TTyPainter; const ARect: TRect);
   published
     procedure TestOwnerDrawFiresOnlyForOwnerDrawPanels;
@@ -583,7 +583,7 @@ end;
 
 { ---- OnDrawPanel --------------------------------------------------------- }
 
-procedure TStatusBarOwnerDrawTest.HandleDrawPanel(AStatusBar: TTyStatusBar;
+procedure TStatusBarOwnerDrawTest.HandleDrawPanel(AStatusBar: TTyCustomStatusBar;
   APanel: TTyStatusPanel; APainter: TTyPainter; const ARect: TRect);
 var
   f: TTyFill;

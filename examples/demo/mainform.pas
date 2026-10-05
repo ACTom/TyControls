@@ -173,11 +173,11 @@ type
       LFM translator cannot reach them. See the resourcestring block. }
     procedure LocalizeTexts;
     procedure TyButton4Click(Sender: TObject);
-    procedure TyTree1InitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+    procedure TyTree1InitNode(Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
       var InitStates: TTyNodeInitStates);
-    procedure TyTree1InitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure TyTree1InitChildren(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       var ChildCount: Cardinal);
-    procedure TyTree1GetText(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure TyTree1GetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       var AText: string);
     { Fills the NATIVE LCL TreeView on the 'Native' tab. Built in code, not streamed:
       TTreeNodes stores design-time nodes as an `Items.Data` binary blob and, although LCL
@@ -187,15 +187,15 @@ type
       IDE. Building here also keeps the labels translatable; the blob hid untranslated text. }
     procedure BuildNativeTree;
     { Multi-column sortable tree handlers }
-    procedure TyColTreeInitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+    procedure TyColTreeInitNode(Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
       var InitStates: TTyNodeInitStates);
-    procedure TyColTreeInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure TyColTreeInitChildren(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       var ChildCount: Cardinal);
-    procedure TyColTreeGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+    procedure TyColTreeGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
       Column: Integer; TextType: TTyVSTTextType; var CellText: string);
-    procedure TyColTreeCompareNodes(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+    procedure TyColTreeCompareNodes(Sender: TTyCustomTreeView; Node1, Node2: PTyTreeNode;
       Column: Integer; var CompareResult: Integer);
-    procedure TyColTreeChecked(Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure TyColTreeChecked(Sender: TTyCustomTreeView; Node: PTyTreeNode);
     procedure TyColTreeSelectionChanged(Sender: TObject);
     procedure GroupBox1Click(Sender: TObject);
     procedure MnuViewToggleClick(Sender: TObject);
@@ -798,14 +798,14 @@ begin
   ChkAgree.Checked := not ChkAgree.Checked;
 end;
 
-procedure TDemoMainForm.TyTree1InitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+procedure TDemoMainForm.TyTree1InitNode(Sender: TTyCustomTreeView; ParentNode, Node: PTyTreeNode;
   var InitStates: TTyNodeInitStates);
 begin
   if Sender.GetNodeLevel(Node) < 4 then
     Include(InitStates, ivsHasChildren);
 end;
 
-procedure TDemoMainForm.TyTree1InitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TDemoMainForm.TyTree1InitChildren(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   var ChildCount: Cardinal);
 begin
   ChildCount := 10;
@@ -831,7 +831,7 @@ begin
   end;
 end;
 
-procedure TDemoMainForm.TyTree1GetText(Sender: TTyTreeView; Node: PTyTreeNode;
+procedure TDemoMainForm.TyTree1GetText(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   var AText: string);
 begin
   AText := Format(rsVirtNodeFmt, [Node^.Index, Sender.GetNodeLevel(Node)]);
@@ -940,7 +940,7 @@ begin
   TyColTree.RootNodeCount := 3;
 end;
 
-procedure TDemoMainForm.TyColTreeInitNode(Sender: TTyTreeView;
+procedure TDemoMainForm.TyColTreeInitNode(Sender: TTyCustomTreeView;
   ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
 var
   level: Integer;
@@ -985,7 +985,7 @@ begin
   end;
 end;
 
-procedure TDemoMainForm.TyColTreeInitChildren(Sender: TTyTreeView;
+procedure TDemoMainForm.TyColTreeInitChildren(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; var ChildCount: Cardinal);
 var
   data:      PColNode;
@@ -1003,7 +1003,7 @@ begin
     ChildCount := 0;
 end;
 
-procedure TDemoMainForm.TyColTreeGetText(Sender: TTyTreeView;
+procedure TDemoMainForm.TyColTreeGetText(Sender: TTyCustomTreeView;
   Node: PTyTreeNode; Column: Integer; TextType: TTyVSTTextType;
   var CellText: string);
 var
@@ -1059,7 +1059,7 @@ begin
   end;
 end;
 
-procedure TDemoMainForm.TyColTreeCompareNodes(Sender: TTyTreeView;
+procedure TDemoMainForm.TyColTreeCompareNodes(Sender: TTyCustomTreeView;
   Node1, Node2: PTyTreeNode; Column: Integer; var CompareResult: Integer);
 var
   t1, t2:    string;
@@ -1113,7 +1113,7 @@ end;
 
 { E4: update StatusBar panel 0 after a checkbox toggle.
   Shows the name of the toggled node (column 0 text). }
-procedure TDemoMainForm.TyColTreeChecked(Sender: TTyTreeView; Node: PTyTreeNode);
+procedure TDemoMainForm.TyColTreeChecked(Sender: TTyCustomTreeView; Node: PTyTreeNode);
 var
   nodeName: string;
 begin

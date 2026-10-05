@@ -16,7 +16,7 @@ type
     (CurrentStyle.TextColor); the halo is the SAME text rasterised in GlowColor,
     Gaussian-blurred by GlowRadius (logical px, PPI-scaled), and stamped a few
     times to build up intensity. Reuses the 'TyLabel' theming — no new .tycss. }
-  TTyGlowLabel = class(TTyGraphicControl)
+  TTyCustomGlowLabel = class(TTyGraphicControl)
   private
     FAlignment: TAlignment;
     FLayout: TTextLayout;
@@ -53,26 +53,68 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-  published
-    { Off by default (a designed label keeps the width the .lfm gave it). Switch it on and the
-      label WIDENS to hug its caption plus the theme's padding and the halo's spread, so a
-      caption that grows lengthens the label instead of being clipped. Height is left alone
-      (see CalculatePreferredSize): it belongs to whoever lays out the row. }
-    property AutoSize;
-    property Caption;
-    property Enabled;
-    property Font;
-    property Align;
-    property Anchors;
-    property StyleClass;
-    property Controller;
-    property OnClick;
+  protected
     property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
     property Layout: TTextLayout read FLayout write SetLayout default tlCenter;
     { Halo colour. Default is a warm translucent white glow (Vista aero-ish). }
     property GlowColor: TTyColor read FGlowColor write SetGlowColor;
     { Gaussian blur radius of the halo, in logical px (PPI-scaled at paint). }
     property GlowRadius: Integer read FGlowRadius write SetGlowRadius default 4;
+  end;
+
+  { TTyGlowLabel publishes TTyCustomGlowLabel's properties; everything lives in TTyCustomGlowLabel. }
+  TTyGlowLabel = class(TTyCustomGlowLabel)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    { Off by default (a designed label keeps the width the .lfm gave it). Switch it on and the
+      label WIDENS to hug its caption plus the theme's padding and the halo's spread, so a
+      caption that grows lengthens the label instead of being clipped. Height is left alone
+      (see CalculatePreferredSize): it belongs to whoever lays out the row. }
+    property AutoSize;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Caption;
+    property Align;
+    property Anchors;
+    property Alignment;
+    property Layout;
+    property GlowColor;
+    property GlowRadius;
   end;
 
 implementation
@@ -87,9 +129,9 @@ begin
     Result := ARadius;
 end;
 
-{ TTyGlowLabel }
+{ TTyCustomGlowLabel }
 
-constructor TTyGlowLabel.Create(AOwner: TComponent);
+constructor TTyCustomGlowLabel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TyAccelRegister(Self);
@@ -100,13 +142,13 @@ begin
   FGlowRadius := 4;
 end;
 
-destructor TTyGlowLabel.Destroy;
+destructor TTyCustomGlowLabel.Destroy;
 begin
   TyAccelUnregister(Self);
   inherited Destroy;
 end;
 
-function TTyGlowLabel.GetStyleTypeKey: string;
+function TTyCustomGlowLabel.GetStyleTypeKey: string;
 begin
   { Own key rather than the borrowed 'TyLabel': the blurred glow layer is a mark a plain label never draws.
     Added to 'TyLabel's rule block as an extra selector, so every resolved value is
@@ -114,33 +156,33 @@ begin
   Result := 'TyGlowLabel';
 end;
 
-function TTyGlowLabel.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
+function TTyCustomGlowLabel.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
 begin
   Result := TyResolveFontSize(AStyle, ParentFont, Font.Size, ActiveController);
 end;
 
-procedure TTyGlowLabel.SetAlignment(AValue: TAlignment);
+procedure TTyCustomGlowLabel.SetAlignment(AValue: TAlignment);
 begin
   if FAlignment = AValue then Exit;
   FAlignment := AValue;
   Invalidate;
 end;
 
-procedure TTyGlowLabel.SetLayout(AValue: TTextLayout);
+procedure TTyCustomGlowLabel.SetLayout(AValue: TTextLayout);
 begin
   if FLayout = AValue then Exit;
   FLayout := AValue;
   Invalidate;
 end;
 
-procedure TTyGlowLabel.SetGlowColor(AValue: TTyColor);
+procedure TTyCustomGlowLabel.SetGlowColor(AValue: TTyColor);
 begin
   if FGlowColor = AValue then Exit;
   FGlowColor := AValue;
   Invalidate;
 end;
 
-procedure TTyGlowLabel.SetGlowRadius(AValue: Integer);
+procedure TTyCustomGlowLabel.SetGlowRadius(AValue: Integer);
 begin
   AValue := TyGlowClampRadius(AValue);
   if FGlowRadius = AValue then Exit;
@@ -148,7 +190,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyGlowLabel.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
+procedure TTyCustomGlowLabel.MeasureCaption(APPI: Integer; out AWidth, AHeight: Integer);
 var
   S: TTyStyleSet;
   Meas: TBitmap;
@@ -163,13 +205,8 @@ begin
   Meas := TBitmap.Create;
   try
     Meas.SetSize(1, 1);
-    Meas.Canvas.Font.Name := TyEffectiveFontName(S.FontName);
-    Meas.Canvas.Font.Size := MulDiv(ResolveFontSize(S), APPI, 96);
-    // TyConfigureTextFont (which both paint passes go through) bolds at weight >= 600.
-    if S.FontWeight >= 600 then
-      Meas.Canvas.Font.Style := [fsBold]
-    else
-      Meas.Canvas.Font.Style := [];
+    // The measuring twin of TyConfigureTextFont, which both paint passes go through.
+    TyConfigureMeasureFont(Meas.Canvas, S.FontName, ResolveFontSize(S), S.FontWeight, APPI);
     AWidth := Meas.Canvas.TextWidth(disp);
     // A stable reference glyph: an empty caption still measures as one line.
     AHeight := Meas.Canvas.TextHeight('Ag');
@@ -180,7 +217,7 @@ begin
   end;
 end;
 
-procedure TTyGlowLabel.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+procedure TTyCustomGlowLabel.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
   WithThemeSpace: Boolean);
 var
   S: TTyStyleSet;
@@ -212,7 +249,7 @@ begin
   PreferredHeight := 0;
 end;
 
-procedure TTyGlowLabel.TextChanged;
+procedure TTyCustomGlowLabel.TextChanged;
 begin
   inherited TextChanged;
   // The new caption needs a different width, so an auto-sized label must re-fit.
@@ -224,7 +261,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyGlowLabel.Invalidate;
+procedure TTyCustomGlowLabel.Invalidate;
 begin
   inherited Invalidate;
   { A theme switch reaches every control as a bare Invalidate (TTyStyleController broadcasts
@@ -246,7 +283,7 @@ begin
   end;
 end;
 
-procedure TTyGlowLabel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyCustomGlowLabel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -321,7 +358,7 @@ begin
   end;
 end;
 
-procedure TTyGlowLabel.Paint;
+procedure TTyCustomGlowLabel.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
