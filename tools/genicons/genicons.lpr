@@ -920,6 +920,51 @@ procedure GCascader(b: TBGRABitmap); begin RRect(b,3,3,21,10,2,Ink); PolyL(b,[Po
 { TTyPopover: a bubble with a pointer that HOLDS controls — that is the whole gap it fills }
 procedure GPopover(b: TBGRABitmap); begin RRect(b,2,4,22,17,2,Ink); PolyL(b,[PointF(9,17),PointF(11.5,20.5),PointF(14,17)],Ink); FillRRect(b,5,7.5,10.5,13.5,1,Acc); Line(b,12.5,9,19,9,Ink,1.3); Line(b,12.5,12,17.5,12,Ink,1.3); end;
 
+{ Data-aware controls (tycontrols_db): the base control's glyph with a small database
+  cylinder in the bottom-right corner. The corner is cleared first so the badge reads on
+  any glyph under it. }
+procedure DbBadge(b: TBGRABitmap);
+begin
+  b.FillRect(Round(14*GScale), Round(14*GScale), b.Width, b.Height, BGRAPixelTransparent, dmSet);
+  b.FillRectAntialias(15.2*GScale, 16.4*GScale, 22.8*GScale, 21.6*GScale, Acc);
+  b.FillEllipseAntialias(19*GScale, 21.6*GScale, 3.8*GScale, 1.5*GScale, Acc);
+  b.FillEllipseAntialias(19*GScale, 16.4*GScale, 3.8*GScale, 1.5*GScale, BGRA($93, $BB, $FB, 255));
+  b.DrawLineAntialias(15.6*GScale, 19*GScale, 22.4*GScale, 19*GScale, BGRAWhite, 0.8*GScale);
+end;
+
+{ TTyDBNavigator: a bar of four record moves -- |< < > >| -- the middle two in the accent }
+procedure GDBNavigator(b: TBGRABitmap);
+begin
+  RRect(b,1.5,7,22.5,17,2,Ink);
+  Line(b,4.5,9.6,4.5,14.4,Ink,1.3);
+  FillPolyG(b,[PointF(8.6,9.6),PointF(5.4,12),PointF(8.6,14.4)],Ink);
+  FillPolyG(b,[PointF(12.8,9.6),PointF(9.6,12),PointF(12.8,14.4)],Acc);
+  FillPolyG(b,[PointF(14.4,9.6),PointF(17.6,12),PointF(14.4,14.4)],Acc);
+  FillPolyG(b,[PointF(15.4,9.6),PointF(18.6,12),PointF(15.4,14.4)],Acc);
+  Line(b,19.5,9.6,19.5,14.4,Ink,1.3);
+end;
+
+procedure GDBText(b: TBGRABitmap); begin GLabel(b); DbBadge(b); end;
+procedure GDBEdit(b: TBGRABitmap); begin GEdit(b); DbBadge(b); end;
+procedure GDBMaskEdit(b: TBGRABitmap); begin GMaskEdit(b); DbBadge(b); end;
+procedure GDBNumericEdit(b: TBGRABitmap); begin GNumericEdit(b); DbBadge(b); end;
+procedure GDBCurrencyEdit(b: TBGRABitmap); begin GCurrencyEdit(b); DbBadge(b); end;
+procedure GDBSpinEdit(b: TBGRABitmap); begin GSpinEdit(b); DbBadge(b); end;
+procedure GDBFloatSpinEdit(b: TBGRABitmap); begin GFloatSpinEdit(b); DbBadge(b); end;
+procedure GDBMemo(b: TBGRABitmap); begin GMemo(b); DbBadge(b); end;
+procedure GDBCheckBox(b: TBGRABitmap); begin GCheckBox(b); DbBadge(b); end;
+procedure GDBToggleSwitch(b: TBGRABitmap); begin GToggle(b); DbBadge(b); end;
+procedure GDBRadioGroup(b: TBGRABitmap); begin GRadioGroup(b); DbBadge(b); end;
+procedure GDBSegmented(b: TBGRABitmap); begin GSegmented(b); DbBadge(b); end;
+procedure GDBRating(b: TBGRABitmap); begin GRating(b); DbBadge(b); end;
+procedure GDBComboBox(b: TBGRABitmap); begin GCombo(b); DbBadge(b); end;
+procedure GDBLookupComboBox(b: TBGRABitmap); begin GComboBoxEx(b); DbBadge(b); end;
+procedure GDBListBox(b: TBGRABitmap); begin GListBox(b); DbBadge(b); end;
+procedure GDBLookupListBox(b: TBGRABitmap); begin GAdvancedListBox(b); DbBadge(b); end;
+procedure GDBImage(b: TBGRABitmap); begin GImage(b); DbBadge(b); end;
+procedure GDBDateTimePicker(b: TBGRABitmap); begin GDateTimePicker(b); DbBadge(b); end;
+procedure GDBCalendar(b: TBGRABitmap); begin GCalendar(b); DbBadge(b); end;
+
 { TTyToolWindowBar: a window frame with an icon strip down its left edge (three small squares,
   the top one in the accent colour = the current page) and the content area to its right }
 procedure GToolWindowBar(b: TBGRABitmap);
@@ -945,7 +990,7 @@ begin
 end;
 
 const
-  Glyphs: array[0..168] of TGlyph = (
+  Glyphs: array[0..189] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -1114,7 +1159,28 @@ const
     (Name:'TTyCascader';          Draw:@GCascader),
     (Name:'TTyPopover';           Draw:@GPopover),
     (Name:'TTyToolWindowBar';     Draw:@GToolWindowBar),
-    (Name:'TTyToolWindowManager'; Draw:@GToolWindowManager)
+    (Name:'TTyToolWindowManager'; Draw:@GToolWindowManager),
+    (Name:'TTyDBNavigator'; Draw:@GDBNavigator),
+    (Name:'TTyDBText'; Draw:@GDBText),
+    (Name:'TTyDBEdit'; Draw:@GDBEdit),
+    (Name:'TTyDBMaskEdit'; Draw:@GDBMaskEdit),
+    (Name:'TTyDBNumericEdit'; Draw:@GDBNumericEdit),
+    (Name:'TTyDBCurrencyEdit'; Draw:@GDBCurrencyEdit),
+    (Name:'TTyDBSpinEdit'; Draw:@GDBSpinEdit),
+    (Name:'TTyDBFloatSpinEdit'; Draw:@GDBFloatSpinEdit),
+    (Name:'TTyDBMemo'; Draw:@GDBMemo),
+    (Name:'TTyDBCheckBox'; Draw:@GDBCheckBox),
+    (Name:'TTyDBToggleSwitch'; Draw:@GDBToggleSwitch),
+    (Name:'TTyDBRadioGroup'; Draw:@GDBRadioGroup),
+    (Name:'TTyDBSegmented'; Draw:@GDBSegmented),
+    (Name:'TTyDBRating'; Draw:@GDBRating),
+    (Name:'TTyDBComboBox'; Draw:@GDBComboBox),
+    (Name:'TTyDBLookupComboBox'; Draw:@GDBLookupComboBox),
+    (Name:'TTyDBListBox'; Draw:@GDBListBox),
+    (Name:'TTyDBLookupListBox'; Draw:@GDBLookupListBox),
+    (Name:'TTyDBImage'; Draw:@GDBImage),
+    (Name:'TTyDBDateTimePicker'; Draw:@GDBDateTimePicker),
+    (Name:'TTyDBCalendar'; Draw:@GDBCalendar)
   );
 
 const

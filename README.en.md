@@ -1,6 +1,6 @@
 # TyControls
 
-A custom-drawn component library for Lazarus. All 169 controls are rendered with BGRABitmap and styled by `.tycss` text themes, so your UI looks exactly the same on Windows, Linux, and macOS.
+A custom-drawn component library for Lazarus. All 190 controls are rendered with BGRABitmap and styled by `.tycss` text themes, so your UI looks exactly the same on Windows, Linux, and macOS.
 
 > **中文:** [README.md](README.md) · **Changelog:** [CHANGELOG.en.md](CHANGELOG.en.md)
 
@@ -36,7 +36,7 @@ Every example, every tab page, in light and dark: see the [gallery](docs/gallery
 
 ## Features
 
-- **169 controls**: buttons, inputs, lists, data grid, virtual tree, Ribbon, calendar, shell file browsing, and 20 custom-drawn dialogs
+- **190 controls**: buttons, inputs, lists, data grid, virtual tree, Ribbon, calendar, shell file browsing, 20 custom-drawn dialogs and 21 data-aware controls
 - **Identical on all three platforms**: fully custom-drawn, no native control wrapping — one code base renders the same UI everywhere
 - **Theming**: 17 built-in themes switched by a single property, with runtime hot-swap and OS light/dark and accent-color following; themes are text files, so restyling needs no recompile
 - **Classic and modern looks**: from Win95 / XP bevels to Win11 / Material flat design, with a switchable control-density scale
@@ -62,7 +62,7 @@ Requires Lazarus 3.0+, FPC 3.2.2+, and BGRABitmap (OPM package `BGRABitmapPack`)
 
 **1. Install the package**
 
-Open `tycontrols_dt.lpk` in Lazarus and click **Use → Install**; the IDE rebuilds and restarts. The runtime package `tycontrols.lpk` installs automatically as a dependency.
+Open `tycontrols_dt.lpk` in Lazarus and click **Use → Install**; the IDE rebuilds and restarts. The runtime packages `tycontrols.lpk` and `tycontrols_db.lpk` (the data-aware controls) install automatically as dependencies.
 
 **2. New project**
 
@@ -80,7 +80,7 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 
 ## Control list
 
-169 controls across 16 palette pages. Per-control properties, events, and theme keys: **[docs/controls/](docs/controls/)**.
+190 controls across 17 palette pages. Per-control properties, events, and theme keys: **[docs/controls/](docs/controls/)**.
 
 ### Core · `TyControls` (2)
 
@@ -259,6 +259,34 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 | `TTyImageView` | Image viewer: pan, zoom, filters |
 | `TTyPreviewBox` | File preview pane |
 
+### Data-aware · `TyControls Data Controls` (21)
+
+A separate package, `tycontrols_db`: bind a field of a `TDataSource` and go; the look follows the theme. See [docs/controls/dbcontrols.md](docs/controls/dbcontrols.md) (in Chinese).
+
+| Control | Description |
+|---|---|
+| `TTyDBNavigator` | Record navigator: first / prior / next / last, insert, delete, edit, post, cancel, refresh |
+| `TTyDBText` | Label showing a field's value |
+| `TTyDBEdit` | Single-line edit bound to a field |
+| `TTyDBMaskEdit` | Masked edit; takes the field's `EditMask` by default |
+| `TTyDBNumericEdit` | Number edit that reads and writes the field as a number |
+| `TTyDBCurrencyEdit` | Currency edit that reads and writes the field as a number |
+| `TTyDBSpinEdit` | Integer spin edit |
+| `TTyDBFloatSpinEdit` | Decimal spin edit |
+| `TTyDBMemo` | Multi-line edit bound to a memo field |
+| `TTyDBCheckBox` | Check box; `ValueChecked` / `ValueUnchecked` map the field, NULL shows grayed |
+| `TTyDBToggleSwitch` | Switch, mapped like the check box |
+| `TTyDBRadioGroup` | Radio group; `Values` map the field |
+| `TTyDBSegmented` | Segmented control; `Values` map the field |
+| `TTyDBRating` | Star rating bound to a number field |
+| `TTyDBComboBox` | Combo box: pick or type the field's value |
+| `TTyDBLookupComboBox` | Lookup combo: lists another table's rows, writes the key |
+| `TTyDBListBox` | List box; the selected item is the field's value |
+| `TTyDBLookupListBox` | Lookup list |
+| `TTyDBImage` | Picture bound to a blob field; reads and writes LCL `TDBImage`'s format |
+| `TTyDBDateTimePicker` | Date-time picker with null-date support |
+| `TTyDBCalendar` | Calendar whose picked day is written back to the field |
+
 ### Menus · `TyControls Menus` (4)
 
 | Control | Description |
@@ -387,6 +415,7 @@ Each example builds standalone: `lazbuild examples/<name>/<project>.lpi`.
 | [icons](examples/icons/) | Icon fonts |
 | [transitions](examples/transitions/) | Slide / fade transitions |
 | [toolwindows](examples/toolwindows/) | IDE-style workbench: side bars and a bottom panel, drag windows across, save and restore the layout |
+| [dbcontrols](examples/dbcontrols/) | Data-aware controls: all 21 bound to an in-memory table; navigating, editing, NULLs, lookups, photos |
 | [terminal](examples/terminal/) | Terminal: asciicast replay, a real shell (ConPTY / PTY / pipes), ZModem send and receive, skins, colour schemes, a key-code panel |
 
 Thirty-plus single-control examples live under [examples/](examples/).
@@ -421,10 +450,11 @@ SetDefaultLang('', LangDir);                                                    
 TranslateUnitResourceStringsEx('', LangDir, 'tycontrols', 'tyControls.StrConsts');  // the library
 ```
 
-Deploy `languages/tycontrols.<lang>.po` next to your own `.po` files. Two notes:
+Deploy `languages/tycontrols.<lang>.po` next to your own `.po` files. A few notes:
 
 - The deployed file name is `tycontrols.<lang>.po`, renamed from the source's `tycontrols.strconsts.<lang>.po`. The third argument must be `'tycontrols'` (no dot — LCL strips everything after a dot as an extension); the real unit name `tyControls.StrConsts` goes in the fourth.
 - English deployments should ship `tycontrols.en.po` too; it is the switch that makes the calendar's and date picker's month and weekday names follow the app language.
+- If you use the data-aware controls (`tycontrols_db`), add `TranslateUnitResourceStringsEx('', LangDir, 'tycontrols_db', 'tyControls.DB.StrConsts')` and deploy `tycontrols.db.strconsts.<lang>.po` renamed to `tycontrols_db.<lang>.po`.
 
 Full example: [examples/demo](examples/demo/).
 

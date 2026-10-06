@@ -47,7 +47,8 @@ TyControls 是一套面向 Lazarus 的**皮肤控件库**,让你的应用在 Win
    重建完成后,组件面板出现 **"TyControls"** 分页,所有控件可直接拖放使用。
 
 > `tycontrols.lpk` 依赖:`BGRABitmapPack`、`LCL`
-> `tycontrols_dt.lpk` 依赖:`tycontrols`、`IDEIntf`
+> `tycontrols_db.lpk`(数据感知控件)依赖:`tycontrols`、`FCL`、`LCL`
+> `tycontrols_dt.lpk` 依赖:`tycontrols`、`tycontrols_db`、`IDEIntf`
 
 ### 方案 B — 纯源码路径(无需安装包)
 

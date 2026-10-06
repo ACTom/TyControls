@@ -167,7 +167,7 @@ var
   i: Integer;
   fn, bad: string;
 begin
-  files := FindAllFiles(RepoRoot + 'source', '*.pas', False);
+  files := LibrarySourceFiles;
   src := TStringList.Create;
   try
     bad := '';

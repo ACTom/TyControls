@@ -47,7 +47,8 @@ The layers are strictly decoupled: controls know nothing about colors, the engin
    After the rebuild, the component palette gains the **TyControls** pages and all controls can be dropped onto forms.
 
 > `tycontrols.lpk` depends on `BGRABitmapPack` and `LCL`.
-> `tycontrols_dt.lpk` depends on `tycontrols` and `IDEIntf`.
+> `tycontrols_db.lpk` (the data-aware controls) depends on `tycontrols`, `FCL` and `LCL`.
+> `tycontrols_dt.lpk` depends on `tycontrols`, `tycontrols_db` and `IDEIntf`.
 
 ### Option B — source-only (no package install)
 

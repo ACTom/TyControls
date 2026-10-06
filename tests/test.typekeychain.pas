@@ -724,8 +724,22 @@ begin
 end;
 
 procedure TTypeKeyChainTest.TestCompletionOffersRegisteredKeys;
-var l: TStringList;
+var
+  l: TStringList;
+  i, j, already: Integer;
+  known: Boolean;
 begin
+  { Keys registered before this test ran -- by units linked into the program, as the
+    data-aware package's TyDBXxx keys are -- are on the panel list too. Count them rather than
+    assume an empty registry. }
+  already := 0;
+  for i := 0 to FBefore.Count - 1 do
+  begin
+    known := False;
+    for j := 0 to High(TyCatalogTypeKeys) do
+      if SameText(TyCatalogTypeKeys[j], FBefore[i]) then known := True;
+    if not known then Inc(already);
+  end;
   l := TStringList.Create;
   try
     TyCssCompletionItems('', True, l);
@@ -745,7 +759,7 @@ begin
     TyCssSelectorTypeKeys(l);
     AssertTrue('panel list has the registered key', l.IndexOf('TagButton') >= 0);
     AssertEquals('panel list: catalogue + new registered keys only',
-      Length(TyCatalogTypeKeys) + 1, l.Count);
+      Length(TyCatalogTypeKeys) + already + 1, l.Count);
   finally
     l.Free;
   end;

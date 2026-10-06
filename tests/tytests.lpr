@@ -239,7 +239,17 @@ uses
   test.themebuilder.edit,
   test.customclasses, test.customclasses.p1, test.customclasses.p2, test.customclasses.p3,
   test.customclasses.p4,
-  test.typekeychain;
+  test.typekeychain,
+  test.db.common,
+  test.corehooks,
+  test.db.edits,
+  test.db.numeric,
+  test.db.choices,
+  test.db.lists,
+  test.db.image,
+  test.db.datetime,
+  test.db.navigator,
+  test.db.typekeys;
 
 type
   TTyTestRunner = class(TTestRunner)

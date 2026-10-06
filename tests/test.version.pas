@@ -19,6 +19,8 @@ uses
   tyControls.Dialogs.Color, tyControls.Dialogs.FileDialog, tyControls.Dialogs.Find,
   tyControls.Dialogs.Font, tyControls.Dialogs.Progress, tyControls.Dialogs.SelectPath,
   tyControls.Dialogs.IconBrowser,
+  tyControls.DB.Edits, tyControls.DB.Choices, tyControls.DB.Lists, tyControls.DB.Image,
+  tyControls.DB.DateTime, tyControls.DB.Navigator,
   tyControls.Divider, tyControls.DropButtons, tyControls.Edit, tyControls.Empty,
   tyControls.ExPanel, tyControls.FilterComboBox, tyControls.FloatSpinEdit,
   tyControls.FontComboBox,
@@ -374,6 +376,8 @@ begin
     core, PackageVersion('tycontrols.lpk'));
   AssertEquals('tycontrols_dt.lpk version must match TyVersion''s release number',
     core, PackageVersion('tycontrols_dt.lpk'));
+  AssertEquals('tycontrols_db.lpk version must match TyVersion''s release number',
+    core, PackageVersion('tycontrols_db.lpk'));
 end;
 
 { The design-time-reachability check in the sweep answers "does ACls descend from a class the
@@ -466,6 +470,12 @@ initialization
   Reg([
     TTyGridCell, TTyFormSurface, TTyForm, TTyDialog,
     TTyToolWindowBar, TTyToolWindowManager, TTyToolWindow, TTyToolWindowActions]);
+  { The data-aware controls (tycontrols_db). }
+  Reg([
+    TTyDBNavigator, TTyDBText, TTyDBEdit, TTyDBMaskEdit, TTyDBNumericEdit, TTyDBCurrencyEdit,
+    TTyDBSpinEdit, TTyDBFloatSpinEdit, TTyDBMemo, TTyDBCheckBox, TTyDBToggleSwitch,
+    TTyDBRadioGroup, TTyDBSegmented, TTyDBRating, TTyDBComboBox, TTyDBLookupComboBox,
+    TTyDBListBox, TTyDBLookupListBox, TTyDBImage, TTyDBDateTimePicker, TTyDBCalendar]);
   { The BASE classes the Version property editor is registered on. They are never dropped on
     a form, so nothing else registers them — but InheritsFromAnEditorBase resolves them by
     name, and an unresolvable base would make that check quietly answer False for everything

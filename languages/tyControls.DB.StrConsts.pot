@@ -1,0 +1,47 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8"
+
+#: tycontrols.db.strconsts.rstydbnavcancel
+msgid "Cancel changes"
+msgstr ""
+
+#: tycontrols.db.strconsts.rstydbnavconfirmdelete
+msgid "Delete this record?"
+msgstr ""
+
+#: tycontrols.db.strconsts.rstydbnavdelete
+msgid "Delete record"
+msgstr ""
+
+#: tycontrols.db.strconsts.rstydbnavedit
+msgid "Edit record"
+msgstr ""
+
+#: tycontrols.db.strconsts.rstydbnavfirst
+msgid "First record"
+msgstr ""
+
+#: tycontrols.db.strconsts.rstydbnavinsert
+msgid "Insert record"
+msgstr ""
+
+#: tycontrols.db.strconsts.rstydbnavlast
+msgid "Last record"
+msgstr ""
+
+#: tycontrols.db.strconsts.rstydbnavnext
+msgid "Next record"
+msgstr ""
+
+#: tycontrols.db.strconsts.rstydbnavpost
+msgid "Save changes"
+msgstr ""
+
+#: tycontrols.db.strconsts.rstydbnavprior
+msgid "Previous record"
+msgstr ""
+
+#: tycontrols.db.strconsts.rstydbnavrefresh
+msgid "Refresh data"
+msgstr ""
+

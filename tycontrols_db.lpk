@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <Package Version="5">
+    <Name Value="tycontrols_db"/>
+    <Author Value="ACTom"/>
+    <CompilerOptions>
+      <Version Value="11"/>
+      <SearchPaths>
+        <OtherUnitFiles Value="source/db"/>
+        <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)/db"/>
+      </SearchPaths>
+    </CompilerOptions>
+    <Description Value="TyControls Data-Aware Controls. The TyControls controls bound to a TDataSource and a field, the way LCL's Data Controls page is. Requires the TyControls Run-Time Package.
+"/>
+    <License Value="Modified LGPL (see COPYING.modifiedLGPL.txt) — same as the Lazarus LCL"/>
+    <Version Major="3" Minor="1" Release="0"/>
+    <Files>
+      <Item>
+        <Filename Value="source/db/tyControls.DB.Choices.pas"/>
+        <UnitName Value="tyControls.DB.Choices"/>
+      </Item>
+      <Item>
+        <Filename Value="source/db/tyControls.DB.Common.pas"/>
+        <UnitName Value="tyControls.DB.Common"/>
+      </Item>
+      <Item>
+        <Filename Value="source/db/tyControls.DB.DateTime.pas"/>
+        <UnitName Value="tyControls.DB.DateTime"/>
+      </Item>
+      <Item>
+        <Filename Value="source/db/tyControls.DB.Edits.pas"/>
+        <UnitName Value="tyControls.DB.Edits"/>
+      </Item>
+      <Item>
+        <Filename Value="source/db/tyControls.DB.Image.pas"/>
+        <UnitName Value="tyControls.DB.Image"/>
+      </Item>
+      <Item>
+        <Filename Value="source/db/tyControls.DB.Lists.pas"/>
+        <UnitName Value="tyControls.DB.Lists"/>
+      </Item>
+      <Item>
+        <Filename Value="source/db/tyControls.DB.Navigator.pas"/>
+        <UnitName Value="tyControls.DB.Navigator"/>
+      </Item>
+      <Item>
+        <Filename Value="source/db/tyControls.DB.StrConsts.pas"/>
+        <UnitName Value="tyControls.DB.StrConsts"/>
+      </Item>
+    </Files>
+    <i18n>
+      <EnableI18N Value="True"/>
+      <OutDir Value="languages"/>
+    </i18n>
+    <RequiredPkgs>
+      <Item>
+        <PackageName Value="tycontrols"/>
+        <MinVersion Major="3" Minor="1" Valid="True"/>
+      </Item>
+      <Item>
+        <PackageName Value="FCL"/>
+        <MinVersion Major="1" Valid="True"/>
+      </Item>
+      <Item>
+        <PackageName Value="LCL"/>
+        <MinVersion Major="3" Valid="True"/>
+      </Item>
+    </RequiredPkgs>
+    <UsageOptions>
+      <UnitPath Value="$(PkgOutDir)"/>
+    </UsageOptions>
+    <PublishOptions>
+      <Version Value="2"/>
+    </PublishOptions>
+  </Package>
+</CONFIG>

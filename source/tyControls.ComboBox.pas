@@ -140,6 +140,9 @@ type
     FSyncingText: Boolean;        // guard: True while we set FEditor.Text programmatically
     FShowingPopup: Boolean;       // guard: True during the autocomplete first-open focus dance
     FOnChange: TNotifyEvent;
+    { True while Loaded applies a waiting ItemIndex: reading a form is nobody's edit, so
+      neither Change nor OnChange hears of it. }
+    FChangeMuted: Boolean;
     FOnSelect: TNotifyEvent;
     FOnDropDown: TNotifyEvent;
     FOnCloseUp: TNotifyEvent;
@@ -267,6 +270,12 @@ type
     { The dropdown's width: the field, widened to ItemWidth when that is larger. Same
       separation as ComputePopupHeight — one formula, exercised headless. }
     function ComputePopupWidth(APPI: Integer): Integer;
+    { The value changed: called exactly where OnChange fires -- the user picking a row,
+      typing in the field, or code setting ItemIndex / Text -- and fires it. LCL's
+      TCustomComboBox.Change. A subclass that must tell the user's edits from its own
+      writes (the data-aware combo) overrides this rather than taking OnChange, which
+      belongs to the application. }
+    procedure Change; virtual;
     procedure DoSelect; virtual;
     { Fires when the editable (csDropDown) field loses focus with committed text.
       Default no-op; TTyMRUComboBox overrides it to remember the typed value. }
@@ -862,6 +871,11 @@ procedure TTyCustomComboBox.DoPopupPick(AIndex: Integer);
 begin
   UserSelect(AIndex);                                 // commit the picked row...
   Application.QueueAsyncCall(@DeferredCloseUp, 0);     // ...and close the dropdown
+end;
+
+procedure TTyCustomComboBox.Change;
+begin
+  if Assigned(FOnChange) then FOnChange(Self);
 end;
 
 procedure TTyCustomComboBox.DoDropDown;
@@ -1586,7 +1600,7 @@ begin
   if FStyle = csSimple then
   begin
     SyncEmbeddedSelection;
-    if Assigned(FOnChange) then FOnChange(Self);
+    Change;
     Exit;
   end;
   filtered := TyFilterItemsByPrefix(FItems, FText);
@@ -1597,7 +1611,7 @@ begin
     CloseUp
   else
     DropDownFiltered;
-  if Assigned(FOnChange) then FOnChange(Self);
+  Change;
 end;
 
 procedure TTyCustomComboBox.EditorExit(Sender: TObject);
@@ -1799,8 +1813,8 @@ begin
     SyncEmbeddedSelection;
   end;
   Invalidate;
-  if Assigned(FOnChange) then
-    FOnChange(Self);
+  if not FChangeMuted then
+    Change;
 end;
 
 { Lazily create the popup helper and the list box (both live for the combo's
@@ -1934,21 +1948,19 @@ begin
 end;
 
 procedure TTyCustomComboBox.Loaded;
-var
-  change: TNotifyEvent;
 begin
   inherited Loaded;
   { The other half of SetItemIndex's csLoading capture. Without OnChange: reading a form is
-    not the user changing anything, and the handler would run before the form is whole. }
+    not the user changing anything, and the handler would run before the form is whole.
+    Without Change either, for the same reason: a subclass hook would take it for an edit. }
   if FItemIndexWaits then
   begin
     FItemIndexWaits := False;
-    change := FOnChange;
-    FOnChange := nil;
+    FChangeMuted := True;
     try
       SelectItem(FStreamedItemIndex);
     finally
-      FOnChange := change;
+      FChangeMuted := False;
     end;
   end;
   { Streaming order writes Height (a TControl property) before Style (ours), so SetStyle's
@@ -2092,7 +2104,7 @@ begin
     FText := Picked;
     FItemIndex := FullIdx;
     Invalidate;
-    if Assigned(FOnChange) then FOnChange(Self);
+    Change;
     if FItemIndex <> OldIndex then DoSelect;
     { csSimple takes this same commit path (it has an edit box, and its docked list holds
       the FULL Items so the text→index map above is the identity) -- but there is no popup

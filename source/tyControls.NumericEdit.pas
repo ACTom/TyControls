@@ -31,6 +31,7 @@ type
     { A Value streamed in while the component is loading, applied in Loaded (see SetValue). }
     FPendingValue: Double;
     FHasPendingValue: Boolean;
+    FEmptyAllowed: Boolean;
     function GetValue: Double;
     procedure SetValue(const AValue: Double);
     procedure SetDecimals(const AValue: Integer);
@@ -56,6 +57,10 @@ type
     procedure DoEnter; override;   // show RAW (ungrouped) for editing
     procedure DoExit; override;    // clamp + re-display GROUPED on blur
     procedure Loaded; override;
+    { False (the default): an empty field is a zero, and leaving it shows 0.00. True: empty
+      stays empty -- no reformat fills it in, and Value reads 0 -- so the field can stand
+      for "no value" (the data-aware numeric edits map it to NULL). Not published. }
+    property EmptyAllowed: Boolean read FEmptyAllowed write FEmptyAllowed;
   public
     constructor Create(AOwner: TComponent); override;
     property Value: Double read GetValue write SetValue;
@@ -278,6 +283,7 @@ end;
 
 procedure TTyCustomNumericEdit.Reformat(AGroup: Boolean);
 begin
+  if FEmptyAllowed and (Trim(Text) = '') then Exit;   { "no value" is not a zero }
   { Re-deriving the DISPLAY from the value the field already holds is the control's own
     bookkeeping, not the program overwriting the user's work — but it goes through the
     published Text setter, whose contract is to clear Modified. So save and restore the

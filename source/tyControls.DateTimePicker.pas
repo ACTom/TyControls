@@ -499,6 +499,13 @@ type
       RAISE (the calendar rejects an out-of-range date), while the rest of OpenDropDown
       needs a screen. }
     procedure SeedPopupCalendar;
+    { The value changed: called exactly where OnChange fires -- a key, the wheel, a spin
+      button, the dropdown calendar, Escape's undo, and a programmatic write when
+      dtpoDoChangeOnSetDateTime is set -- and fires it. LCL's TCustomDateTimePicker.Change.
+      The calendar's edits reach the picker through its own handlers, not through the
+      picker's key and mouse overrides, so this is the one place a subclass sees all of
+      them. }
+    procedure Change; virtual;
 
     function  GetStyleTypeKey: string; override;
     { What the field needs to show its own content without clipping: padding, the
@@ -1771,7 +1778,7 @@ begin
       { dtpoAutoCheck deliberately does NOT fire here. It exists so that editing a value
         implies the value is wanted; clearing it means the opposite, and ticking the
         "I have a date" box at the moment the date goes away is the wrong way round. }
-      if Assigned(FOnChange) then FOnChange(Self);
+      Change;
     end;
     Invalidate;
     Exit;
@@ -1792,7 +1799,7 @@ begin
       (LCL datetimepicker.pas:4007). }
     if (dtpoAutoCheck in FOptions) and FShowCheckBox and not FChecked then
       Checked := True;
-    if Assigned(FOnChange) then FOnChange(Self);
+    Change;
   end;
   Invalidate;
 end;
@@ -2107,7 +2114,7 @@ begin
   if (FMinDate <> 0) and (FDateTime < FMinDate) then FDateTime := FMinDate;
   if (FMaxDate <> 0) and (FDateTime > FMaxDate) then FDateTime := FMaxDate;
   if not TyEqualDateTime(FDateTime, OldVal) then
-    if Assigned(FOnChange) then FOnChange(Self);
+    Change;
   Invalidate;
 end;
 
@@ -2138,9 +2145,8 @@ begin
     through the (now silent) programmatic setter. Without this line the one gesture the
     dropdown exists for became the one gesture that told nobody. }
   if (not TyEqualDateTime(FDateTime, OldVal))
-     and not (dtpoDoChangeOnSetDateTime in FOptions)
-     and Assigned(FOnChange) then
-    FOnChange(Self);
+     and not (dtpoDoChangeOnSetDateTime in FOptions) then
+    Change;
   { Close after committing — CloseDropDown handles both the real-window path
     (FPopup.Close → PopupClosed → FOnCloseUp) and the headless path
     (directly fires FOnCloseUp). }
@@ -2705,9 +2711,14 @@ begin
   { The value the host just supplied is the new baseline: Escape must undo what the
     USER did afterwards, not throw away the record that was just loaded. }
   FConfirmedDateTime := FDateTime;
-  if (dtpoDoChangeOnSetDateTime in FOptions) and Assigned(FOnChange) then
-    FOnChange(Self);
+  if dtpoDoChangeOnSetDateTime in FOptions then
+    Change;
   Invalidate;
+end;
+
+procedure TTyCustomDateTimePicker.Change;
+begin
+  if Assigned(FOnChange) then FOnChange(Self);
 end;
 
 procedure TTyCustomDateTimePicker.ConfirmChanges;
@@ -2733,7 +2744,7 @@ begin
     { A revert IS a change from the handler's point of view -- the value it was last
       told about is no longer the value -- so OnChange fires as for any other user
       gesture. }
-    if Assigned(FOnChange) then FOnChange(Self);
+    Change;
   end;
   Invalidate;
 end;

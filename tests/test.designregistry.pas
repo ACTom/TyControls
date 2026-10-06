@@ -26,6 +26,12 @@ uses
 
 { Repo root — the test exe lives in tests/ (mirrors test.grid.streaming.pas). }
 function RepoRoot: string;
+{ Every unit of the run-time library, as FindAllFiles hands them back (the caller frees the
+  list): source/*.pas, the tycontrols package, and source/db/*.pas, the tycontrols_db package.
+  The guards that hold library code to a rule read their population from here, so a unit in
+  the second package is not one they pass in silence for never having opened it. Not
+  recursive: an IDE backup/ folder under source/ is not library code. }
+function LibrarySourceFiles: TStringList;
 { EVERY design-time registration source, sorted, at least one.
 
   This was a single hardcoded file name, and that was a trap waiting for the first second
@@ -96,6 +102,19 @@ implementation
 function RepoRoot: string;
 begin
   Result := ExtractFilePath(ParamStr(0)) + '..' + PathDelim;
+end;
+
+function LibrarySourceFiles: TStringList;
+var
+  db: TStringList;
+begin
+  Result := FindAllFiles(RepoRoot + 'source', '*.pas', False);
+  db := FindAllFiles(RepoRoot + 'source' + PathDelim + 'db', '*.pas', False);
+  try
+    Result.AddStrings(db);
+  finally
+    db.Free;
+  end;
 end;
 
 procedure CollectDesignSourceFiles(ADest: TStrings);

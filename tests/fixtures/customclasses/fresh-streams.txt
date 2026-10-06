@@ -300,6 +300,168 @@
     DroppedDown = False
     TextForNullDate = 'NULL'
   end
+# TTyDBCalendar
+    Left = 0
+    Height = 220
+    Top = 0
+    Width = 240
+    TabOrder = 0
+  end
+# TTyDBCheckBox
+    Left = 0
+    Height = 22
+    Top = 0
+    Width = 130
+    TabOrder = 0
+    Constraints.MinHeight = 20
+    Constraints.MinWidth = 30
+  end
+# TTyDBComboBox
+    Left = 0
+    Height = 26
+    Top = 0
+    Width = 145
+    TabOrder = 0
+  end
+# TTyDBCurrencyEdit
+    Cursor = crIBeam
+    Left = 0
+    Height = 28
+    Top = 0
+    Width = 140
+    TabOrder = 0
+    Alignment = taRightJustify
+    CurrencySymbol = '$'
+  end
+# TTyDBDateTimePicker
+    Cursor = crArrow
+    Left = 0
+    Height = 24
+    Top = 0
+    Width = 130
+    TabOrder = 0
+    DroppedDown = False
+    TextForNullDate = 'NULL'
+  end
+# TTyDBEdit
+    Cursor = crIBeam
+    Left = 0
+    Height = 28
+    Top = 0
+    Width = 140
+    TabOrder = 0
+  end
+# TTyDBFloatSpinEdit
+    Cursor = crIBeam
+    Left = 0
+    Height = 28
+    Top = 0
+    Width = 140
+    TabOrder = 0
+    Alignment = taRightJustify
+  end
+# TTyDBImage
+    Left = 0
+    Height = 90
+    Top = 0
+    Width = 90
+  end
+# TTyDBListBox
+    Left = 0
+    Height = 120
+    Top = 0
+    Width = 160
+    TabOrder = 0
+  end
+# TTyDBLookupComboBox
+    Left = 0
+    Height = 26
+    Top = 0
+    Width = 145
+    TabOrder = 0
+  end
+# TTyDBLookupListBox
+    Left = 0
+    Height = 120
+    Top = 0
+    Width = 160
+    TabOrder = 0
+  end
+# TTyDBMaskEdit
+    Cursor = crIBeam
+    Left = 0
+    Height = 28
+    Top = 0
+    Width = 140
+    TabOrder = 0
+  end
+# TTyDBMemo
+    Cursor = crIBeam
+    Left = 0
+    Height = 120
+    Top = 0
+    Width = 200
+    TabOrder = 0
+  end
+# TTyDBNavigator
+    Left = 0
+    Height = 25
+    Top = 0
+    Width = 241
+    TabOrder = 0
+    ParentShowHint = False
+  end
+# TTyDBNumericEdit
+    Cursor = crIBeam
+    Left = 0
+    Height = 28
+    Top = 0
+    Width = 140
+    TabOrder = 0
+    Alignment = taRightJustify
+  end
+# TTyDBRadioGroup
+    Left = 0
+    Height = 130
+    Top = 0
+    Width = 185
+    TabOrder = 0
+  end
+# TTyDBRating
+    Left = 0
+    Height = 24
+    Top = 0
+    Width = 120
+    TabOrder = 0
+  end
+# TTyDBSegmented
+    Left = 0
+    Height = 30
+    Top = 0
+    Width = 240
+    TabOrder = 0
+  end
+# TTyDBSpinEdit
+    Cursor = crIBeam
+    Left = 0
+    Height = 28
+    Top = 0
+    Width = 120
+    TabOrder = 0
+  end
+# TTyDBText
+    Left = 0
+    Height = 0
+    Top = 0
+    Width = 0
+  end
+# TTyDBToggleSwitch
+    Left = 0
+    Height = 24
+    Top = 0
+    Width = 44
+    TabOrder = 0
+  end
 # TTyDial
     Left = 0
     Height = 72

@@ -1,0 +1,54 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols 3.1\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: tycontrols.db.strconsts.rstydbnavcancel
+msgid "Cancel changes"
+msgstr "取消修改"
+
+#: tycontrols.db.strconsts.rstydbnavconfirmdelete
+msgid "Delete this record?"
+msgstr "删除这条记录吗？"
+
+#: tycontrols.db.strconsts.rstydbnavdelete
+msgid "Delete record"
+msgstr "删除记录"
+
+#: tycontrols.db.strconsts.rstydbnavedit
+msgid "Edit record"
+msgstr "编辑记录"
+
+#: tycontrols.db.strconsts.rstydbnavfirst
+msgid "First record"
+msgstr "首条记录"
+
+#: tycontrols.db.strconsts.rstydbnavinsert
+msgid "Insert record"
+msgstr "插入记录"
+
+#: tycontrols.db.strconsts.rstydbnavlast
+msgid "Last record"
+msgstr "末条记录"
+
+#: tycontrols.db.strconsts.rstydbnavnext
+msgid "Next record"
+msgstr "下一条记录"
+
+#: tycontrols.db.strconsts.rstydbnavpost
+msgid "Save changes"
+msgstr "保存修改"
+
+#: tycontrols.db.strconsts.rstydbnavprior
+msgid "Previous record"
+msgstr "上一条记录"
+
+#: tycontrols.db.strconsts.rstydbnavrefresh
+msgid "Refresh data"
+msgstr "刷新数据"
