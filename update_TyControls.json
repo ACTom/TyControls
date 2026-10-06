@@ -9,12 +9,6 @@
     {
       "ForceNotify" : false,
       "InternalVersion" : 1,
-      "Name" : "tycontrols_db.lpk",
-      "Version" : "3.0.0.0"
-    },
-    {
-      "ForceNotify" : false,
-      "InternalVersion" : 1,
       "Name" : "tycontrols_dt.lpk",
       "Version" : "3.0.0.0"
     }

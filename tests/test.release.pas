@@ -970,8 +970,10 @@ end;
 
 { OPM installs what its JSON names, and offers updates for what update_TyControls.json names.
   A package missing from the template is one OPM never unpacks into the IDE's package list --
-  and tycontrols_dt, which requires it, then fails to install from OPM. Both files list every
-  package at the root. }
+  and tycontrols_dt, which requires it, then fails to install from OPM. So the template lists
+  every package at the root. update_TyControls.json is read by OPM from main and describes the
+  LAST release: make-release.ps1 -Opm rewrites it from the template, so it may lag a package
+  added since (tycontrols_db until 4.0) but must never name one the template doesn't. }
 procedure TReleaseManifestTest.TheOpmFilesNameEveryPackage;
 var
   lpks: TStringList;
@@ -988,7 +990,16 @@ begin
     begin
       nm := ExtractFileName(lpks[i]);
       if Pos('"Name" : "' + nm + '"', tmpl) = 0 then bad := bad + ' ' + nm + '(template)';
-      if Pos('"Name" : "' + nm + '"', upd) = 0 then bad := bad + ' ' + nm + '(update json)';
+    end;
+    { Every package update_TyControls.json names is one the template names, so a release's
+      rewrite never drops it. }
+    i := 1;
+    while Pos('"Name" : "', Copy(upd, i, MaxInt)) > 0 do
+    begin
+      i := i + Pos('"Name" : "', Copy(upd, i, MaxInt)) + Length('"Name" : "') - 1;
+      nm := Copy(upd, i, Pos('"', Copy(upd, i, MaxInt)) - 1);
+      if (ExtractFileExt(nm) = '.lpk') and (Pos('"Name" : "' + nm + '"', tmpl) = 0) then
+        bad := bad + ' ' + nm + '(update json only)';
     end;
     AssertEquals('packages the OPM files do not name:' + bad, '', bad);
     { The design-time package's OPM dependencies are the .lpk's: OPM installs in that order. }
