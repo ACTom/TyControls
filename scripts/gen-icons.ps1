@@ -47,7 +47,9 @@ $classes = @(
   # Ant Design-gap batch 1 (second group) + batches 2 & 3
   'TTyAlert','TTyNotification','TTyEmpty','TTySegmented',
   'TTyPagination','TTySteps','TTyBreadcrumb',
-  'TTyTransfer','TTyTreeSelect','TTyCascader','TTyPopover'
+  'TTyTransfer','TTyTreeSelect','TTyCascader','TTyPopover',
+  # Data-aware controls (tycontrols_db, 'TyControls Data Controls')
+  'TTyDBNavigator','TTyDBText','TTyDBEdit','TTyDBMaskEdit','TTyDBNumericEdit','TTyDBCurrencyEdit','TTyDBSpinEdit','TTyDBFloatSpinEdit','TTyDBMemo','TTyDBCheckBox','TTyDBToggleSwitch','TTyDBRadioGroup','TTyDBSegmented','TTyDBRating','TTyDBComboBox','TTyDBLookupComboBox','TTyDBListBox','TTyDBLookupListBox','TTyDBImage','TTyDBDateTimePicker','TTyDBCalendar'
 )
 
 # Drift guard: the icon set MUST match the components registered in Design.pas. Parse EVERY
