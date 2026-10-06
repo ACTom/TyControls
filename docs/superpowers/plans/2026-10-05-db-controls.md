@@ -14,7 +14,7 @@
 
 **Tech Stack:** FPC 3.2.2 / Lazarus 4.4 LCL（最低 Lazarus 3.0）、FCL-DB（`DB`、`BufDataset`）、LCL `DBCtrls`、BGRABitmap、fpcunit（`tests/tytests.lpi`）。
 
-**工作树：** `D:/Projects/ty-db`，分支 `feat/db-controls`，起点 `main` @ `a30a69f5`（已含全部 TTyCustomXxx 拆分、#14 typeKey 链）。
+**工作树：** `D:/Projects/ty-db`，分支 `feat/db-controls`，起点 `main` @ ~~`a30a69f5`~~ `01c56a06`（已含全部 TTyCustomXxx 拆分、#14 typeKey 链；开工时 main 已带上 V10 的修复）。
 
 ---
 
@@ -187,7 +187,7 @@ implementation
 
 - [ ] **Step 2：`DB.StrConsts`** — 本任务先放 Navigator 的十条提示与删除确认（英文原文照 LCL `lclstrconsts.pas:83-95` 的意思自己写，不照抄措辞）：`rsTyDBNavFirst` … `rsTyDBNavRefresh`、`rsTyDBNavConfirmDelete`；`.pot` 由 IDE / lazbuild 生成格式手写一份，`zh_CN.po` 写中文（首条记录、上一条、下一条、末条记录、插入、删除、编辑、保存、取消、刷新；「删除这条记录吗？」）。
 
-- [ ] **Step 3：`tycontrols_db.lpk`**：照 `tycontrols.lpk` 的格式（Version 与 `TyVersion` 相同；`SearchPaths/OtherUnitFiles = source/db`；`UnitOutputDirectory = lib/$(TargetCPU)-$(TargetOS)/db`；i18n 开、`OutDir = languages`；`RequiredPkgs`：`tycontrols`、`FCL`（MinVersion 1）、`LCL`（MinVersion 3））；`Files` 列本任务的两个单元（后面每加一个单元同步加一行）。`tycontrols_db.pas` 照 `tycontrols.pas` 的格式。
+- [ ] **Step 3：`tycontrols_db.lpk`**：照 `tycontrols.lpk` 的格式（Version 与 `TyVersion` 相同；`SearchPaths/OtherUnitFiles = source/db`；`UnitOutputDirectory = lib/$(TargetCPU)-$(TargetOS)/db`；i18n 开、`OutDir = languages`；`RequiredPkgs`：`tycontrols`、`FCL`（MinVersion 1）、`LCL`（MinVersion 3））；`Files` 列本任务的两个单元（后面每加一个单元同步加一行）。`tycontrols_db.pas` 照 `tycontrols.pas` 的格式（执行中改：它是 lazbuild 生成物，照 `tycontrols.pas` 加进 `.gitignore`、不提交）。
 
 - [ ] **Step 4：守卫接线**
   - `tests/tytests.lpi` 搜索路径加 `../source/db`。
@@ -332,9 +332,9 @@ implementation
 
 ### Task 12: 示例、文档、发版脚本
 
-- [ ] **Step 1：示例 `examples/dbcontrols/`**（照 `examples/button/` 的文件组与写法：`.lfm` 窗体、`TTyTitleBar`、主题下拉与暗色开关、`.ico` + DPI 清单）。`FormCreate` 建内存 `TBufDataset`（人员表：姓名、备注、金额、数量、在职、等级（Segmented）、评分、生日、城市（查找）、照片）和城市表，三五行示例数据；照片用示例目录里的两三张小 PNG。窗体：左侧 `TTyDBNavigator` + 表单区放全部 21 个控件（每个配一个说明标签），右侧一个只读的 `TTyDBText` 区显示「当前行原始字段值」便于对照。`.lpi` 依赖 `tycontrols`、`tycontrols_db`、`tycontrols_dt`、`LCL`，`OtherUnitFiles` 加 `../../source/db`；`.lpr` 多一句 `TranslateUnitResourceStringsEx('', LangDir, 'tycontrols.db', 'tyControls.DB.StrConsts')`；`languages/` 放两份库目录（`tycontrols.zh_CN.po`、`tycontrols.db.zh_CN.po`）与自己的 `.po`。
+- [ ] **Step 1：示例 `examples/dbcontrols/`**（照 `examples/button/` 的文件组与写法：`.lfm` 窗体、`TTyTitleBar`、主题下拉与暗色开关、`.ico` + DPI 清单）。`FormCreate` 建内存 `TBufDataset`（人员表：姓名、备注、金额、数量、在职、等级（Segmented）、评分、生日、城市（查找）、照片）和城市表，三五行示例数据；照片用示例目录里的两三张小 PNG。窗体：左侧 `TTyDBNavigator` + 表单区放全部 21 个控件（每个配一个说明标签），右侧一个只读的 `TTyDBText` 区显示「当前行原始字段值」便于对照。`.lpi` 依赖 `tycontrols`、`tycontrols_db`、`tycontrols_dt`、`LCL`，`OtherUnitFiles` 加 `../../source/db`；~~`.lpr` 多一句 `TranslateUnitResourceStringsEx('', LangDir, 'tycontrols.db', 'tyControls.DB.StrConsts')`；`languages/` 放两份库目录（`tycontrols.zh_CN.po`、`tycontrols.db.zh_CN.po`）~~ **执行中改（d2582a4e）**：目录名用 `'tycontrols_db'`、文件 `tycontrols_db.zh_CN.po`——LCL `lcltranslator.pas:163` 用 `ChangeFileExt` 拼文件名，`'tycontrols.db'` 会去读 `tycontrols.zh_CN.po`，导航条提示永远是英文与自己的 `.po`。
 - [ ] **Step 2：文档** — `docs/controls/dbcontrols.md`（一页讲整族：概述、包与安装、共用属性、各控件的值映射与空值表（D5、D6）、主题（typeKey 链，单独给 DB 控件写规则的写法）、与 LCL 的差异（Calendar 能写回、查找组合框默认 `csDropDownList`、Navigator 不可聚焦、数值控件按数值读写）、代码示例）；`docs/controls/README.md` 链上；`README.md` / `.en.md` 加「TyControls Data Controls」一节控件表、改控件总数与面板页数、示例表加一行；`CONTRIBUTING.md` / `.en.md` 第 75 行改成「新单元加进 `tycontrols.lpk`（设计期的加进 `tycontrols_dt.lpk`；带来新依赖的放进自己的包，如数据感知控件在 `tycontrols_db.lpk`）」；`docs/subclassing.md` / `.en.md` 加一句数据感知控件同样拆分、可从 `TTyCustomDBXxx` 派生。
-- [ ] **Step 3：发版脚本** — `make-release.ps1` / `.sh` 根文件加 `tycontrols_db.lpk`、`tycontrols_db.pas`（`source/` 整树已含 `source/db`）；`scripts/opm/TyControls.json.template` 加第三个 `PackageFiles` 项（依赖 `tycontrols, FCL, LCL`，`LazCompatibility` 同前两个），`update_TyControls.json` 同步；`build-matrix.sh` 在两个包之间编 `tycontrols_db.lpk`。`test.release` 的脚本解析守卫必须绿。
+- [ ] **Step 3：发版脚本** — `make-release.ps1` / `.sh` 根文件加 `tycontrols_db.lpk`、~~`tycontrols_db.pas`~~（执行中改：它和 `tycontrols.pas` 一样由 lazbuild 生成、已 gitignore，不发）（`source/` 整树已含 `source/db`）；`scripts/opm/TyControls.json.template` 加第三个 `PackageFiles` 项（依赖 `tycontrols, FCL, LCL`，`LazCompatibility` 同前两个），`update_TyControls.json` 同步；`build-matrix.sh` 在两个包之间编 `tycontrols_db.lpk`。`test.release` 的脚本解析守卫必须绿。
 - [ ] **Step 4：提交**（三个提交：`feat(examples): data controls example`、`docs(db): the data-aware controls`、`build(release): ship tycontrols_db`），`Refs #34`。
 
 ### Task 13: 编译、全量、变异、Lazarus 3.0、冒烟、签收【主控执行为主】
@@ -346,3 +346,29 @@ implementation
 - [ ] 签收段写进本文件：全量数字、变异结果表、3.0 结果、偏离与原因。
 
 ## 签收（执行时填）
+
+### 第一期签收（2026-10-06，主控）
+
+**提交**（`feat/db-controls`，起点 `69966f4b` 计划提交）：1dc2ab82 包骨架与守卫 · c3d75db0 核心钩子 · 61727ac9 文本组 · 4c7a5101 数值组 · 23203ef4 R12 测试改为不假设类型键注册表为空 · f64dcd79 绑定后改范围不算编辑 · 148ce7f3 选择组 · ae4bc785 列表组与查找 · ad658272 绑定后改 Decimals 不算编辑 · 9bb3cf6b 写回后刷新装载值 · 049503d6 Image · e850c797 日期与时间 · d866b03e 放宽范围后重新显示字段值 · a2f7c21f Navigator · 37e81d57 类型键与内置主题 · 408ef0b4 合入 main（货币符号修复 cc348529）· 5ffd126e 面板页与 KeyField/ListField 编辑器 · 37c555f3 修 Task 1 的 .po 头 · a544527f 示例 · d2582a4e 示例翻译目录名 · ac77914f 文档 · 45762097 发版脚本 / OPM / build-matrix · 42f9bd9c DPI 截图诊断认得新示例 · dad29145 面板图标。
+
+**验证**
+- 变异：计划列的 M1–M18 全部按判据变红（M2 按要求「不红」）；各批另做了数十个自选变异（每批报告里的表），每次改 → 重编 → 跑 → 还原，后几批用 sha1 核对还原。
+- Lazarus 4.4：私有 `--pcp`（不碰全局注册）`-B` 编 `tycontrols` / `tycontrols_db` / `tycontrols_dt` 三个包 0 错；50 个示例全部编过；按窗口类逐个启动无 `#32770`；`check-lfm-props.py` 通过；`check-example-po.py .` 106 个文件 0 问题。
+- Lazarus 3.0（`D:/lazarus30`，私有 `--pcp`）：三个包与 `tests` 编过，全量 11054 / 0 / 0。
+- Lazarus 4.4 全量：见下一条（最后一遍，图标已生成）。
+
+**偏离计划（均有测试或文档）**
+- 选择组五个控件、DBImage 改动立即写进记录（单选组点击落在子按钮上、图片控件拿不到焦点，都没有 EditingDone / 失焦可等）；C5 对它们改为「改动保留」。
+- RadioGroup、ComboBox 从代码设 `ItemIndex` / `Value` / `Text` 算编辑（它们唯一的变化钩子在代码设值时也触发，LCL 同）；其余控件代码设值不算编辑；查找控件写 `KeyValue` 不算。
+- CheckBox / ToggleSwitch 写回取词表第一个词（LCL 会把整串写进去）；默认 `ValueChecked` / `ValueUnchecked` 照 FPC 实际为 `'-1'` / `'0'`。
+- Rating 不开半星时装载即四舍五入到整星；Calendar 写日期时间字段保留原时分；Image 的扩展名头先校验再信（LCL 会把裸 PNG 的前 4 字节当长度）、写错格式时回退按内容识别；Image 不提供剪贴板方法。
+- Navigator：`ShowHint` 出生为 True（按钮不是子控件，控件自己要收 `CM_HINTSHOW`），`.lfm` 因此写出 `ParentShowHint = False`；按住 Prior / Next 不连续翻页；两个新度量 `--dbnav-gap`、`--dbnav-glyph-size` 用 `Metric(名字, 兜底)`，内置主题不写（Task 10 要求 DB 控件与基础控件解析一致）。
+- 设计期：`DataField` 的字段名编辑器 IDE 已按名字注册给一切组件（ideintf/dbpropedits.pas:211），不用注册；`KeyField` / `ListField` 注册到两个查找控件的 Custom 类。
+- 守卫：计划 V13 漏列了 `test.customclasses`、`test.lucide`、`test.glyphthickness`、`test.dpi.*` 等只扫 `source/` 的扫描，统一改用 `LibrarySourceFiles`；`test.release` 另加两条：根目录每个 `.lpk` 两个发版脚本都发、OPM 两个文件都列。
+
+**发现、已移交或待定**
+- `TTyCurrencyEdit` 符号含 `.` 时丢值（3.0 起）：移交「3.0 问题修复」，已修（#38，cc348529），已合入本分支。
+- 可编辑组合框（`csDropDown`）内嵌编辑框裁掉字母下伸部分、字体与下拉列表样式不同：移交「3.0 问题修复」复现。
+- StyleModel 解析渐变背景时 `TTyFill` 的 `SliceRepeat` / `ImageMode` / `Blur` / `GlassTint` 未初始化（同一渐变解析两次结果不同；绘制按背景类型取字段，目前看不出）：StyleModel 是共享文件，待用户定。
+- `update_TyControls.json` 已列 `tycontrols_db.lpk`：合进 main 后、发版前，OPM 读到的会是不含这个包的 3.0 压缩包，待用户定是否发版时再加。
+- 示例：`DBCurrencyEdit` 显示控件自己的 `CurrencySymbol`（默认 `$`），字段的 `DisplayText` 走系统区域货币（中文 Windows 上是 `¥`），示例里两列不一致。
