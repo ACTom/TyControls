@@ -369,6 +369,6 @@ implementation
 **发现、已移交或待定**
 - `TTyCurrencyEdit` 符号含 `.` 时丢值（3.0 起）：移交「3.0 问题修复」，已修（#38，cc348529），已合入本分支。
 - 可编辑组合框（`csDropDown`）内嵌编辑框裁掉字母下伸部分：移交「3.0 问题修复」，已修（#39，b7ad0f79，根因是 `TyEdit.embedded` 保留了编辑框自己的 4/4 内距），已合入本分支（3cf59d34）；合并后组合框、DB 组合框、类型键、拆分守卫等受影响的套件 90 / 0 / 0，示例重编后截图核对 `Engineering` 显示完整。
-- StyleModel 解析渐变背景时 `TTyFill` 的 `SliceRepeat` / `ImageMode` / `Blur` / `GlassTint` 未初始化（同一渐变解析两次结果不同；绘制按背景类型取字段，目前看不出）：StyleModel 是共享文件，待用户定。
-- `update_TyControls.json` 已列 `tycontrols_db.lpk`：合进 main 后、发版前，OPM 读到的会是不含这个包的 3.0 压缩包，待用户定是否发版时再加。
-- 示例：`DBCurrencyEdit` 显示控件自己的 `CurrencySymbol`（默认 `$`），字段的 `DisplayText` 走系统区域货币（中文 Windows 上是 `¥`），示例里两列不一致。
+- StyleModel 解析渐变 / 九宫格背景时 `TTyFill` 有字段未初始化（`ParseLinearGradient`、`ParseNineSlice` 没有先 `Default(TTyFill)`；3.0.0 起）：用户同意移交「3.0 问题修复」。
+- `update_TyControls.json` 列 `tycontrols_db.lpk`：用户定等 4.0 发版再加（4d8c236f）——条目拿掉；`make-release.ps1 -Opm` 改为按 OPM 模板的包清单整份重写这个文件（核对过：对现模板生成的文本与原文件逐字节相同），发版时自动带上；守卫改为模板列全根目录每个包、update 文件不许列模板没有的包，两个方向的变异都红。
+- 示例：`DBCurrencyEdit` 显示控件自己的 `CurrencySymbol`（默认 `$`），字段的 `DisplayText` 走系统区域货币（中文 Windows 上是 `¥`），示例里两列不一致。用户：`CurrencySymbol` 能手动覆盖就不管。
