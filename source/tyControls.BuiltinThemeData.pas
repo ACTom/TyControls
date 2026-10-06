@@ -85,7 +85,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -730,7 +730,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -1346,7 +1346,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -1793,7 +1793,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -2093,7 +2093,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -2457,7 +2457,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -2771,7 +2771,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -2980,7 +2980,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     'TyComboBox      { render-style: inset3d; background: var(--field); color: var(--ink); padding: 4px 6px; }' + LineEnding +
@@ -3230,7 +3230,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -3526,7 +3526,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -3706,7 +3706,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -3964,7 +3964,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -4226,7 +4226,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -4807,7 +4807,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     'TyComboBox          { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }' + LineEnding +
@@ -5024,7 +5024,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -5277,7 +5277,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -5555,7 +5555,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
