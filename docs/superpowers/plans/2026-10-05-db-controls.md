@@ -355,7 +355,7 @@ implementation
 - 变异：计划列的 M1–M18 全部按判据变红（M2 按要求「不红」）；各批另做了数十个自选变异（每批报告里的表），每次改 → 重编 → 跑 → 还原，后几批用 sha1 核对还原。
 - Lazarus 4.4：私有 `--pcp`（不碰全局注册）`-B` 编 `tycontrols` / `tycontrols_db` / `tycontrols_dt` 三个包 0 错；50 个示例全部编过；按窗口类逐个启动无 `#32770`；`check-lfm-props.py` 通过；`check-example-po.py .` 106 个文件 0 问题。
 - Lazarus 3.0（`D:/lazarus30`，私有 `--pcp`）：三个包与 `tests` 编过，全量 11054 / 0 / 0。
-- Lazarus 4.4 全量：见下一条（最后一遍，图标已生成）。
+- Lazarus 4.4 全量（最后一遍，图标已生成，3.0 构建之后 `-B` 重编）：11054 / 0 错误 / 1 失败，即已知计时偶发 H6（另有任务在追）。合入 main 的组合框修复（b7ad0f79）后，受影响的套件另跑一遍，见合并提交之后。
 
 **偏离计划（均有测试或文档）**
 - 选择组五个控件、DBImage 改动立即写进记录（单选组点击落在子按钮上、图片控件拿不到焦点，都没有 EditingDone / 失焦可等）；C5 对它们改为「改动保留」。
@@ -368,7 +368,7 @@ implementation
 
 **发现、已移交或待定**
 - `TTyCurrencyEdit` 符号含 `.` 时丢值（3.0 起）：移交「3.0 问题修复」，已修（#38，cc348529），已合入本分支。
-- 可编辑组合框（`csDropDown`）内嵌编辑框裁掉字母下伸部分、字体与下拉列表样式不同：移交「3.0 问题修复」复现。
+- 可编辑组合框（`csDropDown`）内嵌编辑框裁掉字母下伸部分：移交「3.0 问题修复」，已修（#39，b7ad0f79，根因是 `TyEdit.embedded` 保留了编辑框自己的 4/4 内距），已合入本分支（3cf59d34）；合并后组合框、DB 组合框、类型键、拆分守卫等受影响的套件 90 / 0 / 0，示例重编后截图核对 `Engineering` 显示完整。
 - StyleModel 解析渐变背景时 `TTyFill` 的 `SliceRepeat` / `ImageMode` / `Blur` / `GlassTint` 未初始化（同一渐变解析两次结果不同；绘制按背景类型取字段，目前看不出）：StyleModel 是共享文件，待用户定。
 - `update_TyControls.json` 已列 `tycontrols_db.lpk`：合进 main 后、发版前，OPM 读到的会是不含这个包的 3.0 压缩包，待用户定是否发版时再加。
 - 示例：`DBCurrencyEdit` 显示控件自己的 `CurrencySymbol`（默认 `$`），字段的 `DisplayText` 走系统区域货币（中文 Windows 上是 `¥`），示例里两列不一致。
