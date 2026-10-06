@@ -97,7 +97,7 @@ TyEdit:disabled { background: darken(var(--field), 3%); color: var(--muted); }
    inside the first is what pushed the drop chevron into the gap between them. This has to be
    repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole
    built-in TyEdit rule set for this typeKey -- variants included. */
-TyEdit.embedded         { border-width: 0; border-radius: 0; }
+TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }
 TyEdit.embedded:hover   { border-color: transparent; }
 TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }
 TyComboBox          { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }
