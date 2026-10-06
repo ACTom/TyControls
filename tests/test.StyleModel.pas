@@ -192,6 +192,23 @@ type
     procedure TestMultiValueShadowToken;
   end;
 
+  { A gradient and a nine-slice background leave every field they do not set at its Default.
+    They used to leave them as the stack held them: the parsers filled in a few fields of the
+    function result and FPC clears only the managed ones, so SliceRepeat, ImageMode, Blur and the
+    glass fields of a gradient -- GradFrom, GradTo and the rest for a nine-slice -- were garbage.
+    The same gradient compared unequal to itself, and a rule pairing it with glass-blur but no
+    glass-tint tinted the glass with whatever was there.
+
+    The stack is filled with $A5 before each resolve (the parse happens then, not at load), so a
+    field nobody set is non-zero for certain rather than zero by luck. }
+  TTestFillDefaults = class(TTestCase)
+  private
+    procedure CheckUnset(const AWhat: string; const AFill: TTyFill; AGradient: Boolean);
+  published
+    procedure TestAGradientLeavesTheRestAtDefault;
+    procedure TestANineSliceLeavesTheRestAtDefault;
+  end;
+
 implementation
 
 procedure TTestStyleMerge.TestMergeUnionPresent;
@@ -1426,7 +1443,69 @@ begin
   AssertEquals('模糊', 8, s.ShadowBlur);
 end;
 
+{ TTestFillDefaults }
+
+procedure PolluteStack;
+var
+  junk: array[0..65535] of Byte;
+begin
+  FillChar(junk, SizeOf(junk), $A5);
+  if junk[High(junk)] <> $A5 then Abort;   // keeps the fill from being dropped
+end;
+
+procedure TTestFillDefaults.CheckUnset(const AWhat: string; const AFill: TTyFill;
+  AGradient: Boolean);
+var
+  d: TTyFill;
+begin
+  d := Default(TTyFill);
+  AssertTrue(AWhat + ': SliceRepeat', AFill.SliceRepeat = d.SliceRepeat);
+  AssertTrue(AWhat + ': ImageMode', AFill.ImageMode = d.ImageMode);
+  AssertEquals(AWhat + ': Blur', d.Blur, AFill.Blur);
+  AssertEquals(AWhat + ': GlassBlur', d.GlassBlur, AFill.GlassBlur);
+  AssertEquals(AWhat + ': GlassTint', Int64(d.GlassTint), Int64(AFill.GlassTint));
+  if not AGradient then
+  begin
+    AssertEquals(AWhat + ': GradFrom', Int64(d.GradFrom), Int64(AFill.GradFrom));
+    AssertEquals(AWhat + ': GradTo', Int64(d.GradTo), Int64(AFill.GradTo));
+    AssertEquals(AWhat + ': GradStops', 0, Length(AFill.GradStops));
+  end;
+end;
+
+procedure TTestFillDefaults.TestAGradientLeavesTheRestAtDefault;
+var
+  m: TTyStyleModel;
+  s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('TyButton { background: linear-gradient(90deg, #ffffff, #000000); }');
+    PolluteStack;
+    s := m.ResolveStyle('TyButton', '', []);
+    AssertTrue('setup: it is the gradient', s.Background.Kind = tfkLinearGradient);
+    AssertEquals('setup: with its two stops', 2, Length(s.Background.GradStops));
+    CheckUnset('gradient', s.Background, True);
+  finally m.Free; end;
+end;
+
+procedure TTestFillDefaults.TestANineSliceLeavesTheRestAtDefault;
+var
+  m: TTyStyleModel;
+  s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('TyPanel { background-image: url(panel.png) slice(1 2 3 4); }');
+    PolluteStack;
+    s := m.ResolveStyle('TyPanel', '', []);
+    AssertTrue('setup: it is the nine-slice', s.Background.Kind = tfkNineSlice);
+    AssertEquals('setup: with its insets', 2, s.Background.SliceInsets.Right);
+    CheckUnset('nine-slice', s.Background, False);
+  finally m.Free; end;
+end;
+
 initialization
+  RegisterTest(TTestFillDefaults);
   RegisterTest(TTestDensityTokens);
   RegisterTest(TTestStyleMerge);
   RegisterTest(TTestStyleMode);

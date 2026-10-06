@@ -422,11 +422,13 @@ var
   fmt: TFormatSettings;
   hasPos: array of Boolean;
 begin
+  { Every field from Default, as ParsePlainImage and the solid / none branches do: FPC clears
+    only the managed fields of a function result, so SliceRepeat, ImageMode, Blur, GlassBlur
+    and GlassTint came back as whatever the stack held -- one gradient parsed twice compared
+    unequal, and a rule pairing it with glass-blur but no glass-tint tinted the glass with it. }
+  Result := Default(TTyFill);
   Result.Kind := tfkLinearGradient;
   Result.Color := tyTransparent;
-  Result.ImagePath := '';
-  Result.SliceInsets := Rect(0, 0, 0, 0);
-  Result.GradAngleDeg := 0;
   p := Pos('(', ARaw);
   q := Length(ARaw);
   while (q > p) and (ARaw[q] <> ')') do Dec(q);
@@ -505,10 +507,11 @@ var
   nums: TStringList;
   t, r, b, l: Integer;
 begin
+  { Every field from Default -- see ParseLinearGradient: GradFrom, GradTo, ImageMode, Blur and
+    the glass fields were left as the stack held them. }
+  Result := Default(TTyFill);
   Result.Kind := tfkNineSlice;
   Result.Color := tyTransparent;
-  Result.GradAngleDeg := 0;
-  Result.SliceRepeat := False;
   lo := ARaw;
   pu := Pos('url(', LowerCase(lo));
   if pu = 0 then raise Exception.CreateFmt(rsSmBackgroundImageNeedsUrl, [ARaw]);
