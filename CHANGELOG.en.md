@@ -7,6 +7,54 @@ Linux and macOS.
 
 > 中文版见 [CHANGELOG.md](CHANGELOG.md)。
 
+## [3.0.1] — 2026-10-07
+
+A bug-fix release for 3.0.
+
+### Added
+
+- `TTySpinEdit` / `TTyFloatSpinEdit` up/down buttons: the pointer turns into an arrow over them, they light up on hover and press, and holding one keeps stepping. ([#12](https://github.com/ACTom/TyControls/issues/12))
+- `OnHelpClicked` on `TTyFindDialog` / `TTyReplaceDialog`: with `frShowHelp` in `Options` the dialog shows a Help button that fires it. ([#30](https://github.com/ACTom/TyControls/issues/30))
+
+### Changed
+
+- `TTyColorButton.DialogCaption` and `TTyColorComboBox.MoreCaption` default to empty, meaning the library's own text, translated with the application; the new `DialogTitle` and `MoreText` return the text actually shown. ([#41](https://github.com/ACTom/TyControls/issues/41))
+- `TTyColorBox` / `TTyColorListBox` no longer write `Items` to the form file and rebuild them from `Style` on load; for a palette of your own, use `cbCustomColors` with `OnGetColors`, or `AddColor` at run time. ([#20](https://github.com/ACTom/TyControls/issues/20))
+- `TTyFontComboBox` / `TTyFontListBox` no longer write `Items` to the form file and refill them from this machine's fonts on load. ([#26](https://github.com/ACTom/TyControls/issues/26))
+- `TyEdit.embedded` has no padding in the built-in themes; a custom theme that defines it should add `padding: 0` too. ([#39](https://github.com/ACTom/TyControls/issues/39))
+
+### Fixed
+
+- The packages failed to build on Lazarus 3.x. ([#3](https://github.com/ACTom/TyControls/issues/3))
+- A project made from the "TyControls Application" template did not show at run time the built-in theme picked in the designer; a project made with 3.0.0 needs the two lines described in the issue. ([#10](https://github.com/ACTom/TyControls/issues/10))
+- With `AutoSize` on, `TTyCheckBox`, `TTyRadioButton`, `TTyTag`, `TTyLabel` and `TTyColorButton` came out too narrow and cut off or ellipsised the end of their caption. ([#11](https://github.com/ACTom/TyControls/issues/11))
+- `TTyFloatSpinEdit`'s up/down buttons were smaller than `TTySpinEdit`'s. ([#17](https://github.com/ACTom/TyControls/issues/17))
+- An editable `TTyComboBox` at its default height cut off the descenders of g, y, p and the like, and set its text further right than a non-editable one. ([#39](https://github.com/ACTom/TyControls/issues/39))
+- An editable `TTyComboBox` whose `ItemIndex` was set in code showed an empty field, and picking that row from the list did not fill it either. ([#43](https://github.com/ACTom/TyControls/issues/43))
+- A read-only `TTyDateTimePicker` could still change its value through the dropdown calendar. ([#35](https://github.com/ACTom/TyControls/issues/35))
+- `TTyCurrencyEdit` lost or corrupted its value when the currency symbol contained a dot or a digit (`Fr.`, `kr.`, `US$1`). ([#38](https://github.com/ACTom/TyControls/issues/38))
+- After scrolling, `TTyTreeView` painted rows over its header, and the last rows could not be scrolled into view. ([#19](https://github.com/ACTom/TyControls/issues/19))
+- Ellipsising a very long text (hundreds of lines) nearly froze; a multi-line text in a single-line place now shows its first line. ([#18](https://github.com/ACTom/TyControls/issues/18))
+- Every `TTyStringGrid` leaked two string lists when freed. ([#16](https://github.com/ACTom/TyControls/issues/16))
+- Freeing a `TTyCoolBar` while its form was open raised an access violation. ([#15](https://github.com/ACTom/TyControls/issues/15))
+- A `TTyColorBox` / `TTyColorListBox` read back from a form showed black swatches and lost its selected colour. ([#20](https://github.com/ACTom/TyControls/issues/20))
+- `TTyFontComboBox` / `TTyFontListBox` wrote the machine's whole font list into the form file, so another machine listed the first machine's fonts. ([#26](https://github.com/ACTom/TyControls/issues/26))
+- On Windows the font combo box, font list box and font dialog listed every CJK font twice, once as a vertical '@' alias that draws its glyphs on their side. ([#31](https://github.com/ACTom/TyControls/issues/31))
+- `TTyRibbon` / `TTyPageControl`: a page moved away, or freed by a different owner, stayed in the page list. ([#21](https://github.com/ACTom/TyControls/issues/21))
+- A `TTyRibbon` saved minimised expanded to just its tab strip after being read back. ([#23](https://github.com/ACTom/TyControls/issues/23))
+- A `TTyForm` lost its content surface after being read if the surface had been renamed. ([#22](https://github.com/ACTom/TyControls/issues/22))
+- Changing an icon font after a `TTyCharImage` / `TTyRibbonGallery` that used it was freed raised an access violation. ([#24](https://github.com/ACTom/TyControls/issues/24))
+- Hints, balloon hints, popup menus, grids and the native styler kept pointing at a referenced component after it was freed on another form. ([#25](https://github.com/ACTom/TyControls/issues/25))
+- File dialogs ignored `fdoPathMustExist`, and checked `fdoFileMustExist` only for one name in an open dialog. ([#29](https://github.com/ACTom/TyControls/issues/29))
+- File dialogs asked `OnCanClose` before checking the name, so the dialog could stay open after `OnCanClose` said yes. ([#32](https://github.com/ACTom/TyControls/issues/32))
+- The `frHide*`, `frDisable*` and `frShowHelp` options of `TTyFindDialog` / `TTyReplaceDialog` had no effect. ([#30](https://github.com/ACTom/TyControls/issues/30))
+- `Description`, `Prompt`, `EmptyText` and other text properties were never translated in a translated application. ([#33](https://github.com/ACTom/TyControls/issues/33))
+- `TTyColorButton`'s dialog title and `TTyColorComboBox`'s "More…" row stayed in English in a translated application. ([#41](https://github.com/ACTom/TyControls/issues/41))
+- In a Chinese UI, the messages for a broken theme were in English, and the font dialog's preview showed no Chinese characters. ([#44](https://github.com/ACTom/TyControls/issues/44))
+- Gradient and nine-slice backgrounds left some fields uninitialised: the same rule could resolve differently twice, and glass with `glass-blur` but no `glass-tint` took a random tint. ([#40](https://github.com/ACTom/TyControls/issues/40))
+- Glass lost its tint when a `.tycss` rule wrote `glass-tint` before `background`, or when a later rule or a `StyleOverride` changed only the background. ([#42](https://github.com/ACTom/TyControls/issues/42))
+- The tycss reference described `padding`, `alpha()` and gradient stops wrongly. ([#13](https://github.com/ACTom/TyControls/issues/13))
+
 ## [3.0.0] — 2026-09-30
 
 TyControls 3.0, the first stable release. Only the changes below since RC3; everything that changed from 2.2 to 3.0 is in the 3.0.0-Beta through 3.0.0-RC3 sections.
