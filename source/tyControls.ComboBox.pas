@@ -338,6 +338,7 @@ type
     { Test seams: what actually reached the embedded editor. A forwarding property that
       stores but never forwards is the failure mode these pin. }
     function EditorTextHintForTest: string;
+    function EditorTextForTest: string;
     function EditorReadOnlyForTest: Boolean;
     { Test seams for the two popup-geometry formulas (the protected ones are where the
       sizing lives; these let a headless test pin the arithmetic, not just the setter). }
@@ -1034,6 +1035,11 @@ end;
 function TTyCustomComboBox.EditorTextHintForTest: string;
 begin
   if FEditor <> nil then Result := FEditor.TextHint else Result := '';
+end;
+
+function TTyCustomComboBox.EditorTextForTest: string;
+begin
+  if FEditor <> nil then Result := FEditor.Text else Result := '';
 end;
 
 function TTyCustomComboBox.EditorReadOnlyForTest: Boolean;
@@ -1802,16 +1808,17 @@ begin
   if (NewIndex = FItemIndex) and (NewText = FText) then Exit;
   FItemIndex := NewIndex;
   FText := NewText;
-  { csSimple keeps its two views in step with the model: the FIELD (a real TTyEdit --
-    seeded under the guard, so EditorChange does not echo) and the DOCKED LIST (synced
-    with OnChange detached, so the list's own change event does not commit back). The
-    popup styles have neither concern here: their list is re-populated on every DropDown,
-    and their editor is seeded by the pick/commit paths that already own that. }
+  { Every style with an edit box shows the selection in its FIELD -- a real TTyEdit, seeded
+    under the guard so EditorChange does not echo (or, in csDropDown, re-filter and pop the
+    list open). csDropDown used to leave this to the popup's pick path, so ItemIndex := 0
+    from code changed nothing on screen, and picking that same row afterwards could not
+    fix it: the list already had it selected, so no change, so no commit. csSimple also
+    keeps its DOCKED LIST in step (synced with OnChange detached, so the list's own change
+    event does not commit back); the popup styles re-populate theirs on every DropDown. }
+  if TyComboStyleHasEditBox(FStyle) and (FEditor <> nil) then
+    SetEditorText(FText);
   if FStyle = csSimple then
-  begin
-    if FEditor <> nil then SetEditorText(FText);
     SyncEmbeddedSelection;
-  end;
   Invalidate;
   if not FChangeMuted then
     Change;

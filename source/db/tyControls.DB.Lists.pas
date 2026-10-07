@@ -651,7 +651,8 @@ begin
   was := FLoading;
   FLoading := True;
   try
-    { Through Text first: setting ItemIndex alone does not reach an editable field's text. }
+    { Through Text first: a value that is not one of the Items still has to show in an
+      editable field, and ItemIndex can only show the ones that are. }
     ItemIndex := -1;
     Text := AText;
     i := Items.IndexOf(AText);
