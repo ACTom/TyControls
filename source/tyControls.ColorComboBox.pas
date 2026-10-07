@@ -32,6 +32,9 @@ type
     procedure DoSelect; override;
   public
     constructor Create(AOwner: TComponent); override;
+    { The "more" row's text: MoreCaption, or the translated default when it is empty. }
+    function MoreText: string;
+    { '' (the default) = the library's translated "More…" (rsColorComboMore). }
     property MoreCaption: TTranslateString read FMoreCaption write SetMoreCaption;
   end;
 
@@ -120,6 +123,8 @@ type
 
 implementation
 
+uses tyControls.StrConsts;
+
 { TTyColorMorePopupList }
 
 procedure TTyColorMorePopupList.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
@@ -146,7 +151,9 @@ end;
 constructor TTyCustomColorComboBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);        // fills the 16-colour palette + selects index 0
-  FMoreCaption := 'More…';
+  { Empty, not 'More…': a literal here was English in every language. MoreText supplies
+    the translated default. }
+  FMoreCaption := '';
   FPrevIndex := ItemIndex;
   RebuildMoreItem;
 end;
@@ -157,7 +164,7 @@ begin
   // Drop any existing "more…" (clNone) row, then append a fresh one at the end.
   for i := Items.Count - 1 downto 0 do
     if TyColorOfItem(Items, i) = clNone then Items.Delete(i);
-  TyAddColorItem(Items, FMoreCaption, clNone);
+  TyAddColorItem(Items, MoreText, clNone);
 end;
 
 procedure TTyCustomColorComboBox.SetMoreCaption(const AValue: TTranslateString);
@@ -165,6 +172,14 @@ begin
   if FMoreCaption = AValue then Exit;
   FMoreCaption := AValue;
   RebuildMoreItem;
+end;
+
+function TTyCustomColorComboBox.MoreText: string;
+begin
+  if FMoreCaption <> '' then
+    Result := FMoreCaption
+  else
+    Result := rsColorComboMore;
 end;
 
 function TTyCustomColorComboBox.IsMoreIndex(AIndex: Integer): Boolean;
@@ -197,7 +212,7 @@ begin
     c := ColorAt(FPrevIndex);
     if c = clNone then c := clBlack;
     a := 255;
-    if TySelectColor(FMoreCaption, c, a) then
+    if TySelectColor(MoreText, c, a) then
     begin
       // Insert the picked colour just above "more…" and select it.
       Items.InsertObject(moreIdx, Format('#%.2x%.2x%.2x',

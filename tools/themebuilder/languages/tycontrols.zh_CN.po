@@ -452,6 +452,14 @@ msgstr "选择文件夹"
 msgid "Color"
 msgstr "颜色"
 
+#: tycontrols.strconsts.rscolorbuttondialogtitle
+msgid "Select Color"
+msgstr "选择颜色"
+
+#: tycontrols.strconsts.rscolorcombomore
+msgid "More…"
+msgstr "更多…"
+
 #: tycontrols.strconsts.rsdlgfonttitle
 msgid "Font"
 msgstr "字体"
