@@ -13,7 +13,7 @@ msgstr ""
 
 #: tmainform.caption
 msgid "Icons & Images example"
-msgstr "Icons & Images 示例"
+msgstr "图标与图片示例"
 
 #: tmainform.darkswitch.caption
 msgid "Dark"
@@ -77,7 +77,7 @@ msgstr "点击星形或拉伸的图片 — TTyImage 与 TTyCharImage 都发布�
 
 #: tmainform.bar.caption
 msgid "Icons & Images  · TyControls"
-msgstr "Icons & Images  · TyControls"
+msgstr "图标与图片  · TyControls"
 
 #: tmainform.fontfamilyedit.text
 msgid "Segoe UI Symbol"
