@@ -60,7 +60,7 @@
 - 若 `AIndex` 在 `[0, Items.Count-1]` 范围内，设置 `FItemIndex := AIndex`，`FText := Items[AIndex]`。
 - 若 `AIndex` 越界（包括负值），清空选中状态：`FItemIndex := -1`，`FText := ''`。
 - 若新索引与新文本均与当前值相同，**不触发任何操作**（防止重复刷新）。
-- 有效变化时：触发 `Invalidate`；若 `OnChange` 已赋值则调用之。
+- 有效变化时：带编辑框的样式（`csDropDown`、`csSimple`）把新文本写进编辑框（不当作键入，不弹出联想列表）；触发 `Invalidate`；若 `OnChange` 已赋值则调用之。
 
 #### `property DroppedDown: Boolean`（读 / 写）
 
