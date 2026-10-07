@@ -13,11 +13,11 @@ msgstr ""
 
 #: ttbmainform.caption
 msgid "Theme Builder"
-msgstr "Theme Builder"
+msgstr "主题编辑器"
 
 #: ttbmainform.bar.caption
 msgid "Theme Builder  · TyControls"
-msgstr "Theme Builder  · TyControls"
+msgstr "主题编辑器  · TyControls"
 
 #: ttbmainform.problemswin.caption
 msgid "Problems"

@@ -114,24 +114,24 @@ msgstr "%s（位于第 %d 行，第 %d 列；实际为 \"%s\"）"
 
 #: tycontrols.strconsts.rscssunexpectedtoken
 msgid "Unexpected token"
-msgstr "Unexpected token"
+msgstr "意外的记号"
 
 #: tycontrols.strconsts.rscssunknownpseudoclass
 #, object-pascal-format
 msgid "Unknown pseudo-class \"%s\""
-msgstr "Unknown pseudo-class \"%s\""
+msgstr "未知的伪类 \"%s\""
 
 #: tycontrols.strconsts.rscssunterminatedrootblock
 msgid "Unterminated :root block"
-msgstr "Unterminated :root block"
+msgstr ":root 块没有结束"
 
 #: tycontrols.strconsts.rscssexpectedvariablename
 msgid "Expected --variable name"
-msgstr "Expected --variable name"
+msgstr "这里应是 --变量名"
 
 #: tycontrols.strconsts.rscssunterminatedruleblock
 msgid "Unterminated rule block"
-msgstr "Unterminated rule block"
+msgstr "规则块没有结束"
 
 #: tycontrols.strconsts.rscssimportmustprecederules
 msgid "An @import must precede all style rules"
@@ -139,113 +139,113 @@ msgstr "@import 必须位于所有样式规则之前"
 
 #: tycontrols.strconsts.rscssexpectedpathinurl
 msgid "Expected a path inside url() for @import"
-msgstr "Expected a path inside url() for @import"
+msgstr "@import 的 url() 里应有路径"
 
 #: tycontrols.strconsts.rscssexpectedpathafterimport
 msgid "Expected a quoted path or url() after @import"
-msgstr "Expected a quoted path or url() after @import"
+msgstr "@import 后应是带引号的路径或 url()"
 
 #: tycontrols.strconsts.rscssexpectedmodename
 msgid "Expected a mode name after \"@mode\""
-msgstr "Expected a mode name after \"@mode\""
+msgstr "\"@mode\" 后应是模式名"
 
 #: tycontrols.strconsts.rscssunterminatedmodeblock
 msgid "Unterminated @mode block"
-msgstr "Unterminated @mode block"
+msgstr "@mode 块没有结束"
 
 #: tycontrols.strconsts.rscssexpectedrootinmode
 msgid "Expected \"root\" after \":\" inside @mode"
-msgstr "Expected \"root\" after \":\" inside @mode"
+msgstr "@mode 里的 \":\" 后应是 \"root\""
 
 #: tycontrols.strconsts.rscssonlyrootinmode
 msgid "Only :root blocks are allowed inside @mode"
-msgstr "Only :root blocks are allowed inside @mode"
+msgstr "@mode 里只能有 :root 块"
 
 #: tycontrols.strconsts.rscssexpectedatrulename
 msgid "Expected an at-rule name after \"@\""
-msgstr "Expected an at-rule name after \"@\""
+msgstr "\"@\" 后应是 at 规则名"
 
 #: tycontrols.strconsts.rscssunknownatrule
 #, object-pascal-format
 msgid "Unknown at-rule \"@%s\""
-msgstr "Unknown at-rule \"@%s\""
+msgstr "未知的 at 规则 \"@%s\""
 
 #: tycontrols.strconsts.rscssexpectedrootaftercolon
 msgid "Expected \"root\" after \":\""
-msgstr "Expected \"root\" after \":\""
+msgstr "\":\" 后应是 \"root\""
 
 #: tycontrols.strconsts.rscssexpectedselectororroot
 msgid "Expected selector or :root"
-msgstr "Expected selector or :root"
+msgstr "这里应是选择器或 :root"
 
 #: tycontrols.strconsts.rscssinvalidcolorliteral
 #, object-pascal-format
 msgid "Invalid color literal: %s"
-msgstr "Invalid color literal: %s"
+msgstr "无效的颜色值：%s"
 
 #: tycontrols.strconsts.rscssinvalidcolorlength
 #, object-pascal-format
 msgid "Invalid color length: %s"
-msgstr "Invalid color length: %s"
+msgstr "颜色值的位数不对：%s"
 
 #: tycontrols.strconsts.rscssinvalidhexincolor
 #, object-pascal-format
 msgid "Invalid hex in color: %s"
-msgstr "Invalid hex in color: %s"
+msgstr "颜色里有无效的十六进制数：%s"
 
 #: tycontrols.strconsts.rscssundefinedvariable
 #, object-pascal-format
 msgid "Undefined variable: --%s"
-msgstr "Undefined variable: --%s"
+msgstr "未定义的变量：--%s"
 
 #: tycontrols.strconsts.rscssemptycolorexpression
 msgid "Empty color expression"
-msgstr "Empty color expression"
+msgstr "颜色表达式为空"
 
 #: tycontrols.strconsts.rscssunknowncolorfunction
 #, object-pascal-format
 msgid "Unknown color function: %s/%d"
-msgstr "Unknown color function: %s/%d"
+msgstr "未知的颜色函数：%s/%d"
 
 #: tycontrols.strconsts.rscsscannotevaluatecolor
 #, object-pascal-format
 msgid "Cannot evaluate color: %s"
-msgstr "Cannot evaluate color: %s"
+msgstr "无法计算颜色：%s"
 
 #: tycontrols.strconsts.rssminvalidpadding
 #, object-pascal-format
 msgid "Invalid padding: %s"
-msgstr "Invalid padding: %s"
+msgstr "无效的 padding：%s"
 
 #: tycontrols.strconsts.rssminvalidlineargradient
 #, object-pascal-format
 msgid "Invalid linear-gradient: %s"
-msgstr "Invalid linear-gradient: %s"
+msgstr "无效的 linear-gradient：%s"
 
 #: tycontrols.strconsts.rssmbackgroundimageneedsurl
 #, object-pascal-format
 msgid "background-image needs url(): %s"
-msgstr "background-image needs url(): %s"
+msgstr "background-image 需要 url()：%s"
 
 #: tycontrols.strconsts.rssmbackgroundimageneedsslice
 #, object-pascal-format
 msgid "background-image needs slice(): %s"
-msgstr "background-image needs slice(): %s"
+msgstr "background-image 需要 slice()：%s"
 
 #: tycontrols.strconsts.rssmsliceneeds4values
 #, object-pascal-format
 msgid "slice() needs 4 values: %s"
-msgstr "slice() needs 4 values: %s"
+msgstr "slice() 需要 4 个值：%s"
 
 #: tycontrols.strconsts.rssminvalidshadow
 #, object-pascal-format
 msgid "Invalid shadow: %s"
-msgstr "Invalid shadow: %s"
+msgstr "无效的阴影：%s"
 
 #: tycontrols.strconsts.rssmborderradiusneeds1or4
 #, object-pascal-format
 msgid "border-radius needs 1 or 4 values: %s"
-msgstr "border-radius needs 1 or 4 values: %s"
+msgstr "border-radius 需要 1 个或 4 个值：%s"
 
 #: tycontrols.strconsts.rssmimportnestingtoodeep
 #, object-pascal-format
@@ -410,7 +410,7 @@ msgstr "颜色"
 
 #: tycontrols.strconsts.rsdlgfontsample
 msgid "AaBbYyZz 0123"
-msgstr "AaBbYyZz 0123"
+msgstr "AaBbYyZz 0123 中文字体"
 
 #: tycontrols.strconsts.rsdlgfindwhat
 msgid "Find what:"
