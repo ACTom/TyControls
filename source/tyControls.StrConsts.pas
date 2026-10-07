@@ -106,6 +106,10 @@ resourcestring
   rsDlgAboutTitle      = 'About';
   rsDlgSelectPathTitle = 'Select Folder';
   rsDlgColorTitle      = 'Color';
+  { The colour button's dialog title and the colour combo's "more" row while their own
+    DialogCaption / MoreCaption are empty. }
+  rsColorButtonDialogTitle = 'Select Color';
+  rsColorComboMore     = 'More…';
   rsDlgFontTitle       = 'Font';
   rsDlgFindTitle       = 'Find';
   rsDlgReplaceTitle    = 'Replace';

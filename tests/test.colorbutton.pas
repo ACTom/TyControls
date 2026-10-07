@@ -4,7 +4,8 @@ interface
 uses
   Classes, SysUtils, TypInfo, fpcunit, testregistry, Forms, Controls, Graphics,
   tyControls.Base, tyControls.Types, tyControls.Painter, tyControls.Controller,
-  tyControls.ColorButton, tyControls.ToolBar, test.captionfit;
+  tyControls.ColorButton, tyControls.ToolBar, tyControls.StrConsts, Translations, FileUtil,
+  test.captionfit, test.designregistry;
 type
   // Expose the protected DrawContent so a headless render can be exercised without
   // opening the (GUI-only) colour dialog.
@@ -36,6 +37,8 @@ type
     procedure TestAnyColourChangeFiresOnColorChange;
     procedure TestShowTextTogglePublished;
     procedure TestDialogCaptionDefault;
+    procedure TestTheDefaultTitleFollowsTheLanguage;
+    procedure TestNoColourDialogGetsARawCaptionField;
     procedure TestDrawContentSafeNoText;
     procedure TestDrawContentSafeWithText;
     procedure TestDrawContentSafeDegenerateRect;
@@ -199,12 +202,47 @@ begin
   finally B.Free; end;
 end;
 
+
+{ Translate tyControls.StrConsts with a two-entry catalogue, then back to English. }
+procedure UseCatalogue(const AText: string);
+var po: TPOFile;
+begin
+  po := TPOFile.Create(True);
+  try
+    po.ReadPOText(AText);
+    TranslateUnitResourceStrings('tyControls.StrConsts', po);
+  finally
+    po.Free;
+  end;
+end;
+
+const
+  ZH_PO =
+    'msgid ""' + LineEnding + 'msgstr "Content-Type: text/plain; charset=UTF-8\n"' + LineEnding + LineEnding +
+    '#: tycontrols.strconsts.rscolorbuttondialogtitle' + LineEnding +
+    'msgid "Select Color"' + LineEnding + 'msgstr "PICK A COLOUR"' + LineEnding + LineEnding +
+    '#: tycontrols.strconsts.rscolorcombomore' + LineEnding +
+    'msgid "More' + #$E2#$80#$A6 + '"' + LineEnding + 'msgstr "MORE COLOURS"' + LineEnding;
+  EN_PO =
+    'msgid ""' + LineEnding + 'msgstr "Content-Type: text/plain; charset=UTF-8\n"' + LineEnding + LineEnding +
+    '#: tycontrols.strconsts.rscolorbuttondialogtitle' + LineEnding +
+    'msgid "Select Color"' + LineEnding + 'msgstr "Select Color"' + LineEnding + LineEnding +
+    '#: tycontrols.strconsts.rscolorcombomore' + LineEnding +
+    'msgid "More' + #$E2#$80#$A6 + '"' + LineEnding + 'msgstr "More' + #$E2#$80#$A6 + '"' + LineEnding;
+
 procedure TColorButtonTest.TestDialogCaptionDefault;
 var B: TTyColorButton;
 begin
   B := TTyColorButton.Create(nil);
   try
-    AssertEquals('DialogCaption default', 'Select Color', B.DialogCaption);
+    { Empty by default: '' is the library's translated title, so a new button follows the
+      application's language instead of storing English into every form. }
+    AssertEquals('DialogCaption default', '', B.DialogCaption);
+    AssertEquals('which shows the default title', 'Select Color', B.DialogTitle);
+    B.DialogCaption := 'Pick a fill';
+    AssertEquals('an own caption wins', 'Pick a fill', B.DialogTitle);
+    B.DialogCaption := '';
+    AssertEquals('and clearing it brings the default back', 'Select Color', B.DialogTitle);
     AssertTrue('DialogCaption published', IsPublishedProp(B, 'DialogCaption'));
   finally B.Free; end;
 end;
@@ -657,6 +695,56 @@ begin
     Form.Free;
     Ctl.Free;
   end;
+end;
+
+procedure TColorButtonTest.TestTheDefaultTitleFollowsTheLanguage;
+var B: TTyColorButton;
+begin
+  UseCatalogue(ZH_PO);
+  try
+    B := TTyColorButton.Create(nil);
+    try
+      AssertEquals('the translated title', 'PICK A COLOUR', B.DialogTitle);
+    finally B.Free; end;
+  finally
+    UseCatalogue(EN_PO);
+  end;
+  AssertEquals('restored', 'Select Color', rsColorButtonDialogTitle);
+end;
+
+{ The dialog itself is modal and never opens headlessly, so the call sites are checked in
+  the source: a caption field may now be '' (= the translated default), and handing the
+  raw field to TySelectColor would give the dialog an empty title bar. }
+procedure TColorButtonTest.TestNoColourDialogGetsARawCaptionField;
+var
+  files, src: TStringList;
+  i, j, calls, at: Integer;
+  line, arg: string;
+begin
+  calls := 0;
+  files := FindAllFiles(RepoRoot + 'source', '*.pas', False);
+  src := TStringList.Create;
+  try
+    for i := 0 to files.Count - 1 do
+    begin
+      src.LoadFromFile(files[i]);
+      for j := 0 to src.Count - 1 do
+      begin
+        line := src[j];
+        at := Pos('TySelectColor(', line);
+        if (at = 0) or (Pos('function TySelectColor', line) > 0) then Continue;
+        Inc(calls);
+        arg := Trim(Copy(line, at + Length('TySelectColor('), MaxInt));
+        AssertFalse(ExtractFileName(files[i]) + ':' + IntToStr(j + 1) +
+          ' passes a raw caption field: ' + Trim(line),
+          (Length(arg) > 1) and (arg[1] = 'F') and (arg[2] in ['A'..'Z']));
+      end;
+    end;
+  finally
+    src.Free;
+    files.Free;
+  end;
+  AssertTrue('the scan found the colour button''s and the colour combo''s calls', calls >= 2);
 end;
 
 initialization

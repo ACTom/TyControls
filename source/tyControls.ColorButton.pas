@@ -61,6 +61,8 @@ type
       同粗体阈值),所以直接问基类要,不另起一套。 }
     function MeasureContentHeight(APPI: Integer): Integer; override;
   public
+    { The colour dialog's title: DialogCaption, or the translated default when it is empty. }
+    function DialogTitle: string;
     { 这个按钮**实际会画出来**的那串文字。
 
       Caption 优先:它是 published 的、能在设计器里填、文档也写着"语义与 TTyButton
@@ -96,7 +98,8 @@ type
     // When True, the '#RRGGBB' hex is drawn as the caption to the right of the swatch;
     // when False the swatch fills most of the content area.
     property ShowText: Boolean read FShowText write SetShowText default False;
-    // Title bar text of the colour dialog opened on click.
+    // Title bar text of the colour dialog opened on click. '' (the default) = the library's
+    // translated title (rsColorButtonDialogTitle), so a new button follows the language.
     property DialogCaption: TTranslateString read FDialogCaption write FDialogCaption;
     // Fired whenever the colour actually changes, however it changed (see SetSelectedColor).
     property OnColorChange: TNotifyEvent read FOnColorChange write FOnColorChange;
@@ -108,6 +111,8 @@ type
   end;
 
 implementation
+
+uses tyControls.StrConsts;
 
 function TyColorHex(AColor: TTyColor): string;
 begin
@@ -130,7 +135,9 @@ begin
   inherited Create(AOwner);
   FSelectedColor := TyRGB(59, 130, 246);   // $FF3B82F6 — the library accent blue
   FShowText := False;
-  FDialogCaption := 'Select Color';
+  { Empty, not 'Select Color': a literal here was English in every language, and stored that
+    way into each new form. DialogTitle supplies the translated default. }
+  FDialogCaption := '';
   // Matches the redeclared `Alignment default taLeftJustify`; the two must agree or the
   // streamer writes the property into every .lfm that holds one of these.
   Alignment := taLeftJustify;
@@ -342,12 +349,20 @@ begin
   inherited Click;
   newColor := FSelectedColor;
   // TySelectColor updates newColor in place; True iff the user accepted (OK).
-  if TySelectColor(FDialogCaption, newColor) then
+  if TySelectColor(DialogTitle, newColor) then
   begin
     didChange := newColor <> FSelectedColor;
     if didChange then
       SelectedColor := newColor;   { one path for the repaint + OnColorChange }
   end;
+end;
+
+function TTyColorButton.DialogTitle: string;
+begin
+  if FDialogCaption <> '' then
+    Result := FDialogCaption
+  else
+    Result := rsColorButtonDialogTitle;
 end;
 
 end.
