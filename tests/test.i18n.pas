@@ -16,6 +16,7 @@ type
     procedure TestTheShippedCataloguesCarryTheDateTimeNames;
     procedure TestTheExampleCataloguesCarryTheLoadSentinel;
     procedure TestEveryPotHasAChineseCatalogue;
+    procedure TestEveryCatalogueBelongsToAUnitThatStillTranslates;
   end;
 
 implementation
@@ -356,7 +357,8 @@ begin
     above check a .pot lists every resourcestring -- which says nothing about
     whether anyone translated it. A unit whose catalogue was never written
     passes all of them, and two units had: the AdvChart editor's six strings,
-    and tyControls.Design's thirty-six, the latter since before this branch.
+    and tyControls.Design's thirty-six -- though that .pot turned out to be left over
+    from splitting the unit, and is gone (TestEveryCatalogueBelongsToAUnitThatStillTranslates).
 
     Naming is lowercase-and-dotted for the .po and mixed-case for the .pot,
     which is why nothing noticed: the two files do not sort next to each other. }
@@ -414,6 +416,72 @@ begin
     missing.Free;
     pots.Free;
   end;
+end;
+
+{ languages/ ships as-is in every release (make-release copies the folder), and the IDE only
+  ever ADDS catalogues there. When tyControls.Design was split into three units its .pot
+  stayed behind -- 36 entries under identifiers no unit declares any more, offered to
+  translators and shipped for nothing. So: each .pot names a unit under source/ or
+  designtime/ that still has a resourcestring section, and each .po names a .pot. }
+procedure TI18NTest.TestEveryCatalogueBelongsToAUnitThatStillTranslates;
+var
+  root, base, stray: string;
+  cats, units, src: TStringList;
+  i, j, n, pots: Integer;
+  found: Boolean;
+begin
+  root := ExtractFilePath(ParamStr(0)) + '..' + PathDelim;
+  stray := '';
+  pots := 0;
+  units := FindAllFiles(root + 'source', '*.pas', True);
+  src := TStringList.Create;
+  try
+    n := units.Count;
+    cats := FindAllFiles(root + 'designtime', '*.pas', False);
+    try units.AddStrings(cats); finally cats.Free; end;
+    AssertTrue('found the units', units.Count > n);
+
+    cats := FindAllFiles(root + 'languages', '*.pot', False);
+    try
+      for i := 0 to cats.Count - 1 do
+      begin
+        Inc(pots);
+        base := LowerCase(ChangeFileExt(ExtractFileName(cats[i]), ''));
+        found := False;
+        for j := 0 to units.Count - 1 do
+          if LowerCase(ChangeFileExt(ExtractFileName(units[j]), '')) = base then
+          begin
+            src.LoadFromFile(units[j]);
+            found := Pos('resourcestring', LowerCase(src.Text)) > 0;
+            Break;
+          end;
+        if not found then stray := stray + ' ' + ExtractFileName(cats[i]);
+      end;
+    finally cats.Free; end;
+    AssertTrue('found the .pot files', pots >= 2);
+
+    cats := FindAllFiles(root + 'languages', '*.po', False);
+    try
+      for i := 0 to cats.Count - 1 do
+      begin
+        { tycontrols.strconsts.zh_CN.po -> tycontrols.strconsts }
+        base := ChangeFileExt(ChangeFileExt(ExtractFileName(cats[i]), ''), '');
+        found := False;
+        for j := 0 to units.Count - 1 do
+          if SameText(ChangeFileExt(ExtractFileName(units[j]), ''), base) then
+          begin
+            found := FileExists(root + 'languages' + PathDelim +
+              ChangeFileExt(ExtractFileName(units[j]), '.pot'));
+            Break;
+          end;
+        if not found then stray := stray + ' ' + ExtractFileName(cats[i]);
+      end;
+    finally cats.Free; end;
+  finally
+    src.Free;
+    units.Free;
+  end;
+  AssertEquals('catalogues no unit translates any more:', '', stray);
 end;
 
 initialization
