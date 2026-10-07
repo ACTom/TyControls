@@ -25,6 +25,8 @@ type
     procedure TestLoadNineSliceBackgroundImage;
     procedure TestLoadPlainImageBackground;
     procedure TestLoadGlassTokens;
+    procedure TestGlassWrittenBeforeTheBackgroundSurvivesIt;
+    procedure TestABackgroundOnlyRuleKeepsTheGlass;
     procedure TestLoadFromCssParseErrorPreservesPrevious;
     procedure TestDuplicateRuleLastWins;
     procedure TestBackgroundColorAlias;
@@ -374,6 +376,76 @@ begin
     AssertEquals('hover keeps bg solid white', $FF, TyRedOf(s.Background.Color));
     AssertTrue('hover bg still solid', s.Background.Kind = tfkSolid);
     AssertEquals('MaxGlassBlur = largest (20)', 20, m.MaxGlassBlur);
+  finally m.Free; end;
+end;
+
+{ glass-* first, background second, in every form background takes: the tint has to come
+  out the same as with the usual order. }
+procedure TTestStyleLoad.TestGlassWrittenBeforeTheBackgroundSurvivesIt;
+const
+  GLASS = 'glass-blur: 14px; glass-tint: alpha(#336699, 0.5); ';
+  FORMS: array[0..4] of string = (
+    'background: #FFFFFF;',
+    'background: linear-gradient(90deg, #FFFFFF, #000000);',
+    'background: none;',
+    'background-image: url(a.png);',
+    'background-image: url(a.png) slice(4 4 4 4);');
+var m: TTyStyleModel; s, ref: TTyStyleSet; i: Integer;
+begin
+  for i := Low(FORMS) to High(FORMS) do
+  begin
+    m := TTyStyleModel.Create;
+    try
+      m.LoadFromCss('TyPanel { ' + FORMS[i] + ' ' + GLASS + '}'
+        + ' TyButton { ' + GLASS + FORMS[i] + ' }');
+      ref := m.ResolveStyle('TyPanel', '', []);
+      s := m.ResolveStyle('TyButton', '', []);
+      AssertTrue(FORMS[i] + ': setup -- glass after it is tinted', ref.Background.GlassTint <> 0);
+      AssertEquals(FORMS[i] + ': glass-tint written before it', Int64(ref.Background.GlassTint),
+        Int64(s.Background.GlassTint));
+      AssertEquals(FORMS[i] + ': glass-blur written before it', 14, s.Background.GlassBlur);
+      AssertTrue(FORMS[i] + ': the fill itself still applies',
+        s.Background.Kind = ref.Background.Kind);
+    finally m.Free; end;
+  end;
+end;
+
+{ A :hover rule or a StyleOverride that changes only the background takes over the fill and
+  leaves the base rule's glass alone; one that names glass too brings its own. }
+procedure TTestStyleLoad.TestABackgroundOnlyRuleKeepsTheGlass;
+var m: TTyStyleModel; base, s, over: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss(
+        'TyPanel { background: #FFFFFF; glass-blur: 14px; glass-tint: alpha(#336699, 0.5); }'
+      + ' TyPanel:hover { background: #EEEEEE; }'
+      + ' TyPanel:focus { background: #DDDDDD; glass-tint: alpha(#000000, 0.2); }');
+    base := m.ResolveStyle('TyPanel', '', []);
+    AssertTrue('setup: the base is tinted', base.Background.GlassTint <> 0);
+
+    s := m.ResolveStyle('TyPanel', '', [tysHover]);
+    AssertEquals('hover: its own fill', $EE, TyRedOf(s.Background.Color));
+    AssertEquals('hover: the base tint', Int64(base.Background.GlassTint),
+      Int64(s.Background.GlassTint));
+
+    s := m.ResolveStyle('TyPanel', '', [tysFocused]);
+    AssertEquals('focus: its own fill', $DD, TyRedOf(s.Background.Color));
+    AssertEquals('focus: its own tint', $33, TyAlphaOf(s.Background.GlassTint));
+
+    { the StyleOverride path is the same merge }
+    over := m.ResolveOverride('background: #CCCCCC');
+    s := base;
+    TyMergeStyleSet(s, over);
+    AssertEquals('override: its fill', $CC, TyRedOf(s.Background.Color));
+    AssertEquals('override: the theme''s tint', Int64(base.Background.GlassTint),
+      Int64(s.Background.GlassTint));
+
+    over := m.ResolveOverride('background: #BBBBBB; glass-tint: alpha(#000000, 0.2)');
+    s := base;
+    TyMergeStyleSet(s, over);
+    AssertEquals('override with glass: its fill', $BB, TyRedOf(s.Background.Color));
+    AssertEquals('override with glass: its own tint', $33, TyAlphaOf(s.Background.GlassTint));
   finally m.Free; end;
 end;
 

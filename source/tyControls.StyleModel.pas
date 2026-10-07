@@ -268,9 +268,23 @@ begin
   end;
 end;
 
+{ AFill with AFrom's glass. Glass rides the Background record but is its own declaration
+  family: a background / background-image declaration replaces the fill, not the glass.
+  Replacing the whole record zeroed glass-tint written earlier in the same rule, and a
+  later rule or StyleOverride that set only a background did the same at merge time --
+  the frosted pane lost its tint. }
+function TyFillWithGlassOf(const AFill, AFrom: TTyFill): TTyFill;
+begin
+  Result := AFill;
+  Result.GlassBlur := AFrom.GlassBlur;
+  Result.GlassTint := AFrom.GlassTint;
+end;
+
 procedure TyMergeStyleSet(var ABase: TTyStyleSet; const AOver: TTyStyleSet);
 begin
-  if tpBackground   in AOver.Present then ABase.Background   := AOver.Background;
+  { the fill only: an overlay that names glass itself brings it in the tpGlass step below }
+  if tpBackground in AOver.Present then
+    ABase.Background := TyFillWithGlassOf(AOver.Background, ABase.Background);
   if tpTextColor    in AOver.Present then ABase.TextColor    := AOver.TextColor;
   if tpBorderColor  in AOver.Present then ABase.BorderColor  := AOver.BorderColor;
   if tpBorderWidth  in AOver.Present then ABase.BorderWidth  := AOver.BorderWidth;
@@ -775,25 +789,25 @@ begin
       // explicit empty background (D4): no fill drawn
       fill := Default(TTyFill);
       fill.Kind := tfkNone;
-      AStyle.Background := fill;
+      AStyle.Background := TyFillWithGlassOf(fill, AStyle.Background);
     end
     else if LowerCase(Copy(raw, 1, 16)) = 'linear-gradient(' then
-      AStyle.Background := ParseLinearGradient(raw, Vars)
+      AStyle.Background := TyFillWithGlassOf(ParseLinearGradient(raw, Vars), AStyle.Background)
     else
     begin
       fill := Default(TTyFill);
       fill.Kind := tfkSolid;
       fill.Color := TyEvalColor(raw, Vars);
-      AStyle.Background := fill;
+      AStyle.Background := TyFillWithGlassOf(fill, AStyle.Background);
     end;
     Include(AStyle.Present, tpBackground);
   end
   else if prop = 'background-image' then
   begin
-    if Pos('slice(', LowerCase(raw)) > 0 then
-      AStyle.Background := ParseNineSlice(raw)    // url(...) slice(t r b l) -> 9-slice
-    else
-      AStyle.Background := ParsePlainImage(raw);  // url(...) -> plain image (cover)
+    if Pos('slice(', LowerCase(raw)) > 0 then      // url(...) slice(t r b l) -> 9-slice
+      AStyle.Background := TyFillWithGlassOf(ParseNineSlice(raw), AStyle.Background)
+    else                                           // url(...) -> plain image (cover)
+      AStyle.Background := TyFillWithGlassOf(ParsePlainImage(raw), AStyle.Background);
     Include(AStyle.Present, tpBackground);
   end
   else if prop = 'background-size' then
