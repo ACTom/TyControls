@@ -10,7 +10,7 @@
 
 **Goal:** GitHub #36 第一步——`TTyCustomMultiTrackBar` 加两个最终类 `TTyRangeTrackBar`（一个或多个区间）与 `TTyMultiTrackBar`（多个值，每个滑块可单独设颜色 / 提示 / 样式），共用 TrackBar 的属性名；三个控件（含 `TTyTrackBar`）加刻度标签。
 
-**Architecture:** 新单元 `tyControls.MultiTrackBar`。`TTyCustomMultiTrackBar = class(TTyCustomControl)`，与 `TTyCustomTrackBar` 并列而不是派生（后者的核心是单个 `Position`）。模型是一个有序整数数组 `FValues`（滑块位置，升序、相邻至少 `MinGap`），两个最终类各自把 `Ranges` / `Thumbs` 集合映射到这个数组。几何复用 `tyControls.TrackBar` 的单元级函数 `TyTrackThumbOffset` / `TyTrackPosFromOffset`；刻度与刻度标签抽成 `tyControls.TrackBar` 里的单元级过程，TrackBar 与多滑块共用一份。
+**Architecture:** 新单元 `tyControls.MultiTrackBar`。`TTyCustomMultiTrackBar = class(TTyCustomControl)`，与 `TTyCustomTrackBar` 并列而不是派生（后者的核心是单个 `Position`）。（执行时改名，Task 5：共用基类叫 `TTyMultiTrackBarBase`，是中间类，同 `TTyGlyphButtonBase`；按拆分规则每个最终类要有自己的 Custom 类，`TTyCustomMultiTrackBar` 让给 `TTyMultiTrackBar` 的 Custom 类，`TTyRangeTrackBar` 的是 `TTyCustomRangeTrackBar`。下文的 `TTyCustomMultiTrackBar` 指共用基类时都读作 `TTyMultiTrackBarBase`。）模型是一个有序整数数组 `FValues`（滑块位置，升序、相邻至少 `MinGap`），两个最终类各自把 `Ranges` / `Thumbs` 集合映射到这个数组。几何复用 `tyControls.TrackBar` 的单元级函数 `TyTrackThumbOffset` / `TyTrackPosFromOffset`；刻度与刻度标签抽成 `tyControls.TrackBar` 里的单元级过程，TrackBar 与多滑块共用一份。
 
 **Tech Stack:** FPC 3.2.2 / Lazarus 4.4 LCL（最低 Lazarus 3.0）、BGRABitmap、fpcunit。
 

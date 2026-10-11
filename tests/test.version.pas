@@ -46,6 +46,7 @@ uses
   tyControls.TabSet, tyControls.TabSheet, tyControls.Tag, tyControls.ToggleSwitch,
   tyControls.ToolWindows, tyControls.ToolWindows.Manager,
   tyControls.ToolBar, tyControls.ToolBarEx, tyControls.ToolGroupPanel, tyControls.TrackBar,
+  tyControls.MultiTrackBar,
   tyControls.TrackEdit, tyControls.Transfer, tyControls.TreeSelect, tyControls.TreeView,
   tyControls.TyLabel, tyControls.URLEdit, tyControls.UpDown, tyControls.ValueListEditor,
   { The property-editor base classes. None of them is ever dropped on a form, so nothing else
@@ -484,6 +485,11 @@ initialization
     TTyGraphicControl, TTyCustomControl, TTyComponent,
     { 4.0: the image list's editor sits on its custom class, which TTyLucideImageList shares. }
     TTyCustomVirtualImageList]);
+  { The multi-thumb track bars (#36). They reach the palette with the design-time registration
+    (plan Task 8); until Design.pas registers them they are not in the parse Reg() is checked
+    against, so they are registered plainly here -- form files read in the tests and the
+    custom-class guards resolve them by name. }
+  RegisterClasses([TTyRangeTrackBar]);
   RegisterTest(TVersionTest);
 
 finalization

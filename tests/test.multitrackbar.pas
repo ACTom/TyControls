@@ -1,7 +1,7 @@
 unit test.multitrackbar;
 {$mode objfpc}{$H+}
 
-{ TTyCustomMultiTrackBar (#36): the ordered thumb model -- SetThumbValue clamping between the
+{ TTyMultiTrackBarBase (#36): the ordered thumb model -- SetThumbValue clamping between the
   neighbours and Min..Max, the events, Normalize, a MinGap the range cannot hold, Min / Max /
   MinGap changes, a form being read -- then the geometry and the painting, then the mouse and
   the keyboard (through MouseDown / MouseMove / MouseUp, KeyDown and the CM_WANTSPECIALKEY and
@@ -17,13 +17,15 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, LMessages, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller, tyControls.TrackBar, tyControls.MultiTrackBar;
+  tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.StyleModel,
+  tyControls.TrackBar,
+  tyControls.MultiTrackBar;
 
 type
   { Opens the protected seams: the whole-set setter, Normalize and the read-a-form pair, the
     painting, and the per-thumb / per-segment data the final classes will supply (here plain
     arrays a test fills; empty = the base class's answer). }
-  TMultiProbe = class(TTyCustomMultiTrackBar)
+  TMultiProbe = class(TTyMultiTrackBarBase)
   protected
     function ThumbEnabled(AIndex: Integer): Boolean; override;
     function ThumbColor(AIndex: Integer): TColor; override;
@@ -178,6 +180,60 @@ type
     procedure TestThumbsOnOneValueComeApartInTheDragDirection;
     procedure TestADisabledBarIgnoresTheMouse;
     procedure TestTheHintIsTheThumbsUnderThePointer;
+  end;
+
+  { The final classes as a form and a theme see them: the published collection, the type key,
+    a form file written and read back. Painting and the pointer go through the protected
+    methods, opened by these. }
+  TBaseAccess = class(TTyMultiTrackBarBase);
+  TRangeAccess = class(TTyRangeTrackBar);
+  TTrackAccess = class(TTyTrackBar);
+
+  { Shared: a host form and a theme, the form file round trip. }
+  TMultiTrackFinalBase = class(TTestCase)
+  protected
+    FCtl: TTyStyleController;
+    FForm: TForm;
+    FLog: string;
+    procedure SetUp; override;
+    procedure TearDown; override;
+    procedure ThumbMoved(Sender: TObject; AIndex: Integer);
+    procedure Changed(Sender: TObject);
+    function ValuesOf(ABar: TTyMultiTrackBarBase): string;
+    { The form file text of AHost, as the IDE writes it. }
+    function FormText(AHost: TForm): string;
+    { A new host form read from AText. }
+    function FromText(const AText: string): TForm;
+    { AHost written and read back into a new host form. }
+    function RoundTrip(AHost: TForm): TForm;
+    { The part of a form file text from the bar's `object` line on. }
+    function BarText(const AText: string): string;
+    { The bar rendered over a magenta sentinel ground. }
+    function Shot(ABar: TTyMultiTrackBarBase): TBGRABitmap;
+    { True when main-axis offset AMain (horizontal bar) lies inside any thumb's hit band. }
+    function UnderAThumb(ABar: TTyMultiTrackBarBase; AMain: Integer): Boolean;
+  end;
+
+  TTyRangeTrackBarTest = class(TMultiTrackFinalBase)
+  private
+    FBar: TTyRangeTrackBar;
+    FSeen: string;
+    procedure ReadTheRangeInTheEvent(Sender: TObject; AIndex: Integer);
+    function Values: string;
+    function RangesText(ABar: TTyRangeTrackBar): string;
+  protected
+    procedure SetUp; override;
+  published
+    procedure TestDefaults;
+    procedure TestTheTypeKeyHangsOnTheTrackBars;
+    procedure TestLowValueAndHighValueAreTheFirstRange;
+    procedure TestARangeEndMovesThroughTheModel;
+    procedure TestBeginUpdateHoldsTheValuesUntilEndUpdate;
+    procedure TestSeveralRangesInOrderAndHighlighted;
+    procedure TestAFormsRangesAreSortedWhenRead;
+    procedure TestADraggedEndIsReadFromItsRange;
+    procedure TestRangesRoundTripThroughAFormFile;
+    procedure TestNoRangesRoundTrips;
   end;
 
   TTyMultiTrackKeyboardTest = class(TMultiTrackInputBase)
@@ -1672,10 +1728,460 @@ begin
   AssertEquals('20,52,80', Values);
 end;
 
+{ TMultiTrackFinalBase }
+
+procedure TMultiTrackFinalBase.SetUp;
+begin
+  FCtl := TTyStyleController.Create(nil);
+  FCtl.LoadThemeCss(CPaintCss);
+  FForm := TForm.CreateNew(nil);
+  FForm.Name := 'HostForm';
+  FForm.SetBounds(0, 0, 640, 480);
+  FLog := '';
+end;
+
+procedure TMultiTrackFinalBase.TearDown;
+begin
+  FForm.Free;
+  FCtl.Free;
+end;
+
+procedure TMultiTrackFinalBase.ThumbMoved(Sender: TObject; AIndex: Integer);
+begin
+  FLog := FLog + 'T' + IntToStr(AIndex) + ' ';
+end;
+
+procedure TMultiTrackFinalBase.Changed(Sender: TObject);
+begin
+  FLog := FLog + 'C ';
+end;
+
+function TMultiTrackFinalBase.ValuesOf(ABar: TTyMultiTrackBarBase): string;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 0 to ABar.ThumbCount - 1 do
+  begin
+    if i > 0 then Result := Result + ',';
+    Result := Result + IntToStr(ABar.ThumbValues[i]);
+  end;
+end;
+
+function TMultiTrackFinalBase.FormText(AHost: TForm): string;
+var
+  ms: TMemoryStream;
+  ts: TStringStream;
+begin
+  ms := TMemoryStream.Create;
+  ts := TStringStream.Create('');
+  try
+    ms.WriteComponent(AHost);
+    ms.Position := 0;
+    ObjectBinaryToText(ms, ts);
+    Result := ts.DataString;
+  finally
+    ts.Free;
+    ms.Free;
+  end;
+end;
+
+function TMultiTrackFinalBase.FromText(const AText: string): TForm;
+var
+  ts: TStringStream;
+  bs: TMemoryStream;
+begin
+  Result := TForm.CreateNew(nil);
+  ts := TStringStream.Create(AText);
+  bs := TMemoryStream.Create;
+  try
+    ObjectTextToBinary(ts, bs);
+    bs.Position := 0;
+    bs.ReadComponent(Result);
+  finally
+    bs.Free;
+    ts.Free;
+  end;
+end;
+
+function TMultiTrackFinalBase.RoundTrip(AHost: TForm): TForm;
+var
+  ms: TMemoryStream;
+begin
+  Result := TForm.CreateNew(nil);
+  ms := TMemoryStream.Create;
+  try
+    ms.WriteComponent(AHost);
+    ms.Position := 0;
+    ms.ReadComponent(Result);
+  finally
+    ms.Free;
+  end;
+end;
+
+function TMultiTrackFinalBase.BarText(const AText: string): string;
+begin
+  Result := Copy(AText, Pos('object Bar:', AText), MaxInt);
+  AssertTrue('the form file holds the bar', Result <> '');
+end;
+
+function TMultiTrackFinalBase.Shot(ABar: TTyMultiTrackBarBase): TBGRABitmap;
+var
+  bmp: TBitmap;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(ABar.Width, ABar.Height);
+    bmp.Canvas.Brush.Color := RGBToColor(255, 0, 255);
+    bmp.Canvas.FillRect(0, 0, ABar.Width, ABar.Height);
+    TBaseAccess(ABar).RenderTo(bmp.Canvas, Rect(0, 0, ABar.Width, ABar.Height), 96);
+    Result := TBGRABitmap.Create(bmp);
+  finally
+    bmp.Free;
+  end;
+end;
+
+function TMultiTrackFinalBase.UnderAThumb(ABar: TTyMultiTrackBarBase; AMain: Integer): Boolean;
+var
+  i: Integer;
+  r: TRect;
+begin
+  Result := False;
+  for i := 0 to ABar.ThumbCount - 1 do
+  begin
+    r := ABar.ThumbRect(i);
+    if (AMain >= r.Left) and (AMain < r.Right) then Exit(True);
+  end;
+end;
+
+{ TTyRangeTrackBarTest }
+
+procedure TTyRangeTrackBarTest.SetUp;
+begin
+  inherited SetUp;
+  FBar := TTyRangeTrackBar.Create(FForm);
+  FBar.Name := 'Bar';
+  FBar.Parent := FForm;
+  FBar.Font.PixelsPerInch := 96;
+  FBar.SetBounds(0, 0, 400, 24);
+  FSeen := '';
+end;
+
+function TTyRangeTrackBarTest.Values: string;
+begin
+  Result := ValuesOf(FBar);
+end;
+
+function TTyRangeTrackBarTest.RangesText(ABar: TTyRangeTrackBar): string;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 0 to ABar.Ranges.Count - 1 do
+  begin
+    if i > 0 then Result := Result + ';';
+    Result := Result + IntToStr(ABar.Ranges[i].Low) + '..' + IntToStr(ABar.Ranges[i].High);
+  end;
+end;
+
+procedure TTyRangeTrackBarTest.ReadTheRangeInTheEvent(Sender: TObject; AIndex: Integer);
+begin
+  { What a handler reads from the collection while the thumb's event fires. }
+  FSeen := FSeen + Format('%d:%s=%d ', [AIndex, RangesText(FBar), FBar.ThumbValues[AIndex]]);
+end;
+
+procedure TTyRangeTrackBarTest.TestDefaults;
+begin
+  AssertEquals('one range, so a new bar shows one', 1, FBar.Ranges.Count);
+  AssertEquals('25..75', RangesText(FBar));
+  AssertEquals('its two thumbs', '25,75', Values);
+  AssertEquals(25, FBar.LowValue);
+  AssertEquals(75, FBar.HighValue);
+  AssertEquals('Min', 0, FBar.Min);
+  AssertEquals('Max', 100, FBar.Max);
+  AssertEquals('MinGap', 0, FBar.MinGap);
+  AssertEquals('no thumb selected', -1, FBar.SelectedThumb);
+  AssertTrue('focusable', FBar.TabStop);
+end;
+
+procedure TTyRangeTrackBarTest.TestTheTypeKeyHangsOnTheTrackBars;
+var
+  ctl: TTyStyleController;
+  ref: TTyTrackBar;
+begin
+  AssertEquals('TyRangeTrackBar', (FBar as ITyStyleable).GetStyleTypeKey);
+  AssertEquals('registered under the track bar''s key', 'TyTrackBar',
+    TyTypeKeyParent('TyRangeTrackBar'));
+  { What the chain is for: a theme that styles only TyTrackBar styles the range bar too, and a
+    rule of its own wins over it. }
+  ctl := TTyStyleController.Create(nil);
+  ref := TTyTrackBar.Create(FForm);
+  try
+    ctl.LoadThemeCss('TyTrackBar { color: #123456; border-width: 1px; }'
+      + 'TyRangeTrackBar { border-width: 3px; }');
+    FBar.Controller := ctl;
+    ref.Parent := FForm;
+    ref.Controller := ctl;
+    AssertEquals('the track bar''s rule reaches the range bar',
+      TTrackAccess(ref).CurrentStyle.TextColor, TRangeAccess(FBar).CurrentStyle.TextColor);
+    AssertEquals('its own rule wins', 3, TRangeAccess(FBar).CurrentStyle.BorderWidth);
+    AssertEquals('and stays its own', 1, TTrackAccess(ref).CurrentStyle.BorderWidth);
+  finally
+    FBar.Controller := nil;
+    ref.Free;
+    ctl.Free;
+  end;
+end;
+
+procedure TTyRangeTrackBarTest.TestLowValueAndHighValueAreTheFirstRange;
+begin
+  FBar.Ranges.Clear;
+  AssertEquals('no range: no thumbs', 0, FBar.ThumbCount);
+  AssertEquals('no range reads 0', 0, FBar.LowValue);
+  AssertEquals(0, FBar.HighValue);
+  FBar.LowValue := 10;
+  AssertEquals('writing adds a range first', 1, FBar.Ranges.Count);
+  AssertEquals('10,100', Values);
+  FBar.HighValue := 40;
+  AssertEquals('10..40', RangesText(FBar));
+  FBar.Ranges.Clear;
+  FBar.HighValue := 40;
+  AssertEquals('HighValue adds one too, Min..Max to start from', '0..40', RangesText(FBar));
+  { With two ranges they are the first one's ends. }
+  FBar.Ranges.Add.Low := 70;
+  FBar.LowValue := 20;
+  AssertEquals('20..40;70..100', RangesText(FBar));
+  FBar.HighValue := 50;
+  AssertEquals('20..50;70..100', RangesText(FBar));
+  AssertEquals(20, FBar.LowValue);
+  AssertEquals(50, FBar.HighValue);
+end;
+
+procedure TTyRangeTrackBarTest.TestARangeEndMovesThroughTheModel;
+begin
+  FBar.MinGap := 5;
+  FBar.OnThumbChange := @ThumbMoved;
+  FBar.OnChange := @Changed;
+  FBar.Ranges[0].High := 10;
+  AssertEquals('stops MinGap above Low, as a drag would', '25..30', RangesText(FBar));
+  AssertEquals('and reports the thumb that moved', 'T1 C ', FLog);
+  FLog := '';
+  FBar.Ranges[0].Low := -50;
+  AssertEquals('inside Min', '0..30', RangesText(FBar));
+  FLog := '';
+  FBar.Ranges[0].Low := 0;
+  AssertEquals('the same value fires nothing', '', FLog);
+  { A range added at the end takes the stretch after the last one; MinGap holds between two
+    ranges as well. }
+  FBar.Ranges.Add;
+  AssertEquals('0..30;35..100', RangesText(FBar));
+  FBar.Ranges[1].Low := 40;
+  AssertEquals('0..30;40..100', RangesText(FBar));
+  FBar.Ranges[1].Low := 20;
+  AssertEquals('stops MinGap above the range before it', '0..30;35..100', RangesText(FBar));
+  AssertEquals('0,30,35,100', Values);
+end;
+
+procedure TTyRangeTrackBarTest.TestBeginUpdateHoldsTheValuesUntilEndUpdate;
+begin
+  FBar.Ranges.BeginUpdate;
+  FBar.Ranges[0].Low := 90;
+  FBar.Ranges[0].High := 10;
+  AssertEquals('kept as given meanwhile', '90..10', RangesText(FBar));
+  AssertEquals('the thumbs wait', '25,75', Values);
+  FBar.Ranges.EndUpdate;
+  AssertEquals('sorted out at EndUpdate', '10..90', RangesText(FBar));
+  AssertEquals('10,90', Values);
+end;
+
+procedure TTyRangeTrackBarTest.TestSeveralRangesInOrderAndHighlighted;
+var
+  a: TBGRABitmap;
+  m, s, lo, hi, red, misplaced, missing: Integer;
+  inSpan, isRed: Boolean;
+  px: TBGRAPixel;
+  spanLo, spanHi: array[0..6] of Integer;
+begin
+  FBar.Controller := FCtl;
+  FBar.Max := 12;
+  FBar.TickStyle := ttsNone;
+  FBar.Ranges.BeginUpdate;
+  try
+    FBar.Ranges.Clear;
+    with FBar.Ranges.Add do begin Low := 1; High := 3; end;
+    with FBar.Ranges.Add do begin Low := 8; High := 12; end;
+    with FBar.Ranges.Add do begin Low := 4; High := 6; end;
+  finally
+    FBar.Ranges.EndUpdate;
+  end;
+  AssertEquals('the thumbs in order: each range''s Low then High', '1,3,4,6,8,12', Values);
+  AssertEquals('1..3;4..6;8..12', RangesText(FBar));
+  for s := 0 to 6 do
+    AssertTrue(FBar.SegmentSpan(s, 96, spanLo[s], spanHi[s]));
+  a := Shot(FBar);
+  try
+    misplaced := 0;
+    missing := 0;
+    for m := 0 to FBar.Width - 1 do
+    begin
+      if UnderAThumb(FBar, m) then Continue;
+      px := a.GetPixel(m, FBar.Height div 2);
+      isRed := SamePx(px, $FF, 0, 0);
+      inSpan := False;
+      for s := 0 to 6 do
+        if Odd(s) and (m >= spanLo[s]) and (m < spanHi[s]) then inSpan := True;
+      if isRed and not inSpan then Inc(misplaced);
+      if inSpan and not isRed then Inc(missing);
+      if not isRed then
+        AssertTrue(Format('off a range at %d: the bare groove, %s', [m, PxStr(px)]),
+          SamePx(px, $60, $60, $60));
+    end;
+    AssertEquals('highlight outside a range (before, between, after)', 0, misplaced);
+    AssertEquals('a range pixel not highlighted', 0, missing);
+    for s := 0 to 6 do
+    begin
+      lo := spanLo[s];
+      hi := spanHi[s];
+      red := 0;
+      for m := lo to hi - 1 do
+        if not UnderAThumb(FBar, m) and SamePx(a.GetPixel(m, FBar.Height div 2), $FF, 0, 0) then
+          Inc(red);
+      if Odd(s) then
+        AssertTrue('range ' + IntToStr(s div 2) + ' shows', red > 0)
+      else
+        AssertEquals('segment ' + IntToStr(s) + ' is not a range', 0, red);
+    end;
+  finally
+    a.Free;
+  end;
+end;
+
+const
+  { A form file as a hand (or an older writer) may leave it: ranges out of order, one inside
+    out, listed before Min and Max. }
+  CRangeForm =
+    'object HostForm: TForm'#10 +
+    '  Left = 0'#10 +
+    '  Top = 0'#10 +
+    '  Width = 640'#10 +
+    '  Height = 480'#10 +
+    '  object Bar: TTyRangeTrackBar'#10 +
+    '    Left = 0'#10 +
+    '    Top = 0'#10 +
+    '    Width = 400'#10 +
+    '    Height = 24'#10 +
+    '    Ranges = <'#10 +
+    '%s' +
+    '>'#10 +
+    '    Min = 0'#10 +
+    '    Max = 100'#10 +
+    '  end'#10 +
+    'end'#10;
+
+function RangeItem(ALow, AHigh: Integer): string;
+begin
+  Result := Format('      item'#10'        Low = %d'#10'        High = %d'#10'      end'#10,
+    [ALow, AHigh]);
+end;
+
+procedure TTyRangeTrackBarTest.TestAFormsRangesAreSortedWhenRead;
+var
+  host: TForm;
+  bar: TTyRangeTrackBar;
+begin
+  host := FromText(Format(CRangeForm, [RangeItem(50, 60) + RangeItem(20, 10)]));
+  try
+    bar := host.FindComponent('Bar') as TTyRangeTrackBar;
+    AssertEquals('out of order, inside out: sorted and paired off', '10,20,50,60', ValuesOf(bar));
+    AssertEquals('10..20;50..60', RangesText(bar));
+  finally
+    host.Free;
+  end;
+  host := FromText(Format(CRangeForm, [RangeItem(10, 50) + RangeItem(20, 30)]));
+  try
+    bar := host.FindComponent('Bar') as TTyRangeTrackBar;
+    AssertEquals('overlapping: the values sorted as one list', '10..20;30..50', RangesText(bar));
+  finally
+    host.Free;
+  end;
+end;
+
+procedure TTyRangeTrackBarTest.TestADraggedEndIsReadFromItsRange;
+var
+  r: TRect;
+  x, y: Integer;
+begin
+  FBar.OnThumbChange := @ReadTheRangeInTheEvent;
+  r := FBar.ThumbRect(1);
+  x := (r.Left + r.Right) div 2;
+  y := (r.Top + r.Bottom) div 2;
+  TRangeAccess(FBar).MouseDown(mbLeft, [ssLeft], x, y);
+  TRangeAccess(FBar).MouseMove([ssLeft], x + 60, y);
+  TRangeAccess(FBar).MouseUp(mbLeft, [], x + 60, y);
+  AssertTrue('the High thumb moved up: ' + Values, FBar.ThumbValues[1] > 75);
+  AssertEquals('the range reads where the thumb went', FBar.ThumbValues[1], FBar.Ranges[0].High);
+  AssertEquals('Low untouched', 25, FBar.Ranges[0].Low);
+  AssertEquals('a handler reads the range already moved',
+    Format('1:25..%d=%d ', [FBar.ThumbValues[1], FBar.ThumbValues[1]]), FSeen);
+end;
+
+procedure TTyRangeTrackBarTest.TestRangesRoundTripThroughAFormFile;
+var
+  host: TForm;
+  bar: TTyRangeTrackBar;
+  txt: string;
+begin
+  FBar.Min := -10;
+  FBar.Max := 50;
+  FBar.MinGap := 2;
+  FBar.Ranges.Add;
+  FBar.Ranges[0].Low := -5;
+  FBar.Ranges[0].High := 0;
+  FBar.Ranges[1].Low := 10;
+  FBar.Ranges[1].High := 20;
+  AssertEquals('the fixture', '-5..0;10..20', RangesText(FBar));
+  txt := FormText(FForm);
+  AssertTrue('the ranges are written: ' + txt, Pos('Ranges = <', txt) > 0);
+  AssertFalse('no marker while there are ranges', Pos('NoRanges', txt) > 0);
+  host := RoundTrip(FForm);
+  try
+    bar := host.FindComponent('Bar') as TTyRangeTrackBar;
+    AssertEquals('read back', '-5..0;10..20', RangesText(bar));
+    AssertEquals('-5,0,10,20', ValuesOf(bar));
+    AssertEquals(2, bar.MinGap);
+    AssertEquals(-10, bar.Min);
+    AssertEquals(50, bar.Max);
+    AssertEquals('and written again the same', BarText(txt), BarText(FormText(host)));
+  finally
+    host.Free;
+  end;
+end;
+
+procedure TTyRangeTrackBarTest.TestNoRangesRoundTrips;
+var
+  host: TForm;
+  bar: TTyRangeTrackBar;
+  txt: string;
+begin
+  FBar.Ranges.Clear;
+  txt := FormText(FForm);
+  AssertTrue('an emptied bar says so: ' + txt, Pos('NoRanges = True', txt) > 0);
+  host := RoundTrip(FForm);
+  try
+    bar := host.FindComponent('Bar') as TTyRangeTrackBar;
+    AssertEquals('read back without the default range', 0, bar.Ranges.Count);
+    AssertEquals(0, bar.ThumbCount);
+  finally
+    host.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyMultiTrackModelTest);
   RegisterTest(TTyMultiTrackGeometryTest);
   RegisterTest(TTyMultiTrackPaintTest);
   RegisterTest(TTyMultiTrackMouseTest);
   RegisterTest(TTyMultiTrackKeyboardTest);
+  RegisterTest(TTyRangeTrackBarTest);
 end.

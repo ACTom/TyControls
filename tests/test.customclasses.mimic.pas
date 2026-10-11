@@ -39,11 +39,11 @@ uses
   tyControls.ImageCollection, tyControls.ImageView, tyControls.LColorPicker, tyControls.LevelMeter,
   tyControls.LinkLabel, tyControls.ListBox, tyControls.ListGroupPanel, tyControls.ListView,
   tyControls.MRUComboBox, tyControls.MaskEdit, tyControls.Memo, tyControls.Menu, tyControls.Meter,
-  tyControls.NativeStyler, tyControls.Notification, tyControls.NumericEdit,
-  tyControls.OfficeComboBox, tyControls.OfficeListBox, tyControls.PageControl,
-  tyControls.Pagination, tyControls.PaintPanel, tyControls.Panel, tyControls.Popover,
-  tyControls.PreviewBox, tyControls.ProgressBar, tyControls.RadioGroup, tyControls.Rating,
-  tyControls.RelativePanel, tyControls.Ribbon, tyControls.RibbonAppMenu,
+  tyControls.MultiTrackBar, tyControls.NativeStyler, tyControls.Notification,
+  tyControls.NumericEdit, tyControls.OfficeComboBox, tyControls.OfficeListBox,
+  tyControls.PageControl, tyControls.Pagination, tyControls.PaintPanel, tyControls.Panel,
+  tyControls.Popover, tyControls.PreviewBox, tyControls.ProgressBar, tyControls.RadioGroup,
+  tyControls.Rating, tyControls.RelativePanel, tyControls.Ribbon, tyControls.RibbonAppMenu,
   tyControls.RibbonBackstage, tyControls.RibbonGallery, tyControls.RibbonQuickAccess,
   tyControls.ScrollBar, tyControls.ScrollBox, tyControls.ScrollContent, tyControls.ScrollPanel,
   tyControls.Segmented, tyControls.ShadowLabel, tyControls.Shape, tyControls.ShellComboBox,
@@ -7520,6 +7520,78 @@ type
     property OnItemExit;
   end;
 
+  TGenRangeTrackBar = class(TTyCustomRangeTrackBar)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Min;
+    property Max;
+    property Orientation;
+    property Reversed;
+    property TickMarks;
+    property TickStyle;
+    property Frequency;
+    property LineSize;
+    property PageSize;
+    property OnChange;
+    property Align;
+    property Anchors;
+    property TickLabels;
+    property OnFormatTickLabel;
+    property MinGap;
+    property Ranges;
+    property OnThumbChange;
+    property OnThumbSelect;
+  end;
+
   TGenRating = class(TTyCustomRating)
   published
     property Version;
@@ -11046,7 +11118,7 @@ type
 
 const
   { (mimic, final class) }
-  CGenMimics: array[0..178, 0..1] of TClass = (
+  CGenMimics: array[0..179, 0..1] of TClass = (
     (TGenAboutDialog, TTyAboutDialog),
     (TGenActivityBar, TTyActivityBar),
     (TGenActivityIndicator, TTyActivityIndicator),
@@ -11172,6 +11244,7 @@ const
     (TGenProgressDialog, TTyProgressDialog),
     (TGenRadioButton, TTyRadioButton),
     (TGenRadioGroup, TTyRadioGroup),
+    (TGenRangeTrackBar, TTyRangeTrackBar),
     (TGenRating, TTyRating),
     (TGenRelativePanel, TTyRelativePanel),
     (TGenRibbon, TTyRibbon),

@@ -4,11 +4,16 @@ unit tyControls.MultiTrackBar;
 { Track bars with more than one thumb (#36): the ordered thumb model shared by TTyRangeTrackBar
   (one or more ranges) and TTyMultiTrackBar (several values).
 
-  TTyCustomMultiTrackBar sits BESIDE TTyCustomTrackBar rather than under it: that class is built
+  TTyMultiTrackBarBase sits BESIDE TTyCustomTrackBar rather than under it: that class is built
   around a single Position. What the two share is the geometry (TyTrackThumbOffset /
   TyTrackPosFromOffset, TyTrackThumbLen, TyTrackSlideRect, TyTrackGrooveRect) and the tick band
   (TyLayoutTrackTicks / TyDrawTrackTicks), all unit-level in tyControls.TrackBar -- so a
-  multi-thumb bar with one thumb at V draws exactly what a TTyTrackBar at Position V draws. }
+  multi-thumb bar with one thumb at V draws exactly what a TTyTrackBar at Position V draws.
+
+  The classes. TTyMultiTrackBarBase is the shared intermediate (as TTyGlyphButtonBase is for the
+  glyph buttons): the model, the picture and the interaction, nothing published. Each final
+  class has its custom class on it -- TTyCustomRangeTrackBar / TTyRangeTrackBar and
+  TTyCustomMultiTrackBar / TTyMultiTrackBar -- which maps a collection onto the thumbs. }
 
 interface
 
@@ -69,7 +74,7 @@ type
 
     No right-to-left mirroring, as TTyTrackBar: the value axis runs by Orientation and Reversed
     only. }
-  TTyCustomMultiTrackBar = class(TTyCustomControl)
+  TTyMultiTrackBarBase = class(TTyCustomControl)
   private
     FValues: array of Integer;
     FMin, FMax, FMinGap: Integer;
@@ -121,6 +126,11 @@ type
       form is being read; otherwise normalized at once, and OnChange fires if the result differs
       from what was there. }
     procedure SetThumbValues(const AValues: array of Integer);
+    { Called whenever the values may have changed -- a thumb moved, Normalize ran (a set was
+      replaced, a form was read, Min / Max / MinGap changed) -- after FValues holds the new
+      values and before any event fires: a final class copies them back into its collection
+      items here, so the items always read what the thumbs show, from the event handlers too. }
+    procedure ValuesChanged; virtual;
     procedure DoThumbChange(AIndex: Integer); virtual;
     procedure DoThumbSelect(AIndex: Integer); virtual;
     procedure DoChange; virtual;
@@ -231,11 +241,165 @@ type
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 
+  TTyCustomRangeTrackBar = class;
+
+  { One range of TTyRangeTrackBar: its two thumbs. Low and High read what the thumbs show; set
+    them and the thumb moves through SetThumbValue -- the path a drag takes -- so it stops
+    MinGap short of its neighbours and inside Min..Max, and OnThumbChange / OnChange fire.
+    Between Ranges.BeginUpdate and EndUpdate, and while a form is read, the values are kept as
+    given and the whole set is sorted out at EndUpdate / Loaded. A range added at the end takes
+    the stretch after the last one, up to Max (Min..Max for the first). }
+  TTyTrackRange = class(TCollectionItem)
+  private
+    FLow, FHigh: Integer;
+    function Bar: TTyCustomRangeTrackBar;
+    procedure SetLow(AValue: Integer);
+    procedure SetHigh(AValue: Integer);
+  public
+    constructor Create(ACollection: TCollection); override;
+    procedure Assign(Source: TPersistent); override;
+  published
+    property Low: Integer read FLow write SetLow;
+    property High: Integer read FHigh write SetHigh;
+  end;
+
+  TTyTrackRanges = class(TOwnedCollection)
+  private
+    function GetItem(AIndex: Integer): TTyTrackRange;
+    procedure SetItem(AIndex: Integer; AValue: TTyTrackRange);
+  protected
+    procedure Update(Item: TCollectionItem); override;
+  public
+    constructor Create(AOwner: TTyCustomRangeTrackBar);
+    function Add: TTyTrackRange;
+    property Items[AIndex: Integer]: TTyTrackRange read GetItem write SetItem; default;
+  end;
+
+  { One or more ranges on one track (#36). Each range is two thumbs, so the thumbs run
+    [Low0, High0, Low1, High1, ...]: the ranges never overlap, and MinGap holds inside a range
+    and between two of them alike. A form whose ranges are out of order, overlap or have
+    Low > High is sorted when it has been read: the values are sorted as one list and paired
+    off again. The span of each range is drawn as TTyTrackBar draws its selection
+    (TyTrackSelection, centre of the Low thumb to centre of the High thumb); between two ranges
+    the bare groove shows.
+
+    A new bar has one range, 25..75, so a bar dropped on a form shows one. A bar whose ranges
+    were all removed says so in its form file (NoRanges), or reading it back would bring that
+    default range back: the reader adds to a collection without emptying it when the list it
+    reads is empty. }
+  TTyCustomRangeTrackBar = class(TTyMultiTrackBarBase)
+  private
+    FRanges: TTyTrackRanges;
+    procedure SetRanges(AValue: TTyTrackRanges);
+    function GetLowValue: Integer;
+    procedure SetLowValue(AValue: Integer);
+    function GetHighValue: Integer;
+    procedure SetHighValue(AValue: Integer);
+    procedure ReadNoRanges(Reader: TReader);
+    procedure WriteNoRanges(Writer: TWriter);
+  protected
+    function GetStyleTypeKey: string; override;
+    { True while a range's value is kept as given rather than moved through SetThumbValue: a
+      form being read, Ranges between BeginUpdate and EndUpdate, the thumbs not (yet) the
+      ranges' -- see TTyTrackRange. }
+    function RangesHeldRaw: Boolean;
+    { The collection changed shape (a range added, removed, moved, assigned): the thumbs are
+      rebuilt from the ranges' values and normalized. }
+    procedure RangesChanged;
+    procedure ValuesChanged; override;
+    procedure Loaded; override;
+    procedure DefineProperties(Filer: TFiler); override;
+    { The odd segments -- Low to High of each range -- in the selection's colour. }
+    function SegmentStyle(AIndex: Integer; out ATypeKey, AStyleClass: string): Boolean; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+    property Ranges: TTyTrackRanges read FRanges write SetRanges;
+    { The first range's ends. With no range they read 0, and setting one adds a range first. }
+    property LowValue: Integer read GetLowValue write SetLowValue;
+    property HighValue: Integer read GetHighValue write SetHighValue;
+  end;
+
+  TTyRangeTrackBar = class(TTyCustomRangeTrackBar)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Min;
+    property Max;
+    property Orientation;
+    property Reversed;
+    property TickMarks;
+    property TickStyle;
+    property Frequency;
+    property LineSize;
+    property PageSize;
+    property OnChange;
+    property Align;
+    property Anchors;
+    property TickLabels;
+    property OnFormatTickLabel;
+    property MinGap;
+    property Ranges;
+    property OnThumbChange;
+    property OnThumbSelect;
+  end;
+
 implementation
 
-{ TTyCustomMultiTrackBar }
+uses
+  tyControls.StyleModel;
 
-constructor TTyCustomMultiTrackBar.Create(AOwner: TComponent);
+{ TTyMultiTrackBarBase }
+
+constructor TTyMultiTrackBarBase.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TabStop := True;
@@ -255,31 +419,31 @@ begin
   Height := TyDensityHeight(ActiveController, 24);
 end;
 
-function TTyCustomMultiTrackBar.GetStyleTypeKey: string;
+function TTyMultiTrackBarBase.GetStyleTypeKey: string;
 begin
   { The final classes get keys of their own, parented to this one. }
   Result := 'TyTrackBar';
 end;
 
-function TTyCustomMultiTrackBar.GetThumbCount: Integer;
+function TTyMultiTrackBarBase.GetThumbCount: Integer;
 begin
   Result := Length(FValues);
 end;
 
-procedure TTyCustomMultiTrackBar.CheckIndex(AIndex: Integer);
+procedure TTyMultiTrackBarBase.CheckIndex(AIndex: Integer);
 begin
   if (AIndex < 0) or (AIndex >= Length(FValues)) then
     raise EListError.CreateFmt('%s: thumb index %d out of bounds (%d thumbs)',
       [ClassName, AIndex, Length(FValues)]);
 end;
 
-function TTyCustomMultiTrackBar.GetThumbValue(AIndex: Integer): Integer;
+function TTyMultiTrackBarBase.GetThumbValue(AIndex: Integer): Integer;
 begin
   CheckIndex(AIndex);
   Result := FValues[AIndex];
 end;
 
-function TTyCustomMultiTrackBar.EffectiveGap: Integer;
+function TTyMultiTrackBarBase.EffectiveGap: Integer;
 var
   n: Integer;
   span: Int64;
@@ -293,7 +457,7 @@ begin
     Result := span div (n - 1);
 end;
 
-procedure TTyCustomMultiTrackBar.Normalize(AFire: Boolean);
+procedure TTyMultiTrackBarBase.Normalize(AFire: Boolean);
 var
   v, old: array of Integer;
   n, i, j, k, gap, lo, hi: Integer;
@@ -333,6 +497,7 @@ begin
   for i := n - 2 downto 0 do
     if v[i] > v[i + 1] - gap then v[i] := v[i + 1] - gap;
   FValues := v;
+  ValuesChanged;
   if not AFire then Exit;
   moved := False;
   for i := 0 to n - 1 do
@@ -348,7 +513,7 @@ begin
   end;
 end;
 
-procedure TTyCustomMultiTrackBar.SetThumbValues(const AValues: array of Integer);
+procedure TTyMultiTrackBarBase.SetThumbValues(const AValues: array of Integer);
 var
   old: array of Integer;
   i: Integer;
@@ -380,7 +545,7 @@ begin
   DoChange;
 end;
 
-procedure TTyCustomMultiTrackBar.SetThumbValue(AIndex, AValue: Integer);
+procedure TTyMultiTrackBarBase.SetThumbValue(AIndex, AValue: Integer);
 var
   lo, hi, gap, n: Integer;
 begin
@@ -403,27 +568,32 @@ begin
   if AValue < lo then AValue := lo;
   if FValues[AIndex] = AValue then Exit;
   FValues[AIndex] := AValue;
+  ValuesChanged;
   Invalidate;
   DoThumbChange(AIndex);
   DoChange;
 end;
 
-procedure TTyCustomMultiTrackBar.DoThumbChange(AIndex: Integer);
+procedure TTyMultiTrackBarBase.ValuesChanged;
+begin
+end;
+
+procedure TTyMultiTrackBarBase.DoThumbChange(AIndex: Integer);
 begin
   if Assigned(FOnThumbChange) then FOnThumbChange(Self, AIndex);
 end;
 
-procedure TTyCustomMultiTrackBar.DoThumbSelect(AIndex: Integer);
+procedure TTyMultiTrackBarBase.DoThumbSelect(AIndex: Integer);
 begin
   if Assigned(FOnThumbSelect) then FOnThumbSelect(Self, AIndex);
 end;
 
-procedure TTyCustomMultiTrackBar.DoChange;
+procedure TTyMultiTrackBarBase.DoChange;
 begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
-procedure TTyCustomMultiTrackBar.SetMin(const AValue: Integer);
+procedure TTyMultiTrackBarBase.SetMin(const AValue: Integer);
 begin
   if FMin = AValue then Exit;
   FMin := AValue;
@@ -432,7 +602,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyCustomMultiTrackBar.SetMax(const AValue: Integer);
+procedure TTyMultiTrackBarBase.SetMax(const AValue: Integer);
 begin
   if FMax = AValue then Exit;
   FMax := AValue;
@@ -441,7 +611,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyCustomMultiTrackBar.SetMinGap(const AValue: Integer);
+procedure TTyMultiTrackBarBase.SetMinGap(const AValue: Integer);
 var
   g: Integer;
 begin
@@ -453,7 +623,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyCustomMultiTrackBar.SetSelectedThumb(AValue: Integer);
+procedure TTyMultiTrackBarBase.SetSelectedThumb(AValue: Integer);
 begin
   if (AValue < 0) or (AValue >= Length(FValues)) then AValue := -1;
   if FSelectedThumb = AValue then Exit;
@@ -462,7 +632,7 @@ begin
   if not (csLoading in ComponentState) then DoThumbSelect(AValue);
 end;
 
-procedure TTyCustomMultiTrackBar.SetOrientation(const AValue: TTyTrackOrientation);
+procedure TTyMultiTrackBarBase.SetOrientation(const AValue: TTyTrackOrientation);
 var
   w, h: Integer;
 begin
@@ -479,28 +649,28 @@ begin
   Invalidate;
 end;
 
-procedure TTyCustomMultiTrackBar.SetReversed(const AValue: Boolean);
+procedure TTyMultiTrackBarBase.SetReversed(const AValue: Boolean);
 begin
   if FReversed = AValue then Exit;
   FReversed := AValue;
   Invalidate;
 end;
 
-procedure TTyCustomMultiTrackBar.SetTickMarks(const AValue: TTyTrackTickMark);
+procedure TTyMultiTrackBarBase.SetTickMarks(const AValue: TTyTrackTickMark);
 begin
   if FTickMarks = AValue then Exit;
   FTickMarks := AValue;
   Invalidate;
 end;
 
-procedure TTyCustomMultiTrackBar.SetTickStyle(const AValue: TTyTrackTickStyle);
+procedure TTyMultiTrackBarBase.SetTickStyle(const AValue: TTyTrackTickStyle);
 begin
   if FTickStyle = AValue then Exit;
   FTickStyle := AValue;
   Invalidate;
 end;
 
-procedure TTyCustomMultiTrackBar.SetFrequency(const AValue: Integer);
+procedure TTyMultiTrackBarBase.SetFrequency(const AValue: Integer);
 var
   f: Integer;
 begin
@@ -510,7 +680,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyCustomMultiTrackBar.SetTickLabels(const AValue: Boolean);
+procedure TTyMultiTrackBarBase.SetTickLabels(const AValue: Boolean);
 begin
   if FTickLabels = AValue then Exit;
   FTickLabels := AValue;
@@ -518,13 +688,13 @@ begin
   Invalidate;
 end;
 
-procedure TTyCustomMultiTrackBar.SetOnFormatTickLabel(const AValue: TTyTrackTickLabelEvent);
+procedure TTyMultiTrackBarBase.SetOnFormatTickLabel(const AValue: TTyTrackTickLabelEvent);
 begin
   FOnFormatTickLabel := AValue;
   if FTickLabels then Invalidate;
 end;
 
-procedure TTyCustomMultiTrackBar.SetTick(AValue: Integer);
+procedure TTyMultiTrackBarBase.SetTick(AValue: Integer);
 var
   i: Integer;
 begin
@@ -536,19 +706,19 @@ begin
   if FTickStyle = ttsManual then Invalidate;
 end;
 
-procedure TTyCustomMultiTrackBar.ClearTicks;
+procedure TTyMultiTrackBarBase.ClearTicks;
 begin
   if Length(FManualTicks) = 0 then Exit;
   SetLength(FManualTicks, 0);
   if FTickStyle = ttsManual then Invalidate;
 end;
 
-function TTyCustomMultiTrackBar.TickCount: Integer;
+function TTyMultiTrackBarBase.TickCount: Integer;
 begin
   Result := Length(FManualTicks);
 end;
 
-procedure TTyCustomMultiTrackBar.Loaded;
+procedure TTyMultiTrackBarBase.Loaded;
 begin
   inherited Loaded;
   { The values arrive in whatever order the form file lists them, possibly before Min and Max:
@@ -558,27 +728,27 @@ begin
   Invalidate;
 end;
 
-function TTyCustomMultiTrackBar.ThumbEnabled(AIndex: Integer): Boolean;
+function TTyMultiTrackBarBase.ThumbEnabled(AIndex: Integer): Boolean;
 begin
   Result := True;
 end;
 
-function TTyCustomMultiTrackBar.ThumbColor(AIndex: Integer): TColor;
+function TTyMultiTrackBarBase.ThumbColor(AIndex: Integer): TColor;
 begin
   Result := clDefault;
 end;
 
-function TTyCustomMultiTrackBar.ThumbStyleClass(AIndex: Integer): string;
+function TTyMultiTrackBarBase.ThumbStyleClass(AIndex: Integer): string;
 begin
   Result := '';
 end;
 
-function TTyCustomMultiTrackBar.ThumbHint(AIndex: Integer): string;
+function TTyMultiTrackBarBase.ThumbHint(AIndex: Integer): string;
 begin
   Result := '';
 end;
 
-function TTyCustomMultiTrackBar.SegmentStyle(AIndex: Integer; out ATypeKey,
+function TTyMultiTrackBarBase.SegmentStyle(AIndex: Integer; out ATypeKey,
   AStyleClass: string): Boolean;
 begin
   ATypeKey := '';
@@ -586,31 +756,31 @@ begin
   Result := False;
 end;
 
-function TTyCustomMultiTrackBar.Inverted: Boolean;
+function TTyMultiTrackBarBase.Inverted: Boolean;
 begin
   Result := (FOrientation = toVertical) xor FReversed;
 end;
 
-function TTyCustomMultiTrackBar.MainLen: Integer;
+function TTyMultiTrackBarBase.MainLen: Integer;
 begin
   if FOrientation = toVertical then Result := ClientHeight
   else Result := ClientWidth;
   if Result < 1 then Result := 1;
 end;
 
-function TTyCustomMultiTrackBar.ThumbOffset(AIndex: Integer): Integer;
+function TTyMultiTrackBarBase.ThumbOffset(AIndex: Integer): Integer;
 begin
   CheckIndex(AIndex);
   Result := TyTrackThumbOffset(MainLen, TyTrackThumbLen(Font.PixelsPerInch), FMin, FMax,
     FValues[AIndex], Inverted);
 end;
 
-function TTyCustomMultiTrackBar.ThumbCentre(AIndex: Integer): Integer;
+function TTyMultiTrackBarBase.ThumbCentre(AIndex: Integer): Integer;
 begin
   Result := ThumbOffset(AIndex) + TyTrackThumbLen(Font.PixelsPerInch) div 2;
 end;
 
-function TTyCustomMultiTrackBar.ThumbRect(AIndex: Integer): TRect;
+function TTyMultiTrackBarBase.ThumbRect(AIndex: Integer): TRect;
 var
   TW, Off: Integer;
 begin
@@ -622,7 +792,7 @@ begin
     Result := Rect(Off, 0, Off + TW, ClientHeight);
 end;
 
-function TTyCustomMultiTrackBar.SegmentSpan(AIndex, APPI: Integer; out ALow,
+function TTyMultiTrackBarBase.SegmentSpan(AIndex, APPI: Integer; out ALow,
   AHigh: Integer): Boolean;
 var
   TW, MLen, a, b, n: Integer;
@@ -652,7 +822,7 @@ begin
   else begin ALow := b; AHigh := a; end;
 end;
 
-procedure TTyCustomMultiTrackBar.CalculatePreferredSize(var PreferredWidth,
+procedure TTyMultiTrackBarBase.CalculatePreferredSize(var PreferredWidth,
   PreferredHeight: Integer; WithThemeSpace: Boolean);
 var
   S: TTyStyleSet;
@@ -680,7 +850,7 @@ begin
   end;
 end;
 
-procedure TTyCustomMultiTrackBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+procedure TTyMultiTrackBarBase.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S, St: TTyStyleSet;
@@ -793,17 +963,17 @@ begin
   end;
 end;
 
-procedure TTyCustomMultiTrackBar.SetLineSize(const AValue: Integer);
+procedure TTyMultiTrackBarBase.SetLineSize(const AValue: Integer);
 begin
   if AValue < 1 then FLineSize := 1 else FLineSize := AValue;
 end;
 
-procedure TTyCustomMultiTrackBar.SetPageSize(const AValue: Integer);
+procedure TTyMultiTrackBarBase.SetPageSize(const AValue: Integer);
 begin
   if AValue < 1 then FPageSize := 1 else FPageSize := AValue;
 end;
 
-function TTyCustomMultiTrackBar.ThumbAt(X, Y: Integer): Integer;
+function TTyMultiTrackBarBase.ThumbAt(X, Y: Integer): Integer;
 var
   i, pos, d, best: Integer;
   r: TRect;
@@ -824,7 +994,7 @@ begin
   end;
 end;
 
-function TTyCustomMultiTrackBar.ValueAt(APos: Integer): Integer;
+function TTyMultiTrackBarBase.ValueAt(APos: Integer): Integer;
 var
   TW: Integer;
 begin
@@ -832,7 +1002,7 @@ begin
   Result := TyTrackPosFromOffset(MainLen, TW, FMin, FMax, APos - TW div 2, Inverted);
 end;
 
-function TTyCustomMultiTrackBar.NearestEnabledThumb(AValue: Integer): Integer;
+function TTyMultiTrackBarBase.NearestEnabledThumb(AValue: Integer): Integer;
 var
   i: Integer;
   d, best: Int64;
@@ -852,7 +1022,7 @@ begin
   end;
 end;
 
-function TTyCustomMultiTrackBar.NextEnabledThumb(AFrom: Integer; AForward: Boolean): Integer;
+function TTyMultiTrackBarBase.NextEnabledThumb(AFrom: Integer; AForward: Boolean): Integer;
 var
   j: Integer;
 begin
@@ -866,7 +1036,7 @@ begin
   Result := j;
 end;
 
-function TTyCustomMultiTrackBar.KeyThumb: Integer;
+function TTyMultiTrackBarBase.KeyThumb: Integer;
 var
   i: Integer;
 begin
@@ -878,7 +1048,7 @@ begin
   Result := -1;
 end;
 
-function TTyCustomMultiTrackBar.KeyShiftState: TShiftState;
+function TTyMultiTrackBarBase.KeyShiftState: TShiftState;
 begin
   Result := GetKeyShiftState;
   if GetKeyState(VK_LBUTTON) < 0 then Include(Result, ssLeft);
@@ -886,7 +1056,7 @@ begin
   if GetKeyState(VK_MBUTTON) < 0 then Include(Result, ssMiddle);
 end;
 
-procedure TTyCustomMultiTrackBar.DoEnter;
+procedure TTyMultiTrackBarBase.DoEnter;
 var
   sh: TShiftState;
   i: Integer;
@@ -912,7 +1082,7 @@ begin
   inherited DoEnter;
 end;
 
-function TTyCustomMultiTrackBar.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+function TTyMultiTrackBarBase.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 var
   i: Integer;
@@ -932,7 +1102,7 @@ begin
   Result := True;
 end;
 
-procedure TTyCustomMultiTrackBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyMultiTrackBarBase.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   idx, pos: Integer;
   onThumb: Boolean;
@@ -962,7 +1132,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyCustomMultiTrackBar.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyMultiTrackBarBase.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   pos, v, i, j, h: Integer;
 begin
@@ -1000,7 +1170,7 @@ begin
   end;
 end;
 
-procedure TTyCustomMultiTrackBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+procedure TTyMultiTrackBarBase.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
   if Button = mbLeft then
@@ -1010,7 +1180,7 @@ begin
   end;
 end;
 
-procedure TTyCustomMultiTrackBar.MouseLeave;
+procedure TTyMultiTrackBarBase.MouseLeave;
 begin
   inherited MouseLeave;
   { A drag goes on until the button is released, as TTyTrackBar's. }
@@ -1018,7 +1188,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyCustomMultiTrackBar.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyMultiTrackBarBase.KeyDown(var Key: Word; Shift: TShiftState);
 var
   i, nxt: Integer;
   v: Int64;
@@ -1056,7 +1226,7 @@ begin
   SetThumbValue(i, v);
 end;
 
-procedure TTyCustomMultiTrackBar.CMWantSpecialKey(var Message: TLMKey);
+procedure TTyMultiTrackBarBase.CMWantSpecialKey(var Message: TLMKey);
 var
   sh: TShiftState;
 begin
@@ -1072,7 +1242,7 @@ begin
   inherited;
 end;
 
-procedure TTyCustomMultiTrackBar.CMHintShow(var Message: TLMessage);
+procedure TTyMultiTrackBarBase.CMHintShow(var Message: TLMessage);
 var
   info: PHintInfo;
   i, idx, pos, lo, hi, s, e: Integer;
@@ -1119,9 +1289,251 @@ begin
   inherited;
 end;
 
-procedure TTyCustomMultiTrackBar.Paint;
+procedure TTyMultiTrackBarBase.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
+
+{ TTyTrackRange }
+
+constructor TTyTrackRange.Create(ACollection: TCollection);
+var
+  b: TTyCustomRangeTrackBar;
+begin
+  { Before inherited: adding the item tells the bar, which reads the new range's values. A
+    range added at the end takes the stretch after the last range: from its High (from Min
+    for the first range) to Max, so either end can then be set where it is wanted. }
+  if (ACollection is TTyTrackRanges)
+     and (TTyTrackRanges(ACollection).Owner is TTyCustomRangeTrackBar) then
+  begin
+    b := TTyCustomRangeTrackBar(TTyTrackRanges(ACollection).Owner);
+    if ACollection.Count > 0 then FLow := TTyTrackRanges(ACollection)[ACollection.Count - 1].FHigh
+    else FLow := b.Min;
+    FHigh := b.Max;
+  end;
+  inherited Create(ACollection);
+end;
+
+function TTyTrackRange.Bar: TTyCustomRangeTrackBar;
+begin
+  Result := nil;
+  if (Collection is TTyTrackRanges) and (TTyTrackRanges(Collection).Owner is TTyCustomRangeTrackBar) then
+    Result := TTyCustomRangeTrackBar(TTyTrackRanges(Collection).Owner);
+end;
+
+procedure TTyTrackRange.SetLow(AValue: Integer);
+var
+  b: TTyCustomRangeTrackBar;
+begin
+  b := Bar;
+  if (b = nil) or b.RangesHeldRaw then FLow := AValue
+  else b.SetThumbValue(2 * Index, AValue);       // ValuesChanged writes FLow back
+end;
+
+procedure TTyTrackRange.SetHigh(AValue: Integer);
+var
+  b: TTyCustomRangeTrackBar;
+begin
+  b := Bar;
+  if (b = nil) or b.RangesHeldRaw then FHigh := AValue
+  else b.SetThumbValue(2 * Index + 1, AValue);
+end;
+
+procedure TTyTrackRange.Assign(Source: TPersistent);
+begin
+  if Source is TTyTrackRange then
+  begin
+    FLow := TTyTrackRange(Source).FLow;
+    FHigh := TTyTrackRange(Source).FHigh;
+    Changed(True);
+  end
+  else
+    inherited Assign(Source);
+end;
+
+{ TTyTrackRanges }
+
+constructor TTyTrackRanges.Create(AOwner: TTyCustomRangeTrackBar);
+begin
+  inherited Create(AOwner, TTyTrackRange);
+end;
+
+function TTyTrackRanges.GetItem(AIndex: Integer): TTyTrackRange;
+begin
+  Result := TTyTrackRange(inherited Items[AIndex]);
+end;
+
+procedure TTyTrackRanges.SetItem(AIndex: Integer; AValue: TTyTrackRange);
+begin
+  inherited Items[AIndex] := AValue;
+end;
+
+function TTyTrackRanges.Add: TTyTrackRange;
+begin
+  Result := TTyTrackRange(inherited Add);
+end;
+
+procedure TTyTrackRanges.Update(Item: TCollectionItem);
+begin
+  inherited Update(Item);
+  if Owner is TTyCustomRangeTrackBar then
+    TTyCustomRangeTrackBar(Owner).RangesChanged;
+end;
+
+{ TTyCustomRangeTrackBar }
+
+constructor TTyCustomRangeTrackBar.Create(AOwner: TComponent);
+var
+  r: TTyTrackRange;
+begin
+  inherited Create(AOwner);
+  FRanges := TTyTrackRanges.Create(Self);
+  FRanges.BeginUpdate;
+  try
+    r := FRanges.Add;
+    r.FLow := 25;
+    r.FHigh := 75;
+  finally
+    FRanges.EndUpdate;
+  end;
+end;
+
+destructor TTyCustomRangeTrackBar.Destroy;
+begin
+  FreeAndNil(FRanges);
+  inherited Destroy;
+end;
+
+function TTyCustomRangeTrackBar.GetStyleTypeKey: string;
+begin
+  Result := 'TyRangeTrackBar';
+end;
+
+procedure TTyCustomRangeTrackBar.SetRanges(AValue: TTyTrackRanges);
+begin
+  FRanges.Assign(AValue);
+end;
+
+function TTyCustomRangeTrackBar.RangesHeldRaw: Boolean;
+begin
+  Result := (csLoading in ComponentState) or (FRanges = nil) or (FRanges.UpdateCount > 0)
+    or (ThumbCount <> 2 * FRanges.Count);
+end;
+
+procedure TTyCustomRangeTrackBar.RangesChanged;
+var
+  v: array of Integer;
+  i: Integer;
+begin
+  if (FRanges = nil) or (csLoading in ComponentState) or (csDestroying in ComponentState) then
+    Exit;
+  v := nil;
+  SetLength(v, 2 * FRanges.Count);
+  for i := 0 to FRanges.Count - 1 do
+  begin
+    v[2 * i] := FRanges[i].FLow;
+    v[2 * i + 1] := FRanges[i].FHigh;
+  end;
+  SetThumbValues(v);
+end;
+
+procedure TTyCustomRangeTrackBar.ValuesChanged;
+var
+  i: Integer;
+begin
+  inherited ValuesChanged;
+  if (FRanges = nil) or (ThumbCount <> 2 * FRanges.Count) then Exit;
+  for i := 0 to FRanges.Count - 1 do
+  begin
+    FRanges[i].FLow := ThumbValues[2 * i];
+    FRanges[i].FHigh := ThumbValues[2 * i + 1];
+  end;
+end;
+
+procedure TTyCustomRangeTrackBar.Loaded;
+var
+  v: array of Integer;
+  i: Integer;
+begin
+  { Still loading: the ranges' values are handed over as read; inherited Loaded sorts them. }
+  v := nil;
+  SetLength(v, 2 * FRanges.Count);
+  for i := 0 to FRanges.Count - 1 do
+  begin
+    v[2 * i] := FRanges[i].FLow;
+    v[2 * i + 1] := FRanges[i].FHigh;
+  end;
+  SetThumbValues(v);
+  inherited Loaded;
+end;
+
+procedure TTyCustomRangeTrackBar.ReadNoRanges(Reader: TReader);
+begin
+  if Reader.ReadBoolean then FRanges.Clear;
+end;
+
+procedure TTyCustomRangeTrackBar.WriteNoRanges(Writer: TWriter);
+begin
+  Writer.WriteBoolean(True);
+end;
+
+procedure TTyCustomRangeTrackBar.DefineProperties(Filer: TFiler);
+
+  function NoneLeft: Boolean;
+  begin
+    Result := FRanges.Count = 0;
+    { An inherited form: only when the ancestor still had ranges. }
+    if Result and (Filer.Ancestor is TTyCustomRangeTrackBar) then
+      Result := TTyCustomRangeTrackBar(Filer.Ancestor).FRanges.Count > 0;
+  end;
+
+begin
+  inherited DefineProperties(Filer);
+  Filer.DefineProperty('NoRanges', @ReadNoRanges, @WriteNoRanges, NoneLeft);
+end;
+
+function TTyCustomRangeTrackBar.SegmentStyle(AIndex: Integer; out ATypeKey,
+  AStyleClass: string): Boolean;
+begin
+  Result := inherited SegmentStyle(AIndex, ATypeKey, AStyleClass);
+  if Odd(AIndex) and (AIndex < ThumbCount) then
+  begin
+    ATypeKey := TyTrackSelectionKey;
+    AStyleClass := '';
+    Result := True;
+  end;
+end;
+
+function TTyCustomRangeTrackBar.GetLowValue: Integer;
+begin
+  if FRanges.Count = 0 then Result := 0
+  else Result := FRanges[0].Low;
+end;
+
+procedure TTyCustomRangeTrackBar.SetLowValue(AValue: Integer);
+begin
+  if FRanges.Count = 0 then FRanges.Add;
+  FRanges[0].Low := AValue;
+end;
+
+function TTyCustomRangeTrackBar.GetHighValue: Integer;
+begin
+  if FRanges.Count = 0 then Result := 0
+  else Result := FRanges[0].High;
+end;
+
+procedure TTyCustomRangeTrackBar.SetHighValue(AValue: Integer);
+begin
+  if FRanges.Count = 0 then FRanges.Add;
+  FRanges[0].High := AValue;
+end;
+
+initialization
+  { The final classes' keys fall back to the track bar's, so every theme styles them as it
+    styles TTyTrackBar until it says otherwise. }
+  TyTryRegisterTypeKeyParent('TyRangeTrackBar', 'TyTrackBar');
+
+finalization
+  TyUnregisterTypeKeyParent('TyRangeTrackBar');
 
 end.

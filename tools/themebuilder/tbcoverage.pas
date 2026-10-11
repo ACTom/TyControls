@@ -105,7 +105,7 @@ const
       'TyListViewHeader,TyListViewHeaderSection,TyListViewItem,TyListViewLine,TyListViewMarquee'),
     (U: 'tyControls.Memo'; K: 'TyMemo,TyTextSelection'),
     (U: 'tyControls.Menu'; K: 'TyMenuBar,TyMenuItem,TyMenuPopup,TyMenuView'),
-    (U: 'tyControls.MultiTrackBar'; K: 'TyTrackBar,TyTrackGroove,TyTrackSegment,TyTrackSelection,TyTrackThumb'),
+    (U: 'tyControls.MultiTrackBar'; K: 'TyRangeTrackBar,TyTrackBar,TyTrackGroove,TyTrackSegment,TyTrackSelection,TyTrackThumb'),
     (U: 'tyControls.Notification'; K: 'TyNotification,TyNotificationClose'),
     (U: 'tyControls.PageControl'; K: 'TyPageControl'),
     (U: 'tyControls.Panel'; K: 'TyPanel'),
