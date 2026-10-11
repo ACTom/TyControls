@@ -239,9 +239,6 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     { ---- Mouse and keyboard. ---- }
-    { The thumb whose hit rectangle holds (X, Y) -- the nearest centre where two overlap, the
-      lower value on a tie -- enabled or not; -1 = none. }
-    function ThumbAt(X, Y: Integer): Integer;
     { The value under main-axis position APos (client px), as the thumb's centre would have it. }
     function ValueAt(APos: Integer): Integer;
     { The enabled thumb whose value is nearest AValue, the lower value on a tie; -1 = none. }
@@ -285,6 +282,12 @@ type
       control across it -- the same rectangle TTyTrackBar.ThumbRect gives at Position = its
       value, so a pointer anywhere in the thumb's column grabs it. }
     function ThumbRect(AIndex: Integer): TRect;
+    { The thumb under client point (X, Y), by the very rule a left press picks its thumb with
+      (the press, the hover and the per-thumb hint all ask this): the thumb whose ThumbRect
+      holds the point, the nearest centre where two overlap, the lower value on a tie; -1 =
+      none. A disabled thumb counts: it is drawn, so an application may still act on it (a
+      context menu's Delete) -- the press itself is what ignores it. }
+    function ThumbAtPoint(X, Y: Integer): Integer;
     { Segment AIndex's span along the track at APPI, in client coordinates of the main axis
       (low..high whichever way the bar runs). False for an index outside 0..ThumbCount. Says
       nothing about whether the segment is drawn -- that is SegmentStyle's call. }
@@ -1424,7 +1427,7 @@ begin
   if AValue < 1 then FPageSize := 1 else FPageSize := AValue;
 end;
 
-function TTyMultiTrackBarBase.ThumbAt(X, Y: Integer): Integer;
+function TTyMultiTrackBarBase.ThumbAtPoint(X, Y: Integer): Integer;
 var
   i, pos, d, best: Integer;
   r: TRect;
@@ -1571,7 +1574,7 @@ begin
   if Shift * [ssDouble, ssTriple, ssQuad] = [] then FTrackClickTaken := False
   else if FTrackClickTaken then Exit;
   if FOrientation = toVertical then pos := Y else pos := X;
-  idx := ThumbAt(X, Y);
+  idx := ThumbAtPoint(X, Y);
   { A disabled thumb is inert: pressing it neither moves it nor picks another thumb. }
   if (idx >= 0) and not ThumbEnabled(idx) then Exit;
   { Off every thumb, on a first press: the application has the first say. }
@@ -1589,7 +1592,7 @@ begin
     { The handler may have added, removed or moved thumbs (or disabled the bar): any index
       from before it is stale, so look again at what is under the pointer. }
     if not Enabled then Exit;
-    idx := ThumbAt(X, Y);
+    idx := ThumbAtPoint(X, Y);
     if (idx >= 0) and not ThumbEnabled(idx) then Exit;
   end;
   onThumb := idx >= 0;
@@ -1640,7 +1643,7 @@ begin
   end
   else
   begin
-    h := ThumbAt(X, Y);
+    h := ThumbAtPoint(X, Y);
     if (h >= 0) and not ThumbEnabled(h) then h := -1;
     if h <> FHoverThumb then
     begin
@@ -1742,7 +1745,7 @@ begin
     inherited;
     Exit;
   end;
-  idx := ThumbAt(info^.CursorPos.X, info^.CursorPos.Y);
+  idx := ThumbAtPoint(info^.CursorPos.X, info^.CursorPos.Y);
   if idx >= 0 then
   begin
     if ThumbHint(idx) <> '' then info^.HintStr := ThumbHint(idx);

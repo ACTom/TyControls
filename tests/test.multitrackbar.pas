@@ -441,6 +441,15 @@ type
     procedure TestTheFinalBarsAskThroughTheirPublishedEvent;
   end;
 
+  { ThumbAtPoint: the thumb under a point by the press's own rule, disabled thumbs included. }
+  TTyMultiTrackThumbAtPointTest = class(TMultiTrackInputBase)
+  published
+    procedure TestTheMiddleOfEachThumbRectIsThatThumb;
+    procedure TestTheBareTrackIsNoThumb;
+    procedure TestWhereThumbsOverlapTheNearestCentreWins;
+    procedure TestAPressPicksTheThumbThumbAtPointNames;
+  end;
+
 implementation
 
 { TMultiProbe }
@@ -4651,6 +4660,120 @@ begin
   AssertEquals('the range reads it', 90, range.Ranges[0].High);
 end;
 
+{ TTyMultiTrackThumbAtPointTest }
+
+procedure TTyMultiTrackThumbAtPointTest.TestTheMiddleOfEachThumbRectIsThatThumb;
+var
+  ori: TTyTrackOrientation;
+  rev: Boolean;
+  i: Integer;
+  r: TRect;
+  where: string;
+begin
+  for ori := toHorizontal to toVertical do
+    for rev := False to True do
+    begin
+      Configure(ori, rev);
+      FBar.Put([10, 40, 70, 95]);
+      SetLength(FBar.Off, 4);
+      FBar.Off[2] := True;
+      where := Format('ori=%d rev=%s', [Ord(ori), BoolToStr(rev, True)]);
+      for i := 0 to FBar.ThumbCount - 1 do
+      begin
+        r := FBar.ThumbRect(i);
+        AssertEquals(Format('%s: the middle of thumb %d', [where, i]), i,
+          FBar.ThumbAtPoint((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2));
+        AssertEquals(Format('%s: its first pixel', [where]), i, FBar.ThumbAtPoint(r.Left, r.Top));
+        AssertEquals(Format('%s: its last pixel', [where]), i,
+          FBar.ThumbAtPoint(r.Right - 1, r.Bottom - 1));
+      end;
+      FBar.Off := nil;
+    end;
+end;
+
+procedure TTyMultiTrackThumbAtPointTest.TestTheBareTrackIsNoThumb;
+var
+  p: TPoint;
+  r: TRect;
+begin
+  FBar.Put([20, 60]);
+  p := At(40);
+  AssertEquals('between two thumbs', -1, FBar.ThumbAtPoint(p.X, p.Y));
+  p := At(0);
+  AssertEquals('at Min, no thumb there', -1, FBar.ThumbAtPoint(p.X, p.Y));
+  r := FBar.ThumbRect(0);
+  AssertEquals('just past a thumb''s rectangle', -1, FBar.ThumbAtPoint(r.Right, p.Y));
+  AssertEquals('just before it', -1, FBar.ThumbAtPoint(r.Left - 1, p.Y));
+  AssertEquals('outside the control', -1, FBar.ThumbAtPoint(-5, -5));
+  FBar.Put([]);
+  p := At(50);
+  AssertEquals('no thumbs at all', -1, FBar.ThumbAtPoint(p.X, p.Y));
+end;
+
+procedure TTyMultiTrackThumbAtPointTest.TestWhereThumbsOverlapTheNearestCentreWins;
+var
+  p: TPoint;
+  r0, r1: TRect;
+  x, c0, c1: Integer;
+begin
+  FBar.Put([50, 52]);
+  p := At(52);
+  AssertTrue('the fixture overlaps: the point is on both thumbs',
+    PtInRect(FBar.ThumbRect(0), p) and PtInRect(FBar.ThumbRect(1), p));
+  AssertEquals('on thumb 1''s centre', 1, FBar.ThumbAtPoint(p.X, p.Y));
+  p := At(50);
+  AssertTrue(PtInRect(FBar.ThumbRect(1), p));
+  AssertEquals('on thumb 0''s centre', 0, FBar.ThumbAtPoint(p.X, p.Y));
+  { Every point both rectangles hold: the nearer centre, the lower value where they are as near. }
+  r0 := FBar.ThumbRect(0);
+  r1 := FBar.ThumbRect(1);
+  c0 := (r0.Left + r0.Right) div 2;
+  c1 := (r1.Left + r1.Right) div 2;
+  for x := r1.Left to r0.Right - 1 do
+    if Abs(x - c0) < Abs(x - c1) then
+      AssertEquals(Format('x=%d is nearer thumb 0', [x]), 0, FBar.ThumbAtPoint(x, p.Y))
+    else if Abs(x - c1) < Abs(x - c0) then
+      AssertEquals(Format('x=%d is nearer thumb 1', [x]), 1, FBar.ThumbAtPoint(x, p.Y))
+    else
+      AssertEquals(Format('x=%d is as near both: the lower value', [x]), 0,
+        FBar.ThumbAtPoint(x, p.Y));
+  { Two thumbs on one value: the lower one. }
+  FBar.Put([30, 30]);
+  p := At(30);
+  AssertEquals('one value, two thumbs: the first', 0, FBar.ThumbAtPoint(p.X, p.Y));
+end;
+
+procedure TTyMultiTrackThumbAtPointTest.TestAPressPicksTheThumbThumbAtPointNames;
+var
+  x, y, i, hits: Integer;
+  before: string;
+begin
+  { Piles and overlaps, and a disabled thumb among them. }
+  FBar.Put([10, 12, 15, 50, 52, 52, 90]);
+  SetLength(FBar.Off, 7);
+  FBar.Off[4] := True;
+  before := Values;
+  y := H div 2;
+  hits := 0;
+  for x := 0 to W - 1 do
+  begin
+    i := FBar.ThumbAtPoint(x, y);
+    if i < 0 then Continue;
+    Inc(hits);
+    FBar.SelectedThumb := -1;
+    FBar.Press(x, y);
+    FBar.Release(x, y);
+    if FBar.Off[i] then
+      AssertEquals(Format('x=%d: ThumbAtPoint names the disabled thumb %d, and the press does '
+        + 'nothing there', [x, i]), -1, FBar.SelectedThumb)
+    else
+      AssertEquals(Format('x=%d: the press picks the thumb ThumbAtPoint names', [x]), i,
+        FBar.SelectedThumb);
+    AssertEquals(Format('x=%d: a press on a thumb moves nothing', [x]), before, Values);
+  end;
+  AssertTrue('fixture: the sweep crossed thumbs', hits > 0);
+end;
+
 initialization
   RegisterTest(TTyMultiTrackModelTest);
   RegisterTest(TTyMultiTrackGeometryTest);
@@ -4665,4 +4788,5 @@ initialization
   RegisterTest(TTyMultiTrackHooksTest);
   RegisterTest(TTyMultiTrackClickTest);
   RegisterTest(TTyMultiTrackChangingTest);
+  RegisterTest(TTyMultiTrackThumbAtPointTest);
 end.
