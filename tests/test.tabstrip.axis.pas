@@ -77,6 +77,7 @@ type
     procedure TabHeightZeroStillMeansNoBandAtEveryPosition;
     procedure MirroringMovesASideBandToTheOtherEdge;
     procedure PaintFillsTheBandOnTheChosenEdge;
+    procedure TabCornersTurnWithTheBand;
     { --- keyboard / overflow --------------------------------------------------------- }
     procedure UpAndDownStepOnlyOnASideBand;
     procedure MirroringDoesNotReverseASideBand;
@@ -601,6 +602,71 @@ end;
   BandRect -- a paint that ignored TabPosition would agree with a BandRect that ignored it
   too, and the pair would pass each other. So each case names the half of the control the
   active tab's fill has to be in, and the half it must be nowhere near. }
+{ The theme rounds ONE corner of the active tab, the top-left: the corner that sticks out
+  and comes first along the run. Wherever the band goes, exactly that corner of the tab has
+  to be the rounded one -- a single corner so a mapping that merely lands on the right side
+  (a rotation instead of a flip) still shows up as the wrong corner. }
+procedure TTabAxisTest.TabCornersTurnWithTheBand;
+type
+  TCorner = (cTL, cTR, cBR, cBL);
+const
+  CornerName: array[TCorner] of string = ('top-left', 'top-right', 'bottom-right', 'bottom-left');
+  Cases: array[0..7] of record Pos: TTabPosition; Rtl: Boolean; Round: TCorner; end = (
+    (Pos: tpTop;    Rtl: False; Round: cTL),
+    (Pos: tpBottom; Rtl: False; Round: cBL),
+    (Pos: tpLeft;   Rtl: False; Round: cTL),
+    (Pos: tpRight;  Rtl: False; Round: cTR),
+    (Pos: tpTop;    Rtl: True;  Round: cTR),
+    (Pos: tpBottom; Rtl: True;  Round: cBR),
+    (Pos: tpLeft;   Rtl: True;  Round: cTR),    { mirrored: the band is on the right }
+    (Pos: tpRight;  Rtl: True;  Round: cTL));
+var
+  i: Integer;
+  c: TCorner;
+  bmp: TBGRABitmap;
+  r: TRect;
+  pt: TPoint;
+  who: string;
+  isRed: Boolean;
+begin
+  for i := 0 to High(Cases) do
+  begin
+    Build(Cases[i].Pos, 4, 400, 300, False, Cases[i].Rtl);
+    FCtl.LoadThemeCss(AxisCss + 'TyTab:active { background: #FF0000; color: #101010; ' +
+      'border-radius: 10px 0px 0px 0px; }');
+    who := PosName(Cases[i].Pos);
+    if Cases[i].Rtl then who := who + ' (right-to-left)';
+    try
+      FStrip.TabIndex := 0;
+      r := FStrip.TabRect(0);
+      bmp := Shot;
+      try
+        AssertTrue(who + ': setup -- the active tab is painted',
+          bmp.GetPixel((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2) = ActiveRed);
+        for c := Low(TCorner) to High(TCorner) do
+        begin
+          { one pixel in from the corner: outside a 10px arc, inside a square corner }
+          case c of
+            cTL: pt := Point(r.Left + 1,  r.Top + 1);
+            cTR: pt := Point(r.Right - 2, r.Top + 1);
+            cBR: pt := Point(r.Right - 2, r.Bottom - 2);
+            cBL: pt := Point(r.Left + 1,  r.Bottom - 2);
+          end;
+          isRed := bmp.GetPixel(pt.X, pt.Y) = ActiveRed;
+          if c = Cases[i].Round then
+            AssertFalse(who + ': the ' + CornerName[c] + ' corner should be the rounded one', isRed)
+          else
+            AssertTrue(who + ': the ' + CornerName[c] + ' corner should be square', isRed);
+        end;
+      finally
+        bmp.Free;
+      end;
+    finally
+      TearDown;
+    end;
+  end;
+end;
+
 procedure TTabAxisTest.PaintFillsTheBandOnTheChosenEdge;
 var
   pi: Integer;
