@@ -85,6 +85,7 @@ type
     procedure TestEnterTimelinesAsUpstream;
     procedure TestAn4EnterTimelinesAsUpstream;
     procedure TestPolarEnterTimelinesAsUpstream;
+    procedure TestSingleRiverEnterTimelinesAsUpstream;
     procedure TestHeadlessRenderDoesNotAnimateByDefault;
     procedure TestOffModeAndOptionOff;
     procedure TestSeriesMoveInTheDynamicLayer;
@@ -105,6 +106,27 @@ var
   GFixture: TJSONData = nil;
   GAn4: TJSONData = nil;
   GPolar: TJSONData = nil;
+  GRiver: TJSONData = nil;
+
+{ tests/fixtures/advchart-single-themeriver.json's `anim`: tools/advchart-
+  oracle/single-themeriver.js, the same harness, clock and samples
+  [Batch 118] }
+function RiverFixture: TJSONObject;
+var sl: TStringList;
+begin
+  if GRiver = nil then
+  begin
+    sl := TStringList.Create;
+    try
+      sl.LoadFromFile(ExtractFilePath(ParamStr(0)) + 'fixtures' + PathDelim
+        + 'advchart-single-themeriver.json');
+      GRiver := GetJSON(sl.Text);
+    finally
+      sl.Free;
+    end;
+  end;
+  Result := TJSONObject(GRiver).Objects['anim'];
+end;
 
 { tests/fixtures/advchart-polar-series.json's `anim`: tools/advchart-oracle/
   polar-series.js, the same harness, clock and samples [Batch 113] }
@@ -551,6 +573,23 @@ begin
       if (parts.Count >= 2) and (parts[1] = '1') then Result.Role := 'radarArea'
       else Result.Role := 'radarLine';
     end
+    else if stype = 'themeRiver' then
+    begin
+      { <layer>.0 the polygon (still), its #clip the enter rect, its #label
+        the label's fade -- the layer's index the key [Batch 118] }
+      if Pos('#clip', id) > 0 then
+      begin
+        Result.Kind := amkModel;
+        Result.Role := 'riverClip';
+        Result.Index := StrToIntDef(parts[0], -1);
+      end
+      else if Pos('#label', id) > 0 then
+      begin
+        Result.Kind := amkModel;
+        Result.Role := 'label';
+        Result.Index := StrToIntDef(parts[0], -1);
+      end;
+    end
     else if stype = 'candlestick' then
     begin
       Result.Kind := amkModel;
@@ -870,8 +909,10 @@ begin
             [Batch 113: a tangential bar ending on 0 degrees] }
           exact := SameBits(gotF[j], upF[j]) or ((gotF[j] = 0) and (upF[j] = 0));
           { A RIPPLE NEVER RESTS: its last sample is mid-loop, its layout
-            value the first frame of a ripple -- the samples speak }
-          if Pos('ripple', m.Role) = 1 then
+            value the first frame of a ripple -- the samples speak. NOR DOES
+            A THEMERIVER'S CLIP: it is removed when it ends, so upstream's
+            last sample is its last frame before the end [Batch 118] }
+          if (Pos('ripple', m.Role) = 1) or (m.Role = 'riverClip') then
           begin
             if not SameBits(got[j], up[j]) then
               Miss(Format('%s t=%s %s: %s[%d] %s here, %s upstream',
@@ -1161,6 +1202,34 @@ begin
     [FBad, FCompared, FReport]), FBad = 0);
   AssertTrue(Format('only %d cases ran', [ran]), ran >= 8);
   AssertTrue(Format('only %d element samples', [FCompared]), FCompared >= 400);
+end;
+
+{ THE SINGLE AXIS' ENTER [Batch 118]: a themeRiver layer's clip rect widening
+  from nothing -- linear by the series' default, an override, a delay
+  function that a clip with no row never calls -- each label fading in, and
+  a scatter's symbols on a single axis popping in }
+procedure TAdvChartAnimEnterTest.TestSingleRiverEnterTimelinesAsUpstream;
+var
+  cases: TJSONArray;
+  cs: TJSONObject;
+  c, ran: Integer;
+begin
+  AssertEquals('the same clock', T0, RiverFixture.Objects['clock'].Floats['T0'], 0);
+  AssertEquals('the same samples', Fixture.Arrays['samplesMs'].AsJSON,
+    RiverFixture.Arrays['samplesMs'].AsJSON);
+  cases := RiverFixture.Arrays['cases'];
+  ran := 0;
+  for c := 0 to cases.Count - 1 do
+  begin
+    cs := cases.Objects[c];
+    if cs.Strings['kind'] <> 'enter' then Continue;
+    RunCase(cs);
+    Inc(ran);
+  end;
+  AssertTrue(Format('%d mismatches over %d element samples:%s',
+    [FBad, FCompared, FReport]), FBad = 0);
+  AssertTrue(Format('only %d cases ran', [ran]), ran >= 4);
+  AssertTrue(Format('only %d element samples', [FCompared]), FCompared >= 150);
 end;
 
 procedure TAdvChartAnimEnterTest.TestAn4EnterTimelinesAsUpstream;
@@ -1455,4 +1524,5 @@ finalization
   FreeAndNil(GFixture);
   FreeAndNil(GAn4);
   FreeAndNil(GPolar);
+  FreeAndNil(GRiver);
 end.

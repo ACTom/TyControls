@@ -53,7 +53,9 @@ type
     them under (every chart view is 'series'). }
   TTyChartView = (cvTitle, cvLegend, cvXAxis, cvYAxis, cvVisualMap,
     cvDataZoom, cvMarkPoint, cvMarkLine, cvMarkArea, cvRadar, cvCalendar,
-    cvAngleAxis, cvRadiusAxis, cvSeries);
+    cvAngleAxis, cvRadiusAxis,
+    { [Batch 118] }
+    cvSingleAxis, cvSeries);
   TTyChartViews = set of TTyChartView;
 
   TTyExportImageType = (eitPng, eitJpeg);
@@ -125,7 +127,7 @@ implementation
 const
   ViewNames: array[TTyChartView] of string = ('title', 'legend', 'xAxis',
     'yAxis', 'visualMap', 'dataZoom', 'markPoint', 'markLine', 'markArea',
-    'radar', 'calendar', 'angleAxis', 'radiusAxis', 'series');
+    'radar', 'calendar', 'angleAxis', 'radiusAxis', 'singleAxis', 'series');
 
 function TyChartViewOf(const AMainType: string; out AView: TTyChartView): Boolean;
 var v: TTyChartView;

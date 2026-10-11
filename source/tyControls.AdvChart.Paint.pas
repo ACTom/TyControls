@@ -567,7 +567,12 @@ type
       content): its frame comes from the treemap's own drill-down
       animation (the control's TreemapFrame), G[0..3] its local shape x, y,
       width, height }
-    carSunPiece, carTmRect);
+    carSunPiece, carTmRect,
+    { [Batch 118, C10] a themeRiver layer's polygon (Index its layer):
+      G[0..3] its path's bounding rect in the view group's frame (x, y,
+      width, height) -- what the enter clip is made from -- and G[4] the
+      group's y }
+    carRiver);
 
   TTyChartAnim = record
     Role: TTyChartAnimRole;

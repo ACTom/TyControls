@@ -28,7 +28,8 @@ type
   TTyDzFilterMode = (dzfFilter, dzfWeakFilter, dzfEmpty, dzfNone);
 
   { One axis a dataZoom drives: 'x', 'y', 'radius' or 'angle' [Batch 113:
-    the polar's two], and the axis' component index. }
+    the polar's two] or 'single' [Batch 118], and the axis' component
+    index. }
   TTyDzTarget = record
     Dim: string;
     AxisIndex: Integer;
@@ -303,7 +304,7 @@ end;
 function AxisExists(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const AMain: string; AIndex: Integer): Boolean;
 begin
-  if (AMain = 'radiusAxis') or (AMain = 'angleAxis') then
+  if (AMain = 'radiusAxis') or (AMain = 'angleAxis') or (AMain = 'singleAxis') then
     Result := (AOption <> nil) and (AIndex >= 0)
       and (AIndex < AOption.ComponentCount(AMain))
       and (ObjOf(AOption.ComponentAt(AMain, AIndex)) <> nil)
@@ -314,7 +315,7 @@ end;
 function AxisCountOf(AOption: TTyChartOption; ABuild: TTyChartBuild;
   const AMain: string): Integer;
 begin
-  if (AMain = 'radiusAxis') or (AMain = 'angleAxis') then
+  if (AMain = 'radiusAxis') or (AMain = 'angleAxis') or (AMain = 'singleAxis') then
   begin
     if AOption = nil then Result := 0
     else Result := AOption.ComponentCount(AMain);
@@ -331,7 +332,7 @@ var
   d: TJSONData;
 begin
   Result := '';
-  if (AMain = 'radiusAxis') or (AMain = 'angleAxis') then
+  if (AMain = 'radiusAxis') or (AMain = 'angleAxis') or (AMain = 'singleAxis') then
   begin
     o := ObjOf(AOption.ComponentAt(AMain, AIndex));
     if o = nil then Exit;
@@ -408,6 +409,30 @@ end;
   every other axis of it in the same grid; failing that, the first category
   axis -- of x, y, then the polar's radius and angle, by the type the option
   writes [Batch 113] }
+{ a single axis model's merged `type` is 'category': written so, or not
+  written over a `data` list (getAxisType) [Batch 118] }
+function SingleIsCategory(ANode: TJSONObject): Boolean;
+var d: TJSONData;
+begin
+  Result := False;
+  if ANode = nil then Exit;
+  d := ANode.Find('type');
+  if (d <> nil) and (d.JSONType = jtString) then Exit(d.AsString = 'category');
+  if (d <> nil) and (d.JSONType <> jtNull) then Exit;
+  d := ANode.Find('data');
+  Result := (d <> nil) and (d.JSONType <> jtNull);
+end;
+
+{ a single axis model's merged `orient`: written, else 'horizontal' }
+function SingleOrient(ANode: TJSONObject): string;
+var d: TJSONData;
+begin
+  Result := 'horizontal';
+  if ANode = nil then Exit;
+  d := ANode.Find('orient');
+  if (d <> nil) and (d.JSONType = jtString) then Result := d.AsString;
+end;
+
 procedure AutoTargets(AOption: TTyChartOption; ABuild: TTyChartBuild;
   var ASpec: TTyDataZoomSpec);
 var
@@ -435,6 +460,16 @@ begin
       AddTarget(ASpec, dim, k);
   end;
   if first <> nil then Exit;
+  { THE FIRST SINGLE AXIS PARALLEL TO IT: its orient the dataZoom's
+    [Batch 118] }
+  if AOption <> nil then
+    for k := 0 to AOption.ComponentCount('singleAxis') - 1 do
+      if (ObjOf(AOption.ComponentAt('singleAxis', k)) <> nil)
+        and (SingleOrient(ObjOf(AOption.ComponentAt('singleAxis', k))) = ASpec.Orient) then
+      begin
+        AddTarget(ASpec, 'single', k);
+        Exit;
+      end;
   for d2 := 0 to 1 do
   begin
     if d2 = 0 then dim := 'x' else dim := 'y';
@@ -464,6 +499,13 @@ begin
         Exit;
       end;
   end;
+  { and then the singles' [Batch 118] }
+  for k := 0 to AOption.ComponentCount('singleAxis') - 1 do
+    if SingleIsCategory(ObjOf(AOption.ComponentAt('singleAxis', k))) then
+    begin
+      AddTarget(ASpec, 'single', k);
+      Exit;
+    end;
 end;
 
 function TyDataZoomSpecOf(AOption: TTyChartOption; AIndex: Integer;
@@ -548,10 +590,9 @@ begin
     if Specified(AOption, node, ABuild, 'radius', Result) then anySpecified := True;
     if Specified(AOption, node, ABuild, 'angle', Result) then anySpecified := True;
   end;
-  { a single axis named is specified too -- and there are none of those
-    here }
-  d := node.Find('singleAxisIndex');
-  if (d <> nil) and (d.JSONType <> jtNull) then anySpecified := True;
+  { and a single axis, last in DATA_ZOOM_AXIS_DIMENSIONS [Batch 118: it was
+    only counted as specified, there were none to drive] }
+  if Specified(AOption, node, ABuild, 'single', Result) then anySpecified := True;
   if anySpecified then
   begin
     if orientRaw <> '' then Result.Orient := orientRaw

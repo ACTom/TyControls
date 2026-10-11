@@ -5885,7 +5885,7 @@ port 一直把名称居中画在标签外侧,y 轴的转 90°,位置由画的时
 - 主题没给名称文字色时,绘制不画,但布局照样给它留地方(以前就是这样)。
 - 转过的多行名称:`DrawTextRotated` 只画一行。
 - `TyAxisThickness` 已没有产品代码调用,只剩测试用它量标签带;它里面的名称项是旧的临时规则。
-- 名称 tooltip、`triggerEvent`、极坐标/平行/单轴的名称、grid 不以画布为容器的布局:未做。**[第 111 批：极坐标半径轴的名称做了——AxisBuilder 的名称布局，在半径轴自己的框架里，照样避开自己的标签，见 §146。]**
+- 名称 tooltip、`triggerEvent`、极坐标/平行/单轴的名称、grid 不以画布为容器的布局:未做。**[第 111 批：极坐标半径轴的名称做了——AxisBuilder 的名称布局，在半径轴自己的框架里，照样避开自己的标签，见 §146。]** **[第 118 批：单轴的名称做了——同一套 AxisBuilder 名称布局，在单轴的自由框架里，见 §153。]**
 
 ### 变异测试
 
@@ -9090,7 +9090,7 @@ AN2–AN4、AN3b 之后，同一个 Option 上的整体更新仍然一帧切过�
 
 ### 推迟与偏差
 
-- 轴名（`'name'`，挂在轴组的变换组下，x、y 是局部的）、次刻度（`'minorticks_'`）、次分隔线（`'minor_line_'`）、分隔区域（`'area_'`）不过渡，画在布局的位置；极坐标、单轴、平行坐标的轴端口没有。**[第 111 批：极坐标的两根轴有了，也不做 groupTransition，直接画在布局的位置，见 §146。]**
+- 轴名（`'name'`，挂在轴组的变换组下，x、y 是局部的）、次刻度（`'minorticks_'`）、次分隔线（`'minor_line_'`）、分隔区域（`'area_'`）不过渡，画在布局的位置；极坐标、单轴、平行坐标的轴端口没有。**[第 111 批：极坐标的两根轴有了，也不做 groupTransition，直接画在布局的位置，见 §146。]** **[第 118 批：单轴有了，同样不做 groupTransition，画在布局的位置，见 §153。]**
 - 动画中的坐标轴叶子照代理的值原样画，中途不吸附像素；静止后静态层按布局画（与代理的终值最多差一个 ulp）。
 - `camAuto` 下窗口外的动作（图例点击、dataZoom 手势）留给下一次窗口绘制布防，起点是那次绘制的 flush，而不是下一帧——最多差一帧。
 - 悬停目标的重新指向只认数据项；悬停在折线本体上跨过 notMerge 时下一次移动仍会 out / over（没有用例）。
@@ -10321,7 +10321,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **新单元 `tyControls.AdvChart.Convert`**（纯）：`TyParseFinder`（对 `TTyChartOption.Keys`，即上游组件表的镜像，空洞照样是空洞）、`TyFinderModels` / `TyFinderModel`；JavaScript 的值：`TyJsonToNumber`、`TyJsonJsString`、`TyJsonElement`（数组元素、串的 UTF-16 字符、对象的属性 `"i"`；null 抛 `ETyConvertNull`）、`TyAxisParseJson`；`TyCartesianToPixel` / `TyCartesianFromPixel` / `TyAxisToPixel` / `TyAxisFromPixel` / `TyCartesianContainJson`。结果是 `TTyConvertResult`：`cvkNone`（undefined）、`cvkNumber`、`cvkArray`、`cvkError`（上游抛错的地方）。全部在屏蔽浮点陷阱下算（无穷乘零是 NaN，不抛）。
 - **新单元 `tyControls.AdvChart.Jitter`**（纯）：`TTyJitterPass`（随机状态和每根轴放下的点）、`TTyJitterAxis.Fix`（`fixJitter` 逐行抄）、`TyJitterIgnoreOverlaps`、`TyJitterPlace`、`TyJitterRandom`。随机数是力导向布局的 xorshift32，种子 `TyJitterSeed`（等于 `TyGraphForceSeed(0)`），**每次 `BuildSeriesList` 重新播种、清空放下的点**：重画同一幅图，抖动不变。
 - **`Marks`**：`TTySeriesVisual.Jitter` / `JitterOnX`；`BuildScatter` 对每一行（空行也算）先求点、按行的符号大小（`ScatterRowRadius`：数据项、visualMap、系列的大小，`[w, h]` 取平均，除以二）抖动，再判空行与裁剪。
-- **控件**：`JitterFor` 读基轴的 `jitter` / `jitterOverlap` / `jitterMargin`（像素按 PPI 换算），给 scatter 挂上那根轴的 `TTyJitterAxis`；`FJitter`。公开的 `ConvertToPixel` / `ConvertFromPixel` / `ContainPixel`：JSON 文本形式（finder 可以是 JSON 也可以是裸的主类型名；答案是 JSON：一个数、一对数，非有限数印成 null，没有答案或上游会抛错时是空串），类型化形式（`TTyConvertResult`，`array of Double` / 一个 `Double` / 两个坐标），以及 `...Data` 形式（直接给 `TJSONData`）。分派按上游的次序：各个 grid、graph 的 view、（polar、singleAxis 留了位置）、各个 calendar。**[第 111 批：polar 接上了，在 graph 的 view 之后，见 §146。]**布局脏了先重新布局（上游的 setOption 是同步的）；从没渲染过的图什么都答不出。
+- **控件**：`JitterFor` 读基轴的 `jitter` / `jitterOverlap` / `jitterMargin`（像素按 PPI 换算），给 scatter 挂上那根轴的 `TTyJitterAxis`；`FJitter`。公开的 `ConvertToPixel` / `ConvertFromPixel` / `ContainPixel`：JSON 文本形式（finder 可以是 JSON 也可以是裸的主类型名；答案是 JSON：一个数、一对数，非有限数印成 null，没有答案或上游会抛错时是空串），类型化形式（`TTyConvertResult`，`array of Double` / 一个 `Double` / 两个坐标），以及 `...Data` 形式（直接给 `TJSONData`）。分派按上游的次序：各个 grid、graph 的 view、（polar、singleAxis 留了位置）、各个 calendar。**[第 111 批：polar 接上了，在 graph 的 view 之后，见 §146。]** **[第 118 批：singleAxis 接上了，在 polar 之后、calendar 之前，见 §153。]**布局脏了先重新布局（上游的 setOption 是同步的）；从没渲染过的图什么都答不出。
 - **`Calendar`**：`PointToData` 对 NaN 和无穷照上游答（以前 `Floor(NaN)` 抛异常）。
 - **`Scale`**：`TyJsRound` 把舍到零的负数答成 -0，和 `Math.round` 一样。
 - **customValues**：`Builder` 的 `TyCustomValuesOf`（真值判断、parse、范围、去重、升序）；`FillSpec` 先做出类目自己的标签，有 `axisLabel.customValues` 时把它们挪进 `CatLabels` / `CatTickValues` / `CatLocalCoords`、换上自定义的标签（终矩形上一起重算坐标）；`AxisMarks` 有 `axisTick.customValues` 时刻度、分割线、分割区域都用它（类目轴各按自己的 `alignWithLabel` 走 `TyFixOnBandMarks`），刻度与被藏标签按值对上。`Layout`：`TTyAxisLayoutSpec.CustomLabels` 与三个 `Cat*` 数组、`TyCategoryLabelCount`；类目间隔在自定义标签下用类目自己的标签量（`IntervalSpec`）；自定义标签全部构建、不按间隔抽稀。`AxisLabels.TyFixMinMaxLabelShow` 多一个 `ACustomValues`。
@@ -10374,7 +10374,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **随机数**：上游的 jitter 用 `Math.random`，每次渲染不同；端口用固定种子的 xorshift32，同一幅图永远一样。同一张图里既有力导向 graph 又有 jitter 时，上游两者共用一条 `Math.random`，端口各用各的种子。
 - **large 散点**（`largeThreshold` 以上走 Float32Array）不在这一批（C8）。
 - **finder 是数组**：上游对数组 finder 的数字键调 `match` 会抛错；端口当成什么都没找到。containPixel 的点是 null 时上游抛错，端口答 false。
-- **matrix、polar、singleAxis、geo、parallel** 坐标系不在（polar 是 C3、singleAxis 是 C10、geo 是 D14）；finder 指到它们时端口什么都答不出，containPixel 答 false。分派里给 polar、singleAxis 留了位置。**[第 111 批：polar 坐标系有了——finder 指 polar 时照上游换算，containPixel 照 containPoint；极坐标系列的 finder 随 C4，见 §146。]** **[第 113 批：系列 finder 在它的 polar 上换算，containPixel 认极坐标系列，见 §148。]**
+- **matrix、polar、singleAxis、geo、parallel** 坐标系不在（polar 是 C3、singleAxis 是 C10、geo 是 D14）；finder 指到它们时端口什么都答不出，containPixel 答 false。分派里给 polar、singleAxis 留了位置。**[第 111 批：polar 坐标系有了——finder 指 polar 时照上游换算，containPixel 照 containPoint；极坐标系列的 finder 随 C4，见 §146。]** **[第 113 批：系列 finder 在它的 polar 上换算，containPixel 认极坐标系列，见 §148。]** **[第 118 批：singleAxis 坐标系有了——`singleAxisIndex / Id` 与裸的 `'singleAxis'` finder、单轴上的系列都照上游的 `dataToPoint` / `pointToData` 换算（包括类目名是 NaN、纵向的 x 是中线），containPixel 照 `containPoint`（纵向拿 x 比矩形的 y），见 §153。]**
 - **[第 114 批：有了 roam，问 View（盒子经 overall），见 §149。]** **桑基图**的 containPixel 按它的盒子（端口没有桑基图的 roam）；旭日图从不包含（上游不下钻时也是如此，端口没有下钻）。**[第 115 批：有了下钻，读返回圆盘最后的布局，见 §150。]**
 - **类目轴的自动间隔**：量的是主题字体，不是上游的 12px sans-serif；60 个 `'category N'` 标签上端口算出 10、上游 9（和有没有 customValues 无关，是原有的偏差）。基准里拥挤的类目用例把间隔写明。
 - **customValues 写成对象或串**：对象取值、串逐字符，照 `zrUtil.each` 的行为；没有基准。
@@ -11058,3 +11058,76 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - `source/tyControls.AdvChart.Events.pas`：`datarangeselected`。
 - `tools/advchart-oracle/visualmap-interact.js`、`tests/fixtures/advchart-visualmap-interact.json`、`tests/test.advchart.visualmapinteract.pas`（新，注册在 `tytests.lpr`）。
 - §89、§92、§93、§122、§123 在原处标注。没有新单元、新主题键或新资源串。
+
+## 153. Tier 2 第一百一十八批：单轴与主题河流图（C10，2026-10-12）
+
+路线图 C10：单轴（`singleAxis`）坐标系、主题河流图（`themeRiver`），以及单轴上的散点与涟漪散点（打卡图）。以前单轴不在：C2 的换算分派给它留了位置（§145），finder 指到它答不出、`containPixel` 答 false；单轴的轴、轴名、指示器都没有（§72、§131）；`themeRiver` 不认，进了「别处画」的名单。这一批对着 `coord/single/Single.ts`（`resize`、`_adjustAxis`、`dataToPoint`、`pointToData`、`containPoint`、`getAxisPointer`）、`SingleAxis.ts`、`singleCreator.ts`、`AxisModel.ts`（默认选项）、`singleAxisHelper.ts`（`layout`）、`component/axis/SingleAxisView.ts`、`axisPointer/SingleAxisPointer.ts`、`chart/themeRiver/ThemeRiverSeries.ts`（`fixData`、`getInitialData`、`getLayerSeries`、`getAxisTooltipData`、`formatTooltip`）、`themeRiverLayout.ts`（`doThemeRiverLayout`、`computeBaseline`）、`ThemeRiverView.ts`（`render`、`createGridClipShape`、标签）、`chart/line/poly.ts`（`ECPolygon` 的平滑）、`component/dataZoom/helper.ts` 与 `AxisProxy`（`singleAxisIndex`、自动目标）、`util/jitter.ts`、`label/LabelManager.ts`（入场淡入），以及 V8 的 `Array.prototype.sort`（TimSort）和 zrender 的 `BoundingRect` 逐行核过，在真 dist 上跑基准。轴的画法沿用 C3 的路子：单轴是一根放在自由框架里的 AxisBuilder 轴（`TyFillAxisLayoutSpec`、`FreeFrame`、`LabelDirection`）。§72、§131、§145 的推迟在原处标注。
+
+### 上游的做法
+
+- **矩形与轴**：`mergeLayoutParam` 合并盒子（四边默认 5%），`getLayoutRect` 定矩形。轴的范围按 grid 的方式铺：横向 `[0, w]`、纵向 `[0, h]`（纵向从下往上），`inverse` 翻转。两件事分开：**`position`** 决定 `isHorizontal`（范围取宽还是高、指示器取哪一维、分隔线的方向），**`orient`** 决定 `dataToPoint` 用哪一维、框架转不转（0 或 π/2）。`orient: 'vertical'` 而 `position` 留默认的 `'bottom'` 时 `layout` 没有这个分支，框架的位置是 NaN，什么都画不出来。
+- **换算的怪处**：`dataToPoint` 先 `+val`（类目名是 NaN、null 是 0、数组取第一个），跨轴的那一维永远是矩形中线；`pointToData` 答 `[v]`。纵向的 `containPoint` 拿 x 去比矩形的 **y** 范围。指示器的像素是 `dataToPoint(value)[0]`——纵向时它是那根固定的中线，所以纵向单轴的指示线停在矩形中央那一列，只有标签跟着走。
+- **轴的视图**：标签方向和刻度方向由 `position` 定（top / left 是 −1，bottom / right 是 1），`axisLabel.inside` / `axisTick.inside` 再翻一次；放在上面时标签旋转取反。单轴自己的默认值：轴线、刻度、分隔线在所有轴类型上都显示，刻度长 6（不是笛卡尔轴的 5）。分隔线每个刻度一条，颜色按 `i % 颜色数` 轮；分隔区域照 grid 的颜色记忆。类目轴的刻度间隔跟着标签间隔。
+- **散点**：单轴没有裁剪区域，越出轴两端的点照画；值是 NaN 的不画。抖动（`jitter`）在任何轴类型上都做，只有类目轴按带宽夹紧（其余是 Infinity，不夹）；`isSingleY` 是「横向且不是类目」或「纵向且是类目」。
+- **主题河流的数据**：只认数组项，`item[2] !== undefined` 的才留；`fixData` 按层补零行，补的顺序走 JS 对象的键序（像数组下标的键先、升序，其余按插入），时间以**串**键写回——时间轴上写数字时间戳的，补回来的行时间成了 NaN；类目轴上的时间也是 NaN（上游留着原始串）。层按名字第一次出现的次序，每层的行按时间排序，用 V8 的 TimSort（比较出 NaN 当 0；少于 64 项是 `CountAndMakeRun` 加二分插入，降序的首段会被整段翻转）。
+- **布局**：`computeBaseline` 是 wiggle 基线；`boundaryGap` 默认 `['10%', '10%']`（百分比按矩形高），多边形组放在 `rect.y + gap[0]`；每层一块 `ECPolygon`，`smooth: 0.4`，下沿是本层的点、上沿是叠上去的点。样式取本层**最后一行**的；多边形的 ECData `dataIndex` 是**层号**（`setItemGraphicEl(idx)`）。标签总是本层最后一行的名字——没有 `labelFetcher`，`formatter` 写了也不用——放在第一个点的 x 减 `margin`、`y0 + y / 2`，对齐取样式（默认 left），竖向永远居中；`emphasis.label.show` 默认是 true。
+- **入场**：只在系列开着动画时，每层套一个裁剪矩形，从多边形自己的矩形的 `x - 10, y - 10`、宽 0、高 `+ 20` 出发，`initProps` 到 `x - 50`、宽 `+ 100`，入场的时长与缓动、没有下标（`animationEasing` 默认 `'linear'`），结束后裁剪被拿掉；标签由 LabelManager 淡入，被忽略的标签不淡入。
+- **提示框**：axis 触发时每层取离指针最近的一行（距离 `<=` 当前最小值就换，所以平局时后面的赢），`nestestValue` 是最后一层的；item 触发是那一行的 `nameValue`，按数据下标取行。
+- **dataZoom**：`singleAxisIndex` / `singleAxisId` 指定目标；不指定时取第一根 `orient` 与 dataZoom 方向相同的单轴，再退到类目轴（包括单轴）。滑块放在单轴的矩形下面。
+
+### port 以前
+
+- 没有单轴坐标系：绑到 `singleAxis` 的系列没有坐标，`themeRiver` 不认；换算分派里 singleAxis 只是个空位。
+
+### 做法
+
+- **`AdvChart.Single`**（新单元）：`TTySingle`（实现 `ITyCoordSys`：`Horizontal` 按 `position`、`OrientHorizontal` 按 `orient`，`ValueToPoint`、`PointXYToData`、`ContainXY` 照上面的怪处原样做）；`TyBuildSingles`（`TyMergedBoxDim` 加 `TySolveBoxXYWH`，范围按 `Horizontal` 铺）、`TyAttachSingleSeries`、`TySingleApplyExtents`（`TyNiceAxisScale`、dataZoom 的窗口）、`TyLayoutSingles`（框架、刻度、次刻度、分隔线与分隔区域；NaN 框架下屏蔽浮点异常）、`TySingleDirection`、指示器的形状（线与阴影，阴影按带宽夹进轴的两端）与标签锚点、`TySingleToPixel / FromPixel / ContainJson`。
+- **`AdvChart.ThemeRiver`**（新单元）：`TyThemeRiverFillStore`（筛项、`fixData` 的键序 `TyRiverKeyOrder`、时间列）、`TyThemeRiverLayers`（`TyV8SortBy`）、`TyThemeRiverLayout`（基线、间隙、组的 y、多边形的点与路径命令、包围盒——负宽高照 `BoundingRect` 规整、标签锚点）、`TyRiverPathDraws`（只有闭合命令的路径不画）。
+- **`Series`**：绑定多了 `SingleIndex / Single`，`singleAxisIndex / Id` 经 `TyResolveComponentRef` 解析；`themeRiver` 按数据项进图例。**`Builder`**：`TyAxisFurnitureOf` 多一个 `ASingle` 参数（单轴的轴线、刻度、分隔线默认显示）；`TyMergedBoxDim` 导出。**`DataZoom`**：认 `singleAxis` 目标与上面的自动目标。**`Marks`**：单轴上的散点和涟漪散点，不裁剪。**`Export`**：`cvSingleAxis`。
+- **`Paint` / `AnimView`**：新角色 `carRiver`（G 存多边形的局部包围盒与组的 y）与 `riverClip`：入场按上面的规则建裁剪矩形的代理，每帧把多边形裁到它，结束后去掉；更新时只给新出现的层入场。被忽略的主题河流标签不淡入。
+- **控件**：`FSingles`、`FRivers`；`Rebuild` 建单轴、挂系列、填主题河流的存储（时间轴是时间列，其余是浮点列）、套 dataZoom 的窗口；`Relayout` 布局单轴、解河流；`PaintSingles`（非有限的位置不画）、`PaintSinglePointer`；`BuildRiverMarks`（多边形不 silent，填充按最后一行的色板颜色，`Datum` 的行号是层号，标签只在锚点有限时出）；状态模型认 `sskRiver`（`emphasis.label.show` 的默认值）；`ResolveAxisPointers` 认单轴（主题河流按层取最近）；提示框；`ConvertDispatch` 接上单轴（`ConvertOnSingle`），`ContainPixel` 认 `singleAxis`；merge 时清掉单轴的分隔区域颜色记忆。
+- 新度量 `--advchart-single-tick-length`（默认 6，单轴刻度长度）。没有新资源串，没有新的 JSON 入口。
+
+### 基准
+
+`tools/advchart-oracle/single-themeriver.js`（真 dist，node SSR，`TZ=UTC`、日期写成带 `Z` 的串、根上 `useUTC: true`，每个用例在根上写死 `color` 色板，随机数是端口的 xorshift32，分隔线经合并路径的钩子取，最后 `process.exit()`）→ `tests/fixtures/advchart-single-themeriver.json`：**62 个静态用例、4 个动画用例、123 条守卫**。
+
+- **轴** 20 个：横向的值、类目（带间隙与不带）、时间、对数轴；放在上面（标签旋转取反、轴名）；纵向左右（反向、轴名）、纵向类目与时间；内侧刻度与标签；分隔区域与两色分隔线；七根叠起来的打卡图框架；盒子的合并；居中的轴名与箭头；次刻度；`hideOverlap`；纵向放在默认的 bottom（NaN 框架）；隐藏的轴；按系列定范围。
+- **散点** 10 个：打卡图（尺寸来自数据）、带标签的值轴、纵向、越出两端的点、涟漪散点、抖动五种（值轴、`jitterOverlap: false`、类目、纵向类目、纵向值轴）。
+- **主题河流** 14 个：时间轴上缺点（补零）、值轴、类目轴、`boundaryGap` 的百分比与像素、六层、样式、无名项、两根单轴、标签模板（不生效）、时间戳、标签关、反向轴、纵向轴（x 全在中线）、和散点同轴。
+- **图例与动作** 2 个、**状态** 4 个（`focus: 'self'` 与 emphasis 颜色、`focus: 'series'` 加 `blurScope: 'global'`、标签关时 emphasis 标签照默认显示、单轴散点的 emphasis 与 select）、**指示器** 6 个（河流的线与标签、提示框列出每一层，探针 x = 84 正落在两天中间；阴影；类目轴散点；值轴散点；纵向；两根单轴）、**dataZoom** 4 个（滑块、inside 的 startValue / endValue、自动目标、`filterMode: 'empty'`）、**换算** 2 个（两根单轴挨着 grid 的各种 finder；纵向单轴）。
+- **动画** 4 个（`animation.js` 的时钟钩子与采样）：河流默认、改了时长 / 缓动 / 延迟、值轴上 `animationDelay` 是函数（裁剪没有下标）、单轴散点。
+
+守卫按源码写期望（默认盒子 5%、横纵向的范围、类目轴上画分隔线、顶部标签旋转取反、补零行、层的次序、默认间隙 10%、组的 y、ECData 是层号、标签左对齐、越界的点照画、纵向指示线停在中线、自动目标是横向单轴、类目名换算出 NaN、null 当 0 等）；两次生成逐字节一致。
+
+### 测试
+
+`test.advchart.singlethemeriver`（新，注册在 `tytests.lpr`）：
+
+- **基准重放**（9 个）：单轴的矩形、范围与刻度；轴的视图（轴线、刻度、次刻度、标签的位置 / 对齐 / 旋转 / 忽略、轴名、分隔线与分隔区域）；散点；河流（行、层、间隙、组、多边形的点与包围盒、填充、标签）；图例；状态（填充、不透明度、状态表、标签显示）；指示器与提示框；dataZoom；换算与 `containPixel`。全部逐位比较。
+- **手写**（4 个）：`fixData` 的键序；V8 排序（含 NaN 比较）；一层画出来并能命中（提示框是 `item:0:1`，没有诊断）；系列指向不存在的单轴给出诊断。
+- `test.advchart.animenter` 多一个 `TestSingleRiverEnterTimelinesAsUpstream`：裁剪矩形按采样比（它结束后被拿掉，不比终点），标签淡入照常。`test.advchart.marks` 把 `themeRiver` 移出「别处画」的名单。
+
+首跑的不对：时区差 8 小时（日期改带 `Z`、`useUTC`）；刻度长 5（单轴的默认是 6）；色板（端口的默认色来自皮肤，基准钉住）；类目轴上的河流——上游的 x 是 NaN，端口原来按序号排（改存浮点列），NaN 的标签矩形让 BGRA 抛浮点异常（锚点不有限就不出标签），只有闭合命令的路径不画；多边形默认 silent，状态与命中都落空；包围盒要按路径算（带描边的矩形不对）；标签模板上游不用；纵向放在 bottom 的 NaN 框架让标签布局抛异常（布局屏蔽浮点异常，绘制跳过非有限的位置）；被忽略的标签多了淡入动画。另有两条手写期望写错了（`fixData` 的次序、V8 对 NaN 的答案），按上游改正。之后全部逐位对上。
+
+本批按规矩只跑了新套件和直接碰到的套件，全部通过：`TAdvChartSingleRiverTest`（13）、`TAdvChartAnimEnterTest`（12）、`TAdvChartMarksTest`（36），以及改过的源单元所在的 `ConvertJitter` 10、`DataZoomInteractOracle` 8、`DataZoomSliderOracle` 6、`DataZoomWindowOracle` 7、`ExportLoading` 15、`PolarAxes` 12、`PolarSeries` 13、`AxisNamesOracle` 17、`AxisFinishOracle` 11、`AxisTrigger` 16、`LegendAct` 8、`Series` 28、`MultiAxis` 12。全量套件与变异轮留到里程碑（C6–C13）末尾。
+
+### 推迟与偏差
+
+- 单轴上的系列不建标注（markPoint / markLine / markArea）。
+- inside dataZoom 的漫游（滚轮、拖动）在单轴上不做，只读它的窗口。
+- 主题河流的更新动画：保留下来的层直接跳到新形状（上游按点补间），只有新出现的层入场。入场时标签不跟着裁剪。
+- `boundaryGap` 的像素值上游会在第一次布局时改写进模型、之后 resize 沿用，端口每次重算。
+- 各层行数不同时端口什么都不画（上游抛错）；不是数组的项（串）端口忽略。
+- 64 项以上且比较出 NaN 时，端口用稳定归并代替 V8 的完整 TimSort（64 项以下逐步照做）。
+- `--advchart-single-tick-length` 没有写进 `light.tycss` 和目录，走默认值 6。
+- 指向空点的 contain 端口答 false（上游抛错）；纵向放在默认 bottom 的单轴什么都不画，与上游一样。
+- 被忽略的标签不淡入只对主题河流做了；其他系列的被忽略标签是否也多建了淡入，留给以后核对。
+
+### 落地
+
+- `source/tyControls.AdvChart.Single.pas`、`source/tyControls.AdvChart.ThemeRiver.pas`（新，进 `tycontrols.lpk` 与 `tycontrols.pas`）。
+- `source/tyControls.AdvChart.Series.pas`、`Builder.pas`、`DataZoom.pas`、`Marks.pas`、`Paint.pas`、`AnimView.pas`、`Export.pas`：见上面「做法」。
+- `source/tyControls.AdvanceChart.pas`：上面「控件」一条的全部。
+- `tools/advchart-oracle/single-themeriver.js`、`tests/fixtures/advchart-single-themeriver.json`、`tests/test.advchart.singlethemeriver.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.animenter.pas`、`tests/test.advchart.marks.pas`。
+- §72、§131、§145 在原处标注。除了上面那个度量，没有新主题键或新资源串。

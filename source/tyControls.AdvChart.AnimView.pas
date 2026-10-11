@@ -24,6 +24,11 @@ unit tyControls.AdvChart.AnimView;
                  delay = duration * (where the clip reaches it) + delay, or
                  the delay function at the row; ignores the threshold
                  (LineView.ts:1078-1177)
+    riverClip    a themeRiver layer's clip rect [Batch 118]: from x - 10,
+                 y - 10, width 0, height + 20 of the polygon's own rect, to
+                 x - 50 and width + 100, enter timing with no row, only for
+                 a series that animates; gone when it ends
+                 (ThemeRiverView.ts createGridClipShape)
     lineClip     the line's clip rect grows along the base axis, enter timing
                  with no row; `clip: false` widens it after the call, and
                  the forced tracks write the unwidened rect back on the next
@@ -976,6 +981,7 @@ begin
     carMarkPoint, carMarkPointLabel: Result := 'markPoint';
     carMarkLine, carMarkLineFrom, carMarkLineTo, carMarkLineLabel: Result := 'markLine';
     carEndLabel: Result := 'lineClip';
+    carRiver: Result := 'riverClip';
   else
     Result := '';
   end;
@@ -1392,6 +1398,27 @@ begin
         end;
         Start(props, TyAnimCallAt(idx));
       end;
+    carRiver:
+      begin
+        { createGridClipShape over polygon.getBoundingRect() -- taken before
+          the style is set, so no stroke in it -- only where the series
+          animates: x - 10, y - 10, no width, height + 20, initProps to
+          x - 50, width + 100 (height + 20 again) on the series, no row; the
+          clip is removed when it ends [Batch 118] }
+        if not AC.Enabled then Exit;
+        p := Make(AEl.Anim.Series, idx, 'riverClip');
+        x := AEl.Anim.G[0];
+        y := AEl.Anim.G[1];
+        w := AEl.Anim.G[2];
+        h := AEl.Anim.G[3];
+        props := TyAnimProps([Num1('shape.x', x - 50), Num1('shape.y', y - 10),
+          Num1('shape.width', w + 100), Num1('shape.height', h + 20)]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('shape.x', x - 10);
+        p.SetNum('shape.width', 0);
+        Start(TyAnimProps([props[0], props[2], props[3]]), TyAnimCallNoIndex);
+      end;
     carPolarBar:
       begin
         { the polar creator: a radial bar's r from r0, a tangential one's end
@@ -1650,6 +1677,10 @@ begin
           Exit;
         end;
         if not (AC.Enabled and AC.LabelFade) or AC.LabelValueAnim then Exit;
+        { A HIDDEN LABEL IS NOT FADED IN: LabelManager walks the texts that
+          are not ignored -- a themeRiver's built for its emphasis alone
+          [Batch 118] }
+        if AEl.Ignore and (AC.SeriesType = 'themeRiver') then Exit;
         p := Make(AEl.Anim.Series, idx, 'label');
         p.Attr(props);
         p.SetFinal(props);
@@ -1918,6 +1949,10 @@ var
     rk: string;
   begin
     case AEl.Anim.Role of
+      carRiver:
+        { A KEPT LAYER is not clipped again (its points tween upstream,
+          snapped here); a new one enters [Batch 118] }
+        if AOldRow < 0 then ArmOne(AList, AAt, AEl, AC, True);
       carBar:
         begin
           if AOldRow < 0 then
@@ -3130,6 +3165,16 @@ begin
       end;
     carPolarBar:
       PolarBarFrom(AEl, AProxy);
+    carRiver:
+      begin
+        { the polygon cut to its clip rect, in the group's frame
+          [Batch 118] }
+        x := AProxy.Num('shape.x');
+        y := AProxy.Num('shape.y') + AEl.Anim.G[4];
+        AEl.HasClip := True;
+        AEl.ClipRect := TyRectF(x, y, x + AProxy.Num('shape.width'),
+          y + AProxy.Num('shape.height'));
+      end;
     carLineRun, carLineArea:
       if (Round(AEl.Anim.G[5]) and 8) <> 0 then
       begin

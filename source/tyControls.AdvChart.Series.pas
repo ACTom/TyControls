@@ -127,6 +127,15 @@ type
       polar named was not built. }
     PolarIndex: Integer;
     Polar: TObject;
+    { WHICH SINGLE AXIS, or -1 [Batch 118, C10]: `coordinateSystem:
+      'singleAxis'` by singleAxisIndex / singleAxisId (SINGLE_REFERRING,
+      neither written is the first). Resolved with HasAxes False, like a
+      polar; once the control has built its singles (TyAttachSingleSeries)
+      XAxis and BaseAxis are the single's one axis -- YAxis and ValueAxis
+      stay nil, a single has no other -- and Single is the TTySingle, nil
+      until attached or when the single named was not built. }
+    SingleIndex: Integer;
+    Single: TObject;
     { SWITCHED OFF BY A LEGEND. Set by the control after the stores are
       filled and before anything is counted; every solver downstream skips
       such a binding, so the axis extents, the stack groups and the bar
@@ -584,6 +593,42 @@ begin
   end;
 end;
 
+{ Each component's `id` of a main type, '' where it has none [Batch 118] }
+function MainIds(AOption: TTyChartOption; const AMain: string): TTyStringArray;
+var
+  k: Integer;
+  d: TJSONData;
+begin
+  Result := nil;
+  SetLength(Result, AOption.ComponentCount(AMain));
+  for k := 0 to High(Result) do
+  begin
+    Result[k] := '';
+    d := AOption.ComponentAt(AMain, k);
+    if (d <> nil) and (d.JSONType = jtObject) then
+    begin
+      d := TJSONObject(d).Find('id');
+      if (d <> nil) and (d.JSONType = jtString) then Result[k] := d.AsString
+      else if (d <> nil) and (d.JSONType = jtNumber) then Result[k] := d.AsString;
+    end;
+  end;
+end;
+
+{ replaceMerge's holes in a main type's family [Batch 118] }
+function MainHoles(AOption: TTyChartOption; const AMain: string): TTyBoolArray;
+var
+  k: Integer;
+  d: TJSONData;
+begin
+  Result := nil;
+  SetLength(Result, AOption.ComponentCount(AMain));
+  for k := 0 to High(Result) do
+  begin
+    d := AOption.ComponentAt(AMain, k);
+    Result[k] := (d <> nil) and (d.JSONType <> jtObject);
+  end;
+end;
+
 { replaceMerge's holes in the polar family }
 function PolarHoles(AOption: TTyChartOption): TTyBoolArray;
 var
@@ -618,6 +663,7 @@ begin
     b.SeriesIndex := i;
     { no polar, even for a hole that leaves below [Batch 113] }
     b.PolarIndex := -1;
+    b.SingleIndex := -1;
     Result[i] := b;
 
     node := ObjAt(AOption, 'series', i);
@@ -657,6 +703,8 @@ begin
     b.CalendarIndex := -1;
     b.PolarIndex := -1;
     b.Polar := nil;
+    b.SingleIndex := -1;
+    b.Single := nil;
 
     if (sys = '') or (sys = 'none') then
     begin
@@ -718,6 +766,28 @@ begin
       b.PolarIndex := TyResolveComponentRef(node, 'polarIndex', 'polarId',
         AOption.ComponentCount('polar'), PolarIds(AOption), PolarHoles(AOption));
       if b.PolarIndex < 0 then
+      begin
+        ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
+        Result[i] := b;
+        Continue;
+      end;
+      b.Resolved := True;
+      b.HasAxes := False;
+      Result[i] := b;
+      Continue;
+    end;
+
+    if sys = 'singleAxis' then
+    begin
+      { A SINGLE AXIS [Batch 118, C10]: which one, by singleAxisIndex or
+        singleAxisId (getReferringComponents, SINGLE_REFERRING). Its axis is
+        filled in once the singles are built (TyAttachSingleSeries). Upstream
+        leaves a series naming none with no coordinate system; here it
+        resolves to nothing and says so. }
+      b.SingleIndex := TyResolveComponentRef(node, 'singleAxisIndex', 'singleAxisId',
+        AOption.ComponentCount('singleAxis'), MainIds(AOption, 'singleAxis'),
+        MainHoles(AOption, 'singleAxis'));
+      if b.SingleIndex < 0 then
       begin
         ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
         Result[i] := b;
@@ -801,7 +871,8 @@ end;
 
 function TySeriesLegendByDatum(const AType: string): Boolean;
 const
-  cByDatum: array[0..2] of string = ('pie', 'funnel', 'radar');
+  { a themeRiver's legend names its layers, the rows' names [Batch 118] }
+  cByDatum: array[0..3] of string = ('pie', 'funnel', 'radar', 'themeRiver');
 var i: Integer;
 begin
   for i := 0 to High(cByDatum) do

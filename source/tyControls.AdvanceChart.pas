@@ -63,6 +63,7 @@ uses
   tyControls.AdvChart.Export, tyControls.AdvChart.Loading,
   tyControls.AdvChart.Convert, tyControls.AdvChart.Jitter,
   tyControls.AdvChart.Polar, tyControls.AdvChart.PolarBar,
+  tyControls.AdvChart.Single, tyControls.AdvChart.ThemeRiver,
   fpjson, contnrs, tyControls.SubPixel;
 
 const
@@ -71,6 +72,11 @@ const
     option model documents so a chart looks the same before and after a skin. }
   TyAdvChartTickLenVar = '--advchart-tick-length';
   TyAdvChartTickLen = 5;
+  { A SINGLE AXIS' TICK: its model's own 6 over axisDefault's 5
+    (SingleAxisModel's axisTick.length) -- a metric of its own so a skin can
+    move it [Batch 118] }
+  TyAdvChartSingleTickLenVar = '--advchart-single-tick-length';
+  TyAdvChartSingleTickLen = 6;
   TyAdvChartMinorTickLenVar = '--advchart-minor-tick-length';
   TyAdvChartMinorTickLen = 3;
   TyAdvChartLabelMarginVar = '--advchart-label-margin';
@@ -139,8 +145,20 @@ type
     Rows: TTyIntegerArray;
     { THE POLAR the axis belongs to; nil on a grid [Batch 111] }
     Polar: TTyPolar;
+    { THE SINGLE AXIS the axis is; nil elsewhere [Batch 118] }
+    Single: TTySingle;
   end;
   TTyAxisHitArray = array of TTyAxisHit;
+
+  { WHAT A SINGLE AXIS' POINTER DRAWS [Batch 118]: its line or shadow rect,
+    and its label's text and padded box (top-left, after the align and the
+    confinement to the control) when the label is shown. }
+  TTySinglePointerDraw = record
+    Shape: TTySinglePointerShape;
+    HasLabel: Boolean;
+    Text: string;
+    X, Y, W, H: Double;
+  end;
 
   { WHAT A POLAR POINTER DRAWS [Batch 111]: its shape, and its label's text
     and padded box (top-left, after the align and the confinement to the
@@ -204,7 +222,9 @@ type
     sskBox,
     { [Batch 114] a sankey: node rects by node index, and its links in a
       second set of rows (EdgeRows) }
-    sskSankey);
+    sskSankey,
+    { [Batch 118] a themeRiver's layer polygon, under the row its index is }
+    sskRiver);
   TTyStNodeArray = array of TJSONObject;
   TTyStSeries = record
     Kind: TTyStKind;
@@ -375,6 +395,11 @@ type
     { THE POLARS of the last build, indexed by component index (a hole or a
       polar missing an axis is nil) [Batch 111] }
     FPolars: TTyPolarArray;
+    { THE SINGLE AXES of the last build, indexed by component index (a hole
+      is nil) [Batch 118] }
+    FSingles: TTySingleArray;
+    { EVERY themeRiver laid out, index-parallel to FBindings [Batch 118] }
+    FRivers: TTyThemeRiverLayoutArray;
     FBindings: TTySeriesBindingArray;
     FStores: array of TTyDataStore;
     { Every bar's width and offset, index-parallel to FBindings. Solved in
@@ -1299,6 +1324,24 @@ type
     procedure FreeRadars;
     { the polars go with the build [Batch 111] }
     procedure FreePolars;
+    { the singles go with the build [Batch 118] }
+    procedure FreeSingles;
+    { every single's axis view: the grid layer (split areas and lines) with
+      ABelow, the line, ticks, labels and name without [Batch 118] }
+    procedure PaintSingles(APainter: TTyPainter; APPI: Integer;
+      const AMeasurer: ITyTextMeasurer; ABelow: Boolean);
+    procedure PaintSinglePointer(APainter: TTyPainter; const ARect: TRect;
+      APPI: Integer; const AMeasurer: ITyTextMeasurer; const AHit: TTyAxisHit);
+    { themeRiverLayout over every themeRiver, after the singles are laid out
+      [Batch 118] }
+    procedure SolveRivers(APPI: Integer);
+    { a themeRiver's label spec: the series' label over the type's defaults
+      (show, 11 px) [Batch 118] }
+    function RiverLabelSpec(ASlot: Integer): TTyLabelSpec;
+    function RiverEmphasisLabelOff(ASlot: Integer): Boolean;
+    { a themeRiver's polygons into the list [Batch 118] }
+    function BuildRiverMarks(ASlot: Integer; AList: TTyPaintList;
+      APPI: Integer): Integer;
     { both axis views of every polar: the grid layer (split areas and lines)
       with ABelow, the axis lines, ticks, labels and names without }
     procedure PaintPolars(APainter: TTyPainter; APPI: Integer;
@@ -1453,6 +1496,8 @@ type
     function ConvertOnView(AView: TTyGraphView; AValue: TJSONData;
       AFrom: Boolean): TTyConvertResult;
     function ConvertOnPolar(APolar: TTyPolar; AValue: TJSONData;
+      AFrom: Boolean): TTyConvertResult;
+    function ConvertOnSingle(ASingle: TTySingle; AValue: TJSONData;
       AFrom: Boolean): TTyConvertResult;
     function ContainSeries(ASeriesIndex: Integer; APoint: TJSONData): Boolean;
     { Which row of a series a point is over, asked of the BASE axis.
@@ -1626,6 +1671,9 @@ type
     { What the polar bar solve gave a series [Batch 113]: unsolved where it
       is not a bar on a polar. }
     function PolarBarOf(ASeriesIndex: Integer): TTyPolarBarLayout;
+    { What the themeRiver layout gave a series [Batch 118]: not Valid where
+      it is no themeRiver. }
+    function RiverLayoutOf(ASeriesIndex: Integer): TTyThemeRiverLayout;
     { What every render measures its text with: the painter's own, in the
       theme's fonts. Virtual so a text table -- zrender's, for a chart laid
       out against upstream's -- can stand in for the fonts. }
@@ -1742,6 +1790,14 @@ type
     function PolarPointerGeometry(const AHit: TTyAxisHit; const ARect: TRect;
       const AMeasurer: ITyTextMeasurer; APPI: Integer;
       out ADraw: TTyPolarPointerDraw): Boolean;
+    { A SINGLE AXIS HIT'S POINTER as it is drawn [Batch 118]:
+      SingleAxisPointer's line or shadow at dataToPoint(value)[0], and its
+      label -- buildCartesianSingleLabelElOption's place, the value's text
+      in the pointer label's font, padded, kept inside the control (ARect).
+      False when the hit is not a single one. }
+    function SinglePointerGeometry(const AHit: TTyAxisHit; const ARect: TRect;
+      const AMeasurer: ITyTextMeasurer; APPI: Integer;
+      out ADraw: TTySinglePointerDraw): Boolean;
     { WHAT THE TOOLTIP WOULD SAY, in four answerable pieces rather than one
       procedure that draws. PROTECTED for the same reason RenderTo is: a
       headless test has no window and no pointer, and a content rule tested
@@ -2320,6 +2376,10 @@ type
     { Polar component AIndex as the last render laid it out -- its centre,
       its two axes and both axis views -- or nil [Batch 111]. }
     function PolarCount: Integer;
+    { singleAxis component AIndex as the last render laid it out -- its
+      rect, its axis and its view -- or nil [Batch 118]. }
+    function SingleCount: Integer;
+    function SingleLayout(AIndex: Integer): TTySingle;
     function PolarLayout(AIndex: Integer): TTyPolar;
     { The legends as the last render placed them. }
     function LegendLayoutCount: Integer;
@@ -2609,6 +2669,7 @@ begin
   FStores := nil;
   FBarCols := nil;
   FPolarBars := nil;
+  FRivers := nil;
   FWhiskers := nil;
   FStacks := nil;
 end;
@@ -2632,6 +2693,7 @@ begin
   FreeGraphs;
   FreeTreeViews;
   FreePolars;
+  FreeSingles;
   FTrees := nil;
   FSunbursts := nil;
   FTreemaps := nil;
@@ -2965,6 +3027,12 @@ begin
         else FAxisMemory.Forget('radiusAxis' + IntToStr(s));
       end;
   end;
+  { and a single axis [Batch 118] }
+  si := TyMergeSlotsIndex(AReport, TySingleCoordSysName);
+  if si >= 0 then
+    for s := 0 to High(AReport.Slots[si].Brand) do
+      if AReport.Slots[si].Brand[s] then
+        FAxisMemory.Forget(TySingleCoordSysName + IntToStr(s));
   { A BRAND NEW MODEL ASKS FOR A NEW VIEW, whatever id it made (a removed
     model's, often) -- until the update that pairs the views [Batch 97] }
   NotMergePass(AReport);
@@ -3375,6 +3443,7 @@ var
   typeInfo: TTySeriesTypeInfo;
   radarSpec: TTyRadarSpec;
   polarMissing: TTyStringArray;
+  ax: TTyAxis;
 begin
   DropBuild;
   FBuild := TyBuildGrids(FOption, FLastRect);
@@ -3387,9 +3456,13 @@ begin
     FBuild.Note(Format(rsTyChartPolarNoAxis, [StrToIntDef(Copy(polarMissing[i], 1, j - 1), -1),
       Copy(polarMissing[i], j + 1, MaxInt)]));
   end;
+  { THE SINGLE AXES: their boxes, axes and extents along them [Batch 118] }
+  FSingles := TyBuildSingles(FOption, FLastRect);
   FBindings := TyBindSeries(FOption, FBuild);
   { A SERIES ON A POLAR takes the polar's axes [Batch 113] }
   TyAttachPolarSeries(FBindings, FPolars);
+  { AND ONE ON A SINGLE AXIS its axis [Batch 118] }
+  TyAttachSingleSeries(FBindings, FSingles);
   { A TYPE THAT RESOLVED AND STILL DRAWS NOTHING HAS TO SAY SO. Binding knows
     the twenty-three names ECharts ships and says nothing about which of them
     this control can paint, so a `funnel` bound cleanly, laid out cleanly and
@@ -3425,7 +3498,26 @@ begin
         FBindings[i].SeriesIndex, FDatasetCache);
       if not FSources[i].Valid then FSeriesDataset[i] := -1;
     end;
-    if (not FBindings[i].HasAxes) and (FBindings[i].Polar = nil) then
+    { A THEMERIVER'S ROWS ARE getInitialData's: the items with a name and
+      fixData's zeros, time and value, the names the rows' [Batch 118] }
+    if (FBindings[i].SeriesType = TyThemeRiverSeriesTypeName) then
+    begin
+      if FBindings[i].Single <> nil then
+      begin
+        { getDimensionTypeByAxis: a time axis' time, a value axis' float --
+          and a category axis' 'ordinal', which with no categories of its
+          own keeps the raw values: a name is not a number to dataToPoint
+          ('+val'), a number is, as a float column reads them }
+        ax := TTySingle(FBindings[i].Single).Axis;
+        if ax.AxisType = atTime then
+          TyThemeRiverFillStore(FOption, FBindings[i].SeriesIndex, ddtTime, nil, st)
+        else
+          TyThemeRiverFillStore(FOption, FBindings[i].SeriesIndex, ddtFloat, nil, st);
+      end;
+      Continue;
+    end;
+    if (not FBindings[i].HasAxes) and (FBindings[i].Polar = nil)
+      and (FBindings[i].Single = nil) then
     begin
       { A SERIES OFF EVERY COORDINATE SYSTEM HAS DATA TOO, and until now
         only a pie got any: the columns below are the coordinate system's
@@ -3543,6 +3635,9 @@ begin
       the store filled as a cartesian series' is [Batch 113] }
     if FBindings[i].Polar <> nil then
       dims := TySeriesCoordSysDims(TTyPolar(FBindings[i].Polar), 0)
+    { ON A SINGLE AXIS: its one column, the single dimension [Batch 118] }
+    else if FBindings[i].Single <> nil then
+      dims := TySeriesCoordSysDims(TTySingle(FBindings[i].Single), 0)
     else
       dims := TySeriesCartesianDims(FBindings[i].Cart, 0);
     { A SERIES WHOSE TYPE DECLARES MORE THAN A PAIR gets those columns
@@ -3667,6 +3762,9 @@ begin
     series on them, the stacks and the dataZoom windows [Batch 113] }
   TyPolarApplyExtents(FOption, FPolars, FBindings, FStores, FStacks, FIndex,
     FAxisZooms);
+  { AND THE SINGLES' [Batch 118] }
+  TySingleApplyExtents(FOption, FSingles, FBindings, FStores, FStacks, FIndex,
+    FAxisZooms);
   { LAST, ON THE VIEWS THE FILTERS LEFT: dataColorPaletteTask is a visual
     stage (4600), after every processor -- a row the legend or a dataZoom
     took out reads the series' colorFromPalette, a row still in reads its
@@ -3723,7 +3821,7 @@ begin
     if not ((typ = 'bar') or (typ = 'line') or (typ = 'scatter')
       or (typ = 'effectScatter') or (typ = 'pictorialBar')
       or (typ = TyPieSeriesTypeName) or (typ = 'funnel') or (typ = 'gauge')
-      or (typ = 'radar')) then Continue;
+      or (typ = 'radar') or (typ = TyThemeRiverSeriesTypeName)) then Continue;
     cb := TyChartColorByOf(FOption, si, typ);
     if cb = 'series' then Continue;
     { the scope first, whether or not a row asks: upstream hands every such
@@ -3785,6 +3883,9 @@ begin
   if (FOption = nil) or (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
   { a dataset's rows are no option items }
   if (ASlot <= High(FSeriesDataset)) and (FSeriesDataset[ASlot] >= 0) then Exit;
+  { nor a themeRiver's: its rows are the kept items and fixData's zeros
+    [Batch 118] }
+  if FBindings[ASlot].SeriesType = TyThemeRiverSeriesTypeName then Exit;
   d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if not (d is TJSONObject) then Exit;
   d := TJSONObject(d).Find('data');
@@ -3968,6 +4069,13 @@ begin
     end;
     Exit;
   end;
+  { a single axis: the component's own [Batch 118] }
+  if ADim = TySingleDim then
+  begin
+    if (AIndex >= 0) and (AIndex <= High(FSingles)) and (FSingles[AIndex] <> nil) then
+      Result := FSingles[AIndex].Axis;
+    Exit;
+  end;
   if FBuild <> nil then Result := FBuild.Axis(ADim + 'Axis', AIndex);
 end;
 
@@ -4105,9 +4213,9 @@ begin
       begin
         si := feeders[c];
         if (si < 0) or (si > High(FStores)) or (FStores[si] = nil) then Continue;
-        { a polar's series too [Batch 113] }
+        { a polar's series too [Batch 113], and a single axis' [Batch 118] }
         if (FBindings[si].CoordSysName <> 'cartesian2d')
-          and (FBindings[si].Polar = nil) then Continue;
+          and (FBindings[si].Polar = nil) and (FBindings[si].Single = nil) then Continue;
         if si <= High(FStacks) then
           cols := TyAxisDataDims(FStores[si], ax, FBindings[si], FStacks[si])
         else
@@ -4224,6 +4332,13 @@ begin
   TyLayoutPolars(FPolars, FOption, AMeasurer, APPI, txt,
     ActiveController.Metric(TyAdvChartMinorTickLenVar, TyAdvChartMinorTickLen),
     FAxisMemory);
+  { THE SINGLE AXES' VIEWS, in the same fonts and gaps [Batch 118] }
+  TyLayoutSingles(FSingles, FOption, AMeasurer, APPI, txt,
+    ActiveController.Metric(TyAdvChartMinorTickLenVar, TyAdvChartMinorTickLen),
+    ActiveController.Metric(TyAdvChartSingleTickLenVar, TyAdvChartSingleTickLen),
+    FAxisMemory);
+  { AND THE RIVERS ON THEM }
+  SolveRivers(APPI);
   { AFTER phase C, for the reason on FBarCols. }
   FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex);
   { AND THE BARS ON A POLAR [Batch 113] }
@@ -5016,6 +5131,9 @@ begin
   { THE POLARS' GRIDS, then their axes [Batch 111] }
   PaintPolars(APainter, APPI, AMeasurer, True);
   PaintPolars(APainter, APPI, AMeasurer, False);
+  { THE SINGLE AXES' GRIDS, then their axes [Batch 118] }
+  PaintSingles(APainter, APPI, AMeasurer, True);
+  PaintSingles(APainter, APPI, AMeasurer, False);
   for g := 0 to FBuild.GridCount - 1 do
   begin
     gb := FBuild.Grid(g);
@@ -5624,6 +5742,16 @@ begin
       and (TJSONObject(FOption.ComponentAt(first.MainType, first.ComponentIndex)).Find('inverse') <> nil)
       and (TJSONObject(FOption.ComponentAt(first.MainType, first.ComponentIndex)).Find('inverse').JSONType = jtBoolean)
       and TJSONObject(FOption.ComponentAt(first.MainType, first.ComponentIndex)).Booleans['inverse'];
+  { a single axis' rect: its getRect [Batch 118] }
+  if (first.MainType = TySingleCoordSysName) and (first.ComponentIndex <= High(FSingles))
+    and (FSingles[first.ComponentIndex] <> nil) then
+  begin
+    AIn.HasCoordRect := True;
+    AIn.CoordRect.X := (FSingles[first.ComponentIndex].Rect.X - FLastRect.Left) / scale;
+    AIn.CoordRect.Y := (FSingles[first.ComponentIndex].Rect.Y - FLastRect.Top) / scale;
+    AIn.CoordRect.W := FSingles[first.ComponentIndex].Rect.W / scale;
+    AIn.CoordRect.H := FSingles[first.ComponentIndex].Rect.H / scale;
+  end;
   { the first target's grid, as the labels left it }
   for g := 0 to FBuild.GridCount - 1 do
   begin
@@ -9965,6 +10093,677 @@ begin
   Result := FPolars[AIndex];
 end;
 
+{ ==================== the single axes [Batch 118] ==================== }
+
+procedure TTyAdvanceChart.FreeSingles;
+var i: Integer;
+begin
+  for i := 0 to High(FSingles) do
+    FSingles[i].Free;
+  FSingles := nil;
+end;
+
+function TTyAdvanceChart.SingleCount: Integer;
+begin
+  Result := Length(FSingles);
+end;
+
+function TTyAdvanceChart.SingleLayout(AIndex: Integer): TTySingle;
+begin
+  if (AIndex < 0) or (AIndex > High(FSingles)) then Exit(nil);
+  Result := FSingles[AIndex];
+end;
+
+{ WHAT A SINGLE AXIS VIEW DRAWS, in the skin's axis styles -- the same keys
+  the grid's and the polar's axes are drawn in: upstream's single axis takes
+  axisDefault like every other }
+procedure TTyAdvanceChart.PaintSingles(APainter: TTyPainter; APPI: Integer;
+  const AMeasurer: ITyTextMeasurer; ABelow: Boolean);
+var
+  i, q, ink: Integer;
+  s: TTySingle;
+  model: TTyStyleModel;
+  lineS, tickS, splitS, areaS, minorTickS, labelS, nameS, inkStyle: TTyStyleSet;
+  areaColour: TTyColor;
+  lblW, lblH: Integer;
+  v: TTySingleAxisView;
+  sp: TTyAxisLayoutSpec;
+  pl: TTyAxisNamePlacement;
+
+  function LineWidth(const AStyle: TTyStyleSet): Double;
+  begin
+    if tpBorderWidth in AStyle.Present then Result := AStyle.BorderWidth
+    else Result := 1;
+    if Result < 0.05 then Result := 0.05;
+  end;
+
+  function AnchorAlign(AH2: TTyTextAnchorH): TAlignment;
+  begin
+    case AH2 of
+      tahLeft: Result := taLeftJustify;
+      tahRight: Result := taRightJustify;
+    else Result := taCenter;
+    end;
+  end;
+
+  function AnchorLayout(AV: TTyTextAnchorV): TTextLayout;
+  begin
+    case AV of
+      tavTop: Result := tlTop;
+      tavBottom: Result := tlBottom;
+    else Result := tlCenter;
+    end;
+  end;
+
+  function AnchorBox(AX, AY: Double; AW, AH: Integer;
+    AH2: TTyTextAnchorH; AV: TTyTextAnchorV): TRect;
+  begin
+    case AH2 of
+      tahLeft: begin Result.Left := Round(AX); Result.Right := Round(AX) + AW; end;
+      tahRight: begin Result.Left := Round(AX) - AW; Result.Right := Round(AX); end;
+    else
+      begin
+        Result.Left := Round(AX - AW / 2);
+        Result.Right := Result.Left + AW;
+      end;
+    end;
+    case AV of
+      tavTop: begin Result.Top := Round(AY); Result.Bottom := Round(AY) + AH; end;
+      tavBottom: begin Result.Top := Round(AY) - AH; Result.Bottom := Round(AY); end;
+    else
+      begin
+        Result.Top := Round(AY - AH / 2);
+        Result.Bottom := Result.Top + AH;
+      end;
+    end;
+  end;
+
+  procedure TextSizeOf(const AText: string; const AStyle: TTyStyleSet;
+    out AW, AH: Integer);
+  var w, h: Double;
+  begin
+    AW := 0;
+    AH := 0;
+    if AMeasurer = nil then Exit;
+    AMeasurer.MeasureLine(AText, AStyle.FontName, ResolveFontSize(AStyle),
+      AStyle.FontWeight, w, h);
+    AW := Round(w);
+    AH := Round(h);
+  end;
+
+  { a place that is a number: a frame of no position (a vertical orient
+    at the default bottom) puts everything at none, which draws nothing }
+  function Finite(AX, AY: Double): Boolean;
+  begin
+    Result := not (IsNan(AX) or IsNan(AY) or IsInfinite(AX) or IsInfinite(AY));
+  end;
+
+  { the lines of AInk (every one when AInk < 0), one path, one stroke }
+  procedure StrokeLines(const ALines: TTySingleLineArray; const AStyle: TTyStyleSet;
+    AInk: Integer);
+  var k, n: Integer;
+  begin
+    if not (tpBorderColor in AStyle.Present) then Exit;
+    n := 0;
+    APainter.BeginPath;
+    for k := 0 to High(ALines) do
+    begin
+      if not ALines[k].Drawn then Continue;
+      if not (Finite(ALines[k].X1, ALines[k].Y1) and Finite(ALines[k].X2, ALines[k].Y2)) then
+        Continue;
+      if (AInk >= 0) and (ALines[k].ColourIndex <> AInk) then Continue;
+      APainter.MoveTo(ALines[k].X1, ALines[k].Y1);
+      APainter.LineTo(ALines[k].X2, ALines[k].Y2);
+      Inc(n);
+    end;
+    if n > 0 then APainter.StrokePath(AStyle.BorderColor, LineWidth(AStyle));
+  end;
+
+  procedure PaintArrow(const AArrow: TTyAxisArrow);
+  var
+    el: TTyChartElement;
+    path: TTyZrPath;
+    t: string;
+  begin
+    t := AArrow.SymbolType;
+    path := TyZrSymbol(t, -AArrow.W / 2, -AArrow.H / 2, AArrow.W, AArrow.H);
+    if Length(path) = 0 then Exit;
+    el := Default(TTyChartElement);
+    el.Style.Alpha := 1;
+    el.Shape := TyMkZrShape(path, TyZrLocal(1, 1, AArrow.Rotation, AArrow.X,
+      AArrow.Y), True);
+    if Copy(t, 1, 5) = 'empty' then
+    begin
+      el.Style.HasFill := True;
+      el.Style.FillColor := TTyChartColor(model.ResolveStyle(
+        'TyAdvChartEmptyCircle', '', []).Background.Color);
+      el.Style.StrokeColor := TTyChartColor(lineS.BorderColor);
+      el.Style.StrokeWidthLogical := 2;
+    end
+    else if t = 'line' then
+    begin
+      el.Style.StrokeColor := TTyChartColor(lineS.BorderColor);
+      el.Style.StrokeWidthLogical := 1;
+    end
+    else
+    begin
+      el.Style.HasFill := True;
+      el.Style.FillColor := TTyChartColor(lineS.BorderColor);
+    end;
+    TyRenderElement(APainter, el);
+  end;
+
+begin
+  if Length(FSingles) = 0 then Exit;
+  { excludeComponents names the view [Batch 118] }
+  if ViewHidden(cvSingleAxis) then Exit;
+  model := ActiveController.Model;
+  lineS := model.ResolveStyle('TyAdvChartAxisLine', '', []);
+  tickS := model.ResolveStyle('TyAdvChartAxisTick', '', []);
+  splitS := model.ResolveStyle('TyAdvChartSplitLine', '', []);
+  areaS := model.ResolveStyle('TyAdvChartSplitArea', '', []);
+  minorTickS := model.ResolveStyle('TyAdvChartMinorTick', '', []);
+  for i := 0 to High(FSingles) do
+  begin
+    s := FSingles[i];
+    if s = nil then Continue;
+    v := s.View;
+    if not v.Shown then Continue;
+    ViewDrew(cvSingleAxis);
+    if ABelow then
+    begin
+      { the split areas in their colours: the author's list, or the skin's
+        colour and none in turn }
+      for q := 0 to High(v.SplitAreas) do
+      begin
+        ink := v.SplitAreas[q].ColourIndex;
+        if Length(v.Furn.SplitAreaInks) > 0 then
+        begin
+          if ink > High(v.Furn.SplitAreaInks) then ink := 0;
+          if not v.Furn.SplitAreaInks[ink].Ok then Continue;
+          areaColour := TTyColor(v.Furn.SplitAreaInks[ink].Colour);
+        end
+        else if (ink <> 0) or not (tpBackground in areaS.Present) then
+          Continue
+        else
+          areaColour := areaS.Background.Color;
+        APainter.BeginPath;
+        APainter.MoveTo(v.SplitAreas[q].X, v.SplitAreas[q].Y);
+        APainter.LineTo(v.SplitAreas[q].X + v.SplitAreas[q].W, v.SplitAreas[q].Y);
+        APainter.LineTo(v.SplitAreas[q].X + v.SplitAreas[q].W,
+          v.SplitAreas[q].Y + v.SplitAreas[q].H);
+        APainter.LineTo(v.SplitAreas[q].X, v.SplitAreas[q].Y + v.SplitAreas[q].H);
+        APainter.ClosePath;
+        APainter.FillPath(areaColour);
+      end;
+      { the split lines in their colours }
+      if (tpBorderColor in splitS.Present) or (Length(v.Furn.SplitLineInks) > 0) then
+        for q := 0 to Math.Max(0, High(v.Furn.SplitLineInks)) do
+        begin
+          inkStyle := splitS;
+          if Length(v.Furn.SplitLineInks) > 0 then
+          begin
+            if not v.Furn.SplitLineInks[q].Ok then Continue;
+            inkStyle.BorderColor := TTyColor(v.Furn.SplitLineInks[q].Colour);
+            Include(inkStyle.Present, tpBorderColor);
+            StrokeLines(v.SplitLines, inkStyle, q);
+          end
+          else
+            StrokeLines(v.SplitLines, inkStyle, -1);
+        end;
+      Continue;
+    end;
+    sp := v.Spec;
+    if v.HasLine and (tpBorderColor in lineS.Present)
+      and Finite(v.Line.X1, v.Line.Y1) and Finite(v.Line.X2, v.Line.Y2) then
+    begin
+      APainter.BeginPath;
+      APainter.MoveTo(v.Line.X1, v.Line.Y1);
+      APainter.LineTo(v.Line.X2, v.Line.Y2);
+      APainter.StrokePath(lineS.BorderColor, LineWidth(lineS));
+      for q := 0 to High(sp.Arrows) do
+        if Finite(sp.Arrows[q].X, sp.Arrows[q].Y) then PaintArrow(sp.Arrows[q]);
+    end;
+    StrokeLines(v.Ticks, tickS, -1);
+    StrokeLines(v.MinorTicks, minorTickS, -1);
+    AxisTextStyles(@sp, labelS, nameS);
+    pl := sp.NamePlacement;
+    if pl.Shown and (tpTextColor in nameS.Present) and Finite(pl.X, pl.Y) then
+    begin
+      if Length(pl.Rt) > 0 then
+        TyRenderRtPieces(APainter, pl.Rt, pl.X, pl.Y, pl.RotationRad, sp.RtScale,
+          1, True, nameS.TextColor)
+      else if Abs(pl.RotationRad) < 1e-9 then
+      begin
+        TextSizeOf(pl.Text, nameS, lblW, lblH);
+        APainter.DrawText(AnchorBox(pl.X, pl.Y, lblW, lblH, pl.AnchorH, pl.AnchorV),
+          pl.Text, nameS.FontName, ResolveFontSize(nameS), nameS.FontWeight,
+          nameS.TextColor, taCenter, tlCenter, False, 0, False, Pos(#10, pl.Text) > 0);
+      end
+      else
+        APainter.DrawTextRotated(pl.Text, nameS.FontName, ResolveFontSize(nameS),
+          nameS.FontWeight, nameS.TextColor, pl.X, pl.Y, pl.RotationRad,
+          AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV));
+    end;
+    if not (tpTextColor in labelS.Present) then Continue;
+    for q := 0 to High(sp.Placements) do
+    begin
+      if not sp.Placements[q].Shown or (sp.Placements[q].Text = '') then Continue;
+      if not Finite(sp.Placements[q].X, sp.Placements[q].Y) then Continue;
+      if Length(sp.Placements[q].Rt) > 0 then
+      begin
+        TyRenderRtPieces(APainter, sp.Placements[q].Rt, sp.Placements[q].X,
+          sp.Placements[q].Y, sp.RotationRad, sp.RtScale, 1, True, labelS.TextColor);
+        Continue;
+      end;
+      if sp.RotationRad <> 0 then
+      begin
+        APainter.DrawTextRotated(sp.Placements[q].Text, labelS.FontName,
+          ResolveFontSize(labelS), labelS.FontWeight, labelS.TextColor,
+          sp.Placements[q].X, sp.Placements[q].Y, sp.RotationRad,
+          AnchorAlign(sp.Placements[q].AnchorH), AnchorLayout(sp.Placements[q].AnchorV));
+        Continue;
+      end;
+      TextSizeOf(sp.Placements[q].Text, labelS, lblW, lblH);
+      APainter.DrawText(AnchorBox(sp.Placements[q].X, sp.Placements[q].Y, lblW,
+        lblH, sp.Placements[q].AnchorH, sp.Placements[q].AnchorV),
+        sp.Placements[q].Text, labelS.FontName, ResolveFontSize(labelS),
+        labelS.FontWeight, labelS.TextColor, taCenter, tlCenter, False, 0, False,
+        Pos(#10, sp.Placements[q].Text) > 0);
+    end;
+  end;
+end;
+
+function TTyAdvanceChart.SinglePointerGeometry(const AHit: TTyAxisHit;
+  const ARect: TRect; const AMeasurer: ITyTextMeasurer; APPI: Integer;
+  out ADraw: TTySinglePointerDraw): Boolean;
+var
+  pv, px, margin, tw, th, padL, padT, padR, padB, x, y, vw, vh: Double;
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
+  labelS: TTyStyleSet;
+  scale: Double;
+begin
+  ADraw := Default(TTySinglePointerDraw);
+  ADraw.Shape.Kind := spkNone;
+  Result := False;
+  if (AHit.Single = nil) or (AHit.Axis = nil) then Exit;
+  Result := True;
+  pv := PointerValue(AHit);
+  { coordSys.dataToPoint(value)[0] -- the x, whichever dimension the axis
+    runs along: a vertical axis' pointer stays on the rect's centre column,
+    upstream's }
+  px := AHit.Single.ValueToPoint(pv).X;
+  case AHit.Spec.PointerType of
+    aptLine: ADraw.Shape := TySinglePointerShape(AHit.Single, px, 0, False);
+    aptShadow: ADraw.Shape := TySinglePointerShape(AHit.Single, px,
+      TyPolarPointerBand(AHit.Axis), True);
+  end;
+  if not AHit.Spec.LabelSpec.Show or (AMeasurer = nil) then Exit;
+  ADraw.Text := PointerLabelText(AHit, pv);
+  labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
+  AMeasurer.MeasureLine(ADraw.Text, labelS.FontName, ResolveFontSize(labelS),
+    labelS.FontWeight, tw, th);
+  if APPI > 0 then scale := APPI / 96 else scale := 1;
+  if AHit.Spec.LabelSpec.HasPadding then
+  begin
+    padL := AHit.Spec.LabelSpec.PadLeft * scale;
+    padT := AHit.Spec.LabelSpec.PadTop * scale;
+    padR := AHit.Spec.LabelSpec.PadRight * scale;
+    padB := AHit.Spec.LabelSpec.PadBottom * scale;
+  end
+  else
+  begin
+    padL := labelS.Padding.Left * scale;
+    padT := labelS.Padding.Top * scale;
+    padR := labelS.Padding.Right * scale;
+    padB := labelS.Padding.Bottom * scale;
+  end;
+  margin := ActiveController.Metric(TyAdvChartAxisPointerMarginVar,
+    TyAdvChartAxisPointerMargin);
+  if AHit.Spec.LabelSpec.MarginLogical <> 3 then
+    margin := AHit.Spec.LabelSpec.MarginLogical;
+  margin := margin * scale;
+  { buildCartesianSingleLabelElOption: getTransformedPosition, then
+    buildLabelElOption's align and confineInContainer }
+  TySinglePointerLabelAnchor(AHit.Single, FOption, pv, margin, x, y, ah, av);
+  ADraw.W := tw + padR + padL;
+  ADraw.H := th + padT + padB;
+  if ah = tahRight then x := x - ADraw.W;
+  if ah = tahCentre then x := x - ADraw.W / 2;
+  if av = tavBottom then y := y - ADraw.H;
+  if av = tavMiddle then y := y - ADraw.H / 2;
+  vw := ARect.Right - ARect.Left;
+  vh := ARect.Bottom - ARect.Top;
+  x := Math.Min(x + ADraw.W, vw) - ADraw.W;
+  y := Math.Min(y + ADraw.H, vh) - ADraw.H;
+  x := Math.Max(x, Double(0));
+  y := Math.Max(y, Double(0));
+  ADraw.X := x;
+  ADraw.Y := y;
+  ADraw.HasLabel := True;
+end;
+
+procedure TTyAdvanceChart.PaintSinglePointer(APainter: TTyPainter;
+  const ARect: TRect; APPI: Integer; const AMeasurer: ITyTextMeasurer;
+  const AHit: TTyAxisHit);
+var
+  d: TTySinglePointerDraw;
+  lineS, shadowS, labelS: TTyStyleSet;
+  colour: TTyColor;
+  w: Double;
+  dash: TTyDoubleArray;
+  box: TRect;
+  corners: TTyCorners;
+  surface: TTyFill;
+  ln: TTySingleLine;
+begin
+  if not SinglePointerGeometry(AHit, ARect, AMeasurer, APPI, d) then Exit;
+  { a pointer at no number draws nothing (a frame of no position) }
+  if IsNan(d.Shape.X1) or IsNan(d.Shape.Y1) or IsNan(d.Shape.X2) or IsNan(d.Shape.Y2) then
+    d.Shape.Kind := spkNone;
+  if IsNan(d.X) or IsNan(d.Y) or IsNan(d.W) or IsNan(d.H) then d.HasLabel := False;
+  lineS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointer', '', []);
+  shadowS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerShadow', '', []);
+  labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
+  case d.Shape.Kind of
+    spkLine:
+      if tpBorderColor in lineS.Present then
+      begin
+        colour := lineS.BorderColor;
+        if AHit.Spec.HasLineColour then colour := TTyColor(AHit.Spec.LineColour);
+        w := lineS.BorderWidth;
+        if AHit.Spec.HasLineWidth then w := AHit.Spec.LineWidthLogical;
+        if w > 0 then
+        begin
+          { subPixelOptimize: true -- the line on the pixel grid as it is
+            built }
+          ln := Default(TTySingleLine);
+          ln.X1 := d.Shape.X1;
+          ln.Y1 := d.Shape.Y1;
+          ln.X2 := d.Shape.X2;
+          ln.Y2 := d.Shape.Y2;
+          TySingleSubPixelLine(ln, APainter.ScaleF(w));
+          dash := TyDashPattern(AHit.Spec.LineDash, AHit.Spec.LineDashExplicit, w);
+          APainter.SetLineDash(dash);
+          APainter.BeginPath;
+          APainter.MoveTo(ln.X1, ln.Y1);
+          APainter.LineTo(ln.X2, ln.Y2);
+          APainter.StrokePath(colour, w);
+          APainter.SetLineDash([]);
+        end;
+      end;
+    spkRect:
+      if tpBackground in shadowS.Present then
+      begin
+        colour := shadowS.Background.Color;
+        if AHit.Spec.HasShadowColour then colour := TTyColor(AHit.Spec.ShadowColour);
+        APainter.BeginPath;
+        APainter.MoveTo(d.Shape.X1, d.Shape.Y1);
+        APainter.LineTo(d.Shape.X1 + d.Shape.X2, d.Shape.Y1);
+        APainter.LineTo(d.Shape.X1 + d.Shape.X2, d.Shape.Y1 + d.Shape.Y2);
+        APainter.LineTo(d.Shape.X1, d.Shape.Y1 + d.Shape.Y2);
+        APainter.ClosePath;
+        APainter.FillPath(colour);
+      end;
+  end;
+  if not d.HasLabel or (d.Text = '') then Exit;
+  if not (tpBackground in labelS.Present) then Exit;
+  box := Rect(Round(d.X), Round(d.Y), Round(d.X + d.W), Round(d.Y + d.H));
+  corners := TyEffectiveCorners(labelS);
+  if AHit.Spec.LabelSpec.HasBorderRadius then
+    corners := TyCorners(Round(AHit.Spec.LabelSpec.BorderRadiusLogical),
+      Round(AHit.Spec.LabelSpec.BorderRadiusLogical),
+      Round(AHit.Spec.LabelSpec.BorderRadiusLogical),
+      Round(AHit.Spec.LabelSpec.BorderRadiusLogical));
+  surface := labelS.Background;
+  if AHit.Spec.LabelSpec.HasBackground then
+  begin
+    surface.Kind := tfkSolid;
+    surface.Color := TTyColor(AHit.Spec.LabelSpec.Background);
+  end;
+  APainter.FillBackground(box, surface, corners);
+  if AHit.Spec.LabelSpec.HasBorderColour and AHit.Spec.LabelSpec.HasBorderWidth
+    and (AHit.Spec.LabelSpec.BorderWidthLogical > 0) then
+    APainter.StrokeBorder(box, corners,
+      Round(AHit.Spec.LabelSpec.BorderWidthLogical),
+      TTyColor(AHit.Spec.LabelSpec.BorderColour))
+  else if TyBorderVisible(labelS) then
+    APainter.StrokeBorder(box, corners, labelS.BorderWidth, labelS.BorderColor);
+  colour := labelS.TextColor;
+  if AHit.Spec.LabelSpec.HasColour then colour := TTyColor(AHit.Spec.LabelSpec.Colour);
+  APainter.DrawText(box, d.Text, labelS.FontName, ResolveFontSize(labelS),
+    labelS.FontWeight, colour, taCenter, tlCenter, False);
+end;
+
+{ ==================== the themeRivers [Batch 118] ==================== }
+
+procedure TTyAdvanceChart.SolveRivers(APPI: Integer);
+var
+  i: Integer;
+  scale, margin: Double;
+  d: TJSONData;
+  lab: TJSONData;
+begin
+  FRivers := nil;
+  SetLength(FRivers, Length(FBindings));
+  if APPI > 0 then scale := APPI / 96 else scale := 1;
+  for i := 0 to High(FBindings) do
+  begin
+    FRivers[i] := Default(TTyThemeRiverLayout);
+    if FBindings[i].SeriesType <> TyThemeRiverSeriesTypeName then Continue;
+    if (FBindings[i].Single = nil) or FBindings[i].Hidden then Continue;
+    if (i > High(FStores)) or (FStores[i] = nil) then Continue;
+    { label.margin, 4 unless written }
+    margin := 4;
+    d := FOption.ComponentAt('series', FBindings[i].SeriesIndex);
+    if d is TJSONObject then
+    begin
+      lab := TJSONObject(d).Find('label');
+      if lab is TJSONObject then
+      begin
+        lab := TJSONObject(lab).Find('margin');
+        if (lab <> nil) and (lab.JSONType = jtNumber) then margin := lab.AsFloat;
+      end;
+    end;
+    FRivers[i] := TyThemeRiverLayout(FOption, FBindings[i].SeriesIndex,
+      TTySingle(FBindings[i].Single), FStores[i], margin * scale);
+  end;
+end;
+
+function TTyAdvanceChart.RiverLayoutOf(ASeriesIndex: Integer): TTyThemeRiverLayout;
+var slot: Integer;
+begin
+  Result := Default(TTyThemeRiverLayout);
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot >= 0) and (slot <= High(FRivers)) then Result := FRivers[slot];
+end;
+
+{ emphasis.label.show written false on a themeRiver }
+function TTyAdvanceChart.RiverEmphasisLabelOff(ASlot: Integer): Boolean;
+var d: TJSONData;
+begin
+  Result := False;
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if not (d is TJSONObject) then Exit;
+  d := TJSONObject(d).Find('emphasis');
+  if not (d is TJSONObject) then Exit;
+  d := TJSONObject(d).Find('label');
+  if not (d is TJSONObject) then Exit;
+  d := TJSONObject(d).Find('show');
+  Result := (d <> nil) and (d.JSONType = jtBoolean) and not d.AsBoolean;
+end;
+
+function TTyAdvanceChart.RiverLabelSpec(ASlot: Integer): TTyLabelSpec;
+var
+  base: TTyLabelSpec;
+  outS, lightS, midS, darkS: TTyStyleSet;
+  hasCol: Boolean;
+  col: Cardinal;
+begin
+  base := TyLabelSpecNone;
+  outS := ActiveController.Model.ResolveStyle('TyAdvChartLabel', '', []);
+  lightS := ActiveController.Model.ResolveStyle('TyAdvChartLabelOnLight', '', []);
+  midS := ActiveController.Model.ResolveStyle('TyAdvChartLabelOnMid', '', []);
+  darkS := ActiveController.Model.ResolveStyle('TyAdvChartLabelOnDark', '', []);
+  base.FontName := outS.FontName;
+  base.FontSizeLogical := ResolveFontSize(outS);
+  base.FontWeight := outS.FontWeight;
+  hasCol := False;
+  col := 0;
+  GlobalTextOver(base.FontName, base.FontSizeLogical, base.FontWeight,
+    hasCol, col, [ttpSize, ttpWeight, ttpFamily]);
+  { THE TYPE'S LABEL DEFAULTS (ThemeRiverSeries.ts): shown, 11 px, the
+    name -- and shown under emphasis, unless that says otherwise }
+  base.Show := True;
+  base.StateShow := not RiverEmphasisLabelOff(ASlot);
+  base.FontSizeLogical := 11;
+  base.DefaultText := tldName;
+  base.OutsideColour := TTyChartColor(outS.TextColor);
+  base.InsideColour[0] := TTyChartColor(lightS.TextColor);
+  base.InsideColour[1] := TTyChartColor(midS.TextColor);
+  base.InsideColour[2] := TTyChartColor(darkS.TextColor);
+  LabelGround(base.Ground, base.GroundDark);
+  base.RtGlobal := RtGlobal;
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit(base);
+  Result := TyLabelSpecOf(FOption, FBindings[ASlot].SeriesIndex, base);
+end;
+
+function TTyAdvanceChart.BuildRiverMarks(ASlot: Integer; AList: TTyPaintList;
+  APPI: Integer): Integer;
+var
+  L: TTyThemeRiverLayout;
+  pg: TTyRiverPolygon;
+  v: TTySeriesVisual;
+  perRaw: TTyChartColorArray;
+  spec: TTyLabelSpec;
+  st: TTyDataStore;
+  el: TTyChartElement;
+  pts: TTyPointFArray;
+  cmds: TTyPathCmdArray;
+  k, j, n, m, raw, si: Integer;
+  gy: Double;
+  fill: TTyChartColor;
+
+  function Legal(const AP: TTyPointF): Boolean;
+  begin
+    Result := not (IsNan(AP.X) or IsNan(AP.Y) or IsInfinite(AP.X) or IsInfinite(AP.Y));
+  end;
+
+begin
+  Result := 0;
+  if (ASlot < 0) or (ASlot > High(FRivers)) or not FRivers[ASlot].Valid then Exit;
+  L := FRivers[ASlot];
+  st := FStores[ASlot];
+  si := FBindings[ASlot].SeriesIndex;
+  v := TySeriesVisual(TTyChartColor(SeriesColor(si)));
+  ApplyOptStyle(v, si);
+  perRaw := PerDatumColours(ASlot);
+  spec := RiverLabelSpec(ASlot);
+  gy := L.GroupY;
+  for k := 0 to High(L.Polygons) do
+  begin
+    pg := L.Polygons[k];
+    if not pg.Valid then Continue;
+    { A PATH OF NO LEGAL POINT draws nothing: upstream's drawSegment skips
+      every point that is not a number (a category axis' names are not) }
+    if not TyRiverPathDraws(pg.Cmds) then Continue;
+    { the polygon in the canvas' frame: the group's y added -- a ring of the
+      bottoms forward and the tops back for the hit test (its legal points),
+      the path upstream builds for the ink }
+    n := Length(pg.Bottoms);
+    SetLength(pts, 2 * n);
+    m := 0;
+    for j := 0 to n - 1 do
+      if Legal(pg.Bottoms[j]) then
+      begin
+        pts[m] := TyPointF(pg.Bottoms[j].X, pg.Bottoms[j].Y + gy);
+        Inc(m);
+      end;
+    for j := n - 1 downto 0 do
+      if Legal(pg.Tops[j]) then
+      begin
+        pts[m] := TyPointF(pg.Tops[j].X, pg.Tops[j].Y + gy);
+        Inc(m);
+      end;
+    SetLength(pts, m);
+    cmds := Copy(pg.Cmds);
+    for j := 0 to High(cmds) do
+    begin
+      cmds[j].Y := cmds[j].Y + gy;
+      cmds[j].Y1 := cmds[j].Y1 + gy;
+      cmds[j].Y2 := cmds[j].Y2 + gy;
+    end;
+    el := TyChartElement(TyShapePolygon(pts));
+    { a layer takes the pointer: its hover, its tooltip, its states }
+    el.Silent := False;
+    el.Shape.Cmds := cmds;
+    el.Shape.HasCmdBounds := True;
+    el.Shape.CmdBounds := TyRectF(pg.Box.X, pg.Box.Y + gy, pg.Box.X + pg.Box.W,
+      pg.Box.Y + gy + pg.Box.H);
+    { THE LAYER'S STYLE IS ITS LAST ROW'S: the palette's colour of that row
+      (colorBy 'data', one colour a name), the series' item style over it }
+    raw := st.GetRawIndex(pg.StyleRow);
+    fill := v.Fill;
+    if (raw >= 0) and (raw <= High(perRaw)) then fill := perRaw[raw];
+    el.Style := TyChartStyle;
+    el.Style.HasFill := True;
+    el.Style.FillColor := fill;
+    el.Style.Alpha := v.Alpha;
+    if (v.Stroke <> 0) and (v.StrokeWidthLogical > 0) then
+    begin
+      el.Style.StrokeColor := v.Stroke;
+      el.Style.StrokeWidthLogical := v.StrokeWidthLogical;
+    end;
+    { setItemGraphicEl(idx): the polygon is the LAYER's index's datum }
+    if k < st.Count then
+      el.Datum := TyChartDatum(si, k, st.GetRawIndex(k))
+    else
+      el.Datum := TyChartDatum(si, k);
+    el.Z := SeriesIntIn(si, 'z', 2);
+    el.Z2 := 0;
+    { the label: the last row's name, at the first row less the margin,
+      halfway up -- the style's align (left unless written) and middle }
+    { (a label at a place that is no number draws nothing) }
+    if (spec.Show or spec.StateShow) and not (IsNan(pg.LabelX) or IsNan(pg.LabelY)
+      or IsInfinite(pg.LabelX) or IsInfinite(pg.LabelY)) then
+    begin
+      { THE NAME AND NOTHING ELSE: the view hands setLabelStyle no label
+        fetcher, so a formatter is never asked -- the default text, the last
+        row's name, is the label }
+      el.Caption.Text := st.GetItemName(pg.StyleRow);
+      el.Caption.HasFixedAnchor := True;
+      el.Caption.FixedX := pg.LabelX;
+      el.Caption.FixedY := pg.LabelY + gy;
+      el.Caption.FixedInside := False;
+      if spec.HasAlignH then el.Caption.FixedAH := spec.AlignH
+      else el.Caption.FixedAH := tahLeft;
+      el.Caption.FixedAV := tavMiddle;
+      el.Caption.FixedRotationRad := 0;
+    end;
+    { the enter animation's clip is made from the path's own rect }
+    el.Anim := Default(TTyChartAnim);
+    el.Anim.Role := carRiver;
+    el.Anim.Series := si;
+    el.Anim.Index := k;
+    el.Anim.G[0] := pg.Box.X;
+    el.Anim.G[1] := pg.Box.Y;
+    el.Anim.G[2] := pg.Box.W;
+    el.Anim.G[3] := pg.Box.H;
+    el.Anim.G[4] := gy;
+    AList.Add(el);
+    Inc(Result);
+  end;
+end;
+
+function TTyAdvanceChart.ConvertOnSingle(ASingle: TTySingle; AValue: TJSONData;
+  AFrom: Boolean): TTyConvertResult;
+begin
+  if AFrom then Result := TySingleFromPixel(ASingle, AValue)
+  else Result := TySingleToPixel(ASingle, AValue);
+end;
+
 { WHAT THE TWO VIEWS DRAW, in the skin's axis styles -- the same keys the
   grid's axes draw in, because upstream's polar axes share axisDefault with
   every other axis. The geometry is the layout's, already on the pixel grid
@@ -14071,6 +14870,16 @@ begin
         end;
         Continue;
       end;
+      { A THEMERIVER: a polygon per layer, its label at the layer's start
+        [Batch 118] }
+      if FBindings[i].SeriesType = TyThemeRiverSeriesTypeName then
+      begin
+        Inc(drawn, BuildRiverMarks(i, list, APPI));
+        if Length(specs) <= FBindings[i].SeriesIndex then
+          SetLength(specs, FBindings[i].SeriesIndex + 1);
+        specs[FBindings[i].SeriesIndex] := RiverLabelSpec(i);
+        Continue;
+      end;
       v := TySeriesVisual(TTyChartColor(SeriesColor(FBindings[i].SeriesIndex)));
       ApplyOptStyle(v, FBindings[i].SeriesIndex);
       ApplyVisualMaps(v, i, APPI);
@@ -14173,7 +14982,11 @@ begin
         category ordinal, which is a number and looks like an answer. }
       v.LabelValueDim := -1;
       if (FBindings[i].ValueAxis <> nil) and (FStores[i] <> nil) then
-        v.LabelValueDim := FStores[i].DimIndexOf(FBindings[i].ValueAxis.Dim);
+        v.LabelValueDim := FStores[i].DimIndexOf(FBindings[i].ValueAxis.Dim)
+      { on a single axis the one dimension is the label's (defaultedLabel)
+        [Batch 118] }
+      else if (FBindings[i].Single <> nil) and (FStores[i] <> nil) then
+        v.LabelValueDim := FStores[i].DimIndexOf(TySingleDim);
       v.SeriesName := SeriesModelName(FBindings[i].SeriesIndex);
       v.SeriesIndex := FBindings[i].SeriesIndex;
       v.SeriesType := FBindings[i].SeriesType;
@@ -15648,6 +16461,23 @@ begin
     and (FStores[slot] <> nil) and (ADatum.DataIndex >= 0)
     and (ADatum.DataIndex < FStores[slot].Count) then
     Exit(RadarTooltip(slot, ADatum.DataIndex, p.Color, ASpec));
+  { A THEMERIVER'S ROW IS ONE BARE ROW: its formatTooltip is a nameValue of
+    the row's name and value, no marker, no section -- for the row the
+    datum names, which over a layer's polygon is the LAYER'S index, as
+    upstream's setItemGraphicEl(idx) leaves it [Batch 118] }
+  if (slot >= 0) and (FBindings[slot].SeriesType = TyThemeRiverSeriesTypeName)
+    and (slot <= High(FStores)) and (FStores[slot] <> nil) then
+  begin
+    Result := TTyTooltipBlock.CreateSection('', True);
+    if (ADatum.DataIndex >= 0) and (ADatum.DataIndex < FStores[slot].Count) then
+    begin
+      tv := FStores[slot].Get(1, ADatum.DataIndex);
+      Result.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0,
+        FStores[slot].GetItemName(ADatum.DataIndex), False,
+        TyTooltipValueText(tv), IsNan(tv)));
+    end;
+    Exit;
+  end;
   cells := Default(TTyTipCells);
   if (slot >= 0) and (slot <= High(FStores)) and (ADatum.DataIndex >= 0)
     and (FStores[slot] <> nil) and (ADatum.DataIndex < FStores[slot].Count) then
@@ -16762,7 +17592,8 @@ begin
   else if t = TyPictorialSeriesTypeName then Result := sskPictorial
   else if t = TySunburstSeriesTypeName then Result := sskSunburst
   else if t = 'boxplot' then Result := sskBox
-  else if t = TySankeySeriesTypeName then Result := sskSankey;
+  else if t = TySankeySeriesTypeName then Result := sskSankey
+  else if t = TyThemeRiverSeriesTypeName then Result := sskRiver;
   { a line on a calendar is not drawn at all }
   if (FBindings[ASlot].CalendarIndex >= 0) and (t = 'line') then Result := sskNone;
 end;
@@ -17005,6 +17836,13 @@ begin
       obj := TyStNoObject;
       { ignore = !show only when the state's show differs from the normal one }
       stShow := TyStReadBool(nodes, [cStNames[n], 'label', 'show'], has);
+      { a themeRiver's model shows the emphasis label unless told
+        (ThemeRiverSeries.ts emphasis.label.show) [Batch 118] }
+      if (n = stnEmphasis) and (FSt[s].Kind = sskRiver) and not has then
+      begin
+        stShow := True;
+        has := True;
+      end;
       if has and (stShow <> normalShow) then TyStSetNum(obj, stkIgnore, Ord(not stShow));
       { hideOverlap's hideEl: a label it hid shows again under emphasis,
         unless that state already says (LabelLayoutHelper.ts hideOverlap)
@@ -18107,6 +18945,9 @@ begin
   else if FBindings[ASlot].Polar <> nil then
     { a polar is its own master [Batch 113] }
     Result := 'polar' + IntToStr(FBindings[ASlot].PolarIndex)
+  { a single axis is too [Batch 118] }
+  else if FBindings[ASlot].Single <> nil then
+    Result := 'single' + IntToStr(FBindings[ASlot].SingleIndex)
   else if FBindings[ASlot].CalendarIndex >= 0 then
     Result := 'calendar' + IntToStr(FBindings[ASlot].CalendarIndex)
   else if FBindings[ASlot].RadarIndex >= 0 then
@@ -20757,8 +21598,9 @@ var
   base: TTyAxis;
   node: TJSONData;
   d: TJSONData;
-  jit, margin, scale: Double;
-  overlap: Boolean;
+  jit, margin, scale, band: Double;
+  overlap, single, singleY: Boolean;
+  s: TTySingle;
 
   function NumOf(AData: TJSONData): Double;
   begin
@@ -20776,9 +21618,18 @@ begin
   AVisual.JitterOnX := False;
   if (ASlot < 0) or (ASlot > High(FBindings)) or (FJitter = nil) then Exit;
   if FBindings[ASlot].SeriesType <> 'scatter' then Exit;
-  if (FBindings[ASlot].Cart = nil) or (FBindings[ASlot].CalendarIndex >= 0) then Exit;
-  base := FBindings[ASlot].Cart.GetBaseAxis;
-  if (base = nil) or (base.AxisType <> atCategory) then Exit;
+  { ON A SINGLE AXIS any type of axis jitters (needFixJitter's
+    COORD_SYS_TYPE_SINGLE) [Batch 118] }
+  single := FBindings[ASlot].Single <> nil;
+  if single then
+    base := FBindings[ASlot].BaseAxis
+  else
+  begin
+    if (FBindings[ASlot].Cart = nil) or (FBindings[ASlot].CalendarIndex >= 0) then Exit;
+    base := FBindings[ASlot].Cart.GetBaseAxis;
+    if (base = nil) or (base.AxisType <> atCategory) then Exit;
+  end;
+  if base = nil then Exit;
   node := FOption.ComponentAt(base.MainType, base.ComponentIndex);
   if not (node is TJSONObject) then Exit;
   jit := 0;
@@ -20796,6 +21647,22 @@ begin
     if IsNan(margin) then margin := 0;
   end;
   if APPI > 0 then scale := APPI / 96 else scale := 1;
+  if single then
+  begin
+    { a band only on a category axis: elsewhere nothing clamps (an
+      infinite band is none) }
+    if base.AxisType = atCategory then band := base.BandWidth
+    else band := Infinity;
+    AVisual.Jitter := FJitter.AxisFor(base.Uid, jit * scale, margin * scale,
+      overlap, band);
+    { isSingleY: a horizontal non-category axis or a vertical category one
+      floats y }
+    s := TTySingle(FBindings[ASlot].Single);
+    singleY := (s.OrientHorizontal and (base.AxisType <> atCategory))
+      or ((s.Orient = 'vertical') and (base.AxisType = atCategory));
+    AVisual.JitterOnX := not singleY;
+    Exit;
+  end;
   AVisual.Jitter := FJitter.AxisFor(base.Uid, jit * scale, margin * scale,
     overlap, base.BandWidth);
   AVisual.JitterOnX := base.Horizontal;
@@ -21010,7 +21877,22 @@ begin
       Result := ConvertOnPolar(FPolars[c], AValue, AFrom);
       if Result.Kind <> cvkNone then Exit;
     end;
-    { singleAxis (C10) takes its turn here }
+    { THE SINGLE AXES [Batch 118]: getCoordSys -- the single named, else
+      the series' own }
+    for c := 0 to High(FSingles) do
+    begin
+      if FSingles[c] = nil then Continue;
+      target := TyFinderModel(pf, TySingleCoordSysName);
+      if (target < 0) and (s >= 0) then
+      begin
+        slot := SlotOfSeries(s);
+        if (slot >= 0) and (FBindings[slot].Single <> nil) then
+          target := FBindings[slot].SingleIndex;
+      end;
+      if target <> c then Continue;
+      Result := ConvertOnSingle(FSingles[c], AValue, AFrom);
+      if Result.Kind <> cvkNone then Exit;
+    end;
     for c := 0 to High(FCalendars) do
     begin
       if FCalendars[c] = nil then Continue;
@@ -21062,6 +21944,8 @@ begin
   if b.Cart <> nil then Exit(TyCartesianContainJson(b.Cart, APoint));
   { a polar's containPoint [Batch 113] }
   if b.Polar <> nil then Exit(TyPolarContainJson(TTyPolar(b.Polar), APoint));
+  { a single axis' [Batch 118] }
+  if b.Single <> nil then Exit(TySingleContainJson(TTySingle(b.Single), APoint));
   if (b.CalendarIndex >= 0) or (b.RadarIndex >= 0) then Exit;
   pt := TyJsonPoint(APoint);
   if IsNan(pt.X) or IsNan(pt.Y) then Exit;
@@ -21146,6 +22030,14 @@ begin
           g := pf.Types[t].Models[k];
           if (g >= 0) and (g <= High(FPolars)) and (FPolars[g] <> nil)
             and TyPolarContainJson(FPolars[g], APoint) then
+            Exit(True);
+        end
+        { Single.containPoint [Batch 118] }
+        else if mt = TySingleCoordSysName then
+        begin
+          g := pf.Types[t].Models[k];
+          if (g >= 0) and (g <= High(FSingles)) and (FSingles[g] <> nil)
+            and TySingleContainJson(FSingles[g], APoint) then
             Exit(True);
         end;
         { a calendar's and a radar's containPoint are not implemented
@@ -22374,6 +23266,7 @@ var
   seen: array of TTyAxis;
   wantPolar: string;
   pol: TTyPolar;
+  sgl: TTySingle;
 
   function AlreadySeen(AAxis: TTyAxis): Boolean;
   var j: Integer;
@@ -22387,8 +23280,43 @@ var
 
   { One axis, resolved and appended when it has something to say. On a
     polar the value is the axis' own half of pointToData [Batch 111]. }
+  { ThemeRiverSeries.getAxisTooltipData: per layer the row nearest AValue
+    in time -- the last of a tie -- and the nearest value of the LAST layer }
+  function RiverNearest(ASlot: Integer; AValue: Double; out ARows: TTyIntegerArray;
+    out ANearest: Double): Boolean;
+  var
+    layers: TTyRiverLayerArray;
+    li, j, idx: Integer;
+    md, t, dd: Double;
+  begin
+    ARows := nil;
+    ANearest := NaN;
+    Result := False;
+    if (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
+    layers := TyThemeRiverLayers(FStores[ASlot]);
+    SetLength(ARows, Length(layers));
+    for li := 0 to High(layers) do
+    begin
+      md := MaxDouble;
+      idx := -1;
+      for j := 0 to High(layers[li].Rows) do
+      begin
+        t := FStores[ASlot].Get(0, layers[li].Rows[j]);
+        dd := Abs(t - AValue);
+        if (not IsNan(dd)) and (dd <= md) then
+        begin
+          ANearest := t;
+          md := dd;
+          idx := layers[li].Rows[j];
+        end;
+      end;
+      ARows[li] := idx;
+    end;
+    Result := Length(layers) > 0;
+  end;
+
   procedure Consider(AAxis: TTyAxis; const APlot: TTyRectF; ACross: Boolean;
-    APolar: TTyPolar = nil);
+    APolar: TTyPolar = nil; ASingle: TTySingle = nil);
   var
     hit: TTyAxisHit;
     coord, value, snapTo, v, diff, dist, minDist, minDiff, maxDist: Double;
@@ -22404,6 +23332,7 @@ var
     hit.Plot := APlot;
     hit.Cross := ACross;
     hit.Polar := APolar;
+    hit.Single := ASingle;
     hit.Spec := TyAxisPointerSpecOf(FOption, AAxis.MainType,
       AAxis.ComponentIndex, isCat, True,
       (tipSpec.Trigger = tttAxis) and not ACross, crossType);
@@ -22411,6 +23340,9 @@ var
 
     if APolar <> nil then
       value := APolar.AxisPointToData(AAxis, AX, AY)
+    { SingleAxis.pointToData: the orient's coordinate [Batch 118] }
+    else if ASingle <> nil then
+      value := ASingle.PointXYToData(AX, AY)
     else
     begin
       if AAxis.Horizontal then coord := AX else coord := AY;
@@ -22461,8 +23393,16 @@ var
           axis finds the bar nearest in value [Batch 101]
           [Revised in batch 101: only the series whose base axis this is.] }
         if (FBindings[s].XAxis <> AAxis) and (FBindings[s].YAxis <> AAxis) then Continue;
-        if not NearestOnAxis(s, AAxis, value, maxDist, rows) then Continue;
-        v := FStores[s].Get(FStores[s].DimIndexOf(AAxis.Dim), rows[0]);
+        { a themeRiver answers by its own getAxisTooltipData [Batch 118] }
+        if FBindings[s].SeriesType = TyThemeRiverSeriesTypeName then
+        begin
+          if not RiverNearest(s, value, rows, v) then Continue;
+        end
+        else
+        begin
+          if not NearestOnAxis(s, AAxis, value, maxDist, rows) then Continue;
+          v := FStores[s].Get(FStores[s].DimIndexOf(AAxis.Dim), rows[0]);
+        end;
         if IsNan(v) or IsInfinite(v) then Continue;
         diff := value - v;
         dist := Abs(diff);
@@ -22553,6 +23493,16 @@ begin
     Consider(baseAxis, Default(TTyRectF), False, pol);
     if crossType and (baseAxis <> nil) then
       Consider(pol.OtherAxis(baseAxis), Default(TTyRectF), True, pol);
+  end;
+  { THE SINGLE AXES, after the polars as the coordinate system manager
+    lists them: one that holds the point (Single.containPoint) takes a
+    pointer on its axis -- its only one, so a cross adds nothing
+    [Batch 118] }
+  for g := 0 to High(FSingles) do
+  begin
+    sgl := FSingles[g];
+    if (sgl = nil) or not sgl.ContainXY(AX, AY) then Continue;
+    Consider(sgl.Axis, sgl.GetRect, False, nil, sgl);
   end;
 end;
 
@@ -23293,6 +24243,12 @@ begin
     if hit.Polar <> nil then
     begin
       PaintPolarPointer(APainter, ARect, APPI, AMeasurer, hit);
+      Continue;
+    end;
+    { and a single axis' [Batch 118] }
+    if hit.Single <> nil then
+    begin
+      PaintSinglePointer(APainter, ARect, APPI, AMeasurer, hit);
       Continue;
     end;
     { SNAP MOVES THE POINTER, not the content. With snap off the line stays
@@ -25302,7 +26258,7 @@ begin
       LabelManager fades all the same }
     r.LabelFade := (t = 'bar') or (t = 'scatter') or (t = 'heatmap')
       or (t = TyPieSeriesTypeName) or (t = TyFunnelSeriesTypeName)
-      or (t = 'effectScatter');
+      or (t = 'effectScatter') or (t = TyThemeRiverSeriesTypeName);
     { A SUNBURST'S DRILL-DOWN: its pieces transition, its new labels fade
       [Batch 115] }
     r.HierDrill := (si <= High(FHierDrill)) and FHierDrill[si];
@@ -25690,8 +26646,9 @@ begin
   begin
     hit := FTipHits[i];
     if (hit.Axis = nil) or (hit.Spec.PointerType = aptNone) then Continue;
-    { a polar pointer does not slide [Batch 111] }
-    if hit.Polar <> nil then Continue;
+    { a polar pointer does not slide [Batch 111], nor a single's
+      [Batch 118] }
+    if (hit.Polar <> nil) or (hit.Single <> nil) then Continue;
     at := hit.Axis.DataToCoord(PointerValue(hit), True);
     if IsNan(at) then Continue;
     key := PtrKeyOf(hit.Axis);
