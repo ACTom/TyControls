@@ -65,8 +65,8 @@ type
       TTyScrollBar.IsEmbedded。
 
       为什么不是「父控件实现了本接口」就算:滚动框是容器,用户完全可以往里面拖一根自己的
-      TTyScrollBar,它的 Parent 同样实现本接口,却是一根独立的条 —— 该画自己的框、该在点击时
-      拿焦点。也不是 TabStop:用户给独立条关掉 TabStop(不进 Tab 顺序)照样指望点它能拿到焦点。
+      TTyScrollBar,它的 Parent 同样实现本接口,却是一根独立的条 —— 该画自己的框,点它也不该
+      把焦点挪给滚动框。也不是 TabStop:它对滚动条已经不起作用(#56)。
       也不是 Owner:代码里 TTyScrollBar.Create(ScrollBox1) 再 Parent := ScrollBox1 是常见写法。
       只有宿主知道哪几根是它自己的,所以让宿主回答;做成接口方法,新宿主漏写就编译不过。 }
     function EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
@@ -172,7 +172,8 @@ type
       const AHost: ITyScrollBarFrameHost; const AStyle: TTyStyleSet; AAlpha: Single);
     { 本条若是某个宿主自己的内嵌条,交出那个宿主。见 IsEmbedded。 }
     function EmbeddingHost(out AHost: ITyScrollBarFrameHost): Boolean;
-    { 一次左键点击之后焦点该落在哪。独立的条拿焦点;内嵌条把焦点交给宿主。见实现处。 }
+    { 一次左键点击之后焦点该落在哪。条自己从不拿;内嵌条把焦点交给宿主,独立的条不动焦点。
+      见实现处。 }
     procedure FocusAfterClick;
     { 主题说的延时，按 (model, ThemeVersion) 缓存。见实现处：热路径上一拍要问两次。 }
     function ThemeAutoHideMs: Integer;
@@ -197,25 +198,15 @@ type
       在没句柄的时候直接 Exit,建不出表来。句柄随后到位,**从前没有任何东西
       回头重试**:一条摆在屏幕上、谁也没碰过的条,表是 0 块,永远停在
       FadeLevel = 1.0,非得等鼠标移上去(MouseEnter -> NoteActivity)才开始算
-      延时——用户报的就是这个。
-
-      有一种情形这里救不了,也不该救:独立摆放的条要是正好是窗体的头一个
-      tab stop,一出生就有焦点,而有焦点是「按住不放」的信号之一
-      (AutoHideHeldOpen),表起来了头一拍也会把自己停掉。那是设计,不是 bug
-      ——键盘焦点停在一个看不见的控件上才是事故。 }
+      延时——用户报的就是这个。 }
     procedure InitializeWnd; override;
     { 全身只为自动隐藏服务：指针压在条上时它必须一直亮着。 }
     procedure MouseEnter; override;
     { 同上，指针离开那一半：把停掉的延时表重新起起来。 }
     procedure MouseLeave; override;
-    { 同上,焦点那一半。 }
-    procedure DoEnter; override;
-    { 同上，失焦那一半。 }
-    procedure DoExit; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
-    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
     // Fire OnScroll with ACode and the proposed APos (which the handler may
@@ -261,6 +252,14 @@ type
       内容已经动了,滑块再缓动追上去就是不跟手 —— 用户看到的是内容在动、
       滑块慢半拍。缓动只在"用户点滑道让它跳过去"那种场景才有意义。 }
     procedure SetPositionSnapped(AValue: Integer);
+    { 滚动条从不拿焦点(#56):滚动条是给鼠标用的,键盘滚动归被滚动的那个控件。LCL 的 Tab 与
+      方向键导航都按 CanFocus 筛(TWinControl.GetTabOrderList),所以这一句堵住了每一条路。 }
+    function CanFocus: Boolean; override;
+    { 一个键对这根条意味着什么,就照着做:↑↓(竖条)或 ←→(横条,镜像时对调)走一个
+      SmallChange,PgUp/PgDn 走一页,Home/End 到头。处理了就把 Key 置 0 并答 True。
+      条自己从不拿焦点,所以这些键从来不会直接到它这儿;被滚动的控件(或应用)把自己
+      收到的键转过来,就能复用同一套步长、OnScroll 与镜像规则。禁用的条什么都不做。 }
+    function ScrollByKey(var Key: Word): Boolean;
     { 本条是不是某个宿主(列表框、备忘录、网格、列表视图、树、滚动框)**自己的**内嵌条 ——
       由父控件经 ITyScrollBarFrameHost.EmbedsScrollBar 回答,不看 TabStop、不看 Owner。
       内嵌条贴边摆、替宿主画框,而且**永远不拿焦点**:点它,焦点归宿主(见 MouseDown)。
@@ -318,11 +317,9 @@ type
     { 换主题时控件收到的就只有这一个广播,所以「自动隐藏关着 -> 条必须看得见」
       这条不变量只能挂在这儿修。见实现处。 }
     procedure Invalidate; override;
-    { A standalone bar is a keyboard control (arrows / PgUp / PgDn / Home / End in
-      KeyDown), so it takes a tab stop like the native TScrollBar does. Declared True to
-      match the constructor, so a host's TabStop=False opt-out streams — which is exactly
-      what the bars EMBEDDED inside a list/grid/tree/scroll box do, in code. }
-    property TabStop default True;
+    { 4.0 起没有作用:滚动条从不拿焦点(CanFocus,#56)。仍然 published,是为了让存过它的
+      窗体照常加载。默认 False,与构造函数一致。 }
+    property TabStop default False;
     { LIVE TRACKING -- whether dragging the thumb moves Position continuously (True, the
       default and what this bar has always done) or only on mouse-up (False).
 
@@ -578,11 +575,8 @@ end;
 constructor TTyCustomScrollBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  // KeyDown below implements the whole native keyboard: line, page and end-to-end. None of
-  // it could ever run, because LCL defaults TabStop to False and TTyCustomControl.MouseDown
-  // gates click-to-focus on it. Controls that EMBED a bar (list box, memo, grid, tree,
-  // scroll box) turn it back off on their instance — see the comments there.
-  TabStop := True;
+  // A scroll bar never takes the focus (CanFocus, #56), so it is not a tab stop either.
+  TabStop := False;
   FKind := sbVertical;
   FMin := 0;
   FMax := 100;
@@ -722,17 +716,15 @@ end;
 function TTyCustomScrollBar.AutoHideHeldOpen: Boolean;
 begin
   { 任一成立就「按住不放」，延时表根本不起。
-    注意 Focused 只对独立摆放的条有意义：内嵌条既不进 Tab 顺序(TabStop=False),点击也把
-    焦点交给宿主(FocusAfterClick),所以这一臂对内嵌条恒假。内嵌条拖动时靠的是 FDragging
-    (和拖动途中指针在不在条上无关),指针在宿主上靠 FHostHovered —— 没有哪一臂指望它有焦点。
+    没有焦点那一臂:条从不拿焦点(#56)。拖动时靠的是 FDragging(和拖动途中指针在不在条上
+    无关),指针在宿主上靠 FHostHovered。
 
     **FHover 和 FHostHovered 必须合起来判——交界处不抖的全部理由就在这里。**
     条是窗口化子控件：指针从宿主内容挪到条上时，宿主收到 MouseLeave、条收到
     MouseEnter，**两者的先后 LCL 不保证**。只认其中一个的话，先到的那个转假的
     瞬间条就该淡了，用户看到的是移到条上的一刹那它闪一下。两个或起来，再加上
     「离开只起表、不当场隐藏」（见 SetHostHovered），交界处就没有一帧是在淡的。 }
-  Result := FHover or FHostHovered or FDragging or (csDesigning in ComponentState)
-            or (HandleAllocated and Focused);
+  Result := FHover or FHostHovered or FDragging or (csDesigning in ComponentState);
 end;
 
 procedure TTyCustomScrollBar.NoteActivity;
@@ -898,8 +890,7 @@ begin
     同一个 EffectiveAutoHideMs >= 0,所以单独摘掉头一句,行为上几乎看不出来
     ——变异测试证实过,全量 7103 条一条不红。它在这儿是因为 Invalidate 一秒钟
     要走几十次,而自动隐藏关着的条应该在**第一个字段读**上就出去,不该先绕过
-    FFadeAnim.Running、再绕过 AutoHideHeldOpen(那里面还有一次 Focused,要问
-    widgetset)。顺带也真挡住一种状态:淡出刚装上膛还没推进(可见度仍是 1.0)
+    FFadeAnim.Running、再绕过 AutoHideHeldOpen。顺带也真挡住一种状态:淡出刚装上膛还没推进(可见度仍是 1.0)
     的那一刻主题把自动隐藏关掉,AutoHideTimerNeeded 会在 FFadeAnim.Running 上
     答 True —— 没这一句就会给一条主人已经关掉特性的条挂上表(下一拍自己会停,
     所以测不出来,但那一拍本来就不该有)。
@@ -1025,32 +1016,8 @@ begin
     起算,那本来就是该有的语义。
 
     NoteActivity 里 FHideTimer.Enabled := True 是**下一拍**才生效的(16ms 之后),
-    所以哪怕这一刻 FHover 还没清干净也不要紧:等表真转起来的时候,状态早就稳了。
-    DoExit 那一半就是靠这个才不必去操心 LCL 什么时候把 Focused 翻成 False。 }
+    所以哪怕这一刻 FHover 还没清干净也不要紧:等表真转起来的时候,状态早就稳了。 }
   inherited MouseLeave;
-  NoteActivity;
-end;
-
-procedure TTyCustomScrollBar.DoEnter;
-begin
-  { 焦点不只是「不计时」,还得**把条叫回来**。独立摆放的条 TabStop=True:等它
-    淡到 0、定时器把自己停掉之后再 Tab 过来,按住不放那条臂连跑的机会都没有
-    (没人推它了),键盘焦点就停在一个看不见的控件上 —— 这是可访问性事故,
-    不是设计。悬停那一半由 MouseEnter 拿到,焦点这一半得自己写。
-
-    从前说「不写对应的 DoExit」,理由和 MouseLeave 那条一样,也和它一起作废了:
-    见 DoExit。 }
-  inherited DoEnter;
-  NoteActivity;
-end;
-
-procedure TTyCustomScrollBar.DoExit;
-begin
-  { 和 MouseLeave 同理,焦点这一半:有焦点的那段延时表是停的,这里不起回来的话条就
-    一直留着。**只有独立摆放的条走得到这里。** 从前内嵌条也走得到 —— MouseDown 里那句
-    无条件的 if CanFocus then SetFocus 把焦点给了它,「点一下条、再去点别处」就进来了;
-    现在点内嵌条焦点归宿主(FocusAfterClick),内嵌条不再有 DoEnter/DoExit。 }
-  inherited DoExit;
   NoteActivity;
 end;
 
@@ -1908,10 +1875,12 @@ begin
 end;
 
 procedure TTyCustomScrollBar.FocusAfterClick;
-{ 独立摆放的条:点它就拿焦点,与从前一样 —— 它有完整的键盘操作,焦点也是自动隐藏「按住
-  不放」的信号。**不看 TabStop**:TabStop=False 的独立条只是不进 Tab 顺序,点它照样该拿到。
+{ 条自己从不拿焦点(CanFocus,#56)。
 
-  内嵌条:**永远不拿焦点**,焦点交给宿主。六个宿主建条时都写了 TabStop := False 并注释了理由
+  独立摆放的条:焦点原地不动。它没有宿主可交 —— 键盘该归旁边被它滚动的那块内容,由应用
+  决定;要复用条的按键,把键转给 ScrollByKey。
+
+  内嵌条:焦点交给宿主。六个宿主建条时都写了 TabStop := False 并注释了理由
   (拖条不能把焦点从列表抢走,否则列表丢了焦点环、滚到一半键盘导航也没了),设计文档
   (2026-09-14-scrollbar-auto-hide-design.md §4)也写着内嵌条拿不到焦点 —— 而这里从前是一句
   无条件的 if CanFocus then SetFocus,一点就把这些全推翻了:焦点落到一根 12px 的条上,条画起
@@ -1929,11 +1898,7 @@ var
   focusedCtl: TWinControl;
 begin
   try
-    if not IsEmbedded then
-    begin
-      if CanFocus then SetFocus;
-      Exit;
-    end;
+    if not IsEmbedded then Exit;
     host := Parent;
     { 先问便宜的那两个:无头下 CanFocus 就是 False,GetFocus 根本不用去问 widgetset。 }
     if not (host.TabStop and host.CanFocus) then Exit;
@@ -2031,12 +1996,17 @@ begin
   end;
 end;
 
-procedure TTyCustomScrollBar.KeyDown(var Key: Word; Shift: TShiftState);
+function TTyCustomScrollBar.CanFocus: Boolean;
+begin
+  Result := False;
+end;
+
+function TTyCustomScrollBar.ScrollByKey(var Key: Word): Boolean;
 var
   Dec1, Inc1: Word;
 begin
-  if not Enabled then Exit;
-  inherited KeyDown(Key, Shift);
+  Result := False;
+  if (Key = 0) or not Enabled then Exit;
   if FKind = sbVertical then
   begin
     Dec1 := VK_UP;
@@ -2074,6 +2044,7 @@ begin
       VK_HOME:  begin ScrollTo(scTop, FMin); Key := 0; end;
       VK_END:   begin ScrollTo(scBottom, FMax); Key := 0; end;
     end;
+  Result := Key = 0;
 end;
 
 end.

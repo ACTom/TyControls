@@ -117,7 +117,7 @@ type
     procedure TestImageMimicsPaintLikeTheirFinalClass;
     { Real input, one per family. }
     procedure TestInputThirdToolButtonClicks;
-    procedure TestInputThirdScrollBarStepsOnArrowKeys;
+    procedure TestInputThirdScrollBarStepsByKey;
     procedure TestInputThirdRibbonGroupLauncher;
     procedure TestInputThirdColorGridSelectsOnClick;
     procedure TestInputThirdTerminalTakesTyping;
@@ -798,7 +798,7 @@ begin
   own.Parent := FForm;
   CheckSameTypeKey(third, own);
   CheckFreshDefaults(TThirdScrollBar, ['Max', 'Position']);
-  AssertTrue('T-e: a scroll bar is a tab stop, the mimic too', third.TabStop);
+  AssertFalse('T-e: a scroll bar is not a tab stop (#56), the mimic neither', third.TabStop);
   c := third;
   c.LargeChange := 20;
   AssertEquals('T-v: LargeChange is public through a TTyCustomScrollBar reference', 20,
@@ -2020,11 +2020,14 @@ begin
   AssertEquals('as it presses TTyToolButton', own.Down, third.Down);
 end;
 
-procedure TTyCustomClassesP3Test.TestInputThirdScrollBarStepsOnArrowKeys;
+procedure TTyCustomClassesP3Test.TestInputThirdScrollBarStepsByKey;
 var
   third: TThirdScrollBar;
   own: TTyScrollBar;
+  k: Word;
 begin
+  { A scroll bar never takes the focus (#56), so its keys come in through ScrollByKey, from
+    the control it scrolls. The mimic answers them as TTyScrollBar does. }
   NeedWidgetSet;
   third := TThirdScrollBar.Create(FForm);
   third.Parent := FForm;
@@ -2035,12 +2038,12 @@ begin
   third.Position := 10;
   own.Position := 10;
   { Vertical out of the constructor: Down steps it. }
-  third.Perform(CN_KEYDOWN, VK_DOWN, 0);
-  own.Perform(CN_KEYDOWN, VK_DOWN, 0);
+  k := VK_DOWN; third.ScrollByKey(k);
+  k := VK_DOWN; own.ScrollByKey(k);
   AssertTrue('Down moves the mimic', third.Position > 10);
   AssertEquals('as it moves TTyScrollBar', own.Position, third.Position);
-  third.Perform(CN_KEYDOWN, VK_END, 0);
-  own.Perform(CN_KEYDOWN, VK_END, 0);
+  k := VK_END; third.ScrollByKey(k);
+  k := VK_END; own.ScrollByKey(k);
   AssertEquals('End as on TTyScrollBar', own.Position, third.Position);
 end;
 

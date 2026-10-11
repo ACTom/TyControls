@@ -158,7 +158,7 @@ type
     procedure AnEmbeddedTrackIsSquareAndRunsIntoTheFrame;
     procedure AnEmbeddedTrackFollowsTheEmbeddedRadiusToken;
     procedure ClickingAnEmbeddedBarFocusesItsHostAndTheKeysGoThere;
-    procedure ClickingAStandaloneBarStillFocusesTheBar;
+    procedure ClickingAStandaloneBarLeavesTheFocusWhereItWas;
     procedure ABarDroppedIntoAScrollBoxIsNotEmbedded;
     procedure ClickingAnEmbeddedBarLeavesFocusAloneWhenTheHostTakesNone;
     procedure ClickingAGridBarWhileEditingKeepsTheEditor;
@@ -1558,27 +1558,23 @@ begin
       AssertEquals(hname + ':点过条之后按下方向键,移动的是列表的选中项', 6,
         TFrameListBox(host).ItemIndex);
 
-      { 条若被代码 SetFocus 过(树把 VScroll 公开着),它也在宿主「里面」,但那不算焦点已经
-        在宿主里:点一下照样挪给宿主。 }
-      bar.SetFocus;
-      Forms.Application.ProcessMessages;
-      AssertSame(hname + ':前置条件——代码把焦点给了条', TWinControl(bar), FindOwnerControl(GetFocus));
-      ClickBar(bar, bar.Width div 2, bar.Height - bar.Width - 4);
-      AssertNothingRaised(hname + ' 条自己有焦点时点它');
-      AssertSame(hname + ':条自己有焦点时点它,焦点也归宿主', host, FindOwnerControl(GetFocus));
+      { 从前这里验「代码把焦点给了条之后再点它」。4.0 起条根本拿不到焦点(#56),代码
+        SetFocus 也给不了 —— LCL 的 Tab、方向键导航和 SetActiveControl 都先问 CanFocus。 }
+      AssertFalse(hname + ':条自己根本拿不到焦点', bar.CanFocus);
     end;
     host.Visible := False;
   end;
 end;
 
-procedure TScrollBarHostFrameTests.ClickingAStandaloneBarStillFocusesTheBar;
+procedure TScrollBarHostFrameTests.ClickingAStandaloneBarLeavesTheFocusWhereItWas;
 var
   pass: Integer;
   bar: TTyScrollBar;
+  parked: TWinControl;
 begin
-  { 反方向:摆在窗体上的独立条,点它照样拿焦点 —— 它有完整的键盘操作,焦点也是自动隐藏
-    「按住不放」的信号。第二轮关掉 TabStop:那只是「不进 Tab 顺序」,点它仍该拿到焦点。
-    所以「内嵌」不能拿 TabStop 来判:拿它判的话第二轮红。 }
+  { 反方向:摆在窗体上的独立条。4.0 起滚动条从不拿焦点(#56):点它,焦点原地不动 —— 它
+    没有宿主可交,键盘该归被它滚动的那块内容。两轮各开、关一次 TabStop:TabStop 对滚动条
+    已经不起作用,开着也不能让它拿到焦点。 }
   OpenWindow;
   for pass := 0 to 1 do
   begin
@@ -1590,11 +1586,13 @@ begin
     bar.HandleNeeded;
     AssertFalse('前置条件:摆在窗体上的条不是内嵌条', bar.IsEmbedded);
     ParkFocus;
+    parked := FindOwnerControl(GetFocus);
+    AssertTrue('前置条件:焦点停在别处', (parked <> nil) and (parked <> bar));
     ClickBar(bar, 6, 160 - 12 - 4);
     AssertNothingRaised('独立条');
     AssertTrue('前置条件:点中了滑道,翻了一页', bar.Position > 0);
-    AssertSame(Format('TabStop=%s 的独立条,点它必须拿到焦点', [BoolToStr(bar.TabStop, True)]),
-      TWinControl(bar), FindOwnerControl(GetFocus));
+    AssertSame(Format('TabStop=%s 的独立条,点它焦点原地不动', [BoolToStr(bar.TabStop, True)]),
+      parked, FindOwnerControl(GetFocus));
   end;
 end;
 
@@ -1605,6 +1603,7 @@ var
   n: Cardinal;
   shot: TBitmap;
   re: TBGRABitmap;
+  parked: TWinControl;
 begin
   { 滚动框是容器,用户完全可以往里拖一根自己的条。它的 Parent 同样实现
     ITyScrollBarFrameHost —— 只按「父控件实现了接口」判内嵌的话,它会被当成滚动框的内嵌条:
@@ -1654,12 +1653,17 @@ begin
     shot.Free;
   end;
 
-  { 3. 点它拿焦点。 }
+  { 3. 点它,焦点原地不动。4.0 起所有滚动条都不拿焦点(#56),这一步已经分不出内嵌与否
+    (内嵌条交给不参与焦点的滚动框,也是原地不动),分辨靠上面两步;留着它验的是「点独立条
+    不会把焦点挪给它的父控件」。 }
   ParkFocus;
+  parked := FindOwnerControl(GetFocus);
+  AssertTrue('前置条件:焦点停在别处', (parked <> nil) and (parked <> user) and (parked <> box));
   ClickBar(user, 6, 80 - 12 - 4);
   AssertNothingRaised('滚动框里的独立条');
   AssertTrue('前置条件:点中了滑道,翻了一页', user.Position > 0);
-  AssertSame('拖进滚动框的独立条,点它必须拿到焦点', TWinControl(user), FindOwnerControl(GetFocus));
+  AssertSame('拖进滚动框的独立条,点它焦点原地不动(不给条,也不给滚动框)',
+    parked, FindOwnerControl(GetFocus));
 
   AssertFalse('拖进滚动框的条不是内嵌条', user.IsEmbedded);
 end;

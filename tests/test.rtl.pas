@@ -786,7 +786,7 @@ procedure TBarAccess.CallMouseUp(X, Y: Integer);   begin MouseUp(mbLeft, [], X, 
 function  TBarAccess.CallKeyDown(AKey: Word): Word;
 begin
   Result := AKey;
-  KeyDown(Result, []);
+  ScrollByKey(Result);   // the bar never takes the focus (#56): keys arrive this way
 end;
 function TBarAccess.Track: TRect;
 begin

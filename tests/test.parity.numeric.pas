@@ -426,7 +426,7 @@ procedure TScrollProbe.DoKey(K: Word);
 var W: Word;
 begin
   W := K;
-  KeyDown(W, []);
+  ScrollByKey(W);   // the bar never takes the focus (#56): keys arrive this way
 end;
 
 { --- 1 --- }

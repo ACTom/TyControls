@@ -86,6 +86,7 @@ type
     procedure TestKeyUpFiresScLineUp;
     procedure TestPageDownFiresScPageDown;
     procedure TestHomeEndFireScTopScBottom;
+    procedure TestScrollByKeyAnswersWhetherItUsedTheKey;
     procedure TestTrackPagingFiresScPageDown;
     procedure TestVarScrollPosIsHonored;
     procedure TestWheelDownDecreasesPosition;
@@ -215,7 +216,9 @@ begin
 end;
 procedure TScrollAccess.DoKeyDown(Key: Word; Shift: TShiftState);
 begin
-  KeyDown(Key, Shift);
+  { The bar never takes the focus (#56), so its keys arrive through ScrollByKey, the way a host
+    forwards them. }
+  ScrollByKey(Key);
 end;
 procedure TScrollAccess.SetHoverState(AValue: Boolean);
 begin
@@ -918,6 +921,38 @@ begin
     AssertEquals('position at Max', 100, SA.Position);
   finally
     SA.Free;
+  end;
+end;
+
+{ #56. A host forwards the keys it gets to ScrollByKey and needs to know whether to pass a key
+  on: True and Key zeroed when the bar used it, False and Key untouched when it did not. A
+  disabled bar uses nothing, and a key already consumed (0) is not used twice. }
+procedure TTyScrollBarOnScrollTest.TestScrollByKeyAnswersWhetherItUsedTheKey;
+var
+  bar: TTyScrollBar;
+  k: Word;
+begin
+  bar := TTyScrollBar.Create(nil);
+  try
+    bar.Kind := sbVertical; bar.Min := 0; bar.Max := 100; bar.Position := 50;
+    k := VK_NEXT;
+    AssertTrue('PgDn is a bar key', bar.ScrollByKey(k));
+    AssertEquals('and it is consumed', 0, k);
+    AssertTrue('it moved the bar', bar.Position > 50);
+    k := VK_A;
+    AssertFalse('A is not', bar.ScrollByKey(k));
+    AssertEquals('and is left for the host', VK_A, k);
+    k := VK_LEFT;
+    AssertFalse('Left is not, on a vertical bar', bar.ScrollByKey(k));
+    AssertEquals('and is left too', VK_LEFT, k);
+    k := 0;
+    AssertFalse('a key already consumed is not used again', bar.ScrollByKey(k));
+    bar.Enabled := False;
+    k := VK_HOME;
+    AssertFalse('a disabled bar uses nothing', bar.ScrollByKey(k));
+    AssertEquals('and leaves the key', VK_HOME, k);
+  finally
+    bar.Free;
   end;
 end;
 
