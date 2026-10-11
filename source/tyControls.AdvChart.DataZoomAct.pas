@@ -37,6 +37,9 @@ type
   TTyDzActionItem = record
     DataZoomIndex: Integer;
     Start, Stop: Double;
+    { the toolbox's brush and its history [Batch 125]: Start and Stop are
+      startValue and endValue (setRawRange in value mode) }
+    IsValue: Boolean;
   end;
   TTyDzActionItemArray = array of TTyDzActionItem;
 
@@ -51,6 +54,9 @@ type
     { a slider's dispatch during a realtime drag: its payload carries
       REALTIME_ANIMATION_CONFIG [Batch 96] }
     Realtime: Boolean;
+    { the toolbox's dataZoom feature dispatched it: a batch with no
+      animation of its own [Batch 125] }
+    FromToolbox: Boolean;
     Items: TTyDzActionItemArray;
   end;
 

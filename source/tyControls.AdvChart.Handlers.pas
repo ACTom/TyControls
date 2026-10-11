@@ -223,6 +223,14 @@ type
   TTyChartLabelLayoutHandler = function(
     const AArgs: TTyChartLabelLayoutArgs): TTyChartLabelLayout of object;
 
+  { ==== a custom toolbox feature's onclick [Batch 125] ====
+    `toolbox.feature.myXxx.onclick: '@Name'` -- upstream calls the function
+    with the feature as `this` and (ecModel, api, iconName). Here: the chart,
+    the feature's name and the icon's (the feature's own name unless its
+    `icon` is a map of several). }
+  TTyChartToolboxHandler = procedure(ASender: TObject;
+    const AFeature, AIcon: string) of object;
+
 { ---- the registry ---- }
 { Registering the same name twice REPLACES, so a form reopened at design time
   does not accumulate stale handlers. }
@@ -259,6 +267,15 @@ procedure TyChartClearLabelLayoutHandlers;
   ALayout -- when nobody registered it. }
 function TyChartRunLabelLayoutHandler(const ASpec: string;
   const AArgs: TTyChartLabelLayoutArgs; out ALayout: TTyChartLabelLayout): Boolean;
+
+{ ---- toolbox onclick handlers [Batch 125] ----
+  The same rules again. }
+procedure TyChartRegisterToolboxHandler(const AName: string;
+  AHandler: TTyChartToolboxHandler);
+procedure TyChartUnregisterToolboxHandler(const AName: string);
+function TyChartFindToolboxHandler(const AName: string;
+  out AHandler: TTyChartToolboxHandler): Boolean;
+procedure TyChartClearToolboxHandlers;
 
 { Building an answer: a number, a text ('50%', 'center'), nothing. }
 function TyChartPosNum(AValue: Double): TTyChartPosValue;
@@ -410,6 +427,64 @@ begin
   if not TyChartFindPositionHandler(Copy(ASpec, 2, MaxInt), h) then Exit;
   APos := h(AArgs);
   Result := True;
+end;
+
+type
+  TToolboxEntry = record
+    Name: string;
+    Handler: TTyChartToolboxHandler;
+  end;
+
+var
+  GToolboxHandlers: array of TToolboxEntry;
+
+function IndexOfToolboxHandler(const AName: string): Integer;
+var i: Integer;
+begin
+  for i := 0 to High(GToolboxHandlers) do
+    if SameText(GToolboxHandlers[i].Name, AName) then
+      Exit(i);
+  Result := -1;
+end;
+
+procedure TyChartRegisterToolboxHandler(const AName: string;
+  AHandler: TTyChartToolboxHandler);
+var i: Integer;
+begin
+  if AName = '' then Exit;
+  i := IndexOfToolboxHandler(AName);
+  if i < 0 then
+  begin
+    i := Length(GToolboxHandlers);
+    SetLength(GToolboxHandlers, i + 1);
+    GToolboxHandlers[i].Name := AName;
+  end;
+  GToolboxHandlers[i].Handler := AHandler;
+end;
+
+procedure TyChartUnregisterToolboxHandler(const AName: string);
+var i, j: Integer;
+begin
+  i := IndexOfToolboxHandler(AName);
+  if i < 0 then Exit;
+  for j := i to High(GToolboxHandlers) - 1 do
+    GToolboxHandlers[j] := GToolboxHandlers[j + 1];
+  SetLength(GToolboxHandlers, Length(GToolboxHandlers) - 1);
+end;
+
+function TyChartFindToolboxHandler(const AName: string;
+  out AHandler: TTyChartToolboxHandler): Boolean;
+var i: Integer;
+begin
+  AHandler := nil;
+  i := IndexOfToolboxHandler(AName);
+  Result := (i >= 0) and Assigned(GToolboxHandlers[i].Handler);
+  if Result then AHandler := GToolboxHandlers[i].Handler;
+end;
+
+procedure TyChartClearToolboxHandlers;
+begin
+  GToolboxHandlers := nil;
 end;
 
 type

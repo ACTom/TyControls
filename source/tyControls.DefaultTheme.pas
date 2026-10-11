@@ -1445,6 +1445,20 @@ begin
     'TyAdvChartDataZoomHandle:hover { background: var(--surface); border-color: alpha(var(--accent), 0.55); }' + LineEnding +
     'TyAdvChartDataZoomMoveHandle:hover { background: alpha(var(--accent), 0.8); color: var(--surface); }' + LineEnding +
     'TyAdvChartDataZoomBrush { background: alpha(var(--accent), 0.3); }' + LineEnding +
+    '/* The toolbox. Upstream draws its icons as hairline outlines in the accent,' + LineEnding +
+    '   a deeper accent under the pointer, and the title that appears below the' + LineEnding +
+    '   icon takes that same deeper ink; the bar itself has no ground and no' + LineEnding +
+    '   frame unless the option asks. The rectangle a zoom drag sweeps out is the' + LineEnding +
+    '   accent faded right down. */' + LineEnding +
+    'TyAdvChartToolbox { border-color: var(--accent); font-size: var(--font-size-base); }' + LineEnding +
+    'TyAdvChartToolbox:hover { border-color: darken(var(--accent), 25%); }' + LineEnding +
+    'TyAdvChartToolboxBackground { background: transparent; }' + LineEnding +
+    'TyAdvChartToolboxBorder { border-color: var(--border); }' + LineEnding +
+    'TyAdvChartToolboxBrush { background: alpha(var(--accent), 0.15); }' + LineEnding +
+    '/* The brush component''s covers. Upstream lays a pale tint over what it' + LineEnding +
+    '   selects and rims it in a light grey; here the ink faded right down and' + LineEnding +
+    '   the skin''s own border colour. */' + LineEnding +
+    'TyAdvChartBrush { background: alpha(var(--on-surface), 0.06); border-color: var(--border); }' + LineEnding +
     '/* The hover tooltip. TWO keys, because upstream''s whole typographic hierarchy' + LineEnding +
     '   inside the box is one weight difference -- the name at 400 and the value at' + LineEnding +
     '   900, in the same grey -- and one style set cannot say two weights. Said here' + LineEnding +

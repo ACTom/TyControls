@@ -1412,6 +1412,20 @@ TyAdvChartDataZoomShadowSelected { background: alpha(var(--accent), 0.12); borde
 TyAdvChartDataZoomHandle:hover { background: var(--surface); border-color: alpha(var(--accent), 0.55); }
 TyAdvChartDataZoomMoveHandle:hover { background: alpha(var(--accent), 0.8); color: var(--surface); }
 TyAdvChartDataZoomBrush { background: alpha(var(--accent), 0.3); }
+/* The toolbox. Upstream draws its icons as hairline outlines in the accent,
+   a deeper accent under the pointer, and the title that appears below the
+   icon takes that same deeper ink; the bar itself has no ground and no
+   frame unless the option asks. The rectangle a zoom drag sweeps out is the
+   accent faded right down. */
+TyAdvChartToolbox { border-color: var(--accent); font-size: var(--font-size-base); }
+TyAdvChartToolbox:hover { border-color: darken(var(--accent), 25%); }
+TyAdvChartToolboxBackground { background: transparent; }
+TyAdvChartToolboxBorder { border-color: var(--border); }
+TyAdvChartToolboxBrush { background: alpha(var(--accent), 0.15); }
+/* The brush component's covers. Upstream lays a pale tint over what it
+   selects and rims it in a light grey; here the ink faded right down and
+   the skin's own border colour. */
+TyAdvChartBrush { background: alpha(var(--on-surface), 0.06); border-color: var(--border); }
 /* The hover tooltip. TWO keys, because upstream's whole typographic hierarchy
    inside the box is one weight difference -- the name at 400 and the value at
    900, in the same grey -- and one style set cannot say two weights. Said here

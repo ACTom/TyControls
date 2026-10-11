@@ -472,6 +472,26 @@ resourcestring
   rsTyChartExportOptsBad = 'The export options are not valid JSON.';
   rsTyChartLoadingCfgBad = 'The loading options are not valid JSON.';
 
+  // --- AdvanceChart: the toolbox [Batch 125] ---
+  // The icons' titles and the data view's words. The English is ECharts'
+  // own locale (langEN.ts toolbox), so an untranslated build measures and
+  // lays out the titles exactly as upstream does; the data view's Close
+  // button is rsMsgBtnClose.
+  rsTyChartToolboxSaveAsImage = 'Save as Image';
+  rsTyChartToolboxRestore = 'Restore';
+  rsTyChartToolboxDataView = 'Data View';
+  rsTyChartToolboxDataViewRefresh = 'Refresh';
+  rsTyChartToolboxZoom = 'Zoom';
+  rsTyChartToolboxZoomBack = 'Zoom Reset';
+  rsTyChartToolboxLine = 'Switch to Line Chart';
+  rsTyChartToolboxBar = 'Switch to Bar Chart';
+  rsTyChartToolboxStack = 'Stack';
+  rsTyChartToolboxTiled = 'Tile';
+  // what the data view says when its text does not parse back
+  rsTyChartToolboxDataViewBad = 'The data view''s text could not be read back: %s';
+  // the save dialog's filter for saveAsImage
+  rsTyChartToolboxImageFilter = 'PNG image (*.png)|*.png|JPEG image (*.jpeg;*.jpg)|*.jpeg;*.jpg|All files (*.*)|*.*';
+
   // --- AdvanceChart: what the build could not honour ---
   // These reach the user through the chart's diagnostics list and through the
   // design-time editor, so they are as translatable as any caption. They were

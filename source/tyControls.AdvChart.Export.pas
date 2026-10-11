@@ -55,7 +55,11 @@ type
     cvDataZoom, cvMarkPoint, cvMarkLine, cvMarkArea, cvRadar, cvCalendar,
     cvAngleAxis, cvRadiusAxis,
     { [Batch 118] }
-    cvSingleAxis, cvSeries);
+    cvSingleAxis, cvSeries,
+    { [Batch 125] }
+    cvToolbox,
+    { [Batch 126] }
+    cvBrush);
   TTyChartViews = set of TTyChartView;
 
   TTyExportImageType = (eitPng, eitJpeg);
@@ -96,7 +100,8 @@ const
   TyExportMaxSide = 16384;
 
 { The view a main type names; False for every type the port draws no view
-  for (grid, tooltip, axisPointer, toolbox, series, an unknown name). }
+  for (grid, tooltip, axisPointer, series, an unknown name). The toolbox
+  has one since batch 125. }
 function TyChartViewOf(const AMainType: string; out AView: TTyChartView): Boolean;
 function TyChartViewName(AView: TTyChartView): string;
 { The views as their main types, sorted, comma-separated -- the oracle's
@@ -127,7 +132,7 @@ implementation
 const
   ViewNames: array[TTyChartView] of string = ('title', 'legend', 'xAxis',
     'yAxis', 'visualMap', 'dataZoom', 'markPoint', 'markLine', 'markArea',
-    'radar', 'calendar', 'angleAxis', 'radiusAxis', 'singleAxis', 'series');
+    'radar', 'calendar', 'angleAxis', 'radiusAxis', 'singleAxis', 'series', 'toolbox', 'brush');
 
 function TyChartViewOf(const AMainType: string; out AView: TTyChartView): Boolean;
 var v: TTyChartView;

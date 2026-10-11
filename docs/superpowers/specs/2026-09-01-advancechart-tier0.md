@@ -7411,7 +7411,7 @@ dataZoom 的模型、窗口、过滤和轴范围钉点。slider 组件的画面�
 
 - **类型与目标**:不写 type 的 dataZoom 是 slider。目标轴:写了 `xAxisIndex`/`yAxisIndex`(或 id、`'all'`)就用写的;否则按 orient 取第一根 x(纵向取 y)轴加同一网格里的同向轴,再不行取第一根类目轴。orient 不写时,第一个目标维是 y 才是纵向。
 - **宿主**:一根轴只归第一个指向它的 dataZoom;后面指向同一根轴的 dataZoom 自己的 start/end 被忽略,显示宿主的窗口。
-- **toolbox 的 select**:`toolbox.feature.dataZoom` 写了就给每根 x 轴、再每根 y 轴各追加一个 select 型 dataZoom(排在作者写的后面),全窗口,filterMode 取 feature 的。它们不画东西,但会接管作者没指向的轴并按全窗口过滤。
+- **[第 125 批：toolbox 的 dataZoom 按钮接上了它们——刷选与回退经值模式的 `setRawRange` 给它们窗口（按轴键保存，`FTbSel`），history 在 GlobalModel 上，见 §160。]** **toolbox 的 select**:`toolbox.feature.dataZoom` 写了就给每根 x 轴、再每根 y 轴各追加一个 select 型 dataZoom(排在作者写的后面),全窗口,filterMode 取 feature 的。它们不画东西,但会接管作者没指向的轴并按全窗口过滤。
 - **取值方式**:每一端分别看 percent 还是 value——只写了一个就用那个;都写了看 `rangeMode`,没有就用 percent。读的是作者写的原值,不是合并后的默认值。
 - **窗口**:百分比按轴的原始范围(nice 之前:数据、min/max、boundaryGap、含零、柱子起点)线性换算;反过来的一对交换;越界的窗口由 `sliderMove` 整体平移、保持跨度(`-10..50` 成 `0..60`);`minSpan`/`maxSpan` 等把跨度夹进范围。由百分比算出的值按轴像素跨度求精度(`getAcceptableTickPrecision(窗口, 像素, 0.5)`,类目和时间为 0)用 toFixed 取整;正好 0%/100% 的一端取原始范围的端点。`percentInverted` 由取整后的值反算。
 - **alignTicks**:对齐到另一根轴、且那根轴也由同一个 dataZoom 控制时,这根轴最后算,用那根轴的 `percentInverted` 当 start/end——zrender 的 `defaults` 保留目标的键,所以它盖过自己写的 start/end。
@@ -7515,7 +7515,7 @@ slider 的拖动、点击、刷选、悬停标签,inside 的滚轮缩放和拖�
 - **点击面板**:窗口中心移到点击处,跨度不变,越界夹住。
 - **刷选**(brushSelect,默认开):按下点击面板开始,移动时刷选框从起点到当前点(终点夹在 slider 内),松开时不到 200ms 且宽度不足 5px 算点击,否则刷选框成为新窗口(再过一遍 min/maxSpan)。刷选框在新的按下时**不清除**,只有视图重建才清——所以之后一次不动的点击会把上一次的刷选框再套用一遍(BRUSH-STALE)。
 - **标签**:悬停手柄、移动区(或没开刷选时的填充)、拖动中显示 `emphasis.handleLabel.show`(默认 true),其余时候是 `handleLabel.show`。移动条的高亮是两个位:移动区自己的悬停,和标签显示。
-- **动作**:`{type: 'dataZoom', start, end}` 按共享坐标轴找出所有联动的 dataZoom(传递),全部 `setRawRange`:两端都成百分比、值清空,取值方式变 percent。然后**同步**更新;发起的 slider 保留自己的端点(交叉后可能是降序)、刷选框和状态,其他 slider 按窗口重建,inside 的区间每次渲染都取窗口。
+- **[第 125 批：也有按值的动作（toolbox 的刷选与回退：startValue / endValue），一样传递，被写到的 dataZoom 变成 value 模式（`FDzRawValue`，合并前按值写回树里）；联动也到 toolbox 的 select dataZoom，见 §160。]** **动作**:`{type: 'dataZoom', start, end}` 按共享坐标轴找出所有联动的 dataZoom(传递),全部 `setRawRange`:两端都成百分比、值清空,取值方式变 percent。然后**同步**更新;发起的 slider 保留自己的端点(交叉后可能是降序)、刷选框和状态,其他 slider 按窗口重建,inside 的区间每次渲染都取窗口。
 - **inside**:每个网格一个 roam 控制器,管这个网格上所有 inside;网格里有一个 inside 能缩放就挂滚轮(全部 zoomLock 时滚轮整个没有,`moveOnMouseWheel` 也跟着没了;缩放处理本身不读 zoomLock),全部禁用就没有控制器。指针在网格矩形里(闭区间)才处理,滚轮不论缩没缩都拦下。缩放系数按 `|delta|` 取 1.1/1.2/1.4,以指针在当前区间里对应的百分比为中心;平移按指针位移占网格边长的比例乘区间跨度,x 轴默认反号、y 轴同号、反向轴再反;`moveOnMouseWheel` 的步长 0.05/0.15/0.4 个跨度。修饰键设置(`'shift'` 等)要对应按键按下才生效。禁用的 inside 照样算区间(视图区间会漂),只是不派发。
 - **节流**('fixRate'):默认 100ms(动画开且更新时长大于 0,否则 20)。距上次执行不足间隔的调用延到"上次执行 + 间隔"时再跑,用最新的参数;slider 的延后调用读执行时的区间。滚轮缩放和滚动平移在同一毫秒各派发一次时,第二次就被延后。
 
@@ -9935,7 +9935,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 
 ### 做法
 
-- **新单元 `tyControls.AdvChart.Export`**（纯）：`TTyChartView`（端口画的视图，按上游的主类型名：title、legend、xAxis、yAxis、visualMap、dataZoom、markPoint、markLine、markArea、radar、calendar、series）、`TyChartViewOf` / `TyChartViewsText`、`TyJsTruthy`、`TyExportOptsOf`（只有 `'jpeg'` 是 JPEG；像素比只收正的有限数；`excludeComponents` 只收数组里认得的字符串；合法 JSON 但不是对象 = 没有选项）、`TyExportBackgroundOf`（`'transparent'` 与零 alpha 清空、颜色、渐变、图案、其余一律黑）、`TyExportImageSize`。
+- **[第 126 批：又加了 `cvBrush`（'brush'），`excludeComponents: ['brush']` 藏得掉刷选的覆盖框，见 §162。]** **[第 125 批：`TTyChartView` 末尾加了 `cvToolbox`，`excludeComponents: ['toolbox']` 藏得掉工具栏——saveAsImage 的缺省就是它，见 §160。]** **新单元 `tyControls.AdvChart.Export`**（纯）：`TTyChartView`（端口画的视图，按上游的主类型名：title、legend、xAxis、yAxis、visualMap、dataZoom、markPoint、markLine、markArea、radar、calendar、series）、`TyChartViewOf` / `TyChartViewsText`、`TyJsTruthy`、`TyExportOptsOf`（只有 `'jpeg'` 是 JPEG；像素比只收正的有限数；`excludeComponents` 只收数组里认得的字符串；合法 JSON 但不是对象 = 没有选项）、`TyExportBackgroundOf`（`'transparent'` 与零 alpha 清空、颜色、渐变、图案、其余一律黑）、`TyExportImageSize`。
 - **新单元 `tyControls.AdvChart.Loading`**（纯）：`TyLoadingCfgOf`（`zrUtil.defaults` 的 null 语义；`text` 按 JS 的 `String()`：数字、布尔、数组 join、`[object Object]`；颜色是主题 / 颜色 / 不画三种，`'none'` 与读不懂的串都不画）、`TyLoadingLayout`（上面的式子，**四项按上游的顺序逐项算**）、`TyLoadingStartSpinner`（在一个 `TTyAnimBag` 上开两个循环动画器，AN1 的引擎）。
 - **控件**：
   - 导出 API：`SaveToStream` / `SaveToBytes` / `SaveToFile`（选项写了 `type` 按选项，否则扩展名 `.jpg` / `.jpeg` 是 JPEG）/ `GetDataURL`（`data:image/png;base64,…`，没有像素时 `'data:,'`）/ `RenderToBitmap`（`renderToCanvas`，调用方释放）。`SaveToPng` 保留，就是不带选项的导出、永远 PNG。选项不是 JSON 抛 `EArgumentException`。
@@ -11590,3 +11590,182 @@ C12（lines）合进已有 C6–C11、C13 的分支。冲突全是两边往同�
 ### 给 C14 的提醒
 
 custom 落地时，`test.advchart.marks`、`test.advchart.diagnose`、`test.advchart.candlestick` 的「没有渲染器」示例要再搬一次；默认坐标系上已经没有别的没有渲染器的类型，diagnose 那条大概只能用显式坐标系挪过来的 map 或 parallel。
+
+## 160. Tier 2 第一百二十五批：toolbox 工具栏（C16，2026-10-12）
+
+路线图 C16：toolbox——原生工具条、saveAsImage、restore、dataZoom 选择与回退（模型已有）、magicType、自定义按钮、dataView 原生对话框。以前 toolbox 在端口里只有一半：C1 的 `toolbox.feature.dataZoom` 会追加 select 型 dataZoom（§94），它们接管坐标轴、按全窗口过滤，但图上没有工具条，没有按钮可点，也没有刷选；`excludeComponents: ['toolbox']` 什么也藏不掉（导出没有 toolbox 的视图）。这一批对着 6.1 的 `component/toolbox/`（`ToolboxModel.ts` 的缺省与主题合并、`featureManager.ts`、`ToolboxView.ts` 的 render / createIconPaths / 悬停处理 / 标题调整、`feature/SaveAsImage.ts`、`Restore.ts`、`DataView.ts`（`groupSeries`、`assembleSeriesWithCategoryAxis`、`assembleOtherSeries`、`parseContents`、`tryMergeDataOption`、`changeDataView` 动作）、`DataZoom.ts`（`_onBrush`、`setBatch`、`makeAxisFinder`、`updateZoomBtnStatus` / `updateBackBtnStatus`、内部 select 选项的创建）、`MagicType.ts`）、`component/dataZoom/history.ts`、`component/helper/BrushController.ts`（`updateCoverByMouse`、`shouldShowCover`、`getCreatingRange`、`updateBaseRect`、`resetCursor`、globalPan 互斥）、`BrushTargetManager.ts`（`makePanelOpts`、`matchOutputRanges`、`coordConvert`）、`brushHelper.ts`、`cursorHelper.ts`、`util/layout.ts`（`box`、`positionElement`、`getLayoutRect`）、`util/graphic.ts`（`createIcon`、`makePath`、`setTooltipConfig`）、`util/states.ts`（`enterEmphasis` / `leaveEmphasis` 只改标记）、`listComponent.makeBackground`、`model/Global.ts` 的 `resetOption('recreate')` 与 `OptionManager.mountOption`、`echarts.ts` 的 `prepareView`（`__requireNewView`）与 `applyChangedStates`，以及 zrender 的 `Path.getBoundingRect`（`strokeContainThreshold`）、`Group.getBoundingRect`、`BoundingRect.union` / `applyTransform`、`Element.updateInnerText`、`contain/text.ts` 的 `calculateTextPosition`、`Handler.mousemove`（被删的悬停目标就地重找）逐行核过，在真 dist 上跑基准。§94、§96、§141 的相关处在原处标注。
+
+### 上游的做法
+
+- **模型**：`toolbox.feature` 按写的顺序逐个看；内置的五个（saveAsImage、restore、dataView、dataZoom、magicType）各自的缺省用 zrender 的 `merge`（不覆盖）并进去，名字以 `my` 开头的是自定义按钮、原样用；别的名字没有 feature 类，跳过（brush 是 C18）。`show` 读 feature 模型，取不到就借 toolbox 的（自定义按钮于是缺省可见）。一个 feature 的图标：magicType 是 `type` 里列出、图标表里有的那几个；其余是 `icon`——字符串就是一个以 feature 名为键的图标，对象就是多个；标题同理（字符串只给 feature 名那一个，对象按键）。图标串 `image://` 是图片，否则去掉第一个 `path://` 当 SVG 路径。没有 onclick 的自定义按钮、空图标串上游都会抛异常。
+- **图标与样式**：`createIcon` 把路径按自己的长宽比放进 `(−itemSize/2, −itemSize/2, itemSize, itemSize)`（`makePath(…, 'center')`），`rectHover: true`、`strokeNoScale`。样式是 feature 的 `iconStyle` 落到 toolbox 的 `iconStyle`（`getItemStyle`：`borderColor` → 描边、`color` → 填充、`borderWidth`、`opacity`）；缺省描边 accent50、填充 `'none'`。emphasis 是 feature 的 `emphasis.iconStyle` 落到 toolbox 的（缺省描边 accent70），作为状态叠在常态上。**包围盒**是路径盒按描边放大：没有填充时至少放大 5（`strokeContainThreshold`），所以 15 的图标盒子是 20 宽——布局与命中都用它。
+- **布局**：`getLayoutRect(盒参数, 画布, padding)` 得视图矩形（`left: 'right'`、`top: 'top'` 缺省，`mergeLayoutParam` 的 ignoreSize 规则），`layout.box` 在其中按 `orient` 排（比较不含间距、超宽换行、行高取最大），`positionElement` 用组的包围盒定位——**从组上次的位置算起**：`x = x旧 + (L − (r + x旧))`，所以同一个视图每次重绘位置末位可能抖动（实测 …9d → …9c → …9c）。然后 `makeBackground`：组的盒子按 padding 外扩、`borderRadius`、填充 `backgroundColor`、`silent`、`z2 −1`。一个高度为 0 的路径让盒子、并集、组的位置统统变 NaN（`Math.min` 遇 NaN 得 NaN），整个工具条既不画也点不到。
+- **标题**：每个图标挂一个 `ZRText`（ignore），`__title` 记下文字。**横向**的工具条在 render 末尾按缺省字体（`makeFont({})` 即 12px sans-serif）量标题：图标下缘加文字高过画布底就把 emphasis 状态的 `textConfig.position` 设成 `'top'`；中心加半宽过画布右缘就设成 `['100%', topOffset]` 并把文字的 emphasis 样式设成右对齐，过左缘就 `[0, topOffset]` 左对齐（`topOffset` 是 `itemSize + 10`，放到上方时 `−5 − 文字高`）。**这些都写在 emphasis 状态里**。
+- **悬停**（图标的 mouseover）：`textConfig.position` 立刻设成 emphasis 样式的 `textPosition`，没写就按方向与停靠边：横向 `bottom == null && top !== 'bottom'` 时在下、否则在上，纵向 `right == null && left !== 'right'` 时在右、否则在左（模型的键，经过 mergeLayoutParam 之后）；文字颜色 `textFill`，否则 emphasis 的填充，否则它的描边；`showTitle` 为假则不显示；然后 `api.enterEmphasis`。**`enterEmphasis` / `leaveEmphasis` 只改 `hoverState` 标记**，状态在下一帧 `applyChangedStates` 才 `useState`——于是悬停那一刻标题已经出现、但在 mouseover 给的位置（居中在下），下一帧进入 emphasis 才换成调整过的位置与对齐。mouseout：图标状态（iconStatus）不是 emphasis 才离开（同样下一帧），文字立刻隐藏。**已经被 iconStatus 置成 emphasis 的图标**（render 末尾就进入了状态，调整也一并生效），悬停时 `useState` 不再重做：位置是 mouseover 给的，对齐却是调整过的（文字的 emphasis 样式早已用上）。图标的命中是包围盒（rectHover），画布外 Handler 不做命中。toolbox 的图标没有 eventData：**不发图表鼠标事件**。
+- **重绘**：每次更新（setOption、任何 update / prepareAndUpdate 的动作）toolbox 都重建图标：新元素没有悬停态、没有标题；指针不动时 Handler 在原地重找被删的目标、找到新的那个，**不发 mouseover**——点了按钮之后停在上面不会再出标题。notMerge 与 restore 的模型是新的（`__requireNewView`），视图跟着新建：组从 0 算起，feature 对象（dataZoom 的「缩放开着」）也是新的。
+- **restore**：按钮先 `history.clear`，再派发 `restore`；动作是 `resetOption('recreate')`——从 `OptionManager._optionBackup`（**最近一次 notMerge 的选项**，之后合并进来的全丢）重建模型，同一个 GlobalModel，所以 API 派发的 restore 不清 history。事件 `restore`。
+- **magicType**：点 `line` / `bar` 时 line、bar 两个状态置 normal，点 `stack` 时 stack 置 normal，被点的置 emphasis。按 `seriesIndex[type]`（没有就所有系列）逐个：line 把 bar 系列换成 `{id, type: 'line', data, stack, markPoint, markLine}`，bar 反之；stack 对 line / bar 系列写 `stack: isStack ? '' : '__ec_magicType_stack__'` 并按「是不是本来就是这个关键字」改 stack 的状态（最后一个系列说了算）；`merge(…, option[type], true)` 再 `defaults(…, 系列模型的 option)`——**整个模型 option 连缺省一起抄进去**（类型变了合并时按新选项重建，这样旧的东西才不丢）。直角坐标上有类目轴（`getAxesByScale('ordinal')[0]`）的，不管系列有没有生成新选项都给那根轴写 `boundaryGap: type === 'bar'`（数组只填那个下标，前面是洞——洞在 mappingToExists 里不占位）。stack 时 `newTitle` 是 stack / tiled 两个标题对调；`currentType` 在 stack 的状态最后不是 emphasis 时报 `'tiled'`。派发 `changeMagicType`，动作 `mergeOption(newOption)`；toolbox 重绘时把 `newTitle` 写进 feature 的选项（「FIXME: ec option should not be modified here」），之后的悬停就是对调后的标题；事件 `magictypechanged`（payload 含 newOption、newTitle、featureName）。
+- **dataZoom 选择**：`zoom` 按钮派发 `takeGlobalCursor {key: 'dataZoomSelect', dataZoomSelectActive}`（事件 `globalcursortaken`，update 重绘），render 时 `updateZoomBtnStatus` 按它置 zoom 的状态、开关 BrushController：面板是 finder（`xAxisIndex` / `yAxisIndex` / id，都没写就是 `'all'`，`false` / `'none'` 是没有）涉及的每个 grid，类型 x 声明而 y 没有是 lineX、反之 lineY、否则 rect。开着时它占用 globalPan，inside dataZoom 和 graph 的 roam 都不平移。按下在面板里（不在可拖动元素上）开始，轨迹两端距离超过 6 才出覆盖框（`UNSELECT_THRESHOLD`），范围是两端裁到面板后的 min / max（lineX 另一维占满面板）；面板内光标是十字。松开：覆盖框移除；对面板里每个被 finder 选到的 cartesian，rect 用 `pointToData(…, clamp)`（两根都是数值 / 时间轴时走仿射逆矩阵、不夹紧），line 用 `axis.coordToData(toLocalCoord(v), true)`；`setBatch`：最后一个指向这根轴的 select dataZoom、宿主的 minValueSpan / maxValueSpan 经 sliderMove、`getAcceptableTickPrecision(scale.getExtent(), 网格宽或高, 0.5)` 后 `round`；`history.push`（快照里第一次出现的 dataZoom 先把当前百分比窗口记进第一格）；派发 `dataZoom {batch: [{dataZoomId, startValue, endValue}]}`——`setRawRange` 是值模式，共享坐标轴的 dataZoom（作者的 slider 也算）一起改。`back`：`history.pop`（只剩一格不弹），把每个 dataZoom 最近一次的窗口（值或最初的百分比）派发；空的不派发。back 的状态在 history 多于一格时是 emphasis。
+- **dataView**：按钮在容器上铺一层：标题 `lang[0] || title`、textarea（`readOnly`）、按钮 Refresh（只读时没有）与 Close。文本：坐标系是直角 / 极坐标且基轴是类目的系列按类目轴分组——表头 `' '` 加各系列名、每行类目名加各系列在值轴维度上的**原始数据**（`getRawData`，NaN 印成 `NaN`、缺的格子是空），以 Tab 连；其余系列每个一块：名字一行，然后每行「名字 Tab」（有名字时）加**所有维度**的值（堆叠的两列也在里面）；块之间是 `\n\n` + 59 个 `-` + `\n\n`，全空白的部分去掉。Refresh：按 `\n*-{59}\n*` 切块，第一行含 Tab（没有换行时是整块去掉最后一个字符）就按表格读——trim 掉的表头切 Tab 是系列名、每行第一格是类目、其余是**字符串**的值，写回 `元数据[块号]` 那根轴的 data（没有元数据就抛 TypeError，外面包成 'Data view format error'）；否则按列表读——第一行名字，之后每个非空行第一格 `isNaN` 的是名字，其余 `+x` 成数，一个值就是标量。`changeDataView`：按名字找现有系列（`getSeriesByName(name)[0]`），找到的写 `{name, data: tryMergeDataOption}`（原来是对象的项：新值包成 `{value}`、`defaults` 原项、原项有名字而新的没有就删名字），找不到的成新的 scatter；`mergeOption(defaults({series}, newOption))`；事件 `dataviewchanged`。另外会 `setTimeout` 派发一次 `hideTip`。
+- **saveAsImage**：类型 `get('type', true) || 'png'`（SVG 画家固定 'svg'），背景 feature 的 `backgroundColor` 否则选项的否则 `#fff`，`excludeComponents`（缺省 `['toolbox']`）、`pixelRatio`、`connectedBackgroundColor` 交给 `getConnectedDataURL`；文件名 `(name || title[0].text || 'echarts') + '.' + type`，浏览器下载。
+- **自定义按钮**：`onclick` 以 feature 为 this、`(ecModel, api, iconName)` 调。
+
+### port 以前
+
+- `toolbox.feature.dataZoom` 追加 select 型 dataZoom（§94）；动作只有百分比的 `setRawRange`，select 型拿不到窗口。
+- 图上没有工具条；`excludeComponents` 的视图表里没有 toolbox（§141）；没有 restore、magicType、dataView 的动作，也没有对应事件。
+
+### 做法
+
+- **新单元 `tyControls.AdvChart.Toolbox`**（纯）：
+  - 模型：`TTyToolboxSpec` / `TTyTbIcon` / `TTyTbItemStyle` / `TTyTbColour`（主题、`none`、写的值三种）、`TyToolboxCount`、`TyToolboxFeatureModel`（选项克隆后按 zrender `merge` 并缺省，标题来自资源串）、`TyTbMerge`、`TyToolboxSpecOf`（图标表 / 标题表、magicType 的 getIcons、`path://` 去掉第一处、图片、feature 落到 toolbox 的两层样式与文字键、iconStatus、mergeLayoutParam 后的盒参数与悬停的缺省方向、背景、padding 的 1–4 个值）。
+  - 布局：`TyToolboxIconRect`（描边放大的包围盒，状态决定线宽）、`TyTbStyleOf`、`TyToolboxLayoutOf`（视图矩形、layout.box、Group.getBoundingRect 的累积并集、从旧位置起算的 positionElement、背景、横向标题的三种调整与 `topOffset`）、`TyToolboxTitlePlace`（`calculateTextPosition` 的四个方向与 inside、数组位置，按「位置是否调整过」「对齐是否调整过」两个开关取；`textAlign` 先于计算出的对齐，调整的对齐再压过它）。整个布局在屏蔽了浮点陷阱的环境里算、`Math.min` / `Math.max` / `BoundingRect.union` 按 JavaScript 的 NaN 语义自写（`JMin` / `JMax` / `JsUnion`），退化的图标与上游一样一路 NaN。
+  - saveAsImage：`TyToolboxSaveOpts`（类型、背景只在 feature 或选项写了时出现、排除、像素比、文件名）。
+  - magicType：`TTyMagicSeries`、`TyMagicTypeOption`（状态、seriesIndex 查询、三种生成器、`option[type]` 覆盖合并、按原系列选项 `defaults`、类目轴的 boundaryGap 与洞、newTitle、currentType）。生成的 series 数组**按位置对齐**：到最后一个改动的系列为止，没改的是空对象——端口的合并按位置映射，上游写的是带 NUL 的自动 id（端口的选项文本装不下 `\u0000`）。
+  - dataView：`TTyDvGroup` / `TTyDvList` / `TTyDvMeta`、`TyDataViewText`、`TyDataViewParse`（块切分、`isTSVFormat` 的切片怪癖、`/X+/` 的切法、JavaScript 的 trim 与 `Number()`、洞读成 null、NaN 与无穷写成它们的 `String()`、缺元数据时给出上游的错误）、`TyDataViewChange`（`tryMergeDataOption`，洞保持为洞）。
+  - 刷选与历史：`TTyTbBrushType`、`TyTbClipPoint`、`TyTbBrushRange`、`TyTbCoverRect`、`TTyTbSnapshot` / `TTyTbHistory`、`TyTbHistoryCount` / `Push` / `Pop`、`TyTbRound`。`TyTbJson`：数字按 JavaScript 印的 JSON（fpjson 自己的浮点文本不是最短往返）。
+- **新单元 `tyControls.AdvChart.ToolboxDlg`**：`TyBuildDataViewDialog`（只建不显示：`TTyDialog`，标题即对话框标题，等宽 `TTyMemo`，Refresh 是缺省按钮、Close 是取消按钮，只读时只有 Close）、`TyShowDataViewDialog`（模态；读回时按行以裸换行连接，不带最后一个换行）、`TyAskImageFileName`（库自己的 `TySaveDialog`）。
+- **控件**：
+  - 状态：`FTbSpecs` / `FTbLayouts`、`FTbPrev`（组上次的位置）、`FTbLive`（每个图标元素的 `HoverEmph`、`TextShown`、`AdjPos`、`AdjAlign` 与等下一帧的 `PendEnter` / `PendLeave`）、`FTbGen`（每次重绘加一）、`FTbStatus`（iconStatus）、`FTbMagicTitle`、`FTbZoomActive`、`FTbHistory`、`FTbSel`（select dataZoom 的动作窗口，按轴键）、`FTbBackup`（最近一次 notMerge 的选项文本）、刷选的轨迹 / 范围 / 覆盖框。
+  - `SolveToolboxes` 在 `Relayout` 最后（toolbox 的视图最后渲染）：dataZoom 按钮的两个状态、量标题（12 px，按 CSS px）、布局、记下位置、新元素（iconStatus 为 emphasis 的图标 `AdjAlign` 置真）。`BuildToolboxes` 接在 dataZoom 之后（`ViewHidden(cvToolbox)`）：背景、图标（`TyMkZrShape` 描边，退化的不画）、显示中的标题、刷选中的覆盖框（z 10000）。
+  - **[第 126 批：刷选的覆盖框排在标题之前（z 10000，HdKind 9），见 §162。]** 指针：`EventTargetAt` 在标题之后、visualMap 之前问 `TbHitAt`（HdKind 8，画布外不命中、NaN 不命中）；`EventMove` 对过期一代的 toolbox 悬停目标就地重找；over / out 走 `TbMouseOver` / `TbMouseOut`；`TbFrame` 是「下一帧」：在每个指针事件、`DispatchAction`、`SetOption` 开头和 `Paint` 里把等着的 emphasis 变化落下（`ToolboxFrame` 公开给测试）；`EventUp` 的点击按 feature 分派；`MouseDown` 在缩放开着时不让 roam 平移（globalPan）、开始刷选，`MouseMove` 更新轨迹，`MouseUp` 在 dataZoom 的 mouseup 之后结束刷选，`CaptureChanged` 也结束它；`TbApplyCursor`：图标上 `pointer`，刷选面板里 `crosshair`（经 `DzApplyCursor`）。
+  - 动作：`DispatchAction` 认 `restore`（`ApplyNotMerge(FTbBackup)`，history 保留）、`changeMagicType`（合并 newOption、记下 newTitle）、`changeDataView`（`TyDataViewChange` 后合并）、`takeGlobalCursor`；各自发 `restore` / `magictypechanged` / `dataviewchanged` / `globalcursortaken`（payload 是动作的、type 换成事件名）。图标的点击都经 `DispatchAction`。
+  - dataZoom：`TTyDzActionItem.IsValue`（值的动作）、`TTyDzAction.FromToolbox`（toolbox 的批没有自己的动画）；`DzDispatch` 联动到 select dataZoom，作者的写进 `FDzRawHas` 加新的 `FDzRawValue`，select 的写进 `FTbSel`；`SolveDataZooms` 用 `DzApplyRaw`（值模式 / 百分比模式）给作者的与 select 的套上窗口；`MergeBefore` 把值模式的窗口按 `startValue` / `endValue` 写回树里。
+  - `ApplyNotMerge`：toolbox 的状态全部随选项走（iconStatus、标题、select 窗口、history、刷选），视图新建（`FTbPrev` 清空、缩放关掉）。
+  - 对话框缝：受保护的虚方法 `ToolboxShowDataView`、`ToolboxAskFileName`；发布的事件 `OnToolboxSaveAsImage(Sender, var AFileName, AOptsJson, var AHandled)`——没处理就问文件名、`SaveToFile`。测试 API：`ToolboxCount`、`ToolboxSpec`、`ToolboxLayout`、`ToolboxIconState`、`ToolboxTitle`、`ToolboxIconStatus`、`ToolboxHistoryCount`、`ToolboxCover`、`ToolboxClick`、`ToolboxDataViewText`、`ToolboxZoomActive`、`ToolboxCursorName`、`ToolboxError`。
+- **`Handlers`**：自定义按钮的命名处理器注册表（`TTyChartToolboxHandler`、`TyChartRegisterToolboxHandler` 等四个），`onclick: '@Name'` 以控件、feature 名、图标名调用；没注册什么都不做。
+- **`Coord`**：`TTyAxis.CoordToData(ACoord, AClamp)`——linearMap 的夹紧（刷选用）。
+- **`Export`**：`cvToolbox`（枚举末尾）与 `'toolbox'`，`excludeComponents: ['toolbox']` 藏得掉工具栏。
+- **主题键**（`themes/light.tycss`，重跑了 `gen-defaulttheme.ps1` 与 `gen-tycss-catalog.ps1`，只有增加；目录顺带补上了 light 里早有、目录里漏掉的 `--grid-bg`、`--input-border` 两个 token）：`TyAdvChartToolbox`（图标描边、标题字号）、`TyAdvChartToolbox:hover`（emphasis 描边，也是标题的颜色）、`TyAdvChartToolboxBackground`、`TyAdvChartToolboxBorder`、`TyAdvChartToolboxBrush`（刷选覆盖框）。
+- **资源串**（`tyControls.StrConsts`，`.pot` 与 zh_CN `.po` 更新，`tools/themebuilder/languages/tycontrols.zh_CN.po` 是它的字节拷贝）：`rsTyChartToolboxSaveAsImage` 'Save as Image'（保存为图片）、`…Restore` 'Restore'（还原；和 `rsTyToolWindowRestore` 同 msgid，两条都加了 msgctxt）、`…DataView` 'Data View'（数据视图，也是对话框标题）、`…DataViewRefresh` 'Refresh'（刷新）、`…Zoom` 'Zoom'（区域缩放）、`…ZoomBack` 'Zoom Reset'（区域缩放还原）、`…Line` 'Switch to Line Chart'（切换为折线图）、`…Bar` 'Switch to Bar Chart'（切换为柱状图）、`…Stack` 'Stack'（切换为堆叠）、`…Tiled` 'Tile'（切换为平铺）、`…DataViewBad`（数据视图的文本无法读回：%s）、`…ImageFilter`（保存对话框的过滤器）。英文是上游 `langEN.ts` 的，没翻译的构建与上游量出一样的标题宽；Close 用现成的 `rsMsgBtnClose`。
+
+### 基准
+
+`tools/advchart-oracle/toolbox.js`（真 dist，node 下 SSR / SVG，600 × 400，每个选项 `animation: false`；假时钟与定时器照 `datazoom-interact.js`，指针事件前 200 ms、click 前 0、idle 1000，帧在推进时钟时跑；驱动 zrender 自己的 Handler；图表原型的 `getDom` 在 dataView 打开时答一个假容器（标题、textarea 的值与只读、按钮的文字与点击监听），`getConnectedDataURL` 换成记录器，下载锚点与 `MouseEvent` 在点击期间是假的，saveAsImage 点击时画家 `getType()` 答 `'canvas'`（浏览器里 canvas 图表走的分支）；夹具里自定义按钮的 `onclick` 写成 `'@Name'`，跑上游时换成记录调用的函数；hideTip 与 brush 组件每次更新都派发的 brushSelect 不记；最后 `process.exit()`）→ `tests/fixtures/advchart-toolbox.json`（约 605 KB）：**30 个用例、280 步、31 个动作、45 个事件**。
+
+- **布局与悬停**（13 个）：五个 feature 全开的缺省（右上、横向，逐个悬停再移开）；纵向靠左居中（标题在右）；纵向 `right: 0`（标题在左）；`top: 'bottom'`（标题在上）；`bottom` 与负的 `right` 像素（标题在上、末个被右缘推回、悬停点在画布外）；`itemSize` 24、`itemGap` 2、`padding [4, 12]`、居中、`showTitle: false`；左上角 70 宽（换行、首个标题被左缘推回）；背景、边框、圆角、贴近底边（标题放上方）；样式（toolbox 的、某个 feature 自己的、emphasis 的 textFill 与 textPosition、两个自定义按钮及其点击、`show: false` 的自定义与内置）；一个 feature 两个图标加一个图片图标（及其点击）；`show: false`；notMerge 换 feature 再合并移动；高度为 0 的路径（整条 NaN）。
+- **magicType 与 restore**（4 个）：line、bar、stack、tiled（对调的标题悬停）、合并改标题后 restore；`option.line` / `option.bar` 与 `seriesIndex.line`（另有饼图）；横向柱（y 轴的 boundaryGap、markPoint / markLine、作者的 stack）；先图例动作、再合并、再 restore 按钮、再 API 的 restore。
+- **select dataZoom**（4 个）：开缩放、十字光标、两次矩形、两次 back、关缩放；`yAxisIndex: false` 的 lineX 拖出网格；作者的 slider 在同一根 x 轴上（联动）；数值轴（舍入精度）、小于阈值的拖动、第二次拖动、back。
+- **dataView**（6 个）：两个系列的类目轴（编辑数值、改一个类目名、带 name 与 itemStyle 的项）；时间轴上的堆叠折线（列表形式、堆叠两列，原样刷新）；饼图与散点（改名、加行、加一个新系列）；两个 grid 上的横向柱（两张表，Close）；只读与自己的 lang；列表块里写了 Tab（抛错）。
+- **saveAsImage**（3 个）：标题当文件名；名字、jpeg、背景、像素比、多排除一个；没有标题与选项背景、`type: 'svg'`。
+
+每条记录：每个 toolbox 的布局（组的位置、背景、每个图标的键 / 标题 / 种类 / 位置 / 包围盒 / 路径盒 / 路径数据，变了才写）；每个图标的状态（当前样式、`currentStates`、emphasis 状态里的调整、文字的 ignore / 内容 / 字体 / 颜色 / 位置 / 生效的对齐 / textConfig.position，变了的才写）与 iconStatus；最后一次 `setCursor`；`api.dispatchAction` 的动作（NUL 写成 `<NUL>`）；图表事件；`getOption` 的系列 type / name / stack / data / smooth / barWidth、坐标轴 type / boundaryGap / data、标题；缩放（开关、history 格数、正在画的覆盖框、每个 dataZoom 的百分比窗口与选项里的值、每根轴的 scale 范围）；dataView 面板；saveAsImage 的选项与下载名；自定义 onclick 的调用；异常信息。另记每个标题在两种字体下的 `getTextRect`。自检：R1 由图标包围盒重算 layout.box 与组的并集、背景；R2 由 measure 重算横向标题的调整；R3 打开 dataView 时由各系列原始数据重算文本，Refresh 时按读到的文本重算 parseContents 并与动作比；R4 每次刷选由网格矩形、`pointToData`（夹紧或仿射逆）、半像素精度重算 startValue / endValue 与批比；R5 每步的 history 格数；6 条守卫（布局不加间距、右缘标题用画布宽而不是 '100%'、分隔线少一个 '-'、表头不 trim、精度用一像素、back 弹两格）都改变了点名的用例；锚点（Z-RECT 有覆盖框与十字光标、M-SWITCH 发 magictypechanged 与 restore、D-ERROR 抛错）成立；两次生成逐字节一致；没有 `\u0000`；JSON 能读回。
+
+### 测试
+
+`test.advchart.toolbox`（新，注册在 `tytests.lpr`）：
+
+- **基准重放**（`TAdvChartToolboxOracleTest`，5 个，按 L / M+R / Z / D / S 分组）：每个用例新建控件（`camOff`，表里的宽度作测量器），同样的指针步骤、动作、setOption / 合并，每步之后无头渲染；记录的空字段沿用上一条。mouseup 与紧跟的 click 在端口是一次松开，合在 click 那步比；dataView 的编辑与按钮在端口发生在点击的模态框里——测试按随后的步骤给 `ToolboxShowDataView` 的缝编排编辑与按钮，在按钮那步比；idle 与面板步骤调 `ToolboxFrame`（时钟推进时的那一帧）。逐位比较组的位置、背景、每个图标的包围盒 / 路径盒 / 路径数据、emphasis、描边（写的值，或上游两种缺省对应的主题色）、线宽、调整（种类与 y）、标题是否显示 / x / y / 对齐 / 文字 / 颜色、iconStatus、光标；toolbox 事件（magictypechanged 的 currentType / newTitle / featureName、按 id 映射到位置的系列 type / stack / data / smooth / barWidth、坐标轴的 boundaryGap；dataviewchanged 的 newOption；globalcursortaken 的键与开关）与 `OnDataZoom` 的批（轴、按值与否、四个数）；`GetOptionJson` 的系列与坐标轴（树里写了的键）、标题；缩放开关、history、覆盖框、select 与作者 dataZoom 的百分比窗口、每根轴的范围；dataView 面板的标题 / 文本 / 只读 / 按钮；saveAsImage 的文件名与选项；自定义 onclick 的调用；数据视图的拒绝。共比较 **51 491 项**（布局与悬停 21 279、magicType 与 restore 14 824、select dataZoom 11 170、dataView 3 042、saveAsImage 与自定义 1 176）。
+- **手写**（`TAdvChartToolboxTest`，7 个）：`TyDataViewText` 与 `TyDataViewParse` 的往返（表格与列表、NaN、对象项）与缺元数据的拒绝；`TyBuildDataViewDialog` 只建不显示（标题、两个按钮的顺序、只读时只剩 Close、memo 的行）；saveAsImage 经事件再经缝（文件名、类型、排除；缝给出路径时真的写出 PNG）；API 的 `takeGlobalCursor`（开、被别的键夺走）、点 magicType 的图标、API 的 restore（iconStatus 随选项清掉）；图标真的画出来（像素），导出时 `excludeComponents: ['toolbox']` 藏掉、不写则在；没注册的处理器什么都不做、注册后调用；标题是资源串的英文。
+
+首跑的不对：测试里路径命令码把 Z 和 R 对调了；**悬停的 emphasis 不是当场生效**——`enterEmphasis` 只改标记、下一帧才 useState，悬停那步上游还没进 emphasis、标题在 mouseover 给的位置，于是加了「等下一帧」的两个标记与 `TbFrame`；被 iconStatus 置成 emphasis 的图标悬停时位置不调整、对齐却调整（拆成 `AdjPos` / `AdjAlign`）；restore 与 notMerge 的视图是新的（组从 0 算起，末位差一）；高度为 0 的路径在 FPC 里除零——改成屏蔽陷阱、按 JavaScript 的 NaN 语义并集（原来的 L-MULTI-ICON 因此整条 NaN，拆出 L-DEGENERATE、原用例换成有高度的路径）；画布外的悬停点；memo 读回带一个结尾换行；saveAsImage 的选项用了 fpjson 的 JSON 文本；测试先按 `api.dispatchAction` 比 toolbox 的动作，API 派发的 restore 不经过它——改按事件比；缩放派发后多排了一次重绘（去掉，派发自己的更新已经重绘）。
+
+本批按规矩只跑了自己的新套件和直接碰到的套件，全部通过：`TAdvChartToolboxOracleTest`（5）、`TAdvChartToolboxTest`（7）、`ExportLoading` 15、`DataZoomInteractOracle` 8、`DataZoomSliderOracle` 6、`DataZoomWindowOracle` 7、`Cartesian` 13、`CoordAffineOracle` 2、`ConvertJitter` 10、`Handlers` 20、`HandlerWiringOracle` 9、`MouseEventsOracle` 3、`VisualMapInteractOracle` 1、`VisualMapInteract` 6、`LegendAct` 8、`OptionMerge` 15、`Media` 10、`HostileOption` 1、`Gallery` 1、`CssCatalog` 14、`BuiltinTheme` 13、`I18N` 8。全量套件与变异轮留到里程碑（C14–C22）末尾；变异候选单列（30 条）。
+
+### 推迟与偏差
+
+- **[第 126 批：brush 组件本身有了（模型、覆盖框、`brush` / `brushEnd` 动作，§162）；toolbox 的 brush 按钮与 brush 的预处理器仍是 C18。]** **brush 按钮**：C18。toolbox 里的 `brush` feature 现在跳过（上游装了 brush 组件就画）。
+- **图片图标**：`image://` 参与布局、点得到、调得到 onclick，但不画。
+- **toolbox 自己的 tooltip**（`tooltip.show`）不做；`iconStyle` 只画描边、填充、线宽、不透明度（阴影、`borderType` 不画）；`textBackgroundColor`、`textBorderRadius`、`textPadding` 不画；emphasis 的 `textFontSize` 用上、其余字体键用皮肤的。调整时量标题用皮肤的字族、12 px（上游是 12px sans-serif）。
+- **dataView 是模态对话框**，不是铺在图上的一层；颜色（backgroundColor、textColor、textarea、按钮）是皮肤的；`optionToContent` / `contentToOption` 函数不支持；读回失败不抛异常，`ToolboxError` 给出原因、选项不动；hideTip 不派发。列表读出的 NaN 与无穷在合并的选项里是字符串 `"NaN"` / `"Infinity"`（JSON 装不下这几个数，读成数据时一样是 NaN / 无穷）。
+- **saveAsImage**：没有浏览器下载——`OnToolboxSaveAsImage` 先问宿主，没处理就弹库的保存对话框、`SaveToFile`。缺省背景是皮肤的底色（B11 的缺省）而不是 `#fff`，所以选项里不写背景；`connectedBackgroundColor` 不传（没有 connect）；`type: 'svg'` 的文件名照上游是 `.svg`，内容是 B11 给的 PNG。
+- **magicType**：新选项按位置对齐、不写自动 id；不抄旧模型的**缺省**（上游连 `z`、`progressive`、`label.position`、`select`、`markLine` 的规范化默认都抄进新类型），端口只抄作者写的键——切换后 z 序、标签缺省位置跟随新类型，与上游不同。
+- **[第 126 批：完整的 BrushController 在 `tyControls.AdvChart.Brush`（§162）；toolbox 的 select 刷选仍是这里的简化实现，两者在 C18 合并。]** **dataZoom 选择**：宿主 dataZoom 的 `minValueSpan` / `maxValueSpan` 不限制刷选的值（sliderMove 那一步没做）；`brushStyle` 不读，覆盖框是 `TyAdvChartToolboxBrush`；只有 toolbox 0 的 dataZoom feature 决定刷选（上游每个 toolbox 的 feature 都有自己的 BrushController，内部 select dataZoom 也只看 toolbox 0）；多个 toolbox 共享缩放开关。`datazoom` 图表事件不发（与端口现有的 slider / inside 一样，经 `OnDataZoom`）。
+- **重绘时机**：上游的动作同步重绘，端口在下一次 `Relayout`（下次绘制，dataZoom 的动作例外，是同步的）；一个指针事件若夹在 setOption / 动作与下一次绘制之间，命中的是旧布局。真机里帧就是绘制，悬停的 emphasis 在绘制时落下。
+- **restore**：用最近一次 notMerge（或第一次）的选项文本重建；之后合并带来的 media 列表不记。
+- **自定义按钮**：没有 onclick 或图标串为空时上游抛异常，端口不画那个图标或点了什么都不做。
+- **退化图标**：上游整个工具条坐标 NaN，端口同样算出 NaN、什么都不画也点不到（与上游一致），只是不抛异常。
+
+### 落地
+
+- `source/tyControls.AdvChart.Toolbox.pas`、`source/tyControls.AdvChart.ToolboxDlg.pas`（新，已登记 `tycontrols.lpk` 与 `tycontrols.pas`）。
+- `source/tyControls.AdvanceChart.pas`：类型 `TTyToolboxSaveEvent`、`TTyTbInk`、`TTyTbIconLive`；`FDzRawValue`、`FTb*`、`FOnToolboxSaveAsImage`；`SolveToolboxes`、`BuildToolboxes`、`TbHitAt`、`TbMouseOver` / `TbMouseOut` / `TbFrame`、`TbClick`、`TbDoRestore`、`TbMagicType` / `TbDoMagic` / `TbMagicSeries`、`TbDataView` / `TbDoDataView` / `TbDataViewContent` / `TbDvFind`、`TbSaveAsImage`、`TbDoTakeCursor`、`TbBack`、`TbDispatchZoom`、`TbSelIndexOf` / `TbSelPut`、`TbPanelAt`、`TbBrushDown` / `TbBrushTrack` / `TbBrushMove` / `TbBrushUp` / `TbBrushEnd`、`TbApplyCursor` 等；虚方法 `ToolboxShowDataView`、`ToolboxAskFileName`；测试 API；`DzApplyRaw`；`ApplyNotMerge`、`Relayout`、`BuildSeriesList`、`SolveDataZooms`、`MergeBefore`、`MergePass`、`DzDispatch`、`EventTargetAt`、`EventMove`、`EventUp`、`EventLeave`、`MouseDown` / `MouseMove` / `MouseUp` / `MouseLeave`、`CaptureChanged`、`DispatchAction`、`SetOption`、`Paint`。
+- `source/tyControls.AdvChart.DataZoomAct.pas`：`TTyDzActionItem.IsValue`、`TTyDzAction.FromToolbox`。
+- `source/tyControls.AdvChart.Coord.pas`：`TTyAxis.CoordToData(ACoord, AClamp)`。
+- `source/tyControls.AdvChart.Export.pas`：`cvToolbox`。
+- `source/tyControls.AdvChart.Handlers.pas`：toolbox 的命名处理器注册表。
+- `source/tyControls.StrConsts.pas`、`languages/tyControls.StrConsts.pot`、`languages/tycontrols.strconsts.zh_CN.po`、`tools/themebuilder/languages/tycontrols.zh_CN.po`。
+- `themes/light.tycss`、`source/tyControls.DefaultTheme.pas`、`source/tyControls.Css.Catalog.pas`（生成）。
+- `tools/advchart-oracle/toolbox.js`、`tests/fixtures/advchart-toolbox.json`、`tests/test.advchart.toolbox.pas`（新，注册在 `tytests.lpr`）。
+
+## 162. Tier 2 第一百二十六批：刷选（一）（C17，2026-10-12）
+
+路线图 C17：brush BR1——组件模型、四种形状、带八个手柄的覆盖框、single / multiple 两种模式。以前 `brush` 在端口里只是选项合并认得的一个主类型：写了也没有模型、没有视图，`brush` 动作不认，图上拖不出框；C16 的 toolbox 为了 dataZoom 的选择框自己带了一个缩水的刷选（只有矩形与线、没有手柄、松开就消失）。这一批对着 6.1 的 `component/brush/`（`BrushModel.ts` 的缺省、`setAreas`、`setBrushOption`、`generateBrushOption`；`BrushView.ts` 的 `_updateController`、`_onBrush`、`updateVisual` → `updateTransform`；`install.ts` 的 `brush` / `brushEnd` 动作；`visualEncoding.ts` 的 `layoutCovers` 与 brushSelect 的节流派发）、`component/helper/BrushController.ts`（`enableBrush`、`setPanels`、`updateCovers` 的 DataDiffer、`createBaseRectCover`、`updateBaseRect`、`updateCommon`、`driftRect` / `driftPolygon`、`updateCoverByMouse`、`shouldShowCover`、`resetCursor`、`getPanelByPoint` / `getPanelByCover`、`clipByPanel`、三个指针处理器、四个 coverRenderer）、`BrushTargetManager.ts`（`targetInfoBuilders.grid`、`findTargetInfo`、`setInputRanges`、`setOutputRanges` / `matchOutputRanges`、`coordConvert`、`diffProcessor`、`getScales`）、`brushHelper.ts`、`util/throttle.ts`（`throttle`、`createOrUpdate`）、`util/model.ts` 的 `parseFinder`，以及 zrender 的 `Draggable`（dragstart / drift / dragend）、`Handler.mousemove`（先找悬停、设光标，再派发）、`Path.contain` / `getBoundingRect`（`strokeContainThreshold`）、`contain/path.ts`、`contain/line.ts`、`contain/windingLine.ts`、`Storage` 的显示列表次序逐行核过，在真 dist 上跑基准。toolbox 的 brush 按钮、inBrush / outOfBrush 视觉、brushLink、brushSelected 事件、与 dataZoom / roam 的 globalPan 互斥是 C18。§141、§160 的相关处在原处标注。
+
+### 上游的做法
+
+- **模型**（`BrushModel`）：缺省 `brushType: 'rect'`、`brushMode: 'single'`、`transformable: true`、`brushStyle: {borderWidth: 1, color: backgroundTint, borderColor: borderTint}`、`throttleType: 'fixRate'`、`throttleDelay: 0`、`removeOnClick: true`、`z: 10000`；finder 是组件自己的 `xAxisIndex` / `yAxisIndex` / `gridIndex`（及 Id / Name）。模型带两样状态：`areas`（`brush` 动作写）与 `brushOption`（正在画的选项，`takeGlobalCursor` 写；起初是空对象——**没有类型，不能画**）。两者都是 `generateBrushOption`：以模型的 brushType、brushMode、transformable、`getItemStyle(brushStyle)`（color → fill、borderColor → stroke、borderWidth → lineWidth）、removeOnClick、z 为底，`merge` 上写了的键。合并（setOption）保留模型与这两样；notMerge 与 restore 是新模型、新视图。
+- **目标**（`BrushTargetManager`）：finder 先找 x 轴们所在的网格，再 y 轴们的，再 `gridIndex` 的，按此序去重；每个网格上 x 或 y 轴被点名的 cartesian 是它的坐标系们，第一个是代表。面板 id 是 `'grid--' + 网格模型 id`，矩形是网格的 `getRect()`。没有目标就是**全局面板**：整张画布、不裁剪、没有 coordRange。只写了 `gridIndex` 的网格没有代表 cartesian，上游在面板矩形上抛异常。
+- **控制器**（BrushController）：`enableBrush` 先关后开，开的选项是 `merge(DEFAULT_BRUSH_OPT, 模型的 brushOption)`（缺省线宽 2、填充与描边是两个 token、可变换、single、removeOnClick 假）；没有类型就关。`updateCovers(model.areas)` 以 DataDiffer 按「id 或 `\0-brush-index-` 加下标」再加类型对位：对上的复用（正在画的那个不动），对不上的删，新的追加——**组里的次序是加入的次序**，与 `_covers` 的次序可以不同（A-API 第二次派发时 lineX 在 named 框之下）。每个框：主体（矩形、线型的矩形、多边形——画的时候是 Polyline，`endCreating` 换成 Polygon），矩形还有 w、e、n、s、se、sw、ne、nw 八个手柄、lineX 有 w、e、lineY 有 n、s，**按这个次序加入，后加的在上**。`updateBaseRect`：`lineWidth || 0`、手柄宽 `max(lineWidth, 6)`，四边与四角的矩形从主体按半个线宽外扩，每块都按 `[[x, y], [x + w, y + h]]` 用 `clipPointsByRect` 裁到面板再转回矩形；不可变换的框不更新手柄。线型的另一维是面板的高（lineX）或宽（lineY），全局面板是画布的。`updateCommon`：主体 `silent = !transformable`、光标 `move` / `default`；手柄 `silent`、`invisible` 同理、光标 `ew-resize` / `ns-resize` / `nwse-resize` / `nesw-resize`（经组的变换，单位阵）。**正在画的框全是 silent**（创建时就是），松开时 `endCreating` + `updateCommon` 才让它接指针。
+- **指针**：zr 层的处理器在开着时才挂上。mousedown：正在画就当作松开（丢了的 mouseup）；目标不是 draggable 时取 `getPanelByPoint`（最后一个闭区间含这点的面板，没有面板就是全局），有就开始轨迹。mousemove：先 `resetCursor`（画布外不管；不在画时、点在本面板某个框的主体里——`Path.contain`，不管 silent——不动光标，否则在面板里就十字），再 `updateCoverByMouse`：轨迹两端距离（`pow(dx² + dy², 0.5)`）**大于** 6 才出框；出框那一刻 single 先清掉所有框，新框的选项是控制器选项的拷贝加类型与面板 id；范围是**裁到面板的轨迹**（矩形 / 线取两端，多边形取全部）；每一步 trigger。mouseup：同样再推一点、松开时 `endCreating` + `updateCommon`、trigger(isEnd)；没出框、single、removeOnClick、松开点在面板里且原来有框——清掉，trigger(isEnd, removeOnClick)。
+- **拖动框**（zrender Draggable）：按在 draggable 的块上 dragstart（控制器的 mousedown 看到 draggable 目标什么都不开），每个 mousemove `drift(dx, dy)`——距上一个指针事件——主体动四条边、手柄动自己那一两条边（`DIRECTION_MAP`），再 `formatRectRange`（拖过对边就对调）；多边形每个点平移。**范围不裁剪，形状裁剪**。dragend：trigger(isEnd)。所以**点一下框**（不动）也发 brushEnd。Handler 的悬停与光标在 drift **之前**找，`resetCursor` 在之后看。
+- **`_onBrush`**：`setOutputRanges`——面板上的区域对目标的每个 cartesian：`pointToData(…, clamp)`（两根都是数值 / 时间轴时走仿射逆矩阵，**不夹紧**）或线型的 `coordToData(toLocalCoord(v), true)`，得 coordRanges，第一个是 coordRange，再用它 `dataToPoint` 回去减掉 range 得 `__rangeOffset`（offset 与 xyMinMax）。不是结束、或是 removeOnClick 的清除时派发 `{type: 'brush', brushId, areas, $from}`；结束时派发 `brushEnd`（update `'none'`，只有事件 `brushend`）。**松开那一点的范围只进 brushEnd，不进模型**——之后任何一次重绘都把框放回最后一次移动的范围（Q-RESCALE 的末步）。
+- **`brush` 动作**：按 `brushIndex` / `brushId` / `brushName` 找组件（都没写是全部），`areas` 是数组就 `setAreas`（没写则不动）；update `'updateVisual'`：`layoutCovers`（每个模型重建目标、`setInputRanges`：绑定到目标的区域取面板 id，range 从 coordRange `dataToPoint` 回来、有 `__rangeOffset` 时减去 `offset × getScales(现在的 xyMinMax / 当时的)`——轴变了按比例，NaN 的比例当 1），然后每个**不是 `$from` 的**视图 `_updateController`。事件 `brush`，载荷照抄。
+- **`takeGlobalCursor`**：`brushVisual` 里对每个模型 `setBrushOption(key === 'brush' ? payload.brushOption : {brushType: false})`，update 是整次更新。`key: 'brush'` 而不写 brushOption 时 `generateBrushOption` 得 undefined，更新抛异常。
+- **节流**：brushVisual 在每次带 payload 的更新里经 `createOrUpdate(zr, …, 第一个组件的 throttleDelay, throttleType)` 派发 brushSelect：类型或延时变了就**新建**节流函数（旧的定时器照旧会跑），`delay == null` 或类型为假就是原函数。fixRate：`diff = now − lastExec − delay`，非负立刻跑，否则 `setTimeout(−diff)`；debounce：每次 `setTimeout(delay)`；每次调用先 `clearTimeout`，定时器跑的是最近一次调用的参数，`lastExec` 从纪元 0 起算。
+
+### port 以前
+
+- `brush` 组件没有模型、视图、动作；`excludeComponents: ['brush']` 无处可藏。toolbox 的 select 刷选是另写的一小段（§160）。
+
+### 做法
+
+- **新单元 `tyControls.AdvChart.Brush`**（纯）：
+  - 类型：`TTyBrushType`（含 `btNone`，即 false）、`TTyBrushPair` / `TTyBrushRange`（照上游的嵌套：线一对、矩形两对、多边形每点一对）、`TTyBrushInk`（写了的颜色或皮肤的）、`TTyBrushStyle`、`TTyBrushOpt`（BrushCoverConfig）、`TTyBrushArea`（加 coordRange、coordRanges、`__rangeOffset`、区域自己的 finder 键）、`TTyBrushSpec`、`TTyBrushPiece`、`TTyBrushCover`（序号——组里的次序、`Live`——updateCommon 跑过、`Closed`——多边形 endCreating 过、主体、手柄）、`TTyBrushPanel`、`TTyBrushTrigger`、`TTyBrushTarget`、`TTyBrushSelectRec`、`TTyBrushEventRec`、`TTyBrushPending`、`TTyBrushThrottle`。
+  - 模型：`TyBrushSpecOf`、`TyBrushPaintOpt`（setBrushOption）、`TyBrushAreaOfJson`（setAreas）、`TyBrushAreaOfOutput`、`TyBrushMergeJson` / `TyBrushMergeOpt`（merge 的键）、`TyBrushAreasJson`（事件载荷，数按 JavaScript 印、NaN 是 null）。
+  - 几何：`TyBrushClip`（clipPointsByRect）、`TyBrushCreatingRange`、`TyBrushDrift`、`TyBrushWindingLine`、`TyBrushLineContainStroke`，以及 R / M-L-Z 两种路径的 `containPath`。Math.min / max 按 NaN 的语义自写，涉及 NaN 的运算都在屏蔽了浮点陷阱的环境里算。
+  - 控制器 `TTyBrushController`：`EnableBrush`、`SetPanels`、`UpdateCovers`（DataDiffer 的一对一：旧的按序对位或删除，剩下的按新键序追加）、`MouseDown` / `MouseMove` / `MouseUp`（updateCoverByMouse、handleDragEnd）、`Crosshair`（resetCursor）、`Drift` / `DragEnd`、`PieceAt`（组里从后往前、块从最后加的往前，silent 的跳过；主体是 `Path.contain`——描边放大的包围盒、描边带、填充的环绕数，手柄是无描边的矩形）、`MainContains`、`PieceSilent`、`GroupOrder`。
+  - 坐标：`TyBrushConvert`（coordConvert 两个方向，CSS px 与 cartesian 的设备 px 之间经视口与缩放换算）、`TyBrushDiff`、`TyBrushScales`。
+  - 节流：`TyBrushThrottleConfigure`（createOrUpdate）、`TyBrushThrottleCall`。
+- **控件**：
+  - 状态：按组件下标的 `FBrushSpecs`、`FBrushAreas`、`FBrushPaint` / `FBrushHasPaint`、`FBrushCtls`；Draggable 的 `FBrushDrag*`；`FBrushCursor`；节流 `FBrushThr`、等着的 `FBrushPend`、时钟 `FBrushNow` / `FBrushTickPrev`、`FBrushTimer`；日志 `FBrushSelLog`、`FBrushEvLog`。
+  - 更新：`Relayout` 末尾（toolbox 之后、不在导出与 appendData 时）`BrushPass`：`BrushSync`（组件数、各自的模型）、每个 `BrushLayout`（setInputRanges）、每个 `BrushRender`（`_updateController`：面板、正在画的选项、`UpdateCovers`）。`BuildBrushes` 接在 toolbox 之后（`ViewHidden(cvBrush)`），按组件、组里的次序画主体（多边形没合上时是折线），填充 / 描边 / 线宽 / 不透明度是框的样式，没写的颜色是 `TyAdvChartBrush`。
+  - 动作：`DispatchAction` 认 `brush`（`BrushDoAction`：`BrushQuery`、setAreas、同步的 updateVisual——除了 `$from` 的视图都重铺——、节流、事件）与 `brushEnd`（只有事件）；`TbDoTakeCursor` 里 `BrushTakeCursor`（setBrushOption，然后同步重铺），globalcursortaken 照旧。视图自己派发的走 `BrushOnTrigger` → `BrushOutput`（setOutputRanges）→ `BrushApplyOwn`，不经 JSON 往返（数字不受打印精度影响）；`brushend` 在其后。
+  - 指针：`EventTargetAt` 最先问 `BrushPieceAt`（z 10000，HdKind 9，HdRow 框的序号、HdGen 块），`HitTestAt` 在框下面不报数据项（悬停、按下、提示框都看不到被盖住的项）。`MouseDown` 在 visualMap 之前 `BrushDragStart`（Draggable 接走，Exit；控制器的 mousedown 照样跑，只会结束丢了松开的轨迹），在 dataZoom 之后 `BrushCtlDown`（slider 手柄上不开始）。`MouseMove` 在 `EventMove`（悬停在拖动之前找）之后 `BrushPointerMove`：先 drift，再各控制器的 mousemove。`MouseUp` 先 `BrushDragEnd`（dragend），dataZoom 与 toolbox 的松开之后 `BrushCtlUp`；`CaptureChanged` 两者都做。`TbApplyCursor`：悬停在块上时用块的光标，任一控制器 `Crosshair` 时十字；`DzApplyCursor` 认 `move`、`nwse-resize`、`nesw-resize`。
+  - notMerge（含 restore）：`BrushReset`，模型与视图都是新的；节流随图表留着。
+  - 测试 API：`BrushCount`、`BrushControllerOf`、`BrushModelAreas`、`BrushHitTest`、`BrushSelectCount` / `At`、`BrushEventCount` / `At`、`BrushClearLogs`、`BrushTick`、`BrushCursorName`、`BrushNow`。
+- **`Export`**：`cvBrush`（'brush'），`excludeComponents: ['brush']` 藏掉覆盖框。
+- **主题键**（`themes/light.tycss`，重跑了 `gen-defaulttheme.ps1` 与 `gen-tycss-catalog.ps1`，只有增加）：`TyAdvChartBrush`（填充是墨色淡到 6%，描边是皮肤的边框色）。
+
+### 基准
+
+`tools/advchart-oracle/brush-cover.js`（真 dist，node 下 SSR / SVG，600 × 400，每个选项 `animation: false`；假时钟与定时器照 `toolbox.js`，指针事件前 200 ms（步骤可以自定）、click 前 0、idle 1000，定时器在推进时钟时跑；驱动 zrender 自己的 Handler；指名「某框某块」的步骤指向那块形状的中心取整再加偏移，一次拖动的后续步骤相对第一步；brushSelect 单独记——何时跑、带了哪些区域；最后 `process.exit()`）→ `tests/fixtures/advchart-brush-cover.json`（约 1.0 MB）：**18 个用例、466 步、182 个动作、205 个事件、139 次 brushSelect**。
+
+- **矩形**（5 个）：类目网格上画框、十字光标、悬停主体与八个手柄的光标、离开；拖主体在网格里、再拖出右下缘（范围出界、形状裁剪、coordRange 夹紧）；八个手柄依次拖、w 拖过 e；single 下第二个框替换第一个、小拖动清除（removeOnClick）、没有框时小拖动什么都不发、点一下框发 brushEnd；恰好 6 px 不出框、7 px 出框、网格外按下不画、拖出画布。
+- **模式与形状**（4 个）：multiple 三个框、重叠处悬停最后一个、小拖动不清、拖露出的角、切回 single 后新框清掉其余；多边形（每次移动一个顶点、出界的点裁到网格、松开点不同于最后一次移动、拖动、被替换、被清）；数值 x 轴上的 lineX（两个手柄、拖 e、拖主体、拖 w）；横向柱的类目 y 轴上的 lineY。
+- **面板与动作**（4 个）：没有 finder 的全局刷选（不裁剪、没有 coordRange、全局 lineX 占满画布高、小拖动清除）；两个网格 `xAxisIndex: 'all'`（右网格里的拖动裁到右网格，左网格里的新框替换它）；`brush` 动作从 coordRange 铺 rect / lineX / polygon、从像素范围铺全局 rect、带 id 的 rect，刷选没开时照样拖得动，第二次派发少了区域（DataDiffer 的复用与删除、组里次序与 `_covers` 不同），空数组清除；合并改了 y 轴的 max 后按比例重铺、松开点不同于最后一次移动时模型停在移动的范围、再一次 takeGlobalCursor 把框放回去。
+- **样式与开关**（3 个）：`brushStyle`（8 px 边、自己的颜色）、`transformable: false`（没有手柄、没有 move 光标、按在框上重新画）、`removeOnClick: false`；10 px 边的手柄宽、brushOption 自己的 removeOnClick 与 multiple；`brushType: false` 与别的键关掉刷选（框留着、照样拖得动、不再十字、不再画）。
+- **节流**（2 个）：fixRate 300 ms（立刻、`lastExec + 300`、带最近的区域）；debounce 250 ms（停下来之后）。
+
+每条记录：每个 brush 组件的面板（变了才写）；控制器（开关、正在画的选项、是否在画、正在画的是哪个框、每个框的 id / 类型 / 面板 / 范围 / 模式 / 可变换 / removeOnClick / z / 组里的次序 / 主体的种类、形状、silent、光标、draggable、样式 / 每个手柄的矩形、silent、invisible、光标）与模型的区域（range、coordRange、coordRanges、`__rangeOffset`），整个组件变了才写；最后一次 `setCursor`；动作（brush、brushEnd、takeGlobalCursor）；事件（brush、brushend、globalcursortaken）；brushSelect；异常信息。自检：T1 由范围、类型、线宽、面板重算每个框的主体与手柄；T2 由轨迹重算正在画的框的范围；T3 由前一条的范围与指针的增量重算拖动后的范围；T4 由事件里的 range 重算 coordRange 与 offset；T5 由模型区域的 coordRange 与 offset 重算 range（轴不变的用例），Q-RESCALE 单独按改轴之前的区域重算改轴之后的；T6 由 brush / takeGlobalCursor 的派发时刻重算 brushSelect 的执行时刻；6 条守卫（手柄宽不取 6 的下限、n 边加了 dx、全局线型的另一维取错边、不裁剪、往返不按比例、fixRate 从最近一次调用算）都改变了点名的用例；锚点（R-DRAW 出框、十字与五种光标，R-REMOVE 小拖动清除，TH-FIXRATE 有推迟）成立；两次生成逐字节一致；没有 `\u0000`；JSON 能读回。
+
+### 测试
+
+`test.advchart.brushcover`（新，注册在 `tytests.lpr`）：
+
+- **基准重放**（`TAdvChartBrushCoverOracleTest`，5 个，按 R / M+P+L / G+T+A+Q / S+D / TH 分组）：每个用例新建控件（`camOff`），`BrushNow` / `BrushTick` 走同一个假时钟，同样的指针步骤、动作、setOption，每步之后无头渲染；记录的空字段沿用上一条。click 在端口是 MouseUp 的一部分，click 那步本身上游什么都不变。逐位比较：面板（个数、id、矩形）；控制器（开关、选项的类型 / 模式 / 可变换 / removeOnClick / 颜色 / 线宽、是否在画、正在画的框）；每个框的类型、面板、id、范围、模式、可变换、removeOnClick、组里的次序、主体的种类与形状（矩形或每个点）、silent 与光标、样式、每个手柄的有无 / 矩形 / silent / invisible / 光标；模型的每个区域（类型、id、面板、range、coordRange、coordRanges、offset、xyMinMax）；每一步之前的悬停块（任一边是框的块时）；移动那步的光标（上游是刷选的词时逐字比，否则端口不能出刷选的光标）；事件的类型次序，brush / brushend 是否来自视图、载荷能读回且 brushId 是模型的、每个区域（同上，视图发的还要求没有的 coordRange / offset 也没有）；brushSelect 的时刻与每个区域的类型、范围。共比较约 **65 500 项**（矩形 21 277、模式与形状 17 454、面板与动作 15 194、样式与开关 8 061、节流 3 542）。
+- **手写**（`TAdvChartBrushCoverTest`，6 个）：框画出来（像素），导出时 `excludeComponents: ['brush']` 藏掉、不写则在；框下面的柱子 `HitTestAt` 不报、旁边报；`brushIndex` / `brushId` / 都不写 / 不写 areas 的动作；合并保留区域与开关、notMerge 都没了；brushend 的载荷是 JSON、brushId 带 `\u0000`、`$from` 是它、线型的 xyMinMax 里 NaN 是 null；windingLine、线的描边包含、w 拖过 e 的对调。
+
+首跑的不对：只有测试自己——fpjson 读 `\u0000` 时把它吞掉（brushId 比不上，改成先换成 `<NUL>` 再读）；手写的事件个数数错（一次移动只有一个 brush）；`HitTestAt` 在动作之后没渲染就问（列表失效，什么都不报，「框下不报」那条是假绿——补上渲染）。实现另有一处：`BrushPass` 在 `Relayout` 里，原来铺完框就 `DropStatic` + 重画，等于每次重排后多画一遍静态层，改成在重排里不发。
+
+本批按规矩只跑了自己的新套件和直接碰到的套件，全部通过：`TAdvChartBrushCoverOracleTest`（5）、`TAdvChartBrushCoverTest`（6）、`ExportLoading` 15、`ToolboxOracle` 5、`Toolbox` 7、`MouseEventsOracle` 3、`HandlerWiringOracle` 9、`Handlers` 20、`DataZoomInteractOracle` 8、`VisualMapInteractOracle` 1、`VisualMapInteract` 6、`GraphSankeyInteractOracle` 1、`GraphSankeyInteract` 11、`TreeInteractOracle` 5、`Hit` 12、`SelectOracle` 11、`LegendAct` 8、`OptionMerge` 15、`CssCatalog` 14、`BuiltinTheme` 13、`BuiltinSync` 2、`BuiltinThemes` 8。全量套件与变异轮留到里程碑（C14–C22）末尾；变异候选单列（20 条）。
+
+### 推迟与偏差
+
+- **C18 的部分**：inBrush / outOfBrush 视觉、brushLink、brushSelected 事件（brushSelect 的节流与时刻已经在，选中的数据下标没有，只记日志）、globalPan 互斥（现在开着刷选时 inside dataZoom 与 roam 照样平移）、toolbox 的 brush 按钮与 brush 的预处理器（上游有 brush 组件就自动加一个带 brush feature 的 toolbox）。
+- **brushSelect 的时机**：上游每次带 payload 的更新（任何走到视觉阶段的动作）都派发，没有 brush 组件时派发空批；端口只在 `brush` 与 `takeGlobalCursor` 时、且有 brush 组件时调用节流。
+- **目标**：`geoIndex` 不支持（端口没有 geo 坐标系）；只写 `gridIndex` 的网格上游抛异常，端口不当目标；`isTargetByCursor` 的 `onIrrelevantElement`（更高 z 的另一坐标系的元素挡住时不开始）没做。
+- **上游抛异常的地方**端口不抛：`brushType: 'auto'` 或别的词（没有渲染器）——区域跳过、正在画的选项当关；`key: 'brush'` 不写 brushOption——正在画的选项不变；区域缺 brushType——跳过；区域绑了目标却没有 coordRange——range 留空。
+- **z**：覆盖框总在最上（画与命中都不看 `z`）；上游 z 小于系列时系列会挡住它。
+- **样式**：只画填充、描边、线宽、不透明度（阴影、虚线不画）；没写的颜色是皮肤的 `TyAdvChartBrush`，不是上游的两个 token。
+- **正在画的框被 `updateCovers` 删掉**（画的途中有人 setOption / 派发 brush）：上游它留在组里成了孤儿、松开时还按它的轨迹更新；端口丢掉它，松开时重新判断是否出框。
+- **重绘时机**：框由 `Relayout` 铺（下一次绘制），动作与 takeGlobalCursor 自己同步铺一遍；与 §160 一样，指针事件夹在 setOption 与下一次绘制之间时看到的是旧框。
+- **HiDPI**：刷选在 CSS px 里算，与 cartesian 之间经视口与缩放换算；96 PPI 时逐位，其他缩放下不保证。
+
+### 落地
+
+- `source/tyControls.AdvChart.Brush.pas`（新，已登记 `tycontrols.lpk` 与 `tycontrols.pas`）。
+- `source/tyControls.AdvanceChart.pas`：`FBrush*`；`BrushViewOf`、`BrushCss`、`BrushSync`、`BrushReset`、`BrushTargets`、`BrushFindTarget`、`BrushLayout`、`BrushRender`、`BrushPass`、`BrushOutput`、`BrushOnTrigger`、`BrushApplyOwn`、`BrushQuery`、`BrushDoAction`、`BrushDoEnd`、`BrushTakeCursor`、`BrushLogEvent`、`BrushClock`、`BrushVisual`、`BrushExecSelect`、`BrushDropPending`、`BrushTick`、`BrushArmTimer`、`BrushTimerFired`、`BrushPieceAt`、`BrushDragStart`、`BrushCtlDown`、`BrushPointerMove`、`BrushDragEnd`、`BrushCtlUp`、`BrushCrosshair`、`BrushChanged`、`BuildBrushes`；测试 API；`Relayout`、列表构建、`EventTargetAt`、`HitTestAt`、`MouseDown` / `MouseMove` / `MouseUp`、`CaptureChanged`、`TbApplyCursor`、`DzApplyCursor`、`DispatchAction`、`TbDoTakeCursor`、`ApplyNotMerge`、构造与析构。
+- `source/tyControls.AdvChart.Export.pas`：`cvBrush`。
+- `themes/light.tycss`、`source/tyControls.DefaultTheme.pas`、`source/tyControls.Css.Catalog.pas`（生成）。
+- `tools/advchart-oracle/brush-cover.js`、`tests/fixtures/advchart-brush-cover.json`、`tests/test.advchart.brushcover.pas`（新，注册在 `tytests.lpr`）。
