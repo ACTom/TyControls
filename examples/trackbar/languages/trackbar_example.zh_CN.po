@@ -91,6 +91,34 @@ msgstr "阈值（TTyMultiTrackBar，分段着色）："
 msgid "Tab steps through the thumbs; the arrows move the ringed one."
 msgstr "Tab 在滑块之间切换；方向键移动带圆环的那个。"
 
+#: tmainform.pgsingle.caption
+msgid "One thumb"
+msgstr "单滑块"
+
+#: tmainform.pgmulti.caption
+msgid "Several thumbs"
+msgstr "多滑块"
+
+#: tmainform.lblrangehint.caption
+msgid "Click the bare track between two ranges to add one there."
+msgstr "点两个区间之间的空白轨道，就在那里加一个区间。"
+
+#: tmainform.lblstops.caption
+msgid "Gradient stops (TTyMultiTrackBar, OnDrawSegment):"
+msgstr "渐变色标（TTyMultiTrackBar，OnDrawSegment）："
+
+#: tmainform.lblstopshint.caption
+msgid "Click the track to add a stop in a mixed colour."
+msgstr "点轨道加一个色标，颜色由两侧的色标混合而来。"
+
+#: tmainform.lblmonths.caption
+msgid "Months (labels from OnFormatTickLabel):"
+msgstr "月份（刻度标签由 OnFormatTickLabel 给出）："
+
+#: tmainform.lblmultistatus.caption
+msgid "Drag a thumb, or click the track."
+msgstr "拖动滑块，或点击轨道。"
+
 # --- code resourcestrings (msgid=Pascal source) ---
 
 #: umain.rsanimoff
@@ -116,10 +144,24 @@ msgstr "亮度：%d"
 msgid "Fine: %d"
 msgstr "微调：%d"
 
+#: umain.rsmonthsfmt
+#, object-pascal-format
+msgid "Months: %s to %s"
+msgstr "月份：%s 至 %s"
+
 #: umain.rsrangesfmt
 #, object-pascal-format
-msgid "Ranges: %d..%d and %d..%d"
-msgstr "区间：%d..%d 和 %d..%d"
+msgid "Ranges: %s"
+msgstr "区间：%s"
+
+#: umain.rsshortmonths
+msgid "Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec"
+msgstr "1月,2月,3月,4月,5月,6月,7月,8月,9月,10月,11月,12月"
+
+#: umain.rsstopsfmt
+#, object-pascal-format
+msgid "Gradient stops: %d"
+msgstr "渐变色标：%d 个"
 
 #: umain.rsthresholdsfmt
 #, object-pascal-format

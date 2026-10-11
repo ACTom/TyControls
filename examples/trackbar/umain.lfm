@@ -2,10 +2,10 @@ object MainForm: TMainForm
   Left = 0
   Height = 670
   Top = 0
-  Width = 460
+  Width = 480
   Caption = 'TrackBar example'
   ClientHeight = 670
-  ClientWidth = 460
+  ClientWidth = 480
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
@@ -14,18 +14,18 @@ object MainForm: TMainForm
     Left = 0
     Height = 670
     Top = 0
-    Width = 460
+    Width = 480
     Align = alClient
     object Bar: TTyTitleBar
       Left = 0
       Height = 34
       Top = 0
-      Width = 460
+      Width = 480
       Align = alTop
       Caption = 'TrackBar  · TyControls'
       TitleAlignment = taLeftJustify
       object DarkSwitch: TTyToggleSwitch
-        Left = 112
+        Left = 132
         Height = 24
         Top = 5
         Width = 74
@@ -34,7 +34,7 @@ object MainForm: TMainForm
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
-        Left = 194
+        Left = 214
         Height = 26
         Top = 4
         Width = 120
@@ -42,241 +42,343 @@ object MainForm: TMainForm
         OnChange = ThemeComboChange
       end
     end
-    object LblVolume: TTyLabel
-      Left = 16
-      Height = 20
-      Top = 48
-      Width = 320
-      Caption = 'Volume (0..100, Min/Max/Position):'
-    end
-    object Track1: TTyTrackBar
-      Left = 16
-      Height = 24
-      Top = 70
-      Width = 300
-      Min = 0
-      Max = 100
-      Position = 50
-      Frequency = 10
-      OnChange = Track1Change
-    end
-    object LblBalance: TTyLabel
-      Left = 16
-      Height = 20
-      Top = 108
-      Width = 320
-      Caption = 'Balance (-50..50):'
-    end
-    object Track2: TTyTrackBar
-      Left = 16
-      Height = 24
-      Top = 130
-      Width = 300
-      Min = -50
-      Max = 50
-      Position = 0
-      OnChange = Track2Change
-    end
-    object LblBrightness: TTyLabel
-      Left = 16
-      Height = 20
-      Top = 168
-      Width = 320
-      Caption = 'Brightness (Freq/PageSize 25, ShowValue on):'
-    end
-    object Track4: TTyTrackBar
-      Left = 16
-      Height = 24
-      Top = 190
-      Width = 300
-      Min = 0
-      Max = 200
-      Position = 120
-      Frequency = 25
-      PageSize = 25
-      ShowValue = True
-      OnChange = Track4Change
-    end
-    object LblVertical: TTyLabel
-      Left = 350
-      Height = 20
-      Top = 48
-      Width = 100
-      Caption = 'Vertical:'
-    end
-    object Track3: TTyTrackBar
-      Left = 380
-      Height = 200
-      Top = 70
-      Width = 60
-      Orientation = toVertical
-      Min = 0
-      Max = 100
-      Position = 40
-      Frequency = 10
-      ShowValue = True
-      OnChange = Track3Change
-      TickLabels = True
-    end
-    object LblStatus: TTyLabel
-      Left = 16
-      Height = 20
-      Top = 236
-      Width = 320
-      Caption = 'Volume: 50'
-    end
-    object LblShowValueHint: TTyLabel
-      Left = 16
-      Height = 20
-      Top = 272
-      Width = 430
-      Caption = 'ShowValue = True: the number is drawn by the bar itself.'
-    end
-    object LblVerticalHint: TTyLabel
-      Left = 16
-      Height = 20
-      Top = 294
-      Width = 430
-      Caption = 'Vertical: ticks and their labels on the right, its number below.'
-    end
-    object LblLineSize: TTyLabel
-      Left = 16
-      Height = 20
-      Top = 320
-      Width = 430
-      Caption = 'Fine step (LineSize = 5 - arrows and the wheel move by 5):'
-    end
-    object Track5: TTyTrackBar
-      Left = 16
-      Height = 24
-      Top = 342
-      Width = 300
-      Min = 0
-      Max = 100
-      Position = 50
-      Frequency = 5
-      LineSize = 5
-      PageSize = 25
-      ShowValue = True
-      OnChange = Track5Change
-    end
-    object AnimSwitch: TTyToggleSwitch
-      Left = 16
-      Height = 24
-      Top = 374
-      Width = 160
-      Caption = 'Animate thumb'
-      Checked = True
-      OnChange = AnimSwitchChange
-    end
-    object LblAnimHint: TTyLabel
-      Left = 186
-      Height = 20
-      Top = 376
-      Width = 260
-      Caption = 'Flips AnimationsEnabled (code only).'
-    end
-    object LblKeysTitle: TTyLabel
-      Left = 16
-      Height = 20
-      Top = 406
-      Width = 430
-      Caption = 'Keyboard and wheel (click a bar to focus it first):'
-    end
-    object LblKeys1: TTyLabel
-      Left = 16
-      Height = 20
-      Top = 426
-      Width = 430
-      Caption = 'Left/Right (Up/Down when vertical) step by LineSize.'
-    end
-    object LblKeys2: TTyLabel
-      Left = 16
-      Height = 20
-      Top = 446
-      Width = 430
-      Caption = 'PageUp/PageDown step by PageSize; Home/End jump to Min/Max.'
-    end
-    object LblKeys3: TTyLabel
-      Left = 16
-      Height = 20
-      Top = 466
-      Width = 430
-      Caption = 'The wheel steps by LineSize; a click jumps the thumb there.'
-    end
-    object LblRange: TTyLabel
-      Left = 16
-      Height = 20
-      Top = 500
-      Width = 430
-      Caption = 'Two ranges (TTyRangeTrackBar, MinGap = 5, tick labels):'
-    end
-    object Range1: TTyRangeTrackBar
-      Left = 16
-      Height = 44
-      Top = 522
-      Width = 412
-      Min = 0
-      Max = 100
-      Frequency = 10
-      OnChange = Range1Change
-      TickLabels = True
-      MinGap = 5
-      Ranges = <
-        item
-          Low = 10
-          High = 30
+    object Pages: TTyPageControl
+      Left = 0
+      Height = 636
+      Top = 34
+      Width = 480
+      Align = alClient
+      ActivePageIndex = 0
+      object PgSingle: TTyTabSheet
+        Caption = 'One thumb'
+        object LblVolume: TTyLabel
+          Left = 16
+          Height = 20
+          Top = 8
+          Width = 320
+          Caption = 'Volume (0..100, Min/Max/Position):'
         end
-        item
-          Low = 60
-          High = 85
-        end>
-    end
-    object LblMulti: TTyLabel
-      Left = 16
-      Height = 20
-      Top = 578
-      Width = 430
-      Caption = 'Thresholds (TTyMultiTrackBar, coloured segments):'
-    end
-    object Multi1: TTyMultiTrackBar
-      Left = 16
-      Height = 24
-      Top = 600
-      Width = 412
-      Min = 0
-      Max = 100
-      Frequency = 10
-      OnChange = Multi1Change
-      Thumbs = <
-        item
-          Value = 30
+        object Track1: TTyTrackBar
+          Left = 16
+          Height = 24
+          Top = 30
+          Width = 300
+          Min = 0
+          Max = 100
+          Position = 50
+          Frequency = 10
+          OnChange = Track1Change
         end
-        item
-          Value = 60
+        object LblBalance: TTyLabel
+          Left = 16
+          Height = 20
+          Top = 68
+          Width = 320
+          Caption = 'Balance (-50..50):'
         end
-        item
-          Value = 85
-        end>
-      Segments = <
-        item
+        object Track2: TTyTrackBar
+          Left = 16
+          Height = 24
+          Top = 90
+          Width = 300
+          Min = -50
+          Max = 50
+          Position = 0
+          OnChange = Track2Change
         end
-        item
-          StyleClass = 'success'
+        object LblBrightness: TTyLabel
+          Left = 16
+          Height = 20
+          Top = 128
+          Width = 320
+          Caption = 'Brightness (Freq/PageSize 25, ShowValue on):'
         end
-        item
-          StyleClass = 'warning'
+        object Track4: TTyTrackBar
+          Left = 16
+          Height = 24
+          Top = 150
+          Width = 300
+          Min = 0
+          Max = 200
+          Position = 120
+          Frequency = 25
+          PageSize = 25
+          ShowValue = True
+          OnChange = Track4Change
         end
-        item
-          StyleClass = 'danger'
-        end>
-    end
-    object LblMultiHint: TTyLabel
-      Left = 16
-      Height = 20
-      Top = 634
-      Width = 430
-      Caption = 'Tab steps through the thumbs; the arrows move the ringed one.'
+        object LblVertical: TTyLabel
+          Left = 350
+          Height = 20
+          Top = 8
+          Width = 100
+          Caption = 'Vertical:'
+        end
+        object Track3: TTyTrackBar
+          Left = 380
+          Height = 200
+          Top = 30
+          Width = 60
+          Orientation = toVertical
+          Min = 0
+          Max = 100
+          Position = 40
+          Frequency = 10
+          ShowValue = True
+          OnChange = Track3Change
+          TickLabels = True
+        end
+        object LblStatus: TTyLabel
+          Left = 16
+          Height = 20
+          Top = 196
+          Width = 320
+          Caption = 'Volume: 50'
+        end
+        object LblShowValueHint: TTyLabel
+          Left = 16
+          Height = 20
+          Top = 232
+          Width = 430
+          Caption = 'ShowValue = True: the number is drawn by the bar itself.'
+        end
+        object LblVerticalHint: TTyLabel
+          Left = 16
+          Height = 20
+          Top = 254
+          Width = 430
+          Caption = 'Vertical: ticks and their labels on the right, its number below.'
+        end
+        object LblLineSize: TTyLabel
+          Left = 16
+          Height = 20
+          Top = 280
+          Width = 430
+          Caption = 'Fine step (LineSize = 5 - arrows and the wheel move by 5):'
+        end
+        object Track5: TTyTrackBar
+          Left = 16
+          Height = 24
+          Top = 302
+          Width = 300
+          Min = 0
+          Max = 100
+          Position = 50
+          Frequency = 5
+          LineSize = 5
+          PageSize = 25
+          ShowValue = True
+          OnChange = Track5Change
+        end
+        object AnimSwitch: TTyToggleSwitch
+          Left = 16
+          Height = 24
+          Top = 334
+          Width = 160
+          Caption = 'Animate thumb'
+          Checked = True
+          OnChange = AnimSwitchChange
+        end
+        object LblAnimHint: TTyLabel
+          Left = 186
+          Height = 20
+          Top = 336
+          Width = 260
+          Caption = 'Flips AnimationsEnabled (code only).'
+        end
+        object LblKeysTitle: TTyLabel
+          Left = 16
+          Height = 20
+          Top = 366
+          Width = 430
+          Caption = 'Keyboard and wheel (click a bar to focus it first):'
+        end
+        object LblKeys1: TTyLabel
+          Left = 16
+          Height = 20
+          Top = 386
+          Width = 430
+          Caption = 'Left/Right (Up/Down when vertical) step by LineSize.'
+        end
+        object LblKeys2: TTyLabel
+          Left = 16
+          Height = 20
+          Top = 406
+          Width = 430
+          Caption = 'PageUp/PageDown step by PageSize; Home/End jump to Min/Max.'
+        end
+        object LblKeys3: TTyLabel
+          Left = 16
+          Height = 20
+          Top = 426
+          Width = 430
+          Caption = 'The wheel steps by LineSize; a click jumps the thumb there.'
+        end
+      end
+      object PgMulti: TTyTabSheet
+        Caption = 'Several thumbs'
+        object LblRange: TTyLabel
+          Left = 16
+          Height = 20
+          Top = 8
+          Width = 430
+          Caption = 'Two ranges (TTyRangeTrackBar, MinGap = 5, tick labels):'
+        end
+        object Range1: TTyRangeTrackBar
+          Left = 16
+          Height = 44
+          Top = 30
+          Width = 412
+          Min = 0
+          Max = 100
+          Frequency = 10
+          OnChange = Range1Change
+          TickLabels = True
+          MinGap = 5
+          Ranges = <
+            item
+              Low = 10
+              High = 30
+            end
+            item
+              Low = 60
+              High = 85
+            end>
+          OnTrackClick = Range1TrackClick
+        end
+        object LblRangeHint: TTyLabel
+          Left = 16
+          Height = 20
+          Top = 78
+          Width = 430
+          Caption = 'Click the bare track between two ranges to add one there.'
+        end
+        object LblStops: TTyLabel
+          Left = 16
+          Height = 20
+          Top = 110
+          Width = 430
+          Caption = 'Gradient stops (TTyMultiTrackBar, OnDrawSegment):'
+        end
+        object Stops: TTyMultiTrackBar
+          Left = 16
+          Height = 24
+          Top = 132
+          Width = 412
+          Min = 0
+          Max = 100
+          TickStyle = ttsNone
+          OnChange = StopsChange
+          Thumbs = <
+            item
+              Value = 0
+              Color = 16155195
+            end
+            item
+              Value = 35
+              Color = 8501520
+            end
+            item
+              Value = 70
+              Color = 761589
+            end
+            item
+              Value = 100
+              Color = 4474095
+            end>
+          OnTrackClick = StopsTrackClick
+          OnDrawSegment = StopsDrawSegment
+        end
+        object StopsPreview: TTyPaintPanel
+          Left = 16
+          Height = 32
+          Top = 162
+          Width = 412
+          OnPaintSurface = StopsPreviewPaint
+        end
+        object LblStopsHint: TTyLabel
+          Left = 16
+          Height = 20
+          Top = 198
+          Width = 430
+          Caption = 'Click the track to add a stop in a mixed colour.'
+        end
+        object LblMulti: TTyLabel
+          Left = 16
+          Height = 20
+          Top = 230
+          Width = 430
+          Caption = 'Thresholds (TTyMultiTrackBar, coloured segments):'
+        end
+        object Multi1: TTyMultiTrackBar
+          Left = 16
+          Height = 24
+          Top = 252
+          Width = 412
+          Min = 0
+          Max = 100
+          Frequency = 10
+          OnChange = Multi1Change
+          Thumbs = <
+            item
+              Value = 30
+            end
+            item
+              Value = 60
+            end
+            item
+              Value = 85
+            end>
+          Segments = <
+            item
+            end
+            item
+              StyleClass = 'success'
+            end
+            item
+              StyleClass = 'warning'
+            end
+            item
+              StyleClass = 'danger'
+            end>
+        end
+        object LblMultiHint: TTyLabel
+          Left = 16
+          Height = 20
+          Top = 282
+          Width = 430
+          Caption = 'Tab steps through the thumbs; the arrows move the ringed one.'
+        end
+        object LblMonths: TTyLabel
+          Left = 16
+          Height = 20
+          Top = 314
+          Width = 430
+          Caption = 'Months (labels from OnFormatTickLabel):'
+        end
+        object Months: TTyRangeTrackBar
+          Left = 16
+          Height = 44
+          Top = 336
+          Width = 412
+          Min = 1
+          Max = 12
+          OnChange = MonthsChange
+          TickLabels = True
+          OnFormatTickLabel = MonthsFormatTickLabel
+          Ranges = <
+            item
+              Low = 3
+              High = 8
+            end>
+        end
+        object LblMultiStatus: TTyLabel
+          Left = 16
+          Height = 20
+          Top = 392
+          Width = 430
+          Caption = 'Drag a thumb, or click the track.'
+        end
+      end
     end
   end
 end
