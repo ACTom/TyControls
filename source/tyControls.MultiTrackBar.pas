@@ -450,13 +450,13 @@ type
   private
     FValue: Integer;
     FColor: TColor;
-    FHint: string;
+    FHint: TTranslateString;
     FEnabled: Boolean;
     FStyleClass: string;
     function Bar: TTyCustomMultiTrackBar;
     procedure SetValue(AValue: Integer);
     procedure SetColor(AValue: TColor);
-    procedure SetHint(const AValue: string);
+    procedure SetHint(const AValue: TTranslateString);
     procedure SetEnabled(AValue: Boolean);
     procedure SetStyleClass(const AValue: string);
   public
@@ -465,7 +465,7 @@ type
   published
     property Value: Integer read FValue write SetValue;
     property Color: TColor read FColor write SetColor default clDefault;
-    property Hint: string read FHint write SetHint;
+    property Hint: TTranslateString read FHint write SetHint;
     property Enabled: Boolean read FEnabled write SetEnabled default True;
     property StyleClass: string read FStyleClass write SetStyleClass;
   end;
@@ -1885,7 +1885,7 @@ begin
   Changed(False);
 end;
 
-procedure TTyTrackThumbItem.SetHint(const AValue: string);
+procedure TTyTrackThumbItem.SetHint(const AValue: TTranslateString);
 begin
   if FHint = AValue then Exit;
   FHint := AValue;

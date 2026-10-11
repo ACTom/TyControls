@@ -447,8 +447,8 @@ initialization
     TTyHSColorPicker, TTyFontComboBox, TTyFontListBox, TTyFontSizeComboBox, TTyFilterComboBox,
     TTyShellComboBox, TTyGauge, TTyMeter, TTyLevelMeter, TTyDial, TTyGearDial, TTyAnalogClock,
     TTyCircularProgress, TTyActivityIndicator, TTyActivityBar, TTyGearActivityIndicator,
-    TTySparkline, TTyRating, TTyTrackBar, TTyProgressBar, TTyScrollBar, TTyStatusBar,
-    TTyToolBar, TTyToolButton, TTyToolSeparator, TTyToolBarEx]);
+    TTySparkline, TTyRating, TTyTrackBar, TTyRangeTrackBar, TTyMultiTrackBar, TTyProgressBar,
+    TTyScrollBar, TTyStatusBar, TTyToolBar, TTyToolButton, TTyToolSeparator, TTyToolBarEx]);
   Reg([
     TTyControlBar, TTyCoolBar, TTyAlert, TTyPagination, TTySteps, TTyBreadcrumb,
     TTyHeaderControl, TTyPanel, TTyGroupBox, TTyBevel, TTyDivider, TTySplitter, TTyPaintPanel,
@@ -485,11 +485,6 @@ initialization
     TTyGraphicControl, TTyCustomControl, TTyComponent,
     { 4.0: the image list's editor sits on its custom class, which TTyLucideImageList shares. }
     TTyCustomVirtualImageList]);
-  { The multi-thumb track bars (#36). They reach the palette with the design-time registration
-    (plan Task 8); until Design.pas registers them they are not in the parse Reg() is checked
-    against, so they are registered plainly here -- form files read in the tests and the
-    custom-class guards resolve them by name. }
-  RegisterClasses([TTyRangeTrackBar, TTyMultiTrackBar]);
   RegisterTest(TVersionTest);
 
 finalization

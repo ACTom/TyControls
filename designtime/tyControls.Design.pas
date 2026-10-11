@@ -45,7 +45,8 @@ uses
   tyControls.ButtonGroup, tyControls.Ribbon, tyControls.RibbonAppMenu,
   tyControls.RibbonQuickAccess, tyControls.RibbonGallery, tyControls.RibbonBackstage,
   tyControls.ToggleSwitch,
-  tyControls.TrackBar, tyControls.GroupBox, tyControls.PageControl, tyControls.TabSheet,
+  tyControls.TrackBar, tyControls.MultiTrackBar, tyControls.GroupBox, tyControls.PageControl,
+  tyControls.TabSheet,
   tyControls.SpinEdit, tyControls.FloatSpinEdit,
   tyControls.Memo, tyControls.Terminal, tyControls.Menu, tyControls.NativeStyler,
   tyControls.Splitter, tyControls.StatusBar, tyControls.ToolBar,
@@ -168,9 +169,9 @@ begin
      TTySparkline, TTyRating]);
   // Bars: sliders / progress / scroll / status / tool bars + header.
   RegisterComponents('TyControls Bars',
-    [TTyTrackBar, TTyProgressBar, TTyScrollBar, TTyStatusBar,
-     TTyToolBar, TTyToolButton, TTyToolSeparator, TTyToolBarEx, TTyControlBar, TTyCoolBar,
-     TTyAlert, TTyPagination, TTySteps, TTyBreadcrumb, TTyHeaderControl]);
+    [TTyTrackBar, TTyRangeTrackBar, TTyMultiTrackBar, TTyProgressBar, TTyScrollBar,
+     TTyStatusBar, TTyToolBar, TTyToolButton, TTyToolSeparator, TTyToolBarEx, TTyControlBar,
+     TTyCoolBar, TTyAlert, TTyPagination, TTySteps, TTyBreadcrumb, TTyHeaderControl]);
   // Containers & layout.
   RegisterComponents('TyControls Containers',
     [TTyPanel, TTyGroupBox, TTyBevel, TTyDivider, TTySplitter, TTyPaintPanel, TTySizeBox,
