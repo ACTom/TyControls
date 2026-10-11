@@ -116,7 +116,12 @@ type
     the thumb the keyboard drives by LineSize, up increasing, as TTyTrackBar's.
 
     No right-to-left mirroring, as TTyTrackBar: the value axis runs by Orientation and Reversed
-    only. }
+    only.
+
+    THE SWITCHES (protected, off; the final classes publish theirs) change what a user move
+    does, never what the program does: AllowCrossing lets a thumb pass its neighbours,
+    Pushable lets it push them along. Whatever they do still goes through OnThumbChanging,
+    thumb by thumb, so the application has the last word over every move. }
   TTyMultiTrackBarBase = class(TTyCustomControl)
   private
     FValues: array of Integer;
@@ -154,6 +159,17 @@ type
       OnTrackClick handled it: the further presses of that multi-click are part of the same
       click and do nothing. }
     FTrackClickTaken: Boolean;
+    FAllowCrossing: Boolean;
+    FPushable: Boolean;
+    procedure SetAllowCrossing(const AValue: Boolean);
+    { The user moves AllowCrossing and Pushable make; see UserMoveThumb. }
+    procedure UserCrossThumb(AIndex, AValue: Integer);
+    procedure UserPushThumb(AIndex, AValue: Integer);
+    { How far thumb AIndex can go up (AUp) or down with every thumb ahead of it pushed: to
+      Max / Min less MinGap for each, or MinGap short of the first disabled thumb that way
+      (a disabled thumb is not pushed). }
+    function PushRoom(AIndex: Integer; AUp: Boolean): Integer;
+    function ClampPushed(AIndex, AValue: Integer): Integer;
     function GetThumbCount: Integer;
     function GetThumbValue(AIndex: Integer): Integer;
     procedure SetMin(const AValue: Integer);
@@ -203,6 +219,11 @@ type
       (the handler may have removed some) does nothing. }
     procedure UserMoveThumb(AIndex, AValue: Integer);
     procedure DoThumbChanging(AIndex: Integer; var AValue: Integer; var AAllow: Boolean); virtual;
+    { A user move under AllowCrossing took thumb AFrom past its neighbours to index ATo: FValues
+      is already in the new order (the other thumbs between the two indexes shifted by one
+      towards AFrom). A final class moves its item the same way here, so the thumb's colour,
+      hint and selection go with it; ValuesChanged follows. }
+    procedure ThumbIndexMoved(AFrom, ATo: Integer); virtual;
     procedure DoThumbChange(AIndex: Integer); virtual;
     procedure DoThumbSelect(AIndex: Integer); virtual;
     procedure DoChange; virtual;
@@ -274,6 +295,20 @@ type
     { Cross axis only, as TTyTrackBar: the thumb, the ticks and their labels. }
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
+
+    { ---- The switches (off here; each final class publishes the ones it offers). ---- }
+    { A thumb the user moves is not stopped by its neighbours: it goes past them and the
+      thumbs are put back in order by value, the moved thumb (its colour, hint, selection)
+      going with it to its new index. MinGap does not apply while it is on -- two thumbs may
+      sit on one value. Only the user's moves cross: a value set from code still stops at the
+      neighbours. Turned off, the thumbs are spaced out by MinGap again (as setting MinGap).
+      Wins over Pushable. }
+    property AllowCrossing: Boolean read FAllowCrossing write SetAllowCrossing default False;
+    { A thumb the user moves into a neighbour's MinGap pushes it along, and that one the next,
+      until the chain is against Min / Max. Each pushed thumb is offered to OnThumbChanging
+      (refused -- or disabled -- it stops the chain, and the thumbs before it stop MinGap
+      short of it) and reports its own OnThumbChange; OnChange fires once at the end. }
+    property Pushable: Boolean read FPushable write FPushable default False;
   public
     constructor Create(AOwner: TComponent); override;
     { Move one thumb; see the class comment. Out-of-range AIndex raises EListError. }
@@ -510,6 +545,8 @@ type
     property OnTrackClick;
     property OnDrawSegment;
     property OnThumbChanging;
+    property AllowCrossing;
+    property Pushable;
   end;
 
   TTyCustomMultiTrackBar = class;
@@ -623,6 +660,7 @@ type
       in order by value and the thumbs rebuilt from them. The selected thumb stays selected
       wherever that puts it; removed, nothing is selected. }
     procedure ThumbsChanged;
+    procedure ThumbIndexMoved(AFrom, ATo: Integer); override;
     procedure ValuesChanged; override;
     procedure DoThumbSelect(AIndex: Integer); override;
     procedure Loaded; override;
@@ -716,6 +754,8 @@ type
     property OnTrackClick;
     property OnDrawSegment;
     property OnThumbChanging;
+    property AllowCrossing;
+    property Pushable;
   end;
 
 implementation
@@ -774,6 +814,8 @@ var
   n: Integer;
   span: Int64;
 begin
+  { Crossing thumbs may share a value: no gap to keep. }
+  if FAllowCrossing then Exit(0);
   Result := FMinGap;
   n := Length(FValues);
   if n < 2 then Exit;
@@ -922,6 +964,16 @@ begin
     SetThumbValue(AIndex, AValue);
     Exit;
   end;
+  if FAllowCrossing then
+  begin
+    UserCrossThumb(AIndex, AValue);
+    Exit;
+  end;
+  if FPushable then
+  begin
+    UserPushThumb(AIndex, AValue);
+    Exit;
+  end;
   v := ClampThumbValue(AIndex, AValue);
   { Only a move that would move the thumb is offered. }
   if v = FValues[AIndex] then Exit;
@@ -938,6 +990,203 @@ procedure TTyMultiTrackBarBase.DoThumbChanging(AIndex: Integer; var AValue: Inte
   var AAllow: Boolean);
 begin
   if Assigned(FOnThumbChanging) then FOnThumbChanging(Self, AIndex, AValue, AAllow);
+end;
+
+{ Where index AX is after the thumb at AFrom has moved to ATo, the ones between shifting up
+  or down by one; -1 stays -1. }
+function MovedIndex(AX, AFrom, ATo: Integer): Integer;
+begin
+  Result := AX;
+  if AX < 0 then Exit;
+  if AX = AFrom then Result := ATo
+  else if (AFrom < ATo) and (AX > AFrom) and (AX <= ATo) then Result := AX - 1
+  else if (ATo < AFrom) and (AX >= ATo) and (AX < AFrom) then Result := AX + 1;
+end;
+
+procedure TTyMultiTrackBarBase.UserCrossThumb(AIndex, AValue: Integer);
+var
+  lo, hi, v, j, n, sel: Integer;
+  allow: Boolean;
+begin
+  lo := FMin;
+  hi := FMax;
+  if hi < lo then hi := lo;
+  { Min..Max only: the neighbours do not hold it. }
+  v := AValue;
+  if v > hi then v := hi;
+  if v < lo then v := lo;
+  if v = FValues[AIndex] then Exit;
+  allow := True;
+  DoThumbChanging(AIndex, v, allow);
+  if not allow then Exit;
+  n := Length(FValues);
+  if AIndex >= n then Exit;
+  if v > hi then v := hi;
+  if v < lo then v := lo;
+  if v = FValues[AIndex] then Exit;
+  { Into its place by value: past every thumb it went beyond, not past one it only reached
+    (a stable order, so equal values keep their order). }
+  j := AIndex;
+  while (j > 0) and (FValues[j - 1] > v) do
+  begin
+    FValues[j] := FValues[j - 1];
+    Dec(j);
+  end;
+  while (j < n - 1) and (FValues[j + 1] < v) do
+  begin
+    FValues[j] := FValues[j + 1];
+    Inc(j);
+  end;
+  FValues[j] := v;
+  sel := FSelectedThumb;
+  if j <> AIndex then
+  begin
+    ThumbIndexMoved(AIndex, j);
+    FDragThumb := MovedIndex(FDragThumb, AIndex, j);
+    FHoverThumb := MovedIndex(FHoverThumb, AIndex, j);
+    FSelectedThumb := MovedIndex(FSelectedThumb, AIndex, j);
+  end;
+  ValuesChanged;
+  Invalidate;
+  { The selection went with its thumb: reported at its new index, before the move itself. }
+  if FSelectedThumb <> sel then DoThumbSelect(FSelectedThumb);
+  DoThumbChange(j);
+  DoChange;
+end;
+
+function TTyMultiTrackBarBase.PushRoom(AIndex: Integer; AUp: Boolean): Integer;
+var
+  gap, lo, hi, j: Integer;
+begin
+  gap := EffectiveGap;
+  lo := FMin;
+  hi := FMax;
+  if hi < lo then hi := lo;
+  if AUp then
+  begin
+    Result := hi - (High(FValues) - AIndex) * gap;
+    for j := AIndex + 1 to High(FValues) do
+      if not ThumbEnabled(j) then
+      begin
+        Result := FValues[j] - (j - AIndex) * gap;
+        Break;
+      end;
+  end
+  else
+  begin
+    Result := lo + AIndex * gap;
+    for j := AIndex - 1 downto 0 do
+      if not ThumbEnabled(j) then
+      begin
+        Result := FValues[j] + (AIndex - j) * gap;
+        Break;
+      end;
+  end;
+end;
+
+function TTyMultiTrackBarBase.ClampPushed(AIndex, AValue: Integer): Integer;
+var
+  r: Integer;
+begin
+  Result := AValue;
+  r := PushRoom(AIndex, True);
+  if Result > r then Result := r;
+  r := PushRoom(AIndex, False);
+  if Result < r then Result := r;
+end;
+
+procedure TTyMultiTrackBarBase.UserPushThumb(AIndex, AValue: Integer);
+var
+  old, nv, order: array of Integer;
+  n, gap, v, w, need, j, k, cnt: Integer;
+  allow, up, moved: Boolean;
+begin
+  v := ClampPushed(AIndex, AValue);
+  if v = FValues[AIndex] then Exit;
+  allow := True;
+  DoThumbChanging(AIndex, v, allow);
+  if not allow then Exit;
+  if AIndex >= Length(FValues) then Exit;
+  v := ClampPushed(AIndex, v);
+  if v = FValues[AIndex] then Exit;
+  n := Length(FValues);
+  gap := EffectiveGap;
+  up := v > FValues[AIndex];
+  nv := Copy(FValues);
+  nv[AIndex] := v;
+  order := nil;
+  SetLength(order, n);
+  order[0] := AIndex;
+  cnt := 1;
+  { Along the chain, each thumb asked -- while every thumb is still where it was -- before it
+    is pushed; the first one that will not go is a wall the ones before it stop MinGap short
+    of. A handler may push its thumb further than it has to (no further than the chain has
+    room for). }
+  j := AIndex;
+  while True do
+  begin
+    if up then Inc(j) else Dec(j);
+    if (j < 0) or (j >= n) then Break;
+    if up then need := nv[j - 1] + gap else need := nv[j + 1] - gap;
+    if (up and (FValues[j] >= need)) or (not up and (FValues[j] <= need)) then Break;
+    { Never a disabled thumb: ClampPushed / PushRoom kept the chain MinGap short of it. }
+    w := need;
+    allow := True;
+    DoThumbChanging(j, w, allow);
+    { The handler changed the thumbs: nothing of this push is left to apply. }
+    if Length(FValues) <> n then Exit;
+    if not allow then
+    begin
+      if up then
+      begin
+        for k := j - 1 downto AIndex do
+          if nv[k] > nv[k + 1] - gap then nv[k] := nv[k + 1] - gap;
+      end
+      else
+        for k := j + 1 to AIndex do
+          if nv[k] < nv[k - 1] + gap then nv[k] := nv[k - 1] + gap;
+      Break;
+    end;
+    if up then
+    begin
+      if w < need then w := need;
+      if w > PushRoom(j, True) then w := PushRoom(j, True);
+    end
+    else
+    begin
+      if w > need then w := need;
+      if w < PushRoom(j, False) then w := PushRoom(j, False);
+    end;
+    nv[j] := w;
+    order[cnt] := j;
+    Inc(cnt);
+  end;
+  old := FValues;
+  FValues := nv;
+  ValuesChanged;
+  moved := False;
+  for k := 0 to cnt - 1 do
+    if nv[order[k]] <> old[order[k]] then
+    begin
+      if not moved then Invalidate;
+      moved := True;
+      DoThumbChange(order[k]);
+    end;
+  if moved then DoChange;
+end;
+
+procedure TTyMultiTrackBarBase.ThumbIndexMoved(AFrom, ATo: Integer);
+begin
+end;
+
+procedure TTyMultiTrackBarBase.SetAllowCrossing(const AValue: Boolean);
+begin
+  if FAllowCrossing = AValue then Exit;
+  FAllowCrossing := AValue;
+  if csLoading in ComponentState then Exit;
+  { Off again: MinGap holds again, as when it is set. }
+  Normalize(True);
+  Invalidate;
 end;
 
 procedure TTyMultiTrackBarBase.ValuesChanged;
@@ -1625,9 +1874,13 @@ begin
     v := ValueAt(pos - FGrab);
     i := FDragThumb;
     { Thumbs on the same value (MinGap 0) are told apart by the direction of the drag: the one
-      that can go that way takes over, or a pile at Min / Max could never be pulled apart. }
+      that can go that way takes over, or a pile at Min / Max could never be pulled apart.
+      Not when they cross: then any of them can go either way, and the one pressed is the one
+      that goes. }
     j := i;
-    if v > FValues[i] then
+    if FAllowCrossing then
+      // the thumb pressed stays the thumb dragged
+    else if v > FValues[i] then
       while (j < High(FValues)) and (FValues[j + 1] = FValues[i]) and ThumbEnabled(j + 1) do Inc(j)
     else if v < FValues[i] then
       while (j > 0) and (FValues[j - 1] = FValues[i]) and ThumbEnabled(j - 1) do Dec(j);
@@ -2332,6 +2585,20 @@ begin
   if selID >= 0 then it := FThumbs.FindItemID(selID);
   if it <> nil then SelectedThumb := it.Index
   else SelectedThumb := -1;
+end;
+
+procedure TTyCustomMultiTrackBar.ThumbIndexMoved(AFrom, ATo: Integer);
+begin
+  inherited ThumbIndexMoved(AFrom, ATo);
+  if (FThumbs = nil) or (AFrom >= FThumbs.Count) or (ATo >= FThumbs.Count) then Exit;
+  { The item goes where its thumb went; the move reports back through the collection, which
+    must not rebuild the thumbs from it. }
+  FSyncing := True;
+  try
+    FThumbs[AFrom].Index := ATo;
+  finally
+    FSyncing := False;
+  end;
 end;
 
 procedure TTyCustomMultiTrackBar.DoThumbSelect(AIndex: Integer);

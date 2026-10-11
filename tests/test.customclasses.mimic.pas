@@ -6782,6 +6782,8 @@ type
     property OnTrackClick;
     property OnDrawSegment;
     property OnThumbChanging;
+    property AllowCrossing;
+    property Pushable;
   end;
 
   TGenNativeStyler = class(TTyCustomNativeStyler)
@@ -7675,6 +7677,8 @@ type
     property OnTrackClick;
     property OnDrawSegment;
     property OnThumbChanging;
+    property AllowCrossing;
+    property Pushable;
   end;
 
   TGenRating = class(TTyCustomRating)
