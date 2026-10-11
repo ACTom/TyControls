@@ -2996,6 +2996,8 @@ begin
     '  --surface-track:  #E0E0E0;' + LineEnding +
     '  --scroll-handle:  var(--face);' + LineEnding +
     '  --scroll-handle-hover: var(--face-hover);' + LineEnding +
+    '  /* The terminal is a text well like the edit: white, not the grey face. */' + LineEnding +
+    '  --terminal-bg:    var(--field);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '@mode light {' + LineEnding +

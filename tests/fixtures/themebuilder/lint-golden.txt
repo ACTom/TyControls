@@ -30,13 +30,26 @@ undefined variable --pad-container
 undefined variable --on-surface
 undefined variable --on-surface
 undefined variable --on-surface
-undefined variable --radius
 undefined variable --pad-card
 undefined variable --on-surface
 == themes/builtin/bootstrap.tycss
 == themes/builtin/breeze.tycss
 undefined variable --radius-round
 == themes/builtin/classic.tycss
+undefined variable --pad-tight
+undefined variable --pad-control
+undefined variable --font-size-base
+undefined variable --pad-datetime
+undefined variable --font-size-base
+undefined variable --pad-button
+undefined variable --font-size-base
+undefined variable --pad-tight
+undefined variable --font-size-base
+undefined variable --font-size-base
+undefined variable --pad-control
+undefined variable --pad-control
+undefined variable --pad-tooltip
+undefined variable --font-size-base
 == themes/builtin/fluent.tycss
 == themes/builtin/macos.tycss
 undefined variable --on-surface

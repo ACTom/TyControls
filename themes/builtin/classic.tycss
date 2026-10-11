@@ -52,6 +52,8 @@
   --surface-track:  #E0E0E0;
   --scroll-handle:  var(--face);
   --scroll-handle-hover: var(--face-hover);
+  /* The terminal is a text well like the edit: white, not the grey face. */
+  --terminal-bg:    var(--field);
 }
 
 @mode light {
