@@ -2069,7 +2069,7 @@ symbol、`smooth` / `step`,以及 `showBackground` 和四角 `borderRadius`,都�
 - TypeScript **7.0.2 是 Go 重写版**,npm 包的入口只有一个版本号存根,没有 `transpileModule`。要装 5.x。
 
 剩下 29 个转不出来的各自记了原因(ecStat、echarts-gl、zrender 内部),
-另有 10 个转出来但太大(`scatter-large` 单个 64MB,十个加起来 120MB,
+**[第 117 批：large 模式已做（一批一个元素、算术命中），十万个点第一次绘制约 2 s；这十个用例仍因体积排除，见 §152。]** 另有 10 个转出来但太大(`scatter-large` 单个 64MB,十个加起来 120MB,
 全是 large 模式的压力用例、恰好也是这个端口画不了的),按 1MB 上限排除,原因同样写在索引里。
 
 ---
@@ -7821,7 +7821,7 @@ M1–M4 完成:markPoint、markLine、markArea 的模型、变换、布局和画
 
 - 上游的一个疏漏没有照抄:位置不对应类目的行(如 2.5),在 dataZoom 过滤后按原始下标去存储里拿名字,拿到的是别的行的(G7 的 4.5 那格读出 `'x3'`);端口给空名字。
 - 热力图的值固定读原始条目的第三格,`encode` 把值映射到别的列时还不支持。
-- 提示框、悬停强调、渐进渲染没有移植。
+- **[第 119 批：渐进渲染已移植，热力图按 `start..end` 逐块加格子，见 §154]** 提示框、悬停强调、渐进渲染没有移植。
 
 ## 103. Tier 1 第六十九批:日历坐标系和它的画面(H2,2026-09-30)
 
@@ -10179,7 +10179,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **阴影**：箱线图 emphasis 的阴影（模糊 5、偏移 1/1）不画，元素没有阴影；测试不比阴影。
 - **命中**：K 线、箱线图按「填充内或描边半个线宽内」近似 zrender 的 contain（实体按外扩的矩形，箱子按多边形加直线段），线帽、斜接处不逐像素；挂了裁剪的元素命中不看裁剪（上游看）。
 - **K 线逐项颜色**：数据项自己的 `itemStyle`（以及 `borderColorDoji` 只写在某一项上）不读；`borderColorDoji` 只认系列上的。
-- **K 线 large 模式**：600 个以上时上游走 large 路径（C8），端口仍逐项画。
+- **[第 117 批：已做——三条按 sign 描的路径、没有数据的命中、纵向布局的零长线，见 §152。]** **K 线 large 模式**：600 个以上时上游走 large 路径（C8），端口仍逐项画。
 - **新来的 K 线**在更新中仍是直接到终值（AN3 的旧行为，没有基准）；新来的箱子按上游入场。
 - **transform**：只有 `'boxplot'`；filter、sort（D2）以及任何没注册的类型、空管道、上游不是数组行或按行排、`fromTransformResult` 指向不存在的结果——上游抛错让整个 setOption 失败，端口只是这个数据集没有表、读它的系列什么都不画，也没有诊断。样本不是数时按 JS 的 `ToNumber` 转（数组、对象当 NaN），含 NaN 时的排序用稳定插入排序，不保证与 V8 的 TimSort 在不一致比较下的结果相同；`useExtreme` 时上游把原始样本（可能是串）放进表，端口放转过的数。`itemNameFormatter` 写成函数不支持（当成非串，名字是行号）。
 - **箱线图的 visualMap** 与逐数据取色不接；图例图标沿用原有规则，没有按上游（白填充、系列色描边）建模。
@@ -10372,7 +10372,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **轴的绘制仍把对数轴上的 0 当 NaN**：换算按上游答无穷像素，但同一根轴画标记时 0 仍是空（`TTyLogScaleMapper.TransformIn` 没改）。
 - **resize 之后的 jitter**：上游把放下的点挂在轴对象上，resize 不重建轴，第二次布局会躲开第一次的点（越 resize 越散）；端口每次构建都从空开始，等于上游的第一次渲染。
 - **随机数**：上游的 jitter 用 `Math.random`，每次渲染不同；端口用固定种子的 xorshift32，同一幅图永远一样。同一张图里既有力导向 graph 又有 jitter 时，上游两者共用一条 `Math.random`，端口各用各的种子。
-- **large 散点**（`largeThreshold` 以上走 Float32Array）不在这一批（C8）。
+- **[第 117 批：已做——jitter 读取整后的点、抖完再取 Float32，见 §152。]** **large 散点**（`largeThreshold` 以上走 Float32Array）不在这一批（C8）。
 - **finder 是数组**：上游对数组 finder 的数字键调 `match` 会抛错；端口当成什么都没找到。containPixel 的点是 null 时上游抛错，端口答 false。
 - **matrix、polar、singleAxis、geo、parallel** 坐标系不在（polar 是 C3、singleAxis 是 C10、geo 是 D14）；finder 指到它们时端口什么都答不出，containPixel 答 false。分派里给 polar、singleAxis 留了位置。**[第 111 批：polar 坐标系有了——finder 指 polar 时照上游换算，containPixel 照 containPoint；极坐标系列的 finder 随 C4，见 §146。]** **[第 113 批：系列 finder 在它的 polar 上换算，containPixel 认极坐标系列，见 §148。]** **[第 118 批：singleAxis 坐标系有了——`singleAxisIndex / Id` 与裸的 `'singleAxis'` finder、单轴上的系列都照上游的 `dataToPoint` / `pointToData` 换算（包括类目名是 NaN、纵向的 x 是中线），containPixel 照 `containPoint`（纵向拿 x 比矩形的 y），见 §153。]**
 - **[第 114 批：有了 roam，问 View（盒子经 overall），见 §149。]** **桑基图**的 containPixel 按它的盒子（端口没有桑基图的 roam）；旭日图从不包含（上游不下钻时也是如此，端口没有下钻）。**[第 115 批：有了下钻，读返回圆盘最后的布局，见 §150。]**
@@ -11059,6 +11059,85 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - `tools/advchart-oracle/visualmap-interact.js`、`tests/fixtures/advchart-visualmap-interact.json`、`tests/test.advchart.visualmapinteract.pas`（新，注册在 `tytests.lpr`）。
 - §89、§92、§93、§122、§123 在原处标注。没有新单元、新主题键或新资源串。
 
+## 152. Tier 2 第一百一十七批：large 模式（C8，2026-10-12）
+
+路线图 C8：large 模式——bar / line / scatter / candlestick 的批量路径、算术命中扫描、`largeThreshold`。以前端口不读 `large`，每个系列都是一项一个元素：§36 的画廊把十个 large 压力用例按体积排除了，§143 的 K 线过了 600 行仍逐项画，§145 的抖动没有碰 large 散点。这一批对着 6.1 的 `util/model.preparePipelineContext`、`core/Scheduler.ts`（`updateStreamModes`、`restorePipelines`：progressive 只在 canvas 画家上开）、`core/echarts.ts`（流模式在数据处理之后、坐标系更新之前定）、`chart/bar/BarSeries.ts`（`getProgressive`、`__preparePipelineContext`）与 `BaseBarSeries` 的缺省、`layout/barGrid.ts`（`createProgressiveLayout` 的 large 分支、`barMinWidth` 的 `isInLargeMode ? 0.5 : 1`）、`chart/bar/BarView.ts`（`_updateDrawMode`、`_renderLarge`、`_updateLargeClip`、`LargePath`、`createLarge`、`largePathUpdateDataIndex`、`largePathFindDataIndex`）、`layout/points.ts`、`chart/scatter/jitterLayout.ts`、`ScatterView.ts` 与 `ScatterSeries` 的缺省、`chart/helper/LargeSymbolDraw.ts`、`chart/candlestick/candlestickLayout.ts`（`largeProgress`、`getSign`）、`CandlestickView.ts`（`LargeBoxPath`、`createLarge`、`setLargeStyle`）与 `candlestickVisual` 的 `getColor` / `getBorderColor`、`chart/helper/createClipPathFromCoordSys.ts`、`util/states.ts`（`blurSeries`、`blurSeriesFromHighlightPayload`）、`util/throttle.ts`，以及 zrender 的 `Path.contain` / `getBoundingRect`、`PathProxy.getBoundingRect`、`contain/path.ts`、`contain/line.ts`、`Handler.mousemove` 与 `isHover` 逐行核过，在真 dist 上跑基准。§36、§143、§145 的推迟在原处标注。
+
+### 上游的做法
+
+- **[第 119 批：progressive 已移植——端口按 canvas 画家的规则分块，渐进的柱强制 large，见 §154]** **开关**：`preparePipelineContext` 的 `large` 是 `get('large') && count >= get('largeThreshold')`，`count` 是**数据处理之后**的条数——dataZoom 过滤掉的行不算，缩放一次就可能在 large 与逐项之间来回。缺省：bar `false` / 400，scatter `false` / 2000，candlestick **`true`** / 600。line 没有 large：写了 `large: true, largeThreshold: 5`，流水线照样说 large，LineView 不看它（它的点本来就总是 Float32）；effectScatter、pictorialBar、boxplot 的视图都不看。progressive 只在 canvas 画家上开，SVG 与这个端口都没有分块绘制（C9）；bar 在 progressive 时强制 large。
+- **柱的布局**（`createProgressiveLayout`，large 分支）：每行三个 Float32——`[x, y, 沿值轴的有符号长度]`，竖柱的 x 是点加列偏移、y 是值轴起点（堆在别的系列上时是 `cumulative − own` 的像素），横柱反之。**不裁剪布局、不扣边框、不圆角**；`barMinHeight` 照常（零向上）；没有值的行照样占位，里面是 NaN。背景的点是同一列在整个 grid 矩形上的条。`largeDataIndices[dataIndex] = dataIndex`。large 时 `barMinWidth` 的缺省是 **0.5** 而不是 1——400 根柱挤在 500 px 里，柱宽是带宽的 69% 即 0.8625，不再被抬到 1。
+- **柱的视图**：每个系列一个 `LargePath`（背景在前，silent、z2 0；柱 z2 1），`ctx.rect` 每行一个；样式是系列级的视觉样式（数据项自己的颜色不进来），描边删掉（#20465）。视图组挂 `createGridClipPath` 的裁剪（无动画）。没有标签、没有入场动画、没有状态。指针：`contain` 先问路径的包围盒——`PathProxy.getBoundingRect` 用 `Math.min / max` 合并，**一个 NaN 让整个盒子是 NaN，整个系列再也悬停不到**——再按非零环绕判断；之后 `isHover` 问组的裁剪。dataIndex 由元素自己的 mousemove / mousedown 处理器写：`largePathFindDataIndex` **从前往后**找第一个包含指针的矩形（边上算在内，负长度先翻过来）；这个处理器经过一个模块级的 30 ms throttle。
+- **散点**：`pointsLayout` 写 Float32 的 `[x, y]`；jitter 读的是取整后的点，抖完再写回 Float32。`LargeSymbolPath` 用系列的符号与大小（数据项的不读，symbolRotate / Offset 也不读）；`setColor` 挂在批次元素上走的是普通分支，**`emptyCircle` 在 large 里是实心圆**；样式是 `itemStyle` 去掉颜色（大小不到 4 时连阴影也去掉）再填视觉色，缺省不透明度 0.8。大小不到 4 px 时不建路径，`afterBrush` 里逐点 `fillRect` 方块。软裁剪 `getArea(0.1)` 只管画不画，**不管命中**：画出界外的点照样悬停得到。命中：自己的包围盒——点的极值各向外扩**符号自身**的一半（NaN 同样毒化）——再从**最后一个点往前**找 `max(size, 4)` 的方框；所以 3 px 符号最外侧那个点，方框里、包围盒外的一像素不算。
+- **K 线**：每行四个 Float32 `[sign, x, ylow, yhigh]`，基值、最低、最高任一缺失就是 `[NaN, 0, 0, 0]`；sign 照 `getSign`（相等时看系列级的 `borderColorDoji`，没写就比前一行的收盘价）；ylow、yhigh 都取 `point[1]`——**纵向布局（类目在 y）时两者都是这一行的 y，线长为零，什么都画不出来**。三个 `LargeBoxPath`（sign 1、−1、0）各描一条从低到高的线，颜色 `getBorderColor(sign) || getColor(sign)`，笔宽 `borderWidth`；组挂裁剪。路径**没有 ECData**：悬停找得到元素，却没有 dataIndex——没有图表事件、没有 item tooltip；axis tooltip 照常。命中是笔：无填充的路径按 `max(lineWidth, 5)` 判断，包围盒也按它外扩。
+- **事件与状态**：一个系列一个元素，指针在同一批里从一行挪到另一行**不是** out / over，只有 mousemove；离开时的 mouseout 带着最后一行。大元素没有状态：悬停不进 emphasis，`blurSeries` 遍历到它时 `useState('blur')` 找不到状态，什么都不变。对 large 系列派发 highlight：找不到元素，`blurSeriesFromHighlightPayload` 就读系列选项的 `emphasis.focus`，写了 `'series'` 照样淡化同一坐标系的其他系列。item tooltip 拿 ECData 的 dataIndex（内部下标），参数里是原始下标。
+
+### port 以前
+
+- `large` / `largeThreshold` 不读，每个系列逐项建元素、逐项绘制；600 行以上的 K 线、jitter 的 large 散点都按逐项画。
+- 绘制的代价：一万个散点逐项画一帧约 0.8 s。把一批几何拼成**一条**路径交给 BGRA 并不更快——BGRA 的扫描线填充每一行要整理整条路径的交点，十万个圆一条路径要两分多钟（见「做法」的数字）。
+
+### 做法
+
+- **新单元 `tyControls.AdvChart.Large`**（纯）：`TTyLargeKind`、`TTyLargeGeom`（点、柱的下标与基维与柱宽、符号的大小与种类与 boost 与 4 px 下限、软裁剪、K 线的 sign 与笔的命中宽、组的裁剪、预先算好的包围盒）；`TyLargeIsOn`（`large` 的 JS 真值，阈值按 JS 比较：字符串当数、null 当 0）、`TyLargeF32`（`Math.fround`，溢出到无穷）、`TyLargeSetBox`（三种包围盒，`Math.min / max` 的 NaN 规则）、`TyLargeBarScan`、`TyLargeSymbolScan`、`TyLargeStrokeHit`（`containStroke` 逐段）、`TyLargeContains`（包围盒、扫描或笔、再问裁剪）、`TyLargeIndexAt`、`TyLargeBounds`。
+- **`Shape`**：新种类 `cskLarge` 与字段 `Large`；`TyShapeBounds`、`TyShapeContains` 交给上面。画列表的命中照旧走 `TyShapeContains`，不另开路径。
+- **`Marks`**：`TTySeriesVisual.Large`（`TySeriesVisual` 置 `lgkNone`）；`TyBuildSeriesMarks` 在直角坐标上按它分派到 `BuildLargeBars`（含背景、堆叠、`barMinHeight`）、`BuildLargeSymbols`（含 jitter 的两次取整）、`BuildLargeCandles`（三条路径）；元素的 datum 是 `(系列, −1)`，有裁剪的挂 `TyWhiskerClipRect`。
+- **`BarLayout`**：`TySolveBarLayout` 多一个重载，收每个槽位是否 large，large 的 `barMinWidth` 缺省 0.5。
+- **`Render`**：`TraceLarge` 逐行描（柱的矩形、符号的盒子、boost 的方块、K 线的竖线；软裁剪外的点跳过）。绘制分两条路：
+  - **纯色、无虚线**（几乎所有情形）走**图层**：每个形状用 BGRA 自己的抗锯齿原语（椭圆、矩形、圆角矩形、多边形、线）以不透明的颜色画进一张透明图层，再按元素的不透明度把图层贴一次——填充一层、笔一层，先填后描，和 canvas 先 fill 整条路径再 stroke 一样，重叠的符号是并集、只合成一次，不会像逐项元素那样叠深。
+  - **渐变、图案、虚线**走**分块**：位图的 `ClipRect` 切成 64 px 的方块，每块的路径装下伸进这块的所有行，块里每个像素只被一次填充覆盖、那次填充含有盖住它的所有形状——仍是并集。
+  - 画布有变换时退回整条路径。
+  - 一万个点：逐项 0.75 s，一条路径 6.9 s，分块 1.2 s，图层 0.22 s；十万个点：一条路径 137 s，分块 17 s，图层第一次绘制 2.2 s（含构建）、之后 2.0 s。
+- **控件**：`LargeKindOf`（只在直角坐标上；`path://` 符号的散点仍逐项，见偏差）、`FLargeKinds` 与公开的 `SeriesLargeKind`；`BuildSeriesList` 把决定写进视觉；`Relayout` 把 large 的柱告诉柱的求解；`HitTestAt` 遇到大元素按它自己的扫描给行（没有行时有元素、无 datum）；`EventTargetAt` 同样，目标的 id 是元素，没有行就没有数据，有行也没有派发者（`HdKind 0`）。状态机对大元素什么都不登记，于是 highlight 走「找不到元素就读系列选项」那条已有的路。
+- 没有新主题键、新资源串；背景条仍用 `TyAdvChartBarBackground`，K 线颜色仍从皮肤来。
+
+### 基准
+
+`tools/advchart-oracle/large-mode.js`（真 dist，node 下 SVG、ssr 初始化后 `_ssr = false`、`env.node = false`，图表原型的 `getDom` 答一个空对象让 TooltipView 运行，xorshift32 的 `Math.random` 每张图重设，替换 `Date` 与定时器，最后 `process.exit()`）→ `tests/fixtures/advchart-large-mode.json`（约 484 KB）：**41 个用例、102 步（74 次移动）、121 个事件、14 028 个点**。时钟每步前进一秒、从不回退，于是柱的 30 ms throttle 每次都立刻执行；每步之后把到期的定时器跑完（tooltip 的 hideDelay）再记录。node 下 richText 的 tooltip 框是画布上的元素，会挡住下一次悬停，基准把它设成 silent（浏览器里 HTML 的框不挡）。
+
+- **开关** 16 个：bar 399 / 400 / 401（缺省阈值）、`large: true` 只有 5 行、`largeThreshold: 0`、`large: false` 450 行；scatter 49 / 50 / 51（阈值 50）与 1999 / 2000（缺省）；candlestick 599 / 600 / 601、`large: false` 650 行；line 写了 `large`。
+- **柱** 10 个：两个系列并排（负值、背景）、横向、两个系列堆叠（正负混合）、`barMinHeight`、值超过 y 轴最大值时 `clip` 开与关（在绘图区上方悬停）、一个 null（包围盒 NaN）、`barWidth` 4 px 与 90%、slider dataZoom（30 行 large → 缩到 14 行逐项 → 回到 40 行 large，内部下标与原始下标不同）、与一个逐项系列并存时的悬停 / highlight / downplay（`emphasis.focus: 'series'`）。
+- **散点** 10 个：重叠的点、三种符号与大小（三角 `[14, 8]`、`emptyCircle`、`roundRect`）、3 px（boost 与 4 px 命中框的边）、`clip` 开与关的软裁剪（界外的点照样悬停）、一个 null、`itemStyle` 的边框与不透明度加一个自带颜色的数据项、inside dataZoom（50 → 16 → 44）、类目轴上的 jitter、与 `focus: 'series'` 的折线并存（悬停折线、对 large 系列 highlight / downplay）。
+- **K 线** 5 个：自定颜色与 `borderWidth: 2`（笔的 2 与 3 px 外）、`borderColorDoji`、axis tooltip、y 轴范围切掉最高价（裁剪挡住悬停）、纵向布局。
+
+每次构建记：每个系列的条数、流水线的 large、视图是否画了大元素、逐项元素数、组的裁剪；每个大元素的种类、z2、silent、包围盒、样式（填充、描边、笔宽、不透明度）、点（Float32 扩成 Double）、柱的下标 / 柱宽 / 基维、符号的大小 / 种类 / boost / 软裁剪、K 线的 sign。每步记：事件后 `findHover` 的目标（大元素的种类、系列、sign 与 ECData 的 dataIndex；逐项的数据项；别的）、图表的 mouseover / mousemove / mouseout（系列、原始与内部下标）、tooltip（显示与否、`item:<系列>:<原始下标>` 或 `axis:<轴值标签>`、内部下标）、每个大元素的状态列表与不透明度、用例点名的逐项数据项的状态列表。自检：R1 悬停的大元素的 dataIndex 由记下的点重算（柱的正向扫描、散点包围盒加倒序扫描、K 线没有）48 次；R2 每个包围盒由点重算 56 次；R3 每一步每个柱的路径环绕判断与「包围盒 + 扫描」一致 46 次；R4 散点的点由 store 经 `dataToPoint` 与 `Math.fround` 重算 2480 次；36 条守卫（阈值减一 / 正好 / 加一、少数据、阈值 0、`large: false`、line 不画 large、背景是 silent 的第二条路径、NaN 毒化包围盒且不再悬停、boost、4 px 框在包围盒外不算、裁剪挡住上方的悬停、不裁剪时上方悬停得到、软裁剪外照样悬停、K 线悬停无数据无 item tooltip、K 线的 axis tooltip、柱和散点的 item tooltip、同一批里换行不发 mouseover、柱缝里没有事件、重叠时后面的点赢、大元素永远没有状态、悬停折线的符号进 emphasis 而旁边的大元素不变、对写了 `focus: 'series'` 的 large 系列 highlight 会淡化别的系列、doji 路径有点、纵向 K 线零长、dataZoom 切回逐项、柱的下标是内部的、散点缩放切回逐项、`emptyCircle` 是实心圆、堆叠也走 large、数据项颜色不进 large）都成立；两次生成逐字节一致；没有 `\u0000`；JSON 能读回。
+
+### 测试
+
+`test.advchart.largemode`（新，注册在 `tytests.lpr`）：
+
+- **基准重放**（`TAdvChartLargeModeOracleTest`，1 个）：每个用例新建控件（`camOff`），按步调 `MouseMove` / `MouseLeave` / `DispatchAction` / `DispatchDataZoom`，`TooltipTick` 走过半秒，无头渲染一次，逐位比较：每个系列是否 large（`SeriesLargeKind`）与条数，每个大元素的种类、silent、包围盒、全部的点、下标、柱宽、基维、符号大小与种类、boost、软裁剪、sign、裁剪、填充与不透明度、笔宽（描边颜色只在用例自己写了颜色时比，缺省色是皮肤的）；悬停（`HitTestAt` 给出的元素种类、系列、sign、行）、事件（类型、系列、原始与内部下标）、tooltip（`TooltipShown`、`TooltipShownDatum`、`TooltipShownWhich`）、大系列前三行没有状态、点名的逐项数据项的状态列表。共比较 **27 438 项**。
+- **手写**（`TAdvChartLargeModeTest`，8 个）：开关读 JS 的值（缺省、null、0、字符串阈值、line 与 effectScatter 没有）；三种扫描与边（柱重叠时前一个赢、边算在内、裁剪挡住命中但不挡扫描、点重叠时后一个赢、4 px 框与包围盒、NaN 毒化、K 线笔的一半宽度、Float32 与溢出）；一批是一个元素（1000 根柱是柱加背景两个元素，5000 个点一个，没开 large 时 5000 个）；真的画出来了（像素）；从 large 退回逐项后状态记录回来；`path://` 符号仍逐项；large 没有入场动画（同一组柱少一行时每根都长出来）；十万个点（见下）。
+
+首跑的不对：large 的柱宽（端口把 `barMinWidth` 的缺省 1 用在了 large 上，0.8625 被抬到 1——`barGrid` 在 large 时用 0.5）；K 线的描边颜色（只写了 `borderColorDoji` 的用例里上涨下跌仍是皮肤色，测试改为按 sign 的键比）。另外 `TAdvChartMarksTest` 红了三个：`TySeriesVisual` 逐个字段赋值，新字段没有置零，偶尔是 lgkBar——补上。
+
+**速度**（`TestAHundredThousandPoints`，打印数字、只设宽松的上限：其他树的套件常常同时在跑）：本机一万个点逐项每帧约 0.75 s、一批约 0.22 s、带边框的一批约 0.58 s；十万个点 `SetOption` 0.14 s、第一次绘制（含构建）约 2.2 s、之后约 2.0 s、100 次命中 16 ms。上限：第一次绘制 60 s、100 次命中 10 s——足以抓住「整批一条路径」那种 137 s 的退化。
+
+本批按规矩只跑了自己的新套件和直接碰到的套件，全部通过：`TAdvChartLargeModeOracleTest`（1）、`TAdvChartLargeModeTest`（8）、`Shape` 46、`Paint` 15、`Marks` 36、`BarLayout` 19、`BarGeometryOracle` 1、`Hit` 12、`MouseEventsOracle` 3、`TooltipRule` 19、`TooltipDraw` 15、`TooltipFinish` 10、`CandleRule` 5、`CandleDraw` 7、`CandleBoxplot` 9、`ConvertJitter` 10、`Gallery`（画廊里的 `candlestick-brush` 有 3141 行，现在按 large 画）。全量套件与变异轮留到里程碑（C6–C13）末尾。
+
+### 推迟与偏差
+
+- **[第 119 批：已做，见 §154；十万点的速度用例改写 `progressive: 0`，量的仍是一次画完的单批]** **progressive 与 appendData**：C9。SVG 画家与这个端口一样没有分块绘制，基准里的 large 都是一次画完；canvas 下柱在 progressive 时强制 large、散点 large 时 progressive 缺省 5000 / 阈值 1e4，都没有建模。
+- **柱的 throttle**：上游写 dataIndex 的处理器经过 30 ms 的 throttle（模块级，所有 large 柱共用），30 ms 内的第二次移动推迟到定时器；端口每次立刻扫描。基准的步子间隔一秒，看不出区别。
+- **环绕与扫描**：上游柱的 `contain` 是路径的非零环绕，端口用「包围盒 + 扫描」代替。同一条路径里方向相反的矩形重叠时两者会不同（环绕相消）；基准每一步都核对两者一致（R3），没有遇到。组的裁剪路径按闭区间的矩形判断，正落在边上的点可能与 zrender 的环绕数不同。
+- **canvas 的 Float32 路径**：浏览器的 canvas 画家把路径数据转成 Float32（`toStatic`），柱的包围盒宽度会按 Float32 的柱宽算；基准跑的是 SVG（Double），端口照它。只在包围盒的边上可能差一个 Float32 的单位。
+- **极坐标、日历、`path://`**：上游极坐标上的 large 柱没有 large 布局（`createLarge` 会读到空点）；极坐标与日历上的 large 散点、`path://` / `image://` 符号的 large 散点，端口都仍逐项画。
+- **点击选中**：上游点 large 的柱或点会派发 select（模型记下、画面不变）；端口的大元素没有派发者，不派发。
+- **像素**：图层用 BGRA 的原语画形状，抗锯齿与 canvas 的路径填充不逐像素一致；boost 的方块并进图层（上游逐个 `fillRect`，不透明度小于 1 时重叠的方块会叠深）；`shadowBlur` 不画；大小不到 4 px 时上游连阴影也去掉，端口本来就不画阴影。
+- **切换时的动画**：上游 `_updateDrawMode` 在逐项与 large 之间切换时直接清空、不淡出；端口开着动画时这条路径没有基准（基准都是 `animation: false`），只测了 large 本身没有入场动画。
+- 背景条的颜色是皮肤的（`backgroundStyle.color` 与逐项时一样不读）；K 线的缺省颜色是皮肤的。
+
+### 落地
+
+- `source/tyControls.AdvChart.Large.pas`（新，已登记 `tycontrols.lpk` 与 `tycontrols.pas`）。
+- `source/tyControls.AdvChart.Shape.pas`：`cskLarge`、`TTyChartShape.Large`、包围盒与包含。
+- `source/tyControls.AdvChart.Marks.pas`：`TTySeriesVisual.Large`、`LargeElement`、`BuildLargeBars`、`BuildLargeSymbols`、`BuildLargeCandles`、`TyBuildSeriesMarks` 的分派。
+- `source/tyControls.AdvChart.BarLayout.pas`：`TySolveBarLayout` 的 large 重载、`cLargeBarMinWidth`。
+- `source/tyControls.AdvChart.Render.pas`：`LargeSymbolSpec`、`LargeRowBox`、`TraceLargeRow`、`TraceLarge`、`TyRenderElement` 的图层（`PaintLargeOnLayer`）与分块（`PaintLargeInTiles`、`TyLargeTilePx`）。
+- `source/tyControls.AdvanceChart.pas`：`LargeKindOf`、`LargeRowAt`、`SeriesLargeKind`、`FLargeKinds`；`BuildSeriesList`、`Relayout`、`HitTestAt`、`EventTargetAt`。
+- `tools/advchart-oracle/large-mode.js`、`tests/fixtures/advchart-large-mode.json`、`tests/test.advchart.largemode.pas`（新，注册在 `tytests.lpr`）。
+- §36、§143、§145 在原处标注。没有新主题键或新资源串。
+
 ## 153. Tier 2 第一百一十八批：单轴与主题河流图（C10，2026-10-12）
 
 路线图 C10：单轴（`singleAxis`）坐标系、主题河流图（`themeRiver`），以及单轴上的散点与涟漪散点（打卡图）。以前单轴不在：C2 的换算分派给它留了位置（§145），finder 指到它答不出、`containPixel` 答 false；单轴的轴、轴名、指示器都没有（§72、§131）；`themeRiver` 不认，进了「别处画」的名单。这一批对着 `coord/single/Single.ts`（`resize`、`_adjustAxis`、`dataToPoint`、`pointToData`、`containPoint`、`getAxisPointer`）、`SingleAxis.ts`、`singleCreator.ts`、`AxisModel.ts`（默认选项）、`singleAxisHelper.ts`（`layout`）、`component/axis/SingleAxisView.ts`、`axisPointer/SingleAxisPointer.ts`、`chart/themeRiver/ThemeRiverSeries.ts`（`fixData`、`getInitialData`、`getLayerSeries`、`getAxisTooltipData`、`formatTooltip`）、`themeRiverLayout.ts`（`doThemeRiverLayout`、`computeBaseline`）、`ThemeRiverView.ts`（`render`、`createGridClipShape`、标签）、`chart/line/poly.ts`（`ECPolygon` 的平滑）、`component/dataZoom/helper.ts` 与 `AxisProxy`（`singleAxisIndex`、自动目标）、`util/jitter.ts`、`label/LabelManager.ts`（入场淡入），以及 V8 的 `Array.prototype.sort`（TimSort）和 zrender 的 `BoundingRect` 逐行核过，在真 dist 上跑基准。轴的画法沿用 C3 的路子：单轴是一根放在自由框架里的 AxisBuilder 轴（`TyFillAxisLayoutSpec`、`FreeFrame`、`LabelDirection`）。§72、§131、§145 的推迟在原处标注。
@@ -11131,6 +11210,85 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - `source/tyControls.AdvanceChart.pas`：上面「控件」一条的全部。
 - `tools/advchart-oracle/single-themeriver.js`、`tests/fixtures/advchart-single-themeriver.json`、`tests/test.advchart.singlethemeriver.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.animenter.pas`、`tests/test.advchart.marks.pas`。
 - §72、§131、§145 在原处标注。除了上面那个度量，没有新主题键或新资源串。
+
+## 154. Tier 2 第一百一十九批：渐进渲染与 appendData（C9，2026-10-12）
+
+路线图 C9：progressive + appendData——按帧时间预算分块绘制、`progressiveThreshold` / `progressiveChunkMode`、appendData API。以前端口一次画完每个系列：§152 的 large 模式说过 progressive 只在 canvas 画家上开、SVG 与这个端口都没有分块绘制，§102 的热力图也把渐进渲染列为没有移植。这一批对着 6.1 的 `core/Scheduler.ts`（`restorePipelines`、`getPerformArgs`、`updateStreamModes`、`_performStageTasks`、`plan`、`_pipe`）、`core/task.ts`（`perform` 的 reset 条件与 `normalizeModBy`、`_doReset`、`modNext` 迭代器）、`core/echarts.ts`（`_onframe` 的 do / while 与 `TEST_FRAME_REMAIN_TIME`、`update`、`appendData`、`bindRenderedEvent`、`renderSeries`、`allocateZlevels`）、`model/Series.ts`（`getProgressive`、`getProgressiveThreshold`、`appendData`、`dataTask` 的 reset 与 progress）、`util/model.preparePipelineContext`、`view/Chart.ts`（`renderTaskReset` 与 `progressMethodMap`）、`chart/helper/createRenderPlanner.ts`、`chart/scatter/ScatterSeries.ts` 与 `ScatterView.ts`、`chart/helper/SymbolDraw.ts` 与 `LargeSymbolDraw.ts` 的 `incrementalUpdate`、`chart/bar/BarSeries.ts`、`BaseBarSeries`、`BarView.ts`（`incrementalPrepareRender`、`_incrementalRenderLarge`、`createLarge`、`largePathFindDataIndex`）、`layout/barGrid.ts`（large 分支的 `params.next()` 与 `largeDataIndices`）、`layout/points.ts`、`chart/candlestick/candlestickLayout.ts`（`normalProgress` / `largeProgress`）与 `CandlestickView.ts`（`_incrementalRenderNormal`、`_incrementalRenderLarge`）、`chart/heatmap/HeatmapView.ts` 与 `HeatmapSeries.preventIncremental`、`data/DataStore.appendData`、`data/helper/dataProvider.ts`（各种 source 格式的 `appendData`）逐行核过，以及 zrender 的 `ZRender._flush` / `refresh` / `wakeUp`、`Animation.update` 的 frame 事件，在真 dist 上跑基准。§102、§152 的推迟在原处标注。
+
+### 上游的做法
+
+- **开关**：管线的 `progressiveEnabled` 是 `zr.painter.type === 'canvas' && seriesModel.getProgressive()` 的真值；`progressiveRender` 是它加上视图有 `incrementalPrepareRender`（散点、柱、K 线、热力图；line、effectScatter、pictorialBar、treemap 缺省 `progressive: 0`，line 写了也没有增量视图）再加 `dataLen >= threshold`，`dataLen` 是**过滤之后**的条数。缺省：Series 400 / 3000；柱（BaseBarSeries）与 K 线 3000，K 线阈值 1e4，二者的 `progressiveChunkMode` 缺省 `'mod'`；散点 `option.progressive == null` 时 large 写了真值就是 5000 / 1e4，否则 400 / 3000。柱的 `getProgressive` 是 `get('large') ? get('progressive') : false`——不写 `large` 的柱永远不渐进；渐进时 `__preparePipelineContext` 强制 large，所以 `largeThreshold: 1000` 的 20 行也是 large 批。`step = Math.round(progressive || 700)`。
+- **块**：每帧每条管线从 `dueIndex` 走一步，`end = min(dueIndex + step, dueEnd)`。`'sequential'` 就是位置本身；`'mod'` 走 task.ts 的 `modNext`：`modBy = ceil(modDataCount / step)`、`winCount = ceil(modDataCount / modBy)`、第 current 个位置是 `(current % winCount) * modBy + ceil(current / winCount)`，不小于 `modDataCount` 时退回 `current`。它**不是排列**：10 行每块 4，行 7 走两次、行 9 永远不来。只有调 `params.next()` 的布局按它走——柱的 large 布局和 K 线的两种布局；散点的 `pointsLayout`、热力图都按 `start..end`，写了 `'mod'` 也一样。
+- **重来**：任务以 `(modBy, modDataCount)` 执行，跟上次不同就 reset，下游一路 dirty 到渲染任务——`incrementalPrepareRender` 清空视图、从第 0 块再画。两种来源：可视阶段的参数（appendData 改了 `'mod'` 的条数），以及**被阻塞的数据阶段**——setOption 新建的管线还没有上下文，数据处理以 `(1, 0)` 执行，第一帧以 `(Infinity, count)` 执行。只有在数据阶段有自己的系列任务的系列受影响：柱（`dataSample('bar')`）与线；概览任务的桩永远以 `(1, 0)` 执行。于是 `'mod'` 的柱第一帧把第 0 块重画一遍、第二帧才画第 1 块；K 线、散点没有这一帧。`createRenderPlanner` 在 large 或 progressive 换了时也 reset。
+- **帧**：setOption 的 update 同步画第 0 块；`_onframe` 在 `scheduler.unfinished` 时循环：`performSeriesTasks`、数据阶段、`updateStreamModes`、可视阶段、`renderSeries`，每次减去用掉的毫秒，直到 `TEST_FRAME_REMAIN_TIME`（1 ms）用完或没有剩的。`rendered` 每次 flush 发一次——渲染时只要还没完，handler 里的 `zr.refresh()` 让下一帧再 flush，所以未完成的每一帧都发；画完最后一块那帧再发 `finished`（动画结束、没有挂起的 update、调度完成、没有挂起的 action）。
+- **元素**：逐项的系列一块一块加元素（散点 `SymbolDraw.incrementalUpdate`、热力图 `_renderOnGridLike(start, end)`）；**增量的 K 线盒子没有 ECData**——`_incrementalRenderNormal` 从不 `setItemGraphicEl`，悬停找得到元素、没有事件、没有 item tooltip、没有状态。large 的柱每块一个背景批加一个柱批，`largeDataIndices` 是块长度的 Float32Array，按 `[dataIndex] = dataIndex` 写——超出块长的行丢掉，那一格留 0：第二块以后的柱几乎都报 dataIndex 0。large 的 K 线每块三条路径。large 的散点把新块拼到最后加的那个批上，直到它装满 2e4 个数，`startIndex` 不动、命中的 dataIndex 是扫描下标加它。
+- **appendData**：`seriesModel.appendData` 推进原始数据——provider 把条目推进 option 自己的 `data` 数组（dataset 的表、`seriesLayoutBy: 'row'` 不支持或会抛），置 `scheduler.unfinished` 并唤醒 zr。**坐标系不更新**：帧里不调 `coordSysMgr.update`，轴保持上一次 update 的范围，超出的点在裁剪外不画；直到下一次 update（setOption、resize、dispatch）。下一帧：数据任务把新行接上，顺序的渐进管线从画到的地方接着画；`'mod'` 的条数变了先在可视阶段重来，下一帧数据阶段再重来一次；跨过阈值（progressive 或 large 换了）从第 0 行重来。不渐进的系列以 `render` 重画——这一路上游自己是坏的：线和不渐进的 large 散点的布局只覆盖新行（`points` 被新段覆盖），画出来只剩追加的那几个点；普通 K 线的视图拿同一个 data 跟自己 diff，新行一根都不画；普通柱、普通散点、large 柱是对的。
+
+### port 以前
+
+- 每个系列在一次绘制里画完，没有帧循环、没有 `progressive*` 选项、没有 appendData；`rendered` / `finished` 两个事件也不存在。
+- 一次画十万个 large 点 2 s 左右（§152），期间界面不动。
+
+### 做法
+
+- **新单元 `tyControls.AdvChart.Progressive`**（纯）：`TTyProgSpec`（`TyProgSpecOf`：各类型缺省、散点的 large 分支、柱的 large 闸门、JS 的真值与 `Math.round`、`progressiveChunkMode`）、`TyProgRenderOn`、`TyProgModBy`（`getPerformArgs` 与 `normalizeModBy`）、`TyProgChunkRows`（`modNext`）、`TTyProgRun`（上下文、块的起止、画到第几块、两个阶段上次的参数）、`TyProgReplan`、`TyProgRowsOf`、`TyProgRowChunks`、`TyProgBlockArgs` / `TyProgVisualArgs` / `TyProgArgsSame`、细粒度时钟 `TyProgNowMs`。
+- **控件的管线**（`FProg`）：每次 Relayout 在 Rebuild 之后、柱求解之前由 `ProgUpdate` 重做——全量 update 从第 0 行规划、画第一块，数据阶段参数在 setOption 之后是 `(1, 0)`；appendData 的流式 relayout 先用旧上下文比数据阶段、再用新上下文比可视阶段，决定接着画还是重来，已画的块保留起止。`LargeKindOf` 让渐进的柱强制 large。
+- **帧**（`ProgressTick`，16 ms 定时器也走它，经 `AnimTick` 与动画同帧）：有挂起的追加先做流式 relayout，否则 `ProgStage` 比数据阶段；然后每条渐进管线画一块，循环到 1 ms 用完——每一步的时间是**把这一块画上增量图层**的时间，时钟用 QueryPerformanceCounter / gettimeofday（GetTickCount64 的 16 ms 刻度会让一帧画完全部）；`ProgressiveStepCostMs` 不是 NaN 时每步按它扣，测试与基准的成本对得上。帧末发 `rendered`，空闲时发 `finished`；`AnimTick` 同一帧只发一次。
+- **元素**：仍为每一行建好元素；`ProgTag` 在状态同步之前给渐进系列的元素记上它出现的块（逐项按行首次被访问的块、large 批按它所属的块）与行，增量 K 线去掉 datum；`ProgApplyVisibility` 把还没到的块标 `ProgHidden`——不画、不命中、`IndexOfDatum` 也找不到；正在长的散点批按 `ChunkEnds` 设 `Shown`、重算包围盒。`Marks` 的三个 large 构建在 `LargeChunks` 非空时按块出批（`ChunkBars` 的 `largeDataIndices` 规则、`AddLargeBars`、散点按 2e4 合并、K 线每块三条）。
+- **增量图层**：渐进元素画在一张自己的透明图层上，静态层按绘制顺序在第一个渐进元素的位置贴它，前面的在下、后面的在上（zrender 的 `EL_AFTER_INCREMENTAL_INC`）；帧只把新块（和长出来的那段点）补画上去，列表原样复用（`FProgReuse`），静态层只重画非渐进的部分；列表重建或状态变了图层整张重画。
+- **appendData**（`AppendData(ASeriesIndex, ADataJson)`）：嵌套守卫、只收 JSON 数组、只收有自己 `data` 数组的系列；先把挂起的 setOption 布局掉（上游的 setOption 是同步的），第一次追加时记下每根直角坐标轴的原始范围（有 dataZoom 的记它的那份），条目克隆进 option 的 `data`；之后的流式 relayout 用记下的范围代替测量（借 `TyApplyAxisExtents` 的 dataZoom 槽位），任何全量 update 丢掉它。还没布局过的图表直接标脏，第一次 update 取全部行。
+- **事件**：`rendered`、`finished` 进事件类型表；和 `updated` 一样只发给按名字注册的处理器。全量 update 在画完时发（`EmitFlush`），帧里发，主动画的每帧发、停下时 `finished`。
+- §152 的十万点基准改写 `progressive: 0`，量的仍是一次画完的单批。
+
+### 基准
+
+`tools/advchart-oracle/progressive.js`（真 dist，node 下 SVG，ssr 初始化后 `_ssr = false`、`env.node = false`、图表原型的 `getDom` 答空对象让 TooltipView 运行，**画家的 `type` 字段改成 `'canvas'`**——`restorePipelines` 只看它；替换 `Date` 与定时器，最后 `process.exit()`）→ `tests/fixtures/advchart-progressive.json`（约 453 KB）：**38 个用例、271 个快照（173 帧、14 次追加、39 次指针）、231 个事件**。一帧：到期的定时器、时钟 +16 ms、`zr.animation.update()`（其 frame 事件跑 `_onframe`）、`zr._flush(false)`（浏览器循环在 frame 事件之后做的 stage update）、`getDisplayList(true)`。**步的成本**：帧内每次 `performSeriesTasks`（`_onframe` 每次迭代一次）把时钟推进用例的成本：1 是一帧一块，0.4 是三块，0 一帧画完。指针步先 +1000 ms（柱的 30 ms throttle 立刻执行），再 handler，再在 `scheduler.unfinished` 置假的情况下跑 `_onframe`（只应用状态、不画块）。
+
+- **开关** 14 个：散点 49 / 50 / 51（阈值 50）、缺省 2999 / 3000、`progressive: 0`、large 的 5000 / 1e4；柱 19 / 20（`largeThreshold: 1000` 下渐进强制 large）、没写 large 的柱；K 线 19 / 20（缺省 mod）；热力图 30 格；写了 progressive 的线。
+- **块的模式** 7 个：柱 10 行每块 4 的 mod 与 sequential（含悬停）、K 线同样两种（mod 漏掉行 9，悬停无数据）、23 行带背景的 mod 柱（逐块悬停）、large K 线 mod、写了 mod 的散点。
+- **预算** 3 个：成本 0.4、0、在帧之间改成本且两个系列同帧。
+- **appendData** 12 个：顺序渐进散点中途与结束后追加（界外的点不画、快照几何）、跨阈值、不渐进散点（几何不变的轴）、顺序与 mod 的 large 柱各追加 7 行再悬停、普通柱、不渐进的 large 柱、跨 `largeThreshold`、large 散点的合并（6000 + 9000 点，每块 3000，FNV 折叠点数组，悬停三个批次里的点）、连追两次；以及只记录不重放的两个（线只剩追加的点；普通 K 线一根新的都不画）。
+- **指针** 2 个：渐进散点在某行的块到来前后悬停、tooltip；mod 柱第二块进来时悬停。
+
+每个快照记：事件（`rendered` / `finished` 与 mouseover / mousemove / mouseout 的系列、原始与内部下标）、`scheduler.unfinished`、每个系列的条数、`progressiveRender`、`large`、`modDataCount`、`step`、逐项元素代表的行（区间）、large 批（种类、z2、startIndex、数的个数、点或 FNV、下标、柱宽、基维、符号大小、包围盒、sign）、悬停目标、tooltip；`snap` 步加上逐项元素的位置。自检：R1 每块 mod 的行与下标由 `modNext` 重算 80 次；R2 每个柱批包围盒由点重算 259 次；R3 悬停柱的 dataIndex 由 `largeDataIndices` 与正向扫描重算 14 次；R4 结束帧由成本与块数预测 3 次；45 条守卫（阈值减一 / 正好 / 加一、首块由 setOption 画、每帧一块、未完成每帧 `rendered`、`finished` 只一次、各类型缺省、柱无 large 不渐进、渐进强制 large、K 线缺省 mod、热力图按 8、线不渐进、mod 柱首帧重画第 0 块、sequential 首帧画第 1 块、后面块的下标几乎全 0、mod 漏行、增量 K 线无数据、背景逐块、悬停后面块报 0、三条 K 线路径一块、散点与 K 线不重来、追加后 mod 柱重来两次、三块一帧、成本 0 一帧完、追加到帧才画、界外不画、轴不变、跨阈值从 0 重来、顺序接着画、mod 重来、普通柱全画、large 柱整批、跨 largeThreshold 全行 large、合并到 12000 点再开新批、普通 K 线不画新行、线只剩追加段、连追、块到之前悬停不到、到了之后悬停得到、渐进中的 tooltip）都成立；两次生成逐字节一致；没有 `\u0000`；JSON 能读回。
+
+### 测试
+
+`test.advchart.progressive`（新，注册在 `tytests.lpr`）：
+
+- **基准重放**（`TAdvChartProgressiveOracleTest`，1 个）：36 个可重放用例，每个新建控件（`camOff`、`AnimNow` 固定使定时器不跑、`ProgressiveStepCostMs` 取用例的成本），按快照调 `ProgressTick` / `AppendData` / `MouseMove` / `MouseLeave` / 改成本，无头渲染一次，逐位比较：事件序列、`ProgressiveUnfinished`、`SeriesProgress` 的四项上下文与条数（追加快照不比条数：上游的原始条数当时就变了，端口的条数到帧才变）、显示中的逐项行区间（增量 K 线按 `ProgRow`）、显示中的 large 批（种类、数的个数、点或 FNV、包围盒、startIndex、下标、柱宽、基维、符号大小、sign）、悬停目标与行、tooltip、`snap` 的位置。共比较 **10 822 项**。
+- **手写**（`TAdvChartProgressiveTest`，8 个）：`modNext` 的漏行与重复、Infinity 与 null；`TyProgSpecOf` 读 JS 的值（null、字符串四舍五入、负步长、阈值 null 与非数）；AppendData 的拒绝（没有的系列、dataset、非数组、坏 JSON、嵌套过深）与到帧才接入、option 里也有；轴在追加之间不动、merge 之后重新测量；setOption 让渐进从头来；`AnimTick` 一帧只发一次 `rendered`、空闲帧不发；还没到的块既不画（像素）也找不到，到了之后都有；十万个 large 点按 5000 分 20 块（见下）。
+
+为验证判据，把 `TyProgHasBlockTask` 去掉 bar 编译跑过一次：67 处不一致——不算变异轮，变异候选单列。
+
+**速度**（`TestAHundredThousandPointsComeInChunks`，只打印、上限宽松）：十万个 3 px 的 large 点，`SetOption` 约 0.16 s，第一块的绘制（含构建全部元素）约 0.85 s，之后 19 帧合计约 1.4 s、最慢一帧约 0.09 s；没有增量图层时（每帧整层重画）19 帧要 4.8 s、最慢 0.39 s。真时钟下第一帧在一块之后停下。
+
+本批按规矩只跑了自己的新套件和直接碰到的套件：`TAdvChartProgressiveOracleTest`（1）、`TAdvChartProgressiveTest`（8）、`TAdvChartLargeModeOracleTest`（1）、`TAdvChartLargeModeTest`（8，十万点用例改写 `progressive: 0` 后通过；改之前它按新的缺省分成了 10 批，这是对的行为）、`Paint` 15、`Marks` 36、`Shape` 46、`Hit` 12、`MouseEventsOracle` 3、`HandlerWiringOracle` 9、`AnimEnter` 11、`AnimUpdate` 7、`AnimEngine` 24、`AnimFullUpdate`、`AnimMerge`、`AnimStateEngine`、`AnimState`、`CandleBoxplot`、`ExportLoading`、`TooltipFinish`、`OptionMerge`、`Gallery`。全量套件与变异轮留到里程碑（C6–C13）末尾。
+
+### 推迟与偏差
+
+- **不渐进系列的 appendData**：上游的线、不渐进的 large 散点只画追加的那几行，普通 K 线一根新的都不画——都是上游自己的错（布局只覆盖新段、视图拿同一个 data 跟自己 diff）；端口按冻结的轴把整个系列重画。基准把这两条录成 `replay: false` 并用守卫钉住上游的样子。追加之后的全量 update 上游也会坏（resize 之后线的点全是 NaN、散点全不见），端口按新数据正常重排。
+- **dataset 与 typed array**：上游会把追加推进 dataset 的表（`seriesLayoutBy: 'row'` 抛错）；端口只收系列自己的 `data` 数组，其余拒绝。Option 属性的文本不改写（`GetOptionJson` 里有追加的行）。
+- **冻结的范围**只覆盖直角坐标轴；极坐标、日历、dataZoom 的窗口在帧里不重算（上游的 dataZoom 处理器会按新数据重算值窗口再过滤）。类目轴上追加了新类目时，上游的 OrdinalMeta 会收集它而范围不变，端口同样落在范围外。
+- **zlevel**：上游 `allocateZlevels` 给条数超过阈值的散点单独的 zlevel，之后的组件与系列抬一层；端口不建 zlevel，增量图层只保证“前面的在下、后面的在上”。
+- **`rendered` / `finished`** 只在全量 update 画完、渐进帧、主动画的帧上发；上游任何一次重绘（悬停改了状态、指针轴滑动、图例滚动）都会再发一次 `rendered`，空闲时还跟一个 `finished`——端口不发。`rendered` 的 `elapsedTime` 不给。
+- **步长**：`progressive` 是非数或小于 1 时上游的步长是 NaN 或负数，管线永远做不完；端口把这种系列当作不渐进。
+- **动画**：上游增量加进来的散点符号各自有入场动画（阈值 2000 以下才会同时开着）；端口的入场动画仍在构建时对整个系列武装。
+- **mod 块内的叠放**：mod 的 K 线按访问顺序加元素，端口的逐项元素按行序；K 线不重叠，看不出。逐项元素被重画的那一次（mod 的重复访问）端口不重复建。
+- **像素**：增量图层上补画的块总在先前所有渐进元素之上（canvas 的增量层也是如此），图层整张重画时回到列表顺序；两个渐进系列交叠时两种顺序可能不同。
+- **真时钟**：一步的代价是在图层上画一块；QueryPerformanceCounter 的分辨率足以让 1 ms 的预算在一块之后停下，但实际一帧画多少块依机器而定，测试一律用 `ProgressiveStepCostMs`。
+
+### 落地
+
+- `source/tyControls.AdvChart.Progressive.pas`（新，已登记 `tycontrols.lpk` 与 `tycontrols.pas`）。
+- `source/tyControls.AdvChart.Large.pas`：`TTyLargeGeom` 的 `Start`、`Shown`、`ChunkFirst`、`ChunkEnds`；`TyLargeRows`；包围盒与扫描只看已有的行，散点命中加 `startIndex`。
+- `source/tyControls.AdvChart.Paint.pas`：`TTyChartElement` 的 `ProgChunk`、`ProgSlot`、`ProgRow`、`ProgHidden`；命中、`IndexOfDatum`、`IndexOfDatumInk` 跳过隐藏的。
+- `source/tyControls.AdvChart.Render.pas`：`TyRenderPaintList` 跳过隐藏的；`LargeRowCount` 走 `TyLargeRows`。
+- `source/tyControls.AdvChart.Marks.pas`：`TTySeriesVisual.LargeChunks`；`ChunkBars`、`AddLargeBars`；散点与 K 线按块出批。
+- `source/tyControls.AdvChart.Events.pas`：`rendered`、`finished`。
+- `source/tyControls.AdvanceChart.pas`：`FProg` 与 `ProgCtxOf`、`ProgUpdate`、`ProgStage`、`ProgStep`、`ProgTag`、`ProgApplyVisibility`、`ProgFrame` / `ProgressTick`、增量图层（`ProgLayerBuild`、`ProgLayerDelta`、`ProgRenderList`）、`FrozenCapture` / `FrozenZooms`、`EmitPlain` / `EmitFlush`、`AppendData`、`ProgressiveUnfinished`、`SeriesProgress`、`ProgressiveStepCostMs`；`Relayout`、`Rebuild`、`LargeKindOf`、`BuildSeriesList`、`PaintSeries`、`RenderCached`、`RenderTo`、`DropStatic`、`AfterSetOption`、`AnimArmTimer`、`AnimTick`（拆出 `AnimTickBody`）。
+- `tools/advchart-oracle/progressive.js`、`tests/fixtures/advchart-progressive.json`、`tests/test.advchart.progressive.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.largemode.pas` 的速度用例写上 `progressive: 0`。
+- 没有新主题键或新资源串。
 
 ## 155. Tier 2 第一百二十批：和弦图（C11，2026-10-12）
 

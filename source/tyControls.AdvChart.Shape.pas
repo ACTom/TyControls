@@ -14,7 +14,8 @@ unit tyControls.AdvChart.Shape;
   That is deliberate: hit-testing is where the bugs are, and it must be testable
   without a graphics stack. }
 interface
-uses SysUtils, Math, tyControls.AdvChart.Types, tyControls.SubPixel;
+uses SysUtils, Math, tyControls.AdvChart.Types, tyControls.SubPixel,
+  tyControls.AdvChart.Large;
 
 type
   TTyChartShapeKind = (
@@ -25,7 +26,8 @@ type
     cskSector,      // CX, CY, R0..R1, StartRad..EndRad -- a pie slice or a ring band
     cskPolyline,    // Points, an open stroked run
     cskPolygon,     // Points, a closed filled area
-    cskPath         // PathData, an SVG path:// symbol
+    cskPath,        // PathData, an SVG path:// symbol
+    cskLarge        // Large, a whole series' batch [Batch 117]
   );
 
   TTyPointFArray = array of TTyPointF;
@@ -96,6 +98,10 @@ type
       loop traces its arc twice) is inside where even-odd would make a
       hole. False, the zero value, is even-odd. [Batch 120] }
     HitNonZero: Boolean;
+    { A LARGE-MODE BATCH, the whole series in one path: its points, how they
+      are drawn and how the pointer finds a row in them -- AdvChart.Large.
+      Default everywhere else. [Batch 117] }
+    Large: TTyLargeGeom;
   end;
 
 { ---- constructors, so a caller never has to remember which fields a kind uses ---- }
@@ -1054,6 +1060,8 @@ begin
                         AShape.CX + AShape.R1, AShape.CY + AShape.R1);
     cskPolyline, cskPolygon:
       Result := PointsBounds(AShape.Points);
+    cskLarge:
+      Result := TyLargeBounds(AShape.Large);
   else
     Result := TyInvalidRectF;
   end;
@@ -1400,6 +1408,9 @@ begin
       end;
     cskPolyline:
       Result := PolylineNear(AShape.Points, AX, AY, ASlopPx);
+    { the batch's own arithmetic, and no slop: upstream's [Batch 117] }
+    cskLarge:
+      Result := TyLargeContains(AShape.Large, AX, AY);
     cskPolygon:
       begin
         n := Length(AShape.Points);
