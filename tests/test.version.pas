@@ -46,6 +46,7 @@ uses
   tyControls.TabSet, tyControls.TabSheet, tyControls.Tag, tyControls.ToggleSwitch,
   tyControls.ToolWindows, tyControls.ToolWindows.Manager,
   tyControls.ToolBar, tyControls.ToolBarEx, tyControls.ToolGroupPanel, tyControls.TrackBar,
+  tyControls.MultiTrackBar,
   tyControls.TrackEdit, tyControls.Transfer, tyControls.TreeSelect, tyControls.TreeView,
   tyControls.TyLabel, tyControls.URLEdit, tyControls.UpDown, tyControls.ValueListEditor,
   { The property-editor base classes. None of them is ever dropped on a form, so nothing else
@@ -446,8 +447,8 @@ initialization
     TTyHSColorPicker, TTyFontComboBox, TTyFontListBox, TTyFontSizeComboBox, TTyFilterComboBox,
     TTyShellComboBox, TTyGauge, TTyMeter, TTyLevelMeter, TTyDial, TTyGearDial, TTyAnalogClock,
     TTyCircularProgress, TTyActivityIndicator, TTyActivityBar, TTyGearActivityIndicator,
-    TTySparkline, TTyRating, TTyTrackBar, TTyProgressBar, TTyScrollBar, TTyStatusBar,
-    TTyToolBar, TTyToolButton, TTyToolSeparator, TTyToolBarEx]);
+    TTySparkline, TTyRating, TTyTrackBar, TTyRangeTrackBar, TTyMultiTrackBar, TTyProgressBar,
+    TTyScrollBar, TTyStatusBar, TTyToolBar, TTyToolButton, TTyToolSeparator, TTyToolBarEx]);
   Reg([
     TTyControlBar, TTyCoolBar, TTyAlert, TTyPagination, TTySteps, TTyBreadcrumb,
     TTyHeaderControl, TTyPanel, TTyGroupBox, TTyBevel, TTyDivider, TTySplitter, TTyPaintPanel,

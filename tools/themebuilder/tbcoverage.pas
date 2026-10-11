@@ -68,7 +68,7 @@ const
   { Checked against the sources by TTbCoverageTests.TestThePartTableMatchesTheSources: every
     typeKey a unit names in a string literal is in its row; what a row adds by hand (keys
     built by concatenation) must be a catalogue typeKey. }
-  cTbPartRows: array[0..51] of TTbPartRow = (
+  cTbPartRows: array[0..52] of TTbPartRow = (
     (U: 'tyControls.ActivityIndicator'; K: 'TyActivityIndicator,TyActivityIndicatorFill'),
     (U: 'tyControls.Alert'; K: 'TyAlert,TyAlertClose'),
     (U: 'tyControls.Badge'; K: 'TyBadge'),
@@ -105,6 +105,7 @@ const
       'TyListViewHeader,TyListViewHeaderSection,TyListViewItem,TyListViewLine,TyListViewMarquee'),
     (U: 'tyControls.Memo'; K: 'TyMemo,TyTextSelection'),
     (U: 'tyControls.Menu'; K: 'TyMenuBar,TyMenuItem,TyMenuPopup,TyMenuView'),
+    (U: 'tyControls.MultiTrackBar'; K: 'TyMultiTrackBar,TyRangeTrackBar,TyTrackBar,TyTrackGroove,TyTrackSegment,TyTrackSelection,TyTrackThumb'),
     (U: 'tyControls.Notification'; K: 'TyNotification,TyNotificationClose'),
     (U: 'tyControls.PageControl'; K: 'TyPageControl'),
     (U: 'tyControls.Panel'; K: 'TyPanel'),
@@ -123,7 +124,7 @@ const
     (U: 'tyControls.Tag'; K: 'TyTag,TyTagClose'),
     (U: 'tyControls.ToggleSwitch'; K: 'TyToggleKnob,TyToggleSwitch'),
     (U: 'tyControls.ToolBar'; K: 'TyToolBar,TyToolSeparator'),
-    (U: 'tyControls.TrackBar'; K: 'TyTrackBar,TyTrackGroove,TyTrackThumb'),
+    (U: 'tyControls.TrackBar'; K: 'TyTrackBar,TyTrackGroove,TyTrackSelection,TyTrackThumb'),
     (U: 'tyControls.TreeView'; K: 'TyTreeCheckBox,TyTreeHeader,TyTreeHeaderSection,TyTreeNode,TyTreeView'),
     (U: 'tyControls.TyLabel'; K: 'TyLabel'),
     (U: 'tyControls.UpDown'; K: 'TyButton,TyUpDown'),

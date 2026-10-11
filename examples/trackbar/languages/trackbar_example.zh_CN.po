@@ -44,8 +44,8 @@ msgid "ShowValue = True: the number is drawn by the bar itself."
 msgstr "ShowValue = True：数字由控件自己绘制。"
 
 #: tmainform.lblverticalhint.caption
-msgid "Vertical: ticks (Frequency = 10) right, its number below."
-msgstr "垂直：刻度（Frequency = 10）在右，数字在下。"
+msgid "Vertical: ticks and their labels on the right, its number below."
+msgstr "垂直：刻度和刻度标签在右，数字在下。"
 
 #: tmainform.lbllinesize.caption
 msgid "Fine step (LineSize = 5 - arrows and the wheel move by 5):"
@@ -79,6 +79,50 @@ msgstr "TrackBar  · TyControls"
 msgid "Animate thumb"
 msgstr "滑块动画"
 
+#: tmainform.lblrange.caption
+msgid "Two ranges (TTyRangeTrackBar, MinGap = 5, tick labels):"
+msgstr "两个区间（TTyRangeTrackBar，MinGap = 5，带刻度标签）："
+
+#: tmainform.lblmulti.caption
+msgid "Thresholds (TTyMultiTrackBar, coloured segments):"
+msgstr "阈值（TTyMultiTrackBar，分段着色）："
+
+#: tmainform.lblmultihint.caption
+msgid "Tab steps through the thumbs; the arrows move the ringed one."
+msgstr "Tab 在滑块之间切换；方向键移动带圆环的那个。"
+
+#: tmainform.divsingle.caption
+msgid "One thumb: TTyTrackBar"
+msgstr "单滑块：TTyTrackBar"
+
+#: tmainform.divmulti.caption
+msgid "Several thumbs: TTyRangeTrackBar, TTyMultiTrackBar"
+msgstr "多滑块：TTyRangeTrackBar、TTyMultiTrackBar"
+
+#: tmainform.lblrangehint.caption
+msgid "Click the bare track between two ranges to add one there."
+msgstr "点两个区间之间的空白轨道，就在那里加一个区间。"
+
+#: tmainform.lblstops.caption
+msgid "Gradient stops (TTyMultiTrackBar, OnDrawSegment):"
+msgstr "渐变色标（TTyMultiTrackBar，OnDrawSegment）："
+
+#: tmainform.lblstopshint.caption
+msgid "Click adds a stop, right-click deletes one; the end stops stay put."
+msgstr "点轨道加色标，右键点色标可删除；首尾两个色标固定不动。"
+
+#: tmainform.lblmonths.caption
+msgid "Months (labels from OnFormatTickLabel):"
+msgstr "月份（刻度标签由 OnFormatTickLabel 给出）："
+
+#: tmainform.lblmultistatus.caption
+msgid "Drag a thumb, or click the track."
+msgstr "拖动滑块，或点击轨道。"
+
+#: tmainform.stopsmenudelete.caption
+msgid "Delete stop"
+msgstr "删除色标"
+
 # --- code resourcestrings (msgid=Pascal source) ---
 
 #: umain.rsanimoff
@@ -103,6 +147,30 @@ msgstr "亮度：%d"
 #, object-pascal-format
 msgid "Fine: %d"
 msgstr "微调：%d"
+
+#: umain.rsmonthsfmt
+#, object-pascal-format
+msgid "Months: %s to %s"
+msgstr "月份：%s 至 %s"
+
+#: umain.rsrangesfmt
+#, object-pascal-format
+msgid "Ranges: %s"
+msgstr "区间：%s"
+
+#: umain.rsshortmonths
+msgid "Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec"
+msgstr "1月,2月,3月,4月,5月,6月,7月,8月,9月,10月,11月,12月"
+
+#: umain.rsstopsfmt
+#, object-pascal-format
+msgid "Gradient stops: %d"
+msgstr "渐变色标：%d 个"
+
+#: umain.rsthresholdsfmt
+#, object-pascal-format
+msgid "Thresholds: %d / %d / %d"
+msgstr "阈值：%d / %d / %d"
 
 #: umain.rsverticalfmt
 #, object-pascal-format

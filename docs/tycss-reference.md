@@ -941,7 +941,10 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 | `TyToggleSwitch` | 开关的轨道(`Checked=True` 时追加 `:active`) | `TTyToggleSwitch` | `:hover` `:active` `:focus` `:disabled` |
 | `TyToggleKnob` | 开关旋钮(tier-a 着色面) | `TTyToggleSwitch` | 无状态 |
 | `TyTrackBar` | 滑杆轨道 | `TTyTrackBar` | `:focus` `:disabled` |
-| `TyTrackThumb` | 滑杆滑块(tier-a) | `TTyTrackBar`、`TTyTrackEdit` | `:hover` `:active` |
+| `TyRangeTrackBar` / `TyMultiTrackBar` | 多滑块控件本体,父键 `TyTrackBar`(没写自己的规则时与 `TTyTrackBar` 一样) | `TTyRangeTrackBar` / `TTyMultiTrackBar` | `:focus` `:disabled` |
+| `TyTrackThumb` | 滑杆滑块(tier-a);`:focus` 的 `outline` 画在滑块**内侧**(`outline-offset` 往里缩),默认主题用 `--on-accent` 画一圈环 | `TTyTrackBar`、`TTyRangeTrackBar`、`TTyMultiTrackBar`、`TTyTrackEdit` | `:hover` `:active` `:focus`(控件有焦点时方向键要动的那个滑块) |
+| `TyTrackSelection` | 滑杆选区(`SelStart..SelEnd`)和 `TTyRangeTrackBar` 的区间,读 `background`、`border-radius` | `TTyTrackBar`、`TTyRangeTrackBar` | 无 |
+| `TyTrackSegment` | `TTyMultiTrackBar` 两个滑块之间的一段,按 `Segments` 项的 `StyleClass` 解析,读 `background`、`border-radius`。不带类时不画;默认主题有 `.success` `.warning` `.danger` 三个变体 | `TTyMultiTrackBar` | 无 |
 | `TyProgressBar` | 进度条轨道 | `TTyProgressBar` | `:disabled` |
 | `TyProgressFill` | 进度条填充段(tier-a);部分填充时只圆起始角 | `TTyProgressBar` | 无状态 |
 

@@ -279,6 +279,7 @@ begin
     '}' + LineEnding +
     'TyTrackThumb:hover  { background: var(--accent-hover); }' + LineEnding +
     'TyTrackThumb:active { background: var(--accent-active); }' + LineEnding +
+    'TyTrackThumb:focus  { outline: 2px var(--on-accent); outline-offset: 2px; }' + LineEnding +
     '' + LineEnding +
     '/* Hyperlink ink for TTyLinkLabel. Its own key rather than a borrowed accent fill: a theme' + LineEnding +
     '   that restyles gauges must not repaint every link, and a theme that wants a different link' + LineEnding +
@@ -922,6 +923,7 @@ begin
     '}' + LineEnding +
     'TyTrackThumb:hover  { background: var(--accent-hover); }' + LineEnding +
     'TyTrackThumb:active { background: var(--accent-active); }' + LineEnding +
+    'TyTrackThumb:focus  { outline: 2px var(--on-accent); outline-offset: 2px; }' + LineEnding +
     '' + LineEnding +
     'TyGroupBox, TyToolGroupPanel {' + LineEnding +
     '  padding: 4px 12px;' + LineEnding +
@@ -3188,6 +3190,8 @@ begin
     'TyToggleKnob       { render-style: bevel3d; background: var(--face); }' + LineEnding +
     'TyTrackThumb:hover  { render-style: bevel3d; background: var(--face-hover); }' + LineEnding +
     'TyTrackThumb:active { render-style: bevel3d; background: var(--face); }' + LineEnding +
+    '/* The thumb the keys move: Win9x drew a thin dark focus mark inside the raised face. */' + LineEnding +
+    'TyTrackThumb:focus  { render-style: bevel3d; background: var(--face); outline: 1px var(--ink); outline-offset: 3px; }' + LineEnding +
     '' + LineEnding +
     '/* Tooltip: the pale yellow box with a thin black frame. */' + LineEnding +
     'TyHint { background: #FFFFE1; color: var(--ink); border-color: #000000; border-width: 1px; border-radius: 0; padding: var(--pad-tooltip); font-size: var(--font-size-base); }' + LineEnding;
@@ -4624,6 +4628,7 @@ begin
     '}' + LineEnding +
     'TyTrackThumb:hover  { background: linear-gradient(90deg, lighten(--accent, 16%), lighten(--accent, 4%)); }' + LineEnding +
     'TyTrackThumb:active { background: var(--accent-active); }' + LineEnding +
+    'TyTrackThumb:focus  { outline: 2px var(--on-accent); outline-offset: 2px; }' + LineEnding +
     '' + LineEnding +
     'TyGroupBox, TyToolGroupPanel {' + LineEnding +
     '  padding: 4px 12px;' + LineEnding +

@@ -256,6 +256,7 @@ TyTrackThumb {
 }
 TyTrackThumb:hover  { background: var(--accent-hover); }
 TyTrackThumb:active { background: var(--accent-active); }
+TyTrackThumb:focus  { outline: 2px var(--on-accent); outline-offset: 2px; }
 
 TyGroupBox, TyToolGroupPanel {
   padding: 4px 12px;

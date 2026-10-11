@@ -697,6 +697,22 @@ begin
     '  background: var(--surface-track);' + LineEnding +
     '  border-radius: var(--radius-round);' + LineEnding +
     '}' + LineEnding +
+    '/* LCL''s selection range (SelStart..SelEnd): the groove filled between two values, under the' + LineEnding +
+    '   thumb, in the accent the thumb uses. */' + LineEnding +
+    'TyTrackSelection {' + LineEnding +
+    '  background: var(--accent);' + LineEnding +
+    '  border-radius: var(--radius-round);' + LineEnding +
+    '}' + LineEnding +
+    '/* A stretch of groove between two thumbs of TTyMultiTrackBar, resolved with the StyleClass of' + LineEnding +
+    '   its Segments item. The plain key paints nothing -- a segment without a class shows the' + LineEnding +
+    '   groove -- and the three classes below are what a status scale (fine / getting there / too' + LineEnding +
+    '   much) needs; a theme adds its own the same way. */' + LineEnding +
+    'TyTrackSegment {' + LineEnding +
+    '  border-radius: var(--radius-round);' + LineEnding +
+    '}' + LineEnding +
+    'TyTrackSegment.success { background: var(--success); }' + LineEnding +
+    'TyTrackSegment.warning { background: var(--warning); }' + LineEnding +
+    'TyTrackSegment.danger  { background: var(--danger); }' + LineEnding +
     'TyTrackBar:focus    { outline: 2px var(--focus-ring); }' + LineEnding +
     'TyTrackBar:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
@@ -706,6 +722,10 @@ begin
     '}' + LineEnding +
     'TyTrackThumb:hover  { background: var(--accent-hover); }' + LineEnding +
     'TyTrackThumb:active { background: var(--accent-active); }' + LineEnding +
+    '/* The thumb the arrow keys move, while the bar has the focus: a ring inside the thumb, in the' + LineEnding +
+    '   ink that sits on the accent. --focus-ring is the accent itself and would vanish on an' + LineEnding +
+    '   accent thumb; on a multi-thumb bar this ring is how Tab shows which thumb it is on. */' + LineEnding +
+    'TyTrackThumb:focus  { outline: 2px var(--on-accent); outline-offset: 2px; }' + LineEnding +
     '' + LineEnding +
     '/* Hyperlink ink for TTyLinkLabel. Its own key rather than a borrowed accent fill: a theme' + LineEnding +
     '   that restyles gauges must not repaint every link, and a theme that wants a different link' + LineEnding +

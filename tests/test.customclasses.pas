@@ -39,7 +39,7 @@ uses
   tyControls.Base, tyControls.Component, tyControls.Button, tyControls.GlyphButtons,
   tyControls.TabStrip, tyControls.Grid, tyControls.TreeView, tyControls.ShellListView,
   tyControls.IconFont, tyControls.Dialogs.FileDialog, tyControls.ToolWindows,
-  tyControls.ScrollContent, tyControls.Types, test.customclasses.mimic;
+  tyControls.ScrollContent, tyControls.Types, tyControls.MultiTrackBar, test.customclasses.mimic;
 
 type
   TTyCustomClassesGuardTest = class(TTestCase)
@@ -100,7 +100,7 @@ const
     intermediate classes. Columns: subject, expected parent, the class whose split activates
     the row. A final-class row checks Subject.ClassParent.ClassParent (the custom class's
     parent); an intermediate row (subject <> activator) checks Subject.ClassParent. }
-  CChain: array[0..59, 0..2] of string = (
+  CChain: array[0..62, 0..2] of string = (
     ('TTyDropDownButton', 'TTyCustomButton', 'TTyDropDownButton'),
     ('TTyMenuButton', 'TTyCustomButton', 'TTyMenuButton'),
     ('TTyColorButton', 'TTyCustomButton', 'TTyColorButton'),
@@ -156,12 +156,15 @@ const
     ('TTyStringGrid', 'TTyCustomDrawGrid', 'TTyStringGrid'),
     ('TTyLucideIconFont', 'TTyIconPackFont', 'TTyLucideIconFont'),
     ('TTyLucideImageList', 'TTyCustomVirtualImageList', 'TTyLucideImageList'),
+    ('TTyRangeTrackBar', 'TTyMultiTrackBarBase', 'TTyRangeTrackBar'),
+    ('TTyMultiTrackBar', 'TTyMultiTrackBarBase', 'TTyMultiTrackBar'),
     { intermediates: activated by their family root }
     ('TTyGlyphButtonBase', 'TTyCustomButton', 'TTyButton'),
     ('TTyShellTreeLink', 'TTyCustomTreeView', 'TTyTreeView'),
     ('TTyIconPackFont', 'TTyCustomIconFont', 'TTyIconFont'),
     ('TTyCustomTabStrip', 'TTyCustomControl', 'TTyPageControl'),
-    ('TTyCustomGrid', 'TTyCustomControl', 'TTyDrawGrid'));
+    ('TTyCustomGrid', 'TTyCustomControl', 'TTyDrawGrid'),
+    ('TTyMultiTrackBarBase', 'TTyCustomControl', 'TTyRangeTrackBar'));
 
 var
   GSplit, GDemoted: TStringList;
@@ -195,6 +198,7 @@ begin
   Result.Add(TTyIconPackFont);
   Result.Add(TTyCustomFileDialog);
   Result.Add(TTyCustomToolWindowManager);
+  Result.Add(TTyMultiTrackBarBase);
 end;
 
 { Registered classes (resolved by name; test.version RegisterClasses all of them) plus the
@@ -1227,11 +1231,13 @@ initialization
     'TTyDBSpinEdit', 'TTyDBFloatSpinEdit', 'TTyDBCheckBox', 'TTyDBToggleSwitch', 'TTyDBRadioGroup',
     'TTyDBSegmented', 'TTyDBRating', 'TTyDBComboBox', 'TTyDBListBox', 'TTyDBLookupComboBox',
     'TTyDBLookupListBox', 'TTyDBImage', 'TTyDBDateTimePicker', 'TTyDBCalendar',
-    'TTyDBNavigator']);
+    'TTyDBNavigator',
+    // multi-thumb track bars (#36)
+    'TTyRangeTrackBar', 'TTyMultiTrackBar']);
 
   { CDemoted: base and intermediate classes that publish nothing beyond their LCL root. }
   AddAll(GDemoted, ['TTyCustomControl', 'TTyGraphicControl', 'TTyComponent', 'TTyGlyphButtonBase', 'TTyCustomTabStrip', 'TTyCustomGrid',
-    'TTyIconPackFont']);
+    'TTyIconPackFont', 'TTyMultiTrackBarBase']);
 
   RegisterTest(TTyCustomClassesGuardTest);
 

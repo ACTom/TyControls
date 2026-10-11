@@ -118,6 +118,10 @@ procedure GRadio(b: TBGRABitmap); begin Circ(b,12,12,8,Ink); FillCirc(b,12,12,3.
 procedure GCombo(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); PolyL(b,[PointF(13.5,10.8),PointF(16,13.4),PointF(18.5,10.8)],Ink); end;
 procedure GToggle(b: TBGRABitmap); begin RRect(b,3,8,21,16,4,Ink); FillCirc(b,16.5,12,2.7,Acc); end;
 procedure GTrack(b: TBGRABitmap); begin Line(b,3,12,21,12,Ink); Line(b,6,10.4,6,13.6,Ink); Line(b,18,10.4,18,13.6,Ink); FillCirc(b,12,12,3,Acc); end;
+{ TTyRangeTrackBar: a track with two thumbs and the accent span between them }
+procedure GRangeTrack(b: TBGRABitmap); begin Line(b,3,12,21,12,Faint); Line(b,8,12,16,12,Acc,2.6); FillCirc(b,8,12,2.6,Acc); FillCirc(b,16,12,2.6,Acc); end;
+{ TTyMultiTrackBar: a track split into three coloured stretches by three thumbs }
+procedure GMultiTrack(b: TBGRABitmap); begin Line(b,3,12,7,12,Faint); Line(b,7,12,12,12,Acc,2.2); Line(b,12,12,17,12,Ink,2.2); Line(b,17,12,21,12,Faint); FillCirc(b,7,12,2.2,Acc); FillCirc(b,12,12,2.2,Ink); FillCirc(b,17,12,2.2,Acc); end;
 procedure GProgress(b: TBGRABitmap); begin RRect(b,3,9,21,15,3,Ink); FillRRect(b,3,9,13,15,3,Acc); end;
 { TTyGauge: a speedometer — upper scale arc + accent needle + hub }
 procedure GGauge(b: TBGRABitmap); begin PolyL(b,[PointF(3.5,15),PointF(5,10.5),PointF(8.5,7.5),PointF(12,6.5),PointF(15.5,7.5),PointF(19,10.5),PointF(20.5,15)],Ink,1.8); Line(b,12,16,16.5,9,Acc,2); FillCirc(b,12,16,1.6,Acc); end;
@@ -990,7 +994,7 @@ begin
 end;
 
 const
-  Glyphs: array[0..189] of TGlyph = (
+  Glyphs: array[0..191] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -1026,6 +1030,8 @@ const
     (Name:'TTyComboBox';        Draw:@GCombo),
     (Name:'TTyToggleSwitch';    Draw:@GToggle),
     (Name:'TTyTrackBar';        Draw:@GTrack),
+    (Name:'TTyRangeTrackBar';   Draw:@GRangeTrack),
+    (Name:'TTyMultiTrackBar';   Draw:@GMultiTrack),
     (Name:'TTyProgressBar';     Draw:@GProgress),
     (Name:'TTyGauge';           Draw:@GGauge),
     (Name:'TTyCircularProgress'; Draw:@GCircularProgress),
