@@ -951,6 +951,7 @@ States: `:disabled` only (`opacity`).
 | `TyToggleKnob` | The switch knob (a tier-a colored surface) | `TTyToggleSwitch` | none |
 | `TyTrackBar` | Slider track | `TTyTrackBar` | `:focus` `:disabled` |
 | `TyTrackThumb` | Slider thumb (tier-a) | `TTyTrackBar`, `TTyTrackEdit` | `:hover` `:active` |
+| `TyTrackSelection` | Slider selection range (`SelStart..SelEnd`), reads `background` and `border-radius` | `TTyTrackBar` | none |
 | `TyProgressBar` | Progress bar track | `TTyProgressBar` | `:disabled` |
 | `TyProgressFill` | Progress fill segment (tier-a); only the leading corners are rounded while partially filled | `TTyProgressBar` | none |
 

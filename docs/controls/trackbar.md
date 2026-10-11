@@ -13,6 +13,7 @@
 | 单元 | `tyControls.TrackBar` |
 | typeKey（轨道） | `TyTrackBar` |
 | typeKey（滑块） | `TyTrackThumb` |
+| typeKey（选区） | `TyTrackSelection` |
 | 基类 | `TTyCustomControl`（继承自 `TCustomControl`） |
 | 默认尺寸 | 160 × 24（逻辑像素） |
 
@@ -38,6 +39,8 @@ uses tyControls.TrackBar;
 | `TickStyle` | `TTyTrackTickStyle` | `ttsAuto` | **（API parity 新增）** 刻度怎么生成：`ttsAuto`（每 `Frequency` 个值单位一条，默认）/ `ttsNone`（不画）/ `ttsManual`（**只**画 `SetTick` 手工放的那几条）。与 LCL `TTickStyle` 同义同默认（`comctrls.pp:2796`）。`Frequency = 0` 仍然能关掉自动刻度，旧写法不变。 |
 | `LineSize` | `Integer` | `1` | 方向键单步步进量（每次 ±`LineSize`）。最小为 1（赋值 <1 被夹为 1）。 |
 | `PageSize` | `Integer` | `10` | `PageUp`/`PageDown` 翻页步进量（每次 ±`PageSize`）。最小为 1（赋值 <1 被夹为 1）。 |
+| `SelStart` / `SelEnd` | `Integer` | `0` / `0` | 选区的两端，单位和 `Position` 相同（照 LCL）。轨道上这两个值之间的一段用 `TyTrackSelection` 的 `background` 填充，画在滑块下面；起止点在滑块中心，`Reversed`、竖排都跟着走。两端超出 `Min..Max` 时落在 `Min` / `Max` 上；两个都是 `0` 表示没有选区（LCL 的约定，新放的控件不显示）；`SelStart > SelEnd` 时不画（和 Windows 原生滑块一样）。只用来显示，用户拖不动——要能拖的区间用 `TTyRangeTrackBar`（#36）。 |
+| `ShowSelRange` | `Boolean` | `True` | 是否显示选区，默认值照 LCL。 |
 | `ShowValue` | `Boolean` | `False` | 在滑轨旁显示当前值（横向在右、纵向在下），字体与颜色取轨道样式 `TyTrackBar` 的 `color`。默认关——打开会占掉一条空间，滑轨相应变短（几何与命中都跟着变）。 |
 | `OnChange` | `TNotifyEvent` | `nil` | `Position` 真实变化时触发（含拖动、点击定位、方向键/翻页键步进、直接赋值）。 |
 | `TabStop` | `Boolean` | `True` | 是否参与 Tab 键导航（构造时自动置为 `True`）。 |

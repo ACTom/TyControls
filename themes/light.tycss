@@ -656,6 +656,12 @@ TyTrackGroove {
   background: var(--surface-track);
   border-radius: var(--radius-round);
 }
+/* LCL's selection range (SelStart..SelEnd): the groove filled between two values, under the
+   thumb, in the accent the thumb uses. */
+TyTrackSelection {
+  background: var(--accent);
+  border-radius: var(--radius-round);
+}
 TyTrackBar:focus    { outline: 2px var(--focus-ring); }
 TyTrackBar:disabled { opacity: var(--disabled-opacity); }
 

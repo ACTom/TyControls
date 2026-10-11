@@ -10514,6 +10514,9 @@ type
     property OnChange;
     property Align;
     property Anchors;
+    property SelStart;
+    property SelEnd;
+    property ShowSelRange;
   end;
 
   TGenTrackEdit = class(TTyCustomTrackEdit)

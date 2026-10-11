@@ -29,6 +29,8 @@ type
     FOnChange: TNotifyEvent;
     FThumbHover: Boolean;
     FShowValue: Boolean;
+    FSelStart, FSelEnd: Integer;
+    FShowSelRange: Boolean;
     { 数值读数占掉的那一条(横向在右、纵向在下)的像素宽/高。
       要量文字才知道,而量文字需要一个 painter —— 所以在 RenderTo 里算好缓存下来,
       几何与命中都读这个缓存值。首帧之前它是 0(还没画过的控件也拖不动)。 }
@@ -52,6 +54,9 @@ type
     procedure SetLineSize(const AValue: Integer);
     procedure SetPageSize(const AValue: Integer);
     procedure SetShowValue(const AValue: Boolean);
+    procedure SetSelStart(const AValue: Integer);
+    procedure SetSelEnd(const AValue: Integer);
+    procedure SetShowSelRange(const AValue: Boolean);
     function  ValueText: string;
     function ThumbWAtPPI(APPI: Integer): Integer;
     function MainLen: Integer;
@@ -143,6 +148,20 @@ type
     { 在滑轨旁显示当前值(横向在右、纵向在下)。默认关 —— 打开会占掉一条空间,
       不该悄悄改变已有界面的排版。 }
     property ShowValue: Boolean read FShowValue write SetShowValue default False;
+    { LCL's selection range (comctrls.pp): a stretch of the track highlighted between two
+      values, in the same units as Position. Display only -- the user can't drag it; a range the
+      user moves is TTyRangeTrackBar's job. Drawn when ShowSelRange is on and the two are not both
+      0 (LCL's "no selection", so a bar dropped on a form shows none), from the nearer end to the
+      farther, both clamped to Min..Max; SelStart > SelEnd draws nothing, as the Win32 trackbar
+      does with that pair. Public here and published by TTyTrackBar, as LCL publishes it on
+      TTrackBar. }
+    property SelStart: Integer read FSelStart write SetSelStart default 0;
+    property SelEnd: Integer read FSelEnd write SetSelEnd default 0;
+    property ShowSelRange: Boolean read FShowSelRange write SetShowSelRange default True;
+    { The selection's pixel span along the groove at APPI, in client coordinates of the main
+      axis (low..high, whichever way the bar runs). False when nothing is drawn -- the rule above.
+      What RenderTo fills, exposed so the geometry can be checked without counting pixels. }
+    function SelRangeSpan(APPI: Integer; out ALow, AHigh: Integer): Boolean;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 
@@ -213,6 +232,9 @@ type
     property OnChange;
     property Align;
     property Anchors;
+    property SelStart;
+    property SelEnd;
+    property ShowSelRange;
   end;
 
 function TyTrackThumbOffset(AMainLen, AThumbLen, AMin, AMax, APos: Integer; AInvert: Boolean): Integer;
@@ -249,6 +271,7 @@ end;
 constructor TTyCustomTrackBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FShowSelRange := True;   // LCL default
   TabStop := True;
   FMin := 0;
   FMax := 100;
@@ -310,6 +333,54 @@ begin
   FShowValue := AValue;
   if not FShowValue then FValueAreaPx := 0;
   Invalidate;
+end;
+
+procedure TTyCustomTrackBar.SetSelStart(const AValue: Integer);
+begin
+  if FSelStart = AValue then Exit;
+  FSelStart := AValue;
+  Invalidate;
+end;
+
+procedure TTyCustomTrackBar.SetSelEnd(const AValue: Integer);
+begin
+  if FSelEnd = AValue then Exit;
+  FSelEnd := AValue;
+  Invalidate;
+end;
+
+procedure TTyCustomTrackBar.SetShowSelRange(const AValue: Boolean);
+begin
+  if FShowSelRange = AValue then Exit;
+  FShowSelRange := AValue;
+  Invalidate;
+end;
+
+function TTyCustomTrackBar.SelRangeSpan(APPI: Integer; out ALow, AHigh: Integer): Boolean;
+var
+  s, e, TW, MLen, a, b: Integer;
+begin
+  ALow := 0;
+  AHigh := 0;
+  Result := False;
+  if not FShowSelRange or ((FSelStart = 0) and (FSelEnd = 0)) or (FMax <= FMin) then Exit;
+  if FSelStart > FSelEnd then Exit;
+  { Ends outside Min..Max land on Min / Max: TyTrackThumbOffset clamps, as it does for the thumb. }
+  s := FSelStart;
+  e := FSelEnd;
+  TW := ThumbWAtPPI(APPI);
+  if FOrientation = toVertical then
+    MLen := ClientHeight - FValueAreaPx
+  else
+    MLen := ClientWidth - FValueAreaPx;
+  if MLen < 1 then MLen := 1;
+  { The thumb's CENTRE at each value: a selection from 20 to 60 runs under the thumb's middle at
+    20 to its middle at 60, whichever way the axis is inverted. }
+  a := TyTrackThumbOffset(MLen, TW, FMin, FMax, s, Inverted) + TW div 2;
+  b := TyTrackThumbOffset(MLen, TW, FMin, FMax, e, Inverted) + TW div 2;
+  if a <= b then begin ALow := a; AHigh := b; end
+  else begin ALow := b; AHigh := a; end;
+  Result := True;
 end;
 
 function TTyCustomTrackBar.ValueText: string;
@@ -707,8 +778,9 @@ end;
 procedure TTyCustomTrackBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
-  S, ThumbS, GrooveS: TTyStyleSet;
-  R, SlideR, GrooveR, ThumbR: TRect;
+  S, ThumbS, GrooveS, SelS: TTyStyleSet;
+  R, SlideR, GrooveR, ThumbR, SelR: TRect;
+  SelLo, SelHi: Integer;
   ThumbStates: TTyStateSet;
   TW, MLen, Off: Integer;
   TickFill: TTyFill;
@@ -821,6 +893,20 @@ begin
     end;
     if (tpBackground in GrooveS.Present) then
       P.FillBackground(GrooveR, GrooveS.Background, GrooveS.BorderRadius);
+    { THE SELECTION RANGE (LCL SelStart/SelEnd): the groove filled between the two values, under
+      the thumb. Its own theme key, so a skin can colour it apart from the thumb. }
+    if SelRangeSpan(APPI, SelLo, SelHi) and (SelHi > SelLo) then
+    begin
+      SelS := ActiveController.Model.ResolveStyle('TyTrackSelection', '', []);
+      if tpBackground in SelS.Present then
+      begin
+        if FOrientation = toVertical then
+          SelR := Rect(GrooveR.Left, SlideR.Top + SelLo, GrooveR.Right, SlideR.Top + SelHi)
+        else
+          SelR := Rect(SlideR.Left + SelLo, GrooveR.Top, SlideR.Left + SelHi, GrooveR.Bottom);
+        P.FillBackground(SelR, SelS.Background, SelS.BorderRadius);
+      end;
+    end;
     // The PAINTED thumb uses the displayed (possibly mid-animation) position; at
     // rest DisplayPos == FPosition so headless renders are pixel-identical. The
     // hover hit-test (ThumbRect), DragTo, hit math and keyboard keep using

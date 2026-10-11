@@ -936,6 +936,7 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 | `TyToggleKnob` | 开关旋钮(tier-a 着色面) | `TTyToggleSwitch` | 无状态 |
 | `TyTrackBar` | 滑杆轨道 | `TTyTrackBar` | `:focus` `:disabled` |
 | `TyTrackThumb` | 滑杆滑块(tier-a) | `TTyTrackBar`、`TTyTrackEdit` | `:hover` `:active` |
+| `TyTrackSelection` | 滑杆选区(`SelStart..SelEnd`),读 `background`、`border-radius` | `TTyTrackBar` | 无 |
 | `TyProgressBar` | 进度条轨道 | `TTyProgressBar` | `:disabled` |
 | `TyProgressFill` | 进度条填充段(tier-a);部分填充时只圆起始角 | `TTyProgressBar` | 无状态 |
 
