@@ -24,6 +24,11 @@ procedure TyTraceShape(P: TTyPainter; const AShape: TTyChartShape);
 { Draw one element: its shape, filled and/or stroked per its style. }
 procedure TyRenderElement(P: TTyPainter; const AElement: TTyChartElement);
 
+var
+  { A LARGE BATCH IS PAINTED IN TILES this many device px square; 0 paints
+    it as the one path [Batch 117]. }
+  TyLargeTilePx: Integer = 64;
+
 { THE BOX A LOCAL GRADIENT ON THIS ELEMENT NORMALISES AGAINST, device px at
   APPI: the builder's own when it set one, else the shape's bounds grown by
   the stroke -- upstream's getBoundingRect. [Batch 105] }
@@ -50,7 +55,7 @@ procedure TyRenderRtPieces(P: TTyPainter; const APieces: TTyRtPieceArray;
 
 implementation
 
-uses base64;
+uses base64, BGRABitmapTypes, tyControls.AdvChart.Large, tyControls.AdvChart.Symbol;
 
 var
   GPatternCache: TStringList = nil;
@@ -140,6 +145,161 @@ begin
   P.ClosePath;
 end;
 
+{ A LARGE-MODE BATCH, row by row [Batch 117]: a bar's rect (LargePath.
+  buildPath -- a not-a-number rect adds nothing, as the canvas ignores
+  one), a scatter's symbol in its box (the series' size, never the row's
+  own; a point outside the soft clip skipped) or, under 4 px, a plain
+  square (afterBrush's fillRect), a candle sign's line from low to high. }
+function LargeSymbolSpec(const AGeom: TTyLargeGeom): TTySymbolSpec;
+begin
+  Result := TySymbolDefault('scatter');
+  Result.Kind := TTySymbolKind(AGeom.SymKind);
+  Result.Empty := False;
+  Result.WidthPx := AGeom.SymW;
+  Result.HeightPx := AGeom.SymH;
+end;
+
+function Bad(AV: Double): Boolean; inline;
+begin
+  Result := IsNan(AV) or IsInfinite(AV);
+end;
+
+{ the box one row is drawn in, and whether it draws anything at all }
+function LargeRowBox(const AGeom: TTyLargeGeom; ARow: Integer;
+  out AX0, AY0, AX1, AY1: Double): Boolean;
+var x, y, w, h: Double;
+begin
+  Result := False;
+  AX0 := 0;
+  AY0 := 0;
+  AX1 := 0;
+  AY1 := 0;
+  case AGeom.Kind of
+    lgkBar:
+      begin
+        x := AGeom.Pts[ARow * 3];
+        y := AGeom.Pts[ARow * 3 + 1];
+        if AGeom.BaseDim = 0 then
+        begin
+          w := AGeom.BarW;
+          h := AGeom.Pts[ARow * 3 + 2];
+        end
+        else
+        begin
+          w := AGeom.Pts[ARow * 3 + 2];
+          h := AGeom.BarW;
+        end;
+        if Bad(x) or Bad(y) or Bad(w) or Bad(h) then Exit;
+        AX0 := Min(x, x + w);
+        AX1 := Max(x, x + w);
+        AY0 := Min(y, y + h);
+        AY1 := Max(y, y + h);
+      end;
+    lgkSymbol:
+      begin
+        x := AGeom.Pts[ARow * 2];
+        y := AGeom.Pts[ARow * 2 + 1];
+        if Bad(x) or Bad(y) then Exit;
+        if AGeom.SoftOn and not ((x >= AGeom.Soft.X) and (x <= AGeom.Soft.X + AGeom.Soft.W)
+          and (y >= AGeom.Soft.Y) and (y <= AGeom.Soft.Y + AGeom.Soft.H)) then Exit;
+        AX0 := x - AGeom.SymW / 2;
+        AX1 := x + AGeom.SymW / 2;
+        AY0 := y - AGeom.SymH / 2;
+        AY1 := y + AGeom.SymH / 2;
+      end;
+    lgkCandle:
+      begin
+        if IsNan(AGeom.Pts[ARow * 4]) or (AGeom.Pts[ARow * 4] <> AGeom.Sign) then Exit;
+        x := AGeom.Pts[ARow * 4 + 1];
+        y := AGeom.Pts[ARow * 4 + 2];
+        h := AGeom.Pts[ARow * 4 + 3];
+        if Bad(x) or Bad(y) or Bad(h) then Exit;
+        AX0 := x;
+        AX1 := x;
+        AY0 := Min(y, h);
+        AY1 := Max(y, h);
+      end;
+  else
+    Exit;
+  end;
+  Result := True;
+end;
+
+procedure TraceLargeRow(P: TTyPainter; const AGeom: TTyLargeGeom;
+  const ASpec: TTySymbolSpec; ARow: Integer);
+var
+  x, y, w, h: Double;
+  sub: TTyChartShape;
+begin
+  case AGeom.Kind of
+    lgkBar:
+      begin
+        x := AGeom.Pts[ARow * 3];
+        y := AGeom.Pts[ARow * 3 + 1];
+        if AGeom.BaseDim = 0 then
+        begin
+          w := AGeom.BarW;
+          h := AGeom.Pts[ARow * 3 + 2];
+        end
+        else
+        begin
+          w := AGeom.Pts[ARow * 3 + 2];
+          h := AGeom.BarW;
+        end;
+        if Bad(x) or Bad(y) or Bad(w) or Bad(h) then Exit;
+        P.RectPath(x, y, x + w, y + h);
+      end;
+    lgkSymbol:
+      begin
+        x := AGeom.Pts[ARow * 2];
+        y := AGeom.Pts[ARow * 2 + 1];
+        if Bad(x) or Bad(y) then Exit;
+        if AGeom.SoftOn and not ((x >= AGeom.Soft.X) and (x <= AGeom.Soft.X + AGeom.Soft.W)
+          and (y >= AGeom.Soft.Y) and (y <= AGeom.Soft.Y + AGeom.Soft.H)) then Exit;
+        w := AGeom.SymW;
+        h := AGeom.SymH;
+        if AGeom.Boost then
+          P.RectPath(x - w / 2, y - h / 2, x - w / 2 + w, y - h / 2 + h)
+        else if ASpec.Kind <> tsyNone then
+        begin
+          sub := TyBuildSymbolInBox(ASpec, TyRectF(x - w / 2, y - h / 2,
+            x - w / 2 + w, y - h / 2 + h));
+          if sub.Kind <> cskLarge then TyTraceShape(P, sub);
+        end;
+      end;
+    lgkCandle:
+      begin
+        if IsNan(AGeom.Pts[ARow * 4]) or (AGeom.Pts[ARow * 4] <> AGeom.Sign) then Exit;
+        x := AGeom.Pts[ARow * 4 + 1];
+        if Bad(x) or Bad(AGeom.Pts[ARow * 4 + 2]) or Bad(AGeom.Pts[ARow * 4 + 3]) then Exit;
+        P.MoveTo(x, AGeom.Pts[ARow * 4 + 2]);
+        P.LineTo(x, AGeom.Pts[ARow * 4 + 3]);
+      end;
+  end;
+end;
+
+function LargeRowCount(const AGeom: TTyLargeGeom): Integer;
+begin
+  case AGeom.Kind of
+    lgkBar: Result := Length(AGeom.Pts) div 3;
+    lgkSymbol: Result := Length(AGeom.Pts) div 2;
+    lgkCandle: Result := Length(AGeom.Pts) div 4;
+  else
+    Result := 0;
+  end;
+end;
+
+{ every row into the current path }
+procedure TraceLarge(P: TTyPainter; const AShape: TTyChartShape);
+var
+  i: Integer;
+  spec: TTySymbolSpec;
+begin
+  spec := LargeSymbolSpec(AShape.Large);
+  for i := 0 to LargeRowCount(AShape.Large) - 1 do
+    TraceLargeRow(P, AShape.Large, spec, i);
+end;
+
 procedure TyTraceShape(P: TTyPainter; const AShape: TTyChartShape);
 var
   i, n: Integer;
@@ -148,6 +308,8 @@ var
 begin
   if P = nil then Exit;
   case AShape.Kind of
+    cskLarge:
+      TraceLarge(P, AShape);
     cskRect:
       P.RectPath(AShape.Bounds.Left, AShape.Bounds.Top,
                  AShape.Bounds.Right, AShape.Bounds.Bottom);
@@ -570,41 +732,14 @@ procedure TyRenderElement(P: TTyPainter; const AElement: TTyChartElement);
 var
   rule: TTyFillRule;
   gx1, gy1, gx2, gy2, gr: Double;
-  gi: Integer;
   stops: array of TTyGradStop;
   img: TBGRABitmap;
   pm: TTyDoubleArray;
-begin
-  if P = nil then Exit;
-  { Nothing to draw is not an error -- a placeholder element with neither fill
-    nor stroke is a legitimate way to register a hit area with no ink. GLYPHS
-    COUNT AS INK: a caption fills no path and strokes nothing, and without
-    this it would be discarded one line before it was drawn. }
-  if (not AElement.Style.HasFill) and (AElement.Style.StrokeWidthLogical <= 0)
-    and (AElement.Caption.Text = '') then
-    Exit;
-  P.SaveState;
-  try
-    { THE CLIP FIRST, and inside the saved state so it comes off with it. The
-      painter's own state stack carries the clip, which is the whole reason
-      this costs one line: the alternative was a second stack here that had to
-      stay in step with that one. }
-    if AElement.HasClip then
-      P.ClipRect(Rect(Floor(AElement.ClipRect.Left), Floor(AElement.ClipRect.Top),
-        Ceil(AElement.ClipRect.Right), Ceil(AElement.ClipRect.Bottom)));
-    { A POLAR LINE'S SECTOR, traced as zrender's arc takes it [Batch 113] }
-    if AElement.HasClipSector then
-    begin
-      P.BeginPath;
-      TyTraceShape(P, TyClipSectorShape(AElement));
-      P.ClipPath(tfrNonZero);
-      P.BeginPath;
-    end;
-    if AElement.Style.Alpha < 1 then
-      P.SetElementAlpha(AElement.Style.Alpha);
-    P.SetLineDash(AElement.Style.DashLogical);
-    P.BeginPath;
-    TyTraceShape(P, AElement.Shape);
+
+  { the fill and the pen of the path just traced }
+  procedure PaintTraced;
+  var gi: Integer;
+  begin
     if AElement.Style.FillEvenOdd then
       rule := tfrEvenOdd
     else
@@ -664,6 +799,304 @@ begin
       else
         P.StrokePath(TTyColor(AElement.Style.StrokeColor),
                      AElement.Style.StrokeWidthLogical);
+    end;
+  end;
+
+  { the canvas draws in the bitmap's own pixels: no transform in force }
+  function IdentityMatrix: Boolean;
+  var m: TAffineMatrix;
+  begin
+    m := P.Bitmap.Canvas2D.matrix;
+    Result := (m[1, 1] = 1) and (m[1, 2] = 0) and (m[1, 3] = 0)
+      and (m[2, 1] = 0) and (m[2, 2] = 1) and (m[2, 3] = 0);
+  end;
+
+  { A LARGE BATCH IS PAINTED IN TILES, not as one path. BGRA's scanline
+    fill sorts every crossing of the path on every row it covers and builds
+    its edge table from every point, so one path of a hundred thousand
+    symbols costs far more than its pixels; a fill per symbol costs a call
+    per symbol, and composites overlapping symbols twice. A tile is the
+    bitmap's clip rect, which bounds the scan: each tile's path holds every
+    row reaching into it, so every pixel is filled by exactly one fill
+    holding every shape that covers it -- the union the single path would
+    have painted, its alpha applied once. [Batch 117] }
+  { A BATCH OF FLAT COLOURS goes through layers: every shape drawn opaque by
+    BGRA's own antialiased primitives (an ellipse, a rect, a polygon, a line
+    -- no path machinery, no edge table), then each layer laid on the bitmap
+    once with the element's alpha, the fills' first and the pen's after, as
+    the canvas fills the one path and then strokes it. The canvas composites
+    the union of the shapes once; so does this -- overlapping symbols are not
+    darkened twice the way an element per symbol would darken them. A ramp,
+    a pattern or a dash goes the slower way, through the painter's path in
+    tiles. [Batch 117] }
+  function LayerFits: Boolean;
+  begin
+    Result := ((not AElement.Style.HasFill)
+        or ((AElement.Style.FillGradient.Kind = cgkNone)
+          and not AElement.Style.FillPattern.Present))
+      and ((AElement.Style.StrokeWidthLogical <= 0)
+        or (AElement.Style.StrokeGradient.Kind = cgkNone))
+      and (Length(AElement.Style.DashLogical) = 0);
+  end;
+
+  procedure PaintLargeOnLayer(AStroke: Boolean);
+  var
+    g: TTyLargeGeom;
+    spec: TTySymbolSpec;
+    bmp, layer: TBGRABitmap;
+    n, i, j, op: Integer;
+    x0, y0, x1, y1, bx0, by0, bx1, by1, ox, oy, w, h, r, pen, reach: Double;
+    any: Boolean;
+    area: TRect;
+    c: TBGRAPixel;
+    sub: TTyChartShape;
+    pts: array of TPointF;
+  begin
+    g := AElement.Shape.Large;
+    spec := LargeSymbolSpec(g);
+    bmp := P.Bitmap;
+    n := LargeRowCount(g);
+    if AStroke then pen := AElement.Style.StrokeWidthLogical * P.PPI / 96
+    else pen := 0;
+    reach := 2 + pen / 2;
+    { the extent actually drawn, cut to the bitmap's clip and the element's }
+    any := False;
+    bx0 := 0; by0 := 0; bx1 := 0; by1 := 0;
+    for i := 0 to n - 1 do
+    begin
+      if not LargeRowBox(g, i, x0, y0, x1, y1) then Continue;
+      if not any then
+      begin
+        bx0 := x0; by0 := y0; bx1 := x1; by1 := y1;
+        any := True;
+      end
+      else
+      begin
+        if x0 < bx0 then bx0 := x0;
+        if y0 < by0 then by0 := y0;
+        if x1 > bx1 then bx1 := x1;
+        if y1 > by1 then by1 := y1;
+      end;
+    end;
+    if not any then Exit;
+    area := bmp.ClipRect;
+    if AElement.HasClip then
+      area := Rect(Max(area.Left, Floor(AElement.ClipRect.Left)),
+        Max(area.Top, Floor(AElement.ClipRect.Top)),
+        Min(area.Right, Ceil(AElement.ClipRect.Right)),
+        Min(area.Bottom, Ceil(AElement.ClipRect.Bottom)));
+    { the antialiased edge and half the pen; far off the bitmap is no matter }
+    if bx0 - reach > area.Left then area.Left := Floor(bx0 - reach);
+    if by0 - reach > area.Top then area.Top := Floor(by0 - reach);
+    if bx1 + reach < area.Right then area.Right := Ceil(bx1 + reach);
+    if by1 + reach < area.Bottom then area.Bottom := Ceil(by1 + reach);
+    if (area.Right <= area.Left) or (area.Bottom <= area.Top) then Exit;
+    if AStroke then c := TyColorToBGRA(TTyColor(AElement.Style.StrokeColor))
+    else c := TyColorToBGRA(TTyColor(AElement.Style.FillColor));
+    op := Round(Max(Double(0), Min(Double(1), AElement.Style.Alpha)) * c.alpha);
+    if op <= 0 then Exit;
+    c.alpha := 255;
+    { pixel-centred primitives: the canvas' (0, 0) is a pixel's corner }
+    ox := area.Left + 0.5;
+    oy := area.Top + 0.5;
+    layer := TBGRABitmap.Create(area.Right - area.Left, area.Bottom - area.Top,
+      BGRAPixelTransparent);
+    try
+      layer.LineCap := pecFlat;
+      for i := 0 to n - 1 do
+      begin
+        if not LargeRowBox(g, i, x0, y0, x1, y1) then Continue;
+        if (x1 < area.Left - reach) or (x0 > area.Right + reach)
+          or (y1 < area.Top - reach) or (y0 > area.Bottom + reach) then Continue;
+        if g.Kind = lgkCandle then
+        begin
+          if AStroke then
+            layer.DrawLineAntialias(x0 - ox, g.Pts[i * 4 + 2] - oy, x0 - ox,
+              g.Pts[i * 4 + 3] - oy, c, pen, False);
+          Continue;
+        end;
+        if (g.Kind = lgkBar) or g.Boost or (TTySymbolKind(g.SymKind) = tsyRect) then
+        begin
+          if AStroke then layer.RectangleAntialias(x0 - ox, y0 - oy, x1 - ox, y1 - oy, c, pen)
+          else layer.FillRectAntialias(x0 - ox, y0 - oy, x1 - ox, y1 - oy, c);
+          Continue;
+        end;
+        w := g.SymW;
+        h := g.SymH;
+        case TTySymbolKind(g.SymKind) of
+          tsyNone: ;
+          tsyCircle:
+            begin
+              r := Min(w, h) / 2;
+              if AStroke then
+                layer.EllipseAntialias((x0 + x1) / 2 - ox, (y0 + y1) / 2 - oy, r, r, c, pen)
+              else
+                layer.FillEllipseAntialias((x0 + x1) / 2 - ox, (y0 + y1) / 2 - oy, r, r, c);
+            end;
+          tsySquare:
+            begin
+              r := Min(w, h);
+              if AStroke then
+                layer.RectangleAntialias(x0 - ox, y0 - oy, x0 + r - ox, y0 + r - oy, c, pen)
+              else
+                layer.FillRectAntialias(x0 - ox, y0 - oy, x0 + r - ox, y0 + r - oy, c);
+            end;
+          tsyRoundRect:
+            begin
+              r := Min(w, h) / 4;
+              if AStroke then
+                layer.RoundRectAntialias(x0 - ox, y0 - oy, x1 - ox, y1 - oy, r, r, c, pen)
+              else
+                layer.FillRoundRectAntialias(x0 - ox, y0 - oy, x1 - ox, y1 - oy, r, r, c);
+            end;
+        else
+          begin
+            sub := TyBuildSymbolInBox(spec, TyRectF(x0, y0, x1, y1));
+            if (sub.Kind in [cskPolygon, cskPolyline]) and (Length(sub.Points) >= 2) then
+            begin
+              SetLength(pts, Length(sub.Points));
+              for j := 0 to High(sub.Points) do
+                pts[j] := PointF(sub.Points[j].X - ox, sub.Points[j].Y - oy);
+              if AStroke then
+              begin
+                if sub.Kind = cskPolyline then layer.DrawPolyLineAntialias(pts, c, pen)
+                else layer.DrawPolygonAntialias(pts, c, pen);
+              end
+              else if sub.Kind = cskPolygon then
+                layer.FillPolyAntialias(pts, c);
+            end;
+          end;
+        end;
+      end;
+      bmp.PutImage(area.Left, area.Top, layer, dmDrawWithTransparency, op);
+    finally
+      layer.Free;
+    end;
+  end;
+
+  procedure PaintLargeInTiles;
+  var
+    g: TTyLargeGeom;
+    spec: TTySymbolSpec;
+    bmp: TBGRABitmap;
+    n, i, j, tx, ty, tx0, tx1, ty0, ty1, nx, ny, t, tile, k: Integer;
+    x0, y0, x1, y1, margin: Double;
+    counts, starts, rows: array of Integer;
+    old, r: TRect;
+
+    function Span(var A0, A1: Double; AExt: Integer; out AT0, AT1: Integer): Boolean;
+    begin
+      A0 := A0 - margin;
+      A1 := A1 + margin;
+      Result := (A1 >= 0) and (A0 < AExt);
+      if not Result then Exit;
+      if A0 < 0 then A0 := 0;
+      if A1 > AExt - 1 then A1 := AExt - 1;
+      AT0 := Trunc(A0) div tile;
+      AT1 := Trunc(A1) div tile;
+    end;
+
+  begin
+    g := AElement.Shape.Large;
+    spec := LargeSymbolSpec(g);
+    bmp := P.Bitmap;
+    tile := TyLargeTilePx;
+    n := LargeRowCount(g);
+    if (n = 0) or (bmp.Width <= 0) or (bmp.Height <= 0) then Exit;
+    nx := (bmp.Width + tile - 1) div tile;
+    ny := (bmp.Height + tile - 1) div tile;
+    { the antialiased edge and the pen reach past the shape }
+    margin := 2 + Max(Double(0), AElement.Style.StrokeWidthLogical) * P.PPI / 96;
+    SetLength(counts, nx * ny);
+    SetLength(starts, nx * ny + 1);
+    for t := 0 to nx * ny - 1 do counts[t] := 0;
+    for k := 0 to 1 do
+    begin
+      if k = 1 then
+      begin
+        starts[0] := 0;
+        for t := 0 to nx * ny - 1 do starts[t + 1] := starts[t] + counts[t];
+        SetLength(rows, starts[nx * ny]);
+        for t := 0 to nx * ny - 1 do counts[t] := starts[t];
+      end;
+      for i := 0 to n - 1 do
+      begin
+        if not LargeRowBox(g, i, x0, y0, x1, y1) then Continue;
+        if not Span(x0, x1, bmp.Width, tx0, tx1) then Continue;
+        if not Span(y0, y1, bmp.Height, ty0, ty1) then Continue;
+        for ty := ty0 to ty1 do
+          for tx := tx0 to tx1 do
+          begin
+            t := ty * nx + tx;
+            if k = 1 then rows[counts[t]] := i;
+            Inc(counts[t]);
+          end;
+      end;
+    end;
+    old := bmp.ClipRect;
+    try
+      for t := 0 to nx * ny - 1 do
+      begin
+        if starts[t + 1] = starts[t] then Continue;
+        tx := t mod nx;
+        ty := t div nx;
+        r := Rect(Max(old.Left, tx * tile), Max(old.Top, ty * tile),
+          Min(old.Right, (tx + 1) * tile), Min(old.Bottom, (ty + 1) * tile));
+        if (r.Right <= r.Left) or (r.Bottom <= r.Top) then Continue;
+        bmp.ClipRect := r;
+        P.BeginPath;
+        for j := starts[t] to starts[t + 1] - 1 do
+          TraceLargeRow(P, g, spec, rows[j]);
+        PaintTraced;
+      end;
+    finally
+      bmp.ClipRect := old;
+    end;
+  end;
+
+begin
+  if P = nil then Exit;
+  { Nothing to draw is not an error -- a placeholder element with neither fill
+    nor stroke is a legitimate way to register a hit area with no ink. GLYPHS
+    COUNT AS INK: a caption fills no path and strokes nothing, and without
+    this it would be discarded one line before it was drawn. }
+  if (not AElement.Style.HasFill) and (AElement.Style.StrokeWidthLogical <= 0)
+    and (AElement.Caption.Text = '') then
+    Exit;
+  P.SaveState;
+  try
+    { THE CLIP FIRST, and inside the saved state so it comes off with it. The
+      painter's own state stack carries the clip, which is the whole reason
+      this costs one line: the alternative was a second stack here that had to
+      stay in step with that one. }
+    if AElement.HasClip then
+      P.ClipRect(Rect(Floor(AElement.ClipRect.Left), Floor(AElement.ClipRect.Top),
+        Ceil(AElement.ClipRect.Right), Ceil(AElement.ClipRect.Bottom)));
+    { A POLAR LINE'S SECTOR, traced as zrender's arc takes it [Batch 113] }
+    if AElement.HasClipSector then
+    begin
+      P.BeginPath;
+      TyTraceShape(P, TyClipSectorShape(AElement));
+      P.ClipPath(tfrNonZero);
+      P.BeginPath;
+    end;
+    if AElement.Style.Alpha < 1 then
+      P.SetElementAlpha(AElement.Style.Alpha);
+    P.SetLineDash(AElement.Style.DashLogical);
+    if (AElement.Shape.Kind = cskLarge) and (P.Bitmap <> nil) and IdentityMatrix
+      and LayerFits then
+    begin
+      if AElement.Style.HasFill then PaintLargeOnLayer(False);
+      if AElement.Style.StrokeWidthLogical > 0 then PaintLargeOnLayer(True);
+    end
+    else if (AElement.Shape.Kind = cskLarge) and (TyLargeTilePx > 0) and (P.Bitmap <> nil)
+      and IdentityMatrix then
+      PaintLargeInTiles
+    else
+    begin
+      P.BeginPath;
+      TyTraceShape(P, AElement.Shape);
+      PaintTraced;
     end;
   finally
     { Restore even if a trace raised: the canvas state is shared, and leaking a

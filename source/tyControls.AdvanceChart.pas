@@ -62,6 +62,7 @@ uses
   tyControls.AdvChart.AxisLabels, tyControls.AdvChart.LabelLayout,
   tyControls.AdvChart.Export, tyControls.AdvChart.Loading,
   tyControls.AdvChart.Convert, tyControls.AdvChart.Jitter,
+  tyControls.AdvChart.Large,
   tyControls.AdvChart.Polar, tyControls.AdvChart.PolarBar,
   fpjson, contnrs, tyControls.SubPixel;
 
@@ -347,6 +348,8 @@ type
     { THE SCATTER JITTER'S PASS: the random state and every category axis'
       placed points, started again by every BuildSeriesList [Batch 110] }
     FJitter: TTyJitterPass;
+    { LARGE MODE, by binding slot, as the last build decided it [Batch 117] }
+    FLargeKinds: array of TTyLargeKind;
     { Which series accumulate onto which, and into which columns. Solved in
       Rebuild, between filling the stores and sizing the axes: the totals have
       to exist before the value axis is asked how far it must reach. }
@@ -1171,6 +1174,13 @@ type
     function StackFor(ASlot: Integer): TTySeriesStack;
     { The symbol spec for a series slot, over its type's own default. }
     function SymbolFor(ASlot: Integer): TTySymbolSpec;
+    { whether this series draws as one batch: preparePipelineContext's
+      `large` against the count after the dataZoom filter, on a cartesian
+      only [Batch 117] }
+    function LargeKindOf(ASlot: Integer): TTyLargeKind;
+    { the row a large element's own handler gives the pointer: the batch's
+      scan, -1 for none (a candle's path has no data) }
+    function LargeRowAt(AElement, AX, AY: Integer): Integer;
     function SeriesIntIn(ASeriesIndex: Integer; const AKey: string;
       ADefault: Integer): Integer;
     { The label interval the layout gave this axis, or 1 when it draws them
@@ -1917,6 +1927,9 @@ type
       the series a second time and risking a different answer. -1 for none. }
     function HitTestAt(AX, AY: Integer;
       out AElement: Integer): TTyChartDatumRef; overload;
+    { THE LARGE MODE the last build drew a series in: lgkNone for one drawn
+      an element per datum [Batch 117] }
+    function SeriesLargeKind(ASeriesIndex: Integer): TTyLargeKind;
     { For a test or a designer to look inside. nil until the first build. }
     property Build: TTyChartBuild read FBuild;
     { THE visualMap MODEL AS THE LAST BUILD SOLVED IT: the completed
@@ -4006,6 +4019,8 @@ var
   labelS: TTyStyleSet;
   lblHasCol: Boolean;
   lblCol: Cardinal;
+  largeBars: TTyBoolArray;
+  i: Integer;
 begin
   FLastRect := ARect;
   FLastPPI := APPI;
@@ -4075,7 +4090,10 @@ begin
     ActiveController.Metric(TyAdvChartMinorTickLenVar, TyAdvChartMinorTickLen),
     FAxisMemory);
   { AFTER phase C, for the reason on FBarCols. }
-  FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex);
+  { a large bar's barMinWidth defaults to half a pixel [Batch 117] }
+  SetLength(largeBars, Length(FBindings));
+  for i := 0 to High(largeBars) do largeBars[i] := LargeKindOf(i) = lgkBar;
+  FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex, largeBars);
   { AND THE BARS ON A POLAR [Batch 113] }
   FPolarBars := TySolvePolarBars(FOption, FBindings, FStores, FStacks, FIndex, FPolars);
   { AND THE CANDLES AND BOXES, by the same band [Batch 108] }
@@ -12045,6 +12063,9 @@ begin
       Inc(drawn, TyBuildCalendar(FCalendars[i], CalendarInk, AMeasurer, APPI, list));
   if drawn > furniture then ViewDrew(cvCalendar);
   furniture := drawn;
+  { nothing is large until the loop below says so [Batch 117] }
+  SetLength(FLargeKinds, Length(FBindings));
+  for i := 0 to High(FLargeKinds) do FLargeKinds[i] := lgkNone;
   if Length(FBindings) = 0 then Exit;
   begin
     for i := 0 to High(FBindings) do
@@ -12244,6 +12265,9 @@ begin
         pass already computed, so it is fetched rather than re-derived. }
       v.Line.LabelStep := LabelStepFor(FBindings[i].BaseAxis);
       v.Symbol := SymbolFor(i);
+      { LARGE MODE: one batch per style [Batch 117] }
+      v.Large := LargeKindOf(i);
+      FLargeKinds[i] := v.Large;
       if FBindings[i].SeriesType = 'effectScatter' then RippleOf(i, v);
       if (FBindings[i].SeriesType = 'scatter')
         or (FBindings[i].SeriesType = 'effectScatter') then
@@ -13164,6 +13188,17 @@ begin
   AElement := idx;
   Result := FPaintList.Element(idx).Datum;
   if Result.SeriesIndex < 0 then Exit;
+  { A LARGE BATCH: the row is its own scan's, and a hit without one (a
+    candle's path, a bar's clip letting a gap through) names the element
+    and no datum [Batch 117] }
+  if FPaintList.Element(idx).Shape.Kind = cskLarge then
+  begin
+    row := LargeRowAt(idx, AX, AY);
+    slot := SlotOfSeries(Result.SeriesIndex);
+    if (row < 0) or (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then
+      Exit(TyChartNoDatum);
+    Exit(TyChartDatum(Result.SeriesIndex, row, FStores[slot].GetRawIndex(row)));
+  end;
   { A RUN ELEMENT -- one element standing for a whole series, which is what a
     line's stroke is. The list reports it as `(series, -1)`, which
     TyChartDatumValid rejects, and because the hit test answers with the
@@ -13181,6 +13216,53 @@ begin
     Result := TyChartDatum(Result.SeriesIndex, row,
       FStores[slot].GetRawIndex(row));
   end;
+end;
+
+{ ==================== large mode [Batch 117] ==================== }
+
+function TTyAdvanceChart.LargeKindOf(ASlot: Integer): TTyLargeKind;
+var
+  d: TJSONData;
+  node: TJSONObject;
+  st: string;
+begin
+  Result := lgkNone;
+  if (FOption = nil) or (ASlot < 0) or (ASlot > High(FBindings))
+    or (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
+  st := FBindings[ASlot].SeriesType;
+  if TyLargeKindOfType(st) = lgkNone then Exit;
+  { ON A CARTESIAN ONLY: barGrid's large layout returns early off one
+    (createLarge would then read no points), and the polar and calendar
+    scatters are left drawn one by one }
+  if (FBindings[ASlot].Cart = nil) or (FBindings[ASlot].Polar <> nil)
+    or (FBindings[ASlot].CalendarIndex >= 0) then Exit;
+  d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if not (d is TJSONObject) then Exit;
+  node := TJSONObject(d);
+  if not TyLargeIsOn(st, node.Find('large'), node.Find('largeThreshold'),
+    FStores[ASlot].Count) then Exit;
+  { A path:// SYMBOL stays one element per row: upstream's batch would
+    replay one fitted path, which this port does not model }
+  if (st = 'scatter') and (SymbolFor(ASlot).Kind = tsyPath) then Exit;
+  Result := TyLargeKindOfType(st);
+end;
+
+function TTyAdvanceChart.LargeRowAt(AElement, AX, AY: Integer): Integer;
+var el: TTyChartElement;
+begin
+  Result := -1;
+  if (FPaintList = nil) or (AElement < 0) or (AElement >= FPaintList.Count) then Exit;
+  el := FPaintList.Element(AElement);
+  if el.Shape.Kind <> cskLarge then Exit;
+  Result := TyLargeIndexAt(el.Shape.Large, AX, AY);
+end;
+
+function TTyAdvanceChart.SeriesLargeKind(ASeriesIndex: Integer): TTyLargeKind;
+var slot: Integer;
+begin
+  Result := lgkNone;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot >= 0) and (slot <= High(FLargeKinds)) then Result := FLargeKinds[slot];
 end;
 
 { ==================== the tooltip ==================== }
@@ -14254,6 +14336,22 @@ begin
     el := FPaintList.Element(idx);
     d := el.Datum;
     Result.Id := idx + 1;
+    { A LARGE BATCH is one element: the pointer moving from row to row in
+      it is no out and no over; the row is the element's handler's (its
+      scan), and with none there is no data at all -- no event, no states
+      (a large element has none) [Batch 117] }
+    if (d.Kind = ctkSeries) and (d.SeriesIndex >= 0) and (el.Shape.Kind = cskLarge) then
+    begin
+      k := LargeRowAt(idx, AX, AY);
+      slot := SlotOfSeries(d.SeriesIndex);
+      if (k >= 0) and (slot >= 0) and (slot <= High(FStores)) and (FStores[slot] <> nil) then
+      begin
+        Result := SeriesEventTarget(TyChartDatum(d.SeriesIndex, k,
+          FStores[slot].GetRawIndex(k)), idx);
+        Result.HdKind := 0;
+      end;
+      Exit;
+    end;
     case d.Kind of
       ctkSeries:
         if d.SeriesIndex >= 0 then
