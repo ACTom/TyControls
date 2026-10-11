@@ -412,6 +412,35 @@ type
     procedure TestASegmentPaintedAsAGradientBetweenItsThumbs;
   end;
 
+  { OnThumbChanging through the real paths -- MouseDown / MouseMove / MouseUp, KeyDown,
+    LM_MOUSEWHEEL, the jump to a press on the bare track -- and never for a value set from code.
+    The handler logs `K<index>:<proposed>@<value the thumb has while asked> ` beside the input
+    base's `S<i>` / `T<i>` / `C`, and as a test sets it up refuses the first and last thumbs
+    (FPinEnds), refuses every move (FRefuse), snaps to multiples of FSnap, or answers FForceTo. }
+  TTyMultiTrackChangingTest = class(TMultiTrackInputBase)
+  private
+    FPinEnds: Boolean;
+    FRefuse: Boolean;
+    FSnap: Integer;
+    FForce: Boolean;
+    FForceTo: Integer;
+    procedure Changing(Sender: TObject; AIndex: Integer; var AValue: Integer;
+      var AAllow: Boolean);
+    { A point on a final bar's track (horizontal, no readout) whose value is AValue. }
+    function PtOn(ABar: TTyMultiTrackBarBase; AValue: Integer): TPoint;
+  protected
+    procedure SetUp; override;
+  published
+    procedure TestPinnedEndsStayThroughEveryUserPath;
+    procedure TestAPinnedThumbStaysSelectable;
+    procedure TestChangingComesBeforeTheChangeAndARefusalReportsNothing;
+    procedure TestSnappingLandsADragOnMultiplesOfFive;
+    procedure TestTheHandlersAnswerIsHeldBetweenTheNeighbours;
+    procedure TestARefusedDragKeepsItsGrip;
+    procedure TestCodeWritesAreNotAsked;
+    procedure TestTheFinalBarsAskThroughTheirPublishedEvent;
+  end;
+
 implementation
 
 { TMultiProbe }
@@ -4245,6 +4274,383 @@ begin
   end;
 end;
 
+{ TTyMultiTrackChangingTest }
+
+procedure TTyMultiTrackChangingTest.SetUp;
+begin
+  inherited SetUp;
+  FPinEnds := False;
+  FRefuse := False;
+  FSnap := 0;
+  FForce := False;
+  FForceTo := 0;
+  FBar.OnThumbChanging := @Changing;
+end;
+
+procedure TTyMultiTrackChangingTest.Changing(Sender: TObject; AIndex: Integer;
+  var AValue: Integer; var AAllow: Boolean);
+var
+  bar: TTyMultiTrackBarBase;
+begin
+  bar := Sender as TTyMultiTrackBarBase;
+  AssertTrue('allowed until the handler says otherwise', AAllow);
+  FLog := FLog + Format('K%d:%d@%d ', [AIndex, AValue, bar.ThumbValues[AIndex]]);
+  if FRefuse then AAllow := False;
+  if FPinEnds and ((AIndex = 0) or (AIndex = bar.ThumbCount - 1)) then AAllow := False;
+  if FSnap > 0 then AValue := Round(AValue / FSnap) * FSnap;
+  if FForce then AValue := FForceTo;
+end;
+
+function TTyMultiTrackChangingTest.PtOn(ABar: TTyMultiTrackBarBase; AValue: Integer): TPoint;
+var
+  tw: Integer;
+begin
+  tw := TyTrackThumbLen(96);
+  Result := Point(TyTrackThumbOffset(ABar.ClientWidth, tw, ABar.Min, ABar.Max, AValue, False)
+    + tw div 2, ABar.Height div 2);
+  AssertEquals('fixture: the point is at that value', AValue, ABar.ValueAtPoint(Result.X, Result.Y));
+end;
+
+procedure TTyMultiTrackChangingTest.TestPinnedEndsStayThroughEveryUserPath;
+var
+  p, q: TPoint;
+begin
+  FBar.Put([20, 40, 60, 80]);
+  FPinEnds := True;
+  { The pointer. }
+  p := At(20);
+  q := At(30);
+  FBar.Press(p.X, p.Y);
+  FBar.Drag(q.X, q.Y);
+  q := At(10);
+  FBar.Drag(q.X, q.Y);
+  FBar.Release(q.X, q.Y);
+  p := At(80);
+  q := At(90);
+  FBar.Press(p.X, p.Y);
+  FBar.Drag(q.X, q.Y);
+  FBar.Release(q.X, q.Y);
+  AssertEquals('dragged, the ends stay', '20,40,60,80', Values);
+  p := At(40);
+  q := At(50);
+  FBar.Press(p.X, p.Y);
+  FBar.Drag(q.X, q.Y);
+  FBar.Release(q.X, q.Y);
+  AssertEquals('an inner thumb drags as usual', '20,50,60,80', Values);
+  { The keys. }
+  FBar.SelectedThumb := 0;
+  AssertEquals('the key is still the bar''s', 0, FBar.Key(VK_RIGHT));
+  FBar.Key(VK_END);
+  FBar.Key(VK_PRIOR);
+  FBar.SelectedThumb := 3;
+  FBar.Key(VK_LEFT);
+  FBar.Key(VK_HOME);
+  FBar.Key(VK_NEXT);
+  AssertEquals('keyed, the ends stay', '20,50,60,80', Values);
+  FBar.SelectedThumb := 2;
+  FBar.Key(VK_RIGHT);
+  AssertEquals('an inner thumb keys as usual', '20,50,61,80', Values);
+  { The wheel. }
+  FBar.SelectedThumb := 3;
+  AssertTrue('the wheel is still the bar''s', FBar.Wheel(-120));
+  FBar.SelectedThumb := 0;
+  FBar.Wheel(120);
+  AssertEquals('wheeled, the ends stay', '20,50,61,80', Values);
+  FBar.SelectedThumb := 1;
+  FBar.Wheel(120);
+  AssertEquals('an inner thumb wheels as usual', '20,51,61,80', Values);
+  { The jump to a press on the bare track, and the drag that press goes on into. }
+  FLog := '';
+  p := At(5);
+  q := At(12);
+  FBar.Press(p.X, p.Y);
+  FBar.Drag(q.X, q.Y);
+  FBar.Release(q.X, q.Y);
+  AssertEquals('the first thumb is nearest: selected, asked, and it does not come',
+    'S0 K0:5@20 K0:12@20 ', FLog);
+  p := At(95);
+  FBar.Press(p.X, p.Y);
+  FBar.Release(p.X, p.Y);
+  AssertEquals('nor does the last', '20,51,61,80', Values);
+  AssertEquals(3, FBar.SelectedThumb);
+  p := At(70);
+  FBar.Press(p.X, p.Y);
+  FBar.Release(p.X, p.Y);
+  AssertEquals('an inner thumb comes to the press as usual', '20,51,70,80', Values);
+end;
+
+procedure TTyMultiTrackChangingTest.TestAPinnedThumbStaysSelectable;
+var
+  p: TPoint;
+begin
+  FBar.Put([20, 40, 60, 80]);
+  FPinEnds := True;
+  FBar.SelectedThumb := 1;
+  FLog := '';
+  p := At(20);
+  FBar.Press(p.X, p.Y);
+  FBar.Release(p.X, p.Y);
+  AssertEquals('a press selects it', 0, FBar.SelectedThumb);
+  AssertEquals('reported as any selection', 'S0 ', FLog);
+  TBaseAccess(FBar).MouseDown(mbLeft, [ssLeft, ssDouble], p.X, p.Y);
+  FBar.Release(p.X, p.Y);
+  AssertEquals('a double-click keeps it selected', 0, FBar.SelectedThumb);
+  AssertEquals('Tab leaves it for the next thumb', 0, FBar.Key(VK_TAB));
+  AssertEquals(1, FBar.SelectedThumb);
+  FBar.Key(VK_TAB, [ssShift]);
+  AssertEquals('and Shift+Tab comes back to it', 0, FBar.SelectedThumb);
+  FBar.SelectedThumb := 2;
+  FBar.Key(VK_TAB);
+  AssertEquals('the last thumb is a Tab stop too', 3, FBar.SelectedThumb);
+  FBar.SelectedThumb := 2;
+  FBar.Enter;
+  AssertEquals('entering from the keyboard starts on it', 0, FBar.SelectedThumb);
+  AssertEquals('none of it moved a thumb', '20,40,60,80', Values);
+end;
+
+procedure TTyMultiTrackChangingTest.TestChangingComesBeforeTheChangeAndARefusalReportsNothing;
+var
+  p, q: TPoint;
+begin
+  FBar.Put([20, 40, 60, 80]);
+  p := At(40);
+  FBar.Press(p.X, p.Y);
+  FLog := '';
+  q := At(45);
+  FBar.Drag(q.X, q.Y);
+  AssertEquals('asked while the thumb is still where it was, then the change',
+    'K1:45@40 T1 C ', FLog);
+  FLog := '';
+  FBar.Drag(q.X, q.Y);
+  AssertEquals('a step that goes nowhere is not offered', '', FLog);
+  FBar.Release(q.X, q.Y);
+  FLog := '';
+  FBar.Key(VK_RIGHT);
+  AssertEquals('a key: the same order', 'K1:46@45 T1 C ', FLog);
+  FLog := '';
+  FBar.Wheel(120);
+  AssertEquals('the wheel: the same order', 'K1:47@46 T1 C ', FLog);
+  FRefuse := True;
+  FLog := '';
+  FBar.Key(VK_RIGHT);
+  FBar.Wheel(120);
+  p := At(47);
+  q := At(55);
+  FBar.Press(p.X, p.Y);
+  FBar.Drag(q.X, q.Y);
+  FBar.Release(q.X, q.Y);
+  AssertEquals('refused: asked, and no OnThumbChange or OnChange',
+    'K1:48@47 K1:48@47 K1:55@47 ', FLog);
+  AssertEquals('20,47,60,80', Values);
+end;
+
+procedure TTyMultiTrackChangingTest.TestSnappingLandsADragOnMultiplesOfFive;
+var
+  p, q: TPoint;
+  x, v: Integer;
+  bad: string;
+begin
+  FBar.MinGap := 2;
+  FBar.Put([20, 50, 80]);
+  FSnap := 5;
+  p := At(50);
+  FBar.Press(p.X, p.Y);
+  bad := '';
+  for x := 0 to W - 1 do
+  begin
+    FBar.Drag(x, p.Y);
+    v := FBar.ThumbValues[1];
+    if (v mod 5 <> 0) and (v <> 22) and (v <> 78) then
+      bad := bad + Format('x=%d:%d ', [x, v]);
+  end;
+  AssertEquals('every step lands on a multiple of 5 (or MinGap from a neighbour)', '', bad);
+  q := At(63);
+  FBar.Drag(q.X, q.Y);
+  AssertEquals('63 snaps to 65', '20,65,80', Values);
+  q := At(67);
+  FBar.Drag(q.X, q.Y);
+  AssertEquals('67 snaps back to 65', '20,65,80', Values);
+  q := At(68);
+  FBar.Drag(q.X, q.Y);
+  AssertEquals('68 snaps on to 70', '20,70,80', Values);
+  FBar.Drag(0, p.Y);
+  AssertEquals('22 snaps to 20, which is held MinGap from the neighbour', '20,22,80', Values);
+  FBar.Drag(W - 1, p.Y);
+  AssertEquals('78 snaps to 80, which is held MinGap from the neighbour', '20,78,80', Values);
+  FBar.Release(W - 1, p.Y);
+end;
+
+procedure TTyMultiTrackChangingTest.TestTheHandlersAnswerIsHeldBetweenTheNeighbours;
+begin
+  FBar.MinGap := 5;
+  FBar.Put([20, 50, 80]);
+  FBar.SelectedThumb := 1;
+  FForce := True;
+  FForceTo := 1000;
+  FBar.Key(VK_RIGHT);
+  AssertEquals('past Max and the neighbour: MinGap short of the neighbour', '20,75,80', Values);
+  FForceTo := -1000;
+  FBar.Key(VK_LEFT);
+  AssertEquals('below Min and the neighbour: MinGap short of the neighbour', '20,25,80', Values);
+  FBar.SelectedThumb := 2;
+  FForceTo := 1000;
+  FBar.Key(VK_LEFT);
+  AssertEquals('the last thumb: Max', '20,25,100', Values);
+  FForceTo := 100;
+  FLog := '';
+  FBar.Key(VK_LEFT);
+  AssertEquals('answered with where it is: asked, nothing reported', 'K2:99@100 ', FLog);
+  AssertEquals('20,25,100', Values);
+end;
+
+procedure TTyMultiTrackChangingTest.TestARefusedDragKeepsItsGrip;
+var
+  p, q: TPoint;
+begin
+  FBar.Put([20, 60]);
+  p := Shifted(At(20), 4);
+  AssertTrue('fixture: off the centre, on the thumb', PtInRect(FBar.ThumbRect(0), p));
+  FBar.Press(p.X, p.Y);
+  FRefuse := True;
+  q := Shifted(At(30), 4);
+  FBar.Drag(q.X, q.Y);
+  AssertEquals('refused: it stays', '20,60', Values);
+  FRefuse := False;
+  q := Shifted(At(35), 4);
+  AssertTrue('fixture: the pointer itself is not at 35', FBar.ValueAtPoint(q.X, q.Y) <> 35);
+  FBar.Drag(q.X, q.Y);
+  AssertEquals('allowed again: it lands where the grip says, not under the pointer', '35,60',
+    Values);
+  FBar.Release(q.X, q.Y);
+end;
+
+procedure TTyMultiTrackChangingTest.TestCodeWritesAreNotAsked;
+var
+  multi: TTyMultiTrackBar;
+  range: TTyRangeTrackBar;
+begin
+  FBar.Put([20, 40, 60, 80]);
+  FPinEnds := True;
+  FLog := '';
+  FBar.SetThumbValue(0, 10);
+  FBar.SetThumbValue(1, 45);
+  AssertEquals('SetThumbValue is not asked, even for a pinned thumb', 'T0 C T1 C ', FLog);
+  AssertEquals('10,45,60,80', Values);
+  FLog := '';
+  FBar.Put([30, 40, 50]);
+  FBar.Min := 35;
+  FBar.MinGap := 8;
+  FBar.Max := 60;
+  AssertTrue('fixture: the thumbs did move', FLog <> '');
+  AssertEquals('a whole set, Min, MinGap, Max: not asked', 0, Pos('K', FLog));
+  FLog := '';
+  FBar.BeginReading;
+  FBar.Put([90, 10]);
+  FBar.SetThumbValue(0, 70);
+  FBar.EndReading;
+  AssertEquals('reading a form: not asked', '', FLog);
+
+  multi := TTyMultiTrackBar.Create(FForm);
+  multi.Parent := FForm;
+  multi.OnThumbChanging := @Changing;
+  multi.OnThumbChange := @Logged;
+  FLog := '';
+  multi.Thumbs[0].Value := 10;
+  multi.Thumbs[1].Value := 55;
+  multi.Thumbs[2].Value := 90;
+  AssertEquals('the items'' values: not asked', 'T0 T1 T2 ', FLog);
+  AssertEquals('10,55,90', Format('%d,%d,%d', [multi.ThumbValues[0], multi.ThumbValues[1],
+    multi.ThumbValues[2]]));
+
+  range := TTyRangeTrackBar.Create(FForm);
+  range.Parent := FForm;
+  range.OnThumbChanging := @Changing;
+  range.OnThumbChange := @Logged;
+  FLog := '';
+  range.Ranges[0].Low := 30;
+  range.Ranges[0].High := 70;
+  range.LowValue := 35;
+  range.HighValue := 65;
+  AssertEquals('Low / High / LowValue / HighValue: not asked', 'T0 T1 T0 T1 ', FLog);
+  AssertEquals('35..65', Format('%d..%d', [range.LowValue, range.HighValue]));
+end;
+
+procedure TTyMultiTrackChangingTest.TestTheFinalBarsAskThroughTheirPublishedEvent;
+var
+  multi: TTyMultiTrackBar;
+  range: TTyRangeTrackBar;
+  p, q: TPoint;
+  k: Word;
+
+  function MultiValues: string;
+  var
+    i: Integer;
+  begin
+    Result := '';
+    for i := 0 to multi.ThumbCount - 1 do
+    begin
+      if i > 0 then Result := Result + ',';
+      Result := Result + IntToStr(multi.ThumbValues[i]);
+    end;
+  end;
+
+begin
+  { A gradient editor: four stops, the first and the last pinned. }
+  multi := TTyMultiTrackBar.Create(FForm);
+  multi.Parent := FForm;
+  multi.Font.PixelsPerInch := 96;
+  multi.SetBounds(0, 40, 400, 24);
+  multi.Controller := FCtl;
+  multi.Thumbs.BeginUpdate;
+  try
+    multi.Thumbs.Clear;
+    multi.Thumbs.Add.Value := 0;
+    multi.Thumbs.Add.Value := 35;
+    multi.Thumbs.Add.Value := 70;
+    multi.Thumbs.Add.Value := 100;
+  finally
+    multi.Thumbs.EndUpdate;
+  end;
+  multi.OnThumbChanging := @Changing;
+  multi.OnThumbSelect := @Selected;
+  FPinEnds := True;
+  FLog := '';
+  p := PtOn(multi, 0);
+  q := PtOn(multi, 20);
+  TBaseAccess(multi).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  TBaseAccess(multi).MouseMove([ssLeft], q.X, q.Y);
+  TBaseAccess(multi).MouseUp(mbLeft, [], q.X, q.Y);
+  AssertEquals('the first stop is selected, asked, and stays', 'S0 K0:20@0 ', FLog);
+  AssertEquals('0,35,70,100', MultiValues);
+  AssertEquals('its item agrees', 0, multi.Thumbs[0].Value);
+  p := PtOn(multi, 35);
+  q := PtOn(multi, 45);
+  TBaseAccess(multi).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  TBaseAccess(multi).MouseMove([ssLeft], q.X, q.Y);
+  TBaseAccess(multi).MouseUp(mbLeft, [], q.X, q.Y);
+  AssertEquals('an inner stop moves', '0,45,70,100', MultiValues);
+  AssertEquals('its item with it', 45, multi.Thumbs[1].Value);
+
+  range := TTyRangeTrackBar.Create(FForm);
+  range.Parent := FForm;
+  range.OnThumbChanging := @Changing;
+  FPinEnds := False;
+  FSnap := 5;
+  range.SelectedThumb := 1;
+  FLog := '';
+  k := VK_PRIOR;
+  TBaseAccess(range).KeyDown(k, []);
+  AssertEquals('the range bar asks too', 'K1:85@75 ', FLog);
+  k := VK_RIGHT;
+  TBaseAccess(range).KeyDown(k, []);
+  AssertEquals('85 + 1 snaps back to 85', 85, range.HighValue);
+  range.LineSize := 5;
+  k := VK_RIGHT;
+  TBaseAccess(range).KeyDown(k, []);
+  AssertEquals('a step of 5 snaps to the next stop', 90, range.HighValue);
+  AssertEquals('the range reads it', 90, range.Ranges[0].High);
+end;
+
 initialization
   RegisterTest(TTyMultiTrackModelTest);
   RegisterTest(TTyMultiTrackGeometryTest);
@@ -4258,4 +4664,5 @@ initialization
   RegisterTest(TTyTrackThumbFocusTest);
   RegisterTest(TTyMultiTrackHooksTest);
   RegisterTest(TTyMultiTrackClickTest);
+  RegisterTest(TTyMultiTrackChangingTest);
 end.

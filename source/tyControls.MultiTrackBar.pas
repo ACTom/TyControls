@@ -32,6 +32,14 @@ const
 type
   { A thumb moved, or was selected; AIndex is its place in ThumbValues (-1 = none selected). }
   TTyTrackThumbEvent = procedure(Sender: TObject; AIndex: Integer) of object;
+  { The user is about to move thumb AIndex to AValue -- a drag step, a key, a wheel notch, or the
+    nearest thumb jumping to a press on the bare track. Asked BEFORE the value changes, and only
+    when it would: AValue is where the thumb would go, already held between its neighbours
+    (each +/- MinGap) and Min..Max. AAllow := False and the thumb stays where it is (no
+    OnThumbChange, no OnChange); change AValue and the thumb goes there instead, held between
+    the neighbours and Min..Max again. Moves made from code are not asked. }
+  TTyTrackThumbChangingEvent = procedure(Sender: TObject; AIndex: Integer; var AValue: Integer;
+    var AAllow: Boolean) of object;
   { Owner-draw: the track (the groove with the range highlight or segment fills on it), asked
     before it is painted. ARect is the groove in APainter's coordinates; set ADefaultDraw to
     False and the bar paints none of the track -- what the handler drew is the track. }
@@ -62,9 +70,13 @@ type
 
       ascending, FValues[i+1] - FValues[i] >= MinGap, every value within Min..Max.
 
-    SetThumbValue is the one way a single thumb moves, from code, the mouse or the keyboard: it
-    clamps the value between its neighbours (each +/- MinGap) and Min..Max, and fires
-    OnThumbChange(Self, AIndex) and OnChange only when the value actually changed.
+    SetThumbValue is the one way a single thumb moves from code: it clamps the value between its
+    neighbours (each +/- MinGap) and Min..Max, and fires OnThumbChange(Self, AIndex) and
+    OnChange only when the value actually changed. The mouse, the keyboard and the wheel go
+    through UserMoveThumb, which clamps the same way and asks OnThumbChanging first: the
+    application can refuse the move or put the thumb elsewhere (pin a thumb, snap to a step)
+    without taking the thumb out of the interaction, as Enabled = False would. As in the LCL,
+    the event intercepts the user, not the program -- a value set from code is not asked.
 
     Normalize puts an arbitrary array back into that shape -- sorted, then pushed apart left to
     right and, where that runs past Max, back from the right. It runs when Min, Max or MinGap
@@ -95,8 +107,8 @@ type
     THE INTERACTION (only enabled thumbs take part). A left press on a thumb selects it and
     drags it from where it was grabbed; a press on the groove brings the nearest thumb there
     (the lower value on a tie) and drags it on -- unless OnTrackClick, asked first, handles the
-    press. A drag goes through SetThumbValue, so it stops
-    MinGap short of a neighbour. The keyboard drives the selected thumb (none selected: the
+    press. A drag step, a key, a wheel notch and that jump go through UserMoveThumb, so each
+    stops MinGap short of a neighbour and is offered to OnThumbChanging first. The keyboard drives the selected thumb (none selected: the
     first enabled one), Tab / Shift+Tab step through the thumbs before leaving the control, and
     the hint over a thumb is that thumb's. Coming in from the keyboard starts at the near end:
     the first enabled thumb when entered forwards, the last when entered with Shift+Tab, so
@@ -131,6 +143,7 @@ type
     FValueTextPx: Integer;
     FOnFormatTickLabel: TTyTrackTickLabelEvent;
     FOnThumbChange: TTyTrackThumbEvent;
+    FOnThumbChanging: TTyTrackThumbChangingEvent;
     FOnThumbSelect: TTyTrackThumbEvent;
     FOnChange: TNotifyEvent;
     FOnDrawTrack: TTyTrackDrawEvent;
@@ -161,6 +174,10 @@ type
     procedure SetOnDrawThumb(const AValue: TTyTrackDrawThumbEvent);
     procedure SetOnDrawSegment(const AValue: TTyTrackDrawSegmentEvent);
     procedure CheckIndex(AIndex: Integer);
+    { AValue held between thumb AIndex's neighbours (each +/- the effective gap) and Min..Max. }
+    function ClampThumbValue(AIndex, AValue: Integer): Integer;
+    { Thumb AIndex to AValue as given (already clamped): stored and reported when it differs. }
+    procedure ApplyThumbValue(AIndex, AValue: Integer);
   protected
     { The thumb under a press (drawn active) and under the pointer (drawn hover); -1 = none. }
     FDragThumb: Integer;
@@ -180,6 +197,12 @@ type
       values and before any event fires: a final class copies them back into its collection
       items here, so the items always read what the thumbs show, from the event handlers too. }
     procedure ValuesChanged; virtual;
+    { A move the user makes -- drag, key, wheel, the jump to a press on the track: clamped as
+      SetThumbValue clamps, then, when the thumb would really move, offered to
+      OnThumbChanging, whose answer is clamped again and applied. An index outside the thumbs
+      (the handler may have removed some) does nothing. }
+    procedure UserMoveThumb(AIndex, AValue: Integer);
+    procedure DoThumbChanging(AIndex: Integer; var AValue: Integer; var AAllow: Boolean); virtual;
     procedure DoThumbChange(AIndex: Integer); virtual;
     procedure DoThumbSelect(AIndex: Integer); virtual;
     procedure DoChange; virtual;
@@ -300,6 +323,10 @@ type
     property OnFormatTickLabel: TTyTrackTickLabelEvent read FOnFormatTickLabel write SetOnFormatTickLabel;
     property TabStop default True;
     property OnThumbChange: TTyTrackThumbEvent read FOnThumbChange write FOnThumbChange;
+    { The user is about to move a thumb; see TTyTrackThumbChangingEvent. A thumb whose moves
+      the handler refuses is still pressed, selected and driven by the keyboard as usual -- it
+      just does not move. }
+    property OnThumbChanging: TTyTrackThumbChangingEvent read FOnThumbChanging write FOnThumbChanging;
     property OnThumbSelect: TTyTrackThumbEvent read FOnThumbSelect write FOnThumbSelect;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property OnDrawTrack: TTyTrackDrawEvent read FOnDrawTrack write SetOnDrawTrack;
@@ -315,9 +342,9 @@ type
   TTyCustomRangeTrackBar = class;
 
   { One range of TTyRangeTrackBar: its two thumbs. Low and High read what the thumbs show; set
-    them and the thumb moves through SetThumbValue -- the path a drag takes -- so it stops
-    MinGap short of its neighbours and inside Min..Max, and OnThumbChange / OnChange fire.
-    Between Ranges.BeginUpdate and EndUpdate, and while a form is read, the values are kept as
+    them and the thumb moves through SetThumbValue -- clamped as a drag is -- so it stops
+    MinGap short of its neighbours and inside Min..Max, and OnThumbChange / OnChange fire
+    (OnThumbChanging does not: this is code, not the user). Between Ranges.BeginUpdate and EndUpdate, and while a form is read, the values are kept as
     given and the whole set is sorted out at EndUpdate / Loaded. A range added at the end takes
     the stretch after the last one, up to Max (Min..Max for the first). }
   TTyTrackRange = class(TCollectionItem)
@@ -479,13 +506,15 @@ type
     property OnDrawThumb;
     property OnTrackClick;
     property OnDrawSegment;
+    property OnThumbChanging;
   end;
 
   TTyCustomMultiTrackBar = class;
 
   { One thumb of TTyMultiTrackBar. Value reads where the thumb is; set it and the thumb moves
-    through SetThumbValue -- the path a drag takes -- so it stops MinGap short of its neighbours
-    and inside Min..Max, and OnThumbChange / OnChange fire. Between Thumbs.BeginUpdate and
+    through SetThumbValue -- clamped as a drag is -- so it stops MinGap short of its neighbours
+    and inside Min..Max, and OnThumbChange / OnChange fire (OnThumbChanging does not: this is
+    code, not the user). Between Thumbs.BeginUpdate and
     EndUpdate, and while a form is read, values are kept as given; at EndUpdate / Loaded the
     thumbs are put in order by value, each keeping its Color, Hint, Enabled and StyleClass. A
     thumb added at the end starts at Max.
@@ -683,6 +712,7 @@ type
     property OnDrawThumb;
     property OnTrackClick;
     property OnDrawSegment;
+    property OnThumbChanging;
   end;
 
 implementation
@@ -838,17 +868,10 @@ begin
   DoChange;
 end;
 
-procedure TTyMultiTrackBarBase.SetThumbValue(AIndex, AValue: Integer);
+function TTyMultiTrackBarBase.ClampThumbValue(AIndex, AValue: Integer): Integer;
 var
   lo, hi, gap, n: Integer;
 begin
-  CheckIndex(AIndex);
-  { Reading a form: keep the value as listed; Loaded sorts it out. }
-  if csLoading in ComponentState then
-  begin
-    FValues[AIndex] := AValue;
-    Exit;
-  end;
   n := Length(FValues);
   gap := EffectiveGap;
   lo := FMin;
@@ -859,12 +882,59 @@ begin
   if (AIndex < n - 1) and (FValues[AIndex + 1] - gap < hi) then hi := FValues[AIndex + 1] - gap;
   if AValue > hi then AValue := hi;
   if AValue < lo then AValue := lo;
+  Result := AValue;
+end;
+
+procedure TTyMultiTrackBarBase.ApplyThumbValue(AIndex, AValue: Integer);
+begin
   if FValues[AIndex] = AValue then Exit;
   FValues[AIndex] := AValue;
   ValuesChanged;
   Invalidate;
   DoThumbChange(AIndex);
   DoChange;
+end;
+
+procedure TTyMultiTrackBarBase.SetThumbValue(AIndex, AValue: Integer);
+begin
+  CheckIndex(AIndex);
+  { Reading a form: keep the value as listed; Loaded sorts it out. }
+  if csLoading in ComponentState then
+  begin
+    FValues[AIndex] := AValue;
+    Exit;
+  end;
+  ApplyThumbValue(AIndex, ClampThumbValue(AIndex, AValue));
+end;
+
+procedure TTyMultiTrackBarBase.UserMoveThumb(AIndex, AValue: Integer);
+var
+  v: Integer;
+  allow: Boolean;
+begin
+  if (AIndex < 0) or (AIndex >= Length(FValues)) then Exit;
+  { Nobody drags a form that is being read; should a move arrive then, it is stored as read. }
+  if csLoading in ComponentState then
+  begin
+    SetThumbValue(AIndex, AValue);
+    Exit;
+  end;
+  v := ClampThumbValue(AIndex, AValue);
+  { Only a move that would move the thumb is offered. }
+  if v = FValues[AIndex] then Exit;
+  allow := True;
+  DoThumbChanging(AIndex, v, allow);
+  if not allow then Exit;
+  { The handler may have added or removed thumbs: the index may be gone, and the neighbours
+    the answer is held between are the ones there are now. }
+  if AIndex >= Length(FValues) then Exit;
+  ApplyThumbValue(AIndex, ClampThumbValue(AIndex, v));
+end;
+
+procedure TTyMultiTrackBarBase.DoThumbChanging(AIndex: Integer; var AValue: Integer;
+  var AAllow: Boolean);
+begin
+  if Assigned(FOnThumbChanging) then FOnThumbChanging(Self, AIndex, AValue, AAllow);
 end;
 
 procedure TTyMultiTrackBarBase.ValuesChanged;
@@ -1485,7 +1555,7 @@ begin
   if v > High(Integer) then v := High(Integer);
   if v < Low(Integer) then v := Low(Integer);
   SelectedThumb := i;
-  SetThumbValue(i, v);
+  UserMoveThumb(i, v);
   Result := True;
 end;
 
@@ -1536,7 +1606,7 @@ begin
   FDragThumb := idx;
   FHoverThumb := -1;
   SelectedThumb := idx;
-  if not onThumb then SetThumbValue(idx, ValueAt(pos));
+  if not onThumb then UserMoveThumb(idx, ValueAt(pos));
   Invalidate;
 end;
 
@@ -1563,7 +1633,9 @@ begin
       FDragThumb := j;
       SelectedThumb := j;
     end;
-    SetThumbValue(FDragThumb, v);
+    { Refused, the thumb stays and FGrab with it: the next step is measured from the same
+      grip, so when a later one is allowed the thumb lands under the pointer as grabbed. }
+    UserMoveThumb(FDragThumb, v);
     Invalidate;
   end
   else
@@ -1631,7 +1703,7 @@ begin
   if v > High(Integer) then v := High(Integer);
   if v < Low(Integer) then v := Low(Integer);
   SelectedThumb := i;
-  SetThumbValue(i, v);
+  UserMoveThumb(i, v);
 end;
 
 procedure TTyMultiTrackBarBase.CMWantSpecialKey(var Message: TLMKey);
