@@ -1467,8 +1467,10 @@ begin
   ThumbFill := Default(TTyFill);
   ThumbFill.Kind := tfkSolid;
   ThumbFill.Color := ThumbS.Background.Color;
+  ThumbS.Background := ThumbFill;            { the thumb has always been filled flat }
+  Include(ThumbS.Present, tpBackground);
   if not IsRectEmpty(ThumbR) then
-    APainter.FillBackground(ThumbR, ThumbFill, ThumbS.BorderRadius);
+    TyFillSubElement(APainter, ThumbR, ThumbS, TyUniformCorners(ThumbS.BorderRadius));
   ButtonRects(ARect, LoR, HiR);
   if (LoR.Right > LoR.Left) then   // buttons exist
   begin
