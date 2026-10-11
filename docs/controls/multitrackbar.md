@@ -37,8 +37,8 @@ uses tyControls.MultiTrackBar;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Min` / `Max` | `Integer` | `0` / `100` | 取值范围。改了以后所有滑块重新排好（见第 6 节），有滑块因此移动时照常触发事件。 |
-| `MinGap` | `Integer` | `0` | 相邻两个滑块至少隔多远（值单位）。`0` 表示可以重合。区间内部、区间之间都受它约束。范围放不下时的处理见第 6 节。 |
+| `Min` / `Max` | `Integer` | `0` / `100` | 取值范围。改了以后所有滑块重新排好（见第 7 节），有滑块因此移动时照常触发事件。 |
+| `MinGap` | `Integer` | `0` | 相邻两个滑块至少隔多远（值单位）。`0` 表示可以重合。区间内部、区间之间都受它约束。范围放不下时的处理见第 7 节。 |
 | `Orientation` | `TTyTrackOrientation` | `toHorizontal` | 与 `TTyTrackBar` 相同：竖排时顶部是 `Max`，改方向时宽高自动对调（读窗体时不动）。 |
 | `Reversed` | `Boolean` | `False` | 不改方向，翻转值轴。 |
 | `TickMarks` / `TickStyle` / `Frequency` | — | `ttmBottomRight` / `ttsAuto` / `1` | 刻度画在哪一侧、画哪些值，与 `TTyTrackBar` 完全相同，连画法都是同一段代码。`SetTick` / `ClearTicks` / `TickCount` 用于 `ttsManual`。 |
@@ -52,6 +52,8 @@ uses tyControls.MultiTrackBar;
 | `OnThumbSelect` | `TTyTrackThumbEvent` | `nil` | 选中的滑块变了，`AIndex` 是新序号（`-1` = 没有选中）。 |
 | `OnDrawTrack` | `TTyTrackDrawEvent` | `nil` | 自绘轨道，见第 5 节。 |
 | `OnDrawThumb` | `TTyTrackDrawThumbEvent` | `nil` | 自绘滑块，见第 5 节。 |
+| `OnDrawSegment` | `TTyTrackDrawSegmentEvent` | `nil` | 自绘分段（两个滑块之间的那段凹槽），见第 5 节。 |
+| `OnTrackClick` | `TTyTrackClickEvent` | `nil` | 左键按在轨道上、没按中滑块时触发，先于默认的「最近的滑块跳过来」。见第 6 节。 |
 
 ### public 成员
 
@@ -63,6 +65,7 @@ uses tyControls.MultiTrackBar;
 | `SelectedThumb: Integer` | 键盘操作的那个滑块，`-1` = 没有。赋值越界当作 `-1`。 |
 | `ThumbRect(AIndex): TRect` | 滑块的**命中**矩形（客户区坐标）：沿轨道 12 逻辑像素，横向占满整个控件——和 `TTyTrackBar.ThumbRect` 在同一个值时完全一样。 |
 | `SegmentSpan(AIndex, APPI, out ALow, AHigh): Boolean` | 第 AIndex 段沿主轴的像素范围（见下文「分段」）。只给位置，不管这一段画不画。 |
+| `ValueAtPoint(X, Y): Integer` | 客户区里一个点对应的值：拖到那里的滑块、按在那里时跳过来的滑块，取的就是这个值。跟着 `Orientation` / `Reversed` 走，只看主轴，超出两端时是 `Min` / `Max`。 |
 
 ---
 
@@ -118,11 +121,14 @@ TTyTrackDrawEvent = procedure(Sender: TObject; APainter: TTyPainter; const ARect
   var ADefaultDraw: Boolean) of object;
 TTyTrackDrawThumbEvent = procedure(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
   const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean) of object;
+TTyTrackDrawSegmentEvent = procedure(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
+  const ARect: TRect; var ADefaultDraw: Boolean) of object;
 ```
 
 - `OnDrawTrack` 在画凹槽**之前**调用，`ARect` 是凹槽矩形。把 `ADefaultDraw` 设成 `False`，控件就不画凹槽，也不画区间高亮和分段——整条轨道交给你。保留 `True` 的话，默认画法会盖在你画的东西上面。
+- `OnDrawSegment` 在凹槽画完之后、每一段的默认填充**之前**调用，`AIndex` 从 `0` 到 `ThumbCount`，**每一段都调**——不管它有没有默认填充（`TTyRangeTrackBar` 的区间、`TTyMultiTrackBar` 设了 `StyleClass` 的分段才有）。`ARect` 就是默认填充用的那个矩形：沿轨道从滑块中心到滑块中心（同 `SegmentSpan`），横向是凹槽的厚度；两个滑块叠在一起时可能是空矩形。`ADefaultDraw := False` 只跳过这一段的默认填充。如果 `OnDrawTrack` 已经把 `ADefaultDraw` 设成了 `False`，整条轨道归你，分段不画，`OnDrawSegment` 也不会被调用。
 - `OnDrawThumb` 在画每个滑块**之前**调用，`ARect` 是滑块实际画出来的矩形（在滑块带里，横向比 `ThumbRect` 的命中矩形窄，有刻度时让出刻度那一条），`AStates` 是解析样式用的状态：`tysNormal` / `tysHover` / `tysActive` 三选一，控件有焦点时选中的那个滑块再加 `tysFocused`。`ADefaultDraw := False` 只跳过这一个滑块。
-- 调用顺序就是绘制顺序：先轨道，再按序号画滑块，正在拖的（没有就是选中的）放到最后，压在上面。刻度、标签和读数总是由控件画。
+- 调用顺序就是绘制顺序：先轨道，再按序号画分段，再按序号画滑块，正在拖的（没有就是选中的）放到最后，压在上面。刻度、标签和读数总是由控件画。
 - `APainter` 的坐标就是控件的客户区坐标。需要区间或分段的位置可以用 `SegmentSpan`。
 
 ```pascal
@@ -142,7 +148,140 @@ end;
 
 ---
 
-## 6. 值的规则
+## 6. 在控件外面扩展
+
+控件只内置通用的行为。点空白处加区间、按滑块颜色画渐变这类需求，用事件和公开的几何（`ValueAtPoint`、`SegmentSpan`、`ThumbRect`、`ThumbValues`）在应用里写，不用改控件。
+
+### OnTrackClick
+
+```pascal
+TTyTrackClickEvent = procedure(Sender: TObject; AValue: Integer;
+  var AHandled: Boolean) of object;
+```
+
+- 左键按在轨道上、但没有按中任何滑块时触发（不可用的滑块也算滑块，按上去什么都不发生）。`AValue` 是按点的值，即 `ValueAtPoint(X, Y)`。
+- 在默认行为**之前**调用。默认行为是离按点最近的可用滑块跳过来、被选中、接着可以拖。`AHandled := True` 就到此为止：没有滑块移动，选中也不变。
+- 处理函数里可以增删区间或滑块。控件在事件返回后重新看一遍按点下面是什么：不处理（`AHandled` 保持 `False`）而刚好在按点放了一个滑块，这一下就按在了新滑块上——抓住它，不移动，可以接着拖。
+- 双击只算一次点击：只有第一次按下会问。第一次被处理了，双击的第二次按下什么也不做；没被处理，第二次按下照常，不再问。
+
+**示例一：点轨道空白处加一个区间**（`TTyRangeTrackBar`，遵守 `MinGap`）
+
+```pascal
+uses Math;
+
+// 点在两个区间之间：在那里加一个宽 10 的区间；点在某个区间里：照常（最近的端点跳过来）
+procedure TMainForm.PriceTrackClick(Sender: TObject; AValue: Integer; var AHandled: Boolean);
+var
+  i, lo, hi, gap: Integer;
+  r: TTyTrackRange;
+begin
+  gap := Price.MinGap;
+  lo := Price.Min;
+  hi := Price.Max;
+  // 区间总是按值排好的：找出按点左右两边的区间，新区间离它们都至少隔 MinGap
+  for i := 0 to Price.Ranges.Count - 1 do
+  begin
+    r := Price.Ranges[i];
+    if (AValue >= r.Low) and (AValue <= r.High) then Exit;   // 在区间里，交给默认行为
+    if r.High < AValue then lo := Math.Max(lo, r.High + gap)
+    else hi := Math.Min(hi, r.Low - gap);
+  end;
+  AHandled := True;                       // 不管加没加，都不让端点跳过来
+  lo := Math.Max(lo, AValue - 5);
+  hi := Math.Min(hi, AValue + 5);
+  if (hi <= lo) or (hi - lo < gap) then Exit;   // 太挤，放不下
+  Price.Ranges.BeginUpdate;
+  try
+    r := Price.Ranges.Add;
+    r.Low := lo;
+    r.High := hi;
+  finally
+    Price.Ranges.EndUpdate;
+  end;
+end;
+```
+
+`BeginUpdate` 不能省：新区间先加在集合末尾，这时直接给 `Low` / `High` 赋值会被它左边的邻居挡住（见第 7 节）；在 `BeginUpdate` 里赋值原样保存，到 `EndUpdate` 时一起排好。
+
+### 示例二：渐变色标
+
+一个 `TTyMultiTrackBar` 当渐变编辑器用：每个滑块是一个色标（颜色放在 `Thumbs[i].Color`，可以直接写在 .lfm 里），相邻两个滑块之间那一段用 `OnDrawSegment` 画成从左边颜色到右边颜色的渐变；点轨道空白处加一个色标，颜色按位置在左右两个色标之间插值。
+
+```pascal
+uses Math, Graphics, tyControls.Types, tyControls.Painter, tyControls.MultiTrackBar;
+
+function MixColor(A, B: TColor; T: Double): TColor;
+begin
+  A := ColorToRGB(A);
+  B := ColorToRGB(B);
+  Result := RGBToColor(Round(Red(A) + (Red(B) - Red(A)) * T),
+    Round(Green(A) + (Green(B) - Green(A)) * T), Round(Blue(A) + (Blue(B) - Blue(A)) * T));
+end;
+
+// 第 i 段（滑块 i-1 到滑块 i）画成两个滑块颜色之间的渐变；首尾两段照默认（露出凹槽）
+procedure TMainForm.StopsDrawSegment(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
+  const ARect: TRect; var ADefaultDraw: Boolean);
+var
+  f: TTyFill;
+  a, b: TColor;
+begin
+  if (AIndex = 0) or (AIndex >= Stops.ThumbCount) then Exit;
+  a := ColorToRGB(Stops.Thumbs[AIndex - 1].Color);
+  b := ColorToRGB(Stops.Thumbs[AIndex].Color);
+  f := Default(TTyFill);
+  f.Kind := tfkLinearGradient;
+  f.GradFrom := TyRGB(Red(a), Green(a), Blue(a));
+  f.GradTo := TyRGB(Red(b), Green(b), Blue(b));
+  f.GradAngleDeg := 0;       // 0 = 从左到右（Min 在左）；竖排是 270（从下到上）
+  APainter.FillBackground(ARect, f, 0);
+  ADefaultDraw := False;
+end;
+
+// 点空白处：在那里加一个色标，颜色取左右两个色标按位置插值
+procedure TMainForm.StopsTrackClick(Sender: TObject; AValue: Integer; var AHandled: Boolean);
+var
+  i: Integer;
+  c: TColor;
+  t: TTyTrackThumbItem;
+begin
+  i := 0;
+  while (i < Stops.ThumbCount) and (Stops.ThumbValues[i] < AValue) do Inc(i);
+  if Stops.ThumbCount = 0 then c := clGray
+  else if i = 0 then c := Stops.Thumbs[0].Color
+  else if i = Stops.ThumbCount then c := Stops.Thumbs[i - 1].Color
+  else c := MixColor(Stops.Thumbs[i - 1].Color, Stops.Thumbs[i].Color,
+    (AValue - Stops.ThumbValues[i - 1]) / (Stops.ThumbValues[i] - Stops.ThumbValues[i - 1]));
+  Stops.Thumbs.BeginUpdate;
+  try
+    t := Stops.Thumbs.Add;
+    t.Value := AValue;
+    t.Color := c;
+  finally
+    Stops.Thumbs.EndUpdate;
+  end;
+  Stops.SelectedThumb := t.Index;   // EndUpdate 已经按值排好，项的序号就是滑块的序号
+  AHandled := True;
+end;
+```
+
+几点说明：
+
+- `TTyFill` 只给两个颜色时填 `GradFrom` / `GradTo` 就够了，`GradStops` 留空。`GradAngleDeg` 与 tycss 的 `linear-gradient` 一致：`0` 从左到右，`90` 从上到下。
+- 例子假定每个色标都设了 `Color`。`clDefault` 表示「跟主题走」，`ColorToRGB` 拿不到滑块实际画出来的颜色，渐变编辑器里别留默认色。
+- 例子里的色标 `MinGap` 是 0。`MinGap` 大于 0 时，点在离已有色标太近的地方，`EndUpdate` 会把相邻的色标推开；不想这样就先在处理函数里检查，太近时不加。
+- 渐变由画家按线性光混合，中间的颜色会比按 sRGB 直接平均的亮一些。
+
+**固定的渐变不用写代码。** 如果分段的颜色是事先定好的（比如温度条从绿到红），在主题里加一个分段的样式类，再把那一段的 `StyleClass` 设成它：
+
+```pascal
+TyDefaultController.StyleOverride :=
+  'TyTrackSegment.heat { background: linear-gradient(0deg, #22C55E, #EAB308, #EF4444); }';
+Bar.Segments[1].StyleClass := 'heat';
+```
+
+---
+
+## 7. 值的规则
 
 **不变式**：滑块按值升序排列，相邻两个至少隔 `MinGap`，全部在 `Min..Max` 内。
 
@@ -166,14 +305,14 @@ end;
 
 ---
 
-## 7. 键盘与鼠标
+## 8. 键盘与鼠标
 
 只有可用的滑块参与。
 
 | 操作 | 行为 |
 |------|------|
 | 左键按在滑块上 | 选中它，从按下的位置开始拖（只按不动不会挪动滑块）。几个滑块叠在一起时取中心最近的那个，一样近取值小的。 |
-| 左键按在轨道空白处 | 离按点最近的滑块跳过去并选中，接着可以拖。一样近时取值小的那个。 |
+| 左键按在轨道空白处 | 先问 `OnTrackClick`（见第 6 节）；没被处理时，离按点最近的滑块跳过去并选中，接着可以拖。一样近时取值小的那个。 |
 | 拖动 | 经 `SetThumbValue`，碰到邻居停在 `MinGap` 处。`MinGap = 0` 时几个滑块叠在同一个值上，往哪边拖就由能往那边走的那个接手，叠在两端的滑块也拉得开。拖出控件不中断，松开左键才结束。 |
 | `←` / `↓` | 键盘滑块减 `LineSize`（竖排时 `↑` 增大，同 `TTyTrackBar`） |
 | `→` / `↑` | 加 `LineSize` |
@@ -187,7 +326,7 @@ end;
 
 ---
 
-## 8. 状态与主题
+## 9. 状态与主题
 
 | typeKey | 画什么 | 状态 |
 |---------|--------|------|
@@ -212,7 +351,7 @@ TyTrackThumb:focus { outline: 2px var(--on-accent); outline-offset: 2px; }
 
 ---
 
-## 9. 与 TTyTrackBar 的区别
+## 10. 与 TTyTrackBar 的区别
 
 1. **没有 `Position`**：值在 `ThumbValues` / 集合项里。读数（`ShowValue`）显示选中滑块的值。
 2. **没有 `SelStart` / `SelEnd`**：要高亮一段就用 `TTyRangeTrackBar` 的区间（同一个主题键），而且用户拖得动。
@@ -222,7 +361,7 @@ TyTrackThumb:focus { outline: 2px var(--on-accent); outline-offset: 2px; }
 
 ---
 
-## 10. 代码示例
+## 11. 代码示例
 
 ```pascal
 uses
