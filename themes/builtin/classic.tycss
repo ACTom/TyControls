@@ -237,6 +237,9 @@ TyScrollThumb:hover  { render-style: bevel3d; background: var(--scroll-handle-ho
 TyScrollThumb:active { render-style: bevel3d; background: var(--scroll-handle); }
 TyTrackGroove      { render-style: inset3d; background: var(--field); }
 TyTrackThumb       { render-style: bevel3d; background: var(--face); }
+/* The switch has no Win9x ancestor either; it is built from the track bar's parts: a square
+   track (--radius-round is 0 here) and a raised grey knob. */
+TyToggleKnob       { render-style: bevel3d; background: var(--face); }
 TyTrackThumb:hover  { render-style: bevel3d; background: var(--face-hover); }
 TyTrackThumb:active { render-style: bevel3d; background: var(--face); }
 
