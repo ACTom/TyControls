@@ -1169,8 +1169,7 @@ var
       St.Background.Color := TyRGB(Red(c), Green(c), Blue(c));
       Include(St.Present, tpBackground);
     end;
-    if tpBackground in St.Present then
-      P.FillBackground(ThumbR, St.Background, St.BorderRadius);
+    TyDrawTrackThumb(P, ThumbR, St);
   end;
 
 begin

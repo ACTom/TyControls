@@ -279,6 +279,7 @@ begin
     '}' + LineEnding +
     'TyTrackThumb:hover  { background: var(--accent-hover); }' + LineEnding +
     'TyTrackThumb:active { background: var(--accent-active); }' + LineEnding +
+    'TyTrackThumb:focus  { outline: 2px var(--on-accent); outline-offset: 2px; }' + LineEnding +
     '' + LineEnding +
     '/* Hyperlink ink for TTyLinkLabel. Its own key rather than a borrowed accent fill: a theme' + LineEnding +
     '   that restyles gauges must not repaint every link, and a theme that wants a different link' + LineEnding +
@@ -922,6 +923,7 @@ begin
     '}' + LineEnding +
     'TyTrackThumb:hover  { background: var(--accent-hover); }' + LineEnding +
     'TyTrackThumb:active { background: var(--accent-active); }' + LineEnding +
+    'TyTrackThumb:focus  { outline: 2px var(--on-accent); outline-offset: 2px; }' + LineEnding +
     '' + LineEnding +
     'TyGroupBox, TyToolGroupPanel {' + LineEnding +
     '  padding: 4px 12px;' + LineEnding +
@@ -4447,6 +4449,7 @@ begin
     '}' + LineEnding +
     'TyTrackThumb:hover  { background: linear-gradient(90deg, lighten(--accent, 16%), lighten(--accent, 4%)); }' + LineEnding +
     'TyTrackThumb:active { background: var(--accent-active); }' + LineEnding +
+    'TyTrackThumb:focus  { outline: 2px var(--on-accent); outline-offset: 2px; }' + LineEnding +
     '' + LineEnding +
     'TyGroupBox, TyToolGroupPanel {' + LineEnding +
     '  padding: 4px 12px;' + LineEnding +

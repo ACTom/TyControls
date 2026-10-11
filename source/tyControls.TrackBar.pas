@@ -323,6 +323,10 @@ procedure TyLayoutTrackTicks(APainter: TTyPainter; var AT: TTyTrackTicks);
 { Draw the ticks and the labels TyLayoutTrackTicks kept, against the edges of ARect (the
   control's rectangle; the track starts at its left / top edge). }
 procedure TyDrawTrackTicks(APainter: TTyPainter; const ARect: TRect; const AT: TTyTrackTicks);
+{ Paint one thumb in its resolved style AStyle: the background, then -- only when the style has
+  one, i.e. a theme's TyTrackThumb:focus rule resolved -- the outline as a ring inside AR,
+  outline-offset in from the thumb's edge (positive = inward, as the control focus rings). }
+procedure TyDrawTrackThumb(APainter: TTyPainter; const AR: TRect; const AStyle: TTyStyleSet);
 
 implementation
 
@@ -380,6 +384,24 @@ begin
   end;
   if Result.Right <= Result.Left then Result := AR;
   if Result.Bottom <= Result.Top then Result := AR;
+end;
+
+procedure TyDrawTrackThumb(APainter: TTyPainter; const AR: TRect; const AStyle: TTyStyleSet);
+var
+  off, rad: Integer;
+  ring: TRect;
+begin
+  if tpBackground in AStyle.Present then
+    APainter.FillBackground(AR, AStyle.Background, AStyle.BorderRadius);
+  if (tpOutline in AStyle.Present) and (AStyle.OutlineWidth > 0) then
+  begin
+    off := APainter.Scale(AStyle.OutlineOffset);
+    ring := Rect(AR.Left + off, AR.Top + off, AR.Right - off, AR.Bottom - off);
+    if (ring.Right <= ring.Left) or (ring.Bottom <= ring.Top) then Exit;
+    rad := AStyle.BorderRadius - AStyle.OutlineOffset;
+    if rad < 0 then rad := 0;
+    APainter.StrokeBorder(ring, rad, AStyle.OutlineWidth, AStyle.OutlineColor);
+  end;
 end;
 
 function TyTrackGrooveRect(const ASlide: TRect; AOrientation: TTyTrackOrientation;
@@ -1324,10 +1346,11 @@ begin
       Include(ThumbStates, tysHover)
     else
       Include(ThumbStates, tysNormal);
+    { The bar has the keyboard: a theme can mark the thumb the keys move (TyTrackThumb:focus),
+      as on the multi-thumb bars. Without such a rule the thumb looks as it always did. }
+    if Focused then Include(ThumbStates, tysFocused);
     ThumbS := ActiveController.Model.ResolveStyle('TyTrackThumb', '', ThumbStates);
-
-    if (tpBackground in ThumbS.Present) then
-      P.FillBackground(ThumbR, ThumbS.Background, ThumbS.BorderRadius);
+    TyDrawTrackThumb(P, ThumbR, ThumbS);
 
     { Tick marks and their labels. Which VALUES get one is TickStyle's call (auto = every
       Frequency units, manual = only the hand-placed ones); which SIDE they are drawn on is

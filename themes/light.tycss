@@ -681,6 +681,10 @@ TyTrackThumb {
 }
 TyTrackThumb:hover  { background: var(--accent-hover); }
 TyTrackThumb:active { background: var(--accent-active); }
+/* The thumb the arrow keys move, while the bar has the focus: a ring inside the thumb, in the
+   ink that sits on the accent. --focus-ring is the accent itself and would vanish on an
+   accent thumb; on a multi-thumb bar this ring is how Tab shows which thumb it is on. */
+TyTrackThumb:focus  { outline: 2px var(--on-accent); outline-offset: 2px; }
 
 /* Hyperlink ink for TTyLinkLabel. Its own key rather than a borrowed accent fill: a theme
    that restyles gauges must not repaint every link, and a theme that wants a different link

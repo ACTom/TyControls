@@ -18,7 +18,7 @@ uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, LMessages, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.StyleModel,
-  tyControls.Painter, tyControls.TrackBar,
+  tyControls.Painter, tyControls.TrackBar, tyControls.BuiltinThemes,
   tyControls.MultiTrackBar;
 
 type
@@ -72,6 +72,8 @@ type
   { The reference: a TTyTrackBar with its painting and preferred size opened. }
   TRefBar = class(TTyTrackBar)
   public
+    FakeFocus: Boolean;
+    function Focused: Boolean; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure PreferredSize(out AW, AH: Integer);
   end;
@@ -327,6 +329,20 @@ type
     procedure TestADefaultDrawFalseLeavesTheTrackToTheHandler;
   end;
 
+  { The keyboard's thumb, marked while the bar has the focus (TyTrackThumb:focus): on the
+    multi-thumb bars the selected thumb, on TTyTrackBar its only one. }
+  TTyTrackThumbFocusTest = class(TMultiTrackPaintBase)
+  private
+    { Pixels that differ between A and B inside the thumb's painted middle: its hit rect less
+      4 px at each end across, clear of the control's own focus ring. }
+    function ThumbDiff(A, B: TBGRABitmap; const AHit: TRect): Integer;
+  published
+    procedure TestEveryBuiltInThemeResolvesARingForTheFocusedThumb;
+    procedure TestEveryBuiltInThemeShowsTheFocusedThumb;
+    procedure TestTheTrackBarsThumbTakesTheFocusState;
+    procedure TestWithoutAFocusRuleTheThumbsLookAsBefore;
+  end;
+
 implementation
 
 { TMultiProbe }
@@ -475,6 +491,11 @@ end;
 procedure TRefBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   inherited RenderTo(ACanvas, ARect, APPI);
+end;
+
+function TRefBar.Focused: Boolean;
+begin
+  Result := FakeFocus or inherited Focused;
 end;
 
 procedure TRefBar.PreferredSize(out AW, AH: Integer);
@@ -3128,6 +3149,215 @@ begin
   end;
 end;
 
+{ TTyTrackThumbFocusTest }
+
+function TTyTrackThumbFocusTest.ThumbDiff(A, B: TBGRABitmap; const AHit: TRect): Integer;
+var
+  x, y: Integer;
+begin
+  Result := 0;
+  for y := AHit.Top + 4 to AHit.Bottom - 5 do
+    for x := AHit.Left to AHit.Right - 1 do
+      if A.GetPixel(x, y) <> B.GetPixel(x, y) then Inc(Result);
+end;
+
+procedure TTyTrackThumbFocusTest.TestEveryBuiltInThemeResolvesARingForTheFocusedThumb;
+const
+  CBase: array[0..2] of TTyState = (tysNormal, tysHover, tysActive);
+var
+  c: TTyStyleController;
+  names: TStringArray;
+  miss: TStringList;
+  i, m, k, compared: Integer;
+  plain, foc: TTyStyleSet;
+  where: string;
+begin
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinThemeNames;
+  AssertTrue('the built-in pack: default, system and the 15 skins', Length(names) >= 17);
+  c := TTyStyleController.Create(nil);
+  miss := TStringList.Create;
+  try
+    compared := 0;
+    for i := 0 to High(names) do
+      for m := 0 to 1 do
+      begin
+        c.ThemeName := names[i];
+        if m = 0 then c.Mode := 'light' else c.Mode := 'dark';
+        for k := 0 to High(CBase) do
+        begin
+          where := Format('%s/%s %d', [names[i], c.Mode, Ord(CBase[k])]);
+          plain := c.Model.ResolveStyle('TyTrackThumb', '', [CBase[k]]);
+          foc := c.Model.ResolveStyle('TyTrackThumb', '', [CBase[k], tysFocused]);
+          Inc(compared);
+          if (tpOutline in plain.Present) and (plain.OutlineWidth > 0) then
+            miss.Add(where + ': a ring without the focus');
+          if not ((tpOutline in foc.Present) and (foc.OutlineWidth > 0)) then
+            miss.Add(where + ': no ring with the focus')
+          else if TyAlphaOf(foc.OutlineColor) = 0 then
+            miss.Add(where + ': the ring is transparent')
+          else if (foc.Background.Kind = tfkSolid) and (foc.OutlineColor = foc.Background.Color) then
+            miss.Add(where + ': the ring is the thumb''s own colour');
+        end;
+      end;
+    AssertEquals(IntToStr(miss.Count) + ' wrong:' + LineEnding + miss.Text, 0, miss.Count);
+    AssertEquals('themes x 2 modes x 3 states', Length(names) * 2 * 3, compared);
+  finally
+    miss.Free;
+    c.Free;
+  end;
+end;
+
+procedure TTyTrackThumbFocusTest.TestEveryBuiltInThemeShowsTheFocusedThumb;
+var
+  c: TTyStyleController;
+  names: TStringArray;
+  miss: TStringList;
+  i, m: Integer;
+  a, b: TBGRABitmap;
+  where: string;
+begin
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinThemeNames;
+  c := TTyStyleController.Create(nil);
+  miss := TStringList.Create;
+  try
+    FBar.Controller := c;
+    FRef.Controller := c;
+    FBar.Put([25, 75]);
+    FBar.SelectedThumb := 1;
+    FRef.Position := 50;
+    for i := 0 to High(names) do
+      for m := 0 to 1 do
+      begin
+        c.ThemeName := names[i];
+        if m = 0 then c.Mode := 'light' else c.Mode := 'dark';
+        where := names[i] + '/' + c.Mode;
+        FBar.FakeFocus := False;
+        a := Shot(False);
+        FBar.FakeFocus := True;
+        b := Shot(False);
+        try
+          if ThumbDiff(a, b, FBar.ThumbRect(1)) = 0 then
+            miss.Add(where + ': the selected thumb looks the same focused');
+          if ThumbDiff(a, b, FBar.ThumbRect(0)) <> 0 then
+            miss.Add(where + ': the other thumb changed too');
+        finally
+          a.Free;
+          b.Free;
+        end;
+        FRef.FakeFocus := False;
+        a := Shot(True);
+        FRef.FakeFocus := True;
+        b := Shot(True);
+        try
+          if ThumbDiff(a, b, FRef.ThumbRect) = 0 then
+            miss.Add(where + ': TTyTrackBar''s thumb looks the same focused');
+        finally
+          a.Free;
+          b.Free;
+        end;
+      end;
+    AssertEquals(IntToStr(miss.Count) + ' wrong:' + LineEnding + miss.Text, 0, miss.Count);
+  finally
+    FBar.Controller := FCtl;
+    FRef.Controller := FCtl;
+    miss.Free;
+    c.Free;
+  end;
+end;
+
+procedure TTyTrackThumbFocusTest.TestTheTrackBarsThumbTakesTheFocusState;
+var
+  a: TBGRABitmap;
+  r: TRect;
+  x, y, ring: Integer;
+begin
+  FCtl.LoadThemeCss(CPaintCss + 'TyTrackThumb:focus { background: #00FF00; }');
+  FRef.Position := 50;
+  a := Shot(True);
+  try
+    r := FRef.ThumbRect;
+    AssertTrue('unfocused: the plain thumb', SamePx(a.GetPixel((r.Left + r.Right) div 2, H div 2),
+      $3B, $82, $F6));
+  finally
+    a.Free;
+  end;
+  FRef.FakeFocus := True;
+  a := Shot(True);
+  try
+    AssertTrue('focused: TyTrackThumb:focus', SamePx(a.GetPixel((r.Left + r.Right) div 2, H div 2),
+      0, $FF, 0));
+  finally
+    a.Free;
+  end;
+  { The outline is drawn on the thumb, inside it. }
+  FCtl.LoadThemeCss(CPaintCss + 'TyTrackThumb:focus { outline: 2px #FF8000; outline-offset: 2px; }');
+  a := Shot(True);
+  try
+    ring := 0;
+    for y := 0 to H - 1 do
+      for x := 0 to W - 1 do
+        if SamePx(a.GetPixel(x, y), $FF, $80, 0) then
+        begin
+          Inc(ring);
+          AssertTrue(Format('ring pixel (%d,%d) inside the thumb', [x, y]),
+            (x >= r.Left + 2) and (x < r.Right - 2));
+        end;
+    AssertTrue('the ring is drawn', ring > 0);
+  finally
+    a.Free;
+  end;
+  FRef.FakeFocus := False;
+  a := Shot(True);
+  try
+    ring := 0;
+    for y := 0 to H - 1 do
+      for x := 0 to W - 1 do
+        if SamePx(a.GetPixel(x, y), $FF, $80, 0) then Inc(ring);
+    AssertEquals('no ring without the focus', 0, ring);
+  finally
+    a.Free;
+  end;
+end;
+
+procedure TTyTrackThumbFocusTest.TestWithoutAFocusRuleTheThumbsLookAsBefore;
+var
+  a, b: TBGRABitmap;
+  x, y, diff: Integer;
+begin
+  { CPaintCss has no TyTrackThumb:focus and no TyTrackBar:focus: the focus changes nothing. }
+  FBar.Put([25, 75]);
+  FBar.SelectedThumb := 1;
+  FRef.Position := 50;
+  a := Shot(True);
+  FRef.FakeFocus := True;
+  b := Shot(True);
+  try
+    diff := 0;
+    for y := 0 to H - 1 do
+      for x := 0 to W - 1 do
+        if a.GetPixel(x, y) <> b.GetPixel(x, y) then Inc(diff);
+    AssertEquals('TTyTrackBar', 0, diff);
+  finally
+    a.Free;
+    b.Free;
+  end;
+  a := Shot(False);
+  FBar.FakeFocus := True;
+  b := Shot(False);
+  try
+    diff := 0;
+    for y := 0 to H - 1 do
+      for x := 0 to W - 1 do
+        if a.GetPixel(x, y) <> b.GetPixel(x, y) then Inc(diff);
+    AssertEquals('the multi-thumb bar', 0, diff);
+  finally
+    a.Free;
+    b.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyMultiTrackModelTest);
   RegisterTest(TTyMultiTrackGeometryTest);
@@ -3138,4 +3368,5 @@ initialization
   RegisterTest(TTyMultiTrackBarTest);
   RegisterTest(TTyMultiTrackReadoutTest);
   RegisterTest(TTyMultiTrackOwnerDrawTest);
+  RegisterTest(TTyTrackThumbFocusTest);
 end.
