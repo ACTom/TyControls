@@ -16,9 +16,15 @@ unit tyControls.AdvChart.VisualMapView;
   same: the background is sized from the bar drawn over its WHOLE length (the
   "sketch" upstream renders first), the group placed from the final one.
 
-  NOT HERE: dragging, hovering and the hover indicator (interaction is a
-  later batch); a rounded clip of a partial in-range bar (it is clipped to
-  the bar's rectangle). The controller's symbolSize IS here: it makes the bar
+  THE INTERACTION'S GEOMETRY [Batch 116, C7]: _updateView on a dragged
+  interval (TyVmContinuousUpdate -- the group stays where the build put it),
+  the hover indicator and its label (TyVmIndicatorAt), and what the pointer
+  hits: the bar's two polygons under the bar's rounded clip, a handle's pill
+  with its pen, a text's rect, a piece's symbol. The control keeps the view's
+  state (ContinuousView's own fields) and decides when to call them.
+
+  NOT HERE: a rounded clip of a partial in-range bar (it is clipped to the
+  bar's rectangle). The controller's symbolSize IS here: it makes the bar
   a trapezoid and scales the handles. [Batch 56: the bar was always a
   rectangle.] The 6.1.0 build this follows does not push
   overlapping handle labels apart, and neither does this.
@@ -72,6 +78,16 @@ type
     TextAlign, TextVAlign: string;
     HasTextOpacity: Boolean;
     TextOpacity: Double;
+    { INTERACTION [Batch 116]: realtime, hoverLink (truthy), hoverLinkDataSize
+      (0 when falsy), hoverLinkOnHandle (Has False when null or absent: then
+      realtime decides), indicatorSize (a percentage of the item width or a
+      length), and a click's mode -- single for 'single' and for true }
+    Realtime: Boolean;
+    HoverLink: Boolean;
+    HoverLinkDataSize: Double;
+    HasHoverLinkOnHandle, HoverLinkOnHandle: Boolean;
+    IndicatorSize: TTyBoxRaw;
+    SelectSingle: Boolean;
   end;
 
   { One text as zrender places it, in the view group's coordinates. }
@@ -143,6 +159,68 @@ type
     ShowLabel: Boolean;
     EndsText: array[0..1] of string;
     HasEnds: Boolean;
+    { device px per CSS px, as the layout was made [Batch 116] }
+    Scale: Double;
+  end;
+
+  { THE HOVER INDICATOR [Batch 116]: the symbol's place in the bar group
+    (x, y), its colour, its box, and the label in the view group }
+  TTyVmIndicator = record
+    X, Y: Double;
+    Fill: TTyVisualColor;
+    Size: Double;
+    Label_: TTyVmText;
+  end;
+
+  { WHAT THE VIEW SHOWS NOW where it is not the layout's [Batch 116]: the
+    handles' fills and labels as the element states left them (a state
+    restores the style it saved), the labels' opacity, and the indicator }
+  TTyVmLiveDraw = record
+    Has: Boolean;
+    HandleFill: array[0..1] of TTyVisualColor;
+    Labels: array[0..1] of TTyVmText;
+    LabelOpacity: array[0..1] of Double;
+    IndVisible: Boolean;
+    IndX, IndY, IndSize: Double;
+    IndFill: TTyChartColor;
+    IndLabelVisible: Boolean;
+    IndLabel: TTyVmText;
+  end;
+
+  { the data items one hover link reaches in one series: inner indices }
+  TTyVmHoverBatch = record
+    SeriesIndex: Integer;
+    Inner: TTyIntegerArray;
+  end;
+  TTyVmHoverBatches = array of TTyVmHoverBatch;
+
+  { ONE VIEW BETWEEN RENDERS [Batch 116]: ContinuousView's own fields --
+    the interval and handle ends a drag moves, whether it drags, whether the
+    pointer is over the bar group, the last hover link's items, whether the
+    indicator has never shown -- its uid (the `from` of its own
+    selectDataRange), how many times it was built, and the element states:
+    a thumb's hover flag (2 emphasis) and whether the emphasis is applied,
+    with the fill it shows and the fill it saved; a handle label's blur flag
+    and whether it is applied, with what it shows and what it saved; the
+    indicator and its label (the control reads their place and fill from
+    their animation bags). Keep: the next update is this view's own
+    selectDataRange, which does not rebuild it. }
+  TTyVmLive = record
+    Alive: Boolean;
+    Gen: Integer;
+    Uid: string;
+    Interval, Ends: array[0..1] of Double;
+    Dragging, Hovering, FirstShow, Keep: Boolean;
+    HoverIdx: TTyVmHoverBatches;
+    ThumbHover: array[0..1] of Integer;
+    ThumbEmph: array[0..1] of Boolean;
+    ThumbFill, ThumbSaved: array[0..1] of TTyVisualColor;
+    LabelBlur, LabelBlurOn: array[0..1] of Boolean;
+    Labels, LabelsSaved: array[0..1] of TTyVmText;
+    IndVisible, IndLabelVisible: Boolean;
+    IndX, IndY, IndSize: Double;
+    IndFill: string;
+    IndLabel: TTyVmText;
   end;
 
   TTyVisualMapInk = record
@@ -173,6 +251,47 @@ function TyLayoutVisualMap(const AModel: TTyVisualMapSpec;
 function TyBuildVisualMapMarks(const ALayout: TTyVisualMapLayout;
   const AView: TTyVmViewSpec; const AInk: TTyVisualMapInk;
   AOriginX, AOriginY: Double; AList: TTyPaintList): Integer;
+
+{ The elements with what the view shows now (ALive) [Batch 116]. }
+function TyBuildVisualMapMarks(const ALayout: TTyVisualMapLayout;
+  const AView: TTyVmViewSpec; const AInk: TTyVisualMapInk;
+  AOriginX, AOriginY: Double; AList: TTyPaintList;
+  const ALive: TTyVmLiveDraw): Integer;
+
+{ ---- the interaction [Batch 116] ---- }
+{ ContinuousView._updateView on an interval and its handle ends (device px
+  along the bar): the in-range bar, its colours and the handles; the
+  out-of-range bar, the texts, the background and the group stay. }
+procedure TyVmContinuousUpdate(var L: TTyVisualMapLayout;
+  const AModel: TTyVisualMapSpec; const AView: TTyVmViewSpec;
+  const AContent: TTyVisualColor; AScale: Double;
+  const AMeasurer: ITyTextMeasurer; const AInk: TTyVisualMapInk;
+  AI0, AI1, AE0, AE1: Double);
+{ _showIndicator's geometry: at ACursor (a data value), the label APrefix
+  and ATextValue formatted }
+function TyVmIndicatorAt(const L: TTyVisualMapLayout;
+  const AModel: TTyVisualMapSpec; const AView: TTyVmViewSpec;
+  const AContent: TTyVisualColor; AScale: Double;
+  const AMeasurer: ITyTextMeasurer; const AInk: TTyVisualMapInk;
+  ACursor, ATextValue: Double; const APrefix: string): TTyVmIndicator;
+{ a canvas point in the bar group's coordinates, the view group at
+  (AGroupX, AGroupY): the inverse of the bar's global transform }
+procedure TyVmGlobalToBar(const L: TTyVisualMapLayout; AGroupX, AGroupY, AX, AY: Double;
+  out ABX, ABY: Double);
+{ a view-group point in the bar group's coordinates }
+procedure TyVmToBar(const L: TTyVisualMapLayout; AGX, AGY: Double;
+  out ABX, ABY: Double);
+{ the bar under a view-group point: 2 the in-range polygon, 1 the
+  out-of-range one, 0 neither (or outside the bar's rounded clip) }
+function TyVmBarPartAt(const L: TTyVisualMapLayout; AGX, AGY: Double): Integer;
+{ a handle's pill and its pen (Path.contain), at a view-group point; AFill
+  whether the thumb is filled }
+function TyVmThumbContains(const L: TTyVisualMapLayout; const AView: TTyVmViewSpec;
+  AHandle: Integer; AFill: Boolean; AGX, AGY: Double): Boolean;
+{ a text's rect (BoundingRect.contain, edges in) }
+function TyVmTextContains(const AText: TTyVmText; AGX, AGY: Double): Boolean;
+{ a piece's symbol at a point of its item's own coordinates }
+function TyVmSymbolContains(const AItem: TTyVmItem; AX, AY: Double): Boolean;
 
 { ---- pieces, exported for the tests ---- }
 { zrender's transformDirection }
@@ -309,6 +428,9 @@ begin
   Result.HandleLineWidth := 2;
   Result.Z := 4;
   Result.ItemGap := 10;
+  Result.Realtime := True;
+  Result.HoverLink := True;
+  Result.IndicatorSize := TyBoxRawStr('50%');
   if AOption = nil then Exit;
   node := ObjOf(AOption.ComponentAt('visualMap', AIndex));
   if node = nil then Exit;
@@ -345,6 +467,25 @@ begin
   end;
   d := node.Find('selectedMode');
   Result.Silent := (d <> nil) and not JsTruthyOf(d);
+  { _onItemClick: 'single' or true picks one, anything else truthy toggles }
+  Result.SelectSingle := (d <> nil) and (((d.JSONType = jtString) and (d.AsString = 'single'))
+    or ((d.JSONType = jtBoolean) and d.AsBoolean));
+  { [Batch 116] the interaction's switches }
+  d := node.Find('realtime');
+  if d <> nil then Result.Realtime := JsTruthyOf(d);
+  d := node.Find('hoverLink');
+  if d <> nil then Result.HoverLink := JsTruthyOf(d);
+  d := node.Find('hoverLinkDataSize');
+  if (d <> nil) and (d.JSONType = jtNumber) and JsTruthyOf(d) then
+    Result.HoverLinkDataSize := d.AsFloat;
+  d := node.Find('hoverLinkOnHandle');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    Result.HasHoverLinkOnHandle := True;
+    Result.HoverLinkOnHandle := JsTruthyOf(d);
+  end;
+  d := node.Find('indicatorSize');
+  if d <> nil then Result.IndicatorSize := TyBoxRawOf(d);
   { normalizeCssArray(padding || 0) }
   d := node.Find('padding');
   if d <> nil then
@@ -1364,6 +1505,7 @@ begin
   L.Index := AModel.Index;
   L.Show := AView.Show;
   L.Piecewise := True;
+  L.Scale := AScale;
   Result := L;
   if not AView.Show then Exit;
   L.Horizontal := AView.Horizontal;
@@ -1437,6 +1579,9 @@ begin
     TyVisualApply(s, st, rv, text, row, False);
     if row.SymbolSet then it.Symbol := row.Symbol else it.Symbol := 'roundRect';
     it.Fill := row.Color;
+    { createSymbol sets no colour it is not given: the path keeps zrender's
+      default fill, black -- a category with no visual of its own [Batch 116] }
+    if not it.Fill.Defined then it.Fill := TyVisualRgba(0, 0, 0, 1);
     it.SymbolBox := XYWH(0, 0, i0, i1);
     it.SymbolRect := TyVmSymbolRect(it.Symbol, it.SymbolBox);
     have := False;
@@ -1504,6 +1649,317 @@ begin
   Result := L;
 end;
 
+{ the handles at AEnds: thumbs in the bar, labels in the view group; the
+  fills from the in-range stops' two ends }
+procedure PlaceHandlesOn(var L: TTyVisualMapLayout; const AModel: TTyVisualMapSpec;
+  const AView: TTyVmViewSpec; AScale: Double; const AMeasurer: ITyTextMeasurer;
+  const AInk: TTyVisualMapInk; const AInStops: TTyVisualGradStopArray;
+  const AEnds: array of Double);
+var
+  h: Integer;
+  th: TTyMat2D;
+  i0, i1, hs, lx, ly, val, ss, lw, lineScale: Double;
+  align: TTyTextAnchorH;
+  dir: string;
+  iconBox, r: TTyXYWH;
+begin
+  if not AView.Calculable then Exit;
+  i0 := L.ItemW;
+  i1 := L.ItemH;
+  hs := TyBoxRawResolve(AView.HandleSize, i0);
+  if AView.HandleSize.Kind = brNumber then hs := hs * AScale;
+  iconBox := XYWH(-hs / 2, -hs / 2, hs, hs);
+  SetLength(L.Handles, 2);
+  for h := 0 to 1 do
+  begin
+    L.Handles[h] := Default(TTyVmHandle);
+    { the controller's size at the value under the handle -- its own
+      state, not a forced one: scaled to it, centred on the bar's edge
+      side }
+    val := TyVmLinearMap(AEnds[h], 0, i1, AModel.Extent0, AModel.Extent1, True);
+    ss := ControllerSize(AModel, TyVisualValueState(AModel, val), val,
+      AView.ItemW) * AScale;
+    th := MatIdentity;
+    th[0] := ss / i0;
+    th[3] := ss / i0;
+    th[4] := i0 - ss / 2;
+    th[5] := AEnds[h];
+    L.Handles[h].Local := th;
+    L.Handles[h].Thumb := MatMul(L.Bar, th);
+    L.Handles[h].PathRect := TyVmIconRect(AView.HandleIcon, iconBox);
+    { Path.getBoundingRect with the pen: strokeNoScale divides by the line
+      scale of the thumb's whole transform, which is 1 at scale 1 }
+    lw := AView.HandleLineWidth;
+    if h = 0 then L.Handles[h].Fill := AInStops[0].Color
+    else L.Handles[h].Fill := AInStops[High(AInStops)].Color;
+    if not L.Handles[h].Fill.Defined then lw := Max(lw, 4);
+    lineScale := 1;
+    if (Abs(L.Handles[h].Thumb[0] - 1) > 1e-10)
+      and (Abs(L.Handles[h].Thumb[3] - 1) > 1e-10) then
+      lineScale := Sqrt(Abs(L.Handles[h].Thumb[0] * L.Handles[h].Thumb[3]
+        - L.Handles[h].Thumb[2] * L.Handles[h].Thumb[1]));
+    r := L.Handles[h].PathRect;
+    if (lw > 0) and (lineScale > 1e-10) then
+    begin
+      r.W := r.W + lw / lineScale;
+      r.H := r.H + lw / lineScale;
+      r.X := r.X - lw / lineScale / 2;
+      r.Y := r.Y - lw / lineScale / 2;
+    end;
+    L.Handles[h].Rect := r;
+    { the label: [handleSize, 0] through the thumb }
+    MatApply(L.Handles[h].Thumb, hs, 0, lx, ly);
+    { a horizontal bar's labels sit off the bar by the thumb's shortfall }
+    if AView.Horizontal then
+    begin
+      dir := TyVmTransformDirection('left', L.Bar);
+      if (dir = 'left') or (dir = 'top') then ly := ly + (i0 - ss) / 2
+      else ly := ly + (i0 - ss) / -2;
+    end;
+    if not AView.Horizontal then
+      align := WordH(TyVmTransformDirection('left', L.Bar))
+    else
+      align := tahCentre;
+    L.Handles[h].Label_ := MakeText(
+      TyVmFormatValue(L.Interval[h], AView.Precision, AView.Formatter),
+      lx, ly, align, tavMiddle, AMeasurer, AInk);
+  end;
+end;
+
+procedure TyVmContinuousUpdate(var L: TTyVisualMapLayout;
+  const AModel: TTyVisualMapSpec; const AView: TTyVmViewSpec;
+  const AContent: TTyVisualColor; AScale: Double;
+  const AMeasurer: ITyTextMeasurer; const AInk: TTyVisualMapInk;
+  AI0, AI1, AE0, AE1: Double);
+var
+  inS0, inS1: Double;
+  inStops: TTyVisualGradStopArray;
+begin
+  L.Interval[0] := AI0;
+  L.Interval[1] := AI1;
+  L.HandleEnds[0] := AE0;
+  L.HandleEnds[1] := AE1;
+  inStops := ColourStops(AModel, tvsInRange, AI0, AI1, AContent);
+  L.InStops := inStops;
+  inS0 := ControllerSize(AModel, tvsInRange, AI0, AView.ItemW) * AScale;
+  inS1 := ControllerSize(AModel, tvsInRange, AI1, AView.ItemW) * AScale;
+  L.InPoints := BarPoints(L.ItemW, inS0, inS1, AE0, AE1);
+  L.InRect := PolyRect(L.InPoints);
+  PlaceHandlesOn(L, AModel, AView, AScale, AMeasurer, AInk, inStops, [AE0, AE1]);
+end;
+
+function TyVmIndicatorAt(const L: TTyVisualMapLayout;
+  const AModel: TTyVisualMapSpec; const AView: TTyVmViewSpec;
+  const AContent: TTyVisualColor; AScale: Double;
+  const AMeasurer: ITyTextMeasurer; const AInk: TTyVisualMapInk;
+  ACursor, ATextValue: Double; const APrefix: string): TTyVmIndicator;
+var
+  st: TTyVisualState;
+  ss, lpx, tx, ty, tw, th: Double;
+  M: TTyMat2D;
+  dir: string;
+begin
+  Result := Default(TTyVmIndicator);
+  { getControllerVisual without a forced state: the value's own state in the
+    MODEL's range; the colour carries the opacity as alpha }
+  st := TyVisualValueState(AModel, ACursor);
+  Result.Fill := ControllerColour(AModel, st, ACursor, AContent);
+  ss := ControllerSize(AModel, st, ACursor, AView.ItemW) * AScale;
+  Result.Y := TyVmLinearMap(ACursor, AModel.Extent0, AModel.Extent1, 0, L.ItemH, True);
+  Result.X := L.ItemW - ss / 2;
+  Result.Size := TyBoxRawResolve(AView.IndicatorSize, L.ItemW);
+  if AView.IndicatorSize.Kind = brNumber then Result.Size := Result.Size * AScale;
+  { indicatorLabelPoint: half the size of U+56FD off a horizontal bar,
+    HOVER_LINK_OUT (6) off a vertical one, past half the item }
+  if AView.Horizontal then
+  begin
+    tw := 0;
+    th := 0;
+    if AMeasurer <> nil then
+      AMeasurer.MeasureLine(#$E5#$9B#$BD, AInk.FontName, AInk.FontSizeLogical,
+        AInk.FontWeight, tw, th);
+    lpx := Max(tw, th) / 2 + L.ItemW / 2;
+  end
+  else
+    lpx := 6 * AScale + L.ItemW / 2;
+  { getTransform(indicator, group): the bar's matrix after the indicator's
+    own translation, then the point }
+  M := MatMul(L.Bar, Translate(Result.X, Result.Y));
+  MatApply(M, lpx, 0, tx, ty);
+  dir := TyVmTransformDirection('left', L.Bar);
+  if AView.Horizontal then
+    Result.Label_ := MakeText(APrefix + TyVmFormatValue(ATextValue, AView.Precision,
+      AView.Formatter), tx, ty, tahCentre, WordV(dir), AMeasurer, AInk)
+  else
+    Result.Label_ := MakeText(APrefix + TyVmFormatValue(ATextValue, AView.Precision,
+      AView.Formatter), tx, ty, WordH(dir), tavMiddle, AMeasurer, AInk);
+end;
+
+procedure TyVmGlobalToBar(const L: TTyVisualMapLayout; AGroupX, AGroupY, AX, AY: Double;
+  out ABX, ABY: Double);
+var inv: TTyMat2D;
+begin
+  ABX := NaN;
+  ABY := NaN;
+  if not TyMatInvert(MatMul(Translate(AGroupX, AGroupY), L.Bar), inv) then Exit;
+  MatApply(inv, AX, AY, ABX, ABY);
+end;
+
+procedure TyVmToBar(const L: TTyVisualMapLayout; AGX, AGY: Double;
+  out ABX, ABY: Double);
+var inv: TTyMat2D;
+begin
+  ABX := NaN;
+  ABY := NaN;
+  if not TyMatInvert(L.Bar, inv) then Exit;
+  MatApply(inv, AGX, AGY, ABX, ABY);
+end;
+
+{ pathContain's windingLine for one edge }
+function WindingLine(X0, Y0, X1, Y1, AX, AY: Double): Double;
+var t, dir, x_: Double;
+begin
+  Result := 0;
+  if ((AY > Y0) and (AY > Y1)) or ((AY < Y0) and (AY < Y1)) then Exit;
+  if Y1 = Y0 then Exit;
+  t := (AY - Y0) / (Y1 - Y0);
+  if Y1 < Y0 then dir := 1 else dir := -1;
+  if (t = 1) or (t = 0) then
+    if Y1 < Y0 then dir := 0.5 else dir := -0.5;
+  x_ := t * (X1 - X0) + X0;
+  if x_ = AX then Exit(Infinity);
+  if x_ > AX then Result := dir;
+end;
+
+{ a polygon's fill: its rect first, then the winding over its edges and the
+  closing one -- any non-zero (an edge through the point is in) }
+function PolyContains(const APts: TTyPointFArray; AX, AY: Double): Boolean;
+var
+  r: TTyXYWH;
+  i, j: Integer;
+  w: Double;
+begin
+  Result := False;
+  if Length(APts) < 2 then Exit;
+  r := PolyRect(APts);
+  if not ((AX >= r.X) and (AX <= r.X + r.W) and (AY >= r.Y) and (AY <= r.Y + r.H)) then Exit;
+  w := 0;
+  for i := 0 to High(APts) do
+  begin
+    j := (i + 1) mod Length(APts);
+    w := w + WindingLine(APts[i].X, APts[i].Y, APts[j].X, APts[j].Y, AX, AY);
+  end;
+  Result := w <> 0;
+end;
+
+function TyVmBarPartAt(const L: TTyVisualMapLayout; AGX, AGY: Double): Integer;
+var bx, by, r, sc: Double;
+
+  function InCorner(ACX, ACY: Double): Boolean;
+  begin
+    Result := Sqr(bx - ACX) + Sqr(by - ACY) <= Sqr(r);
+  end;
+
+begin
+  Result := 0;
+  if L.Piecewise or not L.Valid then Exit;
+  TyVmToBar(L, AGX, AGY, bx, by);
+  if IsNan(bx) or IsNan(by) then Exit;
+  { the clip: the bar's rect with corners of 3 }
+  if not ((bx >= 0) and (bx <= L.ItemW) and (by >= 0) and (by <= L.ItemH)) then Exit;
+  sc := L.Scale;
+  if (sc <= 0) or IsNan(sc) then sc := 1;
+  r := Min(3 * sc, Min(L.ItemW, L.ItemH) / 2);
+  if (bx < r) and (by < r) and not InCorner(r, r) then Exit;
+  if (bx > L.ItemW - r) and (by < r) and not InCorner(L.ItemW - r, r) then Exit;
+  if (bx < r) and (by > L.ItemH - r) and not InCorner(r, L.ItemH - r) then Exit;
+  if (bx > L.ItemW - r) and (by > L.ItemH - r) and not InCorner(L.ItemW - r, L.ItemH - r) then Exit;
+  { the in-range polygon is drawn over the other }
+  if PolyContains(L.InPoints, bx, by) then Exit(2);
+  if PolyContains(L.OutPoints, bx, by) then Exit(1);
+end;
+
+function TyVmThumbContains(const L: TTyVisualMapLayout; const AView: TTyVmViewSpec;
+  AHandle: Integer; AFill: Boolean; AGX, AGY: Double): Boolean;
+var
+  inv, M: TTyMat2D;
+  px, py, rad, ax0, ay0, ax1, ay1, t, dx, dy, d, lw, lineScale, half: Double;
+  pr: TTyXYWH;
+begin
+  Result := False;
+  if (AHandle < 0) or (AHandle > High(L.Handles)) then Exit;
+  M := L.Handles[AHandle].Thumb;
+  if not TyMatInvert(M, inv) then Exit;
+  MatApply(inv, AGX, AGY, px, py);
+  pr := L.Handles[AHandle].PathRect;
+  { the pen: strokeNoScale divides by the line scale; a thumb without a fill
+    is its pen alone, at least strokeContainThreshold (5) wide }
+  lw := AView.HandleLineWidth;
+  { no Max with an integer literal: that overload is Single's }
+  if (not AFill) and (lw < 5) then lw := 5;
+  lineScale := 1;
+  if (Abs(M[0] - 1) > 1e-10) and (Abs(M[3] - 1) > 1e-10) then
+    lineScale := Sqrt(Abs(M[0] * M[3] - M[2] * M[1]));
+  if lineScale <= 1e-10 then half := 0 else half := lw / lineScale / 2;
+  { THE PILL: a stadium along its longer side, ends of half its breadth --
+    the default icon is exactly that }
+  rad := Min(pr.W, pr.H) / 2;
+  if pr.W >= pr.H then
+  begin
+    ax0 := pr.X + rad; ax1 := pr.X + pr.W - rad;
+    ay0 := pr.Y + pr.H / 2; ay1 := ay0;
+  end
+  else
+  begin
+    ay0 := pr.Y + rad; ay1 := pr.Y + pr.H - rad;
+    ax0 := pr.X + pr.W / 2; ax1 := ax0;
+  end;
+  dx := ax1 - ax0;
+  dy := ay1 - ay0;
+  if (dx = 0) and (dy = 0) then t := 0
+  else
+  begin
+    t := ((px - ax0) * dx + (py - ay0) * dy) / (dx * dx + dy * dy);
+    if t < 0 then t := 0
+    else if t > 1 then t := 1;
+  end;
+  d := Sqrt(Sqr(px - (ax0 + t * dx)) + Sqr(py - (ay0 + t * dy))) - rad;
+  if (lw > 0) and (Abs(d) <= half) then Exit(True);
+  Result := AFill and (d <= 0);
+end;
+
+function TyVmTextContains(const AText: TTyVmText; AGX, AGY: Double): Boolean;
+begin
+  Result := (AText.Text <> '') and (AGX >= AText.Rect.X) and (AGX <= AText.Rect.X + AText.Rect.W)
+    and (AGY >= AText.Rect.Y) and (AGY <= AText.Rect.Y + AText.Rect.H);
+end;
+
+function TyVmSymbolContains(const AItem: TTyVmItem; AX, AY: Double): Boolean;
+var b: TTyXYWH; r, cx, cy: Double;
+
+  function InCorner(ACX, ACY: Double): Boolean;
+  begin
+    Result := Sqr(AX - ACX) + Sqr(AY - ACY) <= Sqr(r);
+  end;
+
+begin
+  b := AItem.SymbolBox;
+  if AItem.Symbol = 'circle' then
+  begin
+    r := Min(b.W, b.H) / 2;
+    cx := b.X + b.W / 2;
+    cy := b.Y + b.H / 2;
+    Exit(Sqr(AX - cx) + Sqr(AY - cy) <= Sqr(r));
+  end;
+  Result := (AX >= b.X) and (AX <= b.X + b.W) and (AY >= b.Y) and (AY <= b.Y + b.H);
+  if not Result or (AItem.Symbol <> 'roundRect') then Exit;
+  r := Min(b.W, b.H) / 4;
+  if (AX < b.X + r) and (AY < b.Y + r) and not InCorner(b.X + r, b.Y + r) then Exit(False);
+  if (AX > b.X + b.W - r) and (AY < b.Y + r) and not InCorner(b.X + b.W - r, b.Y + r) then Exit(False);
+  if (AX < b.X + r) and (AY > b.Y + b.H - r) and not InCorner(b.X + r, b.Y + b.H - r) then Exit(False);
+  if (AX > b.X + b.W - r) and (AY > b.Y + b.H - r) and not InCorner(b.X + b.W - r, b.Y + b.H - r) then Exit(False);
+end;
+
 function TyLayoutVisualMap(const AModel: TTyVisualMapSpec;
   const AView: TTyVmViewSpec; const AContent: TTyVisualColor;
   ACanvasW, ACanvasH, AScale: Double; const AMeasurer: ITyTextMeasurer;
@@ -1519,73 +1975,6 @@ var
   k: Integer;
   word: string;
   inStops: TTyVisualGradStopArray;
-
-  { the handles at AEnds: thumbs in the bar, labels in the view group }
-  procedure PlaceHandles(const AEnds: array of Double);
-  var
-    h: Integer;
-    th: TTyMat2D;
-    lx, ly, val, ss: Double;
-    align: TTyTextAnchorH;
-    dir: string;
-  begin
-    if not AView.Calculable then Exit;
-    SetLength(L.Handles, 2);
-    for h := 0 to 1 do
-    begin
-      L.Handles[h] := Default(TTyVmHandle);
-      { the controller's size at the value under the handle -- its own
-        state, not a forced one: scaled to it, centred on the bar's edge
-        side }
-      val := TyVmLinearMap(AEnds[h], 0, i1, AModel.Extent0, AModel.Extent1, True);
-      ss := ControllerSize(AModel, TyVisualValueState(AModel, val), val,
-        AView.ItemW) * AScale;
-      th := MatIdentity;
-      th[0] := ss / i0;
-      th[3] := ss / i0;
-      th[4] := i0 - ss / 2;
-      th[5] := AEnds[h];
-      L.Handles[h].Local := th;
-      L.Handles[h].Thumb := MatMul(L.Bar, th);
-      L.Handles[h].PathRect := TyVmIconRect(AView.HandleIcon, iconBox);
-      { Path.getBoundingRect with the pen: strokeNoScale divides by the line
-        scale of the thumb's whole transform, which is 1 at scale 1 }
-      lw := AView.HandleLineWidth;
-      if h = 0 then L.Handles[h].Fill := inStops[0].Color
-      else L.Handles[h].Fill := inStops[High(inStops)].Color;
-      if not L.Handles[h].Fill.Defined then lw := Max(lw, 4);
-      lineScale := 1;
-      if (Abs(L.Handles[h].Thumb[0] - 1) > 1e-10)
-        and (Abs(L.Handles[h].Thumb[3] - 1) > 1e-10) then
-        lineScale := Sqrt(Abs(L.Handles[h].Thumb[0] * L.Handles[h].Thumb[3]
-          - L.Handles[h].Thumb[2] * L.Handles[h].Thumb[1]));
-      r := L.Handles[h].PathRect;
-      if (lw > 0) and (lineScale > 1e-10) then
-      begin
-        r.W := r.W + lw / lineScale;
-        r.H := r.H + lw / lineScale;
-        r.X := r.X - lw / lineScale / 2;
-        r.Y := r.Y - lw / lineScale / 2;
-      end;
-      L.Handles[h].Rect := r;
-      { the label: [handleSize, 0] through the thumb }
-      MatApply(L.Handles[h].Thumb, hs, 0, lx, ly);
-      { a horizontal bar's labels sit off the bar by the thumb's shortfall }
-      if AView.Horizontal then
-      begin
-        dir := TyVmTransformDirection('left', L.Bar);
-        if (dir = 'left') or (dir = 'top') then ly := ly + (i0 - ss) / 2
-        else ly := ly + (i0 - ss) / -2;
-      end;
-      if not AView.Horizontal then
-        align := WordH(TyVmTransformDirection('left', L.Bar))
-      else
-        align := tahCentre;
-      L.Handles[h].Label_ := MakeText(
-        TyVmFormatValue(L.Interval[h], AView.Precision, AView.Formatter),
-        lx, ly, align, tavMiddle, AMeasurer, AInk);
-    end;
-  end;
 
   { Group.getBoundingRect of the view group }
   function GroupRect(AWithBackground: Boolean): TTyXYWH;
@@ -1634,6 +2023,7 @@ begin
   L := Default(TTyVisualMapLayout);
   L.Index := AModel.Index;
   L.Show := AView.Show;
+  L.Scale := AScale;
   Result := L;
   if AModel.SubType = 'piecewise' then
     Exit(LayoutPiecewise(AModel, AView, AContent, ACanvasW, ACanvasH, AScale,
@@ -1735,7 +2125,7 @@ begin
   L.OutRect := PolyRect(L.OutPoints);
   L.InPoints := BarPoints(i0, inS0, inS1, 0, i1);
   L.InRect := PolyRect(L.InPoints);
-  PlaceHandles([0, i1]);
+  PlaceHandlesOn(L, AModel, AView, AScale, AMeasurer, AInk, inStops, [0, i1]);
   bb := GroupRect(False);
   L.BBoxBackground := bb;
   L.Background := XYWH(bb.X - pad[3], bb.Y - pad[0], bb.W + pad[3] + pad[1],
@@ -1744,7 +2134,7 @@ begin
   { THE FINAL VIEW }
   L.InPoints := BarPoints(i0, inS0, inS1, L.HandleEnds[0], L.HandleEnds[1]);
   L.InRect := PolyRect(L.InPoints);
-  PlaceHandles(L.HandleEnds);
+  PlaceHandlesOn(L, AModel, AView, AScale, AMeasurer, AInk, inStops, L.HandleEnds);
   bb := GroupRect(True);
   L.BBoxPosition := bb;
 
@@ -1764,6 +2154,17 @@ end;
 function TyBuildVisualMapMarks(const ALayout: TTyVisualMapLayout;
   const AView: TTyVmViewSpec; const AInk: TTyVisualMapInk;
   AOriginX, AOriginY: Double; AList: TTyPaintList): Integer;
+var none: TTyVmLiveDraw;
+begin
+  none := Default(TTyVmLiveDraw);
+  Result := TyBuildVisualMapMarks(ALayout, AView, AInk, AOriginX, AOriginY,
+    AList, none);
+end;
+
+function TyBuildVisualMapMarks(const ALayout: TTyVisualMapLayout;
+  const AView: TTyVmViewSpec; const AInk: TTyVisualMapInk;
+  AOriginX, AOriginY: Double; AList: TTyPaintList;
+  const ALive: TTyVmLiveDraw): Integer;
 var
   G: TTyMat2D;
   el: TTyChartElement;
@@ -1861,6 +2262,7 @@ var
   bg: TTyXYWH;
   pr: TTyXYWH;
   cxl, cyl, cx, cy, sw, sh: Double;
+  fill: TTyVisualColor;
 
   { a piecewise child: the symbol in its box, the label or the ends text;
     SILENT unless a click would select }
@@ -1969,17 +2371,39 @@ begin
       TyRectF(cx - sw / 2, cy - sh / 2, cx + sw / 2, cy + sh / 2),
       -TyJsAtan2(ALayout.Handles[h].Thumb[1], ALayout.Handles[h].Thumb[0]),
       cx, cy);
-    el.Style.HasFill := ALayout.Handles[h].Fill.Defined;
-    el.Style.FillColor := TyVisualToChart(ALayout.Handles[h].Fill);
+    { what the thumb shows now: a state that ended put back the fill it
+      saved [Batch 116] }
+    if ALive.Has and (h <= 1) then fill := ALive.HandleFill[h]
+    else fill := ALayout.Handles[h].Fill;
+    el.Style.HasFill := fill.Defined;
+    el.Style.FillColor := TyVisualToChart(fill);
     el.Style.StrokeColor := AInk.HandleStroke;
     el.Style.StrokeWidthLogical := AView.HandleLineWidth;
     el.Style.Alpha := 1;
     AList.Add(el);
     Inc(Result);
   end;
+  { THE HOVER INDICATOR, in the bar group after the thumbs [Batch 116]: the
+    circle of indicatorSize, the handles' pen around it }
+  if ALive.Has and ALive.IndVisible then
+  begin
+    el := Blank;
+    MatApply(G, ALive.IndX, ALive.IndY, cx, cy);
+    el.Shape := TyShapeCircle(cx, cy, ALive.IndSize / 2);
+    el.Style.HasFill := ALive.IndFill shr 24 <> 0;
+    el.Style.FillColor := ALive.IndFill;
+    el.Style.StrokeColor := AInk.HandleStroke;
+    el.Style.StrokeWidthLogical := 2;
+    el.Style.Alpha := 1;
+    AList.Add(el);
+    Inc(Result);
+  end;
   G := T;
   for h := 0 to High(ALayout.Texts) do Text(ALayout.Texts[h]);
-  for h := 0 to High(ALayout.Handles) do Text(ALayout.Handles[h].Label_);
+  for h := 0 to High(ALayout.Handles) do
+    if ALive.Has and (h <= 1) then Text(ALive.Labels[h], ALive.LabelOpacity[h])
+    else Text(ALayout.Handles[h].Label_);
+  if ALive.Has and ALive.IndLabelVisible then Text(ALive.IndLabel);
 end;
 
 end.

@@ -80,7 +80,8 @@ function TyEventQueryMatches(const AQuery: TTyEventQuery;
   of the state actions [Batch 88] -- select, unselect, toggleselect,
   selectchanged, highlight, downplay and the six legacy pie / map select
   events; and the legend's five [Batch 93] and its legendscroll [Batch 98];
-  and dragnode, a sankey's node drag [Batch 114];
+  and dragnode, a sankey's node drag [Batch 114]; and datarangeselected, a
+  visualMap's selectDataRange [Batch 116];
   and `updated`, which every
   setOption and dispatch ends with [Batch 97]. }
 function TyChartEventTypeOf(const AName: string): string;
@@ -95,7 +96,7 @@ uses
 const
   cMouseTypes: array[0..8] of string = ('click', 'dblclick', 'mousedown',
     'mouseup', 'mousemove', 'mouseover', 'mouseout', 'globalout', 'contextmenu');
-  cActionTypes: array[0..18] of string = ('select', 'unselect', 'toggleselect',
+  cActionTypes: array[0..19] of string = ('select', 'unselect', 'toggleselect',
     'selectchanged', 'highlight', 'downplay', 'mapselectchanged',
     'pieselectchanged', 'mapselected', 'pieselected', 'mapunselected',
     'pieunselected',
@@ -105,7 +106,9 @@ const
     { the scrolling legend's [Batch 98] }
     'legendscroll',
     { a sankey's dragNode [Batch 114] }
-    'dragnode');
+    'dragnode',
+    { a visualMap's selectDataRange [Batch 116] }
+    'datarangeselected');
 
 function TyChartEventIsAction(const AType: string): Boolean;
 var i: Integer;

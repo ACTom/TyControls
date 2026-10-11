@@ -7161,7 +7161,7 @@ B2:连续型组件的静态视图(对齐、四种矩阵、101 段渐变的圆角
 
 ## 89. Tier 1 第五十五批:连续型 visualMap 组件的静态视图(B2)(2026-09-27)
 
-B1 让颜色落到了数据上,组件本身还不画。这一批把连续型组件画出来:渐变条、两端文字、手柄与手柄标签、背景,以及整个组件放在哪。交互(拖手柄、悬停指示器、hoverLink)不在这一批。
+**[第 116 批：交互（拖手柄、悬停指示器、双向 hoverLink）已做，见 §151。]** B1 让颜色落到了数据上,组件本身还不画。这一批把连续型组件画出来:渐变条、两端文字、手柄与手柄标签、背景,以及整个组件放在哪。交互(拖手柄、悬停指示器、hoverLink)不在这一批。
 
 ### 上游的做法
 
@@ -7189,7 +7189,7 @@ B1 让颜色落到了数据上,组件本身还不画。这一批把连续型组�
 
 ### 已知偏差
 
-- 交互、悬停指示器、hoverLink 没有。
+- **[第 116 批：已做，见 §151。]** 交互、悬停指示器、hoverLink 没有。
 - 控制器 `symbolSize` 不是 `itemWidth` 时条是梯形、手柄会缩放——这里仍按矩形(B3)。
 - 部分区间的 inRange 条没有圆角裁剪。
 - 自定义图标里的曲线(C/Q)按控制点估包围盒,比 zrender 的精确极值大;默认图标只有直线和圆弧,逐位一致。
@@ -7309,7 +7309,7 @@ B4:分段型(`splitNumber`/`pieces`/`categories`、`reformIntervals`、`findPiec
 - **splitNumber**:步长 `(max - min) / splitNumber`,精度从 `precision` 起往上加,直到 `toFixed` 不改变步长,最多到 5,**写回** `option.precision`,段文字按写回后的精度;段端点是**累加**的 `curr += step`,最后一段止于 max。`minOpen`/`maxOpen` 各加一个开区间段。
 - **pieces**:每个边界依次试 `gte/gt/min`(`lte/lt/max`),**每试一次**都改写闭合标志和 useMinMax,找不到就是 ±∞ 且闭合;`min` 配开放的上界、`max` 配开放的下界时那一端改开。两端相等且都闭合的段带 `value`。竖向且未反向(或横向且反向)时先整体倒序,再 `reformIntervals`:V8 对短数组的排序(降序游程翻转 + 二分插入),扫描时被前一段盖住的端点拉齐,被压成非双闭点的段**删掉**,它的原始下标也从选中表里消失。
 - **categories**:段就是类别,竖向且未反向时倒序;映射方法是 `category`,`categoryMap` 按 `option.categories` 原顺序建,没有视觉值的类别从表里删掉、落到默认槽。
-- **选中表**:键是段的原始下标(类别模式是类别名);没写的键算选中;`selectedMode: 'single'` 只留第一个。
+- **[第 116 批：merge 时上游 `_resetSelected` 取新选项的 `selected` 整体替换（不与旧表合并），新选项没写就每个段都选中；selectDataRange 写进的表不补全，没写的段不选中，见 §151。]** **选中表**:键是段的原始下标(类别模式是类别名);没写的键算选中;`selectedMode: 'single'` 只留第一个。
 - **状态**:值所在的段(不找最近)被选中才是 inRange,不在任何段里是 outOfRange。
 - **映射**:分段型的归一化是**最近段**的下标摊到 [0, 1];inRange 时段自己的视觉值优先(`getSpecifiedVisual`,不找最近),outOfRange 的段没有视觉值;liftZ 在任何方法下都取第一个值。visualMeta 里的不透明度借 `colorAlpha` 的名义查段视觉值。
 - **补全**:某段写了、而选项和 target 的两个状态都没有的视觉类型,在选项的两个状态里补上 visualDefault 的 active/inactive 值——状态因此存在,completeSingle 不再补默认颜色。`!!option.categories` 为真时默认值取列表最后一个元素(标量),控制器缺省的颜色、符号、尺寸也是标量;默认符号是 `itemSymbol`。
@@ -7382,7 +7382,7 @@ PiecewiseView 的静态画面:每段一个条目(符号加标签)、两端文字
 - `TTyVmViewSpec` 增加分段型字段:`Piecewise`(子类型照模型判断)、`ItemGap`、`showLabel`、`selectedMode`(为假时元素静默)、`textStyle` 的 align / verticalAlign / opacity;分段型的 itemHeight 默认 14。
 - 新增 `TTyVmItem` 和 `LayoutPiecewise`,`TyLayoutVisualMap` 按子类型分派;连续型的 getItemAlign 抽成共用的 `AutoItemAlign`。
 - `TyVmSymbolRect` 用已有的 `PathRect`/`FromArc` 构造圆和圆角矩形的路径算包围盒。
-- 画的时候每个条目用 `TyBuildSymbolInBox` 画符号,标签的不透明度乘到文字颜色的 alpha 上。
+- **[第 116 批：控制器给不出颜色的条目（没有视觉值的类别）按 zrender 的默认填充画成黑色，以前不画，见 §151。]** 画的时候每个条目用 `TyBuildSymbolInBox` 画符号,标签的不透明度乘到文字颜色的 alpha 上。
 
 ### 基准
 
@@ -7396,7 +7396,7 @@ PiecewiseView 的静态画面:每段一个条目(符号加标签)、两端文字
 
 ### 已知偏差
 
-- 点击切换选中、悬停联动没有移植;`selectedMode` 只决定元素是否静默。
+- **[第 116 批：已做，见 §151。]** 点击切换选中、悬停联动没有移植;`selectedMode` 只决定元素是否静默。
 - 圆、圆角矩形、矩形以外的符号,包围盒取条目框。
 
 ### 下一批
@@ -8548,7 +8548,7 @@ A4 做了引擎,这一批把它接上:`rich`、背景框、边框、圆角、pad
 
 ### 已知偏差
 
-- additive（只有 visualMap 连续型指示器用）、渐变插值、逐关键帧缓动、pause/resume、saveTo 与 `__changeFinalValue`（状态机，AN3）没做。
+- **[第 116 批：additive 已做，见 §151。]** additive（只有 visualMap 连续型指示器用）、渐变插值、逐关键帧缓动、pause/resume、saveTo 与 `__changeFinalValue`（状态机，AN3）没做。
 - 数字字符串按数插值；上游归为数却在加法里拼接字符串。字符串形式的 duration/delay 按 `Number()` 取；上游的字符串 delay 会拼到时钟上、让 clip 停在起点。未注册的句柄名当 NaN：时长句柄缺失即不动画。
 - 只有一个关键帧且类型未知的轨道按离散处理（上游会写出 `'NaN…'` 之类的字符串）。
 - `easingFuncs` 上的原型属性名（`toString` 等）不当缓动。
@@ -8572,7 +8572,7 @@ A4 做了引擎,这一批把它接上:`rich`、背景框、边框、圆角、pad
 - **[第 112 批：能变的键加了引导线的 smooth（`stkSmooth`），见 §147]** **新单元 `tyControls.AdvChart.States`**（纯，已进 `.lpk`）：`TTyStElement`（标志、三种声明的状态对象、rest 与当前值、当前列表、是否装了代理）、`TTyStItem`（宿主、标签、引导线）、`TyStUseStates`（上面那套 useStates 与默认代理）、`TyStApplyItem`（applyElementStates）、进出 emphasis 与 hbo 位；选中模型 `TTySelModel` 与 select/unselect/toggle/isSelected/indices/initFromData/mapJson，JS 键序在 `MapSet` 里。能变的键：fill、stroke、lineWidth、opacity、z2、平移 x/y、扇形半径、符号缩放、ignore；几何是设备 px，颜色打包。
 - **控件**：`FSt` 按系列下标、按**原始**下标存每项的状态（过滤不搬家），每次建完显示列表 `StSync` 认元素（宿主、已摆好的标签、引导线、折线与面积）、刷新 rest 和声明、同步 selected 标志、应用标志，再 `StWrite` 把当前值写回元素。**帧 = 下一次绘制**：标志变了只记脏，`RenderTo`/`RenderCached` 开头 `StApplyChanged`，有元素变了就丢静态层——一次点击（移动、按下、松开、click）之间没有帧，和上游一样只算一帧，z2 不多爬。`Relayout`（Invalidate、换尺寸）算上游的整体更新：先回 rest、套旧列表、再套标志。
 - **悬停搬到标志上**：柱、饼、折线/散点（笛卡尔，日历和雷达之外）。在 A3 的 mouseout/mouseover 判定处离开/进入 emphasis（`TTyChartEventTarget` 多了派发者 `HdKind/HdSeries/HdRow`），emphasis 禁用的不是派发者，hbo 非零的不理会；画在静态层。覆盖层不再画这几类的项悬停；坐标轴触发的整列高亮仍走覆盖层，跳过已经由标志点亮的项。其余系列类型的悬停原样留在覆盖层。
-- **公开接口**：`DispatchAction(JSON)`（select/unselect/toggleSelect/highlight/downplay，batch 与未知类型答 False）、`SelectedDataIndices`、`SelectedMapText`、`ItemStates`、`LineStates`。事件走 A3 的路：`TTyChartEvent.Payload` 是动作事件的 JSON，查询对它们不过滤（上游 eventInfo 为空）；`TyChartEventTypeOf` 认这十二种。highlight/downplay 只做事件和 hbo 位（highlightKey 按首次使用编号），模糊是 B2 的。
+- **[第 116 批：highlight / downplay 的 batch 收了（一次 allLeaveBlur、每项补上外层的键、一个事件），其余 batch 仍答 False，见 §151。]** **公开接口**：`DispatchAction(JSON)`（select/unselect/toggleSelect/highlight/downplay，batch 与未知类型答 False）、`SelectedDataIndices`、`SelectedMapText`、`ItemStates`、`LineStates`。事件走 A3 的路：`TTyChartEvent.Payload` 是动作事件的 JSON，查询对它们不过滤（上游 eventInfo 为空）；`TyChartEventTypeOf` 认这十二种。highlight/downplay 只做事件和 hbo 位（highlightKey 按首次使用编号），模糊是 B2 的。
 - **样子**：柱/散点默认选中边框取皮肤的**标题字色**（上游的 tokens.color.primary 就是标题色，走皮肤令牌而不硬编码 `#3c3c41`）；rest 没有描边时线宽按 zrender 默认 1；饼的平移用 `TyJsCos/TyJsSin`；声明的 `select.itemStyle`、`select.label.color/show`、`emphasis.*` 按数据项→系列读。标签只因状态才显示时建成 `Ignore` 元素（`TTyChartElement.Ignore`：不画、不命中）；饼的引导线带上扇区的 datum（仍 silent，`IsGuide`）。
 - **顺带修的**：折线符号的 z2 一直是系列的 z2（0），上游是 100——悬停时整条线抬到 10 就盖住了所有符号、也挡住它们的命中。改成 100，和散点（第 71 批）一致。整体换 option 时 A3 记着的悬停目标作废（上游那是被删掉的元素，下次移动重新 over）。
 
@@ -8600,7 +8600,7 @@ A4 做了引擎,这一批把它接上:`rich`、背景框、边框、圆角、pad
 - 状态机只接了柱、饼、笛卡尔上的折线/散点/涟漪散点。其余类型（漏斗、雷达、K 线、象形柱、热力图、关系图、树系……）选中模型、动作和事件都有，**没有选中的样子**，悬停仍在覆盖层；它们的默认选中边框（漏斗、关系图、热力图、桑基图、象形柱）随之没有。关系图的边（dataType edge）不进选中模型，selectchanged 的项也不带 dataType。
 - highlight/downplay 只有事件与 hbo 位：动作前的 allLeaveBlur、按 focus 的 blurSeries、`notBlur`、折线单点高亮落在符号路径上（悬停离开会清掉它）都是 B2；`excludeSeriesId` 读了。悬停的 focus/blur 也是 B2。**[第 90 批已做，见 §125；漏斗、热力图、K 线、象形柱、旭日图与日历上的散点也接上了状态机。]**
 - 整体更新（Invalidate、换尺寸）后先回 rest、再套旧列表、再套标志，这条照上游写了但没有 B1 的用例；上游 `legend-pie` 里那一步（z2 继续爬）和过滤后饼的内部/原始下标对应都是 B3 的。
-- payload 没写任何下标字段时什么也不做（上游会对 `undefined` 做选择，拿到 `'e\0\0undefined'` 之类的键）；越界的下标丢掉；batch 不收；动作要在第一次渲染之后（选中模型要建好的数据）。
+- **[第 116 批：highlight / downplay 的 batch 收了，见 §151。]** payload 没写任何下标字段时什么也不做（上游会对 `undefined` 做选择，拿到 `'e\0\0undefined'` 之类的键）；越界的下标丢掉；batch 不收；动作要在第一次渲染之后（选中模型要建好的数据）。
 - 饼常态不显示标签、只在状态里显示时不建标签（上游一直有一个 ignore 的 Text）；状态的 `label.show` 决定是否建标签只读系列级。内侧标签在选中色上不重新挑墨色，标签不透明度不写（模糊在 B2）。
 - 渐变不抬亮（原有偏差）；z2 只比到 rest 的距离：端口的 rest z2 自己的（柱 0、饼 0、标签宿主 +1），折线符号已改成上游的 100。
 - 旧事件只在 `ChartOn` 注册了该类型时才发，发出时 `OnChartEvent` 也收到一份。
@@ -10873,3 +10873,90 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - 没有新单元、新主题键或新资源串。
 
 全量 **10596 个测试，0 失败、0 错误**（变异轮之前是 10594 个，同样全绿；多出的 2 个是变异补的手写测试）。新增 `test.advchart.graphsankeyinteract` 12 个（基准 1 个、手写 11 个）；力导向的求解拆成实例以后，现有的力导向、roam、聚焦、图例基准逐位不变。
+
+## 151. Tier 2 第一百一十六批：visualMap 交互（C7，2026-10-11）
+
+路线图 C7：visualMap 交互——手柄拖动（calculable / realtime）、hover 指示器、双向 hoverLink、分段点击选中。B2（§89）和 B4b（§93）只画了静态画面，把「拖手柄、悬停指示器、hoverLink、点击切换选中、悬停联动」整块留到这里；AN1（§122）留着 additive 动画，因为只有连续型的指示器用它。这一批对着 6.1 **发行版**的 `ContinuousView`（`_dragHandle`、`_updateInterval`、`_updateView`、`_updateHandle`、`_showIndicator`、`_hideIndicator`、`_enableHoverLinkToSeries` / `FromSeries`、`_doHoverLinkToSeries`、`_hoverLinkFromSeriesMouseOver`、`_clearHoverLinkToSeries`、`dispose`、`createPolygon`、`useHoverLinkOnHandle`、`getHalfHoverLinkSize`）、`PiecewiseView`（`_enableHoverLink`、`_onItemClick`、`_createItemSymbol`）、`visualMapAction.ts`、`ContinuousModel`（`setSelected`、`_resetRange`、`getSelected`、`getValueState`、`findTargetDataIndices`）、`PiecewiseModel`（`_resetSelected`、`setSelected`、`getSelectedMapKey`、`findTargetDataIndices`）、`helper.makeHighDownBatch`、`util/model.compressBatches`、`helper/sliderMove`、`echarts.ts` 的 `doDispatchAction`（batch、`updateDirectly`、挂起的动作）与 `applyChangedStates`、`util/states.ts`（`getHighlightDigit`、`enterBlur` / `leaveBlur`、`handleGlobalMouseOverForHighDown` / `MouseOut`、`setAsHighDownDispatcher`），以及 zrender 的 `Handler`（`mousemove` 的 #6198 重找、`dispatchToElement` 的冒泡与 zr 级触发、`isHover` 的裁剪路径）、`mixin/Draggable.ts`、`Element.animateTo` / `animateToShallow`、`animation/Animator.ts`（`whenWithKeys`、`Track.prepare` / `step` / `_addToTarget`、`_getAdditiveTrack`）、`Element._applyStateObj` 逐行核过，在真 dist 上跑基准。源码树的 `ContinuousView.ts` 比发行版多了「手柄标签重叠时推开、拖标签改拖整段」，发行版没有，照发行版。§89、§92、§93、§122、§123 的推迟在原处标注。
+
+### 上游的做法
+
+- **谁是可拖的**：发行版的 `_createHandle` 把 `_dragHandle(handleIndex, …)` 直接绑在手柄（thumb）和它的标签上，`createPolygon` 把在范围内的那段条绑成 `'all'`——**这段条总是 draggable**（`draggable: !!onDrift`），calculable 为假时它的 drift 什么都不做（`_dragHandle` 开头就回），但它照样被 zrender 的 Draggable 拿住，按在上面不平移。Draggable 在 mousedown 上从命中的元素往上找第一个 draggable 的，之后每个 mousemove 发一次 `drift(dx, dy)`（相对上一次指针的整数差，零也发），mouseup 发 `dragend`；它是 Handler 构造时最早注册的 zr 级处理器，所以 drift 在 echarts 的图表事件之前、在元素自己的 mousemove 冒泡之后。
+- **拖动**（`_dragHandle(idx, isEnd, dx, dy)`）：`_dragging = !isEnd`；不是结束时，增量经条组局部矩阵的**逆矩阵**（`_applyTransform([dx, dy], mainGroup, true)`，只有线性部分）取 y 分量，`sliderMove(delta, handleEnds, [0, itemHeight], idx, 0)`——minSpan 0，两端不交叉、撞上就并在一起，`addSafe` 取整；区间是两端 `linearMap` 回 extent（clamp）；然后 `_hideIndicator`、`_updateView`（视图先于动作）。`isEnd === !realtime` 时派发 `selectDataRange {from: uid, visualMapId, selected: _dataInterval.slice()}`——realtime 每次移动都派、松手不派；不 realtime 只在松手派，**没动过也派**。之后：结束时不在条组上（`!_hovering`）就清 hoverLink；拖动中 `hoverLinkOnHandle ?? realtime` 为真就以手柄端点做一次 hoverLink（不显示指示器）。拖整段时发行版读的是 `this._handleEnds['all']`——undefined，光标是 NaN，范围里什么都没有：**拖整段会把高亮全部 downplay 掉**。
+- **视图什么时候重建**：`doRender` 只在 payload 是自己发的 selectDataRange（`payload.from === this.uid`）时不重建；其余每次更新（setOption、resize、别处派发的 selectDataRange、别的会更新的动作）都 `_buildView`：区间从模型的 range 重来（`getSelected`：升序、夹进 extent）、手柄和标签和指示器都是新元素（没有悬停、没有淡化，指示器隐藏且 `_firstShowIndicator` 复位），**`_dragging`、`_hovering`、`_hoverLinkDataIndices` 是视图对象的字段，留着**。不重建时 `positionGroup` 也不跑：拖动中组停在上一次构建的位置，手柄标签变宽变窄都不挪组。
+- **元素状态保存和恢复的是整份 style**：`_showIndicator` 对两个手柄标签 `api.enterBlur`（blur 态 `opacity: 0.1`，`stateTransition` 200 ms，不看 `animation` 选项），`_hideIndicator` `leaveBlur`；手柄是 `setAsHighDownDispatcher` 的、有 `emphasis` 态（`emphasis.handleStyle` 的 item style），悬停时进 emphasis——但它**没有默认的状态代理**，所以不提亮、z2 不加。标志在事件里改，下一帧 `applyChangedStates` 才 `useStates`：进入一个态时把**当时的整份 style** 存进 normal 态，离开时整份放回。`_updateView` 用 `setStyle` 直接写当前 style（填充、标签的文字和位置），于是：拖动开始前指示器显示着、标签被淡化，拖第一下 `_hideIndicator` 让标签离开 blur——放回的是淡化那一刻的文字和位置，**刚算好的新文字被盖掉**，直到下一次 `_updateView`；手柄离开 emphasis 时填充同样退回进入那一刻的颜色。
+- **悬停在条上**（条组的 mousemove，冒泡自两段条和两个 thumb）：`_hovering = true`；不在拖动时，指针经条组**全局**矩阵的逆矩阵换成条坐标，y 夹进 `[0, itemHeight]`，`hoverOnBar = 0 <= x <= itemWidth`，`_doHoverLinkToSeries(y, hoverOnBar)`：半宽 6（`hoverLinkDataSize` 写了就是它经 `linearMap(size, extent, [0, h], true) / 2`——把**尺寸当成值**映射），两端越出条的一侧是 ±Infinity；在条上才显示指示器——下端开口 `'< ' + 上端`、上端开口 `'> ' + 下端`，否则 `'≈ ' + 光标值`；在条上或 `hoverLinkOnHandle` 为真时才重算 `_hoverLinkDataIndices`（否则它**留着旧的**），`compressBatches(旧, 新)` 得出要 downplay 和要 highlight 的两批。条组的 mouseout：`_hovering = false`，不在拖动就清 hoverLink（隐藏指示器、把 `_hoverLinkDataIndices` 原样 downplay、清空）。在条的两段之间移动是一次 out 一次 over：全部 downplay 再全部 highlight。
+- **指示器**（`_showIndicator`）：颜色是 `getControllerVisual(cursor, 'color', {convertOpacityToAlpha})`——状态按**模型**的 range 判断，不强制；`y = linearMap(cursor, extent, [0, h], true)`，`x = itemWidth - symbolSize / 2`；标签点是 `[(横向 ? max('国' 的宽高) / 2 : 6) + itemWidth / 2, 0]` 经指示器在组里的变换（条组矩阵乘指示器的平移），对齐取条组的 `'left'` 方向。动画开着且不是第一次显示时，`{x, y, style: {fill}}` 和标签的 `style.x / y` 走 `animateTo({duration: 100, easing: 'cubicInOut', additive: true})`；否则直接 `attr`。`_hideIndicator` 只把两者设成 invisible，不停动画、不挪位置。
+- **additive**：新动画器不停任何在跑的动画器，记下元素上同一嵌套对象（`targetName`）的所有动画器；新轨道的起点是其中**最后一个**有这个属性的轨道的最后关键帧（颜色经 `rgba2String` 取整），`prepare` 时如果那条轨道还在跑、类型相同，每个关键帧记下它与第一帧的差；每一帧先由早的动画器写绝对值，再由这条轨道把插值出的差**加**上去（数字直接加；颜色把当前字符串 parse 成 rgba、逐通道加、`rgba2String` 下取整）；早的轨道结束以后，这条改按自己的绝对关键帧走。100 ms 内连续移动三四次，指示器身上就叠着六七个动画器。
+- **hoverLink 从系列来**：zr 级 `mouseover` 落在一个沿宿主 / 父链找得到 ECData `dataIndex` 的元素上（数据项、它的标签、标注——标注的下标读的是**宿主**系列的数据），系列是这个 visualMap 的目标，取 `store.get(维度, dataIndex)`（内部下标），不是 NaN 就 `_showIndicator(v, v)`（没有前缀）。zr 级 `mouseout`（任何元素离开、包括离开画布）就 `_hideIndicator`。两个处理器只在 `hoverLink` 真时注册。
+- **高亮怎么到系列**：`makeHighDownBatch` 把每项改成 `{seriesId, dataIndex: null, dataIndexInside: [...], highlightKey: 'visualMap' + componentIndex}`，派发 `{type, batch}`。`doDispatchAction` 对 batch：`allLeaveBlur` 一次，每项 `defaults(extend({}, item), payload)` 再 `batch = null`，各自 `updateDirectly`；事件一个，`{type, escapeConnect, batch: [每项]}`。highlightKey 的位让不同来源的高亮互不干扰：两个 visualMap 高亮同一根柱子，一个 downplay 后它仍被另一个拿着。`findTargetDataIndices` 每个目标系列都给一项（可能是空列表）；`compressBatches` 丢掉空的。
+- **dispose 的怪处**：notMerge（或模型被移走）时旧视图 `dispose`，`_clearHoverLinkToSeries` 派发 downplay——这时在 setOption 的更新周期里，动作被挂起；`makeHighDownBatch` 返回的就是 `_hoverLinkDataIndices` 那个数组，紧接着被 `length = 0` 清空，挂起的动作到 setOption 末尾才跑：**一个 batch 为空的 downplay 事件，被它高亮的柱子一直亮着**。
+- **zrender 的悬停目标**：Handler 记着上次悬停的元素；它被一次更新删掉（`!__zr`）时，下一次 mousemove 先在**上次悬停的位置**重新找，再和新目标比——分段视图点击后整个重建，指针没动就没有 out / over。
+- **分段型**：每个条目组 `onclick` 是 `_onItemClick(piece)`：`selectedMode` 假什么都不做；克隆 `option.selected`，键是 `getSelectedMapKey`（类别模式是类别，否则段的原始下标）；`'single'` 或 `true` 先把这个键设真、再把表里每个键设成「是不是它」，其余 `!selected[key]`；派发 selectDataRange。条目组 mouseover / mouseout 在 `hoverLink` 真时派发 highlight / downplay，批是 `findTargetDataIndices(段)`（**不压缩**，空列表也派）。`selectedMode` 假时符号和标签都 silent：不点、不悬停。分段视图每次更新都重建。
+- **selectDataRange**：`eachComponent({mainType: 'visualMap', query: payload})`（visualMapIndex，否则 Id，否则 Name，都没有是全部）各自 `setSelected`：连续型 `range = selected.slice()` 再 `_resetRange`（降序就翻转，`Math.max / min` 夹进 extent）；分段型 `option.selected = clone(selected)`——**不补全**：表里没写的段不再算选中。然后 `update`（视觉编码重来），事件 `datarangeselected`（载荷原样、type 换掉）。
+- **merge**：连续型动作写进的 range 留在模型选项里，之后的 merge 写了 range 就盖掉，没写就留着。分段型每次 merge 都会 `optionUpdated`（visualMap 依赖 series，series 每次都被访问），`_resetSelected` 取**新选项**的 `selected`（不与旧的合并），新选项没写就是空表——**每个段又都选中了**，作者在初始选项里写的、动作写的都一样。
+- **命中**：zrender 的 `isHover` 先问元素自己的 `contain`，再沿父链问裁剪路径。条的两段是多边形（`pathContain` 的环绕数，边上算在里面），外面套着条组的裁剪矩形——`r: 3` 的圆角；手柄是 `path://` 药丸（默认图标恰好是半径为高一半的跑道形）加上它的笔：`strokeNoScale`，笔宽除以全局矩阵的线缩放，没有填充时至少 5；文字是 TSpan 的矩形；指示器、背景是 silent。visualMap 的 z 是 4，压在系列上面。
+
+### port 以前
+
+- visualMap 只有静态画面，指针碰不到它：手柄不能拖，悬停没有指示器，hoverLink 两个方向都没有，分段条目点了不选；`DispatchAction` 不认 selectDataRange，带 `batch` 的一律答 False。
+- 动画引擎没有 additive（§122）。
+- 分段型的 `selected` 在 merge 时按普通的深合并，上一次的选择会留下来；控制器给不出颜色的条目（没有视觉值的类别）不画。
+
+### 做法
+
+- **`Anim`**：`TTyAnimCfg.Additive`；`Shallow` 在 additive 时不停旧的、把元素上同名嵌套对象的在跑动画器交给新的（`SetAdditiveTo`，反向记 `FDependents`）；`WhenWithKeys` 的新轨道从 `GetAdditiveTrack` 的最后关键帧起步（颜色按 `rgba2String`）；`TTyAnimTrack.Prepare(maxTime, additive)` 记每帧的差（`AddValue`），`Step` 在那条轨道没结束时把差加到当前值上（数字、颜色——parse 当前字符串、逐通道加、下取整——和数组），结束了就改走自己的值。动画器析构时把指向自己轨道的引用清掉，免得悬空。
+- **`VisualMapView`**：视图规格多读 `realtime`、`hoverLink`、`hoverLinkDataSize`、`hoverLinkOnHandle`、`indicatorSize` 和点击的单选与否；连续型的「真正的视图」抽成 `TyVmContinuousUpdate`（在范围内的条、颜色、两个手柄和标签；组、背景、两端文字不动），构建和拖动共用；`TyVmIndicatorAt` 是 `_showIndicator` 的几何；命中：`TyVmBarPartAt`（逆矩阵、圆角裁剪、两段多边形的环绕数）、`TyVmThumbContains`（跑道形加笔）、`TyVmTextContains`、`TyVmSymbolContains`（圆、矩形、圆角矩形）；`TyVmGlobalToBar`。新记录 `TTyVmLive`（视图在两次渲染之间的字段和元素状态）、`TTyVmLiveDraw`（标记按此刻显示的画：手柄填充、标签、标签淡化、指示器和它的标签）。分段条目的颜色没有定义时按 zrender 的默认填充是黑色。
+- **控件**：
+  - 状态：`FVmLive`、指示器和标签的两个动画包（`TTyAnimBag`，每次构建新建，挂在自己的驱动 `FVmAnim` 上，`AnimTick` 推进、`AnimArmTimer` 认它）、动作写进模型的 `FVmRange0/1`（连续型）和 `FVmSel`（分段型的表，JSON）、Draggable 的拖动（`FVmDragVm / Idx / X / Y`）。`SolveVisualMaps` 把动作写的 range / 表压到规格上（分段型的表照写的读，没写的段不选中）；`SolveVisualMapViews` 对自己发了 selectDataRange 的视图（`Keep`）什么都不做，其余重建并 `VmBuilt`（`_buildView` 那些复位，留下拖动、悬停标志和 hoverLink 的项）。
+  - 指针：`EventTargetAt` 在标题之后、显示列表之前问 `VmHitAt`（后一个组件在上；连续型依次是两端文字、两个 thumb、条、手柄标签——标签按**此刻显示的**位置），目标是 `HdKind 7`，带构建代数 `HdGen`。`EventMove` 先做 #6198 的重找（悬停的是 visualMap 元素而它的视图重建过，就在上次悬停的位置重新找），然后照 zrender 的次序：旧目标的元素 mouseout（`VmElementEvent`，条组的清 hoverLink）、echarts 的 mouseout（`StHoverOut`：thumb 离开 emphasis 前 `allLeaveBlur`）、图表事件、各 visualMap 的 zr 级 mouseout（隐藏指示器）；新目标的元素 mousemove（条组的 hoverLink）、Draggable 的 drift（`VmDragMove`）、图表事件；新目标的元素 mouseover（分段条目的高亮）、`StHoverOver`（thumb 进 emphasis）、图表事件、zr 级 mouseover（`VmZrMouseOver`：数据项或标注的值）；最后一帧（`VmApplyStates`：标志变了的元素进出状态，进时存、出时放回整份 style——手柄填充、手柄标签）。`MouseDown` 先问 `VmDragStart`（thumb、手柄标签、在范围内的条），拿住了就不拖节点、不平移；`EventUp` 先 `VmDragEnd` 再发 mouseup，点击落在分段条目上是 `VmPieceClick`；`EventLeave` 补元素和 zr 级的 mouseout；`CaptureChanged` 结束拖动。
+  - 动作：`DispatchAction` 收 highlight / downplay 的 batch（`DoHighDownBatch`：一次 `StAllLeaveBlur`，每项按 defaults 补上外层的键、`batch` 置 null，走 `DoHighDownAction(item, True)`——不再各自离开淡化、不各自发事件；一个事件），其余 batch 仍答 False；收 `selectDataRange`（`DoSelectDataRange`：按 visualMapIndex / Id / Name 找、`VmSelectRange` 写模型、`FullUpdate`、事件按 JSON.stringify 的数字和键序写）。视图自己的派发在内存里建载荷，区间不经过文本往返。
+  - merge：`MergeBefore` 把连续型动作写的 range 写进树（之后由 merge 决定盖不盖），删掉旧的 `selected`（让新选项的整体替换）；`MergeKeepStates` 对被访问而没写的 visualMap 也删掉 `selected`、清掉动作写的表，模型没了或换了的走 `VmDispose`；notMerge 是 `VmDisposeAll`。`VmDispose` 复现那个空 batch 的 downplay。
+  - 绘制：指示器画在条组里 thumb 之后（`indicatorSize` 的圆，笔用手柄描边的主题墨色），它的标签在手柄标签之后；淡化的手柄标签按 0.1 的不透明度画。
+  - 测试接口：`VisualMapLive`、`VisualMapRoleAt`、`VisualMapSelectedText`。
+- **`Events`**：`datarangeselected` 进事件表。
+- 没有新单元、新主题键、新资源串。
+
+### 基准
+
+`tools/advchart-oracle/visualmap-interact.js`（真 dist，node 下 ssr 初始化后 `_ssr = false`、`env.node = false`，xorshift32 随机数，替换 `Date` 和定时器，动画循环停掉、帧手动推进，最后 `process.exit()`）→ `tests/fixtures/advchart-visualmap-interact.json`：**36 个用例、248 个记录（含初始）、180 个事件**。指针走 zrender 自己的 Handler，`up` 是 mouseup 加同点的 click。静态用例（`animation: false`）每步是事件、NOW 一帧、+16 一帧、+300 一帧（标签 200 ms 的淡化走完）；两个动画用例每步一帧，逐帧记。颜色全部钉住（根上的 `color`、`gradientColor`，visualMap 的 `contentColor`、`inactiveColor`），端口的默认色来自皮肤。文字宽度用 zrender 自己的度量（`echarts.format.getTextRect`，12px sans-serif）：hook `Text.dirtyStyle`，凡交给 zrender 的文字都量，115 条，测试用这张表。
+
+- **拖动** 13 个：竖向 realtime（上下两个手柄）、不 realtime（中途不派发，松手派发、没动也派发）、竖向反向、横向、横向反向且不 realtime、越过另一端与条端（并拢、夹住）、拖手柄标签、拖整段（realtime 与否）、`hoverLinkOnHandle` 两种写法、不 calculable（按下条不拖）、formatter 加 precision 0。
+- **悬停** 11 个：条上（≈、近两端的 < 与 >、离开条宽、离开画布）、部分区间（两段之间来回）、横向、`hoverLinkDataSize`、悬停手柄与它的标签、从系列来（数据项、非目标系列、`hoverLink: false`）、dataZoom 过滤后的散点（批里是内部下标）、`emphasis.focus: 'series'` 的系列被 visualMap 高亮时淡化别的系列、两个 visualMap 两把钥匙。
+- **动作与 merge** 2 个：外部的 selectDataRange（降序、越界、悬停中重建）、拖动后 merge 不写 range、写 range、notMerge（空 batch 的 downplay）。
+- **分段型** 8 个：multiple（点两次、点标签、按住不放再点）、single、`true`、`false`（不能点不能悬停）、pieces 带开区间、categories、只写一部分的 selectDataRange 再 merge、merge 写 `selected` 与不写。
+- **动画** 2 个：条上 30 ms 一次地移动（additive 叠加，最多六个动画器）、悬停数据项（填充一起动）。
+
+每步记：悬停的角色（事件前 `findHover`）、事件（highlight / downplay 的每项：系列、`dataIndexInside`、钥匙；datarangeselected：哪个 visualMap、有没有 `from`、选择）、每个 visualMap 的模型（range 或 selected 表，按对象的键序）与视图（区间、端点、拖动 / 悬停 / 首次显示标志、hoverLink 的项、组的位置、在范围内的条的四个点、每个 thumb 的位置 / 缩放 / 填充 / 悬停标志 / 是否在 emphasis、每个手柄标签的文字 / 位置 / 对齐 / 淡化、指示器的显隐 / 位置 / 填充 / 动画器数、它的标签）、分段条目（段、填充、标签不透明度），以及每个数据项的悬停标志、highByOuter、状态表、填充、不透明度。自检：R1 指示器的 y 反映射回它的文字（29 次）、R2 拖动的端点与区间由逆矩阵 + sliderMove + linearMap 逐位复现（11 次）、R3 第一次悬停条的高亮批由 store 重算（29 次）、R4 分段点击的表由前一步的表重算（11 次）；20 条区分计数（不 realtime 拖动不派发、松手派发、realtime 每步派发、< 与 > 前缀、从系列来的指示器、拖整段的 NaN downplay、手柄标签 0.1、第二把钥匙、被另一个 visualMap 拿着的项、single 只留一个、部分表让段不选中、merge 替换表、merge 复位、拖动后 merge 留下 range、指示器叠着两个以上动画器、拖动中组不动而重建后移动、手柄 emphasis、高亮淡化别的系列、内部下标）都 ≥ 1；两次生成逐字节一致；没有 `\u0000`；JSON 能读回。
+
+### 测试
+
+`test.advchart.visualmapinteract`（新，注册在 `tytests.lpr`）：
+
+- **基准重放**（1 个）：每个用例新建控件（动画用例 `camAlways`、`AnimNow` 走基准的时刻；其余 `camOff`），装上基准的度量表，按步调 `MouseMove / MouseDown / MouseUp / MouseLeave`、`DispatchAction`、`SetOption`（动画用例再 `AnimTick`），每步后无头渲染一次，逐位比较上面记的每一项：悬停角色（`VisualMapRoleAt`）、事件（处理器收到的 JSON：系列按 id 对回下标，datarangeselected 的数字按写出来的文字比）、模型（`VisualMapSpec` 的 range、`VisualMapSelectedText`）、视图（`VisualMapLayout` 与 `VisualMapLive`）、分段条目、`ItemStates`（悬停、highByOuter、状态表、填充的通道与 alpha 字节、不透明度；动画用例只比标志）。共比较约两万六千项。手柄标签的不透明度比淡化标志，不比数值（上游 200 ms 的过渡停在 0.1 或 0.09999999999999998）。
+- **手写**（6 个）：丢了捕获在最后的位置结束不 realtime 的拖动并派发；按住手柄拖不让 inside dataZoom 平移；selectDataRange 按 Id、Name、下标列表找；别的类型带 batch 答 False；highlight 的 batch 一个事件、每项接上外层的钥匙且 `batch` 为 null、只亮点名的项；指示器的标签真的画在列表里。
+
+首跑的不对：颜色（端口取皮肤色，基准改为钉住）；`datarangeselected` 不在事件表里（`ChartOn` 注册不上）；横向组位置差 0.36（测试量字用的是系统字体，改用基准的度量表）；动画用例的入场动画没走完（测试的时钟起点放错）；分段 categories 里没有视觉值的类别——上游 `createSymbol` 不设颜色、路径保留默认的黑色填充，端口不画（B4b 的旧偏差，顺手改掉）。
+
+本批按规矩只跑了自己的新套件和直接碰到的套件，全部通过：`TAdvChartVisualMapInteractOracleTest`（1）、`TAdvChartVisualMapInteractTest`（6）、visualMap 五套（`VisualMap` 8、`VisualMapView` 2、`VisualMapChannels` 4、`VisualMapPiecewise` 7、`VisualMapPiecewiseView` 3）、动画引擎 `AnimEngine` 24、`AnimStateEngine` 11、`AnimState` 5、事件 `MouseEvents` 3，以及共用指针与动作路径的 `Select` 11、`FocusBlur` 11、`LegendAct` 8、`OptionMerge` 15、`DataZoomInteract` 8、`GraphSankeyInteract`（1 + 11）。全量套件与变异轮留到里程碑（C6–C13）末尾。
+
+### 推迟与偏差
+
+- **手柄标签的淡入淡出**：上游 200 ms 的状态过渡，端口在那一帧直接切到 0.1 / 1。
+- **光标**：上游悬停手柄、手柄标签、可拖的条时是 `ns-resize` / `ew-resize`，端口不改光标。
+- **指示器的样式**：上游 `indicatorStyle` 的阴影（blur 2、偏移 1）不画；描边用手柄描边的主题墨色（上游是白色 `neutral00`），宽 2。`indicatorIcon` 只画圆；`emphasis.handleStyle` 不读（只复现了进出 emphasis 时填充的保存与放回）。
+- **命中**：自定义 `handleIcon` 的命中按适配后的矩形做跑道形（默认图标逐位）；圆角裁剪与多边形的边按解析式判断，正落在边上的点可能与 zrender 的路径环绕数不同；分段符号只认圆、矩形、圆角矩形，其余按条目框。
+- **只有左键拖**：zrender 的 Draggable 不看按键。触摸不支持。
+- **从系列来的 hoverLink**：关系图的边（`dataType: 'edge'`）不显示指示器；图例项不算。
+- **重找悬停目标**：只对 visualMap 的元素做 #6198 的重找（端口的 id 在重建前后稳定，大多数情况答案相同）。
+- **挂起的动作**：只复现了 dispose 那一处空 batch 的 downplay；其余「更新周期里派发的动作挂到最后」的时序没有建模。
+- **highlightKey 的位**：上游的钥匙表是模块全局的（所有图表实例共用，最多 32 个），端口按图表各自编号；只在一页上超过 32 把钥匙时有区别。
+- 连续型的 selectDataRange 给的不是数组时端口不理（上游 `slice` 之后 range 成了字符串或抛错）。
+
+### 落地
+
+- `source/tyControls.AdvChart.Anim.pas`：additive（`TTyAnimCfg.Additive`、轨道的 `FAdditive` / `AddValue`、动画器的 `FAdditiveTo` / `FDependents`、`GetAdditiveTrack`）；单元头注释。
+- `source/tyControls.AdvChart.VisualMapView.pas`：视图规格的交互字段、`TTyVmIndicator` / `TTyVmLiveDraw` / `TTyVmHoverBatch` / `TTyVmLive`、`TyVmContinuousUpdate`（`PlaceHandlesOn` 从嵌套过程里提出来）、`TyVmIndicatorAt`、命中与坐标换算、带此刻状态的 `TyBuildVisualMapMarks`、分段条目的默认黑色填充。
+- `source/tyControls.AdvanceChart.pas`：上面「控件」一节的全部；`TTyChartEventTarget.HdGen`；`DoHighDownAction` 的批项参数。
+- `source/tyControls.AdvChart.Events.pas`：`datarangeselected`。
+- `tools/advchart-oracle/visualmap-interact.js`、`tests/fixtures/advchart-visualmap-interact.json`、`tests/test.advchart.visualmapinteract.pas`（新，注册在 `tytests.lpr`）。
+- §89、§92、§93、§122、§123 在原处标注。没有新单元、新主题键或新资源串。
