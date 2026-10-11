@@ -437,7 +437,8 @@ TyTabControl { border-radius: var(--radius) var(--radius) 0 0; }
 ```
 
 内置主题对标题栏(`TyTitleBar`)与页签(`TyTab`)使用 `var(--radius) var(--radius) 0 0`
-实现顶部圆角、底部直角效果。
+实现顶部圆角、底部直角效果。页签的圆角按标签在上方来写;`TabPosition` 为下方或两侧时,
+圆角跟着转到标签伸出去的那一侧。
 
 **不支持**:每角长手写法(`border-top-left-radius` 等)、百分比半径、
 椭圆双半径写法(`<a> / <b>`)。

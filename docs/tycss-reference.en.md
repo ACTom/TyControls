@@ -443,7 +443,8 @@ TyTabControl { border-radius: var(--radius) var(--radius) 0 0; }
 ```
 
 The built-in themes use `var(--radius) var(--radius) 0 0` on title bars (`TyTitleBar`) and tabs (`TyTab`) for the
-round-top, square-bottom look.
+round-top, square-bottom look. Write a tab's corners as it sits on a top band: with `TabPosition` at the
+bottom or on a side, they turn with the band and stay on the edge the tab sticks out from.
 
 **Not supported**: per-corner longhands (`border-top-left-radius` etc.), percentage radii, and the
 elliptical two-radius form (`<a> / <b>`).
