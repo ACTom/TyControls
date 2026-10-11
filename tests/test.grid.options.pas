@@ -27,7 +27,7 @@ unit test.grid.options;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, StrUtils, Types, TypInfo, Controls, Forms, Graphics, LCLType,
+  Classes, SysUtils, StrUtils, Types, TypInfo, Controls, Forms, Graphics, LCLType, LMessages,
   BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
   tyControls.Types, tyControls.Controller, tyControls.Columns, tyControls.ScrollBar, tyControls.Edit,
@@ -60,6 +60,11 @@ type
     function  EditorText: string;
     procedure TypeInEditor(const S: string);
     procedure ScrollRows(ADy: Integer);
+    { #52: a key as the widgetset delivers it to one of the grid's children -- CN_KEYDOWN runs
+      the control's own handling, and a key still standing then comes as LM_KEYDOWN, which
+      offers it to the parents (ChildKey) before LCL's focus navigation. True = claimed. }
+    function  KeyTo(AChild: TWinControl; AKey: Word): Boolean;
+    function  FilterBox: TWinControl;
   end;
 
   TGridOptionsTest = class(TTestCase)
@@ -114,6 +119,8 @@ type
     procedure TestSelectedCellsUseTheSelectionInk;
     procedure TestTheEditorFollowsItsCell;
     procedure TestAGestureOnTheGridLeavesTheEditFirst;
+    procedure TestUpDownTheEditorLeavesMoveTheCell;
+    procedure TestAnArrowTheFilterBoxLeavesStaysThere;
     procedure TestHeaderPushedLookGatesThePressedFill;
     { --- 流式化 --- }
     procedure TestOptionsSurviveARoundTrip;
@@ -161,6 +168,17 @@ end;
 procedure TOptGrid.TypeInEditor(const S: string);
 begin
   if EditorControl is TTyEdit then TTyEdit(EditorControl).Text := S;
+end;
+
+function TOptGrid.KeyTo(AChild: TWinControl; AKey: Word): Boolean;
+begin
+  Result := AChild.Perform(CN_KEYDOWN, AKey, 0) <> 0;
+  if not Result then Result := AChild.Perform(LM_KEYDOWN, AKey, 0) <> 0;
+end;
+
+function TOptGrid.FilterBox: TWinControl;
+begin
+  Result := FilterEditor;
 end;
 
 procedure TOptGrid.ScrollRows(ADy: Integer);
@@ -1230,6 +1248,67 @@ begin
   AssertFalse('valid: the edit was left', FGrid.Editing);
   AssertEquals('valid: and committed', 'good', FGrid.Cells[0, 1]);
   AssertTrue('valid: the drag went ahead', FGrid.Header.Columns.Items[0].Width > before);
+end;
+
+{ #52, from the group: with the editor open, Up or Down -- keys the single-line editor has no
+  use for -- closed the edit and left the focus on the grid's scroll bar. LCL's arrow
+  navigation moves the focus to the editor's next sibling, and inside the grid that is the
+  scroll bar. Headless nothing has the focus, so that last step never runs here; what is
+  checked is that the grid claims the key before it gets that far, and does with it what its
+  own arrows do. }
+procedure TGridOptionsTest.TestUpDownTheEditorLeavesMoveTheCell;
+var
+  ed: TWinControl;
+begin
+  Build(3, 6, 80);
+  FGrid.OnValidateCell := @RefuseBad;
+  FGrid.Cells[0, 1] := 'old';
+  AssertTrue('setup: editing', FGrid.BeginEdit(0, 1));
+  ed := FGrid.EditorControl as TWinControl;
+  AssertTrue('setup: the plain text editor', ed is TTyEdit);
+  AssertSame('setup: a child of the grid', TWinControl(FGrid), ed.Parent);
+  FGrid.TypeInEditor('new');
+
+  AssertTrue('Down is claimed before LCL can move the focus', FGrid.KeyTo(ed, VK_DOWN));
+  AssertFalse('the edit was left', FGrid.Editing);
+  AssertEquals('and committed', 'new', FGrid.Cells[0, 1]);
+  AssertEquals('the cursor moved down a row', 2, FGrid.Row);
+
+  AssertTrue('setup: editing row 2', FGrid.BeginEdit(0, 2));
+  ed := FGrid.EditorControl as TWinControl;
+  FGrid.TypeInEditor('two');
+  AssertTrue('Up is claimed too', FGrid.KeyTo(ed, VK_UP));
+  AssertEquals('committed', 'two', FGrid.Cells[0, 2]);
+  AssertEquals('and moved up', 1, FGrid.Row);
+
+  AssertTrue('setup: editing row 1 again', FGrid.BeginEdit(0, 1));
+  ed := FGrid.EditorControl as TWinControl;
+  FGrid.TypeInEditor('bad');
+  AssertTrue('a refused value: the key is still claimed', FGrid.KeyTo(ed, VK_DOWN));
+  AssertTrue('the edit stays open', FGrid.Editing);
+  AssertEquals('the cursor stays', 1, FGrid.Row);
+  AssertEquals('the cell keeps its value', 'new', FGrid.Cells[0, 1]);
+
+  FGrid.TypeInEditor('fine');
+  AssertTrue('setup: back to row 0', FGrid.KeyTo(ed, VK_UP));
+  AssertTrue('setup: editing the first row', FGrid.BeginEdit(0, 0));
+  ed := FGrid.EditorControl as TWinControl;
+  AssertTrue('Up on the first row: still claimed', FGrid.KeyTo(ed, VK_UP));
+  AssertTrue('nowhere to go: the edit stays open', FGrid.Editing);
+end;
+
+{ The header filter box is a child of the grid too, and Up/Down there went the same way. It
+  has nowhere to move, so the arrow stays put. }
+procedure TGridOptionsTest.TestAnArrowTheFilterBoxLeavesStaysThere;
+begin
+  Build(3, 6, 80);
+  FGrid.ShowFilterRow := True;
+  FGrid.BeginFilterEdit(0);
+  AssertTrue('setup: the filter box is open', FGrid.FilterBox.Visible);
+  AssertTrue('Down is claimed', FGrid.KeyTo(FGrid.FilterBox, VK_DOWN));
+  AssertTrue('Up is claimed', FGrid.KeyTo(FGrid.FilterBox, VK_UP));
+  AssertTrue('the filter box stays open', FGrid.FilterBox.Visible);
+  AssertEquals('the cursor did not move', 0, FGrid.Row);
 end;
 
 procedure TGridOptionsTest.GridCellStyleRed(Sender: TObject; ACol, ARow: Integer;
