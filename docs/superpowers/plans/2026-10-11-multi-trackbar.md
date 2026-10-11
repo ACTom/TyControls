@@ -124,3 +124,28 @@
 - [ ] 签收写进本文件。
 
 ## 签收（执行时填）
+
+### 第一步签收（2026-10-11，主控）
+
+**提交**（`feat/multi-trackbar`，接在 #37 的 `c82ab367` 之后）：e6357802 计划 · b399566f 刻度标签与共用刻度过程 · d0f660ec 有序滑块模型 · 46bbf4d3 覆盖表补 `TyTrackSelection`（摘自 #37 分支的 2b49aadd）· b42e9999 几何与绘制 · 459f2787 鼠标与键盘 · 7ecd9532 Shift+Tab 进入落在最后一个滑块 · d3eb3f20 滚轮 · 7eb38145 `TTyRangeTrackBar` · 6ab2d58d `TTyMultiTrackBar` · 6537619c 自绘钩子与读数 · 49a5fcdd 滑块 `:focus` 样式 · cb9fdee6 面板注册 · 35496305 示例 · 741e1e4a 文档 · ebafbcbe 内置主题一致性测试 · deb5d0b3 主题 golden 更新 · 7aad9fce 面板图标 · 5c587827 示例宽度。
+
+**验证**
+- 变异：各任务列出的全部变红，另有数十个自选变异（各批报告）；有 4 个第一次存活，都补了夹具后变红；每次还原后核对哈希。
+- Lazarus 4.4：私有 `--pcp` `-B` 编三个包 0 错（含实现 agent 编不了的设计期包）；50 个示例全部编过、按窗口类逐个启动无错误框；`check-lfm-props.py` 通过、`check-example-po.py .` 106 个文件 0 问题；全量 11171 / 0 / 0。
+- Lazarus 3.0：三个包与 `tests` 编过，全量 11171 / 0 错误 / 1 失败（已知计时偶发 H6）。
+- 示例截图：两个新控件原先宽 430，超出窗体表面（左右各约 8 px 内边距），右端与最后一个刻度标签被表面裁掉；改为 412 后核对通过（5c587827）。只改 `.lfm` 时 lazbuild 不重编示例，要 `-B`。
+
+**偏离计划（均有测试或文档）**
+- 类名：issue 与本计划里的共用基类 `TTyCustomMultiTrackBar` 改名为中间类 `TTyMultiTrackBarBase`（同 `TTyGlyphButtonBase`）；`TTyCustomRangeTrackBar` / `TTyRangeTrackBar`、`TTyCustomMultiTrackBar` / `TTyMultiTrackBar` 两组建在它上面——多值控件按本库规矩也要有自己的 Custom 类，名字只能让出来。
+- D11 用户未回复，按建议：不做 RTL 镜像（与 `TTyTrackBar` 一致）、`MinGap` 放不下时临时缩小、默认 25..75 / 25, 50, 75。
+- 共用几何抽到 `tyControls.TrackBar`（`TyTrackThumbLen`、`TyTrackGrooveThickness`、`TyTrackSlideRect`、`TyTrackGrooveRect`、`TyDrawTrackThumb`、`TyLayoutTrackTicks` / `TyDrawTrackTicks`），`TTyTrackBar` 改用它们；关掉刻度标签时 TrackBar 与改动前逐像素相同（改动前生成的 72 种配置夹具）。
+- 按在滑块上记住抓取点（TrackBar 按下时滑块中心对准指针，这里不这样，否则一按就改值）；四个方向键横竖都生效；同值叠在一起的滑块按拖动方向分开。
+- 分段钩子合成 `SegmentStyle(i, out ATypeKey, AStyleClass)`；新增 `ThumbHint(i)`、`ValuesChanged`、`KeyShiftState`（测试接缝）。
+- `NoRanges` / `NoThumbs`：FPC 读窗体时空集合不清空，删光后重开窗体默认项会回来；只在集合为空时写出。
+- 新区间默认占最后一个区间之后那段、新滑块放在 Max；`BeginUpdate` / `EndUpdate` 之间可按任意顺序设值，结束时排序，多值控件的颜色等跟着值走，选中跟着项走。
+- 焦点环用 `--on-accent`（`--focus-ring` 就是强调色，画在滑块上看不见）；default / system / dark / showcase 自带滑块规则，light 底层的规则到不了，各自补了一条，green 用 `#FFFFFF`。
+- `TTyTrackThumbItem.Hint` 改为 `TTranslateString`（翻译守卫要求）。
+
+**发现、没修**
+- AutoSize 要等下一次布局才吸收标签带 / 读数带的厚度（与 `ShowValue` 原有的局限相同）。
+- `docs/controls/trackbar.md` 里那段主题示例规则本来就过时；`docs/tycss-reference*.md` 本来就没有 `TyTrackGroove` 行。
