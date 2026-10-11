@@ -40,6 +40,7 @@ type
     procedure TestLightSkinChromeBarsAreFlush;
     procedure TestChromeKeysKeepTheirBaseProperties;
     procedure TestTrackBarShowValueHasVisibleInk;
+    procedure TestFieldWellsMatchTheSkinsOwnEdit;
     procedure TestOnTitleBarInkReadsOnTheBar;
     procedure TestAntDesignGhostIsAFlatTextButton;
     procedure TestAeroTabRampIsOneColdFamilyInBothModes;
@@ -500,6 +501,67 @@ begin
           BarLuma(bar.Background)]),
           Abs(Luma(onbar.TextColor) - BarLuma(bar.Background)) >= 60);
       end;
+  finally
+    c.Free;
+  end;
+end;
+
+{ #47. A skin restyled its own edit, buttons and check boxes, and every other field -- list
+  box, memo, tree, list view, calendar, date picker, spin edit, grid -- fell back to the base
+  layer: the default theme's corners and wells in the skin's colours (rounded beige lists under
+  xp, grey ones under win10 and macos, round ones under classic). A field has to come out as
+  the skin's own edit does: the same well, the same frame, the same corners, in both modes.
+  The grid's corners follow --radius-sm, so it is held to the well and frame only. Checked over
+  the structural skins: 'default' and 'system' ARE the base layer (whose dark grid sits on the
+  surface, not on the raised field well), and showcase writes every key itself. }
+procedure TControllerThemeNameTest.TestFieldWellsMatchTheSkinsOwnEdit;
+const
+  FIELDS: array[0..7] of string = ('TyListBox', 'TyMemo', 'TyTreeView', 'TyListView',
+    'TyCalendar', 'TyDateTimePicker', 'TySpinEdit', 'TyGrid');
+var
+  c: TTyStyleController;
+  names: TStringArray;
+  e, f: TTyStyleSet;
+  ec, fc: TTyCorners;
+  i, m, k: Integer;
+  mode, who: string;
+begin
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinSkinNames;
+  AssertTrue('setup: the skins are there', Length(names) >= 14);
+  c := TTyStyleController.Create(nil);
+  try
+    for i := 0 to High(names) do
+    begin
+      if names[i] = 'showcase' then Continue;
+      for m := 0 to 1 do
+      begin
+        if m = 0 then mode := 'light' else mode := 'dark';
+        c.ThemeName := names[i];
+        c.Mode := mode;
+        e := c.Model.ResolveStyle('TyEdit', '', []);
+        ec := TyEffectiveCorners(e);
+        if (tpRenderStyle in e.Present) and (e.RenderStyle <> trsFlat) then ec := TyUniformCorners(0);
+        for k := 0 to High(FIELDS) do
+        begin
+          who := Format('%s/%s %s', [names[i], mode, FIELDS[k]]);
+          f := c.Model.ResolveStyle(FIELDS[k], '', []);
+          AssertTrue(who + ': the well is the edit''s',
+            (tpBackground in f.Present) and (f.Background.Color = e.Background.Color));
+          AssertEquals(who + ': framed like the edit (render style)',
+            Ord(tpRenderStyle in e.Present) * Ord(e.RenderStyle), Ord(tpRenderStyle in f.Present) * Ord(f.RenderStyle));
+          AssertEquals(who + ': framed like the edit (a border colour or none)',
+            Ord(tpBorderColor in e.Present), Ord(tpBorderColor in f.Present));
+          if tpBorderColor in e.Present then
+            AssertTrue(who + ': framed like the edit (border colour)', f.BorderColor = e.BorderColor);
+          if FIELDS[k] = 'TyGrid' then Continue;
+          fc := TyEffectiveCorners(f);
+          if (tpRenderStyle in f.Present) and (f.RenderStyle <> trsFlat) then fc := TyUniformCorners(0);
+          AssertTrue(who + ': the edit''s corners',
+            (fc.TL = ec.TL) and (fc.TR = ec.TR) and (fc.BR = ec.BR) and (fc.BL = ec.BL));
+        end;
+      end;
+    end;
   finally
     c.Free;
   end;

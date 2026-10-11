@@ -17,6 +17,17 @@
 }
 
 /* ── LIGHT palette — Windows 11 / Office web light ── */
+/* The controls this skin writes no rule for -- lists, trees, grids, calendars, date and spin
+   fields, memos, panels, group boxes, tabs -- are drawn by the built-in base layer. These
+   tokens hand them this skin's corners and the well of this skin's own edit, so they read as
+   part of the skin instead of the default theme in the skin's colours. */
+:root {
+  --radius-sm:    2px;
+  --input-bg:     var(--field);
+  --input-border: var(--border);
+  --grid-bg:      var(--field);
+}
+
 @mode light {
   :root {
     /* SEED — brand + Fluent neutral ramp */
