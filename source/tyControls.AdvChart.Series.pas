@@ -474,7 +474,9 @@ begin
       ['base', 'min', 'Q1', 'median', 'Q3', 'max'], '');
   Reg('candlestick', 'cartesian2d', scuData, ['cartesian2d'],
       ['base', 'open', 'close', 'lowest', 'highest'], '');
-  Reg('lines', 'geo', scuData, [], ['value'], '');
+  { [Batch 121] drawn on a cartesian, a polar and a calendar; a geo plugs
+    into the same coordinate hook (AdvChart.Lines) }
+  Reg('lines', 'geo', scuData, ['cartesian2d', 'polar', 'calendar', 'geo'], ['value'], '');
   Reg('map', 'geo', scuData, ['geo'], ['value'], '');
   { Absent rather than 'none': the source declares no coordinateSystem at all
     and lays these out in a box. }

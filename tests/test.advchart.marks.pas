@@ -507,7 +507,10 @@ begin
       or (cTypes[i] = 'gauge') or (cTypes[i] = 'radar')
       or (cTypes[i] = 'graph') or (cTypes[i] = 'tree')
       or (cTypes[i] = 'sunburst') or (cTypes[i] = 'treemap')
-      or (cTypes[i] = 'sankey') then
+      or (cTypes[i] = 'sankey')
+      { a lines series' rows are laid out by AdvChart.Lines through its
+        coordinate hook, never as a coordinate-pair store [Batch 121] }
+      or (cTypes[i] = 'lines') then
     begin
       AssertTrue(cTypes[i] + ' draws, on the other pass',
         TySeriesTypeHasRenderer(cTypes[i]));
@@ -533,6 +536,7 @@ begin
   AssertTrue('and the graph, as of this batch',
     TySeriesTypeHasRenderer('graph'));
   AssertTrue('and the sankey [Batch 79]', TySeriesTypeHasRenderer('sankey'));
+  AssertTrue('and the lines [Batch 121]', TySeriesTypeHasRenderer('lines'));
   AssertFalse('a chord does not yet', TySeriesTypeHasRenderer('chord'));
   { CASE-SENSITIVE, matching the type registry -- 'Bar' does not resolve as a
     series at all, so answering yes for it would promise a chart that cannot

@@ -560,7 +560,12 @@ type
       G[0..5] (cx, cy, r0, r, the start and end angles), G[6] clockwise,
       G[7] radial (r grows, else the end angle), G[8] a sausage, G[9] of no
       sweep }
-    carPolarBar);
+    carPolarBar,
+    { [Batch 121, C12] a lines series' row: its line (one proxy, the line's
+      shape.percent, drives the line, the two end symbols and the label),
+      and its effect symbol (a looping clip of its own). G[0..5] the line's
+      ends and control point, G[6] curved -- see AdvChart.Lines }
+    carLinesLine, carLinesFrom, carLinesTo, carLinesLabel, carLinesEffect);
 
   TTyChartAnim = record
     Role: TTyChartAnimRole;

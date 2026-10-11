@@ -64,6 +64,7 @@ uses
   tyControls.AdvChart.Convert, tyControls.AdvChart.Jitter,
   tyControls.AdvChart.Large, tyControls.AdvChart.Progressive,
   tyControls.AdvChart.Polar, tyControls.AdvChart.PolarBar,
+  tyControls.AdvChart.Lines,
   fpjson, contnrs, tyControls.SubPixel;
 
 const
@@ -205,7 +206,10 @@ type
     sskBox,
     { [Batch 114] a sankey: node rects by node index, and its links in a
       second set of rows (EdgeRows) }
-    sskSankey);
+    sskSankey,
+    { [Batch 121] a lines row: its line the host, its end symbols parts
+      whose states are the line's stroke and opacity }
+    sskLines);
   TTyStNodeArray = array of TJSONObject;
   TTyStSeries = record
     Kind: TTyStKind;
@@ -419,6 +423,14 @@ type
     { THE SANKEYS and their inks, per slot. [Batch 79] }
     FSankeys: array of TTySankeySolved;
     FSankeyInks: array of TTySankeyInk;
+    { THE LINES SERIES by slot, solved in the layout pass; the slot the
+      coordinate hook projects for; the trail's layer -- a lines series
+      with effect.trailLength, faded by lastFrameAlpha every frame of the
+      continuous phase [Batch 121] }
+    FLines: TTyLinesSolvedArray;
+    FLinesSpecs: TTyLabelSpecTable;
+    FLnSlot: Integer;
+    FTrailLayer: TBGRABitmap;
     { ONE VIEW PER GRAPH SERIES, not one per component: a graph's coordinate
       system belongs to the series, so these are indexed by BINDING slot and
       most of them are nil. A graph on AXES has none either -- its coordinate
@@ -1300,6 +1312,15 @@ type
     procedure SolveSunbursts(APPI: Integer);
     procedure SolveTreemaps(const AMeasurer: ITyTextMeasurer; APPI: Integer);
     procedure SolveSankeys(APPI: Integer);
+    { [Batch 121] }
+    procedure SolveLines(APPI: Integer);
+    function LinesProject(const AX, AY: TTyLinesValue; AClamp: Boolean): TTyPointF;
+    function LinesInk(ASlot: Integer; ANode: TJSONObject; const ASolved: TTyLinesSolved;
+      ARow: Integer; AStroke: TTyChartColor; AScale: Double;
+      out ASpec: TTyLabelSpec): TTyLinesInk;
+    function LinesTooltip(const ADatum: TTyChartDatumRef; out ABlock: TTyTooltipBlock): Boolean;
+    function LinesTrailAlpha(ASeriesIndex: Integer): Double;
+    procedure PaintTrail(APainter: TTyPainter; AList: TTyPaintList);
     function TreemapInk(ASlot: Integer): TTyTreemapInk;
     function SunburstInk(ASlot: Integer): TTySunburstInk;
     function TreeInk(ASlot: Integer): TTyTreeInk;
@@ -1981,6 +2002,9 @@ type
     { THE LARGE MODE the last build drew a series in: lgkNone for one drawn
       an element per datum [Batch 117] }
     function SeriesLargeKind(ASeriesIndex: Integer): TTyLargeKind;
+    { A LINES SERIES as the layout solved it: its rows, their look, its clip
+      and its large batch (Valid False for any other) [Batch 121] }
+    function LinesSolvedOf(ASeriesIndex: Integer): TTyLinesSolved;
     { ---- progressive rendering and appendData [Batch 119] ---- }
     { chart.appendData with seriesIndex and data: ADataJson, a JSON array of data
       items, appended to the series' own `data`. Nothing is drawn until the
@@ -2518,6 +2542,7 @@ begin
     it keeps the surface deliberately, for reuse -- so dropping is not freeing. }
   FreeAndNil(FStatic);
   FreeAndNil(FProgLayer);
+  FreeAndNil(FTrailLayer);
   FreeAndNil(FDzTimer);
   FreeAndNil(FTipTimer);
   { THE PROXIES BEFORE THE DRIVER: freeing one takes its clips off it }
@@ -3309,6 +3334,8 @@ end;
 
 procedure TTyAdvanceChart.Rebuild;
 var
+  d: TJSONData;
+  lnRaws: TTyLinesRawArray;
   i, j, k, ds, cur: Integer;
   dims: TTySeriesDimArray;
   st: TTyDataStore;
@@ -3359,6 +3386,25 @@ begin
   begin
     st := TTyDataStore.Create;
     FStores[i] := st;
+    { A LINES SERIES' ROWS ARE ITS ITEMS: one `value` column and no
+      coordinate at all -- its coords never reach an axis' extent
+      (LinesSeries.getInitialData) [Batch 121] }
+    if FBindings[i].SeriesType = TyLinesSeriesTypeName then
+    begin
+      FSeriesDataset[i] := -1;
+      d := FOption.ComponentAt('series', FBindings[i].SeriesIndex);
+      if d is TJSONObject then
+      begin
+        lnRaws := TyLinesRawsOf(TJSONObject(d));
+        st.AddDimension(TyLinesValueDim, ddtFloat);
+        for k := 0 to High(lnRaws) do
+        begin
+          st.AppendRow([lnRaws[k].Value]);
+          if lnRaws[k].HasName then st.SetName(k, lnRaws[k].Name);
+        end;
+      end;
+      Continue;
+    end;
     { WHICH TABLE, IF ANY. A series with its own `data` reads that and nothing
       else -- the table is there for the series that did not bring any. }
     FSeriesDataset[i] := TySeriesDatasetIndex(FOption, FBindings[i].SeriesIndex);
@@ -4211,6 +4257,11 @@ begin
   SolveSunbursts(APPI);
   SolveTreemaps(AMeasurer, APPI);
   SolveSankeys(APPI);
+  { THE LINES, on the coordinate systems laid out above; an update's render
+    clears a trail's layer (LinesView.render's layer.clear(true))
+    [Batch 121] }
+  SolveLines(APPI);
+  FreeAndNil(FTrailLayer);
   SolveTitles(AMeasurer, APPI);
   SolveLegends(AMeasurer, APPI);
   SolveVisualMapViews(AMeasurer, APPI);
@@ -9936,6 +9987,646 @@ begin
   end;
 end;
 
+{ ==================== the lines series [Batch 121, C12] ====================
+
+  LinesSeries, linesLayout, linesVisual and LinesView: the rows (any of the
+  data forms), laid out through the coordinate hook on a cartesian, a polar
+  or a calendar, their look (the visual style's per-key fallthrough from the
+  row's lineStyle to the series', the end symbols linesVisual pairs up, the
+  label Line.beforeUpdate places, the effect symbol EffectLine moves), the
+  view group's clip, and -- large and over its threshold -- the one batch
+  LargeLineDraw draws. The pure part is AdvChart.Lines. }
+
+function LnNode(ANode: TJSONObject; const APath: array of string): TJSONData;
+var i: Integer; d: TJSONData;
+begin
+  Result := nil;
+  d := ANode;
+  for i := 0 to High(APath) do
+  begin
+    if not (d is TJSONObject) then Exit;
+    d := TJSONObject(d).Find(APath[i]);
+    if d = nil then Exit;
+  end;
+  if (d <> nil) and (d.JSONType = jtNull) then Exit;
+  Result := d;
+end;
+
+{ a colour written as a string, parsed }
+function LnColour(AData: TJSONData; out AColor: TTyChartColor): Boolean;
+begin
+  Result := False;
+  AColor := 0;
+  if (AData = nil) or (AData.JSONType <> jtString) then Exit;
+  Result := TyTryParseChartColor(AData.AsString, AColor);
+end;
+
+{ lineStyle.type as the dash enum }
+procedure LnDashOf(AData: TJSONData; out ADash: TTyOptDash; out AExplicit: TTyDoubleArray);
+var i: Integer;
+begin
+  ADash := todNone;
+  AExplicit := nil;
+  if AData = nil then Exit;
+  if AData.JSONType = jtString then
+  begin
+    if AData.AsString = 'dashed' then ADash := todDashed
+    else if AData.AsString = 'dotted' then ADash := todDotted
+    else if AData.AsString = 'solid' then ADash := todSolid;
+  end
+  else if AData.JSONType = jtNumber then
+  begin
+    ADash := todExplicit;
+    SetLength(AExplicit, 1);
+    AExplicit[0] := AData.AsFloat;
+  end
+  else if AData is TJSONArray then
+  begin
+    ADash := todExplicit;
+    SetLength(AExplicit, AData.Count);
+    for i := 0 to AData.Count - 1 do AExplicit[i] := TyLinesJsNum(TJSONArray(AData).Items[i]);
+  end;
+end;
+
+{ a symbol size as written: a number, or the first two of an array }
+procedure LnSize(AData: TJSONData; AScale: Double; out AW, AH: Double);
+begin
+  AW := NaN;
+  AH := NaN;
+  if AData = nil then Exit;
+  if AData is TJSONArray then
+  begin
+    if AData.Count > 0 then AW := TyLinesJsNum(TJSONArray(AData).Items[0]);
+    if AData.Count > 1 then AH := TyLinesJsNum(TJSONArray(AData).Items[1]) else AH := AW;
+  end
+  else
+  begin
+    AW := TyLinesJsNum(AData);
+    AH := AW;
+  end;
+  AW := AW * AScale;
+  AH := AH * AScale;
+end;
+
+function TTyAdvanceChart.LinesProject(const AX, AY: TTyLinesValue;
+  AClamp: Boolean): TTyPointF;
+var
+  b: TTySeriesBinding;
+  pol: TTyPolar;
+  cal: TTyCalendar;
+  dv: TTyDataValue;
+
+  { scale.parse of one written value on an axis (TyAxisParseJson's rules) }
+  function Parse(AAxis: TTyAxis; const AV: TTyLinesValue): Double;
+  var ord: Integer; ms: Double;
+  begin
+    Result := NaN;
+    if AAxis = nil then Exit;
+    if AV.Kind in [lvkNull, lvkOther] then Exit;
+    case AAxis.AxisType of
+      atCategory:
+        if AV.Kind = lvkString then
+        begin
+          if AAxis.Categories = nil then Exit;
+          ord := AAxis.Categories.GetOrdinal(AV.Str);
+          if ord >= 0 then Result := ord;
+        end
+        else
+          Result := TyJsRound(AV.Num);
+      atTime:
+        if AV.Kind = lvkString then
+        begin
+          if TyParseDateMs(AV.Str, ms, False) then Result := ms;
+        end
+        else
+          Result := TyJsRound(AV.Num);
+    else
+      if AV.Kind = lvkString then
+      begin
+        if AV.Str = '' then Exit;
+        Result := TyJsToNumber(AV.Str);
+      end
+      else
+        Result := AV.Num;
+    end;
+  end;
+
+begin
+  Result := TyPointF(NaN, NaN);
+  if (FLnSlot < 0) or (FLnSlot > High(FBindings)) then Exit;
+  b := FBindings[FLnSlot];
+  if b.Polar is TTyPolar then
+  begin
+    pol := TTyPolar(b.Polar);
+    Exit(pol.DataToPoint([Parse(pol.RadiusAxis, AX), Parse(pol.AngleAxis, AY)]));
+  end;
+  if (b.CalendarIndex >= 0) and (b.CalendarIndex <= High(FCalendars)) then
+  begin
+    { Calendar.dataToPoint(coords): the date of the pair's first value, no
+      range check unless asked }
+    cal := FCalendars[b.CalendarIndex];
+    case AX.Kind of
+      lvkNumber: dv := TyDataNum(AX.Num);
+      lvkString: dv := TyDataText(AX.Str);
+    else
+      dv := TyDataNone;
+    end;
+    Exit(cal.DatePoint(cal.ParseDate(dv), AClamp));
+  end;
+  if b.Cart <> nil then
+    Result := b.Cart.DataToPoint([Parse(b.XAxis, AX), Parse(b.YAxis, AY)]);
+end;
+
+function TTyAdvanceChart.LinesTrailAlpha(ASeriesIndex: Integer): Double;
+var slot: Integer;
+begin
+  Result := 0;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FLines)) or not FLines[slot].Valid then Exit;
+  Result := FLines[slot].TrailAlpha;
+end;
+
+function TTyAdvanceChart.LinesSolvedOf(ASeriesIndex: Integer): TTyLinesSolved;
+var slot: Integer;
+begin
+  Result := Default(TTyLinesSolved);
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FLines)) then Exit;
+  Result := FLines[slot];
+end;
+
+function TTyAdvanceChart.LinesInk(ASlot: Integer; ANode: TJSONObject;
+  const ASolved: TTyLinesSolved; ARow: Integer; AStroke: TTyChartColor;
+  AScale: Double; out ASpec: TTyLabelSpec): TTyLinesInk;
+var
+  raw: TTyLinesRaw;
+  d, own, fmt: TJSONData;
+  c: TTyChartColor;
+  dash: TTyOptDash;
+  expl: TTyDoubleArray;
+  e, cnt: Integer;
+  w, h, speed, len, v: Double;
+  word: string;
+  has, isNum: Boolean;
+  vars: array of TTyStringArray;
+  prm: TTyChartCallbackParams;
+  eff: TTyLinesEffect;
+  sizes, syms: TJSONData;
+
+  function Pair(AData: TJSONData; AIndex: Integer): TJSONData;
+  begin
+    if AData is TJSONArray then
+    begin
+      if AIndex < AData.Count then Result := TJSONArray(AData).Items[AIndex]
+      else Result := nil;
+    end
+    else
+      Result := AData;
+    if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
+  end;
+
+  function SymName(AData: TJSONData): string;
+  begin
+    Result := '';
+    if (AData <> nil) and (AData.JSONType = jtString) then Result := AData.AsString;
+  end;
+
+begin
+  Result := Default(TTyLinesInk);
+  raw := ASolved.Raws[ARow];
+  { THE STYLE: each key the row's lineStyle, else the series', else the
+    default (opacity 0.5, width 1); the colour the series' visual }
+  Result.Stroke := AStroke;
+  if LnColour(TyLinesItemFind(raw, ['lineStyle', 'color']), c) then Result.Stroke := c;
+  d := TyLinesFind(raw, ANode, ['lineStyle', 'width']);
+  if d = nil then Result.Width := 1 else Result.Width := TyLinesJsNum(d);
+  d := TyLinesFind(raw, ANode, ['lineStyle', 'opacity']);
+  if d = nil then Result.Opacity := 0.5 else Result.Opacity := TyLinesJsNum(d);
+  LnDashOf(TyLinesFind(raw, ANode, ['lineStyle', 'type']), dash, expl);
+  Result.Dash := TyDashPattern(dash, expl, Result.Width);
+  { THE END SYMBOLS (linesVisual): the series' pair, the row's own where it
+    is truthy -- a size of 0 keeps the series' }
+  syms := LnNode(ANode, ['symbol']);
+  sizes := LnNode(ANode, ['symbolSize']);
+  for e := 0 to 1 do
+  begin
+    if syms = nil then Result.Sym[e].Name := 'none'
+    else Result.Sym[e].Name := SymName(Pair(syms, e));
+    if sizes = nil then
+    begin
+      Result.Sym[e].W := 10 * AScale;
+      Result.Sym[e].H := 10 * AScale;
+    end
+    else
+      LnSize(Pair(sizes, e), AScale, Result.Sym[e].W, Result.Sym[e].H);
+    d := Pair(TyLinesItemFind(raw, ['symbol']), e);
+    if (raw.Item <> nil) and (d <> nil) and TyLinesJsTruthy(d) then
+      Result.Sym[e].Name := SymName(d);
+    d := Pair(TyLinesItemFind(raw, ['symbolSize']), e);
+    if (raw.Item <> nil) and (d <> nil) and TyLinesJsTruthy(d) then
+      LnSize(d, AScale, Result.Sym[e].W, Result.Sym[e].H);
+  end;
+  { THE LABEL: the series' spec under the row's own label; placed by the
+    line, `position || 'middle'` over the series' default 'end' }
+  ASpec := LabelSpecFor(ASlot);
+  own := TyLinesItemFind(raw, ['label']);
+  if own is TJSONObject then ASpec := TyLabelSpecOfNode(TJSONObject(own), ANode, ASpec);
+  ASpec.Position := tlpInside;
+  ASpec.OffsetXLogical := 0;
+  ASpec.OffsetYLogical := 0;
+  ASpec.Overflow := tloNone;
+  { an outside label inherits the line's colour (setLabelStyle's
+    inheritColor) unless it wrote one }
+  if ASpec.AutoColour then ASpec.InheritColour := True;
+  Result.LabelShow := ASpec.Show;
+  Result.LabelSpec := ARow + 1;
+  d := TyLinesFind(raw, ANode, ['label', 'position']);
+  if (d <> nil) and (d.JSONType = jtString) then word := d.AsString else word := 'end';
+  Result.LabelPos := TyLinesLabelPosOf(word);
+  { `distance`, one for both or a pair; none is nought (null * scale) }
+  Result.DistX := 0;
+  Result.DistY := 0;
+  d := TyLinesFind(raw, ANode, ['label', 'distance']);
+  if d is TJSONArray then
+  begin
+    Result.DistX := NaN;
+    Result.DistY := NaN;
+    if d.Count > 0 then Result.DistX := TyLinesJsNum(TJSONArray(d).Items[0]);
+    if d.Count > 1 then Result.DistY := TyLinesJsNum(TJSONArray(d).Items[1]);
+  end
+  else if d <> nil then
+  begin
+    Result.DistX := TyLinesJsNum(d);
+    Result.DistY := Result.DistX;
+  end;
+  Result.DistX := Result.DistX * AScale;
+  Result.DistY := Result.DistY * AScale;
+  if ASpec.HasAlignH then
+  begin
+    Result.AlignFlags := Result.AlignFlags or 1;
+    Result.AlignH := ASpec.AlignH;
+  end;
+  if ASpec.HasAlignV then
+  begin
+    Result.AlignFlags := Result.AlignFlags or 2;
+    Result.AlignV := ASpec.AlignV;
+  end;
+  { THE WORDS: the formatter over the row (a the series, b the name, c the
+    raw value), else Line.ts' default -- the name when the raw value is
+    undefined, the value rounded to 10 places when it is finite, else the
+    value as text }
+  fmt := TyLinesFind(raw, ANode, ['label', 'formatter']);
+  if (fmt <> nil) and (fmt.JSONType = jtString) and TyChartIsHandlerRef(fmt.AsString) then
+  begin
+    prm := TyChartBlankParams;
+    prm.ComponentType := 'series';
+    prm.SeriesType := TyLinesSeriesTypeName;
+    prm.SeriesIndex := ASolved.SeriesIndex;
+    prm.SeriesName := SeriesModelName(ASolved.SeriesIndex);
+    prm.DataIndex := ARow;
+    prm.RawDataIndex := ARow;
+    prm.Name := raw.Name;
+    SetLength(prm.Values, 1);
+    prm.Values[0] := raw.Value;
+    Result.LabelText := TyChartRunHandler(fmt.AsString, TyChartOneParams(prm));
+  end
+  else if (fmt <> nil) and (fmt.JSONType = jtString) then
+  begin
+    vars := nil;
+    SetLength(vars, 1);
+    SetLength(vars[0], 3);
+    vars[0][0] := SeriesModelName(ASolved.SeriesIndex);
+    vars[0][1] := raw.Name;
+    if raw.RawIsFlat then vars[0][2] := '0'
+    else if raw.RawNone then vars[0][2] := 'undefined'
+    else vars[0][2] := TyGraphJsText(raw.RawJson);
+    Result.LabelText := TyJsFormatTpl(fmt.AsString, 3, vars);
+  end
+  else
+  begin
+    has := raw.RawIsFlat or ((not raw.RawNone) and (raw.RawJson <> nil));
+    isNum := raw.RawIsFlat;
+    v := 0;
+    word := '0';
+    if (not raw.RawIsFlat) and has then
+    begin
+      v := TyLinesJsNum(raw.RawJson);
+      isNum := (raw.RawJson.JSONType <> jtObject)
+        and not ((raw.RawJson is TJSONArray) and (raw.RawJson.Count > 1));
+      word := TyGraphJsText(raw.RawJson);
+    end;
+    Result.LabelText := TyGraphEdgeDefaultText(has, isNum, v, word, raw.Name);
+  end;
+  { THE EFFECT (EffectLine): the row's effect over the series', over the
+    defaults -- a circle of 3, period 4 s, loop -- and the period from the
+    length at constantSpeed; the delay as written, else idx / count *
+    period / 3 with that period }
+  if not ASolved.Effect then Exit;
+  d := TyLinesFind(raw, ANode, ['effect', 'symbol']);
+  if (d <> nil) and (d.JSONType = jtString) then Result.EffName := d.AsString
+  else Result.EffName := 'circle';
+  d := TyLinesFind(raw, ANode, ['effect', 'symbolSize']);
+  if d = nil then
+  begin
+    w := 3 * AScale;
+    h := 3 * AScale;
+  end
+  else
+    LnSize(d, AScale, w, h);
+  Result.EffW := w;
+  Result.EffH := h;
+  Result.EffColor := Result.Stroke;
+  if LnColour(TyLinesFind(raw, ANode, ['effect', 'color']), c) then Result.EffColor := c;
+  d := TyLinesFind(raw, ANode, ['effect', 'opacity']);
+  if d = nil then Result.EffOpacity := 1 else Result.EffOpacity := TyLinesJsNum(d);
+  d := TyLinesFind(raw, ANode, ['effect', 'period']);
+  if d = nil then Result.EffPeriod := 4 * 1000 else Result.EffPeriod := TyLinesJsNum(d) * 1000;
+  d := TyLinesFind(raw, ANode, ['effect', 'loop']);
+  Result.EffLoop := (d = nil) or TyLinesJsTruthy(d);
+  Result.EffRoundTrip := TyLinesJsTruthy(TyLinesFind(raw, ANode, ['effect', 'roundTrip']));
+  d := TyLinesFind(raw, ANode, ['effect', 'constantSpeed']);
+  if d = nil then speed := 0 else speed := TyLinesJsNum(d);
+  if speed > 0 then
+  begin
+    TyLinesEffectInit(eff, ASolved.Geoms[ARow], ASolved.Poly, Result.EffName, w, h);
+    len := TyLinesEffectLength(eff);
+    Result.EffPeriod := len / (speed * AScale) * 1000;
+  end;
+  cnt := Length(ASolved.Raws);
+  d := TyLinesFind(raw, ANode, ['effect', 'delay']);
+  if d <> nil then Result.EffDelay := TyLinesJsNum(d)
+  else Result.EffDelay := ARow / cnt * Result.EffPeriod / 3;
+end;
+
+procedure TTyAdvanceChart.SolveLines(APPI: Integer);
+var
+  i, k, si, n: Integer;
+  node: TJSONObject;
+  d: TJSONData;
+  sol: TTyLinesSolved;
+  stroke, c: TTyChartColor;
+  scale, lw, x, y, cw, ch, e0, e1, trail: Double;
+  area: TTyXYWH;
+  pol: TTyPolar;
+  clipOn: Boolean;
+  dash: TTyOptDash;
+  expl: TTyDoubleArray;
+  spec: TTyLabelSpec;
+begin
+  FLines := nil;
+  FLinesSpecs := nil;
+  SetLength(FLines, Length(FBindings));
+  SetLength(FLinesSpecs, Length(FBindings));
+  if APPI > 0 then scale := APPI / 96 else scale := 1;
+  for i := 0 to High(FBindings) do
+  begin
+    FLines[i] := Default(TTyLinesSolved);
+    if FBindings[i].SeriesType <> TyLinesSeriesTypeName then Continue;
+    if (not FBindings[i].Resolved) or FBindings[i].Hidden then Continue;
+    if (FBindings[i].Cart = nil) and not (FBindings[i].Polar is TTyPolar)
+      and ((FBindings[i].CalendarIndex < 0)
+        or (FBindings[i].CalendarIndex > High(FCalendars))) then Continue;
+    si := FBindings[i].SeriesIndex;
+    d := FOption.ComponentAt('series', si);
+    if not (d is TJSONObject) then Continue;
+    node := TJSONObject(d);
+    sol := Default(TTyLinesSolved);
+    sol.Valid := True;
+    sol.SeriesIndex := si;
+    sol.Raws := TyLinesRawsOf(node);
+    sol.Poly := TyLinesJsTruthy(LnNode(node, ['polyline']));
+    sol.Effect := TyLinesJsTruthy(LnNode(node, ['effect', 'show']));
+    sol.Z := SeriesIntIn(si, 'z', 2);
+    sol.Z2 := 0;
+    { THE TRAIL: a canvas zlevel with motion blur at lastFrameAlpha }
+    d := LnNode(node, ['effect', 'trailLength']);
+    if d = nil then trail := 0.2 else trail := TyLinesJsNum(d);
+    if sol.Effect and (trail > 0) then sol.TrailAlpha := TyLinesTrailAlpha(trail);
+    { the series' visual colour: lineStyle.color, else the palette's }
+    stroke := TTyChartColor(SeriesColor(si));
+    if LnColour(LnNode(node, ['lineStyle', 'color']), c) then stroke := c;
+    { THE CLIP: createGridClipPath widened by the series' lineStyle.width
+      (or nothing), createPolarClipPath; none on a calendar }
+    d := LnNode(node, ['clip']);
+    clipOn := (d = nil) or TyLinesJsTruthy(d);
+    if clipOn and (FBindings[i].Polar is TTyPolar) then
+    begin
+      pol := TTyPolar(FBindings[i].Polar);
+      sol.HasClipSector := True;
+      pol.AxisExtent(pol.RadiusAxis, e0, e1);
+      sol.ClipCX := TyJsToFixed(pol.CX, 1);
+      sol.ClipCY := TyJsToFixed(pol.CY, 1);
+      sol.ClipR0 := TyJsToFixed(Min(e0, e1), 1);
+      sol.ClipR1 := TyJsToFixed(Max(e0, e1), 1);
+      pol.AxisExtent(pol.AngleAxis, e0, e1);
+      sol.ClipSA := -e0 * (Pi / 180);
+      sol.ClipEA := -e1 * (Pi / 180);
+      sol.ClipCW := pol.AngleInverse;
+    end
+    else if clipOn and (FBindings[i].Cart <> nil) then
+    begin
+      area := FBindings[i].Cart.GetArea;
+      lw := TyLinesJsNum(LnNode(node, ['lineStyle', 'width']));
+      if IsNan(lw) or (lw = 0) then lw := 0;
+      lw := lw * scale;
+      x := area.X - lw / 2;
+      y := area.Y - lw / 2;
+      cw := area.W + lw;
+      ch := area.H + lw;
+      cw := Ceil(cw);
+      if x <> Floor(x) then
+      begin
+        x := Floor(x);
+        cw := cw + 1;
+      end;
+      sol.HasClip := True;
+      sol.Clip := TyRectF(x, y, x + cw, y + ch);
+    end;
+    FLnSlot := i;
+    n := Length(sol.Raws);
+    { LARGE: the segs through the hook, the series' style, no per-row look }
+    if LargeKindOf(i) = lgkLines then
+    begin
+      sol.IsLarge := True;
+      sol.Large := Default(TTyLargeGeom);
+      sol.Large.Kind := lgkLines;
+      sol.Large.Pts := TyLinesLargeSegs(sol.Raws, sol.Poly, @LinesProject);
+      sol.Large.LinesPoly := sol.Poly;
+      sol.Large.LinesCurve := TyLinesJsNum(LnNode(node, ['lineStyle', 'curveness']));
+      if IsNan(sol.Large.LinesCurve) then sol.Large.LinesCurve := 0;
+      d := LnNode(node, ['lineStyle', 'width']);
+      if d = nil then sol.LargeWidth := 1 else sol.LargeWidth := TyLinesJsNum(d);
+      sol.Large.LineW := sol.LargeWidth * scale;
+      TyLargeLinesIndex(sol.Large);
+      TyLargeSetBox(sol.Large);
+      if sol.HasClip then
+      begin
+        sol.Large.ClipOn := True;
+        sol.Large.Clip := TyXYWH(sol.Clip.Left, sol.Clip.Top,
+          sol.Clip.Right - sol.Clip.Left, sol.Clip.Bottom - sol.Clip.Top);
+      end;
+      sol.LargeStroke := stroke;
+      d := LnNode(node, ['lineStyle', 'opacity']);
+      if d = nil then sol.LargeOpacity := 0.5 else sol.LargeOpacity := TyLinesJsNum(d);
+      LnDashOf(LnNode(node, ['lineStyle', 'type']), dash, expl);
+      sol.LargeDash := TyDashPattern(dash, expl, sol.LargeWidth);
+      FLines[i] := sol;
+      Continue;
+    end;
+    SetLength(sol.Geoms, n);
+    SetLength(sol.Inks, n);
+    SetLength(FLinesSpecs[i], n);
+    for k := 0 to n - 1 do
+      sol.Geoms[k] := TyLinesLayoutRow(sol.Raws[k], k, sol.Poly,
+        TyLinesCurvenessOf(sol.Raws[k], node), @LinesProject);
+    for k := 0 to n - 1 do
+    begin
+      sol.Inks[k] := LinesInk(i, node, sol, k, stroke, scale, spec);
+      FLinesSpecs[i][k] := spec;
+    end;
+    FLines[i] := sol;
+  end;
+  FLnSlot := -1;
+end;
+
+{ LinesSeries.formatTooltip: one bare row, the item's name -- `name` read
+  through the item model, so a named series lends its name to an unnamed
+  item -- else 'from > to', and the raw value unless it is not a number }
+function TTyAdvanceChart.LinesTooltip(const ADatum: TTyChartDatumRef;
+  out ABlock: TTyTooltipBlock): Boolean;
+var
+  slot: Integer;
+  raw: TTyLinesRaw;
+  nm, vt: string;
+  d: TJSONData;
+  node: TJSONObject;
+  noValue: Boolean;
+  v: Double;
+begin
+  ABlock := nil;
+  Result := False;
+  if (ADatum.Kind <> ctkSeries) or ADatum.IsEdge then Exit;
+  slot := SlotOfSeries(ADatum.SeriesIndex);
+  if (slot < 0) or (slot > High(FLines)) or not FLines[slot].Valid then Exit;
+  if (ADatum.DataIndex < 0) or (ADatum.DataIndex > High(FLines[slot].Raws)) then Exit;
+  Result := True;
+  raw := FLines[slot].Raws[ADatum.DataIndex];
+  node := nil;
+  d := FOption.ComponentAt('series', ADatum.SeriesIndex);
+  if d is TJSONObject then node := TJSONObject(d);
+  if raw.HasName then nm := raw.Name
+  else
+  begin
+    nm := '';
+    d := LnNode(node, ['name']);
+    if (d <> nil) and (d.JSONType = jtString) then nm := d.AsString
+    else if (d <> nil) and (d.JSONType = jtNumber) then nm := TyJsNumberToString(d.AsFloat);
+  end;
+  if nm = '' then
+  begin
+    if raw.HasFromName then nm := raw.FromName;
+    if raw.HasToName then
+    begin
+      if raw.HasFromName then nm := nm + ' > ' + raw.ToName
+      else nm := raw.ToName;
+    end;
+  end;
+  { makeValueReadable of the name: nothing is '-' }
+  if Trim(nm) = '' then nm := '-';
+  noValue := True;
+  vt := '';
+  if raw.RawIsFlat then
+  begin
+    noValue := False;
+    vt := TyTooltipValueText(0);
+  end
+  else if (not raw.RawNone) and (raw.RawJson <> nil) then
+  begin
+    v := TyLinesJsNum(raw.RawJson);
+    if (raw.RawJson is TJSONArray) and (raw.RawJson.Count <> 1) then v := NaN;
+    if raw.RawJson.JSONType = jtObject then v := NaN;
+    noValue := IsNan(v);
+    if not noValue then
+    begin
+      if raw.RawJson.JSONType = jtString then vt := raw.RawJson.AsString
+      else vt := TyTooltipValueText(v);
+    end;
+  end;
+  ABlock := TTyTooltipBlock.CreateSection('', True);
+  ABlock.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, nm, False, vt, noValue));
+end;
+
+{ THE CONTINUOUS PART, a lines series with a trail through its own layer:
+  the canvas' motion blur -- the last frame drawn back at lastFrameAlpha,
+  then the layer's elements over it -- here an alpha multiply of the kept
+  layer before the series is drawn on it again. The rest of the part draws
+  as it does without a trail, over it. [Batch 121] }
+procedure TTyAdvanceChart.PaintTrail(APainter: TTyPainter; AList: TTyPaintList);
+var
+  bmp: TBGRABitmap;
+  P: TTyPainter;
+  i, idx: Integer;
+  el: TTyChartElement;
+  a: Double;
+  any: Boolean;
+  rest: TTyPaintList;
+begin
+  if (AList = nil) or (APainter = nil) then Exit;
+  bmp := APainter.Bitmap;
+  any := False;
+  a := 0;
+  for i := 0 to AList.Count - 1 do
+  begin
+    el := AList.Element(i);
+    if (el.Datum.Kind = ctkSeries) and (LinesTrailAlpha(el.Datum.SeriesIndex) > 0) then
+    begin
+      any := True;
+      a := LinesTrailAlpha(el.Datum.SeriesIndex);
+      Break;
+    end;
+  end;
+  if (not any) or (bmp = nil) then
+  begin
+    FreeAndNil(FTrailLayer);
+    TyRenderPaintList(APainter, AList);
+    Exit;
+  end;
+  if (FTrailLayer = nil) or (FTrailLayer.Width <> bmp.Width)
+    or (FTrailLayer.Height <> bmp.Height) then
+  begin
+    FreeAndNil(FTrailLayer);
+    FTrailLayer := TBGRABitmap.Create(bmp.Width, bmp.Height, BGRAPixelTransparent);
+  end
+  else
+    FTrailLayer.ApplyGlobalOpacity(Round(Max(0.0, Min(1.0, a)) * 255));
+  rest := TTyPaintList.Create;
+  P := TTyPainter.Create;
+  try
+    P.BeginPaintOn(nil, Rect(0, 0, bmp.Width, bmp.Height), FPaintListPPI, FTrailLayer);
+    for i := 0 to AList.Count - 1 do
+    begin
+      idx := AList.PaintOrder(i);
+      el := AList.Element(idx);
+      if (el.Datum.Kind = ctkSeries) and (LinesTrailAlpha(el.Datum.SeriesIndex) > 0) then
+      begin
+        if not el.Ignore then TyRenderElement(P, el);
+      end;
+    end;
+    P.EndPaint;
+    bmp.PutImage(0, 0, FTrailLayer, dmDrawWithTransparency);
+    for i := 0 to AList.Count - 1 do
+    begin
+      el := AList.Element(i);
+      if not ((el.Datum.Kind = ctkSeries) and (LinesTrailAlpha(el.Datum.SeriesIndex) > 0)) then
+        rest.Add(el);
+    end;
+    if rest.Count > 0 then TyRenderPaintList(APainter, rest);
+  finally
+    P.Free;
+    rest.Free;
+  end;
+end;
+
 procedure TTyAdvanceChart.SolveRadars(APPI: Integer);
 var
   i, j, k, n, dim, slot: Integer;
@@ -12191,6 +12882,26 @@ begin
       { A GRAPH IS ON A COORDINATE SYSTEM OF ITS OWN, and that system belongs
         to the series rather than to a component -- so it is solved in the
         layout pass like a pie's box and replayed here like a radar's. }
+      { A LINES SERIES: its rows laid out on their coordinate system in the
+        layout pass, drawn here; the labels go through the expansion with a
+        spec per row [Batch 121] }
+      if FBindings[i].SeriesType = TyLinesSeriesTypeName then
+      begin
+        if (i <= High(FLines)) and FLines[i].Valid then
+        begin
+          if FLines[i].IsLarge then FLargeKinds[i] := lgkLines;
+          Inc(drawn, TyBuildLinesMarks(FLines[i], TTyChartColor(
+            ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass,
+              [tysNormal]).Background.Color), list));
+          if Length(specs) <= FBindings[i].SeriesIndex then
+            SetLength(specs, FBindings[i].SeriesIndex + 1);
+          specs[FBindings[i].SeriesIndex] := LabelSpecFor(i);
+          if Length(itemSpecs) <= FBindings[i].SeriesIndex then
+            SetLength(itemSpecs, FBindings[i].SeriesIndex + 1);
+          itemSpecs[FBindings[i].SeriesIndex] := FLinesSpecs[i];
+        end;
+        Continue;
+      end;
       if FBindings[i].SeriesType = TyGraphSeriesTypeName then
       begin
         if (i <= High(FGraphLaidOut)) and FGraphLaidOut[i] then
@@ -13360,9 +14071,10 @@ begin
   if TyLargeKindOfType(st) = lgkNone then Exit;
   { ON A CARTESIAN ONLY: barGrid's large layout returns early off one
     (createLarge would then read no points), and the polar and calendar
-    scatters are left drawn one by one }
-  if (FBindings[ASlot].Cart = nil) or (FBindings[ASlot].Polar <> nil)
-    or (FBindings[ASlot].CalendarIndex >= 0) then Exit;
+    scatters are left drawn one by one. LINES are batched on any of their
+    systems: linesLayout's large branch is dataToPoint [Batch 121] }
+  if (st <> TyLinesSeriesTypeName) and ((FBindings[ASlot].Cart = nil)
+    or (FBindings[ASlot].Polar <> nil) or (FBindings[ASlot].CalendarIndex >= 0)) then Exit;
   d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if not (d is TJSONObject) then Exit;
   node := TJSONObject(d);
@@ -13383,6 +14095,10 @@ begin
   if (FPaintList = nil) or (AElement < 0) or (AElement >= FPaintList.Count) then Exit;
   el := FPaintList.Element(AElement);
   if el.Shape.Kind <> cskLarge then Exit;
+  { A LINES BATCH IS HOVERED WITH NO ROW: its handler writes null for row 0
+    and dataIndex + an unset startIndex (not a number) for the rest --
+    upstream's own, which the port does not carry into a datum [Batch 121] }
+  if el.Shape.Large.Kind = lgkLines then Exit;
   Result := TyLargeIndexAt(el.Shape.Large, AX, AY);
 end;
 
@@ -14578,6 +15294,8 @@ begin
     a sankey's }
   if TipIsMarker(ADatum) then Exit(MarkerTooltipContent(ADatum));
   if HierTooltipContent(ADatum, DatumColour(ADatum), Result) then Exit;
+  { a lines row: LinesSeries.formatTooltip [Batch 121] }
+  if LinesTooltip(ADatum, Result) then Exit;
   p := TooltipParams(ADatum);
   { The DISPLAY name heads the section: an unnamed series has none. }
   seriesName := SeriesNameOf(ADatum.SeriesIndex);
@@ -15755,7 +16473,11 @@ begin
   else if t = TyPictorialSeriesTypeName then Result := sskPictorial
   else if t = TySunburstSeriesTypeName then Result := sskSunburst
   else if t = 'boxplot' then Result := sskBox
-  else if t = TySankeySeriesTypeName then Result := sskSankey;
+  else if t = TySankeySeriesTypeName then Result := sskSankey
+  { a lines series' rows, not in large mode (a batch has no states)
+    [Batch 121] }
+  else if (t = TyLinesSeriesTypeName) and not ((ASlot <= High(FLines))
+    and FLines[ASlot].IsLarge) then Result := sskLines;
   { a line on a calendar is not drawn at all }
   if (FBindings[ASlot].CalendarIndex >= 0) and (t = 'line') then Result := sskNone;
 end;
@@ -15802,6 +16524,7 @@ end;
 procedure TTyAdvanceChart.StDeclareItem(ASlot, ARaw: Integer;
   AList: TTyPaintList; APPI: Integer);
 var
+  blk: string;
   s, idx, labIdx: Integer;
   lineShow, labRest, labIgn, ownLine: Boolean;
   item: PTyStItem;
@@ -15854,10 +16577,12 @@ begin
     sskSankey:
       TyStSetColor(base, stkStroke, StPrimaryInk);
   end;
+  { a lines row's: its lineStyle's (Line._updateCommonStl) [Batch 121] }
+  if FSt[s].Kind = sskLines then blk := 'lineStyle' else blk := 'itemStyle';
   item^.Host.Decl[stnSelect] := TyStOverlay(base,
-    TyStReadStyle(nodes, 'select', 'itemStyle', bolder));
-  item^.Host.Decl[stnEmphasis] := TyStReadStyle(nodes, 'emphasis', 'itemStyle', bolder);
-  item^.Host.Decl[stnBlur] := TyStReadStyle(nodes, 'blur', 'itemStyle', bolder);
+    TyStReadStyle(nodes, 'select', blk, bolder));
+  item^.Host.Decl[stnEmphasis] := TyStReadStyle(nodes, 'emphasis', blk, bolder);
+  item^.Host.Decl[stnBlur] := TyStReadStyle(nodes, 'blur', blk, bolder);
   if FSt[s].Kind = sskCandle then StDeclareCandle(ASlot, ARaw, nodes, item^.Host);
   { a boxplot's emphasis border is 2 wide unless declared (BoxplotSeries.ts
     emphasis.itemStyle); its shadow is not drawn here [Batch 108] }
@@ -15928,6 +16653,34 @@ begin
       item^.Parts[k].Decl[n] := item^.Host.Decl[n];
     end;
     item^.Parts[k].Rest := StRestOf(AList.Element(FSt[s].PartIdx[ARaw][k]));
+    { A LINES END SYMBOL: each state's the line's stroke as its fill (its
+      stroke when it is empty) and the line's opacity, where the line's
+      state says them; its own proxy lifts and blurs the rest [Batch 121] }
+    if FSt[s].Kind = sskLines then
+      for n := Low(TTyStName) to High(TTyStName) do
+      begin
+        obj := TyStNoObject;
+        if item^.Host.Decl[n].Has[stkStroke] then
+        begin
+          if AList.Element(FSt[s].PartIdx[ARaw][k]).Anim.G[10] <> 0 then
+            obj.Has[stkStroke] := True
+          else
+            obj.Has[stkFill] := True;
+          if obj.Has[stkStroke] then
+          begin
+            obj.Color[stkStroke] := item^.Host.Decl[n].Color[stkStroke];
+            obj.None[stkStroke] := item^.Host.Decl[n].None[stkStroke];
+          end
+          else
+          begin
+            obj.Color[stkFill] := item^.Host.Decl[n].Color[stkStroke];
+            obj.None[stkFill] := item^.Host.Decl[n].None[stkStroke];
+          end;
+        end;
+        if item^.Host.Decl[n].Has[stkOpacity] then
+          TyStSetNum(obj, stkOpacity, item^.Host.Decl[n].Num[stkOpacity]);
+        item^.Parts[k].Decl[n] := obj;
+      end;
     if not was then
     begin
       item^.Parts[k].Cur := item^.Parts[k].Rest;
@@ -16373,6 +17126,14 @@ begin
     end
     else if el.IsGuide then
       FSt[s].GuideIdx[raw] := k
+    else if FSt[s].Kind = sskLines then
+    begin
+      { THE LINE HOSTS, the end symbols after it are parts; the effect
+        symbol is no part of the Line group's states [Batch 121] }
+      if el.Silent then Continue;
+      if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k
+      else StPush(FSt[s].PartIdx[raw], k);
+    end
     else if FSt[s].Kind = sskPictorial then
     begin
       { THE GLYPHS ARE THE PATHS (silent here: the inkless bar rect is the
@@ -24781,8 +25542,12 @@ begin
   for i := 0 to frame.Count - 1 do
   begin
     el := frame.Element(i);
-    { a ripple, an effect symbol, and a label hanging off one }
-    cont := el.Anim.Role in [carRipple, carEffectSymbol];
+    { a ripple, an effect symbol, and a label hanging off one; a lines
+      effect symbol, and every element of a lines series with a trail
+      (its layer is redrawn every frame) [Batch 121] }
+    cont := el.Anim.Role in [carRipple, carEffectSymbol, carLinesEffect];
+    if (not cont) and (el.Datum.Kind = ctkSeries)
+      and (LinesTrailAlpha(el.Datum.SeriesIndex) > 0) then cont := True;
     if (not cont) and (el.Anim.Role = carLabel) then
     begin
       h := el.Anim.HostPlus1 - 1;
@@ -24917,9 +25682,12 @@ begin
   { THE SERIES IN MOTION, and the title over them: this frame's values,
     read from the proxies [Batch 89] }
   if FAnimContinuous then
-    TyRenderPaintList(APainter, AnimPart(True))
+    PaintTrail(APainter, AnimPart(True))
   else if FAnimLive then
   begin
+    { the trail is the continuous phase's: an enter or an update in motion
+      draws every series as it stands [Batch 121] }
+    FreeAndNil(FTrailLayer);
     { the axes in their groupTransition under the series, as the static
       layer draws them [Batch 96] }
     if AxesDynamic then PaintAxes(APainter, APPI, AMeasurer, True);

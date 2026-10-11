@@ -164,10 +164,50 @@ begin
   Result := IsNan(AV) or IsInfinite(AV);
 end;
 
+{ A LINES ROW [Batch 121]: its numbers in the segs, and how many points --
+  two for a line, the count for a polyline }
+function LinesRow(const AGeom: TTyLargeGeom; ARow: Integer;
+  out AFirst, ACount: Integer): Boolean;
+begin
+  Result := False;
+  AFirst := 0;
+  ACount := 0;
+  if (ARow < 0) or (ARow > High(AGeom.Idx)) then Exit;
+  AFirst := AGeom.Idx[ARow];
+  if AGeom.LinesPoly then
+  begin
+    if (AFirst >= Length(AGeom.Pts)) or Bad(AGeom.Pts[AFirst]) then Exit;
+    ACount := Trunc(AGeom.Pts[AFirst]);
+    Inc(AFirst);
+  end
+  else
+    ACount := 2;
+  if AFirst + ACount * 2 > Length(AGeom.Pts) then
+    ACount := (Length(AGeom.Pts) - AFirst) div 2;
+  Result := ACount >= 2;
+end;
+
+{ a straight row's control point when the batch curves }
+function LinesCP(const AGeom: TTyLargeGeom; AFirst: Integer;
+  out ACX, ACY: Double): Boolean;
+var x0, y0, x1, y1: Double;
+begin
+  Result := (not AGeom.LinesPoly) and (AGeom.LinesCurve > 0);
+  ACX := 0;
+  ACY := 0;
+  if not Result then Exit;
+  x0 := AGeom.Pts[AFirst];
+  y0 := AGeom.Pts[AFirst + 1];
+  x1 := AGeom.Pts[AFirst + 2];
+  y1 := AGeom.Pts[AFirst + 3];
+  ACX := (x0 + x1) / 2 - (y0 - y1) * AGeom.LinesCurve;
+  ACY := (y0 + y1) / 2 - (x1 - x0) * AGeom.LinesCurve;
+end;
+
 { the box one row is drawn in, and whether it draws anything at all }
 function LargeRowBox(const AGeom: TTyLargeGeom; ARow: Integer;
   out AX0, AY0, AX1, AY1: Double): Boolean;
-var x, y, w, h: Double;
+var x, y, w, h: Double; first, cnt, k: Integer;
 begin
   Result := False;
   AX0 := 0;
@@ -219,6 +259,31 @@ begin
         AY0 := Min(y, h);
         AY1 := Max(y, h);
       end;
+    lgkLines:
+      begin
+        { the row's points and its control point }
+        if not LinesRow(AGeom, ARow, first, cnt) then Exit;
+        for k := 0 to cnt - 1 do
+        begin
+          x := AGeom.Pts[first + k * 2];
+          y := AGeom.Pts[first + k * 2 + 1];
+          if Bad(x) or Bad(y) then Exit;
+          if k = 0 then
+          begin
+            AX0 := x; AX1 := x; AY0 := y; AY1 := y;
+          end
+          else
+          begin
+            AX0 := Min(AX0, x); AX1 := Max(AX1, x);
+            AY0 := Min(AY0, y); AY1 := Max(AY1, y);
+          end;
+        end;
+        if LinesCP(AGeom, first, w, h) then
+        begin
+          AX0 := Min(AX0, w); AX1 := Max(AX1, w);
+          AY0 := Min(AY0, h); AY1 := Max(AY1, h);
+        end;
+      end;
   else
     Exit;
   end;
@@ -230,6 +295,7 @@ procedure TraceLargeRow(P: TTyPainter; const AGeom: TTyLargeGeom;
 var
   x, y, w, h: Double;
   sub: TTyChartShape;
+  first, cnt, k: Integer;
 begin
   case AGeom.Kind of
     lgkBar:
@@ -274,6 +340,20 @@ begin
         if Bad(x) or Bad(AGeom.Pts[ARow * 4 + 2]) or Bad(AGeom.Pts[ARow * 4 + 3]) then Exit;
         P.MoveTo(x, AGeom.Pts[ARow * 4 + 2]);
         P.LineTo(x, AGeom.Pts[ARow * 4 + 3]);
+      end;
+    lgkLines:
+      begin
+        { LargeLinesPath.buildPath: a move and a line (or a quadratic) per
+          row, a move and lines per polyline }
+        if not LinesRow(AGeom, ARow, first, cnt) then Exit;
+        for k := 0 to cnt * 2 - 1 do
+          if Bad(AGeom.Pts[first + k]) then Exit;
+        P.MoveTo(AGeom.Pts[first], AGeom.Pts[first + 1]);
+        if LinesCP(AGeom, first, w, h) then
+          P.QuadTo(w, h, AGeom.Pts[first + 2], AGeom.Pts[first + 3])
+        else
+          for k := 1 to cnt - 1 do
+            P.LineTo(AGeom.Pts[first + k * 2], AGeom.Pts[first + k * 2 + 1]);
       end;
   end;
 end;
@@ -834,6 +914,30 @@ var
       and (Length(AElement.Style.DashLogical) = 0);
   end;
 
+  { a lines row as layer points: its own, or its quadratic in 16 steps }
+  function LinesRowPoints(const AG: TTyLargeGeom; ARow: Integer;
+    AOX, AOY: Double): ArrayOfTPointF;
+  var first, cnt, k: Integer; cx, cy, t, u: Double;
+  begin
+    Result := nil;
+    if not LinesRow(AG, ARow, first, cnt) then Exit;
+    if LinesCP(AG, first, cx, cy) then
+    begin
+      SetLength(Result, 17);
+      for k := 0 to 16 do
+      begin
+        t := k / 16;
+        u := 1 - t;
+        Result[k] := PointF(u * u * AG.Pts[first] + 2 * u * t * cx + t * t * AG.Pts[first + 2] - AOX,
+          u * u * AG.Pts[first + 1] + 2 * u * t * cy + t * t * AG.Pts[first + 3] - AOY);
+      end;
+      Exit;
+    end;
+    SetLength(Result, cnt);
+    for k := 0 to cnt - 1 do
+      Result[k] := PointF(AG.Pts[first + k * 2] - AOX, AG.Pts[first + k * 2 + 1] - AOY);
+  end;
+
   procedure PaintLargeOnLayer(AStroke: Boolean);
   var
     g: TTyLargeGeom;
@@ -845,7 +949,7 @@ var
     area: TRect;
     c: TBGRAPixel;
     sub: TTyChartShape;
-    pts: array of TPointF;
+    pts: ArrayOfTPointF;
   begin
     g := AElement.Shape.Large;
     spec := LargeSymbolSpec(g);
@@ -908,6 +1012,16 @@ var
           if AStroke then
             layer.DrawLineAntialias(x0 - ox, g.Pts[i * 4 + 2] - oy, x0 - ox,
               g.Pts[i * 4 + 3] - oy, c, pen, False);
+          Continue;
+        end;
+        { a lines row: its polyline, a curve sampled [Batch 121] }
+        if g.Kind = lgkLines then
+        begin
+          if AStroke then
+          begin
+            pts := LinesRowPoints(g, i, ox, oy);
+            if Length(pts) >= 2 then layer.DrawPolyLineAntialias(pts, c, pen);
+          end;
           Continue;
         end;
         if (g.Kind = lgkBar) or g.Boost or (TTySymbolKind(g.SymKind) = tsyRect) then

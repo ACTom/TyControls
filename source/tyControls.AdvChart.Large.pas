@@ -41,7 +41,9 @@ uses
   SysUtils, Math, fpjson, tyControls.AdvChart.Types;
 
 type
-  TTyLargeKind = (lgkNone, lgkBar, lgkSymbol, lgkCandle);
+  TTyLargeKind = (lgkNone, lgkBar, lgkSymbol, lgkCandle,
+    { [Batch 121] a lines series' LargeLinesPath }
+    lgkLines);
 
   { One batch. Device px throughout. }
   TTyLargeGeom = record
@@ -86,6 +88,15 @@ type
     Shown: Integer;
     ChunkFirst: Integer;
     ChunkEnds: TTyIntegerArray;
+    { LINES [Batch 121]: Pts holds the segs -- [x0, y0, x1, y1] per row, or
+      [count, x, y, ...] per row on a polyline (LinesPoly); Idx the offset of
+      each row's first number; the series' curveness (a straight row is a
+      quadratic when it is above 0) and the style's lineWidth, the stroke the
+      pointer is tested against (no 5 px floor: findDataIndex reads the
+      style) }
+    LinesPoly: Boolean;
+    LinesCurve: Double;
+    LineW: Double;
   end;
 
 { The large series a type has: bar, scatter, candlestick; lgkNone for every
@@ -127,11 +138,20 @@ function TyLargeBounds(const AGeom: TTyLargeGeom): TTyRectF;
 { The rows the batch holds now: every row, or a growing symbol batch's
   Shown [Batch 119]. }
 function TyLargeRows(const AGeom: TTyLargeGeom): Integer;
+{ LargeLinesPath.findDataIndex: the first row whose stroke holds the point,
+  -1 for none. A polyline row is tested from its FIRST point to each of the
+  others -- upstream never moves x0, y0 along. [Batch 121] }
+function TyLargeLinesFind(const AGeom: TTyLargeGeom; AX, AY: Double): Integer;
+{ the row offsets of a lines batch into Idx }
+procedure TyLargeLinesIndex(var AGeom: TTyLargeGeom);
 
 implementation
 
+uses tyControls.AdvChart.Lines;
+
 function TyLargeRows(const AGeom: TTyLargeGeom): Integer;
 begin
+  if AGeom.Kind = lgkLines then Exit(Length(AGeom.Idx));
   case AGeom.Kind of
     lgkBar: Result := Length(AGeom.Pts) div 3;
     lgkSymbol:
@@ -150,6 +170,8 @@ begin
   if AType = 'bar' then Result := lgkBar
   else if AType = 'scatter' then Result := lgkSymbol
   else if AType = 'candlestick' then Result := lgkCandle
+  { [Batch 121] LargeLineDraw }
+  else if AType = 'lines' then Result := lgkLines
   else Result := lgkNone;
 end;
 
@@ -200,6 +222,8 @@ begin
   case k of
     lgkBar: th := JsNum(AThreshold, 400);
     lgkSymbol: th := JsNum(AThreshold, 2000);
+    { LinesSeries' largeThreshold }
+    lgkLines: th := JsNum(AThreshold, 2000);
   else
     th := JsNum(AThreshold, 600);
   end;
@@ -338,6 +362,116 @@ begin
         AGeom.Box.W := JsAdd(JsAdd(x1, -x0), lw);
         AGeom.Box.H := JsAdd(JsAdd(y1, -y0), lw);
       end;
+    lgkLines:
+      begin
+        { LargeLinesPath.getBoundingRect: the numbers read two at a time from
+          the start -- a polyline's counts read as coordinates, an odd total
+          reading one past the end (not a number) -- and the rect built as
+          BoundingRect(minX, minY, maxX, maxY): the maxima ARE the width and
+          the height. The stroke is not added. }
+        a := Infinity; b := Infinity; c := NegInfinity; d := NegInfinity;
+        i := 0;
+        n := Length(AGeom.Pts);
+        while i < n do
+        begin
+          rx := AGeom.Pts[i];
+          if i + 1 < n then ry := AGeom.Pts[i + 1] else ry := NaN;
+          Inc(i, 2);
+          a := JsMin(rx, a);
+          c := JsMax(rx, c);
+          b := JsMin(ry, b);
+          d := JsMax(ry, d);
+        end;
+        AGeom.Box.X := a;
+        AGeom.Box.Y := b;
+        AGeom.Box.W := c;
+        AGeom.Box.H := d;
+      end;
+  end;
+end;
+
+procedure TyLargeLinesIndex(var AGeom: TTyLargeGeom);
+var i, n, at, cnt: Integer;
+begin
+  AGeom.Idx := nil;
+  n := Length(AGeom.Pts);
+  if not AGeom.LinesPoly then
+  begin
+    SetLength(AGeom.Idx, n div 4);
+    for i := 0 to High(AGeom.Idx) do AGeom.Idx[i] := i * 4;
+    Exit;
+  end;
+  at := 0;
+  while at < n do
+  begin
+    SetLength(AGeom.Idx, Length(AGeom.Idx) + 1);
+    AGeom.Idx[High(AGeom.Idx)] := at;
+    cnt := 0;
+    if not IsNan(AGeom.Pts[at]) then cnt := Trunc(AGeom.Pts[at]);
+    if cnt < 0 then cnt := 0;
+    Inc(at, 1 + cnt * 2);
+  end;
+end;
+
+function TyLargeLinesFind(const AGeom: TTyLargeGeom; AX, AY: Double): Integer;
+var
+  i, k, n, count, di: Integer;
+  x0, y0, x1, y1, x2, y2, c, lw: Double;
+  segs: TTyDoubleArray;
+
+  function At(AI: Integer): Double;
+  begin
+    if (AI >= 0) and (AI < n) then Result := segs[AI] else Result := NaN;
+  end;
+
+begin
+  Result := -1;
+  segs := AGeom.Pts;
+  n := Length(segs);
+  c := AGeom.LinesCurve;
+  lw := AGeom.LineW;
+  di := 0;
+  i := 0;
+  if AGeom.LinesPoly then
+  begin
+    while i < n do
+    begin
+      count := 0;
+      if not IsNan(segs[i]) then count := Trunc(segs[i]);
+      Inc(i);
+      if count > 0 then
+      begin
+        x0 := At(i);
+        y0 := At(i + 1);
+        Inc(i, 2);
+        for k := 1 to count - 1 do
+        begin
+          x1 := At(i);
+          y1 := At(i + 1);
+          Inc(i, 2);
+          if TyLinesContainLine(x0, y0, x1, y1, lw, AX, AY) then Exit(di);
+        end;
+      end;
+      Inc(di);
+    end;
+    Exit;
+  end;
+  while i < n do
+  begin
+    x0 := At(i);
+    y0 := At(i + 1);
+    x1 := At(i + 2);
+    y1 := At(i + 3);
+    Inc(i, 4);
+    if c > 0 then
+    begin
+      x2 := (x0 + x1) / 2 - (y0 - y1) * c;
+      y2 := (y0 + y1) / 2 - (x1 - x0) * c;
+      if TyLinesContainQuad(x0, y0, x2, y2, x1, y1, lw, AX, AY) then Exit(di);
+    end
+    else if TyLinesContainLine(x0, y0, x1, y1, lw, AX, AY) then
+      Exit(di);
+    Inc(di);
   end;
 end;
 
@@ -445,6 +579,7 @@ begin
     lgkBar: Result := TyLargeBarScan(AGeom, AX, AY) >= 0;
     lgkSymbol: Result := TyLargeSymbolScan(AGeom, AX, AY) >= 0;
     lgkCandle: Result := TyLargeStrokeHit(AGeom, AX, AY);
+    lgkLines: Result := TyLargeLinesFind(AGeom, AX, AY) >= 0;
   end;
   { zrender's isHover asks the clip path after the element: the view
     group's clip rect cuts the hover where it cuts the ink }
@@ -465,6 +600,9 @@ begin
         { `dataIndex + (symbolEl.startIndex || 0)` [Batch 119] }
         if Result >= 0 then Result := Result + AGeom.Start;
       end;
+    { the row the path's own contain found (hoverDataIdx) }
+    lgkLines:
+      if BoxHas(AGeom.Box, AX, AY) then Result := TyLargeLinesFind(AGeom, AX, AY);
   end;
 end;
 

@@ -599,6 +599,11 @@ end;
 
 function TySeriesVisual(AFill: TTyChartColor): TTySeriesVisual;
 begin
+  { EVERY FIELD FROM NOUGHT FIRST: the ones below are set one by one, and a
+    field nobody set -- the jitter pass, a class reference -- was whatever
+    the stack held; a record that grew elsewhere moved the garbage under it
+    and a scatter jittered through it [Batch 121] }
+  Result := Default(TTySeriesVisual);
   { drawn an element per datum unless the control says otherwise: the
     fields below are set one by one, so this one is too [Batch 117] }
   Result.Large := lgkNone;
@@ -3477,9 +3482,11 @@ const
     drives TyBuildSeriesMarks, which a pie deliberately never enters. What
     guards it is TestAPieIsDrawnOffItsOwnCentreWithAColourPerSector, which
     counts the control's own pixels. }
-  cElsewhere: array[0..8] of string = ('pie', 'funnel', 'gauge', 'radar',
+  cElsewhere: array[0..9] of string = ('pie', 'funnel', 'gauge', 'radar',
                                        'graph', 'tree', 'sunburst', 'treemap',
-                                       'sankey');
+                                       'sankey',
+                                       { [Batch 121] AdvChart.Lines }
+                                       'lines');
 
 function RendererFor(const AType: string): TTyMarkBuilder;
 var i: Integer;
