@@ -32,6 +32,17 @@ const
 type
   { A thumb moved, or was selected; AIndex is its place in ThumbValues (-1 = none selected). }
   TTyTrackThumbEvent = procedure(Sender: TObject; AIndex: Integer) of object;
+  { Owner-draw: the track (the groove with the range highlight or segment fills on it), asked
+    before it is painted. ARect is the groove in APainter's coordinates; set ADefaultDraw to
+    False and the bar paints none of the track -- what the handler drew is the track. }
+  TTyTrackDrawEvent = procedure(Sender: TObject; APainter: TTyPainter; const ARect: TRect;
+    var ADefaultDraw: Boolean) of object;
+  { Owner-draw: thumb AIndex, asked before it is painted. ARect is the thumb as it is painted (in
+    the slider band, so narrower across than ThumbRect's hit rectangle), AStates the states it
+    is resolved with (normal / hover / active, focused for the keyboard's thumb while the bar
+    has the focus). ADefaultDraw := False leaves that thumb to the handler. }
+  TTyTrackDrawThumbEvent = procedure(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
+    const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean) of object;
 
   { THE MODEL. The thumbs are an ordered array of integers, FValues, that always holds:
 
@@ -56,6 +67,9 @@ type
     (TyTrackThumb, each with its own hover / active state, StyleClass and Color), then the
     ticks and their labels. Segment I runs from the centre of thumb I - 1 to the centre of thumb
     I; segment 0 starts at the Min end of the groove and segment ThumbCount ends at its Max end.
+    With ShowValue the readout comes last, in a strip the track gives up at the right end (the
+    bottom when vertical), as on TTyTrackBar. OnDrawTrack is asked before the groove and its fills,
+    OnDrawThumb before each thumb; either can take the part over (ADefaultDraw := False).
 
     What each thumb and segment looks like, and whether a thumb takes part in the interaction,
     is the final class's data (its collection items): the protected virtual Thumb* and
@@ -92,10 +106,18 @@ type
     { The label strip's thickness on one tick side, measured at paint time and cached for
       CalculatePreferredSize (as TTyTrackBar does). }
     FTickLabelPx: Integer;
+    FShowValue: Boolean;
+    { The readout strip (right end / bottom) and the readout text's height, measured at paint
+      time and cached, as TTyTrackBar's FValueAreaPx / FValueTextPx: the geometry (MainLen)
+      and CalculatePreferredSize read them. 0 before the first paint. }
+    FValueAreaPx: Integer;
+    FValueTextPx: Integer;
     FOnFormatTickLabel: TTyTrackTickLabelEvent;
     FOnThumbChange: TTyTrackThumbEvent;
     FOnThumbSelect: TTyTrackThumbEvent;
     FOnChange: TNotifyEvent;
+    FOnDrawTrack: TTyTrackDrawEvent;
+    FOnDrawThumb: TTyTrackDrawThumbEvent;
     function GetThumbCount: Integer;
     function GetThumbValue(AIndex: Integer): Integer;
     procedure SetMin(const AValue: Integer);
@@ -111,6 +133,9 @@ type
     procedure SetOnFormatTickLabel(const AValue: TTyTrackTickLabelEvent);
     procedure SetLineSize(const AValue: Integer);
     procedure SetPageSize(const AValue: Integer);
+    procedure SetShowValue(const AValue: Boolean);
+    procedure SetOnDrawTrack(const AValue: TTyTrackDrawEvent);
+    procedure SetOnDrawThumb(const AValue: TTyTrackDrawThumbEvent);
     procedure CheckIndex(AIndex: Integer);
   protected
     { The thumb under a press (drawn active) and under the pointer (drawn hover); -1 = none. }
@@ -153,8 +178,13 @@ type
 
     { The value axis runs the other way: vertical (Max at the top, as TTyTrackBar) xor Reversed. }
     function Inverted: Boolean;
-    { Device px of the track along the main axis -- what TyTrackThumbOffset calls AMainLen. }
+    { Device px of the track along the main axis -- what TyTrackThumbOffset calls AMainLen: the
+      client length less the readout strip, so where a thumb is drawn and where a press lands
+      come from one number, as on TTyTrackBar. }
     function MainLen: Integer;
+    { What the readout shows: the selected thumb's value, else the first thumb's; '' with no
+      thumbs. }
+    function ValueText: string;
     { Where thumb AIndex's thumb starts along the track, device px from the track's start. }
     function ThumbOffset(AIndex: Integer): Integer;
     { The thumb's centre along the track, device px from the track's start. }
@@ -234,11 +264,18 @@ type
     { The keyboard's steps, as TTyTrackBar's: arrows by LineSize, PageUp / PageDown by PageSize. }
     property LineSize: Integer read FLineSize write SetLineSize default 1;
     property PageSize: Integer read FPageSize write SetPageSize default 10;
+    { The value beside the track (right end when horizontal, bottom when vertical), as
+      TTyTrackBar's: the selected thumb's, else the first thumb's. The strip is as wide as the
+      wider of Min and Max, so the track does not change length as the value changes. Off by
+      default. }
+    property ShowValue: Boolean read FShowValue write SetShowValue default False;
     property OnFormatTickLabel: TTyTrackTickLabelEvent read FOnFormatTickLabel write SetOnFormatTickLabel;
     property TabStop default True;
     property OnThumbChange: TTyTrackThumbEvent read FOnThumbChange write FOnThumbChange;
     property OnThumbSelect: TTyTrackThumbEvent read FOnThumbSelect write FOnThumbSelect;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    property OnDrawTrack: TTyTrackDrawEvent read FOnDrawTrack write SetOnDrawTrack;
+    property OnDrawThumb: TTyTrackDrawThumbEvent read FOnDrawThumb write SetOnDrawThumb;
   end;
 
   TTyCustomRangeTrackBar = class;
@@ -390,6 +427,9 @@ type
     property Ranges;
     property OnThumbChange;
     property OnThumbSelect;
+    property ShowValue;
+    property OnDrawTrack;
+    property OnDrawThumb;
   end;
 
   TTyCustomMultiTrackBar = class;
@@ -482,6 +522,9 @@ type
     { Set while the items are being put in order and handed to the thumbs: the moves that makes
       report back through the collection and must not start it over. }
     FSyncing: Boolean;
+    { The ID of the item behind SelectedThumb (-1 = none): when the items are put in order the
+      selection follows its thumb to its new place rather than staying at the old index. }
+    FSelectedID: Integer;
     procedure SetThumbs(AValue: TTyTrackThumbs);
     procedure SetSegments(AValue: TTyTrackSegments);
     procedure ReadNoThumbs(Reader: TReader);
@@ -496,9 +539,11 @@ type
       items' -- see TTyTrackThumbItem. }
     function ThumbsHeldRaw: Boolean;
     { The collection changed shape (a thumb added, removed, moved, assigned): the items are put
-      in order by value and the thumbs rebuilt from them. }
+      in order by value and the thumbs rebuilt from them. The selected thumb stays selected
+      wherever that puts it; removed, nothing is selected. }
     procedure ThumbsChanged;
     procedure ValuesChanged; override;
+    procedure DoThumbSelect(AIndex: Integer); override;
     procedure Loaded; override;
     procedure DefineProperties(Filer: TFiler); override;
     function ThumbEnabled(AIndex: Integer): Boolean; override;
@@ -584,6 +629,9 @@ type
     property Segments;
     property OnThumbChange;
     property OnThumbSelect;
+    property ShowValue;
+    property OnDrawTrack;
+    property OnDrawThumb;
   end;
 
 implementation
@@ -959,7 +1007,42 @@ function TTyMultiTrackBarBase.MainLen: Integer;
 begin
   if FOrientation = toVertical then Result := ClientHeight
   else Result := ClientWidth;
+  Dec(Result, FValueAreaPx);
   if Result < 1 then Result := 1;
+end;
+
+function TTyMultiTrackBarBase.ValueText: string;
+begin
+  if (FSelectedThumb >= 0) and (FSelectedThumb < Length(FValues)) then
+    Result := IntToStr(FValues[FSelectedThumb])
+  else if Length(FValues) > 0 then
+    Result := IntToStr(FValues[0])
+  else
+    Result := '';
+end;
+
+procedure TTyMultiTrackBarBase.SetShowValue(const AValue: Boolean);
+begin
+  if FShowValue = AValue then Exit;
+  FShowValue := AValue;
+  if not FShowValue then
+  begin
+    FValueAreaPx := 0;
+    FValueTextPx := 0;
+  end;
+  Invalidate;
+end;
+
+procedure TTyMultiTrackBarBase.SetOnDrawTrack(const AValue: TTyTrackDrawEvent);
+begin
+  FOnDrawTrack := AValue;
+  Invalidate;
+end;
+
+procedure TTyMultiTrackBarBase.SetOnDrawThumb(const AValue: TTyTrackDrawThumbEvent);
+begin
+  FOnDrawThumb := AValue;
+  Invalidate;
 end;
 
 function TTyMultiTrackBarBase.ThumbOffset(AIndex: Integer): Integer;
@@ -1025,8 +1108,9 @@ begin
   ppi := Font.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
   S := CurrentStyle;
-  { TTyTrackBar's sum, term by term: thumb, tick, label strip(s), padding. }
+  { TTyTrackBar's sum, term by term: thumb, tick, readout, label strip(s), padding. }
   cross := TyTrackThumbLen(ppi) + MulDiv(4, ppi, 96);
+  if FShowValue and (FValueTextPx > 0) then Inc(cross, FValueTextPx);
   if FTickLabels and (FTickLabelPx > 0) then
     if FTickMarks = ttmBoth then Inc(cross, 2 * FTickLabelPx)
     else Inc(cross, FTickLabelPx);
@@ -1053,10 +1137,13 @@ var
   TW, MLen, Off, i, n, lo, hi, topIdx: Integer;
   key, cls: string;
   c: TColor;
+  vs, vw: TSize;
+  dflt: Boolean;
 
   procedure DrawThumb(AIndex: Integer);
   var
     States: TTyStateSet;
+    own: Boolean;
   begin
     Off := TyTrackThumbOffset(MLen, TW, FMin, FMax, FValues[AIndex], Inverted);
     if FOrientation = toVertical then
@@ -1069,6 +1156,9 @@ var
     else Include(States, tysNormal);
     { The thumb the keyboard drives, while the control has the focus: a theme can mark it. }
     if Focused and (AIndex = FSelectedThumb) then Include(States, tysFocused);
+    own := True;
+    if Assigned(FOnDrawThumb) then FOnDrawThumb(Self, P, AIndex, ThumbR, States, own);
+    if not own then Exit;
     St := ActiveController.Model.ResolveStyle('TyTrackThumb', ThumbStyleClass(AIndex), States);
     c := ThumbColor(AIndex);
     if c <> clDefault then
@@ -1092,8 +1182,26 @@ begin
     DrawFrame(P, R, S);
 
     TW := TyTrackThumbLen(APPI);
-    if FOrientation = toVertical then MLen := R.Bottom - R.Top
-    else MLen := R.Right - R.Left;
+    { The readout strip, measured as TTyTrackBar measures it: as wide as the wider of Min and
+      Max, so the track keeps its length whatever the value. }
+    if FShowValue then
+    begin
+      vs := P.MeasureText(IntToStr(FMin), S.FontName, ResolveFontSize(S), S.FontWeight);
+      vw := P.MeasureText(IntToStr(FMax), S.FontName, ResolveFontSize(S), S.FontWeight);
+      if vs.cx > vw.cx then vw := vs;
+      FValueTextPx := vw.cy;
+      if FOrientation = toVertical then
+        FValueAreaPx := vw.cy + MulDiv(4, APPI, 96)
+      else
+        FValueAreaPx := vw.cx + MulDiv(8, APPI, 96);
+    end
+    else
+    begin
+      FValueAreaPx := 0;
+      FValueTextPx := 0;
+    end;
+    if FOrientation = toVertical then MLen := (R.Bottom - R.Top) - FValueAreaPx
+    else MLen := (R.Right - R.Left) - FValueAreaPx;
     if MLen < 1 then MLen := 1;
 
     { The tick band: the same inputs TTyTrackBar hands the shared layout. }
@@ -1117,18 +1225,23 @@ begin
     Ticks.OnFormatLabel := FOnFormatTickLabel;
     TyLayoutTrackTicks(P, Ticks);
     FTickLabelPx := Ticks.LabelBand;
-    SlideR := TyTrackSlideRect(R, FOrientation, FTickMarks, Ticks.TickBand + Ticks.LabelBand, 0);
+    SlideR := TyTrackSlideRect(R, FOrientation, FTickMarks, Ticks.TickBand + Ticks.LabelBand,
+      FValueAreaPx);
 
-    St := ActiveController.Model.ResolveStyle('TyTrackGroove', '', []);
     GrooveR := TyTrackGrooveRect(SlideR, FOrientation, MLen,
       TyTrackGrooveThickness(P, ActiveController));
-    if tpBackground in St.Present then
+    { The track -- the groove and the fills on it -- unless the owner draws it. }
+    dflt := True;
+    if Assigned(FOnDrawTrack) then FOnDrawTrack(Self, P, GrooveR, dflt);
+    St := ActiveController.Model.ResolveStyle('TyTrackGroove', '', []);
+    if dflt and (tpBackground in St.Present) then
       P.FillBackground(GrooveR, St.Background, St.BorderRadius);
 
     { The segments the final class names a style for, groove-thick, centre to centre. }
     n := Length(FValues);
     for i := 0 to n do
     begin
+      if not dflt then Break;
       if not SegmentStyle(i, key, cls) or (key = '') then Continue;
       SegmentSpan(i, APPI, lo, hi);
       if hi <= lo then Continue;
@@ -1151,6 +1264,20 @@ begin
     if topIdx >= 0 then DrawThumb(topIdx);
 
     TyDrawTrackTicks(P, R, Ticks);
+
+    { The readout, in the strip the track gave up; as TTyTrackBar's, ink and font from the
+      bar's own style. }
+    if FShowValue and (FValueAreaPx > 0) then
+    begin
+      if FOrientation = toVertical then
+        P.DrawText(Rect(R.Left, R.Bottom - FValueAreaPx, R.Right, R.Bottom),
+          ValueText, S.FontName, ResolveFontSize(S), S.FontWeight, S.TextColor,
+          taCenter, tlCenter, False)
+      else
+        P.DrawText(Rect(R.Right - FValueAreaPx, R.Top, R.Right, R.Bottom),
+          ValueText, S.FontName, ResolveFontSize(S), S.FontWeight, S.TextColor,
+          taRightJustify, tlCenter, False);
+    end;
     P.EndPaint;
   finally
     P.Free;
@@ -1887,6 +2014,7 @@ var
   i: Integer;
 begin
   inherited Create(AOwner);
+  FSelectedID := -1;
   FSegments := TTyTrackSegments.Create(Self);
   FThumbs := TTyTrackThumbs.Create(Self);
   FThumbs.BeginUpdate;
@@ -1953,18 +2081,42 @@ begin
 end;
 
 procedure TTyCustomMultiTrackBar.ThumbsChanged;
+var
+  selID, prev: Integer;
+  it: TCollectionItem;
 begin
   if (FThumbs = nil) or FSyncing or (csLoading in ComponentState)
      or (csDestroying in ComponentState) then
     Exit;
+  selID := FSelectedID;
+  prev := FSelectedThumb;
   FSyncing := True;
   try
     { In order first, so each thumb's colour, hint and class stay with its value. }
     SortThumbItems;
+    { Held aside while the thumbs are rebuilt: a shorter list would drop it with an
+      OnThumbSelect(-1) of its own before the real answer below. }
+    FSelectedThumb := -1;
     PushThumbItems;
   finally
     FSyncing := False;
   end;
+  FSelectedThumb := prev;
+  { The selection goes with its item to wherever the sort put it -- one OnThumbSelect if that
+    is a new index; an item that is gone takes the selection along. }
+  it := nil;
+  if selID >= 0 then it := FThumbs.FindItemID(selID);
+  if it <> nil then SelectedThumb := it.Index
+  else SelectedThumb := -1;
+end;
+
+procedure TTyCustomMultiTrackBar.DoThumbSelect(AIndex: Integer);
+begin
+  if (FThumbs <> nil) and (AIndex >= 0) and (AIndex < FThumbs.Count) then
+    FSelectedID := FThumbs[AIndex].ID
+  else
+    FSelectedID := -1;
+  inherited DoThumbSelect(AIndex);
 end;
 
 procedure TTyCustomMultiTrackBar.ValuesChanged;

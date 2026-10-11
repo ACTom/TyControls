@@ -18,7 +18,7 @@ uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, LMessages, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.StyleModel,
-  tyControls.TrackBar,
+  tyControls.Painter, tyControls.TrackBar,
   tyControls.MultiTrackBar;
 
 type
@@ -36,11 +36,14 @@ type
   public
     HoldShift: Boolean;             // what KeyShiftState reports for Shift
     HoldMouse: Boolean;             // ... and for the left mouse button
+    { What Focused answers: a test form is never shown, so the bar never really has the focus. }
+    FakeFocus: Boolean;
     Off: array of Boolean;          // thumb i disabled
     Colors: array of TColor;
     ThumbCls: array of string;
     Hints: array of string;
     SegKey, SegCls: array of string;
+    function Focused: Boolean; override;
     procedure Put(const AValues: array of Integer);
     procedure BeginReading;
     procedure EndReading;
@@ -254,6 +257,7 @@ type
     function SegmentsText(ABar: TTyMultiTrackBar): string;
     function Centre(AIndex: Integer): TPoint;
     function HintAt(const P: TPoint): string;
+    procedure Selected(Sender: TObject; AIndex: Integer);
   protected
     procedure SetUp; override;
   published
@@ -261,6 +265,7 @@ type
     procedure TestTheTypeKeyHangsOnTheTrackBars;
     procedure TestAValueMovesThroughTheModel;
     procedure TestSortingKeepsEachThumbsLook;
+    procedure TestTheSelectionFollowsItsThumbWhenSorted;
     procedure TestAThumbsColourIsPainted;
     procedure TestAThumbsStyleClassIsResolved;
     procedure TestAThumbsHintIsShownOverIt;
@@ -285,6 +290,41 @@ type
     procedure TestTabWalksTheEnabledThumbsThenLeaves;
     procedure TestEnteringFromTheKeyboardStartsAtTheNearEnd;
     procedure TestTheWheelStepsTheKeyboardsThumb;
+  end;
+
+  { ShowValue against TTyTrackBar's: the same strip, the same shorter track, the same text. }
+  TTyMultiTrackReadoutTest = class(TMultiTrackInputBase)
+  published
+    procedure TestOneThumbWithTheReadoutDrawsWhatTheTrackBarDraws;
+    procedure TestTheReadoutIsTheSelectedThumbsElseTheFirst;
+  end;
+
+  { OnDrawTrack / OnDrawThumb. The handlers log `track ` and `<i>:<states> ` in the order they
+    are asked, keep the rectangles they were handed, and -- as a test sets them up -- take a part
+    over (ADefaultDraw := False) and / or fill its rectangle in an ink of their own. }
+  TTyMultiTrackOwnerDrawTest = class(TMultiTrackInputBase)
+  private
+    FCalls: string;
+    FTrackRect: TRect;
+    FThumbRects: array of TRect;
+    FDropThumb: Integer;
+    FFillThumb: Boolean;
+    FDropTrack: Boolean;
+    FFillTrack: Boolean;
+    procedure DrawTrack(Sender: TObject; APainter: TTyPainter; const ARect: TRect;
+      var ADefaultDraw: Boolean);
+    procedure DrawThumb(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
+      const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean);
+    { The bounding box of the pixels of one colour inside AWithin. }
+    function InkBox(B: TBGRABitmap; const AWithin: TRect; R, G, Bl: Byte): TRect;
+    function InkCount(B: TBGRABitmap; const AWithin: TRect; R, G, Bl: Byte): Integer;
+  protected
+    procedure SetUp; override;
+  published
+    procedure TestTheHooksAreAskedForEachPartInPaintOrder;
+    procedure TestTheRectanglesAreThePaintedParts;
+    procedure TestADefaultDrawFalseLeavesTheThumbToTheHandler;
+    procedure TestADefaultDrawFalseLeavesTheTrackToTheHandler;
   end;
 
 implementation
@@ -357,6 +397,11 @@ function TMultiProbe.KeyShiftState: TShiftState;
 begin
   if HoldShift then Result := [ssShift] else Result := [];
   if HoldMouse then Include(Result, ssLeft);
+end;
+
+function TMultiProbe.Focused: Boolean;
+begin
+  Result := FakeFocus or inherited Focused;
 end;
 
 procedure TMultiProbe.Enter;
@@ -2515,6 +2560,65 @@ begin
   end;
 end;
 
+procedure TTyMultiTrackBarTest.Selected(Sender: TObject; AIndex: Integer);
+begin
+  FLog := FLog + 'S' + IntToStr(AIndex) + ' ';
+end;
+
+procedure TTyMultiTrackBarTest.TestTheSelectionFollowsItsThumbWhenSorted;
+begin
+  FBar.OnThumbSelect := @Selected;
+  FBar.SelectedThumb := 0;                       // the thumb at 25
+  FLog := '';
+  FBar.Thumbs.BeginUpdate;
+  try
+    FBar.Thumbs[0].Value := 90;
+  finally
+    FBar.Thumbs.EndUpdate;
+  end;
+  AssertEquals('50,75,90', Values);
+  AssertEquals('the thumb that was selected still is, at its new place', 2, FBar.SelectedThumb);
+  AssertEquals('reported once, with the new index', 'S2 ', FLog);
+
+  FLog := '';
+  FBar.Thumbs.Delete(0);
+  AssertEquals('75,90', Values);
+  AssertEquals('a thumb removed before it: the selection moves down with it', 1, FBar.SelectedThumb);
+  AssertEquals('S1 ', FLog);
+
+  FLog := '';
+  FBar.Thumbs.BeginUpdate;
+  try
+    FBar.Thumbs.Add.Value := 10;
+  finally
+    FBar.Thumbs.EndUpdate;
+  end;
+  AssertEquals('10,75,90', Values);
+  AssertEquals('a thumb sorted in before it: the selection moves up', 2, FBar.SelectedThumb);
+  AssertEquals('S2 ', FLog);
+  AssertEquals('and it is the same thumb', 90, FBar.ThumbValues[FBar.SelectedThumb]);
+
+  FLog := '';
+  FBar.SelectedThumb := 0;
+  FLog := '';
+  FBar.Thumbs.BeginUpdate;
+  try
+    FBar.Thumbs[1].Value := 95;
+  finally
+    FBar.Thumbs.EndUpdate;
+  end;
+  AssertEquals('10,90,95', Values);
+  AssertEquals('a sort that leaves it in place', 0, FBar.SelectedThumb);
+  AssertEquals('reports nothing', '', FLog);
+
+  FBar.SelectedThumb := 2;
+  FLog := '';
+  FBar.Thumbs.Delete(2);
+  AssertEquals('10,90', Values);
+  AssertEquals('the selected thumb removed: nothing selected', -1, FBar.SelectedThumb);
+  AssertEquals('reported once', 'S-1 ', FLog);
+end;
+
 const
   CMultiForm =
     'object HostForm: TForm'#10 +
@@ -2619,6 +2723,411 @@ begin
   end;
 end;
 
+{ TTyMultiTrackReadoutTest }
+
+procedure TTyMultiTrackReadoutTest.TestOneThumbWithTheReadoutDrawsWhatTheTrackBarDraws;
+var
+  ori: TTyTrackOrientation;
+  rev: Boolean;
+  a, b, c: TBGRABitmap;
+  x, y, diff, moved, offW, offH, aw, ah, bw, bh: Integer;
+  ra, rb: TRect;
+  where: string;
+begin
+  FBar.Put([30]);
+  FBar.Frequency := 10;
+  FRef.Frequency := 10;
+  for ori := toHorizontal to toVertical do
+    for rev := False to True do
+    begin
+      Configure(ori, rev);
+      if ori = toVertical then
+      begin
+        FBar.SetBounds(0, 0, 40, CLen);
+        FRef.SetBounds(0, 0, 40, CLen);
+      end;
+      where := Format('ori=%d rev=%s', [Ord(ori), BoolToStr(rev, True)]);
+      FBar.ShowValue := False;
+      FRef.ShowValue := False;
+      FRef.Position := 30;
+      FBar.PreferredSize(offW, offH);
+      c := Shot(False);
+      FBar.ShowValue := True;
+      FRef.ShowValue := True;
+      a := Shot(False);
+      b := Shot(True);
+      try
+        diff := 0;
+        moved := 0;
+        for y := 0 to H - 1 do
+          for x := 0 to W - 1 do
+          begin
+            if a.GetPixel(x, y) <> b.GetPixel(x, y) then Inc(diff);
+            if a.GetPixel(x, y) <> c.GetPixel(x, y) then Inc(moved);
+          end;
+        AssertEquals(where + ': pixels that differ from TTyTrackBar with its readout', 0, diff);
+        AssertTrue(where + ': the readout changes the picture', moved > 0);
+      finally
+        a.Free;
+        b.Free;
+        c.Free;
+      end;
+      { The track gave the strip up: where a press lands is where the thumb is drawn. }
+      ra := FBar.ThumbRect(0);
+      rb := FRef.ThumbRect;
+      AssertEquals(where + ': thumb Left', rb.Left, ra.Left);
+      AssertEquals(where + ': thumb Top', rb.Top, ra.Top);
+      AssertEquals(where + ': thumb Right', rb.Right, ra.Right);
+      AssertEquals(where + ': thumb Bottom', rb.Bottom, ra.Bottom);
+      FBar.PreferredSize(aw, ah);
+      FRef.PreferredSize(bw, bh);
+      AssertEquals(where + ': preferred width', bw, aw);
+      AssertEquals(where + ': preferred height', bh, ah);
+      AssertTrue(where + ': the readout makes it thicker', (aw + ah) > (offW + offH));
+    end;
+end;
+
+procedure TTyMultiTrackReadoutTest.TestTheReadoutIsTheSelectedThumbsElseTheFirst;
+var
+  x0: Integer;
+  b: TBGRABitmap;
+  p: TPoint;
+
+  function StripDiff(A, B: TBGRABitmap): Integer;
+  var
+    x, y: Integer;
+  begin
+    Result := 0;
+    for y := 0 to H - 1 do
+      for x := x0 to W - 1 do
+        if A.GetPixel(x, y) <> B.GetPixel(x, y) then Inc(Result);
+  end;
+
+  procedure Check(AValue: Integer; const AWhere: string);
+  var
+    a, r: TBGRABitmap;
+    x, y, ink: Integer;
+  begin
+    FRef.Position := AValue;
+    a := Shot(False);
+    r := Shot(True);
+    try
+      AssertEquals(AWhere + ': the readout says ' + IntToStr(AValue), 0, StripDiff(a, r));
+      ink := 0;
+      for y := 0 to H - 1 do
+        for x := x0 to W - 1 do
+          if SamePx(a.GetPixel(x, y), 0, 0, 0) then Inc(ink);
+      AssertTrue(AWhere + ': there is text in the strip', ink > 0);
+    finally
+      a.Free;
+      r.Free;
+    end;
+  end;
+
+var
+  r20, r90: TBGRABitmap;
+begin
+  FBar.Put([20, 55, 90]);
+  FBar.TickStyle := ttsNone;
+  FRef.TickStyle := ttsNone;
+  FBar.ShowValue := True;
+  FRef.ShowValue := True;
+  b := Shot(True);                  // the reference measures its strip
+  b.Free;
+  x0 := RefThumbRect(100).Right;    // the track ends here, the strip runs to the right edge
+  AssertTrue('the strip is inside the bar', (x0 > 0) and (x0 < W));
+  { The fixture tells the values apart: 20 and 90 are different text. }
+  FRef.Position := 20;
+  r20 := Shot(True);
+  FRef.Position := 90;
+  r90 := Shot(True);
+  try
+    AssertTrue('20 and 90 read differently', StripDiff(r20, r90) > 0);
+  finally
+    r20.Free;
+    r90.Free;
+  end;
+  Check(20, 'nothing selected: the first thumb''s value');
+  FBar.SelectedThumb := 2;
+  Check(90, 'thumb 2 selected');
+  FBar.SelectedThumb := 1;
+  Check(55, 'thumb 1 selected');
+  FBar.SetThumbValue(1, 60);
+  Check(60, 'the selected thumb moved');
+  p := At(90);
+  FBar.Press(p.X, p.Y);
+  FBar.Release(p.X, p.Y);
+  Check(90, 'a press selects');
+  FBar.SelectedThumb := -1;
+  Check(20, 'selection dropped: the first again');
+end;
+
+{ TTyMultiTrackOwnerDrawTest }
+
+const
+  CStateName: array[TTyState] of string =
+    ('normal', 'hover', 'active', 'focused', 'disabled', 'selected');
+
+procedure FillInk(P: TTyPainter; const R: TRect; AR, AG, AB: Byte);
+var
+  f: TTyFill;
+begin
+  f := Default(TTyFill);
+  f.Kind := tfkSolid;
+  f.Color := TyRGB(AR, AG, AB);
+  P.FillBackground(R, f, 0);
+end;
+
+procedure TTyMultiTrackOwnerDrawTest.SetUp;
+begin
+  inherited SetUp;
+  FCalls := '';
+  FDropThumb := -1;
+  FBar.OnDrawTrack := @DrawTrack;
+  FBar.OnDrawThumb := @DrawThumb;
+end;
+
+procedure TTyMultiTrackOwnerDrawTest.DrawTrack(Sender: TObject; APainter: TTyPainter;
+  const ARect: TRect; var ADefaultDraw: Boolean);
+begin
+  AssertTrue('the sender is the bar', Sender = FBar);
+  AssertTrue('the default is to draw', ADefaultDraw);
+  FCalls := FCalls + 'track ';
+  FTrackRect := ARect;
+  if FFillTrack then FillInk(APainter, ARect, $C0, $C0, $FF);
+  if FDropTrack then ADefaultDraw := False;
+end;
+
+procedure TTyMultiTrackOwnerDrawTest.DrawThumb(Sender: TObject; APainter: TTyPainter;
+  AIndex: Integer; const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean);
+var
+  st: TTyState;
+  s: string;
+begin
+  AssertTrue('the sender is the bar', Sender = FBar);
+  AssertTrue('the default is to draw', ADefaultDraw);
+  s := '';
+  for st := Low(TTyState) to High(TTyState) do
+    if st in AStates then
+    begin
+      if s <> '' then s := s + '+';
+      s := s + CStateName[st];
+    end;
+  FCalls := FCalls + Format('%d:%s ', [AIndex, s]);
+  if AIndex >= Length(FThumbRects) then SetLength(FThumbRects, AIndex + 1);
+  FThumbRects[AIndex] := ARect;
+  if AIndex = FDropThumb then
+  begin
+    ADefaultDraw := False;
+    if FFillThumb then FillInk(APainter, ARect, $12, $AB, $34);
+  end;
+end;
+
+function TTyMultiTrackOwnerDrawTest.InkBox(B: TBGRABitmap; const AWithin: TRect;
+  R, G, Bl: Byte): TRect;
+var
+  x, y: Integer;
+begin
+  Result := Rect(MaxInt, MaxInt, -1, -1);
+  for y := AWithin.Top to AWithin.Bottom - 1 do
+    for x := AWithin.Left to AWithin.Right - 1 do
+    begin
+      if (x < 0) or (y < 0) or (x >= W) or (y >= H) then Continue;
+      if not SamePx(B.GetPixel(x, y), R, G, Bl) then Continue;
+      if x < Result.Left then Result.Left := x;
+      if y < Result.Top then Result.Top := y;
+      if x + 1 > Result.Right then Result.Right := x + 1;
+      if y + 1 > Result.Bottom then Result.Bottom := y + 1;
+    end;
+end;
+
+function TTyMultiTrackOwnerDrawTest.InkCount(B: TBGRABitmap; const AWithin: TRect;
+  R, G, Bl: Byte): Integer;
+var
+  x, y: Integer;
+begin
+  Result := 0;
+  for y := AWithin.Top to AWithin.Bottom - 1 do
+    for x := AWithin.Left to AWithin.Right - 1 do
+      if (x >= 0) and (y >= 0) and (x < W) and (y < H) and SamePx(B.GetPixel(x, y), R, G, Bl) then
+        Inc(Result);
+end;
+
+procedure TTyMultiTrackOwnerDrawTest.TestTheHooksAreAskedForEachPartInPaintOrder;
+var
+  b: TBGRABitmap;
+  p: TPoint;
+
+  function Calls: string;
+  begin
+    FCalls := '';
+    b := Shot(False);
+    b.Free;
+    Result := FCalls;
+  end;
+
+begin
+  FBar.Put([20, 50, 80]);
+  AssertEquals('the track first, then every thumb', 'track 0:normal 1:normal 2:normal ', Calls);
+  p := At(20);
+  FBar.Hover(p.X, p.Y);
+  AssertEquals('the thumb under the pointer', 'track 0:hover 1:normal 2:normal ', Calls);
+  p := At(80);
+  FBar.Press(p.X, p.Y);
+  AssertEquals('the thumb being dragged', 'track 0:normal 1:normal 2:active ', Calls);
+  FBar.Release(p.X, p.Y);
+  FBar.SelectedThumb := 0;
+  AssertEquals('the selected thumb is painted last, on top', 'track 1:normal 2:normal 0:normal ',
+    Calls);
+  FBar.FakeFocus := True;
+  AssertEquals('focused: the keyboard''s thumb says so',
+    'track 1:normal 2:normal 0:normal+focused ', Calls);
+end;
+
+procedure TTyMultiTrackOwnerDrawTest.TestTheRectanglesAreThePaintedParts;
+var
+  ori: TTyTrackOrientation;
+  rev: Boolean;
+  a: TBGRABitmap;
+  i: Integer;
+  box: TRect;
+  where: string;
+
+  procedure Same(const AWhat: string; const AWant, AGot: TRect);
+  begin
+    AssertEquals(AWhat + ' Left', AWant.Left, AGot.Left);
+    AssertEquals(AWhat + ' Top', AWant.Top, AGot.Top);
+    AssertEquals(AWhat + ' Right', AWant.Right, AGot.Right);
+    AssertEquals(AWhat + ' Bottom', AWant.Bottom, AGot.Bottom);
+  end;
+
+begin
+  FBar.Put([20, 50, 80]);
+  { With ticks, so the painted thumb (the slider band) is narrower across than its hit rect. }
+  FBar.Frequency := 10;
+  for ori := toHorizontal to toVertical do
+    for rev := False to True do
+    begin
+      Configure(ori, rev);
+      where := Format('ori=%d rev=%s', [Ord(ori), BoolToStr(rev, True)]);
+      SetLength(FThumbRects, 0);
+      a := Shot(False);
+      try
+        AssertEquals(where + ': every thumb asked', 3, Length(FThumbRects));
+        for i := 0 to 2 do
+        begin
+          box := InkBox(a, FBar.ThumbRect(i), $3B, $82, $F6);
+          Same(Format('%s: thumb %d is the rectangle painted', [where, i]), box, FThumbRects[i]);
+        end;
+        box := InkBox(a, Rect(0, 0, W, H), $60, $60, $60);
+        Same(where + ': the track is the groove painted', box, FTrackRect);
+      finally
+        a.Free;
+      end;
+    end;
+end;
+
+procedure TTyMultiTrackOwnerDrawTest.TestADefaultDrawFalseLeavesTheThumbToTheHandler;
+var
+  d, a: TBGRABitmap;
+  r: TRect;
+  x, y, diff: Integer;
+begin
+  FBar.Put([20, 50, 80]);
+  d := Shot(False);
+  try
+    FDropThumb := 1;
+    FFillThumb := True;
+    a := Shot(False);
+    try
+      r := FThumbRects[1];
+      AssertEquals('no default ink on thumb 1', 0, InkCount(a, r, $3B, $82, $F6));
+      AssertEquals('the handler''s ink, all of it', (r.Right - r.Left) * (r.Bottom - r.Top),
+        InkCount(a, r, $12, $AB, $34));
+      AssertTrue('thumb 0 as usual', SamePx(ThumbPx(a, 0), $3B, $82, $F6));
+      AssertTrue('thumb 2 as usual', SamePx(ThumbPx(a, 2), $3B, $82, $F6));
+    finally
+      a.Free;
+    end;
+    FFillThumb := False;
+    a := Shot(False);
+    try
+      AssertEquals('the handler drew nothing: no thumb there', 0, InkCount(a, r, $3B, $82, $F6));
+      AssertTrue('the groove shows through', InkCount(a, r, $60, $60, $60) > 0);
+      diff := 0;
+      for y := 0 to H - 1 do
+        for x := 0 to W - 1 do
+          if not PtInRect(r, Point(x, y)) and (a.GetPixel(x, y) <> d.GetPixel(x, y)) then Inc(diff);
+      AssertEquals('everything else as the default', 0, diff);
+    finally
+      a.Free;
+    end;
+  finally
+    d.Free;
+  end;
+end;
+
+procedure TTyMultiTrackOwnerDrawTest.TestADefaultDrawFalseLeavesTheTrackToTheHandler;
+var
+  d, a: TBGRABitmap;
+  all: TRect;
+  x, y, diff, m, own, other: Integer;
+begin
+  FBar.Put([20, 50, 80]);
+  SetLength(FBar.SegKey, 4);
+  FBar.SegKey[1] := TyTrackSelectionKey;
+  FBar.Frequency := 10;
+  all := Rect(0, 0, W, H);
+  d := Shot(False);
+  try
+    AssertTrue('fixture: a groove', InkCount(d, all, $60, $60, $60) > 0);
+    AssertTrue('fixture: a highlighted segment', InkCount(d, all, $FF, 0, 0) > 0);
+    AssertTrue('fixture: ticks', InkCount(d, all, 0, 0, 0) > 0);
+    { Asked BEFORE the track: left to draw, the bar paints over what the handler drew. }
+    FFillTrack := True;
+    a := Shot(False);
+    try
+      AssertEquals('the default covers the handler''s ink', 0, InkCount(a, all, $C0, $C0, $FF));
+      diff := 0;
+      for y := 0 to H - 1 do
+        for x := 0 to W - 1 do
+          if a.GetPixel(x, y) <> d.GetPixel(x, y) then Inc(diff);
+      AssertEquals('and the picture is the default one', 0, diff);
+    finally
+      a.Free;
+    end;
+    FFillTrack := False;
+    FDropTrack := True;
+    a := Shot(False);
+    try
+      AssertEquals('no groove', 0, InkCount(a, all, $60, $60, $60));
+      AssertEquals('no segment fill', 0, InkCount(a, all, $FF, 0, 0));
+      AssertTrue('the thumbs are still drawn', SamePx(ThumbPx(a, 1), $3B, $82, $F6));
+      AssertEquals('the ticks are still drawn', InkCount(d, all, 0, 0, 0), InkCount(a, all, 0, 0, 0));
+    finally
+      a.Free;
+    end;
+    FFillTrack := True;
+    a := Shot(False);
+    try
+      own := 0;
+      other := 0;
+      for m := FTrackRect.Left to FTrackRect.Right - 1 do
+      begin
+        if UnderAThumb(m) then Continue;
+        for y := FTrackRect.Top to FTrackRect.Bottom - 1 do
+          if SamePx(a.GetPixel(m, y), $C0, $C0, $FF) then Inc(own) else Inc(other);
+      end;
+      AssertTrue('the handler''s track', own > 0);
+      AssertEquals('all of the track off the thumbs is the handler''s', 0, other);
+    finally
+      a.Free;
+    end;
+  finally
+    d.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyMultiTrackModelTest);
   RegisterTest(TTyMultiTrackGeometryTest);
@@ -2627,4 +3136,6 @@ initialization
   RegisterTest(TTyMultiTrackKeyboardTest);
   RegisterTest(TTyRangeTrackBarTest);
   RegisterTest(TTyMultiTrackBarTest);
+  RegisterTest(TTyMultiTrackReadoutTest);
+  RegisterTest(TTyMultiTrackOwnerDrawTest);
 end.
