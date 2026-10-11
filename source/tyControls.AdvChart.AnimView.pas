@@ -127,6 +127,17 @@ unit tyControls.AdvChart.AnimView;
                  LineView._endLabelOnDuring (the place on the line where the
                  clip has got to, and the value there).
 
+  A SUNBURST'S DRILL-DOWN [Batch 115, C6]. sunburstRootToNode is an
+  updateView: every piece the new view keeps runs SunburstPiece.updateData
+  -- updateProps of its whole shape, update timing with no row; a piece
+  that is new (and the return circle, the first time) is created with r at
+  r0 and initProps r, enter timing at its row; a piece the view drops is
+  removed at once. Its label moves from its old layout (LabelManager) and a
+  new one fades. Only the drill's own render does this (HierDrill): the
+  sunburst's first render and its other updates stay unanimated here.
+  A TREEMAP'S rects (carTmRect) are not this set's: TreemapView animates
+  them with its own wrap, which the control runs.
+
   STATES [Batch 94, AN3b]. emphasis, blur and select switch through the
   engine's useStates on the SAME proxy the enter and update animations run on
   when upstream's element is the same one (a bar, a slice, a scatter symbol's
@@ -291,6 +302,9 @@ type
       -- the marker's `animation` and the host's isAnimationEnabled -- is
       Present False when the host does not animate }
     MarkLine, MarkPoint: TTyAnimModel;
+    { [Batch 115] this render is the series' drill-down (a sunburst's
+      sunburstRootToNode): its pieces and labels transition }
+    HierDrill: Boolean;
   end;
   TTyChartAnimSeriesArray = array of TTyChartAnimSeries;
 
@@ -946,6 +960,7 @@ begin
     carLineSymbol: Result := 'lineSymbol';
     carLineRun, carLineArea: Result := 'lineClip';
     carSector: Result := 'sector';
+    carSunPiece: Result := 'sunPiece';
     carFunnel: Result := 'funnel';
     carGaugePointer: Result := 'gaugePointer';
     carGaugeProgress, carGaugeCap: Result := 'gaugeProgress';
@@ -1073,6 +1088,15 @@ end;
 { a bar on a polar: its sector, as BarView's polar creator gives it
   [Batch 113] }
 function PolarBarProps(const AEl: TTyChartElement): TTyAnimProps;
+begin
+  Result := TyAnimProps([Num1('shape.cx', AEl.Anim.G[0]),
+    Num1('shape.cy', AEl.Anim.G[1]), Num1('shape.r0', AEl.Anim.G[2]),
+    Num1('shape.r', AEl.Anim.G[3]), Num1('shape.startAngle', AEl.Anim.G[4]),
+    Num1('shape.endAngle', AEl.Anim.G[5])]);
+end;
+
+{ a sunburst piece's layout, upstream's shape keys [Batch 115] }
+function SunPieceProps(const AEl: TTyChartElement): TTyAnimProps;
 begin
   Result := TyAnimProps([Num1('shape.cx', AEl.Anim.G[0]),
     Num1('shape.cy', AEl.Anim.G[1]), Num1('shape.r0', AEl.Anim.G[2]),
@@ -1502,6 +1526,18 @@ begin
           Start(TyAnimProps([Num1('shape.startAngle', AEl.Anim.G[4]),
             Num1('shape.endAngle', AEl.Anim.G[5])]), TyAnimCallAt(idx));
         end;
+      end;
+    carSunPiece:
+      begin
+        { only a drill-down's new piece: created with r at r0, initProps r
+          at its row (SunburstPiece.updateData's firstCreate) [Batch 115] }
+        if not (AUpdate and AC.HierDrill) then Exit;
+        p := Make(AEl.Anim.Series, idx, 'sunPiece');
+        props := SunPieceProps(AEl);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('shape.r', AEl.Anim.G[2]);
+        Start(TyAnimProps([Num1('shape.r', AEl.Anim.G[3])]), TyAnimCallAt(idx));
       end;
     carFunnel:
       begin
@@ -2000,6 +2036,23 @@ var
           { the whole sectorShape, at the NEW row (PieView.ts:120-125) }
           TyUpdateProps(p, props, AC.Model, TyAnimCallAt(r));
         end;
+      carSunPiece:
+        begin
+          { a drill-down's piece: kept -- updateProps of the whole shape
+            from where it is, update timing, no row; new -- ArmOne's
+            [Batch 115] }
+          if not AC.HierDrill then Exit;
+          hasOld := (AOldRow >= 0) and OldEl(AOld, AOldRow, 'sunPiece', oe);
+          if not hasOld then
+          begin
+            ArmOne(AList, AAt, AEl, AC, True);
+            Exit;
+          end;
+          props := SunPieceProps(AEl);
+          p := Take(AOld, AOldRow, s, r, 'sunPiece', SunPieceProps(oe), props, True);
+          p.SetFinal(props);
+          TyUpdateProps(p, props, AC.Model, TyAnimCallNoIndex);
+        end;
       carFunnel:
         begin
           if AOldRow < 0 then
@@ -2144,7 +2197,9 @@ var
                 if AEl.Caption.ValAnim then
                   CountOn(p, oe, AEl, s, r, 'label', AC.Model)
                 else if (AEl.Anim.HostPlus1 = 0)
-                  and ((AC.SeriesType = 'pie') or AEl.Caption.LmFree) then
+                  and ((AC.SeriesType = 'pie') or AEl.Caption.LmFree
+                    { a sunburst's in its drill-down [Batch 115] }
+                    or (AC.HierDrill and (AC.SeriesType = 'sunburst'))) then
                   MoveLabel(p, oe, AEl, s, r, AC.Model);
               end;
               Exit;
@@ -2903,6 +2958,19 @@ begin
   if v.Kind in [avkNumber, avkBool] then Result := v.Num else Result := AOr;
 end;
 
+{ a sunburst piece as its proxy has it: its angles in order as the static
+  build passes them, the corners the layout's [Batch 115] }
+function SunPieceFrom(const AEl: TTyChartElement; P: TTyChartAnimProxy): TTyChartShape;
+var a, b: Double;
+begin
+  a := NumOr(P, 'shape.startAngle', AEl.Anim.G[4]);
+  b := NumOr(P, 'shape.endAngle', AEl.Anim.G[5]);
+  Result := TyShapeSector(NumOr(P, 'shape.cx', AEl.Anim.G[0]),
+    NumOr(P, 'shape.cy', AEl.Anim.G[1]), NumOr(P, 'shape.r0', AEl.Anim.G[2]),
+    NumOr(P, 'shape.r', AEl.Anim.G[3]), Min(a, b), Max(a, b));
+  Result.SectorRadii := AEl.Shape.SectorRadii;
+end;
+
 { a polar bar as its proxy has it: the sector, its corners and its
   sausage kept; the layout numbers (G) and the label's rect follow
   [Batch 113] }
@@ -3083,6 +3151,9 @@ begin
       end;
     carSector, carGaugeProgress:
       AEl.Shape := SectorFrom(AEl, AProxy);
+    carSunPiece:
+      { the ring as the proxy has it now [Batch 115] }
+      AEl.Shape := SunPieceFrom(AEl, AProxy);
     carGaugeCap:
       begin
         a := AProxy.Num('shape.endAngle');

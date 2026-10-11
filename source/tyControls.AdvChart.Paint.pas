@@ -560,7 +560,14 @@ type
       G[0..5] (cx, cy, r0, r, the start and end angles), G[6] clockwise,
       G[7] radial (r grows, else the end angle), G[8] a sausage, G[9] of no
       sweep }
-    carPolarBar);
+    carPolarBar,
+    { [Batch 115, C6] a sunburst piece (Index its row, 0 the return circle):
+      G[0..5] cx, cy, r0, r and the start and end angles as upstream holds
+      them; a treemap rect (Index its row, Sub 0 the background, 1 the
+      content): its frame comes from the treemap's own drill-down
+      animation (the control's TreemapFrame), G[0..3] its local shape x, y,
+      width, height }
+    carSunPiece, carTmRect);
 
   TTyChartAnim = record
     Role: TTyChartAnimRole;

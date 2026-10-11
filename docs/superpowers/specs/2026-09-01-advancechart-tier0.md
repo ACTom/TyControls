@@ -8085,7 +8085,7 @@ H1–H4b 完成:直角坐标热力图、日历坐标系与它的画面、日历�
 
 - 字符串值:上游补值用 JS `+`,`'5' + '3'` 拼成 `'053'`;端口按数相加(父节点是 8)。基准里的 `V-string` 按名跳过,`TestStringValuesAddAsNumbers` 钉住端口这一侧。
 - 未知 `align` 的标签不画(上游锚点是 NaN)。
-- 下钻(`nodeClick`)、回上一层的圆盘、emphasis 的祖先/后代高亮、visualMap 着色、提示框之后再做。
+- **[第 115 批：下钻、返回圆盘（连同它累加的点击处理器）、`sunburstRootToNode` 与下钻的过渡已做，见 §150。]** 下钻(`nodeClick`)、回上一层的圆盘、emphasis 的祖先/后代高亮、visualMap 着色、提示框之后再做。
 
 ## 110. Tier 1 第七十六批:矩形树图(M1,2026-09-30)
 
@@ -8108,7 +8108,7 @@ H1–H4b 完成:直角坐标热力图、日历坐标系与它的画面、日历�
 - 标题新增 `HasFixedZ2/FixedZ2`,展开标签时照用(矩形树图的累计最大 z2、面包屑文字的 100002)。
 - 控件:存储分支与树/旭日图共用(写入补过的值);`SolveTreemaps` 需要量字器,放在 `Relayout` 里旭日图之后;色板只取图表级的(系列的 `color` 是层级映射用的列表,不是色板),否则主题色阶;`TreemapInk`;`BuildSeriesList` 的矩形树图分支;`treemap` 加入「别处画」名单。
 - 主题新键:`TyAdvChartTreemapLabel`(白字,任何模式都一样,因为下面是色板色)、`TyAdvChartBreadcrumb`(底色是墨色的淡 alpha、字是 muted)。背景矩形的默认边框色是图表底色(上游的白)。
-- 面包屑是静默的(只画不命中);下钻、缩放、悬停色之后再做。
+- **[第 115 批：面包屑可以点、点击 zoomToNode / 叶根 rootToNode、roam、悬停色与下钻的过渡已做，见 §150；面包屑仍不接悬停。]** 面包屑是静默的(只画不命中);下钻、缩放、悬停色之后再做。
 
 ### 基准
 
@@ -8253,7 +8253,7 @@ FPC 3.2.2 的 jsonreader 每进一层数组或对象就递归一次,几十万层
 
 - 写了 `fontSize` 的用例仍跳过标签文字(M4–M6 的随机族里常见,约三成标签);锚点、z2 照比。
 - 标签不透明度、`seriesStyleTask` 给每个矩形树图系列占的色板位(对矩形树图自己不可见)没有做。
-- 下钻/缩放交互、悬停色之后再做。
+- **[第 115 批：已做，见 §150。]** 下钻/缩放交互、悬停色之后再做。
 
 ## 116. Tier 1 第八十一批:树图的交互——点击展开收起、视图与漫游、悬停与提示框(T3,2026-10-01)
 
@@ -8410,7 +8410,7 @@ FPC 3.2.2 的 jsonreader 每进一层数组或对象就递归一次,几十万层
 
 ### 已知偏差
 
-- 上游发布的动作事件(select、selectchanged、legendselectchanged、treemap/sunburst 的下钻……)不在这一批:归 B1、B3、C6;矩形树图、旭日图点击后的下钻画面和图例点击后的切换画面之后的步骤按名停下。
+- **[第 115 批：`sunburstroottonode`、`treemapzoomtonode`、`treemaproottonode`、`treemapmove`、`treemaprender` 已发，见 §150。]** 上游发布的动作事件(select、selectchanged、legendselectchanged、treemap/sunburst 的下钻……)不在这一批:归 B1、B3、C6;矩形树图、旭日图点击后的下钻画面和图例点击后的切换画面之后的步骤按名停下。
 - 轴标签的命中框不随旋转转;markLine/markArea 的 name/value 只有 markPoint 取全了。
 - LCL 的 DblClick 没有坐标,用最近一次按下的点。
 
@@ -8663,7 +8663,7 @@ AN1 有了引擎，没有一个系列用它。这一批把驱动接进控件，�
 
 - **AN4**：仪表盘读数的数值滚动（`valueAnimation`，fixture 的 `style.text`）、`bar-label` 的标签数值滚动、折线的 `endLabel`、markPoint/markLine/markArea、effectScatter（符号以更新时序缩放 + 涟漪）。测试里这些元素的动画器从上游 clip 数里扣掉。
 - **AN3**：同一系列的更新、离场，饼的后续扇区只扫 endAngle，折线的数据差分；现在第二次 setOption 当作新的入场。
-- 这一批没接：象形柱、箱线图、关系图/树/矩形树图/旭日图/桑基图的入场；它们的标签也不淡入（LabelManager 的淡入只给柱、散点、热力图、饼、漏斗）。雷达符号的标签端口本来不画。K 线 simple 模式（实体窄于 1.3 px）不动；部分出界的 K 线没有静态裁剪。**[第 108 批：箱线图的入场与更新已接；部分出界的 K 线、箱线图挂裁剪，整个出界的不画，见 §143。K 线 simple 模式仍不动。]**
+- **[第 115 批：旭日图、矩形树图的下钻过渡（更新路径与矩形树图自己的 wrap）已接，入场仍不做，见 §150。]** 这一批没接：象形柱、箱线图、关系图/树/矩形树图/旭日图/桑基图的入场；它们的标签也不淡入（LabelManager 的淡入只给柱、散点、热力图、饼、漏斗）。雷达符号的标签端口本来不画。K 线 simple 模式（实体窄于 1.3 px）不动；部分出界的 K 线没有静态裁剪。**[第 108 批：箱线图的入场与更新已接；部分出界的 K 线、箱线图挂裁剪，整个出界的不画，见 §143。K 线 simple 模式仍不动。]**
 - 悬停高亮在动画中画的是静止几何（`PaintEmphasis` 读列表）；命中测试已经跟着帧走。
 - 饼在端口里先滤掉负值，视图行号与上游的 dataIndex 在有负值时不一致（延迟函数拿到的序号不同）。
 - 一帧仍要开一张控件大小的 BGRA 位图画动态层（Q7 那 13 ms 的底价）；动画期间所有系列、图例、标题都在动态层，不按元素是否在动细分。
@@ -8708,7 +8708,7 @@ B1 把悬停、选中、动作高亮搬上了标志加状态代理的模型，�
 ### 推迟与偏差
 
 - **[第 114 批：照这里写的做了——两套行、两套下标、`dataType: 'edge'`，见 §149。]** **桑基图**（adjacency/trajectory）**没做**：它的 focus 是 `{node: [...], edge: [...]}` 两套下标，边是另一份数据（`dataType: 'edge'`），状态模型目前只有节点一套行（B1 起就跳过 `IsEdge`）。要做：`TTyStSeries` 加一套按边下标的行、`StItemAt` 认 dataType、`TTyStFocus` 带两套下标、`StBlurSeries` 分别离开 blur，再给 fixture 加桑基的记录（`getData('edge')`）与转写。
-- **[第 114 批：关系图仍保留，理由补在 §149 的「做法」。]** **关系图、树、矩形树图**保留各自的原地重样式（第 46、81 批），不接共享模型：关系图的 adjacency、树的 ancestor/descendant 已有逐项基准；搬过来要先给它们的节点/边建状态行（同上），而且它们的悬停由提示框的 datum 驱动、按帧重建，和标志模型是两条路。因此它们与共享模型之间**不互相淡化**（笛卡尔上的关系图连带柱子、global 范围跨类型），highlight/downplay 动作对它们只发事件、不改样子。
+- **[第 114 批：关系图仍保留，理由补在 §149 的「做法」。]** **[第 115 批：矩形树图原来走覆盖层，现在照上游的派发者在静态列表里原地提亮，仍不接共享模型，见 §150。]** **关系图、树、矩形树图**保留各自的原地重样式（第 46、81 批），不接共享模型：关系图的 adjacency、树的 ancestor/descendant 已有逐项基准；搬过来要先给它们的节点/边建状态行（同上），而且它们的悬停由提示框的 datum 驱动、按帧重建，和标志模型是两条路。因此它们与共享模型之间**不互相淡化**（笛卡尔上的关系图连带柱子、global 范围跨类型），highlight/downplay 动作对它们只发事件、不改样子。
 - **仪表盘、雷达**仍在覆盖层：仪表盘的指针和进度条是两个各自的派发者（`z2EmphasisLift = 0`），雷达的项是组（折线、面积、每个符号各有状态，标签按维度）；需要「一项多派发者」与「组的多路径」两种结构，Parts 只解决后者的一半。箱线图端口没有渲染器；极坐标上的柱/线端口没有。**[第 113 批：极坐标上的柱、线有了，接上状态机（柱的代理表、blurScope 的 polar 键），见 §148。]****[第 108 批：箱线图有了渲染器，接上状态机（`sskBox`，emphasis 边框 2），见 §143。]**
 - 面积在端口里是 silent（拿不到指针），所以「悬停面积只有面积 emphasis」的分支写了但到不了；悬停折线时面积跟着走与上游一致。
 - 折线 `showSymbol: false` 时上游会为单点高亮临时建一个符号，端口不建（只设折线状态）。
@@ -10312,7 +10312,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **Calendar**：系列或 finder 指向它时（`calendarModel` 优先于系列自己的），`dataToPoint(value)`（数组取第一个元素，范围外是 `[NaN, NaN]`）；`pointToData` 是像素所在那天的时间，范围外 null（于是继续问下一个坐标系，最后是 undefined）；像素不是数时是 NaN（Invalid Date），一维是正无穷时在守卫里出局，负无穷或另一维无穷是 NaN。`containPoint` 没实现（false）。
 - **Radar**：`convertToPixel` / `convertFromPixel` 都是 null，`containPoint` 是 false。
 - **View**（graph 的）：`dataToPoint` 走整体矩阵、`pointToData` 走它的逆——zrender 的 `applyTransform` 对零系数也乘，所以一维是 NaN 或无穷时另一维也是 NaN。只有 graph 的 view 在管理器里；tree、sankey 的 view 只挂在系列上，换算找不到它们。
-- **containPixel**：对 finder 里每个 `...Models` 的每个模型：它有坐标系就问坐标系的 `containPoint`（cartesian 的面积两端都闭；grid 问第一个 cartesian；graph、tree、sankey 问各自 view：数据矩形经整体矩阵后的包围盒；calendar、radar 是 false），没有就问系列视图的 `containPoint`：饼图是**第一个数据项**布局的环 `r0 <= d <= r`（玫瑰图是第一项自己的半径），旭日图读第 0 个数据（虚拟根）的布局——不下钻时根没有布局，永远是 false；漏斗、仪表盘、矩形树图没有，是 false。坐标轴模型没有坐标系，也是 false。结果是或。
+- **containPixel**：对 finder 里每个 `...Models` 的每个模型：它有坐标系就问坐标系的 `containPoint`（cartesian 的面积两端都闭；grid 问第一个 cartesian；graph、tree、sankey 问各自 view：数据矩形经整体矩阵后的包围盒；calendar、radar 是 false），没有就问系列视图的 `containPoint`：饼图是**第一个数据项**布局的环 `r0 <= d <= r`（玫瑰图是第一项自己的半径），旭日图读第 0 个数据（虚拟根）的布局——不下钻时根没有布局，永远是 false **[第 115 批：下钻过一次之后这份布局一直留着，回到根也包含，见 §150]**；漏斗、仪表盘、矩形树图没有，是 false。坐标轴模型没有坐标系，也是 false。结果是或。
 - **jitter**（`jitterLayout`，`POST_CHART_LAYOUT`）：只对 `scatter`（不含 `effectScatter`）、坐标系是 cartesian2d、基轴（类目、时间、x 的次序）是类目轴、且基轴写了 `jitter > 0` 的系列；每个系列、每一行（包括值是空的行——布局照样有，照样抖）都调一次 `fixJitter(基轴, 固定坐标, 浮动坐标, symbolSize / 2)`，类目 x 上浮动的是 x，类目 y 上浮动的是 y；`symbolSize` 是数组时取两个的平均。`jitterOverlap`（缺省 true）：`浮动 + (Math.random() - 0.5) × min(max(0, jitter), 带宽 - 2r)`。`jitterOverlap: false`：在这根轴上已放下的点中间找位置——两个方向各试一次，碰到圆（`r + 它的 r + jitterMargin`，缺省 2）就挪到它外侧、再从头检查，超过 `jitter / 2` 放弃；取移动小的一个，若仍超过 `jitter / 2` 或超过 `带宽 / 2 - r`，退回随机放置（**不记住**），否则记住这个点。放下的点挂在**轴对象**上，同一根轴上的系列共享；轴对象在 resize 时保留，所以上游第二次布局会躲开第一次的点。
 - **customValues**（`createAxisLabels` / `createAxisTicks` 的第一个分支）：写了（任何真值）就不走类目间隔或刻度——每个值 `scale.parse`、落在 `scale.getExtent()` 里（两端都算）的留下，去重、升序。`createAxisTicks` 读的是 **`axisTick` 的** `customValues`，不管是谁在问：分割线、分割区域也跟着它走，再各按自己的 `alignWithLabel` 挪到带边（自定义刻度没有 `offInterval`，末尾总是补一个 `extent[1] + 1`）。标签文字是 `makeLabelFormatter(axis)(tick, 序号)`：时间轴的自定义刻度没有 time 信息，用 `getUnitFromValue` 那个单位的第一个模板、level 0。类目轴自己的刻度和分割线仍走类目标签的自动间隔（`makeCategoryLabelsActually`，不看 customValues）。`fixMinMaxLabelShow` 在没写 showMin/MaxLabel、写了 customValues 又没开 hideOverlap 时什么都不藏。`syncLabelIgnoreToMajorTicks` 按**值**把被藏的标签和刻度对上。
 
@@ -10375,7 +10375,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **large 散点**（`largeThreshold` 以上走 Float32Array）不在这一批（C8）。
 - **finder 是数组**：上游对数组 finder 的数字键调 `match` 会抛错；端口当成什么都没找到。containPixel 的点是 null 时上游抛错，端口答 false。
 - **matrix、polar、singleAxis、geo、parallel** 坐标系不在（polar 是 C3、singleAxis 是 C10、geo 是 D14）；finder 指到它们时端口什么都答不出，containPixel 答 false。分派里给 polar、singleAxis 留了位置。**[第 111 批：polar 坐标系有了——finder 指 polar 时照上游换算，containPixel 照 containPoint；极坐标系列的 finder 随 C4，见 §146。]** **[第 113 批：系列 finder 在它的 polar 上换算，containPixel 认极坐标系列，见 §148。]**
-- **[第 114 批：有了 roam，问 View（盒子经 overall），见 §149。]** **桑基图**的 containPixel 按它的盒子（端口没有桑基图的 roam）；旭日图从不包含（上游不下钻时也是如此，端口没有下钻）。
+- **[第 114 批：有了 roam，问 View（盒子经 overall），见 §149。]** **桑基图**的 containPixel 按它的盒子（端口没有桑基图的 roam）；旭日图从不包含（上游不下钻时也是如此，端口没有下钻）。**[第 115 批：有了下钻，读返回圆盘最后的布局，见 §150。]**
 - **类目轴的自动间隔**：量的是主题字体，不是上游的 12px sans-serif；60 个 `'category N'` 标签上端口算出 10、上游 9（和有没有 customValues 无关，是原有的偏差）。基准里拥挤的类目用例把间隔写明。
 - **customValues 写成对象或串**：对象取值、串逐字符，照 `zrUtil.each` 的行为；没有基准。
 - **网格收缩时的自定义标签**：基准都用 `outerBoundsMode: 'none'`；自定义标签参与收缩估算的规则照原来的类目轴 / 数值轴走，没有单独的基准。
@@ -10873,3 +10873,101 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - 没有新单元、新主题键或新资源串。
 
 全量 **10596 个测试，0 失败、0 错误**（变异轮之前是 10594 个，同样全绿；多出的 2 个是变异补的手写测试）。新增 `test.advchart.graphsankeyinteract` 12 个（基准 1 个、手写 11 个）；力导向的求解拆成实例以后，现有的力导向、roam、聚焦、图例基准逐位不变。
+
+## 150. Tier 2 第一百一十五批：旭日图与矩形树图交互（C6，2026-10-11）
+
+路线图 C6：旭日图的下钻与返回圆盘，矩形树图的点击下钻 / zoomToNode / 面包屑点击 / roam / 悬停 / 提示框，以及下钻的过渡。以前旭日图点哪里都不下钻、没有返回圆盘（§109 留的口子），`containPixel` 永远是假（§145）；矩形树图的点击只发鼠标事件，面包屑只画不命中（§110），`leafDepth` 的叶根点了不进去（§115），不能拖、不能滚轮缩放，悬停走覆盖层——悬停在父节点的边框上会把整块白色背景画到孩子上面；两种系列的虚拟根（旭日图的返回圆盘、矩形树图的根背景）都没有提示框；`sunburstroottonode` 这类动作事件 A3 留给了这一批（§119）。这一批对着 `chart/sunburst/SunburstView.ts`（`render` 的 DataDiffer、`renderRollUp`、`_initEvents`、`_rootToNode`、`containPoint`）、`SunburstPiece.ts`（`updateData` 的 `initProps` / `updateProps`）、`sunburstAction.ts`、`sunburstLayout.ts`（`renderRollupNode`）、`SunburstSeries.ts`（`resetViewRoot`、默认选项）、`sunburstVisual.ts`、`chart/treemap/TreemapView.ts`（`render`、`_doRender`、`renderNode`、`giveGraphic`、`prepareAnimationWhenHasOld` / `NoOld`、`_doAnimation`、`_onPan` / `_onZoom`、`_initEvents`、`_renderBreadcrumb`、`findTarget`）、`treemapLayout.ts`（`reset`、`estimateRootSize`、`calculateRootPosition`、`prunning`、`calculateCurrentZoom`、`treemapClampZoom`）、`treemapAction.ts`、`Breadcrumb.ts`、`TreemapSeries.ts`（默认选项）、`chart/helper/treeHelper.ts`（`retrieveTargetInfo`、`aboveViewRoot`）、`data/Tree.ts`（`getNodeById`、`contains`、高度）、`util/animation.ts`（`createWrap`）、`component/helper/RoamController.ts`、`coord/View.ts`（`clampByZoomLimit`）、`label/LabelManager.ts`（`_animateLabels`）、`util/states.ts`，以及 zrender 的 `Element.animateTo`（`setToFinal` 的 `copyValue`）、`Handler`（`isOutsideBoundary`、悬停先于 zr 级监听）、`Transformable.updateTransform` / `transformCoordToLocal` 逐行核过，在真 dist 上跑基准。§109、§110、§115、§119、§124、§125、§145 的推迟在原处标注。
+
+### 上游的做法
+
+- **旭日图的视图根**：`sunburstRootToNode`（`update: 'updateView'`）按 `retrieveTargetInfo` 找目标——`targetNode` 是串就 `getNodeById`（先序，含根自己，`===` 比较，所以数字永远找不到），找不到再看 `targetNodeId`——找到了先算方向（目标在旧视图根的祖先链上是 `rollUp`，否则 `drillDown`，写回 payload），再 `resetViewRoot`。查询 `seriesIndex/Id/Name`，不写就是全部旭日图，各自在自己的树里找；没找到的照样渲染、照样发事件（没有 direction）。视图根只在新树时回到根（`optionUpdated` 时旧节点不在新树里）；`backwardCompat` 让每次 merge 都访问系列、重建数据，所以任何 merge 都回到根，resize 不会。
+- **布局**（`renderRollupNode = viewRoot.depth > 0`）：单位弧度按视图根的值（和为 0 时按它的孩子里值不是 NaN 的个数），层数 = 视图根的高度（叶子是 1）`- (rollup ? -1 : 1)`，`|| 1`；节点的环号 = 深度 - 视图根深度 `- (rollup ? -1 : 1)`，所以视图根自己是第二环的一整圈；层的 `radius` / `r0` / `r` 仍按**绝对**深度取 `levels[depth]`。下钻时虚拟根放在第一环（`r0 .. r0 + rPerLevel`，从起始角转一整圈），它的布局之后再也不清：回到根以后 `containPoint` 读到的还是它，所以一次下钻之后中心永远「包含」。只画视图根的子树（先序），值为 0 的不画；返回圆盘的颜色是 `itemStyle.color`（第 0 层或系列），否则 `neutral50`；它的字是系列名（没有名就没有字），标签规则与其他扇区相同（整圈且内半径 0 时字在圆心）。
+- **点击**：组上的处理器在视图根子树里找被点的扇区，`nodeClick`（数据项 → 层 → 系列，默认 `'rootToNode'`）是 `'rootToNode'` 且不是视图根就派发；`'link'` 开窗口。返回圆盘有自己的处理器：派发到「注册时的视图根的父节点」——而且**每次渲染（只要还在下钻）都再 `on('click')` 一次、从不 `off`**：从 a 钻到 a1 再点返回圆盘，先后派发「到根」和「到 a」，最后停在 a，发两个事件；回到根时圆盘被删、处理器一起没了。`_rootToNode` 在每次调用时才比较当前视图根。zrender 的点击要求按下与松开在同一元素且相距不超过 4 px；画布之外 `isOutsideBoundary` 什么都不命中。
+- **过渡**：同一棵树上的 DataDiffer（按 `getId`）——两个视图都有的扇区 `updateProps` 整个 shape（更新的时长与缓动，**不带下标**），新出现的扇区（包括第一次出现的返回圆盘）以 `r = r0` 建出来再 `initProps` r（入场的时长与缓动，带下标），视图不再有的立刻删除、不淡出。标签由 LabelManager：旧标签从上次的 x / y / rotation `updateProps` 过去（更新时序、带下标），新标签透明度 0 → 1（入场时序、带下标）。全局默认 `animationEasing` 是 `cubicInOut`，旭日图自己的默认时长 1000 / 500。`updateProps` 带 `setToFinal`：派发之后、第一帧之前元素已经在终点，第一帧把它们放回起点、从那一刻起算时间。
+- **悬停与提示框**：返回圆盘也是派发者（focus 读虚拟根的模型，默认 `descendant`），但它**没有登记**为第 0 个数据的元素：按下标离开 blur 时找不到它，highlight 第 0 项也找不到它；悬停它时 hoverState 从 blur 直接到 emphasis。它的提示框与其他扇区同式：系列名做表头，一行带色点，名字是系列名，值是根的值。
+- **矩形树图的点击**：容器组上的处理器只在 `_state === 'ready'` 时工作；`nodeClick` 只读系列自己的（`get(.., true)`，缺省 `'zoomToNode'`，假值什么都不做）；目标不是被点的元素，而是 `findTarget(offsetX, offsetY)`：从视图根沿 viewChildren 先序，每个有背景元素的节点按背景**此刻的变换**把点转回局部、落在 `(0, 0, w, h)` 里才继续往下，最后一个命中的赢；没有背景元素的节点（画布外从没建过）直接往下走。目标是叶根（`leafDepth` 截出来的）就 `treemapRootToNode`，否则 `'zoomToNode'` 派发 `treemapZoomToNode`，`'link'` 开窗口。
+- **面包屑**：每次渲染重建：有 payload 目标用它，否则有系列 `leafDepth` 用视图根，否则 `findTarget(画布中心)`——这时背景元素的变换还是**上一次绘制**时的（新元素没有变换），所以拖动之后的面包屑按拖动前的位置找。点一项：它在视图根的祖先链上就 `rootToNode`，否则 `zoomToNode`；动画中不响应。面包屑压在一切之上（z2 一万倍），按在它上面不是对下面矩形的点击。
+- **布局**（`treemapLayout.reset`）：`treemapMove` 不重新布局、只把根挪到 payload 的 `rootRect.x / y`；其余先清掉所有布局，按根尺寸 squarify 视图根——`treemapZoomToNode` 的尺寸是 `estimateRootSize`（视图面积 × `zoomToNodeRatio`（默认 `0.32 * 0.32`），沿祖先每层乘「父节点所有孩子的值之和 / 自己的值」再加 `4bw² + (3bw + upperHeight) * Math.pow(area, 0.5)`，不超过 2⁵³ - 1，不小于视图面积，边长按 `pow(area / viewArea, 0.5)` 缩放），`treemapRender` 用 payload 的 rootRect 尺寸，两者都经 `calculateCurrentZoom`（宽比 `||` 高比 `|| 1`）和 `clampByZoomLimit`（系列自己的 `scaleLimit`，默认 `{min: 0.2, max: 5}`；`min || 0`、`max || Infinity`）；`treemapRootToNode` 和普通渲染就是盒子大小。视图根以上的节点 `extend` 视图根的布局，它们的 viewChildren 是**从前某次布局留下的**（从不清），渲染沿着它们走到视图根。根的位置：rootRect 的 x / y，否则把目标的中心放到盒子中心（目标没有布局就 (0, 0)），否则 (0, 0)。`prunning` 只标记视图根以上的路径与视图根的子树为 in view，画布外的标 invisible（路径上的不标）。resize 的 payload 是 `'resize'`：缩放和平移都复原。
+- **roam**（默认 `roam: true`、`roamTrigger: 'global'`）：RoamController 的拖动每次 mousemove 都更新上一点，`_onPan` 只在 dx 或 dy 的绝对值超过 3 时派发 `treemapMove`（rootRect 是根布局加位移），小步的位移就此丢掉；滚轮的倍率 1.1 / 1.2 / 1.4 由 wheelDelta 定，`_onZoom` 把根矩形在容器坐标里绕指针缩放（`translate(-m)`、`scale`、`translate(m)` 后 `BoundingRect.applyTransform`），缩放比是夹紧后的新缩放除以当前缩放，派发 `treemapRender`。动画中两者都不响应。zrender 的 Handler 先按移动前的画面找悬停目标、再交给 zr 级监听（RoamController），所以拖动结束时悬停的是平移前指针下的那个元素。
+- **多个矩形树图**：布局阶段对**每个**矩形树图都用这次的 payload（目标在各自树里找），渲染只给 payload 查询到的那一个，其余的画面不动——画面与布局从此分开。
+- **过渡**（`_doAnimation`，只在系列 `get('animation')` 为真——矩形树图的默认值是 true，全局的 `animation: false` 管不到它——且不是首次渲染、payload 是 zoomToNode / rootToNode / 无 payload 时）：
+  - 元素存储按 rawIndex：节点组、背景、内容各一份，渲染时旧的复用（invisible 的也复用），没有旧的且不在画布外才新建；不在新存储里的旧元素是**要删的**。
+  - 复用的元素：组从旧 x / y 到新的，矩形从旧 shape 到新的（透明度不是 1 时补到 1）。新元素：有父节点且（不是 rootToNode 或是 drillDown）时，组从 `(0, 父背景旧高)`、矩形从 `(父背景旧宽, 父背景旧高, 0, 0)` 出发——「父背景旧尺寸」只在不是 rootToNode 时取，取的是父背景在这次渲染里记下的起点（新的父背景就是 0 宽 0 高）；矩形另外淡入 0 → 1。否则组直接到位、矩形只淡入。
+  - 要删的元素（已经 invisible 的跳过）：drillDown 时，落在新视图根的组里的（只能是视图根原来的内容）shape 到 `(0, 0, 视图根新宽, 新高)` 并淡出，其余只淡出（组没有 style，不动）；否则组和矩形都缩向父组的中心（父组也要删时是 (0, 0)），矩形同时淡出。父组的宽高是它最后一次渲染时的。
+  - 时长 `animationDurationUpdate`（矩形树图默认 900），缓动 `animationEasing`（默认 `quinticInOut`，函数当没有：`cubicOut`），没有延迟，`setToFinal`；所有元素进同一个 wrap，全部结束（或被打断）才 `renderFinally`：删掉要删的、把移出画布的设为 invisible、`_state` 回到 ready。
+  - `setToFinal` 用 `copyValue` 直接写值，不标脏：要删的元素在第一帧之前没有被重排，它的字停在原来的位置（但已经按终点宽度重新截断）；第一帧之后跟着形状走。
+  - 字：内容的字每帧按此刻的矩形重新定位、重新截断；LabelManager 给这次渲染新建的元素上的字淡入（入场时长与缓动：矩形树图是 1000 / `quinticInOut`，带下标），复用的元素的字的淡入接着跑（要删的元素的字也接着跑）。
+- **悬停**：叶子的派发者是它的节点组（背景和内容一起进 emphasis），父节点的是它的背景；默认状态代理把填充 `liftColor`、z2 加 10；有动画时状态切换是带过渡的（这一批没有移植，见偏差）。根的背景也接指针，提示框是系列名和根的值。
+
+### port 以前
+
+- 旭日图：只画根以下全部，`TySunburstSolve` 没有视图根；扇区和标签没有动画角色；`containPixel` 永远假；点击只发鼠标事件；第 0 行没有元素也没有提示框。
+- 矩形树图：根永远在 (0, 0)、盒子大小；面包屑只按第一帧的规则找目标、只画不命中；点击、拖动、滚轮都不做事；悬停走覆盖层的 Lift（父节点的背景被提到孩子上面）；根的背景没有提示框；被裁到画布外的节点连同变换都不算。
+
+### 做法
+
+- `Sunburst` 单元：`TySunburstSolve` 多一个视图根参数（越界当根）：单位弧度、层数、环号按上面的规则，下钻时第 0 行放在第一环；`TTySunburstSolved.ViewRoot / HasRootFill`；`TySunburstSubtree`（绘制的先序）、`TySunburstNodeClick`（数据项 → 层 → 系列，写了 null 也算写了）；颜色过程给第 0 行读 `itemStyle.color`；`TyBuildSunburstMarks` 从视图根的子树出元素、返回圆盘排在最后（不受「值为 0 不画」的限制），每个扇区标上 `carSunPiece`（G 存 cx、cy、r0、r 与上游原样的起止角）。`TTySunburstInk.RootFill`：返回圆盘的默认色——桑基连线那个 muted 墨色（`TyAdvChartSankeyLink` 的底色）叠在图表底色上，不透明。
+- `Treemap` 单元：
+  - `TTyTreemapView`（视图根、payload 种类 `tpkNone / ZoomToNode / RootToNode / Move / Render / Keep`、目标、rootRect、方向）与新的 `TyTreemapSolve` 重载：上一次的解（同一棵树）传进来——平移和 `tpkKeep` 照搬布局只挪根，其余重新 squarify 视图根；视图根以上的行照搬视图根的布局、保留上一次的 viewChildren；`EstimateRootSize`（`TyJsPow`，`0.32 * 0.32` 在运行时用 Double 相乘）、`TyTreemapCurrentZoom`、`TyTreemapClampZoom`；根的位置；`Prune` 按祖先路径；`Compose` 也给画布外的节点算变换。节点多了 `AboveView`、`LabelRaw / HasLabelRaw`（截断之前的字）、`DrawInvisible`；解多了 `ViewRoot / AbovePath / ContainerX / Y`。
+  - `TTyTreemapHave` 与 `TyTreemapHaveOf`：上游的元素存储（组、背景、内容），按渲染顺序，复用或在画布内才新建。`TyTreemapFindTarget`（此刻的变换）与面包屑的新重载（payload 目标；否则 `leafDepth` 的视图根；否则按上一次绘制的变换找画布中心——复用的背景用上一次的 TX / TY，新的没有变换）。
+  - 标签的截断与定位提成 `PlaceLabel`，`TyTreemapLabelAt` 让过渡的每一帧按此刻的内容矩形重算；`TyHierIds`（从 `AssignIds` 提出来，旭日图的 `getNodeById` 也用它）；元素标上 `carTmRect`（Sub 0 背景、1 内容，G 存局部 shape）；视图根以上的行只有组。
+- `Paint`：两个新角色 `carSunPiece`、`carTmRect`。
+- `AnimView`：`TTyChartAnimSeries.HierDrill`；`ArmUpdate` / `ArmOne` 的 `carSunPiece`——只在下钻的那次渲染：复用的扇区 `TyUpdateProps` 整个 shape（不带下标），新的从 r0 `TyInitProps` r（带下标）；旭日图下钻时复用的标签走 `MoveLabel`；帧里 `SunPieceFrom`。矩形树图的矩形不归这一套。
+- `Events`：五个动作事件进事件表。
+- 控件：
+  - 状态：`FSunRoot`、`FSunVirt`（返回圆盘最后的布局，`containPixel` 读它）、`FSunHandlers`（返回圆盘累加的处理器：每次在下钻状态下解出旭日图就追加「视图根的父节点」，回到根清空）、`FTmView / FTmPrev / FTmHave / FTmAnim`、面包屑的按下、`FTmHover`；新树（notMerge、任何访问了系列的 merge）全部清掉（`HierDrillReset`）。
+  - 动作：`DispatchAction` 认 `sunburstRootToNode` 与四个矩形树图动作（`DoSunAction` / `DoTreemapAction`：`HierQuery` 按查询或类型找系列、`HierTarget` 照 `retrieveTargetInfo`、`HierAbove` 定方向），设好视图后走 `FullUpdate`（updateView，动画照上游的更新路径），再发事件（payload 照原样，加上 direction）；没被查询到的矩形树图设成 `tpkKeep`，画面不动。公开的 `SunburstRootToNode`、`TreemapZoomToNode / RootToNode / MoveTo` 及读状态的函数。
+  - 手势：`MouseUp` 的点击（同一目标、4 px 内、在画布内）分给 `SunburstClick`（返回圆盘按累加的处理器逐个派发）和 `TreemapClick`（动画中不做；`findTarget`；叶根 rootToNode，否则看 `nodeClick`）；面包屑在 `MouseDown` / `MouseUp` 里按多边形（绕数）自己判断，按在它上面就不算下面矩形的点击；`RoamSeriesAt` 认矩形树图（`roam`、`roamTrigger 'selfRect'` 按根矩形），`MouseMove` 的平移交给 `TreemapPan`（超过 3 px 才派发，位移照样丢），`DoMouseWheel` 交给 `TreemapWheel`（矩阵算式照 `_onZoom`）；手势的事件 payload 里数字按 JS 打印。
+  - 过渡：`TmAnimArm`（在解出矩形树图之后、按上一次的解与存储）照上面的规则建组、矩形、要删的元素（复制旧画面上的元素和它的字）的代理，全部进一个 `TTyTmWrap`，`setToFinal`；接着把还在跑的字的淡入交给复用的元素和要删的元素，给新元素的字建淡入；移出画布的元素在 wrap 结束前照画（`DrawInvisible`，用旧的颜色和字）。`TreemapFrame`：每帧按组代理自上而下合成变换（5e-5 的规则），矩形按代理的 shape 与透明度落到组上，内容的字用 `TyTreemapLabelAt` 重新截断定位，标题条跟着组走，要删的元素画在最后——第一帧之前（`Stepped` 为假）它们的字留在原处。`TmWrapCheck`（每个 `AnimTick`）在 wrap 结束时做 renderFinally。代理在结束后留着，元素停在最后一步算出的位置（与上游一样，可能差最后一位）。
+  - 悬停：矩形树图不再走覆盖层，`ApplyTreemapHover` 在静态列表里原地改：悬停的节点是叶子就背景和内容一起、是父节点就只有背景，`TyChartLiftColor` 加 z2 + 10；悬停的节点在 `MouseMove` 开头、平移之前确定，渲染之后只要元素还在就保留，画布外、离开、元素被删时清掉。
+  - 提示框与颜色：旭日图第 0 行（只在下钻时）和矩形树图的根都有提示框，名字是系列名；返回圆盘的色点用它的填充。
+  - 旭日图的聚焦下标不含 0（返回圆盘不登记在第 0 项下）。
+  - `containPixel`：旭日图读 `FSunVirt`：`r0 <= √(dx² + dy²) <= r`。
+
+### 基准
+
+`tools/advchart-oracle/sunburst-treemap-interact.js`（真 dist，node SSR，`chart._ssr = false`，`echarts.env.node` 关掉，`Date` 在加载 dist 之前换成读 `NOW` 的时钟，每个用例 `NOW` 从 1700000000000 开始、只由 `tick` 步推进，随机数是端口的 xorshift32，`setTimeout` 不跑，tooltip 是 `renderMode: 'richText'`；每步之后 `_onframe()` 把状态标志变成状态，再 `getDisplayList(true)`；最后 `process.exit()`）→ `tests/fixtures/advchart-sunburst-treemap-interact.json`：**25 个用例、189 个状态**。指针步走 zrender 自己的 Handler，点击是按下、松开、click 三件；按节点指定的点在当时的画面上找出来、以整数写进夹具。记录：动作事件（类型、系列、目标的下标、方向、rootRect）、悬停步的提示框（哪一项、逐行的色点 / 名字 / 值）、旭日图的视图根、每块扇区（含返回圆盘）的环、填充、透明度、z2 与标签（字、x、y、转角、对齐、透明度）、8 个探针的 `containPixel`；矩形树图的视图根、根的布局、每个节点的组位置与背景 / 内容（局部 shape、全局平移、透明度、是否 invisible、填充、z2、字的截断结果、锚点、透明度）、要删的元素（按旧存储认出它属于哪个节点——它的 ECData 会被叶子组的 `setItemGraphicEl` 改号）、面包屑（全局多边形、字、字的锚点）、`_state`。
+
+- **旭日图下钻** 4 个：点根扇区、再点下钻视图里的扇区、点视图根（不动）、两次返回圆盘（第一次因为处理器累加发两个事件）、点叶子、resize 保持视图根；系列无名（返回圆盘没有字，值为 0 的孩子不画）；`radius [20, '80%']`、`startAngle 30`、逆时针、按绝对深度取的层半径、圆角 4、切向旋转左对齐；`nodeClick` 系列 false 而第 2 层 `'rootToNode'`。
+- **旭日图动作** 1 个：两个旭日图上按 id、按 `targetNodeId`、未知 id、以系列名找回根，不写查询时两个一起，最后 resize。
+- **旭日图悬停** 1 个：下钻后悬停扇区、返回圆盘、视图根、离开，回到根再悬停；descendant 淡化、返回圆盘被淡化与被强调、提示框。
+- **旭日图过渡** 2 个：默认时序（下钻与返回，采样十余个时刻）与改了时长、缓动、更新延迟的。
+- **矩形树图点击** 5 个：点叶子 zoomToNode（居中）、再点、点画布外的节点（不响应）；`zoomToNodeRatio 0.5` 加逐层边框间隙和 `scaleLimit.max 2`；深处的小叶子（根放大到上限 5）；`leafDepth 1` 的叶根钻入、面包屑回到根；`nodeClick` false 与 `'link'`。
+- **面包屑** 2 个：中间一项、根一项、再钻再点；平移之后面包屑按上一次绘制的变换找中心。
+- **矩形树图动作** 1 个：按 id 的 zoomToNode、按 `targetNodeId` 的 rootToNode、未知 id、resize（复原缩放）、以系列名回到根。
+- **roam** 4 个：拖动（两次小步被丢掉）、四次滚轮、点击回到估计尺寸；`scaleLimit {min 0.5, max 1.5}` 的夹紧；`roam: 'move'`（滚轮不响应）；`roam: false` 加 `'selfRect'`（拖不动，短拖的松开是点击）。
+- **矩形树图悬停** 1 个：逐层边框间隙下悬停叶子、父节点的边框（根的提示框）、另一片叶子、面包屑、离开，点击下钻后再悬停。
+- **矩形树图过渡** 4 个：zoomToNode 与面包屑回到根（采样十个时刻）；放大到画布外（结束时 invisible）；`leafDepth` 的钻入（要删的元素淡出、视图根原来的内容展开到新尺寸、新元素的字淡入、动画中点击不响应）与从面包屑回到根（要删的元素缩向父组中心、上一次的字淡入接着跑）；`animationDurationUpdate 400`、`animationEasing 'linear'`，动画结束后的平移不动画。
+
+自检（任何一条不过就不写文件、退出 1）：R1 下钻后视图根是第二环的一整圈、返回圆盘是 `r0 .. r0 + rPerLevel`；R2 回到根后返回圆盘不在了而中心仍然「包含」；R3 zoomToNode 的根尺寸由 `estimateRootSize` 加夹紧逐位复现；R4 拖动只派发两次、根移动了两次留下的位移之和；R5 滚轮的根矩形由 `_onZoom` 的矩阵逐位复现；R6 复用扇区的形状按 `cubicInOut` 从第一帧起算；R7 根组按 `quinticInOut` 滑动；R8 动画中的点击不发事件、视图根不变、仍在 animating；10 个区分计数都 ≥ 1（drillDown、rollUp、要删的元素、正在淡入的矩形树图标签、旭日图过渡中、根比盒子大的 zoomToNode、三项以上的面包屑、返回圆盘的提示框、被淡化的扇区、悬停的矩形）；两次生成逐字节一致；没有 `\u0000`；JSON 能读回。
+
+测试 `test.advchart.sunbursttreemapinteract`（新，注册在 `tytests.lpr`）：
+
+- **基准重放**：每个用例新建控件（用上游的默认色板；动画用例 `camAlways`、其余 `camOff`，`AnimNow` 从 T0 起），按步调 `MouseDown / MouseUp / MouseMove / DoMouseWheel`、`DispatchAction`、`SetBounds`、`AnimTick`，每步后无头渲染一次，读控件的帧（`AnimFrame`）逐位比较上面记录的一切：扇区的环（起止角按静态构建取的先小后大）、填充（返回圆盘与白色背景是主题色，跳过、计数）、透明度、z2、标签；矩形的全局四边（`x + tx`、`(x + w) + tx`）、透明度、z2、填充、字的截断结果与锚点和透明度（透明度为 0 的字端口画成无墨）；要删的元素；面包屑每个点、字与锚点；视图根、根的布局、`TreemapAnimating`；`containPixel` 探针；每个事件的类型、方向、系列、目标（端口 payload 的 `targetNode` 按 `TyHierIds` 解回行号）、`targetNode` / `targetNodeId` 原样、rootRect；悬停步的提示框（哪一项与逐行内容）。动画用例的第 0 个状态不比（上游首帧还在入场，端口没有入场）。共比较约两万八千项。
+- 手写 6 个：新 option 回到根且不再包含；任何 merge 都回到根（新树）；未知目标不动视图根、事件没有方向，数字 `targetNodeId` 找不到；矩形树图的动作不钻旭日图；面包屑盖住矩形时点的是面包屑；`roam: false` 拖不动。
+
+首跑 1302 处不同，依次是：测试没用上游色板（补上）；**返回圆盘的处理器累加**（上游一次点击发两个事件，端口原来只发一个——照上游累加）；生成的 id 带 `\0`、fpjson 读 `\u0000` 时吞掉（测试比较时去掉）；返回圆盘的色点取不到颜色（取主题色）；离开后的提示框（上游只记一步里有没有新的显示，离开那步不比）；透明度 0 的字端口是无墨（测试照此比）；画布外的点击（上游 `isOutsideBoundary` 不命中，端口原来命中了根背景——补上画布范围的判断）；`Math.Max(Double, 0)` 走了 Single 重载（过渡的宽度差在第 8 位，改成 `Double(0)`）；悬停要在平移之前定、并跟着复用的元素保留（补 `FTmHover`）；多个矩形树图时没被查询到的那一个被复原了（补 `tpkKeep`）；要删的元素的字在第一帧之前留在原处（补 `Stepped`）；字的淡入要跟着元素接着跑（补交接）。此外两个用例改了：`tm-roam-move` 拆成单系列的两个（多个矩形树图下上游的布局与画面分开，见偏差），`tm-anim-opts` 的拖动改在画布外结束（不触发矩形树图带过渡的悬停，见偏差）。之后全部逐位对上。
+
+### 推迟与偏差
+
+- **矩形树图的悬停没有状态过渡**：有动画时上游的 emphasis 填充按 stateAnimation 补间（并且平移后的重渲染会把它重新走一遍），端口立刻提亮；基准里有动画的用例避开了悬停。emphasis / blur / select 声明的颜色、`emphasis.focus`（ancestor / descendant）、`emphasis.disabled`、标题条的 emphasis 显示没有读；矩形树图仍不在共享状态模型上（§125 的理由），highlight / downplay 动作对它不改样子。面包屑的悬停（emphasis 底色与字色）不做，面包屑也不发鼠标事件（上游 `selfType: 'breadcrumb'`）。
+- **多个矩形树图**：上游一次动作给每个矩形树图都重新布局、只渲染被查询的那个，其余的画面不动而布局变了（之后的拖动、滚轮读新布局、点击读旧画面）；端口没被查询的整个保持（`tpkKeep`）。
+- **过渡只在下钻的那次渲染**：旭日图的入场、以及 setOption / 图例 / dataZoom 引起的更新（上游每次渲染都 `updateProps`）不做；矩形树图没有 payload 的渲染（setOption、换主题）不做过渡，首帧的字也不淡入（§124）。动画进行中又派发动作时，端口从旧的终点出发（上游从元素此刻的值），旧 wrap 被直接丢掉（上游先做旧的 renderFinally）。圆角是百分比的扇区在过渡中不重算圆角。
+- 矩形树图字的过渡只按内容矩形重新截断定位：富文本与 `label.position` 不是 `inside` 时的锚点照同一张表算，没有用例；标题条只随组平移。
+- `nodeClick: 'link'` 不开窗口；按下和松开分别在同一节点的背景和内容上，上游不算点击，端口算（同一个 datum）。
+- 返回圆盘的颜色是主题色（muted 叠在底色上），不是上游的 `neutral50`；`highlight` 按第 0 项会找到返回圆盘（上游找不到）。
+- 事件 payload：手势派发的写 `seriesIndex` 与目标的 id 串（上游是 `seriesId` 与节点对象），由 `targetNode` 再派发能找回同一个节点；生成的 id 里有 NUL。`sunburstHighlight` / `sunburstUnhighlight` 这两个旧动作没有接。
+- 被 `visibleMin` 之类改变 viewChildren 的 zoomToNode 里，新元素「从父背景旧角落出发」的规则写了，基准没有覆盖到这种情形。
+
+### 落地
+
+- `source/tyControls.AdvChart.Sunburst.pas`：视图根、返回圆盘、`TySunburstSubtree`、`TySunburstNodeClick`、`carSunPiece`。
+- `source/tyControls.AdvChart.Treemap.pas`：视图与 payload、`EstimateRootSize`、夹紧、祖先路径的剪枝与合成、`TTyTreemapHave`、`TyTreemapFindTarget`、面包屑的新重载、`PlaceLabel` / `TyTreemapLabelAt`、`TyHierIds`、`carTmRect`。
+- `source/tyControls.AdvChart.Paint.pas`：`carSunPiece`、`carTmRect`。
+- `source/tyControls.AdvChart.AnimView.pas`：`HierDrill`、扇区的更新与新建、标签移动、`SunPieceFrom`。
+- `source/tyControls.AdvChart.Events.pas`：五个动作事件。
+- `source/tyControls.AdvanceChart.pas`：上面「控件」一节的全部。
+- `tools/advchart-oracle/sunburst-treemap-interact.js`、`tests/fixtures/advchart-sunburst-treemap-interact.json`、`tests/test.advchart.sunbursttreemapinteract.pas`（新，注册在 `tytests.lpr`）。
+- 没有新单元、新主题键或新资源串。
+
+按这一里程碑的规矩只跑了新套件和直接碰到的套件（见批次报告），全量与变异测试留到 C6–C13 收尾。
