@@ -5745,6 +5745,12 @@ begin
     Values);
   AssertEquals('only asked', 'click:68 ', FLog);
   AssertEquals('the selection stays', 2, FBar.SelectedThumb);
+  { Too near the thumb above: put MinGap below it, not added where pressed and the thumbs
+    above pushed along. }
+  p := PtOn(FBar, 45);
+  Press(FBar, p);
+  Release(FBar, p);
+  AssertEquals('put MinGap below the thumb above; the others stay', '25,40,50,60,75', Values);
 end;
 
 procedure TTyMultiTrackUserThumbsTest.TestMaxThumbsStopsAdding;

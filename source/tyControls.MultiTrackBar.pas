@@ -2081,10 +2081,9 @@ begin
   onThumb := idx >= 0;
   if not onThumb and FAllowUserThumbs then
   begin
-    { The bare track adds a thumb there, and the press drags it on. A further press of a
-      multi-click lands on the thumb the first one added, or -- none added -- does nothing;
-      so does a press past MaxThumbs or where there is no room. }
-    if Shift * [ssDouble, ssTriple, ssQuad] <> [] then Exit;
+    { The bare track adds a thumb there, and the press drags it on; past MaxThumbs, or
+      where there is no room, the press does nothing. (A further press of a multi-click
+      lands on the thumb the first one added, or meets the same MaxThumbs / no room.) }
     idx := UserAddThumb(ValueAt(pos));
     if idx < 0 then Exit;
     FGrab := pos - ThumbCentre(idx);
