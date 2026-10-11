@@ -13,7 +13,7 @@ unit tyControls.MultiTrackBar;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
   tyControls.TrackBar;
 
@@ -57,6 +57,13 @@ type
     SegmentStyle functions below are where it hands that over. Here every thumb is enabled,
     follows the theme and has no hint, and no segment is drawn.
 
+    THE INTERACTION (only enabled thumbs take part). A left press on a thumb selects it and
+    drags it from where it was grabbed; a press on the groove brings the nearest thumb there
+    (the lower value on a tie) and drags it on. A drag goes through SetThumbValue, so it stops
+    MinGap short of a neighbour. The keyboard drives the selected thumb (none selected: the
+    first enabled one), Tab / Shift+Tab step through the thumbs before leaving the control, and
+    the hint over a thumb is that thumb's.
+
     No right-to-left mirroring, as TTyTrackBar: the value axis runs by Orientation and Reversed
     only. }
   TTyCustomMultiTrackBar = class(TTyCustomControl)
@@ -71,6 +78,9 @@ type
     FManualTicks: array of Integer;
     FFrequency: Integer;
     FTickLabels: Boolean;
+    FLineSize, FPageSize: Integer;
+    { Where on the dragged thumb it was pressed, main-axis px from its centre. }
+    FGrab: Integer;
     { The label strip's thickness on one tick side, measured at paint time and cached for
       CalculatePreferredSize (as TTyTrackBar does). }
     FTickLabelPx: Integer;
@@ -91,6 +101,8 @@ type
     procedure SetFrequency(const AValue: Integer);
     procedure SetTickLabels(const AValue: Boolean);
     procedure SetOnFormatTickLabel(const AValue: TTyTrackTickLabelEvent);
+    procedure SetLineSize(const AValue: Integer);
+    procedure SetPageSize(const AValue: Integer);
     procedure CheckIndex(AIndex: Integer);
   protected
     { The thumb under a press (drawn active) and under the pointer (drawn hover); -1 = none. }
@@ -136,6 +148,33 @@ type
     function ThumbCentre(AIndex: Integer): Integer;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
+    { ---- Mouse and keyboard. ---- }
+    { The thumb whose hit rectangle holds (X, Y) -- the nearest centre where two overlap, the
+      lower value on a tie -- enabled or not; -1 = none. }
+    function ThumbAt(X, Y: Integer): Integer;
+    { The value under main-axis position APos (client px), as the thumb's centre would have it. }
+    function ValueAt(APos: Integer): Integer;
+    { The enabled thumb whose value is nearest AValue, the lower value on a tie; -1 = none. }
+    function NearestEnabledThumb(AValue: Integer): Integer;
+    { The thumb the keyboard drives: the selected one if it is enabled, else the first enabled
+      thumb; -1 = none. }
+    function KeyThumb: Integer;
+    { The next enabled thumb after AFrom (before it, AForward = False); -1 = none. }
+    function NextEnabledThumb(AFrom: Integer; AForward: Boolean): Integer;
+    { The modifier keys held now. CM_WANTSPECIALKEY carries none, so Shift+Tab is told from
+      Tab by asking the keyboard; virtual so a test can hold Shift without one. }
+    function KeyShiftState: TShiftState; virtual;
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseLeave; override;
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { Tab / Shift+Tab move between the enabled thumbs; the bar asks for the key only while
+      there is a thumb to move to, so after the last (before the first) the form's own Tab
+      handling takes the focus on. }
+    procedure CMWantSpecialKey(var Message: TLMKey); message CM_WANTSPECIALKEY;
+    { Over a thumb that has a hint, the hint is that thumb's; anywhere else the control's own. }
+    procedure CMHintShow(var Message: TLMessage); message CM_HINTSHOW;
     { Cross axis only, as TTyTrackBar: the thumb, the ticks and their labels. }
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
@@ -170,6 +209,9 @@ type
     property TickStyle: TTyTrackTickStyle read FTickStyle write SetTickStyle default ttsAuto;
     property Frequency: Integer read FFrequency write SetFrequency default 1;
     property TickLabels: Boolean read FTickLabels write SetTickLabels default False;
+    { The keyboard's steps, as TTyTrackBar's: arrows by LineSize, PageUp / PageDown by PageSize. }
+    property LineSize: Integer read FLineSize write SetLineSize default 1;
+    property PageSize: Integer read FPageSize write SetPageSize default 10;
     property OnFormatTickLabel: TTyTrackTickLabelEvent read FOnFormatTickLabel write SetOnFormatTickLabel;
     property TabStop default True;
     property OnThumbChange: TTyTrackThumbEvent read FOnThumbChange write FOnThumbChange;
@@ -195,6 +237,8 @@ begin
   FTickMarks := ttmBottomRight;
   FTickStyle := ttsAuto;
   FFrequency := 1;
+  FLineSize := 1;
+  FPageSize := 10;
   Width := 160;
   Height := TyDensityHeight(ActiveController, 24);
 end;
@@ -735,6 +779,283 @@ begin
   finally
     P.Free;
   end;
+end;
+
+procedure TTyCustomMultiTrackBar.SetLineSize(const AValue: Integer);
+begin
+  if AValue < 1 then FLineSize := 1 else FLineSize := AValue;
+end;
+
+procedure TTyCustomMultiTrackBar.SetPageSize(const AValue: Integer);
+begin
+  if AValue < 1 then FPageSize := 1 else FPageSize := AValue;
+end;
+
+function TTyCustomMultiTrackBar.ThumbAt(X, Y: Integer): Integer;
+var
+  i, pos, d, best: Integer;
+  r: TRect;
+begin
+  Result := -1;
+  best := High(Integer);
+  if FOrientation = toVertical then pos := Y else pos := X;
+  for i := 0 to High(FValues) do
+  begin
+    r := ThumbRect(i);
+    if (X < r.Left) or (X >= r.Right) or (Y < r.Top) or (Y >= r.Bottom) then Continue;
+    d := Abs(pos - ThumbCentre(i));
+    if d < best then
+    begin
+      best := d;
+      Result := i;
+    end;
+  end;
+end;
+
+function TTyCustomMultiTrackBar.ValueAt(APos: Integer): Integer;
+var
+  TW: Integer;
+begin
+  TW := TyTrackThumbLen(Font.PixelsPerInch);
+  Result := TyTrackPosFromOffset(MainLen, TW, FMin, FMax, APos - TW div 2, Inverted);
+end;
+
+function TTyCustomMultiTrackBar.NearestEnabledThumb(AValue: Integer): Integer;
+var
+  i: Integer;
+  d, best: Int64;
+begin
+  Result := -1;
+  best := High(Int64);
+  { Ascending values, a strict "<": on a tie the lower value -- met first -- keeps it. }
+  for i := 0 to High(FValues) do
+  begin
+    if not ThumbEnabled(i) then Continue;
+    d := Abs(Int64(FValues[i]) - AValue);
+    if d < best then
+    begin
+      best := d;
+      Result := i;
+    end;
+  end;
+end;
+
+function TTyCustomMultiTrackBar.NextEnabledThumb(AFrom: Integer; AForward: Boolean): Integer;
+var
+  j: Integer;
+begin
+  Result := -1;
+  if AFrom < 0 then Exit;
+  j := AFrom;
+  repeat
+    if AForward then Inc(j) else Dec(j);
+    if (j < 0) or (j > High(FValues)) then Exit;
+  until ThumbEnabled(j);
+  Result := j;
+end;
+
+function TTyCustomMultiTrackBar.KeyThumb: Integer;
+var
+  i: Integer;
+begin
+  if (FSelectedThumb >= 0) and (FSelectedThumb < Length(FValues))
+    and ThumbEnabled(FSelectedThumb) then
+    Exit(FSelectedThumb);
+  for i := 0 to High(FValues) do
+    if ThumbEnabled(i) then Exit(i);
+  Result := -1;
+end;
+
+function TTyCustomMultiTrackBar.KeyShiftState: TShiftState;
+begin
+  Result := GetKeyShiftState;
+end;
+
+procedure TTyCustomMultiTrackBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  idx, pos: Integer;
+  onThumb: Boolean;
+begin
+  if not Enabled then Exit;
+  inherited MouseDown(Button, Shift, X, Y);
+  if Button <> mbLeft then Exit;
+  if FOrientation = toVertical then pos := Y else pos := X;
+  idx := ThumbAt(X, Y);
+  { A disabled thumb is inert: pressing it neither moves it nor picks another thumb. }
+  if (idx >= 0) and not ThumbEnabled(idx) then Exit;
+  onThumb := idx >= 0;
+  if onThumb then
+    { Grabbed where it was pressed: a press that does not move does not move the thumb. }
+    FGrab := pos - ThumbCentre(idx)
+  else
+  begin
+    { On the groove: the nearest enabled thumb comes to the pointer. }
+    idx := NearestEnabledThumb(ValueAt(pos));
+    if idx < 0 then Exit;
+    FGrab := 0;
+  end;
+  FDragThumb := idx;
+  FHoverThumb := -1;
+  SelectedThumb := idx;
+  if not onThumb then SetThumbValue(idx, ValueAt(pos));
+  Invalidate;
+end;
+
+procedure TTyCustomMultiTrackBar.MouseMove(Shift: TShiftState; X, Y: Integer);
+var
+  pos, v, i, j, h: Integer;
+begin
+  if not Enabled then Exit;
+  inherited MouseMove(Shift, X, Y);
+  if FDragThumb >= 0 then
+  begin
+    if FOrientation = toVertical then pos := Y else pos := X;
+    v := ValueAt(pos - FGrab);
+    i := FDragThumb;
+    { Thumbs on the same value (MinGap 0) are told apart by the direction of the drag: the one
+      that can go that way takes over, or a pile at Min / Max could never be pulled apart. }
+    j := i;
+    if v > FValues[i] then
+      while (j < High(FValues)) and (FValues[j + 1] = FValues[i]) and ThumbEnabled(j + 1) do Inc(j)
+    else if v < FValues[i] then
+      while (j > 0) and (FValues[j - 1] = FValues[i]) and ThumbEnabled(j - 1) do Dec(j);
+    if j <> i then
+    begin
+      FDragThumb := j;
+      SelectedThumb := j;
+    end;
+    SetThumbValue(FDragThumb, v);
+    Invalidate;
+  end
+  else
+  begin
+    h := ThumbAt(X, Y);
+    if (h >= 0) and not ThumbEnabled(h) then h := -1;
+    if h <> FHoverThumb then
+    begin
+      FHoverThumb := h;
+      Invalidate;
+    end;
+  end;
+end;
+
+procedure TTyCustomMultiTrackBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseUp(Button, Shift, X, Y);
+  if Button = mbLeft then
+  begin
+    FDragThumb := -1;
+    Invalidate;
+  end;
+end;
+
+procedure TTyCustomMultiTrackBar.MouseLeave;
+begin
+  inherited MouseLeave;
+  { A drag goes on until the button is released, as TTyTrackBar's. }
+  FHoverThumb := -1;
+  Invalidate;
+end;
+
+procedure TTyCustomMultiTrackBar.KeyDown(var Key: Word; Shift: TShiftState);
+var
+  i, nxt: Integer;
+  v: Int64;
+begin
+  if not Enabled then Exit;
+  inherited KeyDown(Key, Shift);
+  if (Key = VK_TAB) and (Shift - [ssShift] = []) then
+  begin
+    nxt := NextEnabledThumb(KeyThumb, not (ssShift in Shift));
+    if nxt >= 0 then
+    begin
+      SelectedThumb := nxt;
+      Key := 0;
+    end;
+    Exit;
+  end;
+  i := KeyThumb;
+  if i < 0 then Exit;
+  { Value keys, as TTyTrackBar's: up / right increase whichever way the bar runs, so on a
+    vertical bar "up increases"; Home / End go as far as the neighbours let. }
+  case Key of
+    VK_RIGHT, VK_UP: v := Int64(FValues[i]) + FLineSize;
+    VK_LEFT, VK_DOWN: v := Int64(FValues[i]) - FLineSize;
+    VK_PRIOR: v := Int64(FValues[i]) + FPageSize;
+    VK_NEXT: v := Int64(FValues[i]) - FPageSize;
+    VK_HOME: v := FMin;
+    VK_END: v := FMax;
+  else
+    Exit;
+  end;
+  Key := 0;
+  if v > High(Integer) then v := High(Integer);
+  if v < Low(Integer) then v := Low(Integer);
+  SelectedThumb := i;
+  SetThumbValue(i, v);
+end;
+
+procedure TTyCustomMultiTrackBar.CMWantSpecialKey(var Message: TLMKey);
+var
+  sh: TShiftState;
+begin
+  if (Message.CharCode = VK_TAB) and Enabled then
+  begin
+    sh := KeyShiftState;
+    if (sh - [ssShift] = []) and (NextEnabledThumb(KeyThumb, not (ssShift in sh)) >= 0) then
+    begin
+      Message.Result := 1;
+      Exit;
+    end;
+  end;
+  inherited;
+end;
+
+procedure TTyCustomMultiTrackBar.CMHintShow(var Message: TLMessage);
+var
+  info: PHintInfo;
+  i, idx, pos, lo, hi, s, e: Integer;
+  any: Boolean;
+  r: TRect;
+begin
+  info := PHintInfo(Message.LParam);
+  any := False;
+  for i := 0 to High(FValues) do
+    if ThumbHint(i) <> '' then
+    begin
+      any := True;
+      Break;
+    end;
+  if (info = nil) or not any then
+  begin
+    inherited;
+    Exit;
+  end;
+  idx := ThumbAt(info^.CursorPos.X, info^.CursorPos.Y);
+  if idx >= 0 then
+  begin
+    if ThumbHint(idx) <> '' then info^.HintStr := ThumbHint(idx);
+    { Leaving the thumb asks again. }
+    info^.CursorRect := ThumbRect(idx);
+  end
+  else
+  begin
+    { Between two thumbs: the gap, so reaching either thumb asks again. }
+    if FOrientation = toVertical then pos := info^.CursorPos.Y else pos := info^.CursorPos.X;
+    lo := 0;
+    hi := MainLen;
+    for i := 0 to High(FValues) do
+    begin
+      r := ThumbRect(i);
+      if FOrientation = toVertical then begin s := r.Top; e := r.Bottom; end
+      else begin s := r.Left; e := r.Right; end;
+      if (e <= pos) and (e > lo) then lo := e;
+      if (s > pos) and (s < hi) then hi := s;
+    end;
+    if FOrientation = toVertical then info^.CursorRect := Rect(0, lo, ClientWidth, hi)
+    else info^.CursorRect := Rect(lo, 0, hi, ClientHeight);
+  end;
+  inherited;
 end;
 
 procedure TTyCustomMultiTrackBar.Paint;

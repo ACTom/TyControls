@@ -3,7 +3,9 @@ unit test.multitrackbar;
 
 { TTyCustomMultiTrackBar (#36): the ordered thumb model -- SetThumbValue clamping between the
   neighbours and Min..Max, the events, Normalize, a MinGap the range cannot hold, Min / Max /
-  MinGap changes, a form being read -- then the geometry and the painting.
+  MinGap changes, a form being read -- then the geometry and the painting, then the mouse and
+  the keyboard (through MouseDown / MouseMove / MouseUp, KeyDown and the CM_WANTSPECIALKEY and
+  CM_HINTSHOW messages the form and the application send).
 
   Geometry and painting are checked against a TTyTrackBar of the same size and theme, not
   against the formula: a thumb at V must be the track bar's thumb at Position = V, and a bar with
@@ -13,7 +15,7 @@ unit test.multitrackbar;
 interface
 
 uses
-  Classes, SysUtils, Types, Graphics, Forms, Controls, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, LMessages, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.TrackBar, tyControls.MultiTrackBar;
 
@@ -28,7 +30,9 @@ type
     function ThumbStyleClass(AIndex: Integer): string; override;
     function ThumbHint(AIndex: Integer): string; override;
     function SegmentStyle(AIndex: Integer; out ATypeKey, AStyleClass: string): Boolean; override;
+    function KeyShiftState: TShiftState; override;
   public
+    HoldShift: Boolean;             // what KeyShiftState reports for Shift
     Off: array of Boolean;          // thumb i disabled
     Colors: array of TColor;
     ThumbCls: array of string;
@@ -39,6 +43,19 @@ type
     procedure EndReading;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure PreferredSize(out AW, AH: Integer);
+    { The pointer, as the widgetset delivers it. }
+    procedure Press(X, Y: Integer);
+    procedure Drag(X, Y: Integer);
+    procedure Release(X, Y: Integer);
+    procedure Hover(X, Y: Integer);
+    procedure Leave;
+    { KeyDown as the form delivers it; returns the key afterwards (0 = consumed). }
+    function Key(AKey: Word; AShift: TShiftState = []): Word;
+    { What the bar answers the form's CM_WANTSPECIALKEY for AKey. }
+    function WantsKey(AKey: Word): PtrInt;
+    { The hint the application would show at (X, Y): CM_HINTSHOW with the control's own hint
+      prefilled, as TApplication.ShowHintWindow does; ARect is the CursorRect it hands back. }
+    function HintAt(X, Y: Integer; out ARect: TRect): string;
   end;
 
   { The reference: a TTyTrackBar with its painting and preferred size opened. }
@@ -98,6 +115,12 @@ type
     function RefThumbRect(AValue: Integer): TRect;
     { Main-axis centre of that rect. }
     function RefCentre(AValue: Integer): Integer;
+    { The pixel at main-axis offset AMain on the groove's centre line. }
+    function GroovePx(B: TBGRABitmap; AMain: Integer): TBGRAPixel;
+    { True when main-axis offset AMain lies inside any thumb's hit band. }
+    function UnderAThumb(AMain: Integer): Boolean;
+    { The pixel at the middle of thumb AIndex. }
+    function ThumbPx(B: TBGRABitmap; AIndex: Integer): TBGRAPixel;
   end;
 
   TTyMultiTrackGeometryTest = class(TMultiTrackPaintBase)
@@ -109,13 +132,6 @@ type
   end;
 
   TTyMultiTrackPaintTest = class(TMultiTrackPaintBase)
-  private
-    { The pixel at main-axis offset AMain on the groove's centre line. }
-    function GroovePx(B: TBGRABitmap; AMain: Integer): TBGRAPixel;
-    { True when main-axis offset AMain lies inside any thumb's hit band. }
-    function UnderAThumb(AMain: Integer): Boolean;
-    { The pixel at the middle of thumb AIndex. }
-    function ThumbPx(B: TBGRABitmap; AIndex: Integer): TBGRAPixel;
   published
     procedure TestOneThumbDrawsWhatTheTrackBarDraws;
     procedure TestEveryThumbSitsWhereTheTrackBarDrawsIt;
@@ -125,6 +141,47 @@ type
     procedure TestAThumbColourReplacesTheThemeBackground;
     procedure TestAThumbStyleClassIsResolved;
     procedure TestADisabledThumbIsDrawnAsUsual;
+  end;
+
+  { The events logged as `T<i>` (thumb change), `S<i>` (select), `C` (change); points on the
+    bar at a value come from the reference track bar's thumb centre at that value. }
+  TMultiTrackInputBase = class(TMultiTrackPaintBase)
+  protected
+    FLog: string;
+    procedure SetUp; override;
+    procedure Logged(Sender: TObject; AIndex: Integer);
+    procedure Selected(Sender: TObject; AIndex: Integer);
+    procedure Changed(Sender: TObject);
+    function Values: string;
+    function At(AValue: Integer): TPoint;
+    function Shifted(const P: TPoint; ADelta: Integer): TPoint;
+  end;
+
+  TTyMultiTrackMouseTest = class(TMultiTrackInputBase)
+  published
+    procedure TestPressOnAThumbSelectsItWithoutMovingIt;
+    procedure TestWhereThumbsOverlapTheNearestCentreWins;
+    procedure TestDragMovesOnlyThatThumb;
+    procedure TestADragStopsMinGapFromTheNeighbours;
+    procedure TestADragFollowsTheDirectionOfTheBar;
+    procedure TestAPressOnTheGrooveBringsTheNearestThumb;
+    procedure TestEquidistantPressTakesTheLowerValue;
+    procedure TestAJumpSkipsDisabledThumbs;
+    procedure TestADisabledThumbIsInert;
+    procedure TestHoverAndPressArePaintedOnThatThumbOnly;
+    procedure TestThumbsOnOneValueComeApartInTheDragDirection;
+    procedure TestADisabledBarIgnoresTheMouse;
+    procedure TestTheHintIsTheThumbsUnderThePointer;
+  end;
+
+  TTyMultiTrackKeyboardTest = class(TMultiTrackInputBase)
+  published
+    procedure TestArrowsStepTheSelectedThumb;
+    procedure TestPagesAndEndsStopAtTheNeighbours;
+    procedure TestWithNoSelectionTheFirstEnabledThumbMoves;
+    procedure TestAKeyMovesNothingWhenEveryThumbIsDisabled;
+    procedure TestADisabledBarIgnoresTheKeys;
+    procedure TestTabWalksTheEnabledThumbsThenLeaves;
   end;
 
 implementation
@@ -191,6 +248,61 @@ begin
   AW := 0;
   AH := 0;
   CalculatePreferredSize(AW, AH, False);
+end;
+
+function TMultiProbe.KeyShiftState: TShiftState;
+begin
+  if HoldShift then Result := [ssShift] else Result := [];
+end;
+
+procedure TMultiProbe.Press(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [ssLeft], X, Y);
+end;
+
+procedure TMultiProbe.Drag(X, Y: Integer);
+begin
+  MouseMove([ssLeft], X, Y);
+end;
+
+procedure TMultiProbe.Release(X, Y: Integer);
+begin
+  MouseUp(mbLeft, [], X, Y);
+end;
+
+procedure TMultiProbe.Hover(X, Y: Integer);
+begin
+  MouseMove([], X, Y);
+end;
+
+procedure TMultiProbe.Leave;
+begin
+  MouseLeave;
+end;
+
+function TMultiProbe.Key(AKey: Word; AShift: TShiftState): Word;
+begin
+  Result := AKey;
+  KeyDown(Result, AShift);
+end;
+
+function TMultiProbe.WantsKey(AKey: Word): PtrInt;
+begin
+  Result := Perform(CM_WANTSPECIALKEY, AKey, 0);
+end;
+
+function TMultiProbe.HintAt(X, Y: Integer; out ARect: TRect): string;
+var
+  info: THintInfo;
+begin
+  info := Default(THintInfo);
+  info.HintControl := Self;
+  info.CursorPos := Point(X, Y);
+  info.CursorRect := ClientRect;
+  info.HintStr := Hint;
+  Perform(CM_HINTSHOW, 0, LParam(PtrUInt(@info)));
+  ARect := info.CursorRect;
+  Result := info.HintStr;
 end;
 
 { TRefBar }
@@ -708,13 +820,13 @@ end;
 
 { TTyMultiTrackPaintTest }
 
-function TTyMultiTrackPaintTest.GroovePx(B: TBGRABitmap; AMain: Integer): TBGRAPixel;
+function TMultiTrackPaintBase.GroovePx(B: TBGRABitmap; AMain: Integer): TBGRAPixel;
 begin
   if FBar.Orientation = toVertical then Result := B.GetPixel(W div 2, AMain)
   else Result := B.GetPixel(AMain, H div 2);
 end;
 
-function TTyMultiTrackPaintTest.UnderAThumb(AMain: Integer): Boolean;
+function TMultiTrackPaintBase.UnderAThumb(AMain: Integer): Boolean;
 var
   i: Integer;
   r: TRect;
@@ -731,7 +843,7 @@ begin
   end;
 end;
 
-function TTyMultiTrackPaintTest.ThumbPx(B: TBGRABitmap; AIndex: Integer): TBGRAPixel;
+function TMultiTrackPaintBase.ThumbPx(B: TBGRABitmap; AIndex: Integer): TBGRAPixel;
 var
   r: TRect;
 begin
@@ -1042,9 +1154,435 @@ begin
     a.Free;
   end;
 end;
+{ TMultiTrackInputBase }
+
+procedure TMultiTrackInputBase.SetUp;
+begin
+  inherited SetUp;
+  FLog := '';
+  FBar.OnThumbChange := @Logged;
+  FBar.OnThumbSelect := @Selected;
+  FBar.OnChange := @Changed;
+end;
+
+procedure TMultiTrackInputBase.Logged(Sender: TObject; AIndex: Integer);
+begin
+  FLog := FLog + 'T' + IntToStr(AIndex) + ' ';
+end;
+
+procedure TMultiTrackInputBase.Selected(Sender: TObject; AIndex: Integer);
+begin
+  FLog := FLog + 'S' + IntToStr(AIndex) + ' ';
+end;
+
+procedure TMultiTrackInputBase.Changed(Sender: TObject);
+begin
+  FLog := FLog + 'C ';
+end;
+
+function TMultiTrackInputBase.Values: string;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 0 to FBar.ThumbCount - 1 do
+  begin
+    if i > 0 then Result := Result + ',';
+    Result := Result + IntToStr(FBar.ThumbValues[i]);
+  end;
+end;
+
+function TMultiTrackInputBase.At(AValue: Integer): TPoint;
+var
+  c: Integer;
+begin
+  c := RefCentre(AValue);
+  if FBar.Orientation = toVertical then Result := Point(W div 2, c)
+  else Result := Point(c, H div 2);
+end;
+
+function TMultiTrackInputBase.Shifted(const P: TPoint; ADelta: Integer): TPoint;
+begin
+  Result := P;
+  if FBar.Orientation = toVertical then Inc(Result.Y, ADelta) else Inc(Result.X, ADelta);
+end;
+
+{ TTyMultiTrackMouseTest }
+
+procedure TTyMultiTrackMouseTest.TestPressOnAThumbSelectsItWithoutMovingIt;
+var
+  p: TPoint;
+begin
+  FBar.Put([20, 50, 80]);
+  FLog := '';
+  p := Shifted(At(50), 4);         // off its centre, still on it
+  FBar.Press(p.X, p.Y);
+  AssertEquals('selected', 1, FBar.SelectedThumb);
+  AssertEquals('not moved', '20,50,80', Values);
+  AssertEquals('only the selection is reported', 'S1 ', FLog);
+  FBar.Drag(p.X, p.Y);
+  AssertEquals('held where it was grabbed: a drag that goes nowhere moves nothing', '20,50,80',
+    Values);
+  FBar.Release(p.X, p.Y);
+  AssertEquals('20,50,80', Values);
+end;
+
+procedure TTyMultiTrackMouseTest.TestWhereThumbsOverlapTheNearestCentreWins;
+var
+  p: TPoint;
+begin
+  FBar.Put([50, 52]);
+  p := At(52);
+  AssertTrue('the fixture overlaps: the point is on both thumbs',
+    PtInRect(FBar.ThumbRect(0), p) and PtInRect(FBar.ThumbRect(1), p));
+  FBar.Press(p.X, p.Y);
+  FBar.Release(p.X, p.Y);
+  AssertEquals('on thumb 1''s centre', 1, FBar.SelectedThumb);
+  p := At(50);
+  AssertTrue(PtInRect(FBar.ThumbRect(1), p));
+  FBar.Press(p.X, p.Y);
+  FBar.Release(p.X, p.Y);
+  AssertEquals('on thumb 0''s centre', 0, FBar.SelectedThumb);
+  AssertEquals('pressing picks, it does not move', '50,52', Values);
+end;
+
+procedure TTyMultiTrackMouseTest.TestDragMovesOnlyThatThumb;
+var
+  p, q: TPoint;
+begin
+  FBar.Put([20, 50, 80]);
+  p := At(50);
+  q := At(65);
+  FBar.Press(p.X, p.Y);
+  FLog := '';
+  FBar.Drag(q.X, q.Y);
+  AssertEquals('20,65,80', Values);
+  AssertEquals('the dragged thumb reports, then OnChange', 'T1 C ', FLog);
+  FBar.Release(q.X, q.Y);
+  p := At(30);
+  FBar.Hover(p.X, p.Y);
+  AssertEquals('after the release the pointer moves nothing', '20,65,80', Values);
+end;
+
+procedure TTyMultiTrackMouseTest.TestADragStopsMinGapFromTheNeighbours;
+var
+  p, q: TPoint;
+begin
+  FBar.MinGap := 5;
+  FBar.Put([20, 50, 80]);
+  p := At(50);
+  FBar.Press(p.X, p.Y);
+  q := At(95);
+  FBar.Drag(q.X, q.Y);
+  AssertEquals('stops MinGap left of the right neighbour', '20,75,80', Values);
+  q := At(3);
+  FBar.Drag(q.X, q.Y);
+  AssertEquals('stops MinGap right of the left neighbour', '20,25,80', Values);
+  FBar.Release(q.X, q.Y);
+end;
+
+procedure TTyMultiTrackMouseTest.TestADragFollowsTheDirectionOfTheBar;
+var
+  ori: TTyTrackOrientation;
+  rev: Boolean;
+  p, q: TPoint;
+  where: string;
+begin
+  for ori := toHorizontal to toVertical do
+    for rev := False to True do
+    begin
+      Configure(ori, rev);
+      FBar.Put([20, 60]);
+      where := Format('ori=%d rev=%s', [Ord(ori), BoolToStr(rev, True)]);
+      p := At(20);
+      q := At(40);
+      FBar.Press(p.X, p.Y);
+      FBar.Drag(q.X, q.Y);
+      FBar.Release(q.X, q.Y);
+      AssertEquals(where, '40,60', Values);
+    end;
+end;
+
+procedure TTyMultiTrackMouseTest.TestAPressOnTheGrooveBringsTheNearestThumb;
+var
+  p, q: TPoint;
+begin
+  FBar.Put([20, 60]);
+  p := At(35);
+  FBar.Press(p.X, p.Y);
+  AssertEquals('the thumb at 20 is nearer to 35', '35,60', Values);
+  AssertEquals(0, FBar.SelectedThumb);
+  q := At(30);
+  FBar.Drag(q.X, q.Y);
+  AssertEquals('and the press drags it on', '30,60', Values);
+  FBar.Release(q.X, q.Y);
+  p := At(52);
+  FBar.Press(p.X, p.Y);
+  FBar.Release(p.X, p.Y);
+  AssertEquals('the thumb at 60 is nearer to 52', '30,52', Values);
+  AssertEquals(1, FBar.SelectedThumb);
+end;
+
+procedure TTyMultiTrackMouseTest.TestEquidistantPressTakesTheLowerValue;
+var
+  rev: Boolean;
+  p: TPoint;
+begin
+  for rev := False to True do
+  begin
+    Configure(toHorizontal, rev);
+    FBar.Put([20, 60]);
+    FBar.SelectedThumb := -1;
+    p := At(40);
+    FBar.Press(p.X, p.Y);
+    FBar.Release(p.X, p.Y);
+    AssertEquals('rev=' + BoolToStr(rev, True) + ': 40 is as far from both', '40,60', Values);
+    AssertEquals(0, FBar.SelectedThumb);
+  end;
+end;
+
+procedure TTyMultiTrackMouseTest.TestAJumpSkipsDisabledThumbs;
+var
+  p: TPoint;
+begin
+  FBar.Put([20, 60]);
+  SetLength(FBar.Off, 2);
+  FBar.Off[0] := True;
+  p := At(28);
+  FBar.Press(p.X, p.Y);
+  FBar.Release(p.X, p.Y);
+  AssertEquals('the enabled thumb comes, though the other is nearer', '20,28', Values);
+  AssertEquals(1, FBar.SelectedThumb);
+end;
+
+procedure TTyMultiTrackMouseTest.TestADisabledThumbIsInert;
+var
+  p, q: TPoint;
+  a: TBGRABitmap;
+begin
+  FBar.Put([20, 50, 80]);
+  SetLength(FBar.Off, 3);
+  FBar.Off[1] := True;
+  FBar.SelectedThumb := 0;
+  FLog := '';
+  p := At(50);
+  FBar.Hover(p.X, p.Y);
+  a := Shot(False);
+  try
+    AssertTrue('no hover on a disabled thumb: ' + PxStr(ThumbPx(a, 1)),
+      SamePx(ThumbPx(a, 1), $3B, $82, $F6));
+  finally
+    a.Free;
+  end;
+  FBar.Press(p.X, p.Y);
+  q := At(65);
+  FBar.Drag(q.X, q.Y);
+  FBar.Release(q.X, q.Y);
+  AssertEquals('nothing moved', '20,50,80', Values);
+  AssertEquals('the selection stayed where it was', 0, FBar.SelectedThumb);
+  AssertEquals('no event at all', '', FLog);
+end;
+
+procedure TTyMultiTrackMouseTest.TestHoverAndPressArePaintedOnThatThumbOnly;
+var
+  p: TPoint;
+  a: TBGRABitmap;
+begin
+  FBar.Put([20, 50, 80]);
+  p := At(50);
+  FBar.Hover(p.X, p.Y);
+  a := Shot(False);
+  try
+    AssertTrue('hovered: ' + PxStr(ThumbPx(a, 1)), SamePx(ThumbPx(a, 1), 0, $FF, $FF));
+    AssertTrue('the others plain: ' + PxStr(ThumbPx(a, 0)), SamePx(ThumbPx(a, 0), $3B, $82, $F6));
+  finally
+    a.Free;
+  end;
+  FBar.Press(p.X, p.Y);
+  a := Shot(False);
+  try
+    AssertTrue('pressed: ' + PxStr(ThumbPx(a, 1)), SamePx(ThumbPx(a, 1), $80, 0, $FF));
+    AssertTrue('the others plain: ' + PxStr(ThumbPx(a, 2)), SamePx(ThumbPx(a, 2), $3B, $82, $F6));
+  finally
+    a.Free;
+  end;
+  FBar.Release(p.X, p.Y);
+  FBar.Leave;
+  a := Shot(False);
+  try
+    AssertTrue('released and left: ' + PxStr(ThumbPx(a, 1)), SamePx(ThumbPx(a, 1), $3B, $82, $F6));
+  finally
+    a.Free;
+  end;
+end;
+
+procedure TTyMultiTrackMouseTest.TestThumbsOnOneValueComeApartInTheDragDirection;
+var
+  p, q: TPoint;
+begin
+  FBar.Put([0, 0]);
+  p := At(0);
+  FBar.Press(p.X, p.Y);
+  q := At(30);
+  FBar.Drag(q.X, q.Y);
+  FBar.Release(q.X, q.Y);
+  AssertEquals('a pile at Min: dragging right takes the upper thumb', '0,30', Values);
+  AssertEquals(1, FBar.SelectedThumb);
+  FBar.Put([100, 100]);
+  p := At(100);
+  FBar.Press(p.X, p.Y);
+  q := At(70);
+  FBar.Drag(q.X, q.Y);
+  FBar.Release(q.X, q.Y);
+  AssertEquals('a pile at Max: dragging left takes the lower thumb', '70,100', Values);
+end;
+
+procedure TTyMultiTrackMouseTest.TestADisabledBarIgnoresTheMouse;
+var
+  p: TPoint;
+begin
+  FBar.Put([20, 60]);
+  FBar.Enabled := False;
+  p := At(35);
+  FBar.Press(p.X, p.Y);
+  FBar.Release(p.X, p.Y);
+  AssertEquals('20,60', Values);
+  AssertEquals(-1, FBar.SelectedThumb);
+end;
+
+procedure TTyMultiTrackMouseTest.TestTheHintIsTheThumbsUnderThePointer;
+var
+  r: TRect;
+  p: TPoint;
+begin
+  FBar.Hint := 'bar';
+  FBar.Put([20, 50, 80]);
+  SetLength(FBar.Hints, 3);
+  FBar.Hints[0] := 'low';
+  FBar.Hints[2] := 'high';
+  p := At(20);
+  AssertEquals('over a thumb with a hint', 'low', FBar.HintAt(p.X, p.Y, r));
+  AssertTrue('leaving that thumb asks again', EqualRect(r, FBar.ThumbRect(0)));
+  p := At(80);
+  AssertEquals('high', FBar.HintAt(p.X, p.Y, r));
+  p := At(50);
+  AssertEquals('a thumb without one: the control''s', 'bar', FBar.HintAt(p.X, p.Y, r));
+  p := At(35);
+  AssertEquals('between thumbs: the control''s', 'bar', FBar.HintAt(p.X, p.Y, r));
+  AssertEquals('the gap ends where thumb 0 does', FBar.ThumbRect(0).Right, r.Left);
+  AssertEquals('and starts where thumb 1 does', FBar.ThumbRect(1).Left, r.Right);
+end;
+
+{ TTyMultiTrackKeyboardTest }
+
+procedure TTyMultiTrackKeyboardTest.TestArrowsStepTheSelectedThumb;
+var
+  ori: TTyTrackOrientation;
+  where: string;
+begin
+  for ori := toHorizontal to toVertical do
+  begin
+    Configure(ori, False);
+    where := 'ori=' + IntToStr(Ord(ori));
+    FBar.Put([20, 50, 80]);
+    FBar.SelectedThumb := 1;
+    FBar.LineSize := 2;
+    AssertEquals(where + ': consumed', 0, FBar.Key(VK_RIGHT));
+    AssertEquals(where + ': right increases', '20,52,80', Values);
+    FBar.Key(VK_UP);
+    AssertEquals(where + ': up increases', '20,54,80', Values);
+    FBar.Key(VK_LEFT);
+    AssertEquals(where + ': left decreases', '20,52,80', Values);
+    FBar.Key(VK_DOWN);
+    AssertEquals(where + ': down decreases', '20,50,80', Values);
+  end;
+end;
+
+procedure TTyMultiTrackKeyboardTest.TestPagesAndEndsStopAtTheNeighbours;
+begin
+  FBar.MinGap := 5;
+  FBar.Put([20, 50, 80]);
+  FBar.SelectedThumb := 1;
+  FBar.Key(VK_PRIOR);
+  AssertEquals('PageUp adds PageSize', '20,60,80', Values);
+  FBar.Key(VK_NEXT);
+  FBar.Key(VK_NEXT);
+  AssertEquals('PageDown takes it off', '20,40,80', Values);
+  FBar.Key(VK_HOME);
+  AssertEquals('Home: as low as the left neighbour lets', '20,25,80', Values);
+  FBar.Key(VK_END);
+  AssertEquals('End: as high as the right neighbour lets', '20,75,80', Values);
+  FBar.SelectedThumb := 0;
+  FBar.Key(VK_HOME);
+  FBar.SelectedThumb := 2;
+  FBar.Key(VK_END);
+  AssertEquals('the outer thumbs reach Min and Max', '0,75,100', Values);
+end;
+
+procedure TTyMultiTrackKeyboardTest.TestWithNoSelectionTheFirstEnabledThumbMoves;
+begin
+  FBar.Put([20, 50, 80]);
+  SetLength(FBar.Off, 3);
+  FBar.Off[0] := True;
+  FLog := '';
+  FBar.Key(VK_RIGHT);
+  AssertEquals('20,51,80', Values);
+  AssertEquals('and it becomes the selected one', 1, FBar.SelectedThumb);
+  AssertEquals('S1 T1 C ', FLog);
+end;
+
+procedure TTyMultiTrackKeyboardTest.TestAKeyMovesNothingWhenEveryThumbIsDisabled;
+var
+  k: Word;
+begin
+  FBar.Put([20, 50]);
+  SetLength(FBar.Off, 2);
+  FBar.Off[0] := True;
+  FBar.Off[1] := True;
+  FBar.SelectedThumb := 1;
+  k := FBar.Key(VK_RIGHT);
+  AssertEquals('20,50', Values);
+  AssertEquals('not consumed', VK_RIGHT, k);
+  AssertEquals('no Tab wanted', 0, FBar.WantsKey(VK_TAB));
+end;
+
+procedure TTyMultiTrackKeyboardTest.TestADisabledBarIgnoresTheKeys;
+begin
+  FBar.Put([20, 50]);
+  FBar.SelectedThumb := 0;
+  FBar.Enabled := False;
+  FBar.Key(VK_RIGHT);
+  AssertEquals('20,50', Values);
+  AssertEquals('nor wants Tab', 0, FBar.WantsKey(VK_TAB));
+end;
+
+procedure TTyMultiTrackKeyboardTest.TestTabWalksTheEnabledThumbsThenLeaves;
+begin
+  FBar.Put([20, 50, 80]);
+  SetLength(FBar.Off, 3);
+  FBar.Off[1] := True;
+  FBar.SelectedThumb := 0;
+  FLog := '';
+  AssertEquals('a thumb follows: the bar wants Tab', 1, FBar.WantsKey(VK_TAB));
+  AssertEquals('Tab consumed', 0, FBar.Key(VK_TAB));
+  AssertEquals('the disabled thumb is skipped', 2, FBar.SelectedThumb);
+  AssertEquals('S2 ', FLog);
+  AssertEquals('after the last: Tab goes to the form', 0, FBar.WantsKey(VK_TAB));
+  FBar.HoldShift := True;
+  AssertEquals('Shift+Tab has a thumb to go back to', 1, FBar.WantsKey(VK_TAB));
+  FBar.Key(VK_TAB, [ssShift]);
+  AssertEquals('Shift+Tab goes back', 0, FBar.SelectedThumb);
+  AssertEquals('before the first: Shift+Tab goes to the form', 0, FBar.WantsKey(VK_TAB));
+  FBar.HoldShift := False;
+  FBar.SelectedThumb := -1;
+  AssertEquals('none selected: Tab starts after the first enabled thumb', 1, FBar.WantsKey(VK_TAB));
+  AssertEquals('other special keys are the form''s', 0, FBar.WantsKey(VK_RETURN));
+end;
 
 initialization
   RegisterTest(TTyMultiTrackModelTest);
   RegisterTest(TTyMultiTrackGeometryTest);
   RegisterTest(TTyMultiTrackPaintTest);
+  RegisterTest(TTyMultiTrackMouseTest);
+  RegisterTest(TTyMultiTrackKeyboardTest);
 end.
