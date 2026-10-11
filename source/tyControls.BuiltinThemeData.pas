@@ -3190,6 +3190,8 @@ begin
     'TyToggleKnob       { render-style: bevel3d; background: var(--face); }' + LineEnding +
     'TyTrackThumb:hover  { render-style: bevel3d; background: var(--face-hover); }' + LineEnding +
     'TyTrackThumb:active { render-style: bevel3d; background: var(--face); }' + LineEnding +
+    '/* The thumb the keys move: Win9x drew a thin dark focus mark inside the raised face. */' + LineEnding +
+    'TyTrackThumb:focus  { render-style: bevel3d; background: var(--face); outline: 1px var(--ink); outline-offset: 3px; }' + LineEnding +
     '' + LineEnding +
     '/* Tooltip: the pale yellow box with a thin black frame. */' + LineEnding +
     'TyHint { background: #FFFFE1; color: var(--ink); border-color: #000000; border-width: 1px; border-radius: 0; padding: var(--pad-tooltip); font-size: var(--font-size-base); }' + LineEnding;
