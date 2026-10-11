@@ -188,6 +188,9 @@ and text controls to reference. They are ordinary `--` variables and theme autho
 | `--selection` | `alpha(var(--accent), 0.30)` | Text selection highlight band (accent-tinted, semi-transparent); referenced by `TyTextSelection`, so Edit/Memo selections share their look with selected list rows |
 | `--muted` | `alpha(var(--on-surface), 0.5)` | De-emphasized foreground (placeholder / hint text); referenced by `TyTextHint` |
 | `--overlay-hover` | `alpha(var(--on-surface), 0.12)` | Semi-transparent hover overlay (e.g. the rounded backdrop behind a tab's close ×); referenced by `TyTabClose` |
+| `--input-bg` | `var(--surface)` | The well of the field controls: edit, combo box, list box, memo, spin edit, calendar, date picker, tree, list view |
+| `--input-border` | `var(--border)` | The frame of the same field controls; separate from `--border`, so a skin can frame its fields without also recolouring dividers, grid lines and panel frames |
+| `--grid-bg` | `var(--surface)` | The data grid's body |
 
 ```css
 :root {
@@ -197,7 +200,9 @@ and text controls to reference. They are ordinary `--` variables and theme autho
 }
 ```
 
-> Changing these three tokens restyles selections, placeholders, and hover overlays globally, with no per-control edits.
+> Changing these tokens restyles what they name globally, with no per-control edits. The controls a skin writes no rule
+> for are drawn by the built-in base layer; a skin that points `--input-bg`, `--input-border`, `--grid-bg` and the `--radius`
+> family at its own edit's values gets those controls looking like that edit.
 > Like `--accent` and `--on-surface` above they are evaluated lazily at use sites and may reference other variables.
 
 ---
@@ -1410,5 +1415,6 @@ Engine-level limitations (each expanded in the sections above):
     the default border width (2) + a border color derived from the (solid) background when unset, so you do not repeat
     `border-style`/`border-width`/`border-color`/`border-radius` on every control. `flat` (the default) is the original
     behavior. Applies only to control frames drawn through `DrawFrame` (buttons / inputs / panels / progress tracks /
-    forms and so on); separately drawn sub-parts such as the check box indicator are unaffected.
+    forms and so on), and to tabs (`TyTab`), scroll thumbs (`TyScrollThumb`) and track thumbs and grooves
+    (`TyTrackThumb` / `TyTrackGroove`); other separately drawn sub-parts such as the check box indicator are unaffected.
     For an example skin see `examples/theming/classic.tycss` (classic 3D style).

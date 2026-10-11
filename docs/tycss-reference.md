@@ -187,6 +187,9 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 | `--selection` | `alpha(var(--accent), 0.30)` | 文本选区高亮带底色(accent 着色的半透明);由 `TyTextSelection` 引用,使 Edit/Memo 的选区与列表选中行视觉同源 |
 | `--muted` | `alpha(var(--on-surface), 0.5)` | 弱化前景色(占位符 / 提示文字);由 `TyTextHint` 引用 |
 | `--overlay-hover` | `alpha(var(--on-surface), 0.12)` | 半透明悬停叠加层(如页签关闭 × 的圆角底片);由 `TyTabClose` 引用 |
+| `--input-bg` | `var(--surface)` | 输入类控件的底色:编辑框、下拉框、列表框、备忘框、微调框、日历、日期框、树、列表视图 |
+| `--input-border` | `var(--border)` | 同一批输入类控件的边框色;与 `--border` 分开,皮肤改输入框边框时不会连带分隔线、网格线和面板边框 |
+| `--grid-bg` | `var(--surface)` | 数据表格正文的底色 |
 
 ```css
 :root {
@@ -196,8 +199,10 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 }
 ```
 
-> 改这三个令牌即可全局调整选区/占位符/悬停叠加的外观,无需逐个控件改写;它们与上面的
-> `--accent`、`--on-surface` 一样在使用处惰性求值,可引用其他变量。
+> 改这些令牌即可全局调整对应的外观,无需逐个控件改写。皮肤没有专属规则的控件由内置基础层绘制,
+> 皮肤把 `--input-bg`、`--input-border`、`--grid-bg` 和 `--radius` 系列指向自己编辑框的取值,
+> 这些控件就会和皮肤自己的编辑框一致。这些令牌与上面的 `--accent`、`--on-surface` 一样
+> 在使用处惰性求值,可引用其他变量。
 
 ---
 
@@ -1382,5 +1387,6 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
     `bevel3d`/`inset3d` 让 `DrawFrame` 自动应用凸起/凹陷两色 3D 斜角 + 方角 + 默认边宽(2)+
     边色缺省从(纯色)背景派生,省去在每个控件上重复写 `border-style`/`border-width`/
     `border-color`/`border-radius`。`flat`(默认)= 原有行为。只作用于走 `DrawFrame` 的控件外框
-    (按钮/输入框/面板/进度条轨道/窗体等);复选框指示框等单独绘制的子部件不受其影响。
+    (按钮/输入框/面板/进度条轨道/窗体等),以及页签(`TyTab`)、滚动条拇指(`TyScrollThumb`)、
+    滑块拇指与滑槽(`TyTrackThumb` / `TyTrackGroove`);复选框指示框等其他单独绘制的子部件不受其影响。
     示例皮肤见 `examples/theming/classic.tycss`(经典 3D 风)。

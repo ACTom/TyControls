@@ -48,6 +48,14 @@
   --form-bg:          var(--surface-hover);   /* TyForm bg */
   --titlebar-bg:      var(--surface-chrome);  /* TyTitleBar bg */
   --input-bg:         var(--surface);         /* Edit/Check/Radio/Combo/List/Spin/Memo bg */
+  /* The frame of those same field wells, split out of --border (which also draws dividers,
+     grid lines and panel frames) so a skin can give the fields its own edit's frame with one
+     token instead of a rule per control -- a rule would drop the base layer for that key. */
+  --input-border:     var(--border);
+  /* The data grid's body. Its own token, not --input-bg: dark modes raise the field wells above
+     the surface and the grid has always sat on the surface itself, so a skin that wants a
+     field-white grid says so here. */
+  --grid-bg:          var(--surface);
   --scroll-handle:    var(--border);          /* resting scroll thumb/handle */
   --input-border-hover: var(--border-hover);  /* neutral inputs hover border */
   /* on-* declared here but WIRED only in the §3 bug-fix commit */
@@ -385,7 +393,7 @@ TyLabel:disabled, TyHtmlLabel:disabled, TyLinkLabel:disabled, TyShadowLabel:disa
 TyEdit {
   background: var(--input-bg);
   color: var(--on-surface);
-  border-color: var(--border);
+  border-color: var(--input-border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
   padding: var(--pad-control);
@@ -412,7 +420,7 @@ TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }
 TyCheckBox {
   background: var(--input-bg);
   color: var(--on-surface);
-  border-color: var(--border);
+  border-color: var(--input-border);
   border-width: var(--input-border-width);
   border-radius: var(--radius-sm);
   padding: var(--pad-control);
@@ -425,7 +433,7 @@ TyCheckBox:disabled { opacity: var(--disabled-opacity); }
 TyRadioButton {
   background: var(--input-bg);
   color: var(--on-surface);
-  border-color: var(--border);
+  border-color: var(--input-border);
   border-width: var(--input-border-width);
   border-radius: var(--radius-pill);
   padding: var(--pad-control);
@@ -477,7 +485,7 @@ TyExPanelHeader { color: var(--on-surface); }
 TyComboBox {
   background: var(--input-bg);
   color: var(--on-surface);
-  border-color: var(--border);
+  border-color: var(--input-border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
   padding: var(--pad-control);
@@ -526,7 +534,7 @@ TyCaptionButton.max:hover    { background: var(--surface-caption-hover); }
 TyListBox, TyValueListEditor, TyRibbonGallery {
   background: var(--input-bg);
   color: var(--on-surface);
-  border-color: var(--border);
+  border-color: var(--input-border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
   padding: var(--pad-tight);
@@ -728,7 +736,7 @@ TyTab:active { background: var(--surface); color: var(--accent); }
 TySpinEdit {
   background: var(--input-bg);
   color: var(--on-surface);
-  border-color: var(--border);
+  border-color: var(--input-border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
   padding: var(--pad-control);
@@ -741,7 +749,7 @@ TySpinEdit:disabled { opacity: var(--disabled-opacity); }
 TyMemo {
   background: var(--input-bg);
   color: var(--on-surface);
-  border-color: var(--border);
+  border-color: var(--input-border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
   padding: var(--pad-control);
@@ -875,7 +883,7 @@ TyToolBar, TyToolSeparator {
 
 /* ── Calendar + DateTimePicker ─────────────────────────────────────────── */
 
-TyCalendar { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-button); font-size: var(--font-size-base); }
+TyCalendar { background: var(--input-bg); color: var(--on-surface); border-color: var(--input-border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-button); font-size: var(--font-size-base); }
 TyCalendarTitle { color: var(--on-surface); font-weight: var(--font-weight-bold); font-size: var(--font-size-title); }
 TyCalendarTitle:hover { color: var(--accent); }
 TyCalendarWeekday { color: var(--muted); font-size: var(--font-size-base); }
@@ -883,7 +891,7 @@ TyCalendarCell { background: none; color: var(--on-surface); border-radius: var(
 TyCalendarCell:hover { background: var(--surface-hover); }
 TyCalendarCell:selected { background: var(--accent); color: var(--on-accent); }
 TyCalendarCell:disabled { color: var(--muted); }
-TyDateTimePicker { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-datetime); font-size: var(--font-size-base); }
+TyDateTimePicker { background: var(--input-bg); color: var(--on-surface); border-color: var(--input-border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-datetime); font-size: var(--font-size-base); }
 TyDateTimePicker:hover { border-color: var(--input-border-hover); }
 TyDateTimePicker:focus { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyDateTimePicker:disabled { opacity: var(--disabled-opacity); }
@@ -899,7 +907,7 @@ TyDateTimeButton:hover { background: var(--surface-hover); color: var(--accent);
    TyListViewLine and TyListViewMarquee are deliberately left undefined; see the note at
    the end of this file. */
 
-TyTreeView, TyListView { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-tight); font-size: var(--font-size-base); }
+TyTreeView, TyListView { background: var(--input-bg); color: var(--on-surface); border-color: var(--input-border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-tight); font-size: var(--font-size-base); }
 TyTreeNode, TyListViewItem { background: none; color: var(--on-surface); }
 TyTreeNode:hover, TyListViewItem:hover { background: var(--surface-hover); }
 TyTreeNode:selected, TyListViewItem:selected { background: var(--accent); color: var(--on-accent); }
@@ -912,7 +920,7 @@ TyTreeHeaderSection:selected, TyListViewHeaderSection:selected { background: var
 /* --- 数据网格 TTyGrid ------------------------------------------------------
    基层给全套键,新皮肤即使一条网格规则都不写也能正常显示(基层垫在每个主题之下)。
    网格自成一套 typeKey,不借用树/列表的键 —— 借来的键在外观主题层够不着。 */
-TyGrid { background: var(--surface); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); font-size: var(--font-size-base); }
+TyGrid { background: var(--grid-bg); color: var(--on-surface); border-color: var(--input-border); border-width: var(--input-border-width); border-radius: var(--radius-sm); font-size: var(--font-size-base); }
 /* 正文单元格。resting 透明,让网格表面透出来;选中/悬停才上色。 */
 TyGridCell { background: none; color: var(--on-surface); padding: var(--pad-cell); }
 TyGridCell:hover    { background: var(--surface-hover); }
@@ -975,7 +983,7 @@ TyGridSummaryRow { background: none; color: var(--on-surface); }
 TyGridLine      { background: var(--border); }
 /* 单元格图形。各自成键,不借复选框/进度条的键 —— 借来的键在外观层够不着,
    而且改它会波及那些控件。状态只由单元格自身决定,不掺网格的瞬时状态。 */
-TyGridCheckBox           { background: var(--input-bg); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); color: var(--on-surface); }
+TyGridCheckBox           { background: var(--input-bg); border-color: var(--input-border); border-width: var(--input-border-width); border-radius: var(--radius-sm); color: var(--on-surface); }
 TyGridCheckBox:selected  { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 TyGridHyperlink          { color: var(--accent); }
 TyGridCommentMark        { color: var(--warning); }
@@ -988,7 +996,7 @@ TyGridButton          { background: var(--surface-chrome); color: var(--on-surfa
 TyGridButton:hover    { background: var(--surface-hover); }
 TyGridButton:active   { background: var(--surface-active); }
 TyGridSelection { background: var(--selection); border-color: var(--accent); }
-TyTreeCheckBox, TyListViewCheckBox { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); }
+TyTreeCheckBox, TyListViewCheckBox { background: var(--input-bg); color: var(--on-surface); border-color: var(--input-border); border-width: var(--input-border-width); border-radius: var(--radius-sm); }
 TyTreeCheckBox:active, TyListViewCheckBox:active   { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 TyTreeCheckBox:selected, TyListViewCheckBox:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 TyTreeCheckBox:disabled, TyListViewCheckBox:disabled { color: var(--muted); }
@@ -1180,7 +1188,7 @@ TyTransferTitle { background: var(--surface-chrome); color: var(--on-surface);
 TyCascader {
   background: var(--input-bg);
   color: var(--on-surface);
-  border-color: var(--border);
+  border-color: var(--input-border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
   padding: var(--pad-control);
