@@ -215,7 +215,7 @@ object MainForm: TMainForm
       Left = 16
       Height = 44
       Top = 522
-      Width = 430
+      Width = 412
       Min = 0
       Max = 100
       Frequency = 10
@@ -243,7 +243,7 @@ object MainForm: TMainForm
       Left = 16
       Height = 24
       Top = 600
-      Width = 430
+      Width = 412
       Min = 0
       Max = 100
       Frequency = 10
