@@ -49,6 +49,7 @@ uses tyControls.MultiTrackBar;
 | `TabStop` | `Boolean` | `True` | 可以用 Tab 进入。 |
 | `OnChange` | `TNotifyEvent` | `nil` | 任何一个滑块的值变了就触发（一次操作只触发一次）。 |
 | `OnThumbChange` | `TTyTrackThumbEvent` | `nil` | 某个滑块的值变了，`AIndex` 是它的序号。先于 `OnChange`。 |
+| `OnThumbChanging` | `TTyTrackThumbChangingEvent` | `nil` | 用户正要移动某个滑块，值还没变。可以不让动，也可以改成别的值。只管用户操作，代码赋值不触发。见第 6 节。 |
 | `OnThumbSelect` | `TTyTrackThumbEvent` | `nil` | 选中的滑块变了，`AIndex` 是新序号（`-1` = 没有选中）。 |
 | `OnDrawTrack` | `TTyTrackDrawEvent` | `nil` | 自绘轨道，见第 5 节。 |
 | `OnDrawThumb` | `TTyTrackDrawThumbEvent` | `nil` | 自绘滑块，见第 5 节。 |
@@ -61,9 +62,10 @@ uses tyControls.MultiTrackBar;
 |------|------|
 | `ThumbCount: Integer` | 滑块个数。`TTyRangeTrackBar` 是区间数 × 2。 |
 | `ThumbValues[i]: Integer` | 第 i 个滑块的值，只读。滑块永远按值升序排列。 |
-| `SetThumbValue(AIndex, AValue)` | 移动一个滑块。值会被夹在 `Min..Max` 以及左右邻居 ± `MinGap` 之间；真变了才触发 `OnThumbChange` 和 `OnChange`。拖动、键盘、集合项赋值走的都是它。序号越界抛 `EListError`。 |
+| `SetThumbValue(AIndex, AValue)` | 从代码移动一个滑块。值会被夹在 `Min..Max` 以及左右邻居 ± `MinGap` 之间；真变了才触发 `OnThumbChange` 和 `OnChange`，不问 `OnThumbChanging`。给集合项赋值走的也是它。拖动、键盘、滚轮按同样的规则夹值，只是先问 `OnThumbChanging`。序号越界抛 `EListError`。 |
 | `SelectedThumb: Integer` | 键盘操作的那个滑块，`-1` = 没有。赋值越界当作 `-1`。 |
 | `ThumbRect(AIndex): TRect` | 滑块的**命中**矩形（客户区坐标）：沿轨道 12 逻辑像素，横向占满整个控件——和 `TTyTrackBar.ThumbRect` 在同一个值时完全一样。 |
+| `ThumbAtPoint(X, Y): Integer` | 客户区里一个点下面是哪个滑块，没有就是 `-1`。判断规则和左键按下时完全一样（控件自己按下、悬停、按滑块显示提示都调它）：几个滑块的命中矩形叠在一起时取中心最近的，一样近取值小的。**不可用的滑块也算**——它照样画在那里，应用可能还要对它做点什么（比如右键删除）；按下时不理它的是控件自己。 |
 | `SegmentSpan(AIndex, APPI, out ALow, AHigh): Boolean` | 第 AIndex 段沿主轴的像素范围（见下文「分段」）。只给位置，不管这一段画不画。 |
 | `ValueAtPoint(X, Y): Integer` | 客户区里一个点对应的值：拖到那里的滑块、按在那里时跳过来的滑块，取的就是这个值。跟着 `Orientation` / `Reversed` 走，只看主轴，超出两端时是 `Min` / `Max`。 |
 
@@ -150,7 +152,7 @@ end;
 
 ## 6. 在控件外面扩展
 
-控件只内置通用的行为。点空白处加区间、按滑块颜色画渐变这类需求，用事件和公开的几何（`ValueAtPoint`、`SegmentSpan`、`ThumbRect`、`ThumbValues`）在应用里写，不用改控件。
+控件只内置通用的行为。点空白处加区间、按滑块颜色画渐变、固定某个滑块、右键删除这类需求，用事件和公开的几何（`ValueAtPoint`、`ThumbAtPoint`、`SegmentSpan`、`ThumbRect`、`ThumbValues`）在应用里写，不用改控件。
 
 ### OnTrackClick
 
@@ -279,13 +281,116 @@ TyDefaultController.StyleOverride :=
 Bar.Segments[1].StyleClass := 'heat';
 ```
 
+### OnThumbChanging：固定滑块、吸附到整数步
+
+```pascal
+TTyTrackThumbChangingEvent = procedure(Sender: TObject; AIndex: Integer; var AValue: Integer;
+  var AAllow: Boolean) of object;
+```
+
+- 用户要移动第 `AIndex` 个滑块时、值**还没变**之前触发。用户操作指：拖动（每挪一步问一次）、方向键 / `PageUp` / `PageDown` / `Home` / `End`、滚轮，以及按在轨道空白处时最近的滑块跳过来。
+- `AValue` 是滑块将要去的值，已经夹在左右邻居 ± `MinGap` 和 `Min..Max` 之间。这一下根本动不了（比如已经顶着邻居还往那边拖）就不问。
+- `AAllow := False`：滑块不动，也不触发 `OnThumbChange` / `OnChange`。
+- 改 `AValue`：滑块去你给的值。这个值会再按邻居 ± `MinGap` 和 `Min..Max` 夹一遍，所以给得再离谱也破坏不了第 7 节的不变式。改完正好等于当前值，就什么都不发生。
+- **只管用户，不管代码。** `SetThumbValue`、给 `Thumbs[i].Value` / `Ranges[i].Low` / `High` / `LowValue` / `HighValue` 赋值、改 `Min` / `Max` / `MinGap` 引起的重排、读窗体，都不触发——和 LCL 的惯例一样，这类事件拦的是用户，不是程序自己。
+- 拖动被拒时，滑块留在原地，抓取点也不变：之后某一步放行了，滑块落在「指针减去当初按下时的偏移」处，不会突然跳到指针正下方。
+
+**和 `Thumbs[i].Enabled := False` 的区别。** 不可用的滑块完全不参与交互：按不中、选不中、Tab 跳过它、没有悬停效果。被 `OnThumbChanging` 拒绝的滑块只是不动——照样能按、能选中（`OnThumbSelect` 照常触发）、能双击、Tab 能停在它上面、有焦点环。需要「看得到、点得到，但位置固定」时用 `OnThumbChanging`。
+
+**示例一：渐变编辑器固定首尾两个色标**
+
+两端的色标定义了渐变从哪里开始、到哪里结束，位置不该被拖走；但用户还要选中它们来改颜色，所以不能设成不可用。
+
+```pascal
+procedure TMainForm.StopsThumbChanging(Sender: TObject; AIndex: Integer;
+  var AValue: Integer; var AAllow: Boolean);
+begin
+  // 第一个和最后一个色标钉在原地，中间的随便拖
+  if (AIndex = 0) or (AIndex = Stops.ThumbCount - 1) then
+    AAllow := False;
+end;
+```
+
+按在轨道空白处时，如果离按点最近的是首尾色标，它会被选中但不会过来。想让空白处的点击干脆什么都不做，配合 `OnTrackClick` 置 `AHandled := True`。
+
+**示例二：吸附到 5 的倍数**
+
+```pascal
+procedure TMainForm.BarThumbChanging(Sender: TObject; AIndex: Integer;
+  var AValue: Integer; var AAllow: Boolean);
+begin
+  AValue := Round(AValue / 5) * 5;
+end;
+```
+
+- 同时把 `LineSize` 设成 5。否则按一下方向键提议的是当前值 ± 1，吸附回去还是原值，看起来就是按键没反应。
+- 吸附后的值还要再夹一遍。邻居在 20、`MinGap = 2` 时，往左拖到头提议的是 22，吸附成 20，再夹回 22——所以贴着邻居时可能停在不是 5 的倍数的位置。想严格只停在 5 的倍数上，让 `MinGap`、`Min`、`Max` 和所有滑块的初始值也都是 5 的倍数。
+
+### 右键删除滑块
+
+`ThumbAtPoint` 告诉你右键按在了哪个滑块上。下面用库里的 `TTyPopupMenu`（不是系统原生菜单）：把它设为控件的 `PopupMenu`，在 `OnContextPopup` 里决定弹不弹、菜单项能不能用。
+
+```pascal
+// Stops.PopupMenu := StopsMenu;  StopsMenu 里有一项 StopsMenuDelete
+procedure TMainForm.StopsContextPopup(Sender: TObject; MousePos: TPoint;
+  var Handled: Boolean);
+begin
+  if (MousePos.X = -1) and (MousePos.Y = -1) then
+    FMenuStop := Stops.SelectedThumb       // 用菜单键或 Shift+F10 弹出：对选中的滑块
+  else
+    FMenuStop := Stops.ThumbAtPoint(MousePos.X, MousePos.Y);
+  if FMenuStop < 0 then
+  begin
+    Handled := True;                       // 不在滑块上：不弹菜单
+    Exit;
+  end;
+  // 首尾色标是固定的，不能删；只剩两个时也不能再删
+  StopsMenuDelete.Enabled := (FMenuStop > 0) and (FMenuStop < Stops.ThumbCount - 1)
+    and (Stops.ThumbCount > 2);
+end;
+
+procedure TMainForm.StopsMenuDeleteClick(Sender: TObject);
+begin
+  if (FMenuStop >= 0) and (FMenuStop < Stops.ThumbCount) then
+    Stops.Thumbs.Delete(FMenuStop);
+end;
+```
+
+- 序号要在弹出时记下来（`FMenuStop`），点菜单项时指针早就不在原处了，不能再按位置算一次。
+- `OnContextPopup` 收到的 `MousePos` 是客户区坐标，正好交给 `ThumbAtPoint`；`(-1, -1)` 表示是键盘弹出的。
+- `ThumbAtPoint` 会返回不可用的滑块。不想让人删不可用的滑块，自己再判断一下 `Thumbs[i].Enabled`。
+- 删掉选中的滑块后，`SelectedThumb` 变成 `-1`（见第 7 节）。
+
+`TTyRangeTrackBar` 删的是**整个区间**：滑块 `2k` 和 `2k + 1` 是第 `k` 个区间的 `Low` 和 `High`，区间条上的滑块永远成对，不能只删一端。
+
+```pascal
+procedure TMainForm.PriceContextPopup(Sender: TObject; MousePos: TPoint;
+  var Handled: Boolean);
+var
+  i: Integer;
+begin
+  i := Price.ThumbAtPoint(MousePos.X, MousePos.Y);
+  if i < 0 then
+    FMenuRange := -1
+  else
+    FMenuRange := i div 2;                 // 按在哪一端都是这个区间
+  Handled := FMenuRange < 0;
+end;
+
+procedure TMainForm.PriceMenuDeleteClick(Sender: TObject);
+begin
+  if (FMenuRange >= 0) and (FMenuRange < Price.Ranges.Count) then
+    Price.Ranges.Delete(FMenuRange);
+end;
+```
+
 ---
 
 ## 7. 值的规则
 
 **不变式**：滑块按值升序排列，相邻两个至少隔 `MinGap`，全部在 `Min..Max` 内。
 
-- **单个滑块移动**（拖动、键盘、`SetThumbValue`、给集合项赋值）：夹在左右邻居 ± `MinGap` 和 `Min..Max` 之间，碰到邻居就停，不会越过去。
+- **单个滑块移动**（拖动、键盘、滚轮、`SetThumbValue`、给集合项赋值）：夹在左右邻居 ± `MinGap` 和 `Min..Max` 之间，碰到邻居就停，不会越过去。用户操作先问 `OnThumbChanging`，它给回来的值同样再夹一遍。
 - **整体重排**发生在改 `Min`、`Max`、`MinGap` 时，以及读完窗体时：先排序，从左往右推开到满足间距，超出 `Max` 的再从右往左推回来。读窗体时的重排不触发事件。
 - **`MinGap` 放不下时**——`(滑块数 − 1) × MinGap > Max − Min`——不报错，也不改属性值：滑块按 `(Max − Min) div (滑块数 − 1)` 的间距摆放。之后把范围放宽，原来的间距自动恢复。
 - **`BeginUpdate` / `EndUpdate`**：在 `Ranges.BeginUpdate` 或 `Thumbs.BeginUpdate` 之后，给项赋值**原样保存**、不夹不排，滑块也先不动；到 `EndUpdate` 时一次排好。一次改好几个值、而且中间状态会互相挡路时（比如把两个区间整体右移），先 `BeginUpdate`：
@@ -313,7 +418,7 @@ Bar.Segments[1].StyleClass := 'heat';
 |------|------|
 | 左键按在滑块上 | 选中它，从按下的位置开始拖（只按不动不会挪动滑块）。几个滑块叠在一起时取中心最近的那个，一样近取值小的。 |
 | 左键按在轨道空白处 | 先问 `OnTrackClick`（见第 6 节）；没被处理时，离按点最近的滑块跳过去并选中，接着可以拖。一样近时取值小的那个。 |
-| 拖动 | 经 `SetThumbValue`，碰到邻居停在 `MinGap` 处。`MinGap = 0` 时几个滑块叠在同一个值上，往哪边拖就由能往那边走的那个接手，叠在两端的滑块也拉得开。拖出控件不中断，松开左键才结束。 |
+| 拖动 | 每一步先问 `OnThumbChanging`，碰到邻居停在 `MinGap` 处。`MinGap = 0` 时几个滑块叠在同一个值上，往哪边拖就由能往那边走的那个接手，叠在两端的滑块也拉得开。拖出控件不中断，松开左键才结束。 |
 | `←` / `↓` | 键盘滑块减 `LineSize`（竖排时 `↑` 增大，同 `TTyTrackBar`） |
 | `→` / `↑` | 加 `LineSize` |
 | `PageUp` / `PageDown` | 加 / 减 `PageSize` |
