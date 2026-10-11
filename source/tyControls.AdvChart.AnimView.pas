@@ -163,7 +163,7 @@ interface
 uses SysUtils, Classes, Math, contnrs,
   tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
   tyControls.AdvChart.Paint, tyControls.AdvChart.Anim,
-  tyControls.AdvChart.AnimOpt;
+  tyControls.AdvChart.AnimOpt, tyControls.AdvChart.Lines;
 
 type
   TTyChartAnimProxy = class;
@@ -227,6 +227,11 @@ type
       oldLayoutSelect }
     FStSelX, FStSelY: Double;
     FStHasSel: Boolean;
+    { A LINES EFFECT SYMBOL'S RUN [Batch 121]: where the clip's during has
+      moved it, and whether a clip that does not loop has finished (the
+      symbol removed) }
+    FEff: TTyLinesEffect;
+    FEffGone: Boolean;
   public
     constructor Create(ASeries, AIndex: Integer; const ARole: string);
     { the values the layout gave every key }
@@ -244,6 +249,12 @@ type
     { the line clip's during and done, for its end label }
     procedure EndLabelDuring(APercent: Double);
     procedure EndLabelDone;
+    { a lines effect symbol's during (_updateSymbolPosition at __t) and
+      done (removed) [Batch 121] }
+    procedure LinesEffectDuring(APercent: Double);
+    procedure LinesEffectDone;
+    property LinesEffect: TTyLinesEffect read FEff;
+    property LinesEffectGone: Boolean read FEffGone;
     { A STATE KEY at its rest value [Batch 94]: added (and set) when the
       proxy has none yet, or when AForce; its rest value either way }
     procedure StSeed(const AKey: string; const AValue: TTyAnimValue; AForce: Boolean);
@@ -672,6 +683,17 @@ begin
   end;
 end;
 
+procedure TTyChartAnimProxy.LinesEffectDuring(APercent: Double);
+begin
+  TyLinesEffectStep(FEff, Num('__t'));
+  if APercent < 0 then ;
+end;
+
+procedure TTyChartAnimProxy.LinesEffectDone;
+begin
+  FEffGone := True;
+end;
+
 procedure TTyChartAnimProxy.EndLabelDone;
 begin
   { createLineClipPath's done: back to the original place }
@@ -983,6 +1005,8 @@ begin
     carEndLabel: Result := 'lineClip';
     carRiver: Result := 'riverClip';
     carChord: Result := 'chordGroup';
+    carLinesLine, carLinesFrom, carLinesTo, carLinesLabel: Result := 'linesLine';
+    carLinesEffect: Result := 'linesEffect';
   else
     Result := '';
   end;
@@ -1288,6 +1312,46 @@ begin
     [TyAnimNum(half), TyAnimNum(half)]).Delay(delay).Start('');
   AP.Animate('style', True).WhenWithKeys(period, ['opacity'],
     [TyAnimNum(0)]).Delay(delay).Start('');
+end;
+
+{ EffectLine._updateEffectAnimation / _animateSymbol for one symbol: the
+  path, then -- the period above 0 -- `animate('', loop).when(period (twice
+  for a round trip), {__t: 1 or 2}).delay(delay).during(...)`, removed when
+  a clip that does not loop is done. AResume: the __t an update's restart
+  goes on from (delay -period * __t), below 0 for none. [Batch 121] }
+procedure StartLinesEffect(AP: TTyChartAnimProxy; const AEl: TTyChartElement;
+  AResume: Double);
+var
+  period, delay, life, top: Double;
+  flags: Integer;
+  loop, round_: Boolean;
+  an: TTyAnimator;
+begin
+  TyLinesEffectOfElement(AEl, AP.FEff);
+  AP.FEffGone := False;
+  period := AEl.Anim.G[7];
+  delay := AEl.Anim.G[8];
+  flags := Round(AEl.Anim.G[9]);
+  loop := (flags and 1) <> 0;
+  round_ := (flags and 2) <> 0;
+  AP.SetNum('__t', 0);
+  AP.SetFinal(TyAnimProps([Num1('__t', 0)]));
+  if not (period > 0) then Exit;
+  if AResume > 0 then delay := -period * AResume;
+  if round_ then
+  begin
+    life := period * 2;
+    top := 2;
+  end
+  else
+  begin
+    life := period;
+    top := 1;
+  end;
+  an := AP.Animate('', loop).WhenWithKeys(life, ['__t'], [TyAnimNum(top)])
+    .Delay(delay).During(@AP.LinesEffectDuring);
+  if not loop then an.Done(@AP.LinesEffectDone);
+  an.Start('');
 end;
 
 { a run's points as points }
@@ -1772,6 +1836,21 @@ begin
         p.SetFinal(props);
         StartRipple(p, AEl);
       end;
+    carLinesLine, carLinesFrom, carLinesTo, carLinesLabel:
+      begin
+        { Line._createLine: `shape.percent = 0`, initProps to 1 on the
+          series' model at the row -- the symbols and the label read it
+          every frame (beforeUpdate), the label's fade runs on the same
+          timing [Batch 121] }
+        p := Make(AEl.Anim.Series, idx, 'linesLine');
+        props := TyAnimProps([Num1('shape.percent', 1)]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('shape.percent', 0);
+        TyInitProps(p, props, AC.Model, TyAnimCallAt(idx));
+      end;
+    carLinesEffect:
+      StartLinesEffect(Make(AEl.Anim.Series, idx, 'linesEffect'), AEl, -1);
   end;
   if AAt < 0 then ;
 end;
@@ -2333,6 +2412,39 @@ var
             if p <> nil then
             begin
               Carry(p, s, r);
+              Exit;
+            end;
+          end;
+          ArmOne(AList, AAt, AEl, AC, True);
+        end;
+      carLinesEffect:
+        begin
+          { EffectLine.updateData: the path anew; the clip runs on unless the
+            period, loop or roundTrip changed -- then it starts over from
+            where __t was (delay -period * __t) [Batch 121] }
+          if (AOldRow >= 0) and OldEl(AOld, AOldRow, 'linesEffect', oe) then
+          begin
+            p := OldProxy(AOld, AOldRow, 'linesEffect');
+            if p <> nil then
+            begin
+              Carry(p, s, r);
+              if (oe.Anim.G[7] = AEl.Anim.G[7])
+                and (Round(oe.Anim.G[9]) and 3 = Round(AEl.Anim.G[9]) and 3) then
+              begin
+                a := p.FEff.T;
+                rot := p.FEff.LastT;
+                TyLinesEffectOfElement(AEl, p.FEff);
+                p.FEff.T := a;
+                p.FEff.LastT := rot;
+                p.FEff.HasLastT := True;
+                p.FEff.Ignore := True;
+              end
+              else
+              begin
+                a := p.Num('__t');
+                p.StopAnimation;
+                StartLinesEffect(p, AEl, a);
+              end;
               Exit;
             end;
           end;
@@ -3183,8 +3295,21 @@ var
   pts: TTyPointFArray;
   mg: TTyDoubleArray;
 begin
+  { A LINES EFFECT SYMBOL is where its run is, whatever its keys say
+    [Batch 121] }
+  if (AProxy <> nil) and (AEl.Anim.Role = carLinesEffect) then
+  begin
+    TyLinesFrameEffect(AEl, AProxy.FEff, AProxy.FEffGone);
+    Exit;
+  end;
   if (AProxy = nil) or AProxy.AtFinal then Exit;
   case AEl.Anim.Role of
+    carLinesLine:
+      TyLinesFrameLine(AEl, AProxy.Num('shape.percent'));
+    carLinesFrom, carLinesTo:
+      TyLinesFrameSymbol(AEl, AProxy.Num('shape.percent'));
+    carLinesLabel:
+      TyLinesFrameLabel(AEl, AProxy.Num('shape.percent'));
     carBar:
       BarFrom(AEl, AProxy);
     carSymbol, carLineSymbol, carEffectSymbol:

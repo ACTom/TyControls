@@ -2261,7 +2261,7 @@ Free Pascal 会直接抛异常。**加的是除法的护栏,不是行为的改�
 
 顺带:`test.advchart.diagnose` 里那条「某类型还没有渲染器」的测试第二次搬家
 (scatter → pie → funnel)。它钉的是**规则**,类型只是当下的例子;
-它变红就是又有一种类型能画了的提醒。**[第 120 批：又搬了一次——chord 能画了，示例换成 custom（两个类型那条是 grid 上的 lines 加 custom），`test.advchart.candlestick` 的同一条也是，见 §155。]**
+它变红就是又有一种类型能画了的提醒。**[第 120 批：又搬了一次——chord 能画了，示例换成 custom（两个类型那条是 grid 上的 lines 加 custom），`test.advchart.candlestick` 的同一条也是，见 §155。]** **[第 121 批：lines 也能画了，两个类型那条换成显式 `coordinateSystem: 'cartesian2d'` 的 map 加 custom，见 §156。]**
 
 ---
 
@@ -3194,7 +3194,7 @@ parallel 默认值里,坚持四个参数的解析器会在一张原装图上失�
 
 ### 一根折线的颜色来自 `itemStyle`,不是 `lineStyle`
 
-`visualStyleAccessPath` 的原型默认值是 `itemStyle` / `fill`,**只有两个类型覆盖它**
+**[第 121 批：lines 照此实现——色板色或系列 `lineStyle.color` 是它的视觉色，落在描边上，item 的 `lineStyle.color` 再压过它，见 §156]** `visualStyleAccessPath` 的原型默认值是 `itemStyle` / `fill`,**只有两个类型覆盖它**
 (`lines` 和 `parallel`),**折线不在其中**。所以:
 
 - 写 `lineStyle.color` **不能**阻止一根折线去拿色板的一格
@@ -8837,7 +8837,7 @@ AN2、AN3 之后还有一圈动画没接：柱子标签的数值滚动、仪表�
 - **末端标签**：状态里的 `endLabel.show`、富文本末端标签（画成一段）、阶梯线（沿未阶梯化的路径走）、只有一个点的折线（没有 run，不画）不支持；值是数组的数据项不滚动（文字停在终值）。浏览器里路径数据画过一次后会转成 Float32Array，平滑线的 `getPointOn` 在浏览器里读的是单精度控制点；oracle（不绘制）与端口都是双精度。
 - **计数**：handler formatter、富文本标签、数组原始值不滚动；静止时画的是静态列表的文字（`12.50` 这样的原样文本），上游 during(1) 之后是 `12.5`。
 - **markLine** 只按直线做（端口没有 curveness）；percent 为 0 时 `end/start` 标签按零向量居中，对齐用 `TyAnchorBox` 重排，旋转的标签不重排框。markArea 在 notMerge 下从不动画（与上游一致）。
-- **effectScatter**：`showEffectOn: 'emphasis'` 的涟漪不启动（上游悬停时启动、离开时清掉）；涟漪与 effectScatter 符号在持续阶段画在动态层，压在其它系列之上（z 序偏差）；涟漪不受 `animation: false` 约束（上游如此），但受 `AnimationMode` 约束。
+- **[第 121 批：lines 的 effect 符号与有拖尾的整个 lines 系列也进这个持续层，同样压在其它系列之上；拖尾层每帧乘 lastFrameAlpha，见 §156]** **effectScatter**：`showEffectOn: 'emphasis'` 的涟漪不启动（上游悬停时启动、离开时清掉）；涟漪与 effectScatter 符号在持续阶段画在动态层，压在其它系列之上（z 序偏差）；涟漪不受 `animation: false` 约束（上游如此），但受 `AnimationMode` 约束。
 - 饼标签以外的独立标签（漏斗）更新时不位移（上游靠 `style.x/y` 补间，没有 fixture）。
 
 ## 128. Tier 1 第九十三批：图例点击与联动（B3，2026-10-01）
@@ -11121,7 +11121,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **柱的 throttle**：上游写 dataIndex 的处理器经过 30 ms 的 throttle（模块级，所有 large 柱共用），30 ms 内的第二次移动推迟到定时器；端口每次立刻扫描。基准的步子间隔一秒，看不出区别。
 - **环绕与扫描**：上游柱的 `contain` 是路径的非零环绕，端口用「包围盒 + 扫描」代替。同一条路径里方向相反的矩形重叠时两者会不同（环绕相消）；基准每一步都核对两者一致（R3），没有遇到。组的裁剪路径按闭区间的矩形判断，正落在边上的点可能与 zrender 的环绕数不同。
 - **canvas 的 Float32 路径**：浏览器的 canvas 画家把路径数据转成 Float32（`toStatic`），柱的包围盒宽度会按 Float32 的柱宽算；基准跑的是 SVG（Double），端口照它。只在包围盒的边上可能差一个 Float32 的单位。
-- **极坐标、日历、`path://`**：上游极坐标上的 large 柱没有 large 布局（`createLarge` 会读到空点）；极坐标与日历上的 large 散点、`path://` / `image://` 符号的 large 散点，端口都仍逐项画。
+- **[第 121 批：lines 的 large 批（LargeLineDraw）在直角坐标、极坐标、日历上都成批，见 §156]** **极坐标、日历、`path://`**：上游极坐标上的 large 柱没有 large 布局（`createLarge` 会读到空点）；极坐标与日历上的 large 散点、`path://` / `image://` 符号的 large 散点，端口都仍逐项画。
 - **点击选中**：上游点 large 的柱或点会派发 select（模型记下、画面不变）；端口的大元素没有派发者，不派发。
 - **像素**：图层用 BGRA 的原语画形状，抗锯齿与 canvas 的路径填充不逐像素一致；boost 的方块并进图层（上游逐个 `fillRect`，不透明度小于 1 时重叠的方块会叠深）；`shadowBlur` 不画；大小不到 4 px 时上游连阴影也去掉，端口本来就不画阴影。
 - **切换时的动画**：上游 `_updateDrawMode` 在逐项与 large 之间切换时直接清空、不淡出；端口开着动画时这条路径没有基准（基准都是 `animation: false`），只测了 large 本身没有入场动画。
@@ -11217,7 +11217,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 
 ### 上游的做法
 
-- **开关**：管线的 `progressiveEnabled` 是 `zr.painter.type === 'canvas' && seriesModel.getProgressive()` 的真值；`progressiveRender` 是它加上视图有 `incrementalPrepareRender`（散点、柱、K 线、热力图；line、effectScatter、pictorialBar、treemap 缺省 `progressive: 0`，line 写了也没有增量视图）再加 `dataLen >= threshold`，`dataLen` 是**过滤之后**的条数。缺省：Series 400 / 3000；柱（BaseBarSeries）与 K 线 3000，K 线阈值 1e4，二者的 `progressiveChunkMode` 缺省 `'mod'`；散点 `option.progressive == null` 时 large 写了真值就是 5000 / 1e4，否则 400 / 3000。柱的 `getProgressive` 是 `get('large') ? get('progressive') : false`——不写 `large` 的柱永远不渐进；渐进时 `__preparePipelineContext` 强制 large，所以 `largeThreshold: 1000` 的 20 行也是 large 批。`step = Math.round(progressive || 700)`。
+- **[第 121 批：lines 的视图也有增量渲染（large 时 1e4 / 2e4，否则 400 / 3000，`effect.show` 时不渐进）；端口的 lines 一次画完，见 §156]** **开关**：管线的 `progressiveEnabled` 是 `zr.painter.type === 'canvas' && seriesModel.getProgressive()` 的真值；`progressiveRender` 是它加上视图有 `incrementalPrepareRender`（散点、柱、K 线、热力图；line、effectScatter、pictorialBar、treemap 缺省 `progressive: 0`，line 写了也没有增量视图）再加 `dataLen >= threshold`，`dataLen` 是**过滤之后**的条数。缺省：Series 400 / 3000；柱（BaseBarSeries）与 K 线 3000，K 线阈值 1e4，二者的 `progressiveChunkMode` 缺省 `'mod'`；散点 `option.progressive == null` 时 large 写了真值就是 5000 / 1e4，否则 400 / 3000。柱的 `getProgressive` 是 `get('large') ? get('progressive') : false`——不写 `large` 的柱永远不渐进；渐进时 `__preparePipelineContext` 强制 large，所以 `largeThreshold: 1000` 的 20 行也是 large 批。`step = Math.round(progressive || 700)`。
 - **块**：每帧每条管线从 `dueIndex` 走一步，`end = min(dueIndex + step, dueEnd)`。`'sequential'` 就是位置本身；`'mod'` 走 task.ts 的 `modNext`：`modBy = ceil(modDataCount / step)`、`winCount = ceil(modDataCount / modBy)`、第 current 个位置是 `(current % winCount) * modBy + ceil(current / winCount)`，不小于 `modDataCount` 时退回 `current`。它**不是排列**：10 行每块 4，行 7 走两次、行 9 永远不来。只有调 `params.next()` 的布局按它走——柱的 large 布局和 K 线的两种布局；散点的 `pointsLayout`、热力图都按 `start..end`，写了 `'mod'` 也一样。
 - **重来**：任务以 `(modBy, modDataCount)` 执行，跟上次不同就 reset，下游一路 dirty 到渲染任务——`incrementalPrepareRender` 清空视图、从第 0 块再画。两种来源：可视阶段的参数（appendData 改了 `'mod'` 的条数），以及**被阻塞的数据阶段**——setOption 新建的管线还没有上下文，数据处理以 `(1, 0)` 执行，第一帧以 `(Infinity, count)` 执行。只有在数据阶段有自己的系列任务的系列受影响：柱（`dataSample('bar')`）与线；概览任务的桩永远以 `(1, 0)` 执行。于是 `'mod'` 的柱第一帧把第 0 块重画一遍、第二帧才画第 1 块；K 线、散点没有这一帧。`createRenderPlanner` 在 large 或 progressive 换了时也 reset。
 - **帧**：setOption 的 update 同步画第 0 块；`_onframe` 在 `scheduler.unfinished` 时循环：`performSeriesTasks`、数据阶段、`updateStreamModes`、可视阶段、`renderSeries`，每次减去用掉的毫秒，直到 `TEST_FRAME_REMAIN_TIME`（1 ms）用完或没有剩的。`rendered` 每次 flush 发一次——渲染时只要还没完，handler 里的 `zr.refresh()` 让下一帧再 flush，所以未完成的每一帧都发；画完最后一块那帧再发 `finished`（动画结束、没有挂起的 update、调度完成、没有挂起的 action）。
@@ -11270,7 +11270,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **不渐进系列的 appendData**：上游的线、不渐进的 large 散点只画追加的那几行，普通 K 线一根新的都不画——都是上游自己的错（布局只覆盖新段、视图拿同一个 data 跟自己 diff）；端口按冻结的轴把整个系列重画。基准把这两条录成 `replay: false` 并用守卫钉住上游的样子。追加之后的全量 update 上游也会坏（resize 之后线的点全是 NaN、散点全不见），端口按新数据正常重排。
 - **dataset 与 typed array**：上游会把追加推进 dataset 的表（`seriesLayoutBy: 'row'` 抛错）；端口只收系列自己的 `data` 数组，其余拒绝。Option 属性的文本不改写（`GetOptionJson` 里有追加的行）。
 - **冻结的范围**只覆盖直角坐标轴；极坐标、日历、dataZoom 的窗口在帧里不重算（上游的 dataZoom 处理器会按新数据重算值窗口再过滤）。类目轴上追加了新类目时，上游的 OrdinalMeta 会收集它而范围不变，端口同样落在范围外。
-- **zlevel**：上游 `allocateZlevels` 给条数超过阈值的散点单独的 zlevel，之后的组件与系列抬一层；端口不建 zlevel，增量图层只保证“前面的在下、后面的在上”。
+- **[第 121 批：lines 的拖尾有了自己的一层（motion blur 的模拟），其余 zlevel 分层仍不建，见 §156]** **zlevel**：上游 `allocateZlevels` 给条数超过阈值的散点单独的 zlevel，之后的组件与系列抬一层；端口不建 zlevel，增量图层只保证“前面的在下、后面的在上”。
 - **`rendered` / `finished`** 只在全量 update 画完、渐进帧、主动画的帧上发；上游任何一次重绘（悬停改了状态、指针轴滑动、图例滚动）都会再发一次 `rendered`，空闲时还跟一个 `finished`——端口不发。`rendered` 的 `elapsedTime` 不给。
 - **步长**：`progressive` 是非数或小于 1 时上游的步长是 NaN 或负数，管线永远做不完；端口把这种系列当作不渐进。
 - **动画**：上游增量加进来的散点符号各自有入场动画（阈值 2000 以下才会同时开着）；端口的入场动画仍在构建时对整个系列武装。
@@ -11368,6 +11368,99 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - `source/tyControls.AdvanceChart.pas`：上面「控件」一条的全部。
 - `tools/advchart-oracle/chord.js`、`tests/fixtures/advchart-chord.json`、`tests/test.advchart.chord.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.animenter.pas`、`test.advchart.marks.pas`、`test.advchart.diagnose.pas`、`test.advchart.candlestick.pas`。
 - §1、§39 在原处标注。没有新主题键、新度量或新资源串。
+
+## 156. Tier 2 第一百二十一批：lines 系列（C12，2026-10-12）
+
+路线图 C12：lines 系列——直角坐标先行；两点线 / 折线、端点符号、effect 的拖尾走 A9。以前 `lines` 只在系列注册表里有一行（`'geo'`、`RendersOn` 空），能绑定、能进 store，却没有渲染器：诊断说「没有渲染器」，store 把 `coords` 当成直角坐标两列去喂轴的范围。这一批对着 6.1 的 `chart/lines/`（`LinesSeries.ts` 的 `compatEc2`、`_processFlatCoordsArray`、`getInitialData`、`formatTooltip`、`getProgressive` / `getProgressiveThreshold` / `preventIncremental`、`getZLevelKey` 与缺省；`LinesView.ts` 的 `_updateLineDraw`、canvas 分支的 `configLayer`、`createClipPath`；`linesLayout.ts` 的两条分支；`linesVisual.ts`）、`chart/helper/LineDraw.ts`（`lineNeedsDraw`、`makeSeriesScope`）、`Line.ts`（`createSymbol`、`setLinePoints`、`_createLine`、`_updateCommonStl`、`beforeUpdate`）、`LinePath.ts`、`Polyline.ts`、`EffectLine.ts`（`_updateEffectSymbol`、`_updateEffectAnimation`、`_animateSymbol`、`_getLineLength`、`_updateSymbolPosition`）、`EffectPolyline.ts`、`LargeLineDraw.ts`（`LargeLinesPath.buildPath` / `findDataIndex` / `contain` / `getBoundingRect`、`_setCommon`）、`chart/helper/createClipPathFromCoordSys.ts`、`coord/calendar/Calendar.dataToPoint`、`core/echarts.ts` 的 `allocateZlevels`、`util/states.ts`（`createEmphasisDefaultState`、`createBlurDefaultState`）、`component/tooltip/tooltipMarkup.ts` 的 nameValue，以及 zrender 的 `Clip.step`、`Animator`、`curve.quadraticAt` / `quadraticDerivativeAt` / `quadraticProjectPoint`、`contain/line.ts` / `contain/quadratic.ts`、`Transformable.getLocalTransform`、`matrix.rotate`、canvas `Layer` 的 motionBlur 逐行核过，在真 dist 上跑基准。§49、§127、§152、§154 的相关处在原处标注。
+
+### 上游的做法
+
+- **数据**：一行一项，四种写法。`{coords: [[x, y], ...], value, name, fromName, toName, ...}` 是常规写法，`value` 是这一行唯一的维度（值是数组时取第一个）；裸的 `[[x, y], [x, y]]` 没有选项，值不是数，`getRawValue` 拿到的是这个数组本身；`[count, x, y, x, y, count, ...]` 的扁平写法被换成一个全零的 Float32Array，每行的值都是 0（dev 构建要求同时写 `dimensions`）；ECharts 2 的 `[{coord, name}, {coord, name}]` 由 `compatEc2` 合成，第一点的 `name` 是这一行的名字和 `fromName`，第二点的是 `toName`，`mergeAll` 不覆盖，前一点的键赢。**坐标从不进轴**：store 只有 `value` 一列，轴的范围看不到 lines。
+- **坐标系**：缺省 `'geo'`，没有 geo 组件时没有坐标系，`linesLayout` 报错返回，什么都不画。直角坐标、极坐标、日历都可以写在 `coordinateSystem` 上（`dependencies` 有 `grid`、`polar`、`geo`、`calendar`）。每一对坐标走坐标系的 `dataToPoint`：直角坐标先 `scale.parse`（类目名查序号，查不到不是数）；极坐标半径、角度各自 parse；**日历的 `dataToPoint` 缺省 clamp**（`clamp == null && (clamp = true)`）——常规布局不传 clamp，范围外的日期是 NaN、这一行不画；large 布局传 `false`，不查范围。
+- **控制点**：`+curveness` 为真时（字符串 `'0.5'` 也算，0 和非数不算）`cp = ((x0 + x1) / 2 − (y0 − y1)·c, (y0 + y1) / 2 − (x1 − x0)·c)`——**不是关系图的公式**。曲度按 item 的 lineStyle 再系列的取。折线（`polyline: true`）不读曲度，所有点都画。`lineNeedsDraw` 只看前两点是不是数。
+- **样式**：`visualStyleAccessPath = 'lineStyle'`、`visualDrawType = 'stroke'`：色板色或系列 `lineStyle.color` 落在描边上；每个键 item 的 lineStyle → 系列的 → 缺省（`opacity: 0.5`，宽 1）。视图组挂 `createClipPath`：直角坐标是网格矩形按系列 `lineStyle.width || 0` 外扩、宽向上取整、x 有小数时向下取整再补一像素；极坐标是扇形（中心、内外半径 `round(…, 1)`）；日历没有。
+- **端点符号**（`linesVisual` + `Line.createSymbol`）：系列的 `symbol` / `symbolSize` 归一成一对（缺省 `['none', 'none']`、`[10, 10]`），item 自己写了且为真才覆盖——**尺寸 0 保留系列的**。符号在**真实的盒子** `(−w/2, −h/2, w, h)` 里建（圆是 `min(w, h)/2`），位置 `pointAt(0)` 与 `pointAt(percent)`，转角 `(percent === 1 ? −1 : 1)·π/2 − atan2(tangentAt)`——起点用 0 处、终点用 1 处的切线，**与线当前的 percent 无关**；缩放 = percent。`setColor`：填线色，空心的描线色、填白，`line` 型只描；不透明度跟线。曲线的 `tangentAt` 归一两次（BezierCurve 一次，LinePath 再一次）。
+- **标签**（`beforeUpdate`）：位置缺省 `'end'`（系列缺省），未知词什么都不放；`distance` 一个数两向同用、数组各用，**不写是 null，乘出来是 0**——`end` 的标签就落在终点上。`middle` 与 `inside*` 转到切线方向（反向的线再加 π，字保持正立），`start` / `end` 不转、按方向向量的 0.8 阈值对齐；inside 的位置带 origin，最终挂点是 `getLocalTransform`（origin、旋转、位置）的平移。缺省文字：原始值 undefined 用名字，有限数 `round(·, 10)`，其余 `String(·)`（裸数组行是 `"10,10,40,30"`）；模板 `{c}` 是原始值，undefined 写出 `"undefined"`。标签不透明度跟线（0.5）。
+- **effect**（`EffectLine` / `EffectPolyline`）：`effect.show` 只看系列（item 写 `show: false` 也照样有）；item 的 effect 键压过系列的。符号在单位盒 `(−0.5, −0.5, 1, 1)` 里建、按 `symbolSize` 缩放，z2 100，颜色 `effect.color || 描边`。周期 `period·1000`；`constantSpeed > 0` 时改成长度 / 速度 ·1000——直线的长度是**控制多边形两腿之和**（`_getLineLength`，"not so accurate"，直线用弦中点作控制点），折线是总长；缺省延迟 `idx / count · period / 3`，闭包里读的是**改过的** period。`animate('', loop).when(period（往返时 2 倍）, {__t: 1 或 2}).delay(delay)`，during 里按 `__t` 放符号：二次曲线位置与导数、`rotation = −atan2(ty, tx) − π/2`；`line` / `rect` / `roundRect` 的拖影：上一帧 `__lastT < __t` 时 `scaleY = 帧间距离 × 1.05`（`t === 1` 时位置退回半步），`__lastT === 1` 时 `scaleY = 2·|p1 − pos|`，否则复原。折线版按累积长度比例找段，向前找、回绕时从上一段 +1 向下找。延迟期间 Clip.step 仍以 0 调 during，所以 setOption 那一刻每个符号都已现身在起点。`loop: false` 结束时把符号从组里删掉。effect 不受系列 `animation` 开关约束。
+- **拖尾**：`trailLength > 0` 且 effect 开时 `getZLevelKey` 返回它，`allocateZlevels` 给它单独一个 zlevel（同 key 的相邻系列共享，之后的组件与系列抬一层），canvas 分支 `configLayer(zlevel, {motionBlur: true, lastFrameAlpha: max(min(t/10 + 0.9, 1), 0)})`：每帧先把上一帧以 lastFrameAlpha 画回来，再画这一层的元素。SVG 画家不支持（只警告）。
+- **large**（`LargeLineDraw`）：`large && count ≥ largeThreshold`（缺省 2000）时一条 `LargeLinesPath`：segs 是 Float32，直线每行 `[x0, y0, x1, y1]`，折线每行 `[count, x, y, ...]`；样式是系列的 lineStyle（不读 item）。三个上游自己的毛病照录：**包围盒**两个两个地读 segs——折线的 count 被当成坐标，总数为奇数时读出界、整个盒子是 NaN、再也悬停不到——并且以 `BoundingRect(minX, minY, maxX, maxY)` 构造，**最大值当成了宽和高**；**折线命中**每段都从第一点量起（`x0, y0` 从不前移）；**dataIndex**：mousemove 处理器写 `dataIndex > 0 ? dataIndex + __startIndex : null`，不渐进时 `__startIndex` 未设——第 0 行没有数据，其余行是 NaN：图表事件带 NaN，tooltip 显示 `-`。
+- **状态、tooltip、图例**：`toggleHoverEmphasis` 挂在 Line 组上：线是宿主（emphasis 缺省提亮描边、z2 +10，blur 不透明度 ×0.1），两端符号的各状态取线的状态描边作填色（空心的作描边）和不透明度，自己的代理再提亮；effect 符号不在 Line 组里，没有状态。tooltip 是一行裸的 nameValue：名字经 item 模型读 `name`——**命名系列的名字会借给没名字的项**——没有时 `fromName > toName`，空名显示 `-`；值是原始值，非数（数组、undefined）不显示。图例是色板色的 roundRect。
+- **入场**：`Line._createLine` 把 `shape.percent` 置 0 再 `initProps` 到 1（系列时序，缺省 1000 ms `cubicInOut`），端点符号与标签每帧随它；LabelManager 让标签淡入（同一时序：不透明度 = 0.5·percent 逐位相同）。折线没有入场动画。
+
+### port 以前
+
+- `lines` 绑定得上、没有渲染器，诊断说「没有渲染器」；store 按直角坐标两列读 `coords`，轴的范围被它们撑开。
+- 持续动画只有 effectScatter 的涟漪（§127）；没有拖尾，也没有「层上回放上一帧」这种画法。
+- large 只有柱、散点、K 线三种批（§152）。
+
+### 做法
+
+- **新单元 `tyControls.AdvChart.Lines`**（纯，加上 Paint、Large、Symbol）：
+  - 数据：`TTyLinesRaw`、`TyLinesRawsOf`（四种写法、`compatEc2`、扁平写法、原始值的 JSON、名字三件）、`TyLinesFind` / `TyLinesItemFind`（item → ec2 第二点 → 系列，null 落空）、`TyLinesJsNum` / `TyLinesJsTruthy`。
+  - **坐标钩子 `TTyLinesProject`**：一对写下的值（`TTyLinesValue`：数、字符串、null、其他）进、一个点出，`AClamp` 是 large 布局的 `false`。lines 单元不认识任何坐标系；控件按绑定答直角坐标、极坐标、日历，**D14 的 geo 只要再答这一个函数**。
+  - 布局：`TyLinesCurvenessOf`、`TyLinesLayoutRow`（`TTyLinesGeom`：点、是否曲线、控制点、`Drawn`）、`TyLinesLargeSegs`。
+  - Line.ts 的几何：`TyLinesPointAt`、`TyLinesTangentAt`（曲线归一两次）、`TyLinesSymbolRotation`、`TyLinesLabelPlace`（任意 percent：x / y、origin、转角、对齐，加上组合变换后的挂点）、`TyLinesPartPoints`（percent 处的一段，曲线按 quadraticSubdivide 取前半）。
+  - effect：`TTyLinesEffect`（路径与上一帧的状态）、`TyLinesEffectInit`、`TyLinesEffectLength`、`TyLinesEffectStep`（两种 `_updateSymbolPosition`，含拖影与回绕查找）、`TyLinesTrailAlpha`。
+  - `TyLinesContainLine` / `TyLinesContainQuad`（`quadraticProjectPoint` 照抄：0.05 的粗扫、最多 32 次折半）。
+  - `TTyLinesInk` / `TTyLinesSolved` 与 `TyBuildLinesMarks`：每画一行先线（直线两点、曲线 32 段、折线原样；命中带宽 `max(lineWidth, 5)/2`；标签作线的 caption，固定挂点），再两端符号（不 silent，同一个 datum），最后 effect 符号（silent，静态帧是 `__t = 0` 那一刻的位置；周期不大于 0 时隐藏）；large 时一个 `cskLarge` 元素。动画用的帧函数 `TyLinesFrameLine` / `Symbol` / `Label` / `Effect`。
+- **`Large`**：`lgkLines` 与字段 `LinesPoly`、`LinesCurve`、`LineW`；`TyLargeLinesIndex`（每行在 segs 里的起点）、`TyLargeLinesFind`（findDataIndex，含折线的 x0 不前移）、`TyLargeSetBox` 的 lines 分支（成对读、最大值作宽高）、`TyLargeContains` / `TyLargeIndexAt`；`TyLargeKindOfType('lines')`，阈值缺省 2000。
+- **`Render`**：large 的 lines 行——描路径（直线、`QuadTo`、折线），图层画法里每行一条折线（曲线 16 段）。
+- **`Paint`**：新角色 `carLinesLine`、`carLinesFrom`、`carLinesTo`、`carLinesLabel`、`carLinesEffect`（加在枚举末尾）。**`Labels`**：宿主是 `carLinesLine` 的标签展开成 `carLinesLabel`，带上线的几何与摆放参数。
+- **`AnimView`**：线、两端符号、标签共用一个 `linesLine` 代理（`shape.percent` 0 → 1，系列模型，按行）；`linesEffect` 代理装 `TTyLinesEffect`，`StartLinesEffect` 照 `_animateSymbol` 起一个循环（或不循环、done 时删掉）的 `__t` 剪辑，during 调 `TyLinesEffectStep`；帧里 effect 不看 `AtFinal`、按运行状态重建符号；标签的帧按 percent 重新摆放、转角与对齐跟着变、不透明度乘 percent。更新：effect 在周期、loop、roundTrip 不变时带着原剪辑走新路径，变了从 `−period·__t` 重新开始。
+- **控件**：`Rebuild` 给 lines 一个 `value` 列的 store（不进轴）；`Relayout` 在坐标系都排好之后 `SolveLines`（`LinesProject` 是钩子的三种实现；样式、符号、标签规格、effect 的周期与延迟在 `LinesInk`；裁剪；large 批），并清掉拖尾层；`BuildSeriesList` 出元素与每行的标签规格；`LargeKindOf` 让 lines 在任何坐标系上成批；`LargeRowAt` 对 lines 批不给行；状态机新类 `sskLines`（线宿主、两端符号作 parts、状态读 `lineStyle`、parts 的状态由线的描边与不透明度换成填色）；`TooltipContent` 先问 `LinesTooltip`；`AnimPart` 把 effect 符号和**有拖尾的整个系列**放进持续层；`PaintDynamic` 持续阶段经 `PaintTrail`：拖尾层每帧先乘 lastFrameAlpha 的不透明度，再把系列画上去，贴到动态层，其余持续元素画在它上面。公开 `LinesSolvedOf`。
+- **注册**：`Series` 的 lines 行 `RendersOn` 改成 `cartesian2d`、`polar`、`calendar`、`geo`；`Marks` 的「别处画」名单加 `lines`。
+- **顺带修的**：`TySeriesVisual` 先 `Default()` 再逐个字段赋值——`Jitter`（一个类引用）从来没被置空，`TTyLargeGeom` 变大之后栈上的垃圾挪到了它下面，`TAdvChartMarksTest` 的散点在抖动里访问违例。
+- 没有新主题键、新资源串。
+
+### 基准
+
+`tools/advchart-oracle/lines.js`（真 dist，node 下 SVG，ssr 初始化后 `_ssr = false`、`env.node = false`，图表原型的 `getDom` 答空对象让 TooltipView 运行；**画家的 `getType()` 答 `'canvas'`**（`type` 字段不动，渐进渲染仍关）、`getLayer()` 答一个桩，`zr.configLayer` 被记录而不执行，于是 LinesView 走 canvas 分支；替换 `Date` 与定时器，**时钟每个用例重置到 T0 = 1700000000000**——effect 的小数延迟在纪元量级上舍入，端口用同一个 T0 重放；setOption 自己的 flush 在 T0 步进一次（采样 0），之后每个采样 `NOW = T0 + t`、`zr.animation.update()`、`getDisplayList(true)`（`beforeUpdate` 在这里跑）；最后 `process.exit()`）→ `tests/fixtures/advchart-lines.json`（约 319 KB）：**39 个用例**——绘制 14、effect 10、入场 3、large 7、悬停 5；**272 帧、39 步（25 次移动）、48 个事件、111 行**。
+
+- **绘制**：三条直线的缺省；曲度（系列 0.3、item −0.25、显式 0、字符串 `'0.5'`、水平线）；折线（三、五、两点，符号与标签不画）；端点符号（系列一对、item 字符串、`[0, 20]` 的 0 保留系列尺寸、`emptyCircle`、曲线上、`rect` / `roundRect` 两端不同尺寸）；标签（end 无距离、start、middle 6、insideStartTop `[4, 8]`、insideEndBottom、insideMiddle、反向线、曲线、各种缺省文字）；模板 `{a}|{b}|{c}`；三个系列的样式（色板、系列宽 2 点线、item 自己的颜色宽度不透明度虚线）；四种数据写法；类目轴（按名、未知名、按序号）；null 坐标；`clip` 开与关；极坐标；日历（含范围外的一行）；没有 geo。
+- **effect**：缺省（四行：直线、曲线、竖线、反向曲线）；`constantSpeed: 80`、箭头 `[8, 6]`、自己的颜色、`delay: 300`；`loop: false`；`trailLength: 0.4` 的 `rect`（每 100 ms 一帧，含 2000 与 2100）；`line` 与 `roundRect` 的拖尾夹在柱和散点之间（zlevel 共享与抬层）；`trailLength: 0`；折线 effect 与折线的 `constantSpeed`；`roundTrip`；item 自己的 effect（周期 1.5、菱形；`show: false` 被忽略）。
+- **入场**：直线、曲线、反向线带两端符号与三种标签位置；折线；入场与 effect 同时。
+- **large**：直线六行（第 0 行无数据、其余 NaN、离线、离开）；曲线（二次 containStroke）；折线（偶数总数：count 当坐标、第二三段从第一点量起）；奇数总数（包围盒 NaN）；阈值以下两例；自己的颜色宽度不透明度、`clip: false`。
+- **悬停**：两个命名系列带图例与 tooltip（直线、曲线、端点符号、裸数组行、只有 fromName 的行、离开）；`emphasis.focus: 'series'` 加自己的 emphasis / blur lineStyle、highlight / downplay；图例的 highlight / downplay / 切换；未命名系列的名字规则；折线。
+
+每个用例记：每个 lines 系列的条数、流水线的 large、画了什么（normal / large / none）、zlevel、折线与 effect 开关、视图组的裁剪（矩形或扇形的全部参数）、拖尾的 `configLayer`；每行：是否画、线的 shape（x1…cpy1、percent）或折线的点、样式（描边、宽、不透明度、虚线）、z2、两端符号（类型、x、y、rotation、scale、盒子、填色、描边、不透明度）、标签（文字、x / y、origin、挂点、转角、对齐、不透明度）、effect（类型、z2、x / y / 转角 / 缩放 / ignore、颜色、阴影色、不透明度、剪辑的 life / delay / loop、`__t`）；large 批（segs、折线、曲度、包围盒、样式、startIndex）；每帧每行：线的 percent、两端符号、标签挂点与不透明度、effect 的位置转角缩放与 `__t`；每步：`findHover` 的角色与行（NaN 记成字符串）、事件（类型、系列、行、名字）、tooltip 的行（marker / name / value）与文字、每行线 / 符号 / 标签的状态列表与当前样式、图例（名字、是否选中、图标、颜色）。自检：R1 每个布局点由 option 经坐标系 `dataToPoint` 与控制点公式重算 133 次；R2 每帧每个可见 effect 符号由 `__t` 重算位置与转角（拖影的 scaleY、折线的段查找各带一份影子状态）522 次；R3 large 包围盒由 segs 重算 5 次；R4 悬停到的 large 批由 containStroke 重算 findDataIndex、并核对处理器写的 dataIndex（null 或 NaN）6 次；48 条守卫（直线无控制点、缺省不透明度 0.5、显式 0 是直线、字符串曲度、控制点公式的朝向、折线无符号无标签、尺寸 0 保留、字符串符号两端、空心符号、无距离的 end 落在终点、裸数组的文字、扁平写法值 0、ec2 的名字、未知类目不画、null 不画、矩形与无裁剪、极坐标扇形、日历无裁剪、日历范围外不画、没有 geo 不画、effect 缺省、缺省延迟、延迟期间已在起点、constantSpeed 的周期、数值延迟、`loop: false` 删除、拖尾的 0.94、zlevel 共享与抬层、trailLength 0、rect 拖影、往返 `__t` 过 1、item 的 effect 与 show 被忽略、入场从 0 到 1、折线不入场、large 一条路径、无 startIndex、第 0 行无数据、其余 NaN、NaN 事件、阈值以下逐项、悬停提亮与 z2、命名系列借名、未命名的 from > to、裸数组无值、focus series 淡化别的系列、图例 roundRect）都成立；两次生成逐字节一致；没有 `\u0000`；JSON 能读回。
+
+### 测试
+
+`test.advchart.lines`（新，注册在 `tytests.lpr`）：
+
+- **基准重放**（`TAdvChartLinesOracleTest`，5 个）：每个用例新建控件，静态与悬停用 `camOff`、effect 与入场用 `camAlways`，`AnimNow = T0`。绘制、large：`SetOption` 后无头渲染，逐位比较 `LinesSolvedOf` 的几何、样式、符号、标签（文字、挂点、转角、对齐、不透明度，以及 `TyLinesLabelPlace` 算出的 x / y 与 origin）、effect 元素（类型、z2、颜色、不透明度、life、delay、loop、`__t = 0` 时的位置）、裁剪、拖尾的 lastFrameAlpha、large 批的 segs 与包围盒与样式；effect 与入场：`AnimTick(T0 + t)` 逐帧，比较线代理的 percent、由它推导的端点符号位置缩放与标签挂点和淡入（并核对帧里画的标签就在那里）、effect 代理的运行状态与 `__t`；悬停：`MouseMove` / `MouseLeave` / `DispatchAction`，比较 `HitTestAt` 的元素角色与行、事件、`TooltipContent` 展平后的行、每行的状态列表与当前描边 / 不透明度 / 宽 / z2、两端符号的状态与填色、标签状态、图例。共比较 **8 646 项**（绘制 1 377、large 564、effect 5 189、入场 646、悬停 870）。
+- **手写**（`TAdvChartLinesTest`，8 个）：四种数据写法的解析；反向线的标签保持正立、percent 0 时 end 落在起点并居中；系列动画关时 effect 照跑、`loop: false` 结束后符号删除且图表静止、`camOff` 没有代理；**拖尾**（`RenderCached` 走持续阶段 12 帧：没有拖尾时半透明的线透出白底，有拖尾时线饱和到接近不透明——上游拖尾图的样子）；large 批一个元素、悬停到批但没有行、阈值以下逐项；没有 geo 不画、极坐标经钩子落点并挂扇形裁剪；线与 large 批真的画出来了（像素）；更新时 effect 带着原剪辑走新路径。
+
+首跑的不对：`line` 型的 effect 符号是描边不是填色（`symbolPathSetColor`）；往返的剪辑 life 是两倍周期（测试按 G[7] 比了一倍）；帧里标签的 X 用「静止值 + 差」算，差了一个 ulp——改成直接放到挂点；基准把用例级的图例记在了所有步之后、且未选中项是皮肤的灰——改成 setOption 后记录、加上 `selected`；`TAdvChartMarksTest` 一个访问违例（见「顺带修的」）；`TAdvChartMarksTest` 的「发布的答案与绘制一致」把 `lines` 列进「别处画」。另外核对 Calendar 源码时发现日历的 `dataToPoint` 缺省 clamp，补了范围外的一行与守卫（端口本来就按 clamp 走）。
+
+本批按规矩只跑了自己的新套件和直接碰到的套件，全部通过：`TAdvChartLinesOracleTest`（5）、`TAdvChartLinesTest`（8）、`Marks` 36、`Series` 28、`Paint` 15、`Render` 11、`Shape` 46、`Labels` 18、`LargeModeOracle` 1、`LargeMode` 8、`HostileOption` 1、`ProgressiveOracle` 1、`Progressive` 8、`AnimEngine` 24、`AnimEnter` 11、`AnimUpdate` 7、`AnimLabels` 10、`AnimState` 5、`AnimStateEngine` 11、`AnimFullUpdate` 7、`AnimMerge` 6、`FocusBlur` 11、`EmphasisDraw` 6、`EmphasisRule` 8、`SelectOracle` 11、`TooltipFinish` 10、`TooltipDraw` 15、`TooltipRule` 19、`Hit` 12、`MouseEventsOracle` 3、`Legend` 43、`SeriesCalendarOracle` 3、`Gallery` 1。全量套件与变异轮留到里程碑（C6–C13）末尾；变异候选单列（22 条）。
+
+### 推迟与偏差
+
+- **geo**：D14。钩子已在（`TTyLinesProject`），geo 只要答一对坐标的点；`coordinateSystem` 缺省 `'geo'`，没有 geo 时与上游一样什么都不画。
+- **渐进渲染**：上游 lines 有增量视图（large 时 progressive 1e4 / 阈值 2e4，否则 400 / 3000，`effect.show` 时 `preventIncremental`），canvas 下 3000 行以上逐块画、large 批按块合并到 2e4 个数；端口的 lines 一次画完，`appendData` 对 lines 没有专门处理也没有测试。条数超过阈值时 `getZLevelKey` 的系列 id 分层同样没有。
+- **large 的 dataIndex**：上游悬停到第 0 行写 null、其余行写 NaN（`__startIndex` 未设），于是图表事件带 NaN、tooltip 显示 `-`；端口悬停到批、不给行——没有事件、没有 tooltip（与 K 线批一样）。基准录下上游的样子并用守卫钉住，重放只核对端口这边什么都不发。
+- **拖尾**：canvas 的 motion blur 按像素模拟——持续阶段（只剩循环剪辑时）整个有拖尾的系列进持续层，层每帧乘 lastFrameAlpha 的不透明度（按字节量化）再画；入场或更新还在动时不拖尾；无头渲染、导出没有拖尾；拖尾层贴在静态层之上，上游它在自己的 zlevel、之后的组件与系列在它上面（z 序偏差，同 §127 的涟漪）；`allocateZlevels` 的其余分层不建模。拖尾的像素没有上游基准（SVG 画家不支持拖尾），只测了「透出白底 / 饱和」的差别。
+- **effect 符号不是指针目标**：上游 `setItemGraphicEl` 把数据下标也写到 effect 符号上，悬停到它有事件和 tooltip（没有 emphasis）；端口把它设成 silent。阴影（`shadowColor` 跟颜色，缺省无 blur）不画。
+- **更新**：上游 `Line.updateData` 以更新时序补间线的两端、percent 不动，端点符号与标签每帧跟着；端口的线在更新时直接到新位置（effect 照上游接着跑或重启，见做法）。
+- **悬停与裁剪**：上游 isHover 会问视图组的裁剪，裁剪外的线段悬停不到；端口逐项元素的命中不看裁剪（与 §152 之前的其他系列一致）。large 批的命中问矩形裁剪，极坐标的扇形裁剪只用于绘制。
+- **曲线**：画与命中用 32 段折线近似（命中带宽 `max(lineWidth, 5)/2`），上游是真正的二次曲线 containStroke；large 批的命中是逐位的二次 containStroke。`subPixelOptimize` 不做。
+- **没做的选项**：标签 `rotate`、富文本以外的 `label.color` 继承细节（端口让外侧标签继承线色）、`symbolRotate` / `symbolOffset` / `symbolKeepAspect`（linesVisual 本来就不设）、`effect.delay` 写成函数、`colorBy: 'data'`、渐变描边。
+- **像素**：端点符号 `square` 在宽高不等时按单位盒画（上游按真实盒取较短边、贴左上）；BGRA 按线性光混合，半透明的线比 canvas 浅。
+
+### 落地
+
+- `source/tyControls.AdvChart.Lines.pas`（新，已登记 `tycontrols.lpk` 与 `tycontrols.pas`）。
+- `source/tyControls.AdvChart.Large.pas`：`lgkLines`、`LinesPoly` / `LinesCurve` / `LineW`、`TyLargeLinesIndex`、`TyLargeLinesFind`、包围盒与包含与行；`TyLargeKindOfType`、`TyLargeIsOn` 的 lines 缺省。
+- `source/tyControls.AdvChart.Render.pas`：`LinesRow`、`LinesCP`、`LinesRowPoints`；`LargeRowBox`、`TraceLargeRow`、`PaintLargeOnLayer` 的 lines 分支。
+- `source/tyControls.AdvChart.Paint.pas`：五个新动画角色。
+- `source/tyControls.AdvChart.Labels.pas`：lines 线的标签展开为 `carLinesLabel`。
+- `source/tyControls.AdvChart.AnimView.pas`：`linesLine` / `linesEffect` 代理、`StartLinesEffect`、`LinesEffectDuring` / `LinesEffectDone`、帧与更新的 lines 分支。
+- `source/tyControls.AdvChart.Marks.pas`：「别处画」名单加 `lines`；`TySeriesVisual` 先 `Default()`。
+- `source/tyControls.AdvChart.Series.pas`：lines 的 `RendersOn`。
+- `source/tyControls.AdvanceChart.pas`：`FLines`、`FLinesSpecs`、`FLnSlot`、`FTrailLayer`；`SolveLines`、`LinesProject`、`LinesInk`、`LinesTooltip`、`LinesTrailAlpha`、`PaintTrail`、`LinesSolvedOf`；`Rebuild`、`Relayout`、`BuildSeriesList`、`LargeKindOf`、`LargeRowAt`、`StKindOf`、`StSync`、`StDeclareItem`、`TooltipContent`、`AnimPart`、`PaintDynamic`；`sskLines`。
+- `tools/advchart-oracle/lines.js`、`tests/fixtures/advchart-lines.json`、`tests/test.advchart.lines.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.marks.pas` 的发布答案测试；`tests/test.advchart.diagnose.pas` 两个类型那条换成 grid 上的 map 加 custom（与 C11 合并时改，§39 在原处标注）。
+- 没有新主题键或新资源串。
 
 ## 157. Tier 2 第一百二十二批：graphic 组件（C13，2026-10-12）
 

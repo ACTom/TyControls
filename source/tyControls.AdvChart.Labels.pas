@@ -1172,6 +1172,13 @@ begin
     cap.Anim.Role := carLabel;
     cap.Anim.Series := host.Datum.SeriesIndex;
     cap.Anim.Index := host.Datum.DataIndex;
+    { A LINES ROW'S LABEL rides its line's percent (Line.beforeUpdate): the
+      line's geometry and placing with it [Batch 121] }
+    if host.Anim.Role = carLinesLine then
+    begin
+      cap.Anim.Role := carLinesLabel;
+      cap.Anim.G := host.Anim.G;
+    end;
     if not host.Caption.HasFixedAnchor then
     begin
       cap.Anim.HostPlus1 := i + 1;

@@ -145,17 +145,21 @@ begin
     the only such pair is 'map' after 'treemap' or 'heatmap' -- and 'map' never
     reaches this row, because it wants the geo coordinate system and the
     builder reports that first, which suppresses the all-clear entirely.
-    'tree' before 'treemap' is a PREFIX and was never affected. So the fix is
-    right and unreachable, and the mutant for it survives on purpose. }
+    [Batch 121: a map given an explicit cartesian2d does reach it, below --
+    but a treemap and a heatmap both draw now, so neither is ever listed
+    ahead of it.] 'tree' before 'treemap' is a PREFIX and was never affected.
+    So the fix is right and unreachable, and the mutant for it survives on purpose. }
   AssertTrue(FirstOf('{ xAxis: { data: [''A''] }, yAxis: {}, series: ['
-    + '{ type: ''bar'', data: [1] }, { type: ''lines'', coordinateSystem: ''cartesian2d'','
+    + '{ type: ''bar'', data: [1] }, { type: ''map'', coordinateSystem: ''cartesian2d'','
     + ' data: [] }, { type: ''custom'', data: [1] }] }', odkAllClear, d));
   { [Batches 73/75/76/79: a tree, a sunburst, a treemap and a sankey draw
-    now; Batch 120: a chord too, so the two undrawn types are a lines on the
-    grid and a custom] }
-  AssertTrue('names lines, got: ' + d.Text, Pos('lines', d.Text) > 0);
+    now; Batch 120: a chord too; Batch 121: and the lines, so custom is the
+    last undrawn type on a grid by default. The second one is a map moved
+    onto the grid by an explicit coordinateSystem -- binding takes the name
+    it is given, and a map has no renderer on any system.] }
+  AssertTrue('names map, got: ' + d.Text, Pos('map', d.Text) > 0);
   txt := d.Text;
-  Delete(txt, Pos('lines', txt), 5);
+  Delete(txt, Pos('map', txt), 3);
   AssertTrue('and custom as well, got: ' + d.Text, Pos('custom', txt) > 0);
 end;
 

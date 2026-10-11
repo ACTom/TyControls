@@ -586,7 +586,12 @@ type
     { [Batch 120, C11] a chord's sector or ribbon: the view group's enter
       scale, one proxy for the series (Index -1); G[0..1] the group's
       origin, the centre option against the whole canvas }
-    carChord);
+    carChord,
+    { [Batch 121, C12] a lines series' row: its line (one proxy, the line's
+      shape.percent, drives the line, the two end symbols and the label),
+      and its effect symbol (a looping clip of its own). G[0..5] the line's
+      ends and control point, G[6] curved -- see AdvChart.Lines }
+    carLinesLine, carLinesFrom, carLinesTo, carLinesLabel, carLinesEffect);
 
   TTyChartAnim = record
     Role: TTyChartAnimRole;
