@@ -347,6 +347,68 @@ type
     procedure TestEveryBuiltInThemeStylesBothBarsAsTheTrackBar;
   end;
 
+  { The extension points an application builds on without touching the control: ValueAtPoint
+    and OnDrawSegment on the probe, against the same geometry the bar paints and drags with. }
+  TTyMultiTrackHooksTest = class(TMultiTrackInputBase)
+  private
+    FCalls: string;
+    FSegRects: array of TRect;
+    FGroove: TRect;
+    FDropSeg: Integer;
+    FDropThumbs: Boolean;
+    FDropTrack: Boolean;
+    procedure DrawTrack(Sender: TObject; APainter: TTyPainter; const ARect: TRect;
+      var ADefaultDraw: Boolean);
+    procedure DrawThumb(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
+      const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean);
+    procedure DrawSegment(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
+      const ARect: TRect; var ADefaultDraw: Boolean);
+    function Ink(B: TBGRABitmap; R, G, Bl: Byte): Integer;
+  protected
+    procedure SetUp; override;
+  published
+    procedure TestValueAtPointIsTheValueAtAThumbsCentre;
+    procedure TestValueAtPointStopsAtMinAndMax;
+    procedure TestEverySegmentIsOfferedWithItsStretchOfGroove;
+    procedure TestTheRectIsWhereTheDefaultFillGoes;
+    procedure TestADefaultDrawFalseSkipsThatSegmentsFillOnly;
+    procedure TestNoSegmentIsOfferedWhenTheOwnerDrewTheTrack;
+  end;
+
+  { OnTrackClick through the real pointer path (MouseDown / MouseMove / MouseUp) on both final
+    classes, and OnDrawSegment painting a gradient between two thumbs' colours. The handlers
+    log `click:<value>[<the values as the handler saw them>] `. }
+  TTyMultiTrackClickTest = class(TMultiTrackFinalBase)
+  private
+    FRange: TTyRangeTrackBar;
+    FMulti: TTyMultiTrackBar;
+    FAdd: Boolean;          // the handler adds a range / a thumb
+    FHandle: Boolean;       // ... and says it handled the press
+    FAddAt: Integer;        // the new thumb at AValue + this
+    FClear: Boolean;        // the handler removes every thumb first
+    FSegRect: TRect;
+    procedure RangeClick(Sender: TObject; AValue: Integer; var AHandled: Boolean);
+    procedure ThumbClick(Sender: TObject; AValue: Integer; var AHandled: Boolean);
+    procedure GradientSegment(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
+      const ARect: TRect; var ADefaultDraw: Boolean);
+    procedure NoThumbs(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
+      const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean);
+    { A point on ABar's track whose value is AValue (horizontal bar, no readout). }
+    function At(ABar: TTyMultiTrackBarBase; AValue: Integer): TPoint;
+    procedure Click(ABar: TTyMultiTrackBarBase; const P: TPoint; ADouble: Boolean = False);
+    function RangesText: string;
+  protected
+    procedure SetUp; override;
+  published
+    procedure TestAClickOnTheTrackAddsARange;
+    procedure TestAClickOnTheTrackAddsAThumb;
+    procedure TestUnhandledTheNearestThumbJumpsAsBefore;
+    procedure TestTheBarLooksAgainAfterTheHandler;
+    procedure TestNotAskedForAPressOnAThumb;
+    procedure TestADoubleClickIsOneClick;
+    procedure TestASegmentPaintedAsAGradientBetweenItsThumbs;
+  end;
+
 implementation
 
 { TMultiProbe }
@@ -3430,6 +3492,637 @@ begin
   end;
 end;
 
+{ TTyMultiTrackHooksTest }
+
+function RectStr(const R: TRect): string;
+begin
+  Result := Format('(%d,%d)-(%d,%d)', [R.Left, R.Top, R.Right, R.Bottom]);
+end;
+
+{ The bounding box of every pixel of one colour in B. }
+function ColourBox(B: TBGRABitmap; R, G, Bl: Byte): TRect;
+var
+  x, y: Integer;
+begin
+  Result := Rect(MaxInt, MaxInt, -1, -1);
+  for y := 0 to B.Height - 1 do
+    for x := 0 to B.Width - 1 do
+    begin
+      if not SamePx(B.GetPixel(x, y), R, G, Bl) then Continue;
+      if x < Result.Left then Result.Left := x;
+      if y < Result.Top then Result.Top := y;
+      if x + 1 > Result.Right then Result.Right := x + 1;
+      if y + 1 > Result.Bottom then Result.Bottom := y + 1;
+    end;
+end;
+
+function NearPx(const A: TBGRAPixel; R, G, B, ATol: Integer): Boolean;
+begin
+  Result := (Abs(A.red - R) <= ATol) and (Abs(A.green - G) <= ATol) and (Abs(A.blue - B) <= ATol);
+end;
+
+procedure TTyMultiTrackHooksTest.SetUp;
+begin
+  inherited SetUp;
+  FCalls := '';
+  FDropSeg := -1;
+  FDropThumbs := False;
+  FDropTrack := False;
+  FBar.OnDrawTrack := @DrawTrack;
+  FBar.OnDrawThumb := @DrawThumb;
+  FBar.OnDrawSegment := @DrawSegment;
+end;
+
+procedure TTyMultiTrackHooksTest.DrawTrack(Sender: TObject; APainter: TTyPainter;
+  const ARect: TRect; var ADefaultDraw: Boolean);
+begin
+  FGroove := ARect;
+  if FDropTrack then ADefaultDraw := False;
+end;
+
+procedure TTyMultiTrackHooksTest.DrawThumb(Sender: TObject; APainter: TTyPainter;
+  AIndex: Integer; const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean);
+begin
+  if FDropThumbs then ADefaultDraw := False;
+end;
+
+procedure TTyMultiTrackHooksTest.DrawSegment(Sender: TObject; APainter: TTyPainter;
+  AIndex: Integer; const ARect: TRect; var ADefaultDraw: Boolean);
+begin
+  AssertTrue('the sender is the bar', Sender = FBar);
+  AssertTrue('the default is to draw', ADefaultDraw);
+  FCalls := FCalls + IntToStr(AIndex) + ' ';
+  if AIndex >= Length(FSegRects) then SetLength(FSegRects, AIndex + 1);
+  FSegRects[AIndex] := ARect;
+  if AIndex = FDropSeg then ADefaultDraw := False;
+end;
+
+function TTyMultiTrackHooksTest.Ink(B: TBGRABitmap; R, G, Bl: Byte): Integer;
+var
+  x, y: Integer;
+begin
+  Result := 0;
+  for y := 0 to B.Height - 1 do
+    for x := 0 to B.Width - 1 do
+      if SamePx(B.GetPixel(x, y), R, G, Bl) then Inc(Result);
+end;
+
+procedure TTyMultiTrackHooksTest.TestValueAtPointIsTheValueAtAThumbsCentre;
+
+  procedure Check(const AValues: array of Integer);
+  var
+    ori: TTyTrackOrientation;
+    rev: Boolean;
+    i: Integer;
+    r: TRect;
+    p: TPoint;
+    where: string;
+  begin
+    for ori := toHorizontal to toVertical do
+      for rev := False to True do
+      begin
+        Configure(ori, rev);
+        FBar.Put(AValues);
+        for i := 0 to High(AValues) do
+        begin
+          where := Format('%d..%d ori=%d rev=%s thumb %d', [FBar.Min, FBar.Max, Ord(ori),
+            BoolToStr(rev, True), i]);
+          AssertEquals(where + ': fixture', AValues[i], FBar.ThumbValues[i]);
+          r := FBar.ThumbRect(i);
+          p := Point((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+          AssertEquals(where, AValues[i], FBar.ValueAtPoint(p.X, p.Y));
+          { Only the main axis counts: anywhere across the bar, or off it, the same value. }
+          if ori = toVertical then
+            AssertEquals(where + ' (across)', AValues[i], FBar.ValueAtPoint(p.X + 500, p.Y))
+          else
+            AssertEquals(where + ' (across)', AValues[i], FBar.ValueAtPoint(p.X, p.Y - 500));
+        end;
+      end;
+  end;
+
+begin
+  Check([0, 13, 37, 50, 99, 100]);
+  FBar.Min := -20;
+  FBar.Max := 30;
+  Check([-20, -3, 0, 17, 30]);
+end;
+
+procedure TTyMultiTrackHooksTest.TestValueAtPointStopsAtMinAndMax;
+var
+  ori: TTyTrackOrientation;
+  rev: Boolean;
+  first, last, atFirst, atLast: Integer;
+  where: string;
+begin
+  FBar.Min := -20;
+  FBar.Max := 30;
+  FBar.Put([0]);
+  for ori := toHorizontal to toVertical do
+    for rev := False to True do
+    begin
+      Configure(ori, rev);
+      where := Format('ori=%d rev=%s', [Ord(ori), BoolToStr(rev, True)]);
+      { The left / top end is Min unless the axis is inverted (vertical xor reversed). }
+      if (ori = toVertical) xor rev then
+      begin
+        first := 30;
+        last := -20;
+      end
+      else
+      begin
+        first := -20;
+        last := 30;
+      end;
+      if ori = toVertical then
+      begin
+        atFirst := FBar.ValueAtPoint(W div 2, -500);
+        atLast := FBar.ValueAtPoint(W div 2, H + 500);
+        AssertEquals(where + ': the first pixel', first, FBar.ValueAtPoint(W div 2, 0));
+        AssertEquals(where + ': the last pixel', last, FBar.ValueAtPoint(W div 2, H - 1));
+      end
+      else
+      begin
+        atFirst := FBar.ValueAtPoint(-500, H div 2);
+        atLast := FBar.ValueAtPoint(W + 500, H div 2);
+        AssertEquals(where + ': the first pixel', first, FBar.ValueAtPoint(0, H div 2));
+        AssertEquals(where + ': the last pixel', last, FBar.ValueAtPoint(W - 1, H div 2));
+      end;
+      AssertEquals(where + ': before the start', first, atFirst);
+      AssertEquals(where + ': past the end', last, atLast);
+    end;
+end;
+
+procedure TTyMultiTrackHooksTest.TestEverySegmentIsOfferedWithItsStretchOfGroove;
+var
+  ori: TTyTrackOrientation;
+  rev: Boolean;
+  i, lo, hi: Integer;
+  want: TRect;
+  b: TBGRABitmap;
+  where: string;
+begin
+  FBar.Put([20, 50, 80]);
+  { One styled segment among three that are not: each is offered all the same. }
+  SetLength(FBar.SegKey, 4);
+  FBar.SegKey[1] := TyTrackSelectionKey;
+  FBar.Frequency := 10;
+  for ori := toHorizontal to toVertical do
+    for rev := False to True do
+    begin
+      Configure(ori, rev);
+      where := Format('ori=%d rev=%s', [Ord(ori), BoolToStr(rev, True)]);
+      FCalls := '';
+      SetLength(FSegRects, 0);
+      b := Shot(False);
+      b.Free;
+      AssertEquals(where + ': every segment once, in order', '0 1 2 3 ', FCalls);
+      for i := 0 to 3 do
+      begin
+        AssertTrue(FBar.SegmentSpan(i, 96, lo, hi));
+        { Along the track: SegmentSpan; across it: the groove. }
+        if ori = toVertical then want := Rect(FGroove.Left, lo, FGroove.Right, hi)
+        else want := Rect(lo, FGroove.Top, hi, FGroove.Bottom);
+        AssertEquals(Format('%s: segment %d', [where, i]), RectStr(want), RectStr(FSegRects[i]));
+      end;
+    end;
+  FBar.Put([]);
+  FCalls := '';
+  b := Shot(False);
+  b.Free;
+  AssertEquals('no thumbs: the one segment, the whole groove', '0 ', FCalls);
+  AssertEquals(RectStr(FGroove), RectStr(FSegRects[0]));
+end;
+
+procedure TTyMultiTrackHooksTest.TestTheRectIsWhereTheDefaultFillGoes;
+var
+  ori: TTyTrackOrientation;
+  rev: Boolean;
+  b: TBGRABitmap;
+  where: string;
+begin
+  FBar.Put([20, 50, 80]);
+  SetLength(FBar.SegKey, 4);
+  FBar.SegKey[1] := TyTrackSelectionKey;
+  FBar.Frequency := 10;
+  FDropThumbs := True;                 // nothing over the fill's ends
+  for ori := toHorizontal to toVertical do
+    for rev := False to True do
+    begin
+      Configure(ori, rev);
+      where := Format('ori=%d rev=%s', [Ord(ori), BoolToStr(rev, True)]);
+      b := Shot(False);
+      try
+        AssertEquals(where + ': the default fill is exactly the rect handed over',
+          RectStr(FSegRects[1]), RectStr(ColourBox(b, $FF, 0, 0)));
+      finally
+        b.Free;
+      end;
+    end;
+end;
+
+procedure TTyMultiTrackHooksTest.TestADefaultDrawFalseSkipsThatSegmentsFillOnly;
+var
+  d, a: TBGRABitmap;
+  x, y, diff, m: Integer;
+  r: TRect;
+  px: TBGRAPixel;
+begin
+  FBar.Put([20, 50, 80]);
+  SetLength(FBar.SegKey, 4);
+  SetLength(FBar.SegCls, 4);
+  FBar.SegKey[1] := TyTrackSelectionKey;
+  FBar.SegKey[3] := TyTrackSegmentKey;
+  FBar.SegCls[3] := 'go';
+  d := Shot(False);
+  try
+    AssertTrue('fixture: segment 1 filled', Ink(d, $FF, 0, 0) > 0);
+    AssertTrue('fixture: segment 3 filled', Ink(d, 0, $C0, 0) > 0);
+    FDropSeg := 1;
+    a := Shot(False);
+    try
+      AssertEquals('segment 1 left to the handler: no fill', 0, Ink(a, $FF, 0, 0));
+      r := FSegRects[1];
+      m := (r.Left + r.Right) div 2;
+      px := a.GetPixel(m, (FGroove.Top + FGroove.Bottom) div 2);
+      AssertTrue('the bare groove shows there: ' + PxStr(px), SamePx(px, $60, $60, $60));
+      AssertEquals('segment 3 as before', Ink(d, 0, $C0, 0), Ink(a, 0, $C0, 0));
+      diff := 0;
+      for y := 0 to H - 1 do
+        for x := 0 to W - 1 do
+          if not PtInRect(r, Point(x, y)) and (a.GetPixel(x, y) <> d.GetPixel(x, y)) then Inc(diff);
+      AssertEquals('everything off segment 1 as the default', 0, diff);
+    finally
+      a.Free;
+    end;
+    { A segment with no fill of its own: nothing to skip. }
+    FDropSeg := 2;
+    a := Shot(False);
+    try
+      diff := 0;
+      for y := 0 to H - 1 do
+        for x := 0 to W - 1 do
+          if a.GetPixel(x, y) <> d.GetPixel(x, y) then Inc(diff);
+      AssertEquals('an unstyled segment dropped: the same picture', 0, diff);
+    finally
+      a.Free;
+    end;
+  finally
+    d.Free;
+  end;
+end;
+
+procedure TTyMultiTrackHooksTest.TestNoSegmentIsOfferedWhenTheOwnerDrewTheTrack;
+var
+  b: TBGRABitmap;
+begin
+  FBar.Put([20, 50, 80]);
+  b := Shot(False);
+  b.Free;
+  AssertEquals('fixture: offered while the bar draws the track', '0 1 2 3 ', FCalls);
+  FDropTrack := True;
+  FCalls := '';
+  b := Shot(False);
+  b.Free;
+  AssertEquals('the owner took the track: its segments with it', '', FCalls);
+end;
+
+{ TTyMultiTrackClickTest }
+
+procedure TTyMultiTrackClickTest.SetUp;
+var
+  r: TTyTrackRange;
+begin
+  inherited SetUp;
+  FRange := TTyRangeTrackBar.Create(FForm);
+  FRange.Parent := FForm;
+  FRange.Font.PixelsPerInch := 96;
+  FRange.SetBounds(0, 0, 400, 24);
+  FRange.Controller := FCtl;
+  FRange.Ranges.BeginUpdate;
+  try
+    FRange.Ranges.Clear;
+    r := FRange.Ranges.Add;
+    r.Low := 10;
+    r.High := 30;
+    r := FRange.Ranges.Add;
+    r.Low := 60;
+    r.High := 85;
+  finally
+    FRange.Ranges.EndUpdate;
+  end;
+  FMulti := TTyMultiTrackBar.Create(FForm);
+  FMulti.Parent := FForm;
+  FMulti.Font.PixelsPerInch := 96;
+  FMulti.SetBounds(0, 40, 400, 24);
+  FMulti.Controller := FCtl;
+  FAdd := False;
+  FHandle := False;
+  FClear := False;
+  FAddAt := 0;
+end;
+
+procedure TTyMultiTrackClickTest.RangeClick(Sender: TObject; AValue: Integer;
+  var AHandled: Boolean);
+var
+  r: TTyTrackRange;
+begin
+  AssertTrue('the sender is the bar', Sender = FRange);
+  AssertFalse('not handled until the handler says so', AHandled);
+  FLog := FLog + Format('click:%d[%s] ', [AValue, ValuesOf(FRange)]);
+  if FAdd then
+  begin
+    FRange.Ranges.BeginUpdate;
+    try
+      r := FRange.Ranges.Add;
+      r.Low := AValue - 5;
+      r.High := AValue + 5;
+    finally
+      FRange.Ranges.EndUpdate;
+    end;
+  end;
+  if FHandle then AHandled := True;
+end;
+
+procedure TTyMultiTrackClickTest.ThumbClick(Sender: TObject; AValue: Integer;
+  var AHandled: Boolean);
+begin
+  AssertTrue('the sender is the bar', Sender = FMulti);
+  AssertFalse('not handled until the handler says so', AHandled);
+  FLog := FLog + Format('click:%d[%s] ', [AValue, ValuesOf(FMulti)]);
+  if FClear then FMulti.Thumbs.Clear;
+  if FAdd then
+  begin
+    FMulti.Thumbs.BeginUpdate;
+    try
+      FMulti.Thumbs.Add.Value := AValue + FAddAt;
+    finally
+      FMulti.Thumbs.EndUpdate;
+    end;
+  end;
+  if FHandle then AHandled := True;
+end;
+
+procedure TTyMultiTrackClickTest.GradientSegment(Sender: TObject; APainter: TTyPainter;
+  AIndex: Integer; const ARect: TRect; var ADefaultDraw: Boolean);
+var
+  f: TTyFill;
+  a, b: TColor;
+begin
+  { Only the stretches between two thumbs: from the colour of the one before to the colour of
+    the one after. }
+  if (AIndex = 0) or (AIndex >= FMulti.ThumbCount) then Exit;
+  FSegRect := ARect;
+  a := ColorToRGB(FMulti.Thumbs[AIndex - 1].Color);
+  b := ColorToRGB(FMulti.Thumbs[AIndex].Color);
+  f := Default(TTyFill);
+  f.Kind := tfkLinearGradient;
+  f.GradFrom := TyRGB(Red(a), Green(a), Blue(a));
+  f.GradTo := TyRGB(Red(b), Green(b), Blue(b));
+  f.GradAngleDeg := 0;                   // left to right
+  APainter.FillBackground(ARect, f, 0);
+  ADefaultDraw := False;
+end;
+
+procedure TTyMultiTrackClickTest.NoThumbs(Sender: TObject; APainter: TTyPainter;
+  AIndex: Integer; const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean);
+begin
+  ADefaultDraw := False;
+end;
+
+function TTyMultiTrackClickTest.At(ABar: TTyMultiTrackBarBase; AValue: Integer): TPoint;
+var
+  tw: Integer;
+begin
+  tw := TyTrackThumbLen(96);
+  Result := Point(TyTrackThumbOffset(ABar.ClientWidth, tw, ABar.Min, ABar.Max, AValue, False)
+    + tw div 2, ABar.Height div 2);
+  AssertEquals('fixture: the point is at that value', AValue, ABar.ValueAtPoint(Result.X, Result.Y));
+end;
+
+procedure TTyMultiTrackClickTest.Click(ABar: TTyMultiTrackBarBase; const P: TPoint;
+  ADouble: Boolean);
+var
+  sh: TShiftState;
+begin
+  sh := [ssLeft];
+  if ADouble then Include(sh, ssDouble);
+  TBaseAccess(ABar).MouseDown(mbLeft, sh, P.X, P.Y);
+  TBaseAccess(ABar).MouseUp(mbLeft, [], P.X, P.Y);
+end;
+
+function TTyMultiTrackClickTest.RangesText: string;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 0 to FRange.Ranges.Count - 1 do
+  begin
+    if i > 0 then Result := Result + ';';
+    Result := Result + IntToStr(FRange.Ranges[i].Low) + '..' + IntToStr(FRange.Ranges[i].High);
+  end;
+end;
+
+procedure TTyMultiTrackClickTest.TestAClickOnTheTrackAddsARange;
+var
+  p, q: TPoint;
+begin
+  FRange.OnTrackClick := @RangeClick;
+  FRange.OnThumbChange := @ThumbMoved;
+  FRange.OnChange := @Changed;
+  FAdd := True;
+  FHandle := True;
+  p := At(FRange, 45);
+  q := At(FRange, 70);
+  TBaseAccess(FRange).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  AssertEquals('asked once, before anything moved; the new range the only change',
+    'click:45[10,30,60,85] C ', FLog);
+  AssertEquals('10..30;40..50;60..85', RangesText);
+  AssertEquals('the selection stays', -1, FRange.SelectedThumb);
+  TBaseAccess(FRange).MouseMove([ssLeft], q.X, q.Y);
+  TBaseAccess(FRange).MouseUp(mbLeft, [], q.X, q.Y);
+  AssertEquals('the press took no thumb along', '10,30,40,50,60,85', ValuesOf(FRange));
+  AssertEquals('nothing else reported', 'click:45[10,30,60,85] C ', FLog);
+end;
+
+procedure TTyMultiTrackClickTest.TestAClickOnTheTrackAddsAThumb;
+var
+  p, q: TPoint;
+begin
+  FMulti.OnTrackClick := @ThumbClick;
+  FMulti.OnThumbChange := @ThumbMoved;
+  FMulti.OnChange := @Changed;
+  FAdd := True;
+  FHandle := True;
+  p := At(FMulti, 60);
+  q := At(FMulti, 90);
+  TBaseAccess(FMulti).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  AssertEquals('click:60[25,50,75] C ', FLog);
+  AssertEquals('the new thumb in its place, the others where they were', '25,50,60,75',
+    ValuesOf(FMulti));
+  AssertEquals('the item is the new thumb', 60, FMulti.Thumbs[2].Value);
+  AssertEquals('the selection stays', -1, FMulti.SelectedThumb);
+  TBaseAccess(FMulti).MouseMove([ssLeft], q.X, q.Y);
+  TBaseAccess(FMulti).MouseUp(mbLeft, [], q.X, q.Y);
+  AssertEquals('the press took no thumb along', '25,50,60,75', ValuesOf(FMulti));
+end;
+
+procedure TTyMultiTrackClickTest.TestUnhandledTheNearestThumbJumpsAsBefore;
+var
+  p, q: TPoint;
+begin
+  FRange.OnTrackClick := @RangeClick;
+  FRange.OnThumbChange := @ThumbMoved;
+  FRange.OnChange := @Changed;
+  p := At(FRange, 45);
+  q := At(FRange, 50);
+  TBaseAccess(FRange).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  AssertEquals('asked first; then 30 and 60 are as near, the lower jumps',
+    'click:45[10,30,60,85] T1 C ', FLog);
+  AssertEquals('10,45,60,85', ValuesOf(FRange));
+  AssertEquals(1, FRange.SelectedThumb);
+  TBaseAccess(FRange).MouseMove([ssLeft], q.X, q.Y);
+  TBaseAccess(FRange).MouseUp(mbLeft, [], q.X, q.Y);
+  AssertEquals('and the press drags it on', '10,50,60,85', ValuesOf(FRange));
+
+  FLog := '';
+  FMulti.OnTrackClick := @ThumbClick;
+  p := At(FMulti, 60);
+  Click(FMulti, p);
+  AssertEquals('click:60[25,50,75] ', FLog);
+  AssertEquals('the thumb at 50 is nearer', '25,60,75', ValuesOf(FMulti));
+  AssertEquals(1, FMulti.SelectedThumb);
+end;
+
+procedure TTyMultiTrackClickTest.TestTheBarLooksAgainAfterTheHandler;
+var
+  p, q: TPoint;
+  before: string;
+begin
+  FMulti.OnTrackClick := @ThumbClick;
+  { A thumb added just beside the pointer, not handled: the press lands on it -- grabbed where
+    it was pressed, not pulled to the pointer, and it is the one that drags. }
+  FAdd := True;
+  FAddAt := 1;
+  p := At(FMulti, 60);
+  q := Point(p.X + 40, p.Y);
+  TBaseAccess(FMulti).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  AssertEquals('grabbed as it was put', '25,50,61,75', ValuesOf(FMulti));
+  AssertEquals('the new thumb is the one pressed', 2, FMulti.SelectedThumb);
+  TBaseAccess(FMulti).MouseMove([ssLeft], q.X, q.Y);
+  TBaseAccess(FMulti).MouseUp(mbLeft, [], q.X, q.Y);
+  AssertEquals('the others stay', '25,50,75',
+    Format('%d,%d,%d', [FMulti.ThumbValues[0], FMulti.ThumbValues[1], FMulti.ThumbValues[3]]));
+  AssertTrue('it drags', FMulti.ThumbValues[2] > 61);
+  { Every thumb removed, not handled: nothing left to bring, nothing to fail on. }
+  FAdd := False;
+  FClear := True;
+  FLog := '';
+  p := At(FMulti, 10);
+  before := 'click:10[' + ValuesOf(FMulti) + '] ';
+  Click(FMulti, p);
+  AssertEquals(before, FLog);
+  AssertEquals(0, FMulti.ThumbCount);
+  AssertEquals(-1, FMulti.SelectedThumb);
+end;
+
+procedure TTyMultiTrackClickTest.TestNotAskedForAPressOnAThumb;
+var
+  r: TRect;
+  p: TPoint;
+begin
+  FRange.OnTrackClick := @RangeClick;
+  FMulti.OnTrackClick := @ThumbClick;
+  FAdd := True;
+  FHandle := True;
+  r := FRange.ThumbRect(1);
+  p := Point((r.Left + r.Right) div 2 + 3, (r.Top + r.Bottom) div 2);
+  Click(FRange, p);
+  AssertEquals('on a thumb: not asked', '', FLog);
+  AssertEquals('the thumb is pressed as usual', 1, FRange.SelectedThumb);
+  AssertEquals('10..30;60..85', RangesText);
+  { A disabled thumb is inert, and still a thumb: not the track either. }
+  FMulti.Thumbs[1].Enabled := False;
+  r := FMulti.ThumbRect(1);
+  Click(FMulti, Point((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2));
+  AssertEquals('on a disabled thumb: not asked', '', FLog);
+  AssertEquals('25,50,75', ValuesOf(FMulti));
+end;
+
+procedure TTyMultiTrackClickTest.TestADoubleClickIsOneClick;
+var
+  p: TPoint;
+begin
+  FRange.OnTrackClick := @RangeClick;
+  FRange.OnChange := @Changed;
+  FAdd := True;
+  FHandle := True;
+  p := At(FRange, 45);
+  Click(FRange, p);
+  Click(FRange, p, True);          // the second press of a double-click
+  AssertEquals('asked once', 'click:45[10,30,60,85] C ', FLog);
+  AssertEquals('one range added, nothing moved', '10..30;40..50;60..85', RangesText);
+  AssertEquals(-1, FRange.SelectedThumb);
+  { The next click is a new one. }
+  FLog := '';
+  p := At(FRange, 92);
+  Click(FRange, p);
+  AssertEquals('click:92[10,30,40,50,60,85] C ', FLog);
+  AssertEquals('10..30;40..50;60..85;87..97', RangesText);
+end;
+
+procedure TTyMultiTrackClickTest.TestASegmentPaintedAsAGradientBetweenItsThumbs;
+var
+  t: TTyTrackThumbItem;
+  a: TBGRABitmap;
+  y, x, grey, turns: Integer;
+  px, prev: TBGRAPixel;
+begin
+  FMulti.Thumbs.BeginUpdate;
+  try
+    FMulti.Thumbs.Clear;
+    t := FMulti.Thumbs.Add;
+    t.Value := 20;
+    t.Color := RGBToColor($FF, $80, $00);
+    t := FMulti.Thumbs.Add;
+    t.Value := 80;
+    t.Color := RGBToColor($00, $40, $FF);
+  finally
+    FMulti.Thumbs.EndUpdate;
+  end;
+  FMulti.TickStyle := ttsNone;
+  FMulti.OnDrawSegment := @GradientSegment;
+  FMulti.OnDrawThumb := @NoThumbs;      // the segment's ends in the open
+  a := Shot(FMulti);
+  try
+    AssertTrue('the handler was asked for segment 1', FSegRect.Right > FSegRect.Left);
+    y := (FSegRect.Top + FSegRect.Bottom) div 2;
+    px := a.GetPixel(FSegRect.Left, y);
+    { The painter blends in linear light, so the ends are near (not at) the stops' colours
+      one pixel in, and the way between is not a straight line in sRGB: checked as monotonic. }
+    AssertTrue('the left end is the first thumb''s colour: ' + PxStr(px), NearPx(px, $FF, $80, $00, 16));
+    px := a.GetPixel(FSegRect.Right - 1, y);
+    AssertTrue('the right end is the second thumb''s colour: ' + PxStr(px), NearPx(px, $00, $40, $FF, 16));
+    grey := 0;
+    turns := 0;
+    for x := FSegRect.Left to FSegRect.Right - 1 do
+    begin
+      px := a.GetPixel(x, y);
+      if SamePx(px, $60, $60, $60) then Inc(grey);
+      if x > FSegRect.Left then
+      begin
+        prev := a.GetPixel(x - 1, y);
+        if (px.red > prev.red) or (px.blue < prev.blue) then Inc(turns);
+      end;
+    end;
+    AssertEquals('no bare groove left in the segment', 0, grey);
+    AssertEquals('from one colour to the other without turning back', 0, turns);
+    px := a.GetPixel(FSegRect.Left - 10, y);
+    AssertTrue('the segments the handler let be: the groove: ' + PxStr(px), SamePx(px, $60, $60, $60));
+  finally
+    a.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyMultiTrackModelTest);
   RegisterTest(TTyMultiTrackGeometryTest);
@@ -3441,4 +4134,6 @@ initialization
   RegisterTest(TTyMultiTrackReadoutTest);
   RegisterTest(TTyMultiTrackOwnerDrawTest);
   RegisterTest(TTyTrackThumbFocusTest);
+  RegisterTest(TTyMultiTrackHooksTest);
+  RegisterTest(TTyMultiTrackClickTest);
 end.

@@ -6779,6 +6779,8 @@ type
     property ShowValue;
     property OnDrawTrack;
     property OnDrawThumb;
+    property OnTrackClick;
+    property OnDrawSegment;
   end;
 
   TGenNativeStyler = class(TTyCustomNativeStyler)
@@ -7669,6 +7671,8 @@ type
     property ShowValue;
     property OnDrawTrack;
     property OnDrawThumb;
+    property OnTrackClick;
+    property OnDrawSegment;
   end;
 
   TGenRating = class(TTyCustomRating)

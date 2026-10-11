@@ -43,6 +43,20 @@ type
     has the focus). ADefaultDraw := False leaves that thumb to the handler. }
   TTyTrackDrawThumbEvent = procedure(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
     const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean) of object;
+  { Owner-draw: segment AIndex (0..ThumbCount), asked before its default fill -- for every
+    segment, filled by default or not. ARect is that stretch of groove, thumb centre to thumb
+    centre (SegmentSpan along the track, the groove's thickness across it); it may be empty
+    where two thumbs sit on one value. ADefaultDraw := False skips that segment's default fill
+    only. }
+  TTyTrackDrawSegmentEvent = procedure(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
+    const ARect: TRect; var ADefaultDraw: Boolean) of object;
+  { A left press on the track where there is no thumb, AValue the value under the pointer
+    (ValueAtPoint). Asked BEFORE the bar brings the nearest thumb there; AHandled := True and
+    the bar does nothing more with the press -- no thumb moves, the selection stays. The
+    handler may add or remove ranges / thumbs: the bar looks again at what is under the
+    pointer afterwards. }
+  TTyTrackClickEvent = procedure(Sender: TObject; AValue: Integer;
+    var AHandled: Boolean) of object;
 
   { THE MODEL. The thumbs are an ordered array of integers, FValues, that always holds:
 
@@ -69,7 +83,9 @@ type
     I; segment 0 starts at the Min end of the groove and segment ThumbCount ends at its Max end.
     With ShowValue the readout comes last, in a strip the track gives up at the right end (the
     bottom when vertical), as on TTyTrackBar. OnDrawTrack is asked before the groove and its fills,
-    OnDrawThumb before each thumb; either can take the part over (ADefaultDraw := False).
+    OnDrawSegment before each segment's fill (every segment, filled by default or not; not at
+    all when OnDrawTrack took the track over), OnDrawThumb before each thumb; each can take its
+    part over (ADefaultDraw := False).
 
     What each thumb and segment looks like, and whether a thumb takes part in the interaction,
     is the final class's data (its collection items): the protected virtual Thumb* and
@@ -78,7 +94,8 @@ type
 
     THE INTERACTION (only enabled thumbs take part). A left press on a thumb selects it and
     drags it from where it was grabbed; a press on the groove brings the nearest thumb there
-    (the lower value on a tie) and drags it on. A drag goes through SetThumbValue, so it stops
+    (the lower value on a tie) and drags it on -- unless OnTrackClick, asked first, handles the
+    press. A drag goes through SetThumbValue, so it stops
     MinGap short of a neighbour. The keyboard drives the selected thumb (none selected: the
     first enabled one), Tab / Shift+Tab step through the thumbs before leaving the control, and
     the hint over a thumb is that thumb's. Coming in from the keyboard starts at the near end:
@@ -118,6 +135,12 @@ type
     FOnChange: TNotifyEvent;
     FOnDrawTrack: TTyTrackDrawEvent;
     FOnDrawThumb: TTyTrackDrawThumbEvent;
+    FOnDrawSegment: TTyTrackDrawSegmentEvent;
+    FOnTrackClick: TTyTrackClickEvent;
+    { The last first press (no ssDouble / ssTriple / ssQuad) landed on the track and
+      OnTrackClick handled it: the further presses of that multi-click are part of the same
+      click and do nothing. }
+    FTrackClickTaken: Boolean;
     function GetThumbCount: Integer;
     function GetThumbValue(AIndex: Integer): Integer;
     procedure SetMin(const AValue: Integer);
@@ -136,6 +159,7 @@ type
     procedure SetShowValue(const AValue: Boolean);
     procedure SetOnDrawTrack(const AValue: TTyTrackDrawEvent);
     procedure SetOnDrawThumb(const AValue: TTyTrackDrawThumbEvent);
+    procedure SetOnDrawSegment(const AValue: TTyTrackDrawSegmentEvent);
     procedure CheckIndex(AIndex: Integer);
   protected
     { The thumb under a press (drawn active) and under the pointer (drawn hover); -1 = none. }
@@ -242,6 +266,10 @@ type
       (low..high whichever way the bar runs). False for an index outside 0..ThumbCount. Says
       nothing about whether the segment is drawn -- that is SegmentStyle's call. }
     function SegmentSpan(AIndex, APPI: Integer; out ALow, AHigh: Integer): Boolean;
+    { The value under client point (X, Y) along the track -- what a thumb dragged there, or a
+      press on the groove, takes: Orientation and Reversed followed, Min..Max at the ends and
+      beyond them. Only the main axis counts. }
+    function ValueAtPoint(X, Y: Integer): Integer;
     { Place / drop hand-placed ticks, drawn while TickStyle = ttsManual; as TTyTrackBar. }
     procedure SetTick(AValue: Integer);
     procedure ClearTicks;
@@ -276,6 +304,12 @@ type
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property OnDrawTrack: TTyTrackDrawEvent read FOnDrawTrack write SetOnDrawTrack;
     property OnDrawThumb: TTyTrackDrawThumbEvent read FOnDrawThumb write SetOnDrawThumb;
+    property OnDrawSegment: TTyTrackDrawSegmentEvent read FOnDrawSegment write SetOnDrawSegment;
+    { A left press on the track off every thumb; see TTyTrackClickEvent. Only the first press
+      of a multi-click asks -- a double-click is one click, not two. When that press was
+      handled, the further presses of the multi-click (ssDouble ...) do nothing; when it was
+      not, they act as usual without asking. }
+    property OnTrackClick: TTyTrackClickEvent read FOnTrackClick write FOnTrackClick;
   end;
 
   TTyCustomRangeTrackBar = class;
@@ -430,6 +464,8 @@ type
     property ShowValue;
     property OnDrawTrack;
     property OnDrawThumb;
+    property OnTrackClick;
+    property OnDrawSegment;
   end;
 
   TTyCustomMultiTrackBar = class;
@@ -632,6 +668,8 @@ type
     property ShowValue;
     property OnDrawTrack;
     property OnDrawThumb;
+    property OnTrackClick;
+    property OnDrawSegment;
   end;
 
 implementation
@@ -1045,6 +1083,12 @@ begin
   Invalidate;
 end;
 
+procedure TTyMultiTrackBarBase.SetOnDrawSegment(const AValue: TTyTrackDrawSegmentEvent);
+begin
+  FOnDrawSegment := AValue;
+  Invalidate;
+end;
+
 function TTyMultiTrackBarBase.ThumbOffset(AIndex: Integer): Integer;
 begin
   CheckIndex(AIndex);
@@ -1138,7 +1182,7 @@ var
   key, cls: string;
   c: TColor;
   vs, vw: TSize;
-  dflt: Boolean;
+  dflt, segDflt: Boolean;
 
   procedure DrawThumb(AIndex: Integer);
   var
@@ -1236,20 +1280,24 @@ begin
     if dflt and (tpBackground in St.Present) then
       P.FillBackground(GrooveR, St.Background, St.BorderRadius);
 
-    { The segments the final class names a style for, groove-thick, centre to centre. }
+    { The segments, groove-thick, centre to centre: each offered to OnDrawSegment, then filled
+      when the final class names a style for it. None of it when the owner drew the track. }
     n := Length(FValues);
     for i := 0 to n do
     begin
       if not dflt then Break;
-      if not SegmentStyle(i, key, cls) or (key = '') then Continue;
       SegmentSpan(i, APPI, lo, hi);
-      if hi <= lo then Continue;
-      St := ActiveController.Model.ResolveStyle(key, cls, []);
-      if not (tpBackground in St.Present) then Continue;
       if FOrientation = toVertical then
         SegR := Rect(GrooveR.Left, SlideR.Top + lo, GrooveR.Right, SlideR.Top + hi)
       else
         SegR := Rect(SlideR.Left + lo, GrooveR.Top, SlideR.Left + hi, GrooveR.Bottom);
+      segDflt := True;
+      if Assigned(FOnDrawSegment) then FOnDrawSegment(Self, P, i, SegR, segDflt);
+      if not segDflt then Continue;
+      if not SegmentStyle(i, key, cls) or (key = '') then Continue;
+      if hi <= lo then Continue;
+      St := ActiveController.Model.ResolveStyle(key, cls, []);
+      if not (tpBackground in St.Present) then Continue;
       P.FillBackground(SegR, St.Background, St.BorderRadius);
     end;
 
@@ -1320,6 +1368,12 @@ var
 begin
   TW := TyTrackThumbLen(Font.PixelsPerInch);
   Result := TyTrackPosFromOffset(MainLen, TW, FMin, FMax, APos - TW div 2, Inverted);
+end;
+
+function TTyMultiTrackBarBase.ValueAtPoint(X, Y: Integer): Integer;
+begin
+  if FOrientation = toVertical then Result := ValueAt(Y)
+  else Result := ValueAt(X);
 end;
 
 function TTyMultiTrackBarBase.NearestEnabledThumb(AValue: Integer): Integer;
@@ -1425,15 +1479,36 @@ end;
 procedure TTyMultiTrackBarBase.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   idx, pos: Integer;
-  onThumb: Boolean;
+  onThumb, handled: Boolean;
 begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
+  { The further presses of a multi-click whose first press OnTrackClick took: the same click. }
+  if Shift * [ssDouble, ssTriple, ssQuad] = [] then FTrackClickTaken := False
+  else if FTrackClickTaken then Exit;
   if FOrientation = toVertical then pos := Y else pos := X;
   idx := ThumbAt(X, Y);
   { A disabled thumb is inert: pressing it neither moves it nor picks another thumb. }
   if (idx >= 0) and not ThumbEnabled(idx) then Exit;
+  { Off every thumb, on a first press: the application has the first say. }
+  if (idx < 0) and Assigned(FOnTrackClick) and (Shift * [ssDouble, ssTriple, ssQuad] = []) then
+  begin
+    handled := False;
+    FOnTrackClick(Self, ValueAtPoint(X, Y), handled);
+    if handled then
+    begin
+      FTrackClickTaken := True;
+      FHoverThumb := -1;
+      Invalidate;
+      Exit;
+    end;
+    { The handler may have added, removed or moved thumbs (or disabled the bar): any index
+      from before it is stale, so look again at what is under the pointer. }
+    if not Enabled then Exit;
+    idx := ThumbAt(X, Y);
+    if (idx >= 0) and not ThumbEnabled(idx) then Exit;
+  end;
   onThumb := idx >= 0;
   if onThumb then
     { Grabbed where it was pressed: a press that does not move does not move the thumb. }
