@@ -169,6 +169,12 @@ function TyColorToLCL(c: TTyColor): TColor;
 function TyCorners(ATL, ATR, ABR, ABL: Integer): TTyCorners;
 function TyUniformCorners(R: Integer): TTyCorners;
 function TyEffectiveCorners(const AStyle: TTyStyleSet): TTyCorners;
+{ True when a linear gradient has to be drawn stop by stop: three or more stops, or two that do
+  not sit at 0 and 1. The two-colour scanner (first colour to last over the whole sweep) is
+  exact only for two stops at 0 and 1, and is kept for exactly those, so the two-colour
+  gradients every theme ships render as they always did. Used by every place that builds a
+  gradient scanner, so the painter and the parent-background samplers cannot disagree. }
+function TyGradientNeedsStops(const AFill: TTyFill): Boolean;
 { Caps a (theme-token) corner radius at a sub-element's half-side so a smaller
   theme radius is honored but the geometry can never exceed a perfect circle.
   ARadius and AHalf MUST be in the SAME unit (both logical or both device). }
@@ -245,6 +251,15 @@ function TyClampRadius(ARadius, AHalf: Integer): Integer;
 begin
   if ARadius < AHalf then Result := ARadius else Result := AHalf;
   if Result < 0 then Result := 0;
+end;
+
+function TyGradientNeedsStops(const AFill: TTyFill): Boolean;
+var
+  n: Integer;
+begin
+  n := Length(AFill.GradStops);
+  Result := (n > 2) or
+    ((n = 2) and ((AFill.GradStops[0].Pos <> 0) or (AFill.GradStops[1].Pos <> 1)));
 end;
 
 function TyEffectiveCorners(const AStyle: TTyStyleSet): TTyCorners;
