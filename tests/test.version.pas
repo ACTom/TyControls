@@ -447,8 +447,9 @@ initialization
     TTyHSColorPicker, TTyFontComboBox, TTyFontListBox, TTyFontSizeComboBox, TTyFilterComboBox,
     TTyShellComboBox, TTyGauge, TTyMeter, TTyLevelMeter, TTyDial, TTyGearDial, TTyAnalogClock,
     TTyCircularProgress, TTyActivityIndicator, TTyActivityBar, TTyGearActivityIndicator,
-    TTySparkline, TTyRating, TTyTrackBar, TTyRangeTrackBar, TTyMultiTrackBar, TTyProgressBar,
-    TTyScrollBar, TTyStatusBar, TTyToolBar, TTyToolButton, TTyToolSeparator, TTyToolBarEx]);
+    TTySparkline, TTyRating, TTyTrackBar, TTyRangeTrackBar, TTyMultiTrackBar,
+    TTyGradientTrackBar, TTyProgressBar, TTyScrollBar, TTyStatusBar, TTyToolBar, TTyToolButton,
+    TTyToolSeparator, TTyToolBarEx]);
   Reg([
     TTyControlBar, TTyCoolBar, TTyAlert, TTyPagination, TTySteps, TTyBreadcrumb,
     TTyHeaderControl, TTyPanel, TTyGroupBox, TTyBevel, TTyDivider, TTySplitter, TTyPaintPanel,

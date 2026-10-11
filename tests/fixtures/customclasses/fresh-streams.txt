@@ -642,6 +642,22 @@
 # TTyGlyphImageList
     DefaultColor = -16777216
   end
+# TTyGradientTrackBar
+    Left = 0
+    Height = 24
+    Top = 0
+    Width = 160
+    TabOrder = 0
+    Thumbs = <    
+      item
+        Value = 0
+        Color = clBlack
+      end    
+      item
+        Value = 100
+        Color = clWhite
+      end>
+  end
 # TTyGridCell
     Left = 0
     Height = 0
