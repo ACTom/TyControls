@@ -909,6 +909,56 @@ msgstr ""
 msgid "series[%d] has no type, so it is not drawn"
 msgstr ""
 
+#: tycontrols.strconsts.rstycharttoolboxbar
+msgid "Switch to Bar Chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxdataview
+msgid "Data View"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxdataviewbad
+#, object-pascal-format
+msgid "The data view's text could not be read back: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxdataviewrefresh
+msgid "Refresh"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboximagefilter
+msgid "PNG image (*.png)|*.png|JPEG image (*.jpeg;*.jpg)|*.jpeg;*.jpg|All files (*.*)|*.*"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxline
+msgid "Switch to Line Chart"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxrestore
+msgctxt "tycontrols.strconsts.rstycharttoolboxrestore"
+msgid "Restore"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxsaveasimage
+msgid "Save as Image"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxstack
+msgid "Stack"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxtiled
+msgid "Tile"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxzoom
+msgid "Zoom"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxzoomback
+msgid "Zoom Reset"
+msgstr ""
+
 #: tycontrols.strconsts.rstychartxaxisnogrid
 #, object-pascal-format
 msgid "xAxis[%d] names no grid, so it is not drawn"
@@ -1263,6 +1313,7 @@ msgid "Not in a tool window bar: hidden at run time"
 msgstr ""
 
 #: tycontrols.strconsts.rstytoolwindowrestore
+msgctxt "tycontrols.strconsts.rstytoolwindowrestore"
 msgid "Restore"
 msgstr ""
 

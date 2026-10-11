@@ -64,7 +64,7 @@ uses
   tyControls.AdvChart.Convert, tyControls.AdvChart.Jitter,
   tyControls.AdvChart.Large, tyControls.AdvChart.Progressive,
   tyControls.AdvChart.Polar, tyControls.AdvChart.PolarBar,
-  tyControls.AdvChart.Lines,
+  tyControls.AdvChart.Lines, tyControls.AdvChart.Toolbox,
   fpjson, contnrs, tyControls.SubPixel;
 
 const
@@ -257,6 +257,25 @@ type
   { A dataZoom ACTION, as upstream's `datazoom` event reports it: once per
     action, from a gesture, the throttle's timer or DispatchDataZoom. }
   TTyDataZoomEvent = procedure(Sender: TObject; const AAction: TTyDzAction) of object;
+  { saveAsImage's click [Batch 125]: AFileName the name upstream downloads
+    as, AOptsJson the export options it asks for (SaveToFile's). AHandled
+    True: the host saved (or declined) -- no dialog, no file. }
+  TTyToolboxSaveEvent = procedure(Sender: TObject; var AFileName: string;
+    const AOptsJson: string; var AHandled: Boolean) of object;
+  { the skin's inks for the toolbox [Batch 125] }
+  TTyTbInk = record
+    Stroke, StrokeHover, Background, Border, Brush, Title: TTyChartColor;
+    FontName: string;
+    FontSizeLogical, FontWeight: Integer;
+  end;
+  { one icon element's hover [Batch 125]: the emphasis the hover entered,
+    the title shown, the adjusted position and align the emphasis state
+    brought, and the hover's emphasis change waiting for the next frame
+    (echarts applies an element's states in _onframe, not in the mouseover) }
+  TTyTbIconLive = record
+    HoverEmph, TextShown, AdjPos, AdjAlign: Boolean;
+    PendEnter, PendLeave: Boolean;
+  end;
 
   { What the pointer is over, as zrender's findHover answers for a slider:
     one of its non-silent elements, some other element of the chart (a
@@ -690,6 +709,30 @@ type
     FDzNow: Double;
     FDzTimer: TTimer;
     FOnDataZoom: TTyDataZoomEvent;
+    { an action's window in value mode (startValue / endValue in
+      FDzRawStart / FDzRawStop) [Batch 125] }
+    FDzRawValue: array of Boolean;
+    { THE TOOLBOX [Batch 125] -- see its section }
+    FTbSpecs: array of TTyToolboxSpec;
+    FTbLayouts: array of TTyToolboxLayout;
+    FTbPrev: array of TTyPointF;
+    FTbLive: array of array of TTyTbIconLive;
+    FTbGen: Integer;
+    FTbStatus: TStringList;
+    FTbMagicTitle: TTyStringArray;
+    FTbZoomActive: Boolean;
+    FTbHistory: TTyTbHistory;
+    FTbSel: TTyTbSnapshot;
+    FTbBackup: string;
+    FTbCursor: string;
+    FTbBrushing, FTbCover: Boolean;
+    FTbBrushGrid: Integer;
+    FTbBrushType: TTyTbBrushType;
+    FTbBrushPanel: TTyXYWH;
+    FTbTrack, FTbRange: array[0..3] of Double;
+    FTbCoverRect: TTyXYWH;
+    FTbError: string;
+    FOnToolboxSaveAsImage: TTyToolboxSaveEvent;
     { `itemStyle.color: 'none'` -- the series paints NO fill. Not the same as
       unwritten, which is the palette's. }
     FSeriesColorNone: array of Boolean;
@@ -1179,6 +1222,45 @@ type
     function DataZoomInk(const ASpec: TTyDzSliderSpec): TTyDzInk;
     function DataZoomInput(AIndex: Integer; out AIn: TTyDzSliderInput): Boolean;
     function BuildDataZooms(AList: TTyPaintList): Integer;
+    { the toolbox [Batch 125] }
+    function TbTitles: TTyTbTitles;
+    function TbScale: Double;
+    function TbInk: TTyTbInk;
+    function TbStatusOf(ATb: Integer): TStringList;
+    procedure TbSetStatus(ATb: Integer; const AFeature, AIcon, AState: string);
+    function TbStatusIs(ATb: Integer; const AFeature, AIcon: string): Boolean;
+    function TbHasFeature(ATb: Integer; const AName: string): Boolean;
+    procedure SolveToolboxes(const AMeasurer: ITyTextMeasurer; APPI: Integer);
+    procedure TbIconOrigin(ATb, AIcon: Integer; out AX, AY: Double);
+    function TbEmphasised(ATb, AIcon: Integer): Boolean;
+    function BuildToolboxes(AList: TTyPaintList; const AMeasurer: ITyTextMeasurer): Integer;
+    function TbHitAt(AX, AY: Integer; out ATb, AIcon: Integer): Boolean;
+    procedure TbChanged;
+    procedure TbMouseOver(const ATarget: TTyChartEventTarget);
+    procedure TbMouseOut(const ATarget: TTyChartEventTarget);
+    procedure TbClick(ATb, AIcon: Integer);
+    procedure TbDoRestore(APayload: TJSONObject);
+    function TbMagicSeries: TTyMagicSeriesArray;
+    procedure TbMagicType(ATb: Integer; const AType: string);
+    procedure TbDoMagic(APayload: TJSONObject);
+    function TbDataViewContent(out AMeta: TTyDvMetaArray): string;
+    function TbDvFind(const AName: string; out AData: TJSONData): Boolean;
+    procedure TbDataView(ATb: Integer);
+    procedure TbDoDataView(APayload: TJSONObject);
+    procedure TbSaveAsImage(ATb: Integer);
+    procedure TbDoTakeCursor(APayload: TJSONObject);
+    function TbSelIndexOf(const AKey: string): Integer;
+    procedure TbSelPut(const AKey: string; AIsValue: Boolean; A, B: Double);
+    procedure TbDispatchZoom(const ASnap: TTyTbSnapshot);
+    procedure TbBack;
+    function TbPanelAt(AX, AY: Double; out AType: TTyTbBrushType; out ARect: TTyXYWH): Integer;
+    procedure TbBrushDown(AX, AY: Integer);
+    procedure TbBrushTrack(AX, AY: Integer);
+    procedure TbBrushMove(AX, AY: Integer);
+    procedure TbBrushUp(AX, AY: Integer);
+    procedure TbBrushEnd;
+    procedure TbApplyCursor(AX, AY: Integer);
+    procedure TbFrame;
     procedure ApplyVisualMaps(var AVisual: TTySeriesVisual; ASlot,
       APPI: Integer);
     { The THEME's ramp at ASlot, with nothing of the option in it. Split out
@@ -1600,6 +1682,13 @@ type
       theme's fonts. Virtual so a text table -- zrender's, for a chart laid
       out against upstream's -- can stand in for the fonts. }
     function NewTextMeasurer(APPI: Integer): ITyTextMeasurer; virtual;
+    { THE TOOLBOX'S DIALOGS [Batch 125]: dataView's table (True when Refresh
+      closed it, the text in AText) and saveAsImage's file name. Virtual so
+      a host -- or a test -- answers without a modal; the defaults are the
+      library's dialogs (tyControls.AdvChart.ToolboxDlg). }
+    function ToolboxShowDataView(const ATitle: string; var AText: string;
+      AReadOnly: Boolean; const ACloseCaption, ARefreshCaption: string): Boolean; virtual;
+    function ToolboxAskFileName(var AFileName: string; const AType: string): Boolean; virtual;
     function GetStyleTypeKey: string; override;
     { A RESIZE ASKS THE MEDIA QUERIES AGAIN (upstream's resize ->
       resetOption('media')) [Batch 107] }
@@ -2005,6 +2094,29 @@ type
     { A LINES SERIES as the layout solved it: its rows, their look, its clip
       and its large batch (Valid False for any other) [Batch 121] }
     function LinesSolvedOf(ASeriesIndex: Integer): TTyLinesSolved;
+    { THE TOOLBOX [Batch 125]: its model and layout as the last render made
+      them (CSS px), each icon's live state, the title placed where it is
+      drawn, the features' iconStatus, the select dataZoom's history and the
+      brush's cover; ToolboxClick clicks an icon by name. }
+    function ToolboxCount: Integer;
+    function ToolboxSpec(AIndex: Integer): TTyToolboxSpec;
+    function ToolboxLayout(AIndex: Integer): TTyToolboxLayout;
+    function ToolboxIconState(ATb, AIcon: Integer; out AEmphasised, ATitleShown,
+      APosAdjusted, AAlignAdjusted: Boolean): Boolean;
+    function ToolboxTitle(ATb, AIcon: Integer): TTyTbTitlePlace;
+    function ToolboxIconStatus(ATb: Integer; const AFeature, AIcon: string): string;
+    function ToolboxHistoryCount: Integer;
+    function ToolboxCover(out ARect: TTyXYWH): Boolean;
+    function ToolboxClick(ATb: Integer; const AFeature, AIcon: string): Boolean;
+    { the data view's text as the dialog would show it }
+    function ToolboxDataViewText: string;
+    { a frame: the icons' hover states land (a paint does it too) }
+    procedure ToolboxFrame;
+    property ToolboxZoomActive: Boolean read FTbZoomActive;
+    { 'pointer' over an icon, 'crosshair' over a brush panel, '' neither }
+    property ToolboxCursorName: string read FTbCursor;
+    { why the last data view's text was not merged ('' when it was) }
+    property ToolboxError: string read FTbError;
     { ---- progressive rendering and appendData [Batch 119] ---- }
     { chart.appendData with seriesIndex and data: ADataJson, a JSON array of data
       items, appended to the series' own `data`. Nothing is drawn until the
@@ -2478,6 +2590,10 @@ type
     property OnTreeRoam: TTyGraphRoamEvent read FOnTreeRoam write FOnTreeRoam;
     property OnSankeyRoam: TTyGraphRoamEvent read FOnSankeyRoam write FOnSankeyRoam;
     property OnDataZoom: TTyDataZoomEvent read FOnDataZoom write FOnDataZoom;
+    { saveAsImage's click [Batch 125]: unhandled, the save dialog and
+      SaveToFile }
+    property OnToolboxSaveAsImage: TTyToolboxSaveEvent read FOnToolboxSaveAsImage
+      write FOnToolboxSaveAsImage;
     { when the enter animations play -- see TTyChartAnimationMode [Batch 89] }
     property AnimationMode: TTyChartAnimationMode read FAnimMode
       write SetAnimMode default camAuto;
@@ -2492,7 +2608,8 @@ uses
   tyControls.StrConsts,
   tyControls.AdvChart.RichStyle, tyControls.AdvChart.JsMath,
   tyControls.AdvChart.LinePath, tyControls.AdvChart.LabelGuide,
-  BGRABitmapTypes, FPImage, FPWriteJPEG, base64;
+  BGRABitmapTypes, FPImage, FPWriteJPEG, base64,
+  tyControls.AdvChart.ToolboxDlg;
 
 { ==================== construction ==================== }
 
@@ -2524,6 +2641,8 @@ begin
   FAnimNow := NaN;
   FAnimMode := camAuto;
   FProgStepCost := NaN;
+  FTbStatus := TStringList.Create;
+  FTbBrushGrid := -1;
 end;
 
 destructor TTyAdvanceChart.Destroy;
@@ -2538,6 +2657,7 @@ begin
   FreeAndNil(FDatasetCache);
   FreeAndNil(FJitter);
   FreeAndNil(FOption);
+  FreeAndNil(FTbStatus);
   { The static layer owns a TBitmap. TTyPaintCache.Drop only marks it stale --
     it keeps the surface deliberately, for reuse -- so dropping is not freeing. }
   FreeAndNil(FStatic);
@@ -2768,7 +2888,22 @@ begin
   FDzRawHas := nil;
   FDzRawStart := nil;
   FDzRawStop := nil;
+  FDzRawValue := nil;
   FDzState := nil;
+  { THE TOOLBOX'S STATE goes with the option: the iconStatus and the titles
+    written into it, the select dataZooms' windows, the GlobalModel's
+    history, and the view [Batch 125] }
+  FTbBackup := AValue;
+  { new models ask for new views (__requireNewView): the toolbox's view
+    starts where a first render does, with new features -- the zoom off }
+  FTbPrev := nil;
+  FTbZoomActive := False;
+  if FTbStatus <> nil then FTbStatus.Clear;
+  FTbMagicTitle := nil;
+  FTbSel := nil;
+  FTbHistory := nil;
+  FTbBrushing := False;
+  FTbCover := False;
   FDzRoamThrottle := nil;
   FDzRoamBatch := nil;
   FDzHover := Default(TTyDzTarget);
@@ -2813,6 +2948,7 @@ end;
 function TTyAdvanceChart.SetOption(const AJson: string;
   const AOpts: TTySetOptionOpts): Boolean;
 begin
+  TbFrame;
   { normalizeSetOptionInput asserts before anything is touched }
   if not FOption.CheckReplaceMerge(AOpts.ReplaceMerge) then Exit(False);
   { THE FIRST OPTION is an init whatever the flag says (echarts.ts:768),
@@ -3099,10 +3235,22 @@ begin
   if (ANew.Find('start') = nil) and (ANew.Find('end') = nil)
     and (ANew.Find('startValue') = nil) and (ANew.Find('endValue') = nil)
     and (ANew.Find('rangeMode') = nil) then Exit;
-  ANode.Floats['start'] := FDzRawStart[AIndex];
-  ANode.Elements['startValue'] := TJSONNull.Create;
-  ANode.Floats['end'] := FDzRawStop[AIndex];
-  ANode.Elements['endValue'] := TJSONNull.Create;
+  if (AIndex <= High(FDzRawValue)) and FDzRawValue[AIndex] then
+  begin
+    { a value action wrote the values and cleared the percents [Batch 125] }
+    ANode.Elements['start'] := TJSONNull.Create;
+    ANode.Floats['startValue'] := FDzRawStart[AIndex];
+    ANode.Elements['end'] := TJSONNull.Create;
+    ANode.Floats['endValue'] := FDzRawStop[AIndex];
+    FDzRawValue[AIndex] := False;
+  end
+  else
+  begin
+    ANode.Floats['start'] := FDzRawStart[AIndex];
+    ANode.Elements['startValue'] := TJSONNull.Create;
+    ANode.Floats['end'] := FDzRawStop[AIndex];
+    ANode.Elements['endValue'] := TJSONNull.Create;
+  end;
   FDzRawHas[AIndex] := False;
 end;
 
@@ -3188,6 +3336,9 @@ begin
     SetLength(FDzRawStart, n);
     SetLength(FDzRawStop, n);
     for s := i to n - 1 do FDzRawHas[s] := False;
+    i := Length(FDzRawValue);
+    SetLength(FDzRawValue, n);
+    for s := i to n - 1 do FDzRawValue[s] := False;
     for s := 0 to n - 1 do
       if not (AReport.Slots[si].Fate[s] in [mfKept, mfMerged]) then FDzRawHas[s] := False;
   end;
@@ -3966,6 +4117,33 @@ begin
   if FBuild <> nil then Result := FBuild.Axis(ADim + 'Axis', AIndex);
 end;
 
+{ setRawRange's window on a dataZoom: both ends as percents, the values
+  cleared -- or, from a value action (the toolbox's brush and history),
+  both as values, the percents cleared [Batch 125] }
+procedure DzApplyRaw(var ASpec: TTyDataZoomSpec; AIsValue: Boolean; A, B: Double);
+var k: Integer;
+begin
+  for k := 0 to 1 do
+  begin
+    ASpec.Percent[k] := Default(TTyDzArg);
+    ASpec.Value[k] := Default(TTyDzArg);
+    ASpec.Percent[k].Num := NaN;
+    ASpec.Value[k].Num := NaN;
+    if AIsValue then
+    begin
+      ASpec.Value[k].Given := True;
+      if k = 0 then ASpec.Value[k].Num := A else ASpec.Value[k].Num := B;
+      ASpec.Mode[k] := dzmValue;
+    end
+    else
+    begin
+      ASpec.Percent[k].Given := True;
+      if k = 0 then ASpec.Percent[k].Num := A else ASpec.Percent[k].Num := B;
+      ASpec.Mode[k] := dzmPercent;
+    end;
+  end;
+end;
+
 procedure TTyAdvanceChart.SolveDataZooms;
 var
   n, i, t, k, c, si, first: Integer;
@@ -3999,29 +4177,33 @@ begin
     SetLength(FDzRawStop, n);
     for i := 0 to n - 1 do FDzRawHas[i] := False;
   end;
+  if Length(FDzRawValue) <> n then
+  begin
+    SetLength(FDzRawValue, n);
+    for i := 0 to n - 1 do FDzRawValue[i] := False;
+  end;
   for i := 0 to n - 1 do
   begin
     FZoomSpecs[i] := TyDataZoomSpecOf(FOption, i, FBuild);
     { AN ACTION'S WINDOW: both ends as percents, the values cleared, so
       both ends read in percent mode }
     if FDzRawHas[i] then
-      for k := 0 to 1 do
-      begin
-        FZoomSpecs[i].Percent[k] := Default(TTyDzArg);
-        FZoomSpecs[i].Percent[k].Given := True;
-        if k = 0 then FZoomSpecs[i].Percent[k].Num := FDzRawStart[i]
-        else FZoomSpecs[i].Percent[k].Num := FDzRawStop[i];
-        FZoomSpecs[i].Value[k] := Default(TTyDzArg);
-        FZoomSpecs[i].Value[k].Num := NaN;
-        FZoomSpecs[i].Mode[k] := dzmPercent;
-      end;
+      DzApplyRaw(FZoomSpecs[i], FDzRawValue[i], FDzRawStart[i], FDzRawStop[i]);
   end;
-  { the toolbox's select dataZooms after the author's }
+  { the toolbox's select dataZooms after the author's -- with the windows
+    their actions set [Batch 125] }
   sel := TyDataZoomSelectSpecs(FOption, FBuild, n);
   if Length(sel) > 0 then
   begin
     SetLength(FZoomSpecs, n + Length(sel));
-    for i := 0 to High(sel) do FZoomSpecs[n + i] := sel[i];
+    for i := 0 to High(sel) do
+    begin
+      FZoomSpecs[n + i] := sel[i];
+      if Length(sel[i].Targets) > 0 then
+        for k := 0 to High(FTbSel) do
+          if FTbSel[k].Key = sel[i].Targets[0].Dim + IntToStr(sel[i].Targets[0].AxisIndex) then
+            DzApplyRaw(FZoomSpecs[n + i], FTbSel[k].IsValue, FTbSel[k].A, FTbSel[k].B);
+    end;
     n := Length(FZoomSpecs);
   end;
   if n = 0 then Exit;
@@ -4268,6 +4450,8 @@ begin
   { AFTER THE GRIDS: a slider sits under (or beside) the grid it drives,
     by the rect the labels left it }
   SolveDataZoomViews(AMeasurer, APPI);
+  { the toolbox, laid out last as its view renders last [Batch 125] }
+  SolveToolboxes(AMeasurer, APPI);
   FDirty := False;
   { the update's flush: `rendered` once it is painted [Batch 119] }
   if not FStreamRelayout and not FExporting then FFlushDue := True;
@@ -6418,7 +6602,9 @@ var
   end;
 
 begin
-  n := Min(Length(FDzRawHas), Length(FZoomSpecs));
+  { the author's dataZooms and, after them, the toolbox's select ones
+    [Batch 125] }
+  n := Length(FZoomSpecs);
   for it := 0 to High(AAction.Items) do
   begin
     i := AAction.Items[it].DataZoomIndex;
@@ -6448,9 +6634,16 @@ begin
     for j := 0 to n - 1 do
       if found[j] then
       begin
-        FDzRawHas[j] := True;
-        FDzRawStart[j] := AAction.Items[it].Start;
-        FDzRawStop[j] := AAction.Items[it].Stop;
+        if j <= High(FDzRawHas) then
+        begin
+          FDzRawHas[j] := True;
+          FDzRawStart[j] := AAction.Items[it].Start;
+          FDzRawStop[j] := AAction.Items[it].Stop;
+          if j <= High(FDzRawValue) then FDzRawValue[j] := AAction.Items[it].IsValue;
+        end
+        else if (FZoomSpecs[j].SubType = 'select') and (Length(FZoomSpecs[j].Targets) > 0) then
+          TbSelPut(FZoomSpecs[j].Targets[0].Dim + IntToStr(FZoomSpecs[j].Targets[0].AxisIndex),
+            AAction.Items[it].IsValue, AAction.Items[it].Start, AAction.Items[it].Stop);
       end;
   end;
   if AAction.Batch then FDzFrom := -1 else FDzFrom := AAction.FromSlider;
@@ -6460,7 +6653,9 @@ begin
     dispatches (`animation: null`) and for the API's }
   pay := TyAnimNoOverride;
   hasPay := False;
-  if AAction.Batch or ((AAction.FromSlider >= 0) and AAction.Realtime) then
+  { the toolbox's batch carries no animation of its own [Batch 125] }
+  if (AAction.Batch and not AAction.FromToolbox)
+    or ((AAction.FromSlider >= 0) and AAction.Realtime) then
   begin
     hasPay := True;
     pay.HasDuration := True;
@@ -8234,6 +8429,7 @@ var
   d: TTyChartDatumRef;
   el, slot, k: Integer;
 begin
+  TbFrame;
   inherited MouseDown(Button, Shift, X, Y);
   if csDesigning in ComponentState then Exit;
   EventDown(Button, X, Y);
@@ -8283,6 +8479,15 @@ begin
   { A PRESS ON A dataZoom (a handle, the move bar, the slider body, a
     zooming grid) is the dataZoom's }
   DataZoomPointer(dpDown, X, Y, Shift, 0);
+  { THE TOOLBOX'S BRUSH holds globalPan while the zoom is on: no roam pans
+    under it, the inside dataZoom's nor a graph's [Batch 125] }
+  if FTbZoomActive then
+  begin
+    FDzPanGrid := -1;
+    { not on a draggable element (a slider's handle) }
+    if FDzDrag.Kind = dtkNone then TbBrushDown(X, Y);
+    Exit;
+  end;
   if (FDzDrag.Kind = dtkSlider) or (FDzPanGrid >= 0)
     or ((FDzDownTarget.Kind = dtkSlider) and (FDzDownTarget.Role = dzrClickPanel)) then Exit;
   FRoamSeries := RoamSeriesAt(X, Y, False);
@@ -8298,6 +8503,7 @@ var
   cap: Boolean;
   n: TJSONData;
 begin
+  TbFrame;
   if Button = mbLeft then
   begin
     FRoamSeries := -1;
@@ -8310,6 +8516,8 @@ begin
       and (FPaintList.Element(el).Caption.FontSizeLogical > 0);
     { zrender's mouseup, then the DOM click at the same point }
     DataZoomPointer(dpUp, X, Y, Shift, 0);
+    { the brush ends on zrender's mouseup [Batch 125] }
+    TbBrushUp(X, Y);
     DataZoomPointer(dpClick, X, Y, Shift, 0);
     { A CLICK: pressed and released on the same thing -- the same datum, a
       node's disc and its label being different things -- within 4 px. On a
@@ -8354,6 +8562,8 @@ begin
   VmDragEnd;
   if (FDzDrag.Kind <> dtkNone) or (FDzPanGrid >= 0) then
     DataZoomPointer(dpUp, FDzLastX, FDzLastY, [], 0);
+  { a brush ends as a release would end it [Batch 125] }
+  if FTbBrushing then TbBrushUp(FEvLastX, FEvLastY);
   inherited CaptureChanged;
 end;
 
@@ -13267,6 +13477,13 @@ begin
       if n > 0 then ViewDrew(cvDataZoom);
       Inc(drawn, n);
     end;
+    { [Batch 125] }
+    if not ViewHidden(cvToolbox) then
+    begin
+      n := BuildToolboxes(list, AMeasurer);
+      if n > 0 then ViewDrew(cvToolbox);
+      Inc(drawn, n);
+    end;
     Result := drawn;
   end;
 end;
@@ -15771,6 +15988,16 @@ begin
       Exit;
     end;
   end;
+  { THE TOOLBOX, z 6 [Batch 125]: no data, only its icons' own handlers }
+  if TbHitAt(AX, AY, k, q) then
+  begin
+    Result.Id := -(8000000 + Int64(k) * 10000 + q);
+    Result.HdKind := 8;
+    Result.HdSeries := k;
+    Result.HdRow := q;
+    Result.HdGen := FTbGen;
+    Exit;
+  end;
   { THE visualMaps, over the series (z 4) [Batch 116]: no data, only their
     own handlers }
   if VmHitAt(AX, AY, k, q) then
@@ -16058,11 +16285,15 @@ begin
     and ((FEvHover.HdSeries > High(FVmLive))
       or (FEvHover.HdGen <> FVmLive[FEvHover.HdSeries].Gen)) then
     FEvHover := EventTargetAt(FEvHoverX, FEvHoverY);
+  { a toolbox icon a render replaced: the same [Batch 125] }
+  if (FEvHover.Id <> 0) and (FEvHover.HdKind = 8) and (FEvHover.HdGen <> FTbGen) then
+    FEvHover := EventTargetAt(FEvHoverX, FEvHoverY);
   t := EventTargetAt(AX, AY);
   if (FEvHover.Id <> 0) and (t.Id <> FEvHover.Id) then
   begin
     { the element's own mouseout, bubbled [Batch 116] }
     VmElementEvent('mouseout', FEvHover, AX, AY);
+    TbMouseOut(FEvHover);
     { echarts' own mouseout first: the dispatcher leaves emphasis [Batch 88] }
     StHoverOut(FEvHover);
     if FEvHover.HasData then EmitChartEvent('mouseout', FEvHover, AX, AY);
@@ -16076,6 +16307,7 @@ begin
   if (t.Id <> 0) and (t.Id <> FEvHover.Id) then
   begin
     VmElementEvent('mouseover', t, AX, AY);
+    TbMouseOver(t);
     StHoverOver(t);
     if t.HasData then EmitChartEvent('mouseover', t, AX, AY);
     VmZrMouseOver(t);
@@ -16131,7 +16363,8 @@ begin
     VmPieceClick(t.HdSeries, (t.HdRow - 100) div 2);
   { THE ELEMENT'S OWN HANDLER BEFORE ANY zr-LEVEL ONE: a legend item's click
     is downplay, legendToggleSelect, highlight [Batch 93] }
-  if t.HdKind = 4 then LegendClick(t)
+  if t.HdKind = 8 then TbClick(t.HdSeries, t.HdRow)
+  else if t.HdKind = 4 then LegendClick(t)
   { [Batch 98] the selector's and the pager's own onclick }
   else if t.HdKind = 5 then LegendSelectorClick(t)
   else if t.HdKind = 6 then LegendPagerClick(t);
@@ -16165,6 +16398,7 @@ begin
   if FEvHover.Id <> 0 then
   begin
     VmElementEvent('mouseout', FEvHover, AX, AY);
+    TbMouseOut(FEvHover);
     StHoverOut(FEvHover);
   end;
   if (FEvHover.Id <> 0) and FEvHover.HasData then
@@ -21167,6 +21401,7 @@ var
   nLine, nCol: Integer;
 begin
   Result := False;
+  TbFrame;
   { too deep is no payload: refused before fpjson can recurse into it }
   if TyJsonNestingExceeds(APayloadJson, TyOptionMaxNesting, nLine, nCol) then Exit;
   try
@@ -21224,7 +21459,28 @@ begin
     end
     else if (t = 'dragNode') or (t = 'sankeyRoam') or (t = 'graphRoam') then
       { [Batch 114] }
-      Result := DoViewAction(t, p);
+      Result := DoViewAction(t, p)
+    { the toolbox's actions [Batch 125] }
+    else if t = 'restore' then
+    begin
+      TbDoRestore(p);
+      Result := True;
+    end
+    else if t = 'changeMagicType' then
+    begin
+      TbDoMagic(p);
+      Result := True;
+    end
+    else if t = 'changeDataView' then
+    begin
+      TbDoDataView(p);
+      Result := True;
+    end
+    else if t = 'takeGlobalCursor' then
+    begin
+      TbDoTakeCursor(p);
+      Result := True;
+    end;
   finally
     p.Free;
   end;
@@ -24347,6 +24603,8 @@ var
   wasOn, graphChanged, tipWas: Boolean;
   dx, dy: Double;
 begin
+  { the frame between two pointer events [Batch 125] }
+  TbFrame;
   graphChanged := False;
   inherited MouseMove(Shift, X, Y);
   if csDesigning in ComponentState then Exit;
@@ -24366,6 +24624,8 @@ begin
   if FGraphDragSlot >= 0 then GraphDragMove(X, Y);
   if FSankeyDragSlot >= 0 then SankeyDragMove(X, Y);
   DataZoomPointer(dpMove, X, Y, Shift, 0);
+  { the toolbox's brush [Batch 125] }
+  TbBrushMove(X, Y);
   spec := TyTooltipSpecOf(FOption, -1, -1);
   { NOTHING ABOUT THE TOOLTIP IS CHECKED HERE, and that is the point. What is
     under the pointer is a fact about geometry; whether a BOX is drawn for it
@@ -24418,6 +24678,8 @@ begin
   PtrAnimSync;
   { the chart's own mouse events [Batch 84] }
   EventMove(X, Y);
+  { an icon's pointer, the brush's crosshair [Batch 125] }
+  TbApplyCursor(X, Y);
   { REPAINT ON MOVEMENT, not only when the datum changes. The box is anchored
     to the CURSOR -- upstream positions against the raw pointer offsets and
     never against the snapped datum -- so a repaint gated on the datum would
@@ -24434,6 +24696,7 @@ end;
 procedure TTyAdvanceChart.MouseLeave;
 var wasOn, wasGraph: Boolean;
 begin
+  TbFrame;
   if not (csDesigning in ComponentState) then EventLeave(FEvLastX, FEvLastY);
   wasOn := TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0) or FTipShown;
   wasGraph := IsGraphDatum(FTipDatum) or IsTreeDatum(FTipDatum);
@@ -25810,6 +26073,8 @@ end;
 
 procedure TTyAdvanceChart.Paint;
 begin
+  { a paint is a frame: the toolbox's hover states land [Batch 125] }
+  if not (csDesigning in ComponentState) then TbFrame;
   { THE DESIGNER RENDERS STRAIGHT THROUGH, as TTyPanel's does: it repaints
     rarely and streams while it does, so a cache buys nothing there and is one
     more thing that can be holding a frame from before the last property
@@ -26328,6 +26593,1428 @@ begin
   { scheduler.unfinished = true; zr.wakeUp() }
   FStreamPending := True;
   AnimArmTimer;
+end;
+
+{ ==================== the toolbox [Batch 125, C16] ====================
+
+  ToolboxView's render, its icons' handlers and the features' clicks. The
+  model, the layout and the texts are tyControls.AdvChart.Toolbox; this is
+  the state upstream keeps between renders, and where it keeps it:
+  - FTbPrev: where each toolbox's group stood -- positionElement starts
+    from it, so a re-render's arithmetic is not a first render's;
+  - FTbStatus: the features' iconStatus ('<toolbox>|<feature>|<icon>'),
+    written into the toolbox's option upstream: a notMerge or a restore
+    drops it, a merge keeps it;
+  - FTbMagicTitle: magicType's titles a stack click flipped (written into
+    the feature's option upstream, so the same);
+  - FTbLive: each icon element's hover -- the emphasis the hover entered,
+    the title shown, and whether entering applied the emphasis state's
+    adjusted text. A render makes new elements, so none of it survives one,
+    and an element under a still pointer is found again without a
+    mouseover (zrender's Handler looks for a removed hover target where it
+    was, and finds the new one: no over, no title);
+  - FTbZoomActive: the dataZoom feature's _isZoomActive -- the feature
+    object outlives a notMerge and a restore;
+  - FTbHistory: dataZoom/history's snapshots, the GlobalModel's: a notMerge
+    makes a new model, a restore keeps it (the restore BUTTON clears it
+    first);
+  - FTbSel: setRawRange on the select dataZooms, by axis key;
+  - FTbBackup: the option a restore recreates, OptionManager's
+    _optionBackup -- the last notMerge's. }
+
+function TTyAdvanceChart.TbTitles: TTyTbTitles;
+begin
+  Result := Default(TTyTbTitles);
+  Result.SaveAsImage := rsTyChartToolboxSaveAsImage;
+  Result.Restore := rsTyChartToolboxRestore;
+  Result.DataView := rsTyChartToolboxDataView;
+  Result.Zoom := rsTyChartToolboxZoom;
+  Result.Back := rsTyChartToolboxZoomBack;
+  Result.Line := rsTyChartToolboxLine;
+  Result.Bar := rsTyChartToolboxBar;
+  Result.Stack := rsTyChartToolboxStack;
+  Result.Tiled := rsTyChartToolboxTiled;
+  Result.DataViewClose := rsMsgBtnClose;
+  Result.DataViewRefresh := rsTyChartToolboxDataViewRefresh;
+end;
+
+function TTyAdvanceChart.TbScale: Double;
+begin
+  if FLastPPI > 0 then Result := FLastPPI / 96 else Result := 1;
+end;
+
+function TTyAdvanceChart.TbInk: TTyTbInk;
+var
+  model: TTyStyleModel;
+  st: TTyStyleSet;
+begin
+  model := ActiveController.Model;
+  st := model.ResolveStyle('TyAdvChartToolbox', '', []);
+  Result.Stroke := TTyChartColor(st.BorderColor);
+  Result.FontName := st.FontName;
+  Result.FontSizeLogical := ResolveFontSize(st);
+  Result.FontWeight := st.FontWeight;
+  Result.Title := TTyChartColor(st.TextColor);
+  GlobalInk(Result.FontName, Result.FontSizeLogical, Result.FontWeight,
+    Result.Title, [ttpSize, ttpWeight, ttpFamily]);
+  Result.StrokeHover := TTyChartColor(
+    model.ResolveStyle('TyAdvChartToolbox', '', [tysHover]).BorderColor);
+  Result.Background := TTyChartColor(
+    model.ResolveStyle('TyAdvChartToolboxBackground', '', []).Background.Color);
+  Result.Border := TTyChartColor(
+    model.ResolveStyle('TyAdvChartToolboxBorder', '', []).BorderColor);
+  Result.Brush := TTyChartColor(
+    model.ResolveStyle('TyAdvChartToolboxBrush', '', []).Background.Color);
+end;
+
+{ a written colour, the skin's where nothing was written; False: `none` }
+function TbColour(const C: TTyTbColour; AFallback: TTyChartColor;
+  out AColour: TTyChartColor): Boolean;
+begin
+  AColour := AFallback;
+  case C.Kind of
+    tbcNone: Exit(False);
+    tbcText:
+      if not TyTryParseChartColor(C.Text, AColour) then AColour := AFallback;
+  end;
+  Result := True;
+end;
+
+function TTyAdvanceChart.TbStatusOf(ATb: Integer): TStringList;
+var
+  i: Integer;
+  pre, k: string;
+begin
+  Result := TStringList.Create;
+  pre := IntToStr(ATb) + '|';
+  for i := 0 to FTbStatus.Count - 1 do
+  begin
+    k := FTbStatus.Names[i];
+    if Copy(k, 1, Length(pre)) = pre then
+      Result.Values[Copy(k, Length(pre) + 1, MaxInt)] := FTbStatus.ValueFromIndex[i];
+  end;
+end;
+
+procedure TTyAdvanceChart.TbSetStatus(ATb: Integer; const AFeature, AIcon,
+  AState: string);
+begin
+  FTbStatus.Values[IntToStr(ATb) + '|' + AFeature + '|' + AIcon] := AState;
+end;
+
+function TTyAdvanceChart.TbStatusIs(ATb: Integer; const AFeature,
+  AIcon: string): Boolean;
+begin
+  Result := FTbStatus.Values[IntToStr(ATb) + '|' + AFeature + '|' + AIcon] = 'emphasis';
+end;
+
+{ the feature exists and shows: its object lives }
+function TTyAdvanceChart.TbHasFeature(ATb: Integer; const AName: string): Boolean;
+var d: TJSONData;
+begin
+  Result := False;
+  d := FOption.ComponentAt('toolbox', ATb);
+  if not (d is TJSONObject) then Exit;
+  d := TJSONObject(d).Find('feature');
+  if not (d is TJSONObject) then Exit;
+  d := TJSONObject(d).Find(AName);
+  if (d = nil) or (d.JSONType = jtNull) then Exit;
+  Result := True;
+  if d is TJSONObject then
+  begin
+    d := TJSONObject(d).Find('show');
+    if (d <> nil) and (d.JSONType = jtBoolean) and not d.AsBoolean then Result := False;
+  end;
+end;
+
+procedure TTyAdvanceChart.SolveToolboxes(const AMeasurer: ITyTextMeasurer;
+  APPI: Integer);
+var
+  n, t, i: Integer;
+  st: TStringList;
+  s, w, h, tw, th: Double;
+  ws, hs: TTyDoubleArray;
+  ink: TTyTbInk;
+  dzOn: Boolean;
+begin
+  n := TyToolboxCount(FOption);
+  { a toolbox that went takes its view (and where it stood) with it }
+  i := Length(FTbPrev);
+  SetLength(FTbPrev, n);
+  for t := i to n - 1 do FTbPrev[t] := TyPointF(0, 0);
+  SetLength(FTbSpecs, n);
+  SetLength(FTbLayouts, n);
+  i := Length(FTbMagicTitle);
+  SetLength(FTbMagicTitle, n);
+  for t := i to n - 1 do FTbMagicTitle[t] := '';
+  SetLength(FTbLive, n);
+  { NEW ELEMENTS: whatever was hovered is found again, not entered }
+  Inc(FTbGen);
+  s := TbScale;
+  w := (FLastRect.Right - FLastRect.Left) / s;
+  h := (FLastRect.Bottom - FLastRect.Top) / s;
+  ink := TbInk;
+  dzOn := False;
+  for t := 0 to n - 1 do
+  begin
+    { the dataZoom feature's buttons, at every render: zoom by the active
+      flag, back by the history }
+    if TbHasFeature(t, 'dataZoom') then
+    begin
+      if t = 0 then dzOn := True;
+      if FTbZoomActive then TbSetStatus(t, 'dataZoom', 'zoom', 'emphasis')
+      else TbSetStatus(t, 'dataZoom', 'zoom', 'normal');
+      if TyTbHistoryCount(FTbHistory) > 1 then TbSetStatus(t, 'dataZoom', 'back', 'emphasis')
+      else TbSetStatus(t, 'dataZoom', 'back', 'normal');
+    end;
+    st := TbStatusOf(t);
+    try
+      FTbSpecs[t] := TyToolboxSpecOf(FOption, t, TbTitles, st, FTbMagicTitle[t]);
+    finally
+      st.Free;
+    end;
+    { the titles in the default font -- 12 px, whatever the title's own is }
+    SetLength(ws, Length(FTbSpecs[t].Icons));
+    SetLength(hs, Length(FTbSpecs[t].Icons));
+    for i := 0 to High(FTbSpecs[t].Icons) do
+    begin
+      ws[i] := 0;
+      hs[i] := 0;
+      if FTbSpecs[t].Icons[i].HasTitle and (FTbSpecs[t].Icons[i].Title <> '')
+        and (AMeasurer <> nil) then
+      begin
+        AMeasurer.MeasureLine(FTbSpecs[t].Icons[i].Title, ink.FontName,
+          Round(12 * APPI / 96), 400, tw, th);
+        ws[i] := tw / s;
+        hs[i] := th / s;
+      end;
+    end;
+    FTbLayouts[t] := TyToolboxLayoutOf(FTbSpecs[t], w, h, FTbPrev[t].X,
+      FTbPrev[t].Y, ws, hs);
+    if FTbLayouts[t].Valid then
+      FTbPrev[t] := TyPointF(FTbLayouts[t].GroupX, FTbLayouts[t].GroupY);
+    FTbLive[t] := nil;
+    SetLength(FTbLive[t], Length(FTbSpecs[t].Icons));
+    { the status's emphasis is applied when the update ends -- after the
+      adjustment wrote the state: the text's adjusted align comes with it }
+    for i := 0 to High(FTbSpecs[t].Icons) do
+      FTbLive[t][i].AdjAlign := FTbSpecs[t].Icons[i].Status;
+  end;
+  { a dataZoom feature that went takes its active flag with it }
+  if not dzOn then
+  begin
+    FTbZoomActive := False;
+    FTbBrushing := False;
+    FTbCover := False;
+  end;
+end;
+
+{ zrender's composition of the group's move and the icon's: a move inside
+  the epsilon is no transform at all }
+function TbNotAroundZero(V: Double): Boolean;
+begin
+  Result := (V > 5e-5) or (V < -5e-5);
+end;
+
+procedure TTyAdvanceChart.TbIconOrigin(ATb, AIcon: Integer; out AX, AY: Double);
+var gx, gy, x, y: Double;
+begin
+  gx := FTbLayouts[ATb].GroupX;
+  gy := FTbLayouts[ATb].GroupY;
+  x := FTbSpecs[ATb].Icons[AIcon].X;
+  y := FTbSpecs[ATb].Icons[AIcon].Y;
+  if TbNotAroundZero(x) or TbNotAroundZero(y) then
+  begin
+    if TbNotAroundZero(gx) or TbNotAroundZero(gy) then
+    begin
+      AX := x + gx;
+      AY := y + gy;
+    end
+    else
+    begin
+      AX := x;
+      AY := y;
+    end;
+  end
+  else if TbNotAroundZero(gx) or TbNotAroundZero(gy) then
+  begin
+    AX := gx;
+    AY := gy;
+  end
+  else
+  begin
+    AX := 0;
+    AY := 0;
+  end;
+end;
+
+function TTyAdvanceChart.TbEmphasised(ATb, AIcon: Integer): Boolean;
+begin
+  Result := FTbSpecs[ATb].Icons[AIcon].Status;
+  if (ATb <= High(FTbLive)) and (AIcon <= High(FTbLive[ATb])) then
+    Result := Result or FTbLive[ATb][AIcon].HoverEmph;
+end;
+
+function TTyAdvanceChart.BuildToolboxes(AList: TTyPaintList;
+  const AMeasurer: ITyTextMeasurer): Integer;
+var
+  t, i: Integer;
+  ink: TTyTbInk;
+  s, ox, oy, tw, th, l, tp: Double;
+  el: TTyChartElement;
+  c: TTyChartColor;
+  sty: TTyTbItemStyle;
+  emph: Boolean;
+  r: TTyXYWH;
+  place: TTyTbTitlePlace;
+  rad: array of Double;
+  fs: Integer;
+  pr: TTyRectF;
+
+  function Blank: TTyChartElement;
+  begin
+    Result := Default(TTyChartElement);
+    Result.Silent := True;
+    Result.Datum := TyChartDatum(-1, -1);
+    Result.Z := FTbSpecs[t].Z;
+    Result.Style.Alpha := 1;
+  end;
+
+begin
+  Result := 0;
+  ink := TbInk;
+  s := TbScale;
+  for t := 0 to High(FTbLayouts) do
+  begin
+    if (t > High(FTbSpecs)) or not FTbLayouts[t].Valid then Continue;
+    { a group a degenerate icon placed at NaN draws nothing at all }
+    if IsNan(FTbLayouts[t].GroupX) or IsNan(FTbLayouts[t].GroupY) then Continue;
+    { the background, under the icons }
+    r := FTbLayouts[t].Background;
+    el := Blank;
+    el.Z2 := -1;
+    if IsNan(r.X) or IsNan(r.Y) or IsNan(r.W) or IsNan(r.H) then r := Default(TTyXYWH);
+    pr := TyRectF(FLastRect.Left + s * (FTbLayouts[t].GroupX + r.X),
+      FLastRect.Top + s * (FTbLayouts[t].GroupY + r.Y),
+      FLastRect.Left + s * (FTbLayouts[t].GroupX + r.X + r.W),
+      FLastRect.Top + s * (FTbLayouts[t].GroupY + r.Y + r.H));
+    SetLength(rad, Length(FTbSpecs[t].Radius));
+    for i := 0 to High(rad) do rad[i] := FTbSpecs[t].Radius[i] * s;
+    if Length(rad) > 0 then el.Shape := TyShapeRoundRect(pr, rad)
+    else el.Shape := TyShapeRect(pr);
+    if TbColour(FTbSpecs[t].Background, ink.Background, c) and ((c shr 24) <> 0) then
+    begin
+      el.Style.HasFill := True;
+      el.Style.FillColor := c;
+    end;
+    if (FTbSpecs[t].BorderWidth > 0) and TbColour(FTbSpecs[t].BorderColor, ink.Border, c) then
+    begin
+      el.Style.StrokeColor := c;
+      el.Style.StrokeWidthLogical := FTbSpecs[t].BorderWidth;
+    end;
+    if el.Style.HasFill or (el.Style.StrokeWidthLogical > 0) then
+    begin
+      AList.Add(el);
+      Inc(Result);
+    end;
+    { the icons }
+    for i := 0 to High(FTbSpecs[t].Icons) do
+    begin
+      { an image icon is laid out and answers the pointer; it draws nothing --
+        nor does a degenerate path, NaN through and through }
+      if FTbSpecs[t].Icons[i].IsImage then Continue;
+      if IsNan(FTbSpecs[t].Icons[i].PathRect.X) or IsNan(FTbSpecs[t].Icons[i].PathRect.Y)
+        or IsNan(FTbSpecs[t].Icons[i].PathRect.W) or IsNan(FTbSpecs[t].Icons[i].PathRect.H) then
+        Continue;
+      emph := TbEmphasised(t, i);
+      sty := TyTbStyleOf(FTbSpecs[t].Icons[i], emph);
+      TbIconOrigin(t, i, ox, oy);
+      if IsNan(ox) or IsNan(oy) then Continue;
+      el := Blank;
+      el.Shape := TyMkZrShape(FTbSpecs[t].Icons[i].Path, TyZrLocal(s, s, 0,
+        FLastRect.Left + s * ox, FLastRect.Top + s * oy), True);
+      if emph then c := ink.StrokeHover else c := ink.Stroke;
+      if TbColour(sty.Stroke, c, c) and (sty.LineWidth > 0) then
+      begin
+        el.Style.StrokeColor := c;
+        el.Style.StrokeWidthLogical := sty.LineWidth;
+      end;
+      if sty.HasFill and TbColour(sty.Fill, 0, c) and (sty.Fill.Kind = tbcText) then
+      begin
+        el.Style.HasFill := True;
+        el.Style.FillColor := c;
+      end;
+      if sty.HasOpacity and not IsNan(sty.Opacity) then
+        el.Style.Alpha := Max(0, Min(1, sty.Opacity));
+      AList.Add(el);
+      Inc(Result);
+    end;
+    { the titles under the pointer }
+    for i := 0 to High(FTbSpecs[t].Icons) do
+    begin
+      if (t > High(FTbLive)) or (i > High(FTbLive[t])) or not FTbLive[t][i].TextShown then Continue;
+      if not FTbSpecs[t].Icons[i].HasTitle or (FTbSpecs[t].Icons[i].Title = '') then Continue;
+      emph := TbEmphasised(t, i);
+      place := TyToolboxTitlePlace(FTbSpecs[t], FTbLayouts[t], i,
+        FTbLive[t][i].AdjPos, FTbLive[t][i].AdjAlign, emph);
+      if IsNan(place.X) or IsNan(place.Y) then Continue;
+      el := Blank;
+      el.Z2 := 1;
+      fs := ink.FontSizeLogical;
+      if FTbSpecs[t].Icons[i].TextFontSize > 0 then fs := Round(FTbSpecs[t].Icons[i].TextFontSize);
+      tw := 0;
+      th := 0;
+      if AMeasurer <> nil then
+        AMeasurer.MeasureLine(FTbSpecs[t].Icons[i].Title, ink.FontName,
+          Round(fs * s), ink.FontWeight, tw, th);
+      el.Caption.Text := FTbSpecs[t].Icons[i].Title;
+      el.Caption.FontName := ink.FontName;
+      el.Caption.FontSizeLogical := fs;
+      el.Caption.FontWeight := ink.FontWeight;
+      { textFill, else the emphasis fill, else its stroke }
+      sty := TyTbStyleOf(FTbSpecs[t].Icons[i], True);
+      if FTbSpecs[t].Icons[i].TextFill.Kind = tbcText then
+        TbColour(FTbSpecs[t].Icons[i].TextFill, ink.StrokeHover, c)
+      else if FTbSpecs[t].Icons[i].Emph.HasFill
+        and (FTbSpecs[t].Icons[i].Emph.Fill.Kind = tbcText) then
+        TbColour(FTbSpecs[t].Icons[i].Emph.Fill, ink.StrokeHover, c)
+      else
+        TbColour(sty.Stroke, ink.StrokeHover, c);
+      el.Caption.Colour := c;
+      el.Caption.X := FLastRect.Left + s * place.X;
+      el.Caption.Y := FLastRect.Top + s * place.Y;
+      if place.Align = 'center' then el.Caption.AnchorH := tahCentre
+      else if place.Align = 'right' then el.Caption.AnchorH := tahRight
+      else el.Caption.AnchorH := tahLeft;
+      if place.VAlign = 'middle' then el.Caption.AnchorV := tavMiddle
+      else if place.VAlign = 'bottom' then el.Caption.AnchorV := tavBottom
+      else el.Caption.AnchorV := tavTop;
+      case el.Caption.AnchorH of
+        tahCentre: l := el.Caption.X - tw / 2;
+        tahRight: l := el.Caption.X - tw;
+      else
+        l := el.Caption.X;
+      end;
+      case el.Caption.AnchorV of
+        tavMiddle: tp := el.Caption.Y - th / 2;
+        tavBottom: tp := el.Caption.Y - th;
+      else
+        tp := el.Caption.Y;
+      end;
+      el.Shape := TyShapeRect(TyRectF(l, tp, l + tw, tp + th));
+      AList.Add(el);
+      Inc(Result);
+    end;
+  end;
+  { the brush's cover while it is drawn }
+  if FTbCover then
+  begin
+    el := Default(TTyChartElement);
+    el.Silent := True;
+    el.Datum := TyChartDatum(-1, -1);
+    el.Z := 10000;
+    el.Style.Alpha := 1;
+    r := FTbCoverRect;
+    el.Shape := TyShapeRect(TyRectF(FBuild.Viewport.Left + s * r.X,
+      FBuild.Viewport.Top + s * r.Y, FBuild.Viewport.Left + s * (r.X + r.W),
+      FBuild.Viewport.Top + s * (r.Y + r.H)));
+    el.Style.HasFill := True;
+    el.Style.FillColor := ink.Brush;
+    AList.Add(el);
+    Inc(Result);
+  end;
+end;
+
+function TTyAdvanceChart.TbHitAt(AX, AY: Integer; out ATb, AIcon: Integer): Boolean;
+var
+  t, i: Integer;
+  s, x, y, ox, oy: Double;
+  r: TTyXYWH;
+begin
+  Result := False;
+  ATb := -1;
+  AIcon := -1;
+  if csDesigning in ComponentState then Exit;
+  s := TbScale;
+  x := (AX - FLastRect.Left) / s;
+  y := (AY - FLastRect.Top) / s;
+  { zrender's Handler hit-tests nothing outside the canvas }
+  if (x < 0) or (y < 0) or (x > (FLastRect.Right - FLastRect.Left) / s)
+    or (y > (FLastRect.Bottom - FLastRect.Top) / s) then Exit;
+  for t := High(FTbLayouts) downto 0 do
+  begin
+    if (t > High(FTbSpecs)) or not FTbLayouts[t].Valid then Continue;
+    for i := High(FTbSpecs[t].Icons) downto 0 do
+    begin
+      { rectHover: the element's own rect, through its transform }
+      r := TyToolboxIconRect(FTbSpecs[t], FTbSpecs[t].Icons[i], TbEmphasised(t, i));
+      TbIconOrigin(t, i, ox, oy);
+      { a degenerate icon's NaN rect contains nothing, as a comparison with
+        NaN is false }
+      if IsNan(r.X) or IsNan(r.Y) or IsNan(r.W) or IsNan(r.H) or IsNan(ox) or IsNan(oy) then
+        Continue;
+      if (x - ox >= r.X) and (x - ox <= r.X + r.W) and (y - oy >= r.Y)
+        and (y - oy <= r.Y + r.H) then
+      begin
+        ATb := t;
+        AIcon := i;
+        Exit(True);
+      end;
+    end;
+  end;
+end;
+
+procedure TTyAdvanceChart.TbChanged;
+begin
+  DropStatic;
+  inherited Invalidate;
+end;
+
+{ the icon's mouseover: the title shown at once (its position the
+  mouseover's), the emphasis entered at the next frame -- with the state's
+  adjusted text config -- unless the element is already in it }
+procedure TTyAdvanceChart.TbMouseOver(const ATarget: TTyChartEventTarget);
+var t, i: Integer;
+begin
+  if (ATarget.HdKind <> 8) or (ATarget.HdGen <> FTbGen) then Exit;
+  t := ATarget.HdSeries;
+  i := ATarget.HdRow;
+  if (t > High(FTbLive)) or (i < 0) or (i > High(FTbLive[t])) then Exit;
+  FTbLive[t][i].TextShown := FTbSpecs[t].ShowTitle;
+  FTbLive[t][i].PendLeave := False;
+  if not TbEmphasised(t, i) then FTbLive[t][i].PendEnter := True;
+  TbChanged;
+end;
+
+{ the icon's mouseout: the emphasis left at the next frame unless the
+  feature's status holds it; the title hidden at once }
+procedure TTyAdvanceChart.TbMouseOut(const ATarget: TTyChartEventTarget);
+var t, i: Integer;
+begin
+  if (ATarget.HdKind <> 8) or (ATarget.HdGen <> FTbGen) then Exit;
+  t := ATarget.HdSeries;
+  i := ATarget.HdRow;
+  if (t > High(FTbLive)) or (i < 0) or (i > High(FTbLive[t])) then Exit;
+  FTbLive[t][i].PendEnter := False;
+  if not TbStatusIs(t, FTbSpecs[t].Icons[i].Feature, FTbSpecs[t].Icons[i].Name)
+    and FTbLive[t][i].HoverEmph then FTbLive[t][i].PendLeave := True;
+  FTbLive[t][i].TextShown := False;
+  TbChanged;
+end;
+
+{ echarts' _onframe: the hover's emphasis changes applied -- entering brings
+  the state's adjusted position and align, leaving takes them away }
+procedure TTyAdvanceChart.TbFrame;
+var
+  t, i: Integer;
+  any: Boolean;
+begin
+  any := False;
+  for t := 0 to High(FTbLive) do
+    for i := 0 to High(FTbLive[t]) do
+    begin
+      if FTbLive[t][i].PendEnter then
+      begin
+        FTbLive[t][i].PendEnter := False;
+        FTbLive[t][i].HoverEmph := True;
+        FTbLive[t][i].AdjPos := True;
+        FTbLive[t][i].AdjAlign := True;
+        any := True;
+      end;
+      if FTbLive[t][i].PendLeave then
+      begin
+        FTbLive[t][i].PendLeave := False;
+        FTbLive[t][i].HoverEmph := False;
+        FTbLive[t][i].AdjPos := False;
+        FTbLive[t][i].AdjAlign := False;
+        any := True;
+      end;
+    end;
+  if any then TbChanged;
+end;
+
+procedure TTyAdvanceChart.TbClick(ATb, AIcon: Integer);
+var
+  f, ic, nm: string;
+  h: TTyChartToolboxHandler;
+begin
+  if (ATb > High(FTbSpecs)) or (AIcon < 0) or (AIcon > High(FTbSpecs[ATb].Icons)) then Exit;
+  f := FTbSpecs[ATb].Icons[AIcon].Feature;
+  ic := FTbSpecs[ATb].Icons[AIcon].Name;
+  if FTbSpecs[ATb].Icons[AIcon].IsUser then
+  begin
+    { onclick: '@Name' }
+    nm := FTbSpecs[ATb].Icons[AIcon].OnClick;
+    if TyChartIsHandlerRef(nm) and TyChartFindToolboxHandler(Copy(nm, 2, MaxInt), h) then
+      h(Self, f, ic);
+    Exit;
+  end;
+  if f = 'saveAsImage' then TbSaveAsImage(ATb)
+  else if f = 'restore' then
+  begin
+    { history.clear, then the action }
+    FTbHistory := nil;
+    DispatchAction('{"type":"restore"}');
+  end
+  else if f = 'dataView' then TbDataView(ATb)
+  else if f = 'dataZoom' then
+  begin
+    if ic = 'zoom' then
+    begin
+      if FTbZoomActive then
+        DispatchAction('{"type":"takeGlobalCursor","key":"dataZoomSelect","dataZoomSelectActive":false}')
+      else
+        DispatchAction('{"type":"takeGlobalCursor","key":"dataZoomSelect","dataZoomSelectActive":true}');
+    end
+    else if ic = 'back' then TbBack;
+  end
+  else if f = 'magicType' then TbMagicType(ATb, ic);
+end;
+
+function TTyAdvanceChart.ToolboxClick(ATb: Integer; const AFeature, AIcon: string): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if (ATb < 0) or (ATb > High(FTbSpecs)) then Exit;
+  for i := 0 to High(FTbSpecs[ATb].Icons) do
+    if (FTbSpecs[ATb].Icons[i].Feature = AFeature) and (FTbSpecs[ATb].Icons[i].Name = AIcon) then
+    begin
+      TbClick(ATb, i);
+      Exit(True);
+    end;
+end;
+
+{ the action's payload as its event carries it: the event's name for its
+  type }
+function TbEventJson(APayload: TJSONObject; const AName: string): string;
+var
+  o: TJSONObject;
+  i: Integer;
+begin
+  o := TJSONObject.Create;
+  try
+    o.Add('type', AName);
+    for i := 0 to APayload.Count - 1 do
+      if APayload.Names[i] <> 'type' then
+        o.Add(APayload.Names[i], APayload.Items[i].Clone);
+    Result := TyTbJson(o);
+  finally
+    o.Free;
+  end;
+end;
+
+procedure TTyAdvanceChart.TbDoRestore(APayload: TJSONObject);
+var h: TTyTbHistory;
+begin
+  { resetOption('recreate'): new models from the backup -- the same
+    GlobalModel, so the history stays }
+  h := FTbHistory;
+  ApplyNotMerge(FTbBackup);
+  FTbHistory := h;
+  AfterSetOption(False, True);
+  EmitPayloadEvent('restore', TbEventJson(APayload, 'restore'));
+end;
+
+function TTyAdvanceChart.TbMagicSeries: TTyMagicSeriesArray;
+var
+  i, n, slot: Integer;
+  d: TJSONData;
+  b: TTySeriesBinding;
+begin
+  n := FOption.ComponentCount('series');
+  Result := nil;
+  for i := 0 to n - 1 do
+  begin
+    d := FOption.ComponentAt('series', i);
+    if not (d is TJSONObject) then Continue;
+    SetLength(Result, Length(Result) + 1);
+    Result[High(Result)].Index := i;
+    Result[High(Result)].Node := TJSONObject(d);
+    Result[High(Result)].SubType := FOption.ComponentSubType('series', i);
+    Result[High(Result)].Cartesian := False;
+    Result[High(Result)].CatDim := '';
+    Result[High(Result)].CatIndex := -1;
+    slot := SlotOfSeries(i);
+    if slot < 0 then Continue;
+    b := FBindings[slot];
+    if (b.Cart = nil) or (b.CoordSysName <> 'cartesian2d') then Continue;
+    Result[High(Result)].Cartesian := True;
+    { getAxesByScale('ordinal')[0]: x before y }
+    if (b.XAxis <> nil) and (b.XAxis.AxisType = atCategory) then
+    begin
+      Result[High(Result)].CatDim := 'x';
+      Result[High(Result)].CatIndex := b.XAxis.ComponentIndex;
+    end
+    else if (b.YAxis <> nil) and (b.YAxis.AxisType = atCategory) then
+    begin
+      Result[High(Result)].CatDim := 'y';
+      Result[High(Result)].CatIndex := b.YAxis.ComponentIndex;
+    end;
+  end;
+end;
+
+procedure TTyAdvanceChart.TbMagicType(ATb: Integer; const AType: string);
+var
+  fm, opt, ttl, pay: TJSONObject;
+  st: TStringList;
+  cur: string;
+  i: Integer;
+begin
+  fm := TyToolboxFeatureModel(FOption, ATb, 'magicType', TbTitles);
+  if fm = nil then Exit;
+  st := TbStatusOf(ATb);
+  ttl := nil;
+  opt := nil;
+  try
+    { the titles a stack click wrote into the feature }
+    if (ATb <= High(FTbMagicTitle)) and (FTbMagicTitle[ATb] <> '') then
+    begin
+      if fm.IndexOfName('title') >= 0 then fm.Delete('title');
+      fm.Add('title', GetJSON(FTbMagicTitle[ATb]));
+    end;
+    opt := TyMagicTypeOption(fm, AType, TbMagicSeries, st, cur, ttl);
+    if opt = nil then Exit;
+    { the statuses it set, on the feature's option }
+    for i := 0 to st.Count - 1 do
+      if Copy(st.Names[i], 1, 10) = 'magicType|' then
+        FTbStatus.Values[IntToStr(ATb) + '|' + st.Names[i]] := st.ValueFromIndex[i];
+    pay := TJSONObject.Create;
+    try
+      pay.Add('type', 'changeMagicType');
+      pay.Add('currentType', cur);
+      pay.Add('newOption', opt);
+      opt := nil;
+      if ttl <> nil then
+      begin
+        pay.Add('newTitle', ttl);
+        ttl := nil;
+      end;
+      pay.Add('featureName', 'magicType');
+      DispatchAction(TyTbJson(pay));
+    finally
+      pay.Free;
+    end;
+  finally
+    opt.Free;
+    ttl.Free;
+    st.Free;
+    fm.Free;
+  end;
+end;
+
+procedure TTyAdvanceChart.TbDoMagic(APayload: TJSONObject);
+var
+  d, ft: TJSONData;
+  t: Integer;
+begin
+  d := APayload.Find('newOption');
+  if d is TJSONObject then
+  begin
+    if DoMerge(TyTbJson(d), []) then AfterSetOption(False, True);
+  end;
+  { the toolbox's render takes newTitle into the feature it names }
+  d := APayload.Find('newTitle');
+  ft := APayload.Find('featureName');
+  if (d <> nil) and (d.JSONType <> jtNull) and (ft <> nil) and (ft.JSONType = jtString)
+    and (ft.AsString = 'magicType') then
+  begin
+    SetLength(FTbMagicTitle, Max(Length(FTbMagicTitle), TyToolboxCount(FOption)));
+    for t := 0 to High(FTbMagicTitle) do FTbMagicTitle[t] := TyTbJson(d);
+  end;
+  EmitPayloadEvent('magictypechanged', TbEventJson(APayload, 'magictypechanged'));
+end;
+
+{ getContentFromModel's two kinds of series, from the stores }
+function TTyAdvanceChart.TbDataViewContent(out AMeta: TTyDvMetaArray): string;
+var
+  groups: TTyDvGroupArray;
+  lists: TTyDvListArray;
+  keys: TTyStringArray;
+  i, n, slot, g, k, r, dim: Integer;
+  b: TTySeriesBinding;
+  st: TTyDataStore;
+  key: string;
+  cats: TTyOrdinalMeta;
+  dims: TTyIntegerArray;
+  col: TTyDoubleArray;
+  isCat: Boolean;
+  nm: string;
+begin
+  groups := nil;
+  lists := nil;
+  keys := nil;
+  AMeta := nil;
+  n := FOption.ComponentCount('series');
+  for i := 0 to n - 1 do
+  begin
+    slot := SlotOfSeries(i);
+    if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Continue;
+    b := FBindings[slot];
+    st := FStores[slot];
+    isCat := ((b.Cart <> nil) or (b.Polar <> nil)) and (b.BaseAxis <> nil)
+      and (b.BaseAxis.AxisType = atCategory) and (b.ValueAxis <> nil);
+    nm := FOption.ComponentModelName('series', i);
+    if isCat then
+    begin
+      key := b.BaseAxis.Dim + '_' + IntToStr(b.BaseAxis.ComponentIndex);
+      g := -1;
+      for k := 0 to High(keys) do
+        if keys[k] = key then g := k;
+      if g < 0 then
+      begin
+        g := Length(groups);
+        SetLength(groups, g + 1);
+        SetLength(keys, g + 1);
+        keys[g] := key;
+        groups[g].AxisDim := b.BaseAxis.Dim;
+        groups[g].AxisIndex := b.BaseAxis.ComponentIndex;
+        cats := b.BaseAxis.Categories;
+        if cats <> nil then
+        begin
+          SetLength(groups[g].Categories, cats.Count);
+          for k := 0 to cats.Count - 1 do groups[g].Categories[k] := cats.CategoryAt(k);
+        end;
+        SetLength(AMeta, g + 1);
+        AMeta[g].AxisDim := b.BaseAxis.Dim;
+        AMeta[g].AxisIndex := b.BaseAxis.ComponentIndex;
+      end;
+      SetLength(groups[g].Names, Length(groups[g].Names) + 1);
+      groups[g].Names[High(groups[g].Names)] := nm;
+      dims := st.DimsOfCoord(b.ValueAxis.Dim);
+      col := nil;
+      if (Length(dims) > 0) and (dims[0] >= 0) then
+      begin
+        SetLength(col, st.RawCount);
+        for r := 0 to st.RawCount - 1 do col[r] := st.GetOriginalByRaw(dims[0], r);
+      end;
+      SetLength(groups[g].Columns, Length(groups[g].Columns) + 1);
+      groups[g].Columns[High(groups[g].Columns)] := col;
+    end
+    else
+    begin
+      k := Length(lists);
+      SetLength(lists, k + 1);
+      lists[k].Name := nm;
+      SetLength(lists[k].RowNames, st.RawCount);
+      SetLength(lists[k].Rows, st.RawCount);
+      for r := 0 to st.RawCount - 1 do
+      begin
+        lists[k].RowNames[r] := st.GetNameByRaw(r);
+        col := nil;
+        for dim := 0 to st.DimCount - 1 do
+        begin
+          { the stack's two columns are in the raw data upstream; no other
+            column of the port's own }
+          if (Copy(st.DimName(dim), 1, 5) = '__ty_')
+            and (Copy(st.DimName(dim), 1, 16) <> '__ty_stackresult')
+            and (Copy(st.DimName(dim), 1, 16) <> '__ty_stackedover') then Continue;
+          SetLength(col, Length(col) + 1);
+          if Copy(st.DimName(dim), 1, 5) = '__ty_' then col[High(col)] := st.GetByRaw(dim, r)
+          else col[High(col)] := st.GetOriginalByRaw(dim, r);
+        end;
+        lists[k].Rows[r] := col;
+      end;
+    end;
+  end;
+  Result := TyDataViewText(groups, lists);
+end;
+
+function TTyAdvanceChart.ToolboxDataViewText: string;
+var meta: TTyDvMetaArray;
+begin
+  Result := TbDataViewContent(meta);
+end;
+
+function TTyAdvanceChart.TbDvFind(const AName: string; out AData: TJSONData): Boolean;
+var
+  i: Integer;
+  d: TJSONData;
+begin
+  Result := False;
+  AData := nil;
+  for i := 0 to FOption.ComponentCount('series') - 1 do
+    if FOption.ComponentModelName('series', i) = AName then
+    begin
+      d := FOption.ComponentAt('series', i);
+      if d is TJSONObject then AData := TJSONObject(d).Find('data');
+      Exit(True);
+    end;
+end;
+
+procedure TTyAdvanceChart.TbDataView(ATb: Integer);
+var
+  fm, parsed, pay: TJSONObject;
+  meta: TTyDvMetaArray;
+  body, title, closeC, refreshC, err: string;
+  d: TJSONData;
+  ro: Boolean;
+begin
+  FTbError := '';
+  fm := TyToolboxFeatureModel(FOption, ATb, 'dataView', TbTitles);
+  if fm = nil then Exit;
+  try
+    body := TbDataViewContent(meta);
+    d := fm.Find('readOnly');
+    ro := (d <> nil) and (((d.JSONType = jtBoolean) and d.AsBoolean)
+      or ((d.JSONType = jtNumber) and (d.AsFloat <> 0))
+      or ((d.JSONType = jtString) and (d.AsString <> '')));
+    { lang[0] || title; lang[1], lang[2] the buttons }
+    title := '';
+    closeC := rsMsgBtnClose;
+    refreshC := rsTyChartToolboxDataViewRefresh;
+    d := fm.Find('lang');
+    if d is TJSONArray then
+    begin
+      if (TJSONArray(d).Count > 0) and (TJSONArray(d).Items[0].JSONType = jtString) then
+        title := TJSONArray(d).Items[0].AsString;
+      if (TJSONArray(d).Count > 1) and (TJSONArray(d).Items[1].JSONType = jtString) then
+        closeC := TJSONArray(d).Items[1].AsString;
+      if (TJSONArray(d).Count > 2) and (TJSONArray(d).Items[2].JSONType = jtString) then
+        refreshC := TJSONArray(d).Items[2].AsString;
+    end;
+    if title = '' then
+    begin
+      d := fm.Find('title');
+      if (d <> nil) and (d.JSONType = jtString) then title := d.AsString;
+    end;
+  finally
+    fm.Free;
+  end;
+  if not ToolboxShowDataView(title, body, ro, closeC, refreshC) then Exit;
+  body := StringReplace(StringReplace(body, #13#10, #10, [rfReplaceAll]), #13, #10, [rfReplaceAll]);
+  parsed := TyDataViewParse(body, meta, err);
+  if parsed = nil then
+  begin
+    { upstream throws 'Data view format error' after closing }
+    FTbError := Format(rsTyChartToolboxDataViewBad, [err]);
+    Exit;
+  end;
+  pay := TJSONObject.Create;
+  try
+    pay.Add('type', 'changeDataView');
+    pay.Add('newOption', parsed);
+    DispatchAction(TyTbJson(pay));
+  finally
+    pay.Free;
+  end;
+end;
+
+procedure TTyAdvanceChart.TbDoDataView(APayload: TJSONObject);
+var
+  d: TJSONData;
+  merged: TJSONObject;
+begin
+  d := APayload.Find('newOption');
+  if d is TJSONObject then
+  begin
+    merged := TyDataViewChange(TJSONObject(d), @TbDvFind);
+    try
+      if DoMerge(TyTbJson(merged), []) then AfterSetOption(False, True);
+    finally
+      merged.Free;
+    end;
+  end;
+  EmitPayloadEvent('dataviewchanged', TbEventJson(APayload, 'dataviewchanged'));
+end;
+
+function TTyAdvanceChart.ToolboxShowDataView(const ATitle: string;
+  var AText: string; AReadOnly: Boolean; const ACloseCaption,
+  ARefreshCaption: string): Boolean;
+begin
+  Result := TyShowDataViewDialog(ATitle, AText, AReadOnly, ACloseCaption, ARefreshCaption);
+end;
+
+function TTyAdvanceChart.ToolboxAskFileName(var AFileName: string;
+  const AType: string): Boolean;
+begin
+  Result := TyAskImageFileName(AFileName, AType);
+end;
+
+procedure TTyAdvanceChart.TbSaveAsImage(ATb: Integer);
+var
+  fm: TJSONObject;
+  opts, fileName, typ: string;
+  handled: Boolean;
+begin
+  fm := TyToolboxFeatureModel(FOption, ATb, 'saveAsImage', TbTitles);
+  try
+    opts := TyToolboxSaveOpts(FOption, fm, fileName, typ);
+  finally
+    fm.Free;
+  end;
+  handled := False;
+  if Assigned(FOnToolboxSaveAsImage) then
+    FOnToolboxSaveAsImage(Self, fileName, opts, handled);
+  if handled then Exit;
+  if not ToolboxAskFileName(fileName, typ) then Exit;
+  SaveToFile(fileName, opts);
+end;
+
+procedure TTyAdvanceChart.TbDoTakeCursor(APayload: TJSONObject);
+var d: TJSONData;
+begin
+  d := APayload.Find('key');
+  if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'dataZoomSelect') then
+    FTbZoomActive := TyJsTruthy(APayload.Find('dataZoomSelectActive'))
+  else
+    FTbZoomActive := False;
+  if not FTbZoomActive then
+  begin
+    FTbBrushing := False;
+    FTbCover := False;
+  end;
+  { update: every view renders again }
+  FDirty := True;
+  Invalidate;
+  EmitPayloadEvent('globalcursortaken', TbEventJson(APayload, 'globalcursortaken'));
+end;
+
+{ the select dataZoom for an axis key ('x0'); -1 for none (findDataZoom:
+  the last one) }
+function TTyAdvanceChart.TbSelIndexOf(const AKey: string): Integer;
+var i, k: Integer;
+begin
+  Result := -1;
+  for i := 0 to High(FZoomSpecs) do
+    if FZoomSpecs[i].SubType = 'select' then
+      for k := 0 to High(FZoomSpecs[i].Targets) do
+        if FZoomSpecs[i].Targets[k].Dim + IntToStr(FZoomSpecs[i].Targets[k].AxisIndex) = AKey then
+          Result := i;
+end;
+
+procedure TTyAdvanceChart.TbSelPut(const AKey: string; AIsValue: Boolean; A, B: Double);
+var i: Integer;
+begin
+  for i := 0 to High(FTbSel) do
+    if FTbSel[i].Key = AKey then
+    begin
+      FTbSel[i].IsValue := AIsValue;
+      FTbSel[i].A := A;
+      FTbSel[i].B := B;
+      Exit;
+    end;
+  i := Length(FTbSel);
+  SetLength(FTbSel, i + 1);
+  FTbSel[i].Key := AKey;
+  FTbSel[i].IsValue := AIsValue;
+  FTbSel[i].A := A;
+  FTbSel[i].B := B;
+end;
+
+procedure TTyAdvanceChart.TbDispatchZoom(const ASnap: TTyTbSnapshot);
+var
+  a: TTyDzAction;
+  i, k, n: Integer;
+begin
+  a := Default(TTyDzAction);
+  a.Batch := True;
+  a.FromToolbox := True;
+  a.FromSlider := -1;
+  for i := 0 to High(ASnap) do
+  begin
+    k := TbSelIndexOf(ASnap[i].Key);
+    if k < 0 then Continue;
+    n := Length(a.Items);
+    SetLength(a.Items, n + 1);
+    a.Items[n].DataZoomIndex := k;
+    a.Items[n].IsValue := ASnap[i].IsValue;
+    a.Items[n].Start := ASnap[i].A;
+    a.Items[n].Stop := ASnap[i].B;
+  end;
+  if Length(a.Items) = 0 then Exit;
+  DzDispatch(a);
+end;
+
+procedure TTyAdvanceChart.TbBack;
+var snap: TTyTbSnapshot;
+begin
+  snap := TyTbHistoryPop(FTbHistory);
+  { the dispatch's update renders the toolbox again: back's status follows
+    the history -- and an empty snapshot dispatches nothing, renders
+    nothing }
+  TbDispatchZoom(snap);
+end;
+
+{ makePanelOpts: a grid some select dataZoom targets an axis of; lineX when
+  only its x axes are declared, lineY only its y, else rect. CSS px. }
+function TTyAdvanceChart.TbPanelAt(AX, AY: Double; out AType: TTyTbBrushType;
+  out ARect: TTyXYWH): Integer;
+var
+  g, i, k: Integer;
+  xd, yd: Boolean;
+  axis: TTyAxis;
+  r: TTyXYWH;
+begin
+  Result := -1;
+  AType := tbbRect;
+  ARect := Default(TTyXYWH);
+  if FBuild = nil then Exit;
+  for g := 0 to FBuild.GridCount - 1 do
+  begin
+    xd := False;
+    yd := False;
+    for i := 0 to High(FZoomSpecs) do
+      if FZoomSpecs[i].SubType = 'select' then
+        for k := 0 to High(FZoomSpecs[i].Targets) do
+        begin
+          axis := DzAxis(FZoomSpecs[i].Targets[k].Dim, FZoomSpecs[i].Targets[k].AxisIndex);
+          if (axis = nil) or (axis.GridIndex <> FBuild.Grid(g).ComponentIndex) then Continue;
+          if FZoomSpecs[i].Targets[k].Dim = 'x' then xd := True else yd := True;
+        end;
+    if not (xd or yd) then Continue;
+    r := DzGridRect(g);
+    { getPanelByPoint: the last panel that contains the point }
+    if (AX >= r.X) and (AX <= r.X + r.W) and (AY >= r.Y) and (AY <= r.Y + r.H) then
+    begin
+      Result := g;
+      ARect := r;
+      if xd and not yd then AType := tbbLineX
+      else if yd and not xd then AType := tbbLineY
+      else AType := tbbRect;
+    end;
+  end;
+end;
+
+procedure TTyAdvanceChart.TbBrushDown(AX, AY: Integer);
+var
+  x, y, s: Double;
+  g: Integer;
+  bt: TTyTbBrushType;
+  r: TTyXYWH;
+begin
+  if not FTbZoomActive or (FBuild = nil) then Exit;
+  s := TbScale;
+  x := (AX - FBuild.Viewport.Left) / s;
+  y := (AY - FBuild.Viewport.Top) / s;
+  { a press during a drag ends it (a release lost outside the window) }
+  if FTbBrushing then
+  begin
+    TbBrushUp(AX, AY);
+    Exit;
+  end;
+  g := TbPanelAt(x, y, bt, r);
+  if g < 0 then Exit;
+  FTbBrushing := True;
+  FTbBrushGrid := g;
+  FTbBrushType := bt;
+  FTbBrushPanel := r;
+  FTbTrack[0] := x;
+  FTbTrack[1] := y;
+  FTbTrack[2] := x;
+  FTbTrack[3] := y;
+  FTbCover := False;
+end;
+
+{ updateCoverByMouse: the cover once the track is longer than the
+  threshold, its range from the track's two ends clipped to the panel }
+procedure TTyAdvanceChart.TbBrushTrack(AX, AY: Integer);
+var
+  s, lo, hi, lo2, hi2: Double;
+begin
+  s := TbScale;
+  FTbTrack[2] := (AX - FBuild.Viewport.Left) / s;
+  FTbTrack[3] := (AY - FBuild.Viewport.Top) / s;
+  if not FTbCover and (Power(Sqr(FTbTrack[2] - FTbTrack[0]) + Sqr(FTbTrack[3] - FTbTrack[1]), 0.5)
+    <= TyTbUnselectThreshold) then Exit;
+  FTbCover := True;
+  TyTbBrushRange(FTbBrushType, FTbTrack[0], FTbTrack[1], FTbTrack[2], FTbTrack[3],
+    FTbBrushPanel, lo, hi, lo2, hi2);
+  FTbRange[0] := lo;
+  FTbRange[1] := hi;
+  FTbRange[2] := lo2;
+  FTbRange[3] := hi2;
+  FTbCoverRect := TyTbCoverRect(FTbBrushType, lo, hi, lo2, hi2, FTbBrushPanel);
+end;
+
+procedure TTyAdvanceChart.TbBrushMove(AX, AY: Integer);
+begin
+  if not FTbBrushing or (FBuild = nil) then Exit;
+  TbBrushTrack(AX, AY);
+  TbChanged;
+end;
+
+procedure TTyAdvanceChart.TbBrushUp(AX, AY: Integer);
+var had: Boolean;
+begin
+  if not FTbBrushing or (FBuild = nil) then Exit;
+  TbBrushTrack(AX, AY);
+  FTbBrushing := False;
+  had := FTbCover;
+  { the brush's end: the cover goes (updateCovers([])) }
+  FTbCover := False;
+  TbChanged;
+  if had then TbBrushEnd;
+end;
+
+{ _onBrush: every cartesian of the panel's grid that the feature targets,
+  its range in data (pointToData clamped, or the affine inverse), restricted
+  to the hosting dataZoom's value spans, rounded to the precision the
+  grid's pixels allow; pushed to the history; dispatched }
+procedure TTyAdvanceChart.TbBrushEnd;
+var
+  snap: TTyTbSnapshot;
+  keys: TTyStringArray;
+  pa, pb: TTyDoubleArray;
+  g, c, i, k, n: Integer;
+  cart: TTyCartesian2D;
+  ax: TTyAxis;
+  dim: Integer;
+  m: TTyMat2D;
+  pt: TTyPointF;
+  d0, d1: TTyDoubleArray;
+  mm: array[0..1] of Double;
+  t: Double;
+  key: string;
+  zoom: TTyAxisZoom;
+  win: TTyDzWindow;
+  host: Integer;
+  s, px: Double;
+  ext: TTyRange;
+  prec: Double;
+  r: TTyXYWH;
+
+  function DevX(V: Double): Double;
+  begin
+    Result := FBuild.Viewport.Left + V * s;
+  end;
+
+  function DevY(V: Double): Double;
+  begin
+    Result := FBuild.Viewport.Top + V * s;
+  end;
+
+  procedure SetBatch(ADim: Integer; AAxis: TTyAxis; A, B: Double);
+  var j: Integer;
+  begin
+    if AAxis = nil then Exit;
+    if ADim = 0 then key := 'x' else key := 'y';
+    key := key + IntToStr(AAxis.ComponentIndex);
+    if TbSelIndexOf(key) < 0 then Exit;
+    ext := AAxis.Scale.GetExtent;
+    if ADim = 0 then px := r.W else px := r.H;
+    prec := TyAcceptableTickPrecision(ext.Start, ext.Stop, px, 0.5);
+    if not IsNan(prec) and not IsInfinite(prec) then
+    begin
+      A := TyTbRound(A, prec);
+      B := TyTbRound(B, prec);
+    end;
+    for j := 0 to High(snap) do
+      if snap[j].Key = key then
+      begin
+        snap[j].IsValue := True;
+        snap[j].A := A;
+        snap[j].B := B;
+        Exit;
+      end;
+    j := Length(snap);
+    SetLength(snap, j + 1);
+    snap[j].Key := key;
+    snap[j].IsValue := True;
+    snap[j].A := A;
+    snap[j].B := B;
+  end;
+
+begin
+  snap := nil;
+  g := FTbBrushGrid;
+  if (FBuild = nil) or (g < 0) or (g >= FBuild.GridCount) then Exit;
+  s := TbScale;
+  r := DzGridRect(g);
+  for c := 0 to FBuild.Grid(g).CartesianCount - 1 do
+  begin
+    cart := FBuild.Grid(g).CartesianByIndex(c);
+    if cart = nil then Continue;
+    { a cartesian whose x or y axis the feature targets }
+    if (cart.AxisByDim('x') = nil) or (cart.AxisByDim('y') = nil) then Continue;
+    if (TbSelIndexOf('x' + IntToStr(cart.AxisByDim('x').ComponentIndex)) < 0)
+      and (TbSelIndexOf('y' + IntToStr(cart.AxisByDim('y').ComponentIndex)) < 0) then Continue;
+    case FTbBrushType of
+      tbbRect:
+        begin
+          if cart.InvTransform(m) then
+          begin
+            cart.PointToData(TyPointF(DevX(FTbRange[0]), DevY(FTbRange[2])), d0);
+            cart.PointToData(TyPointF(DevX(FTbRange[1]), DevY(FTbRange[3])), d1);
+          end
+          else
+          begin
+            SetLength(d0, 2);
+            SetLength(d1, 2);
+            d0[0] := cart.AxisByDim('x').CoordToData(DevX(FTbRange[0]), True);
+            d0[1] := cart.AxisByDim('y').CoordToData(DevY(FTbRange[2]), True);
+            d1[0] := cart.AxisByDim('x').CoordToData(DevX(FTbRange[1]), True);
+            d1[1] := cart.AxisByDim('y').CoordToData(DevY(FTbRange[3]), True);
+          end;
+          for dim := 0 to 1 do
+          begin
+            mm[0] := d0[dim];
+            mm[1] := d1[dim];
+            if mm[0] > mm[1] then
+            begin
+              t := mm[0];
+              mm[0] := mm[1];
+              mm[1] := t;
+            end;
+            if dim = 0 then SetBatch(0, cart.AxisByDim('x'), mm[0], mm[1])
+            else SetBatch(1, cart.AxisByDim('y'), mm[0], mm[1]);
+          end;
+        end;
+      tbbLineX, tbbLineY:
+        begin
+          if FTbBrushType = tbbLineX then
+          begin
+            ax := cart.AxisByDim('x');
+            mm[0] := ax.CoordToData(DevX(FTbRange[0]), True);
+            mm[1] := ax.CoordToData(DevX(FTbRange[1]), True);
+            dim := 0;
+          end
+          else
+          begin
+            ax := cart.AxisByDim('y');
+            mm[0] := ax.CoordToData(DevY(FTbRange[2]), True);
+            mm[1] := ax.CoordToData(DevY(FTbRange[3]), True);
+            dim := 1;
+          end;
+          if mm[0] > mm[1] then
+          begin
+            t := mm[0];
+            mm[0] := mm[1];
+            mm[1] := t;
+          end;
+          SetBatch(dim, ax, mm[0], mm[1]);
+        end;
+    end;
+  end;
+  if Length(snap) = 0 then Exit;
+  { the windows before the first brush: each select dataZoom's percent range }
+  n := Length(snap);
+  SetLength(keys, n);
+  SetLength(pa, n);
+  SetLength(pb, n);
+  for i := 0 to n - 1 do
+  begin
+    keys[i] := snap[i].Key;
+    pa[i] := 0;
+    pb[i] := 100;
+    k := StrToIntDef(Copy(snap[i].Key, 2, MaxInt), 0);
+    if Copy(snap[i].Key, 1, 1) = 'x' then
+    begin
+      if AxisZoom('xAxis', k, zoom, win, host) then
+      begin
+        pa[i] := win.Percent[0];
+        pb[i] := win.Percent[1];
+      end;
+    end
+    else if AxisZoom('yAxis', k, zoom, win, host) then
+    begin
+      pa[i] := win.Percent[0];
+      pb[i] := win.Percent[1];
+    end;
+  end;
+  TyTbHistoryPush(FTbHistory, snap, keys, pa, pb);
+  { the dispatch's update renders the toolbox again (back's status) }
+  TbDispatchZoom(snap);
+end;
+
+{ the pointer's cursor: an icon's own ('pointer'), and over a brush panel
+  the brush's crosshair, which is set after it }
+procedure TTyAdvanceChart.TbApplyCursor(AX, AY: Integer);
+var
+  s, x, y: Double;
+  bt: TTyTbBrushType;
+  r: TTyXYWH;
+  c: string;
+begin
+  c := '';
+  if (FEvHover.HdKind = 8) and (FEvHover.Id <> 0) then c := 'pointer';
+  if FTbZoomActive and (FBuild <> nil) then
+  begin
+    s := TbScale;
+    x := (AX - FBuild.Viewport.Left) / s;
+    y := (AY - FBuild.Viewport.Top) / s;
+    if (x >= 0) and (y >= 0) and (x <= (FLastRect.Right - FLastRect.Left) / s)
+      and (y <= (FLastRect.Bottom - FLastRect.Top) / s)
+      and (TbPanelAt(x, y, bt, r) >= 0) then c := 'crosshair';
+  end;
+  if c <> '' then
+  begin
+    FTbCursor := c;
+    FDzCursor := c;
+    DzApplyCursor;
+  end
+  else if FTbCursor <> '' then
+  begin
+    FTbCursor := '';
+    FDzCursor := 'default';
+    DzApplyCursor;
+  end;
+end;
+
+{ ---- what the tests read ---- }
+
+procedure TTyAdvanceChart.ToolboxFrame;
+begin
+  TbFrame;
+end;
+
+function TTyAdvanceChart.ToolboxCount: Integer;
+begin
+  Result := Length(FTbSpecs);
+end;
+
+function TTyAdvanceChart.ToolboxSpec(AIndex: Integer): TTyToolboxSpec;
+begin
+  Result := Default(TTyToolboxSpec);
+  if (AIndex >= 0) and (AIndex <= High(FTbSpecs)) then Result := FTbSpecs[AIndex];
+end;
+
+function TTyAdvanceChart.ToolboxLayout(AIndex: Integer): TTyToolboxLayout;
+begin
+  Result := Default(TTyToolboxLayout);
+  if (AIndex >= 0) and (AIndex <= High(FTbLayouts)) then Result := FTbLayouts[AIndex];
+end;
+
+function TTyAdvanceChart.ToolboxIconState(ATb, AIcon: Integer;
+  out AEmphasised, ATitleShown, APosAdjusted, AAlignAdjusted: Boolean): Boolean;
+begin
+  AEmphasised := False;
+  ATitleShown := False;
+  APosAdjusted := False;
+  AAlignAdjusted := False;
+  Result := (ATb >= 0) and (ATb <= High(FTbSpecs)) and (AIcon >= 0)
+    and (AIcon <= High(FTbSpecs[ATb].Icons));
+  if not Result then Exit;
+  AEmphasised := TbEmphasised(ATb, AIcon);
+  if (ATb <= High(FTbLive)) and (AIcon <= High(FTbLive[ATb])) then
+  begin
+    ATitleShown := FTbLive[ATb][AIcon].TextShown;
+    APosAdjusted := FTbLive[ATb][AIcon].AdjPos;
+    AAlignAdjusted := FTbLive[ATb][AIcon].AdjAlign;
+  end;
+end;
+
+function TTyAdvanceChart.ToolboxTitle(ATb, AIcon: Integer): TTyTbTitlePlace;
+var e, shown, ap, aa: Boolean;
+begin
+  Result := Default(TTyTbTitlePlace);
+  if not ToolboxIconState(ATb, AIcon, e, shown, ap, aa) then Exit;
+  Result := TyToolboxTitlePlace(FTbSpecs[ATb], FTbLayouts[ATb], AIcon, ap, aa, e);
+end;
+
+function TTyAdvanceChart.ToolboxIconStatus(ATb: Integer; const AFeature,
+  AIcon: string): string;
+begin
+  Result := FTbStatus.Values[IntToStr(ATb) + '|' + AFeature + '|' + AIcon];
+end;
+
+function TTyAdvanceChart.ToolboxHistoryCount: Integer;
+begin
+  Result := TyTbHistoryCount(FTbHistory);
+end;
+
+function TTyAdvanceChart.ToolboxCover(out ARect: TTyXYWH): Boolean;
+begin
+  ARect := FTbCoverRect;
+  Result := FTbCover;
 end;
 
 end.

@@ -925,6 +925,14 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.Lines"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.Toolbox.pas"/>
+        <UnitName Value="tyControls.AdvChart.Toolbox"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.ToolboxDlg.pas"/>
+        <UnitName Value="tyControls.AdvChart.ToolboxDlg"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Polar.pas"/>
         <UnitName Value="tyControls.AdvChart.Polar"/>
       </Item>
