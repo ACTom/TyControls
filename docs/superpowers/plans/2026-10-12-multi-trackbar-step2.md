@@ -18,22 +18,30 @@
 
 ## 核实记录（执行前补）
 
-| # | 待核的事实 | 影响 |
-|---|---|---|
-| V1 | 第一步的 `UserMoveThumb`、`OnTrackClick` 的触发点与「处理后重新命中」逻辑、双击合并规则 | 新开关都插在这些点之后 |
-| V2 | `TTyMultiTrackBar` 在 `EndUpdate` 时排序、颜色与选中跟着项走（6537619c）；区间控件同样（1c9de42d） | `AllowCrossing` 的「越过后重排」直接复用 |
-| V3 | `TyGradientNeedsStops`（#49，tyControls.Types）与 `TTyFill` 的多色标渐变（`GradStops`） | 渐变控件的轨道与 `Gradient` 输出用它 |
-| V4 | `TTyColorDialog`（tyControls.Dialogs.Color）的用法；双击经 protected virtual 调用，测试可替换 | D3 |
+| # | 待核的事实 | 影响 | 核实结果（2026-10-12，d280bfa9） |
+|---|---|---|---|
+| V1 | 第一步的 `UserMoveThumb`、`OnTrackClick` 的触发点与「处理后重新命中」逻辑、双击合并规则 | 新开关都插在这些点之后 | 成立。`UserMoveThumb` 在 MultiTrackBar.pas:913（先 `ClampThumbValue`、不动不问、`DoThumbChanging`、处理后索引失效即退、再夹一次后 `ApplyThumbValue`）；拖动 / 键 / 滚轮 / 跳到按点都经它（:1641、:1709、:1561、:1612）。`OnTrackClick` 在 `MouseDown` :1580–1597：只在空白处、首击（无 ssDouble/Triple/Quad）问；处理了置 `FTrackClickTaken` 退出；没处理则 `ThumbAtPoint` 重新命中（:1595）。双击规则 :1573–1575。内置添加插在 :1603 的「空白处」分支、最近滑块跳过来之前。 |
+| V2 | `TTyMultiTrackBar` 在 `EndUpdate` 时排序、颜色与选中跟着项走（6537619c）；区间控件同样（1c9de42d） | `AllowCrossing` 的「越过后重排」直接复用 | 成立，但**不能直接复用**：`ThumbsChanged`（:2307）排序后整组 `SetThumbValues` 重建，选中按项 ID（`FSelectedID`）找回、发一次 `OnThumbSelect`；它不知道哪个是被拖的滑块，也会把 `FDragThumb` 留在旧索引。越过改为基类就地交换 `FValues` 并经新的 protected virtual `ThumbIndexMoved(AFrom, ATo)` 让最终类挪项（多值：`FSyncing` 下 `Item.Index := ATo`；区间：值按位置写回，不用挪），`FDragThumb` / `FHoverThumb` / `FSelectedThumb` 一并重映射。选中跟项的机制（ID / `RememberSelection`）照旧在 `DoThumbSelect` 里生效。 |
+| V3 | `TyGradientNeedsStops`（#49，tyControls.Types）与 `TTyFill` 的多色标渐变（`GradStops`） | 渐变控件的轨道与 `Gradient` 输出用它 | 存在：`TyGradientNeedsStops` Types.pas:177/256；`TTyFill.GradStops: array of TTyGradStop`（Color: TTyColor; Pos: Single）Types.pas:59。（Task 4 用，本次未动。） |
+| V4 | `TTyColorDialog`（tyControls.Dialogs.Color）的用法；双击经 protected virtual 调用，测试可替换 | D3 | 存在：Dialogs.Color.pas:156，`Execute: Boolean`（:173，非 virtual），`Color` 是 **TTyColor**（ARGB，默认 $FF000000，:180），`LCLColor: TColor` 可读写（:174）。（Task 4 用，本次未动。） |
+
+**核实中发现与设计不符之处（已在下文原处标注）**：
+- D7 的 `:removing` 状态做不出来而不改 StyleModel：状态的层叠顺序是 StyleModel.pas:1852 / :1910 的固定 5 元数组（`cStateOrder` / `cTierStates`），新加的 `TTyState` 成员永远不会被应用；伪类名在 Css.Parser.pas:176 `PseudoToState` 里写死。改用**变体类** `TyTrackThumb.removing`：`ResolveLayer` 把 StyleClass 按空格拆成多个变体（StyleModel.pas:1861–1863），所以解析时传 `'<滑块自己的类> removing'`，滑块原有的类照样生效。
+- `opacity` 画不到单个滑块上：`TTyPainter.Opacity` 是整次绘制在 `EndPaint` 统一乘的（Base.pas:1393），`TyDrawTrackThumb` / `TyFillSubElement` 不读 `tpOpacity`。改为 MultiTrackBar 自己把「将被删除」滑块解析出的颜色（背景、边框、轮廓，含 `Color` 覆盖的底色）的 alpha 乘上 `Opacity`。
 
 ## 设计
 
 **D1 `AllowCrossing`**（默认 False；渐变控件默认 True）：拖动时不受邻居阻挡，越过即按值重新排序，被拖的滑块（以及它的颜色、提示、选中）跟着项走；`MinGap` 在开着时不生效（色标可以重合）。键盘方向键同样可越过。与 `Pushable` 同开时 `AllowCrossing` 优先。
+  > 【执行时补，Task 1】只管用户的移动（拖动、键、滚轮、跳到按点）：代码写值（`SetThumbValue`、`Thumbs[i].Value`）开着时仍夹在两邻居之间（间距 0），不改项的顺序——程序要整体重排用 `BeginUpdate` / `EndUpdate`。越过后的事件顺序：`OnThumbSelect`（新索引）→ `OnThumbChange`（新索引）→ `OnChange`。关掉 `AllowCrossing` 时按 `MinGap` 重新排开（同改 `MinGap`，会发事件）。
 
 **D2 `Pushable`**（默认 False）：拖到邻居 `MinGap` 处时推着邻居一起走，连锁推动，直到被推的一串碰到 `Min` / `Max` 为止；每个被推动的滑块都经 `OnThumbChanging`（被拒则推动在那里停住）、触发各自的 `OnThumbChange`，最后一次 `OnChange`。
+  > 【执行时补，Task 1】禁用的滑块（`Enabled = False`）推不动，当作墙：同被 `OnThumbChanging` 拒绝。被拒时整串退到离墙 `MinGap` 处（已问过的滑块不再重问，退回的值总在它们被允许的方向上）。被推者的处理器答案再夹在「前一个 + MinGap」与链条余地之间。`OnThumbChange` 按推动顺序（被拖的先，再依次被推的），最后一次 `OnChange`。只管用户的移动，代码写值不推。
 
 **D3 `AllowUserThumbs`**（多值、渐变控件；默认 False，渐变控件默认 True）：
 - 加：在空白轨道左键按下，`OnTrackClick` 之后（没被处理时），在该值加一个滑块并选中；多值控件的新滑块 `Color = clDefault`，渐变控件取两侧色标在该位置的插值色。超过 `MaxThumbs`（默认 0 = 不限）不加。
+  > 【执行时补，Task 2】只在首击（不是双击的后续按下）。按点离邻居不足 `MinGap` 时夹进两邻居之间的空档，空档放不下不加（同 D4）。新滑块成为这次按下拖动的滑块（按在哪就抓在哪）。到了 `MaxThumbs` 或放不下时这次按下什么也不做——不退回「最近滑块跳过来」。
 - 删：把滑块垂直于轨道拖出超过一段距离（主题度量 `--track-remove-distance`，默认 24 逻辑像素）时，滑块按「将被删除」画（`TyTrackThumb:removing` 状态，主题给淡出样式），此时松开即删；拖回轨道内恢复。删除前触发新事件 `OnThumbRemoving(Sender; AIndex: Integer; var AAllow: Boolean)`；少于 `MinThumbs`（默认 0；渐变控件默认 2）不删。
+  > 【执行时改，Task 2】`:removing` 状态改为变体类 `TyTrackThumb.removing`（理由见核实记录）；淡出用 `opacity`，由控件乘到滑块颜色的 alpha 上。距离从控件边缘沿交叉轴量起（水平条看 Y、竖直条看 X），超过（>）才算拖出；拖出期间滑块的值不跟指针走。滑块数已到 `MinThumbs` 时不显示「将被删除」，松开也不问 `OnThumbRemoving`。删除后选中跟着消失（-1）。
 - 键盘：选中滑块时 Delete 键删除（同样经 `OnThumbRemoving` 与 `MinThumbs`）。
 
 **D4 `AllowUserRanges`**（区间控件；默认 False）：空白处左键按下（未被 `OnTrackClick` 处理）时，以按点为中心加一个区间，宽度为 `NewRangeWidth`（默认 10，单位同值），放不下（与相邻区间冲突）时在可用空档内收缩，空档小于 `MinGap` 时不加。删除：把区间的任一端拖出轨道，整个区间按「将被删除」显示，松开删除（`OnThumbRemoving` 收到该端点的序号；拒绝则不删）；Delete 键删除选中端点所在的区间。
@@ -48,6 +56,7 @@
 - 输出：`function Gradient: TTyGradStops`（按值排序的颜色与 0..1 位置）、`function GradientFill(AAngleDeg: Single = 0): TTyFill`（直接交给 `FillBackground` 画同一条渐变）。
 
 **D7 主题**：`TyGradientTrackBar` → `TyTrackBar`；新增状态 `:removing`（`TyTrackThumb:removing { opacity: … }`，各内置主题能 resolve 到可见的区别，跨 17 主题 × 亮 / 暗测）、度量 `--track-remove-distance`（light.tycss 定义，其余主题回退）。
+  > 【执行时改，Task 2】`:removing` → `TyTrackThumb.removing`（变体类，见核实记录）。Task 2 已在 light.tycss 加 `--track-remove-distance: 24px` 与 `TyTrackThumb.removing { opacity: var(--disabled-opacity); }`；其余内置皮肤的跨 17 主题测仍归 Task 5（自带 `TyTrackThumb` 规则的皮肤拿不到基础层的 `.removing`，要各自补）。
 
 **D8 需主控确认**（不回复按建议）：① `AllowCrossing` 时 `MinGap` 不生效；② 拖出轨道删除的距离用主题度量；③ 渐变控件默认黑→白两个色标、默认可加减可越过；④ 新增状态名 `:removing`。
 
