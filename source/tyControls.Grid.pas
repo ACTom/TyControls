@@ -2220,6 +2220,8 @@ type
     { 把焦点还给正在打开的编辑器。只从**手势处理**里调(点击/按键之后,焦点变化已经完成);
       绝不从 EditorExit 这类失焦回调里调 —— 那是 widgetset 层的焦点递归陷阱。 }
     procedure RefocusEditor;
+    { #52: an arrow one of the grid's own children leaves standing. See the implementation. }
+    function ChildKey(var Message: TLMKey): Boolean; override;
     function  EditorTargetRect: TRect;
     function  CellKey(ACol, ARow: Integer): string;
     function  GetCells(ACol, ARow: Integer): string;
@@ -15698,6 +15700,39 @@ end;
 procedure TTyStringGrid.PickEditorExit(Sender: TObject);
 begin
   TryEndEdit(True);
+end;
+
+{ #52. A key a child leaves standing is offered to its parents before LCL's own navigation
+  (TWinControl.DoRemainingKeyDown asks ChildKey first). An unmodified arrow nobody used goes on
+  to TApplication.DoArrowKey, which moves the focus to the child's next sibling -- and inside
+  the grid that sibling is the scroll bar. The single-line editor has no use for Up/Down, so
+  Up or Down while editing took the focus to the scroll bar; the editor lost it, committed and
+  closed, and the user was left with the keyboard on a scroll bar.
+
+  So the grid claims those arrows. While a cell is being edited, Up/Down commit and move the
+  cursor, as the grid's own arrows do (MoveCursor commits first and, when validation refuses,
+  stays put and hands the focus back to the editor), and when the edit did end the focus comes
+  back to the grid, since the control that held it just closed. Any other arrow its children
+  decline -- Left/Right at a pick list, Up/Down in the filter box -- goes nowhere: the focus
+  stays where it is. Arrows with a modifier are not navigation, and are left alone. }
+function TTyStringGrid.ChildKey(var Message: TLMKey): Boolean;
+var
+  wasEditing: Boolean;
+begin
+  if (Message.CharCode in [VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN]) and
+     (GetKeyShiftState * [ssShift, ssCtrl, ssAlt, ssMeta] = []) then
+  begin
+    wasEditing := FEditing;
+    if FEditing then
+      case Message.CharCode of
+        VK_UP:   MoveCursor(FCol, FRow - 1);
+        VK_DOWN: MoveCursor(FCol, FRow + 1);
+      end;
+    if wasEditing and not FEditing and HandleAllocated and CanFocus then SetFocus;
+    Message.CharCode := VK_UNKNOWN;
+    Exit(True);
+  end;
+  Result := inherited ChildKey(Message);
 end;
 
 procedure TTyStringGrid.EditorKeyDown(Sender: TObject; var Key: Word;
