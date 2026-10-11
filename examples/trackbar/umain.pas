@@ -3,11 +3,13 @@ unit umain;
 { TTyTrackBar demo:
   - Horizontal track bar (0..100), OnChange updates the status label live
   - Custom-range track bar (-50..50, shows a negative range)
-  - Vertical track bar (Orientation = toVertical) with ticks and its own readout
+  - Vertical track bar (Orientation = toVertical) with ticks, tick labels and its own readout
   - Fine-stepping track bar (PageSize / Frequency demo, its own range and readout)
   - ShowValue: the bar paints its own number (right end horizontal, under the track vertical)
   - LineSize: a bar whose arrow-key / wheel step is 5 instead of 1
   - AnimationsEnabled toggled from code (it is public, not published, so no .lfm can set it)
+  - TTyRangeTrackBar: two ranges on one track, MinGap = 5, tick labels
+  - TTyMultiTrackBar: three thresholds, the stretches between them coloured by segment class
   The main form (a TTyForm + TTyTitleBar), every track bar and the live theme switcher are
   designed in umain.lfm; the code here is event handlers + theme setup only. }
 
@@ -18,7 +20,8 @@ interface
 uses
   Classes, SysUtils, Forms, Controls,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
-  tyControls.TrackBar, tyControls.TyLabel, tyControls.ComboBox, tyControls.ToggleSwitch;
+  tyControls.TrackBar, tyControls.MultiTrackBar, tyControls.TyLabel, tyControls.ComboBox,
+  tyControls.ToggleSwitch;
 
 type
   TMainForm = class(TTyForm)
@@ -45,6 +48,11 @@ type
     LblKeys1: TTyLabel;
     LblKeys2: TTyLabel;
     LblKeys3: TTyLabel;
+    LblRange: TTyLabel;
+    Range1: TTyRangeTrackBar;
+    LblMulti: TTyLabel;
+    Multi1: TTyMultiTrackBar;
+    LblMultiHint: TTyLabel;
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
@@ -54,6 +62,8 @@ type
     procedure Track4Change(Sender: TObject);
     procedure Track5Change(Sender: TObject);
     procedure AnimSwitchChange(Sender: TObject);
+    procedure Range1Change(Sender: TObject);
+    procedure Multi1Change(Sender: TObject);
   end;
 
 var
@@ -72,6 +82,8 @@ resourcestring
   rsFineFmt       = 'Fine: %d';
   rsAnimOn  = 'AnimationsEnabled = True (thumb eases)';
   rsAnimOff = 'AnimationsEnabled = False (thumb jumps)';
+  rsRangesFmt     = 'Ranges: %d..%d and %d..%d';
+  rsThresholdsFmt = 'Thresholds: %d / %d / %d';
 
 procedure TMainForm.FormCreate(Sender: TObject);
 var
@@ -146,6 +158,21 @@ begin
     LblStatus.Caption := rsAnimOn
   else
     LblStatus.Caption := rsAnimOff;
+end;
+
+{ Two ranges: the thumbs run Low0, High0, Low1, High1, and each item reads what its thumbs show. }
+procedure TMainForm.Range1Change(Sender: TObject);
+begin
+  if Range1.Ranges.Count < 2 then Exit;
+  LblStatus.Caption := Format(rsRangesFmt, [Range1.Ranges[0].Low, Range1.Ranges[0].High,
+    Range1.Ranges[1].Low, Range1.Ranges[1].High]);
+end;
+
+procedure TMainForm.Multi1Change(Sender: TObject);
+begin
+  if Multi1.ThumbCount < 3 then Exit;
+  LblStatus.Caption := Format(rsThresholdsFmt, [Multi1.ThumbValues[0], Multi1.ThumbValues[1],
+    Multi1.ThumbValues[2]]);
 end;
 
 end.

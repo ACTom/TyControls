@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 502
+  Height = 670
   Top = 0
   Width = 460
   Caption = 'TrackBar example'
-  ClientHeight = 502
+  ClientHeight = 670
   ClientWidth = 460
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -12,7 +12,7 @@ object MainForm: TMainForm
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 502
+    Height = 670
     Top = 0
     Width = 460
     Align = alClient
@@ -108,7 +108,7 @@ object MainForm: TMainForm
       Left = 380
       Height = 200
       Top = 70
-      Width = 24
+      Width = 60
       Orientation = toVertical
       Min = 0
       Max = 100
@@ -116,6 +116,7 @@ object MainForm: TMainForm
       Frequency = 10
       ShowValue = True
       OnChange = Track3Change
+      TickLabels = True
     end
     object LblStatus: TTyLabel
       Left = 16
@@ -136,7 +137,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 294
       Width = 430
-      Caption = 'Vertical: ticks (Frequency = 10) right, its number below.'
+      Caption = 'Vertical: ticks and their labels on the right, its number below.'
     end
     object LblLineSize: TTyLabel
       Left = 16
@@ -202,6 +203,80 @@ object MainForm: TMainForm
       Top = 466
       Width = 430
       Caption = 'The wheel steps by LineSize; a click jumps the thumb there.'
+    end
+    object LblRange: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 500
+      Width = 430
+      Caption = 'Two ranges (TTyRangeTrackBar, MinGap = 5, tick labels):'
+    end
+    object Range1: TTyRangeTrackBar
+      Left = 16
+      Height = 44
+      Top = 522
+      Width = 430
+      Min = 0
+      Max = 100
+      Frequency = 10
+      OnChange = Range1Change
+      TickLabels = True
+      MinGap = 5
+      Ranges = <
+        item
+          Low = 10
+          High = 30
+        end
+        item
+          Low = 60
+          High = 85
+        end>
+    end
+    object LblMulti: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 578
+      Width = 430
+      Caption = 'Thresholds (TTyMultiTrackBar, coloured segments):'
+    end
+    object Multi1: TTyMultiTrackBar
+      Left = 16
+      Height = 24
+      Top = 600
+      Width = 430
+      Min = 0
+      Max = 100
+      Frequency = 10
+      OnChange = Multi1Change
+      Thumbs = <
+        item
+          Value = 30
+        end
+        item
+          Value = 60
+        end
+        item
+          Value = 85
+        end>
+      Segments = <
+        item
+        end
+        item
+          StyleClass = 'success'
+        end
+        item
+          StyleClass = 'warning'
+        end
+        item
+          StyleClass = 'danger'
+        end>
+    end
+    object LblMultiHint: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 634
+      Width = 430
+      Caption = 'Tab steps through the thumbs; the arrows move the ringed one.'
     end
   end
 end

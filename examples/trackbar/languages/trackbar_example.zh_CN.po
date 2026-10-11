@@ -44,8 +44,8 @@ msgid "ShowValue = True: the number is drawn by the bar itself."
 msgstr "ShowValue = True：数字由控件自己绘制。"
 
 #: tmainform.lblverticalhint.caption
-msgid "Vertical: ticks (Frequency = 10) right, its number below."
-msgstr "垂直：刻度（Frequency = 10）在右，数字在下。"
+msgid "Vertical: ticks and their labels on the right, its number below."
+msgstr "垂直：刻度和刻度标签在右，数字在下。"
 
 #: tmainform.lbllinesize.caption
 msgid "Fine step (LineSize = 5 - arrows and the wheel move by 5):"
@@ -79,6 +79,18 @@ msgstr "TrackBar  · TyControls"
 msgid "Animate thumb"
 msgstr "滑块动画"
 
+#: tmainform.lblrange.caption
+msgid "Two ranges (TTyRangeTrackBar, MinGap = 5, tick labels):"
+msgstr "两个区间（TTyRangeTrackBar，MinGap = 5，带刻度标签）："
+
+#: tmainform.lblmulti.caption
+msgid "Thresholds (TTyMultiTrackBar, coloured segments):"
+msgstr "阈值（TTyMultiTrackBar，分段着色）："
+
+#: tmainform.lblmultihint.caption
+msgid "Tab steps through the thumbs; the arrows move the ringed one."
+msgstr "Tab 在滑块之间切换；方向键移动带圆环的那个。"
+
 # --- code resourcestrings (msgid=Pascal source) ---
 
 #: umain.rsanimoff
@@ -103,6 +115,16 @@ msgstr "亮度：%d"
 #, object-pascal-format
 msgid "Fine: %d"
 msgstr "微调：%d"
+
+#: umain.rsrangesfmt
+#, object-pascal-format
+msgid "Ranges: %d..%d and %d..%d"
+msgstr "区间：%d..%d 和 %d..%d"
+
+#: umain.rsthresholdsfmt
+#, object-pascal-format
+msgid "Thresholds: %d / %d / %d"
+msgstr "阈值：%d / %d / %d"
 
 #: umain.rsverticalfmt
 #, object-pascal-format
