@@ -33,6 +33,10 @@ const
   { A thumb dragged off the track far enough to be removed on release is resolved with this
     class added to its own: TyTrackThumb.removing (an opacity there fades it). }
   TyTrackRemovingClass = 'removing';
+  { TTyGradientTrackBar adds this class to every stop's own: TyTrackThumb.stop. A stop is filled
+    with its own colour, so the theme gives it an edge that keeps a white stop on a light
+    surface (or a black one on a dark surface) in sight. }
+  TyTrackStopClass = 'stop';
   { How far off the track (logical px, from the control's edge across the track) a thumb has
     to be dragged before a release removes it; a theme sets it as a metric. }
   TyTrackRemoveDistanceVar = '--track-remove-distance';
@@ -936,6 +940,8 @@ type
     function TrackAngle: Single;
   protected
     function GetStyleTypeKey: string; override;
+    { The stop's own class and TyTrackStopClass: the theme's edge for a stop. }
+    function ThumbStyleClass(AIndex: Integer): string; override;
     { The new stop takes the colour the gradient has where it goes. }
     function AddUserThumb(AValue: Integer): Integer; override;
     { The groove as the stops' gradient (GradientFill), the first and last colours carried on
@@ -3494,6 +3500,11 @@ end;
 function TTyCustomGradientTrackBar.GetStyleTypeKey: string;
 begin
   Result := 'TyGradientTrackBar';
+end;
+
+function TTyCustomGradientTrackBar.ThumbStyleClass(AIndex: Integer): string;
+begin
+  Result := Trim(inherited ThumbStyleClass(AIndex) + ' ' + TyTrackStopClass);
 end;
 
 function TTyCustomGradientTrackBar.ColorAtValue(AValue: Integer): TColor;

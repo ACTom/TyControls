@@ -659,6 +659,27 @@ type
     procedure TestStopsRoundTripThroughAFormFile;
   end;
 
+  { The built-in themes' looks for the two classes the bars add to a thumb's own:
+    TyTrackThumb.removing (dragged off far enough to go on release) and TyTrackThumb.stop (a
+    stop of TTyGradientTrackBar, filled with its own colour). A skin that writes any
+    TyTrackThumb rule suppresses the default theme's whole set for the key, classes included,
+    so every such skin has to carry both; these walk all of them in both modes. }
+  TTyTrackThumbClassThemeTest = class(TMultiTrackFinalBase)
+  private
+    FBar: TTyGradientTrackBar;
+    { Three stops, at Min, half way and Max, all AColor. }
+    procedure SetStops(AColor: TColor);
+    { The pixels of R that stand off AStop -- more than 64 away on a channel -- and are not the
+      magenta ground or a blend with it. }
+    function EdgePixels(ABmp: TBGRABitmap; const R: TRect; AStop: TColor): Integer;
+  protected
+    procedure SetUp; override;
+  published
+    procedure TestEveryBuiltInThemeFadesARemovingThumbAndOnlyThat;
+    procedure TestEveryBuiltInThemeGivesAStopAnEdge;
+    procedure TestAStopInTheSurroundingsColourKeepsAnEdgeInEveryBuiltInTheme;
+  end;
+
 implementation
 
 { TMultiProbe }
@@ -3783,7 +3804,7 @@ end;
 
 procedure TTyTrackThumbFocusTest.TestEveryBuiltInThemeStylesBothBarsAsTheTrackBar;
 const
-  CKeys: array[0..1] of string = ('TyRangeTrackBar', 'TyMultiTrackBar');
+  CKeys: array[0..2] of string = ('TyRangeTrackBar', 'TyMultiTrackBar', 'TyGradientTrackBar');
   CStates: array[0..3] of TTyStateSet = ([tysNormal], [tysHover], [tysFocused], [tysDisabled]);
 var
   c: TTyStyleController;
@@ -3817,7 +3838,7 @@ begin
         end;
       end;
     AssertEquals(IntToStr(miss.Count) + ' differ:' + LineEnding + miss.Text, 0, miss.Count);
-    AssertEquals('themes x 2 modes x 4 states x 2 keys', Length(names) * 2 * 4 * 2, compared);
+    AssertEquals('themes x 2 modes x 4 states x 3 keys', Length(names) * 2 * 4 * 3, compared);
   finally
     miss.Free;
     c.Free;
@@ -7316,6 +7337,231 @@ begin
   end;
 end;
 
+{ TTyTrackThumbClassThemeTest }
+
+procedure TTyTrackThumbClassThemeTest.SetUp;
+begin
+  inherited SetUp;
+  FBar := TTyGradientTrackBar.Create(FForm);
+  FBar.Name := 'Bar';
+  FBar.Parent := FForm;
+  FBar.Font.PixelsPerInch := 96;
+  FBar.SetBounds(0, 0, 400, 24);
+  { No ticks: drawn in the surface's ink beside the track, they would stand off a stop's
+    colour inside its rect just as an edge does. }
+  FBar.TickStyle := ttsNone;
+  FBar.Controller := FCtl;
+end;
+
+procedure TTyTrackThumbClassThemeTest.SetStops(AColor: TColor);
+var
+  i: Integer;
+  it: TTyTrackThumbItem;
+begin
+  FBar.Thumbs.BeginUpdate;
+  try
+    FBar.Thumbs.Clear;
+    for i := 0 to 2 do
+    begin
+      it := FBar.Thumbs.Add;
+      it.Value := i * 50;
+      it.Color := AColor;
+    end;
+  finally
+    FBar.Thumbs.EndUpdate;
+  end;
+end;
+
+function TTyTrackThumbClassThemeTest.EdgePixels(ABmp: TBGRABitmap; const R: TRect;
+  AStop: TColor): Integer;
+var
+  x, y, sr, sg, sb: Integer;
+  p: TBGRAPixel;
+begin
+  Result := 0;
+  AStop := ColorToRGB(AStop);
+  sr := Red(AStop);
+  sg := Green(AStop);
+  sb := Blue(AStop);
+  for y := R.Top to R.Bottom - 1 do
+    for x := R.Left to R.Right - 1 do
+    begin
+      p := ABmp.GetPixel(x, y);
+      if (Integer(p.red) - p.green > 40) and (Integer(p.blue) - p.green > 40) then Continue;
+      if (Abs(p.red - sr) > 64) or (Abs(p.green - sg) > 64) or (Abs(p.blue - sb) > 64) then
+        Inc(Result);
+    end;
+end;
+
+procedure TTyTrackThumbClassThemeTest.TestEveryBuiltInThemeFadesARemovingThumbAndOnlyThat;
+{ A thumb drawn removing has to look different from the same thumb on the track, and only by
+  fading: the class must not repaint the skin's thumb. Checked on a plain thumb and on a stop,
+  resting, hovered and dragged (a dragged-off thumb is the active one; a range's other end is
+  drawn removing at rest). }
+const
+  CClasses: array[0..1] of string = ('', TyTrackStopClass);
+  CStates: array[0..2] of TTyStateSet = ([tysNormal], [tysHover], [tysActive]);
+var
+  c: TTyStyleController;
+  names: TStringArray;
+  miss: TStringList;
+  i, m, k, st, compared: Integer;
+  plain, gone: TTyStyleSet;
+  where: string;
+  fs: TFormatSettings;
+begin
+  fs := DefaultFormatSettings;
+  fs.DecimalSeparator := '.';
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinThemeNames;
+  AssertTrue('the built-in pack: default, system and the 15 skins', Length(names) >= 17);
+  c := TTyStyleController.Create(nil);
+  miss := TStringList.Create;
+  try
+    compared := 0;
+    for i := 0 to High(names) do
+      for m := 0 to 1 do
+      begin
+        c.ThemeName := names[i];
+        if m = 0 then c.Mode := 'light' else c.Mode := 'dark';
+        for k := 0 to High(CClasses) do
+          for st := 0 to High(CStates) do
+          begin
+            where := Format('%s/%s .%s state %d', [names[i], c.Mode, CClasses[k], st]);
+            plain := c.Model.ResolveStyle('TyTrackThumb', CClasses[k], CStates[st]);
+            gone := c.Model.ResolveStyle('TyTrackThumb',
+              Trim(CClasses[k] + ' ' + TyTrackRemovingClass), CStates[st]);
+            Inc(compared);
+            if (tpOpacity in plain.Present) and (plain.Opacity < 1) then
+              miss.Add(where + ': faded without .removing');
+            if not (tpOpacity in gone.Present) then
+              miss.Add(where + ': .removing sets no opacity -- drawn as on the track')
+            else if not ((gone.Opacity > 0) and (gone.Opacity < 1)) then
+              miss.Add(where + Format(': .removing opacity %.2f', [gone.Opacity], fs))
+            else
+            begin
+              gone.Opacity := plain.Opacity;
+              if tpOpacity in plain.Present then Include(gone.Present, tpOpacity)
+              else Exclude(gone.Present, tpOpacity);
+              if (gone.RenderStyle <> plain.RenderStyle) or (StyleDump(gone) <> StyleDump(plain)) then
+                miss.Add(where + ': .removing changes more than the opacity:' + LineEnding +
+                  '    ' + StyleDump(gone) + LineEnding + '    ' + StyleDump(plain));
+            end;
+          end;
+      end;
+    AssertEquals(IntToStr(miss.Count) + ' wrong:' + LineEnding + miss.Text, 0, miss.Count);
+    AssertEquals('themes x 2 modes x 2 classes x 3 states', Length(names) * 2 * 2 * 3, compared);
+  finally
+    miss.Free;
+    c.Free;
+  end;
+end;
+
+procedure TTyTrackThumbClassThemeTest.TestEveryBuiltInThemeGivesAStopAnEdge;
+{ A stop resolves an edge of its own in every theme: a visible border, or a 3D bevel -- which
+  is derived from the stop's own colour when the bar paints it, one side lighter and one
+  darker, so one of them always stands off the stop. The fill is left to the stop's colour. }
+const
+  CStates: array[0..3] of TTyStateSet = ([tysNormal], [tysHover], [tysActive],
+    [tysNormal, tysFocused]);
+var
+  c: TTyStyleController;
+  names: TStringArray;
+  miss: TStringList;
+  i, m, st, compared: Integer;
+  s: TTyStyleSet;
+  where: string;
+begin
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinThemeNames;
+  c := TTyStyleController.Create(nil);
+  miss := TStringList.Create;
+  try
+    compared := 0;
+    for i := 0 to High(names) do
+      for m := 0 to 1 do
+      begin
+        c.ThemeName := names[i];
+        if m = 0 then c.Mode := 'light' else c.Mode := 'dark';
+        for st := 0 to High(CStates) do
+        begin
+          where := Format('%s/%s state %d', [names[i], c.Mode, st]);
+          s := c.Model.ResolveStyle('TyTrackThumb', TyTrackStopClass, CStates[st]);
+          Inc(compared);
+          if (tpRenderStyle in s.Present) and (s.RenderStyle <> trsFlat) then
+          begin
+            if (tpBorderColor in s.Present) and (TyAlphaOf(s.BorderColor) = 0) then
+              miss.Add(where + ': the bevel is transparent');
+          end
+          else if not TyBorderVisible(s) then
+            miss.Add(where + ': no edge')
+          else if TyAlphaOf(s.BorderColor) = 0 then
+            miss.Add(where + ': the edge is transparent');
+        end;
+      end;
+    AssertEquals(IntToStr(miss.Count) + ' wrong:' + LineEnding + miss.Text, 0, miss.Count);
+    AssertEquals('themes x 2 modes x 4 states', Length(names) * 2 * 4, compared);
+  finally
+    miss.Free;
+    c.Free;
+  end;
+end;
+
+procedure TTyTrackThumbClassThemeTest.TestAStopInTheSurroundingsColourKeepsAnEdgeInEveryBuiltInTheme;
+{ The case the edge is for: every stop white on a white ground where the theme's surface is
+  light, every stop black on a black ground where it is dark -- told by the theme's ink, the
+  track bar's text colour (dark ink, light surface). Not by the mode alone: xp and classic
+  have no dark look, and their dark mode keeps the light surface. The groove is then the
+  stops' colour too, so inside a stop's rect only an edge can stand off it. }
+const
+  CMinEdge = 24;
+var
+  c: TTyStyleController;
+  names: TStringArray;
+  miss: TStringList;
+  i, m, n: Integer;
+  a: TBGRABitmap;
+  r: TRect;
+  ink: TTyColor;
+  stop: TColor;
+begin
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinThemeNames;
+  c := TTyStyleController.Create(nil);
+  miss := TStringList.Create;
+  try
+    FBar.Controller := c;
+    for i := 0 to High(names) do
+      for m := 0 to 1 do
+      begin
+        c.ThemeName := names[i];
+        if m = 0 then c.Mode := 'light' else c.Mode := 'dark';
+        ink := c.Model.ResolveStyle('TyTrackBar', '', []).TextColor;
+        if TyRedOf(ink) * 299 + TyGreenOf(ink) * 587 + TyBlueOf(ink) * 114 < 128000 then
+          stop := clWhite
+        else
+          stop := clBlack;
+        FForm.Color := stop;
+        SetStops(stop);
+        r := FBar.ThumbRect(1);
+        a := Shot(FBar);
+        try
+          n := EdgePixels(a, r, stop);
+          if n < CMinEdge then
+            miss.Add(Format('%s/%s: %d pixels of the %s stop stand off it', [names[i], c.Mode, n,
+              BoolToStr(stop = clWhite, 'white', 'black')]));
+        finally
+          a.Free;
+        end;
+      end;
+    AssertEquals(IntToStr(miss.Count) + ' wrong:' + LineEnding + miss.Text, 0, miss.Count);
+  finally
+    FBar.Controller := FCtl;
+    miss.Free;
+    c.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyMultiTrackModelTest);
   RegisterTest(TTyMultiTrackGeometryTest);
@@ -7337,4 +7583,5 @@ initialization
   RegisterTest(TTyMultiTrackUserThumbsTest);
   RegisterTest(TTyRangeUserRangesTest);
   RegisterTest(TTyGradientTrackBarTest);
+  RegisterTest(TTyTrackThumbClassThemeTest);
 end.

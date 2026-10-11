@@ -732,6 +732,11 @@ begin
     '   that is about to go. A class, not a state -- the cascade knows a fixed set of states --' + LineEnding +
     '   added to whatever class the thumb has, so a theme can fade .big and .removing apart. */' + LineEnding +
     'TyTrackThumb.removing { opacity: var(--disabled-opacity); }' + LineEnding +
+    '/* A colour stop of TTyGradientTrackBar is filled with the stop''s own colour, so a white stop' + LineEnding +
+    '   on a light surface, or a black one on a dark surface, would vanish into what is around it.' + LineEnding +
+    '   An edge in the surface''s ink keeps every stop in sight. Like .removing, a class the bar adds' + LineEnding +
+    '   to the stop''s own. */' + LineEnding +
+    'TyTrackThumb.stop { border-width: 1px; border-color: var(--on-surface); }' + LineEnding +
     '' + LineEnding +
     '/* Hyperlink ink for TTyLinkLabel. Its own key rather than a borrowed accent fill: a theme' + LineEnding +
     '   that restyles gauges must not repaint every link, and a theme that wants a different link' + LineEnding +

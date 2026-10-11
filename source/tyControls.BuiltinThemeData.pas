@@ -280,6 +280,11 @@ begin
     'TyTrackThumb:hover  { background: var(--accent-hover); }' + LineEnding +
     'TyTrackThumb:active { background: var(--accent-active); }' + LineEnding +
     'TyTrackThumb:focus  { outline: 2px var(--on-accent); outline-offset: 2px; }' + LineEnding +
+    '/* This skin writes its own TyTrackThumb, so the default theme''s classes do not reach it:' + LineEnding +
+    '   a thumb dragged off far enough to be removed on release fades, and a gradient stop (filled' + LineEnding +
+    '   with its own colour) keeps an edge in the surface''s ink. */' + LineEnding +
+    'TyTrackThumb.removing { background: var(--accent); opacity: var(--disabled-opacity); }' + LineEnding +
+    'TyTrackThumb.stop     { border-width: 1px; border-color: var(--on-surface); }' + LineEnding +
     '' + LineEnding +
     '/* Hyperlink ink for TTyLinkLabel. Its own key rather than a borrowed accent fill: a theme' + LineEnding +
     '   that restyles gauges must not repaint every link, and a theme that wants a different link' + LineEnding +
@@ -924,6 +929,11 @@ begin
     'TyTrackThumb:hover  { background: var(--accent-hover); }' + LineEnding +
     'TyTrackThumb:active { background: var(--accent-active); }' + LineEnding +
     'TyTrackThumb:focus  { outline: 2px var(--on-accent); outline-offset: 2px; }' + LineEnding +
+    '/* This skin writes its own TyTrackThumb, so the default theme''s classes do not reach it:' + LineEnding +
+    '   a thumb dragged off far enough to be removed on release fades, and a gradient stop (filled' + LineEnding +
+    '   with its own colour) keeps an edge in the surface''s ink. */' + LineEnding +
+    'TyTrackThumb.removing { background: var(--accent); opacity: var(--disabled-opacity); }' + LineEnding +
+    'TyTrackThumb.stop     { border-width: 1px; border-color: var(--on-surface); }' + LineEnding +
     '' + LineEnding +
     'TyGroupBox, TyToolGroupPanel {' + LineEnding +
     '  padding: 4px 12px;' + LineEnding +
@@ -3192,6 +3202,11 @@ begin
     'TyTrackThumb:active { render-style: bevel3d; background: var(--face); }' + LineEnding +
     '/* The thumb the keys move: Win9x drew a thin dark focus mark inside the raised face. */' + LineEnding +
     'TyTrackThumb:focus  { render-style: bevel3d; background: var(--face); outline: 1px var(--ink); outline-offset: 3px; }' + LineEnding +
+    '/* A thumb dragged off far enough to be removed on release fades (this skin writes its own' + LineEnding +
+    '   TyTrackThumb, so the default theme''s class does not reach it). A gradient stop needs no' + LineEnding +
+    '   rule here: the raised bevel is derived from the stop''s own colour, and one of its two sides' + LineEnding +
+    '   always stands off it. */' + LineEnding +
+    'TyTrackThumb.removing { render-style: bevel3d; background: var(--face); opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     '/* Tooltip: the pale yellow box with a thin black frame. */' + LineEnding +
     'TyHint { background: #FFFFE1; color: var(--ink); border-color: #000000; border-width: 1px; border-radius: 0; padding: var(--pad-tooltip); font-size: var(--font-size-base); }' + LineEnding;
@@ -4629,6 +4644,11 @@ begin
     'TyTrackThumb:hover  { background: linear-gradient(90deg, lighten(--accent, 16%), lighten(--accent, 4%)); }' + LineEnding +
     'TyTrackThumb:active { background: var(--accent-active); }' + LineEnding +
     'TyTrackThumb:focus  { outline: 2px var(--on-accent); outline-offset: 2px; }' + LineEnding +
+    '/* This skin writes its own TyTrackThumb, so the default theme''s classes do not reach it:' + LineEnding +
+    '   a thumb dragged off far enough to be removed on release fades, and a gradient stop (filled' + LineEnding +
+    '   with its own colour) keeps an edge in the surface''s ink. */' + LineEnding +
+    'TyTrackThumb.removing { background: linear-gradient(90deg, lighten(--accent, 10%), var(--accent)); opacity: var(--disabled-opacity); }' + LineEnding +
+    'TyTrackThumb.stop     { border-width: 1px; border-color: var(--on-surface); }' + LineEnding +
     '' + LineEnding +
     'TyGroupBox, TyToolGroupPanel {' + LineEnding +
     '  padding: 4px 12px;' + LineEnding +
