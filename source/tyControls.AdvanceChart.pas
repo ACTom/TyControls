@@ -62,7 +62,7 @@ uses
   tyControls.AdvChart.AxisLabels, tyControls.AdvChart.LabelLayout,
   tyControls.AdvChart.Export, tyControls.AdvChart.Loading,
   tyControls.AdvChart.Convert, tyControls.AdvChart.Jitter,
-  tyControls.AdvChart.Large,
+  tyControls.AdvChart.Large, tyControls.AdvChart.Progressive,
   tyControls.AdvChart.Polar, tyControls.AdvChart.PolarBar,
   fpjson, contnrs, tyControls.SubPixel;
 
@@ -350,6 +350,35 @@ type
     FJitter: TTyJitterPass;
     { LARGE MODE, by binding slot, as the last build decided it [Batch 117] }
     FLargeKinds: array of TTyLargeKind;
+    { PROGRESSIVE RENDERING AND appendData [Batch 119]: every slot's
+      pipeline (its context, its chunks, the args its tasks ran with); a
+      chunk still to draw; the next update is a setOption's (a pipeline with
+      no context yet); the list a progress frame left is the one to paint;
+      the ms a step costs (NaN: the clock measures it); rows appended and
+      not yet taken in; the relayout taking them in; the axes' raw extents
+      as the last update left them, which appendData keeps; and an update
+      laid out whose `rendered` is still to fire. }
+    FProg: TTyProgRunArray;
+    FProgUnfinished: Boolean;
+    FProgFresh: Boolean;
+    FProgReuse: Boolean;
+    FProgStepCost: Double;
+    FStreamPending: Boolean;
+    FStreamRelayout: Boolean;
+    FFrozen: TTyAxisZoomArray;
+    FFrozenKeys: TTyStringArray;
+    FFrozenOn: Boolean;
+    FFlushDue: Boolean;
+    { THE INCREMENTAL LAYER (zrender's, for `incremental` elements): every
+      shown element of a progressive run painted once, onto a layer of its
+      own that a frame adds its chunk to and the static layer blits where
+      the first of them stands in the paint order; whether it holds the
+      list as it stands, its PPI, and what of each element it holds (rows
+      of a growing batch, 1 for anything else, 0 for nothing) }
+    FProgLayer: TBGRABitmap;
+    FProgLayerOk: Boolean;
+    FProgLayerPPI: Integer;
+    FProgPainted: TTyIntegerArray;
     { Which series accumulate onto which, and into which columns. Solved in
       Rebuild, between filling the stores and sizing the axes: the totals have
       to exist before the value axis is asked how far it must reach. }
@@ -986,6 +1015,7 @@ type
     function AnimToOldPoint(AOldSeries: Integer; AX, AY: Double): TTyPointF;
     procedure AnimArmTimer;
     procedure AnimTimerFired(Sender: TObject);
+    procedure AnimTickBody(ANowMs: Double);
     { every live clip loops }
     function AnimLoopOnly: Boolean;
     { the pointer's slide: synced to the hover, dropped with the build }
@@ -1178,6 +1208,27 @@ type
       `large` against the count after the dataZoom filter, on a cartesian
       only [Batch 117] }
     function LargeKindOf(ASlot: Integer): TTyLargeKind;
+    { ---- progressive rendering and appendData [Batch 119] ---- }
+    function ProgOnOf(ASlot: Integer): Boolean;
+    function ProgCtxOf(ASlot: Integer): TTyProgRun;
+    procedure ProgUpdate;
+    procedure ProgStage;
+    procedure ProgStep;
+    function ProgAnyUnfinished: Boolean;
+    procedure ProgTag(AList: TTyPaintList);
+    procedure ProgApplyVisibility(AList: TTyPaintList);
+    function ProgClock: Double;
+    function ProgIdle: Boolean;
+    function ProgLive: Boolean;
+    function ProgFrame(AEmit: Boolean): Boolean;
+    procedure FrozenCapture;
+    function FrozenZooms: TTyAxisZoomArray;
+    procedure EmitPlain(const AType: string);
+    procedure EmitFlush;
+    function ProgIsLayered(const AEl: TTyChartElement): Boolean;
+    procedure ProgLayerBuild(AW, AH, APPI: Integer);
+    procedure ProgLayerDelta;
+    procedure ProgRenderList(APainter: TTyPainter; AList: TTyPaintList; APPI: Integer);
     { the row a large element's own handler gives the pointer: the batch's
       scan, -1 for none (a candle's path has no data) }
     function LargeRowAt(AElement, AX, AY: Integer): Integer;
@@ -1930,6 +1981,29 @@ type
     { THE LARGE MODE the last build drew a series in: lgkNone for one drawn
       an element per datum [Batch 117] }
     function SeriesLargeKind(ASeriesIndex: Integer): TTyLargeKind;
+    { ---- progressive rendering and appendData [Batch 119] ---- }
+    { chart.appendData with seriesIndex and data: ADataJson, a JSON array of data
+      items, appended to the series' own `data`. Nothing is drawn until the
+      next frame (the animation timer, or ProgressTick), which takes the rows
+      in WITHOUT moving the axes -- they keep the extent of the last update,
+      as upstream's do -- and carries a progressive series on, or starts it
+      again, as upstream's scheduler would. False, and nothing appended, for
+      a series that is not there or reads a dataset (no `data` array of its
+      own), and for a text that is no array or nests too deep. }
+    function AppendData(ASeriesIndex: Integer; const ADataJson: string): Boolean;
+    { ONE ANIMATION FRAME of progressive rendering (_onframe): appended rows
+      taken in, then a chunk of every progressive series, again while the
+      frame's 1 ms budget lasts; `rendered`, and `finished` with the last
+      chunk. The 16 ms timer calls it with the animation's frame. }
+    procedure ProgressTick;
+    { a chunk still to draw, or rows appended and not yet taken in }
+    function ProgressiveUnfinished: Boolean;
+    { the series' pipeline as the last update and frame left it (Series -1
+      for none) }
+    function SeriesProgress(ASeriesIndex: Integer): TTyProgRun;
+    { what one step of a frame costs, ms; NaN (the default) measures it on the
+      clock. A test sets it, as upstream's own budget is wall time. }
+    property ProgressiveStepCostMs: Double read FProgStepCost write FProgStepCost;
     { For a test or a designer to look inside. nil until the first build. }
     property Build: TTyChartBuild read FBuild;
     { THE visualMap MODEL AS THE LAST BUILD SOLVED IT: the completed
@@ -2425,6 +2499,7 @@ begin
   FDzNow := NaN;
   FAnimNow := NaN;
   FAnimMode := camAuto;
+  FProgStepCost := NaN;
 end;
 
 destructor TTyAdvanceChart.Destroy;
@@ -2442,6 +2517,7 @@ begin
   { The static layer owns a TBitmap. TTyPaintCache.Drop only marks it stale --
     it keeps the surface deliberately, for reuse -- so dropping is not freeing. }
   FreeAndNil(FStatic);
+  FreeAndNil(FProgLayer);
   FreeAndNil(FDzTimer);
   FreeAndNil(FTipTimer);
   { THE PROXIES BEFORE THE DRIVER: freeing one takes its clips off it }
@@ -2888,6 +2964,10 @@ end;
 
 procedure TTyAdvanceChart.AfterSetOption(ALazy, ASilent: Boolean);
 begin
+  { restorePipelines: the next update's pipelines have no context yet; rows
+    appended are in the option the update reads [Batch 119] }
+  FProgFresh := True;
+  FStreamPending := False;
   { an axis' `axisPointer.status: 'show'` holds again until a pointer moves
     [Batch 100] }
   FOptPtrGone := False;
@@ -3524,8 +3604,14 @@ begin
   { EVERY RENDER IS A RENDER OF THE VIEWS: a slider rebuilds from the window
     unless the action was its own, an inside takes the window again }
   DzRenderStates;
-  TyApplyAxisExtents(FOption, FBuild, FBindings, FStores, FStacks, FIndex,
-    FLastPPI, FAxisZooms);
+  { appendData's frame does not update the coordinate systems: every axis
+    takes the raw extent the last update measured [Batch 119] }
+  if (FStreamRelayout or FExporting) and FFrozenOn then
+    TyApplyAxisExtents(FOption, FBuild, FBindings, FStores, FStacks, FIndex,
+      FLastPPI, FrozenZooms)
+  else
+    TyApplyAxisExtents(FOption, FBuild, FBindings, FStores, FStacks, FIndex,
+      FLastPPI, FAxisZooms);
   { AND THE POLARS' SCALES, the same nice step [Batch 111] -- over the
     series on them, the stacks and the dataZoom windows [Batch 113] }
   TyPolarApplyExtents(FOption, FPolars, FBindings, FStores, FStacks, FIndex,
@@ -4024,6 +4110,16 @@ var
 begin
   FLastRect := ARect;
   FLastPPI := APPI;
+  { a new layout: a progress frame's list is not this one's [Batch 119] }
+  FProgReuse := False;
+  { A FULL UPDATE measures the axes again: what appendData froze goes
+    [Batch 119] }
+  if not FStreamRelayout and not FExporting then
+  begin
+    FFrozenOn := False;
+    FFrozen := nil;
+    FFrozenKeys := nil;
+  end;
   { a full update: the next sync re-renders the states [Batch 88] }
   Inc(FStGen);
   { the legend is rendered anew: its buttons are new elements in no state
@@ -4043,6 +4139,9 @@ begin
   else
     AnimDropAll;
   Rebuild;
+  { THE PIPELINES, from the counts the filters left -- before the bars ask
+    which of them are large [Batch 119] }
+  ProgUpdate;
   { The layout pass measures the labels the PAINT pass will draw, so it has to
     be handed the same font and the same gaps. Resolving them here rather than
     inside the builder keeps that unit free of the controller, which is the
@@ -4119,6 +4218,8 @@ begin
     by the rect the labels left it }
   SolveDataZoomViews(AMeasurer, APPI);
   FDirty := False;
+  { the update's flush: `rendered` once it is painted [Batch 119] }
+  if not FStreamRelayout and not FExporting then FFlushDue := True;
 end;
 
 { ==================== paint ==================== }
@@ -4806,7 +4907,7 @@ begin
       measured from zero. }
     R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     { upstream's frame: the flags become state lists [Batch 88] }
-    StApplyChanged;
+    if StApplyChanged then FProgReuse := False;
     P.BeginPaint(ACanvas, ARect, APPI);
     PaintStatic(P, R, APPI, measurer);
     PaintDynamic(P, R, APPI, measurer);
@@ -4814,6 +4915,8 @@ begin
   finally
     P.Free;
   end;
+  { the update painted: `rendered` [Batch 119] }
+  EmitFlush;
 end;
 
 procedure TTyAdvanceChart.PaintStatic(APainter: TTyPainter; const ARect: TRect;
@@ -12020,6 +12123,7 @@ var
   si2: TTySunburstInk;
   specs: TTyLabelSpecArray;
   itemSpecs: TTyLabelSpecTable;
+  pk: Integer;
 begin
   Result := 0;
   { ONE LIST FOR EVERY SERIES, not one per series: the ordering rule is (Z, Z2,
@@ -12028,6 +12132,8 @@ begin
   if FPaintList = nil then FPaintList := TTyPaintList.Create
   else FPaintList.Clear;
   list := FPaintList;
+  { a new list: the incremental layer holds none of it [Batch 119] }
+  FProgLayerOk := False;
   { BEFORE THE EARLY EXIT, not after -- and not because a stale list would
     otherwise be read: Clear has already run, so the answer would be "nothing"
     either way. It is here because a render that drew no series is still a
@@ -12268,6 +12374,14 @@ begin
       { LARGE MODE: one batch per style [Batch 117] }
       v.Large := LargeKindOf(i);
       FLargeKinds[i] := v.Large;
+      { A PROGRESSIVE BATCH comes a chunk at a time: every planned chunk's
+        rows, the frames show them [Batch 119] }
+      if (v.Large <> lgkNone) and ProgOnOf(i) then
+      begin
+        SetLength(v.LargeChunks, Length(FProg[i].Starts));
+        for pk := 0 to High(FProg[i].Starts) do
+          v.LargeChunks[pk] := TyProgRowsOf(FProg[i], pk);
+      end;
       if FBindings[i].SeriesType = 'effectScatter' then RippleOf(i, v);
       if (FBindings[i].SeriesType = 'scatter')
         or (FBindings[i].SeriesType = 'effectScatter') then
@@ -12409,6 +12523,10 @@ begin
     { AFTER THE LABELS, so a caption dims and rises with its node. }
     if drawn > 0 then ApplyGraphHover(list, APPI);
     if drawn > 0 then ApplyTreeHover(list, APPI);
+    { THE CHUNKS: which frame draws each element of a progressive series,
+      and which are still to come -- before the states, which an element
+      with no data does not take [Batch 119] }
+    if drawn > 0 then ProgTag(list);
     { THE STATES, onto the elements just built [Batch 88] -- and with
       nothing drawn too: a legend can switch every series off, and their
       records go with their elements [Batch 93] }
@@ -13083,10 +13201,18 @@ end;
 
 procedure TTyAdvanceChart.PaintSeries(APainter: TTyPainter;
   const AMeasurer: ITyTextMeasurer; APPI: Integer);
-var drawn: Integer;
+var
+  drawn: Integer;
+  built: Boolean;
 begin
-  { BUILD, THEN DRAW. The list stays afterwards -- see FPaintList. }
-  drawn := BuildSeriesList(AMeasurer, APPI);
+  { BUILD, THEN DRAW. The list stays afterwards -- see FPaintList. A
+    PROGRESS FRAME changed which elements are shown and nothing else: its
+    list is drawn as it stands [Batch 119] }
+  built := not (FProgReuse and FPaintListValid and (FPaintList <> nil)
+    and not FExporting);
+  FProgReuse := False;
+  if built then drawn := BuildSeriesList(AMeasurer, APPI)
+  else drawn := FPaintList.Count;
   { AN EXPORT DRAWS THE LIST AS LAID OUT: the finished chart, nothing armed,
     bound or stepped -- the proxies are the window's [Batch 106] }
   if FExporting then
@@ -13094,7 +13220,7 @@ begin
     if drawn > 0 then TyRenderPaintList(APainter, FPaintList);
     Exit;
   end;
-  AnimAfterBuild;
+  if built then AnimAfterBuild;
   { the states on their proxies, then the armed option's flush [Batch 94] }
   StAnimSync;
   AnimFlushArmed;
@@ -13114,7 +13240,8 @@ begin
     if (Length(FAnimBind) > 0) or (Length(FAnimStBind) > 0) then
       TyRenderPaintList(APainter, AnimFrame)
     else
-      TyRenderPaintList(APainter, FPaintList);
+      { a progressive run's chunks through their own layer [Batch 119] }
+      ProgRenderList(APainter, FPaintList, APPI);
 end;
 
 function TTyAdvanceChart.SlotOfSeries(ASeriesIndex: Integer): Integer;
@@ -13239,8 +13366,10 @@ begin
   d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if not (d is TJSONObject) then Exit;
   node := TJSONObject(d);
+  { BarSeries.__preparePipelineContext: progressive rendering forces large
+    [Batch 119] }
   if not TyLargeIsOn(st, node.Find('large'), node.Find('largeThreshold'),
-    FStores[ASlot].Count) then Exit;
+    FStores[ASlot].Count) and not ((st = 'bar') and ProgOnOf(ASlot)) then Exit;
   { A path:// SYMBOL stays one element per row: upstream's batch would
     replay one fitted path, which this port does not model }
   if (st = 'scatter') and (SymbolFor(ASlot).Kind = tsyPath) then Exit;
@@ -13263,6 +13392,621 @@ begin
   Result := lgkNone;
   slot := SlotOfSeries(ASeriesIndex);
   if (slot >= 0) and (slot <= High(FLargeKinds)) then Result := FLargeKinds[slot];
+end;
+
+{ ==================== progressive rendering and appendData [Batch 119] ====================
+
+  THE PIPELINE PER SLOT (FProg), made by every relayout from the counts the
+  filters left: the context (progressiveRender, large, modDataCount), the
+  chunks planned from row 0 by the step, how many are drawn, and the args
+  the blocked data stage and the visual stage last ran with -- the two
+  things that restart a run (see AdvChart.Progressive).
+
+  A FULL UPDATE (setOption, a dispatch, a resize) starts every run again and
+  draws its first chunk, as upstream's update does inside setOption. A FRAME
+  (ProgressTick, the 16 ms timer) is _onframe: rows appendData left are
+  taken in by a relayout that keeps the axes (FFrozen) and keeps the drawn
+  chunks where the run may carry on; then each progressive series draws
+  its next chunk, again while the 1 ms budget lasts.
+
+  THE ELEMENTS are built for every row, as always; ProgTag marks the chunk
+  that draws each (an element per datum by its row's first chunk, a batch
+  by the chunk it was made for) and ProgApplyVisibility hides what is to
+  come -- neither drawn nor hit. A progress frame changes nothing else, so
+  the list it leaves is painted as it stands (FProgReuse). }
+
+function TTyAdvanceChart.ProgOnOf(ASlot: Integer): Boolean;
+begin
+  Result := (ASlot >= 0) and (ASlot <= High(FProg)) and (ASlot <= High(FBindings))
+    and FProg[ASlot].On and (FProg[ASlot].Series = FBindings[ASlot].SeriesIndex);
+end;
+
+function TTyAdvanceChart.ProgCtxOf(ASlot: Integer): TTyProgRun;
+var
+  d: TJSONData;
+  node: TJSONObject;
+  st: string;
+  n: Integer;
+begin
+  Result := Default(TTyProgRun);
+  Result.Series := -1;
+  Result.ModCount := -1;
+  Result.Block.ModBy := 1;
+  Result.Visual.ModBy := 1;
+  if (FOption = nil) or (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  st := FBindings[ASlot].SeriesType;
+  Result.Series := FBindings[ASlot].SeriesIndex;
+  Result.SeriesType := st;
+  d := FOption.ComponentAt('series', Result.Series);
+  if d is TJSONObject then node := TJSONObject(d) else node := nil;
+  Result.Spec := TyProgSpecOf(st, node);
+  if (ASlot <= High(FStores)) and (FStores[ASlot] <> nil) then n := FStores[ASlot].Count
+  else n := 0;
+  Result.Count := n;
+  { a series the legend switched off is not in the pipeline at all }
+  Result.On := (not FBindings[ASlot].Hidden) and TyProgRenderOn(Result.Spec, st, n);
+  if node <> nil then
+    Result.Large := TyLargeIsOn(st, node.Find('large'), node.Find('largeThreshold'), n)
+  else
+    Result.Large := TyLargeIsOn(st, nil, nil, n);
+  { BarSeries.__preparePipelineContext }
+  if (st = 'bar') and Result.On then Result.Large := True;
+  if Result.Spec.ModMode then Result.ModCount := n;
+end;
+
+procedure TTyAdvanceChart.ProgUpdate;
+var
+  i: Integer;
+  old: TTyProgRunArray;
+  r, o: TTyProgRun;
+  haveOld, restart: Boolean;
+  a: TTyProgArgs;
+begin
+  { an export's own layout keeps the window's runs }
+  if FExporting then Exit;
+  old := FProg;
+  FProg := nil;
+  SetLength(FProg, Length(FBindings));
+  for i := 0 to High(FBindings) do
+  begin
+    r := ProgCtxOf(i);
+    haveOld := (i <= High(old)) and (old[i].Series = r.Series)
+      and (old[i].SeriesType = r.SeriesType);
+    if haveOld then o := old[i] else o := Default(TTyProgRun);
+    if FStreamRelayout and haveOld then
+    begin
+      { THE FRAME'S FIRST ITERATION, data stage first: the blocked tasks run
+        with the context they had, then the stream modes, then the visual
+        tasks with the new one }
+      r.Starts := o.Starts;
+      r.Ends := o.Ends;
+      r.Done := o.Done;
+      r.Block := o.Block;
+      restart := False;
+      if TyProgHasBlockTask(r.SeriesType) then
+      begin
+        a := TyProgBlockArgs(o, False);
+        if not TyProgArgsSame(a, o.Block) then restart := True;
+        r.Block := a;
+      end;
+      a := TyProgVisualArgs(r);
+      { createRenderPlanner: a large or a progressive switch resets too }
+      if (not TyProgArgsSame(a, o.Visual)) or (r.On <> o.On) or (r.Large <> o.Large) then
+        restart := True;
+      r.Visual := a;
+      if not r.On then
+      begin
+        r.Starts := nil;
+        r.Ends := nil;
+        r.Done := 0;
+      end
+      else if restart or not o.On then
+      begin
+        r.Done := 0;
+        TyProgReplan(r, 0);
+      end
+      else
+        { the chunks drawn stay, the rows appended come after them }
+        TyProgReplan(r, r.Done);
+    end
+    else
+    begin
+      { AN UPDATE: everything from row 0, the first chunk drawn by it. Its
+        blocked stage ran with the context the pipeline had -- none after a
+        setOption }
+      if haveOld and not FProgFresh then r.Block := TyProgBlockArgs(o, False)
+      else
+      begin
+        r.Block.ModBy := 1;
+        r.Block.ModCount := 0;
+      end;
+      r.Visual := TyProgVisualArgs(r);
+      r.Done := 0;
+      TyProgReplan(r, 0);
+      if Length(r.Starts) > 0 then r.Done := 1;
+    end;
+    FProg[i] := r;
+  end;
+  if not FStreamRelayout then FProgFresh := False;
+  FProgUnfinished := ProgAnyUnfinished;
+end;
+
+{ A frame's later iteration: the blocked data stage with the context as it
+  stands. Where its args moved -- the first frame after a setOption, the
+  frame after appendData moved a 'mod' count -- the run starts over. }
+procedure TTyAdvanceChart.ProgStage;
+var
+  i: Integer;
+  a: TTyProgArgs;
+begin
+  for i := 0 to High(FProg) do
+  begin
+    if not TyProgHasBlockTask(FProg[i].SeriesType) then Continue;
+    a := TyProgBlockArgs(FProg[i], False);
+    if TyProgArgsSame(a, FProg[i].Block) then Continue;
+    FProg[i].Block := a;
+    if FProg[i].On then
+    begin
+      FProg[i].Done := 0;
+      TyProgReplan(FProg[i], 0);
+    end;
+  end;
+end;
+
+procedure TTyAdvanceChart.ProgStep;
+var i: Integer;
+begin
+  for i := 0 to High(FProg) do
+    if TyProgUnfinished(FProg[i]) then Inc(FProg[i].Done);
+end;
+
+function TTyAdvanceChart.ProgAnyUnfinished: Boolean;
+var i: Integer;
+begin
+  for i := 0 to High(FProg) do
+    if TyProgUnfinished(FProg[i]) then Exit(True);
+  Result := False;
+end;
+
+procedure TTyAdvanceChart.ProgTag(AList: TTyPaintList);
+var
+  k, slot, r: Integer;
+  el: TTyChartElement;
+  rows: array of TTyIntegerArray;
+  any: Boolean;
+begin
+  any := False;
+  for slot := 0 to High(FProg) do
+    if FProg[slot].On then any := True;
+  if not any then Exit;
+  SetLength(rows, Length(FProg));
+  for k := 0 to AList.Count - 1 do
+  begin
+    el := AList.Element(k);
+    if (el.Datum.Kind <> ctkSeries) or (el.Datum.SeriesIndex < 0) then Continue;
+    slot := SlotOfSeries(el.Datum.SeriesIndex);
+    if not ProgOnOf(slot) then Continue;
+    if el.Shape.Kind = cskLarge then
+    begin
+      { the builder made it for its chunk }
+      if el.ProgChunk <= 0 then Continue;
+    end
+    else
+    begin
+      if (el.Datum.DataIndex < 0) or el.Datum.IsEdge then Continue;
+      if rows[slot] = nil then rows[slot] := TyProgRowChunks(FProg[slot]);
+      r := el.Datum.DataIndex;
+      { a row no chunk visits -- the 'mod' walk misses some -- never comes }
+      if (r < Length(rows[slot])) and (rows[slot][r] >= 0) then
+        el.ProgChunk := rows[slot][r] + 1
+      else
+        el.ProgChunk := MaxInt;
+      el.ProgRow := r;
+      { AN INCREMENTAL CANDLE HAS NO DATA: _incrementalRenderNormal never
+        calls setItemGraphicEl, so its box is hovered and names nothing --
+        no event, no item tooltip, no state }
+      if FProg[slot].SeriesType = 'candlestick' then el.Datum := TyChartNoDatum;
+    end;
+    el.ProgSlot := slot;
+    AList.SetElement(k, el);
+  end;
+  ProgApplyVisibility(AList);
+end;
+
+procedure TTyAdvanceChart.ProgApplyVisibility(AList: TTyPaintList);
+var
+  k, done, j, shown: Integer;
+  el: TTyChartElement;
+  hid, moved: Boolean;
+begin
+  if AList = nil then Exit;
+  for k := 0 to AList.Count - 1 do
+  begin
+    el := AList.Element(k);
+    if el.ProgChunk <= 0 then Continue;
+    if (el.ProgSlot >= 0) and (el.ProgSlot <= High(FProg)) then done := FProg[el.ProgSlot].Done
+    else done := MaxInt;
+    hid := el.ProgChunk > done;
+    moved := hid <> el.ProgHidden;
+    { A GROWING SCATTER BATCH holds the rows of its chunks drawn so far }
+    if (el.Shape.Kind = cskLarge) and (el.Shape.Large.Kind = lgkSymbol)
+      and (Length(el.Shape.Large.ChunkEnds) > 0) then
+    begin
+      j := done - el.Shape.Large.ChunkFirst;
+      if j > Length(el.Shape.Large.ChunkEnds) then j := Length(el.Shape.Large.ChunkEnds);
+      if j < 1 then j := 1;
+      shown := el.Shape.Large.ChunkEnds[j - 1];
+      if shown <> el.Shape.Large.Shown then
+      begin
+        el.Shape.Large.Shown := shown;
+        TyLargeSetBox(el.Shape.Large);
+        el.Shape.Bounds := TyLargeBounds(el.Shape.Large);
+        moved := True;
+      end;
+    end;
+    if moved then
+    begin
+      el.ProgHidden := hid;
+      AList.SetElement(k, el);
+    end;
+  end;
+end;
+
+function TTyAdvanceChart.ProgClock: Double;
+begin
+  if IsNan(FAnimNow) then Result := TyProgNowMs else Result := FAnimNow;
+end;
+
+{ drawn through the incremental layer: an element a chunk of a run draws }
+function TTyAdvanceChart.ProgIsLayered(const AEl: TTyChartElement): Boolean;
+begin
+  Result := (AEl.ProgChunk > 0) and not AEl.ProgHidden and not AEl.Ignore;
+end;
+
+procedure TTyAdvanceChart.ProgLayerBuild(AW, AH, APPI: Integer);
+var
+  P: TTyPainter;
+  i, idx: Integer;
+  el: TTyChartElement;
+begin
+  if (FProgLayer = nil) or (FProgLayer.Width <> AW) or (FProgLayer.Height <> AH) then
+  begin
+    FreeAndNil(FProgLayer);
+    FProgLayer := TBGRABitmap.Create(AW, AH, BGRAPixelTransparent);
+  end
+  else
+    FProgLayer.Fill(BGRAPixelTransparent);
+  FProgLayerPPI := APPI;
+  FProgPainted := nil;
+  SetLength(FProgPainted, FPaintList.Count);
+  P := TTyPainter.Create;
+  try
+    P.BeginPaintOn(nil, Rect(0, 0, AW, AH), APPI, FProgLayer);
+    for i := 0 to FPaintList.Count - 1 do
+    begin
+      idx := FPaintList.PaintOrder(i);
+      el := FPaintList.Element(idx);
+      if not ProgIsLayered(el) then Continue;
+      TyRenderElement(P, el);
+      if el.Shape.Kind = cskLarge then FProgPainted[idx] := Max(1, TyLargeRows(el.Shape.Large))
+      else FProgPainted[idx] := 1;
+    end;
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+  FProgLayerOk := True;
+end;
+
+{ A FRAME'S CHUNK onto the layer: what was not on it, in paint order, and
+  the rows a growing scatter batch took on since -- on top of everything
+  already there, as the canvas' incremental layer adds it }
+procedure TTyAdvanceChart.ProgLayerDelta;
+var
+  P: TTyPainter;
+  i, idx, have, rows: Integer;
+  el, part: TTyChartElement;
+  started: Boolean;
+begin
+  if not FProgLayerOk or (FProgLayer = nil) or (FPaintList = nil) then Exit;
+  if Length(FProgPainted) <> FPaintList.Count then
+  begin
+    FProgLayerOk := False;
+    Exit;
+  end;
+  P := nil;
+  started := False;
+  try
+    for i := 0 to FPaintList.Count - 1 do
+    begin
+      idx := FPaintList.PaintOrder(i);
+      el := FPaintList.Element(idx);
+      if not ProgIsLayered(el) then Continue;
+      have := FProgPainted[idx];
+      if el.Shape.Kind = cskLarge then rows := Max(1, TyLargeRows(el.Shape.Large))
+      else rows := 1;
+      if have >= rows then Continue;
+      if not started then
+      begin
+        P := TTyPainter.Create;
+        P.BeginPaintOn(nil, Rect(0, 0, FProgLayer.Width, FProgLayer.Height),
+          FProgLayerPPI, FProgLayer);
+        started := True;
+      end;
+      if (have > 0) and (el.Shape.Kind = cskLarge) and (el.Shape.Large.Kind = lgkSymbol) then
+      begin
+        { only the rows the batch grew by }
+        part := el;
+        part.Shape.Large.Pts := Copy(el.Shape.Large.Pts, have * 2, (rows - have) * 2);
+        part.Shape.Large.Shown := 0;
+        part.Shape.Large.ChunkEnds := nil;
+        TyRenderElement(P, part);
+      end
+      else
+        TyRenderElement(P, el);
+      FProgPainted[idx] := rows;
+    end;
+  finally
+    if started then
+    begin
+      P.EndPaint;
+      P.Free;
+    end;
+  end;
+end;
+
+{ The series in paint order, a run's chunks as the incremental layer where
+  the first of them stands: what comes before it below, what comes after it
+  above (zrender's EL_AFTER_INCREMENTAL_INC) }
+procedure TTyAdvanceChart.ProgRenderList(APainter: TTyPainter; AList: TTyPaintList;
+  APPI: Integer);
+var
+  i, idx: Integer;
+  el: TTyChartElement;
+  any, blitted: Boolean;
+  bmp: TBGRABitmap;
+begin
+  if (AList = nil) or (APainter = nil) then Exit;
+  bmp := APainter.Bitmap;
+  any := False;
+  if (bmp <> nil) and (AList = FPaintList) then
+    for i := 0 to AList.Count - 1 do
+      if ProgIsLayered(AList.Element(i)) then
+      begin
+        any := True;
+        Break;
+      end;
+  if not any then
+  begin
+    TyRenderPaintList(APainter, AList);
+    Exit;
+  end;
+  if not FProgLayerOk or (FProgLayer = nil) or (FProgLayer.Width <> bmp.Width)
+    or (FProgLayer.Height <> bmp.Height) or (FProgLayerPPI <> APPI) then
+    ProgLayerBuild(bmp.Width, bmp.Height, APPI);
+  blitted := False;
+  for i := 0 to AList.Count - 1 do
+  begin
+    idx := AList.PaintOrder(i);
+    el := AList.Element(idx);
+    if el.Ignore or el.ProgHidden then Continue;
+    if el.ProgChunk > 0 then
+    begin
+      if not blitted then
+      begin
+        bmp.PutImage(0, 0, FProgLayer, dmDrawWithTransparency);
+        blitted := True;
+      end;
+      Continue;
+    end;
+    TyRenderElement(APainter, el);
+  end;
+end;
+
+function TTyAdvanceChart.ProgLive: Boolean;
+begin
+  Result := FProgUnfinished or FStreamPending;
+end;
+
+{ the `finished` test: the animation finished, no update pending, the
+  scheduler finished }
+function TTyAdvanceChart.ProgIdle: Boolean;
+begin
+  Result := not ProgLive and not FAnimLive and not FLazyPending;
+end;
+
+function TTyAdvanceChart.ProgFrame(AEmit: Boolean): Boolean;
+var
+  remain, t0: Double;
+  relaid: Boolean;
+  m: ITyTextMeasurer;
+begin
+  Result := False;
+  if not ProgLive then Exit;
+  { nothing laid out yet, or an update still to lay out: the update draws
+    first }
+  if (FOption = nil) or (FLastPPI <= 0) or FDirty
+    or (csDestroying in ComponentState) then Exit;
+  Result := True;
+  remain := TyProgFrameBudgetMs;
+  relaid := False;
+  repeat
+    t0 := ProgClock;
+    if FStreamPending then
+    begin
+      { performSeriesTasks and the data stage take the appended rows in;
+        the coordinate systems are not updated }
+      FStreamPending := False;
+      m := NewTextMeasurer(FLastPPI);
+      FStreamRelayout := True;
+      try
+        Relayout(nil, FLastRect, FLastPPI, m);
+      finally
+        FStreamRelayout := False;
+      end;
+      relaid := True;
+    end
+    else
+      ProgStage;
+    ProgStep;
+    FProgUnfinished := ProgAnyUnfinished;
+    { THE CHUNK IS DRAWN IN THE STEP, onto the incremental layer: the time
+      the budget measures is the drawing's }
+    if not relaid and (FPaintList <> nil) and FPaintListValid then
+    begin
+      ProgApplyVisibility(FPaintList);
+      ProgLayerDelta;
+    end;
+    if IsNan(FProgStepCost) then remain := remain - (ProgClock - t0)
+    else remain := remain - FProgStepCost;
+  until (remain <= 0) or not FProgUnfinished;
+  if relaid or (FPaintList = nil) or not FPaintListValid then
+    DropStatic
+  else
+  begin
+    { THE SAME LIST, more of it shown -- and on the layer already }
+    if FStatic <> nil then FStatic.Drop;
+    FProgReuse := True;
+  end;
+  InvalidateFrame;
+  if AEmit then
+  begin
+    EmitPlain('rendered');
+    if ProgIdle then EmitPlain('finished');
+    AnimArmTimer;
+  end;
+end;
+
+procedure TTyAdvanceChart.ProgressTick;
+begin
+  ProgFrame(True);
+end;
+
+function TTyAdvanceChart.ProgressiveUnfinished: Boolean;
+begin
+  Result := ProgLive;
+end;
+
+function TTyAdvanceChart.SeriesProgress(ASeriesIndex: Integer): TTyProgRun;
+var slot: Integer;
+begin
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot >= 0) and (slot <= High(FProg)) then Result := FProg[slot]
+  else
+  begin
+    Result := Default(TTyProgRun);
+    Result.Series := -1;
+    Result.ModCount := -1;
+  end;
+end;
+
+{ THE AXES AS THE LAST UPDATE MEASURED THEM: every grid axis' raw extent
+  (a dataZoom's hold where it has one), keyed by main type and index -- the
+  build's axes are new objects every relayout }
+procedure TTyAdvanceChart.FrozenCapture;
+var
+  g, a: Integer;
+  gb: TTyGridBuild;
+
+  procedure Take(AAxis: TTyAxis);
+  var k, zi: Integer; z: TTyAxisZoom; any: Boolean;
+  begin
+    if AAxis = nil then Exit;
+    zi := -1;
+    for k := 0 to High(FAxisZooms) do
+      if FAxisZooms[k].Axis = AAxis then zi := k;
+    if zi >= 0 then z := FAxisZooms[zi]
+    else
+    begin
+      z := Default(TTyAxisZoom);
+      z.Raw := TyAxisNoZoomExtent(FOption, FBindings, FStores, FStacks, FIndex,
+        AAxis, AAxis.MainType, any);
+      z.Any := any;
+      z.ZoomLo := NaN;
+      z.ZoomHi := NaN;
+    end;
+    z.Axis := nil;
+    SetLength(FFrozen, Length(FFrozen) + 1);
+    FFrozen[High(FFrozen)] := z;
+    SetLength(FFrozenKeys, Length(FFrozenKeys) + 1);
+    FFrozenKeys[High(FFrozenKeys)] := AAxis.MainType + ':' + IntToStr(AAxis.ComponentIndex);
+  end;
+
+begin
+  FFrozen := nil;
+  FFrozenKeys := nil;
+  FFrozenOn := True;
+  if FBuild = nil then Exit;
+  for g := 0 to FBuild.GridCount - 1 do
+  begin
+    gb := FBuild.Grid(g);
+    for a := 0 to gb.XAxisCount - 1 do Take(gb.XAxis(a));
+    for a := 0 to gb.YAxisCount - 1 do Take(gb.YAxis(a));
+  end;
+end;
+
+function TTyAdvanceChart.FrozenZooms: TTyAxisZoomArray;
+var
+  j, g, a, k, hit: Integer;
+  gb: TTyGridBuild;
+  ax, cand: TTyAxis;
+begin
+  Result := Copy(FAxisZooms);
+  if FBuild = nil then Exit;
+  for j := 0 to High(FFrozen) do
+  begin
+    ax := nil;
+    for g := 0 to FBuild.GridCount - 1 do
+    begin
+      gb := FBuild.Grid(g);
+      for a := 0 to gb.XAxisCount + gb.YAxisCount - 1 do
+      begin
+        if a < gb.XAxisCount then cand := gb.XAxis(a)
+        else cand := gb.YAxis(a - gb.XAxisCount);
+        if (cand <> nil) and (cand.MainType + ':' + IntToStr(cand.ComponentIndex) = FFrozenKeys[j]) then
+          ax := cand;
+      end;
+    end;
+    if ax = nil then Continue;
+    hit := -1;
+    for k := 0 to High(Result) do
+      if Result[k].Axis = ax then hit := k;
+    if hit < 0 then
+    begin
+      hit := Length(Result);
+      SetLength(Result, hit + 1);
+    end;
+    Result[hit] := FFrozen[j];
+    Result[hit].Axis := ax;
+  end;
+end;
+
+{ An event with no params and no payload, to the handlers registered for
+  it -- the catch-all OnChartEvent does not count as asking, as with
+  `updated` }
+procedure TTyAdvanceChart.EmitPlain(const AType: string);
+var
+  ev: TTyChartEvent;
+  regs: array of TTyChartEventReg;
+  i: Integer;
+begin
+  if not HasChartHandler(AType) then Exit;
+  ev := Default(TTyChartEvent);
+  ev.EventType := AType;
+  ev.Params := TyChartBlankParams;
+  regs := Copy(FEventRegs);
+  for i := 0 to High(regs) do
+    if regs[i].EventType = AType then regs[i].Handler(Self, ev);
+end;
+
+{ bindRenderedEvent over an update's flush: `rendered`, and `finished` when
+  nothing animates, nothing is to draw and no update waits }
+procedure TTyAdvanceChart.EmitFlush;
+begin
+  if not FFlushDue then Exit;
+  FFlushDue := False;
+  EmitPlain('rendered');
+  if ProgIdle then EmitPlain('finished');
 end;
 
 { ==================== the tooltip ==================== }
@@ -23650,7 +24394,7 @@ end;
 
 procedure TTyAdvanceChart.AnimArmTimer;
 begin
-  if (FAnimLive or PtrLive or LegLive or LoadLive or VmLive_) and IsNan(FAnimNow)
+  if (FAnimLive or PtrLive or LegLive or LoadLive or VmLive_ or ProgLive) and IsNan(FAnimNow)
     and not (csDesigning in ComponentState) then
   begin
     if FAnimTimer = nil then
@@ -23672,6 +24416,23 @@ begin
 end;
 
 procedure TTyAdvanceChart.AnimTick(ANowMs: Double);
+var ran, was: Boolean;
+begin
+  { ONE FRAME: zrender's clips step, then the chart's _onframe draws its
+    chunks, then the flush -- `rendered` once for the frame, and `finished`
+    when nothing is left moving or to draw [Batch 119] }
+  ran := ProgFrame(False);
+  was := FAnimLive;
+  AnimTickBody(ANowMs);
+  if ran then AnimArmTimer;
+  if ran or was then
+  begin
+    EmitPlain('rendered');
+    if ProgIdle then EmitPlain('finished');
+  end;
+end;
+
+procedure TTyAdvanceChart.AnimTickBody(ANowMs: Double);
 var ptrWas: Boolean;
 begin
   { the pointer's own driver first [Batch 92] }
@@ -24200,6 +24961,7 @@ end;
 procedure TTyAdvanceChart.DropStatic;
 begin
   if FStatic <> nil then FStatic.Drop;
+  FProgReuse := False;
   { AND THE LIST WITH IT. The two describe the same frame: the list is what
     the static pass added up to, so a kept list beside a dropped cache would
     answer questions about a picture no longer on screen. Not freed -- the
@@ -24236,7 +24998,12 @@ begin
   end;
   { upstream's frame: the flags become state lists, and a changed element
     is a changed static layer [Batch 88] }
-  if StApplyChanged then FStatic.Drop;
+  if StApplyChanged then
+  begin
+    FStatic.Drop;
+    { the states restyle the list: it is built again [Batch 119] }
+    FProgReuse := False;
+  end;
 
   if FStatic.NeedsRender(w, h) then
   begin
@@ -24257,16 +25024,20 @@ begin
     blending it and freeing it -- roughly the 13 ms floor a frame has even with
     no axes, so paying it to draw nothing would give back most of what the
     cache just saved. }
-  if not HasDynamicContent then Exit;
-  measurer := NewTextMeasurer(APPI);
-  P := TTyPainter.Create;
-  try
-    P.BeginPaint(ACanvas, ARect, APPI);
-    PaintDynamic(P, R, APPI, measurer);
-    P.EndPaint;
-  finally
-    P.Free;
+  if HasDynamicContent then
+  begin
+    measurer := NewTextMeasurer(APPI);
+    P := TTyPainter.Create;
+    try
+      P.BeginPaint(ACanvas, ARect, APPI);
+      PaintDynamic(P, R, APPI, measurer);
+      P.EndPaint;
+    finally
+      P.Free;
+    end;
   end;
+  { the update painted: `rendered` [Batch 119] }
+  EmitFlush;
 end;
 
 procedure TTyAdvanceChart.Paint;
@@ -24737,6 +25508,58 @@ begin
   finally
     APainter.RestoreState;
   end;
+end;
+
+{ ==================== appendData [Batch 119] ==================== }
+
+function TTyAdvanceChart.AppendData(ASeriesIndex: Integer;
+  const ADataJson: string): Boolean;
+var
+  d, node, arr: TJSONData;
+  nLine, nCol, k: Integer;
+begin
+  Result := False;
+  if (FOption = nil) or not (FOption.Root is TJSONObject) then Exit;
+  { too deep is refused before fpjson can recurse into it }
+  if TyJsonNestingExceeds(ADataJson, TyOptionMaxNesting, nLine, nCol) then Exit;
+  node := FOption.ComponentAt('series', ASeriesIndex);
+  if not (node is TJSONObject) then Exit;
+  { THE SERIES' OWN ARRAY: upstream's provider pushes into it; a series
+    reading a dataset is not taken (upstream would push into the table) }
+  arr := TJSONObject(node).Find('data');
+  if not (arr is TJSONArray) then Exit;
+  try
+    d := GetJSON(NulSafeJson(ADataJson));
+    NulRestore(d);
+  except
+    d := nil;
+  end;
+  if not (d is TJSONArray) then
+  begin
+    d.Free;
+    Exit;
+  end;
+  try
+    { THE UPDATE BEFORE IT: upstream's setOption has laid the chart out by
+      the time appendData can run }
+    ConvertReady;
+    if (FLastPPI > 0) and not FDirty and not FFrozenOn then FrozenCapture;
+    for k := 0 to d.Count - 1 do
+      TJSONArray(arr).Add(d.Items[k].Clone);
+  finally
+    d.Free;
+  end;
+  Result := True;
+  if (FLastPPI <= 0) or FDirty then
+  begin
+    { nothing laid out yet: the first update takes every row }
+    FDirty := True;
+    Invalidate;
+    Exit;
+  end;
+  { scheduler.unfinished = true; zr.wakeUp() }
+  FStreamPending := True;
+  AnimArmTimer;
 end;
 
 end.

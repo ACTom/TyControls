@@ -280,13 +280,8 @@ end;
 
 function LargeRowCount(const AGeom: TTyLargeGeom): Integer;
 begin
-  case AGeom.Kind of
-    lgkBar: Result := Length(AGeom.Pts) div 3;
-    lgkSymbol: Result := Length(AGeom.Pts) div 2;
-    lgkCandle: Result := Length(AGeom.Pts) div 4;
-  else
-    Result := 0;
-  end;
+  { a growing progressive batch draws the rows it holds [Batch 119] }
+  Result := TyLargeRows(AGeom);
 end;
 
 { every row into the current path }
@@ -1119,7 +1114,8 @@ begin
   { Paint order, back to front. The hit test walks the same order in reverse, so
     what the eye sees on top is what the pointer gets. }
   for i := 0 to AList.Count - 1 do
-    if not AList.Element(AList.PaintOrder(i)).Ignore then
+    if not AList.Element(AList.PaintOrder(i)).Ignore
+      and not AList.Element(AList.PaintOrder(i)).ProgHidden then
       TyRenderElement(P, AList.Element(AList.PaintOrder(i)));
 end;
 

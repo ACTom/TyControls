@@ -281,6 +281,12 @@ type
       filter against `largeThreshold`): the series is drawn as one batched
       element per style instead of an element per datum [Batch 117] }
     Large: TTyLargeKind;
+    { PROGRESSIVE LARGE MODE [Batch 119]: the view rows of every chunk the
+      run has planned, in the order the layout walks them (modNext for a
+      bar and a candlestick in 'mod'); empty for a batch drawn at once. A
+      bar or a candlestick then makes its batch per chunk, a scatter merges
+      chunks into a batch while it holds under 2e4 numbers. }
+    LargeChunks: array of TTyIntegerArray;
   end;
 
 { A visual with the defaults: a filled mark, no stroke, upstream's bar gap. }
@@ -596,6 +602,7 @@ begin
   { drawn an element per datum unless the control says otherwise: the
     fields below are set one by one, so this one is too [Batch 117] }
   Result.Large := lgkNone;
+  Result.LargeChunks := nil;
   Result.SeriesIndex := -1;
   Result.SeriesType := '';
   Result.Fill := AFill;
@@ -3539,11 +3546,16 @@ end;
   does the cutting), no rounded corners (ctx.rect). A row with no value
   keeps its place with not-a-number in it. The background's points are the
   column across the whole grid rect. }
+function ChunkBars(const AGeom: TTyLargeGeom; const ARows: TTyIntegerArray): TTyLargeGeom; forward;
+function AddLargeBars(const ABinding: TTySeriesBinding; const AVisual: TTySeriesVisual;
+  const ACol: TTyBarColumn; const AGeom, ABg: TTyLargeGeom; AList: TTyPaintList;
+  AChunk: Integer): Integer; forward;
+
 function BuildLargeBars(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
   const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
   AList: TTyPaintList; AColX, AColY: Integer): Integer;
 var
-  i, n, valCol: Integer;
+  i, k, n, valCol: Integer;
   baseHoriz, stacked, onBelow, haveCol: Boolean;
   col: TTyBarColumn;
   lay: TTyCoordLayout;
@@ -3552,8 +3564,6 @@ var
   g, bg: TTyLargeGeom;
   grid: TTyRectF;
   clip: TTyXYWH;
-  v: TTySeriesVisual;
-  el: TTyChartElement;
 begin
   Result := 0;
   baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
@@ -3671,8 +3681,59 @@ begin
     bg.ClipOn := True;
     bg.Clip := clip;
   end;
-  { the background first (z2 0, silent), then the bars (z2 1, no pen:
-    the stroke is dropped, #20465) }
+  { PROGRESSIVE: a background and a bar batch per chunk [Batch 119] }
+  if Length(AVisual.LargeChunks) > 0 then
+  begin
+    for k := 0 to High(AVisual.LargeChunks) do
+      Inc(Result, AddLargeBars(ABinding, AVisual, col, ChunkBars(g, AVisual.LargeChunks[k]),
+        ChunkBars(bg, AVisual.LargeChunks[k]), AList, k + 1));
+    Exit;
+  end;
+  Inc(Result, AddLargeBars(ABinding, AVisual, col, g, bg, AList, 0));
+end;
+
+{ largeProgress over one chunk: the rows in the walk's order, and
+  largeDataIndices -- a Float32Array of the chunk's count written at
+  [dataIndex] = dataIndex, so a row past the count is lost and its slot
+  stays 0 [Batch 119] }
+function ChunkBars(const AGeom: TTyLargeGeom; const ARows: TTyIntegerArray): TTyLargeGeom;
+var j, r, m: Integer;
+begin
+  Result := AGeom;
+  Result.Pts := nil;
+  Result.Idx := nil;
+  if Length(AGeom.Pts) = 0 then Exit;
+  m := Length(ARows);
+  SetLength(Result.Pts, m * 3);
+  SetLength(Result.Idx, m);
+  for j := 0 to m - 1 do
+  begin
+    r := ARows[j];
+    Result.Pts[j * 3] := AGeom.Pts[r * 3];
+    Result.Pts[j * 3 + 1] := AGeom.Pts[r * 3 + 1];
+    Result.Pts[j * 3 + 2] := AGeom.Pts[r * 3 + 2];
+    Result.Idx[j] := 0;
+  end;
+  for j := 0 to m - 1 do
+  begin
+    r := ARows[j];
+    if (r >= 0) and (r < m) then Result.Idx[r] := r;
+  end;
+end;
+
+{ createLarge: the background batch first (z2 0, silent), then the bars (z2
+  1, no pen: the stroke is dropped, #20465); AChunk the progressive chunk
+  that draws them, 0 for none }
+function AddLargeBars(const ABinding: TTySeriesBinding; const AVisual: TTySeriesVisual;
+  const ACol: TTyBarColumn; const AGeom, ABg: TTyLargeGeom; AList: TTyPaintList;
+  AChunk: Integer): Integer;
+var
+  v: TTySeriesVisual;
+  el: TTyChartElement;
+  col: TTyBarColumn;
+begin
+  Result := 0;
+  col := ACol;
   if col.ShowBackground then
   begin
     v := AVisual;
@@ -3681,7 +3742,7 @@ begin
     v.FillPattern := Default(TTyChartPattern);
     v.Alpha := 1;
     v.StrokeWidthLogical := 0;
-    el := LargeElement(bg, v, ABinding.SeriesIndex);
+    el := LargeElement(ABg, v, ABinding.SeriesIndex);
     el.Silent := True;
     el.Style.DashLogical := nil;
     if col.Clip then
@@ -3689,12 +3750,13 @@ begin
       el.HasClip := True;
       el.ClipRect := TyWhiskerClipRect(ABinding.Cart.GetArea);
     end;
+    el.ProgChunk := AChunk;
     AList.Add(el);
     Inc(Result);
   end;
   v := AVisual;
   v.StrokeWidthLogical := 0;
-  el := LargeElement(g, v, ABinding.SeriesIndex);
+  el := LargeElement(AGeom, v, ABinding.SeriesIndex);
   el.Style.DashLogical := nil;
   el.Z2 := AVisual.Z2 + 1;
   if col.Clip then
@@ -3702,6 +3764,7 @@ begin
     el.HasClip := True;
     el.ClipRect := TyWhiskerClipRect(ABinding.Cart.GetArea);
   end;
+  el.ProgChunk := AChunk;
   AList.Add(el);
   Inc(Result);
 end;
@@ -3716,7 +3779,9 @@ function BuildLargeSymbols(const ABinding: TTySeriesBinding; AStore: TTyDataStor
   const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
   AList: TTyPaintList; AColX, AColY: Integer): Integer;
 var
-  i, n: Integer;
+  i, n, k, k0, j, rows: Integer;
+  part: TTyLargeGeom;
+  ch: TTyIntegerArray;
   baseHoriz, stacked: Boolean;
   x, y, px, py, scale: Double;
   p: TTyPointF;
@@ -3777,9 +3842,67 @@ begin
     colour as the fill; a boosted batch is squares filled one by one, with
     no pen }
   if g.Boost or (v.Stroke = 0) then v.StrokeWidthLogical := 0;
-  el := LargeElement(g, v, ABinding.SeriesIndex);
-  AList.Add(el);
-  Inc(Result);
+  if Length(AVisual.LargeChunks) = 0 then
+  begin
+    el := LargeElement(g, v, ABinding.SeriesIndex);
+    AList.Add(el);
+    Inc(Result);
+    Exit;
+  end;
+  { PROGRESSIVE [Batch 119]: LargeSymbolDraw.incrementalUpdate concatenates
+    a chunk onto the batch added last while that holds under 2e4 numbers
+    (its endIndex moves, its startIndex stays), else starts a batch at the
+    chunk's start }
+  k0 := -1;
+  part := g;
+  rows := 0;
+  for k := 0 to High(AVisual.LargeChunks) do
+  begin
+    if (k0 >= 0) and (rows * 2 < 20000) then
+    begin
+      ch := AVisual.LargeChunks[k];
+      SetLength(part.Pts, (rows + Length(ch)) * 2);
+      for j := 0 to High(ch) do
+      begin
+        part.Pts[(rows + j) * 2] := g.Pts[ch[j] * 2];
+        part.Pts[(rows + j) * 2 + 1] := g.Pts[ch[j] * 2 + 1];
+      end;
+      Inc(rows, Length(ch));
+      SetLength(part.ChunkEnds, Length(part.ChunkEnds) + 1);
+      part.ChunkEnds[High(part.ChunkEnds)] := rows;
+      Continue;
+    end;
+    if k0 >= 0 then
+    begin
+      el := LargeElement(part, v, ABinding.SeriesIndex);
+      el.ProgChunk := k0 + 1;
+      AList.Add(el);
+      Inc(Result);
+    end;
+    ch := AVisual.LargeChunks[k];
+    k0 := k;
+    part := g;
+    part.Pts := nil;
+    part.ChunkEnds := nil;
+    part.ChunkFirst := k;
+    if Length(ch) > 0 then part.Start := ch[0] else part.Start := 0;
+    SetLength(part.Pts, Length(ch) * 2);
+    for j := 0 to High(ch) do
+    begin
+      part.Pts[j * 2] := g.Pts[ch[j] * 2];
+      part.Pts[j * 2 + 1] := g.Pts[ch[j] * 2 + 1];
+    end;
+    rows := Length(ch);
+    SetLength(part.ChunkEnds, 1);
+    part.ChunkEnds[0] := rows;
+  end;
+  if k0 >= 0 then
+  begin
+    el := LargeElement(part, v, ABinding.SeriesIndex);
+    el.ProgChunk := k0 + 1;
+    AList.Add(el);
+    Inc(Result);
+  end;
 end;
 
 { candlestickLayout's largeProgress and CandlestickView's createLarge:
@@ -3795,11 +3918,12 @@ function BuildLargeCandles(const ABinding: TTySeriesBinding; AStore: TTyDataStor
 const
   cSigns: array[0..2] of Integer = (1, -1, 0);
 var
-  i, k, n, colBase, colOpen, colClose, colLow, colHigh, sgn: Integer;
+  i, k, n, colBase, colOpen, colClose, colLow, colHigh, sgn, c, j, nChunks: Integer;
   baseHoriz, clipOn: Boolean;
   at, openV, closeV, lowV, highV, prevClose, scale, lw: Double;
   pLow, pHigh: TTyPointF;
-  pts: TTyDoubleArray;
+  pts, cpts: TTyDoubleArray;
+  ch: TTyIntegerArray;
   g: TTyLargeGeom;
   v: TTySeriesVisual;
   el: TTyChartElement;
@@ -3860,11 +3984,31 @@ begin
   end;
   clipOn := (not AVisual.Whisker.Solved) or AVisual.Whisker.Clip;
   lw := AVisual.Candle.BorderWidthLogical;
+  { PROGRESSIVE: three paths per chunk, over the chunk's rows in the walk's
+    order [Batch 119] }
+  nChunks := Length(AVisual.LargeChunks);
+  if nChunks = 0 then nChunks := 1;
+  for c := 0 to nChunks - 1 do
+  begin
+  if Length(AVisual.LargeChunks) = 0 then cpts := pts
+  else
+  begin
+    ch := AVisual.LargeChunks[c];
+    cpts := nil;
+    SetLength(cpts, Length(ch) * 4);
+    for j := 0 to High(ch) do
+    begin
+      cpts[j * 4] := pts[ch[j] * 4];
+      cpts[j * 4 + 1] := pts[ch[j] * 4 + 1];
+      cpts[j * 4 + 2] := pts[ch[j] * 4 + 2];
+      cpts[j * 4 + 3] := pts[ch[j] * 4 + 3];
+    end;
+  end;
   for k := 0 to 2 do
   begin
     g := Default(TTyLargeGeom);
     g.Kind := lgkCandle;
-    g.Pts := pts;
+    g.Pts := cpts;
     g.Sign := cSigns[k];
     { containStroke at max(lineWidth, 5) for a path with no fill; no pen
       at all is never hit }
@@ -3894,8 +4038,10 @@ begin
       el.HasClip := True;
       el.ClipRect := TyWhiskerClipRect(ABinding.Cart.GetArea);
     end;
+    if Length(AVisual.LargeChunks) > 0 then el.ProgChunk := c + 1;
     AList.Add(el);
     Inc(Result);
+  end;
   end;
 end;
 

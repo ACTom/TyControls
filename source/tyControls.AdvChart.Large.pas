@@ -75,6 +75,17 @@ type
     Clip: TTyXYWH;
     { el.getBoundingRect(), worked out once by TyLargeSetBox }
     Box: TTyXYWH;
+    { PROGRESSIVE [Batch 119]. symbol: the batch's startIndex -- the row its
+      first point is (a dataIndex is the scan's index plus it) -- and the
+      rows it holds so far: LargeSymbolDraw merges every chunk into the
+      last batch while that holds under 2e4 numbers, so a batch grows a
+      chunk at a time; 0 is every row (the zero value: a batch drawn at
+      once). ChunkFirst is the chunk the batch starts with, ChunkEnds the
+      rows it holds after each of its chunks. }
+    Start: Integer;
+    Shown: Integer;
+    ChunkFirst: Integer;
+    ChunkEnds: TTyIntegerArray;
   end;
 
 { The large series a type has: bar, scatter, candlestick; lgkNone for every
@@ -113,8 +124,26 @@ function TyLargeContains(const AGeom: TTyLargeGeom; AX, AY: Double): Boolean;
 function TyLargeIndexAt(const AGeom: TTyLargeGeom; AX, AY: Double): Integer;
 { The bounding rect as a rect (a not-a-number one is not valid). }
 function TyLargeBounds(const AGeom: TTyLargeGeom): TTyRectF;
+{ The rows the batch holds now: every row, or a growing symbol batch's
+  Shown [Batch 119]. }
+function TyLargeRows(const AGeom: TTyLargeGeom): Integer;
 
 implementation
+
+function TyLargeRows(const AGeom: TTyLargeGeom): Integer;
+begin
+  case AGeom.Kind of
+    lgkBar: Result := Length(AGeom.Pts) div 3;
+    lgkSymbol:
+      begin
+        Result := Length(AGeom.Pts) div 2;
+        if (AGeom.Shown > 0) and (AGeom.Shown < Result) then Result := AGeom.Shown;
+      end;
+    lgkCandle: Result := Length(AGeom.Pts) div 4;
+  else
+    Result := 0;
+  end;
+end;
 
 function TyLargeKindOfType(const AType: string): TTyLargeKind;
 begin
@@ -273,7 +302,7 @@ begin
         { LargeSymbolPath.getBoundingRect: the points' extremes grown by the
           symbol's own size -- not the hit box's 4 px floor }
         a := Infinity; b := Infinity; c := NegInfinity; d := NegInfinity;
-        n := Length(AGeom.Pts) div 2;
+        n := TyLargeRows(AGeom);
         for i := 0 to n - 1 do
         begin
           a := JsMin(AGeom.Pts[i * 2], a);
@@ -365,7 +394,7 @@ begin
   Result := -1;
   w := Max(AGeom.SymW, AGeom.HitMin);
   h := Max(AGeom.SymH, AGeom.HitMin);
-  for idx := Length(AGeom.Pts) div 2 - 1 downto 0 do
+  for idx := TyLargeRows(AGeom) - 1 downto 0 do
   begin
     x0 := AGeom.Pts[idx * 2] - w / 2;
     y0 := AGeom.Pts[idx * 2 + 1] - h / 2;
@@ -431,7 +460,11 @@ begin
     lgkBar: Result := TyLargeBarScan(AGeom, AX, AY);
     lgkSymbol:
       if BoxHas(AGeom.Box, AX, AY) then
+      begin
         Result := TyLargeSymbolScan(AGeom, AX, AY);
+        { `dataIndex + (symbolEl.startIndex || 0)` [Batch 119] }
+        if Result >= 0 then Result := Result + AGeom.Start;
+      end;
   end;
 end;
 

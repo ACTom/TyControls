@@ -917,6 +917,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.Large"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.Progressive.pas"/>
+        <UnitName Value="tyControls.AdvChart.Progressive"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Polar.pas"/>
         <UnitName Value="tyControls.AdvChart.Polar"/>
       </Item>

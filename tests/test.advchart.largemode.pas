@@ -983,14 +983,16 @@ var
   el, i, nn: Integer;
   d: TTyChartDatumRef;
 begin
-  { the batch against an element per point, at ten thousand }
+  { the batch against an element per point, at ten thousand -- all of it at
+    once: a large scatter of 1e4 rows is progressive by default, by 5000
+    [Batch 119], and `progressive: 0` keeps the one batch measured here }
   for nn := 0 to 2 do
   begin
     case nn of
       0: opt := Scatter(10000, '');
-      1: opt := Scatter(10000, ',"large":true');
+      1: opt := Scatter(10000, ',"large":true,"progressive":0');
     else
-      opt := Scatter(10000, ',"large":true,"itemStyle":{"borderColor":"#000","borderWidth":1}');
+      opt := Scatter(10000, ',"large":true,"progressive":0,"itemStyle":{"borderColor":"#000","borderWidth":1}');
     end;
     FreeAndNil(FChart);
     FChart := TLmProbe.Create(FForm);
@@ -1012,7 +1014,7 @@ begin
       WriteLn(Format('  [large] 10k points, one bordered batch: first paint %d ms, then %d ms', [tSet, tSecond]));
     end;
   end;
-  opt := Scatter(100000, ',"large":true');
+  opt := Scatter(100000, ',"large":true,"progressive":0');
   FreeAndNil(FChart);
   FChart := TLmProbe.Create(FForm);
   FChart.Parent := FForm;

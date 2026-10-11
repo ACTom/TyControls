@@ -127,6 +127,9 @@ begin
   if TyChartEventIsAction(Result) then Exit;
   { the update's own event, no params and no payload [Batch 97] }
   if Result = 'updated' then Exit;
+  { the flush's, no params either: every frame that renders, and the one
+    where nothing is left to animate or to draw [Batch 119] }
+  if (Result = 'rendered') or (Result = 'finished') then Exit;
   Result := '';
 end;
 

@@ -646,6 +646,17 @@ type
     IsGuide: Boolean;
     { the enter animation's view of it [Batch 89] }
     Anim: TTyChartAnim;
+    { PROGRESSIVE RENDERING [Batch 119]: the chunk (1-based) whose frame
+      draws the element -- 0, the zero value, for one drawn with the update
+      as every element was before -- the series slot it belongs to, and
+      whether its chunk is still to come. A hidden element is neither drawn
+      nor hit nor found for its datum: upstream has not made it yet.
+      ProgRow is the view row of an element per datum, kept where the datum
+      itself is not (an incremental candle has none). }
+    ProgChunk: Integer;
+    ProgSlot: Integer;
+    ProgRow: Integer;
+    ProgHidden: Boolean;
   end;
 
   TTyPaintList = class
@@ -767,7 +778,7 @@ begin
   for i := FCount - 1 downto 0 do
   begin
     idx := FOrder[i];
-    if FItems[idx].Silent or FItems[idx].Ignore then Continue;
+    if FItems[idx].Silent or FItems[idx].Ignore or FItems[idx].ProgHidden then Continue;
     if FItems[idx].Datum.SeriesIndex <> ASeries then Continue;
     { A ROW IS A DATUM'S, never a graph link's that happens to share its
       number. }
@@ -786,7 +797,7 @@ begin
   for i := FCount - 1 downto 0 do
   begin
     idx := FOrder[i];
-    if FItems[idx].Silent or FItems[idx].Ignore then Continue;
+    if FItems[idx].Silent or FItems[idx].Ignore or FItems[idx].ProgHidden then Continue;
     if FItems[idx].Datum.SeriesIndex <> ASeries then Continue;
     if FItems[idx].Datum.IsEdge then Continue;
     if (ARow >= 0) and (FItems[idx].Datum.DataIndex <> ARow) then Continue;
@@ -1051,7 +1062,7 @@ begin
   for i := FCount - 1 downto 0 do
   begin
     idx := FOrder[i];
-    if FItems[idx].Silent or FItems[idx].Ignore then Continue;
+    if FItems[idx].Silent or FItems[idx].Ignore or FItems[idx].ProgHidden then Continue;
     if APPI > 0 then
       slop := FItems[idx].HitSlopLogical * APPI / 96
     else
