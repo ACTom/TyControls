@@ -300,7 +300,7 @@ Bar.Segments[1].StyleClass := 'heat';
   end;
   ```
 
-  `TTyMultiTrackBar` 在 `EndUpdate` 时按值把集合项排序，每一项带着自己的颜色、提示、可用状态和样式类一起挪；选中的滑块也跟着它的项走到新位置（序号变了会触发一次 `OnThumbSelect`），被删掉的话就变成没有选中。
+  `TTyMultiTrackBar` 在 `EndUpdate` 时按值把集合项排序，每一项带着自己的颜色、提示、可用状态和样式类一起挪；选中的滑块也跟着它的项走到新位置（序号变了会触发一次 `OnThumbSelect`），被删掉的话就变成没有选中。`TTyRangeTrackBar` 也一样：加区间、删区间或在 `EndUpdate` 时，区间项按值排序，每一项留着自己的 `Low` / `High`；选中的还是原来那个区间的同一端，序号变了触发一次 `OnThumbSelect`，那个区间被删了就变成没有选中。读窗体时不触发。
 - **清空集合**：把区间或滑块全删了，窗体文件里会写 `NoRanges = True` / `NoThumbs = True`。读窗体时空集合不会被清掉，没有这个标记就会把构造时的默认项读回来。
 
 ---

@@ -204,6 +204,7 @@ type
     procedure TearDown; override;
     procedure ThumbMoved(Sender: TObject; AIndex: Integer);
     procedure Changed(Sender: TObject);
+    procedure ThumbSelected(Sender: TObject; AIndex: Integer);
     function ValuesOf(ABar: TTyMultiTrackBarBase): string;
     { The form file text of AHost, as the IDE writes it. }
     function FormText(AHost: TForm): string;
@@ -237,6 +238,7 @@ type
     procedure TestSeveralRangesInOrderAndHighlighted;
     procedure TestAFormsRangesAreSortedWhenRead;
     procedure TestADraggedEndIsReadFromItsRange;
+    procedure TestTheSelectionFollowsItsThumbWhenRangesChange;
     procedure TestRangesRoundTripThroughAFormFile;
     procedure TestNoRangesRoundTrips;
   end;
@@ -406,6 +408,7 @@ type
     procedure TestTheBarLooksAgainAfterTheHandler;
     procedure TestNotAskedForAPressOnAThumb;
     procedure TestADoubleClickIsOneClick;
+    procedure TestARangeAddedOnAClickLeavesTheSelectionOnItsThumb;
     procedure TestASegmentPaintedAsAGradientBetweenItsThumbs;
   end;
 
@@ -1924,6 +1927,11 @@ begin
   FLog := FLog + 'C ';
 end;
 
+procedure TMultiTrackFinalBase.ThumbSelected(Sender: TObject; AIndex: Integer);
+begin
+  FLog := FLog + 'S' + IntToStr(AIndex) + ' ';
+end;
+
 function TMultiTrackFinalBase.ValuesOf(ABar: TTyMultiTrackBarBase): string;
 var
   i: Integer;
@@ -2292,6 +2300,83 @@ begin
   AssertEquals('Low untouched', 25, FBar.Ranges[0].Low);
   AssertEquals('a handler reads the range already moved',
     Format('1:25..%d=%d ', [FBar.ThumbValues[1], FBar.ThumbValues[1]]), FSeen);
+end;
+
+procedure TTyRangeTrackBarTest.TestTheSelectionFollowsItsThumbWhenRangesChange;
+var
+  r: TRect;
+  x, y: Integer;
+  sel, added: TTyTrackRange;
+  key: Word;
+begin
+  FBar.Ranges.BeginUpdate;
+  try
+    FBar.Ranges.Clear;
+    sel := FBar.Ranges.Add;
+    sel.Low := 50;
+    sel.High := 60;
+    with FBar.Ranges.Add do begin Low := 70; High := 90; end;
+  finally
+    FBar.Ranges.EndUpdate;
+  end;
+  FBar.OnThumbSelect := @ThumbSelected;
+  { The High end of the first range, picked with the mouse. }
+  r := FBar.ThumbRect(1);
+  x := (r.Left + r.Right) div 2;
+  y := (r.Top + r.Bottom) div 2;
+  TRangeAccess(FBar).MouseDown(mbLeft, [ssLeft], x, y);
+  TRangeAccess(FBar).MouseUp(mbLeft, [], x, y);
+  AssertEquals('fixture: pressed, not moved', '50,60,70,90', Values);
+  AssertEquals('fixture: the High end selected', 1, FBar.SelectedThumb);
+
+  { A range added from code ahead of it, sorted in at EndUpdate. }
+  FLog := '';
+  FBar.Ranges.BeginUpdate;
+  try
+    added := FBar.Ranges.Add;
+    added.Low := 10;
+    added.High := 20;
+  finally
+    FBar.Ranges.EndUpdate;
+  end;
+  AssertEquals('10..20;50..60;70..90', RangesText(FBar));
+  AssertEquals('each range keeps its own values', '50..60',
+    IntToStr(sel.Low) + '..' + IntToStr(sel.High));
+  AssertEquals('the new range holds what it was given', '10..20',
+    IntToStr(added.Low) + '..' + IntToStr(added.High));
+  AssertEquals('the same end of the same range is selected', 2 * sel.Index + 1,
+    FBar.SelectedThumb);
+  AssertEquals('at its new index', 3, FBar.SelectedThumb);
+  AssertEquals('the selected value has not changed', 60, FBar.ThumbValues[FBar.SelectedThumb]);
+  AssertEquals('reported once, with the new index', 'S3 ', FLog);
+  key := VK_RIGHT;
+  TRangeAccess(FBar).KeyDown(key, []);
+  AssertEquals('the arrow moves that thumb', '10,20,50,61,70,90', Values);
+  AssertEquals(61, sel.High);
+
+  { Re-sorted: the range ahead of it moved past the others. }
+  FLog := '';
+  FBar.Ranges.BeginUpdate;
+  try
+    added.Low := 92;
+    added.High := 96;
+  finally
+    FBar.Ranges.EndUpdate;
+  end;
+  AssertEquals('50..61;70..90;92..96', RangesText(FBar));
+  AssertEquals('follows its range down', 1, FBar.SelectedThumb);
+  AssertEquals('S1 ', FLog);
+
+  { A range added at the end leaves it where it is, and says nothing. }
+  FLog := '';
+  FBar.Ranges.Add;
+  AssertEquals(1, FBar.SelectedThumb);
+  AssertEquals('', FLog);
+
+  { Its range removed: nothing selected, reported once. }
+  FBar.Ranges.Delete(sel.Index);
+  AssertEquals(-1, FBar.SelectedThumb);
+  AssertEquals('S-1 ', FLog);
 end;
 
 procedure TTyRangeTrackBarTest.TestRangesRoundTripThroughAFormFile;
@@ -4068,6 +4153,43 @@ begin
   Click(FRange, p);
   AssertEquals('click:92[10,30,40,50,60,85] C ', FLog);
   AssertEquals('10..30;40..50;60..85;87..97', RangesText);
+end;
+
+procedure TTyMultiTrackClickTest.TestARangeAddedOnAClickLeavesTheSelectionOnItsThumb;
+var
+  r: TRect;
+  p: TPoint;
+  sel: TTyTrackRange;
+  key: Word;
+begin
+  FRange.OnTrackClick := @RangeClick;
+  FRange.OnThumbSelect := @ThumbSelected;
+  FRange.OnChange := @Changed;
+  sel := FRange.Ranges[1];
+  { The Low end of 60..85, picked with the mouse. }
+  r := FRange.ThumbRect(2);
+  p := Point((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  Click(FRange, p);
+  AssertEquals('fixture: the press selects it, not asked', 'S2 ', FLog);
+  AssertEquals('fixture: nothing moved', '10,30,60,85', ValuesOf(FRange));
+  { A click on the empty track to its left adds 40..50 and handles the press. }
+  FAdd := True;
+  FHandle := True;
+  FLog := '';
+  Click(FRange, At(FRange, 45));
+  AssertEquals('10..30;40..50;60..85', RangesText);
+  AssertEquals('the range keeps its values', 60, sel.Low);
+  AssertEquals('the same end of the same range is selected', 2 * sel.Index,
+    FRange.SelectedThumb);
+  AssertEquals('at its new index', 4, FRange.SelectedThumb);
+  AssertEquals('the selected value has not changed', 60,
+    FRange.ThumbValues[FRange.SelectedThumb]);
+  AssertEquals('the new range, then the selection reported once with its new index',
+    'click:45[10,30,60,85] C S4 ', FLog);
+  key := VK_RIGHT;
+  TBaseAccess(FRange).KeyDown(key, []);
+  AssertEquals('the arrow moves that thumb', '10,30,40,50,61,85', ValuesOf(FRange));
+  AssertEquals(61, sel.Low);
 end;
 
 procedure TTyMultiTrackClickTest.TestASegmentPaintedAsAGradientBetweenItsThumbs;

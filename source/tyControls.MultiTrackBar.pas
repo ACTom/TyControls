@@ -361,7 +361,17 @@ type
   TTyCustomRangeTrackBar = class(TTyMultiTrackBarBase)
   private
     FRanges: TTyTrackRanges;
+    { Set while the items are being put in order: the moves that makes report back through the
+      collection and must not start it over. }
+    FSyncing: Boolean;
+    { The ID of the range behind SelectedThumb (-1 = none) and which end of it: when the ranges
+      are put in order the selection follows its thumb rather than staying at the old index. }
+    FSelectedID: Integer;
+    FSelectedHigh: Boolean;
     procedure SetRanges(AValue: TTyTrackRanges);
+    { Stable insertion sort of the items by their lower end. }
+    procedure SortRangeItems;
+    procedure RememberSelection(AIndex: Integer);
     function GetLowValue: Integer;
     procedure SetLowValue(AValue: Integer);
     function GetHighValue: Integer;
@@ -374,10 +384,13 @@ type
       form being read, Ranges between BeginUpdate and EndUpdate, the thumbs not (yet) the
       ranges' -- see TTyTrackRange. }
     function RangesHeldRaw: Boolean;
-    { The collection changed shape (a range added, removed, moved, assigned): the thumbs are
-      rebuilt from the ranges' values and normalized. }
+    { The collection changed shape (a range added, removed, moved, assigned): the items are put
+      in order and the thumbs rebuilt from the ranges' values and normalized. The selected thumb
+      stays selected -- the same end of the same range -- wherever that puts it; its range
+      removed, nothing is selected. }
     procedure RangesChanged;
     procedure ValuesChanged; override;
+    procedure DoThumbSelect(AIndex: Integer); override;
     procedure Loaded; override;
     procedure DefineProperties(Filer: TFiler); override;
     { The odd segments -- Low to High of each range -- in the selection's colour. }
@@ -1782,6 +1795,7 @@ var
   r: TTyTrackRange;
 begin
   inherited Create(AOwner);
+  FSelectedID := -1;
   FRanges := TTyTrackRanges.Create(Self);
   FRanges.BeginUpdate;
   try
@@ -1815,21 +1829,80 @@ begin
     or (ThumbCount <> 2 * FRanges.Count);
 end;
 
+procedure TTyCustomRangeTrackBar.SortRangeItems;
+
+  function Key(R: TTyTrackRange): Integer;
+  begin
+    if R.FLow <= R.FHigh then Result := R.FLow else Result := R.FHigh;
+  end;
+
+var
+  i, j: Integer;
+  it: TTyTrackRange;
+begin
+  for i := 1 to FRanges.Count - 1 do
+  begin
+    it := FRanges[i];
+    j := i;
+    while (j > 0) and (Key(FRanges[j - 1]) > Key(it)) do Dec(j);
+    if j <> i then it.Index := j;
+  end;
+end;
+
+procedure TTyCustomRangeTrackBar.RememberSelection(AIndex: Integer);
+begin
+  if (FRanges <> nil) and (AIndex >= 0) and (AIndex div 2 < FRanges.Count) then
+  begin
+    FSelectedID := FRanges[AIndex div 2].ID;
+    FSelectedHigh := Odd(AIndex);
+  end
+  else
+    FSelectedID := -1;
+end;
+
 procedure TTyCustomRangeTrackBar.RangesChanged;
 var
   v: array of Integer;
-  i: Integer;
+  i, selID, prev: Integer;
+  it: TCollectionItem;
 begin
-  if (FRanges = nil) or (csLoading in ComponentState) or (csDestroying in ComponentState) then
+  if (FRanges = nil) or FSyncing or (csLoading in ComponentState)
+     or (csDestroying in ComponentState) then
     Exit;
-  v := nil;
-  SetLength(v, 2 * FRanges.Count);
-  for i := 0 to FRanges.Count - 1 do
-  begin
-    v[2 * i] := FRanges[i].FLow;
-    v[2 * i + 1] := FRanges[i].FHigh;
+  selID := FSelectedID;
+  prev := FSelectedThumb;
+  FSyncing := True;
+  try
+    { In order first, so each range keeps its own values: the values are paired off by position
+      below, and a range sorted in ahead of others would otherwise take over their values. }
+    SortRangeItems;
+    v := nil;
+    SetLength(v, 2 * FRanges.Count);
+    for i := 0 to FRanges.Count - 1 do
+    begin
+      v[2 * i] := FRanges[i].FLow;
+      v[2 * i + 1] := FRanges[i].FHigh;
+    end;
+    { Held aside while the thumbs are rebuilt: a shorter list would drop it with an
+      OnThumbSelect(-1) of its own before the real answer below. }
+    FSelectedThumb := -1;
+    SetThumbValues(v);
+  finally
+    FSyncing := False;
   end;
-  SetThumbValues(v);
+  FSelectedThumb := prev;
+  { The selection goes with its range to wherever the sort put it, the same end of it -- one
+    OnThumbSelect if that is a new index; a range that is gone takes the selection along. }
+  it := nil;
+  if selID >= 0 then it := FRanges.FindItemID(selID);
+  if it <> nil then SelectedThumb := 2 * it.Index + Ord(FSelectedHigh)
+  else SelectedThumb := -1;
+end;
+
+procedure TTyCustomRangeTrackBar.DoThumbSelect(AIndex: Integer);
+begin
+  RememberSelection(AIndex);
+  inherited DoThumbSelect(AIndex);
 end;
 
 procedure TTyCustomRangeTrackBar.ValuesChanged;
@@ -1860,6 +1933,8 @@ begin
   end;
   SetThumbValues(v);
   inherited Loaded;
+  { No OnThumbSelect while reading: note the selection's range here instead. }
+  RememberSelection(FSelectedThumb);
 end;
 
 procedure TTyCustomRangeTrackBar.ReadNoRanges(Reader: TReader);
