@@ -68,6 +68,10 @@ type
     function GetImageSize: Integer;
   protected
     function GetStyleTypeKey: string; override;   // 'TyImage'
+    { Picture changed (loaded, assigned, cleared, or its graphic edited), called after the
+      control has resized and invalidated and just before OnPictureChanged. Does nothing
+      here; the data-aware image hears an edit of its picture through it. }
+    procedure DoPictureChanged; virtual;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
@@ -583,7 +587,12 @@ begin
   Invalidate;
   { LAST, and after the control has finished reacting: the handler is app code and may
     well read Width/Height or force a repaint of its own. }
+  DoPictureChanged;
   if Assigned(FOnPictureChanged) then FOnPictureChanged(Self);
+end;
+
+procedure TTyCustomImage.DoPictureChanged;
+begin
 end;
 
 procedure TTyCustomImage.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;

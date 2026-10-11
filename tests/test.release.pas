@@ -73,6 +73,9 @@ type
     procedure TheExampleColourSchemesAreCoveredByTheNotice;
     { 7 期: the example's ZModem is our own, written from the public-domain protocol }
     procedure TheExampleZmodemUnitsAreOurOwn;
+    { issue #34: a third package at the root, tycontrols_db }
+    procedure EveryPackageAtTheRootIsShipped;
+    procedure TheOpmFilesNameEveryPackage;
   end;
 
 implementation
@@ -393,6 +396,7 @@ begin
   try
     CollectLpkFiles('tycontrols.lpk', named);
     CollectLpkFiles('tycontrols_dt.lpk', named);
+    CollectLpkFiles('tycontrols_db.lpk', named);
     AssertTrue('the .lpk files name some units', named.Count > 50);
     bad := '';
     for i := 0 to named.Count - 1 do
@@ -497,7 +501,7 @@ procedure TReleaseManifestTest.EveryUnitOnDiskIsListedInItsPackage;
       end;
       for i := 0 to found.Count - 1 do
       begin
-        rel := ADir + '/' + found[i];
+        rel := Slashes(ADir) + '/' + found[i];   { the .lpk's spelling }
         if listed.IndexOf(rel) < 0 then
           ABad.Add(rel + '  (not listed in ' + ALpk + ')');
       end;
@@ -523,6 +527,7 @@ begin
   try
     CheckDir('source', 'tycontrols.lpk', bad);
     CheckDir('designtime', 'tycontrols_dt.lpk', bad);
+    CheckDir('source' + PathDelim + 'db', 'tycontrols_db.lpk', bad);
     AssertEquals('units on disk that no package lists -- they compile via the '
       + 'search path and then go missing from the installed package:'
       + LineEnding + bad.Text, '', bad.Text);
@@ -933,6 +938,75 @@ begin
     AssertEquals(ZmUnits[i] + ': no "GPL"', 0, Pos('GPL', body));
     head := Copy(body, 1, 1500);
     AssertTrue(ZmUnits[i] + ': the header names the protocol''s source', Pos('Forsberg', head) > 0);
+  end;
+end;
+
+{ The .lpk files themselves are root files, named one by one in each script -- unlike source/,
+  which ships as a tree. A package added at the root and forgotten in a script is a release
+  that cannot be installed: tycontrols_dt requires tycontrols_db, so without it the IDE has no
+  package to open. The population is the disk, not a list here, so the next package is checked
+  without anyone remembering this test. }
+procedure TReleaseManifestTest.EveryPackageAtTheRootIsShipped;
+var
+  lpks: TStringList;
+  i: Integer;
+  nm, bad: string;
+begin
+  lpks := FindAllFiles(RepoRoot, '*.lpk', False);
+  try
+    AssertTrue('the root holds the three packages at least', lpks.Count >= 3);
+    bad := '';
+    for i := 0 to lpks.Count - 1 do
+    begin
+      nm := ExtractFileName(lpks[i]);
+      if not IsShipped(FPs1, nm) then bad := bad + ' ' + nm + '(ps1)';
+      if not IsShipped(FSh, nm) then bad := bad + ' ' + nm + '(sh)';
+    end;
+    AssertEquals('packages at the root that a release script does not ship:' + bad, '', bad);
+  finally
+    lpks.Free;
+  end;
+end;
+
+{ OPM installs what its JSON names, and offers updates for what update_TyControls.json names.
+  A package missing from the template is one OPM never unpacks into the IDE's package list --
+  and tycontrols_dt, which requires it, then fails to install from OPM. So the template lists
+  every package at the root. update_TyControls.json is read by OPM from main and describes the
+  LAST release: make-release.ps1 -Opm rewrites it from the template, so it may lag a package
+  added since (tycontrols_db until 4.0) but must never name one the template doesn't. }
+procedure TReleaseManifestTest.TheOpmFilesNameEveryPackage;
+var
+  lpks: TStringList;
+  i: Integer;
+  tmpl, upd, nm, bad: string;
+begin
+  tmpl := ReadScript(RepoRoot + 'scripts' + PathDelim + 'opm' + PathDelim + 'TyControls.json.template');
+  upd := ReadScript(RepoRoot + 'update_TyControls.json');
+  lpks := FindAllFiles(RepoRoot, '*.lpk', False);
+  try
+    AssertTrue('the root holds the three packages at least', lpks.Count >= 3);
+    bad := '';
+    for i := 0 to lpks.Count - 1 do
+    begin
+      nm := ExtractFileName(lpks[i]);
+      if Pos('"Name" : "' + nm + '"', tmpl) = 0 then bad := bad + ' ' + nm + '(template)';
+    end;
+    { Every package update_TyControls.json names is one the template names, so a release's
+      rewrite never drops it. }
+    i := 1;
+    while Pos('"Name" : "', Copy(upd, i, MaxInt)) > 0 do
+    begin
+      i := i + Pos('"Name" : "', Copy(upd, i, MaxInt)) + Length('"Name" : "') - 1;
+      nm := Copy(upd, i, Pos('"', Copy(upd, i, MaxInt)) - 1);
+      if (ExtractFileExt(nm) = '.lpk') and (Pos('"Name" : "' + nm + '"', tmpl) = 0) then
+        bad := bad + ' ' + nm + '(update json only)';
+    end;
+    AssertEquals('packages the OPM files do not name:' + bad, '', bad);
+    { The design-time package's OPM dependencies are the .lpk's: OPM installs in that order. }
+    AssertTrue('the OPM template gives tycontrols_dt its tycontrols_db dependency',
+      Pos('"tycontrols, tycontrols_db, IDEIntf, SynEdit"', tmpl) > 0);
+  finally
+    lpks.Free;
   end;
 end;
 

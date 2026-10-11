@@ -9,7 +9,8 @@ Runs from anywhere (it works in the repository this script sits in); no argument
 WHAT IT WRITES
 --------------
 For every class in CSplit (the AddAll(GSplit, [...]) block of tests/test.customclasses.pas) it
-finds `TTyXxx = class(TTyCustomXxx)` in source/*.pas and writes `TGenXxx = class(TTyCustomXxx)`
+finds `TTyXxx = class(TTyCustomXxx)` in source/*.pas and source/db/*.pas (the
+tycontrols_db package) and writes `TGenXxx = class(TTyCustomXxx)`
 with the final class's published section copied line by line (comments dropped). The guard
 TestGeneratedMimicsMatchTheirFinalClass then holds each pair to identical RTTI, fresh stream,
 type key, default size and resolved style -- i.e. a third party that publishes what the final
@@ -101,7 +102,10 @@ def main():
     names = split_names()
     wanted = set(names)
     found = {}
-    for f in sorted(glob.glob(os.path.join('source', '*.pas'))):
+    # The library's two packages: tycontrols (source/) and tycontrols_db (source/db/).
+    files = (sorted(glob.glob(os.path.join('source', '*.pas')))
+             + sorted(glob.glob(os.path.join('source', 'db', '*.pas'))))
+    for f in files:
         raw = read_source(f)
         m = re.search(r'^unit\s+([\w.]+)\s*;', raw, re.M | re.I)
         if not m:
@@ -128,7 +132,7 @@ def main():
             found[m.group(1)] = (unit, m.group(2), body)
     missing = [n for n in names if n not in found]
     if missing:
-        sys.exit('split classes without a declaration in source/: ' + ', '.join(missing))
+        sys.exit('split classes without a declaration in source/ or source/db/: ' + ', '.join(missing))
     assert len(found) == len(names), (len(found), len(names))
     units = sorted(set(v[0] for v in found.values()))
     out = []

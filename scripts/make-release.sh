@@ -71,6 +71,7 @@ add_file COPYING.modifiedLGPL.txt
 # (assets/lucide/ deliberately does not ship -- see make-release.ps1 for why).
 add_file THIRD-PARTY-NOTICES.md
 add_file tycontrols.lpk
+add_file tycontrols_db.lpk
 add_file tycontrols_dt.lpk
 
 # source/ and designtime/ ship WHOLE -- both filters used to drop files silently. See the

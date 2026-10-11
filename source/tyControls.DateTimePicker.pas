@@ -499,6 +499,13 @@ type
       RAISE (the calendar rejects an out-of-range date), while the rest of OpenDropDown
       needs a screen. }
     procedure SeedPopupCalendar;
+    { The value changed: called exactly where OnChange fires -- a key, the wheel, a spin
+      button, the dropdown calendar, Escape's undo, and a programmatic write when
+      dtpoDoChangeOnSetDateTime is set -- and fires it. LCL's TCustomDateTimePicker.Change.
+      The calendar's edits reach the picker through its own handlers, not through the
+      picker's key and mouse overrides, so this is the one place a subclass sees all of
+      them. }
+    procedure Change; virtual;
 
     function  GetStyleTypeKey: string; override;
     { What the field needs to show its own content without clipping: padding, the
@@ -1771,7 +1778,7 @@ begin
       { dtpoAutoCheck deliberately does NOT fire here. It exists so that editing a value
         implies the value is wanted; clearing it means the opposite, and ticking the
         "I have a date" box at the moment the date goes away is the wrong way round. }
-      if Assigned(FOnChange) then FOnChange(Self);
+      Change;
     end;
     Invalidate;
     Exit;
@@ -1792,7 +1799,7 @@ begin
       (LCL datetimepicker.pas:4007). }
     if (dtpoAutoCheck in FOptions) and FShowCheckBox and not FChecked then
       Checked := True;
-    if Assigned(FOnChange) then FOnChange(Self);
+    Change;
   end;
   Invalidate;
 end;
@@ -1982,6 +1989,10 @@ var
   calSize: TSize;
 begin
   if IsInert then Exit;
+  { A read-only picker drops no calendar, as LCL's does not (DropDownCalendarForm): keys,
+    wheel, spin buttons and the check box already refused to edit it, and picking a day was
+    the one way left to change its value. }
+  if FReadOnly then Exit;
   { DateMode, not Kind, decides whether there is a calendar to drop. }
   if not HasDropDownButton then Exit;
   if (FPopup <> nil) and FPopup.IsOpen then Exit;
@@ -2088,6 +2099,9 @@ var
   OldVal: TDateTime;
 begin
   if FCalendar = nil then Exit;
+  { The calendar is open over a read-only picker only when ReadOnly was set while it was
+    open. Moving through it then edits nothing. }
+  if FReadOnly then Exit;
   OldVal    := FDateTime;
   { Keep the time part; replace only the date part -- except that an EMPTY field has no
     time part, and Frac of the sentinel is not one. Navigating the calendar over an empty
@@ -2100,7 +2114,7 @@ begin
   if (FMinDate <> 0) and (FDateTime < FMinDate) then FDateTime := FMinDate;
   if (FMaxDate <> 0) and (FDateTime > FMaxDate) then FDateTime := FMaxDate;
   if not TyEqualDateTime(FDateTime, OldVal) then
-    if Assigned(FOnChange) then FOnChange(Self);
+    Change;
   Invalidate;
 end;
 
@@ -2113,6 +2127,12 @@ var
   NewDate, OldVal: TDateTime;
 begin
   if FCalendar = nil then Exit;
+  { ReadOnly set while the calendar was open: the click still closes it, and changes nothing. }
+  if FReadOnly then
+  begin
+    CloseDropDown;
+    Exit;
+  end;
   { Same as CalendarChange: no time part to keep when the field is empty. Picking a day
     is the gesture that fills an empty field. }
   if TyDateIsNull(FDateTime) then
@@ -2125,9 +2145,8 @@ begin
     through the (now silent) programmatic setter. Without this line the one gesture the
     dropdown exists for became the one gesture that told nobody. }
   if (not TyEqualDateTime(FDateTime, OldVal))
-     and not (dtpoDoChangeOnSetDateTime in FOptions)
-     and Assigned(FOnChange) then
-    FOnChange(Self);
+     and not (dtpoDoChangeOnSetDateTime in FOptions) then
+    Change;
   { Close after committing — CloseDropDown handles both the real-window path
     (FPopup.Close → PopupClosed → FOnCloseUp) and the headless path
     (directly fires FOnCloseUp). }
@@ -2692,9 +2711,14 @@ begin
   { The value the host just supplied is the new baseline: Escape must undo what the
     USER did afterwards, not throw away the record that was just loaded. }
   FConfirmedDateTime := FDateTime;
-  if (dtpoDoChangeOnSetDateTime in FOptions) and Assigned(FOnChange) then
-    FOnChange(Self);
+  if dtpoDoChangeOnSetDateTime in FOptions then
+    Change;
   Invalidate;
+end;
+
+procedure TTyCustomDateTimePicker.Change;
+begin
+  if Assigned(FOnChange) then FOnChange(Self);
 end;
 
 procedure TTyCustomDateTimePicker.ConfirmChanges;
@@ -2720,7 +2744,7 @@ begin
     { A revert IS a change from the handler's point of view -- the value it was last
       told about is no longer the value -- so OnChange fires as for any other user
       gesture. }
-    if Assigned(FOnChange) then FOnChange(Self);
+    Change;
   end;
   Invalidate;
 end;

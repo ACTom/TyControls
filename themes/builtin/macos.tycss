@@ -6,6 +6,19 @@
    so the runtime accent-picker recolours the whole skin through it. */
 
 /* --- palette: light (macOS light, system grey) --------------------------- */
+/* The controls this skin writes no rule for -- lists, trees, grids, calendars, date and spin
+   fields, memos, panels, group boxes, tabs -- are drawn by the built-in base layer. These
+   tokens hand them this skin's corners and the well of this skin's own edit, so they read as
+   part of the skin instead of the default theme in the skin's colours. */
+:root {
+  --radius:        6px;
+  --radius-sm:     4px;
+  --radius-scroll: 8px;
+  --input-bg:      var(--field);
+  --input-border:  var(--border);
+  --grid-bg:       var(--field);
+}
+
 @mode light {
   :root {
     --accent:               #007AFF;   /* macOS system blue — seeds every accent/primary surface */
@@ -167,7 +180,7 @@ TyEdit:disabled { background: var(--field-disabled-bg); color: var(--field-disab
    inside the first is what pushed the drop chevron into the gap between them. This has to be
    repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole
    built-in TyEdit rule set for this typeKey -- variants included. */
-TyEdit.embedded         { border-width: 0; border-radius: 0; }
+TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }
 TyEdit.embedded:hover   { border-color: transparent; }
 TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }
 

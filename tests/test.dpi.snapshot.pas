@@ -19,7 +19,7 @@ interface
 uses
   Classes, SysUtils, Types, Math, Controls, Forms, Graphics, LCLType, LMessages, LResources,
   FileUtil,
-  Menus, ExtCtrls, StdCtrls, ComCtrls, Dialogs, ActnList,
+  Menus, ExtCtrls, StdCtrls, ComCtrls, Dialogs, ActnList, DB,
   fpcunit, testregistry,
   test.version, test.designregistry, test.dpi.support,
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.BuiltinThemes,
@@ -238,7 +238,10 @@ begin
     that did nothing must leave it as it found it. }
   RegisterClasses([TMainMenu, TPopupMenu, TMenuItem, TTimer, TPanel, TLabel, TButton,
     TEdit, TMemo, TImageList, TActionList, TAction, TTreeView, TListView, TListBox,
-    TComboBox, TCheckBox, TRadioButton, TGroupBox, TPageControl, TTabSheet]);
+    TComboBox, TCheckBox, TRadioButton, TGroupBox, TPageControl, TTabSheet,
+    { examples/dbcontrols: its data-aware controls point at these by type, so a stand-in would
+      reach their DataSource setter as the wrong class. }
+    TDataSource]);
   { Every example there is: a form file is the only thing this needs from one. }
   CExamples := nil;
   found := FindAllFiles(RepoRoot + 'examples', '*.lfm', True);

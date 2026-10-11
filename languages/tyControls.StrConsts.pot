@@ -5,6 +5,14 @@ msgstr "Content-Type: text/plain; charset=UTF-8"
 msgid "99+"
 msgstr ""
 
+#: tycontrols.strconsts.rscolorbuttondialogtitle
+msgid "Select Color"
+msgstr ""
+
+#: tycontrols.strconsts.rscolorcombomore
+msgid "More…"
+msgstr ""
+
 #: tycontrols.strconsts.rscsscannotevaluatecolor
 #, object-pascal-format
 msgid "Cannot evaluate color: %s"

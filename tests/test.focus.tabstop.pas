@@ -40,7 +40,10 @@ uses
   tyControls.Transfer, tyControls.Steps,
   { non-focusable side, same extension }
   tyControls.GridPanel, tyControls.ScrollPanel, tyControls.CoolBar, tyControls.ToolBarEx,
-  tyControls.HtmlLabel, tyControls.PreviewBox, tyControls.Form, tyControls.AdvanceChart;
+  tyControls.HtmlLabel, tyControls.PreviewBox, tyControls.Form, tyControls.AdvanceChart,
+  { the data-aware controls (tycontrols_db), both sides }
+  tyControls.DB.Edits, tyControls.DB.Choices, tyControls.DB.Lists, tyControls.DB.DateTime,
+  tyControls.DB.Navigator;
 
 type
   { Any windowed TyControl, as a class reference — TabStop is published on
@@ -251,7 +254,14 @@ begin
     TTyRibbonGallery,
     { TTyRibbonAppMenu is a menu button (a TTyCustomMenuButton since the custom-class split) —
       a button that opens the application menu, and a button is a tab stop. }
-    TTyRibbonAppMenu);
+    TTyRibbonAppMenu,
+    { The data-aware controls take the focus default of the control each one is built on: a
+      DB edit is an edit, a DB list a list. Listed one by one for the reason the text-entry
+      family is (a descendant can re-set TabStop in its constructor). }
+    TTyDBEdit, TTyDBMaskEdit, TTyDBNumericEdit, TTyDBCurrencyEdit, TTyDBSpinEdit,
+    TTyDBFloatSpinEdit, TTyDBMemo, TTyDBCheckBox, TTyDBToggleSwitch, TTyDBSegmented,
+    TTyDBRating, TTyDBComboBox, TTyDBLookupComboBox, TTyDBListBox, TTyDBLookupListBox,
+    TTyDBDateTimePicker, TTyDBCalendar);
 end;
 
 { Containers and chrome. Every one of these either holds the real controls as children
@@ -330,7 +340,14 @@ begin
       stop (spec §6.7: every action has an API, there is no keyboard strip); a tool window is a
       page (csNoFocus, like TTyTabSheet) whose body holds the real controls; the actions area
       is a row that hosts buttons. }
-    TTyToolWindowBar, TTyToolWindow, TTyToolWindowActions);
+    TTyToolWindowBar, TTyToolWindow, TTyToolWindowActions,
+    { TTyDBRadioGroup is a radio group: its buttons take the focus, as TTyRadioGroup's do. }
+    TTyDBRadioGroup,
+    { TTyDBNavigator's buttons are painted rects, not windows, and a record command acts on the
+      record the user is editing -- the tool-button rule above: taking focus would pull the
+      caret out of the field the command is about (plan D9; LCL's own navigator is not
+      focusable either unless navFocusableButtons is set, which ours does not offer). }
+    TTyDBNavigator);
 end;
 
 procedure TTyFocusTabStopTest.SetUp;
@@ -771,7 +788,16 @@ begin
       actually exercise the fix at their default value -- the other three hold "0.00"/"0",
       whose blur reformat is a no-op write -- but the family is listed whole so a future
       change to any one of their Formatted overrides is clicked too. }
-    TTyNumericEdit, TTyCurrencyEdit, TTyCalcEdit, TTyCalcCurrencyEdit, TTyTrackEdit);
+    TTyNumericEdit, TTyCurrencyEdit, TTyCalcEdit, TTyCalcCurrencyEdit, TTyTrackEdit,
+    { The data-aware controls. Most override DoEnter / DoExit (focus decides Text against
+      DisplayText and when a change is written back) and several override MouseDown or Click,
+      so both halves of this probe -- the click and the free-while-focused teardown -- are
+      theirs to pass too. Unbound here (no DataSource), which is the state a freshly dropped
+      control is in. }
+    TTyDBEdit, TTyDBMaskEdit, TTyDBNumericEdit, TTyDBCurrencyEdit, TTyDBSpinEdit,
+    TTyDBFloatSpinEdit, TTyDBMemo, TTyDBCheckBox, TTyDBToggleSwitch, TTyDBSegmented,
+    TTyDBRating, TTyDBComboBox, TTyDBLookupComboBox, TTyDBListBox, TTyDBLookupListBox,
+    TTyDBDateTimePicker, TTyDBCalendar);
 end;
 
 procedure TTyClickFocusTest.TestAClickActuallyLandsFocusOnEveryFocusableControl;

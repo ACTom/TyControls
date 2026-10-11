@@ -275,6 +275,8 @@ These have no `TTyCustomXxx`. To derive one, derive from the class on the palett
 
 Ty's own eight dialogs (`TTyMessage`, `TTyInputDialog`, `TTyPasswordDialog`, `TTyTextDialog`, `TTySelectValueDialog`, `TTyProgressDialog`, `TTyAboutDialog`, `TTyIconBrowserDialog`) are split, as LCL splits `TCustomTaskDialog` / `TTaskDialog`.
 
+The 21 data-aware controls in the `tycontrols_db` package are split too: `TTyDBEdit`'s implementation is in `TTyCustomDBEdit`, `TTyDBNavigator`'s in `TTyCustomDBNavigator`, and so on. `DataSource`, `DataField`, `ReadOnly` and `Field` are public on the custom classes (as on LCL's `TCustomDBComboBox`); derive from `TTyCustomDBXxx` and publish the ones you want.
+
 ---
 
 ## 6. Writing a brand-new control on the base classes

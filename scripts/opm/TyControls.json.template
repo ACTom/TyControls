@@ -30,6 +30,19 @@
       "DependenciesAsString" : "BGRABitmapPack, LCL"
     },
     {
+      "Name" : "tycontrols_db.lpk",
+      "Description" : "TyControls data-aware controls: 21 controls (edits, number edits, check box, radio group, lookups, image, date pickers, navigator...) bound to TDataSource fields, styled by the same themes. Requires the TyControls Run-Time Package.\r\n",
+      "Author" : "ACTom",
+      "License" : "Modified LGPL (see COPYING.modifiedLGPL.txt) — same as the Lazarus LCL",
+      "RelativeFilePath" : "",
+      "VersionAsString" : "@VERSION@",
+      "LazCompatibility" : "3.0.0, 3.2.0, 3.4.0, 3.6.0, 3.8.0, 4.0.0, 4.2.0, 4.4.0, 4.6.0, 4.8.0",
+      "FPCCompatibility" : "3.2.2, 3.2.4",
+      "SupportedWidgetSet" : "win32/win64, gtk2, gtk3, qt5, qt6, cocoa",
+      "PackageType" : 2,
+      "DependenciesAsString" : "tycontrols, FCL, LCL"
+    },
+    {
       "Name" : "tycontrols_dt.lpk",
       "Description" : "TyControls Design-Time Support Package. Requires the TyControls Run-Time Package to function.\r\n",
       "Author" : "ACTom",
@@ -40,7 +53,7 @@
       "FPCCompatibility" : "3.2.2, 3.2.4",
       "SupportedWidgetSet" : "win32/win64, gtk2, gtk3, qt5, qt6, cocoa",
       "PackageType" : 1,
-      "DependenciesAsString" : "tycontrols, IDEIntf, SynEdit"
+      "DependenciesAsString" : "tycontrols, tycontrols_db, IDEIntf, SynEdit"
     }
   ]
 }

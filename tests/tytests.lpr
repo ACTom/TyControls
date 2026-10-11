@@ -34,7 +34,7 @@ uses
   test.groupbox,
   test.tabstrip, test.tabstrip.axis, test.tabstrip.multiline,
   test.defaulttheme, test.spinedit, test.memo, test.memo.selection, test.memo.undo,
-  test.floatspinedit, test.spinbuttons, test.freewhileownerlives, test.danglingrefs, test.translatable, test.componentleaks, test.examplelfm,
+  test.floatspinedit, test.spinbuttons, test.freewhileownerlives, test.danglingrefs, test.combobox.editor, test.translatable, test.componentleaks, test.examplelfm,
   test.memo.props,
   test.memo.visualrows,
   test.memo.hscroll,
@@ -239,7 +239,17 @@ uses
   test.themebuilder.edit,
   test.customclasses, test.customclasses.p1, test.customclasses.p2, test.customclasses.p3,
   test.customclasses.p4,
-  test.typekeychain;
+  test.typekeychain,
+  test.db.common,
+  test.corehooks,
+  test.db.edits,
+  test.db.numeric,
+  test.db.choices,
+  test.db.lists,
+  test.db.image,
+  test.db.datetime,
+  test.db.navigator,
+  test.db.typekeys;
 
 type
   TTyTestRunner = class(TTestRunner)

@@ -275,6 +275,8 @@ end;
 
 另外 8 个 Ty 自己的对话框（`TTyMessage`、`TTyInputDialog`、`TTyPasswordDialog`、`TTyTextDialog`、`TTySelectValueDialog`、`TTyProgressDialog`、`TTyAboutDialog`、`TTyIconBrowserDialog`）是拆了的，LCL 的 `TCustomTaskDialog` / `TTaskDialog` 也是这么拆。
 
+数据感知控件包 `tycontrols_db` 里的 21 个控件也都拆了：`TTyDBEdit` 的实现在 `TTyCustomDBEdit`，`TTyDBNavigator` 的在 `TTyCustomDBNavigator`，其余同理。`DataSource`、`DataField`、`ReadOnly`、`Field` 在 Custom 类上是 public（和 LCL 的 `TCustomDBComboBox` 一样），从 `TTyCustomDBXxx` 派生时挑需要的发布即可。
+
 ---
 
 ## 6. 直接从基类写一个全新的控件

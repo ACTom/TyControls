@@ -1,6 +1,6 @@
 # TyControls
 
-Lazarus 自绘控件库。169 个控件全部由 BGRABitmap 绘制,外观由 `.tycss` 文本主题统一控制,在 Windows、Linux、macOS 上显示效果完全一致。
+Lazarus 自绘控件库。190 个控件全部由 BGRABitmap 绘制,外观由 `.tycss` 文本主题统一控制,在 Windows、Linux、macOS 上显示效果完全一致。
 
 > **English:** [README.en.md](README.en.md) · **更新日志:** [CHANGELOG.md](CHANGELOG.md)
 
@@ -36,7 +36,7 @@ Lazarus 自绘控件库。169 个控件全部由 BGRABitmap 绘制,外观由 `.t
 
 ## 特性
 
-- **169 个控件**:按钮、输入、列表、数据网格、虚拟树、Ribbon、日历、Shell 文件浏览、20 个自绘对话框,一套配齐
+- **190 个控件**:按钮、输入、列表、数据网格、虚拟树、Ribbon、日历、Shell 文件浏览、20 个自绘对话框、21 个数据感知控件,一套配齐
 - **三平台一致**:完全自绘,不包装原生控件,同一份代码在三个平台上渲染出同样的界面
 - **主题换肤**:17 个内置主题一个属性切换,支持运行时热切换、跟随系统明暗和强调色;主题是文本文件,改外观不用重编译
 - **经典与现代两种风格**:从 Win95 / XP 的立体风到 Win11 / Material 的扁平风都能做,控件密度也可整体切换
@@ -62,7 +62,7 @@ Lazarus 自绘控件库。169 个控件全部由 BGRABitmap 绘制,外观由 `.t
 
 **1. 安装包**
 
-Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译并重启。运行期包 `tycontrols.lpk` 作为依赖自动安装。
+Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译并重启。运行期包 `tycontrols.lpk` 和数据感知控件包 `tycontrols_db.lpk` 作为依赖自动安装。
 
 **2. 新建工程**
 
@@ -80,7 +80,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 
 ## 控件清单
 
-169 个控件,分 16 个组件面板分页。每个控件的属性、事件、主题键说明见 **[docs/controls/](docs/controls/)**。
+190 个控件,分 17 个组件面板分页。每个控件的属性、事件、主题键说明见 **[docs/controls/](docs/controls/)**。
 
 ### 核心 · `TyControls`(2)
 
@@ -259,6 +259,34 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 | `TTyImageView` | 图片查看器:平移、缩放、滤镜 |
 | `TTyPreviewBox` | 文件预览框 |
 
+### 数据感知 · `TyControls Data Controls`(21)
+
+单独的包 `tycontrols_db`,绑 `TDataSource` 的字段即用,外观跟随主题。说明见 [docs/controls/dbcontrols.md](docs/controls/dbcontrols.md)。
+
+| 控件 | 说明 |
+|---|---|
+| `TTyDBNavigator` | 记录导航条:首 / 上 / 下 / 末、插入、删除、编辑、保存、取消、刷新 |
+| `TTyDBText` | 显示字段值的标签 |
+| `TTyDBEdit` | 绑字段的单行编辑框 |
+| `TTyDBMaskEdit` | 带掩码的编辑框,默认用字段的 `EditMask` |
+| `TTyDBNumericEdit` | 数值编辑框,按数值读写字段 |
+| `TTyDBCurrencyEdit` | 货币编辑框,按数值读写字段 |
+| `TTyDBSpinEdit` | 整数微调框 |
+| `TTyDBFloatSpinEdit` | 小数微调框 |
+| `TTyDBMemo` | 绑备注字段的多行编辑框 |
+| `TTyDBCheckBox` | 复选框,`ValueChecked` / `ValueUnchecked` 对应字段值,空值显示灰态 |
+| `TTyDBToggleSwitch` | 开关,对应规则同复选框 |
+| `TTyDBRadioGroup` | 单选组,`Values` 对应字段值 |
+| `TTyDBSegmented` | 分段控制器,`Values` 对应字段值 |
+| `TTyDBRating` | 星级评分,绑数值字段 |
+| `TTyDBComboBox` | 下拉框,选择或输入字段值 |
+| `TTyDBLookupComboBox` | 查找下拉:列另一张表的行,写回键值 |
+| `TTyDBListBox` | 列表框,选中项即字段值 |
+| `TTyDBLookupListBox` | 查找列表 |
+| `TTyDBImage` | 绑 blob 字段的图片,与 LCL `TDBImage` 的存储格式互通 |
+| `TTyDBDateTimePicker` | 日期时间选择器,支持空值 |
+| `TTyDBCalendar` | 日历,选中的日期能写回字段 |
+
 ### 菜单 · `TyControls Menus`(4)
 
 | 控件 | 说明 |
@@ -387,6 +415,7 @@ CharImage1.GlyphName := 'house';
 | [icons](examples/icons/) | 图标字体 |
 | [transitions](examples/transitions/) | 滑入 / 淡入过渡 |
 | [toolwindows](examples/toolwindows/) | IDE 式工作台:左右侧栏 + 底栏、跨侧拖动、保存 / 恢复布局 |
+| [dbcontrols](examples/dbcontrols/) | 数据感知控件:21 个控件绑一张内存表,导航、编辑、空值、查找、照片 |
 | [terminal](examples/terminal/) | 终端:asciicast 回放、真 shell(ConPTY / PTY / 管道)、ZModem 收发、换肤、配色方案、键码面板 |
 
 其余 30 多个单控件示例见 [examples/](examples/)。
@@ -421,10 +450,11 @@ SetDefaultLang('', LangDir);                                                    
 TranslateUnitResourceStringsEx('', LangDir, 'tycontrols', 'tyControls.StrConsts');  // 控件库
 ```
 
-部署时把 `languages/tycontrols.<语言>.po` 与应用自己的 `.po` 放在同一个 `languages/` 目录。注意两点:
+部署时把 `languages/tycontrols.<语言>.po` 与应用自己的 `.po` 放在同一个 `languages/` 目录。注意几点:
 
 - 部署文件名是 `tycontrols.<语言>.po`,由源码里的 `tycontrols.strconsts.<语言>.po` 改名而来。第三个参数必须传 `'tycontrols'`(不能带点,LCL 会把点号后面当扩展名剥掉),第四个参数传真实单元名 `tyControls.StrConsts`。
 - 英文部署也要带 `tycontrols.en.po`,它是日历和日期框的月份、星期名跟随应用语言的开关。
+- 用了数据感知控件(`tycontrols_db`)的,再加一行 `TranslateUnitResourceStringsEx('', LangDir, 'tycontrols_db', 'tyControls.DB.StrConsts')`,部署 `tycontrols.db.strconsts.<语言>.po` 改名后的 `tycontrols_db.<语言>.po`。
 
 完整示例见 [examples/demo](examples/demo/)。
 

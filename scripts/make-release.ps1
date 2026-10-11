@@ -3,7 +3,7 @@
 
   Ships ONLY what a consumer needs to use the library — the runtime + design-time
   source, the Lazarus packages, themes, i18n catalogs, user docs and examples — laid out exactly
-  as in the repo so `tycontrols.lpk` / `tycontrols_dt.lpk` install unchanged.
+  as in the repo so `tycontrols.lpk` / `tycontrols_db.lpk` / `tycontrols_dt.lpk` install unchanged.
 
   EXCLUDED: tests, tools/ (icon generator, gallery capture), scripts/, docs/superpowers
   (specs/plans), docs/gallery* (the screenshot pages),
@@ -82,7 +82,7 @@ Write-Host '-- root + packages'
 # only consumers are the test suite and the generator, neither of which is in the archive).
 'README.md', 'README.en.md', 'CHANGELOG.md', 'CHANGELOG.en.md',
 'COPYING.LGPL.txt', 'COPYING.modifiedLGPL.txt', 'THIRD-PARTY-NOTICES.md',
-'tycontrols.lpk', 'tycontrols_dt.lpk' | ForEach-Object { Add-File $_ }
+'tycontrols.lpk', 'tycontrols_db.lpk', 'tycontrols_dt.lpk' | ForEach-Object { Add-File $_ }
 
 # source/ and designtime/ ship WHOLE. Both used to be filtered -- source/ by extension, and
 # designtime/ by two hardcoded file names -- and both filters were silent: a package .lfm, .lrs
@@ -135,11 +135,20 @@ if ($Opm) {
   $json = $json.Replace('@VERSION@', $lpkVersion)
   $utf8 = New-Object System.Text.UTF8Encoding($false)
   [IO.File]::WriteAllText((Join-Path $opmDir 'TyControls.json'), $json, $utf8)
+  { Rewritten whole from the template's package list, not patched in place: a package added
+    since the last release (tycontrols_db in 4.0) is offered as an update the moment the release
+    that contains it is out -- and not before, since OPM reads this file from main and an entry
+    ahead of its release would point at a zip that does not have the package. }
   $upd = Join-Path $root 'update_TyControls.json'
-  $text = [IO.File]::ReadAllText($upd)
-  $text = [regex]::Replace($text, '("Version"\s*:\s*")[^"]*(")', "`${1}$lpkVersion`${2}")
-  $text = [regex]::Replace($text, '("DownloadZipURL"\s*:\s*")[^"]*(")',
-    "`${1}https://github.com/ACTom/TyControls/releases/download/v$version/TyControls-$version.zip`${2}")
+  $names = @([regex]::Matches($json, '"Name"\s*:\s*"([^"]+\.lpk)"') | ForEach-Object { $_.Groups[1].Value })
+  if ($names.Count -eq 0) { throw 'the OPM template names no package' }
+  $entries = $names | ForEach-Object {
+    "    {`n      `"ForceNotify`" : false,`n      `"InternalVersion`" : 1,`n      `"Name`" : `"$_`",`n      `"Version`" : `"$lpkVersion`"`n    }"
+  }
+  $text = "{`n  `"UpdateLazPackages`" : [`n" + ($entries -join ",`n") + "`n  ],`n" +
+    "  `"UpdatePackageData`" : {`n    `"DisableInOPM`" : false,`n" +
+    "    `"DownloadZipURL`" : `"https://github.com/ACTom/TyControls/releases/download/v$version/TyControls-$version.zip`",`n" +
+    "    `"Name`" : `"TyControls`"`n  }`n}"
   [IO.File]::WriteAllText($upd, $text, $utf8)
   Write-Host "Wrote $opmZip + TyControls.json; update_TyControls.json now points at v$version" -ForegroundColor Green
 }

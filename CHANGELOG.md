@@ -6,6 +6,54 @@
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md).
 
+## [3.0.1] — 2026-10-07
+
+3.0 的修复版。
+
+### 新增
+
+- `TTySpinEdit` / `TTyFloatSpinEdit` 的上下按钮:指针移上去变成箭头,悬停和按下时高亮,按住连续步进。([#12](https://github.com/ACTom/TyControls/issues/12))
+- `TTyFindDialog` / `TTyReplaceDialog` 的 `OnHelpClicked` 事件:`Options` 含 `frShowHelp` 时显示帮助按钮,点击触发该事件。([#30](https://github.com/ACTom/TyControls/issues/30))
+
+### 变更
+
+- `TTyColorButton.DialogCaption` 和 `TTyColorComboBox.MoreCaption` 默认为空,表示使用库自带、随程序语言翻译的文字;实际显示的文字由新增的 `DialogTitle`、`MoreText` 返回。([#41](https://github.com/ACTom/TyControls/issues/41))
+- `TTyColorBox` / `TTyColorListBox` 的 `Items` 不再写入窗体文件,读取后按 `Style` 重建;自定义调色板请用 `cbCustomColors` 加 `OnGetColors`,或在运行时 `AddColor`。([#20](https://github.com/ACTom/TyControls/issues/20))
+- `TTyFontComboBox` / `TTyFontListBox` 的 `Items` 不再写入窗体文件,读取后按本机字体重新填充。([#26](https://github.com/ACTom/TyControls/issues/26))
+- 内置主题的 `TyEdit.embedded` 内距改为 0;自定义主题如果定义了它,也要加上 `padding: 0`。([#39](https://github.com/ACTom/TyControls/issues/39))
+
+### 修复
+
+- 在 Lazarus 3.x 上编译失败。([#3](https://github.com/ACTom/TyControls/issues/3))
+- 用「TyControls Application」模板新建的项目,运行时看不到设计器里选的内置主题;3.0.0 建的项目需按 issue 里的说明手动加两行。([#10](https://github.com/ACTom/TyControls/issues/10))
+- `TTyCheckBox`、`TTyRadioButton`、`TTyTag`、`TTyLabel`、`TTyColorButton` 开启 `AutoSize` 时宽度偏窄,标题末尾被省略或切掉。([#11](https://github.com/ACTom/TyControls/issues/11))
+- `TTyFloatSpinEdit` 的上下按钮比 `TTySpinEdit` 的小。([#17](https://github.com/ACTom/TyControls/issues/17))
+- 可编辑的 `TTyComboBox` 在默认高度下切掉 g、y、p 等字母的下半部,文字也比不可编辑时偏右。([#39](https://github.com/ACTom/TyControls/issues/39))
+- 可编辑的 `TTyComboBox` 在代码里设置 `ItemIndex` 后输入框是空的,从列表里再选这一项也不显示。([#43](https://github.com/ACTom/TyControls/issues/43))
+- 只读的 `TTyDateTimePicker` 仍能通过下拉日历改值。([#35](https://github.com/ACTom/TyControls/issues/35))
+- `TTyCurrencyEdit` 的货币符号带点或数字(`Fr.`、`kr.`、`US$1`)时,值变成 0 或被改错。([#38](https://github.com/ACTom/TyControls/issues/38))
+- `TTyTreeView` 滚动后,行会画到表头上,最后几行也滚不到。([#19](https://github.com/ACTom/TyControls/issues/19))
+- 很长的文字(如几百行)需要省略显示时几乎卡死;多行文字放在单行位置时只显示第一行。([#18](https://github.com/ACTom/TyControls/issues/18))
+- `TTyStringGrid` 每个实例释放时泄漏两个字符串列表。([#16](https://github.com/ACTom/TyControls/issues/16))
+- 窗体打开时释放 `TTyCoolBar` 会访问违例。([#15](https://github.com/ACTom/TyControls/issues/15))
+- 从窗体文件读回的 `TTyColorBox` / `TTyColorListBox` 色块全黑,选中的颜色丢失。([#20](https://github.com/ACTom/TyControls/issues/20))
+- `TTyFontComboBox` / `TTyFontListBox` 把本机的全部字体写进窗体文件,换台机器打开时列出的仍是原机器的字体。([#26](https://github.com/ACTom/TyControls/issues/26))
+- 字体下拉框、字体列表框和字体对话框在 Windows 上把中日韩字体各列两遍,其中以 `@` 开头的竖排别名画出的字是横躺的。([#31](https://github.com/ACTom/TyControls/issues/31))
+- `TTyRibbon` / `TTyPageControl`:移走的页面,或由别的所有者释放的页面,仍留在页面列表里。([#21](https://github.com/ACTom/TyControls/issues/21))
+- 最小化状态下保存的 `TTyRibbon`,读回后展开只剩标签栏。([#23](https://github.com/ACTom/TyControls/issues/23))
+- `TTyForm` 的内容面板改名后,读回窗体时找不到它。([#22](https://github.com/ACTom/TyControls/issues/22))
+- 释放 `TTyCharImage` / `TTyRibbonGallery` 后,再修改它用过的图标字体会访问违例。([#24](https://github.com/ACTom/TyControls/issues/24))
+- 提示、气泡提示、弹出菜单、表格和原生样式器引用的组件在别的窗体上被释放后,它们仍指向已释放的对象。([#25](https://github.com/ACTom/TyControls/issues/25))
+- 文件对话框不检查 `fdoPathMustExist`,`fdoFileMustExist` 也只对打开对话框的一个文件名检查。([#29](https://github.com/ACTom/TyControls/issues/29))
+- 文件对话框先问 `OnCanClose` 再检查文件名,`OnCanClose` 同意后对话框仍可能不关闭。([#32](https://github.com/ACTom/TyControls/issues/32))
+- `TTyFindDialog` / `TTyReplaceDialog` 的 `frHide*`、`frDisable*` 和 `frShowHelp` 选项不起作用。([#30](https://github.com/ACTom/TyControls/issues/30))
+- `Description`、`Prompt`、`EmptyText` 等一批文字属性在翻译后的程序里不被翻译。([#33](https://github.com/ACTom/TyControls/issues/33))
+- `TTyColorButton` 取色对话框的标题和 `TTyColorComboBox` 的「更多…」行在翻译后的程序里仍是英文。([#41](https://github.com/ACTom/TyControls/issues/41))
+- 中文界面下,主题写错时的提示是英文,字体对话框的预览里没有汉字。([#44](https://github.com/ACTom/TyControls/issues/44))
+- 渐变和九宫格背景有几个字段未初始化:同一条规则两次解析的结果可能不同,只写了 `glass-blur` 的毛玻璃会染上随机颜色。([#40](https://github.com/ACTom/TyControls/issues/40))
+- `.tycss` 里 `glass-tint` 写在 `background` 前面,或者后续规则、`StyleOverride` 只改背景时,毛玻璃丢失着色。([#42](https://github.com/ACTom/TyControls/issues/42))
+- tycss 参考文档里 `padding`、`alpha()` 和渐变色标的说明与实际不符。([#13](https://github.com/ACTom/TyControls/issues/13))
+
 ## [3.0.0] — 2026-09-30
 
 TyControls 3.0 正式版。与 RC3 相比只有下面几处改动;从 2.2 到 3.0 的全部变化见 3.0.0-Beta 至 3.0.0-RC3 各节。

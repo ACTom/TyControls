@@ -59,6 +59,9 @@
         <PackageName Value="tycontrols"/>
       </Item>
       <Item>
+        <PackageName Value="tycontrols_db"/>
+      </Item>
+      <Item>
         <PackageName Value="IDEIntf"/>
       </Item>
       <Item>

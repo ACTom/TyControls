@@ -26,7 +26,7 @@ uses
   Classes, SysUtils, StrUtils, Types, Math, Controls, Forms, Graphics, LCLType, LMessages,
   IntfGraphics, FPimage, FileUtil,
   fpcunit, testregistry,
-  test.dpi.support,
+  test.dpi.support, test.designregistry,
   tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.Columns,
   tyControls.Button, tyControls.CheckBox, tyControls.TyLabel, tyControls.Gauge,
   tyControls.CircularProgress, tyControls.ShellListView, tyControls.ComboBox,
@@ -803,7 +803,7 @@ begin
       + ' P.DrawText(R, s, n, S.FontSize, 400, c, a, l, False);'
       + ' for i := 0 to Scale(3) do P.DrawEdge(R, i, c, c); end;'));
 
-  files := FindAllFiles(TyTestRepoRoot + 'source', '*.pas', False);
+  files := LibrarySourceFiles;
   sl := TStringList.Create;
   bad := TStringList.Create;
   try

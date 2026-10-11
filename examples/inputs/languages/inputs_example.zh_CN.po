@@ -13,7 +13,7 @@ msgstr ""
 
 #: tmainform.caption
 msgid "Rich Inputs example"
-msgstr "Rich Inputs 示例"
+msgstr "富输入示例"
 
 #: tmainform.darkswitch.caption
 msgid "Dark"
@@ -149,7 +149,7 @@ msgstr "SelectedFont + FontSize 驱动此预览(字号上限 28 以适配):"
 
 #: tmainform.lblfontpreview.caption
 msgid "Handgloves"
-msgstr "Handgloves"
+msgstr "Handgloves 汉字"
 
 #: tmainform.lblfontecho.caption
 msgid "SelectedFont / FontSize land here"
@@ -169,7 +169,7 @@ msgstr "锁定整张表 —— ValueListEditor.ReadOnly 禁掉所有值单元格
 
 #: tmainform.bar.caption
 msgid "Rich Inputs  · TyControls"
-msgstr "Rich Inputs  · TyControls"
+msgstr "富输入  · TyControls"
 
 # --- code resourcestrings (msgid=Pascal source) ---
 

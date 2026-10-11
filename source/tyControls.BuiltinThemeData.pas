@@ -85,7 +85,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -730,7 +730,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -1257,6 +1257,19 @@ begin
     '   short CJK/label captions fit without truncation. --accent is the brand seed the picker recolours. */' + LineEnding +
     '' + LineEnding +
     '/* --- palette: light ------------------------------------------------------ */' + LineEnding +
+    '/* The controls this skin writes no rule for -- lists, trees, grids, calendars, date and spin' + LineEnding +
+    '   fields, memos, panels, group boxes, tabs -- are drawn by the built-in base layer. These' + LineEnding +
+    '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
+    '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
+    ':root {' + LineEnding +
+    '  --radius:        6px;' + LineEnding +
+    '  --radius-sm:     4px;' + LineEnding +
+    '  --radius-scroll: 8px;' + LineEnding +
+    '  --input-bg:      var(--field);' + LineEnding +
+    '  --input-border:  var(--border);' + LineEnding +
+    '  --grid-bg:       var(--field);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     '@mode light {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:       #3584E4;   /* GNOME blue — brand/accent seed              */' + LineEnding +
@@ -1354,7 +1367,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -1458,6 +1471,19 @@ begin
     '}' + LineEnding +
     '' + LineEnding +
     '/* ---- LIGHT palette (authentic Aero glass) ---- */' + LineEnding +
+    '/* The controls this skin writes no rule for -- lists, trees, grids, calendars, date and spin' + LineEnding +
+    '   fields, memos, panels, group boxes, tabs -- are drawn by the built-in base layer. These' + LineEnding +
+    '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
+    '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
+    ':root {' + LineEnding +
+    '  --radius:        3px;' + LineEnding +
+    '  --radius-sm:     2px;' + LineEnding +
+    '  --radius-scroll: 2px;' + LineEnding +
+    '  --input-bg:      var(--field-bg);' + LineEnding +
+    '  --input-border:  var(--field-border);' + LineEnding +
+    '  --grid-bg:       var(--field-bg);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     '@mode light {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:            #2C7FD6;   /* brand blue — runtime accent-picker recolours from here */' + LineEnding +
@@ -1801,7 +1827,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -1996,6 +2022,15 @@ begin
     '   like "绿色 Green" from truncating. */' + LineEnding +
     '' + LineEnding +
     '/* --- palette: light ------------------------------------------------------ */' + LineEnding +
+    '/* The controls this skin writes no rule for -- lists, trees, grids, calendars, date and spin' + LineEnding +
+    '   fields, memos, panels, group boxes, tabs -- are drawn by the built-in base layer. These' + LineEnding +
+    '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
+    '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
+    ':root {' + LineEnding +
+    '  --radius:    6px;' + LineEnding +
+    '  --radius-sm: 4px;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     '@mode light {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:         #1677FF;   /* brand blue — primary fill, focus ring, checkbox tick, progress fill */' + LineEnding +
@@ -2101,7 +2136,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -2248,6 +2283,16 @@ begin
     '   normal, tight padding — nativeness comes from colour + border + radius, never from size. */' + LineEnding +
     '' + LineEnding +
     '/* --- palette: light ------------------------------------------------------ */' + LineEnding +
+    '/* The controls this skin writes no rule for -- lists, trees, grids, calendars, date and spin' + LineEnding +
+    '   fields, memos, panels, group boxes, tabs -- are drawn by the built-in base layer. These' + LineEnding +
+    '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
+    '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
+    ':root {' + LineEnding +
+    '  --radius:       6px;' + LineEnding +
+    '  --radius-sm:    4px;' + LineEnding +
+    '  --input-border: var(--field-border);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     '@mode light {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:            #0D6EFD;   /* Bootstrap primary blue (brand seed)        */' + LineEnding +
@@ -2465,7 +2510,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -2682,6 +2727,19 @@ begin
     '}' + LineEnding +
     '' + LineEnding +
     '/* LIGHT palette — Breeze-light. */' + LineEnding +
+    '/* The controls this skin writes no rule for -- lists, trees, grids, calendars, date and spin' + LineEnding +
+    '   fields, memos, panels, group boxes, tabs -- are drawn by the built-in base layer. These' + LineEnding +
+    '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
+    '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
+    ':root {' + LineEnding +
+    '  --radius:        3px;' + LineEnding +
+    '  --radius-sm:     2px;' + LineEnding +
+    '  --radius-scroll: 3px;' + LineEnding +
+    '  --input-bg:      var(--field);' + LineEnding +
+    '  --input-border:  var(--field-border);' + LineEnding +
+    '  --grid-bg:       var(--field);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     '@mode light {' + LineEnding +
     '  :root {' + LineEnding +
     '    --surface:           #EFF0F1;   /* window body                             */' + LineEnding +
@@ -2779,7 +2837,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -2915,6 +2973,33 @@ begin
     '}' + LineEnding +
     '' + LineEnding +
     '/* --accent is the brand seed; the runtime accent-picker recolours the skin through it. */' + LineEnding +
+    '/* The controls this skin writes no rule for -- lists, trees, grids, calendars, date and spin' + LineEnding +
+    '   fields, memos, panels, group boxes, tabs -- are drawn by the built-in base layer. These' + LineEnding +
+    '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
+    '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
+    ':root {' + LineEnding +
+    '  --radius:        0;' + LineEnding +
+    '  --radius-sm:     0;' + LineEnding +
+    '  --radius-scroll: 0;' + LineEnding +
+    '  --radius-round:  0;' + LineEnding +
+    '  --input-bg:      var(--field);' + LineEnding +
+    '  --input-border:  var(--border);' + LineEnding +
+    '  --grid-bg:       var(--field);' + LineEnding +
+    '  /* Everything that is not a field sits on the grey system face -- panels, tab pages, menus,' + LineEnding +
+    '     the chrome bars -- as every Win9x window did. The scroll and track' + LineEnding +
+    '     channels are the lighter grey between the face and the white wells. */' + LineEnding +
+    '  --surface:        var(--face);' + LineEnding +
+    '  --surface-chrome: var(--face);' + LineEnding +
+    '  --chrome-bar-bg:  var(--face);' + LineEnding +
+    '  --surface-tab-rest:  var(--face);' + LineEnding +
+    '  --surface-tab-hover: var(--face);' + LineEnding +
+    '  --surface-track:  #E0E0E0;' + LineEnding +
+    '  --scroll-handle:  var(--face);' + LineEnding +
+    '  --scroll-handle-hover: var(--face-hover);' + LineEnding +
+    '  /* The terminal is a text well like the edit: white, not the grey face. */' + LineEnding +
+    '  --terminal-bg:    var(--field);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     '@mode light {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:       #10318C;   /* brand seed — title-bar dark stop + progress fill */' + LineEnding +
@@ -2950,7 +3035,7 @@ begin
     '       values so base-fallback controls (list box, panel, status bar, …) stay light too —' + LineEnding +
     '       without these, dark mode renders a mixed window. Values = the base light seeds' + LineEnding +
     '       (TyBuiltinBaseModeCss); --border needs no pin, classic''s own #808080 above covers it. */' + LineEnding +
-    '    --surface:      #FFFFFF;' + LineEnding +
+    '    --surface:      var(--face);' + LineEnding +
     '    --on-surface:   #1F2937;' + LineEnding +
     '    --on-titlebar: var(--title-ink);   /* ink for controls hosted on the title bar */' + LineEnding +
     '}' + LineEnding +
@@ -2988,7 +3073,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     'TyComboBox      { render-style: inset3d; background: var(--field); color: var(--ink); padding: 4px 6px; }' + LineEnding +
@@ -3062,7 +3147,50 @@ begin
     'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
     'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
     '  color: var(--on-titlebar);' + LineEnding +
-    '}' + LineEnding;
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* ── The controls the base layer draws, in this skin''s shapes ─────────────────────────────' + LineEnding +
+    '   Each rule below replaces the base layer''s whole rule set for its keys, so it restates what' + LineEnding +
+    '   the base gives (padding, font size) and changes only the frame and the colours.' + LineEnding +
+    '' + LineEnding +
+    '   Field wells: every list, tree, grid and field is a sunken white well, like TyEdit above.' + LineEnding +
+    '   ''render-style: inset3d'' derives the two-tone 2px frame from the white face. Hover and focus' + LineEnding +
+    '   change nothing (this era had no hover, and focus was the caret or a dotted rect). */' + LineEnding +
+    'TyListBox, TyValueListEditor, TyRibbonGallery { render-style: inset3d; background: var(--input-bg); color: var(--on-surface); padding: var(--pad-tight); }' + LineEnding +
+    'TyListBox:disabled, TyValueListEditor:disabled, TyRibbonGallery:disabled { color: var(--ink-disabled); }' + LineEnding +
+    'TySpinEdit, TyMemo, TyCascader { render-style: inset3d; background: var(--input-bg); color: var(--on-surface); padding: var(--pad-control); font-size: var(--font-size-base); }' + LineEnding +
+    'TySpinEdit:disabled, TyMemo:disabled, TyCascader:disabled { color: var(--ink-disabled); }' + LineEnding +
+    'TyDateTimePicker { render-style: inset3d; background: var(--input-bg); color: var(--on-surface); padding: var(--pad-datetime); font-size: var(--font-size-base); }' + LineEnding +
+    'TyDateTimePicker:disabled { color: var(--ink-disabled); }' + LineEnding +
+    'TyCalendar { render-style: inset3d; background: var(--input-bg); color: var(--on-surface); padding: var(--pad-button); font-size: var(--font-size-base); }' + LineEnding +
+    'TyTreeView, TyListView { render-style: inset3d; background: var(--input-bg); color: var(--on-surface); padding: var(--pad-tight); font-size: var(--font-size-base); }' + LineEnding +
+    'TyGrid { render-style: inset3d; background: var(--grid-bg); color: var(--on-surface); font-size: var(--font-size-base); }' + LineEnding +
+    '' + LineEnding +
+    '/* Raised: the tab page frame and each tab, and the menu popup stand out of the face. Panels stay' + LineEnding +
+    '   flat (the base layer''s grey frame): the panel''s rules are shared by shapes, images and charts,' + LineEnding +
+    '   which must not grow a bevel. */' + LineEnding +
+    'TyPageControl, TyTabControl, TyTabSet { render-style: bevel3d; background: var(--surface); color: var(--on-surface); }' + LineEnding +
+    'TyPageControl:disabled, TyTabControl:disabled, TyTabSet:disabled { color: var(--ink-disabled); }' + LineEnding +
+    'TyTab        { render-style: bevel3d; background: var(--surface); color: var(--on-surface); padding: var(--pad-control); }' + LineEnding +
+    'TyTab:active { render-style: bevel3d; background: var(--surface); color: var(--accent); }   /* the page shown: navy caption */' + LineEnding +
+    'TyMenuView, TyMenuPopup { render-style: bevel3d; background: var(--surface); color: var(--on-surface); padding: var(--pad-control); }' + LineEnding +
+    '' + LineEnding +
+    '/* Scroll bar and track bar: a raised grey thumb on a light channel -- no pill, no accent. */' + LineEnding +
+    'TyScrollBar        { background: var(--surface-track); color: var(--ink); border-radius: 0; }' + LineEnding +
+    'TyScrollBar:disabled { color: var(--ink-disabled); }' + LineEnding +
+    'TyScrollThumb      { render-style: bevel3d; background: var(--scroll-handle); }' + LineEnding +
+    'TyScrollThumb:hover  { render-style: bevel3d; background: var(--scroll-handle-hover); }' + LineEnding +
+    'TyScrollThumb:active { render-style: bevel3d; background: var(--scroll-handle); }' + LineEnding +
+    'TyTrackGroove      { render-style: inset3d; background: var(--field); }' + LineEnding +
+    'TyTrackThumb       { render-style: bevel3d; background: var(--face); }' + LineEnding +
+    '/* The switch has no Win9x ancestor either; it is built from the track bar''s parts: a square' + LineEnding +
+    '   track (--radius-round is 0 here) and a raised grey knob. */' + LineEnding +
+    'TyToggleKnob       { render-style: bevel3d; background: var(--face); }' + LineEnding +
+    'TyTrackThumb:hover  { render-style: bevel3d; background: var(--face-hover); }' + LineEnding +
+    'TyTrackThumb:active { render-style: bevel3d; background: var(--face); }' + LineEnding +
+    '' + LineEnding +
+    '/* Tooltip: the pale yellow box with a thin black frame. */' + LineEnding +
+    'TyHint { background: #FFFFE1; color: var(--ink); border-color: #000000; border-width: 1px; border-radius: 0; padding: var(--pad-tooltip); font-size: var(--font-size-base); }' + LineEnding;
 end;
 
 function SkinCss_fluent: string;
@@ -3090,6 +3218,17 @@ begin
     '}' + LineEnding +
     '' + LineEnding +
     '/* ── LIGHT palette — Windows 11 / Office web light ── */' + LineEnding +
+    '/* The controls this skin writes no rule for -- lists, trees, grids, calendars, date and spin' + LineEnding +
+    '   fields, memos, panels, group boxes, tabs -- are drawn by the built-in base layer. These' + LineEnding +
+    '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
+    '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
+    ':root {' + LineEnding +
+    '  --radius-sm:    2px;' + LineEnding +
+    '  --input-bg:     var(--field);' + LineEnding +
+    '  --input-border: var(--border);' + LineEnding +
+    '  --grid-bg:      var(--field);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     '@mode light {' + LineEnding +
     '  :root {' + LineEnding +
     '    /* SEED — brand + Fluent neutral ramp */' + LineEnding +
@@ -3241,7 +3380,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -3383,6 +3522,19 @@ begin
     '   so the runtime accent-picker recolours the whole skin through it. */' + LineEnding +
     '' + LineEnding +
     '/* --- palette: light (macOS light, system grey) --------------------------- */' + LineEnding +
+    '/* The controls this skin writes no rule for -- lists, trees, grids, calendars, date and spin' + LineEnding +
+    '   fields, memos, panels, group boxes, tabs -- are drawn by the built-in base layer. These' + LineEnding +
+    '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
+    '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
+    ':root {' + LineEnding +
+    '  --radius:        6px;' + LineEnding +
+    '  --radius-sm:     4px;' + LineEnding +
+    '  --radius-scroll: 8px;' + LineEnding +
+    '  --input-bg:      var(--field);' + LineEnding +
+    '  --input-border:  var(--border);' + LineEnding +
+    '  --grid-bg:       var(--field);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     '@mode light {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:               #007AFF;   /* macOS system blue — seeds every accent/primary surface */' + LineEnding +
@@ -3544,7 +3696,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -3641,6 +3793,18 @@ begin
     '   container, light on-surface ink. */' + LineEnding +
     '' + LineEnding +
     '/* --- palette: light ------------------------------------------------------ */' + LineEnding +
+    '/* The controls this skin writes no rule for -- lists, trees, grids, calendars, date and spin' + LineEnding +
+    '   fields, memos, panels, group boxes, tabs -- are drawn by the built-in base layer. These' + LineEnding +
+    '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
+    '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
+    ':root {' + LineEnding +
+    '  --radius:       4px;' + LineEnding +
+    '  --radius-sm:    4px;' + LineEnding +
+    '  --input-bg:     var(--field);' + LineEnding +
+    '  --input-border: var(--outline);' + LineEnding +
+    '  --grid-bg:      var(--field);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     '@mode light {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:     #6750A4;   /* M3 primary — brand/accent seed (picker target)   */' + LineEnding +
@@ -3731,7 +3895,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -3851,6 +4015,19 @@ begin
     '   modes. The runtime accent-picker recolours through var(--accent). */' + LineEnding +
     '' + LineEnding +
     '/* ── Palette: light = classic Fluent, dark = Office dark ─────────────────── */' + LineEnding +
+    '/* The controls this skin writes no rule for -- lists, trees, grids, calendars, date and spin' + LineEnding +
+    '   fields, memos, panels, group boxes, tabs -- are drawn by the built-in base layer. These' + LineEnding +
+    '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
+    '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
+    ':root {' + LineEnding +
+    '  --radius:        2px;' + LineEnding +
+    '  --radius-sm:     2px;' + LineEnding +
+    '  --radius-scroll: 0;' + LineEnding +
+    '  --input-bg:      var(--field);' + LineEnding +
+    '  --input-border:  var(--line-field);' + LineEnding +
+    '  --grid-bg:       var(--field);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     '@mode light {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:        #2B579A;   /* Office blue — the runtime accent-picker recolours everything */' + LineEnding +
@@ -3989,7 +4166,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -4251,7 +4428,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -4749,6 +4926,19 @@ begin
     '   mode-varying colour through var(--…); --accent stays the brand seed in both. */' + LineEnding +
     '' + LineEnding +
     '/* LIGHT — Yaru light. */' + LineEnding +
+    '/* The controls this skin writes no rule for -- lists, trees, grids, calendars, date and spin' + LineEnding +
+    '   fields, memos, panels, group boxes, tabs -- are drawn by the built-in base layer. These' + LineEnding +
+    '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
+    '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
+    ':root {' + LineEnding +
+    '  --radius:        6px;' + LineEnding +
+    '  --radius-sm:     4px;' + LineEnding +
+    '  --radius-scroll: 8px;' + LineEnding +
+    '  --input-bg:      var(--field);' + LineEnding +
+    '  --input-border:  var(--border);' + LineEnding +
+    '  --grid-bg:       var(--field);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     '@mode light {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:     #E95420;   /* Ubuntu orange — brand seed; runtime picker recolours from here */' + LineEnding +
@@ -4840,7 +5030,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     'TyComboBox          { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }' + LineEnding +
@@ -4926,6 +5116,19 @@ begin
     '   Only the COLOURS flip between modes; radius, border width and font-weight are identical. */' + LineEnding +
     '' + LineEnding +
     '/* ---- LIGHT palette ---- */' + LineEnding +
+    '/* The controls this skin writes no rule for -- lists, trees, grids, calendars, date and spin' + LineEnding +
+    '   fields, memos, panels, group boxes, tabs -- are drawn by the built-in base layer. These' + LineEnding +
+    '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
+    '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
+    ':root {' + LineEnding +
+    '  --radius:        0;' + LineEnding +
+    '  --radius-sm:     0;' + LineEnding +
+    '  --radius-scroll: 0;' + LineEnding +
+    '  --input-bg:      var(--field);' + LineEnding +
+    '  --input-border:  var(--field-border);' + LineEnding +
+    '  --grid-bg:       var(--field);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     '@mode light {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:  #0078D7;   /* Windows 10 signature blue — brand seed */' + LineEnding +
@@ -5057,7 +5260,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -5153,6 +5356,16 @@ begin
     '   still recolours the primary / accent surfaces. */' + LineEnding +
     '' + LineEnding +
     '/* ── palette: light (Mica) ───────────────────────────────────────────────── */' + LineEnding +
+    '/* The controls this skin writes no rule for -- lists, trees, grids, calendars, date and spin' + LineEnding +
+    '   fields, memos, panels, group boxes, tabs -- are drawn by the built-in base layer. These' + LineEnding +
+    '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
+    '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
+    ':root {' + LineEnding +
+    '  --input-bg:     var(--field);' + LineEnding +
+    '  --input-border: var(--border);' + LineEnding +
+    '  --grid-bg:      var(--field);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     '@mode light {' + LineEnding +
     '  :root {' + LineEnding +
     '    /* Brand accent (recoloured by the picker) */' + LineEnding +
@@ -5313,7 +5526,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +
@@ -5423,6 +5636,18 @@ begin
     '}' + LineEnding +
     '' + LineEnding +
     '/* Light palette = the authentic XP Luna look. */' + LineEnding +
+    '/* The controls this skin writes no rule for -- lists, trees, grids, calendars, date and spin' + LineEnding +
+    '   fields, memos, panels, group boxes, tabs -- are drawn by the built-in base layer. These' + LineEnding +
+    '   tokens hand them this skin''s corners and the well of this skin''s own edit, so they read as' + LineEnding +
+    '   part of the skin instead of the default theme in the skin''s colours. */' + LineEnding +
+    ':root {' + LineEnding +
+    '  --radius-sm:     0;' + LineEnding +
+    '  --radius-scroll: 3px;' + LineEnding +
+    '  --input-bg:      var(--field);' + LineEnding +
+    '  --input-border:  var(--field-border);' + LineEnding +
+    '  --grid-bg:       var(--field);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     '@mode light {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:       #2F6FE0;   /* Luna royal blue — caption + primary + accent chrome */' + LineEnding +
@@ -5591,7 +5816,7 @@ begin
     '   inside the first is what pushed the drop chevron into the gap between them. This has to be' + LineEnding +
     '   repeated in every theme that writes ANY TyEdit rule, because doing so suppresses the whole' + LineEnding +
     '   built-in TyEdit rule set for this typeKey -- variants included. */' + LineEnding +
-    'TyEdit.embedded         { border-width: 0; border-radius: 0; }' + LineEnding +
+    'TyEdit.embedded         { border-width: 0; border-radius: 0; padding: 0; }' + LineEnding +
     'TyEdit.embedded:hover   { border-color: transparent; }' + LineEnding +
     'TyEdit.embedded:focus   { border-color: transparent; outline: 0px transparent; }' + LineEnding +
     '' + LineEnding +

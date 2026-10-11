@@ -111,6 +111,11 @@ type
     procedure ItemMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState;
       X, Y: Integer);
   protected
+    { The selection changed -- a click or a key on an option, or code setting ItemIndex --
+      called just before OnSelectionChanged fires. Does nothing here. The option a user
+      clicks is a child control, so the group's own mouse and key overrides never see the
+      gesture; this is where a subclass (the data-aware group) does. }
+    procedure SelectionChanged; virtual;
     { The ONE place this group asks for the caret -- mouse and keyboard both come through
       here, so "the ring follows the dot" is a single rule with a single implementation
       rather than two that can drift apart.
@@ -579,8 +584,13 @@ end;
   a control whose whole surface is covered by its children is never. }
 procedure TTyCustomRadioGroup.NotifySelection;
 begin
+  SelectionChanged;
   if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
   if Assigned(OnClick) then OnClick(Self);
+end;
+
+procedure TTyCustomRadioGroup.SelectionChanged;
+begin
 end;
 
 { Only the checked radio is a tab stop, so Tab enters the group once, lands on the current

@@ -45,7 +45,7 @@ uses tyControls.DateTimePicker;
 | `Options` | `TTyDateTimePickerOptions` | `[]` | LCL 同名集合：`dtpoDoChangeOnSetDateTime`（代码写入也触发 `OnChange`）、`dtpoEnabledIfUnchecked`（复选框未勾选时仍可编辑）、`dtpoAutoCheck`（值被改动时自动勾上复选框）、`dtpoResetSelection`（每次获得焦点都回到第一个字段）。 |
 | `DateMode` | `TTyDTDateMode` | `dmComboBox` | 右侧交互件：`dmComboBox` = 保持由 `Kind` 决定（日期→下拉日历，时间→上下箭头）；`dmUpDown` = 一律上下箭头（日期字段也只步进、不弹日历）；`dmNone` = **没有按钮，也不预留按钮列**——文字拿回这块宽度，用于表格单元格 / 紧凑工具条。 |
 | `AutoSize` | `Boolean` | `False` | 打开后控件按"内边距 + 复选框 + 该格式可能渲染出的最宽文字 + 按钮列"自行测量并收缩包裹。默认关闭（LCL 的 picker 默认是开的）——统一打开会改动现有窗体上每一个字段的尺寸。 |
-| `ReadOnly` | `Boolean` | `False` | 为 `True` 时禁止步进 / 数字录入（仍可切换字段、打开下拉查看）。 |
+| `ReadOnly` | `Boolean` | `False` | 为 `True` 时禁止步进 / 数字录入，也不弹下拉日历（与 LCL 一致；日历开着时设为只读，在日历里点选也不改值）。仍可切换字段。 |
 | `ShowCheckBox` | `Boolean` | `False` | 为 `True` 时字段左侧绘制一个复选框；未勾选（`Checked=False`）时字段进入 inert 空态。 |
 | `Checked` | `Boolean` | `True` | 仅在 `ShowCheckBox=True` 时有意义。为 `False` 时控件 inert：所有编辑、步进、滚轮、下拉均被屏蔽，文字置灰。 |
 | `DroppedDown` | `Boolean` | —（运行时状态） | 读取返回下拉日历当前是否打开；写入 `True` 调用 `OpenDropDown`，`False` 调用 `CloseDropDown`。 |

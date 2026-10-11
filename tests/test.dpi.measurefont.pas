@@ -1154,7 +1154,7 @@ begin
     CountFontSizeWrites(CodeOnly('{ Font.Size := 1 { nested } Font.Size := 2 }'
       + ' // Font.Size := 3' + LineEnding + ' s := ''Font.Size := 4''; (* Font.Size := 5 *)')));
 
-  files := FindAllFiles(RepoRoot + 'source', '*.pas', False);
+  files := LibrarySourceFiles;
   sl := TStringList.Create;
   bad := TStringList.Create;
   try

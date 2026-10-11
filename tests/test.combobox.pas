@@ -17,6 +17,7 @@ type
     procedure TestMaxLengthForwardedToEditor;
     procedure TestMaxLengthBeforeStyleSwitch;
     procedure TestCharCaseSyncsText;
+    procedure TestASelectionFromCodeReachesTheField;
   end;
 implementation
 
@@ -64,6 +65,26 @@ begin
     AssertFalse('list-mode: no editor visible', c.EditorVisibleForTest);
     c.Style := csDropDown;
     AssertTrue('dropdown-mode: editor visible', c.EditorVisibleForTest);
+  finally c.Free; end;
+end;
+
+{ The ribbon example's font box: csDropDown, ItemIndex := 0 from code. The field stayed
+  empty, and picking row 0 could not fill it either (already selected: no change, no commit). }
+procedure TComboEditableTest.TestASelectionFromCodeReachesTheField;
+var c: TTyComboBox; changes: Integer;
+begin
+  c := TTyComboBox.Create(nil);
+  try
+    c.Style := csDropDown;
+    c.Items.AddStrings(['DengXian', 'SimSun', 'Arial']);
+    c.ItemIndex := 0;
+    AssertEquals('ItemIndex := 0 shows the row', 'DengXian', c.EditorTextForTest);
+    c.ItemIndex := 2;
+    AssertEquals('another row', 'Arial', c.EditorTextForTest);
+    AssertFalse('seeding is not typing: no suggestion list', c.DroppedDown);
+    c.ItemIndex := -1;
+    AssertEquals('no selection, empty field', '', c.EditorTextForTest);
+    AssertEquals('Text agrees', '', c.Text);
   finally c.Free; end;
 end;
 

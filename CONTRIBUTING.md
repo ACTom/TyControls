@@ -72,7 +72,7 @@ tests/tytests --all --format=plain
 
 - 颜色、尺寸、圆角等视觉值走主题 token,不写死在代码里。
 - 自绘界面里不用原生 LCL 控件(`TEdit`、`TButton` 等)。
-- 新单元要加进 `tycontrols.lpk`(设计期的加进 `tycontrols_dt.lpk`)。
+- 新单元要加进 `tycontrols.lpk`(设计期的加进 `tycontrols_dt.lpk`;带来新依赖的放进自己的包,比如数据感知控件在 `tycontrols_db.lpk`)。
 - 新控件一开始就拆成两个类:`TTyCustomXxx` 放全部实现,`TTyXxx` 只有一段 `published`(做法见 [docs/subclassing.md](docs/subclassing.md))。不拆的要在 `tests/test.customclasses.pas` 的 `CNotSplit` 里写明理由,否则测试会红。拆好的类加进同一个文件的 `CSplit`,再做两步,各看一遍 diff:
   - 跑 `python scripts/gen-mimic.py`,重新生成 `tests/test.customclasses.mimic.pas`(第三方模拟子类)。diff 里只该多出新类。脚本照抄每个最终类**当前**的发布段,要是别的类也有行变了,说明那个类的发布顺序被意外改了——重新生成只会把错的顺序抄过去,不会让它变对。
   - 在 `tests/` 下跑 `TY_WRITE_FRESH_STREAMS=1 ./tytests --suite=TTyCustomClassesGuardTest.TestFreshFormFileTextUnchanged`(PowerShell 里先 `$env:TY_WRITE_FRESH_STREAMS='1'`),把新类写进 `tests/fixtures/customclasses/fresh-streams.txt`。diff 里只该多出新类那一段;别的类的行变了,就是那个类新实例写进窗体文件的东西变了。

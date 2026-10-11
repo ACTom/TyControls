@@ -91,6 +91,10 @@ type
     procedure TestCaptionRendersBesideSwitch;
     { Task 14: empty Caption leaves the switch rendering unchanged }
     procedure TestNoCaptionUnchanged;
+    { #47: a declared 0 radius squares the track; no radius at all keeps the pill }
+    procedure TestADeclaredZeroRadiusSquaresTheTrack;
+    { #47: the knob takes the edge its style gives }
+    procedure TestTheKnobTakesTheFrameItsStyleGives;
   end;
 
 implementation
@@ -476,6 +480,79 @@ begin
 end;
 
 { TTyToggleSwitchPixelTest }
+
+{ Render a 44x24 switch under ACss onto a white ground. }
+function RenderSwitch(const ACss: string; AChecked: Boolean): TBGRABitmap;
+var
+  Ctl: TTyStyleController;
+  Form: TForm;
+  Sw: TTyToggleSwitchProbe;
+  Bmp: TBitmap;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(ACss);
+    Sw := TTyToggleSwitchProbe.Create(Form);
+    Sw.Parent := Form;
+    Sw.Controller := Ctl;
+    Sw.Checked := AChecked;
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(44, 24);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, 44, 24);
+    Sw.RenderTo(Bmp.Canvas, Rect(0, 0, 44, 24), 96);
+    Result := TBGRABitmap.Create(Bmp);
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ classic sets --radius-round to 0: nothing in that skin is round. The track read a 0 radius
+  as "the theme said nothing" and drew a pill anyway, around a knob the same token had made
+  square. Probed at the track's top-left pixel: track colour when square, the white ground
+  when the corner is rounded off. }
+procedure TTyToggleSwitchPixelTest.TestADeclaredZeroRadiusSquaresTheTrack;
+var
+  bmp: TBGRABitmap;
+begin
+  bmp := RenderSwitch('TyToggleSwitch { background: #444444; border-width: 0px; border-radius: 0px; }' +
+    'TyToggleKnob { background: #FFFFFF; border-radius: 0px; }', False);
+  try
+    AssertTrue('a declared 0 radius: the corner is the track', bmp.GetPixel(0, 0).red < 100);
+  finally
+    bmp.Free;
+  end;
+  bmp := RenderSwitch('TyToggleSwitch { background: #444444; border-width: 0px; }' +
+    'TyToggleKnob { background: #FFFFFF; }', False);
+  try
+    AssertTrue('no radius at all: still a pill (the corner is the ground)', bmp.GetPixel(0, 0).red > 200);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ The knob was only ever filled: a border or render-style on TyToggleKnob did nothing, so
+  classic could not raise it. One pixel inside the knob's top-left: the light half of the
+  bevel, where the fill alone would be the grey face. }
+procedure TTyToggleSwitchPixelTest.TestTheKnobTakesTheFrameItsStyleGives;
+var
+  bmp: TBGRABitmap;
+  px: TBGRAPixel;
+begin
+  bmp := RenderSwitch('TyToggleSwitch { background: #444444; border-width: 0px; border-radius: 0px; }' +
+    'TyToggleKnob { background: #C0C0C0; border-radius: 0px; render-style: bevel3d; }', False);
+  try
+    AssertTrue('setup: the knob is the grey face inside', bmp.GetPixel(12, 12).red = $C0);
+    px := bmp.GetPixel(3, 3);   { the knob's top-left: margin 3 at 96 ppi }
+    AssertTrue(Format('the raised edge is drawn (got %d)', [px.red]), px.red > $C0);
+  finally
+    bmp.Free;
+  end;
+end;
 
 procedure TTyToggleSwitchPixelTest.TestOffKnobPixelWhite;
 { OFF state: knob is on the left side.

@@ -16,6 +16,7 @@ type
     procedure TestTheShippedCataloguesCarryTheDateTimeNames;
     procedure TestTheExampleCataloguesCarryTheLoadSentinel;
     procedure TestEveryPotHasAChineseCatalogue;
+    procedure TestEveryCatalogueBelongsToAUnitThatStillTranslates;
   end;
 
 implementation
@@ -140,14 +141,12 @@ end;
   just is not there.
 
   Failing entries are reported by name so the fix is either "add it to the .pot" or "give it
-  a non-empty English baseline", decided per string. }
+  a non-empty English baseline", decided per string.
+
+  Both packages' string units: tycontrols' StrConsts and tycontrols_db's DB.StrConsts. }
 procedure TI18NTest.TestEveryStrConstsResourcestringIsInThePot;
 var
-  src, pot: TStringList;
-  i, k, eq, depth: Integer;
-  root, line, id, missing: string;
-  inBlock: Boolean;
-  potText: string;
+  root: string;
 
   { A valid Pascal identifier and nothing else -- the guard that keeps prose out. }
   function IsIdent(const S: string): Boolean;
@@ -160,63 +159,80 @@ var
       if not (S[j] in ['A'..'Z', 'a'..'z', '0'..'9', '_']) then Exit(False);
   end;
 
+  { AUnitPath: the unit under the repo root; AUnit: its name, which is also the .pot's. }
+  procedure CheckUnit(const AUnitPath, AUnit: string);
+  var
+    src, pot: TStringList;
+    i, k, eq, depth, seen: Integer;
+    line, id, missing, potText: string;
+    inBlock: Boolean;
+  begin
+    AssertTrue('found the .pot', FileExists(root + 'languages' + PathDelim + AUnit + '.pot'));
+
+    pot := TStringList.Create;
+    src := TStringList.Create;
+    try
+      pot.LoadFromFile(root + 'languages' + PathDelim + AUnit + '.pot');
+      potText := LowerCase(pot.Text);
+      src.LoadFromFile(root + AUnitPath);
+
+      inBlock := False;
+      depth   := 0;
+      seen    := 0;
+      missing := '';
+      for i := 0 to src.Count - 1 do
+      begin
+        line := src[i];
+        (* Brace depth FIRST, and it is what makes this readable at all: this unit documents
+           nearly every string in a multi-line brace comment, and a comment's CONTINUATION
+           lines do not start with an opening brace. Skipping only lines that BEGIN with one
+           let the tail of a comment through as if it were code -- the first run of this test
+           reported "LCL refuses it (customupdown.inc:380-389). %s" as an untranslated
+           resourcestring. *)
+        if depth > 0 then
+        begin
+          for k := 1 to Length(line) do
+            if line[k] = '}' then Dec(depth) else if line[k] = '{' then Inc(depth);
+          Continue;
+        end;
+        for k := 1 to Length(line) do
+          if line[k] = '{' then Inc(depth) else if line[k] = '}' then Dec(depth);
+        if depth > 0 then Continue;      { a comment opened on this line and did not close }
+
+        line := Trim(line);
+        if LowerCase(line) = 'resourcestring' then begin inBlock := True; Continue; end;
+        if not inBlock then Continue;
+        if (LowerCase(line) = 'implementation') or (LowerCase(line) = 'type')
+           or (LowerCase(line) = 'var') or (LowerCase(line) = 'const') then
+        begin
+          inBlock := False;
+          Continue;
+        end;
+        if (line = '') or (Copy(line, 1, 2) = '//') then Continue;
+        eq := Pos('=', line);
+        if eq < 2 then Continue;
+        id := Trim(Copy(line, 1, eq - 1));
+        if not IsIdent(id) then Continue;
+        Inc(seen);
+        if Pos('#: ' + LowerCase(AUnit) + '.' + LowerCase(id) + LineEnding, potText) = 0 then
+          missing := missing + LineEnding + '  ' + id;
+      end;
+
+      { A parse that matched nothing would pass the assertion below vacuously. }
+      AssertTrue(AUnit + ': found its resourcestrings at all', seen > 0);
+      AssertEquals('resourcestrings declared in ' + AUnit + ' with no .pot entry -- nobody '
+        + 'can translate these:' + missing, '', missing);
+    finally
+      src.Free;
+      pot.Free;
+    end;
+  end;
+
 begin
   root := ExtractFilePath(ParamStr(0)) + '..' + PathDelim;
-  AssertTrue('found the .pot', FileExists(root + 'languages' + PathDelim + 'tyControls.StrConsts.pot'));
-
-  pot := TStringList.Create;
-  src := TStringList.Create;
-  try
-    pot.LoadFromFile(root + 'languages' + PathDelim + 'tyControls.StrConsts.pot');
-    potText := LowerCase(pot.Text);
-    src.LoadFromFile(root + 'source' + PathDelim + 'tyControls.StrConsts.pas');
-
-    inBlock := False;
-    depth   := 0;
-    missing := '';
-    for i := 0 to src.Count - 1 do
-    begin
-      line := src[i];
-      (* Brace depth FIRST, and it is what makes this readable at all: this unit documents
-         nearly every string in a multi-line brace comment, and a comment's CONTINUATION
-         lines do not start with an opening brace. Skipping only lines that BEGIN with one
-         let the tail of a comment through as if it were code -- the first run of this test
-         reported "LCL refuses it (customupdown.inc:380-389). %s" as an untranslated
-         resourcestring. *)
-      if depth > 0 then
-      begin
-        for k := 1 to Length(line) do
-          if line[k] = '}' then Dec(depth) else if line[k] = '{' then Inc(depth);
-        Continue;
-      end;
-      for k := 1 to Length(line) do
-        if line[k] = '{' then Inc(depth) else if line[k] = '}' then Dec(depth);
-      if depth > 0 then Continue;      { a comment opened on this line and did not close }
-
-      line := Trim(line);
-      if LowerCase(line) = 'resourcestring' then begin inBlock := True; Continue; end;
-      if not inBlock then Continue;
-      if (LowerCase(line) = 'implementation') or (LowerCase(line) = 'type')
-         or (LowerCase(line) = 'var') or (LowerCase(line) = 'const') then
-      begin
-        inBlock := False;
-        Continue;
-      end;
-      if (line = '') or (Copy(line, 1, 2) = '//') then Continue;
-      eq := Pos('=', line);
-      if eq < 2 then Continue;
-      id := Trim(Copy(line, 1, eq - 1));
-      if not IsIdent(id) then Continue;
-      if Pos('#: tycontrols.strconsts.' + LowerCase(id) + LineEnding, potText) = 0 then
-        missing := missing + LineEnding + '  ' + id;
-    end;
-
-    AssertEquals('resourcestrings declared in StrConsts.pas with no .pot entry -- nobody '
-      + 'can translate these:' + missing, '', missing);
-  finally
-    src.Free;
-    pot.Free;
-  end;
+  CheckUnit('source' + PathDelim + 'tyControls.StrConsts.pas', 'tyControls.StrConsts');
+  CheckUnit('source' + PathDelim + 'db' + PathDelim + 'tyControls.DB.StrConsts.pas',
+    'tyControls.DB.StrConsts');
 end;
 
 { End to end, against the catalogue that actually ships.
@@ -341,7 +357,8 @@ begin
     above check a .pot lists every resourcestring -- which says nothing about
     whether anyone translated it. A unit whose catalogue was never written
     passes all of them, and two units had: the AdvChart editor's six strings,
-    and tyControls.Design's thirty-six, the latter since before this branch.
+    and tyControls.Design's thirty-six -- though that .pot turned out to be left over
+    from splitting the unit, and is gone (TestEveryCatalogueBelongsToAUnitThatStillTranslates).
 
     Naming is lowercase-and-dotted for the .po and mixed-case for the .pot,
     which is why nothing noticed: the two files do not sort next to each other. }
@@ -399,6 +416,72 @@ begin
     missing.Free;
     pots.Free;
   end;
+end;
+
+{ languages/ ships as-is in every release (make-release copies the folder), and the IDE only
+  ever ADDS catalogues there. When tyControls.Design was split into three units its .pot
+  stayed behind -- 36 entries under identifiers no unit declares any more, offered to
+  translators and shipped for nothing. So: each .pot names a unit under source/ or
+  designtime/ that still has a resourcestring section, and each .po names a .pot. }
+procedure TI18NTest.TestEveryCatalogueBelongsToAUnitThatStillTranslates;
+var
+  root, base, stray: string;
+  cats, units, src: TStringList;
+  i, j, n, pots: Integer;
+  found: Boolean;
+begin
+  root := ExtractFilePath(ParamStr(0)) + '..' + PathDelim;
+  stray := '';
+  pots := 0;
+  units := FindAllFiles(root + 'source', '*.pas', True);
+  src := TStringList.Create;
+  try
+    n := units.Count;
+    cats := FindAllFiles(root + 'designtime', '*.pas', False);
+    try units.AddStrings(cats); finally cats.Free; end;
+    AssertTrue('found the units', units.Count > n);
+
+    cats := FindAllFiles(root + 'languages', '*.pot', False);
+    try
+      for i := 0 to cats.Count - 1 do
+      begin
+        Inc(pots);
+        base := LowerCase(ChangeFileExt(ExtractFileName(cats[i]), ''));
+        found := False;
+        for j := 0 to units.Count - 1 do
+          if LowerCase(ChangeFileExt(ExtractFileName(units[j]), '')) = base then
+          begin
+            src.LoadFromFile(units[j]);
+            found := Pos('resourcestring', LowerCase(src.Text)) > 0;
+            Break;
+          end;
+        if not found then stray := stray + ' ' + ExtractFileName(cats[i]);
+      end;
+    finally cats.Free; end;
+    AssertTrue('found the .pot files', pots >= 2);
+
+    cats := FindAllFiles(root + 'languages', '*.po', False);
+    try
+      for i := 0 to cats.Count - 1 do
+      begin
+        { tycontrols.strconsts.zh_CN.po -> tycontrols.strconsts }
+        base := ChangeFileExt(ChangeFileExt(ExtractFileName(cats[i]), ''), '');
+        found := False;
+        for j := 0 to units.Count - 1 do
+          if SameText(ChangeFileExt(ExtractFileName(units[j]), ''), base) then
+          begin
+            found := FileExists(root + 'languages' + PathDelim +
+              ChangeFileExt(ExtractFileName(units[j]), '.pot'));
+            Break;
+          end;
+        if not found then stray := stray + ' ' + ExtractFileName(cats[i]);
+      end;
+    finally cats.Free; end;
+  finally
+    src.Free;
+    units.Free;
+  end;
+  AssertEquals('catalogues no unit translates any more:', '', stray);
 end;
 
 initialization

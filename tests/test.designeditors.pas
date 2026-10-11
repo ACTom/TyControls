@@ -35,6 +35,7 @@ uses
   tyControls.Dialogs.FileDialog, tyControls.Dialogs.SelectPath, tyControls.FilterComboBox,
   tyControls.ShellComboBox, tyControls.ShellListView, tyControls.ShellTreeView,
   tyControls.ImageCollection, tyControls.ToolWindows, tyControls.Icons.Lucide,
+  tyControls.DB.Lists,
   test.customclasses;
 
 type
@@ -611,6 +612,8 @@ initialization
     TTyCustomShellTreeView, TTyCustomRibbonPage, TTyCustomCharImage, TTyCustomStyleController,
     TTyCustomIconFont, TTyCustomPopover, TTyCustomLucideImageList, TTyCustomLucideIconFont,
     TTyCustomToolWindow, TTyCustomToolWindowActions,
+    { The lookup controls' KeyField / ListField pickers (tycontrols_db). }
+    TTyCustomDBLookupComboBox, TTyCustomDBLookupListBox,
     { A collection ITEM, not a component — the image-payload editor is registered on
       TTyImageItem so it applies inside the stock collection editor for
       TTyImageCollection.Images. GetClass needs it registered to resolve the name. }

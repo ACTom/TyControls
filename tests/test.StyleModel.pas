@@ -25,6 +25,8 @@ type
     procedure TestLoadNineSliceBackgroundImage;
     procedure TestLoadPlainImageBackground;
     procedure TestLoadGlassTokens;
+    procedure TestGlassWrittenBeforeTheBackgroundSurvivesIt;
+    procedure TestABackgroundOnlyRuleKeepsTheGlass;
     procedure TestLoadFromCssParseErrorPreservesPrevious;
     procedure TestDuplicateRuleLastWins;
     procedure TestBackgroundColorAlias;
@@ -192,6 +194,23 @@ type
     procedure TestMultiValueShadowToken;
   end;
 
+  { A gradient and a nine-slice background leave every field they do not set at its Default.
+    They used to leave them as the stack held them: the parsers filled in a few fields of the
+    function result and FPC clears only the managed ones, so SliceRepeat, ImageMode, Blur and the
+    glass fields of a gradient -- GradFrom, GradTo and the rest for a nine-slice -- were garbage.
+    The same gradient compared unequal to itself, and a rule pairing it with glass-blur but no
+    glass-tint tinted the glass with whatever was there.
+
+    The stack is filled with $A5 before each resolve (the parse happens then, not at load), so a
+    field nobody set is non-zero for certain rather than zero by luck. }
+  TTestFillDefaults = class(TTestCase)
+  private
+    procedure CheckUnset(const AWhat: string; const AFill: TTyFill; AGradient: Boolean);
+  published
+    procedure TestAGradientLeavesTheRestAtDefault;
+    procedure TestANineSliceLeavesTheRestAtDefault;
+  end;
+
 implementation
 
 procedure TTestStyleMerge.TestMergeUnionPresent;
@@ -357,6 +376,76 @@ begin
     AssertEquals('hover keeps bg solid white', $FF, TyRedOf(s.Background.Color));
     AssertTrue('hover bg still solid', s.Background.Kind = tfkSolid);
     AssertEquals('MaxGlassBlur = largest (20)', 20, m.MaxGlassBlur);
+  finally m.Free; end;
+end;
+
+{ glass-* first, background second, in every form background takes: the tint has to come
+  out the same as with the usual order. }
+procedure TTestStyleLoad.TestGlassWrittenBeforeTheBackgroundSurvivesIt;
+const
+  GLASS = 'glass-blur: 14px; glass-tint: alpha(#336699, 0.5); ';
+  FORMS: array[0..4] of string = (
+    'background: #FFFFFF;',
+    'background: linear-gradient(90deg, #FFFFFF, #000000);',
+    'background: none;',
+    'background-image: url(a.png);',
+    'background-image: url(a.png) slice(4 4 4 4);');
+var m: TTyStyleModel; s, ref: TTyStyleSet; i: Integer;
+begin
+  for i := Low(FORMS) to High(FORMS) do
+  begin
+    m := TTyStyleModel.Create;
+    try
+      m.LoadFromCss('TyPanel { ' + FORMS[i] + ' ' + GLASS + '}'
+        + ' TyButton { ' + GLASS + FORMS[i] + ' }');
+      ref := m.ResolveStyle('TyPanel', '', []);
+      s := m.ResolveStyle('TyButton', '', []);
+      AssertTrue(FORMS[i] + ': setup -- glass after it is tinted', ref.Background.GlassTint <> 0);
+      AssertEquals(FORMS[i] + ': glass-tint written before it', Int64(ref.Background.GlassTint),
+        Int64(s.Background.GlassTint));
+      AssertEquals(FORMS[i] + ': glass-blur written before it', 14, s.Background.GlassBlur);
+      AssertTrue(FORMS[i] + ': the fill itself still applies',
+        s.Background.Kind = ref.Background.Kind);
+    finally m.Free; end;
+  end;
+end;
+
+{ A :hover rule or a StyleOverride that changes only the background takes over the fill and
+  leaves the base rule's glass alone; one that names glass too brings its own. }
+procedure TTestStyleLoad.TestABackgroundOnlyRuleKeepsTheGlass;
+var m: TTyStyleModel; base, s, over: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss(
+        'TyPanel { background: #FFFFFF; glass-blur: 14px; glass-tint: alpha(#336699, 0.5); }'
+      + ' TyPanel:hover { background: #EEEEEE; }'
+      + ' TyPanel:focus { background: #DDDDDD; glass-tint: alpha(#000000, 0.2); }');
+    base := m.ResolveStyle('TyPanel', '', []);
+    AssertTrue('setup: the base is tinted', base.Background.GlassTint <> 0);
+
+    s := m.ResolveStyle('TyPanel', '', [tysHover]);
+    AssertEquals('hover: its own fill', $EE, TyRedOf(s.Background.Color));
+    AssertEquals('hover: the base tint', Int64(base.Background.GlassTint),
+      Int64(s.Background.GlassTint));
+
+    s := m.ResolveStyle('TyPanel', '', [tysFocused]);
+    AssertEquals('focus: its own fill', $DD, TyRedOf(s.Background.Color));
+    AssertEquals('focus: its own tint', $33, TyAlphaOf(s.Background.GlassTint));
+
+    { the StyleOverride path is the same merge }
+    over := m.ResolveOverride('background: #CCCCCC');
+    s := base;
+    TyMergeStyleSet(s, over);
+    AssertEquals('override: its fill', $CC, TyRedOf(s.Background.Color));
+    AssertEquals('override: the theme''s tint', Int64(base.Background.GlassTint),
+      Int64(s.Background.GlassTint));
+
+    over := m.ResolveOverride('background: #BBBBBB; glass-tint: alpha(#000000, 0.2)');
+    s := base;
+    TyMergeStyleSet(s, over);
+    AssertEquals('override with glass: its fill', $BB, TyRedOf(s.Background.Color));
+    AssertEquals('override with glass: its own tint', $33, TyAlphaOf(s.Background.GlassTint));
   finally m.Free; end;
 end;
 
@@ -1426,7 +1515,69 @@ begin
   AssertEquals('模糊', 8, s.ShadowBlur);
 end;
 
+{ TTestFillDefaults }
+
+procedure PolluteStack;
+var
+  junk: array[0..65535] of Byte;
+begin
+  FillChar(junk, SizeOf(junk), $A5);
+  if junk[High(junk)] <> $A5 then Abort;   // keeps the fill from being dropped
+end;
+
+procedure TTestFillDefaults.CheckUnset(const AWhat: string; const AFill: TTyFill;
+  AGradient: Boolean);
+var
+  d: TTyFill;
+begin
+  d := Default(TTyFill);
+  AssertTrue(AWhat + ': SliceRepeat', AFill.SliceRepeat = d.SliceRepeat);
+  AssertTrue(AWhat + ': ImageMode', AFill.ImageMode = d.ImageMode);
+  AssertEquals(AWhat + ': Blur', d.Blur, AFill.Blur);
+  AssertEquals(AWhat + ': GlassBlur', d.GlassBlur, AFill.GlassBlur);
+  AssertEquals(AWhat + ': GlassTint', Int64(d.GlassTint), Int64(AFill.GlassTint));
+  if not AGradient then
+  begin
+    AssertEquals(AWhat + ': GradFrom', Int64(d.GradFrom), Int64(AFill.GradFrom));
+    AssertEquals(AWhat + ': GradTo', Int64(d.GradTo), Int64(AFill.GradTo));
+    AssertEquals(AWhat + ': GradStops', 0, Length(AFill.GradStops));
+  end;
+end;
+
+procedure TTestFillDefaults.TestAGradientLeavesTheRestAtDefault;
+var
+  m: TTyStyleModel;
+  s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('TyButton { background: linear-gradient(90deg, #ffffff, #000000); }');
+    PolluteStack;
+    s := m.ResolveStyle('TyButton', '', []);
+    AssertTrue('setup: it is the gradient', s.Background.Kind = tfkLinearGradient);
+    AssertEquals('setup: with its two stops', 2, Length(s.Background.GradStops));
+    CheckUnset('gradient', s.Background, True);
+  finally m.Free; end;
+end;
+
+procedure TTestFillDefaults.TestANineSliceLeavesTheRestAtDefault;
+var
+  m: TTyStyleModel;
+  s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('TyPanel { background-image: url(panel.png) slice(1 2 3 4); }');
+    PolluteStack;
+    s := m.ResolveStyle('TyPanel', '', []);
+    AssertTrue('setup: it is the nine-slice', s.Background.Kind = tfkNineSlice);
+    AssertEquals('setup: with its insets', 2, s.Background.SliceInsets.Right);
+    CheckUnset('nine-slice', s.Background, False);
+  finally m.Free; end;
+end;
+
 initialization
+  RegisterTest(TTestFillDefaults);
   RegisterTest(TTestDensityTokens);
   RegisterTest(TTestStyleMerge);
   RegisterTest(TTestStyleMode);
