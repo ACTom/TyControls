@@ -42,6 +42,7 @@
 | `MaxButton` | `TTyCaptionButton` | 最大化/还原按钮（`Kind = cbkMax`，最大化后切换为 `cbkRestore`）。 |
 | `CloseButton` | `TTyCaptionButton` | 关闭按钮（`Kind = cbkClose`）。 |
 | `CaptionLayout` | `function: TTyCaptionLayout` | 系统按钮簇与内容区当前的几何（`MinBtn`/`MaxBtn`/`CloseBtn`/`Band`/`Content`，均为客户区设备像素）。**这是按钮 x 的唯一权威**：`LayoutButtons`、`AdjustClientRect`、`CaptionSpan` 全部读它。宿主要在标题栏上放东西时，问它按钮在哪一侧，别自己算。 |
+| `CaptionSpan(AWidth, out ALeft, out ARight)` | `procedure` | 标题文字可用的横向区间：`CaptionLayout.Content` 再避开宿主放在栏上的子控件。子控件把内容区切成几段空隙时，按 `TitleAlignment` 选一段：左对齐取从起始侧数**第一段放得下标题**的空隙，右对齐取最后一段，居中取最宽的一段；哪段都放不下（或标题为空）时取最宽的。所以标题后面紧跟一条工具栏时，窗口再拉宽，标题也不会跳到工具栏右边去。 |
 | `RightInset` | `function: Integer` | 系统按钮簇占用的总**宽度**（= `CaptionLayout.Band` 的宽度）。宽度没有方向，所以镜像不改变它的值——但镜像后它量的那条带在**左**边，名字会骗人。保留原名是因为改公开成员名属破坏性变更，收益不抵成本（见 `plans/2026-08-04-rtl-mirroring-scope.md` §6.3 第 6 条）。 |
 
 这三个按钮的 `Parent` 设为 `TTyTitleBar` 自身（**代码持有**），由 `LayoutButtons` 在构造和 `Resize` 时自动排布。它们是**窗口化子控件**，所以 `LayoutButtons` 写下的 `SetBounds` 同时就是它们的命中区、悬停区和按下区——LCL 按这份 bounds 路由——这也是按钮几何只需要在一个地方正确的原因。
@@ -139,7 +140,7 @@ TyTitleBar {
 - **窗口边角码。** `HTBOTTOMLEFT` / `HTBOTTOMRIGHT` 命名的是真实窗口角，一个窗口的左下角在哪个阅读方向下都是左下角。`TyNcHitTest` 因此根本没有方向参数。这与 `TTyStatusBar` 的 size grip 早先做的决定一致。
 - **`cbkRestore` 的字形。** 还原图标（两个叠起来的方框，后面那个在右上）目前没有镜像伙伴——`tyControls.Painter.pas` 里没有 `tgRestoreLeft`。它是纯字形，绘制与命中不会因此分叉。
 
-标题栏上**宿主自己放的子控件**不会被镜像（`Align`/`Anchors` 由 LCL 的对齐引擎管，而 LCL 不认 BiDi）。标题文本仍然取这些子控件让出的**最宽空隙**，所以不会被压在它们下面。
+标题栏上**宿主自己放的子控件**不会被镜像（`Align`/`Anchors` 由 LCL 的对齐引擎管，而 LCL 不认 BiDi）。标题文本仍然只放在这些子控件让出的空隙里，所以不会被压在它们下面；选哪段空隙同样按阅读序：镜像后左对齐的标题从**右**边数起（见上表 `CaptionSpan`）。
 
 ### 跨显示器 DPI（PerMonitorV2）
 

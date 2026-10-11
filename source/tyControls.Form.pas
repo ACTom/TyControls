@@ -126,6 +126,10 @@ type
       an off-screen one), and a second copy of the metric gathering is exactly what this
       function exists to prevent. }
     function CaptionLayoutAt(AWidth, AHeight: Integer): TTyCaptionLayout;
+    { The caption's rendered width at APPI (0 for an empty caption), and the span for a caption
+      that wide -- CaptionSpan and RenderTo both go through it, each at its own PPI. }
+    function CaptionTextWidth(APPI: Integer): Integer;
+    procedure CaptionSpanFor(AWidth, ATextWidth: Integer; out ALeft, ARight: Integer);
     function GetShowMinimize: Boolean;
     function GetShowMaximize: Boolean;
     function GetShowClose: Boolean;
@@ -172,7 +176,8 @@ type
       documentation can give instead (see docs/controls/titlebar.md). }
     function RightInset: Integer;
     { The horizontal span the caption may use: the bar minus the caption-button inset, minus
-      whatever the host's own child controls occupy. }
+      whatever the host's own child controls occupy. When those children leave several gaps, the
+      caption keeps the side TitleAlignment puts it on (see the implementation). }
     procedure CaptionSpan(AWidth: Integer; out ALeft, ARight: Integer);
   published
     property Caption: TCaption read FCaption write SetCaption;
@@ -1324,14 +1329,36 @@ end;
   roomier buttons (xp) pushed the cluster further right. Clipping is not the answer either;
   the caption simply has to live in the space the children leave.
 
-  So: take the widest contiguous gap the children do not cover. Scanning gaps rather than
-  assuming children sit on the left keeps this correct for a host that anchors something to
-  the right instead. }
+  So the caption takes one of the gaps the children leave. Which one follows TitleAlignment, read
+  in reading order: a start-aligned caption takes the FIRST gap that holds it, an end-aligned one
+  the LAST, a centred one the widest. It used to be the widest gap for every alignment, and that
+  moved the caption whenever the window was resized: the ribbon example glues its quick access
+  toolbar right after the caption, and once the window was wide enough for the gap past the
+  toolbar to win, the caption jumped over it (#50). When no gap holds the whole caption it is cut
+  wherever it goes, and the widest gap shows the most of it. An empty caption has nothing to fit
+  and keeps the widest gap too. Scanning gaps rather than assuming children sit on the left keeps
+  this correct for a host that anchors something to the right instead. }
 procedure TTyTitleBar.CaptionSpan(AWidth: Integer; out ALeft, ARight: Integer);
+begin
+  CaptionSpanFor(AWidth, CaptionTextWidth(Font.PixelsPerInch), ALeft, ARight);
+end;
+
+function TTyTitleBar.CaptionTextWidth(APPI: Integer): Integer;
 var
-  i, bl, br, gl, gr, bestL, bestR, scan: Integer;
+  S: TTyStyleSet;
+begin
+  if FCaption = '' then Exit(0);
+  if APPI <= 0 then APPI := 96;
+  S := CurrentStyle;
+  Result := TyMeasureRenderedTextWidth(FCaption, S.FontName, ResolveFontSize(S), S.FontWeight,
+    APPI);
+end;
+
+procedure TTyTitleBar.CaptionSpanFor(AWidth, ATextWidth: Integer; out ALeft, ARight: Integer);
+var
+  i, bl, br, scan, g, best, k, kStep: Integer;
   c: TControl;
-  edges: array of Integer;
+  edges, gapL, gapR: array of Integer;
   n, j, tmp: Integer;
   lay: TTyCaptionLayout;
 begin
@@ -1373,21 +1400,55 @@ begin
       end;
     end;
 
-  { Widest gap between the covered spans. }
-  bestL := ALeft; bestR := ALeft; scan := ALeft;
+  { The gaps between the covered spans, left to right. Spans can overlap, so a gap can come out
+    negative; it then holds nothing and is never the widest. }
+  SetLength(gapL, n div 2 + 1);
+  SetLength(gapR, n div 2 + 1);
+  g := 0;
+  scan := ALeft;
   i := 0;
   while i < n do
   begin
-    gl := scan;
-    gr := edges[i];
-    if gr - gl > bestR - bestL then begin bestL := gl; bestR := gr; end;
+    gapL[g] := scan;
+    gapR[g] := edges[i];
+    Inc(g);
     if edges[i + 1] > scan then scan := edges[i + 1];
     Inc(i, 2);
   end;
-  if ARight - scan > bestR - bestL then begin bestL := scan; bestR := ARight; end;
+  gapL[g] := scan;
+  gapR[g] := ARight;
+  Inc(g);
 
-  ALeft := bestL;
-  ARight := bestR;
+  best := -1;
+  { A start- or end-aligned caption: the first gap from its own side that holds it. Reading
+    order, like the alignment itself -- on a mirrored bar taLeftJustify starts from the right. }
+  if (ATextWidth > 0) and (FTitleAlignment <> taCenter) then
+  begin
+    if (FTitleAlignment = taLeftJustify) <> IsRightToLeft then
+    begin k := 0; kStep := 1; end
+    else
+    begin k := g - 1; kStep := -1; end;
+    while (k >= 0) and (k < g) do
+    begin
+      if gapR[k] - gapL[k] >= ATextWidth then begin best := k; Break; end;
+      Inc(k, kStep);
+    end;
+  end;
+  { Otherwise the widest; the leftmost of equals, and nothing at all if every gap is empty. }
+  if best < 0 then
+  begin
+    tmp := 0;
+    for k := 0 to g - 1 do
+      if gapR[k] - gapL[k] > tmp then begin best := k; tmp := gapR[k] - gapL[k]; end;
+  end;
+
+  if best < 0 then
+    ARight := ALeft
+  else
+  begin
+    ALeft := gapL[best];
+    ARight := gapR[best];
+  end;
   if ARight < ALeft then ARight := ALeft;
 end;
 
@@ -1410,7 +1471,7 @@ begin
     P.BeginPaint(ACanvas, ARect, APPI, IsRightToLeft);
     S := CurrentStyle;
     DrawFrame(P, R, S);
-    CaptionSpan(W, tl, tr);
+    CaptionSpanFor(W, CaptionTextWidth(APPI), tl, tr);
     TextRect := Rect(R.Left + tl, R.Top, R.Left + tr, R.Top + H);
     P.DrawText(TextRect, FCaption, S.FontName, ResolveFontSize(S), S.FontWeight,
       S.TextColor, FTitleAlignment, tlCenter, True);
