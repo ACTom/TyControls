@@ -341,6 +341,10 @@ type
     procedure TestEveryBuiltInThemeShowsTheFocusedThumb;
     procedure TestTheTrackBarsThumbTakesTheFocusState;
     procedure TestWithoutAFocusRuleTheThumbsLookAsBefore;
+    { The two type keys hang on TyTrackBar: in every built-in theme and mode, in every state the
+      control resolves, each is styled exactly as TyTrackBar -- no theme says anything of its
+      own about them yet. }
+    procedure TestEveryBuiltInThemeStylesBothBarsAsTheTrackBar;
   end;
 
 implementation
@@ -3355,6 +3359,74 @@ begin
   finally
     a.Free;
     b.Free;
+  end;
+end;
+
+function StyleDump(const S: TTyStyleSet): string;
+var
+  p: TTyProp;
+  i: Integer;
+  fs: TFormatSettings;
+begin
+  fs := DefaultFormatSettings;
+  fs.DecimalSeparator := '.';
+  Result := 'pres=';
+  for p := Low(TTyProp) to High(TTyProp) do
+    if p in S.Present then Result := Result + IntToStr(Ord(p)) + ',';
+  with S.Background do
+  begin
+    Result := Result + Format(' bg=%d/%x/%x/%x/%.3f', [Ord(Kind), Color, GradFrom, GradTo,
+      GradAngleDeg], fs);
+    for i := 0 to High(GradStops) do
+      Result := Result + Format(' stop=%x@%.3f', [GradStops[i].Color, GradStops[i].Pos], fs);
+  end;
+  Result := Result + Format(' txt=%x bd=%x/%d/%d rad=%d pad=%d,%d,%d,%d fnt=%s/%d/%d' +
+    ' op=%.3f ol=%x/%d/%d', [S.TextColor, S.BorderColor, S.BorderWidth, Ord(S.BorderStyle),
+    S.BorderRadius, S.Padding.Left, S.Padding.Top, S.Padding.Right, S.Padding.Bottom,
+    S.FontName, S.FontSize, S.FontWeight, S.Opacity, S.OutlineColor, S.OutlineWidth,
+    S.OutlineOffset], fs);
+end;
+
+procedure TTyTrackThumbFocusTest.TestEveryBuiltInThemeStylesBothBarsAsTheTrackBar;
+const
+  CKeys: array[0..1] of string = ('TyRangeTrackBar', 'TyMultiTrackBar');
+  CStates: array[0..3] of TTyStateSet = ([tysNormal], [tysHover], [tysFocused], [tysDisabled]);
+var
+  c: TTyStyleController;
+  names: TStringArray;
+  miss: TStringList;
+  i, m, k, st, compared: Integer;
+  a, b: string;
+begin
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinThemeNames;
+  c := TTyStyleController.Create(nil);
+  miss := TStringList.Create;
+  try
+    compared := 0;
+    for i := 0 to High(names) do
+      for m := 0 to 1 do
+      begin
+        c.ThemeName := names[i];
+        if m = 0 then c.Mode := 'light' else c.Mode := 'dark';
+        for st := 0 to High(CStates) do
+        begin
+          a := StyleDump(c.Model.ResolveStyle('TyTrackBar', '', CStates[st]));
+          for k := 0 to High(CKeys) do
+          begin
+            b := StyleDump(c.Model.ResolveStyle(CKeys[k], '', CStates[st]));
+            Inc(compared);
+            if (a <> b) and (miss.Count < 20) then
+              miss.Add(Format('%s/%s %s state %d: %s' + LineEnding + '    TyTrackBar: %s',
+                [names[i], c.Mode, CKeys[k], st, b, a]));
+          end;
+        end;
+      end;
+    AssertEquals(IntToStr(miss.Count) + ' differ:' + LineEnding + miss.Text, 0, miss.Count);
+    AssertEquals('themes x 2 modes x 4 states x 2 keys', Length(names) * 2 * 4 * 2, compared);
+  finally
+    miss.Free;
+    c.Free;
   end;
 end;
 
