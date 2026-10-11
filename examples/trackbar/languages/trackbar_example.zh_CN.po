@@ -108,8 +108,8 @@ msgid "Gradient stops (TTyMultiTrackBar, OnDrawSegment):"
 msgstr "渐变色标（TTyMultiTrackBar，OnDrawSegment）："
 
 #: tmainform.lblstopshint.caption
-msgid "Click the track to add a stop in a mixed colour."
-msgstr "点轨道加一个色标，颜色由两侧的色标混合而来。"
+msgid "Click adds a stop, right-click deletes one; the end stops stay put."
+msgstr "点轨道加色标，右键点色标可删除；首尾两个色标固定不动。"
 
 #: tmainform.lblmonths.caption
 msgid "Months (labels from OnFormatTickLabel):"
@@ -118,6 +118,10 @@ msgstr "月份（刻度标签由 OnFormatTickLabel 给出）："
 #: tmainform.lblmultistatus.caption
 msgid "Drag a thumb, or click the track."
 msgstr "拖动滑块，或点击轨道。"
+
+#: tmainform.stopsmenudelete.caption
+msgid "Delete stop"
+msgstr "删除色标"
 
 # --- code resourcestrings (msgid=Pascal source) ---
 

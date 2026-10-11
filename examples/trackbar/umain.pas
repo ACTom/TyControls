@@ -17,7 +17,9 @@ unit umain;
     (OnTrackClick)
   - Gradient stops: each thumb's Color is a stop, the stretches between them painted as
     gradients (OnDrawSegment), a click on the track adds a stop in the colour mixed from its
-    neighbours, and a TTyPaintPanel below shows the whole gradient
+    neighbours, a right-click on a stop offers to delete it (a TTyPopupMenu, OnContextPopup +
+    ThumbAtPoint), the first and last stops are pinned where they are but stay selectable
+    (OnThumbChanging), and a TTyPaintPanel below shows the whole gradient
   - Three thresholds, the stretches between them coloured by segment class
   - A range of months: the tick labels 1..12 become month names (OnFormatTickLabel)
 
@@ -29,10 +31,11 @@ unit umain;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Graphics, Forms, Controls,
+  Classes, SysUtils, Types, Math, Graphics, Forms, Controls, Menus,
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Form,
   tyControls.BuiltinThemes, tyControls.TrackBar, tyControls.MultiTrackBar, tyControls.TyLabel,
-  tyControls.ComboBox, tyControls.ToggleSwitch, tyControls.Divider, tyControls.PaintPanel;
+  tyControls.ComboBox, tyControls.ToggleSwitch, tyControls.Divider, tyControls.PaintPanel,
+  tyControls.Menu;
 
 type
   TMainForm = class(TTyForm)
@@ -74,6 +77,8 @@ type
     LblMonths: TTyLabel;
     Months: TTyRangeTrackBar;
     LblMultiStatus: TTyLabel;
+    StopsMenu: TTyPopupMenu;
+    StopsMenuDelete: TMenuItem;
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
@@ -90,9 +95,17 @@ type
     procedure StopsDrawSegment(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
       const ARect: TRect; var ADefaultDraw: Boolean);
     procedure StopsPreviewPaint(Sender: TObject; APainter: TTyPainter; const AContent: TRect);
+    procedure StopsThumbChanging(Sender: TObject; AIndex: Integer; var AValue: Integer;
+      var AAllow: Boolean);
+    procedure StopsContextPopup(Sender: TObject; MousePos: TPoint; var Handled: Boolean);
+    procedure StopsMenuDeleteClick(Sender: TObject);
     procedure Multi1Change(Sender: TObject);
     procedure MonthsChange(Sender: TObject);
     procedure MonthsFormatTickLabel(Sender: TObject; AValue: Integer; var AText: string);
+  private
+    { The stop the context menu was raised over, noted when it pops up: by the time an item is
+      chosen the pointer is somewhere else. }
+    FMenuStop: Integer;
   end;
 
 var
@@ -358,6 +371,40 @@ begin
     f.GradAngleDeg := 0;
   end;
   APainter.FillBackground(AContent, f, 0);
+end;
+
+{ The first and last stops say where the gradient starts and ends: they stay where they are.
+  Refusing the move (rather than Thumbs[i].Enabled := False) keeps them selectable -- they can
+  still be clicked, tabbed to and given another colour. }
+procedure TMainForm.StopsThumbChanging(Sender: TObject; AIndex: Integer; var AValue: Integer;
+  var AAllow: Boolean);
+begin
+  if (AIndex = 0) or (AIndex = Stops.ThumbCount - 1) then
+    AAllow := False;
+end;
+
+{ A right-click on a stop offers to delete it; off every stop there is no menu. The pinned ends
+  cannot go, nor can a stop that would leave fewer than two. }
+procedure TMainForm.StopsContextPopup(Sender: TObject; MousePos: TPoint; var Handled: Boolean);
+begin
+  if (MousePos.X = -1) and (MousePos.Y = -1) then
+    FMenuStop := Stops.SelectedThumb       // raised from the keyboard: the selected stop
+  else
+    FMenuStop := Stops.ThumbAtPoint(MousePos.X, MousePos.Y);
+  if FMenuStop < 0 then
+  begin
+    Handled := True;
+    Exit;
+  end;
+  StopsMenuDelete.Enabled := (FMenuStop > 0) and (FMenuStop < Stops.ThumbCount - 1)
+    and (Stops.ThumbCount > 2);
+end;
+
+procedure TMainForm.StopsMenuDeleteClick(Sender: TObject);
+begin
+  if (FMenuStop > 0) and (FMenuStop < Stops.ThumbCount - 1) then
+    Stops.Thumbs.Delete(FMenuStop);
+  FMenuStop := -1;
 end;
 
 procedure TMainForm.Multi1Change(Sender: TObject);

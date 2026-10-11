@@ -268,6 +268,8 @@ object MainForm: TMainForm
       Height = 24
       Top = 200
       Width = 480
+      OnContextPopup = StopsContextPopup
+      PopupMenu = StopsMenu
       Min = 0
       Max = 100
       TickStyle = ttsNone
@@ -291,6 +293,7 @@ object MainForm: TMainForm
         end>
       OnTrackClick = StopsTrackClick
       OnDrawSegment = StopsDrawSegment
+      OnThumbChanging = StopsThumbChanging
     end
     object StopsPreview: TTyPaintPanel
       Left = 480
@@ -304,7 +307,7 @@ object MainForm: TMainForm
       Height = 20
       Top = 266
       Width = 490
-      Caption = 'Click the track to add a stop in a mixed colour.'
+      Caption = 'Click adds a stop, right-click deletes one; the end stops stay put.'
     end
     object LblMulti: TTyLabel
       Left = 480
@@ -381,6 +384,14 @@ object MainForm: TMainForm
       Top = 460
       Width = 490
       Caption = 'Drag a thumb, or click the track.'
+    end
+  end
+  object StopsMenu: TTyPopupMenu
+    Left = 920
+    Top = 240
+    object StopsMenuDelete: TMenuItem
+      Caption = 'Delete stop'
+      OnClick = StopsMenuDeleteClick
     end
   end
 end
