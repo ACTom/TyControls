@@ -1,8 +1,8 @@
 unit umain;
 
-{ TTyTrackBar demo, on two pages.
+{ TTyTrackBar demo, in two columns.
 
-  "One thumb" (TTyTrackBar):
+  Left, one thumb (TTyTrackBar):
   - Horizontal track bar (0..100), OnChange updates the status label live
   - Custom-range track bar (-50..50, shows a negative range)
   - Vertical track bar (Orientation = toVertical) with ticks, tick labels and its own readout
@@ -11,7 +11,7 @@ unit umain;
   - LineSize: a bar whose arrow-key / wheel step is 5 instead of 1
   - AnimationsEnabled toggled from code (it is public, not published, so no .lfm can set it)
 
-  "Several thumbs" (TTyRangeTrackBar / TTyMultiTrackBar), each extra built from the bars'
+  Right, several thumbs (TTyRangeTrackBar / TTyMultiTrackBar), each extra built from the bars'
   events and public geometry, none of it inside the controls:
   - Two ranges, MinGap = 5, tick labels; a click on the bare track adds a range there
     (OnTrackClick)
@@ -21,7 +21,7 @@ unit umain;
   - Three thresholds, the stretches between them coloured by segment class
   - A range of months: the tick labels 1..12 become month names (OnFormatTickLabel)
 
-  The main form (a TTyForm + TTyTitleBar), the pages, every track bar and the live theme
+  The main form (a TTyForm + TTyTitleBar), the column headings, every track bar and the live theme
   switcher are designed in umain.lfm; the code here is event handlers + theme setup only. }
 
 {$mode objfpc}{$H+}
@@ -32,8 +32,7 @@ uses
   Classes, SysUtils, Types, Math, Graphics, Forms, Controls,
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Form,
   tyControls.BuiltinThemes, tyControls.TrackBar, tyControls.MultiTrackBar, tyControls.TyLabel,
-  tyControls.ComboBox, tyControls.ToggleSwitch, tyControls.PageControl, tyControls.TabSheet,
-  tyControls.PaintPanel;
+  tyControls.ComboBox, tyControls.ToggleSwitch, tyControls.Divider, tyControls.PaintPanel;
 
 type
   TMainForm = class(TTyForm)
@@ -41,8 +40,7 @@ type
     DarkSwitch: TTyToggleSwitch;
     Surface: TTyFormSurface;
     ThemeCombo: TTyComboBox;
-    Pages: TTyPageControl;
-    PgSingle: TTyTabSheet;
+    DivSingle: TTyDivider;
     LblVolume: TTyLabel;
     Track1: TTyTrackBar;
     LblBalance: TTyLabel;
@@ -62,7 +60,7 @@ type
     LblKeys1: TTyLabel;
     LblKeys2: TTyLabel;
     LblKeys3: TTyLabel;
-    PgMulti: TTyTabSheet;
+    DivMulti: TTyDivider;
     LblRange: TTyLabel;
     Range1: TTyRangeTrackBar;
     LblRangeHint: TTyLabel;

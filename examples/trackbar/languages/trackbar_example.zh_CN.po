@@ -91,13 +91,13 @@ msgstr "阈值（TTyMultiTrackBar，分段着色）："
 msgid "Tab steps through the thumbs; the arrows move the ringed one."
 msgstr "Tab 在滑块之间切换；方向键移动带圆环的那个。"
 
-#: tmainform.pgsingle.caption
-msgid "One thumb"
-msgstr "单滑块"
+#: tmainform.divsingle.caption
+msgid "One thumb: TTyTrackBar"
+msgstr "单滑块：TTyTrackBar"
 
-#: tmainform.pgmulti.caption
-msgid "Several thumbs"
-msgstr "多滑块"
+#: tmainform.divmulti.caption
+msgid "Several thumbs: TTyRangeTrackBar, TTyMultiTrackBar"
+msgstr "多滑块：TTyRangeTrackBar、TTyMultiTrackBar"
 
 #: tmainform.lblrangehint.caption
 msgid "Click the bare track between two ranges to add one there."
