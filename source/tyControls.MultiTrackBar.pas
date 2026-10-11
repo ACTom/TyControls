@@ -55,7 +55,9 @@ type
   { Owner-draw: thumb AIndex, asked before it is painted. ARect is the thumb as it is painted (in
     the slider band, so narrower across than ThumbRect's hit rectangle), AStates the states it
     is resolved with (normal / hover / active, focused for the keyboard's thumb while the bar
-    has the focus). ADefaultDraw := False leaves that thumb to the handler. }
+    has the focus). ADefaultDraw := False leaves that thumb to the handler. A thumb dragged off
+    the track far enough to be removed on release is drawn by default with the removing look;
+    the bar's RemovingThumb names it, so a handler can draw it its own way too. }
   TTyTrackDrawThumbEvent = procedure(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
     const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean) of object;
   { Owner-draw: segment AIndex (0..ThumbCount), asked before its default fill -- for every
@@ -202,6 +204,7 @@ type
     { Client point (X, Y) is off the track by more than RemoveDistance across it (Y on a
       horizontal bar, X on a vertical one), and a thumb dragged there would be removed. }
     function DraggedOff(X, Y: Integer): Boolean;
+    function GetRemovingThumb: Integer;
     function GetThumbCount: Integer;
     function GetThumbValue(AIndex: Integer): Integer;
     procedure SetMin(const AValue: Integer);
@@ -395,6 +398,10 @@ type
     { The thumb the keyboard acts on; -1 = none. Kept within 0..ThumbCount - 1. A change fires
       OnThumbSelect. }
     property SelectedThumb: Integer read FSelectedThumb write SetSelectedThumb default -1;
+    { The thumb being dragged while it is off the track far enough to be removed on release
+      (drawn with the removing look); -1 = none. It holds while the bar paints and through
+      the drag: back on the track, or released, it is -1 again. }
+    property RemovingThumb: Integer read GetRemovingThumb;
     property MinGap: Integer read FMinGap write SetMinGap default 0;
     property Min: Integer read FMin write SetMin default 0;
     property Max: Integer read FMax write SetMax default 100;
@@ -1377,6 +1384,14 @@ begin
   else if c >= len then d := c - (len - 1)
   else d := 0;
   Result := d > RemoveDistance;
+end;
+
+function TTyMultiTrackBarBase.GetRemovingThumb: Integer;
+begin
+  if FRemoving and (FDragThumb >= 0) and (FDragThumb < Length(FValues)) then
+    Result := FDragThumb
+  else
+    Result := -1;
 end;
 
 procedure TTyMultiTrackBarBase.SetAllowCrossing(const AValue: Boolean);

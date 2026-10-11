@@ -513,7 +513,10 @@ type
     FHandleClick: Boolean;      // OnTrackClick handles the press
     FKeep: Boolean;             // OnThumbRemoving refuses
     FSelectLast: Boolean;       // ... and selects the last thumb while asked
+    FSeen: string;              // `<index>:<RemovingThumb> ` per OnDrawThumb call
     procedure Wire(ABar: TTyMultiTrackBarBase);
+    procedure SeeRemoving(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
+      const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean);
     procedure TrackClick(Sender: TObject; AValue: Integer; var AHandled: Boolean);
     procedure Removing(Sender: TObject; AIndex: Integer; var AAllow: Boolean);
     { A point on ABar's track (horizontal, no readout) whose value is AValue, on no thumb. }
@@ -543,6 +546,7 @@ type
     procedure TestDeleteRemovesTheSelectedThumb;
     procedure TestTheBaseClassAddsAndRemovesItsOwnThumbs;
     procedure TestTheDefaultThemeFadesARemovingThumb;
+    procedure TestOwnerDrawSeesWhichThumbIsRemoving;
   end;
 
 implementation
@@ -6028,6 +6032,60 @@ begin
     FBar.Controller := FCtl;
     c.Free;
   end;
+end;
+
+procedure TTyMultiTrackUserThumbsTest.SeeRemoving(Sender: TObject; APainter: TTyPainter;
+  AIndex: Integer; const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean);
+begin
+  FSeen := FSeen + Format('%d:%d ', [AIndex, (Sender as TTyMultiTrackBarBase).RemovingThumb]);
+end;
+
+procedure TTyMultiTrackUserThumbsTest.TestOwnerDrawSeesWhichThumbIsRemoving;
+var
+  c: TPoint;
+  b: TBGRABitmap;
+begin
+  FBar.AllowUserThumbs := True;
+  FBar.OnDrawThumb := @SeeRemoving;
+  AssertEquals('nothing dragged: none', -1, FBar.RemovingThumb);
+  c := Centre(FBar, 1);
+  Press(FBar, c);
+  AssertEquals('pressed on the track: none', -1, FBar.RemovingThumb);
+  Drag(FBar, Point(c.X, 23 + 24));
+  AssertEquals('not yet far enough: none', -1, FBar.RemovingThumb);
+  Drag(FBar, Point(c.X, 80));
+  AssertEquals('dragged off: the dragged thumb', 1, FBar.RemovingThumb);
+  FSeen := '';
+  b := Shot(FBar);
+  b.Free;
+  AssertEquals('each thumb''s handler call sees it (the dragged one is painted last)',
+    '0:1 2:1 1:1 ', FSeen);
+  Drag(FBar, c);
+  AssertEquals('dragged back: none', -1, FBar.RemovingThumb);
+  FSeen := '';
+  b := Shot(FBar);
+  b.Free;
+  AssertEquals('0:-1 2:-1 1:-1 ', FSeen);
+  Drag(FBar, Point(c.X, 80));
+  AssertEquals(1, FBar.RemovingThumb);
+  FBar.MinThumbs := 3;
+  Drag(FBar, Point(c.X, 81));
+  AssertEquals('at MinThumbs it would not go: none', -1, FBar.RemovingThumb);
+  FBar.MinThumbs := 0;
+  Drag(FBar, Point(c.X, 80));
+  AssertEquals(1, FBar.RemovingThumb);
+  Release(FBar, Point(c.X, 80));
+  AssertEquals('released: gone, and none', -1, FBar.RemovingThumb);
+  AssertEquals('25,75', Values);
+  { Released back on the track: none either. }
+  c := Centre(FBar, 0);
+  Press(FBar, c);
+  Drag(FBar, Point(c.X, 80));
+  AssertEquals(0, FBar.RemovingThumb);
+  Drag(FBar, c);
+  Release(FBar, c);
+  AssertEquals(-1, FBar.RemovingThumb);
+  AssertEquals('25,75', Values);
 end;
 
 initialization
