@@ -3480,10 +3480,10 @@ const
     guards it is TestAPieIsDrawnOffItsOwnCentreWithAColourPerSector, which
     counts the control's own pixels. }
   { [Batch 118] a themeRiver's layers are built by the control, on its single
-    axis }
-  cElsewhere: array[0..9] of string = ('pie', 'funnel', 'gauge', 'radar',
+    axis; [Batch 120] a chord's sectors and ribbons by AdvChart.Chord }
+  cElsewhere: array[0..10] of string = ('pie', 'funnel', 'gauge', 'radar',
                                        'graph', 'tree', 'sunburst', 'treemap',
-                                       'sankey', 'themeRiver');
+                                       'sankey', 'themeRiver', 'chord');
 
 function RendererFor(const AType: string): TTyMarkBuilder;
 var i: Integer;

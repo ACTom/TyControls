@@ -982,6 +982,7 @@ begin
     carMarkLine, carMarkLineFrom, carMarkLineTo, carMarkLineLabel: Result := 'markLine';
     carEndLabel: Result := 'lineClip';
     carRiver: Result := 'riverClip';
+    carChord: Result := 'chordGroup';
   else
     Result := '';
   end;
@@ -1418,6 +1419,20 @@ begin
         p.SetNum('shape.x', x - 10);
         p.SetNum('shape.width', 0);
         Start(TyAnimProps([props[0], props[2], props[3]]), TyAnimCallNoIndex);
+      end;
+    carChord:
+      begin
+        { ChordView's first render: the view group at 0.01 about the centre
+          option, initProps to 1 on the series, no row; with the series not
+          animating initProps sets 1 at once -- no proxy [Batch 120] }
+        if not AC.Enabled then Exit;
+        p := Make(AEl.Anim.Series, -1, 'chordGroup');
+        props := TyAnimProps([Num1('scaleX', 1), Num1('scaleY', 1)]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('scaleX', 0.01);
+        p.SetNum('scaleY', 0.01);
+        Start(props, TyAnimCallNoIndex);
       end;
     carPolarBar:
       begin
@@ -1953,6 +1968,13 @@ var
         { A KEPT LAYER is not clipped again (its points tween upstream,
           snapped here); a new one enters [Batch 118] }
         if AOldRow < 0 then ArmOne(AList, AAt, AEl, AC, True);
+      carChord:
+        { A KEPT VIEW scales no more (`if (!oldData)`): an enter still
+          running goes on [Batch 120] }
+        begin
+          p := OldProxy(AOld, -1, 'chordGroup');
+          if p <> nil then Carry(p, s, -1);
+        end;
       carBar:
         begin
           if AOldRow < 0 then
@@ -3110,6 +3132,48 @@ begin
   Result[3] := NumOr(AProxy, 'shape.y2', Result[3]);
 end;
 
+procedure ChordFrom(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
+var
+  sx, sy, ox, oy: Double;
+
+  function GX(AV: Double): Double;
+  begin
+    Result := ox + (AV - ox) * sx;
+  end;
+
+  function GY(AV: Double): Double;
+  begin
+    Result := oy + (AV - oy) * sy;
+  end;
+
+begin
+  sx := AProxy.Num('scaleX');
+  sy := AProxy.Num('scaleY');
+  ox := AEl.Anim.G[0];
+  oy := AEl.Anim.G[1];
+  if IsNan(sx) or IsNan(sy) then Exit;
+  TyShapeScaleAbout(AEl.Shape, ox, oy, sx, sy);
+  if AEl.Style.FillGradient.Kind <> cgkNone then
+  begin
+    if AEl.Style.FillGradient.Global then
+    begin
+      AEl.Style.FillGradient.X := GX(AEl.Style.FillGradient.X);
+      AEl.Style.FillGradient.Y := GY(AEl.Style.FillGradient.Y);
+      AEl.Style.FillGradient.X2 := GX(AEl.Style.FillGradient.X2);
+      AEl.Style.FillGradient.Y2 := GY(AEl.Style.FillGradient.Y2);
+      AEl.Style.FillGradient.R := AEl.Style.FillGradient.R * Min(Abs(sx), Abs(sy));
+    end;
+    if AEl.Style.GradBoxSet then
+    begin
+      AEl.Style.GradBox.X := GX(AEl.Style.GradBox.X);
+      AEl.Style.GradBox.Y := GY(AEl.Style.GradBox.Y);
+      AEl.Style.GradBox.W := AEl.Style.GradBox.W * sx;
+      AEl.Style.GradBox.H := AEl.Style.GradBox.H * sy;
+    end;
+  end;
+  AEl.Style.StrokeWidthLogical := AEl.Style.StrokeWidthLogical * Min(Abs(sx), Abs(sy));
+end;
+
 procedure TyAnimApply(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
 var
   x, y, fx, fy, a, d, c, s, cx, cy, tx, ty, lx, ly, lx1, ly1, bw, bh: Double;
@@ -3165,6 +3229,11 @@ begin
       end;
     carPolarBar:
       PolarBarFrom(AEl, AProxy);
+    carChord:
+      { THE VIEW GROUP'S SCALE about its origin: the sector, the ribbon,
+        their gradients and their strokes with it -- the labels are not the
+        group's (a text that is not local takes no parent) [Batch 120] }
+      ChordFrom(AEl, AProxy);
     carRiver:
       begin
         { the polygon cut to its clip rect, in the group's frame

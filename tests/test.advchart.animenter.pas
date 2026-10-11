@@ -86,6 +86,7 @@ type
     procedure TestAn4EnterTimelinesAsUpstream;
     procedure TestPolarEnterTimelinesAsUpstream;
     procedure TestSingleRiverEnterTimelinesAsUpstream;
+    procedure TestChordEnterTimelinesAsUpstream;
     procedure TestHeadlessRenderDoesNotAnimateByDefault;
     procedure TestOffModeAndOptionOff;
     procedure TestSeriesMoveInTheDynamicLayer;
@@ -107,6 +108,7 @@ var
   GAn4: TJSONData = nil;
   GPolar: TJSONData = nil;
   GRiver: TJSONData = nil;
+  GChord: TJSONData = nil;
 
 { tests/fixtures/advchart-single-themeriver.json's `anim`: tools/advchart-
   oracle/single-themeriver.js, the same harness, clock and samples
@@ -126,6 +128,25 @@ begin
     end;
   end;
   Result := TJSONObject(GRiver).Objects['anim'];
+end;
+
+{ tests/fixtures/advchart-chord.json's `anim`: tools/advchart-oracle/
+  chord.js, the same harness, clock and samples [Batch 120] }
+function ChordFixture: TJSONObject;
+var sl: TStringList;
+begin
+  if GChord = nil then
+  begin
+    sl := TStringList.Create;
+    try
+      sl.LoadFromFile(ExtractFilePath(ParamStr(0)) + 'fixtures' + PathDelim
+        + 'advchart-chord.json');
+      GChord := GetJSON(sl.Text);
+    finally
+      sl.Free;
+    end;
+  end;
+  Result := TJSONObject(GChord).Objects['anim'];
 end;
 
 { tests/fixtures/advchart-polar-series.json's `anim`: tools/advchart-oracle/
@@ -582,6 +603,24 @@ begin
         Result.Kind := amkModel;
         Result.Role := 'riverClip';
         Result.Index := StrToIntDef(parts[0], -1);
+      end
+      else if Pos('#label', id) > 0 then
+      begin
+        Result.Kind := amkModel;
+        Result.Role := 'label';
+        Result.Index := StrToIntDef(parts[0], -1);
+      end;
+    end
+    else if stype = 'chord' then
+    begin
+      { the view group (root) scales from 0.01, a sector's #label fades --
+        the node's data index the sector's place in the group, the nodes
+        first [Batch 120] }
+      if path = 'root' then
+      begin
+        Result.Kind := amkModel;
+        Result.Role := 'chordGroup';
+        Result.Index := -1;
       end
       else if Pos('#label', id) > 0 then
       begin
@@ -1232,6 +1271,32 @@ begin
   AssertTrue(Format('only %d element samples', [FCompared]), FCompared >= 150);
 end;
 
+{ A CHORD'S ENTER: the view group from 0.01 about the centre option,
+  initProps with no row; the labels fade at their nodes [Batch 120] }
+procedure TAdvChartAnimEnterTest.TestChordEnterTimelinesAsUpstream;
+var
+  cases: TJSONArray;
+  cs: TJSONObject;
+  c, ran: Integer;
+begin
+  AssertEquals('the same clock', T0, ChordFixture.Objects['clock'].Floats['T0'], 0);
+  AssertEquals('the same samples', Fixture.Arrays['samplesMs'].AsJSON,
+    ChordFixture.Arrays['samplesMs'].AsJSON);
+  cases := ChordFixture.Arrays['cases'];
+  ran := 0;
+  for c := 0 to cases.Count - 1 do
+  begin
+    cs := cases.Objects[c];
+    if cs.Strings['kind'] <> 'enter' then Continue;
+    RunCase(cs);
+    Inc(ran);
+  end;
+  AssertTrue(Format('%d mismatches over %d element samples:%s',
+    [FBad, FCompared, FReport]), FBad = 0);
+  AssertTrue(Format('only %d cases ran', [ran]), ran >= 4);
+  AssertTrue(Format('only %d element samples', [FCompared]), FCompared >= 150);
+end;
+
 procedure TAdvChartAnimEnterTest.TestAn4EnterTimelinesAsUpstream;
 var
   cases: TJSONArray;
@@ -1525,4 +1590,5 @@ finalization
   FreeAndNil(GAn4);
   FreeAndNil(GPolar);
   FreeAndNil(GRiver);
+  FreeAndNil(GChord);
 end.

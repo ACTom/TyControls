@@ -18,7 +18,7 @@
 | 5 | **深度优先** | 先把直角坐标做透，再上径向 / 关系族 |
 | 6 | **对标 ECharts 6.1**，不是 6.0、不是 5 | v5 词汇是 v6 的严格子集，粘 v5 配置照样解析。抄公式必须从 **6.1** 源码抄——6.1 重写了轴的数学，且文档滞后于源码 |
 
-**公开口径**：「覆盖 ECharts 6.1 的全部制图与交互能力，减去浏览器投递层、减去 WebGL、减去地图数据生态；matrix / chord / thumbnail / 断轴在路线图上。」
+**公开口径**：「覆盖 ECharts 6.1 的全部制图与交互能力，减去浏览器投递层、减去 WebGL、减去地图数据生态；matrix / chord / thumbnail / 断轴在路线图上。」**[第 120 批：chord 落地了（环形布局、借角、飘带、渐变飘带、状态、提示框、入场），见 §155。]**
 
 ---
 
@@ -2261,7 +2261,7 @@ Free Pascal 会直接抛异常。**加的是除法的护栏,不是行为的改�
 
 顺带:`test.advchart.diagnose` 里那条「某类型还没有渲染器」的测试第二次搬家
 (scatter → pie → funnel)。它钉的是**规则**,类型只是当下的例子;
-它变红就是又有一种类型能画了的提醒。
+它变红就是又有一种类型能画了的提醒。**[第 120 批：又搬了一次——chord 能画了，示例换成 custom（两个类型那条是 grid 上的 lines 加 custom），`test.advchart.candlestick` 的同一条也是，见 §155。]**
 
 ---
 
@@ -11131,3 +11131,82 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - `source/tyControls.AdvanceChart.pas`：上面「控件」一条的全部。
 - `tools/advchart-oracle/single-themeriver.js`、`tests/fixtures/advchart-single-themeriver.json`、`tests/test.advchart.singlethemeriver.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.animenter.pas`、`tests/test.advchart.marks.pas`。
 - §72、§131、§145 在原处标注。除了上面那个度量，没有新主题键或新资源串。
+
+## 155. Tier 2 第一百二十批：和弦图（C11，2026-10-12）
+
+路线图 C11：和弦图（`chord`，ECharts 6 新增的系列）——环形布局、`minAngle` 借角、飘带、渐变飘带。以前 `chord` 只在类型注册表里（`'none'` 坐标系、`'Graph'` 伴生），没有渲染器：它一直是诊断面板「这个类型还没有渲染器」的示例。这一批对着 `chart/chord/ChordSeries.ts`（`getInitialData` 与边的 `resolveParentPath`、`formatTooltip`、`getDataParams`、默认选项）、`chordLayout.ts`（整段）、`ChordView.ts`（`render`、`renderEdges`、首次渲染的组缩放）、`ChordPiece.ts`（扇区、`getSectorCornerRadius`、`_updateLabel`）、`ChordEdge.ts`（`buildPath`、`applyEdgeFill`、状态）、`chart/helper/createGraphFromNodeEdge.ts`、`data/Graph.ts`（`addNode` / `addEdge` / `update` / `eachNode` / `eachEdge` / `getAdjacentDataIndices`）、`helper/sectorHelper.ts`、`util/layout.ts` 的 `getCircleLayout`、`label/labelStyle.ts`（`setTextStyleCommon` 的 `inheritColor`）、`model/mixin/dataFormat.ts`（`getFormattedLabel`、`getDataParams`）、`processor/dataFilter.ts`、`label/LabelManager.ts`（标签淡入），以及 zrender 的 `PathProxy`（`normalizeArcAngles`、`arc`）、`Element.updateInnerText`、`graphic/Text.ts` 的 `updateTransform`、`graphic/Path.ts` 的默认样式逐行核过，在真 dist 上跑基准。§1、§39 在原处标注。
+
+### 上游的做法
+
+- **图**：`data || nodes`、`edges || links` 按 JS 真假取；节点的键是 `id ?? name ?? 下标`，同键的第二个节点 `addNode` 拒收，接着 `Graph.update` 按原始下标去取它，抛错。连线的一端是数字时当**节点数组的下标**（`graph.nodes[n]`，越界是 undefined，再按键 `'undefined'` 找），否则当键找；找不到的连线丢掉，剩下的才进边数据（名字是 `id`，否则 `source + ' > ' + target`，原样拼）。图例按名字过滤**节点**数据（`dataFilter('chord')`），`Graph.update` 再把两端有一端被滤掉的连线滤掉；之后 `eachNode` / `eachEdge` 只走留下的，数据下标按留下的次序重排。颜色在过滤之前按原始行取（`colorBy: 'data'`，同类型同 colorBy 共用一个色板游标），图例开关不改颜色。
+- **布局**（`chordLayout.ts`，没有连线就整段不跑——一个扇区都不画）：
+  - 圆：`getCircleLayout`，盒子默认四边 0，`center` 默认 `['50%', '50%']`、相对盒子，`radius` 默认 `['70%', '80%']`、相对盒子短边的一半；一个数的 `radius` 是 `[0, r]`。
+  - 角：`startAngle` 默认 90，`-startAngle * RADIAN`（0 得到 -0），终点**总是**起点加一整圈——`endAngle` 选项从不被读；`normalizeArcAngles(angles, !clockwise)` 之后的 `totalAngle` 逆时针是负的。
+  - 值：`allZero` 是节点数据与边数据的 `getSum('value')`（跳过 NaN）都为 0。每条连线把它的值（`allZero` 时是 1）加到两端，写法是 `(nodeValues[i] || 0) + value`——NaN 被 `|| 0` 吞掉，自环加两次；`allZero` 时每条连线给 `renderedNodeCount` 加 2（值大于 0 或者有 `minAngle`）。节点的数据值不是 NaN 时取 `Math.max(数据值, 连线之和 || 0)`；不 `allZero` 时值大于 0 或者有 `minAngle` 的节点各算一个。没有可画的节点或总和为 0 就不布局。
+  - `padAngle`（默认 3）乘上节点数不小于一整圈时，改成 `(整圈 - minAngle × 数) / 数`（不小于 0）；`(padAngle + minAngle) × 数` 还不小于一整圈，`minAngle` 改成 `(整圈 - padAngle × 数) / 数`。单位角 `(totalAngle - padAngle × 数 × dir) / 总和`，每个节点的跨度是单位角乘值乘 dir——两个方向上都是正的。
+  - 借角：跨度小于 `minAngle` 的节点记欠额，其余记余额与余额跨度。**欠额大于余额**（只有 `allZero` 且有节点没有连线时才可能）就把所有角放大 `欠额 / 余额` 倍、不够的设成 `minAngle`；否则先看有没有节点按比例出借后会掉到 `minAngle` 以下（`surplusAsMuchAsPossible`）。然后按节点次序借：剩余欠额没了就停（后面的节点连 `ratio` 都没有），跨度大于 `minAngle` 的借出 `min(跨度 - minAngle, 剩余欠额, 欠额 × 比例)`、`ratio` 是借后与借前之比，小的设成 `minAngle`、`ratio` 是 `minAngle / 跨度`。
+  - 落位：扇区的跨度是 `max(角, minAngle)`，一个接一个，中间隔 `padAngle`。连线的两段弧都从那一端节点**上一条连线停下的地方**开始（`edgeAccAngle[i] || 0`：NaN 又从 0 开始），长度是单位角乘值再乘那一端的 `ratio || 1`；弧在内半径 r0 上，`s1 / s2 / t1 / t2` 是 `cx + r0 × cos`。
+- **扇区**（`ChordPiece`，Sector，z2 2）：形状是布局加 `getSectorCornerRadius(itemStyle)`——`borderRadius` 默认 `[0, 0, 5, 5]`，百分比相对 `r || (0 - r0)`；样式是数据的视觉（填充、`borderColor` / `borderWidth` 的描边、`opacity`）。
+- **飘带**（`ChordEdge`，Path，z2 0，**节点之后**加进组）：`moveTo s1`，源弧，`bezierCurveTo` 两个控制点各是端点朝圆心走 0.7，目标弧，再一段回 `s1`，闭合。样式先 `setStyle(getLineStyle())`——`lineStyle.color` 是**描边**、`width`（默认 0）是线宽、`opacity` 默认 0.2——再按颜色词定填充：`'source'`（默认）/ `'target'` 取那一端节点的视觉填充（渐变对象也照搬）；`'gradient'` 只有两端都是字符串颜色时才是一个**全局坐标**的线性渐变，从源弧弦的中点到目标弧弦的中点；字面颜色和不成立的 `'gradient'` 不设填充，于是是 Path 原型上的 `'#000'`。连线没有值时它有起点、没有终点：`isNaN(sStartAngle)` 不成立，照样建、照样上样式、照样有状态，只是 NaN 的路径什么都画不出来。
+- **标签**：`textConfig` 被整个换成 `{inside}`，`label.attr({x, y, rotation: 0, style: {align, verticalAlign}})`——`offset`、`rotate` 都不生效。中角上，`position`（默认 `'outside'`）是 `'outside'` 时半径是 `r + (distance || 0)`（默认 5），左右按 cos 的正负、上下按 sin 的正负；其余词都在环的正中、`align || 'center'`、`verticalAlign || 'middle'`。文字是 `retrieve3(状态的 formatter, 普通的 formatter, itemModel.get('name'))` 交给 `getFormattedLabel`：字符串当模板（a 系列名、b 数据名、c 原始值，没有就是布局值），别的都等于没有，没有就是数据下标；`itemModel.get('name')` 走 `Model.get`，**没有名字的节点会读到系列的 `name`**。`setTextStyleCommon` 对不挂在文字上的标签直接把 `fill` 设成 `inheritColor`——节点自己的颜色（渐变就是渐变对象），所以没有描边光晕；透明度是节点的。z2 是宿主加 2。
+- **状态**：扇区 `setStatesStylesFromModel(itemStyle)`；飘带 `setStatesStylesFromModel(edgeModel, 'lineStyle')`——`getLineStyle`，emphasis 的颜色是描边，系列默认 `emphasis.lineStyle.opacity: 0.5`。`focus` 默认 `'adjacency'`：节点换成 `getAdjacentDataIndices()`（每条留下的连线和它的两端）、连线是自己和两端；其余词照常。连线的链是 连线 → 系列（`label` 改读 `edgeLabel`，但 `ChordEdge` 根本不建文字）。
+- **提示框与事件**：`formatTooltip` 是一个裸的 `nameValue`：节点是数据名（空名 `'-'`）和值（原始值，没有就是布局值）；连线是两端节点的**数据名**用 `' > '` 连起来和连线自己的值，没有值就没有值格。`getDataParams` 给节点补上名字和布局值；`params.dataIndex` 是**原始**下标（连线的也是）。
+- **动画**：第一次渲染（`!oldData`）时视图组 `scaleX / scaleY` 先设 0.01、`originX / Y` 是 `center` 选项相对**整个画布**的值，`initProps` 到 1，入场的时长与缓动、没有下标；扇区和飘带都是组的孩子，跟着缩放。标签不跟——不是 local 的文字没有父变换——由 LabelManager 按节点下标淡入。之后的渲染组不再缩放。
+- **换算**：没有坐标系，`convertToPixel` / `convertFromPixel` 什么都不答，`containPixel`（视图没有 `containPoint`）是 false。
+
+### port 以前
+
+- `chord` 注册了、绑定得上，没有渲染器，诊断说它画不出来；`test.advchart.diagnose`、`marks`、`candlestick` 里「还没有渲染器」的示例都是它。
+
+### 做法
+
+- **`AdvChart.Chord`**（新单元）：`TyChordSolve`（图、图例保留的节点、`getCircleLayout` 借用饼图的选项读法、布局逐句照抄——`|| 0` / `|| 1` 写成 `OrZero`，`normalizeArcAngles` 用 JS 的 `Math.round` 与 `%` 重写一份，保住 -0）、`TyChordCorners` / `TyChordSectorPath`（PolarBar 的 `TyZrSectorPath`，新导出 `TyPolarCornerSpecOf`）、`TyChordRibbonPath`（PathProxy 的数据）、`TyZrPathToCmds`（弧拆成不超过四分之一圈的三次曲线给画家，轮廓采样给命中）、`TyChordLabelSpecs` / `TyChordLabels`（没写颜色的标签 `InheritColour`，位置、文字、对齐）、`TyBuildChordMarks`、`TyChordFocusSets`、`TyChordNodeValue` / `TyChordEdgeRawValue`。
+- **`Shape`**：`TTyChartShape.HitNonZero`——多边形按非零规则命中（自环的弧走两遍，奇偶规则会把它当成洞）；画家本来就是非零填充。
+- **`Paint` / `AnimView`**：新角色 `carChord`，一个系列一个 `chordGroup` 代理（scaleX / scaleY 从 0.01，G[0..1] 是原点）；每帧扇区、飘带、它们的全局渐变和线宽都绕原点缩放（`ChordFrom`）；更新时只把还在跑的入场接过去。
+- **`Series` / `Marks`**：`chord` 按数据项进图例，进「别处画」的名单。
+- **控件**：存储分支（`TyGraphFillStore`，`data || nodes`）、`SolveDatumPalette` 认 chord、`RawItemNode` 认 `nodes`；`SolveChords`（图例保留的行、`PerDatumColours` 与对象填充、标签墨色）；`BuildSeriesList` 分支；状态机 `sskChord`——节点是存储的原始行，飘带是第二套行（`EdgeRows`，按**原始**连线下标，元素的 `Datum` 两个下标都是它）、`StDeclareChordEdge`（`lineStyle` 读法、emphasis 透明度默认 0.5）、`StItemFocus` / `StEdgeFocus` 的默认 adjacency、派发者 / highlight 的 `dataType: 'edge'` 认 chord、飘带的状态过渡各有代理；`DatumColour`、`TooltipParams`（`dataType`、连线的名字与值）、事件的值（没有原始值的节点取布局值）、`HierTooltipContent` 的 chord 分支；入场淡入标签；`ChordSolved` / `ChordEdgeStates` 给测试。
+- 新的颜色常量只有一个：飘带的 `'#000'`，那是 zrender 的 `DEFAULT_PATH_STYLE`，上游在任何主题下都是它，不是主题能管的值，没有做成主题键。没有新主题键、新度量、新资源串。
+
+### 基准
+
+`tools/advchart-oracle/chord.js`（真 dist，node SSR，`chart._ssr = false`，`env.node` 关掉、`getDom` 打桩让提示框跑在 zrender 画布上（`renderMode: 'richText'`），animation.js 的时钟钩子，`setTimeout` 不跑，随机数是端口的 xorshift32，每个用例在根上写死 ECharts 6 的色板，静态用例 `animation: false`，指针步走 zrender 自己的 Handler，每步之后画一遍让路径都建出来，最后 `process.exit()`）→ `tests/fixtures/advchart-chord.json`：**35 个用例（169 个节点、202 条连线）、4 个动画用例、79 条守卫**。
+
+- **布局与绘制** 25 个：三节点的默认；六节点九连线带自环；`padAngle` 0 与 70（超过整圈）；`minAngle` 借角（一个 0.5 的小节点，借到剩余欠额为 0 就停）、放大分支（全为 0、四个节点一条连线、`minAngle` 90）、`surplusAsMuchAsPossible`、`minAngle` 120 被截；逆时针加 `startAngle` 30；`startAngle` 0 与被忽略的 `endAngle` 180、盒子、百分比圆心与半径；`startAngle` -135、单个半径、像素圆心；像素半径与圆角 0；渐变飘带（两端字符串、一端渐变对象得 `'#000'`、一条 `'target'`）；逐边样式（字面色描边与 `'#000'`、宽度、透明度、`'target'`、`'source'`）；`borderRadius` 标量与 `['10%', 0]`、描边、透明度、颜色；标签在环内（右上对齐的、关掉的、模板的）；`distance` 20、系列模板、节点自己的颜色、读到系列名的无名节点、数字节点；无名系列的下标文字与 `inherit`；`hideOverlap` 下拥挤的长名字；系列关、单个节点开；全为 0；节点值大于连线和、没有连线的节点值、没有值的连线（下一条从 0 起）、字符串值；`nodes` / `edges`、id 优先、数字端点、找不到的连线；没有连线；两个和弦图（色板接着取）。
+- **图例** 2 个：`selected` 关掉 B（连同它的三条连线，重新布局，颜色不动）；三个图例动作之后的图。
+- **状态** 4 个：默认 adjacency 下高亮 / 取消节点与连线；声明的 emphasis / blur 样式；标签平时隐藏、只在 emphasis 显示；`'self'`、逐边 `'none'`、逐节点 `'series'`。
+- **指针** 3 个：悬停节点与飘带（emphasis、邻接 blur、提示框）、点击节点与飘带；图例滤掉 B 之后的连线（原始下标与数据下标不同，含自环）；无名节点、没有值的节点与连线。
+- **换算** 1 个；**动画** 4 个：默认、改了时长 / 缓动 / 延迟 / 圆心 / 环内标签、`animationDelay` 是函数（组没有下标，标签有）、标签关。
+
+自检（任何一条不过就不写文件、退出 1）：R1 每个节点和每条连线的布局由 `chordLayout` 的抄写重算逐位一致、R2 每条飘带的 PathProxy 数据由 `buildPath`（加 `normalizeArcAngles`）重算一致、R3 每个标签的位置、对齐由 `_updateLabel` 重算一致、R4 每条全局渐变的两点是两段弧弦的中点；四十多条区分事实（默认半径与起点、默认圆角、先节点后飘带、自环计两次、`endAngle` 不读、放大分支与 `surplusAsMuchAsPossible` 都跑到、两个截断、`'#000'` 的两种来由、字面色描边、标签取节点色、读系列名、下标文字、NaN 连线从 0 起、丢连线、没有连线不画、图例滤掉节点与连线且颜色不动、状态、提示框、点击事件、滤后的原始下标、换算全不答、组从 0.01 缩放、标签淡入、1500 ms 内全部停下）；两次生成逐字节一致；没有 `\u0000`；JSON 能读回。
+
+### 测试
+
+`test.advchart.chord`（新，注册在 `tytests.lpr`）：
+
+- **基准重放**（6 个）：图与布局（节点的键、名字、数据下标、值、角、值、`ratio`、圆、起止角；连线的行、两端、数据下标、值、名字、四个点与四个角、布局值）；扇区与飘带（扇区的圆角表与 `roundSector` 的整段 PathProxy 数据、飘带的整段 PathProxy 数据、填充——颜色、全局渐变的两点与色标、对象渐变——描边、线宽、透明度、z2；NaN 的路径要有元素、没有轮廓）；标签（显示、文字、锚点、对齐、墨色、无光晕、透明度、z2）；图例（条目与选中条目的颜色，三个动作之后的图与绘制）；状态与指针（每一步之后每个元素的 hover 标志、状态表、透明度、z2、填充与标签的显示 / 透明度，提示框显示谁——按原始下标——与读出的行，点击事件的 `dataType`、下标、名字、值）；换算。全部逐位比较。
+- **手写**（3 个）：同键节点整个不画；飘带在源弧下方命中、对面不命中；弧拆成三次曲线后端点都在圆上。
+- `test.advchart.animenter` 多一个 `TestChordEnterTimelinesAsUpstream`（组的 scaleX / scaleY 按采样逐位比，标签淡入，片段数，停下后帧等于静态表）。
+- 「还没有渲染器」的示例从 chord 搬到 custom（`test.advchart.diagnose` 的两个类型那条是 lines 加 custom）；`test.advchart.marks` 把 chord 放进「别处画」的名单、断言它有渲染器。
+
+首跑：`startAngle` 0 的起点上游是 -0（`-0 * RADIAN`，再经 `modPI2` 的 `Math.round` 与 `%` 都保着符号），端口是 +0——`normalizeArcAngles` 在单元里用 JS 的取整与取余重写一份、负号乘在常量上；图例滤掉 B 之后，悬停飘带落到了别的连线上——元素的数据下标是数据下标、状态行按原始下标，改成两个都用原始下标（上游的 `params.dataIndex` 本来就是原始的）；自环的飘带在奇偶规则下是个洞，悬停落到下面那条——命中改非零；没有值的连线上游有元素、有状态，端口原来整条不建——改成建出来、没有轮廓；给测试调路径时没屏蔽浮点异常。另有一条测试期望写错（渐变节点的标签墨色上游是渐变对象，端口取第一个色标，改成只比字符串颜色）。之后全部逐位对上。
+
+本批按规矩只跑了新套件和直接碰到的套件，全部通过：`TAdvChartChordTest`（9）、`TAdvChartAnimEnterTest`（13）、`TAdvChartMarksTest`（36）、`TAdvChartDiagnoseTest`（23）、`TAdvChartCandleRuleTest`（5）、`TAdvChartCandleDrawTest`（7）、`TAdvChartShapeTest`（46）、`TAdvChartPaintTest`（15）、`TAdvChartHitTest`（12）、`TAdvChartPolarSeriesTest`（13）、`TAdvChartSeriesTest`（28）、`TAdvChartLegendTest`（43）、`TAdvChartLegendActTest`（8）、`TAdvChartSankeyOracleTest`（2）、`TAdvChartGraphSankeyInteractOracleTest`（1）、`TAdvChartGraphSankeyInteractTest`（11）、`TAdvChartFocusBlurTest`（11）、`TAdvChartSelectOracleTest`（11）、`TAdvChartTooltipRuleTest`（19）、`TAdvChartTooltipDrawTest`（15）、`TAdvChartMouseEventsOracleTest`（3）、`TAdvChartHandlerWiringOracleTest`（9）、`TAdvChartAnimStateEngineTest`（11）、`TAdvChartAnimStateTest`（5）、`TAdvChartAnimUpdateTest`（7）、`TAdvChartAnimFullUpdateTest`（7）、`TAdvChartEmphasisRuleTest`（8）、`TAdvChartEmphasisDrawTest`（6）、`TAdvChartPieTest`（24）、`TAdvChartSunburstOracleTest`（4）。全量套件与变异轮留到里程碑（C6–C13）末尾。
+
+### 推迟与偏差
+
+- **更新动画**：保留下来的视图里扇区和飘带直接跳到新形状（上游 `updateProps` 补间形状、飘带先 `saveOldStyle`）；只有第一次渲染的组缩放与标签淡入，更新时还在跑的入场接着跑。
+- **渐变颜色的节点**：标签墨色取第一个色标（上游把渐变对象当文字填充）；emphasis 不提亮渐变（全局既有偏差）。
+- **飘带的命中**按采样的轮廓（每段三次曲线 24 步、弧每弧度 24 步）与非零规则，上游按精确路径；画家把弧画成不超过四分之一圈的三次曲线。
+- 同键节点上游抛错，端口整个系列不画（与桑基图一样）。
+- 连线的 `lineStyle.type`（虚线）、阴影、`decal` 不读；颜色词（`'source'` 等）配上大于 0 的 `width` 时上游把这个词当描边色交给画布（它不是合法颜色），端口不描边。
+- 圆角和像素的圆心 / 半径不按 PPI 换算（标签的 `distance` 换算），只在 96 之外有差别。
+- 系列自己的名字被图例关掉时上游的 `legendFilter` 会把整个系列滤掉，端口和饼图一样只按数据名过滤。
+- 标签模板里的 `{@dim}` 不替换。
+
+### 落地
+
+- `source/tyControls.AdvChart.Chord.pas`（新，进 `tycontrols.lpk` 与 `tycontrols.pas`）。
+- `source/tyControls.AdvChart.PolarBar.pas`：导出 `TyPolarCornerSpecOf`。`Shape.pas`：`HitNonZero`。`Paint.pas`：`carChord`。`AnimView.pas`：`chordGroup` 的入场、帧与更新。`Series.pas`：chord 按数据项进图例。`Marks.pas`：「别处画」。
+- `source/tyControls.AdvanceChart.pas`：上面「控件」一条的全部。
+- `tools/advchart-oracle/chord.js`、`tests/fixtures/advchart-chord.json`、`tests/test.advchart.chord.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.animenter.pas`、`test.advchart.marks.pas`、`test.advchart.diagnose.pas`、`test.advchart.candlestick.pas`。
+- §1、§39 在原处标注。没有新主题键、新度量或新资源串。

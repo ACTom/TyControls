@@ -116,6 +116,9 @@ function TyPolarCornerList(const ASpec: TTyPolarCornerSpec;
   const S: TTyPolarSector): TTyDoubleArray;
 { the background's: backgroundStyle.borderRadius || 0, never a percentage }
 function TyPolarCornerRaw(const ASpec: TTyPolarCornerSpec): TTyDoubleArray;
+{ `borderRadius` as written -- a number, a string, a list of up to four --
+  read into a spec (nil or null: not given) [Batch 120: a chord's sectors] }
+function TyPolarCornerSpecOf(D: TJSONData): TTyPolarCornerSpec;
 { roundSector's normalizeCornerRadius: four, from one to four given }
 function TyPolarCornerFour(const AList: TTyDoubleArray; out A: TTyCornerRadii): Boolean;
 
@@ -267,6 +270,11 @@ begin
     Result.Count := 1;
     CornerItem(D, Result, 0);
   end;
+end;
+
+function TyPolarCornerSpecOf(D: TJSONData): TTyPolarCornerSpec;
+begin
+  Result := CornerSpecOf(D);
 end;
 
 function StyleKey(ANode: TJSONObject; const ABlock, AKey: string): TJSONData;

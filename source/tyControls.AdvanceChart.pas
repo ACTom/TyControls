@@ -64,6 +64,7 @@ uses
   tyControls.AdvChart.Convert, tyControls.AdvChart.Jitter,
   tyControls.AdvChart.Polar, tyControls.AdvChart.PolarBar,
   tyControls.AdvChart.Single, tyControls.AdvChart.ThemeRiver,
+  tyControls.AdvChart.Chord,
   fpjson, contnrs, tyControls.SubPixel;
 
 const
@@ -224,7 +225,10 @@ type
       second set of rows (EdgeRows) }
     sskSankey,
     { [Batch 118] a themeRiver's layer polygon, under the row its index is }
-    sskRiver);
+    sskRiver,
+    { [Batch 120] a chord: node sectors by the store's raw rows, and its
+      ribbons in the second set of rows (EdgeRows) by raw link index }
+    sskChord);
   TTyStNodeArray = array of TJSONObject;
   TTyStSeries = record
     Kind: TTyStKind;
@@ -488,6 +492,9 @@ type
     { THE SANKEYS and their inks, per slot. [Batch 79] }
     FSankeys: array of TTySankeySolved;
     FSankeyInks: array of TTySankeyInk;
+    { THE CHORDS and their inks, per slot. [Batch 120] }
+    FChords: array of TTyChordSolved;
+    FChordInks: array of TTyChordInk;
     { ONE VIEW PER GRAPH SERIES, not one per component: a graph's coordinate
       system belongs to the series, so these are indexed by BINDING slot and
       most of them are nil. A graph on AXES has none either -- its coordinate
@@ -1358,6 +1365,7 @@ type
     procedure SolveSunbursts(APPI: Integer);
     procedure SolveTreemaps(const AMeasurer: ITyTextMeasurer; APPI: Integer);
     procedure SolveSankeys(APPI: Integer);
+    procedure SolveChords(APPI: Integer);
     function TreemapInk(ASlot: Integer): TTyTreemapInk;
     function SunburstInk(ASlot: Integer): TTySunburstInk;
     function TreeInk(ASlot: Integer): TTyTreeInk;
@@ -1884,6 +1892,11 @@ type
     function StNodes(ASeriesIndex, ARaw: Integer): TTyStNodeArray;
     function StEdgeNodes(ASeriesIndex, AEdge: Integer): TTyStNodeArray;
     function StIsSankey(ASeriesIndex: Integer): Boolean;
+    { [Batch 120] a chord; a series with an edge data's rows (a sankey's,
+      a chord's) }
+    function StIsChord(ASeriesIndex: Integer): Boolean;
+    function StHasEdges(ASeriesIndex: Integer): Boolean;
+    procedure StDeclareChordEdge(ASlot, AEdge: Integer; AList: TTyPaintList);
     procedure StSankeyCurveFill(ASlot, AEdge: Integer;
       const ANodes: TTyStNodeArray; const AState: string; var AObj: TTyStObject);
     procedure StDeclareEdge(ASlot, AEdge: Integer; AList: TTyPaintList);
@@ -2176,6 +2189,8 @@ type
       has no element the state machine speaks for. }
     { a sankey link's state record, by link index [Batch 114] }
     function SankeyEdgeStates(ASeriesIndex, AEdge: Integer; out AItem: TTyStItem): Boolean;
+    { a chord ribbon's state record, by raw link index [Batch 120] }
+    function ChordEdgeStates(ASeriesIndex, AEdge: Integer; out AItem: TTyStItem): Boolean;
     { a force graph's preserved state and running instance [Batch 114] }
     function GraphForceState(ASeriesIndex: Integer): TTyGraphForceState;
     function ItemStates(ASeriesIndex, ADataIndex: Integer;
@@ -2325,6 +2340,8 @@ type
       ALocalX: Double; AHasY: Boolean; ALocalY: Double): Boolean;
     { the solved sankey, for a test to read (Valid False: none) [Batch 114] }
     function SankeySolved(ASeriesIndex: Integer): TTySankeySolved;
+    { the solved chord, for a test to read (Valid False: none) [Batch 120] }
+    function ChordSolved(ASeriesIndex: Integer): TTyChordSolved;
     { ---- the drill-downs [Batch 115] ---- }
     { upstream's sunburstRootToNode on the sunburst ASeriesIndex: the view
       root becomes ARow (a row of its tree; 0 the root) -- what a click on a
@@ -2700,6 +2717,8 @@ begin
   FTreemapInks := nil;
   FSankeys := nil;
   FSankeyInks := nil;
+  FChords := nil;
+  FChordInks := nil;
   FRadarDims := nil;
   FreeStores;
   FBindings := nil;
@@ -3568,6 +3587,13 @@ begin
         TyGraphFillStore(FOption, i, st);
         Continue;
       end;
+      { A CHORD'S NODES are its rows the graph's way too: `data || nodes`,
+        one value column, the names the legend lists [Batch 120] }
+      if FBindings[i].SeriesType = TyChordSeriesTypeName then
+      begin
+        TyGraphFillStore(FOption, i, st);
+        Continue;
+      end;
       { A TREE'S ROWS ARE ITS HIERARCHY IN PRE-ORDER under a virtual root --
         never the top-level `data` alone, which would lose every child. Before
         the calendar's branch: a tree on a calendar keeps its own rows.
@@ -3821,7 +3847,9 @@ begin
     if not ((typ = 'bar') or (typ = 'line') or (typ = 'scatter')
       or (typ = 'effectScatter') or (typ = 'pictorialBar')
       or (typ = TyPieSeriesTypeName) or (typ = 'funnel') or (typ = 'gauge')
-      or (typ = 'radar') or (typ = TyThemeRiverSeriesTypeName)) then Continue;
+      or (typ = 'radar') or (typ = TyThemeRiverSeriesTypeName)
+      { a chord's nodes, colorBy 'data' by default [Batch 120] }
+      or (typ = TyChordSeriesTypeName)) then Continue;
     cb := TyChartColorByOf(FOption, si, typ);
     if cb = 'series' then Continue;
     { the scope first, whether or not a row asks: upstream hands every such
@@ -3888,7 +3916,13 @@ begin
   if FBindings[ASlot].SeriesType = TyThemeRiverSeriesTypeName then Exit;
   d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if not (d is TJSONObject) then Exit;
-  d := TJSONObject(d).Find('data');
+  { a chord's nodes are `data || nodes` [Batch 120] }
+  if (FBindings[ASlot].SeriesType = TyChordSeriesTypeName)
+    and ((TJSONObject(d).Find('data') = nil)
+      or (TJSONObject(d).Find('data').JSONType = jtNull)) then
+    d := TJSONObject(d).Find('nodes')
+  else
+    d := TJSONObject(d).Find('data');
   if not (d is TJSONArray) then Exit;
   if (ARaw < 0) or (ARaw >= TJSONArray(d).Count) then Exit;
   d := TJSONArray(d).Items[ARaw];
@@ -4359,6 +4393,7 @@ begin
   SolveSunbursts(APPI);
   SolveTreemaps(AMeasurer, APPI);
   SolveSankeys(APPI);
+  SolveChords(APPI);
   SolveTitles(AMeasurer, APPI);
   SolveLegends(AMeasurer, APPI);
   SolveVisualMapViews(AMeasurer, APPI);
@@ -8258,6 +8293,15 @@ begin
   Result := FSankeys[slot];
 end;
 
+function TTyAdvanceChart.ChordSolved(ASeriesIndex: Integer): TTyChordSolved;
+var slot: Integer;
+begin
+  Result := Default(TTyChordSolved);
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FChords)) then Exit;
+  Result := FChords[slot];
+end;
+
 function TTyAdvanceChart.SankeyView(ASeriesIndex: Integer): TTyGraphView;
 var slot: Integer;
 begin
@@ -11951,6 +11995,71 @@ begin
   end;
 end;
 
+{ THE CHORDS [Batch 120]: each laid out on the whole canvas over the nodes
+  the legend kept (the store's view), its nodes coloured by the per-datum
+  palette -- an object fill where the datum wrote one -- and labelled. }
+procedure TTyAdvanceChart.SolveChords(APPI: Integer);
+var
+  i, k: Integer;
+  kept: TTyBoolArray;
+  st: TTyDataStore;
+  perRaw: TTyChartColorArray;
+  obj: TTyChartObjFill;
+  base: TTyLabelSpec;
+begin
+  FChords := nil;
+  FChordInks := nil;
+  SetLength(FChords, Length(FBindings));
+  SetLength(FChordInks, Length(FBindings));
+  for i := 0 to High(FBindings) do
+  begin
+    FChords[i] := Default(TTyChordSolved);
+    FChordInks[i] := Default(TTyChordInk);
+    if FBindings[i].SeriesType <> TyChordSeriesTypeName then Continue;
+    if FBindings[i].Hidden then Continue;
+    st := nil;
+    if i <= High(FStores) then st := FStores[i];
+    kept := nil;
+    if st <> nil then
+    begin
+      SetLength(kept, st.RawCount);
+      for k := 0 to st.RawCount - 1 do kept[k] := st.IndexOfRawIndex(k) >= 0;
+    end;
+    FChords[i] := TyChordSolve(FOption, FBindings[i].SeriesIndex, FLastRect, APPI, kept);
+    if not FChords[i].Valid then Continue;
+    { the colour visual: the palette's pick or the datum's own colour, a
+      gradient where one was written (not a string: no gradient ribbon) }
+    perRaw := PerDatumColours(i);
+    for k := 0 to High(FChords[i].Nodes) do
+    begin
+      if k <= High(perRaw) then
+      begin
+        FChords[i].Nodes[k].HasColour := True;
+        FChords[i].Nodes[k].IsString := True;
+        FChords[i].Nodes[k].Colour := perRaw[k];
+      end;
+      obj := DatumObjectFill(i, k);
+      if obj.Present then
+      begin
+        FChords[i].Nodes[k].IsString := False;
+        if obj.Gradient.Kind <> cgkNone then
+        begin
+          FChords[i].Nodes[k].HasGradient := True;
+          FChords[i].Nodes[k].Gradient := obj.Gradient;
+          FChords[i].Nodes[k].Colour := TyGradientSolid(obj.Gradient);
+        end;
+      end;
+    end;
+    { the labels: shown and outside by default, the chart's label font }
+    base := LabelBaseFor(i);
+    base.Show := True;
+    base.DefaultText := tldName;
+    FChordInks[i].Label_ := TyLabelSpecOf(FOption, FBindings[i].SeriesIndex, base);
+    FChordInks[i].ItemLabels := TyChordLabelSpecs(FChords[i], FChordInks[i].Label_);
+    TyChordLabels(FChords[i], SeriesModelName(FBindings[i].SeriesIndex));
+  end;
+end;
+
 { A TREEMAP'S INK: its labels in their own key's ink -- white over the
   palette in every mode, never the auto bands -- read item -> level ->
   series; after the rows, the breadcrumb's words, and its chip. }
@@ -14759,6 +14868,22 @@ begin
         end;
         Continue;
       end;
+      { A CHORD: its sectors, its ribbons, its label requests [Batch 120] }
+      if FBindings[i].SeriesType = TyChordSeriesTypeName then
+      begin
+        if (i <= High(FChords)) and FChords[i].Valid then
+        begin
+          Inc(drawn, TyBuildChordMarks(FBindings[i].SeriesIndex, FChords[i],
+            FChordInks[i], list));
+          if Length(specs) <= FBindings[i].SeriesIndex then
+            SetLength(specs, FBindings[i].SeriesIndex + 1);
+          specs[FBindings[i].SeriesIndex] := FChordInks[i].Label_;
+          if Length(itemSpecs) <= FBindings[i].SeriesIndex then
+            SetLength(itemSpecs, FBindings[i].SeriesIndex + 1);
+          itemSpecs[FBindings[i].SeriesIndex] := FChordInks[i].ItemLabels;
+        end;
+        Continue;
+      end;
       if FBindings[i].SeriesType = TyTreemapSeriesTypeName then
       begin
         if (i <= High(FTreemaps)) and FTreemaps[i].Valid then
@@ -16002,6 +16127,17 @@ begin
       Result := FSankeys[slot].Nodes[ADatum.DataIndex].Colour;
     Exit;
   end;
+  { A CHORD NODE: its colour visual; a ribbon has none (params.color is
+    undefined for the edge data) [Batch 120] }
+  if (FBindings[slot].SeriesType = TyChordSeriesTypeName)
+    and (slot <= High(FChords)) and FChords[slot].Valid then
+  begin
+    if (not ADatum.IsEdge) and (ADatum.RawDataIndex >= 0)
+      and (ADatum.RawDataIndex <= High(FChords[slot].Nodes))
+      and FChords[slot].Nodes[ADatum.RawDataIndex].HasColour then
+      Result := FChords[slot].Nodes[ADatum.RawDataIndex].Colour;
+    Exit;
+  end;
   { A GRAPH LINK'S COLOUR IS ITS STROKE, found by its own row. }
   if ADatum.IsEdge then
   begin
@@ -16080,6 +16216,8 @@ var
   cols: TTyIntegerArray;
   st: TTyDataStore;
   pct: TTyDoubleArray;
+  tv: Double;
+  tvText: string;
 begin
   if TipIsMarker(ADatum) then Exit(MarkerTooltipParams(ADatum));
   Result := TyChartBlankParams;
@@ -16095,10 +16233,26 @@ begin
   if slot > High(FStores) then Exit;
   st := FStores[slot];
   if st = nil then Exit;
-  if Result.SeriesType = TyGraphSeriesTypeName then
+  if (Result.SeriesType = TyGraphSeriesTypeName)
+    or (Result.SeriesType = TyChordSeriesTypeName) then
   begin
     if ADatum.IsEdge then Result.DataType := 'edge'
     else Result.DataType := 'node';
+  end;
+  { A CHORD LINK: the edge data's params -- its name (the link's id, else
+    `source > target` as written) and its own value [Batch 120] }
+  if ADatum.IsEdge and (Result.SeriesType = TyChordSeriesTypeName) then
+  begin
+    if (slot > High(FChords)) or not FChords[slot].Valid then Exit;
+    if (ADatum.RawDataIndex < 0) or (ADatum.RawDataIndex > High(FChords[slot].Edges)) then Exit;
+    Result.Name := FChords[slot].Edges[ADatum.RawDataIndex].Name;
+    if TyChordEdgeRawValue(FChords[slot], ADatum.RawDataIndex, tv, tvText)
+      and not IsNan(tv) then
+    begin
+      SetLength(Result.Values, 1);
+      Result.Values[0] := tv;
+    end;
+    Exit;
   end;
   { A GRAPH LINK IS NAMED BY ITS TWO ENDS, `source > target`, each the name
     upstream's getName answers -- so a link between two bare numbers on a
@@ -16761,6 +16915,8 @@ var
   p: TTyChartCallbackParams;
   n, d: TJSONData;
   st: string;
+  cv: Double;
+  cvText: string;
 begin
   Result := Default(TTyChartEventTarget);
   Result.Id := AElement + 1;
@@ -16787,6 +16943,12 @@ begin
     else if p.Raw.Shape <> rshNone then
       p.ValueText := TyRawItemText(p.Raw);
     if p.ValueText = 'undefined' then p.ValueText := '';
+    { a chord node's getDataParams: `params.value == null` takes the
+      layout's value [Batch 120] }
+    if (not ADatum.IsEdge) and (st = TyChordSeriesTypeName)
+      and (slot <= High(FChords)) and FChords[slot].Valid
+      and TyChordNodeValue(FChords[slot], ADatum.RawDataIndex, cv, cvText) then
+      p.ValueText := cvText;
     if (st = TyTreemapSeriesTypeName) or (st = TySunburstSeriesTypeName)
       or (st = TyTreeSeriesTypeName) then
       p.DataType := 'main';
@@ -17593,7 +17755,8 @@ begin
   else if t = TySunburstSeriesTypeName then Result := sskSunburst
   else if t = 'boxplot' then Result := sskBox
   else if t = TySankeySeriesTypeName then Result := sskSankey
-  else if t = TyThemeRiverSeriesTypeName then Result := sskRiver;
+  else if t = TyThemeRiverSeriesTypeName then Result := sskRiver
+  else if t = TyChordSeriesTypeName then Result := sskChord;
   { a line on a calendar is not drawn at all }
   if (FBindings[ASlot].CalendarIndex >= 0) and (t = 'line') then Result := sskNone;
 end;
@@ -17618,6 +17781,13 @@ begin
     if (ARaw >= 0) and (ARaw <= High(FSunbursts[slot].Hier.Nodes))
       and (FSunbursts[slot].Hier.Nodes[ARaw].Item is TJSONObject) then
       Result := TJSONObject(FSunbursts[slot].Hier.Nodes[ARaw].Item);
+    Exit;
+  end;
+  { A CHORD'S NODE: its item of `data || nodes` [Batch 120] }
+  if (slot >= 0) and (slot <= High(FChords)) and FChords[slot].Valid then
+  begin
+    if (ARaw >= 0) and (ARaw <= High(FChords[slot].Nodes)) then
+      Result := FChords[slot].Nodes[ARaw].Obj;
     Exit;
   end;
   s := StSeriesNode(ASeriesIndex);
@@ -18135,6 +18305,25 @@ begin
     end
     else
       k := FStores[slot].RawCount;
+    { A CHORD: its nodes the store's rows, its ribbons by raw link index
+      [Batch 120] }
+    if FSt[s].Kind = sskChord then
+    begin
+      if (slot > High(FChords)) or not FChords[slot].Valid then
+      begin
+        FSt[s].Kind := sskNone;
+        Continue;
+      end;
+      n := Length(FChords[slot].Edges);
+      if Length(FSt[s].EdgeRows) < n then SetLength(FSt[s].EdgeRows, n);
+      SetLength(FSt[s].EdgeHostIdx, n);
+      SetLength(FSt[s].EdgeLabelIdx, n);
+      for i := 0 to n - 1 do
+      begin
+        FSt[s].EdgeHostIdx[i] := -1;
+        FSt[s].EdgeLabelIdx[i] := -1;
+      end;
+    end;
     if Length(FSt[s].Rows) < k then SetLength(FSt[s].Rows, k);
     SetLength(FSt[s].HostIdx, k);
     SetLength(FSt[s].LabelIdx, k);
@@ -18190,6 +18379,16 @@ begin
       end
       else if not el.Silent and (FSt[s].HostIdx[raw] < 0) then
         FSt[s].HostIdx[raw] := k;
+      Continue;
+    end;
+    { a chord's ribbon, by its raw link index [Batch 120] }
+    if el.Datum.IsEdge and (FSt[s].Kind = sskChord) then
+    begin
+      raw := el.Datum.RawDataIndex;
+      if (raw < 0) or (raw > High(FSt[s].EdgeHostIdx)) then Continue;
+      if (el.Caption.FontSizeLogical = 0) and not el.Silent
+        and (FSt[s].EdgeHostIdx[raw] < 0) then
+        FSt[s].EdgeHostIdx[raw] := k;
       Continue;
     end;
     if el.Datum.IsEdge then Continue;
@@ -18282,6 +18481,13 @@ begin
           FSt[s].EdgeRows[raw] := Default(TTyStItem)
         else
           StDeclareEdge(slot, raw, AList);
+    { a chord's ribbons [Batch 120] }
+    if FSt[s].Kind = sskChord then
+      for raw := 0 to High(FSt[s].EdgeRows) do
+        if (raw > High(FSt[s].EdgeHostIdx)) or (FSt[s].EdgeHostIdx[raw] < 0) then
+          FSt[s].EdgeRows[raw] := Default(TTyStItem)
+        else
+          StDeclareChordEdge(slot, raw, AList);
   end;
   FStDirty := False;
   StWrite(AList);
@@ -18863,6 +19069,13 @@ begin
         StAnimEl(item^.Guide, FSt[s].GuideIdx[raw], s, raw, 'guide', cStPxGuide,
           cfg, hasCfg, over);
     end;
+    { A CHORD'S RIBBONS have states of their own, each its own proxy
+      (the series' view group is their role) [Batch 120] }
+    if FSt[s].Kind = sskChord then
+      for raw := 0 to Min(High(FSt[s].EdgeHostIdx), High(FSt[s].EdgeRows)) do
+        if (FSt[s].EdgeHostIdx[raw] >= 0) and FSt[s].EdgeRows[raw].Host.Exists then
+          StAnimEl(FSt[s].EdgeRows[raw].Host, FSt[s].EdgeHostIdx[raw], s, raw,
+            'edge', cStPxPath, cfg, hasCfg, over);
     { a line's polyline and area: one element each upstream, its runs here }
     if FSt[s].Run.Host.Exists and (Length(FSt[s].RunIdx) > 0) then
     begin
@@ -19001,6 +19214,14 @@ begin
   Result := nil;
   SetLength(Result, 3);
   slot := SlotOfSeries(ASeriesIndex);
+  { A CHORD LINK'S CHAIN: its item, the series (no levels) [Batch 120] }
+  if (slot >= 0) and (slot <= High(FChords)) and FChords[slot].Valid then
+  begin
+    if (AEdge >= 0) and (AEdge <= High(FChords[slot].Edges)) then
+      Result[0] := FChords[slot].Edges[AEdge].Item;
+    Result[2] := StSeriesNode(ASeriesIndex);
+    Exit;
+  end;
   if (slot >= 0) and (slot <= High(FSankeys)) and FSankeys[slot].Valid
     and (AEdge >= 0) and (AEdge <= High(FSankeys[slot].Edges)) then
   begin
@@ -19015,6 +19236,73 @@ function TTyAdvanceChart.StIsSankey(ASeriesIndex: Integer): Boolean;
 begin
   Result := (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSt))
     and (FSt[ASeriesIndex].Kind = sskSankey);
+end;
+
+function TTyAdvanceChart.StIsChord(ASeriesIndex: Integer): Boolean;
+begin
+  Result := (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSt))
+    and (FSt[ASeriesIndex].Kind = sskChord);
+end;
+
+function TTyAdvanceChart.StHasEdges(ASeriesIndex: Integer): Boolean;
+begin
+  Result := StIsSankey(ASeriesIndex) or StIsChord(ASeriesIndex);
+end;
+
+{ ONE CHORD RIBBON INTO THE STATE MACHINE [Batch 120]: a path whose states
+  are setStatesStylesFromModel(el, edgeModel, 'lineStyle') -- getLineStyle
+  of [state].lineStyle along link -> series: the colour a STROKE, the width
+  its width -- the series' emphasis opacity 0.5 under what is declared. It
+  has no label. }
+procedure TTyAdvanceChart.StDeclareChordEdge(ASlot, AEdge: Integer; AList: TTyPaintList);
+var
+  s: Integer;
+  item: PTyStItem;
+  host: TTyChartElement;
+  nodes: TTyStNodeArray;
+  has, bolder, disabled, prevWas: Boolean;
+  prev: TTyStNames;
+  n: TTyStName;
+begin
+  s := FBindings[ASlot].SeriesIndex;
+  item := @FSt[s].EdgeRows[AEdge];
+  host := AList.Element(FSt[s].EdgeHostIdx[AEdge]);
+  nodes := StEdgeNodes(s, AEdge);
+  prevWas := item^.Host.Exists;
+  prev := item^.Host.States;
+  item^.Host.Exists := True;
+  item^.Host.IsPath := True;
+  disabled := TyStReadBool(nodes, ['emphasis', 'disabled'], has);
+  item^.Host.Proxy := not disabled;
+  for n := Low(TTyStName) to High(TTyStName) do item^.Host.HasState[n] := True;
+  item^.Host.Rest := StRestOf(host);
+  for n := Low(TTyStName) to High(TTyStName) do
+    item^.Host.Decl[n] := TyStReadStyle(nodes, cStNames[n], 'lineStyle', bolder);
+  { ChordSeries' defaultOption: emphasis.lineStyle.opacity 0.5 }
+  if not item^.Host.Decl[stnEmphasis].Has[stkOpacity] then
+    TyStSetNum(item^.Host.Decl[stnEmphasis], stkOpacity, 0.5);
+  item^.Label_ := Default(TTyStElement);
+  if not prevWas then
+  begin
+    item^.Host.Cur := item^.Host.Rest;
+    item^.Host.States := [];
+  end
+  else if FStRerender then
+  begin
+    TyStClearItem(item^);
+    if prev <> [] then TyStUseItemStates(item^, prev);
+  end;
+  TyStApplyItem(item^);
+end;
+
+function TTyAdvanceChart.ChordEdgeStates(ASeriesIndex, AEdge: Integer;
+  out AItem: TTyStItem): Boolean;
+begin
+  AItem := Default(TTyStItem);
+  Result := StIsChord(ASeriesIndex) and (AEdge >= 0)
+    and (AEdge <= High(FSt[ASeriesIndex].EdgeRows))
+    and FSt[ASeriesIndex].EdgeRows[AEdge].Host.Exists;
+  if Result then AItem := FSt[ASeriesIndex].EdgeRows[AEdge];
 end;
 
 { applyCurveStyle on a state's style: 'source' / 'target' take that end
@@ -19143,6 +19431,19 @@ begin
       Result.Indices, Result.EdgeIndices);
     Exit;
   end;
+  { A CHORD NODE'S 'adjacency' -- the series' default -- is getAdjacentData-
+    Indices: its kept links and their ends (ChordPiece) [Batch 120] }
+  if StIsChord(ASeriesIndex) then
+  begin
+    if (d = nil) or ((d.JSONType = jtString) and (d.AsString = 'adjacency')) then
+    begin
+      Result := Default(TTyStFocus);
+      Result.Kind := sfkIndices;
+      TyChordFocusSets(FChords[slot], False, ARaw, Result.Indices, Result.EdgeIndices);
+      Exit;
+    end;
+    Exit(TyStFocusOf(d));
+  end;
   if not ((slot >= 0) and (slot <= High(FSunbursts)) and FSunbursts[slot].Valid
     and (ARaw >= 0) and (ARaw <= High(FSunbursts[slot].Hier.Nodes))) then
     Exit(TyStFocusOf(d));
@@ -19193,6 +19494,19 @@ begin
   d := TyStFind(nodes, ['emphasis', 'focus']);
   AScope := TyStScopeOf(TyStFind(nodes, ['emphasis', 'blurScope']));
   slot := SlotOfSeries(ASeriesIndex);
+  { A CHORD RIBBON'S 'adjacency' -- the series' default -- itself and its two
+    ends (ChordEdge) [Batch 120] }
+  if StIsChord(ASeriesIndex) then
+  begin
+    if (d = nil) or ((d.JSONType = jtString) and (d.AsString = 'adjacency')) then
+    begin
+      Result := Default(TTyStFocus);
+      Result.Kind := sfkIndices;
+      TyChordFocusSets(FChords[slot], True, AEdge, Result.Indices, Result.EdgeIndices);
+      Exit;
+    end;
+    Exit(TyStFocusOf(d));
+  end;
   if (d <> nil) and (d.JSONType = jtString)
     and ((d.AsString = 'adjacency') or (d.AsString = 'trajectory')) then
   begin
@@ -19334,8 +19648,9 @@ begin
   begin
     if ATarget.HdEdge then
     begin
-      { a sankey link is a dispatcher of its own [Batch 114] }
-      if not StIsSankey(s) then Exit;
+      { a sankey link is a dispatcher of its own [Batch 114]; a chord
+        ribbon too [Batch 120] }
+      if not StHasEdges(s) then Exit;
       if (ATarget.HdRow < 0) or (ATarget.HdRow > High(FSt[s].EdgeRows)) then Exit;
       AItem := @FSt[s].EdgeRows[ATarget.HdRow];
       if not AItem^.Host.Exists or not AItem^.Host.Proxy then Exit;
@@ -19496,7 +19811,7 @@ begin
   d := FPaintList.Element(AIndex).Datum;
   if d.IsEdge then
   begin
-    Result := StIsSankey(d.SeriesIndex) and (d.DataIndex >= 0)
+    Result := StHasEdges(d.SeriesIndex) and (d.DataIndex >= 0)
       and (d.DataIndex <= High(FSt[d.SeriesIndex].EdgeRows))
       and (stnEmphasis in FSt[d.SeriesIndex].EdgeRows[d.DataIndex].Host.States);
     Exit;
@@ -19965,7 +20280,8 @@ var
   begin
     AIdx := nil;
     Result := False;
-    if not StIsSankey(ASeries) then Exit;
+    { a chord's links too, by their raw index [Batch 120] }
+    if not StHasEdges(ASeries) then Exit;
     x := APayload.Find('dataType');
     if not ((x <> nil) and (x.JSONType = jtString) and (x.AsString = 'edge')) then Exit;
     Result := True;
@@ -25219,6 +25535,7 @@ var
   st, nm, valueText: string;
   item, d: TJSONData;
   v: Double;
+  has: Boolean;
 begin
   ABlock := nil;
   Result := False;
@@ -25302,6 +25619,38 @@ begin
     ABlock := TTyTooltipBlock.CreateSection('', True);
     ABlock.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, nm, False,
       TyTooltipValueText(v), IsNan(v)));
+    Exit;
+  end;
+
+  { CHORD: a bare nameValue (ChordSeries.formatTooltip). A node: its name
+    ('-' without one) and its value -- the raw one, else the layout's; a
+    link: its two nodes' names joined by ' > ' and its own value, none when
+    it has none [Batch 120] }
+  if (st = TyChordSeriesTypeName) and (slot <= High(FChords))
+    and FChords[slot].Valid then
+  begin
+    if ADatum.IsEdge then
+    begin
+      row := ADatum.RawDataIndex;
+      if (row < 0) or (row > High(FChords[slot].Edges)) then Exit;
+      nm := FChords[slot].Nodes[FChords[slot].Edges[row].Source].Name + ' > '
+        + FChords[slot].Nodes[FChords[slot].Edges[row].Target].Name;
+      has := TyChordEdgeRawValue(FChords[slot], row, v, valueText);
+    end
+    else
+    begin
+      row := ADatum.RawDataIndex;
+      if (row < 0) or (row > High(FChords[slot].Nodes)) then Exit;
+      nm := FChords[slot].Nodes[row].Name;
+      has := TyChordNodeValue(FChords[slot], row, v, valueText);
+    end;
+    { makeValueReadable: a number grouped, a string as it is ('-' blank) }
+    if has and not IsNan(v) then valueText := TyTooltipValueText(v)
+    else if has and (Trim(valueText) = '') then valueText := '-';
+    Result := True;
+    ABlock := TTyTooltipBlock.CreateSection('', True);
+    ABlock.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, TipRowName(nm), False,
+      valueText, not has));
   end;
 end;
 
@@ -26258,7 +26607,9 @@ begin
       LabelManager fades all the same }
     r.LabelFade := (t = 'bar') or (t = 'scatter') or (t = 'heatmap')
       or (t = TyPieSeriesTypeName) or (t = TyFunnelSeriesTypeName)
-      or (t = 'effectScatter') or (t = TyThemeRiverSeriesTypeName);
+      or (t = 'effectScatter') or (t = TyThemeRiverSeriesTypeName)
+      { a chord's node labels [Batch 120] }
+      or (t = TyChordSeriesTypeName);
     { A SUNBURST'S DRILL-DOWN: its pieces transition, its new labels fade
       [Batch 115] }
     r.HierDrill := (si <= High(FHierDrill)) and FHierDrill[si];

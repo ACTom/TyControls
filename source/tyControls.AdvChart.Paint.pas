@@ -572,7 +572,11 @@ type
       G[0..3] its path's bounding rect in the view group's frame (x, y,
       width, height) -- what the enter clip is made from -- and G[4] the
       group's y }
-    carRiver);
+    carRiver,
+    { [Batch 120, C11] a chord's sector or ribbon: the view group's enter
+      scale, one proxy for the series (Index -1); G[0..1] the group's
+      origin, the centre option against the whole canvas }
+    carChord);
 
   TTyChartAnim = record
     Role: TTyChartAnimRole;

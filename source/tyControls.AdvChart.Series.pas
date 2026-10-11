@@ -871,8 +871,9 @@ end;
 
 function TySeriesLegendByDatum(const AType: string): Boolean;
 const
-  { a themeRiver's legend names its layers, the rows' names [Batch 118] }
-  cByDatum: array[0..3] of string = ('pie', 'funnel', 'radar', 'themeRiver');
+  { a themeRiver's legend names its layers, the rows' names [Batch 118]; a
+    chord's its nodes (LegendVisualProvider over the node data) [Batch 120] }
+  cByDatum: array[0..4] of string = ('pie', 'funnel', 'radar', 'themeRiver', 'chord');
 var i: Integer;
 begin
   for i := 0 to High(cByDatum) do
