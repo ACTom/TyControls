@@ -10517,6 +10517,8 @@ type
     property SelStart;
     property SelEnd;
     property ShowSelRange;
+    property TickLabels;
+    property OnFormatTickLabel;
   end;
 
   TGenTrackEdit = class(TTyCustomTrackEdit)

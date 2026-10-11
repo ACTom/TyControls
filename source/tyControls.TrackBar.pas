@@ -16,6 +16,51 @@ type
     is expressed. }
   TTyTrackTickStyle = (ttsNone, ttsAuto, ttsManual);
 
+  { Hands the text of one tick label to the application before it is measured and drawn:
+    "Jan" for 1, "$100" for 100. An empty AText leaves that tick without a label. }
+  TTyTrackTickLabelEvent = procedure(Sender: TObject; AValue: Integer; var AText: string) of object;
+
+  { One label that survived the overlap pass of TyLayoutTrackTicks. Lead is where its leading
+    edge sits along the track, in device pixels from the track's origin (the same origin as the
+    thumb offset); Size is the measured text. }
+  TTyTrackTickLabel = record
+    Value: Integer;
+    Text: string;
+    Size: TSize;
+    Lead: Integer;
+  end;
+
+  { THE TICK BAND, shared by TTyTrackBar and the multi-thumb bars so the two cannot drift apart
+    on where a tick or its label goes. The caller fills the inputs, calls TyLayoutTrackTicks
+    (which measures the labels, drops the ones that would overlap and works out how thick the
+    strips are), reserves TickBand + LabelBand on every side TickMarks names, then calls
+    TyDrawTrackTicks with the control's rectangle.
+
+    Layout across the track, from the control's edge inwards: the label strip (LabelBand, only
+    with Labels on), the tick strip (TickBand), then the slider. With Labels off LabelBand is 0
+    and everything sits where it always did. }
+  TTyTrackTicks = record
+    { inputs }
+    Orientation: TTyTrackOrientation;
+    TickMarks: TTyTrackTickMark;
+    TickStyle: TTyTrackTickStyle;
+    Frequency: Integer;
+    Manual: array of Integer;     // ttsManual: the hand-placed values, in any order
+    Min, Max: Integer;
+    Invert: Boolean;
+    MainLen, ThumbLen: Integer;   // device px, as handed to TyTrackThumbOffset
+    Labels: Boolean;
+    FontName: string;             // the label font and colour: the control's own style,
+    FontSize, FontWeight: Integer;//   the same `color` the ticks are drawn in
+    Color: TTyColor;
+    Sender: TObject;              // passed to OnFormatLabel
+    OnFormatLabel: TTyTrackTickLabelEvent;
+    { outputs of TyLayoutTrackTicks }
+    TickBand: Integer;            // device px of the tick strip on each tick side; 0 = ttsNone
+    LabelBand: Integer;           // device px of the label strip outside it; 0 = no labels
+    Shown: array of TTyTrackTickLabel;   // the labels to draw, in track order
+  end;
+
   TTyCustomTrackBar = class(TTyCustomControl)
   private
     FMin, FMax, FPosition: Integer;
@@ -38,6 +83,11 @@ type
     { 读数文字自身的高度(跨轴方向要让出多少),同样量于绘制、缓存于此:
       AutoSize 的跨轴预期尺寸要用它,而量文字必须有 painter。 }
     FValueTextPx: Integer;
+    FTickLabels: Boolean;
+    FOnFormatTickLabel: TTyTrackTickLabelEvent;
+    { The label strip's thickness on one tick side, measured at paint time and cached for
+      CalculatePreferredSize -- the FValueTextPx arrangement, for the same reason. }
+    FTickLabelPx: Integer;
 
     FAnimEnabled: Boolean;
     FPosAnim: TTyAnimator;      // 0..1 traversal driving FAnimFrom -> FAnimTo
@@ -57,6 +107,8 @@ type
     procedure SetSelStart(const AValue: Integer);
     procedure SetSelEnd(const AValue: Integer);
     procedure SetShowSelRange(const AValue: Boolean);
+    procedure SetTickLabels(const AValue: Boolean);
+    procedure SetOnFormatTickLabel(const AValue: TTyTrackTickLabelEvent);
     function  ValueText: string;
     function ThumbWAtPPI(APPI: Integer): Integer;
     function MainLen: Integer;
@@ -162,6 +214,16 @@ type
       axis (low..high, whichever way the bar runs). False when nothing is drawn -- the rule above.
       What RenderTo fills, exposed so the geometry can be checked without counting pixels. }
     function SelRangeSpan(APPI: Integer; out ALow, AHigh: Integer): Boolean;
+    { Write each tick's value beside it, on the far side of the tick from the groove. Off by
+      default: the labels take a strip of their own across the track, and a bar already on a
+      form must not change shape. Font and colour come from the control's style -- the same
+      `color` the ticks use. Labels that would run into a neighbour are skipped; the first and
+      the last are kept (on a bar too short for even those two, only the first). The strip's
+      thickness is measured when the bar paints, so an AutoSize'd bar takes it into account
+      from its next layout on, as with ShowValue. }
+    property TickLabels: Boolean read FTickLabels write SetTickLabels default False;
+    { Change a label's text before it is drawn ("Jan", "$100"); an empty text drops that label. }
+    property OnFormatTickLabel: TTyTrackTickLabelEvent read FOnFormatTickLabel write SetOnFormatTickLabel;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 
@@ -235,10 +297,18 @@ type
     property SelStart;
     property SelEnd;
     property ShowSelRange;
+    property TickLabels;
+    property OnFormatTickLabel;
   end;
 
 function TyTrackThumbOffset(AMainLen, AThumbLen, AMin, AMax, APos: Integer; AInvert: Boolean): Integer;
 function TyTrackPosFromOffset(AMainLen, AThumbLen, AMin, AMax, AOffset: Integer; AInvert: Boolean): Integer;
+{ Fill the outputs of AT (see TTyTrackTicks): the strip thicknesses and the labels that fit.
+  Needs the painter for its scale and to measure the labels. }
+procedure TyLayoutTrackTicks(APainter: TTyPainter; var AT: TTyTrackTicks);
+{ Draw the ticks and the labels TyLayoutTrackTicks kept, against the edges of ARect (the
+  control's rectangle; the track starts at its left / top edge). }
+procedure TyDrawTrackTicks(APainter: TTyPainter; const ARect: TRect; const AT: TTyTrackTicks);
 
 implementation
 
@@ -264,6 +334,285 @@ begin
   if AOffset > travel then AOffset := travel;
   eff := (AOffset * span + travel div 2) div travel;
   if AInvert then Result := AMax - eff else Result := AMin + eff;
+end;
+
+type
+  TTrackTickAt = record
+    V: Integer;   // the tick's value
+    C: Integer;   // the thumb's centre at that value, device px along the track
+  end;
+  TTrackTickAtArray = array of TTrackTickAt;
+
+{ Every tick of AT, in the order it is generated. Which VALUES get one is TickStyle's call
+  (auto = every Frequency units from Min, manual = only the hand-placed ones); a tick sits under
+  the thumb's centre at its value, so the marks line up with where the thumb stops. }
+function TrackTickCentres(const AT: TTyTrackTicks): TTrackTickAtArray;
+var
+  arr: TTrackTickAtArray;
+  n, i, V: Integer;
+
+  procedure Add(AV: Integer);
+  begin
+    if n = Length(arr) then SetLength(arr, n * 2 + 8);
+    arr[n].V := AV;
+    arr[n].C := TyTrackThumbOffset(AT.MainLen, AT.ThumbLen, AT.Min, AT.Max, AV, AT.Invert)
+      + AT.ThumbLen div 2;
+    Inc(n);
+  end;
+
+begin
+  arr := nil;
+  n := 0;
+  if (AT.TickStyle <> ttsNone) and (AT.Max > AT.Min) then
+  begin
+    if AT.TickStyle = ttsManual then
+    begin
+      for i := 0 to High(AT.Manual) do
+      begin
+        { A tick the range has since moved past is not drawn -- TyTrackThumbOffset clamps,
+          which would otherwise pile it onto an end and invent a mark. }
+        if (AT.Manual[i] < AT.Min) or (AT.Manual[i] > AT.Max) then Continue;
+        Add(AT.Manual[i]);
+      end;
+    end
+    else if AT.Frequency > 0 then
+    begin
+      V := AT.Min;
+      while V <= AT.Max do
+      begin
+        Add(V);
+        Inc(V, AT.Frequency);
+      end;
+    end;
+  end;
+  SetLength(arr, n);
+  Result := arr;
+end;
+
+procedure TyLayoutTrackTicks(APainter: TTyPainter; var AT: TTyTrackTicks);
+var
+  ticks: TTrackTickAtArray;
+  order: array of Integer;
+  n, i, j, k, fi, li, gap, prevEnd, cross, kept: Integer;
+  first, last, lab: TTyTrackTickLabel;
+  haveLast: Boolean;
+
+  function Along(const L: TTyTrackTickLabel): Integer;
+  begin
+    if AT.Orientation = toVertical then Result := L.Size.cy else Result := L.Size.cx;
+  end;
+
+  { The label of the tick at ticks[AIdx]: text (through OnFormatLabel), measured size, and its
+    leading edge centred on the tick but kept inside the track. False = no text, no label. }
+  function MakeLabel(AIdx: Integer; out L: TTyTrackTickLabel): Boolean;
+  var
+    a: Integer;
+  begin
+    L.Value := ticks[AIdx].V;
+    L.Text := IntToStr(L.Value);
+    if Assigned(AT.OnFormatLabel) then AT.OnFormatLabel(AT.Sender, L.Value, L.Text);
+    L.Size := Default(TSize);
+    L.Lead := 0;
+    Result := L.Text <> '';
+    if not Result then Exit;
+    L.Size := APainter.MeasureText(L.Text, AT.FontName, AT.FontSize, AT.FontWeight);
+    a := Along(L);
+    L.Lead := ticks[AIdx].C - a div 2;
+    if L.Lead > AT.MainLen - a then L.Lead := AT.MainLen - a;
+    if L.Lead < 0 then L.Lead := 0;
+  end;
+
+  procedure Keep(const L: TTyTrackTickLabel);
+  begin
+    if kept = Length(AT.Shown) then SetLength(AT.Shown, kept * 2 + 4);
+    AT.Shown[kept] := L;
+    Inc(kept);
+  end;
+
+begin
+  AT.Shown := nil;
+  AT.LabelBand := 0;
+  { The tick strip: 4 px of tick and 2 of air, the strip the slider has always cleared. }
+  if AT.TickStyle = ttsNone then
+    AT.TickBand := 0
+  else
+    AT.TickBand := APainter.Scale(4) + APainter.Scale(2);
+  if not AT.Labels then Exit;
+  ticks := TrackTickCentres(AT);
+  n := Length(ticks);
+  if n = 0 then Exit;
+
+  { Labels in track order. The automatic ticks already come in order (backwards on an inverted
+    axis, hence the flip), so the insertion sort only does real work on hand-placed ones. }
+  SetLength(order, n);
+  if ticks[0].C > ticks[n - 1].C then
+    for i := 0 to n - 1 do order[i] := n - 1 - i
+  else
+    for i := 0 to n - 1 do order[i] := i;
+  for i := 1 to n - 1 do
+  begin
+    k := order[i];
+    j := i - 1;
+    while (j >= 0) and (ticks[order[j]].C > ticks[k].C) do
+    begin
+      order[j + 1] := order[j];
+      Dec(j);
+    end;
+    order[j + 1] := k;
+  end;
+
+  { The space between two labels is a space in the label font, so it follows the theme's type. }
+  gap := APainter.MeasureText(' ', AT.FontName, AT.FontSize, AT.FontWeight).cx;
+  if gap < 1 then gap := 1;
+
+  { The first and the last label always stay; the ones between are taken left to right (top to
+    bottom) as long as each clears the one before it and leaves room for the last. }
+  kept := 0;
+  fi := 0;
+  while (fi < n) and not MakeLabel(order[fi], first) do Inc(fi);
+  if fi >= n then Exit;
+  haveLast := False;
+  li := n - 1;
+  while li > fi do
+  begin
+    if MakeLabel(order[li], last) then
+    begin
+      haveLast := True;
+      Break;
+    end;
+    Dec(li);
+  end;
+  { Too short for even those two: the first only. }
+  if haveLast and (last.Lead < first.Lead + Along(first) + gap) then haveLast := False;
+  if not haveLast then li := n;
+
+  Keep(first);
+  prevEnd := first.Lead + Along(first);
+  for i := fi + 1 to li - 1 do
+  begin
+    { A label's leading edge is never past its tick, so a tick still inside the previous label
+      (plus the gap) cannot clear it -- skipped without measuring, which keeps a 0..10000 bar
+      with Frequency 1 from formatting and measuring ten thousand strings per paint. }
+    if ticks[order[i]].C < prevEnd + gap then Continue;
+    if not MakeLabel(order[i], lab) then Continue;
+    if lab.Lead < prevEnd + gap then Continue;
+    if haveLast and (lab.Lead + Along(lab) + gap > last.Lead) then Continue;
+    Keep(lab);
+    prevEnd := lab.Lead + Along(lab);
+  end;
+  if haveLast then Keep(last);
+  SetLength(AT.Shown, kept);
+
+  { The strip is as thick as the thickest label across the track (its height on a horizontal
+    bar, its width on a vertical one) plus 2 px between it and the ticks. }
+  cross := 0;
+  for i := 0 to kept - 1 do
+    if AT.Orientation = toVertical then
+      cross := Math.Max(cross, AT.Shown[i].Size.cx)
+    else
+      cross := Math.Max(cross, AT.Shown[i].Size.cy);
+  if cross > 0 then AT.LabelBand := cross + APainter.Scale(2);
+end;
+
+procedure TyDrawTrackTicks(APainter: TTyPainter; const ARect: TRect; const AT: TTyTrackTicks);
+var
+  ticks: TTrackTickAtArray;
+  TickFill: TTyFill;
+  TickLen, TickW, LB, Air, i: Integer;
+  L: TTyTrackTickLabel;
+  R, TR: TRect;
+
+  { One tick at offset AC along the track, on whichever side(s) TickMarks names, against the
+    inner edge of the label strip (the control's edge when there are no labels). }
+  procedure DrawTickAt(AC: Integer);
+  begin
+    if AT.Orientation = toVertical then
+    begin
+      if AT.TickMarks in [ttmBottomRight, ttmBoth] then
+        APainter.FillBackground(Rect(R.Right - LB - TickLen, R.Top + AC,
+          R.Right - LB, R.Top + AC + TickW), TickFill, 0);
+      if AT.TickMarks in [ttmTopLeft, ttmBoth] then
+        APainter.FillBackground(Rect(R.Left + LB, R.Top + AC,
+          R.Left + LB + TickLen, R.Top + AC + TickW), TickFill, 0);
+    end
+    else
+    begin
+      if AT.TickMarks in [ttmBottomRight, ttmBoth] then
+        APainter.FillBackground(Rect(R.Left + AC, R.Bottom - LB - TickLen,
+          R.Left + AC + TickW, R.Bottom - LB), TickFill, 0);
+      if AT.TickMarks in [ttmTopLeft, ttmBoth] then
+        APainter.FillBackground(Rect(R.Left + AC, R.Top + LB,
+          R.Left + AC + TickW, R.Top + LB + TickLen), TickFill, 0);
+    end;
+  end;
+
+  procedure DrawLabelIn(const ARectL: TRect);
+  begin
+    APainter.DrawText(ARectL, L.Text, AT.FontName, AT.FontSize, AT.FontWeight, AT.Color,
+      taLeftJustify, tlTop, False);
+  end;
+
+begin
+  if (AT.TickStyle = ttsNone) or (AT.Max <= AT.Min) then Exit;
+  R := ARect;
+  TickLen := APainter.Scale(4);
+  TickW := APainter.Scale(1);
+  if TickW < 1 then TickW := 1;
+  TickFill := Default(TTyFill);
+  TickFill.Kind := tfkSolid;
+  TickFill.Color := AT.Color;
+  LB := AT.LabelBand;
+  if LB < 0 then LB := 0;
+
+  ticks := TrackTickCentres(AT);
+  for i := 0 to High(ticks) do
+    DrawTickAt(ticks[i].C);
+
+  { The labels hug the ticks across the 2 px the layout put between them. }
+  if LB = 0 then Exit;
+  Air := APainter.Scale(2);
+  for i := 0 to High(AT.Shown) do
+  begin
+    L := AT.Shown[i];
+    if AT.Orientation = toVertical then
+    begin
+      if AT.TickMarks in [ttmBottomRight, ttmBoth] then
+      begin
+        TR.Left := R.Right - LB + Air;
+        TR.Top := R.Top + L.Lead;
+        TR.Right := TR.Left + L.Size.cx;
+        TR.Bottom := TR.Top + L.Size.cy;
+        DrawLabelIn(TR);
+      end;
+      if AT.TickMarks in [ttmTopLeft, ttmBoth] then
+      begin
+        TR.Right := R.Left + LB - Air;
+        TR.Left := TR.Right - L.Size.cx;
+        TR.Top := R.Top + L.Lead;
+        TR.Bottom := TR.Top + L.Size.cy;
+        DrawLabelIn(TR);
+      end;
+    end
+    else
+    begin
+      if AT.TickMarks in [ttmBottomRight, ttmBoth] then
+      begin
+        TR.Left := R.Left + L.Lead;
+        TR.Right := TR.Left + L.Size.cx;
+        TR.Top := R.Bottom - LB + Air;
+        TR.Bottom := TR.Top + L.Size.cy;
+        DrawLabelIn(TR);
+      end;
+      if AT.TickMarks in [ttmTopLeft, ttmBoth] then
+      begin
+        TR.Left := R.Left + L.Lead;
+        TR.Right := TR.Left + L.Size.cx;
+        TR.Bottom := R.Top + LB - Air;
+        TR.Top := TR.Bottom - L.Size.cy;
+        DrawLabelIn(TR);
+      end;
+    end;
+  end;
 end;
 
 { TTyCustomTrackBar }
@@ -354,6 +703,20 @@ begin
   if FShowSelRange = AValue then Exit;
   FShowSelRange := AValue;
   Invalidate;
+end;
+
+procedure TTyCustomTrackBar.SetTickLabels(const AValue: Boolean);
+begin
+  if FTickLabels = AValue then Exit;
+  FTickLabels := AValue;
+  if not FTickLabels then FTickLabelPx := 0;
+  Invalidate;
+end;
+
+procedure TTyCustomTrackBar.SetOnFormatTickLabel(const AValue: TTyTrackTickLabelEvent);
+begin
+  FOnFormatTickLabel := AValue;
+  if FTickLabels then Invalidate;
 end;
 
 function TTyCustomTrackBar.SelRangeSpan(APPI: Integer; out ALow, AHigh: Integer): Boolean;
@@ -461,6 +824,11 @@ begin
     Before the first paint it is 0, so an AutoSize'd bar settles on its second layout --
     the same first-frame caveat MainLen already carries. }
   if FShowValue and (FValueTextPx > 0) then Inc(cross, FValueTextPx);
+  { The tick labels' strip, on each side that has ticks; measured and cached at paint time
+    like the readout, with the same first-frame caveat. }
+  if FTickLabels and (FTickLabelPx > 0) then
+    if FTickMarks = ttmBoth then Inc(cross, 2 * FTickLabelPx)
+    else Inc(cross, FTickLabelPx);
   Inc(cross, MulDiv(S.Padding.Top + S.Padding.Bottom, ppi, 96));
   if cross < 1 then cross := 1;
   { CROSS AXIS ONLY: 0 means "no preference" to LCL, so the track keeps whatever length
@@ -783,36 +1151,9 @@ var
   SelLo, SelHi: Integer;
   ThumbStates: TTyStateSet;
   TW, MLen, Off: Integer;
-  TickFill: TTyFill;
-  TickLen, TickW, V, TickOff, Idx: Integer;
+  Ticks: TTyTrackTicks;
   Band, GrooveTh, Mid: Integer;
   vs, vw: TSize;
-
-  { One tick at cross-axis-independent offset AC along the track, on whichever side(s)
-    TickMarks names. Nested so the two generators (auto/manual) cannot drift apart on
-    where a tick is drawn -- which is exactly how the side got hard-coded before. }
-  procedure DrawTickAt(AC: Integer);
-  begin
-    if FOrientation = toVertical then
-    begin
-      if FTickMarks in [ttmBottomRight, ttmBoth] then
-        P.FillBackground(Rect(R.Right - TickLen, R.Top + AC,
-          R.Right, R.Top + AC + TickW), TickFill, 0);
-      if FTickMarks in [ttmTopLeft, ttmBoth] then
-        P.FillBackground(Rect(R.Left, R.Top + AC,
-          R.Left + TickLen, R.Top + AC + TickW), TickFill, 0);
-    end
-    else
-    begin
-      if FTickMarks in [ttmBottomRight, ttmBoth] then
-        P.FillBackground(Rect(R.Left + AC, R.Bottom - TickLen,
-          R.Left + AC + TickW, R.Bottom), TickFill, 0);
-      if FTickMarks in [ttmTopLeft, ttmBoth] then
-        P.FillBackground(Rect(R.Left + AC, R.Top,
-          R.Left + AC + TickW, R.Top + TickLen), TickFill, 0);
-    end;
-  end;
-
 begin
   P := TTyPainter.Create;
   try
@@ -854,9 +1195,29 @@ begin
     { THE TICK BAND. Ticks are drawn flush against the control's outer edge on whichever side
       TickMarks names; reserve that strip so the groove and the thumb sit BESIDE the marks
       instead of under them. Before this the slider spanned the whole cross axis and the ticks
-      were painted into the same pixels -- the reported "the ruler covers the slider". }
-    TickLen := P.Scale(4);
-    if FTickStyle = ttsNone then Band := 0 else Band := TickLen + P.Scale(2);
+      were painted into the same pixels -- the reported "the ruler covers the slider". The tick
+      labels, when on, take a further strip outside the ticks. }
+    Ticks := Default(TTyTrackTicks);
+    Ticks.Orientation := FOrientation;
+    Ticks.TickMarks := FTickMarks;
+    Ticks.TickStyle := FTickStyle;
+    Ticks.Frequency := FFrequency;
+    Ticks.Manual := FManualTicks;
+    Ticks.Min := FMin;
+    Ticks.Max := FMax;
+    Ticks.Invert := Inverted;
+    Ticks.MainLen := MLen;
+    Ticks.ThumbLen := TW;
+    Ticks.Labels := FTickLabels;
+    Ticks.FontName := S.FontName;
+    Ticks.FontSize := ResolveFontSize(S);
+    Ticks.FontWeight := S.FontWeight;
+    Ticks.Color := S.TextColor;
+    Ticks.Sender := Self;
+    Ticks.OnFormatLabel := FOnFormatTickLabel;
+    TyLayoutTrackTicks(P, Ticks);
+    FTickLabelPx := Ticks.LabelBand;    // cached for CalculatePreferredSize
+    Band := Ticks.TickBand + Ticks.LabelBand;
     SlideR := R;
     if FOrientation = toVertical then
     begin
@@ -931,39 +1292,10 @@ begin
     if (tpBackground in ThumbS.Present) then
       P.FillBackground(ThumbR, ThumbS.Background, ThumbS.BorderRadius);
 
-    { Tick marks. Which VALUES get one is TickStyle's call (auto = every Frequency
-      units, manual = only the hand-placed ones); which SIDE they are drawn on is
+    { Tick marks and their labels. Which VALUES get one is TickStyle's call (auto = every
+      Frequency units, manual = only the hand-placed ones); which SIDE they are drawn on is
       TickMarks'. Theme-driven colour (S.TextColor) either way. }
-    if (FTickStyle <> ttsNone) and (FMax > FMin) then
-    begin
-      TickW := P.Scale(1);
-      if TickW < 1 then TickW := 1;
-      TickFill := Default(TTyFill);
-      TickFill.Kind := tfkSolid;
-      TickFill.Color := S.TextColor;
-
-      if FTickStyle = ttsManual then
-      begin
-        for Idx := 0 to High(FManualTicks) do
-        begin
-          { A tick the range has since moved past is not drawn -- TyTrackThumbOffset
-            clamps, which would otherwise pile it onto an end and invent a mark. }
-          if (FManualTicks[Idx] < FMin) or (FManualTicks[Idx] > FMax) then Continue;
-          TickOff := TyTrackThumbOffset(MLen, TW, FMin, FMax, FManualTicks[Idx], Inverted);
-          DrawTickAt(TickOff + TW div 2);
-        end;
-      end
-      else if FFrequency > 0 then
-      begin
-        V := FMin;
-        while V <= FMax do
-        begin
-          TickOff := TyTrackThumbOffset(MLen, TW, FMin, FMax, V, Inverted);
-          DrawTickAt(TickOff + TW div 2);
-          Inc(V, FFrequency);
-        end;
-      end;
-    end;
+    TyDrawTrackTicks(P, R, Ticks);
 
     { 读数。画在滑轨让出来的那一条里,颜色/字体全走本体样式,不硬编码。 }
     if FShowValue and (FValueAreaPx > 0) then
