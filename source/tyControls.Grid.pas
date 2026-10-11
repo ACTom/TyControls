@@ -1169,6 +1169,10 @@ type
       ADisplayPos 只用于斑马纹;ARow 是数据行。 }
     function CellAppearance(ACol, ARow, ADisplayPos: Integer;
       const AFrame: TTyStyleSet): TTyGridCellAppearance; virtual;
+    { The text colour for a cell painted under the selection fill, when it is one. The base
+      grid has no selection, so never; TTyStringGrid answers for the cells it fills. }
+    function SelectionInk(ACol, ARow: Integer; const AAppearance: TTyGridCellAppearance;
+      out AInk: TTyColor): Boolean; virtual;
     procedure DoGetCellStyle(ACol, ARow: Integer;
       var AAppearance: TTyGridCellAppearance); virtual;
     { 逐格边框:宿主没接钩子时四支笔全关,一个像素都不多画。 }
@@ -2331,6 +2335,12 @@ type
     function  TruncatedCellHint(ACol, ARow: Integer): string; virtual;
     function  CellAppearance(ACol, ARow, ADisplayPos: Integer;
       const AFrame: TTyStyleSet): TTyGridCellAppearance; override;
+    function  SelectionInk(ACol, ARow: Integer; const AAppearance: TTyGridCellAppearance;
+      out AInk: TTyColor): Boolean; override;
+    { The selection fill's style: TyGridCell:selected, or TyGridCellSelectedInactive while
+      the grid is unfocused and HideSelectionWhenInactive is on. The fill and the ink read it
+      from here, so they cannot come from two different states. }
+    function  SelectionFillStyle: TTyStyleSet;
     function  HoverIsHyperlink(X, Y: Integer): Boolean; override;
     function  DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean; override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -5612,6 +5622,13 @@ begin
     AAppearance.HasExplicitBackground := True;
 end;
 
+function TTyCustomGrid.SelectionInk(ACol, ARow: Integer;
+  const AAppearance: TTyGridCellAppearance; out AInk: TTyColor): Boolean;
+begin
+  AInk := AAppearance.TextColor;
+  Result := False;
+end;
+
 function TTyCustomGrid.CellAppearance(ACol, ARow, ADisplayPos: Integer;
   const AFrame: TTyStyleSet): TTyGridCellAppearance;
 var
@@ -5619,6 +5636,7 @@ var
   col: TTyColumn;
   attr: TTyGridCellAttr;
   slot: Integer;
+  inkBefore, ink: TTyColor;
 begin
   { 基础外观按状态组合记忆化 —— 逐格路径上不再做样式解析,也不再查主题变量。 }
   slot := CellStyleSlot(ACol, ARow);   { 先算槽位,再索引 —— 见 ResolveCellStyle 的说明 }
@@ -5718,7 +5736,16 @@ begin
   end;
 
   { 宿主钩子最后说了算(它自己判断动没动过底色,见 DoGetCellStyle)。 }
+  inkBefore := Result.TextColor;
   DoGetCellStyle(ACol, ARow, Result);
+
+  { 选区底色铺在格子自己的底色**之上**(TTyStringGrid.RenderCells),所以选中格的文字
+    要换成选区那一档的文字色(主题里 TyGridCell:selected 的 color)。从前一直用的是
+    未选中的文字色:默认主题的强调色偏亮,深字勉强读得出来;强调色一深(classic 的
+    #10318C),深字落在深底上就看不见了。放在钩子**之后**、且只在钩子没碰文字色时才换:
+    钩子是宿主对这一格的明确判断(和 LCL 的 OnPrepareCanvas 一样,宿主说了算)。 }
+  if (Result.TextColor = inkBefore) and SelectionInk(ACol, ARow, Result, ink) then
+    Result.TextColor := ink;
 end;
 
 function TTyCustomGrid.GridLineWidthPx: Integer;
@@ -10844,10 +10871,40 @@ end;
   OnGetCellStyle 都还能再压过它 —— 优先级链就一条,不另开分支。 }
 function TTyStringGrid.CellAppearance(ACol, ARow, ADisplayPos: Integer;
   const AFrame: TTyStyleSet): TTyGridCellAppearance;
+var
+  ink: TTyColor;
 begin
   Result := inherited CellAppearance(ACol, ARow, ADisplayPos, AFrame);
-  if CellDisplayFor(ACol, ARow) = gcdHyperlink then
+  { 选中的链接格同样用选区的文字色:链接色多半就是强调色,落在强调色的选区底上看不见。 }
+  if (CellDisplayFor(ACol, ARow) = gcdHyperlink)
+     and not SelectionInk(ACol, ARow, Result, ink) then
     Result.TextColor := HyperlinkTextColor(Result.TextColor);
+end;
+
+function TTyStringGrid.SelectionFillStyle: TTyStyleSet;
+begin
+  if FHideSelectionWhenInactive and (not SelectionIsActive) then
+    Result := ActiveController.Model.ResolveStyle('TyGridCellSelectedInactive', StyleClass, [])
+  else
+    Result := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, [tysSelected]);
+end;
+
+function TTyStringGrid.SelectionInk(ACol, ARow: Integer;
+  const AAppearance: TTyGridCellAppearance; out AInk: TTyColor): Boolean;
+var
+  selS: TTyStyleSet;
+begin
+  AInk := AAppearance.TextColor;
+  Result := False;
+  { 用户给这一格上了底色的,选区只盖一层半透明的标记(RenderCells),格子自己的颜色
+    还透得出来 —— 文字也保持它自己的。 }
+  if AAppearance.HasExplicitBackground then Exit;
+  if not IsCellSelected(ACol, ARow) then Exit;
+  selS := SelectionFillStyle;
+  { 没有选区底色就没有可配的文字色:主题没定义就什么都不换。 }
+  if not ((tpBackground in selS.Present) and (tpTextColor in selS.Present)) then Exit;
+  AInk := selS.TextColor;
+  Result := True;
 end;
 
 function TTyStringGrid.HoverIsHyperlink(X, Y: Integer): Boolean;
@@ -15711,12 +15768,7 @@ begin
   { 失焦时换一个 typeKey 解析选区底色 —— 控件不自己去调淡一个颜色
     (那就成了硬编码的视觉值)。用独立的键而不是 :selected:disabled:
     .tycss 每个选择器只认一个 :state。 }
-  if FHideSelectionWhenInactive and (not SelectionIsActive) then
-    selS := ActiveController.Model.ResolveStyle('TyGridCellSelectedInactive',
-      StyleClass, [])
-  else
-    selS := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass,
-      [tysSelected]);
+  selS := SelectionFillStyle;
   { 盖在"用户显式指定了底色"的格上时改用半透明层。选区底色是不透明的 accent,
     直接铺上去会把用户自己标的颜色**整块抹掉** —— 而光标总是落在刚上色的那一格上,
     于是"上了色却什么都没变"。半透明层让两者都读得出来。 }

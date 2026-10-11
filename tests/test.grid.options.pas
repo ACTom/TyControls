@@ -63,6 +63,9 @@ type
     procedure TearDown; override;
     { 建一张 ACols 列 x ARows 行、每列 AColWidth 宽的表。 }
     procedure Build(ACols, ARows, AColWidth: Integer);
+    procedure GridCellStyleRed(Sender: TObject; ACol, ARow: Integer;
+      var ABackground: TTyFill; var ATextColor: TTyColor; var AFontName: string;
+      var AFontSize, AFontWeight: Integer; var AHAlign: TAlignment; var AVAlign: TTextLayout);
   published
     { --- 类型纪律 --- }
     procedure TestOptionOrdinalsAreAppendOnly;
@@ -99,6 +102,7 @@ type
     procedure TestCellHintsIsTheMasterSwitch;
     procedure TestTruncCellHintsShowsTheFullText;
     procedure TestRowHighlightPaintsTheWholeRow;
+    procedure TestSelectedCellsUseTheSelectionInk;
     procedure TestHeaderPushedLookGatesThePressedFill;
     { --- 流式化 --- }
     procedure TestOptionsSurviveARoundTrip;
@@ -1089,6 +1093,70 @@ end;
 
 { 整行高亮。断言在 CellAppearance 上而不是像素上:这一层就是绘制读的那一层,
   而且它能把"光标那一格"和"同一行的别的格"分开问 —— 后者正是这个标志的全部内容。 }
+procedure TGridOptionsTest.GridCellStyleRed(Sender: TObject; ACol, ARow: Integer;
+  var ABackground: TTyFill; var ATextColor: TTyColor; var AFontName: string;
+  var AFontSize, AFontWeight: Integer; var AHAlign: TAlignment; var AVAlign: TTextLayout);
+begin
+  ATextColor := TyRGB(255, 0, 0);
+end;
+
+{ 选中格的文字色。群里的截图:classic 主题下选中格是深蓝底(强调色)、字还是黑的。
+  断言在 CellAppearance 上 —— 绘制读的就是这一层。 }
+procedure TGridOptionsTest.TestSelectedCellsUseTheSelectionInk;
+var
+  sel, plain: TTyStyleSet;
+  inSel, outSel, explicit, hooked, link: TTyGridCellAppearance;
+  inactive: TTyStyleSet;
+  ctl: TTyStyleController;
+begin
+  Build(4, 6, 80);
+  sel   := FGrid.ActiveController.Model.ResolveStyle('TyGridCell', '', [tysSelected]);
+  plain := FGrid.ActiveController.Model.ResolveStyle('TyGridCell', '', []);
+  AssertTrue('setup: the theme gives the selection its own ink',
+    (tpTextColor in sel.Present) and (sel.TextColor <> plain.TextColor));
+
+  FGrid.Cells[2, 1] := 'x';
+  FGrid.Cells[2, 3] := 'y';
+  FGrid.CellColors[2, 3] := TyRGB(255, 255, 0);   { 用户上了底色的格 }
+  FGrid.SelectRange(1, 1, 2, 3);
+
+  inSel  := FGrid.AppearanceOf(2, 1);
+  outSel := FGrid.AppearanceOf(3, 1);
+  AssertTrue('a selected cell is inked like the selection', inSel.TextColor = sel.TextColor);
+  AssertTrue('a cell outside it keeps the plain ink', outSel.TextColor = plain.TextColor);
+
+  explicit := FGrid.AppearanceOf(2, 3);
+  AssertTrue('a selected cell with its own background keeps its own ink',
+    explicit.TextColor = plain.TextColor);
+
+  FGrid.OnGetCellStyle := @GridCellStyleRed;
+  hooked := FGrid.AppearanceOf(1, 2);
+  AssertTrue('an ink the host chose wins over the selection''s', hooked.TextColor = TyRGB(255, 0, 0));
+  FGrid.OnGetCellStyle := nil;
+
+  (FGrid.Header.Columns.Items[1] as TTyGridColumn).CellDisplay := gcdHyperlink;
+  link := FGrid.AppearanceOf(1, 2);
+  AssertTrue('a selected link cell is inked like the selection too', link.TextColor = sel.TextColor);
+  (FGrid.Header.Columns.Items[1] as TTyGridColumn).CellDisplay := gcdText;
+
+  { 失焦淡化:底色换成 TyGridCellSelectedInactive,文字色也跟着它(无头环境下网格没有焦点)。 }
+  inactive := FGrid.ActiveController.Model.ResolveStyle('TyGridCellSelectedInactive', '', []);
+  AssertTrue('setup: the inactive selection inks differently',
+    (tpTextColor in inactive.Present) and (inactive.TextColor <> sel.TextColor));
+  FGrid.HideSelectionWhenInactive := True;
+  AssertTrue('an unfocused grid inks like the inactive selection',
+    FGrid.AppearanceOf(2, 1).TextColor = inactive.TextColor);
+  FGrid.HideSelectionWhenInactive := False;
+
+  { 主题的选区没有底色 = 不铺选区,文字色也就不换。 }
+  ctl := TTyStyleController.Create(FForm);
+  ctl.LoadThemeCss('TyGrid { color: #111111; } TyGridCell { color: #111111; } ' +
+    'TyGridCell:selected { color: #EEEEEE; }');
+  FGrid.Controller := ctl;
+  AssertTrue('no selection fill, no selection ink',
+    FGrid.AppearanceOf(2, 1).TextColor = TyRGB($11, $11, $11));
+end;
+
 procedure TGridOptionsTest.TestRowHighlightPaintsTheWholeRow;
 var
   sameRowOther, otherRow, focused: TTyGridCellAppearance;
