@@ -415,6 +415,10 @@ function TyResolveParentBgFill(AChild: TControl; const ARect: TRect;
   at the child's own CENTRE -- see TyFillCentreColor for why that point and no other.
   Exposed for tests. }
 function TyResolveParentBg(AChild: TControl; out AColor: TTyColor): Boolean;
+{ The one colour that stands for AFill over ARect: its value at the rect's centre (see the
+  implementation for why that point). Public so the samplers can be checked against the
+  painter; a solid fill answers its own colour. }
+function TyFillCentreColor(const AFill: TTyFill; const ARect: TRect): TTyColor;
 
 { Fill ARect with AControl's backdrop: the form's photo/glass on an image theme, else
   the OPAQUE resolved parent background (solid); a no-op only when there is no parent
@@ -448,6 +452,13 @@ procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyCustomStyleControlle
 procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyCustomStyleController;
   const ARect: TRect; AVectorKind: TTyGlyphKind; AColor: TTyColor; AThickness: Integer;
   APadLogical: Integer = 4); overload;
+{ A part drawn inside a control -- a tab, a scroll or track thumb -- filled and framed the way a
+  control's own frame is (DrawFrame): the render-style preset expanded, the fill, then a two-tone
+  bevel or a plain border when the style resolves one. These parts used to take only the fill, so
+  a skin could not give a tab or a thumb an edge at all; a style that declares no border is still
+  only filled, exactly as before. }
+procedure TyFillSubElement(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet;
+  const ACorners: TTyCorners);
 { v3/C5. Try to draw a theme glyph override into ARect; True = drawn (icon path), False =
   unset/malformed so the CALLER draws its own default (used where the default isn't a plain
   vector kind, e.g. the drop chevron). And the canonical token for a vector kind. }
@@ -937,7 +948,7 @@ var
 begin
   AOwned := nil;
   TyGradientEndpoints(ARect, AFill.GradAngleDeg, p1, p2);
-  if Length(AFill.GradStops) > 2 then
+  if TyGradientNeedsStops(AFill) then   { the painter's own rule (#49) }
   begin
     SetLength(cols, Length(AFill.GradStops));
     SetLength(poss, Length(AFill.GradStops));
@@ -989,11 +1000,13 @@ end;
   which settles the gamma question for free, whichever space it interpolates in — and every
   parent stop falling inside the child's span is carried across at its remapped position.
 
-  The stop COUNT is preserved on purpose either side of the painter's >2 threshold: a parent
-  drawn through the multi-stop path interpolated without gamma correction, and a two-stop
-  child would silently switch to the gamma-corrected fast path and drift off the ramp it is
-  supposed to continue. When no parent stop lands inside the span, a midpoint sampled from
-  the parent keeps the count above two — collinear, so it changes nothing but the path. }
+  The path is preserved on purpose either side of the painter's rule (TyGradientNeedsStops):
+  a parent drawn through the multi-stop path interpolated without gamma correction, and a
+  two-stop child would silently switch to the gamma-corrected fast path and drift off the
+  ramp it is supposed to continue. When no parent stop lands inside the span, a midpoint
+  sampled from the parent keeps the count above two — collinear, so it changes nothing but
+  the path. A two-stop parent off 0 and 1 is a multi-stop parent here too: its stops are
+  where the ramp bends, so they are carried across like any other (#49). }
 function TyRebaseGradient(const AFill: TTyFill; const APR, ACR: TRect): TTyFill;
 var
   p1, p2, q1, q2: TPointF;
@@ -1041,7 +1054,7 @@ begin
       Exit;
     end;
     AddStop(Result.GradFrom, 0);
-    if Length(AFill.GradStops) > 2 then
+    if TyGradientNeedsStops(AFill) then
     begin
       for i := 0 to High(AFill.GradStops) do
         if (AFill.GradStops[i].Pos > u0) and (AFill.GradStops[i].Pos < u1) then
@@ -1525,6 +1538,24 @@ begin
     Include(AStyle.Present, tpBorderColor);
   end;
   ACorners := TyUniformCorners(0);   // 3D bevels are square
+end;
+
+procedure TyFillSubElement(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet;
+  const ACorners: TTyCorners);
+var
+  eff: TTyStyleSet;
+  corners: TTyCorners;
+begin
+  eff := AStyle;
+  corners := ACorners;
+  TyApplyRenderStyle(eff, corners);
+  if tpBackground in eff.Present then
+    APainter.FillBackground(ARect, eff.Background, corners);
+  if TyBorderVisible(eff) then
+    if eff.BorderStyle in [tbsOutset, tbsInset] then
+      TyDrawBevelBorder(APainter, ARect, eff)
+    else
+      APainter.StrokeBorder(ARect, corners, eff.BorderWidth, eff.BorderColor);
 end;
 
 procedure TyDrawFrameUnderlay(APainter: TTyPainter; const ARect: TRect;

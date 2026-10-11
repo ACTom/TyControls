@@ -391,8 +391,9 @@ var
   off, rad: Integer;
   ring: TRect;
 begin
-  if tpBackground in AStyle.Present then
-    APainter.FillBackground(AR, AStyle.Background, AStyle.BorderRadius);
+  { Filled and framed like any part (#47): a skin that gives the thumb a border or a bevel
+    gets it on every track bar. }
+  TyFillSubElement(APainter, AR, AStyle, TyUniformCorners(AStyle.BorderRadius));
   if (tpOutline in AStyle.Present) and (AStyle.OutlineWidth > 0) then
   begin
     off := APainter.Scale(AStyle.OutlineOffset);
@@ -1311,8 +1312,7 @@ begin
     GrooveS := ActiveController.Model.ResolveStyle('TyTrackGroove', '', []);
     GrooveTh := TyTrackGrooveThickness(P, ActiveController);
     GrooveR := TyTrackGrooveRect(SlideR, FOrientation, MLen, GrooveTh);
-    if (tpBackground in GrooveS.Present) then
-      P.FillBackground(GrooveR, GrooveS.Background, GrooveS.BorderRadius);
+    TyFillSubElement(P, GrooveR, GrooveS, TyUniformCorners(GrooveS.BorderRadius));
     { THE SELECTION RANGE (LCL SelStart/SelEnd): the groove filled between the two values, under
       the thumb. Its own theme key, so a skin can colour it apart from the thumb. }
     if SelRangeSpan(APPI, SelLo, SelHi) and (SelHi > SelLo) then

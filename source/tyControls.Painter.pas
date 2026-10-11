@@ -1969,10 +1969,12 @@ begin
     tfkLinearGradient:
       begin
         GradientEndpoints(ARect, AFill.GradAngleDeg, p1f, p2f);
-        if Length(AFill.GradStops) > 2 then
+        if TyGradientNeedsStops(AFill) then
         begin
-          // v3/B1 multi-stop: build a BGRA multi-gradient from the N stops. (2-stop keeps the
-          // exact 2-colour scanner below, so existing themes / the golden are byte-identical.)
+          // v3/B1 multi-stop: build a BGRA multi-gradient from the stops. Two stops at 0 and 1
+          // keep the exact 2-colour scanner below (existing themes / the golden byte-identical);
+          // two stops anywhere else are placed by position too -- the 2-colour scanner spread
+          // '#F00 20%, #00F 80%' over the whole sweep (#49).
           SetLength(cols, Length(AFill.GradStops));
           SetLength(poss, Length(AFill.GradStops));
           for i := 0 to High(AFill.GradStops) do

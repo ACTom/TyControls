@@ -9,7 +9,7 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.StyleModel, tyControls.Painter;
+  tyControls.Types, tyControls.StyleModel, tyControls.Painter, tyControls.Base;
 type
   TGradientTest = class(TTestCase)
   private
@@ -23,6 +23,8 @@ type
     procedure TestNonDecreasingClamp;
     procedure TestTooFewColoursRaises;
     procedure TestPainterRendersMiddleStop;
+    procedure TestTwoStopsKeepTheirPositions;
+    procedure TestTheCentreColourHonoursTwoStopPositions;
   end;
 
 implementation
@@ -150,6 +152,57 @@ begin
     p.Free;
     host.Free;
   end;
+end;
+
+{ #49. Two stops at 20% and 80%: CSS keeps the first fifth pure stop-0 colour and the last fifth
+  pure stop-1 colour, and blends only between. The two-colour scanner blended over the whole
+  sweep, so the 10% row was already a mix. Sampled along the gradient axis (90deg runs down
+  the rows here, as in TestPainterRendersMiddleStop). }
+procedure TGradientTest.TestTwoStopsKeepTheirPositions;
+var
+  fill: TTyFill;
+  host: TBitmap;
+  p: TTyPainter;
+  a, b, mid: TBGRAPixel;
+begin
+  fill := GradFill('linear-gradient(90deg, #FF0000 20%, #0000FF 80%)');
+  AssertEquals('parsed: stop 0 at 20%', 0.2, fill.GradStops[0].Pos, 0.001);
+  AssertEquals('parsed: stop 1 at 80%', 0.8, fill.GradStops[1].Pos, 0.001);
+  host := TBitmap.Create;
+  p := TTyPainter.Create;
+  try
+    host.SetSize(20, 100);
+    p.BeginPaint(host.Canvas, Rect(0, 0, 20, 100), 96);
+    p.FillBackground(Rect(0, 0, 20, 100), fill, 0);
+    a := p.Bitmap.GetPixel(10, 10);
+    b := p.Bitmap.GetPixel(10, 90);
+    mid := p.Bitmap.GetPixel(10, 50);
+    p.EndPaint;
+    AssertTrue(Format('the 10%% row is pure red (got %d,%d,%d)', [a.red, a.green, a.blue]),
+      (a.red = 255) and (a.blue = 0));
+    AssertTrue(Format('the 90%% row is pure blue (got %d,%d,%d)', [b.red, b.green, b.blue]),
+      (b.red = 0) and (b.blue = 255));
+    AssertTrue('the middle row is between the two',
+      (mid.red > 40) and (mid.red < 215) and (mid.blue > 40) and (mid.blue < 215));
+  finally
+    p.Free;
+    host.Free;
+  end;
+end;
+
+{ The parent-background samplers (TyFillCentreColor and the slice behind a child) build their
+  own scanner; they must place two stops by position as the painter does. Stops at 0% and
+  40%: by position the centre is already pure blue; spread over the whole sweep it would be
+  a mix. }
+procedure TGradientTest.TestTheCentreColourHonoursTwoStopPositions;
+var
+  fill: TTyFill;
+  c: TTyColor;
+begin
+  fill := GradFill('linear-gradient(90deg, #FF0000 0%, #0000FF 40%)');
+  c := TyFillCentreColor(fill, Rect(0, 0, 20, 100));
+  AssertTrue(Format('the centre is past the last stop: pure blue (got %d,%d,%d)',
+    [TyRedOf(c), TyGreenOf(c), TyBlueOf(c)]), (TyRedOf(c) = 0) and (TyBlueOf(c) = 255));
 end;
 
 initialization

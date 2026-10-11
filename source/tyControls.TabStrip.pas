@@ -1572,6 +1572,37 @@ begin
   InsetForBand(Result);           // the same inset AdjustClientRect applies
 end;
 
+{ A theme draws a tab as it sits on a TOP band: `border-radius: 6px 6px 0 0` rounds the two
+  corners that stick out, and leaves square the two that join the body. On another edge the
+  same tab has to turn with the band, or the rounding stays on top -- the inner edge of a
+  bottom tab, the side edge of a left one. So the corners are carried over the way the tab
+  itself is: flipped top-to-bottom for a bottom band, transposed for a left one (the outer
+  edge becomes the left edge, and the first corner along the run stays the first), and for a
+  right one the outer edge goes right. A mirrored horizontal run swaps left and right on top
+  of that; a side band is already on its mirrored edge (EffectiveBandSide), and its run
+  still goes down the page. }
+function TyTabCornersOnBand(const C: TTyCorners; ASide: TTabPosition;
+  AMirror: Boolean): TTyCorners;
+var
+  t: Integer;
+begin
+  case ASide of
+    tpBottom:
+      begin Result.TL := C.BL; Result.TR := C.BR; Result.BR := C.TR; Result.BL := C.TL; end;
+    tpLeft:
+      begin Result.TL := C.TL; Result.TR := C.BL; Result.BR := C.BR; Result.BL := C.TR; end;
+    tpRight:
+      begin Result.TL := C.BL; Result.TR := C.TL; Result.BR := C.TR; Result.BL := C.BR; end;
+  else
+    Result := C;
+  end;
+  if AMirror and (ASide in [tpTop, tpBottom]) then
+  begin
+    t := Result.TL; Result.TL := Result.TR; Result.TR := t;
+    t := Result.BL; Result.BL := Result.BR; Result.BR := t;
+  end;
+end;
+
 { The edge the band is DRAWN on, mirror applied -- the one answer every edge-picking rule
   below takes. On a right-to-left strip tpLeft and tpRight trade places, because
   ToScreenRect's reflection moves the band to the other side and the client-rect inset, the
@@ -2081,8 +2112,8 @@ begin
       end;
 
       { Fill header background }
-      if tpBackground in TabStyle.Present then
-        P.FillBackground(HdrRect, TabStyle.Background, TyEffectiveCorners(TabStyle));
+      TyFillSubElement(P, HdrRect, TabStyle,
+        TyTabCornersOnBand(TyEffectiveCorners(TabStyle), EffectiveBandSide, Rtl));
 
       { Draw caption centered in header, clipped off the close glyph and the icon. The
         close slot is at the header's TRAILING edge -- the right one normally, the left one

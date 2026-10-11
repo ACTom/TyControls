@@ -462,8 +462,11 @@ begin
 
     // Build a track style with a pill border-radius.
     // If the theme supplies a BorderRadius, use it; otherwise half the device height.
+    // "Supplies" is the declaration, not the value: a skin that writes 0 (classic, where
+    // nothing is round) means a square track. Testing the value made 0 read as "unset", so
+    // the track stayed a pill around a knob the same token had made square.
     TrackS := S;
-    if TrackS.BorderRadius = 0 then
+    if not (tpBorderRadius in TrackS.Present) then
     begin
       // Compute logical radius so that Scale() → device half-height
       TrackRadius := MulDiv(DevH, 96, APPI) div 2;
@@ -500,7 +503,11 @@ begin
     KnobFill.Kind := tfkSolid;
     KnobFill.Color := KnobStyle.Background.Color;
 
-    P.FillBackground(KnobRect, KnobFill, KnobRadiusLogical);
+    { Through TyFillSubElement, so a skin can give the knob an edge (classic's raised one);
+      a knob style with no border is only filled, as before. }
+    KnobStyle.Background := KnobFill;
+    Include(KnobStyle.Present, tpBackground);
+    TyFillSubElement(P, KnobRect, KnobStyle, TyUniformCorners(KnobRadiusLogical));
 
     // Caption: drawn to the RIGHT of the switch zone, vertically centred, using
     // the same style tokens captioned controls use (font/size/weight/text-color).

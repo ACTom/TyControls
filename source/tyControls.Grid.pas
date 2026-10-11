@@ -1173,6 +1173,10 @@ type
       ADisplayPos 只用于斑马纹;ARow 是数据行。 }
     function CellAppearance(ACol, ARow, ADisplayPos: Integer;
       const AFrame: TTyStyleSet): TTyGridCellAppearance; virtual;
+    { The text colour for a cell painted under the selection fill, when it is one. The base
+      grid has no selection, so never; TTyStringGrid answers for the cells it fills. }
+    function SelectionInk(ACol, ARow: Integer; const AAppearance: TTyGridCellAppearance;
+      out AInk: TTyColor): Boolean; virtual;
     procedure DoGetCellStyle(ACol, ARow: Integer;
       var AAppearance: TTyGridCellAppearance); virtual;
     { 逐格边框:宿主没接钩子时四支笔全关,一个像素都不多画。 }
@@ -1540,6 +1544,12 @@ type
       (测量记录在实现处)。没有这个座,SyncScrollBars 那一条就只能靠读代码猜。 }
     procedure SyncScrollBars; virtual;
     procedure Resize; override;
+    { An open in-place editor follows its cell after the layout moved: a scroll, a column
+      or row size, the control's own size. Called where those settle (UpdateScrollBars,
+      the two scroll setters) and again before every paint, so a path that changes the
+      layout without passing through them is caught on the next frame. The base grid has
+      no editor. }
+    procedure EditorFollowCell; virtual;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -2212,6 +2222,8 @@ type
       关编辑时按它分派 —— 不能从"哪个控件可见"反推:日期与时间共用一个控件,
       可见性根本区分不出它们(时间格因此被当日期提交,写坏了数据)。 }
     FEditKind: TTyGridEditorKind;
+    FPlacedEditorRect: TRect;   { where EditorFollowCell last put the editor }
+    FGestureRefused: Boolean;   { this press was refused: its moves and release go nowhere }
     FFillDragging: Boolean;
     FFillToCol, FFillToRow: Integer;
     { 这次按住是从**单元格**上按下的 —— 拖选只认这种按住。列头/分隔线/行头槽上
@@ -2352,6 +2364,7 @@ type
     { 把焦点还给正在打开的编辑器。只从**手势处理**里调(点击/按键之后,焦点变化已经完成);
       绝不从 EditorExit 这类失焦回调里调 —— 那是 widgetset 层的焦点递归陷阱。 }
     procedure RefocusEditor;
+    function  EditorTargetRect: TRect;
     function  CellKey(ACol, ARow: Integer): string;
     function  GetCells(ACol, ARow: Integer): string;
     procedure SetCells(ACol, ARow: Integer; const AValue: string);
@@ -2477,6 +2490,13 @@ type
     function  TruncatedCellHint(ACol, ARow: Integer): string; virtual;
     function  CellAppearance(ACol, ARow, ADisplayPos: Integer;
       const AFrame: TTyStyleSet): TTyGridCellAppearance; override;
+    function  SelectionInk(ACol, ARow: Integer; const AAppearance: TTyGridCellAppearance;
+      out AInk: TTyColor): Boolean; override;
+    { The selection fill's style: TyGridCell:selected, or TyGridCellSelectedInactive while
+      the grid is unfocused and HideSelectionWhenInactive is on. The fill and the ink read it
+      from here, so they cannot come from two different states. }
+    function  SelectionFillStyle: TTyStyleSet;
+    procedure EditorFollowCell; override;
     function  HoverIsHyperlink(X, Y: Integer): Boolean; override;
     function  DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean; override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -4589,6 +4609,10 @@ begin
   UpdateScrollBars;
 end;
 
+procedure TTyCustomGrid.EditorFollowCell;
+begin
+end;
+
 procedure TTyCustomGrid.SyncScrollBars;
 begin
   { **这里原来有一句 `if (FVScroll = nil) or (FHScroll = nil) then Exit`,量过之后删的。**
@@ -4994,6 +5018,7 @@ begin
   finally
     FSyncingScroll := False;
   end;
+  EditorFollowCell;
 end;
 
 function TTyCustomGrid.ContentHeightPx: Integer;
@@ -5982,6 +6007,13 @@ begin
     AAppearance.HasExplicitBackground := True;
 end;
 
+function TTyCustomGrid.SelectionInk(ACol, ARow: Integer;
+  const AAppearance: TTyGridCellAppearance; out AInk: TTyColor): Boolean;
+begin
+  AInk := AAppearance.TextColor;
+  Result := False;
+end;
+
 function TTyCustomGrid.CellAppearance(ACol, ARow, ADisplayPos: Integer;
   const AFrame: TTyStyleSet): TTyGridCellAppearance;
 var
@@ -5989,6 +6021,7 @@ var
   col: TTyColumn;
   attr: TTyGridCellAttr;
   slot: Integer;
+  inkBefore, ink: TTyColor;
 begin
   { 基础外观按状态组合记忆化 —— 逐格路径上不再做样式解析,也不再查主题变量。 }
   slot := CellStyleSlot(ACol, ARow);   { 先算槽位,再索引 —— 见 ResolveCellStyle 的说明 }
@@ -6088,7 +6121,16 @@ begin
   end;
 
   { 宿主钩子最后说了算(它自己判断动没动过底色,见 DoGetCellStyle)。 }
+  inkBefore := Result.TextColor;
   DoGetCellStyle(ACol, ARow, Result);
+
+  { 选区底色铺在格子自己的底色**之上**(TTyStringGrid.RenderCells),所以选中格的文字
+    要换成选区那一档的文字色(主题里 TyGridCell:selected 的 color)。从前一直用的是
+    未选中的文字色:默认主题的强调色偏亮,深字勉强读得出来;强调色一深(classic 的
+    #10318C),深字落在深底上就看不见了。放在钩子**之后**、且只在钩子没碰文字色时才换:
+    钩子是宿主对这一格的明确判断(和 LCL 的 OnPrepareCanvas 一样,宿主说了算)。 }
+  if (Result.TextColor = inkBefore) and SelectionInk(ACol, ARow, Result, ink) then
+    Result.TextColor := ink;
 end;
 
 function TTyCustomGrid.GridLineWidthPx: Integer;
@@ -6148,6 +6190,7 @@ begin
     反过来的话 KeepCursorVisible 算的是**旧**视口,永远拖不对。 }
   if goScrollKeepVisible in Options then KeepCursorVisible;
   Invalidate;
+  EditorFollowCell;
   NotifyTopLeftChanged;
 end;
 
@@ -6177,6 +6220,7 @@ begin
     那是对的:换了当前格,焦点底色和选区都变了,平移旧像素本来就不成立。
     没开这个标志时一行都不多跑。 }
   if goScrollKeepVisible in Options then KeepCursorVisible;
+  EditorFollowCell;
   NotifyTopLeftChanged;
 end;
 
@@ -7985,6 +8029,7 @@ end;
 
 procedure TTyCustomGrid.Paint;
 begin
+  EditorFollowCell;   { a no-op unless the editor's place changed since it was last put }
   RenderTo(Canvas, ClientRect, Dpi);
 end;
 
@@ -9396,6 +9441,19 @@ var
   hit: TTyGridHit;
   gPos, gIdx: Integer;
 begin
+  { #48. A press on the grid first leaves the edited cell, the way moving to another cell
+    does: a valid value is committed and the gesture goes on; one OnValidateCell refuses
+    keeps the editor where it is and the whole gesture is dropped -- the base class's half
+    too (dragging a column wider, moving a column, the double-click auto-fit), or the grid
+    would change shape under an editor that stays. Scrolling does not come through here;
+    the editor follows its cell instead (EditorFollowCell). }
+  FGestureRefused := False;
+  if FEditing and not TryEndEdit(True) then
+  begin
+    FGestureRefused := True;
+    RefocusEditor;
+    Exit;
+  end;
   inherited MouseDown(Button, Shift, X, Y);
   { 每次按下都从头记:上一次按住的来历不能带到这一次。 }
   FCellPress := False;
@@ -9553,6 +9611,11 @@ var
   bc, br, sc: Integer;
   hit: TTyGridHit;
 begin
+  if FGestureRefused then
+  begin
+    FGestureRefused := False;   { the release of a refused press ends nothing it never began }
+    Exit;
+  end;
   { 松开才真正填 —— 拖的过程里只记目标。 }
   if FFillDragging then
   begin
@@ -11091,6 +11154,7 @@ var
   hit: TTyGridHit;
   txt, cmt: string;
 begin
+  if FGestureRefused and (ssLeft in Shift) then Exit;   { the refused press is still held }
   inherited MouseMove(Shift, X, Y);
   if not Enabled then Exit;
 
@@ -11250,10 +11314,40 @@ end;
   OnGetCellStyle 都还能再压过它 —— 优先级链就一条,不另开分支。 }
 function TTyCustomStringGrid.CellAppearance(ACol, ARow, ADisplayPos: Integer;
   const AFrame: TTyStyleSet): TTyGridCellAppearance;
+var
+  ink: TTyColor;
 begin
   Result := inherited CellAppearance(ACol, ARow, ADisplayPos, AFrame);
-  if CellDisplayFor(ACol, ARow) = gcdHyperlink then
+  { 选中的链接格同样用选区的文字色:链接色多半就是强调色,落在强调色的选区底上看不见。 }
+  if (CellDisplayFor(ACol, ARow) = gcdHyperlink)
+     and not SelectionInk(ACol, ARow, Result, ink) then
     Result.TextColor := HyperlinkTextColor(Result.TextColor);
+end;
+
+function TTyCustomStringGrid.SelectionFillStyle: TTyStyleSet;
+begin
+  if FHideSelectionWhenInactive and (not SelectionIsActive) then
+    Result := ActiveController.Model.ResolveStyle('TyGridCellSelectedInactive', StyleClass, [])
+  else
+    Result := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, [tysSelected]);
+end;
+
+function TTyCustomStringGrid.SelectionInk(ACol, ARow: Integer;
+  const AAppearance: TTyGridCellAppearance; out AInk: TTyColor): Boolean;
+var
+  selS: TTyStyleSet;
+begin
+  AInk := AAppearance.TextColor;
+  Result := False;
+  { 用户给这一格上了底色的,选区只盖一层半透明的标记(RenderCells),格子自己的颜色
+    还透得出来 —— 文字也保持它自己的。 }
+  if AAppearance.HasExplicitBackground then Exit;
+  if not IsCellSelected(ACol, ARow) then Exit;
+  selS := SelectionFillStyle;
+  { 没有选区底色就没有可配的文字色:主题没定义就什么都不换。 }
+  if not ((tpBackground in selS.Present) and (tpTextColor in selS.Present)) then Exit;
+  AInk := selS.TextColor;
+  Result := True;
 end;
 
 function TTyCustomStringGrid.HoverIsHyperlink(X, Y: Integer): Boolean;
@@ -15585,6 +15679,7 @@ end;
 function TTyCustomStringGrid.BeginEdit(ACol, ARow: Integer): Boolean;
 begin
   Result := DoBeginEdit(ACol, ARow);
+  if Result and FEditing then FPlacedEditorRect := EditorTargetRect;   { where DoBeginEdit put it }
   if Result and Assigned(FOnGetEditorProp) and (EditorControl <> nil) then
     FOnGetEditorProp(Self, FEditCol, FEditRow, EditorControl);
 end;
@@ -15951,6 +16046,50 @@ begin
   if (w <> nil) and w.HandleAllocated and w.CanFocus then w.SetFocus;
 end;
 
+{ Where the open editor belongs now: on its cell's visible part, widened as BeginEdit
+  widens it, and a memo editor taller. A cell scrolled out of view (or filtered out, or
+  folded into a group) parks the editor outside the control instead of hiding it: hiding
+  the focused control hands focus away, and losing focus commits the edit -- or, while the
+  value is refused, pulls focus straight back. Parked, it keeps the focus and the text
+  being typed, and comes back with its cell. }
+function TTyCustomStringGrid.EditorTargetRect: TRect;
+var
+  r: TRect;
+begin
+  r := CellVisibleRect(FEditCol, FEditRow);
+  if IsRectEmpty(r) then
+  begin
+    r := CellRect(FEditCol, FEditRow);
+    Exit(Rect(-10000, -10000, -10000 + Max(1, r.Right - r.Left),
+      -10000 + Max(1, r.Bottom - r.Top)));
+  end;
+  r := WidenEditorRect(FEditCol, FEditRow, r);
+  if FEditKind = gekMemo then r.Bottom := Max(r.Bottom, r.Top + ScaleI(72));
+  Result := r;
+end;
+
+{ #48. The editor's place was worked out once, when editing started, and nothing moved it
+  afterwards: a scroll, a column dragged wider, a form resized, and it sat over some other
+  cell. Only a change is applied, so the host's own adjustments in OnGetEditorProp stand
+  until the layout really moves. }
+procedure TTyCustomStringGrid.EditorFollowCell;
+var
+  r: TRect;
+  ctl: TControl;
+begin
+  if (not FEditing) or FEndingEdit then Exit;
+  r := EditorTargetRect;
+  if EqualRect(r, FPlacedEditorRect) then Exit;
+  FPlacedEditorRect := r;
+  if FEditLink <> nil then
+    FEditLink.SetBounds(r)
+  else
+  begin
+    ctl := EditorControl;
+    if ctl <> nil then ctl.BoundsRect := r;
+  end;
+end;
+
 procedure TTyCustomStringGrid.DateEditorExit(Sender: TObject);
 begin
   TryEndEdit(True);
@@ -16038,6 +16177,7 @@ end;
 
 procedure TTyCustomStringGrid.DblClick;
 begin
+  if FEditing and not TryEndEdit(True) then begin RefocusEditor; Exit; end;   { #48 }
   inherited DblClick;
   { 只有双击**单元格**才进编辑。行号槽、列头、末行以下的空白都不是格子 ——
     在那些地方双击时用户的手根本没碰当前光标格。 }
@@ -16117,12 +16257,7 @@ begin
   { 失焦时换一个 typeKey 解析选区底色 —— 控件不自己去调淡一个颜色
     (那就成了硬编码的视觉值)。用独立的键而不是 :selected:disabled:
     .tycss 每个选择器只认一个 :state。 }
-  if FHideSelectionWhenInactive and (not SelectionIsActive) then
-    selS := ActiveController.Model.ResolveStyle('TyGridCellSelectedInactive',
-      StyleClass, [])
-  else
-    selS := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass,
-      [tysSelected]);
+  selS := SelectionFillStyle;
   { 盖在"用户显式指定了底色"的格上时改用半透明层。选区底色是不透明的 accent,
     直接铺上去会把用户自己标的颜色**整块抹掉** —— 而光标总是落在刚上色的那一格上,
     于是"上了色却什么都没变"。半透明层让两者都读得出来。 }

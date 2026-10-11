@@ -1363,8 +1363,8 @@ begin
     dflt := True;
     if Assigned(FOnDrawTrack) then FOnDrawTrack(Self, P, GrooveR, dflt);
     St := ActiveController.Model.ResolveStyle('TyTrackGroove', '', []);
-    if dflt and (tpBackground in St.Present) then
-      P.FillBackground(GrooveR, St.Background, St.BorderRadius);
+    if dflt then
+      TyFillSubElement(P, GrooveR, St, TyUniformCorners(St.BorderRadius));
 
     { The segments, groove-thick, centre to centre: each offered to OnDrawSegment, then filled
       when the final class names a style for it. None of it when the owner drew the track. }

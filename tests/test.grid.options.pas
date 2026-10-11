@@ -30,7 +30,7 @@ uses
   Classes, SysUtils, StrUtils, Types, TypInfo, Controls, Forms, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
-  tyControls.Types, tyControls.Controller, tyControls.Columns, tyControls.ScrollBar,
+  tyControls.Types, tyControls.Controller, tyControls.Columns, tyControls.ScrollBar, tyControls.Edit,
   tyControls.Grid;
 
 type
@@ -53,6 +53,13 @@ type
     procedure DoubleClickDivider(X, Y: Integer);
     procedure HoverAt(X, Y: Integer);
     procedure RenderInto(ABmp: TBGRABitmap);
+    { #48: the open editor's bounds, the cell's visible part, typing into the text editor,
+      a scroll that goes through the real entry. }
+    function  EditorBox: TRect;
+    function  VisibleCell(ACol, ARow: Integer): TRect;
+    function  EditorText: string;
+    procedure TypeInEditor(const S: string);
+    procedure ScrollRows(ADy: Integer);
   end;
 
   TGridOptionsTest = class(TTestCase)
@@ -63,6 +70,11 @@ type
     procedure TearDown; override;
     { 建一张 ACols 列 x ARows 行、每列 AColWidth 宽的表。 }
     procedure Build(ACols, ARows, AColWidth: Integer);
+    procedure RefuseBad(Sender: TObject; ACol, ARow: Integer;
+      const AOldText, ANewText: string; var AValid: Boolean);
+    procedure GridCellStyleRed(Sender: TObject; ACol, ARow: Integer;
+      var ABackground: TTyFill; var ATextColor: TTyColor; var AFontName: string;
+      var AFontSize, AFontWeight: Integer; var AHAlign: TAlignment; var AVAlign: TTextLayout);
   published
     { --- 类型纪律 --- }
     procedure TestOptionOrdinalsAreAppendOnly;
@@ -99,6 +111,9 @@ type
     procedure TestCellHintsIsTheMasterSwitch;
     procedure TestTruncCellHintsShowsTheFullText;
     procedure TestRowHighlightPaintsTheWholeRow;
+    procedure TestSelectedCellsUseTheSelectionInk;
+    procedure TestTheEditorFollowsItsCell;
+    procedure TestAGestureOnTheGridLeavesTheEditFirst;
     procedure TestHeaderPushedLookGatesThePressedFill;
     { --- 流式化 --- }
     procedure TestOptionsSurviveARoundTrip;
@@ -124,6 +139,33 @@ end;
 function TOptGrid.StoredOptionBits: TTyGridOptions;
 begin
   Result := FOptions;
+end;
+
+function TOptGrid.EditorBox: TRect;
+begin
+  Result := Rect(0, 0, 0, 0);
+  if EditorControl <> nil then Result := EditorControl.BoundsRect;
+end;
+
+function TOptGrid.VisibleCell(ACol, ARow: Integer): TRect;
+begin
+  Result := CellVisibleRect(ACol, ARow);
+end;
+
+function TOptGrid.EditorText: string;
+begin
+  Result := '';
+  if EditorControl is TTyEdit then Result := TTyEdit(EditorControl).Text;
+end;
+
+procedure TOptGrid.TypeInEditor(const S: string);
+begin
+  if EditorControl is TTyEdit then TTyEdit(EditorControl).Text := S;
+end;
+
+procedure TOptGrid.ScrollRows(ADy: Integer);
+begin
+  ScrollVerticallyBy(ADy);
 end;
 
 function TOptGrid.CellRectOf(ACol, ARow: Integer): TRect;
@@ -1089,6 +1131,171 @@ end;
 
 { 整行高亮。断言在 CellAppearance 上而不是像素上:这一层就是绘制读的那一层,
   而且它能把"光标那一格"和"同一行的别的格"分开问 —— 后者正是这个标志的全部内容。 }
+procedure TGridOptionsTest.RefuseBad(Sender: TObject; ACol, ARow: Integer;
+  const AOldText, ANewText: string; var AValid: Boolean);
+begin
+  AValid := ANewText <> 'bad';
+end;
+
+{ #48. Scroll, column widths and row heights move the cell; the editor has to move with it.
+  Each step is asserted against the cell's visible rect AFTER the change -- the editor that
+  stayed where it was would match the rect from before. }
+procedure TGridOptionsTest.TestTheEditorFollowsItsCell;
+var
+  rowH: Integer;
+  rowH2: TRect;
+begin
+  Build(3, 200, 80);
+  FGrid.Cells[1, 5] := 'abc';
+  AssertTrue('setup: editing', FGrid.BeginEdit(1, 5));
+  AssertTrue('setup: it starts on its cell', EqualRect(FGrid.EditorBox, FGrid.VisibleCell(1, 5)));
+
+  rowH := FGrid.CellRectOf(1, 5).Bottom - FGrid.CellRectOf(1, 5).Top;
+  FGrid.ScrollRows(rowH);
+  AssertTrue('scrolled one row: still editing', FGrid.Editing);
+  AssertTrue('scrolled one row: on its cell', EqualRect(FGrid.EditorBox, FGrid.VisibleCell(1, 5)));
+
+  FGrid.ScrollRows(rowH * 100);
+  AssertTrue('scrolled out of view: still editing', FGrid.Editing);
+  AssertTrue('scrolled out of view: parked outside the control', FGrid.EditorBox.Bottom <= 0);
+  AssertEquals('…keeping what was typed', 'abc', FGrid.EditorText);
+
+  FGrid.ScrollRows(-rowH * 1000);
+  AssertTrue('scrolled back: on its cell again', EqualRect(FGrid.EditorBox, FGrid.VisibleCell(1, 5)));
+
+  FGrid.Header.Columns.Items[0].Width := 140;
+  AssertTrue('a column before it widened: moved along', EqualRect(FGrid.EditorBox, FGrid.VisibleCell(1, 5)));
+  FGrid.Header.Columns.Items[1].Width := 160;
+  AssertTrue('its own column widened: as wide', EqualRect(FGrid.EditorBox, FGrid.VisibleCell(1, 5)));
+  FGrid.RowHeights[2] := rowH * 3;
+  AssertTrue('a row above it grew: moved down', EqualRect(FGrid.EditorBox, FGrid.VisibleCell(1, 5)));
+  FGrid.RowHeights[5] := rowH * 2;
+  AssertTrue('its own row grew: as tall', EqualRect(FGrid.EditorBox, FGrid.VisibleCell(1, 5)));
+
+  { Hidden UNDER frozen rows the cell's own rect is still inside the control -- an editor
+    put there would sit on top of the frozen band. It has to be parked off the control. }
+  FGrid.RowHeights[2] := 0;
+  FGrid.RowHeights[5] := 0;
+  FGrid.FixedRows := 3;
+  FGrid.ScrollRows(rowH * 3);
+  AssertTrue('setup: row 5 is under the frozen rows', IsRectEmpty(FGrid.VisibleCell(1, 5)));
+  AssertTrue('setup: yet its rect is on the control',
+    IntersectRect(rowH2, FGrid.CellRectOf(1, 5), FGrid.ClientRect));
+  AssertFalse('under the frozen rows: parked off the control',
+    IntersectRect(rowH2, FGrid.EditorBox, FGrid.ClientRect));
+  AssertTrue('…still editing', FGrid.Editing);
+end;
+
+{ #48. While OnValidateCell refuses the value, a gesture on the grid does not happen: the
+  column is not dragged wider, the header does not sort, and the editor stays with what was
+  typed. Once the value is valid, the same gesture commits it and goes ahead. }
+procedure TGridOptionsTest.TestAGestureOnTheGridLeavesTheEditFirst;
+var
+  edgeX, y, before: Integer;
+  hdr: TRect;
+begin
+  Build(3, 6, 80);
+  FGrid.Header.Options := FGrid.Header.Options + [hoHeaderClickAutoSort];
+  FGrid.OnValidateCell := @RefuseBad;
+  FGrid.Cells[0, 0] := 'z';
+  FGrid.Cells[0, 1] := 'old';
+  FGrid.Cells[0, 2] := 'a';
+  AssertTrue('setup: editing', FGrid.BeginEdit(0, 1));
+  FGrid.TypeInEditor('bad');
+
+  edgeX := FGrid.CellRectOf(0, 0).Right;
+  y := FGrid.HeaderH div 2;
+  AssertEquals('setup: the divider of column 0', 0, FGrid.DividerHit(edgeX));
+  before := FGrid.Header.Columns.Items[0].Width;
+
+  FGrid.DragFromTo(edgeX, y, edgeX + 40, y);
+  AssertEquals('refused: the column was not dragged wider', before, FGrid.Header.Columns.Items[0].Width);
+  AssertTrue('refused: still editing', FGrid.Editing);
+  AssertEquals('refused: with what was typed', 'bad', FGrid.EditorText);
+
+  hdr := FGrid.CellRectOf(0, 0);
+  FGrid.ClickAt((hdr.Left + hdr.Right) div 2, y);
+  AssertEquals('refused: the header did not sort', -1, FGrid.SortColumn);
+  AssertTrue('refused: still editing after the header click', FGrid.Editing);
+  AssertEquals('refused: the value was not dropped', 'bad', FGrid.EditorText);
+  AssertEquals('refused: the cell kept its value', 'old', FGrid.Cells[0, 1]);
+
+  FGrid.DoubleClickDivider(edgeX, y);
+  AssertEquals('refused: a double-click on the divider did not auto-fit the column', before,
+    FGrid.Header.Columns.Items[0].Width);
+  AssertTrue('refused: still editing after the double-click', FGrid.Editing);
+
+  FGrid.TypeInEditor('good');
+  FGrid.DragFromTo(edgeX, y, edgeX + 40, y);
+  AssertFalse('valid: the edit was left', FGrid.Editing);
+  AssertEquals('valid: and committed', 'good', FGrid.Cells[0, 1]);
+  AssertTrue('valid: the drag went ahead', FGrid.Header.Columns.Items[0].Width > before);
+end;
+
+procedure TGridOptionsTest.GridCellStyleRed(Sender: TObject; ACol, ARow: Integer;
+  var ABackground: TTyFill; var ATextColor: TTyColor; var AFontName: string;
+  var AFontSize, AFontWeight: Integer; var AHAlign: TAlignment; var AVAlign: TTextLayout);
+begin
+  ATextColor := TyRGB(255, 0, 0);
+end;
+
+{ 选中格的文字色。群里的截图:classic 主题下选中格是深蓝底(强调色)、字还是黑的。
+  断言在 CellAppearance 上 —— 绘制读的就是这一层。 }
+procedure TGridOptionsTest.TestSelectedCellsUseTheSelectionInk;
+var
+  sel, plain: TTyStyleSet;
+  inSel, outSel, explicit, hooked, link: TTyGridCellAppearance;
+  inactive: TTyStyleSet;
+  ctl: TTyStyleController;
+begin
+  Build(4, 6, 80);
+  sel   := FGrid.ActiveController.Model.ResolveStyle('TyGridCell', '', [tysSelected]);
+  plain := FGrid.ActiveController.Model.ResolveStyle('TyGridCell', '', []);
+  AssertTrue('setup: the theme gives the selection its own ink',
+    (tpTextColor in sel.Present) and (sel.TextColor <> plain.TextColor));
+
+  FGrid.Cells[2, 1] := 'x';
+  FGrid.Cells[2, 3] := 'y';
+  FGrid.CellColors[2, 3] := TyRGB(255, 255, 0);   { 用户上了底色的格 }
+  FGrid.SelectRange(1, 1, 2, 3);
+
+  inSel  := FGrid.AppearanceOf(2, 1);
+  outSel := FGrid.AppearanceOf(3, 1);
+  AssertTrue('a selected cell is inked like the selection', inSel.TextColor = sel.TextColor);
+  AssertTrue('a cell outside it keeps the plain ink', outSel.TextColor = plain.TextColor);
+
+  explicit := FGrid.AppearanceOf(2, 3);
+  AssertTrue('a selected cell with its own background keeps its own ink',
+    explicit.TextColor = plain.TextColor);
+
+  FGrid.OnGetCellStyle := @GridCellStyleRed;
+  hooked := FGrid.AppearanceOf(1, 2);
+  AssertTrue('an ink the host chose wins over the selection''s', hooked.TextColor = TyRGB(255, 0, 0));
+  FGrid.OnGetCellStyle := nil;
+
+  (FGrid.Header.Columns.Items[1] as TTyGridColumn).CellDisplay := gcdHyperlink;
+  link := FGrid.AppearanceOf(1, 2);
+  AssertTrue('a selected link cell is inked like the selection too', link.TextColor = sel.TextColor);
+  (FGrid.Header.Columns.Items[1] as TTyGridColumn).CellDisplay := gcdText;
+
+  { 失焦淡化:底色换成 TyGridCellSelectedInactive,文字色也跟着它(无头环境下网格没有焦点)。 }
+  inactive := FGrid.ActiveController.Model.ResolveStyle('TyGridCellSelectedInactive', '', []);
+  AssertTrue('setup: the inactive selection inks differently',
+    (tpTextColor in inactive.Present) and (inactive.TextColor <> sel.TextColor));
+  FGrid.HideSelectionWhenInactive := True;
+  AssertTrue('an unfocused grid inks like the inactive selection',
+    FGrid.AppearanceOf(2, 1).TextColor = inactive.TextColor);
+  FGrid.HideSelectionWhenInactive := False;
+
+  { 主题的选区没有底色 = 不铺选区,文字色也就不换。 }
+  ctl := TTyStyleController.Create(FForm);
+  ctl.LoadThemeCss('TyGrid { color: #111111; } TyGridCell { color: #111111; } ' +
+    'TyGridCell:selected { color: #EEEEEE; }');
+  FGrid.Controller := ctl;
+  AssertTrue('no selection fill, no selection ink',
+    FGrid.AppearanceOf(2, 1).TextColor = TyRGB($11, $11, $11));
+end;
+
 procedure TGridOptionsTest.TestRowHighlightPaintsTheWholeRow;
 var
   sameRowOther, otherRow, focused: TTyGridCellAppearance;

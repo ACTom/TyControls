@@ -307,9 +307,13 @@ begin
       AssertEquals('E13: auto light ' + TbSeedNames[seed], Ord(tssOwn), Ord(TbSeedCell(s, seed, 'light').Source));
       AssertEquals('E13: auto dark ' + TbSeedNames[seed], Ord(tssOwn), Ord(TbSeedCell(s, seed, 'dark').Source));
     end;
+    { classic sets its surface in :root (the grey face, #47) and pins it again in its dark
+      block; adwaita leaves the light surface to the base layer. }
     Open('builtin/classic.tycss');
-    AssertEquals('E13: classic light surface', Ord(tssInherited), Ord(TbSeedCell(s, cSurface, 'light').Source));
+    AssertEquals('E13: classic light surface', Ord(tssShared), Ord(TbSeedCell(s, cSurface, 'light').Source));
     AssertEquals('E13: classic dark surface', Ord(tssOwn), Ord(TbSeedCell(s, cSurface, 'dark').Source));
+    Open('builtin/adwaita.tycss');
+    AssertEquals('E13: adwaita light surface', Ord(tssInherited), Ord(TbSeedCell(s, cSurface, 'light').Source));
     Open('builtin/win11.tycss');
     c := TbSeedCell(s, cRadius, 'light');
     AssertEquals('E13: win11 light radius', Ord(tssShared), Ord(c.Source));

@@ -29,6 +29,33 @@
 }
 
 /* --accent is the brand seed; the runtime accent-picker recolours the skin through it. */
+/* The controls this skin writes no rule for -- lists, trees, grids, calendars, date and spin
+   fields, memos, panels, group boxes, tabs -- are drawn by the built-in base layer. These
+   tokens hand them this skin's corners and the well of this skin's own edit, so they read as
+   part of the skin instead of the default theme in the skin's colours. */
+:root {
+  --radius:        0;
+  --radius-sm:     0;
+  --radius-scroll: 0;
+  --radius-round:  0;
+  --input-bg:      var(--field);
+  --input-border:  var(--border);
+  --grid-bg:       var(--field);
+  /* Everything that is not a field sits on the grey system face -- panels, tab pages, menus,
+     the chrome bars -- as every Win9x window did. The scroll and track
+     channels are the lighter grey between the face and the white wells. */
+  --surface:        var(--face);
+  --surface-chrome: var(--face);
+  --chrome-bar-bg:  var(--face);
+  --surface-tab-rest:  var(--face);
+  --surface-tab-hover: var(--face);
+  --surface-track:  #E0E0E0;
+  --scroll-handle:  var(--face);
+  --scroll-handle-hover: var(--face-hover);
+  /* The terminal is a text well like the edit: white, not the grey face. */
+  --terminal-bg:    var(--field);
+}
+
 @mode light {
   :root {
     --accent:       #10318C;   /* brand seed — title-bar dark stop + progress fill */
@@ -64,7 +91,7 @@
        values so base-fallback controls (list box, panel, status bar, …) stay light too —
        without these, dark mode renders a mixed window. Values = the base light seeds
        (TyBuiltinBaseModeCss); --border needs no pin, classic's own #808080 above covers it. */
-    --surface:      #FFFFFF;
+    --surface:      var(--face);
     --on-surface:   #1F2937;
     --on-titlebar: var(--title-ink);   /* ink for controls hosted on the title bar */
 }
@@ -177,3 +204,46 @@ TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,
 TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {
   color: var(--on-titlebar);
 }
+
+/* ── The controls the base layer draws, in this skin's shapes ─────────────────────────────
+   Each rule below replaces the base layer's whole rule set for its keys, so it restates what
+   the base gives (padding, font size) and changes only the frame and the colours.
+
+   Field wells: every list, tree, grid and field is a sunken white well, like TyEdit above.
+   'render-style: inset3d' derives the two-tone 2px frame from the white face. Hover and focus
+   change nothing (this era had no hover, and focus was the caret or a dotted rect). */
+TyListBox, TyValueListEditor, TyRibbonGallery { render-style: inset3d; background: var(--input-bg); color: var(--on-surface); padding: var(--pad-tight); }
+TyListBox:disabled, TyValueListEditor:disabled, TyRibbonGallery:disabled { color: var(--ink-disabled); }
+TySpinEdit, TyMemo, TyCascader { render-style: inset3d; background: var(--input-bg); color: var(--on-surface); padding: var(--pad-control); font-size: var(--font-size-base); }
+TySpinEdit:disabled, TyMemo:disabled, TyCascader:disabled { color: var(--ink-disabled); }
+TyDateTimePicker { render-style: inset3d; background: var(--input-bg); color: var(--on-surface); padding: var(--pad-datetime); font-size: var(--font-size-base); }
+TyDateTimePicker:disabled { color: var(--ink-disabled); }
+TyCalendar { render-style: inset3d; background: var(--input-bg); color: var(--on-surface); padding: var(--pad-button); font-size: var(--font-size-base); }
+TyTreeView, TyListView { render-style: inset3d; background: var(--input-bg); color: var(--on-surface); padding: var(--pad-tight); font-size: var(--font-size-base); }
+TyGrid { render-style: inset3d; background: var(--grid-bg); color: var(--on-surface); font-size: var(--font-size-base); }
+
+/* Raised: the tab page frame and each tab, and the menu popup stand out of the face. Panels stay
+   flat (the base layer's grey frame): the panel's rules are shared by shapes, images and charts,
+   which must not grow a bevel. */
+TyPageControl, TyTabControl, TyTabSet { render-style: bevel3d; background: var(--surface); color: var(--on-surface); }
+TyPageControl:disabled, TyTabControl:disabled, TyTabSet:disabled { color: var(--ink-disabled); }
+TyTab        { render-style: bevel3d; background: var(--surface); color: var(--on-surface); padding: var(--pad-control); }
+TyTab:active { render-style: bevel3d; background: var(--surface); color: var(--accent); }   /* the page shown: navy caption */
+TyMenuView, TyMenuPopup { render-style: bevel3d; background: var(--surface); color: var(--on-surface); padding: var(--pad-control); }
+
+/* Scroll bar and track bar: a raised grey thumb on a light channel -- no pill, no accent. */
+TyScrollBar        { background: var(--surface-track); color: var(--ink); border-radius: 0; }
+TyScrollBar:disabled { color: var(--ink-disabled); }
+TyScrollThumb      { render-style: bevel3d; background: var(--scroll-handle); }
+TyScrollThumb:hover  { render-style: bevel3d; background: var(--scroll-handle-hover); }
+TyScrollThumb:active { render-style: bevel3d; background: var(--scroll-handle); }
+TyTrackGroove      { render-style: inset3d; background: var(--field); }
+TyTrackThumb       { render-style: bevel3d; background: var(--face); }
+/* The switch has no Win9x ancestor either; it is built from the track bar's parts: a square
+   track (--radius-round is 0 here) and a raised grey knob. */
+TyToggleKnob       { render-style: bevel3d; background: var(--face); }
+TyTrackThumb:hover  { render-style: bevel3d; background: var(--face-hover); }
+TyTrackThumb:active { render-style: bevel3d; background: var(--face); }
+
+/* Tooltip: the pale yellow box with a thin black frame. */
+TyHint { background: #FFFFE1; color: var(--ink); border-color: #000000; border-width: 1px; border-radius: 0; padding: var(--pad-tooltip); font-size: var(--font-size-base); }
