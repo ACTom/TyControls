@@ -160,6 +160,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | 控件 | 说明 |
 |------|------|
 | [TTyTrackBar](trackbar.md) | 滑块（连续取值） |
+| [TTyRangeTrackBar / TTyMultiTrackBar](multitrackbar.md) | 多滑块：一个或多个区间 / 多个值，每个滑块可单独设颜色与样式 |
 | [TTyScrollBar](scrollbar.md) | 滚动条 |
 | [TTyProgressBar](progressbar.md) | 进度条 |
 

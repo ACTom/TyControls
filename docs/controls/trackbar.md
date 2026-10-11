@@ -39,9 +39,11 @@ uses tyControls.TrackBar;
 | `TickStyle` | `TTyTrackTickStyle` | `ttsAuto` | **（API parity 新增）** 刻度怎么生成：`ttsAuto`（每 `Frequency` 个值单位一条，默认）/ `ttsNone`（不画）/ `ttsManual`（**只**画 `SetTick` 手工放的那几条）。与 LCL `TTickStyle` 同义同默认（`comctrls.pp:2796`）。`Frequency = 0` 仍然能关掉自动刻度，旧写法不变。 |
 | `LineSize` | `Integer` | `1` | 方向键单步步进量（每次 ±`LineSize`）。最小为 1（赋值 <1 被夹为 1）。 |
 | `PageSize` | `Integer` | `10` | `PageUp`/`PageDown` 翻页步进量（每次 ±`PageSize`）。最小为 1（赋值 <1 被夹为 1）。 |
-| `SelStart` / `SelEnd` | `Integer` | `0` / `0` | 选区的两端，单位和 `Position` 相同（照 LCL）。轨道上这两个值之间的一段用 `TyTrackSelection` 的 `background` 填充，画在滑块下面；起止点在滑块中心，`Reversed`、竖排都跟着走。两端超出 `Min..Max` 时落在 `Min` / `Max` 上；两个都是 `0` 表示没有选区（LCL 的约定，新放的控件不显示）；`SelStart > SelEnd` 时不画（和 Windows 原生滑块一样）。只用来显示，用户拖不动——要能拖的区间用 `TTyRangeTrackBar`（#36）。 |
+| `SelStart` / `SelEnd` | `Integer` | `0` / `0` | 选区的两端，单位和 `Position` 相同（照 LCL）。轨道上这两个值之间的一段用 `TyTrackSelection` 的 `background` 填充，画在滑块下面；起止点在滑块中心，`Reversed`、竖排都跟着走。两端超出 `Min..Max` 时落在 `Min` / `Max` 上；两个都是 `0` 表示没有选区（LCL 的约定，新放的控件不显示）；`SelStart > SelEnd` 时不画（和 Windows 原生滑块一样）。只用来显示，用户拖不动——要能拖的区间用 [`TTyRangeTrackBar`](multitrackbar.md)。 |
 | `ShowSelRange` | `Boolean` | `True` | 是否显示选区，默认值照 LCL。 |
 | `ShowValue` | `Boolean` | `False` | 在滑轨旁显示当前值（横向在右、纵向在下），字体与颜色取轨道样式 `TyTrackBar` 的 `color`。默认关——打开会占掉一条空间，滑轨相应变短（几何与命中都跟着变）。 |
+| `TickLabels` | `Boolean` | `False` | 在每条刻度外侧写上它的值，见第 6 节「刻度标签」。默认关——标签要另占一条，已经摆好的窗体不该因此变形。 |
+| `OnFormatTickLabel` | `TTyTrackTickLabelEvent` | `nil` | `procedure(Sender: TObject; AValue: Integer; var AText: string)`：画之前改写某条刻度标签的文字（「1 月」「¥100」）；改成空串就不画这一条。 |
 | `OnChange` | `TNotifyEvent` | `nil` | `Position` 真实变化时触发（含拖动、点击定位、方向键/翻页键步进、直接赋值）。 |
 | `TabStop` | `Boolean` | `True` | 是否参与 Tab 键导航（构造时自动置为 `True`）。 |
 | `Align` | `TAlign` | — | 父容器内的停靠方式。 |
@@ -117,6 +119,7 @@ TTyTrackBar 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态�
 |------|----------|
 | `:hover` | 鼠标悬停在滑块矩形内（非拖动时） |
 | `:active` | 正在拖动中（`FDragging = True`） |
+| `:focus` | 控件有键盘焦点（与上面三种叠加）。默认主题在滑块内侧画一圈 `--on-accent` 色的环；主题没写这条规则时滑块外观不变。 |
 | 无伪类 | 正常状态 |
 
 > **注意：** 拖动时滑块状态固定为 `:active`，即使鼠标移出控件边界（`MouseLeave` 不会清除 `FDragging`，仅在 `MouseUp` 时清除）。
@@ -134,13 +137,33 @@ TyTrackBar:disabled { opacity: 0.5; }   /* 禁用态半透明，与其余控件�
 TyTrackThumb { background: var(--border); border-radius: 4px; }
 TyTrackThumb:hover  { background: darken(--border, 10%); }
 TyTrackThumb:active { background: var(--accent); }
+TyTrackThumb:focus  { outline: 2px var(--on-accent); outline-offset: 2px; }
 ```
+
+> **滑块的焦点环：** `TyTrackThumb` 的 `outline` 画在滑块**内侧**，`outline-offset` 往里缩。滑块本身是强调色，用 `--focus-ring`（也是强调色）画会看不出来，所以默认主题用强调色上的文字色 `--on-accent`。整条控件的焦点环仍由 `TyTrackBar:focus` 负责。多滑块控件里，这个状态只给方向键要动的那个滑块，见 [multitrackbar.md](multitrackbar.md)。
 
 > **`:disabled`（Batch ④）：** `TyTrackBar` 现支持 `:disabled` 伪类，与 `TyScrollBar` / `TyTabControl` / `TyProgressBar` 一道补齐状态等价性——`Enabled = False` 时整条轨道（含滑块、刻度）按 `opacity` 统一变淡。滑块子部件 `TyTrackThumb`（tier-a 着色面）的颜色独立于轨道，详见 [tycss-reference.md](../tycss-reference.md) §8.3。
 
 ### 刻度线（ticks）
 
 当 `Frequency > 0` 且 `Max > Min` 时，控件从 `Min` 起每隔 `Frequency` 个值单位绘制一条短刻度线，刻度对齐到该值下滑块中心所在的主轴位置（水平绘于轨道底缘、垂直绘于轨道右缘，长约 4 逻辑像素 / 粗 1 逻辑像素）。刻度颜色取轨道样式 `TyTrackBar` 的 `TextColor`（即 CSS `color`，主题驱动），可在 `.tycss` 中为 `TyTrackBar` 声明 `color` 控制刻度颜色——`ShowValue` 的读数用的也是这一条 `color`。默认 `Frequency = 1`（每个值单位一条）；置 `0` 才完全不绘制刻度。
+
+### 刻度标签（TickLabels）
+
+`TickLabels = True` 时，每条刻度外侧（离凹槽较远的那一边）写上它的值；`TickMarks = ttmBoth` 时两侧都写。字体和颜色取 `TyTrackBar`，和刻度、读数是同一条 `color`。
+
+- 标签另占一条：横排时高度是文字高 + 2 逻辑像素，竖排时宽度是最宽那个标签 + 2 逻辑像素，凹槽和滑块相应让开。这条的厚度在绘制时量出并缓存，所以开了 `AutoSize` 的控件在第二次布局时才把它算进去（和 `ShowValue` 一样）。
+- 相邻标签挤不下时跳过中间会重叠的那些，首尾两个总是保留（控件短得连这两个都放不下时只留第一个）。
+- `OnFormatTickLabel` 可以改写文字：
+
+  ```pascal
+  procedure TMainForm.MonthLabel(Sender: TObject; AValue: Integer; var AText: string);
+  begin
+    AText := IntToStr(AValue) + ' 月';
+  end;
+  ```
+
+- 关着的时候（默认）布局和绘制与没有这个功能时逐像素相同。`TTyRangeTrackBar` / `TTyMultiTrackBar` 的刻度和标签与这里是同一段代码。
 
 ---
 

@@ -950,8 +950,10 @@ States: `:disabled` only (`opacity`).
 | `TyToggleSwitch` | The switch track (`:active` is added while `Checked=True`) | `TTyToggleSwitch` | `:hover` `:active` `:focus` `:disabled` |
 | `TyToggleKnob` | The switch knob (a tier-a colored surface) | `TTyToggleSwitch` | none |
 | `TyTrackBar` | Slider track | `TTyTrackBar` | `:focus` `:disabled` |
-| `TyTrackThumb` | Slider thumb (tier-a) | `TTyTrackBar`, `TTyTrackEdit` | `:hover` `:active` |
-| `TyTrackSelection` | Slider selection range (`SelStart..SelEnd`), reads `background` and `border-radius` | `TTyTrackBar` | none |
+| `TyRangeTrackBar` / `TyMultiTrackBar` | The multi-thumb sliders themselves; parent key `TyTrackBar`, so without rules of their own they look like `TTyTrackBar` | `TTyRangeTrackBar` / `TTyMultiTrackBar` | `:focus` `:disabled` |
+| `TyTrackThumb` | Slider thumb (tier-a). The `:focus` `outline` is drawn **inside** the thumb (`outline-offset` moves it in); the default theme draws a ring in `--on-accent` | `TTyTrackBar`, `TTyRangeTrackBar`, `TTyMultiTrackBar`, `TTyTrackEdit` | `:hover` `:active` `:focus` (the thumb the arrow keys move, while the control has the focus) |
+| `TyTrackSelection` | Slider selection range (`SelStart..SelEnd`) and the ranges of `TTyRangeTrackBar`, reads `background` and `border-radius` | `TTyTrackBar`, `TTyRangeTrackBar` | none |
+| `TyTrackSegment` | A stretch of `TTyMultiTrackBar` between two thumbs, resolved with the `StyleClass` of its `Segments` item; reads `background` and `border-radius`. Without a class it is not drawn; the default theme has `.success`, `.warning` and `.danger` variants | `TTyMultiTrackBar` | none |
 | `TyProgressBar` | Progress bar track | `TTyProgressBar` | `:disabled` |
 | `TyProgressFill` | Progress fill segment (tier-a); only the leading corners are rounded while partially filled | `TTyProgressBar` | none |
 
