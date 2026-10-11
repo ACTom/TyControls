@@ -96,11 +96,20 @@ const
   { Registered with RegisterClass only: not on the palette, but streamed in .lfm files. }
   CStreamOnly: array[0..0] of string = ('TTyScrollContent');
 
+  { Split, in CSplit, and not on the palette YET: TTyGradientTrackBar (#36 step 2) is split and
+    guarded as it is written, and reaches designtime/tyControls.Design.pas with its palette
+    entry (plan Task 5). Until then the population (what Design.pas registers) does not hold
+    it -- so neither does G10's fixture -- and check (4) of
+    TestEveryRegisteredClassIsAccountedFor lets it through. A class registered since is
+    reported, so this list empties itself rather than going stale. }
+  CNotYetOnThePalette: array[0..0] of string = (
+    'TTyGradientTrackBar');
+
   { G7: where each derived control's custom class must hang (plan appendix C-0), plus the
     intermediate classes. Columns: subject, expected parent, the class whose split activates
     the row. A final-class row checks Subject.ClassParent.ClassParent (the custom class's
     parent); an intermediate row (subject <> activator) checks Subject.ClassParent. }
-  CChain: array[0..62, 0..2] of string = (
+  CChain: array[0..63, 0..2] of string = (
     ('TTyDropDownButton', 'TTyCustomButton', 'TTyDropDownButton'),
     ('TTyMenuButton', 'TTyCustomButton', 'TTyMenuButton'),
     ('TTyColorButton', 'TTyCustomButton', 'TTyColorButton'),
@@ -158,6 +167,7 @@ const
     ('TTyLucideImageList', 'TTyCustomVirtualImageList', 'TTyLucideImageList'),
     ('TTyRangeTrackBar', 'TTyMultiTrackBarBase', 'TTyRangeTrackBar'),
     ('TTyMultiTrackBar', 'TTyMultiTrackBarBase', 'TTyMultiTrackBar'),
+    ('TTyGradientTrackBar', 'TTyCustomMultiTrackBar', 'TTyGradientTrackBar'),
     { intermediates: activated by their family root }
     ('TTyGlyphButtonBase', 'TTyCustomButton', 'TTyButton'),
     ('TTyShellTreeLink', 'TTyCustomTreeView', 'TTyTreeView'),
@@ -594,10 +604,13 @@ begin
       if InList(n, CNotSplit) and IsSplitShape(c) then
         bad := bad + ' ' + n + '(split but still listed as not split)';
     end;
-    { (4): every split class is in the population. }
+    { (4): every split class is in the population -- or is on its way there. }
     for i := 0 to GSplit.Count - 1 do
-      if pop.IndexOf(GSplit[i]) < 0 then
+      if (pop.IndexOf(GSplit[i]) < 0) and not InList(GSplit[i], CNotYetOnThePalette) then
         bad := bad + ' ' + GSplit[i] + '(in CSplit but not registered)';
+    for i := Low(CNotYetOnThePalette) to High(CNotYetOnThePalette) do
+      if pop.IndexOf(CNotYetOnThePalette[i]) >= 0 then
+        bad := bad + ' ' + CNotYetOnThePalette[i] + '(registered now: drop it from CNotYetOnThePalette)';
   finally
     pop.Free;
   end;
@@ -1233,7 +1246,7 @@ initialization
     'TTyDBLookupListBox', 'TTyDBImage', 'TTyDBDateTimePicker', 'TTyDBCalendar',
     'TTyDBNavigator',
     // multi-thumb track bars (#36)
-    'TTyRangeTrackBar', 'TTyMultiTrackBar']);
+    'TTyRangeTrackBar', 'TTyMultiTrackBar', 'TTyGradientTrackBar']);
 
   { CDemoted: base and intermediate classes that publish nothing beyond their LCL root. }
   AddAll(GDemoted, ['TTyCustomControl', 'TTyGraphicControl', 'TTyComponent', 'TTyGlyphButtonBase', 'TTyCustomTabStrip', 'TTyCustomGrid',

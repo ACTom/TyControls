@@ -597,6 +597,68 @@ type
     procedure TestANewRangeIsDraggedOnWhenDraggable;
   end;
 
+  { The colour dialog answered without a dialog: logs `dialog:<colour as $hex> `, then picks
+    Pick (or is cancelled). }
+  TGradProbe = class(TTyGradientTrackBar)
+  protected
+    function ExecuteColorDialog(var AColor: TColor): Boolean; override;
+  public
+    Log: string;
+    Pick: TColor;
+    Cancel: Boolean;
+  end;
+
+  TGradAccess = class(TTyGradientTrackBar);
+
+  { TTyGradientTrackBar: the stops, the track painted as GradientFill paints, Gradient, a new
+    stop's colour, the colour edit on a double-click, the form file. Pointer input through
+    MouseDown / MouseMove / MouseUp; the log holds `edit:<i>:<colour> ` (OnEditStopColor) beside
+    `S<i>` / `T<i>` / `C` and the probe's `dialog:`. }
+  TTyGradientTrackBarTest = class(TMultiTrackFinalBase)
+  private
+    FBar: TGradProbe;
+    FGroove: TRect;
+    FHandleEdit: Boolean;
+    FEditTo: TColor;
+    procedure SeeTrack(Sender: TObject; APainter: TTyPainter; const ARect: TRect;
+      var ADefaultDraw: Boolean);
+    procedure NoThumbs(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
+      const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean);
+    procedure EditColor(Sender: TObject; AIndex: Integer; var AColor: TColor;
+      var AHandled: Boolean);
+    procedure TakeClick(Sender: TObject; AValue: Integer; var AHandled: Boolean);
+    { A stop with no colour of its own (Color clDefault) at AValue. }
+    procedure AddPlainStop(AValue: Integer);
+    procedure SetStops(const AValues: array of Integer; const AColors: array of TColor);
+    function StopsText: string;
+    function PtOn(AValue: Integer): TPoint;
+    function Centre(AIndex: Integer): TPoint;
+    procedure Click(const P: TPoint; ADouble: Boolean = False);
+    { The bar rendered (thumbs left out) and AFill painted by itself over the same ground,
+      compared inside the stretch of groove from the centre of a thumb at Min to the centre of
+      one at Max; '' = every pixel the same. }
+    function TrackAgainstFill(const AFill: TTyFill): string;
+    { The groove's stretch from Min's thumb centre to Max's (the bar rendered first, so FGroove
+      is known). }
+    function GradientRect: TRect;
+  protected
+    procedure SetUp; override;
+  published
+    procedure TestDefaults;
+    procedure TestTheTypeKeyHangsOnTheTrackBar;
+    procedure TestTheTrackIsTheGradientFill;
+    procedure TestTheTrackFollowsTheBarsDirection;
+    procedure TestTheTrackKeepsTheFirstAndLastColoursToTheEnds;
+    procedure TestGradientIsInOrderWithPositionsFromMinToMax;
+    procedure TestGradientFillKinds;
+    procedure TestANewStopTakesTheColourTheGradientHasThere;
+    procedure TestANewStopChangesNothingOnTheTrack;
+    procedure TestADoubleClickEditsTheStopsColour;
+    procedure TestOnEditStopColorHandledOpensNoDialog;
+    procedure TestStopsCrossAndAreRemovedDownToTwo;
+    procedure TestStopsRoundTripThroughAFormFile;
+  end;
+
 implementation
 
 { TMultiProbe }
@@ -6645,6 +6707,615 @@ begin
   Release(PtOn(60));
 end;
 
+{ Within 4 of R, G, B on every channel: a gradient's pixel at a stop's centre. }
+function NearPx(const A: TBGRAPixel; R, G, B: Byte): Boolean;
+begin
+  Result := (Abs(A.red - R) <= 4) and (Abs(A.green - G) <= 4) and (Abs(A.blue - B) <= 4);
+end;
+
+{ TGradProbe }
+
+function TGradProbe.ExecuteColorDialog(var AColor: TColor): Boolean;
+begin
+  Log := Log + Format('dialog:$%.6x ', [ColorToRGB(AColor)]);
+  Result := not Cancel;
+  if Result then AColor := Pick;
+end;
+
+{ TTyGradientTrackBarTest }
+
+procedure TTyGradientTrackBarTest.SetUp;
+begin
+  inherited SetUp;
+  FBar := TGradProbe.Create(FForm);
+  FBar.Name := 'Bar';
+  FBar.Parent := FForm;
+  FBar.Font.PixelsPerInch := 96;
+  FBar.SetBounds(0, 0, 400, 24);
+  FBar.Controller := FCtl;
+  FHandleEdit := False;
+  FEditTo := clDefault;
+  FGroove := Rect(0, 0, 0, 0);
+end;
+
+procedure TTyGradientTrackBarTest.SeeTrack(Sender: TObject; APainter: TTyPainter;
+  const ARect: TRect; var ADefaultDraw: Boolean);
+begin
+  FGroove := ARect;
+end;
+
+procedure TTyGradientTrackBarTest.NoThumbs(Sender: TObject; APainter: TTyPainter;
+  AIndex: Integer; const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean);
+begin
+  ADefaultDraw := False;
+end;
+
+procedure TTyGradientTrackBarTest.EditColor(Sender: TObject; AIndex: Integer;
+  var AColor: TColor; var AHandled: Boolean);
+begin
+  FLog := FLog + Format('edit:%d:$%.6x ', [AIndex, ColorToRGB(AColor)]);
+  if FEditTo <> clDefault then AColor := FEditTo;
+  if FHandleEdit then AHandled := True;
+end;
+
+procedure TTyGradientTrackBarTest.TakeClick(Sender: TObject; AValue: Integer;
+  var AHandled: Boolean);
+begin
+  AHandled := True;
+end;
+
+procedure TTyGradientTrackBarTest.AddPlainStop(AValue: Integer);
+begin
+  { Between BeginUpdate and EndUpdate the value is kept as given and sorted in at EndUpdate
+    (set later, it would be held between its neighbours as the last item). }
+  FBar.Thumbs.BeginUpdate;
+  try
+    FBar.Thumbs.Add.Value := AValue;
+  finally
+    FBar.Thumbs.EndUpdate;
+  end;
+end;
+
+procedure TTyGradientTrackBarTest.SetStops(const AValues: array of Integer;
+  const AColors: array of TColor);
+var
+  i: Integer;
+  it: TTyTrackThumbItem;
+begin
+  FBar.Thumbs.BeginUpdate;
+  try
+    FBar.Thumbs.Clear;
+    for i := 0 to High(AValues) do
+    begin
+      it := FBar.Thumbs.Add;
+      it.Value := AValues[i];
+      it.Color := AColors[i];
+    end;
+  finally
+    FBar.Thumbs.EndUpdate;
+  end;
+end;
+
+function TTyGradientTrackBarTest.StopsText: string;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 0 to FBar.Thumbs.Count - 1 do
+  begin
+    if i > 0 then Result := Result + ';';
+    if FBar.Thumbs[i].Color = clDefault then
+      Result := Result + Format('%d:def', [FBar.Thumbs[i].Value])
+    else
+      Result := Result + Format('%d:$%.6x', [FBar.Thumbs[i].Value, ColorToRGB(FBar.Thumbs[i].Color)]);
+  end;
+end;
+
+function TTyGradientTrackBarTest.PtOn(AValue: Integer): TPoint;
+var
+  tw: Integer;
+begin
+  tw := TyTrackThumbLen(96);
+  Result := Point(TyTrackThumbOffset(FBar.ClientWidth, tw, FBar.Min, FBar.Max, AValue, False)
+    + tw div 2, FBar.Height div 2);
+  AssertEquals('fixture: the point is at that value', AValue, FBar.ValueAtPoint(Result.X, Result.Y));
+  AssertEquals('fixture: the point is on no thumb', -1, FBar.ThumbAtPoint(Result.X, Result.Y));
+end;
+
+function TTyGradientTrackBarTest.Centre(AIndex: Integer): TPoint;
+var
+  r: TRect;
+begin
+  r := FBar.ThumbRect(AIndex);
+  Result := Point((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+end;
+
+procedure TTyGradientTrackBarTest.Click(const P: TPoint; ADouble: Boolean);
+begin
+  TBaseAccess(FBar).MouseDown(mbLeft, [ssLeft], P.X, P.Y);
+  TBaseAccess(FBar).MouseUp(mbLeft, [], P.X, P.Y);
+  if not ADouble then Exit;
+  TBaseAccess(FBar).MouseDown(mbLeft, [ssLeft, ssDouble], P.X, P.Y);
+  TBaseAccess(FBar).MouseUp(mbLeft, [], P.X, P.Y);
+end;
+
+function TTyGradientTrackBarTest.GradientRect: TRect;
+var
+  tw, mlen, a, b, lo, hi: Integer;
+  inv: Boolean;
+begin
+  tw := TyTrackThumbLen(96);
+  inv := (FBar.Orientation = toVertical) xor FBar.Reversed;
+  if FBar.Orientation = toVertical then mlen := FBar.ClientHeight else mlen := FBar.ClientWidth;
+  a := TyTrackThumbOffset(mlen, tw, FBar.Min, FBar.Max, FBar.Min, inv) + tw div 2;
+  b := TyTrackThumbOffset(mlen, tw, FBar.Min, FBar.Max, FBar.Max, inv) + tw div 2;
+  if a <= b then begin lo := a; hi := b; end else begin lo := b; hi := a; end;
+  AssertTrue('fixture: the groove was painted', FGroove.Right > FGroove.Left);
+  if FBar.Orientation = toVertical then
+    Result := Rect(FGroove.Left, FGroove.Top + lo, FGroove.Right, FGroove.Top + hi)
+  else
+    Result := Rect(FGroove.Left + lo, FGroove.Top, FGroove.Left + hi, FGroove.Bottom);
+end;
+
+function TTyGradientTrackBarTest.TrackAgainstFill(const AFill: TTyFill): string;
+var
+  bar, ref: TBGRABitmap;
+  bmp: TBitmap;
+  P: TTyPainter;
+  r: TRect;
+  x, y: Integer;
+begin
+  Result := '';
+  FBar.OnDrawTrack := @SeeTrack;
+  FBar.OnDrawThumb := @NoThumbs;
+  bar := Shot(FBar);
+  ref := nil;
+  try
+    r := GradientRect;
+    bmp := TBitmap.Create;
+    try
+      bmp.PixelFormat := pf32bit;
+      bmp.SetSize(FBar.Width, FBar.Height);
+      bmp.Canvas.Brush.Color := RGBToColor(255, 0, 255);
+      bmp.Canvas.FillRect(0, 0, FBar.Width, FBar.Height);
+      P := TTyPainter.Create;
+      try
+        P.BeginPaint(bmp.Canvas, Rect(0, 0, FBar.Width, FBar.Height), 96);
+        P.FillBackground(r, AFill, TyUniformCorners(0));
+        P.EndPaint;
+      finally
+        P.Free;
+      end;
+      ref := TBGRABitmap.Create(bmp);
+    finally
+      bmp.Free;
+    end;
+    for y := r.Top to r.Bottom - 1 do
+      for x := r.Left to r.Right - 1 do
+        if bar.GetPixel(x, y) <> ref.GetPixel(x, y) then
+          Exit(Format('(%d,%d): track %s, fill %s', [x, y, PxStr(bar.GetPixel(x, y)),
+            PxStr(ref.GetPixel(x, y))]));
+  finally
+    ref.Free;
+    bar.Free;
+  end;
+end;
+
+procedure TTyGradientTrackBarTest.TestDefaults;
+const
+  COn: array[0..6] of string = ('Thumbs', 'AllowCrossing', 'AllowUserThumbs', 'MinThumbs',
+    'MaxThumbs', 'OnThumbRemoving', 'OnEditStopColor');
+  COff: array[0..1] of string = ('Segments', 'Pushable');
+var
+  i: Integer;
+  txt: string;
+begin
+  AssertEquals('two stops: black at Min, white at Max', '0:$000000;100:$FFFFFF', StopsText);
+  AssertEquals('0,100', ValuesOf(FBar));
+  AssertTrue('stops pass each other', FBar.AllowCrossing);
+  AssertTrue('the user adds and removes them', FBar.AllowUserThumbs);
+  AssertEquals('down to two', 2, FBar.MinThumbs);
+  AssertEquals(0, FBar.MaxThumbs);
+  AssertEquals(0, FBar.Min);
+  AssertEquals(100, FBar.Max);
+  for i := 0 to High(COn) do
+    AssertTrue(COn[i] + ' is published', IsPublishedProp(FBar, COn[i]));
+  for i := 0 to High(COff) do
+    AssertFalse(COff[i] + ' is not published', IsPublishedProp(FBar, COff[i]));
+  txt := BarText(FormText(FForm));
+  AssertEquals('AllowCrossing: the default is not written', 0, Pos('AllowCrossing', txt));
+  AssertEquals('AllowUserThumbs: the default is not written', 0, Pos('AllowUserThumbs', txt));
+  AssertEquals('MinThumbs: the default is not written', 0, Pos('MinThumbs', txt));
+  AssertTrue('the stops are', Pos('Color = clWhite', txt) > 0);
+end;
+
+procedure TTyGradientTrackBarTest.TestTheTypeKeyHangsOnTheTrackBar;
+var
+  ctl: TTyStyleController;
+  ref: TTyTrackBar;
+begin
+  AssertEquals('TyGradientTrackBar', (FBar as ITyStyleable).GetStyleTypeKey);
+  AssertEquals('registered under the track bar''s key', 'TyTrackBar',
+    TyTypeKeyParent('TyGradientTrackBar'));
+  ctl := TTyStyleController.Create(nil);
+  ref := TTyTrackBar.Create(FForm);
+  try
+    ctl.LoadThemeCss('TyTrackBar { color: #123456; border-width: 1px; }'
+      + 'TyGradientTrackBar { border-width: 3px; }');
+    FBar.Controller := ctl;
+    ref.Parent := FForm;
+    ref.Controller := ctl;
+    AssertEquals('the track bar''s rule reaches the gradient bar',
+      TTrackAccess(ref).CurrentStyle.TextColor, TGradAccess(FBar).CurrentStyle.TextColor);
+    AssertEquals('its own rule wins', 3, TGradAccess(FBar).CurrentStyle.BorderWidth);
+  finally
+    FBar.Controller := FCtl;
+    ref.Free;
+    ctl.Free;
+  end;
+end;
+
+procedure TTyGradientTrackBarTest.TestTheTrackIsTheGradientFill;
+var
+  r: TRect;
+  b: TBGRABitmap;
+begin
+  SetStops([20, 50, 80], [clRed, clLime, clBlue]);
+  AssertEquals('pixel for pixel what GradientFill paints', '', TrackAgainstFill(FBar.GradientFill));
+  { Not a vacuous match: the stretch really runs red to blue. }
+  r := GradientRect;
+  b := Shot(FBar);
+  try
+    AssertTrue('red at the first stop: ' + PxStr(b.GetPixel(Centre(0).X, r.Top)),
+      NearPx(b.GetPixel(Centre(0).X, r.Top), $FF, 0, 0));
+    AssertTrue('lime at the middle one: ' + PxStr(b.GetPixel(Centre(1).X, r.Top)),
+      NearPx(b.GetPixel(Centre(1).X, r.Top), 0, $FF, 0));
+    AssertTrue('blue at the last: ' + PxStr(b.GetPixel(Centre(2).X, r.Top)),
+      NearPx(b.GetPixel(Centre(2).X, r.Top), 0, 0, $FF));
+  finally
+    b.Free;
+  end;
+  { The default black to white blends without gamma correction, as three stops would: about
+    half way is about half grey (gamma-corrected it would be about #BCBCBC). }
+  SetStops([0, 100], [clBlack, clWhite]);
+  AssertEquals('', TrackAgainstFill(FBar.GradientFill));
+  b := Shot(FBar);
+  try
+    AssertTrue('half grey half way: ' + PxStr(b.GetPixel(PtOn(50).X, r.Top)),
+      Abs(b.GetPixel(PtOn(50).X, r.Top).red - 128) <= 2);
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TTyGradientTrackBarTest.TestTheTrackFollowsTheBarsDirection;
+begin
+  SetStops([20, 50, 80], [clRed, clLime, clBlue]);
+  FBar.Reversed := True;
+  AssertEquals('reversed: Min at the right', '', TrackAgainstFill(FBar.GradientFill(180)));
+  AssertTrue('fixture: the direction matters', TrackAgainstFill(FBar.GradientFill(0)) <> '');
+  FBar.Reversed := False;
+  FBar.Orientation := toVertical;
+  AssertEquals('fixture: 400 high', 400, FBar.Height);
+  AssertEquals('vertical: Min at the bottom', '', TrackAgainstFill(FBar.GradientFill(270)));
+  FBar.Reversed := True;
+  AssertEquals('vertical, reversed: Min at the top', '', TrackAgainstFill(FBar.GradientFill(90)));
+end;
+
+procedure TTyGradientTrackBarTest.TestTheTrackKeepsTheFirstAndLastColoursToTheEnds;
+var
+  b: TBGRABitmap;
+  x, y, first, last: Integer;
+begin
+  SetStops([20, 80], [clRed, clBlue]);
+  FBar.OnDrawTrack := @SeeTrack;
+  FBar.OnDrawThumb := @NoThumbs;
+  b := Shot(FBar);
+  try
+    y := (FGroove.Top + FGroove.Bottom) div 2;
+    first := Centre(0).X;
+    last := Centre(1).X;
+    for x := FGroove.Left to first - 2 do
+      AssertTrue(Format('the first colour on to the Min end, at %d: %s', [x, PxStr(b.GetPixel(x, y))]),
+        SamePx(b.GetPixel(x, y), $FF, 0, 0));
+    for x := last + 2 to FGroove.Right - 1 do
+      AssertTrue(Format('the last colour on to the Max end, at %d: %s', [x, PxStr(b.GetPixel(x, y))]),
+        SamePx(b.GetPixel(x, y), 0, 0, $FF));
+  finally
+    b.Free;
+  end;
+  { Reversed: Max at the left, so the last colour runs on to the left end. }
+  FBar.Reversed := True;
+  b := Shot(FBar);
+  try
+    first := Centre(0).X;
+    last := Centre(1).X;
+    for x := FGroove.Left to last - 2 do
+      AssertTrue(Format('reversed, the last colour on to the left, at %d: %s', [x,
+        PxStr(b.GetPixel(x, y))]), SamePx(b.GetPixel(x, y), 0, 0, $FF));
+    for x := first + 2 to FGroove.Right - 1 do
+      AssertTrue(Format('reversed, the first colour on to the right, at %d: %s', [x,
+        PxStr(b.GetPixel(x, y))]), SamePx(b.GetPixel(x, y), $FF, 0, 0));
+  finally
+    b.Free;
+  end;
+  FBar.Reversed := False;
+  { No stop with a colour of its own: the bare groove. }
+  FBar.Thumbs[0].Color := clDefault;
+  FBar.Thumbs[1].Color := clDefault;
+  b := Shot(FBar);
+  try
+    AssertTrue('the bare groove', SamePx(b.GetPixel(PtOn(50).X, y), $60, $60, $60));
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TTyGradientTrackBarTest.TestGradientIsInOrderWithPositionsFromMinToMax;
+
+  function GradText: string;
+  var
+    g: TTyGradStops;
+    i: Integer;
+  begin
+    g := FBar.Gradient;
+    Result := '';
+    for i := 0 to High(g) do
+      Result := Result + Format('%.3f:%.8x ', [g[i].Pos, g[i].Color]);
+  end;
+
+var
+  p, q: TPoint;
+begin
+  FBar.Min := -100;
+  SetStops([-100, 0, 100], [clRed, clLime, clBlue]);
+  AssertEquals('positions 0..1 from Min to Max, opaque colours',
+    '0.000:FFFF0000 0.500:FF00FF00 1.000:FF0000FF ', GradText);
+  { A stop with no colour of its own is not part of it. }
+  AddPlainStop(50);
+  AssertEquals('-100:$0000FF;0:$00FF00;50:def;100:$FF0000', StopsText);
+  AssertEquals('0.000:FFFF0000 0.500:FF00FF00 1.000:FF0000FF ', GradText);
+  { The lime stop dragged past the plain one: in order of value. }
+  p := Centre(1);
+  q := PtOn(75);
+  TBaseAccess(FBar).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  TBaseAccess(FBar).MouseMove([ssLeft], q.X, q.Y);
+  TBaseAccess(FBar).MouseUp(mbLeft, [], q.X, q.Y);
+  AssertEquals('-100:$0000FF;50:def;75:$00FF00;100:$FF0000', StopsText);
+  AssertEquals('0.000:FFFF0000 0.875:FF00FF00 1.000:FF0000FF ', GradText);
+end;
+
+procedure TTyGradientTrackBarTest.TestGradientFillKinds;
+var
+  f: TTyFill;
+begin
+  f := FBar.GradientFill(30);
+  AssertTrue('two stops: a gradient', f.Kind = tfkLinearGradient);
+  AssertEquals('at the angle asked', 30.0, f.GradAngleDeg, 0.0001);
+  AssertEquals(Integer($FF000000), Integer(f.GradFrom));
+  AssertEquals(Integer($FFFFFFFF), Integer(f.GradTo));
+  AssertTrue('drawn stop by stop', TyGradientNeedsStops(f));
+  AssertEquals('the first stop repeated', 3, Length(f.GradStops));
+  AssertTrue((f.GradStops[0].Pos = 0) and (f.GradStops[1].Pos = 0) and (f.GradStops[2].Pos = 1));
+  AssertEquals(Integer(f.GradStops[0].Color), Integer(f.GradStops[1].Color));
+  SetStops([20, 80], [clRed, clBlue]);
+  f := FBar.GradientFill;
+  AssertEquals('two stops inside: as they are', 2, Length(f.GradStops));
+  FBar.Thumbs[1].Color := clDefault;
+  f := FBar.GradientFill;
+  AssertTrue('one coloured stop: solid', f.Kind = tfkSolid);
+  AssertEquals(Integer($FFFF0000), Integer(f.Color));
+  FBar.Thumbs[0].Color := clDefault;
+  AssertTrue('none: no fill', FBar.GradientFill.Kind = tfkNone);
+end;
+
+procedure TTyGradientTrackBarTest.TestANewStopTakesTheColourTheGradientHasThere;
+var
+  p: TPoint;
+begin
+  SetStops([20, 80], [clRed, clBlue]);
+  FBar.OnChange := @Changed;
+  FBar.OnThumbSelect := @ThumbSelected;
+  p := PtOn(40);
+  Click(p);
+  AssertEquals('a third of the way from red to blue', '20:$0000FF;40:$5500AA;80:$FF0000',
+    StopsText);
+  AssertEquals('added with its colour, then selected', 'C S1 ', FLog);
+  Click(PtOn(10));
+  AssertEquals('before the first stop: the first colour', '10:$0000FF;20:$0000FF;40:$5500AA;80:$FF0000',
+    StopsText);
+  Click(PtOn(90));
+  AssertEquals('after the last: the last colour',
+    '10:$0000FF;20:$0000FF;40:$5500AA;80:$FF0000;90:$FF0000', StopsText);
+  { A stop without a colour of its own is passed over. }
+  AddPlainStop(60);
+  Click(PtOn(72));
+  AssertEquals('between 40 and 80, the plain stop at 60 passed over',
+    '10:$0000FF;20:$0000FF;40:$5500AA;60:def;72:$DD0022;80:$FF0000;90:$FF0000', StopsText);
+end;
+
+procedure TTyGradientTrackBarTest.TestANewStopChangesNothingOnTheTrack;
+
+  procedure Check(const AWhere: string; AValue: Integer);
+  var
+    before, after: TBGRABitmap;
+    r: TRect;
+    x, y, d, worst: Integer;
+    p: TPoint;
+    a, b: TBGRAPixel;
+  begin
+    p := PtOn(AValue);
+    before := Shot(FBar);
+    try
+      r := GradientRect;
+      Click(p);
+      after := Shot(FBar);
+      try
+        worst := 0;
+        for y := r.Top to r.Bottom - 1 do
+          for x := r.Left to r.Right - 1 do
+          begin
+            a := before.GetPixel(x, y);
+            b := after.GetPixel(x, y);
+            d := Abs(a.red - b.red);
+            if Abs(a.green - b.green) > d then d := Abs(a.green - b.green);
+            if Abs(a.blue - b.blue) > d then d := Abs(a.blue - b.blue);
+            if d > worst then worst := d;
+          end;
+        AssertTrue(AWhere + ': no pixel moves by more than rounding, worst ' + IntToStr(worst),
+          worst <= 1);
+      finally
+        after.Free;
+      end;
+    finally
+      before.Free;
+    end;
+  end;
+
+begin
+  FBar.OnDrawTrack := @SeeTrack;
+  FBar.OnDrawThumb := @NoThumbs;
+  Check('black to white', 37);
+  AssertEquals(3, FBar.Thumbs.Count);
+  SetStops([10, 90], [RGBToColor($FF, $80, 0), RGBToColor(0, $40, $FF)]);
+  Check('orange to blue', 63);
+  Check('and again beside it', 30);
+  AssertEquals(4, FBar.Thumbs.Count);
+end;
+
+procedure TTyGradientTrackBarTest.TestADoubleClickEditsTheStopsColour;
+var
+  c: TPoint;
+begin
+  FBar.OnChange := @Changed;
+  FBar.Pick := clRed;
+  c := Centre(1);
+  Click(c);
+  AssertEquals('a single click opens nothing', '', FBar.Log);
+  FLog := '';
+  Click(c, True);
+  AssertEquals('a double-click opens the dialog on the stop''s colour', 'dialog:$FFFFFF ', FBar.Log);
+  AssertEquals('0:$000000;100:$0000FF', StopsText);
+  AssertEquals('the gradient changed', 'C ', FLog);
+  AssertEquals('the second press drags nothing', '0,100', ValuesOf(FBar));
+  { Cancelled, or the same colour: nothing changes. }
+  FBar.Log := '';
+  FLog := '';
+  FBar.Cancel := True;
+  Click(Centre(0), True);
+  AssertEquals('dialog:$000000 ', FBar.Log);
+  AssertEquals('0:$000000;100:$0000FF', StopsText);
+  AssertEquals('', FLog);
+  FBar.Cancel := False;
+  FBar.Pick := clBlack;
+  Click(Centre(0), True);
+  AssertEquals('', FLog);
+  { A disabled stop: nothing. }
+  FBar.Thumbs[0].Enabled := False;
+  FBar.Log := '';
+  Click(Centre(0), True);
+  AssertEquals('', FBar.Log);
+  FBar.Thumbs[0].Enabled := True;
+  { On the bare track: the first press adds a stop, the second edits it. }
+  FBar.Pick := clLime;
+  FBar.Log := '';
+  Click(PtOn(50), True);
+  AssertEquals('the new stop''s colour offered', 'dialog:$000080 ', FBar.Log);
+  AssertEquals('0:$000000;50:$00FF00;100:$0000FF', StopsText);
+  { A press OnTrackClick takes adds nothing and edits nothing. }
+  FBar.OnTrackClick := @TakeClick;
+  FBar.Log := '';
+  Click(PtOn(25), True);
+  AssertEquals('', FBar.Log);
+  AssertEquals(3, FBar.Thumbs.Count);
+end;
+
+procedure TTyGradientTrackBarTest.TestOnEditStopColorHandledOpensNoDialog;
+begin
+  FBar.OnChange := @Changed;
+  FBar.OnEditStopColor := @EditColor;
+  FBar.Pick := clRed;
+  FHandleEdit := True;
+  FEditTo := clBlue;
+  Click(Centre(1), True);
+  AssertEquals('asked with the stop''s colour', 'edit:1:$FFFFFF C ', FLog);
+  AssertEquals('handled: no dialog', '', FBar.Log);
+  AssertEquals('the handler''s colour', '0:$000000;100:$FF0000', StopsText);
+  { Not handled: the dialog opens on the colour the handler left. }
+  FHandleEdit := False;
+  FEditTo := clYellow;
+  FLog := '';
+  Click(Centre(0), True);
+  AssertEquals('edit:0:$000000 C ', FLog);
+  AssertEquals('dialog:$00FFFF ', FBar.Log);
+  AssertEquals('0:$0000FF;100:$FF0000', StopsText);
+end;
+
+procedure TTyGradientTrackBarTest.TestStopsCrossAndAreRemovedDownToTwo;
+var
+  p, q: TPoint;
+begin
+  SetStops([20, 50, 80], [clRed, clLime, clBlue]);
+  p := Centre(0);
+  q := PtOn(60);
+  TBaseAccess(FBar).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  TBaseAccess(FBar).MouseMove([ssLeft], q.X, q.Y);
+  TBaseAccess(FBar).MouseUp(mbLeft, [], q.X, q.Y);
+  AssertEquals('crossed, its colour with it', '50:$00FF00;60:$0000FF;80:$FF0000', StopsText);
+  p := Centre(1);
+  TBaseAccess(FBar).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  TBaseAccess(FBar).MouseMove([ssLeft], p.X, 90);
+  AssertEquals('dragged off: removing', 1, FBar.RemovingThumb);
+  TBaseAccess(FBar).MouseUp(mbLeft, [], p.X, 90);
+  AssertEquals('removed', '50:$00FF00;80:$FF0000', StopsText);
+  p := Centre(1);
+  TBaseAccess(FBar).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  TBaseAccess(FBar).MouseMove([ssLeft], p.X, 90);
+  AssertEquals('at two stops: not removing', -1, FBar.RemovingThumb);
+  TBaseAccess(FBar).MouseUp(mbLeft, [], p.X, 90);
+  AssertEquals('two stay', '50:$00FF00;80:$FF0000', StopsText);
+end;
+
+procedure TTyGradientTrackBarTest.TestStopsRoundTripThroughAFormFile;
+var
+  bar: TTyGradientTrackBar;
+  back: TForm;
+  txt: string;
+  it: TTyTrackThumbItem;
+begin
+  { The probe is not registered: a plain bar in its place. }
+  FreeAndNil(FBar);
+  bar := TTyGradientTrackBar.Create(FForm);
+  bar.Name := 'Bar';
+  bar.Parent := FForm;
+  bar.Thumbs.BeginUpdate;
+  try
+    it := bar.Thumbs.Add;
+    it.Value := 30;
+    it.Color := RGBToColor($12, $34, $56);
+  finally
+    bar.Thumbs.EndUpdate;
+  end;
+  bar.AllowCrossing := False;
+  bar.MinThumbs := 3;
+  txt := BarText(FormText(FForm));
+  AssertTrue('AllowCrossing off is written', Pos('AllowCrossing = False', txt) > 0);
+  AssertTrue(Pos('MinThumbs = 3', txt) > 0);
+  back := RoundTrip(FForm);
+  try
+    bar := back.FindComponent('Bar') as TTyGradientTrackBar;
+    AssertEquals('0,30,100', ValuesOf(bar));
+    AssertEquals(clBlack, bar.Thumbs[0].Color);
+    AssertEquals(RGBToColor($12, $34, $56), bar.Thumbs[1].Color);
+    AssertEquals(clWhite, bar.Thumbs[2].Color);
+    AssertFalse(bar.AllowCrossing);
+    AssertTrue(bar.AllowUserThumbs);
+    AssertEquals(3, bar.MinThumbs);
+  finally
+    back.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyMultiTrackModelTest);
   RegisterTest(TTyMultiTrackGeometryTest);
@@ -6665,4 +7336,5 @@ initialization
   RegisterTest(TTyMultiTrackSwitchesFinalTest);
   RegisterTest(TTyMultiTrackUserThumbsTest);
   RegisterTest(TTyRangeUserRangesTest);
+  RegisterTest(TTyGradientTrackBarTest);
 end.

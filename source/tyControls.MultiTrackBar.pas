@@ -13,7 +13,9 @@ unit tyControls.MultiTrackBar;
   The classes. TTyMultiTrackBarBase is the shared intermediate (as TTyGlyphButtonBase is for the
   glyph buttons): the model, the picture and the interaction, nothing published. Each final
   class has its custom class on it -- TTyCustomRangeTrackBar / TTyRangeTrackBar and
-  TTyCustomMultiTrackBar / TTyMultiTrackBar -- which maps a collection onto the thumbs. }
+  TTyCustomMultiTrackBar / TTyMultiTrackBar -- which maps a collection onto the thumbs.
+  TTyCustomGradientTrackBar / TTyGradientTrackBar builds on the multi-value one: its thumbs
+  are a gradient's colour stops. }
 
 interface
 
@@ -332,6 +334,9 @@ type
     { The thumb's centre along the track, device px from the track's start. }
     function ThumbCentre(AIndex: Integer): Integer;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { The bare groove, AGroove in the painter's coordinates (AMainLen long, as MainLen at
+      APPI): here TyTrackGroove. Not asked when OnDrawTrack took the track over. }
+    procedure PaintGroove(APainter: TTyPainter; const AGroove: TRect; AMainLen, APPI: Integer); virtual;
     procedure Paint; override;
     { ---- Mouse and keyboard. ---- }
     { The value under main-axis position APos (client px), as the thumb's centre would have it. }
@@ -894,10 +899,162 @@ type
     property OnThumbRemoving;
   end;
 
+  { A gradient's stops in order: each one's colour and where it sits, 0..1 along the gradient. }
+  TTyGradStops = array of TTyGradStop;
+
+  { The user double-clicked stop AIndex to give it another colour. AColor is its colour now;
+    AHandled := True and the bar opens no dialog: the stop takes AColor as the handler leaves
+    it (unchanged = nothing changes). Not handled, the colour dialog opens on AColor. }
+  TTyEditStopColorEvent = procedure(Sender: TObject; AIndex: Integer; var AColor: TColor;
+    var AHandled: Boolean) of object;
+
+  { A gradient editor on a track (#36): the thumbs are the colour stops -- Thumbs[i].Value
+    where the stop sits, Thumbs[i].Color its colour -- and the groove is painted as the
+    gradient they make, from the centre of a thumb at Min to the centre of one at Max: before
+    the first stop the first colour goes on, after the last the last. Gradient and
+    GradientFill hand the same gradient to the application, so a preview drawn with
+    TTyPainter.FillBackground(R, GradientFill) is the track's picture.
+
+    A stop whose Color is clDefault has no colour of its own: it is not part of the gradient
+    (its thumb follows the theme). OnDrawTrack takes the whole track over as on the other bars.
+
+    The user edits it as a gradient editor works: a press on the bare track adds a stop there
+    in the colour the gradient already has at that point, so adding one changes nothing until
+    it is moved or given another colour; stops pass each other (AllowCrossing) and may share a
+    value; one dragged off the track goes on release, down to two (MinThumbs); a double-click
+    on a stop edits its colour (OnEditStopColor, else the colour dialog). Each switch can be
+    turned off. A user's colour edit fires OnChange, as an added, moved or removed stop does.
+
+    A new bar has two stops: black at Min, white at Max. }
+  TTyCustomGradientTrackBar = class(TTyCustomMultiTrackBar)
+  private
+    FOnEditStopColor: TTyEditStopColorEvent;
+    { The colour the gradient shows at AValue, from the stops with a colour of their own (the
+      last one at AValue where several share it); clDefault when none has one. }
+    function ColorAtValue(AValue: Integer): TColor;
+    { The direction the track's value axis runs on the painter, as a gradient angle. }
+    function TrackAngle: Single;
+  protected
+    function GetStyleTypeKey: string; override;
+    { The new stop takes the colour the gradient has where it goes. }
+    function AddUserThumb(AValue: Integer): Integer; override;
+    { The groove as the stops' gradient (GradientFill), the first and last colours carried on
+      to the ends, its border as the theme draws it; the bare groove with no stop coloured. }
+    procedure PaintGroove(APainter: TTyPainter; const AGroove: TRect; AMainLen, APPI: Integer); override;
+    { A double-click on an enabled stop edits its colour (EditStopColor). }
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    { OnEditStopColor, then -- not handled -- ExecuteColorDialog; a colour that differs is
+      given to the stop and OnChange fires. }
+    procedure EditStopColor(AIndex: Integer); virtual;
+    { The colour dialog (TTyColorDialog) opened on AColor; True with the colour picked, False
+      when it was cancelled. Virtual so a test (or an application) can answer without one. }
+    function ExecuteColorDialog(var AColor: TColor): Boolean; virtual;
+    property AllowCrossing default True;
+    property AllowUserThumbs default True;
+    property MinThumbs default 2;
+    property OnEditStopColor: TTyEditStopColorEvent read FOnEditStopColor write FOnEditStopColor;
+  public
+    constructor Create(AOwner: TComponent); override;
+    { The stops with a colour of their own, in order of value (stops on one value in their
+      order in Thumbs), each with its position: (Value - Min) / (Max - Min), 0..1. }
+    function Gradient: TTyGradStops;
+    { Gradient as a fill FillBackground draws: no stops = tfkNone, one = tfkSolid, more = a
+      linear gradient at AAngleDeg (0 = Min at the left, 90 = Min at the top). Always drawn
+      stop by stop, so it blends as the track does whatever the number of stops: two stops at
+      exactly 0 and 1 would otherwise take the painter's two-colour path, which blends with
+      gamma correction, and adding a stop between them would change the whole picture -- the
+      first stop is repeated to keep it on the stop-by-stop path. }
+    function GradientFill(AAngleDeg: Single = 0): TTyFill;
+  end;
+
+  TTyGradientTrackBar = class(TTyCustomGradientTrackBar)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Min;
+    property Max;
+    property Orientation;
+    property Reversed;
+    property TickMarks;
+    property TickStyle;
+    property Frequency;
+    property LineSize;
+    property PageSize;
+    property OnChange;
+    property Align;
+    property Anchors;
+    property TickLabels;
+    property OnFormatTickLabel;
+    property MinGap;
+    property Thumbs;
+    property OnThumbChange;
+    property OnThumbSelect;
+    property ShowValue;
+    property OnDrawTrack;
+    property OnDrawThumb;
+    property OnTrackClick;
+    property OnDrawSegment;
+    property OnThumbChanging;
+    property AllowCrossing;
+    property AllowUserThumbs;
+    property MinThumbs;
+    property MaxThumbs;
+    property OnThumbRemoving;
+    property OnEditStopColor;
+  end;
+
 implementation
 
 uses
-  tyControls.StyleModel;
+  tyControls.StyleModel, tyControls.Dialogs.Color;
 
 { TTyMultiTrackBarBase }
 
@@ -2016,9 +2173,7 @@ begin
     { The track -- the groove and the fills on it -- unless the owner draws it. }
     dflt := True;
     if Assigned(FOnDrawTrack) then FOnDrawTrack(Self, P, GrooveR, dflt);
-    St := ActiveController.Model.ResolveStyle('TyTrackGroove', '', []);
-    if dflt then
-      TyFillSubElement(P, GrooveR, St, TyUniformCorners(St.BorderRadius));
+    if dflt then PaintGroove(P, GrooveR, MLen, APPI);
 
     { The segments, groove-thick, centre to centre: each offered to OnDrawSegment, then filled
       when the final class names a style for it. None of it when the owner drew the track. }
@@ -2075,6 +2230,15 @@ begin
   finally
     P.Free;
   end;
+end;
+
+procedure TTyMultiTrackBarBase.PaintGroove(APainter: TTyPainter; const AGroove: TRect;
+  AMainLen, APPI: Integer);
+var
+  St: TTyStyleSet;
+begin
+  St := ActiveController.Model.ResolveStyle('TyTrackGroove', '', []);
+  TyFillSubElement(APainter, AGroove, St, TyUniformCorners(St.BorderRadius));
 end;
 
 procedure TTyMultiTrackBarBase.SetLineSize(const AValue: Integer);
@@ -3293,14 +3457,288 @@ begin
   end;
 end;
 
+{ TTyCustomGradientTrackBar }
+
+{ A TColor as an opaque TTyColor. }
+function StopTyColor(AColor: TColor): TTyColor;
+var
+  c: TColor;
+begin
+  c := ColorToRGB(AColor);
+  Result := TyRGB(Red(c), Green(c), Blue(c));
+end;
+
+constructor TTyCustomGradientTrackBar.Create(AOwner: TComponent);
+var
+  it: TTyTrackThumbItem;
+begin
+  inherited Create(AOwner);
+  AllowCrossing := True;
+  AllowUserThumbs := True;
+  MinThumbs := 2;
+  { Two stops, black to white: the colours are the gradient's data, not a look. }
+  Thumbs.BeginUpdate;
+  try
+    Thumbs.Clear;
+    it := Thumbs.Add;
+    it.Value := Min;
+    it.Color := clBlack;
+    it := Thumbs.Add;
+    it.Value := Max;
+    it.Color := clWhite;
+  finally
+    Thumbs.EndUpdate;
+  end;
+end;
+
+function TTyCustomGradientTrackBar.GetStyleTypeKey: string;
+begin
+  Result := 'TyGradientTrackBar';
+end;
+
+function TTyCustomGradientTrackBar.ColorAtValue(AValue: Integer): TColor;
+var
+  i, a, b: Integer;
+  ca, cb: TColor;
+  t: Double;
+begin
+  Result := clDefault;
+  a := -1;
+  b := -1;
+  { The items are in order of value: the last coloured stop at or below AValue, and the
+    first one above it. }
+  for i := 0 to Thumbs.Count - 1 do
+  begin
+    if Thumbs[i].Color = clDefault then Continue;
+    if Thumbs[i].Value <= AValue then a := i
+    else if b < 0 then b := i;
+  end;
+  if (a < 0) and (b < 0) then Exit;
+  if b < 0 then Exit(Thumbs[a].Color);
+  if a < 0 then Exit(Thumbs[b].Color);
+  if Thumbs[a].Value = AValue then Exit(Thumbs[a].Color);
+  { In between: blended channel by channel as the painter's stop-by-stop gradient blends
+    (no gamma correction), so the new stop is where the gradient already was. }
+  ca := ColorToRGB(Thumbs[a].Color);
+  cb := ColorToRGB(Thumbs[b].Color);
+  t := (AValue - Thumbs[a].Value) / (Thumbs[b].Value - Thumbs[a].Value);
+  Result := RGBToColor(
+    Round(Red(ca) + (Red(cb) - Red(ca)) * t),
+    Round(Green(ca) + (Green(cb) - Green(ca)) * t),
+    Round(Blue(ca) + (Blue(cb) - Blue(ca)) * t));
+end;
+
+function TTyCustomGradientTrackBar.AddUserThumb(AValue: Integer): Integer;
+var
+  it: TTyTrackThumbItem;
+  c: TColor;
+begin
+  c := ColorAtValue(AValue);
+  { One change for the collection: added with its value and colour, then put in order. }
+  Thumbs.BeginUpdate;
+  try
+    it := Thumbs.Add;
+    it.Value := AValue;
+    it.Color := c;
+  finally
+    Thumbs.EndUpdate;
+  end;
+  Result := it.Index;
+end;
+
+function TTyCustomGradientTrackBar.Gradient: TTyGradStops;
+var
+  i, n: Integer;
+  span: Double;
+begin
+  Result := nil;
+  span := Double(Max) - Min;
+  n := 0;
+  SetLength(Result, Thumbs.Count);
+  for i := 0 to Thumbs.Count - 1 do
+  begin
+    if Thumbs[i].Color = clDefault then Continue;
+    Result[n].Color := StopTyColor(Thumbs[i].Color);
+    if span <= 0 then Result[n].Pos := 0
+    else Result[n].Pos := (Thumbs[i].Value - Min) / span;
+    Inc(n);
+  end;
+  SetLength(Result, n);
+end;
+
+function TTyCustomGradientTrackBar.GradientFill(AAngleDeg: Single): TTyFill;
+var
+  g: TTyGradStops;
+  i, n: Integer;
+begin
+  Result := Default(TTyFill);
+  g := Gradient;
+  n := Length(g);
+  if n = 0 then Exit;
+  if n = 1 then
+  begin
+    Result.Kind := tfkSolid;
+    Result.Color := g[0].Color;
+    Exit;
+  end;
+  Result.Kind := tfkLinearGradient;
+  Result.GradAngleDeg := AAngleDeg;
+  Result.GradFrom := g[0].Color;
+  Result.GradTo := g[n - 1].Color;
+  SetLength(Result.GradStops, n);
+  for i := 0 to n - 1 do
+    Result.GradStops[i] := g[i];
+  if not TyGradientNeedsStops(Result) then
+  begin
+    SetLength(Result.GradStops, 3);
+    Result.GradStops[2] := Result.GradStops[1];
+    Result.GradStops[1] := Result.GradStops[0];
+  end;
+end;
+
+function TTyCustomGradientTrackBar.TrackAngle: Single;
+begin
+  { Gradient angles: 0 runs left to right, 90 top to bottom. Min is where the value axis
+    starts: the left, the right when Reversed; the bottom on a vertical bar (Max at the
+    top), the top when Reversed. }
+  if Orientation = toVertical then
+  begin
+    if Inverted then Result := 270 else Result := 90;
+  end
+  else if Inverted then Result := 180
+  else Result := 0;
+end;
+
+procedure TTyCustomGradientTrackBar.PaintGroove(APainter: TTyPainter; const AGroove: TRect;
+  AMainLen, APPI: Integer);
+var
+  St: TTyStyleSet;
+  F, Solid: TTyFill;
+  g: TTyGradStops;
+  TW, a, b, lo, hi, r: Integer;
+  RLo, RMid, RHi: TRect;
+  cLo, cHi, cMid: TTyCorners;
+  lowColor, highColor: TTyColor;
+begin
+  F := GradientFill(TrackAngle);
+  if F.Kind = tfkNone then
+  begin
+    inherited PaintGroove(APainter, AGroove, AMainLen, APPI);
+    Exit;
+  end;
+  St := ActiveController.Model.ResolveStyle('TyTrackGroove', '', []);
+  r := St.BorderRadius;
+  g := Gradient;
+  { Main-axis offsets of the centres of a thumb at Min and at Max: the gradient runs between
+    them, as the stops sit at their thumbs' centres. }
+  TW := TyTrackThumbLen(APPI);
+  a := TyTrackThumbOffset(AMainLen, TW, Min, Max, Min, Inverted) + TW div 2;
+  b := TyTrackThumbOffset(AMainLen, TW, Min, Max, Max, Inverted) + TW div 2;
+  if a <= b then
+  begin
+    lo := a; hi := b;
+    lowColor := g[0].Color; highColor := g[High(g)].Color;
+  end
+  else
+  begin
+    lo := b; hi := a;
+    lowColor := g[High(g)].Color; highColor := g[0].Color;
+  end;
+  cMid := TyUniformCorners(0);
+  cLo := cMid;
+  cHi := cMid;
+  if Orientation = toVertical then
+  begin
+    RLo := Rect(AGroove.Left, AGroove.Top, AGroove.Right, AGroove.Top + lo);
+    RMid := Rect(AGroove.Left, AGroove.Top + lo, AGroove.Right, AGroove.Top + hi);
+    RHi := Rect(AGroove.Left, AGroove.Top + hi, AGroove.Right, AGroove.Bottom);
+    cLo.TL := r; cLo.TR := r;
+    cHi.BL := r; cHi.BR := r;
+  end
+  else
+  begin
+    RLo := Rect(AGroove.Left, AGroove.Top, AGroove.Left + lo, AGroove.Bottom);
+    RMid := Rect(AGroove.Left + lo, AGroove.Top, AGroove.Left + hi, AGroove.Bottom);
+    RHi := Rect(AGroove.Left + hi, AGroove.Top, AGroove.Right, AGroove.Bottom);
+    cLo.TL := r; cLo.BL := r;
+    cHi.TR := r; cHi.BR := r;
+  end;
+  Solid := Default(TTyFill);
+  Solid.Kind := tfkSolid;
+  Solid.Color := lowColor;
+  APainter.FillBackground(RLo, Solid, cLo);
+  APainter.FillBackground(RMid, F, cMid);
+  Solid.Color := highColor;
+  APainter.FillBackground(RHi, Solid, cHi);
+  { The groove's border, as the theme draws it, over the gradient. }
+  Exclude(St.Present, tpBackground);
+  TyFillSubElement(APainter, AGroove, St, TyUniformCorners(r));
+end;
+
+procedure TTyCustomGradientTrackBar.MouseDown(Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer);
+var
+  i: Integer;
+begin
+  inherited MouseDown(Button, Shift, X, Y);
+  { The second press of a double-click that took a stop (an enabled one under the pointer):
+    its colour is edited, and the press drags nothing. A press OnTrackClick took, or one on
+    a disabled stop, has no stop. }
+  if (Button = mbLeft) and (ssDouble in Shift) and (FDragThumb >= 0)
+     and (FDragThumb = ThumbAtPoint(X, Y)) then
+  begin
+    i := FDragThumb;
+    FDragThumb := -1;
+    Invalidate;
+    EditStopColor(i);
+  end;
+end;
+
+procedure TTyCustomGradientTrackBar.EditStopColor(AIndex: Integer);
+var
+  c, old: TColor;
+  handled: Boolean;
+begin
+  if (AIndex < 0) or (AIndex >= Thumbs.Count) then Exit;
+  old := Thumbs[AIndex].Color;
+  c := old;
+  { No colour of its own: start from the one the gradient shows there. }
+  if c = clDefault then c := ColorAtValue(Thumbs[AIndex].Value);
+  if c = clDefault then c := clBlack;
+  handled := False;
+  if Assigned(FOnEditStopColor) then FOnEditStopColor(Self, AIndex, c, handled);
+  if not handled and not ExecuteColorDialog(c) then Exit;
+  { The handler may have removed stops. }
+  if (AIndex >= Thumbs.Count) or (c = old) then Exit;
+  Thumbs[AIndex].Color := c;
+  Invalidate;
+  DoChange;
+end;
+
+function TTyCustomGradientTrackBar.ExecuteColorDialog(var AColor: TColor): Boolean;
+var
+  d: TTyColorDialog;
+begin
+  d := TTyColorDialog.Create(nil);
+  try
+    d.LCLColor := AColor;
+    Result := d.Execute;
+    if Result then AColor := d.LCLColor;
+  finally
+    d.Free;
+  end;
+end;
+
 initialization
   { The final classes' keys fall back to the track bar's, so every theme styles them as it
     styles TTyTrackBar until it says otherwise. }
   TyTryRegisterTypeKeyParent('TyRangeTrackBar', 'TyTrackBar');
   TyTryRegisterTypeKeyParent('TyMultiTrackBar', 'TyTrackBar');
+  TyTryRegisterTypeKeyParent('TyGradientTrackBar', 'TyTrackBar');
 
 finalization
   TyUnregisterTypeKeyParent('TyRangeTrackBar');
   TyUnregisterTypeKeyParent('TyMultiTrackBar');
+  TyUnregisterTypeKeyParent('TyGradientTrackBar');
 
 end.

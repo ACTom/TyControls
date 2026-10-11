@@ -5276,6 +5276,90 @@ type
     property DefaultColor;
   end;
 
+  TGenGradientTrackBar = class(TTyCustomGradientTrackBar)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Min;
+    property Max;
+    property Orientation;
+    property Reversed;
+    property TickMarks;
+    property TickStyle;
+    property Frequency;
+    property LineSize;
+    property PageSize;
+    property OnChange;
+    property Align;
+    property Anchors;
+    property TickLabels;
+    property OnFormatTickLabel;
+    property MinGap;
+    property Thumbs;
+    property OnThumbChange;
+    property OnThumbSelect;
+    property ShowValue;
+    property OnDrawTrack;
+    property OnDrawThumb;
+    property OnTrackClick;
+    property OnDrawSegment;
+    property OnThumbChanging;
+    property AllowCrossing;
+    property AllowUserThumbs;
+    property MinThumbs;
+    property MaxThumbs;
+    property OnThumbRemoving;
+    property OnEditStopColor;
+  end;
+
   TGenGridCell = class(TTyCustomGridCell)
   published
     property Version;
@@ -11215,7 +11299,7 @@ type
 
 const
   { (mimic, final class) }
-  CGenMimics: array[0..180, 0..1] of TClass = (
+  CGenMimics: array[0..181, 0..1] of TClass = (
     (TGenAboutDialog, TTyAboutDialog),
     (TGenActivityBar, TTyActivityBar),
     (TGenActivityIndicator, TTyActivityIndicator),
@@ -11296,6 +11380,7 @@ const
     (TGenGlyphButton, TTyGlyphButton),
     (TGenGlyphContainerButton, TTyGlyphContainerButton),
     (TGenGlyphImageList, TTyGlyphImageList),
+    (TGenGradientTrackBar, TTyGradientTrackBar),
     (TGenGridCell, TTyGridCell),
     (TGenGridPanel, TTyGridPanel),
     (TGenGroupBox, TTyGroupBox),
