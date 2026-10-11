@@ -64,7 +64,8 @@ type
     first enabled one), Tab / Shift+Tab step through the thumbs before leaving the control, and
     the hint over a thumb is that thumb's. Coming in from the keyboard starts at the near end:
     the first enabled thumb when entered forwards, the last when entered with Shift+Tab, so
-    every thumb is one Tab away; entered by a click, the press picks the thumb.
+    every thumb is one Tab away; entered by a click, the press picks the thumb. The wheel steps
+    the thumb the keyboard drives by LineSize, up increasing, as TTyTrackBar's.
 
     No right-to-left mirroring, as TTyTrackBar: the value axis runs by Orientation and Reversed
     only. }
@@ -171,6 +172,10 @@ type
       whatever was selected before -- a forward Tab that landed on the last thumb would
       otherwise leave again at once. Entered with a mouse button down: left to the press. }
     procedure DoEnter; override;
+    { The wheel steps the thumb the keyboard drives (selecting it) by LineSize, wheel-up
+      increasing, as TTyTrackBar's; an OnMouseWheel* handler that handles it stops the step. }
+    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint): Boolean; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -905,6 +910,26 @@ begin
     if i >= 0 then SelectedThumb := i;
   end;
   inherited DoEnter;
+end;
+
+function TTyCustomMultiTrackBar.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+  MousePos: TPoint): Boolean;
+var
+  i: Integer;
+  v: Int64;
+begin
+  Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
+  if Result or not Enabled then Exit;
+  i := KeyThumb;
+  if i < 0 then Exit;
+  v := FValues[i];
+  if WheelDelta > 0 then Inc(v, FLineSize)
+  else if WheelDelta < 0 then Dec(v, FLineSize);
+  if v > High(Integer) then v := High(Integer);
+  if v < Low(Integer) then v := Low(Integer);
+  SelectedThumb := i;
+  SetThumbValue(i, v);
+  Result := True;
 end;
 
 procedure TTyCustomMultiTrackBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);

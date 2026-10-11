@@ -56,6 +56,9 @@ type
     function WantsKey(AKey: Word): PtrInt;
     { The focus arriving, as the form announces it (CM_ENTER). }
     procedure Enter;
+    { One wheel notch as the widgetset delivers it (LM_MOUSEWHEEL, through TControl's
+      WMMouseWheel); True when the bar handled it. }
+    function Wheel(ADelta: Integer): Boolean;
     { The hint the application would show at (X, Y): CM_HINTSHOW with the control's own hint
       prefilled, as TApplication.ShowHintWindow does; ARect is the CursorRect it hands back. }
     function HintAt(X, Y: Integer; out ARect: TRect): string;
@@ -178,6 +181,9 @@ type
   end;
 
   TTyMultiTrackKeyboardTest = class(TMultiTrackInputBase)
+  private
+    procedure WheelSwallowed(Sender: TObject; Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint; var Handled: Boolean);
   published
     procedure TestArrowsStepTheSelectedThumb;
     procedure TestPagesAndEndsStopAtTheNeighbours;
@@ -186,6 +192,7 @@ type
     procedure TestADisabledBarIgnoresTheKeys;
     procedure TestTabWalksTheEnabledThumbsThenLeaves;
     procedure TestEnteringFromTheKeyboardStartsAtTheNearEnd;
+    procedure TestTheWheelStepsTheKeyboardsThumb;
   end;
 
 implementation
@@ -263,6 +270,17 @@ end;
 procedure TMultiProbe.Enter;
 begin
   Perform(CM_ENTER, 0, 0);
+end;
+
+function TMultiProbe.Wheel(ADelta: Integer): Boolean;
+var
+  msg: TLMMouseEvent;
+begin
+  FillChar(msg{%H-}, SizeOf(msg), 0);
+  msg.Msg := LM_MOUSEWHEEL;
+  msg.WheelDelta := ADelta;
+  Dispatch(msg);
+  Result := msg.Result <> 0;
 end;
 
 procedure TMultiProbe.Press(X, Y: Integer);
@@ -1618,6 +1636,40 @@ begin
   FBar.Off[2] := True;
   FBar.Enter;
   AssertEquals('no enabled thumb: the selection is left alone', 2, FBar.SelectedThumb);
+end;
+
+procedure TTyMultiTrackKeyboardTest.WheelSwallowed(Sender: TObject; Shift: TShiftState;
+  WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
+begin
+  Handled := True;
+end;
+
+procedure TTyMultiTrackKeyboardTest.TestTheWheelStepsTheKeyboardsThumb;
+begin
+  FBar.Put([20, 50, 80]);
+  FBar.LineSize := 2;
+  FBar.SelectedThumb := 1;
+  FLog := '';
+  AssertTrue('handled', FBar.Wheel(120));
+  AssertEquals('wheel-up increases the selected thumb by LineSize', '20,52,80', Values);
+  AssertEquals('T1 C ', FLog);
+  FBar.Wheel(-120);
+  AssertEquals('wheel-down decreases it', '20,50,80', Values);
+  { None selected: the first enabled thumb, which becomes the selected one -- as a key. }
+  SetLength(FBar.Off, 3);
+  FBar.Off[0] := True;
+  FBar.SelectedThumb := -1;
+  FBar.Wheel(120);
+  AssertEquals('20,52,80', Values);
+  AssertEquals(1, FBar.SelectedThumb);
+  { An OnMouseWheel handler that handles the wheel stops the step, as on TTyTrackBar. }
+  FBar.OnMouseWheel := @WheelSwallowed;
+  FBar.Wheel(120);
+  AssertEquals('handled by the application: nothing moves', '20,52,80', Values);
+  FBar.OnMouseWheel := nil;
+  FBar.Enabled := False;
+  AssertFalse('a disabled bar leaves the wheel to its parent', FBar.Wheel(120));
+  AssertEquals('20,52,80', Values);
 end;
 
 initialization
