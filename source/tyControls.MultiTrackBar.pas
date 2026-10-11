@@ -28,6 +28,13 @@ const
     between two thumbs of TTyMultiTrackBar is resolved as TyTrackSegment.<its StyleClass>. }
   TyTrackSelectionKey = 'TyTrackSelection';
   TyTrackSegmentKey = 'TyTrackSegment';
+  { A thumb dragged off the track far enough to be removed on release is resolved with this
+    class added to its own: TyTrackThumb.removing (an opacity there fades it). }
+  TyTrackRemovingClass = 'removing';
+  { How far off the track (logical px, from the control's edge across the track) a thumb has
+    to be dragged before a release removes it; a theme sets it as a metric. }
+  TyTrackRemoveDistanceVar = '--track-remove-distance';
+  TyTrackRemoveDistance = 24;
 
 type
   { A thumb moved, or was selected; AIndex is its place in ThumbValues (-1 = none selected). }
@@ -65,6 +72,11 @@ type
     pointer afterwards. }
   TTyTrackClickEvent = procedure(Sender: TObject; AValue: Integer;
     var AHandled: Boolean) of object;
+  { The user is about to remove thumb AIndex (dragged off the track and released, or Delete):
+    AAllow := False keeps it. Asked only when the thumb would go -- AllowUserThumbs on and more
+    thumbs than MinThumbs. Removals made from code are not asked. }
+  TTyTrackThumbRemovingEvent = procedure(Sender: TObject; AIndex: Integer;
+    var AAllow: Boolean) of object;
 
   { THE MODEL. The thumbs are an ordered array of integers, FValues, that always holds:
 
@@ -120,8 +132,10 @@ type
 
     THE SWITCHES (protected, off; the final classes publish theirs) change what a user move
     does, never what the program does: AllowCrossing lets a thumb pass its neighbours,
-    Pushable lets it push them along. Whatever they do still goes through OnThumbChanging,
-    thumb by thumb, so the application has the last word over every move. }
+    Pushable lets it push them along, AllowUserThumbs lets the user add and remove thumbs.
+    The built-in behaviour comes after the application's events and stops where they say:
+    a move (every pushed thumb too) goes through OnThumbChanging, an add only happens for a
+    press OnTrackClick did not handle, a removal goes through OnThumbRemoving. }
   TTyMultiTrackBarBase = class(TTyCustomControl)
   private
     FValues: array of Integer;
@@ -161,6 +175,11 @@ type
     FTrackClickTaken: Boolean;
     FAllowCrossing: Boolean;
     FPushable: Boolean;
+    FAllowUserThumbs: Boolean;
+    FMinThumbs, FMaxThumbs: Integer;
+    FOnThumbRemoving: TTyTrackThumbRemovingEvent;
+    { The thumb being dragged is off the track far enough to go on release (drawn removing). }
+    FRemoving: Boolean;
     procedure SetAllowCrossing(const AValue: Boolean);
     { The user moves AllowCrossing and Pushable make; see UserMoveThumb. }
     procedure UserCrossThumb(AIndex, AValue: Integer);
@@ -170,6 +189,19 @@ type
       (a disabled thumb is not pushed). }
     function PushRoom(AIndex: Integer; AUp: Boolean): Integer;
     function ClampPushed(AIndex, AValue: Integer): Integer;
+    procedure SetMinThumbs(const AValue: Integer);
+    procedure SetMaxThumbs(const AValue: Integer);
+    { The user adds a thumb at AValue -- held into the free stretch the value is in, MinGap
+      from both neighbours -- unless MaxThumbs is reached or the stretch has no room; the
+      index it went to, -1 = none added. }
+    function UserAddThumb(AValue: Integer): Integer;
+    { The user removes thumb AIndex: offered to OnThumbRemoving when CanRemoveThumb. }
+    function UserRemoveThumb(AIndex: Integer): Boolean;
+    { AllowUserThumbs, and more thumbs than MinThumbs. }
+    function CanRemoveThumb: Boolean;
+    { Client point (X, Y) is off the track by more than RemoveDistance across it (Y on a
+      horizontal bar, X on a vertical one), and a thumb dragged there would be removed. }
+    function DraggedOff(X, Y: Integer): Boolean;
     function GetThumbCount: Integer;
     function GetThumbValue(AIndex: Integer): Integer;
     procedure SetMin(const AValue: Integer);
@@ -224,6 +256,16 @@ type
       towards AFrom). A final class moves its item the same way here, so the thumb's colour,
       hint and selection go with it; ValuesChanged follows. }
     procedure ThumbIndexMoved(AFrom, ATo: Integer); virtual;
+    { Add a thumb at AValue (already where it may go) and return its index. Here: inserted
+      into the thumbs as they are; a final class adds an item instead (TTyMultiTrackBar: one
+      that follows the theme). The selection is the caller's to set. }
+    function AddUserThumb(AValue: Integer): Integer; virtual;
+    { Remove thumb AIndex. Here: taken out of the thumbs, the selection dropped with it (or
+      kept on its thumb, at its new index); a final class deletes its item instead. }
+    procedure RemoveThumb(AIndex: Integer); virtual;
+    procedure DoThumbRemoving(AIndex: Integer; var AAllow: Boolean); virtual;
+    { The theme's --track-remove-distance in device px at the bar's PPI. }
+    function RemoveDistance: Integer;
     procedure DoThumbChange(AIndex: Integer); virtual;
     procedure DoThumbSelect(AIndex: Integer); virtual;
     procedure DoChange; virtual;
@@ -309,6 +351,18 @@ type
       (refused -- or disabled -- it stops the chain, and the thumbs before it stop MinGap
       short of it) and reports its own OnThumbChange; OnChange fires once at the end. }
     property Pushable: Boolean read FPushable write FPushable default False;
+    { The user adds and removes thumbs. A left press on the bare track that OnTrackClick did
+      not handle adds one there (MinGap from its neighbours; not past MaxThumbs) and drags it
+      on; a thumb dragged off the track by more than the theme's --track-remove-distance is
+      drawn as TyTrackThumb.removing and goes when released there (dragged back, it stays);
+      Delete removes the selected thumb. A removal is offered to OnThumbRemoving and never
+      leaves fewer than MinThumbs. }
+    property AllowUserThumbs: Boolean read FAllowUserThumbs write FAllowUserThumbs default False;
+    { The fewest thumbs the user can remove down to; 0 = all of them. Code is not held. }
+    property MinThumbs: Integer read FMinThumbs write SetMinThumbs default 0;
+    { The most thumbs the user can add up to; 0 = no limit. Code is not held. }
+    property MaxThumbs: Integer read FMaxThumbs write SetMaxThumbs default 0;
+    property OnThumbRemoving: TTyTrackThumbRemovingEvent read FOnThumbRemoving write FOnThumbRemoving;
   public
     constructor Create(AOwner: TComponent); override;
     { Move one thumb; see the class comment. Out-of-range AIndex raises EListError. }
@@ -460,6 +514,10 @@ type
     procedure DefineProperties(Filer: TFiler); override;
     { The odd segments -- Low to High of each range -- in the selection's colour. }
     function SegmentStyle(AIndex: Integer; out ATypeKey, AStyleClass: string): Boolean; override;
+    { A range bar does not take single thumbs: nothing is added. }
+    function AddUserThumb(AValue: Integer): Integer; override;
+    { The whole range the thumb is an end of. }
+    procedure RemoveThumb(AIndex: Integer); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -661,6 +719,9 @@ type
       wherever that puts it; removed, nothing is selected. }
     procedure ThumbsChanged;
     procedure ThumbIndexMoved(AFrom, ATo: Integer); override;
+    { A new item at AValue that follows the theme (Color clDefault, no hint or class). }
+    function AddUserThumb(AValue: Integer): Integer; override;
+    procedure RemoveThumb(AIndex: Integer); override;
     procedure ValuesChanged; override;
     procedure DoThumbSelect(AIndex: Integer); override;
     procedure Loaded; override;
@@ -756,6 +817,10 @@ type
     property OnThumbChanging;
     property AllowCrossing;
     property Pushable;
+    property AllowUserThumbs;
+    property MinThumbs;
+    property MaxThumbs;
+    property OnThumbRemoving;
   end;
 
 implementation
@@ -1179,6 +1244,141 @@ procedure TTyMultiTrackBarBase.ThumbIndexMoved(AFrom, ATo: Integer);
 begin
 end;
 
+function TTyMultiTrackBarBase.AddUserThumb(AValue: Integer): Integer;
+var
+  v: array of Integer;
+  n, k, i: Integer;
+begin
+  n := Length(FValues);
+  k := 0;
+  while (k < n) and (FValues[k] <= AValue) do Inc(k);
+  v := nil;
+  SetLength(v, n + 1);
+  for i := 0 to k - 1 do v[i] := FValues[i];
+  v[k] := AValue;
+  for i := k to n - 1 do v[i + 1] := FValues[i];
+  { The selected thumb keeps its thumb: one place on when the new one comes before it. }
+  if FSelectedThumb >= k then Inc(FSelectedThumb);
+  SetThumbValues(v);
+  Result := k;
+end;
+
+procedure TTyMultiTrackBarBase.RemoveThumb(AIndex: Integer);
+var
+  v: array of Integer;
+  i, sel, newSel: Integer;
+begin
+  v := nil;
+  SetLength(v, Length(FValues) - 1);
+  for i := 0 to AIndex - 1 do v[i] := FValues[i];
+  for i := AIndex + 1 to High(FValues) do v[i - 1] := FValues[i];
+  sel := FSelectedThumb;
+  if sel = AIndex then newSel := -1
+  else if sel > AIndex then newSel := sel - 1
+  else newSel := sel;
+  { Held aside while the thumbs shrink, then set once: OnThumbSelect only for a new index. }
+  FSelectedThumb := -1;
+  SetThumbValues(v);
+  FSelectedThumb := sel;
+  SelectedThumb := newSel;
+end;
+
+procedure TTyMultiTrackBarBase.DoThumbRemoving(AIndex: Integer; var AAllow: Boolean);
+begin
+  if Assigned(FOnThumbRemoving) then FOnThumbRemoving(Self, AIndex, AAllow);
+end;
+
+function TTyMultiTrackBarBase.RemoveDistance: Integer;
+var
+  ppi: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  Result := MulDiv(ActiveController.Metric(TyTrackRemoveDistanceVar, TyTrackRemoveDistance),
+    ppi, 96);
+end;
+
+procedure TTyMultiTrackBarBase.SetMinThumbs(const AValue: Integer);
+begin
+  if AValue < 0 then FMinThumbs := 0 else FMinThumbs := AValue;
+end;
+
+procedure TTyMultiTrackBarBase.SetMaxThumbs(const AValue: Integer);
+begin
+  if AValue < 0 then FMaxThumbs := 0 else FMaxThumbs := AValue;
+end;
+
+function TTyMultiTrackBarBase.UserAddThumb(AValue: Integer): Integer;
+var
+  n, k, gap, lo, hi, v: Integer;
+begin
+  Result := -1;
+  n := Length(FValues);
+  if (FMaxThumbs > 0) and (n >= FMaxThumbs) then Exit;
+  { The gap the new thumb must keep: MinGap itself (none while crossing). }
+  if FAllowCrossing then gap := 0 else gap := FMinGap;
+  k := 0;
+  while (k < n) and (FValues[k] <= AValue) do Inc(k);
+  lo := FMin;
+  hi := FMax;
+  if hi < lo then hi := lo;
+  if (k > 0) and (FValues[k - 1] + gap > lo) then lo := FValues[k - 1] + gap;
+  if (k < n) and (FValues[k] - gap < hi) then hi := FValues[k] - gap;
+  if lo > hi then Exit;
+  v := AValue;
+  if v < lo then v := lo;
+  if v > hi then v := hi;
+  Result := AddUserThumb(v);
+  if (Result < 0) or (Result >= Length(FValues)) then Result := -1;
+end;
+
+function TTyMultiTrackBarBase.CanRemoveThumb: Boolean;
+begin
+  Result := FAllowUserThumbs and (Length(FValues) > FMinThumbs);
+end;
+
+function TTyMultiTrackBarBase.UserRemoveThumb(AIndex: Integer): Boolean;
+var
+  allow: Boolean;
+begin
+  Result := False;
+  if (AIndex < 0) or (AIndex >= Length(FValues)) or not CanRemoveThumb then Exit;
+  allow := True;
+  DoThumbRemoving(AIndex, allow);
+  if not allow then Exit;
+  { The handler may have changed the thumbs: the index, or the room above MinThumbs, gone. }
+  if (AIndex >= Length(FValues)) or not CanRemoveThumb then Exit;
+  FDragThumb := -1;
+  FHoverThumb := -1;
+  RemoveThumb(AIndex);
+  Invalidate;
+  Result := True;
+end;
+
+function TTyMultiTrackBarBase.DraggedOff(X, Y: Integer): Boolean;
+var
+  c, len, d: Integer;
+begin
+  Result := False;
+  if not CanRemoveThumb then Exit;
+  { Across the track: Y on a horizontal bar, X on a vertical one; measured from the edge of
+    the control, so anywhere in it is on the track. }
+  if FOrientation = toVertical then
+  begin
+    c := X;
+    len := ClientWidth;
+  end
+  else
+  begin
+    c := Y;
+    len := ClientHeight;
+  end;
+  if c < 0 then d := -c
+  else if c >= len then d := c - (len - 1)
+  else d := 0;
+  Result := d > RemoveDistance;
+end;
+
 procedure TTyMultiTrackBarBase.SetAllowCrossing(const AValue: Boolean);
 begin
   if FAllowCrossing = AValue then Exit;
@@ -1507,6 +1707,34 @@ begin
   end;
 end;
 
+{ AStyle's colours with their alpha multiplied by AOpacity: a thumb drawn removing fades by
+  its own opacity, which the painter only applies to a whole paint. Image fills are left as
+  they are. }
+procedure FadeThumbStyle(var AStyle: TTyStyleSet; AOpacity: Single);
+
+  function Fade(c: TTyColor): TTyColor;
+  begin
+    Result := TyRGBA(TyRedOf(c), TyGreenOf(c), TyBlueOf(c), Round(TyAlphaOf(c) * AOpacity));
+  end;
+
+var
+  i: Integer;
+begin
+  if AOpacity < 0 then AOpacity := 0;
+  if AOpacity > 1 then AOpacity := 1;
+  with AStyle.Background do
+  begin
+    Color := Fade(Color);
+    GradFrom := Fade(GradFrom);
+    GradTo := Fade(GradTo);
+    { The stops are shared with the theme's resolved (cached) style: faded in a copy. }
+    GradStops := Copy(GradStops);
+    for i := 0 to High(GradStops) do GradStops[i].Color := Fade(GradStops[i].Color);
+  end;
+  AStyle.BorderColor := Fade(AStyle.BorderColor);
+  AStyle.OutlineColor := Fade(AStyle.OutlineColor);
+end;
+
 procedure TTyMultiTrackBarBase.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
@@ -1522,7 +1750,8 @@ var
   procedure DrawThumb(AIndex: Integer);
   var
     States: TTyStateSet;
-    own: Boolean;
+    own, removing: Boolean;
+    thumbCls: string;
   begin
     Off := TyTrackThumbOffset(MLen, TW, FMin, FMax, FValues[AIndex], Inverted);
     if FOrientation = toVertical then
@@ -1538,7 +1767,11 @@ var
     own := True;
     if Assigned(FOnDrawThumb) then FOnDrawThumb(Self, P, AIndex, ThumbR, States, own);
     if not own then Exit;
-    St := ActiveController.Model.ResolveStyle('TyTrackThumb', ThumbStyleClass(AIndex), States);
+    { Dragged off far enough to go on release: its own class and the removing one. }
+    removing := FRemoving and (AIndex = FDragThumb);
+    thumbCls := ThumbStyleClass(AIndex);
+    if removing then thumbCls := Trim(thumbCls + ' ' + TyTrackRemovingClass);
+    St := ActiveController.Model.ResolveStyle('TyTrackThumb', thumbCls, States);
     c := ThumbColor(AIndex);
     if c <> clDefault then
     begin
@@ -1548,6 +1781,7 @@ var
       St.Background.Color := TyRGB(Red(c), Green(c), Blue(c));
       Include(St.Present, tpBackground);
     end;
+    if removing and (tpOpacity in St.Present) then FadeThumbStyle(St, St.Opacity);
     TyDrawTrackThumb(P, ThumbR, St);
   end;
 
@@ -1845,6 +2079,22 @@ begin
     if (idx >= 0) and not ThumbEnabled(idx) then Exit;
   end;
   onThumb := idx >= 0;
+  if not onThumb and FAllowUserThumbs then
+  begin
+    { The bare track adds a thumb there, and the press drags it on. A further press of a
+      multi-click lands on the thumb the first one added, or -- none added -- does nothing;
+      so does a press past MaxThumbs or where there is no room. }
+    if Shift * [ssDouble, ssTriple, ssQuad] <> [] then Exit;
+    idx := UserAddThumb(ValueAt(pos));
+    if idx < 0 then Exit;
+    FGrab := pos - ThumbCentre(idx);
+    FDragThumb := idx;
+    FHoverThumb := -1;
+    FRemoving := False;
+    SelectedThumb := idx;
+    Invalidate;
+    Exit;
+  end;
   if onThumb then
     { Grabbed where it was pressed: a press that does not move does not move the thumb. }
     FGrab := pos - ThumbCentre(idx)
@@ -1857,6 +2107,7 @@ begin
   end;
   FDragThumb := idx;
   FHoverThumb := -1;
+  FRemoving := False;
   SelectedThumb := idx;
   if not onThumb then UserMoveThumb(idx, ValueAt(pos));
   Invalidate;
@@ -1865,11 +2116,21 @@ end;
 procedure TTyMultiTrackBarBase.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   pos, v, i, j, h: Integer;
+  off: Boolean;
 begin
   if not Enabled then Exit;
   inherited MouseMove(Shift, X, Y);
   if FDragThumb >= 0 then
   begin
+    { Off the track far enough to be removed: drawn so, and it stays where it was meanwhile;
+      back within the distance it follows the pointer again. }
+    off := DraggedOff(X, Y);
+    if off <> FRemoving then
+    begin
+      FRemoving := off;
+      Invalidate;
+    end;
+    if off then Exit;
     if FOrientation = toVertical then pos := Y else pos := X;
     v := ValueAt(pos - FGrab);
     i := FDragThumb;
@@ -1907,12 +2168,20 @@ begin
 end;
 
 procedure TTyMultiTrackBarBase.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  i: Integer;
+  off: Boolean;
 begin
   inherited MouseUp(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
+    { Released off the track: the dragged thumb goes, if OnThumbRemoving lets it. }
+    i := FDragThumb;
+    off := (i >= 0) and DraggedOff(X, Y);
     FDragThumb := -1;
+    FRemoving := False;
     Invalidate;
+    if off then UserRemoveThumb(i);
   end;
 end;
 
@@ -1939,6 +2208,16 @@ begin
       SelectedThumb := nxt;
       Key := 0;
     end;
+    Exit;
+  end;
+  { Delete removes the selected thumb -- only one that is selected, and enabled. The key is
+    the bar's even when OnThumbRemoving or MinThumbs keeps the thumb. }
+  if (Key = VK_DELETE) and FAllowUserThumbs and (Shift * [ssShift, ssCtrl, ssAlt, ssMeta] = [])
+     and (FSelectedThumb >= 0) and (FSelectedThumb < Length(FValues))
+     and ThumbEnabled(FSelectedThumb) then
+  begin
+    Key := 0;
+    UserRemoveThumb(FSelectedThumb);
     Exit;
   end;
   i := KeyThumb;
@@ -2302,6 +2581,16 @@ begin
   end;
 end;
 
+function TTyCustomRangeTrackBar.AddUserThumb(AValue: Integer): Integer;
+begin
+  Result := -1;
+end;
+
+procedure TTyCustomRangeTrackBar.RemoveThumb(AIndex: Integer);
+begin
+  if (AIndex >= 0) and (AIndex div 2 < FRanges.Count) then FRanges.Delete(AIndex div 2);
+end;
+
 function TTyCustomRangeTrackBar.GetLowValue: Integer;
 begin
   if FRanges.Count = 0 then Result := 0
@@ -2599,6 +2888,27 @@ begin
   finally
     FSyncing := False;
   end;
+end;
+
+function TTyCustomMultiTrackBar.AddUserThumb(AValue: Integer): Integer;
+var
+  it: TTyTrackThumbItem;
+begin
+  { One change for the collection: added and given its value, then put in order. }
+  FThumbs.BeginUpdate;
+  try
+    it := FThumbs.Add;
+    it.FValue := AValue;
+  finally
+    FThumbs.EndUpdate;
+  end;
+  Result := it.Index;
+end;
+
+procedure TTyCustomMultiTrackBar.RemoveThumb(AIndex: Integer);
+begin
+  { The collection tells the bar, which drops the thumb and the selection that was on it. }
+  FThumbs.Delete(AIndex);
 end;
 
 procedure TTyCustomMultiTrackBar.DoThumbSelect(AIndex: Integer);

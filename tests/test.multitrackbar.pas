@@ -502,6 +502,49 @@ type
     procedure TestTheFinalBarsPush;
   end;
 
+  { AllowUserThumbs on TTyMultiTrackBar (and the probe, for the base class's own add and
+    remove) through the real paths -- MouseDown / MouseMove / MouseUp, KeyDown -- with
+    MinThumbs, MaxThumbs, OnTrackClick and OnThumbRemoving. The log holds `click:<value> `
+    (OnTrackClick), `R<i> ` (OnThumbRemoving) beside `S<i>` / `T<i>` / `C`. The theme is the
+    paint fixture's plus an opacity of 0.5 for TyTrackThumb.removing. }
+  TTyMultiTrackUserThumbsTest = class(TMultiTrackFinalBase)
+  private
+    FBar: TTyMultiTrackBar;
+    FHandleClick: Boolean;      // OnTrackClick handles the press
+    FKeep: Boolean;             // OnThumbRemoving refuses
+    FSelectLast: Boolean;       // ... and selects the last thumb while asked
+    procedure Wire(ABar: TTyMultiTrackBarBase);
+    procedure TrackClick(Sender: TObject; AValue: Integer; var AHandled: Boolean);
+    procedure Removing(Sender: TObject; AIndex: Integer; var AAllow: Boolean);
+    { A point on ABar's track (horizontal, no readout) whose value is AValue, on no thumb. }
+    function PtOn(ABar: TTyMultiTrackBarBase; AValue: Integer): TPoint;
+    function Centre(ABar: TTyMultiTrackBarBase; AIndex: Integer): TPoint;
+    procedure Press(ABar: TTyMultiTrackBarBase; const P: TPoint; ADouble: Boolean = False);
+    procedure Drag(ABar: TTyMultiTrackBarBase; const P: TPoint);
+    procedure Release(ABar: TTyMultiTrackBarBase; const P: TPoint);
+    function Key(ABar: TTyMultiTrackBarBase; AKey: Word; AShift: TShiftState = []): Word;
+    function Values: string;
+    { The pixel in the middle of thumb AIndex as painted now. }
+    function ThumbPixel(ABar: TTyMultiTrackBarBase; AIndex: Integer): TBGRAPixel;
+    procedure SetThumbs(const AValues: array of Integer);
+  protected
+    procedure SetUp; override;
+  published
+    procedure TestTheSwitchesAreOffAndPublished;
+    procedure TestOffAPressJumpsAndADragOffRemovesNothing;
+    procedure TestAPressOnTheBareTrackAddsAThumbAndDragsIt;
+    procedure TestAPressOnTrackClickHandledAddsNothing;
+    procedure TestAnAddedThumbKeepsMinGapOrIsNotAdded;
+    procedure TestMaxThumbsStopsAdding;
+    procedure TestDraggedOffItIsDrawnRemovingAndGoesOnRelease;
+    procedure TestTheDistanceIsAcrossTheTrack;
+    procedure TestTheDistanceIsTheThemesMetric;
+    procedure TestOnThumbRemovingAndMinThumbsKeepTheThumb;
+    procedure TestDeleteRemovesTheSelectedThumb;
+    procedure TestTheBaseClassAddsAndRemovesItsOwnThumbs;
+    procedure TestTheDefaultThemeFadesARemovingThumb;
+  end;
+
 implementation
 
 { TMultiProbe }
@@ -5437,6 +5480,550 @@ begin
     Format('%d..%d', [range.LowValue, range.HighValue]));
 end;
 
+{ TTyMultiTrackUserThumbsTest }
+
+procedure TTyMultiTrackUserThumbsTest.SetUp;
+begin
+  inherited SetUp;
+  FCtl.LoadThemeCss(CPaintCss + 'TyTrackThumb.removing { opacity: 0.5; }');
+  FBar := TTyMultiTrackBar.Create(FForm);
+  FBar.Name := 'Bar';
+  FBar.Parent := FForm;
+  FBar.Font.PixelsPerInch := 96;
+  FBar.SetBounds(0, 0, 400, 24);
+  FBar.Controller := FCtl;
+  FHandleClick := False;
+  FKeep := False;
+  FSelectLast := False;
+end;
+
+procedure TTyMultiTrackUserThumbsTest.Wire(ABar: TTyMultiTrackBarBase);
+begin
+  { Only where a test logs: a form written with these assigned would name the test's methods. }
+  TBaseAccess(ABar).OnThumbSelect := @ThumbSelected;
+  TBaseAccess(ABar).OnThumbChange := @ThumbMoved;
+  TBaseAccess(ABar).OnChange := @Changed;
+  TBaseAccess(ABar).OnTrackClick := @TrackClick;
+  TBaseAccess(ABar).OnThumbRemoving := @Removing;
+end;
+
+procedure TTyMultiTrackUserThumbsTest.TrackClick(Sender: TObject; AValue: Integer;
+  var AHandled: Boolean);
+begin
+  FLog := FLog + Format('click:%d ', [AValue]);
+  if FHandleClick then AHandled := True;
+end;
+
+procedure TTyMultiTrackUserThumbsTest.Removing(Sender: TObject; AIndex: Integer;
+  var AAllow: Boolean);
+var
+  bar: TTyMultiTrackBarBase;
+begin
+  bar := Sender as TTyMultiTrackBarBase;
+  AssertTrue('allowed until the handler says otherwise', AAllow);
+  FLog := FLog + Format('R%d ', [AIndex]);
+  if FKeep then AAllow := False;
+  if FSelectLast then bar.SelectedThumb := bar.ThumbCount - 1;
+end;
+
+function TTyMultiTrackUserThumbsTest.PtOn(ABar: TTyMultiTrackBarBase; AValue: Integer): TPoint;
+var
+  tw: Integer;
+begin
+  tw := TyTrackThumbLen(96);
+  Result := Point(TyTrackThumbOffset(ABar.ClientWidth, tw, ABar.Min, ABar.Max, AValue, False)
+    + tw div 2, ABar.Height div 2);
+  AssertEquals('fixture: the point is at that value', AValue, ABar.ValueAtPoint(Result.X, Result.Y));
+  AssertEquals('fixture: the point is on no thumb', -1, ABar.ThumbAtPoint(Result.X, Result.Y));
+end;
+
+function TTyMultiTrackUserThumbsTest.Centre(ABar: TTyMultiTrackBarBase; AIndex: Integer): TPoint;
+var
+  r: TRect;
+begin
+  r := ABar.ThumbRect(AIndex);
+  Result := Point((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+end;
+
+procedure TTyMultiTrackUserThumbsTest.Press(ABar: TTyMultiTrackBarBase; const P: TPoint;
+  ADouble: Boolean);
+var
+  sh: TShiftState;
+begin
+  sh := [ssLeft];
+  if ADouble then Include(sh, ssDouble);
+  TBaseAccess(ABar).MouseDown(mbLeft, sh, P.X, P.Y);
+end;
+
+procedure TTyMultiTrackUserThumbsTest.Drag(ABar: TTyMultiTrackBarBase; const P: TPoint);
+begin
+  TBaseAccess(ABar).MouseMove([ssLeft], P.X, P.Y);
+end;
+
+procedure TTyMultiTrackUserThumbsTest.Release(ABar: TTyMultiTrackBarBase; const P: TPoint);
+begin
+  TBaseAccess(ABar).MouseUp(mbLeft, [], P.X, P.Y);
+end;
+
+function TTyMultiTrackUserThumbsTest.Key(ABar: TTyMultiTrackBarBase; AKey: Word;
+  AShift: TShiftState): Word;
+begin
+  Result := AKey;
+  TBaseAccess(ABar).KeyDown(Result, AShift);
+end;
+
+function TTyMultiTrackUserThumbsTest.Values: string;
+begin
+  Result := ValuesOf(FBar);
+end;
+
+function TTyMultiTrackUserThumbsTest.ThumbPixel(ABar: TTyMultiTrackBarBase;
+  AIndex: Integer): TBGRAPixel;
+var
+  b: TBGRABitmap;
+  p: TPoint;
+begin
+  p := Centre(ABar, AIndex);
+  b := Shot(ABar);
+  try
+    Result := b.GetPixel(p.X, p.Y);
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TTyMultiTrackUserThumbsTest.SetThumbs(const AValues: array of Integer);
+var
+  i: Integer;
+begin
+  FBar.Thumbs.BeginUpdate;
+  try
+    FBar.Thumbs.Clear;
+    for i := 0 to High(AValues) do
+      FBar.Thumbs.Add.Value := AValues[i];
+  finally
+    FBar.Thumbs.EndUpdate;
+  end;
+end;
+
+procedure TTyMultiTrackUserThumbsTest.TestTheSwitchesAreOffAndPublished;
+const
+  CNames: array[0..3] of string = ('AllowUserThumbs', 'MinThumbs', 'MaxThumbs', 'OnThumbRemoving');
+var
+  i: Integer;
+  txt: string;
+  back: TForm;
+  bar: TTyMultiTrackBar;
+  range: TTyRangeTrackBar;
+begin
+  for i := 0 to High(CNames) do
+    AssertTrue(CNames[i] + ' is published', IsPublishedProp(FBar, CNames[i]));
+  AssertFalse('AllowUserThumbs is off', FBar.AllowUserThumbs);
+  AssertEquals('MinThumbs', 0, FBar.MinThumbs);
+  AssertEquals('MaxThumbs', 0, FBar.MaxThumbs);
+  txt := BarText(FormText(FForm));
+  for i := 0 to 2 do
+    AssertEquals(CNames[i] + ': the default is not written', 0, Pos(CNames[i], txt));
+  FBar.AllowUserThumbs := True;
+  FBar.MinThumbs := 2;
+  FBar.MaxThumbs := 5;
+  txt := BarText(FormText(FForm));
+  AssertTrue(Pos('AllowUserThumbs = True', txt) > 0);
+  AssertTrue(Pos('MinThumbs = 2', txt) > 0);
+  AssertTrue(Pos('MaxThumbs = 5', txt) > 0);
+  back := RoundTrip(FForm);
+  try
+    bar := back.FindComponent('Bar') as TTyMultiTrackBar;
+    AssertTrue('read back', bar.AllowUserThumbs);
+    AssertEquals(2, bar.MinThumbs);
+    AssertEquals(5, bar.MaxThumbs);
+  finally
+    back.Free;
+  end;
+  FBar.MinThumbs := -3;
+  FBar.MaxThumbs := -1;
+  AssertEquals('no fewer than none', 0, FBar.MinThumbs);
+  AssertEquals('0 = no limit', 0, FBar.MaxThumbs);
+  { The range bar adds and removes ranges, not thumbs (AllowUserRanges): none of this is its. }
+  range := TTyRangeTrackBar.Create(FForm);
+  for i := 0 to High(CNames) do
+    AssertFalse('TTyRangeTrackBar does not publish ' + CNames[i], IsPublishedProp(range, CNames[i]));
+end;
+
+procedure TTyMultiTrackUserThumbsTest.TestOffAPressJumpsAndADragOffRemovesNothing;
+var
+  p, c: TPoint;
+begin
+  p := PtOn(FBar, 60);
+  Press(FBar, p);
+  Release(FBar, p);
+  AssertEquals('off: the nearest thumb comes to the press, as before', '25,60,75', Values);
+  c := Centre(FBar, 1);
+  Press(FBar, c);
+  Drag(FBar, Point(c.X, 200));
+  AssertTrue('not drawn removing', SamePx(ThumbPixel(FBar, 1), $80, $00, $FF));
+  Release(FBar, Point(c.X, 200));
+  AssertEquals('off: dragged far off the track and released, it stays', '25,60,75', Values);
+  FBar.SelectedThumb := 1;
+  AssertEquals('off: Delete is not the bar''s', VK_DELETE, Key(FBar, VK_DELETE));
+  AssertEquals(3, FBar.Thumbs.Count);
+end;
+
+procedure TTyMultiTrackUserThumbsTest.TestAPressOnTheBareTrackAddsAThumbAndDragsIt;
+var
+  p: TPoint;
+begin
+  FBar.AllowUserThumbs := True;
+  Wire(FBar);
+  p := PtOn(FBar, 60);
+  Press(FBar, p);
+  AssertEquals('a thumb added where pressed', '25,50,60,75', Values);
+  AssertEquals('as an item of its own, in its place', 4, FBar.Thumbs.Count);
+  AssertEquals(60, FBar.Thumbs[2].Value);
+  AssertEquals('following the theme', clDefault, FBar.Thumbs[2].Color);
+  AssertEquals('selected', 2, FBar.SelectedThumb);
+  AssertEquals('OnTrackClick first; then the new thumb, then its selection',
+    'click:60 C S2 ', FLog);
+  FLog := '';
+  p := PtOn(FBar, 68);
+  Drag(FBar, p);
+  AssertEquals('the press drags it on', '25,50,68,75', Values);
+  AssertEquals('T2 C ', FLog);
+  Release(FBar, p);
+  { The second press of a double-click is on the thumb the first one added. }
+  FLog := '';
+  p := PtOn(FBar, 90);
+  Press(FBar, p);
+  Release(FBar, p);
+  Press(FBar, p, True);
+  Release(FBar, p);
+  AssertEquals('one thumb for a double-click', '25,50,68,75,90', Values);
+  AssertEquals('click:90 C S4 ', FLog);
+end;
+
+procedure TTyMultiTrackUserThumbsTest.TestAPressOnTrackClickHandledAddsNothing;
+var
+  p: TPoint;
+begin
+  FBar.AllowUserThumbs := True;
+  Wire(FBar);
+  FHandleClick := True;
+  p := PtOn(FBar, 60);
+  Press(FBar, p);
+  Release(FBar, p);
+  Press(FBar, p, True);
+  Release(FBar, p);
+  AssertEquals('handled: nothing added, nothing moved', '25,50,75', Values);
+  AssertEquals('asked once for the double-click', 'click:60 ', FLog);
+  AssertEquals(-1, FBar.SelectedThumb);
+  FHandleClick := False;
+  FLog := '';
+  Press(FBar, p);
+  Release(FBar, p);
+  AssertEquals('not handled: added', '25,50,60,75', Values);
+end;
+
+procedure TTyMultiTrackUserThumbsTest.TestAnAddedThumbKeepsMinGapOrIsNotAdded;
+var
+  p: TPoint;
+begin
+  FBar.MinGap := 10;
+  FBar.AllowUserThumbs := True;
+  Wire(FBar);
+  p := PtOn(FBar, 57);
+  Press(FBar, p);
+  AssertEquals('put MinGap from the thumb below', '25,50,60,75', Values);
+  Drag(FBar, p);
+  AssertEquals('grabbed where it was pressed: not pulled to the pointer', '25,50,60,75', Values);
+  Release(FBar, p);
+  AssertEquals(2, FBar.SelectedThumb);
+  FLog := '';
+  p := PtOn(FBar, 68);
+  Press(FBar, p);
+  Release(FBar, p);
+  AssertEquals('no room between 60 and 75: nothing added, and nothing jumps', '25,50,60,75',
+    Values);
+  AssertEquals('only asked', 'click:68 ', FLog);
+  AssertEquals('the selection stays', 2, FBar.SelectedThumb);
+end;
+
+procedure TTyMultiTrackUserThumbsTest.TestMaxThumbsStopsAdding;
+var
+  p: TPoint;
+begin
+  FBar.AllowUserThumbs := True;
+  FBar.MaxThumbs := 4;
+  Wire(FBar);
+  p := PtOn(FBar, 60);
+  Press(FBar, p);
+  Release(FBar, p);
+  AssertEquals('below MaxThumbs: added', '25,50,60,75', Values);
+  FLog := '';
+  p := PtOn(FBar, 90);
+  Press(FBar, p);
+  Release(FBar, p);
+  AssertEquals('at MaxThumbs: nothing added, and nothing jumps', '25,50,60,75', Values);
+  AssertEquals('only asked', 'click:90 ', FLog);
+  AssertEquals(2, FBar.SelectedThumb);
+  FBar.MaxThumbs := 0;
+  Press(FBar, p);
+  Release(FBar, p);
+  AssertEquals('0: no limit', '25,50,60,75,90', Values);
+end;
+
+procedure TTyMultiTrackUserThumbsTest.TestDraggedOffItIsDrawnRemovingAndGoesOnRelease;
+var
+  c: TPoint;
+  px: TBGRAPixel;
+begin
+  FBar.AllowUserThumbs := True;
+  FBar.Thumbs[2].Color := clRed;
+  Wire(FBar);
+  c := Centre(FBar, 1);
+  Press(FBar, c);
+  AssertTrue('fixture: pressed, it is drawn active', SamePx(ThumbPixel(FBar, 1), $80, $00, $FF));
+  { The bar is 24 high; the distance is 24 below its last row (23). }
+  Drag(FBar, Point(c.X, 23 + 24));
+  AssertTrue('24 px off: still on the track', SamePx(ThumbPixel(FBar, 1), $80, $00, $FF));
+  Drag(FBar, Point(c.X, 23 + 25));
+  px := ThumbPixel(FBar, 1);
+  AssertFalse('25 px off: drawn removing (faded): ' + PxStr(px), SamePx(px, $80, $00, $FF));
+  AssertTrue('the others as they were', SamePx(ThumbPixel(FBar, 0), $3B, $82, $F6));
+  Drag(FBar, Point(c.X + 80, 90));
+  AssertEquals('off the track it does not follow the pointer', '25,50,75', Values);
+  Drag(FBar, Point(c.X, 30));
+  AssertTrue('dragged back: as it was', SamePx(ThumbPixel(FBar, 1), $80, $00, $FF));
+  AssertEquals('25,50,75', Values);
+  Drag(FBar, Point(c.X, -26));
+  px := ThumbPixel(FBar, 1);
+  AssertFalse('above the bar too: ' + PxStr(px), SamePx(px, $80, $00, $FF));
+  FLog := '';
+  Release(FBar, Point(c.X, -26));
+  AssertEquals('released there: gone', '25,75', Values);
+  AssertEquals('asked, then the change, then the selection it took along',
+    'R1 C S-1 ', FLog);
+  AssertEquals('the items with it', 2, FBar.Thumbs.Count);
+  AssertEquals(clRed, FBar.Thumbs[1].Color);
+  { A thumb with a colour of its own fades too. }
+  c := Centre(FBar, 1);
+  Press(FBar, c);
+  AssertTrue('fixture: its colour', SamePx(ThumbPixel(FBar, 1), $FF, 0, 0));
+  Drag(FBar, Point(c.X, 100));
+  px := ThumbPixel(FBar, 1);
+  AssertFalse('faded: ' + PxStr(px), SamePx(px, $FF, 0, 0));
+  Drag(FBar, c);
+  Release(FBar, c);
+  AssertEquals('released on the track: it stays', '25,75', Values);
+end;
+
+procedure TTyMultiTrackUserThumbsTest.TestTheDistanceIsAcrossTheTrack;
+var
+  c: TPoint;
+begin
+  FBar.AllowUserThumbs := True;
+  { Along the track, past either end: a drag, not a removal. }
+  c := Centre(FBar, 1);
+  Press(FBar, c);
+  Drag(FBar, Point(FBar.Width + 100, c.Y));
+  AssertTrue('past the end: not removing', SamePx(ThumbPixel(FBar, 1), $80, $00, $FF));
+  Release(FBar, Point(FBar.Width + 100, c.Y));
+  c := Centre(FBar, 0);
+  Press(FBar, c);
+  Release(FBar, Point(-100, c.Y));
+  AssertEquals('released past either end: both stay', 3, FBar.Thumbs.Count);
+  { Vertical: across is X. }
+  SetThumbs([25, 50, 75]);
+  FBar.Orientation := toVertical;
+  AssertEquals('fixture: 24 wide', 24, FBar.ClientWidth);
+  c := Centre(FBar, 1);
+  Press(FBar, c);
+  Drag(FBar, Point(c.X, FBar.Height + 100));
+  AssertTrue('vertical, past the end: not removing', SamePx(ThumbPixel(FBar, 1), $80, $00, $FF));
+  Release(FBar, Point(c.X, FBar.Height + 100));
+  AssertEquals(3, FBar.Thumbs.Count);
+  c := Centre(FBar, 2);
+  Press(FBar, c);
+  Drag(FBar, Point(23 + 25, c.Y));
+  AssertFalse('vertical, beside it: removing', SamePx(ThumbPixel(FBar, 2), $80, $00, $FF));
+  Release(FBar, Point(23 + 25, c.Y));
+  AssertEquals('vertical, released beside it: gone', 2, FBar.Thumbs.Count);
+  c := Centre(FBar, 0);
+  Press(FBar, c);
+  Release(FBar, Point(-25, c.Y));
+  AssertEquals('and on its other side', 1, FBar.Thumbs.Count);
+end;
+
+procedure TTyMultiTrackUserThumbsTest.TestTheDistanceIsTheThemesMetric;
+var
+  c: TPoint;
+begin
+  FCtl.LoadThemeCss(CPaintCss + ':root { --track-remove-distance: 40px; }');
+  FBar.AllowUserThumbs := True;
+  c := Centre(FBar, 1);
+  Press(FBar, c);
+  Release(FBar, Point(c.X, 23 + 40));
+  AssertEquals('40 px off: stays', 3, FBar.Thumbs.Count);
+  Press(FBar, c);
+  Release(FBar, Point(c.X, 23 + 41));
+  AssertEquals('41 px off: gone', 2, FBar.Thumbs.Count);
+  { In logical px: twice as far at 192 PPI. }
+  FBar.Font.PixelsPerInch := 192;
+  c := Centre(FBar, 1);
+  Press(FBar, c);
+  Release(FBar, Point(c.X, 23 + 80));
+  AssertEquals('80 device px at 192 PPI: stays', 2, FBar.Thumbs.Count);
+  Press(FBar, c);
+  Release(FBar, Point(c.X, 23 + 81));
+  AssertEquals('81: gone', 1, FBar.Thumbs.Count);
+end;
+
+procedure TTyMultiTrackUserThumbsTest.TestOnThumbRemovingAndMinThumbsKeepTheThumb;
+var
+  c, off: TPoint;
+begin
+  FBar.AllowUserThumbs := True;
+  Wire(FBar);
+  FKeep := True;
+  c := Centre(FBar, 1);
+  off := Point(c.X, 80);
+  Press(FBar, c);
+  Drag(FBar, off);
+  FLog := '';
+  Release(FBar, off);
+  AssertEquals('refused: asked, and it stays', 'R1 ', FLog);
+  AssertEquals('25,50,75', Values);
+  FKeep := False;
+  FBar.MinThumbs := 3;
+  Press(FBar, c);
+  Drag(FBar, off);
+  AssertTrue('at MinThumbs: not drawn removing', SamePx(ThumbPixel(FBar, 1), $80, $00, $FF));
+  FLog := '';
+  Release(FBar, off);
+  AssertEquals('nor asked', '', FLog);
+  AssertEquals('25,50,75', Values);
+  FBar.MinThumbs := 2;
+  Press(FBar, c);
+  Drag(FBar, off);
+  Release(FBar, off);
+  AssertEquals('above MinThumbs: gone', '25,75', Values);
+  c := Centre(FBar, 0);
+  Press(FBar, c);
+  Drag(FBar, Point(c.X, 80));
+  FLog := '';
+  Release(FBar, Point(c.X, 80));
+  AssertEquals('down to MinThumbs: the next one stays, unasked', '', FLog);
+  AssertEquals('25,75', Values);
+end;
+
+procedure TTyMultiTrackUserThumbsTest.TestDeleteRemovesTheSelectedThumb;
+begin
+  FBar.AllowUserThumbs := True;
+  Wire(FBar);
+  FBar.SelectedThumb := 1;
+  FLog := '';
+  AssertEquals('the bar takes the key', 0, Key(FBar, VK_DELETE));
+  AssertEquals('25,75', Values);
+  AssertEquals('asked, the change, the selection gone with it', 'R1 C S-1 ', FLog);
+  FLog := '';
+  AssertEquals('nothing selected: the key is not the bar''s', VK_DELETE, Key(FBar, VK_DELETE));
+  AssertEquals('25,75', Values);
+  AssertEquals('', FLog);
+  FBar.SelectedThumb := 0;
+  AssertEquals('Ctrl+Delete is not the bar''s', VK_DELETE, Key(FBar, VK_DELETE, [ssCtrl]));
+  AssertEquals('25,75', Values);
+  FKeep := True;
+  FLog := '';
+  AssertEquals('refused: the key is still the bar''s', 0, Key(FBar, VK_DELETE));
+  AssertEquals('R0 ', FLog);
+  AssertEquals('25,75', Values);
+  FKeep := False;
+  FBar.MinThumbs := 2;
+  FLog := '';
+  AssertEquals(0, Key(FBar, VK_DELETE));
+  AssertEquals('at MinThumbs: kept, unasked', '', FLog);
+  FBar.MinThumbs := 0;
+  FBar.Thumbs[0].Enabled := False;
+  AssertEquals('a disabled thumb: not the bar''s', VK_DELETE, Key(FBar, VK_DELETE));
+  AssertEquals('25,75', Values);
+  FBar.Thumbs[0].Enabled := True;
+  FBar.AllowUserThumbs := False;
+  AssertEquals('off: not the bar''s', VK_DELETE, Key(FBar, VK_DELETE));
+  FBar.AllowUserThumbs := True;
+  AssertEquals(0, Key(FBar, VK_DELETE));
+  AssertEquals('on again: gone', '75', Values);
+end;
+
+procedure TTyMultiTrackUserThumbsTest.TestTheBaseClassAddsAndRemovesItsOwnThumbs;
+var
+  probe: TMultiProbe;
+  c: TPoint;
+begin
+  probe := TMultiProbe.Create(FForm);
+  probe.Parent := FForm;
+  probe.Font.PixelsPerInch := 96;
+  probe.SetBounds(0, 40, 400, 24);
+  probe.Put([20, 60]);
+  probe.AllowUserThumbs := True;
+  Wire(probe);
+  probe.SelectedThumb := 1;
+  FLog := '';
+  c := PtOn(probe, 40);
+  Press(probe, c);
+  Release(probe, c);
+  AssertEquals('inserted in its place', '20,40,60', ValuesOf(probe));
+  AssertEquals('and selected -- a new index for the selection even where the number is the '
+    + 'old one''s', 'click:40 C S1 ', FLog);
+  { A handler that moves the selection onto another thumb: it stays on that thumb. }
+  FSelectLast := True;
+  probe.SelectedThumb := 0;
+  FLog := '';
+  AssertEquals(0, Key(probe, VK_DELETE));
+  AssertEquals('40,60', ValuesOf(probe));
+  AssertEquals('the selection kept on the thumb the handler chose, at its new index',
+    'R0 S2 C S1 ', FLog);
+  AssertEquals(60, probe.ThumbValues[probe.SelectedThumb]);
+  FSelectLast := False;
+  c := Centre(probe, 0);
+  Press(probe, c);
+  FLog := '';
+  Release(probe, Point(c.X, 40 + 80));
+  AssertEquals('dragged off', '60', ValuesOf(probe));
+  AssertEquals('R0 C S-1 ', FLog);
+end;
+
+procedure TTyMultiTrackUserThumbsTest.TestTheDefaultThemeFadesARemovingThumb;
+var
+  c: TTyStyleController;
+  plain, gone, own: TTyStyleSet;
+  p: TPoint;
+  px: TBGRAPixel;
+begin
+  c := TTyStyleController.Create(nil);
+  try
+    AssertEquals('the distance', 24, c.Metric(TyTrackRemoveDistanceVar, -1));
+    plain := c.Model.ResolveStyle('TyTrackThumb', '', [tysActive]);
+    gone := c.Model.ResolveStyle('TyTrackThumb', TyTrackRemovingClass, [tysActive]);
+    own := c.Model.ResolveStyle('TyTrackThumb', 'big ' + TyTrackRemovingClass, [tysActive]);
+    AssertFalse('a thumb is not faded', tpOpacity in plain.Present);
+    AssertTrue('a removing thumb is', tpOpacity in gone.Present);
+    AssertTrue('partly', (gone.Opacity > 0) and (gone.Opacity < 1));
+    AssertTrue('with a class of its own too', (tpOpacity in own.Present) and (own.Opacity < 1));
+    FBar.Controller := c;
+    FBar.AllowUserThumbs := True;
+    p := Centre(FBar, 1);
+    Press(FBar, p);
+    Drag(FBar, Point(p.X, 80));
+    px := ThumbPixel(FBar, 1);
+    Drag(FBar, p);
+    AssertFalse('painted faded in the default theme: ' + PxStr(px),
+      px = ThumbPixel(FBar, 1));
+    Release(FBar, p);
+  finally
+    FBar.Controller := FCtl;
+    c.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyMultiTrackModelTest);
   RegisterTest(TTyMultiTrackGeometryTest);
@@ -5455,4 +6042,5 @@ initialization
   RegisterTest(TTyMultiTrackCrossingTest);
   RegisterTest(TTyMultiTrackPushTest);
   RegisterTest(TTyMultiTrackSwitchesFinalTest);
+  RegisterTest(TTyMultiTrackUserThumbsTest);
 end.

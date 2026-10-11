@@ -6784,6 +6784,10 @@ type
     property OnThumbChanging;
     property AllowCrossing;
     property Pushable;
+    property AllowUserThumbs;
+    property MinThumbs;
+    property MaxThumbs;
+    property OnThumbRemoving;
   end;
 
   TGenNativeStyler = class(TTyCustomNativeStyler)
