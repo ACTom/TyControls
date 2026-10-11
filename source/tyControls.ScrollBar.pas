@@ -59,6 +59,8 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { Where the focus goes after a click on the bar: see the implementation (#55). }
+    procedure FocusAfterClick;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
     // Fire OnScroll with ACode and the proposed APos (which the handler may
@@ -88,6 +90,8 @@ type
       内容已经动了,滑块再缓动追上去就是不跟手 —— 用户看到的是内容在动、
       滑块慢半拍。缓动只在"用户点滑道让它跳过去"那种场景才有意义。 }
     procedure SetPositionSnapped(AValue: Integer);
+    { A bar takes the focus only when TabStop asks for it (#55/#56). See the implementation. }
+    function CanFocus: Boolean; override;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function GetStyleTypeKey: string; override;
@@ -164,11 +168,15 @@ type
     property LargeChange: Integer read FLargeChange write SetLargeChange default 0;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property OnScroll: TScrollEvent read FOnScroll write FOnScroll;
-    { A standalone bar is a keyboard control (arrows / PgUp / PgDn / Home / End in
-      KeyDown), so it takes a tab stop like the native TScrollBar does. Declared True to
-      match the constructor, so a host's TabStop=False opt-out streams — which is exactly
-      what the bars EMBEDDED inside a list/grid/tree/scroll box do, in code. }
-    property TabStop default True;
+    { A scroll bar is a pointer control: keyboard scrolling belongs to the control being
+      scrolled (#56). So it is not a tab stop unless told to be, and TabStop here is more than
+      the Tab order -- it decides whether the bar can take the focus at all (CanFocus). Set it
+      True for a standalone bar that should be operated from the keyboard: it then joins the
+      Tab order, takes the focus on a click and answers arrows / PgUp / PgDn / Home / End
+      (KeyDown). The bars a list/grid/tree/memo/scroll box creates for itself are never tab
+      stops, so they can never be focused. Declared False to match the constructor. 3.0.2
+      changed this default from True; a form that wants the old behaviour sets it. }
+    property TabStop default False;
     property Align;
     property Anchors;
     property StyleClass;
@@ -203,6 +211,9 @@ function TyScrollTrackRect(const AClient: TRect; AKind: TTyScrollBarKind;
   AButtonSize: Integer): TRect;
 
 implementation
+
+uses
+  LCLIntf;   { GetFocus: FocusAfterClick }
 
 function TyScrollMirrorOffset(AOffset, AFreeSpace: Integer; AKind: TTyScrollBarKind;
   ARightToLeft: Boolean): Integer;
@@ -284,11 +295,9 @@ end;
 constructor TTyScrollBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  // KeyDown below implements the whole native keyboard: line, page and end-to-end. None of
-  // it could ever run, because LCL defaults TabStop to False and TTyCustomControl.MouseDown
-  // gates click-to-focus on it. Controls that EMBED a bar (list box, memo, grid, tree,
-  // scroll box) turn it back off on their instance — see the comments there.
-  TabStop := True;
+  // Not a tab stop, so not focusable (CanFocus): see the TabStop declaration (#56). KeyDown
+  // implements the whole native keyboard for a bar that opts in with TabStop := True.
+  TabStop := False;
   FKind := sbVertical;
   FMin := 0;
   FMax := 100;
@@ -884,13 +893,13 @@ begin
     if PtInRect(LoR, Point(X, Y)) then
     begin
       ScrollTo(Back, Position + BackSign * FSmallChange);
-      try if CanFocus then SetFocus; except end;
+      FocusAfterClick;
       Exit;
     end;
     if PtInRect(HiR, Point(X, Y)) then
     begin
       ScrollTo(Fwd, Position - BackSign * FSmallChange);
-      try if CanFocus then SetFocus; except end;
+      FocusAfterClick;
       Exit;
     end;
     { THE HIT TEST AND THE PAINT ARE THE SAME CALL. RenderTo builds its thumb from
@@ -921,10 +930,45 @@ begin
       else if (FKind = sbHorizontal) and (X >= ThumbR.Right) then
         ScrollTo(Fwd, Position - BackSign * EffectiveLargeChange);
     end;
-    try
-      if CanFocus then SetFocus;
-    except
+    FocusAfterClick;
+  end;
+end;
+
+{ #55. TabStop used to keep a bar out of the Tab order and nothing more. LCL's arrow navigation
+  (TApplication.DoArrowKey) calls SelectNext with TabStop NOT checked, so it could land on a
+  bar a grid or a list had created for itself -- #52 left the focus on the grid's scroll bar
+  that way -- and the click below focused any bar CanFocus allowed. LCL builds its navigation
+  list from CanFocus (TWinControl.GetTabOrderList), so this is the one place that closes every
+  path: a bar that is not a tab stop cannot be focused at all. }
+function TTyScrollBar.CanFocus: Boolean;
+begin
+  Result := TabStop and inherited CanFocus;
+end;
+
+{ After a click. A bar that may take the focus takes it, as before. One that may not hands it
+  to the control it belongs to, so the keyboard goes on scrolling what the click scrolled --
+  the rule a click on that control itself follows (TabStop and CanFocus), so a parent that
+  does not take part in focus (a panel, a form, a scroll box) leaves it where it was. And when
+  the focus is already inside that control -- the grid itself, or the editor of a cell it is
+  editing -- it stays: the editor commits and closes when it loses the focus, and ending an
+  edit is not what a scroll is for. try/except as before: a headless form that was never
+  shown raises from SetFocus. }
+procedure TTyScrollBar.FocusAfterClick;
+var
+  host, holder: TWinControl;
+begin
+  try
+    if CanFocus then
+    begin
+      SetFocus;
+      Exit;
     end;
+    host := Parent;
+    if (host = nil) or not (host.TabStop and host.CanFocus) then Exit;
+    holder := FindOwnerControl(GetFocus);
+    if (holder <> nil) and host.ContainsControl(holder) then Exit;
+    host.SetFocus;
+  except
   end;
 end;
 

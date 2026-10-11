@@ -155,7 +155,7 @@ Grid.HScrollBar.LiveTracking := False;
 
 ### 键盘操作
 
-控件需获得焦点才响应（`TabStop` 默认 `False`，参见注意事项）。每个被处理的按键消费后不再传递（`Key := 0`）。
+只有设了 `TabStop := True` 的独立滚动条才能拿到焦点、响应按键（默认 `False`，见注意事项 5）。每个被处理的按键消费后不再传递（`Key := 0`）。
 
 | 按键 | 行为 |
 |------|------|
@@ -367,7 +367,7 @@ end;
 2. **SetMin/SetMax 自动夹紧 Position：** 修改 `Min` 或 `Max` 时若导致 `Position` 越界，会静默调整 `Position`（不触发 `OnChange`，仅触发 `Invalidate`）。
 3. **BeginThumbDrag 的坐标系：** `AGrabPosAlongTrack` 和 `APosAlongTrack` 均为**控件客户区坐标**，垂直时取鼠标 Y，水平时取鼠标 X，与控件的 `ClientRect` 基准一致。
 4. **退化情形：** 当 `Max <= Min` 或 `PageSize <= 0` 时，`TyScrollThumbRect` 返回整个轨道矩形（thumb 填满），此时拖动无意义。
-5. **TabStop：** ScrollBar 控件 `TabStop` 不在 `published` 列表中，默认继承 `TCustomControl` 的默认值（`False`），通常不参与焦点循环。
+5. **TabStop 与焦点：** 默认 `False`（3.0.2 起，之前是 `True`）。滚动条是给鼠标用的，键盘滚动应由被滚动的控件响应。这里的 `TabStop` 不只管 Tab 顺序，也决定滚动条能不能拿到焦点（`CanFocus`）：为 `False` 时，Tab、方向键导航、点击都不会让它获得焦点。点控件自建的滚动条（网格、列表、树、备忘录、滚动框里那些，恒为 `False`）时，焦点交给那个控件；焦点已经在它里面（比如网格正在编辑的格）就不动。独立滚动条要用键盘操作，就设 `TabStop := True`：进 Tab 顺序、点击获焦、响应上面的按键。
 6. **水平时默认尺寸不自动翻转：** `Kind` 改变后，控件的宽/高不会自动对调，需手动交换 `Width` 和 `Height`。
 7. **滑块过渡动画（batch⑤+⑥）：** `AnimationsEnabled` 默认 `True`，程序化 `Position` 变化（键盘/滚轮/翻页/箭头）时滑块缓动到新位置（约 120ms），**拖动则始终瞬时跟手**；headless / 设计器下瞬间吸附。`TTyListBox` / `TTyMemo` 的**内嵌滚动条按设计置为静态**（`AnimationsEnabled := False`）。详见上文「状态过渡动画」。
 

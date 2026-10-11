@@ -10,7 +10,7 @@ uses
   tyControls.Button, tyControls.ColorButton, tyControls.DropButtons,
   tyControls.GlyphButtons, tyControls.ButtonGroup, tyControls.ColorGrid,
   tyControls.Calculator, tyControls.Grid, tyControls.HeaderControl, tyControls.HSColorPicker,
-  tyControls.LColorPicker, tyControls.ImageView, tyControls.Edit,
+  tyControls.LColorPicker, tyControls.ImageView, tyControls.Edit, tyControls.Columns,
   tyControls.ListBox, tyControls.CheckBox, tyControls.Segmented,
   tyControls.TreeView, tyControls.ListView, tyControls.ToggleSwitch,
   tyControls.Menu, tyControls.RibbonBackstage,
@@ -78,6 +78,7 @@ type
     procedure TestEveryRegisteredWindowedControlIsOnATable;
     procedure TestPublishedDefaultAgreesWithTheConstructedValue;
     procedure TestEmbeddedScrollBarsNeverTakeFocusFromTheirHost;
+    procedure TestAScrollBarTakesFocusOnlyWhenTabStopAsks;
     procedure TestTransferRailStaysOutOfTheTabOrder;
     procedure TestCalculatorKeypadIsNotTheTabOrder;
   end;
@@ -140,6 +141,8 @@ type
     procedure TestTheGuardIsNotVacuousForANonFocusableControl;
     procedure TestClickThenArrowWalksAClickableStepsRail;
     procedure TestFreeingAFocusedEditWhoseExitWritesTextDoesNotRaise;
+    procedure TestArrowNavigationNeverLandsOnAControlsOwnBar;
+    procedure TestClickingAControlsOwnBarLeavesTheFocusWithTheControl;
   end;
 
 implementation
@@ -149,6 +152,7 @@ implementation
   purely as a cast. }
 type
   TGridAccess = class(TTyCustomGrid);
+  TWinAccess = class(TWinControl);   // FindNextControl is protected
   TListViewAccess = class(TTyListView);
 
 function FocusableControls: TTyCtlClassArray; forward;
@@ -169,8 +173,8 @@ end;
 
 
 { Controls the user OPERATES: a click must land focus on them, and Tab must reach them.
-  Each one either handles keys itself (button: Space/Enter; scroll bar: arrows/page/Home/
-  End; grid, tree, list, edit: the lot) or is the direct target of a click that changes
+  Each one either handles keys itself (button: Space/Enter; grid, tree, list, edit: the
+  lot) or is the direct target of a click that changes
   its value (colour grid, hue/saturation pickers, header sections, segmented bars). }
 function FocusableControls: TTyCtlClassArray;
 begin
@@ -180,7 +184,7 @@ begin
     TTyGlyphButton, TTyGlyphContainerButton,
     { selection / picker / data controls fixed in this pass }
     TTyButtonGroup, TTyColorGrid, TTyDrawGrid, TTyStringGrid, TTyHeaderControl,
-    TTyHSColorPicker, TTyLColorPicker, TTyImageView, TTyScrollBar,
+    TTyHSColorPicker, TTyLColorPicker, TTyImageView,
     { already focusable before this pass — listed so a regression shows up as a failure,
       and because several of them only got their DECLARED default fixed in it }
     TTyEdit, TTyListBox, TTyCheckBox, TTySegmented, TTyTreeView, TTyListView,
@@ -306,6 +310,10 @@ begin
     { TTyPreviewBox displays a rendering; there is nothing to type into it and nothing its
       arrow keys would move. }
     TTyPreviewBox,
+    { TTyScrollBar is a pointer control: keyboard scrolling belongs to the control being
+      scrolled (#56), so a bar is not a tab stop unless it is told to be. Its arrow / page /
+      Home / End keys are still there for a bar that opts in with TabStop := True. }
+    TTyScrollBar,
     { TTyTitleBar is the form's own chrome and a designer container (a menu bar, a quick
       access rail and a search box get dropped INTO it). Its buttons are TTyCaptionButtons
       with their own focus story; the bar itself is a drag handle, and a tab stop on it would
@@ -485,10 +493,10 @@ begin
   for i := 0 to High(list) do CheckOne(list[i]);
 end;
 
-{ A standalone TTyScrollBar is focusable (it owns the arrow/page/Home/End keyboard), but
-  the bars EMBEDDED in a scrolling control must not be: dragging one would move focus off
-  the grid/tree/list it is scrolling, which would then drop its focus ring and its
-  keyboard navigation mid-drag, and Tab would stop three times inside one widget. }
+{ The bars EMBEDDED in a scrolling control must not be tab stops: dragging one would move
+  focus off the grid/tree/list it is scrolling, which would then drop its focus ring and its
+  keyboard navigation mid-drag, and Tab would stop three times inside one widget. A
+  standalone bar is not one by default either (#56); TabStop opts it in. }
 procedure TTyFocusTabStopTest.TestEmbeddedScrollBarsNeverTakeFocusFromTheirHost;
 var
   standalone: TTyScrollBar;
@@ -499,7 +507,8 @@ var
   i, found: Integer;
 begin
   standalone := TTyScrollBar.Create(FForm);
-  AssertTrue('a scroll bar dropped on a form is a keyboard control', standalone.TabStop);
+  AssertFalse('a scroll bar dropped on a form is not a tab stop by default (#56)',
+    standalone.TabStop);
 
   grid := TTyStringGrid.Create(FForm);
   AssertFalse('the grid vertical bar must not steal the grid focus', TGridAccess(grid).VScrollBar.TabStop);
@@ -529,6 +538,32 @@ begin
     end;
   AssertEquals('the scroll box built both of its bars (the loop must not be vacuous)',
     2, found);
+end;
+
+{ #55/#56. TabStop used to keep a bar out of the Tab order and nothing more: LCL's arrow
+  navigation (TApplication.DoArrowKey -> SelectNext with CheckTabStop = False) ignores it, and
+  the bar's own click focused it whenever CanFocus said yes. The navigation list is built from
+  CanFocus (TWinControl.GetTabOrderList), so CanFocus is where a bar that is not a tab stop has
+  to say no. LCL's CanFocus only asks that every control up to the form is visible and
+  enabled, so it answers here without the form ever being shown. }
+procedure TTyFocusTabStopTest.TestAScrollBarTakesFocusOnlyWhenTabStopAsks;
+var
+  bar: TTyScrollBar;
+  grid: TTyStringGrid;
+begin
+  bar := TTyScrollBar.Create(FForm);
+  bar.Parent := FForm;
+  AssertFalse('a standalone bar cannot take focus by default', bar.CanFocus);
+  bar.TabStop := True;
+  AssertTrue('TabStop opts it back in', bar.CanFocus);
+  bar.TabStop := False;
+  AssertFalse('and back out', bar.CanFocus);
+
+  grid := TTyStringGrid.Create(FForm);
+  grid.Parent := FForm;
+  AssertTrue('setup: the grid itself can take focus', grid.CanFocus);
+  TGridAccess(grid).VScrollBar.Visible := True;
+  AssertFalse('the grid''s own bar cannot', TGridAccess(grid).VScrollBar.CanFocus);
 end;
 
 { TTyTransfer builds its four move arrows out of TTyButton, which IS a tab stop — the box
@@ -750,7 +785,7 @@ begin
     TTyButton, TTyColorButton, TTyDropDownButton, TTyMenuButton,
     TTyGlyphButton, TTyGlyphContainerButton,
     TTyButtonGroup, TTyColorGrid, TTyDrawGrid, TTyStringGrid, TTyHeaderControl,
-    TTyHSColorPicker, TTyLColorPicker, TTyImageView, TTyScrollBar,
+    TTyHSColorPicker, TTyLColorPicker, TTyImageView,
     TTyEdit, TTyListBox, TTyCheckBox, TTySegmented, TTyTreeView, TTyListView,
     TTyCalculator, TTyToggleSwitch, TTyMenuBar, TTyRibbonBackstage,
     { The numeric edit family, added with the teardown fix above. All five were run one at
@@ -848,6 +883,91 @@ end;
   half of Clickable that is not the mouse -- were dead code. Both halves, end to end, on a
   real handle: nothing else in the suite joins them up. test.steps drives the protected
   PressAt/SendKey seams directly, which cannot see a focus failure at all. }
+function NewScrollingGrid(AForm: TForm): TTyStringGrid;
+var
+  c: TTyColumn;
+begin
+  Result := TTyStringGrid.Create(AForm);
+  Result.Parent := AForm;
+  Result.SetBounds(220, 60, 260, 150);
+  c := Result.Header.Columns.Add as TTyColumn;
+  c.Width := 120;
+  c.Text := 'C0';
+  Result.RowCount := 100;          // more rows than fit: the vertical bar shows
+  Result.HandleNeeded;
+  Forms.Application.ProcessMessages;
+end;
+
+{ #55: the path #52 took. Arrow navigation asks the parent for the next control with TabStop
+  not checked; inside a grid with its bar showing, nothing it can answer may be the bar.
+  FindNextControl skips what is not IsVisible, and that asks the form too -- which is why this
+  lives in the suite whose form is really shown: unshown, the bar is skipped for the wrong
+  reason and the test proves nothing. }
+procedure TTyClickFocusTest.TestArrowNavigationNeverLandsOnAControlsOwnBar;
+var
+  grid: TTyStringGrid;
+  next: TWinControl;
+begin
+  grid := NewScrollingGrid(FForm);
+  try
+    AssertTrue('setup: the vertical bar is showing', TGridAccess(grid).VScrollBar.IsVisible);
+    next := TWinAccess(grid).FindNextControl(nil, True, False, False);
+    AssertFalse('forward: not a scroll bar', next is TTyScrollBar);
+    next := TWinAccess(grid).FindNextControl(nil, False, False, False);
+    AssertFalse('backward: not a scroll bar', next is TTyScrollBar);
+  finally
+    grid.Free;
+  end;
+end;
+
+{ #55: a click on a control's own bar used to focus the BAR -- the grid lost its focus ring and
+  its keys, and a cell being edited was committed and closed. The control gets the focus
+  instead, so the keyboard goes on scrolling what the click scrolled; and when the focus is
+  already inside the control (the editor of a cell) it stays where it is. A track click, not
+  the thumb, so no drag capture is left behind. }
+procedure TTyClickFocusTest.TestClickingAControlsOwnBarLeavesTheFocusWithTheControl;
+var
+  grid: TTyStringGrid;
+  bar: TTyScrollBar;
+  ed: TWinControl;
+
+  procedure ClickTheTrack;
+  var
+    y: Integer;
+  begin
+    y := bar.Height - bar.Width - 4;   // above the bottom arrow, below the thumb at the top
+    bar.Perform(LM_LBUTTONDOWN, MK_LBUTTON, MousePos(bar.Width div 2, y));
+    bar.Perform(LM_LBUTTONUP, 0, MousePos(bar.Width div 2, y));
+    Forms.Application.ProcessMessages;
+  end;
+
+begin
+  grid := NewScrollingGrid(FForm);
+  try
+    bar := TGridAccess(grid).VScrollBar;
+    AssertTrue('setup: the vertical bar is showing', bar.IsVisible);
+    if FPark.CanFocus then FPark.SetFocus;
+    Forms.Application.ProcessMessages;
+    AssertSame('setup: the focus is parked elsewhere', TWinControl(FPark),
+      TWinControl(FForm.ActiveControl));
+
+    ClickTheTrack;
+    AssertNothingRaised('a click on the grid''s bar');
+    AssertSame('the grid has the focus, not its bar', TWinControl(grid),
+      TWinControl(FForm.ActiveControl));
+
+    AssertTrue('setup: editing', grid.BeginEdit(0, 1));
+    Forms.Application.ProcessMessages;
+    ed := grid.EditorControl as TWinControl;
+    AssertSame('setup: the editor has the focus', ed, TWinControl(FForm.ActiveControl));
+    ClickTheTrack;
+    AssertTrue('a click on the bar does not end the edit', grid.Editing);
+    AssertSame('and the editor keeps the focus', ed, TWinControl(FForm.ActiveControl));
+  finally
+    grid.Free;
+  end;
+end;
+
 procedure TTyClickFocusTest.TestClickThenArrowWalksAClickableStepsRail;
 var
   s: TTySteps;
