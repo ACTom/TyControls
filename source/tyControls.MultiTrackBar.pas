@@ -392,6 +392,200 @@ type
     property OnThumbSelect;
   end;
 
+  TTyCustomMultiTrackBar = class;
+
+  { One thumb of TTyMultiTrackBar. Value reads where the thumb is; set it and the thumb moves
+    through SetThumbValue -- the path a drag takes -- so it stops MinGap short of its neighbours
+    and inside Min..Max, and OnThumbChange / OnChange fire. Between Thumbs.BeginUpdate and
+    EndUpdate, and while a form is read, values are kept as given; at EndUpdate / Loaded the
+    thumbs are put in order by value, each keeping its Color, Hint, Enabled and StyleClass. A
+    thumb added at the end starts at Max.
+
+    Color: clDefault follows the theme; any other colour is the thumb's own (data, like a colour
+    picker's value) and replaces the background the theme resolves for it in every state.
+    Enabled False: drawn as usual, but it cannot be pressed, dragged, selected or moved from the
+    keyboard. StyleClass: resolved as TyTrackThumb.<class>. Hint: the control's hint while the
+    pointer is over this thumb. }
+  TTyTrackThumbItem = class(TCollectionItem)
+  private
+    FValue: Integer;
+    FColor: TColor;
+    FHint: string;
+    FEnabled: Boolean;
+    FStyleClass: string;
+    function Bar: TTyCustomMultiTrackBar;
+    procedure SetValue(AValue: Integer);
+    procedure SetColor(AValue: TColor);
+    procedure SetHint(const AValue: string);
+    procedure SetEnabled(AValue: Boolean);
+    procedure SetStyleClass(const AValue: string);
+  public
+    constructor Create(ACollection: TCollection); override;
+    procedure Assign(Source: TPersistent); override;
+  published
+    property Value: Integer read FValue write SetValue;
+    property Color: TColor read FColor write SetColor default clDefault;
+    property Hint: string read FHint write SetHint;
+    property Enabled: Boolean read FEnabled write SetEnabled default True;
+    property StyleClass: string read FStyleClass write SetStyleClass;
+  end;
+
+  TTyTrackThumbs = class(TOwnedCollection)
+  private
+    function GetItem(AIndex: Integer): TTyTrackThumbItem;
+    procedure SetItem(AIndex: Integer; AValue: TTyTrackThumbItem);
+  protected
+    procedure Update(Item: TCollectionItem); override;
+  public
+    constructor Create(AOwner: TTyCustomMultiTrackBar);
+    function Add: TTyTrackThumbItem;
+    property Items[AIndex: Integer]: TTyTrackThumbItem read GetItem write SetItem; default;
+  end;
+
+  { How one stretch of groove between two thumbs is drawn: segment I runs from thumb I - 1 to
+    thumb I (segment 0 from the Min end to the first thumb, the last one from the last thumb to
+    the Max end). A StyleClass fills it with the background TyTrackSegment.<class> resolves to;
+    '' -- or no item for that segment -- leaves the bare groove. }
+  TTyTrackSegmentItem = class(TCollectionItem)
+  private
+    FStyleClass: string;
+    procedure SetStyleClass(const AValue: string);
+  public
+    procedure Assign(Source: TPersistent); override;
+  published
+    property StyleClass: string read FStyleClass write SetStyleClass;
+  end;
+
+  TTyTrackSegments = class(TOwnedCollection)
+  private
+    function GetItem(AIndex: Integer): TTyTrackSegmentItem;
+    procedure SetItem(AIndex: Integer; AValue: TTyTrackSegmentItem);
+  protected
+    procedure Update(Item: TCollectionItem); override;
+  public
+    constructor Create(AOwner: TTyCustomMultiTrackBar);
+    function Add: TTyTrackSegmentItem;
+    property Items[AIndex: Integer]: TTyTrackSegmentItem read GetItem write SetItem; default;
+  end;
+
+  { Several values on one track (#36), each thumb with its own colour, hint, enabled state and
+    style class (Thumbs), and the stretches between them styled per segment (Segments). The
+    items are the thumbs in order: Thumbs[i] is ThumbValues[i].
+
+    A new bar has three thumbs, 25, 50 and 75, and no segment style. A bar whose thumbs were all
+    removed says so in its form file (NoThumbs), or reading it back would bring the three back:
+    the reader adds to a collection without emptying it when the list it reads is empty. }
+  TTyCustomMultiTrackBar = class(TTyMultiTrackBarBase)
+  private
+    FThumbs: TTyTrackThumbs;
+    FSegments: TTyTrackSegments;
+    { Set while the items are being put in order and handed to the thumbs: the moves that makes
+      report back through the collection and must not start it over. }
+    FSyncing: Boolean;
+    procedure SetThumbs(AValue: TTyTrackThumbs);
+    procedure SetSegments(AValue: TTyTrackSegments);
+    procedure ReadNoThumbs(Reader: TReader);
+    procedure WriteNoThumbs(Writer: TWriter);
+    { Stable insertion sort of the items by value. }
+    procedure SortThumbItems;
+    procedure PushThumbItems;
+  protected
+    function GetStyleTypeKey: string; override;
+    { True while an item's value is kept as given rather than moved through SetThumbValue: a
+      form being read, Thumbs between BeginUpdate and EndUpdate, the thumbs not (yet) the
+      items' -- see TTyTrackThumbItem. }
+    function ThumbsHeldRaw: Boolean;
+    { The collection changed shape (a thumb added, removed, moved, assigned): the items are put
+      in order by value and the thumbs rebuilt from them. }
+    procedure ThumbsChanged;
+    procedure ValuesChanged; override;
+    procedure Loaded; override;
+    procedure DefineProperties(Filer: TFiler); override;
+    function ThumbEnabled(AIndex: Integer): Boolean; override;
+    function ThumbColor(AIndex: Integer): TColor; override;
+    function ThumbStyleClass(AIndex: Integer): string; override;
+    function ThumbHint(AIndex: Integer): string; override;
+    function SegmentStyle(AIndex: Integer; out ATypeKey, AStyleClass: string): Boolean; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+    property Thumbs: TTyTrackThumbs read FThumbs write SetThumbs;
+    property Segments: TTyTrackSegments read FSegments write SetSegments;
+  end;
+
+  TTyMultiTrackBar = class(TTyCustomMultiTrackBar)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Min;
+    property Max;
+    property Orientation;
+    property Reversed;
+    property TickMarks;
+    property TickStyle;
+    property Frequency;
+    property LineSize;
+    property PageSize;
+    property OnChange;
+    property Align;
+    property Anchors;
+    property TickLabels;
+    property OnFormatTickLabel;
+    property MinGap;
+    property Thumbs;
+    property Segments;
+    property OnThumbChange;
+    property OnThumbSelect;
+  end;
+
 implementation
 
 uses
@@ -1528,12 +1722,353 @@ begin
   FRanges[0].High := AValue;
 end;
 
+{ TTyTrackThumbItem }
+
+constructor TTyTrackThumbItem.Create(ACollection: TCollection);
+begin
+  { Before inherited: adding the item tells the bar, which reads the new thumb's value. A thumb
+    added at the end starts at Max, after every thumb there is. }
+  FColor := clDefault;
+  FEnabled := True;
+  if (ACollection is TTyTrackThumbs)
+     and (TTyTrackThumbs(ACollection).Owner is TTyCustomMultiTrackBar) then
+    FValue := TTyCustomMultiTrackBar(TTyTrackThumbs(ACollection).Owner).Max;
+  inherited Create(ACollection);
+end;
+
+function TTyTrackThumbItem.Bar: TTyCustomMultiTrackBar;
+begin
+  Result := nil;
+  if (Collection is TTyTrackThumbs) and (TTyTrackThumbs(Collection).Owner is TTyCustomMultiTrackBar) then
+    Result := TTyCustomMultiTrackBar(TTyTrackThumbs(Collection).Owner);
+end;
+
+procedure TTyTrackThumbItem.SetValue(AValue: Integer);
+var
+  b: TTyCustomMultiTrackBar;
+begin
+  b := Bar;
+  if (b = nil) or b.ThumbsHeldRaw then FValue := AValue
+  else b.SetThumbValue(Index, AValue);           // ValuesChanged writes FValue back
+end;
+
+procedure TTyTrackThumbItem.SetColor(AValue: TColor);
+begin
+  if FColor = AValue then Exit;
+  FColor := AValue;
+  Changed(False);
+end;
+
+procedure TTyTrackThumbItem.SetHint(const AValue: string);
+begin
+  if FHint = AValue then Exit;
+  FHint := AValue;
+  Changed(False);
+end;
+
+procedure TTyTrackThumbItem.SetEnabled(AValue: Boolean);
+begin
+  if FEnabled = AValue then Exit;
+  FEnabled := AValue;
+  Changed(False);
+end;
+
+procedure TTyTrackThumbItem.SetStyleClass(const AValue: string);
+begin
+  if FStyleClass = AValue then Exit;
+  FStyleClass := AValue;
+  Changed(False);
+end;
+
+procedure TTyTrackThumbItem.Assign(Source: TPersistent);
+var
+  src: TTyTrackThumbItem;
+begin
+  if Source is TTyTrackThumbItem then
+  begin
+    src := TTyTrackThumbItem(Source);
+    FValue := src.FValue;
+    FColor := src.FColor;
+    FHint := src.FHint;
+    FEnabled := src.FEnabled;
+    FStyleClass := src.FStyleClass;
+    Changed(True);
+  end
+  else
+    inherited Assign(Source);
+end;
+
+{ TTyTrackThumbs }
+
+constructor TTyTrackThumbs.Create(AOwner: TTyCustomMultiTrackBar);
+begin
+  inherited Create(AOwner, TTyTrackThumbItem);
+end;
+
+function TTyTrackThumbs.GetItem(AIndex: Integer): TTyTrackThumbItem;
+begin
+  Result := TTyTrackThumbItem(inherited Items[AIndex]);
+end;
+
+procedure TTyTrackThumbs.SetItem(AIndex: Integer; AValue: TTyTrackThumbItem);
+begin
+  inherited Items[AIndex] := AValue;
+end;
+
+function TTyTrackThumbs.Add: TTyTrackThumbItem;
+begin
+  Result := TTyTrackThumbItem(inherited Add);
+end;
+
+procedure TTyTrackThumbs.Update(Item: TCollectionItem);
+begin
+  inherited Update(Item);
+  if not (Owner is TTyCustomMultiTrackBar) then Exit;
+  { One item's look changed: repaint. The collection changed shape: rebuild the thumbs. }
+  if Item <> nil then TTyCustomMultiTrackBar(Owner).Invalidate
+  else TTyCustomMultiTrackBar(Owner).ThumbsChanged;
+end;
+
+{ TTyTrackSegmentItem }
+
+procedure TTyTrackSegmentItem.SetStyleClass(const AValue: string);
+begin
+  if FStyleClass = AValue then Exit;
+  FStyleClass := AValue;
+  Changed(False);
+end;
+
+procedure TTyTrackSegmentItem.Assign(Source: TPersistent);
+begin
+  if Source is TTyTrackSegmentItem then
+  begin
+    FStyleClass := TTyTrackSegmentItem(Source).FStyleClass;
+    Changed(False);
+  end
+  else
+    inherited Assign(Source);
+end;
+
+{ TTyTrackSegments }
+
+constructor TTyTrackSegments.Create(AOwner: TTyCustomMultiTrackBar);
+begin
+  inherited Create(AOwner, TTyTrackSegmentItem);
+end;
+
+function TTyTrackSegments.GetItem(AIndex: Integer): TTyTrackSegmentItem;
+begin
+  Result := TTyTrackSegmentItem(inherited Items[AIndex]);
+end;
+
+procedure TTyTrackSegments.SetItem(AIndex: Integer; AValue: TTyTrackSegmentItem);
+begin
+  inherited Items[AIndex] := AValue;
+end;
+
+function TTyTrackSegments.Add: TTyTrackSegmentItem;
+begin
+  Result := TTyTrackSegmentItem(inherited Add);
+end;
+
+procedure TTyTrackSegments.Update(Item: TCollectionItem);
+begin
+  inherited Update(Item);
+  if Owner is TTyCustomMultiTrackBar then
+    TTyCustomMultiTrackBar(Owner).Invalidate;
+end;
+
+{ TTyCustomMultiTrackBar }
+
+constructor TTyCustomMultiTrackBar.Create(AOwner: TComponent);
+const
+  CDefaults: array[0..2] of Integer = (25, 50, 75);
+var
+  i: Integer;
+begin
+  inherited Create(AOwner);
+  FSegments := TTyTrackSegments.Create(Self);
+  FThumbs := TTyTrackThumbs.Create(Self);
+  FThumbs.BeginUpdate;
+  try
+    for i := 0 to High(CDefaults) do
+      FThumbs.Add.FValue := CDefaults[i];
+  finally
+    FThumbs.EndUpdate;
+  end;
+end;
+
+destructor TTyCustomMultiTrackBar.Destroy;
+begin
+  FreeAndNil(FThumbs);
+  FreeAndNil(FSegments);
+  inherited Destroy;
+end;
+
+function TTyCustomMultiTrackBar.GetStyleTypeKey: string;
+begin
+  Result := 'TyMultiTrackBar';
+end;
+
+procedure TTyCustomMultiTrackBar.SetThumbs(AValue: TTyTrackThumbs);
+begin
+  FThumbs.Assign(AValue);
+end;
+
+procedure TTyCustomMultiTrackBar.SetSegments(AValue: TTyTrackSegments);
+begin
+  FSegments.Assign(AValue);
+end;
+
+function TTyCustomMultiTrackBar.ThumbsHeldRaw: Boolean;
+begin
+  Result := (csLoading in ComponentState) or (FThumbs = nil) or (FThumbs.UpdateCount > 0)
+    or FSyncing or (ThumbCount <> FThumbs.Count);
+end;
+
+procedure TTyCustomMultiTrackBar.SortThumbItems;
+var
+  i, j: Integer;
+  it: TTyTrackThumbItem;
+begin
+  for i := 1 to FThumbs.Count - 1 do
+  begin
+    it := FThumbs[i];
+    j := i;
+    while (j > 0) and (FThumbs[j - 1].FValue > it.FValue) do Dec(j);
+    if j <> i then it.Index := j;
+  end;
+end;
+
+procedure TTyCustomMultiTrackBar.PushThumbItems;
+var
+  v: array of Integer;
+  i: Integer;
+begin
+  v := nil;
+  SetLength(v, FThumbs.Count);
+  for i := 0 to FThumbs.Count - 1 do
+    v[i] := FThumbs[i].FValue;
+  SetThumbValues(v);
+end;
+
+procedure TTyCustomMultiTrackBar.ThumbsChanged;
+begin
+  if (FThumbs = nil) or FSyncing or (csLoading in ComponentState)
+     or (csDestroying in ComponentState) then
+    Exit;
+  FSyncing := True;
+  try
+    { In order first, so each thumb's colour, hint and class stay with its value. }
+    SortThumbItems;
+    PushThumbItems;
+  finally
+    FSyncing := False;
+  end;
+end;
+
+procedure TTyCustomMultiTrackBar.ValuesChanged;
+var
+  i: Integer;
+begin
+  inherited ValuesChanged;
+  if (FThumbs = nil) or (ThumbCount <> FThumbs.Count) then Exit;
+  for i := 0 to FThumbs.Count - 1 do
+    FThumbs[i].FValue := ThumbValues[i];
+end;
+
+procedure TTyCustomMultiTrackBar.Loaded;
+begin
+  { Still loading: the items as read, put in order, are handed over; inherited Loaded settles
+    the values. }
+  FSyncing := True;
+  try
+    SortThumbItems;
+    PushThumbItems;
+  finally
+    FSyncing := False;
+  end;
+  inherited Loaded;
+end;
+
+procedure TTyCustomMultiTrackBar.ReadNoThumbs(Reader: TReader);
+begin
+  if Reader.ReadBoolean then FThumbs.Clear;
+end;
+
+procedure TTyCustomMultiTrackBar.WriteNoThumbs(Writer: TWriter);
+begin
+  Writer.WriteBoolean(True);
+end;
+
+procedure TTyCustomMultiTrackBar.DefineProperties(Filer: TFiler);
+
+  function NoneLeft: Boolean;
+  begin
+    Result := FThumbs.Count = 0;
+    { An inherited form: only when the ancestor still had thumbs. }
+    if Result and (Filer.Ancestor is TTyCustomMultiTrackBar) then
+      Result := TTyCustomMultiTrackBar(Filer.Ancestor).FThumbs.Count > 0;
+  end;
+
+begin
+  inherited DefineProperties(Filer);
+  Filer.DefineProperty('NoThumbs', @ReadNoThumbs, @WriteNoThumbs, NoneLeft);
+end;
+
+function TTyCustomMultiTrackBar.ThumbEnabled(AIndex: Integer): Boolean;
+begin
+  if (FThumbs <> nil) and (AIndex >= 0) and (AIndex < FThumbs.Count) then
+    Result := FThumbs[AIndex].Enabled
+  else
+    Result := inherited ThumbEnabled(AIndex);
+end;
+
+function TTyCustomMultiTrackBar.ThumbColor(AIndex: Integer): TColor;
+begin
+  if (FThumbs <> nil) and (AIndex >= 0) and (AIndex < FThumbs.Count) then
+    Result := FThumbs[AIndex].Color
+  else
+    Result := inherited ThumbColor(AIndex);
+end;
+
+function TTyCustomMultiTrackBar.ThumbStyleClass(AIndex: Integer): string;
+begin
+  if (FThumbs <> nil) and (AIndex >= 0) and (AIndex < FThumbs.Count) then
+    Result := FThumbs[AIndex].StyleClass
+  else
+    Result := inherited ThumbStyleClass(AIndex);
+end;
+
+function TTyCustomMultiTrackBar.ThumbHint(AIndex: Integer): string;
+begin
+  if (FThumbs <> nil) and (AIndex >= 0) and (AIndex < FThumbs.Count) then
+    Result := FThumbs[AIndex].Hint
+  else
+    Result := inherited ThumbHint(AIndex);
+end;
+
+function TTyCustomMultiTrackBar.SegmentStyle(AIndex: Integer; out ATypeKey,
+  AStyleClass: string): Boolean;
+begin
+  Result := inherited SegmentStyle(AIndex, ATypeKey, AStyleClass);
+  if (FSegments <> nil) and (AIndex >= 0) and (AIndex < FSegments.Count)
+     and (FSegments[AIndex].StyleClass <> '') then
+  begin
+    ATypeKey := TyTrackSegmentKey;
+    AStyleClass := FSegments[AIndex].StyleClass;
+    Result := True;
+  end;
+end;
+
 initialization
   { The final classes' keys fall back to the track bar's, so every theme styles them as it
     styles TTyTrackBar until it says otherwise. }
   TyTryRegisterTypeKeyParent('TyRangeTrackBar', 'TyTrackBar');
+  TyTryRegisterTypeKeyParent('TyMultiTrackBar', 'TyTrackBar');
 
 finalization
   TyUnregisterTypeKeyParent('TyRangeTrackBar');
+  TyUnregisterTypeKeyParent('TyMultiTrackBar');
 
 end.

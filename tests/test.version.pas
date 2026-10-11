@@ -489,7 +489,7 @@ initialization
     (plan Task 8); until Design.pas registers them they are not in the parse Reg() is checked
     against, so they are registered plainly here -- form files read in the tests and the
     custom-class guards resolve them by name. }
-  RegisterClasses([TTyRangeTrackBar]);
+  RegisterClasses([TTyRangeTrackBar, TTyMultiTrackBar]);
   RegisterTest(TVersionTest);
 
 finalization

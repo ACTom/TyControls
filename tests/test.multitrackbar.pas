@@ -236,6 +236,42 @@ type
     procedure TestNoRangesRoundTrips;
   end;
 
+  TMultiAccess = class(TTyMultiTrackBar);
+
+  { Counts the repaints an item change asks for. }
+  TMultiCounting = class(TTyMultiTrackBar)
+  public
+    Invalidations: Integer;
+    procedure Invalidate; override;
+  end;
+
+  TTyMultiTrackBarTest = class(TMultiTrackFinalBase)
+  private
+    FBar: TTyMultiTrackBar;
+    function Values: string;
+    { Every item: value, colour (as $hex, or 'def'), hint, enabled (+/-), style class. }
+    function ThumbsText(ABar: TTyMultiTrackBar): string;
+    function SegmentsText(ABar: TTyMultiTrackBar): string;
+    function Centre(AIndex: Integer): TPoint;
+    function HintAt(const P: TPoint): string;
+  protected
+    procedure SetUp; override;
+  published
+    procedure TestDefaults;
+    procedure TestTheTypeKeyHangsOnTheTrackBars;
+    procedure TestAValueMovesThroughTheModel;
+    procedure TestSortingKeepsEachThumbsLook;
+    procedure TestAThumbsColourIsPainted;
+    procedure TestAThumbsStyleClassIsResolved;
+    procedure TestAThumbsHintIsShownOverIt;
+    procedure TestADisabledThumbIsInert;
+    procedure TestAnItemChangeRepaints;
+    procedure TestSegmentsStyleTheirStretchOnly;
+    procedure TestAFormsThumbsAreSortedWhenRead;
+    procedure TestThumbsAndSegmentsRoundTripThroughAFormFile;
+    procedure TestNoThumbsRoundTrips;
+  end;
+
   TTyMultiTrackKeyboardTest = class(TMultiTrackInputBase)
   private
     procedure WheelSwallowed(Sender: TObject; Shift: TShiftState; WheelDelta: Integer;
@@ -2177,6 +2213,412 @@ begin
   end;
 end;
 
+{ TMultiCounting }
+
+procedure TMultiCounting.Invalidate;
+begin
+  Inc(Invalidations);
+  inherited Invalidate;
+end;
+
+{ TTyMultiTrackBarTest }
+
+procedure TTyMultiTrackBarTest.SetUp;
+begin
+  inherited SetUp;
+  FBar := TTyMultiTrackBar.Create(FForm);
+  FBar.Name := 'Bar';
+  FBar.Parent := FForm;
+  FBar.Font.PixelsPerInch := 96;
+  FBar.SetBounds(0, 0, 400, 24);
+end;
+
+function TTyMultiTrackBarTest.Values: string;
+begin
+  Result := ValuesOf(FBar);
+end;
+
+function TTyMultiTrackBarTest.ThumbsText(ABar: TTyMultiTrackBar): string;
+var
+  i: Integer;
+  t: TTyTrackThumbItem;
+  c: string;
+begin
+  Result := '';
+  for i := 0 to ABar.Thumbs.Count - 1 do
+  begin
+    t := ABar.Thumbs[i];
+    if t.Color = clDefault then c := 'def' else c := Format('$%x', [t.Color]);
+    if i > 0 then Result := Result + ';';
+    Result := Result + Format('%d:%s:%s:%s:%s', [t.Value, c, t.Hint,
+      BoolToStr(t.Enabled, '+', '-'), t.StyleClass]);
+  end;
+end;
+
+function TTyMultiTrackBarTest.SegmentsText(ABar: TTyMultiTrackBar): string;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 0 to ABar.Segments.Count - 1 do
+  begin
+    if i > 0 then Result := Result + ';';
+    Result := Result + ABar.Segments[i].StyleClass;
+  end;
+end;
+
+function TTyMultiTrackBarTest.Centre(AIndex: Integer): TPoint;
+var
+  r: TRect;
+begin
+  r := FBar.ThumbRect(AIndex);
+  Result := Point((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+end;
+
+function TTyMultiTrackBarTest.HintAt(const P: TPoint): string;
+var
+  info: THintInfo;
+begin
+  info := Default(THintInfo);
+  info.HintControl := FBar;
+  info.CursorPos := P;
+  info.CursorRect := FBar.ClientRect;
+  info.HintStr := FBar.Hint;
+  FBar.Perform(CM_HINTSHOW, 0, LParam(PtrUInt(@info)));
+  Result := info.HintStr;
+end;
+
+procedure TTyMultiTrackBarTest.TestDefaults;
+begin
+  AssertEquals('three thumbs, so a new bar shows them', 3, FBar.Thumbs.Count);
+  AssertEquals('25,50,75', Values);
+  AssertEquals('each follows the theme, enabled, no hint or class',
+    '25:def::+:;50:def::+:;75:def::+:', ThumbsText(FBar));
+  AssertEquals('no segment style', 0, FBar.Segments.Count);
+  AssertEquals('Min', 0, FBar.Min);
+  AssertEquals('Max', 100, FBar.Max);
+  AssertEquals('MinGap', 0, FBar.MinGap);
+  AssertEquals('no thumb selected', -1, FBar.SelectedThumb);
+  AssertTrue('focusable', FBar.TabStop);
+end;
+
+procedure TTyMultiTrackBarTest.TestTheTypeKeyHangsOnTheTrackBars;
+var
+  ctl: TTyStyleController;
+  ref: TTyTrackBar;
+begin
+  AssertEquals('TyMultiTrackBar', (FBar as ITyStyleable).GetStyleTypeKey);
+  AssertEquals('registered under the track bar''s key', 'TyTrackBar',
+    TyTypeKeyParent('TyMultiTrackBar'));
+  ctl := TTyStyleController.Create(nil);
+  ref := TTyTrackBar.Create(FForm);
+  try
+    ctl.LoadThemeCss('TyTrackBar { color: #123456; border-width: 1px; }'
+      + 'TyMultiTrackBar { border-width: 3px; }');
+    FBar.Controller := ctl;
+    ref.Parent := FForm;
+    ref.Controller := ctl;
+    AssertEquals('the track bar''s rule reaches the multi-value bar',
+      TTrackAccess(ref).CurrentStyle.TextColor, TMultiAccess(FBar).CurrentStyle.TextColor);
+    AssertEquals('its own rule wins', 3, TMultiAccess(FBar).CurrentStyle.BorderWidth);
+    AssertEquals('and stays its own', 1, TTrackAccess(ref).CurrentStyle.BorderWidth);
+  finally
+    FBar.Controller := nil;
+    ref.Free;
+    ctl.Free;
+  end;
+end;
+
+procedure TTyMultiTrackBarTest.TestAValueMovesThroughTheModel;
+begin
+  FBar.MinGap := 5;
+  FBar.OnThumbChange := @ThumbMoved;
+  FBar.OnChange := @Changed;
+  FBar.Thumbs[1].Value := 90;
+  AssertEquals('stops MinGap below the next thumb, as a drag would', '25,70,75', Values);
+  AssertEquals('the item reads where the thumb went', 70, FBar.Thumbs[1].Value);
+  AssertEquals('and the thumb that moved is reported', 'T1 C ', FLog);
+  FLog := '';
+  FBar.Thumbs[0].Value := -9;
+  AssertEquals('inside Min', '0,70,75', Values);
+  FLog := '';
+  FBar.Thumbs[0].Value := 0;
+  AssertEquals('the same value fires nothing', '', FLog);
+  FBar.Thumbs.Add;
+  AssertEquals('a thumb added at the end starts at Max', '0,70,75,100', Values);
+  FBar.Thumbs.Delete(1);
+  AssertEquals('a thumb removed takes its value with it', '0,75,100', Values);
+end;
+
+procedure TTyMultiTrackBarTest.TestSortingKeepsEachThumbsLook;
+begin
+  FBar.Thumbs[2].StyleClass := 'big';
+  FBar.Thumbs.BeginUpdate;
+  try
+    FBar.Thumbs[0].Value := 90;
+    FBar.Thumbs[0].Color := clRed;
+    FBar.Thumbs[0].Hint := 'was first';
+    AssertEquals('kept as given meanwhile', 90, FBar.Thumbs[0].Value);
+    AssertEquals('the thumbs wait', '25,50,75', Values);
+  finally
+    FBar.Thumbs.EndUpdate;
+  end;
+  AssertEquals('in order at EndUpdate', '50,75,90', Values);
+  AssertEquals('each item kept its look and moved with its value',
+    '50:def::+:;75:def::+:big;90:$FF:was first:+:', ThumbsText(FBar));
+end;
+
+procedure TTyMultiTrackBarTest.TestAThumbsColourIsPainted;
+var
+  a: TBGRABitmap;
+  p: TPoint;
+begin
+  FBar.Controller := FCtl;
+  FBar.Thumbs[1].Color := RGBToColor($FF, $80, $00);
+  a := Shot(FBar);
+  try
+    p := Centre(1);
+    AssertTrue('the item''s colour: ' + PxStr(a.GetPixel(p.X, p.Y)),
+      SamePx(a.GetPixel(p.X, p.Y), $FF, $80, $00));
+    p := Centre(0);
+    AssertTrue('clDefault follows the theme: ' + PxStr(a.GetPixel(p.X, p.Y)),
+      SamePx(a.GetPixel(p.X, p.Y), $3B, $82, $F6));
+  finally
+    a.Free;
+  end;
+end;
+
+procedure TTyMultiTrackBarTest.TestAThumbsStyleClassIsResolved;
+var
+  a: TBGRABitmap;
+  p: TPoint;
+begin
+  FBar.Controller := FCtl;
+  FBar.Thumbs[2].StyleClass := 'big';
+  a := Shot(FBar);
+  try
+    p := Centre(2);
+    AssertTrue('TyTrackThumb.big: ' + PxStr(a.GetPixel(p.X, p.Y)),
+      SamePx(a.GetPixel(p.X, p.Y), $FF, $FF, $00));
+    p := Centre(1);
+    AssertTrue('no class: plain TyTrackThumb: ' + PxStr(a.GetPixel(p.X, p.Y)),
+      SamePx(a.GetPixel(p.X, p.Y), $3B, $82, $F6));
+  finally
+    a.Free;
+  end;
+end;
+
+procedure TTyMultiTrackBarTest.TestAThumbsHintIsShownOverIt;
+begin
+  FBar.Hint := 'bar';
+  FBar.Thumbs[0].Hint := 'low';
+  AssertEquals('over a thumb with a hint', 'low', HintAt(Centre(0)));
+  AssertEquals('over a thumb without one: the control''s', 'bar', HintAt(Centre(1)));
+end;
+
+procedure TTyMultiTrackBarTest.TestADisabledThumbIsInert;
+var
+  p: TPoint;
+  a: TBGRABitmap;
+begin
+  FBar.Controller := FCtl;
+  FBar.Thumbs[1].Enabled := False;
+  FBar.SelectedThumb := 0;
+  p := Centre(1);
+  TMultiAccess(FBar).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  TMultiAccess(FBar).MouseMove([ssLeft], p.X + 40, p.Y);
+  TMultiAccess(FBar).MouseUp(mbLeft, [], p.X + 40, p.Y);
+  AssertEquals('not moved', '25,50,75', Values);
+  AssertEquals('not selected', 0, FBar.SelectedThumb);
+  a := Shot(FBar);
+  try
+    AssertTrue('still drawn as usual: ' + PxStr(a.GetPixel(p.X, p.Y)),
+      SamePx(a.GetPixel(p.X, p.Y), $3B, $82, $F6));
+  finally
+    a.Free;
+  end;
+end;
+
+procedure TTyMultiTrackBarTest.TestAnItemChangeRepaints;
+var
+  bar: TMultiCounting;
+begin
+  bar := TMultiCounting.Create(FForm);
+  bar.Parent := FForm;
+  bar.Invalidations := 0;
+  bar.Thumbs[0].Color := clRed;
+  AssertTrue('Color', bar.Invalidations > 0);
+  bar.Invalidations := 0;
+  bar.Thumbs[0].Color := clRed;
+  AssertEquals('the same colour again asks nothing', 0, bar.Invalidations);
+  bar.Thumbs[1].StyleClass := 'big';
+  AssertTrue('StyleClass', bar.Invalidations > 0);
+  bar.Invalidations := 0;
+  bar.Thumbs[2].Enabled := False;
+  AssertTrue('Enabled', bar.Invalidations > 0);
+  bar.Invalidations := 0;
+  bar.Segments.Add;
+  bar.Invalidations := 0;
+  bar.Segments[0].StyleClass := 'go';
+  AssertTrue('a segment''s StyleClass', bar.Invalidations > 0);
+end;
+
+procedure TTyMultiTrackBarTest.TestSegmentsStyleTheirStretchOnly;
+
+  { The colour segment AIndex shows clear of the thumbs: 'go', 'stop', 'bare' or 'mixed'. }
+  function SegmentLook(B: TBGRABitmap; AIndex: Integer): string;
+  var
+    lo, hi, m, go, stop, bare, other: Integer;
+    px: TBGRAPixel;
+  begin
+    AssertTrue(FBar.SegmentSpan(AIndex, 96, lo, hi));
+    go := 0; stop := 0; bare := 0; other := 0;
+    for m := lo to hi - 1 do
+    begin
+      if UnderAThumb(FBar, m) then Continue;
+      px := B.GetPixel(m, FBar.Height div 2);
+      if SamePx(px, 0, $C0, 0) then Inc(go)
+      else if SamePx(px, $C0, $80, 0) then Inc(stop)
+      else if SamePx(px, $60, $60, $60) then Inc(bare)
+      else Inc(other);
+    end;
+    if (go > 0) and (stop + bare + other = 0) then Result := 'go'
+    else if (stop > 0) and (go + bare + other = 0) then Result := 'stop'
+    else if (bare > 0) and (go + stop + other = 0) then Result := 'bare'
+    else Result := Format('mixed(%d/%d/%d/%d)', [go, stop, bare, other]);
+  end;
+
+var
+  a: TBGRABitmap;
+begin
+  FBar.Controller := FCtl;
+  FBar.TickStyle := ttsNone;
+  FBar.Segments.Add.StyleClass := 'go';
+  FBar.Segments.Add;                    // an item without a class
+  a := Shot(FBar);
+  try
+    AssertEquals('segment 0, before the first thumb', 'go', SegmentLook(a, 0));
+    AssertEquals('an item without a class', 'bare', SegmentLook(a, 1));
+    AssertEquals('fewer items than segments: no item', 'bare', SegmentLook(a, 2));
+    AssertEquals('nor the last', 'bare', SegmentLook(a, 3));
+  finally
+    a.Free;
+  end;
+  FBar.Segments.Add.StyleClass := 'stop';
+  a := Shot(FBar);
+  try
+    AssertEquals('the third item styles the third segment', 'stop', SegmentLook(a, 2));
+    AssertEquals('the one after still bare', 'bare', SegmentLook(a, 3));
+    AssertEquals('the first unchanged', 'go', SegmentLook(a, 0));
+  finally
+    a.Free;
+  end;
+end;
+
+const
+  CMultiForm =
+    'object HostForm: TForm'#10 +
+    '  Left = 0'#10 +
+    '  Top = 0'#10 +
+    '  Width = 640'#10 +
+    '  Height = 480'#10 +
+    '  object Bar: TTyMultiTrackBar'#10 +
+    '    Left = 0'#10 +
+    '    Top = 0'#10 +
+    '    Width = 400'#10 +
+    '    Height = 24'#10 +
+    '    Thumbs = <'#10 +
+    '      item'#10 +
+    '        Value = 80'#10 +
+    '        Color = clRed'#10 +
+    '        Hint = ''high'''#10 +
+    '      end'#10 +
+    '      item'#10 +
+    '        Value = 10'#10 +
+    '        StyleClass = ''big'''#10 +
+    '      end'#10 +
+    '      item'#10 +
+    '        Value = 40'#10 +
+    '        Enabled = False'#10 +
+    '      end>'#10 +
+    '    Segments = <'#10 +
+    '      item'#10 +
+    '        StyleClass = ''go'''#10 +
+    '      end>'#10 +
+    '  end'#10 +
+    'end'#10;
+
+procedure TTyMultiTrackBarTest.TestAFormsThumbsAreSortedWhenRead;
+var
+  host: TForm;
+  bar: TTyMultiTrackBar;
+begin
+  host := FromText(CMultiForm);
+  try
+    bar := host.FindComponent('Bar') as TTyMultiTrackBar;
+    AssertEquals('10,40,80', ValuesOf(bar));
+    AssertEquals('in order, each with its own look', '10:def::+:big;40:def::-:;80:$FF:high:+:',
+      ThumbsText(bar));
+    AssertEquals('go', SegmentsText(bar));
+  finally
+    host.Free;
+  end;
+end;
+
+procedure TTyMultiTrackBarTest.TestThumbsAndSegmentsRoundTripThroughAFormFile;
+var
+  host: TForm;
+  bar: TTyMultiTrackBar;
+  txt, want: string;
+begin
+  FBar.MinGap := 3;
+  FBar.Thumbs.Add;
+  FBar.Thumbs[0].Value := 5;
+  FBar.Thumbs[0].Color := RGBToColor($12, $34, $56);
+  FBar.Thumbs[1].Hint := 'middle';
+  FBar.Thumbs[2].Enabled := False;
+  FBar.Thumbs[3].StyleClass := 'big';
+  FBar.Segments.Add.StyleClass := 'go';
+  FBar.Segments.Add;
+  FBar.Segments.Add.StyleClass := 'stop';
+  want := ThumbsText(FBar);
+  AssertEquals('the fixture', '5:$563412::+:;50:def:middle:+:;75:def::-:;100:def::+:big', want);
+  txt := FormText(FForm);
+  AssertTrue('the thumbs are written: ' + txt, Pos('Thumbs = <', txt) > 0);
+  AssertFalse('no marker while there are thumbs', Pos('NoThumbs', txt) > 0);
+  host := RoundTrip(FForm);
+  try
+    bar := host.FindComponent('Bar') as TTyMultiTrackBar;
+    AssertEquals('read back', want, ThumbsText(bar));
+    AssertEquals('5,50,75,100', ValuesOf(bar));
+    AssertEquals('go;;stop', SegmentsText(bar));
+    AssertEquals(3, bar.MinGap);
+    AssertEquals('and written again the same', BarText(txt), BarText(FormText(host)));
+  finally
+    host.Free;
+  end;
+end;
+
+procedure TTyMultiTrackBarTest.TestNoThumbsRoundTrips;
+var
+  host: TForm;
+  bar: TTyMultiTrackBar;
+  txt: string;
+begin
+  FBar.Thumbs.Clear;
+  AssertEquals(0, FBar.ThumbCount);
+  txt := FormText(FForm);
+  AssertTrue('an emptied bar says so: ' + txt, Pos('NoThumbs = True', txt) > 0);
+  host := RoundTrip(FForm);
+  try
+    bar := host.FindComponent('Bar') as TTyMultiTrackBar;
+    AssertEquals('read back without the default thumbs', 0, bar.Thumbs.Count);
+    AssertEquals(0, bar.ThumbCount);
+  finally
+    host.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyMultiTrackModelTest);
   RegisterTest(TTyMultiTrackGeometryTest);
@@ -2184,4 +2626,5 @@ initialization
   RegisterTest(TTyMultiTrackMouseTest);
   RegisterTest(TTyMultiTrackKeyboardTest);
   RegisterTest(TTyRangeTrackBarTest);
+  RegisterTest(TTyMultiTrackBarTest);
 end.

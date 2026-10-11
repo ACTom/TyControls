@@ -102,14 +102,14 @@ const
     them -- so neither does G10's fixture -- and check (4) of
     TestEveryRegisteredClassIsAccountedFor lets them through. A class registered since is
     reported, so this list empties itself rather than going stale. }
-  CNotYetOnThePalette: array[0..0] of string = (
-    'TTyRangeTrackBar');
+  CNotYetOnThePalette: array[0..1] of string = (
+    'TTyRangeTrackBar', 'TTyMultiTrackBar');
 
   { G7: where each derived control's custom class must hang (plan appendix C-0), plus the
     intermediate classes. Columns: subject, expected parent, the class whose split activates
     the row. A final-class row checks Subject.ClassParent.ClassParent (the custom class's
     parent); an intermediate row (subject <> activator) checks Subject.ClassParent. }
-  CChain: array[0..61, 0..2] of string = (
+  CChain: array[0..62, 0..2] of string = (
     ('TTyDropDownButton', 'TTyCustomButton', 'TTyDropDownButton'),
     ('TTyMenuButton', 'TTyCustomButton', 'TTyMenuButton'),
     ('TTyColorButton', 'TTyCustomButton', 'TTyColorButton'),
@@ -166,6 +166,7 @@ const
     ('TTyLucideIconFont', 'TTyIconPackFont', 'TTyLucideIconFont'),
     ('TTyLucideImageList', 'TTyCustomVirtualImageList', 'TTyLucideImageList'),
     ('TTyRangeTrackBar', 'TTyMultiTrackBarBase', 'TTyRangeTrackBar'),
+    ('TTyMultiTrackBar', 'TTyMultiTrackBarBase', 'TTyMultiTrackBar'),
     { intermediates: activated by their family root }
     ('TTyGlyphButtonBase', 'TTyCustomButton', 'TTyButton'),
     ('TTyShellTreeLink', 'TTyCustomTreeView', 'TTyTreeView'),
@@ -1244,7 +1245,7 @@ initialization
     'TTyDBLookupListBox', 'TTyDBImage', 'TTyDBDateTimePicker', 'TTyDBCalendar',
     'TTyDBNavigator',
     // multi-thumb track bars (#36)
-    'TTyRangeTrackBar']);
+    'TTyRangeTrackBar', 'TTyMultiTrackBar']);
 
   { CDemoted: base and intermediate classes that publish nothing beyond their LCL root. }
   AddAll(GDemoted, ['TTyCustomControl', 'TTyGraphicControl', 'TTyComponent', 'TTyGlyphButtonBase', 'TTyCustomTabStrip', 'TTyCustomGrid',
