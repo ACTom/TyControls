@@ -756,8 +756,7 @@ begin
       GrooveR := Rect(SlideR.Left, Mid - GrooveTh div 2,
                       SlideR.Left + MLen, Mid - GrooveTh div 2 + GrooveTh);
     end;
-    if (tpBackground in GrooveS.Present) then
-      P.FillBackground(GrooveR, GrooveS.Background, GrooveS.BorderRadius);
+    TyFillSubElement(P, GrooveR, GrooveS, TyUniformCorners(GrooveS.BorderRadius));
     // The PAINTED thumb uses the displayed (possibly mid-animation) position; at
     // rest DisplayPos == FPosition so headless renders are pixel-identical. The
     // hover hit-test (ThumbRect), DragTo, hit math and keyboard keep using
@@ -779,8 +778,7 @@ begin
       Include(ThumbStates, tysNormal);
     ThumbS := ActiveController.Model.ResolveStyle('TyTrackThumb', '', ThumbStates);
 
-    if (tpBackground in ThumbS.Present) then
-      P.FillBackground(ThumbR, ThumbS.Background, ThumbS.BorderRadius);
+    TyFillSubElement(P, ThumbR, ThumbS, TyUniformCorners(ThumbS.BorderRadius));
 
     { Tick marks. Which VALUES get one is TickStyle's call (auto = every Frequency
       units, manual = only the hand-placed ones); which SIDE they are drawn on is

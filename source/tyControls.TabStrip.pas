@@ -2113,9 +2113,8 @@ begin
       end;
 
       { Fill header background }
-      if tpBackground in TabStyle.Present then
-        P.FillBackground(HdrRect, TabStyle.Background,
-          TyTabCornersOnBand(TyEffectiveCorners(TabStyle), EffectiveBandSide, Rtl));
+      TyFillSubElement(P, HdrRect, TabStyle,
+        TyTabCornersOnBand(TyEffectiveCorners(TabStyle), EffectiveBandSide, Rtl));
 
       { Draw caption centered in header, clipped off the close glyph and the icon. The
         close slot is at the header's TRAILING edge -- the right one normally, the left one

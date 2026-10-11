@@ -78,6 +78,7 @@ type
     procedure MirroringMovesASideBandToTheOtherEdge;
     procedure PaintFillsTheBandOnTheChosenEdge;
     procedure TabCornersTurnWithTheBand;
+    procedure ATabTakesTheFrameItsStyleGives;
     { --- keyboard / overflow --------------------------------------------------------- }
     procedure UpAndDownStepOnlyOnASideBand;
     procedure MirroringDoesNotReverseASideBand;
@@ -664,6 +665,37 @@ begin
     finally
       TearDown;
     end;
+  end;
+end;
+
+{ #47. A tab used to take only its fill: a skin could declare a border or a 3D edge on TyTab
+  and nothing showed (classic's raised tabs came out as flat text on the grey face). The tab is
+  framed now the way a control's own frame is. Probed one pixel inside the tab's top-left
+  corner: the light half of a raised bevel, where the fill alone would leave the face. }
+procedure TTabAxisTest.ATabTakesTheFrameItsStyleGives;
+var
+  bmp: TBGRABitmap;
+  r: TRect;
+  face, px: TBGRAPixel;
+begin
+  Build(tpTop);
+  { The fixture's own TyTab rule says border-width: 0px, and a render-style only fills in what a
+    style left unsaid, so the width is restated here. }
+  FCtl.LoadThemeCss(AxisCss + 'TyTab { background: #C0C0C0; color: #101010; font-size: 12px; ' +
+    'render-style: bevel3d; border-width: 2px; } ' +
+    'TyTab:active { background: #C0C0C0; color: #101010; render-style: bevel3d; border-width: 2px; }');
+  FStrip.TabIndex := 0;
+  r := FStrip.TabRect(1);
+  face := BGRA($C0, $C0, $C0);
+  bmp := Shot;
+  try
+    AssertTrue('setup: the tab is filled with its face',
+      bmp.GetPixel((r.Left + r.Right) div 2, r.Bottom - 4) = face);
+    px := bmp.GetPixel(r.Left, r.Top);
+    AssertTrue(Format('the raised edge is drawn (got %d,%d,%d)', [px.red, px.green, px.blue]),
+      px.red > $C0);
+  finally
+    bmp.Free;
   end;
 end;
 

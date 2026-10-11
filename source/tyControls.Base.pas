@@ -577,6 +577,13 @@ procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
 procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
   const ARect: TRect; AVectorKind: TTyGlyphKind; AColor: TTyColor; AThickness: Integer;
   APadLogical: Integer = 4); overload;
+{ A part drawn inside a control -- a tab, a scroll or track thumb -- filled and framed the way a
+  control's own frame is (DrawFrame): the render-style preset expanded, the fill, then a two-tone
+  bevel or a plain border when the style resolves one. These parts used to take only the fill, so
+  a skin could not give a tab or a thumb an edge at all; a style that declares no border is still
+  only filled, exactly as before. }
+procedure TyFillSubElement(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet;
+  const ACorners: TTyCorners);
 { v3/C5. Try to draw a theme glyph override into ARect; True = drawn (icon path), False =
   unset/malformed so the CALLER draws its own default (used where the default isn't a plain
   vector kind, e.g. the drop chevron). And the canonical token for a vector kind. }
@@ -1585,6 +1592,24 @@ begin
     Include(AStyle.Present, tpBorderColor);
   end;
   ACorners := TyUniformCorners(0);   // 3D bevels are square
+end;
+
+procedure TyFillSubElement(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet;
+  const ACorners: TTyCorners);
+var
+  eff: TTyStyleSet;
+  corners: TTyCorners;
+begin
+  eff := AStyle;
+  corners := ACorners;
+  TyApplyRenderStyle(eff, corners);
+  if tpBackground in eff.Present then
+    APainter.FillBackground(ARect, eff.Background, corners);
+  if TyBorderVisible(eff) then
+    if eff.BorderStyle in [tbsOutset, tbsInset] then
+      TyDrawBevelBorder(APainter, ARect, eff)
+    else
+      APainter.StrokeBorder(ARect, corners, eff.BorderWidth, eff.BorderColor);
 end;
 
 procedure TTyGraphicControl.DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);

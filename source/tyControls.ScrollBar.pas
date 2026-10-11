@@ -649,7 +649,9 @@ begin
     ThumbFill := Default(TTyFill);
     ThumbFill.Kind := tfkSolid;
     ThumbFill.Color := ThumbS.Background.Color;
-    P.FillBackground(ThumbR, ThumbFill, ThumbS.BorderRadius);
+    ThumbS.Background := ThumbFill;            { the thumb has always been filled flat }
+    Include(ThumbS.Present, tpBackground);
+    TyFillSubElement(P, ThumbR, ThumbS, TyUniformCorners(ThumbS.BorderRadius));
     ButtonRects(R, LoR, HiR);
     if (LoR.Right > LoR.Left) then   // buttons exist
     begin
