@@ -55,7 +55,9 @@ type
     cvDataZoom, cvMarkPoint, cvMarkLine, cvMarkArea, cvRadar, cvCalendar,
     cvAngleAxis, cvRadiusAxis, cvSeries,
     { [Batch 125] }
-    cvToolbox);
+    cvToolbox,
+    { [Batch 126] }
+    cvBrush);
   TTyChartViews = set of TTyChartView;
 
   TTyExportImageType = (eitPng, eitJpeg);
@@ -128,7 +130,7 @@ implementation
 const
   ViewNames: array[TTyChartView] of string = ('title', 'legend', 'xAxis',
     'yAxis', 'visualMap', 'dataZoom', 'markPoint', 'markLine', 'markArea',
-    'radar', 'calendar', 'angleAxis', 'radiusAxis', 'series', 'toolbox');
+    'radar', 'calendar', 'angleAxis', 'radiusAxis', 'series', 'toolbox', 'brush');
 
 function TyChartViewOf(const AMainType: string; out AView: TTyChartView): Boolean;
 var v: TTyChartView;
