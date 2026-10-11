@@ -662,6 +662,16 @@ TyTrackSelection {
   background: var(--accent);
   border-radius: var(--radius-round);
 }
+/* A stretch of groove between two thumbs of TTyMultiTrackBar, resolved with the StyleClass of
+   its Segments item. The plain key paints nothing -- a segment without a class shows the
+   groove -- and the three classes below are what a status scale (fine / getting there / too
+   much) needs; a theme adds its own the same way. */
+TyTrackSegment {
+  border-radius: var(--radius-round);
+}
+TyTrackSegment.success { background: var(--success); }
+TyTrackSegment.warning { background: var(--warning); }
+TyTrackSegment.danger  { background: var(--danger); }
 TyTrackBar:focus    { outline: 2px var(--focus-ring); }
 TyTrackBar:disabled { opacity: var(--disabled-opacity); }
 

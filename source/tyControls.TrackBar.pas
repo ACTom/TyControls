@@ -303,6 +303,20 @@ type
 
 function TyTrackThumbOffset(AMainLen, AThumbLen, AMin, AMax, APos: Integer; AInvert: Boolean): Integer;
 function TyTrackPosFromOffset(AMainLen, AThumbLen, AMin, AMax, AOffset: Integer; AInvert: Boolean): Integer;
+{ THE SLIDER'S SHAPE, shared by TTyTrackBar and the multi-thumb bars so a thumb, a groove and a
+  slider band come out the same size and in the same place on both.
+  TyTrackThumbLen: the thumb's length along the track at APPI (12 logical px, at least 1). }
+function TyTrackThumbLen(APPI: Integer): Integer;
+{ The groove's thickness across the track, in device px: the theme's --track-thickness. }
+function TyTrackGrooveThickness(APainter: TTyPainter; AController: TTyCustomStyleController): Integer;
+{ The band the thumb rides in: AR less the tick strips (ABand -- ticks plus labels -- on each
+  side AMarks names) and the readout strip (AValueArea, at the right / bottom end). A control
+  too short to hold both keeps the whole of AR rather than an inverted band. }
+function TyTrackSlideRect(const AR: TRect; AOrientation: TTyTrackOrientation;
+  AMarks: TTyTrackTickMark; ABand, AValueArea: Integer): TRect;
+{ The groove: AThickness thick, centred across ASlide, AMainLen long from its leading edge. }
+function TyTrackGrooveRect(const ASlide: TRect; AOrientation: TTyTrackOrientation;
+  AMainLen, AThickness: Integer): TRect;
 { Fill the outputs of AT (see TTyTrackTicks): the strip thicknesses and the labels that fit.
   Needs the painter for its scale and to measure the labels. }
 procedure TyLayoutTrackTicks(APainter: TTyPainter; var AT: TTyTrackTicks);
@@ -334,6 +348,57 @@ begin
   if AOffset > travel then AOffset := travel;
   eff := (AOffset * span + travel div 2) div travel;
   if AInvert then Result := AMax - eff else Result := AMin + eff;
+end;
+
+function TyTrackThumbLen(APPI: Integer): Integer;
+begin
+  Result := MulDiv(12, APPI, 96);
+  if Result < 1 then Result := 1;
+end;
+
+function TyTrackGrooveThickness(APainter: TTyPainter; AController: TTyCustomStyleController): Integer;
+begin
+  Result := APainter.Scale(AController.Metric('--track-thickness', TyTrackThickness));
+  if Result < 1 then Result := 1;
+end;
+
+function TyTrackSlideRect(const AR: TRect; AOrientation: TTyTrackOrientation;
+  AMarks: TTyTrackTickMark; ABand, AValueArea: Integer): TRect;
+begin
+  Result := AR;
+  if AOrientation = toVertical then
+  begin
+    if AMarks in [ttmTopLeft, ttmBoth]     then Inc(Result.Left,  ABand);
+    if AMarks in [ttmBottomRight, ttmBoth] then Dec(Result.Right, ABand);
+    Dec(Result.Bottom, AValueArea);
+  end
+  else
+  begin
+    if AMarks in [ttmTopLeft, ttmBoth]     then Inc(Result.Top,    ABand);
+    if AMarks in [ttmBottomRight, ttmBoth] then Dec(Result.Bottom, ABand);
+    Dec(Result.Right, AValueArea);
+  end;
+  if Result.Right <= Result.Left then Result := AR;
+  if Result.Bottom <= Result.Top then Result := AR;
+end;
+
+function TyTrackGrooveRect(const ASlide: TRect; AOrientation: TTyTrackOrientation;
+  AMainLen, AThickness: Integer): TRect;
+var
+  Mid: Integer;
+begin
+  if AOrientation = toVertical then
+  begin
+    Mid := (ASlide.Left + ASlide.Right) div 2;
+    Result := Rect(Mid - AThickness div 2, ASlide.Top,
+                   Mid - AThickness div 2 + AThickness, ASlide.Top + AMainLen);
+  end
+  else
+  begin
+    Mid := (ASlide.Top + ASlide.Bottom) div 2;
+    Result := Rect(ASlide.Left, Mid - AThickness div 2,
+                   ASlide.Left + AMainLen, Mid - AThickness div 2 + AThickness);
+  end;
 end;
 
 type
@@ -662,8 +727,7 @@ end;
 
 function TTyCustomTrackBar.ThumbWAtPPI(APPI: Integer): Integer;
 begin
-  Result := MulDiv(12, APPI, 96);
-  if Result < 1 then Result := 1;
+  Result := TyTrackThumbLen(APPI);
 end;
 
 function TTyCustomTrackBar.MainLen: Integer;
@@ -1152,7 +1216,7 @@ var
   ThumbStates: TTyStateSet;
   TW, MLen, Off: Integer;
   Ticks: TTyTrackTicks;
-  Band, GrooveTh, Mid: Integer;
+  Band, GrooveTh: Integer;
   vs, vw: TSize;
 begin
   P := TTyPainter.Create;
@@ -1165,8 +1229,7 @@ begin
     // Compute thumb geometry using APPI for pixel-exact rendering.
     // Horizontal goes through the non-inverted branch of TyTrackThumbOffset,
     // which equals the legacy formula exactly (pixel regression).
-    TW := MulDiv(12, APPI, 96);
-    if TW < 1 then TW := 1;
+    TW := TyTrackThumbLen(APPI);
     { 读数条:先量出它要多宽(按 Min/Max 里更宽的那个算,免得拖动时滑轨长度
       跟着位数变来变去、滑块自己抖),再把滑轨缩短同样多。 }
     if FShowValue then
@@ -1218,40 +1281,14 @@ begin
     TyLayoutTrackTicks(P, Ticks);
     FTickLabelPx := Ticks.LabelBand;    // cached for CalculatePreferredSize
     Band := Ticks.TickBand + Ticks.LabelBand;
-    SlideR := R;
-    if FOrientation = toVertical then
-    begin
-      if FTickMarks in [ttmTopLeft, ttmBoth]     then Inc(SlideR.Left,  Band);
-      if FTickMarks in [ttmBottomRight, ttmBoth] then Dec(SlideR.Right, Band);
-      Dec(SlideR.Bottom, FValueAreaPx);
-    end
-    else
-    begin
-      if FTickMarks in [ttmTopLeft, ttmBoth]     then Inc(SlideR.Top,    Band);
-      if FTickMarks in [ttmBottomRight, ttmBoth] then Dec(SlideR.Bottom, Band);
-      Dec(SlideR.Right, FValueAreaPx);
-    end;
     { A control too short to hold both bands keeps the slider rather than inverting it. }
-    if SlideR.Right <= SlideR.Left then SlideR := R;
-    if SlideR.Bottom <= SlideR.Top then SlideR := R;
+    SlideR := TyTrackSlideRect(R, FOrientation, FTickMarks, Band, FValueAreaPx);
 
     { THE GROOVE. Its own theme key, because the recess is a part of the control and not the
       control: TyTrackBar itself now declares no background and inherits the parent surface. }
     GrooveS := ActiveController.Model.ResolveStyle('TyTrackGroove', '', []);
-    GrooveTh := P.Scale(ActiveController.Metric('--track-thickness', TyTrackThickness));
-    if GrooveTh < 1 then GrooveTh := 1;
-    if FOrientation = toVertical then
-    begin
-      Mid := (SlideR.Left + SlideR.Right) div 2;
-      GrooveR := Rect(Mid - GrooveTh div 2, SlideR.Top,
-                      Mid - GrooveTh div 2 + GrooveTh, SlideR.Top + MLen);
-    end
-    else
-    begin
-      Mid := (SlideR.Top + SlideR.Bottom) div 2;
-      GrooveR := Rect(SlideR.Left, Mid - GrooveTh div 2,
-                      SlideR.Left + MLen, Mid - GrooveTh div 2 + GrooveTh);
-    end;
+    GrooveTh := TyTrackGrooveThickness(P, ActiveController);
+    GrooveR := TyTrackGrooveRect(SlideR, FOrientation, MLen, GrooveTh);
     if (tpBackground in GrooveS.Present) then
       P.FillBackground(GrooveR, GrooveS.Background, GrooveS.BorderRadius);
     { THE SELECTION RANGE (LCL SelStart/SelEnd): the groove filled between the two values, under
