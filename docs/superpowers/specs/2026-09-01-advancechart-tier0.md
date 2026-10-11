@@ -9031,7 +9031,7 @@ Q7 在 3.1 承诺了「入场动画和状态过渡」。AN2–AN4 把前一半�
 - **A11**：replaceMerge（只按 id 映射、未匹配的已有模型被移除留下空洞、`brandNew` 强制新视图）、整份选项的 replaceAll、空洞在系列下标、图例数据、dataZoom 目标里的跳过；`SetOption` 的选项对象形式（`{notMerge, replaceMerge, lazyUpdate, silent, transition}`）。接口已留好：keys 的列表、映射函数的模式参数、报告里每个位置的命运。（第 97 批：已做，见 §132；整份选项的 replaceAll 只在 timeline / media 里用，端口没有它们，它等同 notMerge，不单独提供。）**[第 107 批：media 已做（§142），但它走的是 `resetOption('media')`——一项一次普通合并，不是整份的 replaceAll；`resetOption('recreate')` 只有 setTheme 与工具箱的 restore 用，仍不提供。]**
 - **notMerge 下系列的 null 项不压缩**：上游 initBase 给 series 预置了列表，所以 `[bar, null, line]` 的 line 是系列 1（虚名 `series\u00001`）；端口的 notMerge 树照写的下标，line 是系列 2。只影响写了 null 系列项的选项，合并时按端口的下标找。（第 97 批：已修正，notMerge 与第一次 setOption 都压缩系列，见 §132。）
 - 盒子写回只做端口实际布局的那几种；calendar（与 cellSize 联动的二次合并）、singleAxis、geo、parallel、matrix、timeline、thumbnail、slider dataZoom、map 系列、grid 的 `outerBounds` 只做深合并——合并没有碰盒子键时与上游相同。
-- 预处理器只模拟了它们建的模型（axisPointer、grid）；markPoint/markLine/markArea 的根组件、axisPointer 的 `link` 归一、graphic 的包装、backwardCompat 的旧写法转换、timeline / media / baseOption 都不做（notMerge 下也不做）。**[第 107 批：media 与 baseOption 已做，见 §142——预处理器跑基础选项与列表里的项，不跑默认项；timeline 的各帧（`options`）仍不做，只按 `parseRawOption` 从根上拿掉。]**
+- 预处理器只模拟了它们建的模型（axisPointer、grid）；markPoint/markLine/markArea 的根组件、axisPointer 的 `link` 归一、graphic 的包装、backwardCompat 的旧写法转换、timeline / media / baseOption 都不做（notMerge 下也不做）。**[第 107 批：media 与 baseOption 已做，见 §142——预处理器跑基础选项与列表里的项，不跑默认项；timeline 的各帧（`options`）仍不做，只按 `parseRawOption` 从根上拿掉。]** **[第 122 批：graphic 的包装已做——`TyParseRawOption` 对基础选项与带 query 的 media 项跑 graphic 的预处理器，见 §157。]**
 - `emphasis.label.show` 上游只在 init 时由 `label.show` 补（defaultEmphasis），合并改了 `label.show` 之后它保持 init 时的值；端口在读的时候从当前的 `label.show` 补。
 - 系列从 dataset 维度自动取的名字（autoSeriesName）不进 keys；合并时按名字找人用的是写过的名字或虚名，维度名变了以后与上游可能不同。
 - 选中：合并后留下来的系列保留选中模型，但 `selectedMode` 的改变和新数据里 `selected: true` 的补选（`_initSelectedMapFromData`）不重读。
@@ -11368,3 +11368,77 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - `source/tyControls.AdvanceChart.pas`：上面「控件」一条的全部。
 - `tools/advchart-oracle/chord.js`、`tests/fixtures/advchart-chord.json`、`tests/test.advchart.chord.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.animenter.pas`、`test.advchart.marks.pas`、`test.advchart.diagnose.pas`、`test.advchart.candlestick.pas`。
 - §1、§39 在原处标注。没有新主题键、新度量或新资源串。
+
+## 157. Tier 2 第一百二十二批：graphic 组件（C13，2026-10-12）
+
+路线图 C13：graphic 组件——十三种元素、`$action`、变换、`bounding`、文字走富文本。以前 `graphic` 只是合并里的一个组件主类型：选项进得了树、合并得进去，没有人读，一个元素都不画。这一批对着 `component/graphic/install.ts`（预处理器）、`GraphicModel.ts`（整段：`mergeOption`、`optionUpdated`、`_flatten`、`setKeyInfoToNewElOption`、`mergeNewElOptionToExist`、`copyTransitionInfo`、`setLayoutInfoToExist`）、`GraphicView.ts`（整段：`_updateElements`、`_relocate`、`_clear`、`createEl`、`removeEl`、`updateCommonAttrs`、`getCleanedElOption`、`setEventData`）、`animation/customGraphicTransition.ts`（`applyUpdateTransition`、`updateLeaveTo`、`applyLeaveTransition`、`getElementAnimationConfig` 与几个 `prepare*`）、`animation/basicTransition.ts`（`getAnimationConfig`、`updateProps`）、`util/layout.ts`（`positionElement`、`getLayoutRect`、`mergeLayoutParam`、`copyLayoutParams`）、`util/model.ts`（`mappingToExists`、`makeIdAndName`）、`util/styleCompat.ts`、`util/graphic.ts` 的形状登记、`model/globalDefault.ts`、`core/echarts.ts` 的鼠标事件参数，以及 zrender 的 `Transformable`（`getLocalTransform`、`updateTransform`）、`Element`（`attr`、`updateInnerText`、`setTextConfig`）、`Path`（`getBoundingRect`、`canBeInsideText`、`getInsideTextFill / Stroke`、默认样式）、`Group.getBoundingRect`、`Text`（`_mergeStyle`、`makeFont`、`normalizeStyle`、`getBoundingRect`）、`Image`、`graphic/shape/*` 的十个形状、`helper/poly.ts`、`helper/smoothBezier.ts`、`helper/roundRect.ts`、`core/curve.ts` 的两个 subdivide、`contain/text.ts` 的 `calculateTextPosition`、`Handler.dispatchToElement` 逐行核过，在真 dist 上跑基准。§130 在原处标注。
+
+### 上游的做法
+
+- **预处理器**：`graphic` 是一个元素（对象且没有 `elements`）、一个元素数组、或 `[{elements}]`；前两种包成 `[{elements: …}]`，第三种只留第一个组件。基础选项和带 query 的 media 项都过它。
+- **模型**：`mergeOption` 不让通用合并碰 `elements`。`optionUpdated` 把新元素列表摊平（组的孩子紧跟在组后面，记下父选项，删掉 `children`），对着已有列表 `mappingToExists('normalMerge')`：先按 id，再按名字（两边有一边没 id），再按下标（第一个空槽，不落到 id 不同的已有元素上），然后 `makeIdAndName`——没写 id 的元素拿到 `'\0' + 名字 + '\0' + n`，没写名字的名字是 `'series\0' + 映射结果里的下标`。每个新选项依次：写上 id、缺 type 时取旧的、`parentId`（父选项的 id，没有父选项时沿用旧的）；`$action`（假值是 merge）：merge 把副本深合并进旧选项（数组整个替换）、`mergeLayoutParam` 带 ignoreSize（新选项里 left 有值就把 right 置 null，反之亦然）、把合并后的 left/right/top/bottom/width/height 抄回新选项、把 `transition / enterFrom / leaveTo / enter/update/leaveAnimation` 从旧选项抄进新选项（root、shape、style、extra 四处——**新选项没有 shape / style 而旧的有时，先给它一个空对象**）；replace 用副本顶掉；remove 置空；别的词什么都不做。然后 `hv = [left/right 有值, top/bottom 有值]` 写进两边，组缺 width / height 时两边都补 0。最后去掉空槽和 `$action`。**组被删掉时它的孩子留在模型列表里**（视图里没了）。
+- **视图** `_updateElements`（只在 setOption 之后有待更新的选项时跑）：每个新选项——文字且 `hv[1]` 时把 style 的 `align / verticalAlign / textBaseline / textVerticalAlign` 置 null；`isEC4CompatibleStyle`（**`text` 类型只要没有 textContent / textConfig 就总是**；别的类型 style 里有 `text` 时）走 `convertFromEC4CompatibleStyle`：文字是就地改名（`textAlign` → `align` 等，`font = textFont || font`），别的类型造一个 `silent` 的 textContent 和 `{position: textPosition || 'inside', offset, rotation, distance}`；`getCleanedElOption` 去掉 id、parentId、`$action`、hv、bounding、textContent、clipPath 和六个位置键；merge：没有就 `createEl`（先挂到父节点上，父节点不在就抛错）、有就标成不新；replace：先删再建；remove：先 `updateLeaveTo` 再删。`applyUpdateTransition`：不是初次且动画开时先记下 `transition` 点名的变换键、shape（`shape.transition` 点名的，或 `transition` 是 `'all'` / 含 `'shape'` 时形状里每个**新选项给了有限数**的键）、style（`style.transition` 点名的，或 `'all'` / 含 `'style'` 时新 style 里每个可动画的键）的旧值；然后直接设终值（style 走 `setStyle`——文字的 rich 按名字逐个合并——再 `attr` 变换和 shape，**shape 和 style 里的 `transition / enterFrom / leaveTo` 也一并进了元素的 shape / style**）、silent / ignore / invisible；初次用 root、style、shape 的 `enterFrom` 拼成起点做 `animateFrom`（`'enter'` 的配置），否则从记下的旧值 `animateFrom`（`'update'` 的配置）；最后 `updateLeaveTo` 累积 leaveTo。`updateCommonAttrs`：非组的 cursor / zlevel / z / z2 **只在选项自己写了这个键时**才设（写 null 时取默认值：`'pointer'`、组件的 zlevel / z、0），`on*` 是函数就挂、否则摘掉，draggable、name、id。textContent：merge 时已有就 `attr`、没有就新建；replace 新建。`setTextConfig` 是扩展。`setEventData`：元素不 silent 不 ignore 且还没有时建一次 `{componentType: 'graphic', componentIndex, name: 当时的名字}`，之后每次更新都写 `info`（**这次更新没写 info 就成了 undefined**）。
+- **配置**：`getElementAnimationConfig(类型)` 取 `getAnimationConfig`——模型自己的选项，没有就根选项，再没有就 globalDefault：**`animationEasing` 与 `animationEasingUpdate` 都是 `cubicInOut`**（系列自己默认 cubicOut，组件不是），1000 / 500 ms，延迟 0——时长大于 0 时 `setToFinal`、scope 是类型名，然后元素的 `enterAnimation / updateAnimation / leaveAnimation` 盖上去。**离场用的是 `'update'`**：`applyLeaveTransition` 要的是 update 的时长与缓动、`updateAnimation` 的覆盖，`leaveAnimation` 从不被读；有 leaveTo 才动画（动完从父节点上摘掉），没有就当即摘掉；组被删时它的每个后代也各自走一遍。
+- **`_relocate`**（每次 render，包括 resize）：先自顶向下算组的尺寸——`parsePercent(width, 父尺寸) || 0`（父是根时是画布）；再自底向上（模型列表倒序）对每个元素 `positionElement`：`hv` 两维都不设就不动；`bounding: 'raw'` 时组的盒子是 `(0, 0, +width || 0, +height || 0)`、别的元素是自己未变换的 `getBoundingRect`，结果**直接**是 x / y（`out.x = dx`，不是加）；`'all'`（默认）时盒子是 `getBoundingRect` 经本地变换，`x += dx`。`getLayoutRect` 的宽高取盒子的。不是新元素且有位置时，`transition` 点名的 x / y 走 `updateProps`（update 配置），其余直接设。`isNew` 只在被 merge 碰到时才变成 false，所以初次之后的 resize 也直接设。
+- **元素**：十个形状的 `getDefaultShape`、`getDefaultStyle`（arc、polyline、line、bezierCurve 描 `'#000'`、不填）；Rect 的 `if (!r)` 与 roundRect、Circle（`moveTo` + 整圈）、Ellipse（`k = 0.5522848` 四段三次）、Ring（外圈顺时针、内圈逆时针）、Sector（roundSector；角半径一个数是四个，0 是没有）、Arc（`max(r, 0)`）、Polygon / Polyline（两点以下什么都不建；`smooth` 走 smoothBezier，`smoothConstraint` 夹住控制点；Polyline 不读 `percent`）、Line（`percent === 0` 什么都不建，小于 1 截短）、BezierCurve（没有 `cpx2` / `cpy2` 是二次；`percent` 用 subdivide 截前半段）。`getBoundingRect`：路径的盒子按描边长宽（没有填充时至少 5）；图片是 `(x || 0, y || 0, width, height)`——**没写宽高时 SSR 下图片不加载，是 0**；文字是各子元素盒子的并集；组是没 ignore、没 invisible 的孩子的盒子经各自本地变换的并集，一个都没有是 `(0, 0, 0, 0)`。变换：`getLocalTransform`（origin、anchor、skew——`skewY` 取 `tan(-skewY)`——再转、再移），`updateTransform` 在没有本地变换也没有父变换时是 null。
+- **文字**：style 是 zrender 的 `TextStyleProps`：`makeFont`（写了 fontSize、fontFamily 或 fontWeight 时拼 `fontStyle fontWeight 大小 family`，大小是数加 px、缺省 12px，family 缺省 sans-serif；否则 `textFont || font`）；rich 项的字体自己有分项就自己拼，**否则整个用块的字体**（不是逐项继承）；`align` / `verticalAlign` 归一；默认样式 `{fill: '#000'}`。textContent 的位置与颜色是 `updateInnerText`：`position` 有值时对宿主的 `getBoundingRect`（`local` 之外再经宿主变换）`calculateTextPosition`（`distance` 缺省 5，数组位置不带对齐），`rotation` 与 `origin`（`'center'` 或百分比数组）、`offset`；颜色：在里面（`inside` 或位置词含 `inside`）且宿主能放字（路径要有填充）时 `insideFill` 缺省按宿主填充的亮度取 `'#333'` / `'#eee'` / `'#ccc'`，`insideStroke` 缺省在「亮度 < 0.4」与暗色模式一致时取宿主填充（自动描边）；否则 `outsideFill` 缺省 `'#333'`（暗色 `'#ccc'`），`outsideStroke` 缺省是背景色叠在白（暗色是黑）上的不透明色。**textContent 自己的 z / z2 / zlevel 不随宿主**——宿主 z 3 的标签仍在 z 0。
+- **次序**：zrender 按 (zlevel, z, z2) 稳定排序，并列时按树的次序；graphic 组件的组比坐标轴、系列都先挂到根上，所以 z 相同时 graphic 在下面——默认 z 0 的元素压在坐标轴（z 0）下面，z 2 的在系列（z 2）下面，z2 才分得开。
+- **事件**：`findHover` 跳过 silent（祖先 silent 也算）、ignore 的元素，**不跳过 invisible**；`dispatchToElement` 从目标起沿 `__hostTarget || parent` 一路调 `on*`，返回真值就不再往上、也不触发根上的处理器（ECharts 自己的 click / mouseover 都在那里）；图表事件的参数是 `findEventDispatcher` 找到的第一个 eventData 的拷贝：`{componentType: 'graphic', componentIndex, name, info}`。
+- **抛错**：`compoundPath`、`path` 在组件里是保留的空类，未知类型没有类，都在 `createEl` 里抛错；之前的元素已经建好，这次的更新和布局中断。
+
+### port 以前
+
+- `graphic` 在 OptionMerge 的主类型表里，合并、`getOption` 都带着它；没有模型、没有视图，什么都不画。
+
+### 做法
+
+- **`AdvChart.GfxEl`**（新单元，custom 系列下一批复用）：`TTyGfxEl`——派生自 `TTyAnimElement` 的属性袋：变换十一个键是字段，`shape` / `style` 是 JSON 对象（读时缺的键走原型的默认值），z / zlevel / z2、silent / ignore / invisible、cursor、draggable、textContent 与 textConfig、eventData 与 info、`on*` 句柄、leaveTo；`GetAnimProp` / `SetAnimProp` 让动画引擎直接驱动 `'x'`、`'shape.r'`、`'style.fill'`。函数：`TyGfxCreate`（默认形状与样式）、`TyGfxSetStyle`（rich 按名字合并）、`TyGfxSetShape`、`TyGfxLocalTransform` / `TyGfxUpdateTransforms` / `TyGfxLabelTransform`、`TyGfxPath`（十个形状的 PathProxy 数据；`TyGfxSmoothBezier`）、`TyGfxRect`、`TyGfxMakeFont` / `TyGfxParseFont`、`TyGfxTextLayout`（style 读成富文本引擎的样式，交给 `TyRtLayout`）、`TyGfxTextPosition` / `TyGfxInnerText`、`TyGfxPathCmds`（PathProxy 数据经矩阵变成画家的三次曲线，弧不超过四分之一圈、二次升三次、rect 四条线，轮廓采样给命中）、`TyGfxPaintElement`（路径、图片、文字各成一个绘制元素）。
+- **`AdvChart.Graphic`**（新单元）：`TyGraphicPreprocess`；`TTyGfxModel`（`OptionUpdated` 即上游的摊平、映射、`$action`、hv；`UseToUpdate`）；`TTyGfxView`（按 id 的元素表、`Render` = `_updateElements` + `_relocate`、`Place`、`Clear` / `ForgetModel`、`Prepare`——变换与 textContent 的位置、`Snap`——动画关掉时一步到位、`Error`——上游抛错的那句话）。
+- **`Paint`**：`ctkGraphic`；`GfxUnder`（zlevel 0、z ≤ 0 的 graphic 元素，列表的渲染跳过它，控件在坐标轴之前画）；`TTyChartPattern` 加整矩阵（`HasMatrix`、`UnitImage`、`Matrix`）。**`Render`**：图片按元素自己的矩阵填充，`UnitImage` 时除以解码后的尺寸；列表渲染跳过 `GfxUnder`。
+- **`Events`**：`TTyChartElementEvent` 与 `TTyChartElementHandler`（返回真即 cancelBubble），登记表 `TyChartRegister / Unregister / Find / ClearElementHandlers`、`TyChartRunElementHandler`。**`Handlers`**：参数加 `Info`（info 的 JSON）。**`Media`**：`TyParseRawOption` 对基础选项和带 query 的项跑 graphic 预处理器。
+- **控件**：模型、视图和视图自己的动画驱动；notMerge / 初次从树上建新模型（视图下一次 render 先清掉旧模型的元素），合并时按报告 `optionUpdated`，结果写回树上的 `elements`；`PaintStatic` 在坐标轴之前 `GfxBuild`（有待更新时 render 并在 setOption 的时刻冲一步动画、尺寸变了就 `Place`，然后 `Prepare`、遍历出绘制元素：ignore 连子树跳过，silent 向下继承，z 映射成 `zlevel × 100000 + z`）并画 `GfxUnder` 的那些；`BuildSeriesList` 把它们放在列表最前面（z 相等时在系列下面）；命中 `ctkGraphic` 时 `HdKind 8`、`HdName` 是元素 id，事件参数沿父链找 eventData；`GfxElementEvent` 在 mousemove / mouseover / mouseout / mousedown / mouseup / click / dblclick / contextmenu 上冒泡调句柄，真值时跳过图表事件（click 时连 `StClickSelect` 一起跳过）；`GfxDragStart` / `GfxDragMove`——draggable（或 draggable 的祖先组）随指针平移，`'horizontal'` / `'vertical'` 只动一维；动画帧走静态层（与 visualMap 指示器同法）；`AnimDropAll` 时 `Snap`。
+- 默认颜色：路径没写填充是 zrender 的 `'#000'`（任何主题下都是，同和弦图的飘带）；自由文字没写颜色时上游是 `'#000'`，绘制时取皮肤的文字色（模型里仍是上游的值）；textContent 的内外默认色是上游按宿主填充与暗色模式算出来的。没有新主题键、新度量、新资源串。
+
+### 基准
+
+`tools/advchart-oracle/graphic.js`（真 dist，node SSR，`chart._ssr = false`，`env.node` 关掉，animation.js 的时钟钩子，`setTimeout` 不跑，随机数是端口的 xorshift32，zrender 的宽度表量字，元素句柄写成 `{$fn: 'log:名'}` / `{$fn: 'stop:名'}` 在 node 里换成记录调用的函数，图片是脚本自己编的 2 × 2 PNG data URL，指针步走 zrender 自己的 Handler，每步之后画一遍，最后 `process.exit()`）→ `tests/fixtures/advchart-graphic.json`：**24 个用例、45 个状态、271 条元素记录、66 个文字片段、91 个动画采样、12 次句柄调用、21 个图表事件、75 条守卫**。
+
+- **形状** 5 个：九种 rect（圆角数、两个、四个，描边，没写填充，`'none'` 加描边，透明度，虚线）；圆、椭圆、环、三个扇区（内径、圆角、逆时针、全默认）、两段弧；多边形、折线、平滑多边形、带约束的平滑折线、一个点的折线；直线、截短的直线、二次与三次贝塞尔、两种截短、`percent: 0`；四张图片（尺寸、style 的 x / y、透明度、没写尺寸）。
+- **文字** 5 个：字体简写、分项字体、右下对齐、两行与行高、带框带内边距圆角、截断、style 的 x / y、旧写法 `textAlign`；富文本（两个具名样式、带背景的片段、未知名字、块宽与行高）；left / top / right / bottom 定位的文字（`hv[1]` 抹掉对齐）；textContent 十一种（默认 inside 颜色、top 与距离、insideTopLeft、left 与 offset、转过的标签与 origin、自定 inside 颜色、outside 颜色、数组位置、宿主转过、`local`、标签自己的 fill）；ec4 写法的 rect。
+- **定位** 3 个：px、%、center / middle、right / bottom 的 px 与 %、left 与 right 都写、`'auto'`、shape 有偏移、带描边的圆；组（`'all'`、`'raw'`、转过的组两种 bounding、嵌套、带尺寸的组里孩子相对它定位、空组）；变换（转、带 origin 的缩放、拉伸的圆、转过的文字、skew、转过的组里转过的孩子、anchor、`'all'` / `'raw'` 下定位的转过的 rect）。
+- **次序与标志** 4 个：一个柱状系列加八个元素（默认 z 0、z 1、z 2、z 2 z2 5、z 3 带标签、z -1、zlevel 1、z 10 的文字）；silent、invisible、ignore（组连孩子）、cursor、draggable、name 与 info、silent 组的孩子；compoundPath 抛错；预处理器的两种形式。
+- **合并** 2 个：merge 只改 style（shape 保留）、replace 换类型、remove、新增、删组、按名字映射、无 id 无名按下标落到第一个元素上、notMerge；right 顶掉 left、% 的 top 加转角、resize。
+- **事件** 1 个：十步——点击（自己的句柄与图表事件）、组里的孩子（冒泡到组）、返回真值（没有图表事件）、silent 的透过去、invisible 的照样命中、ignore 的命中不到、文字、悬停的 mouseover / mouseout。
+- **动画** 4 个（每个状态 13 个采样）：入场（root 与 style 的 enterFrom、`enterAnimation` 覆盖、默认、组带孩子）；更新（shape、style、x 三种 transition，没 transition 的直接跳，`updateAnimation` 覆盖）；重新定位的 `updateProps`；离场（leaveTo、`updateAnimation` 与不被读的 `leaveAnimation`、没有 leaveTo 的当即消失、组连孩子）。
+
+自检（任何一条不过就不写文件、退出 1）：T1 每个元素的全局矩阵由属性按 `getLocalTransform` 与父矩阵重算逐位一致、D1 显示列表按 (zlevel, z, z2) 有序；五十多条区分事实（`'#000'` 的两种来由、圆角出弧、一点的折线与 `percent: 0` 不建、没尺寸的图片是 0、富文本的片段框、`hv[1]` 抹对齐、inside / outside 的默认色、ec4 的 silent 标签、`'auto'` 不动、`'raw'` 的直接赋值、带尺寸的组、z 0 在坐标轴下、z 2 并列在系列下、z 3 的标签在系列下、zlevel 1 最后、info、silent 没有 eventData、compoundPath 抛错、只留第一个组件、merge 保留 shape、replace 换类型、删组连孩子、按名字映射、notMerge 重来、right 顶掉 left、resize 重排、冒泡、真值截断、silent 透过、invisible 命中、ignore 不中、悬停句柄、enterFrom、延迟、shape 的 enterFrom、无 transition 直接跳、rgba 插值、`updateAnimation`、离场留到动完、没有 leaveTo 当即消失、离场按 update 的 400 ms、全部停下）；两次生成逐字节一致；没有 `\u0000`（自动 id 里的 `\0` 写成 `~`）；JSON 能读回。
+
+### 测试
+
+`test.advchart.graphic`（新，注册在 `tytests.lpr`）：
+
+- **基准重放**（7 个）：形状、文字、定位、次序与标志、合并、事件、动画。每个状态逐个元素比：id、类型、父、名字、十一个变换键与全局矩阵、标志、cursor、draggable、z、组的尺寸、`getBoundingRect`、形状的每个键、整段 PathProxy 数据、样式、文字的每个片段（文字、锚点、字体、对齐、填充、描边、线宽、透明度）、textContent 的矩阵、innerTransformable、默认样式、样式、片段、盒子与 z、eventData 与 info；模型列表的 id、类型与 parentId；绘制列表里 graphic 与系列的先后（坐标轴前画的那些在 `'a'` 之前）；句柄调用（名字、类型、自己、目标）与图表事件（类型、组件、名字、info）；动画每个采样的元素集合与每个键。全部逐位比较。
+- **手写**（5 个）：预处理器的三种形式；转过的 rect 在画出来的地方命中；图片是带元素矩阵的单位方块图案；未知类型中断更新（前面的建了、后面的没建）；拖动（自己 draggable 的元素、按住孩子拖 `'horizontal'` 的组）。
+
+首跑：动画四个用例里只有入场不对——默认缓动按系列的 cubicOut 写了，globalDefault 是 cubicInOut；形状的 `enterFrom` / `leaveTo` 上游原样留在元素的 shape 里（快照比较改成对象按 JSON 比）。之后全部逐位对上。另把渐进渲染的那条绘制路径也让它跳过 `GfxUnder`。
+
+本批按规矩只跑了新套件和直接碰到的套件，全部通过：`TAdvChartGraphicTest`（12）、`TAdvChartPaintTest`（15）、`TAdvChartHitTest`（12）、`TAdvChartMouseEventsOracleTest`（3）、`TAdvChartHandlerWiringOracleTest`（9）、`TAdvChartMediaTest`（10）、`TAdvChartPaletteFillTest`（6）、`TAdvChartOptionMergeTest`（15）、`TAdvChartAnimMergeTest`（6）、`TAdvChartLegendScrollTest`（10）、`TAdvChartLegendActTest`（8）、`TAdvChartSelectOracleTest`（11）、`TAdvChartExportLoadingTest`（15）、`TAdvChartVisualMapInteractOracleTest`（1）、`TAdvChartVisualMapInteractTest`（6）、`TAdvChartChordTest`（9）、`TAdvChartRichTextEngineOracleTest`（1）、`TAdvChartRichWiringOracleTest`（14）、`TAdvChartTextStyleOracleTest`（4）、`TAdvChartProgressiveTest`（8）、`TAdvChartProgressiveOracleTest`（1）、`TAdvChartAnimEnterTest`（13）。全量套件与变异轮留到里程碑（C6–C13）末尾；变异候选列在会话草稿 `s157.md.candidates.md`。
+
+### 推迟与偏差
+
+- **clipPath**、元素上的 **tooltip**、**keyframeAnimation**（D6）、`during`、`extra` 不做；`style.legacy` 只认真假。
+- **拖动**只平移：上游 `drift` 之后 `decomposeTransform` 把整个矩阵重新分解（转角、缩放的末位可能变），端口只把指针的位移经父矩阵的逆加到 x / y 上；`ondrag*` 句柄与拖动事件不发。
+- `compoundPath`、`path`、未知类型、父节点不在：上游抛错，端口停在那里、`Error` 记下上游那句话，不抛。删除一个不存在的 id 上游也抛错（`transitionInnerStore(undefined)`），端口什么都不做。`notMerge` 清旧元素时上游用每个元素最后一次的选项取离场配置，端口不带元素覆盖。
+- **z 映射成整数**：`zlevel × 100000 + round(z)`、`round(z2)`，小数 z 会并列；zlevel > 0 的元素仍画在标题和提示框下面。**坐标轴前后的分界只看 z**：z ≤ 0（zlevel 0）一律在坐标轴下，上游 z 0 而 z2 大于坐标轴标签 z2 的会在标签上面。
+- 变换下的绘制：路径的点经矩阵（三次曲线精确），线宽与虚线乘 `√|det|`（非均匀缩放下上游的笔是椭圆），局部渐变的两端经矩阵（径向半径乘 `√|det|`）；文字按矩阵的转角和 `√|det|` 画（斜切、非均匀缩放的文字画成均匀的）；命中按采样轮廓与非零规则，描边按 `max(线宽, 5)` 的一半放宽。
+- 图片：只认 `data:` URL（§140 的规则）；没写宽高时布局按上游首帧的 0，绘制按解码后的原尺寸（浏览器加载完以后的样子）；`sx / sy / sWidth / sHeight` 裁剪不做。
+- 文字的渐变 / 图案填充按上游的 `getFill` 当 `'#000'`；`backgroundColor` 只认颜色串。
+- `textConfig` 的 `autoOverflowArea` 与 `layoutRect` 不读。
+
+### 落地
+
+- `source/tyControls.AdvChart.GfxEl.pas`、`source/tyControls.AdvChart.Graphic.pas`（新，进 `tycontrols.lpk` 与 `tycontrols.pas`）。
+- `source/tyControls.AdvChart.Paint.pas`：`ctkGraphic`、`GfxUnder`、图案的整矩阵。`Render.pas`：元素矩阵的图案、跳过 `GfxUnder`。`Events.pas`：元素句柄。`Handlers.pas`：`Info`。`Media.pas`：预处理器。
+- `source/tyControls.AdvanceChart.pas`：上面「控件」一条的全部。
+- `tools/advchart-oracle/graphic.js`、`tests/fixtures/advchart-graphic.json`、`tests/test.advchart.graphic.pas`（新，注册在 `tytests.lpr`）。
+- §130 在原处标注。没有新主题键、新度量或新资源串。

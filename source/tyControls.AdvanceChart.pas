@@ -66,6 +66,7 @@ uses
   tyControls.AdvChart.Polar, tyControls.AdvChart.PolarBar,
   tyControls.AdvChart.Single, tyControls.AdvChart.ThemeRiver,
   tyControls.AdvChart.Chord,
+  tyControls.AdvChart.GfxEl, tyControls.AdvChart.Graphic,
   fpjson, contnrs, tyControls.SubPixel;
 
 const
@@ -741,6 +742,25 @@ type
     FVmLive: array of TTyVmLive;
     FVmIndBag, FVmLabBag: array of TTyAnimBag;
     FVmAnim: TTyAnimation;
+    { THE GRAPHIC COMPONENT [Batch 122]: its model (the flattened element
+      list and the options pending for the view), its view (the elements by
+      id), the view's own animation driver; a fresh option's init still to
+      run; a render pending (an update, a new model); the size it was
+      placed at; and the last build's paint elements, each with the element
+      it came from (a textContent's own) -- the list's first entries, and
+      the ones under the axes painted before them }
+    FGfxModel: TTyGfxModel;
+    FGfxView: TTyGfxView;
+    FGfxAnim: TTyAnimation;
+    FGfxFresh, FGfxPending: Boolean;
+    FGfxW, FGfxH: Double;
+    FGfxPaint: array of TTyChartElement;
+    FGfxPaintEl: TTyGfxElArray;
+    FGfxUnder: TTyPaintList;
+    { a draggable element being dragged: its id and the last point }
+    FGfxDragOn: Boolean;
+    FGfxDragId: string;
+    FGfxDragX, FGfxDragY: Integer;
     FVmRangeHas: array of Boolean;
     FVmRange0, FVmRange1: TTyDoubleArray;
     FVmSel: TTyStringArray;
@@ -1918,6 +1938,28 @@ type
     procedure EventDblClick(AX, AY: Integer);
     procedure EventContextMenu(AX, AY: Integer);
     procedure EventLeave(AX, AY: Integer);
+    { ---- the graphic component [Batch 122] ---- }
+    { a merge's report: the model's optionUpdated (or a new model, or none) }
+    procedure GfxPass(const AReport: TTyMergeReport);
+    { a fresh option: a new model from the tree }
+    procedure GfxInitFromTree;
+    { the model's list into the option tree, as getOption shows it }
+    procedure GfxWriteBack;
+    function GfxAnimSettings: TTyGfxAnimSettings;
+    { the view rendered (an update pending) or placed (a new size), made
+      ready, and turned into paint elements }
+    procedure GfxBuild(APPI: Integer);
+    { the elements under the axes }
+    procedure GfxPaintUnder(APainter: TTyPainter);
+    function GfxLive: Boolean;
+    { an element's handlers, bubbling up its groups: True when one asked to
+      stop (no chart event follows) }
+    function GfxElementEvent(const AType: string; const ATarget: TTyChartEventTarget;
+      AX, AY: Integer): Boolean;
+    { zrender's Draggable: a press on a draggable element (or one under a
+      draggable group) starts a drag, every move drifts it, a release ends it }
+    procedure GfxDragStart(const ATarget: TTyChartEventTarget; AX, AY: Integer);
+    procedure GfxDragMove(AX, AY: Integer);
     { ---- element states and the selection [Batch 88] ---- }
     function StKindOf(ASlot: Integer): TTyStKind;
     function StSeriesNode(ASeriesIndex: Integer): TJSONObject;
@@ -2429,6 +2471,14 @@ type
     function SankeySolved(ASeriesIndex: Integer): TTySankeySolved;
     { the solved chord, for a test to read (Valid False: none) [Batch 120] }
     function ChordSolved(ASeriesIndex: Integer): TTyChordSolved;
+    { THE GRAPHIC COMPONENT, for a test to read [Batch 122]: the view (its
+      elements by id), the model (nil: none), the last build's paint
+      elements and the element each came from }
+    function GraphicView: TTyGfxView;
+    function GraphicModel: TTyGfxModel;
+    function GraphicPaintCount: Integer;
+    function GraphicPaintElement(AIndex: Integer): TTyChartElement;
+    function GraphicPaintSource(AIndex: Integer): TTyGfxEl;
     { ---- the drill-downs [Batch 115] ---- }
     { upstream's sunburstRootToNode on the sunburst ASeriesIndex: the view
       root becomes ARow (a row of its tree; 0 the root) -- what a click on a
@@ -2722,6 +2772,12 @@ begin
   FAnimNow := NaN;
   FAnimMode := camAuto;
   FProgStepCost := NaN;
+  FGfxAnim := TTyAnimation.Create;
+  FGfxView := TTyGfxView.Create;
+  FGfxView.Animation := FGfxAnim;
+  FGfxUnder := TTyPaintList.Create;
+  FGfxW := NaN;
+  FGfxH := NaN;
 end;
 
 destructor TTyAdvanceChart.Destroy;
@@ -2764,6 +2820,12 @@ begin
   LoadDrop;
   FreeAndNil(FLoadAnim);
   FreeAndNil(FAnimOldBuild);
+  { THE ELEMENTS BEFORE THEIR DRIVER [Batch 122] }
+  FGfxPaintEl := nil;
+  FreeAndNil(FGfxView);
+  FreeAndNil(FGfxModel);
+  FreeAndNil(FGfxAnim);
+  FreeAndNil(FGfxUnder);
   inherited Destroy;
 end;
 
@@ -2947,7 +3009,10 @@ begin
   FAnimHasPayload := False;
   { the media are asked at the control's size [Batch 107] }
   MediaViewSize;
+  { a new graphic model, from the fresh tree [Batch 122] }
+  FGfxFresh := True;
   FOption.SetOptionText(AValue, AReplace, @NotMergePass);
+  if FGfxFresh then GfxInitFromTree;
   { new axis models and views: nothing kept from the last render
     [Batch 101] }
   FAxisMemory.Clear;
@@ -3150,6 +3215,8 @@ end;
 procedure TTyAdvanceChart.NotMergePass(const AReport: TTyMergeReport);
 var si, s: Integer;
 begin
+  { the graphic model's optionUpdated [Batch 122] }
+  GfxPass(AReport);
   si := TyMergeSlotsIndex(AReport, 'series');
   if si >= 0 then
     for s := 0 to High(AReport.Slots[si].Brand) do
@@ -5263,6 +5330,11 @@ begin
     LazyUpdateDone;
   end;
 
+  { THE GRAPHIC COMPONENT, against the canvas; its elements at z 0 and
+    under go beneath the axes, as upstream's group joins the root first
+    [Batch 122] }
+  GfxBuild(APPI);
+  GfxPaintUnder(APainter);
   { WHILE THEIR groupTransition RUNS the axes are the dynamic layer's, as
     the series are [Batch 96] -- an export draws them at rest [Batch 106] }
   if FExporting or not AxesDynamic then PaintAxes(APainter, APPI, AMeasurer, False);
@@ -14876,14 +14948,20 @@ var
   specs: TTyLabelSpecArray;
   itemSpecs: TTyLabelSpecTable;
   pk: Integer;
+  gfxCount: Integer;
 begin
   Result := 0;
+  gfxCount := 0;
   { ONE LIST FOR EVERY SERIES, not one per series: the ordering rule is (Z, Z2,
     insertion) ACROSS the chart, and a list per series would order each one
     against itself and leave the between-series order to the loop. }
   if FPaintList = nil then FPaintList := TTyPaintList.Create
   else FPaintList.Clear;
   list := FPaintList;
+  { THE GRAPHIC ELEMENTS FIRST: at an equal z they are under every series,
+    the component's group joining the root before the series' [Batch 122] }
+  for i := 0 to High(FGfxPaint) do list.Add(FGfxPaint[i]);
+  gfxCount := Length(FGfxPaint);
   { a new list: the incremental layer holds none of it [Batch 119] }
   FProgLayerOk := False;
   { BEFORE THE EARLY EXIT, not after -- and not because a stale list would
@@ -14894,6 +14972,7 @@ begin
     to tell "there is nothing there" from "there is nothing yet". }
   FPaintListPPI := APPI;
   FPaintListValid := True;
+  Result := gfxCount;
   { A NEW JITTER PASS: the seed again and no points placed [Batch 110] }
   if FJitter = nil then FJitter := TTyJitterPass.Create;
   FJitter.Reset;
@@ -15339,7 +15418,7 @@ begin
       if n > 0 then ViewDrew(cvDataZoom);
       Inc(drawn, n);
     end;
-    Result := drawn;
+    Result := drawn + gfxCount;
   end;
 end;
 
@@ -16572,7 +16651,8 @@ begin
   begin
     idx := AList.PaintOrder(i);
     el := AList.Element(idx);
-    if el.Ignore or el.ProgHidden then Continue;
+    { a graphic element under the axes is painted before them [Batch 122] }
+    if el.Ignore or el.ProgHidden or el.GfxUnder then Continue;
     if el.ProgChunk > 0 then
     begin
       if not blitted then
@@ -17803,7 +17883,7 @@ end;
 function TTyAdvanceChart.EventTargetAt(AX, AY: Integer): TTyChartEventTarget;
 const
   cKindWord: array[TTyChartTargetKind] of string = ('series', 'markPoint',
-    'markLine', 'markArea', 'legend', 'legend', 'legend');
+    'markLine', 'markArea', 'legend', 'legend', 'legend', 'graphic');
 var
   i, k, g, a, q, idx, slot, nth: Integer;
   lay: TTyTitleLayout;
@@ -17820,6 +17900,7 @@ var
   kind: TTyMarkerKind;
   mk: TTyMkBlock;
   nm, mainT: string;
+  gel: TTyGfxEl;
 
   function Inside(const AR: TTyRectF): Boolean;
   begin
@@ -18043,6 +18124,33 @@ begin
             Result.Model.SubType := 'scroll';
           Result.Model.Index := d.ComponentIndex;
         end;
+      ctkGraphic:
+        begin
+          { [Batch 122] a graphic element: its handlers by its id (a label's
+            are its host's), and the event data findEventDispatcher finds --
+            its own, else the nearest ancestor's }
+          Result.HdKind := 8;
+          Result.HdRow := d.DataIndex;
+          if (d.DataIndex >= 0) and (d.DataIndex <= High(FGfxPaintEl)) then
+          begin
+            gel := FGfxPaintEl[d.DataIndex];
+            if gel.Host <> nil then gel := gel.Host;
+            Result.HdName := gel.Id;
+            while (gel <> nil) and not gel.HasEventData do gel := gel.Parent;
+            if gel <> nil then
+            begin
+              Result.HasData := True;
+              Result.Params.ComponentType := 'graphic';
+              Result.Params.ComponentIndex := d.ComponentIndex;
+              Result.Params.Name := gel.EventName;
+              if gel.Info <> nil then Result.Params.Info := gel.Info.AsJSON;
+              Result.Model.Valid := True;
+              Result.Model.MainType := 'graphic';
+              Result.Model.Index := d.ComponentIndex;
+              Result.Model.Id := FOption.ComponentId('graphic', d.ComponentIndex);
+            end;
+          end;
+        end;
       ctkLegendSelector, ctkLegendPager:
         begin
           { [Batch 98] no ECData: an identity and a handler, no event }
@@ -18171,10 +18279,14 @@ end;
   a move to the new one, an over when it changed -- each only where the
   target carries data }
 procedure TTyAdvanceChart.EventMove(AX, AY: Integer);
-var t: TTyChartEventTarget;
+var
+  t: TTyChartEventTarget;
+  cancel: Boolean;
 begin
   FEvLastX := AX;
   FEvLastY := AY;
+  { a graphic element dragged [Batch 122] }
+  GfxDragMove(AX, AY);
   { zrender #6198: a hovered element an update removed (a visualMap view
     rebuilt) is looked for again where it was hovered [Batch 116] }
   if (FEvHover.Id <> 0) and (FEvHover.HdKind = 7)
@@ -18186,21 +18298,25 @@ begin
   begin
     { the element's own mouseout, bubbled [Batch 116] }
     VmElementEvent('mouseout', FEvHover, AX, AY);
+    { a graphic element's handlers; a true answer stops the rest [Batch 122] }
+    cancel := GfxElementEvent('mouseout', FEvHover, AX, AY);
     { echarts' own mouseout first: the dispatcher leaves emphasis [Batch 88] }
-    StHoverOut(FEvHover);
-    if FEvHover.HasData then EmitChartEvent('mouseout', FEvHover, AX, AY);
+    if not cancel then StHoverOut(FEvHover);
+    if FEvHover.HasData and not cancel then EmitChartEvent('mouseout', FEvHover, AX, AY);
     { the visualMaps' zr.on('mouseout') }
     VmZrMouseOut;
   end;
   { the element's mousemove, then zrender's Draggable [Batch 116] }
   VmElementEvent('mousemove', t, AX, AY);
+  cancel := GfxElementEvent('mousemove', t, AX, AY);
   VmDragMove(AX, AY);
-  if t.HasData then EmitChartEvent('mousemove', t, AX, AY);
+  if t.HasData and not cancel then EmitChartEvent('mousemove', t, AX, AY);
   if (t.Id <> 0) and (t.Id <> FEvHover.Id) then
   begin
     VmElementEvent('mouseover', t, AX, AY);
-    StHoverOver(t);
-    if t.HasData then EmitChartEvent('mouseover', t, AX, AY);
+    cancel := GfxElementEvent('mouseover', t, AX, AY);
+    if not cancel then StHoverOver(t);
+    if t.HasData and not cancel then EmitChartEvent('mouseover', t, AX, AY);
     VmZrMouseOver(t);
   end;
   FEvHover := t;
@@ -18222,6 +18338,8 @@ begin
   FEvDownArmed := True;
   FEvDownX := AX;
   FEvDownY := AY;
+  GfxDragStart(t, AX, AY);
+  if GfxElementEvent('mousedown', t, AX, AY) then Exit;
   if t.HasData then EmitChartEvent('mousedown', t, AX, AY);
 end;
 
@@ -18236,7 +18354,9 @@ begin
   FEvUpId := t.Id;
   { zrender's Draggable ends before echarts' own handlers [Batch 116] }
   if AButton = mbLeft then VmDragEnd;
-  if t.HasData then EmitChartEvent('mouseup', t, AX, AY);
+  FGfxDragOn := False;
+  if not GfxElementEvent('mouseup', t, AX, AY) and t.HasData then
+    EmitChartEvent('mouseup', t, AX, AY);
   if AButton <> mbLeft then
   begin
     VmApplyStates;
@@ -18258,6 +18378,13 @@ begin
   { [Batch 98] the selector's and the pager's own onclick }
   else if t.HdKind = 5 then LegendSelectorClick(t)
   else if t.HdKind = 6 then LegendPagerClick(t);
+  { A GRAPHIC ELEMENT'S onclick, up its groups; a true answer stops
+    everything at the zrender root [Batch 122] }
+  if GfxElementEvent('click', t, AX, AY) then
+  begin
+    VmApplyStates;
+    Exit;
+  end;
   { ECHARTS' OWN CLICK HANDLER FIRST: an item click dispatches select or
     unselect, whatever selectedMode says [Batch 88] }
   StClickSelect(t);
@@ -18269,6 +18396,7 @@ procedure TTyAdvanceChart.EventDblClick(AX, AY: Integer);
 var t: TTyChartEventTarget;
 begin
   t := EventTargetAt(AX, AY);
+  if GfxElementEvent('dblclick', t, AX, AY) then Exit;
   if t.HasData then EmitChartEvent('dblclick', t, AX, AY);
 end;
 
@@ -18276,6 +18404,7 @@ procedure TTyAdvanceChart.EventContextMenu(AX, AY: Integer);
 var t: TTyChartEventTarget;
 begin
   t := EventTargetAt(AX, AY);
+  if GfxElementEvent('contextmenu', t, AX, AY) then Exit;
   if t.HasData then EmitChartEvent('contextmenu', t, AX, AY);
 end;
 
@@ -18283,14 +18412,18 @@ end;
   it was seen, then globalout with nothing -- and what was hovered is
   remembered, so coming back onto it is no over }
 procedure TTyAdvanceChart.EventLeave(AX, AY: Integer);
-var none: TTyChartEventTarget;
+var
+  none: TTyChartEventTarget;
+  cancel: Boolean;
 begin
+  cancel := False;
   if FEvHover.Id <> 0 then
   begin
     VmElementEvent('mouseout', FEvHover, AX, AY);
-    StHoverOut(FEvHover);
+    cancel := GfxElementEvent('mouseout', FEvHover, AX, AY);
+    if not cancel then StHoverOut(FEvHover);
   end;
-  if (FEvHover.Id <> 0) and FEvHover.HasData then
+  if (FEvHover.Id <> 0) and FEvHover.HasData and not cancel then
     EmitChartEvent('mouseout', FEvHover, AX, AY);
   { zr-level: fired with or without a target [Batch 116] }
   VmZrMouseOut;
@@ -26046,7 +26179,7 @@ end;
 function TTyAdvanceChart.TooltipShownWhich: string;
 const
   cMk: array[TTyChartTargetKind] of string = ('item', 'markPoint', 'markLine',
-    'markArea', 'legend', 'legend', 'legend');
+    'markArea', 'legend', 'legend', 'legend', 'graphic');
 var block: TTyTooltipBlock;
 begin
   Result := '';
@@ -26945,6 +27078,8 @@ end;
 procedure TTyAdvanceChart.AnimDropAll;
 begin
   if FAnimSet <> nil then FAnimSet.Clear;
+  { the graphic elements at their last frames [Batch 122] }
+  if FGfxView <> nil then FGfxView.Snap;
   AxisAnimDrop;
   { a treemap's drill-down snaps with the rest [Batch 115] }
   TmAnimDropAll;
@@ -27604,7 +27739,8 @@ end;
 
 procedure TTyAdvanceChart.AnimArmTimer;
 begin
-  if (FAnimLive or PtrLive or LegLive or LoadLive or VmLive_ or ProgLive) and IsNan(FAnimNow)
+  if (FAnimLive or PtrLive or LegLive or LoadLive or VmLive_ or ProgLive or GfxLive)
+    and IsNan(FAnimNow)
     and not (csDesigning in ComponentState) then
   begin
     if FAnimTimer = nil then
@@ -27669,6 +27805,15 @@ begin
   begin
     FLoadAnim.Update(ANowMs);
     InvalidateFrame;
+  end;
+  { the graphic elements' transitions: frames of the static layer
+    [Batch 122] }
+  if GfxLive then
+  begin
+    FGfxAnim.Update(ANowMs);
+    DropStatic;
+    InvalidateFrame;
+    if not GfxLive and not FAnimLive then AnimArmTimer;
   end;
   { the visualMap indicator's slide: a frame of the static layer [Batch 116] }
   if VmLive_ then
@@ -28274,6 +28419,384 @@ begin
   finally
     FAnimWindow := False;
   end;
+end;
+
+{ ==================== the graphic component [Batch 122] ==================== }
+
+procedure TTyAdvanceChart.GfxWriteBack;
+var
+  node: TJSONData;
+  i: Integer;
+begin
+  if (FGfxModel = nil) or (FOption = nil) then Exit;
+  node := FOption.ComponentAt('graphic', 0);
+  if not (node is TJSONObject) then Exit;
+  i := TJSONObject(node).IndexOfName('elements');
+  if i >= 0 then TJSONObject(node).Items[i] := FGfxModel.Elements.Clone
+  else TJSONObject(node).Add('elements', FGfxModel.Elements.Clone);
+end;
+
+procedure TTyAdvanceChart.GfxInitFromTree;
+var node: TJSONData;
+begin
+  FGfxFresh := False;
+  { A NEW MODEL: the view clears the old one's elements at its next
+    render (GraphicView's _lastGraphicModel) }
+  FGfxView.ForgetModel;
+  FreeAndNil(FGfxModel);
+  FGfxPending := True;
+  if FOption = nil then Exit;
+  node := FOption.ComponentAt('graphic', 0);
+  if not (node is TJSONObject) then Exit;
+  FGfxModel := TTyGfxModel.Create;
+  FGfxModel.OptionUpdated(TJSONObject(node).Find('elements'), True);
+  GfxWriteBack;
+end;
+
+procedure TTyAdvanceChart.GfxPass(const AReport: TTyMergeReport);
+var
+  si: Integer;
+  newOpt: TJSONObject;
+begin
+  if FGfxFresh then
+  begin
+    GfxInitFromTree;
+    Exit;
+  end;
+  si := TyMergeSlotsIndex(AReport, 'graphic');
+  if (si < 0) or (Length(AReport.Slots[si].Fate) = 0) then Exit;
+  case AReport.Slots[si].Fate[0] of
+    mfNew:
+      GfxInitFromTree;
+    mfMerged:
+      begin
+        if FGfxModel = nil then
+        begin
+          GfxInitFromTree;
+          Exit;
+        end;
+        newOpt := nil;
+        if Length(AReport.Slots[si].NewOpt) > 0 then newOpt := AReport.Slots[si].NewOpt[0];
+        if newOpt <> nil then
+          FGfxModel.OptionUpdated(newOpt.Find('elements'), False)
+        else
+          FGfxModel.OptionUpdated(nil, False);
+        GfxWriteBack;
+        FGfxPending := True;
+      end;
+    mfRemoved, mfHole:
+      begin
+        FGfxView.ForgetModel;
+        FreeAndNil(FGfxModel);
+        FGfxPending := True;
+      end;
+  end;
+end;
+
+{ isAnimationEnabled and getShallow over the graphic model: its own option,
+  else the root's, else globalDefault }
+function TTyAdvanceChart.GfxAnimSettings: TTyGfxAnimSettings;
+var
+  node, root: TJSONObject;
+  d: TJSONData;
+
+  function Get(const AKey: string): TJSONData;
+  begin
+    Result := nil;
+    if node <> nil then Result := node.Find(AKey);
+    if ((Result = nil) or (Result.JSONType = jtNull)) and (root <> nil) then
+      Result := root.Find(AKey);
+    if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
+  end;
+
+  function Num(const AKey: string; ADefault: Double): Double;
+  begin
+    d := Get(AKey);
+    if (d <> nil) and (d.JSONType = jtNumber) then Result := d.AsFloat
+    else Result := ADefault;
+  end;
+
+  function Str(const AKey, ADefault: string): string;
+  begin
+    d := Get(AKey);
+    if (d <> nil) and (d.JSONType = jtString) then Result := d.AsString
+    else Result := ADefault;
+  end;
+
+begin
+  Result := Default(TTyGfxAnimSettings);
+  node := nil;
+  root := nil;
+  if FOption <> nil then
+  begin
+    d := FOption.ComponentAt('graphic', 0);
+    if d is TJSONObject then node := TJSONObject(d);
+    if FOption.Root is TJSONObject then root := TJSONObject(FOption.Root);
+  end;
+  Result.Enabled := AnimAllowed;
+  d := nil;
+  if node <> nil then d := node.Find('animation');
+  if (d = nil) or (d.JSONType = jtNull) then
+  begin
+    if root <> nil then d := root.Find('animation') else d := nil;
+    { the root's 'auto' by default; a written null is no animation }
+    if d = nil then
+    else if d.JSONType = jtNull then Result.Enabled := False
+    else if (d.JSONType = jtBoolean) and not d.AsBoolean then Result.Enabled := False
+    else if (d.JSONType = jtNumber) and (d.AsFloat = 0) then Result.Enabled := False
+    else if (d.JSONType = jtString) and (d.AsString = '') then Result.Enabled := False;
+  end
+  else if ((d.JSONType = jtBoolean) and not d.AsBoolean)
+    or ((d.JSONType = jtNumber) and (d.AsFloat = 0))
+    or ((d.JSONType = jtString) and (d.AsString = '')) then
+    Result.Enabled := False;
+  Result.Duration := Num('animationDuration', 1000);
+  { globalDefault's: an easing of cubicInOut both ways (a series' own
+    defaults say cubicOut, a component's do not) }
+  Result.Easing := Str('animationEasing', 'cubicInOut');
+  Result.Delay := Num('animationDelay', 0);
+  Result.DurationUpdate := Num('animationDurationUpdate', 500);
+  Result.EasingUpdate := Str('animationEasingUpdate', 'cubicInOut');
+  Result.DelayUpdate := Num('animationDelayUpdate', 0);
+end;
+
+function TTyAdvanceChart.GfxLive: Boolean;
+begin
+  Result := (FGfxAnim <> nil) and (FGfxAnim.ClipCount > 0);
+end;
+
+function GfxImageSize(const ASource: string; out AW, AH: Double): Boolean;
+var bmp: TBGRABitmap;
+begin
+  bmp := TyPatternImage(ASource);
+  Result := (bmp <> nil) and (bmp.Width > 0) and (bmp.Height > 0);
+  if Result then
+  begin
+    AW := bmp.Width;
+    AH := bmp.Height;
+  end
+  else
+  begin
+    AW := 0;
+    AH := 0;
+  end;
+end;
+
+procedure TTyAdvanceChart.GfxBuild(APPI: Integer);
+var
+  scale, w, h, z, zl: Double;
+  meas: ITyTextMeasurer;
+  node, d: TJSONData;
+  ground: TTyGfxGround;
+  ctx: TTyGfxPaintCtx;
+  n: Integer;
+
+  procedure Add(AEl: TTyGfxEl; ASilent: Boolean);
+  var pe: TTyChartElement;
+  begin
+    if not TyGfxPaintElement(AEl, meas, ctx, pe) then Exit;
+    pe.Silent := ASilent;
+    pe.Datum := TyChartComponentDatum(ctkGraphic, 0, n);
+    { zlevel over z, as zrender sorts; z and z2 whole }
+    pe.Z := Round(AEl.ZLevel) * 100000 + Round(AEl.Z);
+    pe.Z2 := Round(AEl.Z2);
+    pe.GfxUnder := (AEl.ZLevel = 0) and (AEl.Z <= 0);
+    SetLength(FGfxPaint, n + 1);
+    SetLength(FGfxPaintEl, n + 1);
+    FGfxPaint[n] := pe;
+    FGfxPaintEl[n] := AEl;
+    AEl.Serial := n;
+    Inc(n);
+  end;
+
+  procedure Walk(AEl: TTyGfxEl; ASilent: Boolean);
+  var i: Integer; s: Boolean;
+  begin
+    if AEl.Ignore then Exit;
+    s := ASilent or AEl.Silent;
+    if AEl.IsGroup then
+    begin
+      for i := 0 to High(AEl.Children) do Walk(AEl.Children[i], s);
+      Exit;
+    end;
+    Add(AEl, s);
+    if (AEl.TextContent <> nil) and not AEl.TextContent.Ignore then
+      Add(AEl.TextContent, s or AEl.TextContent.Silent);
+  end;
+
+begin
+  FGfxPaint := nil;
+  FGfxPaintEl := nil;
+  if FGfxView = nil then Exit;
+  FGfxView.FreeGone;
+  if APPI <= 0 then APPI := 96;
+  scale := APPI / 96;
+  w := (FLastRect.Right - FLastRect.Left) / scale;
+  h := (FLastRect.Bottom - FLastRect.Top) / scale;
+  { the layout measures in css px }
+  meas := NewTextMeasurer(96);
+  if FGfxPending then
+  begin
+    FGfxPending := False;
+    z := NaN;
+    zl := NaN;
+    node := nil;
+    if FOption <> nil then node := FOption.ComponentAt('graphic', 0);
+    if node is TJSONObject then
+    begin
+      d := TJSONObject(node).Find('z');
+      if (d <> nil) and (d.JSONType = jtNumber) then z := d.AsFloat;
+      d := TJSONObject(node).Find('zlevel');
+      if (d <> nil) and (d.JSONType = jtNumber) then zl := d.AsFloat;
+    end;
+    FGfxView.Render(FGfxModel, w, h, meas, GfxAnimSettings, z, zl);
+    FGfxW := w;
+    FGfxH := h;
+    { the flush that steps every new clip at the setOption instant }
+    FGfxAnim.Update(AnimClock, True);
+    AnimArmTimer;
+  end
+  else if (w <> FGfxW) or (h <> FGfxH) then
+  begin
+    FGfxView.Place(w, h, meas);
+    FGfxW := w;
+    FGfxH := h;
+  end;
+  MarkerGround(ground.Background, ground.IsDark);
+  FGfxView.Prepare(meas, ground);
+  ctx := Default(TTyGfxPaintCtx);
+  ctx.Scale := scale;
+  ctx.HasInk := True;
+  ctx.Ink := TTyChartColor(ActiveController.Model.ResolveStyle(GetStyleTypeKey,
+    StyleClass, [tysNormal]).TextColor);
+  ctx.ImageSize := @GfxImageSize;
+  n := 0;
+  Walk(FGfxView.Root, False);
+end;
+
+procedure TTyAdvanceChart.GfxPaintUnder(APainter: TTyPainter);
+var
+  i: Integer;
+  el: TTyChartElement;
+begin
+  FGfxUnder.Clear;
+  for i := 0 to High(FGfxPaint) do
+    if FGfxPaint[i].GfxUnder then FGfxUnder.Add(FGfxPaint[i]);
+  for i := 0 to FGfxUnder.Count - 1 do
+  begin
+    el := FGfxUnder.Element(FGfxUnder.PaintOrder(i));
+    if not el.Ignore then TyRenderElement(APainter, el);
+  end;
+end;
+
+function TTyAdvanceChart.GfxElementEvent(const AType: string;
+  const ATarget: TTyChartEventTarget; AX, AY: Integer): Boolean;
+var
+  el: TTyGfxEl;
+  spec: string;
+  ev: TTyChartElementEvent;
+begin
+  Result := False;
+  if (ATarget.HdKind <> 8) or (FGfxView = nil) then Exit;
+  el := FGfxView.Find(ATarget.HdName);
+  if el = nil then Exit;
+  ev := Default(TTyChartElementEvent);
+  ev.EventType := AType;
+  ev.TargetId := el.Id;
+  ev.OffsetX := AX;
+  ev.OffsetY := AY;
+  { up the groups to the root: the handler, then the parent unless the
+    handler stopped it }
+  while (el <> nil) and (el <> FGfxView.Root) do
+  begin
+    spec := el.Handlers.Values['on' + AType];
+    if spec <> '' then
+    begin
+      ev.Id := el.Id;
+      ev.Name := el.Name;
+      ev.Handler := spec;
+      if TyChartRunElementHandler(spec, Self, ev) then Result := True;
+    end;
+    if Result then Break;
+    el := el.Parent;
+  end;
+end;
+
+procedure TTyAdvanceChart.GfxDragStart(const ATarget: TTyChartEventTarget;
+  AX, AY: Integer);
+var el: TTyGfxEl;
+begin
+  FGfxDragOn := False;
+  if (ATarget.HdKind <> 8) or (FGfxView = nil) then Exit;
+  el := FGfxView.Find(ATarget.HdName);
+  while (el <> nil) and (el <> FGfxView.Root) and (el.Draggable = '') do el := el.Parent;
+  if (el = nil) or (el = FGfxView.Root) then Exit;
+  FGfxDragOn := True;
+  FGfxDragId := el.Id;
+  FGfxDragX := AX;
+  FGfxDragY := AY;
+end;
+
+procedure TTyAdvanceChart.GfxDragMove(AX, AY: Integer);
+var
+  el: TTyGfxEl;
+  dx, dy, scale, vx, vy: Double;
+  inv: TTyMat2D;
+begin
+  if not FGfxDragOn or (FGfxView = nil) then Exit;
+  el := FGfxView.Find(FGfxDragId);
+  if el = nil then
+  begin
+    FGfxDragOn := False;
+    Exit;
+  end;
+  if FPaintListPPI > 0 then scale := FPaintListPPI / 96 else scale := 1;
+  dx := (AX - FGfxDragX) / scale;
+  dy := (AY - FGfxDragY) / scale;
+  FGfxDragX := AX;
+  FGfxDragY := AY;
+  if (dx = 0) and (dy = 0) then Exit;
+  { Element.drift: 'horizontal' keeps y, 'vertical' keeps x }
+  if el.Draggable = 'horizontal' then dy := 0
+  else if el.Draggable = 'vertical' then dx := 0;
+  { the move in the parent's frame }
+  vx := dx;
+  vy := dy;
+  if (el.Parent <> nil) and el.Parent.HasTransform
+    and TyMatInvert(el.Parent.Transform, inv) then
+  begin
+    vx := inv[0] * dx + inv[2] * dy;
+    vy := inv[1] * dx + inv[3] * dy;
+  end;
+  el.X := el.X + vx;
+  el.Y := el.Y + vy;
+  DropStatic;
+  InvalidateFrame;
+end;
+
+function TTyAdvanceChart.GraphicView: TTyGfxView;
+begin
+  Result := FGfxView;
+end;
+
+function TTyAdvanceChart.GraphicModel: TTyGfxModel;
+begin
+  Result := FGfxModel;
+end;
+
+function TTyAdvanceChart.GraphicPaintCount: Integer;
+begin
+  Result := Length(FGfxPaint);
+end;
+
+function TTyAdvanceChart.GraphicPaintElement(AIndex: Integer): TTyChartElement;
+begin
+  Result := FGfxPaint[AIndex];
+end;
+
+function TTyAdvanceChart.GraphicPaintSource(AIndex: Integer): TTyGfxEl;
+begin
+  Result := FGfxPaintEl[AIndex];
 end;
 
 { ==================== export and loading [Batch 106] ==================== }

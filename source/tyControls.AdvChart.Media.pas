@@ -112,7 +112,8 @@ function TyMediaJsNumber(AData: TJSONData): Double;
 
 implementation
 
-uses tyControls.AdvChart.Data, tyControls.AdvChart.OptionMerge;
+uses tyControls.AdvChart.Data, tyControls.AdvChart.OptionMerge,
+  tyControls.AdvChart.Graphic;
 
 function JsTruthy(AData: TJSONData): Boolean;
 var v: Double;
@@ -184,6 +185,8 @@ begin
       if JsTruthy(q) then
       begin
         opt := OptionObject(o);
+        { the preprocessors run over a unit with a query [Batch 122] }
+        TyGraphicPreprocess(opt);
         if TyOptionHasDuplicateId(opt) then
         begin
           opt.Free;
@@ -227,6 +230,8 @@ begin
     if ARaw.Find('options') <> nil then ARaw.Delete('options');
     if ARaw.Find('media') <> nil then ARaw.Delete('media');
   end;
+  { THE PREPROCESSORS over the base: the graphic component's [Batch 122] }
+  TyGraphicPreprocess(ARaw);
 end;
 
 { ==================== applyMediaQuery ==================== }

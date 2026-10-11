@@ -84,6 +84,12 @@ type
     { `repeat || 'repeat'` as zrender hands it to createPattern }
     Repetition: string;
     X, Y, Rotation, ScaleX, ScaleY: Double;
+    { A WHOLE MATRIX instead of the five numbers, css px [Batch 122]: a
+      graphic image drawn through its element's transform. With UnitImage
+      the matrix places the image's unit square -- the renderer divides by
+      the decoded image's own size. }
+    HasMatrix, UnitImage: Boolean;
+    Matrix: TTyMat2D;
   end;
 
   { A FILL THAT IS AN OBJECT, for a renderer handed colours one per datum
@@ -130,7 +136,11 @@ type
     { [Batch 98] a legend's selector button (DataIndex the button) and its
       pager's page buttons (DataIndex 0 the previous, 1 the next): targets
       without ECData, so no chart mouse event names them }
-    ctkLegendSelector, ctkLegendPager);
+    ctkLegendSelector, ctkLegendPager,
+    { [Batch 122] a graphic component's element: ComponentIndex the
+      component, DataIndex the element's serial in the view's last build;
+      it has ECData's eventData, not a data index }
+    ctkGraphic);
 
   TTyChartDatumRef = record
     SeriesIndex: Integer;
@@ -673,6 +683,11 @@ type
     ProgSlot: Integer;
     ProgRow: Integer;
     ProgHidden: Boolean;
+    { A GRAPHIC ELEMENT UNDER THE AXES [Batch 122]: zlevel 0 and z 0 or
+      less, which upstream draws before the axes' z 0 (the component's
+      group joins the zrender root first). The list's renderer skips it;
+      the control paints it before the axes. Hit and ordered as any other. }
+    GfxUnder: Boolean;
   end;
 
   TTyPaintList = class

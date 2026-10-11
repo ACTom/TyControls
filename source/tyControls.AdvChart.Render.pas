@@ -767,7 +767,22 @@ var
         img := TyPatternImage(AElement.Style.FillPattern.Image);
         if img <> nil then
         begin
-          TyPatternMatrix(AElement.Style.FillPattern, pm);
+          if AElement.Style.FillPattern.HasMatrix then
+          begin
+            { the element's own matrix [Batch 122]: a unit square divided by
+              the image's size }
+            SetLength(pm, 6);
+            for gi := 0 to 5 do pm[gi] := AElement.Style.FillPattern.Matrix[gi];
+            if AElement.Style.FillPattern.UnitImage then
+            begin
+              pm[0] := pm[0] / img.Width;
+              pm[1] := pm[1] / img.Width;
+              pm[2] := pm[2] / img.Height;
+              pm[3] := pm[3] / img.Height;
+            end;
+          end
+          else
+            TyPatternMatrix(AElement.Style.FillPattern, pm);
           for gi := 0 to 5 do pm[gi] := pm[gi] * P.PPI / 96;
           P.FillPathPattern(img, AElement.Style.FillPattern.Repetition, pm, rule);
         end;
@@ -1115,7 +1130,8 @@ begin
     what the eye sees on top is what the pointer gets. }
   for i := 0 to AList.Count - 1 do
     if not AList.Element(AList.PaintOrder(i)).Ignore
-      and not AList.Element(AList.PaintOrder(i)).ProgHidden then
+      and not AList.Element(AList.PaintOrder(i)).ProgHidden
+      and not AList.Element(AList.PaintOrder(i)).GfxUnder then
       TyRenderElement(P, AList.Element(AList.PaintOrder(i)));
 end;
 
