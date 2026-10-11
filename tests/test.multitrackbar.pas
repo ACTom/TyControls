@@ -33,6 +33,7 @@ type
     function KeyShiftState: TShiftState; override;
   public
     HoldShift: Boolean;             // what KeyShiftState reports for Shift
+    HoldMouse: Boolean;             // ... and for the left mouse button
     Off: array of Boolean;          // thumb i disabled
     Colors: array of TColor;
     ThumbCls: array of string;
@@ -53,6 +54,8 @@ type
     function Key(AKey: Word; AShift: TShiftState = []): Word;
     { What the bar answers the form's CM_WANTSPECIALKEY for AKey. }
     function WantsKey(AKey: Word): PtrInt;
+    { The focus arriving, as the form announces it (CM_ENTER). }
+    procedure Enter;
     { The hint the application would show at (X, Y): CM_HINTSHOW with the control's own hint
       prefilled, as TApplication.ShowHintWindow does; ARect is the CursorRect it hands back. }
     function HintAt(X, Y: Integer; out ARect: TRect): string;
@@ -182,6 +185,7 @@ type
     procedure TestAKeyMovesNothingWhenEveryThumbIsDisabled;
     procedure TestADisabledBarIgnoresTheKeys;
     procedure TestTabWalksTheEnabledThumbsThenLeaves;
+    procedure TestEnteringFromTheKeyboardStartsAtTheNearEnd;
   end;
 
 implementation
@@ -253,6 +257,12 @@ end;
 function TMultiProbe.KeyShiftState: TShiftState;
 begin
   if HoldShift then Result := [ssShift] else Result := [];
+  if HoldMouse then Include(Result, ssLeft);
+end;
+
+procedure TMultiProbe.Enter;
+begin
+  Perform(CM_ENTER, 0, 0);
 end;
 
 procedure TMultiProbe.Press(X, Y: Integer);
@@ -1577,6 +1587,37 @@ begin
   FBar.SelectedThumb := -1;
   AssertEquals('none selected: Tab starts after the first enabled thumb', 1, FBar.WantsKey(VK_TAB));
   AssertEquals('other special keys are the form''s', 0, FBar.WantsKey(VK_RETURN));
+end;
+
+procedure TTyMultiTrackKeyboardTest.TestEnteringFromTheKeyboardStartsAtTheNearEnd;
+begin
+  FBar.Put([20, 50, 80, 90]);
+  SetLength(FBar.Off, 4);
+  FBar.Off[0] := True;
+  FBar.Off[3] := True;
+  FBar.SelectedThumb := 2;
+  FLog := '';
+  FBar.Enter;
+  AssertEquals('Tab in: the first enabled thumb, not the one selected before', 1,
+    FBar.SelectedThumb);
+  AssertEquals('S1 ', FLog);
+  AssertEquals('so the next Tab still has a thumb to go to', 1, FBar.WantsKey(VK_TAB));
+  FBar.HoldShift := True;
+  FBar.Enter;
+  AssertEquals('Shift+Tab in: the last enabled thumb', 2, FBar.SelectedThumb);
+  AssertEquals('so Shift+Tab still has a thumb to go back to', 1, FBar.WantsKey(VK_TAB));
+  FBar.HoldShift := False;
+  FBar.HoldMouse := True;
+  FBar.SelectedThumb := 2;     // not the first enabled thumb: a reset would show
+  FLog := '';
+  FBar.Enter;
+  AssertEquals('entered by a click: the press picks, the focus does not', 2, FBar.SelectedThumb);
+  AssertEquals('', FLog);
+  FBar.HoldMouse := False;
+  FBar.Off[1] := True;
+  FBar.Off[2] := True;
+  FBar.Enter;
+  AssertEquals('no enabled thumb: the selection is left alone', 2, FBar.SelectedThumb);
 end;
 
 initialization

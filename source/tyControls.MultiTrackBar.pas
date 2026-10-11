@@ -13,7 +13,7 @@ unit tyControls.MultiTrackBar;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LCLIntf, LMessages,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
   tyControls.TrackBar;
 
@@ -62,7 +62,9 @@ type
     (the lower value on a tie) and drags it on. A drag goes through SetThumbValue, so it stops
     MinGap short of a neighbour. The keyboard drives the selected thumb (none selected: the
     first enabled one), Tab / Shift+Tab step through the thumbs before leaving the control, and
-    the hint over a thumb is that thumb's.
+    the hint over a thumb is that thumb's. Coming in from the keyboard starts at the near end:
+    the first enabled thumb when entered forwards, the last when entered with Shift+Tab, so
+    every thumb is one Tab away; entered by a click, the press picks the thumb.
 
     No right-to-left mirroring, as TTyTrackBar: the value axis runs by Orientation and Reversed
     only. }
@@ -161,9 +163,14 @@ type
     function KeyThumb: Integer;
     { The next enabled thumb after AFrom (before it, AForward = False); -1 = none. }
     function NextEnabledThumb(AFrom: Integer; AForward: Boolean): Integer;
-    { The modifier keys held now. CM_WANTSPECIALKEY carries none, so Shift+Tab is told from
-      Tab by asking the keyboard; virtual so a test can hold Shift without one. }
+    { The modifier keys and mouse buttons held now. CM_WANTSPECIALKEY and CM_ENTER carry none,
+      so Shift+Tab is told from Tab, and a click from a key, by asking the keyboard and the
+      mouse; virtual so a test can hold them without either. }
     function KeyShiftState: TShiftState; virtual;
+    { Entered from the keyboard: the first enabled thumb (Shift held: the last) is selected,
+      whatever was selected before -- a forward Tab that landed on the last thumb would
+      otherwise leave again at once. Entered with a mouse button down: left to the press. }
+    procedure DoEnter; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -869,6 +876,35 @@ end;
 function TTyCustomMultiTrackBar.KeyShiftState: TShiftState;
 begin
   Result := GetKeyShiftState;
+  if GetKeyState(VK_LBUTTON) < 0 then Include(Result, ssLeft);
+  if GetKeyState(VK_RBUTTON) < 0 then Include(Result, ssRight);
+  if GetKeyState(VK_MBUTTON) < 0 then Include(Result, ssMiddle);
+end;
+
+procedure TTyCustomMultiTrackBar.DoEnter;
+var
+  sh: TShiftState;
+  i: Integer;
+begin
+  sh := KeyShiftState;
+  if sh * [ssLeft, ssRight, ssMiddle] = [] then
+  begin
+    { The near end for the direction the focus came from: the last enabled thumb for
+      Shift+Tab, else the first. }
+    if ssShift in sh then
+    begin
+      i := High(FValues);
+      while (i >= 0) and not ThumbEnabled(i) do Dec(i);
+    end
+    else
+    begin
+      i := 0;
+      while (i <= High(FValues)) and not ThumbEnabled(i) do Inc(i);
+      if i > High(FValues) then i := -1;
+    end;
+    if i >= 0 then SelectedThumb := i;
+  end;
+  inherited DoEnter;
 end;
 
 procedure TTyCustomMultiTrackBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -1002,7 +1038,7 @@ begin
   if (Message.CharCode = VK_TAB) and Enabled then
   begin
     sh := KeyShiftState;
-    if (sh - [ssShift] = []) and (NextEnabledThumb(KeyThumb, not (ssShift in sh)) >= 0) then
+    if (sh * [ssCtrl, ssAlt, ssMeta] = []) and (NextEnabledThumb(KeyThumb, not (ssShift in sh)) >= 0) then
     begin
       Message.Result := 1;
       Exit;
