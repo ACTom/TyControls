@@ -42,10 +42,12 @@ uses tyControls.RibbonQuickAccess, tyControls.GlyphButtons;
 
 ## 3. 子控件如何排布（Align=alLeft）
 
-QAT 让每个子按钮携带 **`Align := alLeft`**，由 LCL 的对齐引擎按子控件顺序把它们**依次贴向左边缘**，形成自左向右的流式排布。这是最简单、最健壮的做法——无需自定义 `AlignControls`，添加顺序即视觉顺序。
+QAT 让每个子按钮携带 **`Align := alLeft`**，由 LCL 的对齐引擎把它们**依次贴向左边缘**，形成自左向右的流式排布，无需自定义 `AlignControls`。
 
-- 用 **`AddButton`** 便捷方法添加（见下），会自动设好 `Align=alLeft`；
-- 或自行把任意小尺寸 TTy 控件 `Parent := QAT` 并设 `Align := alLeft`。
+对齐引擎按子控件的 **`Left`** 决定先后，不是按添加顺序：`Left` 全是 0 的几个 `alLeft` 兄弟控件会**倒着**排（最后加的在最左）。
+
+- 用 **`AddButton`** 便捷方法添加（见下），它会把新按钮的 `Left` 放在已有子控件之后再设 `Align=alLeft`，添加顺序就是视觉顺序；
+- 自行把小尺寸 TTy 控件 `Parent := QAT` 并设 `Align := alLeft` 时，也要给它们**递增的 `Left`**（数值只用来排序，对齐时会被改写）。
 
 `Indent` / `Spacing` 属性是**给宿主测量条带宽度用的建议值**（配合下方纯函数 `TyQatContentWidth`），本身并不移动按钮——`alLeft` 子控件始终紧贴客户区边缘。
 
@@ -57,7 +59,7 @@ QAT 让每个子按钮携带 **`Align := alLeft`**，由 LCL 的对齐引擎按�
 function AddButton(const ACaption: string): TTyGlyphButton;
 ```
 
-创建一个紧凑的 [[TTyGlyphButton]]，把它 `Parent := Self`、设好 `Align := alLeft`、赋上 `Caption` 并返回。每调用一次，`ControlCount` 增长 1；返回的按钮由 QAT 拥有（随 QAT 一同释放）。这样在代码里填充 QAT 就是一行的事：
+创建一个紧凑的 [[TTyGlyphButton]]，把它排在已有子控件之后、`Parent := Self`、设好 `Align := alLeft`、赋上 `Caption` 并返回。每调用一次，`ControlCount` 增长 1；返回的按钮由 QAT 拥有（随 QAT 一同释放）。这样在代码里填充 QAT 就是一行的事：
 
 ```pascal
 Qat.AddButton('保存').OnClick := @DoSave;

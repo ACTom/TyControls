@@ -344,14 +344,16 @@ function TMainForm.AddQat(AQat: TTyRibbonQuickAccess; const AHint, AGlyph: strin
 begin
   Result := AQat.AddButton('');    // no caption -> pure icon
   Result.StyleClass := 'ghost';    // flat: no frame at rest, subtle hover (Office QAT)
+  // The ghost button's THEME padding (office: 5px 10px) shrinks the content box to ~6px, which
+  // CLAMPS the glyph tiny no matter how big GlyphSize is. Override to a small uniform pad so the
+  // 20px icon actually fills the box (content = 28 − 2·4 = 20px). This is the real size fix.
+  // It goes in BEFORE the width: a button never gets narrower than its content plus padding, so
+  // with the theme's padding still in place Width := 28 came out 40 and stayed 40.
+  Result.StyleOverride := 'padding: 4px';
   Result.Images := FImgColl;
   Result.ImageName := AGlyph;
   Result.GlyphSize := 20;          // Office-QAT proportions (was 16 → looked tiny on a 34px bar)
   Result.Width := 28;              // square; Align=alLeft keeps this width
-  // The ghost button's THEME padding (office: 5px 10px) shrinks the content box to ~6px, which
-  // CLAMPS the glyph tiny no matter how big GlyphSize is. Override to a small uniform pad so the
-  // 20px icon actually fills the box (content = 28 − 2·4 = 20px). This is the real size fix.
-  Result.StyleOverride := 'padding: 4px';
   Result.Hint := AHint;
   Result.ShowHint := True;
   Result.OnClick := AHandler;
@@ -381,9 +383,16 @@ var
   s: TTyStyleSet;
   P: TTyPainter;
   bmp: TBitmap;
-  fs, capW, leftPad, gap: Integer;
+  fs, capW, leftPad, gap, i, w: Integer;
 begin
   if FQat = nil then Exit;
+  // The strip is as wide as its buttons really are. A button is never narrower than its glyph
+  // plus padding, which on a high-DPI screen is more than 28, and a fixed width cut the last
+  // one off.
+  w := 0;
+  for i := 0 to FQat.ControlCount - 1 do
+    Inc(w, FQat.Controls[i].Width);
+  FQat.Width := w;
   s  := TyDefaultController.Model.ResolveStyle('TyTitleBar', '', []);
   // Bar carries no explicit font (see umain.lfm) → ParentFont=True: the caption size is the
   // theme's --font-size-base (or the style's own font-size), exactly what the bar draws with.
@@ -1169,11 +1178,11 @@ begin
   AppMenu.RecentItems := FRecent;           // re-assigned by AddRecent (RecentItems copies)
 
   // Icon-only Quick Access Toolbar (like Office) on the title bar: New / Open / Save /
-  // Undo / Redo. Width = 5 buttons flush (alLeft, no layout spacing); Left is glued right
-  // after the measured caption by LayoutQat (run here + on every theme change).
+  // Undo / Redo, flush (alLeft, no layout spacing). LayoutQat (run here + on every theme
+  // change) sizes it to its buttons and glues it right after the measured caption.
   FQat := TTyRibbonQuickAccess.Create(Self);
   FQat.Parent := Bar;
-  FQat.SetBounds(Bar.ClientWidth, 3, 5 * 28 + 8, 28);   // 5 flush buttons + tiny slack; Left set by LayoutQat
+  FQat.SetBounds(Bar.ClientWidth, 3, 5 * 28, 28);   // Left and Width set by LayoutQat
   // Two-line hints (title + description) render as Office-style ScreenTips.
   AddQat(FQat, rsQatNew, 'new',  @DoNew);
   AddQat(FQat, rsQatOpen, 'open', @DoOpen);
