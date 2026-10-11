@@ -15,6 +15,13 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
 
+  { Runs the alignment engine on demand: headless, nothing else ever does (see
+    memory/headless-tests-never-run-lcl-align). }
+  TTyQatAlignAccess = class(TTyRibbonQuickAccess)
+  public
+    procedure RunAlign;
+  end;
+
   TRibbonQuickAccessTest = class(TTestCase)
   published
     procedure TestTypeKeyIsTitleBar;
@@ -25,6 +32,7 @@ type
     procedure TestAddButtonAlignIsLeft;
     procedure TestAddButtonParentedToQat;
     procedure TestPaintSmokeNoChildrenDoesNotRaise;
+    procedure TestButtonsKeepTheOrderTheyWereAddedIn;
   end;
 
 implementation
@@ -40,7 +48,42 @@ begin
   inherited RenderTo(ACanvas, ARect, APPI);
 end;
 
+procedure TTyQatAlignAccess.RunAlign;
+var
+  r: TRect;
+begin
+  r := ClientRect;   // not pre-adjusted: AlignControls adjusts it itself
+  AlignControls(nil, r);
+end;
+
 { TRibbonQuickAccessTest }
+
+{ #51. AddButton counted on alLeft packing siblings in the order they were added. With every
+  Left at 0 the align engine packs them in REVERSE: the ribbon example's strip read Redo, Undo,
+  Save, Open, and New, the first one added, ended up last and past the strip's end. }
+procedure TRibbonQuickAccessTest.TestButtonsKeepTheOrderTheyWereAddedIn;
+var
+  F: TForm;
+  Qat: TTyQatAlignAccess;
+  A, B, C: TTyGlyphButton;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    Qat := TTyQatAlignAccess.Create(F);
+    Qat.Parent := F;
+    Qat.SetBounds(0, 0, 400, 28);
+    A := Qat.AddButton('A');
+    B := Qat.AddButton('B');
+    C := Qat.AddButton('C');
+    Qat.RunAlign;
+    AssertEquals('the first one added sits at the left edge', 0, A.Left);
+    AssertTrue(Format('then the second, then the third (A=%d B=%d C=%d)',
+      [A.Left, B.Left, C.Left]), (B.Left > A.Left) and (C.Left > B.Left));
+    AssertEquals('packed flush', A.Left + A.Width, B.Left);
+  finally
+    F.Free;
+  end;
+end;
 
 procedure TRibbonQuickAccessTest.TestTypeKeyIsTitleBar;
 var
