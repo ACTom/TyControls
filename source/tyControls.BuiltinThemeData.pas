@@ -3206,7 +3206,7 @@ begin
     '   TyTrackThumb, so the default theme''s class does not reach it). A gradient stop needs no' + LineEnding +
     '   rule here: the raised bevel is derived from the stop''s own colour, and one of its two sides' + LineEnding +
     '   always stands off it. */' + LineEnding +
-    'TyTrackThumb.removing { render-style: bevel3d; background: var(--face); opacity: var(--disabled-opacity); }' + LineEnding +
+    'TyTrackThumb.removing { render-style: bevel3d; background: var(--face); opacity: 0.5; }' + LineEnding +
     '' + LineEnding +
     '/* Tooltip: the pale yellow box with a thin black frame. */' + LineEnding +
     'TyHint { background: #FFFFE1; color: var(--ink); border-color: #000000; border-width: 1px; border-radius: 0; padding: var(--pad-tooltip); font-size: var(--font-size-base); }' + LineEnding;
