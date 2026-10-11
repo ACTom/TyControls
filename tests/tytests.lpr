@@ -33,6 +33,7 @@ uses
   test.trackbar,
   test.trackbar.selrange,
   test.trackbar.ticklabels,
+  test.multitrackbar,
   test.groupbox,
   test.tabstrip, test.tabstrip.axis, test.tabstrip.multiline,
   test.defaulttheme, test.spinedit, test.memo, test.memo.selection, test.memo.undo,

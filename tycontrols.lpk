@@ -389,6 +389,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.TrackBar"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.MultiTrackBar.pas"/>
+        <UnitName Value="tyControls.MultiTrackBar"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.GroupBox.pas"/>
         <UnitName Value="tyControls.GroupBox"/>
       </Item>
