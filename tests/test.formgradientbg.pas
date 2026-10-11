@@ -62,6 +62,7 @@ type
     procedure TestSurfaceHostedChildCornersFollowTheTranslatedChain;
     procedure TestAlphaGradientFormBgStillResolvesOpaque;
     procedure TestRawFormClDefaultResolvesToTheDefaultBrushNotBlack;
+    procedure TestASliceKeepsTheParentsTwoStopPositions;
   end;
 
 implementation
@@ -334,6 +335,68 @@ begin
       (TyRedOf(c) > 100) and (TyGreenOf(c) > 100) and (TyBlueOf(c) > 100));
   finally
     rawForm.Free;
+  end;
+end;
+
+procedure TFormGradientBgTest.TestASliceKeepsTheParentsTwoStopPositions;
+{ #49. The form is pure red down to 20% and pure blue from 80%. The slice behind a child
+  carried the parent's interior stops only for three or more, so a child spanning both
+  stops got its two end colours and one straight blend between them -- already a mix at
+  the form's 10% row. Painted over the child's own rect, the slice must match the form's
+  own rendition row for row. }
+var
+  btn: TTyButton;
+  fill: TTyFill;
+  host: TBitmap;
+  shot: TBGRABitmap;
+  p: TTyPainter;
+  w, h: Integer;
+
+  procedure CheckRow(AFormY: Integer);
+  var
+    want, got: TBGRAPixel;
+  begin
+    want := OracleAt(btn.Left + w div 2, AFormY);
+    got := shot.GetPixel(w div 2, AFormY - btn.Top);
+    AssertTrue(Format('form row %d: the slice matches the form ' +
+      '(want #%.2x%.2x%.2x, got #%.2x%.2x%.2x)',
+      [AFormY, want.red, want.green, want.blue, got.red, got.green, got.blue]),
+      (Abs(got.red - want.red) <= cTol) and
+      (Abs(got.green - want.green) <= cTol) and
+      (Abs(got.blue - want.blue) <= cTol));
+  end;
+
+begin
+  MakeFixture('TyForm { background: linear-gradient(90deg, #FF0000 20%, #0000FF 80%); }' +
+    cBtnCss);
+  btn := TTyButton.Create(FForm);
+  btn.Parent := FForm;
+  btn.Controller := FCtl;
+  btn.SetBounds(40, 20, 120, 360);
+  w := btn.ClientWidth;
+  h := btn.ClientHeight;
+  AssertTrue('fixture: the child spans both stops (rows 80 and 320)',
+    (btn.Top < 40) and (btn.Top + h > 360));
+  AssertTrue('resolved a parent fill', TyResolveParentBgFill(btn, Rect(0, 0, w, h), fill));
+  host := TBitmap.Create;
+  p := TTyPainter.Create;
+  try
+    host.PixelFormat := pf32bit;
+    host.SetSize(w, h);
+    p.BeginPaint(host.Canvas, Rect(0, 0, w, h), 96);
+    p.FillBackground(Rect(0, 0, w, h), fill, 0);
+    p.EndPaint;
+    shot := TBGRABitmap.Create(host);
+    try
+      CheckRow(40);    // the form's 10% row: pure red
+      CheckRow(200);   // the middle
+      CheckRow(360);   // the form's 90% row: pure blue
+    finally
+      shot.Free;
+    end;
+  finally
+    p.Free;
+    host.Free;
   end;
 end;
 
