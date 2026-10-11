@@ -45,8 +45,11 @@
 - 键盘：选中滑块时 Delete 键删除（同样经 `OnThumbRemoving` 与 `MinThumbs`）。
 
 **D4 `AllowUserRanges`**（区间控件；默认 False）：空白处左键按下（未被 `OnTrackClick` 处理）时，以按点为中心加一个区间，宽度为 `NewRangeWidth`（默认 10，单位同值），放不下（与相邻区间冲突）时在可用空档内收缩，空档小于 `MinGap` 时不加。删除：把区间的任一端拖出轨道，整个区间按「将被删除」显示，松开删除（`OnThumbRemoving` 收到该端点的序号；拒绝则不删）；Delete 键删除选中端点所在的区间。
+  > 【执行时改，Task 3】`AllowUserRanges` 不是基类的第二个开关，而是区间控件给 `AllowUserThumbs` 起的名字（同一个字段、同一套加删机制）：声明在 `TTyCustomRangeTrackBar`（protected），`TTyRangeTrackBar` 发布它、`NewRangeWidth` 与 `OnThumbRemoving`；`DraggableRanges` 照架构放在基类（protected），「哪段算区间高亮」经新的 protected virtual `SpanAtPoint` 由区间控件回答。基类的 `UserAddThumb` 改为 protected virtual，区间控件覆盖成加区间。
+  > 【执行时补，Task 3】区间 `[v - w div 2, v - w div 2 + w]`，奇数宽多出的一格在上方；按点落在某个区间内（含按在高亮段上而 `DraggableRanges` 关着）不加，也不退回「最近滑块跳过来」（同 D3）。加上后选中新区间的下端；`DraggableRanges` 开着时这次按下接着整段拖新区间，关着时不拖（从中间按下却拖一端不合理）。「将被删除」时两端滑块都按 removing 画，高亮段按 `TyTrackThumb.removing` 解析出的 opacity 淡出（不新增 `TyTrackSelection.removing` 规则，不动主题）。公开只读 `RemovingThumb`（额外提交）给出被拖的那一端。
 
 **D5 `DraggableRanges`**（区间控件；默认 False）：按在区间的高亮段上（不在端点上）拖动，整段平移，宽度不变，碰到相邻区间（`MinGap`）或 `Min` / `Max` 停住；两个端点都经 `OnThumbChanging`（任一被拒则这一步整段不动）。
+  > 【执行时补，Task 3】按下先问 `OnTrackClick`，处理了就不拖。按下选中该区间的下端，指针位置按下端的抓取点换算（同拖滑块）。每一步先问下端、再问上端，各带这一步会把它放到的值；处理器改了答案，整段按该端的答案平移（后问的说了算），再夹回邻居与 `Min` / `Max`。事件：两端各一次 `OnThumbChange`（下端先），最后一次 `OnChange`。整段拖出轨道不删除（只有拖一端才删）。
 
 **D6 `TTyGradientTrackBar`**：
 - 发布：`Thumbs`（色标）、`Min` / `Max`（默认 0 / 100）及第一步的共用属性，外加 `AllowCrossing`（默认 True）、`AllowUserThumbs`（默认 True）、`MinThumbs`（默认 2）、`MaxThumbs`、`OnThumbRemoving`、`OnEditStopColor`。
@@ -54,11 +57,14 @@
 - 轨道：凹槽画成色标渐变（首个色标之前延续首色、末个之后延续末色），用 `TTyFill` 的多色标渐变；`OnDrawTrack` / `OnDrawSegment` 照常可以接管。
 - 双击色标：触发 `OnEditStopColor(Sender; AIndex: Integer; var AColor: TColor; var AHandled: Boolean)`，没处理时弹 `TTyColorDialog`（经 protected virtual `ExecuteColorDialog(var AColor): Boolean`，测试替换），确定后改该色标的 `Color`。
 - 输出：`function Gradient: TTyGradStops`（按值排序的颜色与 0..1 位置）、`function GradientFill(AAngleDeg: Single = 0): TTyFill`（直接交给 `FillBackground` 画同一条渐变）。
+  > 【执行时补，Task 4】`TTyGradStops` 原本不存在，在 MultiTrackBar 单元声明为 `array of TTyGradStop`。位置 = `(Value - Min) / (Max - Min)`。`Color = clDefault` 的色标没有自己的颜色，不进 `Gradient`（滑块按主题画）。
+  > 【执行时改，Task 4】插值空间：画家的两色快路径（恰好两个色标、位置 0 和 1）用 BGRA 默认的 gamma 校正混色，多色标路径不做 gamma 校正——默认黑→白若走快路径，中间点约 #AAAAAA，加一个色标就整条变样。所以 `GradientFill` 在「恰好 0 / 1 两个色标」时把首个色标重复一次，强制走多色标路径；新色标的颜色按 sRGB 逐通道线性插值（与多色标路径一致），加上后轨道像素变化不超过 1。
+  > 【执行时补，Task 4】轨道经基类新的 protected virtual `PaintGroove`：Min 端滑块中心到 Max 端滑块中心之间画 `GradientFill(按方向的角度)`（水平 0、Reversed 180、竖直 270、竖直 Reversed 90），两端外侧分别用首 / 末色实心延续，最后按主题画凹槽边框；没有带颜色的色标时画普通凹槽。`OnEditStopColor` 处理了就不弹框，色标取处理器留下的 `AColor`（不改即不变）；没处理时对话框以 `AColor` 打开（处理器可预设）。用户改色（颜色确有变化）触发 `OnChange`。空白处双击：第一下加色标、第二下编辑它的颜色。默认值（`AllowCrossing`/`AllowUserThumbs` True、`MinThumbs` 2）在自定义类里重声明（G3b：最终类只能写 `property X;`）。不发布 `Segments` 与 `Pushable`（D6 未列）。真实的 `ExecuteColorDialog` 用 `TTyColorDialog`（它没有 `Controller` 属性，按全局主题显示）。
 
 **D7 主题**：`TyGradientTrackBar` → `TyTrackBar`；新增状态 `:removing`（`TyTrackThumb:removing { opacity: … }`，各内置主题能 resolve 到可见的区别，跨 17 主题 × 亮 / 暗测）、度量 `--track-remove-distance`（light.tycss 定义，其余主题回退）。
   > 【执行时改，Task 2】`:removing` → `TyTrackThumb.removing`（变体类，见核实记录）。Task 2 已在 light.tycss 加 `--track-remove-distance: 24px` 与 `TyTrackThumb.removing { opacity: var(--disabled-opacity); }`；其余内置皮肤的跨 17 主题测仍归 Task 5（自带 `TyTrackThumb` 规则的皮肤拿不到基础层的 `.removing`，要各自补）。
 
-**D8 需主控确认**（不回复按建议）：① `AllowCrossing` 时 `MinGap` 不生效；② 拖出轨道删除的距离用主题度量；③ 渐变控件默认黑→白两个色标、默认可加减可越过；④ 新增状态名 `:removing`。
+**D8 需主控确认**（不回复按建议；执行时未收到回复，均按建议实现）：① `AllowCrossing` 时 `MinGap` 不生效；② 拖出轨道删除的距离用主题度量；③ 渐变控件默认黑→白两个色标、默认可加减可越过；④ 新增状态名 `:removing`。
 
 ## 任务
 
