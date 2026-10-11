@@ -29424,7 +29424,10 @@ begin
     FGfxAnim.Update(AnimClock, True);
     AnimArmTimer;
   end
-  else if (w <> FGfxW) or (h <> FGfxH) then
+  { NOT BEFORE THE FIRST RENDER: the size is NaN until then, and comparing
+    against it raises with the invalid-operation trap unmasked -- a chart
+    that never had an option painted nothing but an exception }
+  else if (not IsNan(FGfxW)) and ((w <> FGfxW) or (h <> FGfxH)) then
   begin
     FGfxView.Place(w, h, meas);
     FGfxW := w;

@@ -1137,7 +1137,7 @@ end;
 
 procedure TAdvChartGraphicTest.TestTheMergesAreUpstreams;
 begin
-  RunStatic(['actions', 'relayout'], True);
+  RunStatic(['actions', 'relayout', 'relayout-unset'], True);
   Finish('the merges', 500);
 end;
 

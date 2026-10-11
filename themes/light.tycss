@@ -208,6 +208,7 @@
   --advchart-label-margin: 8px;
   --advchart-minor-tick-length: 3px;
   --advchart-name-gap: 15px;
+  --advchart-single-tick-length: 6px;
   --advchart-tick-length: 5px;
   --advchart-axispointer-margin: 3px;
   --advchart-tooltip-gap: 20px;

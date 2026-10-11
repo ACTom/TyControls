@@ -15572,6 +15572,562 @@
    "fails": []
   },
   {
+   "id": "relayout-unset",
+   "group": "merge",
+   "note": "a left over a right nulls the right: unset the left again and the element has no horizontal placement at all (not the old right); the same for top over bottom",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "graphic": [
+     {
+      "type": "rect",
+      "id": "u",
+      "right": 40,
+      "bottom": 30,
+      "shape": {
+       "width": 60,
+       "height": 40
+      },
+      "style": {
+       "fill": "#5070dd"
+      }
+     },
+     {
+      "type": "text",
+      "id": "ut",
+      "right": 10,
+      "top": 10,
+      "style": {
+       "text": "unset",
+       "fontSize": 14
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "merge": {
+      "graphic": [
+       {
+        "id": "u",
+        "left": 50,
+        "top": 20
+       },
+       {
+        "id": "ut",
+        "left": 30
+       }
+      ]
+     }
+    },
+    {
+     "merge": {
+      "graphic": [
+       {
+        "id": "u",
+        "left": null,
+        "top": null
+       },
+       {
+        "id": "ut",
+        "left": null
+       }
+      ]
+     }
+    }
+   ],
+   "throws": null,
+   "states": [
+    {
+     "els": [
+      {
+       "id": "u",
+       "gtype": "rect",
+       "type": "rect",
+       "parent": null,
+       "name": "",
+       "t": {
+        "x": "407f400000000000",
+        "y": "4074a00000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000",
+        "skewX": "0000000000000000",
+        "skewY": "0000000000000000",
+        "anchorX": "0000000000000000",
+        "anchorY": "0000000000000000"
+       },
+       "transform": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "407f400000000000",
+        "4074a00000000000"
+       ],
+       "silent": false,
+       "ignore": false,
+       "invisible": false,
+       "draggable": false,
+       "cursor": "pointer",
+       "z": "0000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "size": null,
+       "rect": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "width": "404e000000000000",
+        "height": "4044000000000000"
+       },
+       "shape": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "width": "404e000000000000",
+        "height": "4044000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "404e000000000000",
+        "4044000000000000"
+       ],
+       "style": {
+        "fill": "#5070dd",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "eventData": true,
+       "info": null
+      },
+      {
+       "id": "ut",
+       "gtype": "text",
+       "type": "text",
+       "parent": null,
+       "name": "",
+       "t": {
+        "x": "40815c7ae147ae14",
+        "y": "4024000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000",
+        "skewX": "0000000000000000",
+        "skewY": "0000000000000000",
+        "anchorX": "0000000000000000",
+        "anchorY": "0000000000000000"
+       },
+       "transform": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "40815c7ae147ae14",
+        "4024000000000000"
+       ],
+       "silent": false,
+       "ignore": false,
+       "invisible": false,
+       "draggable": false,
+       "cursor": "pointer",
+       "z": "0000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "size": null,
+       "rect": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "width": "40413851eb851eb8",
+        "height": "402c000000000000"
+       },
+       "style": {
+        "text": "unset",
+        "font": "14px sans-serif",
+        "fill": null,
+        "stroke": null,
+        "lineWidth": null,
+        "align": null,
+        "verticalAlign": null,
+        "x": null,
+        "y": null,
+        "opacity": "3ff0000000000000"
+       },
+       "pieces": [
+        {
+         "k": "t",
+         "text": "unset",
+         "x": "0000000000000000",
+         "y": "401c000000000000",
+         "font": "14px sans-serif",
+         "align": "left",
+         "base": "middle",
+         "fill": "#000",
+         "stroke": null,
+         "lineWidth": "3ff0000000000000",
+         "opacity": "3ff0000000000000"
+        }
+       ],
+       "label": null,
+       "eventData": true,
+       "info": null
+      }
+     ],
+     "order": [
+      "g:u",
+      "g:ut"
+     ],
+     "model": [
+      {
+       "id": "u",
+       "type": "rect",
+       "parentId": null
+      },
+      {
+       "id": "ut",
+       "type": "text",
+       "parentId": null
+      }
+     ],
+     "log": [],
+     "events": []
+    },
+    {
+     "els": [
+      {
+       "id": "u",
+       "gtype": "rect",
+       "type": "rect",
+       "parent": null,
+       "name": "",
+       "t": {
+        "x": "4049000000000000",
+        "y": "4034000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000",
+        "skewX": "0000000000000000",
+        "skewY": "0000000000000000",
+        "anchorX": "0000000000000000",
+        "anchorY": "0000000000000000"
+       },
+       "transform": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4049000000000000",
+        "4034000000000000"
+       ],
+       "silent": false,
+       "ignore": false,
+       "invisible": false,
+       "draggable": false,
+       "cursor": "pointer",
+       "z": "0000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "size": null,
+       "rect": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "width": "404e000000000000",
+        "height": "4044000000000000"
+       },
+       "shape": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "width": "404e000000000000",
+        "height": "4044000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "404e000000000000",
+        "4044000000000000"
+       ],
+       "style": {
+        "fill": "#5070dd",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "eventData": true,
+       "info": null
+      },
+      {
+       "id": "ut",
+       "gtype": "text",
+       "type": "text",
+       "parent": null,
+       "name": "",
+       "t": {
+        "x": "403e000000000000",
+        "y": "4024000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000",
+        "skewX": "0000000000000000",
+        "skewY": "0000000000000000",
+        "anchorX": "0000000000000000",
+        "anchorY": "0000000000000000"
+       },
+       "transform": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "403e000000000000",
+        "4024000000000000"
+       ],
+       "silent": false,
+       "ignore": false,
+       "invisible": false,
+       "draggable": false,
+       "cursor": "pointer",
+       "z": "0000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "size": null,
+       "rect": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "width": "40413851eb851eb8",
+        "height": "402c000000000000"
+       },
+       "style": {
+        "text": "unset",
+        "font": "14px sans-serif",
+        "fill": null,
+        "stroke": null,
+        "lineWidth": null,
+        "align": null,
+        "verticalAlign": null,
+        "x": null,
+        "y": null,
+        "opacity": "3ff0000000000000"
+       },
+       "pieces": [
+        {
+         "k": "t",
+         "text": "unset",
+         "x": "0000000000000000",
+         "y": "401c000000000000",
+         "font": "14px sans-serif",
+         "align": "left",
+         "base": "middle",
+         "fill": "#000",
+         "stroke": null,
+         "lineWidth": "3ff0000000000000",
+         "opacity": "3ff0000000000000"
+        }
+       ],
+       "label": null,
+       "eventData": true,
+       "info": null
+      }
+     ],
+     "order": [
+      "g:u",
+      "g:ut"
+     ],
+     "model": [
+      {
+       "id": "u",
+       "type": "rect",
+       "parentId": null
+      },
+      {
+       "id": "ut",
+       "type": "text",
+       "parentId": null
+      }
+     ],
+     "log": [],
+     "events": [],
+     "point": null
+    },
+    {
+     "els": [
+      {
+       "id": "u",
+       "gtype": "rect",
+       "type": "rect",
+       "parent": null,
+       "name": "",
+       "t": {
+        "x": "4049000000000000",
+        "y": "4034000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000",
+        "skewX": "0000000000000000",
+        "skewY": "0000000000000000",
+        "anchorX": "0000000000000000",
+        "anchorY": "0000000000000000"
+       },
+       "transform": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4049000000000000",
+        "4034000000000000"
+       ],
+       "silent": false,
+       "ignore": false,
+       "invisible": false,
+       "draggable": false,
+       "cursor": "pointer",
+       "z": "0000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "size": null,
+       "rect": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "width": "404e000000000000",
+        "height": "4044000000000000"
+       },
+       "shape": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "width": "404e000000000000",
+        "height": "4044000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "404e000000000000",
+        "4044000000000000"
+       ],
+       "style": {
+        "fill": "#5070dd",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "eventData": true,
+       "info": null
+      },
+      {
+       "id": "ut",
+       "gtype": "text",
+       "type": "text",
+       "parent": null,
+       "name": "",
+       "t": {
+        "x": "403e000000000000",
+        "y": "4024000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000",
+        "skewX": "0000000000000000",
+        "skewY": "0000000000000000",
+        "anchorX": "0000000000000000",
+        "anchorY": "0000000000000000"
+       },
+       "transform": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "403e000000000000",
+        "4024000000000000"
+       ],
+       "silent": false,
+       "ignore": false,
+       "invisible": false,
+       "draggable": false,
+       "cursor": "pointer",
+       "z": "0000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "size": null,
+       "rect": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "width": "40413851eb851eb8",
+        "height": "402c000000000000"
+       },
+       "style": {
+        "text": "unset",
+        "font": "14px sans-serif",
+        "fill": null,
+        "stroke": null,
+        "lineWidth": null,
+        "align": null,
+        "verticalAlign": null,
+        "x": null,
+        "y": null,
+        "opacity": "3ff0000000000000"
+       },
+       "pieces": [
+        {
+         "k": "t",
+         "text": "unset",
+         "x": "0000000000000000",
+         "y": "401c000000000000",
+         "font": "14px sans-serif",
+         "align": "left",
+         "base": "middle",
+         "fill": "#000",
+         "stroke": null,
+         "lineWidth": "3ff0000000000000",
+         "opacity": "3ff0000000000000"
+        }
+       ],
+       "label": null,
+       "eventData": true,
+       "info": null
+      }
+     ],
+     "order": [
+      "g:u",
+      "g:ut"
+     ],
+     "model": [
+      {
+       "id": "u",
+       "type": "rect",
+       "parentId": null
+      },
+      {
+       "id": "ut",
+       "type": "text",
+       "parentId": null
+      }
+     ],
+     "log": [],
+     "events": [],
+     "point": null
+    }
+   ],
+   "fails": []
+  },
+  {
    "id": "events",
    "group": "event",
    "note": "element handlers and chart events: a click on a rect with onclick, a click on a child of a group with onclick (bubbling), a handler that returns true (no chart event), a silent rect over another (the one under it), an invisible rect (still hit), an ignored one (not), hovers with onmouseover / onmouseout",
@@ -29714,6 +30270,10 @@
   },
   {
    "name": "relayout: every record matches its recipe",
+   "ok": true
+  },
+  {
+   "name": "relayout-unset: every record matches its recipe",
    "ok": true
   },
   {

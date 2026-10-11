@@ -11199,7 +11199,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - `boundaryGap` 的像素值上游会在第一次布局时改写进模型、之后 resize 沿用，端口每次重算。
 - 各层行数不同时端口什么都不画（上游抛错）；不是数组的项（串）端口忽略。
 - 64 项以上且比较出 NaN 时，端口用稳定归并代替 V8 的完整 TimSort（64 项以下逐步照做）。
-- `--advchart-single-tick-length` 没有写进 `light.tycss` 和目录，走默认值 6。
+- **[里程碑 C6–C13：已写进 `light.tycss`（6px），`DefaultTheme.pas` 与 tycss 目录随之重生成，见 §158。]** `--advchart-single-tick-length` 没有写进 `light.tycss` 和目录，走默认值 6。
 - 指向空点的 contain 端口答 false（上游抛错）；纵向放在默认 bottom 的单轴什么都不画，与上游一样。
 - 被忽略的标签不淡入只对主题河流做了；其他系列的被忽略标签是否也多建了淡入，留给以后核对。
 
@@ -11534,4 +11534,59 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - `source/tyControls.AdvChart.Paint.pas`：`ctkGraphic`、`GfxUnder`、图案的整矩阵。`Render.pas`：元素矩阵的图案、跳过 `GfxUnder`。`Events.pas`：元素句柄。`Handlers.pas`：`Info`。`Media.pas`：预处理器。
 - `source/tyControls.AdvanceChart.pas`：上面「控件」一条的全部。
 - `tools/advchart-oracle/graphic.js`、`tests/fixtures/advchart-graphic.json`、`tests/test.advchart.graphic.pas`（新，注册在 `tytests.lpr`）。
-- §130 在原处标注。没有新主题键、新度量或新资源串。
+- §130 在原处标注。没有新主题键、新度量或新资源串。**[里程碑 C6–C13：从没设过选项的图在首帧拿 NaN 尺寸做比较，非法运算陷阱下抛 EInvalidOp，已修，见 §158。]**
+
+## 158. 里程碑 C6–C13 统一验证（2026-10-12）
+
+C6–C13 八批（§150–§157）每批落地时只跑了自己的新套件和直接碰到的套件，全量与变异都留到这里；C4、C5 与 main 合并之后的组合也一直没整体跑过。这一节在 C12 合进来之后（合并提交 c6d209e4）一次做完。
+
+### 合并
+
+C12（lines）合进已有 C6–C11、C13 的分支。冲突全是两边往同一处加东西：动画角色枚举（`carChord` 与 `carLines*`）、状态种类（`sskChord` 与 `sskLines`）、控件字段与方法、`cElsewhere`（现在十二种）、uses 子句、测试注册，一律两边都留。C11 把几条「还没有渲染器」的示例改成了 grid 上的 lines，lines 现在能画了：`test.advchart.marks` 的发布答案断言改成 custom；`test.advchart.diagnose` 里「两种不同类型都要点名」那条改成显式 `coordinateSystem: 'cartesian2d'` 的 map 加 custom（custom 是默认坐标系上最后一个没有渲染器的类型，C14 之后这条还得再搬）；`test.advchart.candlestick` 本来就是 custom。§39 在原处标注。
+
+### 全量
+
+第一次全量（合并之后）：11182 个用例，2 个错误、0 个失败。两个错误都在 `TAdvanceChartTest`（`TestAnEmptyChartStillPaintsItsSurface`、`TestEveryCornerIsPainted`），单跑也红，不是偶发：C13 的 `GfxBuild` 在一张从没设过选项的图上拿尺寸去和 `FGfxW` / `FGfxH` 比，二者在第一次渲染之前是 NaN，非法运算陷阱打开时比较本身就抛 EInvalidOp——没设选项的图画不出底色，只有异常。改成第一次渲染之前不比较。C13 那一批没有跑 `TAdvanceChartTest`，所以当时没看见。
+
+最后一次全量（下面的修补全部在内）：11183 个用例，0 个错误、0 个失败（1 个忽略：Windows 不认文件夹的只读，与本里程碑无关），墙钟约 49 分钟；第一次是 11182 个、约 54 分钟，多出来的一个是上面的引擎用例。两次都没碰上表格剪贴板 / 计时与终端 H6 的偶发项。
+
+### 变异
+
+八批的候选清单逐条换成精确文本（行号在几次合并后已经漂了），每个变异单独打上、重编、跑本批的套件、按字节还原；驱动是 `c613_mut.py`，跑在两个临时工作树里，主树只用来验证补上的用例。套件：C6 `SunburstTreemapInteract` 两套；C7 `VisualMapInteract` 两套加 `AnimEngine`；C8 `LargeMode` 两套；C9 `Progressive` 两套；C10 `SingleRiver` 加 `AnimEnter`；C11 `Chord` 加 `AnimEnter`；C12 `Lines` 两套；C13 `Graphic`。
+
+| 批 | 变异 | 杀死 | 存活 / 无效 |
+|---|---|---|---|
+| C6 | 22 | 18 | 4 |
+| C7 | 22 | 20 | 1 存活，1 编不过 |
+| C8 | 23 | 23 | 0 |
+| C9 | 23 | 18 | 5 |
+| C10 | 23 | 22 | 1 |
+| C11 | 28 | 27 | 1 |
+| C12 | 22 | 22 | 0 |
+| C13 | 20 | 19 | 1 |
+
+（C9 多了 13、14 的成对变异和 `finished` 的三处发出点；C11 的 11、22 各拆成两处。）
+
+存活与无效的处理：
+
+- **C6-05**（不下钻时清 `FSunVirt.Has`）：清单上的写法改的是 `Has := True` 那一句，可那一块只在返回圆盘已放置时执行，而返回圆盘只在 `rootDepth > 0`（视图根不是根）时放置——写法本身等价。按清单的本意重写成「不在下钻时把 Has 清掉」的 else 分支（C6-05b），`sb-drill` 回到根之后的 containPixel 把它杀了。
+- **C6-09**（`estimateRootSize` 去掉 `4·bw²`）、**C6-10**（`scaleLimit` 默认上限 5 改 50）：`tm-click-ratio` 唯一一次缩放被它自己的 `scaleLimit.max 2` 夹住，后两次点击落在画布外；`tm-click-big` 的缩放是 3.2，碰不到 5。补了两个上游用例：`tm-click-border`（逐层边框、无 scaleLimit，缩放约 1.6，边框项直接进根的尺寸）和 `tm-click-cap`（千分之一的叶子，要求约 10 倍，被默认上限 5 截住）。两个都杀了。
+- **C6-17**（要删的矩形缩向 `pw` 而不是 `pw / 2`）：改的是「矩形、自己的组还在、不是下钻」那一支。矩形的父组就是它自己节点的组；不是下钻的变换只有 zoomToNode 与上卷，zoomToNode 不改视图根（leafDepth 从视图根量起，显示集合不变，出视野的只是隐藏），上卷删掉的节点连组一起删（`parDel` 为真，走 0 那一支）。这一支在上游的流程里到不了，等价。同一处的「组」那一支（C6-17b，`tm-anim-drill` 上卷时要删的组滑向父组中心）补跑了，被杀。
+- **C7-01**（已完成的被叠加轨道不丢）：被叠加的动画器在完成的那一帧末尾才释放，析构里会断开链接，所以变异只在基轨道结束的那一帧可见；而叠加轨道的起点就是基轨道的末关键帧，`基轨道写下的终值 + (v − 起点)` 与 `v` 只在基轨道的终值算术上不等于它的关键帧时差一个末位。`anim-bar` 没有碰上这种数。加了手写用例 `TestAFinishedBaseIsDroppedInTheFrameItEnds`：0.7 → 0.1 的基轨道停在 0.09999999999999998，叠加在它上面的 0.1 → 0.3 在基轨道结束的那一帧应是自己的 0.2（`3fc999999999999a`），变异给 `3fc9999999999998`。杀了。
+- **C7-14**（不放回保存的标签）：删掉 `else` 一行后前一句缺分号，编不过；改写成只留 `if want then …;`（C7-14b），`drag-v-rt` 把它杀了。
+- **C9-05**（`modBy < 1` 不归一）：`TyProgModBy(0, NaN)` 走的是 NaN 那半，测不到 `< 1`。补断言 `TyProgModBy(0, 4) = 1`（`Math.ceil(0 / 4)` 是 0，只有 `!(val >= 1)` 那半能把它抬到 1）。杀了。
+- **C9-11**（合批上限 `<` 改 `<=`）：`ap-sc-merge` 的批是 24000 个数，碰不到正好 2e4。补上游用例 `sc-merge-edge`：large 散点按缺省的 5000 一块，两块正好 20000 个数，第三块另起一批（`startIndex` 10000）。杀了。
+- **C9-13、C9-14 与二者成对**：清单预计成对时会红，实际也存活。原因是一个不变量：没在渐进（`On` 为假）的 run，`Done` 恒为 0——`TyProgReplan` 不给它排块（`Starts` 为空，更新路径的 `Done := 1` 不触发），流式路径在 `not r.On` 时清零，`ProgStep` 只推进未完成的（要求 `On`），块参数的重来也只在 `On` 时动 `Done`。于是 `o.On` 为假时 `TyProgReplan(r, r.Done)` 就是 `TyProgReplan(r, 0)`，与重来那一支完全相同；`o.On` 为真而 `r.On` 为假时走的是 `not r.On` 那一支。`r.On <> o.On` 这一项和 `not o.On` 这一项都是冗余的，三个变异都等价。
+- **C10-08**（阴影低端不夹）：类目轴的带宽正好铺满两端，值轴又从 0 起，`ptr-river-shadow` 只碰到高端的夹。补上游用例 `ptr-river-shadow-min`：值轴 `min: 1`，第一个值就在轴的起点，阴影从 30 起、宽 0.5。杀了。
+- **C11-03**（`v * (-cRadian)` 改 `-v * cRadian`）：IEEE 754 里取负是精确的，乘法的符号对称，`(−a)·b` 与 `a·(−b)` 对任何 a、b 逐位相同，`startAngle` 为 0 时两边都是 −0。等价（清单已预告）。
+- **C13-10**（新选项写了 left 不再把旧的 right 置空）：两边都在时 `positionElement` 先认 left，看不出差别；差别要等 left 再被写成 null——上游此时两边都空，`isSetLoc` 为假，元素留在原地；变异留着旧 right，元素被重新贴到右边。补上游用例 `relayout-unset`（写进 `TestTheMergesAreUpstreams` 的用例表）。杀了。
+
+### 其他修补
+
+- C10 的 `--advchart-single-tick-length` 写进 `themes/light.tycss`（6px）；重跑 `gen-defaulttheme.ps1` 与 `gen-tycss-catalog.ps1`，两边的差异都只是增加。目录这次还补上了 `--grid-bg`、`--input-border` 两个早就在 `light.tycss` 里、之前没重生成的键（263 → 266）；没有按键数写死的测试。§153 在原处标注。
+- 四份基准（`advchart-sunburst-treemap-interact`、`advchart-graphic`、`advchart-single-themeriver`、`advchart-progressive`）重生成后逐条比对：已有用例一个字节没变，只多了上面的新用例（和它们的自检条目）。
+- §157 在原处标注 NaN 比较的修补。
+
+### 给 C14 的提醒
+
+custom 落地时，`test.advchart.marks`、`test.advchart.diagnose`、`test.advchart.candlestick` 的「没有渲染器」示例要再搬一次；默认坐标系上已经没有别的没有渲染器的类型，diagnose 那条大概只能用显式坐标系挪过来的 map 或 parallel。

@@ -696,6 +696,15 @@ const CASES = [
       { name: 'big', value: 90 },
       { name: 'small', children: [{ name: 's1', value: 6, children: [{ name: 's11', value: 1 }, { name: 's12', value: 5 }] }, { name: 's2', value: 4 }] }] }),
     steps: [{ click: { tm: 4 } }, { click: { crumb: 0 } }, { click: { tm: 5 } }] },
+  // [milestone C6-C13] tm-click-ratio's only zoom is clamped by its scaleLimit
+  // max 2 and tm-click-big's 3.2 is under the default max 5, so neither the
+  // border terms of estimateRootSize nor the default clamp were ever visible
+  { id: 'tm-click-border', group: 'tm-click', note: 'a border / gap per level and no scaleLimit: the border terms of estimateRootSize reach the root size unclamped (zoom about 1.6)',
+    W: 600, H: 400, option: tm({ zoomToNodeRatio: 0.5, levels: clone(TM_BORDERED) }),
+    steps: [{ click: { tm: 9 } }, { click: { crumb: 0 } }, { click: { tm: 7 } }] },
+  { id: 'tm-click-cap', group: 'tm-click', note: 'a leaf a thousandth of the whole: estimateRootSize asks for a zoom of about 10, the default scaleLimit max 5 caps it',
+    W: 600, H: 400, option: tm({ data: [{ name: 'big', value: 999 }, { name: 'tiny', value: 1 }] }),
+    steps: [{ click: { tm: 2 } }] },
   { id: 'tm-leafdepth', group: 'tm-click', note: 'leafDepth 1: a click on a leaf root drills (rootToNode), again one level down, the breadcrumb root rolls up',
     W: 600, H: 400, option: tm({ leafDepth: 1 }),
     steps: [{ click: { tm: 1 } }, { click: { tm: 2 } }, { click: { crumb: 0 } }, { click: { tm: 6 } }, { click: { crumb: 0 } }] },

@@ -778,6 +778,10 @@ begin
   AssertEquals('a null count is no walk', 1, Trunc(TyProgModBy(-1, 4)));
   AssertTrue('a null step on a count is Infinity', IsInfinite(TyProgModBy(10, NaN)));
   AssertEquals('a null step on no rows normalizes to 1', 1, Trunc(TyProgModBy(0, NaN)));
+  { Math.ceil(0 / 4) is 0, a number: only the `!(val >= 1)` half of
+    normalizeModBy lifts it [milestone C6-C13] }
+  AssertEquals('no rows with a step: ceil gives 0, normalized to 1', 1,
+    Trunc(TyProgModBy(0, 4)));
 end;
 
 procedure TAdvChartProgressiveTest.TestTheSpecReadsJavaScriptValues;

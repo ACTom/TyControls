@@ -241,6 +241,7 @@ begin
     '  --advchart-label-margin: 8px;' + LineEnding +
     '  --advchart-minor-tick-length: 3px;' + LineEnding +
     '  --advchart-name-gap: 15px;' + LineEnding +
+    '  --advchart-single-tick-length: 6px;' + LineEnding +
     '  --advchart-tick-length: 5px;' + LineEnding +
     '  --advchart-axispointer-margin: 3px;' + LineEnding +
     '  --advchart-tooltip-gap: 20px;' + LineEnding +

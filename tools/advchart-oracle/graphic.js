@@ -781,6 +781,15 @@ add('merge', 'relayout', "merging placements: a right replaces the left (mergeLa
     { merge: { graphic: [{ id: 'm', right: 20 }] } },
     { merge: { graphic: [{ id: 'm', top: '50%', rotation: 0.2 }, { id: 'mt', left: 30 }] } },
     { resize: [500, 300] }] });
+// [milestone C6-C13] the side a new placement replaces is nulled, not only
+// outranked: with both written the left (top) wins and the stale right
+// (bottom) is invisible -- until the new side is unset again
+add('merge', 'relayout-unset', "a left over a right nulls the right: unset the left again and the element has no horizontal placement at all (not the old right); the same for top over bottom",
+  { graphic: [
+    { type: 'rect', id: 'u', right: 40, bottom: 30, shape: { width: 60, height: 40 }, style: { fill: '#5070dd' } },
+    { type: 'text', id: 'ut', right: 10, top: 10, style: { text: 'unset', fontSize: 14 } }] }, { steps: [
+    { merge: { graphic: [{ id: 'u', left: 50, top: 20 }, { id: 'ut', left: 30 }] } },
+    { merge: { graphic: [{ id: 'u', left: null, top: null }, { id: 'ut', left: null }] } }] });
 
 // ---- events
 add('event', 'events', "element handlers and chart events: a click on a rect with onclick, a click on a child of a group with onclick (bubbling), a handler that returns true (no chart event), a silent rect over another (the one under it), an invisible rect (still hit), an ignored one (not), hovers with onmouseover / onmouseout",

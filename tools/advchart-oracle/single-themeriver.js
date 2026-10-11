@@ -788,6 +788,12 @@ add('pointer', 'ptr-river', 'the gallery\'s pointer: a line with its label, the 
 add('pointer', 'ptr-river-shadow', 'a shadow pointer over a river on a value axis',
   { tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } }, singleAxis: { type: 'value', top: 60, bottom: 60 }, series: [river(RIVER_V)] }, {
     probes: probesAlong(200, [30, 31, 99, 150, 260, 301, 420, 569, 570]) });
+// [milestone C6-C13] the axis starting at the first value: the shadow's low
+// end is clamped to the axis start (calcAxisPointerShadowEnds' max), which a
+// category band or a value axis from 0 never reaches
+add('pointer', 'ptr-river-shadow-min', 'a shadow pointer on a value axis whose min is the first value: the band is cut at the axis start',
+  { tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } }, singleAxis: { type: 'value', min: 1, top: 60, bottom: 60 }, series: [river(RIVER_V)] }, {
+    probes: probesAlong(200, [30, 31, 60, 569, 570]) });
 add('pointer', 'ptr-scatter-cat', 'a category axis with a scatter: shadow a band wide, the nearest row',
   { tooltip: { trigger: 'axis', axisPointer: { type: 'shadow', label: { show: true } } },
     singleAxis: { type: 'category', data: ['a', 'b', 'c', 'd', 'e'], top: 150, bottom: 150 }, series: [sc([[0, 1], [1, 1], [3, 1]], { symbolSize: 10 })] }, {
