@@ -83,6 +83,7 @@ function TyEventQueryMatches(const AQuery: TTyEventQuery;
   and dragnode, a sankey's node drag [Batch 114];
   and the drill-downs' sunburstroottonode, treemapzoomtonode,
   treemaproottonode, treemapmove and treemaprender [Batch 115];
+  and datarangeselected, a visualMap's selectDataRange [Batch 116];
   and `updated`, which every
   setOption and dispatch ends with [Batch 97]. }
 function TyChartEventTypeOf(const AName: string): string;
@@ -97,7 +98,7 @@ uses
 const
   cMouseTypes: array[0..8] of string = ('click', 'dblclick', 'mousedown',
     'mouseup', 'mousemove', 'mouseover', 'mouseout', 'globalout', 'contextmenu');
-  cActionTypes: array[0..23] of string = ('select', 'unselect', 'toggleselect',
+  cActionTypes: array[0..24] of string = ('select', 'unselect', 'toggleselect',
     'selectchanged', 'highlight', 'downplay', 'mapselectchanged',
     'pieselectchanged', 'mapselected', 'pieselected', 'mapunselected',
     'pieunselected',
@@ -110,7 +111,9 @@ const
     'dragnode',
     { the drill-downs [Batch 115] }
     'sunburstroottonode', 'treemapzoomtonode', 'treemaproottonode',
-    'treemapmove', 'treemaprender');
+    'treemapmove', 'treemaprender',
+    { a visualMap's selectDataRange [Batch 116] }
+    'datarangeselected');
 
 function TyChartEventIsAction(const AType: string): Boolean;
 var i: Integer;
