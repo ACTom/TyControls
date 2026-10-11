@@ -134,10 +134,12 @@ type
 
     THE SWITCHES (protected, off; the final classes publish theirs) change what a user move
     does, never what the program does: AllowCrossing lets a thumb pass its neighbours,
-    Pushable lets it push them along, AllowUserThumbs lets the user add and remove thumbs.
+    Pushable lets it push them along, AllowUserThumbs lets the user add and remove thumbs
+    (ranges, on the range bar), DraggableRanges lets a press on a range's span drag it whole.
     The built-in behaviour comes after the application's events and stops where they say:
-    a move (every pushed thumb too) goes through OnThumbChanging, an add only happens for a
-    press OnTrackClick did not handle, a removal goes through OnThumbRemoving. }
+    a move (every pushed thumb, both ends of a dragged span too) goes through
+    OnThumbChanging, an add or a span drag only happens for a press OnTrackClick did not
+    handle, a removal goes through OnThumbRemoving. }
   TTyMultiTrackBarBase = class(TTyCustomControl)
   private
     FValues: array of Integer;
@@ -182,6 +184,10 @@ type
     FOnThumbRemoving: TTyTrackThumbRemovingEvent;
     { The thumb being dragged is off the track far enough to go on release (drawn removing). }
     FRemoving: Boolean;
+    FDraggableRanges: Boolean;
+    { The span being dragged whole (DraggableRanges): the index of its lower thumb, -1 = none.
+      FGrab then holds where on the span it was pressed, from the lower thumb's centre. }
+    FDragSpan: Integer;
     procedure SetAllowCrossing(const AValue: Boolean);
     { The user moves AllowCrossing and Pushable make; see UserMoveThumb. }
     procedure UserCrossThumb(AIndex, AValue: Integer);
@@ -193,10 +199,6 @@ type
     function ClampPushed(AIndex, AValue: Integer): Integer;
     procedure SetMinThumbs(const AValue: Integer);
     procedure SetMaxThumbs(const AValue: Integer);
-    { The user adds a thumb at AValue -- held into the free stretch the value is in, MinGap
-      from both neighbours -- unless MaxThumbs is reached or the stretch has no room; the
-      index it went to, -1 = none added. }
-    function UserAddThumb(AValue: Integer): Integer;
     { The user removes thumb AIndex: offered to OnThumbRemoving when CanRemoveThumb. }
     function UserRemoveThumb(AIndex: Integer): Boolean;
     { AllowUserThumbs, and more thumbs than MinThumbs. }
@@ -204,6 +206,9 @@ type
     { Client point (X, Y) is off the track by more than RemoveDistance across it (Y on a
       horizontal bar, X on a vertical one), and a thumb dragged there would be removed. }
     function DraggedOff(X, Y: Integer): Boolean;
+    { A press at client (X, Y), main-axis APos, on a span DraggableRanges drags (both ends
+      enabled): the drag starts, the span's lower end is selected, True. }
+    function StartSpanDrag(X, Y, APos: Integer): Boolean;
     function GetRemovingThumb: Integer;
     function GetThumbCount: Integer;
     function GetThumbValue(AIndex: Integer): Integer;
@@ -263,6 +268,30 @@ type
       into the thumbs as they are; a final class adds an item instead (TTyMultiTrackBar: one
       that follows the theme). The selection is the caller's to set. }
     function AddUserThumb(AValue: Integer): Integer; virtual;
+    { The user adds at AValue (a press on the bare track, AllowUserThumbs on). Here: a thumb,
+      held into the free stretch the value is in, MinGap from both neighbours, through
+      AddUserThumb -- unless MaxThumbs is reached or the stretch has no room. The index of
+      the thumb the press selects, -1 = nothing added (the press then does nothing). }
+    function UserAddThumb(AValue: Integer): Integer; virtual;
+    { True: the press that added a thumb drags it on (here). False: it only selects it -- unless
+      the press is on a span that DraggableRanges drags, which then goes with the pointer. }
+    function DragsAnAddedThumb: Boolean; virtual;
+    { The span under client point (X, Y) that a press drags whole: the index of its lower
+      thumb, -1 = none. Here there are no spans; the range bar names its ranges' highlights. }
+    function SpanAtPoint(X, Y: Integer): Integer; virtual;
+    { The user moves the span whose lower thumb is ALow (and the upper one ALow + 1) by
+      ADelta: held at the neighbours (each +/- the effective gap) and Min..Max so its width
+      never changes; then both ends are asked through OnThumbChanging, the lower first, each
+      with where the step puts it. Either refusing stops the step; an end answering another
+      value moves the span by that end's answer instead (the later answer wins), held again.
+      Then each end's OnThumbChange (lower first) and one OnChange. }
+    procedure UserMoveSpan(ALow, ADelta: Integer);
+    { Thumb AIndex is drawn removing: here only the thumb RemovingThumb names; the range bar
+      fades both ends of that thumb's range. }
+    function DrawnRemoving(AIndex: Integer): Boolean; virtual;
+    { Segment AIndex fades with the removing look (the opacity TyTrackThumb.removing
+      resolves to): here none; the range bar fades the span of the range being removed. }
+    function SegmentDrawnRemoving(AIndex: Integer): Boolean; virtual;
     { Remove thumb AIndex. Here: taken out of the thumbs, the selection dropped with it (or
       kept on its thumb, at its new index); a final class deletes its item instead. }
     procedure RemoveThumb(AIndex: Integer); virtual;
@@ -366,6 +395,12 @@ type
     { The most thumbs the user can add up to; 0 = no limit. Code is not held. }
     property MaxThumbs: Integer read FMaxThumbs write SetMaxThumbs default 0;
     property OnThumbRemoving: TTyTrackThumbRemovingEvent read FOnThumbRemoving write FOnThumbRemoving;
+    { A press on a span the final class names (SpanAtPoint: a range's highlight on the range
+      bar), off its thumbs, drags the whole span: its width stays, it stops MinGap short of
+      the neighbouring thumbs and at Min / Max, and every step goes through OnThumbChanging
+      for both ends (see UserMoveSpan). The press is OnTrackClick's first: handled, nothing
+      is dragged. }
+    property DraggableRanges: Boolean read FDraggableRanges write FDraggableRanges default False;
   public
     constructor Create(AOwner: TComponent); override;
     { Move one thumb; see the class comment. Out-of-range AIndex raises EListError. }
@@ -494,6 +529,10 @@ type
       are put in order the selection follows its thumb rather than staying at the old index. }
     FSelectedID: Integer;
     FSelectedHigh: Boolean;
+    FNewRangeWidth: Integer;
+    function GetAllowUserRanges: Boolean;
+    procedure SetAllowUserRanges(AValue: Boolean);
+    procedure SetNewRangeWidth(AValue: Integer);
     procedure SetRanges(AValue: TTyTrackRanges);
     { Stable insertion sort of the items by their lower end. }
     procedure SortRangeItems;
@@ -523,8 +562,29 @@ type
     function SegmentStyle(AIndex: Integer; out ATypeKey, AStyleClass: string): Boolean; override;
     { A range bar does not take single thumbs: nothing is added. }
     function AddUserThumb(AValue: Integer): Integer; override;
+    { A range, NewRangeWidth wide and centred on AValue, cut to the free stretch between the
+      neighbouring ranges (MinGap from each) and Min..Max; none when the press is inside a
+      range or what is left is narrower than MinGap. The index of its lower end. }
+    function UserAddThumb(AValue: Integer): Integer; override;
+    { False: the new range is centred on the press, so the press drags it whole
+      (DraggableRanges) or only selects its lower end. }
+    function DragsAnAddedThumb: Boolean; override;
+    { The range whose highlight -- lower thumb's centre to upper thumb's centre, as painted --
+      holds the point along the track. }
+    function SpanAtPoint(X, Y: Integer): Integer; override;
+    { Both ends of the range being removed, and its span. }
+    function DrawnRemoving(AIndex: Integer): Boolean; override;
+    function SegmentDrawnRemoving(AIndex: Integer): Boolean; override;
     { The whole range the thumb is an end of. }
     procedure RemoveThumb(AIndex: Integer); override;
+    { The user adds and removes ranges -- AllowUserThumbs under the range bar's name. A left
+      press on the bare track that OnTrackClick did not handle adds a range there (see
+      UserAddThumb); either end dragged off the track by more than --track-remove-distance
+      shows the whole range as removing and removes it on release, and Delete removes the
+      range of the selected end. OnThumbRemoving is asked first, with the end's index. }
+    property AllowUserRanges: Boolean read GetAllowUserRanges write SetAllowUserRanges default False;
+    { How wide (in values) a range the user adds is, before it is cut to the room it is in. }
+    property NewRangeWidth: Integer read FNewRangeWidth write SetNewRangeWidth default 10;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -612,6 +672,10 @@ type
     property OnThumbChanging;
     property AllowCrossing;
     property Pushable;
+    property AllowUserRanges;
+    property DraggableRanges;
+    property NewRangeWidth;
+    property OnThumbRemoving;
   end;
 
   TTyCustomMultiTrackBar = class;
@@ -847,6 +911,7 @@ begin
   FSelectedThumb := -1;
   FDragThumb := -1;
   FHoverThumb := -1;
+  FDragSpan := -1;
   FOrientation := toHorizontal;
   FTickMarks := ttmBottomRight;
   FTickStyle := ttsAuto;
@@ -1339,6 +1404,78 @@ begin
   if (Result < 0) or (Result >= Length(FValues)) then Result := -1;
 end;
 
+function TTyMultiTrackBarBase.DragsAnAddedThumb: Boolean;
+begin
+  Result := True;
+end;
+
+function TTyMultiTrackBarBase.SpanAtPoint(X, Y: Integer): Integer;
+begin
+  Result := -1;
+end;
+
+procedure TTyMultiTrackBarBase.UserMoveSpan(ALow, ADelta: Integer);
+var
+  n, hi, d: Integer;
+
+  { ADelta held so both ends stay at the neighbours (each +/- the gap) and Min..Max. }
+  function Held(ADelta: Integer): Integer;
+  var
+    lo, top, gap: Integer;
+  begin
+    gap := EffectiveGap;
+    lo := FMin;
+    top := FMax;
+    if top < lo then top := lo;
+    if (ALow > 0) and (FValues[ALow - 1] + gap > lo) then lo := FValues[ALow - 1] + gap;
+    if (hi < n - 1) and (FValues[hi + 1] - gap < top) then top := FValues[hi + 1] - gap;
+    Result := ADelta;
+    if FValues[hi] + Result > top then Result := top - FValues[hi];
+    if FValues[ALow] + Result < lo then Result := lo - FValues[ALow];
+    { A span wider than the room it is in (only from code) does not move at all. }
+    if (FValues[ALow] + Result < lo) or (FValues[hi] + Result > top) then Result := 0;
+  end;
+
+  { Ask end AIndex about going by d; False = refused or the thumbs changed under it. }
+  function Asked(AIndex: Integer): Boolean;
+  var
+    v: Integer;
+    allow: Boolean;
+  begin
+    v := FValues[AIndex] + d;
+    allow := True;
+    DoThumbChanging(AIndex, v, allow);
+    Result := allow and (Length(FValues) = n);
+    if Result then d := Held(v - FValues[AIndex]);
+  end;
+
+begin
+  n := Length(FValues);
+  hi := ALow + 1;
+  if (ALow < 0) or (hi >= n) then Exit;
+  d := Held(ADelta);
+  if d = 0 then Exit;
+  if not Asked(ALow) or (d = 0) then Exit;
+  if not Asked(hi) or (d = 0) then Exit;
+  Inc(FValues[ALow], d);
+  Inc(FValues[hi], d);
+  ValuesChanged;
+  Invalidate;
+  DoThumbChange(ALow);
+  DoThumbChange(hi);
+  DoChange;
+end;
+
+function TTyMultiTrackBarBase.DrawnRemoving(AIndex: Integer): Boolean;
+begin
+  Result := (AIndex >= 0) and (AIndex = GetRemovingThumb);
+end;
+
+function TTyMultiTrackBarBase.SegmentDrawnRemoving(AIndex: Integer): Boolean;
+begin
+  Result := False;
+end;
+
 function TTyMultiTrackBarBase.CanRemoveThumb: Boolean;
 begin
   Result := FAllowUserThumbs and (Length(FValues) > FMinThumbs);
@@ -1356,6 +1493,7 @@ begin
   { The handler may have changed the thumbs: the index, or the room above MinThumbs, gone. }
   if (AIndex >= Length(FValues)) or not CanRemoveThumb then Exit;
   FDragThumb := -1;
+  FDragSpan := -1;
   FHoverThumb := -1;
   RemoveThumb(AIndex);
   Invalidate;
@@ -1384,6 +1522,24 @@ begin
   else if c >= len then d := c - (len - 1)
   else d := 0;
   Result := d > RemoveDistance;
+end;
+
+function TTyMultiTrackBarBase.StartSpanDrag(X, Y, APos: Integer): Boolean;
+var
+  s: Integer;
+begin
+  Result := False;
+  if not FDraggableRanges then Exit;
+  s := SpanAtPoint(X, Y);
+  if (s < 0) or (s + 1 >= Length(FValues)) or not ThumbEnabled(s) or not ThumbEnabled(s + 1) then
+    Exit;
+  FDragSpan := s;
+  FGrab := APos - ThumbCentre(s);
+  FHoverThumb := -1;
+  FRemoving := False;
+  SelectedThumb := s;
+  Invalidate;
+  Result := True;
 end;
 
 function TTyMultiTrackBarBase.GetRemovingThumb: Integer;
@@ -1753,7 +1909,7 @@ end;
 procedure TTyMultiTrackBarBase.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
-  S, St: TTyStyleSet;
+  S, St, Rm: TTyStyleSet;
   R, SlideR, GrooveR, SegR, ThumbR: TRect;
   Ticks: TTyTrackTicks;
   TW, MLen, Off, i, n, lo, hi, topIdx: Integer;
@@ -1783,7 +1939,7 @@ var
     if Assigned(FOnDrawThumb) then FOnDrawThumb(Self, P, AIndex, ThumbR, States, own);
     if not own then Exit;
     { Dragged off far enough to go on release: its own class and the removing one. }
-    removing := FRemoving and (AIndex = FDragThumb);
+    removing := DrawnRemoving(AIndex);
     thumbCls := ThumbStyleClass(AIndex);
     if removing then thumbCls := Trim(thumbCls + ' ' + TyTrackRemovingClass);
     St := ActiveController.Model.ResolveStyle('TyTrackThumb', thumbCls, States);
@@ -1882,6 +2038,12 @@ begin
       if hi <= lo then Continue;
       St := ActiveController.Model.ResolveStyle(key, cls, []);
       if not (tpBackground in St.Present) then Continue;
+      if SegmentDrawnRemoving(i) then
+      begin
+        { The span goes with its thumbs: faded as they are. }
+        Rm := ActiveController.Model.ResolveStyle('TyTrackThumb', TyTrackRemovingClass, []);
+        if tpOpacity in Rm.Present then FadeThumbStyle(St, Rm.Opacity);
+      end;
       P.FillBackground(SegR, St.Background, St.BorderRadius);
     end;
 
@@ -2068,6 +2230,7 @@ begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
+  FDragSpan := -1;
   { The further presses of a multi-click whose first press OnTrackClick took: the same click. }
   if Shift * [ssDouble, ssTriple, ssQuad] = [] then FTrackClickTaken := False
   else if FTrackClickTaken then Exit;
@@ -2094,6 +2257,8 @@ begin
     if (idx >= 0) and not ThumbEnabled(idx) then Exit;
   end;
   onThumb := idx >= 0;
+  { On a span DraggableRanges drags: the press takes the whole span. }
+  if not onThumb and StartSpanDrag(X, Y, pos) then Exit;
   if not onThumb and FAllowUserThumbs then
   begin
     { The bare track adds a thumb there, and the press drags it on; past MaxThumbs, or
@@ -2101,10 +2266,19 @@ begin
       lands on the thumb the first one added, or meets the same MaxThumbs / no room.) }
     idx := UserAddThumb(ValueAt(pos));
     if idx < 0 then Exit;
-    FGrab := pos - ThumbCentre(idx);
-    FDragThumb := idx;
     FHoverThumb := -1;
     FRemoving := False;
+    { A range bar's new range is centred on the press: the press drags it whole when
+      DraggableRanges is on, and only selects it otherwise. }
+    if not DragsAnAddedThumb then
+    begin
+      SelectedThumb := idx;
+      StartSpanDrag(X, Y, pos);
+      Invalidate;
+      Exit;
+    end;
+    FGrab := pos - ThumbCentre(idx);
+    FDragThumb := idx;
     SelectedThumb := idx;
     Invalidate;
     Exit;
@@ -2134,6 +2308,15 @@ var
 begin
   if not Enabled then Exit;
   inherited MouseMove(Shift, X, Y);
+  if FDragSpan >= 0 then
+  begin
+    { The lower end follows the pointer as a dragged thumb would, grabbed where pressed; the
+      span goes with it. Not removed off the track: only a dragged end is. }
+    if FDragSpan + 1 >= Length(FValues) then Exit;
+    if FOrientation = toVertical then pos := Y else pos := X;
+    UserMoveSpan(FDragSpan, ValueAt(pos - FGrab) - FValues[FDragSpan]);
+    Exit;
+  end;
   if FDragThumb >= 0 then
   begin
     { Off the track far enough to be removed: drawn so, and it stays where it was meanwhile;
@@ -2193,6 +2376,7 @@ begin
     i := FDragThumb;
     off := (i >= 0) and DraggedOff(X, Y);
     FDragThumb := -1;
+    FDragSpan := -1;
     FRemoving := False;
     Invalidate;
     if off then UserRemoveThumb(i);
@@ -2417,6 +2601,7 @@ var
 begin
   inherited Create(AOwner);
   FSelectedID := -1;
+  FNewRangeWidth := 10;
   FRanges := TTyTrackRanges.Create(Self);
   FRanges.BeginUpdate;
   try
@@ -2598,6 +2783,86 @@ end;
 function TTyCustomRangeTrackBar.AddUserThumb(AValue: Integer): Integer;
 begin
   Result := -1;
+end;
+
+function TTyCustomRangeTrackBar.GetAllowUserRanges: Boolean;
+begin
+  Result := AllowUserThumbs;
+end;
+
+procedure TTyCustomRangeTrackBar.SetAllowUserRanges(AValue: Boolean);
+begin
+  AllowUserThumbs := AValue;
+end;
+
+procedure TTyCustomRangeTrackBar.SetNewRangeWidth(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  FNewRangeWidth := AValue;
+end;
+
+function TTyCustomRangeTrackBar.UserAddThumb(AValue: Integer): Integer;
+var
+  n, k, gap, lo, hi, a, b: Integer;
+  r: TTyTrackRange;
+begin
+  Result := -1;
+  n := ThumbCount;
+  if (MaxThumbs > 0) and (n + 2 > MaxThumbs) then Exit;
+  k := 0;
+  while (k < n) and (ThumbValues[k] <= AValue) do Inc(k);
+  { Past an odd number of ends: inside a range (its lower end at or below the press). }
+  if Odd(k) then Exit;
+  gap := EffectiveGap;
+  lo := Min;
+  hi := Max;
+  if hi < lo then hi := lo;
+  if (k > 0) and (ThumbValues[k - 1] + gap > lo) then lo := ThumbValues[k - 1] + gap;
+  if (k < n) and (ThumbValues[k] - gap < hi) then hi := ThumbValues[k] - gap;
+  a := AValue - FNewRangeWidth div 2;
+  b := a + FNewRangeWidth;
+  if a < lo then a := lo;
+  if b > hi then b := hi;
+  if (b < a) or (b - a < gap) then Exit;
+  FRanges.BeginUpdate;
+  try
+    r := FRanges.Add;
+    r.FLow := a;
+    r.FHigh := b;
+  finally
+    FRanges.EndUpdate;
+  end;
+  Result := 2 * r.Index;
+  if Result + 1 >= ThumbCount then Result := -1;
+end;
+
+function TTyCustomRangeTrackBar.DragsAnAddedThumb: Boolean;
+begin
+  Result := False;
+end;
+
+function TTyCustomRangeTrackBar.SpanAtPoint(X, Y: Integer): Integer;
+var
+  i, pos, lo, hi: Integer;
+begin
+  Result := -1;
+  if Orientation = toVertical then pos := Y else pos := X;
+  for i := 0 to FRanges.Count - 1 do
+  begin
+    if 2 * i + 1 >= ThumbCount then Break;
+    SegmentSpan(2 * i + 1, Font.PixelsPerInch, lo, hi);
+    if (pos >= lo) and (pos <= hi) then Exit(2 * i);
+  end;
+end;
+
+function TTyCustomRangeTrackBar.DrawnRemoving(AIndex: Integer): Boolean;
+begin
+  Result := (AIndex >= 0) and (RemovingThumb >= 0) and (AIndex div 2 = RemovingThumb div 2);
+end;
+
+function TTyCustomRangeTrackBar.SegmentDrawnRemoving(AIndex: Integer): Boolean;
+begin
+  Result := Odd(AIndex) and (RemovingThumb >= 0) and (AIndex div 2 = RemovingThumb div 2);
 end;
 
 procedure TTyCustomRangeTrackBar.RemoveThumb(AIndex: Integer);

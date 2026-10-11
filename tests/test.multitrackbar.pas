@@ -549,6 +549,54 @@ type
     procedure TestOwnerDrawSeesWhichThumbIsRemoving;
   end;
 
+  { AllowUserRanges, NewRangeWidth and DraggableRanges on TTyRangeTrackBar through the real
+    paths -- MouseDown / MouseMove / MouseUp, KeyDown. The log holds `click:<value> `
+    (OnTrackClick), `R<i> ` (OnThumbRemoving), `K<i>:<proposed>@<value while asked> `
+    (OnThumbChanging) beside `S<i>` / `T<i>` / `C`. The changing handler refuses thumb i
+    where FPin[i] and answers FForceTo for thumb FForceIdx. The theme is the paint fixture's
+    plus an opacity of 0.5 for TyTrackThumb.removing. }
+  TTyRangeUserRangesTest = class(TMultiTrackFinalBase)
+  private
+    FBar: TTyRangeTrackBar;
+    FHandleClick: Boolean;
+    FKeep: Boolean;
+    FPin: array of Boolean;
+    FForceIdx, FForceTo: Integer;
+    procedure Wire;
+    procedure TrackClick(Sender: TObject; AValue: Integer; var AHandled: Boolean);
+    procedure Removing(Sender: TObject; AIndex: Integer; var AAllow: Boolean);
+    procedure Changing(Sender: TObject; AIndex: Integer; var AValue: Integer;
+      var AAllow: Boolean);
+    { A point on the track (horizontal, no readout) whose value is AValue, on no thumb. }
+    function PtOn(AValue: Integer): TPoint;
+    function Centre(AIndex: Integer): TPoint;
+    procedure Press(const P: TPoint; ADouble: Boolean = False);
+    procedure Drag(const P: TPoint);
+    procedure Release(const P: TPoint);
+    function Key(AKey: Word; AShift: TShiftState = []): Word;
+    function Ranges: string;
+    { The ranges as flat Low, High pairs. }
+    procedure SetRanges(const AValues: array of Integer);
+    function PixelAt(const P: TPoint): TBGRAPixel;
+  protected
+    procedure SetUp; override;
+  published
+    procedure TestTheSwitchesAreOffAndPublished;
+    procedure TestAPressAddsARangeCentredOnIt;
+    procedure TestTrackClickHandledAddsNothing;
+    procedure TestANewRangeIsCutToTheRoomOrNotAdded;
+    procedure TestNoRangeIsAddedInsideARange;
+    procedure TestAnEndDraggedOffRemovesTheWholeRange;
+    procedure TestOnThumbRemovingKeepsTheRange;
+    procedure TestDeleteRemovesTheSelectedEndsRange;
+    procedure TestDraggingTheSpanMovesTheWholeRange;
+    procedure TestEitherEndRefusingStopsTheStep;
+    procedure TestAnEndsAnswerMovesTheWholeSpan;
+    procedure TestOffASpanPressJumpsTheNearestThumb;
+    procedure TestTrackClickHandledDragsNoSpan;
+    procedure TestANewRangeIsDraggedOnWhenDraggable;
+  end;
+
 implementation
 
 { TMultiProbe }
@@ -5648,10 +5696,12 @@ begin
   FBar.MaxThumbs := -1;
   AssertEquals('no fewer than none', 0, FBar.MinThumbs);
   AssertEquals('0 = no limit', 0, FBar.MaxThumbs);
-  { The range bar adds and removes ranges, not thumbs (AllowUserRanges): none of this is its. }
+  { The range bar adds and removes ranges, not thumbs (AllowUserRanges): only the removal
+    event is its too. }
   range := TTyRangeTrackBar.Create(FForm);
-  for i := 0 to High(CNames) do
+  for i := 0 to 2 do
     AssertFalse('TTyRangeTrackBar does not publish ' + CNames[i], IsPublishedProp(range, CNames[i]));
+  AssertTrue(IsPublishedProp(range, 'OnThumbRemoving'));
 end;
 
 procedure TTyMultiTrackUserThumbsTest.TestOffAPressJumpsAndADragOffRemovesNothing;
@@ -6088,6 +6138,513 @@ begin
   AssertEquals('25,75', Values);
 end;
 
+{ TTyRangeUserRangesTest }
+
+procedure TTyRangeUserRangesTest.SetUp;
+begin
+  inherited SetUp;
+  FCtl.LoadThemeCss(CPaintCss + 'TyTrackThumb.removing { opacity: 0.5; }');
+  FBar := TTyRangeTrackBar.Create(FForm);
+  FBar.Name := 'Bar';
+  FBar.Parent := FForm;
+  FBar.Font.PixelsPerInch := 96;
+  FBar.SetBounds(0, 0, 400, 24);
+  FBar.Controller := FCtl;
+  FHandleClick := False;
+  FKeep := False;
+  FPin := nil;
+  FForceIdx := -1;
+end;
+
+procedure TTyRangeUserRangesTest.Wire;
+begin
+  { Only where a test logs: a form written with these assigned would name the test's methods. }
+  FBar.OnThumbSelect := @ThumbSelected;
+  FBar.OnThumbChange := @ThumbMoved;
+  FBar.OnChange := @Changed;
+  FBar.OnTrackClick := @TrackClick;
+  FBar.OnThumbRemoving := @Removing;
+  FBar.OnThumbChanging := @Changing;
+end;
+
+procedure TTyRangeUserRangesTest.TrackClick(Sender: TObject; AValue: Integer;
+  var AHandled: Boolean);
+begin
+  FLog := FLog + Format('click:%d ', [AValue]);
+  if FHandleClick then AHandled := True;
+end;
+
+procedure TTyRangeUserRangesTest.Removing(Sender: TObject; AIndex: Integer;
+  var AAllow: Boolean);
+begin
+  FLog := FLog + Format('R%d ', [AIndex]);
+  if FKeep then AAllow := False;
+end;
+
+procedure TTyRangeUserRangesTest.Changing(Sender: TObject; AIndex: Integer;
+  var AValue: Integer; var AAllow: Boolean);
+begin
+  FLog := FLog + Format('K%d:%d@%d ', [AIndex, AValue, FBar.ThumbValues[AIndex]]);
+  if (AIndex < Length(FPin)) and FPin[AIndex] then AAllow := False;
+  if AIndex = FForceIdx then AValue := FForceTo;
+end;
+
+function TTyRangeUserRangesTest.PtOn(AValue: Integer): TPoint;
+var
+  tw: Integer;
+begin
+  tw := TyTrackThumbLen(96);
+  Result := Point(TyTrackThumbOffset(FBar.ClientWidth, tw, FBar.Min, FBar.Max, AValue, False)
+    + tw div 2, FBar.Height div 2);
+  AssertEquals('fixture: the point is at that value', AValue, FBar.ValueAtPoint(Result.X, Result.Y));
+  AssertEquals('fixture: the point is on no thumb', -1, FBar.ThumbAtPoint(Result.X, Result.Y));
+end;
+
+function TTyRangeUserRangesTest.Centre(AIndex: Integer): TPoint;
+var
+  r: TRect;
+begin
+  r := FBar.ThumbRect(AIndex);
+  Result := Point((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+end;
+
+procedure TTyRangeUserRangesTest.Press(const P: TPoint; ADouble: Boolean);
+var
+  sh: TShiftState;
+begin
+  sh := [ssLeft];
+  if ADouble then Include(sh, ssDouble);
+  TBaseAccess(FBar).MouseDown(mbLeft, sh, P.X, P.Y);
+end;
+
+procedure TTyRangeUserRangesTest.Drag(const P: TPoint);
+begin
+  TBaseAccess(FBar).MouseMove([ssLeft], P.X, P.Y);
+end;
+
+procedure TTyRangeUserRangesTest.Release(const P: TPoint);
+begin
+  TBaseAccess(FBar).MouseUp(mbLeft, [], P.X, P.Y);
+end;
+
+function TTyRangeUserRangesTest.Key(AKey: Word; AShift: TShiftState): Word;
+begin
+  Result := AKey;
+  TBaseAccess(FBar).KeyDown(Result, AShift);
+end;
+
+function TTyRangeUserRangesTest.Ranges: string;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 0 to FBar.Ranges.Count - 1 do
+  begin
+    if i > 0 then Result := Result + ';';
+    Result := Result + IntToStr(FBar.Ranges[i].Low) + '..' + IntToStr(FBar.Ranges[i].High);
+  end;
+end;
+
+procedure TTyRangeUserRangesTest.SetRanges(const AValues: array of Integer);
+var
+  i: Integer;
+  r: TTyTrackRange;
+begin
+  FBar.Ranges.BeginUpdate;
+  try
+    FBar.Ranges.Clear;
+    i := 0;
+    while i < High(AValues) do
+    begin
+      r := FBar.Ranges.Add;
+      r.Low := AValues[i];
+      r.High := AValues[i + 1];
+      Inc(i, 2);
+    end;
+  finally
+    FBar.Ranges.EndUpdate;
+  end;
+end;
+
+function TTyRangeUserRangesTest.PixelAt(const P: TPoint): TBGRAPixel;
+var
+  b: TBGRABitmap;
+begin
+  b := Shot(FBar);
+  try
+    Result := b.GetPixel(P.X, P.Y);
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TTyRangeUserRangesTest.TestTheSwitchesAreOffAndPublished;
+const
+  CNames: array[0..2] of string = ('AllowUserRanges', 'DraggableRanges', 'NewRangeWidth');
+var
+  i: Integer;
+  txt: string;
+  back: TForm;
+  bar: TTyRangeTrackBar;
+  multi: TTyMultiTrackBar;
+begin
+  for i := 0 to High(CNames) do
+    AssertTrue(CNames[i] + ' is published', IsPublishedProp(FBar, CNames[i]));
+  AssertTrue('OnThumbRemoving is published', IsPublishedProp(FBar, 'OnThumbRemoving'));
+  AssertFalse('AllowUserRanges is off', FBar.AllowUserRanges);
+  AssertFalse('DraggableRanges is off', FBar.DraggableRanges);
+  AssertEquals('NewRangeWidth', 10, FBar.NewRangeWidth);
+  txt := BarText(FormText(FForm));
+  for i := 0 to High(CNames) do
+    AssertEquals(CNames[i] + ': the default is not written', 0, Pos(CNames[i], txt));
+  FBar.AllowUserRanges := True;
+  FBar.DraggableRanges := True;
+  FBar.NewRangeWidth := 4;
+  txt := BarText(FormText(FForm));
+  AssertTrue(Pos('AllowUserRanges = True', txt) > 0);
+  AssertTrue(Pos('DraggableRanges = True', txt) > 0);
+  AssertTrue(Pos('NewRangeWidth = 4', txt) > 0);
+  back := RoundTrip(FForm);
+  try
+    bar := back.FindComponent('Bar') as TTyRangeTrackBar;
+    AssertTrue('read back', bar.AllowUserRanges);
+    AssertTrue(bar.DraggableRanges);
+    AssertEquals(4, bar.NewRangeWidth);
+  finally
+    back.Free;
+  end;
+  FBar.NewRangeWidth := -3;
+  AssertEquals('no narrower than nothing', 0, FBar.NewRangeWidth);
+  { The multi-thumb bar has no ranges. }
+  multi := TTyMultiTrackBar.Create(FForm);
+  for i := 0 to High(CNames) do
+    AssertFalse('TTyMultiTrackBar does not publish ' + CNames[i], IsPublishedProp(multi, CNames[i]));
+end;
+
+procedure TTyRangeUserRangesTest.TestAPressAddsARangeCentredOnIt;
+var
+  p: TPoint;
+begin
+  SetRanges([10, 20]);
+  FBar.AllowUserRanges := True;
+  Wire;
+  p := PtOn(50);
+  Press(p);
+  AssertEquals('NewRangeWidth wide, centred on the press', '10..20;45..55', Ranges);
+  AssertEquals('its lower end selected', 2, FBar.SelectedThumb);
+  AssertEquals('OnTrackClick first; then the new range, then its selection', 'click:50 C S2 ',
+    FLog);
+  FLog := '';
+  Drag(PtOn(60));
+  AssertEquals('not draggable: the press drags nothing', '10..20;45..55', Ranges);
+  AssertEquals('', FLog);
+  Release(PtOn(60));
+  { Before the first range, and an odd width: the extra value goes above. }
+  FBar.NewRangeWidth := 5;
+  Press(PtOn(4));
+  Release(PtOn(4));
+  AssertEquals('2..7;10..20;45..55', Ranges);
+  AssertEquals('the new range''s lower end, wherever the sort put it', 0, FBar.SelectedThumb);
+end;
+
+procedure TTyRangeUserRangesTest.TestTrackClickHandledAddsNothing;
+var
+  p: TPoint;
+begin
+  SetRanges([10, 20]);
+  FBar.AllowUserRanges := True;
+  Wire;
+  FHandleClick := True;
+  p := PtOn(50);
+  Press(p);
+  Release(p);
+  Press(p, True);
+  Release(p);
+  AssertEquals('handled: nothing added', '10..20', Ranges);
+  AssertEquals('asked once for the double-click', 'click:50 ', FLog);
+  FHandleClick := False;
+  FBar.AllowUserRanges := False;
+  FLog := '';
+  Press(p);
+  Release(p);
+  AssertEquals('off: the nearest thumb jumps, as before', '10..50', Ranges);
+end;
+
+procedure TTyRangeUserRangesTest.TestANewRangeIsCutToTheRoomOrNotAdded;
+var
+  p: TPoint;
+begin
+  FBar.MinGap := 2;
+  SetRanges([10, 20, 40, 60]);
+  FBar.AllowUserRanges := True;
+  Wire;
+  Press(PtOn(25));
+  Release(PtOn(25));
+  AssertEquals('cut at MinGap above the range below', '10..20;22..30;40..60', Ranges);
+  Press(PtOn(35));
+  Release(PtOn(35));
+  AssertEquals('cut at both ends', '10..20;22..30;32..38;40..60', Ranges);
+  Press(PtOn(3));
+  Release(PtOn(3));
+  AssertEquals('cut at Min', '0..8;10..20;22..30;32..38;40..60', Ranges);
+  Press(PtOn(97));
+  Release(PtOn(97));
+  AssertEquals('and at Max', '0..8;10..20;22..30;32..38;40..60;92..100', Ranges);
+  { Room narrower than MinGap: nothing added, and the press does nothing else. }
+  SetRanges([10, 20, 25, 60]);
+  FBar.SelectedThumb := 1;
+  FLog := '';
+  p := PtOn(22);
+  Press(p);
+  Release(p);
+  AssertEquals('no room: none added', '10..20;25..60', Ranges);
+  AssertEquals('only asked; nothing jumps, the selection stays', 'click:22 ', FLog);
+  AssertEquals(1, FBar.SelectedThumb);
+end;
+
+procedure TTyRangeUserRangesTest.TestNoRangeIsAddedInsideARange;
+begin
+  SetRanges([10, 20, 40, 60]);
+  FBar.AllowUserRanges := True;
+  Wire;
+  Press(PtOn(50));
+  Release(PtOn(50));
+  AssertEquals('inside a range: none added, nothing jumps', '10..20;40..60', Ranges);
+  AssertEquals('click:50 ', FLog);
+end;
+
+procedure TTyRangeUserRangesTest.TestAnEndDraggedOffRemovesTheWholeRange;
+var
+  c, span, other: TPoint;
+  px: TBGRAPixel;
+  y: Integer;
+begin
+  SetRanges([10, 20, 40, 60]);
+  FBar.AllowUserRanges := True;
+  Wire;
+  span := PtOn(50);
+  other := PtOn(15);
+  { The groove's row: where the span is painted. }
+  y := 0;
+  while (y < FBar.Height) and not SamePx(PixelAt(Point(span.X, y)), $FF, 0, 0) do Inc(y);
+  AssertTrue('fixture: the spans are painted', y < FBar.Height);
+  span.Y := y;
+  other.Y := y;
+  AssertTrue(SamePx(PixelAt(other), $FF, 0, 0));
+  c := Centre(3);
+  Press(c);
+  Drag(Point(c.X, 80));
+  AssertEquals('the dragged end is the removing one', 3, FBar.RemovingThumb);
+  px := PixelAt(Centre(3));
+  AssertFalse('the dragged end faded: ' + PxStr(px), SamePx(px, $80, 0, $FF));
+  px := PixelAt(Centre(2));
+  AssertFalse('the other end too: ' + PxStr(px), SamePx(px, $3B, $82, $F6));
+  px := PixelAt(span);
+  AssertFalse('and the span: ' + PxStr(px), SamePx(px, $FF, 0, 0));
+  AssertFalse('faded, not gone: ' + PxStr(px), SamePx(px, $60, $60, $60));
+  AssertTrue('the other range as it was', SamePx(PixelAt(other), $FF, 0, 0));
+  AssertTrue(SamePx(PixelAt(Centre(1)), $3B, $82, $F6));
+  Drag(c);
+  AssertEquals('dragged back: none', -1, FBar.RemovingThumb);
+  AssertTrue('the span as it was', SamePx(PixelAt(span), $FF, 0, 0));
+  AssertTrue(SamePx(PixelAt(Centre(2)), $3B, $82, $F6));
+  Drag(Point(c.X, 80));
+  FLog := '';
+  Release(Point(c.X, 80));
+  AssertEquals('released off the track: the whole range is gone', '10..20', Ranges);
+  AssertEquals('asked with the end''s index, the change, the selection gone',
+    'R3 C S-1 ', FLog);
+  { The lower end does it too. }
+  c := Centre(0);
+  Press(c);
+  Release(Point(c.X, -40));
+  AssertEquals('', Ranges);
+end;
+
+procedure TTyRangeUserRangesTest.TestOnThumbRemovingKeepsTheRange;
+var
+  c: TPoint;
+begin
+  SetRanges([10, 20, 40, 60]);
+  FBar.AllowUserRanges := True;
+  Wire;
+  FKeep := True;
+  c := Centre(2);
+  Press(c);
+  Drag(Point(c.X, 80));
+  FLog := '';
+  Release(Point(c.X, 80));
+  AssertEquals('refused: asked, and it stays', 'R2 ', FLog);
+  AssertEquals('10..20;40..60', Ranges);
+  { Off: dragged off and released, an end is just an end. }
+  FKeep := False;
+  FBar.AllowUserRanges := False;
+  Press(c);
+  Drag(Point(c.X, 80));
+  AssertEquals('off: nothing removing', -1, FBar.RemovingThumb);
+  FLog := '';
+  Release(Point(c.X, 80));
+  AssertEquals('', FLog);
+  AssertEquals('10..20;40..60', Ranges);
+end;
+
+procedure TTyRangeUserRangesTest.TestDeleteRemovesTheSelectedEndsRange;
+begin
+  SetRanges([10, 20, 40, 60]);
+  FBar.AllowUserRanges := True;
+  Wire;
+  FBar.SelectedThumb := 1;
+  FLog := '';
+  AssertEquals('the bar takes the key', 0, Key(VK_DELETE));
+  AssertEquals('the upper end''s range is gone', '40..60', Ranges);
+  AssertEquals('R1 C S-1 ', FLog);
+  FBar.SelectedThumb := 0;
+  FKeep := True;
+  FLog := '';
+  AssertEquals(0, Key(VK_DELETE));
+  AssertEquals('refused: kept', '40..60', Ranges);
+  AssertEquals('R0 ', FLog);
+  FKeep := False;
+  FBar.AllowUserRanges := False;
+  AssertEquals('off: not the bar''s', VK_DELETE, Key(VK_DELETE));
+  AssertEquals('40..60', Ranges);
+end;
+
+procedure TTyRangeUserRangesTest.TestDraggingTheSpanMovesTheWholeRange;
+var
+  p, q: TPoint;
+begin
+  FBar.MinGap := 5;
+  SetRanges([10, 20, 40, 60]);
+  FBar.DraggableRanges := True;
+  Wire;
+  p := PtOn(50);
+  Press(p);
+  AssertEquals('OnTrackClick first; the press selects the span''s lower end, nothing moves',
+    'click:50 S2 ', FLog);
+  AssertEquals('10..20;40..60', Ranges);
+  FLog := '';
+  q := PtOn(55);
+  Drag(q);
+  AssertEquals('the whole range moves with the pointer', '10..20;45..65', Ranges);
+  AssertEquals('both ends asked, the lower first; each reported, one change',
+    'K2:45@40 K3:65@60 T2 T3 C ', FLog);
+  Drag(Point(FBar.Width + 50, q.Y));
+  AssertEquals('stopped at Max, as wide as before', '10..20;80..100', Ranges);
+  Drag(Point(-50, q.Y));
+  AssertEquals('stopped MinGap short of the range below, as wide as before', '10..20;25..45',
+    Ranges);
+  Release(Point(-50, q.Y));
+  FLog := '';
+  Drag(PtOn(70));
+  AssertEquals('released: no longer dragged', '10..20;25..45', Ranges);
+  AssertEquals('', FLog);
+  { The first range: at Min, and below the second. }
+  Press(PtOn(15));
+  Drag(Point(-50, 12));
+  AssertEquals('0..10;25..45', Ranges);
+  Drag(Point(FBar.Width + 50, 12));
+  AssertEquals('stopped MinGap short of the range above', '10..20;25..45', Ranges);
+  Release(Point(FBar.Width + 50, 12));
+end;
+
+procedure TTyRangeUserRangesTest.TestEitherEndRefusingStopsTheStep;
+var
+  p: TPoint;
+begin
+  SetRanges([10, 20, 40, 60]);
+  FBar.DraggableRanges := True;
+  Wire;
+  SetLength(FPin, 4);
+  FPin[3] := True;
+  p := PtOn(50);
+  Press(p);
+  FLog := '';
+  Drag(PtOn(55));
+  AssertEquals('the upper end refuses: the span stays', '10..20;40..60', Ranges);
+  AssertEquals('both asked, nothing reported', 'K2:45@40 K3:65@60 ', FLog);
+  FPin[3] := False;
+  FPin[2] := True;
+  FLog := '';
+  Drag(PtOn(56));
+  AssertEquals('the lower end refuses: the span stays', '10..20;40..60', Ranges);
+  AssertEquals('the upper end is not asked', 'K2:46@40 ', FLog);
+  FPin[2] := False;
+  FLog := '';
+  Drag(PtOn(57));
+  AssertEquals('both let it: it goes', '10..20;47..67', Ranges);
+  Release(PtOn(57));
+end;
+
+procedure TTyRangeUserRangesTest.TestAnEndsAnswerMovesTheWholeSpan;
+var
+  p: TPoint;
+begin
+  FBar.MinGap := 5;
+  SetRanges([10, 20, 40, 60]);
+  FBar.DraggableRanges := True;
+  Wire;
+  p := PtOn(50);
+  Press(p);
+  FForceIdx := 2;
+  FForceTo := 50;
+  FLog := '';
+  Drag(PtOn(55));
+  AssertEquals('the lower end''s answer moves the span, the upper end asked with that',
+    'K2:45@40 K3:70@60 T2 T3 C ', FLog);
+  AssertEquals('10..20;50..70', Ranges);
+  { The upper end's answer, held at the neighbours: the span as wide as before. }
+  FForceIdx := 3;
+  FForceTo := 5;
+  FLog := '';
+  Drag(PtOn(52));
+  AssertEquals('10..20;25..45', Ranges);
+  AssertEquals('K2:42@50 K3:62@70 T2 T3 C ', FLog);
+  Release(PtOn(52));
+end;
+
+procedure TTyRangeUserRangesTest.TestOffASpanPressJumpsTheNearestThumb;
+var
+  q: TPoint;
+begin
+  SetRanges([10, 20, 40, 60]);
+  Wire;
+  q := PtOn(50);
+  Press(PtOn(47));
+  Drag(q);
+  Release(q);
+  AssertEquals('DraggableRanges off: the nearest end comes to the press, as before',
+    '10..20;50..60', Ranges);
+end;
+
+procedure TTyRangeUserRangesTest.TestTrackClickHandledDragsNoSpan;
+begin
+  SetRanges([10, 20, 40, 60]);
+  FBar.DraggableRanges := True;
+  Wire;
+  FHandleClick := True;
+  Press(PtOn(50));
+  Drag(PtOn(55));
+  Release(PtOn(55));
+  AssertEquals('handled: the span stays', '10..20;40..60', Ranges);
+  AssertEquals('click:50 ', FLog);
+end;
+
+procedure TTyRangeUserRangesTest.TestANewRangeIsDraggedOnWhenDraggable;
+begin
+  SetRanges([10, 20]);
+  FBar.AllowUserRanges := True;
+  FBar.DraggableRanges := True;
+  Wire;
+  Press(PtOn(50));
+  AssertEquals('10..20;45..55', Ranges);
+  FLog := '';
+  Drag(PtOn(60));
+  AssertEquals('the press drags the new range on, whole', '10..20;55..65', Ranges);
+  AssertEquals('K2:55@45 K3:65@55 T2 T3 C ', FLog);
+  Release(PtOn(60));
+end;
+
 initialization
   RegisterTest(TTyMultiTrackModelTest);
   RegisterTest(TTyMultiTrackGeometryTest);
@@ -6107,4 +6664,5 @@ initialization
   RegisterTest(TTyMultiTrackPushTest);
   RegisterTest(TTyMultiTrackSwitchesFinalTest);
   RegisterTest(TTyMultiTrackUserThumbsTest);
+  RegisterTest(TTyRangeUserRangesTest);
 end.

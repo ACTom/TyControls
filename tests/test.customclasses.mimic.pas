@@ -7683,6 +7683,10 @@ type
     property OnThumbChanging;
     property AllowCrossing;
     property Pushable;
+    property AllowUserRanges;
+    property DraggableRanges;
+    property NewRangeWidth;
+    property OnThumbRemoving;
   end;
 
   TGenRating = class(TTyCustomRating)
