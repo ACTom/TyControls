@@ -145,6 +145,7 @@ type
     procedure TestDataViewTextAndParseBack;
     procedure TestTheDataViewDialogIsBuiltNotShown;
     procedure TestSaveAsImageGoesThroughTheEventThenTheSeam;
+    procedure TestSaveAsImageWithAFalsyTypeIsPng;
     procedure TestTheActionsByTheApi;
     procedure TestTheToolboxIsDrawnAndExcludedFromTheExport;
     procedure TestAnUnregisteredHandlerDoesNothing;
@@ -1499,6 +1500,21 @@ begin
   finally
     d.Free;
   end;
+end;
+
+procedure TAdvChartToolboxTest.TestSaveAsImageWithAFalsyTypeIsPng;
+begin
+  { `model.get('type', true) || 'png'`: the feature's defaultOption already
+    says 'png', and the toolbox's optionUpdated merges it in without
+    overwriting, so only a type the author wrote falsy reaches the fallback
+    -- an empty string is 'png' again, not the empty extension [milestone
+    C14-C22] }
+  Show('{"animation":false,"title":{"text":"Sales"},"xAxis":{"type":"category","data":["a","b"]},'
+    + '"yAxis":{},"series":[{"type":"bar","data":[1,2]}],"toolbox":{"feature":{"saveAsImage":{"type":""}}}}');
+  AssertTrue('the icon is there', FChart.ToolboxClick(0, 'saveAsImage', 'saveAsImage'));
+  AssertEquals('the file name', 'Sales.png', FChart.SaveName);
+  AssertEquals('the type', 'png', FChart.SaveType);
+  AssertTrue('and in the options', Pos('"type":"png"', FChart.SaveOpts) > 0);
 end;
 
 procedure TAdvChartToolboxTest.TestSaveAsImageGoesThroughTheEventThenTheSeam;

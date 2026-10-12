@@ -3215,7 +3215,7 @@ radar 一样。端口原来默认 1,而且注释还专门写着「上游没有�
 
 ### 不在这一批里
 
-渐变和图案(自己一行)、`decal`、`visualMap`(**[编码见 §88]**)、`brush`、颜色回调、`colorLayer`、
+**[第 131 批：decal 做了——生成的平铺块、aria.decal 自动分配、柱 / 饼 / 漏斗 / 面积 / 图例图标上画出来，见 §167。]** 渐变和图案(自己一行)、`decal`、`visualMap`(**[编码见 §88]**)、`brush`、颜色回调、`colorLayer`、
 `colorBy: 'data'` 的**独立**游标(饼现在按原始行取同一条色板,顺序对、作用域还没分家)。
 **[第 105 批：`colorLayer`、`colorBy` 的作用域（按 `类型-colorBy` 在同类系列之间共享）、`pattern` 填充都做了，见 §140；没写 `color` 时主题九色也改成走同一个游标和名字备忘，不再按系列下标取。]**
 
@@ -3336,7 +3336,7 @@ Canvas 2D 预乘所以没这个问题。修法是**把一个看不见的停靠�
 `type: 'pattern'`(要一条图片管线,而且上游那个字段收的是
 `HTMLImageElement`/canvas,不是路径——照搬不过来,补一条路径形式就是发明而不是移植)
 **[第 105 批：上游的图案是 `{image, repeat, x, y, rotation, scaleX, scaleY}`，`image` 也收字符串；端口做了 `data:` URL（base64）这一种，见 §140。]**、
-`decal`、文字上的渐变(上游把带 `colorStops` 的文字填充**换成字面量 `'#000'`**,
+**[第 131 批：decal 是 `util/decal.ts` 生成的图案（LCM 平铺、旋转、六个内置），端口照转写并画出，见 §167。]** `decal`、文字上的渐变(上游把带 `colorStops` 的文字填充**换成字面量 `'#000'`**,
 这在深色皮肤上是个上游缺陷,不抄)。
 
 ### 变异测试:两轮 30 个,0 存活
@@ -7140,7 +7140,7 @@ store 里的一个格子,上游是 `parseDataValue`:除了恰好的空串,文字
 ### 已知偏差
 
 - 组件本身不画(B2);分段型不映射(B4)。
-- `symbol`、`symbolSize`、`liftZ`、`decal` 不施加;折线的符号仍是系列色;饼、漏斗、雷达、仪表盘、图例按数据项取色的路径不看 visualMap;graph 节点色(B3)。
+- **[第 131 批：`decal` 上游也不施加——`setItemVisualFromData` 不认这个键，类目型什么都不写、pieces 与连续型 setOption 抛出；端口一律不施加，见 §167。]** `symbol`、`symbolSize`、`liftZ`、`decal` 不施加;折线的符号仍是系列色;饼、漏斗、雷达、仪表盘、图例按数据项取色的路径不看 visualMap;graph 节点色(B3)。
 - 店外的维度按数值解析;上游若是 ordinal 类型会给类目序号。
 - 颜色 `rgba(0,0,0,0)` 量化成 0,等于不填充:画出来一样,但上游透明填充仍可命中。
 - `rgba()` 里读不出的通道:上游带着 NaN 继续画,这里退回主题色。
@@ -7244,7 +7244,7 @@ B3 按系列拆成两批:这一批是直角坐标系上的——部分颜色通�
 
 - 大小为 0 的符号:上游有一个不可见的元素,这里不建。
 - `symbolSize` 写成 `[w, h]` 对的映射不支持;`symbol` 对 NaN 值上游返回 `{}`,这里不设。
-- `decal` 不画。
+- **[第 131 批：visualMap 的 decal 通道上游就是坏的（见 §88 的标注）；系列与 aria 的 decal 画了，见 §167。]** `decal` 不画。
 
 ### 变异测试
 
@@ -9935,7 +9935,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 
 ### 做法
 
-- **[第 126 批：又加了 `cvBrush`（'brush'），`excludeComponents: ['brush']` 藏得掉刷选的覆盖框，见 §162。]** **[第 125 批：`TTyChartView` 末尾加了 `cvToolbox`，`excludeComponents: ['toolbox']` 藏得掉工具栏——saveAsImage 的缺省就是它，见 §160。]** **新单元 `tyControls.AdvChart.Export`**（纯）：`TTyChartView`（端口画的视图，按上游的主类型名：title、legend、xAxis、yAxis、visualMap、dataZoom、markPoint、markLine、markArea、radar、calendar、series）、`TyChartViewOf` / `TyChartViewsText`、`TyJsTruthy`、`TyExportOptsOf`（只有 `'jpeg'` 是 JPEG；像素比只收正的有限数；`excludeComponents` 只收数组里认得的字符串；合法 JSON 但不是对象 = 没有选项）、`TyExportBackgroundOf`（`'transparent'` 与零 alpha 清空、颜色、渐变、图案、其余一律黑）、`TyExportImageSize`。
+- **[第 126 批：又加了 `cvBrush`（'brush'），`excludeComponents: ['brush']` 藏得掉刷选的覆盖框，见 §162。]** **[里程碑 C14–C22：改回上游——覆盖框藏不掉。BrushController 的组挂在 zr 的根上，不在 brush 视图的组里，`cvBrush` 是一个永远空着的视图，见 §168。]** **[第 125 批：`TTyChartView` 末尾加了 `cvToolbox`，`excludeComponents: ['toolbox']` 藏得掉工具栏——saveAsImage 的缺省就是它，见 §160。]** **新单元 `tyControls.AdvChart.Export`**（纯）：`TTyChartView`（端口画的视图，按上游的主类型名：title、legend、xAxis、yAxis、visualMap、dataZoom、markPoint、markLine、markArea、radar、calendar、series）、`TyChartViewOf` / `TyChartViewsText`、`TyJsTruthy`、`TyExportOptsOf`（只有 `'jpeg'` 是 JPEG；像素比只收正的有限数；`excludeComponents` 只收数组里认得的字符串；合法 JSON 但不是对象 = 没有选项）、`TyExportBackgroundOf`（`'transparent'` 与零 alpha 清空、颜色、渐变、图案、其余一律黑）、`TyExportImageSize`。
 - **新单元 `tyControls.AdvChart.Loading`**（纯）：`TyLoadingCfgOf`（`zrUtil.defaults` 的 null 语义；`text` 按 JS 的 `String()`：数字、布尔、数组 join、`[object Object]`；颜色是主题 / 颜色 / 不画三种，`'none'` 与读不懂的串都不画）、`TyLoadingLayout`（上面的式子，**四项按上游的顺序逐项算**）、`TyLoadingStartSpinner`（在一个 `TTyAnimBag` 上开两个循环动画器，AN1 的引擎）。
 - **控件**：
   - 导出 API：`SaveToStream` / `SaveToBytes` / `SaveToFile`（选项写了 `type` 按选项，否则扩展名 `.jpg` / `.jpeg` 是 JPEG）/ `GetDataURL`（`data:image/png;base64,…`，没有像素时 `'data:,'`）/ `RenderToBitmap`（`renderToCanvas`，调用方释放）。`SaveToPng` 保留，就是不带选项的导出、永远 PNG。选项不是 JSON 抛 `EArgumentException`。
@@ -11654,7 +11654,7 @@ custom 落地时，`test.advchart.marks`、`test.advchart.diagnose`、`test.advc
 - **基准重放**（`TAdvChartCustomSeriesOracleTest`，5 个）：形状、合并、图例、dataZoom、emphasis。每个 renderItem 是 Pascal 抄写的句柄，用同一个名字登记，api 的每次调用像记录器那样记下来；**每个 api 调用单独一句、按 JavaScript 的求值次序写**——FPC 对实参（和开放数组里的元素）的求值次序不是从左到右，记下的调用次序本身就在比较之列。全部逐位比较。
 - **手写**（`TAdvChartCustomSeriesTest`，10 个）：登记表认 `'@Name'` 与 `'Name'`、区分大小写；没登记的名字进诊断、什么都不画、不再说「还画不出来」；句柄抛异常——每项照问、什么都不画、诊断带异常信息；太深的树不要、记诊断；`TyCustomBarLayout` 的缺省、barWidth 被 barMaxWidth 截住、没有 count；元素真的画出来（像素）；未知类型停在那里（前面的画了、后面的不调）、下一轮从头来；事件参数带目标元素的 info；极坐标上的 custom 说坐标系还没做；动画开着也画在 renderItem 放的地方。
 
-另：`test.advchart.marks` 的发布答案测试把 custom 放进「别处画」的名单、断言它有渲染器，「还不画」的例子换成 parallel；`test.advchart.diagnose` 两条换成显式 `coordinateSystem: 'cartesian2d'` 的 parallel（两个类型那条是 map 加 parallel）；`test.advchart.candlestick` 的同一条换成 parallel。
+**[里程碑 C14–C22：parallel 也画了（第 128 批），三处的「还不画」示例再搬到显式 `cartesian2d` 上的 map；diagnose「两个类型都点名」那条没有第二个不画的类型可用，改成直接测列表的去重函数，见 §168。]** 另：`test.advchart.marks` 的发布答案测试把 custom 放进「别处画」的名单、断言它有渲染器，「还不画」的例子换成 parallel；`test.advchart.diagnose` 两条换成显式 `coordinateSystem: 'cartesian2d'` 的 parallel（两个类型那条是 map 加 parallel）；`test.advchart.candlestick` 的同一条换成 parallel。
 
 首跑：形状一组 145 处不同——几乎全是 Pascal 抄写里把 api 调用嵌在实参和 `TJSONObject.Create([...])` 里，FPC 从右往左求值，记下的次序与 JS 相反；拆成逐句之后全对。另两处：ec4 转出来的没有文字的标签端口多出一个绘制元素（上游没有行就不进显示列表，改成不出）；dataZoom 动作在端口是 `DispatchDataZoom`（不经 `DispatchAction`），测试按它走。之后全部逐位对上。
 
@@ -11899,7 +11899,7 @@ custom 落地时，`test.advchart.marks`、`test.advchart.diagnose`、`test.advc
   - 指针：`EventTargetAt` 最先问 `BrushPieceAt`（z 10000，HdKind 9，HdRow 框的序号、HdGen 块），`HitTestAt` 在框下面不报数据项（悬停、按下、提示框都看不到被盖住的项）。`MouseDown` 在 visualMap 之前 `BrushDragStart`（Draggable 接走，Exit；控制器的 mousedown 照样跑，只会结束丢了松开的轨迹），在 dataZoom 之后 `BrushCtlDown`（slider 手柄上不开始）。`MouseMove` 在 `EventMove`（悬停在拖动之前找）之后 `BrushPointerMove`：先 drift，再各控制器的 mousemove。`MouseUp` 先 `BrushDragEnd`（dragend），dataZoom 与 toolbox 的松开之后 `BrushCtlUp`；`CaptureChanged` 两者都做。`TbApplyCursor`：悬停在块上时用块的光标，任一控制器 `Crosshair` 时十字；`DzApplyCursor` 认 `move`、`nwse-resize`、`nesw-resize`。
   - notMerge（含 restore）：`BrushReset`，模型与视图都是新的；节流随图表留着。
   - 测试 API：`BrushCount`、`BrushControllerOf`、`BrushModelAreas`、`BrushHitTest`、`BrushSelectCount` / `At`、`BrushEventCount` / `At`、`BrushClearLogs`、`BrushTick`、`BrushCursorName`、`BrushNow`。
-- **`Export`**：`cvBrush`（'brush'），`excludeComponents: ['brush']` 藏掉覆盖框。
+- **[里程碑 C14–C22：覆盖框不再跟着 `cvBrush` 藏——上游的控制器把组挂在 zr 的根上，`excludeComponents: ['brush']` 藏的只是 brush 视图那个空组，框照样在导出里；`cvBrush` 也从不算「画过的视图」，见 §168。]** **`Export`**：`cvBrush`（'brush'），`excludeComponents: ['brush']` 藏掉覆盖框。
 - **主题键**（`themes/light.tycss`，重跑了 `gen-defaulttheme.ps1` 与 `gen-tycss-catalog.ps1`，只有增加）：`TyAdvChartBrush`（填充是墨色淡到 6%，描边是皮肤的边框色）。
 
 ### 基准
@@ -11919,7 +11919,7 @@ custom 落地时，`test.advchart.marks`、`test.advchart.diagnose`、`test.advc
 `test.advchart.brushcover`（新，注册在 `tytests.lpr`）：
 
 - **基准重放**（`TAdvChartBrushCoverOracleTest`，5 个，按 R / M+P+L / G+T+A+Q / S+D / TH 分组）：每个用例新建控件（`camOff`），`BrushNow` / `BrushTick` 走同一个假时钟，同样的指针步骤、动作、setOption，每步之后无头渲染；记录的空字段沿用上一条。click 在端口是 MouseUp 的一部分，click 那步本身上游什么都不变。逐位比较：面板（个数、id、矩形）；控制器（开关、选项的类型 / 模式 / 可变换 / removeOnClick / 颜色 / 线宽、是否在画、正在画的框）；每个框的类型、面板、id、范围、模式、可变换、removeOnClick、组里的次序、主体的种类与形状（矩形或每个点）、silent 与光标、样式、每个手柄的有无 / 矩形 / silent / invisible / 光标；模型的每个区域（类型、id、面板、range、coordRange、coordRanges、offset、xyMinMax）；每一步之前的悬停块（任一边是框的块时）；移动那步的光标（上游是刷选的词时逐字比，否则端口不能出刷选的光标）；事件的类型次序，brush / brushend 是否来自视图、载荷能读回且 brushId 是模型的、每个区域（同上，视图发的还要求没有的 coordRange / offset 也没有）；brushSelect 的时刻与每个区域的类型、范围。共比较约 **65 500 项**（矩形 21 277、模式与形状 17 454、面板与动作 15 194、样式与开关 8 061、节流 3 542）。
-- **手写**（`TAdvChartBrushCoverTest`，6 个）：框画出来（像素），导出时 `excludeComponents: ['brush']` 藏掉、不写则在；框下面的柱子 `HitTestAt` 不报、旁边报；`brushIndex` / `brushId` / 都不写 / 不写 areas 的动作；合并保留区域与开关、notMerge 都没了；brushend 的载荷是 JSON、brushId 带 `\u0000`、`$from` 是它、线型的 xyMinMax 里 NaN 是 null；windingLine、线的描边包含、w 拖过 e 的对调。
+- **[里程碑 C14–C22：第一个改成框在导出里不论排不排除 brush 都在、`cvBrush` 不算画过，见 §168。]** **手写**（`TAdvChartBrushCoverTest`，6 个）：框画出来（像素），导出时 `excludeComponents: ['brush']` 藏掉、不写则在；框下面的柱子 `HitTestAt` 不报、旁边报；`brushIndex` / `brushId` / 都不写 / 不写 areas 的动作；合并保留区域与开关、notMerge 都没了；brushend 的载荷是 JSON、brushId 带 `\u0000`、`$from` 是它、线型的 xyMinMax 里 NaN 是 null；windingLine、线的描边包含、w 拖过 e 的对调。
 
 首跑的不对：只有测试自己——fpjson 读 `\u0000` 时把它吞掉（brushId 比不上，改成先换成 `<NUL>` 再读）；手写的事件个数数错（一次移动只有一个 brush）；`HitTestAt` 在动作之后没渲染就问（列表失效，什么都不报，「框下不报」那条是假绿——补上渲染）。实现另有一处：`BrushPass` 在 `Relayout` 里，原来铺完框就 `DropStatic` + 重画，等于每次重排后多画一遍静态层，改成在重排里不发。
 
@@ -12380,6 +12380,82 @@ custom 落地时，`test.advchart.marks`、`test.advchart.diagnose`、`test.advc
 - `source/tyControls.StrConsts.pas`、`languages/tyControls.StrConsts.pot`、`languages/tycontrols.strconsts.zh_CN.po`、`tools/themebuilder/languages/tycontrols.zh_CN.po`（逐字节复制）。
 - `themes/light.tycss`、`source/tyControls.DefaultTheme.pas`、`source/tyControls.Css.Catalog.pas`（生成）。
 - `tools/advchart-oracle/decal-aria.js`、`tests/fixtures/advchart-decal-aria.json`、`tests/test.advchart.decalaria.pas`（新，注册在 `tytests.lpr`）。
+
+## 168. 里程碑 C14–C22 统一验证（2026-10-13）
+
+C14–C22 九批（§159–§167）落地时每批只跑了自己的新套件和直接碰到的套件；C18–C20、C22 是在另一条线（tmp/an2）上做的，从 C17 分出去，C14、C15、C21 和 C6–C13 的东西它都没见过。这一节先把那条线合回来（合并提交 a35ee4b5），再做全量、变异和收尾。
+
+### 合并
+
+冲突几乎都是两边往同一处加东西，一律两边都留：导出视图枚举（`cvTimeline` 与 `cvParallelAxis`，名字表跟着）、状态种类（`sskCustom` 与 `sskParallel`）、动画角色的更新分支（`carRiver` / `carChord` 与 `carParallelLine`）、绑定记录（`SingleIndex` / `Single` 与 `ParallelIndex` / `Parallel`，`TyBindSeries` 里 singleAxis 与 parallel 两段都在）、事件表（`cActionTypes` 加上时间线的两个和刷选的五个，共 32 个）、uses 子句、`cElsewhere`（现在十四种）、测试注册、`Rebuild` 里单轴与平行坐标的建立和挂接、`Relayout` 里两种轴的排版和 `SolveRivers` / `SolveParallels` / `SolveCustom`、`ConvertDispatch` 与 `containPixel` 的分派（单轴换算照旧，平行坐标照上游答不出、containPixel 认 parallel 与 parallelAxis）、动作分派（时间线两个动作与 `axisAreaSelect` 都在）。两处要动手接：C21 之前的 `DispatchAction` 在一个函数里解析加分派，C20 把它拆成 `DispatchAction` + `DispatchActionObject`，C14 的 `FCustomAction` 保存 / 还原跟着搬进后者；dataZoom 动作里 C14 的「更新是 dataZoom 的」只罩着 `DzSyncLayout`，C18 的刷选深度罩着整个派发，两层 try 各管各的。合并时还漏了一个 `;`（`sskCustom` 那一行后面接了 else），编译时补上。
+
+spec 的四处冲突：§164 / §165 / §166 / §167 按编号排好；三条两边都在行首打了标注的条目（§72 的轴名、§131 的轴端口不过渡、§145 的坐标系 finder）合成一行，两个标注都在；合并后查过没有重复的条目。
+
+「还没有渲染器」的示例：C14 把 `test.advchart.marks`、`test.advchart.diagnose`、`test.advchart.candlestick` 里的示例换成显式 `cartesian2d` 上的 parallel，C19 让 parallel 能画了，三处再搬到 map（geo 要到 D14）。marks 断言 custom 与 parallel 都有渲染器、map 没有；candlestick 断言诊断里出现 `"map" series type is not drawn`。diagnose「两种不同类型都要点名」那一条已经找不到第二个不画的类型，于是把诊断里拼「还没画的类型」列表的那几行提成 `TyOptListTypeOnce`（Diagnose 单元公开），直接用 treemap、map、tree 去测：每个类型一次、按出现顺序、整词匹配（map 不因 treemap 已在而被吞，tree 也不因 treemap 而被吞）。§158 记过「整词匹配那条修补到不了、变异只能留着」，现在到得了了。
+
+生成物：`themes/light.tycss` 两边的主题键（时间线一组，刷选的 `BrushOut`、`ParallelSelect` 与 `Decal`）都留，重跑 `gen-defaulttheme.ps1` 与 `gen-tycss-catalog.ps1`（类型键 311 → 314）。语言文件：`.pot` 与 zh_CN `.po` 是两边条目的并集（348 条，与 `StrConsts.pas` 的资源串数相同），没有新增的重复 msgid（原有的 Color、May 等同名条目按标识区分，不是这次带来的），themebuilder 那份逐字节相同。`tycontrols.pas`（不进库）补上 Parallel、Decal、Aria 三个单元。
+
+### 全量
+
+第一次全量（合并之后、下面的测试补充之前；三个变异工作树同时在跑）：11295 个用例，0 个错误、4 个失败、1 个忽略，墙钟约 1 小时 28 分。四个失败都是计时类，和本里程碑无关：`TTyTerminalPerfTests.TestTheLongestSliceStaysNearTheBudget`（最长一片 34.5 ms）、`TTyTerminalZmodemWslTests` 的 `TestDownloadABigFile` 与 `TestAResizeDuringADownload`、`TTbHttpTests.TestSilenceTimesOut`（H6）；三个套件随后单跑全绿（6 / 23 / 14）。
+
+最后一次全量（下面的修补全部在内；变异工作树已删，但另一个会话的测试程序同时在跑）：11299 个用例（多出的 4 个是下面补的手写用例），0 个错误、2 个失败、1 个忽略，墙钟约 55 分钟。两个失败都在 `TTyTerminalPerfTests`（`TestTheLongestSliceStaysNearTheBudget` 最长一片 28.1 ms、`TestAFloodStillPaints` 最长 373 ms 没有重画），都是计时；这个套件随后单跑两次都是 6 个全过。本里程碑碰到的套件全绿。
+
+custom 拆类守卫：`TTyCustomClassesGuardTest`（fresh-streams 与 `CNotSplit`）两次都是 11 个全过——C16 给 `TTyAdvanceChart` 加的 published 事件没有碰到守卫。
+
+Lazarus 3.0：最后一次全量之前用 `laz30_build.ps1`（私有 `--pcp`、`--skip-dependencies -B`，不动全局的包注册）把 `tycontrols.lpk`、`tycontrols_db.lpk`、`tycontrols_dt.lpk` 在 `D:\lazarus30` 下各编一遍，三个都是 0；C14–C22 没有用到 3.0 之后的 LCL 接口，不需要 `LCL_FULLVERSION` 分支。
+
+### 变异
+
+九批的候选清单（`s159`–`s167.md.candidates.md`）逐条换成精确文本，每个变异单独打上、重编、跑本批的套件、按字节还原；驱动 `c1422_mut.py`（上次的 `c613_mut.py` 改了批号），跑在三个临时工作树里，补上的用例先在工作树里验证再搬回主树，工作树最后删掉。套件：C14 `CustomSeries` 两套加 `EmphasisDraw`；C15 `CustomSeries2` 两套加 `CustomSeries` 两套；C16 `Toolbox` 两套；C17 `BrushCover` 两套；C18 `BrushSelect` 两套、`Toolbox` 两套、`BrushCoverOracle`；C19 `Parallel` 两套；C20 `ParallelBrush` 两套加 `MouseEventsOracle`；C21 `Timeline` 两套；C22 `DecalAria` 两套。
+
+| 批 | 变异 | 第一轮杀死 | 存活 | 处理后 |
+|---|---|---|---|---|
+| C14（§159） | 20 + 1 | 19 | 1 | 全杀 |
+| C15（§161） | 25 | 25 | 0 | — |
+| C16（§160） | 30 | 27 | 3 | 全杀 |
+| C17（§162） | 20 | 20 | 0 | — |
+| C18（§163） | 31 | 25 | 6 | 5 杀，1 等价 |
+| C19（§164） | 26 | 25 | 1 | 全杀 |
+| C20（§166） | 23 | 22 | 1 | 全杀 |
+| C21（§165） | 23 | 23 | 0 | — |
+| C22（§167） | 24 | 24 | 0 | — |
+
+共 223 个（C14 的 +1 是补的 c14-10b），没有编不过的；第一轮 13 个存活，补测试后 12 个被杀，1 个等价。几个候选按合并后的代码改写过：C16-25 / 26 / 29 在 C16、C17 合并时搬进了共用的 `TTyBrushController`，变异跟着搬；C18-22（「把 flush 挪到处理之前」照字面只会冲掉一条空队列）改写成去掉 `DispatchActionObject` 的深度计数；C20-04 清单自己划掉了，C20-23 拆成两个（各删一个事件名）。
+
+存活的处理：
+
+- **C14-10**（类目轴上 `api.size` 减半）：C15 把直角坐标那段改写过，精确文本只剩单轴分支还对得上，而 C15 的单轴用例是值轴——变异打在了一段没有用例的代码上。补上游用例 `single-category`（类目单轴，`api.size` 是带宽 108），并补一个打在直角坐标分支上的 C14-10b，两个都被杀。
+- **C16-18**（回退时把底下那个快照也弹掉）：Z-RECT 两次刷选、两次回退，从来没在只剩底的时候回退。补上游用例 `Z-BACK-BASE`：一次刷选、回退两次（第二次在底上，上游不弹，照底派发一次）、再刷再退。杀了。
+- **C16-19**（saveAsImage 的类型缺省改 jpeg）：feature 的 defaultOption 已经写着 `'png'`，`optionUpdated` 不覆盖地并进去，只有作者把 type 写成假值才走到 `|| 'png'`。补手写用例 `TestSaveAsImageWithAFalsyTypeIsPng`（`type: ''` 还是 Sales.png）。杀了。
+- **C16-30**（类目带外的低端不夹）：Z-LINEX 只拖出右边。补上游用例 `Z-LINEX-LEFT`（从网格里往左拖出左缘，起点夹在第一个类目）。杀了。
+- **C18-02**（矩形求交去掉「反了的矩形不相交」）：等价。两个矩形进来先 `NormRect`，宽高要么不小于 0、要么是 NaN；IEEE 754 的加法按就近舍入是单调的，x 加上一个非负数不会小于 x，NaN 的比较又恒为假，所以 `ax1 < ax0` 一类的判断永远不成立。上游的 `BoundingRect.create` 同样先把负宽高翻过来。
+- **C18-04**（多边形选柱时看第二个点而不是第一个点）：只要第一个点在柱里、另一个点在柱外，连它们的边就会和柱的某条边相交，相交测试先把它认下来；要分出差别，得让所有边都「平行」。手写用例用一个几个 1e-8 px 大的三角形骑在柱的右缘上：第一个点在里、另两个在外，每条边对柱的每条边叉积都在 nearZero 的 1e-6 以内，柱的角也不在三角形里，只剩「第一个点在柱里」这一条认它。杀了。
+- **C18-07**（nearZero 改 1e-3）：同一个用例里补了一条几乎水平的边——跨 100 px 只高出 1e-6 px，与 (10, 0)–(90, 0) 的叉积是 8e-5，算相交；高出 1e-8 px 时叉积 8e-7，算平行。两头都钉住。杀了。
+- **C18-08**（多边形总是闭合）：上游 `polygon.contain` 在最后一点离第一点不到 1e-8 时不补闭合边，哪怕两点并不相同。补的断言：正方形最后多一个 (0, 1e-9)，正方形左边 (−5, 5e-10) 那个点只有右边一条边过它的射线——上游答在里面；差到 2e-8 时闭合边补上，答在外面。杀了。
+- **C18-13**（未定义的 opacity 写成 NaN 而不是 1）：基准里没有写成 null 的 opacity 视觉。补手写用例 `TestAnUndefinedOpacityDrawsAtOne`，直接调 `TyBrushApplyVisual`。杀了。
+- **C18-22**（动作派发不再推迟 brushselected）：上游的 brushSelect 是派发中的待办动作，动作自己的事件发给每个处理函数之后才轮到它。端口的更新是惰性的，所以只有在处理函数里重画（比如处理函数里有一次 ProcessMessages）时视觉阶段才会在派发里跑起来；补手写用例 `TestBrushSelectedWaitsForTheActionsHandlers`，`legendselectchanged` 的处理函数先画一次再记下事件，brushselected 必须排在它后面。杀了。
+- **C19-25**（视图不是新的也加入场裁剪）：裁剪确实又建了一个，可原测试在建好之后没走时钟，代理在时钟走之前读出的是终值，`AtFinal` 为真，等于没测。`TestTheClipIsTheViewsFirstRenderOnly` 在重新显示之后走一步时钟（T0 + 1600），再看代理和帧里 b 的行有没有裁剪。杀了。
+- **C20-20**（普通更新不清「跳过的轴」）：原用例在第二个 axisAreaSelect 里检查，那次派发自己就把跳过的轴改了，看不出 FullUpdate 有没有清。`TestTheNamedAxisWaitsForTheNextUpdate` 末尾补一段：轴 2 的 axisAreaSelect 之后它的覆盖框先不铺，接着一次图例切换（它的更新不是 axisAreaSelect 的）必须把两个框铺出来。杀了。
+
+这一轮存活的都是测试的缺口，没有一个露出代码的错。
+
+### 修补
+
+- **刷选覆盖框不再被 `excludeComponents: ['brush']` 藏掉**（C17 的偏差，C20 发现）。上游 BrushView 的 BrushController 把自己的组挂在 zrender 的根上（`mount` 里 `zr.add(this.group)`），不在视图的组里；getDataURL 的排除只把视图的组 `ignore` 掉，而 brush 视图的组是空的。端口照上游：覆盖框和平行坐标轴的框一样总是画，`cvBrush` 留在枚举里但从不算「画过的视图」。`TAdvChartBrushCoverTest` 的第一个用例改名 `TestTheCoversAreDrawnAndStayInTheExport`，断言排除 brush 时框照样在图里、`cvBrush` 不在画过的视图里；§141、§162 在原处标注。
+- 合并本身的几处（见上）：dataZoom 动作与 `DispatchActionObject` 里 `FCustomAction` 的保存还原、漏掉的分号、「没有渲染器」示例与 `TyOptListTypeOnce`。
+- C22 的四处前文标注（§49、§50、§88、§90）当时没对上格式，这次在原处补上。
+
+### 路线图
+
+`docs/superpowers/plans/2026-10-01-advancechart-remaining-roadmap.md` 按第 82–131 批（§117–§167）逐行重新核对，「已知偏差」里还点着名的子项一律算 PARTIAL。Tier 1：DONE 10 → 25、PARTIAL 14 → 3、NOT STARTED 4 → 0（还是 PARTIAL 的：tooltip、状态贯通、动画引擎）。Tier 2：DONE 8 → 34、PARTIAL 10 → 3、NOT STARTED 19 → 0（PARTIAL：treemap、graph、decal + aria——decal 只画在柱、饼、漏斗、面积和图例图标上；visualMap 的 decal 通道上游就不施加，不算缺口）。Tier 3：DONE 0 → 3、PARTIAL 5 → 7、NOT STARTED 18 → 13（新完成的是叠加动画、option 合并、事件查询过滤；新 PARTIAL 的是 axisExpandable 的静态布局、dataset transform 的链式与多输出、批量动作只有 highlight / downplay）。endLabel 在第 92 批（§127）已经和 `label.valueAnimation` 一起做了，B15 没有单独成批。文件头的渲染器统计更新为 22 种能画、只剩 map 没有。
+
+### 落地
+
+- `source/tyControls.AdvanceChart.pas`：刷选覆盖框不再受排除控制。
+- `tests/test.advchart.brushcover.pas`、`tests/test.advchart.brushselect.pas`（三个新手写用例）、`tests/test.advchart.toolbox.pas`（一个）、`tests/test.advchart.parallel.pas`、`tests/test.advchart.parallelbrush.pas`。
+- `tools/advchart-oracle/custom-series2.js`、`tools/advchart-oracle/toolbox.js` 与两份基准：重生成后已有用例一个字节没变，只多了新用例（toolbox 的自检条目跟着多列出新用例）。
+- `docs/superpowers/plans/2026-10-01-advancechart-remaining-roadmap.md`；本 spec 的 §49、§50、§88、§90、§141、§159、§162 在原处标注。
 
 ## 169. Tier 3 第一百三十二批：断轴（D1，2026-10-13）
 

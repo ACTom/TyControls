@@ -24,7 +24,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
      tyControls.AdvChart.Types, tyControls.AdvChart.Events, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Brush,
+     tyControls.AdvChart.Brush, tyControls.AdvChart.Export,
      tyControls.AdvanceChart;
 type
   TBcProbe = class(TTyAdvanceChart)
@@ -95,7 +95,7 @@ type
     procedure SetUp; override;
     procedure TearDown; override;
   published
-    procedure TestTheCoversAreDrawnAndExcludedFromTheExport;
+    procedure TestTheCoversAreDrawnAndStayInTheExport;
     procedure TestACoverHidesTheItemBeneath;
     procedure TestTheActionNamesOneBrush;
     procedure TestNotMergeDropsTheAreasAndTheBrush;
@@ -841,7 +841,7 @@ const
   cBarChart = '{"animation":false,"backgroundColor":"#ffffff","xAxis":{"type":"category","data":["a","b","c","d"]},'
     + '"yAxis":{"type":"value"},"series":[{"type":"bar","data":[10,20,30,40]}],';
 
-procedure TAdvChartBrushCoverTest.TestTheCoversAreDrawnAndExcludedFromTheExport;
+procedure TAdvChartBrushCoverTest.TestTheCoversAreDrawnAndStayInTheExport;
 var
   bmp, ex, nx: TBGRABitmap;
 
@@ -869,11 +869,17 @@ begin
   finally
     bmp.Free;
   end;
-  ex := FChart.RenderToBitmap('{"excludeComponents":["brush"],"backgroundColor":"#ffffff"}');
+  { NOT HIDDEN BY THE EXCLUSION. BrushView's controller mounts its group on
+    zrender's root, not in the view's group, so getDataURL's
+    `excludeComponents: ['brush']` ignores an empty group and the covers
+    are in the picture either way; the brush view is never a view that
+    drew. [milestone C14-C22: C17 hid them, which upstream cannot do] }
   nx := FChart.RenderToBitmap('{"backgroundColor":"#ffffff"}');
+  AssertFalse('the brush view holds nothing', cvBrush in FChart.LastViewsDrawn);
+  ex := FChart.RenderToBitmap('{"excludeComponents":["brush"],"backgroundColor":"#ffffff"}');
   try
     AssertTrue('the export draws it', Reddish(nx) > 400);
-    AssertEquals('excluded, it does not', 0, Reddish(ex));
+    AssertTrue('and excluding the brush does not hide it', Reddish(ex) > 400);
   finally
     ex.Free;
     nx.Free;

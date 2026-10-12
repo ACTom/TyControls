@@ -35,6 +35,10 @@ type
   TBsProbe = class(TTyAdvanceChart)
   public
     Events: TStringList;
+    { every event's type, and the one whose handler paints the chart first
+      (a handler that repaints, as a ProcessMessages would) }
+    AllEvents: TStringList;
+    PaintOn: string;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -114,6 +118,9 @@ type
   published
     procedure TestTheBrushSelectedPayloadIsUpstreamsShape;
     procedure TestTheSelectorsOnTheirOwn;
+    procedure TestThePolygonSelectorNearZero;
+    procedure TestAnUndefinedOpacityDrawsAtOne;
+    procedure TestBrushSelectedWaitsForTheActionsHandlers;
     procedure TestTheGlobalPanMutexHasOneHolder;
     procedure TestTheSelectBrushIsAController;
     procedure TestAnItemCanOptOut;
@@ -141,12 +148,14 @@ constructor TBsProbe.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   Events := TStringList.Create;
+  AllEvents := TStringList.Create;
   OnChartEvent := @OnEv;
 end;
 
 destructor TBsProbe.Destroy;
 begin
   Events.Free;
+  AllEvents.Free;
   inherited Destroy;
 end;
 
@@ -171,7 +180,18 @@ begin
 end;
 
 procedure TBsProbe.OnEv(Sender: TObject; const AEvent: TTyChartEvent);
+var bmp: TBGRABitmap;
 begin
+  if (PaintOn <> '') and (AEvent.EventType = PaintOn) then
+  begin
+    bmp := TBGRABitmap.Create(400, 300, BGRA(255, 255, 255, 255));
+    try
+      RenderTo(bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    finally
+      bmp.Free;
+    end;
+  end;
+  AllEvents.Add(AEvent.EventType);
   if IsEvType(AEvent.EventType) then
     Events.Add(AEvent.EventType + #9 + AEvent.Payload);
 end;
@@ -1199,6 +1219,121 @@ begin
   sa := TyBrushSelAreaOf(a);
   l.X := 0; l.Y := 20; l.W := 3; l.H := -18;
   AssertTrue('the bar reaches up into the line range', TyBrushSelects(sa, l));
+end;
+
+procedure TAdvChartBrushSelectTest.TestThePolygonSelectorNearZero;
+var
+  a: TTyBrushArea;
+  sa: TTyBrushSelArea;
+  l: TTyBrushItemLayout;
+  pts: TTyBrushRange;
+begin
+  { lineLineIntersect's nearZero is 1e-6 on the cross product, in pixels
+    squared: an edge 1e-6 px off level across 100 px crosses the segment
+    from (10, 0) to (90, 0) at x 50 with a cross product of 8e-5 -- an
+    intersection; 1e-8 px off gives 8e-7, parallel, none. The polygon's
+    other three edges stay clear of the segment. [milestone C14-C22] }
+  SetLength(pts, 4);
+  pts[0][0] := 0; pts[0][1] := -5e-7;
+  pts[1][0] := 100; pts[1][1] := 5e-7;
+  pts[2][0] := 100; pts[2][1] := 50;
+  pts[3][0] := 0; pts[3][1] := 50;
+  AssertTrue('a cross product of 8e-5 crosses', TyBrushLinePolygonIntersect(10, 0, 90, 0, pts));
+  pts[0][1] := -5e-9;
+  pts[1][1] := 5e-9;
+  AssertFalse('8e-7 is near zero', TyBrushLinePolygonIntersect(10, 0, 90, 0, pts));
+  { THE FIRST POINT IN THE BAR is a selection of its own (selector.ts:
+    BoundingRect.create(itemLayout).contain(p[0], p[1])): a polygon a few
+    1e-8 px across on the bar's right edge, its first point just inside and
+    the others just outside, holds no corner of the bar, and every edge is
+    near zero against every side -- only that test sees it. }
+  SetLength(pts, 3);
+  pts[0][0] := 10 - 1e-8; pts[0][1] := 10;
+  pts[1][0] := 10 + 1e-8; pts[1][1] := 10;
+  pts[2][0] := 10 + 1e-8; pts[2][1] := 10 + 1e-8;
+  a := Default(TTyBrushArea);
+  a.Opt.BrushType := btPolygon;
+  a.Opt.Range := pts;
+  sa := TyBrushSelAreaOf(a);
+  l := Default(TTyBrushItemLayout);
+  l.Kind := blkRect;
+  l.X := 0; l.Y := 0; l.W := 10; l.H := 20;
+  AssertTrue('the first point is in the bar', TyBrushSelects(sa, l));
+  { and turned so the first point is outside: nothing }
+  pts[0][0] := 10 + 2e-8;
+  a.Opt.Range := pts;
+  sa := TyBrushSelAreaOf(a);
+  AssertFalse('none of it is', TyBrushSelects(sa, l));
+  { THE CLOSING EDGE IS SKIPPED when the last point is within 1e-8 of the
+    first (polygon.contain's isAroundEqual), even though it is not the same
+    point: a point beside that sliver, 5e-10 above the first point and to
+    the left of the square, then has the right edge alone crossing its ray
+    -- inside, upstream's answer. Closing anyway would wind it back out. }
+  SetLength(pts, 5);
+  pts[0][0] := 0; pts[0][1] := 0;
+  pts[1][0] := 10; pts[1][1] := 0;
+  pts[2][0] := 10; pts[2][1] := 10;
+  pts[3][0] := 0; pts[3][1] := 10;
+  pts[4][0] := 0; pts[4][1] := 1e-9;
+  AssertTrue('the sliver does not close', TyBrushPolygonContain(pts, -5, 5e-10));
+  pts[4][1] := 2e-8;
+  AssertFalse('a gap of 2e-8 does', TyBrushPolygonContain(pts, -5, 5e-10));
+end;
+
+procedure TAdvChartBrushSelectTest.TestAnUndefinedOpacityDrawsAtOne;
+var
+  vis: TTyVisualPieceVisualArray;
+  row: TTyVisualRow;
+begin
+  { an opacity visual that is undefined (`inBrush: {opacity: null}`) is
+    still set on the item -- style.opacity undefined, which zrender draws
+    at 1, not as nothing [milestone C14-C22] }
+  SetLength(vis, 1);
+  vis[0] := Default(TTyVisualPieceVisual);
+  vis[0].Kind := 'opacity';
+  vis[0].Defined := False;
+  row := Default(TTyVisualRow);
+  row.Opacity := 0.25;
+  TyBrushApplyVisual(vis, False, TyVisualUndefined, row);
+  AssertTrue('set', row.OpacitySet);
+  AssertEquals('at one', 1, row.Opacity, 0);
+  vis[0].Defined := True;
+  vis[0].IsNum := True;
+  vis[0].Num := 0.4;
+  TyBrushApplyVisual(vis, False, TyVisualUndefined, row);
+  AssertEquals('a number is itself', 0.4, row.Opacity, 0);
+end;
+
+procedure TAdvChartBrushSelectTest.TestBrushSelectedWaitsForTheActionsHandlers;
+var
+  i, iLeg, iSel: Integer;
+begin
+  { upstream's brushSelect is a pending action while the dispatch runs:
+    the action's own events go to every handler first, then brushselected.
+    Here the update is lazy, so it is the handler that paints the chart
+    (a repaint inside it) that runs the visual stage -- and the action
+    holds its brushselected until the dispatch is over, so a handler
+    still hears its own event before brushselected [milestone C14-C22] }
+  Show('{"animation":false,"legend":{},"xAxis":{"type":"category","data":["a","b"]},'
+    + '"yAxis":{},"series":[{"type":"bar","name":"A","data":[1,2]},'
+    + '{"type":"bar","name":"B","data":[2,1]}]}');
+  FChart.AllEvents.Clear;
+  FChart.PaintOn := 'legendselectchanged';
+  try
+    AssertTrue(FChart.DispatchAction('{"type":"legendToggleSelect","name":"B"}'));
+  finally
+    FChart.PaintOn := '';
+  end;
+  iLeg := -1;
+  iSel := -1;
+  for i := 0 to FChart.AllEvents.Count - 1 do
+  begin
+    if (FChart.AllEvents[i] = 'legendselectchanged') and (iLeg < 0) then iLeg := i;
+    if (FChart.AllEvents[i] = 'brushselected') and (iSel < 0) then iSel := i;
+  end;
+  AssertTrue('the legend event: ' + FChart.AllEvents.CommaText, iLeg >= 0);
+  AssertTrue('a brushselected: ' + FChart.AllEvents.CommaText, iSel >= 0);
+  AssertTrue('after the legend''s: ' + FChart.AllEvents.CommaText, iSel > iLeg);
 end;
 
 procedure TAdvChartBrushSelectTest.TestTheGlobalPanMutexHasOneHolder;

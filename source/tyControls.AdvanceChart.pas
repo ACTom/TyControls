@@ -18345,13 +18345,12 @@ begin
     { the parallel axes' covers, z 10000: their controllers' groups are
       zrender's, no view hides them [Batch 130] }
     Inc(drawn, BuildParallelBrushes(list));
-    { the brush's covers, z 10000 [Batch 126] }
-    if not ViewHidden(cvBrush) then
-    begin
-      n := BuildBrushes(list);
-      if n > 0 then ViewDrew(cvBrush);
-      Inc(drawn, n);
-    end;
+    { the brush's covers, z 10000 [Batch 126]. Like the parallel axes',
+      they are its controller's: BrushController.mount adds its group to
+      zrender's root, outside the brush view's group, so
+      `excludeComponents: ['brush']` cannot hide them and the brush view is
+      never a view that drew (its group holds nothing) [milestone C14-C22] }
+    Inc(drawn, BuildBrushes(list));
     Result := drawn + gfxCount;
   end;
 end;
