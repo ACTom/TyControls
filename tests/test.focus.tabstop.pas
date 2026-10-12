@@ -167,7 +167,7 @@ type
     procedure TestASpinCellKeepsTheNumberTypedIntoIt;
     procedure TestEscapeOnAnEditedMaskCellRaisesNothing;
     procedure TestAnUnfilledMaskCellIsRefusedAndReported;
-    procedure TestAnUntouchedMaskCellCanAlwaysBeLeft;
+    procedure TestAnUnfilledStoredValueIsRefusedUntouchedToo;
     procedure TestAMaskCellWithNoMaskTakesAnyText;
     procedure TestTypingOnASpinCellStartsTheNumberWithThatKey;
     procedure TestTypingOnAMemoCellStartsTheTextWithThatKey;
@@ -1378,19 +1378,47 @@ begin
   end;
 end;
 
-{ Only an edit is checked. A cell whose stored value does not fill the mask -- it came in
-  from a file -- opens and closes again without a word, as an untouched mask editor leaves
-  without one (maskedit.md 5.2: the exit check compares against the text on entry). }
-procedure TTyClickFocusTest.TestAnUntouchedMaskCellCanAlwaysBeLeft;
+{ #69. A value that does not fill the mask is not written, typed now or stored that way -- it
+  came in from a file. #67 let an untouched cell through, and its commit wrote the mask's
+  display of the value back: 12 became 12_-____. Escape is the way out and leaves the cell as
+  it was; a close from code writes nothing. An empty cell under a mask with required slots
+  does not fill it either. }
+procedure TTyClickFocusTest.TestAnUnfilledStoredValueIsRefusedUntouchedToo;
 var
   grid: TTyStringGrid;
 begin
   StartMaskEdit('12', grid);
   try
     PressKey(VK_RETURN);
-    AssertNothingRaised('Enter on an untouched mask cell');
-    AssertFalse('Enter ended the edit', grid.Editing);
-    AssertTheGridHasTheFocus(grid, 'after Enter');
+    AssertTheMaskWasReported('Enter on an untouched cell');
+    AssertTrue('Enter left the edit open', grid.Editing);
+    AssertEquals('wrote nothing', '12', grid.Cells[0, 1]);
+    PressKey(VK_ESCAPE);
+    AssertNothingRaised('Escape on an untouched mask cell');
+    AssertFalse('Escape ended the edit', grid.Editing);
+    AssertEquals('and left the cell as it was', '12', grid.Cells[0, 1]);
+    AssertTheGridHasTheFocus(grid, 'after Escape');
+
+    AssertTrue('setup: editing the cell again', grid.BeginEdit(0, 1));
+    Forms.Application.ProcessMessages;
+    grid.EndEdit(True);
+    Forms.Application.ProcessMessages;
+    AssertNothingRaised('EndEdit(True) on an untouched unfilled cell');
+    AssertFalse('EndEdit ended the edit', grid.Editing);
+    AssertEquals('without writing', '12', grid.Cells[0, 1]);
+
+    grid.Cells[0, 1] := '';
+    grid.SetFocus;
+    Forms.Application.ProcessMessages;
+    AssertTrue('setup: editing the empty cell', grid.BeginEdit(0, 1));
+    Forms.Application.ProcessMessages;
+    PressKey(VK_RETURN);
+    AssertTheMaskWasReported('Enter on an empty cell');
+    AssertTrue('Enter left the edit open', grid.Editing);
+    PressKey(VK_ESCAPE);
+    AssertFalse('Escape ended the edit', grid.Editing);
+    AssertEquals('and the cell is still empty', '', grid.Cells[0, 1]);
+    AssertNothingRaised('Escape on an empty mask cell');
   finally
     grid.Free;
   end;

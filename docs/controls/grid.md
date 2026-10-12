@@ -91,7 +91,7 @@ end;
 | `gekSlider` | 滑动条,范围同上。编辑时自带数值读数,拖到哪儿一眼看得见 |
 | `gekRating` | **不弹编辑器** —— 点第几颗星就是几分(与勾选框同一种手感) |
 | `gekMemo` | 多行文本,编辑器向下撑开 |
-| `gekMask` | 掩码输入,掩码取列的 `EditMask` —— 交给 [`TTyMaskEdit`](maskedit.md) 解释,**写法就是 LCL / Delphi 的掩码语言**(`0` 必填数字、`9` 可选数字、`L` 字母……);`#` 会被拒,详见 [maskedit.md 3.3](maskedit.md#33-与-lcl-的两处故意不同)。改过之后必填位还空着就不让提交:编辑器留着、不写回,按 Enter、↑↓ 或点别的格时报掩码框自己的那条错误,跟 `OnValidateCell` 拒绝一样;没改过的格随时能离开 |
+| `gekMask` | 掩码输入,掩码取列的 `EditMask` —— 交给 [`TTyMaskEdit`](maskedit.md) 解释,**写法就是 LCL / Delphi 的掩码语言**(`0` 必填数字、`9` 可选数字、`L` 字母……);`#` 会被拒,详见 [maskedit.md 3.3](maskedit.md#33-与-lcl-的两处故意不同)。必填位还空着就不让提交,改没改过都一样(原值没填满、空格子也算):编辑器留着、不写回,按 Enter、↑↓ 或点别的格时报掩码框自己的那条错误,跟 `OnValidateCell` 拒绝一样;按 Esc 放弃,格子保持原样 |
 | `gekTime` | 只选时间 |
 | `gekPassword` | 输入时打点 |
 | `gekCalculator` | 带计算器的数值输入 |
