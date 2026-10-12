@@ -101,44 +101,74 @@ type
     property Base: Double read FBase;
   end;
 
-  { One axis break: a value range collapsed to a small visual gap.
-    Gap is a FRACTION of the visual span (0..1), not px — so a break survives a
-    resize without re-solving, and two breaks cannot together exceed the axis. }
+  { ONE AXIS BREAK AS UPSTREAM PARSES IT (ParsedAxisBreak, batch 132).
+    VMin <= VMax, in the scale's own value space. The gap as written: an
+    absolute one in DATA units (scale.parse of the option), or a fraction of
+    the axis' linear span ('5%' is 0.05). GapReal is the gap in the linear
+    space, worked out again each time the effective extent is set -- a
+    percent share depends on the extent, and a break the extent cuts counts
+    only the part inside.
+    Id is the break's identity: the option's start and end as String()
+    writes them, joined by '_', a NUL and '_' (serializeAxisBreakIdentifier).
+    StartJson / EndJson: the two as written, JSON text, for the action's
+    event.
+    [Revised in batch 132: a range, a gap as a fraction of the VISUAL span
+    and an Expanded flag -- the Tier 0 spike's own model, which nothing had
+    wired to an option. An expanded break is not parsed at all upstream.] }
+  TTyBreakGapKind = (bgkAbs, bgkPrct);
   TTyAxisBreak = record
-    Range: TTyRange;
-    Gap: Double;
-    Expanded: Boolean;
+    VMin, VMax: Double;
+    GapKind: TTyBreakGapKind;
+    GapVal: Double;
+    GapReal: Double;
+    Id: string;
+    StartJson, EndJson: string;
   end;
   TTyAxisBreakArray = array of TTyAxisBreak;
 
-  { Breaks, as a DECORATOR over any other mapper.
+  { What the break decorator answers beyond the mapper's own questions. }
+  ITyBreakScaleMapper = interface
+    ['{2F1C7B8E-5A4D-4C3B-9E21-7D6A0B3C8F15}']
+    { the breaks, with the GapReal of the last effective extent }
+    function BreakList: TTyAxisBreakArray;
+    function BreakCount: Integer;
+    { the extent in the linear (elapsed) space, as it was worked out when
+      that extent was set: upstream's _linear mapper }
+    function LinearExtent(AKind: TTyScaleExtentKind): TTyRange;
+    { the first break with VMin < AValue < VMax, -1 for none
+      (calcNiceTickMultiple's test) }
+    function BreakInside(AValue: Double): Integer;
+  end;
 
-    Because the base implements Normalize/Denormalize in terms of
-    TransformIn/TransformOut, breaks need to override only that pair: collapse in
-    the INNER (already linearised) space, then delegate. That is why this composes
-    with the log mapper for free, and why no scale subclass mentions breaks.
+  { BREAKS, as a DECORATOR over any other mapper.
 
-    Extents are delegated to the inner mapper — the decorator has no extent of its
-    own, so wrapping one around a live scale cannot move its axis. }
-  TTyBreakScaleMapper = class(TInterfacedObject, ITyScaleMapper)
+    Upstream's BreakScaleMapper (scale/breakImpl.ts): it keeps the extent
+    twice -- as set ("out of break") and in the linear space the breaks
+    leave ("elapsed") -- and normalises over the second. TransformIn is the
+    elapse: a value past a break loses the break's span and gains its gap; a
+    value inside lands proportionally in the gap. TransformOut undoes it.
+    Over a non-linear inner mapper (a log axis' decades) the breaks are
+    taken into its space first, as parseAxisBreakOptionInwardTransform does.
+
+    NeedTransform answers False, as upstream's needTransform does
+    (`!this.breaks.length`, mounted only where there are breaks). }
+  TTyBreakScaleMapper = class(TInterfacedObject, ITyScaleMapper, ITyBreakScaleMapper)
   private
     FInner: ITyScaleMapper;
     FBreaks: TTyAxisBreakArray;
-    function ActiveCount: Integer;
-    { Inner-space span the active breaks would otherwise have occupied. }
-    function CollapsedInnerSpan: Double;
-    { Inner-space span the active breaks keep between them, all breaks together. }
-    function GapInnerSpan: Double;
-    { Sum of the active breaks' gap fractions; never 0, so the per-break share
-      below cannot divide by zero. }
-    function ActiveGapFractionSum: Double;
-    { This break's own share of GapInnerSpan. }
-    function GapFor(AIndex: Integer; AGapTotal: Double): Double;
+    { the same breaks in the inner mapper's space }
+    FIn: TTyAxisBreakArray;
+    FExt: array[TTyScaleExtentKind] of TTyRange;
+    FHas: array[TTyScaleExtentKind] of Boolean;
+    FLin: array[TTyScaleExtentKind] of TTyRange;
+    function Elapse(AValue: Double): Double;
+    function Unelapse(AValue: Double): Double;
   public
-    constructor Create(const AInner: ITyScaleMapper);
-    procedure AddBreak(const ARange: TTyRange; AGap: Double);
-    procedure SetBreakExpanded(AIndex: Integer; AExpanded: Boolean);
+    constructor Create(const AInner: ITyScaleMapper; const ABreaks: TTyAxisBreakArray);
+    function BreakList: TTyAxisBreakArray;
     function BreakCount: Integer;
+    function LinearExtent(AKind: TTyScaleExtentKind): TTyRange;
+    function BreakInside(AValue: Double): Integer;
 
     function NeedTransform: Boolean;
     function TransformIn(AValue: Double): Double;
@@ -150,6 +180,21 @@ type
     procedure SetExtent(AKind: TTyScaleExtentKind; const ARange: TTyRange);
     function HasExtent(AKind: TTyScaleExtentKind): Boolean;
   end;
+
+  { WHICH TICKS A SCALE HANDS BACK (upstream's ScaleGetTicksOpt). The break
+    ends as ticks of their own: inserted (the default -- labels, axis
+    ticks), left out (split lines and areas), or alone. The normal ticks
+    near a break: pruned (the default), kept, or pruned but for the
+    extent's two ends. Everything is the default on an axis with no break. }
+  TTyTicksBreakMode = (tbmInsert, tbmNone, tbmOnly);
+  TTyTicksPruneMode = (tpmAuto, tpmNo, tpmPreserveExtentBound);
+  TTyTicksOpt = record
+    BreakMode: TTyTicksBreakMode;
+    Prune: TTyTicksPruneMode;
+  end;
+
+  { which end of a break a tick stands for }
+  TTyBreakTickKind = (btkNone, btkVMin, btkVMax);
 
   { One axis tick. Level 0 = major (labelled, splitLine), 1 = minor. }
   TTyScaleTick = record
@@ -176,6 +221,19 @@ type
       which is about a BAND -- this is about a number line whose ends were
       never rounded outwards, and it is read to HIDE the label. }
     NotNice: Boolean;
+    { THE UNIT ABOVE, for a tick at a break's end: the coarsest unit the
+      break spans, which picks its label's template (dictionary entry
+      [TimeUnit, TimeUpper]). Every other time tick has it equal to
+      TimeUnit. [Batch 132] }
+    TimeUpper: TTyTimeUnit;
+
+    { ---- and four that only a break's end fills in [Batch 132] ---- }
+
+    BreakKind: TTyBreakTickKind;
+    { which of the scale's breaks (BreakList) }
+    BreakIndex: Integer;
+    { the break as the extent clamps it: Value is one of these two }
+    BreakVMin, BreakVMax: Double;
   end;
   TTyScaleTickArray = array of TTyScaleTick;
 
@@ -216,6 +274,12 @@ type
     procedure SetExtent(const ARange: TTyRange);
     procedure SetExtent2(AKind: TTyScaleExtentKind; const ARange: TTyRange);
     function GetTicks: TTyScaleTickArray; virtual; abstract;
+    { THE TICKS AS AOpt ASKS FOR THEM [Batch 132]: only an axis with breaks
+      answers anything but GetTicks. }
+    function GetTicksOpt(const AOpt: TTyTicksOpt): TTyScaleTickArray; virtual;
+    { the break decorator, when this scale's mapper is one and holds a break;
+      nil otherwise [Batch 132] }
+    function BreakMapper: ITyBreakScaleMapper;
     { "This scale has nothing to show." A value axis with no data is blank too,
       so it belongs on the base rather than on the ordinal subclass: GetTicks,
       band width and the axis builder all want ONE predicate. }
@@ -341,6 +405,11 @@ type
     function StubExtent: TTyRange;
     function StubToValue(AValue: Double): Double;
     function StubTicks(AExpand: Boolean): TTyDoubleArray;
+    { GetTicks with no break, as it always was }
+    function PlainTicks: TTyScaleTickArray;
+    { [Batch 132] with breaks }
+    function BrokenTicks(const AOpt: TTyTicksOpt;
+      const ABrk: ITyBreakScaleMapper): TTyScaleTickArray;
     function LogWarped: Boolean;
     procedure NiceifyJs(ASplitNumber: Double; AUserInterval: Double);
   public
@@ -389,6 +458,10 @@ type
       rounded to the step's precision one by one, and none at all past three
       thousand. Minor ticks, when asked for, merged in value order. }
     function GetTicks: TTyScaleTickArray; override;
+    { [Batch 132] Interval.ts' getTicks with its options: the steps over a
+      break (calcNiceTickMultiple), the pruning, the break ends; and the
+      minor ticks of getMinorTicks between two normal ticks only. }
+    function GetTicksOpt(const AOpt: TTyTicksOpt): TTyScaleTickArray; override;
     property Interval: Double read FInterval;
     { Decimals every tick is rounded to: the step's own plus two. }
     property IntervalPrecision: Integer read FIntervalPrecision;
@@ -445,9 +518,23 @@ type
   private
     FSplitNumber: Integer;
     FUTC: Boolean;
+    { the units and level a break's ends are labelled at: the coarsest unit
+      among the ticks and their top level, as the last GetTicksOpt left them
+      [Batch 132] }
+    FBrkUpper: Integer;
+    FBrkLevel: Integer;
+    function BreakTimeProps(const AClamped: TTyAxisBreak; out ALevel: Integer;
+      out ALower, AUpper: TTyTimeUnit): Boolean;
   public
     constructor Create;
     function GetTicks: TTyScaleTickArray; override;
+    { [Batch 132] with breaks: the approximate interval from the span the
+      breaks leave, the steps over a break, the pruning, and the break ends
+      at the units the break spans }
+    function GetTicksOpt(const AOpt: TTyTicksOpt): TTyScaleTickArray; override;
+    { calcNiceForTimeScale's approxInterval: the linear span over the split
+      number, clamped by minInterval and maxInterval [Batch 132] }
+    function ApproxInterval: Double;
     { Roughly how many ticks to aim for. Upstream defaults a time axis to SIX
       where every other axis gets five -- dates are wider than numbers. }
     property SplitNumber: Integer read FSplitNumber write FSplitNumber;
@@ -550,6 +637,31 @@ function TyScaleCalcAlign(const AIn: TTyAlignInput): TTyAlignResult;
   checks isBlank -- and GetTicks otherwise. GetTicks itself still answers on
   a blank scale, as upstream's does. }
 function TyDrawnTicks(AScale: TTyScale): TTyScaleTickArray;
+{ ... with options [Batch 132] }
+function TyDrawnTicksOpt(AScale: TTyScale; const AOpt: TTyTicksOpt): TTyScaleTickArray;
+function TyTicksOpt(ABreakMode: TTyTicksBreakMode; APrune: TTyTicksPruneMode): TTyTicksOpt;
+
+{ ---- the breaks' arithmetic (scale/breakImpl.ts) [Batch 132] ---- }
+
+{ clampBreakByExtent: the break cut to the extent; False when they do not
+  meet, or meet only at one of the extent's ends }
+function TyClampBreak(const ABreak: TTyAxisBreak; const AExtent: TTyRange;
+  out AClamped: TTyAxisBreak): Boolean;
+{ updateAxisBreakGapReal: every break's GapReal over AExtent -- an absolute
+  gap is itself; the percent ones share what their percents sum to of the
+  span the breaks leave, the parts of a break the extent cuts counted by the
+  fraction inside }
+procedure TyUpdateBreakGapReal(var ABreaks: TTyAxisBreakArray;
+  const AExtent: TTyRange);
+{ pruneTicksByBreak over tick values: every one strictly within AInterval *
+  3 / 4 of a break the extent meets is dropped -- but for the extent's ends
+  under tpmPreserveExtentBound, and none under tpmNo }
+procedure TyPruneTicksByBreaks(var ATicks: TTyScaleTickArray;
+  AMode: TTyTicksPruneMode; const ABreaks: TTyAxisBreakArray;
+  AInterval: Double; const AExtent: TTyRange);
+procedure TyPruneValuesByBreaks(var AValues: TTyDoubleArray;
+  AMode: TTyTicksPruneMode; const ABreaks: TTyAxisBreakArray;
+  AInterval: Double; const AExtent: TTyRange);
 
 { ---- upstream's text for a number ---- }
 
@@ -744,43 +856,278 @@ begin
   Result := TyJsPow(FBase, AValue);
 end;
 
+{ ============================ the breaks' arithmetic ============================ }
+
+function TyClampBreak(const ABreak: TTyAxisBreak; const AExtent: TTyRange;
+  out AClamped: TTyAxisBreak): Boolean;
+var vmin, vmax: Double;
+begin
+  AClamped := ABreak;
+  if IsNan(ABreak.VMin) or IsNan(ABreak.VMax) or IsNan(AExtent.Start)
+    or IsNan(AExtent.Stop) then Exit(False);
+  { mathMax / mathMin }
+  if ABreak.VMin > AExtent.Start then vmin := ABreak.VMin else vmin := AExtent.Start;
+  if ABreak.VMax < AExtent.Stop then vmax := ABreak.VMax else vmax := AExtent.Stop;
+  Result := (vmin < vmax)
+    or ((vmin = vmax) and (vmin > AExtent.Start) and (vmin < AExtent.Stop));
+  if not Result then Exit;
+  AClamped.VMin := vmin;
+  AClamped.VMax := vmax;
+end;
+
+procedure TyUpdateBreakGapReal(var ABreaks: TTyAxisBreakArray;
+  const AExtent: TTyRange);
+type
+  TSemi = record
+    Has: Boolean;
+    Span, InExtFrac, Val: Double;
+  end;
+var
+  gapPrctSum, clampedSpan, sum, num_, den: Double;
+  fullSpan, fullVal: array[TTyBreakGapKind] of Double;
+  semi: array[Boolean, TTyBreakGapKind] of TSemi;
+  i: Integer;
+  c: TTyAxisBreak;
+  vminC, vmaxC: Boolean;
+  k: TTyBreakGapKind;
+  mask: TFPUExceptionMask;
+begin
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide]);
+  try
+    gapPrctSum := 0;
+    for k := Low(TTyBreakGapKind) to High(TTyBreakGapKind) do
+    begin
+      fullSpan[k] := 0;
+      fullVal[k] := 0;
+      semi[False, k].Has := False;
+      semi[True, k].Has := False;
+    end;
+    for i := 0 to High(ABreaks) do
+    begin
+      if ABreaks[i].GapKind = bgkPrct then
+        gapPrctSum := gapPrctSum + ABreaks[i].GapVal;
+      if not TyClampBreak(ABreaks[i], AExtent, c) then Continue;
+      vminC := c.VMin <> ABreaks[i].VMin;
+      vmaxC := c.VMax <> ABreaks[i].VMax;
+      clampedSpan := c.VMax - c.VMin;
+      { both cut: nothing -- the gap then covers the whole extent, upstream's
+        own words: not consistent with the other cases but practically works }
+      if vminC and vmaxC then
+      else if vminC or vmaxC then
+      begin
+        { S (the start) when vmin was cut, E otherwise }
+        semi[not vminC, ABreaks[i].GapKind].Has := True;
+        semi[not vminC, ABreaks[i].GapKind].Span := clampedSpan;
+        semi[not vminC, ABreaks[i].GapKind].InExtFrac :=
+          clampedSpan / (ABreaks[i].VMax - ABreaks[i].VMin);
+        semi[not vminC, ABreaks[i].GapKind].Val := ABreaks[i].GapVal;
+      end
+      else
+      begin
+        fullSpan[ABreaks[i].GapKind] := fullSpan[ABreaks[i].GapKind] + clampedSpan;
+        fullVal[ABreaks[i].GapKind] := fullVal[ABreaks[i].GapKind] + ABreaks[i].GapVal;
+      end;
+    end;
+    { left to right, as JavaScript adds them }
+    num_ := 0 + (AExtent.Stop - AExtent.Start);
+    num_ := num_ + (fullVal[bgkAbs] - fullSpan[bgkAbs]);
+    if semi[False, bgkAbs].Has then
+      num_ := num_ + (semi[False, bgkAbs].Val - semi[False, bgkAbs].Span) * semi[False, bgkAbs].InExtFrac
+    else num_ := num_ + 0;
+    if semi[True, bgkAbs].Has then
+      num_ := num_ + (semi[True, bgkAbs].Val - semi[True, bgkAbs].Span) * semi[True, bgkAbs].InExtFrac
+    else num_ := num_ + 0;
+    num_ := num_ - fullSpan[bgkPrct];
+    if semi[False, bgkPrct].Has then
+      num_ := num_ - semi[False, bgkPrct].Span * semi[False, bgkPrct].InExtFrac
+    else num_ := num_ - 0;
+    if semi[True, bgkPrct].Has then
+      num_ := num_ - semi[True, bgkPrct].Span * semi[True, bgkPrct].InExtFrac
+    else num_ := num_ - 0;
+    den := 1 - fullVal[bgkPrct];
+    if semi[False, bgkPrct].Has then
+      den := den - semi[False, bgkPrct].Val * semi[False, bgkPrct].InExtFrac
+    else den := den - 0;
+    if semi[True, bgkPrct].Has then
+      den := den - semi[True, bgkPrct].Val * semi[True, bgkPrct].InExtFrac
+    else den := den - 0;
+    sum := gapPrctSum * num_ / den;
+    { mathMax(sum, 0): not-a-number stays so }
+    if not IsNan(sum) and not (sum > 0) then sum := 0;
+    for i := 0 to High(ABreaks) do
+      if ABreaks[i].GapKind = bgkPrct then
+      begin
+        if gapPrctSum <> 0 then
+          ABreaks[i].GapReal := sum * ABreaks[i].GapVal / gapPrctSum
+        else
+          ABreaks[i].GapReal := 0;
+      end
+      else
+        ABreaks[i].GapReal := ABreaks[i].GapVal;
+  finally
+    ClearExceptions(False);
+    {$IFDEF CPUX86_64}
+    SetMXCSR(GetMXCSR and not LongWord($3F));
+    {$ENDIF}
+    SetExceptionMask(mask);
+  end;
+end;
+
+{ one value against every break the extent meets }
+function PrunedByBreaks(AValue: Double; AMode: TTyTicksPruneMode;
+  const ABreaks: TTyAxisBreakArray; AGap: Double; const AExtent: TTyRange): Boolean;
+var
+  i: Integer;
+  c: TTyAxisBreak;
+begin
+  Result := False;
+  for i := 0 to High(ABreaks) do
+  begin
+    if not TyClampBreak(ABreaks[i], AExtent, c) then Continue;
+    if (AValue > c.VMin - AGap) and (AValue < c.VMax + AGap)
+      and ((AMode <> tpmPreserveExtentBound)
+        or ((AValue <> AExtent.Start) and (AValue <> AExtent.Stop))) then
+      Exit(True);
+  end;
+end;
+
+procedure TyPruneTicksByBreaks(var ATicks: TTyScaleTickArray;
+  AMode: TTyTicksPruneMode; const ABreaks: TTyAxisBreakArray;
+  AInterval: Double; const AExtent: TTyRange);
+var
+  i, n: Integer;
+  gap: Double;
+begin
+  if AMode = tpmNo then Exit;
+  { an empirical gap, three quarters of a step }
+  gap := AInterval * 3 / 4;
+  n := 0;
+  for i := 0 to High(ATicks) do
+    if not PrunedByBreaks(ATicks[i].Value, AMode, ABreaks, gap, AExtent) then
+    begin
+      ATicks[n] := ATicks[i];
+      Inc(n);
+    end;
+  SetLength(ATicks, n);
+end;
+
+procedure TyPruneValuesByBreaks(var AValues: TTyDoubleArray;
+  AMode: TTyTicksPruneMode; const ABreaks: TTyAxisBreakArray;
+  AInterval: Double; const AExtent: TTyRange);
+var
+  i, n: Integer;
+  gap: Double;
+begin
+  if AMode = tpmNo then Exit;
+  gap := AInterval * 3 / 4;
+  n := 0;
+  for i := 0 to High(AValues) do
+    if not PrunedByBreaks(AValues[i], AMode, ABreaks, gap, AExtent) then
+    begin
+      AValues[n] := AValues[i];
+      Inc(n);
+    end;
+  SetLength(AValues, n);
+end;
+
+{ addBreaksToTicks: each break the extent meets adds its two clamped ends,
+  then -- whenever there are breaks at all -- a stable sort by value. A time
+  scale's ends carry the units and level ATimeProps gives them. }
+type
+  TTyBreakTimeProps = function(const AClamped: TTyAxisBreak; out ALevel: Integer;
+    out ALower, AUpper: TTyTimeUnit): Boolean of object;
+
+procedure AddBreakTicks(var ATicks: TTyScaleTickArray; const ABreaks: TTyAxisBreakArray;
+  const AExtent: TTyRange; ATimeProps: TTyBreakTimeProps);
+var
+  i, j, n, lv: Integer;
+  c: TTyAxisBreak;
+  t: TTyScaleTick;
+  lo, up: TTyTimeUnit;
+  hasTime: Boolean;
+  k: TTyBreakTickKind;
+begin
+  for i := 0 to High(ABreaks) do
+  begin
+    if not TyClampBreak(ABreaks[i], AExtent, c) then Continue;
+    hasTime := Assigned(ATimeProps) and ATimeProps(c, lv, lo, up);
+    for k := btkVMin to btkVMax do
+    begin
+      t := Default(TTyScaleTick);
+      if k = btkVMin then t.Value := c.VMin else t.Value := c.VMax;
+      t.Level := 0;
+      t.BreakKind := k;
+      t.BreakIndex := i;
+      t.BreakVMin := c.VMin;
+      t.BreakVMax := c.VMax;
+      if hasTime then
+      begin
+        t.TimeLevel := lv;
+        t.TimeUnit := lo;
+        t.TimeUpper := up;
+      end;
+      n := Length(ATicks);
+      SetLength(ATicks, n + 1);
+      ATicks[n] := t;
+    end;
+  end;
+  if Length(ABreaks) = 0 then Exit;
+  { stable, as V8's sort is }
+  for i := 1 to High(ATicks) do
+  begin
+    t := ATicks[i];
+    j := i - 1;
+    while (j >= 0) and (ATicks[j].Value > t.Value) do
+    begin
+      ATicks[j + 1] := ATicks[j];
+      Dec(j);
+    end;
+    ATicks[j + 1] := t;
+  end;
+end;
+
 { ============================ TTyBreakScaleMapper ============================ }
 
-constructor TTyBreakScaleMapper.Create(const AInner: ITyScaleMapper);
+constructor TTyBreakScaleMapper.Create(const AInner: ITyScaleMapper;
+  const ABreaks: TTyAxisBreakArray);
+var
+  i: Integer;
+  k: TTyScaleExtentKind;
 begin
   inherited Create;
   FInner := AInner;
-  FBreaks := nil;
+  FBreaks := Copy(ABreaks);
+  FIn := Copy(ABreaks);
+  { parseAxisBreakOptionInwardTransform: over a transforming inner mapper the
+    ends go into its space, and an absolute gap becomes what it spans from
+    the break's start there. A linear one keeps them as written. }
+  if (FInner <> nil) and FInner.NeedTransform then
+    for i := 0 to High(FIn) do
+    begin
+      FIn[i].VMin := FInner.TransformIn(ABreaks[i].VMin);
+      FIn[i].VMax := FInner.TransformIn(ABreaks[i].VMax);
+      if FIn[i].GapKind = bgkAbs then
+        FIn[i].GapVal := FInner.TransformIn(ABreaks[i].VMin + ABreaks[i].GapVal) - FIn[i].VMin;
+    end;
+  for k := Low(TTyScaleExtentKind) to High(TTyScaleExtentKind) do
+  begin
+    FExt[k] := TyRange(0, 1);
+    FLin[k] := TyRange(0, 1);
+    FHas[k] := False;
+  end;
+  FHas[sekEffective] := True;
+  { no gap until an extent is set, as upstream's gapReal is null till then }
+  for i := 0 to High(FIn) do
+  begin
+    FIn[i].GapReal := 0;
+    FBreaks[i].GapReal := 0;
+  end;
 end;
 
-procedure TTyBreakScaleMapper.AddBreak(const ARange: TTyRange; AGap: Double);
-var
-  n, i, j: Integer;
-  tmp: TTyAxisBreak;
+function TTyBreakScaleMapper.BreakList: TTyAxisBreakArray;
 begin
-  if AGap < 0 then AGap := 0;
-  if AGap > 1 then AGap := 1;
-  n := Length(FBreaks);
-  SetLength(FBreaks, n + 1);
-  FBreaks[n].Range := ARange;
-  FBreaks[n].Gap := AGap;
-  FBreaks[n].Expanded := False;
-  { Keep ascending by range start — the accumulation walks below assume it.
-    Bubble sort: a chart has a handful of breaks, never enough to matter. }
-  for i := n downto 1 do
-    for j := 0 to i - 1 do
-      if FBreaks[j].Range.Start > FBreaks[j + 1].Range.Start then
-      begin
-        tmp := FBreaks[j];
-        FBreaks[j] := FBreaks[j + 1];
-        FBreaks[j + 1] := tmp;
-      end;
-end;
-
-procedure TTyBreakScaleMapper.SetBreakExpanded(AIndex: Integer; AExpanded: Boolean);
-begin
-  if (AIndex >= 0) and (AIndex <= High(FBreaks)) then
-    FBreaks[AIndex].Expanded := AExpanded;
+  Result := Copy(FBreaks);
 end;
 
 function TTyBreakScaleMapper.BreakCount: Integer;
@@ -788,190 +1135,173 @@ begin
   Result := Length(FBreaks);
 end;
 
-function TTyBreakScaleMapper.ActiveCount: Integer;
+function TTyBreakScaleMapper.LinearExtent(AKind: TTyScaleExtentKind): TTyRange;
+begin
+  if (AKind = sekMapping) and not FHas[sekMapping] then
+    Result := FLin[sekEffective]
+  else
+    Result := FLin[AKind];
+end;
+
+function TTyBreakScaleMapper.BreakInside(AValue: Double): Integer;
 var i: Integer;
 begin
-  Result := 0;
   for i := 0 to High(FBreaks) do
-    if not FBreaks[i].Expanded then
-      Inc(Result);
-end;
-
-function TTyBreakScaleMapper.CollapsedInnerSpan: Double;
-var i: Integer;
-begin
-  Result := 0;
-  for i := 0 to High(FBreaks) do
-    if not FBreaks[i].Expanded then
-      Result := Result + Abs(FInner.TransformIn(FBreaks[i].Range.Stop)
-                           - FInner.TransformIn(FBreaks[i].Range.Start));
-end;
-
-function TTyBreakScaleMapper.ActiveGapFractionSum: Double;
-var i: Integer;
-begin
-  Result := 0;
-  for i := 0 to High(FBreaks) do
-    if not FBreaks[i].Expanded then
-      Result := Result + FBreaks[i].Gap;
-  if Result <= 0 then
-    Result := 1;
-end;
-
-function TTyBreakScaleMapper.GapInnerSpan: Double;
-var
-  e: TTyRange;
-  full, kept: Double;
-  i: Integer;
-begin
-  { A gap is a fraction of the VISUAL span. The visual span in inner units is
-    (full - collapsed + gaps), which is circular — so solve it: with G the sum of
-    the gap fractions, visual = (full - collapsed) / (1 - G), and the gaps
-    together take G of that. }
-  e := GetExtent(sekMapping);
-  full := Abs(FInner.TransformIn(e.Stop) - FInner.TransformIn(e.Start));
-  kept := 0;
-  for i := 0 to High(FBreaks) do
-    if not FBreaks[i].Expanded then
-      kept := kept + FBreaks[i].Gap;
-  if kept >= 1 then
-    kept := 0.99;   // a break cannot eat the whole axis
-  Result := (full - CollapsedInnerSpan) / (1 - kept) * kept;
-end;
-
-function TTyBreakScaleMapper.GapFor(AIndex: Integer; AGapTotal: Double): Double;
-begin
-  if AGapTotal <= 0 then
-    Exit(0);
-  Result := AGapTotal * FBreaks[AIndex].Gap / ActiveGapFractionSum;
+    if (FBreaks[i].VMin < AValue) and (AValue < FBreaks[i].VMax) then Exit(i);
+  Result := -1;
 end;
 
 function TTyBreakScaleMapper.NeedTransform: Boolean;
 begin
-  Result := True;
+  Result := False;
+end;
+
+{ upstream's transformIn, "elapse": operation for operation }
+function TTyBreakScaleMapper.Elapse(AValue: Double): Double;
+var
+  i: Integer;
+  e, last: Double;
+  over: Boolean;
+begin
+  { not a number goes through as itself; FPC would raise on comparing it }
+  if IsNan(AValue) then Exit(AValue);
+  e := 0;
+  last := 0;
+  over := True;
+  for i := 0 to High(FIn) do
+  begin
+    if AValue <= FIn[i].VMax then
+    begin
+      if AValue > FIn[i].VMin then
+        e := e + ((FIn[i].VMin - last)
+          + (AValue - FIn[i].VMin) / (FIn[i].VMax - FIn[i].VMin) * FIn[i].GapReal)
+      else
+        e := e + (AValue - last);
+      last := FIn[i].VMax;
+      over := False;
+      Break;
+    end;
+    e := e + ((FIn[i].VMin - last) + FIn[i].GapReal);
+    last := FIn[i].VMax;
+  end;
+  if over then e := e + (AValue - last);
+  Result := e;
+end;
+
+{ ... and transformOut, "unelapse" }
+function TTyBreakScaleMapper.Unelapse(AValue: Double): Double;
+var
+  i: Integer;
+  lastE, lastB, es, ee, u: Double;
+  over: Boolean;
+begin
+  if IsNan(AValue) then Exit(AValue);
+  lastE := 0;
+  lastB := 0;
+  over := True;
+  u := 0;
+  for i := 0 to High(FIn) do
+  begin
+    es := lastE + FIn[i].VMin - lastB;
+    ee := es + FIn[i].GapReal;
+    if AValue <= ee then
+    begin
+      if AValue > es then
+        u := FIn[i].VMin + (AValue - es) / (ee - es) * (FIn[i].VMax - FIn[i].VMin)
+      else
+        u := lastB + AValue - lastE;
+      over := False;
+      Break;
+    end;
+    lastE := ee;
+    lastB := FIn[i].VMax;
+  end;
+  if over then u := lastB + AValue - lastE;
+  Result := u;
 end;
 
 function TTyBreakScaleMapper.TransformIn(AValue: Double): Double;
-var
-  t, bs, be, swap, shift, gapTotal, gapEach: Double;
-  i: Integer;
 begin
-  t := FInner.TransformIn(AValue);
-  if (ActiveCount = 0) or IsNan(t) then
-    Exit(t);
-  gapTotal := GapInnerSpan;
-  shift := 0;
-  for i := 0 to High(FBreaks) do
-  begin
-    if FBreaks[i].Expanded then
-      Continue;
-    bs := FInner.TransformIn(FBreaks[i].Range.Start);
-    be := FInner.TransformIn(FBreaks[i].Range.Stop);
-    if be < bs then
-    begin
-      { A decreasing inner transform would reverse the pair. Use a dedicated
-        temp — reusing `shift` here would silently discard the accumulation. }
-      swap := bs; bs := be; be := swap;
-    end;
-    gapEach := GapFor(i, gapTotal);
-    if t >= be then
-      { Wholly past this break: lose its span, keep its gap. }
-      shift := shift - (be - bs) + gapEach
-    else if t > bs then
-    begin
-      { Inside: land proportionally within this break's own gap. }
-      Result := bs + shift + (t - bs) / (be - bs) * gapEach;
-      Exit;
-    end
-    else
-      { Before this break, and breaks are ascending, so before all the rest. }
-      Break;
-  end;
-  Result := t + shift;
+  if FInner <> nil then AValue := FInner.TransformIn(AValue);
+  Result := Elapse(AValue);
 end;
 
 function TTyBreakScaleMapper.TransformOut(AValue: Double): Double;
-var
-  bs, be, swap, shift, gapTotal, gapEach, lo, hi: Double;
-  i: Integer;
 begin
-  if ActiveCount = 0 then
-    Exit(FInner.TransformOut(AValue));
-  gapTotal := GapInnerSpan;
-  shift := 0;
-  for i := 0 to High(FBreaks) do
-  begin
-    if FBreaks[i].Expanded then
-      Continue;
-    bs := FInner.TransformIn(FBreaks[i].Range.Start);
-    be := FInner.TransformIn(FBreaks[i].Range.Stop);
-    if be < bs then
-    begin
-      swap := bs; bs := be; be := swap;
-    end;
-    gapEach := GapFor(i, gapTotal);
-    lo := bs + shift;
-    hi := lo + gapEach;
-    if AValue > hi then
-      shift := shift - (be - bs) + gapEach
-    else if AValue >= lo then
-    begin
-      { Inside the gap: invert the proportional placement. A zero-width gap has
-        no interior, so every point in it is the break's start. }
-      if gapEach = 0 then
-        Exit(FInner.TransformOut(bs));
-      Exit(FInner.TransformOut(bs + (AValue - lo) / gapEach * (be - bs)));
-    end
-    else
-      Break;
-  end;
-  Result := FInner.TransformOut(AValue - shift);
+  Result := Unelapse(AValue);
+  if FInner <> nil then Result := FInner.TransformOut(Result);
 end;
 
+{ the linear mapper's normalize over the elapsed extent }
 function TTyBreakScaleMapper.Normalize(AValue: Double): Double;
-var
-  e: TTyRange;
-  a, b: Double;
+var e: TTyRange;
 begin
-  e := GetExtent(sekMapping);
-  a := TransformIn(e.Start);
-  b := TransformIn(e.Stop);
-  if (b = a) or IsNan(a) or IsNan(b) then
-    Exit(0.5);
-  Result := (TransformIn(AValue) - a) / (b - a);
+  e := LinearExtent(sekMapping);
+  if e.Stop = e.Start then Exit(0.5);
+  Result := (TransformIn(AValue) - e.Start) / (e.Stop - e.Start);
 end;
 
+{ ... and its scale, then out of the breaks }
 function TTyBreakScaleMapper.Denormalize(ANorm: Double): Double;
-var
-  e: TTyRange;
-  a, b: Double;
+var e: TTyRange;
 begin
-  e := GetExtent(sekMapping);
-  a := TransformIn(e.Start);
-  b := TransformIn(e.Stop);
-  if IsNan(a) or IsNan(b) then
-    Exit(NaN);
-  Result := TransformOut(a + ANorm * (b - a));
+  e := LinearExtent(sekMapping);
+  Result := TransformOut(ANorm * (e.Stop - e.Start) + e.Start);
 end;
 
+{ the extent as set, the mapping one when there is one }
 function TTyBreakScaleMapper.Contain(AValue: Double): Boolean;
+var e: TTyRange;
 begin
-  Result := FInner.Contain(AValue);
+  e := GetExtent(sekMapping);
+  Result := not IsNan(AValue) and (AValue >= e.Start) and (AValue <= e.Stop);
 end;
 
 function TTyBreakScaleMapper.GetExtent(AKind: TTyScaleExtentKind): TTyRange;
 begin
-  Result := FInner.GetExtent(AKind);
+  if (AKind = sekMapping) and not FHas[sekMapping] then
+    Result := FExt[sekEffective]
+  else
+    Result := FExt[AKind];
 end;
 
+{ setExtent2: the effective extent works the gaps out again first; then the
+  extent is kept as set and in the linear space. An extent that is not two
+  finite ends in order changes no gap and no linear extent (writeExtent's
+  rule), but is still what GetExtent answers -- a blank scale is read off
+  it. }
 procedure TTyBreakScaleMapper.SetExtent(AKind: TTyScaleExtentKind; const ARange: TTyRange);
+var
+  i: Integer;
+  e: TTyRange;
 begin
-  FInner.SetExtent(AKind, ARange);
+  if not FHas[AKind] then
+  begin
+    FExt[AKind] := FExt[sekEffective];
+    FLin[AKind] := FLin[sekEffective];
+  end;
+  FExt[AKind] := ARange;
+  FHas[AKind] := True;
+  if IsNan(ARange.Start) or IsNan(ARange.Stop) or IsInfinite(ARange.Start)
+    or IsInfinite(ARange.Stop) or (ARange.Start > ARange.Stop) then Exit;
+  if AKind = sekEffective then
+  begin
+    e := ARange;
+    if (FInner <> nil) and FInner.NeedTransform then
+    begin
+      e.Start := FInner.TransformIn(ARange.Start);
+      e.Stop := FInner.TransformIn(ARange.Stop);
+    end;
+    TyUpdateBreakGapReal(FIn, e);
+    for i := 0 to High(FIn) do FBreaks[i].GapReal := FIn[i].GapReal;
+  end;
+  FLin[AKind].Start := TransformIn(ARange.Start);
+  FLin[AKind].Stop := TransformIn(ARange.Stop);
 end;
 
 function TTyBreakScaleMapper.HasExtent(AKind: TTyScaleExtentKind): Boolean;
 begin
-  Result := FInner.HasExtent(AKind);
+  Result := FHas[AKind];
 end;
 
 { ============================ TTyScale ============================ }
@@ -1030,9 +1360,28 @@ begin
   Result := FMapper.GetExtent(AKind);
 end;
 
-function TTyScale.LinearExtent2(AKind: TTyScaleExtentKind): TTyRange;
-var e: TTyRange;
+function TTyScale.GetTicksOpt(const AOpt: TTyTicksOpt): TTyScaleTickArray;
 begin
+  Result := GetTicks;
+end;
+
+function TTyScale.BreakMapper: ITyBreakScaleMapper;
+begin
+  Result := nil;
+  if (FMapper = nil) or not Supports(FMapper, ITyBreakScaleMapper, Result) then
+    Exit(nil);
+  if Result.BreakCount = 0 then Result := nil;
+end;
+
+function TTyScale.LinearExtent2(AKind: TTyScaleExtentKind): TTyRange;
+var
+  e: TTyRange;
+  brk: ITyBreakScaleMapper;
+begin
+  { AN AXIS WITH BREAKS keeps it as it was worked out when it was set: the
+    gaps of that moment [Batch 132] }
+  brk := BreakMapper;
+  if brk <> nil then Exit(brk.LinearExtent(AKind));
   e := GetExtent2(AKind);
   Result.Start := FMapper.TransformIn(e.Start);
   Result.Stop := FMapper.TransformIn(e.Stop);
@@ -2198,6 +2547,18 @@ begin
   Result := AScale.GetTicks;
 end;
 
+function TyDrawnTicksOpt(AScale: TTyScale; const AOpt: TTyTicksOpt): TTyScaleTickArray;
+begin
+  if (AScale = nil) or AScale.Blank then Exit(nil);
+  Result := AScale.GetTicksOpt(AOpt);
+end;
+
+function TyTicksOpt(ABreakMode: TTyTicksBreakMode; APrune: TTyTicksPruneMode): TTyTicksOpt;
+begin
+  Result.BreakMode := ABreakMode;
+  Result.Prune := APrune;
+end;
+
 function TyLabelPrecision(AKind: TTyLabelPrecisionKind;
   ADigits: Double): TTyLabelPrecision;
 begin
@@ -2534,9 +2895,10 @@ end;
 
 { THE STEP WALKS IN LOG SPACE ON A LOG AXIS ONLY. A break decorator
   transforms too, but upstream nices a broken axis in value space -- on the
-  span with the breaks taken out, which this port does not do yet -- and
-  treating its collapsed space as decades put ticks past the extent and out
-  of order. }
+  span with the breaks taken out -- and treating its collapsed space as
+  decades put ticks past the extent and out of order.
+  [Batch 132: the span with the breaks taken out is now the nice step's,
+  NiceifyJs; the decorator answers NeedTransform False as upstream's does.] }
 function TTyIntervalScale.LogWarped: Boolean;
 begin
   Result := FLogRule and (FMapper <> nil) and FMapper.NeedTransform;
@@ -2586,7 +2948,7 @@ end;
 procedure TTyIntervalScale.NiceifyJs(ASplitNumber: Double;
   AUserInterval: Double);
 var
-  e, oldE: TTyRange;
+  e, oldE, lin: TTyRange;
   warped, hasUser: Boolean;
   lo, hi, span, iv, autoIv, h, a, b, err, powLo, powHi, vLo, vHi: Double;
   prec, autoPrec, split: Integer;
@@ -2660,6 +3022,15 @@ begin
   vLo := lo;
   vHi := hi;
   span := hi - lo;
+  { ON AN AXIS WITH BREAKS the step is chosen from the span the breaks leave:
+    the validated extent is set (which works the gaps out) and the span read
+    back in the linear space -- getScaleLinearSpanEffective [Batch 132] }
+  if (not warped) and (BreakMapper <> nil) then
+  begin
+    SetExtent(TyRange(lo, hi));
+    lin := BreakMapper.LinearExtent(sekEffective);
+    span := lin.Stop - lin.Start;
+  end;
 
   if FLogRule then
   begin
@@ -2891,9 +3262,11 @@ end;
 function TTyIntervalScale.StubTicks(AExpand: Boolean): TTyDoubleArray;
 var
   e: TTyRange;
-  n, k: Integer;
+  n, k, bi: Integer;
   tick, iv, last, precD: Double;
   prec: Integer;
+  brk: ITyBreakScaleMapper;
+  brks: TTyAxisBreakArray;
 
   procedure Push(AValue: Double);
   begin
@@ -2918,6 +3291,8 @@ begin
     FNiceStop := TyJsToFixed(JsFloor(e.Stop / iv) * iv, prec);
   end;
   if FPrecisionNaN then precD := NaN else precD := prec;
+  brk := BreakMapper;
+  if brk <> nil then brks := brk.BreakList else brks := nil;
   if e.Start < FNiceStart then
   begin
     if AExpand then Push(TyRoundP(FNiceStart - iv, precD))
@@ -2942,6 +3317,18 @@ begin
     Inc(k);
     Push(tick);
     tick := TyRoundP(tick + iv, precD);
+    { OVER A BREAK [Batch 132]: calcNiceTickMultiple -- a tick strictly
+      inside the first break that holds it moves on by the whole number of
+      steps nearest the break's end; anywhere else by none, rounded again
+      all the same }
+    if brk <> nil then
+    begin
+      bi := brk.BreakInside(tick);
+      if bi >= 0 then
+        tick := TyRoundP(tick + TyJsRound((brks[bi].VMax - tick) / iv) * iv, precD)
+      else
+        tick := TyRoundP(tick + 0 * iv, precD);
+    end;
     { Past the precision a Double can carry the step adds nothing. }
     if tick = Result[n - 1] then Break;
     if n > cSafeTickLimit then
@@ -2960,6 +3347,115 @@ begin
 end;
 
 function TTyIntervalScale.GetTicks: TTyScaleTickArray;
+begin
+  Result := GetTicksOpt(TyTicksOpt(tbmInsert, tpmAuto));
+end;
+
+function TTyIntervalScale.GetTicksOpt(const AOpt: TTyTicksOpt): TTyScaleTickArray;
+var brk: ITyBreakScaleMapper;
+begin
+  brk := BreakMapper;
+  if (brk = nil) or LogWarped then Exit(PlainTicks);
+  Result := BrokenTicks(AOpt, brk);
+end;
+
+function TTyIntervalScale.BrokenTicks(const AOpt: TTyTicksOpt;
+  const ABrk: ITyBreakScaleMapper): TTyScaleTickArray;
+var
+  brks: TTyAxisBreakArray;
+  e: TTyRange;
+  majors, grp, minors: TTyDoubleArray;
+  maj, wt: TTyScaleTickArray;
+  i, k, m, nm, split, mprec: Integer;
+  prev, next, miv, v: Double;
+
+  function AsTicks(const AValues: TTyDoubleArray): TTyScaleTickArray;
+  var q: Integer;
+  begin
+    SetLength(Result, Length(AValues));
+    for q := 0 to High(AValues) do
+    begin
+      Result[q] := Default(TTyScaleTick);
+      Result[q].Value := AValues[q];
+    end;
+  end;
+
+begin
+  Result := nil;
+  brks := ABrk.BreakList;
+  e := GetExtent;
+  { `if (!interval) return []`, before anything else }
+  if IsNan(FInterval) or (FInterval = 0) then Exit;
+  if AOpt.BreakMode = tbmOnly then
+  begin
+    AddBreakTicks(Result, brks, e, nil);
+    Exit;
+  end;
+  majors := StubTicks(False);
+  maj := AsTicks(majors);
+  TyPruneTicksByBreaks(maj, AOpt.Prune, brks, FInterval, e);
+  if AOpt.BreakMode <> tbmNone then AddBreakTicks(maj, brks, e, nil);
+
+  { getMinorTicks: the ticks expanded to the nice extent, pruned and with the
+    break ends in; nothing between a break's end and its neighbour (the
+    interval may be anything there); each group pruned by the breaks too }
+  minors := nil;
+  nm := 0;
+  split := FMinorSplit;
+  if split >= 2 then
+  begin
+    wt := AsTicks(StubTicks(True));
+    TyPruneTicksByBreaks(wt, tpmAuto, brks, FInterval, e);
+    AddBreakTicks(wt, brks, e, nil);
+    for i := 1 to High(wt) do
+    begin
+      if (wt[i - 1].BreakKind <> btkNone) or (wt[i].BreakKind <> btkNone) then Continue;
+      prev := wt[i - 1].Value;
+      next := wt[i].Value;
+      miv := (next - prev) / split;
+      mprec := TyIntervalPrecision(miv);
+      grp := nil;
+      for k := 0 to split - 2 do
+      begin
+        v := TyJsToFixed(prev + (k + 1) * miv, mprec);
+        if (v > e.Start) and (v < e.Stop) then
+        begin
+          SetLength(grp, Length(grp) + 1);
+          grp[High(grp)] := v;
+        end;
+      end;
+      TyPruneValuesByBreaks(grp, tpmAuto, brks, FInterval, e);
+      SetLength(minors, nm + Length(grp));
+      for k := 0 to High(grp) do minors[nm + k] := grp[k];
+      Inc(nm, Length(grp));
+    end;
+  end;
+
+  { one array in value order, a major first where the two meet }
+  SetLength(Result, Length(maj) + nm);
+  i := 0;
+  k := 0;
+  m := 0;
+  while (i <= High(maj)) or (k < nm) do
+  begin
+    if (k >= nm) or ((i <= High(maj)) and (maj[i].Value <= minors[k])) then
+    begin
+      Result[m] := maj[i];
+      Inc(i);
+    end
+    else
+    begin
+      Result[m] := Default(TTyScaleTick);
+      Result[m].Value := minors[k];
+      Result[m].Level := 1;
+      Inc(k);
+    end;
+    Inc(m);
+  end;
+  SetLength(Result, m);
+end;
+
+function TTyIntervalScale.PlainTicks: TTyScaleTickArray;
 var
   majors, wide: TTyDoubleArray;
   minors: TTyDoubleArray;
@@ -3044,25 +3540,117 @@ begin
 end;
 
 function TTyTimeScale.GetLabel(AValue: Double): string;
-var e: TTyRange;
+var
+  e, lin: TTyRange;
+  brk: ITyBreakScaleMapper;
 begin
   e := GetExtent;
+  { the bottom unit from the span the breaks leave [Batch 132] }
+  brk := BreakMapper;
+  if brk <> nil then
+  begin
+    lin := brk.LinearExtent(sekEffective);
+    Result := TyTimeFullLabelSpan(AValue, e.Start, e.Stop, lin.Stop - lin.Start,
+      FSplitNumber, FUTC, MinInterval, MaxInterval);
+    Exit;
+  end;
   Result := TyTimeFullLabel(AValue, e.Start, e.Stop, FSplitNumber, FUTC,
     MinInterval, MaxInterval);
 end;
 
-function TTyTimeScale.GetTicks: TTyScaleTickArray;
+function TTyTimeScale.ApproxInterval: Double;
 var
-  e: TTyRange;
+  e, lin: TTyRange;
+  brk: ITyBreakScaleMapper;
+  span: Double;
+  split: Integer;
+begin
+  e := GetExtent;
+  brk := BreakMapper;
+  if brk <> nil then
+  begin
+    lin := brk.LinearExtent(sekEffective);
+    span := lin.Stop - lin.Start;
+  end
+  else
+    span := e.Stop - e.Start;
+  split := FSplitNumber;
+  if split < 1 then split := 6;
+  Result := span / split;
+  if (MinInterval > 0) and (Result < MinInterval) then Result := MinInterval;
+  if (MaxInterval > 0) and (Result > MaxInterval) then Result := MaxInterval;
+end;
+
+function TTyTimeScale.GetTicks: TTyScaleTickArray;
+begin
+  Result := GetTicksOpt(TyTicksOpt(tbmInsert, tpmAuto));
+end;
+
+{ the units a break's end is labelled at: the break's own finest unit at
+  its two ends, and the coarsest unit the break crosses -- no coarser than
+  the coarsest of the ticks -- at the ticks' top level }
+function TTyTimeScale.BreakTimeProps(const AClamped: TTyAxisBreak;
+  out ALevel: Integer; out ALower, AUpper: TTyTimeUnit): Boolean;
+var
+  lowerBrk, upperBrk, upper, lower: Integer;
+  u: TTyTimeUnit;
+begin
+  lowerBrk := Max(Ord(TyTimeUnitOf(AClamped.VMin, FUTC)), Ord(TyTimeUnitOf(AClamped.VMax, FUTC)));
+  upperBrk := 0;
+  for u := Low(TTyTimeUnit) to High(TTyTimeUnit) do
+    if TyTimeFloor(AClamped.VMin, u, FUTC) <> TyTimeFloor(AClamped.VMax, u, FUTC) then
+    begin
+      upperBrk := Ord(u);
+      Break;
+    end;
+  upper := Min(upperBrk, FBrkUpper);
+  lower := Max(upper, lowerBrk);
+  ALevel := FBrkLevel;
+  ALower := TTyTimeUnit(lower);
+  AUpper := TTyTimeUnit(upper);
+  Result := True;
+end;
+
+function TTyTimeScale.GetTicksOpt(const AOpt: TTyTicksOpt): TTyScaleTickArray;
+var
+  e, lin: TTyRange;
   t: TTyTimeTickArray;
   i: Integer;
+  brk: ITyBreakScaleMapper;
+  brks: TTyAxisBreakArray;
+  spans: TTyTimeBreakSpanArray;
+  approx, span: Double;
 begin
   Result := nil;
   e := GetExtent;
-  t := TyTimeTicks(e.Start, e.Stop, FSplitNumber, FUTC, MinInterval, MaxInterval);
+  brk := BreakMapper;
+  spans := nil;
+  span := NaN;
+  if brk <> nil then
+  begin
+    brks := brk.BreakList;
+    lin := brk.LinearExtent(sekEffective);
+    span := lin.Stop - lin.Start;
+    SetLength(spans, Length(brks));
+    for i := 0 to High(brks) do
+    begin
+      spans[i].VMin := brks[i].VMin;
+      spans[i].VMax := brks[i].VMax;
+    end;
+    if AOpt.BreakMode = tbmOnly then
+    begin
+      AddBreakTicks(Result, brks, e, nil);
+      Exit;
+    end;
+  end;
+  t := TyTimeTicksSpan(e.Start, e.Stop, span, FSplitNumber, FUTC, MinInterval,
+    MaxInterval, spans, approx);
   SetLength(Result, Length(t));
+  FBrkUpper := Ord(High(TTyTimeUnit));
+  FBrkLevel := 0;
   for i := 0 to High(t) do
   begin
+    Result[i] := Default(TTyScaleTick);
     Result[i].Value := t[i].Value;
     { EVERY TIME TICK IS A MAJOR. There is no such thing as a minor tick on a
       time axis: a year marker among days is not a subdivision of anything,
@@ -3071,8 +3659,14 @@ begin
     Result[i].OffInterval := False;
     Result[i].TimeLevel := t[i].Level;
     Result[i].TimeUnit := t[i].Unit_;
+    Result[i].TimeUpper := t[i].Unit_;
     Result[i].NotNice := t[i].NotNice;
+    FBrkUpper := Min(FBrkUpper, Ord(t[i].Unit_));
+    FBrkLevel := Max(FBrkLevel, t[i].Level);
   end;
+  if brk = nil then Exit;
+  TyPruneTicksByBreaks(Result, AOpt.Prune, brks, approx, e);
+  if AOpt.BreakMode <> tbmNone then AddBreakTicks(Result, brks, e, @BreakTimeProps);
 end;
 
 end.

@@ -741,9 +741,9 @@ end;
 function CanAffine(AAxis: TTyAxis): Boolean;
 begin
   { upstream's canCalculateAffineTransform: an interval or a time scale --
-    not log, not ordinal. (Breaks too, which nothing here builds yet.) }
+    not log, not ordinal, and not one with breaks [Batch 132] }
   Result := (AAxis <> nil) and (AAxis.AxisType in [atValue, atTime])
-    and (AAxis.Scale is TTyIntervalScale);
+    and (AAxis.Scale is TTyIntervalScale) and (AAxis.Scale.BreakMapper = nil);
 end;
 
 procedure TTyCartesian2D.CalcAffineTransform;

@@ -6,7 +6,16 @@ unit test.advchart.scale.break;
   WITHOUT touching TTyIntervalScale, TTyLinearScaleMapper or TTyLogScaleMapper,
   and without changing a single assertion in test.advchart.scale. If a future
   change to breaks forces an edit in those files, the decorator design has failed
-  and the retrofit cost this spike was run to avoid has arrived anyway. }
+  and the retrofit cost this spike was run to avoid has arrived anyway.
+
+  [Revised in batch 132: the decorator now carries upstream's model -- a gap
+  in data units or a percent of the linear span, worked out when the
+  effective extent is set, and no expanded state (an expanded break is not
+  parsed). A percent gap still comes out as that share of the axis, so the
+  assertions below kept their numbers; the expanded test became `no break is
+  the inner mapper`. The interval scale learned the nice step on the span
+  the breaks leave and the steps over a break (upstream's own code in
+  Interval.ts), which is batch 132's and not this contract's.] }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry,
      tyControls.AdvChart.Types, tyControls.AdvChart.Scale;
@@ -14,6 +23,7 @@ type
   TAdvChartBreakTest = class(TTestCase)
   private
     function LinearWithBreak: ITyScaleMapper;
+    function MkBrk(AMin, AMax: Double; AKind: TTyBreakGapKind; AVal: Double): TTyAxisBreak;
   published
     procedure TestNoBreaksIsIdenticalToInner;
     procedure TestBreakCollapsesItsRange;
@@ -31,17 +41,23 @@ implementation
 const
   Eps = 1e-9;
 
-function TAdvChartBreakTest.LinearWithBreak: ITyScaleMapper;
-var
-  inner: ITyScaleMapper;
-  brk: TTyBreakScaleMapper;
+function TAdvChartBreakTest.MkBrk(AMin, AMax: Double; AKind: TTyBreakGapKind;
+  AVal: Double): TTyAxisBreak;
 begin
-  inner := TTyLinearScaleMapper.Create;
-  inner.SetExtent(sekEffective, TyRange(0, 100));
-  brk := TTyBreakScaleMapper.Create(inner);
+  Result := Default(TTyAxisBreak);
+  Result.VMin := AMin;
+  Result.VMax := AMax;
+  Result.GapKind := AKind;
+  Result.GapVal := AVal;
+  Result.Id := FloatToStr(AMin) + '_'#0'_' + FloatToStr(AMax);
+end;
+
+function TAdvChartBreakTest.LinearWithBreak: ITyScaleMapper;
+begin
   { Collapse 20..80 — 60 % of the axis — down to 5 % of the visual span. }
-  brk.AddBreak(TyRange(20, 80), 0.05);
-  Result := brk;
+  Result := TTyBreakScaleMapper.Create(TTyLinearScaleMapper.Create,
+    [MkBrk(20, 80, bgkPrct, 0.05)]);
+  Result.SetExtent(sekEffective, TyRange(0, 100));
 end;
 
 procedure TAdvChartBreakTest.TestNoBreaksIsIdenticalToInner;
@@ -49,7 +65,7 @@ var inner, brk: ITyScaleMapper; i: Integer; v: Double;
 begin
   inner := TTyLinearScaleMapper.Create;
   inner.SetExtent(sekEffective, TyRange(0, 100));
-  brk := TTyBreakScaleMapper.Create(TTyLinearScaleMapper.Create);
+  brk := TTyBreakScaleMapper.Create(TTyLinearScaleMapper.Create, nil);
   brk.SetExtent(sekEffective, TyRange(0, 100));
   for i := 0 to 20 do
   begin
@@ -116,14 +132,11 @@ begin
 end;
 
 procedure TAdvChartBreakTest.TestTwoBreaksAccumulate;
-var inner: ITyScaleMapper; brk: TTyBreakScaleMapper; m: ITyScaleMapper;
+var m: ITyScaleMapper;
 begin
-  inner := TTyLinearScaleMapper.Create;
-  inner.SetExtent(sekEffective, TyRange(0, 100));
-  brk := TTyBreakScaleMapper.Create(inner);
-  brk.AddBreak(TyRange(10, 30), 0.02);
-  brk.AddBreak(TyRange(60, 90), 0.02);
-  m := brk;
+  m := TTyBreakScaleMapper.Create(TTyLinearScaleMapper.Create,
+    [MkBrk(10, 30, bgkPrct, 0.02), MkBrk(60, 90, bgkPrct, 0.02)]);
+  m.SetExtent(sekEffective, TyRange(0, 100));
   AssertEquals('start', 0.0, m.Normalize(0), Eps);
   AssertEquals('stop', 1.0, m.Normalize(100), Eps);
   AssertEquals('first gap', 0.02, m.Normalize(30) - m.Normalize(10), Eps);
@@ -131,30 +144,26 @@ begin
 end;
 
 procedure TAdvChartBreakTest.TestBreakOnLogInnerMapper;
-var inner: ITyScaleMapper; brk: TTyBreakScaleMapper; m: ITyScaleMapper;
+var inner: ITyScaleMapper; m: ITyScaleMapper;
 begin
   { Breaks compose with ANY inner mapper — that is the whole point of the
     TransformIn/TransformOut chain. On a log axis the break collapses a decade. }
   inner := TTyLogScaleMapper.Create(10);
-  inner.SetExtent(sekEffective, TyRange(1, 10000));
-  brk := TTyBreakScaleMapper.Create(inner);
-  brk.AddBreak(TyRange(10, 100), 0.05);
-  m := brk;
+  m := TTyBreakScaleMapper.Create(inner, [MkBrk(10, 100, bgkPrct, 0.05)]);
+  m.SetExtent(sekEffective, TyRange(1, 10000));
   AssertEquals('start', 0.0, m.Normalize(1), Eps);
   AssertEquals('stop', 1.0, m.Normalize(10000), Eps);
   AssertEquals('one collapsed decade', 0.05, m.Normalize(100) - m.Normalize(10), Eps);
 end;
 
 procedure TAdvChartBreakTest.TestScaleAcceptsBreakDecoratorWithoutKnowingIt;
-var s: TTyIntervalScale; brk: TTyBreakScaleMapper; ticks: TTyScaleTickArray; i: Integer;
+var s: TTyIntervalScale; ticks: TTyScaleTickArray; i: Integer;
 begin
   s := TTyIntervalScale.Create;
   try
+    s.Mapper := TTyBreakScaleMapper.Create(s.Mapper, [MkBrk(20, 80, bgkPrct, 0.05)]);
     s.SetExtent(TyRange(0, 100));
     s.Niceify(5);
-    brk := TTyBreakScaleMapper.Create(s.Mapper);
-    brk.AddBreak(TyRange(20, 80), 0.05);
-    s.Mapper := brk;
     { TTyIntervalScale contains no reference to breaks whatsoever, yet: }
     AssertEquals('collapsed', 0.05, s.Normalize(80) - s.Normalize(20), Eps);
     ticks := s.GetTicks;
@@ -173,16 +182,14 @@ begin
 end;
 
 procedure TAdvChartBreakTest.TestExpandedBreakBehavesLikeNoBreak;
-var inner: ITyScaleMapper; brk: TTyBreakScaleMapper; m: ITyScaleMapper;
+var m: ITyScaleMapper;
 begin
   { A break the user clicked open must map exactly as if it were absent —
-    otherwise the expand animation would not land where the expanded axis draws. }
-  inner := TTyLinearScaleMapper.Create;
-  inner.SetExtent(sekEffective, TyRange(0, 100));
-  brk := TTyBreakScaleMapper.Create(inner);
-  brk.AddBreak(TyRange(20, 80), 0.05);
-  brk.SetBreakExpanded(0, True);
-  m := brk;
+    otherwise the expand animation would not land where the expanded axis draws.
+    [Batch 132] Upstream does not parse an expanded break at all: the
+    decorator is handed none, and maps as its inner mapper does. }
+  m := TTyBreakScaleMapper.Create(TTyLinearScaleMapper.Create, nil);
+  m.SetExtent(sekEffective, TyRange(0, 100));
   AssertEquals('expanded midpoint', 0.5, m.Normalize(50), Eps);
   AssertEquals('expanded quarter', 0.2, m.Normalize(20), Eps);
 end;

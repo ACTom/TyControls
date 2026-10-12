@@ -87,6 +87,8 @@ function TyEventQueryMatches(const AQuery: TTyEventQuery;
   and timelinechanged / timelineplaychanged, the timeline's [Batch 129];
   and the brush's: brush, brushend, globalcursortaken, brushselected, and
   axisareaselected, a parallel axis' area select [Batch 130];
+  and axisbreakchanged, the axis breaks' expand / collapse / toggle
+  [Batch 132];
   and `updated`, which every
   setOption and dispatch ends with [Batch 97]. }
 function TyChartEventTypeOf(const AName: string): string;
@@ -135,7 +137,7 @@ uses
 const
   cMouseTypes: array[0..8] of string = ('click', 'dblclick', 'mousedown',
     'mouseup', 'mousemove', 'mouseover', 'mouseout', 'globalout', 'contextmenu');
-  cActionTypes: array[0..31] of string = ('select', 'unselect', 'toggleselect',
+  cActionTypes: array[0..32] of string = ('select', 'unselect', 'toggleselect',
     'selectchanged', 'highlight', 'downplay', 'mapselectchanged',
     'pieselectchanged', 'mapselected', 'pieselected', 'mapunselected',
     'pieunselected',
@@ -157,7 +159,9 @@ const
       127], and the parallel axes' axisAreaSelect, which upstream registers
       with the event axisAreaSelected -- all published as chart events
       (registerAction lowercases the name) [Batch 130] }
-    'brush', 'brushend', 'globalcursortaken', 'brushselected', 'axisareaselected');
+    'brush', 'brushend', 'globalcursortaken', 'brushselected', 'axisareaselected',
+    { the axis breaks' actions, refined into one event [Batch 132] }
+    'axisbreakchanged');
 
 function TyChartEventIsAction(const AType: string): Boolean;
 var i: Integer;

@@ -18,7 +18,7 @@
 | 5 | **深度优先** | 先把直角坐标做透，再上径向 / 关系族 |
 | 6 | **对标 ECharts 6.1**，不是 6.0、不是 5 | v5 词汇是 v6 的严格子集，粘 v5 配置照样解析。抄公式必须从 **6.1** 源码抄——6.1 重写了轴的数学，且文档滞后于源码 |
 
-**公开口径**：「覆盖 ECharts 6.1 的全部制图与交互能力，减去浏览器投递层、减去 WebGL、减去地图数据生态；matrix / chord / thumbnail / 断轴在路线图上。」**[第 120 批：chord 落地了（环形布局、借角、飘带、渐变飘带、状态、提示框、入场），见 §155。]**
+**[第 132 批：断轴已做（§169）；log 轴的断开与 singleAxis 仍在路线图上。]** **公开口径**：「覆盖 ECharts 6.1 的全部制图与交互能力，减去浏览器投递层、减去 WebGL、减去地图数据生态；matrix / chord / thumbnail / 断轴在路线图上。」**[第 120 批：chord 落地了（环形布局、借角、飘带、渐变飘带、状态、提示框、入场），见 §155。]**
 
 ---
 
@@ -293,7 +293,7 @@ M8 是最要紧的一条：它就是契约 ② 要防的那个失败模式，被
 
 两个契约都**没有**打架，而且比预估便宜：
 
-- **契约 ②** 比预想的省。ECharts 把断轴做成 `ScaleMapper` 的 `transformIn`/`transformOut` 链，
+- **[第 132 批：装饰器换成上游的模型——gap 是数据单位或线性跨度的百分比、在设有效 extent 时算、两份 extent、没有展开状态（展开的断开不解析）；`TTyIntervalScale` 为了 nice 与刻度现在知道断开（上游 `Interval.ts` 本身就知道），契约测试的断言数字没改。见 §169。]** **契约 ②** 比预想的省。ECharts 把断轴做成 `ScaleMapper` 的 `transformIn`/`transformOut` 链，
   **log 轴和断轴因此是同一个机制**。照抄这个形状之后，`TTyBreakScaleMapper` 是一个**装饰器**，
   `TTyIntervalScale` 和两个基础 mapper 一个字都不用改，而且断轴**免费**地和 log 组合
   （`TestBreakOnLogInnerMapper`：一个 decade 塌缩成 5%）。整个断轴支持是 Scale 单元里约 180 行。
@@ -3562,7 +3562,7 @@ TDateTime 从 1899-12-30 起算、之前是负数,**钳在 0 看着像地板,其
   `TyAdvChartAxisLabelPrimary` 代替:效果一样,而且皮肤能改。
 - **[第 104 批：维持，理由仍成立；在 §139 重新核过。上游在浏览器里看 `navigator.language`，中文环境本来也是中文月名，本库的三级规则是同一类做法。]** ECharts 自己的 locale registry。月名走的是本库的三级规则(见上),
   和日历共用——这是有意的偏离。
-- **[第 104 批：`axisPointer` 标签和轴 tooltip 的表头改走 `TimeScale.getLabel`（以前用的是刻度的短模板，表头只写一个 `2`），轴触发下字符串 `tooltip.formatter` 先过时间模板；断轴的 `upperTimeUnit` 仍然没有（断轴没做，字典的跨单位项已经建好）。见 §139。]** 断轴上的 `upperTimeUnit`(断轴本身还没做)、`axisPointer`/`tooltip` 上的时间
+- **[第 132 批：断开端的刻度有了上单位，读字典的跨单位项。见 §169。]** **[第 104 批：`axisPointer` 标签和轴 tooltip 的表头改走 `TimeScale.getLabel`（以前用的是刻度的短模板，表头只写一个 `2`），轴触发下字符串 `tooltip.formatter` 先过时间模板；断轴的 `upperTimeUnit` 仍然没有（断轴没做，字典的跨单位项已经建好）。见 §139。]** 断轴上的 `upperTimeUnit`(断轴本身还没做)、`axisPointer`/`tooltip` 上的时间
   格式(那两行还没到)。
 - `hideOverlap`。**上游默认也不开**,所以「Feb 和 2 挤在一起」是忠实的;
   真要按测量去碰撞归到「标签去碰撞」那一行。
@@ -5233,7 +5233,7 @@ single 模式的图例、没有 data 的类目轴、有名字的节点、带值�
   这只有 splitNumber 不超过 4 时才可能。minInterval、maxInterval 不读。
 - 刻度和范围回到值空间走 V8 的 `Math.pow` 表。取整没动的一端保留它进来时的值——上游的 lookup,
   不只管钉住的端点:10^log10(3) 在这里是 2.9999999999999996;数据从 10.000000000000002 起,首刻度就是它,不是整 10。
-- 只有 log 轴在 log 空间里 nice。断轴的装饰器也做变换,以前被当成 log 轴,步长在压缩后的空间里走,
+- **[第 132 批：断开的轴在值空间里 nice、步长用扣掉断开加上 gap 的线性跨度，断开接到了 `breaks` 选项上。见 §169。]** 只有 log 轴在 log 空间里 nice。断轴的装饰器也做变换,以前被当成 log 轴,步长在压缩后的空间里走,
   刻度出了范围、顺序也乱(0、20、97.89、117.89、137.89、100)。上游在值空间里 nice 断轴(跨度扣掉断开的部分,这个还没做)。
   断轴还没接到任何 option 上,图表碰不到,但单元测试碰得到。
 - 范围里没有小于等于 0 的端点:上游的 `sanitize` 把它挪到数据的最小值(`min: 0` 变成数据最小值)。
@@ -9801,7 +9801,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **年份范围**：端口的日历算术钳在公元 1–9999 年；JS 的日期到 ±275760 年，超出 8.64e15 才无效。
 - **替换值里的 `$`**：JS 的 `replace` 会解释替换串里的 `$&`、`$1`；替换值来自名字表，英文名里没有，端口不模拟。
 - **字典数组里的非字符串真值**（数字、对象）：上游拿它当模板时抛 `TypeError`，端口印它的 `String()`。
-- **断轴**：跨单位的字典项照上游建好，但端口没有断轴，用不到。
+- **[第 132 批：断开端的标签读 `[下单位][上单位]`，用上了。见 §169。]** **断轴**：跨单位的字典项照上游建好，但端口没有断轴，用不到。
 - **`new Date(tick.value)`**：上游给刻度格式化时是截断，给数字格式化时是 `Math.round`；端口一律按后者。只有作者写了小数毫秒的 `min` / `max` 时不整齐的两端会差 1 毫秒。
 - **轴标签事件的 `value`**：上游是 `rawLabel`，时间轴上就是 `getLabel` 的完整日期；端口仍给数值。基准没有覆盖，留给事件那一行。
 - **毫秒精度的 `getLabel`**：端口的间隔表没有毫秒行（§52），`fullLeveledFormatter.millisecond` 到不了。
@@ -10111,7 +10111,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **箱线图的宽**（`boxplotLayout.calculateBase`）：一根基轴上所有（未被图例关掉的）箱线图系列共享带宽：可用宽 `band × 0.8 − 2`，间隔 `可用宽 / n × 0.3`，每个宽 `(可用宽 − 间隔 × (n − 1)) / n`，偏移从 `宽 / 2 − 可用宽 / 2` 起每个加 `(间隔 + 宽)`；每个系列的宽再夹在自己的 `boxWidth` 里（缺省 `[7, 50]`，不是数组时上下限相同，`parsePercent(…, band) || 0`），**先下限后上限**。
 - **箱线图的点**（14 个）：Q1 端与 Q3 端各两点围成箱子，两根须（最小到 Q1、最大到 Q3），三根横线（最小、最大、中位）；基轴坐标加偏移，**不做 subPixelOptimize**。`BoxPath` 先闭合箱子，再逐段画须和横线。入场从中位数的像素长出，`animationDuration` 缺省 800；更新时留下的从原处补间、新来的入场、走掉的当即消失。
 - **样式**：`visualDrawType: 'stroke'`——`itemStyle.color`（缺省 `tokens.color.neutral00`，浅色主题是 `#fff`）是填充，`itemStyle.borderColor` 缺省是色板色，`borderWidth` 缺省 1，数据项的 `itemStyle` 叠在上面。emphasis 缺省 `borderWidth 2` 加阴影（模糊 5、偏移 1/1、`rgba(0,0,0,0.2)`），默认抬亮（白色抬亮还是白），z2 从 100 到 110。
-- **transform**：数据集有真值的 `transform` 或 `fromTransformResult` 时没有自己的 `source`：上游数据集是 `fromDatasetIndex`，否则 `fromDatasetId`，都没写就是 0；取它的第 `fromTransformResult || 0` 个结果（写了却没有就抛错）。有 transform 就逐级管道（空数组抛错），没有就原样克隆那个结果。`'boxplot'` 要求上游是数组行、按列排（否则抛错），`getRawData()` 是**整个** `data`（表头行也算进去）。结果 0 是 `['ItemName', 'Low', 'Q1', 'Q2', 'Q3', 'High']` 命名的箱子表，结果 1 是不命名的离群点表 `[name, value]`，两个都没有表头行。
+- **[第 133 批：上游一个都找不到时当根数据集读自己的 `source`（不是没有表）；`fromDatasetIndex` 可以是数组或下标串、`fromDatasetId` 可以是数组；`fromTransformResult` 超出上游自己的结果时回落到上游的上游的同号结果；副本（cloneSourceShallow）没有原始 meta——系列读它重新猜表头、丢掉维度名，对它做 transform 时结果 0 继承维度会抛。见 §170。]** **transform**：数据集有真值的 `transform` 或 `fromTransformResult` 时没有自己的 `source`：上游数据集是 `fromDatasetIndex`，否则 `fromDatasetId`，都没写就是 0；取它的第 `fromTransformResult || 0` 个结果（写了却没有就抛错）。有 transform 就逐级管道（空数组抛错），没有就原样克隆那个结果。`'boxplot'` 要求上游是数组行、按列排（否则抛错），`getRawData()` 是**整个** `data`（表头行也算进去）。结果 0 是 `['ItemName', 'Low', 'Q1', 'Q2', 'Q3', 'High']` 命名的箱子表，结果 1 是不命名的离群点表 `[name, value]`，两个都没有表头行。
 - **prepareBoxplotData**：每行 `slice` 后用 `a - b` 排序；`quantile` 是 `H = (n − 1)p + 1`，取 `floor(H)` 处的值，`H` 有小数部分时往下一个插值，越界读 `undefined`（于是空行全是 NaN）；`boundIQR` 缺省 1.5，`'none'` 和数字 0 用最小最大值，否则 `boundIQR × (Q3 − Q1)` 外扩后再和最小最大值夹（`'1'` 这种串被乘法转成数）；`itemNameFormatter` 是串时只替换**第一个** `{value}`，否则名字是行号；样本落在 `[low, high]` 外的进离群点表。
 - **tooltip 维**：类型声明的 `defaultTooltip`（K 线 open…highest、箱线图 min…max）只在**没人给这一维起名**时生效（`createDimensions` 只在 `resultItem.name == null` 时套类型的维度定义）。数据集表头、`dataset.dimensions`、系列 `dimensions`、transform 的结果给了名字，这些子行就没了，tooltip 跟标签走——最后一个适合当标签的坐标维（transform 出来的箱子只显示 High）。
 
@@ -10119,7 +10119,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 
 - **新单元 `tyControls.AdvChart.WhiskerBox`**（纯）：`TTyWhiskerLayout`（解出的 K 线宽、箱宽与偏移、`clip`，以及控件填的箱线图填充 / 描边 / 线宽）、`TyWhiskerParsePercent`、`TyCandleWidthOf`、`TyBoxWidthBounds`、`TyBoxplotBase`、`TyWhiskerBand`（类目轴取 `BandWidth`，否则 `TyBandFromMinGap` 配 `TyLiPosMinGap` 与映射范围，至少 1）、`TyCandleEndsOf` / `TyBoxEndsOf`（`Cart.DataToPoint`、实体两侧与脊线 `TySubPixelOptimize`、开盘价 / 中位数基线）、`TyWhiskerClipOf` / `TyWhiskerClipRect`、`TySolveWhiskerLayouts`（K 线逐系列、箱线图逐轴，跳过隐藏系列）。
 - **`Series`**：`TySeriesWhiskerBaseIsX`，绑定时 K 线和箱线图按它选基轴（索引、统计、containShape 跟着走）。
-- **`Dataset`**：`TTyDatasetCache`——每个数据集的结果是一个 `TySourceOf` 本来就会读的节点（`source` / `dimensions` / `sourceHeader` / `seriesLayoutBy`）：根数据集借自己的节点，transform 的结果是缓存造的节点（随缓存释放），`fromTransformResult` 的克隆就是上游的节点；解析中的标记挡住自引用和环。`TySourceOf` 多一个缓存参数，遇到计算出来的数据集就读缓存给的节点（系列自己的 `seriesLayoutBy` / `sourceHeader` / `dimensions` 照旧优先）。注册表只有 `'boxplot'`（`ApplyOne`），D2 的 filter / sort 加在同一处。`TyQuantile`、`TyPrepareBoxplotData` 公开。
+- **[第 133 批：注册表搬到 `tyControls.AdvChart.DataTransform`（`TyRegisterDataTransform`，filter / sort / boxplot 内置），`ApplyOne` / `ApplyPipe` 删掉，boxplot 也走通用的 applySingleDataTransform（结果节点不变）；结果记成 `TTySourceRef`（节点 + 是否副本），失败的数据集记理由（`ErrorOf`）。见 §170。]** **`Dataset`**：`TTyDatasetCache`——每个数据集的结果是一个 `TySourceOf` 本来就会读的节点（`source` / `dimensions` / `sourceHeader` / `seriesLayoutBy`）：根数据集借自己的节点，transform 的结果是缓存造的节点（随缓存释放），`fromTransformResult` 的克隆就是上游的节点；解析中的标记挡住自引用和环。`TySourceOf` 多一个缓存参数，遇到计算出来的数据集就读缓存给的节点（系列自己的 `seriesLayoutBy` / `sourceHeader` / `dimensions` 照旧优先）。注册表只有 `'boxplot'`（`ApplyOne`），D2 的 filter / sort 加在同一处。`TyQuantile`、`TyPrepareBoxplotData` 公开。
 - **`Marks`**：`TTySeriesVisual.Whisker`。`BuildCandlestick` 重写落位：宽取解出的（没解时退回半个带宽），八个点来自 `TyCandleEndsOf`，实体是四点的包围盒、影线是两段，入场的数存对齐后的；sign 0 取 `color0`、上一行收盘是 NaN 时为跌；`hasValue` 要五个数都在；部分出界挂裁剪、全部出界不画；影线与实体的命中带半个线宽；去掉零高实体补的一个像素。新 `BuildBoxplot`：每行一个带 `Cmds` 的多边形（`TyBoxplotShape`：命中多边形是箱子，路径是箱子加五段），数据项 `itemStyle` 的 color / borderColor / borderWidth / opacity 叠上去，入场与更新的数（14 点、中位数基线、方向）放在 `Anim.Pts` / `G`，命中带半个线宽，裁剪同 K 线。渲染器表加 `boxplot`；没解时（纯单元调用）用单系列的缺省布局。
 - **`Shape`**：`TyBoxplotShape`；多边形带 `Cmds` 时命中检测再看路径里的直线段（须和横线）。
 - **控件**：`FWhiskers` 在柱布局之后解；`BoxplotStyle` 填填充（`itemStyle.color`，缺省是主题的图表底色——上游的 `neutral00`，不写死 `#fff`）、描边（`borderColor`，缺省系列色）、线宽；`FDatasetCache` 每次建 store 时清空并传给 `TySourceOf`；`MultiValueDims` 只在类目基轴且 `encode` 没写基轴时前插行号，否则基值是元素第一个；`ResolveTextDims` 被命名的维不进类型的 tooltip 维。
@@ -10142,7 +10142,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **表**：每个数据集的每个结果过 `TTyDatasetCache`：维度名、结果 0 的 `StartIndex`、逐格（数字逐位，NaN 只认 NaN——JS 里只有一个 NaN）。
 - **tooltip**：指针放到基准的点上，比显示的是哪一项、各行（axis 触发走 `AxisTooltipContent`）。
 - **高亮**：`DispatchAction` 之后比线宽、不透明度、z2 的抬升、写了的填充逐位，没写的比「动没动」。
-- 手写 5 个：`TyQuantile` 的插值与边界；不是数的样本从不算离群点（这里对 NaN 做有序比较会抛异常）、不是数组的行什么都不做；没注册的 transform、空管道、上游不存在、对象行、根数据集只有一个结果、没缓存时计算出来的数据集无效；互相引用的两个数据集都没有表也不死循环；K 线宽的规则。
+- **[第 133 批：「没注册的 transform」那条改了两处——filter 现在有表；找不到上游的那个当根数据集，没有 source 所以读不出表。见 §170。]** 手写 5 个：`TyQuantile` 的插值与边界；不是数的样本从不算离群点（这里对 NaN 做有序比较会抛异常）、不是数组的行什么都不做；没注册的 transform、空管道、上游不存在、对象行、根数据集只有一个结果、没缓存时计算出来的数据集无效；互相引用的两个数据集都没有表也不死循环；K 线宽的规则。
 
 另外：`test.advchart.animenter` 的 K 线横向坐标不再按权重比，全部逐位（例外取消）；`animenter` / `animupdate` / `animstate` 的映射认 `boxplot` / `boxplotBoxPath`；`test.advchart.containshape` 重新比较原先推迟的「值基轴上的 K 线」用例；`test.advchart.candlestick` 的两个像素测试改读影线那一列（零高实体的线落在两行之间，半透明，方向要从影线读）。
 
@@ -10181,7 +10181,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **K 线逐项颜色**：数据项自己的 `itemStyle`（以及 `borderColorDoji` 只写在某一项上）不读；`borderColorDoji` 只认系列上的。
 - **[第 117 批：已做——三条按 sign 描的路径、没有数据的命中、纵向布局的零长线，见 §152。]** **K 线 large 模式**：600 个以上时上游走 large 路径（C8），端口仍逐项画。
 - **新来的 K 线**在更新中仍是直接到终值（AN3 的旧行为，没有基准）；新来的箱子按上游入场。
-- **transform**：只有 `'boxplot'`；filter、sort（D2）以及任何没注册的类型、空管道、上游不是数组行或按行排、`fromTransformResult` 指向不存在的结果——上游抛错让整个 setOption 失败，端口只是这个数据集没有表、读它的系列什么都不画，也没有诊断。样本不是数时按 JS 的 `ToNumber` 转（数组、对象当 NaN），含 NaN 时的排序用稳定插入排序，不保证与 V8 的 TimSort 在不一致比较下的结果相同；`useExtreme` 时上游把原始样本（可能是串）放进表，端口放转过的数。`itemNameFormatter` 写成函数不支持（当成非串，名字是行号）。
+- **[第 133 批：filter、sort 与注册表已做；出错仍是这个数据集（和读它的）没有表，但控件现在给诊断 `dataset[%d] has no table: %s`；找不到上游的数据集当根数据集。见 §170。]** **transform**：只有 `'boxplot'`；filter、sort（D2）以及任何没注册的类型、空管道、上游不是数组行或按行排、`fromTransformResult` 指向不存在的结果——上游抛错让整个 setOption 失败，端口只是这个数据集没有表、读它的系列什么都不画，也没有诊断。样本不是数时按 JS 的 `ToNumber` 转（数组、对象当 NaN），含 NaN 时的排序用稳定插入排序，不保证与 V8 的 TimSort 在不一致比较下的结果相同；`useExtreme` 时上游把原始样本（可能是串）放进表，端口放转过的数。`itemNameFormatter` 写成函数不支持（当成非串，名字是行号）。
 - **箱线图的 visualMap** 与逐数据取色不接；图例图标沿用原有规则，没有按上游（白填充、系列色描边）建模。
 - **`encode` 写了基轴时的系列自带数据**只是不前插行号，`encode` 的其余映射走原有的 `SeriesDataEncode`。
 
@@ -12456,3 +12456,187 @@ Lazarus 3.0：最后一次全量之前用 `laz30_build.ps1`（私有 `--pcp`、`
 - `tests/test.advchart.brushcover.pas`、`tests/test.advchart.brushselect.pas`（三个新手写用例）、`tests/test.advchart.toolbox.pas`（一个）、`tests/test.advchart.parallel.pas`、`tests/test.advchart.parallelbrush.pas`。
 - `tools/advchart-oracle/custom-series2.js`、`tools/advchart-oracle/toolbox.js` 与两份基准：重生成后已有用例一个字节没变，只多了新用例（toolbox 的自检条目跟着多列出新用例）。
 - `docs/superpowers/plans/2026-10-01-advancechart-remaining-roadmap.md`；本 spec 的 §49、§50、§88、§90、§141、§159、§162 在原处标注。
+
+## 169. Tier 3 第一百三十二批：断轴（D1，2026-10-13）
+
+路线图 D1：断轴——`breaks` 接到已有 mapper、随机锯齿缓存、刻度剪枝、nice 扣除断开区间、展开收起动作。在这之前端口里的断轴只有 Tier 0 spike 留下的那个装饰器（§2 契约 ②、§9）：一段值域塌成「可视跨度的一个分数」、带一个 Expanded 标志，单元测试碰得到，图表碰不到——`breaks` 一个字都不读，§67 还记着「上游在值空间里 nice 断轴（跨度扣掉断开的部分，这个还没做）」，§139 的时间字典里跨单位的项建好了没人读。这一批对着 6.1 的 `scale/break.ts`、`scale/breakImpl.ts`（`BreakScaleMapperImpl` 的 `transformIn` / `transformOut` / `setExtent2`、`updateAxisBreakGapReal`、`pruneTicksByBreak`、`addBreaksToTicks`、`clampBreakByExtent`、`parseAxisBreakOption`、`identifyAxisBreak`、`retrieveAxisBreakPairs`）、`scale/scaleMapper.ts`（`initBreakOrLinearMapper`、线性 mapper 的 `normalize` / `scale` / `setExtent2`、`getScaleLinearSpanEffective`）、`scale/Interval.ts` 的 `getTicks`、`scale/Time.ts`（`getTicks`、`createIntervalTicks`、`createEstimateNiceMultiple`、`calcNiceForTimeScale`）、`scale/minorTicks.ts`、`coord/axisNiceTicks.ts`、`coord/axisHelper.ts`（`createScaleByModel`、`retrieveAxisBreaksOption`）、`coord/axisTickLabelBuilder.ts`、`coord/cartesian/Grid.ts`（`prepareAlignToInCoordSysCreate`）、`coord/cartesian/Cartesian2D.ts`（`canCalculateAffineTransform`）、`coord/axisDefault.ts` 的 `breakArea` / `breakLabelLayout` / `axisLine.breakLine`、`component/axis/axisBreakHelperImpl.ts`（`rectCoordBuildBreakAxis`、`buildAxisBreakLine`、`adjustBreakLabelPair`、`updateModelAxisBreak`）、`component/axis/AxisBuilder.ts`（断轴线、标签的 `adjustBreakLabels`、断开端标签的优先级与点击）、`component/axis/CartesianAxisView.ts`、`component/axis/axisSplitHelper.ts`、`component/axis/axisAction.ts`（三个动作与 `axisbreakchanged`），以及 zrender 的 `BoundingRect.intersect`（方向 MTV）、`matrix.rotate` / `mul`、`subPixelOptimizeLine` 逐行核过，**以 dist 为准**在真 dist 上跑基准。§9、§52、§67、§139 的相关处在原处标注。
+
+### 上游的做法
+
+- **解析**（`parseAxisBreakOption`）：`breaks` 每项要有 `start` 与 `end`（null / undefined 跳过）；`isExpanded` 为真的**整项不解析**——展开就是「没有这个断开」；两端过 scale 的 `parse`（数值轴 `Number()`，`null` 与 `''` 是 NaN；时间轴数字 `Math.round`、字符串 `parseDate`，没写时区是本地时间）；`gap` 是以 `%` 结尾的字符串时取 `parseFloat / 100`，不在 `[0, 1 − 1e-5)` 里就是 0，类型 `tpPrct`；否则过 `parse`，不是非负有限数就是 0，类型 `tpAbs`——**绝对 gap 的单位是数据，不是像素**；没写 gap 是 `tpAbs` 0；两端相等时 gap 强制为 `tpAbs` 0；写反了交换；按 `vmin` 升序（V8 稳定排序），**和前一项（被丢的也算）重叠**的丢掉。断开的身份是选项里 `start + '_\0_' + end` 的字符串拼接（`'50'` 与 `50` 是同一个）。
+- **支持范围**：直角坐标系与 singleAxis 的 value / log / time 轴（`createScaleByModel(…, coordSysSupportAxisBreaks)`）；类目轴、极坐标、平行坐标的 `breaks` 被忽略（只有 dev 报错）。有断开（解析后非空）时才装 break mapper。
+- **映射**（`BreakScaleMapperImpl`）：extent 存两份——原样的（out of break）与线性的（elapsed）。`transformIn`（elapse）：一个值越过一个断开就丢掉它的跨度、加上它的 `gapReal`，落在断开里按比例落在 gap 里；`transformOut` 反过来。`normalize` 是线性 mapper 对 elapse 之后的值做归一化（线性 extent 在 **set 的那一刻**算好）；`scale` 是 `transformOut(n·(e1 − e0) + e0)`。`needTransform()` 写的是 `!this.breaks.length`，又只在有断开时挂上——**恒为 false**。`contain` 看原样的 extent。
+- **gapReal**（`updateAxisBreakGapReal`，每次设 effective extent 先算）：绝对 gap 就是自己；百分比的那些分摊 `prctBrksGapRealSum = gapPrctSum × (跨度 + Σ绝对的 (gap − 跨度) − Σ百分比的跨度) / (1 − Σ百分比)`，其中被 extent 切掉一端的断开按留在里面的比例 `inExtFrac` 计（两端都被切的什么都不计），`max(·, 0)` 后按各自百分比分。于是 `'5%'` 正好是线性跨度的 5%。
+- **nice**：`intervalStub.setExtent(验证过的 extent)` 之后用 `getScaleLinearSpanEffective`（扣掉断开、加上 gap 的线性跨度）定步长，取整仍在值空间。时间轴 `approxInterval = 线性跨度 / splitNumber`（再按 min / maxInterval 夹），`createIntervalTicks` 的目标刻度数也是线性跨度除以它。断开的轴不参与 `alignTicks`（只要写了 `breaks` 键，不论解析结果），也不算仿射变换。
+- **刻度**（`Interval.getTicks` / `Time.getTicks`）：步进时落进某个断开（`vmin < t < vmax`）的刻度按 `calcNiceTickMultiple` 跳过——数值轴 `round((vmax − t) / interval)` 个步长（为 0 时也重新 round 一次），时间轴 `max(0, round((vmax − t) / 估计步长))` 个，估计步长是 1970 年那个单位的字段设成 1 与 1 + 步长之差（月份从 0 数，1 是二月）；然后 `pruneTicksByBreak`：与 extent 相交的断开前后 `interval × 3/4`（时间轴用 approxInterval）**开区间**里的普通刻度去掉，`preserve_extent_bound` 时 extent 的两端留着，`no` 不剪；再 `addBreaksToTicks`：每个与 extent 相交的断开把**被 extent 切过的**两端作为刻度加进去（`vmin` 在前），有断开就稳定排序。三种用法：标签与轴刻度（缺省：剪枝、加断开端）、分割线与分割区域（`breakTicks: 'none'`、`preserve_extent_bound`）、断开区与断轴线（`only_break`）。时间轴断开端的时间属性：level 是普通刻度的最大 level；下单位是两端 `getUnitFromValue` 较细的那个，上单位是断开跨过的最粗单位（两端 `roundTime` 不等的第一个），且不粗于普通刻度里最粗的单位；标签读字典 `[下][上]`。次刻度（`getMinorTicks`）在扩展到 nice 范围的刻度上做，挨着断开端的区间不分，每组再按断开剪一次。
+- **标签**：断开端的标签与普通的一样格式化；`breakLabelLayout.moveOverlap`（缺省 `'auto'`）为 true / `'auto'` 时，每对断开标签（`retrieveAxisBreakPairs`）在 `fixMinMaxLabelShow` 之前用 `labelIntersect` 检查：方向是 `−rotation`（反向轴再加 π）、单向、touchThreshold 0；相交就按 MTV 把两个分开——标签与轴平行时（x 轴）按两者的宽度算分摊系数 k 让空隙尽量停在断开中间，否则各走一半。hideOverlap 时断开标签的优先级是 `z2 + (z2Max − z2Min + 1)`。`triggerEvent` 时断开标签可点，点击派发展开。
+- **断开区**（`rectCoordBuildBreakAxis`，`breakArea.show` 缺省 true）：对每对断开端，两端经 `dataToCoord(·, clamp)` 转成全局坐标、排序、各自 `subPixelOptimize`（线宽 1），从网格一边走到另一边：第一点与最后一点正在边上，其余交替偏移 `zigzagAmplitude`（缺省 4），每步走 `随机数 × (maxSpan − minSpan) + minSpan`（`minSpan = max(2, zigzagMinSpan || 0)`、`maxSpan = max(minSpan, zigzagMaxSpan || 0)`，缺省 4 与 20）——**最后一点之后也取一个随机数**。两条折线 A（`break_a_<id>`）、B（`break_b_<id>`，gapReal 为 0 时没有）与它们之间的多边形（`break_c_<id>`，同样）。样式：折线 `stroke` 是 `itemStyle.borderColor`、宽 `borderWidth`（1）、虚线 `borderType`（`[3, 3]`）、不填充；多边形 `fill` 是 `itemStyle.color`、`opacity`（0.6）；`z` 是 `zigzagZ`（100，`ignoreModelZ`，在系列之上）。**随机数按断开缓存在轴的 view 上**：每次渲染先把所有缓存标成待删、用到的留下、没用到的删掉——**没有任何一对断开端时（全展开、都在 extent 外）直接返回，缓存原样不动**；`breakArea.show` 为 false、轴不显示、scale 是空的时根本不进来。轴 view 的渲染次序是**所有 yAxis 组件（按下标）在所有 xAxis 之前**——随机数按这个次序取。`expandOnClick`（缺省 true）时整组可点（`silent = !expandOnClick`），点击派发 `{type: 'expandAxisBreak', breaks: [{start, end}], <dim>AxisIndex}`。
+- **断轴线**（`axisLine.breakLine`，缺省 true，且 scale 有断开）：轴线按断开端（轴自己坐标系里的 `dataToCoord(·, clamp)`，按起点排序）切成几段，每段两端各和一个 `[x, 5]` 的假刻度一起经轴组矩阵变换、`subPixelOptimizeLine`，再整段优化一次；anid 是 `breakLine_<前一个断开>_\0_<后一个断开>`（没有的一侧是 `\0`）。
+- **动作**（`axisAction.ts`）：`expandAxisBreak` / `collapseAxisBreak` / `toggleAxisBreak`，`update: 'update'`；`parseFinder` 找 x / y / single 轴，按 `start`、`end` 的身份在模型的 `breaks` 选项里找到那一项，把 `isExpanded` 写成布尔（toggle 取反），找不到的跳过。更新之后发**精化事件** `axisbreakchanged`：`{type, breaks: [{<dim>AxisIndex, start, end, isExpanded, old: {isExpanded}}], fromAction, fromActionPayload, escapeConnect: true}`——没找到任何断开也发，`breaks` 是空的。
+- **dataZoom** 不知道断开：窗口在值空间里算，extent 设成窗口后断开被切、gapReal 重算。
+
+### port 以前
+
+- `TTyBreakScaleMapper` 是 spike 的模型（区间、可视跨度的分数、Expanded），没有 gapReal、没有两份 extent；`breaks` 不读；刻度、标签、分割线、轴线、断开区、动作、事件都没有。
+
+### 做法
+
+- **`tyControls.AdvChart.Scale`**：
+  - `TTyAxisBreak` 改成上游的 `ParsedAxisBreak`：`VMin` / `VMax`、`GapKind`（`bgkAbs` / `bgkPrct`）/ `GapVal` / `GapReal`、`Id`（含 NUL 的身份）、`StartJson` / `EndJson`（选项原样，给事件）。
+  - `ITyBreakScaleMapper`（`BreakList`、`BreakCount`、`LinearExtent`、`BreakInside`）；`TTyBreakScaleMapper` 重写：构造时拿断开表，内层 mapper 会变换（log）时按 `parseAxisBreakOptionInwardTransform` 把两端与绝对 gap 带进内层空间；`FExt` / `FLin` 两份 extent；`SetExtent`（有效的 extent 先 `TyUpdateBreakGapReal` 再存，线性的在 set 时算；不是有限且有序的 extent 只记原样、不动 gap 与线性 extent——空轴靠原样的 NaN 判断）；`Elapse` / `Unelapse` 逐运算转写（NaN 原样返回）；`Normalize` / `Denormalize` 照线性 mapper 的式子（`n·(e1 − e0) + e0`）；`NeedTransform` 答 false。
+  - `TTyScale.BreakMapper`（有断开时的装饰器，否则 nil）、`GetTicksOpt`（缺省调 `GetTicks`）、`LinearExtent2` 有断开时读装饰器存的线性 extent。
+  - `TTyScaleTick` 加 `TimeUpper`、`BreakKind`、`BreakIndex`、`BreakVMin` / `BreakVMax`。`TTyTicksOpt`（`tbmInsert` / `tbmNone` / `tbmOnly` × `tpmAuto` / `tpmNo` / `tpmPreserveExtentBound`）、`TyTicksOpt`、`TyDrawnTicksOpt`。
+  - `TyClampBreak`、`TyUpdateBreakGapReal`（JS 的从左到右加减，异常屏蔽）、`TyPruneTicksByBreaks` / `TyPruneValuesByBreaks`、`AddBreakTicks`（稳定排序，时间属性由回调给）。
+  - `TTyIntervalScale`：`NiceifyJs` 有断开时先设验证过的 extent、跨度取线性的；`StubTicks` 步进后按 `BreakInside` 跳（`round((vmax − t) / interval) · interval`，不在断开里也 `+ 0 · interval` 再 round 一次）；`GetTicks` 改成 `GetTicksOpt` 的缺省，没断开（或 log 走法）走原来的 `PlainTicks`，有断开走 `BrokenTicks`（剪枝、断开端、次刻度照 `getMinorTicks`）。
+  - `TTyTimeScale`：`GetTicksOpt`（线性跨度、断开交给 `TyTimeTicksSpan`、剪枝用 `ApproxInterval`、断开端的时间属性 `BreakTimeProps`）、`ApproxInterval`、`GetLabel` 的底层单位也按线性跨度。
+- **`tyControls.AdvChart.Time`**：`TyTimeTicksSpan`（原 `TyTimeTicks` 的主体加上线性跨度、断开表与 `approx` 输出；`AddSpan` 步进后跳断开，估计步长 `EstimateStepMs`）、`TTyTimeBreakSpan`、`TyTimeFloor`（`roundTime`）、`TyTimeFullLabelSpan`；原两个 `TyTimeTicks` 与 `TyTimeFullLabel` 变成它们的包装。
+- **`tyControls.AdvChart.AxisBreak`**（新）：`TyParseAxisBreaks`（parseAxisBreakOption，NaN 比较照 JS、异常屏蔽）、`TyAxisBreaksWritten`、`TyBreakJsText`（`String()`）、`TTyBreakAreaOpt` / `TyBreakAreaOptOf`（两个重载）、`TyBreakMoveOverlap`、`TyAxisBreakLineOn`、`TyBreakZigzag`（addZigzagShapes，随机数从缓存续，不够就用 `TyJitterRandom` 取）、`TyAxisBreakLineSegs`（buildAxisBreakLine）、`TyAdjustBreakLabelPair`（adjustBreakLabelPair：`TyRectIntersectDir` 单向 MTV、`rotate` / `mul` / `BoundingRect.applyTransform` / `Point.transform` 逐运算）。
+- **`tyControls.AdvChart.Layout`**：规格加 `LabelBreakKind` / `LabelBreakIndex`、`BreakMoveOverlap`、`HasBreakLine` / `BreakLineSegs`、`BreakAreas`（`TTyBreakAreaGeom`：身份、断开下标、A、B、有没有 B、两端）；`TTyAxisTextStyle.AxisLineWidthLogical`。`TyLayoutAxisLabels` 在位置算完、候选框做出之前调 `AdjustBreakLabels`，候选的优先级给断开标签加 `z2Max − z2Min + 1`——估算与定稿两次都走这里。
+- **`tyControls.AdvChart.Builder`**：`TyCreateAxis` 对 `xAxis` / `yAxis` 的 value / time 轴解析 `breaks`，非空就把装饰器套在 scale 的 mapper 上；`TyFillAxisLayoutSpec` 给断开端的标签记种类与下标，时间轴断开端读字典 `[TimeUnit, TimeUpper]`；`AxisMarks` 有断开时分割线 / 分割区域用 `(tbmNone, tpmPreserveExtentBound)` 的刻度；`TyLayoutGrids` 末尾 `BreakLine` 算断轴线（线宽是皮肤 `TyAdvChartAxisLine` 的）；`TTyAxisMemory` 加 `BreakIds` / `BreakRands`（随机数缓存，跟轴模型的记忆一样合并保留、notMerge 清掉），`TTyAxisMemoryStore.RandomState`（图表的 xorshift32，`TyJitterSeed` 起，Clear 不重置）；`TyLayoutBreakAreas`：所有 yAxis 组件按下标、再所有 xAxis，按上游的条件建断开区并更新缓存。
+- **`tyControls.AdvChart.Series`**：`alignTicks` 的两处候选排除写了 `breaks` 的轴。**`tyControls.AdvChart.Coord`**：`CanAffine` 排除有断开的轴。**`tyControls.AdvChart.AnimAxis`**：轴线切开时每段是自己的叶子（anid 照上游），过渡动画按段走。**`tyControls.AdvChart.Events`**：`axisbreakchanged` 进动作事件表。
+- **控件**：`Relayout` 在 `TyLayoutGrids` 之后调 `TyLayoutBreakAreas`，文字样式带上轴线宽；`PaintAxis` 有断轴线时画各段；`PaintBreakAreas` 在系列之后（zigzagZ 在系列之上）按 A、B、多边形的次序画，颜色是皮肤的（作者写了 `itemStyle.color` / `borderColor` 就用作者的，作者的填充色带 `opacity`，缺省 0.6）；`EventTargetAt` 在刷子覆盖物之后、标题之前找可点的断开区（多边形非零环绕，或离 A / B 2.5 px 以内——zrender 的 `strokeContainThreshold` 5 的一半），断开标签的命中记成第 11 类；`EventUp` 的点击派发 `expandAxisBreak`；`DispatchActionObject` 接三个动作，`DoAxisBreakAction` 照 `parseFinder`（`Index`：数、数组、`'all'`；否则 `Id`；否则 `Name`）改选项树里那一项的 `isExpanded`、`FullUpdate`、发 `axisbreakchanged`。
+- **主题键**（`themes/light.tycss`，重跑 `gen-defaulttheme.ps1` 与 `gen-tycss-catalog.ps1`，只有增加）：`TyAdvChartBreakArea { background: alpha(var(--surface), 0.6); border-color: var(--border); border-width: 1px; }`——上游白色 60%、边框灰，这里是皮肤的表面色 60% 与边框色，深色皮肤上是暗的；虚线是选项的（缺省 `[3, 3]`）。
+- 新单元进 `tycontrols.lpk` 与（忽略的）`tycontrols.pas`。
+
+### 基准
+
+`tools/advchart-oracle/axis-breaks.js`（真 dist，node 下 SSR / SVG，600 × 400，`TZ=UTC`，每个选项 `animation: false`，zrender 宽度表量字；`Math.random` 换成端口的 xorshift32，每个图表从 `TyJitterSeed` 起并计数；`ssr: true` 之后 `_ssr = false`；点击走 zrender 自己的 Handler：mousemove / mousedown / mouseup / click；最后 `process.exit()`）→ `tests/fixtures/advchart-axis-breaks.json`（约 470 KB）：**43 个用例、65 次渲染**。
+
+- **数值轴**（29 个）：一个断开 `'5%'` / 绝对 20 / 不写 gap（B 与多边形都没有）、两个（写乱了次序、一个百分比一个绝对）、重叠（丢第二个）、写反了加字符串的 `'50'`、两个百分比分摊、`min` 落在断开里与 `max` 落在断开里（被 extent 切一端）、完全在 extent 外、选项里 `isExpanded: true`、反向轴、`moveOverlap: false`、宽 gap（标签不动）、写了 `interval`、`splitNumber` 加 `minInterval`、显示轴线与轴刻度（切开的轴线、断开端的刻度）、`breakLine: false`、次刻度 / 次分割线 / 分割区域、写了的 breakArea 样式与锯齿参数、`borderType` 数组加 minSpan 大于 maxSpan、`breakArea.show: false`（不取随机数）、横向数值轴、折线穿过断开（一个点在断开里）、两个数值轴都断开的散点（y 先于 x 取随机数）、零以下的断开、`hideOverlap`、字符串 formatter、类目轴上写 `breaks`（忽略）。
+- **时间轴**（4 个，`useUTC: true`）：90 天里断开 40 天、两个周末（gap 0）、跨年断开（标签读 `[day][year]`）、带时区的字符串两端。
+- **dataZoom**（2 个）：数值轴的内置 dataZoom（`filterMode: 'none'`）四步——切到断开、离开断开、切断开的另一头、还原；时间轴两步。
+- **动作**（6 个）：点断开区展开、collapse、两次 toggle；两个断开先点第二个、再一个动作点两个、再收一个；`expandOnClick: false` 点了什么都不发生；`triggerEvent` 点断开标签展开；横向轴展开（事件里是 `xAxisIndex`）；动作点了不存在的断开（事件的 `breaks` 为空）。
+- **缓存**（2 个）：横向轴的图表在高度 400 → 700 → 300 → 700 之间缩放（变长才取新的随机数，变短再变长一个都不取）；两个断开里展开一个再收起（那个的缓存被删、重新取，另一个留着）。
+- 每次渲染记网格矩形、这次取的随机数个数、这一步发的 `axisbreakchanged`（payload 去掉 echarts 内部的键）、点击的点；每根记录的轴：extent、步长（时间轴是 approxInterval）、niceExtent、断开表（两端、gap 类型与值、gapReal）、三种刻度（缺省的带断开端类型与时间属性、不剪的、分割线的）、次刻度、每个标签（文字、元素自己的 x / y、是否显示、断开端类型）、分割线、轴刻度（带 `!ignore`）、轴线或各段、每个断开区（身份、A、B、多边形、z、silent、样式）；系列：柱的布局矩形、折线与散点的 `dataToPoint`（布局里是 Float32Array，这里记双精度）。
+- 自检：每次渲染由断开表与 extent 经转写重算 gapReal（逐位）；由 `rawTicks` 经 `pruneTicksByBreak` 转写重算缺省刻度里的普通刻度与分割线刻度；**每个断开区的 A、B 逐点**由这个图表的随机数序列经 `addZigzagShapes` 转写（缓存按轴、按身份，没有断开对时不动，线性映射与 `subPixelOptimize`）重算——65 次渲染全部相等。4 条守卫（百分比 gap 减半、剪枝范围减半、不缓存、振幅反号）都改变了点名的用例；锚点：`v-one-prct` 取了随机数、`v-area-off` 没取、展开点击发了事件、`expandOnClick: false` 没发、缩放缓存（变长取、变短再变长不取）；两次生成逐字节一致；没有 `\u0000`；JSON 能读回。
+
+### 测试
+
+`test.advchart.axisbreaks`（新，注册在 `tytests.lpr`）：
+
+- **基准重放**（`TAdvChartAxisBreaksOracleTest`，5 个按组，共约 **16 200 项**：数值轴 7 467、时间轴 989、dataZoom 2 028、动作 3 644、缓存 2 085；`TY_AXISBREAKS_COUNTS=1` 时打印）：每个用例一个新图表（随机数从种子重来，与基准每个图表重置 `Math.random` 一致），照样 setOption、无头渲染；点击是指针的 move / down / up，dataZoom 走 `DispatchDataZoom`、别的动作走 `DispatchAction`，缩放改边界。每次渲染比网格矩形、随机数个数（从上一次的状态数 xorshift 步数）、事件（类型、`fromAction`、`breaks` 与 payload 的 JSON）；每根轴比 extent、步长、nice 范围、断开表、三种刻度（缺省的逐个比值、断开端类型、时间属性）、次刻度、每个标签的文字 / x / y / 显示 / 断开端类型、分割线与轴刻度（含隐藏的）的值、轴线各段（anid 与四个坐标）、每个断开区（身份、A、B 逐点、多边形、z、silent、虚线、写了的颜色线宽与不透明度）；系列：柱的元素外框与基准矩形按网格裁过之后比（整个在网格外的不比），散点圆心逐位，折线顶点按单精度比。
+- **手写**（3 个）：断开区真的画在柱子上（同一张图开关 `breakArea.show`，断开带中线上超过 100 个像素不同）；重画、同样选项的合并、变窄的网格都不取新的随机数；类目轴的 `breaks` 不装 mapper、不画断开区、不取随机数。
+- 契约测试 `test.advchart.scale.break`（`TAdvChartBreakTest` 10 个）改成新接口：百分比 gap 仍是轴的那个份额，数都没改；「展开等于没有」改成「没有断开就是内层 mapper」。
+
+首跑的不对：实现两处——log 内层 mapper 在构造时对 0 取对数，NaN 比较在 FPC 里抛（构造不再算线性 extent，`Elapse` / `Unelapse` 对 NaN 原样返回）；`BreakAreaAt` 的局部变量 `ax` 与参数 `AX` 同名、`width` 与 `Width` 属性同名。测试四处——机器是中文 locale，时间轴月名要钉成 `dnTranslation`；上游被隐藏标签的轴刻度是 `ignore` 而不是删掉（基准补记 `!ignore`，测试比隐藏标记）；柱的元素是按网格裁过的，基准是布局矩形（测试按网格裁了再比，`v-min-in-break` 的数据改到 extent 之内）；散点的圆心是双精度不是单精度；dataZoom 不是 `DispatchAction` 认的动作。基准三处——折线 / 散点的布局是 Float32Array、`getItemLayout` 是 null（改记 `dataToPoint`）；`'_\u0000_'` 经 heredoc 写成了真的 NUL 字节；转写的缓存忘了「没有断开对就不动」与 y 先于 x。
+
+本批按规矩只跑了自己的新套件和直接碰到的套件，全部通过：`TAdvChartAxisBreaksOracleTest` 8、`TAdvChartBreakTest` 10、`TAdvChartMapperTest` 13、`TAdvChartIntervalScaleTest` 14、`TAdvChartTimeTest` 32、`TAdvChartTimeAxisTest` 17、`TAdvChartValueAxisOracleTest` 1、`TAdvChartScaleAlignOracleTest` 5、`TAdvChartCoordAffineOracleTest` 2、`TAdvChartAxisFinishOracleTest` 11、`TAdvChartMouseEventsOracleTest` 3、`TAdvChartTimeFormatOracleTest` 8、`TAdvChartAxisLabelTest` 14、`TAdvChartLabelThinningOracleTest` 15、`TAdvChartGridBoundsOracleTest` 3、`TAdvChartAnimUpdateTest` 7、`TAdvChartAnimFullUpdateTest` 7、`TCssCatalogTest` 14、`TBuiltinThemeTest` 13、`TBuiltinSyncTest` 2、`TBuiltinThemesTest` 8、`TBuiltinSkinsSyncTest` 2。全量套件与变异轮留到里程碑（D1–D4）末尾；变异候选单列（21 条，另记一条可能等价）。
+
+### 推迟与偏差
+
+- **log 轴的断开**：上游支持（`LogScale` 的 `powStub` / `intervalStub` 两套断开、lookup 表、log 空间里的 nice），端口的装饰器能套在 log mapper 上（契约测试还在），但 `breaks` 只接到 value / time 轴；log 轴上写了 `breaks` 什么都不做（仍不参与 alignTicks）。singleAxis 端口还没有。
+- **转了角度的断开标签**：两个框都与坐标轴对齐时照上游移开；有一个转了角度时上游走 OBB 的 MTV，端口没有，不移。
+- **移开之后的标签框**：上游把已算好的全局矩形平移，端口用平移后的矩阵重算——最后一位上可能差一点，只影响随后的重叠判断，基准里没有差别。
+- **函数 formatter 的 `break` 参数**、轴标签点击事件参数里的 `break: {start, end}`：端口的事件参数里没有这一项。
+- **断开区不参加过渡动画**（上游的 `break_a/b/c` 有 anid、跟着 groupTransition 走）；切开的轴线段参加。
+- **notMerge**：轴记忆清掉，随机数缓存跟着没了（上游的 view 在同 id 的组件上可能留着，没有核）；随机数状态不重置。
+- **悬停光标**：上游断开区的光标是 pointer，端口不设（系列的悬停端口也不设）。
+- **命中**：断开区在刷子覆盖物之下、标题之上；多个轴的断开区重叠时 x 轴的先被找到。
+- **时间轴字符串两端**：与上游一样没写时区按本地时间，基准用了带 `Z` 的串。
+- **绝对 gap**：路线图说「px 与 %」，上游的绝对 gap 是数据单位，照上游。
+
+### 落地
+
+- `source/tyControls.AdvChart.AxisBreak.pas`（新，进 `tycontrols.lpk`）。
+- `source/tyControls.AdvChart.Scale.pas`：断开记录、`ITyBreakScaleMapper`、`TTyBreakScaleMapper` 重写、刻度选项、`TyClampBreak` / `TyUpdateBreakGapReal` / 剪枝 / 断开端、`TTyScale.BreakMapper` / `GetTicksOpt`、区间与时间 scale 的断开路径。
+- `source/tyControls.AdvChart.Time.pas`：`TyTimeTicksSpan`、`TyTimeFloor`、`TyTimeFullLabelSpan`。
+- `source/tyControls.AdvChart.Layout.pas`：规格字段、`AdjustBreakLabels`、断开标签的优先级、轴线宽。
+- `source/tyControls.AdvChart.Builder.pas`：装饰器、断开端标签、分割线刻度、`BreakLine`、随机数缓存、`TyLayoutBreakAreas`。
+- `source/tyControls.AdvChart.Series.pas`、`Coord.pas`、`AnimAxis.pas`、`Events.pas`：见上。
+- `source/tyControls.AdvanceChart.pas`：`PaintBreakAreas`、`BreakAreaAt`、`BreakAxisOf`、`BreakAreaClickAt`、`BreakExpandClick`、`DoAxisBreakAction`；`Relayout`、`PaintAxis`、`PaintStatic`、`EventTargetAt`、`EventUp`、`DispatchActionObject` 的调用处。
+- `themes/light.tycss`、`source/tyControls.DefaultTheme.pas`、`source/tyControls.Css.Catalog.pas`（生成）。
+- `tools/advchart-oracle/axis-breaks.js`、`tests/fixtures/advchart-axis-breaks.json`、`tests/test.advchart.axisbreaks.pas`（新，注册在 `tytests.lpr`）、`tests/test.advchart.scale.break.pas`（改接口）。
+
+## 170. Tier 3 第一百三十三批：dataset transform（D2，2026-10-12）
+
+路线图 D2：dataset transform——注册表、filter 条件语言（不含 `reg`）、sort、管道、多输出。在这之前端口的 transform 只有 C1 顺手做的那一个：`'boxplot'` 写死在 `TTyDatasetCache.ApplyOne` 里（§143），`filter` 与 `sort` 一概「没有表」，§143 的推迟里还记着「filter、sort（D2）」；数据集串联只认数字的 `fromDatasetIndex`，找不到上游就没有表，`fromTransformResult` 超出上游自己的结果就没有表，出错时什么都不说。这一批对着 6.1 的 `data/helper/transform.ts`（`registerExternalTransform`、`applyDataTransform`、`applySingleDataTransform`、`createExternalSource`、`getDimensionInfo`、`cloneRawData`）、`component/transform/filterTransform.ts`、`sortTransform.ts`、`util/conditionalExpression.ts`（`parseOption`、`parseAndOrOption`、`parseNotOption`、`parseRelationalOption`、`isObjectNotArray`）、`data/helper/dataValueHelper.ts`（`parseDataValue`、`getRawValueParser`、`FilterOrderComparator`、`FilterEqualityComparator`、`SortOrderComparator`、`createFilterComparator`）、`data/helper/sourceManager.ts`（`_createSource`、`_applyTransform`、`getSource`、`_getSourceMetaRawOption`）、`data/helper/sourceHelper.ts` 的 `queryDatasetUpstreamDatasetModels`、`model/Global.ts` 的 `queryComponents`、`data/Source.ts`（`createSource`、`determineSourceDimensions`、`normalizeDimensionsOption`、`cloneSourceShallow`、`objectRowsCollectDimensions`）、`data/helper/dataProvider.ts` 的三张取值表、`component/dataset/install.ts`，以及 V8 的 `Array.prototype.sort`（`third_party/v8/builtins/array-sort.tq`）逐行核过，**以 dist 为准**在真 dist 上跑基准。§143 的相关处在原处标注。
+
+### 上游的做法
+
+- **注册表**：`registerTransform` 要 `ns:name` 形式（`split(':')` 恰好两段，否则抛）；`echarts` 命名空间的是内置的，按裸名登记（`'filter'`，不是 `'echarts:filter'`），别的按全名；同名后登记的覆盖先登记的。transform 组件装 `filter` 与 `sort`，箱线图系列装 `boxplot`。只有内置的能调 `getRawDataItem` / `getRawData`，外来的调了抛 `not supported`。
+- **外部源**（`createExternalSource`）：上游表 `seriesLayoutBy` 不是 `column` 就抛；维度是 `dimensionsDefine`（有的话，名字重复就抛——注意名字已经过 `normalizeDimensionsOption` 去重：第二个 `a` 是 `a-1`，但 `['a', 'a', 'a-1']` 会撞出两个 `a-1`）或 `dimensionsDetectedCount` 个无名维度；取值表按格式查，不认识的格式（没有 `source` 的数据集）在 dev 构建里断言失败抛错。`count` 是数组行减表头行数（不小于 0）、对象行的行数、按列表的第一个维度那一列的长度（一个维度都没有时读 undefined 的属性抛 TypeError）。`retrieveValueFromItem` 在数组行 / 按列表里取 `item[dimIndex]`，在对象行里取 `item[dimName]`（无名维度取 `'undefined'` 键），行是 null 时是 undefined。按列表的「行」是每个维度那一列的第 i 格拼成的新数组。
+- **`getDimensionInfo(dim)`**：null 没有；数字直接当下标（`dimensions[dim]`，`1.5`、负数、NaN 都没有）；字符串若读得出数（`!isNaN(dim)`）而且不是某个维度的名字，当属性键用——只有规范的数组下标串（`'2'`，不是 `'02'`、`' 2'`、`'2.0'`）找得到；否则按名字找。所以名为 `'1'` 的维度，`dimension: '1'` 找到它，`dimension: 1` 找到下标 1。
+- **管道**（`applyDataTransform`）：`normalizeToArray`；空列表抛；每一步的结果是下一步的上游列表，**中间步至少补成一个**（`length = max(length, 1)`，补的是 undefined，下一步读它抛 TypeError）。每一步：没有上游抛；transform 不是对象（数组也算对象）抛；`type` 找不到抛（`"undefined"`）；对每个上游建外部源；调 transform；结果规范成数组。
+- **结果**：每个结果必须是对象、`data` 为真、格式是数组行或对象行，否则抛。**第一个结果没有 `dimensions`（按真值）时继承上游**：上游的前 `startIndex` 行（表头）拼在结果前面，`sourceHeader` 就是那个数，`dimensions` 是上游的**原始** `metaRawOption.dimensions`——上游是 `fromTransformResult` 的副本时它没有 `metaRawOption`，读 `.dimensions` 抛 TypeError。其余的结果 `sourceHeader: 0`、`dimensions` 是结果自己给的。全部 `seriesLayoutBy: 'column'`。
+- **filter**：`parseConditionalExpression(config)`：`true` / `false` 是常量；不是「对象且不像数组」（`isArrayLike` 看 `length` 是不是数——条件对象里写了数字 `length` 也算数组）抛；`and` 为真 → 必须是非空数组；`or` 同理；`not` 为真 → 必须是对象（`not: true` 也抛）；否则是关系条件：**先** `prepareGetValue`（没有 `dimension` 键抛、找不到维度抛），再逐个键：跳过 `parser` 与 `dimension`，别名 `value`→eq、`<`→lt、`<=`→lte、`>`→gt、`>=`→gte、`=`→eq、`!=` / `<>`→ne，条件值先过 parser；`eq` / `ne` 建相等比较，`lt` / `lte` / `gt` / `gte` 要求（过 parser 之后的）值 `typeof` 是 number（NaN 也行）否则抛，`reg` 建正则，别的抛；一个运算符都没有也抛。`parser` 名字不认识时**什么都不做**（不抛）。求值：取格子、过 parser、逐个比较（与）。`and: 0` 不是 and，`and` 成了一个运算符名，抛。
+- **比较**：序比较——格子是 number 就直接比，否则 `numericToNumber`（数字串的数，`' 30 '` 是 30，`'7px'`、`'-'`、`''`、`'0x10'` 是 NaN），条件值也过 `numericToNumber`（-0 成 0），NaN 一律假。相等——先 `===`（数组、对象只等于自己，所以永远不等）；不等且 `typeof` 不同、其中一边是 number 时再比两边的 `numericToNumber`。`eq: '2012'` 碰到 2012 为真，`eq: 2013` 碰到 `'2013'` 为真，`eq: true` 什么都碰不到，`eq: null` 只碰到 null。
+- **parser**：`number` 是 `parseFloat(String(v))`（`'7px'` 是 7、`'0x10'` 是 0、null 是 NaN）；`time` 是 `+parseDate(v)`——字符串过 TIME_REG（没写时区是本地时间），null / undefined 是 NaN，别的是 `new Date(Math.round(+v))`（TimeClip：超过 8.64e15 是 NaN，-0 成 0）；`trim` 只修剪字符串。
+- **sort**：`normalizeToArray(config)`，空的抛；每个键依次查：`dimension` 为 null 抛、`order` 不是 `'asc'` / `'desc'` 抛、`incomparable` 为真却不是 `'min'` / `'max'` 抛、维度找不到抛、`parser` 为真却不认识抛（filter 不抛，sort 抛）；全部查完再查上游格式（只认数组行与对象行，按列表在这里抛）。然后取全部行、`Array.prototype.sort`，比较器逐键 `SortOrderComparator`：两边先变成数（number 原样、别的 `numericToNumber`），不是数的当 incomparable（缺省 asc 是 +∞、desc 是 −∞——**只在 `incomparable` 是 null 时**取这个缺省，`''` 或 0 就是 +∞）；两边都不是数时，两个字符串按 UTF-16 码元比，一边是字符串的那边当 0、另一边保持 incomparable；`<` 给 `resultLT`（asc −1、desc 1）。**这个比较器不一致**：数字 ±Infinity（由 `'Infinity'` 之类的串读出）既等于 incomparable 的字符串、又等于 null，而字符串小于 null——结果取决于排序算法本身。
+- **V8 的排序**：TimSort。`minRun` 由长度算（≥ 64 时右移并记住移出去的 1）；`CountAndMakeRun`（严格递减的段就地翻转）、不够 minRun 用二分插入补齐；入栈、`MergeCollapse`（带 2015 年修过的不变式检查）、最后 `MergeForceCollapse`；`MergeAt` 先 `GallopRight` / `GallopLeft` 剪掉两头已就位的，再按短的一边 `MergeLow` / `MergeHigh`，计数到 `minGallop`（初始 7）转入 galloping，离开时加一作罚。
+- **串联**（`SourceManager`）：没有真值的 `transform` 和 `fromTransformResult` 的是根数据集（`fromTransformResult: 0` 单独写也是根）；否则上游是 `queryReferringComponents` 的结果——`fromDatasetIndex` 不为 null 时按下标（可以是数组、可以是下标串），否则 `fromDatasetId`（字符串与数字按文字比，可以是数组），都没写是第 0 个。**一个都找不到时 `hasUpstream` 为假，数据集当根数据集读自己的 `source`**。写了 `fromTransformResult`（不为 null）而上游不止一个抛；取上游的 `getSource(fromTransformResult || 0)`，写了却取不到抛；有 transform 就跑管道，否则 `cloneSourceShallow`（副本：表、表头数、维度定义都留着，`metaRawOption` 没了）。`getSource(k)` 在自己没有第 k 个结果时**回落到第一个上游的第 k 个**，一直往上。读自己的数据集无限递归，栈溢出（RangeError）。
+- **系列读结果**：`seriesLayoutBy` / `sourceHeader` / `dimensions` 是系列的、没有就上游 `metaRawOption` 的；副本没有 `metaRawOption`，于是 `seriesLayoutBy`（null）≠ undefined，**系列按自己的三样（往往什么都没写）重建源**——表头重新猜、维度名丢掉。
+- **出错**：上面的每一处 throw 都让 `setOption` 失败（有系列读到它时；没有系列读的数据集不准备源，不抛）。`transform` 写成数字、字符串、`true` 时更早：`disableTransformOptionMerge` 给它打 primitive 标记，`setOption` 直接 TypeError。系列读一个没有 `source` 的根数据集也抛（`Invalide sourceFormat: unknown`）。`print` 只在 dev 打日志。
+
+### port 以前
+
+- `ApplyOne` 只认 `'boxplot'`；filter、sort、外来的 transform 都是「没有表」；没有注册表。
+- `UpstreamOf` 只认数字下标（数组、下标串当没写）；找不到上游没有表；`fromTransformResult` 取不到不回落；副本与原结果同一个节点、同一套 meta，系列读副本照用原结果的 `sourceHeader`。
+- `TySourceOf` 的 `sourceHeader` 写成 `'auto'` 以外的字符串当 0（上游按真值是 1）。
+- 失败一声不吭。
+
+### 做法
+
+- **`tyControls.AdvChart.DataTransform`**（新）：
+  - `ETyTransformError`；`TTyExternalSource`（`SourceFormat`、`BuiltIn`、`Count`、`RawItem`、`RawData`、`CloneRawData`、`ValueOfItem`、`RetrieveValue`、`DimensionOf`、`DimCount` / `Dim`；构造时查按行排、维度名重复、格式；按列表的行是做出来的、随源释放）；`TTyTransformParams`（`Upstream`、`Upstreams`、`Config`）、`TTyTransformResult`（`Data`、`Dimensions`）、`TTyDataTransformFunc`。
+  - **注册一个 transform 是一步**：`TyRegisterDataTransform('ns:name', @Proc)`；过程读 `AParams`，用 `TyAddTransformResult` 交结果，配置不对就 `raise ETyTransformError`——数据集于是没有表，消息就是诊断。D3 的 `ecStat:regression` / `clustering` / `histogram` 照这个接。`TyFindDataTransform`。
+  - `TyApplyDataTransform`（applyDataTransform + applySingleDataTransform：管道、中间步补位、结果检查、第一个结果的继承——副本上游报错——、结果节点进 owner 列表），整段屏蔽浮点陷阱，`Exception` 一律变成理由。
+  - 值的规则：`TTyJsValue`（undefined / null / 布尔 / 数 / 串 / 数组 / 对象）、`TyJsValueOf`、`TyJsNumericOf`（numericToNumber，数组按文字）、`TyRawParserByName`、`TyApplyRawParser`（time 用 `TyParseDateMs`、`TyJsRound` 与 TimeClip）、`TyCompareJsStrings`（UTF-16 码元）、`TySortOrderCompare`。
+  - **`TyJsArraySort`**：V8 TimSort 逐行转写（`ComputeMinRunLength`、`CountAndMakeRun`、`BinaryInsertionSort`、`GallopLeft` / `GallopRight`、`MergeLow` / `MergeHigh` 含 galloping 与 `minGallop` 的罚、`MergeAt`、`MergeCollapse` / `MergeForceCollapse`），在下标数组上跑，比较器是方法指针——不一致的比较器也给出 V8 的次序。
+  - filter：条件树 `TTyCond`（常量 / and / or / not / 关系），`ParseCond` 的检查次序照上游（维度先于运算符）；sort：键先全部检查再查格式，parser 是纯函数，每格只解析一次。boxplot 改走通用路径（`RawData` + `TyPrepareBoxplotData`，结果节点与以前相同）。三个都在 `initialization` 里以 `echarts:` 登记。
+- **`tyControls.AdvChart.Dataset`**：
+  - `TTySourceRef`（节点 + 是否副本）；`TTyDatasetCache` 的结果改成它，加 `FUps`、`FErrors`；`UpstreamsOf`（下标 / 下标数组 / 下标串、id / id 数组，按组件次序）；`SourceAt`（getSource 的回落）；`Resolve` 照 `_createSource` / `_applyTransform`：找不到上游当根、`fromTransformResult` 的真值与下标串、上游不止一个、环、上游失败、取不到结果各有理由；副本记 `IsClone`。新公开 `ResultIsClone`、`SeriesNode`（系列读的那个：带回落）、`ResultCount`、`ErrorOf`、`DatasetCount`。`ApplyOne` / `ApplyPipe` / `Own` 删掉。
+  - `TyJsTextOf`（`String()`）、`TyNormalizeDims`（normalizeDimensionsOption：名字变串、显示名缺省是名字、重名加 `-1`、`-2`，计数只记原名）、`TTySourceFields` / `TySourceFieldsOf`（createSource 对一个节点算出的格式、方向、表头数、维度定义、探测到的维度数——外部源和测试都读它；表头名是第一行每一格的 `String()`，对象行的维度是第一个真值行的键）。
+  - `TySourceOf`：计算出来的数据集走 `SeriesNode`；**系列读副本时只用系列自己的 meta**；`sourceHeader` 按真值（`'auto'` 与 null 才猜）。
+- **控件**：建 store 之后，对缓存里每个有理由的数据集记一条诊断 `dataset[%d] has no table: %s`——只有系列碰到过的数据集才会被解析，没人读的不说。
+- **字符串**：`rsTyChartDatasetNoTable` 加 32 条理由（`rsTyDs…`），进 `tyControls.StrConsts`、`.pot` 与 zh_CN（`tools/themebuilder/languages/tycontrols.zh_CN.po` 逐字节同步）。没有新的主题键，也没有新的 JSON 入口（transform 读的是已经解析过的选项树）。
+- 新单元进 `tycontrols.lpk` 与（忽略的）`tycontrols.pas`。
+
+### 基准
+
+`tools/advchart-oracle/dataset-transform.js`（真 dist，node 下 SSR / SVG，600 × 400，`TZ=UTC`，`Math.random` 为 0，每个选项 `animation: false`，最后 `process.exit()`）→ `tests/fixtures/advchart-dataset-transform.json`（约 790 KB）：**128 个用例**。脚本自己用 `echarts.registerTransform` 登记三个测试用的 transform——`test:scale`（经 `retrieveValue` 把每个数乘 k，不给维度：结果 0 继承表头）、`test:pairs`（两个结果：命名的 `[name, value]` 与一张「两个词一行、计数一行」的无名表）、`test:raw`（调 `getRawDataItem`，外来的不许）；Pascal 那边登记同样的三个。
+
+- **filter**（39 个）：gt / gte / lt / lte、一个条件两个运算符、eq 的四种类型不匹配（数对数字串、串对数、null、true）、eq 数字串（`' 30 '`、`'1e2'`，`'0x10'` 不等于 16）、ne 留下 null、`!=` / `<>` / `value` / `=` 别名、维度按名字 / 按下标 / 按 `'2'`、名为 `'1'` 的维度、and / or / not 嵌套与 not 套 and、整个条件 true / false、`and: [true]` 与 `or: [false, …]`、trim（两边都修剪）、number（`'7px'` 是 7、eq `'7em'`）、不认识的 parser、time（带时区的串、数字、布尔、`'abc'`、null、`.5` 毫秒、数字条件值的取整）、对象行、对象行加声明的维度、无表头加声明的维度（含 `{name, type}`）、`sourceHeader: false` / `2` / `'yes'`、重名维度 `a-1`、按列表、null 行、空表；`reg`（偏差，见下）。
+- **sort**（19 个）：asc / desc（null 在尾）、两个键、数字串与词（incomparable 缺省、`'min'`、desc 加 `'max'`）、全是词、词加 null 加大写、number / trim / time parser、对象行；**不一致比较器**的混合列（数、数字串、词含 é 与 emoji、null、布尔、`'Infinity'` / `'-Infinity'`、带空格的数）20、60、300 行与 300 行两个键；200 行少数几个值（稳定）、500 行两段递增（galloping 归并）、开头严格递减的段（翻转）。
+- **管道**（5 个）：filter → sort、sort → filter → sort、boxplot → filter（按 boxplot 给的名字 `Q2`，结果 1 被丢掉）、filter → boxplot（两个结果）、一个元素的列表。
+- **串联**（10 个）：按下标串三级、按 id、数字 id 对字符串、下标与 id 都写（下标赢）、下标数组（filter 读第一个）、找不到上游（读自己的 source）、缺省第 0 个、`test:scale` 两种、`test:pairs` 加它结果 1 的副本与对结果 0 的 sort。
+- **多输出**（5 个）：boxplot 的两个结果、结果 1 的副本、对结果 1 的 filter；结果 1 的回落（filter 之后的数据集要第 1 个，拿到 boxplot 的离群点）；`fromTransformResult: 0` 加 transform；`fromTransformResult: 0` 单独写（根）；sort 结果 0 的副本。
+- **出错**（36 个，35 个上游抛）：不认识的类型、`echarts:filter` 全名、空列表、数字 transform（setOption 就抛）、列表里套列表、条件没有维度 / 维度不存在 / 维度 null / 没有运算符 / 不认识的运算符 / lt 一个串、`and: []` / `and: {}` / `not: true` / 没有 config / config 是列表 / 带数字 `length` / `and: 0`、sort 的空 config / 没有 config / 没有维度 / 没有 order / incomparable `'mid'` / 不认识的 parser / 维度不存在 / 按列表、上游按行排、重名撞车、读自己、根数据集要结果 1、对副本做 filter、上游没有 source、对象行做 boxplot、外来的要原始行、下游跟着失败；外加不抛的一个（time parser 与读不出的日期：NaN 也是数，什么都不过）。
+- **系列**（14 个）：filter 上的柱（标签）、sort 上的折线（含 null 断开）、对象行 filter 上的散点、管道上的饼（`{b}`）、两个系列读同一张表的两个 transform（类目按到达次序）、带表头的缺省 encode、按行读 filter 结果（继承的表头让它读得了）、结果 1 的副本上的散点、副本重新猜表头（一根柱）、`datasetId`、继承声明的维度按名字 encode、对象行 sort 上的饼；上游拒绝的两个：transform 抛错、读一个没有 source 的根数据集。
+- 每个数据集按次序 `prepareSource()`，记抛出的消息或 `_sourceList` 的每个结果：格式、是否副本（没有 `metaRawOption`）、`startIndex`、维度名、`dimensionsDetectedCount`、逐格的行；有系列的另记网格矩形、类目轴的类目、每个系列的项（柱的布局矩形、折线与散点 `dataToPoint` 的点、饼的 cx / cy / r0 / r / 起止角）和标签文字。
+- 86 条守卫（gt 50 留下哪五行、表头行在前、`'2'` 是下标 2、名为 `'1'` 的维度、嵌套、false 只剩表头、trim 两边、parser 的 `'7px'`、时区、对象行、声明维度继承、`sourceHeader: 2`、`a-1`、按列表、null 行、`reg` 上游留六行、asc / desc 的 null 在尾、词的码元序、稳定、两段归并、管道、串联四种、副本标记、回落、35 个出错用例都在对的数据集上抛、读自己是 RangeError、下游跟着抛、类目到达次序、饼排过序、副本只剩一根柱）全部成立；两次生成逐字节一致；没有 `\u0000`。另在脚本外核过：s-mix-60 / 300 / 300-multi 的 V8 结果与普通稳定插入排序**不同**——这几个用例确实在考算法本身。
+
+### 测试
+
+`test.advchart.datasettransform`（新，注册在 `tytests.lpr`；`TY_DATASETTRANSFORM_COUNTS=1` 时打印计数）：
+
+- **表**（`TestEveryTableIsUpstreamsTable`）：非出错用例的每个数据集，`TTyDatasetCache` 的结果数、每个结果经 `TySourceFieldsOf` 的格式、副本标记、`startIndex`、探测维度数、维度名，和逐格的行（数逐位、串原样、布尔、对象行的键序）——206 个结果、12 900 格、19 767 项比较。
+- **出错**（`TestEveryThrowLeavesNoTable`）：上游抛的数据集这里没有结果且有理由，没抛的照样逐格比——2 501 项。
+- **画面**（`TestSeriesOverTransformsDrawAsUpstream`）：控件自己画（zrender 宽度表量字），比网格矩形、类目、柱（按网格裁过）、散点、折线（单精度，两点以上的段）、饼的扇形六个数、标签文字与个数——319 项、70 个图元、50 个标签。
+- **手写**（4 个）：`reg` 没有表、理由是 `rsTyDsCondReg`（上游留六行）；抛错的 transform 在诊断里说 `dataset[1] has no table: no transform is registered as "nope"`、系列什么都不画，没有系列读的失败数据集不说；注册表的命名规矩（没有 `:`、两个 `:`、`nil`、内置裸名、外来全名、覆盖）；`TyJsArraySort` 对 200 组一致比较器（0–700 个、少数或很多不同的键、长的升 / 降段）与普通稳定插入排序逐位相同。
+- `test.advchart.candleboxplot` 的 `TestATransformNobodyRegisteredHasNoTable` 改了两条：filter 现在有表；找不到上游的那个当根数据集（没有 source，`TySourceOf` 读不出表）。
+
+首跑：表、出错、手写全过；画面两处是测试自己的——散点与折线里上游 NaN 的点（null 销量）端口不画、单独一个点的段不画线，改成跳过 NaN、只比两点以上的段。补了两个用例：`sourceHeader: 'yes'`、副本重新猜表头（原想做「声明维度的结果 0 的副本」，才发现 `fromTransformResult: 0` 单独写是根数据集，副本只可能是结果 1 以上——那个用例留作「读没有 source 的根数据集」）。
+
+本批按规矩只跑了自己的新套件和直接碰到的套件，全部通过：`TAdvChartDatasetTransformTest` 7、`TAdvChartCandleBoxplotTest` 9、`TAdvChartDatasetTest` 22、`TAdvChartOptionMergeTest` 15。全量与变异留到 D1–D4 里程碑末；候选见 `s170.md.candidates.md`（22 个）。
+
+### 推迟与偏差
+
+- **`reg`**：路线图划掉的。端口遇到 `reg` 运算符整条条件拒绝（数据集没有表，理由 `rsTyDsCondReg`），上游按正则匹配（6.1 的 `RegExpEvaluator.evaluate` 写成 `isString(typeof lVal)`，恒真，数也按 `test(lVal)` 匹配）。
+- **出错不抛**：上游任何一处 throw 让整个 `setOption` 失败、画面不变；端口只有这个数据集与读它的数据集没有表，读它们的系列什么都不画，别的照画，并给诊断 `dataset[%d] has no table: %s`。理由是端口自己的话，不是上游的消息原文。读自己的数据集上游栈溢出，端口说「它读的是自己」。
+- **非对象的 transform**（数字、字符串、`true`）：上游在 `setOption` 里就 TypeError；端口同上，理由「有一个 transform 不是对象」。
+- **读没有 source 的根数据集**（包括 `fromTransformResult: 0` 单独写、找不到上游又没有自己 `source` 的）：上游抛 `Invalide sourceFormat: unknown`，端口什么都不画、没有诊断（以前就是这样，这一批没动）。
+- **time parser 的无时区字符串**：与 §87 一样按本机**当前**时差换算；基准都带时区。
+- **条件对象的键序**：JavaScript 的 `keys` 把整数样子的键排在前面，端口按选项的次序——只影响同一条件里两个错误先报哪个（比较之间是与，次序不影响结果）。
+- **表里是字符串的「行」**（数组行的表里某一行是 `'abc'`）：上游 `'abc'[1]` 是 `'b'`，端口当 undefined。
+- **系列读的维度名不去重**：transform 看到的维度经 `normalizeDimensionsOption`（第二个 `a` 是 `a-1`），`TySourceOf` 给系列的仍是写的名字（以前就是）；`encode: 'a-1'` 这类写法在系列上找不到。
+- **`print`**：不做（§6 的不做清单里本来就有 `transform.print`）。
+- sort 的 parser 每格只算一次（上游每次比较都算）——parser 是纯函数，结果相同。
+
+### 落地
+
+- `source/tyControls.AdvChart.DataTransform.pas`（新，进 `tycontrols.lpk`）。
+- `source/tyControls.AdvChart.Dataset.pas`：`TTySourceRef`、缓存重写（`UpstreamsOf`、`SourceAt`、`Resolve`、`SeriesNode` 等）、`TyJsTextOf`、`TyNormalizeDims`、`TySourceFieldsOf`、`TySourceOf` 的副本与 `sourceHeader` 真值。
+- `source/tyControls.AdvanceChart.pas`：失败数据集的诊断。
+- `source/tyControls.StrConsts.pas`、`languages/tyControls.StrConsts.pot`、`languages/tycontrols.strconsts.zh_CN.po`、`tools/themebuilder/languages/tycontrols.zh_CN.po`：33 条字符串。
+- `tycontrols.lpk`、`tycontrols.pas`（忽略的）。
+- `tools/advchart-oracle/dataset-transform.js`、`tests/fixtures/advchart-dataset-transform.json`、`tests/test.advchart.datasettransform.pas`（新，注册在 `tytests.lpr`）、`tests/test.advchart.candleboxplot.pas`（两条断言）。

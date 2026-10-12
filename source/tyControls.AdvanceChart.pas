@@ -209,7 +209,10 @@ type
       -- a rebuilt view's elements are new ones. No data.
       [Batch 125] 8 a toolbox icon. [Batch 126] 9 a brush cover's piece:
       HdSeries the brush component, HdRow the cover's serial, HdGen the
-      piece (TTyBrushPiece). No data. }
+      piece (TTyBrushPiece). No data. [Batch 129] 10 a timeline element:
+      HdRow the element, HdGen the render that made it. [Batch 132] 12 a
+      break area (BreakAreaClickAt), 13 a break's axis label
+      (BreakExpandClick): HdSeries and HdRow as those read them. }
     HdKind: Integer;
     HdGen: Integer;
     HdSeries, HdRow: Integer;
@@ -1359,6 +1362,22 @@ type
     procedure PaintAxis(APainter: TTyPainter; AAxis: TTyAxis;
       const APlot: TTyRectF; APPI: Integer; AGrid: TTyGridBuild;
       const AMeasurer: ITyTextMeasurer; ABelow: Boolean; AProxied: Boolean = False);
+    { THE BREAK AREAS [Batch 132]: over the series (zigzagZ, 100 by default),
+      each break's polylines and the polygon between them }
+    procedure PaintBreakAreas(APainter: TTyPainter);
+    { the break area under (AX, AY) whose click expands it: the axis (grid
+      times a thousand plus its place in the grid) and the area }
+    function BreakAreaAt(AX, AY: Integer; out AAxisKey, AArea: Integer): Boolean;
+    { the axis a break target names }
+    function BreakAxisOf(AAxisKey: Integer; out AGrid: TTyGridBuild): TTyAxis;
+    { the click on a break area: its break }
+    procedure BreakAreaClickAt(AAxisKey, AArea: Integer);
+    { the click on a break area or a break label: expandAxisBreak }
+    procedure BreakExpandClick(AAxisKey, ABreakIndex: Integer);
+    { expandAxisBreak / collapseAxisBreak / toggleAxisBreak: the axes the
+      payload names take the new state into their option, the chart
+      updates, and axisbreakchanged follows [Batch 132] }
+    procedure DoAxisBreakAction(APayload: TJSONObject);
     { THE TWO LAYERS, split by what makes them change rather than by what they
       look like. Static is everything the model decides; dynamic is what moves
       while the model stands still. }
@@ -3197,7 +3216,8 @@ uses
   tyControls.AdvChart.RichStyle, tyControls.AdvChart.JsMath,
   tyControls.AdvChart.LinePath, tyControls.AdvChart.LabelGuide,
   BGRABitmapTypes, FPImage, FPWriteJPEG, base64,
-  tyControls.AdvChart.ToolboxDlg, tyControls.AdvChart.Aria;
+  tyControls.AdvChart.ToolboxDlg, tyControls.AdvChart.Aria,
+  tyControls.AdvChart.AxisBreak;
 
 { ==================== construction ==================== }
 
@@ -4530,6 +4550,12 @@ begin
     HeatmapTipDims(i, enc, st);
     Continue;
   end;
+  { A DATASET WHOSE TRANSFORM FAILED has no table, and the series reading it
+    draw nothing -- said here, once per dataset a series reached. Upstream
+    throws out of setOption and draws nothing at all. [Batch 133] }
+  for i := 0 to FDatasetCache.DatasetCount - 1 do
+    if FDatasetCache.ErrorOf(i) <> '' then
+      FBuild.Note(Format(rsTyChartDatasetNoTable, [i, FDatasetCache.ErrorOf(i)]));
   { AFTER THE STORES AND BEFORE EVERYTHING THAT COUNTS. A pie legend names
     DATA ITEMS, so the names have to be in the store before the legend can
     list them; and the filter the legend implies has to be in place before
@@ -5199,6 +5225,12 @@ begin
     TyAdvChartTickLen);
   txt.NameGapLogical := ActiveController.Metric(TyAdvChartNameGapVar,
     TyAdvChartNameGap);
+  { THE AXIS LINE'S WIDTH, which a line cut at its breaks is snapped by
+    [Batch 132] -- PaintAxis' LineWidth }
+  labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisLine', '', []);
+  if tpBorderWidth in labelS.Present then txt.AxisLineWidthLogical := labelS.BorderWidth
+  else txt.AxisLineWidthLogical := 1;
+  if txt.AxisLineWidthLogical < 0.05 then txt.AxisLineWidthLogical := 0.05;
   { the name is measured in the font it is drawn in }
   labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisName', '', []);
   txt.NameFontName := labelS.FontName;
@@ -5220,6 +5252,9 @@ begin
     called directly, so the layout layer stays free of the painter and a test
     can hand it a deterministic measurer instead of this machine's fonts. }
   TyLayoutGrids(FBuild, FOption, AMeasurer, APPI, txt, FAxisMemory);
+  { THE BREAK AREAS on the final rects, the zigzags from the axes' caches
+    [Batch 132] }
+  TyLayoutBreakAreas(FBuild, FOption, FAxisMemory);
   { THE POLAR AXIS VIEWS, in the same fonts and gaps [Batch 111] }
   TyLayoutPolars(FPolars, FOption, AMeasurer, APPI, txt,
     ActiveController.Metric(TyAdvChartMinorTickLenVar, TyAdvChartMinorTickLen),
@@ -5297,6 +5332,385 @@ begin
   FDirty := False;
   { the update's flush: `rendered` once it is painted [Batch 119] }
   if not FStreamRelayout and not FExporting then FFlushDue := True;
+end;
+
+{ ==================== axis breaks [Batch 132] ==================== }
+
+function TTyAdvanceChart.BreakAxisOf(AAxisKey: Integer; out AGrid: TTyGridBuild): TTyAxis;
+var g, a: Integer;
+begin
+  Result := nil;
+  AGrid := nil;
+  if FBuild = nil then Exit;
+  g := AAxisKey div 1000;
+  a := AAxisKey mod 1000;
+  if (g < 0) or (g >= FBuild.GridCount) then Exit;
+  AGrid := FBuild.Grid(g);
+  if a < AGrid.XAxisCount then Result := AGrid.XAxis(a)
+  else if a - AGrid.XAxisCount < AGrid.YAxisCount then
+    Result := AGrid.YAxis(a - AGrid.XAxisCount);
+end;
+
+{ zrender's hit test of a break group: the polygon's fill, or within half
+  the strokeContainThreshold (5) of either polyline -- they have no fill }
+function TTyAdvanceChart.BreakAreaAt(AX, AY: Integer; out AAxisKey, AArea: Integer): Boolean;
+var
+  g, a, q, pass: Integer;
+  gb: TTyGridBuild;
+  axo: TTyAxis;
+  spec: PTyAxisLayoutSpec;
+  opt: TTyBreakAreaOpt;
+
+  function NearLine(const P: TTyBreakPointArray): Boolean;
+  var
+    i: Integer;
+    dx, dy, len2, t, px, py: Double;
+  begin
+    Result := False;
+    for i := 1 to High(P) do
+    begin
+      dx := P[i].X - P[i - 1].X;
+      dy := P[i].Y - P[i - 1].Y;
+      len2 := dx * dx + dy * dy;
+      if len2 = 0 then t := 0
+      else t := ((AX - P[i - 1].X) * dx + (AY - P[i - 1].Y) * dy) / len2;
+      if t < 0 then t := 0;
+      if t > 1 then t := 1;
+      px := P[i - 1].X + t * dx - AX;
+      py := P[i - 1].Y + t * dy - AY;
+      if px * px + py * py <= 2.5 * 2.5 then Exit(True);
+    end;
+  end;
+
+  { nonzero winding over A, then B backwards }
+  function InPolygon(const PA, PB: TTyBreakPointArray): Boolean;
+  var
+    pts: TTyBreakPointArray;
+    i, j, w: Integer;
+    x0, y0, x1, y1: Double;
+  begin
+    SetLength(pts, Length(PA) + Length(PB));
+    for i := 0 to High(PA) do pts[i] := PA[i];
+    for i := 0 to High(PB) do pts[Length(PA) + i] := PB[High(PB) - i];
+    w := 0;
+    for i := 0 to High(pts) do
+    begin
+      j := (i + 1) mod Length(pts);
+      x0 := pts[i].X; y0 := pts[i].Y;
+      x1 := pts[j].X; y1 := pts[j].Y;
+      if y0 <= AY then
+      begin
+        if (y1 > AY) and ((x1 - x0) * (AY - y0) - (AX - x0) * (y1 - y0) > 0) then Inc(w);
+      end
+      else if (y1 <= AY) and ((x1 - x0) * (AY - y0) - (AX - x0) * (y1 - y0) < 0) then Dec(w);
+    end;
+    Result := w <> 0;
+  end;
+
+begin
+  Result := False;
+  AAxisKey := -1;
+  AArea := -1;
+  if FBuild = nil then Exit;
+  { the x axes' areas are drawn over the y axes' (their views render
+    later): asked first }
+  for pass := 1 downto 0 do
+    for g := FBuild.GridCount - 1 downto 0 do
+    begin
+      gb := FBuild.Grid(g);
+      for a := gb.XAxisCount + gb.YAxisCount - 1 downto 0 do
+      begin
+        if (pass = 1) <> (a < gb.XAxisCount) then Continue;
+        if a < gb.XAxisCount then axo := gb.XAxis(a) else axo := gb.YAxis(a - gb.XAxisCount);
+        if axo = nil then Continue;
+        spec := gb.SpecFor(axo);
+        if (spec = nil) or (Length(spec^.BreakAreas) = 0) then Continue;
+        opt := TyBreakAreaOptOf(FOption.ComponentAt(axo.MainType, axo.ComponentIndex));
+        { silent unless it expands }
+        if not opt.ExpandOnClick then Continue;
+        for q := High(spec^.BreakAreas) downto 0 do
+          if (spec^.BreakAreas[q].HasB and InPolygon(spec^.BreakAreas[q].A, spec^.BreakAreas[q].B))
+            or NearLine(spec^.BreakAreas[q].A)
+            or (spec^.BreakAreas[q].HasB and NearLine(spec^.BreakAreas[q].B)) then
+          begin
+            AAxisKey := g * 1000 + a;
+            AArea := q;
+            Exit(True);
+          end;
+      end;
+    end;
+end;
+
+procedure TTyAdvanceChart.BreakAreaClickAt(AAxisKey, AArea: Integer);
+var
+  gb: TTyGridBuild;
+  ax: TTyAxis;
+  spec: PTyAxisLayoutSpec;
+begin
+  ax := BreakAxisOf(AAxisKey, gb);
+  if ax = nil then Exit;
+  spec := gb.SpecFor(ax);
+  if (spec = nil) or (AArea < 0) or (AArea > High(spec^.BreakAreas)) then Exit;
+  BreakExpandClick(AAxisKey, spec^.BreakAreas[AArea].BreakIndex);
+end;
+
+procedure TTyAdvanceChart.BreakExpandClick(AAxisKey, ABreakIndex: Integer);
+var
+  gb: TTyGridBuild;
+  ax: TTyAxis;
+  brks: TTyAxisBreakArray;
+begin
+  ax := BreakAxisOf(AAxisKey, gb);
+  if (ax = nil) or (ax.Scale.BreakMapper = nil) then Exit;
+  brks := ax.Scale.BreakMapper.BreakList;
+  if (ABreakIndex < 0) or (ABreakIndex > High(brks)) then Exit;
+  { {type, breaks: [{start, end}]}, then `${dim}AxisIndex` }
+  DispatchAction('{"type":"expandAxisBreak","breaks":[{"start":' + brks[ABreakIndex].StartJson
+    + ',"end":' + brks[ABreakIndex].EndJson + '}],"' + ax.Dim + 'AxisIndex":'
+    + IntToStr(ax.ComponentIndex) + '}');
+end;
+
+procedure TTyAdvanceChart.DoAxisBreakAction(APayload: TJSONObject);
+var
+  t, evBreaks, payloadJson: string;
+  m: Integer;
+  idx: TTyIntegerArray;
+  mains: array[0..1] of string;
+  i, k, j: Integer;
+  node, bo, inp: TJSONObject;
+  arr, inputs: TJSONData;
+  old, now_: Boolean;
+  d: TJSONData;
+
+  function JsonOrUndefined(AData: TJSONData): string;
+  begin
+    if AData = nil then Result := 'null' else Result := AData.AsJSON;
+  end;
+
+  function Identity(AObj: TJSONObject): string;
+  begin
+    Result := TyBreakJsText(AObj.Find('start')) + '_'#0'_' + TyBreakJsText(AObj.Find('end'));
+  end;
+
+  { parseFinder for one axis family: <main>Index (a number, a list,
+    'all'), else <main>Id, else <main>Name; nothing named, no axis }
+  function Query(const AMain: string): TTyIntegerArray;
+  var
+    q, n, c: Integer;
+    dd: TJSONData;
+    v: string;
+
+    procedure Add(AIndex: Integer);
+    var z: Integer;
+    begin
+      if not (FOption.ComponentAt(AMain, AIndex) is TJSONObject) then Exit;
+      for z := 0 to High(Result) do
+        if Result[z] = AIndex then Exit;
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := AIndex;
+    end;
+
+    function Wanted(AData: TJSONData; const AText: string): Boolean;
+    var z: Integer;
+    begin
+      Result := False;
+      if AData is TJSONArray then
+      begin
+        for z := 0 to AData.Count - 1 do
+          if (TJSONArray(AData).Items[z].JSONType in [jtString, jtNumber])
+            and (TJSONArray(AData).Items[z].AsString = AText) then Exit(True);
+      end
+      else if AData.JSONType in [jtString, jtNumber] then
+        Result := AData.AsString = AText;
+    end;
+
+  begin
+    Result := nil;
+    c := FOption.ComponentCount(AMain);
+    dd := APayload.Find(AMain + 'Index');
+    if (dd <> nil) and (dd.JSONType <> jtNull) then
+    begin
+      if (dd.JSONType = jtString) and (dd.AsString = 'all') then
+        for q := 0 to c - 1 do Add(q)
+      else if dd is TJSONArray then
+      begin
+        for q := 0 to dd.Count - 1 do
+          if TJSONArray(dd).Items[q].JSONType = jtNumber then
+          begin
+            n := Trunc(TJSONArray(dd).Items[q].AsFloat);
+            if (n >= 0) and (n < c) then Add(n);
+          end;
+      end
+      else if dd.JSONType = jtNumber then
+      begin
+        n := Trunc(dd.AsFloat);
+        if (n >= 0) and (n < c) then Add(n);
+      end;
+      Exit;
+    end;
+    dd := APayload.Find(AMain + 'Id');
+    if (dd <> nil) and (dd.JSONType <> jtNull) then
+    begin
+      for q := 0 to c - 1 do
+      begin
+        v := ComponentModelId(AMain, q);
+        if (v <> '') and Wanted(dd, v) then Add(q);
+      end;
+      Exit;
+    end;
+    dd := APayload.Find(AMain + 'Name');
+    if (dd <> nil) and (dd.JSONType <> jtNull) then
+      for q := 0 to c - 1 do
+        if Wanted(dd, ComponentModelName(AMain, q)) then Add(q);
+  end;
+
+begin
+  t := APayload.Strings['type'];
+  payloadJson := APayload.AsJSON;
+  evBreaks := '';
+  mains[0] := 'xAxis';
+  mains[1] := 'yAxis';
+  inputs := APayload.Find('breaks');
+  for m := 0 to 1 do
+  begin
+    idx := Query(mains[m]);
+    for i := 0 to High(idx) do
+    begin
+      node := TJSONObject(FOption.ComponentAt(mains[m], idx[i]));
+      arr := node.Find('breaks');
+      if not (inputs is TJSONArray) then Continue;
+      for k := 0 to inputs.Count - 1 do
+      begin
+        if not (TJSONArray(inputs).Items[k] is TJSONObject) then Continue;
+        inp := TJSONObject(TJSONArray(inputs).Items[k]);
+        bo := nil;
+        if arr is TJSONArray then
+          for j := 0 to arr.Count - 1 do
+            if (TJSONArray(arr).Items[j] is TJSONObject)
+              and (Identity(TJSONObject(TJSONArray(arr).Items[j])) = Identity(inp)) then
+            begin
+              bo := TJSONObject(TJSONArray(arr).Items[j]);
+              Break;
+            end;
+        if bo = nil then Continue;
+        d := bo.Find('isExpanded');
+        old := (d <> nil) and (((d.JSONType = jtBoolean) and d.AsBoolean)
+          or ((d.JSONType = jtNumber) and (d.AsFloat <> 0) and not IsNan(d.AsFloat))
+          or ((d.JSONType = jtString) and (d.AsString <> ''))
+          or (d.JSONType in [jtArray, jtObject]));
+        if t = 'expandAxisBreak' then now_ := True
+        else if t = 'collapseAxisBreak' then now_ := False
+        else now_ := not old;
+        if d <> nil then bo.Delete('isExpanded');
+        bo.Add('isExpanded', now_);
+        if evBreaks <> '' then evBreaks := evBreaks + ',';
+        evBreaks := evBreaks + '{"' + mains[m] + 'Index":' + IntToStr(idx[i])
+          + ',"start":' + JsonOrUndefined(bo.Find('start'))
+          + ',"end":' + JsonOrUndefined(bo.Find('end'))
+          + ',"isExpanded":' + BoolToStr(now_, 'true', 'false')
+          + ',"old":{"isExpanded":' + BoolToStr(old, 'true', 'false') + '}}';
+      end;
+    end;
+  end;
+  { the update renders with the new state, then the refined event }
+  FullUpdate;
+  FDirty := True;
+  Invalidate;
+  EmitPayloadEvent('axisbreakchanged', '{"type":"axisbreakchanged","breaks":['
+    + evBreaks + '],"fromAction":"' + StringToJSONString(t)
+    + '","fromActionPayload":' + payloadJson + ',"escapeConnect":true}');
+end;
+
+procedure TTyAdvanceChart.PaintBreakAreas(APainter: TTyPainter);
+var
+  pass, g, a, q, i: Integer;
+  gb: TTyGridBuild;
+  axo: TTyAxis;
+  spec: PTyAxisLayoutSpec;
+  opt: TTyBreakAreaOpt;
+  st: TTyStyleSet;
+  stroke, fill: TTyColor;
+  cc: TTyChartColor;
+  lw, op: Double;
+  hasStroke, hasFill: Boolean;
+
+  procedure Line(const P: TTyBreakPointArray);
+  var z: Integer;
+  begin
+    if (Length(P) = 0) or not hasStroke then Exit;
+    APainter.BeginPath;
+    APainter.MoveTo(P[0].X, P[0].Y);
+    for z := 1 to High(P) do APainter.LineTo(P[z].X, P[z].Y);
+    APainter.SetLineDash(opt.Dash);
+    APainter.StrokePath(stroke, lw);
+    APainter.SetLineDash([]);
+  end;
+
+begin
+  if (FBuild = nil) or (FOption = nil) then Exit;
+  st := ActiveController.Model.ResolveStyle('TyAdvChartBreakArea', '', []);
+  { the y axes' views first, as upstream renders them }
+  for pass := 0 to 1 do
+    for g := 0 to FBuild.GridCount - 1 do
+    begin
+      gb := FBuild.Grid(g);
+      for a := 0 to gb.XAxisCount + gb.YAxisCount - 1 do
+      begin
+        if (pass = 0) <> (a >= gb.XAxisCount) then Continue;
+        if a < gb.XAxisCount then axo := gb.XAxis(a) else axo := gb.YAxis(a - gb.XAxisCount);
+        if axo = nil then Continue;
+        spec := gb.SpecFor(axo);
+        if (spec = nil) or (Length(spec^.BreakAreas) = 0) then Continue;
+        opt := TyBreakAreaOptOf(FOption.ComponentAt(axo.MainType, axo.ComponentIndex));
+        { THE SKIN'S COLOURS unless the option writes its own; the skin's fill
+          carries its opacity, an author's colour takes the option's (0.6
+          unless written) }
+        hasStroke := tpBorderColor in st.Present;
+        stroke := st.BorderColor;
+        if opt.HasBorderColor and TyTryParseChartColor(opt.BorderColor, cc) then
+        begin
+          stroke := TTyColor(cc);
+          hasStroke := True;
+        end;
+        if not IsNan(opt.BorderWidth) then lw := opt.BorderWidth
+        else if tpBorderWidth in st.Present then lw := st.BorderWidth
+        else lw := 1;
+        if lw <= 0 then hasStroke := False;
+        hasFill := tpBackground in st.Present;
+        fill := st.Background.Color;
+        op := opt.Opacity;
+        if opt.HasColor and TyTryParseChartColor(opt.Color, cc) then
+        begin
+          fill := TTyColor(cc);
+          hasFill := True;
+          if IsNan(op) then op := 0.6;
+        end;
+        if not IsNan(op) then
+        begin
+          if op < 0 then op := 0;
+          if op > 1 then op := 1;
+          fill := TTyColor((Cardinal(fill) and $00FFFFFF)
+            or (Cardinal(Round(((Cardinal(fill) shr 24) and $FF) * op)) shl 24));
+        end;
+        for q := 0 to High(spec^.BreakAreas) do
+        begin
+          Line(spec^.BreakAreas[q].A);
+          if not spec^.BreakAreas[q].HasB then Continue;
+          Line(spec^.BreakAreas[q].B);
+          if hasFill and (Length(spec^.BreakAreas[q].A) > 0) then
+          begin
+            { from A's end back along B: the band between them }
+            APainter.BeginPath;
+            APainter.MoveTo(spec^.BreakAreas[q].A[0].X, spec^.BreakAreas[q].A[0].Y);
+            for i := 1 to High(spec^.BreakAreas[q].A) do
+              APainter.LineTo(spec^.BreakAreas[q].A[i].X, spec^.BreakAreas[q].A[i].Y);
+            for i := High(spec^.BreakAreas[q].B) downto 0 do
+              APainter.LineTo(spec^.BreakAreas[q].B[i].X, spec^.BreakAreas[q].B[i].Y);
+            APainter.FillPath(fill);
+          end;
+        end;
+      end;
+    end;
 end;
 
 { ==================== paint ==================== }
@@ -5759,7 +6173,18 @@ begin
   if furn.ShowLine and (tpBorderColor in lineS.Present) then
   begin
     APainter.BeginPath;
-    if ProxLine('line') then
+    { CUT AT THE BREAKS, each segment already on the pixel grid [Batch 132] }
+    if (spec <> nil) and spec^.HasBreakLine then
+    begin
+      for i := 0 to High(spec^.BreakLineSegs) do
+        if not ProxLine(spec^.BreakLineSegs[i].Anid) then
+        begin
+          APainter.MoveTo(spec^.BreakLineSegs[i].X1, spec^.BreakLineSegs[i].Y1);
+          APainter.LineTo(spec^.BreakLineSegs[i].X2, spec^.BreakLineSegs[i].Y2);
+          Inc(batched);
+        end;
+    end
+    else if ProxLine('line') then
     else if horiz then
       BatchLine(APlot.Left, at, APlot.Right, at, LineWidth(lineS))
     else
@@ -6052,6 +6477,8 @@ begin
   { AFTER THE AXES, so a bar sits on the grid rather than under it. Within the
     series, the paint list decides the order. }
   PaintSeries(APainter, AMeasurer, APPI);
+  { THE BREAK AREAS, zigzagZ over the series [Batch 132] }
+  PaintBreakAreas(APainter);
   { THE PARALLEL AXES OVER THEIR LINES: a parallelAxis is z 10, its series
     2 [Batch 128] }
   PaintParallels(APainter, APPI, AMeasurer);
@@ -20461,6 +20888,16 @@ begin
     Result.HdGen := Ord(piece);
     Exit;
   end;
+  { A BREAK AREA THAT EXPANDS ON A CLICK, zigzagZ (100) over the rest: no
+    data, only its group's click [Batch 132] }
+  if BreakAreaAt(AX, AY, k, q) then
+  begin
+    Result.Id := -((Int64(10) shl 44) + Int64(k) * 1000 + q);
+    Result.HdKind := 12;
+    Result.HdSeries := k;
+    Result.HdRow := q;
+    Exit;
+  end;
   { THE TITLES, over everything but the tooltip: the text and the subtext are
     two targets }
   for i := 0 to High(FTitles) do
@@ -20762,6 +21199,13 @@ begin
         Result.HasData := True;
         Result.Params.TargetType := 'axisLabel';
         Result.Params.TickIndex := q;
+        { A BREAK'S LABEL expands its break on a click [Batch 132] }
+        if (q <= High(spec^.LabelBreakKind)) and (spec^.LabelBreakKind[q] <> 0) then
+        begin
+          Result.HdKind := 13;
+          Result.HdSeries := g * 1000 + a;
+          Result.HdRow := spec^.LabelBreakIndex[q];
+        end;
         if axObj.Scale is TTyOrdinalScale then
         begin
           Result.Params.ValueText := TTyOrdinalScale(axObj.Scale).GetLabel(spec^.TickValues[q]);
@@ -20928,6 +21372,9 @@ begin
   if t.HdKind = 8 then TbClick(t.HdSeries, t.HdRow)
   { [Batch 129] a timeline element's onclick }
   else if t.HdKind = 10 then TlClick(t.HdRow)
+  { a break area's group, a break label's text: expandAxisBreak [Batch 132] }
+  else if t.HdKind = 12 then BreakAreaClickAt(t.HdSeries, t.HdRow)
+  else if t.HdKind = 13 then BreakExpandClick(t.HdSeries, t.HdRow)
   else if t.HdKind = 4 then LegendClick(t)
   { [Batch 98] the selector's and the pager's own onclick }
   else if t.HdKind = 5 then LegendSelectorClick(t)
@@ -26435,6 +26882,13 @@ begin
     else if t = 'axisAreaSelect' then
     begin
       BrushDoAxisAreaSelect(p);
+      Result := True;
+    end
+    { the axis breaks' actions [Batch 132] }
+    else if (t = 'expandAxisBreak') or (t = 'collapseAxisBreak')
+      or (t = 'toggleAxisBreak') then
+    begin
+      DoAxisBreakAction(p);
       Result := True;
     end;
   finally

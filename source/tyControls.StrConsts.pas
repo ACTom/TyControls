@@ -567,6 +567,45 @@ resourcestring
   rsTyChartSeriesNoAxis = 'series[%d] names an axis that does not exist';
   rsTyChartSeriesAxesSplit =
     'series[%d]: xAxis[%d] and yAxis[%d] are not on one grid';
+  // --- AdvanceChart: dataset transforms [Batch 133] ---
+  // Why a dataset has no table: the chart's diagnostics say
+  // rsTyChartDatasetNoTable with one of the reasons below.  Upstream
+  // throws out of setOption instead.
+  rsTyChartDatasetNoTable = 'dataset[%d] has no table: %s';
+  rsTyDsReadsItself = 'it reads itself';
+  rsTyDsUpstreamFailed = 'dataset[%d], which it reads, has no table';
+  rsTyDsNoResult = 'its upstream has no result %s';
+  rsTyDsOneUpstream = 'fromTransformResult needs exactly one upstream dataset';
+  rsTyDsEmptyPipe = 'the transform list is empty';
+  rsTyDsNotObject = 'a transform is not an object';
+  rsTyDsUnknownType = 'no transform is registered as "%s"';
+  rsTyDsUpstreamMissing = 'a transform has no input';
+  rsTyDsUpstreamByRow = 'its upstream is laid out by row';
+  rsTyDsUpstreamFormat = 'its upstream is not a table';
+  rsTyDsDuplicateDim = 'the dimension name "%s" is used twice';
+  rsTyDsCopyHasNoMeta =
+    'it reads a fromTransformResult copy, which has no dimensions to pass on';
+  rsTyDsBadResult = 'a transform result is not a table of arrays or of objects';
+  rsTyDsNotSupported =
+    '%s is not available to a transform registered outside ECharts';
+  rsTyDsKeyedNoDims = 'its upstream table of columns has no dimensions';
+  rsTyDsRowNotList = 'a row of the table is not a list';
+  rsTyDsCondNotObject = 'a filter condition is not an object';
+  rsTyDsCondAndOr = '"%s" must be a non-empty list of conditions';
+  rsTyDsCondNot = '"not" must be a condition object';
+  rsTyDsCondNoDimension = 'a filter condition has no dimension';
+  rsTyDsNoDimension = 'there is no dimension %s';
+  rsTyDsCondNoOperator = 'a filter condition has no operator';
+  rsTyDsCondBadOperator = '"%s" is not a filter operator';
+  rsTyDsCondNeedsNumber = '"%s" compares with a number only';
+  rsTyDsCondReg = '"reg" (a regular expression) is not supported';
+  rsTyDsSortEmpty = 'the sort has no config';
+  rsTyDsSortNoDimension = 'a sort key has no dimension';
+  rsTyDsSortOrder = 'a sort key''s order must be "asc" or "desc"';
+  rsTyDsSortIncomparable = '"incomparable" must be "min" or "max"';
+  rsTyDsSortParser = '"%s" is not a parser';
+  rsTyDsSortFormat = 'the sort reads only a table of arrays or of objects';
+  rsTyDsBoxplotRows = 'the boxplot reads only a table of arrays';
 
   // --- AdvanceChart: the option editor's own vocabulary ---
   // Shown in the design-time editor's status line and its completion popup.

@@ -253,6 +253,9 @@ type
     LabelMarginLogical: Double;
     TickLengthLogical: Double;
     NameGapLogical: Double;
+    { THE AXIS LINE'S WIDTH, the skin's: the ends of a line cut at its breaks
+      are snapped as the line is [Batch 132] }
+    AxisLineWidthLogical: Double;
     { The axis NAME's font, which the layout measures the name in: the same
       one the paint pass draws it in, and not always the labels'. }
     NameFontName: string;
@@ -366,6 +369,28 @@ type
     Colour: Cardinal;
   end;
   TTyAxisInkArray = array of TTyAxisInk;
+
+  { A SEGMENT OF AN AXIS LINE CUT AT ITS BREAKS [Batch 132]: the anid
+    upstream gives it (breakLine_<id before>_<NUL>_<id after>, a NUL for
+    an end) and its two ends, on the pixel grid. }
+  TTyAxisLineSeg = record
+    Anid: string;
+    X1, Y1, X2, Y2: Double;
+  end;
+  TTyAxisLineSegArray = array of TTyAxisLineSeg;
+  TTyBreakPointArray = array of TTyPointF;
+  { ONE BREAK'S AREA AS IT IS DRAWN [Batch 132]: its identity, which of the
+    scale's breaks, polyline A and -- where the gap is not nothing --
+    polyline B and the polygon between them; Lo / Hi its two ends along the
+    axis (global px, snapped, in order) }
+  TTyBreakAreaGeom = record
+    Id: string;
+    BreakIndex: Integer;
+    A, B: TTyBreakPointArray;
+    HasB: Boolean;
+    Lo, Hi: Double;
+  end;
+  TTyBreakAreaGeomArray = array of TTyBreakAreaGeom;
 
   { nameLocation: 'end' is upstream's default and so the zero value;
     'center' is 'middle'. }
@@ -663,6 +688,23 @@ type
       on its Side. }
     FreeFrame: Boolean;
     LabelDirection: Integer;
+
+    { ---- axis breaks [Batch 132] ---- }
+
+    { which labels stand for a break's end: 0 none, 1 its start, 2 its end
+      -- and which break (the scale's BreakList). Parallel to Labels; empty
+      on an axis with no break. A break label is weighed first under
+      hideOverlap, and the two of one break are moved apart. }
+    LabelBreakKind: TTyIntegerArray;
+    LabelBreakIndex: TTyIntegerArray;
+    { breakLabelLayout.moveOverlap: true or 'auto' }
+    BreakMoveOverlap: Boolean;
+    { the axis line cut at the breaks, on the final rect; HasBreakLine False
+      draws the one whole line }
+    HasBreakLine: Boolean;
+    BreakLineSegs: TTyAxisLineSegArray;
+    { the break areas, on the final rect, in the order upstream adds them }
+    BreakAreas: TTyBreakAreaGeomArray;
   end;
   TTyAxisLayoutSpecArray = array of TTyAxisLayoutSpec;
   PTyAxisLayoutSpec = ^TTyAxisLayoutSpec;
@@ -827,6 +869,7 @@ function TyAxisLabelStep(const ASpec: TTyAxisLayoutSpec; const APlot: TTyRectF;
 implementation
 
 uses tyControls.AdvChart.AxisName, tyControls.AdvChart.JsMath,
+  tyControls.AdvChart.AxisBreak,
   tyControls.AdvChart.AxisLabels, tyControls.AdvChart.Data;
 
 type
@@ -2320,10 +2363,36 @@ begin
   end;
 end;
 
+{ adjustBreakLabels: each break whose start and end both have a label, the
+  two moved apart [Batch 132] }
+procedure AdjustBreakLabels(const ASpec: TTyAxisLayoutSpec;
+  var APlaces: TTyAxisLabelPlacementArray; AAxisRotation: Double;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer);
+var
+  i, j: Integer;
+  m0, b0, m1, b1: TTyLabelBox;
+begin
+  { retrieveAxisBreakPairs: every start, then the end of the same break }
+  for i := 0 to High(APlaces) do
+  begin
+    if ASpec.LabelBreakKind[i] <> 1 then Continue;
+    for j := 0 to High(APlaces) do
+      if (ASpec.LabelBreakKind[j] = 2)
+        and (ASpec.LabelBreakIndex[j] = ASpec.LabelBreakIndex[i]) then
+      begin
+        LabelBoxes(ASpec, APlaces[i], AMeasurer, APPI, m0, b0);
+        LabelBoxes(ASpec, APlaces[j], AMeasurer, APPI, m1, b1);
+        TyAdjustBreakLabelPair(ASpec.Inverse, AAxisRotation, APlaces[i], APlaces[j],
+          m0, m1, b0.LocalRect, b1.LocalRect);
+        Break;
+      end;
+  end;
+end;
+
 function TyLayoutAxisLabels(const ASpec: TTyAxisLayoutSpec; const APlot: TTyRectF;
   const AMeasurer: ITyTextMeasurer; APPI: Integer): TTyAxisLabelPlacementArray;
 var
-  i, k, m, n: Integer;
+  i, k, m, n, z2Min, z2Max: Integer;
   ah: TTyTextAnchorH;
   av: TTyTextAnchorV;
   gap, len, iv, t: Double;
@@ -2454,6 +2523,12 @@ begin
   if not ASpec.ShowLabels then Exit;
   n := Length(ASpec.Labels);
 
+  { A BREAK'S TWO LABELS MOVED APART where they overlap, before the end
+    rules and hideOverlap weigh any box [Batch 132] }
+  if (Length(ASpec.LabelBreakKind) = n) and ASpec.BreakMoveOverlap
+    and (AMeasurer <> nil) and byFrame then
+    AdjustBreakLabels(ASpec, Result, fr.Rotation, AMeasurer, APPI);
+
   { THE BUILT LIST. A category axis: every interval-th category from nought,
     and its two ends; anything else: every tick. }
   values := nil;
@@ -2494,6 +2569,24 @@ begin
     Inc(m);
   end;
   SetLength(cands, m);
+  { A BREAK'S LABELS COME FIRST [Batch 132]: their z2 lifted past every
+    other label's -- by the spread of z2 over the axis, plus one }
+  if Length(ASpec.LabelBreakKind) = n then
+  begin
+    z2Min := MaxInt;
+    z2Max := -MaxInt;
+    for i := 0 to n - 1 do
+    begin
+      k := 10;
+      if (ASpec.LabelKind = lakTime) and (i <= High(ASpec.LabelLevel)) then
+        k := 10 + ASpec.LabelLevel[i];
+      if k < z2Min then z2Min := k;
+      if k > z2Max then z2Max := k;
+    end;
+    for k := 0 to m - 1 do
+      if ASpec.LabelBreakKind[cands[k].Index] <> 0 then
+        cands[k].Priority := cands[k].Priority + (z2Max - z2Min + 1);
+  end;
 
   { THE BOXES the rules weigh: every one under hideOverlap, else only the
     two at each end }

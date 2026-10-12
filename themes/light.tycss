@@ -1448,6 +1448,11 @@ TyAdvChartBrushOut { color: var(--border); }
    Upstream fills and rims it in one light blue at 30% opacity (the opacity
    is the chart's, not the skin's); here the accent halfway to the surface. */
 TyAdvChartParallelSelect { background: mix(var(--accent), var(--surface), 50%); border-color: mix(var(--accent), var(--surface), 50%); }
+/* An axis break's area: the zigzag band where a stretch of the axis is cut
+   out, over the series. Upstream fills it white at 60% and rims it in its
+   border grey, dashed; here the skin's surface at 60% and its border, so a
+   dark skin's breaks are dark. The dash is the option's (3, 3 by default). */
+TyAdvChartBreakArea { background: alpha(var(--surface), 0.6); border-color: var(--border); border-width: 1px; }
 /* A decal's symbols, where the decal names no colour of its own -- the aria
    decals that tell the series apart without their colours. Upstream draws
    them black at 20%; here the skin's ink at 20%, so a dark skin's decals

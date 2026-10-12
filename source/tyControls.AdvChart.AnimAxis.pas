@@ -147,8 +147,18 @@ begin
   if not ASpec.HasNameFrame then Exit;
   fr := ASpec.NameFrame;
   g := TyMatLocal(fr.PosX, fr.PosY, fr.Rotation);
-  { the axis line: the axis' own extent, through the group's matrix }
-  if AIn.ShowLine then
+  { the axis line: the axis' own extent, through the group's matrix -- or
+    cut at the breaks, each segment its own leaf [Batch 132] }
+  if AIn.ShowLine and ASpec.HasBreakLine then
+    for i := 0 to High(ASpec.BreakLineSegs) do
+    begin
+      k := Push(aakLine, ASpec.BreakLineSegs[i].Anid, -1);
+      els[k].X1 := ASpec.BreakLineSegs[i].X1;
+      els[k].Y1 := ASpec.BreakLineSegs[i].Y1;
+      els[k].X2 := ASpec.BreakLineSegs[i].X2;
+      els[k].Y2 := ASpec.BreakLineSegs[i].Y2;
+    end
+  else if AIn.ShowLine then
   begin
     k := Push(aakLine, 'line', -1);
     Apply(g, fr.Ext0, 0, els[k].X1, els[k].Y1);

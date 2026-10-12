@@ -938,6 +938,149 @@ msgstr ""
 msgid "series[%d]: xAxis[%d] and yAxis[%d] are not on one grid"
 msgstr ""
 
+#: tycontrols.strconsts.rstychartdatasetnotable
+#, object-pascal-format
+msgid "dataset[%d] has no table: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsreadsitself
+msgid "it reads itself"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsupstreamfailed
+#, object-pascal-format
+msgid "dataset[%d], which it reads, has no table"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsnoresult
+#, object-pascal-format
+msgid "its upstream has no result %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsoneupstream
+msgid "fromTransformResult needs exactly one upstream dataset"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsemptypipe
+msgid "the transform list is empty"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsnotobject
+msgid "a transform is not an object"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsunknowntype
+#, object-pascal-format
+msgid "no transform is registered as \"%s\""
+msgstr ""
+
+#: tycontrols.strconsts.rstydsupstreammissing
+msgid "a transform has no input"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsupstreambyrow
+msgid "its upstream is laid out by row"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsupstreamformat
+msgid "its upstream is not a table"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsduplicatedim
+#, object-pascal-format
+msgid "the dimension name \"%s\" is used twice"
+msgstr ""
+
+#: tycontrols.strconsts.rstydscopyhasnometa
+msgid "it reads a fromTransformResult copy, which has no dimensions to pass on"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsbadresult
+msgid "a transform result is not a table of arrays or of objects"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsnotsupported
+#, object-pascal-format
+msgid "%s is not available to a transform registered outside ECharts"
+msgstr ""
+
+#: tycontrols.strconsts.rstydskeyednodims
+msgid "its upstream table of columns has no dimensions"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsrownotlist
+msgid "a row of the table is not a list"
+msgstr ""
+
+#: tycontrols.strconsts.rstydscondnotobject
+msgid "a filter condition is not an object"
+msgstr ""
+
+#: tycontrols.strconsts.rstydscondandor
+#, object-pascal-format
+msgid "\"%s\" must be a non-empty list of conditions"
+msgstr ""
+
+#: tycontrols.strconsts.rstydscondnot
+msgid "\"not\" must be a condition object"
+msgstr ""
+
+#: tycontrols.strconsts.rstydscondnodimension
+msgid "a filter condition has no dimension"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsnodimension
+#, object-pascal-format
+msgid "there is no dimension %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstydscondnooperator
+msgid "a filter condition has no operator"
+msgstr ""
+
+#: tycontrols.strconsts.rstydscondbadoperator
+#, object-pascal-format
+msgid "\"%s\" is not a filter operator"
+msgstr ""
+
+#: tycontrols.strconsts.rstydscondneedsnumber
+#, object-pascal-format
+msgid "\"%s\" compares with a number only"
+msgstr ""
+
+#: tycontrols.strconsts.rstydscondreg
+msgid "\"reg\" (a regular expression) is not supported"
+msgstr ""
+
+#: tycontrols.strconsts.rstydssortempty
+msgid "the sort has no config"
+msgstr ""
+
+#: tycontrols.strconsts.rstydssortnodimension
+msgid "a sort key has no dimension"
+msgstr ""
+
+#: tycontrols.strconsts.rstydssortorder
+msgid "a sort key's order must be \"asc\" or \"desc\""
+msgstr ""
+
+#: tycontrols.strconsts.rstydssortincomparable
+msgid "\"incomparable\" must be \"min\" or \"max\""
+msgstr ""
+
+#: tycontrols.strconsts.rstydssortparser
+#, object-pascal-format
+msgid "\"%s\" is not a parser"
+msgstr ""
+
+#: tycontrols.strconsts.rstydssortformat
+msgid "the sort reads only a table of arrays or of objects"
+msgstr ""
+
+#: tycontrols.strconsts.rstydsboxplotrows
+msgid "the boxplot reads only a table of arrays"
+msgstr ""
+
 #: tycontrols.strconsts.rstychartseriesbadtype
 #, object-pascal-format
 msgid "series[%d]: \"%s\" is not a series type"

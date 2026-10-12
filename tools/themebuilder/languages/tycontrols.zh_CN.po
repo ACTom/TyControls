@@ -1416,6 +1416,149 @@ msgstr "series[%d] 指向了一条不存在的轴"
 msgid "series[%d]: xAxis[%d] and yAxis[%d] are not on one grid"
 msgstr "series[%d]：xAxis[%d] 与 yAxis[%d] 不在同一个 grid 上"
 
+#: tycontrols.strconsts.rstychartdatasetnotable
+#, object-pascal-format
+msgid "dataset[%d] has no table: %s"
+msgstr "dataset[%d] 没有数据表：%s"
+
+#: tycontrols.strconsts.rstydsreadsitself
+msgid "it reads itself"
+msgstr "它读的是自己"
+
+#: tycontrols.strconsts.rstydsupstreamfailed
+#, object-pascal-format
+msgid "dataset[%d], which it reads, has no table"
+msgstr "它读的 dataset[%d] 没有数据表"
+
+#: tycontrols.strconsts.rstydsnoresult
+#, object-pascal-format
+msgid "its upstream has no result %s"
+msgstr "上游没有第 %s 个结果"
+
+#: tycontrols.strconsts.rstydsoneupstream
+msgid "fromTransformResult needs exactly one upstream dataset"
+msgstr "fromTransformResult 只能有一个上游 dataset"
+
+#: tycontrols.strconsts.rstydsemptypipe
+msgid "the transform list is empty"
+msgstr "transform 列表是空的"
+
+#: tycontrols.strconsts.rstydsnotobject
+msgid "a transform is not an object"
+msgstr "有一个 transform 不是对象"
+
+#: tycontrols.strconsts.rstydsunknowntype
+#, object-pascal-format
+msgid "no transform is registered as \"%s\""
+msgstr "没有注册名为“%s”的 transform"
+
+#: tycontrols.strconsts.rstydsupstreammissing
+msgid "a transform has no input"
+msgstr "有一个 transform 没有输入"
+
+#: tycontrols.strconsts.rstydsupstreambyrow
+msgid "its upstream is laid out by row"
+msgstr "上游是按行排的"
+
+#: tycontrols.strconsts.rstydsupstreamformat
+msgid "its upstream is not a table"
+msgstr "上游不是数据表"
+
+#: tycontrols.strconsts.rstydsduplicatedim
+#, object-pascal-format
+msgid "the dimension name \"%s\" is used twice"
+msgstr "维度名“%s”重复了"
+
+#: tycontrols.strconsts.rstydscopyhasnometa
+msgid "it reads a fromTransformResult copy, which has no dimensions to pass on"
+msgstr "它读的是 fromTransformResult 的副本，副本没有可以沿用的维度"
+
+#: tycontrols.strconsts.rstydsbadresult
+msgid "a transform result is not a table of arrays or of objects"
+msgstr "transform 的结果不是数组行或对象行的表"
+
+#: tycontrols.strconsts.rstydsnotsupported
+#, object-pascal-format
+msgid "%s is not available to a transform registered outside ECharts"
+msgstr "%s 只有 ECharts 自带的 transform 能用"
+
+#: tycontrols.strconsts.rstydskeyednodims
+msgid "its upstream table of columns has no dimensions"
+msgstr "上游的按列表没有维度"
+
+#: tycontrols.strconsts.rstydsrownotlist
+msgid "a row of the table is not a list"
+msgstr "表里有一行不是数组"
+
+#: tycontrols.strconsts.rstydscondnotobject
+msgid "a filter condition is not an object"
+msgstr "filter 的条件不是对象"
+
+#: tycontrols.strconsts.rstydscondandor
+#, object-pascal-format
+msgid "\"%s\" must be a non-empty list of conditions"
+msgstr "“%s”必须是非空的条件列表"
+
+#: tycontrols.strconsts.rstydscondnot
+msgid "\"not\" must be a condition object"
+msgstr "“not”必须是一个条件对象"
+
+#: tycontrols.strconsts.rstydscondnodimension
+msgid "a filter condition has no dimension"
+msgstr "filter 的条件没有写 dimension"
+
+#: tycontrols.strconsts.rstydsnodimension
+#, object-pascal-format
+msgid "there is no dimension %s"
+msgstr "没有维度 %s"
+
+#: tycontrols.strconsts.rstydscondnooperator
+msgid "a filter condition has no operator"
+msgstr "filter 的条件没有运算符"
+
+#: tycontrols.strconsts.rstydscondbadoperator
+#, object-pascal-format
+msgid "\"%s\" is not a filter operator"
+msgstr "“%s”不是 filter 的运算符"
+
+#: tycontrols.strconsts.rstydscondneedsnumber
+#, object-pascal-format
+msgid "\"%s\" compares with a number only"
+msgstr "“%s”只能和数比较"
+
+#: tycontrols.strconsts.rstydscondreg
+msgid "\"reg\" (a regular expression) is not supported"
+msgstr "不支持“reg”（正则表达式）"
+
+#: tycontrols.strconsts.rstydssortempty
+msgid "the sort has no config"
+msgstr "sort 没有 config"
+
+#: tycontrols.strconsts.rstydssortnodimension
+msgid "a sort key has no dimension"
+msgstr "sort 的排序键没有 dimension"
+
+#: tycontrols.strconsts.rstydssortorder
+msgid "a sort key's order must be \"asc\" or \"desc\""
+msgstr "sort 的 order 必须是“asc”或“desc”"
+
+#: tycontrols.strconsts.rstydssortincomparable
+msgid "\"incomparable\" must be \"min\" or \"max\""
+msgstr "“incomparable”必须是“min”或“max”"
+
+#: tycontrols.strconsts.rstydssortparser
+#, object-pascal-format
+msgid "\"%s\" is not a parser"
+msgstr "“%s”不是 parser"
+
+#: tycontrols.strconsts.rstydssortformat
+msgid "the sort reads only a table of arrays or of objects"
+msgstr "sort 只能读数组行或对象行的表"
+
+#: tycontrols.strconsts.rstydsboxplotrows
+msgid "the boxplot reads only a table of arrays"
+msgstr "boxplot 只能读数组行的表"
+
 #: tycontrols.strconsts.rstyoptsummarydefault
 #, object-pascal-format
 msgid "default %s"
