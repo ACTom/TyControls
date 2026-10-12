@@ -48,7 +48,7 @@ uses
   tyControls.AdvChart.Marker, tyControls.AdvChart.MarkerView,
   tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
   tyControls.AdvChart.Gauge, tyControls.AdvChart.Radar,
-  tyControls.AdvChart.Calendar, tyControls.AdvChart.Tree,
+  tyControls.AdvChart.Calendar, tyControls.AdvChart.Matrix, tyControls.AdvChart.Tree,
   tyControls.AdvChart.Sunburst, tyControls.AdvChart.Treemap,
   tyControls.AdvChart.Sankey,
   tyControls.AdvChart.Graph,
@@ -587,6 +587,10 @@ type
     FRadars: array of TTyRadar;
     { THE CALENDARS, one per component, laid out on the canvas. [Batch 69] }
     FCalendars: array of TTyCalendar;
+    { THE MATRICES, one per component [Batch 145]: built with the stores
+      (each series on one borrows its header trees' category lists), laid
+      out on the canvas with the calendars, freed after the stores. }
+    FMatrices: array of TTyMatrix;
     { THE TREES, laid out per slot -- an empty record where the slot is no
       tree. [Batch 73] }
     FTrees: array of TTyTreeSolved;
@@ -1998,6 +2002,10 @@ type
     procedure SolveCalendars(APPI: Integer);
     procedure FreeCalendars;
     function CalendarInk: TTyCalendarInk;
+    procedure BuildMatrices;
+    procedure SolveMatrices(APPI: Integer);
+    procedure FreeMatrices;
+    function MatrixInk: TTyMatrixInk;
     procedure FreeRadars;
     { the polars go with the build [Batch 111] }
     procedure FreePolars;
@@ -3374,6 +3382,9 @@ type
     function RadarLayout(AIndex: Integer): TTyRadar;
     { Calendar component AIndex as the last render laid it out, or nil. }
     function CalendarLayout(AIndex: Integer): TTyCalendar;
+    { Matrix component AIndex as the last render laid it out, or nil.
+      [Batch 145] }
+    function MatrixLayout(AIndex: Integer): TTyMatrix;
     { Polar component AIndex as the last render laid it out -- its centre,
       its two axes and both axis views -- or nil [Batch 111]. }
     function PolarCount: Integer;
@@ -3910,6 +3921,9 @@ begin
   FChordInks := nil;
   FRadarDims := nil;
   FreeStores;
+  { the matrices after the stores, which borrow their category lists
+    [Batch 145] }
+  FreeMatrices;
   FBindings := nil;
   if FIndex <> nil then FIndex.Clear;
   FreeAndNil(FBuild);
@@ -4856,6 +4870,9 @@ begin
       and not TySeriesTypeHasRenderer(FBindings[i].SeriesType) then
       FBuild.Note(Format(rsTyChartSeriesNoRenderer,
         [FBindings[i].SeriesIndex, FBindings[i].SeriesType]));
+  { THE MATRICES before the stores: a series on one parses its x and y by
+    the header trees' category lists [Batch 145] }
+  BuildMatrices;
   SetLength(FStores, Length(FBindings));
   { the previous build's sources go before the tables they borrow }
   FSources := nil;
@@ -4951,6 +4968,26 @@ begin
         absent. One float column per indicator, named the way the coordinate
         system names its dimensions, and the store's own default of "column j
         takes element j of the row" is exactly a radar row. }
+      { ON A MATRIX [Batch 145]: Matrix.getDimensionsInfo -- x and y are
+        ordinal on the header trees' own category lists (a collecting tree
+        takes the names as they come), then the value }
+      if (FBindings[i].MatrixIndex >= 0) and (FBindings[i].MatrixIndex <= High(FMatrices)) then
+      begin
+        FSeriesDataset[i] := -1;
+        SetLength(dims, 3);
+        for j := 0 to 2 do dims[j] := Default(TTySeriesDim);
+        dims[0].Name := TyMatrixXDim;
+        dims[0].Kind := ddtOrdinal;
+        dims[1].Name := TyMatrixYDim;
+        dims[1].Kind := ddtOrdinal;
+        dims[2].Name := TyMatrixValueDim;
+        dims[2].Kind := ddtFloat;
+        for j := 0 to 2 do st.AddDimension(dims[j].Name, dims[j].Kind);
+        st.UseOrdinalMeta(0, FMatrices[FBindings[i].MatrixIndex].Dims[0].Meta);
+        st.UseOrdinalMeta(1, FMatrices[FBindings[i].MatrixIndex].Dims[1].Meta);
+        TyFillSeriesStore(FOption, i, dims, st);
+        Continue;
+      end;
       if FBindings[i].RadarIndex >= 0 then
       begin
         radarSpec := TyRadarSpecOf(FOption, FBindings[i].RadarIndex);
@@ -5156,6 +5193,14 @@ begin
     FAxisMemory.RandomState^ := FTransformRandom;
     FTransformSeedTaken := True;
   end;
+  { A MATRIX TREE WITH NO DATA takes the names its series collected, in
+    series order (MatrixDim._initBySeriesData) [Batch 145] }
+  for i := 0 to High(FMatrices) do
+    if FMatrices[i] <> nil then
+    begin
+      FMatrices[i].Dims[0].TakeCollected;
+      FMatrices[i].Dims[1].TakeCollected;
+    end;
   { A DATASET WHOSE TRANSFORM FAILED has no table, and the series reading it
     draw nothing -- said here, once per dataset a series reached. Upstream
     throws out of setOption and draws nothing at all. [Batch 133] }
@@ -5907,6 +5952,8 @@ begin
   { BEFORE THE PIES: a pie on a calendar is laid out in a day's cell
     [Batch 72] }
   SolveCalendars(APPI);
+  { the matrices on the canvas too [Batch 145] }
+  SolveMatrices(APPI);
   SolvePies;
   SolveFunnels;
   SolveGauges(APPI);
@@ -10366,6 +10413,52 @@ begin
   Result.YearFontName := st.FontName;
 end;
 
+procedure TTyAdvanceChart.FreeMatrices;
+var i: Integer;
+begin
+  for i := 0 to High(FMatrices) do FreeAndNil(FMatrices[i]);
+  FMatrices := nil;
+end;
+
+{ THE MATRICES, one per component, from the option [Batch 145] }
+procedure TTyAdvanceChart.BuildMatrices;
+var i, n: Integer;
+begin
+  FreeMatrices;
+  n := 0;
+  if FOption <> nil then n := FOption.ComponentCount(TyMatrixCoordSysName);
+  SetLength(FMatrices, n);
+  for i := 0 to n - 1 do
+    FMatrices[i] := TTyMatrix.Create(FOption, i);
+end;
+
+{ each laid out on the whole canvas, as upstream's is: getLayoutRect
+  against the chart's width and height [Batch 145] }
+procedure TTyAdvanceChart.SolveMatrices(APPI: Integer);
+var i: Integer;
+begin
+  for i := 0 to High(FMatrices) do
+    if FMatrices[i] <> nil then FMatrices[i].Resize(FLastRect, APPI);
+end;
+
+{ THE MATRIX'S INK, from keys the chart already has: a cell border is an
+  axis split line, a divider and the outer border an axis line, a label an
+  axis label's ink. Upstream's tokens for them (borderTint, border,
+  axisLine, secondary) are the same neutrals. [Batch 145] }
+function TTyAdvanceChart.MatrixInk: TTyMatrixInk;
+var model: TTyStyleModel;
+begin
+  Result := Default(TTyMatrixInk);
+  model := ActiveController.Model;
+  Result.CellBorder := TTyChartColor(
+    model.ResolveStyle('TyAdvChartSplitLine', '', []).BorderColor);
+  Result.Divider := TTyChartColor(
+    model.ResolveStyle('TyAdvChartAxisLine', '', []).BorderColor);
+  Result.OuterBorder := Result.Divider;
+  Result.LabelColour := TTyChartColor(
+    model.ResolveStyle('TyAdvChartAxisLabel', '', []).TextColor);
+end;
+
 function TTyAdvanceChart.GraphLayout(ASeriesIndex: Integer;
   out ANodes: TTyGraphNodeArray; out AEdges: TTyGraphEdgeArray;
   out AFills: TTyChartColorArray): Boolean;
@@ -13970,6 +14063,13 @@ begin
   Result := nil;
   if (AIndex >= 0) and (AIndex <= High(FCalendars)) then
     Result := FCalendars[AIndex];
+end;
+
+function TTyAdvanceChart.MatrixLayout(AIndex: Integer): TTyMatrix;
+begin
+  Result := nil;
+  if (AIndex >= 0) and (AIndex <= High(FMatrices)) then
+    Result := FMatrices[AIndex];
 end;
 
 function TTyAdvanceChart.TitleCount: Integer;
@@ -18617,6 +18717,13 @@ begin
       Inc(drawn, TyBuildCalendar(FCalendars[i], CalendarInk, AMeasurer, APPI, list));
   if drawn > furniture then ViewDrew(cvCalendar);
   furniture := drawn;
+  { THE MATRICES' TOO, at their own z (-50 by default: under every series)
+    [Batch 145] }
+  if not ViewHidden(cvMatrix) then
+    for i := 0 to High(FMatrices) do
+      Inc(drawn, TyBuildMatrix(FMatrices[i], MatrixInk, RtGlobal, AMeasurer, APPI, list));
+  if drawn > furniture then ViewDrew(cvMatrix);
+  furniture := drawn;
   { nothing is large until the loop below says so [Batch 117] }
   SetLength(FLargeKinds, Length(FBindings));
   for i := 0 to High(FLargeKinds) do FLargeKinds[i] := lgkNone;
@@ -19004,6 +19111,29 @@ begin
             v.LabelValueDim := FStores[i].DimIndexOf(TyCalendarValueDim);
             Inc(drawn, TyBuildCalendarScatter(FBindings[i],
               FCalendars[FBindings[i].CalendarIndex], FStores[i], v, list));
+          end;
+        end;
+        Continue;
+      end;
+      { ON A MATRIX: a heatmap's cells and a scatter's symbols on the
+        matrix's cells [Batch 145] }
+      if FBindings[i].MatrixIndex >= 0 then
+      begin
+        if (FBindings[i].MatrixIndex <= High(FMatrices)) and (FStores[i] <> nil) then
+        begin
+          if FBindings[i].SeriesType = 'heatmap' then
+            Inc(drawn, TyBuildMatrixHeatmap(FBindings[i],
+              FMatrices[FBindings[i].MatrixIndex], FStores[i],
+              FStores[i].DimIndexOf(TyMatrixXDim), FStores[i].DimIndexOf(TyMatrixYDim), v, list))
+          else
+          begin
+            { NO DEFAULT WORDS: the defaulted label is the last coordinate
+              dimension a label can show, and on a matrix those are x and y
+              -- ordinal, so none (the value is not one of them) }
+            v.LabelValueDim := -1;
+            Inc(drawn, TyBuildMatrixScatter(FBindings[i],
+              FMatrices[FBindings[i].MatrixIndex], FStores[i],
+              FStores[i].DimIndexOf(TyMatrixXDim), FStores[i].DimIndexOf(TyMatrixYDim), v, list));
           end;
         end;
         Continue;
@@ -24010,6 +24140,8 @@ begin
     Result := 'single' + IntToStr(FBindings[ASlot].SingleIndex)
   else if FBindings[ASlot].CalendarIndex >= 0 then
     Result := 'calendar' + IntToStr(FBindings[ASlot].CalendarIndex)
+  else if FBindings[ASlot].MatrixIndex >= 0 then
+    Result := 'matrix' + IntToStr(FBindings[ASlot].MatrixIndex)
   else if FBindings[ASlot].RadarIndex >= 0 then
     Result := 'radar' + IntToStr(FBindings[ASlot].RadarIndex)
   { the parallel the series is on [Batch 128] }
@@ -27208,7 +27340,8 @@ begin
   { a parallel's containPoint [Batch 128] }
   if b.Parallel is TTyParallel then
     Exit(TyParallelContainJson(TTyParallel(b.Parallel), APoint));
-  if (b.CalendarIndex >= 0) or (b.RadarIndex >= 0) then Exit;
+  { a matrix series' containPoint is part two [Batch 145] }
+  if (b.CalendarIndex >= 0) or (b.RadarIndex >= 0) or (b.MatrixIndex >= 0) then Exit;
   pt := TyJsonPoint(APoint);
   if IsNan(pt.X) or IsNan(pt.Y) then Exit;
   if (b.SeriesType = TyGraphSeriesTypeName) and (slot <= High(FGraphs))

@@ -44,6 +44,7 @@ const
   { A series on a calendar: the system's name, and the two dimensions it
     gives a series -- Calendar.ts `dimensions = ['time', 'value']`. }
   TyCalendarSysName = 'calendar';
+  TyMatrixSysName = 'matrix';
   TyCalendarTimeDim = 'time';
   TyCalendarValueDim = 'value';
 
@@ -141,6 +142,12 @@ type
       nil until attached. }
     ParallelIndex: Integer;
     Parallel: TObject;
+    { WHICH MATRIX, or -1 [Batch 145, D12 MX1]: `coordinateSystem: 'matrix'`
+      by matrixIndex / matrixId (SINGLE_REFERRING, neither written is the
+      first). Resolved with HasAxes False, like a calendar; only the types
+      part one draws there resolve (a heatmap, a scatter, an
+      effectScatter) -- any other says the coordinate system is not built. }
+    MatrixIndex: Integer;
     { SWITCHED OFF BY A LEGEND. Set by the control after the stores are
       filled and before anything is counted; every solver downstream skips
       such a binding, so the axis extents, the stack groups and the bar
@@ -707,6 +714,7 @@ begin
     b.PolarIndex := -1;
     b.SingleIndex := -1;
     b.ParallelIndex := -1;
+    b.MatrixIndex := -1;
     Result[i] := b;
 
     node := ObjAt(AOption, 'series', i);
@@ -750,6 +758,7 @@ begin
     b.Single := nil;
     b.ParallelIndex := -1;
     b.Parallel := nil;
+    b.MatrixIndex := -1;
 
     if (sys = '') or (sys = 'none') then
     begin
@@ -790,6 +799,27 @@ begin
       b.CalendarIndex := TyResolveComponentRef(node, 'calendarIndex', 'calendarId',
         AOption.ComponentCount('calendar'), CalendarIds(AOption));
       if b.CalendarIndex < 0 then
+      begin
+        ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
+        Result[i] := b;
+        Continue;
+      end;
+      b.Resolved := True;
+      b.HasAxes := False;
+      Result[i] := b;
+      Continue;
+    end;
+
+    if (sys = TyMatrixSysName) and ((b.SeriesType = 'heatmap')
+      or (b.SeriesType = 'scatter') or (b.SeriesType = 'effectScatter')) then
+    begin
+      { A MATRIX [Batch 145, D12 MX1]: which one, by matrixIndex or
+        matrixId; its two dimensions are the matrix's header trees, not
+        axes }
+      b.MatrixIndex := TyResolveComponentRef(node, 'matrixIndex', 'matrixId',
+        AOption.ComponentCount(TyMatrixSysName), MainIds(AOption, TyMatrixSysName),
+        MainHoles(AOption, TyMatrixSysName));
+      if b.MatrixIndex < 0 then
       begin
         ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
         Result[i] := b;

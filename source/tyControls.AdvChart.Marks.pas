@@ -359,6 +359,16 @@ function TyBuildCalendarHeatmap(const ABinding: TTySeriesBinding;
   const ACal: ITyCoordSys; AStore: TTyDataStore; const AVisual: TTySeriesVisual;
   AList: TTyPaintList): Integer;
 
+{ A heatmap on a matrix: one cell per row, the matrix's dataToLayout rect
+  for its x and y (AColX / AColY) at z2 1, whatever its value. A scatter or
+  an effectScatter on one: the symbol at dataToPoint. [Batch 145] }
+function TyBuildMatrixHeatmap(const ABinding: TTySeriesBinding;
+  const AMatrix: ITyCoordSys; AStore: TTyDataStore; AColX, AColY: Integer;
+  const AVisual: TTySeriesVisual; AList: TTyPaintList): Integer;
+function TyBuildMatrixScatter(const ABinding: TTySeriesBinding;
+  const AMatrix: ITyCoordSys; AStore: TTyDataStore; AColX, AColY: Integer;
+  const AVisual: TTySeriesVisual; AList: TTyPaintList): Integer;
+
 { Append this series' marks to AList and answer how many were added.
 
   Zero is a legitimate answer and not a failure: a series whose type has no
@@ -2620,6 +2630,56 @@ begin
     el.Z2 := 1;
     AList.Add(el);
     Inc(Result);
+  end;
+end;
+
+{ A HEATMAP ON A MATRIX (HeatmapView's matrix branch): the rect is
+  dataToLayout([x, y]).rect, no widening and no inset; a row whose x names
+  no cell is skipped -- and one whose y names none too, where upstream
+  makes a rect with a y of NaN that paints nothing. The VALUE IS NOT
+  TESTED: a gap still has its cell, in whatever the visual left it. z2 1.
+  [Batch 145] }
+function TyBuildMatrixHeatmap(const ABinding: TTySeriesBinding;
+  const AMatrix: ITyCoordSys; AStore: TTyDataStore; AColX, AColY: Integer;
+  const AVisual: TTySeriesVisual; AList: TTyPaintList): Integer;
+var
+  i: Integer;
+  lay: TTyCoordLayout;
+  el: TTyChartElement;
+begin
+  Result := 0;
+  if (AStore = nil) or (AMatrix = nil) or (AList = nil) then Exit;
+  if (AColX < 0) or (AColY < 0) then Exit;
+  for i := 0 to AStore.Count - 1 do
+  begin
+    lay := AMatrix.DataToLayout([AStore.Get(AColX, i), AStore.Get(AColY, i)]);
+    if IsNan(lay.Rect.Left) or IsNan(lay.Rect.Top) then Continue;
+    el := HeatCell(ABinding, AStore, AVisual, i, lay.Rect);
+    el.Z2 := 1;
+    AList.Add(el);
+    Inc(Result);
+  end;
+end;
+
+{ A SCATTER ON A MATRIX: the symbol at the centre of the row's cell
+  (layout/points.ts' dataToPoint); a point that is not a number is not
+  drawn. No clip: a matrix has no area to clip to. [Batch 145] }
+function TyBuildMatrixScatter(const ABinding: TTySeriesBinding;
+  const AMatrix: ITyCoordSys; AStore: TTyDataStore; AColX, AColY: Integer;
+  const AVisual: TTySeriesVisual; AList: TTyPaintList): Integer;
+var
+  i: Integer;
+  p: TTyPointF;
+begin
+  Result := 0;
+  if (AStore = nil) or (AMatrix = nil) or (AList = nil) then Exit;
+  if AVisual.Symbol.Kind = tsyNone then Exit;
+  if (AColX < 0) or (AColY < 0) then Exit;
+  for i := 0 to AStore.Count - 1 do
+  begin
+    p := AMatrix.DataToPoint([AStore.Get(AColX, i), AStore.Get(AColY, i)]);
+    if IsNan(p.X) or IsNan(p.Y) then Continue;
+    Inc(Result, AddScatterSymbol(ABinding, AStore, AVisual, i, p, AVisual.Symbol, AList));
   end;
 end;
 
