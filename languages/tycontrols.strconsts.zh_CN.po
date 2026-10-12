@@ -624,6 +624,10 @@ msgstr "撤销"
 msgid "More commands"
 msgstr "更多命令"
 
+#: tycontrols.strconsts.rsribbonmoregroups
+msgid "More groups"
+msgstr "更多分组"
+
 #: tycontrols.strconsts.rstyupdownalreadyassociated
 #, object-pascal-format
 msgid "\"%s\" is already associated with the up-down \"%s\"."

@@ -628,6 +628,10 @@ msgstr ""
 msgid "Cannot preview this file"
 msgstr ""
 
+#: tycontrols.strconsts.rsribbonmoregroups
+msgid "More groups"
+msgstr ""
+
 #: tycontrols.strconsts.rssmbackgroundimageneedsslice
 #, object-pascal-format
 msgid "background-image needs slice(): %s"

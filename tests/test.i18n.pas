@@ -16,6 +16,7 @@ type
     procedure TestTheShippedCataloguesCarryTheDateTimeNames;
     procedure TestTheExampleCataloguesCarryTheLoadSentinel;
     procedure TestEveryCatalogueBelongsToAUnitThatStillTranslates;
+    procedure TestNoUnitHoldsChineseTextInAStringLiteral;
   end;
 
 implementation
@@ -394,6 +395,137 @@ begin
     units.Free;
   end;
   AssertEquals('catalogues no unit translates any more:', '', stray);
+end;
+
+{ True when the UTF-8 bytes of S hold a CJK character: U+3000..U+9FFF (lead bytes E3..E9) or
+  a fullwidth form, U+FF00..U+FFEF (EF BC..EF BF). '…' (E2 80 A6) and '»' are not. }
+function HoldsCJK(const S: string): Boolean;
+var
+  i: Integer;
+begin
+  for i := 1 to Length(S) do
+  begin
+    if Ord(S[i]) in [$E3..$E9] then Exit(True);
+    if (Ord(S[i]) = $EF) and (i < Length(S)) and (Ord(S[i + 1]) in [$BC..$BF]) then
+      Exit(True);
+  end;
+  Result := False;
+end;
+
+{ The string literals of the unit at APath that hold CJK text, one 'unit:line: literal' a line.
+  Comments are left out: // to the end of the line, (* *), and { } -- which nest in FPC. }
+function ChineseLiterals(const APath: string): string;
+var
+  s, lit: string;
+  i, j, n, line, depth: Integer;
+  inParen: Boolean;
+begin
+  Result := '';
+  s := ReadFileToString(APath);
+  n := Length(s);
+  i := 1;
+  line := 1;
+  depth := 0;
+  inParen := False;
+  while i <= n do
+  begin
+    if s[i] = #10 then Inc(line);
+    if inParen then
+    begin
+      if (s[i] = '*') and (i < n) and (s[i + 1] = ')') then
+      begin
+        inParen := False;
+        Inc(i, 2);
+      end
+      else
+        Inc(i);
+      Continue;
+    end;
+    if depth > 0 then
+    begin
+      if s[i] = '{' then Inc(depth)
+      else if s[i] = '}' then Dec(depth);
+      Inc(i);
+      Continue;
+    end;
+    if s[i] = '{' then
+    begin
+      depth := 1;
+      Inc(i);
+      Continue;
+    end;
+    if (s[i] = '(') and (i < n) and (s[i + 1] = '*') then
+    begin
+      inParen := True;
+      Inc(i, 2);
+      Continue;
+    end;
+    if (s[i] = '/') and (i < n) and (s[i + 1] = '/') then
+    begin
+      while (i <= n) and (s[i] <> #10) do Inc(i);   { the #10 is counted on the next pass }
+      Continue;
+    end;
+    if s[i] = '''' then
+    begin
+      j := i + 1;
+      while (j <= n) and (s[j] <> #10) do
+      begin
+        if s[j] = '''' then
+        begin
+          if (j < n) and (s[j + 1] = '''') then
+          begin
+            Inc(j, 2);
+            Continue;
+          end;
+          Break;
+        end;
+        Inc(j);
+      end;
+      lit := Copy(s, i, j - i + 1);
+      if HoldsCJK(lit) then
+        Result := Result + ExtractFileName(APath) + ':' + IntToStr(line) + ': ' + lit
+          + LineEnding;
+      i := j + 1;
+      Continue;
+    end;
+    Inc(i);
+  end;
+end;
+
+{ #68. Text a user reads is a resourcestring, so a catalogue can translate it (CONTRIBUTING);
+  an error raised at a developer is English, as every other one in the library is. The value
+  list editor's "More…" colour row and its colour dialog's title, and the ribbon's overflow
+  hint, were Chinese literals -- an English application showed them in Chinese and no
+  catalogue could reach them -- and so were TTyTreeView's errors for mixing Items with the
+  virtual-tree API. This reads every unit under source/ for a string literal holding CJK
+  text, comments left out.
+  The theme units are left out: their literals are .tycss text, and the CJK in them sits in
+  the stylesheet's own comments, which nobody sees. }
+procedure TI18NTest.TestNoUnitHoldsChineseTextInAStringLiteral;
+var
+  files: TStringList;
+  i, scanned: Integer;
+  name, found: string;
+begin
+  files := FindAllFiles(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'source',
+    '*.pas', True);
+  try
+    found := '';
+    scanned := 0;
+    for i := 0 to files.Count - 1 do
+    begin
+      name := ExtractFileName(files[i]);
+      if SameText(name, 'tyControls.BuiltinThemeData.pas')
+        or SameText(name, 'tyControls.DefaultTheme.pas') then Continue;
+      Inc(scanned);
+      found := found + ChineseLiterals(files[i]);
+    end;
+    AssertTrue('the scan read the library (' + IntToStr(scanned) + ' units)', scanned > 100);
+    AssertEquals('Chinese text in a string literal -- a resourcestring if a user reads it, '
+      + 'English if it is an error for a developer:' + LineEnding + found, '', found);
+  finally
+    files.Free;
+  end;
 end;
 
 initialization

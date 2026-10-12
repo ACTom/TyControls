@@ -3321,9 +3321,11 @@ procedure TTyTreeView.ItemModeConflict(const AWhat: string);
 var
   msg: string;
 begin
-  msg := Format('TTyTreeView "%s": Items 与 %s 不能同时使用。'
-    + 'Items 非空时节点的标题与结构由条目集合拥有;%s 属于虚拟模式。'
-    + '二选一:清空 Items 走虚拟模式,或者移除 %s 走条目模式。',
+  { #68: English, as every other error the library raises at a developer is. }
+  msg := Format('TTyTreeView "%s": Items and %s cannot be used together. '
+    + 'While Items is not empty, the item collection owns the nodes'' captions and '
+    + 'structure; %s belongs to the virtual mode. Choose one: clear Items to use the '
+    + 'virtual mode, or remove %s to use the item mode.',
     [Name, AWhat, AWhat, AWhat]);
   if csLoading in ComponentState then
   begin
@@ -3445,8 +3447,9 @@ begin
     这一条要排在其它冲突之前:对这种后代来说,"Items 根本用不了"比
     "Items 和 OnGetText 撞了"更接近真正的原因。 }
   if not SupportsItemModel then
-    raise ETyTreeItemMode.CreateFmt('%s "%s" 自己拥有节点数据(它覆写了 DoGetText '
-      + '并自行建树),不支持 Items 条目模型。请清空 Items,用它自己的数据源属性。',
+    raise ETyTreeItemMode.CreateFmt('%s "%s" owns its node data (it overrides DoGetText '
+      + 'and builds the tree itself), so it does not support the Items model. Clear '
+      + 'Items and use its own data-source properties.',
       [ClassName, Name]);
   { 进条目模式前先把两边的冲突问清楚 —— 事件是在 Items 之前挂上的那一半。 }
   if Assigned(FOnGetText) then ItemModeConflict('OnGetText');
@@ -3621,7 +3624,7 @@ var
   p: PTyTreeNode;
 begin
   { 自己的名字报自己的错 —— 转手给 SetChildCount 会让消息指向调用者没写的成员。 }
-  GuardVirtualStructure('AddChild(PTyTreeNode)（条目模式请用 Items.AddChild）');
+  GuardVirtualStructure('AddChild(PTyTreeNode) (in item mode, use Items.AddChild)');
   if AParent = nil then p := FRoot else p := AParent;
   SetChildCount(p, p^.ChildCount + 1);
   Result := p^.LastChild;
@@ -3638,7 +3641,7 @@ var
 begin
   { 条目模式:删节点要走 Items.DeleteItem,否则条目还在、节点没了,
     下标槽从此错行。 }
-  GuardVirtualStructure('DeleteNode（条目模式请用 Items.DeleteItem）');
+  GuardVirtualStructure('DeleteNode (in item mode, use Items.DeleteItem)');
   if (Node = nil) or (Node = FRoot) then Exit;
 
   { ③e E4: if the active edit lives in the subtree about to be freed (the node

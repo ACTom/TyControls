@@ -254,6 +254,11 @@ resourcestring
     application showed a Chinese tooltip and no catalogue could reach it. }
   rsToolBarMoreCommands = 'More commands';
 
+  { --- TTyRibbon ---------------------------------------------------------------
+    Hint on the overflow button a ribbon page shows when its groups do not fit. It was a
+    hardcoded Chinese literal, like the toolbar's above (#68). }
+  rsRibbonMoreGroups = 'More groups';
+
   { --- Text-edit context menu -----------------------------------------------
     The default right-click menu shared by TTyEdit and TTyMemo (tyControls.TextMenu).
     User-facing menu captions, so translated. No '&' mnemonic markers -- the other

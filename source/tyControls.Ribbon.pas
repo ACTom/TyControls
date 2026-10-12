@@ -306,6 +306,9 @@ function TyRibbonVisibleGroupCount(const AWidths: array of Integer; AAvailPx: In
 
 implementation
 
+uses
+  tyControls.StrConsts;
+
 // ---------------------------------------------------------------------------
 // Pure geometry
 // ---------------------------------------------------------------------------
@@ -1259,7 +1262,7 @@ begin
     忽有忽无的 tab stop 比没有更难用。TTyButton 默认是 tab stop,这里显式关掉。 }
   FMoreBtn.TabStop := False;
   FMoreBtn.Caption := '»';
-  FMoreBtn.Hint := '更多分组';
+  FMoreBtn.Hint := rsRibbonMoreGroups;   { #68: was a Chinese literal no catalogue could reach }
   FMoreBtn.ShowHint := True;
   FMoreBtn.OnClick := @MoreClick;
 end;
