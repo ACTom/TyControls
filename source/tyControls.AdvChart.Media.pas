@@ -38,6 +38,11 @@ unit tyControls.AdvChart.Media;
   has units, and the default when it has one -- never merges them; a
   notMerge starts a new manager.
 
+  THE TIMELINE'S FRAMES [Batch 129]: the root's `options` list, read
+  whatever the form (with a `baseOption` too), each frame preprocessed as
+  the base is; a merge replaces the list only when it brings a non-empty
+  one. Which frame is merged, and when, is the option's (Frame).
+
   LCL-free: SysUtils, Math, fcl-json and the data unit's Number(). }
 interface
 uses SysUtils, Math, fpjson;
@@ -57,6 +62,9 @@ type
     Units: TTyMediaUnits;
     { owned; nil: none }
     DefaultOpt: TJSONObject;
+    { the timeline's frames, `options` in order: owned, nil for an entry
+      that is no object [Batch 129] }
+    Frames: array of TJSONObject;
   end;
 
   { one option getMediaOption hands over: a clone the caller frees }
@@ -92,6 +100,10 @@ type
     function UnitQuery(AIndex: Integer): TJSONData;
     function UnitOption(AIndex: Integer): TJSONObject;
     function HasDefault: Boolean;
+    { the timeline's frames [Batch 129]: how many, and frame AIndex (nil for
+      none there -- past the end, or no object) }
+    function FrameCount: Integer;
+    function Frame(AIndex: Integer): TJSONObject;
     property Current: TTyMediaIndices read FCurrent;
   end;
 
@@ -113,7 +125,7 @@ function TyMediaJsNumber(AData: TJSONData): Double;
 implementation
 
 uses tyControls.AdvChart.Data, tyControls.AdvChart.OptionMerge,
-  tyControls.AdvChart.Graphic;
+  tyControls.AdvChart.Graphic, tyControls.AdvChart.Timeline;
 
 function JsTruthy(AData: TJSONData): Boolean;
 var v: Double;
@@ -143,6 +155,8 @@ begin
   end;
   ASet.Units := nil;
   FreeAndNil(ASet.DefaultOpt);
+  for i := 0 to High(ASet.Frames) do ASet.Frames[i].Free;
+  ASet.Frames := nil;
 end;
 
 { ==================== parseRawOption ==================== }
@@ -185,8 +199,10 @@ begin
       if JsTruthy(q) then
       begin
         opt := OptionObject(o);
-        { the preprocessors run over a unit with a query [Batch 122] }
+        { the preprocessors run over a unit with a query [Batch 122] -- the
+          timeline's too [Batch 129] }
         TyGraphicPreprocess(opt);
+        TyTimelinePreprocess(opt);
         if TyOptionHasDuplicateId(opt) then
         begin
           opt.Free;
@@ -205,6 +221,26 @@ begin
         else ASet.DefaultOpt := opt;
       end;
     end;
+
+  { ---- the timeline's frames: the root's `options`, whatever the form
+    [Batch 129] ---- }
+  d := ARaw.Find('options');
+  if JsTruthy(d) and (d is TJSONArray) then
+  begin
+    SetLength(ASet.Frames, d.Count);
+    for i := 0 to d.Count - 1 do
+    begin
+      if d.Items[i] is TJSONObject then
+      begin
+        ASet.Frames[i] := TJSONObject(d.Items[i].Clone);
+        { doPreprocess over each frame }
+        TyGraphicPreprocess(ASet.Frames[i]);
+        TyTimelinePreprocess(ASet.Frames[i]);
+      end
+      else
+        ASet.Frames[i] := nil;
+    end;
+  end;
 
   { ---- the base ---- }
   if JsTruthy(declared) then
@@ -230,8 +266,10 @@ begin
     if ARaw.Find('options') <> nil then ARaw.Delete('options');
     if ARaw.Find('media') <> nil then ARaw.Delete('media');
   end;
-  { THE PREPROCESSORS over the base: the graphic component's [Batch 122] }
+  { THE PREPROCESSORS over the base: the graphic component's [Batch 122],
+    the timeline's [Batch 129] }
   TyGraphicPreprocess(ARaw);
+  TyTimelinePreprocess(ARaw);
 end;
 
 { ==================== applyMediaQuery ==================== }
@@ -418,6 +456,15 @@ begin
     FSet.DefaultOpt := ASet.DefaultOpt;
     ASet.DefaultOpt := nil;
   end;
+  { the frames likewise: only a non-empty list substitutes [Batch 129] }
+  if Length(ASet.Frames) > 0 then
+  begin
+    keep := Default(TTyMediaSet);
+    keep.Frames := FSet.Frames;
+    TyMediaSetFree(keep);
+    FSet.Frames := ASet.Frames;
+    ASet.Frames := nil;
+  end;
   TyMediaSetFree(ASet);
 end;
 
@@ -466,6 +513,17 @@ end;
 function TTyMediaManager.HasDefault: Boolean;
 begin
   Result := FSet.DefaultOpt <> nil;
+end;
+
+function TTyMediaManager.FrameCount: Integer;
+begin
+  Result := Length(FSet.Frames);
+end;
+
+function TTyMediaManager.Frame(AIndex: Integer): TJSONObject;
+begin
+  if (AIndex < 0) or (AIndex > High(FSet.Frames)) then Exit(nil);
+  Result := FSet.Frames[AIndex];
 end;
 
 end.

@@ -9028,10 +9028,10 @@ Q7 在 3.1 承诺了「入场动画和状态过渡」。AN2–AN4 把前一半�
 
 ### 推迟与偏差
 
-- **A11**：replaceMerge（只按 id 映射、未匹配的已有模型被移除留下空洞、`brandNew` 强制新视图）、整份选项的 replaceAll、空洞在系列下标、图例数据、dataZoom 目标里的跳过；`SetOption` 的选项对象形式（`{notMerge, replaceMerge, lazyUpdate, silent, transition}`）。接口已留好：keys 的列表、映射函数的模式参数、报告里每个位置的命运。（第 97 批：已做，见 §132；整份选项的 replaceAll 只在 timeline / media 里用，端口没有它们，它等同 notMerge，不单独提供。）**[第 107 批：media 已做（§142），但它走的是 `resetOption('media')`——一项一次普通合并，不是整份的 replaceAll；`resetOption('recreate')` 只有 setTheme 与工具箱的 restore 用，仍不提供。]**
+- **A11**：replaceMerge（只按 id 映射、未匹配的已有模型被移除留下空洞、`brandNew` 强制新视图）、整份选项的 replaceAll、空洞在系列下标、图例数据、dataZoom 目标里的跳过；`SetOption` 的选项对象形式（`{notMerge, replaceMerge, lazyUpdate, silent, transition}`）。接口已留好：keys 的列表、映射函数的模式参数、报告里每个位置的命运。（第 97 批：已做，见 §132；整份选项的 replaceAll 只在 timeline / media 里用，端口没有它们，它等同 notMerge，不单独提供。）**[第 107 批：media 已做（§142），但它走的是 `resetOption('media')`——一项一次普通合并，不是整份的 replaceAll；`resetOption('recreate')` 只有 setTheme 与工具箱的 restore 用，仍不提供。]** **[第 129 批：timeline 也已做（§165），走 `resetOption('timeline')`——一帧一次普通合并，带时间线自己的 replaceMerge；仍不是整份的 replaceAll。]**
 - **notMerge 下系列的 null 项不压缩**：上游 initBase 给 series 预置了列表，所以 `[bar, null, line]` 的 line 是系列 1（虚名 `series\u00001`）；端口的 notMerge 树照写的下标，line 是系列 2。只影响写了 null 系列项的选项，合并时按端口的下标找。（第 97 批：已修正，notMerge 与第一次 setOption 都压缩系列，见 §132。）
-- 盒子写回只做端口实际布局的那几种；calendar（与 cellSize 联动的二次合并）、singleAxis、geo、parallel、matrix、timeline、thumbnail、slider dataZoom、map 系列、grid 的 `outerBounds` 只做深合并——合并没有碰盒子键时与上游相同。
-- 预处理器只模拟了它们建的模型（axisPointer、grid）；markPoint/markLine/markArea 的根组件、axisPointer 的 `link` 归一、graphic 的包装、backwardCompat 的旧写法转换、timeline / media / baseOption 都不做（notMerge 下也不做）。**[第 107 批：media 与 baseOption 已做，见 §142——预处理器跑基础选项与列表里的项，不跑默认项；timeline 的各帧（`options`）仍不做，只按 `parseRawOption` 从根上拿掉。]** **[第 122 批：graphic 的包装已做——`TyParseRawOption` 对基础选项与带 query 的 media 项跑 graphic 的预处理器，见 §157。]**
+- 盒子写回只做端口实际布局的那几种；calendar（与 cellSize 联动的二次合并）、singleAxis、geo、parallel、matrix、timeline、thumbnail、slider dataZoom、map 系列、grid 的 `outerBounds` 只做深合并——合并没有碰盒子键时与上游相同。 **[第 129 批：timeline 的盒子也照 `mergeLayoutParam` 写回了（`BoxOf` 的缺省：left / right `20%`、bottom 0、height 40，width / top 为 null），见 §165。]**
+- 预处理器只模拟了它们建的模型（axisPointer、grid）；markPoint/markLine/markArea 的根组件、axisPointer 的 `link` 归一、graphic 的包装、backwardCompat 的旧写法转换、timeline / media / baseOption 都不做（notMerge 下也不做）。**[第 107 批：media 与 baseOption 已做，见 §142——预处理器跑基础选项与列表里的项，不跑默认项；timeline 的各帧（`options`）仍不做，只按 `parseRawOption` 从根上拿掉。]** **[第 122 批：graphic 的包装已做——`TyParseRawOption` 对基础选项与带 query 的 media 项跑 graphic 的预处理器，见 §157。]** **[第 129 批：timeline 的各帧已做（§165）：根上的 `options` 不论哪种写法都读，每帧跑预处理器；时间线自己的预处理器（`compatibleEC2`）也跑在基础选项、带 query 的 media 项与各帧上。]**
 - `emphasis.label.show` 上游只在 init 时由 `label.show` 补（defaultEmphasis），合并改了 `label.show` 之后它保持 init 时的值；端口在读的时候从当前的 `label.show` 补。
 - 系列从 dataset 维度自动取的名字（autoSeriesName）不进 keys；合并时按名字找人用的是写过的名字或虚名，维度名变了以后与上游可能不同。
 - 选中：合并后留下来的系列保留选中模型，但 `selectedMode` 的改变和新数据里 `selected: true` 的补选（`_initSelectedMapFromData`）不重读。
@@ -9116,7 +9116,7 @@ AN2–AN4、AN3b 之后，同一个 Option 上的整体更新仍然一帧切过�
 - **brandNew 与视图**：新模型带 `__requireNewView`，`doPrepare` 里 `!requireNewView && viewMap[viewId]`——即使 viewId 相同也建新视图，读完即清，**只生效一次**。被 id 认领回来的模型照常合并、照常保留视图。
 - **init 忽略 replaceMerge**：`_resetOption` 在还没有 option 时走 `initBase`，它调 `_mergeOption(baseOption, null)`；notMerge 是新建一个 GlobalModel 再 init。所以第一次 setOption、notMerge 都不看 `replaceMerge`（探针：notMerge 带 `replaceMerge: ['series', 'title']`，`getOption` 里没有 title，系列也没有新视图的要求）。
 - **notMerge 压缩系列**：`initBase` 预置了 `{series: []}`，第一次 / notMerge 的系列是空列表上的 normalMerge——null、数字这类不是对象的项不占位置（`[bar, null, 5, line]` 的 line 是系列 1，虚名 `series\u00001`）。其余主类型第一次出现是 replaceAll，空洞保留（§130 已做）。
-- **replaceAll**：只在主类型第一次被访问时（§130 已做），以及 `resetOption('recreate')`——timeline / media 用，它就是对存着的原始选项重做一次 `initBase`。**[第 107 批：这里说错了。timeline 用 `resetOption('timeline')`、media 用 `resetOption('media')`，都是普通合并；`'recreate'` 的调用者是 setTheme 和工具箱的 restore（`Restore.ts`），见 §142。]**
+- **replaceAll**：只在主类型第一次被访问时（§130 已做），以及 `resetOption('recreate')`——timeline / media 用，它就是对存着的原始选项重做一次 `initBase`。**[第 107 批：这里说错了。timeline 用 `resetOption('timeline')`、media 用 `resetOption('media')`，都是普通合并；`'recreate'` 的调用者是 setTheme 和工具箱的 restore（`Restore.ts`），见 §142。]** **[第 129 批：timeline 的这条路已做，见 §165。]**
 - **空洞处处跳过**：`eachComponent`、`eachSeries`、`eachRawSeries` 都跳过 `undefined`；`getSeriesCount` 只数有模型的；`componentIndex` 是位置下标。于是：
   - 系列颜色按 `eachSeries` 的顺序从调色板取：A、C 之间的 B 被移除后，C 取第二个颜色；
   - 图例的默认数据只来自剩下的系列；被移除的图例不过滤任何系列（被它点掉的 B 重新显示）；
@@ -9181,7 +9181,7 @@ AN2–AN4、AN3b 之后，同一个 Option 上的整体更新仍然一帧切过�
 - **系列落在空洞轴上**：上游抛错；端口这个系列解析失败、不画，给诊断，其余照画。
 - **`updated` 只发给为它注册的处理器**：通配的 `OnChartEvent` 不算（和 legacy 的选中事件一样），否则每次派发都多一个事件。resize、换主题不发（上游会发）；派发的 `silent` 选项端口没有（`DispatchAction` 只接受载荷）；lazy 更新期间排队的动作端口也没有。dataZoom、roam、树的动作不带走等着的 lazy 更新（上游 dataZoom 等会带走）——只影响 lazy 之后、渲染之前派发这些动作时 `updated` 的个数。
 - **lazy 的“下一帧”是下一次布局的渲染**：端口的构建本来就在渲染时做，lazy 与否只差 `updated` 的时机和旧视图键的取法；查询类接口（`SeriesStore`、命中测试）一直读的是上一次渲染的结果，这一点 lazy 与否都一样，和上游同步 setOption 之后立刻就能查不同（§130 之前就是如此）。
-- **整份选项的 replaceAll**（`resetOption('recreate')`）不单独提供：它只服务 timeline / media，端口没有这两样；没有它们时它就是 notMerge。**[第 107 批：理由不成立——media 已做（§142），而且 media 与 timeline 都不走 `'recreate'`；它服务的是 setTheme 与工具箱的 restore（C16），结论（不单独提供）暂时不变。]**
+- **整份选项的 replaceAll**（`resetOption('recreate')`）不单独提供：它只服务 timeline / media，端口没有这两样；没有它们时它就是 notMerge。**[第 107 批：理由不成立——media 已做（§142），而且 media 与 timeline 都不走 `'recreate'`；它服务的是 setTheme 与工具箱的 restore（C16），结论（不单独提供）暂时不变。]** **[第 129 批：timeline 已做（§165），也不走 `'recreate'`；结论仍不变。]**
 - **内部组件**（`'\0_ec_\0'` 开头的 id，工具箱的 dataZoom）：上游在两种模式下都不让它们参与映射；端口的工具箱 dataZoom 不进 keys，不涉及。
 - **[第 99 批：被替换的轴是新视图，叶子当场出现、不过渡；留下的轴照常过渡，见 §134。]** **被移除的系列当帧消失**，和上游一样没有离场动画；被移除的组件（轴、图例、标题）同样直接消失。
 - 空洞网格仍按默认盒子算了一个外框（只是不收轴、不画），`Build.Grid(i)` 的下标因此与组件下标一致；上游那里没有网格。
@@ -10077,7 +10077,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **会抛错的查询**：上游对非空的数组 / 字符串查询、`length > 0` 的对象查询在 `getMediaOption` 里抛 TypeError（setOption 中途，模型已合并一半）；端口当作不成立。
 - **重复 id 的 media 项**：上游在合并它时断言抛错；端口读的时候就丢掉，`MediaIndices` 按留下的项编号。
 - **`option` 为真但不是对象**：上游把原始值交给 `_mergeOption`（什么都不写，但仍占默认项的位置、仍是一次合并；列表项还会让预处理器碰原始值）；端口当 `{}`。不是对象的 `baseOption`（上游写 `timeline` 时在严格模式下抛错）当空对象。
-- **timeline**：`options` 只按 `parseRawOption` 从根上拿掉，时间轴的各帧选项（C21）不读；根上的 `timeline` 照规则补进 `baseOption`，组件本身端口不画。
+- **timeline**：`options` 只按 `parseRawOption` 从根上拿掉，时间轴的各帧选项（C21）不读；根上的 `timeline` 照规则补进 `baseOption`，组件本身端口不画。 **[第 129 批：已做，见 §165——各帧读进管理器、每次 setOption 在基础选项之后、media 之前合并当前帧，`timelineChange` 只合并当前帧（不再合并 media），组件画出来、可点、可拖、可播放。]**
 - **尺寸来源**：上游是容器的 CSS 尺寸；端口是客户区按字体 PPI 折算的逻辑 px。`RenderTo` 用别的矩形渲染（导出）不改变查询的答案，和上游导出不改尺寸一样。
 - **何时重新判定**：上游只在宿主调 `resize()` 时；端口在每次 `Resize`（LCL 改变边界）和 `Loaded` 时——相当于宿主总在尺寸变化后调 `resize()`。只改 PPI 而逻辑尺寸不变时什么都不合并。
 - **resize 的其余部分**：`updated` 事件（§132 已记）、`restoreData` 不做。setOption 之后、渲染之前就 resize 的，端口仍按那次 setOption 的更新补间（布防在下一次布局时才消费），上游 setOption 已经同步渲染、随后的 resize 以 0 时长跳到终态。
@@ -11943,3 +11943,85 @@ custom 落地时，`test.advchart.marks`、`test.advchart.diagnose`、`test.advc
 - `source/tyControls.AdvChart.Export.pas`：`cvBrush`。
 - `themes/light.tycss`、`source/tyControls.DefaultTheme.pas`、`source/tyControls.Css.Catalog.pas`（生成）。
 - `tools/advchart-oracle/brush-cover.js`、`tests/fixtures/advchart-brush-cover.json`、`tests/test.advchart.brushcover.pas`（新，注册在 `tytests.lpr`）。
+
+## 165. Tier 2 第一百二十九批：timeline 时间线（C21，2026-10-13）
+
+路线图 C21：timeline——组件视图、播放 / 暂停 / 单步计时、`options` 数组合并到 baseOption、autoPlay / loop / rewind、checkpoint 滑动。以前端口对时间线只做了 B12 的那一半：`parseRawOption` 从根上拿掉 `options`，各帧一律不读；`timeline` 组件只是选项合并认得的一个主类型，不画、不响应、`timelineChange` 动作不认（§142 的推迟）。这一批对着 6.1 的 `component/timeline/`（`TimelineModel.ts` 的 `defaultOption`、`_initData`、`setCurrentIndex`、`isIndexMax`、`setPlayState`；`SliderTimelineModel.ts` 的缺省；`SliderTimelineView.ts` 整个：`render`、`_layout`、`_position`、`_createAxis`、四个 `_render*`、`_renderAxisLabel`、`_handlePlayClick`、`_handlePointerDrag` / `_handlePointerDragend`、`_pointerChangeTimeline`、`_doPlayStop`、`_toAxisCoord`、`_findNearestTick`、`_changeTimeline`、`_updateTicksStatus`、`makeControlIcon`、`giveSymbol`、`pointerMoveTo`；`timelineAction.ts`；`preprocessor.ts`；`TimelineAxis.ts`）、`model/OptionManager.ts`（`setOption`、`mountOption`、`getTimelineOption`、`parseRawOption`）、`model/Global.ts` 的 `_resetOption`、`core/echarts.ts`（`dispatchAction` 的挂起动作、`doDispatchAction` 的事件对象、`renderComponents` 的 `clearStates` / `updateZ` / `updateStates`、`applyChangedStates`）、`util/states.ts`（`enableHoverEmphasis`、`elementStateProxy`、`createEmphasisDefaultState`）、`coord/axisTickLabelBuilder.ts`（`makeCategoryLabels`、`calculateCategoryInterval`、`makeRealNumberLabels`）、`coord/axisHelper.ts`（`createScaleByModel`、`makeLabelFormatter`）、`coord/axisNiceTicks.ts`、`scale/helper.ts`（`ordinalScaleCreateTicks`、`intervalScaleEnsureValidExtent`）、`scale/Time.ts`（`calcNiceForTimeScale`、`parse`）、`util/time.ts` 的 `leveledFormat`、`util/symbol.ts` 的 `createSymbol`、`util/graphic.ts` 的 `createIcon` / `makePath`、`util/layout.ts` 的 `mergeLayoutParam` / `getLayoutRect`、`label/labelStyle.ts`，以及 zrender 的 `Draggable`、`Handler`（`findHover`、click 规则、#6198 的再找）、`Element.useStates` / `_mergeStates`、`Text` 的 `DEFAULT_TEXT_ANIMATION_PROPS`、`Path.getBoundingRect` / `getLineScale`、`Group.getBoundingRect` 逐行核过，在真 dist 上跑基准。§130、§142 的相关处在原处标注。
+
+### 上游的做法
+
+- **预处理器**（`compatibleEC2`，跑在基础选项、带 query 的 media 项和每一帧上）：`type` 为 `'number'` / `'time'` 的改写成 `axisType` 并删掉 `type`；`transferItem` 给时间线自己和**每个是对象的数据项**都补 `itemStyle: {emphasis: {}}`（没有就建），写了 `label` 的把它自己的键（除 `normal` / `emphasis`）抄进 `label.normal`（已有的不覆盖），`itemStyle.emphasis.label` 搬到 `label.emphasis`——没写 `label` 时 `label` 是个临时对象，搬过去的就丢了，但 `itemStyle.emphasis.label` 照样删；`controlPosition` 有就搬进 `controlStyle.position`（已有的不动），为 `'none'` 且没写 `show` 的变成 `show: false`、删掉 position，最后删 `controlPosition`；有 `name` 没 `value` 的数据项拿 name 当 value。这些写入都留在选项里，`getOption` 看得见。
+- **各帧**：`parseRawOption` 不论哪种写法都从根上读 `options`，每帧跑一遍预处理器；`null` 帧在预处理器里抛 TypeError。合并模式的 setOption 只在新列表非空时整个替换，notMerge 是新管理器。每次 setOption 的 `_resetOption` 依次合并：基础选项、**第一个时间线模型 `currentIndex` 处的那一帧**（`getTimelineOption`，克隆；此时 currentIndex 是模型选项原样，不归一，越界或不是数组下标就没有帧）、成立的 media 项；帧的合并带这次 setOption 的 replaceMerge。
+- **模型**：`mergeDefaultAndTheme`——默认值在下（`axisType: 'time'`、`currentIndex: 0`、`loop: true`、`playInterval: 2000`、`realtime: true`、`left/right: '20%'`、`bottom: 0`、`height: 40`、`padding: 15`、`symbolSize: 12`、checkpoint 15、按钮 24 / 12、prev / next 18、`lineStyle.width: 2`……颜色是 token），盒子再走一遍 `mergeLayoutParam`。`_initData`：category 的项值是下标、名字是 `convertOptionIdName(值, '')`；time / value 的是原值（time 维 `parseDate`，number 维 `Number()`）。`setCurrentIndex`：loop 时 `(i % n + n) % n`，否则夹到 `[0, n-1]`，写回 `option.currentIndex`；`setPlayState` 写 `option.autoPlay`。
+- **两个动作**：`timelineChange`（`prepareAndUpdate`）——有 currentIndex 就 `setCurrentIndex`，之后**不循环、已到末项、正在播放**则 `setPlayState(false)` 并 `api.dispatchAction(timelinePlayChange{playState: false, from})`——在派发周期里，这个动作挂起，等这一个做完才做；然后 `resetOption('timeline', {replaceMerge: 时间线自己的 replaceMerge})`（没有时间线模型时这里读 `null.get` 抛错）：`restoreData` 后只合并当前帧，**不重新合并 media**；事件对象是 `defaults({currentIndex: 模型的}, payload)`，类型改成 `timelinechanged`。`timelinePlayChange`（`update`）——`playState` 不为 null 就写 `!!playState`；事件是载荷的拷贝、类型 `timelineplaychanged`。两个事件按动作先后，最后一个 `updated`。
+- **布局**（`_layout`）：视图矩形是 `getLayoutRect(盒子, 整个画布, padding)`；标签位置 `'auto'` 横向看矩形中线在不在画布上半（上半 `'-'`），纵向看在不在左半（左半 `'+'`）；`'top'/'bottom'`（横向）、`'left'/'right'`（纵向）映射成 `'-'/'+'`，别的词是 undefined；数字原样。对齐：横向 `center`、基线按正负 top / bottom；纵向左右、基线 middle；`label.align` / `verticalAlign` / `baseline` 写了就用写的。按钮：`controlStyle.show` 才有尺寸与间隔；`'left'/'bottom'` 时播放、上一个在头、下一个在尾，其余位置播放在尾、上一个在头、下一个紧挨播放；剩下的是轴的范围，`inverse` 时倒过来。
+- **轴**（`_createAxis`）：`createScaleByModel` 按 `axisType` 建 ordinal / time / interval 刻度，`getTicks` 被换成数据值本身，范围是数据的范围，`scaleCalcNiceDirectly` 两端固定——time 单点时各扩一天，value 单点时按 `intervalScaleEnsureValidExtent` 扩；`dataToCoord` 是 `normalize`（两端相等是 0.5）再 `linearMap` 到轴的范围（端点直接给端点），time 先 `Math.round`。
+- **元素**：
+  - 轴线是 `Line`，`extend({lineCap: 'round'}, lineStyle)`、`silent`、z2 1；进度线紧跟着，`x2` 是 checkpoint 现在的 x（没有 checkpoint 时是起点），样式 `defaults({lineCap: 'round', lineWidth: 轴线的}, progress.lineStyle)`——轴线没写宽度时读到原型的 1。`lineStyle.show` 为假两条都没有。
+  - 刻度点 `giveSymbol`：`createSymbol(symbol, -1, -1, 2, 2, color)`（`empty` 前缀给描边、白底、线宽 2，`'line'` 给描边，其余给填充；`path://` 按 cover 铺满），`strokeNoScale`，项样式（去掉颜色）盖上去，`rectHover`、z2 100、缩放是尺寸的一半，`symbolOffset` 按 `(x || 0) + 偏移`，`symbolRotate` 转成弧度，随后 `updateTransform`（父组的变换还是 null）。**刻度的值被当成数据下标**：`getItemModel(tick.value)`、`onclick` 交 `_changeTimeline(tick.value)`——category 上值就是下标，time / value 上是时间戳或数值，点一下就把它当下标送去 `timelineChange`（loop 时取模）。
+  - 按钮：`createIcon` 把 `path://` 居中按比例放进 `[0, -size/2, size, size]`（size 是 `xxxBtnSize`，百分数按 itemSize），原点 `(itemSize/2, 0)`，播放按钮转 `-rotation`（竖着时摆正），控件样式，`rectHover`。
+  - checkpoint：**从这次渲染到下次渲染是同一个元素**，换了组也挂回去；第一次建时立刻放到当前项（`pointerMoveTo` 无动画），之后每次 `setColor` 再 `pointerMoveTo`：拖动中什么都不做；时间线自己的 `checkpointStyle.animation` 为真时 `stopAnimation(null, true)`（跳到上一段的终点）再 `animateTo({x, y: 0})` 300 ms quinticInOut，进度线的 `x2` 同时 `animateTo`；为假时直接设。
+  - 标签：`getViewLabels`——category 的间隔是 `'auto'` 时 `calculateCategoryInterval`（标签按时间线 label 的字体量，乘 1.3、不少于 7，横 0° / 竖 90° 减去 `rotate`），`ordinalScaleCreateTicks` 补上的两端（`offInterval`）**跳过**；time 是 `leveledFormat`——字符串是统一模板，否则按值自己的单位取字典的第一级；value 是 `getPrecision` 位的 `toFixed` 加千分位；字符串模板替换第一个 `{value}`。文字 `createTextStyle(项的 label)` 加上 `{text, align, verticalAlign}`，x 是刻度位置，转 `labelRotation - rotation`，`silent: false`。
+  - `_position`：竖着时先把视图矩形绕它的左下角转回横向；主组、标签组的包围盒（组里各子元素的盒子经各自的局部变换求并）对着视图矩形：x 都靠左边，`'+'` 时主组贴上边、标签组贴下边，`'-'` 反之，数字时标签组在主组下方那么多像素；两组都转 `rotation`，原点设成视图矩形左上角。
+- **状态**：渲染里 `_updateTicksStatus`——第 i 个刻度在 `i < currentIndex` 时、标签在 `值 <= currentIndex` 时进 `'progress'`（time / value 上标签比的是时间戳，永远不进）。刻度、标签、按钮 `enableHoverEmphasis`：mouseover 只置 hoverState，下一帧 `applyChangedStates` 用 `[progress, emphasis]`；emphasis 的代理把 z2 抬 10（不是 Path 的标签也抬）；组件动画开着（时间线或根的 `animation`）且 `stateAnimation.duration > 0` 时状态切换有 300 ms cubicOut 的过渡——文字的填充色也过渡（`DEFAULT_TEXT_ANIMATION_PROPS`）。
+- **交互**：Handler 的 click 要求按下与抬起同一元素、相距不过 4 px；标签由 TSpan 命中、事件冒泡到 Text；checkpoint 是 `draggable`：Draggable 在 mousemove 里调 `drift`——`_handlePointerDrag` 清计时器、用指针的绝对位置经主组局部变换的逆求轴坐标、夹到轴上、checkpoint 与进度线直接放过去、找最近的刻度，`realtime` 且变了就派发；dragend 时（`dragging` 先置假）无论变没变都派发，这次渲染里 checkpoint 才滑向刻度。播放按钮先清计时器再派发 `timelinePlayChange`。渲染换掉了悬停的元素时，下一次 mousemove 在原处找回新的元素，不发 mouseover，它不进 emphasis。
+- **计时**：每次渲染末尾 `_doPlayStop`：清掉计时器，播放中就 `setTimeout(playInterval)`；到点 `_changeTimeline(currentIndex ± 1)`（`rewind` 为减）。所以任何一次全量更新都会让计时从头算。
+- **系列**：`prepareAndUpdate` 和 `update` 都是全量更新，系列从**当前画面上的值**开始更新动画；没有帧可合并时也一样。不循环播到末项时挂起的 `timelinePlayChange` 又渲染一次：checkpoint 被 `stopAnimation(forward)` 直接放到刻度上，进度线从那里再动。
+
+### 做法
+
+- **新单元 `tyControls.AdvChart.Timeline`**（纯 fpjson + AdvChart 单元）：`TyTimelinePreprocess`（上面的预处理器）、`TyTimelineDefaultsJson`（Slider 的缺省，颜色换成皮肤的）、`TyTimelineFullOption`（`mergeDefaultAndTheme` 加盒子的 `mergeLayoutParam`）、`TyTimelineData`、`TyTimelineNormIndex`，和 `TTyTimelineView`——`Render` 是上面整段 render，元素都是 `AdvChart.GfxEl` 的：根组、主组、标签组、各元素的角色（`TTyTlRole`：种类、数据下标、onclick 交出的值）、progress / emphasis 两个状态、hoverState；`HitAt`（显示次序上自顶而下、跳过 silent、按包围盒命中）、`DisplayOrder`、`ApplyStates`、`ToAxisCoord`、`NearestTick`、`DragTo`。z2 是 Displayable 的主状态键（直接设、不过渡），由视图自己按 emphasis 抬落。
+- **`AdvChart.GfxEl`**：新的 `gkPath`（`PathData` 由造它的一方给，不对应任何选项类型词）；`TyGfxLineScale` / `TyGfxStrokeNoScale`——`strokeNoScale` 的包围盒按元素当时的变换求线宽缩放（`Path.getLineScale`），绘制时线宽不随缩放变。
+- **`AdvChart.Anim`**：`StateText`——Text 的可过渡样式键（填充、描边、字号、行高、盒子、文字阴影）。
+- **`AdvChart.Media`**：`TTyMediaSet.Frames`、管理器的 `FrameCount` / `Frame`、`Adopt` 只在新列表非空时替换；基础选项、列表项与各帧都跑时间线的预处理器（graphic 的照旧）。
+- **`AdvChart.Option`**：`MergeFrame`（getTimelineOption + 一次合并，报给 `AAfter`），setOption 与合并里放在基础选项之后、media 之前；`TimelineReset` 是动作的 `resetOption('timeline')`。**`AdvChart.OptionMerge`**：`BoxOf` 加上时间线的盒子缺省，合并时照 `mergeLayoutParam` 写回。**`AdvChart.Events`**：`timelinechanged`、`timelineplaychanged` 可注册。**`AdvChart.Export`**：`cvTimeline`。
+- **控件**：
+  - `SolveTimeline` 在 `Relayout` 里（工具箱之前）：第一个时间线模型才有视图（`ec_tl_<n>` 是它的 uid，即事件里的 `from`）；模型没了、notMerge 都换新视图、清计时器；渲染后按 `_doPlayStop` 设 `FTlDue`，并在自己的驱动 `FTlAnim` 上 flush。
+  - `BuildTimeline` 把元素按树的次序放进绘制表（z、z2 照元素的），在表里一律 silent；命中走 `TlHitAt`（`EventTargetAt` 里，HdKind 10，HdGen 是渲染代数，换了代数的悬停在原处重找）。
+  - `EventMove` 发 mouseout / mouseover 给时间线元素、之后是 Draggable 的 drift，最后一帧的状态；`EventDown` 的 dragstart、`EventUp` 的 dragend（在 click 之前）与元素的 onclick；`EventLeave`、`CaptureChanged` 也收尾。
+  - `DispatchAction` 认两个动作：`DoTimelineChange`（归一、写树、播到末项时先写 `autoPlay: false`、`TlMerge`、事件、再把挂起的 `timelinePlayChange` 做掉——在那之前时间线先渲染一次，好让第二次渲染的 `stopAnimation(forward)` 把 checkpoint 放到刻度上）；`DoTimelinePlayChange`。帧合并了就照合并布防（`FAnimPending`），没有帧可合并、以及 `timelinePlayChange`，走 `FullUpdate`——系列从当前值更新。
+  - **`Option` 属性不变**：动作合并进来的帧只在树里（`GetOptionJson` 看得见），属性仍是宿主写的那段文本，同 media 的 resize。
+  - 计时：`TimelineNow`（NaN 是机器时钟，此时才有 `TTimer`）、`TimelineTick(t)`（到点的依次触发，触发时钟停在到点时刻）、`TimelineDue`；`AnimTickBody` 推 `FTlAnim`、`AnimArmTimer` 看 `TlLive`；指针形状 `pointer`。
+- **皮肤键**（`themes/light.tycss`，重新生成 `DefaultTheme.pas` 与 `Css.Catalog.pas`，只增不改）：`TyAdvChartTimeline`（轴线、空心符号的底）、`TyAdvChartTimelineProgress`（进度线、进度中的刻度）、`TyAdvChartTimelineItem`（刻度，`:hover` 是 emphasis）、`TyAdvChartTimelineCheckpoint`、`TyAdvChartTimelineControl`（`:hover`）、`TyAdvChartTimelineLabel`（`:hover`；字号、字族）。
+
+### 基准
+
+`tools/advchart-oracle/timeline.js`（新；真 dist，node SSR，`chart._ssr = false`、`env.node` 关掉，时钟与计时器队列同 animation.js / custom-series2.js，xorshift32 随机数，zrender 宽度表量字，TZ=UTC；`process.exit()` 收尾）→ `tests/fixtures/advchart-timeline.json`。一步是：时钟先走 dt（到点的播放计时器依次在到点时刻触发，各跟一帧），然后这一步、再一帧；一帧是 `animation.update()`（片段推进，然后 `_onframe` 应用悬停状态）加同一时刻的 `update(true)`（新片段在此起算）。指针事件走 zrender 自己的 Handler，坐标取元素包围盒中心的整数点；`up` 后面跟浏览器的 DOM click。
+
+- **45 个用例、137 步、182 个状态**：布局 10（横 / 竖 / 竖在左半 / 横在上半；time 的字符串模板与默认字典的年、月、日、时；value 的不等距与 `{value}` 模板、千分位；category 的模板、旋转与字号；空心符号、矩形、偏移、旋转、菱形 checkpoint）；按钮 7（`controlPosition` 右、`position` 上 / 下、`'none'`、少一个按钮与百分数尺寸、竖着在远端、inverse）；标签 7（数字位置正负、`'top'`、横向写 `'left'`、不显示与无轴线、24 个长类目的自动间隔与点标签、ec2 写法）；点击 2（刻度、标签、上一个 / 下一个绕回、播放与停止、不循环的夹住）；拖动 3（realtime 开 / 关、竖着）；悬停 2（刻度、标签、按钮的过渡与离开；全写颜色的 progress / emphasis）；播放 5（loop 绕回、不循环停在末项并发事件、rewind、rewind 不循环卡在 0、播放中点击与拖动打断）；动作 2（越界取模、负数、无下标、播放开关；不循环的夹住与末项停止）；选项 4（合并时帧再合并、新帧列表替换、空列表保留、notMerge 忘掉；根上写法与越界无帧；时间线的 `replaceMerge: ['series']`；media 与时间线：帧在 media 之前、resize 只合并 media、resize 后再换帧、点刻度、合并写 currentIndex）；动画 3（系列与 checkpoint 的更新动画多次采样、中途再换；基础选项关动画；checkpoint 动画关掉与改时长缓动）。
+- 每个状态记：时刻、这一步触发的计时器、模型的 currentIndex / autoPlay、挂着的计时器到点时刻、两种事件（`from` 是视图 uid 的写成 `@view`）、原始合并层（同 media.js，外加时间线模型 `setCurrentIndex` / `setPlayState` 写进去的两个键）、视图（两组的变换；按显示次序的每个元素：角色、类型、z、z2、silent、七个变换属性、全局矩阵、states、hoverState、包围盒、path 数据或线段、样式）、每个柱系列每项的柱形（按 seriesIndex，空洞为 null）、标题文字。共 2564 条元素记录、69 个事件、18 次计时器触发。
+- 守卫 107 条（任一失败不写文件）：每个状态的原始合并层是 `getOption()` 的子集；触发的计时器都是时间线视图的；各用例的区分事实（播放按钮在主组起点、checkpoint 在第 0 项、竖着转四分之一、标签对齐、模板与字典的文字、不等距、千分位、按钮位置、自动间隔丢标签、ec2 的 value 轴与 `label.normal`、inverse、点击与事件的 `from`、标签点击、next 绕回、播放起计时器、到点触发、停止清计时器、realtime 拖动中派发与松开派发、非 realtime 只在松开时、悬停进 `progress,emphasis` 且过渡在走、loop 绕回、不循环停止的两个事件、rewind 序列、越界取模与夹住、合并后帧再合并、新帧、空列表保留、notMerge 忘掉、无帧不合并、replaceMerge 只剩一个系列且新 id 占第一个空洞、media 默认项赢过帧、resize 到窄屏、checkpoint 在滑、柱子在动、动画关掉时跳）；两次生成逐字节相同；没有 `\u0000`；能读回。
+
+### 测试
+
+`test.advchart.timeline`（新，注册在 `tytests.lpr`）：
+
+- **基准重放**（`TAdvChartTimelineOracleTest`，按组 7 个）：真控件、96 PPI、`camAlways`、zrender 宽度表量字、月名钉在英文资源串；`AnimNow` 与 `TimelineNow` 是时钟，每个触发的计时器在到点时刻 `TimelineTick`、渲染、`AnimTick`，然后这一步（`Option` / `SetOption`、`DispatchAction`、`MouseMove` / `MouseDown` / `MouseUp` / `MouseLeave`、`SetBounds`）、渲染、`AnimTick`。每个状态比：模型、计时器、事件（结构比较）、`GetOptionJson` 对原始合并层（结构比较，键集合与值）、视图（两组的变换逐位；显示次序；每个元素按角色找到后比类型、z、z2、silent、变换属性、全局矩阵、states、hover、包围盒、path 数据或线段、不透明度、线宽、标签的文字与对齐——全部逐位；全写颜色的用例另比填充与描边）、柱形（1e-9，同 media）。十万余项比较。
+- **手写**（`TAdvChartTimelineTest`，8 个）：预处理器的边角（ec2 的 time、`label.normal` 不覆盖、emphasis 标签搬出、`'none'` 而写了 show、只有 name 的项、没写 label 时临时对象吞掉搬走的标签）；`TyTimelineNormIndex` 的取模与夹住；没有时间线时 `timelineChange` 不做任何事（端口的偏差）；动作之后 `Option` 属性仍是宿主文本、再赋同样文本不复位；notMerge 拿走计时器与 checkpoint、换 uid；两个事件类型可注册；导出可排除时间线；缺省颜色是皮肤的。
+
+首跑：布局一组只有字典的月名（本机语言给了「4月」，测试把名字源钉到英文资源串后对上）；`TyTlNumJson` 用 `1 / x` 判负零撞了浮点陷阱（改看符号位）；悬停的 z2——引擎的状态不管 z2（它是 Displayable 的主状态键），视图自己抬落后对上；`timelinePlayChange` 与无帧的 `timelineChange` 只标脏、系列直接跳到终值，改走 `FullUpdate` 后与上游一样从当前值更新（上游每一步都在帧之前重渲染，柱子停在原处直到最后一步之后才走完）；不循环播到末项时上游渲染两次、checkpoint 直接到位，端口补上先渲染一次；基准的柱子原先按 `getSeries()` 的下标记，replaceMerge 留空洞时与系列下标错位，改按 seriesIndex。之后全部逐位对上。
+
+`test.advchart.media` 的 `TestParseRawOptionCorners`：基础选项里的时间线现在带着预处理器写的 `itemStyle.emphasis`（上游也是），并加一条：根上 `options` 读成一帧、不是对象就是 nil。
+
+本批按规矩只跑了新套件和直接碰到的套件，全部通过：`TAdvChartTimelineOracleTest`（7）、`TAdvChartTimelineTest`（8）、`TAdvChartGraphicTest`（12）、`TAdvChartCustomSeriesOracleTest`（5）、`TAdvChartCustomSeriesTest`（10）、`TAdvChartCustomSeries2OracleTest`（5）、`TAdvChartCustomSeries2Test`（5）、`TAdvChartAnimStateEngineTest`（11）、`TAdvChartAnimStateTest`（5）、`TAdvChartAnimEngineTest`（25）、`TAdvChartMediaTest`（10）、`TAdvChartOptionMergeTest`（15）、`TAdvChartAnimMergeTest`（6）、`TAdvChartOptionTest`（31）、`TAdvChartMouseEventsOracleTest`（3）、`TAdvChartExportLoadingTest`（15）、`TAdvChartToolboxOracleTest`（5）、`TAdvChartToolboxTest`（7）、`TAdvChartBrushCoverOracleTest`（5）、`TAdvChartBrushCoverTest`（6）、`TAdvChartVisualMapInteractOracleTest`（1）、`TAdvChartVisualMapInteractTest`（6）、`TAdvChartDataZoomInteractOracleTest`（8）、`TAdvChartHitTest`（12）、`TAdvChartLegendActTest`（8）、`TAdvChartFocusBlurTest`（11）、`TAdvanceChartTest`（60）、`TBuiltinThemeTest`（13）、`TCssCatalogTest`（14）、`TBuiltinSyncTest`（2）。全量与变异轮留到里程碑（C14–C22）末尾；变异候选列在会话草稿 `s165.md.candidates.md`。
+
+### 推迟与偏差
+
+- **只有第一个时间线**有视图（上游每个时间线模型一个视图、各有计时器；动作与帧都只认第一个，这一点相同）。
+- **抛错的地方**：没有时间线时的 `timelineChange`（上游读 `null.get` 抛错）端口什么都不做、不发事件；`null` 帧（上游在预处理器里抛错）端口当没有帧；`currentIndex` 是字符串时上游按属性名取帧 / 不归一，端口只认数字。
+- **时间线元素不是数据项**：刻度的 `ecData`（`dataModel` 是时间线、`tooltip` 为真时带 `dataIndex`）没有接——悬停刻度不出提示框，点刻度不发图表的 `click` / `mouseover` 鼠标事件（只有元素自己的 onclick 与悬停状态）。
+- **标签**：handler formatter（`'@名字'`）、`rich`、`overflow` 不做；emphasis 没写颜色时的「提亮」（`liftColor`）不做；`calculateCategoryInterval` 的跨渲染缓存（`lastAutoInterval`）不做——同样的布局下它不起作用。
+- **图标与符号**：`image://` 的按钮与符号不画；`path://` 符号按 cover。
+- **时钟**：机器时钟下计时器在下一次绘制的布局时重设（上游在派发里同步渲染），差几毫秒；`TimelineTick` 一次跨过多个到点时只有最后一次渲染（测试每个到点单独一步）。
+- **属性与合并**：合并式 setOption 之后 `Option` 属性是合并后的树，不含帧（同 §130 / §142 的 media）。
+- **组件背景**：上游的 `backgroundColor` / `borderColor` / `borderWidth` 是选项里有、Slider 视图不画的，端口同样不画。
+
+### 落地
+
+- `source/tyControls.AdvChart.Timeline.pas`（新，已登记 `tycontrols.lpk` 与 `tycontrols.pas`）。
+- `source/tyControls.AdvChart.GfxEl.pas`：`gkPath` 与 `PathData`、`TyGfxStrokeNoScale`、`TyGfxLineScale`，包围盒与绘制的 `strokeNoScale`。`source/tyControls.AdvChart.Anim.pas`：`StateText` 与 Text 的可过渡键。
+- `source/tyControls.AdvChart.Media.pas`：`Frames`、`FrameCount` / `Frame`、`Adopt`、预处理器。`source/tyControls.AdvChart.Option.pas`：`MergeFrame`、`TimelineReset`。`source/tyControls.AdvChart.OptionMerge.pas`：时间线的盒子缺省。`source/tyControls.AdvChart.Events.pas`：两个事件类型。`source/tyControls.AdvChart.Export.pas`：`cvTimeline`。
+- `source/tyControls.AdvanceChart.pas`：上面「控件」一条的全部（`FTl*`、`TlInk`、`TlClock`、`TlLive`、`TlNode`、`TlCurrentIndex`、`TlAnimCfg`、`SolveTimeline`、`BuildTimeline`、`TlHitAt`、`TlArmTimer`、`TlTimerFired`、`TimelineTick`、`TlChange`、`TlClick`、`TlMouseOver` / `TlMouseOut`、`TlApplyStates`、`TlDragStart` / `TlDragMove` / `TlDragEnd`、`TlPointerChange`、`TlMerge`、`DoTimelineChange`、`DoTimelinePlayChange`、`TimelineView`、`TimelineDue`、`TimelineNow`；`Relayout`、列表构建、`EventTargetAt`、`EventMove` / `EventDown` / `EventUp` / `EventLeave`、`CaptureChanged`、`DispatchAction`、`AnimTickBody`、`AnimArmTimer`、`TbApplyCursor`、`ApplyNotMerge`、构造与析构）。
+- `themes/light.tycss`、`source/tyControls.DefaultTheme.pas`、`source/tyControls.Css.Catalog.pas`（生成，只增）。
+- `tools/advchart-oracle/timeline.js`、`tests/fixtures/advchart-timeline.json`、`tests/test.advchart.timeline.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.media.pas`（预处理器的写入）。
+- §130、§142 在原处标注。没有新的 resourcestring。

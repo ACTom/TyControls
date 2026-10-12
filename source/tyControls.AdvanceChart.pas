@@ -69,6 +69,7 @@ uses
   tyControls.AdvChart.GfxEl, tyControls.AdvChart.Graphic,
   tyControls.AdvChart.Lines, tyControls.AdvChart.Custom,
   tyControls.AdvChart.Toolbox, tyControls.AdvChart.Brush,
+  tyControls.AdvChart.Timeline,
   fpjson, contnrs, tyControls.SubPixel;
 
 const
@@ -886,6 +887,13 @@ type
     FTbCoverRect: TTyXYWH;
     FTbError: string;
     FOnToolboxSaveAsImage: TTyToolboxSaveEvent;
+    { THE TIMELINE [Batch 129] -- see its section }
+    FTlView: TTyTimelineView;
+    FTlAnim: TTyAnimation;
+    FTlUidSeq: Integer;
+    FTlNow, FTlDue: Double;
+    FTlTimer: TTimer;
+    FTlDragging, FTlStatesDirty: Boolean;
     { THE BRUSH COMPONENTS [Batch 126] -- see their section. Per component:
       the model from its option, the areas and the painting option the
       model keeps (a merge keeps them, a notMerge does not), the view's
@@ -1413,6 +1421,30 @@ type
     function TbEmphasised(ATb, AIcon: Integer): Boolean;
     function BuildToolboxes(AList: TTyPaintList; const AMeasurer: ITyTextMeasurer): Integer;
     function TbHitAt(AX, AY: Integer; out ATb, AIcon: Integer): Boolean;
+    { ---- the timeline [Batch 129] ---- }
+    function TlInk: TTyTimelineInk;
+    function TlClock: Double;
+    function TlLive: Boolean;
+    function TlNode: TJSONObject;
+    function TlCurrentIndex: Double;
+    function TlAnimCfg: TTyTlAnimCfg;
+    procedure SolveTimeline(APPI: Integer);
+    function BuildTimeline(AList: TTyPaintList): Integer;
+    function TlHitAt(AX, AY: Integer; out AEl: Integer): Boolean;
+    procedure TlArmTimer;
+    procedure TlTimerFired(Sender: TObject);
+    procedure TlChange(AIndex: Double; AHasIndex: Boolean);
+    procedure TlClick(AEl: Integer);
+    procedure TlMouseOver(const ATarget: TTyChartEventTarget);
+    procedure TlMouseOut(const ATarget: TTyChartEventTarget);
+    procedure TlApplyStates;
+    procedure TlDragStart(const ATarget: TTyChartEventTarget);
+    procedure TlPointerChange(AX, AY: Integer; ATrigger: Boolean);
+    procedure TlDragMove(AX, AY: Integer);
+    procedure TlDragEnd(AX, AY: Integer);
+    procedure TlMerge;
+    procedure DoTimelineChange(APayload: TJSONObject);
+    procedure DoTimelinePlayChange(APayload: TJSONObject);
     procedure TbChanged;
     procedure TbMouseOver(const ATarget: TTyChartEventTarget);
     procedure TbMouseOut(const ATarget: TTyChartEventTarget);
@@ -2445,6 +2477,17 @@ type
     property ToolboxCursorName: string read FTbCursor;
     { why the last data view's text was not merged ('' when it was) }
     property ToolboxError: string read FTbError;
+    { ---- THE TIMELINE [Batch 129] ----
+      The first timeline's view as the last render left it (nil without a
+      timeline): its elements, their roles and states, the model it read.
+      TimelineNow is the play timer's clock (ms; NaN, the default, is the
+      machine's -- and only then does a timer run); TimelineTick fires every
+      play timer due by ANowMs; TimelineDue is the pending one's due instant
+      (NaN for none). }
+    function TimelineView: TTyTimelineView;
+    function TimelineDue: Double;
+    procedure TimelineTick(ANowMs: Double);
+    property TimelineNow: Double read FTlNow write FTlNow;
     { ---- THE BRUSH COMPONENTS [Batch 126] ----
       Per brush component: its controller (the panels, the covers and their
       shapes, the drawing state; CSS px) and the areas its model keeps. The
@@ -3056,6 +3099,8 @@ begin
   FTbBrushGrid := -1;
   FBrushNow := NaN;
   FBrushTickPrev := NaN;
+  FTlNow := NaN;
+  FTlDue := NaN;
 end;
 
 destructor TTyAdvanceChart.Destroy;
@@ -3106,6 +3151,10 @@ begin
   { THE ELEMENTS BEFORE THEIR DRIVER [Batch 122] }
   FGfxPaintEl := nil;
   FreeAndNil(FGfxView);
+  { the timeline's too [Batch 129] }
+  FreeAndNil(FTlTimer);
+  FreeAndNil(FTlView);
+  FreeAndNil(FTlAnim);
   for i := 0 to High(FCustomViews) do FreeAndNil(FCustomViews[i]);
   FCustomViews := nil;
   FCustomPaintEls := nil;
@@ -3350,6 +3399,13 @@ begin
   { THE BRUSH COMPONENTS: new models (no areas, no painting option) and new
     views (no covers) [Batch 126] }
   BrushReset;
+  { THE TIMELINE'S VIEW goes with its model: its timer and its checkpoint
+    with it [Batch 129] }
+  FreeAndNil(FTlView);
+  FTlDue := NaN;
+  FTlDragging := False;
+  FTlStatesDirty := False;
+  TlArmTimer;
   { new series models: no selection [Batch 88]. AN ELEMENT SURVIVES where
     the view and the row do: upstream diffs the new data against the old
     and keeps its hoverState and __highByOuter bits [Batch 96] }
@@ -4982,6 +5038,8 @@ begin
   { AFTER THE GRIDS: a slider sits under (or beside) the grid it drives,
     by the rect the labels left it }
   SolveDataZoomViews(AMeasurer, APPI);
+  { the timeline's view: its render, its play timer [Batch 129] }
+  if not FStreamRelayout and not FExporting then SolveTimeline(APPI);
   { the toolbox, laid out last as its view renders last [Batch 125] }
   SolveToolboxes(AMeasurer, APPI);
   { the brush components: the visual stage's layoutCovers, then every brush
@@ -9210,6 +9268,8 @@ begin
   { a cover's drag and a brush component's track too [Batch 126] }
   BrushDragEnd;
   BrushCtlUp(FEvLastX, FEvLastY);
+  { and the timeline's checkpoint [Batch 129] }
+  TlDragEnd(FEvLastX, FEvLastY);
   inherited CaptureChanged;
 end;
 
@@ -16541,6 +16601,13 @@ begin
       if n > 0 then ViewDrew(cvDataZoom);
       Inc(drawn, n);
     end;
+    { the timeline, z 4 [Batch 129] }
+    if not ViewHidden(cvTimeline) then
+    begin
+      n := BuildTimeline(list);
+      if n > 0 then ViewDrew(cvTimeline);
+      Inc(drawn, n);
+    end;
     { [Batch 125] }
     if not ViewHidden(cvToolbox) then
     begin
@@ -19151,6 +19218,16 @@ begin
     Result.HdGen := FTbGen;
     Exit;
   end;
+  { THE TIMELINE, z 4 [Batch 129]: no data, only its elements' own
+    handlers; HdRow the element, HdGen the render that made it }
+  if TlHitAt(AX, AY, q) then
+  begin
+    Result.Id := -(10000000 + Int64(q));
+    Result.HdKind := 10;
+    Result.HdRow := q;
+    Result.HdGen := FTlView.Gen;
+    Exit;
+  end;
   { THE visualMaps, over the series (z 4) [Batch 116]: no data, only their
     own handlers }
   if VmHitAt(AX, AY, k, q) then
@@ -19472,6 +19549,10 @@ begin
   { a toolbox icon a render replaced: the same [Batch 125] }
   if (FEvHover.Id <> 0) and (FEvHover.HdKind = 8) and (FEvHover.HdGen <> FTbGen) then
     FEvHover := EventTargetAt(FEvHoverX, FEvHoverY);
+  { and a timeline element [Batch 129] }
+  if (FEvHover.Id <> 0) and (FEvHover.HdKind = 10)
+    and ((FTlView = nil) or (FEvHover.HdGen <> FTlView.Gen)) then
+    FEvHover := EventTargetAt(FEvHoverX, FEvHoverY);
   t := EventTargetAt(AX, AY);
   if (FEvHover.Id <> 0) and (t.Id <> FEvHover.Id) then
   begin
@@ -19480,6 +19561,7 @@ begin
     { a graphic element's handlers; a true answer stops the rest [Batch 122] }
     cancel := GfxElementEvent('mouseout', FEvHover, AX, AY);
     TbMouseOut(FEvHover);
+    TlMouseOut(FEvHover);
     { echarts' own mouseout first: the dispatcher leaves emphasis [Batch 88] }
     if not cancel then StHoverOut(FEvHover);
     if FEvHover.HasData and not cancel then EmitChartEvent('mouseout', FEvHover, AX, AY);
@@ -19495,6 +19577,7 @@ begin
   begin
     VmElementEvent('mouseover', t, AX, AY);
     TbMouseOver(t);
+    TlMouseOver(t);
     cancel := GfxElementEvent('mouseover', t, AX, AY);
     if not cancel then StHoverOver(t);
     if t.HasData and not cancel then EmitChartEvent('mouseover', t, AX, AY);
@@ -19503,8 +19586,12 @@ begin
   FEvHover := t;
   FEvHoverX := AX;
   FEvHoverY := AY;
+  { zrender's Draggable on the timeline's checkpoint, after the hover was
+    found [Batch 129] }
+  TlDragMove(AX, AY);
   { the frame's states [Batch 116] }
   VmApplyStates;
+  TlApplyStates;
 end;
 
 procedure TTyAdvanceChart.EventDown(AButton: TMouseButton; AX, AY: Integer);
@@ -19520,6 +19607,8 @@ begin
   FEvDownX := AX;
   FEvDownY := AY;
   GfxDragStart(t, AX, AY);
+  { the timeline's checkpoint is draggable [Batch 129] }
+  if AButton = mbLeft then TlDragStart(t);
   if GfxElementEvent('mousedown', t, AX, AY) then Exit;
   if t.HasData then EmitChartEvent('mousedown', t, AX, AY);
 end;
@@ -19535,6 +19624,8 @@ begin
   FEvUpId := t.Id;
   { zrender's Draggable ends before echarts' own handlers [Batch 116] }
   if AButton = mbLeft then VmDragEnd;
+  { the timeline's checkpoint: its dragend changes the index [Batch 129] }
+  if AButton = mbLeft then TlDragEnd(AX, AY);
   FGfxDragOn := False;
   if not GfxElementEvent('mouseup', t, AX, AY) and t.HasData then
     EmitChartEvent('mouseup', t, AX, AY);
@@ -19556,6 +19647,8 @@ begin
   { THE ELEMENT'S OWN HANDLER BEFORE ANY zr-LEVEL ONE: a legend item's click
     is downplay, legendToggleSelect, highlight [Batch 93] }
   if t.HdKind = 8 then TbClick(t.HdSeries, t.HdRow)
+  { [Batch 129] a timeline element's onclick }
+  else if t.HdKind = 10 then TlClick(t.HdRow)
   else if t.HdKind = 4 then LegendClick(t)
   { [Batch 98] the selector's and the pager's own onclick }
   else if t.HdKind = 5 then LegendSelectorClick(t)
@@ -19572,6 +19665,7 @@ begin
   StClickSelect(t);
   if t.HasData then EmitChartEvent('click', t, AX, AY);
   VmApplyStates;
+  TlApplyStates;
 end;
 
 procedure TTyAdvanceChart.EventDblClick(AX, AY: Integer);
@@ -19604,6 +19698,7 @@ begin
     VmElementEvent('mouseout', FEvHover, AX, AY);
     cancel := GfxElementEvent('mouseout', FEvHover, AX, AY);
     TbMouseOut(FEvHover);
+    TlMouseOut(FEvHover);
     if not cancel then StHoverOut(FEvHover);
   end;
   if (FEvHover.Id <> 0) and FEvHover.HasData and not cancel then
@@ -19611,6 +19706,7 @@ begin
   { zr-level: fired with or without a target [Batch 116] }
   VmZrMouseOut;
   VmApplyStates;
+  TlApplyStates;
   none := Default(TTyChartEventTarget);
   none.Params := TyChartBlankParams;
   EmitChartEvent('globalout', none, 0, 0, False);
@@ -24996,6 +25092,17 @@ begin
     begin
       BrushDoEnd(p);
       Result := True;
+    end
+    { the timeline's actions [Batch 129] }
+    else if t = 'timelineChange' then
+    begin
+      DoTimelineChange(p);
+      Result := True;
+    end
+    else if t = 'timelinePlayChange' then
+    begin
+      DoTimelinePlayChange(p);
+      Result := True;
     end;
   finally
     p.Free;
@@ -29081,7 +29188,7 @@ end;
 procedure TTyAdvanceChart.AnimArmTimer;
 begin
   if (FAnimLive or PtrLive or LegLive or LoadLive or VmLive_ or ProgLive or GfxLive
-    or CuLive)
+    or CuLive or TlLive)
     and IsNan(FAnimNow)
     and not (csDesigning in ComponentState) then
   begin
@@ -29165,6 +29272,15 @@ begin
     DropStatic;
     InvalidateFrame;
     if not CuLive and not FAnimLive then AnimArmTimer;
+  end;
+  { the timeline's checkpoint, its progress line and its hover
+    transitions: frames of the static layer [Batch 129] }
+  if TlLive then
+  begin
+    FTlAnim.Update(ANowMs);
+    DropStatic;
+    InvalidateFrame;
+    if not TlLive and not FAnimLive then AnimArmTimer;
   end;
   { the visualMap indicator's slide: a frame of the static layer [Batch 116] }
   if VmLive_ then
@@ -32249,6 +32365,580 @@ begin
   AnimArmTimer;
 end;
 
+{ ==================== the timeline [Batch 129, C21] ====================
+
+  SliderTimelineView's render and handlers, and the two actions. The
+  option, the model and the view's elements are tyControls.AdvChart.Timeline;
+  this is what upstream keeps outside them:
+  - FTlView: the first timeline model's view, from render to render (its
+    checkpoint element lives in it); a notMerge, or the model going, makes
+    a new one -- upstream's view is disposed with its model;
+  - FTlDue: the play timer _doPlayStop sets at every render (setTimeout
+    with playInterval), NaN for none; TimelineTick fires it on the clock
+    TimelineNow says, the machine's when that is NaN;
+  - FTlAnim: the driver the checkpoint's slide, the progress line's and the
+    hover transitions run on;
+  - FTlDragging: zrender's Draggable holds the checkpoint;
+  - FTlStatesDirty: a hover changed a hoverState -- the next frame applies
+    it (applyChangedStates). }
+
+function TlCss(AColour: TTyChartColor): string;
+begin
+  Result := 'rgba(' + IntToStr((AColour shr 16) and $FF) + ','
+    + IntToStr((AColour shr 8) and $FF) + ',' + IntToStr(AColour and $FF) + ','
+    + TyJsNumberToString(((AColour shr 24) and $FF) / 255) + ')';
+end;
+
+function TTyAdvanceChart.TlInk: TTyTimelineInk;
+var
+  model: TTyStyleModel;
+  st: TTyStyleSet;
+begin
+  Result := Default(TTyTimelineInk);
+  model := ActiveController.Model;
+  st := model.ResolveStyle('TyAdvChartTimeline', '', []);
+  Result.Line := TlCss(TTyChartColor(st.BorderColor));
+  Result.EmptyFill := TlCss(TTyChartColor(st.Background.Color));
+  Result.Border := Result.Line;
+  st := model.ResolveStyle('TyAdvChartTimelineProgress', '', []);
+  Result.Progress := TlCss(TTyChartColor(st.BorderColor));
+  Result.ProgressItem := TlCss(TTyChartColor(st.Background.Color));
+  st := model.ResolveStyle('TyAdvChartTimelineItem', '', []);
+  Result.Item := TlCss(TTyChartColor(st.Background.Color));
+  st := model.ResolveStyle('TyAdvChartTimelineItem', '', [tysHover]);
+  Result.ItemEmphasis := TlCss(TTyChartColor(st.Background.Color));
+  Result.ItemEmphasisBorder := TlCss(TTyChartColor(st.BorderColor));
+  st := model.ResolveStyle('TyAdvChartTimelineCheckpoint', '', []);
+  Result.Checkpoint := TlCss(TTyChartColor(st.Background.Color));
+  Result.CheckpointBorder := TlCss(TTyChartColor(st.BorderColor));
+  st := model.ResolveStyle('TyAdvChartTimelineControl', '', []);
+  Result.Control := TlCss(TTyChartColor(st.Background.Color));
+  Result.ControlBorder := TlCss(TTyChartColor(st.BorderColor));
+  st := model.ResolveStyle('TyAdvChartTimelineControl', '', [tysHover]);
+  Result.ControlEmphasis := TlCss(TTyChartColor(st.Background.Color));
+  Result.ControlEmphasisBorder := TlCss(TTyChartColor(st.BorderColor));
+  st := model.ResolveStyle('TyAdvChartTimelineLabel', '', []);
+  Result.LabelColour := TlCss(TTyChartColor(st.TextColor));
+  Result.FontFamily := st.FontName;
+  Result.FontPx := TyFontPxOf(ResolveFontSize(st));
+  if Result.FontPx <= 0 then Result.FontPx := 12;
+  st := model.ResolveStyle('TyAdvChartTimelineLabel', '', [tysHover]);
+  Result.LabelEmphasis := TlCss(TTyChartColor(st.TextColor));
+end;
+
+function TTyAdvanceChart.TlClock: Double;
+begin
+  if IsNan(FTlNow) then Result := TyAnimClockMs else Result := FTlNow;
+end;
+
+function TTyAdvanceChart.TlLive: Boolean;
+begin
+  Result := (FTlAnim <> nil) and (FTlAnim.ClipCount > 0);
+end;
+
+function TTyAdvanceChart.TlNode: TJSONObject;
+var d: TJSONData;
+begin
+  Result := nil;
+  if FOption = nil then Exit;
+  { getComponent('timeline'): the first slot }
+  d := FOption.ComponentAt('timeline', 0);
+  if d is TJSONObject then Result := TJSONObject(d);
+end;
+
+{ getCurrentIndex: the model's option -- its default nought where nothing
+  was written; NaN for what is no number }
+function TTyAdvanceChart.TlCurrentIndex: Double;
+var
+  n: TJSONObject;
+  d: TJSONData;
+begin
+  Result := NaN;
+  n := TlNode;
+  if n = nil then Exit;
+  d := n.Find('currentIndex');
+  if d = nil then Result := 0
+  else if d.JSONType = jtNumber then Result := d.AsFloat;
+end;
+
+{ the component's state transition (updateStates): its animation enabled,
+  stateAnimation's duration above nought }
+function TTyAdvanceChart.TlAnimCfg: TTyTlAnimCfg;
+var
+  node, root, sa, rsa: TJSONObject;
+  d: TJSONData;
+  on: Boolean;
+  dur, delay: Double;
+  easing: string;
+
+  function Get(const AKey: string): TJSONData;
+  begin
+    Result := nil;
+    if sa <> nil then Result := sa.Find(AKey);
+    if ((Result = nil) or (Result.JSONType = jtNull)) and (rsa <> nil) then
+      Result := rsa.Find(AKey);
+    if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
+  end;
+
+begin
+  Result := Default(TTyTlAnimCfg);
+  Result.Driver := FTlAnim;
+  Result.Allowed := AnimAllowed;
+  node := TlNode;
+  root := nil;
+  if (FOption <> nil) and (FOption.Root is TJSONObject) then root := TJSONObject(FOption.Root);
+  { isAnimationEnabled: the timeline's own `animation`, else the root's
+    ('auto' when nothing is written) }
+  on := Result.Allowed;
+  d := nil;
+  if node <> nil then d := node.Find('animation');
+  if (d = nil) or (d.JSONType = jtNull) then
+  begin
+    if root <> nil then d := root.Find('animation') else d := nil;
+    if (d <> nil) and not TyTlTruthy(d) then on := False;
+  end
+  else if not TyTlTruthy(d) then on := False;
+  if not on then Exit;
+  sa := nil;
+  rsa := nil;
+  if node <> nil then
+  begin
+    d := node.Find('stateAnimation');
+    if d is TJSONObject then sa := TJSONObject(d);
+  end;
+  if root <> nil then
+  begin
+    d := root.Find('stateAnimation');
+    if d is TJSONObject then rsa := TJSONObject(d);
+  end;
+  d := Get('duration');
+  if d = nil then dur := 300
+  else if d.JSONType = jtNumber then dur := d.AsFloat
+  else dur := NaN;
+  { duration > 0, a comparison NaN fails }
+  if not (dur > 0) then Exit;
+  d := Get('delay');
+  if (d <> nil) and (d.JSONType = jtNumber) then delay := d.AsFloat else delay := 0;
+  d := Get('easing');
+  if (d <> nil) and (d.JSONType = jtString) then easing := d.AsString
+  else if d = nil then easing := 'cubicOut'
+  else easing := '';
+  Result.HasStateCfg := True;
+  Result.StateCfg := TyAnimCfg(dur, delay, easing);
+end;
+
+procedure TTyAdvanceChart.SolveTimeline(APPI: Integer);
+var
+  node, root: TJSONObject;
+  s, w, h, interval: Double;
+  meas: ITyTextMeasurer;
+begin
+  node := TlNode;
+  if node = nil then
+  begin
+    { the model went: its view too -- remove() and dispose() clear the timer }
+    FreeAndNil(FTlView);
+    FTlDue := NaN;
+    FTlDragging := False;
+    TlArmTimer;
+    Exit;
+  end;
+  if FTlAnim = nil then FTlAnim := TTyAnimation.Create;
+  if FTlView = nil then
+  begin
+    Inc(FTlUidSeq);
+    FTlView := TTyTimelineView.Create('ec_tl_' + IntToStr(FTlUidSeq));
+    FTlView.Dragging := FTlDragging;
+  end;
+  if APPI <= 0 then APPI := 96;
+  s := APPI / 96;
+  w := (FLastRect.Right - FLastRect.Left) / s;
+  h := (FLastRect.Bottom - FLastRect.Top) / s;
+  root := nil;
+  if FOption.Root is TJSONObject then root := TJSONObject(FOption.Root);
+  { the layout measures in css px }
+  meas := NewTextMeasurer(96);
+  FTlView.Render(node, root, w, h, TlInk, meas, TlAnimCfg,
+    FOption.GetBool('useUTC', False));
+  { _doPlayStop: the timer cleared, and set again while playing --
+    setTimeout(fn, playInterval) from now }
+  FTlDue := NaN;
+  if FTlView.PlayState then
+  begin
+    interval := FTlView.PlayInterval;
+    if IsNan(interval) then interval := 0;
+    FTlDue := TlClock + interval;
+  end;
+  TlArmTimer;
+  FTlStatesDirty := False;
+  { the flush: what the render started takes its start now }
+  FTlAnim.Update(AnimClock, True);
+  AnimArmTimer;
+end;
+
+function TTyAdvanceChart.BuildTimeline(AList: TTyPaintList): Integer;
+var
+  i: Integer;
+  ctx: TTyGfxPaintCtx;
+  pe: TTyChartElement;
+  meas: ITyTextMeasurer;
+  el: TTyGfxEl;
+begin
+  Result := 0;
+  if (FTlView = nil) or not FTlView.Shown then Exit;
+  FTlView.UpdateTransforms;
+  meas := NewTextMeasurer(96);
+  ctx := Default(TTyGfxPaintCtx);
+  if FLastPPI > 0 then ctx.Scale := FLastPPI / 96 else ctx.Scale := 1;
+  ctx.HasInk := False;
+  for i := 0 to High(FTlView.Els) do
+  begin
+    el := FTlView.Els[i];
+    if el.Ignore then Continue;
+    if not TyGfxPaintElement(el, meas, ctx, pe) then Continue;
+    { the pointer is the timeline's own: nothing in the paint list answers
+      for it }
+    pe.Silent := True;
+    pe.Datum := TyChartDatum(-1, -1);
+    pe.Z := Round(el.ZLevel) * 100000 + Round(el.Z);
+    pe.Z2 := Round(el.Z2);
+    AList.Add(pe);
+    Inc(Result);
+  end;
+end;
+
+function TTyAdvanceChart.TlHitAt(AX, AY: Integer; out AEl: Integer): Boolean;
+var
+  s, x, y: Double;
+begin
+  Result := False;
+  AEl := -1;
+  if (FTlView = nil) or not FTlView.Shown or (csDesigning in ComponentState) then Exit;
+  if FLastPPI > 0 then s := FLastPPI / 96 else s := 1;
+  x := AX / s;
+  y := AY / s;
+  { zrender's Handler hit-tests nothing outside the canvas }
+  if (x < 0) or (y < 0) or (x > (FLastRect.Right - FLastRect.Left) / s)
+    or (y > (FLastRect.Bottom - FLastRect.Top) / s) then Exit;
+  AEl := FTlView.HitAt(x, y, NewTextMeasurer(96));
+  Result := AEl >= 0;
+end;
+
+procedure TTyAdvanceChart.TlArmTimer;
+var ms: Double;
+begin
+  if IsNan(FTlNow) and not IsNan(FTlDue) and not (csDesigning in ComponentState) then
+  begin
+    if FTlTimer = nil then
+    begin
+      FTlTimer := TTimer.Create(nil);
+      FTlTimer.Enabled := False;
+      FTlTimer.OnTimer := @TlTimerFired;
+    end;
+    ms := FTlDue - TyAnimClockMs;
+    if ms < 1 then ms := 1;
+    if ms > MaxInt then ms := MaxInt;
+    FTlTimer.Enabled := False;
+    FTlTimer.Interval := Ceil(ms);
+    FTlTimer.Enabled := True;
+  end
+  else if FTlTimer <> nil then
+    FTlTimer.Enabled := False;
+end;
+
+procedure TTyAdvanceChart.TlTimerFired(Sender: TObject);
+begin
+  if FTlTimer <> nil then FTlTimer.Enabled := False;
+  TimelineTick(TlClock);
+end;
+
+procedure TTyAdvanceChart.TimelineTick(ANowMs: Double);
+var
+  t, cur: Double;
+  node: TJSONObject;
+begin
+  while (not IsNan(FTlDue)) and (FTlDue <= ANowMs) do
+  begin
+    t := FTlDue;
+    FTlDue := NaN;
+    { the clock is the timer's due while it runs }
+    if not IsNan(FTlNow) then FTlNow := t;
+    node := TlNode;
+    if node = nil then Break;
+    { _changeTimeline(current +/- 1), the model read now }
+    cur := TlCurrentIndex;
+    if TyTlTruthy(node.Find('rewind')) then TlChange(cur - 1, True)
+    else TlChange(cur + 1, True);
+  end;
+  TlArmTimer;
+end;
+
+{ _changeTimeline: the timelineChange action from the view }
+procedure TTyAdvanceChart.TlChange(AIndex: Double; AHasIndex: Boolean);
+var p: string;
+begin
+  if FTlView = nil then Exit;
+  p := '{"type":"timelineChange"';
+  if AHasIndex and not (IsNan(AIndex) or IsInfinite(AIndex)) then
+    p := p + ',"currentIndex":' + TyJsNumberToString(AIndex);
+  p := p + ',"from":"' + FTlView.Uid + '"}';
+  DispatchAction(p);
+end;
+
+procedure TTyAdvanceChart.TlClick(AEl: Integer);
+var
+  r: TTyTlRole;
+  cur: Double;
+begin
+  if (FTlView = nil) or (AEl < 0) or (AEl > High(FTlView.Els)) then Exit;
+  r := FTlView.RoleOf(AEl);
+  cur := TlCurrentIndex;
+  case r.Kind of
+    tlrTick, tlrLabel: TlChange(r.Value, True);
+    tlrNext: if FTlView.Inverse then TlChange(cur - 1, True) else TlChange(cur + 1, True);
+    tlrPrev: if FTlView.Inverse then TlChange(cur + 1, True) else TlChange(cur - 1, True);
+    tlrPlay, tlrStop:
+      begin
+        { _handlePlayClick(!playState): the timer cleared first }
+        FTlDue := NaN;
+        TlArmTimer;
+        if r.Kind = tlrPlay then
+          DispatchAction('{"type":"timelinePlayChange","playState":true,"from":"' + FTlView.Uid + '"}')
+        else
+          DispatchAction('{"type":"timelinePlayChange","playState":false,"from":"' + FTlView.Uid + '"}');
+      end;
+  end;
+end;
+
+procedure TTyAdvanceChart.TlMouseOver(const ATarget: TTyChartEventTarget);
+begin
+  if (ATarget.HdKind <> 10) or (FTlView = nil) or (ATarget.HdGen <> FTlView.Gen) then Exit;
+  if not FTlView.IsDispatcher(ATarget.HdRow) then Exit;
+  { singleEnterEmphasis: the flag; the frame applies it }
+  FTlView.Hover[ATarget.HdRow] := True;
+  FTlStatesDirty := True;
+end;
+
+procedure TTyAdvanceChart.TlMouseOut(const ATarget: TTyChartEventTarget);
+begin
+  if (ATarget.HdKind <> 10) or (FTlView = nil) or (ATarget.HdGen <> FTlView.Gen) then Exit;
+  if not FTlView.IsDispatcher(ATarget.HdRow) then Exit;
+  if not FTlView.Hover[ATarget.HdRow] then Exit;
+  FTlView.Hover[ATarget.HdRow] := False;
+  FTlStatesDirty := True;
+end;
+
+procedure TTyAdvanceChart.TlApplyStates;
+var i: Integer;
+begin
+  if not FTlStatesDirty then Exit;
+  FTlStatesDirty := False;
+  if FTlView = nil then Exit;
+  for i := 0 to High(FTlView.Els) do FTlView.ApplyStates(i);
+  DropStatic;
+  InvalidateFrame;
+  AnimArmTimer;
+end;
+
+procedure TTyAdvanceChart.TlDragStart(const ATarget: TTyChartEventTarget);
+begin
+  if (ATarget.HdKind <> 10) or (FTlView = nil) or (ATarget.HdGen <> FTlView.Gen) then Exit;
+  if (ATarget.HdRow < 0) or (ATarget.HdRow > High(FTlView.Els)) then Exit;
+  if FTlView.RoleOf(ATarget.HdRow).Kind <> tlrPointer then Exit;
+  FTlDragging := True;
+  FTlView.Dragging := True;
+end;
+
+{ _pointerChangeTimeline }
+procedure TTyAdvanceChart.TlPointerChange(AX, AY: Integer; ATrigger: Boolean);
+var
+  s, coord: Double;
+  target: Integer;
+begin
+  if (FTlView = nil) or not FTlView.Shown then Exit;
+  if FLastPPI > 0 then s := FLastPPI / 96 else s := 1;
+  coord := FTlView.DragTo(AX / s, AY / s);
+  target := FTlView.NearestTick(coord);
+  DropStatic;
+  InvalidateFrame;
+  if ATrigger or ((target <> TlCurrentIndex) and FTlView.Realtime) then
+    TlChange(target, target >= 0);
+end;
+
+procedure TTyAdvanceChart.TlDragMove(AX, AY: Integer);
+begin
+  if not FTlDragging then Exit;
+  { _handlePointerDrag: the timer cleared, the checkpoint moved }
+  FTlDue := NaN;
+  TlArmTimer;
+  TlPointerChange(AX, AY, False);
+end;
+
+procedure TTyAdvanceChart.TlDragEnd(AX, AY: Integer);
+begin
+  if not FTlDragging then Exit;
+  FTlDragging := False;
+  if FTlView <> nil then FTlView.Dragging := False;
+  { _handlePointerDragend: a change whatever the index }
+  TlPointerChange(AX, AY, True);
+end;
+
+{ resetOption('timeline') with the timeline's replaceMerge, and the update
+  after it }
+procedure TTyAdvanceChart.TlMerge;
+var
+  node: TJSONObject;
+  d: TJSONData;
+  rep: array of string;
+  k: Integer;
+
+  procedure AddType(A: TJSONData);
+  begin
+    if (A = nil) or (A.JSONType <> jtString) then Exit;
+    if not TyOptionIsComponentType(A.AsString) then Exit;
+    SetLength(rep, Length(rep) + 1);
+    rep[High(rep)] := A.AsString;
+  end;
+
+begin
+  rep := nil;
+  node := TlNode;
+  if node <> nil then
+  begin
+    d := node.Find('replaceMerge');
+    if d is TJSONArray then
+    begin
+      for k := 0 to d.Count - 1 do AddType(d.Items[k]);
+    end
+    else
+      AddType(d);
+  end;
+  FMergeOldKeys := AnimViewKeys;
+  FMergeOldAxes := AxisViewKeys;
+  FMergeFirst := True;
+  FMergeResize := False;
+  MediaViewSize;
+  { prepareAndUpdate: an update whose models were merged -- armed as a
+    merge's when a frame was merged; without one the same models render
+    again, every series updating from where it stands }
+  if FOption.TimelineReset(rep, @MergeBefore, @MergePass) then
+  begin
+    FAnimPending := True;
+    FDirty := True;
+    Invalidate;
+  end
+  else
+    FullUpdate;
+end;
+
+procedure TTyAdvanceChart.DoTimelineChange(APayload: TJSONObject);
+var
+  node, full, ev: TJSONObject;
+  d: TJSONData;
+  idx: Double;
+  values: TTyDoubleArray;
+  names: TTyStringArray;
+  items: TTyJsonObjArray;
+  stop: Boolean;
+  k: Integer;
+  pp: string;
+begin
+  node := TlNode;
+  { upstream reads the model's replaceMerge whatever there is: without a
+    timeline it throws, and nothing happens here }
+  if node = nil then Exit;
+  stop := False;
+  d := APayload.Find('currentIndex');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    full := TyTimelineFullOption(node, TlInk);
+    try
+      TyTimelineData(full, FOption.GetBool('useUTC', False), values, names, items);
+      { setCurrentIndex: `this.option.loop` }
+      idx := TyTimelineNormIndex(TyTlJsNum(d), Length(values), TyTlTruthy(full.Find('loop')));
+      TyTlPut(node, 'currentIndex', TyTlNumJson(idx));
+      { played to the end without a loop: the play stops, and says so }
+      if (not TyTlTruthy(full.Find('loop'))) and (idx >= Length(values) - 1)
+        and TyTlTruthy(full.Find('autoPlay')) then
+      begin
+        TyTlPut(node, 'autoPlay', TJSONBoolean.Create(False));
+        stop := True;
+      end;
+    finally
+      full.Free;
+    end;
+  end;
+  TlMerge;
+  { the event: defaults(the model's currentIndex, payload) }
+  ev := TJSONObject.Create;
+  try
+    d := node.Find('currentIndex');
+    if d <> nil then ev.Add('currentIndex', d.Clone)
+    else ev.Add('currentIndex', TJSONIntegerNumber.Create(0));
+    for k := 0 to APayload.Count - 1 do
+    begin
+      if ev.IndexOfName(APayload.Names[k]) >= 0 then
+      begin
+        if ev.Find(APayload.Names[k]).JSONType <> jtNull then Continue;
+        ev.Delete(APayload.Names[k]);
+      end;
+      ev.Add(APayload.Names[k], APayload.Items[k].Clone);
+    end;
+    ev.Elements['type'] := TJSONString.Create('timelinechanged');
+    EmitPayloadEvent('timelinechanged', ev.AsJSON);
+  finally
+    ev.Free;
+  end;
+  { the action the end dispatched waits for this one -- and this one's
+    render comes first: the checkpoint the second render meets is already
+    sliding, and its stopAnimation(forward) puts it at its tick }
+  if stop then
+  begin
+    if (FTlView <> nil) and (FLastPPI > 0) then SolveTimeline(FLastPPI);
+    pp := '{"type":"timelinePlayChange","playState":false';
+    d := APayload.Find('from');
+    if d <> nil then pp := pp + ',"from":' + d.AsJSON;
+    pp := pp + '}';
+    ev := TJSONObject(GetJSON(pp));
+    try
+      DoTimelinePlayChange(ev);
+    finally
+      ev.Free;
+    end;
+  end;
+end;
+
+procedure TTyAdvanceChart.DoTimelinePlayChange(APayload: TJSONObject);
+var
+  node, ev: TJSONObject;
+  d: TJSONData;
+begin
+  node := TlNode;
+  d := APayload.Find('playState');
+  if (node <> nil) and (d <> nil) and (d.JSONType <> jtNull) then
+    TyTlPut(node, 'autoPlay', TJSONBoolean.Create(TyTlTruthy(d)));
+  { update: every view renders again now (the timer with them), the series
+    updating from where they stand }
+  FullUpdate;
+  ev := TJSONObject(APayload.Clone);
+  try
+    ev.Elements['type'] := TJSONString.Create('timelineplaychanged');
+    EmitPayloadEvent('timelineplaychanged', ev.AsJSON);
+  finally
+    ev.Free;
+  end;
+end;
+
+function TTyAdvanceChart.TimelineView: TTyTimelineView;
+begin
+  Result := FTlView;
+end;
+
+function TTyAdvanceChart.TimelineDue: Double;
+begin
+  Result := FTlDue;
+end;
+
 { ==================== the toolbox [Batch 125, C16] ====================
 
   ToolboxView's render, its icons' handlers and the features' clicks. The
@@ -33583,6 +34273,8 @@ begin
   c := '';
   bc := '';
   if (FEvHover.HdKind = 8) and (FEvHover.Id <> 0) then c := 'pointer';
+  { a timeline element's cursor, zrender's default [Batch 129] }
+  if (FEvHover.HdKind = 10) and (FEvHover.Id <> 0) then c := 'pointer';
   { a brush cover's piece under the pointer: its own cursor [Batch 126] }
   if (FEvHover.HdKind = 9) and (FEvHover.Id <> 0) and (FEvHover.HdGen >= 0)
     and (FEvHover.HdGen <= Ord(High(TTyBrushPiece))) then

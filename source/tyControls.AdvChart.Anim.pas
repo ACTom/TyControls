@@ -359,6 +359,8 @@ type
     FHasStateCfg: Boolean;
     FStateSkip: array of string;
     FStatePath: Boolean;
+    { a Text: its fill, stroke, font size ... transition too [Batch 129] }
+    FStateText: Boolean;
     procedure SetAnimation(AValue: TTyAnimation);
     procedure AddAnimator(AAnimator: TTyAnimator);
     procedure RemoveFromList(AAnimator: TTyAnimator);
@@ -426,6 +428,11 @@ type
     { a Path (its fill, stroke, width ... animate), else a Text (opacity and
       the shadow only); True by default }
     property StatePath: Boolean read FStatePath write FStatePath;
+    { not a Path but a Text (zrender's DEFAULT_TEXT_ANIMATION_PROPS: fill,
+      stroke, the opacities, lineWidth, fontSize, lineHeight, the box and
+      the text shadow over the common ones); False by default -- the common
+      ones only [Batch 129] }
+    property StateText: Boolean read FStateText write FStateText;
     property Animation: TTyAnimation read FAnimation write SetAnimation;
   end;
 
@@ -1930,8 +1937,13 @@ const
     'shadowBlur', 'shadowOffsetX', 'shadowOffsetY', 'shadowColor', 'opacity');
   cCommonAnimStyle: array[0..4] of string = ('shadowBlur', 'shadowOffsetX',
     'shadowOffsetY', 'shadowColor', 'opacity');
+  { Text.ts DEFAULT_TEXT_ANIMATION_PROPS' own [Batch 129] }
+  cTextAnimStyle: array[0..17] of string = ('fill', 'stroke', 'fillOpacity',
+    'strokeOpacity', 'lineWidth', 'fontSize', 'lineHeight', 'width', 'height',
+    'textShadowColor', 'textShadowBlur', 'textShadowOffsetX', 'textShadowOffsetY',
+    'backgroundColor', 'padding', 'borderColor', 'borderWidth', 'borderRadius');
 
-function StyleAnimatable(APath: Boolean; const AKey: string): Boolean;
+function StyleAnimatable(APath, AText: Boolean; const AKey: string): Boolean;
 var i: Integer;
 begin
   Result := True;
@@ -1941,8 +1953,13 @@ begin
       if cPathAnimStyle[i] = AKey then Exit;
   end
   else
+  begin
+    if AText then
+      for i := 0 to High(cTextAnimStyle) do
+        if cTextAnimStyle[i] = AKey then Exit;
     for i := 0 to High(cCommonAnimStyle) do
       if cCommonAnimStyle[i] = AKey then Exit;
+  end;
   Result := False;
 end;
 
@@ -1979,7 +1996,7 @@ begin
     { animationProps: a state transition's style animates only the props
       getAnimationStyleProps names; the rest is assigned [Batch 94] }
     if (AValues[i].Kind <> avkNull) and (cur.Kind <> avkNull)
-      and not (AFilter and (ATopKey = 'style') and not StyleAnimatable(FStatePath, AKeys[i])) then
+      and not (AFilter and (ATopKey = 'style') and not StyleAnimatable(FStatePath, FStateText, AKeys[i])) then
     begin
       n := Length(keys);
       SetLength(keys, n + 1); SetLength(vals, n + 1); SetLength(assigned, n + 1);

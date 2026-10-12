@@ -797,12 +797,14 @@ begin
       goes into a base without one }
     Parse('{"baseOption":{"grid":{}},"title":{},"timeline":{"axisType":"category"},'
       + '"media":[{"query":{"minWidth":1},"option":{"grid":{"left":1}}},{"option":{"title":{}}}]}');
-    AssertEquals('{"grid":{},"timeline":{"axisType":"category"}}', Compact(raw));
+    { [Batch 129] the timeline's preprocessor runs over the base: every
+      timeline keeps an itemStyle.emphasis, as upstream's getOption shows }
+    AssertEquals('{"grid":{},"timeline":{"axisType":"category","itemStyle":{"emphasis":{}}}}', Compact(raw));
     AssertEquals(1, Length(mset.Units));
     AssertNotNull('the default', mset.DefaultOpt);
     { a base with a timeline keeps its own }
     Parse('{"baseOption":{"timeline":{"show":false}},"timeline":{"show":true}}');
-    AssertEquals('{"timeline":{"show":false}}', Compact(raw));
+    AssertEquals('{"timeline":{"show":false,"itemStyle":{"emphasis":{}}}}', Compact(raw));
     { a falsy timeline in the base is the root's -- undefined, gone }
     Parse('{"baseOption":{"timeline":0}}');
     AssertEquals('{}', Compact(raw));
@@ -813,6 +815,10 @@ begin
     Parse('{"grid":{},"media":[],"options":[1]}');
     AssertEquals('{"grid":{}}', Compact(raw));
     AssertEquals('an empty list', 0, Length(mset.Units));
+    { [Batch 129] the timeline's frames are read: one, no object -- nothing
+      it could merge }
+    AssertEquals('one frame', 1, Length(mset.Frames));
+    AssertNull('no object', mset.Frames[0]);
     { a falsy media stays, a root key like any other; so do options with no
       media or timeline to read }
     Parse('{"media":0,"options":0}');

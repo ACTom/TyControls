@@ -43,9 +43,12 @@ uses
   tyControls.AdvChart.Anim, tyControls.AdvChart.RichText;
 
 type
+  { gkPath: a path whose PathProxy data is made by its maker, not read off a
+    shape -- a symbol, an icon (the timeline's, batch 129); no option type
+    word makes one }
   TTyGfxKind = (gkUnknown, gkGroup, gkImage, gkText, gkRect, gkCircle,
     gkEllipse, gkRing, gkSector, gkArc, gkPolygon, gkPolyline, gkLine,
-    gkBezier);
+    gkBezier, gkPath);
 
   TTyGfxEl = class;
   TTyGfxElArray = array of TTyGfxEl;
@@ -108,6 +111,8 @@ type
       options, its root's focus) [Batch 123]: owned, freed with the
       element; nil on everything else }
     Custom: TObject;
+    { a gkPath's data, in its own frame [Batch 129] }
+    PathData: TTyZrPath;
     constructor Create(AKind: TTyGfxKind; const AType: string);
     destructor Destroy; override;
     function GetAnimProp(const AKey: string): TTyAnimValue; override;
@@ -179,6 +184,11 @@ function TyGfxSmoothBezier(const APoints: TTyPointFArray; ASmooth: Double;
 function TyGfxTextLayout(AEl: TTyGfxEl; const AMeasurer: ITyTextMeasurer): TTyRtResult;
 { getBoundingRect, in the element's own frame }
 function TyGfxRect(AEl: TTyGfxEl; const AMeasurer: ITyTextMeasurer): TTyXYWH;
+{ style.strokeNoScale is truthy [Batch 129] }
+function TyGfxStrokeNoScale(AEl: TTyGfxEl): Boolean;
+{ Path.getLineScale: 1, or -- with strokeNoScale and a transform whose
+  diagonal is not one -- the square root of its determinant [Batch 129] }
+function TyGfxLineScale(AEl: TTyGfxEl): Double;
 
 { makeFont of a style object (TextStylePropsPart): '' when it has none }
 function TyGfxMakeFont(AStyle: TJSONObject): string;
@@ -553,7 +563,7 @@ function TTyGfxEl.ZrType: string;
 const
   cNames: array[TTyGfxKind] of string = ('', 'group', 'image', 'text', 'rect',
     'circle', 'ellipse', 'ring', 'sector', 'arc', 'polygon', 'polyline', 'line',
-    'bezier-curve');
+    'bezier-curve', 'path');
 begin
   Result := cNames[Kind];
 end;
@@ -562,7 +572,7 @@ function TTyGfxEl.StyleDefault(const AKey: string; out AValue: TTyAnimValue): Bo
 begin
   Result := True;
   if Kind in [gkRect, gkCircle, gkEllipse, gkRing, gkSector, gkArc, gkPolygon,
-    gkPolyline, gkLine, gkBezier] then
+    gkPolyline, gkLine, gkBezier, gkPath] then
   begin
     if TyAnimStyleDefault(AKey, AValue) then Exit;
   end;
@@ -1281,6 +1291,7 @@ begin
         end;
       gkPolygon: PolyPath(AEl, True, Result);
       gkPolyline: PolyPath(AEl, False, Result);
+      gkPath: Result := Copy(AEl.PathData);
       gkLine:
         begin
           x1 := ShapeNum(AEl, 'x1'); y1 := ShapeNum(AEl, 'y1');
@@ -1805,8 +1816,28 @@ begin
   else
     path := TyGfxPath(AEl);
     Result := TyZrStrokeRect(TyZrBBox(path), TyZrDataLength(path),
-      TyGfxHasStroke(AEl), TyGfxHasFill(AEl), TyGfxLineWidth(AEl), 1);
+      TyGfxHasStroke(AEl), TyGfxHasFill(AEl), TyGfxLineWidth(AEl),
+      TyGfxLineScale(AEl));
   end;
+end;
+
+function TyGfxStrokeNoScale(AEl: TTyGfxEl): Boolean;
+var d: TJSONData;
+begin
+  d := AEl.Style.Find('strokeNoScale');
+  Result := (d <> nil) and (((d.JSONType = jtBoolean) and d.AsBoolean)
+    or ((d.JSONType = jtNumber) and (d.AsFloat <> 0) and not IsNan(d.AsFloat))
+    or ((d.JSONType = jtString) and (d.AsString <> '')));
+end;
+
+function TyGfxLineScale(AEl: TTyGfxEl): Double;
+var m: TTyMat2D;
+begin
+  Result := 1;
+  if (AEl = nil) or not TyGfxStrokeNoScale(AEl) or not AEl.HasTransform then Exit;
+  m := AEl.Transform;
+  if (Abs(m[0] - 1) > 1e-10) and (Abs(m[3] - 1) > 1e-10) then
+    Result := Sqrt(Abs(m[0] * m[3] - m[2] * m[1]));
 end;
 
 { ==================== a textContent ==================== }
@@ -2444,6 +2475,10 @@ begin
           AOut.Style.FillColor := TyGradientSolid(AOut.Style.FillGradient);
         end;
       end;
+      { strokeNoScale: the canvas divides the width by the line scale, so
+        it is drawn at its own width whatever the element's scale
+        [Batch 129] }
+      if TyGfxStrokeNoScale(AEl) then us := ACtx.Scale;
       if hasStroke then
       begin
         d := AEl.Style.Find('stroke');

@@ -747,6 +747,16 @@ begin
     Def(4, TJSONIntegerNumber.Create(50));
     Def(5, TJSONIntegerNumber.Create(50));
   end
+  else if AMainType = 'timeline' then
+  begin
+    { TimelineModel's box, layoutMode 'box' [Batch 129] }
+    Def(0, TJSONNull.Create);
+    Def(1, TJSONString.Create('20%'));
+    Def(2, TJSONString.Create('20%'));
+    Def(3, TJSONIntegerNumber.Create(40));
+    Def(4, TJSONNull.Create);
+    Def(5, TJSONIntegerNumber.Create(0));
+  end
   else
     Result := False;
 end;

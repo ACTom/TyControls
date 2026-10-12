@@ -1426,6 +1426,21 @@ TyAdvChartToolboxBrush { background: alpha(var(--accent), 0.15); }
    selects and rims it in a light grey; here the ink faded right down and
    the skin's own border colour. */
 TyAdvChartBrush { background: alpha(var(--on-surface), 0.06); border-color: var(--border); }
+/* The timeline. Upstream builds the whole slider from its accent in steps:
+   the axis line palest, the passed part of it a little deeper, the ticks
+   deeper again and a passed tick deeper still, the checkpoint and the
+   buttons the accent itself; under the pointer a tick, a button and a label
+   take a darker accent. The labels are the muted ink; an empty symbol's
+   inside is the surface. */
+TyAdvChartTimeline { border-color: alpha(var(--accent), 0.2); background: var(--surface); }
+TyAdvChartTimelineProgress { border-color: alpha(var(--accent), 0.45); background: alpha(var(--accent), 0.65); }
+TyAdvChartTimelineItem { background: alpha(var(--accent), 0.3); }
+TyAdvChartTimelineItem:hover { background: darken(var(--accent), 10%); border-color: darken(var(--accent), 10%); }
+TyAdvChartTimelineCheckpoint { background: var(--accent); border-color: var(--accent); }
+TyAdvChartTimelineControl { background: var(--accent); border-color: var(--accent); }
+TyAdvChartTimelineControl:hover { background: darken(var(--accent), 25%); border-color: darken(var(--accent), 25%); }
+TyAdvChartTimelineLabel { color: var(--muted); font-size: var(--font-size-base); }
+TyAdvChartTimelineLabel:hover { color: darken(var(--accent), 10%); }
 /* The hover tooltip. TWO keys, because upstream's whole typographic hierarchy
    inside the box is one weight difference -- the name at 400 and the value at
    900, in the same grey -- and one style set cannot say two weights. Said here

@@ -1459,6 +1459,21 @@ begin
     '   selects and rims it in a light grey; here the ink faded right down and' + LineEnding +
     '   the skin''s own border colour. */' + LineEnding +
     'TyAdvChartBrush { background: alpha(var(--on-surface), 0.06); border-color: var(--border); }' + LineEnding +
+    '/* The timeline. Upstream builds the whole slider from its accent in steps:' + LineEnding +
+    '   the axis line palest, the passed part of it a little deeper, the ticks' + LineEnding +
+    '   deeper again and a passed tick deeper still, the checkpoint and the' + LineEnding +
+    '   buttons the accent itself; under the pointer a tick, a button and a label' + LineEnding +
+    '   take a darker accent. The labels are the muted ink; an empty symbol''s' + LineEnding +
+    '   inside is the surface. */' + LineEnding +
+    'TyAdvChartTimeline { border-color: alpha(var(--accent), 0.2); background: var(--surface); }' + LineEnding +
+    'TyAdvChartTimelineProgress { border-color: alpha(var(--accent), 0.45); background: alpha(var(--accent), 0.65); }' + LineEnding +
+    'TyAdvChartTimelineItem { background: alpha(var(--accent), 0.3); }' + LineEnding +
+    'TyAdvChartTimelineItem:hover { background: darken(var(--accent), 10%); border-color: darken(var(--accent), 10%); }' + LineEnding +
+    'TyAdvChartTimelineCheckpoint { background: var(--accent); border-color: var(--accent); }' + LineEnding +
+    'TyAdvChartTimelineControl { background: var(--accent); border-color: var(--accent); }' + LineEnding +
+    'TyAdvChartTimelineControl:hover { background: darken(var(--accent), 25%); border-color: darken(var(--accent), 25%); }' + LineEnding +
+    'TyAdvChartTimelineLabel { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
+    'TyAdvChartTimelineLabel:hover { color: darken(var(--accent), 10%); }' + LineEnding +
     '/* The hover tooltip. TWO keys, because upstream''s whole typographic hierarchy' + LineEnding +
     '   inside the box is one weight difference -- the name at 400 and the value at' + LineEnding +
     '   900, in the same grey -- and one style set cannot say two weights. Said here' + LineEnding +

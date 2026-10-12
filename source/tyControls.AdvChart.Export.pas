@@ -59,7 +59,9 @@ type
     { [Batch 125] }
     cvToolbox,
     { [Batch 126] }
-    cvBrush);
+    cvBrush,
+    { [Batch 129] }
+    cvTimeline);
   TTyChartViews = set of TTyChartView;
 
   TTyExportImageType = (eitPng, eitJpeg);
@@ -132,7 +134,8 @@ implementation
 const
   ViewNames: array[TTyChartView] of string = ('title', 'legend', 'xAxis',
     'yAxis', 'visualMap', 'dataZoom', 'markPoint', 'markLine', 'markArea',
-    'radar', 'calendar', 'angleAxis', 'radiusAxis', 'singleAxis', 'series', 'toolbox', 'brush');
+    'radar', 'calendar', 'angleAxis', 'radiusAxis', 'singleAxis', 'series', 'toolbox', 'brush',
+    'timeline');
 
 function TyChartViewOf(const AMainType: string; out AView: TTyChartView): Boolean;
 var v: TTyChartView;
