@@ -3328,6 +3328,10 @@ const
   TyGridRatingMax = 5;
 
 type
+  { UTF8KeyPress is protected on TWinControl: TypeIntoCell hands the key that opened an
+    editor to it through this. }
+  TTyEditorKeyAccess = class(TWinControl);
+
   { #67. The grid's mask editor. A mask editor checks itself when it loses the focus and
     raises on a required slot left empty (maskedit.md 5.2) -- in a cell, at the wrong times.
     Hiding the editor at the end of an edit ran the check: on a value being thrown away, or
@@ -9424,9 +9428,14 @@ begin
 end;
 
 function TTyStringGrid.TypeIntoCell(const AChar: string): Boolean;
+var
+  key: TUTF8Char;
+  was: string;
+  home: Word;
 begin
   Result := BeginEdit;
   if not Result then Exit;
+  key := AChar;
   { 这一笔就是新内容的第一个字符 —— 覆盖原值,与 Excel 一致。 }
   if FEditor.Visible then
   begin
@@ -9435,7 +9444,54 @@ begin
     { AChar 按约定就是**一个**字符,所以光标位置是 1 —— TTyEdit 的 SelStart 数的是
       码点不是字节,一个汉字在这里同样只算 1。 }
     FEditor.SelStart := 1;
-  end;
+  end
+  { #64. Every other editor opened and never saw the key. It now gets it through its own
+    UTF8KeyPress -- the way a real key arrives -- so its own rules decide what the key does:
+    the spin and calculator edits take digits, the mask fills its first slot, the date picker
+    types into a field, the pick list finds the item by its letter (and commits, #59). LCL's
+    grid does the same (grids.pas EditorShowChar -> SendCharToEditor).
+    The key replaces what was there, as above: an editor with a selection selects everything
+    first. (The calculator and the mask, both TTyEdits, have done so already when the focus
+    came from the keyboard, as it did here -- AutoSelect; said again so the replacing does not
+    hang on how the focus arrived. The memo has no AutoSelect.) The spin edit has no
+    selection, so it is emptied -- and given its number back when it does not take the key,
+    or a key it refuses would leave the cell blank.
+    A host editor (OnCreateEditLink) is none of these and keeps the key out: there is no way
+    to hand it one. Neither do the cells with nothing to type into (check box, rating, slider,
+    colour) -- none of these editors is showing for them. }
+  else if FSpinEditor.Visible then
+  begin
+    was := FSpinEditor.Text;
+    FSpinEditor.Text := '';
+    TTyEditorKeyAccess(FSpinEditor).UTF8KeyPress(key);
+    if FSpinEditor.Text = '' then FSpinEditor.Text := was;
+  end
+  else if FMemoEditor.Visible then
+  begin
+    FMemoEditor.SelectAll;
+    TTyEditorKeyAccess(FMemoEditor).UTF8KeyPress(key);
+  end
+  else if FCalcEditor.Visible then
+  begin
+    FCalcEditor.SelectAll;
+    TTyEditorKeyAccess(FCalcEditor).UTF8KeyPress(key);
+  end
+  else if FMaskEditor.Visible then
+  begin
+    FMaskEditor.SelectAll;
+    TTyEditorKeyAccess(FMaskEditor).UTF8KeyPress(key);
+  end
+  else if FDateEditor.Visible then
+  begin
+    { Every date and time cell shares this one picker, and it keeps the field the last edit
+      left it on. The key starts what the cell will hold, so it goes where Home and then the
+      key would put it: into the first field. }
+    home := VK_HOME;
+    TTyEditorKeyAccess(FDateEditor).KeyDown(home, []);
+    TTyEditorKeyAccess(FDateEditor).UTF8KeyPress(key);
+  end
+  else if FPickEditor.Visible then
+    TTyEditorKeyAccess(FPickEditor).UTF8KeyPress(key);
 end;
 
 procedure TTyStringGrid.UTF8KeyPress(var UTF8Key: TUTF8Char);
