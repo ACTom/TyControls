@@ -1559,6 +1559,76 @@ msgstr "sort 只能读数组行或对象行的表"
 msgid "the boxplot reads only a table of arrays"
 msgstr "boxplot 只能读数组行的表"
 
+#: tycontrols.strconsts.rstystatregmethod
+#, object-pascal-format
+msgid "\"%s\" is not a regression method"
+msgstr "“%s”不是回归方法"
+
+#: tycontrols.strconsts.rstystatpolyorder
+#, object-pascal-format
+msgid "the polynomial order must be a whole number from -1 to %d"
+msgstr "多项式的阶数必须是 -1 到 %d 之间的整数"
+
+#: tycontrols.strconsts.rstystatbinmethod
+#, object-pascal-format
+msgid "\"%s\" is not a binning method"
+msgstr "“%s”不是分箱方法"
+
+#: tycontrols.strconsts.rstystatbinlayout
+msgid "the bins cannot be laid out over these values"
+msgstr "这些值排不出分箱"
+
+#: tycontrols.strconsts.rstystatbinprecision
+msgid "the bins are finer than 20 decimal places"
+msgstr "分箱比 20 位小数还细"
+
+#: tycontrols.strconsts.rstystattoomanybins
+#, object-pascal-format
+msgid "more than %d bins"
+msgstr "分箱超过 %d 个"
+
+#: tycontrols.strconsts.rstystatclustercount
+msgid "\"clusterCount\" must be a number of 2 or more"
+msgstr "clusterCount 必须是不小于 2 的数"
+
+#: tycontrols.strconsts.rstystatclusterindex
+msgid "\"outputClusterIndexDimension\" is required, as a number"
+msgstr "必须写 outputClusterIndexDimension，而且要写成数"
+
+#: tycontrols.strconsts.rstystatnewdim
+msgid "a new dimension must be an index or { name, index }"
+msgstr "新维度必须是下标或 { name, index }"
+
+#: tycontrols.strconsts.rstystatindexnotnumber
+msgid "the index of a new dimension must be written as a number"
+msgstr "新维度的下标必须写成数"
+
+#: tycontrols.strconsts.rstystattoomanyclusters
+#, object-pascal-format
+msgid "more than %d clusters"
+msgstr "聚类超过 %d 个"
+
+#: tycontrols.strconsts.rstystatnosplit
+msgid "no cluster could be split"
+msgstr "没有哪个聚类能再分"
+
+#: tycontrols.strconsts.rstystatunassigned
+msgid "a point belongs to no cluster"
+msgstr "有一个点不属于任何聚类"
+
+#: tycontrols.strconsts.rstystatnoconverge
+msgid "k-means did not settle"
+msgstr "k-means 没有收敛"
+
+#: tycontrols.strconsts.rstystatdimhole
+msgid "a dimension of the result is left undefined"
+msgstr "结果有一个维度没有定义"
+
+#: tycontrols.strconsts.rstystatindextoofar
+#, object-pascal-format
+msgid "a new dimension's index is past %d"
+msgstr "新维度的下标超过了 %d"
+
 #: tycontrols.strconsts.rstyoptsummarydefault
 #, object-pascal-format
 msgid "default %s"

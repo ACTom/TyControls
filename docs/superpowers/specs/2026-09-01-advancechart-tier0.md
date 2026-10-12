@@ -12492,7 +12492,7 @@ Lazarus 3.0：最后一次全量之前用 `laz30_build.ps1`（私有 `--pcp`、`
 - **`tyControls.AdvChart.Time`**：`TyTimeTicksSpan`（原 `TyTimeTicks` 的主体加上线性跨度、断开表与 `approx` 输出；`AddSpan` 步进后跳断开，估计步长 `EstimateStepMs`）、`TTyTimeBreakSpan`、`TyTimeFloor`（`roundTime`）、`TyTimeFullLabelSpan`；原两个 `TyTimeTicks` 与 `TyTimeFullLabel` 变成它们的包装。
 - **`tyControls.AdvChart.AxisBreak`**（新）：`TyParseAxisBreaks`（parseAxisBreakOption，NaN 比较照 JS、异常屏蔽）、`TyAxisBreaksWritten`、`TyBreakJsText`（`String()`）、`TTyBreakAreaOpt` / `TyBreakAreaOptOf`（两个重载）、`TyBreakMoveOverlap`、`TyAxisBreakLineOn`、`TyBreakZigzag`（addZigzagShapes，随机数从缓存续，不够就用 `TyJitterRandom` 取）、`TyAxisBreakLineSegs`（buildAxisBreakLine）、`TyAdjustBreakLabelPair`（adjustBreakLabelPair：`TyRectIntersectDir` 单向 MTV、`rotate` / `mul` / `BoundingRect.applyTransform` / `Point.transform` 逐运算）。
 - **`tyControls.AdvChart.Layout`**：规格加 `LabelBreakKind` / `LabelBreakIndex`、`BreakMoveOverlap`、`HasBreakLine` / `BreakLineSegs`、`BreakAreas`（`TTyBreakAreaGeom`：身份、断开下标、A、B、有没有 B、两端）；`TTyAxisTextStyle.AxisLineWidthLogical`。`TyLayoutAxisLabels` 在位置算完、候选框做出之前调 `AdjustBreakLabels`，候选的优先级给断开标签加 `z2Max − z2Min + 1`——估算与定稿两次都走这里。
-- **`tyControls.AdvChart.Builder`**：`TyCreateAxis` 对 `xAxis` / `yAxis` 的 value / time 轴解析 `breaks`，非空就把装饰器套在 scale 的 mapper 上；`TyFillAxisLayoutSpec` 给断开端的标签记种类与下标，时间轴断开端读字典 `[TimeUnit, TimeUpper]`；`AxisMarks` 有断开时分割线 / 分割区域用 `(tbmNone, tpmPreserveExtentBound)` 的刻度；`TyLayoutGrids` 末尾 `BreakLine` 算断轴线（线宽是皮肤 `TyAdvChartAxisLine` 的）；`TTyAxisMemory` 加 `BreakIds` / `BreakRands`（随机数缓存，跟轴模型的记忆一样合并保留、notMerge 清掉），`TTyAxisMemoryStore.RandomState`（图表的 xorshift32，`TyJitterSeed` 起，Clear 不重置）；`TyLayoutBreakAreas`：所有 yAxis 组件按下标、再所有 xAxis，按上游的条件建断开区并更新缓存。
+- **[第 134 批：这条随机数也给 dataset transform 用——ecStat 的 k-means 在每个选项第一次构建时先抽，断开区接着抽，与上游 setOption 先于渲染的次序一致；见 §171。]** **`tyControls.AdvChart.Builder`**：`TyCreateAxis` 对 `xAxis` / `yAxis` 的 value / time 轴解析 `breaks`，非空就把装饰器套在 scale 的 mapper 上；`TyFillAxisLayoutSpec` 给断开端的标签记种类与下标，时间轴断开端读字典 `[TimeUnit, TimeUpper]`；`AxisMarks` 有断开时分割线 / 分割区域用 `(tbmNone, tpmPreserveExtentBound)` 的刻度；`TyLayoutGrids` 末尾 `BreakLine` 算断轴线（线宽是皮肤 `TyAdvChartAxisLine` 的）；`TTyAxisMemory` 加 `BreakIds` / `BreakRands`（随机数缓存，跟轴模型的记忆一样合并保留、notMerge 清掉），`TTyAxisMemoryStore.RandomState`（图表的 xorshift32，`TyJitterSeed` 起，Clear 不重置）；`TyLayoutBreakAreas`：所有 yAxis 组件按下标、再所有 xAxis，按上游的条件建断开区并更新缓存。
 - **`tyControls.AdvChart.Series`**：`alignTicks` 的两处候选排除写了 `breaks` 的轴。**`tyControls.AdvChart.Coord`**：`CanAffine` 排除有断开的轴。**`tyControls.AdvChart.AnimAxis`**：轴线切开时每段是自己的叶子（anid 照上游），过渡动画按段走。**`tyControls.AdvChart.Events`**：`axisbreakchanged` 进动作事件表。
 - **控件**：`Relayout` 在 `TyLayoutGrids` 之后调 `TyLayoutBreakAreas`，文字样式带上轴线宽；`PaintAxis` 有断轴线时画各段；`PaintBreakAreas` 在系列之后（zigzagZ 在系列之上）按 A、B、多边形的次序画，颜色是皮肤的（作者写了 `itemStyle.color` / `borderColor` 就用作者的，作者的填充色带 `opacity`，缺省 0.6）；`EventTargetAt` 在刷子覆盖物之后、标题之前找可点的断开区（多边形非零环绕，或离 A / B 2.5 px 以内——zrender 的 `strokeContainThreshold` 5 的一半），断开标签的命中记成第 11 类；`EventUp` 的点击派发 `expandAxisBreak`；`DispatchActionObject` 接三个动作，`DoAxisBreakAction` 照 `parseFinder`（`Index`：数、数组、`'all'`；否则 `Id`；否则 `Name`）改选项树里那一项的 `isExpanded`、`FullUpdate`、发 `axisbreakchanged`。
 - **主题键**（`themes/light.tycss`，重跑 `gen-defaulttheme.ps1` 与 `gen-tycss-catalog.ps1`，只有增加）：`TyAdvChartBreakArea { background: alpha(var(--surface), 0.6); border-color: var(--border); border-width: 1px; }`——上游白色 60%、边框灰，这里是皮肤的表面色 60% 与边框色，深色皮肤上是暗的；虚线是选项的（缺省 `[3, 3]`）。
@@ -12577,14 +12577,14 @@ Lazarus 3.0：最后一次全量之前用 `laz30_build.ps1`（私有 `--pcp`、`
 ### 做法
 
 - **`tyControls.AdvChart.DataTransform`**（新）：
-  - `ETyTransformError`；`TTyExternalSource`（`SourceFormat`、`BuiltIn`、`Count`、`RawItem`、`RawData`、`CloneRawData`、`ValueOfItem`、`RetrieveValue`、`DimensionOf`、`DimCount` / `Dim`；构造时查按行排、维度名重复、格式；按列表的行是做出来的、随源释放）；`TTyTransformParams`（`Upstream`、`Upstreams`、`Config`）、`TTyTransformResult`（`Data`、`Dimensions`）、`TTyDataTransformFunc`。
-  - **注册一个 transform 是一步**：`TyRegisterDataTransform('ns:name', @Proc)`；过程读 `AParams`，用 `TyAddTransformResult` 交结果，配置不对就 `raise ETyTransformError`——数据集于是没有表，消息就是诊断。D3 的 `ecStat:regression` / `clustering` / `histogram` 照这个接。`TyFindDataTransform`。
-  - `TyApplyDataTransform`（applyDataTransform + applySingleDataTransform：管道、中间步补位、结果检查、第一个结果的继承——副本上游报错——、结果节点进 owner 列表），整段屏蔽浮点陷阱，`Exception` 一律变成理由。
+  - **[第 134 批：`TTyTransformParams` 加了 `Random`（图表的 xorshift32 状态，k-means 用），见 §171。]** `ETyTransformError`；`TTyExternalSource`（`SourceFormat`、`BuiltIn`、`Count`、`RawItem`、`RawData`、`CloneRawData`、`ValueOfItem`、`RetrieveValue`、`DimensionOf`、`DimCount` / `Dim`；构造时查按行排、维度名重复、格式；按列表的行是做出来的、随源释放）；`TTyTransformParams`（`Upstream`、`Upstreams`、`Config`）、`TTyTransformResult`（`Data`、`Dimensions`）、`TTyDataTransformFunc`。
+  - **[第 134 批：三个已经接上，在 `tyControls.AdvChart.StatTransform` 的 initialization 里登记（不用用户调用），见 §171。]** **注册一个 transform 是一步**：`TyRegisterDataTransform('ns:name', @Proc)`；过程读 `AParams`，用 `TyAddTransformResult` 交结果，配置不对就 `raise ETyTransformError`——数据集于是没有表，消息就是诊断。D3 的 `ecStat:regression` / `clustering` / `histogram` 照这个接。`TyFindDataTransform`。
+  - **[第 134 批：加了 `ARandom`；nil 时这一次调用自己从 `TyJitterSeed` 起。]** `TyApplyDataTransform`（applyDataTransform + applySingleDataTransform：管道、中间步补位、结果检查、第一个结果的继承——副本上游报错——、结果节点进 owner 列表），整段屏蔽浮点陷阱，`Exception` 一律变成理由。
   - 值的规则：`TTyJsValue`（undefined / null / 布尔 / 数 / 串 / 数组 / 对象）、`TyJsValueOf`、`TyJsNumericOf`（numericToNumber，数组按文字）、`TyRawParserByName`、`TyApplyRawParser`（time 用 `TyParseDateMs`、`TyJsRound` 与 TimeClip）、`TyCompareJsStrings`（UTF-16 码元）、`TySortOrderCompare`。
   - **`TyJsArraySort`**：V8 TimSort 逐行转写（`ComputeMinRunLength`、`CountAndMakeRun`、`BinaryInsertionSort`、`GallopLeft` / `GallopRight`、`MergeLow` / `MergeHigh` 含 galloping 与 `minGallop` 的罚、`MergeAt`、`MergeCollapse` / `MergeForceCollapse`），在下标数组上跑，比较器是方法指针——不一致的比较器也给出 V8 的次序。
   - filter：条件树 `TTyCond`（常量 / and / or / not / 关系），`ParseCond` 的检查次序照上游（维度先于运算符）；sort：键先全部检查再查格式，parser 是纯函数，每格只解析一次。boxplot 改走通用路径（`RawData` + `TyPrepareBoxplotData`，结果节点与以前相同）。三个都在 `initialization` 里以 `echarts:` 登记。
 - **`tyControls.AdvChart.Dataset`**：
-  - `TTySourceRef`（节点 + 是否副本）；`TTyDatasetCache` 的结果改成它，加 `FUps`、`FErrors`；`UpstreamsOf`（下标 / 下标数组 / 下标串、id / id 数组，按组件次序）；`SourceAt`（getSource 的回落）；`Resolve` 照 `_createSource` / `_applyTransform`：找不到上游当根、`fromTransformResult` 的真值与下标串、上游不止一个、环、上游失败、取不到结果各有理由；副本记 `IsClone`。新公开 `ResultIsClone`、`SeriesNode`（系列读的那个：带回落）、`ResultCount`、`ErrorOf`、`DatasetCount`。`ApplyOne` / `ApplyPipe` / `Own` 删掉。
+  - **[第 134 批：缓存加 `RandomState`，控件借给它图表的状态，没人借时自己从种子起。]** `TTySourceRef`（节点 + 是否副本）；`TTyDatasetCache` 的结果改成它，加 `FUps`、`FErrors`；`UpstreamsOf`（下标 / 下标数组 / 下标串、id / id 数组，按组件次序）；`SourceAt`（getSource 的回落）；`Resolve` 照 `_createSource` / `_applyTransform`：找不到上游当根、`fromTransformResult` 的真值与下标串、上游不止一个、环、上游失败、取不到结果各有理由；副本记 `IsClone`。新公开 `ResultIsClone`、`SeriesNode`（系列读的那个：带回落）、`ResultCount`、`ErrorOf`、`DatasetCount`。`ApplyOne` / `ApplyPipe` / `Own` 删掉。
   - `TyJsTextOf`（`String()`）、`TyNormalizeDims`（normalizeDimensionsOption：名字变串、显示名缺省是名字、重名加 `-1`、`-2`，计数只记原名）、`TTySourceFields` / `TySourceFieldsOf`（createSource 对一个节点算出的格式、方向、表头数、维度定义、探测到的维度数——外部源和测试都读它；表头名是第一行每一格的 `String()`，对象行的维度是第一个真值行的键）。
   - `TySourceOf`：计算出来的数据集走 `SeriesNode`；**系列读副本时只用系列自己的 meta**；`sourceHeader` 按真值（`'auto'` 与 null 才猜）。
 - **控件**：建 store 之后，对缓存里每个有理由的数据集记一条诊断 `dataset[%d] has no table: %s`——只有系列碰到过的数据集才会被解析，没人读的不说。
@@ -12640,6 +12640,100 @@ Lazarus 3.0：最后一次全量之前用 `laz30_build.ps1`（私有 `--pcp`、`
 - `source/tyControls.StrConsts.pas`、`languages/tyControls.StrConsts.pot`、`languages/tycontrols.strconsts.zh_CN.po`、`tools/themebuilder/languages/tycontrols.zh_CN.po`：33 条字符串。
 - `tycontrols.lpk`、`tycontrols.pas`（忽略的）。
 - `tools/advchart-oracle/dataset-transform.js`、`tests/fixtures/advchart-dataset-transform.json`、`tests/test.advchart.datasettransform.pas`（新，注册在 `tytests.lpr`）、`tests/test.advchart.candleboxplot.pas`（两条断言）。
+
+## 171. Tier 3 第一百三十四批：统计变换（D3，2026-10-12）
+
+路线图 D3：统计变换——回归 4 种、k-means、直方图 4 种分箱。在这之前 `ecStat:regression`、`ecStat:histogram`、`ecStat:clustering` 都没有登记，写了就是「没有注册名为……的 transform」（§170），画廊里回归、直方图、聚类那几个例子一概画不出。echarts-stat 的源码不在本地，本地有的是 ECharts 测试目录里的构建产物 `test/lib/ecStat.min.js`（带 `transform: {regression, histogram, clustering}`；旁边的 `ecStat-1.1.1.min.js` 没有 transform）。这一批把它美化成可读的样子（`d3_ecstat.js`），按模块逐个转写：`dataPreprocess`、`normalizeDimensions`、`getPrecision`；回归的五个方法和它的高斯消元；直方图本体、四种分箱规则、`quantityExponent`、nice 步长、`range`、`bisect`；它借用的统计函数（`max`、`min`、`sum`、`mean`、`sampleVariance`、`deviation`、`quantile`）；二分 k-means（`hierarchicalKMeans`、`kMeans`、随机初值、距离、质心）；三个 transform 外壳和 `normalizeExistingDimensions` / `normalizeNewDimensions`。用法对着画廊的 `scatter-linear-regression`、`scatter-exponential-regression`、`scatter-logarithmic-regression`、`scatter-polynomial-regression`、`bar-histogram`、`scatter-clustering`、`archive/custom-aggregate-scatter-cluster`，以及 `test/data-transform-ecStat.html`。**以真跑为准**：基准把 ecStat 登记进真 dist 跑。§169、§170 的相关处在原处标注。
+
+### 上游的做法
+
+- **登记**：三个都不是 ECharts 自带的。每个用到的页面先 `echarts.registerTransform(ecStat.transform.xxx)`，类型名是 `ecStat:regression` 等，按外来 transform 的规矩带命名空间（§170）。没登记就用，`setOption` 抛「找不到 transform」。
+- **dataPreprocess**：先 `size(data)`——顺着第一个元素往下记长度：对象行（或空表）是一维、数组行是二维、第一格又是数组就是三维以上。二维时只看**第一行的宽度**：对每个 `p < 宽度`，没给维度就每一列都查、给了就只查维度里列出的，`isNumber` 不过整行丢掉；`isNumber` 是 `null → NaN; +v` 之后是数且非 NaN——**数字串、布尔、空串、`[5]` 都算数**。一维时留下本身是数的项（对象行一项都留不下）；三维以上什么都不留。`toOneDimensionArray` 取每行在第一个维度（没给维度时是 0）的值。
+- **维度**：`normalizeExistingDimensions` 把 config 的 `dimensions` 经上游的 `getDimensionInfo` 变成下标（一个值或一列），找不到抛 `Can not find dimension by …`；`normalizeDimensions` 把一个下标变成一列、没写时用缺省（回归是 `[0, 1]`，聚类是第一行的每一列，直方图没有缺省）。
+- **回归**（`regression(method, data, {order, dimensions})`，transform 读的是 `cloneRawData()`——**连表头行一起**，空行 `null.slice()` 抛）：`method || 'linear'`，查 `methods[method]`，不是五个之一时调不了（抛）。
+  - `linear`：Σx、Σy、Σxy、Σx² 逐行累加，`k = (n·Σxy − Σx·Σy) / (n·Σx² − (Σx)²)`、`b = Σy/n − k·Σx/n`；`linearThroughOrigin`：`k = Σxy / Σx²`；`exponential`：Σy、Σxy、Σx²y、Σy·ln y、Σxy·ln y，`a = e^((Σx²y·Σy ln y − Σxy·Σxy ln y) / (Σy·Σx²y − (Σxy)²))`、`b = (Σy·Σxy ln y − Σxy·Σy ln y) / 同一个分母`，点是 `a·e^(bx)`（`Math.pow(Math.E, …)`）；`logarithmic`：Σln x、Σy ln x、Σy、Σ(ln x)²（`Math.pow(·, 2)`），`k = (n·Σy ln x − Σy·Σln x) / (n·Σ(ln x)² − (Σln x)²)`、`b = (Σy − k·Σln x) / n`。负数、零的对数是 NaN / −∞，结果跟着 NaN。
+  - `polynomial`：`order` 为 null 时是 2；`s = order + 1` 个方程，第 l 个右边是 Σy·x^l、左边第 p 列是 Σx^(l+p)（全用 `Math.pow`）；按列存的矩阵做**部分主元**的高斯消元（主元在第 t 列的 t+1..s−1 行里找，交换的是从第 t 列起的每一列——右边那列也换），回代；`new Array(s)` 让小数阶与 −2 以下抛 RangeError，−1 阶是空系数、`y = 0`。
+  - 每个点是原行的副本，y 那一格换成拟合值（x 写回原值）；然后**按 x 排序**（`a[x] − b[x]`，V8 的 TimSort）。表达式：`y = ` + `Math.round(100k)/100` + `x + ` + …（负截距照样写成 `+ -3.2`），多项式 l > 1 的项保留 l + 1 位、l = 1 与常数项两位，项之间 ` + `；数字按 JS 的 `String()`。
+  - transform 外壳：`formulaOn` 为 null 时是 `'end'`；不是 `'none'` 就把**第 2 列**（写死的）写成表达式或空串（`start` 第一个点、`end` 最后一个点、`all` 每个点、别的值一个都不写），维度是 `cloneAllDimensionInfo()` 再把 `[2]` 换成 `{}`——上游只有一个维度时中间留了洞，`createSource` 读洞的 `.type` 抛 TypeError；`'none'` 时不给维度，结果 0 照 §170 继承表头和维度。
+- **直方图**（`histogram(data, {method, dimensions})`）：值先取出来；`max` / `min` 只看数；分箱数——`squareRoot`（缺省）`ceil(√n)` 封顶 50、`scott` `ceil((max − min) / (3.5·σ·n^(−1/3)))`（σ 是样本标准差：均值除以全部个数、平方和除以 n − 1、零与 NaN 原样）、`freedmanDiaconis` 先把值**原地**升序排、`ceil((max − min) / (2·(Q₃ − Q₁)·n^(−1/3)))`、`sturges` `ceil(log₂ n) + 1`；`method` 查不到抛。步长：`o = |max − min| / 分箱数`、`i = quantityExponent(o)`（ecStat 自己的：0 是 0，`floor(log o / LN10)`、`o / 10^i ≥ 10` 加一），尾数 ≥ √50 乘 10、≥ √10 乘 5、≥ √2 乘 2，精度 `i < 0 ? −i : 0`，步长 `+(±a).toFixed(精度)`。刻度 `range(+(ceil(min/步)·步).toFixed(p), +(floor(max/步)·步).toFixed(p), 步, p)`：个数 `ceil(((终 − 起)/步).toFixed(p))`，`new Array(个数 + 1)` 让 NaN 与负数抛 RangeError；每个刻度 `+(起 + s·步).toFixed(p)`。箱比刻度多一个：第一个箱的左端是 `刻度₀ − min === 步 ? min : 刻度₀ − 步`，最后一个箱的右端对称；一个刻度都没有时（`scott` 对两个值就会这样）只有一个两端都是 NaN 的箱，所有值都进它。计数：`min ≤ v ≤ max` 的值按 `bisect`（落在刻度上的进**后一个**箱）。结果 0 是 `[(x0 + x1)/2 按精度, 个数, x0, x1, 'x0 - x1']`，维度 `MeanOfV0V1, VCount, V0, V1, DisplayableName`；结果 1 是 `[x0, x1, 个数]`，没有维度。
+- **聚类**（transform 外壳）：`clusterCount` 过 `isNumber` 且大于 0，否则抛；**恰好是数 1** 时交出 `[{}, {data: []}]`——第一个结果没有 data，抛；`outputClusterIndexDimension` 与 `outputCentroidDimensions` 过 `normalizeNewDimensions`（数是 `{index}`、对象要有数的 `index`、列表逐个，别的抛 `Illegle new dimensions config`），前者没写抛。`hierarchicalKMeans(cloneRawData(), …)`：簇数小于 2 没有结果（读 `undefined.data` 抛）。
+  - 范围（`rawExtents`）在**整张原始表**上算——表头行、被预处理丢掉的行都在：`min > 格 && (min = 格)`，于是 **null 当 0**、词不算、数字串按数比较（存进去之后两个串之间按字典序）。
+  - 所有点先在簇 0，误差是到全体均值的距离。距离是每个维度 `((p − c) / 跨度)²` 的和（`Math.pow(·, 2)`），跨度为 0 或 NaN 的维度跳过。
+  - 只要簇数 F 小于 clusterCount：**每个**现有簇都试切一次——对它的点跑 `kMeans(·, 2)`，记切后误差和加上别的点的误差和，严格小于当前最好才换（相等取先到的）；一个都比不上无穷时读 `undefined.length` 抛。选中的簇：切出来的 0 号保留原簇号，1 号用新簇号（现有簇数），质心替换与追加，点按原次序改簇号与误差。
+  - `kMeans`：两个初始质心——按维度、维度里先 0 号后 1 号，`min + span × Math.random()`（这里的 min / span 是**这些点自己的**范围）；然后反复：每个点找最近的质心（严格小于，都是 NaN 时簇号 −1、误差 ∞），有点换了簇就再来，每轮重算两个质心（空簇是 0/0 = NaN）。
+  - 输出：每个点的副本在 `outputClusterIndexDimension` 写簇号（超出行长留洞）；写了 `outputCentroidDimensions` 时先查每个点的簇有没有质心（簇号 −1 读 `undefined.length` 抛），是列表时把质心的值写到那些列（列数取两边小的）。维度名是上游的名字、簇号列的名字、质心列的有名字的那些——中间留洞照样抛。结果 1 是质心表，没有维度。`outputType` 写什么都没用（外壳总是传 `single`）；`clusterCount` 是 `'3'` 照样当 3、`2.5` 切到 3 个。
+
+### port 以前
+
+- 三个类型都没有登记，数据集没有表，诊断「没有注册名为“ecStat:regression”的 transform」。
+- transform 没有办法取随机数——`TTyTransformParams` 只有上游和 config。
+
+### 做法
+
+- **`tyControls.AdvChart.StatTransform`**（新）：三个过程 `RegressionTransform`、`HistogramTransform`、`ClusteringTransform`，照上面逐个转写：
+  - 维度：`ExistingDims`（经 `TTyExternalSource.DimensionOf`，找不到用 §170 的 `rsTyDsNoDimension`）、`NormalizeDims`、`DimItem`（列表外是 −1，即 undefined）；`DataDepth`（size）、`PreprocessRows` / `PreprocessValues`（dataPreprocess，第一行宽度、维度把哪几列算作要查）。
+  - 取格子：`CellNum`（JSON 数，别的一律 NaN）、`SetCell`（写出行尾先补 null，下标 −1 不写）；数字的文字一律 `TyJsNumberToString`，`Math.round` 是 `TyJsRound`，`Math.log` / `Math.pow` 是 `TyJsLog` / `TyJsPow`，`toFixed` 是 `TyJsToFixed` 外面再把 −0 规整成 +0（`FixedNum`——见偏差里的注）。`Math.LN10`、`LN2`、`E`、`−1/3`、`√50`、`√10`、`√2` 按位写死。
+  - 回归：`FitRegression`（五个方法，累加次序、乘除结合次序照抄）、`Gaussian`（按列的矩阵，主元与交换范围照抄）；点的排序走 `TyJsArraySort`（§170 的 V8 TimSort），比较器 NaN 当 0。维度表：`DimInfoObject`（`{index, name, displayName}`）＋ `[2]` 的空对象；上游少于两个维度时直接 `raise`（上游在 createSource 里抛）。
+  - 直方图：`MaxOf` / `MinOf` / `SumOf` / `DeviationOf` / `QuantileOf`、`SortValues`（TimSort）、`BinCount`、`QuantityExponent`、`NiceStep`、`TickRange`、`TickAt`（越界是 NaN，于是空刻度那个 NaN 箱不用特判）、`Bisect`。
+  - 聚类：`TNewDims` / `NewDims`（normalizeNewDimensions）、`ElementIndex`（一个下标写进去落在数组元素还是属性上：负数、小数、2³²−1 以上是属性，看不见）；`TKMeans`（`Dist`、`Mean`、`Run`——随机初值用 `TyJitterRandom(AParams.Random^)`）；外层的切分、改号、写簇号与质心列、名字表（中间有洞就 `raise`）。
+  - **登记在这个单元的 `initialization` 里**（`TyRegisterEcStatTransforms`，公开，程序自己登记过同名的东西之后再调一次可以换回来）。理由：上游要用户先 `registerTransform`，因为 ecStat 是个可选的脚本库；端口的选项是文本，用户没有地方写这句调用，而名字带 `ecStat:` 命名空间，不会和别人的撞。`TTyAdvanceChart` 的单元 `uses` 它，有图表就有这三个。
+- **`tyControls.AdvChart.DataTransform`**：`TTyTransformParams` 加 `Random: PLongWord`（transform 里永远不是 nil）；`TyApplyDataTransform` 加 `ARandom`（缺省 nil：这一次调用自己从 `TyJitterSeed` 起一个）。
+- **`tyControls.AdvChart.Dataset`**：`TTyDatasetCache.RandomState`——控件借给它图表的状态；没人借时用缓存自己的，`Create` 与每次重置都从 `TyJitterSeed` 起；`Clear` 不动借来的指针。
+- **控件（`TTyAdvanceChart`）**：图表只有一条 `Math.random`（§169 的 `TTyAxisMemoryStore.RandomState`）。上游的 transform 在 `setOption` 里跑一次、比渲染里的任何抽取都早；端口每次构建都重建缓存、重跑 transform。所以记一个种子：`FTransformSeed` 是这个选项**第一次构建时**图表随机数的状态，每次构建都从它（拷到 `FTransformRandom`）开始跑 transform——缩放、不带 `dataset` 的合并都画出同样的簇；第一次构建跑完之后把图表的状态推到 transform 抽完的地方（于是之后断轴的锯齿接着抽，次序与上游一致）。`notMerge` 的 setOption 与 piece 里带 `dataset` 的合并（上游让数据集 `dirty`）把种子作废，下一次构建重取。
+- **字符串**：16 条 `rsTyStat…`（方法、阶数、分箱方法、排不出分箱、精度、分箱 / 聚类上限、clusterCount、簇号列、新维度、下标要写成数、下标太远、切不开、没有簇的点、不收敛、维度洞），进 `tyControls.StrConsts`、`.pot` 与 zh_CN（`tools/themebuilder/languages/tycontrols.zh_CN.po` 逐字节同步）。没有新的主题键，也没有新的 JSON 入口（transform 读的是已经解析过的选项树，`TyJsonNestingExceeds` 已经在入口处挡过）。
+- 新单元进 `tycontrols.lpk` 与（忽略的）`tycontrols.pas`。
+
+### 基准
+
+`tools/advchart-oracle/stat-transforms.js`（真 dist 加 `test/lib/ecStat.min.js`，三个都 `echarts.registerTransform`；node 下 SSR / SVG，600 × 400，`TZ=UTC`，每个选项 `animation: false`；`Math.random` 换成端口的 xorshift32，**每张图从 `TyJitterSeed` 起并计数**；最后 `process.exit()`）→ `tests/fixtures/advchart-stat-transforms.json`（约 1.07 MB）：**164 个用例**。
+
+- **回归**（46 个）：画廊的 60 个点（linear 缺省、`start` 加表头、`all`、`none` 继承表头与声明的维度、不认识的 `formulaOn`）、`y = 2x + 1` 三个乱序点、四列按名字（第 2 列被公式盖掉、第 0 列留着）、按下标反过来、一个维度（y 是 undefined：`y = NaNx + NaN`）、三个维度（第三个只查不用）、负斜率负截距（`x + -`）、200 个噪声点；`linearThroughOrigin` 两种；`exponential`（GDP 表、`start`、负数与零、衰减）；`logarithmic`（画廊的人均寿命表，第 3 列是国名、x ≤ 0、四个点 `all`）；`polynomial` 缺省 2 阶、3 阶（画廊）、1、0、5、8 阶（病态）、−1 阶、`order: null`、`y = x² − 3x + 2`；`method: ''`；一个点（linear 与 polynomial）、竖线（x 全等）、全等的点（linear 与 exponential）、x 重复（排序稳定）、null / 词 / 短行 / 长行混着、对象行、空表（维度洞，抛）、只有表头、一个声明的维度（有公式时维度洞抛，`none` 时不抛）；数字串一个（偏差，见下）。
+- **直方图**（50 个）：画廊的两张（第 0 列、`dimensions: [1]`）、没有 config；四种方法各在 100 个均匀、500 个近似正态、300 个偏斜、80 个小整数（刻度上的平局）、60 个千分之一以下（精度 4 位）、40 个正负都有、50 个百万级、三个值上；`squareRoot` 过 2500 个值封顶；全等的值（`squareRoot` 能排、`scott` 与 `freedmanDiaconis` 抛 RangeError）、四分位距为 0（分箱数 ∞、步长 1）、一个值（缺省与 `sturges`）、`scott` 两个值（空刻度、一个 NaN 箱）、没有值（抛）、按名字、单个下标、没给维度时整行都查与只查第 0 列、对象行（抛）、结果 1 的副本。
+- **聚类**（27 个）：画廊的 60 个点切 2 / 3 / 4 / 6 个、三维四团、二维里只用一维、按名字给维度并给簇号列与质心列名字（画廊的 archive 例子）、质心列是下标列表 / 单个下标（什么都不写）/ 比维度少、簇号列在行尾之外（行里留洞，名字表靠四个表头名没有洞）、簇号列盖掉第 0 列、`outputType: 'multiple'`（没用）、`clusterCount: '3'` 与 `2.5`、点比簇少、全相同、两堆重复点切 2 与 3、null 与词混在一起、**null 让第 0 列的范围从 0 起、切法与把它换成词时不同**、表头行、对象行（一个点都没有、零维的质心）、200 个点 8 个簇、一张图里两个聚类（第二个接着第一个抽）、结果 1（质心）的副本。
+- **管道**（9 个）：filter → 对数回归（人均寿命 2015）、回归 → 按 y 降序 sort、`none` 回归 → 按名字 sort、聚类 → 按簇号与 x 两键 sort、聚类 → 只留簇 1、filter → 聚类、sort → 直方图、直方图 → filter（`VCount > 2`）、三个数据集串成 filter / 聚类 / 回归。
+- **出错**（23 个，都在 transform 那一级抛）：未知回归方法、`'toString'`、维度不存在、空行、按列表、`order` 2.5 与 −2、未知分箱方法、`dimensions: []`、直方图维度不存在、`clusterCount` 没写 / 0 / 1 / 1.5 / `'many'`、没有簇号列、簇号列是词 / 没有 `index` 的对象、聚类维度不存在、没有 config、质心列不是维度配置、簇号列在名字表外两格（洞）、下游跟着失败。
+- **画面**（9 个）：画廊的线性回归（散点 + 带公式标签的线）、`data-transform-ecStat.html` 的指数回归（类目 x）、画廊的对数回归（两张 filter 散点 + 读数据集 0 的回归线）、多项式 3 阶（`yAxis.min: -40`、`splitNumber: 20`）、`bar-histogram` 的三个网格、按 `DisplayableName` 的直方图柱、`scatter-clustering`（6 个簇、visualMap 分段上色）、聚类点加质心散点、回归抛错（上游拒绝整个选项）。画面用例去掉了画廊里的 `smooth: true` 与 `labelLayout.dx`——这两样不是这一批的事，留着只会让线的顶点比不了。
+- 每个数据集按次序 `prepareSource()`，记抛出的消息或每个结果（格式、是否副本、`startIndex`、维度名——洞记 null、探测维度数、逐格的行；**根数据集的行不写**，那就是它自己的 source）；每个用例记 `Math.random` 被调了几次；有系列的另记网格矩形、类目、每个系列的项（柱的布局矩形、折线与散点的 `dataToPoint`）、**visualMap 管着的散点的填色**（别的散点用的是调色板，端口的调色板是皮肤的）、非空的标签（回归线别的点的标签是空串）。
+- 82 条守卫（`y = 2x + 1` 与排序、公式写在哪、表头不是点而名字过来了、`none` 的表头行与两列、声明维度继承、宽表的第 2 列与名字、一个维度的 NaN、三维度丢两行、`x + -`、过原点的形式、`e^(`、零的 NaN、`ln(x)` 与国名留着、多项式精确公式、−1 阶、null 阶是 2、一个点 NaN、重复 x 稳定、null 行留四行、对象行没有点、一个声明维度有洞才抛、直方图名字、画廊的箱装下全部 31 个值、箱首尾相接、封顶、`scott` 全等抛、`scott` 两个值的 NaN 箱、没有值抛、只查维度列、customData；每个画廊聚类每个点都在 [0, k) 且恰好 k 个簇、k 个质心、**抽了 k(k − 1)·维度数 次**；三维四团 36 次、名字表、单个质心列不写、行尾之外留洞、`'3'` 与 2.5 都是三个簇、两个聚类抽 12 + 24 次、null 改变切法、对象行、串联三步；23 个出错用例都在 dataset 1 抛、下游跟着抛；画面：线上只有一个公式标签、直方图柱数、六种颜色、回归抛错拒绝选项、每个画面用例至多一个聚类）全部成立；两次生成逐字节一致；没有 `\u0000`。
+
+### 测试
+
+`test.advchart.stattransforms`（新，注册在 `tytests.lpr`；`TY_STATTRANSFORMS_COUNTS=1` 时打印计数）：
+
+- **表**（`TestEveryTableIsUpstreamsTable`）：非出错、非偏差用例的每个数据集，`TTyDatasetCache` 的结果数、每个结果经 `TySourceFieldsOf` 的格式、副本标记、`startIndex`、探测维度数、维度名、逐格的行；**缓存的随机数状态 = 种子按上游的抽取次数走过去**——362 个结果、11 695 格、586 次抽取、18 330 项比较。
+- **出错**（`TestEveryThrowLeavesNoTable`）：上游抛的数据集这里没有结果且有理由，没抛的照样比——210 项。
+- **画面**（`TestChartsOverTheTransformsDrawAsUpstream`）：控件自己画（zrender 宽度表量字），比**第一次渲染后图表的随机数状态**、网格矩形、类目、柱（按所在网格裁过）、散点圆心与 visualMap 填色、折线顶点（单精度）、非空标签——1 004 项、446 个图元、31 个标签。
+- **手写**（4 个）：三个不用调用就登记着、程序换掉之后 `TyRegisterEcStatTransforms` 换回来；聚类图缩放、合并一个不带 `dataset` 的选项都画同样的点和颜色且不动图表的随机数，合并带 `dataset` 的选项之后再抽一遍（状态走到两倍）；数字串那一行端口丢掉（上游留着、算出 NaN）；回归方法不认识时诊断说 `dataset[1] has no table: "nope" is not a regression method`、系列什么都不画。
+
+首跑：表、出错、手写全过；画面只有填色不对——那是调色板（端口用皮肤的），改成只记 visualMap 管着的散点的填色之后全过。补了几个用例：`scott` 对两个值的空刻度、一个声明维度（有无公式）、null 改变范围的那一对（原来的 null 用例里 null 并不改变结果，靠它够不到范围那一行）。
+
+本批按规矩只跑了自己的新套件和直接碰到的套件，全部通过：`TAdvChartStatTransformsTest` 7、`TAdvChartDatasetTransformTest` 7、`TAdvChartCandleBoxplotTest` 9、`TAdvChartDatasetTest` 22、`TAdvChartAxisBreaksOracleTest` 8、`TAdvChartOptionMergeTest` 15、`TAdvChartConvertJitterTest` 10。全量与变异留到 D1–D4 里程碑末；候选见 `s171.md.candidates.md`（21 个）。
+
+### 推迟与偏差
+
+- **不用登记就有**：上游没登记时 `setOption` 抛「找不到 transform」，端口三个总在（理由见上）。
+- **数才是数**：ecStat 的 `isNumber` 让数字串、布尔、空串、`[5]` 都过了预处理，接着在 `+=` 里——数字串把累加变成字符串拼接，结果多半是 NaN。端口只认 JSON 的数，这样的行丢掉（`r-numstr`：上游留四行、公式 `NaN`，端口留三行、公式是数）。
+- **第一行宽度以外的列**：预处理不查，上游按 JS 算（null 是 0），端口当 NaN。
+- **聚类范围里的数字串**：上游存进去之后两个串之间按字典序比，端口一律按数比。
+- **新维度的下标**：上游 `isNumber` 让 `'3'` 与 `[3]` 当下标用，端口要求写成数（`rsTyStatIndexNotNumber`）；簇号列写成列表时上游读 `+[...]`，端口同样拒绝。
+- **上限**（上游会一直跑下去或分配一个巨大的数组）：多项式阶数 64、刻度 100 000 个、聚类 1 000 个、一次 k-means 100 000 轮、新维度下标 100 000——超过就没有表，理由说清楚。`order` 写成数以外的东西端口也拒绝（上游做字符串加法）。
+- **toFixed 超过 20 位**：端口的 `TyJsToFixed` 到 20 位为止，步长小于 1e−20 的直方图没有表（上游到 100 位都行）。
+- **原型上的名字**：直方图的 `method: 'constructor'` 之类上游会去调 `Object` 的方法、出一张怪表或抛，端口当不认识的方法；回归同类名字上游都抛，结果一样。
+- **点排序的比较器**：x 有 ±∞ 时 `a − b` 是 NaN，V8 各处对 NaN 的处理不同，端口当相等。
+- **出错不抛**：与 §170 相同——只有这个数据集与读它的没有表，理由是端口自己的话。维度表有洞时上游在 `createSource` 里读洞的 `.type` 抛 TypeError，端口在 transform 里就拒绝（`rsTyStatDimHole`），结果相同。
+- **随机数的重跑**：上游在上游数据集版本变了时也重跑下游的 transform；端口以「`notMerge` 或合并的 piece 带 `dataset`」为准。media 单元里写 `dataset` 不算。
+- **`print`**：不做（§170 一样）。
+- 注：`TyJsToFixed(-0, p)` 回 −0，JS 的 `+(-0).toFixed(p)` 是 +0；这一批在自己的 `FixedNum` 里规整了，`tyControls.AdvChart.Scale` 的函数没有动——别的调用点要不要改，另看。
+
+### 落地
+
+- `source/tyControls.AdvChart.StatTransform.pas`（新，进 `tycontrols.lpk`）。
+- `source/tyControls.AdvChart.DataTransform.pas`：`TTyTransformParams.Random`、`TyApplyDataTransform` 的 `ARandom`。
+- `source/tyControls.AdvChart.Dataset.pas`：`TTyDatasetCache.RandomState`。
+- `source/tyControls.AdvanceChart.pas`：`uses` 新单元；`FTransformSeed` / `FTransformSeedTaken` / `FTransformRandom`，构建时借给缓存、第一次构建后推进图表的随机数，`notMerge` 与带 `dataset` 的合并作废种子。
+- `source/tyControls.StrConsts.pas`、`languages/tyControls.StrConsts.pot`、`languages/tycontrols.strconsts.zh_CN.po`、`tools/themebuilder/languages/tycontrols.zh_CN.po`：16 条字符串。
+- `tycontrols.lpk`、`tycontrols.pas`（忽略的）。
+- `tools/advchart-oracle/stat-transforms.js`、`tests/fixtures/advchart-stat-transforms.json`、`tests/test.advchart.stattransforms.pas`（新，注册在 `tytests.lpr`）。
 
 ## 172. Tier 3 第一百三十五批：realtimeSort 柱状竞赛（D4，2026-10-12）
 
