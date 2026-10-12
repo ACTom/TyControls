@@ -2717,6 +2717,534 @@
    "fails": []
   },
   {
+   "id": "single-category",
+   "group": "coords",
+   "note": "dots on a CATEGORY single axis: api.size is the band width whatever the value asked (milestone C14-C22)",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666",
+     "#73c0de"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "singleAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ],
+     "top": 100,
+     "height": 60
+    },
+    "series": [
+     {
+      "type": "custom",
+      "coordinateSystem": "singleAxis",
+      "renderItem": "@singleDot",
+      "data": [
+       [
+        0,
+        2
+       ],
+       [
+        2,
+        5
+       ],
+       [
+        4,
+        3
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [],
+   "states": [
+    {
+     "calls": [
+      {
+       "s": 0,
+       "name": "singleDot",
+       "params": {
+        "dataIndex": 0,
+        "dataIndexInside": 0,
+        "dataInsideLength": 3,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "singleAxis",
+         "x": "403e000000000000",
+         "y": "4059000000000000",
+         "width": "4080e00000000000",
+         "height": "404e000000000000"
+        },
+        "encode": {
+         "single": [
+          0
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "0000000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "4000000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": [
+          "4055000000000000",
+          "4060400000000000"
+         ]
+        },
+        {
+         "fn": "size",
+         "args": [
+          "4000000000000000",
+          "0000000000000000"
+         ],
+         "ret": "405b000000000000"
+        },
+        {
+         "fn": "visual",
+         "args": [
+          "color"
+         ],
+         "ret": "#5470c6"
+        }
+       ],
+       "ret": {
+        "type": "circle",
+        "shape": {
+         "cx": "4055000000000000",
+         "cy": "4060400000000000",
+         "r": "404b000000000000"
+        },
+        "style": {
+         "fill": "#5470c6"
+        },
+        "info": {
+         "mid": "4060400000000000"
+        }
+       }
+      },
+      {
+       "s": 0,
+       "name": "singleDot",
+       "params": {
+        "dataIndex": 1,
+        "dataIndexInside": 1,
+        "dataInsideLength": 3,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "singleAxis",
+         "x": "403e000000000000",
+         "y": "4059000000000000",
+         "width": "4080e00000000000",
+         "height": "404e000000000000"
+        },
+        "encode": {
+         "single": [
+          0
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "4000000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "4014000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          "4000000000000000"
+         ],
+         "ret": [
+          "4072c00000000000",
+          "4060400000000000"
+         ]
+        },
+        {
+         "fn": "size",
+         "args": [
+          "4014000000000000",
+          "4000000000000000"
+         ],
+         "ret": "405b000000000000"
+        },
+        {
+         "fn": "visual",
+         "args": [
+          "color"
+         ],
+         "ret": "#5470c6"
+        }
+       ],
+       "ret": {
+        "type": "circle",
+        "shape": {
+         "cx": "4072c00000000000",
+         "cy": "4060400000000000",
+         "r": "404b000000000000"
+        },
+        "style": {
+         "fill": "#5470c6"
+        },
+        "info": {
+         "mid": "4060400000000000"
+        }
+       }
+      },
+      {
+       "s": 0,
+       "name": "singleDot",
+       "params": {
+        "dataIndex": 2,
+        "dataIndexInside": 2,
+        "dataInsideLength": 3,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "singleAxis",
+         "x": "403e000000000000",
+         "y": "4059000000000000",
+         "width": "4080e00000000000",
+         "height": "404e000000000000"
+        },
+        "encode": {
+         "single": [
+          0
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "4010000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "4008000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          "4010000000000000"
+         ],
+         "ret": [
+          "4080200000000000",
+          "4060400000000000"
+         ]
+        },
+        {
+         "fn": "size",
+         "args": [
+          "4008000000000000",
+          "4010000000000000"
+         ],
+         "ret": "405b000000000000"
+        },
+        {
+         "fn": "visual",
+         "args": [
+          "color"
+         ],
+         "ret": "#5470c6"
+        }
+       ],
+       "ret": {
+        "type": "circle",
+        "shape": {
+         "cx": "4080200000000000",
+         "cy": "4060400000000000",
+         "r": "404b000000000000"
+        },
+        "style": {
+         "fill": "#5470c6"
+        },
+        "info": {
+         "mid": "4060400000000000"
+        }
+       }
+      }
+     ],
+     "throws": null,
+     "els": [
+      {
+       "key": "s0:0",
+       "type": "circle",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "cx": "4055000000000000",
+        "cy": "4060400000000000",
+        "r": "404b000000000000"
+       },
+       "path": [
+        "3ff0000000000000",
+        "4061400000000000",
+        "4060400000000000",
+        "4014000000000000",
+        "4055000000000000",
+        "4060400000000000",
+        "404b000000000000",
+        "404b000000000000",
+        "0000000000000000",
+        "401921fb54442d18",
+        "0000000000000000",
+        "3ff0000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 0
+       },
+       "info": "{\"mid\":130}"
+      },
+      {
+       "key": "s0:1",
+       "type": "circle",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "cx": "4072c00000000000",
+        "cy": "4060400000000000",
+        "r": "404b000000000000"
+       },
+       "path": [
+        "3ff0000000000000",
+        "4076200000000000",
+        "4060400000000000",
+        "4014000000000000",
+        "4072c00000000000",
+        "4060400000000000",
+        "404b000000000000",
+        "404b000000000000",
+        "0000000000000000",
+        "401921fb54442d18",
+        "0000000000000000",
+        "3ff0000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 1
+       },
+       "info": "{\"mid\":130}"
+      },
+      {
+       "key": "s0:2",
+       "type": "circle",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "cx": "4080200000000000",
+        "cy": "4060400000000000",
+        "r": "404b000000000000"
+       },
+       "path": [
+        "3ff0000000000000",
+        "4081d00000000000",
+        "4060400000000000",
+        "4014000000000000",
+        "4080200000000000",
+        "4060400000000000",
+        "404b000000000000",
+        "404b000000000000",
+        "0000000000000000",
+        "401921fb54442d18",
+        "0000000000000000",
+        "3ff0000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 2
+       },
+       "info": "{\"mid\":130}"
+      }
+     ],
+     "order": [
+      "s0:0",
+      "s0:1",
+      "s0:2"
+     ],
+     "clips": [
+      {
+       "s": 0,
+       "rect": null
+      }
+     ],
+     "st": [
+      {
+       "key": "s0:0",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:1",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:2",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      }
+     ],
+     "legend": null
+    }
+   ],
+   "fails": []
+  },
+  {
    "id": "none",
    "group": "coords",
    "note": "coordinateSystem 'none': no coordSys, the dimensions x and y, the values as pixels; a hover",
@@ -17399,6 +17927,10 @@
   },
   {
    "name": "single: every record matches its recipe",
+   "ok": true
+  },
+  {
+   "name": "single-category: every record matches its recipe",
    "ok": true
   },
   {

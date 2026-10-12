@@ -932,6 +932,26 @@ begin
     bmp.Free;
   end;
   AssertEquals('the resize lays the one', 1, Length(FChart.ParallelBrushOf(2).Covers));
+  { ANY OTHER UPDATE renders every view too -- a legend's toggle runs one,
+    and its payload is no axisAreaSelect [milestone C14-C22] }
+  bmp := TBGRABitmap.Create(cW, cH, BGRA(255, 255, 255, 255));
+  try
+    FChart.SetBounds(0, 0, cW, cH);
+    FChart.Render(bmp.Canvas, Rect(0, 0, cW, cH), 96);
+  finally
+    bmp.Free;
+  end;
+  FChart.SetOption('{"animation":false,"backgroundColor":"#ffffff","legend":{},'
+    + '"parallelAxis":[{"dim":0,"min":0,"max":100},{"dim":1,"min":0,"max":100},'
+    + '{"dim":2,"min":0,"max":100}],"series":[{"type":"parallel","name":"p","data":'
+    + cRows + '}]}', True);
+  RenderNow;
+  FChart.DispatchAction('{"type":"axisAreaSelect","parallelAxisIndex":2,"intervals":[[10,30],[50,70]]}');
+  RenderNow;
+  AssertEquals('the named axis waits', 0, Length(FChart.ParallelBrushOf(2).Covers));
+  FChart.DispatchAction('{"type":"legendToggleSelect","name":"p"}');
+  RenderNow;
+  AssertEquals('a legend''s update lays it', 2, Length(FChart.ParallelBrushOf(2).Covers));
 end;
 
 procedure TAdvChartParallelBrushTest.TestNotMergeDropsTheControllers;

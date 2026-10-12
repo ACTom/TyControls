@@ -11025,6 +11025,1235 @@
    ]
   },
   {
+   "id": "Z-LINEX-LEFT",
+   "note": "a lineX brush dragged out past the left edge is clipped to the first band (milestone C14-C22)",
+   "option": {
+    "animation": false,
+    "legend": {"show":false},
+    "xAxis": {"type":"category","data":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]},
+    "yAxis": {"type":"value"},
+    "series": [{"type":"line","name":"Email","data":[120,132,101,134,90,230,210]},{"type":"bar","name":"Ads","data":[220,182,191,234,290,330,310]}],
+    "toolbox": {"feature":{"dataZoom":{"yAxisIndex":false}}}
+   },
+   "initial": {
+    "toolboxes": [
+     {
+      "iconStatus": {"dataZoom":{"zoom":"normal","back":"normal"}},
+      "icons": [
+       {
+        "key": "dataZoom.zoom",
+        "style": {"stroke":"#6578ba","fill":"none","lineWidth":1,"opacity":1},
+        "states": [],
+        "emphasis": {"position":null,"align":null},
+        "text": {"ignore":true,"text":"Zoom","font":"normal normal 12px Microsoft YaHei","fill":null,"x":"0000000000000000","xText":"0","y":"0000000000000000","yText":"0","align":"left","verticalAlign":"top","position":null}
+       },
+       {
+        "key": "dataZoom.back",
+        "style": {"stroke":"#6578ba","fill":"none","lineWidth":1,"opacity":1},
+        "states": [],
+        "emphasis": {"position":["100%",25],"align":"right"},
+        "text": {"ignore":true,"text":"Zoom Reset","font":"normal normal 12px Microsoft YaHei","fill":null,"x":"0000000000000000","xText":"0","y":"0000000000000000","yText":"0","align":"left","verticalAlign":"top","position":null}
+       }
+      ]
+     }
+    ],
+    "cursor": null,
+    "actions": [],
+    "events": [],
+    "option": {
+     "series": [{"type":"line","name":"Email","data":[120,132,101,134,90,230,210],"smooth":false},{"type":"bar","name":"Ads","data":[220,182,191,234,290,330,310]}],
+     "xAxis": [{"type":"category","boundaryGap":true,"data":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]}],
+     "yAxis": [{"type":"value","boundaryGap":[0,0]}],
+     "title": []
+    },
+    "zoom": {
+     "active": false,
+     "history": 1,
+     "cover": null,
+     "dataZooms": [{"key":"select:x0","range":["0000000000000000","4059000000000000"],"rangeText":["0","100"],"startValue":"0000000000000000","startValueText":"0","endValue":"4018000000000000","endValueText":"6"}],
+     "extents": {"x0":["0000000000000000","4018000000000000"],"x0Text":["0","6"],"y0":["0000000000000000","4075e00000000000"],"y0Text":["0","350"]}
+    },
+    "dataView": null,
+    "saved": null,
+    "clicks": [],
+    "error": null,
+    "layout": [
+     {
+      "show": true,
+      "group": ["408120c30c000000","4039000000000000"],
+      "groupText": ["548.0952377319336","25"],
+      "background": {"x":"c039000000000000","xText":"-25","y":"c039000000000000","yText":"-25","width":"405339e7a0000000","widthText":"76.9047622680664","height":"4049000000000000","heightText":"50","r":0,"fill":"transparent","stroke":"#b7b9be","lineWidth":0},
+      "icons": [
+       {
+        "key": "dataZoom.zoom",
+        "feature": "dataZoom",
+        "name": "zoom",
+        "title": "Zoom",
+        "kind": "path",
+        "x": "0000000000000000",
+        "xText": "0",
+        "y": "0000000000000000",
+        "yText": "0",
+        "rect": ["c024000000000000","c024000000000000","4034000000000000","4034000000000000"],
+        "rectText": ["-10","-10","20","20"],
+        "pathRect": ["c01e000000000000","c01e000000000000","402e000000000000","402e000000000000"],
+        "pathRectText": ["-7.5","-7.5","15","15"],
+        "data": [
+         "3ff0000000000000","c01e000000000000","c01008d3e0000000","4000000000000000","bfe1611ac0000000","c01008d3e0000000","3ff0000000000000","c01008d3e0000000","bfe1611ac0000000","4000000000000000","c01008d3e0000000","c01e000000000000",
+         "3ff0000000000000","3fe9a7b880000000","c01008d3e0000000","4000000000000000","401e000000000000","c01008d3e0000000","4000000000000000","401e000000000000","401e000000000000","4000000000000000","c01008d3e0000000","401e000000000000",
+         "4000000000000000","c01008d3e0000000","3fe9a7b880000000"
+        ]
+       },
+       {
+        "key": "dataZoom.back",
+        "feature": "dataZoom",
+        "name": "back",
+        "title": "Zoom Reset",
+        "kind": "path",
+        "x": "403c73cf40000000",
+        "xText": "28.452381134033203",
+        "y": "0000000000000000",
+        "yText": "0",
+        "rect": ["c020e79e80000000","c024000000000000","4030e79e80000000","4034000000000000"],
+        "rectText": ["-8.452381134033203","-10","16.904762268066406","20"],
+        "pathRect": ["c017cf3d00000000","c01e000000000000","4027cf3d00000000","402e000000000000"],
+        "pathRectText": ["-5.952381134033203","-7.5","11.904762268066406","15"],
+        "data": [
+         "3ff0000000000000","c00602b5a0000000","c01e000000000000","4000000000000000","c017cf3d00000000","c011321dc0000000","4000000000000000","c005965960000000","bff0b83640000000","3ff0000000000000","c01762e0e0000000","c011321dc0000000",
+         "4000000000000000","4017cf3d00000000","c011321dc0000000","4000000000000000","4017cf3d00000000","401e000000000000","4000000000000000","c01762e0e0000000","401e000000000000","4000000000000000","c01762e0e0000000","3fe3e4e8a0000000"
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "i": 0,
+     "step": {"type":"mousemove","x":548,"y":25,"at":"toolbox0.dataZoom.zoom"},
+     "hover": "toolbox0.dataZoom.zoom",
+     "record": {
+      "toolboxes": [
+       {
+        "iconStatus": {"dataZoom":{"zoom":"normal","back":"normal"}},
+        "icons": [
+         {
+          "key": "dataZoom.zoom",
+          "style": {"stroke":"#6578ba","fill":"none","lineWidth":1,"opacity":1},
+          "states": [],
+          "emphasis": {"position":null,"align":null},
+          "text": {"ignore":false,"text":"Zoom","font":"normal normal 12px Microsoft YaHei","fill":"#404c76","x":"408120c30c000000","xText":"548.0952377319336","y":"4044000000000000","yText":"40","align":"center","verticalAlign":"top","position":"bottom"}
+         }
+        ]
+       }
+      ],
+      "cursor": "pointer",
+      "actions": [],
+      "events": [],
+      "option": null,
+      "zoom": null,
+      "dataView": null,
+      "saved": null,
+      "clicks": [],
+      "error": null,
+      "layout": null
+     }
+    },
+    {
+     "i": 1,
+     "step": {"type":"mousedown","x":548,"y":25,"at":"toolbox0.dataZoom.zoom"},
+     "hover": "toolbox0.dataZoom.zoom",
+     "record": {
+      "toolboxes": [
+       {
+        "iconStatus": {"dataZoom":{"zoom":"normal","back":"normal"}},
+        "icons": [
+         {
+          "key": "dataZoom.zoom",
+          "style": {"stroke":"#404c76","fill":"none","lineWidth":1,"opacity":1},
+          "states": ["emphasis"],
+          "emphasis": {"position":null,"align":null},
+          "text": {"ignore":false,"text":"Zoom","font":"normal normal 12px Microsoft YaHei","fill":"#404c76","x":"408120c30c000000","xText":"548.0952377319336","y":"4044000000000000","yText":"40","align":"center","verticalAlign":"top","position":"bottom"}
+         }
+        ]
+       }
+      ],
+      "cursor": null,
+      "actions": [],
+      "events": [],
+      "option": null,
+      "zoom": null,
+      "dataView": null,
+      "saved": null,
+      "clicks": [],
+      "error": null,
+      "layout": null
+     }
+    },
+    {
+     "i": 2,
+     "step": {"type":"mouseup","x":548,"y":25,"at":"toolbox0.dataZoom.zoom"},
+     "hover": "toolbox0.dataZoom.zoom",
+     "record": {"toolboxes":[{"iconStatus":{"dataZoom":{"zoom":"normal","back":"normal"}},"icons":[]}],"cursor":null,"actions":[],"events":[],"option":null,"zoom":null,"dataView":null,"saved":null,"clicks":[],"error":null,"layout":null}
+    },
+    {
+     "i": 3,
+     "step": {"type":"click","x":548,"y":25,"at":"toolbox0.dataZoom.zoom"},
+     "hover": "toolbox0.dataZoom.zoom",
+     "record": {
+      "toolboxes": [
+       {
+        "iconStatus": {"dataZoom":{"zoom":"emphasis","back":"normal"}},
+        "icons": [
+         {
+          "key": "dataZoom.zoom",
+          "style": {"stroke":"#404c76","fill":"none","lineWidth":1,"opacity":1},
+          "states": ["emphasis"],
+          "emphasis": {"position":null,"align":null},
+          "text": {"ignore":true,"text":"Zoom","font":"normal normal 12px Microsoft YaHei","fill":null,"x":"0000000000000000","xText":"0","y":"0000000000000000","yText":"0","align":"left","verticalAlign":"top","position":null}
+         }
+        ]
+       }
+      ],
+      "cursor": null,
+      "actions": [{"type":"takeGlobalCursor","key":"dataZoomSelect","dataZoomSelectActive":true}],
+      "events": [{"type":"globalcursortaken","payload":{"type":"globalcursortaken","key":"dataZoomSelect","dataZoomSelectActive":true}}],
+      "option": null,
+      "zoom": {
+       "active": true,
+       "history": 1,
+       "cover": null,
+       "dataZooms": [{"key":"select:x0","range":["0000000000000000","4059000000000000"],"rangeText":["0","100"],"startValue":"0000000000000000","startValueText":"0","endValue":"4018000000000000","endValueText":"6"}],
+       "extents": {"x0":["0000000000000000","4018000000000000"],"x0Text":["0","6"],"y0":["0000000000000000","4075e00000000000"],"y0Text":["0","350"]}
+      },
+      "dataView": null,
+      "saved": null,
+      "clicks": [],
+      "error": null,
+      "layout": null
+     }
+    },
+    {
+     "i": 4,
+     "step": {"type":"mousemove","x":400,"y":200,"at":null},
+     "hover": "series1",
+     "record": {
+      "toolboxes": [{"iconStatus":{"dataZoom":{"zoom":"emphasis","back":"normal"}},"icons":[]}],
+      "cursor": "crosshair",
+      "actions": [],
+      "events": [
+       {
+        "type": "mouseover",
+        "payload": {
+         "componentType": "series",
+         "componentSubType": "bar",
+         "componentIndex": 1,
+         "seriesType": "bar",
+         "seriesIndex": 1,
+         "seriesId": "<NUL>Ads<NUL>0",
+         "seriesName": "Ads",
+         "name": "Fri",
+         "dataIndex": 4,
+         "data": 290,
+         "value": 290,
+         "color": "#b6d634",
+         "dimensionNames": ["x","y"],
+         "encode": {"x":[0],"y":[1]},
+         "$vars": ["seriesName","name","value"],
+         "type": "mouseover"
+        }
+       }
+      ],
+      "option": null,
+      "zoom": null,
+      "dataView": null,
+      "saved": null,
+      "clicks": [],
+      "error": null,
+      "layout": null
+     }
+    },
+    {"i":5,"step":{"type":"mousedown","x":400,"y":200,"at":null},"hover":"series1","record":{"toolboxes":null,"cursor":null,"actions":[],"events":[],"option":null,"zoom":null,"dataView":null,"saved":null,"clicks":[],"error":null,"layout":null}},
+    {
+     "i": 6,
+     "step": {"type":"mousemove","x":210,"y":225,"at":null},
+     "hover": null,
+     "record": {
+      "toolboxes": null,
+      "cursor": "crosshair",
+      "actions": [],
+      "events": [
+       {
+        "type": "mouseout",
+        "payload": {
+         "componentType": "series",
+         "componentSubType": "bar",
+         "componentIndex": 1,
+         "seriesType": "bar",
+         "seriesIndex": 1,
+         "seriesId": "<NUL>Ads<NUL>0",
+         "seriesName": "Ads",
+         "name": "Fri",
+         "dataIndex": 4,
+         "data": 290,
+         "value": 290,
+         "color": "#b6d634",
+         "dimensionNames": ["x","y"],
+         "encode": {"x":[0],"y":[1]},
+         "$vars": ["seriesName","name","value"],
+         "type": "mouseout"
+        }
+       }
+      ],
+      "option": null,
+      "zoom": {
+       "active": true,
+       "history": 1,
+       "cover": {"fill":"rgba(234,237,245,0.5)","rect":["406a400000000000","4050400000000000","4067c00000000000","406fe00000000000"],"rectText":["210","65","190","255"]},
+       "dataZooms": [{"key":"select:x0","range":["0000000000000000","4059000000000000"],"rangeText":["0","100"],"startValue":"0000000000000000","startValueText":"0","endValue":"4018000000000000","endValueText":"6"}],
+       "extents": {"x0":["0000000000000000","4018000000000000"],"x0Text":["0","6"],"y0":["0000000000000000","4075e00000000000"],"y0Text":["0","350"]}
+      },
+      "dataView": null,
+      "saved": null,
+      "clicks": [],
+      "error": null,
+      "layout": null
+     }
+    },
+    {
+     "i": 7,
+     "step": {"type":"mousemove","x":20,"y":250,"at":null},
+     "hover": null,
+     "record": {
+      "toolboxes": null,
+      "cursor": "default",
+      "actions": [],
+      "events": [],
+      "option": null,
+      "zoom": {
+       "active": true,
+       "history": 1,
+       "cover": {"fill":"rgba(234,237,245,0.5)","rect":["4056800000000000","4050400000000000","4073600000000000","406fe00000000000"],"rectText":["90","65","310","255"]},
+       "dataZooms": [{"key":"select:x0","range":["0000000000000000","4059000000000000"],"rangeText":["0","100"],"startValue":"0000000000000000","startValueText":"0","endValue":"4018000000000000","endValueText":"6"}],
+       "extents": {"x0":["0000000000000000","4018000000000000"],"x0Text":["0","6"],"y0":["0000000000000000","4075e00000000000"],"y0Text":["0","350"]}
+      },
+      "dataView": null,
+      "saved": null,
+      "clicks": [],
+      "error": null,
+      "layout": null
+     }
+    },
+    {
+     "i": 8,
+     "step": {"type":"mouseup","x":20,"y":250,"at":null},
+     "hover": null,
+     "record": {
+      "toolboxes": [
+       {
+        "iconStatus": {"dataZoom":{"zoom":"emphasis","back":"emphasis"}},
+        "icons": [
+         {
+          "key": "dataZoom.back",
+          "style": {"stroke":"#404c76","fill":"none","lineWidth":1,"opacity":1},
+          "states": ["emphasis"],
+          "emphasis": {"position":["100%",25],"align":"right"},
+          "text": {"ignore":true,"text":"Zoom Reset","font":"normal normal 12px Microsoft YaHei","fill":null,"x":"0000000000000000","xText":"0","y":"0000000000000000","yText":"0","align":"right","verticalAlign":"top","position":["100%",25]}
+         }
+        ]
+       }
+      ],
+      "cursor": null,
+      "actions": [{"type":"dataZoom","batch":[{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_xAxis0","startValue":0,"endValue":4}]}],
+      "events": [{"type":"datazoom","payload":{"type":"datazoom","batch":[{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_xAxis0","startValue":0,"endValue":4,"type":"datazoom","batch":null}]}}],
+      "option": null,
+      "zoom": {
+       "active": true,
+       "history": 2,
+       "cover": null,
+       "dataZooms": [{"key":"select:x0","range":["0000000000000000","4050aaaaaaaaaaaa"],"rangeText":["0","66.66666666666666"],"startValue":"0000000000000000","startValueText":"0","endValue":"4010000000000000","endValueText":"4"}],
+       "extents": {"x0":["0000000000000000","4010000000000000"],"x0Text":["0","4"],"y0":["0000000000000000","4072c00000000000"],"y0Text":["0","300"]}
+      },
+      "dataView": null,
+      "saved": null,
+      "clicks": [],
+      "error": null,
+      "layout": null
+     }
+    },
+    {
+     "i": 9,
+     "step": {"type":"click","x":20,"y":250,"at":null},
+     "hover": null,
+     "record": {"toolboxes":[{"iconStatus":{"dataZoom":{"zoom":"emphasis","back":"emphasis"}},"icons":[]}],"cursor":null,"actions":[],"events":[],"option":null,"zoom":null,"dataView":null,"saved":null,"clicks":[],"error":null,"layout":null}
+    },
+    {"i":10,"step":{"type":"idle"},"hover":null,"record":{"toolboxes":null,"cursor":null,"actions":[],"events":[],"option":null,"zoom":null,"dataView":null,"saved":null,"clicks":[],"error":null,"layout":null}}
+   ]
+  },
+  {
+   "id": "Z-BACK-BASE",
+   "note": "back at the base snapshot: the base stays and is dispatched again (milestone C14-C22)",
+   "option": {
+    "animation": false,
+    "legend": {"show":false},
+    "xAxis": {"type":"category","data":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]},
+    "yAxis": {"type":"value"},
+    "series": [{"type":"line","name":"Email","data":[120,132,101,134,90,230,210]},{"type":"bar","name":"Ads","data":[220,182,191,234,290,330,310]}],
+    "toolbox": {"feature":{"dataZoom":{}}}
+   },
+   "initial": {
+    "toolboxes": [
+     {
+      "iconStatus": {"dataZoom":{"zoom":"normal","back":"normal"}},
+      "icons": [
+       {
+        "key": "dataZoom.zoom",
+        "style": {"stroke":"#6578ba","fill":"none","lineWidth":1,"opacity":1},
+        "states": [],
+        "emphasis": {"position":null,"align":null},
+        "text": {"ignore":true,"text":"Zoom","font":"normal normal 12px Microsoft YaHei","fill":null,"x":"0000000000000000","xText":"0","y":"0000000000000000","yText":"0","align":"left","verticalAlign":"top","position":null}
+       },
+       {
+        "key": "dataZoom.back",
+        "style": {"stroke":"#6578ba","fill":"none","lineWidth":1,"opacity":1},
+        "states": [],
+        "emphasis": {"position":["100%",25],"align":"right"},
+        "text": {"ignore":true,"text":"Zoom Reset","font":"normal normal 12px Microsoft YaHei","fill":null,"x":"0000000000000000","xText":"0","y":"0000000000000000","yText":"0","align":"left","verticalAlign":"top","position":null}
+       }
+      ]
+     }
+    ],
+    "cursor": null,
+    "actions": [],
+    "events": [],
+    "option": {
+     "series": [{"type":"line","name":"Email","data":[120,132,101,134,90,230,210],"smooth":false},{"type":"bar","name":"Ads","data":[220,182,191,234,290,330,310]}],
+     "xAxis": [{"type":"category","boundaryGap":true,"data":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]}],
+     "yAxis": [{"type":"value","boundaryGap":[0,0]}],
+     "title": []
+    },
+    "zoom": {
+     "active": false,
+     "history": 1,
+     "cover": null,
+     "dataZooms": [
+      {"key":"select:x0","range":["0000000000000000","4059000000000000"],"rangeText":["0","100"],"startValue":"0000000000000000","startValueText":"0","endValue":"4018000000000000","endValueText":"6"},
+      {"key":"select:y0","range":["0000000000000000","4059000000000000"],"rangeText":["0","100"],"startValue":"0000000000000000","startValueText":"0","endValue":"4074a00000000000","endValueText":"330"}
+     ],
+     "extents": {"x0":["0000000000000000","4018000000000000"],"x0Text":["0","6"],"y0":["0000000000000000","4075e00000000000"],"y0Text":["0","350"]}
+    },
+    "dataView": null,
+    "saved": null,
+    "clicks": [],
+    "error": null,
+    "layout": [
+     {
+      "show": true,
+      "group": ["408120c30c000000","4039000000000000"],
+      "groupText": ["548.0952377319336","25"],
+      "background": {"x":"c039000000000000","xText":"-25","y":"c039000000000000","yText":"-25","width":"405339e7a0000000","widthText":"76.9047622680664","height":"4049000000000000","heightText":"50","r":0,"fill":"transparent","stroke":"#b7b9be","lineWidth":0},
+      "icons": [
+       {
+        "key": "dataZoom.zoom",
+        "feature": "dataZoom",
+        "name": "zoom",
+        "title": "Zoom",
+        "kind": "path",
+        "x": "0000000000000000",
+        "xText": "0",
+        "y": "0000000000000000",
+        "yText": "0",
+        "rect": ["c024000000000000","c024000000000000","4034000000000000","4034000000000000"],
+        "rectText": ["-10","-10","20","20"],
+        "pathRect": ["c01e000000000000","c01e000000000000","402e000000000000","402e000000000000"],
+        "pathRectText": ["-7.5","-7.5","15","15"],
+        "data": [
+         "3ff0000000000000","c01e000000000000","c01008d3e0000000","4000000000000000","bfe1611ac0000000","c01008d3e0000000","3ff0000000000000","c01008d3e0000000","bfe1611ac0000000","4000000000000000","c01008d3e0000000","c01e000000000000",
+         "3ff0000000000000","3fe9a7b880000000","c01008d3e0000000","4000000000000000","401e000000000000","c01008d3e0000000","4000000000000000","401e000000000000","401e000000000000","4000000000000000","c01008d3e0000000","401e000000000000",
+         "4000000000000000","c01008d3e0000000","3fe9a7b880000000"
+        ]
+       },
+       {
+        "key": "dataZoom.back",
+        "feature": "dataZoom",
+        "name": "back",
+        "title": "Zoom Reset",
+        "kind": "path",
+        "x": "403c73cf40000000",
+        "xText": "28.452381134033203",
+        "y": "0000000000000000",
+        "yText": "0",
+        "rect": ["c020e79e80000000","c024000000000000","4030e79e80000000","4034000000000000"],
+        "rectText": ["-8.452381134033203","-10","16.904762268066406","20"],
+        "pathRect": ["c017cf3d00000000","c01e000000000000","4027cf3d00000000","402e000000000000"],
+        "pathRectText": ["-5.952381134033203","-7.5","11.904762268066406","15"],
+        "data": [
+         "3ff0000000000000","c00602b5a0000000","c01e000000000000","4000000000000000","c017cf3d00000000","c011321dc0000000","4000000000000000","c005965960000000","bff0b83640000000","3ff0000000000000","c01762e0e0000000","c011321dc0000000",
+         "4000000000000000","4017cf3d00000000","c011321dc0000000","4000000000000000","4017cf3d00000000","401e000000000000","4000000000000000","c01762e0e0000000","401e000000000000","4000000000000000","c01762e0e0000000","3fe3e4e8a0000000"
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "i": 0,
+     "step": {"type":"mousemove","x":548,"y":25,"at":"toolbox0.dataZoom.zoom"},
+     "hover": "toolbox0.dataZoom.zoom",
+     "record": {
+      "toolboxes": [
+       {
+        "iconStatus": {"dataZoom":{"zoom":"normal","back":"normal"}},
+        "icons": [
+         {
+          "key": "dataZoom.zoom",
+          "style": {"stroke":"#6578ba","fill":"none","lineWidth":1,"opacity":1},
+          "states": [],
+          "emphasis": {"position":null,"align":null},
+          "text": {"ignore":false,"text":"Zoom","font":"normal normal 12px Microsoft YaHei","fill":"#404c76","x":"408120c30c000000","xText":"548.0952377319336","y":"4044000000000000","yText":"40","align":"center","verticalAlign":"top","position":"bottom"}
+         }
+        ]
+       }
+      ],
+      "cursor": "pointer",
+      "actions": [],
+      "events": [],
+      "option": null,
+      "zoom": null,
+      "dataView": null,
+      "saved": null,
+      "clicks": [],
+      "error": null,
+      "layout": null
+     }
+    },
+    {
+     "i": 1,
+     "step": {"type":"mousedown","x":548,"y":25,"at":"toolbox0.dataZoom.zoom"},
+     "hover": "toolbox0.dataZoom.zoom",
+     "record": {
+      "toolboxes": [
+       {
+        "iconStatus": {"dataZoom":{"zoom":"normal","back":"normal"}},
+        "icons": [
+         {
+          "key": "dataZoom.zoom",
+          "style": {"stroke":"#404c76","fill":"none","lineWidth":1,"opacity":1},
+          "states": ["emphasis"],
+          "emphasis": {"position":null,"align":null},
+          "text": {"ignore":false,"text":"Zoom","font":"normal normal 12px Microsoft YaHei","fill":"#404c76","x":"408120c30c000000","xText":"548.0952377319336","y":"4044000000000000","yText":"40","align":"center","verticalAlign":"top","position":"bottom"}
+         }
+        ]
+       }
+      ],
+      "cursor": null,
+      "actions": [],
+      "events": [],
+      "option": null,
+      "zoom": null,
+      "dataView": null,
+      "saved": null,
+      "clicks": [],
+      "error": null,
+      "layout": null
+     }
+    },
+    {
+     "i": 2,
+     "step": {"type":"mouseup","x":548,"y":25,"at":"toolbox0.dataZoom.zoom"},
+     "hover": "toolbox0.dataZoom.zoom",
+     "record": {"toolboxes":[{"iconStatus":{"dataZoom":{"zoom":"normal","back":"normal"}},"icons":[]}],"cursor":null,"actions":[],"events":[],"option":null,"zoom":null,"dataView":null,"saved":null,"clicks":[],"error":null,"layout":null}
+    },
+    {
+     "i": 3,
+     "step": {"type":"click","x":548,"y":25,"at":"toolbox0.dataZoom.zoom"},
+     "hover": "toolbox0.dataZoom.zoom",
+     "record": {
+      "toolboxes": [
+       {
+        "iconStatus": {"dataZoom":{"zoom":"emphasis","back":"normal"}},
+        "icons": [
+         {
+          "key": "dataZoom.zoom",
+          "style": {"stroke":"#404c76","fill":"none","lineWidth":1,"opacity":1},
+          "states": ["emphasis"],
+          "emphasis": {"position":null,"align":null},
+          "text": {"ignore":true,"text":"Zoom","font":"normal normal 12px Microsoft YaHei","fill":null,"x":"0000000000000000","xText":"0","y":"0000000000000000","yText":"0","align":"left","verticalAlign":"top","position":null}
+         }
+        ]
+       }
+      ],
+      "cursor": null,
+      "actions": [{"type":"takeGlobalCursor","key":"dataZoomSelect","dataZoomSelectActive":true}],
+      "events": [{"type":"globalcursortaken","payload":{"type":"globalcursortaken","key":"dataZoomSelect","dataZoomSelectActive":true}}],
+      "option": null,
+      "zoom": {
+       "active": true,
+       "history": 1,
+       "cover": null,
+       "dataZooms": [
+        {"key":"select:x0","range":["0000000000000000","4059000000000000"],"rangeText":["0","100"],"startValue":"0000000000000000","startValueText":"0","endValue":"4018000000000000","endValueText":"6"},
+        {"key":"select:y0","range":["0000000000000000","4059000000000000"],"rangeText":["0","100"],"startValue":"0000000000000000","startValueText":"0","endValue":"4074a00000000000","endValueText":"330"}
+       ],
+       "extents": {"x0":["0000000000000000","4018000000000000"],"x0Text":["0","6"],"y0":["0000000000000000","4075e00000000000"],"y0Text":["0","350"]}
+      },
+      "dataView": null,
+      "saved": null,
+      "clicks": [],
+      "error": null,
+      "layout": null
+     }
+    },
+    {
+     "i": 4,
+     "step": {"type":"mousemove","x":150,"y":120,"at":null},
+     "hover": null,
+     "record": {"toolboxes":[{"iconStatus":{"dataZoom":{"zoom":"emphasis","back":"normal"}},"icons":[]}],"cursor":"crosshair","actions":[],"events":[],"option":null,"zoom":null,"dataView":null,"saved":null,"clicks":[],"error":null,"layout":null}
+    },
+    {"i":5,"step":{"type":"mousedown","x":150,"y":120,"at":null},"hover":null,"record":{"toolboxes":null,"cursor":null,"actions":[],"events":[],"option":null,"zoom":null,"dataView":null,"saved":null,"clicks":[],"error":null,"layout":null}},
+    {
+     "i": 6,
+     "step": {"type":"mousemove","x":265,"y":210,"at":null},
+     "hover": "series1",
+     "record": {
+      "toolboxes": null,
+      "cursor": "crosshair",
+      "actions": [],
+      "events": [
+       {
+        "type": "mouseover",
+        "payload": {
+         "componentType": "series",
+         "componentSubType": "bar",
+         "componentIndex": 1,
+         "seriesType": "bar",
+         "seriesIndex": 1,
+         "seriesId": "<NUL>Ads<NUL>0",
+         "seriesName": "Ads",
+         "name": "Wed",
+         "dataIndex": 2,
+         "data": 191,
+         "value": 191,
+         "color": "#b6d634",
+         "dimensionNames": ["x","y"],
+         "encode": {"x":[0],"y":[1]},
+         "$vars": ["seriesName","name","value"],
+         "type": "mouseover"
+        }
+       }
+      ],
+      "option": null,
+      "zoom": {
+       "active": true,
+       "history": 1,
+       "cover": {"fill":"rgba(234,237,245,0.5)","rect":["4062c00000000000","405e000000000000","405cc00000000000","4056800000000000"],"rectText":["150","120","115","90"]},
+       "dataZooms": [
+        {"key":"select:x0","range":["0000000000000000","4059000000000000"],"rangeText":["0","100"],"startValue":"0000000000000000","startValueText":"0","endValue":"4018000000000000","endValueText":"6"},
+        {"key":"select:y0","range":["0000000000000000","4059000000000000"],"rangeText":["0","100"],"startValue":"0000000000000000","startValueText":"0","endValue":"4074a00000000000","endValueText":"330"}
+       ],
+       "extents": {"x0":["0000000000000000","4018000000000000"],"x0Text":["0","6"],"y0":["0000000000000000","4075e00000000000"],"y0Text":["0","350"]}
+      },
+      "dataView": null,
+      "saved": null,
+      "clicks": [],
+      "error": null,
+      "layout": null
+     }
+    },
+    {
+     "i": 7,
+     "step": {"type":"mousemove","x":380,"y":300,"at":null},
+     "hover": "series1",
+     "record": {
+      "toolboxes": null,
+      "cursor": "crosshair",
+      "actions": [],
+      "events": [
+       {
+        "type": "mouseout",
+        "payload": {
+         "componentType": "series",
+         "componentSubType": "bar",
+         "componentIndex": 1,
+         "seriesType": "bar",
+         "seriesIndex": 1,
+         "seriesId": "<NUL>Ads<NUL>0",
+         "seriesName": "Ads",
+         "name": "Wed",
+         "dataIndex": 2,
+         "data": 191,
+         "value": 191,
+         "color": "#b6d634",
+         "dimensionNames": ["x","y"],
+         "encode": {"x":[0],"y":[1]},
+         "$vars": ["seriesName","name","value"],
+         "type": "mouseout"
+        }
+       },
+       {
+        "type": "mouseover",
+        "payload": {
+         "componentType": "series",
+         "componentSubType": "bar",
+         "componentIndex": 1,
+         "seriesType": "bar",
+         "seriesIndex": 1,
+         "seriesId": "<NUL>Ads<NUL>0",
+         "seriesName": "Ads",
+         "name": "Fri",
+         "dataIndex": 4,
+         "data": 290,
+         "value": 290,
+         "color": "#b6d634",
+         "dimensionNames": ["x","y"],
+         "encode": {"x":[0],"y":[1]},
+         "$vars": ["seriesName","name","value"],
+         "type": "mouseover"
+        }
+       }
+      ],
+      "option": null,
+      "zoom": {
+       "active": true,
+       "history": 1,
+       "cover": {"fill":"rgba(234,237,245,0.5)","rect":["4062c00000000000","405e000000000000","406cc00000000000","4066800000000000"],"rectText":["150","120","230","180"]},
+       "dataZooms": [
+        {"key":"select:x0","range":["0000000000000000","4059000000000000"],"rangeText":["0","100"],"startValue":"0000000000000000","startValueText":"0","endValue":"4018000000000000","endValueText":"6"},
+        {"key":"select:y0","range":["0000000000000000","4059000000000000"],"rangeText":["0","100"],"startValue":"0000000000000000","startValueText":"0","endValue":"4074a00000000000","endValueText":"330"}
+       ],
+       "extents": {"x0":["0000000000000000","4018000000000000"],"x0Text":["0","6"],"y0":["0000000000000000","4075e00000000000"],"y0Text":["0","350"]}
+      },
+      "dataView": null,
+      "saved": null,
+      "clicks": [],
+      "error": null,
+      "layout": null
+     }
+    },
+    {
+     "i": 8,
+     "step": {"type":"mouseup","x":380,"y":300,"at":null},
+     "hover": "series1",
+     "record": {
+      "toolboxes": [
+       {
+        "iconStatus": {"dataZoom":{"zoom":"emphasis","back":"emphasis"}},
+        "icons": [
+         {
+          "key": "dataZoom.back",
+          "style": {"stroke":"#404c76","fill":"none","lineWidth":1,"opacity":1},
+          "states": ["emphasis"],
+          "emphasis": {"position":["100%",25],"align":"right"},
+          "text": {"ignore":true,"text":"Zoom Reset","font":"normal normal 12px Microsoft YaHei","fill":null,"x":"0000000000000000","xText":"0","y":"0000000000000000","yText":"0","align":"right","verticalAlign":"top","position":["100%",25]}
+         }
+        ]
+       }
+      ],
+      "cursor": null,
+      "actions": [{"type":"dataZoom","batch":[{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_xAxis0","startValue":0,"endValue":4},{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_yAxis0","startValue":27,"endValue":275}]}],
+      "events": [
+       {
+        "type": "datazoom",
+        "payload": {
+         "type": "datazoom",
+         "batch": [{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_xAxis0","startValue":0,"endValue":4,"type":"datazoom","batch":null},{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_yAxis0","startValue":27,"endValue":275,"type":"datazoom","batch":null}]
+        }
+       }
+      ],
+      "option": null,
+      "zoom": {
+       "active": true,
+       "history": 2,
+       "cover": null,
+       "dataZooms": [
+        {"key":"select:x0","range":["0000000000000000","4050aaaaaaaaaaaa"],"rangeText":["0","66.66666666666666"],"startValue":"0000000000000000","startValueText":"0","endValue":"4010000000000000","endValueText":"4"},
+        {"key":"select:y0","range":["40229ee58469ee59","4057b4f72c234f73"],"rangeText":["9.310344827586208","94.82758620689656"],"startValue":"403b000000000000","startValueText":"27","endValue":"4071300000000000","endValueText":"275"}
+       ],
+       "extents": {"x0":["0000000000000000","4010000000000000"],"x0Text":["0","4"],"y0":["403b000000000000","4071300000000000"],"y0Text":["27","275"]}
+      },
+      "dataView": null,
+      "saved": null,
+      "clicks": [],
+      "error": null,
+      "layout": null
+     }
+    },
+    {
+     "i": 9,
+     "step": {"type":"click","x":380,"y":300,"at":null},
+     "hover": "series1",
+     "record": {"toolboxes":[{"iconStatus":{"dataZoom":{"zoom":"emphasis","back":"emphasis"}},"icons":[]}],"cursor":null,"actions":[],"events":[],"option":null,"zoom":null,"dataView":null,"saved":null,"clicks":[],"error":null,"layout":null}
+    },
+    {
+     "i": 10,
+     "step": {"type":"mousemove","x":577,"y":25,"at":"toolbox0.dataZoom.back"},
+     "hover": "toolbox0.dataZoom.back",
+     "record": {
+      "toolboxes": [
+       {
+        "iconStatus": {"dataZoom":{"zoom":"emphasis","back":"emphasis"}},
+        "icons": [
+         {
+          "key": "dataZoom.back",
+          "style": {"stroke":"#404c76","fill":"none","lineWidth":1,"opacity":1},
+          "states": ["emphasis"],
+          "emphasis": {"position":["100%",25],"align":"right"},
+          "text": {
+           "ignore": false,
+           "text": "Zoom Reset",
+           "font": "normal normal 12px Microsoft YaHei",
+           "fill": "#404c76",
+           "x": "4082046186000000",
+           "xText": "576.5476188659668",
+           "y": "4044000000000000",
+           "yText": "40",
+           "align": "right",
+           "verticalAlign": "top",
+           "position": "bottom"
+          }
+         }
+        ]
+       }
+      ],
+      "cursor": "pointer",
+      "actions": [],
+      "events": [
+       {
+        "type": "mouseout",
+        "payload": {
+         "componentType": "series",
+         "componentSubType": "bar",
+         "componentIndex": 1,
+         "seriesType": "bar",
+         "seriesIndex": 1,
+         "seriesId": "<NUL>Ads<NUL>0",
+         "seriesName": "Ads",
+         "name": "Thu",
+         "dataIndex": 3,
+         "data": 234,
+         "value": 234,
+         "color": "#b6d634",
+         "dimensionNames": ["x","y"],
+         "encode": {"x":[0],"y":[1]},
+         "$vars": ["seriesName","name","value"],
+         "type": "mouseout"
+        }
+       }
+      ],
+      "option": null,
+      "zoom": null,
+      "dataView": null,
+      "saved": null,
+      "clicks": [],
+      "error": null,
+      "layout": null
+     }
+    },
+    {
+     "i": 11,
+     "step": {"type":"mousedown","x":577,"y":25,"at":"toolbox0.dataZoom.back"},
+     "hover": "toolbox0.dataZoom.back",
+     "record": {"toolboxes":[{"iconStatus":{"dataZoom":{"zoom":"emphasis","back":"emphasis"}},"icons":[]}],"cursor":null,"actions":[],"events":[],"option":null,"zoom":null,"dataView":null,"saved":null,"clicks":[],"error":null,"layout":null}
+    },
+    {
+     "i": 12,
+     "step": {"type":"mouseup","x":577,"y":25,"at":"toolbox0.dataZoom.back"},
+     "hover": "toolbox0.dataZoom.back",
+     "record": {"toolboxes":null,"cursor":null,"actions":[],"events":[],"option":null,"zoom":null,"dataView":null,"saved":null,"clicks":[],"error":null,"layout":null}
+    },
+    {
+     "i": 13,
+     "step": {"type":"click","x":577,"y":25,"at":"toolbox0.dataZoom.back"},
+     "hover": "toolbox0.dataZoom.back",
+     "record": {
+      "toolboxes": [
+       {
+        "iconStatus": {"dataZoom":{"zoom":"emphasis","back":"normal"}},
+        "icons": [
+         {
+          "key": "dataZoom.back",
+          "style": {"stroke":"#6578ba","fill":"none","lineWidth":1,"opacity":1},
+          "states": [],
+          "emphasis": {"position":["100%",25],"align":"right"},
+          "text": {"ignore":true,"text":"Zoom Reset","font":"normal normal 12px Microsoft YaHei","fill":null,"x":"0000000000000000","xText":"0","y":"0000000000000000","yText":"0","align":"left","verticalAlign":"top","position":null}
+         }
+        ]
+       }
+      ],
+      "cursor": null,
+      "actions": [{"type":"dataZoom","batch":[{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_xAxis0","start":0,"end":100},{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_yAxis0","start":0,"end":100}]}],
+      "events": [
+       {
+        "type": "datazoom",
+        "payload": {"type":"datazoom","batch":[{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_xAxis0","start":0,"end":100,"type":"datazoom","batch":null},{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_yAxis0","start":0,"end":100,"type":"datazoom","batch":null}]}
+       }
+      ],
+      "option": null,
+      "zoom": {
+       "active": true,
+       "history": 1,
+       "cover": null,
+       "dataZooms": [
+        {"key":"select:x0","range":["0000000000000000","4059000000000000"],"rangeText":["0","100"],"startValue":"0000000000000000","startValueText":"0","endValue":"4018000000000000","endValueText":"6"},
+        {"key":"select:y0","range":["0000000000000000","4059000000000000"],"rangeText":["0","100"],"startValue":"0000000000000000","startValueText":"0","endValue":"4074a00000000000","endValueText":"330"}
+       ],
+       "extents": {"x0":["0000000000000000","4018000000000000"],"x0Text":["0","6"],"y0":["0000000000000000","4075e00000000000"],"y0Text":["0","350"]}
+      },
+      "dataView": null,
+      "saved": null,
+      "clicks": [],
+      "error": null,
+      "layout": null
+     }
+    },
+    {
+     "i": 14,
+     "step": {"type":"mousemove","x":577,"y":25,"at":"toolbox0.dataZoom.back"},
+     "hover": "toolbox0.dataZoom.back",
+     "record": {"toolboxes":[{"iconStatus":{"dataZoom":{"zoom":"emphasis","back":"normal"}},"icons":[]}],"cursor":"pointer","actions":[],"events":[],"option":null,"zoom":null,"dataView":null,"saved":null,"clicks":[],"error":null,"layout":null}
+    },
+    {
+     "i": 15,
+     "step": {"type":"mousedown","x":577,"y":25,"at":"toolbox0.dataZoom.back"},
+     "hover": "toolbox0.dataZoom.back",
+     "record": {"toolboxes":null,"cursor":null,"actions":[],"events":[],"option":null,"zoom":null,"dataView":null,"saved":null,"clicks":[],"error":null,"layout":null}
+    },
+    {
+     "i": 16,
+     "step": {"type":"mouseup","x":577,"y":25,"at":"toolbox0.dataZoom.back"},
+     "hover": "toolbox0.dataZoom.back",
+     "record": {"toolboxes":null,"cursor":null,"actions":[],"events":[],"option":null,"zoom":null,"dataView":null,"saved":null,"clicks":[],"error":null,"layout":null}
+    },
+    {
+     "i": 17,
+     "step": {"type":"click","x":577,"y":25,"at":"toolbox0.dataZoom.back"},
+     "hover": "toolbox0.dataZoom.back",
+     "record": {
+      "toolboxes": null,
+      "cursor": null,
+      "actions": [{"type":"dataZoom","batch":[{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_xAxis0","start":0,"end":100},{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_yAxis0","start":0,"end":100}]}],
+      "events": [
+       {
+        "type": "datazoom",
+        "payload": {"type":"datazoom","batch":[{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_xAxis0","start":0,"end":100,"type":"datazoom","batch":null},{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_yAxis0","start":0,"end":100,"type":"datazoom","batch":null}]}
+       }
+      ],
+      "option": null,
+      "zoom": null,
+      "dataView": null,
+      "saved": null,
+      "clicks": [],
+      "error": null,
+      "layout": null
+     }
+    },
+    {"i":18,"step":{"type":"mousemove","x":200,"y":150,"at":null},"hover":null,"record":{"toolboxes":null,"cursor":"crosshair","actions":[],"events":[],"option":null,"zoom":null,"dataView":null,"saved":null,"clicks":[],"error":null,"layout":null}},
+    {"i":19,"step":{"type":"mousedown","x":200,"y":150,"at":null},"hover":null,"record":{"toolboxes":null,"cursor":null,"actions":[],"events":[],"option":null,"zoom":null,"dataView":null,"saved":null,"clicks":[],"error":null,"layout":null}},
+    {
+     "i": 20,
+     "step": {"type":"mousemove","x":265,"y":215,"at":null},
+     "hover": "series1",
+     "record": {
+      "toolboxes": null,
+      "cursor": "crosshair",
+      "actions": [],
+      "events": [
+       {
+        "type": "mouseover",
+        "payload": {
+         "componentType": "series",
+         "componentSubType": "bar",
+         "componentIndex": 1,
+         "seriesType": "bar",
+         "seriesIndex": 1,
+         "seriesId": "<NUL>Ads<NUL>0",
+         "seriesName": "Ads",
+         "name": "Wed",
+         "dataIndex": 2,
+         "data": 191,
+         "value": 191,
+         "color": "#b6d634",
+         "dimensionNames": ["x","y"],
+         "encode": {"x":[0],"y":[1]},
+         "$vars": ["seriesName","name","value"],
+         "type": "mouseover"
+        }
+       }
+      ],
+      "option": null,
+      "zoom": {
+       "active": true,
+       "history": 1,
+       "cover": {"fill":"rgba(234,237,245,0.5)","rect":["4069000000000000","4062c00000000000","4050400000000000","4050400000000000"],"rectText":["200","150","65","65"]},
+       "dataZooms": [
+        {"key":"select:x0","range":["0000000000000000","4059000000000000"],"rangeText":["0","100"],"startValue":"0000000000000000","startValueText":"0","endValue":"4018000000000000","endValueText":"6"},
+        {"key":"select:y0","range":["0000000000000000","4059000000000000"],"rangeText":["0","100"],"startValue":"0000000000000000","startValueText":"0","endValue":"4074a00000000000","endValueText":"330"}
+       ],
+       "extents": {"x0":["0000000000000000","4018000000000000"],"x0Text":["0","6"],"y0":["0000000000000000","4075e00000000000"],"y0Text":["0","350"]}
+      },
+      "dataView": null,
+      "saved": null,
+      "clicks": [],
+      "error": null,
+      "layout": null
+     }
+    },
+    {
+     "i": 21,
+     "step": {"type":"mousemove","x":330,"y":280,"at":null},
+     "hover": "series1",
+     "record": {
+      "toolboxes": null,
+      "cursor": "crosshair",
+      "actions": [],
+      "events": [
+       {
+        "type": "mouseout",
+        "payload": {
+         "componentType": "series",
+         "componentSubType": "bar",
+         "componentIndex": 1,
+         "seriesType": "bar",
+         "seriesIndex": 1,
+         "seriesId": "<NUL>Ads<NUL>0",
+         "seriesName": "Ads",
+         "name": "Wed",
+         "dataIndex": 2,
+         "data": 191,
+         "value": 191,
+         "color": "#b6d634",
+         "dimensionNames": ["x","y"],
+         "encode": {"x":[0],"y":[1]},
+         "$vars": ["seriesName","name","value"],
+         "type": "mouseout"
+        }
+       },
+       {
+        "type": "mouseover",
+        "payload": {
+         "componentType": "series",
+         "componentSubType": "bar",
+         "componentIndex": 1,
+         "seriesType": "bar",
+         "seriesIndex": 1,
+         "seriesId": "<NUL>Ads<NUL>0",
+         "seriesName": "Ads",
+         "name": "Thu",
+         "dataIndex": 3,
+         "data": 234,
+         "value": 234,
+         "color": "#b6d634",
+         "dimensionNames": ["x","y"],
+         "encode": {"x":[0],"y":[1]},
+         "$vars": ["seriesName","name","value"],
+         "type": "mouseover"
+        }
+       }
+      ],
+      "option": null,
+      "zoom": {
+       "active": true,
+       "history": 1,
+       "cover": {"fill":"rgba(234,237,245,0.5)","rect":["4069000000000000","4062c00000000000","4060400000000000","4060400000000000"],"rectText":["200","150","130","130"]},
+       "dataZooms": [
+        {"key":"select:x0","range":["0000000000000000","4059000000000000"],"rangeText":["0","100"],"startValue":"0000000000000000","startValueText":"0","endValue":"4018000000000000","endValueText":"6"},
+        {"key":"select:y0","range":["0000000000000000","4059000000000000"],"rangeText":["0","100"],"startValue":"0000000000000000","startValueText":"0","endValue":"4074a00000000000","endValueText":"330"}
+       ],
+       "extents": {"x0":["0000000000000000","4018000000000000"],"x0Text":["0","6"],"y0":["0000000000000000","4075e00000000000"],"y0Text":["0","350"]}
+      },
+      "dataView": null,
+      "saved": null,
+      "clicks": [],
+      "error": null,
+      "layout": null
+     }
+    },
+    {
+     "i": 22,
+     "step": {"type":"mouseup","x":330,"y":280,"at":null},
+     "hover": "series1",
+     "record": {
+      "toolboxes": [
+       {
+        "iconStatus": {"dataZoom":{"zoom":"emphasis","back":"emphasis"}},
+        "icons": [
+         {
+          "key": "dataZoom.back",
+          "style": {"stroke":"#404c76","fill":"none","lineWidth":1,"opacity":1},
+          "states": ["emphasis"],
+          "emphasis": {"position":["100%",25],"align":"right"},
+          "text": {"ignore":true,"text":"Zoom Reset","font":"normal normal 12px Microsoft YaHei","fill":null,"x":"0000000000000000","xText":"0","y":"0000000000000000","yText":"0","align":"right","verticalAlign":"top","position":["100%",25]}
+         }
+        ]
+       }
+      ],
+      "cursor": null,
+      "actions": [{"type":"dataZoom","batch":[{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_xAxis0","startValue":1,"endValue":3},{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_yAxis0","startValue":55,"endValue":233}]}],
+      "events": [
+       {
+        "type": "datazoom",
+        "payload": {
+         "type": "datazoom",
+         "batch": [{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_xAxis0","startValue":1,"endValue":3,"type":"datazoom","batch":null},{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_yAxis0","startValue":55,"endValue":233,"type":"datazoom","batch":null}]
+        }
+       }
+      ],
+      "option": null,
+      "zoom": {
+       "active": true,
+       "history": 2,
+       "cover": null,
+       "dataZooms": [
+        {"key":"select:x0","range":["4030aaaaaaaaaaaa","4049000000000000"],"rangeText":["16.666666666666664","50"],"startValue":"3ff0000000000000","startValueText":"1","endValue":"4008000000000000","endValueText":"3"},
+        {"key":"select:y0","range":["4037811811811811","4058e4a64a64a64a"],"rangeText":["23.504273504273502","99.57264957264957"],"startValue":"404b800000000000","startValueText":"55","endValue":"406d200000000000","endValueText":"233"}
+       ],
+       "extents": {"x0":["3ff0000000000000","4008000000000000"],"x0Text":["1","3"],"y0":["404b800000000000","406d200000000000"],"y0Text":["55","233"]}
+      },
+      "dataView": null,
+      "saved": null,
+      "clicks": [],
+      "error": null,
+      "layout": null
+     }
+    },
+    {
+     "i": 23,
+     "step": {"type":"click","x":330,"y":280,"at":null},
+     "hover": "series1",
+     "record": {"toolboxes":[{"iconStatus":{"dataZoom":{"zoom":"emphasis","back":"emphasis"}},"icons":[]}],"cursor":null,"actions":[],"events":[],"option":null,"zoom":null,"dataView":null,"saved":null,"clicks":[],"error":null,"layout":null}
+    },
+    {
+     "i": 24,
+     "step": {"type":"mousemove","x":577,"y":25,"at":"toolbox0.dataZoom.back"},
+     "hover": "toolbox0.dataZoom.back",
+     "record": {
+      "toolboxes": [
+       {
+        "iconStatus": {"dataZoom":{"zoom":"emphasis","back":"emphasis"}},
+        "icons": [
+         {
+          "key": "dataZoom.back",
+          "style": {"stroke":"#404c76","fill":"none","lineWidth":1,"opacity":1},
+          "states": ["emphasis"],
+          "emphasis": {"position":["100%",25],"align":"right"},
+          "text": {
+           "ignore": false,
+           "text": "Zoom Reset",
+           "font": "normal normal 12px Microsoft YaHei",
+           "fill": "#404c76",
+           "x": "4082046186000000",
+           "xText": "576.5476188659668",
+           "y": "4044000000000000",
+           "yText": "40",
+           "align": "right",
+           "verticalAlign": "top",
+           "position": "bottom"
+          }
+         }
+        ]
+       }
+      ],
+      "cursor": "pointer",
+      "actions": [],
+      "events": [
+       {
+        "type": "mouseout",
+        "payload": {
+         "componentType": "series",
+         "componentSubType": "bar",
+         "componentIndex": 1,
+         "seriesType": "bar",
+         "seriesIndex": 1,
+         "seriesId": "<NUL>Ads<NUL>0",
+         "seriesName": "Ads",
+         "name": "Wed",
+         "dataIndex": 2,
+         "data": 191,
+         "value": 191,
+         "color": "#b6d634",
+         "dimensionNames": ["x","y"],
+         "encode": {"x":[0],"y":[1]},
+         "$vars": ["seriesName","name","value"],
+         "type": "mouseout"
+        }
+       }
+      ],
+      "option": null,
+      "zoom": null,
+      "dataView": null,
+      "saved": null,
+      "clicks": [],
+      "error": null,
+      "layout": null
+     }
+    },
+    {
+     "i": 25,
+     "step": {"type":"mousedown","x":577,"y":25,"at":"toolbox0.dataZoom.back"},
+     "hover": "toolbox0.dataZoom.back",
+     "record": {"toolboxes":[{"iconStatus":{"dataZoom":{"zoom":"emphasis","back":"emphasis"}},"icons":[]}],"cursor":null,"actions":[],"events":[],"option":null,"zoom":null,"dataView":null,"saved":null,"clicks":[],"error":null,"layout":null}
+    },
+    {
+     "i": 26,
+     "step": {"type":"mouseup","x":577,"y":25,"at":"toolbox0.dataZoom.back"},
+     "hover": "toolbox0.dataZoom.back",
+     "record": {"toolboxes":null,"cursor":null,"actions":[],"events":[],"option":null,"zoom":null,"dataView":null,"saved":null,"clicks":[],"error":null,"layout":null}
+    },
+    {
+     "i": 27,
+     "step": {"type":"click","x":577,"y":25,"at":"toolbox0.dataZoom.back"},
+     "hover": "toolbox0.dataZoom.back",
+     "record": {
+      "toolboxes": [
+       {
+        "iconStatus": {"dataZoom":{"zoom":"emphasis","back":"normal"}},
+        "icons": [
+         {
+          "key": "dataZoom.back",
+          "style": {"stroke":"#6578ba","fill":"none","lineWidth":1,"opacity":1},
+          "states": [],
+          "emphasis": {"position":["100%",25],"align":"right"},
+          "text": {"ignore":true,"text":"Zoom Reset","font":"normal normal 12px Microsoft YaHei","fill":null,"x":"0000000000000000","xText":"0","y":"0000000000000000","yText":"0","align":"left","verticalAlign":"top","position":null}
+         }
+        ]
+       }
+      ],
+      "cursor": null,
+      "actions": [{"type":"dataZoom","batch":[{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_xAxis0","start":0,"end":100},{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_yAxis0","start":0,"end":100}]}],
+      "events": [
+       {
+        "type": "datazoom",
+        "payload": {"type":"datazoom","batch":[{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_xAxis0","start":0,"end":100,"type":"datazoom","batch":null},{"dataZoomId":"<NUL>_ec_<NUL>toolbox-dataZoom_yAxis0","start":0,"end":100,"type":"datazoom","batch":null}]}
+       }
+      ],
+      "option": null,
+      "zoom": {
+       "active": true,
+       "history": 1,
+       "cover": null,
+       "dataZooms": [
+        {"key":"select:x0","range":["0000000000000000","4059000000000000"],"rangeText":["0","100"],"startValue":"0000000000000000","startValueText":"0","endValue":"4018000000000000","endValueText":"6"},
+        {"key":"select:y0","range":["0000000000000000","4059000000000000"],"rangeText":["0","100"],"startValue":"0000000000000000","startValueText":"0","endValue":"4074a00000000000","endValueText":"330"}
+       ],
+       "extents": {"x0":["0000000000000000","4018000000000000"],"x0Text":["0","6"],"y0":["0000000000000000","4075e00000000000"],"y0Text":["0","350"]}
+      },
+      "dataView": null,
+      "saved": null,
+      "clicks": [],
+      "error": null,
+      "layout": null
+     }
+    },
+    {
+     "i": 28,
+     "step": {"type":"idle"},
+     "hover": null,
+     "record": {"toolboxes":[{"iconStatus":{"dataZoom":{"zoom":"emphasis","back":"normal"}},"icons":[]}],"cursor":null,"actions":[],"events":[],"option":null,"zoom":null,"dataView":null,"saved":null,"clicks":[],"error":null,"layout":null}
+    }
+   ]
+  },
+  {
    "id": "Z-SLIDER",
    "note": "an author's slider on the same x axis: linked by the action",
    "option": {
@@ -13966,14 +15195,14 @@
    "id": "G1",
    "mutation": "the box layout adds no gap",
    "named": ["L-DEFAULT","L-SIZE"],
-   "changed": ["L-DEFAULT","L-BOTTOM","L-BOTTOM-PX","L-SIZE","L-WRAP","L-BACKGROUND","L-STYLES","L-MULTI-ICON","L-DEGENERATE","L-RESET","M-SWITCH","M-OPTIONS","M-HORIZONTAL","R-RESTORE","Z-RECT","Z-LINEX","Z-SLIDER","Z-VALUE"],
+   "changed": ["L-DEFAULT","L-BOTTOM","L-BOTTOM-PX","L-SIZE","L-WRAP","L-BACKGROUND","L-STYLES","L-MULTI-ICON","L-DEGENERATE","L-RESET","M-SWITCH","M-OPTIONS","M-HORIZONTAL","R-RESTORE","Z-RECT","Z-LINEX","Z-LINEX-LEFT","Z-BACK-BASE","Z-SLIDER","Z-VALUE"],
    "ok": true
   },
   {
    "id": "G2",
    "mutation": "the right-edge title at the canvas width instead of '100%'",
    "named": ["L-BOTTOM-PX","L-BACKGROUND"],
-   "changed": ["L-BOTTOM-PX","L-BACKGROUND","L-RESET","M-OPTIONS","R-RESTORE","Z-LINEX","Z-SLIDER","Z-VALUE","D-CATEGORY","D-TIME","D-PIE-SCATTER","D-HBAR","D-READONLY","D-ERROR","S-DEFAULT","S-OPTIONS","S-PLAIN"],
+   "changed": ["L-BOTTOM-PX","L-BACKGROUND","L-RESET","M-OPTIONS","R-RESTORE","Z-LINEX","Z-LINEX-LEFT","Z-BACK-BASE","Z-SLIDER","Z-VALUE","D-CATEGORY","D-TIME","D-PIE-SCATTER","D-HBAR","D-READONLY","D-ERROR","S-DEFAULT","S-OPTIONS","S-PLAIN"],
    "ok": true
   },
   {"id":"G3","mutation":"the block separator one dash short","named":["D-TIME","D-PIE-SCATTER"],"changed":["D-TIME","D-PIE-SCATTER","D-HBAR"],"ok":true},

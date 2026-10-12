@@ -785,6 +785,9 @@ add('coords', 'calendar', "calendar days: coordSys {x, y, width, height, cellWid
 add('coords', 'single', "dots on a single axis: coordSys {x, y, width, height}, api.coord and api.size of bare values (a number back)",
   { singleAxis: { type: 'value', min: 0, max: 20, top: 100, height: 60 },
     series: [{ type: 'custom', coordinateSystem: 'singleAxis', renderItem: '@singleDot', data: [[3, 2], [9, 5], [15, 3]] }] });
+add('coords', 'single-category', "dots on a CATEGORY single axis: api.size is the band width whatever the value asked (milestone C14-C22)",
+  { singleAxis: { type: 'category', data: ['a', 'b', 'c', 'd', 'e'], top: 100, height: 60 },
+    series: [{ type: 'custom', coordinateSystem: 'singleAxis', renderItem: '@singleDot', data: [[0, 2], [2, 5], [4, 3]] }] });
 add('coords', 'none', "coordinateSystem 'none': no coordSys, the dimensions x and y, the values as pixels; a hover",
   { series: [{ type: 'custom', coordinateSystem: 'none', renderItem: '@free', data: [[50, 60, 120], [200, 100, 80], [320, 240, 40]] }] },
   { steps: [{ move: 's0:1' }] });

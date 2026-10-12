@@ -1515,8 +1515,20 @@ begin
   FChart.AnimTick(T0 + 1500);
   FChart.DispatchAction('{"type": "legendToggleSelect", "name": "b"}');
   RenderNow;
+  { a tick into what would be a second clip's run: a proxy reads its final
+    values until the clock moves [milestone C14-C22: without the tick a
+    second clip passed as done] }
+  FChart.AnimTick(T0 + 1600);
+  RenderNow;
   p := FChart.AnimFindProxy(1, -1, 'parallelClip');
   AssertTrue('no second clip', (p = nil) or p.AtFinal);
+  { and the frame draws series b's rows unclipped }
+  list := FChart.Frame;
+  clipped := False;
+  for i := 0 to list.Count - 1 do
+    if (list.Element(i).Datum.SeriesIndex = 1) and list.Element(i).HasClip then
+      clipped := True;
+  AssertFalse('the rows shown again are not clipped', clipped);
 end;
 
 initialization
