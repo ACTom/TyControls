@@ -65,7 +65,7 @@ uses
   tyControls.AdvChart.Large, tyControls.AdvChart.Progressive,
   tyControls.AdvChart.Polar, tyControls.AdvChart.PolarBar,
   tyControls.AdvChart.Lines, tyControls.AdvChart.Toolbox,
-  tyControls.AdvChart.Brush,
+  tyControls.AdvChart.Brush, tyControls.AdvChart.Parallel,
   fpjson, contnrs, tyControls.SubPixel;
 
 const
@@ -213,7 +213,9 @@ type
     sskSankey,
     { [Batch 121] a lines row: its line the host, its end symbols parts
       whose states are the line's stroke and opacity }
-    sskLines);
+    sskLines,
+    { [Batch 128] a parallel row: its polyline, states read lineStyle }
+    sskParallel);
   TTyStNodeArray = array of TJSONObject;
   TTyStSeries = record
     Kind: TTyStKind;
@@ -354,6 +356,19 @@ type
     { THE POLARS of the last build, indexed by component index (a hole or a
       polar missing an axis is nil) [Batch 111] }
     FPolars: TTyPolarArray;
+    { THE PARALLELS of the last build, by component index (a hole is nil),
+      each parallel series' rows as laid out (index-parallel to FBindings),
+      and the active intervals each parallelAxis MODEL keeps -- by component
+      index and as long as the model: axisAreaSelect writes them, a merge
+      keeps them, a notMerge or a new model in the slot drops them
+      [Batch 128] }
+    FParallels: TTyParallelArray;
+    FParSolved: TTyParallelSolvedArray;
+    FParIntervals: array of TTyParallelIntervalArray;
+    { the parallel series views that have rendered (by view key): a view
+      clips its enter once, on its first render (ParallelView._initialized);
+      a legend-hidden series keeps its view }
+    FParSeen: TStringList;
     FBindings: TTySeriesBindingArray;
     FStores: array of TTyDataStore;
     { Every bar's width and offset, index-parallel to FBindings. Solved in
@@ -1483,6 +1498,16 @@ type
     procedure FreeRadars;
     { the polars go with the build [Batch 111] }
     procedure FreePolars;
+    { [Batch 128] the parallels go with the build; a parallel series' store,
+      its rows laid out, the axes painted, the action's intervals written
+      (True when an axis took them) and the parallel an axis stands on }
+    procedure FreeParallels;
+    procedure ParallelStore(ASlot: Integer; AStore: TTyDataStore);
+    procedure SolveParallels(APPI: Integer);
+    procedure PaintParallels(APainter: TTyPainter; APPI: Integer;
+      const AMeasurer: ITyTextMeasurer);
+    function ParallelAreaSelect(APayload: TJSONObject): Boolean;
+    function ParallelOfAxis(AComponent: Integer): Integer;
     { both axis views of every polar: the grid layer (split areas and lines)
       with ABelow, the axis lines, ticks, labels and names without }
     procedure PaintPolars(APainter: TTyPainter; APPI: Integer;
@@ -2530,6 +2555,15 @@ type
       its two axes and both axis views -- or nil [Batch 111]. }
     function PolarCount: Integer;
     function PolarLayout(AIndex: Integer): TTyPolar;
+    { Parallel component AIndex as the last render laid it out -- its box,
+      its axes, their places and views, their active intervals -- or nil;
+      a parallel series' rows as laid out (Valid False for any other); the
+      active intervals of parallelAxis AAxisIndex as its model keeps them
+      [Batch 128] }
+    function ParallelCount: Integer;
+    function ParallelLayout(AIndex: Integer): TTyParallel;
+    function ParallelSolvedOf(ASeriesIndex: Integer): TTyParallelSolved;
+    function ParallelIntervals(AAxisIndex: Integer): TTyParallelIntervalArray;
     { The legends as the last render placed them. }
     function LegendLayoutCount: Integer;
     function LegendLayout(AIndex: Integer): TTyLegendLayout;
@@ -2804,6 +2838,7 @@ begin
   FreeAndNil(FAxisProxies);
   FreeAndNil(FAxisList);
   FreeAndNil(FAnimSet);
+  FreeAndNil(FParSeen);
   FreeAndNil(FAnim);
   FreeAndNil(FAnimFrame);
   FreeAndNil(FAnimSplit);
@@ -2853,6 +2888,8 @@ begin
   FreeGraphs;
   FreeTreeViews;
   FreePolars;
+  FreeParallels;
+  FParSolved := nil;
   FTrees := nil;
   FSunbursts := nil;
   FTreemaps := nil;
@@ -3002,6 +3039,8 @@ begin
   { new axis models and views: nothing kept from the last render
     [Batch 101] }
   FAxisMemory.Clear;
+  { new parallelAxis models: no active intervals [Batch 128] }
+  FParIntervals := nil;
   FGraphForce := nil;
   { notMerge: new series models, so no roam survives either, nor a toggle. }
   FGraphRoam := nil;
@@ -3204,6 +3243,16 @@ begin
         else FAxisMemory.Forget('radiusAxis' + IntToStr(s));
       end;
   end;
+  { a parallelAxis brought in new: a new model, no active intervals, its
+    memory over [Batch 128] }
+  si := TyMergeSlotsIndex(AReport, 'parallelAxis');
+  if si >= 0 then
+    for s := 0 to High(AReport.Slots[si].Brand) do
+      if AReport.Slots[si].Brand[s] then
+      begin
+        FAxisMemory.Forget('parallelAxis' + IntToStr(s));
+        if s <= High(FParIntervals) then FParIntervals[s] := nil;
+      end;
   { A BRAND NEW MODEL ASKS FOR A NEW VIEW, whatever id it made (a removed
     model's, often) -- until the update that pairs the views [Batch 97] }
   NotMergePass(AReport);
@@ -3663,9 +3712,22 @@ begin
     FBuild.Note(Format(rsTyChartPolarNoAxis, [StrToIntDef(Copy(polarMissing[i], 1, j - 1), -1),
       Copy(polarMissing[i], j + 1, MaxInt)]));
   end;
+  { THE PARALLELS beside them: their axes, their boxes, and each axis' active
+    intervals from its model [Batch 128] }
+  FParallels := TyBuildParallels(FOption, FLastRect);
+  for i := 0 to High(FParallels) do
+    if FParallels[i] <> nil then
+      for j := 0 to FParallels[i].AxisCount - 1 do
+        if FParallels[i].AxisIndices[j] <= High(FParIntervals) then
+          FParallels[i].Intervals[j] := Copy(FParIntervals[FParallels[i].AxisIndices[j]]);
   FBindings := TyBindSeries(FOption, FBuild);
   { A SERIES ON A POLAR takes the polar's axes [Batch 113] }
   TyAttachPolarSeries(FBindings, FPolars);
+  { and one on a parallel its parallel [Batch 128] }
+  for i := 0 to High(FBindings) do
+    if FBindings[i].Resolved and (FBindings[i].ParallelIndex >= 0)
+      and (FBindings[i].ParallelIndex <= High(FParallels)) then
+      FBindings[i].Parallel := FParallels[FBindings[i].ParallelIndex];
   { A TYPE THAT RESOLVED AND STILL DRAWS NOTHING HAS TO SAY SO. Binding knows
     the twenty-three names ECharts ships and says nothing about which of them
     this control can paint, so a `funnel` bound cleanly, laid out cleanly and
@@ -3709,6 +3771,14 @@ begin
           if lnRaws[k].HasName then st.SetName(k, lnRaws[k].Name);
         end;
       end;
+      Continue;
+    end;
+    { A PARALLEL SERIES' ROWS: a column per row element, 'dimN' where an axis
+      of its parallel stands [Batch 128] }
+    if FBindings[i].Parallel is TTyParallel then
+    begin
+      FSeriesDataset[i] := -1;
+      ParallelStore(i, st);
       Continue;
     end;
     { WHICH TABLE, IF ANY. A series with its own `data` reads that and nothing
@@ -3942,6 +4012,13 @@ begin
     is not a calculation, and the stack columns are calculations. }
   SolveVisualMaps;
   TyIndexSeries(FBindings, FIndex);
+  { A PARALLEL SERIES IS ON EVERY AXIS OF ITS PARALLEL
+    (associateSeriesWithAxis) [Batch 128] }
+  for i := 0 to High(FBindings) do
+    if (FBindings[i].Parallel is TTyParallel) and not FBindings[i].Hidden then
+      for j := 0 to TTyParallel(FBindings[i].Parallel).AxisCount - 1 do
+        FIndex.Associate(TTyParallel(FBindings[i].Parallel).Axis(j), nil, i,
+          FBindings[i].SeriesType, TyParallelCoordSysName);
   { BEFORE THE EXTENTS, and that order is the whole point: a stacked chart
     whose axis was sized from the raw values draws off the top of its plot. }
   FStacks := TySolveStacks(FOption, FBindings, FStores);
@@ -3968,6 +4045,8 @@ begin
     series on them, the stacks and the dataZoom windows [Batch 113] }
   TyPolarApplyExtents(FOption, FPolars, FBindings, FStores, FStacks, FIndex,
     FAxisZooms);
+  { AND THE PARALLELS' (Parallel.update) [Batch 128] }
+  TyParallelApplyExtents(FOption, FParallels, FBindings, FStores, FStacks, FIndex);
   { LAST, ON THE VIEWS THE FILTERS LEFT: dataColorPaletteTask is a visual
     stage (4600), after every processor -- a row the legend or a dataZoom
     took out reads the series' colorFromPalette, a row still in reads its
@@ -4571,6 +4650,10 @@ begin
   TyLayoutPolars(FPolars, FOption, AMeasurer, APPI, txt,
     ActiveController.Metric(TyAdvChartMinorTickLenVar, TyAdvChartMinorTickLen),
     FAxisMemory);
+  { THE PARALLEL AXES, the same AxisBuilder [Batch 128] }
+  TyLayoutParallels(FParallels, FOption, AMeasurer, APPI, txt,
+    ActiveController.Metric(TyAdvChartMinorTickLenVar, TyAdvChartMinorTickLen),
+    FAxisMemory);
   { AFTER phase C, for the reason on FBarCols. }
   { a large bar's barMinWidth defaults to half a pixel [Batch 117] }
   SetLength(largeBars, Length(FBindings));
@@ -4599,6 +4682,8 @@ begin
     [Batch 121] }
   SolveLines(APPI);
   FreeAndNil(FTrailLayer);
+  { THE PARALLEL ROWS, on their parallels [Batch 128] }
+  SolveParallels(APPI);
   SolveTitles(AMeasurer, APPI);
   SolveLegends(AMeasurer, APPI);
   SolveVisualMapViews(AMeasurer, APPI);
@@ -5372,6 +5457,9 @@ begin
   { AFTER THE AXES, so a bar sits on the grid rather than under it. Within the
     series, the paint list decides the order. }
   PaintSeries(APainter, AMeasurer, APPI);
+  { THE PARALLEL AXES OVER THEIR LINES: a parallelAxis is z 10, its series
+    2 [Batch 128] }
+  PaintParallels(APainter, APPI, AMeasurer);
   { AND THE TITLE LAST. It floats over the container rather than reserving
     room, so anything it overlaps it is meant to overlap. While the series
     move the title goes with them into the dynamic layer, so it stays over
@@ -10893,6 +10981,566 @@ begin
   FLnSlot := -1;
 end;
 
+{ ==================== the parallels [Batch 128] ==================== }
+
+procedure TTyAdvanceChart.FreeParallels;
+var i: Integer;
+begin
+  for i := 0 to High(FParallels) do
+    FParallels[i].Free;
+  FParallels := nil;
+end;
+
+function TTyAdvanceChart.ParallelCount: Integer;
+begin
+  Result := Length(FParallels);
+end;
+
+function TTyAdvanceChart.ParallelLayout(AIndex: Integer): TTyParallel;
+begin
+  if (AIndex < 0) or (AIndex > High(FParallels)) then Exit(nil);
+  Result := FParallels[AIndex];
+end;
+
+function TTyAdvanceChart.ParallelSolvedOf(ASeriesIndex: Integer): TTyParallelSolved;
+var slot: Integer;
+begin
+  Result := Default(TTyParallelSolved);
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FParSolved)) then Exit;
+  Result := FParSolved[slot];
+end;
+
+function TTyAdvanceChart.ParallelIntervals(AAxisIndex: Integer): TTyParallelIntervalArray;
+begin
+  Result := nil;
+  if (AAxisIndex >= 0) and (AAxisIndex <= High(FParIntervals)) then
+    Result := Copy(FParIntervals[AAxisIndex]);
+end;
+
+function TTyAdvanceChart.ParallelOfAxis(AComponent: Integer): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  for i := 0 to High(FParallels) do
+    if (FParallels[i] <> nil) and (FParallels[i].AxisOfComponent(AComponent) >= 0) then
+      Exit(i);
+end;
+
+{ createSeriesData for a parallel series: its own `data`, a column per row
+  element up to the widest of the data and the highest 'dimN' (the data's
+  dimensions, named and typed as upstream's schema names them); the label
+  and the tooltip read the LAST coordinate a label suits -- not a category,
+  not a time (summarizeDimensions' defaultedLabel, which is also its
+  defaultedTooltip) -- or, with none, every element }
+procedure TTyAdvanceChart.ParallelStore(ASlot: Integer; AStore: TTyDataStore);
+var
+  par: TTyParallel;
+  node: TJSONObject;
+  d: TJSONData;
+  dims: TTySeriesDimArray;
+  k, n, best: Integer;
+  pos: TTyIntegerArray;
+begin
+  par := TTyParallel(FBindings[ASlot].Parallel);
+  node := StSeriesNode(FBindings[ASlot].SeriesIndex);
+  n := 0;
+  d := nil;
+  if node <> nil then d := node.Find('data');
+  if d is TJSONArray then n := TySeriesDetectedDimCount(TJSONArray(d));
+  dims := TyParallelSeriesDims(par, n);
+  for k := 0 to High(dims) do
+  begin
+    AStore.AddDimension(dims[k].Name, dims[k].Kind);
+    if dims[k].Axis <> nil then AStore.UseOrdinalMeta(k, dims[k].Axis.Categories);
+  end;
+  if Length(dims) > 0 then TyFillSeriesStore(FOption, ASlot, dims, AStore);
+  best := -1;
+  for k := 0 to High(dims) do
+    if (Copy(dims[k].Name, 1, Length(TyParallelDimPrefix)) = TyParallelDimPrefix)
+      and (dims[k].Kind = ddtFloat) then
+      best := k;
+  pos := nil;
+  if best >= 0 then
+  begin
+    SetLength(pos, 1);
+    pos[0] := best;
+  end;
+  AStore.SetTooltipPositions(pos);
+  AStore.SetLabelPositions(pos);
+end;
+
+{ ParallelView and parallelVisual: each row's points (an empty value drops
+  its point), its curve, its active state, and its style -- the series'
+  colour (lineStyle.color or the palette's), a visualMap's (4000), an item's
+  own lineStyle (4500); the width and the dash the same way; the opacity
+  parallelVisual's (5000): lineStyle.opacity, or the item's own, while no
+  axis is brushed, else activeOpacity / inactiveOpacity }
+procedure TTyAdvanceChart.SolveParallels(APPI: Integer);
+var
+  i, a, r, raw, si: Integer;
+  b: TTySeriesBinding;
+  par: TTyParallel;
+  st: TTyDataStore;
+  node, item: TJSONObject;
+  sol: TTyParallelSolved;
+  row: TTyParallelRow;
+  cols, poss: TTyIntegerArray;
+  cats: array of Boolean;
+  rawItem: TTyRawItem;
+  cell: TTyDataValue;
+  v, lsWidth, opN, opA, opI, w: Double;
+  seen: TStringList;
+  key: string;
+  has, any, catHas: Boolean;
+  base, c, ic: TTyChartColor;
+  dash, idash: TTyOptDash;
+  expl, iexpl: TTyDoubleArray;
+  dashWord, iword: string;
+  vrows: TTyVisualRowArray;
+  d: TJSONData;
+  mask: TFPUExceptionMask;
+
+  function DashText(AData: TJSONData): string;
+  begin
+    if (AData = nil) or (AData.JSONType = jtNull) then Result := ''
+    else if AData.JSONType = jtString then Result := AData.AsString
+    else Result := AData.AsJSON;
+  end;
+
+begin
+  FParSolved := nil;
+  SetLength(FParSolved, Length(FBindings));
+  seen := TStringList.Create;
+  seen.Sorted := True;
+  seen.Duplicates := dupIgnore;
+  try
+  for i := 0 to High(FBindings) do
+  begin
+    FParSolved[i] := Default(TTyParallelSolved);
+    b := FBindings[i];
+    if b.SeriesType <> TyParallelSeriesTypeName then Continue;
+    { a view of a model still here, shown or not, has rendered }
+    key := SeriesViewKey(b.SeriesIndex);
+    if b.Resolved then seen.Add(key);
+    if not b.Resolved or b.Hidden then Continue;
+    if not (b.Parallel is TTyParallel) then Continue;
+    if (i > High(FStores)) or (FStores[i] = nil) then Continue;
+    par := TTyParallel(b.Parallel);
+    st := FStores[i];
+    si := b.SeriesIndex;
+    node := StSeriesNode(si);
+    sol := Default(TTyParallelSolved);
+    sol.Valid := True;
+    sol.SeriesIndex := si;
+    sol.ParallelIndex := b.ParallelIndex;
+    sol.Smooth := TyParallelSmoothOf(node);
+    sol.Z := SeriesIntIn(si, 'z', 2);
+    sol.Z2 := TyParallelLineZ2;
+    sol.Horizontal := par.Horizontal;
+    sol.Clip := par.Rect;
+    { never an incremental view; the clip starts on the view's first
+      render only }
+    sol.EnterClip := not ProgOnOf(i);
+    sol.NewView := (FParSeen = nil) or (FParSeen.IndexOf(key) < 0);
+    SetLength(cols, par.AxisCount);
+    SetLength(poss, par.AxisCount);
+    SetLength(cats, par.AxisCount);
+    for a := 0 to par.AxisCount - 1 do
+    begin
+      cols[a] := st.DimIndexOf(par.Dims[a]);
+      poss[a] := par.DimNums[a];
+      cats[a] := par.Axis(a).AxisType = atCategory;
+    end;
+    { the series' style }
+    base := TTyChartColor(SeriesColor(si));
+    d := LnNode(node, ['lineStyle', 'width']);
+    if (d <> nil) and (d.JSONType = jtNumber) then lsWidth := d.AsFloat else lsWidth := 1;
+    d := LnNode(node, ['lineStyle', 'type']);
+    if d = nil then dashWord := 'solid' else dashWord := DashText(d);
+    LnDashOf(d, dash, expl);
+    if d = nil then dash := todSolid;
+    d := LnNode(node, ['lineStyle', 'opacity']);
+    if (d <> nil) and (d.JSONType = jtNumber) then opN := d.AsFloat else opN := 0.45;
+    d := LnNode(node, ['activeOpacity']);
+    if (d <> nil) and (d.JSONType = jtNumber) then opA := d.AsFloat else opA := 1;
+    d := LnNode(node, ['inactiveOpacity']);
+    if (d <> nil) and (d.JSONType = jtNumber) then opI := d.AsFloat else opI := 0.05;
+    any := par.HasAxisBrushed;
+    vrows := nil;
+    if i <= High(FVisualRows) then vrows := FVisualRows[i];
+    SetLength(sol.Rows, st.Count);
+    mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+      exOverflow, exUnderflow, exPrecision]);
+    try
+      for r := 0 to st.Count - 1 do
+      begin
+        row := Default(TTyParallelRow);
+        raw := st.GetRawIndex(r);
+        row.Row := r;
+        row.Raw := raw;
+        rawItem := st.RawItem(r);
+        if any then row.Active := ppaActive else row.Active := ppaNormal;
+        for a := 0 to par.AxisCount - 1 do
+        begin
+          if cols[a] >= 0 then v := st.Get(cols[a], r) else v := NaN;
+          { createLinePoints' isEmptyValue: a category value is empty when it
+            is null, any other when it is null or not a number }
+          catHas := TTyDataStore.RawCell(rawItem, poss[a], cell)
+            and (cell.Kind <> dvkNone);
+          if cats[a] then has := catHas else has := not IsNan(v);
+          if has then
+          begin
+            SetLength(row.Pts, Length(row.Pts) + 1);
+            row.Pts[High(row.Pts)] := par.DataToPoint(v, a);
+          end;
+          { eachActiveState: the first axis that rejects the value }
+          if any and (row.Active = ppaActive) then
+            if par.AxisActiveState(a, v, (not cats[a]) or catHas) = ppaInactive then
+              row.Active := ppaInactive;
+        end;
+        { buildPath's `if (smooth)` }
+        if (sol.Smooth <> 0) and not IsNan(sol.Smooth) and (Length(row.Pts) >= 2) then
+          row.Cmds := TyParallelSmoothCmds(row.Pts, sol.Smooth);
+        { the style: series, visualMap, the item's own }
+        c := base;
+        if (raw >= 0) and (raw <= High(vrows)) and vrows[raw].ColorSet then
+          c := TyVisualToChart(vrows[raw].Color);
+        w := lsWidth;
+        iword := dashWord;
+        idash := dash;
+        iexpl := expl;
+        row.Opacity := opN;
+        item := StItemNode(si, raw);
+        if item <> nil then
+        begin
+          if LnColour(LnNode(item, ['lineStyle', 'color']), ic) then c := ic;
+          d := LnNode(item, ['lineStyle', 'width']);
+          if (d <> nil) and (d.JSONType = jtNumber) then w := d.AsFloat;
+          d := LnNode(item, ['lineStyle', 'type']);
+          if d <> nil then
+          begin
+            iword := DashText(d);
+            LnDashOf(d, idash, iexpl);
+          end;
+          { parallelVisual: the item's own opacity only while normal }
+          d := LnNode(item, ['lineStyle', 'opacity']);
+          if (d <> nil) and (d.JSONType = jtNumber) then row.Opacity := d.AsFloat;
+        end;
+        case row.Active of
+          ppaActive: row.Opacity := opA;
+          ppaInactive: row.Opacity := opI;
+        end;
+        row.Stroke := c;
+        row.Width := w;
+        row.DashWord := iword;
+        row.Dash := TyDashPattern(idash, iexpl, w);
+        sol.Rows[r] := row;
+      end;
+    finally
+      ClearExceptions(False);
+      SetExceptionMask(mask);
+    end;
+    FParSolved[i] := sol;
+  end;
+  finally
+    FreeAndNil(FParSeen);
+    FParSeen := seen;
+  end;
+end;
+
+{ ParallelAxisView's AxisBuilder, in the skin's axis styles: the line and
+  its arrows, the ticks and minor ticks, the name, the labels -- the keys
+  every other axis draws in (a parallelAxis shares axisDefault) }
+procedure TTyAdvanceChart.PaintParallels(APainter: TTyPainter; APPI: Integer;
+  const AMeasurer: ITyTextMeasurer);
+var
+  i, a, q: Integer;
+  par: TTyParallel;
+  model: TTyStyleModel;
+  lineS, tickS, minorTickS, labelS, nameS: TTyStyleSet;
+  lblW, lblH: Integer;
+  sp: TTyAxisLayoutSpec;
+  pl: TTyAxisNamePlacement;
+
+  function LineWidth(const AStyle: TTyStyleSet): Double;
+  begin
+    if tpBorderWidth in AStyle.Present then Result := AStyle.BorderWidth
+    else Result := 1;
+    if Result < 0.05 then Result := 0.05;
+  end;
+
+  function AnchorAlign(AH2: TTyTextAnchorH): TAlignment;
+  begin
+    case AH2 of
+      tahLeft: Result := taLeftJustify;
+      tahRight: Result := taRightJustify;
+    else Result := taCenter;
+    end;
+  end;
+
+  function AnchorLayout(AV: TTyTextAnchorV): TTextLayout;
+  begin
+    case AV of
+      tavTop: Result := tlTop;
+      tavBottom: Result := tlBottom;
+    else Result := tlCenter;
+    end;
+  end;
+
+  function AnchorBox(AX, AY: Double; AW, AH: Integer;
+    AH2: TTyTextAnchorH; AV: TTyTextAnchorV): TRect;
+  begin
+    case AH2 of
+      tahLeft: begin Result.Left := Round(AX); Result.Right := Round(AX) + AW; end;
+      tahRight: begin Result.Left := Round(AX) - AW; Result.Right := Round(AX); end;
+    else
+      begin
+        Result.Left := Round(AX - AW / 2);
+        Result.Right := Result.Left + AW;
+      end;
+    end;
+    case AV of
+      tavTop: begin Result.Top := Round(AY); Result.Bottom := Round(AY) + AH; end;
+      tavBottom: begin Result.Top := Round(AY) - AH; Result.Bottom := Round(AY); end;
+    else
+      begin
+        Result.Top := Round(AY - AH / 2);
+        Result.Bottom := Result.Top + AH;
+      end;
+    end;
+  end;
+
+  procedure TextSizeOf(const AText: string; const AStyle: TTyStyleSet;
+    out AW, AH: Integer);
+  var w, h: Double;
+  begin
+    AW := 0;
+    AH := 0;
+    if AMeasurer = nil then Exit;
+    AMeasurer.MeasureLine(AText, AStyle.FontName, ResolveFontSize(AStyle),
+      AStyle.FontWeight, w, h);
+    AW := Round(w);
+    AH := Round(h);
+  end;
+
+  { a coordinate a canvas would draw: neither infinite nor not a number }
+  function Fin(A: Double): Boolean;
+  begin
+    Result := not (IsNan(A) or IsInfinite(A));
+  end;
+
+  procedure StrokeLines(const ALines: TTyPolarLineArray; const AStyle: TTyStyleSet);
+  var k, n: Integer;
+  begin
+    if not (tpBorderColor in AStyle.Present) then Exit;
+    n := 0;
+    APainter.BeginPath;
+    for k := 0 to High(ALines) do
+    begin
+      if not ALines[k].Drawn then Continue;
+      if not (Fin(ALines[k].X1) and Fin(ALines[k].Y1) and Fin(ALines[k].X2)
+        and Fin(ALines[k].Y2)) then Continue;
+      APainter.MoveTo(ALines[k].X1, ALines[k].Y1);
+      APainter.LineTo(ALines[k].X2, ALines[k].Y2);
+      Inc(n);
+    end;
+    if n > 0 then APainter.StrokePath(AStyle.BorderColor, LineWidth(AStyle));
+  end;
+
+  procedure PaintArrow(const AArrow: TTyAxisArrow);
+  var
+    el: TTyChartElement;
+    path: TTyZrPath;
+    t: string;
+  begin
+    t := AArrow.SymbolType;
+    path := TyZrSymbol(t, -AArrow.W / 2, -AArrow.H / 2, AArrow.W, AArrow.H);
+    if Length(path) = 0 then Exit;
+    el := Default(TTyChartElement);
+    el.Style.Alpha := 1;
+    el.Shape := TyMkZrShape(path, TyZrLocal(1, 1, AArrow.Rotation, AArrow.X,
+      AArrow.Y), True);
+    if Copy(t, 1, 5) = 'empty' then
+    begin
+      el.Style.HasFill := True;
+      el.Style.FillColor := TTyChartColor(model.ResolveStyle(
+        'TyAdvChartEmptyCircle', '', []).Background.Color);
+      el.Style.StrokeColor := TTyChartColor(lineS.BorderColor);
+      el.Style.StrokeWidthLogical := 2;
+    end
+    else if t = 'line' then
+    begin
+      el.Style.StrokeColor := TTyChartColor(lineS.BorderColor);
+      el.Style.StrokeWidthLogical := 1;
+    end
+    else
+    begin
+      el.Style.HasFill := True;
+      el.Style.FillColor := TTyChartColor(lineS.BorderColor);
+    end;
+    TyRenderElement(APainter, el);
+  end;
+
+begin
+  if Length(FParallels) = 0 then Exit;
+  if ViewHidden(cvParallelAxis) then Exit;
+  model := ActiveController.Model;
+  lineS := model.ResolveStyle('TyAdvChartAxisLine', '', []);
+  tickS := model.ResolveStyle('TyAdvChartAxisTick', '', []);
+  minorTickS := model.ResolveStyle('TyAdvChartMinorTick', '', []);
+  for i := 0 to High(FParallels) do
+  begin
+    par := FParallels[i];
+    if par = nil then Continue;
+    for a := 0 to High(par.Views) do
+    begin
+      if not par.Views[a].Shown then Continue;
+      ViewDrew(cvParallelAxis);
+      sp := par.Views[a].Spec;
+      { a lone axis stands nowhere (its place is not a number) }
+      if not (Fin(par.Layouts[a].PosX) and Fin(par.Layouts[a].PosY)) then Continue;
+      if par.Views[a].HasLine and (tpBorderColor in lineS.Present) then
+      begin
+        APainter.BeginPath;
+        APainter.MoveTo(par.Views[a].Line.X1, par.Views[a].Line.Y1);
+        APainter.LineTo(par.Views[a].Line.X2, par.Views[a].Line.Y2);
+        APainter.StrokePath(lineS.BorderColor, LineWidth(lineS));
+        for q := 0 to High(sp.Arrows) do PaintArrow(sp.Arrows[q]);
+      end;
+      StrokeLines(par.Views[a].Ticks, tickS);
+      StrokeLines(par.Views[a].MinorTicks, minorTickS);
+      AxisTextStyles(@sp, labelS, nameS);
+      pl := sp.NamePlacement;
+      if pl.Shown and (tpTextColor in nameS.Present) then
+      begin
+        if Length(pl.Rt) > 0 then
+          TyRenderRtPieces(APainter, pl.Rt, pl.X, pl.Y, pl.RotationRad, sp.RtScale,
+            1, True, nameS.TextColor)
+        else if Abs(pl.RotationRad) < 1e-9 then
+        begin
+          TextSizeOf(pl.Text, nameS, lblW, lblH);
+          APainter.DrawText(AnchorBox(pl.X, pl.Y, lblW, lblH, pl.AnchorH, pl.AnchorV),
+            pl.Text, nameS.FontName, ResolveFontSize(nameS), nameS.FontWeight,
+            nameS.TextColor, taCenter, tlCenter, False, 0, False, Pos(#10, pl.Text) > 0);
+        end
+        else
+          APainter.DrawTextRotated(pl.Text, nameS.FontName, ResolveFontSize(nameS),
+            nameS.FontWeight, nameS.TextColor, pl.X, pl.Y, pl.RotationRad,
+            AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV));
+      end;
+      if not (tpTextColor in labelS.Present) then Continue;
+      for q := 0 to High(sp.Placements) do
+      begin
+        if not sp.Placements[q].Shown or (sp.Placements[q].Text = '') then Continue;
+        if Length(sp.Placements[q].Rt) > 0 then
+        begin
+          TyRenderRtPieces(APainter, sp.Placements[q].Rt, sp.Placements[q].X,
+            sp.Placements[q].Y, sp.RotationRad, sp.RtScale, 1, True, labelS.TextColor);
+          Continue;
+        end;
+        if sp.RotationRad <> 0 then
+        begin
+          APainter.DrawTextRotated(sp.Placements[q].Text, labelS.FontName,
+            ResolveFontSize(labelS), labelS.FontWeight, labelS.TextColor,
+            sp.Placements[q].X, sp.Placements[q].Y, sp.RotationRad,
+            AnchorAlign(sp.Placements[q].AnchorH), AnchorLayout(sp.Placements[q].AnchorV));
+          Continue;
+        end;
+        TextSizeOf(sp.Placements[q].Text, labelS, lblW, lblH);
+        APainter.DrawText(AnchorBox(sp.Placements[q].X, sp.Placements[q].Y, lblW,
+          lblH, sp.Placements[q].AnchorH, sp.Placements[q].AnchorV),
+          sp.Placements[q].Text, labelS.FontName, ResolveFontSize(labelS),
+          labelS.FontWeight, labelS.TextColor, taCenter, tlCenter, False, 0, False,
+          Pos(#10, sp.Placements[q].Text) > 0);
+      end;
+    end;
+  end;
+end;
+
+{ parallelAxisAction's axisAreaSelect: every parallelAxis the query names
+  (parallelAxisIndex, else parallelAxisId, else parallelAxisName; none is
+  all) whose parallel was built takes `intervals` (setActiveIntervals: a
+  clone, each pair ascending) }
+function TTyAdvanceChart.ParallelAreaSelect(APayload: TJSONObject): Boolean;
+var
+  n, k: Integer;
+  hit: array of Boolean;
+  d: TJSONData;
+  iv: TTyParallelIntervalArray;
+
+  procedure MarkIndex(AData: TJSONData);
+  var j: Integer; v: Double;
+  begin
+    if AData is TJSONArray then
+    begin
+      for j := 0 to AData.Count - 1 do MarkIndex(TJSONArray(AData).Items[j]);
+      Exit;
+    end;
+    { a property key: a whole number, or a string that is one }
+    if AData.JSONType = jtNumber then v := AData.AsFloat
+    else if (AData.JSONType = jtString) and (AData.AsString <> '')
+      and (IntToStr(StrToIntDef(AData.AsString, -1)) = AData.AsString) then
+      v := StrToInt(AData.AsString)
+    else Exit;
+    if IsNan(v) or (Frac(v) <> 0) or (v < 0) or (v >= n) then Exit;
+    hit[Trunc(v)] := True;
+  end;
+
+  procedure MarkText(AData: TJSONData; AById: Boolean; AInList: Boolean);
+  var j: Integer; t: string;
+  begin
+    if AData is TJSONArray then
+    begin
+      if AInList then Exit;
+      for j := 0 to AData.Count - 1 do MarkText(TJSONArray(AData).Items[j], AById, True);
+      Exit;
+    end;
+    { queryByIdOrName: a list matches its strings only, a single value as
+      its text }
+    if AData.JSONType = jtString then t := AData.AsString
+    else if (AData.JSONType = jtNumber) and not AInList then
+      t := TyJsNumberToString(AData.AsFloat)
+    else Exit;
+    for j := 0 to n - 1 do
+      if AById and (ComponentModelId('parallelAxis', j) = t) then hit[j] := True
+      else if (not AById) and (ComponentModelName('parallelAxis', j) = t) then hit[j] := True;
+  end;
+
+begin
+  Result := False;
+  if (FOption = nil) or (APayload = nil) then Exit;
+  n := FOption.ComponentCount('parallelAxis');
+  if n = 0 then Exit;
+  SetLength(hit, n);
+  for k := 0 to n - 1 do hit[k] := False;
+  d := APayload.Find('parallelAxisIndex');
+  if (d <> nil) and (d.JSONType <> jtNull) then MarkIndex(d)
+  else
+  begin
+    d := APayload.Find('parallelAxisId');
+    if (d <> nil) and (d.JSONType <> jtNull) then MarkText(d, True, False)
+    else
+    begin
+      d := APayload.Find('parallelAxisName');
+      if (d <> nil) and (d.JSONType <> jtNull) then MarkText(d, False, False)
+      else
+        for k := 0 to n - 1 do hit[k] := True;
+    end;
+  end;
+  iv := TyParallelIntervalsOf(APayload.Find('intervals'));
+  if Length(FParIntervals) < n then SetLength(FParIntervals, n);
+  for k := 0 to n - 1 do
+  begin
+    if not hit[k] then Continue;
+    if not (FOption.ComponentAt('parallelAxis', k) is TJSONObject) then Continue;
+    { an axis on no parallel has no `axis` to set them through }
+    if ParallelOfAxis(k) < 0 then Continue;
+    FParIntervals[k] := Copy(iv);
+    Result := True;
+  end;
+end;
+
 { LinesSeries.formatTooltip: one bare row, the item's name -- `name` read
   through the item model, so a named series lends its name to an unnamed
   item -- else 'from > to', and the raw value unless it is not a number }
@@ -13289,6 +13937,14 @@ begin
       { A LINES SERIES: its rows laid out on their coordinate system in the
         layout pass, drawn here; the labels go through the expansion with a
         spec per row [Batch 121] }
+      { A PARALLEL SERIES: a polyline per row, laid out in the layout pass
+        [Batch 128] }
+      if FBindings[i].SeriesType = TyParallelSeriesTypeName then
+      begin
+        if (i <= High(FParSolved)) and FParSolved[i].Valid then
+          Inc(drawn, TyBuildParallelMarks(FParSolved[i], list));
+        Continue;
+      end;
       if FBindings[i].SeriesType = TyLinesSeriesTypeName then
       begin
         if (i <= High(FLines)) and FLines[i].Valid then
@@ -15304,6 +15960,14 @@ begin
       Result := FSankeys[slot].Nodes[ADatum.DataIndex].Colour;
     Exit;
   end;
+  { A PARALLEL ROW'S IS ITS STROKE: drawType 'stroke' [Batch 128] }
+  if (FBindings[slot].SeriesType = TyParallelSeriesTypeName)
+    and (slot <= High(FParSolved)) and FParSolved[slot].Valid then
+  begin
+    if (ADatum.DataIndex >= 0) and (ADatum.DataIndex <= High(FParSolved[slot].Rows)) then
+      Exit(FParSolved[slot].Rows[ADatum.DataIndex].Stroke);
+    Exit(TTyChartColor(SeriesColor(ADatum.SeriesIndex)));
+  end;
   { A GRAPH LINK'S COLOUR IS ITS STROKE, found by its own row. }
   if ADatum.IsEdge then
   begin
@@ -16929,7 +17593,10 @@ begin
   { a lines series' rows, not in large mode (a batch has no states)
     [Batch 121] }
   else if (t = TyLinesSeriesTypeName) and not ((ASlot <= High(FLines))
-    and FLines[ASlot].IsLarge) then Result := sskLines;
+    and FLines[ASlot].IsLarge) then Result := sskLines
+  { a parallel row's polyline [Batch 128] }
+  else if (t = TyParallelSeriesTypeName) and (FBindings[ASlot].Parallel <> nil) then
+    Result := sskParallel;
   { a line on a calendar is not drawn at all }
   if (FBindings[ASlot].CalendarIndex >= 0) and (t = 'line') then Result := sskNone;
 end;
@@ -17030,7 +17697,7 @@ begin
       TyStSetColor(base, stkStroke, StPrimaryInk);
   end;
   { a lines row's: its lineStyle's (Line._updateCommonStl) [Batch 121] }
-  if FSt[s].Kind = sskLines then blk := 'lineStyle' else blk := 'itemStyle';
+  if FSt[s].Kind in [sskLines, sskParallel] then blk := 'lineStyle' else blk := 'itemStyle';
   item^.Host.Decl[stnSelect] := TyStOverlay(base,
     TyStReadStyle(nodes, 'select', blk, bolder));
   item^.Host.Decl[stnEmphasis] := TyStReadStyle(nodes, 'emphasis', blk, bolder);
@@ -18316,7 +18983,10 @@ begin
   else if FBindings[ASlot].CalendarIndex >= 0 then
     Result := 'calendar' + IntToStr(FBindings[ASlot].CalendarIndex)
   else if FBindings[ASlot].RadarIndex >= 0 then
-    Result := 'radar' + IntToStr(FBindings[ASlot].RadarIndex);
+    Result := 'radar' + IntToStr(FBindings[ASlot].RadarIndex)
+  { the parallel the series is on [Batch 128] }
+  else if FBindings[ASlot].ParallelIndex >= 0 then
+    Result := 'parallel' + IntToStr(FBindings[ASlot].ParallelIndex);
 end;
 
 { an item's model chain: the item, a sunburst row's level, the series }
@@ -21168,9 +21838,10 @@ begin
 end;
 
 { doConvertPixel: every coordinate system in the manager's order -- the
-  grids, the radars (which answer nothing), the graphs' views, then (were
-  they here) parallel, polar and singleAxis, then the calendars -- and the
-  first answer that is not null/undefined }
+  grids, the radars (which answer nothing), the graphs' views, then the
+  parallels (which have no convertToPixel / convertFromPixel at all
+  [Batch 128]), the polars and (were it here) singleAxis, then the
+  calendars -- and the first answer that is not null/undefined }
 function TTyAdvanceChart.ConvertDispatch(AFinder, AValue: TJSONData;
   AFrom: Boolean): TTyConvertResult;
 var
@@ -21213,7 +21884,8 @@ begin
       Result := ConvertOnPolar(FPolars[c], AValue, AFrom);
       if Result.Kind <> cvkNone then Exit;
     end;
-    { singleAxis (C10) takes its turn here }
+    { THE PARALLELS answer nothing: Parallel has no convertToPixel or
+      convertFromPixel [Batch 128]. singleAxis (C10) takes its turn here }
     for c := 0 to High(FCalendars) do
     begin
       if FCalendars[c] = nil then Continue;
@@ -21265,6 +21937,9 @@ begin
   if b.Cart <> nil then Exit(TyCartesianContainJson(b.Cart, APoint));
   { a polar's containPoint [Batch 113] }
   if b.Polar <> nil then Exit(TyPolarContainJson(TTyPolar(b.Polar), APoint));
+  { a parallel's containPoint [Batch 128] }
+  if b.Parallel is TTyParallel then
+    Exit(TyParallelContainJson(TTyParallel(b.Parallel), APoint));
   if (b.CalendarIndex >= 0) or (b.RadarIndex >= 0) then Exit;
   pt := TyJsonPoint(APoint);
   if IsNan(pt.X) or IsNan(pt.Y) then Exit;
@@ -21339,6 +22014,21 @@ begin
           g := pf.Types[t].Models[k];
           if (g >= 0) and (g <= High(FPolars)) and (FPolars[g] <> nil)
             and TyPolarContainJson(FPolars[g], APoint) then
+            Exit(True);
+        end
+        { Parallel.containPoint, asked by the parallel and by each of its
+          axes (the axis model carries its coordinate system) [Batch 128] }
+        else if mt = 'parallel' then
+        begin
+          g := pf.Types[t].Models[k];
+          if (g >= 0) and (g <= High(FParallels)) and (FParallels[g] <> nil)
+            and TyParallelContainJson(FParallels[g], APoint) then
+            Exit(True);
+        end
+        else if mt = 'parallelAxis' then
+        begin
+          g := ParallelOfAxis(pf.Types[t].Models[k]);
+          if (g >= 0) and TyParallelContainJson(FParallels[g], APoint) then
             Exit(True);
         end;
         { a calendar's and a radar's containPoint are not implemented
@@ -21720,7 +22410,8 @@ begin
       Result := True;
     end
     { the parallel axes' area select, which the brush feature's clear
-      dispatches: no parallel here, the update and the event [Batch 127] }
+      dispatches: the update and the event [Batch 127], and the queried
+      parallelAxis models' active intervals [Batch 128] }
     else if t = 'axisAreaSelect' then
     begin
       BrushDoAxisAreaSelect(p);
@@ -26206,6 +26897,8 @@ begin
       layer draws them [Batch 96] }
     if AxesDynamic then PaintAxes(APainter, APPI, AMeasurer, True);
     TyRenderPaintList(APainter, AnimFrame);
+    { the parallel axes over the lines in motion [Batch 128] }
+    PaintParallels(APainter, APPI, AMeasurer);
     PaintTitles(APainter);
   end;
   { THE POINTER UNDER THE HIGHLIGHT UNDER THE BOX. A shadow band drawn over
@@ -29638,10 +30331,14 @@ begin
   Result := Result + ']}';
 end;
 
-{ axisAreaSelect: no parallel axes here -- the update (the visual stage's
-  brushSelect, the toolbox's render) and the event }
+{ axisAreaSelect: the queried parallelAxis models take the intervals and
+  the chart updates (parallelVisual's opacities) [Batch 128]; the update's
+  visual stage (brushSelect), the toolbox's render and the event }
 procedure TTyAdvanceChart.BrushDoAxisAreaSelect(APayload: TJSONObject);
 begin
+  { THE AXES THE QUERY NAMES take the intervals, and the update renders
+    them (parallelVisual's opacities) [Batch 128] }
+  if ParallelAreaSelect(APayload) then FullUpdate;
   BrushSync;
   BrushSelectRun(True);
   TbBrushSnap;

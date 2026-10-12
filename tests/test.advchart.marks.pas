@@ -510,7 +510,10 @@ begin
       or (cTypes[i] = 'sankey')
       { a lines series' rows are laid out by AdvChart.Lines through its
         coordinate hook, never as a coordinate-pair store [Batch 121] }
-      or (cTypes[i] = 'lines') then
+      or (cTypes[i] = 'lines')
+      { a parallel series' rows by AdvChart.Parallel on its parallel
+        [Batch 128] }
+      or (cTypes[i] = 'parallel') then
     begin
       AssertTrue(cTypes[i] + ' draws, on the other pass',
         TySeriesTypeHasRenderer(cTypes[i]));
@@ -537,6 +540,7 @@ begin
     TySeriesTypeHasRenderer('graph'));
   AssertTrue('and the sankey [Batch 79]', TySeriesTypeHasRenderer('sankey'));
   AssertTrue('and the lines [Batch 121]', TySeriesTypeHasRenderer('lines'));
+  AssertTrue('and the parallel [Batch 128]', TySeriesTypeHasRenderer('parallel'));
   AssertFalse('a chord does not yet', TySeriesTypeHasRenderer('chord'));
   { CASE-SENSITIVE, matching the type registry -- 'Bar' does not resolve as a
     series at all, so answering yes for it would promise a chart that cannot

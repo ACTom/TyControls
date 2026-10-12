@@ -565,7 +565,12 @@ type
       shape.percent, drives the line, the two end symbols and the label),
       and its effect symbol (a looping clip of its own). G[0..5] the line's
       ends and control point, G[6] curved -- see AdvChart.Lines }
-    carLinesLine, carLinesFrom, carLinesTo, carLinesLabel, carLinesEffect);
+    carLinesLine, carLinesFrom, carLinesTo, carLinesLabel, carLinesEffect,
+    { [Batch 128, C19] a parallel series' row: the data group's enter clip
+      (one proxy per series, row -1), G[0..3] the parallel's rect, G[4] 1 on
+      a horizontal layout (the width grows, else the height), G[5] 1 on the
+      view's first render (only then does the clip start) }
+    carParallelLine);
 
   TTyChartAnim = record
     Role: TTyChartAnimRole;

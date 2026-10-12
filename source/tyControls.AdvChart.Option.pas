@@ -851,12 +851,109 @@ begin
   end;
 end;
 
+{ zrUtil.merge(target, source, false): a key the target lacks is a clone of
+  the source's; two plain objects recurse; anything else stays the target's }
+procedure PreMergeKeep(ATarget, ASource: TJSONObject);
+var
+  i, k: Integer;
+  key: string;
+  sp, tp: TJSONData;
+begin
+  if (ATarget = nil) or (ASource = nil) then Exit;
+  for i := 0 to ASource.Count - 1 do
+  begin
+    key := ASource.Names[i];
+    sp := ASource.Items[i];
+    k := ATarget.IndexOfName(key);
+    if k >= 0 then tp := ATarget.Items[k] else tp := nil;
+    if (sp is TJSONObject) and (tp is TJSONObject) then
+      PreMergeKeep(TJSONObject(tp), TJSONObject(sp))
+    else if k < 0 then
+      ATarget.Add(key, sp.Clone);
+  end;
+end;
+
+{ normalizeToArray's item AIndex of AData: an array's own, a single value
+  as item 0, nothing for null or absent }
+function PreItem(AData: TJSONData; AIndex: Integer): TJSONData;
+begin
+  Result := nil;
+  if (AData = nil) or (AData.JSONType = jtNull) then Exit;
+  if AData is TJSONArray then
+  begin
+    if (AIndex >= 0) and (AIndex < AData.Count) then Result := TJSONArray(AData).Items[AIndex];
+  end
+  else if AIndex = 0 then
+    Result := AData;
+end;
+
+function PreCount(AData: TJSONData): Integer;
+begin
+  if (AData = nil) or (AData.JSONType = jtNull) then Result := 0
+  else if AData is TJSONArray then Result := AData.Count
+  else Result := 1;
+end;
+
+{ parallelPreprocessor [Batch 128, C19]: createParallelIfNeeded -- with no
+  truthy `parallel` and a series of type 'parallel' the option gets
+  `parallel: [{}]` -- then mergeAxisOptionFromParallel: every parallelAxis
+  object takes the parallelAxisDefault of the parallel its `parallelIndex
+  || 0` names (in this option), under its own keys }
+procedure TyParallelPreprocess(AOption: TJSONObject);
+var
+  ser, axes, pars, it, pd, def: TJSONData;
+  i: Integer;
+  has: Boolean;
+  v: Double;
+begin
+  if AOption = nil then Exit;
+  if not PreTruthy(AOption.Find('parallel')) then
+  begin
+    has := False;
+    ser := AOption.Find('series');
+    for i := 0 to PreCount(ser) - 1 do
+    begin
+      it := PreItem(ser, i);
+      if (it is TJSONObject) and (TJSONObject(it).Find('type') <> nil)
+        and (TJSONObject(it).Find('type').JSONType = jtString)
+        and (TJSONObject(it).Find('type').AsString = 'parallel') then
+        has := True;
+    end;
+    if has then
+    begin
+      if AOption.IndexOfName('parallel') >= 0 then AOption.Delete('parallel');
+      AOption.Add('parallel', TJSONArray.Create([TJSONObject.Create]));
+    end;
+  end;
+  axes := AOption.Find('parallelAxis');
+  pars := AOption.Find('parallel');
+  for i := 0 to PreCount(axes) - 1 do
+  begin
+    it := PreItem(axes, i);
+    if not (it is TJSONObject) then Continue;
+    pd := TJSONObject(it).Find('parallelIndex');
+    if not PreTruthy(pd) then v := 0
+    else if pd.JSONType = jtNumber then v := pd.AsFloat
+    else Continue;
+    if IsNan(v) or (Frac(v) <> 0) or (v < 0) or (v > MaxInt) then Continue;
+    pd := PreItem(pars, Trunc(v));
+    if not (pd is TJSONObject) then Continue;
+    def := TJSONObject(pd).Find('parallelAxisDefault');
+    if def is TJSONObject then PreMergeKeep(TJSONObject(it), TJSONObject(def));
+  end;
+end;
+
 procedure PreprocessUnits(ABase: TJSONObject; const ASet: TTyMediaSet; AIsNew: Boolean);
 var i: Integer;
 begin
+  TyParallelPreprocess(ABase);
   TyBrushPreprocess(ABase, AIsNew);
   for i := 0 to High(ASet.Units) do
-    if ASet.Units[i].Option <> nil then TyBrushPreprocess(ASet.Units[i].Option, AIsNew);
+    if ASet.Units[i].Option <> nil then
+    begin
+      TyParallelPreprocess(ASet.Units[i].Option);
+      TyBrushPreprocess(ASet.Units[i].Option, AIsNew);
+    end;
 end;
 
 function TTyChartOption.SetOptionText(const AText: string): Boolean;

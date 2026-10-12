@@ -222,6 +222,14 @@ function TyPolarFullTurn(AFirst, ALast: Double): Boolean;
 function TyPolarRadialLine(APolar: TTyPolar; AR0, AR1, AAngle: Double): TTyPolarLine;
 { graphic.subPixelOptimizeLine, with Math.round }
 procedure TyPolarSubPixelLine(var ALine: TTyPolarLine; AWidth: Double);
+{ AxisBuilder's tick marks of an axis laid out by ASpec (getTicksCoords: a
+  category axis' interval and band edges, axisTick.customValues, else every
+  major tick), in the axis' own coordinates; and its minor ticks' --
+  shared with the parallel axes [Batch 128] }
+function TyPolarTickMarks(AOption: TTyChartOption; AAxis: TTyAxis;
+  const ASpec: TTyAxisLayoutSpec; const AFurn: TTyAxisFurniture;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer): TTyAxisMarkArray;
+function TyPolarMinorCoords(AAxis: TTyAxis): TTyDoubleArray;
 
 { ---- the pointer ---- }
 type
@@ -966,6 +974,18 @@ begin
     Inc(k);
   end;
   SetLength(Result, k);
+end;
+
+function TyPolarTickMarks(AOption: TTyChartOption; AAxis: TTyAxis;
+  const ASpec: TTyAxisLayoutSpec; const AFurn: TTyAxisFurniture;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer): TTyAxisMarkArray;
+begin
+  Result := TickMarks(AOption, AAxis, ASpec, AFurn, AMeasurer, APPI);
+end;
+
+function TyPolarMinorCoords(AAxis: TTyAxis): TTyDoubleArray;
+begin
+  Result := MinorCoords(AAxis);
 end;
 
 { a point through the axis group's matrix -- none where it needs no local

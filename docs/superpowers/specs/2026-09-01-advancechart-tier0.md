@@ -5885,7 +5885,7 @@ port 一直把名称居中画在标签外侧,y 轴的转 90°,位置由画的时
 - 主题没给名称文字色时,绘制不画,但布局照样给它留地方(以前就是这样)。
 - 转过的多行名称:`DrawTextRotated` 只画一行。
 - `TyAxisThickness` 已没有产品代码调用,只剩测试用它量标签带;它里面的名称项是旧的临时规则。
-- 名称 tooltip、`triggerEvent`、极坐标/平行/单轴的名称、grid 不以画布为容器的布局:未做。**[第 111 批：极坐标半径轴的名称做了——AxisBuilder 的名称布局，在半径轴自己的框架里，照样避开自己的标签，见 §146。]**
+- **[第 128 批：平行坐标轴的名称做了——AxisBuilder 的名称布局，在每根轴自己的框架里，两端的名称截到两根轴的间距（`axisNameAvailableWidth`），见 §164。]** 名称 tooltip、`triggerEvent`、极坐标/平行/单轴的名称、grid 不以画布为容器的布局:未做。**[第 111 批：极坐标半径轴的名称做了——AxisBuilder 的名称布局，在半径轴自己的框架里，照样避开自己的标签，见 §146。]**
 
 ### 变异测试
 
@@ -9090,7 +9090,7 @@ AN2–AN4、AN3b 之后，同一个 Option 上的整体更新仍然一帧切过�
 
 ### 推迟与偏差
 
-- 轴名（`'name'`，挂在轴组的变换组下，x、y 是局部的）、次刻度（`'minorticks_'`）、次分隔线（`'minor_line_'`）、分隔区域（`'area_'`）不过渡，画在布局的位置；极坐标、单轴、平行坐标的轴端口没有。**[第 111 批：极坐标的两根轴有了，也不做 groupTransition，直接画在布局的位置，见 §146。]**
+- **[第 128 批：平行坐标轴有了，同样不做 groupTransition，直接画在布局的位置，见 §164。]** 轴名（`'name'`，挂在轴组的变换组下，x、y 是局部的）、次刻度（`'minorticks_'`）、次分隔线（`'minor_line_'`）、分隔区域（`'area_'`）不过渡，画在布局的位置；极坐标、单轴、平行坐标的轴端口没有。**[第 111 批：极坐标的两根轴有了，也不做 groupTransition，直接画在布局的位置，见 §146。]**
 - 动画中的坐标轴叶子照代理的值原样画，中途不吸附像素；静止后静态层按布局画（与代理的终值最多差一个 ulp）。
 - `camAuto` 下窗口外的动作（图例点击、dataZoom 手势）留给下一次窗口绘制布防，起点是那次绘制的 flush，而不是下一帧——最多差一帧。
 - 悬停目标的重新指向只认数据项；悬停在折线本体上跨过 notMerge 时下一次移动仍会 out / over（没有用例）。
@@ -10374,7 +10374,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **随机数**：上游的 jitter 用 `Math.random`，每次渲染不同；端口用固定种子的 xorshift32，同一幅图永远一样。同一张图里既有力导向 graph 又有 jitter 时，上游两者共用一条 `Math.random`，端口各用各的种子。
 - **[第 117 批：已做——jitter 读取整后的点、抖完再取 Float32，见 §152。]** **large 散点**（`largeThreshold` 以上走 Float32Array）不在这一批（C8）。
 - **finder 是数组**：上游对数组 finder 的数字键调 `match` 会抛错；端口当成什么都没找到。containPixel 的点是 null 时上游抛错，端口答 false。
-- **matrix、polar、singleAxis、geo、parallel** 坐标系不在（polar 是 C3、singleAxis 是 C10、geo 是 D14）；finder 指到它们时端口什么都答不出，containPixel 答 false。分派里给 polar、singleAxis 留了位置。**[第 111 批：polar 坐标系有了——finder 指 polar 时照上游换算，containPixel 照 containPoint；极坐标系列的 finder 随 C4，见 §146。]** **[第 113 批：系列 finder 在它的 polar 上换算，containPixel 认极坐标系列，见 §148。]**
+- **[第 128 批：parallel 坐标系有了——它没有 convertToPixel / convertFromPixel，任何 finder 都照上游答不出；containPixel 认 parallel、parallelAxis 与平行系列的 finder（containPoint），见 §164。]** **matrix、polar、singleAxis、geo、parallel** 坐标系不在（polar 是 C3、singleAxis 是 C10、geo 是 D14）；finder 指到它们时端口什么都答不出，containPixel 答 false。分派里给 polar、singleAxis 留了位置。**[第 111 批：polar 坐标系有了——finder 指 polar 时照上游换算，containPixel 照 containPoint；极坐标系列的 finder 随 C4，见 §146。]** **[第 113 批：系列 finder 在它的 polar 上换算，containPixel 认极坐标系列，见 §148。]**
 - **[第 114 批：有了 roam，问 View（盒子经 overall），见 §149。]** **桑基图**的 containPixel 按它的盒子（端口没有桑基图的 roam）；旭日图从不包含（上游不下钻时也是如此，端口没有下钻）。
 - **类目轴的自动间隔**：量的是主题字体，不是上游的 12px sans-serif；60 个 `'category N'` 标签上端口算出 10、上游 9（和有没有 customValues 无关，是原有的偏差）。基准里拥挤的类目用例把间隔写明。
 - **customValues 写成对象或串**：对象取值、串逐字符，照 `zrUtil.each` 的行为；没有基准。
@@ -10414,7 +10414,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 ### 做法
 
 - **新单元 `tyControls.AdvChart.Polar`**（纯）：`TTyPolar`（`ITyCoordSys`；两根 `TTyAxis`，像素映射是恒等的，`SetPxExtent` 写成度或像素；`TTyAxis.Inverse` 永远不设，两个 `inverse` 标志在 `TTyPolar` 上）；`CoordToPoint` / `PointToCoord` / `AxisPointToData` / `ContainXY` / `BaseAxis`；`TyBuildPolars`（建坐标系、找轴、中心与半径）、`TyPolarApplyExtents`（`TyNiceAxisScale`，翻转标志，类目角度轴让一个带）、`TyLayoutPolars`（两个视图：线、弧、环、扇形、标签的几何，记录的就是上游的元素）；指针的 `TyPolarPointerShape` / `TyPolarPointerBand` / `TyPolarPointerLabelAnchor`；换算的 `TyPolarToPixel` / `TyPolarFromPixel` / `TyPolarContainJson`。三角函数全用 JsMath，`Math.round` 的 subPixelOptimize 用 `TyZrSubPixelOptimize`。
-- **共用而不是另写**：`Builder` 的 `FillSpec` / `ReadName` / `ReadNameMargin` 从 `TyLayoutGrids` 里提出来成为 `TyFillAxisLayoutSpec`（直角坐标的嵌套 `FillSpec` 只剩一层转发）；新导出 `TyCreateAxis`（`BuildAxisFamily` 也走它）、`TyCustomValuesOf`、`TyAxisRtPieces`；`TyAxisFurnitureOf` 多一个 `APolar`（`'auto'` 就是真）。`Series` 的 `DoAxis` 里从「时间轴没有数据显示今天」到「次刻度分段」这一段提出来成为 `TyNiceAxisScale`（`ADefaultSplit` 给极坐标的 12 / 5；翻转只报告，由调用者翻自己的标志；containShape 仍由 `DoAxis` 做）。`Layout` 的 `TTyAxisLayoutSpec` 多 `FreeFrame` / `LabelDirection`：轴转角取 `NameFrame.Rotation`，标签方向由它给、不看 `inside`——半径轴的标签、名称、箭头、类目间隔、保持都走直角坐标的那几个函数。`AxisName` 导出 `TyInnerTextLayout`，`Convert` 导出 `TyAxisCoordJs`，`AxisPointer` 加 `TyTooltipPolarPointerAxis`。
+- **[第 128 批：平行坐标轴也走这条路——`FreeFrame`、`LabelDirection` +1；`TyCreateAxis` 加 `AValueUntyped`，`Polar` 导出 `TyPolarTickMarks` / `TyPolarMinorCoords`，见 §164。]** **共用而不是另写**：`Builder` 的 `FillSpec` / `ReadName` / `ReadNameMargin` 从 `TyLayoutGrids` 里提出来成为 `TyFillAxisLayoutSpec`（直角坐标的嵌套 `FillSpec` 只剩一层转发）；新导出 `TyCreateAxis`（`BuildAxisFamily` 也走它）、`TyCustomValuesOf`、`TyAxisRtPieces`；`TyAxisFurnitureOf` 多一个 `APolar`（`'auto'` 就是真）。`Series` 的 `DoAxis` 里从「时间轴没有数据显示今天」到「次刻度分段」这一段提出来成为 `TyNiceAxisScale`（`ADefaultSplit` 给极坐标的 12 / 5；翻转只报告，由调用者翻自己的标志；containShape 仍由 `DoAxis` 做）。`Layout` 的 `TTyAxisLayoutSpec` 多 `FreeFrame` / `LabelDirection`：轴转角取 `NameFrame.Rotation`，标签方向由它给、不看 `inside`——半径轴的标签、名称、箭头、类目间隔、保持都走直角坐标的那几个函数。`AxisName` 导出 `TyInnerTextLayout`，`Convert` 导出 `TyAxisCoordJs`，`AxisPointer` 加 `TyTooltipPolarPointerAxis`。
 - **控件**：`FPolars`；`Rebuild` 建、`TyApplyAxisExtents` 之后定刻度；`Relayout` 在 `TyLayoutGrids` 之后排两个视图（同一套字体、间距、轴记忆）；`PaintAxes` 先画极坐标的网格层再画轴层，主题键全部和直角坐标轴共用（`TyAdvChartAxisLine`、`TyAdvChartAxisTick`、`TyAdvChartSplitLine`、`TyAdvChartSplitArea`、`TyAdvChartMinorTick`、`TyAdvChartMinorSplitLine`、`TyAdvChartAxisLabel` / `AxisName`、指针的三个键）——上游的两根极坐标轴本来就共用 `axisDefault`，没有新主题键。弧、环、扇形按 zrender 的 buildPath 画（`ArcTo` 的方向是 `!clockwise`）。`ResolveAxisPointers` 在 grid 之后问每个 polar；`TTyAxisHit.Polar`；`PolarPointerGeometry`（受保护，绘制和测试都用它）给出形状和标签框；极坐标指针不做移动动画。`ConvertDispatch` 在 graph 的 view 之后问 polar，`ContainPixelData` 认 `polar`。合并时新进来的 angleAxis / radiusAxis 忘掉轴记忆。缺轴的 polar 不建、给诊断（`rsTyChartPolarNoAxis`，有中文翻译）。导出的 `excludeComponents` 认 `angleAxis` / `radiusAxis`（新的 `cvAngleAxis` / `cvRadiusAxis`）。`PolarCount` / `PolarLayout` 公开。
 
 ### 基准
@@ -11046,7 +11046,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 
 ### 上游的做法
 
-- **[第 121 批：lines 的视图也有增量渲染（large 时 1e4 / 2e4，否则 400 / 3000，`effect.show` 时不渐进）；端口的 lines 一次画完，见 §156]** **开关**：管线的 `progressiveEnabled` 是 `zr.painter.type === 'canvas' && seriesModel.getProgressive()` 的真值；`progressiveRender` 是它加上视图有 `incrementalPrepareRender`（散点、柱、K 线、热力图；line、effectScatter、pictorialBar、treemap 缺省 `progressive: 0`，line 写了也没有增量视图）再加 `dataLen >= threshold`，`dataLen` 是**过滤之后**的条数。缺省：Series 400 / 3000；柱（BaseBarSeries）与 K 线 3000，K 线阈值 1e4，二者的 `progressiveChunkMode` 缺省 `'mod'`；散点 `option.progressive == null` 时 large 写了真值就是 5000 / 1e4，否则 400 / 3000。柱的 `getProgressive` 是 `get('large') ? get('progressive') : false`——不写 `large` 的柱永远不渐进；渐进时 `__preparePipelineContext` 强制 large，所以 `largeThreshold: 1000` 的 20 行也是 large 批。`step = Math.round(progressive || 700)`。
+- **[第 128 批：parallel 的视图也有增量渲染（progressive 300 / 阈值 3000），端口按块显示它的行，增量视图不入场，见 §164。]** **[第 121 批：lines 的视图也有增量渲染（large 时 1e4 / 2e4，否则 400 / 3000，`effect.show` 时不渐进）；端口的 lines 一次画完，见 §156]** **开关**：管线的 `progressiveEnabled` 是 `zr.painter.type === 'canvas' && seriesModel.getProgressive()` 的真值；`progressiveRender` 是它加上视图有 `incrementalPrepareRender`（散点、柱、K 线、热力图；line、effectScatter、pictorialBar、treemap 缺省 `progressive: 0`，line 写了也没有增量视图）再加 `dataLen >= threshold`，`dataLen` 是**过滤之后**的条数。缺省：Series 400 / 3000；柱（BaseBarSeries）与 K 线 3000，K 线阈值 1e4，二者的 `progressiveChunkMode` 缺省 `'mod'`；散点 `option.progressive == null` 时 large 写了真值就是 5000 / 1e4，否则 400 / 3000。柱的 `getProgressive` 是 `get('large') ? get('progressive') : false`——不写 `large` 的柱永远不渐进；渐进时 `__preparePipelineContext` 强制 large，所以 `largeThreshold: 1000` 的 20 行也是 large 批。`step = Math.round(progressive || 700)`。
 - **块**：每帧每条管线从 `dueIndex` 走一步，`end = min(dueIndex + step, dueEnd)`。`'sequential'` 就是位置本身；`'mod'` 走 task.ts 的 `modNext`：`modBy = ceil(modDataCount / step)`、`winCount = ceil(modDataCount / modBy)`、第 current 个位置是 `(current % winCount) * modBy + ceil(current / winCount)`，不小于 `modDataCount` 时退回 `current`。它**不是排列**：10 行每块 4，行 7 走两次、行 9 永远不来。只有调 `params.next()` 的布局按它走——柱的 large 布局和 K 线的两种布局；散点的 `pointsLayout`、热力图都按 `start..end`，写了 `'mod'` 也一样。
 - **重来**：任务以 `(modBy, modDataCount)` 执行，跟上次不同就 reset，下游一路 dirty 到渲染任务——`incrementalPrepareRender` 清空视图、从第 0 块再画。两种来源：可视阶段的参数（appendData 改了 `'mod'` 的条数），以及**被阻塞的数据阶段**——setOption 新建的管线还没有上下文，数据处理以 `(1, 0)` 执行，第一帧以 `(Infinity, count)` 执行。只有在数据阶段有自己的系列任务的系列受影响：柱（`dataSample('bar')`）与线；概览任务的桩永远以 `(1, 0)` 执行。于是 `'mod'` 的柱第一帧把第 0 块重画一遍、第二帧才画第 1 块；K 线、散点没有这一帧。`createRenderPlanner` 在 large 或 progressive 换了时也 reset。
 - **帧**：setOption 的 update 同步画第 0 块；`_onframe` 在 `scheduler.unfinished` 时循环：`performSeriesTasks`、数据阶段、`updateStreamModes`、可视阶段、`renderSeries`，每次减去用掉的毫秒，直到 `TEST_FRAME_REMAIN_TIME`（1 ms）用完或没有剩的。`rendered` 每次 flush 发一次——渲染时只要还没完，handler 里的 `zr.refresh()` 让下一帧再 flush，所以未完成的每一帧都发；画完最后一块那帧再发 `finished`（动画结束、没有挂起的 update、调度完成、没有挂起的 action）。
@@ -11433,7 +11433,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
   - `BrushIrrelevant`：`TopElementAt` 的元素属于某个系列，系列在 cartesian 上且网格就是面板的——相关；系列有别的坐标系（polar、calendar、graph / tree 的 view、radar）或另一个网格，比 zlevel 再比 z（系列的缺省 line 3、其余 2，网格 0），严格更高才无关。
   - toolbox：`TbBrushRender`（每次 `SolveToolboxes` 给 brush feature 置状态、记 `FTbBfHas` / `FTbBfType` / `FTbBfMulti`），`TbBrushClick`，`TbBrushSnap`——`takeGlobalCursor` 与 `axisAreaSelect` 的更新在端口是下一次重排才渲染工具栏，派发时先把状态快照下来，重排时用它（之后的 brush 动作不渲染工具栏，与上游一样看不到）。`TbTitles` 加六个资源串。
   - select 刷选并进控制器：`FTbBrushCtl`（`TbZoomCtlSync`：面板是 select dataZoom 指到的网格、各带缺省类型与网格编号，缩放开着且有面板时 `EnableAuto`）、`TbCtlDown` / `TbCtlMove` / `TbCtlUp` / `TbCtlTrigger`（只认结束且有区域：`UpdateCovers([])`，按区域的面板找网格、把类型与 range 交给原来的 `TbBrushEnd`）；`ToolboxCover`、`BuildToolboxes` 的覆盖框、`TbApplyCursor` 的十字都读控制器；`FTbBrushing` / `FTbCover` / `FTbTrack` / `FTbCoverRect` / `FTbBrushPanel` 与 `TbPanelAt` / `TbBrushDown` / `TbBrushTrack` / `TbBrushMove` / `TbBrushUp` 删掉。
-  - 动作 `axisAreaSelect`（`BrushDoAxisAreaSelect`）：没有平行坐标，只有更新（brushSelect、工具栏渲染）与事件 `axisareaselected`。
+  - **[第 128 批：有平行坐标了——查到的 parallelAxis 模型写入 activeIntervals 并整次更新，见 §164。]** 动作 `axisAreaSelect`（`BrushDoAxisAreaSelect`）：没有平行坐标，只有更新（brushSelect、工具栏渲染）与事件 `axisareaselected`。
   - `MergeBefore` 的 `brush`：replaceVisualOption——新选项的 inBrush / outOfBrush 有键时先把树上的两个删掉。
   - 测试 API：`BrushGlobalPanTaken`；`VisualRow` 现在带刷选写的视觉。
 - **主题键**（`themes/light.tycss`，重跑了 `gen-defaulttheme.ps1` 与 `gen-tycss-catalog.ps1`，只有增加）：`TyAdvChartBrushOut`（`color: var(--border)`，上游 outOfBrush 的缺省灰）。
@@ -11473,7 +11473,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **onIrrelevantElement**：端口的「最上层元素」是绘制列表里的（系列的标记与它的标签、标记点线面、图例、工具栏、刷选框）；坐标轴、分隔区、网格背景不在列表里——它们的模型没有坐标系、z 也在系列之下，结果一样。认得的坐标系：cartesian（按网格）、polar、calendar、graph / tree 的 view、radar；z 按整数读。
 - **toolbox 的 brush 按钮**：没有 brush 组件时点击照样带 `brushMode`（上游是 undefined）；还没有类型时按 keep 发的 `brushType` 是 null（上游 undefined，结果都是关）。工具栏在端口的整次更新晚到下一次重排，只有 `takeGlobalCursor` 与 `axisAreaSelect` 在派发时快照了按钮状态；别的这种动作之后、绘制之前若再有 brush 动作，状态读的是之后的。
 - **预处理器**：上游会抛异常的写法（feature 不是对象、type 不是数组、brush 数组里有 null）什么都不做。
-- **axisAreaSelect**：没有平行坐标，只有更新与事件。
+- **[第 128 批：写区间与 active / inactive 的不透明度做了，逐轴刷选是 C20，见 §164。]** **axisAreaSelect**：没有平行坐标，只有更新与事件。
 - **select 刷选**：仍不读 feature 的 `brushStyle`（§160），覆盖框是 `TyAdvChartToolboxBrush`。
 - **缺省的框外灰**是皮肤的 `TyAdvChartBrushOut`（light 里是 `var(--border)`，`#D1D5DB`；上游 token 是 `#cfd2d7`）。
 
@@ -11489,3 +11489,84 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - `source/tyControls.StrConsts.pas`、`languages/tyControls.StrConsts.pot`、`languages/tycontrols.strconsts.zh_CN.po`、`tools/themebuilder/languages/tycontrols.zh_CN.po`。
 - `themes/light.tycss`、`source/tyControls.DefaultTheme.pas`、`source/tyControls.Css.Catalog.pas`（生成）。
 - `tools/advchart-oracle/brush-select.js`、`tests/fixtures/advchart-brush-select.json`、`tests/test.advchart.brushselect.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.toolbox.pas`（magicType 点击后的事件个数）。
+
+## 164. Tier 2 第一百二十八批：平行坐标系（C19，2026-10-12）
+
+路线图 C19：parallel PA1——parallel 坐标系、parallelAxis 与 parallel 系列。以前 `parallel`、`parallelAxis` 只是选项里认得的组件名（合并、replaceMerge、盒子合并都按组件处理），系列注册表里 `parallel` 有一行（`'parallel'` 坐标系、`RendersOn` 只写了自己），绑定时却因为「这个坐标系端口没有」落空，诊断说坐标系找不到，什么都不画；C2 的换算分派给 parallel 留了位置但它什么都不答，C18 的 `axisAreaSelect` 动作只有更新与事件。C20 加逐轴刷选（`areaSelectStyle`、轴上的 BrushController），D7 加 `axisExpandable` 的交互，这一批把它们要接的地方留好。这一批对着 6.1 的 `coord/parallel/`（`Parallel.ts` 的 `_init`、`update`、`containPoint`、`resize`、`_makeLayoutInfo`、`_layoutAxes`、`dataToPoint`、`eachActiveState`、`hasAxisBrushed`、`axisCoordToPoint`、`layoutAxisWithoutExpand` / `layoutAxisWithExpand`；`ParallelModel.ts` 的缺省、`_initDimensions`、`contains`；`AxisModel.ts` 的 `setActiveIntervals`、`getActiveState`、`getAreaSelectStyle`；`ParallelAxis.ts` 的 `isHorizontal`；`parallelCreator.ts`；`parallelPreprocessor.ts`）、`component/parallel/install.ts`（parallelAxis 的额外缺省）与 `ParallelView.ts`、`component/axis/ParallelAxisView.ts`（`builderOpt`、`fromAxisAreaSelect`、`getCoverInfoList`）与 `parallelAxisAction.ts`、`AxisBuilder.ts`（`axisLabelShow`、`axisNameAvailableWidth`、`nameTruncateMaxWidth`、`endTextLayout` 与名称的截断宽度）、`chart/parallel/`（`ParallelSeries.ts` 的缺省、`makeDefaultEncode`、`getRawIndicesByActiveState`；`ParallelView.ts` 的 `render` / diff、`createGridClipShape`、`createLinePoints`、`isEmptyValue`、`makeSeriesScope`、`updateElCommon`、`incrementalPrepareRender` / `incrementalRender`；`parallelVisual.ts`）、`model/referHelper.ts` 的 parallel 取值器、`chart/helper/createSeriesData.ts` 的 `injectOrdinalMeta`、`data/helper/dimensionHelper.ts` 的 `summarizeDimensions`（defaultedLabel / defaultedTooltip）、`model/Component.ts` 的 `getReferringComponents`、`model/Global.ts` 的 `findComponents` / `queryComponents`、`util/layout.ts` 的 `mergeLayoutParam` / `getLayoutRect`、`coord/axisModelCreator.ts`（subType 与 `option.type` 的两次判定）、`coord/axisHelper.ts` 的 `determineAxisType`、`coord/scaleRawExtentInfo.ts`（反向的 min / max 翻 inverse）、`util/states.ts` 的 `blurSeries`、`animation/basicTransition.ts` 的 `initProps` 与 `saveOldStyle`，以及 zrender 的 `matrix.rotate` / `translate`、`vector.applyTransform`、`helper/poly.ts` 与 `smoothBezier.ts`、`Displayable._innerSaveToNormal` 逐行核过，在真 dist 上跑基准。§72、§131、§145、§146、§154、§163 的相关处在原处标注。
+
+### 上游的做法
+
+- **建坐标系**（`parallelCreator.create`）：每个 parallel 组件一个。它的轴是 `parallelIndex || 0` 等于它下标的 parallelAxis（严格相等，只有数才配得上），**按组件次序**而不是按 `dim` 次序；轴 k 的维度名是 `'dim' + dim`，系列一行的第 N 个元素进 `'dimN'` 那根轴（`makeDefaultEncode`）。parallelAxis 的缺省 `type: 'value'` 在 `mergeDefaultAndTheme` 里先合进选项，`getAxisType` 再看——于是**写了 `data` 没写 `type` 的 parallelAxis 是数值轴**（subType 却是 category）。系列的坐标系由 `getReferringComponents` 找，系列缺省 `parallelIndex: 0`，它压过写了的 `parallelId`；只有把 `parallelIndex` 写成 null，`parallelId` 才被读。找不到 parallel 时上游抛错。
+- **预处理器**（`parallelPreprocessor`）：选项里没有真值的 `parallel`、又有 `type: 'parallel'` 的系列时，选项加上 `parallel: [{}]`；然后每个 parallelAxis 对象拿它所指 parallel（`parallelIndex || 0`，在**这一次**的选项里找）的 `parallelAxisDefault` 以 `zrUtil.merge(axis, default, false)` 垫在自己的键下面。
+- **盒子与布局**（`resize`、`_makeLayoutInfo`、`_layoutAxes`）：缺省 left 80、top 60、right 80、bottom 60，`mergeLayoutParam`（layoutMode `'box'`，不忽略尺寸）再 `getLayoutRect` 在整张图上。`layout` 是 `'horizontal'`（缺省）时轴竖着排、沿 x 等距：第 i 根在 `step·i + rect.x`、`rect.y + axisLength`，`step = layoutLength / (n − 1)`，转角 π/2；`'vertical'` 时横着排、沿 y 等距，转角 0。变换是 `matrix.rotate(I, rotation)` 再 `translate(position)`——cos(π/2) 是 6e-17，它留在数里：水平布局的点 x 是 `6.123e-17·coord + 0 + x`。每根轴的范围 `[0, axisLength]`，模型写了 inverse 就倒过来，`axis.inverse` 也置上；之后 `update` 里反向的 min / max 再翻一次 `axis.inverse`——这时范围已经设好了，只动读这个标志的地方（名称的方向）。`axisExpandable`（轴数大于 3、`axisExpandCount` 在 (1, n) 之间、`axisExpandWidth` 与布局长度都大于 0）时窗口里的轴按 `axisExpandWidth` 排、窗口外的按 `axisCollapseWidth`（小于 3 当 0）挤在两头，窗口外的轴 `axisLabelShow: false`、名称截到 `axisCollapseWidth`。
+- **轴**（`ParallelAxisView`）是一个 AxisBuilder：组在轴的位置、转过轴的转角，`tickDirection` 与 `labelDirection` 都是 +1（水平布局里标签在轴的右边），`axisLabelShow` 是坐标系给的（**压过 `axisLabel.show`**：不展开时 `axisLabel: {show: false}` 照样画标签），名称的截断宽度是 `nameTruncateMaxWidth`（只有展开时折起来的轴有）、`nameTruncate.maxWidth`、`axisNameAvailableWidth / |sin(名称相对轴的转角)|`（只在两端，不是有限数时不截）三者取第一个——水平布局的端点名称截到两根轴的间距。parallelAxis 的 z 是 10，画在系列（2）之上。
+- **系列**（`ParallelView`）：每行一条 Polyline（z2 10），点是每根轴上的 `dataToPoint`，空值的点去掉——类目轴上是 null，别的轴上是 null 或非数；**不认识的类目是 NaN，不算空**，点留着（canvas 跳过它）。`smooth` 是 `true` 时 0.3，再 `numericToNumber`（数字串照读），非数是 0；非 0 时 zrender 的 `smoothBezier`（不闭合、无约束）把折线画成三次曲线。样式是 `lineStyle`（`visualStyleAccessPath`）、颜色落在描边上（`visualDrawType: 'stroke'`）：系列色或 `lineStyle.color` → visualMap（4000）→ 项自己的 lineStyle（4500）；宽缺省 1、`type` 缺省 `'solid'`。
+- **不透明度**（`parallelVisual`，优先级 5000，在 visualMap 之后，所以 visualMap 的 opacity 通道被盖掉）：没有任何轴有 active intervals 时是 `lineStyle.opacity`（缺省 0.45），项自己写了 `lineStyle.opacity` 用项的；有了时逐行 `eachActiveState`——按轴的次序，第一根拒绝这个值的轴让它 `'inactive'`（`inactiveOpacity`，缺省 0.05），否则 `'active'`（`activeOpacity`，缺省 1）。`getActiveState`：没有区间是 `'normal'`；值是 null 或非数是 `'inactive'`；落在某个闭区间里是 `'active'`。
+- **axisAreaSelect**（`parallelAxisAction`，update 缺省 `'update'`）：`findComponents({mainType: 'parallelAxis', query: payload})`——`parallelAxisIndex`，否则 `parallelAxisId`，否则 `parallelAxisName`（parallelAxis 的 name 就是轴名），都没有就是全部——每个轴模型 `setActiveIntervals(intervals)`：克隆、每对 `asc`。区间活在**轴模型**上：合并、图例切换都留着，notMerge 或新模型没有。事件 `axisareaselected` 之后照 C18 派发一次空批的 `brushselected`。被查到的那根轴的视图在这次更新里不渲染（`fromAxisAreaSelect`），它的刷选框（`getCoverInfoList`）是 C20 的事。
+- **入场**（`createGridClipShape`）：视图**第一次**渲染时数据组挂一个裁剪矩形，水平布局宽从 0、竖直布局高从 0，`initProps` 到整个 parallel 的矩形（系列的时序：缺省 1000 ms、`'linear'`、延时）；结束时 `setTimeout` 把裁剪去掉。视图在图例藏起又显示、合并、notMerge 换模型但视图 id 不变时都不是新的（`_initialized`），不再入场；增量视图（`incrementalPrepareRender`）从不入场。更新时 `updateProps` 补间每行的点。
+- **状态、提示框、图例**：`setStatesStylesFromModel(el, itemModel, 'lineStyle')` 与 `toggleHoverEmphasis`；缺省的 emphasis 提亮描边、z2 +10，blur 不透明度 ×0.1。`blurScope` 缺省的「同坐标系」认的是同一个 Parallel。提示框是 `defaultSeriesFormatTooltip`：项名是数据维次序里**第一个类目维**的值（`injectOrdinalMeta` 把 itemName 给它），值是 `defaultedTooltip` = `defaultedLabel`——数据维次序里**最后一个**能当标签的坐标维（不是类目、不是时间）；一个都没有时整行的值都列出来。图例是系列色的 roundRect。
+- **换算**：Parallel 没有 `convertToPixel` / `convertFromPixel`，任何 finder 都答不出（undefined）；`containPixel` 问 `coordinateSystem.containPoint`——parallel 组件、parallelAxis（轴模型上注入了坐标系）与平行系列的 finder 都答，`containPoint` 是两向都闭的盒子。
+
+### port 以前
+
+- `parallel` 系列绑定失败、诊断「坐标系找不到」；parallel、parallelAxis 不画；`axisAreaSelect` 不写区间；换算分派里 parallel 不答，`containPixel` 的 parallel、parallelAxis 答 false。
+
+### 做法
+
+- **新单元 `tyControls.AdvChart.Parallel`**（纯）：
+  - `TTyParallel`：盒子、布局方向、维度（`Dims` / `DimNums`，轴的次序）、轴（`TTyAxis`，恒等映射；`TTyAxis.Inverse` 不设，`AxisInverse` 记上游的标志）、`AxisIndices`、`Layouts`（位置、转角、矩阵、名称可用宽、`LabelShow`、折起时的 `NameTruncMax`）、`Views`、`Intervals`；`_makeLayoutInfo` 的 `LayoutBase` / `LayoutLength` / `AxisBase` / `AxisLength` 与展开的窗口、宽、内侧下标。`AxisCoordToPoint`（`m0·c + m2·0 + m4`，逐项照 applyTransform）、`DataToPoint`、`ContainXY`、`HasAxisBrushed`、`AxisActiveState`、`AxisOfDim`（同名维取最后一个）、`AxisOfComponent`。
+  - `TyBuildParallels`（建坐标系、`mergeLayoutParam` + `TyGetLayoutRect` 的盒子、`LayoutAxes` 的布局与展开算术）、`TyParallelSeriesDims`（数据的列：轴所在的 `'dimN'` 按轴的类型、类目列借轴的类目表，其余 `'value'`、`'value0'`……）、`TyParallelApplyExtents`（`TyAxisNoZoomExtent` + `TyNiceAxisScale`，反向的 min / max 翻 `AxisInverse`）、`TyLayoutParallels`（AxisBuilder：`TyFillAxisLayoutSpec`、`FreeFrame`、`LabelDirection` +1、`axisLabelShow` 压过 `axisLabel.show`、名称按可用宽截断，刻度朝 +1，线与刻度 subPixel；整段在屏蔽了浮点陷阱的环境里算——只有一根轴时位置是 `Infinity·0`）。
+  - 系列：`TyParallelSmoothOf`、`TyParallelSmoothCmds`（smoothBezier 照抄）、`TyParallelSampleCmds`（命中用的采样）、`TyBuildParallelMarks`（每行一条折线，z2 10，命中带宽 `max(lineWidth, 5)/2`，平滑的按曲线画、按采样命中；画的路径去掉非有限的点——canvas 跳过它们）、`TyParallelIntervalsOf`、`TyParallelContainJson`。
+- **共用**：`Builder.TyCreateAxis` 加 `AValueUntyped`（没写 `type` 就是数值轴）；`Polar` 导出 `TyPolarTickMarks` / `TyPolarMinorCoords`（AxisBuilder 的刻度表）；`Series` 的绑定加 `ParallelIndex` / `Parallel` 与 `'parallel'` 一支（缺省下标压过 id）；`Option` 加 `TyParallelPreprocess`（在 `PreprocessUnits` 里，基础选项与每个媒体单元，先于刷选的）；`Paint` 加动画角色 `carParallelLine`；`Export` 加视图 `cvParallelAxis`（`excludeComponents: ['parallelAxis']`）；`Progressive` 的增量视图加 `parallel`（缺省 300 / 3000 早已在）；`Marks` 的「别处画」加 `parallel`。
+- **`AnimView`**：`parallelClip` 代理（每个系列一个，行 −1）：`G[0..3]` 是 parallel 的矩形，`G[4]` 水平布局，`G[5]` 视图是新的才建；宽或高从 0 起 `initProps`（系列时序、无行），帧里每行挂这个裁剪，到终点不再挂。更新里保留的系列带着还在跑的裁剪走（`UpdateOne`）。
+- **控件**：
+  - `Rebuild`：`TyBuildParallels`，把 `FParIntervals`（按 parallelAxis 组件下标，轴模型的区间）抄进每根轴；绑定挂上 `Parallel`；`ParallelStore`（每行元素一列，`TyFillSeriesStore`；`SetTooltipPositions` / `SetLabelPositions` 是最后一个数值坐标维，没有就空——于是提示框走通用的 `TipCellsOf`）；`TyIndexSeries` 之后把系列挂到它 parallel 的每根轴上；`TyPolarApplyExtents` 之后 `TyParallelApplyExtents`。
+  - `Relayout`：`TyLayoutPolars` 之后 `TyLayoutParallels`（同一套字体、间距、轴记忆）；`SolveLines` 之后 `SolveParallels`（点、曲线、活动状态、样式：系列色 → visualMap 行色 → 项自己的 lineStyle；宽、虚线同理；不透明度照 parallelVisual）。`FParSeen` 记已经渲染过的平行系列视图（按视图 key，藏起的也算），没见过的才 `NewView`。
+  - `BuildSeriesList` 的平行一支；`PaintParallels`（主题键全部和直角坐标轴共用，在系列之后画——静态层与动画中的动态层都画）；`StKindOf` 的 `sskParallel`（状态读 `lineStyle`）；`StCoordKey` 认 parallel（blur 的同坐标系）；`DatumColour`（提示框的标记色）是行的描边。
+  - `ContainSeries` 与 `ContainPixelData` 认 parallel、parallelAxis（`ParallelOfAxis`）；`ConvertDispatch` 不问它。
+  - `BrushDoAxisAreaSelect` 先 `ParallelAreaSelect`（查询：下标——数或规范的数字串、列表——，否则 id，否则 name，列表只认串；不在任何 parallel 上的轴跳过），写了就 `FullUpdate`，然后照 C18 走。`MergePass` 让新进来的 parallelAxis 模型忘掉区间与轴记忆，`ApplyNotMerge` 全忘。
+  - 公开：`ParallelCount`、`ParallelLayout`、`ParallelSolvedOf`、`ParallelIntervals`。
+- 没有新主题键、新资源串（找不到 parallel 的诊断沿用 `rsTyChartSeriesCoordSys`）。
+
+### 基准
+
+`tools/advchart-oracle/parallel.js`（真 dist，node 下 SSR / SVG，600 × 400，TZ=UTC，zrender 的宽度表量字；ssr 初始化后 `_ssr = false`、`env.node = false`、图表原型的 `getDom` 答空对象让 TooltipView 运行；替换 `Date` 与定时器，每个用例时钟回到 T0 = 1700000000000，setOption 自己的 flush 在 T0 步进一次（帧 0），之后每帧 `NOW = T0 + t`、`zr.animation.update()`、到期的定时器、`getDisplayList(true)`；动作的步骤照 lines.js；最后 `process.exit()`）→ `tests/fixtures/advchart-parallel.json`（约 528 KB）：**34 个用例**——布局 24、交互 5、入场 3、换算 2；37 个 parallel、126 根轴、113 行，19 步、34 个事件、28 帧、120 个换算探针。
+
+- **布局与轴**：缺省；竖直布局（自己的盒子）；每种轴型（数值、带 data 的类目、从数据收集的类目、时间（带时区的串与数）、对数）；有 data 没 type 的数值轴；inverse（数值、类目、带 min / max）；反向的 min / max（标志翻、范围不动、只有名称挪）；四十个类目在水平与竖直两个 parallel 上（类目间隔按轴的转角量）；min / max、scale、splitNumber、interval、dataMin / dataMax；名称（start、转着的 middle、带 gap 的 end、nameRotate、长到要按轴间距截的、nameTruncate 自己的宽与省略号、nameTextStyle）；竖直布局的名称；标签（rotate 30 / −45、margin、formatter、showMinLabel false、被坐标系压过的 `axisLabel.show: false`、类目的 interval、不起作用的 inside）；刻度长 9 且 inside（不起作用）、次刻度、藏起的轴线、藏起的轴、箭头、藏起的刻度；百分比盒子与只写右下宽高的盒子；`parallelAxisDefault`；轴按组件次序（dims 3、0、2）；预处理器造 parallel；`axisExpandable` 的静态布局（八根轴、窗口四根）。
+- **系列**：smooth（true、0.6、`'0.15'`、0、false）与空值去点；类目的 null 去点、未知类目留下 NaN 点、空串；三个系列的调色板、lineStyle 宽 2 虚线、项自己的颜色宽度不透明度点线、系列 `color`；两个 parallel（按 `parallelIndex`，`parallelId` 被缺省下标压过）；连续 visualMap 在维 2 上着色（它的 opacity 被盖掉）；分段 visualMap 在缺省维、outOfRange 灰、`seriesIndex`；图例两次切换（轴的范围跟着变）。
+- **交互**：悬停三条线再离开（emphasis 提亮描边、z2 20，提示框——系列名作头、项名是第一个类目、值是最后一个数值坐标，事件）；`focus: 'series'` 加自己的 emphasis / blur lineStyle（另一系列 blur 到 0.045），highlight / downplay；axisAreaSelect 按 id 一段、两段（端点上的值）、按下标一段倒着写的、类目轴、下标列表清空（项自己的不透明度只在没有区间时生效、null 是 inactive）；activeOpacity / inactiveOpacity、合并后区间还在、按名字查；图例切换后区间还在。
+- **入场**：水平（宽，线性 1000 ms，结束后裁剪去掉）；竖直（高，600 ms 延时 100，与缺省时序的第二个系列）；cubicOut 与关了动画的系列。
+- **换算**：七种 finder（parallelIndex 0 与 1、裸词 `'parallel'`、parallelAxisIndex、parallelAxisId、seriesIndex、不存在的轴）× convertToPixel、convertFromPixel 与九个像素的 containPixel；竖直的 parallel 与一个 grid 并存。
+
+每条记录：每个 parallel 的矩形、布局、维度，每根轴的维度、组件下标、类型、范围、inverse、刻度范围、空白、位置、转角、六个矩阵数、名称可用宽、标签显示、区间，以及它的 AxisBuilder 画出来的线、箭头、刻度（被藏的）、次刻度、标签（文字、位置、分解后的转角、对齐、藏）与名称（截断后画出来的字、整串、位置、转角、对齐）；每个系列的 parallel、smooth、z，每行的点、`buildPath` 的命令、描边、宽、不透明度、虚线、z2——**元素在状态里时记 `_normalState` 的值**——与活动状态；图例的图标与颜色；步骤的悬停目标、事件（mouse 三种、axisareaselected 的轴与区间、brushselected 的批、legendselectchanged）、提示框的行、每行的状态与当前描边 / 不透明度 / 宽 / z2，动作与合并之后整份记录再记一次；每帧每个系列的裁剪矩形；换算的输入与答案。自检：R1 由盒子选项与 `mergeLayoutParam` 后的键重算矩形、由布局重算每根轴的位置、转角、矩阵与范围（118 次）；R2 由轴的 `dataToCoord` 与矩阵重算每个点、空值去点（163 次）；R3 由 smoothBezier 重算每条曲线的控制点（4 次）；R4 由区间、`getActiveState` 与 parallelVisual 的表重算每行的不透明度（163 次）；R5 由时长、延时与缓动重算每帧的裁剪（46 次）。47 条守卫（缺省盒子、两种转角、cos(π/2) 留在矩阵里、标签在 +1 侧、有 data 的数值轴、收集的类目、inverse 换范围与名称、反向 min / max 只翻标志、四十个类目两种布局都抽稀且不同、长名称被截、nameTruncate 的省略号、`axisLabel.show: false` 被压过、藏起的轴什么都不画、预处理器造 parallel、`parallelAxisDefault` 垫在轴下、组件次序、展开时折起的轴藏标签截名称、smooth true 是 0.3、数字串、0 与 false 是直线、空值去点、类目 null 去点而未知类目不去、缺省 0.45、z2 10、项自己的不透明度、visualMap 上色而 opacity 被盖、outOfRange 灰、图例切换改范围、悬停提亮与 z2、提示框的项名与值、focus series 淡化、axisareaselected 在 brushselected 之前、active 1 与 inactive 0.05、项的不透明度输给活动状态、倒着的区间排好、null 是 inactive、空表清空、区间经合并与图例都在、入场从 0 宽起、结束后去掉、竖直的长高、换算都不答、axis 与 series 的 finder 都答 containPixel）都成立；两次生成逐字节一致；没有 `\u0000`；JSON 能读回。
+
+### 测试
+
+`test.advchart.parallel`（新，注册在 `tytests.lpr`）：
+
+- **基准重放**（`TAdvChartParallelOracleTest`，6 个）：每个用例新建控件（静态与交互 `camOff`，入场 `camAlways` 与同一个 T0），文字用 zrender 的宽度表量。坐标系（`ParallelLayout`：矩形、布局、每根轴的维度到区间，逐位）；轴（每个 AxisBuilder 元素，逐位）；行（`ParallelSolvedOf`：点、平滑曲线的每个控制点、描边、宽、不透明度、虚线、z2、活动状态，图例）；步骤（`MouseMove` / `MouseLeave` / `DispatchAction` / 合并的 `SetOption`，`HitTestAt` 的行、事件、`TooltipContent` 展平后的行、`ItemStates` 的状态与当前样式，动作与合并后整份记录）；入场（`AnimTick(T0 + t)`，`parallelClip` 代理的四个数；上游还挂着、到了终点等着被去掉的整块裁剪与「没有裁剪」画法相同）；换算（每个探针按精确的 Double 重放）。共比较 **19 749 项**（坐标系 2 902、轴 12 080、行 2 277、步骤 2 212、入场 154、换算 124；`TY_PARALLEL_COUNTS=1` 时打印）。
+- **手写**（`TAdvChartParallelTest`，8 个）：线和轴真的画出来了（像素，`cvParallelAxis` 在画过的视图里）；smoothBezier 的控制点（端点是自己、中间点的两只手按两段距离分）与 `numericToNumber`；区间活在轴模型上（合并还在、notMerge 没有、回到 0.45）；动作的查询（id、name、数字串下标与列表、不写就是全部、不在 parallel 上的轴不收、倒着的区间排好、事件发出去）；渐进的平行系列一块一块来（阈值 50、每块 20：第一块 20 行显示 40 行等着，没有入场裁剪）；排除的视图名；找不到 parallel 的系列给诊断、缺省下标压过 `parallelId`、写 null 才读 id；入场裁剪只在视图第一次渲染（40% 时宽是 0.4·440、帧里挂着裁剪、合并时带着走、结束、图例藏起再显示不再裁剪）。
+
+首跑的不对：未知类目的 NaN 点让包围盒的比较抛 EInvalidOp——画的路径去掉非有限的点（canvas 跳过它们，`ParallelSolvedOf` 里照旧留着）；项没写 `lineStyle.color` 时 `LnColour` 的 out 参数把行色写成 0；只有一根轴的 parallel 位置是 `Infinity·0`，`TyPolarSubPixelLine` 与标签相交的比较抛异常——布局整段屏蔽浮点陷阱、画时跳过非有限的轴；`axisareaselected` / `brushselected` 不在 `ChartOn` 的事件表里——测试照 C18 用 `OnChartEvent`；`focus: 'series'` 淡化不到另一个系列——`StCoordKey` 不认 parallel。基准自己三处：「types」的日期串不带时区，端口按本机时区读——改成带 `Z` 的串；highlight 之后的整份记录读了状态里的样式（z2 20、提亮的描边）当常态——改记 `_normalState`；R1 用翻过的 `axis.inverse` 预测范围——改用模型的 inverse；另外 lines.js 的提示框行解析在标记之后丢名字，这里改了。
+
+本批按规矩只跑了自己的新套件和直接碰到的套件，全部通过：`TAdvChartParallelOracleTest`（6）、`TAdvChartParallelTest`（8）、`Marks` 36、`Gallery` 1、`PolarAxes` 12、`PolarSeries` 13、`Option` 31、`OptionMerge` 15、`Series` 28、`Builder` 47、`ExportLoading` 15、`ProgressiveOracle` 1、`Progressive` 8、`AnimEngine` 24、`AnimEnter` 11、`AnimUpdate` 7、`AnimFullUpdate` 7、`AnimMerge` 6、`AnimStateEngine` 11、`AnimState` 5、`BrushSelectOracle` 5、`BrushSelect` 5、`ToolboxOracle` 5、`Toolbox` 7、`Paint` 15、`Hit` 12、`FocusBlur` 11、`EmphasisRule` 8、`EmphasisDraw` 6、`LegendAct` 8、`Legend` 43、`TooltipFinish` 10、`TooltipRule` 19、`TooltipDraw` 15、`Media` 10、`ConvertJitter` 10、`HostileOption` 1、`LinesOracle` 5、`Lines` 8、`MouseEventsOracle` 3、`HandlerWiringOracle` 9、`SelectOracle` 11。全量套件与变异轮留到里程碑（C14–C22）末尾；变异候选单列（26 条）。
+
+### 推迟与偏差
+
+- **逐轴刷选**是 C20：轴上的 BrushController、`areaSelectStyle`、`realtime`、`getCoverInfoList` 的框都没有；区间只能由 `axisAreaSelect` 动作写。接口已在：`FParIntervals`（轴模型的区间）、`ParallelAreaSelect`、`TTyParallel.Layouts`（面板的位置与转角）、`AxisCoordToPoint` / `TTyAxis.CoordToData`。
+- **`axisExpandable`** 的静态布局做了（窗口、折起的轴、藏标签、截名称）；`axisExpandTriggerOn` 的点击 / 移动、`parallelAxisExpand` 动作、节流是 D7。
+- **更新**：上游保留的视图用 `updateProps` 补间每行的点；端口直接画到新位置。轴的 `groupTransition` 也不做（同 §131 的极坐标轴）。
+- **数据**：只读系列自己的 `data`；dataset 与 `encode` 不接。`dimensions` 照通用的读。上游 ParallelModel 只在 parallel 组件被合并时重算维度（只合并 parallelAxis 时维度不变），端口每次构建都重算。
+- **上游抛错的写法**：系列指向不存在的 parallel（端口给诊断、不画）；`axisAreaSelect` 查到不在任何 parallel 上的轴（端口跳过它）；不写 `intervals`（端口当空表）。
+- **命中**：平滑的线按每段 16 点的采样折线命中（上游是三次曲线的 containStroke）；直线的命中带宽 `max(lineWidth, 5)/2` 与 zrender 一样，靠近线段端点处的判定（zrender 的盒子是 ±lineWidth）略有不同。
+- **z 序**：平行轴总画在系列之上（parallelAxis 的 z 10）；系列的 z 写到 10 以上时上游把线画在轴上面，端口不变。
+- **颜色**：轴线、刻度、标签的颜色是皮肤的（`axisLine.lineStyle.color` 这类作者颜色与直角坐标一样不读）；逐数据取色（`colorBy: 'data'`）对平行系列没接（§140）。
+- **渐进**：元素仍一次建好，块按帧显示（§154 的做法）；增量视图没有入场裁剪，与上游一样。
+
+### 落地
+
+- `source/tyControls.AdvChart.Parallel.pas`（新，已登记 `tycontrols.lpk` 与 `tycontrols.pas`）。
+- `source/tyControls.AdvanceChart.pas`：`FParallels`、`FParSolved`、`FParIntervals`、`FParSeen`；`FreeParallels`、`ParallelStore`、`SolveParallels`、`PaintParallels`、`ParallelAreaSelect`、`ParallelOfAxis`、`ParallelCount` / `ParallelLayout` / `ParallelSolvedOf` / `ParallelIntervals`；`Rebuild`、`Relayout`、`BuildSeriesList`、`PaintStatic`、`PaintDynamic`、`StKindOf`、`StDeclareItem`、`StCoordKey`、`DatumColour`、`ContainSeries`、`ContainPixelData`、`BrushDoAxisAreaSelect`、`MergePass`、`ApplyNotMerge`、`DropBuild`、析构；`sskParallel`。
+- `source/tyControls.AdvChart.Builder.pas`：`TyCreateAxis` 的 `AValueUntyped`。`source/tyControls.AdvChart.Polar.pas`：`TyPolarTickMarks`、`TyPolarMinorCoords`。`source/tyControls.AdvChart.Series.pas`：`TTySeriesBinding.ParallelIndex` / `Parallel`、`ParallelRef`、绑定的 `'parallel'` 一支。`source/tyControls.AdvChart.Option.pas`：`TyParallelPreprocess`、`PreMergeKeep`。`source/tyControls.AdvChart.Paint.pas`：`carParallelLine`。`source/tyControls.AdvChart.AnimView.pas`：`parallelClip` 代理的建、更新时带走与帧。`source/tyControls.AdvChart.Export.pas`：`cvParallelAxis`。`source/tyControls.AdvChart.Progressive.pas`：增量视图加 `parallel`。`source/tyControls.AdvChart.Marks.pas`：「别处画」加 `parallel`。
+- `tools/advchart-oracle/parallel.js`、`tests/fixtures/advchart-parallel.json`、`tests/test.advchart.parallel.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.marks.pas` 的发布答案测试加 `parallel`。
+- 没有新主题键或新资源串。

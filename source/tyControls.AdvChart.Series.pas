@@ -127,6 +127,11 @@ type
       polar named was not built. }
     PolarIndex: Integer;
     Polar: TObject;
+    { WHICH PARALLEL, or -1 [Batch 128, C19]. Resolved with HasAxes False;
+      Parallel is the TTyParallel the control built (a plain object here),
+      nil until attached. }
+    ParallelIndex: Integer;
+    Parallel: TObject;
     { SWITCHED OFF BY A LEGEND. Set by the control after the stores are
       filled and before anything is counted; every solver downstream skips
       such a binding, so the axis extents, the stack groups and the bar
@@ -601,6 +606,41 @@ begin
   end;
 end;
 
+{ a parallel series' parallel: parallelIndex (default 0) unless written null,
+  then parallelId [Batch 128] }
+function ParallelRef(AOption: TTyChartOption; ANode: TJSONObject): Integer;
+var
+  d: TJSONData;
+  n, k: Integer;
+  v: Double;
+  id: string;
+begin
+  Result := -1;
+  n := AOption.ComponentCount('parallel');
+  d := ANode.Find('parallelIndex');
+  if (d = nil) or (d.JSONType <> jtNull) then
+  begin
+    v := 0;
+    if d <> nil then
+    begin
+      if d.JSONType <> jtNumber then Exit;
+      v := d.AsFloat;
+    end;
+    if IsNan(v) or (Frac(v) <> 0) or (v < 0) or (v >= n) then Exit;
+    k := Trunc(v);
+    if AOption.ComponentAt('parallel', k) is TJSONObject then Result := k;
+    Exit;
+  end;
+  d := ANode.Find('parallelId');
+  if (d = nil) or not (d.JSONType in [jtString, jtNumber]) then Exit;
+  if d.JSONType = jtNumber then id := TyJsNumberToString(d.AsFloat)
+  else id := d.AsString;
+  for k := 0 to n - 1 do
+    if (AOption.ComponentAt('parallel', k) is TJSONObject)
+      and (StrOf(TJSONObject(AOption.ComponentAt('parallel', k)), 'id', '') = id) then
+      Exit(k);
+end;
+
 function TyBindSeries(AOption: TTyChartOption; ABuild: TTyChartBuild): TTySeriesBindingArray;
 var
   i, n, xi, yi: Integer;
@@ -620,6 +660,7 @@ begin
     b.SeriesIndex := i;
     { no polar, even for a hole that leaves below [Batch 113] }
     b.PolarIndex := -1;
+    b.ParallelIndex := -1;
     Result[i] := b;
 
     node := ObjAt(AOption, 'series', i);
@@ -659,6 +700,8 @@ begin
     b.CalendarIndex := -1;
     b.PolarIndex := -1;
     b.Polar := nil;
+    b.ParallelIndex := -1;
+    b.Parallel := nil;
 
     if (sys = '') or (sys = 'none') then
     begin
@@ -720,6 +763,25 @@ begin
       b.PolarIndex := TyResolveComponentRef(node, 'polarIndex', 'polarId',
         AOption.ComponentCount('polar'), PolarIds(AOption), PolarHoles(AOption));
       if b.PolarIndex < 0 then
+      begin
+        ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
+        Result[i] := b;
+        Continue;
+      end;
+      b.Resolved := True;
+      b.HasAxes := False;
+      Result[i] := b;
+      Continue;
+    end;
+
+    if sys = 'parallel' then
+    begin
+      { A PARALLEL [Batch 128, C19]: getReferringComponents with the series'
+        default `parallelIndex: 0`, which a parallelId does not override
+        (only a written null lets the id be read). Upstream throws on a
+        parallel that is not there; here the series resolves to nothing. }
+      b.ParallelIndex := ParallelRef(AOption, node);
+      if b.ParallelIndex < 0 then
       begin
         ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
         Result[i] := b;

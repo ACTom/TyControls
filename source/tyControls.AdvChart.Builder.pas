@@ -379,10 +379,13 @@ function TyAxisFurnitureOf(ANode: TJSONObject; AAxis: TTyAxis;
   type (an unknown one is a value axis, its name in AUnknown), the scale (a
   log axis' base), the categories, the band (a category axis' boundaryGap),
   `show`, the id and the name, its main type and index. Not its inverse,
-  which each coordinate system reads its own way. [Batch 111] }
+  which each coordinate system reads its own way. [Batch 111]
+  AValueUntyped: an axis with no `type` key is a value axis whatever its
+  `data` says -- the parallelAxis model's own default `type: 'value'` is
+  merged in before getAxisType looks at the data [Batch 128] }
 function TyCreateAxis(AOption: TTyChartOption; const AMainType: string;
   AIndex: Integer; const ADim: string; AHorizontal: Boolean;
-  out AUnknown: string): TTyAxis;
+  out AUnknown: string; AValueUntyped: Boolean = False): TTyAxis;
 { axisLabel / axisTick customValues under AModel [Batch 110]: AHas when the
   option is truthy, then the values parsed, in the extent, deduplicated and
   ascending. }
@@ -1069,7 +1072,7 @@ end;
 
 function TyCreateAxis(AOption: TTyChartOption; const AMainType: string;
   AIndex: Integer; const ADim: string; AHorizontal: Boolean;
-  out AUnknown: string): TTyAxis;
+  out AUnknown: string; AValueUntyped: Boolean): TTyAxis;
 var
   nd: TJSONObject;
   t: TTyAxisType;
@@ -1078,6 +1081,7 @@ var
 begin
   nd := ObjOf(AOption.ComponentAt(AMainType, AIndex));
   TyResolveAxisType(nd, t, AUnknown);
+  if AValueUntyped and ((nd = nil) or (nd.Find('type') = nil)) then t := atValue;
   a := TTyAxis.Create(ADim, MakeScale(t, nd), AHorizontal);
   { `useUTC` IS A ROOT OPTION, not an axis one -- upstream reads it once
     off the top of the tree and every time axis in the chart obeys it. }
