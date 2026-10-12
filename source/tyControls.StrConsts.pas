@@ -394,6 +394,11 @@ resourcestring
   // The TStrings editor: %s = the property's path ('Lines', 'Memo.Lines').
   rsTyPropGridStringsTitle  = 'Edit %s';
   rsTyPropGridStringsPrompt = 'One entry per line:';
+  // The menu of a collection row and of its items (the keys are shown beside them).
+  rsTyPropGridAddItem    = 'Add Item';
+  rsTyPropGridDeleteItem = 'Delete Item';
+  rsTyPropGridMoveUp     = 'Move Up';
+  rsTyPropGridMoveDown   = 'Move Down';
 
   { --- Calendar / DateTimePicker: month & weekday names ----------------------
     The names TTyCalendar and TTyDateTimePicker render ('August', 'Sun', ...).

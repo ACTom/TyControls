@@ -1128,6 +1128,14 @@ msgstr ""
 msgid "The option is nested more than %d levels deep."
 msgstr ""
 
+#: tycontrols.strconsts.rstypropgridadditem
+msgid "Add Item"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgriddeleteitem
+msgid "Delete Item"
+msgstr ""
+
 #: tycontrols.strconsts.rstypropgridinvalidvalue
 #, object-pascal-format
 msgid "'%s' is not a valid value for %s"
@@ -1136,6 +1144,14 @@ msgstr ""
 #: tycontrols.strconsts.rstypropgriditems
 #, object-pascal-format
 msgid "(%d items)"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgridmovedown
+msgid "Move Down"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgridmoveup
+msgid "Move Up"
 msgstr ""
 
 #: tycontrols.strconsts.rstypropgridnocomponent

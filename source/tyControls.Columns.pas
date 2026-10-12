@@ -124,6 +124,11 @@ type
     procedure NotifyOwner;
   protected
     function  GetDisplayName: string; override;
+    { TCollectionItem.SetIndex moves the item and says nothing a header hears (no Notify, and
+      TTyColumns does not override Update), so a move through Index -- an Object Inspector's
+      collection editor, a property grid -- left the host's column geometry stale. The visual
+      order is still the position map's; this only re-lays it out and tells the owner. }
+    procedure SetIndex(Value: Integer); override;
   public
     constructor Create(ACollection: TCollection); override;
     procedure Assign(ASource: TPersistent); override;
@@ -586,6 +591,18 @@ procedure TTyColumn.NotifyOwner;
 begin
   if Collection <> nil then
     GetOwnerColumns.DoChange;
+end;
+
+procedure TTyColumn.SetIndex(Value: Integer);
+var old: Integer;
+begin
+  old := Index;
+  inherited SetIndex(Value);
+  if (Collection <> nil) and (Index <> old) then
+  begin
+    GetOwnerColumns.UpdatePositions;
+    GetOwnerColumns.DoChange;
+  end;
 end;
 
 procedure TTyColumn.SetWidth(AValue: Integer);

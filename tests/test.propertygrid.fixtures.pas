@@ -14,7 +14,7 @@ unit test.propertygrid.fixtures;
 interface
 
 uses
-  Classes, SysUtils, Variants, TypInfo, LCLType, Controls, Graphics, Forms,
+  Classes, SysUtils, Variants, TypInfo, LCLType, Controls, Graphics, Forms, Menus,
   tyControls.ListBox, tyControls.ValueListEditor, tyControls.PropertyGrid;
 
 type
@@ -279,7 +279,10 @@ type
     function ExecuteFontDialog(AFont: TFont): Boolean; override;
     function ExecuteColorDialog(var AColor: TColor): Boolean; override;
     function ExecuteStringsDialog(const ATitle: string; AStrings: TStrings): Boolean; override;
+    { The built-in collection menu is counted, never shown: a test picks its items. }
+    procedure ShowCollectionMenu(AMenu: TPopupMenu; X, Y: Integer); override;
   public
+    MenusShown: Integer;
     FontAnswer: TFont;        // nil = the dialog is cancelled
     ColorAnswer: TColor;
     FontDialogs: Integer;
@@ -311,6 +314,13 @@ type
     function CurrentRow: TTyValueRow;
     { csDesigning on and off, as the form designer sets it. }
     procedure DesignMode(AOn: Boolean);
+    { A right click on ARow's key cell: the press, the release, then the context-menu request
+      the widgetset sends. True when the grid took it (showed its own menu). }
+    function RightClick(ARow: TTyValueRow): Boolean;
+    { The built-in collection menu's item captioned ACaption (fails the test if missing). }
+    function MenuItem(const ACaption: string): TMenuItem;
+    { Choose that item the way a click in the shown menu does (a disabled one does nothing). }
+    procedure PickMenu(const ACaption: string);
   end;
 
 { The runner never calls Forms.Application.Initialize; a test that needs window handles does. }
@@ -775,6 +785,39 @@ end;
 procedure TPGGrid.DesignMode(AOn: Boolean);
 begin
   SetDesigning(AOn, False);
+end;
+
+procedure TPGGrid.ShowCollectionMenu(AMenu: TPopupMenu; X, Y: Integer);
+begin
+  Inc(MenusShown);
+end;
+
+function TPGGrid.RightClick(ARow: TTyValueRow): Boolean;
+var f, x, y: Integer; r: TRect;
+begin
+  f := FlatOf(ARow);
+  TopIndex := f;
+  r := ItemRect(f);
+  x := 40;                         // the key column
+  y := (r.Top + r.Bottom) div 2;
+  MouseDown(mbRight, [], x, y);
+  MouseUp(mbRight, [], x, y);
+  Result := False;
+  DoContextPopup(Point(x, y), Result);
+end;
+
+function TPGGrid.MenuItem(const ACaption: string): TMenuItem;
+var i: Integer;
+begin
+  if CollectionMenu = nil then raise EAssertionFailedError.Create('no collection menu yet');
+  for i := 0 to CollectionMenu.Items.Count - 1 do
+    if CollectionMenu.Items[i].Caption = ACaption then Exit(CollectionMenu.Items[i]);
+  raise EAssertionFailedError.Create('no menu item ' + ACaption);
+end;
+
+procedure TPGGrid.PickMenu(const ACaption: string);
+begin
+  CollectionMenu.ActivateRowForTest(MenuItem(ACaption).MenuIndex);
 end;
 
 end.

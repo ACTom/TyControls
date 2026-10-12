@@ -20,8 +20,8 @@ unit tyControls.PropertyGrid;
 interface
 
 uses
-  Classes, SysUtils, TypInfo, Graphics, Controls, Forms, LCLType,
-  tyControls.ValueListEditor;
+  Classes, SysUtils, Types, TypInfo, Graphics, Controls, Forms, LCLType, Menus,
+  tyControls.ValueListEditor, tyControls.Menu;
 
 const
   { The kinds the grid shows by default: everything it can show except event handlers. Untyped,
@@ -271,6 +271,28 @@ type
       write FOnSetPropertyText;
   end;
 
+  { What is done to a collection: an item added, deleted, or moved to another index. }
+  TTyCollectionAction = (caAdd, caDelete, caMove);
+
+  { About to change ACollection; set AAllow to False to refuse. caAdd: the new item will take
+    index AIndex (= ANewIndex). caDelete: the item at AIndex goes (ANewIndex is -1). caMove: the
+    item at AIndex moves to ANewIndex. Refusing and doing the change another way is how a host
+    whose own data follows the items (a string grid's cells follow its columns by index) keeps
+    them together: the grid only uses TCollection's own Add, Delete and Index. }
+  TTyCollectionChangingEvent = procedure(Sender: TObject; ACollection: TCollection;
+    AAction: TTyCollectionAction; AIndex, ANewIndex: Integer; var AAllow: Boolean) of object;
+
+  { ACollection has changed; the indexes as for TTyCollectionChangingEvent (for caAdd, where the
+    new item ended up). The rows are already rebuilt. }
+  TTyCollectionChangedEvent = procedure(Sender: TObject; ACollection: TCollection;
+    AAction: TTyCollectionAction; AIndex, ANewIndex: Integer) of object;
+
+  { Create the item to add yourself (a particular item class, first values): create it in
+    ACollection and hand it back in AItem. Left nil, the grid calls ACollection.Add. The grid
+    then moves it to where it was asked to go. }
+  TTyCreateCollectionItemEvent = procedure(Sender: TObject; ACollection: TCollection;
+    var AItem: TCollectionItem) of object;
+
   { How a write reaches the object: typed (or picked) text, a font from the font dialog, a list
     from the strings dialog. }
   TTyPropertyWriteKind = (pwkText, pwkFont, pwkStrings);
@@ -293,6 +315,14 @@ type
     FOnPropertyChanged: TTyPropertyChangedEvent;
     FOnPropertyError: TTyPropertyErrorEvent;
     FOnEditProperty: TTyEditPropertyEvent;
+    FOnCollectionChanging: TTyCollectionChangingEvent;
+    FOnCollectionChanged: TTyCollectionChangedEvent;
+    FOnCreateCollectionItem: TTyCreateCollectionItemEvent;
+    { The built-in menu of a collection row and an item row, built on first use, and the path of
+      the row it was opened on. }
+    FMenu: TTyPopupMenu;
+    FMenuAdd, FMenuDelete, FMenuUp, FMenuDown: TMenuItem;
+    FMenuPath: string;
     function GetSelectedObject: TPersistent;
     procedure SetSelectedObject(AValue: TPersistent);
     function GetSelectedObjects(AIndex: Integer): TPersistent;
@@ -324,10 +354,36 @@ type
     procedure SetOnGetPropertyText(AValue: TTyGetPropertyTextEvent);
     function GetOnSetPropertyText: TTySetPropertyTextEvent;
     procedure SetOnSetPropertyText(AValue: TTySetPropertyTextEvent);
-    procedure RebuildRows(AKeepTop: Boolean);
+    { ASelect, when given, is the path of the row to make current (and scroll into view)
+      instead of the one that was. }
+    procedure RebuildRows(AKeepTop: Boolean; const ASelect: string = '';
+      AHarvest: Boolean = True);
+    { Can the user add, delete and move items here: a collection or an item row, one object,
+      not ReadOnly, not at design time. }
+    function CollectionEditable(ANode: TTyPropertyNode): Boolean;
+    { The one place a collection changes: resolve APath, ask OnCollectionChanging, do it, keep
+      the expanded rows with their items, rebuild, put the current row on the item, announce. }
+    function DoCollectionAction(AAction: TTyCollectionAction; const APath: string;
+      ADelta: Integer): TCollectionItem;
+    procedure RemapExpanded(const ACollPath: string; AAction: TTyCollectionAction;
+      AFrom, ATo: Integer);
+    procedure BuildCollectionMenu;
+    procedure MenuAddClick(Sender: TObject);
+    procedure MenuDeleteClick(Sender: TObject);
+    procedure MenuUpClick(Sender: TObject);
+    procedure MenuDownClick(Sender: TObject);
   protected
     function CanCommitValue(ARow: TTyValueRow; var AText: string): Boolean; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { A right click (or the menu key) on a collection or item row shows the built-in menu: Add
+      Item, Delete Item, Move Up, Move Down. Only while PopupMenu is not assigned -- the
+      application's own menu wins, and it can do the same through the public methods. }
+    procedure DoContextPopup(MousePos: TPoint; var Handled: Boolean); override;
+    { Shows the built-in menu at screen point (X, Y). A descendant (or a test) can show it its
+      own way. }
+    procedure ShowCollectionMenu(AMenu: TPopupMenu; X, Y: Integer); virtual;
+    { The built-in menu, nil until it is first needed. }
+    property CollectionMenu: TTyPopupMenu read FMenu;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Loaded; override;
     { 'TyPropertyGrid', hung on 'TyValueListEditor' (see the initialization): a theme silent about
@@ -356,6 +412,21 @@ type
       current row. When the object no longer fits the rows (a collection gained an item, a
       sub-object came or went) the rows are rebuilt, keeping the same. }
     procedure Refresh;
+    { Add an item to the collection at APath ('Items', 'Header.Columns'), at the end; or, given
+      an item's path ('Items[1]'), right after that item. OnCreateCollectionItem may create it,
+      else ACollection.Add does. Returns the new item, nil when OnCollectionChanging refused
+      (or at design time). The rows are rebuilt with the new item's row current. }
+    function AddCollectionItem(const APath: string): TCollectionItem;
+    { Delete the item at APath ('Items[1]'). The current row moves to the next item, else the
+      one before, else the collection's row. }
+    procedure DeleteCollectionItem(const APath: string);
+    { Move the item at APath by ADelta places (-1 up, 1 down), stopping at either end. }
+    procedure MoveCollectionItem(const APath: string; ADelta: Integer);
+    { The row the selection is on, nil when none. }
+    function SelectedRow: TTyValueRow;
+    { The dotted path of one of the grid's rows, as ExpandedProperties and the collection
+      methods spell it ('Font.Size', 'Items[1].Caption'); '' for a row the grid did not build. }
+    function RowPath(ARow: TTyValueRow): string;
     { The property ARow edits: the object that has it and its name (for a set's element, the
       set). False for a collection item's row and for a row the grid did not build. }
     function PropertyAt(ARow: TTyValueRow; out AInstance: TPersistent;
@@ -420,6 +491,12 @@ type
       after OnEditProperty leaves a row unhandled, and takes the row from the built-in editor.
       Prefer OnEditProperty. Not published. }
     property OnEditRow: TTyValueEditEvent read FOnEditRowApp write FOnEditRowApp;
+    property OnCollectionChanging: TTyCollectionChangingEvent read FOnCollectionChanging
+      write FOnCollectionChanging;
+    property OnCollectionChanged: TTyCollectionChangedEvent read FOnCollectionChanged
+      write FOnCollectionChanged;
+    property OnCreateCollectionItem: TTyCreateCollectionItemEvent read FOnCreateCollectionItem
+      write FOnCreateCollectionItem;
   end;
 
   { The property grid. TTyCustomPropertyGrid holds everything; this class only publishes. What
@@ -497,6 +574,9 @@ type
     property OnPropertyChanged;
     property OnPropertyError;
     property OnEditProperty;
+    property OnCollectionChanging;
+    property OnCollectionChanged;
+    property OnCreateCollectionItem;
   end;
 
 { True when ATypeInfo is TColor (graphics.pp declares TColor = TGraphicsColor, so the RTTI name
@@ -1792,6 +1872,7 @@ begin
   Clear;          // rows first: their Data points at the nodes
   FreeAndNil(FRows);
   FreeAndNil(FExpanded);
+  FreeAndNil(FMenu);   // no owner: the grid frees it (its items with it)
   inherited Destroy;
 end;
 
@@ -2059,19 +2140,25 @@ end;
 { The rows again from SelectedObject. Expansion comes back from ExpandedProperties and the current
   row by its path, so neither is lost to a rebuild nor to a move to another object of a like kind;
   AKeepTop keeps the scroll position too (the same object again), else the list starts at the top. }
-procedure TTyCustomPropertyGrid.RebuildRows(AKeepTop: Boolean);
+procedure TTyCustomPropertyGrid.RebuildRows(AKeepTop: Boolean; const ASelect: string;
+  AHarvest: Boolean);
 var
   cur: TTyValueRow;
   nd: TTyPropertyNode;
   selPath: string;
-  keptTop, at: Integer;
+  keptTop, at, shown: Integer;
 begin
   if FRows = nil then Exit;
-  HarvestExpanded;
-  selPath := '';
-  cur := FlatRowAt(ItemIndex);
-  nd := FRows.NodeOf(cur);
-  if nd <> nil then selPath := nd.Path;
+  { Not after a collection change: the old rows still carry the old indexes, and the list has
+    already been moved along with the items (RemapExpanded). }
+  if AHarvest then HarvestExpanded;
+  selPath := ASelect;
+  if selPath = '' then
+  begin
+    cur := FlatRowAt(ItemIndex);
+    nd := FRows.NodeOf(cur);
+    if nd <> nil then selPath := nd.Path;
+  end;
   keptTop := TopIndex;
   Inc(FBuildCount);
   FRows.Build(Self, FSelected);
@@ -2080,6 +2167,13 @@ begin
   if nd <> nil then at := FlatIndexOf(nd.Row) else at := -1;
   SetItemIndexSilent(at);
   if AKeepTop then TopIndex := keptTop else TopIndex := 0;
+  if (ASelect <> '') and (at >= 0) then
+  begin
+    shown := VisibleRowCount;
+    if shown < 1 then shown := 1;
+    if at < TopIndex then TopIndex := at
+    else if at >= TopIndex + shown then TopIndex := at - shown + 1;
+  end;
   Invalidate;
 end;
 
@@ -2316,10 +2410,335 @@ begin
   end;
 end;
 
-{ Space flips a boolean row -- the list itself does nothing with Space in single selection. }
-procedure TTyCustomPropertyGrid.KeyDown(var Key: Word; Shift: TShiftState);
-var r: TTyValueRow;
+{ ---- collection items: add, delete, move (plan D2) ---- }
+
+function TTyCustomPropertyGrid.CollectionEditable(ANode: TTyPropertyNode): Boolean;
 begin
+  Result := (ANode <> nil) and (ANode.Kind in [pnkCollection, pnkCollectionItem])
+    and (FRows.RootCount = 1) and not ReadOnly and not (csDesigning in ComponentState);
+end;
+
+{ The expanded paths follow their items: an item that moves takes its expansion along, the
+  items after an added or a deleted one shift by one, a deleted item's go with it. }
+procedure TTyCustomPropertyGrid.RemapExpanded(const ACollPath: string;
+  AAction: TTyCollectionAction; AFrom, ATo: Integer);
+var
+  old: TStringList;
+  i, close, n: Integer;
+  e, prefix, rest: string;
+begin
+  prefix := ACollPath + '[';
+  old := TStringList.Create;
+  FHarvesting := True;   // the list changes, the rows are rebuilt from it afterwards
+  FExpanded.BeginUpdate;
+  try
+    old.Assign(FExpanded);
+    FExpanded.Clear;
+    for i := 0 to old.Count - 1 do
+    begin
+      e := old[i];
+      if SameText(Copy(e, 1, Length(prefix)), prefix) then
+      begin
+        close := Pos(']', Copy(e, Length(prefix) + 1, MaxInt));
+        if (close > 0)
+          and TryStrToInt(Copy(e, Length(prefix) + 1, close - 1), n) then
+        begin
+          rest := Copy(e, Length(prefix) + close + 1, MaxInt);
+          case AAction of
+            caAdd:
+              if n >= ATo then Inc(n);
+            caDelete:
+              if n = AFrom then Continue
+              else if n > AFrom then Dec(n);
+            caMove:
+              if n = AFrom then n := ATo
+              else if (AFrom < ATo) and (n > AFrom) and (n <= ATo) then Dec(n)
+              else if (AFrom > ATo) and (n >= ATo) and (n < AFrom) then Inc(n);
+          end;
+          e := prefix + IntToStr(n) + ']' + rest;
+        end;
+      end;
+      FExpanded.Add(e);
+    end;
+  finally
+    FExpanded.EndUpdate;
+    FHarvesting := False;
+    old.Free;
+  end;
+end;
+
+function TTyCustomPropertyGrid.DoCollectionAction(AAction: TTyCollectionAction;
+  const APath: string; ADelta: Integer): TCollectionItem;
+var
+  nd, collNode, p: TTyPropertyNode;
+  obj: TObject;
+  coll: TCollection;
+  idx, fromIdx, toIdx, gen: Integer;
+  allow: Boolean;
+  collPath, sel: string;
+begin
+  Result := nil;
+  if (FRows = nil) or (csDesigning in ComponentState) then Exit;
+  { An open cell editor first: its text is committed (or, for a delete, dropped) before the
+    rows move under it. A commit may rebuild the rows, so the path is resolved after it. }
+  if EditingRow >= 0 then EndEdit(AAction <> caDelete);
+  nd := FRows.FindByPath(APath);
+  if (nd = nil) or not (nd.Kind in [pnkCollection, pnkCollectionItem])
+    or (FRows.RootCount <> 1) then
+    raise EPropertyError.CreateFmt('"%s" is not a collection or a collection item of the '
+      + 'inspected object', [APath]);
+  if nd.Kind = pnkCollection then
+  begin
+    collNode := nd;
+    idx := -1;
+  end
+  else
+  begin
+    collNode := nd.Parent;
+    idx := nd.Index;
+  end;
+  obj := FRows.ObjectOf(collNode);
+  if not (obj is TCollection) then
+    raise EPropertyError.CreateFmt('"%s" is not a collection', [collNode.Path]);
+  coll := TCollection(obj);
+  if (AAction <> caAdd) and ((idx < 0) or (idx >= coll.Count)) then
+    raise EPropertyError.CreateFmt('"%s" is not an item of the collection', [APath]);
+  case AAction of
+    caAdd:
+      begin
+        if idx < 0 then toIdx := coll.Count else toIdx := idx + 1;
+        fromIdx := toIdx;
+      end;
+    caDelete:
+      begin
+        fromIdx := idx;
+        toIdx := -1;
+      end;
+  else
+    begin
+      fromIdx := idx;
+      toIdx := idx + ADelta;
+      if toIdx < 0 then toIdx := 0;                          // stop at either end
+      if toIdx > coll.Count - 1 then toIdx := coll.Count - 1;
+      if toIdx = fromIdx then Exit;                           // nowhere to go: nothing happens
+    end;
+  end;
+  if Assigned(FOnCollectionChanging) then
+  begin
+    allow := True;
+    gen := FBuildCount;
+    FOnCollectionChanging(Self, coll, AAction, fromIdx, toIdx, allow);
+    if not allow or (gen <> FBuildCount) then Exit;
+  end;
+  collPath := collNode.Path;
+  HarvestExpanded;
+  try
+    case AAction of
+      caAdd:
+        begin
+          Result := nil;
+          if Assigned(FOnCreateCollectionItem) then FOnCreateCollectionItem(Self, coll, Result);
+          if Result = nil then Result := coll.Add
+          else if Result.Collection <> coll then
+            raise EPropertyError.Create('OnCreateCollectionItem returned an item of another '
+              + 'collection');
+          if Result.Index <> toIdx then Result.Index := toIdx;
+          toIdx := Result.Index;
+          fromIdx := toIdx;
+        end;
+      caDelete:
+        coll.Delete(fromIdx);
+      caMove:
+        coll.Items[fromIdx].Index := toIdx;
+    end;
+  except
+    RebuildRows(True);   // whatever got done, the rows show it
+    raise;
+  end;
+  RemapExpanded(collPath, AAction, fromIdx, toIdx);
+  case AAction of
+    caDelete:
+      if fromIdx < coll.Count then sel := collPath + '[' + IntToStr(fromIdx) + ']'
+      else if coll.Count > 0 then sel := collPath + '[' + IntToStr(coll.Count - 1) + ']'
+      else sel := collPath;
+  else
+    sel := collPath + '[' + IntToStr(toIdx) + ']';
+  end;
+  { The row made current has to be seen: the collection's row and everything above it open. }
+  if sel <> collPath then
+  begin
+    FHarvesting := True;
+    try
+      p := collNode;
+      while p <> nil do
+      begin
+        FExpanded.Add(p.Path);
+        p := p.Parent;
+      end;
+    finally
+      FHarvesting := False;
+    end;
+  end;
+  RebuildRows(True, sel, False);
+  if Assigned(FOnCollectionChanged) then
+    FOnCollectionChanged(Self, coll, AAction, fromIdx, toIdx);
+end;
+
+function TTyCustomPropertyGrid.AddCollectionItem(const APath: string): TCollectionItem;
+begin
+  Result := DoCollectionAction(caAdd, APath, 0);
+end;
+
+procedure TTyCustomPropertyGrid.DeleteCollectionItem(const APath: string);
+begin
+  DoCollectionAction(caDelete, APath, 0);
+end;
+
+procedure TTyCustomPropertyGrid.MoveCollectionItem(const APath: string; ADelta: Integer);
+begin
+  DoCollectionAction(caMove, APath, ADelta);
+end;
+
+function TTyCustomPropertyGrid.SelectedRow: TTyValueRow;
+begin
+  Result := FlatRowAt(ItemIndex);
+end;
+
+function TTyCustomPropertyGrid.RowPath(ARow: TTyValueRow): string;
+var nd: TTyPropertyNode;
+begin
+  Result := '';
+  if FRows = nil then Exit;
+  nd := FRows.NodeOf(ARow);
+  if nd <> nil then Result := nd.Path;
+end;
+
+procedure TTyCustomPropertyGrid.BuildCollectionMenu;
+
+  function AddItem(const ACaption: string; AKey: Word; AShift: TShiftState;
+    AOnClick: TNotifyEvent): TMenuItem;
+  begin
+    Result := TMenuItem.Create(FMenu);
+    Result.Caption := ACaption;
+    Result.ShortCut := ShortCut(AKey, AShift);   // shown beside the item: the same keys work
+    Result.OnClick := AOnClick;
+    FMenu.Items.Add(Result);
+  end;
+
+var sep: TMenuItem;
+begin
+  if FMenu <> nil then Exit;
+  FMenu := TTyPopupMenu.Create(nil);
+  FMenuAdd := AddItem(rsTyPropGridAddItem, VK_INSERT, [], @MenuAddClick);
+  FMenuDelete := AddItem(rsTyPropGridDeleteItem, VK_DELETE, [ssModifier], @MenuDeleteClick);
+  sep := TMenuItem.Create(FMenu);
+  sep.Caption := '-';
+  FMenu.Items.Add(sep);
+  FMenuUp := AddItem(rsTyPropGridMoveUp, VK_UP, [ssModifier], @MenuUpClick);
+  FMenuDown := AddItem(rsTyPropGridMoveDown, VK_DOWN, [ssModifier], @MenuDownClick);
+end;
+
+procedure TTyCustomPropertyGrid.MenuAddClick(Sender: TObject);
+begin
+  AddCollectionItem(FMenuPath);
+end;
+
+procedure TTyCustomPropertyGrid.MenuDeleteClick(Sender: TObject);
+begin
+  DeleteCollectionItem(FMenuPath);
+end;
+
+procedure TTyCustomPropertyGrid.MenuUpClick(Sender: TObject);
+begin
+  MoveCollectionItem(FMenuPath, -1);
+end;
+
+procedure TTyCustomPropertyGrid.MenuDownClick(Sender: TObject);
+begin
+  MoveCollectionItem(FMenuPath, 1);
+end;
+
+procedure TTyCustomPropertyGrid.ShowCollectionMenu(AMenu: TPopupMenu; X, Y: Integer);
+begin
+  AMenu.PopUp(X, Y);
+end;
+
+procedure TTyCustomPropertyGrid.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
+var
+  flat, itemCount: Integer;
+  r: TTyValueRow;
+  nd: TTyPropertyNode;
+  coll: TObject;
+  isItem: Boolean;
+  at: TPoint;
+begin
+  inherited DoContextPopup(MousePos, Handled);   // OnContextPopup first; it may take it
+  if Handled or (PopupMenu <> nil) or (FRows = nil) then Exit;
+  if (MousePos.X = -1) and (MousePos.Y = -1) then
+    flat := ItemIndex   // the menu key: the current row
+  else
+  begin
+    flat := RowAtY(MousePos.Y);
+    if (flat < 0) or (flat >= DisplayRowCount) then Exit;
+    if flat <> ItemIndex then ItemIndex := flat;   // the row clicked becomes the current one
+  end;
+  r := FlatRowAt(flat);
+  nd := FRows.NodeOf(r);
+  if not CollectionEditable(nd) then Exit;
+  isItem := nd.Kind = pnkCollectionItem;
+  if isItem then coll := FRows.ObjectOf(nd.Parent) else coll := FRows.ObjectOf(nd);
+  if not (coll is TCollection) then Exit;
+  itemCount := TCollection(coll).Count;
+  BuildCollectionMenu;
+  FMenuPath := nd.Path;
+  FMenuDelete.Enabled := isItem;
+  FMenuUp.Enabled := isItem and (nd.Index > 0);
+  FMenuDown.Enabled := isItem and (nd.Index < itemCount - 1);
+  FMenu.Controller := ActiveController;
+  FMenu.PopupComponent := Self;
+  if (MousePos.X = -1) and (MousePos.Y = -1) then
+    at := ClientToScreen(Point(ItemRect(flat).Left, ItemRect(flat).Bottom))
+  else
+    at := ClientToScreen(MousePos);
+  Handled := True;
+  ShowCollectionMenu(FMenu, at.X, at.Y);
+end;
+
+{ Space flips a boolean row -- the list itself does nothing with Space in single selection.
+  On a collection or item row: Insert adds, Ctrl+Delete deletes, Ctrl+Up / Ctrl+Down move --
+  taken before the list, which would move the selection on Ctrl+Up / Ctrl+Down. }
+procedure TTyCustomPropertyGrid.KeyDown(var Key: Word; Shift: TShiftState);
+var r: TTyValueRow; nd: TTyPropertyNode; path: string;
+begin
+  if FRows <> nil then
+  begin
+    nd := FRows.NodeOf(FlatRowAt(ItemIndex));
+    if CollectionEditable(nd) then
+    begin
+      path := nd.Path;
+      if (Key = VK_INSERT) and (Shift = []) then
+      begin
+        Key := 0;
+        AddCollectionItem(path);
+        Exit;
+      end;
+      if nd.Kind = pnkCollectionItem then
+      begin
+        if (Key = VK_DELETE) and (Shift = [ssModifier]) then
+        begin
+          Key := 0;
+          DeleteCollectionItem(path);
+          Exit;
+        end;
+        if ((Key = VK_UP) or (Key = VK_DOWN)) and (Shift = [ssModifier]) then
+        begin
+          if Key = VK_UP then MoveCollectionItem(path, -1) else MoveCollectionItem(path, 1);
+          Key := 0;
+          Exit;
+        end;
+      end;
+    end;
+  end;
   if (Key = VK_SPACE) and (Shift = []) and not ReadOnly and (EditingRow < 0)
     and not (csDesigning in ComponentState) then
   begin

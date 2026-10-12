@@ -7716,6 +7716,9 @@ type
     property OnPropertyChanged;
     property OnPropertyError;
     property OnEditProperty;
+    property OnCollectionChanging;
+    property OnCollectionChanged;
+    property OnCreateCollectionItem;
   end;
 
   TGenRadioButton = class(TTyCustomRadioButton)
