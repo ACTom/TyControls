@@ -120,6 +120,7 @@ type
     procedure TestTheEditorFollowsItsCell;
     procedure TestAGestureOnTheGridLeavesTheEditFirst;
     procedure TestUpDownTheEditorLeavesMoveTheCell;
+    procedure TestPageKeysPageByTheRowsOnScreen;
     procedure TestAnArrowTheFilterBoxLeavesStaysThere;
     procedure TestHeaderPushedLookGatesThePressedFill;
     { --- 流式化 --- }
@@ -1309,6 +1310,81 @@ begin
   AssertTrue('Up is claimed', FGrid.KeyTo(FGrid.FilterBox, VK_UP));
   AssertTrue('the filter box stays open', FGrid.FilterBox.Visible);
   AssertEquals('the cursor did not move', 0, FGrid.Row);
+end;
+
+{ #57. PageUp/PageDown moved a fixed 10 rows. They page as LCL's TCustomGrid does
+  (grids.pas VK_PRIOR/VK_NEXT: FullVisibleGrid.Bottom - FullVisibleGrid.Top): by the rows
+  FULLY on screen, minus one. Asserted as the property that follows, not as a number: from
+  the top row, PageDown lands on the last row fully on screen; a second one pages on by the
+  same step; PageUp from there lands on the first row fully on screen. Two heights, so a
+  constant step (10, or any other) cannot pass both. }
+procedure TGridOptionsTest.TestPageKeysPageByTheRowsOnScreen;
+var
+  rowH, y0: Integer;
+  steps: array[0..1] of Integer;
+  pass: Integer;
+
+  function FullyShown(ARow: Integer): Boolean;
+  var
+    v, c: TRect;
+  begin
+    if (ARow < 0) or (ARow >= FGrid.RowCount) then Exit(False);
+    v := FGrid.VisibleCell(0, ARow);
+    c := FGrid.CellRectOf(0, ARow);
+    Result := (v.Bottom > v.Top) and (v.Top = c.Top) and (v.Bottom = c.Bottom);
+  end;
+
+begin
+  for pass := 0 to 1 do
+  begin
+    Build(2, 300, 80);
+    rowH := FGrid.CellRectOf(0, 1).Top - FGrid.CellRectOf(0, 0).Top;
+    AssertTrue('setup: rows have a height', rowH > 0);
+    { 6.5 rows of body, then 29.5: a partly visible last row both times. }
+    if pass = 0 then
+      FGrid.Height := FGrid.HeaderH + 6 * rowH + rowH div 2 + 4
+    else
+      FGrid.Height := FGrid.HeaderH + 29 * rowH + rowH div 2 + 4;
+    FGrid.Row := 0;
+    AssertTrue('setup: the top row is on screen', FullyShown(0));
+
+    { Where row 0 is drawn says whether the view moved, to the pixel. TopRow does not: a view
+      scrolled by half a row still has row 0 as its first visible row. }
+    y0 := FGrid.CellRectOf(0, 0).Top;
+    AssertTrue('PageDown is a grid key', FGrid.PressKey(VK_NEXT, []));
+    steps[pass] := FGrid.Row;
+    { Without this a step that reaches past the last full row passes the next two checks too:
+      the view scrolls to follow the cursor and leaves it on the last full row anyway. The
+      first PageDown from the top row stays on this screen. }
+    AssertEquals(Format('pass %d: the first PageDown does not scroll (cursor at row %d)',
+      [pass, FGrid.Row]), y0, FGrid.CellRectOf(0, 0).Top);
+    AssertTrue(Format('pass %d: PageDown lands on a row fully on screen (row %d)',
+      [pass, FGrid.Row]), FullyShown(FGrid.Row));
+    AssertFalse(Format('pass %d: the last one -- row %d below it is not fully on screen',
+      [pass, FGrid.Row + 1]), FullyShown(FGrid.Row + 1));
+    AssertTrue('a page is more than one row here', steps[pass] > 1);
+
+    FGrid.PressKey(VK_NEXT, []);
+    AssertEquals(Format('pass %d: a second PageDown pages on by the same step', [pass]),
+      2 * steps[pass], FGrid.Row);
+    y0 := FGrid.CellRectOf(0, 0).Top;
+    FGrid.PressKey(VK_PRIOR, []);
+    AssertEquals(Format('pass %d: PageUp from the last full row stays on this screen (row %d)',
+      [pass, FGrid.Row]), y0, FGrid.CellRectOf(0, 0).Top);
+    AssertTrue(Format('pass %d: PageUp lands on a row fully on screen (row %d)',
+      [pass, FGrid.Row]), FullyShown(FGrid.Row));
+    AssertFalse(Format('pass %d: the first one -- row %d above it is not fully on screen',
+      [pass, FGrid.Row - 1]), FullyShown(FGrid.Row - 1));
+  end;
+  AssertTrue(Format('the two heights page by different steps (%d, %d)', [steps[0], steps[1]]),
+    steps[0] <> steps[1]);
+
+  { One full row on screen: LCL's page is 0 and its PageDown does nothing. Ours still moves. }
+  Build(2, 300, 80);
+  FGrid.Height := FGrid.HeaderH + rowH + rowH div 2 + 4;
+  FGrid.Row := 0;
+  FGrid.PressKey(VK_NEXT, []);
+  AssertEquals('one full row on screen: PageDown still moves a row', 1, FGrid.Row);
 end;
 
 procedure TGridOptionsTest.GridCellStyleRed(Sender: TObject; ACol, ARow: Integer;
