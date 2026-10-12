@@ -937,6 +937,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.Brush"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.Timeline.pas"/>
+        <UnitName Value="tyControls.AdvChart.Timeline"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.Decal.pas"/>
         <UnitName Value="tyControls.AdvChart.Decal"/>
       </Item>
@@ -959,6 +963,30 @@ Homepage: https://github.com/ACTom/TyControls"/>
       <Item>
         <Filename Value="source/tyControls.AdvChart.PolarBar.pas"/>
         <UnitName Value="tyControls.AdvChart.PolarBar"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Single.pas"/>
+        <UnitName Value="tyControls.AdvChart.Single"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.ThemeRiver.pas"/>
+        <UnitName Value="tyControls.AdvChart.ThemeRiver"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Chord.pas"/>
+        <UnitName Value="tyControls.AdvChart.Chord"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.GfxEl.pas"/>
+        <UnitName Value="tyControls.AdvChart.GfxEl"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Graphic.pas"/>
+        <UnitName Value="tyControls.AdvChart.Graphic"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Custom.pas"/>
+        <UnitName Value="tyControls.AdvChart.Custom"/>
       </Item>
       <Item>
         <Filename Value="source/tyControls.AdvChart.Symbol.pas"/>

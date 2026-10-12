@@ -369,6 +369,11 @@ C('ap-large-cross', 'append', 'a scatter crossing largeThreshold through appendD
     [['frame'], ['frame'], ['append', 0, b], ['frame'], ['frame'], ['frame'], ['frame'],
       ['move', { row: [0, 100] }], ['move', { row: [0, 7000] }], ['move', { row: [0, 13500] }], ['leave']]);
 })();
+// [milestone C6-C13] the merge limit exactly: two chunks of 5000 rows hold
+// 20000 numbers, which is not under 2e4, so the third chunk starts a batch
+C('sc-merge-edge', 'chunk', 'a large scatter by 5000 (the large default): two chunks fill a batch to exactly 2e4 numbers, the third starts a new one',
+  base(Object.assign({}, XY, { series: [{ type: 'scatter', large: true, largeThreshold: 10, symbolSize: 3, data: pts(16000, 61, [0, 1000], [0, 500]) }] })),
+  [['frame'], ['frame'], ['frame'], ['frame']]);
 C('ap-cd', 'append', 'normal candles, not progressive, appended to: upstream draws none of the new rows',
   base(Object.assign({}, catX(8), { series: [{ type: 'candlestick', data: ohlc(5, 61) }] })),
   [['append', 0, ohlc(3, 67)], ['frame'], ['frame']], { replay: false });

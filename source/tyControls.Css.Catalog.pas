@@ -5,10 +5,10 @@ unit tyControls.Css.Catalog;
   Change the theme and re-run the script. test.css.catalog guards the two against drift.
 
   The machine-readable tycss vocabulary for the design-time StyleOverride editor:
-    - TyCatalogTokens   : the --custom-property names a theme defines (265 of them).
+    - TyCatalogTokens   : the --custom-property names a theme defines (266 of them).
                           OPEN axis -- a theme may invent more, so the editor SUGGESTS these but
                           must not reject an unknown one.
-    - TyCatalogTypeKeys : the control selector heads (309 of them), for the
+    - TyCatalogTypeKeys : the control selector heads (315 of them), for the
                           controller-level (selector-carrying) override.
 
   Property names, colour functions and pseudo-states are closed sets and live in code beside their
@@ -18,7 +18,7 @@ unit tyControls.Css.Catalog;
 interface
 
 const
-  TyCatalogTokens: array[0..264] of string = (
+  TyCatalogTokens: array[0..265] of string = (
     '--accent',
     '--accent-active',
     '--accent-hover',
@@ -26,6 +26,7 @@ const
     '--advchart-label-margin',
     '--advchart-minor-tick-length',
     '--advchart-name-gap',
+    '--advchart-single-tick-length',
     '--advchart-tick-length',
     '--advchart-tooltip-gap',
     '--advchart-tooltip-gutter',
@@ -285,7 +286,7 @@ const
     '--treeselect-drop-height',
     '--warning');
 
-  TyCatalogTypeKeys: array[0..308] of string = (
+  TyCatalogTypeKeys: array[0..314] of string = (
     'TyActivityBar',
     'TyActivityBarFill',
     'TyActivityIndicator',
@@ -348,6 +349,12 @@ const
     'TyAdvChartSplitArea',
     'TyAdvChartSplitLine',
     'TyAdvChartSubtitle',
+    'TyAdvChartTimeline',
+    'TyAdvChartTimelineCheckpoint',
+    'TyAdvChartTimelineControl',
+    'TyAdvChartTimelineItem',
+    'TyAdvChartTimelineLabel',
+    'TyAdvChartTimelineProgress',
     'TyAdvChartTitle',
     'TyAdvChartToolbox',
     'TyAdvChartToolboxBackground',

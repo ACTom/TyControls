@@ -109,6 +109,9 @@ type
       axis label's own text, a dataZoom label's valueStr. '' where upstream
       has no such thing. }
     DefaultText: string;
+    { A GRAPHIC ELEMENT'S `info` [Batch 122], as JSON text ('' where the
+      element has none): what its ECData's eventData carries into an event }
+    Info: string;
   end;
   TTyChartParams = array of TTyChartCallbackParams;
 

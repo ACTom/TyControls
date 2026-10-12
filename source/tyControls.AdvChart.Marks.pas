@@ -378,7 +378,8 @@ implementation
 
 uses tyControls.AdvChart.JsMath, tyControls.AdvChart.AxisLabels,
      tyControls.AdvChart.LinePath, tyControls.AdvChart.LabelGuide,
-     tyControls.AdvChart.Polar, tyControls.AdvChart.ZrPath;
+     tyControls.AdvChart.Polar, tyControls.AdvChart.ZrPath,
+     tyControls.AdvChart.Single;
 
 { THE POLAR A SERIES IS ON, nil on a cartesian [Batch 113] }
 function PolarOf(const ABinding: TTySeriesBinding): TTyPolar;
@@ -387,12 +388,25 @@ begin
   else Result := nil;
 end;
 
+{ THE SINGLE AXIS a series is on, nil elsewhere [Batch 118] }
+function SingleOf(const ABinding: TTySeriesBinding): TTySingle;
+begin
+  if ABinding.Single is TTySingle then Result := TTySingle(ABinding.Single)
+  else Result := nil;
+end;
+
 { datum -> point on whichever system the series is on }
 function SysPoint(const ABinding: TTySeriesBinding; const AData: array of Double): TTyPointF;
-var pol: TTyPolar;
+var
+  pol: TTyPolar;
+  sgl: TTySingle;
 begin
   pol := PolarOf(ABinding);
+  sgl := SingleOf(ABinding);
   if pol <> nil then Result := pol.DataToPoint(AData)
+  { a single axis' dataToPoint: the first value, the rect's middle across
+    [Batch 118] }
+  else if sgl <> nil then Result := sgl.DataToPoint(AData)
   else Result := ABinding.Cart.DataToPoint(AData);
 end;
 
@@ -2354,7 +2368,7 @@ var
   x, y, sz: Double;
   p: TTyPointF;
   spec: TTySymbolSpec;
-  baseHoriz, stacked: Boolean;
+  baseHoriz, stacked, noClip: Boolean;
   area: TTyXYWH;
   pol: TTyPolar;
 begin
@@ -2364,7 +2378,9 @@ begin
   { ON A POLAR the clip is getArea(.1), whose contain is the ring -- the
     tolerance is not read there [Batch 113] }
   pol := PolarOf(ABinding);
-  if pol = nil then area := ABinding.Cart.GetAreaTol(0.1)
+  { A SINGLE AXIS HAS NO getArea: nothing is clipped [Batch 118] }
+  noClip := SingleOf(ABinding) <> nil;
+  if (pol = nil) and not noClip then area := ABinding.Cart.GetAreaTol(0.1)
   else area := Default(TTyXYWH);
   baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
   stacked := AStack.Stacked and (AStack.ResultCol >= 0);
@@ -2406,7 +2422,7 @@ begin
     if IsNan(p.X) or IsNan(p.Y)
       or IsInfinite(p.X) or IsInfinite(p.Y) then Continue;
     { OUTSIDE THE PLOT, WITH CLIP ON, NO MARKER: upstream's getArea(0.1) }
-    if AVisual.Line.Clip then
+    if AVisual.Line.Clip and not noClip then
       if pol <> nil then
       begin
         if not PolarRingContains(pol, p.X, p.Y) then Continue;
@@ -3552,13 +3568,14 @@ const
     drives TyBuildSeriesMarks, which a pie deliberately never enters. What
     guards it is TestAPieIsDrawnOffItsOwnCentreWithAColourPerSector, which
     counts the control's own pixels. }
-  cElsewhere: array[0..10] of string = ('pie', 'funnel', 'gauge', 'radar',
+  { [Batch 118] a themeRiver's layers are built by the control, on its single
+    axis; [Batch 120] a chord's sectors and ribbons by AdvChart.Chord;
+    [Batch 121] a lines series' rows by AdvChart.Lines; [Batch 128] a
+    parallel series' rows by AdvChart.Parallel }
+  cElsewhere: array[0..13] of string = ('pie', 'funnel', 'gauge', 'radar',
                                        'graph', 'tree', 'sunburst', 'treemap',
-                                       'sankey',
-                                       { [Batch 121] AdvChart.Lines }
-                                       'lines',
-                                       { [Batch 128] AdvChart.Parallel }
-                                       'parallel');
+                                       'sankey', 'themeRiver', 'chord',
+                                       'lines', 'custom', 'parallel');
 
 function RendererFor(const AType: string): TTyMarkBuilder;
 var i: Integer;
@@ -4315,7 +4332,17 @@ begin
   { ON A POLAR [Batch 113]: a bar, a line, a scatter and an effectScatter
     draw; a heatmap draws nothing there, upstream's HeatmapView knows no
     polar }
-  if PolarOf(ABinding) <> nil then
+  { ON A SINGLE AXIS [Batch 118]: a scatter and an effectScatter, laid out
+    from its one column (pointsLayout's dimLen 1) }
+  if SingleOf(ABinding) <> nil then
+  begin
+    if ABinding.XAxis = nil then Exit;
+    colX := FirstColumnOn(AStore, ABinding.XAxis);
+    if colX < 0 then Exit;
+    if (ABinding.SeriesType = 'scatter') or (ABinding.SeriesType = 'effectScatter') then
+      Result := BuildScatter(ABinding, AStore, AStack, AVisual, AList, colX, colX);
+  end
+  else if PolarOf(ABinding) <> nil then
   begin
     if (ABinding.XAxis = nil) or (ABinding.YAxis = nil) then Exit;
     colX := FirstColumnOn(AStore, ABinding.XAxis);

@@ -561,6 +561,9 @@ resourcestring
   rsTyChartSeriesBadType = 'series[%d]: "%s" is not a series type';
   rsTyChartSeriesCoordSys = 'series[%d]: coordinateSystem "%s" is not built yet';
   rsTyChartSeriesNoRenderer = 'series[%d]: the "%s" series type is not drawn yet';
+  rsTyChartCustomNoRenderItem =
+    'series[%d]: no renderItem is registered as "%s", so nothing is drawn';
+  rsTyChartCustomRenderItemFailed = 'series[%d]: renderItem "%s" failed: %s';
   rsTyChartSeriesNoAxis = 'series[%d] names an axis that does not exist';
   rsTyChartSeriesAxesSplit =
     'series[%d]: xAxis[%d] and yAxis[%d] are not on one grid';

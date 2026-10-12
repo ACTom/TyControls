@@ -84,6 +84,12 @@ type
     { `repeat || 'repeat'` as zrender hands it to createPattern }
     Repetition: string;
     X, Y, Rotation, ScaleX, ScaleY: Double;
+    { A WHOLE MATRIX instead of the five numbers, css px [Batch 122]: a
+      graphic image drawn through its element's transform. With UnitImage
+      the matrix places the image's unit square -- the renderer divides by
+      the decoded image's own size. }
+    HasMatrix, UnitImage: Boolean;
+    Matrix: TTyMat2D;
   end;
 
   { A FILL THAT IS AN OBJECT, for a renderer handed colours one per datum
@@ -161,7 +167,11 @@ type
     { [Batch 98] a legend's selector button (DataIndex the button) and its
       pager's page buttons (DataIndex 0 the previous, 1 the next): targets
       without ECData, so no chart mouse event names them }
-    ctkLegendSelector, ctkLegendPager);
+    ctkLegendSelector, ctkLegendPager,
+    { [Batch 122] a graphic component's element: ComponentIndex the
+      component, DataIndex the element's serial in the view's last build;
+      it has ECData's eventData, not a data index }
+    ctkGraphic);
 
   TTyChartDatumRef = record
     SeriesIndex: Integer;
@@ -592,6 +602,22 @@ type
       G[7] radial (r grows, else the end angle), G[8] a sausage, G[9] of no
       sweep }
     carPolarBar,
+    { [Batch 115, C6] a sunburst piece (Index its row, 0 the return circle):
+      G[0..5] cx, cy, r0, r and the start and end angles as upstream holds
+      them; a treemap rect (Index its row, Sub 0 the background, 1 the
+      content): its frame comes from the treemap's own drill-down
+      animation (the control's TreemapFrame), G[0..3] its local shape x, y,
+      width, height }
+    carSunPiece, carTmRect,
+    { [Batch 118, C10] a themeRiver layer's polygon (Index its layer):
+      G[0..3] its path's bounding rect in the view group's frame (x, y,
+      width, height) -- what the enter clip is made from -- and G[4] the
+      group's y }
+    carRiver,
+    { [Batch 120, C11] a chord's sector or ribbon: the view group's enter
+      scale, one proxy for the series (Index -1); G[0..1] the group's
+      origin, the centre option against the whole canvas }
+    carChord,
     { [Batch 121, C12] a lines series' row: its line (one proxy, the line's
       shape.percent, drives the line, the two end symbols and the label),
       and its effect symbol (a looping clip of its own). G[0..5] the line's
@@ -698,6 +724,11 @@ type
     ProgSlot: Integer;
     ProgRow: Integer;
     ProgHidden: Boolean;
+    { A GRAPHIC ELEMENT UNDER THE AXES [Batch 122]: zlevel 0 and z 0 or
+      less, which upstream draws before the axes' z 0 (the component's
+      group joins the zrender root first). The list's renderer skips it;
+      the control paints it before the axes. Hit and ordered as any other. }
+    GfxUnder: Boolean;
   end;
 
   TTyPaintList = class

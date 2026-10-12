@@ -158,6 +158,11 @@ type
   TTyVisualRow = record
     ColorSet: Boolean;
     Color: TTyVisualColor;
+    { THE COLOUR AS THE VISUAL HOLDS IT [Batch 124]: a piece's or a
+      category's colour as written ('#ee6666'); '' for one a mapping
+      computed, which upstream holds as the rgba() text of Color
+      (TyVisualCss) -- what a custom series' api.visual('color') answers }
+    ColorText: string;
     OpacitySet: Boolean;
     Opacity: Double;
     { the symbol's name and size (CSS px), and liftZ }
@@ -2153,6 +2158,15 @@ var
       Result := TyVisualUndefined;
   end;
 
+  { the text of a written colour: '' where ColorOf has none }
+  function TextOf(const APv: TTyVisualPieceVisual): string;
+  var c: TTyVisualColor;
+  begin
+    Result := '';
+    if APv.Defined and not APv.IsNum and TyVisualTryParse(APv.Str, c) then
+      Result := APv.Str;
+  end;
+
 begin
   n := NaN;
   sp := -1;
@@ -2186,6 +2200,7 @@ begin
       if m.Kind = 'color' then
       begin
         ARow.Color := ColorOf(pv);
+        ARow.ColorText := TextOf(pv);
         ARow.ColorSet := True;
         Continue;
       end;
@@ -2205,6 +2220,7 @@ begin
         end
         else if not IsNan(v) then
         begin
+          ARow.ColorText := '';
           if (m.Kind = 'colorAlpha') or (m.Kind = 'opacity') then
             ARow.Color := TyVisualModifyAlpha(ARow.Color, v)
           else if m.Kind = 'colorHue' then
@@ -2238,8 +2254,16 @@ begin
     end;
     if m.Kind = 'color' then
     begin
-      if Specified('color') then ARow.Color := ColorOf(pv)
-      else ARow.Color := TyVisualFastLerp(n, m.Colors);
+      if Specified('color') then
+      begin
+        ARow.Color := ColorOf(pv);
+        ARow.ColorText := TextOf(pv);
+      end
+      else
+      begin
+        ARow.Color := TyVisualFastLerp(n, m.Colors);
+        ARow.ColorText := '';
+      end;
       ARow.ColorSet := True;
       Continue;
     end;
@@ -2260,6 +2284,7 @@ begin
       end
       else
       begin
+        ARow.ColorText := '';
         if (m.Kind = 'colorAlpha') or (m.Kind = 'opacity') then
           ARow.Color := TyVisualModifyAlpha(ARow.Color, v)
         else if m.Kind = 'colorHue' then

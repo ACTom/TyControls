@@ -53,11 +53,15 @@ type
     them under (every chart view is 'series'). }
   TTyChartView = (cvTitle, cvLegend, cvXAxis, cvYAxis, cvVisualMap,
     cvDataZoom, cvMarkPoint, cvMarkLine, cvMarkArea, cvRadar, cvCalendar,
-    cvAngleAxis, cvRadiusAxis, cvSeries,
+    cvAngleAxis, cvRadiusAxis,
+    { [Batch 118] }
+    cvSingleAxis, cvSeries,
     { [Batch 125] }
     cvToolbox,
     { [Batch 126] }
     cvBrush,
+    { [Batch 129] }
+    cvTimeline,
     { [Batch 128] }
     cvParallelAxis);
   TTyChartViews = set of TTyChartView;
@@ -132,8 +136,8 @@ implementation
 const
   ViewNames: array[TTyChartView] of string = ('title', 'legend', 'xAxis',
     'yAxis', 'visualMap', 'dataZoom', 'markPoint', 'markLine', 'markArea',
-    'radar', 'calendar', 'angleAxis', 'radiusAxis', 'series', 'toolbox', 'brush',
-    'parallelAxis');
+    'radar', 'calendar', 'angleAxis', 'radiusAxis', 'singleAxis', 'series', 'toolbox', 'brush',
+    'timeline', 'parallelAxis');
 
 function TyChartViewOf(const AMainType: string; out AView: TTyChartView): Boolean;
 var v: TTyChartView;

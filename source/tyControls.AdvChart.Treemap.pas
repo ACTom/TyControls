@@ -34,6 +34,15 @@ unit tyControls.AdvChart.Treemap;
   effect, descending into any node at least half the canvas wide and half as
   tall.
 
+  THE VIEW [Batch 115]: a drill-down (treemapRootToNode, a leaf root's
+  click) lays out only the VIEW ROOT's subtree; the nodes above it keep the
+  view root's layout and draw nothing, their viewChildren whatever an
+  earlier layout left (upstream never clears them). A zoomToNode lays the
+  view root out at estimateRootSize's size and centres the target; a pan
+  (treemapMove) only moves the root; the wheel (treemapRender) lays it out
+  at the zoomed size, both at the payload's rootRect. The root's position
+  is the tree root's layout x / y, under the container group.
+
   PURE: SysUtils, Math, fpjson and the AdvChart units. No painter, no LCL. }
 interface
 uses
@@ -91,6 +100,39 @@ type
     UpperText: string;
     UpperX, UpperY: Double;
     UpperCentre, UpperInside: Boolean;
+    { [Batch 115] above the view root: laid out as the view root, drawing
+      nothing but its group }
+    AboveView: Boolean;
+    { the label's words before the cut (the drill icon included): what a
+      frame of the drill-down cuts again to the rect it has then }
+    LabelRaw: string;
+    HasLabelRaw: Boolean;
+    { drawn although outside the canvas: an element kept from the last
+      render while the drill-down moves it out (willInvisibleEls) }
+    DrawInvisible: Boolean;
+  end;
+
+  { WHAT A RENDER IS FOR [Batch 115]: the payload's type, its target (a row,
+    -1 for none or a node the tree does not hold) and its rootRect }
+  TTyTreemapPayloadKind = (tpkNone, tpkZoomToNode, tpkRootToNode, tpkMove, tpkRender,
+    { not rendered by an action that queries another treemap: the last
+      layout and root kept as they are }
+    tpkKeep);
+  TTyTreemapView = record
+    ViewRoot: Integer;
+    Kind: TTyTreemapPayloadKind;
+    Target: Integer;
+    RootX, RootY, RootW, RootH: Double;
+    { a rootToNode's direction against the view root before it: 0 none,
+      1 drillDown, 2 rollUp }
+    Direction: Integer;
+  end;
+
+  { UPSTREAM'S ELEMENT STORAGE, by row: a node group, a background, a
+    content -- made once and kept while the node is rendered, invisible ones
+    included [Batch 115] }
+  TTyTreemapHave = record
+    Group, Bg, Ct: array of Boolean;
   end;
 
   TTyTreemapCrumb = record
@@ -120,6 +162,12 @@ type
     { the store's dimension count: the longest value array, the root's
       scalar counting one }
     DimMax: Integer;
+    { THE VIEW [Batch 115]: the view root, the rows above it (root first),
+      and the root's position under the container group }
+    ViewRoot: Integer;
+    AbovePath: TTyIntegerArray;
+    { the container group's origin, device px }
+    ContainerX, ContainerY: Double;
   end;
 
   TTyTreemapInk = record
@@ -130,9 +178,42 @@ type
     CrumbFill: TTyChartColor;
   end;
 
-{ Layout and pruning over the container, device px at APPI. }
+{ Layout and pruning over the container, device px at APPI. AView is what
+  the render is for; APrev the last solve of the same tree (Valid False for
+  none): a pan keeps its layout, and every render keeps the viewChildren of
+  the nodes it does not lay out [Batch 115]. }
 function TyTreemapSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
-  const AContainer: TTyRectF; APPI: Integer): TTyTreemapSolved;
+  const AContainer: TTyRectF; APPI: Integer): TTyTreemapSolved; overload;
+function TyTreemapSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const AContainer: TTyRectF; APPI: Integer; const AView: TTyTreemapView;
+  const APrev: TTyTreemapSolved): TTyTreemapSolved; overload;
+{ SeriesData's ids of a hierarchy's rows (upstream's node.getId()): the
+  item's own id, else its name -- the k-th repeat among the rows without an
+  id '__ec__k', the root named after the series -- else generated
+  ('e' + two NULs + the row) [Batch 115: from AssignIds, for a sunburst's
+  getNodeById too] }
+function TyHierIds(const AHier: TTyHierarchy; ASeries: TJSONObject): TTyStringArray;
+{ The view of a render with no payload: the root, nothing targeted. }
+function TyTreemapNoView: TTyTreemapView;
+{ treemapClampZoom: the series' own scaleLimit (default min 0.2, max 5) }
+function TyTreemapClampZoom(const ASolved: TTyTreemapSolved; AZoom: Double): Double;
+{ calculateCurrentZoom: the width ratio, else the height's, else 1 }
+function TyTreemapCurrentZoom(ABaseW, ABaseH, ACurW, ACurH: Double): Double;
+{ The row under the view root that a click finds at the global point (AX,
+  AY): findTarget, pre-order over the viewChildren, the last whose
+  background (AHave) holds it through its group's transform; -1 for none. }
+function TyTreemapFindTarget(const ASolved: TTyTreemapSolved; const AHave: TTyTreemapHave;
+  AX, AY: Double): Integer;
+{ The storage after a render: what was kept from APrev, and what is new
+  (not made for a node outside the canvas) [Batch 115]. }
+function TyTreemapHaveOf(const ASolved: TTyTreemapSolved;
+  const APrev: TTyTreemapHave): TTyTreemapHave;
+{ A content label's words and anchor on a content rect at (AX0, AY0) --
+  shape x * 1 + the group's tx -- of ACW by ACH: zrender's cut and the
+  position table, as a frame of the drill-down places it [Batch 115]. }
+function TyTreemapLabelAt(const ASolved: TTyTreemapSolved; ARow: Integer;
+  const ASpec: TTyLabelSpec; const AMeasurer: ITyTextMeasurer;
+  AX0, AY0, ACW, ACH: Double; out AText: string; out ALX, ALY: Double): Boolean;
 { The colour visual: APalette into levels[0] unless a level has a colour;
   ABorder is the series' default border colour. }
 procedure TyTreemapColour(var ASolved: TTyTreemapSolved;
@@ -156,14 +237,22 @@ procedure TyTreemapUpperLabels(var ASolved: TTyTreemapSolved;
 { The breadcrumb on the first frame, measured in ACrumbSpec's font. }
 procedure TyTreemapBreadcrumb(var ASolved: TTyTreemapSolved;
   const ACrumbSpec: TTyLabelSpec; const AMeasurer: ITyTextMeasurer;
-  const AContainer: TTyRectF);
+  const AContainer: TTyRectF); overload;
+{ ATarget: the payload's target (-1 for none); otherwise, without a
+  leafDepth, the node under the canvas centre as the backgrounds were LAST
+  PAINTED -- APrev's transforms for the ones kept (AHave / APrevHave), none
+  for the new [Batch 115]. }
+procedure TyTreemapBreadcrumb(var ASolved: TTyTreemapSolved;
+  const ACrumbSpec: TTyLabelSpec; const AMeasurer: ITyTextMeasurer;
+  const AContainer: TTyRectF; ATarget: Integer; const AHave, APrevHave: TTyTreemapHave;
+  const APrev: TTyTreemapSolved); overload;
 { The rects in pre-order, then the breadcrumb. }
 function TyBuildTreemapMarks(ASeriesIndex: Integer; const ASolved: TTyTreemapSolved;
   const AInk: TTyTreemapInk; AList: TTyPaintList): Integer;
 
 implementation
 
-uses tyControls.AdvChart.Scale;
+uses tyControls.AdvChart.Scale, tyControls.AdvChart.JsMath;
 
 const
   cEps = 5e-5;
@@ -588,14 +677,23 @@ begin
   Result := not ((ax1 < bx0) or (bx1 < ax0) or (ay1 < by0) or (by1 < ay0));
 end;
 
-procedure Prune(var S: TTyTreemapSolved; ARow: Integer; CX, CY, CW, CH: Double);
-var k: Integer;
+{ prunning(): the rows above the view root and its subtree are in view;
+  a sibling of the path, or anything at the view root's depth that is not
+  it, is not visited [Batch 115] }
+procedure Prune(var S: TTyTreemapSolved; ARow: Integer; CX, CY, CW, CH: Double;
+  ADepth: Integer);
+var k: Integer; above: Boolean;
 begin
+  above := (ADepth <= High(S.AbovePath)) and (S.AbovePath[ADepth] = ARow);
+  if ((ADepth <= High(S.AbovePath)) and not above)
+    or ((ADepth = Length(S.AbovePath)) and (ARow <> S.ViewRoot)) then Exit;
   S.Nodes[ARow].InView := True;
-  S.Nodes[ARow].Invisible := not Intersects(CX, CY, CW, CH,
+  S.Nodes[ARow].AboveView := above;
+  S.Nodes[ARow].Invisible := (not above) and not Intersects(CX, CY, CW, CH,
     S.Nodes[ARow].X, S.Nodes[ARow].Y, S.Nodes[ARow].W, S.Nodes[ARow].H);
   for k := 0 to High(S.Nodes[ARow].View) do
-    Prune(S, S.Nodes[ARow].View[k], CX - S.Nodes[ARow].X, CY - S.Nodes[ARow].Y, CW, CH);
+    Prune(S, S.Nodes[ARow].View[k], CX - S.Nodes[ARow].X, CY - S.Nodes[ARow].Y, CW, CH,
+      ADepth + 1);
 end;
 
 { zrender's group transforms, top down: a local offset under 5e-5 on both
@@ -603,7 +701,9 @@ end;
 procedure Compose(var S: TTyTreemapSolved; ARow: Integer; AHasT: Boolean; ATX, ATY: Double);
 var k: Integer; x, y: Double;
 begin
-  if not S.Nodes[ARow].HasLayout or S.Nodes[ARow].Invisible then Exit;
+  { every node in view, the ones outside the canvas included: a kept
+    element of one still moves while a drill-down runs [Batch 115] }
+  if not S.Nodes[ARow].HasLayout or not S.Nodes[ARow].InView then Exit;
   x := S.Nodes[ARow].X;
   y := S.Nodes[ARow].Y;
   if IsNan(x) then x := 0;
@@ -639,7 +739,7 @@ end;
 { SeriesData's ids: the item's own (a number as its text), else its name
   -- counted among the id-less rows, the k-th repeat '__ec__k', the root
   named after the series -- else generated from the row }
-procedure AssignIds(var S: TTyTreemapSolved);
+function TyHierIds(const AHier: TTyHierarchy; ASeries: TJSONObject): TTyStringArray;
 var
   row, k: Integer;
   counts: TStringList;
@@ -663,24 +763,26 @@ begin
   try
     counts.Sorted := True;
     counts.CaseSensitive := True;
-    for row := 0 to High(S.Nodes) do
+    SetLength(Result, Length(AHier.Nodes));
+    for row := 0 to High(AHier.Nodes) do
     begin
       if row = 0 then
       begin
-        hasName := IdName(S.Series.Find('name'), nm);
+        if ASeries <> nil then hasName := IdName(ASeries.Find('name'), nm)
+        else hasName := False;
         d := nil;
       end
-      else if S.Hier.Nodes[row].Item is TJSONObject then
+      else if AHier.Nodes[row].Item is TJSONObject then
       begin
-        hasName := IdName(TJSONObject(S.Hier.Nodes[row].Item).Find('name'), nm);
-        d := TJSONObject(S.Hier.Nodes[row].Item).Find('id');
+        hasName := IdName(TJSONObject(AHier.Nodes[row].Item).Find('name'), nm);
+        d := TJSONObject(AHier.Nodes[row].Item).Find('id');
       end
       else
       begin
         hasName := False;
         d := nil;
       end;
-      if IdName(d, S.Nodes[row].Id) then Continue;
+      if IdName(d, Result[row]) then Continue;
       if hasName then
       begin
         if counts.Find(nm, k) then
@@ -688,33 +790,140 @@ begin
         else
           k := counts.AddObject(nm, TObject(PtrInt(1)));
         if PtrInt(counts.Objects[k]) > 1 then
-          S.Nodes[row].Id := nm + '__ec__' + IntToStr(PtrInt(counts.Objects[k]))
+          Result[row] := nm + '__ec__' + IntToStr(PtrInt(counts.Objects[k]))
         else
-          S.Nodes[row].Id := nm;
+          Result[row] := nm;
       end
       else
-        S.Nodes[row].Id := 'e'#0#0 + IntToStr(row);
+        Result[row] := 'e'#0#0 + IntToStr(row);
     end;
   finally
     counts.Free;
   end;
 end;
 
+procedure AssignIds(var S: TTyTreemapSolved);
+var ids: TTyStringArray; row: Integer;
+begin
+  ids := TyHierIds(S.Hier, S.Series);
+  for row := 0 to High(S.Nodes) do S.Nodes[row].Id := ids[row];
+end;
+
+function TyTreemapNoView: TTyTreemapView;
+begin
+  Result := Default(TTyTreemapView);
+  Result.ViewRoot := 0;
+  Result.Kind := tpkNone;
+  Result.Target := -1;
+end;
+
 function TyTreemapSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
   const AContainer: TTyRectF; APPI: Integer): TTyTreemapSolved;
+begin
+  Result := TyTreemapSolve(AOption, ASeriesIndex, AContainer, APPI, TyTreemapNoView,
+    Default(TTyTreemapSolved));
+end;
+
+function TyTreemapCurrentZoom(ABaseW, ABaseH, ACurW, ACurH: Double): Double;
+begin
+  { (a / b) || (c / d) || 1: nought and not-a-number are false }
+  Result := ACurW / ABaseW;
+  if (Result = 0) or IsNan(Result) then Result := ACurH / ABaseH;
+  if (Result = 0) or IsNan(Result) then Result := 1;
+end;
+
+function TyTreemapClampZoom(const ASolved: TTyTreemapSolved; AZoom: Double): Double;
+var
+  sl, d: TJSONData;
+  lo, hi: Double;
+begin
+  Result := AZoom;
+  if ASolved.Series = nil then Exit;
+  { the default {max: 5, min: 0.2} merged under the series' own; written
+    null, it is gone and nothing clamps }
+  sl := ASolved.Series.Find('scaleLimit');
+  if (sl <> nil) and (sl.JSONType = jtNull) then Exit;
+  lo := 0.2;
+  hi := 5;
+  if sl is TJSONObject then
+  begin
+    d := TJSONObject(sl).Find('min');
+    if d <> nil then lo := JsNum(d);
+    d := TJSONObject(sl).Find('max');
+    if d <> nil then hi := JsNum(d);
+  end;
+  { zoomLimit.min || 0, zoomLimit.max || Infinity }
+  if (lo = 0) or IsNan(lo) then lo := 0;
+  if (hi = 0) or IsNan(hi) then hi := Infinity;
+  Result := JsMax(JsMin(hi, Result), lo);
+end;
+
+{ estimateRootSize: the area that gives the target zoomToNodeRatio of the
+  view, grown up the ancestors by each one's share and its borders }
+procedure EstimateRootSize(const S: TTyTreemapSolved; ATarget: Integer;
+  ACW, ACH: Double; out AW, AH: Double);
+var
+  cur, par, k: Integer;
+  viewArea, area, sum, v, ratio, bw, ulh, uh, sc, maxSafe: Double;
+  d: TJSONData;
+begin
+  AW := ACW;
+  AH := ACH;
+  if (ATarget < 0) or (ATarget = S.ViewRoot) then Exit;
+  viewArea := ACW * ACH;
+  d := S.Series.Find('zoomToNodeRatio');
+  if (d <> nil) and (d.JSONType = jtNumber) then ratio := d.AsFloat
+  else
+  begin
+    { 0.32 * 0.32, multiplied at run time in doubles }
+    ratio := 0.32;
+    ratio := ratio * ratio;
+  end;
+  area := viewArea * ratio;
+  maxSafe := 9007199254740991;
+  cur := ATarget;
+  par := S.Hier.Nodes[cur].Parent;
+  while par >= 0 do
+  begin
+    sum := 0;
+    for k := 0 to High(S.Hier.Nodes[par].Children) do
+      sum := sum + S.Nodes[S.Hier.Nodes[par].Children[k]].Value;
+    v := S.Nodes[cur].Value;
+    if v = 0 then Exit;
+    area := area * (sum / v);
+    bw := ChainNum(S, par, 'itemStyle', 'borderWidth', 0) * S.Scale;
+    if Truthy(ChainFind(S, par, 'upperLabel', 'show')) then
+      ulh := ChainNum(S, par, 'upperLabel', 'height', 20) * S.Scale
+    else
+      ulh := 0;
+    uh := JsMax(bw, ulh);
+    area := area + (4 * bw * bw + (3 * bw + uh) * TyJsPow(area, 0.5));
+    if area > maxSafe then area := maxSafe;
+    cur := par;
+    par := S.Hier.Nodes[cur].Parent;
+  end;
+  if area < viewArea then area := viewArea;
+  sc := TyJsPow(area / viewArea, 0.5);
+  AW := ACW * sc;
+  AH := ACH * sc;
+end;
+
+function TyTreemapSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const AContainer: TTyRectF; APPI: Integer; const AView: TTyTreemapView;
+  const APrev: TTyTreemapSolved): TTyTreemapSolved;
 const
   cBoxKey: array[0..5] of string = ('width', 'left', 'right', 'height', 'top', 'bottom');
 var
   mask: TFPUExceptionMask;
   node, d: TJSONData;
-  n, row, k: Integer;
+  n, row, k, vr, p: Integer;
   done: TTyDoubleArray;
   C: TSolveCtx;
   raw, target: TTyCalBoxKeys;
   box: TTyRawBox;
-  W, H, cx, cy: Double;
+  W, H, cx, cy, rw, rh, zoom, tcx, tcy: Double;
   lv: TJSONObject;
-  hasColor: Boolean;
+  hasColor, samePrev, relayout: Boolean;
 
   function Scaled(const R: TTyBoxRaw): TTyBoxRaw;
   begin
@@ -819,19 +1028,131 @@ begin
     W := AContainer.Right - AContainer.Left;
     H := AContainer.Bottom - AContainer.Top;
     Result.Box := TyGetLayoutRect(box, AContainer.Left, AContainer.Top, W, H, []);
-    { the root at (0, 0), the whole box }
-    Result.Nodes[0].HasLayout := True;
-    Result.Nodes[0].X := 0;
-    Result.Nodes[0].Y := 0;
-    Result.Nodes[0].W := Result.Box.W;
-    Result.Nodes[0].H := Result.Box.H;
-    Result.Nodes[0].Area := Result.Box.W * Result.Box.H;
-    Squarify(C, 0, False, 0);
+    { THE VIEW ROOT and the path above it, root first [Batch 115] }
+    vr := AView.ViewRoot;
+    if (vr < 0) or (vr >= n) then vr := 0;
+    Result.ViewRoot := vr;
+    Result.AbovePath := nil;
+    p := Result.Hier.Nodes[vr].Parent;
+    while p >= 0 do
+    begin
+      SetLength(Result.AbovePath, Length(Result.AbovePath) + 1);
+      for k := High(Result.AbovePath) downto 1 do
+        Result.AbovePath[k] := Result.AbovePath[k - 1];
+      Result.AbovePath[0] := p;
+      p := Result.Hier.Nodes[p].Parent;
+    end;
+    samePrev := APrev.Valid and (Length(APrev.Nodes) = n);
+    { what an earlier layout left in the viewChildren of the nodes this one
+      does not lay out }
+    if samePrev then
+      for row := 0 to n - 1 do Result.Nodes[row].View := APrev.Nodes[row].View;
+    relayout := not ((AView.Kind in [tpkMove, tpkKeep]) and samePrev);
+    if not relayout then
+    begin
+      { A PAN keeps the layout: only the root moves }
+      for row := 0 to n - 1 do
+      begin
+        Result.Nodes[row].HasLayout := APrev.Nodes[row].HasLayout;
+        Result.Nodes[row].X := APrev.Nodes[row].X;
+        Result.Nodes[row].Y := APrev.Nodes[row].Y;
+        Result.Nodes[row].W := APrev.Nodes[row].W;
+        Result.Nodes[row].H := APrev.Nodes[row].H;
+        Result.Nodes[row].Area := APrev.Nodes[row].Area;
+        Result.Nodes[row].BorderWidth := APrev.Nodes[row].BorderWidth;
+        Result.Nodes[row].UpperHeight := APrev.Nodes[row].UpperHeight;
+        Result.Nodes[row].UpperLabelHeight := APrev.Nodes[row].UpperLabelHeight;
+        Result.Nodes[row].HasExtent := APrev.Nodes[row].HasExtent;
+        Result.Nodes[row].ExtMin := APrev.Nodes[row].ExtMin;
+        Result.Nodes[row].ExtMax := APrev.Nodes[row].ExtMax;
+        Result.Nodes[row].IsLeafRoot := APrev.Nodes[row].IsLeafRoot;
+      end;
+    end
+    else
+    begin
+      { THE ROOT'S SIZE: the box; a zoomToNode's estimate, or a wheel's
+        rootRect, clamped by scaleLimit }
+      rw := Result.Box.W;
+      rh := Result.Box.H;
+      if AView.Kind = tpkZoomToNode then
+      begin
+        EstimateRootSize(Result, AView.Target, Result.Box.W, Result.Box.H, rw, rh);
+        zoom := TyTreemapClampZoom(Result,
+          TyTreemapCurrentZoom(Result.Box.W, Result.Box.H, rw, rh));
+        rw := Result.Box.W * zoom;
+        rh := Result.Box.H * zoom;
+      end
+      else if AView.Kind in [tpkRender, tpkMove] then
+      begin
+        zoom := TyTreemapClampZoom(Result,
+          TyTreemapCurrentZoom(Result.Box.W, Result.Box.H, AView.RootW, AView.RootH));
+        rw := Result.Box.W * zoom;
+        rh := Result.Box.H * zoom;
+      end;
+      Result.Nodes[vr].HasLayout := True;
+      Result.Nodes[vr].X := 0;
+      Result.Nodes[vr].Y := 0;
+      Result.Nodes[vr].W := rw;
+      Result.Nodes[vr].H := rh;
+      Result.Nodes[vr].Area := rw * rh;
+      Squarify(C, vr, False, 0);
+      { the rows above take the view root's layout (extend over it) }
+      for k := 0 to High(Result.AbovePath) do
+      begin
+        row := Result.AbovePath[k];
+        Result.Nodes[row].HasLayout := True;
+        Result.Nodes[row].X := Result.Nodes[vr].X;
+        Result.Nodes[row].Y := Result.Nodes[vr].Y;
+        Result.Nodes[row].W := Result.Nodes[vr].W;
+        Result.Nodes[row].H := Result.Nodes[vr].H;
+        Result.Nodes[row].Area := Result.Nodes[vr].Area;
+        Result.Nodes[row].BorderWidth := Result.Nodes[vr].BorderWidth;
+        Result.Nodes[row].UpperHeight := Result.Nodes[vr].UpperHeight;
+        Result.Nodes[row].UpperLabelHeight := Result.Nodes[vr].UpperLabelHeight;
+        Result.Nodes[row].HasExtent := Result.Nodes[vr].HasExtent;
+        Result.Nodes[row].ExtMin := Result.Nodes[vr].ExtMin;
+        Result.Nodes[row].ExtMax := Result.Nodes[vr].ExtMax;
+        Result.Nodes[row].IsLeafRoot := Result.Nodes[vr].IsLeafRoot;
+      end;
+    end;
+    { THE ROOT'S POSITION: a rootRect's, else the target centred, else 0 }
+    if (AView.Kind = tpkKeep) and samePrev then
+    begin
+      Result.Nodes[0].X := APrev.Nodes[0].X;
+      Result.Nodes[0].Y := APrev.Nodes[0].Y;
+    end
+    else if AView.Kind in [tpkMove, tpkRender] then
+    begin
+      Result.Nodes[0].X := AView.RootX;
+      Result.Nodes[0].Y := AView.RootY;
+    end
+    else if (AView.Kind in [tpkZoomToNode, tpkRootToNode]) and (AView.Target >= 0)
+      and (AView.Target < n) and Result.Nodes[AView.Target].HasLayout then
+    begin
+      tcx := Result.Nodes[AView.Target].W / 2;
+      tcy := Result.Nodes[AView.Target].H / 2;
+      row := AView.Target;
+      while row >= 0 do
+      begin
+        tcx := tcx + Result.Nodes[row].X;
+        tcy := tcy + Result.Nodes[row].Y;
+        row := Result.Hier.Nodes[row].Parent;
+      end;
+      Result.Nodes[0].X := Result.Box.W / 2 - tcx;
+      Result.Nodes[0].Y := Result.Box.H / 2 - tcy;
+    end
+    else
+    begin
+      Result.Nodes[0].X := 0;
+      Result.Nodes[0].Y := 0;
+    end;
     { the canvas in root coordinates }
-    Prune(Result, 0, -(Result.Box.X - AContainer.Left), -(Result.Box.Y - AContainer.Top), W, H);
+    Prune(Result, 0, -(Result.Box.X - AContainer.Left), -(Result.Box.Y - AContainer.Top), W, H, 0);
     { the container group at the box, then the nodes' own groups }
     cx := Result.Box.X;
     cy := Result.Box.Y;
+    Result.ContainerX := cx;
+    Result.ContainerY := cy;
     if Around0(cx) and Around0(cy) then
       Compose(Result, 0, False, 0, 0)
     else
@@ -1233,6 +1554,187 @@ begin
   end;
 end;
 
+{ THE CUT AND THE ANCHOR of a content label on a rect whose origin (shape x
+  * 1 + the group's tx) is (ARX0, ARY0), ACW by ACH: padding (5, CSS
+  shorthand), distance (0), position ('inside') by zrender's table; the
+  words cut to the padded rect [Batch 115: from TyTreemapLabels, for the
+  drill-down's frames too] }
+function PlaceLabel(const ASolved: TTyTreemapSolved; ARow: Integer;
+  const spec: TTyLabelSpec; const AText: string; ARX0, ARY0, ACW, ACH: Double;
+  const AMeasurer: ITyTextMeasurer; out AWords: string; out ALX, ALY: Double;
+  out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV): Boolean;
+var
+  k, j: Integer;
+  pad, ps: string;
+  rich: Boolean;
+  cw, ch, rx, ry, dist, tw, th, ow, oh, bx, by, xl, lt, tokW, h_: Double;
+  pd: array[0..3] of Double;
+  lines: TStringArray;
+  d: TJSONData;
+begin
+  cw := ACW;
+  ch := ACH;
+  for k := 0 to 3 do pd[k] := 5 * ASolved.Scale;
+  d := ChainFind(ASolved, ARow, 'label', 'padding');
+  if d <> nil then
+  begin
+    if d.JSONType = jtNumber then
+      for k := 0 to 3 do pd[k] := d.AsFloat * ASolved.Scale
+    else if (d.JSONType = jtArray) and (d.Count > 0) then
+      for k := 0 to 3 do
+      begin
+        case d.Count of
+          1: j := 0;
+          2: j := k mod 2;
+          3: if k = 3 then j := 1 else j := k;
+        else
+          j := k;
+        end;
+        pd[k] := JsNum(d.Items[j]) * ASolved.Scale;
+      end;
+  end;
+  d := ChainFind(ASolved, ARow, 'label', 'distance');
+  if d <> nil then dist := JsNum(d) * ASolved.Scale else dist := 0;
+  d := ChainFind(ASolved, ARow, 'label', 'position');
+  if (d <> nil) and (d.JSONType = jtString) then ps := d.AsString else ps := 'inside';
+  rich := ChainFind(ASolved, ARow, 'label', 'rich') is TJSONObject;
+  tw := JsMax(cw - pd[1] - pd[3], 0);
+  th := JsMax(ch - pd[0] - pd[2], 0);
+  lines := TyZrPlainTextLines(AText, tw, th, 2, '...', AMeasurer, spec.FontName,
+    spec.FontSizeLogical, spec.FontWeight, rich);
+  { the anchor in the content rect, by zrender's table }
+  rx := ARX0;
+  ry := ARY0;
+  AAH := tahCentre;
+  AAV := tavMiddle;
+  if ps = 'insideLeft' then
+  begin
+    rx := rx + dist; ry := ry + ch / 2; AAH := tahLeft;
+  end
+  else if ps = 'insideRight' then
+  begin
+    rx := rx + (cw - dist); ry := ry + ch / 2; AAH := tahRight;
+  end
+  else if ps = 'insideTop' then
+  begin
+    rx := rx + cw / 2; ry := ry + dist; AAV := tavTop;
+  end
+  else if ps = 'insideBottom' then
+  begin
+    rx := rx + cw / 2; ry := ry + (ch - dist); AAV := tavBottom;
+  end
+  else if ps = 'insideTopLeft' then
+  begin
+    rx := rx + dist; ry := ry + dist;
+    AAH := tahLeft; AAV := tavTop;
+  end
+  else if ps = 'insideTopRight' then
+  begin
+    rx := rx + (cw - dist); ry := ry + dist;
+    AAH := tahRight; AAV := tavTop;
+  end
+  else if ps = 'insideBottomLeft' then
+  begin
+    rx := rx + dist; ry := ry + (ch - dist);
+    AAH := tahLeft; AAV := tavBottom;
+  end
+  else if ps = 'insideBottomRight' then
+  begin
+    rx := rx + (cw - dist); ry := ry + (ch - dist);
+    AAH := tahRight; AAV := tavBottom;
+  end
+  else
+  begin
+    rx := rx + cw / 2;
+    ry := ry + ch / 2;
+  end;
+  if Around0(rx) and Around0(ry) then
+  begin
+    rx := 0;
+    ry := 0;
+  end;
+  { where the words start from the anchor: the plain layout pads the
+    side it is aligned to; the rich one places the OUTER box and puts
+    the first line at its top }
+  if rich and (Length(lines) > 0) then
+  begin
+    ow := tw + (pd[1] + pd[3]);
+    oh := th + (pd[0] + pd[2]);
+    case AAH of
+      tahLeft: bx := 0;
+      tahRight: bx := 0 - ow;
+    else
+      bx := 0 - ow / 2;
+    end;
+    case AAV of
+      tavTop: by := 0;
+      tavBottom: by := 0 - oh;
+    else
+      by := 0 - oh / 2;
+    end;
+    xl := bx + pd[3];
+    lt := by + pd[0];
+    AMeasurer.MeasureLine(lines[0], spec.FontName, spec.FontSizeLogical,
+      spec.FontWeight, tokW, h_);
+    case AAH of
+      tahLeft: rx := rx + xl;
+      tahRight: rx := rx + (xl + tw);
+    else
+      rx := rx + ((xl + (tw - (xl - xl) - ((xl + tw) - (xl + tw)) - tokW) / 2) + tokW / 2);
+    end;
+    ry := ry + lt;
+    AAV := tavTop;
+  end
+  else
+  begin
+    case AAH of
+      tahLeft: rx := rx + (0 + pd[3]);
+      tahRight: rx := rx + (0 - pd[1]);
+    else
+      rx := rx + (0 + pd[3] / 2 - pd[1] / 2);
+    end;
+    case AAV of
+      tavTop: ry := ry + pd[0];
+      tavBottom: ry := ry - pd[2];
+    end;
+  end;
+  Result := Length(lines) > 0;
+  pad := '';
+  AWords := '';
+  for k := 0 to High(lines) do
+  begin
+    AWords := AWords + pad + lines[k];
+    pad := #10;
+  end;
+  ALX := rx;
+  ALY := ry;
+end;
+
+function TyTreemapLabelAt(const ASolved: TTyTreemapSolved; ARow: Integer;
+  const ASpec: TTyLabelSpec; const AMeasurer: ITyTextMeasurer;
+  AX0, AY0, ACW, ACH: Double; out AText: string; out ALX, ALY: Double): Boolean;
+var
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
+  mask: TFPUExceptionMask;
+begin
+  AText := '';
+  ALX := 0;
+  ALY := 0;
+  Result := False;
+  if (AMeasurer = nil) or (ARow < 0) or (ARow > High(ASolved.Nodes))
+    or not ASolved.Nodes[ARow].HasLabelRaw then Exit;
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+  try
+    Result := PlaceLabel(ASolved, ARow, ASpec, ASolved.Nodes[ARow].LabelRaw,
+      AX0, AY0, JsMax(ACW, 0), JsMax(ACH, 0), AMeasurer, AText, ALX, ALY, ah, av);
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
 procedure TyTreemapLabels(var ASolved: TTyTreemapSolved;
   const ASpecs: TTyLabelSpecArray; AStore: TTyDataStore; const ASeriesName: string;
   AValueDim: Integer; const AMeasurer: ITyTextMeasurer);
@@ -1255,8 +1757,10 @@ begin
     begin
       ASolved.Nodes[row].HasLabel := False;
       ASolved.Nodes[row].LabelText := '';
+      ASolved.Nodes[row].HasLabelRaw := False;
+      ASolved.Nodes[row].LabelRaw := '';
       if not ASolved.Nodes[row].HasLayout or not ASolved.Nodes[row].InView
-        or ASolved.Nodes[row].Invisible then Continue;
+        or ASolved.Nodes[row].Invisible or ASolved.Nodes[row].AboveView then Continue;
       if Length(ASolved.Nodes[row].View) > 0 then Continue;
       if row <= High(ASpecs) then spec := ASpecs[row] else Continue;
       if not spec.Show then Continue;
@@ -1282,142 +1786,13 @@ begin
       bw := ASolved.Nodes[row].BorderWidth;
       cw := JsMax(ASolved.Nodes[row].W - 2 * bw, 0);
       ch := JsMax(ASolved.Nodes[row].H - 2 * bw, 0);
-      { padding (5, CSS shorthand), distance (0), position ('inside') }
-      for k := 0 to 3 do pd[k] := 5 * ASolved.Scale;
-      d := ChainFind(ASolved, row, 'label', 'padding');
-      if d <> nil then
-      begin
-        if d.JSONType = jtNumber then
-          for k := 0 to 3 do pd[k] := d.AsFloat * ASolved.Scale
-        else if (d.JSONType = jtArray) and (d.Count > 0) then
-          for k := 0 to 3 do
-          begin
-            case d.Count of
-              1: j := 0;
-              2: j := k mod 2;
-              3: if k = 3 then j := 1 else j := k;
-            else
-              j := k;
-            end;
-            pd[k] := JsNum(d.Items[j]) * ASolved.Scale;
-          end;
-      end;
-      d := ChainFind(ASolved, row, 'label', 'distance');
-      if d <> nil then dist := JsNum(d) * ASolved.Scale else dist := 0;
-      d := ChainFind(ASolved, row, 'label', 'position');
-      if (d <> nil) and (d.JSONType = jtString) then ps := d.AsString else ps := 'inside';
-      rich := ChainFind(ASolved, row, 'label', 'rich') is TJSONObject;
-      tw := JsMax(cw - pd[1] - pd[3], 0);
-      th := JsMax(ch - pd[0] - pd[2], 0);
-      lines := TyZrPlainTextLines(text, tw, th, 2, '...', AMeasurer, spec.FontName,
-        spec.FontSizeLogical, spec.FontWeight, rich);
-      { the anchor in the content rect, by zrender's table }
-      rx := bw * 1 + ASolved.Nodes[row].TX;
-      ry := bw * 1 + ASolved.Nodes[row].TY;
-      ASolved.Nodes[row].LabelAH := tahCentre;
-      ASolved.Nodes[row].LabelAV := tavMiddle;
-      if ps = 'insideLeft' then
-      begin
-        rx := rx + dist; ry := ry + ch / 2; ASolved.Nodes[row].LabelAH := tahLeft;
-      end
-      else if ps = 'insideRight' then
-      begin
-        rx := rx + (cw - dist); ry := ry + ch / 2; ASolved.Nodes[row].LabelAH := tahRight;
-      end
-      else if ps = 'insideTop' then
-      begin
-        rx := rx + cw / 2; ry := ry + dist; ASolved.Nodes[row].LabelAV := tavTop;
-      end
-      else if ps = 'insideBottom' then
-      begin
-        rx := rx + cw / 2; ry := ry + (ch - dist); ASolved.Nodes[row].LabelAV := tavBottom;
-      end
-      else if ps = 'insideTopLeft' then
-      begin
-        rx := rx + dist; ry := ry + dist;
-        ASolved.Nodes[row].LabelAH := tahLeft; ASolved.Nodes[row].LabelAV := tavTop;
-      end
-      else if ps = 'insideTopRight' then
-      begin
-        rx := rx + (cw - dist); ry := ry + dist;
-        ASolved.Nodes[row].LabelAH := tahRight; ASolved.Nodes[row].LabelAV := tavTop;
-      end
-      else if ps = 'insideBottomLeft' then
-      begin
-        rx := rx + dist; ry := ry + (ch - dist);
-        ASolved.Nodes[row].LabelAH := tahLeft; ASolved.Nodes[row].LabelAV := tavBottom;
-      end
-      else if ps = 'insideBottomRight' then
-      begin
-        rx := rx + (cw - dist); ry := ry + (ch - dist);
-        ASolved.Nodes[row].LabelAH := tahRight; ASolved.Nodes[row].LabelAV := tavBottom;
-      end
-      else
-      begin
-        rx := rx + cw / 2;
-        ry := ry + ch / 2;
-      end;
-      if Around0(rx) and Around0(ry) then
-      begin
-        rx := 0;
-        ry := 0;
-      end;
-      { where the words start from the anchor: the plain layout pads the
-        side it is aligned to; the rich one places the OUTER box and puts
-        the first line at its top }
-      if rich and (Length(lines) > 0) then
-      begin
-        ow := tw + (pd[1] + pd[3]);
-        oh := th + (pd[0] + pd[2]);
-        case ASolved.Nodes[row].LabelAH of
-          tahLeft: bx := 0;
-          tahRight: bx := 0 - ow;
-        else
-          bx := 0 - ow / 2;
-        end;
-        case ASolved.Nodes[row].LabelAV of
-          tavTop: by := 0;
-          tavBottom: by := 0 - oh;
-        else
-          by := 0 - oh / 2;
-        end;
-        xl := bx + pd[3];
-        lt := by + pd[0];
-        AMeasurer.MeasureLine(lines[0], spec.FontName, spec.FontSizeLogical,
-          spec.FontWeight, tokW, h_);
-        case ASolved.Nodes[row].LabelAH of
-          tahLeft: rx := rx + xl;
-          tahRight: rx := rx + (xl + tw);
-        else
-          rx := rx + ((xl + (tw - (xl - xl) - ((xl + tw) - (xl + tw)) - tokW) / 2) + tokW / 2);
-        end;
-        ry := ry + lt;
-        ASolved.Nodes[row].LabelAV := tavTop;
-      end
-      else
-      begin
-        case ASolved.Nodes[row].LabelAH of
-          tahLeft: rx := rx + (0 + pd[3]);
-          tahRight: rx := rx + (0 - pd[1]);
-        else
-          rx := rx + (0 + pd[3] / 2 - pd[1] / 2);
-        end;
-        case ASolved.Nodes[row].LabelAV of
-          tavTop: ry := ry + pd[0];
-          tavBottom: ry := ry - pd[2];
-        end;
-      end;
-      ASolved.Nodes[row].HasLabel := Length(lines) > 0;
-      pad := '';
-      text := '';
-      for k := 0 to High(lines) do
-      begin
-        text := text + pad + lines[k];
-        pad := #10;
-      end;
-      ASolved.Nodes[row].LabelText := text;
-      ASolved.Nodes[row].LabelX := rx;
-      ASolved.Nodes[row].LabelY := ry;
+      { the words before the cut, for a frame of the drill-down [Batch 115] }
+      ASolved.Nodes[row].LabelRaw := text;
+      ASolved.Nodes[row].HasLabelRaw := True;
+      ASolved.Nodes[row].HasLabel := PlaceLabel(ASolved, row, spec, text,
+        bw * 1 + ASolved.Nodes[row].TX, bw * 1 + ASolved.Nodes[row].TY, cw, ch,
+        AMeasurer, ASolved.Nodes[row].LabelText, ASolved.Nodes[row].LabelX,
+        ASolved.Nodes[row].LabelY, ASolved.Nodes[row].LabelAH, ASolved.Nodes[row].LabelAV);
     end;
   finally
     ClearExceptions(False);
@@ -1465,7 +1840,7 @@ begin
     begin
       ASolved.Nodes[row].HasUpper := False;
       nd := ASolved.Nodes[row];
-      if not nd.HasLayout or not nd.InView or nd.Invisible then Continue;
+      if not nd.HasLayout or not nd.InView or nd.Invisible or nd.AboveView then Continue;
       { A PARENT whose strip is reserved; a leaf never has one }
       if Length(nd.View) = 0 then Continue;
       if (nd.UpperLabelHeight = 0) or IsNan(nd.UpperLabelHeight) then Continue;
@@ -1578,9 +1953,115 @@ end;
 
 { ==================== the breadcrumb ==================== }
 
+{ ==================== the storage and the hit ==================== }
+
+function TyTreemapHaveOf(const ASolved: TTyTreemapSolved;
+  const APrev: TTyTreemapHave): TTyTreemapHave;
+var n: Integer;
+
+  function Was(const A: array of Boolean; ARow: Integer): Boolean;
+  begin
+    Result := (ARow >= 0) and (ARow <= High(A)) and A[ARow];
+  end;
+
+  { renderNode: a group reused, or made where the node is not outside the
+    canvas; none -- the subtree is not visited }
+  procedure Visit(ARow: Integer);
+  var k: Integer; inv: Boolean;
+  begin
+    if not ASolved.Nodes[ARow].HasLayout or not ASolved.Nodes[ARow].InView then Exit;
+    inv := ASolved.Nodes[ARow].Invisible;
+    if inv and not Was(APrev.Group, ARow) then Exit;
+    Result.Group[ARow] := True;
+    if not ASolved.Nodes[ARow].AboveView then
+    begin
+      Result.Bg[ARow] := (not inv) or Was(APrev.Bg, ARow);
+      if Length(ASolved.Nodes[ARow].View) = 0 then
+        Result.Ct[ARow] := (not inv) or Was(APrev.Ct, ARow);
+    end;
+    for k := 0 to High(ASolved.Nodes[ARow].View) do Visit(ASolved.Nodes[ARow].View[k]);
+  end;
+
+begin
+  Result := Default(TTyTreemapHave);
+  if not ASolved.Valid then Exit;
+  n := Length(ASolved.Nodes);
+  SetLength(Result.Group, n);
+  SetLength(Result.Bg, n);
+  SetLength(Result.Ct, n);
+  Visit(0);
+end;
+
+type
+  TTmTrans = record
+    HasT: Boolean;
+    TX, TY: Double;
+  end;
+  TTmTransArray = array of TTmTrans;
+
+{ findTarget from the view root: pre-order over the viewChildren, a
+  background holding the point continues into its children, one that does
+  not stops there; a node without a background is passed through }
+function FindIn(const ASolved: TTyTreemapSolved; const AHave: TTyTreemapHave;
+  const ATrans: TTmTransArray; AX, AY: Double): Integer;
+var found: Integer;
+
+  procedure Visit(ARow: Integer);
+  var k: Integer; lx, ly: Double;
+  begin
+    if (ARow <= High(AHave.Bg)) and AHave.Bg[ARow] then
+    begin
+      { transformCoordToLocal: through the inverse of the last transform }
+      lx := AX;
+      ly := AY;
+      if (ARow <= High(ATrans)) and ATrans[ARow].HasT then
+      begin
+        lx := AX - ATrans[ARow].TX;
+        ly := AY - ATrans[ARow].TY;
+      end;
+      if not ((0 <= lx) and (lx <= 0 + ASolved.Nodes[ARow].W)
+        and (0 <= ly) and (ly <= 0 + ASolved.Nodes[ARow].H)) then Exit;
+      found := ARow;
+    end;
+    for k := 0 to High(ASolved.Nodes[ARow].View) do Visit(ASolved.Nodes[ARow].View[k]);
+  end;
+
+begin
+  found := -1;
+  if ASolved.Valid then Visit(ASolved.ViewRoot);
+  Result := found;
+end;
+
+function TyTreemapFindTarget(const ASolved: TTyTreemapSolved; const AHave: TTyTreemapHave;
+  AX, AY: Double): Integer;
+var
+  tr: TTmTransArray;
+  row: Integer;
+begin
+  tr := nil;
+  SetLength(tr, Length(ASolved.Nodes));
+  for row := 0 to High(ASolved.Nodes) do
+  begin
+    tr[row].HasT := ASolved.Nodes[row].HasT;
+    tr[row].TX := ASolved.Nodes[row].TX;
+    tr[row].TY := ASolved.Nodes[row].TY;
+  end;
+  Result := FindIn(ASolved, AHave, tr, AX, AY);
+end;
+
 procedure TyTreemapBreadcrumb(var ASolved: TTyTreemapSolved;
   const ACrumbSpec: TTyLabelSpec; const AMeasurer: ITyTextMeasurer;
   const AContainer: TTyRectF);
+begin
+  TyTreemapBreadcrumb(ASolved, ACrumbSpec, AMeasurer, AContainer, -1,
+    TyTreemapHaveOf(ASolved, Default(TTyTreemapHave)), Default(TTyTreemapHave),
+    Default(TTyTreemapSolved));
+end;
+
+procedure TyTreemapBreadcrumb(var ASolved: TTyTreemapSolved;
+  const ACrumbSpec: TTyLabelSpec; const AMeasurer: ITyTextMeasurer;
+  const AContainer: TTyRectF; ATarget: Integer; const AHave, APrevHave: TTyTreemapHave;
+  const APrev: TTyTreemapSolved);
 const
   cKey: array[0..3] of string = ('left', 'right', 'top', 'bottom');
 var
@@ -1602,19 +2083,8 @@ var
   polys: array of array of TTyPointF;
   shown: array of string;
   mask: TFPUExceptionMask;
-
-  procedure Find(ARow: Integer);
-  var c: Integer;
-  begin
-    if ASolved.Nodes[ARow].Invisible then Exit;
-    if (0 <= px) and (px <= 0 + ASolved.Nodes[ARow].W)
-      and (0 <= py) and (py <= 0 + ASolved.Nodes[ARow].H) then
-    begin
-      target := ARow;
-      for c := 0 to High(ASolved.Nodes[ARow].View) do
-        Find(ASolved.Nodes[ARow].View[c]);
-    end;
-  end;
+  tr: TTmTransArray;
+  r2: Integer;
 
   function Measure(const AText: string): Double;
   var w_, h_: Double;
@@ -1667,14 +2137,32 @@ begin
   mask := GetExceptionMask;
   SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
   try
-    { THE TARGET, as the first frame finds it: the backgrounds have no
-      transforms yet, so the centre is tested against each node's own
-      (0, 0, w, h) -- a node at least half the canvas each way }
+    { THE TARGET: the payload's; else, under a series leafDepth, the view
+      root [Batch 80]; else the node under the canvas centre as the
+      backgrounds were LAST PAINTED: a kept one through the transform of the
+      last render, a new one through none -- on the first frame every one,
+      so the centre is tested against each node's own (0, 0, w, h)
+      [Batch 115] }
     px := W / 2;
     py := H / 2;
     target := -1;
-    { a series leafDepth puts the crumb on the view root [Batch 80] }
-    if ASolved.HasLeafDepth then target := 0 else Find(0);
+    if (ATarget >= 0) and (ATarget <= High(ASolved.Nodes)) then target := ATarget
+    else if ASolved.HasLeafDepth then target := ASolved.ViewRoot
+    else
+    begin
+      tr := nil;
+      SetLength(tr, Length(ASolved.Nodes));
+      if APrev.Valid and (Length(APrev.Nodes) = Length(ASolved.Nodes)) then
+        for r2 := 0 to High(ASolved.Nodes) do
+          if (r2 <= High(APrevHave.Bg)) and APrevHave.Bg[r2]
+            and (r2 <= High(AHave.Bg)) and AHave.Bg[r2] then
+          begin
+            tr[r2].HasT := APrev.Nodes[r2].HasT;
+            tr[r2].TX := APrev.Nodes[r2].TX;
+            tr[r2].TY := APrev.Nodes[r2].TY;
+          end;
+      target := FindIn(ASolved, AHave, tr, px, py);
+    end;
     if target < 0 then target := 0;
     { the path, target first }
     path := nil;
@@ -1829,7 +2317,15 @@ var
     bw, cw, ch: Double;
   begin
     nd := ASolved.Nodes[ARow];
-    if not nd.HasLayout or not nd.InView or nd.Invisible then Exit;
+    if not nd.HasLayout or not nd.InView then Exit;
+    { ABOVE THE VIEW ROOT: a group and nothing else; its (stale)
+      viewChildren lead down the path [Batch 115] }
+    if nd.AboveView then
+    begin
+      for k := 0 to High(nd.View) do Walk(nd.View[k], ADepth + 1);
+      Exit;
+    end;
+    if nd.Invisible and not nd.DrawInvisible then Exit;
     { the background, in the border colour }
     z2 := ADepth * 100 + 20;
     el := TyChartElement(TyShapeRect(TyRectF(0 + nd.TX, 0 + nd.TY,
@@ -1839,6 +2335,15 @@ var
     el.Z := ASolved.Z;
     el.Z2 := z2;
     el.Datum := TyChartDatum(ASeriesIndex, ARow, ARow);
+    { THE DRILL-DOWN'S VIEW: a background's local shape [Batch 115] }
+    el.Anim.Role := carTmRect;
+    el.Anim.Series := ASeriesIndex;
+    el.Anim.Index := ARow;
+    el.Anim.Sub := 0;
+    el.Anim.G[0] := 0;
+    el.Anim.G[1] := 0;
+    el.Anim.G[2] := nd.W;
+    el.Anim.G[3] := nd.H;
     { the node takes the pointer -- TyChartElement starts silent [Batch 84] }
     el.Silent := False;
     if z2 > maxZ2 then maxZ2 := z2;
@@ -1873,6 +2378,14 @@ var
       el.Z2 := z2;
       el.Datum := TyChartDatum(ASeriesIndex, ARow, ARow);
       el.Silent := False;
+      el.Anim.Role := carTmRect;
+      el.Anim.Series := ASeriesIndex;
+      el.Anim.Index := ARow;
+      el.Anim.Sub := 1;
+      el.Anim.G[0] := bw;
+      el.Anim.G[1] := bw;
+      el.Anim.G[2] := cw;
+      el.Anim.G[3] := ch;
       if z2 > maxZ2 then maxZ2 := z2;
       if nd.HasLabel and (nd.LabelText <> '') then
       begin

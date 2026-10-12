@@ -24,6 +24,11 @@ unit tyControls.AdvChart.AnimView;
                  delay = duration * (where the clip reaches it) + delay, or
                  the delay function at the row; ignores the threshold
                  (LineView.ts:1078-1177)
+    riverClip    a themeRiver layer's clip rect [Batch 118]: from x - 10,
+                 y - 10, width 0, height + 20 of the polygon's own rect, to
+                 x - 50 and width + 100, enter timing with no row, only for
+                 a series that animates; gone when it ends
+                 (ThemeRiverView.ts createGridClipShape)
     lineClip     the line's clip rect grows along the base axis, enter timing
                  with no row; `clip: false` widens it after the call, and
                  the forced tracks write the unwidened rect back on the next
@@ -126,6 +131,17 @@ unit tyControls.AdvChart.AnimView;
     endLabel     a line's end label rides its clip: the clip's during is
                  LineView._endLabelOnDuring (the place on the line where the
                  clip has got to, and the value there).
+
+  A SUNBURST'S DRILL-DOWN [Batch 115, C6]. sunburstRootToNode is an
+  updateView: every piece the new view keeps runs SunburstPiece.updateData
+  -- updateProps of its whole shape, update timing with no row; a piece
+  that is new (and the return circle, the first time) is created with r at
+  r0 and initProps r, enter timing at its row; a piece the view drops is
+  removed at once. Its label moves from its old layout (LabelManager) and a
+  new one fades. Only the drill's own render does this (HierDrill): the
+  sunburst's first render and its other updates stay unanimated here.
+  A TREEMAP'S rects (carTmRect) are not this set's: TreemapView animates
+  them with its own wrap, which the control runs.
 
   STATES [Batch 94, AN3b]. emphasis, blur and select switch through the
   engine's useStates on the SAME proxy the enter and update animations run on
@@ -302,6 +318,9 @@ type
       -- the marker's `animation` and the host's isAnimationEnabled -- is
       Present False when the host does not animate }
     MarkLine, MarkPoint: TTyAnimModel;
+    { [Batch 115] this render is the series' drill-down (a sunburst's
+      sunburstRootToNode): its pieces and labels transition }
+    HierDrill: Boolean;
   end;
   TTyChartAnimSeriesArray = array of TTyChartAnimSeries;
 
@@ -968,6 +987,7 @@ begin
     carLineSymbol: Result := 'lineSymbol';
     carLineRun, carLineArea: Result := 'lineClip';
     carSector: Result := 'sector';
+    carSunPiece: Result := 'sunPiece';
     carFunnel: Result := 'funnel';
     carGaugePointer: Result := 'gaugePointer';
     carGaugeProgress, carGaugeCap: Result := 'gaugeProgress';
@@ -983,6 +1003,8 @@ begin
     carMarkPoint, carMarkPointLabel: Result := 'markPoint';
     carMarkLine, carMarkLineFrom, carMarkLineTo, carMarkLineLabel: Result := 'markLine';
     carEndLabel: Result := 'lineClip';
+    carRiver: Result := 'riverClip';
+    carChord: Result := 'chordGroup';
     carLinesLine, carLinesFrom, carLinesTo, carLinesLabel: Result := 'linesLine';
     carLinesEffect: Result := 'linesEffect';
     carParallelLine: Result := 'parallelClip';
@@ -1098,6 +1120,15 @@ end;
 { a bar on a polar: its sector, as BarView's polar creator gives it
   [Batch 113] }
 function PolarBarProps(const AEl: TTyChartElement): TTyAnimProps;
+begin
+  Result := TyAnimProps([Num1('shape.cx', AEl.Anim.G[0]),
+    Num1('shape.cy', AEl.Anim.G[1]), Num1('shape.r0', AEl.Anim.G[2]),
+    Num1('shape.r', AEl.Anim.G[3]), Num1('shape.startAngle', AEl.Anim.G[4]),
+    Num1('shape.endAngle', AEl.Anim.G[5])]);
+end;
+
+{ a sunburst piece's layout, upstream's shape keys [Batch 115] }
+function SunPieceProps(const AEl: TTyChartElement): TTyAnimProps;
 begin
   Result := TyAnimProps([Num1('shape.cx', AEl.Anim.G[0]),
     Num1('shape.cy', AEl.Anim.G[1]), Num1('shape.r0', AEl.Anim.G[2]),
@@ -1454,6 +1485,41 @@ begin
         end;
         Start(props, TyAnimCallAt(idx));
       end;
+    carRiver:
+      begin
+        { createGridClipShape over polygon.getBoundingRect() -- taken before
+          the style is set, so no stroke in it -- only where the series
+          animates: x - 10, y - 10, no width, height + 20, initProps to
+          x - 50, width + 100 (height + 20 again) on the series, no row; the
+          clip is removed when it ends [Batch 118] }
+        if not AC.Enabled then Exit;
+        p := Make(AEl.Anim.Series, idx, 'riverClip');
+        x := AEl.Anim.G[0];
+        y := AEl.Anim.G[1];
+        w := AEl.Anim.G[2];
+        h := AEl.Anim.G[3];
+        props := TyAnimProps([Num1('shape.x', x - 50), Num1('shape.y', y - 10),
+          Num1('shape.width', w + 100), Num1('shape.height', h + 20)]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('shape.x', x - 10);
+        p.SetNum('shape.width', 0);
+        Start(TyAnimProps([props[0], props[2], props[3]]), TyAnimCallNoIndex);
+      end;
+    carChord:
+      begin
+        { ChordView's first render: the view group at 0.01 about the centre
+          option, initProps to 1 on the series, no row; with the series not
+          animating initProps sets 1 at once -- no proxy [Batch 120] }
+        if not AC.Enabled then Exit;
+        p := Make(AEl.Anim.Series, -1, 'chordGroup');
+        props := TyAnimProps([Num1('scaleX', 1), Num1('scaleY', 1)]);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('scaleX', 0.01);
+        p.SetNum('scaleY', 0.01);
+        Start(props, TyAnimCallNoIndex);
+      end;
     carPolarBar:
       begin
         { the polar creator: a radial bar's r from r0, a tangential one's end
@@ -1589,6 +1655,18 @@ begin
             Num1('shape.endAngle', AEl.Anim.G[5])]), TyAnimCallAt(idx));
         end;
       end;
+    carSunPiece:
+      begin
+        { only a drill-down's new piece: created with r at r0, initProps r
+          at its row (SunburstPiece.updateData's firstCreate) [Batch 115] }
+        if not (AUpdate and AC.HierDrill) then Exit;
+        p := Make(AEl.Anim.Series, idx, 'sunPiece');
+        props := SunPieceProps(AEl);
+        p.Attr(props);
+        p.SetFinal(props);
+        p.SetNum('shape.r', AEl.Anim.G[2]);
+        Start(TyAnimProps([Num1('shape.r', AEl.Anim.G[3])]), TyAnimCallAt(idx));
+      end;
     carFunnel:
       begin
         p := Make(AEl.Anim.Series, idx, 'funnel');
@@ -1700,6 +1778,10 @@ begin
           Exit;
         end;
         if not (AC.Enabled and AC.LabelFade) or AC.LabelValueAnim then Exit;
+        { A HIDDEN LABEL IS NOT FADED IN: LabelManager walks the texts that
+          are not ignored -- a themeRiver's built for its emphasis alone
+          [Batch 118] }
+        if AEl.Ignore and (AC.SeriesType = 'themeRiver') then Exit;
         p := Make(AEl.Anim.Series, idx, 'label');
         p.Attr(props);
         p.SetFinal(props);
@@ -1983,6 +2065,17 @@ var
     rk: string;
   begin
     case AEl.Anim.Role of
+      carRiver:
+        { A KEPT LAYER is not clipped again (its points tween upstream,
+          snapped here); a new one enters [Batch 118] }
+        if AOldRow < 0 then ArmOne(AList, AAt, AEl, AC, True);
+      carChord:
+        { A KEPT VIEW scales no more (`if (!oldData)`): an enter still
+          running goes on [Batch 120] }
+        begin
+          p := OldProxy(AOld, -1, 'chordGroup');
+          if p <> nil then Carry(p, s, -1);
+        end;
       carParallelLine:
         begin
           { THE VIEW IS KEPT: its enter clip runs on (it is made only on the
@@ -2109,6 +2202,23 @@ var
           p.SetFinal(props);
           { the whole sectorShape, at the NEW row (PieView.ts:120-125) }
           TyUpdateProps(p, props, AC.Model, TyAnimCallAt(r));
+        end;
+      carSunPiece:
+        begin
+          { a drill-down's piece: kept -- updateProps of the whole shape
+            from where it is, update timing, no row; new -- ArmOne's
+            [Batch 115] }
+          if not AC.HierDrill then Exit;
+          hasOld := (AOldRow >= 0) and OldEl(AOld, AOldRow, 'sunPiece', oe);
+          if not hasOld then
+          begin
+            ArmOne(AList, AAt, AEl, AC, True);
+            Exit;
+          end;
+          props := SunPieceProps(AEl);
+          p := Take(AOld, AOldRow, s, r, 'sunPiece', SunPieceProps(oe), props, True);
+          p.SetFinal(props);
+          TyUpdateProps(p, props, AC.Model, TyAnimCallNoIndex);
         end;
       carFunnel:
         begin
@@ -2254,7 +2364,9 @@ var
                 if AEl.Caption.ValAnim then
                   CountOn(p, oe, AEl, s, r, 'label', AC.Model)
                 else if (AEl.Anim.HostPlus1 = 0)
-                  and ((AC.SeriesType = 'pie') or AEl.Caption.LmFree) then
+                  and ((AC.SeriesType = 'pie') or AEl.Caption.LmFree
+                    { a sunburst's in its drill-down [Batch 115] }
+                    or (AC.HierDrill and (AC.SeriesType = 'sunburst'))) then
                   MoveLabel(p, oe, AEl, s, r, AC.Model);
               end;
               Exit;
@@ -3046,6 +3158,19 @@ begin
   if v.Kind in [avkNumber, avkBool] then Result := v.Num else Result := AOr;
 end;
 
+{ a sunburst piece as its proxy has it: its angles in order as the static
+  build passes them, the corners the layout's [Batch 115] }
+function SunPieceFrom(const AEl: TTyChartElement; P: TTyChartAnimProxy): TTyChartShape;
+var a, b: Double;
+begin
+  a := NumOr(P, 'shape.startAngle', AEl.Anim.G[4]);
+  b := NumOr(P, 'shape.endAngle', AEl.Anim.G[5]);
+  Result := TyShapeSector(NumOr(P, 'shape.cx', AEl.Anim.G[0]),
+    NumOr(P, 'shape.cy', AEl.Anim.G[1]), NumOr(P, 'shape.r0', AEl.Anim.G[2]),
+    NumOr(P, 'shape.r', AEl.Anim.G[3]), Min(a, b), Max(a, b));
+  Result.SectorRadii := AEl.Shape.SectorRadii;
+end;
+
 { a polar bar as its proxy has it: the sector, its corners and its
   sausage kept; the layout numbers (G) and the label's rect follow
   [Batch 113] }
@@ -3150,6 +3275,48 @@ begin
   Result[3] := NumOr(AProxy, 'shape.y2', Result[3]);
 end;
 
+procedure ChordFrom(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
+var
+  sx, sy, ox, oy: Double;
+
+  function GX(AV: Double): Double;
+  begin
+    Result := ox + (AV - ox) * sx;
+  end;
+
+  function GY(AV: Double): Double;
+  begin
+    Result := oy + (AV - oy) * sy;
+  end;
+
+begin
+  sx := AProxy.Num('scaleX');
+  sy := AProxy.Num('scaleY');
+  ox := AEl.Anim.G[0];
+  oy := AEl.Anim.G[1];
+  if IsNan(sx) or IsNan(sy) then Exit;
+  TyShapeScaleAbout(AEl.Shape, ox, oy, sx, sy);
+  if AEl.Style.FillGradient.Kind <> cgkNone then
+  begin
+    if AEl.Style.FillGradient.Global then
+    begin
+      AEl.Style.FillGradient.X := GX(AEl.Style.FillGradient.X);
+      AEl.Style.FillGradient.Y := GY(AEl.Style.FillGradient.Y);
+      AEl.Style.FillGradient.X2 := GX(AEl.Style.FillGradient.X2);
+      AEl.Style.FillGradient.Y2 := GY(AEl.Style.FillGradient.Y2);
+      AEl.Style.FillGradient.R := AEl.Style.FillGradient.R * Min(Abs(sx), Abs(sy));
+    end;
+    if AEl.Style.GradBoxSet then
+    begin
+      AEl.Style.GradBox.X := GX(AEl.Style.GradBox.X);
+      AEl.Style.GradBox.Y := GY(AEl.Style.GradBox.Y);
+      AEl.Style.GradBox.W := AEl.Style.GradBox.W * sx;
+      AEl.Style.GradBox.H := AEl.Style.GradBox.H * sy;
+    end;
+  end;
+  AEl.Style.StrokeWidthLogical := AEl.Style.StrokeWidthLogical * Min(Abs(sx), Abs(sy));
+end;
+
 procedure TyAnimApply(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
 var
   x, y, fx, fy, a, d, c, s, cx, cy, tx, ty, lx, ly, lx1, ly1, bw, bh: Double;
@@ -3227,6 +3394,21 @@ begin
       end;
     carPolarBar:
       PolarBarFrom(AEl, AProxy);
+    carChord:
+      { THE VIEW GROUP'S SCALE about its origin: the sector, the ribbon,
+        their gradients and their strokes with it -- the labels are not the
+        group's (a text that is not local takes no parent) [Batch 120] }
+      ChordFrom(AEl, AProxy);
+    carRiver:
+      begin
+        { the polygon cut to its clip rect, in the group's frame
+          [Batch 118] }
+        x := AProxy.Num('shape.x');
+        y := AProxy.Num('shape.y') + AEl.Anim.G[4];
+        AEl.HasClip := True;
+        AEl.ClipRect := TyRectF(x, y, x + AProxy.Num('shape.width'),
+          y + AProxy.Num('shape.height'));
+      end;
     carLineRun, carLineArea:
       if (Round(AEl.Anim.G[5]) and 8) <> 0 then
       begin
@@ -3248,6 +3430,9 @@ begin
       end;
     carSector, carGaugeProgress:
       AEl.Shape := SectorFrom(AEl, AProxy);
+    carSunPiece:
+      { the ring as the proxy has it now [Batch 115] }
+      AEl.Shape := SunPieceFrom(AEl, AProxy);
     carGaugeCap:
       begin
         a := AProxy.Num('shape.endAngle');

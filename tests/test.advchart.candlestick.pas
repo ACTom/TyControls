@@ -377,15 +377,19 @@ procedure TAdvChartCandleDrawTest.TestATypeWithNoRendererSaysSo;
 begin
   { A CHART THAT CANNOT DRAW SOMETHING HAS TO SAY SO. Binding knows the
     twenty-three names ECharts ships and nothing about which of them this
-    control can paint, so a chord binds cleanly, lays out cleanly and comes
-    out blank -- and with no diagnostic that is the one thing this control is
-    not allowed to do.
+    control can paint, so a map series moved onto the grid binds cleanly,
+    lays out cleanly and comes out blank -- and with no diagnostic that is
+    the one thing this control is not allowed to do.
     The example was a funnel until the funnel drew, then a sankey until the
-    sankey drew; moving it is what this test is for. }
+    sankey drew, then a chord until the chord drew [Batch 120], then a
+    custom series until it drew [Batch 123], then a parallel series until
+    it drew [Batch 128]; moving it is what this test is for. The map is the
+    last undrawn type (until D14) and does not bind on a grid by default,
+    hence the explicit coordinateSystem. }
   Draw('{"xAxis":{"type":"category","data":["a"]},"yAxis":{},' +
-       '"series":[{"type":"chord","data":[1]}]}');
-  AssertTrue('the chord says it is not drawn',
-             Pos('chord', Diagnostics) > 0);
+       '"series":[{"type":"map","coordinateSystem":"cartesian2d","data":[]}]}');
+  AssertTrue('the map series says it is not drawn',
+             Pos('"map" series type is not drawn', Diagnostics) > 0);
 end;
 
 procedure TAdvChartCandleDrawTest.TestATypeWithARendererDoesNot;

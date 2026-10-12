@@ -391,7 +391,13 @@ function TyAxisArrows(const AFrame: TTyAxisNameFrame;
   because upstream walks every cartesian in the grid and asks each one for
   its opposite-dimension axis whether or not this axis is in it. }
 function TyAxisFurnitureOf(ANode: TJSONObject; AAxis: TTyAxis;
-  AOtherIsValue: Boolean; APolar: Boolean = False): TTyAxisFurniture;
+  AOtherIsValue: Boolean; APolar: Boolean = False;
+  ASingle: Boolean = False): TTyAxisFurniture;
+{ mergeLayoutParam on one direction of a component's box: the option's own
+  left / right / width (or top / bottom / height) against the component's
+  defaults [Batch 118: the single axis' box, beside the grid's] }
+procedure TyMergedBoxDim(ANode: TJSONObject; const AK0, AK1, AK2: string;
+  const AD0, AD1, AD2: TTyBoxValue; out AV0, AV1, AV2: TTyBoxValue);
 { AN AXIS MADE FROM ITS OPTION, as every coordinate system's axis is: the
   type (an unknown one is a value axis, its name in AUnknown), the scale (a
   log axis' base), the categories, the band (a category axis' boundaryGap),
@@ -745,6 +751,12 @@ begin
   AV0 := res[0];
   AV1 := res[1];
   AV2 := res[2];
+end;
+
+procedure TyMergedBoxDim(ANode: TJSONObject; const AK0, AK1, AK2: string;
+  const AD0, AD1, AD2: TTyBoxValue; out AV0, AV1, AV2: TTyBoxValue);
+begin
+  MergedBoxDim(ANode, AK0, AK1, AK2, AD0, AD1, AD2, AV0, AV1, AV2);
 end;
 
 { ==================== the axis type rule ==================== }
@@ -1737,7 +1749,7 @@ begin
 end;
 
 function TyAxisFurnitureOf(ANode: TJSONObject; AAxis: TTyAxis;
-  AOtherIsValue: Boolean; APolar: Boolean): TTyAxisFurniture;
+  AOtherIsValue: Boolean; APolar: Boolean; ASingle: Boolean): TTyAxisFurniture;
 var
   cat, tickAuto: Boolean;
   d, sub: TJSONData;
@@ -1773,6 +1785,15 @@ begin
     the vertical lines it does not have would have come from the category one. }
   Result.ShowSplitLine := ShowIn(ANode, 'splitLine',
     not (cat or (AAxis.AxisType = atTime)), False, True);
+  { A SINGLE AXIS' MODEL shows its line, its ticks and its split lines on
+    every type -- SingleAxisModel's defaults over axisDefault's, plain
+    `true`, no `auto` [Batch 118] }
+  if ASingle then
+  begin
+    Result.ShowLine := ShowIn(ANode, 'axisLine', True, False, True);
+    Result.ShowTicks := ShowIn(ANode, 'axisTick', True, False, True);
+    Result.ShowSplitLine := ShowIn(ANode, 'splitLine', True, False, True);
+  end;
   Result.ShowSplitArea := ShowIn(ANode, 'splitArea', False, False, True);
   { The minor pair is a value-axis affair: a category axis has nothing to
     subdivide. }

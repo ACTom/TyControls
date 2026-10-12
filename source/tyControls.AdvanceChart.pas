@@ -64,8 +64,13 @@ uses
   tyControls.AdvChart.Convert, tyControls.AdvChart.Jitter,
   tyControls.AdvChart.Large, tyControls.AdvChart.Progressive,
   tyControls.AdvChart.Polar, tyControls.AdvChart.PolarBar,
-  tyControls.AdvChart.Lines, tyControls.AdvChart.Toolbox,
-  tyControls.AdvChart.Brush, tyControls.AdvChart.Parallel,
+  tyControls.AdvChart.Single, tyControls.AdvChart.ThemeRiver,
+  tyControls.AdvChart.Chord,
+  tyControls.AdvChart.GfxEl, tyControls.AdvChart.Graphic,
+  tyControls.AdvChart.Lines, tyControls.AdvChart.Custom,
+  tyControls.AdvChart.Toolbox, tyControls.AdvChart.Brush,
+  tyControls.AdvChart.Timeline,
+  tyControls.AdvChart.Parallel,
   fpjson, contnrs, tyControls.SubPixel;
 
 const
@@ -74,6 +79,11 @@ const
     option model documents so a chart looks the same before and after a skin. }
   TyAdvChartTickLenVar = '--advchart-tick-length';
   TyAdvChartTickLen = 5;
+  { A SINGLE AXIS' TICK: its model's own 6 over axisDefault's 5
+    (SingleAxisModel's axisTick.length) -- a metric of its own so a skin can
+    move it [Batch 118] }
+  TyAdvChartSingleTickLenVar = '--advchart-single-tick-length';
+  TyAdvChartSingleTickLen = 6;
   TyAdvChartMinorTickLenVar = '--advchart-minor-tick-length';
   TyAdvChartMinorTickLen = 3;
   TyAdvChartLabelMarginVar = '--advchart-label-margin';
@@ -142,8 +152,20 @@ type
     Rows: TTyIntegerArray;
     { THE POLAR the axis belongs to; nil on a grid [Batch 111] }
     Polar: TTyPolar;
+    { THE SINGLE AXIS the axis is; nil elsewhere [Batch 118] }
+    Single: TTySingle;
   end;
   TTyAxisHitArray = array of TTyAxisHit;
+
+  { WHAT A SINGLE AXIS' POINTER DRAWS [Batch 118]: its line or shadow rect,
+    and its label's text and padded box (top-left, after the align and the
+    confinement to the control) when the label is shown. }
+  TTySinglePointerDraw = record
+    Shape: TTySinglePointerShape;
+    HasLabel: Boolean;
+    Text: string;
+    X, Y, W, H: Double;
+  end;
 
   { WHAT A POLAR POINTER DRAWS [Batch 111]: its shape, and its label's text
     and padded box (top-left, after the align and the confinement to the
@@ -187,7 +209,10 @@ type
       -- a rebuilt view's elements are new ones. No data.
       [Batch 125] 8 a toolbox icon. [Batch 126] 9 a brush cover's piece:
       HdSeries the brush component, HdRow the cover's serial, HdGen the
-      piece (TTyBrushPiece). No data. }
+      piece (TTyBrushPiece). No data. [Batch 129] 10 a timeline element:
+      HdRow the element, HdGen the render that made it. [Batch 132] 12 a
+      break area (BreakAreaClickAt), 13 a break's axis label
+      (BreakExpandClick): HdSeries and HdRow as those read them. }
     HdKind: Integer;
     HdGen: Integer;
     HdSeries, HdRow: Integer;
@@ -211,9 +236,17 @@ type
     { [Batch 114] a sankey: node rects by node index, and its links in a
       second set of rows (EdgeRows) }
     sskSankey,
+    { [Batch 118] a themeRiver's layer polygon, under the row its index is }
+    sskRiver,
+    { [Batch 120] a chord: node sectors by the store's raw rows, and its
+      ribbons in the second set of rows (EdgeRows) by raw link index }
+    sskChord,
     { [Batch 121] a lines row: its line the host, its end symbols parts
       whose states are the line's stroke and opacity }
     sskLines,
+    { [Batch 123] a custom item: its first path the host, every other path
+      of its tree a part with states of its own }
+    sskCustom,
     { [Batch 128] a parallel row: its polyline, states read lineStyle }
     sskParallel);
   TTyStNodeArray = array of TJSONObject;
@@ -343,6 +376,55 @@ type
     X, Y: Integer;
   end;
 
+  { [Batch 115] THE RETURN CIRCLE'S LAYOUT, as the virtual root's layout
+    stays after a roll-up (sunburstLayout only ever sets it) }
+  TTySunVirt = record
+    Has: Boolean;
+    CX, CY, R0, R: Double;
+  end;
+
+  { [Batch 115] ONE ANIMATION WRAP (util/animation.ts createWrap): done when
+    every element added has finished or been stopped }
+  TTyTmWrap = class
+  public
+    Pending: Integer;
+    Live: Boolean;
+    procedure Hit;
+  end;
+
+  { [Batch 115] A TREEMAP ELEMENT STILL LEAVING: the old rect and its words,
+    its row and kind (0 the background, 1 the content), and the proxy its
+    shape and opacity run on (nil: it is not animated) }
+  TTyTmGhost = record
+    Row, Kind: Integer;
+    El: TTyChartElement;
+    HasLabel: Boolean;
+    LabelEl: TTyChartElement;
+    P: TTyChartAnimProxy;
+    { its words' fade, still running from when it was new }
+    LP: TTyChartAnimProxy;
+  end;
+
+  { [Batch 115] A TREEMAP'S DRILL-DOWN (TreemapView._doAnimation): the
+    proxies of its node groups (x, y; a deleted group's too), its rects
+    (shape.x / y / width / height, style.opacity) and its labels' fades, by
+    row; the elements leaving; the layout and storage it left; the wrap }
+  TTyTmProxyPair = array[0..1] of TTyChartAnimProxy;
+  TTyTmAnim = record
+    Wrap: TTyTmWrap;
+    Groups: array of TTyChartAnimProxy;
+    Rects: array of TTyTmProxyPair;
+    Labels: array of TTyTmProxyPair;
+    GhostGroup: TTyBoolArray;
+    Ghosts: array of TTyTmGhost;
+    Old: TTyTreemapSolved;
+    OldHave: TTyTreemapHave;
+    { a frame has been stepped since the arming: until then a leaving
+      element is not dirty and its words stand where they were (setToFinal
+      copies the values without marking it) }
+    Stepped: Boolean;
+  end;
+
   TTyAdvanceChart = class(TTyCustomControl)
   private
     FOption: TTyChartOption;
@@ -356,6 +438,11 @@ type
     { THE POLARS of the last build, indexed by component index (a hole or a
       polar missing an axis is nil) [Batch 111] }
     FPolars: TTyPolarArray;
+    { THE SINGLE AXES of the last build, indexed by component index (a hole
+      is nil) [Batch 118] }
+    FSingles: TTySingleArray;
+    { EVERY themeRiver laid out, index-parallel to FBindings [Batch 118] }
+    FRivers: TTyThemeRiverLayoutArray;
     { THE PARALLELS of the last build, by component index (a hole is nil),
       each parallel series' rows as laid out (index-parallel to FBindings),
       and the active intervals each parallelAxis MODEL keeps -- by component
@@ -468,9 +555,39 @@ type
       cells when the layout is, so the specs are read then. [Batch 76] }
     FTreemaps: array of TTyTreemapSolved;
     FTreemapInks: array of TTyTreemapInk;
+    { [Batch 115] THE DRILL-DOWNS, by series index: a sunburst's view root
+      (0: none) and its return circle's last layout; a treemap's view (the
+      view root, and what the next render is for), its last solve and
+      element storage, and its drill-down animation. A new option (a merge
+      that visits the series too) forgets them all, as resetViewRoot does
+      on a new tree. }
+    FSunRoot: TTyIntegerArray;
+    FSunVirt: array of TTySunVirt;
+    { THE RETURN CIRCLE'S CLICK HANDLERS, by series index: SunburstView adds
+      one on every render while drilled and never takes one off (the piece
+      is kept), each bound to the view root's parent of its render; a
+      render at the root removes the piece, and them }
+    FSunHandlers: array of TTyIntegerArray;
+    FTmView: array of TTyTreemapView;
+    FTmPrev: array of TTyTreemapSolved;
+    FTmHave: array of TTyTreemapHave;
+    FTmAnim: array of TTyTmAnim;
+    { a press on a breadcrumb item: its series, its index, where }
+    FCrumbPressSeries, FCrumbPressIndex, FCrumbPressX, FCrumbPressY: Integer;
+    { a press that started on a breadcrumb item is not a treemap click }
+    FCrumbPressed: Boolean;
+    { THE HOVERED TREEMAP NODE (series, row; -1 none): zrender's hover
+      target, found before a pan's render moves the picture and kept by the
+      kept element through renders, until the pointer moves off it }
+    FTmHoverSeries, FTmHoverRow: Integer;
+    { the series a sunburst drill renders for: its pieces transition }
+    FHierDrill: TTyBoolArray;
     { THE SANKEYS and their inks, per slot. [Batch 79] }
     FSankeys: array of TTySankeySolved;
     FSankeyInks: array of TTySankeyInk;
+    { THE CHORDS and their inks, per slot. [Batch 120] }
+    FChords: array of TTyChordSolved;
+    FChordInks: array of TTyChordInk;
     { THE LINES SERIES by slot, solved in the layout pass; the slot the
       coordinate hook projects for; the trail's layer -- a lines series
       with effect.trailLength, faded by lastFrameAlpha every frame of the
@@ -479,6 +596,24 @@ type
     FLinesSpecs: TTyLabelSpecTable;
     FLnSlot: Integer;
     FTrailLayer: TBGRABitmap;
+    { THE CUSTOM SERIES [Batch 123]: one view per series index (its group
+      of item roots and its last data, kept across updates for the merge
+      by data id); the element each paint list entry was made from (nil for
+      the rest); the action the running update is for (renderItem's
+      actionType); each slot's clip (css px); and, while renderItem runs,
+      the slot, its handler, its params and its api }
+    FCustomViews: array of TTyCustomView;
+    FCustomPaintEls: TTyGfxElArray;
+    FCustomAction: string;
+    FCustomClipOn: TTyBoolArray;
+    FCustomClip: array of TTyXYWH;
+    FCustomSlot: Integer;
+    FCustomHandler: TTyChartRenderItem;
+    FCustomParams: TTyCustomParams;
+    FCustomApi: TObject;
+    FCustomMissing: string;
+    { the custom elements' transitions' own driver [Batch 124] }
+    FCuAnim: TTyAnimation;
     { ONE VIEW PER GRAPH SERIES, not one per component: a graph's coordinate
       system belongs to the series, so these are indexed by BINDING slot and
       most of them are nil. A graph on AXES has none either -- its coordinate
@@ -693,6 +828,25 @@ type
     FVmLive: array of TTyVmLive;
     FVmIndBag, FVmLabBag: array of TTyAnimBag;
     FVmAnim: TTyAnimation;
+    { THE GRAPHIC COMPONENT [Batch 122]: its model (the flattened element
+      list and the options pending for the view), its view (the elements by
+      id), the view's own animation driver; a fresh option's init still to
+      run; a render pending (an update, a new model); the size it was
+      placed at; and the last build's paint elements, each with the element
+      it came from (a textContent's own) -- the list's first entries, and
+      the ones under the axes painted before them }
+    FGfxModel: TTyGfxModel;
+    FGfxView: TTyGfxView;
+    FGfxAnim: TTyAnimation;
+    FGfxFresh, FGfxPending: Boolean;
+    FGfxW, FGfxH: Double;
+    FGfxPaint: array of TTyChartElement;
+    FGfxPaintEl: TTyGfxElArray;
+    FGfxUnder: TTyPaintList;
+    { a draggable element being dragged: its id and the last point }
+    FGfxDragOn: Boolean;
+    FGfxDragId: string;
+    FGfxDragX, FGfxDragY: Integer;
     FVmRangeHas: array of Boolean;
     FVmRange0, FVmRange1: TTyDoubleArray;
     FVmSel: TTyStringArray;
@@ -773,6 +927,13 @@ type
     FTbBfSnapType: TTyBrushType;
     FTbError: string;
     FOnToolboxSaveAsImage: TTyToolboxSaveEvent;
+    { THE TIMELINE [Batch 129] -- see its section }
+    FTlView: TTyTimelineView;
+    FTlAnim: TTyAnimation;
+    FTlUidSeq: Integer;
+    FTlNow, FTlDue: Double;
+    FTlTimer: TTimer;
+    FTlDragging, FTlStatesDirty: Boolean;
     { THE BRUSH COMPONENTS [Batch 126] -- see their section. Per component:
       the model from its option, the areas and the painting option the
       model keeps (a merge keeps them, a notMerge does not), the view's
@@ -1339,6 +1500,30 @@ type
     function TbEmphasised(ATb, AIcon: Integer): Boolean;
     function BuildToolboxes(AList: TTyPaintList; const AMeasurer: ITyTextMeasurer): Integer;
     function TbHitAt(AX, AY: Integer; out ATb, AIcon: Integer): Boolean;
+    { ---- the timeline [Batch 129] ---- }
+    function TlInk: TTyTimelineInk;
+    function TlClock: Double;
+    function TlLive: Boolean;
+    function TlNode: TJSONObject;
+    function TlCurrentIndex: Double;
+    function TlAnimCfg: TTyTlAnimCfg;
+    procedure SolveTimeline(APPI: Integer);
+    function BuildTimeline(AList: TTyPaintList): Integer;
+    function TlHitAt(AX, AY: Integer; out AEl: Integer): Boolean;
+    procedure TlArmTimer;
+    procedure TlTimerFired(Sender: TObject);
+    procedure TlChange(AIndex: Double; AHasIndex: Boolean);
+    procedure TlClick(AEl: Integer);
+    procedure TlMouseOver(const ATarget: TTyChartEventTarget);
+    procedure TlMouseOut(const ATarget: TTyChartEventTarget);
+    procedure TlApplyStates;
+    procedure TlDragStart(const ATarget: TTyChartEventTarget);
+    procedure TlPointerChange(AX, AY: Integer; ATrigger: Boolean);
+    procedure TlDragMove(AX, AY: Integer);
+    procedure TlDragEnd(AX, AY: Integer);
+    procedure TlMerge;
+    procedure DoTimelineChange(APayload: TJSONObject);
+    procedure DoTimelinePlayChange(APayload: TJSONObject);
     procedure TbChanged;
     procedure TbMouseOver(const ATarget: TTyChartEventTarget);
     procedure TbMouseOut(const ATarget: TTyChartEventTarget);
@@ -1558,6 +1743,24 @@ type
     procedure FreeRadars;
     { the polars go with the build [Batch 111] }
     procedure FreePolars;
+    { the singles go with the build [Batch 118] }
+    procedure FreeSingles;
+    { every single's axis view: the grid layer (split areas and lines) with
+      ABelow, the line, ticks, labels and name without [Batch 118] }
+    procedure PaintSingles(APainter: TTyPainter; APPI: Integer;
+      const AMeasurer: ITyTextMeasurer; ABelow: Boolean);
+    procedure PaintSinglePointer(APainter: TTyPainter; const ARect: TRect;
+      APPI: Integer; const AMeasurer: ITyTextMeasurer; const AHit: TTyAxisHit);
+    { themeRiverLayout over every themeRiver, after the singles are laid out
+      [Batch 118] }
+    procedure SolveRivers(APPI: Integer);
+    { a themeRiver's label spec: the series' label over the type's defaults
+      (show, 11 px) [Batch 118] }
+    function RiverLabelSpec(ASlot: Integer): TTyLabelSpec;
+    function RiverEmphasisLabelOff(ASlot: Integer): Boolean;
+    { a themeRiver's polygons into the list [Batch 118] }
+    function BuildRiverMarks(ASlot: Integer; AList: TTyPaintList;
+      APPI: Integer): Integer;
     { [Batch 128] the parallels go with the build; a parallel series' store,
       its rows laid out, the axes painted, the action's intervals written
       (True when an axis took them) and the parallel an axis stands on }
@@ -1584,6 +1787,25 @@ type
     procedure SolveSunbursts(APPI: Integer);
     procedure SolveTreemaps(const AMeasurer: ITyTextMeasurer; APPI: Integer);
     procedure SolveSankeys(APPI: Integer);
+    procedure SolveChords(APPI: Integer);
+    { [Batch 123] the custom series: every renderItem of every series
+      shown, its view merged; the columns an encode spreads over one axis;
+      the paint elements; the states }
+    procedure SolveCustom(APPI: Integer);
+    function CustomCall(AIndexInside: Integer): TJSONData;
+    procedure CustomDims(ASlot: Integer; var ADims: TTySeriesDimArray);
+    function CustomBuild(ASlot: Integer; AList: TTyPaintList; APPI: Integer): Integer;
+    function CustomVisualFill(ASlot, ARow: Integer): TJSONData;
+    procedure StDeclareCustom(ASlot, ARaw: Integer; AList: TTyPaintList);
+    { [Batch 124] the custom transitions' driver has clips; a custom series
+      on no coordinate system; an item's root info (nil none); a visualMap's
+      row for a custom item; whether a paint element sits under an element
+      with tooltipDisabled }
+    function CuLive: Boolean;
+    function CustomOnNone(ASlot: Integer): Boolean;
+    function CustomRootInfo(ASeriesIndex, AInside: Integer): TTyCustomElInfo;
+    function CustomVisualRow(ASlot, ARow: Integer; out AVisual: TTyVisualRow): Boolean;
+    function CustomTipDisabled(AElement: Integer): Boolean;
     { [Batch 121] }
     procedure SolveLines(APPI: Integer);
     function LinesProject(const AX, AY: TTyLinesValue; AClamp: Boolean): TTyPointF;
@@ -1732,6 +1954,8 @@ type
       AFrom: Boolean): TTyConvertResult;
     function ConvertOnPolar(APolar: TTyPolar; AValue: TJSONData;
       AFrom: Boolean): TTyConvertResult;
+    function ConvertOnSingle(ASingle: TTySingle; AValue: TJSONData;
+      AFrom: Boolean): TTyConvertResult;
     function ContainSeries(ASeriesIndex: Integer; APoint: TJSONData): Boolean;
     { Which row of a series a point is over, asked of the BASE axis.
 
@@ -1761,6 +1985,42 @@ type
       FGraphEdges of ASlot. }
     procedure GraphEdgeLabels(ASlot: Integer; var AInk: TTyGraphInk);
     function DoViewAction(const AType: string; APayload: TJSONObject): Boolean;
+    { ---- the drill-downs [Batch 115] ---- }
+    { a new tree: the view roots, the storage and the animation go }
+    procedure HierDrillReset;
+    { a row of a hierarchy series by upstream's getNodeById, -1 for none }
+    function HierRowOfId(ASlot: Integer; const AId: string): Integer;
+    { a node's id, for an event's targetNode }
+    function HierIdOfRow(ASlot, ARow: Integer): string;
+    { retrieveTargetInfo: targetNode (an id), else targetNodeId; -1 }
+    function HierTarget(ASlot: Integer; APayload: TJSONObject): Integer;
+    { the series an action's query names (none: every one of the type) }
+    function HierQuery(APayload: TJSONObject; const AType: string): TTyIntegerArray;
+    function DoSunAction(APayload: TJSONObject): Boolean;
+    function DoTreemapAction(const AType: string; APayload: TJSONObject;
+      const AEventJson: string = ''): Boolean;
+    { a new tree or a drill took the hovered element away }
+    procedure TmHoverCheck;
+    { the render an action asks for, then its event }
+    procedure HierUpdate(const AEventType, APayloadJson: string);
+    procedure SunburstClick(ASeries, ARow: Integer);
+    procedure TreemapClick(ASeries, AX, AY: Integer);
+    function CrumbAt(AX, AY: Integer; out ASeries, AIndex: Integer): Boolean;
+    procedure TreemapCrumbSelect(ASeries, AIndex: Integer);
+    function TreemapPan(ASeries, ADX, ADY: Integer): Boolean;
+    function TreemapWheel(ASeries: Integer; AScale: Double; AX, AY: Integer): Boolean;
+    function TreemapRoamOk(ASlot: Integer; AZoom: Boolean): Boolean;
+    function TmRowsOf(ASeries: Integer; out ASlot: Integer): Boolean;
+    { the drill-down's animation: armed by a render, a frame of it, its end }
+    procedure TmAnimArm(ASlot: Integer; const AView: TTyTreemapView;
+      const AOld: TTyTreemapSolved; const AOldHave: TTyTreemapHave; ADirection: Integer);
+    procedure TmAnimDrop(ASeries: Integer);
+    procedure TmAnimDropAll;
+    function TmAnimAny: Boolean;
+    procedure TmWrapCheck;
+    procedure TreemapFrame(AFrame: TTyPaintList);
+    function IsTreemapDatum(const ADatum: TTyChartDatumRef): Boolean;
+    procedure ApplyTreemapHover(AList: TTyPaintList);
     function GraphEmphasisOf(ASlot: Integer; AIsEdge: Boolean;
       AIndex: Integer): TTyChartEmphasisSpec;
     { THE HOVER, APPLIED TO THE GRAPHS IN THE LIST: every element of the
@@ -1868,6 +2128,9 @@ type
     { What the polar bar solve gave a series [Batch 113]: unsolved where it
       is not a bar on a polar. }
     function PolarBarOf(ASeriesIndex: Integer): TTyPolarBarLayout;
+    { What the themeRiver layout gave a series [Batch 118]: not Valid where
+      it is no themeRiver. }
+    function RiverLayoutOf(ASeriesIndex: Integer): TTyThemeRiverLayout;
     { What every render measures its text with: the painter's own, in the
       theme's fonts. Virtual so a text table -- zrender's, for a chart laid
       out against upstream's -- can stand in for the fonts. }
@@ -1991,6 +2254,14 @@ type
     function PolarPointerGeometry(const AHit: TTyAxisHit; const ARect: TRect;
       const AMeasurer: ITyTextMeasurer; APPI: Integer;
       out ADraw: TTyPolarPointerDraw): Boolean;
+    { A SINGLE AXIS HIT'S POINTER as it is drawn [Batch 118]:
+      SingleAxisPointer's line or shadow at dataToPoint(value)[0], and its
+      label -- buildCartesianSingleLabelElOption's place, the value's text
+      in the pointer label's font, padded, kept inside the control (ARect).
+      False when the hit is not a single one. }
+    function SinglePointerGeometry(const AHit: TTyAxisHit; const ARect: TRect;
+      const AMeasurer: ITyTextMeasurer; APPI: Integer;
+      out ADraw: TTySinglePointerDraw): Boolean;
     { WHAT THE TOOLTIP WOULD SAY, in four answerable pieces rather than one
       procedure that draws. PROTECTED for the same reason RenderTo is: a
       headless test has no window and no pointer, and a content rule tested
@@ -2042,6 +2313,28 @@ type
     procedure EventDblClick(AX, AY: Integer);
     procedure EventContextMenu(AX, AY: Integer);
     procedure EventLeave(AX, AY: Integer);
+    { ---- the graphic component [Batch 122] ---- }
+    { a merge's report: the model's optionUpdated (or a new model, or none) }
+    procedure GfxPass(const AReport: TTyMergeReport);
+    { a fresh option: a new model from the tree }
+    procedure GfxInitFromTree;
+    { the model's list into the option tree, as getOption shows it }
+    procedure GfxWriteBack;
+    function GfxAnimSettings: TTyGfxAnimSettings;
+    { the view rendered (an update pending) or placed (a new size), made
+      ready, and turned into paint elements }
+    procedure GfxBuild(APPI: Integer);
+    { the elements under the axes }
+    procedure GfxPaintUnder(APainter: TTyPainter);
+    function GfxLive: Boolean;
+    { an element's handlers, bubbling up its groups: True when one asked to
+      stop (no chart event follows) }
+    function GfxElementEvent(const AType: string; const ATarget: TTyChartEventTarget;
+      AX, AY: Integer): Boolean;
+    { zrender's Draggable: a press on a draggable element (or one under a
+      draggable group) starts a drag, every move drifts it, a release ends it }
+    procedure GfxDragStart(const ATarget: TTyChartEventTarget; AX, AY: Integer);
+    procedure GfxDragMove(AX, AY: Integer);
     { ---- element states and the selection [Batch 88] ---- }
     function StKindOf(ASlot: Integer): TTyStKind;
     function StSeriesNode(ASeriesIndex: Integer): TJSONObject;
@@ -2077,6 +2370,11 @@ type
     function StNodes(ASeriesIndex, ARaw: Integer): TTyStNodeArray;
     function StEdgeNodes(ASeriesIndex, AEdge: Integer): TTyStNodeArray;
     function StIsSankey(ASeriesIndex: Integer): Boolean;
+    { [Batch 120] a chord; a series with an edge data's rows (a sankey's,
+      a chord's) }
+    function StIsChord(ASeriesIndex: Integer): Boolean;
+    function StHasEdges(ASeriesIndex: Integer): Boolean;
+    procedure StDeclareChordEdge(ASlot, AEdge: Integer; AList: TTyPaintList);
     procedure StSankeyCurveFill(ASlot, AEdge: Integer;
       const ANodes: TTyStNodeArray; const AState: string; var AObj: TTyStObject);
     procedure StDeclareEdge(ASlot, AEdge: Integer; AList: TTyPaintList);
@@ -2179,6 +2477,7 @@ type
     function RoamSeriesAt(AX, AY: Integer; AZoom: Boolean): Integer;
     function IsTreeSeries(ASeriesIndex: Integer): Boolean;
     function IsSankeySeries(ASeriesIndex: Integer): Boolean;
+    function IsTreemapSeries(ASeriesIndex: Integer): Boolean;
     { the node drags [Batch 114] }
     procedure GraphDragMove(AX, AY: Integer);
     procedure GraphDragEnd;
@@ -2307,6 +2606,17 @@ type
     property ToolboxCursorName: string read FTbCursor;
     { why the last data view's text was not merged ('' when it was) }
     property ToolboxError: string read FTbError;
+    { ---- THE TIMELINE [Batch 129] ----
+      The first timeline's view as the last render left it (nil without a
+      timeline): its elements, their roles and states, the model it read.
+      TimelineNow is the play timer's clock (ms; NaN, the default, is the
+      machine's -- and only then does a timer run); TimelineTick fires every
+      play timer due by ANowMs; TimelineDue is the pending one's due instant
+      (NaN for none). }
+    function TimelineView: TTyTimelineView;
+    function TimelineDue: Double;
+    procedure TimelineTick(ANowMs: Double);
+    property TimelineNow: Double read FTlNow write FTlNow;
     { ---- THE BRUSH COMPONENTS [Batch 126] ----
       Per brush component: its controller (the panels, the covers and their
       shapes, the drawing state; CSS px) and the areas its model keeps. The
@@ -2466,6 +2776,8 @@ type
       has no element the state machine speaks for. }
     { a sankey link's state record, by link index [Batch 114] }
     function SankeyEdgeStates(ASeriesIndex, AEdge: Integer; out AItem: TTyStItem): Boolean;
+    { a chord ribbon's state record, by raw link index [Batch 120] }
+    function ChordEdgeStates(ASeriesIndex, AEdge: Integer; out AItem: TTyStItem): Boolean;
     { a force graph's preserved state and running instance [Batch 114] }
     function GraphForceState(ASeriesIndex: Integer): TTyGraphForceState;
     function ItemStates(ASeriesIndex, ADataIndex: Integer;
@@ -2615,6 +2927,52 @@ type
       ALocalX: Double; AHasY: Boolean; ALocalY: Double): Boolean;
     { the solved sankey, for a test to read (Valid False: none) [Batch 114] }
     function SankeySolved(ASeriesIndex: Integer): TTySankeySolved;
+    { the solved chord, for a test to read (Valid False: none) [Batch 120] }
+    function ChordSolved(ASeriesIndex: Integer): TTyChordSolved;
+    { THE GRAPHIC COMPONENT, for a test to read [Batch 122]: the view (its
+      elements by id), the model (nil: none), the last build's paint
+      elements and the element each came from }
+    function GraphicView: TTyGfxView;
+    function GraphicModel: TTyGfxModel;
+    function GraphicPaintCount: Integer;
+    function GraphicPaintElement(AIndex: Integer): TTyChartElement;
+    function GraphicPaintSource(AIndex: Integer): TTyGfxEl;
+    { THE CUSTOM SERIES, for a test to read [Batch 123]: series
+      ASeriesIndex's view (nil: none), the element a paint list entry was
+      made from (nil: not a custom series'), and the series' clip in css px
+      (False: none) }
+    function CustomView(ASeriesIndex: Integer): TTyCustomView;
+    function CustomPaintSource(AIndex: Integer): TTyGfxEl;
+    function CustomClip(ASeriesIndex: Integer; out ARect: TTyXYWH): Boolean;
+    { ---- the drill-downs [Batch 115] ---- }
+    { upstream's sunburstRootToNode on the sunburst ASeriesIndex: the view
+      root becomes ARow (a row of its tree; 0 the root) -- what a click on a
+      piece and on the return circle dispatch; its event follows }
+    function SunburstRootToNode(ASeriesIndex, ARow: Integer): Boolean;
+    { the sunburst's view root (0: none) }
+    function SunburstViewRoot(ASeriesIndex: Integer): Integer;
+    { the solved sunburst and treemap, for a test to read (Valid False:
+      none) }
+    function SunburstSolved(ASeriesIndex: Integer): TTySunburstSolved;
+    function TreemapSolved(ASeriesIndex: Integer): TTyTreemapSolved;
+    { the treemap's element storage (which rows have a group, a background,
+      a content) }
+    function TreemapHave(ASeriesIndex: Integer): TTyTreemapHave;
+    { upstream's treemapZoomToNode / treemapRootToNode on the treemap
+      ASeriesIndex, the target a row of its tree }
+    function TreemapZoomToNode(ASeriesIndex, ARow: Integer): Boolean;
+    function TreemapRootToNode(ASeriesIndex, ARow: Integer): Boolean;
+    { treemapMove / treemapRender: the root at the rect (x, y; its size for
+      the render, through scaleLimit) }
+    function TreemapMoveTo(ASeriesIndex: Integer; AX, AY, AW, AH: Double;
+      AZoom: Boolean): Boolean;
+    { the treemap's drill-down is running (TreemapView._state 'animating'):
+      a click, a pan, a wheel does nothing }
+    function TreemapAnimating(ASeriesIndex: Integer): Boolean;
+    { the proxies of a treemap's drill-down, for a test: AKind 'group',
+      'bg', 'ct', 'label' (the content's words), 'upper'; nil for none }
+    function TreemapAnimProxy(ASeriesIndex, ARow: Integer; const AKind: string): TTyChartAnimProxy;
+    function TreemapGhostCount(ASeriesIndex: Integer): Integer;
     { whether the row is expanded now, the toggles applied }
     function TreeExpanded(ASeriesIndex, ADataIndex: Integer): Boolean;
     { The centre and zoom as the OPTION now says them -- the series' own
@@ -2637,6 +2995,10 @@ type
     { Polar component AIndex as the last render laid it out -- its centre,
       its two axes and both axis views -- or nil [Batch 111]. }
     function PolarCount: Integer;
+    { singleAxis component AIndex as the last render laid it out -- its
+      rect, its axis and its view -- or nil [Batch 118]. }
+    function SingleCount: Integer;
+    function SingleLayout(AIndex: Integer): TTySingle;
     function PolarLayout(AIndex: Integer): TTyPolar;
     { Parallel component AIndex as the last render laid it out -- its box,
       its axes, their places and views, their active intervals -- or nil;
@@ -2881,20 +3243,33 @@ begin
   FRoamSeries := -1;
   FGraphDragSlot := -1;
   FSankeyDragSlot := -1;
+  FCrumbPressSeries := -1;
+  FTmHoverSeries := -1;
+  FTmHoverRow := -1;
   FDzFrom := -1;
   FDzPanGrid := -1;
   FDzNow := NaN;
   FAnimNow := NaN;
   FAnimMode := camAuto;
   FProgStepCost := NaN;
+  FGfxAnim := TTyAnimation.Create;
+  FGfxView := TTyGfxView.Create;
+  FGfxView.Animation := FGfxAnim;
+  FGfxUnder := TTyPaintList.Create;
+  FCuAnim := TTyAnimation.Create;
+  FGfxW := NaN;
+  FGfxH := NaN;
   FTbStatus := TStringList.Create;
   FTbBrushGrid := -1;
   FBrushNow := NaN;
   FParBrushSkip := -1;
   FBrushTickPrev := NaN;
+  FTlNow := NaN;
+  FTlDue := NaN;
 end;
 
 destructor TTyAdvanceChart.Destroy;
+var i: Integer;
 begin
   { Order is a contract, not a habit: a store BORROWS its category list from an
     axis the build owns, so every store goes first. }
@@ -2921,6 +3296,7 @@ begin
   { THE PROXIES BEFORE THE DRIVER: freeing one takes its clips off it }
   FreeAndNil(FAnimTimer);
   AxisAnimDrop;
+  TmAnimDropAll;
   FreeAndNil(FAxisProxies);
   FreeAndNil(FAxisList);
   FreeAndNil(FAnimSet);
@@ -2940,6 +3316,21 @@ begin
   LoadDrop;
   FreeAndNil(FLoadAnim);
   FreeAndNil(FAnimOldBuild);
+  { THE ELEMENTS BEFORE THEIR DRIVER [Batch 122] }
+  FGfxPaintEl := nil;
+  FreeAndNil(FGfxView);
+  { the timeline's too [Batch 129] }
+  FreeAndNil(FTlTimer);
+  FreeAndNil(FTlView);
+  FreeAndNil(FTlAnim);
+  for i := 0 to High(FCustomViews) do FreeAndNil(FCustomViews[i]);
+  FCustomViews := nil;
+  FCustomPaintEls := nil;
+  FreeAndNil(FGfxModel);
+  FreeAndNil(FGfxAnim);
+  { after the custom views, whose elements' animators it drives [Batch 124] }
+  FreeAndNil(FCuAnim);
+  FreeAndNil(FGfxUnder);
   inherited Destroy;
 end;
 
@@ -2951,6 +3342,7 @@ begin
   FStores := nil;
   FBarCols := nil;
   FPolarBars := nil;
+  FRivers := nil;
   FWhiskers := nil;
   FStacks := nil;
 end;
@@ -2974,6 +3366,7 @@ begin
   FreeGraphs;
   FreeTreeViews;
   FreePolars;
+  FreeSingles;
   FreeParallels;
   FParSolved := nil;
   FTrees := nil;
@@ -2982,6 +3375,8 @@ begin
   FTreemapInks := nil;
   FSankeys := nil;
   FSankeyInks := nil;
+  FChords := nil;
+  FChordInks := nil;
   FRadarDims := nil;
   FreeStores;
   FBindings := nil;
@@ -3121,7 +3516,10 @@ begin
   FAnimHasPayload := False;
   { the media are asked at the control's size [Batch 107] }
   MediaViewSize;
+  { a new graphic model, from the fresh tree [Batch 122] }
+  FGfxFresh := True;
   FOption.SetOptionText(AValue, AReplace, @NotMergePass);
+  if FGfxFresh then GfxInitFromTree;
   { A NEW GlobalModel: a new decal scope, and aria on where the option
     wrote an aria object [Batch 131] }
   FDecalScope := Default(TTyDecalScope);
@@ -3140,6 +3538,8 @@ begin
   FTreeRoam := nil;
   FTreeBox := nil;
   FTreeBoxHas := nil;
+  { new series models: new trees, so no view root [Batch 115] }
+  HierDrillReset;
   FPressArmed := False;
   FRoamSeries := -1;
   FGraphDragSlot := -1;
@@ -3178,6 +3578,13 @@ begin
   { THE BRUSH COMPONENTS: new models (no areas, no painting option) and new
     views (no covers) [Batch 126] }
   BrushReset;
+  { THE TIMELINE'S VIEW goes with its model: its timer and its checkpoint
+    with it [Batch 129] }
+  FreeAndNil(FTlView);
+  FTlDue := NaN;
+  FTlDragging := False;
+  FTlStatesDirty := False;
+  TlArmTimer;
   { new series models: no selection [Batch 88]. AN ELEMENT SURVIVES where
     the view and the row do: upstream diffs the new data against the old
     and keeps its hoverState and __highByOuter bits [Batch 96] }
@@ -3338,6 +3745,12 @@ begin
         else FAxisMemory.Forget('radiusAxis' + IntToStr(s));
       end;
   end;
+  { and a single axis [Batch 118] }
+  si := TyMergeSlotsIndex(AReport, TySingleCoordSysName);
+  if si >= 0 then
+    for s := 0 to High(AReport.Slots[si].Brand) do
+      if AReport.Slots[si].Brand[s] then
+        FAxisMemory.Forget(TySingleCoordSysName + IntToStr(s));
   { a parallelAxis brought in new: a new model, no active intervals, its
     memory over [Batch 128] }
   si := TyMergeSlotsIndex(AReport, 'parallelAxis');
@@ -3359,6 +3772,8 @@ end;
 procedure TTyAdvanceChart.NotMergePass(const AReport: TTyMergeReport);
 var si, s: Integer;
 begin
+  { the graphic model's optionUpdated [Batch 122] }
+  GfxPass(AReport);
   si := TyMergeSlotsIndex(AReport, 'series');
   if si >= 0 then
     for s := 0 to High(AReport.Slots[si].Brand) do
@@ -3627,6 +4042,8 @@ begin
     every option the preprocessors saw; the media default they never see
     visits the series only where it writes them [Batch 107] }
   if si >= 0 then FTreeToggled := nil;
+  { and resetViewRoot finds its node in no new tree [Batch 115] }
+  if si >= 0 then HierDrillReset;
 
   { ---- by dataZoom: an action's window stays unless the merge wrote over
     it (MergeBefore); a new model has none ---- }
@@ -3799,6 +4216,7 @@ var
   typeInfo: TTySeriesTypeInfo;
   radarSpec: TTyRadarSpec;
   polarMissing: TTyStringArray;
+  ax: TTyAxis;
 begin
   DropBuild;
   FBuild := TyBuildGrids(FOption, FLastRect);
@@ -3811,6 +4229,8 @@ begin
     FBuild.Note(Format(rsTyChartPolarNoAxis, [StrToIntDef(Copy(polarMissing[i], 1, j - 1), -1),
       Copy(polarMissing[i], j + 1, MaxInt)]));
   end;
+  { THE SINGLE AXES: their boxes, axes and extents along them [Batch 118] }
+  FSingles := TyBuildSingles(FOption, FLastRect);
   { THE PARALLELS beside them: their axes, their boxes, and each axis' active
     intervals from its model [Batch 128] }
   FParallels := TyBuildParallels(FOption, FLastRect);
@@ -3822,6 +4242,8 @@ begin
   FBindings := TyBindSeries(FOption, FBuild);
   { A SERIES ON A POLAR takes the polar's axes [Batch 113] }
   TyAttachPolarSeries(FBindings, FPolars);
+  { AND ONE ON A SINGLE AXIS its axis [Batch 118] }
+  TyAttachSingleSeries(FBindings, FSingles);
   { and one on a parallel its parallel [Batch 128] }
   for i := 0 to High(FBindings) do
     if FBindings[i].Resolved and (FBindings[i].ParallelIndex >= 0)
@@ -3889,7 +4311,26 @@ begin
         FBindings[i].SeriesIndex, FDatasetCache);
       if not FSources[i].Valid then FSeriesDataset[i] := -1;
     end;
-    if (not FBindings[i].HasAxes) and (FBindings[i].Polar = nil) then
+    { A THEMERIVER'S ROWS ARE getInitialData's: the items with a name and
+      fixData's zeros, time and value, the names the rows' [Batch 118] }
+    if (FBindings[i].SeriesType = TyThemeRiverSeriesTypeName) then
+    begin
+      if FBindings[i].Single <> nil then
+      begin
+        { getDimensionTypeByAxis: a time axis' time, a value axis' float --
+          and a category axis' 'ordinal', which with no categories of its
+          own keeps the raw values: a name is not a number to dataToPoint
+          ('+val'), a number is, as a float column reads them }
+        ax := TTySingle(FBindings[i].Single).Axis;
+        if ax.AxisType = atTime then
+          TyThemeRiverFillStore(FOption, FBindings[i].SeriesIndex, ddtTime, nil, st)
+        else
+          TyThemeRiverFillStore(FOption, FBindings[i].SeriesIndex, ddtFloat, nil, st);
+      end;
+      Continue;
+    end;
+    if (not FBindings[i].HasAxes) and (FBindings[i].Polar = nil)
+      and (FBindings[i].Single = nil) and not CustomOnNone(i) then
     begin
       { A SERIES OFF EVERY COORDINATE SYSTEM HAS DATA TOO, and until now
         only a pie got any: the columns below are the coordinate system's
@@ -3936,6 +4377,13 @@ begin
         value column, read from `data` or from `nodes`, its second name.
         A graph on AXES is not here at all -- it has the axes' columns, below. }
       if FBindings[i].SeriesType = TyGraphSeriesTypeName then
+      begin
+        TyGraphFillStore(FOption, i, st);
+        Continue;
+      end;
+      { A CHORD'S NODES are its rows the graph's way too: `data || nodes`,
+        one value column, the names the legend lists [Batch 120] }
+      if FBindings[i].SeriesType = TyChordSeriesTypeName then
       begin
         TyGraphFillStore(FOption, i, st);
         Continue;
@@ -4007,6 +4455,22 @@ begin
       the store filled as a cartesian series' is [Batch 113] }
     if FBindings[i].Polar <> nil then
       dims := TySeriesCoordSysDims(TTyPolar(FBindings[i].Polar), 0)
+    { ON A SINGLE AXIS: its one column, the single dimension [Batch 118] }
+    else if FBindings[i].Single <> nil then
+      dims := TySeriesCoordSysDims(TTySingle(FBindings[i].Single), 0)
+    { A CUSTOM SERIES ON NO COORDINATE SYSTEM ('none'): getCoordSysDimDefs'
+      last resort, the dimensions x and y, as floats; the rest of a row the
+      store keeps by position [Batch 124] }
+    else if FBindings[i].Cart = nil then
+    begin
+      SetLength(dims, 2);
+      dims[0] := Default(TTySeriesDim);
+      dims[0].Name := 'x';
+      dims[0].Kind := ddtFloat;
+      dims[1] := Default(TTySeriesDim);
+      dims[1].Name := 'y';
+      dims[1].Kind := ddtFloat;
+    end
     else
       dims := TySeriesCartesianDims(FBindings[i].Cart, 0);
     { A SERIES WHOSE TYPE DECLARES MORE THAN A PAIR gets those columns
@@ -4016,6 +4480,9 @@ begin
       other three away. The axis then sized itself from a quarter of its own
       data and the renderer found no columns to read. }
     MultiValueDims(FBindings[i], dims);
+    { a custom series' encode may spread one coordinate over several
+      columns (a span's start and end) [Batch 123] }
+    CustomDims(i, dims);
     for k := 0 to High(dims) do
     begin
       st.AddDimension(dims[k].Name, dims[k].Kind);
@@ -4144,6 +4611,9 @@ begin
     series on them, the stacks and the dataZoom windows [Batch 113] }
   TyPolarApplyExtents(FOption, FPolars, FBindings, FStores, FStacks, FIndex,
     FAxisZooms);
+  { AND THE SINGLES' [Batch 118] }
+  TySingleApplyExtents(FOption, FSingles, FBindings, FStores, FStacks, FIndex,
+    FAxisZooms);
   { AND THE PARALLELS' (Parallel.update) [Batch 128] }
   TyParallelApplyExtents(FOption, FParallels, FBindings, FStores, FStacks, FIndex);
   { LAST, ON THE VIEWS THE FILTERS LEFT: dataColorPaletteTask is a visual
@@ -4205,7 +4675,9 @@ begin
     if not ((typ = 'bar') or (typ = 'line') or (typ = 'scatter')
       or (typ = 'effectScatter') or (typ = 'pictorialBar')
       or (typ = TyPieSeriesTypeName) or (typ = 'funnel') or (typ = 'gauge')
-      or (typ = 'radar')) then Continue;
+      or (typ = 'radar') or (typ = TyThemeRiverSeriesTypeName)
+      { a chord's nodes, colorBy 'data' by default [Batch 120] }
+      or (typ = TyChordSeriesTypeName)) then Continue;
     cb := TyChartColorByOf(FOption, si, typ);
     if cb = 'series' then Continue;
     { the scope first, whether or not a row asks: upstream hands every such
@@ -4267,9 +4739,18 @@ begin
   if (FOption = nil) or (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
   { a dataset's rows are no option items }
   if (ASlot <= High(FSeriesDataset)) and (FSeriesDataset[ASlot] >= 0) then Exit;
+  { nor a themeRiver's: its rows are the kept items and fixData's zeros
+    [Batch 118] }
+  if FBindings[ASlot].SeriesType = TyThemeRiverSeriesTypeName then Exit;
   d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if not (d is TJSONObject) then Exit;
-  d := TJSONObject(d).Find('data');
+  { a chord's nodes are `data || nodes` [Batch 120] }
+  if (FBindings[ASlot].SeriesType = TyChordSeriesTypeName)
+    and ((TJSONObject(d).Find('data') = nil)
+      or (TJSONObject(d).Find('data').JSONType = jtNull)) then
+    d := TJSONObject(d).Find('nodes')
+  else
+    d := TJSONObject(d).Find('data');
   if not (d is TJSONArray) then Exit;
   if (ARaw < 0) or (ARaw >= TJSONArray(d).Count) then Exit;
   d := TJSONArray(d).Items[ARaw];
@@ -4450,6 +4931,13 @@ begin
     end;
     Exit;
   end;
+  { a single axis: the component's own [Batch 118] }
+  if ADim = TySingleDim then
+  begin
+    if (AIndex >= 0) and (AIndex <= High(FSingles)) and (FSingles[AIndex] <> nil) then
+      Result := FSingles[AIndex].Axis;
+    Exit;
+  end;
   if FBuild <> nil then Result := FBuild.Axis(ADim + 'Axis', AIndex);
 end;
 
@@ -4618,9 +5106,9 @@ begin
       begin
         si := feeders[c];
         if (si < 0) or (si > High(FStores)) or (FStores[si] = nil) then Continue;
-        { a polar's series too [Batch 113] }
+        { a polar's series too [Batch 113], and a single axis' [Batch 118] }
         if (FBindings[si].CoordSysName <> 'cartesian2d')
-          and (FBindings[si].Polar = nil) then Continue;
+          and (FBindings[si].Polar = nil) and (FBindings[si].Single = nil) then Continue;
         if si <= High(FStacks) then
           cols := TyAxisDataDims(FStores[si], ax, FBindings[si], FStacks[si])
         else
@@ -4765,6 +5253,13 @@ begin
   TyLayoutPolars(FPolars, FOption, AMeasurer, APPI, txt,
     ActiveController.Metric(TyAdvChartMinorTickLenVar, TyAdvChartMinorTickLen),
     FAxisMemory);
+  { THE SINGLE AXES' VIEWS, in the same fonts and gaps [Batch 118] }
+  TyLayoutSingles(FSingles, FOption, AMeasurer, APPI, txt,
+    ActiveController.Metric(TyAdvChartMinorTickLenVar, TyAdvChartMinorTickLen),
+    ActiveController.Metric(TyAdvChartSingleTickLenVar, TyAdvChartSingleTickLen),
+    FAxisMemory);
+  { AND THE RIVERS ON THEM }
+  SolveRivers(APPI);
   { THE PARALLEL AXES, the same AxisBuilder [Batch 128] }
   TyLayoutParallels(FParallels, FOption, AMeasurer, APPI, txt,
     ActiveController.Metric(TyAdvChartMinorTickLenVar, TyAdvChartMinorTickLen),
@@ -4792,11 +5287,15 @@ begin
   SolveSunbursts(APPI);
   SolveTreemaps(AMeasurer, APPI);
   SolveSankeys(APPI);
+  SolveChords(APPI);
   { THE LINES, on the coordinate systems laid out above; an update's render
     clears a trail's layer (LinesView.render's layer.clear(true))
     [Batch 121] }
   SolveLines(APPI);
   FreeAndNil(FTrailLayer);
+  { THE CUSTOM SERIES, on the coordinate systems laid out above: renderItem
+    runs here, once per item shown [Batch 123] }
+  SolveCustom(APPI);
   { THE PARALLEL ROWS, on their parallels [Batch 128] }
   SolveParallels(APPI);
   SolveTitles(AMeasurer, APPI);
@@ -4805,6 +5304,8 @@ begin
   { AFTER THE GRIDS: a slider sits under (or beside) the grid it drives,
     by the rect the labels left it }
   SolveDataZoomViews(AMeasurer, APPI);
+  { the timeline's view: its render, its play timer [Batch 129] }
+  if not FStreamRelayout and not FExporting then SolveTimeline(APPI);
   { the toolbox, laid out last as its view renders last [Batch 125] }
   SolveToolboxes(AMeasurer, APPI);
   { the brush components: the visual stage's layoutCovers, then every brush
@@ -5958,6 +6459,11 @@ begin
     LazyUpdateDone;
   end;
 
+  { THE GRAPHIC COMPONENT, against the canvas; its elements at z 0 and
+    under go beneath the axes, as upstream's group joins the root first
+    [Batch 122] }
+  GfxBuild(APPI);
+  GfxPaintUnder(APainter);
   { WHILE THEIR groupTransition RUNS the axes are the dynamic layer's, as
     the series are [Batch 96] -- an export draws them at rest [Batch 106] }
   if FExporting or not AxesDynamic then PaintAxes(APainter, APPI, AMeasurer, False);
@@ -5987,6 +6493,9 @@ begin
   { THE POLARS' GRIDS, then their axes [Batch 111] }
   PaintPolars(APainter, APPI, AMeasurer, True);
   PaintPolars(APainter, APPI, AMeasurer, False);
+  { THE SINGLE AXES' GRIDS, then their axes [Batch 118] }
+  PaintSingles(APainter, APPI, AMeasurer, True);
+  PaintSingles(APainter, APPI, AMeasurer, False);
   for g := 0 to FBuild.GridCount - 1 do
   begin
     gb := FBuild.Grid(g);
@@ -6602,6 +7111,16 @@ begin
       and (TJSONObject(FOption.ComponentAt(first.MainType, first.ComponentIndex)).Find('inverse') <> nil)
       and (TJSONObject(FOption.ComponentAt(first.MainType, first.ComponentIndex)).Find('inverse').JSONType = jtBoolean)
       and TJSONObject(FOption.ComponentAt(first.MainType, first.ComponentIndex)).Booleans['inverse'];
+  { a single axis' rect: its getRect [Batch 118] }
+  if (first.MainType = TySingleCoordSysName) and (first.ComponentIndex <= High(FSingles))
+    and (FSingles[first.ComponentIndex] <> nil) then
+  begin
+    AIn.HasCoordRect := True;
+    AIn.CoordRect.X := (FSingles[first.ComponentIndex].Rect.X - FLastRect.Left) / scale;
+    AIn.CoordRect.Y := (FSingles[first.ComponentIndex].Rect.Y - FLastRect.Top) / scale;
+    AIn.CoordRect.W := FSingles[first.ComponentIndex].Rect.W / scale;
+    AIn.CoordRect.H := FSingles[first.ComponentIndex].Rect.H / scale;
+  end;
   { the first target's grid, as the labels left it }
   for g := 0 to FBuild.GridCount - 1 do
   begin
@@ -7354,6 +7873,7 @@ end;
   payload -- the source slider keeps its view }
 procedure TTyAdvanceChart.DzDispatch(const AAction: TTyDzAction);
 var
+  savedAction: string;
   n, it, i, j, t, u: Integer;
   pay: TTyAnimOverride;
   hasPay: Boolean;
@@ -7440,6 +7960,9 @@ begin
       pay.Delay := 0;
     end;
   end;
+  { the update is a dataZoom action's, whoever dispatched it [Batch 123] }
+  savedAction := FCustomAction;
+  FCustomAction := 'dataZoom';
   { the dataZoom action's update runs the visual stage with a payload: the
     brush's brushSelect [Batch 127] }
   FBrushPayload := True;
@@ -7449,6 +7972,7 @@ begin
       DzSyncLayout(pay, hasPay);
     finally
       FDzFrom := -1;
+      FCustomAction := savedAction;
     end;
     if Assigned(FOnDataZoom) then FOnDataZoom(Self, AAction);
   finally
@@ -9298,6 +9822,38 @@ begin
       bs := sp;
     end;
   end;
+  { AND THE TREEMAPS [Batch 115]: roam true by default, roamTrigger 'global'
+    by default; 'selfRect' the container group's rect -- the root's }
+  for i := 0 to High(FTreemaps) do
+  begin
+    if not FTreemaps[i].Valid then Continue;
+    if not TreemapRoamOk(i, AZoom) then Continue;
+    sp := Default(TTyGraphSpec);
+    sp.Z := 2;
+    if (FTreemaps[i].Series.Find('z') <> nil)
+      and (FTreemaps[i].Series.Find('z').JSONType = jtNumber) then
+      sp.Z := Round(FTreemaps[i].Series.Find('z').AsFloat);
+    if (FTreemaps[i].Series.Find('zlevel') <> nil)
+      and (FTreemaps[i].Series.Find('zlevel').JSONType = jtNumber) then
+      sp.ZLevel := Round(FTreemaps[i].Series.Find('zlevel').AsFloat);
+    ok := (FTreemaps[i].Series.Find('roamTrigger') = nil)
+      or (FTreemaps[i].Series.Find('roamTrigger').JSONType <> jtString)
+      or (FTreemaps[i].Series.Find('roamTrigger').AsString <> 'selfRect');
+    if not ok then
+      ok := (AX - FTreemaps[i].Box.X >= FTreemaps[i].Nodes[0].X)
+        and (AX - FTreemaps[i].Box.X <= FTreemaps[i].Nodes[0].X + FTreemaps[i].Nodes[0].W)
+        and (AY - FTreemaps[i].Box.Y >= FTreemaps[i].Nodes[0].Y)
+        and (AY - FTreemaps[i].Box.Y <= FTreemaps[i].Nodes[0].Y + FTreemaps[i].Nodes[0].H);
+    if not ok then Continue;
+    if (best < 0) or (sp.ZLevel > bs.ZLevel)
+      or ((sp.ZLevel = bs.ZLevel) and (sp.Z > bs.Z))
+      or ((sp.ZLevel = bs.ZLevel) and (sp.Z = bs.Z)
+        and (FBindings[i].SeriesIndex < FBindings[best].SeriesIndex)) then
+    begin
+      best := i;
+      bs := sp;
+    end;
+  end;
   if best >= 0 then Result := FBindings[best].SeriesIndex;
 end;
 
@@ -9306,6 +9862,13 @@ var slot: Integer;
 begin
   slot := SlotOfSeries(ASeriesIndex);
   Result := (slot >= 0) and (FBindings[slot].SeriesType = TyTreeSeriesTypeName);
+end;
+
+function TTyAdvanceChart.IsTreemapSeries(ASeriesIndex: Integer): Boolean;
+var slot: Integer;
+begin
+  slot := SlotOfSeries(ASeriesIndex);
+  Result := (slot >= 0) and (FBindings[slot].SeriesType = TyTreemapSeriesTypeName);
 end;
 
 function TTyAdvanceChart.IsSankeySeries(ASeriesIndex: Integer): Boolean;
@@ -9462,6 +10025,15 @@ begin
   Result := FSankeys[slot];
 end;
 
+function TTyAdvanceChart.ChordSolved(ASeriesIndex: Integer): TTyChordSolved;
+var slot: Integer;
+begin
+  Result := Default(TTyChordSolved);
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FChords)) then Exit;
+  Result := FChords[slot];
+end;
+
 function TTyAdvanceChart.SankeyView(ASeriesIndex: Integer): TTyGraphView;
 var slot: Integer;
 begin
@@ -9599,6 +10171,10 @@ begin
   FPressArmed := True;
   FGraphDragSlot := -1;
   FSankeyDragSlot := -1;
+  { A BREADCRUMB ITEM is over everything: its own click [Batch 115] }
+  FCrumbPressed := CrumbAt(X, Y, FCrumbPressSeries, FCrumbPressIndex);
+  FCrumbPressX := X;
+  FCrumbPressY := Y;
   { A PRESS ON A BRUSH COVER'S PIECE is zrender's Draggable's: the cover
     moves or resizes, and nothing under it hears the press [Batch 126] }
   if BrushDragStart(X, Y) then Exit;
@@ -9660,7 +10236,7 @@ procedure TTyAdvanceChart.MouseUp(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
   d: TTyChartDatumRef;
-  el, slot: Integer;
+  el, slot, cs: Integer;
   cap: Boolean;
   n: TJSONData;
 begin
@@ -9695,7 +10271,18 @@ begin
       and (Sqrt(Sqr(X - FPressX) + Sqr(Y - FPressY)) <= 4) then
     begin
       slot := SlotOfSeries(d.SeriesIndex);
-      if (slot >= 0) and (FBindings[slot].SeriesType = TyTreeSeriesTypeName) then
+      { [Batch 115] a sunburst's piece or return circle; a treemap's
+        container -- the target found under the point -- unless the press
+        was the breadcrumb's; never outside the canvas (zrender's
+        isOutsideBoundary hovers nothing there) }
+      if (X < FLastRect.Left) or (X > FLastRect.Right) or (Y < FLastRect.Top)
+        or (Y > FLastRect.Bottom) then
+      else if (slot >= 0) and (FBindings[slot].SeriesType = TySunburstSeriesTypeName) then
+        SunburstClick(d.SeriesIndex, d.DataIndex)
+      else if (slot >= 0) and (FBindings[slot].SeriesType = TyTreemapSeriesTypeName)
+        and not FCrumbPressed then
+        TreemapClick(d.SeriesIndex, X, Y)
+      else if (slot >= 0) and (FBindings[slot].SeriesType = TyTreeSeriesTypeName) then
       begin
         n := FOption.ComponentAt('series', d.SeriesIndex);
         if (n <> nil) and (n.JSONType = jtObject) then
@@ -9708,6 +10295,14 @@ begin
       end;
     end;
     FPressArmed := False;
+    { A BREADCRUMB ITEM: pressed and released on it, within 4 px }
+    if FCrumbPressed then
+    begin
+      FCrumbPressed := False;
+      if CrumbAt(X, Y, slot, cs) and (slot = FCrumbPressSeries) and (cs = FCrumbPressIndex)
+        and (Sqrt(Sqr(X - FCrumbPressX) + Sqr(Y - FCrumbPressY)) <= 4) then
+        TreemapCrumbSelect(slot, cs);
+    end;
   end;
   if not (csDesigning in ComponentState) then EventUp(Button, X, Y);
   inherited MouseUp(Button, Shift, X, Y);
@@ -9732,6 +10327,8 @@ begin
   { a cover's drag and a brush component's track too [Batch 126] }
   BrushDragEnd;
   BrushCtlUp(FEvLastX, FEvLastY);
+  { and the timeline's checkpoint [Batch 129] }
+  TlDragEnd(FEvLastX, FEvLastY);
   inherited CaptureChanged;
 end;
 
@@ -9754,7 +10351,1526 @@ begin
   if si < 0 then Exit;
   if IsTreeSeries(si) then Result := TreeZoom(si, s, MousePos.X, MousePos.Y)
   else if IsSankeySeries(si) then Result := SankeyZoom(si, s, MousePos.X, MousePos.Y)
+  { [Batch 115] }
+  else if IsTreemapSeries(si) then Result := TreemapWheel(si, s, MousePos.X, MousePos.Y)
   else Result := GraphZoom(si, s, MousePos.X, MousePos.Y);
+end;
+
+{ ==================== the drill-downs [Batch 115] ====================
+
+  A SUNBURST drills by sunburstRootToNode -- a click on a piece of the view
+  (its nodeClick 'rootToNode'), on the return circle (the view root's
+  parent), or the action -- and the view root lives until a new tree. A
+  TREEMAP zooms (treemapZoomToNode: a click, nodeClick 'zoomToNode' by
+  default; a breadcrumb item below the view root), drills
+  (treemapRootToNode: a click on a leaf root under leafDepth; a breadcrumb
+  item above the view root), pans (treemapMove: a drag of more than 3 px
+  between two moves) and zooms about the pointer (treemapRender: the wheel).
+  Each is an updateView: the chart renders again (FullUpdate) and the
+  action's event follows. }
+
+procedure TTyTmWrap.Hit;
+begin
+  Dec(Pending);
+  if Pending <= 0 then Live := False;
+end;
+
+procedure TTyAdvanceChart.HierDrillReset;
+begin
+  FSunRoot := nil;
+  FSunVirt := nil;
+  FSunHandlers := nil;
+  FTmView := nil;
+  FTmPrev := nil;
+  FTmHave := nil;
+  FHierDrill := nil;
+  TmAnimDropAll;
+end;
+
+function TTyAdvanceChart.HierIdOfRow(ASlot, ARow: Integer): string;
+var
+  ids: TTyStringArray;
+  ser: TJSONData;
+  hier: TTyHierarchy;
+begin
+  Result := '';
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  if (ASlot <= High(FSunbursts)) and FSunbursts[ASlot].Valid then hier := FSunbursts[ASlot].Hier
+  else if (ASlot <= High(FTreemaps)) and FTreemaps[ASlot].Valid then hier := FTreemaps[ASlot].Hier
+  else Exit;
+  ser := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if ser is TJSONObject then ids := TyHierIds(hier, TJSONObject(ser))
+  else ids := TyHierIds(hier, nil);
+  if (ARow >= 0) and (ARow <= High(ids)) then Result := ids[ARow];
+end;
+
+function TTyAdvanceChart.HierRowOfId(ASlot: Integer; const AId: string): Integer;
+var
+  ids: TTyStringArray;
+  ser: TJSONData;
+  hier: TTyHierarchy;
+  k: Integer;
+begin
+  Result := -1;
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  if (ASlot <= High(FSunbursts)) and FSunbursts[ASlot].Valid then hier := FSunbursts[ASlot].Hier
+  else if (ASlot <= High(FTreemaps)) and FTreemaps[ASlot].Valid then hier := FTreemaps[ASlot].Hier
+  else Exit;
+  ser := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if ser is TJSONObject then ids := TyHierIds(hier, TJSONObject(ser))
+  else ids := TyHierIds(hier, nil);
+  { getNodeById: the root first, then down -- the ids are one each }
+  for k := 0 to High(ids) do
+    if ids[k] = AId then Exit(k);
+end;
+
+{ treeHelper.retrieveTargetInfo: a targetNode string by getNodeById (the
+  tree holds every node it finds), else a targetNodeId -- getNodeById
+  compares with ===, so only a string ever matches }
+function TTyAdvanceChart.HierTarget(ASlot: Integer; APayload: TJSONObject): Integer;
+var d: TJSONData;
+begin
+  Result := -1;
+  d := APayload.Find('targetNode');
+  if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    Result := HierRowOfId(ASlot, d.AsString);
+    if Result >= 0 then Exit;
+  end;
+  d := APayload.Find('targetNodeId');
+  if (d <> nil) and (d.JSONType = jtString) then
+    Result := HierRowOfId(ASlot, d.AsString);
+end;
+
+function TTyAdvanceChart.HierQuery(APayload: TJSONObject; const AType: string): TTyIntegerArray;
+var
+  ser: TTyIntegerArray;
+  k, slot: Integer;
+  queried: Boolean;
+begin
+  Result := nil;
+  queried := (APayload.Find('seriesIndex') <> nil) or (APayload.Find('seriesId') <> nil)
+    or (APayload.Find('seriesName') <> nil);
+  if queried then
+  begin
+    ser := MatchSeries(APayload);
+    for k := 0 to High(ser) do
+    begin
+      slot := SlotOfSeries(ser[k]);
+      if (slot >= 0) and (FBindings[slot].SeriesType = AType) then
+      begin
+        SetLength(Result, Length(Result) + 1);
+        Result[High(Result)] := slot;
+      end;
+    end;
+  end
+  else
+    for slot := 0 to High(FBindings) do
+      if FBindings[slot].SeriesType = AType then
+      begin
+        SetLength(Result, Length(Result) + 1);
+        Result[High(Result)] := slot;
+      end;
+end;
+
+{ aboveViewRoot: the node is among the view root's ancestors }
+function HierAbove(const AHier: TTyHierarchy; AViewRoot, ARow: Integer): Boolean;
+var p: Integer;
+begin
+  Result := False;
+  if (AViewRoot < 0) or (AViewRoot > High(AHier.Nodes)) then Exit;
+  p := AHier.Nodes[AViewRoot].Parent;
+  while p >= 0 do
+  begin
+    if p = ARow then Exit(True);
+    p := AHier.Nodes[p].Parent;
+  end;
+end;
+
+procedure TTyAdvanceChart.HierUpdate(const AEventType, APayloadJson: string);
+begin
+  { updateView: the layout, the visuals and the render again }
+  FullUpdate;
+  EmitPayloadEvent(AEventType, APayloadJson);
+end;
+
+function TTyAdvanceChart.DoSunAction(APayload: TJSONObject): Boolean;
+var
+  slots: TTyIntegerArray;
+  k, slot, si, row, old: Integer;
+  dir: string;
+begin
+  Result := True;
+  slots := HierQuery(APayload, TySunburstSeriesTypeName);
+  dir := '';
+  for k := 0 to High(slots) do
+  begin
+    slot := slots[k];
+    if (slot > High(FSunbursts)) or not FSunbursts[slot].Valid then Continue;
+    row := HierTarget(slot, APayload);
+    if row < 0 then Continue;
+    si := FBindings[slot].SeriesIndex;
+    old := FSunbursts[slot].ViewRoot;
+    if HierAbove(FSunbursts[slot].Hier, old, row) then dir := 'rollUp'
+    else dir := 'drillDown';
+    if Length(FSunRoot) <= si then SetLength(FSunRoot, si + 1);
+    FSunRoot[si] := row;
+    if Length(FHierDrill) <= si then SetLength(FHierDrill, si + 1);
+    FHierDrill[si] := True;
+  end;
+  { the payload, as dispatched, gains the last series' direction }
+  if dir <> '' then APayload.Strings['direction'] := dir;
+  try
+    HierUpdate('sunburstroottonode', APayload.AsJSON);
+  finally
+    FHierDrill := nil;
+  end;
+end;
+
+function TTyAdvanceChart.DoTreemapAction(const AType: string; APayload: TJSONObject;
+  const AEventJson: string): Boolean;
+var
+  slots: TTyIntegerArray;
+  k, slot, si, row: Integer;
+  dir: string;
+  v: TTyTreemapView;
+  rr: TJSONData;
+
+  function RectNum(const AKey: string): Double;
+  var dd: TJSONData;
+  begin
+    Result := NaN;
+    if not (rr is TJSONObject) then Exit;
+    dd := TJSONObject(rr).Find(AKey);
+    if (dd <> nil) and (dd.JSONType = jtNumber) then Result := dd.AsFloat;
+  end;
+
+begin
+  Result := True;
+  slots := HierQuery(APayload, TyTreemapSeriesTypeName);
+  dir := '';
+  rr := APayload.Find('rootRect');
+  for k := 0 to High(slots) do
+  begin
+    slot := slots[k];
+    if (slot > High(FTreemaps)) or not FTreemaps[slot].Valid then Continue;
+    si := FBindings[slot].SeriesIndex;
+    if Length(FTmView) <= si then
+    begin
+      SetLength(FTmView, si + 1);
+      FTmView[si] := TyTreemapNoView;
+    end;
+    v := FTmView[si];
+    v.ViewRoot := FTreemaps[slot].ViewRoot;
+    v.Target := -1;
+    v.Direction := 0;
+    if AType = 'treemapRootToNode' then
+    begin
+      v.Kind := tpkRootToNode;
+      row := HierTarget(slot, APayload);
+      if row >= 0 then
+      begin
+        if HierAbove(FTreemaps[slot].Hier, FTreemaps[slot].ViewRoot, row) then
+        begin
+          dir := 'rollUp';
+          v.Direction := 2;
+        end
+        else
+        begin
+          dir := 'drillDown';
+          v.Direction := 1;
+        end;
+        v.ViewRoot := row;
+        v.Target := row;
+      end;
+    end
+    else if AType = 'treemapZoomToNode' then
+    begin
+      v.Kind := tpkZoomToNode;
+      v.Target := HierTarget(slot, APayload);
+    end
+    else if AType = 'treemapMove' then
+    begin
+      { the root to the rect's x, y; none: back to 0 }
+      v.Kind := tpkMove;
+      v.RootX := RectNum('x');
+      v.RootY := RectNum('y');
+      if not (rr is TJSONObject) then
+      begin
+        v.RootX := 0;
+        v.RootY := 0;
+      end;
+      v.RootW := RectNum('width');
+      v.RootH := RectNum('height');
+    end
+    else
+    begin
+      { treemapRender: a rect zooms and places the root; none is a plain
+        render }
+      if rr is TJSONObject then
+      begin
+        v.Kind := tpkRender;
+        v.RootX := RectNum('x');
+        v.RootY := RectNum('y');
+        v.RootW := RectNum('width');
+        v.RootH := RectNum('height');
+      end
+      else
+        v.Kind := tpkNone;
+    end;
+    FTmView[si] := v;
+  end;
+  { THE OTHER TREEMAPS are not rendered (TreemapView.render's query): they
+    keep their picture }
+  for slot := 0 to High(FBindings) do
+  begin
+    if FBindings[slot].SeriesType <> TyTreemapSeriesTypeName then Continue;
+    if (slot > High(FTreemaps)) or not FTreemaps[slot].Valid then Continue;
+    row := 0;
+    for k := 0 to High(slots) do
+      if slots[k] = slot then row := 1;
+    if row = 1 then Continue;
+    si := FBindings[slot].SeriesIndex;
+    if Length(FTmView) <= si then
+    begin
+      SetLength(FTmView, si + 1);
+      FTmView[si] := TyTreemapNoView;
+    end;
+    FTmView[si].ViewRoot := FTreemaps[slot].ViewRoot;
+    FTmView[si].Kind := tpkKeep;
+  end;
+  if dir <> '' then APayload.Strings['direction'] := dir;
+  if AEventJson <> '' then HierUpdate(LowerCase(AType), AEventJson)
+  else HierUpdate(LowerCase(AType), APayload.AsJSON);
+end;
+
+function TTyAdvanceChart.SunburstRootToNode(ASeriesIndex, ARow: Integer): Boolean;
+var
+  p: TJSONObject;
+  slot: Integer;
+begin
+  Result := False;
+  p := TJSONObject.Create;
+  try
+    p.Strings['type'] := 'sunburstRootToNode';
+    slot := SlotOfSeries(ASeriesIndex);
+    if (slot < 0) or (FBindings[slot].SeriesType <> TySunburstSeriesTypeName) then Exit;
+    p.Integers['seriesIndex'] := ASeriesIndex;
+    p.Strings['targetNode'] := HierIdOfRow(slot, ARow);
+    Result := DoSunAction(p);
+    EmitUpdated;
+  finally
+    p.Free;
+  end;
+end;
+
+function TTyAdvanceChart.SunburstViewRoot(ASeriesIndex: Integer): Integer;
+var slot: Integer;
+begin
+  Result := 0;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot >= 0) and (slot <= High(FSunbursts)) and FSunbursts[slot].Valid then
+    Result := FSunbursts[slot].ViewRoot;
+end;
+
+function TTyAdvanceChart.SunburstSolved(ASeriesIndex: Integer): TTySunburstSolved;
+var slot: Integer;
+begin
+  Result := Default(TTySunburstSolved);
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot >= 0) and (slot <= High(FSunbursts)) then Result := FSunbursts[slot];
+end;
+
+function TTyAdvanceChart.TreemapSolved(ASeriesIndex: Integer): TTyTreemapSolved;
+var slot: Integer;
+begin
+  Result := Default(TTyTreemapSolved);
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot >= 0) and (slot <= High(FTreemaps)) then Result := FTreemaps[slot];
+end;
+
+function TTyAdvanceChart.TreemapHave(ASeriesIndex: Integer): TTyTreemapHave;
+begin
+  Result := Default(TTyTreemapHave);
+  if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FTmHave)) then Result := FTmHave[ASeriesIndex];
+end;
+
+function TreemapPayload(const AType: string; ASeries: Integer; const AId: string): TJSONObject;
+begin
+  Result := TJSONObject.Create;
+  Result.Strings['type'] := AType;
+  Result.Integers['seriesIndex'] := ASeries;
+  Result.Strings['targetNode'] := AId;
+end;
+
+function TTyAdvanceChart.TreemapZoomToNode(ASeriesIndex, ARow: Integer): Boolean;
+var p: TJSONObject; slot: Integer;
+begin
+  Result := False;
+  slot := SlotOfSeries(ASeriesIndex);
+  if slot < 0 then Exit;
+  p := TreemapPayload('treemapZoomToNode', ASeriesIndex, HierIdOfRow(slot, ARow));
+  try
+    Result := DoTreemapAction('treemapZoomToNode', p);
+    EmitUpdated;
+  finally
+    p.Free;
+  end;
+end;
+
+function TTyAdvanceChart.TreemapRootToNode(ASeriesIndex, ARow: Integer): Boolean;
+var p: TJSONObject; slot: Integer;
+begin
+  Result := False;
+  slot := SlotOfSeries(ASeriesIndex);
+  if slot < 0 then Exit;
+  p := TreemapPayload('treemapRootToNode', ASeriesIndex, HierIdOfRow(slot, ARow));
+  try
+    Result := DoTreemapAction('treemapRootToNode', p);
+    EmitUpdated;
+  finally
+    p.Free;
+  end;
+end;
+
+function TTyAdvanceChart.TreemapMoveTo(ASeriesIndex: Integer; AX, AY, AW, AH: Double;
+  AZoom: Boolean): Boolean;
+var
+  p, r: TJSONObject;
+  t: string;
+begin
+  if AZoom then t := 'treemapRender' else t := 'treemapMove';
+  p := TJSONObject.Create;
+  try
+    p.Strings['type'] := t;
+    p.Integers['seriesIndex'] := ASeriesIndex;
+    r := TJSONObject.Create;
+    r.Floats['x'] := AX;
+    r.Floats['y'] := AY;
+    r.Floats['width'] := AW;
+    r.Floats['height'] := AH;
+    p.Objects['rootRect'] := r;
+    Result := DoTreemapAction(t, p);
+    EmitUpdated;
+  finally
+    p.Free;
+  end;
+end;
+
+function TTyAdvanceChart.TmRowsOf(ASeries: Integer; out ASlot: Integer): Boolean;
+begin
+  ASlot := SlotOfSeries(ASeries);
+  Result := (ASlot >= 0) and (ASlot <= High(FTreemaps)) and FTreemaps[ASlot].Valid;
+end;
+
+function TTyAdvanceChart.TreemapAnimating(ASeriesIndex: Integer): Boolean;
+begin
+  Result := (ASeriesIndex >= 0) and (ASeriesIndex <= High(FTmAnim))
+    and (FTmAnim[ASeriesIndex].Wrap <> nil) and FTmAnim[ASeriesIndex].Wrap.Live;
+end;
+
+function TTyAdvanceChart.TreemapAnimProxy(ASeriesIndex, ARow: Integer;
+  const AKind: string): TTyChartAnimProxy;
+begin
+  Result := nil;
+  if (ASeriesIndex < 0) or (ASeriesIndex > High(FTmAnim)) then Exit;
+  if ARow < 0 then Exit;
+  if (AKind = 'group') and (ARow <= High(FTmAnim[ASeriesIndex].Groups)) then
+    Result := FTmAnim[ASeriesIndex].Groups[ARow]
+  else if (AKind = 'bg') and (ARow <= High(FTmAnim[ASeriesIndex].Rects)) then
+    Result := FTmAnim[ASeriesIndex].Rects[ARow][0]
+  else if (AKind = 'ct') and (ARow <= High(FTmAnim[ASeriesIndex].Rects)) then
+    Result := FTmAnim[ASeriesIndex].Rects[ARow][1]
+  else if (AKind = 'label') and (ARow <= High(FTmAnim[ASeriesIndex].Labels)) then
+    Result := FTmAnim[ASeriesIndex].Labels[ARow][0]
+  else if (AKind = 'upper') and (ARow <= High(FTmAnim[ASeriesIndex].Labels)) then
+    Result := FTmAnim[ASeriesIndex].Labels[ARow][1];
+end;
+
+function TTyAdvanceChart.TreemapGhostCount(ASeriesIndex: Integer): Integer;
+begin
+  Result := 0;
+  if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FTmAnim)) then
+    Result := Length(FTmAnim[ASeriesIndex].Ghosts);
+end;
+
+{ ---- the gestures ---- }
+
+procedure TTyAdvanceChart.SunburstClick(ASeries, ARow: Integer);
+var
+  slot, vr, target, k: Integer;
+  p: TJSONObject;
+  nc: string;
+  hs: TTyIntegerArray;
+begin
+  slot := SlotOfSeries(ASeries);
+  if (slot < 0) or (slot > High(FSunbursts)) or not FSunbursts[slot].Valid then Exit;
+  vr := FSunbursts[slot].ViewRoot;
+  target := -1;
+  if ARow = 0 then
+  begin
+    { THE RETURN CIRCLE: every handler its renders added, in order, each to
+      the parent it was bound to -- unless that is the view root by then }
+    if vr <= 0 then Exit;
+    hs := nil;
+    if ASeries <= High(FSunHandlers) then hs := Copy(FSunHandlers[ASeries]);
+    for k := 0 to High(hs) do
+    begin
+      slot := SlotOfSeries(ASeries);
+      if (slot < 0) or (slot > High(FSunbursts)) or not FSunbursts[slot].Valid then Exit;
+      if (hs[k] < 0) or (hs[k] = FSunbursts[slot].ViewRoot) then Continue;
+      p := TJSONObject.Create;
+      try
+        p.Strings['type'] := 'sunburstRootToNode';
+        p.Integers['seriesIndex'] := ASeries;
+        p.Strings['targetNode'] := HierIdOfRow(slot, hs[k]);
+        DoSunAction(p);
+        EmitUpdated;
+      finally
+        p.Free;
+      end;
+    end;
+    Exit;
+  end
+  else
+  begin
+    { a piece of the view: its nodeClick, item -> level -> series }
+    if (ARow > High(FSunbursts[slot].Nodes)) or not FSunbursts[slot].Nodes[ARow].Placed then Exit;
+    nc := TySunburstNodeClick(FSunbursts[slot], ARow);
+    { 'link' opens a window upstream: nothing here }
+    if nc <> 'rootToNode' then Exit;
+    target := ARow;
+  end;
+  { _rootToNode: not to the view root itself }
+  if (target < 0) or (target = vr) then Exit;
+  p := TJSONObject.Create;
+  try
+    p.Strings['type'] := 'sunburstRootToNode';
+    p.Integers['seriesIndex'] := ASeries;
+    p.Strings['targetNode'] := HierIdOfRow(slot, target);
+    DoSunAction(p);
+    EmitUpdated;
+  finally
+    p.Free;
+  end;
+end;
+
+procedure TTyAdvanceChart.TreemapClick(ASeries, AX, AY: Integer);
+var
+  slot, target: Integer;
+  d: TJSONData;
+  nc: string;
+  p: TJSONObject;
+begin
+  if not TmRowsOf(ASeries, slot) then Exit;
+  { _state 'animating': a click does nothing }
+  if TreemapAnimating(ASeries) then Exit;
+  { nodeClick is the series' own (get(.., true)): absent 'zoomToNode';
+    falsy, nothing }
+  nc := 'zoomToNode';
+  d := FTreemaps[slot].Series.Find('nodeClick');
+  if d <> nil then
+  begin
+    if d.JSONType = jtString then nc := d.AsString
+    else if (d.JSONType = jtBoolean) and d.AsBoolean then nc := 'true'
+    else if (d.JSONType = jtNumber) and (d.AsFloat <> 0) and not IsNan(d.AsFloat) then nc := 'true'
+    else if d.JSONType in [jtObject, jtArray] then nc := 'true'
+    else nc := '';
+  end;
+  if nc = '' then Exit;
+  if ASeries > High(FTmHave) then Exit;
+  target := TyTreemapFindTarget(FTreemaps[slot], FTmHave[ASeries], AX, AY);
+  if target < 0 then Exit;
+  if FTreemaps[slot].Nodes[target].IsLeafRoot then
+    p := TreemapPayload('treemapRootToNode', ASeries, HierIdOfRow(slot, target))
+  else if nc = 'zoomToNode' then
+    p := TreemapPayload('treemapZoomToNode', ASeries, HierIdOfRow(slot, target))
+  else
+    { 'link' opens a window upstream: nothing here }
+    Exit;
+  try
+    DoTreemapAction(p.Strings['type'], p);
+    EmitUpdated;
+  finally
+    p.Free;
+  end;
+end;
+
+{ zrender's polygon.contain: the winding number about the point }
+function CrumbContains(const APts: array of TTyPointF; AX, AY: Double): Boolean;
+var
+  i, j, w: Integer;
+  x0, y0, x1, y1, t, xi: Double;
+begin
+  w := 0;
+  for i := 0 to High(APts) do
+  begin
+    j := (i + 1) mod Length(APts);
+    x0 := APts[i].X;
+    y0 := APts[i].Y;
+    x1 := APts[j].X;
+    y1 := APts[j].Y;
+    if ((y0 > AY) and (y1 > AY)) or ((y0 < AY) and (y1 < AY)) or (y0 = y1) then Continue;
+    t := (AY - y0) / (y1 - y0);
+    xi := t * (x1 - x0) + x0;
+    if xi = AX then Exit(True);
+    if xi > AX then
+    begin
+      if y0 < y1 then Inc(w) else Dec(w);
+    end;
+  end;
+  Result := w <> 0;
+end;
+
+function TTyAdvanceChart.CrumbAt(AX, AY: Integer; out ASeries, AIndex: Integer): Boolean;
+var slot, k: Integer;
+begin
+  Result := False;
+  ASeries := -1;
+  AIndex := -1;
+  for slot := High(FTreemaps) downto 0 do
+  begin
+    if not FTreemaps[slot].Valid then Continue;
+    for k := High(FTreemaps[slot].Crumbs) downto 0 do
+      if (Length(FTreemaps[slot].Crumbs[k].Points) > 2)
+        and CrumbContains(FTreemaps[slot].Crumbs[k].Points, AX, AY) then
+      begin
+        ASeries := FBindings[slot].SeriesIndex;
+        AIndex := k;
+        Exit(True);
+      end;
+  end;
+end;
+
+procedure TTyAdvanceChart.TreemapCrumbSelect(ASeries, AIndex: Integer);
+var
+  slot, row: Integer;
+  p: TJSONObject;
+begin
+  if not TmRowsOf(ASeries, slot) then Exit;
+  if TreemapAnimating(ASeries) then Exit;
+  if (AIndex < 0) or (AIndex > High(FTreemaps[slot].Crumbs)) then Exit;
+  row := FTreemaps[slot].Crumbs[AIndex].Row;
+  if HierAbove(FTreemaps[slot].Hier, FTreemaps[slot].ViewRoot, row) then
+    p := TreemapPayload('treemapRootToNode', ASeries, HierIdOfRow(slot, row))
+  else
+    p := TreemapPayload('treemapZoomToNode', ASeries, HierIdOfRow(slot, row));
+  try
+    DoTreemapAction(p.Strings['type'], p);
+    EmitUpdated;
+  finally
+    p.Free;
+  end;
+end;
+
+function TTyAdvanceChart.TreemapRoamOk(ASlot: Integer; AZoom: Boolean): Boolean;
+var d: TJSONData; s: string;
+begin
+  Result := False;
+  if (ASlot > High(FTreemaps)) or not FTreemaps[ASlot].Valid then Exit;
+  { roam: true by default -- both; 'scale' / 'zoom' the wheel, 'move' /
+    'pan' the drag; anything else neither }
+  d := FTreemaps[ASlot].Series.Find('roam');
+  if d = nil then Exit(True);
+  if (d.JSONType = jtBoolean) then Exit(d.AsBoolean);
+  if d.JSONType <> jtString then Exit;
+  s := d.AsString;
+  if AZoom then Result := (s = 'scale') or (s = 'zoom')
+  else Result := (s = 'move') or (s = 'pan');
+end;
+
+{ RoamController's pan: dx, dy since the last move; past 3 px the root moves
+  by them (treemapMove), else they are lost }
+function TTyAdvanceChart.TreemapPan(ASeries, ADX, ADY: Integer): Boolean;
+var
+  slot: Integer;
+  nd: TTyTreemapNode;
+  js: string;
+  p: TJSONObject;
+  r: TJSONObject;
+begin
+  Result := False;
+  if not TmRowsOf(ASeries, slot) then Exit;
+  if TreemapAnimating(ASeries) then Exit;
+  if not ((Abs(ADX) > 3) or (Abs(ADY) > 3)) then Exit;
+  nd := FTreemaps[slot].Nodes[0];
+  p := TJSONObject.Create;
+  try
+    p.Strings['type'] := 'treemapMove';
+    p.Integers['seriesIndex'] := ASeries;
+    r := TJSONObject.Create;
+    r.Floats['x'] := nd.X + ADX;
+    r.Floats['y'] := nd.Y + ADY;
+    r.Floats['width'] := nd.W;
+    r.Floats['height'] := nd.H;
+    p.Objects['rootRect'] := r;
+    { the event's numbers as JavaScript prints them }
+    js := '{"type":"treemapMove","seriesIndex":' + IntToStr(ASeries)
+      + ',"rootRect":{"x":' + TyJsNumberToString(nd.X + ADX)
+      + ',"y":' + TyJsNumberToString(nd.Y + ADY)
+      + ',"width":' + TyJsNumberToString(nd.W)
+      + ',"height":' + TyJsNumberToString(nd.H) + '}}';
+    DoTreemapAction(p.Strings['type'], p, js);
+    Result := True;
+    EmitUpdated;
+  finally
+    p.Free;
+  end;
+end;
+
+{ RoamController's zoom: the root rect scaled about the pointer, in the
+  container's coordinates, by the clamped zoom over the current one
+  (treemapRender) }
+function TTyAdvanceChart.TreemapWheel(ASeries: Integer; AScale: Double; AX, AY: Integer): Boolean;
+var
+  slot: Integer;
+  nd: TTyTreemapNode;
+  bx: TTyXYWH;
+  cur, nz, zs, mx, my, m4, m5, x, y, w, h: Double;
+  js: string;
+  p, r: TJSONObject;
+begin
+  Result := False;
+  if not TmRowsOf(ASeries, slot) then Exit;
+  if TreemapAnimating(ASeries) then Exit;
+  nd := FTreemaps[slot].Nodes[0];
+  bx := FTreemaps[slot].Box;
+  cur := TyTreemapCurrentZoom(bx.W, bx.H, nd.W, nd.H);
+  nz := TyTreemapClampZoom(FTreemaps[slot], cur * AScale);
+  zs := nz / cur;
+  mx := AX - bx.X;
+  my := AY - bx.Y;
+  { translate(-m), scale, translate(m); BoundingRect.applyTransform }
+  m4 := (-mx) * zs + mx;
+  m5 := (-my) * zs + my;
+  x := nd.X * zs + m4;
+  y := nd.Y * zs + m5;
+  w := nd.W * zs;
+  h := nd.H * zs;
+  if w < 0 then
+  begin
+    x := x + w;
+    w := -w;
+  end;
+  if h < 0 then
+  begin
+    y := y + h;
+    h := -h;
+  end;
+  p := TJSONObject.Create;
+  try
+    p.Strings['type'] := 'treemapRender';
+    p.Integers['seriesIndex'] := ASeries;
+    r := TJSONObject.Create;
+    r.Floats['x'] := x;
+    r.Floats['y'] := y;
+    r.Floats['width'] := w;
+    r.Floats['height'] := h;
+    p.Objects['rootRect'] := r;
+    js := '{"type":"treemapRender","seriesIndex":' + IntToStr(ASeries)
+      + ',"rootRect":{"x":' + TyJsNumberToString(x) + ',"y":' + TyJsNumberToString(y)
+      + ',"width":' + TyJsNumberToString(w) + ',"height":' + TyJsNumberToString(h) + '}}';
+    DoTreemapAction(p.Strings['type'], p, js);
+    Result := True;
+    EmitUpdated;
+  finally
+    p.Free;
+  end;
+end;
+
+{ ---- a treemap's drill-down (TreemapView._doRender / _doAnimation) ---- }
+
+function TmProxy(AAnim: TTyAnimation; ASeries, ARow: Integer;
+  const ARole: string): TTyChartAnimProxy;
+begin
+  Result := TTyChartAnimProxy.Create(ASeries, ARow, ARole);
+  Result.Animation := AAnim;
+end;
+
+function TmNum(const AKey: string; AValue: Double): TTyAnimProp;
+begin
+  Result := TyAnimProp(AKey, TyAnimNum(AValue));
+end;
+
+{ a group's x: `thisLayout.x || 0` }
+function TmOr0(AValue: Double): Double;
+begin
+  if IsNan(AValue) then Result := 0 else Result := AValue;
+end;
+
+procedure TTyAdvanceChart.TmAnimDrop(ASeries: Integer);
+var k, j: Integer;
+begin
+  if (ASeries < 0) or (ASeries > High(FTmAnim)) then Exit;
+  { the proxies before their wrap: a proxy freed stops its animators, and a
+    stopped one counts down on the wrap }
+  for k := 0 to High(FTmAnim[ASeries].Groups) do FreeAndNil(FTmAnim[ASeries].Groups[k]);
+  for k := 0 to High(FTmAnim[ASeries].Rects) do
+    for j := 0 to 1 do FreeAndNil(FTmAnim[ASeries].Rects[k][j]);
+  for k := 0 to High(FTmAnim[ASeries].Labels) do
+    for j := 0 to 1 do FreeAndNil(FTmAnim[ASeries].Labels[k][j]);
+  for k := 0 to High(FTmAnim[ASeries].Ghosts) do
+  begin
+    FreeAndNil(FTmAnim[ASeries].Ghosts[k].P);
+    FreeAndNil(FTmAnim[ASeries].Ghosts[k].LP);
+  end;
+  FreeAndNil(FTmAnim[ASeries].Wrap);
+  FTmAnim[ASeries] := Default(TTyTmAnim);
+end;
+
+procedure TTyAdvanceChart.TmAnimDropAll;
+var k: Integer;
+begin
+  for k := 0 to High(FTmAnim) do TmAnimDrop(k);
+  FTmAnim := nil;
+end;
+
+function TTyAdvanceChart.TmAnimAny: Boolean;
+var k: Integer;
+begin
+  Result := False;
+  for k := 0 to High(FTmAnim) do
+    if (Length(FTmAnim[k].Groups) > 0) or (Length(FTmAnim[k].Ghosts) > 0) then Exit(True);
+end;
+
+{ THE WRAP'S END: renderFinally -- the deleted elements leave, the ones
+  moved out of the canvas become invisible -- and _state is 'ready' again.
+  The proxies stay: an element rests where its last step put it. }
+procedure TTyAdvanceChart.TmWrapCheck;
+var si, slot, row: Integer; anyChange: Boolean;
+begin
+  anyChange := False;
+  for si := 0 to High(FTmAnim) do FTmAnim[si].Stepped := True;
+  for si := 0 to High(FTmAnim) do
+  begin
+    if (FTmAnim[si].Wrap = nil) or FTmAnim[si].Wrap.Live then Continue;
+    if Length(FTmAnim[si].Ghosts) = 0 then
+    begin
+      slot := SlotOfSeries(si);
+      if (slot < 0) or (slot > High(FTreemaps)) then Continue;
+      { invisible from now on }
+      row := 0;
+      while row <= High(FTreemaps[slot].Nodes) do
+      begin
+        if FTreemaps[slot].Nodes[row].DrawInvisible then
+        begin
+          FTreemaps[slot].Nodes[row].DrawInvisible := False;
+          anyChange := True;
+        end;
+        Inc(row);
+      end;
+      Continue;
+    end;
+    for row := 0 to High(FTmAnim[si].Ghosts) do
+    begin
+      FreeAndNil(FTmAnim[si].Ghosts[row].P);
+      FreeAndNil(FTmAnim[si].Ghosts[row].LP);
+    end;
+    FTmAnim[si].Ghosts := nil;
+    for row := 0 to High(FTmAnim[si].GhostGroup) do
+      if FTmAnim[si].GhostGroup[row] then
+      begin
+        FreeAndNil(FTmAnim[si].Groups[row]);
+        FTmAnim[si].GhostGroup[row] := False;
+      end;
+    slot := SlotOfSeries(si);
+    if (slot >= 0) and (slot <= High(FTreemaps)) then
+      for row := 0 to High(FTreemaps[slot].Nodes) do
+        FTreemaps[slot].Nodes[row].DrawInvisible := False;
+    anyChange := True;
+  end;
+  if anyChange then DropStatic;
+end;
+
+procedure TTyAdvanceChart.TmAnimArm(ASlot: Integer; const AView: TTyTreemapView;
+  const AOld: TTyTreemapSolved; const AOldHave: TTyTreemapHave; ADirection: Integer);
+type
+  TTask = record
+    P: TTyChartAnimProxy;
+    Props: TTyAnimProps;
+  end;
+var
+  si, nn, row, k, par, cnt, kind: Integer;
+  have: TTyTreemapHave;
+  model: TTyAnimModel;
+  wrapOn, labelsOn, reRoot, drill, parDel: Boolean;
+  v: TTyAnimOptValue;
+  dur, pw, ph, tx, ty, ox, oy: Double;
+  easing: string;
+  cfg: TTyAnimCfg;
+  A: TTyTmAnim;
+  lastHas: TTyBoolArray;
+  lastW, lastH: TTyDoubleArray;
+  p: TTyChartAnimProxy;
+  tasks: array of TTask;
+  TS: ^TTyTreemapSolved;
+  oldLabels: array of TTyTmProxyPair;
+  el, lel: TTyChartElement;
+  props: TTyAnimProps;
+
+  function Was(const AArr: TTyBoolArray; ARow: Integer): Boolean;
+  begin
+    Result := (ARow >= 0) and (ARow <= High(AArr)) and AArr[ARow];
+  end;
+
+  procedure Task(AP: TTyChartAnimProxy; const AProps: TTyAnimProps);
+  begin
+    SetLength(tasks, Length(tasks) + 1);
+    tasks[High(tasks)].P := AP;
+    tasks[High(tasks)].Props := AProps;
+  end;
+
+  function OldShape(ARow, AKind: Integer): TTyAnimProps;
+  var bw: Double;
+  begin
+    if AKind = 1 then
+      Result := TyAnimProps([TmNum('shape.x', 0), TmNum('shape.y', 0),
+        TmNum('shape.width', AOld.Nodes[ARow].W), TmNum('shape.height', AOld.Nodes[ARow].H)])
+    else
+    begin
+      bw := AOld.Nodes[ARow].BorderWidth;
+      Result := TyAnimProps([TmNum('shape.x', bw), TmNum('shape.y', bw),
+        TmNum('shape.width', Math.Max(AOld.Nodes[ARow].W - 2 * bw, Double(0))),
+        TmNum('shape.height', Math.Max(AOld.Nodes[ARow].H - 2 * bw, Double(0)))]);
+    end;
+  end;
+
+  function NewShape(ARow, AKind: Integer): TTyAnimProps;
+  var bw: Double;
+  begin
+    if AKind = 1 then
+      Result := TyAnimProps([TmNum('shape.x', 0), TmNum('shape.y', 0),
+        TmNum('shape.width', TS^.Nodes[ARow].W), TmNum('shape.height', TS^.Nodes[ARow].H)])
+    else
+    begin
+      bw := TS^.Nodes[ARow].BorderWidth;
+      Result := TyAnimProps([TmNum('shape.x', bw), TmNum('shape.y', bw),
+        TmNum('shape.width', Math.Max(TS^.Nodes[ARow].W - 2 * bw, Double(0))),
+        TmNum('shape.height', Math.Max(TS^.Nodes[ARow].H - 2 * bw, Double(0)))]);
+    end;
+  end;
+
+  function With1(const AProps: TTyAnimProps; const AKey: string; AValue: Double): TTyAnimProps;
+  begin
+    Result := Copy(AProps, 0, Length(AProps));
+    SetLength(Result, Length(Result) + 1);
+    Result[High(Result)] := TmNum(AKey, AValue);
+  end;
+
+  { the old element of a row and kind, and its words, in the list the last
+    render built }
+  function FindOld(ARow, AKind: Integer; out AEl, ALabel: TTyChartElement;
+    out AHasLabel: Boolean): Boolean;
+  var j, spec: Integer; e: TTyChartElement;
+  begin
+    Result := False;
+    AHasLabel := False;
+    AEl := Default(TTyChartElement);
+    ALabel := Default(TTyChartElement);
+    if FPaintList = nil then Exit;
+    if AKind = 2 then spec := ARow + 1 else spec := Length(AOld.Nodes) + 2 + ARow;
+    for j := 0 to FPaintList.Count - 1 do
+    begin
+      e := FPaintList.Element(j);
+      if (e.Anim.Role = carTmRect) and (e.Anim.Series = si) and (e.Anim.Index = ARow)
+        and (e.Anim.Sub = AKind - 1) then
+      begin
+        AEl := e;
+        Result := True;
+      end
+      else if (e.Anim.Role = carLabel) and (e.Datum.SeriesIndex = si)
+        and (e.Anim.Index = ARow) and (e.Caption.ItemSpec = spec) then
+      begin
+        ALabel := e;
+        AHasLabel := True;
+      end;
+    end;
+    { a ghost is drawn, never hit }
+    AEl.Silent := True;
+    ALabel.Silent := True;
+  end;
+
+  procedure Visit(ARow: Integer);
+  var c, pr: Integer; q: TTyChartAnimProxy;
+  begin
+    if not Was(have.Group, ARow) then Exit;
+    pr := TS^.Hier.Nodes[ARow].Parent;
+    { the group }
+    if Was(AOldHave.Group, ARow) then
+    begin
+      q := TmProxy(FAnim, si, ARow, 'tmGroup');
+      q.Attr(TyAnimProps([TmNum('x', TmOr0(AOld.Nodes[ARow].X)), TmNum('y', TmOr0(AOld.Nodes[ARow].Y))]));
+      A.Groups[ARow] := q;
+      Task(q, TyAnimProps([TmNum('x', TmOr0(TS^.Nodes[ARow].X)), TmNum('y', TmOr0(TS^.Nodes[ARow].Y))]));
+    end
+    else if (pr >= 0) and ((not reRoot) or drill) then
+    begin
+      { new: in from the parent's old corner -- x 0, y its height }
+      oy := 0;
+      if (not reRoot) and lastHas[pr] then oy := lastH[pr];
+      q := TmProxy(FAnim, si, ARow, 'tmGroup');
+      q.Attr(TyAnimProps([TmNum('x', 0), TmNum('y', oy)]));
+      A.Groups[ARow] := q;
+      Task(q, TyAnimProps([TmNum('x', TmOr0(TS^.Nodes[ARow].X)), TmNum('y', TmOr0(TS^.Nodes[ARow].Y))]));
+    end
+    else
+      Task(nil, nil);
+    { the background and the content }
+    for c := 1 to 2 do
+    begin
+      if (c = 1) and not Was(have.Bg, ARow) then Continue;
+      if (c = 2) and not Was(have.Ct, ARow) then Continue;
+      q := TmProxy(FAnim, si, ARow, 'tmRect');
+      if ((c = 1) and Was(AOldHave.Bg, ARow)) or ((c = 2) and Was(AOldHave.Ct, ARow)) then
+      begin
+        { kept: from its old shape }
+        q.Attr(With1(OldShape(ARow, c), 'style.opacity', 1));
+        if c = 1 then
+        begin
+          lastHas[ARow] := True;
+          lastW[ARow] := AOld.Nodes[ARow].W;
+          lastH[ARow] := AOld.Nodes[ARow].H;
+        end;
+        Task(q, NewShape(ARow, c));
+      end
+      else if (pr >= 0) and ((not reRoot) or drill) then
+      begin
+        { new: out of the parent's old corner, fading in }
+        ox := 0;
+        oy := 0;
+        if (not reRoot) and lastHas[pr] then
+        begin
+          ox := lastW[pr];
+          oy := lastH[pr];
+        end;
+        q.Attr(TyAnimProps([TmNum('shape.x', ox), TmNum('shape.y', oy),
+          TmNum('shape.width', 0), TmNum('shape.height', 0), TmNum('style.opacity', 0)]));
+        if c = 1 then
+        begin
+          lastHas[ARow] := True;
+          lastW[ARow] := 0;
+          lastH[ARow] := 0;
+        end;
+        Task(q, With1(NewShape(ARow, c), 'style.opacity', 1));
+      end
+      else
+      begin
+        { new with no start: it fades in where it is }
+        q.Attr(With1(NewShape(ARow, c), 'style.opacity', 0));
+        Task(q, TyAnimProps([TmNum('style.opacity', 1)]));
+      end;
+      A.Rects[ARow][c - 1] := q;
+    end;
+    for c := 0 to High(TS^.Nodes[ARow].View) do Visit(TS^.Nodes[ARow].View[c]);
+  end;
+
+begin
+  si := FBindings[ASlot].SeriesIndex;
+  { a label's fade is its Text's: it runs on whatever the render does with
+    the element (LabelManager starts none for a kept one) }
+  oldLabels := nil;
+  if si <= High(FTmAnim) then
+  begin
+    oldLabels := FTmAnim[si].Labels;
+    FTmAnim[si].Labels := nil;
+  end;
+  TmAnimDrop(si);
+  try
+  if not AnimAllowed then Exit;
+  TS := @FTreemaps[ASlot];
+  nn := Length(TS^.Nodes);
+  if (not AOld.Valid) or (Length(AOld.Nodes) <> nn) then Exit;
+  have := TyTreemapHaveOf(TS^, AOldHave);
+  cnt := nn;
+  if (ASlot <= High(FStores)) and (FStores[ASlot] <> nil) then cnt := FStores[ASlot].Count;
+  model := TyAnimSeriesModel(FOption.Root, si, cnt);
+  { hasAnimation is `get('animation')` -- no threshold -- and only a zoom or
+    a drill transitions; LabelManager fades a new label whenever the series
+    animates }
+  wrapOn := (AView.Kind in [tpkZoomToNode, tpkRootToNode])
+    and TyAnimOptTruthy(TyAnimGetShallow(model, 'animation'));
+  labelsOn := TyAnimIsEnabled(model);
+  if not (wrapOn or labelsOn) then Exit;
+  if FAnim = nil then FAnim := TTyAnimation.Create;
+  A := Default(TTyTmAnim);
+  SetLength(A.Groups, nn);
+  SetLength(A.Rects, nn);
+  SetLength(A.Labels, nn);
+  SetLength(A.GhostGroup, nn);
+  A.Old := AOld;
+  A.OldHave := AOldHave;
+  if wrapOn then
+  begin
+    { the duration the series' update one, a function none; the easing its
+      animationEasing, else cubicOut }
+    v := TyAnimGetShallow(model, 'animationDurationUpdate');
+    if v.Kind in [aokNumber, aokBool] then dur := v.Num
+    else if v.Kind = aokString then dur := TyJsToNumber(v.Str)
+    else dur := 0;
+    if IsNan(dur) then dur := 0;
+    v := TyAnimGetShallow(model, 'animationEasing');
+    if (v.Kind = aokString) and (v.Str <> '') then easing := v.Str else easing := 'cubicOut';
+    A.Wrap := TTyTmWrap.Create;
+    A.Wrap.Live := True;
+    cfg := TyAnimCfg(dur, 0, easing);
+    cfg.SetToFinal := True;
+    cfg.Done := @A.Wrap.Hit;
+    cfg.Aborted := @A.Wrap.Hit;
+    reRoot := (AView.Kind = tpkRootToNode) and (AView.Target >= 0);
+    drill := reRoot and (ADirection = 1);
+    tasks := nil;
+    { THE DELETED, first: groups, backgrounds, contents of the old storage
+      the render did not take }
+    for kind := 0 to 2 do
+      for row := 0 to nn - 1 do
+      begin
+        case kind of
+          0: if not (Was(AOldHave.Group, row) and not Was(have.Group, row)) then Continue;
+          1: if not (Was(AOldHave.Bg, row) and not Was(have.Bg, row)) then Continue;
+        else
+          if not (Was(AOldHave.Ct, row) and not Was(have.Ct, row)) then Continue;
+        end;
+        { an element already invisible leaves at the end, unanimated }
+        if (kind > 0) and AOld.Nodes[row].Invisible then Continue;
+        { the parent group's store: its node's size at its last render }
+        if kind = 0 then par := AOld.Hier.Nodes[row].Parent else par := row;
+        if par < 0 then Continue;
+        parDel := not Was(have.Group, par);
+        if parDel then
+        begin
+          pw := AOld.Nodes[par].W;
+          ph := AOld.Nodes[par].H;
+        end
+        else
+        begin
+          pw := TS^.Nodes[par].W;
+          ph := TS^.Nodes[par].H;
+        end;
+        if kind = 0 then
+        begin
+          A.GhostGroup[row] := True;
+          p := TmProxy(FAnim, si, row, 'tmGroup');
+          p.Attr(TyAnimProps([TmNum('x', TmOr0(AOld.Nodes[row].X)), TmNum('y', TmOr0(AOld.Nodes[row].Y))]));
+          A.Groups[row] := p;
+          { a drill fades a group's style, which a group has not: it stays }
+          if drill then Task(nil, nil)
+          else
+          begin
+            if parDel then
+            begin
+              tx := 0;
+              ty := 0;
+            end
+            else
+            begin
+              tx := pw / 2;
+              ty := ph / 2;
+            end;
+            Task(p, TyAnimProps([TmNum('x', tx), TmNum('y', ty)]));
+          end;
+          Continue;
+        end;
+        SetLength(A.Ghosts, Length(A.Ghosts) + 1);
+        A.Ghosts[High(A.Ghosts)].Row := row;
+        A.Ghosts[High(A.Ghosts)].Kind := kind - 1;
+        FindOld(row, kind, el, lel, A.Ghosts[High(A.Ghosts)].HasLabel);
+        A.Ghosts[High(A.Ghosts)].El := el;
+        A.Ghosts[High(A.Ghosts)].LabelEl := lel;
+        p := TmProxy(FAnim, si, row, 'tmGhost');
+        p.Attr(With1(OldShape(row, kind), 'style.opacity', 1));
+        A.Ghosts[High(A.Ghosts)].P := p;
+        if (row <= High(oldLabels)) and (oldLabels[row][2 - kind] <> nil) then
+        begin
+          A.Ghosts[High(A.Ghosts)].LP := oldLabels[row][2 - kind];
+          oldLabels[row][2 - kind] := nil;
+        end;
+        if drill then
+        begin
+          if (row = AView.Target) and Was(AOldHave.Group, AView.Target) then
+            props := TyAnimProps([TmNum('shape.x', 0), TmNum('shape.y', 0),
+              TmNum('shape.width', pw), TmNum('shape.height', ph), TmNum('style.opacity', 0)])
+          else
+            props := TyAnimProps([TmNum('style.opacity', 0)]);
+        end
+        else
+        begin
+          if parDel then
+          begin
+            tx := 0;
+            ty := 0;
+          end
+          else
+          begin
+            tx := pw / 2;
+            ty := ph / 2;
+          end;
+          props := TyAnimProps([TmNum('shape.x', tx), TmNum('shape.y', ty),
+            TmNum('shape.width', 0), TmNum('shape.height', 0), TmNum('style.opacity', 0)]);
+        end;
+        Task(p, props);
+      end;
+    { THE STORAGE, in the render's order }
+    SetLength(lastHas, nn);
+    SetLength(lastW, nn);
+    SetLength(lastH, nn);
+    Visit(0);
+    { the wrap: done when every element added has finished }
+    A.Wrap.Pending := Length(tasks);
+    for k := 0 to High(tasks) do
+      if (tasks[k].P = nil) or (Length(tasks[k].Props) = 0) then A.Wrap.Hit
+      else tasks[k].P.AnimateTo(tasks[k].Props, cfg);
+    { THE ELEMENTS MOVED OUT OF THE CANVAS are drawn until the end, in their
+      old visual (processInvisible sets none) }
+    for row := 0 to nn - 1 do
+      if TS^.Nodes[row].Invisible and (Was(have.Bg, row) or Was(have.Ct, row))
+        and not AOld.Nodes[row].Invisible and AOld.Nodes[row].HasLayout then
+      begin
+        TS^.Nodes[row].DrawInvisible := True;
+        TS^.Nodes[row].HasStroke := AOld.Nodes[row].HasStroke;
+        TS^.Nodes[row].Stroke := AOld.Nodes[row].Stroke;
+        TS^.Nodes[row].HasFill := AOld.Nodes[row].HasFill;
+        TS^.Nodes[row].Fill := AOld.Nodes[row].Fill;
+        TS^.Nodes[row].HasLabel := AOld.Nodes[row].HasLabel;
+        TS^.Nodes[row].LabelText := AOld.Nodes[row].LabelText;
+        TS^.Nodes[row].LabelX := AOld.Nodes[row].LabelX - AOld.Nodes[row].TX + TS^.Nodes[row].TX;
+        TS^.Nodes[row].LabelY := AOld.Nodes[row].LabelY - AOld.Nodes[row].TY + TS^.Nodes[row].TY;
+        TS^.Nodes[row].LabelAH := AOld.Nodes[row].LabelAH;
+        TS^.Nodes[row].LabelAV := AOld.Nodes[row].LabelAV;
+        TS^.Nodes[row].LabelRaw := AOld.Nodes[row].LabelRaw;
+        TS^.Nodes[row].HasLabelRaw := AOld.Nodes[row].HasLabelRaw;
+        TS^.Nodes[row].HasUpper := AOld.Nodes[row].HasUpper;
+        TS^.Nodes[row].UpperText := AOld.Nodes[row].UpperText;
+        TS^.Nodes[row].UpperX := AOld.Nodes[row].UpperX - AOld.Nodes[row].TX + TS^.Nodes[row].TX;
+        TS^.Nodes[row].UpperY := AOld.Nodes[row].UpperY - AOld.Nodes[row].TY + TS^.Nodes[row].TY;
+        TS^.Nodes[row].UpperCentre := AOld.Nodes[row].UpperCentre;
+        TS^.Nodes[row].UpperInside := AOld.Nodes[row].UpperInside;
+      end;
+  end;
+  { a kept element's fade goes on }
+  for row := 0 to Math.Min(High(oldLabels), nn - 1) do
+  begin
+    if Was(have.Ct, row) and Was(AOldHave.Ct, row) and (oldLabels[row][0] <> nil) then
+    begin
+      A.Labels[row][0] := oldLabels[row][0];
+      oldLabels[row][0] := nil;
+    end;
+    if Was(have.Bg, row) and Was(AOldHave.Bg, row) and (oldLabels[row][1] <> nil) then
+    begin
+      A.Labels[row][1] := oldLabels[row][1];
+      oldLabels[row][1] := nil;
+    end;
+  end;
+  { LabelManager: a label on an element this render made fades in, the
+    series' enter timing at its row }
+  if labelsOn then
+    for row := 0 to nn - 1 do
+    begin
+      if Was(have.Ct, row) and not Was(AOldHave.Ct, row) and TS^.Nodes[row].HasLabel then
+      begin
+        p := TmProxy(FAnim, si, row, 'tmLabel');
+        p.Attr(TyAnimProps([TmNum('style.opacity', 0)]));
+        TyInitProps(p, TyAnimProps([TmNum('style.opacity', 1)]), model, TyAnimCallAt(row));
+        A.Labels[row][0] := p;
+      end;
+      if Was(have.Bg, row) and not Was(AOldHave.Bg, row) and TS^.Nodes[row].HasUpper then
+      begin
+        p := TmProxy(FAnim, si, row, 'tmUpper');
+        p.Attr(TyAnimProps([TmNum('style.opacity', 0)]));
+        TyInitProps(p, TyAnimProps([TmNum('style.opacity', 1)]), model, TyAnimCallAt(row));
+        A.Labels[row][1] := p;
+      end;
+    end;
+  if Length(FTmAnim) <= si then SetLength(FTmAnim, si + 1);
+  FTmAnim[si] := A;
+  finally
+    for row := 0 to High(oldLabels) do
+    begin
+      FreeAndNil(oldLabels[row][0]);
+      FreeAndNil(oldLabels[row][1]);
+    end;
+  end;
+end;
+
+{ A FRAME OF THE DRILL-DOWN: every node's group where its proxy has it,
+  composed down the tree as zrender composes the groups (a local offset
+  under 5e-5 is none); every rect's shape and opacity on its group; a
+  content's words placed and cut again on the rect it has now, an upper
+  label carried by its group; and the deleted elements drawn after the rest }
+procedure TTyAdvanceChart.TreemapFrame(AFrame: TTyPaintList);
+type
+  TTmT = record
+    Done, HasT: Boolean;
+    TX, TY: Double;
+  end;
+var
+  si, slot, nn, i, row, sub: Integer;
+  T: array of TTmT;
+  A: ^TTyTmAnim;
+  TS: ^TTyTreemapSolved;
+  m: ITyTextMeasurer;
+  el: TTyChartElement;
+  sx, sy, sw, sh, op, lx, ly, ox0, oy0: Double;
+  p: TTyChartAnimProxy;
+  wtext: string;
+  spec: TTyLabelSpec;
+
+  function GroupXY(ARow: Integer; out AX, AY: Double): Boolean;
+  begin
+    Result := True;
+    if (ARow <= High(A^.Groups)) and (A^.Groups[ARow] <> nil) then
+    begin
+      AX := A^.Groups[ARow].Num('x');
+      AY := A^.Groups[ARow].Num('y');
+    end
+    else if (ARow <= High(A^.GhostGroup)) and A^.GhostGroup[ARow] then
+    begin
+      AX := TmOr0(A^.Old.Nodes[ARow].X);
+      AY := TmOr0(A^.Old.Nodes[ARow].Y);
+    end
+    else
+    begin
+      AX := TmOr0(TS^.Nodes[ARow].X);
+      AY := TmOr0(TS^.Nodes[ARow].Y);
+    end;
+  end;
+
+  procedure Compose(ARow: Integer);
+  var par: Integer; x, y, ptx, pty: Double; pHas: Boolean;
+  begin
+    if T[ARow].Done then Exit;
+    par := TS^.Hier.Nodes[ARow].Parent;
+    if par >= 0 then
+    begin
+      Compose(par);
+      pHas := T[par].HasT;
+      ptx := T[par].TX;
+      pty := T[par].TY;
+    end
+    else
+    begin
+      { the container group at the box }
+      pHas := not ((not ((TS^.ContainerX > 5e-5) or (TS^.ContainerX < -5e-5)))
+        and (not ((TS^.ContainerY > 5e-5) or (TS^.ContainerY < -5e-5))));
+      if pHas then
+      begin
+        ptx := 0 + (0 + TS^.ContainerX);
+        pty := 0 + (0 + TS^.ContainerY);
+      end
+      else
+      begin
+        ptx := 0;
+        pty := 0;
+      end;
+    end;
+    GroupXY(ARow, x, y);
+    if (not ((x > 5e-5) or (x < -5e-5))) and (not ((y > 5e-5) or (y < -5e-5))) then
+    begin
+      T[ARow].HasT := pHas;
+      T[ARow].TX := ptx;
+      T[ARow].TY := pty;
+    end
+    else if not pHas then
+    begin
+      T[ARow].HasT := True;
+      T[ARow].TX := 0 + (0 + x);
+      T[ARow].TY := 0 + (0 + y);
+    end
+    else
+    begin
+      T[ARow].HasT := True;
+      T[ARow].TX := x + ptx;
+      T[ARow].TY := y + pty;
+    end;
+    if not T[ARow].HasT then
+    begin
+      T[ARow].TX := 0;
+      T[ARow].TY := 0;
+    end;
+    T[ARow].Done := True;
+  end;
+
+  procedure RectOf(AP: TTyChartAnimProxy; const AEl: TTyChartElement);
+  begin
+    if AP <> nil then
+    begin
+      sx := AP.Num('shape.x');
+      sy := AP.Num('shape.y');
+      sw := AP.Num('shape.width');
+      sh := AP.Num('shape.height');
+      op := AP.Num('style.opacity');
+    end
+    else
+    begin
+      sx := AEl.Anim.G[0];
+      sy := AEl.Anim.G[1];
+      sw := AEl.Anim.G[2];
+      sh := AEl.Anim.G[3];
+      op := AEl.Style.Alpha;
+    end;
+  end;
+
+  procedure Place(var AEl: TTyChartElement; ARow: Integer);
+  begin
+    Compose(ARow);
+    AEl.Shape.Bounds := TyRectF(sx + T[ARow].TX, sy + T[ARow].TY,
+      (sx + sw) + T[ARow].TX, (sy + sh) + T[ARow].TY);
+    AEl.Style.Alpha := op;
+  end;
+
+  procedure Words(var ALabel: TTyChartElement; const ASolved: TTyTreemapSolved; ARow: Integer);
+  var dx, dy: Double;
+  begin
+    if (ARow <= High(FTreemapInks[slot].ItemLabels)) then
+      spec := FTreemapInks[slot].ItemLabels[ARow]
+    else
+      spec := FTreemapInks[slot].Label_;
+    if m = nil then m := NewTextMeasurer(FLastPPI);
+    Compose(ARow);
+    dx := ALabel.Caption.X - ALabel.Caption.FixedX;
+    dy := ALabel.Caption.Y - ALabel.Caption.FixedY;
+    if TyTreemapLabelAt(ASolved, ARow, spec, m, sx * 1 + T[ARow].TX, sy * 1 + T[ARow].TY,
+      sw, sh, wtext, lx, ly) and (wtext <> '') then
+    begin
+      ALabel.Caption.Text := wtext;
+      ALabel.Caption.X := lx + dx;
+      ALabel.Caption.Y := ly + dy;
+    end
+    else
+      ALabel.Ignore := True;
+  end;
+
+begin
+  if AFrame = nil then Exit;
+  m := nil;
+  for si := 0 to High(FTmAnim) do
+  begin
+    if (Length(FTmAnim[si].Groups) = 0) and (Length(FTmAnim[si].Ghosts) = 0) then Continue;
+    slot := SlotOfSeries(si);
+    if (slot < 0) or (slot > High(FTreemaps)) or not FTreemaps[slot].Valid then Continue;
+    A := @FTmAnim[si];
+    TS := @FTreemaps[slot];
+    nn := Length(TS^.Nodes);
+    if Length(A^.Groups) <> nn then Continue;
+    T := nil;
+    SetLength(T, nn);
+    for i := 0 to AFrame.Count - 1 do
+    begin
+      el := AFrame.Element(i);
+      if (el.Anim.Role = carTmRect) and (el.Anim.Series = si) then
+      begin
+        row := el.Anim.Index;
+        sub := el.Anim.Sub;
+        if (row < 0) or (row >= nn) or (sub < 0) or (sub > 1) then Continue;
+        RectOf(A^.Rects[row][sub], el);
+        Place(el, row);
+        AFrame.SetElement(i, el);
+      end
+      else if (el.Anim.Role = carLabel) and (el.Datum.SeriesIndex = si) then
+      begin
+        row := el.Anim.Index;
+        if (row < 0) or (row >= nn) then Continue;
+        if el.Caption.ItemSpec = row + 1 then
+        begin
+          { a content's wtext on the content as it is now }
+          if not ((row <= High(TS^.Nodes)) and (Length(TS^.Nodes[row].View) = 0)) then Continue;
+          RectOf(A^.Rects[row][1], el);
+          if A^.Rects[row][1] = nil then
+          begin
+            sx := TS^.Nodes[row].BorderWidth;
+            sy := sx;
+            sw := Math.Max(TS^.Nodes[row].W - 2 * sx, Double(0));
+            sh := Math.Max(TS^.Nodes[row].H - 2 * sx, Double(0));
+          end;
+          Words(el, TS^, row);
+          if A^.Labels[row][0] <> nil then el.Style.Alpha := A^.Labels[row][0].Num('style.opacity');
+        end
+        else if el.Caption.ItemSpec = nn + 2 + row then
+        begin
+          { a header rides its group }
+          Compose(row);
+          el.Caption.X := el.Caption.X + (T[row].TX - TS^.Nodes[row].TX);
+          el.Caption.Y := el.Caption.Y + (T[row].TY - TS^.Nodes[row].TY);
+          if A^.Labels[row][1] <> nil then el.Style.Alpha := A^.Labels[row][1].Num('style.opacity');
+        end;
+        AFrame.SetElement(i, el);
+      end;
+    end;
+    { THE DELETED, still leaving }
+    for i := 0 to High(A^.Ghosts) do
+    begin
+      if A^.Ghosts[i].El.Anim.Role <> carTmRect then Continue;
+      row := A^.Ghosts[i].Row;
+      el := A^.Ghosts[i].El;
+      RectOf(A^.Ghosts[i].P, el);
+      Place(el, row);
+      AFrame.Add(el);
+      if A^.Ghosts[i].HasLabel then
+      begin
+        el := A^.Ghosts[i].LabelEl;
+        if (A^.Ghosts[i].Kind = 1) and not A^.Stepped then
+        begin
+          { not dirty yet: the words cut to the rect it has, where they were }
+          ox0 := el.Caption.X;
+          oy0 := el.Caption.Y;
+          Words(el, A^.Old, row);
+          if not el.Ignore then
+          begin
+            el.Caption.X := ox0;
+            el.Caption.Y := oy0;
+          end;
+        end
+        else if A^.Ghosts[i].Kind = 1 then
+          Words(el, A^.Old, row)
+        else if not A^.Stepped then
+        else
+        begin
+          Compose(row);
+          el.Caption.X := el.Caption.X + (T[row].TX - A^.Old.Nodes[row].TX);
+          el.Caption.Y := el.Caption.Y + (T[row].TY - A^.Old.Nodes[row].TY);
+        end;
+        if A^.Ghosts[i].LP <> nil then el.Style.Alpha := A^.Ghosts[i].LP.Num('style.opacity');
+        AFrame.Add(el);
+      end;
+    end;
+  end;
+end;
+
+{ ---- a treemap's hover: in place, in the static list ---- }
+
+function TTyAdvanceChart.IsTreemapDatum(const ADatum: TTyChartDatumRef): Boolean;
+var slot: Integer;
+begin
+  Result := False;
+  if (ADatum.SeriesIndex < 0) or (ADatum.DataIndex < 0) or ADatum.IsEdge then Exit;
+  slot := SlotOfSeries(ADatum.SeriesIndex);
+  Result := (slot >= 0) and (FBindings[slot].SeriesType = TyTreemapSeriesTypeName);
+end;
+
+{ THE HOVERED NODE'S DISPATCHER in emphasis (setAsHighDownDispatcher): a
+  leaf's group -- its background and content both -- or a parent's
+  background alone; each lifted (liftColor) and its z2 up by 10 }
+procedure TTyAdvanceChart.ApplyTreemapHover(AList: TTyPaintList);
+var
+  slot, row, i: Integer;
+  leaf: Boolean;
+  el: TTyChartElement;
+begin
+  if (AList = nil) or (FTmHoverSeries < 0) then Exit;
+  slot := SlotOfSeries(FTmHoverSeries);
+  if (slot < 0) or (slot > High(FTreemaps)) or not FTreemaps[slot].Valid then Exit;
+  row := FTmHoverRow;
+  if (row < 0) or (row > High(FTreemaps[slot].Nodes)) then Exit;
+  leaf := Length(FTreemaps[slot].Nodes[row].View) = 0;
+  for i := 0 to AList.Count - 1 do
+  begin
+    el := AList.Element(i);
+    if (el.Anim.Role <> carTmRect) or (el.Anim.Series <> FTmHoverSeries)
+      or (el.Anim.Index <> row) then Continue;
+    if (el.Anim.Sub = 1) and not leaf then Continue;
+    if el.Style.HasFill then el.Style.FillColor := TyChartLiftColor(el.Style.FillColor);
+    el.Z2 := el.Z2 + 10;
+    AList.SetElement(i, el);
+  end;
 end;
 
 function TTyAdvanceChart.RadarLayout(AIndex: Integer): TTyRadar;
@@ -9782,6 +11898,677 @@ function TTyAdvanceChart.PolarLayout(AIndex: Integer): TTyPolar;
 begin
   if (AIndex < 0) or (AIndex > High(FPolars)) then Exit(nil);
   Result := FPolars[AIndex];
+end;
+
+{ ==================== the single axes [Batch 118] ==================== }
+
+procedure TTyAdvanceChart.FreeSingles;
+var i: Integer;
+begin
+  for i := 0 to High(FSingles) do
+    FSingles[i].Free;
+  FSingles := nil;
+end;
+
+function TTyAdvanceChart.SingleCount: Integer;
+begin
+  Result := Length(FSingles);
+end;
+
+function TTyAdvanceChart.SingleLayout(AIndex: Integer): TTySingle;
+begin
+  if (AIndex < 0) or (AIndex > High(FSingles)) then Exit(nil);
+  Result := FSingles[AIndex];
+end;
+
+{ WHAT A SINGLE AXIS VIEW DRAWS, in the skin's axis styles -- the same keys
+  the grid's and the polar's axes are drawn in: upstream's single axis takes
+  axisDefault like every other }
+procedure TTyAdvanceChart.PaintSingles(APainter: TTyPainter; APPI: Integer;
+  const AMeasurer: ITyTextMeasurer; ABelow: Boolean);
+var
+  i, q, ink: Integer;
+  s: TTySingle;
+  model: TTyStyleModel;
+  lineS, tickS, splitS, areaS, minorTickS, labelS, nameS, inkStyle: TTyStyleSet;
+  areaColour: TTyColor;
+  lblW, lblH: Integer;
+  v: TTySingleAxisView;
+  sp: TTyAxisLayoutSpec;
+  pl: TTyAxisNamePlacement;
+
+  function LineWidth(const AStyle: TTyStyleSet): Double;
+  begin
+    if tpBorderWidth in AStyle.Present then Result := AStyle.BorderWidth
+    else Result := 1;
+    if Result < 0.05 then Result := 0.05;
+  end;
+
+  function AnchorAlign(AH2: TTyTextAnchorH): TAlignment;
+  begin
+    case AH2 of
+      tahLeft: Result := taLeftJustify;
+      tahRight: Result := taRightJustify;
+    else Result := taCenter;
+    end;
+  end;
+
+  function AnchorLayout(AV: TTyTextAnchorV): TTextLayout;
+  begin
+    case AV of
+      tavTop: Result := tlTop;
+      tavBottom: Result := tlBottom;
+    else Result := tlCenter;
+    end;
+  end;
+
+  function AnchorBox(AX, AY: Double; AW, AH: Integer;
+    AH2: TTyTextAnchorH; AV: TTyTextAnchorV): TRect;
+  begin
+    case AH2 of
+      tahLeft: begin Result.Left := Round(AX); Result.Right := Round(AX) + AW; end;
+      tahRight: begin Result.Left := Round(AX) - AW; Result.Right := Round(AX); end;
+    else
+      begin
+        Result.Left := Round(AX - AW / 2);
+        Result.Right := Result.Left + AW;
+      end;
+    end;
+    case AV of
+      tavTop: begin Result.Top := Round(AY); Result.Bottom := Round(AY) + AH; end;
+      tavBottom: begin Result.Top := Round(AY) - AH; Result.Bottom := Round(AY); end;
+    else
+      begin
+        Result.Top := Round(AY - AH / 2);
+        Result.Bottom := Result.Top + AH;
+      end;
+    end;
+  end;
+
+  procedure TextSizeOf(const AText: string; const AStyle: TTyStyleSet;
+    out AW, AH: Integer);
+  var w, h: Double;
+  begin
+    AW := 0;
+    AH := 0;
+    if AMeasurer = nil then Exit;
+    AMeasurer.MeasureLine(AText, AStyle.FontName, ResolveFontSize(AStyle),
+      AStyle.FontWeight, w, h);
+    AW := Round(w);
+    AH := Round(h);
+  end;
+
+  { a place that is a number: a frame of no position (a vertical orient
+    at the default bottom) puts everything at none, which draws nothing }
+  function Finite(AX, AY: Double): Boolean;
+  begin
+    Result := not (IsNan(AX) or IsNan(AY) or IsInfinite(AX) or IsInfinite(AY));
+  end;
+
+  { the lines of AInk (every one when AInk < 0), one path, one stroke }
+  procedure StrokeLines(const ALines: TTySingleLineArray; const AStyle: TTyStyleSet;
+    AInk: Integer);
+  var k, n: Integer;
+  begin
+    if not (tpBorderColor in AStyle.Present) then Exit;
+    n := 0;
+    APainter.BeginPath;
+    for k := 0 to High(ALines) do
+    begin
+      if not ALines[k].Drawn then Continue;
+      if not (Finite(ALines[k].X1, ALines[k].Y1) and Finite(ALines[k].X2, ALines[k].Y2)) then
+        Continue;
+      if (AInk >= 0) and (ALines[k].ColourIndex <> AInk) then Continue;
+      APainter.MoveTo(ALines[k].X1, ALines[k].Y1);
+      APainter.LineTo(ALines[k].X2, ALines[k].Y2);
+      Inc(n);
+    end;
+    if n > 0 then APainter.StrokePath(AStyle.BorderColor, LineWidth(AStyle));
+  end;
+
+  procedure PaintArrow(const AArrow: TTyAxisArrow);
+  var
+    el: TTyChartElement;
+    path: TTyZrPath;
+    t: string;
+  begin
+    t := AArrow.SymbolType;
+    path := TyZrSymbol(t, -AArrow.W / 2, -AArrow.H / 2, AArrow.W, AArrow.H);
+    if Length(path) = 0 then Exit;
+    el := Default(TTyChartElement);
+    el.Style.Alpha := 1;
+    el.Shape := TyMkZrShape(path, TyZrLocal(1, 1, AArrow.Rotation, AArrow.X,
+      AArrow.Y), True);
+    if Copy(t, 1, 5) = 'empty' then
+    begin
+      el.Style.HasFill := True;
+      el.Style.FillColor := TTyChartColor(model.ResolveStyle(
+        'TyAdvChartEmptyCircle', '', []).Background.Color);
+      el.Style.StrokeColor := TTyChartColor(lineS.BorderColor);
+      el.Style.StrokeWidthLogical := 2;
+    end
+    else if t = 'line' then
+    begin
+      el.Style.StrokeColor := TTyChartColor(lineS.BorderColor);
+      el.Style.StrokeWidthLogical := 1;
+    end
+    else
+    begin
+      el.Style.HasFill := True;
+      el.Style.FillColor := TTyChartColor(lineS.BorderColor);
+    end;
+    TyRenderElement(APainter, el);
+  end;
+
+begin
+  if Length(FSingles) = 0 then Exit;
+  { excludeComponents names the view [Batch 118] }
+  if ViewHidden(cvSingleAxis) then Exit;
+  model := ActiveController.Model;
+  lineS := model.ResolveStyle('TyAdvChartAxisLine', '', []);
+  tickS := model.ResolveStyle('TyAdvChartAxisTick', '', []);
+  splitS := model.ResolveStyle('TyAdvChartSplitLine', '', []);
+  areaS := model.ResolveStyle('TyAdvChartSplitArea', '', []);
+  minorTickS := model.ResolveStyle('TyAdvChartMinorTick', '', []);
+  for i := 0 to High(FSingles) do
+  begin
+    s := FSingles[i];
+    if s = nil then Continue;
+    v := s.View;
+    if not v.Shown then Continue;
+    ViewDrew(cvSingleAxis);
+    if ABelow then
+    begin
+      { the split areas in their colours: the author's list, or the skin's
+        colour and none in turn }
+      for q := 0 to High(v.SplitAreas) do
+      begin
+        ink := v.SplitAreas[q].ColourIndex;
+        if Length(v.Furn.SplitAreaInks) > 0 then
+        begin
+          if ink > High(v.Furn.SplitAreaInks) then ink := 0;
+          if not v.Furn.SplitAreaInks[ink].Ok then Continue;
+          areaColour := TTyColor(v.Furn.SplitAreaInks[ink].Colour);
+        end
+        else if (ink <> 0) or not (tpBackground in areaS.Present) then
+          Continue
+        else
+          areaColour := areaS.Background.Color;
+        APainter.BeginPath;
+        APainter.MoveTo(v.SplitAreas[q].X, v.SplitAreas[q].Y);
+        APainter.LineTo(v.SplitAreas[q].X + v.SplitAreas[q].W, v.SplitAreas[q].Y);
+        APainter.LineTo(v.SplitAreas[q].X + v.SplitAreas[q].W,
+          v.SplitAreas[q].Y + v.SplitAreas[q].H);
+        APainter.LineTo(v.SplitAreas[q].X, v.SplitAreas[q].Y + v.SplitAreas[q].H);
+        APainter.ClosePath;
+        APainter.FillPath(areaColour);
+      end;
+      { the split lines in their colours }
+      if (tpBorderColor in splitS.Present) or (Length(v.Furn.SplitLineInks) > 0) then
+        for q := 0 to Math.Max(0, High(v.Furn.SplitLineInks)) do
+        begin
+          inkStyle := splitS;
+          if Length(v.Furn.SplitLineInks) > 0 then
+          begin
+            if not v.Furn.SplitLineInks[q].Ok then Continue;
+            inkStyle.BorderColor := TTyColor(v.Furn.SplitLineInks[q].Colour);
+            Include(inkStyle.Present, tpBorderColor);
+            StrokeLines(v.SplitLines, inkStyle, q);
+          end
+          else
+            StrokeLines(v.SplitLines, inkStyle, -1);
+        end;
+      Continue;
+    end;
+    sp := v.Spec;
+    if v.HasLine and (tpBorderColor in lineS.Present)
+      and Finite(v.Line.X1, v.Line.Y1) and Finite(v.Line.X2, v.Line.Y2) then
+    begin
+      APainter.BeginPath;
+      APainter.MoveTo(v.Line.X1, v.Line.Y1);
+      APainter.LineTo(v.Line.X2, v.Line.Y2);
+      APainter.StrokePath(lineS.BorderColor, LineWidth(lineS));
+      for q := 0 to High(sp.Arrows) do
+        if Finite(sp.Arrows[q].X, sp.Arrows[q].Y) then PaintArrow(sp.Arrows[q]);
+    end;
+    StrokeLines(v.Ticks, tickS, -1);
+    StrokeLines(v.MinorTicks, minorTickS, -1);
+    AxisTextStyles(@sp, labelS, nameS);
+    pl := sp.NamePlacement;
+    if pl.Shown and (tpTextColor in nameS.Present) and Finite(pl.X, pl.Y) then
+    begin
+      if Length(pl.Rt) > 0 then
+        TyRenderRtPieces(APainter, pl.Rt, pl.X, pl.Y, pl.RotationRad, sp.RtScale,
+          1, True, nameS.TextColor)
+      else if Abs(pl.RotationRad) < 1e-9 then
+      begin
+        TextSizeOf(pl.Text, nameS, lblW, lblH);
+        APainter.DrawText(AnchorBox(pl.X, pl.Y, lblW, lblH, pl.AnchorH, pl.AnchorV),
+          pl.Text, nameS.FontName, ResolveFontSize(nameS), nameS.FontWeight,
+          nameS.TextColor, taCenter, tlCenter, False, 0, False, Pos(#10, pl.Text) > 0);
+      end
+      else
+        APainter.DrawTextRotated(pl.Text, nameS.FontName, ResolveFontSize(nameS),
+          nameS.FontWeight, nameS.TextColor, pl.X, pl.Y, pl.RotationRad,
+          AnchorAlign(pl.AnchorH), AnchorLayout(pl.AnchorV));
+    end;
+    if not (tpTextColor in labelS.Present) then Continue;
+    for q := 0 to High(sp.Placements) do
+    begin
+      if not sp.Placements[q].Shown or (sp.Placements[q].Text = '') then Continue;
+      if not Finite(sp.Placements[q].X, sp.Placements[q].Y) then Continue;
+      if Length(sp.Placements[q].Rt) > 0 then
+      begin
+        TyRenderRtPieces(APainter, sp.Placements[q].Rt, sp.Placements[q].X,
+          sp.Placements[q].Y, sp.RotationRad, sp.RtScale, 1, True, labelS.TextColor);
+        Continue;
+      end;
+      if sp.RotationRad <> 0 then
+      begin
+        APainter.DrawTextRotated(sp.Placements[q].Text, labelS.FontName,
+          ResolveFontSize(labelS), labelS.FontWeight, labelS.TextColor,
+          sp.Placements[q].X, sp.Placements[q].Y, sp.RotationRad,
+          AnchorAlign(sp.Placements[q].AnchorH), AnchorLayout(sp.Placements[q].AnchorV));
+        Continue;
+      end;
+      TextSizeOf(sp.Placements[q].Text, labelS, lblW, lblH);
+      APainter.DrawText(AnchorBox(sp.Placements[q].X, sp.Placements[q].Y, lblW,
+        lblH, sp.Placements[q].AnchorH, sp.Placements[q].AnchorV),
+        sp.Placements[q].Text, labelS.FontName, ResolveFontSize(labelS),
+        labelS.FontWeight, labelS.TextColor, taCenter, tlCenter, False, 0, False,
+        Pos(#10, sp.Placements[q].Text) > 0);
+    end;
+  end;
+end;
+
+function TTyAdvanceChart.SinglePointerGeometry(const AHit: TTyAxisHit;
+  const ARect: TRect; const AMeasurer: ITyTextMeasurer; APPI: Integer;
+  out ADraw: TTySinglePointerDraw): Boolean;
+var
+  pv, px, margin, tw, th, padL, padT, padR, padB, x, y, vw, vh: Double;
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
+  labelS: TTyStyleSet;
+  scale: Double;
+begin
+  ADraw := Default(TTySinglePointerDraw);
+  ADraw.Shape.Kind := spkNone;
+  Result := False;
+  if (AHit.Single = nil) or (AHit.Axis = nil) then Exit;
+  Result := True;
+  pv := PointerValue(AHit);
+  { coordSys.dataToPoint(value)[0] -- the x, whichever dimension the axis
+    runs along: a vertical axis' pointer stays on the rect's centre column,
+    upstream's }
+  px := AHit.Single.ValueToPoint(pv).X;
+  case AHit.Spec.PointerType of
+    aptLine: ADraw.Shape := TySinglePointerShape(AHit.Single, px, 0, False);
+    aptShadow: ADraw.Shape := TySinglePointerShape(AHit.Single, px,
+      TyPolarPointerBand(AHit.Axis), True);
+  end;
+  if not AHit.Spec.LabelSpec.Show or (AMeasurer = nil) then Exit;
+  ADraw.Text := PointerLabelText(AHit, pv);
+  labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
+  AMeasurer.MeasureLine(ADraw.Text, labelS.FontName, ResolveFontSize(labelS),
+    labelS.FontWeight, tw, th);
+  if APPI > 0 then scale := APPI / 96 else scale := 1;
+  if AHit.Spec.LabelSpec.HasPadding then
+  begin
+    padL := AHit.Spec.LabelSpec.PadLeft * scale;
+    padT := AHit.Spec.LabelSpec.PadTop * scale;
+    padR := AHit.Spec.LabelSpec.PadRight * scale;
+    padB := AHit.Spec.LabelSpec.PadBottom * scale;
+  end
+  else
+  begin
+    padL := labelS.Padding.Left * scale;
+    padT := labelS.Padding.Top * scale;
+    padR := labelS.Padding.Right * scale;
+    padB := labelS.Padding.Bottom * scale;
+  end;
+  margin := ActiveController.Metric(TyAdvChartAxisPointerMarginVar,
+    TyAdvChartAxisPointerMargin);
+  if AHit.Spec.LabelSpec.MarginLogical <> 3 then
+    margin := AHit.Spec.LabelSpec.MarginLogical;
+  margin := margin * scale;
+  { buildCartesianSingleLabelElOption: getTransformedPosition, then
+    buildLabelElOption's align and confineInContainer }
+  TySinglePointerLabelAnchor(AHit.Single, FOption, pv, margin, x, y, ah, av);
+  ADraw.W := tw + padR + padL;
+  ADraw.H := th + padT + padB;
+  if ah = tahRight then x := x - ADraw.W;
+  if ah = tahCentre then x := x - ADraw.W / 2;
+  if av = tavBottom then y := y - ADraw.H;
+  if av = tavMiddle then y := y - ADraw.H / 2;
+  vw := ARect.Right - ARect.Left;
+  vh := ARect.Bottom - ARect.Top;
+  x := Math.Min(x + ADraw.W, vw) - ADraw.W;
+  y := Math.Min(y + ADraw.H, vh) - ADraw.H;
+  x := Math.Max(x, Double(0));
+  y := Math.Max(y, Double(0));
+  ADraw.X := x;
+  ADraw.Y := y;
+  ADraw.HasLabel := True;
+end;
+
+procedure TTyAdvanceChart.PaintSinglePointer(APainter: TTyPainter;
+  const ARect: TRect; APPI: Integer; const AMeasurer: ITyTextMeasurer;
+  const AHit: TTyAxisHit);
+var
+  d: TTySinglePointerDraw;
+  lineS, shadowS, labelS: TTyStyleSet;
+  colour: TTyColor;
+  w: Double;
+  dash: TTyDoubleArray;
+  box: TRect;
+  corners: TTyCorners;
+  surface: TTyFill;
+  ln: TTySingleLine;
+begin
+  if not SinglePointerGeometry(AHit, ARect, AMeasurer, APPI, d) then Exit;
+  { a pointer at no number draws nothing (a frame of no position) }
+  if IsNan(d.Shape.X1) or IsNan(d.Shape.Y1) or IsNan(d.Shape.X2) or IsNan(d.Shape.Y2) then
+    d.Shape.Kind := spkNone;
+  if IsNan(d.X) or IsNan(d.Y) or IsNan(d.W) or IsNan(d.H) then d.HasLabel := False;
+  lineS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointer', '', []);
+  shadowS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerShadow', '', []);
+  labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
+  case d.Shape.Kind of
+    spkLine:
+      if tpBorderColor in lineS.Present then
+      begin
+        colour := lineS.BorderColor;
+        if AHit.Spec.HasLineColour then colour := TTyColor(AHit.Spec.LineColour);
+        w := lineS.BorderWidth;
+        if AHit.Spec.HasLineWidth then w := AHit.Spec.LineWidthLogical;
+        if w > 0 then
+        begin
+          { subPixelOptimize: true -- the line on the pixel grid as it is
+            built }
+          ln := Default(TTySingleLine);
+          ln.X1 := d.Shape.X1;
+          ln.Y1 := d.Shape.Y1;
+          ln.X2 := d.Shape.X2;
+          ln.Y2 := d.Shape.Y2;
+          TySingleSubPixelLine(ln, APainter.ScaleF(w));
+          dash := TyDashPattern(AHit.Spec.LineDash, AHit.Spec.LineDashExplicit, w);
+          APainter.SetLineDash(dash);
+          APainter.BeginPath;
+          APainter.MoveTo(ln.X1, ln.Y1);
+          APainter.LineTo(ln.X2, ln.Y2);
+          APainter.StrokePath(colour, w);
+          APainter.SetLineDash([]);
+        end;
+      end;
+    spkRect:
+      if tpBackground in shadowS.Present then
+      begin
+        colour := shadowS.Background.Color;
+        if AHit.Spec.HasShadowColour then colour := TTyColor(AHit.Spec.ShadowColour);
+        APainter.BeginPath;
+        APainter.MoveTo(d.Shape.X1, d.Shape.Y1);
+        APainter.LineTo(d.Shape.X1 + d.Shape.X2, d.Shape.Y1);
+        APainter.LineTo(d.Shape.X1 + d.Shape.X2, d.Shape.Y1 + d.Shape.Y2);
+        APainter.LineTo(d.Shape.X1, d.Shape.Y1 + d.Shape.Y2);
+        APainter.ClosePath;
+        APainter.FillPath(colour);
+      end;
+  end;
+  if not d.HasLabel or (d.Text = '') then Exit;
+  if not (tpBackground in labelS.Present) then Exit;
+  box := Rect(Round(d.X), Round(d.Y), Round(d.X + d.W), Round(d.Y + d.H));
+  corners := TyEffectiveCorners(labelS);
+  if AHit.Spec.LabelSpec.HasBorderRadius then
+    corners := TyCorners(Round(AHit.Spec.LabelSpec.BorderRadiusLogical),
+      Round(AHit.Spec.LabelSpec.BorderRadiusLogical),
+      Round(AHit.Spec.LabelSpec.BorderRadiusLogical),
+      Round(AHit.Spec.LabelSpec.BorderRadiusLogical));
+  surface := labelS.Background;
+  if AHit.Spec.LabelSpec.HasBackground then
+  begin
+    surface.Kind := tfkSolid;
+    surface.Color := TTyColor(AHit.Spec.LabelSpec.Background);
+  end;
+  APainter.FillBackground(box, surface, corners);
+  if AHit.Spec.LabelSpec.HasBorderColour and AHit.Spec.LabelSpec.HasBorderWidth
+    and (AHit.Spec.LabelSpec.BorderWidthLogical > 0) then
+    APainter.StrokeBorder(box, corners,
+      Round(AHit.Spec.LabelSpec.BorderWidthLogical),
+      TTyColor(AHit.Spec.LabelSpec.BorderColour))
+  else if TyBorderVisible(labelS) then
+    APainter.StrokeBorder(box, corners, labelS.BorderWidth, labelS.BorderColor);
+  colour := labelS.TextColor;
+  if AHit.Spec.LabelSpec.HasColour then colour := TTyColor(AHit.Spec.LabelSpec.Colour);
+  APainter.DrawText(box, d.Text, labelS.FontName, ResolveFontSize(labelS),
+    labelS.FontWeight, colour, taCenter, tlCenter, False);
+end;
+
+{ ==================== the themeRivers [Batch 118] ==================== }
+
+procedure TTyAdvanceChart.SolveRivers(APPI: Integer);
+var
+  i: Integer;
+  scale, margin: Double;
+  d: TJSONData;
+  lab: TJSONData;
+begin
+  FRivers := nil;
+  SetLength(FRivers, Length(FBindings));
+  if APPI > 0 then scale := APPI / 96 else scale := 1;
+  for i := 0 to High(FBindings) do
+  begin
+    FRivers[i] := Default(TTyThemeRiverLayout);
+    if FBindings[i].SeriesType <> TyThemeRiverSeriesTypeName then Continue;
+    if (FBindings[i].Single = nil) or FBindings[i].Hidden then Continue;
+    if (i > High(FStores)) or (FStores[i] = nil) then Continue;
+    { label.margin, 4 unless written }
+    margin := 4;
+    d := FOption.ComponentAt('series', FBindings[i].SeriesIndex);
+    if d is TJSONObject then
+    begin
+      lab := TJSONObject(d).Find('label');
+      if lab is TJSONObject then
+      begin
+        lab := TJSONObject(lab).Find('margin');
+        if (lab <> nil) and (lab.JSONType = jtNumber) then margin := lab.AsFloat;
+      end;
+    end;
+    FRivers[i] := TyThemeRiverLayout(FOption, FBindings[i].SeriesIndex,
+      TTySingle(FBindings[i].Single), FStores[i], margin * scale);
+  end;
+end;
+
+function TTyAdvanceChart.RiverLayoutOf(ASeriesIndex: Integer): TTyThemeRiverLayout;
+var slot: Integer;
+begin
+  Result := Default(TTyThemeRiverLayout);
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot >= 0) and (slot <= High(FRivers)) then Result := FRivers[slot];
+end;
+
+{ emphasis.label.show written false on a themeRiver }
+function TTyAdvanceChart.RiverEmphasisLabelOff(ASlot: Integer): Boolean;
+var d: TJSONData;
+begin
+  Result := False;
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if not (d is TJSONObject) then Exit;
+  d := TJSONObject(d).Find('emphasis');
+  if not (d is TJSONObject) then Exit;
+  d := TJSONObject(d).Find('label');
+  if not (d is TJSONObject) then Exit;
+  d := TJSONObject(d).Find('show');
+  Result := (d <> nil) and (d.JSONType = jtBoolean) and not d.AsBoolean;
+end;
+
+function TTyAdvanceChart.RiverLabelSpec(ASlot: Integer): TTyLabelSpec;
+var
+  base: TTyLabelSpec;
+  outS, lightS, midS, darkS: TTyStyleSet;
+  hasCol: Boolean;
+  col: Cardinal;
+begin
+  base := TyLabelSpecNone;
+  outS := ActiveController.Model.ResolveStyle('TyAdvChartLabel', '', []);
+  lightS := ActiveController.Model.ResolveStyle('TyAdvChartLabelOnLight', '', []);
+  midS := ActiveController.Model.ResolveStyle('TyAdvChartLabelOnMid', '', []);
+  darkS := ActiveController.Model.ResolveStyle('TyAdvChartLabelOnDark', '', []);
+  base.FontName := outS.FontName;
+  base.FontSizeLogical := ResolveFontSize(outS);
+  base.FontWeight := outS.FontWeight;
+  hasCol := False;
+  col := 0;
+  GlobalTextOver(base.FontName, base.FontSizeLogical, base.FontWeight,
+    hasCol, col, [ttpSize, ttpWeight, ttpFamily]);
+  { THE TYPE'S LABEL DEFAULTS (ThemeRiverSeries.ts): shown, 11 px, the
+    name -- and shown under emphasis, unless that says otherwise }
+  base.Show := True;
+  base.StateShow := not RiverEmphasisLabelOff(ASlot);
+  base.FontSizeLogical := 11;
+  base.DefaultText := tldName;
+  base.OutsideColour := TTyChartColor(outS.TextColor);
+  base.InsideColour[0] := TTyChartColor(lightS.TextColor);
+  base.InsideColour[1] := TTyChartColor(midS.TextColor);
+  base.InsideColour[2] := TTyChartColor(darkS.TextColor);
+  LabelGround(base.Ground, base.GroundDark);
+  base.RtGlobal := RtGlobal;
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit(base);
+  Result := TyLabelSpecOf(FOption, FBindings[ASlot].SeriesIndex, base);
+end;
+
+function TTyAdvanceChart.BuildRiverMarks(ASlot: Integer; AList: TTyPaintList;
+  APPI: Integer): Integer;
+var
+  L: TTyThemeRiverLayout;
+  pg: TTyRiverPolygon;
+  v: TTySeriesVisual;
+  perRaw: TTyChartColorArray;
+  spec: TTyLabelSpec;
+  st: TTyDataStore;
+  el: TTyChartElement;
+  pts: TTyPointFArray;
+  cmds: TTyPathCmdArray;
+  k, j, n, m, raw, si: Integer;
+  gy: Double;
+  fill: TTyChartColor;
+
+  function Legal(const AP: TTyPointF): Boolean;
+  begin
+    Result := not (IsNan(AP.X) or IsNan(AP.Y) or IsInfinite(AP.X) or IsInfinite(AP.Y));
+  end;
+
+begin
+  Result := 0;
+  if (ASlot < 0) or (ASlot > High(FRivers)) or not FRivers[ASlot].Valid then Exit;
+  L := FRivers[ASlot];
+  st := FStores[ASlot];
+  si := FBindings[ASlot].SeriesIndex;
+  v := TySeriesVisual(TTyChartColor(SeriesColor(si)));
+  ApplyOptStyle(v, si);
+  perRaw := PerDatumColours(ASlot);
+  spec := RiverLabelSpec(ASlot);
+  gy := L.GroupY;
+  for k := 0 to High(L.Polygons) do
+  begin
+    pg := L.Polygons[k];
+    if not pg.Valid then Continue;
+    { A PATH OF NO LEGAL POINT draws nothing: upstream's drawSegment skips
+      every point that is not a number (a category axis' names are not) }
+    if not TyRiverPathDraws(pg.Cmds) then Continue;
+    { the polygon in the canvas' frame: the group's y added -- a ring of the
+      bottoms forward and the tops back for the hit test (its legal points),
+      the path upstream builds for the ink }
+    n := Length(pg.Bottoms);
+    SetLength(pts, 2 * n);
+    m := 0;
+    for j := 0 to n - 1 do
+      if Legal(pg.Bottoms[j]) then
+      begin
+        pts[m] := TyPointF(pg.Bottoms[j].X, pg.Bottoms[j].Y + gy);
+        Inc(m);
+      end;
+    for j := n - 1 downto 0 do
+      if Legal(pg.Tops[j]) then
+      begin
+        pts[m] := TyPointF(pg.Tops[j].X, pg.Tops[j].Y + gy);
+        Inc(m);
+      end;
+    SetLength(pts, m);
+    cmds := Copy(pg.Cmds);
+    for j := 0 to High(cmds) do
+    begin
+      cmds[j].Y := cmds[j].Y + gy;
+      cmds[j].Y1 := cmds[j].Y1 + gy;
+      cmds[j].Y2 := cmds[j].Y2 + gy;
+    end;
+    el := TyChartElement(TyShapePolygon(pts));
+    { a layer takes the pointer: its hover, its tooltip, its states }
+    el.Silent := False;
+    el.Shape.Cmds := cmds;
+    el.Shape.HasCmdBounds := True;
+    el.Shape.CmdBounds := TyRectF(pg.Box.X, pg.Box.Y + gy, pg.Box.X + pg.Box.W,
+      pg.Box.Y + gy + pg.Box.H);
+    { THE LAYER'S STYLE IS ITS LAST ROW'S: the palette's colour of that row
+      (colorBy 'data', one colour a name), the series' item style over it }
+    raw := st.GetRawIndex(pg.StyleRow);
+    fill := v.Fill;
+    if (raw >= 0) and (raw <= High(perRaw)) then fill := perRaw[raw];
+    el.Style := TyChartStyle;
+    el.Style.HasFill := True;
+    el.Style.FillColor := fill;
+    el.Style.Alpha := v.Alpha;
+    if (v.Stroke <> 0) and (v.StrokeWidthLogical > 0) then
+    begin
+      el.Style.StrokeColor := v.Stroke;
+      el.Style.StrokeWidthLogical := v.StrokeWidthLogical;
+    end;
+    { setItemGraphicEl(idx): the polygon is the LAYER's index's datum }
+    if k < st.Count then
+      el.Datum := TyChartDatum(si, k, st.GetRawIndex(k))
+    else
+      el.Datum := TyChartDatum(si, k);
+    el.Z := SeriesIntIn(si, 'z', 2);
+    el.Z2 := 0;
+    { the label: the last row's name, at the first row less the margin,
+      halfway up -- the style's align (left unless written) and middle }
+    { (a label at a place that is no number draws nothing) }
+    if (spec.Show or spec.StateShow) and not (IsNan(pg.LabelX) or IsNan(pg.LabelY)
+      or IsInfinite(pg.LabelX) or IsInfinite(pg.LabelY)) then
+    begin
+      { THE NAME AND NOTHING ELSE: the view hands setLabelStyle no label
+        fetcher, so a formatter is never asked -- the default text, the last
+        row's name, is the label }
+      el.Caption.Text := st.GetItemName(pg.StyleRow);
+      el.Caption.HasFixedAnchor := True;
+      el.Caption.FixedX := pg.LabelX;
+      el.Caption.FixedY := pg.LabelY + gy;
+      el.Caption.FixedInside := False;
+      if spec.HasAlignH then el.Caption.FixedAH := spec.AlignH
+      else el.Caption.FixedAH := tahLeft;
+      el.Caption.FixedAV := tavMiddle;
+      el.Caption.FixedRotationRad := 0;
+    end;
+    { the enter animation's clip is made from the path's own rect }
+    el.Anim := Default(TTyChartAnim);
+    el.Anim.Role := carRiver;
+    el.Anim.Series := si;
+    el.Anim.Index := k;
+    el.Anim.G[0] := pg.Box.X;
+    el.Anim.G[1] := pg.Box.Y;
+    el.Anim.G[2] := pg.Box.W;
+    el.Anim.G[3] := pg.Box.H;
+    el.Anim.G[4] := gy;
+    AList.Add(el);
+    Inc(Result);
+  end;
+end;
+
+function TTyAdvanceChart.ConvertOnSingle(ASingle: TTySingle; AValue: TJSONData;
+  AFrom: Boolean): TTyConvertResult;
+begin
+  if AFrom then Result := TySingleFromPixel(ASingle, AValue)
+  else Result := TySingleToPixel(ASingle, AValue);
 end;
 
 { WHAT THE TWO VIEWS DRAW, in the skin's axis styles -- the same keys the
@@ -10731,7 +13518,37 @@ begin
     FSunbursts[i] := Default(TTySunburstSolved);
     if FBindings[i].SeriesType <> TySunburstSeriesTypeName then Continue;
     if (not FBindings[i].Resolved) or FBindings[i].Hidden then Continue;
-    FSunbursts[i] := TySunburstSolve(FOption, FBindings[i].SeriesIndex, FLastRect, APPI);
+    { THE VIEW ROOT a drill left [Batch 115] }
+    k := 0;
+    if FBindings[i].SeriesIndex <= High(FSunRoot) then k := FSunRoot[FBindings[i].SeriesIndex];
+    FSunbursts[i] := TySunburstSolve(FOption, FBindings[i].SeriesIndex, FLastRect, APPI, k);
+    { renderRollUp: one more handler on the kept piece, or none at the
+      root }
+    if FSunbursts[i].Valid then
+    begin
+      if Length(FSunHandlers) <= FBindings[i].SeriesIndex then
+        SetLength(FSunHandlers, FBindings[i].SeriesIndex + 1);
+      if FSunbursts[i].Nodes[0].Placed and (FSunbursts[i].ViewRoot > 0) then
+      begin
+        SetLength(FSunHandlers[FBindings[i].SeriesIndex],
+          Length(FSunHandlers[FBindings[i].SeriesIndex]) + 1);
+        FSunHandlers[FBindings[i].SeriesIndex][High(FSunHandlers[FBindings[i].SeriesIndex])] :=
+          FSunbursts[i].Hier.Nodes[FSunbursts[i].ViewRoot].Parent;
+      end
+      else
+        FSunHandlers[FBindings[i].SeriesIndex] := nil;
+    end;
+    { the return circle's layout outlives a roll-up: containPixel reads it }
+    if FSunbursts[i].Valid and FSunbursts[i].Nodes[0].Placed then
+    begin
+      if Length(FSunVirt) <= FBindings[i].SeriesIndex then
+        SetLength(FSunVirt, FBindings[i].SeriesIndex + 1);
+      FSunVirt[FBindings[i].SeriesIndex].Has := True;
+      FSunVirt[FBindings[i].SeriesIndex].CX := FSunbursts[i].CX;
+      FSunVirt[FBindings[i].SeriesIndex].CY := FSunbursts[i].CY;
+      FSunVirt[FBindings[i].SeriesIndex].R0 := FSunbursts[i].Nodes[0].R0;
+      FSunVirt[FBindings[i].SeriesIndex].R := FSunbursts[i].Nodes[0].R;
+    end;
     { the series' own palette, else the chart's, else the theme's ramp }
     pal := TyChartPaletteOf(FOption, FBindings[i].SeriesIndex, declared);
     if not declared then pal := TyChartPaletteOf(FOption, -1, declared);
@@ -10754,10 +13571,13 @@ end;
 procedure TTyAdvanceChart.SolveTreemaps(const AMeasurer: ITyTextMeasurer;
   APPI: Integer);
 var
-  i, k, dim: Integer;
+  i, k, dim, si, target: Integer;
   pal: TTyChartColorArray;
   declared: Boolean;
   border: TTyChartColor;
+  view: TTyTreemapView;
+  prev: TTyTreemapSolved;
+  prevHave, have: TTyTreemapHave;
 begin
   FTreemaps := nil;
   FTreemapInks := nil;
@@ -10777,8 +13597,18 @@ begin
     FTreemapInks[i] := Default(TTyTreemapInk);
     if FBindings[i].SeriesType <> TyTreemapSeriesTypeName then Continue;
     if (not FBindings[i].Resolved) or FBindings[i].Hidden then Continue;
-    FTreemaps[i] := TyTreemapSolve(FOption, FBindings[i].SeriesIndex, FLastRect, APPI);
+    { [Batch 115] THE VIEW a drill or a roam left, and what this render is
+      for (consumed by it); the last solve and storage of the same tree }
+    si := FBindings[i].SeriesIndex;
+    view := TyTreemapNoView;
+    if si <= High(FTmView) then view := FTmView[si];
+    prev := Default(TTyTreemapSolved);
+    if si <= High(FTmPrev) then prev := FTmPrev[si];
+    prevHave := Default(TTyTreemapHave);
+    if si <= High(FTmHave) then prevHave := FTmHave[si];
+    FTreemaps[i] := TyTreemapSolve(FOption, si, FLastRect, APPI, view, prev);
     if not FTreemaps[i].Valid then Continue;
+    have := TyTreemapHaveOf(FTreemaps[i], prevHave);
     TyTreemapColour(FTreemaps[i], pal, border);
     FTreemapInks[i] := TreemapInk(i);
     dim := -1;
@@ -10789,9 +13619,59 @@ begin
     TyTreemapUpperLabels(FTreemaps[i], Copy(FTreemapInks[i].ItemLabels,
       Length(FTreemaps[i].Nodes) + 1, Length(FTreemaps[i].Nodes)), FStores[i],
       SeriesModelName(FBindings[i].SeriesIndex), dim, AMeasurer);
-    TyTreemapBreadcrumb(FTreemaps[i],
-      FTreemapInks[i].ItemLabels[Length(FTreemaps[i].Nodes)], AMeasurer,
-      FLastRect);
+    { the breadcrumb: on the payload's target, else as found; a picture
+      kept keeps its own }
+    target := -1;
+    if view.Kind in [tpkZoomToNode, tpkRootToNode] then target := view.Target;
+    if (view.Kind = tpkKeep) and prev.Valid then FTreemaps[i].Crumbs := prev.Crumbs
+    else
+      TyTreemapBreadcrumb(FTreemaps[i],
+        FTreemapInks[i].ItemLabels[Length(FTreemaps[i].Nodes)], AMeasurer,
+        FLastRect, target, have, prevHave, prev);
+    { THE DRILL-DOWN of a render for a gesture or an action [Batch 115] }
+    if view.Kind = tpkKeep then
+    else if prev.Valid and (view.Kind <> tpkNone) then
+      TmAnimArm(i, view, prev, prevHave, view.Direction)
+    else
+      TmAnimDrop(si);
+    if Length(FTmView) <= si then
+    begin
+      k := Length(FTmView);
+      SetLength(FTmView, si + 1);
+      while k <= si do
+      begin
+        FTmView[k] := TyTreemapNoView;
+        Inc(k);
+      end;
+    end;
+    FTmView[si].ViewRoot := FTreemaps[i].ViewRoot;
+    FTmView[si].Kind := tpkNone;
+    FTmView[si].Target := -1;
+    FTmView[si].Direction := 0;
+    if Length(FTmPrev) <= si then SetLength(FTmPrev, si + 1);
+    FTmPrev[si] := FTreemaps[i];
+    { its own nodes: a node of this solve is changed later (the drill-down's
+      DrawInvisible) }
+    FTmPrev[si].Nodes := Copy(FTreemaps[i].Nodes, 0, Length(FTreemaps[i].Nodes));
+    if Length(FTmHave) <= si then SetLength(FTmHave, si + 1);
+    FTmHave[si] := have;
+  end;
+  TmHoverCheck;
+end;
+
+procedure TTyAdvanceChart.TmHoverCheck;
+var slot: Integer; keep: Boolean;
+begin
+  if FTmHoverSeries < 0 then Exit;
+  slot := SlotOfSeries(FTmHoverSeries);
+  keep := (slot >= 0) and (slot <= High(FTreemaps)) and FTreemaps[slot].Valid
+    and (FTmHoverSeries <= High(FTmHave)) and (FTmHoverRow >= 0)
+    and (FTmHoverRow <= High(FTmHave[FTmHoverSeries].Bg))
+    and (FTmHave[FTmHoverSeries].Bg[FTmHoverRow] or FTmHave[FTmHoverSeries].Ct[FTmHoverRow]);
+  if not keep then
+  begin
+    FTmHoverSeries := -1;
+    FTmHoverRow := -1;
   end;
 end;
 
@@ -10878,6 +13758,71 @@ begin
   end;
 end;
 
+{ THE CHORDS [Batch 120]: each laid out on the whole canvas over the nodes
+  the legend kept (the store's view), its nodes coloured by the per-datum
+  palette -- an object fill where the datum wrote one -- and labelled. }
+procedure TTyAdvanceChart.SolveChords(APPI: Integer);
+var
+  i, k: Integer;
+  kept: TTyBoolArray;
+  st: TTyDataStore;
+  perRaw: TTyChartColorArray;
+  obj: TTyChartObjFill;
+  base: TTyLabelSpec;
+begin
+  FChords := nil;
+  FChordInks := nil;
+  SetLength(FChords, Length(FBindings));
+  SetLength(FChordInks, Length(FBindings));
+  for i := 0 to High(FBindings) do
+  begin
+    FChords[i] := Default(TTyChordSolved);
+    FChordInks[i] := Default(TTyChordInk);
+    if FBindings[i].SeriesType <> TyChordSeriesTypeName then Continue;
+    if FBindings[i].Hidden then Continue;
+    st := nil;
+    if i <= High(FStores) then st := FStores[i];
+    kept := nil;
+    if st <> nil then
+    begin
+      SetLength(kept, st.RawCount);
+      for k := 0 to st.RawCount - 1 do kept[k] := st.IndexOfRawIndex(k) >= 0;
+    end;
+    FChords[i] := TyChordSolve(FOption, FBindings[i].SeriesIndex, FLastRect, APPI, kept);
+    if not FChords[i].Valid then Continue;
+    { the colour visual: the palette's pick or the datum's own colour, a
+      gradient where one was written (not a string: no gradient ribbon) }
+    perRaw := PerDatumColours(i);
+    for k := 0 to High(FChords[i].Nodes) do
+    begin
+      if k <= High(perRaw) then
+      begin
+        FChords[i].Nodes[k].HasColour := True;
+        FChords[i].Nodes[k].IsString := True;
+        FChords[i].Nodes[k].Colour := perRaw[k];
+      end;
+      obj := DatumObjectFill(i, k);
+      if obj.Present then
+      begin
+        FChords[i].Nodes[k].IsString := False;
+        if obj.Gradient.Kind <> cgkNone then
+        begin
+          FChords[i].Nodes[k].HasGradient := True;
+          FChords[i].Nodes[k].Gradient := obj.Gradient;
+          FChords[i].Nodes[k].Colour := TyGradientSolid(obj.Gradient);
+        end;
+      end;
+    end;
+    { the labels: shown and outside by default, the chart's label font }
+    base := LabelBaseFor(i);
+    base.Show := True;
+    base.DefaultText := tldName;
+    FChordInks[i].Label_ := TyLabelSpecOf(FOption, FBindings[i].SeriesIndex, base);
+    FChordInks[i].ItemLabels := TyChordLabelSpecs(FChords[i], FChordInks[i].Label_);
+    TyChordLabels(FChords[i], SeriesModelName(FBindings[i].SeriesIndex));
+  end;
+end;
+
 { A TREEMAP'S INK: its labels in their own key's ink -- white over the
   palette in every mode, never the auto bands -- read item -> level ->
   series; after the rows, the breadcrumb's words, and its chip. }
@@ -10929,12 +13874,32 @@ end;
   white), and the labels are shown by default with the node's name, read
   item -> level -> series. }
 function TTyAdvanceChart.SunburstInk(ASlot: Integer): TTySunburstInk;
-var base: TTyLabelSpec;
+var
+  base: TTyLabelSpec;
+  muted: TTyStyleSet;
+  a, r, g, b: Cardinal;
+  over: TTyChartColor;
+
+  function Mix(AFore, ABack: Cardinal): Cardinal;
+  begin
+    Result := (AFore * a + ABack * (255 - a) + 127) div 255;
+  end;
+
 begin
   Result := Default(TTySunburstInk);
   Result.Border := TTyChartColor(
     ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass,
       [tysNormal]).Background.Color);
+  { THE RETURN CIRCLE'S FILL [Batch 115]: upstream's neutral50, a mid grey
+    -- here the muted ink a sankey's links take, laid on the chart's ground
+    so the circle is opaque in every skin }
+  muted := ActiveController.Model.ResolveStyle('TyAdvChartSankeyLink', '', []);
+  over := TTyChartColor(muted.Background.Color);
+  a := (Cardinal(over) shr 24) and $FF;
+  r := Mix((Cardinal(over) shr 16) and $FF, (Cardinal(Result.Border) shr 16) and $FF);
+  g := Mix((Cardinal(over) shr 8) and $FF, (Cardinal(Result.Border) shr 8) and $FF);
+  b := Mix(Cardinal(over) and $FF, Cardinal(Result.Border) and $FF);
+  Result.RootFill := TTyChartColor($FF000000 or (r shl 16) or (g shl 8) or b);
   base := LabelBaseFor(ASlot);
   base.Show := True;
   base.DefaultText := tldName;
@@ -14816,14 +17781,25 @@ var
   specs: TTyLabelSpecArray;
   itemSpecs: TTyLabelSpecTable;
   pk: Integer;
+  gfxCount: Integer;
 begin
   Result := 0;
+  gfxCount := 0;
   { ONE LIST FOR EVERY SERIES, not one per series: the ordering rule is (Z, Z2,
     insertion) ACROSS the chart, and a list per series would order each one
     against itself and leave the between-series order to the loop. }
   if FPaintList = nil then FPaintList := TTyPaintList.Create
   else FPaintList.Clear;
   list := FPaintList;
+  { a new list: no entry is a custom element yet, and what the last render
+    removed may go [Batch 123] }
+  FCustomPaintEls := nil;
+  for i := 0 to High(FCustomViews) do
+    if FCustomViews[i] <> nil then FCustomViews[i].FreeGone;
+  { THE GRAPHIC ELEMENTS FIRST: at an equal z they are under every series,
+    the component's group joining the root before the series' [Batch 122] }
+  for i := 0 to High(FGfxPaint) do list.Add(FGfxPaint[i]);
+  gfxCount := Length(FGfxPaint);
   { a new list: the incremental layer holds none of it [Batch 119] }
   FProgLayerOk := False;
   { BEFORE THE EARLY EXIT, not after -- and not because a stale list would
@@ -14834,6 +17810,7 @@ begin
     to tell "there is nothing there" from "there is nothing yet". }
   FPaintListPPI := APPI;
   FPaintListValid := True;
+  Result := gfxCount;
   { A NEW JITTER PASS: the seed again and no points placed [Batch 110] }
   if FJitter = nil then FJitter := TTyJitterPass.Create;
   FJitter.Reset;
@@ -14883,6 +17860,13 @@ begin
       { A GRAPH IS ON A COORDINATE SYSTEM OF ITS OWN, and that system belongs
         to the series rather than to a component -- so it is solved in the
         layout pass like a pie's box and replayed here like a radar's. }
+      { A CUSTOM SERIES: the elements its renderItem made, drawn from its
+        view [Batch 123] }
+      if FBindings[i].SeriesType = TyCustomSeriesType then
+      begin
+        Inc(drawn, CustomBuild(i, list, APPI));
+        Continue;
+      end;
       { A LINES SERIES: its rows laid out on their coordinate system in the
         layout pass, drawn here; the labels go through the expansion with a
         spec per row [Batch 121] }
@@ -14960,6 +17944,22 @@ begin
           if Length(itemSpecs) <= FBindings[i].SeriesIndex then
             SetLength(itemSpecs, FBindings[i].SeriesIndex + 1);
           itemSpecs[FBindings[i].SeriesIndex] := FSankeyInks[i].ItemLabels;
+        end;
+        Continue;
+      end;
+      { A CHORD: its sectors, its ribbons, its label requests [Batch 120] }
+      if FBindings[i].SeriesType = TyChordSeriesTypeName then
+      begin
+        if (i <= High(FChords)) and FChords[i].Valid then
+        begin
+          Inc(drawn, TyBuildChordMarks(FBindings[i].SeriesIndex, FChords[i],
+            FChordInks[i], list));
+          if Length(specs) <= FBindings[i].SeriesIndex then
+            SetLength(specs, FBindings[i].SeriesIndex + 1);
+          specs[FBindings[i].SeriesIndex] := FChordInks[i].Label_;
+          if Length(itemSpecs) <= FBindings[i].SeriesIndex then
+            SetLength(itemSpecs, FBindings[i].SeriesIndex + 1);
+          itemSpecs[FBindings[i].SeriesIndex] := FChordInks[i].ItemLabels;
         end;
         Continue;
       end;
@@ -15072,6 +18072,16 @@ begin
             FStores[i].DimIndexOf(TyPieValueDim),
             FPieSpecs[i].PercentPrecision, AMeasurer, APPI, list));
         end;
+        Continue;
+      end;
+      { A THEMERIVER: a polygon per layer, its label at the layer's start
+        [Batch 118] }
+      if FBindings[i].SeriesType = TyThemeRiverSeriesTypeName then
+      begin
+        Inc(drawn, BuildRiverMarks(i, list, APPI));
+        if Length(specs) <= FBindings[i].SeriesIndex then
+          SetLength(specs, FBindings[i].SeriesIndex + 1);
+        specs[FBindings[i].SeriesIndex] := RiverLabelSpec(i);
         Continue;
       end;
       v := TySeriesVisual(TTyChartColor(SeriesColor(FBindings[i].SeriesIndex)));
@@ -15187,7 +18197,11 @@ begin
         category ordinal, which is a number and looks like an answer. }
       v.LabelValueDim := -1;
       if (FBindings[i].ValueAxis <> nil) and (FStores[i] <> nil) then
-        v.LabelValueDim := FStores[i].DimIndexOf(FBindings[i].ValueAxis.Dim);
+        v.LabelValueDim := FStores[i].DimIndexOf(FBindings[i].ValueAxis.Dim)
+      { on a single axis the one dimension is the label's (defaultedLabel)
+        [Batch 118] }
+      else if (FBindings[i].Single <> nil) and (FStores[i] <> nil) then
+        v.LabelValueDim := FStores[i].DimIndexOf(TySingleDim);
       v.SeriesName := SeriesModelName(FBindings[i].SeriesIndex);
       v.SeriesIndex := FBindings[i].SeriesIndex;
       v.SeriesType := FBindings[i].SeriesType;
@@ -15247,6 +18261,7 @@ begin
       and which are still to come -- before the states, which an element
       with no data does not take [Batch 119] }
     if drawn > 0 then ProgTag(list);
+    if drawn > 0 then ApplyTreemapHover(list);
     { THE STATES, onto the elements just built [Batch 88] -- and with
       nothing drawn too: a legend can switch every series off, and their
       records go with their elements [Batch 93] }
@@ -15276,6 +18291,13 @@ begin
       if n > 0 then ViewDrew(cvDataZoom);
       Inc(drawn, n);
     end;
+    { the timeline, z 4 [Batch 129] }
+    if not ViewHidden(cvTimeline) then
+    begin
+      n := BuildTimeline(list);
+      if n > 0 then ViewDrew(cvTimeline);
+      Inc(drawn, n);
+    end;
     { [Batch 125] }
     if not ViewHidden(cvToolbox) then
     begin
@@ -15293,7 +18315,7 @@ begin
       if n > 0 then ViewDrew(cvBrush);
       Inc(drawn, n);
     end;
-    Result := drawn;
+    Result := drawn + gfxCount;
   end;
 end;
 
@@ -15974,7 +18996,7 @@ begin
   if drawn > 0 then
     { AT REST, a proxy may still hold a value a unit in the last place off
       the layout -- the frame draws where upstream's element rests }
-    if (Length(FAnimBind) > 0) or (Length(FAnimStBind) > 0) then
+    if (Length(FAnimBind) > 0) or (Length(FAnimStBind) > 0) or TmAnimAny then
       TyRenderPaintList(APainter, AnimFrame)
     else
       { a progressive run's chunks through their own layer [Batch 119] }
@@ -16535,7 +19557,8 @@ begin
   begin
     idx := AList.PaintOrder(i);
     el := AList.Element(idx);
-    if el.Ignore or el.ProgHidden then Continue;
+    { a graphic element under the axes is painted before them [Batch 122] }
+    if el.Ignore or el.ProgHidden or el.GfxUnder then Continue;
     if el.ProgChunk > 0 then
     begin
       if not blitted then
@@ -16893,6 +19916,10 @@ begin
   begin
     if (ADatum.DataIndex >= 0) and (ADatum.DataIndex <= High(FSunbursts[slot].Nodes)) then
       Result := FSunbursts[slot].Nodes[ADatum.DataIndex].Fill;
+    { the return circle's own colour, the theme's where none is named
+      [Batch 115] }
+    if (ADatum.DataIndex = 0) and not FSunbursts[slot].HasRootFill then
+      Result := SunburstInk(slot).RootFill;
     Exit;
   end;
   if (FBindings[slot].SeriesType = TyTreemapSeriesTypeName)
@@ -16910,6 +19937,17 @@ begin
       and (ADatum.DataIndex <= High(FSankeys[slot].Nodes))
       and FSankeys[slot].Nodes[ADatum.DataIndex].HasColour then
       Result := FSankeys[slot].Nodes[ADatum.DataIndex].Colour;
+    Exit;
+  end;
+  { A CHORD NODE: its colour visual; a ribbon has none (params.color is
+    undefined for the edge data) [Batch 120] }
+  if (FBindings[slot].SeriesType = TyChordSeriesTypeName)
+    and (slot <= High(FChords)) and FChords[slot].Valid then
+  begin
+    if (not ADatum.IsEdge) and (ADatum.RawDataIndex >= 0)
+      and (ADatum.RawDataIndex <= High(FChords[slot].Nodes))
+      and FChords[slot].Nodes[ADatum.RawDataIndex].HasColour then
+      Result := FChords[slot].Nodes[ADatum.RawDataIndex].Colour;
     Exit;
   end;
   { A PARALLEL ROW'S IS ITS STROKE: drawType 'stroke' [Batch 128] }
@@ -16998,6 +20036,8 @@ var
   cols: TTyIntegerArray;
   st: TTyDataStore;
   pct: TTyDoubleArray;
+  tv: Double;
+  tvText: string;
 begin
   if TipIsMarker(ADatum) then Exit(MarkerTooltipParams(ADatum));
   Result := TyChartBlankParams;
@@ -17013,10 +20053,26 @@ begin
   if slot > High(FStores) then Exit;
   st := FStores[slot];
   if st = nil then Exit;
-  if Result.SeriesType = TyGraphSeriesTypeName then
+  if (Result.SeriesType = TyGraphSeriesTypeName)
+    or (Result.SeriesType = TyChordSeriesTypeName) then
   begin
     if ADatum.IsEdge then Result.DataType := 'edge'
     else Result.DataType := 'node';
+  end;
+  { A CHORD LINK: the edge data's params -- its name (the link's id, else
+    `source > target` as written) and its own value [Batch 120] }
+  if ADatum.IsEdge and (Result.SeriesType = TyChordSeriesTypeName) then
+  begin
+    if (slot > High(FChords)) or not FChords[slot].Valid then Exit;
+    if (ADatum.RawDataIndex < 0) or (ADatum.RawDataIndex > High(FChords[slot].Edges)) then Exit;
+    Result.Name := FChords[slot].Edges[ADatum.RawDataIndex].Name;
+    if TyChordEdgeRawValue(FChords[slot], ADatum.RawDataIndex, tv, tvText)
+      and not IsNan(tv) then
+    begin
+      SetLength(Result.Values, 1);
+      Result.Values[0] := tv;
+    end;
+    Exit;
   end;
   { A GRAPH LINK IS NAMED BY ITS TWO ENDS, `source > target`, each the name
     upstream's getName answers -- so a link between two bare numbers on a
@@ -17381,6 +20437,23 @@ begin
     and (FStores[slot] <> nil) and (ADatum.DataIndex >= 0)
     and (ADatum.DataIndex < FStores[slot].Count) then
     Exit(RadarTooltip(slot, ADatum.DataIndex, p.Color, ASpec));
+  { A THEMERIVER'S ROW IS ONE BARE ROW: its formatTooltip is a nameValue of
+    the row's name and value, no marker, no section -- for the row the
+    datum names, which over a layer's polygon is the LAYER'S index, as
+    upstream's setItemGraphicEl(idx) leaves it [Batch 118] }
+  if (slot >= 0) and (FBindings[slot].SeriesType = TyThemeRiverSeriesTypeName)
+    and (slot <= High(FStores)) and (FStores[slot] <> nil) then
+  begin
+    Result := TTyTooltipBlock.CreateSection('', True);
+    if (ADatum.DataIndex >= 0) and (ADatum.DataIndex < FStores[slot].Count) then
+    begin
+      tv := FStores[slot].Get(1, ADatum.DataIndex);
+      Result.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0,
+        FStores[slot].GetItemName(ADatum.DataIndex), False,
+        TyTooltipValueText(tv), IsNan(tv)));
+    end;
+    Exit;
+  end;
   cells := Default(TTyTipCells);
   if (slot >= 0) and (slot <= High(FStores)) and (ADatum.DataIndex >= 0)
     and (FStores[slot] <> nil) and (ADatum.DataIndex < FStores[slot].Count) then
@@ -17660,10 +20733,13 @@ end;
 function TTyAdvanceChart.SeriesEventTarget(const ADatum: TTyChartDatumRef;
   AElement: Integer): TTyChartEventTarget;
 var
+  gel: TTyGfxEl;
   slot: Integer;
   p: TTyChartCallbackParams;
   n, d: TJSONData;
   st: string;
+  cv: Double;
+  cvText: string;
 begin
   Result := Default(TTyChartEventTarget);
   Result.Id := AElement + 1;
@@ -17690,6 +20766,12 @@ begin
     else if p.Raw.Shape <> rshNone then
       p.ValueText := TyRawItemText(p.Raw);
     if p.ValueText = 'undefined' then p.ValueText := '';
+    { a chord node's getDataParams: `params.value == null` takes the
+      layout's value [Batch 120] }
+    if (not ADatum.IsEdge) and (st = TyChordSeriesTypeName)
+      and (slot <= High(FChords)) and FChords[slot].Valid
+      and TyChordNodeValue(FChords[slot], ADatum.RawDataIndex, cv, cvText) then
+      p.ValueText := cvText;
     if (st = TyTreemapSeriesTypeName) or (st = TySunburstSeriesTypeName)
       or (st = TyTreeSeriesTypeName) then
       p.DataType := 'main';
@@ -17701,6 +20783,10 @@ begin
   p.SeriesIndex := ADatum.SeriesIndex;
   p.SeriesName := SeriesModelName(ADatum.SeriesIndex);
   p.SeriesId := SeriesIdOf(FOption, ADatum.SeriesIndex);
+  { A CUSTOM ELEMENT'S info rides the event: CustomSeries.getDataParams
+    reads the target element's own [Batch 123] }
+  gel := CustomPaintSource(AElement);
+  if (gel <> nil) and (gel.Info <> nil) then p.Info := gel.Info.AsJSON;
   Result.HasData := True;
   Result.Params := p;
   Result.Model := SeriesEventModel(ADatum.SeriesIndex);
@@ -17718,7 +20804,7 @@ end;
 function TTyAdvanceChart.EventTargetAt(AX, AY: Integer): TTyChartEventTarget;
 const
   cKindWord: array[TTyChartTargetKind] of string = ('series', 'markPoint',
-    'markLine', 'markArea', 'legend', 'legend', 'legend');
+    'markLine', 'markArea', 'legend', 'legend', 'legend', 'graphic');
 var
   i, k, g, a, q, idx, slot, nth: Integer;
   lay: TTyTitleLayout;
@@ -17735,6 +20821,7 @@ var
   kind: TTyMarkerKind;
   mk: TTyMkBlock;
   nm, mainT: string;
+  gel: TTyGfxEl;
   piece: TTyBrushPiece;
 
   function Inside(const AR: TTyRectF): Boolean;
@@ -17801,7 +20888,7 @@ begin
   if BreakAreaAt(AX, AY, k, q) then
   begin
     Result.Id := -((Int64(10) shl 44) + Int64(k) * 1000 + q);
-    Result.HdKind := 10;
+    Result.HdKind := 12;
     Result.HdSeries := k;
     Result.HdRow := q;
     Exit;
@@ -17840,6 +20927,16 @@ begin
     Result.HdSeries := k;
     Result.HdRow := q;
     Result.HdGen := FTbGen;
+    Exit;
+  end;
+  { THE TIMELINE, z 4 [Batch 129]: no data, only its elements' own
+    handlers; HdRow the element, HdGen the render that made it }
+  if TlHitAt(AX, AY, q) then
+  begin
+    Result.Id := -(10000000 + Int64(q));
+    Result.HdKind := 10;
+    Result.HdRow := q;
+    Result.HdGen := FTlView.Gen;
     Exit;
   end;
   { THE visualMaps, over the series (z 4) [Batch 116]: no data, only their
@@ -17991,6 +21088,33 @@ begin
             Result.Model.SubType := 'scroll';
           Result.Model.Index := d.ComponentIndex;
         end;
+      ctkGraphic:
+        begin
+          { [Batch 122] a graphic element: its handlers by its id (a label's
+            are its host's), and the event data findEventDispatcher finds --
+            its own, else the nearest ancestor's }
+          Result.HdKind := 8;
+          Result.HdRow := d.DataIndex;
+          if (d.DataIndex >= 0) and (d.DataIndex <= High(FGfxPaintEl)) then
+          begin
+            gel := FGfxPaintEl[d.DataIndex];
+            if gel.Host <> nil then gel := gel.Host;
+            Result.HdName := gel.Id;
+            while (gel <> nil) and not gel.HasEventData do gel := gel.Parent;
+            if gel <> nil then
+            begin
+              Result.HasData := True;
+              Result.Params.ComponentType := 'graphic';
+              Result.Params.ComponentIndex := d.ComponentIndex;
+              Result.Params.Name := gel.EventName;
+              if gel.Info <> nil then Result.Params.Info := gel.Info.AsJSON;
+              Result.Model.Valid := True;
+              Result.Model.MainType := 'graphic';
+              Result.Model.Index := d.ComponentIndex;
+              Result.Model.Id := FOption.ComponentId('graphic', d.ComponentIndex);
+            end;
+          end;
+        end;
       ctkLegendSelector, ctkLegendPager:
         begin
           { [Batch 98] no ECData: an identity and a handler, no event }
@@ -18073,7 +21197,7 @@ begin
         { A BREAK'S LABEL expands its break on a click [Batch 132] }
         if (q <= High(spec^.LabelBreakKind)) and (spec^.LabelBreakKind[q] <> 0) then
         begin
-          Result.HdKind := 11;
+          Result.HdKind := 13;
           Result.HdSeries := g * 1000 + a;
           Result.HdRow := spec^.LabelBreakIndex[q];
         end;
@@ -18126,10 +21250,14 @@ end;
   a move to the new one, an over when it changed -- each only where the
   target carries data }
 procedure TTyAdvanceChart.EventMove(AX, AY: Integer);
-var t: TTyChartEventTarget;
+var
+  t: TTyChartEventTarget;
+  cancel: Boolean;
 begin
   FEvLastX := AX;
   FEvLastY := AY;
+  { a graphic element dragged [Batch 122] }
+  GfxDragMove(AX, AY);
   { zrender #6198: a hovered element an update removed (a visualMap view
     rebuilt) is looked for again where it was hovered [Batch 116] }
   if (FEvHover.Id <> 0) and (FEvHover.HdKind = 7)
@@ -18139,35 +21267,49 @@ begin
   { a toolbox icon a render replaced: the same [Batch 125] }
   if (FEvHover.Id <> 0) and (FEvHover.HdKind = 8) and (FEvHover.HdGen <> FTbGen) then
     FEvHover := EventTargetAt(FEvHoverX, FEvHoverY);
+  { and a timeline element [Batch 129] }
+  if (FEvHover.Id <> 0) and (FEvHover.HdKind = 10)
+    and ((FTlView = nil) or (FEvHover.HdGen <> FTlView.Gen)) then
+    FEvHover := EventTargetAt(FEvHoverX, FEvHoverY);
   t := EventTargetAt(AX, AY);
   if (FEvHover.Id <> 0) and (t.Id <> FEvHover.Id) then
   begin
     { the element's own mouseout, bubbled [Batch 116] }
     VmElementEvent('mouseout', FEvHover, AX, AY);
+    { a graphic element's handlers; a true answer stops the rest [Batch 122] }
+    cancel := GfxElementEvent('mouseout', FEvHover, AX, AY);
     TbMouseOut(FEvHover);
+    TlMouseOut(FEvHover);
     { echarts' own mouseout first: the dispatcher leaves emphasis [Batch 88] }
-    StHoverOut(FEvHover);
-    if FEvHover.HasData then EmitChartEvent('mouseout', FEvHover, AX, AY);
+    if not cancel then StHoverOut(FEvHover);
+    if FEvHover.HasData and not cancel then EmitChartEvent('mouseout', FEvHover, AX, AY);
     { the visualMaps' zr.on('mouseout') }
     VmZrMouseOut;
   end;
   { the element's mousemove, then zrender's Draggable [Batch 116] }
   VmElementEvent('mousemove', t, AX, AY);
+  cancel := GfxElementEvent('mousemove', t, AX, AY);
   VmDragMove(AX, AY);
-  if t.HasData then EmitChartEvent('mousemove', t, AX, AY);
+  if t.HasData and not cancel then EmitChartEvent('mousemove', t, AX, AY);
   if (t.Id <> 0) and (t.Id <> FEvHover.Id) then
   begin
     VmElementEvent('mouseover', t, AX, AY);
     TbMouseOver(t);
-    StHoverOver(t);
-    if t.HasData then EmitChartEvent('mouseover', t, AX, AY);
+    TlMouseOver(t);
+    cancel := GfxElementEvent('mouseover', t, AX, AY);
+    if not cancel then StHoverOver(t);
+    if t.HasData and not cancel then EmitChartEvent('mouseover', t, AX, AY);
     VmZrMouseOver(t);
   end;
   FEvHover := t;
   FEvHoverX := AX;
   FEvHoverY := AY;
+  { zrender's Draggable on the timeline's checkpoint, after the hover was
+    found [Batch 129] }
+  TlDragMove(AX, AY);
   { the frame's states [Batch 116] }
   VmApplyStates;
+  TlApplyStates;
 end;
 
 procedure TTyAdvanceChart.EventDown(AButton: TMouseButton; AX, AY: Integer);
@@ -18182,6 +21324,10 @@ begin
   FEvDownArmed := True;
   FEvDownX := AX;
   FEvDownY := AY;
+  GfxDragStart(t, AX, AY);
+  { the timeline's checkpoint is draggable [Batch 129] }
+  if AButton = mbLeft then TlDragStart(t);
+  if GfxElementEvent('mousedown', t, AX, AY) then Exit;
   if t.HasData then EmitChartEvent('mousedown', t, AX, AY);
 end;
 
@@ -18196,7 +21342,11 @@ begin
   FEvUpId := t.Id;
   { zrender's Draggable ends before echarts' own handlers [Batch 116] }
   if AButton = mbLeft then VmDragEnd;
-  if t.HasData then EmitChartEvent('mouseup', t, AX, AY);
+  { the timeline's checkpoint: its dragend changes the index [Batch 129] }
+  if AButton = mbLeft then TlDragEnd(AX, AY);
+  FGfxDragOn := False;
+  if not GfxElementEvent('mouseup', t, AX, AY) and t.HasData then
+    EmitChartEvent('mouseup', t, AX, AY);
   if AButton <> mbLeft then
   begin
     VmApplyStates;
@@ -18215,24 +21365,35 @@ begin
   { THE ELEMENT'S OWN HANDLER BEFORE ANY zr-LEVEL ONE: a legend item's click
     is downplay, legendToggleSelect, highlight [Batch 93] }
   if t.HdKind = 8 then TbClick(t.HdSeries, t.HdRow)
+  { [Batch 129] a timeline element's onclick }
+  else if t.HdKind = 10 then TlClick(t.HdRow)
   { a break area's group, a break label's text: expandAxisBreak [Batch 132] }
-  else if t.HdKind = 10 then BreakAreaClickAt(t.HdSeries, t.HdRow)
-  else if t.HdKind = 11 then BreakExpandClick(t.HdSeries, t.HdRow)
+  else if t.HdKind = 12 then BreakAreaClickAt(t.HdSeries, t.HdRow)
+  else if t.HdKind = 13 then BreakExpandClick(t.HdSeries, t.HdRow)
   else if t.HdKind = 4 then LegendClick(t)
   { [Batch 98] the selector's and the pager's own onclick }
   else if t.HdKind = 5 then LegendSelectorClick(t)
   else if t.HdKind = 6 then LegendPagerClick(t);
+  { A GRAPHIC ELEMENT'S onclick, up its groups; a true answer stops
+    everything at the zrender root [Batch 122] }
+  if GfxElementEvent('click', t, AX, AY) then
+  begin
+    VmApplyStates;
+    Exit;
+  end;
   { ECHARTS' OWN CLICK HANDLER FIRST: an item click dispatches select or
     unselect, whatever selectedMode says [Batch 88] }
   StClickSelect(t);
   if t.HasData then EmitChartEvent('click', t, AX, AY);
   VmApplyStates;
+  TlApplyStates;
 end;
 
 procedure TTyAdvanceChart.EventDblClick(AX, AY: Integer);
 var t: TTyChartEventTarget;
 begin
   t := EventTargetAt(AX, AY);
+  if GfxElementEvent('dblclick', t, AX, AY) then Exit;
   if t.HasData then EmitChartEvent('dblclick', t, AX, AY);
 end;
 
@@ -18240,6 +21401,7 @@ procedure TTyAdvanceChart.EventContextMenu(AX, AY: Integer);
 var t: TTyChartEventTarget;
 begin
   t := EventTargetAt(AX, AY);
+  if GfxElementEvent('contextmenu', t, AX, AY) then Exit;
   if t.HasData then EmitChartEvent('contextmenu', t, AX, AY);
 end;
 
@@ -18247,19 +21409,25 @@ end;
   it was seen, then globalout with nothing -- and what was hovered is
   remembered, so coming back onto it is no over }
 procedure TTyAdvanceChart.EventLeave(AX, AY: Integer);
-var none: TTyChartEventTarget;
+var
+  none: TTyChartEventTarget;
+  cancel: Boolean;
 begin
+  cancel := False;
   if FEvHover.Id <> 0 then
   begin
     VmElementEvent('mouseout', FEvHover, AX, AY);
+    cancel := GfxElementEvent('mouseout', FEvHover, AX, AY);
     TbMouseOut(FEvHover);
-    StHoverOut(FEvHover);
+    TlMouseOut(FEvHover);
+    if not cancel then StHoverOut(FEvHover);
   end;
-  if (FEvHover.Id <> 0) and FEvHover.HasData then
+  if (FEvHover.Id <> 0) and FEvHover.HasData and not cancel then
     EmitChartEvent('mouseout', FEvHover, AX, AY);
   { zr-level: fired with or without a target [Batch 116] }
   VmZrMouseOut;
   VmApplyStates;
+  TlApplyStates;
   none := Default(TTyChartEventTarget);
   none.Params := TyChartBlankParams;
   EmitChartEvent('globalout', none, 0, 0, False);
@@ -18562,10 +21730,14 @@ begin
   else if t = TySunburstSeriesTypeName then Result := sskSunburst
   else if t = 'boxplot' then Result := sskBox
   else if t = TySankeySeriesTypeName then Result := sskSankey
+  else if t = TyThemeRiverSeriesTypeName then Result := sskRiver
+  else if t = TyChordSeriesTypeName then Result := sskChord
   { a lines series' rows, not in large mode (a batch has no states)
     [Batch 121] }
   else if (t = TyLinesSeriesTypeName) and not ((ASlot <= High(FLines))
     and FLines[ASlot].IsLarge) then Result := sskLines
+  { a custom series' items [Batch 123] }
+  else if t = TyCustomSeriesType then Result := sskCustom
   { a parallel row's polyline [Batch 128] }
   else if (t = TyParallelSeriesTypeName) and (FBindings[ASlot].Parallel <> nil) then
     Result := sskParallel;
@@ -18593,6 +21765,13 @@ begin
     if (ARaw >= 0) and (ARaw <= High(FSunbursts[slot].Hier.Nodes))
       and (FSunbursts[slot].Hier.Nodes[ARaw].Item is TJSONObject) then
       Result := TJSONObject(FSunbursts[slot].Hier.Nodes[ARaw].Item);
+    Exit;
+  end;
+  { A CHORD'S NODE: its item of `data || nodes` [Batch 120] }
+  if (slot >= 0) and (slot <= High(FChords)) and FChords[slot].Valid then
+  begin
+    if (ARaw >= 0) and (ARaw <= High(FChords[slot].Nodes)) then
+      Result := FChords[slot].Nodes[ARaw].Obj;
     Exit;
   end;
   s := StSeriesNode(ASeriesIndex);
@@ -18631,6 +21810,11 @@ var
   k: Integer;
 begin
   s := FBindings[ASlot].SeriesIndex;
+  if FSt[s].Kind = sskCustom then
+  begin
+    StDeclareCustom(ASlot, ARaw, AList);
+    Exit;
+  end;
   item := @FSt[s].Rows[ARaw];
   host := AList.Element(FSt[s].HostIdx[ARaw]);
   nodes := StNodes(s, ARaw);
@@ -18842,6 +22026,13 @@ begin
       obj := TyStNoObject;
       { ignore = !show only when the state's show differs from the normal one }
       stShow := TyStReadBool(nodes, [cStNames[n], 'label', 'show'], has);
+      { a themeRiver's model shows the emphasis label unless told
+        (ThemeRiverSeries.ts emphasis.label.show) [Batch 118] }
+      if (n = stnEmphasis) and (FSt[s].Kind = sskRiver) and not has then
+      begin
+        stShow := True;
+        has := True;
+      end;
       if has and (stShow <> normalShow) then TyStSetNum(obj, stkIgnore, Ord(not stShow));
       { hideOverlap's hideEl: a label it hid shows again under emphasis,
         unless that state already says (LabelLayoutHelper.ts hideOverlap)
@@ -19059,6 +22250,7 @@ procedure TTyAdvanceChart.StSync(AList: TTyPaintList; APPI: Integer);
 var
   slot, s, k, raw, n, i, hoverS: Integer;
   el: TTyChartElement;
+  gel: TTyGfxEl;
   item: PTyStItem;
   prev: TTyStNames;
   was: Boolean;
@@ -19134,6 +22326,25 @@ begin
     end
     else
       k := FStores[slot].RawCount;
+    { A CHORD: its nodes the store's rows, its ribbons by raw link index
+      [Batch 120] }
+    if FSt[s].Kind = sskChord then
+    begin
+      if (slot > High(FChords)) or not FChords[slot].Valid then
+      begin
+        FSt[s].Kind := sskNone;
+        Continue;
+      end;
+      n := Length(FChords[slot].Edges);
+      if Length(FSt[s].EdgeRows) < n then SetLength(FSt[s].EdgeRows, n);
+      SetLength(FSt[s].EdgeHostIdx, n);
+      SetLength(FSt[s].EdgeLabelIdx, n);
+      for i := 0 to n - 1 do
+      begin
+        FSt[s].EdgeHostIdx[i] := -1;
+        FSt[s].EdgeLabelIdx[i] := -1;
+      end;
+    end;
     if Length(FSt[s].Rows) < k then SetLength(FSt[s].Rows, k);
     SetLength(FSt[s].HostIdx, k);
     SetLength(FSt[s].LabelIdx, k);
@@ -19191,6 +22402,16 @@ begin
         FSt[s].HostIdx[raw] := k;
       Continue;
     end;
+    { a chord's ribbon, by its raw link index [Batch 120] }
+    if el.Datum.IsEdge and (FSt[s].Kind = sskChord) then
+    begin
+      raw := el.Datum.RawDataIndex;
+      if (raw < 0) or (raw > High(FSt[s].EdgeHostIdx)) then Continue;
+      if (el.Caption.FontSizeLogical = 0) and not el.Silent
+        and (FSt[s].EdgeHostIdx[raw] < 0) then
+        FSt[s].EdgeHostIdx[raw] := k;
+      Continue;
+    end;
     if el.Datum.IsEdge then Continue;
     if el.Datum.DataIndex < 0 then
     begin
@@ -19211,6 +22432,17 @@ begin
     if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Continue;
     raw := FStores[slot].GetRawIndex(el.Datum.DataIndex);
     if (raw < 0) or (raw > High(FSt[s].HostIdx)) then Continue;
+    { A CUSTOM ITEM'S PATHS, in the order its tree draws them: the first
+      hosts, the rest are parts with states of their own; a text, an image
+      and a textContent take no state here [Batch 123] }
+    if FSt[s].Kind = sskCustom then
+    begin
+      gel := CustomPaintSource(k);
+      if (gel = nil) or not gel.StatePath or (gel.Host <> nil) then Continue;
+      if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k
+      else StPush(FSt[s].PartIdx[raw], k);
+      Continue;
+    end;
     if el.Caption.FontSizeLogical > 0 then
     begin
       if FSt[s].LabelIdx[raw] < 0 then FSt[s].LabelIdx[raw] := k;
@@ -19289,6 +22521,13 @@ begin
           FSt[s].EdgeRows[raw] := Default(TTyStItem)
         else
           StDeclareEdge(slot, raw, AList);
+    { a chord's ribbons [Batch 120] }
+    if FSt[s].Kind = sskChord then
+      for raw := 0 to High(FSt[s].EdgeRows) do
+        if (raw > High(FSt[s].EdgeHostIdx)) or (FSt[s].EdgeHostIdx[raw] < 0) then
+          FSt[s].EdgeRows[raw] := Default(TTyStItem)
+        else
+          StDeclareChordEdge(slot, raw, AList);
   end;
   FStDirty := False;
   StWrite(AList);
@@ -19870,6 +23109,13 @@ begin
         StAnimEl(item^.Guide, FSt[s].GuideIdx[raw], s, raw, 'guide', cStPxGuide,
           cfg, hasCfg, over);
     end;
+    { A CHORD'S RIBBONS have states of their own, each its own proxy
+      (the series' view group is their role) [Batch 120] }
+    if FSt[s].Kind = sskChord then
+      for raw := 0 to Min(High(FSt[s].EdgeHostIdx), High(FSt[s].EdgeRows)) do
+        if (FSt[s].EdgeHostIdx[raw] >= 0) and FSt[s].EdgeRows[raw].Host.Exists then
+          StAnimEl(FSt[s].EdgeRows[raw].Host, FSt[s].EdgeHostIdx[raw], s, raw,
+            'edge', cStPxPath, cfg, hasCfg, over);
     { a line's polyline and area: one element each upstream, its runs here }
     if FSt[s].Run.Host.Exists and (Length(FSt[s].RunIdx) > 0) then
     begin
@@ -19952,6 +23198,9 @@ begin
   else if FBindings[ASlot].Polar <> nil then
     { a polar is its own master [Batch 113] }
     Result := 'polar' + IntToStr(FBindings[ASlot].PolarIndex)
+  { a single axis is too [Batch 118] }
+  else if FBindings[ASlot].Single <> nil then
+    Result := 'single' + IntToStr(FBindings[ASlot].SingleIndex)
   else if FBindings[ASlot].CalendarIndex >= 0 then
     Result := 'calendar' + IntToStr(FBindings[ASlot].CalendarIndex)
   else if FBindings[ASlot].RadarIndex >= 0 then
@@ -20008,6 +23257,14 @@ begin
   Result := nil;
   SetLength(Result, 3);
   slot := SlotOfSeries(ASeriesIndex);
+  { A CHORD LINK'S CHAIN: its item, the series (no levels) [Batch 120] }
+  if (slot >= 0) and (slot <= High(FChords)) and FChords[slot].Valid then
+  begin
+    if (AEdge >= 0) and (AEdge <= High(FChords[slot].Edges)) then
+      Result[0] := FChords[slot].Edges[AEdge].Item;
+    Result[2] := StSeriesNode(ASeriesIndex);
+    Exit;
+  end;
   if (slot >= 0) and (slot <= High(FSankeys)) and FSankeys[slot].Valid
     and (AEdge >= 0) and (AEdge <= High(FSankeys[slot].Edges)) then
   begin
@@ -20022,6 +23279,73 @@ function TTyAdvanceChart.StIsSankey(ASeriesIndex: Integer): Boolean;
 begin
   Result := (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSt))
     and (FSt[ASeriesIndex].Kind = sskSankey);
+end;
+
+function TTyAdvanceChart.StIsChord(ASeriesIndex: Integer): Boolean;
+begin
+  Result := (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSt))
+    and (FSt[ASeriesIndex].Kind = sskChord);
+end;
+
+function TTyAdvanceChart.StHasEdges(ASeriesIndex: Integer): Boolean;
+begin
+  Result := StIsSankey(ASeriesIndex) or StIsChord(ASeriesIndex);
+end;
+
+{ ONE CHORD RIBBON INTO THE STATE MACHINE [Batch 120]: a path whose states
+  are setStatesStylesFromModel(el, edgeModel, 'lineStyle') -- getLineStyle
+  of [state].lineStyle along link -> series: the colour a STROKE, the width
+  its width -- the series' emphasis opacity 0.5 under what is declared. It
+  has no label. }
+procedure TTyAdvanceChart.StDeclareChordEdge(ASlot, AEdge: Integer; AList: TTyPaintList);
+var
+  s: Integer;
+  item: PTyStItem;
+  host: TTyChartElement;
+  nodes: TTyStNodeArray;
+  has, bolder, disabled, prevWas: Boolean;
+  prev: TTyStNames;
+  n: TTyStName;
+begin
+  s := FBindings[ASlot].SeriesIndex;
+  item := @FSt[s].EdgeRows[AEdge];
+  host := AList.Element(FSt[s].EdgeHostIdx[AEdge]);
+  nodes := StEdgeNodes(s, AEdge);
+  prevWas := item^.Host.Exists;
+  prev := item^.Host.States;
+  item^.Host.Exists := True;
+  item^.Host.IsPath := True;
+  disabled := TyStReadBool(nodes, ['emphasis', 'disabled'], has);
+  item^.Host.Proxy := not disabled;
+  for n := Low(TTyStName) to High(TTyStName) do item^.Host.HasState[n] := True;
+  item^.Host.Rest := StRestOf(host);
+  for n := Low(TTyStName) to High(TTyStName) do
+    item^.Host.Decl[n] := TyStReadStyle(nodes, cStNames[n], 'lineStyle', bolder);
+  { ChordSeries' defaultOption: emphasis.lineStyle.opacity 0.5 }
+  if not item^.Host.Decl[stnEmphasis].Has[stkOpacity] then
+    TyStSetNum(item^.Host.Decl[stnEmphasis], stkOpacity, 0.5);
+  item^.Label_ := Default(TTyStElement);
+  if not prevWas then
+  begin
+    item^.Host.Cur := item^.Host.Rest;
+    item^.Host.States := [];
+  end
+  else if FStRerender then
+  begin
+    TyStClearItem(item^);
+    if prev <> [] then TyStUseItemStates(item^, prev);
+  end;
+  TyStApplyItem(item^);
+end;
+
+function TTyAdvanceChart.ChordEdgeStates(ASeriesIndex, AEdge: Integer;
+  out AItem: TTyStItem): Boolean;
+begin
+  AItem := Default(TTyStItem);
+  Result := StIsChord(ASeriesIndex) and (AEdge >= 0)
+    and (AEdge <= High(FSt[ASeriesIndex].EdgeRows))
+    and FSt[ASeriesIndex].EdgeRows[AEdge].Host.Exists;
+  if Result then AItem := FSt[ASeriesIndex].EdgeRows[AEdge];
 end;
 
 { applyCurveStyle on a state's style: 'source' / 'target' take that end
@@ -20126,6 +23450,8 @@ var
   w: string;
   slot, i, p: Integer;
   anc: TTyIntegerArray;
+  info: TTyCustomElInfo;
+  txt: TJSONString;
 
   procedure Add(AIndex: Integer);
   begin
@@ -20138,6 +23464,37 @@ begin
   d := TyStFind(nodes, ['emphasis', 'focus']);
   AScope := TyStScopeOf(TyStFind(nodes, ['emphasis', 'blurScope']));
   slot := SlotOfSeries(ASeriesIndex);
+  { A CUSTOM ITEM'S focus and blurScope are its root option's
+    (toggleHoverEmphasis(el, elOption.focus, elOption.blurScope)), never the
+    series' emphasis: none written is no focus [Batch 124] }
+  if (slot >= 0) and (FBindings[slot].SeriesType = TyCustomSeriesType) then
+  begin
+    Result := Default(TTyStFocus);
+    AScope := TyStScopeOf(nil);
+    info := nil;
+    if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FCustomViews))
+      and (FCustomViews[ASeriesIndex] <> nil)
+      and (FCustomViews[ASeriesIndex].ElOfRaw(ARaw) <> nil)
+      and (FCustomViews[ASeriesIndex].ElOfRaw(ARaw).Custom is TTyCustomElInfo) then
+      info := TTyCustomElInfo(FCustomViews[ASeriesIndex].ElOfRaw(ARaw).Custom);
+    if (info = nil) or (info.Focus = '') then Exit;
+    txt := TJSONString.Create(info.Focus);
+    try
+      Result := TyStFocusOf(txt);
+    finally
+      txt.Free;
+    end;
+    if info.BlurScope <> '' then
+    begin
+      txt := TJSONString.Create(info.BlurScope);
+      try
+        AScope := TyStScopeOf(txt);
+      finally
+        txt.Free;
+      end;
+    end;
+    Exit;
+  end;
   { A SANKEY'S WORDS ARE TWO INDEX SETS (SankeyView: adjacency and
     trajectory become getAdjacentDataIndices / getTrajectoryDataIndices)
     [Batch 114] }
@@ -20149,6 +23506,19 @@ begin
     TySankeyFocusSets(FSankeys[slot], False, ARaw, d.AsString = 'trajectory',
       Result.Indices, Result.EdgeIndices);
     Exit;
+  end;
+  { A CHORD NODE'S 'adjacency' -- the series' default -- is getAdjacentData-
+    Indices: its kept links and their ends (ChordPiece) [Batch 120] }
+  if StIsChord(ASeriesIndex) then
+  begin
+    if (d = nil) or ((d.JSONType = jtString) and (d.AsString = 'adjacency')) then
+    begin
+      Result := Default(TTyStFocus);
+      Result.Kind := sfkIndices;
+      TyChordFocusSets(FChords[slot], False, ARaw, Result.Indices, Result.EdgeIndices);
+      Exit;
+    end;
+    Exit(TyStFocusOf(d));
   end;
   if not ((slot >= 0) and (slot <= High(FSunbursts)) and FSunbursts[slot].Valid
     and (ARaw >= 0) and (ARaw <= High(FSunbursts[slot].Hier.Nodes))) then
@@ -20173,14 +23543,17 @@ begin
       anc[High(anc)] := p;
       p := FSunbursts[slot].Hier.Nodes[p].Parent;
     end;
-    for i := High(anc) downto 0 do Add(anc[i]);
+    { the root's index finds no element (the return circle is not
+      registered under it) [Batch 115] }
+    for i := High(anc) downto 0 do
+      if anc[i] <> 0 then Add(anc[i]);
   end;
   if (w = 'descendant') or (w = 'relative') then
     for i := 0 to High(FSunbursts[slot].Hier.Nodes) do
     begin
       p := i;
       while (p >= 0) and (p <> ARaw) do p := FSunbursts[slot].Hier.Nodes[p].Parent;
-      if p = ARaw then Add(i);
+      if (p = ARaw) and (i <> 0) then Add(i);
     end;
 end;
 
@@ -20197,6 +23570,19 @@ begin
   d := TyStFind(nodes, ['emphasis', 'focus']);
   AScope := TyStScopeOf(TyStFind(nodes, ['emphasis', 'blurScope']));
   slot := SlotOfSeries(ASeriesIndex);
+  { A CHORD RIBBON'S 'adjacency' -- the series' default -- itself and its two
+    ends (ChordEdge) [Batch 120] }
+  if StIsChord(ASeriesIndex) then
+  begin
+    if (d = nil) or ((d.JSONType = jtString) and (d.AsString = 'adjacency')) then
+    begin
+      Result := Default(TTyStFocus);
+      Result.Kind := sfkIndices;
+      TyChordFocusSets(FChords[slot], True, AEdge, Result.Indices, Result.EdgeIndices);
+      Exit;
+    end;
+    Exit(TyStFocusOf(d));
+  end;
   if (d <> nil) and (d.JSONType = jtString)
     and ((d.AsString = 'adjacency') or (d.AsString = 'trajectory')) then
   begin
@@ -20328,7 +23714,9 @@ end;
 
 function TTyAdvanceChart.StDispatcher(const ATarget: TTyChartEventTarget;
   out AItem: PTyStItem; out APart: Integer): Boolean;
-var s, idx, k: Integer;
+var
+  s, idx, k: Integer;
+  info: TTyCustomElInfo;
 begin
   Result := False;
   AItem := nil;
@@ -20338,8 +23726,9 @@ begin
   begin
     if ATarget.HdEdge then
     begin
-      { a sankey link is a dispatcher of its own [Batch 114] }
-      if not StIsSankey(s) then Exit;
+      { a sankey link is a dispatcher of its own [Batch 114]; a chord
+        ribbon too [Batch 120] }
+      if not StHasEdges(s) then Exit;
       if (ATarget.HdRow < 0) or (ATarget.HdRow > High(FSt[s].EdgeRows)) then Exit;
       AItem := @FSt[s].EdgeRows[ATarget.HdRow];
       if not AItem^.Host.Exists or not AItem^.Host.Proxy then Exit;
@@ -20349,6 +23738,13 @@ begin
     AItem := StItemAt(s, ATarget.HdRow);
     { emphasis.disabled: not a highDownDispatcher at all }
     if (AItem = nil) or not AItem^.Host.Proxy then Exit;
+    { a custom item whose root option says emphasisDisabled
+      (disableHoverEmphasis: no dispatcher) [Batch 124] }
+    if (s >= 0) and (s <= High(FSt)) and (FSt[s].Kind = sskCustom) then
+    begin
+      info := CustomRootInfo(s, ATarget.HdRow);
+      if (info <> nil) and info.EmphasisDisabled then Exit;
+    end;
     APart := 0;
     Exit(True);
   end;
@@ -20500,7 +23896,7 @@ begin
   d := FPaintList.Element(AIndex).Datum;
   if d.IsEdge then
   begin
-    Result := StIsSankey(d.SeriesIndex) and (d.DataIndex >= 0)
+    Result := StHasEdges(d.SeriesIndex) and (d.DataIndex >= 0)
       and (d.DataIndex <= High(FSt[d.SeriesIndex].EdgeRows))
       and (stnEmphasis in FSt[d.SeriesIndex].EdgeRows[d.DataIndex].Host.States);
     Exit;
@@ -20969,7 +24365,8 @@ var
   begin
     AIdx := nil;
     Result := False;
-    if not StIsSankey(ASeries) then Exit;
+    { a chord's links too, by their raw index [Batch 120] }
+    if not StHasEdges(ASeries) then Exit;
     x := APayload.Find('dataType');
     if not ((x <> nil) and (x.JSONType = jtString) and (x.AsString = 'edge')) then Exit;
     Result := True;
@@ -22602,8 +25999,9 @@ var
   base: TTyAxis;
   node: TJSONData;
   d: TJSONData;
-  jit, margin, scale: Double;
-  overlap: Boolean;
+  jit, margin, scale, band: Double;
+  overlap, single, singleY: Boolean;
+  s: TTySingle;
 
   function NumOf(AData: TJSONData): Double;
   begin
@@ -22621,9 +26019,18 @@ begin
   AVisual.JitterOnX := False;
   if (ASlot < 0) or (ASlot > High(FBindings)) or (FJitter = nil) then Exit;
   if FBindings[ASlot].SeriesType <> 'scatter' then Exit;
-  if (FBindings[ASlot].Cart = nil) or (FBindings[ASlot].CalendarIndex >= 0) then Exit;
-  base := FBindings[ASlot].Cart.GetBaseAxis;
-  if (base = nil) or (base.AxisType <> atCategory) then Exit;
+  { ON A SINGLE AXIS any type of axis jitters (needFixJitter's
+    COORD_SYS_TYPE_SINGLE) [Batch 118] }
+  single := FBindings[ASlot].Single <> nil;
+  if single then
+    base := FBindings[ASlot].BaseAxis
+  else
+  begin
+    if (FBindings[ASlot].Cart = nil) or (FBindings[ASlot].CalendarIndex >= 0) then Exit;
+    base := FBindings[ASlot].Cart.GetBaseAxis;
+    if (base = nil) or (base.AxisType <> atCategory) then Exit;
+  end;
+  if base = nil then Exit;
   node := FOption.ComponentAt(base.MainType, base.ComponentIndex);
   if not (node is TJSONObject) then Exit;
   jit := 0;
@@ -22641,6 +26048,22 @@ begin
     if IsNan(margin) then margin := 0;
   end;
   if APPI > 0 then scale := APPI / 96 else scale := 1;
+  if single then
+  begin
+    { a band only on a category axis: elsewhere nothing clamps (an
+      infinite band is none) }
+    if base.AxisType = atCategory then band := base.BandWidth
+    else band := Infinity;
+    AVisual.Jitter := FJitter.AxisFor(base.Uid, jit * scale, margin * scale,
+      overlap, band);
+    { isSingleY: a horizontal non-category axis or a vertical category one
+      floats y }
+    s := TTySingle(FBindings[ASlot].Single);
+    singleY := (s.OrientHorizontal and (base.AxisType <> atCategory))
+      or ((s.Orient = 'vertical') and (base.AxisType = atCategory));
+    AVisual.JitterOnX := not singleY;
+    Exit;
+  end;
   AVisual.Jitter := FJitter.AxisFor(base.Uid, jit * scale, margin * scale,
     overlap, base.BandWidth);
   AVisual.JitterOnX := base.Horizontal;
@@ -22856,8 +26279,24 @@ begin
       Result := ConvertOnPolar(FPolars[c], AValue, AFrom);
       if Result.Kind <> cvkNone then Exit;
     end;
+    { THE SINGLE AXES [Batch 118]: getCoordSys -- the single named, else
+      the series' own }
+    for c := 0 to High(FSingles) do
+    begin
+      if FSingles[c] = nil then Continue;
+      target := TyFinderModel(pf, TySingleCoordSysName);
+      if (target < 0) and (s >= 0) then
+      begin
+        slot := SlotOfSeries(s);
+        if (slot >= 0) and (FBindings[slot].Single <> nil) then
+          target := FBindings[slot].SingleIndex;
+      end;
+      if target <> c then Continue;
+      Result := ConvertOnSingle(FSingles[c], AValue, AFrom);
+      if Result.Kind <> cvkNone then Exit;
+    end;
     { THE PARALLELS answer nothing: Parallel has no convertToPixel or
-      convertFromPixel [Batch 128]. singleAxis (C10) takes its turn here }
+      convertFromPixel [Batch 128] }
     for c := 0 to High(FCalendars) do
     begin
       if FCalendars[c] = nil then Continue;
@@ -22909,6 +26348,8 @@ begin
   if b.Cart <> nil then Exit(TyCartesianContainJson(b.Cart, APoint));
   { a polar's containPoint [Batch 113] }
   if b.Polar <> nil then Exit(TyPolarContainJson(TTyPolar(b.Polar), APoint));
+  { a single axis' [Batch 118] }
+  if b.Single <> nil then Exit(TySingleContainJson(TTySingle(b.Single), APoint));
   { a parallel's containPoint [Batch 128] }
   if b.Parallel is TTyParallel then
     Exit(TyParallelContainJson(TTyParallel(b.Parallel), APoint));
@@ -22932,6 +26373,16 @@ begin
     bx := FSankeys[slot].Box;
     Exit((pt.X >= bx.X) and (pt.X <= bx.X + bx.W) and (pt.Y >= bx.Y)
       and (pt.Y <= bx.Y + bx.H));
+  end;
+  { A SUNBURST: the virtual root's layout, set by a drill and kept after
+    it -- none before the first [Batch 115: never before] }
+  if b.SeriesType = TySunburstSeriesTypeName then
+  begin
+    if (ASeriesIndex > High(FSunVirt)) or not FSunVirt[ASeriesIndex].Has then Exit;
+    dx := pt.X - FSunVirt[ASeriesIndex].CX;
+    dy := pt.Y - FSunVirt[ASeriesIndex].CY;
+    r := Sqrt(dx * dx + dy * dy);
+    Exit((r <= FSunVirt[ASeriesIndex].R) and (r >= FSunVirt[ASeriesIndex].R0));
   end;
   if (b.SeriesType = TyPieSeriesTypeName) and (slot <= High(FPies))
     and FPies[slot].Valid then
@@ -22986,6 +26437,14 @@ begin
           g := pf.Types[t].Models[k];
           if (g >= 0) and (g <= High(FPolars)) and (FPolars[g] <> nil)
             and TyPolarContainJson(FPolars[g], APoint) then
+            Exit(True);
+        end
+        { Single.containPoint [Batch 118] }
+        else if mt = TySingleCoordSysName then
+        begin
+          g := pf.Types[t].Models[k];
+          if (g >= 0) and (g <= High(FSingles)) and (FSingles[g] <> nil)
+            and TySingleContainJson(FSingles[g], APoint) then
             Exit(True);
         end
         { Parallel.containPoint, asked by the parallel and by each of its
@@ -23275,9 +26734,7 @@ end;
 
 function TTyAdvanceChart.DispatchAction(const APayloadJson: string): Boolean;
 var
-  d, tp: TJSONData;
-  p: TJSONObject;
-  t: string;
+  d: TJSONData;
   nLine, nCol: Integer;
 begin
   Result := False;
@@ -23304,7 +26761,7 @@ function TTyAdvanceChart.DispatchActionObject(APayload: TJSONObject): Boolean;
 var
   tp: TJSONData;
   p: TJSONObject;
-  t: string;
+  t, savedAction: string;
 begin
   Result := False;
   p := APayload;
@@ -23314,6 +26771,10 @@ begin
     tp := p.Find('type');
     if (tp = nil) or (tp.JSONType <> jtString) then Exit;
     t := tp.AsString;
+    { the update this action runs renders for it: renderItem's actionType
+      [Batch 123] }
+    savedAction := FCustomAction;
+    FCustomAction := t;
     { THE ACTIONS WHOSE UPDATE RUNS THE VISUAL STAGE with a payload: the
       brush's brushSelect is dispatched by it [Batch 127] }
     if (t = 'selectDataRange') or (t = 'legendToggleSelect') or (t = 'legendSelect')
@@ -23358,6 +26819,12 @@ begin
       DoLegendScroll(p);
       Result := True;
     end
+    else if t = 'sunburstRootToNode' then
+      { [Batch 115] }
+      Result := DoSunAction(p)
+    else if (t = 'treemapZoomToNode') or (t = 'treemapRootToNode')
+      or (t = 'treemapMove') or (t = 'treemapRender') then
+      Result := DoTreemapAction(t, p)
     else if (t = 'dragNode') or (t = 'sankeyRoam') or (t = 'graphRoam') then
       { [Batch 114] }
       Result := DoViewAction(t, p)
@@ -23393,6 +26860,17 @@ begin
       BrushDoEnd(p);
       Result := True;
     end
+    { the timeline's actions [Batch 129] }
+    else if t = 'timelineChange' then
+    begin
+      DoTimelineChange(p);
+      Result := True;
+    end
+    else if t = 'timelinePlayChange' then
+    begin
+      DoTimelinePlayChange(p);
+      Result := True;
+    end
     { the parallel axes' area select, which the brush feature's clear
       dispatches: the update and the event [Batch 127], and the queried
       parallelAxis models' active intervals [Batch 128] }
@@ -23410,6 +26888,7 @@ begin
     end;
   finally
     p.Free;
+    FCustomAction := savedAction;
     Dec(FBrushActDepth);
   end;
   { the pending brushSelect, then triggerUpdatedEvent [Batch 127] }
@@ -24298,6 +27777,7 @@ var
   seen: array of TTyAxis;
   wantPolar: string;
   pol: TTyPolar;
+  sgl: TTySingle;
 
   function AlreadySeen(AAxis: TTyAxis): Boolean;
   var j: Integer;
@@ -24311,8 +27791,43 @@ var
 
   { One axis, resolved and appended when it has something to say. On a
     polar the value is the axis' own half of pointToData [Batch 111]. }
+  { ThemeRiverSeries.getAxisTooltipData: per layer the row nearest AValue
+    in time -- the last of a tie -- and the nearest value of the LAST layer }
+  function RiverNearest(ASlot: Integer; AValue: Double; out ARows: TTyIntegerArray;
+    out ANearest: Double): Boolean;
+  var
+    layers: TTyRiverLayerArray;
+    li, j, idx: Integer;
+    md, t, dd: Double;
+  begin
+    ARows := nil;
+    ANearest := NaN;
+    Result := False;
+    if (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
+    layers := TyThemeRiverLayers(FStores[ASlot]);
+    SetLength(ARows, Length(layers));
+    for li := 0 to High(layers) do
+    begin
+      md := MaxDouble;
+      idx := -1;
+      for j := 0 to High(layers[li].Rows) do
+      begin
+        t := FStores[ASlot].Get(0, layers[li].Rows[j]);
+        dd := Abs(t - AValue);
+        if (not IsNan(dd)) and (dd <= md) then
+        begin
+          ANearest := t;
+          md := dd;
+          idx := layers[li].Rows[j];
+        end;
+      end;
+      ARows[li] := idx;
+    end;
+    Result := Length(layers) > 0;
+  end;
+
   procedure Consider(AAxis: TTyAxis; const APlot: TTyRectF; ACross: Boolean;
-    APolar: TTyPolar = nil);
+    APolar: TTyPolar = nil; ASingle: TTySingle = nil);
   var
     hit: TTyAxisHit;
     coord, value, snapTo, v, diff, dist, minDist, minDiff, maxDist: Double;
@@ -24328,6 +27843,7 @@ var
     hit.Plot := APlot;
     hit.Cross := ACross;
     hit.Polar := APolar;
+    hit.Single := ASingle;
     hit.Spec := TyAxisPointerSpecOf(FOption, AAxis.MainType,
       AAxis.ComponentIndex, isCat, True,
       (tipSpec.Trigger = tttAxis) and not ACross, crossType);
@@ -24335,6 +27851,9 @@ var
 
     if APolar <> nil then
       value := APolar.AxisPointToData(AAxis, AX, AY)
+    { SingleAxis.pointToData: the orient's coordinate [Batch 118] }
+    else if ASingle <> nil then
+      value := ASingle.PointXYToData(AX, AY)
     else
     begin
       if AAxis.Horizontal then coord := AX else coord := AY;
@@ -24385,8 +27904,16 @@ var
           axis finds the bar nearest in value [Batch 101]
           [Revised in batch 101: only the series whose base axis this is.] }
         if (FBindings[s].XAxis <> AAxis) and (FBindings[s].YAxis <> AAxis) then Continue;
-        if not NearestOnAxis(s, AAxis, value, maxDist, rows) then Continue;
-        v := FStores[s].Get(FStores[s].DimIndexOf(AAxis.Dim), rows[0]);
+        { a themeRiver answers by its own getAxisTooltipData [Batch 118] }
+        if FBindings[s].SeriesType = TyThemeRiverSeriesTypeName then
+        begin
+          if not RiverNearest(s, value, rows, v) then Continue;
+        end
+        else
+        begin
+          if not NearestOnAxis(s, AAxis, value, maxDist, rows) then Continue;
+          v := FStores[s].Get(FStores[s].DimIndexOf(AAxis.Dim), rows[0]);
+        end;
         if IsNan(v) or IsInfinite(v) then Continue;
         diff := value - v;
         dist := Abs(diff);
@@ -24477,6 +28004,16 @@ begin
     Consider(baseAxis, Default(TTyRectF), False, pol);
     if crossType and (baseAxis <> nil) then
       Consider(pol.OtherAxis(baseAxis), Default(TTyRectF), True, pol);
+  end;
+  { THE SINGLE AXES, after the polars as the coordinate system manager
+    lists them: one that holds the point (Single.containPoint) takes a
+    pointer on its axis -- its only one, so a cross adds nothing
+    [Batch 118] }
+  for g := 0 to High(FSingles) do
+  begin
+    sgl := FSingles[g];
+    if (sgl = nil) or not sgl.ContainXY(AX, AY) then Continue;
+    Consider(sgl.Axis, sgl.GetRect, False, nil, sgl);
   end;
 end;
 
@@ -25132,6 +28669,8 @@ var
       ApplyGraphHover. }
     if IsGraphDatum(FPaintList.Element(AIndex).Datum) then Exit;
     if IsTreeDatum(FPaintList.Element(AIndex).Datum) then Exit;
+    { nor a treemap's [Batch 115] }
+    if IsTreemapDatum(FPaintList.Element(AIndex).Datum) then Exit;
     if not EmphasiseElement(AIndex, APPI, el) then Exit;
     { THE CAPTION IS DROPPED. A mark's words were expanded once, into a
       SEPARATE element, and the copy drawn here carries the request rather
@@ -25215,6 +28754,12 @@ begin
     if hit.Polar <> nil then
     begin
       PaintPolarPointer(APainter, ARect, APPI, AMeasurer, hit);
+      Continue;
+    end;
+    { and a single axis' [Batch 118] }
+    if hit.Single <> nil then
+    begin
+      PaintSinglePointer(APainter, ARect, APPI, AMeasurer, hit);
       Continue;
     end;
     { SNAP MOVES THE POINTER, not the content. With snap off the line stays
@@ -25701,7 +29246,9 @@ begin
       TipTryShow(snap, g);
       Exit;
     end;
-    if TipTargetValid(FTipDatum) then
+    { a custom element under one with tooltipDisabled: no dispatcher, the
+      tooltip hides (TooltipView's findEventDispatcher) [Batch 124] }
+    if TipTargetValid(FTipDatum) and not CustomTipDisabled(FTipElement) then
     begin
       spec := TipSpecOf(snap);
       { the cascade's trigger must be 'item' -- a marker's default 'item'
@@ -25854,7 +29401,7 @@ end;
 function TTyAdvanceChart.TooltipShownWhich: string;
 const
   cMk: array[TTyChartTargetKind] of string = ('item', 'markPoint', 'markLine',
-    'markArea', 'legend', 'legend', 'legend');
+    'markArea', 'legend', 'legend', 'legend', 'graphic');
 var block: TTyTooltipBlock;
 begin
   Result := '';
@@ -26185,6 +29732,7 @@ var
   st, nm, valueText: string;
   item, d: TJSONData;
   v: Double;
+  has: Boolean;
 begin
   ABlock := nil;
   Result := False;
@@ -26200,12 +29748,15 @@ begin
   if (st = TySunburstSeriesTypeName) and (slot <= High(FSunbursts))
     and FSunbursts[slot].Valid then
   begin
-    if (row <= 0) or (row > High(FSunbursts[slot].Nodes)) then Exit;
+    { the virtual root only as the return circle [Batch 115] }
+    if (row < 0) or (row > High(FSunbursts[slot].Nodes)) then Exit;
+    if (row = 0) and (FSunbursts[slot].ViewRoot = 0) then Exit;
     Result := True;
     nm := SeriesNameOf(ADatum.SeriesIndex);
     if (nm <> '') and (Trim(nm) = '') then nm := '-';
     ABlock := TTyTooltipBlock.CreateSection(nm, False);
-    nm := HierItemName(FSunbursts[slot].Hier.Nodes[row].Item);
+    if row = 0 then nm := HierItemName(FOption.ComponentAt('series', ADatum.SeriesIndex))
+    else nm := HierItemName(FSunbursts[slot].Hier.Nodes[row].Item);
     v := FSunbursts[slot].Nodes[row].Value;
     ABlock.Add(TTyTooltipBlock.CreateNameValue(ttmItem, AColour, nm, False,
       TyTooltipValueText(v), False));
@@ -26218,9 +29769,12 @@ begin
   if (st = TyTreemapSeriesTypeName) and (slot <= High(FTreemaps))
     and FTreemaps[slot].Valid then
   begin
-    if (row <= 0) or (row > High(FTreemaps[slot].Nodes)) then Exit;
+    { the root's background takes the pointer too, named after the series
+      [Batch 115] }
+    if (row < 0) or (row > High(FTreemaps[slot].Nodes)) then Exit;
     Result := True;
-    item := FTreemaps[slot].Hier.Nodes[row].Item;
+    if row = 0 then item := FOption.ComponentAt('series', ADatum.SeriesIndex)
+    else item := FTreemaps[slot].Hier.Nodes[row].Item;
     nm := TipRowName(HierItemName(item));
     v := FTreemaps[slot].Nodes[row].Value;
     valueText := TyTooltipValueText(v);
@@ -26262,6 +29816,38 @@ begin
     ABlock := TTyTooltipBlock.CreateSection('', True);
     ABlock.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, nm, False,
       TyTooltipValueText(v), IsNan(v)));
+    Exit;
+  end;
+
+  { CHORD: a bare nameValue (ChordSeries.formatTooltip). A node: its name
+    ('-' without one) and its value -- the raw one, else the layout's; a
+    link: its two nodes' names joined by ' > ' and its own value, none when
+    it has none [Batch 120] }
+  if (st = TyChordSeriesTypeName) and (slot <= High(FChords))
+    and FChords[slot].Valid then
+  begin
+    if ADatum.IsEdge then
+    begin
+      row := ADatum.RawDataIndex;
+      if (row < 0) or (row > High(FChords[slot].Edges)) then Exit;
+      nm := FChords[slot].Nodes[FChords[slot].Edges[row].Source].Name + ' > '
+        + FChords[slot].Nodes[FChords[slot].Edges[row].Target].Name;
+      has := TyChordEdgeRawValue(FChords[slot], row, v, valueText);
+    end
+    else
+    begin
+      row := ADatum.RawDataIndex;
+      if (row < 0) or (row > High(FChords[slot].Nodes)) then Exit;
+      nm := FChords[slot].Nodes[row].Name;
+      has := TyChordNodeValue(FChords[slot], row, v, valueText);
+    end;
+    { makeValueReadable: a number grouped, a string as it is ('-' blank) }
+    if has and not IsNan(v) then valueText := TyTooltipValueText(v)
+    else if has and (Trim(valueText) = '') then valueText := '-';
+    Result := True;
+    ABlock := TTyTooltipBlock.CreateSection('', True);
+    ABlock.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, TipRowName(nm), False,
+      valueText, not has));
   end;
 end;
 
@@ -26541,6 +30127,22 @@ begin
   graphChanged := False;
   inherited MouseMove(Shift, X, Y);
   if csDesigning in ComponentState then Exit;
+  { A TREEMAP'S HOVER, before the drag pans: zrender's handler finds the
+    element under the pointer first and RoamController moves the picture
+    after [Batch 115] }
+  d := HitTestAt(X, Y, el);
+  if ((X < FLastRect.Left) or (X > FLastRect.Right) or (Y < FLastRect.Top)
+    or (Y > FLastRect.Bottom)) or not IsTreemapDatum(d) then
+  begin
+    d.SeriesIndex := -1;
+    d.DataIndex := -1;
+  end;
+  if (d.SeriesIndex <> FTmHoverSeries) or (d.DataIndex <> FTmHoverRow) then
+  begin
+    FTmHoverSeries := d.SeriesIndex;
+    FTmHoverRow := d.DataIndex;
+    graphChanged := True;
+  end;
   { THE DRAG FIRST: the delta from where the pointer was last, wherever it is
     now -- a drag that leaves the control keeps panning. }
   if FRoamSeries >= 0 then
@@ -26551,6 +30153,8 @@ begin
     FRoamY := Y;
     if IsTreeSeries(FRoamSeries) then TreeRoam(FRoamSeries, dx, dy)
     else if IsSankeySeries(FRoamSeries) then SankeyRoam(FRoamSeries, dx, dy)
+    { a treemap's pan: past 3 px, else the delta is lost [Batch 115] }
+    else if IsTreemapSeries(FRoamSeries) then TreemapPan(FRoamSeries, Round(dx), Round(dy))
     else GraphRoam(FRoamSeries, dx, dy);
   end;
   { A NODE DRAG: one 'drag' per move, the delta from the last move [Batch 114] }
@@ -26635,7 +30239,10 @@ begin
   TbFrame;
   if not (csDesigning in ComponentState) then EventLeave(FEvLastX, FEvLastY);
   wasOn := TyChartDatumValid(FTipDatum) or (Length(FTipHits) > 0) or FTipShown;
-  wasGraph := IsGraphDatum(FTipDatum) or IsTreeDatum(FTipDatum);
+  wasGraph := IsGraphDatum(FTipDatum) or IsTreeDatum(FTipDatum)
+    or (FTmHoverSeries >= 0);
+  FTmHoverSeries := -1;
+  FTmHoverRow := -1;
   FTipDatum := TyChartNoDatum;
   FTipElement := -1;
   FTipHits := nil;
@@ -26701,9 +30308,17 @@ begin
 end;
 
 procedure TTyAdvanceChart.AnimDropAll;
+var i: Integer;
 begin
   if FAnimSet <> nil then FAnimSet.Clear;
+  { the graphic elements at their last frames [Batch 122] }
+  if FGfxView <> nil then FGfxView.Snap;
+  { and the custom series' [Batch 124] }
+  for i := 0 to High(FCustomViews) do
+    if FCustomViews[i] <> nil then FCustomViews[i].Snap;
   AxisAnimDrop;
+  { a treemap's drill-down snaps with the rest [Batch 115] }
+  TmAnimDropAll;
   FAnimBind := nil;
   FAnimStBind := nil;
   FAnimFlush := False;
@@ -27205,7 +30820,13 @@ begin
       LabelManager fades all the same }
     r.LabelFade := (t = 'bar') or (t = 'scatter') or (t = 'heatmap')
       or (t = TyPieSeriesTypeName) or (t = TyFunnelSeriesTypeName)
-      or (t = 'effectScatter');
+      or (t = 'effectScatter') or (t = TyThemeRiverSeriesTypeName)
+      { a chord's node labels [Batch 120] }
+      or (t = TyChordSeriesTypeName);
+    { A SUNBURST'S DRILL-DOWN: its pieces transition, its new labels fade
+      [Batch 115] }
+    r.HierDrill := (si <= High(FHierDrill)) and FHierDrill[si];
+    if r.HierDrill then r.LabelFade := True;
     ser := r.Model.Own;
     if ser is TJSONObject then
     begin
@@ -27354,7 +30975,9 @@ end;
 
 procedure TTyAdvanceChart.AnimArmTimer;
 begin
-  if (FAnimLive or PtrLive or LegLive or LoadLive or VmLive_ or ProgLive) and IsNan(FAnimNow)
+  if (FAnimLive or PtrLive or LegLive or LoadLive or VmLive_ or ProgLive or GfxLive
+    or CuLive or TlLive)
+    and IsNan(FAnimNow)
     and not (csDesigning in ComponentState) then
   begin
     if FAnimTimer = nil then
@@ -27420,6 +31043,33 @@ begin
     FLoadAnim.Update(ANowMs);
     InvalidateFrame;
   end;
+  { the graphic elements' transitions: frames of the static layer
+    [Batch 122] }
+  if GfxLive then
+  begin
+    FGfxAnim.Update(ANowMs);
+    DropStatic;
+    InvalidateFrame;
+    if not GfxLive and not FAnimLive then AnimArmTimer;
+  end;
+  { the custom elements' transitions: frames of the static layer
+    [Batch 124] }
+  if CuLive then
+  begin
+    FCuAnim.Update(ANowMs);
+    DropStatic;
+    InvalidateFrame;
+    if not CuLive and not FAnimLive then AnimArmTimer;
+  end;
+  { the timeline's checkpoint, its progress line and its hover
+    transitions: frames of the static layer [Batch 129] }
+  if TlLive then
+  begin
+    FTlAnim.Update(ANowMs);
+    DropStatic;
+    InvalidateFrame;
+    if not TlLive and not FAnimLive then AnimArmTimer;
+  end;
   { the visualMap indicator's slide: a frame of the static layer [Batch 116] }
   if VmLive_ then
   begin
@@ -27432,6 +31082,8 @@ begin
   FAnim.Update(ANowMs);
   { a fade that ended removed its element [Batch 90] }
   if FAnimSet <> nil then FAnimSet.Purge;
+  { a treemap's wrap that ended: renderFinally [Batch 115] }
+  TmWrapCheck;
   if FAnimLive and (FAnim.ClipCount = 0) then
   begin
     { AT REST: the series go back into the static layer, drawn once more
@@ -27604,8 +31256,9 @@ begin
   begin
     hit := FTipHits[i];
     if (hit.Axis = nil) or (hit.Spec.PointerType = aptNone) then Continue;
-    { a polar pointer does not slide [Batch 111] }
-    if hit.Polar <> nil then Continue;
+    { a polar pointer does not slide [Batch 111], nor a single's
+      [Batch 118] }
+    if (hit.Polar <> nil) or (hit.Single <> nil) then Continue;
     at := hit.Axis.DataToCoord(PointerValue(hit), True);
     if IsNan(at) then Continue;
     key := PtrKeyOf(hit.Axis);
@@ -27851,9 +31504,12 @@ end;
 function TTyAdvanceChart.AnimFrame: TTyPaintList;
 begin
   if (FPaintList = nil) or ((Length(FAnimBind) = 0) and (Length(FAnimStBind) = 0)
-    and ((FAnimSet = nil) or (FAnimSet.GhostCount = 0))) then Exit(FPaintList);
+    and ((FAnimSet = nil) or (FAnimSet.GhostCount = 0)) and not TmAnimAny) then
+    Exit(FPaintList);
   if FAnimFrame = nil then FAnimFrame := TTyPaintList.Create;
   TyAnimBuildFrame(FPaintList, FAnimFrame, FAnimBind, FAnimSet, FAnimStBind);
+  { a treemap's drill-down, its own wrap [Batch 115] }
+  if TmAnimAny then TreemapFrame(FAnimFrame);
   Result := FAnimFrame;
 end;
 
@@ -28028,6 +31684,1972 @@ begin
     RenderCached(Canvas, ClientRect, Font.PixelsPerInch);
   finally
     FAnimWindow := False;
+  end;
+end;
+
+{ ==================== the graphic component [Batch 122] ==================== }
+
+procedure TTyAdvanceChart.GfxWriteBack;
+var
+  node: TJSONData;
+  i: Integer;
+begin
+  if (FGfxModel = nil) or (FOption = nil) then Exit;
+  node := FOption.ComponentAt('graphic', 0);
+  if not (node is TJSONObject) then Exit;
+  i := TJSONObject(node).IndexOfName('elements');
+  if i >= 0 then TJSONObject(node).Items[i] := FGfxModel.Elements.Clone
+  else TJSONObject(node).Add('elements', FGfxModel.Elements.Clone);
+end;
+
+procedure TTyAdvanceChart.GfxInitFromTree;
+var node: TJSONData;
+begin
+  FGfxFresh := False;
+  { A NEW MODEL: the view clears the old one's elements at its next
+    render (GraphicView's _lastGraphicModel) }
+  FGfxView.ForgetModel;
+  FreeAndNil(FGfxModel);
+  FGfxPending := True;
+  if FOption = nil then Exit;
+  node := FOption.ComponentAt('graphic', 0);
+  if not (node is TJSONObject) then Exit;
+  FGfxModel := TTyGfxModel.Create;
+  FGfxModel.OptionUpdated(TJSONObject(node).Find('elements'), True);
+  GfxWriteBack;
+end;
+
+procedure TTyAdvanceChart.GfxPass(const AReport: TTyMergeReport);
+var
+  si: Integer;
+  newOpt: TJSONObject;
+begin
+  if FGfxFresh then
+  begin
+    GfxInitFromTree;
+    Exit;
+  end;
+  si := TyMergeSlotsIndex(AReport, 'graphic');
+  if (si < 0) or (Length(AReport.Slots[si].Fate) = 0) then Exit;
+  case AReport.Slots[si].Fate[0] of
+    mfNew:
+      GfxInitFromTree;
+    mfMerged:
+      begin
+        if FGfxModel = nil then
+        begin
+          GfxInitFromTree;
+          Exit;
+        end;
+        newOpt := nil;
+        if Length(AReport.Slots[si].NewOpt) > 0 then newOpt := AReport.Slots[si].NewOpt[0];
+        if newOpt <> nil then
+          FGfxModel.OptionUpdated(newOpt.Find('elements'), False)
+        else
+          FGfxModel.OptionUpdated(nil, False);
+        GfxWriteBack;
+        FGfxPending := True;
+      end;
+    mfRemoved, mfHole:
+      begin
+        FGfxView.ForgetModel;
+        FreeAndNil(FGfxModel);
+        FGfxPending := True;
+      end;
+  end;
+end;
+
+{ isAnimationEnabled and getShallow over the graphic model: its own option,
+  else the root's, else globalDefault }
+function TTyAdvanceChart.GfxAnimSettings: TTyGfxAnimSettings;
+var
+  node, root: TJSONObject;
+  d: TJSONData;
+
+  function Get(const AKey: string): TJSONData;
+  begin
+    Result := nil;
+    if node <> nil then Result := node.Find(AKey);
+    if ((Result = nil) or (Result.JSONType = jtNull)) and (root <> nil) then
+      Result := root.Find(AKey);
+    if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
+  end;
+
+  function Num(const AKey: string; ADefault: Double): Double;
+  begin
+    d := Get(AKey);
+    if (d <> nil) and (d.JSONType = jtNumber) then Result := d.AsFloat
+    else Result := ADefault;
+  end;
+
+  function Str(const AKey, ADefault: string): string;
+  begin
+    d := Get(AKey);
+    if (d <> nil) and (d.JSONType = jtString) then Result := d.AsString
+    else Result := ADefault;
+  end;
+
+begin
+  Result := Default(TTyGfxAnimSettings);
+  node := nil;
+  root := nil;
+  if FOption <> nil then
+  begin
+    d := FOption.ComponentAt('graphic', 0);
+    if d is TJSONObject then node := TJSONObject(d);
+    if FOption.Root is TJSONObject then root := TJSONObject(FOption.Root);
+  end;
+  Result.Enabled := AnimAllowed;
+  d := nil;
+  if node <> nil then d := node.Find('animation');
+  if (d = nil) or (d.JSONType = jtNull) then
+  begin
+    if root <> nil then d := root.Find('animation') else d := nil;
+    { the root's 'auto' by default; a written null is no animation }
+    if d = nil then
+    else if d.JSONType = jtNull then Result.Enabled := False
+    else if (d.JSONType = jtBoolean) and not d.AsBoolean then Result.Enabled := False
+    else if (d.JSONType = jtNumber) and (d.AsFloat = 0) then Result.Enabled := False
+    else if (d.JSONType = jtString) and (d.AsString = '') then Result.Enabled := False;
+  end
+  else if ((d.JSONType = jtBoolean) and not d.AsBoolean)
+    or ((d.JSONType = jtNumber) and (d.AsFloat = 0))
+    or ((d.JSONType = jtString) and (d.AsString = '')) then
+    Result.Enabled := False;
+  Result.Duration := Num('animationDuration', 1000);
+  { globalDefault's: an easing of cubicInOut both ways (a series' own
+    defaults say cubicOut, a component's do not) }
+  Result.Easing := Str('animationEasing', 'cubicInOut');
+  Result.Delay := Num('animationDelay', 0);
+  Result.DurationUpdate := Num('animationDurationUpdate', 500);
+  Result.EasingUpdate := Str('animationEasingUpdate', 'cubicInOut');
+  Result.DelayUpdate := Num('animationDelayUpdate', 0);
+end;
+
+function TTyAdvanceChart.GfxLive: Boolean;
+begin
+  Result := (FGfxAnim <> nil) and (FGfxAnim.ClipCount > 0);
+end;
+
+function GfxImageSize(const ASource: string; out AW, AH: Double): Boolean;
+var bmp: TBGRABitmap;
+begin
+  bmp := TyPatternImage(ASource);
+  Result := (bmp <> nil) and (bmp.Width > 0) and (bmp.Height > 0);
+  if Result then
+  begin
+    AW := bmp.Width;
+    AH := bmp.Height;
+  end
+  else
+  begin
+    AW := 0;
+    AH := 0;
+  end;
+end;
+
+procedure TTyAdvanceChart.GfxBuild(APPI: Integer);
+var
+  scale, w, h, z, zl: Double;
+  meas: ITyTextMeasurer;
+  node, d: TJSONData;
+  ground: TTyGfxGround;
+  ctx: TTyGfxPaintCtx;
+  n: Integer;
+
+  procedure Add(AEl: TTyGfxEl; ASilent: Boolean);
+  var pe: TTyChartElement;
+  begin
+    if not TyGfxPaintElement(AEl, meas, ctx, pe) then Exit;
+    pe.Silent := ASilent;
+    pe.Datum := TyChartComponentDatum(ctkGraphic, 0, n);
+    { zlevel over z, as zrender sorts; z and z2 whole }
+    pe.Z := Round(AEl.ZLevel) * 100000 + Round(AEl.Z);
+    pe.Z2 := Round(AEl.Z2);
+    pe.GfxUnder := (AEl.ZLevel = 0) and (AEl.Z <= 0);
+    SetLength(FGfxPaint, n + 1);
+    SetLength(FGfxPaintEl, n + 1);
+    FGfxPaint[n] := pe;
+    FGfxPaintEl[n] := AEl;
+    AEl.Serial := n;
+    Inc(n);
+  end;
+
+  procedure Walk(AEl: TTyGfxEl; ASilent: Boolean);
+  var i: Integer; s: Boolean;
+  begin
+    if AEl.Ignore then Exit;
+    s := ASilent or AEl.Silent;
+    if AEl.IsGroup then
+    begin
+      for i := 0 to High(AEl.Children) do Walk(AEl.Children[i], s);
+      Exit;
+    end;
+    Add(AEl, s);
+    if (AEl.TextContent <> nil) and not AEl.TextContent.Ignore then
+      Add(AEl.TextContent, s or AEl.TextContent.Silent);
+  end;
+
+begin
+  FGfxPaint := nil;
+  FGfxPaintEl := nil;
+  if FGfxView = nil then Exit;
+  FGfxView.FreeGone;
+  if APPI <= 0 then APPI := 96;
+  scale := APPI / 96;
+  w := (FLastRect.Right - FLastRect.Left) / scale;
+  h := (FLastRect.Bottom - FLastRect.Top) / scale;
+  { the layout measures in css px }
+  meas := NewTextMeasurer(96);
+  if FGfxPending then
+  begin
+    FGfxPending := False;
+    z := NaN;
+    zl := NaN;
+    node := nil;
+    if FOption <> nil then node := FOption.ComponentAt('graphic', 0);
+    if node is TJSONObject then
+    begin
+      d := TJSONObject(node).Find('z');
+      if (d <> nil) and (d.JSONType = jtNumber) then z := d.AsFloat;
+      d := TJSONObject(node).Find('zlevel');
+      if (d <> nil) and (d.JSONType = jtNumber) then zl := d.AsFloat;
+    end;
+    FGfxView.Render(FGfxModel, w, h, meas, GfxAnimSettings, z, zl);
+    FGfxW := w;
+    FGfxH := h;
+    { the flush that steps every new clip at the setOption instant }
+    FGfxAnim.Update(AnimClock, True);
+    AnimArmTimer;
+  end
+  { NOT BEFORE THE FIRST RENDER: the size is NaN until then, and comparing
+    against it raises with the invalid-operation trap unmasked -- a chart
+    that never had an option painted nothing but an exception }
+  else if (not IsNan(FGfxW)) and ((w <> FGfxW) or (h <> FGfxH)) then
+  begin
+    FGfxView.Place(w, h, meas);
+    FGfxW := w;
+    FGfxH := h;
+  end;
+  MarkerGround(ground.Background, ground.IsDark);
+  FGfxView.Prepare(meas, ground);
+  ctx := Default(TTyGfxPaintCtx);
+  ctx.Scale := scale;
+  ctx.HasInk := True;
+  ctx.Ink := TTyChartColor(ActiveController.Model.ResolveStyle(GetStyleTypeKey,
+    StyleClass, [tysNormal]).TextColor);
+  ctx.ImageSize := @GfxImageSize;
+  n := 0;
+  Walk(FGfxView.Root, False);
+end;
+
+procedure TTyAdvanceChart.GfxPaintUnder(APainter: TTyPainter);
+var
+  i: Integer;
+  el: TTyChartElement;
+begin
+  FGfxUnder.Clear;
+  for i := 0 to High(FGfxPaint) do
+    if FGfxPaint[i].GfxUnder then FGfxUnder.Add(FGfxPaint[i]);
+  for i := 0 to FGfxUnder.Count - 1 do
+  begin
+    el := FGfxUnder.Element(FGfxUnder.PaintOrder(i));
+    if not el.Ignore then TyRenderElement(APainter, el);
+  end;
+end;
+
+function TTyAdvanceChart.GfxElementEvent(const AType: string;
+  const ATarget: TTyChartEventTarget; AX, AY: Integer): Boolean;
+var
+  el: TTyGfxEl;
+  spec: string;
+  ev: TTyChartElementEvent;
+begin
+  Result := False;
+  if (ATarget.HdKind <> 8) or (FGfxView = nil) then Exit;
+  el := FGfxView.Find(ATarget.HdName);
+  if el = nil then Exit;
+  ev := Default(TTyChartElementEvent);
+  ev.EventType := AType;
+  ev.TargetId := el.Id;
+  ev.OffsetX := AX;
+  ev.OffsetY := AY;
+  { up the groups to the root: the handler, then the parent unless the
+    handler stopped it }
+  while (el <> nil) and (el <> FGfxView.Root) do
+  begin
+    spec := el.Handlers.Values['on' + AType];
+    if spec <> '' then
+    begin
+      ev.Id := el.Id;
+      ev.Name := el.Name;
+      ev.Handler := spec;
+      if TyChartRunElementHandler(spec, Self, ev) then Result := True;
+    end;
+    if Result then Break;
+    el := el.Parent;
+  end;
+end;
+
+procedure TTyAdvanceChart.GfxDragStart(const ATarget: TTyChartEventTarget;
+  AX, AY: Integer);
+var el: TTyGfxEl;
+begin
+  FGfxDragOn := False;
+  if (ATarget.HdKind <> 8) or (FGfxView = nil) then Exit;
+  el := FGfxView.Find(ATarget.HdName);
+  while (el <> nil) and (el <> FGfxView.Root) and (el.Draggable = '') do el := el.Parent;
+  if (el = nil) or (el = FGfxView.Root) then Exit;
+  FGfxDragOn := True;
+  FGfxDragId := el.Id;
+  FGfxDragX := AX;
+  FGfxDragY := AY;
+end;
+
+procedure TTyAdvanceChart.GfxDragMove(AX, AY: Integer);
+var
+  el: TTyGfxEl;
+  dx, dy, scale, vx, vy: Double;
+  inv: TTyMat2D;
+begin
+  if not FGfxDragOn or (FGfxView = nil) then Exit;
+  el := FGfxView.Find(FGfxDragId);
+  if el = nil then
+  begin
+    FGfxDragOn := False;
+    Exit;
+  end;
+  if FPaintListPPI > 0 then scale := FPaintListPPI / 96 else scale := 1;
+  dx := (AX - FGfxDragX) / scale;
+  dy := (AY - FGfxDragY) / scale;
+  FGfxDragX := AX;
+  FGfxDragY := AY;
+  if (dx = 0) and (dy = 0) then Exit;
+  { Element.drift: 'horizontal' keeps y, 'vertical' keeps x }
+  if el.Draggable = 'horizontal' then dy := 0
+  else if el.Draggable = 'vertical' then dx := 0;
+  { the move in the parent's frame }
+  vx := dx;
+  vy := dy;
+  if (el.Parent <> nil) and el.Parent.HasTransform
+    and TyMatInvert(el.Parent.Transform, inv) then
+  begin
+    vx := inv[0] * dx + inv[2] * dy;
+    vy := inv[1] * dx + inv[3] * dy;
+  end;
+  el.X := el.X + vx;
+  el.Y := el.Y + vy;
+  DropStatic;
+  InvalidateFrame;
+end;
+
+function TTyAdvanceChart.GraphicView: TTyGfxView;
+begin
+  Result := FGfxView;
+end;
+
+function TTyAdvanceChart.GraphicModel: TTyGfxModel;
+begin
+  Result := FGfxModel;
+end;
+
+function TTyAdvanceChart.GraphicPaintCount: Integer;
+begin
+  Result := Length(FGfxPaint);
+end;
+
+function TTyAdvanceChart.GraphicPaintElement(AIndex: Integer): TTyChartElement;
+begin
+  Result := FGfxPaint[AIndex];
+end;
+
+function TTyAdvanceChart.GraphicPaintSource(AIndex: Integer): TTyGfxEl;
+begin
+  Result := FGfxPaintEl[AIndex];
+end;
+
+function TTyAdvanceChart.CustomView(ASeriesIndex: Integer): TTyCustomView;
+begin
+  Result := nil;
+  if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FCustomViews)) then
+    Result := FCustomViews[ASeriesIndex];
+end;
+
+function TTyAdvanceChart.CustomPaintSource(AIndex: Integer): TTyGfxEl;
+begin
+  Result := nil;
+  if (AIndex >= 0) and (AIndex <= High(FCustomPaintEls)) then
+    Result := FCustomPaintEls[AIndex];
+end;
+
+function TTyAdvanceChart.CustomClip(ASeriesIndex: Integer; out ARect: TTyXYWH): Boolean;
+var slot: Integer;
+begin
+  ARect := Default(TTyXYWH);
+  slot := SlotOfSeries(ASeriesIndex);
+  Result := (slot >= 0) and (slot <= High(FCustomClipOn)) and FCustomClipOn[slot];
+  if Result then ARect := FCustomClip[slot];
+end;
+
+function TTyAdvanceChart.CuLive: Boolean;
+begin
+  Result := (FCuAnim <> nil) and (FCuAnim.ClipCount > 0);
+end;
+
+{ `coordinateSystem: 'none'` (or ''): resolved on nothing, its dimensions
+  getCoordSysDimDefs' x and y }
+function TTyAdvanceChart.CustomOnNone(ASlot: Integer): Boolean;
+begin
+  Result := (ASlot >= 0) and (ASlot <= High(FBindings))
+    and (FBindings[ASlot].SeriesType = TyCustomSeriesType)
+    and FBindings[ASlot].Resolved and (FBindings[ASlot].Cart = nil)
+    and (FBindings[ASlot].Polar = nil) and (FBindings[ASlot].Single = nil)
+    and (FBindings[ASlot].CalendarIndex < 0) and (FBindings[ASlot].RadarIndex < 0)
+    and ((FBindings[ASlot].CoordSysName = 'none') or (FBindings[ASlot].CoordSysName = ''));
+end;
+
+function TTyAdvanceChart.CustomRootInfo(ASeriesIndex, AInside: Integer): TTyCustomElInfo;
+var
+  view: TTyCustomView;
+  el: TTyGfxEl;
+begin
+  Result := nil;
+  view := CustomView(ASeriesIndex);
+  if view = nil then Exit;
+  el := view.ElOf(AInside);
+  if (el <> nil) and (el.Custom is TTyCustomElInfo) then
+    Result := TTyCustomElInfo(el.Custom);
+end;
+
+{ the visualMap's row of a custom item (its dataIndexInside); False none }
+function TTyAdvanceChart.CustomVisualRow(ASlot, ARow: Integer;
+  out AVisual: TTyVisualRow): Boolean;
+var raw: Integer;
+begin
+  AVisual := Default(TTyVisualRow);
+  Result := False;
+  if (ASlot < 0) or (ASlot > High(FBindings)) or (ASlot > High(FStores))
+    or (FStores[ASlot] = nil) or (ARow < 0) or (ARow >= FStores[ASlot].Count) then Exit;
+  raw := FStores[ASlot].GetRawIndex(ARow);
+  if (ASlot > High(FVisualRows)) or (raw < 0) or (raw > High(FVisualRows[ASlot])) then Exit;
+  AVisual := FVisualRows[ASlot][raw];
+  Result := True;
+end;
+
+{ findEventDispatcher from the element up -- a textContent's host, then the
+  parents: any with tooltipDisabled }
+function TTyAdvanceChart.CustomTipDisabled(AElement: Integer): Boolean;
+var el: TTyGfxEl;
+begin
+  Result := False;
+  el := CustomPaintSource(AElement);
+  while el <> nil do
+  begin
+    if (el.Custom is TTyCustomElInfo) and TTyCustomElInfo(el.Custom).TooltipDisabled then
+      Exit(True);
+    if el.Host <> nil then el := el.Host else el := el.Parent;
+  end;
+end;
+
+{ ==================== the custom series [Batch 123] ==================== }
+
+type
+  { the coordinate system a custom series is drawn on [Batch 124]:
+    cusUnknown one with no prepareCustom (nothing is drawn) }
+  TTyCuSys = (cusUnknown, cusNone, cusCart, cusPolar, cusSingle, cusCalendar);
+
+  { THE API a renderItem is handed: CustomView.makeRenderItem's closures over
+    the series' data, its visuals and its coordinate system's prepareCustom
+    (cartesian, polar, single, calendar [Batch 124]) }
+  TTyChartCustomApi = class(TTyCustomApi)
+  private
+    function Row(AInside: Integer; out ARow: Integer): Boolean;
+    function ColumnAt(ADim: Integer): Integer;
+    function ItemNode(ARow: Integer): TJSONObject;
+    function Lookup(AItem, ASeries: TJSONObject; const APath: array of string): TJSONData;
+    function GlobalText(const AKey: string): TJSONData;
+    function MakeStyle(AExtra: TJSONObject; ARow: Integer; AEmphasis: Boolean): TJSONObject;
+    function ParseOn(AAxis: TTyAxis; const ACell: TTyCustomCell): Double;
+  protected
+    function DimIndexOf(const AName: string): Integer; override;
+    function DoCoord(const ACells: TTyCustomCellArray): TTyDoubleArray; override;
+    function DoLayout(const ACells: TTyCustomCellArray): TTyCustomLayout; override;
+  public
+    Chart: TTyAdvanceChart;
+    Slot, Series: Integer;
+    { the coordinate system, and its object [Batch 124] }
+    Sys: TTyCuSys;
+    Polar: TTyPolar;
+    Single: TTySingle;
+    Calendar: TTyCalendar;
+    Store: TTyDataStore;
+    Node: TJSONObject;
+    { the dataIndexInside of the running call }
+    Current: Integer;
+    { device px per css px }
+    Scale: Double;
+    function Value(ADim: Integer; ADataIndexInside: Integer = -1): Double; overload; override;
+    function ValueText(ADim: Integer; ADataIndexInside: Integer = -1): string; overload; override;
+    function OrdinalRawValue(ADim: Integer; ADataIndexInside: Integer = -1): string; overload; override;
+    function Size(const ADataSize, ADataItem: array of Double): TTyDoubleArray; overload; override;
+    function Style(AExtra: TJSONObject = nil; ADataIndexInside: Integer = -1): TJSONObject; override;
+    function StyleEmphasis(AExtra: TJSONObject = nil; ADataIndexInside: Integer = -1): TJSONObject; override;
+    function Visual(const AType: string; ADataIndexInside: Integer = -1): TJSONData; override;
+    function BarLayout(AOpt: TJSONObject): TTyCustomBarLayout; override;
+    function CurrentSeriesIndices: TTyIntegerArray; override;
+    function Font(AOpt: TJSONObject): string; override;
+    function GetWidth: Double; override;
+    function GetHeight: Double; override;
+    function GetDevicePixelRatio: Double; override;
+  end;
+
+function CuNull(A: TJSONData): Boolean; inline;
+begin
+  Result := (A = nil) or (A.JSONType = jtNull);
+end;
+
+function CuTruthy(A: TJSONData): Boolean;
+begin
+  if A = nil then Exit(False);
+  case A.JSONType of
+    jtNull: Result := False;
+    jtBoolean: Result := A.AsBoolean;
+    jtNumber: Result := (A.AsFloat <> 0) and not IsNan(A.AsFloat);
+    jtString: Result := A.AsString <> '';
+  else
+    Result := True;
+  end;
+end;
+
+procedure CuPut(AObj: TJSONObject; const AKey: string; AValue: TJSONData);
+var i: Integer;
+begin
+  i := AObj.IndexOfName(AKey);
+  if i >= 0 then AObj.Items[i] := AValue else AObj.Add(AKey, AValue);
+end;
+
+function CuObj(AObj: TJSONObject; const AKey: string): TJSONObject;
+var d: TJSONData;
+begin
+  Result := nil;
+  if AObj = nil then Exit;
+  d := AObj.Find(AKey);
+  if d is TJSONObject then Result := TJSONObject(d);
+end;
+
+{ String() of a JSON value the way a join prints it }
+function CuText(A: TJSONData): string;
+begin
+  Result := '';
+  if A = nil then Exit;
+  case A.JSONType of
+    jtString: Result := A.AsString;
+    jtNumber: Result := TyJsNumberToString(A.AsFloat);
+    jtBoolean: if A.AsBoolean then Result := 'true' else Result := 'false';
+    jtNull: Result := 'null';
+  end;
+end;
+
+function TTyChartCustomApi.Row(AInside: Integer; out ARow: Integer): Boolean;
+begin
+  if AInside < 0 then ARow := Current else ARow := AInside;
+  Result := (Store <> nil) and (ARow >= 0) and (ARow < Store.Count);
+end;
+
+{ the store column that reads data dimension ADim (its raw position) }
+function TTyChartCustomApi.ColumnAt(ADim: Integer): Integer;
+var c: Integer;
+begin
+  Result := -1;
+  if Store = nil then Exit;
+  for c := 0 to Store.DimCount - 1 do
+    if Store.RawDimPos(c) = ADim then Exit(c);
+end;
+
+function TTyChartCustomApi.ItemNode(ARow: Integer): TJSONObject;
+var d: TJSONData; raw: Integer;
+begin
+  Result := nil;
+  if (Node = nil) or (Store = nil) then Exit;
+  raw := Store.GetRawIndex(ARow);
+  d := Node.Find('data');
+  if not (d is TJSONArray) or (raw < 0) or (raw >= d.Count) then Exit;
+  d := TJSONArray(d).Items[raw];
+  if d is TJSONObject then Result := TJSONObject(d);
+end;
+
+{ getShallow through the item model: the item's own value, else the
+  series' }
+function TTyChartCustomApi.Lookup(AItem, ASeries: TJSONObject;
+  const APath: array of string): TJSONData;
+
+  function Walk(ARoot: TJSONObject): TJSONData;
+  var i: Integer; o: TJSONObject;
+  begin
+    Result := nil;
+    o := ARoot;
+    for i := 0 to High(APath) - 1 do
+    begin
+      o := CuObj(o, APath[i]);
+      if o = nil then Exit;
+    end;
+    if o <> nil then Result := o.Find(APath[High(APath)]);
+    if CuNull(Result) then Result := nil;
+  end;
+
+begin
+  Result := nil;
+  if AItem <> nil then Result := Walk(AItem);
+  if (Result = nil) and (ASeries <> nil) then Result := Walk(ASeries);
+end;
+
+{ the global text style: the option's root textStyle over globalDefault's }
+function TTyChartCustomApi.GlobalText(const AKey: string): TJSONData;
+var root: TJSONObject;
+begin
+  Result := nil;
+  if (Chart.FOption <> nil) and (Chart.FOption.Root is TJSONObject) then
+  begin
+    root := CuObj(TJSONObject(Chart.FOption.Root), 'textStyle');
+    if root <> nil then Result := root.Find(AKey);
+  end;
+  if CuNull(Result) then Result := TyMkDefaultTextStyle.Find(AKey);
+  if CuNull(Result) then Result := nil;
+end;
+
+function TTyChartCustomApi.DimIndexOf(const AName: string): Integer;
+var p: Integer;
+begin
+  Result := -1;
+  if Store = nil then Exit;
+  for p := 0 to Max(Store.RawWidth, Store.DimCount) - 1 do
+    if Store.RawDimName(p) = AName then Exit(p);
+end;
+
+function TTyChartCustomApi.Value(ADim: Integer; ADataIndexInside: Integer): Double;
+var
+  r, col: Integer;
+  cell: TTyDataValue;
+  t: TTyDimType;
+begin
+  Result := NaN;
+  if not Row(ADataIndexInside, r) then Exit;
+  col := ColumnAt(ADim);
+  if col >= 0 then Exit(Store.Get(col, r));
+  if not TTyDataStore.RawCell(Store.RawItem(r), ADim, cell) then Exit;
+  t := Store.RawPosType(ADim);
+  { an ordinal dimension no axis interns keeps the value as written }
+  if t = ddtOrdinal then
+  begin
+    if cell.Kind = dvkNumber then Result := cell.Num;
+    Exit;
+  end;
+  Result := TyParseDataValue(cell, t);
+end;
+
+function TTyChartCustomApi.ValueText(ADim: Integer; ADataIndexInside: Integer): string;
+var
+  r, col: Integer;
+  cell: TTyDataValue;
+begin
+  Result := 'undefined';
+  if not Row(ADataIndexInside, r) then Exit;
+  col := ColumnAt(ADim);
+  if col >= 0 then Exit(TyJsNumberToString(Store.Get(col, r)));
+  if not TTyDataStore.RawCell(Store.RawItem(r), ADim, cell) then Exit;
+  if (Store.RawPosType(ADim) = ddtOrdinal) or (cell.Kind = dvkNone) then
+    Exit(TyJsValueText(cell, 'undefined'));
+  Result := TyJsNumberToString(Value(ADim, r));
+end;
+
+function TTyChartCustomApi.OrdinalRawValue(ADim: Integer; ADataIndexInside: Integer): string;
+var r, col: Integer; v: Double;
+begin
+  Result := 'undefined';
+  if not Row(ADataIndexInside, r) then Exit;
+  col := ColumnAt(ADim);
+  if (col >= 0) and (Store.DimType(col) = ddtOrdinal) and (Store.OrdinalMeta(col) <> nil) then
+  begin
+    v := Store.Get(col, r);
+    if IsNan(v) or (Frac(v) <> 0) or (v < 0) or (v >= Store.CategoryCount(col)) then
+      Exit('undefined');
+    Exit(Store.CategoryAt(col, Trunc(v)));
+  end;
+  Result := ValueText(ADim, r);
+end;
+
+{ scale.parse of one cell on an axis }
+function TTyChartCustomApi.ParseOn(AAxis: TTyAxis; const ACell: TTyCustomCell): Double;
+var ord_: Integer; ms: Double;
+begin
+  Result := NaN;
+  if (AAxis = nil) or (ACell.Kind = cckNone) then Exit;
+  case AAxis.AxisType of
+    atCategory:
+      if ACell.Kind = cckText then
+      begin
+        if AAxis.Categories = nil then Exit;
+        ord_ := AAxis.Categories.GetOrdinal(ACell.Text);
+        if ord_ >= 0 then Result := ord_;
+      end
+      else
+        Result := TyJsRound(ACell.Num);
+    atTime:
+      if ACell.Kind = cckText then
+      begin
+        if TyParseDateMs(ACell.Text, ms, False) then Result := ms;
+      end
+      else
+        Result := TyJsRound(ACell.Num);
+  else
+    if ACell.Kind = cckText then
+    begin
+      if ACell.Text = '' then Exit;
+      Result := TyJsToNumber(ACell.Text);
+    end
+    else
+      Result := ACell.Num;
+  end;
+end;
+
+const
+  cCuPi: Double = Pi;
+
+function CuMask: TFPUExceptionMask;
+begin
+  Result := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+end;
+
+{ +v of a cell: a text's number, nothing NaN }
+function CuNumCell(const ACell: TTyCustomCell): TTyCustomCell;
+begin
+  Result := ACell;
+  if ACell.Kind = cckText then
+  begin
+    Result.Kind := cckNumber;
+    Result.Num := TyJsToNumber(ACell.Text);
+  end
+  else if ACell.Kind = cckNone then
+  begin
+    Result.Kind := cckNumber;
+    Result.Num := NaN;
+  end;
+end;
+
+{ a calendar's parseDate of a cell: a number is epoch ms, a text a date }
+function CuCalMs(ACal: TTyCalendar; const ACell: TTyCustomCell): Double;
+var v: TTyDataValue;
+begin
+  v := Default(TTyDataValue);
+  case ACell.Kind of
+    cckNumber:
+      begin
+        v.Kind := dvkNumber;
+        v.Num := ACell.Num;
+      end;
+    cckText:
+      begin
+        v.Kind := dvkText;
+        v.Text := ACell.Text;
+      end;
+  else
+    v.Kind := dvkNone;
+  end;
+  Result := ACal.ParseDate(v);
+end;
+
+{ the coordinate system's api.coord, in css px: a cartesian's dataToPoint;
+  a polar's dataToRadius and dataToAngle through coordToPoint, the radius
+  and the angle in radians pushed on; a single's dataToPoint(+v); a
+  calendar's dataToPoint (clamped); nothing on no system }
+function TTyChartCustomApi.DoCoord(const ACells: TTyCustomCellArray): TTyDoubleArray;
+var
+  b: TTySeriesBinding;
+  p: TTyPointF;
+  cx, cy: TTyCustomCell;
+  rad, ang, t: Double;
+  mask: TFPUExceptionMask;
+begin
+  Result := nil;
+  cx := Default(TTyCustomCell);
+  cy := Default(TTyCustomCell);
+  if Length(ACells) > 0 then cx := ACells[0];
+  if Length(ACells) > 1 then cy := ACells[1];
+  b := Chart.FBindings[Slot];
+  mask := CuMask;
+  try
+    case Sys of
+      cusCart:
+        begin
+          SetLength(Result, 2);
+          Result[0] := NaN;
+          Result[1] := NaN;
+          if b.Cart = nil then Exit;
+          p := b.Cart.DataToPoint([ParseOn(b.XAxis, cx), ParseOn(b.YAxis, cy)]);
+          Result[0] := p.X / Scale;
+          Result[1] := p.Y / Scale;
+        end;
+      cusPolar:
+        begin
+          rad := Polar.RadiusAxis.DataToCoord(ParseOn(Polar.RadiusAxis, cx));
+          ang := Polar.AngleAxis.DataToCoord(ParseOn(Polar.AngleAxis, cy));
+          p := Polar.CoordToPoint(rad, ang);
+          SetLength(Result, 4);
+          Result[0] := p.X / Scale;
+          Result[1] := p.Y / Scale;
+          Result[2] := rad / Scale;
+          { angle * Math.PI / 180, in that order }
+          t := ang * cCuPi;
+          Result[3] := t / 180;
+        end;
+      cusSingle:
+        begin
+          p := Single.ValueToPoint(ParseOn(Single.Axis, CuNumCell(cx)));
+          SetLength(Result, 2);
+          Result[0] := p.X / Scale;
+          Result[1] := p.Y / Scale;
+        end;
+      cusCalendar:
+        begin
+          p := Calendar.DatePoint(CuCalMs(Calendar, cx), True);
+          SetLength(Result, 2);
+          Result[0] := p.X / Scale;
+          Result[1] := p.Y / Scale;
+        end;
+    end;
+  finally
+    ConvertUnmask(mask);
+  end;
+end;
+
+{ a calendar's api.layout: dataToLayout (clamped), in css px }
+function TTyChartCustomApi.DoLayout(const ACells: TTyCustomCellArray): TTyCustomLayout;
+var
+  c0: TTyCustomCell;
+  rc, cc: TTyXYWH;
+  mask: TFPUExceptionMask;
+begin
+  Result := Default(TTyCustomLayout);
+  if (Sys <> cusCalendar) or (Calendar = nil) then Exit;
+  c0 := Default(TTyCustomCell);
+  if Length(ACells) > 0 then c0 := ACells[0];
+  mask := CuMask;
+  try
+    Calendar.DateLayoutXYWH(CuCalMs(Calendar, c0), True, rc, cc);
+    Result.Valid := True;
+    Result.Rect.X := rc.X / Scale;
+    Result.Rect.Y := rc.Y / Scale;
+    Result.Rect.Width := rc.W / Scale;
+    Result.Rect.Height := rc.H / Scale;
+    Result.ContentRect.X := cc.X / Scale;
+    Result.ContentRect.Y := cc.Y / Scale;
+    Result.ContentRect.Width := cc.W / Scale;
+    Result.ContentRect.Height := cc.H / Scale;
+  finally
+    ConvertUnmask(mask);
+  end;
+end;
+
+{ dataToCoordSize: a category axis' band width, else the span the size
+  covers about the item's value -- per axis on a cartesian and a polar
+  (dataItem || [0, 0]; the angle in radians), one number on a single axis
+  (an undefined item NaN), nothing on a calendar or no system }
+function TTyChartCustomApi.Size(const ADataSize, ADataItem: array of Double): TTyDoubleArray;
+var
+  b: TTySeriesBinding;
+  ax: TTyAxis;
+  i: Integer;
+  val, half, w: Double;
+  item: array[0..1] of Double;
+  mask: TFPUExceptionMask;
+begin
+  Result := nil;
+  b := Chart.FBindings[Slot];
+  mask := CuMask;
+  try
+    case Sys of
+      cusCart, cusPolar:
+        begin
+          if Length(ADataItem) = 0 then
+          begin
+            item[0] := 0;
+            item[1] := 0;
+          end
+          else
+          begin
+            item[0] := ADataItem[0];
+            if Length(ADataItem) > 1 then item[1] := ADataItem[1] else item[1] := NaN;
+          end;
+          SetLength(Result, 2);
+          for i := 0 to 1 do
+          begin
+            Result[i] := NaN;
+            if Sys = cusCart then
+            begin
+              if i = 0 then ax := b.XAxis else ax := b.YAxis;
+            end
+            else if i = 0 then ax := Polar.RadiusAxis
+            else ax := Polar.AngleAxis;
+            if ax = nil then Continue;
+            val := item[i];
+            if i <= High(ADataSize) then half := ADataSize[i] / 2 else half := NaN;
+            if ax.AxisType = atCategory then w := ax.BandWidth
+            else w := Abs(ax.DataToLocal(val - half) - ax.DataToLocal(val + half));
+            if (Sys = cusPolar) and (i = 1) then
+            begin
+              { result * Math.PI / 180: degrees are no pixels }
+              w := w * cCuPi;
+              Result[i] := w / 180;
+            end
+            else
+              Result[i] := w / Scale;
+          end;
+        end;
+      cusSingle:
+        begin
+          SetLength(Result, 1);
+          ax := Single.Axis;
+          if Length(ADataItem) > 0 then val := ADataItem[0] else val := NaN;
+          if Length(ADataSize) > 0 then half := ADataSize[0] / 2 else half := NaN;
+          if ax.AxisType = atCategory then
+            Result[0] := ax.BandWidth / Scale
+          else
+            Result[0] := Abs(ax.DataToLocal(val - half) - ax.DataToLocal(val + half)) / Scale;
+        end;
+    end;
+  finally
+    ConvertUnmask(mask);
+  end;
+end;
+
+{ api.style / api.styleEmphasis: getItemStyle, the visual colour and
+  opacity (normal), the label's text style and config, then
+  convertToEC4StyleForCustomSerise, the extra over it, legacy }
+function TTyChartCustomApi.MakeStyle(AExtra: TJSONObject; ARow: Integer;
+  AEmphasis: Boolean): TJSONObject;
+const
+  cItem: array[0..12, 0..1] of string = (('fill', 'color'), ('stroke', 'borderColor'),
+    ('lineWidth', 'borderWidth'), ('opacity', 'opacity'), ('shadowBlur', 'shadowBlur'),
+    ('shadowOffsetX', 'shadowOffsetX'), ('shadowOffsetY', 'shadowOffsetY'),
+    ('shadowColor', 'shadowColor'), ('lineDash', 'borderType'),
+    ('lineDashOffset', 'borderDashOffset'), ('lineCap', 'borderCap'),
+    ('lineJoin', 'borderJoin'), ('miterLimit', 'borderMiterLimit'));
+  { convertToEC4RichItem: the text style's keys under their ec4 names }
+  cRich: array[0..21, 0..1] of string = (('lineWidth', 'textStrokeWidth'),
+    ('font', 'font'), ('fontStyle', 'fontStyle'), ('fontWeight', 'fontWeight'),
+    ('fontSize', 'fontSize'), ('fontFamily', 'fontFamily'), ('align', 'textAlign'),
+    ('verticalAlign', 'textVerticalAlign'), ('lineHeight', 'textLineHeight'),
+    ('width', 'textWidth'), ('height', 'textHeight'),
+    ('backgroundColor', 'textBackgroundColor'), ('padding', 'textPadding'),
+    ('borderColor', 'textBorderColor'), ('borderWidth', 'textBorderWidth'),
+    ('borderRadius', 'textBorderRadius'), ('shadowColor', 'textBoxShadowColor'),
+    ('shadowBlur', 'textBoxShadowBlur'), ('shadowOffsetX', 'textBoxShadowOffsetX'),
+    ('shadowOffsetY', 'textBoxShadowOffsetY'), ('textShadowColor', 'textShadowColor'),
+    ('textShadowBlur', 'textShadowBlur'));
+  cFonts: array[0..3] of string = ('fontStyle', 'fontWeight', 'fontSize', 'fontFamily');
+var
+  item, ts, tc: TJSONObject;
+  d, vis, posD: TJSONData;
+  i, k: Integer;
+  isInside, show: Boolean;
+  txt: string;
+  hasText: Boolean;
+  cells: TTyIntegerArray;
+  cell: TTyDataValue;
+  vrow: TTyVisualRow;
+
+  function ItemStyleOf(AKey: string): TJSONData;
+  begin
+    if AEmphasis then Result := Lookup(item, Node, ['emphasis', 'itemStyle', AKey])
+    else Result := Lookup(item, Node, ['itemStyle', AKey]);
+  end;
+
+  function LabelOf(AKey: string): TJSONData;
+  begin
+    if AEmphasis then Result := Lookup(item, Node, ['emphasis', 'label', AKey])
+    else Result := Lookup(item, Node, ['label', AKey]);
+  end;
+
+begin
+  item := ItemNode(ARow);
+  Result := TJSONObject.Create;
+  { getItemStyle }
+  for i := 0 to High(cItem) do
+  begin
+    d := ItemStyleOf(cItem[i, 1]);
+    if d = nil then Continue;
+    { borderType: getLineDash -- only a dash pattern is a lineDash }
+    if cItem[i, 1] = 'borderType' then
+    begin
+      if not (d is TJSONArray) then Continue;
+    end;
+    Result.Add(cItem[i, 0], d.Clone);
+  end;
+  vis := nil;
+  if not AEmphasis then
+  begin
+    { the visual's fill and opacity over it }
+    vis := Chart.CustomVisualFill(Slot, ARow);
+    if vis <> nil then CuPut(Result, 'fill', vis.Clone);
+    { the visual style's opacity: the itemStyle's, a visualMap's over it
+      [Batch 124] }
+    if Chart.CustomVisualRow(Slot, ARow, vrow) and vrow.OpacitySet then
+      CuPut(Result, 'opacity', TJSONFloatNumber.Create(vrow.Opacity))
+    else
+    begin
+      d := ItemStyleOf('opacity');
+      if d <> nil then CuPut(Result, 'opacity', d.Clone);
+    end;
+  end;
+  try
+    { createTextStyle(labelModel, null, opt with inheritColor, isNotNormal,
+      true) }
+    ts := TJSONObject.Create;
+    tc := TJSONObject.Create;
+    try
+      d := LabelOf('color');
+      if d <> nil then
+      begin
+        if (d.JSONType = jtString) and (d.AsString = 'inherit') then
+        begin
+          if (vis <> nil) and (vis.JSONType = jtString) then ts.Add('fill', vis.AsString)
+          else ts.Add('fill', '#000');
+        end
+        else
+          ts.Add('fill', d.Clone);
+      end;
+      for k := 0 to High(cFonts) do
+      begin
+        d := LabelOf(cFonts[k]);
+        if (d = nil) and not AEmphasis then d := GlobalText(cFonts[k]);
+        if d <> nil then ts.Add(cFonts[k], d.Clone);
+      end;
+      d := LabelOf('align');
+      if d <> nil then ts.Add('align', d.Clone);
+      d := LabelOf('verticalAlign');
+      if d <> nil then ts.Add('verticalAlign', d.Clone);
+      d := LabelOf('lineHeight');
+      if d <> nil then ts.Add('lineHeight', d.Clone);
+      d := LabelOf('textBorderColor');
+      if d <> nil then ts.Add('stroke', d.Clone);
+      d := LabelOf('textBorderWidth');
+      if d <> nil then ts.Add('lineWidth', d.Clone);
+      { the text: shown, the default label (the label dimensions' values) }
+      show := CuTruthy(LabelOf('show'));
+      hasText := False;
+      txt := '';
+      if show then
+      begin
+        hasText := True;
+        if Store.HasLabelPositions then cells := Store.LabelPositions else cells := nil;
+        for k := 0 to High(cells) do
+        begin
+          if not TTyDataStore.RawCell(Store.RawItem(ARow), cells[k], cell) then
+            cell := Default(TTyDataValue);
+          if k > 0 then txt := txt + ' ';
+          txt := txt + TyJsValueText(cell, '');
+        end;
+      end;
+      { createTextConfig }
+      d := LabelOf('position');
+      if d <> nil then tc.Add('position', d.Clone);
+      d := LabelOf('distance');
+      if d <> nil then tc.Add('distance', d.Clone)
+      else if not AEmphasis then tc.Add('distance', 5);
+      d := LabelOf('offset');
+      if d <> nil then tc.Add('offset', d.Clone);
+      d := LabelOf('rotate');
+      if (d <> nil) and (d.JSONType = jtNumber) then tc.Add('rotation', d.AsFloat * Pi / 180);
+      { preFetchFromExtra }
+      if AExtra <> nil then
+      begin
+        if CuTruthy(AExtra.Find('textFill')) then CuPut(Result, 'textFill', AExtra.Find('textFill').Clone);
+        if CuTruthy(AExtra.Find('textPosition')) then
+          CuPut(Result, 'textPosition', AExtra.Find('textPosition').Clone);
+      end;
+      { convertToEC4StyleForCustomSerise }
+      posD := Result.Find('textPosition');
+      if not CuTruthy(posD) then
+      begin
+        if CuTruthy(tc.Find('position')) then CuPut(Result, 'textPosition', tc.Find('position').Clone)
+        else CuPut(Result, 'textPosition', TJSONString.Create('inside'));
+      end;
+      if not CuNull(tc.Find('offset')) then CuPut(Result, 'textOffset', tc.Find('offset').Clone);
+      if not CuNull(tc.Find('rotation')) then CuPut(Result, 'textRotation', tc.Find('rotation').Clone);
+      if not CuNull(tc.Find('distance')) then CuPut(Result, 'textDistance', tc.Find('distance').Clone);
+      posD := Result.Find('textPosition');
+      isInside := (posD <> nil) and (posD.JSONType = jtString)
+        and (Pos('inside', posD.AsString) > 0);
+      { convertToEC4RichItem(out, textStyle): fill to textFill and -- as
+        upstream writes it -- a stroke to textStroke as the fill }
+      if ts.IndexOfName('fill') >= 0 then CuPut(Result, 'textFill', ts.Find('fill').Clone);
+      if ts.IndexOfName('stroke') >= 0 then
+      begin
+        if ts.IndexOfName('fill') >= 0 then CuPut(Result, 'textStroke', ts.Find('fill').Clone)
+        else CuPut(Result, 'textStroke', TJSONNull.Create);
+      end;
+      for k := 0 to High(cRich) do
+        if ts.IndexOfName(cRich[k, 0]) >= 0 then
+          CuPut(Result, cRich[k, 1], ts.Find(cRich[k, 0]).Clone);
+      if CuNull(Result.Find('textFill')) then
+      begin
+        if isInside then
+        begin
+          CuPut(Result, 'textFill', TJSONString.Create('#fff'));
+          if not CuTruthy(Result.Find('textStroke')) then
+          begin
+            d := Result.Find('fill');
+            if CuTruthy(d) then CuPut(Result, 'textStroke', d.Clone)
+            else CuPut(Result, 'textStroke', TJSONString.Create('#000'));
+          end;
+          if CuNull(Result.Find('textStrokeWidth')) then
+            CuPut(Result, 'textStrokeWidth', TJSONIntegerNumber.Create(2));
+        end
+        else
+        begin
+          d := Result.Find('fill');
+          if CuTruthy(d) then CuPut(Result, 'textFill', d.Clone)
+          else CuPut(Result, 'textFill', TJSONString.Create('#000'));
+        end;
+      end
+      else if isInside then
+      begin
+        if not CuTruthy(Result.Find('textStroke')) then
+        begin
+          d := Result.Find('fill');
+          if CuTruthy(d) then CuPut(Result, 'textStroke', d.Clone)
+          else CuPut(Result, 'textStroke', TJSONString.Create('#000'));
+        end;
+        if CuNull(Result.Find('textStrokeWidth')) then
+          CuPut(Result, 'textStrokeWidth', TJSONIntegerNumber.Create(2));
+      end;
+      if hasText then CuPut(Result, 'text', TJSONString.Create(txt))
+      else CuPut(Result, 'text', TJSONNull.Create);
+    finally
+      ts.Free;
+      tc.Free;
+    end;
+  finally
+    vis.Free;
+  end;
+  { applyUserPropsAfter }
+  if AExtra <> nil then
+    for i := 0 to AExtra.Count - 1 do CuPut(Result, AExtra.Names[i], AExtra.Items[i].Clone);
+  CuPut(Result, 'legacy', TJSONBoolean.Create(True));
+end;
+
+function TTyChartCustomApi.Style(AExtra: TJSONObject; ADataIndexInside: Integer): TJSONObject;
+var r: Integer;
+begin
+  if not Row(ADataIndexInside, r) then r := -1;
+  Result := MakeStyle(AExtra, r, False);
+end;
+
+function TTyChartCustomApi.StyleEmphasis(AExtra: TJSONObject; ADataIndexInside: Integer): TJSONObject;
+var r: Integer;
+begin
+  if not Row(ADataIndexInside, r) then r := -1;
+  Result := MakeStyle(AExtra, r, True);
+end;
+
+{ the style visual's fill and stroke; the item visuals a visualMap sets --
+  symbol, symbolSize, liftZ [Batch 124]; the rest a custom series has none
+  of }
+function TTyChartCustomApi.Visual(const AType: string; ADataIndexInside: Integer): TJSONData;
+var
+  r: Integer;
+  vr: TTyVisualRow;
+begin
+  Result := nil;
+  if not Row(ADataIndexInside, r) then r := -1;
+  if AType = 'color' then Result := Chart.CustomVisualFill(Slot, r)
+  else if AType = 'borderColor' then
+  begin
+    Result := Lookup(ItemNode(r), Node, ['itemStyle', 'borderColor']);
+    if Result <> nil then Result := Result.Clone;
+  end
+  else if Chart.CustomVisualRow(Slot, r, vr) then
+  begin
+    if (AType = 'symbol') and vr.SymbolSet then Result := TJSONString.Create(vr.Symbol)
+    else if (AType = 'symbolSize') and vr.SizeSet then Result := TJSONFloatNumber.Create(vr.Size)
+    else if (AType = 'liftZ') and vr.LiftZSet then Result := TJSONFloatNumber.Create(vr.LiftZ);
+  end;
+end;
+
+{ computeBarLayoutForCustomSeries on the base axis: a category axis' band,
+  anything else -- and every other coordinate system -- undefined }
+function TTyChartCustomApi.BarLayout(AOpt: TJSONObject): TTyCustomBarLayout;
+var b: TTySeriesBinding;
+begin
+  Result := nil;
+  if Sys <> cusCart then Exit;
+  b := Chart.FBindings[Slot];
+  if (b.BaseAxis = nil) or (b.BaseAxis.AxisType <> atCategory) then Exit;
+  Result := TyCustomBarLayout(b.BaseAxis.BandWidth / Scale, AOpt);
+end;
+
+function TTyChartCustomApi.CurrentSeriesIndices: TTyIntegerArray;
+var i, j, n, t: Integer;
+begin
+  Result := nil;
+  n := 0;
+  for i := 0 to High(Chart.FBindings) do
+  begin
+    if Chart.FBindings[i].Hidden or (Chart.FBindings[i].SeriesIndex < 0) then Continue;
+    SetLength(Result, n + 1);
+    Result[n] := Chart.FBindings[i].SeriesIndex;
+    Inc(n);
+  end;
+  { eachSeries: by series index }
+  for i := 1 to n - 1 do
+  begin
+    t := Result[i];
+    j := i - 1;
+    while (j >= 0) and (Result[j] > t) do
+    begin
+      Result[j + 1] := Result[j];
+      Dec(j);
+    end;
+    Result[j + 1] := t;
+  end;
+end;
+
+{ labelStyle.getFont over the global text style }
+function TTyChartCustomApi.Font(AOpt: TJSONObject): string;
+
+  function Part(const AKey, ADefault: string): string;
+  var d: TJSONData;
+  begin
+    d := nil;
+    if AOpt <> nil then d := AOpt.Find(AKey);
+    if not CuTruthy(d) then d := GlobalText(AKey);
+    if CuTruthy(d) then Result := CuText(d) else Result := ADefault;
+  end;
+
+begin
+  Result := Trim(Part('fontStyle', '') + ' ' + Part('fontWeight', '') + ' '
+    + Part('fontSize', '12') + 'px ' + Part('fontFamily', 'sans-serif'));
+end;
+
+function TTyChartCustomApi.GetWidth: Double;
+begin
+  Result := (Chart.FLastRect.Right - Chart.FLastRect.Left) / Scale;
+end;
+
+function TTyChartCustomApi.GetHeight: Double;
+begin
+  Result := (Chart.FLastRect.Bottom - Chart.FLastRect.Top) / Scale;
+end;
+
+function TTyChartCustomApi.GetDevicePixelRatio: Double;
+begin
+  Result := Scale;
+end;
+
+{ the style visual's fill of a row: the item's own itemStyle colour, the
+  series', else its palette colour -- as written where it was written }
+function TTyAdvanceChart.CustomVisualFill(ASlot, ARow: Integer): TJSONData;
+var
+  node, item: TJSONObject;
+  d: TJSONData;
+  raw, si: Integer;
+  vr: TTyVisualRow;
+begin
+  Result := nil;
+  if (FOption = nil) or (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  { A VISUALMAP'S COLOUR over the item's and the series' (visualEncoding runs
+    after the style visuals): a piece's as written, a computed one as its
+    rgba() text, an undefined one undefined [Batch 124] }
+  if CustomVisualRow(ASlot, ARow, vr) and vr.ColorSet then
+  begin
+    if vr.ColorText <> '' then Exit(TJSONString.Create(vr.ColorText));
+    if vr.Color.Defined then Exit(TJSONString.Create(TyVisualCss(vr.Color)));
+    Exit;
+  end;
+  si := FBindings[ASlot].SeriesIndex;
+  d := FOption.ComponentAt('series', si);
+  if not (d is TJSONObject) then Exit;
+  node := TJSONObject(d);
+  item := nil;
+  if (ARow >= 0) and (ASlot <= High(FStores)) and (FStores[ASlot] <> nil)
+    and (ARow < FStores[ASlot].Count) then
+  begin
+    raw := FStores[ASlot].GetRawIndex(ARow);
+    d := node.Find('data');
+    if (d is TJSONArray) and (raw >= 0) and (raw < d.Count)
+      and (TJSONArray(d).Items[raw] is TJSONObject) then
+      item := TJSONObject(TJSONArray(d).Items[raw]);
+  end;
+  d := nil;
+  if item <> nil then
+  begin
+    d := item.FindPath('itemStyle.color');
+    if CuNull(d) or ((d.JSONType = jtString) and (d.AsString = 'auto')) then d := nil;
+  end;
+  if d = nil then
+  begin
+    d := node.FindPath('itemStyle.color');
+    if CuNull(d) or ((d.JSONType = jtString) and (d.AsString = 'auto')) then d := nil;
+  end;
+  if d <> nil then Exit(d.Clone);
+  if (si >= 0) and (si <= High(FSeriesColorNone)) and FSeriesColorNone[si] then
+    Exit(TJSONString.Create('none'));
+  Result := TJSONString.Create(TyCustomColorText(Cardinal(SeriesColor(si))));
+end;
+
+procedure TTyAdvanceChart.CustomDims(ASlot: Integer; var ADims: TTySeriesDimArray);
+var
+  node, enc: TJSONObject;
+  d, names: TJSONData;
+  outDims: TTySeriesDimArray;
+  dim: TTySeriesDim;
+  i, k, n: Integer;
+  pos: TTyIntegerArray;
+  spread: Boolean;
+
+  function PosOf(A: TJSONData): Integer;
+  var q: Integer; e: TJSONData; nm: string;
+  begin
+    Result := -1;
+    if A = nil then Exit;
+    if A.JSONType = jtNumber then Exit(Trunc(A.AsFloat));
+    if (A.JSONType <> jtString) or not (names is TJSONArray) then Exit;
+    for q := 0 to names.Count - 1 do
+    begin
+      e := TJSONArray(names).Items[q];
+      if e.JSONType = jtString then nm := e.AsString
+      else if (e is TJSONObject) and (TJSONObject(e).Find('name') <> nil) then
+        nm := CuText(TJSONObject(e).Find('name'))
+      else nm := '';
+      if nm = A.AsString then Exit(q);
+    end;
+  end;
+
+  procedure Positions(A: TJSONData);
+  var q, p: Integer;
+  begin
+    pos := nil;
+    if A = nil then Exit;
+    if A is TJSONArray then
+    begin
+      for q := 0 to A.Count - 1 do
+      begin
+        p := PosOf(A.Items[q]);
+        if p < 0 then Continue;
+        SetLength(pos, Length(pos) + 1);
+        pos[High(pos)] := p;
+      end;
+    end
+    else
+    begin
+      p := PosOf(A);
+      if p >= 0 then
+      begin
+        SetLength(pos, 1);
+        pos[0] := p;
+      end;
+    end;
+  end;
+
+begin
+  if FBindings[ASlot].SeriesType <> TyCustomSeriesType then Exit;
+  if FOption = nil then Exit;
+  d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if not (d is TJSONObject) then Exit;
+  node := TJSONObject(d);
+  enc := CuObj(node, 'encode');
+  if enc = nil then Exit;
+  names := node.Find('dimensions');
+  spread := False;
+  for i := 0 to High(ADims) do
+  begin
+    Positions(enc.Find(ADims[i].Name));
+    if Length(pos) > 1 then spread := True;
+  end;
+  if not spread then Exit;
+  { EVERY POSITION THE ENCODE NAMES IS A COLUMN, each feeding its
+    coordinate: both ends of a span size the axis and both are what a
+    dataZoom filters on }
+  outDims := nil;
+  n := 0;
+  for i := 0 to High(ADims) do
+  begin
+    Positions(enc.Find(ADims[i].Name));
+    if Length(pos) = 0 then
+    begin
+      SetLength(outDims, n + 1);
+      outDims[n] := ADims[i];
+      Inc(n);
+      Continue;
+    end;
+    for k := 0 to High(pos) do
+    begin
+      dim := ADims[i];
+      if k > 0 then dim.Name := ADims[i].Name + IntToStr(k);
+      dim.SourceSlot := pos[k] + 1;
+      dim.Coord := ADims[i].Name;
+      SetLength(outDims, n + 1);
+      outDims[n] := dim;
+      Inc(n);
+    end;
+  end;
+  ADims := outDims;
+end;
+
+procedure TTyAdvanceChart.SolveCustom(APPI: Integer);
+var
+  i, si, n, p, c, k: Integer;
+  view: TTyCustomView;
+  node: TJSONObject;
+  d: TJSONData;
+  key, spec, coord: string;
+  ids: TTyStringArray;
+  raws: TTyIntegerArray;
+  api: TTyChartCustomApi;
+  scale, z, zl, lw, x, y, cw, ch, r0, r1: Double;
+  area: TTyXYWH;
+  st: TTyDataStore;
+  alive: TTyBoolArray;
+  arr: TJSONArray;
+  sys: TTyCuSys;
+  names: array of string;
+  anim: TTyCustomAnim;
+  cal: TTyCalendar;
+  pol: TTyPolar;
+  sgl: TTySingle;
+  isCoord: Boolean;
+
+  { getDateInfo's text fields of a range end }
+  function CalDate(const AInfo: TTyCalDateInfo): TTyCustomCalDate;
+
+    function Two(AN: Integer): string;
+    begin
+      if AN < 10 then Result := '0' + IntToStr(AN) else Result := IntToStr(AN);
+    end;
+
+  begin
+    Result := Default(TTyCustomCalDate);
+    Result.Y := IntToStr(AInfo.Y);
+    Result.M := Two(AInfo.M);
+    Result.D := Two(AInfo.D);
+    Result.Day := AInfo.Day;
+    Result.Time := AInfo.Time;
+    Result.FormatedDate := Result.Y + '-' + Result.M + '-' + Result.D;
+  end;
+
+begin
+  if APPI > 0 then scale := APPI / 96 else scale := 1;
+  if FOption = nil then n := 0 else n := FOption.ComponentCount('series');
+  { the views of series that are gone, or are another series now }
+  alive := nil;
+  SetLength(alive, Max(n, Length(FCustomViews)));
+  for i := 0 to High(FBindings) do
+    if (FBindings[i].SeriesType = TyCustomSeriesType) and (FBindings[i].SeriesIndex >= 0) then
+      alive[FBindings[i].SeriesIndex] := True;
+  for i := 0 to High(FCustomViews) do
+    if (FCustomViews[i] <> nil) and ((i >= n) or not alive[i]
+      or (FCustomViews[i].Key <> FOption.ComponentId('series', i) + #1 + TyCustomSeriesType)) then
+      FreeAndNil(FCustomViews[i]);
+  if Length(FCustomViews) < n then SetLength(FCustomViews, n);
+  FCustomClipOn := nil;
+  FCustomClip := nil;
+  SetLength(FCustomClipOn, Length(FBindings));
+  SetLength(FCustomClip, Length(FBindings));
+  for i := 0 to High(FBindings) do
+  begin
+    if FBindings[i].SeriesType <> TyCustomSeriesType then Continue;
+    si := FBindings[i].SeriesIndex;
+    if (si < 0) or (si >= n) then Continue;
+    key := FOption.ComponentId('series', si) + #1 + TyCustomSeriesType;
+    view := FCustomViews[si];
+    if view = nil then
+    begin
+      view := TTyCustomView.Create;
+      view.Key := key;
+      FCustomViews[si] := view;
+    end;
+    st := nil;
+    if i <= High(FStores) then st := FStores[i];
+    { THE COORDINATE SYSTEM, the prepareCustom it has [Batch 124]: a
+      cartesian, a polar, a single axis, a calendar -- or none at all }
+    sys := cusUnknown;
+    pol := nil;
+    sgl := nil;
+    cal := nil;
+    if FBindings[i].Cart <> nil then sys := cusCart
+    else if FBindings[i].Polar <> nil then
+    begin
+      sys := cusPolar;
+      pol := TTyPolar(FBindings[i].Polar);
+    end
+    else if FBindings[i].Single <> nil then
+    begin
+      sys := cusSingle;
+      sgl := TTySingle(FBindings[i].Single);
+    end
+    else if (FBindings[i].CalendarIndex >= 0) and (FBindings[i].CalendarIndex <= High(FCalendars))
+      and (FCalendars[FBindings[i].CalendarIndex] <> nil) then
+    begin
+      sys := cusCalendar;
+      cal := FCalendars[FBindings[i].CalendarIndex];
+    end
+    else if CustomOnNone(i) then sys := cusNone;
+    { NOT RENDERED: a series the legend switched off has its group emptied
+      (ChartView.remove) and keeps its data; one on a coordinate system with
+      no prepareCustom is not drawn }
+    if FBindings[i].Hidden or (not FBindings[i].Resolved) or (sys = cusUnknown)
+      or (st = nil) then
+    begin
+      view.RemoveAll;
+      { A COORDINATE SYSTEM WITH NO prepareCustom (a radar, a graph's view):
+        upstream asserts in its development build and calls undefined in its
+        production one; nothing is drawn and the chart says so. A geo and a
+        matrix do not resolve at all (their binding said so). }
+      if FBindings[i].Resolved and not FBindings[i].Hidden and (sys = cusUnknown) then
+        FBuild.Note(Format(rsTyChartSeriesCoordSys, [si, FBindings[i].CoordSysName]));
+      Continue;
+    end;
+    d := FOption.ComponentAt('series', si);
+    if not (d is TJSONObject) then Continue;
+    node := TJSONObject(d);
+    AnimRowKeys(st, ids, raws);
+    { the handler }
+    FCustomHandler := nil;
+    spec := '';
+    d := node.Find('renderItem');
+    if (d <> nil) and (d.JSONType = jtString) then spec := d.AsString;
+    if not TyChartFindRenderItem(spec, FCustomHandler) then
+    begin
+      FCustomHandler := nil;
+      FBuild.Note(Format(rsTyChartCustomNoRenderItem, [si, spec]));
+    end;
+    FCustomMissing := spec;
+    { the api and the params of this round }
+    api := TTyChartCustomApi.Create;
+    api.Chart := Self;
+    api.Slot := i;
+    api.Series := si;
+    api.Store := st;
+    api.Node := node;
+    api.Current := -1;
+    api.Scale := scale;
+    api.Sys := sys;
+    api.Polar := pol;
+    api.Single := sgl;
+    api.Calendar := cal;
+    FCustomApi := api;
+    FCustomSlot := i;
+    FCustomParams := Default(TTyCustomParams);
+    FCustomParams.Context := TJSONObject.Create;
+    FCustomParams.SeriesId := FOption.ComponentId('series', si);
+    FCustomParams.SeriesName := SeriesModelName(si);
+    FCustomParams.SeriesIndex := si;
+    FCustomParams.DataInsideLength := st.Count;
+    FCustomParams.ActionType := FCustomAction;
+    { coordSys: each system's prepareCustom, in css px }
+    names := nil;
+    case sys of
+      cusCart:
+        begin
+          area := FBindings[i].Cart.GetArea;
+          FCustomParams.CoordSys.Type_ := 'cartesian2d';
+          FCustomParams.CoordSys.X := area.X / scale;
+          FCustomParams.CoordSys.Y := area.Y / scale;
+          FCustomParams.CoordSys.Width := area.W / scale;
+          FCustomParams.CoordSys.Height := area.H / scale;
+          SetLength(names, 2);
+          names[0] := 'x';
+          names[1] := 'y';
+        end;
+      cusPolar:
+        begin
+          { the radius extent, the lesser first }
+          pol.AxisExtent(pol.RadiusAxis, r0, r1);
+          if r0 > r1 then
+          begin
+            x := r0;
+            r0 := r1;
+            r1 := x;
+          end;
+          FCustomParams.CoordSys.Type_ := 'polar';
+          FCustomParams.CoordSys.Cx := pol.CX / scale;
+          FCustomParams.CoordSys.Cy := pol.CY / scale;
+          FCustomParams.CoordSys.R := r1 / scale;
+          FCustomParams.CoordSys.R0 := r0 / scale;
+          SetLength(names, 2);
+          names[0] := TyPolarRadiusDim;
+          names[1] := TyPolarAngleDim;
+        end;
+      cusSingle:
+        begin
+          FCustomParams.CoordSys.Type_ := 'singleAxis';
+          FCustomParams.CoordSys.X := sgl.Rect.X / scale;
+          FCustomParams.CoordSys.Y := sgl.Rect.Y / scale;
+          FCustomParams.CoordSys.Width := sgl.Rect.W / scale;
+          FCustomParams.CoordSys.Height := sgl.Rect.H / scale;
+          SetLength(names, 1);
+          names[0] := TySingleDim;
+        end;
+      cusCalendar:
+        begin
+          FCustomParams.CoordSys.Type_ := 'calendar';
+          FCustomParams.CoordSys.X := cal.Rect.X / scale;
+          FCustomParams.CoordSys.Y := cal.Rect.Y / scale;
+          FCustomParams.CoordSys.Width := cal.Rect.W / scale;
+          FCustomParams.CoordSys.Height := cal.Rect.H / scale;
+          FCustomParams.CoordSys.CellWidth := cal.CellW / scale;
+          FCustomParams.CoordSys.CellHeight := cal.CellH / scale;
+          FCustomParams.CoordSys.RangeStart := CalDate(cal.Range.Start);
+          FCustomParams.CoordSys.RangeEnd := CalDate(cal.Range.Stop);
+          FCustomParams.CoordSys.Weeks := cal.Range.Weeks;
+          FCustomParams.CoordSys.DayCount := cal.Range.AllDay;
+          SetLength(names, 2);
+          names[0] := TyCalendarTimeDim;
+          names[1] := TyCalendarValueDim;
+        end;
+    else
+      begin
+        { 'none': no coordSys, the dimensions getCoordSysDimDefs made }
+        FCustomParams.CoordSys.Type_ := '';
+        SetLength(names, 2);
+        names[0] := 'x';
+        names[1] := 'y';
+      end;
+    end;
+    { wrapEncodeDef: every coordinate column's data dimension, by position }
+    FCustomParams.Encode := TJSONObject.Create;
+    for p := 0 to Max(st.RawWidth, st.DimCount) - 1 do
+      for c := 0 to st.DimCount - 1 do
+      begin
+        if st.RawDimPos(c) <> p then Continue;
+        coord := st.DimCoord(c);
+        if coord = '' then coord := st.DimName(c);
+        isCoord := False;
+        for k := 0 to High(names) do
+          if names[k] = coord then isCoord := True;
+        if not isCoord then Continue;
+        d := FCustomParams.Encode.Find(coord);
+        if not (d is TJSONArray) then
+        begin
+          arr := TJSONArray.Create;
+          FCustomParams.Encode.Add(coord, arr);
+        end
+        else
+          arr := TJSONArray(d);
+        arr.Add(p);
+      end;
+    d := node.Find('itemPayload');
+    if CuTruthy(d) and (d is TJSONObject) then
+      FCustomParams.ItemPayload := TJSONObject(d.Clone)
+    else
+      FCustomParams.ItemPayload := TJSONObject.Create;
+    d := node.Find('z');
+    if (d <> nil) and (d.JSONType = jtNumber) then z := d.AsFloat else z := 2;
+    d := node.Find('zlevel');
+    if (d <> nil) and (d.JSONType = jtNumber) then zl := d.AsFloat else zl := 0;
+    { THE TRANSITIONS' MODEL is the series [Batch 124]: isAnimationEnabled
+      (its data count against animationThreshold) under the chart's own
+      switch, getAnimationConfig's timing with the update's payload }
+    anim := Default(TTyCustomAnim);
+    anim.Model := TyAnimSeriesModel(FOption.Root, si, st.Count);
+    anim.Model.Payload := FAnimPayload;
+    anim.Model.HasPayload := FAnimHasPayload;
+    anim.Enabled := AnimAllowed and TyAnimIsEnabled(anim.Model);
+    anim.Driver := FCuAnim;
+    try
+      view.Render(ids, raws, @CustomCall, z, zl, anim);
+    finally
+      FreeAndNil(FCustomParams.Context);
+      FreeAndNil(FCustomParams.Encode);
+      FreeAndNil(FCustomParams.ItemPayload);
+      FCustomApi := nil;
+      FCustomHandler := nil;
+      api.Free;
+    end;
+    if view.Error <> '' then FBuild.Note('series[' + IntToStr(si) + ']: ' + view.Error);
+    { createGridClipPath: the grid's area widened by lineStyle.width, its
+      width ceiled, a fractional x floored -- a cartesian's only (a polar's
+      sector clip is not drawn here) }
+    if (sys = cusCart) and CuTruthy(node.Find('clip')) then
+    begin
+      d := node.FindPath('lineStyle.width');
+      if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then lw := d.AsFloat
+      else lw := 0;
+      x := area.X / scale - lw / 2;
+      y := area.Y / scale - lw / 2;
+      cw := area.W / scale + lw;
+      ch := area.H / scale + lw;
+      cw := Ceil(cw);
+      if x <> Floor(x) then
+      begin
+        x := Floor(x);
+        cw := cw + 1;
+      end;
+      FCustomClipOn[i] := True;
+      FCustomClip[i] := TyXYWH(x, y, cw, ch);
+    end;
+  end;
+  { THE FLUSH: upstream's setOption ends with a synchronous update that
+    steps every clip the render made, so each starts NOW and this paint
+    shows the from values [Batch 124] }
+  if CuLive then
+  begin
+    FCuAnim.Update(AnimClock, True);
+    AnimArmTimer;
+  end;
+end;
+
+{ renderItem for one item of the series being rendered }
+function TTyAdvanceChart.CustomCall(AIndexInside: Integer): TJSONData;
+var
+  api: TTyChartCustomApi;
+  nLine, nCol: Integer;
+begin
+  Result := nil;
+  api := TTyChartCustomApi(FCustomApi);
+  api.Current := AIndexInside;
+  FCustomParams.DataIndexInside := AIndexInside;
+  FCustomParams.DataIndex := api.Store.GetRawIndex(AIndexInside);
+  if not Assigned(FCustomHandler) then Exit;
+  try
+    Result := FCustomHandler(FCustomParams, api);
+  except
+    on E: Exception do
+    begin
+      Result := nil;
+      FBuild.Note(Format(rsTyChartCustomRenderItemFailed,
+        [FCustomParams.SeriesIndex, FCustomMissing, E.Message]));
+    end;
+  end;
+  { a tree too deep for the readers is no tree -- and the chart says so }
+  if (Result <> nil) and TyJsonNestingExceeds(Result.AsJSON, TyOptionMaxNesting,
+    nLine, nCol) then
+  begin
+    FreeAndNil(Result);
+    FBuild.Note(Format(rsTyChartCustomRenderItemFailed, [FCustomParams.SeriesIndex,
+      FCustomMissing, Format(rsTyOptTooDeep, [TyOptionMaxNesting])]));
+  end;
+end;
+
+function TTyAdvanceChart.CustomBuild(ASlot: Integer; AList: TTyPaintList;
+  APPI: Integer): Integer;
+var
+  si, i, inside, raw: Integer;
+  view: TTyCustomView;
+  root, el: TTyGfxEl;
+  meas: ITyTextMeasurer;
+  ground: TTyGfxGround;
+  ctx: TTyGfxPaintCtx;
+  scale, maxZ2: Double;
+  datum: TTyChartDatumRef;
+  clipOn: Boolean;
+  clip: TTyRectF;
+  all: TTyGfxElArray;
+
+  { doUpdateZ over one item's tree: the running greatest z2 lifts each
+    textContent to it + 2 }
+  procedure UpdZ(AEl: TTyGfxEl);
+  var k: Integer;
+  begin
+    if AEl.IsGroup then
+    begin
+      for k := 0 to High(AEl.Children) do UpdZ(AEl.Children[k]);
+      Exit;
+    end;
+    if AEl.Z2 > maxZ2 then maxZ2 := AEl.Z2;
+    if AEl.TextContent <> nil then
+    begin
+      AEl.TextContent.Z := AEl.Z;
+      AEl.TextContent.ZLevel := AEl.ZLevel;
+      if not IsInfinite(maxZ2) then AEl.TextContent.Z2 := maxZ2 + 2;
+    end;
+  end;
+
+  procedure Add(AEl: TTyGfxEl; ASilent: Boolean);
+  var
+    pe: TTyChartElement;
+    k: Integer;
+    d: TJSONData;
+  begin
+    { A TEXT OF NO TEXT has no line, so no tspan, so nothing in the display
+      list (parsePlainText: `text ? text.split('\n') : []`) -- the empty
+      label an ec4 style makes when the label is not shown }
+    if AEl.Kind = gkText then
+    begin
+      d := AEl.Style.Find('text');
+      if (d = nil) or (d.JSONType = jtNull) or ((d.JSONType = jtString) and (d.AsString = '')) then
+        Exit;
+    end;
+    if not TyGfxPaintElement(AEl, meas, ctx, pe) then Exit;
+    pe.Silent := ASilent;
+    pe.Datum := datum;
+    pe.Z := Round(AEl.ZLevel) * 100000 + Round(AEl.Z);
+    pe.Z2 := Round(AEl.Z2);
+    if clipOn then
+    begin
+      pe.HasClip := True;
+      pe.ClipRect := clip;
+    end;
+    k := AList.Add(pe);
+    if Length(FCustomPaintEls) <= k then SetLength(FCustomPaintEls, k + 1);
+    FCustomPaintEls[k] := AEl;
+    Inc(Result);
+  end;
+
+  procedure Walk(AEl: TTyGfxEl; ASilent: Boolean);
+  var k: Integer; s: Boolean;
+  begin
+    if AEl.Ignore then Exit;
+    s := ASilent or AEl.Silent;
+    if AEl.IsGroup then
+    begin
+      for k := 0 to High(AEl.Children) do Walk(AEl.Children[k], s);
+      Exit;
+    end;
+    Add(AEl, s);
+    if (AEl.TextContent <> nil) and not AEl.TextContent.Ignore then
+      Add(AEl.TextContent, s or AEl.TextContent.Silent);
+  end;
+
+begin
+  Result := 0;
+  si := FBindings[ASlot].SeriesIndex;
+  view := CustomView(si);
+  if (view = nil) or (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
+  if APPI <= 0 then APPI := 96;
+  scale := APPI / 96;
+  meas := NewTextMeasurer(96);
+  { the transforms and the textContents' places }
+  TyGfxUpdateTransforms(view.Root);
+  MarkerGround(ground.Background, ground.IsDark);
+  all := nil;
+  TyGfxTraverse(view.Root, all);
+  for i := 0 to High(all) do
+    if all[i].TextContent <> nil then
+    begin
+      TyGfxInnerText(all[i], meas, ground);
+      TyGfxLabelTransform(all[i].TextContent, all[i].TextContent.HasTransform,
+        all[i].TextContent.Transform);
+    end;
+  ctx := Default(TTyGfxPaintCtx);
+  ctx.Scale := scale;
+  ctx.HasInk := True;
+  ctx.Ink := TTyChartColor(ActiveController.Model.ResolveStyle(GetStyleTypeKey,
+    StyleClass, [tysNormal]).TextColor);
+  ctx.ImageSize := @GfxImageSize;
+  clipOn := (ASlot <= High(FCustomClipOn)) and FCustomClipOn[ASlot];
+  if clipOn then
+    clip := TyRectF(FCustomClip[ASlot].X * scale, FCustomClip[ASlot].Y * scale,
+      (FCustomClip[ASlot].X + FCustomClip[ASlot].W) * scale,
+      (FCustomClip[ASlot].Y + FCustomClip[ASlot].H) * scale);
+  { which item each root draws }
+  for i := 0 to FStores[ASlot].Count - 1 do
+  begin
+    el := view.ElOf(i);
+    if el <> nil then el.Serial := i;
+  end;
+  for i := 0 to High(view.Root.Children) do
+  begin
+    root := view.Root.Children[i];
+    inside := root.Serial;
+    if (inside < 0) or (view.ElOf(inside) <> root) then Continue;
+    raw := FStores[ASlot].GetRawIndex(inside);
+    datum := TyChartDatum(si, inside, raw);
+    maxZ2 := NegInfinity;
+    UpdZ(root);
+    Walk(root, False);
+  end;
+end;
+
+{ a custom element's declared state, as its option wrote it: the style's
+  fill, stroke, lineWidth and opacity, and the state's z2 }
+function StCustomDecl(AInfo: TTyCustomElInfo; AName: TTyStName): TTyStObject;
+var
+  idx: Integer;
+  st: TJSONObject;
+  d: TJSONData;
+  c: TTyChartColor;
+
+  procedure Colour(const AKey: string; ASt: TTyStKey);
+  begin
+    d := st.Find(AKey);
+    if d = nil then Exit;
+    if (d.JSONType = jtNull) or ((d.JSONType = jtString) and TyChartColorIsNone(d.AsString)) then
+      TyStSetNone(Result, ASt)
+    else if (d.JSONType = jtString) and (d.AsString = 'inherit') and (ASt = stkFill) then
+      Result.FillInherit := True
+    else if (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
+      TyStSetColor(Result, ASt, c);
+  end;
+
+begin
+  Result := TyStNoObject;
+  if AInfo = nil then Exit;
+  case AName of
+    stnEmphasis: idx := 0;
+    stnBlur: idx := 1;
+  else
+    idx := 2;
+  end;
+  st := AInfo.StateStyle[idx];
+  if st <> nil then
+  begin
+    Colour('fill', stkFill);
+    Colour('stroke', stkStroke);
+    d := st.Find('lineWidth');
+    if (d <> nil) and (d.JSONType = jtNumber) then TyStSetNum(Result, stkLineWidth, d.AsFloat);
+    d := st.Find('opacity');
+    if (d <> nil) and (d.JSONType = jtNumber) then TyStSetNum(Result, stkOpacity, d.AsFloat);
+  end;
+  if not IsNan(AInfo.StateZ2[idx]) then TyStSetNum(Result, stkZ2, AInfo.StateZ2[idx]);
+end;
+
+{ a custom item's elements: every path of its tree has the three states
+  updateElOnState gives it, the default proxy and the lift of 1 }
+procedure TTyAdvanceChart.StDeclareCustom(ASlot, ARaw: Integer; AList: TTyPaintList);
+var
+  s, k: Integer;
+  item: PTyStItem;
+  was: Boolean;
+
+  procedure Declare(var AEl: TTyStElement; AIdx: Integer);
+  var
+    gel: TTyGfxEl;
+    info: TTyCustomElInfo;
+    n: TTyStName;
+  begin
+    gel := CustomPaintSource(AIdx);
+    info := nil;
+    if (gel <> nil) and (gel.Custom is TTyCustomElInfo) then info := TTyCustomElInfo(gel.Custom);
+    AEl.Exists := True;
+    AEl.IsPath := True;
+    AEl.Proxy := True;
+    AEl.LiftOne := True;
+    for n := Low(TTyStName) to High(TTyStName) do
+    begin
+      AEl.HasState[n] := True;
+      AEl.Decl[n] := StCustomDecl(info, n);
+    end;
+    AEl.Rest := StRestOf(AList.Element(AIdx));
+  end;
+
+begin
+  s := FBindings[ASlot].SeriesIndex;
+  item := @FSt[s].Rows[ARaw];
+  Declare(item^.Host, FSt[s].HostIdx[ARaw]);
+  if Length(item^.Parts) <> Length(FSt[s].PartIdx[ARaw]) then SetLength(item^.Parts, 0);
+  was := Length(item^.Parts) > 0;
+  SetLength(item^.Parts, Length(FSt[s].PartIdx[ARaw]));
+  for k := 0 to High(item^.Parts) do
+  begin
+    Declare(item^.Parts[k], FSt[s].PartIdx[ARaw][k]);
+    if not was then
+    begin
+      item^.Parts[k].Cur := item^.Parts[k].Rest;
+      item^.Parts[k].States := [];
+      if item^.Host.States <> [] then TyStUseStates(item^.Parts[k], item^.Host.States);
+    end;
   end;
 end;
 
@@ -28531,6 +34153,580 @@ begin
   { scheduler.unfinished = true; zr.wakeUp() }
   FStreamPending := True;
   AnimArmTimer;
+end;
+
+{ ==================== the timeline [Batch 129, C21] ====================
+
+  SliderTimelineView's render and handlers, and the two actions. The
+  option, the model and the view's elements are tyControls.AdvChart.Timeline;
+  this is what upstream keeps outside them:
+  - FTlView: the first timeline model's view, from render to render (its
+    checkpoint element lives in it); a notMerge, or the model going, makes
+    a new one -- upstream's view is disposed with its model;
+  - FTlDue: the play timer _doPlayStop sets at every render (setTimeout
+    with playInterval), NaN for none; TimelineTick fires it on the clock
+    TimelineNow says, the machine's when that is NaN;
+  - FTlAnim: the driver the checkpoint's slide, the progress line's and the
+    hover transitions run on;
+  - FTlDragging: zrender's Draggable holds the checkpoint;
+  - FTlStatesDirty: a hover changed a hoverState -- the next frame applies
+    it (applyChangedStates). }
+
+function TlCss(AColour: TTyChartColor): string;
+begin
+  Result := 'rgba(' + IntToStr((AColour shr 16) and $FF) + ','
+    + IntToStr((AColour shr 8) and $FF) + ',' + IntToStr(AColour and $FF) + ','
+    + TyJsNumberToString(((AColour shr 24) and $FF) / 255) + ')';
+end;
+
+function TTyAdvanceChart.TlInk: TTyTimelineInk;
+var
+  model: TTyStyleModel;
+  st: TTyStyleSet;
+begin
+  Result := Default(TTyTimelineInk);
+  model := ActiveController.Model;
+  st := model.ResolveStyle('TyAdvChartTimeline', '', []);
+  Result.Line := TlCss(TTyChartColor(st.BorderColor));
+  Result.EmptyFill := TlCss(TTyChartColor(st.Background.Color));
+  Result.Border := Result.Line;
+  st := model.ResolveStyle('TyAdvChartTimelineProgress', '', []);
+  Result.Progress := TlCss(TTyChartColor(st.BorderColor));
+  Result.ProgressItem := TlCss(TTyChartColor(st.Background.Color));
+  st := model.ResolveStyle('TyAdvChartTimelineItem', '', []);
+  Result.Item := TlCss(TTyChartColor(st.Background.Color));
+  st := model.ResolveStyle('TyAdvChartTimelineItem', '', [tysHover]);
+  Result.ItemEmphasis := TlCss(TTyChartColor(st.Background.Color));
+  Result.ItemEmphasisBorder := TlCss(TTyChartColor(st.BorderColor));
+  st := model.ResolveStyle('TyAdvChartTimelineCheckpoint', '', []);
+  Result.Checkpoint := TlCss(TTyChartColor(st.Background.Color));
+  Result.CheckpointBorder := TlCss(TTyChartColor(st.BorderColor));
+  st := model.ResolveStyle('TyAdvChartTimelineControl', '', []);
+  Result.Control := TlCss(TTyChartColor(st.Background.Color));
+  Result.ControlBorder := TlCss(TTyChartColor(st.BorderColor));
+  st := model.ResolveStyle('TyAdvChartTimelineControl', '', [tysHover]);
+  Result.ControlEmphasis := TlCss(TTyChartColor(st.Background.Color));
+  Result.ControlEmphasisBorder := TlCss(TTyChartColor(st.BorderColor));
+  st := model.ResolveStyle('TyAdvChartTimelineLabel', '', []);
+  Result.LabelColour := TlCss(TTyChartColor(st.TextColor));
+  Result.FontFamily := st.FontName;
+  Result.FontPx := TyFontPxOf(ResolveFontSize(st));
+  if Result.FontPx <= 0 then Result.FontPx := 12;
+  st := model.ResolveStyle('TyAdvChartTimelineLabel', '', [tysHover]);
+  Result.LabelEmphasis := TlCss(TTyChartColor(st.TextColor));
+end;
+
+function TTyAdvanceChart.TlClock: Double;
+begin
+  if IsNan(FTlNow) then Result := TyAnimClockMs else Result := FTlNow;
+end;
+
+function TTyAdvanceChart.TlLive: Boolean;
+begin
+  Result := (FTlAnim <> nil) and (FTlAnim.ClipCount > 0);
+end;
+
+function TTyAdvanceChart.TlNode: TJSONObject;
+var d: TJSONData;
+begin
+  Result := nil;
+  if FOption = nil then Exit;
+  { getComponent('timeline'): the first slot }
+  d := FOption.ComponentAt('timeline', 0);
+  if d is TJSONObject then Result := TJSONObject(d);
+end;
+
+{ getCurrentIndex: the model's option -- its default nought where nothing
+  was written; NaN for what is no number }
+function TTyAdvanceChart.TlCurrentIndex: Double;
+var
+  n: TJSONObject;
+  d: TJSONData;
+begin
+  Result := NaN;
+  n := TlNode;
+  if n = nil then Exit;
+  d := n.Find('currentIndex');
+  if d = nil then Result := 0
+  else if d.JSONType = jtNumber then Result := d.AsFloat;
+end;
+
+{ the component's state transition (updateStates): its animation enabled,
+  stateAnimation's duration above nought }
+function TTyAdvanceChart.TlAnimCfg: TTyTlAnimCfg;
+var
+  node, root, sa, rsa: TJSONObject;
+  d: TJSONData;
+  on: Boolean;
+  dur, delay: Double;
+  easing: string;
+
+  function Get(const AKey: string): TJSONData;
+  begin
+    Result := nil;
+    if sa <> nil then Result := sa.Find(AKey);
+    if ((Result = nil) or (Result.JSONType = jtNull)) and (rsa <> nil) then
+      Result := rsa.Find(AKey);
+    if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
+  end;
+
+begin
+  Result := Default(TTyTlAnimCfg);
+  Result.Driver := FTlAnim;
+  Result.Allowed := AnimAllowed;
+  node := TlNode;
+  root := nil;
+  if (FOption <> nil) and (FOption.Root is TJSONObject) then root := TJSONObject(FOption.Root);
+  { isAnimationEnabled: the timeline's own `animation`, else the root's
+    ('auto' when nothing is written) }
+  on := Result.Allowed;
+  d := nil;
+  if node <> nil then d := node.Find('animation');
+  if (d = nil) or (d.JSONType = jtNull) then
+  begin
+    if root <> nil then d := root.Find('animation') else d := nil;
+    if (d <> nil) and not TyTlTruthy(d) then on := False;
+  end
+  else if not TyTlTruthy(d) then on := False;
+  if not on then Exit;
+  sa := nil;
+  rsa := nil;
+  if node <> nil then
+  begin
+    d := node.Find('stateAnimation');
+    if d is TJSONObject then sa := TJSONObject(d);
+  end;
+  if root <> nil then
+  begin
+    d := root.Find('stateAnimation');
+    if d is TJSONObject then rsa := TJSONObject(d);
+  end;
+  d := Get('duration');
+  if d = nil then dur := 300
+  else if d.JSONType = jtNumber then dur := d.AsFloat
+  else dur := NaN;
+  { duration > 0, a comparison NaN fails }
+  if not (dur > 0) then Exit;
+  d := Get('delay');
+  if (d <> nil) and (d.JSONType = jtNumber) then delay := d.AsFloat else delay := 0;
+  d := Get('easing');
+  if (d <> nil) and (d.JSONType = jtString) then easing := d.AsString
+  else if d = nil then easing := 'cubicOut'
+  else easing := '';
+  Result.HasStateCfg := True;
+  Result.StateCfg := TyAnimCfg(dur, delay, easing);
+end;
+
+procedure TTyAdvanceChart.SolveTimeline(APPI: Integer);
+var
+  node, root: TJSONObject;
+  s, w, h, interval: Double;
+  meas: ITyTextMeasurer;
+begin
+  node := TlNode;
+  if node = nil then
+  begin
+    { the model went: its view too -- remove() and dispose() clear the timer }
+    FreeAndNil(FTlView);
+    FTlDue := NaN;
+    FTlDragging := False;
+    TlArmTimer;
+    Exit;
+  end;
+  if FTlAnim = nil then FTlAnim := TTyAnimation.Create;
+  if FTlView = nil then
+  begin
+    Inc(FTlUidSeq);
+    FTlView := TTyTimelineView.Create('ec_tl_' + IntToStr(FTlUidSeq));
+    FTlView.Dragging := FTlDragging;
+  end;
+  if APPI <= 0 then APPI := 96;
+  s := APPI / 96;
+  w := (FLastRect.Right - FLastRect.Left) / s;
+  h := (FLastRect.Bottom - FLastRect.Top) / s;
+  root := nil;
+  if FOption.Root is TJSONObject then root := TJSONObject(FOption.Root);
+  { the layout measures in css px }
+  meas := NewTextMeasurer(96);
+  FTlView.Render(node, root, w, h, TlInk, meas, TlAnimCfg,
+    FOption.GetBool('useUTC', False));
+  { _doPlayStop: the timer cleared, and set again while playing --
+    setTimeout(fn, playInterval) from now }
+  FTlDue := NaN;
+  if FTlView.PlayState then
+  begin
+    interval := FTlView.PlayInterval;
+    if IsNan(interval) then interval := 0;
+    FTlDue := TlClock + interval;
+  end;
+  TlArmTimer;
+  FTlStatesDirty := False;
+  { the flush: what the render started takes its start now }
+  FTlAnim.Update(AnimClock, True);
+  AnimArmTimer;
+end;
+
+function TTyAdvanceChart.BuildTimeline(AList: TTyPaintList): Integer;
+var
+  i: Integer;
+  ctx: TTyGfxPaintCtx;
+  pe: TTyChartElement;
+  meas: ITyTextMeasurer;
+  el: TTyGfxEl;
+begin
+  Result := 0;
+  if (FTlView = nil) or not FTlView.Shown then Exit;
+  FTlView.UpdateTransforms;
+  meas := NewTextMeasurer(96);
+  ctx := Default(TTyGfxPaintCtx);
+  if FLastPPI > 0 then ctx.Scale := FLastPPI / 96 else ctx.Scale := 1;
+  ctx.HasInk := False;
+  for i := 0 to High(FTlView.Els) do
+  begin
+    el := FTlView.Els[i];
+    if el.Ignore then Continue;
+    if not TyGfxPaintElement(el, meas, ctx, pe) then Continue;
+    { the pointer is the timeline's own: nothing in the paint list answers
+      for it }
+    pe.Silent := True;
+    pe.Datum := TyChartDatum(-1, -1);
+    pe.Z := Round(el.ZLevel) * 100000 + Round(el.Z);
+    pe.Z2 := Round(el.Z2);
+    AList.Add(pe);
+    Inc(Result);
+  end;
+end;
+
+function TTyAdvanceChart.TlHitAt(AX, AY: Integer; out AEl: Integer): Boolean;
+var
+  s, x, y: Double;
+begin
+  Result := False;
+  AEl := -1;
+  if (FTlView = nil) or not FTlView.Shown or (csDesigning in ComponentState) then Exit;
+  if FLastPPI > 0 then s := FLastPPI / 96 else s := 1;
+  x := AX / s;
+  y := AY / s;
+  { zrender's Handler hit-tests nothing outside the canvas }
+  if (x < 0) or (y < 0) or (x > (FLastRect.Right - FLastRect.Left) / s)
+    or (y > (FLastRect.Bottom - FLastRect.Top) / s) then Exit;
+  AEl := FTlView.HitAt(x, y, NewTextMeasurer(96));
+  Result := AEl >= 0;
+end;
+
+procedure TTyAdvanceChart.TlArmTimer;
+var ms: Double;
+begin
+  if IsNan(FTlNow) and not IsNan(FTlDue) and not (csDesigning in ComponentState) then
+  begin
+    if FTlTimer = nil then
+    begin
+      FTlTimer := TTimer.Create(nil);
+      FTlTimer.Enabled := False;
+      FTlTimer.OnTimer := @TlTimerFired;
+    end;
+    ms := FTlDue - TyAnimClockMs;
+    if ms < 1 then ms := 1;
+    if ms > MaxInt then ms := MaxInt;
+    FTlTimer.Enabled := False;
+    FTlTimer.Interval := Ceil(ms);
+    FTlTimer.Enabled := True;
+  end
+  else if FTlTimer <> nil then
+    FTlTimer.Enabled := False;
+end;
+
+procedure TTyAdvanceChart.TlTimerFired(Sender: TObject);
+begin
+  if FTlTimer <> nil then FTlTimer.Enabled := False;
+  TimelineTick(TlClock);
+end;
+
+procedure TTyAdvanceChart.TimelineTick(ANowMs: Double);
+var
+  t, cur: Double;
+  node: TJSONObject;
+begin
+  while (not IsNan(FTlDue)) and (FTlDue <= ANowMs) do
+  begin
+    t := FTlDue;
+    FTlDue := NaN;
+    { the clock is the timer's due while it runs }
+    if not IsNan(FTlNow) then FTlNow := t;
+    node := TlNode;
+    if node = nil then Break;
+    { _changeTimeline(current +/- 1), the model read now }
+    cur := TlCurrentIndex;
+    if TyTlTruthy(node.Find('rewind')) then TlChange(cur - 1, True)
+    else TlChange(cur + 1, True);
+  end;
+  TlArmTimer;
+end;
+
+{ _changeTimeline: the timelineChange action from the view }
+procedure TTyAdvanceChart.TlChange(AIndex: Double; AHasIndex: Boolean);
+var p: string;
+begin
+  if FTlView = nil then Exit;
+  p := '{"type":"timelineChange"';
+  if AHasIndex and not (IsNan(AIndex) or IsInfinite(AIndex)) then
+    p := p + ',"currentIndex":' + TyJsNumberToString(AIndex);
+  p := p + ',"from":"' + FTlView.Uid + '"}';
+  DispatchAction(p);
+end;
+
+procedure TTyAdvanceChart.TlClick(AEl: Integer);
+var
+  r: TTyTlRole;
+  cur: Double;
+begin
+  if (FTlView = nil) or (AEl < 0) or (AEl > High(FTlView.Els)) then Exit;
+  r := FTlView.RoleOf(AEl);
+  cur := TlCurrentIndex;
+  case r.Kind of
+    tlrTick, tlrLabel: TlChange(r.Value, True);
+    tlrNext: if FTlView.Inverse then TlChange(cur - 1, True) else TlChange(cur + 1, True);
+    tlrPrev: if FTlView.Inverse then TlChange(cur + 1, True) else TlChange(cur - 1, True);
+    tlrPlay, tlrStop:
+      begin
+        { _handlePlayClick(!playState): the timer cleared first }
+        FTlDue := NaN;
+        TlArmTimer;
+        if r.Kind = tlrPlay then
+          DispatchAction('{"type":"timelinePlayChange","playState":true,"from":"' + FTlView.Uid + '"}')
+        else
+          DispatchAction('{"type":"timelinePlayChange","playState":false,"from":"' + FTlView.Uid + '"}');
+      end;
+  end;
+end;
+
+procedure TTyAdvanceChart.TlMouseOver(const ATarget: TTyChartEventTarget);
+begin
+  if (ATarget.HdKind <> 10) or (FTlView = nil) or (ATarget.HdGen <> FTlView.Gen) then Exit;
+  if not FTlView.IsDispatcher(ATarget.HdRow) then Exit;
+  { singleEnterEmphasis: the flag; the frame applies it }
+  FTlView.Hover[ATarget.HdRow] := True;
+  FTlStatesDirty := True;
+end;
+
+procedure TTyAdvanceChart.TlMouseOut(const ATarget: TTyChartEventTarget);
+begin
+  if (ATarget.HdKind <> 10) or (FTlView = nil) or (ATarget.HdGen <> FTlView.Gen) then Exit;
+  if not FTlView.IsDispatcher(ATarget.HdRow) then Exit;
+  if not FTlView.Hover[ATarget.HdRow] then Exit;
+  FTlView.Hover[ATarget.HdRow] := False;
+  FTlStatesDirty := True;
+end;
+
+procedure TTyAdvanceChart.TlApplyStates;
+var i: Integer;
+begin
+  if not FTlStatesDirty then Exit;
+  FTlStatesDirty := False;
+  if FTlView = nil then Exit;
+  for i := 0 to High(FTlView.Els) do FTlView.ApplyStates(i);
+  DropStatic;
+  InvalidateFrame;
+  AnimArmTimer;
+end;
+
+procedure TTyAdvanceChart.TlDragStart(const ATarget: TTyChartEventTarget);
+begin
+  if (ATarget.HdKind <> 10) or (FTlView = nil) or (ATarget.HdGen <> FTlView.Gen) then Exit;
+  if (ATarget.HdRow < 0) or (ATarget.HdRow > High(FTlView.Els)) then Exit;
+  if FTlView.RoleOf(ATarget.HdRow).Kind <> tlrPointer then Exit;
+  FTlDragging := True;
+  FTlView.Dragging := True;
+end;
+
+{ _pointerChangeTimeline }
+procedure TTyAdvanceChart.TlPointerChange(AX, AY: Integer; ATrigger: Boolean);
+var
+  s, coord: Double;
+  target: Integer;
+begin
+  if (FTlView = nil) or not FTlView.Shown then Exit;
+  if FLastPPI > 0 then s := FLastPPI / 96 else s := 1;
+  coord := FTlView.DragTo(AX / s, AY / s);
+  target := FTlView.NearestTick(coord);
+  DropStatic;
+  InvalidateFrame;
+  if ATrigger or ((target <> TlCurrentIndex) and FTlView.Realtime) then
+    TlChange(target, target >= 0);
+end;
+
+procedure TTyAdvanceChart.TlDragMove(AX, AY: Integer);
+begin
+  if not FTlDragging then Exit;
+  { _handlePointerDrag: the timer cleared, the checkpoint moved }
+  FTlDue := NaN;
+  TlArmTimer;
+  TlPointerChange(AX, AY, False);
+end;
+
+procedure TTyAdvanceChart.TlDragEnd(AX, AY: Integer);
+begin
+  if not FTlDragging then Exit;
+  FTlDragging := False;
+  if FTlView <> nil then FTlView.Dragging := False;
+  { _handlePointerDragend: a change whatever the index }
+  TlPointerChange(AX, AY, True);
+end;
+
+{ resetOption('timeline') with the timeline's replaceMerge, and the update
+  after it }
+procedure TTyAdvanceChart.TlMerge;
+var
+  node: TJSONObject;
+  d: TJSONData;
+  rep: array of string;
+  k: Integer;
+
+  procedure AddType(A: TJSONData);
+  begin
+    if (A = nil) or (A.JSONType <> jtString) then Exit;
+    if not TyOptionIsComponentType(A.AsString) then Exit;
+    SetLength(rep, Length(rep) + 1);
+    rep[High(rep)] := A.AsString;
+  end;
+
+begin
+  rep := nil;
+  node := TlNode;
+  if node <> nil then
+  begin
+    d := node.Find('replaceMerge');
+    if d is TJSONArray then
+    begin
+      for k := 0 to d.Count - 1 do AddType(d.Items[k]);
+    end
+    else
+      AddType(d);
+  end;
+  FMergeOldKeys := AnimViewKeys;
+  FMergeOldAxes := AxisViewKeys;
+  FMergeFirst := True;
+  FMergeResize := False;
+  MediaViewSize;
+  { prepareAndUpdate: an update whose models were merged -- armed as a
+    merge's when a frame was merged; without one the same models render
+    again, every series updating from where it stands }
+  if FOption.TimelineReset(rep, @MergeBefore, @MergePass) then
+  begin
+    FAnimPending := True;
+    FDirty := True;
+    Invalidate;
+  end
+  else
+    FullUpdate;
+end;
+
+procedure TTyAdvanceChart.DoTimelineChange(APayload: TJSONObject);
+var
+  node, full, ev: TJSONObject;
+  d: TJSONData;
+  idx: Double;
+  values: TTyDoubleArray;
+  names: TTyStringArray;
+  items: TTyJsonObjArray;
+  stop: Boolean;
+  k: Integer;
+  pp: string;
+begin
+  node := TlNode;
+  { upstream reads the model's replaceMerge whatever there is: without a
+    timeline it throws, and nothing happens here }
+  if node = nil then Exit;
+  stop := False;
+  d := APayload.Find('currentIndex');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    full := TyTimelineFullOption(node, TlInk);
+    try
+      TyTimelineData(full, FOption.GetBool('useUTC', False), values, names, items);
+      { setCurrentIndex: `this.option.loop` }
+      idx := TyTimelineNormIndex(TyTlJsNum(d), Length(values), TyTlTruthy(full.Find('loop')));
+      TyTlPut(node, 'currentIndex', TyTlNumJson(idx));
+      { played to the end without a loop: the play stops, and says so }
+      if (not TyTlTruthy(full.Find('loop'))) and (idx >= Length(values) - 1)
+        and TyTlTruthy(full.Find('autoPlay')) then
+      begin
+        TyTlPut(node, 'autoPlay', TJSONBoolean.Create(False));
+        stop := True;
+      end;
+    finally
+      full.Free;
+    end;
+  end;
+  TlMerge;
+  { the event: defaults(the model's currentIndex, payload) }
+  ev := TJSONObject.Create;
+  try
+    d := node.Find('currentIndex');
+    if d <> nil then ev.Add('currentIndex', d.Clone)
+    else ev.Add('currentIndex', TJSONIntegerNumber.Create(0));
+    for k := 0 to APayload.Count - 1 do
+    begin
+      if ev.IndexOfName(APayload.Names[k]) >= 0 then
+      begin
+        if ev.Find(APayload.Names[k]).JSONType <> jtNull then Continue;
+        ev.Delete(APayload.Names[k]);
+      end;
+      ev.Add(APayload.Names[k], APayload.Items[k].Clone);
+    end;
+    ev.Elements['type'] := TJSONString.Create('timelinechanged');
+    EmitPayloadEvent('timelinechanged', ev.AsJSON);
+  finally
+    ev.Free;
+  end;
+  { the action the end dispatched waits for this one -- and this one's
+    render comes first: the checkpoint the second render meets is already
+    sliding, and its stopAnimation(forward) puts it at its tick }
+  if stop then
+  begin
+    if (FTlView <> nil) and (FLastPPI > 0) then SolveTimeline(FLastPPI);
+    pp := '{"type":"timelinePlayChange","playState":false';
+    d := APayload.Find('from');
+    if d <> nil then pp := pp + ',"from":' + d.AsJSON;
+    pp := pp + '}';
+    ev := TJSONObject(GetJSON(pp));
+    try
+      DoTimelinePlayChange(ev);
+    finally
+      ev.Free;
+    end;
+  end;
+end;
+
+procedure TTyAdvanceChart.DoTimelinePlayChange(APayload: TJSONObject);
+var
+  node, ev: TJSONObject;
+  d: TJSONData;
+begin
+  node := TlNode;
+  d := APayload.Find('playState');
+  if (node <> nil) and (d <> nil) and (d.JSONType <> jtNull) then
+    TyTlPut(node, 'autoPlay', TJSONBoolean.Create(TyTlTruthy(d)));
+  { update: every view renders again now (the timer with them), the series
+    updating from where they stand }
+  FullUpdate;
+  ev := TJSONObject(APayload.Clone);
+  try
+    ev.Elements['type'] := TJSONString.Create('timelineplaychanged');
+    EmitPayloadEvent('timelineplaychanged', ev.AsJSON);
+  finally
+    ev.Free;
+  end;
+end;
+
+function TTyAdvanceChart.TimelineView: TTyTimelineView;
+begin
+  Result := FTlView;
+end;
+
+function TTyAdvanceChart.TimelineDue: Double;
+begin
+  Result := FTlDue;
 end;
 
 { ==================== the toolbox [Batch 125, C16] ====================
@@ -29895,6 +36091,8 @@ begin
   c := '';
   bc := '';
   if (FEvHover.HdKind = 8) and (FEvHover.Id <> 0) then c := 'pointer';
+  { a timeline element's cursor, zrender's default [Batch 129] }
+  if (FEvHover.HdKind = 10) and (FEvHover.Id <> 0) then c := 'pointer';
   { a brush cover's piece under the pointer: its own cursor [Batch 126] }
   if (FEvHover.HdKind = 9) and (FEvHover.Id <> 0) and (FEvHover.HdGen >= 0)
     and (FEvHover.HdGen <= Ord(High(TTyBrushPiece))) then

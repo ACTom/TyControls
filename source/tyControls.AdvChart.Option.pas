@@ -29,6 +29,12 @@ unit tyControls.AdvChart.Option;
   units merged again only when the set that applies has changed. The view
   size is the host's to keep current (SetViewSize, CSS px).
 
+  THE TIMELINE'S FRAMES [Batch 129]: the root's `options`, kept beside the
+  units; every setOption merges, after its base and before the units, the
+  frame at the first timeline's currentIndex (getTimelineOption), and
+  TimelineReset is the timelineChange action's resetOption('timeline'):
+  that frame merged alone.
+
   A REJECTED OPTION LEAVES NO OPTION. The tree goes and Error says why, so the
   chart is blank rather than showing something the option no longer says. The
   earlier rule kept the last good tree, for an editor that re-applied text on
@@ -75,6 +81,10 @@ type
     procedure LegendsNewIn(const AReport: TTyMergeReport);
     { getMediaOption and the merges of what it hands over }
     function MergeMedia(const AReplaceMerge: array of string;
+      ABefore: TTyMergeBeforeComponent; AAfter: TTyMergePassEvent): Boolean;
+    { getTimelineOption and its merge: the frame at the first timeline's
+      currentIndex [Batch 129] }
+    function MergeFrame(const AReplaceMerge: array of string;
       ABefore: TTyMergeBeforeComponent; AAfter: TTyMergePassEvent): Boolean;
     procedure SetError(const AMsg: string; ALine, ACol: Integer);
     procedure ClearError;
@@ -125,6 +135,11 @@ type
       anything was merged. [Batch 107] }
     function MediaRecheck(ABefore: TTyMergeBeforeComponent;
       AAfter: TTyMergePassEvent): Boolean;
+    { resetOption('timeline') with a replaceMerge: the frame at the first
+      timeline's currentIndex merged, with AReplaceMerge -- the timeline's
+      own. True when a frame was merged. [Batch 129] }
+    function TimelineReset(const AReplaceMerge: array of string;
+      ABefore: TTyMergeBeforeComponent; AAfter: TTyMergePassEvent): Boolean;
     property Media: TTyMediaManager read FMedia;
     { False, with Error saying which, when a name is no component main type
       -- upstream asserts on it before it touches anything; the option is
@@ -356,6 +371,55 @@ begin
   for i := 0 to High(FMediaMerged) do FMediaMerged[i].Free;
   FMediaMerged := nil;
   Result := MergeMedia([], ABefore, AAfter);
+end;
+
+function TTyChartOption.MergeFrame(const AReplaceMerge: array of string;
+  ABefore: TTyMergeBeforeComponent; AAfter: TTyMergePassEvent): Boolean;
+var
+  tl, d: TJSONData;
+  idx: Double;
+  frame: TJSONObject;
+  n: Integer;
+  rep: TTyMergeReport;
+  err: string;
+begin
+  Result := False;
+  if not (FRoot is TJSONObject) then Exit;
+  if FMedia.FrameCount = 0 then Exit;
+  { getComponent('timeline'): the first slot, a hole is none }
+  tl := ComponentAt('timeline', 0);
+  if not (tl is TJSONObject) then Exit;
+  { getCurrentIndex: the model's option, its default nought }
+  d := TJSONObject(tl).Find('currentIndex');
+  if d = nil then idx := 0
+  else if d.JSONType = jtNumber then idx := d.AsFloat
+  else Exit;
+  { timelineOptions[index]: an index that is no element is undefined }
+  if IsNan(idx) or IsInfinite(idx) or (Frac(idx) <> 0) or (idx < 0)
+    or (idx >= FMedia.FrameCount) then Exit;
+  frame := FMedia.Frame(Trunc(idx));
+  if frame = nil then Exit;
+  frame := TJSONObject(frame.Clone);
+  { kept: the report's NewOpt points into it }
+  n := Length(FMediaMerged);
+  SetLength(FMediaMerged, n + 1);
+  FMediaMerged[n] := frame;
+  if TyOptionMerge(TJSONObject(FRoot), FKeys, frame, AReplaceMerge, True,
+    ABefore, rep, err) then
+  begin
+    Result := True;
+    LegendsNewIn(rep);
+    if Assigned(AAfter) then AAfter(rep);
+  end;
+end;
+
+function TTyChartOption.TimelineReset(const AReplaceMerge: array of string;
+  ABefore: TTyMergeBeforeComponent; AAfter: TTyMergePassEvent): Boolean;
+var i: Integer;
+begin
+  for i := 0 to High(FMediaMerged) do FMediaMerged[i].Free;
+  FMediaMerged := nil;
+  Result := MergeFrame(AReplaceMerge, ABefore, AAfter);
 end;
 
 procedure TTyChartOption.ClearError;
@@ -1023,8 +1087,9 @@ begin
   TyOptionKeysOfTree(FRoot, FKeys);
   for i := 0 to ComponentCount('legend') - 1 do LegendInitSelected(i);
   ClearError;
-  { and the media that apply, merged over the fresh models: nothing kept
-    outside the tree to write back }
+  { the timeline's frame, then the media that apply, merged over the fresh
+    models: nothing kept outside the tree to write back [Batch 129] }
+  MergeFrame(AReplaceMerge, nil, AAfter);
   MergeMedia(AReplaceMerge, nil, AAfter);
   Result := True;
 end;
@@ -1103,6 +1168,8 @@ begin
   ClearError;
   LegendsNewIn(AReport);
   if Assigned(AAfter) then AAfter(AReport);
+  { the frame of the merged timeline, then the media [Batch 129] }
+  MergeFrame(AReplaceMerge, ABefore, AAfter);
   MergeMedia(AReplaceMerge, ABefore, AAfter);
   Result := True;
 end;

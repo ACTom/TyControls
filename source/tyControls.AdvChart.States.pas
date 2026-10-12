@@ -76,6 +76,9 @@ type
     IsPath: Boolean;
     { echarts' default state proxy is installed: emphasis not disabled }
     Proxy: Boolean;
+    { an element a custom series made: its z2EmphasisLift and z2SelectLift
+      are 1, not 10 and 9 (CustomView.createEl) [Batch 123] }
+    LiftOne: Boolean;
     { the flags }
     HoverState: Integer;
     Selected: Boolean;
@@ -404,7 +407,10 @@ begin
   { only when there is a state at all: a label with no emphasis object gets
     no lift }
   if exists and not AObj.Has[stkZ2] then
-    TyStSetNum(AObj, stkZ2, AEl.Cur.Num[stkZ2] + TyStZ2EmphasisLift);
+  begin
+    if AEl.LiftOne then TyStSetNum(AObj, stkZ2, AEl.Cur.Num[stkZ2] + 1)
+    else TyStSetNum(AObj, stkZ2, AEl.Cur.Num[stkZ2] + TyStZ2EmphasisLift);
+  end;
   Result := exists;
 end;
 
@@ -427,7 +433,10 @@ begin
         if not Result then Exit;
         AObj := AEl.Decl[stnSelect];
         if not AObj.Has[stkZ2] then
-          TyStSetNum(AObj, stkZ2, AEl.Cur.Num[stkZ2] + TyStZ2SelectLift);
+        begin
+          if AEl.LiftOne then TyStSetNum(AObj, stkZ2, AEl.Cur.Num[stkZ2] + 1)
+          else TyStSetNum(AObj, stkZ2, AEl.Cur.Num[stkZ2] + TyStZ2SelectLift);
+        end;
       end;
   else
     begin

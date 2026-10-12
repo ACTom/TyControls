@@ -93,6 +93,11 @@ type
       roundCap -- the ring between R0 and R1 over the sweep, with a half
       disc of the ring's half thickness on either end. [Batch 113] }
     Sausage: Boolean;
+    { A POLYGON HIT BY THE NONZERO RULE, as zrender's Path.contain and the
+      painter fill it: an outline that runs over itself (a chord's self
+      loop traces its arc twice) is inside where even-odd would make a
+      hole. False, the zero value, is even-odd. [Batch 120] }
+    HitNonZero: Boolean;
     { A LARGE-MODE BATCH, the whole series in one path: its points, how they
       are drawn and how the pointer finds a row in them -- AdvChart.Large.
       Default everywhere else. [Batch 117] }
@@ -1235,6 +1240,29 @@ begin
     end;
 end;
 
+{ the winding number of the closed outline round the point: nonzero is in }
+function PolygonWinds(const APoints: TTyPointFArray; AX, AY: Double): Boolean;
+var
+  i, j, wn: Integer;
+  side: Double;
+begin
+  wn := 0;
+  j := High(APoints);
+  for i := 0 to High(APoints) do
+  begin
+    side := (APoints[i].X - APoints[j].X) * (AY - APoints[j].Y)
+      - (AX - APoints[j].X) * (APoints[i].Y - APoints[j].Y);
+    if APoints[j].Y <= AY then
+    begin
+      if (APoints[i].Y > AY) and (side > 0) then Inc(wn);
+    end
+    else if (APoints[i].Y <= AY) and (side < 0) then
+      Dec(wn);
+    j := i;
+  end;
+  Result := wn <> 0;
+end;
+
 function PolygonContains(const APoints: TTyPointFArray; AX, AY: Double): Boolean;
 var
   i, j: Integer;
@@ -1387,7 +1415,8 @@ begin
       begin
         n := Length(AShape.Points);
         if n < 3 then Exit(PolylineNear(AShape.Points, AX, AY, ASlopPx));
-        Result := PolygonContains(AShape.Points, AX, AY);
+        if AShape.HitNonZero then Result := PolygonWinds(AShape.Points, AX, AY)
+        else Result := PolygonContains(AShape.Points, AX, AY);
         { Also accept a point near the OUTLINE, so a polygon squeezed to a
           sliver -- a near-zero-height area band -- is still hittable at all.
           Closing the ring first, because the outline includes the last edge. }

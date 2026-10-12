@@ -80,8 +80,11 @@ function TyEventQueryMatches(const AQuery: TTyEventQuery;
   of the state actions [Batch 88] -- select, unselect, toggleselect,
   selectchanged, highlight, downplay and the six legacy pie / map select
   events; and the legend's five [Batch 93] and its legendscroll [Batch 98];
-  and dragnode, a sankey's node drag [Batch 114]; and datarangeselected, a
-  visualMap's selectDataRange [Batch 116];
+  and dragnode, a sankey's node drag [Batch 114];
+  and the drill-downs' sunburstroottonode, treemapzoomtonode,
+  treemaproottonode, treemapmove and treemaprender [Batch 115];
+  and datarangeselected, a visualMap's selectDataRange [Batch 116];
+  and timelinechanged / timelineplaychanged, the timeline's [Batch 129];
   and the brush's: brush, brushend, globalcursortaken, brushselected, and
   axisareaselected, a parallel axis' area select [Batch 130];
   and axisbreakchanged, the axis breaks' expand / collapse / toggle
@@ -92,6 +95,40 @@ function TyChartEventTypeOf(const AName: string): string;
 { whether a type is one of the action events (no params, a payload) }
 function TyChartEventIsAction(const AType: string): Boolean;
 
+type
+  { AN ELEMENT'S OWN HANDLER'S EVENT [Batch 122]: what zrender hands an
+    `onclick` (an `onmouseover` ...) of a graphic element, as it bubbles up
+    the groups -- the element whose handler runs (its id and name), the
+    element the pointer is over, the event's type and the pointer. }
+  TTyChartElementEvent = record
+    EventType: string;
+    { the '@Name' the option wrote: one method can serve several names }
+    Handler: string;
+    Id, Name: string;
+    TargetId: string;
+    OffsetX, OffsetY: Integer;
+  end;
+
+  { A NAMED ELEMENT HANDLER: what `onclick: '@Name'` runs. True is the
+    function's truthy return -- zrender's cancelBubble: no handler further up
+    runs, and neither does the chart's own event. }
+  TTyChartElementHandler = function(Sender: TObject;
+    const AEvent: TTyChartElementEvent): Boolean of object;
+
+{ ---- element handlers [Batch 122] ----
+  The formatters' rules: a name, registered once, replaced when registered
+  again. }
+procedure TyChartRegisterElementHandler(const AName: string;
+  AHandler: TTyChartElementHandler);
+procedure TyChartUnregisterElementHandler(const AName: string);
+function TyChartFindElementHandler(const AName: string;
+  out AHandler: TTyChartElementHandler): Boolean;
+procedure TyChartClearElementHandlers;
+{ Runs the handler ASpec ('@Name') names: its answer, False when nobody
+  registered it. }
+function TyChartRunElementHandler(const ASpec: string; ASender: TObject;
+  const AEvent: TTyChartElementEvent): Boolean;
+
 implementation
 
 uses
@@ -100,7 +137,7 @@ uses
 const
   cMouseTypes: array[0..8] of string = ('click', 'dblclick', 'mousedown',
     'mouseup', 'mousemove', 'mouseover', 'mouseout', 'globalout', 'contextmenu');
-  cActionTypes: array[0..25] of string = ('select', 'unselect', 'toggleselect',
+  cActionTypes: array[0..32] of string = ('select', 'unselect', 'toggleselect',
     'selectchanged', 'highlight', 'downplay', 'mapselectchanged',
     'pieselectchanged', 'mapselected', 'pieselected', 'mapunselected',
     'pieunselected',
@@ -111,8 +148,13 @@ const
     'legendscroll',
     { a sankey's dragNode [Batch 114] }
     'dragnode',
+    { the drill-downs [Batch 115] }
+    'sunburstroottonode', 'treemapzoomtonode', 'treemaproottonode',
+    'treemapmove', 'treemaprender',
     { a visualMap's selectDataRange [Batch 116] }
     'datarangeselected',
+    { the timeline's two actions [Batch 129] }
+    'timelinechanged', 'timelineplaychanged',
     { the brush's actions and its visual stage's brushSelect [Batch 126,
       127], and the parallel axes' axisAreaSelect, which upstream registers
       with the event axisAreaSelected -- all published as chart events
@@ -241,6 +283,74 @@ function SameNum(const AQ: TTyEventQueryValue; AHost: Integer;
 begin
   if not AQ.Has then Exit(True);
   Result := AHostHas and AQ.IsNumber and (AQ.Num = AHost);
+end;
+
+{ ==================== element handlers [Batch 122] ==================== }
+
+type
+  TElementHandlerEntry = record
+    Name: string;
+    Handler: TTyChartElementHandler;
+  end;
+
+var
+  GElementHandlers: array of TElementHandlerEntry;
+
+procedure TyChartRegisterElementHandler(const AName: string;
+  AHandler: TTyChartElementHandler);
+var i: Integer;
+begin
+  for i := 0 to High(GElementHandlers) do
+    if GElementHandlers[i].Name = AName then
+    begin
+      GElementHandlers[i].Handler := AHandler;
+      Exit;
+    end;
+  SetLength(GElementHandlers, Length(GElementHandlers) + 1);
+  GElementHandlers[High(GElementHandlers)].Name := AName;
+  GElementHandlers[High(GElementHandlers)].Handler := AHandler;
+end;
+
+procedure TyChartUnregisterElementHandler(const AName: string);
+var i, k: Integer;
+begin
+  for i := 0 to High(GElementHandlers) do
+    if GElementHandlers[i].Name = AName then
+    begin
+      for k := i to High(GElementHandlers) - 1 do
+        GElementHandlers[k] := GElementHandlers[k + 1];
+      SetLength(GElementHandlers, Length(GElementHandlers) - 1);
+      Exit;
+    end;
+end;
+
+function TyChartFindElementHandler(const AName: string;
+  out AHandler: TTyChartElementHandler): Boolean;
+var i: Integer;
+begin
+  AHandler := nil;
+  for i := 0 to High(GElementHandlers) do
+    if GElementHandlers[i].Name = AName then
+    begin
+      AHandler := GElementHandlers[i].Handler;
+      Exit(Assigned(AHandler));
+    end;
+  Result := False;
+end;
+
+procedure TyChartClearElementHandlers;
+begin
+  GElementHandlers := nil;
+end;
+
+function TyChartRunElementHandler(const ASpec: string; ASender: TObject;
+  const AEvent: TTyChartElementEvent): Boolean;
+var h: TTyChartElementHandler;
+begin
+  Result := False;
+  if (Length(ASpec) < 2) or (ASpec[1] <> '@') then Exit;
+  if not TyChartFindElementHandler(Copy(ASpec, 2, MaxInt), h) then Exit;
+  Result := h(ASender, AEvent);
 end;
 
 function TyEventQueryMatches(const AQuery: TTyEventQuery;

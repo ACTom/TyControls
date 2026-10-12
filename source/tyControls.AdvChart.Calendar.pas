@@ -158,6 +158,10 @@ type
     function DatePoint(AMs: Double; AClamp: Boolean): TTyPointF;
     function DateCell(AMs: Double; AClamp: Boolean): TTyCalCellLayout;
     function DateLayout(AMs: Double; AClamp: Boolean): TTyCoordLayout;
+    { dataToLayout's rect and contentRect as upstream holds them, x, y,
+      width and height -- not edges, whose differences would round
+      [Batch 124] }
+    procedure DateLayoutXYWH(AMs: Double; AClamp: Boolean; out ARect, AContent: TTyXYWH);
     { ---- ITyCoordSys: data is [ms, value]; the value is ignored ---- }
     function CoordSysName: string;
     function DimCount: Integer;
@@ -1137,6 +1141,23 @@ begin
   ShrinkDim(x, w, FLineWidth / 2);
   ShrinkDim(y, h, FLineWidth / 2);
   Result.ContentRect := TyRectF(x, y, x + w, y + h);
+end;
+
+procedure TTyCalendar.DateLayoutXYWH(AMs: Double; AClamp: Boolean;
+  out ARect, AContent: TTyXYWH);
+var
+  p: TTyPointF;
+  x, y, w, h: Double;
+begin
+  p := DatePoint(AMs, AClamp);
+  x := p.X - FSW / 2;
+  y := p.Y - FSH / 2;
+  ARect := TyXYWH(x, y, FSW, FSH);
+  w := FSW;
+  h := FSH;
+  ShrinkDim(x, w, FLineWidth / 2);
+  ShrinkDim(y, h, FLineWidth / 2);
+  AContent := TyXYWH(x, y, w, h);
 end;
 
 function TTyCalendar.CoordSysName: string;
