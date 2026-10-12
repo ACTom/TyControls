@@ -254,6 +254,9 @@ type
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Loaded; override;
+    { 'TyPropertyGrid', hung on 'TyValueListEditor' (see the initialization): a theme silent about
+      it styles the grid as the value list editor. The rows and their parts keep the editor's keys. }
+    function GetStyleTypeKey: string; override;
     { One write into the object, wrapped in OnPropertyChanging / OnPropertyChanged /
       OnPropertyError. AText is the row's text for pwkText (and comes back as the object reads
       it), AObject the font or the list for the other two. AExceptRow is the row the caller will
@@ -404,7 +407,7 @@ function TyIsColorType(ATypeInfo: PTypeInfo): Boolean;
 implementation
 
 uses
-  tyControls.StrConsts, tyControls.Dialogs;
+  tyControls.StyleModel, tyControls.StrConsts, tyControls.Dialogs;
 
 function TyIsColorType(ATypeInfo: PTypeInfo): Boolean;
 begin
@@ -1501,6 +1504,11 @@ begin
   RebuildRows(False);
 end;
 
+function TTyCustomPropertyGrid.GetStyleTypeKey: string;
+begin
+  Result := 'TyPropertyGrid';
+end;
+
 function TTyCustomPropertyGrid.GetFixedKeyOptions: TTyKeyOptions;
 begin
   Result := [];
@@ -1896,5 +1904,11 @@ begin
   end;
   inherited KeyDown(Key, Shift);
 end;
+
+initialization
+  TyTryRegisterTypeKeyParent('TyPropertyGrid', 'TyValueListEditor');
+
+finalization
+  TyUnregisterTypeKeyParent('TyPropertyGrid');
 
 end.

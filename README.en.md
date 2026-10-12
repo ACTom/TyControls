@@ -1,6 +1,6 @@
 # TyControls
 
-A custom-drawn component library for Lazarus. All 194 controls are rendered with BGRABitmap and styled by `.tycss` text themes, so your UI looks exactly the same on Windows, Linux, and macOS.
+A custom-drawn component library for Lazarus. All 195 controls are rendered with BGRABitmap and styled by `.tycss` text themes, so your UI looks exactly the same on Windows, Linux, and macOS.
 
 > **中文:** [README.md](README.md) · **Changelog:** [CHANGELOG.en.md](CHANGELOG.en.md)
 
@@ -36,7 +36,7 @@ Every example, every tab page, in light and dark: see the [gallery](docs/gallery
 
 ## Features
 
-- **194 controls**: buttons, inputs, lists, data grid, virtual tree, Ribbon, calendar, shell file browsing, 20 custom-drawn dialogs and 22 data-aware controls
+- **195 controls**: buttons, inputs, lists, data grid, virtual tree, Ribbon, calendar, shell file browsing, 20 custom-drawn dialogs and 22 data-aware controls
 - **Identical on all three platforms**: fully custom-drawn, no native control wrapping — one code base renders the same UI everywhere
 - **Theming**: 17 built-in themes switched by a single property, with runtime hot-swap and OS light/dark and accent-color following; themes are text files, so restyling needs no recompile
 - **Classic and modern looks**: from Win95 / XP bevels to Win11 / Material flat design, with a switchable control-density scale
@@ -80,7 +80,7 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 
 ## Control list
 
-194 controls across 17 palette pages. Per-control properties, events, and theme keys: **[docs/controls/](docs/controls/)**.
+195 controls across 17 palette pages. Per-control properties, events, and theme keys: **[docs/controls/](docs/controls/)**.
 
 ### Core · `TyControls` (2)
 
@@ -145,7 +145,7 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 | `TTyCheckGroup` | Titled check-box group |
 | `TTySegmented` | Segmented control |
 
-### Lists & dropdowns · `TyControls Lists` (14)
+### Lists & dropdowns · `TyControls Lists` (15)
 
 | Control | Description |
 |---|---|
@@ -159,7 +159,8 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 | `TTyAdvancedComboBox` | Two-line items (title + subtitle + image) |
 | `TTyAdvancedListBox` | Rich two-line list |
 | `TTyCheckComboBox` | Multi-select combo box |
-| `TTyValueListEditor` | Property grid: key on the left, value on the right, editor kind per row |
+| `TTyValueListEditor` | Name/value editor: key on the left, value on the right, editor kind per row |
+| `TTyPropertyGrid` | Property grid: lists an object's published properties and writes edits straight back |
 | `TTyTransfer` | Dual-list transfer |
 | `TTyTreeSelect` | Selector whose dropdown is a tree |
 | `TTyCascader` | Cascading multi-column selector |
@@ -421,6 +422,7 @@ Each example builds standalone: `lazbuild examples/<name>/<project>.lpi`.
 | [toolwindows](examples/toolwindows/) | IDE-style workbench: side bars and a bottom panel, drag windows across, save and restore the layout |
 | [dbcontrols](examples/dbcontrols/) | Data-aware controls: all 21 bound to an in-memory table; navigating, editing, NULLs, lookups, photos |
 | [dbgrid](examples/dbgrid/) | Data grid: a thousand orders, design-time columns (check box, lookup, memo, formatted amount), sorting by title click, deleting a multiselection, a read-only switch |
+| [propertygrid](examples/propertygrid/) | Property grid: click a control to inspect it and edit it in place; a show-events switch and a filter box built on `OnFilterProperty` |
 | [terminal](examples/terminal/) | Terminal: asciicast replay, a real shell (ConPTY / PTY / pipes), ZModem send and receive, skins, colour schemes, a key-code panel |
 
 Thirty-plus single-control examples live under [examples/](examples/).

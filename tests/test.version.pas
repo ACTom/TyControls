@@ -443,7 +443,7 @@ initialization
     TTyComboBox, TTyMRUComboBox, TTyComboBoxEx, TTyOfficeComboBox]);
   Reg([
     TTyAdvancedComboBox, TTyCheckComboBox, TTyListBox, TTyCheckListBox, TTyOfficeListBox,
-    TTyAdvancedListBox, TTyValueListEditor, TTyTransfer, TTyTreeSelect, TTyCascader,
+    TTyAdvancedListBox, TTyValueListEditor, TTyPropertyGrid, TTyTransfer, TTyTreeSelect, TTyCascader,
     TTyColorBox, TTyColorComboBox, TTyColorListBox, TTyColorGrid, TTyLColorPicker,
     TTyHSColorPicker, TTyFontComboBox, TTyFontListBox, TTyFontSizeComboBox, TTyFilterComboBox,
     TTyShellComboBox, TTyGauge, TTyMeter, TTyLevelMeter, TTyDial, TTyGearDial, TTyAnalogClock,
@@ -493,9 +493,6 @@ initialization
     checked against, so it is registered plainly here -- form files read in the tests and the
     custom-class guards resolve it by name. }
   RegisterClasses([TTyGradientTrackBar]);
-  { The property grid (#65) the same way, until its palette entry (plan Task 5) puts it in
-    Design.pas. }
-  RegisterClasses([TTyPropertyGrid]);
   RegisterTest(TVersionTest);
 
 finalization
