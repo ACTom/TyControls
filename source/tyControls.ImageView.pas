@@ -731,15 +731,15 @@ var
   p: TPoint;
   factor: Double;
 begin
-  if FSource <> nil then
-  begin
-    p := ScreenToClient(MousePos);
-    factor := Power(1.15, WheelDelta / 120);
-    ZoomAt(factor, p.X, p.Y);
-    Result := True;   // handled
-  end
-  else
-    Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
+  { The application's wheel events first, image or no image; a handler that sets Handled keeps
+    the notch. With an image shown this zoomed without calling inherited, so OnMouseWheel and
+    OnMouseWheelUp/Down never fired (#62). }
+  Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
+  if Result or (FSource = nil) then Exit;
+  p := ScreenToClient(MousePos);
+  factor := Power(1.15, WheelDelta / 120);
+  ZoomAt(factor, p.X, p.Y);
+  Result := True;   // handled
 end;
 
 procedure TTyCustomImageView.DblClick;

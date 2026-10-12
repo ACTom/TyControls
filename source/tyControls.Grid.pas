@@ -5112,6 +5112,10 @@ function TTyCustomGrid.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
 var
   step: Integer;
 begin
+  { The application's OnMouseWheel, then OnMouseWheelUp/Down -- TControl fires them -- and a
+    handler that sets Handled keeps the notch, as in LCL's TCustomGrid. This override never
+    called inherited, so none of the three ever fired (#62). }
+  if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
   { 一格滚轮走三行 —— 与列表/树保持一致的手感。 }
   step := 3 * ScaleI(GetDefaultRowHeight);
   if WheelDelta > 0 then SetScrollY(FScrollY - step)
