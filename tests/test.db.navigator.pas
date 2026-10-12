@@ -56,6 +56,12 @@ type
       buttons black, an enabled mark white and a disabled one red; ACss is added to it. }
     function Render(const ACss: string): TBGRABitmap;
     function InkIn(ABmp: TBGRABitmap; const ARect: TRect; ARed: Boolean): Integer;
+    { The navigator moved onto a panel the theme paints lime, and rendered on a magenta ground
+      under the base layer with nothing but that panel rule added: the strip's own look is
+      whatever the built-in rules give it. }
+    function RenderOnLime(const AStyleClass, AOverride: string): TBGRABitmap;
+    { How many pixels of the strip's outermost ring are not the lime parent. }
+    function NotLimeOnTheEdges(ABmp: TBGRABitmap): Integer;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -92,6 +98,8 @@ type
     procedure TestEveryVisibleButtonCarriesAMark;
     procedure TestThemeGlyphReplacesTheBuiltInMark;
     procedure TestImagesReplaceTheMarks;
+    procedure TestTheStripDrawsNoFrame;
+    procedure TestAStyleOverrideBringsTheFrameBack;
     procedure TestFreedDataSourceUnbinds;
     procedure TestDataSourceRemovedFromItsOwnerUnbinds;
     procedure TestGetDataLinkAnswersTheLink;
@@ -102,7 +110,7 @@ type
 implementation
 
 uses
-  ImgList, test.db.edits;
+  ImgList, tyControls.Panel, test.db.edits;
 
 type
   TNavInput = class(TWinControl);
@@ -272,6 +280,59 @@ begin
       else if (p.red > 200) and (p.green > 200) and (p.blue > 200) then
         Inc(Result);
     end;
+end;
+
+function TDBNavigatorTest.RenderOnLime(const AStyleClass, AOverride: string): TBGRABitmap;
+var
+  host: TTyPanel;
+  bmp: TBitmap;
+begin
+  FreeAndNil(FTheme);
+  FTheme := TTyStyleController.Create(nil);
+  FTheme.LoadThemeCss('TyPanel { background: #00FF00; }');
+  host := TTyPanel.Create(FForm);
+  host.Controller := FTheme;
+  host.Parent := FForm;
+  host.SetBounds(0, 0, 360, 60);
+  FNav.Parent := host;
+  FNav.SetBounds(8, 8, 300, 30);
+  FNav.Controller := FTheme;
+  FNav.StyleClass := AStyleClass;
+  FNav.StyleOverride := AOverride;
+  FNav.Font.PixelsPerInch := 96;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FNav.Width, FNav.Height);
+    bmp.Canvas.Brush.Color := clFuchsia;   // the sentinel: what no fill at all would leave
+    bmp.Canvas.FillRect(0, 0, FNav.Width, FNav.Height);
+    FNav.Render(bmp.Canvas, Rect(0, 0, FNav.Width, FNav.Height), 96);
+    Result := TBGRABitmap.Create(bmp);
+  finally
+    bmp.Free;
+  end;
+end;
+
+function IsLime(const P: TBGRAPixel): Boolean;
+begin
+  Result := (P.red <= 2) and (P.green >= 253) and (P.blue <= 2);
+end;
+
+function TDBNavigatorTest.NotLimeOnTheEdges(ABmp: TBGRABitmap): Integer;
+var
+  x, y: Integer;
+begin
+  Result := 0;
+  for x := 0 to ABmp.Width - 1 do
+  begin
+    if not IsLime(ABmp.GetPixel(x, 0)) then Inc(Result);
+    if not IsLime(ABmp.GetPixel(x, ABmp.Height - 1)) then Inc(Result);
+  end;
+  for y := 1 to ABmp.Height - 2 do
+  begin
+    if not IsLime(ABmp.GetPixel(0, y)) then Inc(Result);
+    if not IsLime(ABmp.GetPixel(ABmp.Width - 1, y)) then Inc(Result);
+  end;
 end;
 
 { ------------------------------------------------------------------ defaults ----------- }
@@ -709,6 +770,77 @@ begin
   try
     AssertEquals('Next: the theme''s (empty) glyph', 0, InkIn(bmp, FNav.ButtonRect(nbNext), False));
     AssertTrue('Prior: still the built-in mark', InkIn(bmp, FNav.ButtonRect(nbPrior), False) > 4);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ The strip has no frame and no fill: on a lime panel, its outermost ring of pixels is lime --
+  not the tool bar's border colour, not its bar colour, and not the magenta ground, which is
+  what a strip that filled nothing at all would leave. The ghost buttons are transparent at
+  rest, so the ring is the strip alone; with plain buttons, the gaps between them, top to
+  bottom, are the parent's too. }
+procedure TDBNavigatorTest.TestTheStripDrawsNoFrame;
+var
+  bmp: TBGRABitmap;
+  b, nxt: TDBNavButtonType;
+  x, y, gaps, wrong: Integer;
+begin
+  FDS.First;
+  FDS.Next;
+  bmp := RenderOnLime('ghost', '');
+  try
+    AssertEquals('the edges are the parent''s surface', 0, NotLimeOnTheEdges(bmp));
+  finally
+    bmp.Free;
+  end;
+  bmp := RenderOnLime('', '');
+  try
+    gaps := 0;
+    wrong := 0;
+    for b := Low(TDBNavButtonType) to Pred(High(TDBNavButtonType)) do
+    begin
+      nxt := Succ(b);
+      for x := FNav.ButtonRect(b).Right to FNav.ButtonRect(nxt).Left - 1 do
+      begin
+        Inc(gaps);
+        for y := 0 to bmp.Height - 1 do
+          if not IsLime(bmp.GetPixel(x, y)) then Inc(wrong);
+      end;
+    end;
+    AssertTrue('there are gaps between the buttons: ' + IntToStr(gaps), gaps >= 9);
+    AssertEquals('the gaps are the parent''s surface, top to bottom', 0, wrong);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ A StyleOverride border width on the one navigator brings the frame back, in the bar's border
+  colour (which still reaches the strip): the strip resolves a visible 1px border, and none of
+  its outermost ring is the lime parent any more. }
+procedure TDBNavigatorTest.TestAStyleOverrideBringsTheFrameBack;
+var
+  bmp: TBGRABitmap;
+  st: TTyStyleSet;
+  p: TBGRAPixel;
+begin
+  FDS.First;
+  FDS.Next;
+  bmp := RenderOnLime('ghost', 'border-width: 1px;');
+  try
+    st := FNav.CurrentStyle;
+    AssertEquals('the override''s width', 1, st.BorderWidth);
+    AssertTrue('a visible border', TyBorderVisible(st));
+    AssertEquals('a frame all round: ' + IntToStr(NotLimeOnTheEdges(bmp)),
+      2 * bmp.Width + 2 * (bmp.Height - 2), NotLimeOnTheEdges(bmp));
+    { The painter's 1px stroke is antialiased over the lime, so the edge is a mix, not the exact
+      grey. A light grey mixed in still shows: all three channels are up, where the lime parent
+      has no red or blue and the magenta ground no green. }
+    AssertTrue('the bar''s border colour is a light grey', (TyRedOf(st.BorderColor) > 150)
+      and (TyGreenOf(st.BorderColor) > 150) and (TyBlueOf(st.BorderColor) > 150));
+    p := bmp.GetPixel(bmp.Width div 2, 0);
+    AssertTrue(Format('in the border colour: %d,%d,%d', [p.red, p.green, p.blue]),
+      (p.red > 100) and (p.green > 100) and (p.blue > 100));
   finally
     bmp.Free;
   end;
