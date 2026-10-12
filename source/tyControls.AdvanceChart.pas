@@ -729,12 +729,23 @@ type
     FTbSel: TTyTbSnapshot;
     FTbBackup: string;
     FTbCursor: string;
-    FTbBrushing, FTbCover: Boolean;
+    { the select brush's end: its grid, type and range (CSS px: x lo, x hi,
+      y lo, y hi) }
     FTbBrushGrid: Integer;
     FTbBrushType: TTyTbBrushType;
-    FTbBrushPanel: TTyXYWH;
-    FTbTrack, FTbRange: array[0..3] of Double;
-    FTbCoverRect: TTyXYWH;
+    FTbRange: array[0..3] of Double;
+    { THE SELECT BRUSH IS A BrushController [Batch 127]: brushType 'auto',
+      its panels the grids the select dataZooms target (each one's build
+      grid index beside it) }
+    FTbBrushCtl: TTyBrushController;
+    FTbBrushGrids: TTyIntegerArray;
+    { the brush feature's render: BrushFeature._brushType / _brushMode, and
+      the statuses an update that renders later took at its dispatch }
+    FTbBfHas, FTbBfMulti: Boolean;
+    FTbBfType: TTyBrushType;
+    FTbBfSnap: Boolean;
+    FTbBfSnapHas, FTbBfSnapMulti, FTbBfSnapBrushed: Boolean;
+    FTbBfSnapType: TTyBrushType;
     FTbError: string;
     FOnToolboxSaveAsImage: TTyToolboxSaveEvent;
     { THE BRUSH COMPONENTS [Batch 126] -- see their section. Per component:
@@ -762,6 +773,18 @@ type
     FBrushInSelect: Boolean;
     FBrushSelLog: array of TTyBrushSelectRec;
     FBrushEvLog: array of TTyBrushEventRec;
+    { THE SELECTION [Batch 127]: FVisualRows as the visual stages before the
+      brush's left them (the brush writes over a copy of these); an action's
+      update whose brushSelect the next visual stage dispatches; the
+      brushselected events waiting for their action's own event, and how
+      deep the actions nest; the globalPan mutex's holder (a controller's
+      uid, 0 none) }
+    FBrushVisBase: array of TTyVisualRowArray;
+    FBrushVisBaseOk: Boolean;
+    FBrushPayload: Boolean;
+    FBrushEmitQ: TTyStringArray;
+    FBrushActDepth: Integer;
+    FPanHolder: Integer;
     { `itemStyle.color: 'none'` -- the series paints NO fill. Not the same as
       unwritten, which is the palette's. }
     FSeriesColorNone: array of Boolean;
@@ -1282,12 +1305,18 @@ type
     procedure TbSelPut(const AKey: string; AIsValue: Boolean; A, B: Double);
     procedure TbDispatchZoom(const ASnap: TTyTbSnapshot);
     procedure TbBack;
-    function TbPanelAt(AX, AY: Double; out AType: TTyTbBrushType; out ARect: TTyXYWH): Integer;
-    procedure TbBrushDown(AX, AY: Integer);
-    procedure TbBrushTrack(AX, AY: Integer);
-    procedure TbBrushMove(AX, AY: Integer);
-    procedure TbBrushUp(AX, AY: Integer);
+    { the select brush's controller [Batch 127] }
+    procedure TbZoomCtlSync;
+    procedure TbCtlDown(AX, AY: Integer; ADraggable: Boolean);
+    procedure TbCtlMove(AX, AY: Integer);
+    procedure TbCtlUp(AX, AY: Integer);
+    procedure TbCtlTrigger(const ATrig: TTyBrushTrigger);
     procedure TbBrushEnd;
+    { the brush feature [Batch 127] }
+    procedure TbBrushModelState(out AHas, AMulti, ABrushed: Boolean; out AType: TTyBrushType);
+    procedure TbBrushSnap;
+    procedure TbBrushRender(ATb: Integer);
+    procedure TbBrushClick(const AIcon: string);
     procedure TbApplyCursor(AX, AY: Integer);
     procedure TbFrame;
     { the brush components [Batch 126] }
@@ -1311,7 +1340,7 @@ type
     procedure BrushLogEvent(const AType: string; ABrush: Integer; AFromSelf: Boolean;
       const AAreas: TTyBrushAreaArray; const APayload: string);
     function BrushClock: Double;
-    procedure BrushVisual;
+    procedure BrushVisual(const ABatch: TTyBrushSelectBatch);
     procedure BrushExecSelect(const ABatch: TTyBrushSelectBatch; ATime: Double);
     procedure BrushDropPending(AId: Integer);
     procedure BrushArmTimer;
@@ -1326,6 +1355,17 @@ type
     function BrushCrosshair(AX, AY: Integer): Boolean;
     procedure BrushChanged;
     function BuildBrushes(AList: TTyPaintList): Integer;
+    { the selection, the globalPan mutex, onIrrelevantElement [Batch 127] }
+    procedure BrushEnableCtl(ACtl: TTyBrushController; const AOpt: TTyBrushOpt; AAuto: Boolean);
+    procedure BrushFreeCtl(var ACtl: TTyBrushController);
+    function PanTaken: Boolean;
+    function BrushIrrelevant(const APanel: TTyBrushPanel; AX, AY: Double): Boolean;
+    procedure BrushVisCapture;
+    function BrushSelectCompute: TTyBrushSelectBatch;
+    procedure BrushSelectRun(ADispatch: Boolean; ARepaint: Boolean = True);
+    procedure BrushFlush;
+    function BrushSelectedJson(const ABatch: TTyBrushSelectBatch): string;
+    procedure BrushDoAxisAreaSelect(APayload: TJSONObject);
     procedure ApplyVisualMaps(var AVisual: TTySeriesVisual; ASlot,
       APPI: Integer);
     { The THEME's ramp at ASlot, with nothing of the option in it. Split out
@@ -2203,6 +2243,8 @@ type
     procedure BrushTick(ANow: Double);
     property BrushCursorName: string read FBrushCursor;
     property BrushNow: Double read FBrushNow write FBrushNow;
+    { whether some brush controller holds globalPan [Batch 127] }
+    function BrushGlobalPanTaken: Boolean;
     { ---- progressive rendering and appendData [Batch 119] ---- }
     { chart.appendData with seriesIndex and data: ADataJson, a JSON array of data
       items, appended to the series' own `data`. Nothing is drawn until the
@@ -2753,6 +2795,7 @@ begin
   FreeAndNil(FTrailLayer);
   FreeAndNil(FDzTimer);
   BrushReset;
+  BrushFreeCtl(FTbBrushCtl);
   FreeAndNil(FBrushTimer);
   FreeAndNil(FTipTimer);
   { THE PROXIES BEFORE THE DRIVER: freeing one takes its clips off it }
@@ -2992,8 +3035,9 @@ begin
   FTbMagicTitle := nil;
   FTbSel := nil;
   FTbHistory := nil;
-  FTbBrushing := False;
-  FTbCover := False;
+  { the feature's view is new: its select brush too [Batch 127] }
+  BrushFreeCtl(FTbBrushCtl);
+  FTbBfSnap := False;
   FDzRoamThrottle := nil;
   FDzRoamBatch := nil;
   FDzHover := Default(TTyDzTarget);
@@ -3302,7 +3346,25 @@ end;
 
 procedure TTyAdvanceChart.MergeBefore(const AMainType: string; AIndex: Integer;
   ANode, ANew: TJSONObject);
+
+  function HasKeys(AData: TJSONData): Boolean;
+  begin
+    Result := (AData <> nil) and (AData.JSONType in [jtObject, jtArray]) and (AData.Count > 0);
+  end;
+
 begin
+  { replaceVisualOption [Batch 127]: a merge that writes inBrush or
+    outOfBrush with any key replaces both -- the one it does not write goes
+    (and optionUpdated's defaults come back) }
+  if AMainType = 'brush' then
+  begin
+    if HasKeys(ANew.Find('inBrush')) or HasKeys(ANew.Find('outOfBrush')) then
+    begin
+      if ANode.IndexOfName('inBrush') >= 0 then ANode.Delete('inBrush');
+      if ANode.IndexOfName('outOfBrush') >= 0 then ANode.Delete('outOfBrush');
+    end;
+    Exit;
+  end;
   if AMainType = 'visualMap' then
   begin
     { setSelected wrote `range` into the model's option: it goes into the
@@ -4548,6 +4610,15 @@ begin
   { the brush components: the visual stage's layoutCovers, then every brush
     view's render -- the covers laid from the model's areas [Batch 126] }
   if not FStreamRelayout and not FExporting then BrushPass;
+  { THE BRUSH'S VISUAL STAGE [Batch 127]: what every brush selects, its
+    inBrush / outOfBrush visuals over the rows the visual stages left, and
+    -- for an action's update -- brushSelect through the throttle }
+  if not FStreamRelayout then
+  begin
+    BrushVisCapture;
+    BrushSelectRun(FBrushPayload and not FExporting, False);
+    if FBrushActDepth = 0 then BrushFlush;
+  end;
   FDirty := False;
   { the update's flush: `rendered` once it is painted [Batch 119] }
   if not FStreamRelayout and not FExporting then FFlushDue := True;
@@ -6764,12 +6835,21 @@ begin
       pay.Delay := 0;
     end;
   end;
+  { the dataZoom action's update runs the visual stage with a payload: the
+    brush's brushSelect [Batch 127] }
+  FBrushPayload := True;
+  Inc(FBrushActDepth);
   try
-    DzSyncLayout(pay, hasPay);
+    try
+      DzSyncLayout(pay, hasPay);
+    finally
+      FDzFrom := -1;
+    end;
+    if Assigned(FOnDataZoom) then FOnDataZoom(Self, AAction);
   finally
-    FDzFrom := -1;
+    Dec(FBrushActDepth);
   end;
-  if Assigned(FOnDataZoom) then FOnDataZoom(Self, AAction);
+  if FBrushActDepth = 0 then BrushFlush;
   { the dispatch's triggerUpdatedEvent [Batch 97] }
   EmitUpdated;
 end;
@@ -8585,13 +8665,14 @@ begin
   { THE BRUSH COMPONENTS' controllers: a press in a panel starts a track,
     not on a draggable element (a slider's handle) [Batch 126] }
   BrushCtlDown(X, Y, FDzDrag.Kind <> dtkNone);
-  { THE TOOLBOX'S BRUSH holds globalPan while the zoom is on: no roam pans
+  { THE TOOLBOX'S SELECT BRUSH, a BrushController [Batch 127] }
+  TbCtlDown(X, Y, FDzDrag.Kind <> dtkNone);
+  { globalPan HELD -- by the toolbox's brush while the zoom is on, by a
+    brush component's controller while it draws [Batch 127]: no roam pans
     under it, the inside dataZoom's nor a graph's [Batch 125] }
-  if FTbZoomActive then
+  if PanTaken then
   begin
     FDzPanGrid := -1;
-    { not on a draggable element (a slider's handle) }
-    if FDzDrag.Kind = dtkNone then TbBrushDown(X, Y);
     Exit;
   end;
   if (FDzDrag.Kind = dtkSlider) or (FDzPanGrid >= 0)
@@ -8625,7 +8706,7 @@ begin
     { zrender's mouseup, then the DOM click at the same point }
     DataZoomPointer(dpUp, X, Y, Shift, 0);
     { the brush ends on zrender's mouseup [Batch 125] }
-    TbBrushUp(X, Y);
+    TbCtlUp(X, Y);
     { and the brush components' controllers [Batch 126] }
     BrushCtlUp(X, Y);
     DataZoomPointer(dpClick, X, Y, Shift, 0);
@@ -8673,7 +8754,7 @@ begin
   if (FDzDrag.Kind <> dtkNone) or (FDzPanGrid >= 0) then
     DataZoomPointer(dpUp, FDzLastX, FDzLastY, [], 0);
   { a brush ends as a release would end it [Batch 125] }
-  if FTbBrushing then TbBrushUp(FEvLastX, FEvLastY);
+  TbCtlUp(FEvLastX, FEvLastY);
   { a cover's drag and a brush component's track too [Batch 126] }
   BrushDragEnd;
   BrushCtlUp(FEvLastX, FEvLastY);
@@ -21553,10 +21634,19 @@ begin
     Exit;
   end;
   p := TJSONObject(d);
+  { an action's brushselected comes after its own event [Batch 127] }
+  Inc(FBrushActDepth);
   try
     tp := p.Find('type');
     if (tp = nil) or (tp.JSONType <> jtString) then Exit;
     t := tp.AsString;
+    { THE ACTIONS WHOSE UPDATE RUNS THE VISUAL STAGE with a payload: the
+      brush's brushSelect is dispatched by it [Batch 127] }
+    if (t = 'selectDataRange') or (t = 'legendToggleSelect') or (t = 'legendSelect')
+      or (t = 'legendUnSelect') or (t = 'legendAllSelect') or (t = 'legendInverseSelect')
+      or (t = 'legendScroll') or (t = 'dragNode') or (t = 'restore')
+      or (t = 'changeMagicType') or (t = 'changeDataView') then
+      FBrushPayload := True;
     { A BATCH of highlight / downplay [Batch 116]: each item over the
       payload, one event; any other batch is not taken }
     if (p.Find('batch') is TJSONArray) and ((t = 'highlight') or (t = 'downplay')) then
@@ -21628,10 +21718,20 @@ begin
     begin
       BrushDoEnd(p);
       Result := True;
+    end
+    { the parallel axes' area select, which the brush feature's clear
+      dispatches: no parallel here, the update and the event [Batch 127] }
+    else if t = 'axisAreaSelect' then
+    begin
+      BrushDoAxisAreaSelect(p);
+      Result := True;
     end;
   finally
     p.Free;
+    Dec(FBrushActDepth);
   end;
+  { the pending brushSelect, then triggerUpdatedEvent [Batch 127] }
+  if FBrushActDepth = 0 then BrushFlush;
   { every dispatch ends with triggerUpdatedEvent [Batch 97] }
   if Result then EmitUpdated;
 end;
@@ -24773,7 +24873,7 @@ begin
   if FSankeyDragSlot >= 0 then SankeyDragMove(X, Y);
   DataZoomPointer(dpMove, X, Y, Shift, 0);
   { the toolbox's brush [Batch 125] }
-  TbBrushMove(X, Y);
+  TbCtlMove(X, Y);
   spec := TyTooltipSpecOf(FOption, -1, -1);
   { NOTHING ABOUT THE TOOLTIP IS CHECKED HERE, and that is the point. What is
     under the pointer is a fact about geometry; whether a BOX is drawn for it
@@ -26787,6 +26887,13 @@ begin
   Result.Tiled := rsTyChartToolboxTiled;
   Result.DataViewClose := rsMsgBtnClose;
   Result.DataViewRefresh := rsTyChartToolboxDataViewRefresh;
+  { the brush feature's [Batch 127] }
+  Result.BrushRect := rsTyChartToolboxBrushRect;
+  Result.BrushPolygon := rsTyChartToolboxBrushPolygon;
+  Result.BrushLineX := rsTyChartToolboxBrushLineX;
+  Result.BrushLineY := rsTyChartToolboxBrushLineY;
+  Result.BrushKeep := rsTyChartToolboxBrushKeep;
+  Result.BrushClear := rsTyChartToolboxBrushClear;
 end;
 
 function TTyAdvanceChart.TbScale: Double;
@@ -26917,6 +27024,8 @@ begin
       if TyTbHistoryCount(FTbHistory) > 1 then TbSetStatus(t, 'dataZoom', 'back', 'emphasis')
       else TbSetStatus(t, 'dataZoom', 'back', 'normal');
     end;
+    { the brush feature's buttons, at every render [Batch 127] }
+    if TbHasFeature(t, 'brush') then TbBrushRender(t);
     st := TbStatusOf(t);
     try
       FTbSpecs[t] := TyToolboxSpecOf(FOption, t, TbTitles, st, FTbMagicTitle[t]);
@@ -26951,12 +27060,11 @@ begin
       FTbLive[t][i].AdjAlign := FTbSpecs[t].Icons[i].Status;
   end;
   { a dataZoom feature that went takes its active flag with it }
-  if not dzOn then
-  begin
-    FTbZoomActive := False;
-    FTbBrushing := False;
-    FTbCover := False;
-  end;
+  if not dzOn then FTbZoomActive := False;
+  { the statuses an update took at its dispatch are spent [Batch 127] }
+  FTbBfSnap := False;
+  { updateZoomBtnStatus: the select brush's panels, on or off [Batch 127] }
+  TbZoomCtlSync;
 end;
 
 { zrender's composition of the group's move and the icon's: a move inside
@@ -27156,15 +27264,15 @@ begin
       Inc(Result);
     end;
   end;
-  { the brush's cover while it is drawn }
-  if FTbCover then
+  { the brush's cover while it is drawn (the controller's) [Batch 127] }
+  if (FTbBrushCtl <> nil) and (Length(FTbBrushCtl.Covers) > 0) then
   begin
     el := Default(TTyChartElement);
     el.Silent := True;
     el.Datum := TyChartDatum(-1, -1);
     el.Z := 10000;
     el.Style.Alpha := 1;
-    r := FTbCoverRect;
+    r := FTbBrushCtl.Covers[0].Main;
     el.Shape := TyShapeRect(TyRectF(FBuild.Viewport.Left + s * r.X,
       FBuild.Viewport.Top + s * r.Y, FBuild.Viewport.Left + s * (r.X + r.W),
       FBuild.Viewport.Top + s * (r.Y + r.H)));
@@ -27318,7 +27426,8 @@ begin
     end
     else if ic = 'back' then TbBack;
   end
-  else if f = 'magicType' then TbMagicType(ATb, ic);
+  else if f = 'magicType' then TbMagicType(ATb, ic)
+  else if f = 'brush' then TbBrushClick(ic);
 end;
 
 function TTyAdvanceChart.ToolboxClick(ATb: Integer; const AFeature, AIcon: string): Boolean;
@@ -27708,13 +27817,15 @@ begin
     FTbZoomActive := TyJsTruthy(APayload.Find('dataZoomSelectActive'))
   else
     FTbZoomActive := False;
-  if not FTbZoomActive then
-  begin
-    FTbBrushing := False;
-    FTbCover := False;
-  end;
+  { the toolbox renders in the update: its select brush on or off at once
+    [Batch 127] }
+  TbZoomCtlSync;
   { the brush components' painting option, and their views [Batch 126] }
   BrushTakeCursor(APayload);
+  { the visual stage's brushSelect [Batch 127], and the brush feature's
+    statuses as this update renders them }
+  BrushSelectRun(True);
+  TbBrushSnap;
   { update: every view renders again }
   FDirty := True;
   Invalidate;
@@ -27787,115 +27898,133 @@ begin
   TbDispatchZoom(snap);
 end;
 
-{ makePanelOpts: a grid some select dataZoom targets an axis of; lineX when
-  only its x axes are declared, lineY only its y, else rect. CSS px. }
-function TTyAdvanceChart.TbPanelAt(AX, AY: Double; out AType: TTyTbBrushType;
-  out ARect: TTyXYWH): Integer;
+{ updateZoomBtnStatus [Batch 127]: the panels are the grids some select
+  dataZoom targets an axis of (makePanelOpts), each typed lineX when only
+  its x axes are declared, lineY only its y, else rect; the controller on
+  with brushType 'auto' while the zoom is on and there is a panel, off
+  otherwise. CSS px. }
+procedure TTyAdvanceChart.TbZoomCtlSync;
 var
-  g, i, k: Integer;
+  g, i, k, n: Integer;
   xd, yd: Boolean;
   axis: TTyAxis;
-  r: TTyXYWH;
+  pn: array of TTyBrushPanel;
+  off: TTyBrushOpt;
+  s: Double;
 begin
-  Result := -1;
-  AType := tbbRect;
-  ARect := Default(TTyXYWH);
-  if FBuild = nil then Exit;
-  for g := 0 to FBuild.GridCount - 1 do
+  if (FTbBrushCtl = nil) and not FTbZoomActive then Exit;
+  if FTbBrushCtl = nil then
   begin
-    xd := False;
-    yd := False;
-    for i := 0 to High(FZoomSpecs) do
-      if FZoomSpecs[i].SubType = 'select' then
-        for k := 0 to High(FZoomSpecs[i].Targets) do
-        begin
-          axis := DzAxis(FZoomSpecs[i].Targets[k].Dim, FZoomSpecs[i].Targets[k].AxisIndex);
-          if (axis = nil) or (axis.GridIndex <> FBuild.Grid(g).ComponentIndex) then Continue;
-          if FZoomSpecs[i].Targets[k].Dim = 'x' then xd := True else yd := True;
-        end;
-    if not (xd or yd) then Continue;
-    r := DzGridRect(g);
-    { getPanelByPoint: the last panel that contains the point }
-    if (AX >= r.X) and (AX <= r.X + r.W) and (AY >= r.Y) and (AY <= r.Y + r.H) then
+    FTbBrushCtl := TTyBrushController.Create;
+    FTbBrushCtl.IsIrrelevant := @BrushIrrelevant;
+  end;
+  pn := nil;
+  FTbBrushGrids := nil;
+  if FBuild <> nil then
+    for g := 0 to FBuild.GridCount - 1 do
     begin
-      Result := g;
-      ARect := r;
-      if xd and not yd then AType := tbbLineX
-      else if yd and not xd then AType := tbbLineY
-      else AType := tbbRect;
+      xd := False;
+      yd := False;
+      for i := 0 to High(FZoomSpecs) do
+        if FZoomSpecs[i].SubType = 'select' then
+          for k := 0 to High(FZoomSpecs[i].Targets) do
+          begin
+            axis := DzAxis(FZoomSpecs[i].Targets[k].Dim, FZoomSpecs[i].Targets[k].AxisIndex);
+            if (axis = nil) or (axis.GridIndex <> FBuild.Grid(g).ComponentIndex) then Continue;
+            if FZoomSpecs[i].Targets[k].Dim = 'x' then xd := True else yd := True;
+          end;
+      if not (xd or yd) then Continue;
+      n := Length(pn);
+      SetLength(pn, n + 1);
+      SetLength(FTbBrushGrids, n + 1);
+      pn[n].Id := 'grid--' + ComponentModelId('grid', FBuild.Grid(g).ComponentIndex);
+      pn[n].Rect := DzGridRect(g);
+      pn[n].GridComponent := FBuild.Grid(g).ComponentIndex;
+      if xd and not yd then pn[n].DefaultType := btLineX
+      else if yd and not xd then pn[n].DefaultType := btLineY
+      else pn[n].DefaultType := btRect;
+      FTbBrushGrids[n] := g;
     end;
-  end;
-end;
-
-procedure TTyAdvanceChart.TbBrushDown(AX, AY: Integer);
-var
-  x, y, s: Double;
-  g: Integer;
-  bt: TTyTbBrushType;
-  r: TTyXYWH;
-begin
-  if not FTbZoomActive or (FBuild = nil) then Exit;
   s := TbScale;
-  x := (AX - FBuild.Viewport.Left) / s;
-  y := (AY - FBuild.Viewport.Top) / s;
-  { a press during a drag ends it (a release lost outside the window) }
-  if FTbBrushing then
+  FTbBrushCtl.CanvasW := (FLastRect.Right - FLastRect.Left) / s;
+  FTbBrushCtl.CanvasH := (FLastRect.Bottom - FLastRect.Top) / s;
+  FTbBrushCtl.SetPanels(pn, Length(pn) > 0);
+  if FTbZoomActive and (Length(pn) > 0) then
+    BrushEnableCtl(FTbBrushCtl, TyBrushDefaultOpt, True)
+  else
   begin
-    TbBrushUp(AX, AY);
-    Exit;
+    off := TyBrushDefaultOpt;
+    off.BrushType := btNone;
+    BrushEnableCtl(FTbBrushCtl, off, False);
   end;
-  g := TbPanelAt(x, y, bt, r);
-  if g < 0 then Exit;
-  FTbBrushing := True;
-  FTbBrushGrid := g;
-  FTbBrushType := bt;
-  FTbBrushPanel := r;
-  FTbTrack[0] := x;
-  FTbTrack[1] := y;
-  FTbTrack[2] := x;
-  FTbTrack[3] := y;
-  FTbCover := False;
 end;
 
-{ updateCoverByMouse: the cover once the track is longer than the
-  threshold, its range from the track's two ends clipped to the panel }
-procedure TTyAdvanceChart.TbBrushTrack(AX, AY: Integer);
+procedure TTyAdvanceChart.TbCtlDown(AX, AY: Integer; ADraggable: Boolean);
+var x, y: Double;
+begin
+  if FTbBrushCtl = nil then Exit;
+  BrushCss(AX, AY, x, y);
+  TbCtlTrigger(FTbBrushCtl.MouseDown(x, y, ADraggable));
+end;
+
+procedure TTyAdvanceChart.TbCtlMove(AX, AY: Integer);
+var x, y: Double;
+begin
+  if (FTbBrushCtl = nil) or not FTbBrushCtl.Dragging then Exit;
+  BrushCss(AX, AY, x, y);
+  TbCtlTrigger(FTbBrushCtl.MouseMove(x, y));
+  TbChanged;
+end;
+
+procedure TTyAdvanceChart.TbCtlUp(AX, AY: Integer);
+var x, y: Double;
+begin
+  if (FTbBrushCtl = nil) or not FTbBrushCtl.Dragging then Exit;
+  BrushCss(AX, AY, x, y);
+  TbCtlTrigger(FTbBrushCtl.MouseUp(x, y));
+  TbChanged;
+end;
+
+{ DataZoomFeature._onBrush: only an end with areas; the cover goes
+  (updateCovers([])) and the area is the zoom }
+procedure TTyAdvanceChart.TbCtlTrigger(const ATrig: TTyBrushTrigger);
 var
-  s, lo, hi, lo2, hi2: Double;
+  a: TTyBrushArea;
+  i, g: Integer;
 begin
-  s := TbScale;
-  FTbTrack[2] := (AX - FBuild.Viewport.Left) / s;
-  FTbTrack[3] := (AY - FBuild.Viewport.Top) / s;
-  if not FTbCover and (Power(Sqr(FTbTrack[2] - FTbTrack[0]) + Sqr(FTbTrack[3] - FTbTrack[1]), 0.5)
-    <= TyTbUnselectThreshold) then Exit;
-  FTbCover := True;
-  TyTbBrushRange(FTbBrushType, FTbTrack[0], FTbTrack[1], FTbTrack[2], FTbTrack[3],
-    FTbBrushPanel, lo, hi, lo2, hi2);
-  FTbRange[0] := lo;
-  FTbRange[1] := hi;
-  FTbRange[2] := lo2;
-  FTbRange[3] := hi2;
-  FTbCoverRect := TyTbCoverRect(FTbBrushType, lo, hi, lo2, hi2, FTbBrushPanel);
-end;
-
-procedure TTyAdvanceChart.TbBrushMove(AX, AY: Integer);
-begin
-  if not FTbBrushing or (FBuild = nil) then Exit;
-  TbBrushTrack(AX, AY);
+  if not ATrig.Fired or not ATrig.IsEnd or (Length(ATrig.Areas) = 0) then Exit;
+  FTbBrushCtl.UpdateCovers([]);
   TbChanged;
-end;
-
-procedure TTyAdvanceChart.TbBrushUp(AX, AY: Integer);
-var had: Boolean;
-begin
-  if not FTbBrushing or (FBuild = nil) then Exit;
-  TbBrushTrack(AX, AY);
-  FTbBrushing := False;
-  had := FTbCover;
-  { the brush's end: the cover goes (updateCovers([])) }
-  FTbCover := False;
-  TbChanged;
-  if had then TbBrushEnd;
+  a := ATrig.Areas[0];
+  g := -1;
+  for i := 0 to High(FTbBrushCtl.Panels) do
+    if a.Opt.HasPanel and (FTbBrushCtl.Panels[i].Id = a.Opt.PanelId)
+      and (i <= High(FTbBrushGrids)) then g := FTbBrushGrids[i];
+  if (g < 0) or (Length(a.Opt.Range) = 0) then Exit;
+  FTbBrushGrid := g;
+  for i := 0 to 3 do FTbRange[i] := NaN;
+  case a.Opt.BrushType of
+    btLineX:
+      begin
+        FTbBrushType := tbbLineX;
+        FTbRange[0] := a.Opt.Range[0][0];
+        FTbRange[1] := a.Opt.Range[0][1];
+      end;
+    btLineY:
+      begin
+        FTbBrushType := tbbLineY;
+        FTbRange[2] := a.Opt.Range[0][0];
+        FTbRange[3] := a.Opt.Range[0][1];
+      end;
+  else
+    if Length(a.Opt.Range) < 2 then Exit;
+    FTbBrushType := tbbRect;
+    FTbRange[0] := a.Opt.Range[0][0];
+    FTbRange[1] := a.Opt.Range[0][1];
+    FTbRange[2] := a.Opt.Range[1][0];
+    FTbRange[3] := a.Opt.Range[1][1];
+  end;
+  TbBrushEnd;
 end;
 
 { _onBrush: every cartesian of the panel's grid that the feature targets,
@@ -28072,9 +28201,7 @@ end;
   the brush's crosshair, which is set after it }
 procedure TTyAdvanceChart.TbApplyCursor(AX, AY: Integer);
 var
-  s, x, y: Double;
-  bt: TTyTbBrushType;
-  r: TTyXYWH;
+  x, y: Double;
   c, bc: string;
 begin
   c := '';
@@ -28087,14 +28214,11 @@ begin
     bc := TyBrushPieceCursor(TTyBrushPiece(FEvHover.HdGen), True);
     c := bc;
   end;
-  if FTbZoomActive and (FBuild <> nil) then
+  { the select brush's resetCursor [Batch 127] }
+  if FTbBrushCtl <> nil then
   begin
-    s := TbScale;
-    x := (AX - FBuild.Viewport.Left) / s;
-    y := (AY - FBuild.Viewport.Top) / s;
-    if (x >= 0) and (y >= 0) and (x <= (FLastRect.Right - FLastRect.Left) / s)
-      and (y <= (FLastRect.Bottom - FLastRect.Top) / s)
-      and (TbPanelAt(x, y, bt, r) >= 0) then c := 'crosshair';
+    BrushCss(AX, AY, x, y);
+    if FTbBrushCtl.Crosshair(x, y) then c := 'crosshair';
   end;
   { the brush controllers' resetCursor: the crosshair in a panel off the
     covers [Batch 126] }
@@ -28182,8 +28306,9 @@ end;
 
 function TTyAdvanceChart.ToolboxCover(out ARect: TTyXYWH): Boolean;
 begin
-  ARect := FTbCoverRect;
-  Result := FTbCover;
+  ARect := Default(TTyXYWH);
+  Result := (FTbBrushCtl <> nil) and (Length(FTbBrushCtl.Covers) > 0);
+  if Result then ARect := FTbBrushCtl.Covers[0].Main;
 end;
 
 { ==================== the brush components [Batch 126] ====================
@@ -28232,7 +28357,7 @@ var n, i, old: Integer;
 begin
   n := FOption.ComponentCount('brush');
   old := Length(FBrushCtls);
-  for i := n to old - 1 do FBrushCtls[i].Free;
+  for i := n to old - 1 do BrushFreeCtl(FBrushCtls[i]);
   SetLength(FBrushCtls, n);
   for i := old to n - 1 do FBrushCtls[i] := nil;
   SetLength(FBrushSpecs, n);
@@ -28242,14 +28367,20 @@ begin
   for i := 0 to n - 1 do
   begin
     FBrushSpecs[i] := TyBrushSpecOf(FOption.ComponentAt('brush', i));
-    if FBrushCtls[i] = nil then FBrushCtls[i] := TTyBrushController.Create;
+    if FBrushCtls[i] = nil then
+    begin
+      FBrushCtls[i] := TTyBrushController.Create;
+      { isTargetByCursor's onIrrelevantElement [Batch 127] }
+      FBrushCtls[i].IsIrrelevant := @BrushIrrelevant;
+    end;
   end;
 end;
 
 procedure TTyAdvanceChart.BrushReset;
 var i: Integer;
 begin
-  for i := 0 to High(FBrushCtls) do FBrushCtls[i].Free;
+  { a view disposed: its controller off (globalPan released) [Batch 127] }
+  for i := 0 to High(FBrushCtls) do BrushFreeCtl(FBrushCtls[i]);
   FBrushCtls := nil;
   FBrushSpecs := nil;
   FBrushAreas := nil;
@@ -28467,15 +28598,18 @@ begin
   begin
     pn[i].Id := tg[i].PanelId;
     pn[i].Rect := tg[i].Rect;
+    pn[i].DefaultType := btRect;
+    pn[i].GridComponent := tg[i].GridComponent;
   end;
   ctl.SetPanels(pn, Length(pn) > 0);
-  if FBrushHasPaint[ABrush] then ctl.EnableBrush(FBrushPaint[ABrush])
+  { through the globalPan mutex [Batch 127] }
+  if FBrushHasPaint[ABrush] then BrushEnableCtl(ctl, FBrushPaint[ABrush], False)
   else
   begin
     { a model's brushOption starts empty: no type, drawing off }
     off := TyBrushDefaultOpt;
     off.BrushType := btNone;
-    ctl.EnableBrush(off);
+    BrushEnableCtl(ctl, off, False);
   end;
   SetLength(cfg, Length(FBrushAreas[ABrush]));
   for i := 0 to High(cfg) do cfg[i] := FBrushAreas[ABrush][i].Opt;
@@ -28569,18 +28703,25 @@ begin
   SetLength(FBrushAreas[ABrush], Length(AAreas));
   for i := 0 to High(AAreas) do
     FBrushAreas[ABrush][i] := TyBrushAreaOfOutput(FBrushSpecs[ABrush], AAreas[i]);
-  if FBuild <> nil then
-  begin
-    for b := 0 to High(FBrushSpecs) do BrushLayout(b);
-    for b := 0 to High(FBrushSpecs) do
-      if b <> ABrush then BrushRender(b);
+  Inc(FBrushActDepth);
+  try
+    if FBuild <> nil then
+    begin
+      for b := 0 to High(FBrushSpecs) do BrushLayout(b);
+      for b := 0 to High(FBrushSpecs) do
+        if b <> ABrush then BrushRender(b);
+    end;
+    { the visual stage: the selection, its visuals, brushSelect [Batch 127] }
+    BrushSelectRun(True);
+    id := ComponentModelId('brush', ABrush);
+    js := '{"type":"brush","brushId":' + TyBrushJsonStr(id) + ',"areas":'
+      + TyBrushAreasJson(AAreas) + ',"$from":' + TyBrushJsonStr(id) + '}';
+    BrushLogEvent('brush', ABrush, True, AAreas, js);
+    EmitPayloadEvent('brush', js);
+  finally
+    Dec(FBrushActDepth);
   end;
-  BrushVisual;
-  id := ComponentModelId('brush', ABrush);
-  js := '{"type":"brush","brushId":' + TyBrushJsonStr(id) + ',"areas":'
-    + TyBrushAreasJson(AAreas) + ',"$from":' + TyBrushJsonStr(id) + '}';
-  BrushLogEvent('brush', ABrush, True, AAreas, js);
-  EmitPayloadEvent('brush', js);
+  if FBrushActDepth = 0 then BrushFlush;
   EmitUpdated;
 end;
 
@@ -28694,7 +28835,8 @@ begin
     for b := 0 to High(FBrushSpecs) do
       if not (hasFrom and (from = ComponentModelId('brush', b))) then BrushRender(b);
   end;
-  BrushVisual;
+  { the visual stage: the selection, its visuals, brushSelect [Batch 127] }
+  BrushSelectRun(True);
   js := TbEventJson(APayload, 'brush');
   BrushLogEvent('brush', -1, False, logged, js);
   EmitPayloadEvent('brush', js);
@@ -28746,7 +28888,7 @@ begin
     for b := 0 to High(FBrushSpecs) do BrushLayout(b);
     for b := 0 to High(FBrushSpecs) do BrushRender(b);
   end;
-  BrushVisual;
+  { brushSelect: TbDoTakeCursor's, with or without a brush [Batch 127] }
 end;
 
 procedure TTyAdvanceChart.BrushLogEvent(const AType: string; ABrush: Integer;
@@ -28770,25 +28912,24 @@ end;
 { brushVisual's dispatch of brushSelect: through the throttle the first
   component asks for (createOrUpdate), with every component's areas. Not
   during a brushSelect of its own. }
-procedure TTyAdvanceChart.BrushVisual;
+procedure TTyAdvanceChart.BrushVisual(const ABatch: TTyBrushSelectBatch);
 var
   batch: TTyBrushSelectBatch;
-  b, n: Integer;
+  n: Integer;
   now_, due: Double;
-  execNow: Boolean;
+  execNow, thr: Boolean;
 begin
-  if FBrushInSelect or (Length(FBrushSpecs) = 0) then Exit;
-  SetLength(batch, Length(FBrushSpecs));
-  for b := 0 to High(FBrushSpecs) do
-  begin
-    batch[b].BrushIndex := b;
-    batch[b].BrushId := ComponentModelId('brush', b);
-    batch[b].BrushName := ComponentModelName('brush', b);
-    batch[b].Areas := Copy(FBrushAreas[b]);
-  end;
+  if FBrushInSelect then Exit;
+  batch := ABatch;
   now_ := BrushClock;
-  if not TyBrushThrottleConfigure(FBrushThr, FBrushSpecs[0].ThrottleKind,
-    FBrushSpecs[0].ThrottleType, FBrushSpecs[0].ThrottleDelay) then
+  { only the first component's throttle; none without a brush (an empty
+    batch, dispatched at once) [Batch 127] }
+  if Length(FBrushSpecs) > 0 then
+    thr := TyBrushThrottleConfigure(FBrushThr, FBrushSpecs[0].ThrottleKind,
+      FBrushSpecs[0].ThrottleType, FBrushSpecs[0].ThrottleDelay)
+  else
+    thr := TyBrushThrottleConfigure(FBrushThr, btkNone, '', NaN);
+  if not thr then
   begin
     BrushExecSelect(batch, now_);
     Exit;
@@ -28823,6 +28964,11 @@ begin
     SetLength(FBrushSelLog, n + 1);
     FBrushSelLog[n].Time := ATime;
     FBrushSelLog[n].Batch := ABatch;
+    { the brushSelect action: its brushselected event, after the event of
+      the action whose update dispatched it [Batch 127] }
+    n := Length(FBrushEmitQ);
+    SetLength(FBrushEmitQ, n + 1);
+    FBrushEmitQ[n] := BrushSelectedJson(ABatch);
   finally
     FBrushInSelect := False;
   end;
@@ -28870,6 +29016,8 @@ begin
   until False;
   FBrushTickPrev := ANow;
   BrushArmTimer;
+  { a timer's brushSelect is an action of its own [Batch 127] }
+  if FBrushActDepth = 0 then BrushFlush;
 end;
 
 procedure TTyAdvanceChart.BrushArmTimer;
@@ -29113,6 +29261,506 @@ begin
       Inc(Result);
     end;
   end;
+end;
+
+{ ==================== the selection [Batch 127] ====================
+
+  visualEncoding.ts's brushVisual, the overall visual stage, over the pure
+  tyControls.AdvChart.Brush: every brush component in order -- its areas
+  with their bounding rects, each series it controls (a brushSelector:
+  scatter, effectScatter, bar, candlestick; seriesIndex; controlSeries: the
+  area's target grid holds the series' cartesian, or the area is global)
+  checked item by item against the item's layout, brushLink spreading a
+  selection by data index -- and the inBrush / outOfBrush visuals written
+  over the rows the visual stages before it left (FVisualRows, restored from
+  FBrushVisBase first: the stage runs again from the same input). A later
+  brush writes over an earlier one. An update with a payload (an action's,
+  not a setOption's) then dispatches brushSelect through the throttle; its
+  brushselected event waits for the action's own event (BrushFlush).
+
+  THE globalPan MUTEX (interactionMutex.ts): one holder, the controller
+  that enabled last; a disable releases it only when it holds it. While it
+  is held no roam pans (MouseDown). onIrrelevantElement: the topmost
+  element under the pointer, a silent one too, belongs to a series on
+  another coordinate system above the panel's grid -- its zlevel, then its
+  z, higher. }
+
+procedure TTyAdvanceChart.BrushEnableCtl(ACtl: TTyBrushController; const AOpt: TTyBrushOpt;
+  AAuto: Boolean);
+var was: Boolean;
+begin
+  if ACtl = nil then Exit;
+  was := ACtl.Enabled;
+  if AAuto then ACtl.EnableAuto(AOpt) else ACtl.EnableBrush(AOpt);
+  { _doDisableBrush releases globalPan when this one holds it, then
+    _doEnableBrush takes it }
+  if was and (FPanHolder = ACtl.Uid) then FPanHolder := 0;
+  if ACtl.Enabled then FPanHolder := ACtl.Uid;
+end;
+
+procedure TTyAdvanceChart.BrushFreeCtl(var ACtl: TTyBrushController);
+begin
+  if ACtl = nil then Exit;
+  { dispose: enableBrush(false) }
+  if ACtl.Enabled and (FPanHolder = ACtl.Uid) then FPanHolder := 0;
+  FreeAndNil(ACtl);
+end;
+
+function TTyAdvanceChart.PanTaken: Boolean;
+begin
+  Result := FPanHolder <> 0;
+end;
+
+function TTyAdvanceChart.BrushGlobalPanTaken: Boolean;
+begin
+  Result := PanTaken;
+end;
+
+function TTyAdvanceChart.BrushIrrelevant(const APanel: TTyBrushPanel; AX, AY: Double): Boolean;
+var
+  v: TTyBrushView;
+  idx, slot, si, sz, szl: Integer;
+  el: TTyChartElement;
+  node, d: TJSONData;
+  gz, gzl, diff: Double;
+  hasCoord: Boolean;
+begin
+  Result := False;
+  if (APanel.GridComponent < 0) or (FPaintList = nil) or not FPaintListValid then Exit;
+  v := BrushViewOf;
+  idx := FPaintList.TopElementAt(v.OX + AX * v.S, v.OY + AY * v.S, FPaintListPPI);
+  if idx < 0 then Exit;
+  el := FPaintList.Element(idx);
+  { getComponentByElement: a series' element. A marker's, a legend's, the
+    toolbox's, a brush cover -- nothing with a coordinate system -- is not
+    irrelevant }
+  if (el.Datum.Kind <> ctkSeries) or (el.Datum.SeriesIndex < 0) then Exit;
+  si := el.Datum.SeriesIndex;
+  slot := SlotOfSeries(si);
+  if (slot < 0) or (slot > High(FBindings)) then Exit;
+  { its coordinate system's model: the panel's own grid is relevant; a
+    series with none (a pie, a funnel) is too }
+  if FBindings[slot].Cart <> nil then
+  begin
+    if (FBindings[slot].XAxis <> nil)
+      and (FBindings[slot].XAxis.GridIndex = APanel.GridComponent) then Exit;
+    hasCoord := True;
+  end
+  else
+    hasCoord := (FBindings[slot].Polar <> nil) or (FBindings[slot].CalendarIndex >= 0)
+      or (FBindings[slot].SeriesType = TyGraphSeriesTypeName)
+      or (FBindings[slot].SeriesType = TyTreeSeriesTypeName)
+      or (FBindings[slot].SeriesType = 'radar');
+  if not hasCoord then Exit;
+  { retrieveZInfo: zlevel first, then z; equal is relevant }
+  gz := 0;
+  gzl := 0;
+  node := FOption.ComponentAt('grid', APanel.GridComponent);
+  if node is TJSONObject then
+  begin
+    d := TJSONObject(node).Find('z');
+    if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then gz := d.AsFloat;
+    d := TJSONObject(node).Find('zlevel');
+    if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then gzl := d.AsFloat;
+  end;
+  if FBindings[slot].SeriesType = 'line' then sz := SeriesIntIn(si, 'z', 3)
+  else sz := SeriesIntIn(si, 'z', 2);
+  szl := SeriesIntIn(si, 'zlevel', 0);
+  diff := szl - gzl;
+  if diff = 0 then diff := sz - gz;
+  Result := diff > 0;
+end;
+
+procedure TTyAdvanceChart.BrushVisCapture;
+var i: Integer;
+begin
+  FBrushVisBase := nil;
+  FBrushVisBaseOk := Length(FBrushSpecs) > 0;
+  if not FBrushVisBaseOk then Exit;
+  SetLength(FBrushVisBase, Length(FVisualRows));
+  for i := 0 to High(FVisualRows) do FBrushVisBase[i] := Copy(FVisualRows[i]);
+end;
+
+function TTyAdvanceChart.BrushSelectCompute: TTyBrushSelectBatch;
+var
+  b, i, k, r, raw, n, si, t: Integer;
+  reach: TTyBrushReach;
+  vis: TTyBrushVisual;
+  sel: TTyBrushSelAreaArray;
+  tg: TTyBrushTargetArray;
+  lays: array of TTyBrushItemLayoutArray;
+  layDone: array of Boolean;
+  lists: array of TTyIntegerArray;
+  linkSel: array of Boolean;
+  hasBrush, linked, inB, applies, ctrl: Boolean;
+  v: TTyBrushView;
+  sv: TTySeriesVisual;
+  outColor, baseColor: TTyVisualColor;
+  st: TTyDataStore;
+  offKey: Integer;
+  ov: TTyDataValue;
+  item: TTyBrushSelSeries;
+
+  function Live(ASlot: Integer): Boolean;
+  begin
+    Result := not FBindings[ASlot].Hidden;
+  end;
+
+  function HasSelector(ASlot: Integer): Boolean;
+  var s: string;
+  begin
+    s := FBindings[ASlot].SeriesType;
+    Result := (s = 'scatter') or (s = 'effectScatter') or (s = 'bar') or (s = 'candlestick');
+  end;
+
+  procedure EnsureLayout(ASlot: Integer);
+  var q: Integer;
+  begin
+    if layDone[ASlot] then Exit;
+    layDone[ASlot] := True;
+    lays[ASlot] := nil;
+    if (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
+    sv := TySeriesVisual(0);
+    if ASlot <= High(FBarCols) then sv.Bar := FBarCols[ASlot];
+    if ASlot <= High(FWhiskers) then sv.Whisker := FWhiskers[ASlot];
+    sv.Large := LargeKindOf(ASlot);
+    lays[ASlot] := TyBrushItemLayouts(FBindings[ASlot], FStores[ASlot], StackFor(ASlot), sv);
+    { the cartesian's device px -> the brush's CSS px }
+    for q := 0 to High(lays[ASlot]) do
+    begin
+      lays[ASlot][q].X := (lays[ASlot][q].X - v.OX) / v.S;
+      lays[ASlot][q].Y := (lays[ASlot][q].Y - v.OY) / v.S;
+      lays[ASlot][q].W := lays[ASlot][q].W / v.S;
+      lays[ASlot][q].H := lays[ASlot][q].H / v.S;
+    end;
+  end;
+
+  function CheckIn(ASlot, ARow: Integer): Boolean;
+  var q: Integer;
+  begin
+    Result := False;
+    if (ASlot > High(lays)) or (ARow > High(lays[ASlot])) then Exit;
+    for q := 0 to High(lists[ASlot]) do
+      if TyBrushSelects(sel[lists[ASlot][q]], lays[ASlot][ARow]) then Exit(True);
+  end;
+
+begin
+  Result := nil;
+  if Length(FBrushSpecs) = 0 then Exit;
+  SetLength(Result, Length(FBrushSpecs));
+  for b := 0 to High(FBrushSpecs) do
+  begin
+    Result[b].BrushIndex := b;
+    Result[b].BrushId := ComponentModelId('brush', b);
+    Result[b].BrushName := ComponentModelName('brush', b);
+    if b <= High(FBrushAreas) then Result[b].Areas := Copy(FBrushAreas[b]);
+  end;
+  if (FBuild = nil) or (FOption = nil) then Exit;
+  { the stage runs again from the rows the stages before it left }
+  if FBrushVisBaseOk then
+  begin
+    SetLength(FVisualRows, Length(FBrushVisBase));
+    for i := 0 to High(FBrushVisBase) do FVisualRows[i] := Copy(FBrushVisBase[i]);
+  end;
+  v := BrushViewOf;
+  SetLength(lays, Length(FBindings));
+  SetLength(layDone, Length(FBindings));
+  for i := 0 to High(layDone) do layDone[i] := False;
+  outColor := TyVisualFromChart(TTyChartColor(
+    ActiveController.Model.ResolveStyle('TyAdvChartBrushOut', '', []).TextColor));
+  offKey := TyOverrideKey('visualMap');
+  for b := 0 to High(FBrushSpecs) do
+  begin
+    reach := TyBrushReachOf(FOption.ComponentAt('brush', b));
+    vis := TyBrushVisualOf(FOption.ComponentAt('brush', b));
+    SetLength(sel, Length(Result[b].Areas));
+    for k := 0 to High(sel) do sel[k] := TyBrushSelAreaOf(Result[b].Areas[k]);
+    tg := BrushTargets(b);
+    lists := nil;
+    SetLength(lists, Length(FBindings));
+    linkSel := nil;
+    hasBrush := False;
+    { step A: each series' areas, and the data indices a linked one selects }
+    for i := 0 to High(FBindings) do
+    begin
+      if not Live(i) or not HasSelector(i) then Continue;
+      if not TyBrushControls(reach, FBindings[i].SeriesIndex) then Continue;
+      for k := 0 to High(sel) do
+      begin
+        { controlSeries: a global area, or the target's cartesians hold the
+          series' }
+        t := BrushFindTarget(tg, Result[b].Areas[k]);
+        ctrl := t < 0;
+        if not ctrl then
+          for r := 0 to High(tg[t].Carts) do
+            if tg[t].Carts[r] = FBindings[i].Cart then ctrl := True;
+        if ctrl then
+        begin
+          n := Length(lists[i]);
+          SetLength(lists[i], n + 1);
+          lists[i][n] := k;
+        end;
+        hasBrush := hasBrush or (Length(lists[i]) > 0);
+      end;
+      if TyBrushLinks(reach, FBindings[i].SeriesIndex) and (Length(lists[i]) > 0)
+        and (i <= High(FStores)) and (FStores[i] <> nil) then
+      begin
+        EnsureLayout(i);
+        if Length(linkSel) < FStores[i].Count then
+        begin
+          n := Length(linkSel);
+          SetLength(linkSel, FStores[i].Count);
+          for r := n to High(linkSel) do linkSel[r] := False;
+        end;
+        for r := 0 to FStores[i].Count - 1 do
+          if CheckIn(i, r) then linkSel[r] := True;
+      end;
+    end;
+    { step B: every series in the batch; the visuals where the brush applies }
+    for i := 0 to High(FBindings) do
+    begin
+      if not Live(i) then Continue;
+      si := FBindings[i].SeriesIndex;
+      item := Default(TTyBrushSelSeries);
+      item.SeriesIndex := si;
+      item.SeriesId := ComponentModelId('series', si);
+      item.SeriesName := SeriesModelName(si);
+      st := nil;
+      if i <= High(FStores) then st := FStores[i];
+      if st <> nil then
+      begin
+        linked := TyBrushLinks(reach, si);
+        if linked then applies := hasBrush else applies := Length(lists[i]) > 0;
+        if not linked and (Length(lists[i]) > 0) then EnsureLayout(i);
+        if applies then
+        begin
+          if Length(FVisualRows) < Length(FBindings) then
+          begin
+            SetLength(FVisualRows, Length(FBindings));
+            SetLength(FVisualMetas, Length(FBindings));
+            SetLength(FVisualLines, Length(FBindings));
+          end;
+          if FVisualRows[i] = nil then
+          begin
+            baseColor := TyVisualFromChart(TTyChartColor(SeriesColor(si)));
+            SetLength(FVisualRows[i], st.RawCount);
+            for r := 0 to High(FVisualRows[i]) do
+            begin
+              FVisualRows[i][r] := Default(TTyVisualRow);
+              FVisualRows[i][r].Color := baseColor;
+              FVisualRows[i][r].Opacity := NaN;
+            end;
+          end;
+        end;
+        for r := 0 to st.Count - 1 do
+        begin
+          raw := st.GetRawIndex(r);
+          if linked then inB := (r <= High(linkSel)) and linkSel[r]
+          else inB := CheckIn(i, r);
+          if inB then
+          begin
+            n := Length(item.DataIndex);
+            SetLength(item.DataIndex, n + 1);
+            item.DataIndex[n] := raw;
+          end;
+          if not applies or (raw < 0) or (raw > High(FVisualRows[i])) then Continue;
+          { `visualMap: false` on the item opts it out }
+          if st.HasOverrideByRaw(raw, offKey) then
+          begin
+            ov := st.GetOverrideByRaw(raw, offKey);
+            if (ov.Kind = dvkBool) and (ov.Num = 0) then Continue;
+          end;
+          TyBrushApplyVisual(vis.States[inB], vis.OutIsSkin and not inB, outColor,
+            FVisualRows[i][raw]);
+        end;
+      end;
+      n := Length(Result[b].Selected);
+      SetLength(Result[b].Selected, n + 1);
+      Result[b].Selected[n] := item;
+    end;
+  end;
+end;
+
+procedure TTyAdvanceChart.BrushSelectRun(ADispatch: Boolean; ARepaint: Boolean);
+var batch: TTyBrushSelectBatch;
+begin
+  if ADispatch then FBrushPayload := False;
+  batch := BrushSelectCompute;
+  { the series' visuals changed: the list again (inside a layout it is
+    built next anyway) }
+  if ARepaint and (Length(FBrushSpecs) > 0) then BrushChanged;
+  if ADispatch then BrushVisual(batch);
+end;
+
+procedure TTyAdvanceChart.BrushFlush;
+var
+  q: TTyStringArray;
+  i: Integer;
+begin
+  while Length(FBrushEmitQ) > 0 do
+  begin
+    q := FBrushEmitQ;
+    FBrushEmitQ := nil;
+    for i := 0 to High(q) do EmitPayloadEvent('brushselected', q[i]);
+  end;
+end;
+
+{ the brushSelect action's event: the batch, each item as the action
+  handled it (its type the event's, its batch null) }
+function TTyAdvanceChart.BrushSelectedJson(const ABatch: TTyBrushSelectBatch): string;
+var
+  b, s, k: Integer;
+begin
+  Result := '{"type":"brushselected","batch":[';
+  for b := 0 to High(ABatch) do
+  begin
+    if b > 0 then Result := Result + ',';
+    Result := Result + '{"brushId":' + TyBrushJsonStr(ABatch[b].BrushId)
+      + ',"brushIndex":' + IntToStr(ABatch[b].BrushIndex)
+      + ',"brushName":' + TyBrushJsonStr(ABatch[b].BrushName)
+      + ',"areas":' + TyBrushAreasJson(ABatch[b].Areas) + ',"selected":[';
+    for s := 0 to High(ABatch[b].Selected) do
+    begin
+      if s > 0 then Result := Result + ',';
+      Result := Result + '{"seriesId":' + TyBrushJsonStr(ABatch[b].Selected[s].SeriesId)
+        + ',"seriesIndex":' + IntToStr(ABatch[b].Selected[s].SeriesIndex)
+        + ',"seriesName":' + TyBrushJsonStr(ABatch[b].Selected[s].SeriesName)
+        + ',"dataIndex":[';
+      for k := 0 to High(ABatch[b].Selected[s].DataIndex) do
+      begin
+        if k > 0 then Result := Result + ',';
+        Result := Result + IntToStr(ABatch[b].Selected[s].DataIndex[k]);
+      end;
+      Result := Result + ']}';
+    end;
+    Result := Result + '],"type":"brushselected","batch":null}';
+  end;
+  Result := Result + ']}';
+end;
+
+{ axisAreaSelect: no parallel axes here -- the update (the visual stage's
+  brushSelect, the toolbox's render) and the event }
+procedure TTyAdvanceChart.BrushDoAxisAreaSelect(APayload: TJSONObject);
+begin
+  BrushSync;
+  BrushSelectRun(True);
+  TbBrushSnap;
+  FDirty := True;
+  Invalidate;
+  EmitPayloadEvent('axisareaselected', TbEventJson(APayload, 'axisareaselected'));
+end;
+
+{ ---- the toolbox's brush feature (feature/Brush.ts) ---- }
+
+{ what BrushFeature.render reads off the brush models: the last one's
+  brushType and brushOption.brushMode (|| 'single'), and whether any keeps
+  an area }
+procedure TTyAdvanceChart.TbBrushModelState(out AHas, AMulti, ABrushed: Boolean;
+  out AType: TTyBrushType);
+var b: Integer;
+begin
+  AHas := False;
+  AMulti := False;
+  ABrushed := False;
+  AType := btNone;
+  for b := 0 to High(FBrushSpecs) do
+  begin
+    AHas := (b <= High(FBrushHasPaint)) and FBrushHasPaint[b];
+    if AHas then
+    begin
+      AType := FBrushPaint[b].BrushType;
+      AMulti := FBrushPaint[b].Multiple;
+    end
+    else
+    begin
+      AType := btNone;
+      AMulti := False;
+    end;
+    if (b <= High(FBrushAreas)) and (Length(FBrushAreas[b]) > 0) then ABrushed := True;
+  end;
+end;
+
+{ an update the port renders later: the feature renders with what the
+  models hold now }
+procedure TTyAdvanceChart.TbBrushSnap;
+begin
+  TbBrushModelState(FTbBfSnapHas, FTbBfSnapMulti, FTbBfSnapBrushed, FTbBfSnapType);
+  FTbBfSnap := True;
+end;
+
+{ BrushFeature.render: every listed type's status -- keep by the mode,
+  clear by any area, a type by the brush type -- and the type and mode its
+  clicks read }
+procedure TTyAdvanceChart.TbBrushRender(ATb: Integer);
+var
+  fm: TJSONObject;
+  d: TJSONData;
+  k: Integer;
+  has, multi, brushed, on_: Boolean;
+  typ: TTyBrushType;
+  nm: string;
+begin
+  if FTbBfSnap then
+  begin
+    has := FTbBfSnapHas;
+    multi := FTbBfSnapMulti;
+    brushed := FTbBfSnapBrushed;
+    typ := FTbBfSnapType;
+  end
+  else
+    TbBrushModelState(has, multi, brushed, typ);
+  FTbBfHas := has;
+  FTbBfMulti := multi;
+  FTbBfType := typ;
+  fm := TyToolboxFeatureModel(FOption, ATb, 'brush', TbTitles);
+  if fm = nil then Exit;
+  try
+    d := fm.Find('type');
+    if not (d is TJSONArray) then Exit;
+    for k := 0 to d.Count - 1 do
+    begin
+      if d.Items[k].JSONType <> jtString then Continue;
+      nm := d.Items[k].AsString;
+      if nm = 'keep' then on_ := multi
+      else if nm = 'clear' then on_ := brushed
+      else on_ := has and (typ <> btNone) and (TyBrushTypeName(typ) = nm);
+      if on_ then TbSetStatus(ATb, 'brush', nm, 'emphasis')
+      else TbSetStatus(ATb, 'brush', nm, 'normal');
+    end;
+  finally
+    fm.Free;
+  end;
+end;
+
+{ BrushFeature.onclick: clear dispatches axisAreaSelect, then the brush
+  action with no areas; any other takes the global cursor -- keep flips the
+  mode and keeps the type, a type flips itself on or off }
+procedure TTyAdvanceChart.TbBrushClick(const AIcon: string);
+var bt, bm: string;
+begin
+  if AIcon = 'clear' then
+  begin
+    DispatchAction('{"type":"axisAreaSelect","intervals":[]}');
+    DispatchAction('{"type":"brush","command":"clear","areas":[]}');
+    Exit;
+  end;
+  if AIcon = 'keep' then
+  begin
+    if FTbBfHas and (FTbBfType <> btNone) then bt := '"' + TyBrushTypeName(FTbBfType) + '"'
+    else if FTbBfHas then bt := 'false'
+    else bt := 'null';
+    if FTbBfMulti then bm := 'single' else bm := 'multiple';
+  end
+  else
+  begin
+    if FTbBfHas and (FTbBfType <> btNone) and (TyBrushTypeName(FTbBfType) = AIcon) then
+      bt := 'false'
+    else
+      bt := TyBrushJsonStr(AIcon);
+    if FTbBfMulti then bm := 'multiple' else bm := 'single';
+  end;
+  DispatchAction('{"type":"takeGlobalCursor","key":"brush","brushOption":{"brushType":'
+    + bt + ',"brushMode":"' + bm + '"}}');
 end;
 
 { ---- what the tests read ---- }

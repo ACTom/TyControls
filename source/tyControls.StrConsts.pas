@@ -487,6 +487,13 @@ resourcestring
   rsTyChartToolboxBar = 'Switch to Bar Chart';
   rsTyChartToolboxStack = 'Stack';
   rsTyChartToolboxTiled = 'Tile';
+  // the brush feature's buttons [Batch 127] (langEN.ts toolbox.brush.title)
+  rsTyChartToolboxBrushRect = 'Box Select';
+  rsTyChartToolboxBrushPolygon = 'Lasso Select';
+  rsTyChartToolboxBrushLineX = 'Horizontally Select';
+  rsTyChartToolboxBrushLineY = 'Vertically Select';
+  rsTyChartToolboxBrushKeep = 'Keep Selections';
+  rsTyChartToolboxBrushClear = 'Clear Selections';
   // what the data view says when its text does not parse back
   rsTyChartToolboxDataViewBad = 'The data view''s text could not be read back: %s';
   // the save dialog's filter for saveAsImage

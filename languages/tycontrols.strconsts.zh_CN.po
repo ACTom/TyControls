@@ -1105,6 +1105,30 @@ msgstr "加载选项不是合法的 JSON。"
 msgid "Switch to Bar Chart"
 msgstr "切换为柱状图"
 
+#: tycontrols.strconsts.rstycharttoolboxbrushclear
+msgid "Clear Selections"
+msgstr "清除选择"
+
+#: tycontrols.strconsts.rstycharttoolboxbrushkeep
+msgid "Keep Selections"
+msgstr "保持选择"
+
+#: tycontrols.strconsts.rstycharttoolboxbrushlinex
+msgid "Horizontally Select"
+msgstr "横向选择"
+
+#: tycontrols.strconsts.rstycharttoolboxbrushliney
+msgid "Vertically Select"
+msgstr "纵向选择"
+
+#: tycontrols.strconsts.rstycharttoolboxbrushpolygon
+msgid "Lasso Select"
+msgstr "圈选"
+
+#: tycontrols.strconsts.rstycharttoolboxbrushrect
+msgid "Box Select"
+msgstr "矩形选择"
+
 #: tycontrols.strconsts.rstycharttoolboxdataview
 msgid "Data View"
 msgstr "数据视图"

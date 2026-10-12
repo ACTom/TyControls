@@ -40,11 +40,19 @@ unit tyControls.AdvChart.Brush;
   THE THROTTLE (util/throttle): fixRate and debounce, as brushSelect's
   dispatch takes them.
 
+  THE SELECTION (visualEncoding.ts, selector.ts) [Batch 127, C18]: an
+  area's bounding rect, the point and rect selectors of the four brush
+  types against an item's layout (zrender's polygon contain, BoundingRect's
+  contain and intersect, linePolygonIntersect), and the inBrush /
+  outOfBrush visuals through the fixed mappings onto a visual row. The
+  brush preprocessor's toolbox list (preprocessor.ts) is the option unit's.
+
   PURE: options and numbers in, records out. CSS px throughout; a
   conversion takes the view that maps them to the cartesian's device px. }
 interface
 uses SysUtils, Math, fpjson,
-  tyControls.AdvChart.Types, tyControls.AdvChart.Coord;
+  tyControls.AdvChart.Types, tyControls.AdvChart.Coord,
+  tyControls.AdvChart.VisualMap;
 
 const
   TyBrushCoverZ = 10000;
@@ -146,7 +154,18 @@ type
   TTyBrushPanel = record
     Id: string;
     Rect: TTyXYWH;
+    { the type a brush of type 'auto' draws in this panel (the toolbox's
+      dataZoom select: lineX, lineY or rect) [Batch 127] }
+    DefaultType: TTyBrushType;
+    { the grid component the panel is (targetInfo.coordSysModel), -1 none
+      [Batch 127] }
+    GridComponent: Integer;
   end;
+
+  { isTargetByCursor's second half: onIrrelevantElement -- True when what the
+    pointer is over at (AX, AY), CSS px, belongs to another coordinate
+    system drawn over the panel [Batch 127] }
+  TTyBrushPanelFilter = function(const APanel: TTyBrushPanel; AX, AY: Double): Boolean of object;
 
   { the controller's `brush` event }
   TTyBrushTrigger = record
@@ -190,10 +209,21 @@ type
     Dragging: Boolean;
     { the canvas, CSS px: the global panel's extent }
     CanvasW, CanvasH: Double;
+    { brushType 'auto': each new cover takes its panel's DefaultType
+      [Batch 127] }
+    Auto: Boolean;
+    { the controller's own uid: whose globalPan the mutex holds [Batch 127] }
+    Uid: Integer;
+    { onIrrelevantElement, asked of every panel a point is in (nil: none)
+      [Batch 127] }
+    IsIrrelevant: TTyBrushPanelFilter;
     constructor Create;
     { enableBrush: a type turns drawing on with the option merged over the
       defaults; btNone turns it off }
     procedure EnableBrush(const AOpt: TTyBrushOpt);
+    { enableBrush with brushType 'auto': on, each cover typed by its
+      panel [Batch 127] }
+    procedure EnableAuto(const AOpt: TTyBrushOpt);
     procedure SetPanels(const APanels: array of TTyBrushPanel; AHasPanels: Boolean);
     procedure UpdateCovers(const AConfigs: array of TTyBrushOpt);
     { the pointer handlers (only while Enabled); ATargetDraggable: the press
@@ -233,11 +263,22 @@ type
   end;
   TTyBrushTargetArray = array of TTyBrushTarget;
 
+  { one series in a brushSelect batch item: the raw indices it selected
+    [Batch 127] }
+  TTyBrushSelSeries = record
+    SeriesIndex: Integer;
+    SeriesId, SeriesName: string;
+    DataIndex: TTyIntegerArray;
+  end;
+  TTyBrushSelSeriesArray = array of TTyBrushSelSeries;
+
   { one brush component in a brushSelect batch }
   TTyBrushSelectItem = record
     BrushIndex: Integer;
     BrushId, BrushName: string;
     Areas: TTyBrushAreaArray;
+    { every series the visual stage visited, in series order [Batch 127] }
+    Selected: TTyBrushSelSeriesArray;
   end;
   TTyBrushSelectBatch = array of TTyBrushSelectItem;
   { a brushSelect dispatch that ran: when (ms), and what it carried }
@@ -260,6 +301,46 @@ type
     Due: Double;
     Gen: Integer;
     Batch: TTyBrushSelectBatch;
+  end;
+
+  { an item's layout as its series' brushSelector reads it: a point
+    (scatter, effectScatter), a rect (a bar's layout, a candle's brushRect),
+    or none (large mode, a gap) [Batch 127] }
+  TTyBrushLayoutKind = (blkNone, blkPoint, blkRect);
+  TTyBrushItemLayout = record
+    Kind: TTyBrushLayoutKind;
+    X, Y, W, H: Double;
+  end;
+  TTyBrushItemLayoutArray = array of TTyBrushItemLayout;
+
+  { BrushSelectableArea: an area with its boundingRect (rect and polygon) }
+  TTyBrushSelArea = record
+    BrushType: TTyBrushType;
+    Range: TTyBrushRange;
+    HasBR: Boolean;
+    BR: TTyXYWH;
+  end;
+  TTyBrushSelAreaArray = array of TTyBrushSelArea;
+
+  { the inBrush / outOfBrush visuals of a brush model: per state (True in
+    the brush) the fixed visuals in prepareVisualTypes' order }
+  TTyBrushVisual = record
+    States: array[Boolean] of TTyVisualPieceVisualArray;
+    { outOfBrush is the default (its colour defaultOutOfBrushColor) and the
+      option writes no defaultOutOfBrushColor: the skin's colour }
+    OutIsSkin: Boolean;
+  end;
+
+  { brushLink }
+  TTyBrushLinkKind = (blnNone, blnAll, blnList);
+
+  { what a brush model selects beyond its areas: brushLink and seriesIndex }
+  TTyBrushReach = record
+    Link: TTyBrushLinkKind;
+    LinkList: TTyIntegerArray;
+    { seriesIndex null / 'all': every series }
+    AllSeries: Boolean;
+    SeriesList: TTyIntegerArray;
   end;
 
 { ---- names ---- }
@@ -333,6 +414,35 @@ function TyBrushDiff(AType: TTyBrushType; const AValues, ARefer: TTyBrushRange;
 { getScales }
 procedure TyBrushScales(const ACur, AOrig: TTyBrushRange; out ASX, ASY: Double);
 
+{ ---- the selection [Batch 127] ---- }
+
+{ boundingRectBuilders: the area's rect (a rect's range, a polygon's
+  extent) }
+function TyBrushSelAreaOf(const AArea: TTyBrushArea): TTyBrushSelArea;
+{ selector[brushType].point / .rect against an item's layout }
+function TyBrushSelects(const AArea: TTyBrushSelArea; const ALayout: TTyBrushItemLayout): Boolean;
+{ zrender's contain/polygon.ts }
+function TyBrushPolygonContain(const APoints: TTyBrushRange; AX, AY: Double): Boolean;
+{ graphic.linePolygonIntersect }
+function TyBrushLinePolygonIntersect(A1X, A1Y, A2X, A2Y: Double;
+  const APoints: TTyBrushRange): Boolean;
+{ BoundingRect.intersect (touching counts; negative sizes normalised; a
+  NaN compares false as JavaScript's does) }
+function TyBrushRectIntersect(const A, B: TTyXYWH): Boolean;
+{ the model's inBrush / outOfBrush after optionUpdated: inBrush its own or
+  an empty one, liftZ 5 unless written; outOfBrush its own or the default
+  colour }
+function TyBrushVisualOf(ANode: TJSONData): TTyBrushVisual;
+{ brushLink and seriesIndex }
+function TyBrushReachOf(ANode: TJSONData): TTyBrushReach;
+function TyBrushLinks(const AReach: TTyBrushReach; ASeriesIndex: Integer): Boolean;
+function TyBrushControls(const AReach: TTyBrushReach; ASeriesIndex: Integer): Boolean;
+{ applyVisual of one state's fixed mappings onto a row. AOutColor: the
+  skin's out-of-brush colour, for the default (ASkinColor). A colour or an
+  opacity it writes is marked late: it comes after the item's own style. }
+procedure TyBrushApplyVisual(const AVisuals: TTyVisualPieceVisualArray;
+  ASkinColor: Boolean; const AOutColor: TTyVisualColor; var ARow: TTyVisualRow);
+
 { ---- the throttle (util/throttle.ts) ---- }
 
 type
@@ -362,6 +472,9 @@ procedure TyBrushThrottleCall(var T: TTyBrushThrottle; ANow: Double;
 implementation
 
 uses tyControls.AdvChart.Scale;
+
+var
+  GBrushUid: Integer = 0;
 
 function MaskFP: TFPUExceptionMask;
 begin
@@ -1177,6 +1290,8 @@ begin
   Opt := TyBrushDefaultOpt;
   Creating := -1;
   CreatingPanel := -1;
+  Inc(GBrushUid);
+  Uid := GBrushUid;
 end;
 
 function TTyBrushController.IndexOf(ASerial: Integer): Integer;
@@ -1213,12 +1328,23 @@ begin
   if Enabled then
   begin
     Enabled := False;
+    Auto := False;
     Opt := TyBrushDefaultOpt;
   end;
   if AOpt.BrushType = btNone then Exit;
   Enabled := True;
   { merge(clone(DEFAULT_BRUSH_OPT), brushOption, true) }
   Opt := TyBrushMergeOpt(TyBrushDefaultOpt, AOpt);
+end;
+
+procedure TTyBrushController.EnableAuto(const AOpt: TTyBrushOpt);
+var o: TTyBrushOpt;
+begin
+  o := AOpt;
+  { any type turns it on; the covers take their panels' }
+  o.BrushType := btRect;
+  EnableBrush(o);
+  Auto := True;
 end;
 
 procedure TTyBrushController.SetPanels(const APanels: array of TTyBrushPanel;
@@ -1248,10 +1374,13 @@ var i: Integer;
 begin
   if not HasPanels then Exit(-2);
   Result := -1;
-  { each panel asked; the last that takes the point }
+  { each panel asked; the last that takes the point -- unless what the
+    pointer is over is another coordinate system's (isTargetByCursor's
+    onIrrelevantElement) [Batch 127] }
   for i := 0 to High(Panels) do
     if BoxContain(Panels[i].Rect.X, Panels[i].Rect.Y, Panels[i].Rect.W,
-      Panels[i].Rect.H, AX, AY) then Result := i;
+      Panels[i].Rect.H, AX, AY)
+      and not (Assigned(IsIrrelevant) and IsIrrelevant(Panels[i], AX, AY)) then Result := i;
 end;
 
 function TTyBrushController.ClipByPanel(AIndex: Integer;
@@ -1559,6 +1688,8 @@ begin
       o.HasPanel := CreatingPanel >= 0;
       if o.HasPanel then o.PanelId := Panels[CreatingPanel].Id
       else o.PanelId := '';
+      { determineBrushType: 'auto' is the panel's default [Batch 127] }
+      if Auto and o.HasPanel then o.BrushType := Panels[CreatingPanel].DefaultType;
       ci := NewCover(o);
       Creating := Covers[ci].Serial;
     end;
@@ -1835,6 +1966,506 @@ begin
         AIndex := i;
         APiece := bpMain;
         Exit(True);
+      end;
+    end;
+  finally
+    UnmaskFP(m);
+  end;
+end;
+
+{ ==================== the selection [Batch 127] ====================
+
+  Comparisons go through Lt / Le, false on a NaN as JavaScript's are. }
+
+function Lt(A, B: Double): Boolean;
+begin
+  Result := not IsNan(A) and not IsNan(B) and (A < B);
+end;
+
+function Le(A, B: Double): Boolean;
+begin
+  Result := not IsNan(A) and not IsNan(B) and (A <= B);
+end;
+
+{ new BoundingRect(x, y, w, h): a negative size flipped }
+function NormRect(AX, AY, AW, AH: Double): TTyXYWH;
+begin
+  if Lt(AW, 0) then
+  begin
+    AX := AX + AW;
+    AW := -AW;
+  end;
+  if Lt(AH, 0) then
+  begin
+    AY := AY + AH;
+    AH := -AH;
+  end;
+  Result.X := AX;
+  Result.Y := AY;
+  Result.W := AW;
+  Result.H := AH;
+end;
+
+{ BoundingRect.contain }
+function RectContain(const R: TTyXYWH; AX, AY: Double): Boolean;
+begin
+  Result := Le(R.X, AX) and Le(AX, R.X + R.W) and Le(R.Y, AY) and Le(AY, R.Y + R.H);
+end;
+
+function TyBrushRectIntersect(const A, B: TTyXYWH): Boolean;
+var
+  na, nb: TTyXYWH;
+  ax0, ax1, ay0, ay1, bx0, bx1, by0, by1: Double;
+  m: TFPUExceptionMask;
+begin
+  m := MaskFP;
+  try
+    na := NormRect(A.X, A.Y, A.W, A.H);
+    nb := NormRect(B.X, B.Y, B.W, B.H);
+    ax0 := na.X;
+    ax1 := na.X + na.W;
+    ay0 := na.Y;
+    ay1 := na.Y + na.H;
+    bx0 := nb.X;
+    bx1 := nb.X + nb.W;
+    by0 := nb.Y;
+    by1 := nb.Y + nb.H;
+    if Lt(ax1, ax0) or Lt(ay1, ay0) or Lt(bx1, bx0) or Lt(by1, by0) then Exit(False);
+    Result := not (Lt(ax1, bx0) or Lt(bx1, ax0) or Lt(ay1, by0) or Lt(by1, ay0));
+  finally
+    UnmaskFP(m);
+  end;
+end;
+
+function TyBrushSelAreaOf(const AArea: TTyBrushArea): TTyBrushSelArea;
+var
+  i: Integer;
+  x0, x1, y0, y1: Double;
+  m: TFPUExceptionMask;
+begin
+  Result := Default(TTyBrushSelArea);
+  Result.BrushType := AArea.Opt.BrushType;
+  Result.Range := Copy(AArea.Opt.Range);
+  m := MaskFP;
+  try
+    if Result.BrushType = btRect then
+    begin
+      if Length(Result.Range) < 2 then Exit;
+      Result.HasBR := True;
+      Result.BR := NormRect(Result.Range[0][0], Result.Range[1][0],
+        Result.Range[0][1] - Result.Range[0][0], Result.Range[1][1] - Result.Range[1][0]);
+    end
+    else if Result.BrushType = btPolygon then
+    begin
+      if Length(Result.Range) = 0 then Exit;
+      { initExtentForUnion, then the strict comparisons }
+      x0 := Infinity;
+      x1 := NegInfinity;
+      y0 := Infinity;
+      y1 := NegInfinity;
+      for i := 0 to High(Result.Range) do
+      begin
+        if Lt(Result.Range[i][0], x0) then x0 := Result.Range[i][0];
+        if Lt(x1, Result.Range[i][0]) then x1 := Result.Range[i][0];
+        if Lt(Result.Range[i][1], y0) then y0 := Result.Range[i][1];
+        if Lt(y1, Result.Range[i][1]) then y1 := Result.Range[i][1];
+      end;
+      Result.HasBR := True;
+      Result.BR := NormRect(x0, y0, x1 - x0, y1 - y0);
+    end;
+  finally
+    UnmaskFP(m);
+  end;
+end;
+
+function TyBrushPolygonContain(const APoints: TTyBrushRange; AX, AY: Double): Boolean;
+const cEps = 1e-8;
+var
+  w: Double;
+  i: Integer;
+  p, p2, p0: TTyBrushPair;
+  m: TFPUExceptionMask;
+begin
+  if Length(APoints) = 0 then Exit(False);
+  m := MaskFP;
+  try
+    w := 0;
+    p := APoints[0];
+    for i := 1 to High(APoints) do
+    begin
+      p2 := APoints[i];
+      w := w + TyBrushWindingLine(p[0], p[1], p2[0], p2[1], AX, AY);
+      p := p2;
+    end;
+    { close the polygon }
+    p0 := APoints[0];
+    if not (Abs(p[0] - p0[0]) < cEps) or not (Abs(p[1] - p0[1]) < cEps) then
+      w := w + TyBrushWindingLine(p[0], p[1], p0[0], p0[1], AX, AY);
+    Result := w <> 0;
+  finally
+    UnmaskFP(m);
+  end;
+end;
+
+{ lineLineIntersect: crossProduct2d and nearZero (1e-6); colinear is none }
+function LineLineIntersect(A1X, A1Y, A2X, A2Y, B1X, B1Y, B2X, B2Y: Double): Boolean;
+var mx, my, nx, ny, nm, bx, by, q, p: Double;
+begin
+  mx := A2X - A1X;
+  my := A2Y - A1Y;
+  nx := B2X - B1X;
+  ny := B2Y - B1Y;
+  nm := nx * my - mx * ny;
+  if Le(nm, 1e-6) and Le(-1e-6, nm) then Exit(False);
+  bx := A1X - B1X;
+  by := A1Y - B1Y;
+  q := (bx * my - mx * by) / nm;
+  if Lt(q, 0) or Lt(1, q) then Exit(False);
+  p := (bx * ny - nx * by) / nm;
+  if Lt(p, 0) or Lt(1, p) then Exit(False);
+  Result := True;
+end;
+
+function TyBrushLinePolygonIntersect(A1X, A1Y, A2X, A2Y: Double;
+  const APoints: TTyBrushRange): Boolean;
+var
+  i: Integer;
+  p, p2: TTyBrushPair;
+  m: TFPUExceptionMask;
+begin
+  Result := False;
+  if Length(APoints) = 0 then Exit;
+  m := MaskFP;
+  try
+    p2 := APoints[High(APoints)];
+    for i := 0 to High(APoints) do
+    begin
+      p := APoints[i];
+      if LineLineIntersect(A1X, A1Y, A2X, A2Y, p[0], p[1], p2[0], p2[1]) then Exit(True);
+      p2 := p;
+    end;
+  finally
+    UnmaskFP(m);
+  end;
+end;
+
+{ inLineRange }
+function InLine(AP, A0, A1: Double): Boolean;
+begin
+  Result := Le(A0, AP) and Le(AP, A1);
+end;
+
+function TyBrushSelects(const AArea: TTyBrushSelArea; const ALayout: TTyBrushItemLayout): Boolean;
+var
+  x, y, w, h, l0, l1, t, r0, r1: Double;
+  pts: TTyBrushRange;
+  m: TFPUExceptionMask;
+begin
+  Result := False;
+  if ALayout.Kind = blkNone then Exit;
+  m := MaskFP;
+  try
+    case AArea.BrushType of
+      btRect:
+        begin
+          if not AArea.HasBR then Exit;
+          if ALayout.Kind = blkPoint then Result := RectContain(AArea.BR, ALayout.X, ALayout.Y)
+          else Result := TyBrushRectIntersect(AArea.BR, NormRect(ALayout.X, ALayout.Y,
+            ALayout.W, ALayout.H));
+        end;
+      btPolygon:
+        begin
+          pts := AArea.Range;
+          if ALayout.Kind = blkPoint then
+          begin
+            Result := AArea.HasBR and RectContain(AArea.BR, ALayout.X, ALayout.Y)
+              and TyBrushPolygonContain(pts, ALayout.X, ALayout.Y);
+            Exit;
+          end;
+          if Length(pts) <= 1 then Exit;
+          x := ALayout.X;
+          y := ALayout.Y;
+          w := ALayout.W;
+          h := ALayout.H;
+          Result := TyBrushPolygonContain(pts, x, y)
+            or TyBrushPolygonContain(pts, x + w, y)
+            or TyBrushPolygonContain(pts, x, y + h)
+            or TyBrushPolygonContain(pts, x + w, y + h)
+            or RectContain(NormRect(x, y, w, h), pts[0][0], pts[0][1])
+            or TyBrushLinePolygonIntersect(x, y, x + w, y, pts)
+            or TyBrushLinePolygonIntersect(x, y, x, y + h, pts)
+            or TyBrushLinePolygonIntersect(x + w, y, x + w, y + h, pts)
+            or TyBrushLinePolygonIntersect(x, y + h, x + w, y + h, pts);
+        end;
+      btLineX, btLineY:
+        begin
+          if Length(AArea.Range) < 1 then Exit;
+          r0 := AArea.Range[0][0];
+          r1 := AArea.Range[0][1];
+          if ALayout.Kind = blkPoint then
+          begin
+            if AArea.BrushType = btLineX then t := ALayout.X else t := ALayout.Y;
+            Exit(InLine(t, r0, r1));
+          end;
+          if AArea.BrushType = btLineX then
+          begin
+            l0 := ALayout.X;
+            l1 := ALayout.X + ALayout.W;
+          end
+          else
+          begin
+            l0 := ALayout.Y;
+            l1 := ALayout.Y + ALayout.H;
+          end;
+          { layoutRange.reverse() when its end is below its start }
+          if Lt(l1, l0) then
+          begin
+            t := l0;
+            l0 := l1;
+            l1 := t;
+          end;
+          Result := InLine(l0, r0, r1) or InLine(l1, r0, r1)
+            or InLine(r0, l0, l1) or InLine(r1, l0, l1);
+        end;
+    end;
+  finally
+    UnmaskFP(m);
+  end;
+end;
+
+{ one fixed visual: the first of a list, the value itself otherwise }
+function FixedVisualOf(const AKind: string; AData: TJSONData): TTyVisualPieceVisual;
+begin
+  Result := Default(TTyVisualPieceVisual);
+  Result.Kind := AKind;
+  if AData is TJSONArray then
+  begin
+    if AData.Count = 0 then Exit;
+    AData := AData.Items[0];
+  end;
+  if (AData = nil) or (AData.JSONType = jtNull) then Exit;
+  case AData.JSONType of
+    jtNumber:
+      begin
+        Result.Defined := True;
+        Result.IsNum := True;
+        Result.Num := AData.AsFloat;
+      end;
+    jtString:
+      begin
+        Result.Defined := True;
+        Result.Str := AData.AsString;
+        Result.Num := NaN;
+      end;
+    jtBoolean:
+      begin
+        Result.Defined := True;
+        Result.IsNum := True;
+        if AData.AsBoolean then Result.Num := 1 else Result.Num := 0;
+      end;
+  end;
+end;
+
+{ createVisualMappings of one state: its valid visual types, in
+  prepareVisualTypes' order. AAddLift: optionUpdated's `liftZ = 5`, the
+  object's last key }
+function StateVisuals(AObj: TJSONObject; AAddLift: Boolean): TTyVisualPieceVisualArray;
+var
+  keys, ordered: TTyStringArray;
+  i, k: Integer;
+begin
+  Result := nil;
+  keys := nil;
+  if AObj <> nil then
+    for i := 0 to AObj.Count - 1 do
+      if TyVisualIsValidType(AObj.Names[i]) then
+      begin
+        SetLength(keys, Length(keys) + 1);
+        keys[High(keys)] := AObj.Names[i];
+      end;
+  if AAddLift then
+  begin
+    SetLength(keys, Length(keys) + 1);
+    keys[High(keys)] := 'liftZ';
+  end;
+  ordered := TyPrepareVisualTypes(keys);
+  SetLength(Result, Length(ordered));
+  for k := 0 to High(ordered) do
+    if AAddLift and (ordered[k] = 'liftZ') then
+    begin
+      Result[k] := Default(TTyVisualPieceVisual);
+      Result[k].Kind := 'liftZ';
+      Result[k].Defined := True;
+      Result[k].IsNum := True;
+      Result[k].Num := 5;
+    end
+    else
+      Result[k] := FixedVisualOf(ordered[k], AObj.Find(ordered[k]));
+end;
+
+function JsTruthyData(AData: TJSONData): Boolean;
+begin
+  Result := JsTruthy(AData);
+end;
+
+function TyBrushVisualOf(ANode: TJSONData): TTyBrushVisual;
+var
+  o, inB, outB: TJSONObject;
+  d: TJSONData;
+  defOut: TJSONData;
+begin
+  Result := Default(TTyBrushVisual);
+  o := nil;
+  if ANode is TJSONObject then o := TJSONObject(ANode);
+  inB := nil;
+  outB := nil;
+  defOut := nil;
+  if o <> nil then
+  begin
+    d := o.Find('inBrush');
+    if JsTruthyData(d) and (d is TJSONObject) then inB := TJSONObject(d);
+    d := o.Find('outOfBrush');
+    if JsTruthyData(d) and (d is TJSONObject) then outB := TJSONObject(d);
+    defOut := o.Find('defaultOutOfBrushColor');
+  end;
+  { liftZ 5 unless the option has its own (null included) }
+  Result.States[True] := StateVisuals(inB, (inB = nil) or (inB.IndexOfName('liftZ') < 0));
+  if outB <> nil then
+    Result.States[False] := StateVisuals(outB, False)
+  else
+  begin
+    SetLength(Result.States[False], 1);
+    Result.States[False][0] := FixedVisualOf('color', defOut);
+    Result.States[False][0].Kind := 'color';
+    { the model's defaultOutOfBrushColor: the token, the skin's here }
+    Result.OutIsSkin := (defOut = nil);
+  end;
+end;
+
+function TyBrushReachOf(ANode: TJSONData): TTyBrushReach;
+var
+  d: TJSONData;
+  i: Integer;
+
+  procedure AddTo(var A: TTyIntegerArray; AData: TJSONData);
+  begin
+    if (AData = nil) or (AData.JSONType <> jtNumber) then Exit;
+    if Frac(AData.AsFloat) <> 0 then Exit;
+    SetLength(A, Length(A) + 1);
+    A[High(A)] := Trunc(AData.AsFloat);
+  end;
+
+begin
+  Result := Default(TTyBrushReach);
+  { seriesIndex: 'all' by default }
+  Result.AllSeries := True;
+  if not (ANode is TJSONObject) then Exit;
+  d := TJSONObject(ANode).Find('brushLink');
+  if d <> nil then
+  begin
+    if (d.JSONType = jtString) and (d.AsString = 'all') then Result.Link := blnAll
+    else if d is TJSONArray then
+    begin
+      Result.Link := blnList;
+      for i := 0 to d.Count - 1 do AddTo(Result.LinkList, d.Items[i]);
+    end;
+  end;
+  d := TJSONObject(ANode).Find('seriesIndex');
+  if (d <> nil) and (d.JSONType <> jtNull)
+    and not ((d.JSONType = jtString) and (d.AsString = 'all')) then
+  begin
+    Result.AllSeries := False;
+    if d is TJSONArray then
+      for i := 0 to d.Count - 1 do AddTo(Result.SeriesList, d.Items[i])
+    else
+      AddTo(Result.SeriesList, d);
+  end;
+end;
+
+function InList(const A: TTyIntegerArray; V: Integer): Boolean;
+var i: Integer;
+begin
+  for i := 0 to High(A) do
+    if A[i] = V then Exit(True);
+  Result := False;
+end;
+
+function TyBrushLinks(const AReach: TTyBrushReach; ASeriesIndex: Integer): Boolean;
+begin
+  case AReach.Link of
+    blnAll: Result := True;
+    blnList: Result := InList(AReach.LinkList, ASeriesIndex);
+  else
+    Result := False;
+  end;
+end;
+
+function TyBrushControls(const AReach: TTyBrushReach; ASeriesIndex: Integer): Boolean;
+begin
+  Result := AReach.AllSeries or InList(AReach.SeriesList, ASeriesIndex);
+end;
+
+procedure TyBrushApplyVisual(const AVisuals: TTyVisualPieceVisualArray;
+  ASkinColor: Boolean; const AOutColor: TTyVisualColor; var ARow: TTyVisualRow);
+var
+  i: Integer;
+  v: TTyVisualPieceVisual;
+  c: TTyVisualColor;
+  m: TFPUExceptionMask;
+begin
+  m := MaskFP;
+  try
+    for i := 0 to High(AVisuals) do
+    begin
+      v := AVisuals[i];
+      if v.Kind = 'color' then
+      begin
+        { setItemVisual(style[drawType], visual[0]) }
+        if ASkinColor and not v.Defined then c := AOutColor
+        else if not v.Defined or v.IsNum or not TyVisualTryParse(v.Str, c) then
+          c := TyVisualUndefined;
+        ARow.Color := c;
+        ARow.ColorSet := True;
+        ARow.LateColor := True;
+      end
+      else if v.Kind = 'opacity' then
+      begin
+        { undefined is still written: the element draws at 1 }
+        if v.Defined and not IsNan(v.Num) then ARow.Opacity := v.Num
+        else ARow.Opacity := 1;
+        ARow.OpacitySet := True;
+        ARow.LateOpacity := True;
+      end
+      else if (v.Kind = 'colorAlpha') or (v.Kind = 'colorHue')
+        or (v.Kind = 'colorSaturation') or (v.Kind = 'colorLightness') then
+      begin
+        if not v.Defined or IsNan(v.Num) then Continue;
+        if v.Kind = 'colorAlpha' then ARow.Color := TyVisualModifyAlpha(ARow.Color, v.Num)
+        else if v.Kind = 'colorHue' then
+          ARow.Color := TyVisualModifyHSL(ARow.Color, v.Num, 0, 0, True, False, False)
+        else if v.Kind = 'colorSaturation' then
+          ARow.Color := TyVisualModifyHSL(ARow.Color, 0, v.Num, 0, False, True, False)
+        else
+          ARow.Color := TyVisualModifyHSL(ARow.Color, 0, 0, v.Num, False, False, True);
+        ARow.ColorSet := True;
+        ARow.LateColor := True;
+      end
+      else if v.Kind = 'symbol' then
+      begin
+        ARow.SymbolSet := v.Defined;
+        if v.IsNum then ARow.Symbol := TyJsNumberToString(v.Num) else ARow.Symbol := v.Str;
+      end
+      else if v.Kind = 'symbolSize' then
+      begin
+        ARow.Size := v.Num;
+        if not v.Defined then ARow.Size := NaN;
+        ARow.SizeSet := not IsNan(ARow.Size);
+      end
+      else if v.Kind = 'liftZ' then
+      begin
+        ARow.LiftZ := v.Num;
+        if not v.Defined then ARow.LiftZ := NaN;
+        ARow.LiftZSet := not IsNan(ARow.LiftZ);
       end;
     end;
   finally

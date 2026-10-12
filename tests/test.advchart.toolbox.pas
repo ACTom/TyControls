@@ -1551,8 +1551,11 @@ begin
   AssertTrue(FChart.ToolboxClick(0, 'magicType', 'bar'));
   RenderNow;
   AssertTrue('the series is a bar now', Pos('"type":"bar"', FChart.GetOptionJson) > 0);
-  AssertEquals('one event', 1, FChart.Events.Count);
+  { the action's event, then the brushselected its update dispatches -- an
+    empty batch with no brush component [Batch 127] }
+  AssertEquals('two events', 2, FChart.Events.Count);
   AssertEquals('magictypechanged', 'magictypechanged', Copy(FChart.Events[0], 1, Pos(#9, FChart.Events[0]) - 1));
+  AssertEquals('brushselected', 'brushselected'#9'{"type":"brushselected","batch":[]}', FChart.Events[1]);
   AssertTrue(FChart.DispatchAction('{"type":"restore"}'));
   RenderNow;
   AssertTrue('a line again', Pos('"type":"line"', FChart.GetOptionJson) > 0);

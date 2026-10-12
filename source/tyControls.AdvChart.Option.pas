@@ -209,7 +209,8 @@ uses
   { Only for the diagnostic resourcestrings; kept out of the interface uses so
     the dependency stays one-way and invisible to hosts. LazUTF8 is here for
     UnicodeToUTF8, used by the escape decoder below. }
-  tyControls.StrConsts, LazUTF8, Math, tyControls.FontUnits;
+  tyControls.StrConsts, LazUTF8, Math, tyControls.FontUnits,
+  tyControls.AdvChart.Scale;
 
 function TyOptFontSize(AData: TJSONData; ADefault: Integer): Integer;
 var
@@ -694,6 +695,170 @@ begin
   Result := True;
 end;
 
+{ ==================== the brush preprocessor [Batch 127] ====================
+
+  component/brush/preprocessor.ts, run over every option unit the
+  preprocessors see (the base and the media with a query): a brush
+  component brings the toolbox's brush feature. The first toolbox (one is
+  made, with an empty feature object, when the option has none) gets
+  `feature.brush.type`
+  -- its own list, the brush components' `toolbox` lists appended, the
+  duplicates dropped by their string; a new option (the first setOption, a
+  notMerge) whose list is still empty takes rect, polygon, keep and clear.
+  Where upstream would throw (a feature that is no object, a type that is
+  no array) nothing is done. }
+
+function PreJsKey(AData: TJSONData): string;
+begin
+  case AData.JSONType of
+    jtString: Result := AData.AsString;
+    jtNumber: Result := TyJsNumberToString(AData.AsFloat);
+    jtBoolean: if AData.AsBoolean then Result := 'true' else Result := 'false';
+    jtNull: Result := 'null';
+  else
+    Result := #1 + AData.AsJSON;
+  end;
+end;
+
+function PreTruthy(AData: TJSONData): Boolean;
+begin
+  if AData = nil then Exit(False);
+  case AData.JSONType of
+    jtNull: Result := False;
+    jtBoolean: Result := AData.AsBoolean;
+    jtNumber: Result := (AData.AsFloat <> 0) and not IsNan(AData.AsFloat);
+    jtString: Result := AData.AsString <> '';
+  else
+    Result := True;
+  end;
+end;
+
+procedure TyBrushPreprocess(AOption: TJSONObject; AIsNew: Boolean);
+var
+  d, tbs, tbNode: TJSONData;
+  brushes: array of TJSONData;
+  spec: TJSONArray;
+  toolbox, feature, brushF: TJSONObject;
+  types, kept: TJSONArray;
+  seen: TStringList;
+  i, k: Integer;
+  key: string;
+begin
+  if AOption = nil then Exit;
+  d := AOption.Find('brush');
+  brushes := nil;
+  if d is TJSONArray then
+  begin
+    for i := 0 to d.Count - 1 do
+    begin
+      SetLength(brushes, Length(brushes) + 1);
+      brushes[High(brushes)] := d.Items[i];
+    end;
+  end
+  else if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    SetLength(brushes, 1);
+    brushes[0] := d;
+  end;
+  if Length(brushes) = 0 then Exit;
+  spec := TJSONArray.Create;
+  try
+    for i := 0 to High(brushes) do
+    begin
+      if not (brushes[i] is TJSONObject) then Continue;
+      tbs := TJSONObject(brushes[i]).Find('toolbox');
+      if tbs is TJSONArray then
+        for k := 0 to tbs.Count - 1 do spec.Add(tbs.Items[k].Clone);
+    end;
+    tbNode := AOption.Find('toolbox');
+    toolbox := nil;
+    if tbNode is TJSONArray then
+    begin
+      if (tbNode.Count > 0) and PreTruthy(tbNode.Items[0]) then
+      begin
+        if not (tbNode.Items[0] is TJSONObject) then Exit;
+        toolbox := TJSONObject(tbNode.Items[0]);
+      end;
+    end
+    else if PreTruthy(tbNode) then
+    begin
+      if not (tbNode is TJSONObject) then Exit;
+      toolbox := TJSONObject(tbNode);
+    end;
+    if toolbox = nil then
+    begin
+      toolbox := TJSONObject.Create;
+      toolbox.Add('feature', TJSONObject.Create);
+      if AOption.IndexOfName('toolbox') >= 0 then AOption.Delete('toolbox');
+      AOption.Add('toolbox', TJSONArray.Create([toolbox]));
+    end;
+    d := toolbox.Find('feature');
+    if not PreTruthy(d) then
+    begin
+      if d <> nil then toolbox.Delete('feature');
+      toolbox.Add('feature', TJSONObject.Create);
+      d := toolbox.Find('feature');
+    end;
+    if not (d is TJSONObject) then Exit;
+    feature := TJSONObject(d);
+    d := feature.Find('brush');
+    if not PreTruthy(d) then
+    begin
+      if d <> nil then feature.Delete('brush');
+      feature.Add('brush', TJSONObject.Create);
+      d := feature.Find('brush');
+    end;
+    if not (d is TJSONObject) then Exit;
+    brushF := TJSONObject(d);
+    d := brushF.Find('type');
+    if not PreTruthy(d) then
+    begin
+      if d <> nil then brushF.Delete('type');
+      brushF.Add('type', TJSONArray.Create);
+      d := brushF.Find('type');
+    end;
+    if not (d is TJSONArray) then Exit;
+    types := TJSONArray(d);
+    for k := 0 to spec.Count - 1 do types.Add(spec.Items[k].Clone);
+    { removeDuplicates by the item's string }
+    seen := TStringList.Create;
+    kept := TJSONArray.Create;
+    try
+      seen.Sorted := True;
+      seen.CaseSensitive := True;
+      for k := 0 to types.Count - 1 do
+      begin
+        key := PreJsKey(types.Items[k]);
+        if seen.IndexOf(key) >= 0 then Continue;
+        seen.Add(key);
+        kept.Add(types.Items[k].Clone);
+      end;
+      types.Clear;
+      for k := 0 to kept.Count - 1 do types.Add(kept.Items[k].Clone);
+    finally
+      kept.Free;
+      seen.Free;
+    end;
+    if AIsNew and (types.Count = 0) then
+    begin
+      types.Add('rect');
+      types.Add('polygon');
+      types.Add('keep');
+      types.Add('clear');
+    end;
+  finally
+    spec.Free;
+  end;
+end;
+
+procedure PreprocessUnits(ABase: TJSONObject; const ASet: TTyMediaSet; AIsNew: Boolean);
+var i: Integer;
+begin
+  TyBrushPreprocess(ABase, AIsNew);
+  for i := 0 to High(ASet.Units) do
+    if ASet.Units[i].Option <> nil then TyBrushPreprocess(ASet.Units[i].Option, AIsNew);
+end;
+
 function TTyChartOption.SetOptionText(const AText: string): Boolean;
 begin
   Result := SetOptionText(AText, [], nil);
@@ -745,6 +910,8 @@ begin
   begin
     base := TJSONObject(parsed);
     TyParseRawOption(base, mset);
+    { the preprocessors: a new option [Batch 127] }
+    PreprocessUnits(base, mset, True);
     parsed := base;
   end;
   FMedia.Reset(mset);
@@ -818,6 +985,8 @@ begin
   { the base and the units apart [Batch 107] }
   base := TJSONObject(parsed);
   TyParseRawOption(base, mset);
+  { the preprocessors: not a new option [Batch 127] }
+  PreprocessUnits(base, mset, False);
   FMerged := base;
   if not TyOptionMerge(TJSONObject(FRoot), FKeys, base, AReplaceMerge,
     ABefore, AReport, err) then

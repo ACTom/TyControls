@@ -1425,6 +1425,9 @@ TyAdvChartToolboxBrush { background: alpha(var(--accent), 0.15); }
    selects and rims it in a light grey; here the ink faded right down and
    the skin's own border colour. */
 TyAdvChartBrush { background: alpha(var(--on-surface), 0.06); border-color: var(--border); }
+/* What a brush leaves out. Upstream greys the items outside every cover in a
+   light neutral; here the skin's border colour, which is that neutral. */
+TyAdvChartBrushOut { color: var(--border); }
 /* The hover tooltip. TWO keys, because upstream's whole typographic hierarchy
    inside the box is one weight difference -- the name at 400 and the value at
    900, in the same grey -- and one style set cannot say two weights. Said here

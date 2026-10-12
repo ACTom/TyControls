@@ -913,6 +913,30 @@ msgstr ""
 msgid "Switch to Bar Chart"
 msgstr ""
 
+#: tycontrols.strconsts.rstycharttoolboxbrushclear
+msgid "Clear Selections"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxbrushkeep
+msgid "Keep Selections"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxbrushlinex
+msgid "Horizontally Select"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxbrushliney
+msgid "Vertically Select"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxbrushpolygon
+msgid "Lasso Select"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxbrushrect
+msgid "Box Select"
+msgstr ""
+
 #: tycontrols.strconsts.rstycharttoolboxdataview
 msgid "Data View"
 msgstr ""

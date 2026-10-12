@@ -167,6 +167,10 @@ type
     Size: Double;
     LiftZSet: Boolean;
     LiftZ: Double;
+    { the brush's visual stage (5000) wrote the colour / the opacity: it
+      comes after the item's own style and the per-datum palette
+      [Batch 127] }
+    LateColor, LateOpacity: Boolean;
   end;
   TTyVisualRowArray = array of TTyVisualRow;
 

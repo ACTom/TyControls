@@ -686,6 +686,9 @@ type
     function PaintOrder(AIndex: Integer): Integer;
     { Topmost non-silent element containing the point, or -1. }
     function HitTestElement(AX, AY: Double; APPI: Integer): Integer;
+    { Topmost element containing the point, a silent one too -- zrender's
+      `topTarget` -- or -1 [Batch 127] }
+    function TopElementAt(AX, AY: Double; APPI: Integer): Integer;
     { The same walk, reported as a datum. This and HitTestElement are ONE code
       path, so the element the caller highlights and the datum it reports can
       never be two different things. }
@@ -1068,6 +1071,26 @@ begin
   begin
     idx := FOrder[i];
     if FItems[idx].Silent or FItems[idx].Ignore or FItems[idx].ProgHidden then Continue;
+    if APPI > 0 then
+      slop := FItems[idx].HitSlopLogical * APPI / 96
+    else
+      slop := FItems[idx].HitSlopLogical;
+    if TyShapeContains(FItems[idx].Shape, AX, AY, slop) then
+      Exit(idx);
+  end;
+end;
+
+function TTyPaintList.TopElementAt(AX, AY: Double; APPI: Integer): Integer;
+var
+  i, idx: Integer;
+  slop: Double;
+begin
+  Result := -1;
+  EnsureOrder;
+  for i := FCount - 1 downto 0 do
+  begin
+    idx := FOrder[i];
+    if FItems[idx].Ignore or FItems[idx].ProgHidden then Continue;
     if APPI > 0 then
       slop := FItems[idx].HitSlopLogical * APPI / 96
     else

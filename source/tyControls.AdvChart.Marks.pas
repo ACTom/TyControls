@@ -47,7 +47,8 @@ uses
   tyControls.AdvChart.Layout, tyControls.AdvChart.Pictorial,
   tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
   tyControls.AdvChart.WhiskerBox, tyControls.AdvChart.Jitter,
-  tyControls.AdvChart.PolarBar, tyControls.AdvChart.Large;
+  tyControls.AdvChart.PolarBar, tyControls.AdvChart.Large,
+  tyControls.AdvChart.Brush;
 
 type
   { Where a stepped line turns. ECharts spells `step: true` as 'start'. }
@@ -355,6 +356,15 @@ function TyBuildCalendarHeatmap(const ABinding: TTySeriesBinding;
 function TyBuildSeriesMarks(const ABinding: TTySeriesBinding;
   AStore: TTyDataStore; const AStack: TTySeriesStack;
   const AVisual: TTySeriesVisual; AList: TTyPaintList): Integer;
+
+{ THE ITEM LAYOUTS a series' brushSelector reads (data.getItemLayout), one per
+  row of the store [Batch 127]: a scatter's or an effectScatter's point
+  (stacked, unjittered), a bar's barGrid layout on a cartesian -- its signed
+  size, barMinHeight in, before the border and the clip --, a candlestick's
+  brushRect. None for every other type, in large mode, for a gap. }
+function TyBrushItemLayouts(const ABinding: TTySeriesBinding;
+  AStore: TTyDataStore; const AStack: TTySeriesStack;
+  const AVisual: TTySeriesVisual): TTyBrushItemLayoutArray;
 
 implementation
 
@@ -847,7 +857,7 @@ end;
 
   A row that names an unreadable colour keeps the series' -- the same rule
   the series level follows. }
-function RowVisual(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
+function RowVisualEarly(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
   ARow: Integer): TTySeriesVisual;
 var v: TTyDataValue; c: TTyChartColor; raw: Integer; vr: TTyVisualRow;
   rf: TTyRowFill;
@@ -925,6 +935,28 @@ begin
     Result.FillGradient := Default(TTyChartGradient);
     Result.FillPattern := Default(TTyChartPattern);
   end;
+end;
+
+{ THE BRUSH'S VISUALS COME LAST: its stage (5000) runs after the item's own
+  style (4500) and the per-datum palette (4600), and writes over both
+  [Batch 127] }
+function RowVisual(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
+  ARow: Integer): TTySeriesVisual;
+var raw: Integer; vr: TTyVisualRow;
+begin
+  Result := RowVisualEarly(AVisual, AStore, ARow);
+  if (AVisual.VisualRows = nil) or (AStore = nil) then Exit;
+  raw := AStore.GetRawIndex(ARow);
+  if (raw < 0) or (raw > High(AVisual.VisualRows)) then Exit;
+  vr := AVisual.VisualRows[raw];
+  if vr.LateColor then
+  begin
+    Result.Fill := TyVisualToChart(vr.Color);
+    Result.FillGradient := Default(TTyChartGradient);
+    Result.FillPattern := Default(TTyChartPattern);
+  end;
+  if vr.LateOpacity and not IsNan(vr.Opacity) then
+    Result.Alpha := Min(Double(1), Max(Double(0), vr.Opacity));
 end;
 
 { THE SYMBOL A visualMap WROTE ON THIS ROW over the series' own: its name,
@@ -2651,6 +2683,18 @@ begin
     v.Fill := fill;
     v.Stroke := border;
     v.StrokeWidthLogical := AVisual.Candle.BorderWidthLogical;
+    { THE BRUSH'S fill and opacity (its visual stage writes style.fill, the
+      drawType, over the rise / fall colour; the pen stays) [Batch 127] }
+    if (AVisual.VisualRows <> nil) and (AStore.GetRawIndex(i) >= 0)
+      and (AStore.GetRawIndex(i) <= High(AVisual.VisualRows)) then
+    begin
+      if AVisual.VisualRows[AStore.GetRawIndex(i)].LateColor then
+        v.Fill := TyVisualToChart(AVisual.VisualRows[AStore.GetRawIndex(i)].Color);
+      if AVisual.VisualRows[AStore.GetRawIndex(i)].LateOpacity
+        and not IsNan(AVisual.VisualRows[AStore.GetRawIndex(i)].Opacity) then
+        v.Alpha := Min(Double(1), Max(Double(0),
+          AVisual.VisualRows[AStore.GetRawIndex(i)].Opacity));
+    end;
 
     { THE LAYOUT'S EIGHT POINTS: the body's sides snapped to the half pixel
       apart, the spine to the half pixel [Batch 108] }
@@ -4060,6 +4104,172 @@ begin
   if (AStore = nil) or (AAxis = nil) then Exit;
   cols := AStore.DimsOfCoord(AAxis.Dim);
   if Length(cols) > 0 then Result := cols[0];
+end;
+
+function TyBrushItemLayouts(const ABinding: TTySeriesBinding;
+  AStore: TTyDataStore; const AStack: TTySeriesStack;
+  const AVisual: TTySeriesVisual): TTyBrushItemLayoutArray;
+var
+  colX, colY, valCol, i, colOpen, colClose, colLow, colHigh, colBase: Integer;
+  x, y, own, floorV, floorPx, baseline, lx, ly, lw, lh, width, band: Double;
+  baseHoriz, stacked, haveCol: Boolean;
+  p, loPt: TTyPointF;
+  lay: TTyCoordLayout;
+  col: TTyBarColumn;
+  r: TTyXYWH;
+  m: TFPUExceptionMask;
+begin
+  Result := nil;
+  if (AStore = nil) or not ABinding.Resolved then Exit;
+  SetLength(Result, AStore.Count);
+  for i := 0 to High(Result) do Result[i] := Default(TTyBrushItemLayout);
+  { large mode keeps no item layout: nothing is selected }
+  if AVisual.Large <> lgkNone then Exit;
+  if (ABinding.XAxis = nil) or (ABinding.YAxis = nil) then Exit;
+  colX := FirstColumnOn(AStore, ABinding.XAxis);
+  colY := FirstColumnOn(AStore, ABinding.YAxis);
+  if (colX < 0) or (colY < 0) then Exit;
+  baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
+  stacked := AStack.Stacked and (AStack.ResultCol >= 0);
+  m := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    if (ABinding.SeriesType = 'scatter') or (ABinding.SeriesType = 'effectScatter') then
+    begin
+      if (PolarOf(ABinding) = nil) and (ABinding.Cart = nil) then Exit;
+      for i := 0 to AStore.Count - 1 do
+      begin
+        x := AStore.Get(colX, i);
+        y := AStore.Get(colY, i);
+        if stacked then
+        begin
+          if baseHoriz then y := AStore.Get(AStack.ResultCol, i)
+                       else x := AStore.Get(AStack.ResultCol, i);
+        end;
+        if IsNan(x) or IsNan(y) then
+        begin
+          Result[i].Kind := blkPoint;
+          Result[i].X := NaN;
+          Result[i].Y := NaN;
+          Continue;
+        end;
+        p := SysPoint(ABinding, [x, y]);
+        Result[i].Kind := blkPoint;
+        Result[i].X := p.X;
+        Result[i].Y := p.Y;
+      end;
+      Exit;
+    end;
+    if PolarOf(ABinding) <> nil then Exit;
+    if ABinding.Cart = nil then Exit;
+    if ABinding.SeriesType = 'bar' then
+    begin
+      { BuildBars' layout, to barMinHeight }
+      if baseHoriz then valCol := colY else valCol := colX;
+      baseline := 0;
+      if ABinding.ValueAxis <> nil then
+        baseline := ABinding.ValueAxis.DataToCoord(TyValueAxisStart(ABinding.ValueAxis));
+      haveCol := False;
+      col := Default(TTyBarColumn);
+      for i := 0 to AStore.Count - 1 do
+      begin
+        x := AStore.Get(colX, i);
+        y := AStore.Get(colY, i);
+        own := AStore.Get(valCol, i);
+        if stacked then
+        begin
+          if baseHoriz then y := AStore.Get(AStack.ResultCol, i)
+                       else x := AStore.Get(AStack.ResultCol, i);
+        end;
+        if IsNan(x) or IsNan(y) then Continue;
+        if not haveCol then
+        begin
+          lay := ABinding.Cart.DataToLayout([x, y]);
+          if not TyRectFIsValid(lay.Rect) then Continue;
+          col := ColumnFor(AVisual, lay.Rect, baseHoriz);
+          haveCol := True;
+        end;
+        floorPx := baseline;
+        if stacked and AStack.HasBelow and not IsNan(own) then
+        begin
+          if baseHoriz then
+          begin
+            if IsInfinite(y) and IsInfinite(own) then floorV := NaN else floorV := y - own;
+            loPt := ABinding.Cart.DataToPoint([x, floorV]);
+            floorPx := loPt.Y;
+          end
+          else
+          begin
+            if IsInfinite(x) and IsInfinite(own) then floorV := NaN else floorV := x - own;
+            loPt := ABinding.Cart.DataToPoint([floorV, y]);
+            floorPx := loPt.X;
+          end;
+        end;
+        if IsNan(floorPx) or IsInfinite(floorPx) then Continue;
+        p := ABinding.Cart.DataToPoint([x, y]);
+        if baseHoriz then
+        begin
+          lx := p.X + col.Offset;
+          ly := floorPx;
+          lw := col.Width;
+          lh := p.Y - floorPx;
+          if Abs(lh) < col.MinHeightPx then
+            if lh <= 0 then lh := -col.MinHeightPx else lh := col.MinHeightPx;
+        end
+        else
+        begin
+          lx := floorPx;
+          ly := p.Y + col.Offset;
+          lw := p.X - floorPx;
+          lh := col.Width;
+          if Abs(lw) < col.MinHeightPx then
+            if lw < 0 then lw := -col.MinHeightPx else lw := col.MinHeightPx;
+        end;
+        Result[i].Kind := blkRect;
+        Result[i].X := lx;
+        Result[i].Y := ly;
+        Result[i].W := lw;
+        Result[i].H := lh;
+      end;
+      Exit;
+    end;
+    if ABinding.SeriesType = 'candlestick' then
+    begin
+      if ABinding.BaseAxis = nil then Exit;
+      baseHoriz := ABinding.BaseAxis.Horizontal;
+      colBase := colX;
+      if not baseHoriz then colBase := colY;
+      colOpen := AStore.DimIndexOf('open');
+      colClose := AStore.DimIndexOf('close');
+      colLow := AStore.DimIndexOf('lowest');
+      colHigh := AStore.DimIndexOf('highest');
+      if (colOpen < 0) or (colClose < 0) or (colLow < 0) or (colHigh < 0) then Exit;
+      if AVisual.Whisker.Solved then
+        width := AVisual.Whisker.CandleWidth
+      else
+      begin
+        band := ABinding.BaseAxis.BandWidth;
+        if band <= 0 then band := 8;
+        width := Max(Double(1), band / 2);
+      end;
+      for i := 0 to AStore.Count - 1 do
+      begin
+        r := TyCandleBrushRect(ABinding.Cart, baseHoriz, AStore.Get(colBase, i),
+          AStore.Get(colLow, i), AStore.Get(colHigh, i), width);
+        Result[i].Kind := blkRect;
+        Result[i].X := r.X;
+        Result[i].Y := r.Y;
+        Result[i].W := r.W;
+        Result[i].H := r.H;
+      end;
+    end;
+  finally
+    ClearExceptions(False);
+    {$IFDEF CPUX86_64}
+    SetMXCSR(GetMXCSR and not LongWord($3F));
+    {$ENDIF}
+    SetExceptionMask(m);
+  end;
 end;
 
 function TyBuildSeriesMarks(const ABinding: TTySeriesBinding;
