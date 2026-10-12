@@ -227,6 +227,10 @@ msgstr "无效的 linear-gradient：%s"
 msgid "background-image needs url(): %s"
 msgstr "background-image 需要 url()：%s"
 
+#: tycontrols.strconsts.rsribbonmoregroups
+msgid "More groups"
+msgstr "更多分组"
+
 #: tycontrols.strconsts.rssmbackgroundimageneedsslice
 #, object-pascal-format
 msgid "background-image needs slice(): %s"
