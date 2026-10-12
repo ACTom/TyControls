@@ -3332,6 +3332,1304 @@
      ]
     }
    ]
+  },
+  {
+   "id": "link-shared-grid",
+   "note": "two x axes in one grid (bottom a..e; top p, q, r with max 4: positions 3 and 4 hold no category), linked with @Half: at b both show and nothing is linked; at e and d the top one shows nothing and takes half the bottom one's value, parsed (2, and 1.5 -> 2)",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis"
+    },
+    "axisPointer": {
+     "link": [
+      {
+       "xAxisIndex": [
+        0,
+        1
+       ],
+       "mapper": "@Half"
+      }
+     ]
+    },
+    "grid": {
+     "left": 50,
+     "right": 50,
+     "top": 60,
+     "bottom": 60
+    },
+    "xAxis": [
+     {
+      "type": "category",
+      "data": [
+       "a",
+       "b",
+       "c",
+       "d",
+       "e"
+      ]
+     },
+     {
+      "type": "category",
+      "position": "top",
+      "data": [
+       "p",
+       "q",
+       "r"
+      ],
+      "max": 4
+     }
+    ],
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       4,
+       7,
+       2
+      ]
+     },
+     {
+      "type": "line",
+      "xAxisIndex": 1,
+      "data": [
+       2,
+       6,
+       4
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "at": [
+      200,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "3ff0000000000000",
+       "valueText": "1",
+       "sdi": [
+        [
+         0,
+         1,
+         1
+        ]
+       ]
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "3ff0000000000000",
+       "valueText": "1",
+       "sdi": [
+        [
+         1,
+         1,
+         1
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ]
+         ]
+        },
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           1,
+           1,
+           1
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         1
+        ]
+       ]
+      }
+     ],
+     "mapper": []
+    },
+    {
+     "at": [
+      500,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "4010000000000000",
+       "valueText": "4",
+       "sdi": [
+        [
+         0,
+         4,
+         4
+        ]
+       ]
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "4000000000000000",
+       "valueText": "2",
+       "sdi": [
+        [
+         1,
+         2,
+         2
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "4010000000000000",
+         "valueText": "4",
+         "sdi": [
+          [
+           0,
+           4,
+           4
+          ]
+         ]
+        },
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "4000000000000000",
+         "valueText": "2",
+         "sdi": [
+          [
+           1,
+           2,
+           2
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         1
+        ]
+       ]
+      },
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         4
+        ],
+        [
+         1,
+         2
+        ]
+       ]
+      }
+     ],
+     "mapper": [
+      {
+       "fn": "Half",
+       "value": "4010000000000000",
+       "valueText": "4",
+       "src": {
+        "axisDim": "x",
+        "axisIndex": 0,
+        "axisName": "series␀0",
+        "axisId": "␀series␀0␀0"
+       },
+       "tar": {
+        "axisDim": "x",
+        "axisIndex": 1,
+        "axisName": "series␀1",
+        "axisId": "␀series␀1␀0"
+       }
+      }
+     ]
+    },
+    {
+     "at": [
+      400,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "4008000000000000",
+       "valueText": "3",
+       "sdi": [
+        [
+         0,
+         3,
+         3
+        ]
+       ]
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "4000000000000000",
+       "valueText": "2",
+       "sdi": [
+        [
+         1,
+         2,
+         2
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "4008000000000000",
+         "valueText": "3",
+         "sdi": [
+          [
+           0,
+           3,
+           3
+          ]
+         ]
+        },
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "4000000000000000",
+         "valueText": "2",
+         "sdi": [
+          [
+           1,
+           2,
+           2
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         0,
+         4
+        ]
+       ]
+      },
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         3
+        ]
+       ]
+      }
+     ],
+     "mapper": [
+      {
+       "fn": "Half",
+       "value": "4008000000000000",
+       "valueText": "3",
+       "src": {
+        "axisDim": "x",
+        "axisIndex": 0,
+        "axisName": "series␀0",
+        "axisId": "␀series␀0␀0"
+       },
+       "tar": {
+        "axisDim": "x",
+        "axisIndex": 1,
+        "axisName": "series␀1",
+        "axisId": "␀series␀1␀0"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "link-last-source",
+   "note": "two shown axes of one group in grid 0 (the bottom x at b, 1; the top x of three categories at p, 0) and a target in grid 1: the target takes the LAST source's value",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis"
+    },
+    "axisPointer": {
+     "link": {
+      "xAxisIndex": "all"
+     }
+    },
+    "grid": [
+     {
+      "left": 50,
+      "width": 500,
+      "top": 40,
+      "height": 130
+     },
+     {
+      "left": 50,
+      "width": 500,
+      "top": 230,
+      "height": 130
+     }
+    ],
+    "xAxis": [
+     {
+      "type": "category",
+      "data": [
+       "a",
+       "b",
+       "c",
+       "d",
+       "e"
+      ]
+     },
+     {
+      "type": "category",
+      "position": "top",
+      "data": [
+       "p",
+       "q",
+       "r"
+      ]
+     },
+     {
+      "type": "category",
+      "data": [
+       "a",
+       "b",
+       "c",
+       "d",
+       "e"
+      ],
+      "gridIndex": 1
+     }
+    ],
+    "yAxis": [
+     {},
+     {
+      "gridIndex": 1
+     }
+    ],
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       4,
+       7,
+       2
+      ]
+     },
+     {
+      "type": "line",
+      "xAxisIndex": 1,
+      "data": [
+       2,
+       6,
+       4
+      ]
+     },
+     {
+      "type": "line",
+      "xAxisIndex": 2,
+      "yAxisIndex": 1,
+      "data": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "at": [
+      200,
+      100
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "3ff0000000000000",
+       "valueText": "1",
+       "sdi": [
+        [
+         0,
+         1,
+         1
+        ]
+       ]
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "0000000000000000",
+       "valueText": "0",
+       "sdi": [
+        [
+         1,
+         0,
+         0
+        ]
+       ]
+      },
+      {
+       "key": "x2",
+       "dim": "x",
+       "index": 2,
+       "status": "show",
+       "value": "0000000000000000",
+       "valueText": "0",
+       "sdi": [
+        [
+         2,
+         0,
+         0
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ]
+         ]
+        },
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "0000000000000000",
+         "valueText": "0",
+         "sdi": [
+          [
+           1,
+           0,
+           0
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "cs": "grid1",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 2,
+         "value": "0000000000000000",
+         "valueText": "0",
+         "sdi": [
+          [
+           2,
+           0,
+           0
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         0
+        ],
+        [
+         2,
+         0
+        ]
+       ]
+      }
+     ],
+     "mapper": []
+    },
+    {
+     "at": [
+      450,
+      100
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "4010000000000000",
+       "valueText": "4",
+       "sdi": [
+        [
+         0,
+         4,
+         4
+        ]
+       ]
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "4000000000000000",
+       "valueText": "2",
+       "sdi": [
+        [
+         1,
+         2,
+         2
+        ]
+       ]
+      },
+      {
+       "key": "x2",
+       "dim": "x",
+       "index": 2,
+       "status": "show",
+       "value": "4000000000000000",
+       "valueText": "2",
+       "sdi": [
+        [
+         2,
+         2,
+         2
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "4010000000000000",
+         "valueText": "4",
+         "sdi": [
+          [
+           0,
+           4,
+           4
+          ]
+         ]
+        },
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "4000000000000000",
+         "valueText": "2",
+         "sdi": [
+          [
+           1,
+           2,
+           2
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "cs": "grid1",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 2,
+         "value": "4000000000000000",
+         "valueText": "2",
+         "sdi": [
+          [
+           2,
+           2,
+           2
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         0
+        ],
+        [
+         2,
+         0
+        ]
+       ]
+      },
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         4
+        ],
+        [
+         1,
+         2
+        ],
+        [
+         2,
+         2
+        ]
+       ]
+      }
+     ],
+     "mapper": []
+    }
+   ]
+  },
+  {
+   "id": "link-regroup",
+   "note": "a polar over the grid holds the point too: the grid's top x shows nothing and is linked from its bottom x (d, 3 -> @Half 1.5 -> r) -- its pointer joins the grid's axes in the tooltip, before the polar's",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis"
+    },
+    "axisPointer": {
+     "link": [
+      {
+       "xAxisIndex": [
+        0,
+        1
+       ],
+       "mapper": "@Half"
+      }
+     ]
+    },
+    "grid": {
+     "left": 50,
+     "right": 50,
+     "top": 60,
+     "bottom": 60
+    },
+    "polar": {
+     "center": [
+      400,
+      200
+     ],
+     "radius": 80
+    },
+    "angleAxis": {
+     "type": "category",
+     "data": [
+      "u",
+      "v",
+      "w",
+      "x"
+     ]
+    },
+    "radiusAxis": {},
+    "xAxis": [
+     {
+      "type": "category",
+      "data": [
+       "a",
+       "b",
+       "c",
+       "d",
+       "e"
+      ]
+     },
+     {
+      "type": "category",
+      "position": "top",
+      "data": [
+       "p",
+       "q",
+       "r"
+      ],
+      "max": 4
+     }
+    ],
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       4,
+       7,
+       2
+      ]
+     },
+     {
+      "type": "line",
+      "xAxisIndex": 1,
+      "data": [
+       2,
+       6,
+       4
+      ]
+     },
+     {
+      "type": "bar",
+      "coordinateSystem": "polar",
+      "data": [
+       1,
+       2,
+       3,
+       4
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "at": [
+      420,
+      180
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "4008000000000000",
+       "valueText": "3",
+       "sdi": [
+        [
+         0,
+         3,
+         3
+        ]
+       ]
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "4000000000000000",
+       "valueText": "2",
+       "sdi": [
+        [
+         1,
+         2,
+         2
+        ]
+       ]
+      },
+      {
+       "key": "angle0",
+       "dim": "angle",
+       "index": 0,
+       "status": "show",
+       "value": "0000000000000000",
+       "valueText": "0",
+       "sdi": [
+        [
+         2,
+         0,
+         0
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "4008000000000000",
+         "valueText": "3",
+         "sdi": [
+          [
+           0,
+           3,
+           3
+          ]
+         ]
+        },
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "4000000000000000",
+         "valueText": "2",
+         "sdi": [
+          [
+           1,
+           2,
+           2
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "cs": "polar0",
+       "axes": [
+        {
+         "dim": "angle",
+         "index": 0,
+         "value": "0000000000000000",
+         "valueText": "0",
+         "sdi": [
+          [
+           2,
+           0,
+           0
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         3
+        ],
+        [
+         1,
+         2
+        ],
+        [
+         2,
+         0
+        ]
+       ]
+      }
+     ],
+     "mapper": [
+      {
+       "fn": "Half",
+       "value": "4008000000000000",
+       "valueText": "3",
+       "src": {
+        "axisDim": "x",
+        "axisIndex": 0,
+        "axisName": "series␀0",
+        "axisId": "␀series␀0␀0"
+       },
+       "tar": {
+        "axisDim": "x",
+        "axisIndex": 1,
+        "axisName": "series␀1",
+        "axisId": "␀series␀1␀0"
+       }
+      }
+     ]
+    },
+    {
+     "at": [
+      380,
+      230
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "4008000000000000",
+       "valueText": "3",
+       "sdi": [
+        [
+         0,
+         3,
+         3
+        ]
+       ]
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "4000000000000000",
+       "valueText": "2",
+       "sdi": [
+        [
+         1,
+         2,
+         2
+        ]
+       ]
+      },
+      {
+       "key": "angle0",
+       "dim": "angle",
+       "index": 0,
+       "status": "show",
+       "value": "4000000000000000",
+       "valueText": "2",
+       "sdi": [
+        [
+         2,
+         2,
+         2
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "4008000000000000",
+         "valueText": "3",
+         "sdi": [
+          [
+           0,
+           3,
+           3
+          ]
+         ]
+        },
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "4000000000000000",
+         "valueText": "2",
+         "sdi": [
+          [
+           1,
+           2,
+           2
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "cs": "polar0",
+       "axes": [
+        {
+         "dim": "angle",
+         "index": 0,
+         "value": "4000000000000000",
+         "valueText": "2",
+         "sdi": [
+          [
+           2,
+           2,
+           2
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         2,
+         0
+        ]
+       ]
+      },
+      {
+       "type": "highlight",
+       "items": [
+        [
+         2,
+         2
+        ]
+       ]
+      }
+     ],
+     "mapper": [
+      {
+       "fn": "Half",
+       "value": "4008000000000000",
+       "valueText": "3",
+       "src": {
+        "axisDim": "x",
+        "axisIndex": 0,
+        "axisName": "series␀0",
+        "axisId": "␀series␀0␀0"
+       },
+       "tar": {
+        "axisDim": "x",
+        "axisIndex": 1,
+        "axisName": "series␀1",
+        "axisId": "␀series␀1␀0"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "snap-outside",
+   "note": "no link: a value axis cut at 10 snaps only to a point that is on it -- nearest 9 is 12, past the axis, so the pointer stays at 9 (the tooltip still names 12); nearest 3 is 2",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis"
+    },
+    "grid": {
+     "left": 50,
+     "right": 50,
+     "top": 40,
+     "bottom": 40
+    },
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       [
+        2,
+        1
+       ],
+       [
+        12,
+        3
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "at": [
+      500,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "4022000000000000",
+       "valueText": "9",
+       "sdi": [
+        [
+         0,
+         1,
+         1
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "4028000000000000",
+         "valueText": "12",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         1
+        ]
+       ]
+      }
+     ],
+     "mapper": []
+    },
+    {
+     "at": [
+      200,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "4000000000000000",
+       "valueText": "2",
+       "sdi": [
+        [
+         0,
+         0,
+         0
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "4000000000000000",
+         "valueText": "2",
+         "sdi": [
+          [
+           0,
+           0,
+           0
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         0,
+         1
+        ]
+       ]
+      },
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         0
+        ]
+       ]
+      }
+     ],
+     "mapper": []
+    }
+   ]
   }
  ],
  "connect": [
@@ -7548,8 +8846,8 @@
   },
   {
    "id": "conn-timeline",
-   "note": "timelineChange and timelinePlayChange between two timeline charts; the brushSelect their updates dispatch is left out (dropBrushSelect: the port runs a timeline update at the next frame)",
-   "dropBrushSelect": true,
+   "note": "timelineChange and timelinePlayChange between two timeline charts, with the brushSelect their updates dispatch (milestone D5-D8: it was left out, dropBrushSelect, while the port ran the update of a merged frame at the next frame)",
+   "dropBrushSelect": false,
    "charts": [
     {
      "option": {
@@ -7751,6 +9049,35 @@
       ],
       [
        1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
        "updated",
        null
       ],
@@ -7810,6 +9137,35 @@
        {
         "type": "timelineplaychanged",
         "playState": false
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
        }
       ],
       [
@@ -8270,6 +9626,1263 @@
   }
  ],
  "batch": [
+  {
+   "id": "brush-own-keys",
+   "note": "a brush whose option writes its style (the colours echoed as written) and action areas with keys of their own: generateBrushOption overwrites the six in place, the rest follow in order, then range and a targeted panelId (milestone D5-D8)",
+   "dropBrushSelect": false,
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "legend": {
+       "data": [
+        "s1",
+        "s2"
+       ]
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+       ]
+      },
+      "yAxis": {},
+      "dataZoom": [
+       {
+        "type": "slider"
+       },
+       {
+        "type": "inside"
+       }
+      ],
+      "series": [
+       {
+        "name": "s1",
+        "type": "bar",
+        "selectedMode": "multiple",
+        "data": [
+         3,
+         5,
+         2,
+         6,
+         4,
+         7
+        ]
+       },
+       {
+        "name": "s2",
+        "type": "line",
+        "selectedMode": "single",
+        "data": [
+         6,
+         2,
+         5,
+         3,
+         7,
+         1
+        ]
+       }
+      ],
+      "brush": {
+       "xAxisIndex": 0,
+       "brushStyle": {
+        "color": "rgba(10,20,30,0.25)",
+        "borderColor": "#336699",
+        "borderWidth": 2,
+        "opacity": 0.8
+       }
+      }
+     },
+     "w": 600,
+     "h": 400
+    }
+   ],
+   "steps": [
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "brush",
+      "areas": [
+       {
+        "brushType": "lineX",
+        "foo": "bar",
+        "coordRange": [
+         1,
+         3
+        ],
+        "xAxisIndex": 0,
+        "brushMode": "multiple"
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "brush",
+       {
+        "type": "brush",
+        "areas": [
+         {
+          "brushType": "lineX",
+          "foo": "bar",
+          "coordRange": [
+           1,
+           3
+          ],
+          "xAxisIndex": 0,
+          "brushMode": "multiple"
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [
+           {
+            "brushType": "lineX",
+            "brushMode": "multiple",
+            "transformable": true,
+            "brushStyle": {
+             "fill": "rgba(10,20,30,0.25)",
+             "stroke": "#336699",
+             "lineWidth": 2,
+             "opacity": 0.8
+            },
+            "removeOnClick": true,
+            "z": 10000,
+            "foo": "bar",
+            "coordRange": [
+             1,
+             3
+            ],
+            "xAxisIndex": 0,
+            "range": [
+             202.5,
+             352.5
+            ],
+            "panelId": "grid--␀series␀0␀0"
+           }
+          ],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": [
+             1,
+             2,
+             3
+            ]
+           },
+           {
+            "seriesId": "␀s2␀0",
+            "seriesIndex": 1,
+            "seriesName": "s2",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "brush",
+      "areas": [
+       {
+        "brushType": "rect",
+        "range": [
+         [
+          100,
+          200
+         ],
+         [
+          80,
+          160
+         ]
+        ],
+        "z": 7
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "brush",
+       {
+        "type": "brush",
+        "areas": [
+         {
+          "brushType": "rect",
+          "range": [
+           [
+            100,
+            200
+           ],
+           [
+            80,
+            160
+           ]
+          ],
+          "z": 7
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [
+           {
+            "brushType": "rect",
+            "brushMode": "single",
+            "transformable": true,
+            "brushStyle": {
+             "fill": "rgba(10,20,30,0.25)",
+             "stroke": "#336699",
+             "lineWidth": 2,
+             "opacity": 0.8
+            },
+            "removeOnClick": true,
+            "z": 7,
+            "range": [
+             [
+              100,
+              200
+             ],
+             [
+              80,
+              160
+             ]
+            ]
+           }
+          ],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": [
+             1
+            ]
+           },
+           {
+            "seriesId": "␀s2␀0",
+            "seriesIndex": 1,
+            "seriesName": "s2",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "resize-brush",
+   "note": "a resize is an update with a payload ({type: 'resize'}): the brush visual dispatches brushSelect -- brushselected, which B is sent -- then `updated` (milestone D5-D8)",
+   "dropBrushSelect": false,
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "legend": {
+       "data": [
+        "s1",
+        "s2"
+       ]
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+       ]
+      },
+      "yAxis": {},
+      "dataZoom": [
+       {
+        "type": "slider"
+       },
+       {
+        "type": "inside"
+       }
+      ],
+      "series": [
+       {
+        "name": "s1",
+        "type": "bar",
+        "selectedMode": "multiple",
+        "data": [
+         3,
+         5,
+         2,
+         6,
+         4,
+         7
+        ]
+       },
+       {
+        "name": "s2",
+        "type": "line",
+        "selectedMode": "single",
+        "data": [
+         6,
+         2,
+         5,
+         3,
+         7,
+         1
+        ]
+       }
+      ],
+      "brush": {
+       "xAxisIndex": 0
+      }
+     },
+     "w": 600,
+     "h": 400
+    },
+    {
+     "option": {
+      "animation": false,
+      "legend": {
+       "data": [
+        "s1",
+        "s2"
+       ]
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+       ]
+      },
+      "yAxis": {},
+      "dataZoom": [
+       {
+        "type": "slider"
+       },
+       {
+        "type": "inside"
+       }
+      ],
+      "series": [
+       {
+        "name": "s1",
+        "type": "bar",
+        "selectedMode": "multiple",
+        "data": [
+         3,
+         5,
+         2,
+         6,
+         4,
+         7
+        ]
+       },
+       {
+        "name": "s2",
+        "type": "line",
+        "selectedMode": "single",
+        "data": [
+         6,
+         2,
+         5,
+         3,
+         7,
+         1
+        ]
+       }
+      ],
+      "brush": {
+       "xAxisIndex": 0
+      }
+     },
+     "w": 600,
+     "h": 400
+    }
+   ],
+   "steps": [
+    {
+     "op": "connectList",
+     "charts": [
+      0,
+      1
+     ],
+     "ret": "g_<auto>",
+     "events": [],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      },
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "brush",
+      "areas": [
+       {
+        "brushType": "lineX",
+        "coordRange": [
+         1,
+         3
+        ],
+        "xAxisIndex": 0
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "brush",
+       {
+        "type": "brush",
+        "areas": [
+         {
+          "brushType": "lineX",
+          "coordRange": [
+           1,
+           3
+          ],
+          "xAxisIndex": 0
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "brush",
+       {
+        "type": "brush",
+        "areas": [
+         {
+          "brushType": "lineX",
+          "coordRange": [
+           1,
+           3
+          ],
+          "xAxisIndex": 0
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [
+           {
+            "brushType": "lineX",
+            "brushMode": "single",
+            "transformable": true,
+            "brushStyle": {
+             "fill": "rgba(234,237,245,0.5)",
+             "stroke": "#cfd2d7",
+             "lineWidth": 1
+            },
+            "removeOnClick": true,
+            "z": 10000,
+            "coordRange": [
+             1,
+             3
+            ],
+            "xAxisIndex": 0,
+            "range": [
+             202.5,
+             352.5
+            ],
+            "panelId": "grid--␀series␀0␀0"
+           }
+          ],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": [
+             1,
+             2,
+             3
+            ]
+           },
+           {
+            "seriesId": "␀s2␀0",
+            "seriesIndex": 1,
+            "seriesName": "s2",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [
+           {
+            "brushType": "lineX",
+            "brushMode": "single",
+            "transformable": true,
+            "brushStyle": {
+             "fill": "rgba(234,237,245,0.5)",
+             "stroke": "#cfd2d7",
+             "lineWidth": 1
+            },
+            "removeOnClick": true,
+            "z": 10000,
+            "coordRange": [
+             1,
+             3
+            ],
+            "xAxisIndex": 0,
+            "range": [
+             202.5,
+             352.5
+            ],
+            "panelId": "grid--␀series␀0␀0"
+           }
+          ],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": [
+             1,
+             2,
+             3
+            ]
+           },
+           {
+            "seriesId": "␀s2␀0",
+            "seriesIndex": 1,
+            "seriesName": "s2",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [
+           {
+            "brushType": "lineX",
+            "brushMode": "single",
+            "transformable": true,
+            "brushStyle": {
+             "fill": "rgba(234,237,245,0.5)",
+             "stroke": "#cfd2d7",
+             "lineWidth": 1
+            },
+            "removeOnClick": true,
+            "z": 10000,
+            "coordRange": [
+             1,
+             3
+            ],
+            "xAxisIndex": 0,
+            "range": [
+             202.5,
+             352.5
+            ],
+            "panelId": "grid--␀series␀0␀0"
+           }
+          ],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": [
+             1,
+             2,
+             3
+            ]
+           },
+           {
+            "seriesId": "␀s2␀0",
+            "seriesIndex": 1,
+            "seriesName": "s2",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      },
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      }
+     ]
+    },
+    {
+     "op": "resize",
+     "chart": 0,
+     "w": 500,
+     "h": 360,
+     "ret": null,
+     "events": [
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [
+           {
+            "brushType": "lineX",
+            "brushMode": "single",
+            "transformable": true,
+            "brushStyle": {
+             "fill": "rgba(234,237,245,0.5)",
+             "stroke": "#cfd2d7",
+             "lineWidth": 1
+            },
+            "removeOnClick": true,
+            "z": 10000,
+            "coordRange": [
+             1,
+             3
+            ],
+            "xAxisIndex": 0,
+            "range": [
+             168.75,
+             293.75
+            ],
+            "panelId": "grid--␀series␀0␀0"
+           }
+          ],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": [
+             1,
+             2,
+             3
+            ]
+           },
+           {
+            "seriesId": "␀s2␀0",
+            "seriesIndex": 1,
+            "seriesName": "s2",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [
+           {
+            "brushType": "lineX",
+            "brushMode": "single",
+            "transformable": true,
+            "brushStyle": {
+             "fill": "rgba(234,237,245,0.5)",
+             "stroke": "#cfd2d7",
+             "lineWidth": 1
+            },
+            "removeOnClick": true,
+            "z": 10000,
+            "coordRange": [
+             1,
+             3
+            ],
+            "xAxisIndex": 0,
+            "range": [
+             168.75,
+             293.75
+            ],
+            "panelId": "grid--␀series␀0␀0"
+           }
+          ],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": [
+             1,
+             2,
+             3
+            ]
+           },
+           {
+            "seriesId": "␀s2␀0",
+            "seriesIndex": 1,
+            "seriesName": "s2",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      },
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      }
+     ]
+    },
+    {
+     "op": "resize",
+     "chart": 1,
+     "w": 560,
+     "h": 380,
+     "ret": null,
+     "events": [
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [
+           {
+            "brushType": "lineX",
+            "brushMode": "single",
+            "transformable": true,
+            "brushStyle": {
+             "fill": "rgba(234,237,245,0.5)",
+             "stroke": "#cfd2d7",
+             "lineWidth": 1
+            },
+            "removeOnClick": true,
+            "z": 10000,
+            "coordRange": [
+             1,
+             3
+            ],
+            "xAxisIndex": 0,
+            "range": [
+             189,
+             329
+            ],
+            "panelId": "grid--␀series␀0␀0"
+           }
+          ],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": [
+             1,
+             2,
+             3
+            ]
+           },
+           {
+            "seriesId": "␀s2␀0",
+            "seriesIndex": 1,
+            "seriesName": "s2",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [
+           {
+            "brushType": "lineX",
+            "brushMode": "single",
+            "transformable": true,
+            "brushStyle": {
+             "fill": "rgba(234,237,245,0.5)",
+             "stroke": "#cfd2d7",
+             "lineWidth": 1
+            },
+            "removeOnClick": true,
+            "z": 10000,
+            "coordRange": [
+             1,
+             3
+            ],
+            "xAxisIndex": 0,
+            "range": [
+             189,
+             329
+            ],
+            "panelId": "grid--␀series␀0␀0"
+           }
+          ],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": [
+             1,
+             2,
+             3
+            ]
+           },
+           {
+            "seriesId": "␀s2␀0",
+            "seriesIndex": 1,
+            "seriesName": "s2",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       1,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      },
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      }
+     ]
+    }
+   ]
+  },
   {
    "id": "batch-legend",
    "note": "the legend actions with a batch: each item over the payload, ONE update, one event whose batch holds each item's own result",
@@ -9109,6 +11722,132 @@
        "brush": []
       }
      ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "select",
+      "batch": [
+       {
+        "seriesIndex": 0,
+        "dataIndex": 0
+       },
+       {
+        "type": "unselect",
+        "seriesIndex": 0,
+        "dataIndex": 0
+       },
+       {
+        "type": "toggleSelect",
+        "seriesIndex": 0,
+        "dataIndex": 2
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "select",
+       {
+        "type": "select",
+        "batch": [
+         {
+          "seriesIndex": 0,
+          "dataIndex": 0,
+          "type": "select",
+          "batch": null
+         },
+         {
+          "seriesIndex": 0,
+          "dataIndex": 0,
+          "type": "select",
+          "batch": null
+         },
+         {
+          "seriesIndex": 0,
+          "dataIndex": 0,
+          "type": "select",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "selectchanged",
+       {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           5
+          ],
+          "seriesIndex": 1
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "select",
+        "fromActionPayload": {
+         "type": "select",
+         "batch": [
+          {
+           "seriesIndex": 0,
+           "dataIndex": 0
+          },
+          {
+           "type": "unselect",
+           "seriesIndex": 0,
+           "dataIndex": 0
+          },
+          {
+           "type": "toggleSelect",
+           "seriesIndex": 0,
+           "dataIndex": 2
+          }
+         ]
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": [
+          5
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
     }
    ]
   },
@@ -9591,6 +12330,154 @@
         [
          "0000000000000000",
          "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "dataZoom",
+      "batch": [
+       {
+        "dataZoomIndex": 0,
+        "startValue": 1,
+        "endValue": 4
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "datazoom",
+       {
+        "type": "datazoom",
+        "batch": [
+         {
+          "dataZoomIndex": 0,
+          "startValue": 1,
+          "endValue": 4,
+          "type": "datazoom",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "4034000000000000",
+         "4054000000000000"
+        ],
+        [
+         "4034000000000000",
+         "4054000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "dataZoom",
+      "batch": [
+       {
+        "dataZoomIndex": 0,
+        "startValue": 2
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "datazoom",
+       {
+        "type": "datazoom",
+        "batch": [
+         {
+          "dataZoomIndex": 0,
+          "startValue": 2,
+          "type": "datazoom",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "4044000000000000",
+         "4054000000000000"
+        ],
+        [
+         "4044000000000000",
+         "4054000000000000"
         ]
        ],
        "sel": [
@@ -10278,6 +13165,230 @@
        "brush": []
       }
      ]
+    },
+    {
+     "op": "action",
+     "chart": 1,
+     "payload": {
+      "type": "toggleSelect",
+      "batch": [
+       {
+        "seriesIndex": 0,
+        "dataIndex": 1
+       },
+       {
+        "seriesIndex": 0,
+        "dataIndex": 3
+       },
+       {
+        "seriesIndex": 0,
+        "dataIndex": 4
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       1,
+       "toggleselect",
+       {
+        "type": "toggleselect",
+        "batch": [
+         {
+          "seriesIndex": 0,
+          "dataIndex": 1,
+          "type": "toggleselect",
+          "batch": null
+         },
+         {
+          "seriesIndex": 0,
+          "dataIndex": 1,
+          "type": "toggleselect",
+          "batch": null
+         },
+         {
+          "seriesIndex": 0,
+          "dataIndex": 1,
+          "type": "toggleselect",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "toggleselect",
+       {
+        "type": "toggleselect",
+        "batch": [
+         {
+          "seriesIndex": 0,
+          "dataIndex": 1,
+          "type": "toggleselect",
+          "batch": null
+         },
+         {
+          "seriesIndex": 0,
+          "dataIndex": 1,
+          "type": "toggleselect",
+          "batch": null
+         },
+         {
+          "seriesIndex": 0,
+          "dataIndex": 1,
+          "type": "toggleselect",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "selectchanged",
+       {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           2
+          ],
+          "seriesIndex": 0
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "toggleSelect",
+        "fromActionPayload": {
+         "type": "toggleSelect",
+         "batch": [
+          {
+           "seriesIndex": 0,
+           "dataIndex": 1,
+           "type": "toggleselect",
+           "batch": null
+          },
+          {
+           "seriesIndex": 0,
+           "dataIndex": 1,
+           "type": "toggleselect",
+           "batch": null
+          },
+          {
+           "seriesIndex": 0,
+           "dataIndex": 1,
+           "type": "toggleselect",
+           "batch": null
+          }
+         ]
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       1,
+       "selectchanged",
+       {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           2,
+           5,
+           1,
+           3,
+           4
+          ],
+          "seriesIndex": 0
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "toggleSelect",
+        "fromActionPayload": {
+         "type": "toggleSelect",
+         "batch": [
+          {
+           "seriesIndex": 0,
+           "dataIndex": 1
+          },
+          {
+           "seriesIndex": 0,
+           "dataIndex": 3
+          },
+          {
+           "seriesIndex": 0,
+           "dataIndex": 4
+          }
+         ]
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          2
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          2,
+          5,
+          1,
+          3,
+          4
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
     }
    ]
   }
@@ -10701,6 +13812,102 @@
    "mime": "image/png"
   },
   {
+   "id": "exp-ratio11",
+   "note": "pixelRatio 1.1: the left edge times the ratio is inexact, each offset the product less it (milestone D5-D8)",
+   "rects": [
+    {
+     "left": 3,
+     "top": 7,
+     "w": 101,
+     "h": 67
+    },
+    {
+     "left": 117,
+     "top": 29,
+     "w": 55,
+     "h": 91
+    },
+    {
+     "left": 241,
+     "top": 13,
+     "w": 40,
+     "h": 40
+    }
+   ],
+   "connect": true,
+   "chart": 0,
+   "opts": {
+    "pixelRatio": 1.1
+   },
+   "self": false,
+   "url": "data:image/png",
+   "renders": [
+    {
+     "chart": 0,
+     "opts": {
+      "pixelRatio": 1.1
+     }
+    },
+    {
+     "chart": 1,
+     "opts": {
+      "pixelRatio": 1.1
+     }
+    },
+    {
+     "chart": 2,
+     "opts": {
+      "pixelRatio": 1.1
+     }
+    }
+   ],
+   "canvas": {
+    "width": "40731ccccccccccd",
+    "height": "405f133333333333",
+    "widthText": "305.8",
+    "heightText": "124.3"
+   },
+   "ops": [
+    {
+     "op": "image",
+     "chart": 0,
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "w": "405bc00000000000",
+     "h": "4052400000000000",
+     "xText": "0",
+     "yText": "0",
+     "wText": "111",
+     "hText": "73"
+    },
+    {
+     "op": "image",
+     "chart": 1,
+     "x": "405f59999999999b",
+     "y": "4038333333333334",
+     "w": "404e000000000000",
+     "h": "4059000000000000",
+     "xText": "125.40000000000002",
+     "yText": "24.200000000000003",
+     "wText": "60",
+     "hText": "100"
+    },
+    {
+     "op": "image",
+     "chart": 2,
+     "x": "40705ccccccccccd",
+     "y": "401a666666666666",
+     "w": "4046000000000000",
+     "h": "4046000000000000",
+     "xText": "261.8",
+     "yText": "6.6",
+     "wText": "44",
+     "hText": "44"
+    }
+   ],
+   "mime": "image/png"
+  },
+  {
    "id": "exp-not-connected",
    "note": "the group is set but never connected: getDataURL of the asking chart alone",
    "rects": [
@@ -10893,6 +14100,11 @@
   },
   {
    "id": "exp-layout-exp-none-bg",
+   "ok": true,
+   "what": "the transcription reproduces the layout"
+  },
+  {
+   "id": "exp-layout-exp-ratio11",
    "ok": true,
    "what": "the transcription reproduces the layout"
   },

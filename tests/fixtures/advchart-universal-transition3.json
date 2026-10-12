@@ -97760,6 +97760,648 @@
     }
    ],
    "direction": 0
+  },
+  {
+   "id": "sb.drilled-tm",
+   "note": "a sunburst drilled to a (sunburstRootToNode: the return circle is the virtual root's piece, data index 0) becomes a treemap of the same tree",
+   "steps": [
+    {
+     "option": {
+      "color": ["#5070dd","#b6d634","#505372","#ff994d","#0ca8df","#ffd10a","#fb628b","#785db0","#3fbe95"],
+      "series": [
+       {
+        "type": "sunburst",
+        "id": "pk",
+        "radius": ["20%","90%"],
+        "animationDurationUpdate": 1000,
+        "nodeClick": false,
+        "universalTransition": true,
+        "label": {"show":false},
+        "data": [{"id":"a","name":"a","children":[{"id":"a1","name":"a1","value":3},{"id":"a2","name":"a2","value":5}]},{"id":"b","name":"b","value":4},{"id":"c","name":"c","children":[{"id":"c1","name":"c1","value":2}]}]
+       }
+      ]
+     },
+     "after": null,
+     "merge": false
+    },
+    {"action":{"type":"sunburstRootToNode","targetNode":"a"},"after":null,"merge":false},
+    {
+     "option": {
+      "color": ["#5070dd","#b6d634","#505372","#ff994d","#0ca8df","#ffd10a","#fb628b","#785db0","#3fbe95"],
+      "series": [
+       {
+        "type": "treemap",
+        "id": "pk",
+        "animationDurationUpdate": 1000,
+        "roam": false,
+        "nodeClick": false,
+        "universalTransition": true,
+        "label": {"show":false},
+        "breadcrumb": {"show":false},
+        "data": [{"id":"a","name":"a","children":[{"id":"a1","name":"a1","value":3},{"id":"a2","name":"a2","value":5}]},{"id":"b","name":"b","value":4},{"id":"c","name":"c","children":[{"id":"c1","name":"c1","value":2}]}]
+       }
+      ]
+     },
+     "after": null,
+     "merge": false
+    }
+   ],
+   "samples": [0,1,16,50,100,150,250,300,400,499,500,501,750,1000,1500],
+   "digest": true,
+   "resolved": [{"seriesIndex":0,"type":"treemap","id":"pk","ut":true,"animation":true,"count":7}],
+   "clips": [17,17,17,17,17,17,17,17,17,17,17,17,17,0,0],
+   "elements": [
+    {
+     "id": "s0/0/0",
+     "series": 0,
+     "type": "rect",
+     "seriesType": "treemap",
+     "item": true,
+     "dataIndex": 0,
+     "present": null,
+     "morph": null,
+     "style": {
+      "fill": "#fff",
+      "stroke": null,
+      "lineWidth": null,
+      "opacity": [
+       "0000000000000000","3d1203af9ee75617","3e5203af9ee75617","3ed4f8b588e368f3","3f24f8b588e368f3","3f53e81450efdc9c","3f90000000000000","3fa3e81450efdc9c","3fc4f8b588e368f3","3fdfae6832cf4b17","3fe0000000000000","3fe028cbe6985a74",
+       "3fef800000000000","3ff0000000000000","3ff0000000000000"
+      ]
+     },
+     "snap": {
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "rotation": "0000000000000000",
+      "shape.x": "0000000000000000",
+      "shape.y": "0000000000000000",
+      "shape.width": "4076800000000000",
+      "shape.height": "4069000000000000",
+      "shape.r": "0000000000000000",
+      "g.x": "0000000000000000",
+      "g.y": "0000000000000000",
+      "g.scaleX": "3ff0000000000000",
+      "g.scaleY": "3ff0000000000000",
+      "g.rotation": "0000000000000000"
+     },
+     "anim": [1,1,1,1,1,1,1,1,1,1,1,1,1,0,0]
+    },
+    {
+     "id": "s0/1/0",
+     "series": 0,
+     "type": "rect",
+     "seriesType": "treemap",
+     "item": true,
+     "dataIndex": 1,
+     "present": null,
+     "morph": [true,true,true,true,true,true,true,true,true,true,true,true,true,false,false],
+     "d": ["fnv62:62e4a54d","fnv62:dc331c52","fnv62:f3887c67","fnv62:5e85a600","fnv62:3087fdad","fnv62:29059f27","fnv62:862379e5","fnv62:3464af9b","fnv62:d4cb9b02","fnv62:08691667","fnv62:67e21965","fnv62:fa81a201","fnv62:ba42e79b",null,null],
+     "style": {
+      "fill": [
+       "rgba(80,112,221,1)","rgba(80,112,221,1)","rgba(80,112,221,1)","rgba(80,112,221,1)","rgba(80,112,221,1)","rgba(82,113,221,1)","rgba(90,120,223,1)","rgba(98,127,224,1)","rgba(124,148,229,1)","rgba(166,183,237,1)","rgba(167,183,238,1)",
+       "rgba(168,183,238,1)","rgba(244,246,252,1)","rgba(255,255,255,1)","rgba(255,255,255,1)"
+      ],
+      "stroke": null,
+      "lineWidth": null,
+      "opacity": "3ff0000000000000"
+     },
+     "snap": {
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "rotation": "0000000000000000",
+      "shape.x": "0000000000000000",
+      "shape.y": "0000000000000000",
+      "shape.width": "4069b6db6db6db6e",
+      "shape.height": "4069000000000000",
+      "shape.r": "0000000000000000",
+      "g.x": "0000000000000000",
+      "g.y": "0000000000000000",
+      "g.scaleX": "3ff0000000000000",
+      "g.scaleY": "3ff0000000000000",
+      "g.rotation": "0000000000000000"
+     },
+     "anim": [2,2,2,2,2,2,2,2,2,2,2,2,2,0,0]
+    },
+    {
+     "id": "s0/2/0",
+     "series": 0,
+     "type": "rect",
+     "seriesType": "treemap",
+     "item": true,
+     "dataIndex": 2,
+     "present": null,
+     "morph": [true,true,true,true,true,true,true,true,true,true,true,true,true,false,false],
+     "d": ["fnv37:283a863c","fnv45:f5a69076","fnv45:98ffa93d","fnv45:7c75e2ce","fnv45:3124306e","fnv45:12e87b28","fnv45:c8d1b8e8","fnv45:0caacaeb","fnv45:3147a46e","fnv45:683b8cb1","fnv45:aa4f3f66","fnv45:539f35d2","fnv45:6599ab84",null,null],
+     "style": {
+      "fill": [
+       "rgba(123,147,229,1)","rgba(122,146,228,1)","rgba(122,146,228,1)","rgba(122,146,228,1)","rgba(122,146,228,1)","rgba(122,146,228,1)","rgba(120,144,228,1)","rgba(118,143,228,1)","rgba(111,138,226,1)","rgba(101,129,225,1)","rgba(101,129,225,1)",
+       "rgba(101,129,224,1)","rgba(82,114,221,1)","rgba(80,112,221,1)","rgba(80,112,221,1)"
+      ],
+      "stroke": null,
+      "lineWidth": null,
+      "opacity": "3ff0000000000000"
+     },
+     "snap": {
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "rotation": "0000000000000000",
+      "shape.x": "0000000000000000",
+      "shape.y": "0000000000000000",
+      "shape.width": "4069b6db6db6db6e",
+      "shape.height": "4052bfffffffffff",
+      "shape.r": "0000000000000000",
+      "g.x": "0000000000000000",
+      "g.y": "405f400000000001",
+      "g.scaleX": "3ff0000000000000",
+      "g.scaleY": "3ff0000000000000",
+      "g.rotation": "0000000000000000"
+     },
+     "anim": [2,2,2,2,2,2,2,2,2,2,2,2,2,0,0]
+    },
+    {
+     "id": "s0/3/0",
+     "series": 0,
+     "type": "rect",
+     "seriesType": "treemap",
+     "item": true,
+     "dataIndex": 3,
+     "present": null,
+     "morph": [true,true,true,true,true,true,true,true,true,true,true,true,true,false,false],
+     "d": ["fnv51:a5ae9fd0","fnv59:cbe892b5","fnv59:25ab2d93","fnv59:54e91a22","fnv59:766c7929","fnv59:a31211ce","fnv59:58444c8d","fnv59:5b2006a5","fnv59:7cb9bdf5","fnv59:3a208920","fnv59:28cb8258","fnv59:419ccc99","fnv59:2c521e87",null,null],
+     "style": {
+      "fill": [
+       "rgba(123,147,229,1)","rgba(122,146,228,1)","rgba(122,146,228,1)","rgba(122,146,228,1)","rgba(122,146,228,1)","rgba(122,146,228,1)","rgba(120,144,228,1)","rgba(118,143,228,1)","rgba(111,138,226,1)","rgba(101,129,225,1)","rgba(101,129,225,1)",
+       "rgba(101,129,224,1)","rgba(82,114,221,1)","rgba(80,112,221,1)","rgba(80,112,221,1)"
+      ],
+      "stroke": null,
+      "lineWidth": null,
+      "opacity": "3ff0000000000000"
+     },
+     "snap": {
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "rotation": "0000000000000000",
+      "shape.x": "0000000000000000",
+      "shape.y": "0000000000000000",
+      "shape.width": "4069b6db6db6db6e",
+      "shape.height": "405f400000000001",
+      "shape.r": "0000000000000000",
+      "g.x": "0000000000000000",
+      "g.y": "0000000000000000",
+      "g.scaleX": "3ff0000000000000",
+      "g.scaleY": "3ff0000000000000",
+      "g.rotation": "0000000000000000"
+     },
+     "anim": [2,2,2,2,2,2,2,2,2,2,2,2,2,0,0]
+    },
+    {
+     "id": "s0/4/0",
+     "series": 0,
+     "type": "rect",
+     "seriesType": "treemap",
+     "item": true,
+     "dataIndex": 4,
+     "present": null,
+     "morph": [true,true,true,true,true,true,true,true,true,true,true,true,true,false,false],
+     "d": ["fnv37:d828f433","fnv41:c2536def","fnv41:c3054dbb","fnv41:6ffb492b","fnv41:18222388","fnv41:698401b8","fnv41:d56a2410","fnv41:f5195337","fnv41:1a4e5b31","fnv41:af4df312","fnv41:6ee10821","fnv41:5d7a6cf6","fnv41:71ef5db4",null,null],
+     "style": {"fill":"#b6d634","stroke":null,"lineWidth":null,"opacity":"3ff0000000000000"},
+     "snap": {
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "rotation": "0000000000000000",
+      "shape.x": "0000000000000000",
+      "shape.y": "0000000000000000",
+      "shape.width": "4063492492492492",
+      "shape.height": "4060aaaaaaaaaaab",
+      "shape.r": "0000000000000000",
+      "g.x": "4069b6db6db6db6e",
+      "g.y": "0000000000000000",
+      "g.scaleX": "3ff0000000000000",
+      "g.scaleY": "3ff0000000000000",
+      "g.rotation": "0000000000000000"
+     },
+     "anim": [2,2,2,2,2,2,2,2,2,2,2,2,2,0,0]
+    },
+    {
+     "id": "s0/5/0",
+     "series": 0,
+     "type": "rect",
+     "seriesType": "treemap",
+     "item": true,
+     "dataIndex": 5,
+     "present": null,
+     "morph": [true,true,true,true,true,true,true,true,true,true,true,true,true,false,false],
+     "d": ["fnv23:602e9901","fnv23:52d7b474","fnv23:f5b3d56a","fnv23:2799b6c2","fnv23:399ee357","fnv23:9e91c1c7","fnv23:4ddfa25e","fnv23:1b408fff","fnv23:b4716540","fnv23:364fa4c6","fnv23:4c77861d","fnv23:334ce28d","fnv23:4ecce124",null,null],
+     "style": {
+      "fill": [
+       "rgba(80,83,114,1)","rgba(80,83,114,1)","rgba(80,83,114,1)","rgba(80,83,114,1)","rgba(80,83,114,1)","rgba(82,85,115,1)","rgba(90,93,122,1)","rgba(98,101,129,1)","rgba(124,127,150,1)","rgba(166,168,184,1)","rgba(167,169,184,1)",
+       "rgba(168,169,184,1)","rgba(244,244,246,1)","rgba(255,255,255,1)","rgba(255,255,255,1)"
+      ],
+      "stroke": null,
+      "lineWidth": null,
+      "opacity": "3ff0000000000000"
+     },
+     "snap": {
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "rotation": "0000000000000000",
+      "shape.x": "0000000000000000",
+      "shape.y": "0000000000000000",
+      "shape.width": "4063492492492492",
+      "shape.height": "4050aaaaaaaaaaaa",
+      "shape.r": "0000000000000000",
+      "g.x": "4069b6db6db6db6e",
+      "g.y": "4060aaaaaaaaaaab",
+      "g.scaleX": "3ff0000000000000",
+      "g.scaleY": "3ff0000000000000",
+      "g.rotation": "0000000000000000"
+     },
+     "anim": [2,2,2,2,2,2,2,2,2,2,2,2,2,0,0]
+    },
+    {
+     "id": "s0/6/0",
+     "series": 0,
+     "type": "rect",
+     "seriesType": "treemap",
+     "item": true,
+     "dataIndex": 6,
+     "present": null,
+     "morph": [true,true,true,true,true,true,true,true,true,true,true,true,true,false,false],
+     "d": ["fnv23:91efd646","fnv23:406a9202","fnv23:cf82fef8","fnv23:bbe3222d","fnv23:960650e7","fnv23:da064a33","fnv23:9d81da89","fnv23:c355bcd9","fnv23:1a3a638e","fnv23:dd9744c5","fnv23:bef9efae","fnv23:2daffb9f","fnv23:872a8b35",null,null],
+     "style": {
+      "fill": [
+       "rgba(123,126,149,1)","rgba(122,125,148,1)","rgba(122,125,148,1)","rgba(122,125,148,1)","rgba(122,125,148,1)","rgba(122,125,148,1)","rgba(120,123,146,1)","rgba(118,121,145,1)","rgba(111,114,140,1)","rgba(101,104,131,1)","rgba(101,104,131,1)",
+       "rgba(101,104,131,1)","rgba(82,85,116,1)","rgba(80,83,114,1)","rgba(80,83,114,1)"
+      ],
+      "stroke": null,
+      "lineWidth": null,
+      "opacity": "3ff0000000000000"
+     },
+     "snap": {
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "rotation": "0000000000000000",
+      "shape.x": "0000000000000000",
+      "shape.y": "0000000000000000",
+      "shape.width": "4063492492492492",
+      "shape.height": "4050aaaaaaaaaaaa",
+      "shape.r": "0000000000000000",
+      "g.x": "0000000000000000",
+      "g.y": "0000000000000000",
+      "g.scaleX": "3ff0000000000000",
+      "g.scaleY": "3ff0000000000000",
+      "g.rotation": "0000000000000000"
+     },
+     "anim": [2,2,2,2,2,2,2,2,2,2,2,2,2,0,0]
+    },
+    {
+     "id": "s0/x/0",
+     "series": 0,
+     "type": "rect",
+     "seriesType": "treemap",
+     "item": false,
+     "owner": 3,
+     "present": null,
+     "morph": null,
+     "style": {
+      "opacity": [
+       "0000000000000000","3e312e0be826d695","3ef12e0be826d695","3f40624dd2f1a9fd","3f70624dd2f1a9fd","3f8ba5e353f7ced9","3fb0000000000000","3fbba5e353f7ced9","3fd0624dd2f1a9fd","3fdfcef23caf1919","3fe0000000000000","3fe01886e1a87374",
+       "3fee000000000000","3ff0000000000000","3ff0000000000000"
+      ]
+     },
+     "snap": {},
+     "anim": [1,1,1,1,1,1,1,1,1,1,1,1,1,0,0]
+    },
+    {
+     "id": "s0/x/1",
+     "series": 0,
+     "type": "rect",
+     "seriesType": "treemap",
+     "item": false,
+     "owner": 2,
+     "present": null,
+     "morph": null,
+     "style": {
+      "opacity": [
+       "0000000000000000","3e312e0be826d695","3ef12e0be826d695","3f40624dd2f1a9fd","3f70624dd2f1a9fd","3f8ba5e353f7ced9","3fb0000000000000","3fbba5e353f7ced9","3fd0624dd2f1a9fd","3fdfcef23caf1919","3fe0000000000000","3fe01886e1a87374",
+       "3fee000000000000","3ff0000000000000","3ff0000000000000"
+      ]
+     },
+     "snap": {},
+     "anim": [1,1,1,1,1,1,1,1,1,1,1,1,1,0,0]
+    },
+    {
+     "id": "s0/x/2",
+     "series": 0,
+     "type": "rect",
+     "seriesType": "treemap",
+     "item": false,
+     "owner": 4,
+     "present": null,
+     "morph": null,
+     "style": {
+      "opacity": [
+       "0000000000000000","3e312e0be826d695","3ef12e0be826d695","3f40624dd2f1a9fd","3f70624dd2f1a9fd","3f8ba5e353f7ced9","3fb0000000000000","3fbba5e353f7ced9","3fd0624dd2f1a9fd","3fdfcef23caf1919","3fe0000000000000","3fe01886e1a87374",
+       "3fee000000000000","3ff0000000000000","3ff0000000000000"
+      ]
+     },
+     "snap": {},
+     "anim": [1,1,1,1,1,1,1,1,1,1,1,1,1,0,0]
+    },
+    {
+     "id": "s0/x/3",
+     "series": 0,
+     "type": "rect",
+     "seriesType": "treemap",
+     "item": false,
+     "owner": 6,
+     "present": null,
+     "morph": null,
+     "style": {
+      "opacity": [
+       "0000000000000000","3e312e0be826d695","3ef12e0be826d695","3f40624dd2f1a9fd","3f70624dd2f1a9fd","3f8ba5e353f7ced9","3fb0000000000000","3fbba5e353f7ced9","3fd0624dd2f1a9fd","3fdfcef23caf1919","3fe0000000000000","3fe01886e1a87374",
+       "3fee000000000000","3ff0000000000000","3ff0000000000000"
+      ]
+     },
+     "snap": {},
+     "anim": [1,1,1,1,1,1,1,1,1,1,1,1,1,0,0]
+    }
+   ],
+   "direction": 0
+  },
+  {
+   "id": "tm-tm.recolor",
+   "note": "the same treemap with a new palette: one view, its own update -- a treemap keeps no old style, so the transition animates no style",
+   "steps": [
+    {
+     "option": {
+      "color": ["#5070dd","#b6d634","#505372","#ff994d","#0ca8df","#ffd10a","#fb628b","#785db0","#3fbe95"],
+      "series": [
+       {
+        "type": "treemap",
+        "id": "pk",
+        "animationDurationUpdate": 1000,
+        "roam": false,
+        "nodeClick": false,
+        "universalTransition": true,
+        "label": {"show":false},
+        "breadcrumb": {"show":false},
+        "data": [{"id":"a","name":"a","children":[{"id":"a1","name":"a1","value":3},{"id":"a2","name":"a2","value":5}]},{"id":"b","name":"b","value":4},{"id":"c","name":"c","children":[{"id":"c1","name":"c1","value":2}]}]
+       }
+      ]
+     },
+     "after": null,
+     "merge": false
+    },
+    {
+     "option": {
+      "color": ["#3fbe95","#785db0","#fb628b","#ffd10a","#0ca8df","#ff994d","#505372","#b6d634","#5070dd"],
+      "series": [
+       {
+        "type": "treemap",
+        "id": "pk",
+        "animationDurationUpdate": 1000,
+        "roam": false,
+        "nodeClick": false,
+        "universalTransition": true,
+        "label": {"show":false},
+        "breadcrumb": {"show":false},
+        "data": [{"id":"a","name":"a","children":[{"id":"a1","name":"a1","value":3},{"id":"a2","name":"a2","value":5}]},{"id":"b","name":"b","value":4},{"id":"c","name":"c","children":[{"id":"c1","name":"c1","value":2}]}]
+       }
+      ]
+     },
+     "after": null,
+     "merge": false
+    }
+   ],
+   "samples": [0,1,16,50,100,150,250,300,400,499,500,501,750,1000,1500],
+   "digest": true,
+   "resolved": [{"seriesIndex":0,"type":"treemap","id":"pk","ut":true,"animation":true,"count":7}],
+   "clips": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+   "elements": [
+    {
+     "id": "s0/0/0",
+     "series": 0,
+     "type": "rect",
+     "seriesType": "treemap",
+     "item": true,
+     "dataIndex": 0,
+     "present": null,
+     "morph": null,
+     "style": {"fill":"#fff","stroke":null,"lineWidth":null,"opacity":"3ff0000000000000"},
+     "snap": {
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "rotation": "0000000000000000",
+      "shape.x": "0000000000000000",
+      "shape.y": "0000000000000000",
+      "shape.width": "4076800000000000",
+      "shape.height": "4069000000000000",
+      "shape.r": "0000000000000000",
+      "g.x": "0000000000000000",
+      "g.y": "0000000000000000",
+      "g.scaleX": "3ff0000000000000",
+      "g.scaleY": "3ff0000000000000",
+      "g.rotation": "0000000000000000"
+     },
+     "anim": 0
+    },
+    {
+     "id": "s0/1/0",
+     "series": 0,
+     "type": "rect",
+     "seriesType": "treemap",
+     "item": true,
+     "dataIndex": 1,
+     "present": null,
+     "morph": null,
+     "style": {"fill":"#fff","stroke":null,"lineWidth":null,"opacity":"3ff0000000000000"},
+     "snap": {
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "rotation": "0000000000000000",
+      "shape.x": "0000000000000000",
+      "shape.y": "0000000000000000",
+      "shape.width": "4069b6db6db6db6e",
+      "shape.height": "4069000000000000",
+      "shape.r": "0000000000000000",
+      "g.x": "0000000000000000",
+      "g.y": "0000000000000000",
+      "g.scaleX": "3ff0000000000000",
+      "g.scaleY": "3ff0000000000000",
+      "g.rotation": "0000000000000000"
+     },
+     "anim": 0
+    },
+    {
+     "id": "s0/2/0",
+     "series": 0,
+     "type": "rect",
+     "seriesType": "treemap",
+     "item": true,
+     "dataIndex": 2,
+     "present": null,
+     "morph": null,
+     "style": {"fill":"#3fbe95","stroke":null,"lineWidth":null,"opacity":"3ff0000000000000"},
+     "snap": {
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "rotation": "0000000000000000",
+      "shape.x": "0000000000000000",
+      "shape.y": "0000000000000000",
+      "shape.width": "4069b6db6db6db6e",
+      "shape.height": "4052bfffffffffff",
+      "shape.r": "0000000000000000",
+      "g.x": "0000000000000000",
+      "g.y": "405f400000000001",
+      "g.scaleX": "3ff0000000000000",
+      "g.scaleY": "3ff0000000000000",
+      "g.rotation": "0000000000000000"
+     },
+     "anim": 0
+    },
+    {
+     "id": "s0/3/0",
+     "series": 0,
+     "type": "rect",
+     "seriesType": "treemap",
+     "item": true,
+     "dataIndex": 3,
+     "present": null,
+     "morph": null,
+     "style": {"fill":"#3fbe95","stroke":null,"lineWidth":null,"opacity":"3ff0000000000000"},
+     "snap": {
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "rotation": "0000000000000000",
+      "shape.x": "0000000000000000",
+      "shape.y": "0000000000000000",
+      "shape.width": "4069b6db6db6db6e",
+      "shape.height": "405f400000000001",
+      "shape.r": "0000000000000000",
+      "g.x": "0000000000000000",
+      "g.y": "0000000000000000",
+      "g.scaleX": "3ff0000000000000",
+      "g.scaleY": "3ff0000000000000",
+      "g.rotation": "0000000000000000"
+     },
+     "anim": 0
+    },
+    {
+     "id": "s0/4/0",
+     "series": 0,
+     "type": "rect",
+     "seriesType": "treemap",
+     "item": true,
+     "dataIndex": 4,
+     "present": null,
+     "morph": null,
+     "style": {"fill":"#785db0","stroke":null,"lineWidth":null,"opacity":"3ff0000000000000"},
+     "snap": {
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "rotation": "0000000000000000",
+      "shape.x": "0000000000000000",
+      "shape.y": "0000000000000000",
+      "shape.width": "4063492492492492",
+      "shape.height": "4060aaaaaaaaaaab",
+      "shape.r": "0000000000000000",
+      "g.x": "4069b6db6db6db6e",
+      "g.y": "0000000000000000",
+      "g.scaleX": "3ff0000000000000",
+      "g.scaleY": "3ff0000000000000",
+      "g.rotation": "0000000000000000"
+     },
+     "anim": 0
+    },
+    {
+     "id": "s0/5/0",
+     "series": 0,
+     "type": "rect",
+     "seriesType": "treemap",
+     "item": true,
+     "dataIndex": 5,
+     "present": null,
+     "morph": null,
+     "style": {"fill":"#fff","stroke":null,"lineWidth":null,"opacity":"3ff0000000000000"},
+     "snap": {
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "rotation": "0000000000000000",
+      "shape.x": "0000000000000000",
+      "shape.y": "0000000000000000",
+      "shape.width": "4063492492492492",
+      "shape.height": "4050aaaaaaaaaaaa",
+      "shape.r": "0000000000000000",
+      "g.x": "4069b6db6db6db6e",
+      "g.y": "4060aaaaaaaaaaab",
+      "g.scaleX": "3ff0000000000000",
+      "g.scaleY": "3ff0000000000000",
+      "g.rotation": "0000000000000000"
+     },
+     "anim": 0
+    },
+    {
+     "id": "s0/6/0",
+     "series": 0,
+     "type": "rect",
+     "seriesType": "treemap",
+     "item": true,
+     "dataIndex": 6,
+     "present": null,
+     "morph": null,
+     "style": {"fill":"#fb628b","stroke":null,"lineWidth":null,"opacity":"3ff0000000000000"},
+     "snap": {
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "rotation": "0000000000000000",
+      "shape.x": "0000000000000000",
+      "shape.y": "0000000000000000",
+      "shape.width": "4063492492492492",
+      "shape.height": "4050aaaaaaaaaaaa",
+      "shape.r": "0000000000000000",
+      "g.x": "0000000000000000",
+      "g.y": "0000000000000000",
+      "g.scaleX": "3ff0000000000000",
+      "g.scaleY": "3ff0000000000000",
+      "g.rotation": "0000000000000000"
+     },
+     "anim": 0
+    },
+    {"id":"s0/x/0","series":0,"type":"rect","seriesType":"treemap","item":false,"owner":3,"present":null,"morph":null,"style":{"opacity":"3ff0000000000000"},"snap":{},"anim":0},
+    {"id":"s0/x/1","series":0,"type":"rect","seriesType":"treemap","item":false,"owner":2,"present":null,"morph":null,"style":{"opacity":"3ff0000000000000"},"snap":{},"anim":0},
+    {"id":"s0/x/2","series":0,"type":"rect","seriesType":"treemap","item":false,"owner":4,"present":null,"morph":null,"style":{"opacity":"3ff0000000000000"},"snap":{},"anim":0},
+    {"id":"s0/x/3","series":0,"type":"rect","seriesType":"treemap","item":false,"owner":6,"present":null,"morph":null,"style":{"opacity":"3ff0000000000000"},"snap":{},"anim":0}
+   ],
+   "direction": 0
   }
  ]
 }

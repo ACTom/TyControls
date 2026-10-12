@@ -345,7 +345,11 @@ function engineCases() {
   // prepareMorphBatches (ids for paths)
   const BATCHES = [[[0], [[10]]], [[0, 1, 2], [[10, 11, 12, 13, 14, 15, 16]]], [[0, 1, 2, 3], [[10, 11]]],
     [[0, 1, 2, 3, 4], [[10, 11, 12]]], [[0, 1], [[10], [20, 21, 22]]], [[0, 1, 2, 3, 4, 5], [[10, 11, 12, 13]]],
-    [[0, 1, 2], [[10]]]];
+    [[0, 1, 2], [[10]]],
+    // milestone D5-D8: batches that do average (two lists over four), and the
+    // wrap-round once a source has one path left (five)
+    [[0, 1, 2, 3], [[10, 11], [20, 21]]], [[0, 1, 2, 3, 4], [[10, 11], [20, 21]]],
+    [[0, 1, 2, 3, 4, 5], [[10, 11, 12], [20, 21, 22]]]];
   cases.push({ id: 'batches', kind: 'batches',
     rows: BATCHES.map(([one, many]) => ({ one, many, out: E.prepareMorphBatches(one, many).map(b => ({ one: b.one, many: b.many })) })) });
   return cases;
@@ -592,6 +596,11 @@ function chartCases() {
     pie({ id: 'b', universalTransition: { enabled: true, seriesKey: ['j', 'k'] } }));
   add('bar-pie.rootdelay', 'the delay on the root option\'s universalTransition, the series\' own is true',
     bar(), Object.assign(pie(), { universalTransition: { delay: { $fn: 'ut120' } } }));
+  // milestone D5-D8
+  add('scatter-bar.opaque', 'symbols written opaque (itemStyle.opacity 1: an own key) become half-opaque bars, which fade from 1',
+    scatter({ itemStyle: { opacity: 1 } }), bar({ itemStyle: { opacity: 0.5 } }));
+  add('bar-pie.opacity', 'bars become slices whose itemStyle.opacity is 0.6: the pie draws its own opacity',
+    bar(), pie({ itemStyle: { opacity: 0.6 } }));
   return list;
 }
 

@@ -50,9 +50,10 @@ included) is not null; 'shape.<k>' and 'extra.<k>' for every own key that is
 not null and not transition / enterFrom / leaveTo; n, the element's
 animators that still have a clip (an animator whose every track another one
 stopped stays in el.animators with no clip; the port frees it). A custom
-textContent ('#label') has no opacity and no n: LabelManager fades a new
-series label in on its own animator, which the port does not do for a
-custom series' textContent.
+textContent ('#label') is read like any element: LabelManager fades a new
+series label in from 0 on an animator of its own (initProps at the series'
+enter timing), and moves an old one from its last layout (milestone D5-D8;
+batch 139 left both out).
 
 Guards (any failure: nothing is written, exit 1): named discriminating facts
 and the whole fixture generated twice, byte-identical.
@@ -270,7 +271,6 @@ function snap(el, isLabel) {
   for (const k of TKEYS) o[k] = hex(el[k]);
   if (el.style) {
     for (const k of SNAP_STYLE) {
-      if (isLabel && k === 'opacity') continue;
       if (el.style[k] != null) o['style.' + k] = valRec(el.style[k]);
     }
   }
@@ -286,7 +286,7 @@ function snap(el, isLabel) {
       o['extra.' + k] = valRec(el.extra[k]);
     }
   }
-  if (!isLabel) o.n = el.animators.filter(a => a.getClip()).length;
+  o.n = el.animators.filter(a => a.getClip()).length;
   return o;
 }
 function readEls(chart) {

@@ -59,7 +59,6 @@ type
     FClock: Double;
     FW, FH: Integer;
     FEvSeen, FRoamSeen, FActSeen, FAxActSeen: Integer;
-    FResizeStep: Boolean;
     procedure Miss(const AWhat: string);
     procedure SameHex(const AWhat: string; AGot: Double; AWant: TJSONData);
     procedure SameItem(const AWhat: string; AGot: Double; AWant: TJSONData);
@@ -784,9 +783,6 @@ begin
       Inc(nr);
       Continue;
     end;
-    { a resize's update dispatches brushSelect upstream; the port's resize
-      does not (outside this batch: a deviation of the brush's, §178) }
-    if FResizeStep and (t = 'brushselected') then Continue;
     if FEvSeen + n >= FChart.Events.Count then
     begin
       Miss(Format('no event %d (%s) here', [n, t]));
@@ -856,7 +852,6 @@ begin
   FActSeen := 0;
   FAxActSeen := 0;
   FClock := 1700000000000;
-  FResizeStep := False;
   FChart.BrushNow := FClock;
   FChart.DataZoomNow := FClock;
   FChart.ParallelExpandNow := FClock;
@@ -872,7 +867,6 @@ begin
     st := steps.Objects[i].Objects['step'];
     rec := steps.Objects[i].Objects['record'];
     typ := st.Strings['type'];
-    FResizeStep := typ = 'resize';
     FClock := FClock + st.Floats['dt'];
     FChart.ParallelExpandNow := FClock;
     FChart.ParallelExpandTick(FClock);

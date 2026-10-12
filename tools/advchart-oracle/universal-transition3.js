@@ -371,7 +371,9 @@ function runCase(c) {
       }
       if (i === c.steps.length - 1 && i > 0) oldItems = FLAT.flattenDataDiffItems(sideOf(chart.getModel()));
       NOW = t;
-      chart.setOption(materialize(st.option), i > 0 && !st.merge);
+      // a step may dispatch an action instead (milestone D5-D8)
+      if (st.action) chart.dispatchAction(JSON.parse(JSON.stringify(st.action)));
+      else chart.setOption(materialize(st.option), i > 0 && !st.merge);
     });
     const newItems = FLAT.flattenDataDiffItems(sideOf(chart.getModel()));
     const tl = record(chart, t, c.samples, c.digest);
@@ -551,6 +553,18 @@ function chartCases() {
     { samples: SAMPLES_BIG, digest: true });
   add('tm-sb-tm.inflight', '300 ms into tm-sb, the treemap again: each rect morphs from the frame its sector was drawing',
     [s(tm.treemapOption), s(tm.sunburstOption), s(tm.treemapOption, 300)], { samples: SAMPLES_BIG, digest: true });
+  // ---- milestone D5-D8: a drilled sunburst, a treemap into itself ----
+  const small = () => [{ id: 'a', name: 'a', children: [{ id: 'a1', name: 'a1', value: 3 }, { id: 'a2', name: 'a2', value: 5 }] },
+    { id: 'b', name: 'b', value: 4 }, { id: 'c', name: 'c', children: [{ id: 'c1', name: 'c1', value: 2 }] }];
+  const sbSmall = { color: PALETTE, series: [{ type: 'sunburst', id: 'pk', radius: ['20%', '90%'], animationDurationUpdate: 1000,
+    nodeClick: false, universalTransition: true, label: { show: false }, data: small() }] };
+  const tmSmall = pal => ({ color: pal, series: [{ type: 'treemap', id: 'pk', animationDurationUpdate: 1000, roam: false,
+    nodeClick: false, universalTransition: true, label: { show: false }, breadcrumb: { show: false }, data: small() }] });
+  add('sb.drilled-tm', 'a sunburst drilled to a (sunburstRootToNode: the return circle is the virtual root\'s piece, data index 0) '
+    + 'becomes a treemap of the same tree', [s(sbSmall), { action: { type: 'sunburstRootToNode', targetNode: 'a' }, after: null,
+      merge: false }, s(tmSmall(PALETTE))], { digest: true });
+  add('tm-tm.recolor', 'the same treemap with a new palette: one view, its own update -- a treemap keeps no old style, so the '
+    + 'transition animates no style', [s(tmSmall(PALETTE)), s(tmSmall(PALETTE.slice().reverse()))], { digest: true });
   return list;
 }
 

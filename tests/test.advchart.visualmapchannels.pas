@@ -64,8 +64,8 @@ type
 const
   cCartesian: array[0..10] of string = ('C1', 'C2', 'C4a', 'C4b', 'C4c', 'C5a',
     'C5b', 'C5c', 'C5d', 'C6', 'L1');
-  cDatum: array[0..11] of string = ('C3a', 'C3b', 'C3c', 'C7a', 'C7b', 'C7c',
-    'C7d', 'C7e', 'R1', 'R2', 'G1', 'GL');
+  cDatum: array[0..13] of string = ('C3a', 'C3b', 'C3c', 'C7a', 'C7b', 'C7c',
+    'C7d', 'C7e', 'C7f', 'C7g', 'R1', 'R2', 'G1', 'GL');
 
 procedure TVmcProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin

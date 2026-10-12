@@ -1,8 +1,8 @@
 # TTyAdvanceChart 路线图进度审计(Tier 1 / 2 / 3)
 
-- 审计对象:`D:/Projects/ty-advchart`(feat/advancechart-tier2,HEAD `72983fa7` 合入 D1–D4;初版审计在 feat/advancechart `68f470c1` T3 树图交互;2026-10-13 更新到第 131 批,2026-10-12 里程碑 D1–D4(§174)更新到第 135 批)
+- 审计对象:`D:/Projects/ty-advchart`(feat/advancechart-tier2,HEAD `8a7de2df` 合入 D5–D8;初版审计在 feat/advancechart `68f470c1` T3 树图交互;2026-10-13 更新到第 131 批,2026-10-12 里程碑 D1–D4(§174)更新到第 135 批,里程碑 D5–D8(§180)更新到第 141 批)
 - 路线图:`docs/superpowers/research/2026-09-01-echarts/10-gap-analysis.md` §5
-- 进度日志:`docs/superpowers/specs/2026-09-01-advancechart-tier0.md` §33–§172、§174
+- 进度日志:`docs/superpowers/specs/2026-09-01-advancechart-tier0.md` §33–§180
 - 核对方法:spec 每节的"实现"和"已知偏差/没做"逐条摘出,再到 `source/tyControls.AdvChart.*.pas` 和 `tyControls.AdvanceChart.pas` 里 grep option 键(排除生成的 `Catalog.pas`)。spec 里只说"押后"的一律不算做完。
 - 渲染器表(`Marks.pas` `cRenderers` 8 种 + `cElsewhere` 14 种)实际能画的 22 种:bar, line, scatter, effectScatter, candlestick, boxplot, pictorialBar, heatmap, pie, funnel, gauge, radar, graph, tree, sunburst, treemap, sankey, themeRiver, chord, lines, custom, parallel。
 - 只注册、没有渲染器的 1 种(`Series.pas` `Reg`):map(等 geo,D14)。
@@ -27,14 +27,14 @@
 | bar:calcBarWidthAndOffset、横向、borderRadius、showBackground | DONE | §34 求解器;§40 四角圆角/showBackground/clip;§70 基线与 barMinHeight | NaN 行没有背景条(§40/§70);borderWidth 内缩没做(§70);`barMinWidth: 0`(§70);`backgroundStyle` 颜色读了但主题优先 |
 | 堆叠:stack + stackStrategy×4 + stackOrder + addSafe | DONE | §35 `Stack.pas`;§46 图例过滤改变成员;§148 极坐标柱按基值与符号的像素累加器(`lastStackCoords`) | — |
 | scatter / bubble | DONE | §37;§90 visualMap symbolSize 通道 | 回调形式的 symbolSize 只能走 visualMap 或第三列替身 |
-| 饼图:start/endAngle、clockwise、padAngle、minAngle、roseType、selectedOffset、emphasis.scale、percentPrecision | DONE | §39 布局/minAngle/roseType;§41 扇区圆角;§57 emphasis.scale;§69 最大余数 `{d}`;`Pie.pas:428-458` endAngle/clockwise/padAngle/roseType;§123 选中态与 selectedOffset(标签、引导线一起平移);§129 选中平移与 emphasis 放大的状态过渡 | 扇区命中仍用整环,圆角外一点也算中(§41);常态隐藏、只在状态里显示的标签不建(§123/§144);内侧标签在选中色上不重挑墨色(§123) |
+| 饼图:start/endAngle、clockwise、padAngle、minAngle、roseType、selectedOffset、emphasis.scale、percentPrecision | DONE | §39 布局/minAngle/roseType;§41 扇区圆角;§57 emphasis.scale;§69 最大余数 `{d}`;`Pie.pas:428-458` endAngle/clockwise/padAngle/roseType;§123 选中态与 selectedOffset(标签、引导线一起平移);§129 选中平移与 emphasis 放大的状态过渡;§180 系列与数据项的 `itemStyle.opacity`(此前只画 visualMap 的) | 扇区命中仍用整环,圆角外一点也算中(§41);常态隐藏、只在状态里显示的标签不建(§123/§144);内侧标签在选中色上不重挑墨色(§123) |
 | 坐标轴解剖:axisLine(+onZero、箭头)、axisTick、minorTick、axisLabel、splitLine(+配色循环)、minorSplitLine、splitArea、name* / nameTruncate | DONE | §48 显隐默认、minorTick/minorSplitLine;§51 onZero/offset;§53/§77 rotate/margin/inside;§68 字符串 formatter;§72 name/nameLocation/nameGap/nameRotate;§74 tick/split 跟标签走;§117 函数 formatter;§118 轴标签与轴名的作者字体、颜色;§121 轴标签与轴名的 rich/盒子;§136 axisLine 箭头、nameTruncate、splitLine/splitArea 颜色列表轮流取(跨渲染保色) | 轴线与箭头颜色走皮肤 `TyAdvChartAxisLine`,不读 `axisLine.lineStyle.color`(§136);splitLine 的 width/type、splitArea 的 opacity 仍是皮肤的(§136);`image://` 箭头不画(§136);截成空串的轴名当没有名字(§136) |
 | 多轴:position、offset、第二 Y 轴、gridIndex、alignTicks | DONE | §51 offset/onZeroAxisIndex;§82 alignTicks(`scaleCalcAlign`);Builder `gridIndex`/`position` | alignTicks 与 inverse、containShape 的交互没做(§82);写了 `breaks` 的轴照上游不参加 alignTicks(§169) |
 | `axisLabel.interval: 'auto'` + ±1 滞回缓存 | DONE | §73 `calculateCategoryInterval`(采样、×1.3、7px 下限、旋转投影);§136 滞回缓存(只抑制减一、resize 不用,按轴记忆,notMerge 清空) | replaceMerge 删轴不补时记忆留到这个下标再有新轴才清;隐藏的轴不量间隔(§136);量的是主题字体而不是上游的 12px,拥挤类目上可差一档(§145);时间线组件的跨渲染缓存不做(§165) |
 | 时间轴:12 级阶梯、分级 tick、日历边界、级别格式器、24 个格式 token、本地化月/周名 | DONE | §52 `Time.pas` 分级阶梯/日历步进/级别标签;§67 flat extent 与 min/maxInterval;`Time.pas:98` 24 个 token 与默认分级模板;§117 字符串与 `@Name` formatter;§139 上游替换链、按级别对象与级联、`{primary|}` 走富文本、指针标签与轴 tooltip 表头走 getLabel | 改应用语言后不重建就不重标(§52);没有 `locale` 选项,月名走本库三级规则(§139,有意);毫秒级 getLabel 到不了(§139);日历算术钳在公元 1–9999 年(§139) |
 | 图例组件:orient/align/盒子折行、逐项图标、selectedMode + **点击切换**、未选样式、formatter、selector | DONE | §45 绘制与折行;§46 过滤;§65 类别入图例;§86 mergeLayoutParam;`Legend.pas` 读 formatter/icon/orient/align;§117 `@Name` formatter;§128 点击切换、五个图例动作与 legendselectchanged、悬停联动高亮、作者 textStyle/inactiveColor;§131 切换的过渡;§133 selector 按钮与 scroll 翻页(legendScroll、翻页补间);§135 找不到名字的项不画 | `legend.data[i]` 里的 inactiveColor/textStyle 不读(§121/§128);`image://` 翻页图标不画(§133);`emphasis.selectorLabel` 只读颜色(§133);按钮命中是整个盒子(§133) |
-| tooltip:trigger、triggerOn、formatter 模板、valueFormatter、order、position、delay、alwaysShowContent | PARTIAL | §55 item trigger 与 richText 盒;§56 axis trigger 与 order;§69 模板;§84 子行/encode.tooltip;§117 valueFormatter 与各处 `@Name`;§135 position 四种写法与函数形式、showDelay/hideDelay/alwaysShowContent 计时器、只在有 tooltip 组件时出、markers/heatmap/sunburst/treemap/sankey 的 tooltip、`axisPointer.status: 'show'` 的初始指针 | **`triggerOn: 'click'` 仍不出盒子**(§135);Invalidate、dataZoom、动作重建时盒子被清掉,alwaysShowContent 也不 keepShow(§135);未写的 confine 按真(有意偏差,§135);状态显示的指针只认直角坐标(§135);旭日/矩形树图/桑基的格式器参数走通用 TooltipParams(§135) |
-| axisPointer:line / shadow / cross、snap、值标签药丸、滑动动画 | DONE | §56 三种类型、snap、九字段优先级;§68 标签 precision/formatter;§77 夹住的像素;§127 滑动动画('auto' 判定、轴自己的 axisPointer 优先);§136 值轴/时间轴的 shadow 带;§146 极坐标指示器 | 极坐标指示器不做移动动画(§146);指示器标签按皮肤排版、跟着线走,不与上游逐位比(§127);link / triggerEmphasis(归 Tier 3) |
+| tooltip:trigger、triggerOn、formatter 模板、valueFormatter、order、position、delay、alwaysShowContent | PARTIAL | §55 item trigger 与 richText 盒;§56 axis trigger 与 order;§69 模板;§84 子行/encode.tooltip;§117 valueFormatter 与各处 `@Name`;§135 position 四种写法与函数形式、showDelay/hideDelay/alwaysShowContent 计时器、只在有 tooltip 组件时出、markers/heatmap/sunburst/treemap/sankey 的 tooltip、`axisPointer.status: 'show'` 的初始指针 | **`triggerOn: 'click'` 仍不出盒子**(§135);Invalidate、dataZoom、动作重建时盒子被清掉,alwaysShowContent 也不 keepShow(§135);未写的 confine 按真(有意偏差,§135);状态显示的指针只认直角坐标(§135);旭日/矩形树图/桑基的格式器参数走通用 TooltipParams(§135);**connect 的组里不跨图联动**(不走 updateAxisPointer / showTip / hideTip,§179/§180,见 D8b) |
+| axisPointer:line / shadow / cross、snap、值标签药丸、滑动动画 | DONE | §56 三种类型、snap、九字段优先级;§68 标签 precision/formatter;§77 夹住的像素;§127 滑动动画('auto' 判定、轴自己的 axisPointer 优先);§136 值轴/时间轴的 shadow 带;§146 极坐标指示器 | 极坐标指示器不做移动动画(§146);指示器标签按皮肤排版、跟着线走,不与上游逐位比(§127);`triggerEmphasis` 不读(§179);link 见 Tier 3 |
 | markPoint / markLine / markArea:四种定位 + min/max/average/median | DONE | §98 模型/变换/布局(coord、x/y、xAxis/yAxis、type 统计、relativeTo);§99–§101 三种画面;`Marker.pas` median 等;§119 标注不再 silent、发鼠标事件;§121 富文本标签画出;§127/§134 markLine 划出、markPoint 弹出与合并下的更新;§135 标注 tooltip;§140 markArea 渐变/图案填充;§148 极坐标上的 markPoint/markLine | 更新按数据下标配对,增删重排会配错(§134);被淡化系列的标注不变淡(§125);markPoint 的 path/image 符号(§100);极坐标上 markArea 不建(上游抛错,§148);单轴上不建标注(§153) |
 | 标签引擎:13 矩形 + 9 扇区位置、distance/rotate/offset、模板、内外自动对比色、overflow/ellipsis | DONE | §43 13 个位置与模板;§69 `{a0}`/`$` 替换;§81 自动墨色 + halo;`LabelOpt.pas:273` overflow;§117 函数 formatter;§118 根 textStyle 与 darkMode 描边;§121 背景框/边框/padding/文字阴影;§148 9 个扇区位置 | textBorderType 没做(§81);`fontStyle` 斜体画家画不出(§118/§120);文字阴影不模糊(§121);图片背景没做(§120) |
 | 标签去碰撞:hideOverlap(AABB + OBB SAT)、moveOverlap(shiftLayoutOnXY) | DONE | §73 轴标签 hideOverlap 与 OBB 求交;§72 nameMoveOverlap;§138 系列 labelLayout 的 hideOverlap/moveOverlap、x/y/dx/dy/rotate 与 `@Name`;§144 饼先挪后藏 | endLabel、漏斗标签不进清单(§138);labelLayout 的 width/height 读了不应用、draggable 不做(§138);雷达轴标签 hideOverlap(§82) |
@@ -76,14 +76,14 @@
 | singleAxis + themeRiver | DONE | §153 C10 单轴坐标系、轴与指示器、themeRiver、单轴上的散点/涟漪散点、dataZoom 目标、convertToPixel | 单轴上不建标注(§153);单轴上 inside dataZoom 的漫游不做(§153);themeRiver 更新不补间(§153) |
 | 日历坐标系 + 日历热力图 | DONE | §103 H2 坐标系;§104 H3 热力图;§105/§106 日历上的 scatter/effectScatter/graph/pie | 用库的语言而不是图表 locale 取名字(§103);边距写成百分比字符串时不画 |
 | View 坐标系 + RoamController(平移/缩放、scaleLimit、roamTrigger、preserveAspect、nodeScaleRatio) | DONE | §79 graph roam;§116 tree view/roam | 捏合缩放;`roamTrigger: 'selfRect'` 是近似;roam 动画;拖动后不抑制 click(§79);非均匀视图的箭头与线宽(§79) |
-| brush:4 种形状、8 手柄 cover、inBrush/outOfBrush、brushLink、globalPan 互斥 | DONE | §162 C17 组件模型、4 种形状、8 手柄 cover、single/multiple、brush/brushEnd 动作;§163 C18 inBrush/outOfBrush 视觉、brushLink、brushselected、globalPan 互斥、toolbox 的 brush 按钮与预处理器;§166 平行轴上的逐轴刷选 | 覆盖框总在最上,不看 z(§162);样式只画填充/描边/线宽/不透明度(§162);geoIndex 等 D14;散点按未抖动的点选、极坐标柱不选(§163);非 96 PPI 不保证逐位(§162);导出时 `excludeComponents: ['brush']` 藏不掉框,与上游一致(不算缺口) |
+| brush:4 种形状、8 手柄 cover、inBrush/outOfBrush、brushLink、globalPan 互斥 | DONE | §162 C17 组件模型、4 种形状、8 手柄 cover、single/multiple、brush/brushEnd 动作;§163 C18 inBrush/outOfBrush 视觉、brushLink、brushselected、globalPan 互斥、toolbox 的 brush 按钮与预处理器;§166 平行轴上的逐轴刷选 | brushselected 的 `areas` 现在是模型区域的整个对象(§180);缺省的刷选颜色是皮肤的,事件里 brushStyle 的 fill / stroke 与上游令牌不同(同调色板,§180);覆盖框总在最上,不看 z(§162);样式只画填充/描边/线宽/不透明度(§162);geoIndex 等 D14;散点按未抖动的点选、极坐标柱不选(§163);非 96 PPI 不保证逐位(§162);导出时 `excludeComponents: ['brush']` 藏不掉框,与上游一致(不算缺口) |
 | toolbox 原生工具条:saveAsImage、restore、框选 dataZoom、magicType、brush、自定义按钮 | DONE | §94 `toolbox.feature.dataZoom` 的 select 型 dataZoom 模型;§160 C16 原生工具条、saveAsImage、restore、dataZoom 选择与回退、magicType、自定义按钮、dataView 对话框;§163 brush 按钮 | `image://` 图标不画(§160);工具栏自己的 tooltip 不做(§160);dataView 是模态对话框,optionToContent/contentToOption 不支持(§160);magicType 只抄作者写的键(§160);`type: 'svg'` 存出来是 PNG(§160) |
 | timeline 组件 | DONE | §165 C21 组件视图、播放/暂停/单步计时、`options` 各帧合并到 baseOption、autoPlay/loop/rewind、checkpoint 拖动、timelineChange/timelinePlayChange 动作 | 只有第一个时间线有视图(§165);刻度不是数据项,没有 tooltip 与图表鼠标事件(§165);标签的 `@Name` formatter、rich、overflow 不做(§165);`image://` 按钮与符号不画(§165) |
 | 富文本引擎(`{name|content}`、逐片段盒子/图片/百分比宽度、lineOverflow) | DONE | §120 A4 引擎(切分、样式继承、片段量测与排版、truncate/lineOverflow、百分比宽度、wrapText);§121 A5 接到系列标签、标注、轴标签与轴名、标题、图例、仪表盘 | 图片背景没做(§120);`legend.data[i].textStyle`、`emphasis.label.rich` 不读(§121);矩形树图/旭日图/桑基图先截断再盖章,rich 标记会被当字截(§121);斜体画不出(§120) |
 | Decal 图案 + aria 描述 | PARTIAL | §167 C22 decal 图案生成(LCM 平铺、旋转、6 种内置)、aria.decal 自动分配、柱/饼/漏斗/折线面积/图例图标上画出、aria 描述文字(`AriaDescription`);visualMap 的 decal 通道上游本身不施加,端口照做(§88/§167,不算缺口) | **雷达面积、桑基、旭日、矩形树图、K 线、箱线图、热力图、象形柱、custom、large 批量与渐进路径不画 decal**(§167);没写颜色的 decal 用皮肤键而不是黑色 20%(§167);描述交给 UIA/MSAA 归 D11 |
-| `graphic` 覆盖组件 | DONE | §157 C13 元素类型、$action、变换、bounding、文字走富文本、拖动、过渡与离场 | clipPath、元素 tooltip、keyframeAnimation(D6)、during 不做(§157);拖动只平移、不发 ondrag 事件(§157);图片只认 `data:` URL(§157);z 映射成整数(§157) |
+| `graphic` 覆盖组件 | DONE | §157 C13 元素类型、$action、变换、bounding、文字走富文本、拖动、过渡与离场 | clipPath、元素 tooltip、during 不做(§157/§177);拖动只平移、不发 ondrag 事件(§157);图片只认 `data:` URL(§157);z 映射成整数(§157) |
 | SVG `path://` | DONE | §37 符号;§60 gauge 指针;§89/§95 手柄图标;`ZrPath.pas` | — |
-| `custom` 系列 | DONE | §159 C14 `renderItem` 作 `@Name` 句柄、api.value/coord/size/style/visual/barLayout、元素复用 C13;§161 C15 极坐标/日历/单轴/'none' 上的 custom、enter/update 过渡、根上的 focus/blurScope、tooltipDisabled、`api.visual` 看得到 visualMap | geo(D14)、matrix(D12)上不画(§161);clipPath、autoBatch 不做(§161);keyframe/morph/universal transition(D5/D6);渐进渲染没有(§161);文字/图片元素的状态不做(§159);decal 不画(§167) |
+| `custom` 系列 | DONE | §159 C14 `renderItem` 作 `@Name` 句柄、api.value/coord/size/style/visual/barLayout、元素复用 C13;§161 C15 极坐标/日历/单轴/'none' 上的 custom、enter/update 过渡、根上的 focus/blurScope、tooltipDisabled、`api.visual` 看得到 visualMap | geo(D14)、matrix(D12)上不画(§161);clipPath、autoBatch 不做(§161);关键帧已有(§177)、textContent 的淡入已有(§180),universal transition 不收 custom(§173);渐进渲染没有(§161);文字/图片元素的状态不做(§159);decal 不画(§167) |
 | `large` 模式批量路径 + 算术命中扫描 | DONE | §152 C8 bar/line/scatter/candlestick 的批量路径、算术命中扫描、largeThreshold;§156 lines 的 large 批 | 极坐标、日历与 path:// 符号的 large 散点仍逐项画(§152);点 large 元素不派发 select(§152);柱的 30 ms throttle 不做(§152);阴影不画(§152) |
 | 渐进 / 分块绘制 | DONE | §154 C9 按帧时间预算分块、progressiveThreshold/ChunkMode、增量图层(热力图、散点、柱、K 线、平行系列) | zlevel 分层不建(§154);rendered/finished 只在部分重绘时发(§154);lines、custom 没有渐进(§156/§161) |
 | `appendData` 流式追加 | DONE | §154 C9 `AppendData` API,按冻结的直角坐标轴重画 | dataset 与 typed array 不收(§154);冻结范围只覆盖直角坐标轴,极坐标/日历/dataZoom 窗口不重算(§154);lines 的 appendData 没专门处理(§156) |
@@ -93,11 +93,11 @@
 | labelLine 自动走线(nearestPointOnPath、limitTurnAngle、limitSurfaceAngle) | DONE | §138 LabelManager 布局;§144 饼求解器;§147 B14 nearestPointOnPath、limitTurnAngle、limitSurfaceAngle、smooth 与各状态,散点/涟漪散点/折线符号/直角坐标柱建线 | 热力图、象形柱、K 线、关系图、树、旭日、桑基、雷达、极坐标柱不建线(§147/§148);lineStyle 只读 color/width/opacity/type(§147);平滑线描入时画直的前缀(§147) |
 | 饼图 avoidLabelOverlap 完整求解器 | DONE | §44 单个标签的外侧定位;`PieLabel.pas` 读了 alignTo/edgeDistance/bleedMargin/distanceToLabelLine;§144 B13 求解器(上下平移、椭圆重算 x、借空间、截断,先挪后藏) | `overflow: 'break'/'breakAll'` 不换行(§144);NaN 扇区与只在状态里显示的标签不进清单(§144);数据项级的 label/labelLine 不读(§144) |
 | `endLabel` + `label.valueAnimation` | DONE | §127 AN4 末端标签(新元素,按裁剪前沿定位、值插值)与柱、仪表盘的 `label.valueAnimation`(上游也只有这两种);B15 没有单开批 | 状态里的 `endLabel.show`、富文本末端标签、阶梯线、单点折线不支持(§127);endLabel 不进 labelLayout 清单(§138);handler formatter、富文本、数组值不滚动(§127) |
-| parallel + parallelAxis + 逐轴刷选 | DONE | §164 C19 parallel 坐标系、parallelAxis、系列、axisAreaSelect、axisExpandable 静态布局;§166 C20 逐轴刷选(areaSelectStyle、realtime、getCoverInfoList) | axisExpandable 的交互归 D7(§164);更新不补间(§164);dataset 与 encode 不接(§164);轴颜色走皮肤、逐数据取色没接(§164) |
+| parallel + parallelAxis + 逐轴刷选 | DONE | §164 C19 parallel 坐标系、parallelAxis、系列、axisAreaSelect、axisExpandable 静态布局;§166 C20 逐轴刷选(areaSelectStyle、realtime、getCoverInfoList) | axisExpandable 的交互见 Tier 3(§178);更新不补间(§164);dataset 与 encode 不接(§164);轴颜色走皮肤、逐数据取色没接(§164) |
 
 ---
 
-## Tier 3(23 行):DONE 6 · PARTIAL 6 · NOT STARTED 11
+## Tier 3(23 行):DONE 10 · PARTIAL 7 · NOT STARTED 6
 
 | 行 | 状态 | 证据 | 缺什么 |
 |---|---|---|---|
@@ -108,20 +108,20 @@
 | `coordinateSystemUsage: 'box'` | PARTIAL | §106 pie 摆进日历格子(用 `coord` 或把 center 写成日期);§104–§106 系列落在日历格 | matrix 格子里的宿主;在格子里嵌坐标系或组件(grid/legend…) |
 | 断轴(v6):分段映射、锯齿、刻度剪枝、展开收起动作 | PARTIAL | Tier 0 契约 ②:断轴 mapper 和 `test.advchart.scale.break`;§169 D1 `breaks` 接到 value / time 轴(解析、合并重叠、两种 gap)、随机锯齿与按断开 id 的缓存、刻度剪枝(两种模式)、nice 用扣掉断开的线性跨度、断开区与断开标签、展开 / 收起 / toggle 动作与 `axisbreakchanged`(上游基准 `advchart-axis-breaks.json`) | log 轴与 singleAxis 上的 `breaks`(上游有,端口不接);转了角度的断开标签不按 OBB 移开;断开区不参加过渡动画;formatter 与事件参数里没有 `break`(§169) |
 | `realtimeSort` 柱状竞赛 | DONE | §172 D4 `realtimeSort` 与类目轴的 `categorySortInfo`(刻度 ↔ 序号双向映射)、`rendered` 里的次序检查与 `changeAxisOrder` 动作 / 事件、初次排序与后续排序的两种过渡、竞赛柱裁剪后留着 `ignore`、标签计数接着走(上游基准 `advchart-realtime-sort.json`) | 被覆盖的旧 `rendered` 监听不另算;竞赛轴上的 dataZoom、notMerge / replaceMerge 下的第一帧没有基准;查次序的时机按端口的绘制(§172) |
-| Universal transition + 形状变形 | NOT STARTED | 0 命中 | 全部;前置的动画引擎已在(§122–§134) |
-| `keyframeAnimation` + 过渡小语言 | NOT STARTED | 0 命中 | 全部 |
-| 叠加动画 | DONE | §151 引擎的 additive(`TTyAnimCfg.Additive`、轨道 `AddValue`、`GetAdditiveTrack`),visualMap 连续型指示器在用 | —(上游也只有这一处用它,§122) |
-| `thumbnail` 小地图 | NOT STARTED | 0 命中 | 全部 |
-| parallel `axisExpandable` 鱼眼 | PARTIAL | §164 静态布局(窗口、折起的轴、藏标签、截名称) | `axisExpandTriggerOn` 的点击/移动、`parallelAxisExpand` 动作、节流(D7) |
-| `axisPointer.link` + mapper | NOT STARTED | §56 把 link 列为押后 | 全部 |
-| 跨控件联动 + 组合导出 | NOT STARTED | — | 全部 |
+| Universal transition + 形状变形 | PARTIAL | §173 D5 UT1 形状变形引擎(`Morph.pas`:贝塞尔化、对齐、旋转搜索、`split` / `clone`、hilbert 排序)与一对一过渡;§175 UT2 合并 / 拆分、`groupId` / `dataGroupId`、`divideShape`、`delay(index, count)`、列表键;§176 UT3 `childGroupId` 与方向嗅探、编码维度、多层钻取、树图 ↔ 旭日图;§180 下钻后的旭日图从数据仍记着的扇区出发(上游基准 `advchart-universal-transition*.json`) | **只有柱、饼扇区、散点 / 折线符号、树图、旭日图进变形**,批里有 custom、漏斗、极坐标柱、象形柱等就整批不做(§173);标签不跟变形帧走(§173);同类型的树图 / 旭日图批不做,旭日图重设颜色没有样式过渡(§176);setOption 的 `transition` 参数没有(§173/§176) |
+| `keyframeAnimation` + 过渡小语言 | DONE | §177 D6 graphic 与 custom 元素的 `keyframeAnimation`(百分比、缓动、循环、延迟、离散键、恢复)、`transition` / `enterFrom` / `leaveTo` 写在 style / shape / extra 上、`enterAnimation` / `updateAnimation` 的 additive;§180 custom textContent 入场淡入(上游基准 `advchart-keyframe-animation.json`) | `during` 不做;clipPath 的关键帧随 clipPath 没有;被停光的动画器端口释放(§177) |
+| 叠加动画 | DONE | §151 引擎的 additive(`TTyAnimCfg.Additive`、轨道 `AddValue`、`GetAdditiveTrack`),visualMap 连续型指示器在用;§177 graphic / custom 的 `updateAnimation.additive` 与关键帧 | — |
+| `thumbnail` 小地图 | DONE | §178 D7 graph 的缩略图:框与内容框、副本、窗口、拖动平移与滚轮缩放、跟着 graph 的 roam(上游基准 `advchart-thumbnail-axisexpand.json`) | 盒子放在 calendar / matrix 上没做;双指缩放、光标、缩略图元素的鼠标事件不做;副本的缺省颜色是皮肤的(§178) |
+| parallel `axisExpandable` 鱼眼 | DONE | §164 静态布局(窗口、折起的轴、藏标签、截名称);§178 D7 `axisExpandTriggerOn` 的点击 / 移动、滑动与跳转、`parallelAxisExpand` 动作与事件、节流 / 防抖 | 展开不补间(§164/§178);多个 parallel 共用一个窗口数组时各自一份(§178) |
+| `axisPointer.link` + mapper | DONE | §179 D8 按 index / id / name 与 `'all'` 分组、mapper 句柄、目标不吸附、分组次序;§180 补了同一网格里两根 x 轴、多个源、与极坐标重叠的用例,吸附只吸到轴上的值(上游基准 `advchart-connect-link-batch.json`) | 候选轴只有 tooltip 轴(上游还收 `axisPointer.show` 的轴);`triggerEmphasis` 不读;mapper 返回不了类目名(§179) |
+| 跨控件联动 + 组合导出 | PARTIAL | §179 D8 `Group`、`TyChartConnect` / `TyChartDisconnect`、事件 → 动作的转发与挂起、`escapeConnect`、silent、组合导出(`GetConnectedDataURL`、saveAsImage);§180 resize 与时间线的更新带上 brushSelect | **tooltip 与指示器不跨图联动**(`updateAxisPointer` / `showTip` / `hideTip` 三个动作与事件没有,见 D8b);组合导出按整像素贴图、没有 SVG(§179) |
 | dataset transform 管线(filter DSL、sort、管道、多输出) | DONE | `Dataset.pas` 头注释;§47;§143 数据集串联(fromDatasetIndex/Id、fromTransformResult)、管道、多输出、`'boxplot'` 变换(`TTyDatasetCache`);§170 D2 transform 注册表、filter 条件语言(and / or / not、六种比较、parser)、sort(V8 TimSort 逐位、incomparable)、维度名去重、上游抛错的写法给诊断 `dataset[%d] has no table`(上游基准 `advchart-dataset-transform.json`) | `reg` 运算符照路线图不做;上游整次 `setOption` 失败处端口只让相关数据集没有表;`print` 不做(§170) |
 | 统计变换:回归、k-means、直方图 | DONE | §171 D3 `ecStat:regression`(linear / exponential / logarithmic / polynomial,公式与 formulaOn)、`ecStat:histogram`(squareRoot / scott / freedmanDiaconis / sturges)、`ecStat:clustering`(二分 k-means,随机数接图表的流)(上游基准 `advchart-stat-transforms.json`) | 不用 `registerTransform` 就有;只认 JSON 的数(ecStat 的 `isNumber` 放过数字串);迭代、阶数、刻度数有上限;toFixed 只到 20 位(§171) |
 | `setOption` 式 option 树 + normal/replace 合并 | DONE | Tier 0 第 4 项:宽松 JSON 树 + 整体替换(notMerge,`Option.pas:17-21`);§79 resize 与重设保留 roam;§130 A10 `MergeOption`/`SetOption` 的 normalMerge(id/name/索引)、完全相同文本的语义、`GetOptionJson`;§132 A11 replaceMerge、索引空洞、选项对象形式与 updated 事件;§142/§160/§165 media、toolbox restore/magicType、timeline 走合并 | 整份的 replaceAll(`resetOption('recreate')`)不单独提供(§132);`GetOptionJson` 是原始合并层(§130);重复 id 的合并整个不生效(§130);未知系列类型照常占位置(§130) |
 | 事件的查询过滤 | DONE | §119 A3 字符串与对象查询(ECEventProcessor 规则)、`ChartOn`/`ChartOff` 去重 | — |
 | 粗指针命中回退 | NOT STARTED | — | 全部 |
 | 脏矩形 / 缓存表面绘制 | PARTIAL | Q7 静态层缓存 `TTyPaintCache` + `InvalidateFrame` 已落地(一帧 1.18 ms) | 脏矩形(Q7 定为 Tier 3,只有像素成为瓶颈时才做) |
-| 批量动作 + 细化事件 | PARTIAL | §151 highlight/downplay 的 `batch` 与 `{type, batch:[…]}` 事件;§163 brushselected 的批载荷;§132 updated;§154 rendered/finished | 其余动作的 `batch` 不收(§151);rendered/finished 不是每次重绘都发(§154) |
+| 批量动作 + 细化事件 | PARTIAL | §151 highlight/downplay 的 `batch` 与 `{type, batch:[…]}` 事件;§163 brushselected 的批载荷;§132 updated;§154 rendered/finished;§179 select 三个、图例五个、dataZoom、brushSelect 的 batch,`DispatchAction(json, silent)`;§180 批项读自己的 type | 其余动作带 batch 仍答 False(§179);rendered/finished 不是每次重绘都发(§154);挂起动作只有 brushSelect 建了模(§179) |
 | 设计期:系列/数据编辑对话框、属性编辑器、组件编辑器动词 | PARTIAL | `designtime/tyControls.Design.AdvChart.Editor.pas`:Option 的 SynEdit 编辑器(补全、参考树、诊断)+ `TComponentEditor` 动词 + `RegisterPropertyEditor`(Tier 0 第 6 项) | 结构化的系列/数据编辑对话框(`Values` 属性编辑器在 option 树 API 下已经不适用) |
 | 键盘导航 + MSAA/UIA | NOT STARTED | 控件是 `TabStop := False`(§96 有意为之);§167 的 `AriaDescription` 已能给出描述文字 | 全部(UIA/MSAA 可以接 §167 的描述) |
 
@@ -268,10 +268,11 @@
 | D2 | **[DONE,第 133 批 §170]** dataset transform:注册表、filter DSL(不含 reg)、sort、管道、多输出 | 3 | — |
 | D3 | **[DONE,第 134 批 §171]** 统计变换:回归 4 种、k-means、直方图 4 种分箱 | 3 | D2 |
 | D4 | **[DONE,第 135 批 §172]** realtimeSort 柱状竞赛 | 2–3 | A8 |
-| D5 | universalTransition(UT1–UT3:dividePath/combine/separate 变形、groupId 方向嗅探) | 3×3 | A8 |
-| D6 | keyframeAnimation + 过渡小语言、叠加动画 | 3 | A8, C13 |
-| D7 | thumbnail 小地图;parallel axisExpandable | 3 | C19 |
-| D8 | axisPointer.link + mapper;跨控件联动(共享控制器)+ 组合导出;批量动作 | 3 | B1, B11 |
+| D5 | **[PARTIAL,第 136–138 批 §173、§175、§176,里程碑 §180;只有柱、扇区、符号、树图、旭日图进变形]** universalTransition(UT1–UT3:dividePath/combine/separate 变形、groupId 方向嗅探) | 3×3 | A8 |
+| D6 | **[DONE,第 139 批 §177]** keyframeAnimation + 过渡小语言、叠加动画 | 3 | A8, C13 |
+| D7 | **[DONE,第 140 批 §178]** thumbnail 小地图;parallel axisExpandable | 3 | C19 |
+| D8 | **[PARTIAL,第 141 批 §179;tooltip 与指示器的跨图联动拆到 D8b]** axisPointer.link + mapper;跨控件联动(共享控制器)+ 组合导出;批量动作 | 3 | B1, B11 |
+| D8b | **[新增,里程碑 §180]** connect 组里的 tooltip / 指示器联动:`updateAxisPointer`(载荷的 `axesInfo` 限定轴与值、`currTrigger`、`x` / `y`)、`showTip`(按 `seriesIndex` + `dataIndex`、按 `x` / `y`、按 `axesInfo` 定位,`findPointFromSeries`)、`hideTip` 三个动作与它们的事件,指针由鼠标驱动改成由载荷驱动,tooltip 视图的 manualShowTip / manualHideTip | 2–3 | D8 |
 | D9 | 粗指针命中回退 + 脏矩形 | 2–3 | — |
 | D10 | 设计期的系列/数据结构化编辑对话框 | 3 | — |
 | D11 | 键盘导航 + UIA/MSAA(接 aria 描述) | 3 | B1, C22 |

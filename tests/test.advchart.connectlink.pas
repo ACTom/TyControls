@@ -45,6 +45,10 @@ type
     procedure Move(AX, AY: Integer);
     procedure Leave;
     function Hits: TTyAxisHitArray;
+    { the value the chart puts the pointer at: the axisPointer model's
+      value upstream (milestone D5-D8: the suite read its own copy of the
+      rule, so a pointer drawn elsewhere passed) }
+    function PointerValueOf(const AHit: TTyAxisHit): Double;
   end;
 
   { saveAsImage's file name answered without a dialog }
@@ -118,6 +122,7 @@ type
     procedure TestTheAxisBreakActionsTravel;
     procedure TestTheApiDataZoomPublishesItsPayload;
     procedure TestSaveAsImageSavesTheConnectedGroup;
+    procedure TestALegendBatchUpdatesOnce;
   end;
 
 implementation
@@ -190,18 +195,16 @@ begin
   FromIsUid(Result);
 end;
 
-{ A BRUSH AREA as the port's model holds it: brushType, coordRange, range
-  and panelId, in that order. Upstream's is generateBrushOption's whole
-  object (brushMode, transformable, brushStyle, removeOnClick, z and the
-  area's own keys besides) -- a gap of the brush's model since batch 126,
-  not of the broadcast; both sides are reduced to the four. }
-procedure ReduceAreas(AData: TJSONData);
-const
-  cKeep: array[0..3] of string = ('brushType', 'coordRange', 'range', 'panelId');
+{ A BRUSH AREA whole, generateBrushOption's object and the area's own keys
+  (milestone D5-D8; batches 126-141 reduced both sides to brushType,
+  coordRange, range and panelId). The brush's DEFAULT colours are the
+  skin's, as a palette is: where the option wrote none, brushStyle's fill
+  and stroke are set aside on both sides. }
+procedure SkinAreas(AData: TJSONData);
 var
-  i, k, n: Integer;
-  area, keep: TJSONObject;
+  i, k: Integer;
   arr: TJSONArray;
+  st: TJSONData;
 begin
   if AData = nil then Exit;
   if AData is TJSONObject then
@@ -213,19 +216,19 @@ begin
         for k := 0 to arr.Count - 1 do
         begin
           if not (arr.Items[k] is TJSONObject) then Continue;
-          area := TJSONObject(arr.Items[k]);
-          keep := TJSONObject.Create;
-          for n := 0 to High(cKeep) do
-            if area.IndexOfName(cKeep[n]) >= 0 then
-              keep.Add(cKeep[n], area.Find(cKeep[n]).Clone);
-          arr.Items[k] := keep;
+          st := TJSONObject(arr.Items[k]).Find('brushStyle');
+          if not (st is TJSONObject) then Continue;
+          if TJSONObject(st).IndexOfName('fill') >= 0 then
+            TJSONObject(st).Strings['fill'] := '<skin>';
+          if TJSONObject(st).IndexOfName('stroke') >= 0 then
+            TJSONObject(st).Strings['stroke'] := '<skin>';
         end;
       end
       else
-        ReduceAreas(AData.Items[i]);
+        SkinAreas(AData.Items[i]);
   end
   else if AData is TJSONArray then
-    for i := 0 to AData.Count - 1 do ReduceAreas(AData.Items[i]);
+    for i := 0 to AData.Count - 1 do SkinAreas(AData.Items[i]);
 end;
 
 function SameJson(AWant, AGot: TJSONData): Boolean;
@@ -264,14 +267,6 @@ begin
 end;
 
 { the pointer's value as upstream's option.value holds it }
-function ModelValue(const AHit: TTyAxisHit): Double;
-begin
-  Result := AHit.Value;
-  if AHit.Linked then Exit;
-  if AHit.Spec.Snap and not IsNan(AHit.SnapValue)
-    and AHit.Axis.Scale.Contain(AHit.SnapValue) then Result := AHit.SnapValue;
-end;
-
 function SdiText(AChart: TClProbe; const AHit: TTyAxisHit): string;
 var
   k: Integer;
@@ -323,6 +318,11 @@ end;
 procedure TClProbe.Leave;
 begin
   MouseLeave;
+end;
+
+function TClProbe.PointerValueOf(const AHit: TTyAxisHit): Double;
+begin
+  Result := PointerValue(AHit);
 end;
 
 function TClProbe.Hits: TTyAxisHitArray;
@@ -559,7 +559,7 @@ begin
           Continue;
         end;
         if h < 0 then Continue;
-        Same(ax.Strings['key'] + ' value', ModelValue(hits[h]), ax.Strings['value']);
+        Same(ax.Strings['key'] + ' value', chart.PointerValueOf(hits[h]), ax.Strings['value']);
         Inc(FCompared);
         if SdiText(chart, hits[h]) <> FixSdiText(ax.Arrays['sdi']) then
           Bad(Format('%s rows %s, upstream %s', [ax.Strings['key'],
@@ -739,14 +739,20 @@ var
   t: Double;
   want, got: TJSONData;
   parts: TStringArray;
+  ws, hs: array of Integer;
 begin
   defs := ACase.Arrays['charts'];
   SetLength(charts, defs.Count);
+  SetLength(ws, defs.Count);
+  SetLength(hs, defs.Count);
   for i := 0 to High(charts) do charts[i] := nil;
   try
     for i := 0 to defs.Count - 1 do
-      charts[i] := NewProbe(defs.Objects[i].Objects['option'].AsJSON,
-        defs.Objects[i].Integers['w'], defs.Objects[i].Integers['h'], i);
+    begin
+      ws[i] := defs.Objects[i].Integers['w'];
+      hs[i] := defs.Objects[i].Integers['h'];
+      charts[i] := NewProbe(defs.Objects[i].Objects['option'].AsJSON, ws[i], hs[i], i);
+    end;
     t := 0;
     steps := ACase.Arrays['steps'];
     for k := 0 to steps.Count - 1 do
@@ -800,10 +806,17 @@ begin
           charts[c].DataZoomNow := t;
           charts[c].DataZoomTick(t);
         end;
+      end
+      { milestone D5-D8 }
+      else if op = 'resize' then
+      begin
+        c := st.Integers['chart'];
+        ws[c] := st.Integers['w'];
+        hs[c] := st.Integers['h'];
+        charts[c].SetBounds(0, 0, ws[c], hs[c]);
       end;
       for c := 0 to High(charts) do
-        charts[c].Render(FBmp.Canvas, Rect(0, 0, defs.Objects[c].Integers['w'],
-          defs.Objects[c].Integers['h']), 96);
+        charts[c].Render(FBmp.Canvas, Rect(0, 0, ws[c], hs[c]), 96);
       if st.Items[st.IndexOfName('ret')].JSONType = jtString then
       begin
         Inc(FCompared);
@@ -842,10 +855,10 @@ begin
           got := nil;
         end;
         try
-          if typ = 'brushselected' then
+          if (typ = 'brushselected') and (Pos('brushStyle', defs.AsJSON) = 0) then
           begin
-            ReduceAreas(want);
-            ReduceAreas(got);
+            SkinAreas(want);
+            SkinAreas(got);
           end;
           Inc(FCompared);
           if not SameJson(want, got) then
@@ -1328,6 +1341,41 @@ begin
   finally
     TyChartDisconnect(a.Group);
     DeleteFile(fn);
+  end;
+end;
+
+{ the legend actions' batch: every item over the selection, then ONE update
+  (doDispatchAction's updateMethods.update after the loop). Toggling s1 off
+  and on in one batch moves nothing; an update per item would hide s1's
+  bars -- fading them out -- and bring them back. [Milestone D5-D8: the
+  connect oracle runs without animation, where the two cannot be told
+  apart.] }
+procedure TAdvChartConnectLinkTest.TestALegendBatchUpdatesOnce;
+const
+  cOpt = '{"legend":{},"xAxis":{"type":"category","data":["a","b","c"]},"yAxis":{},'
+    + '"series":[{"name":"s1","type":"bar","data":[3,5,2]},'
+    + '{"name":"s2","type":"bar","data":[4,1,6]}]}';
+var
+  c: TClProbe;
+  bmp: TBGRABitmap;
+begin
+  c := TClProbe.Create(FForm);
+  c.Parent := FForm;
+  c.Controller := FCtl;
+  c.AnimationMode := camAlways;
+  c.AnimNow := 1000;
+  c.SetBounds(0, 0, 400, 300);
+  c.Option := cOpt;
+  bmp := TBGRABitmap.Create(400, 300);
+  try
+    c.Render(bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    c.AnimTick(1000 + 5000);
+    c.AnimNow := 7000;
+    AssertTrue(c.DispatchAction('{"type":"legendToggleSelect","batch":[{"name":"s1"},{"name":"s1"}]}'));
+    c.Render(bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    AssertEquals('no bar fades out', 0, c.AnimGhostCount);
+  finally
+    bmp.Free;
   end;
 end;
 

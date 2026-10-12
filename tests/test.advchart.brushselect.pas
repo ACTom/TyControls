@@ -73,6 +73,7 @@ type
     procedure Miss(const AWhat: string);
     procedure SameHex(const AWhat: string; AGot: Double; AWant: TJSONData);
     procedure SameStr(const AWhat, AGot, AWant: string);
+    procedure SameJsonTree(const AWhat: string; AGot, AWant: TJSONData);
     procedure SameBool(const AWhat: string; AGot, AWant: Boolean);
     procedure SameRange(const AWhat: string; const AGot: TTyBrushRange;
       ALine: Boolean; AWant: TJSONData);
@@ -770,6 +771,74 @@ begin
     end;
 end;
 
+{ two JSON values alike: the same keys in the same order, numbers equal,
+  the skin's default brush colours (a brushStyle's fill and stroke) set
+  aside -- the scenarios write none [milestone D5-D8] }
+function KeysOf(AObj: TJSONObject): string;
+var i: Integer;
+begin
+  Result := '';
+  for i := 0 to AObj.Count - 1 do Result := Result + AObj.Names[i] + ',';
+end;
+
+procedure TAdvChartBrushSelectOracleTest.SameJsonTree(const AWhat: string; AGot, AWant: TJSONData);
+var
+  i: Integer;
+  go, wo: TJSONObject;
+  nm: string;
+begin
+  if (AGot = nil) or (AWant = nil) then
+  begin
+    if (AGot = nil) <> (AWant = nil) then Miss(AWhat + ': missing');
+    Exit;
+  end;
+  { a number that is not finite: the oracle writes an object with $num,
+    an event's JSON text null (JSON.stringify) }
+  if (AGot.JSONType = jtNull) and (AWant is TJSONObject)
+    and (TJSONObject(AWant).IndexOfName('$num') >= 0) then Exit;
+  if (AWant.JSONType = jtNumber) and (AGot.JSONType = jtNumber) then
+  begin
+    if AGot.AsFloat <> AWant.AsFloat then
+      Miss(Format('%s: %s here, %s upstream', [AWhat, AGot.AsJSON, AWant.AsJSON]));
+    Exit;
+  end;
+  if AGot.JSONType <> AWant.JSONType then
+  begin
+    Miss(Format('%s: %s here, %s upstream', [AWhat, AGot.AsJSON, AWant.AsJSON]));
+    Exit;
+  end;
+  case AWant.JSONType of
+    jtArray:
+      begin
+        if AGot.Count <> AWant.Count then
+        begin
+          Miss(Format('%s: %d items here, %d upstream', [AWhat, AGot.Count, AWant.Count]));
+          Exit;
+        end;
+        for i := 0 to AWant.Count - 1 do
+          SameJsonTree(Format('%s[%d]', [AWhat, i]), AGot.Items[i], AWant.Items[i]);
+      end;
+    jtObject:
+      begin
+        go := TJSONObject(AGot);
+        wo := TJSONObject(AWant);
+        nm := '';
+        for i := 0 to go.Count - 1 do nm := nm + go.Names[i] + ',';
+        SameStr(AWhat + ' keys', nm, KeysOf(wo));
+        if nm <> KeysOf(wo) then Exit;
+        for i := 0 to wo.Count - 1 do
+        begin
+          if ((wo.Names[i] = 'fill') or (wo.Names[i] = 'stroke'))
+            and (Pos('brushStyle', AWhat) > 0) then Continue;
+          SameJsonTree(AWhat + '.' + wo.Names[i], go.Items[i], wo.Items[i]);
+        end;
+      end;
+  else
+    if AGot.AsJSON <> AWant.AsJSON then
+      Miss(Format('%s: %s here, %s upstream', [AWhat, AGot.AsJSON, AWant.AsJSON]));
+  end;
+end;
+
 procedure TAdvChartBrushSelectOracleTest.CheckBatch(const AWhat: string; AGot, AWant: TJSONObject);
 var
   gb, wb, gs, ws, ga, wa: TJSONArray;
@@ -822,6 +891,9 @@ begin
       end;
       SameRange(Format('%s area %d range', [what, k]), rg, ln, wa.Objects[k].Find('range'));
     end;
+    { and every key of every area, in order [milestone D5-D8] }
+    if wi.Find('areasFull') is TJSONArray then
+      SameJsonTree(what + ' areas', ga, wi.Arrays['areasFull']);
     gs := gi.Arrays['selected'];
     ws := wi.Arrays['selected'];
     SameStr(what + ' selected series', IntToStr(gs.Count), IntToStr(ws.Count));
@@ -885,6 +957,9 @@ begin
         for k := 0 to Min(ga.Count, wa.Count) - 1 do
           SameStr(Format('%s area %d type', [t, k]), ga.Objects[k].Strings['brushType'],
             wa.Objects[k].Strings['brushType']);
+        { and every key of every area, in order [milestone D5-D8] }
+        if e.Find('areasFull') is TJSONArray then
+          SameJsonTree(t + ' areas', ga, e.Arrays['areasFull']);
       end
       else if t = 'globalcursortaken' then
       begin

@@ -329,6 +329,7 @@ type
     function DoCreateOrUpdate(AExists: TTyGfxEl; AOpt: TJSONObject;
       AGroup: TTyGfxEl): TTyGfxEl;
     function CreateOrUpdateItem(AExists: TTyGfxEl; AOpt: TJSONData): TTyGfxEl;
+    procedure AnimateLabels;
   public
     { the series model the view is for (its id and type) }
     Key: string;
@@ -1483,6 +1484,7 @@ begin
   FRaws := Copy(ARaws);
   FEls := newEls;
   FHasData := True;
+  AnimateLabels;
   { a detached element no item holds any more is gone }
   for i := FDetached.Count - 1 downto 0 do
   begin
@@ -1491,6 +1493,67 @@ begin
       if FEls[k] = TTyGfxEl(FDetached[i]) then keep := True;
     if not keep then Discard(TTyGfxEl(FDetached[i]));
   end;
+end;
+
+{ LabelManager.processLabelsOverall's _animateLabels over this view's group
+  (a series that animates): every element not ignored -- an ignored one
+  hides its subtree -- whose textContent is shown and not leaving, and
+  which the manager has not laid out yet, fades that text in from 0 to its
+  opacity (initProps: the series' enter timing at the item's data index).
+  A text laid out before keeps its opacity; its x / y / rotation would move
+  from the old layout, which a custom textContent never changes here.
+  [Milestone D5-D8: a custom series' text was never faded in.] }
+procedure TTyCustomView.AnimateLabels;
+
+  procedure Walk(AEl: TTyGfxEl; AIdx: Integer);
+  var
+    tc: TTyGfxEl;
+    k: Integer;
+    timing: TTyAnimTiming;
+    cfg: TTyAnimCfg;
+    op: TTyAnimValue;
+    props: TTyAnimProps;
+  begin
+    if AEl.Ignore then Exit;
+    tc := AEl.TextContent;
+    if (tc <> nil) and not tc.Ignore and not tc.Invisible and not AEl.Leaving then
+    begin
+      if not tc.LabelLaidOut then
+      begin
+        op := tc.StyleValue('opacity');
+        if op.Kind <> avkNumber then op := TyAnimNum(1);
+        props := nil;
+        TyAnimPropPut(props, 'style.opacity', op);
+        if TyAnimGetConfig(atEnter, FAnim.Model, TyAnimCallAt(AIdx), timing)
+          and (timing.Duration > 0) and (tc.Animation <> nil) then
+        begin
+          tc.SetAnimProp('style.opacity', TyAnimNum(0));
+          cfg := Default(TTyAnimCfg);
+          cfg.Duration := timing.Duration;
+          cfg.HasDuration := True;
+          if IsNan(timing.Delay) then cfg.Delay := 0 else cfg.Delay := timing.Delay;
+          cfg.Easing := timing.Easing;
+          cfg.SetToFinal := True;
+          cfg.Scope := 'enter';
+          tc.AnimateTo(props, cfg);
+        end
+        else
+        begin
+          { no duration: stopAnimation, then the props at once }
+          tc.StopAnimation;
+          tc.Attr(props);
+        end;
+      end;
+      tc.LabelLaidOut := True;
+    end;
+    for k := 0 to High(AEl.Children) do Walk(AEl.Children[k], AIdx);
+  end;
+
+var i: Integer;
+begin
+  if not FAnim.Enabled then Exit;
+  for i := 0 to High(FRoot.Children) do
+    Walk(FRoot.Children[i], InsideOfRoot(FRoot.Children[i]));
 end;
 
 procedure TTyCustomView.Snap;

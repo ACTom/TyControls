@@ -485,6 +485,10 @@ type
     AliveKeys: TTyStringArray;
     Series: TTyChartAnimSeriesArray;
     Elements: array of TTyChartElement;
+    { item elements the old data still names that the old render did not
+      draw: a drilled sunburst's pieces outside its view, which a universal
+      transition morphs from [milestone D5-D8] }
+    UtStale: array of TTyChartElement;
     ToOldPoint: TTyChartAnimToPoint;
   end;
 
@@ -5572,6 +5576,18 @@ begin
       ASnaps[first - 1].PieceCount := Length(op.FPieces);
     end;
   end;
+  { THE PIECES THE OLD DATA STILL NAMES, as the render that last drew
+    them left them [milestone D5-D8] }
+  for i := 0 to High(APrev.UtStale) do
+  begin
+    el := APrev.UtStale[i];
+    if UtHostRole(el) = '' then Continue;
+    if AIdx.Find(KeyOf(el.Anim.Series, el.Anim.Index, 'ut')) <> nil then Continue;
+    SetLength(ASnaps, n + 1);
+    UtSnapEl(el, nil, ASnaps[n]);
+    AIdx.Add(KeyOf(el.Anim.Series, el.Anim.Index, 'ut'), Pointer(PtrInt(n + 1)));
+    Inc(n);
+  end;
 end;
 
 procedure TTyChartAnimSet.ArmUniversal(AList: TTyPaintList;
@@ -5617,13 +5633,24 @@ var
 
   { the old render's item element (AOld, ARow) }
   function OldEl(AOld, ARow: Integer; out AEl: TTyChartElement): Boolean;
-  var v: Pointer;
+  var
+    v: Pointer;
+    k2: Integer;
   begin
     AEl := Default(TTyChartElement);
     if (AOld < 0) or (AOld > High(APrev.Series)) then Exit(False);
     v := APrevIdx.Find(KeyOf(AOld, ARow, UtTypeRole(APrev.Series[AOld].SeriesType)));
     Result := v <> nil;
-    if Result then AEl := APrev.Elements[PtrInt(v) - 1];
+    if Result then AEl := APrev.Elements[PtrInt(v) - 1]
+    else
+      { a piece the data still names [milestone D5-D8] }
+      for k2 := 0 to High(APrev.UtStale) do
+        if (APrev.UtStale[k2].Anim.Series = AOld) and (APrev.UtStale[k2].Anim.Index = ARow)
+          and (UtHostRole(APrev.UtStale[k2]) = UtTypeRole(APrev.Series[AOld].SeriesType)) then
+        begin
+          AEl := APrev.UtStale[k2];
+          Exit(True);
+        end;
   end;
 
   { the old element (AOld, ARow) as it was before this update: -1 for none }

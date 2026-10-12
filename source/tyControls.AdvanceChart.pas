@@ -1174,6 +1174,14 @@ type
       put it); and the old option's series view keys, read before the option
       text is replaced. }
     FAnimPrev: TTyChartAnimPrev;
+    { WHAT A SUNBURST'S DATA STILL NAMES [milestone D5-D8]: each row's
+      piece as the last render that drew it left it -- a drill removes the
+      pieces outside the view from the group, but the data keeps them
+      (getItemGraphicEl), so a universal transition after the drill morphs
+      from them. Kept while the option's data lives; a new option's
+      snapshot hands the ones the last render did not draw to
+      FAnimPrev.UtStale. }
+    FUtStale: array of TTyChartElement;
     FAnimOldBuild: TTyChartBuild;
     FAnimOldBindings: TTySeriesBindingArray;
     FAnimOldViewKeys: TTyStringArray;
@@ -1224,6 +1232,9 @@ type
     { A LAZY setOption's update waits for the next render, and its
       `updated` event with it [Batch 97] }
     FLazyPending, FLazySilent: Boolean;
+    { a resize's update ran: its `updated` is due once the layout is done
+      [milestone D5-D8] }
+    FResizeDue: Boolean;
     FPaintList: TTyPaintList;
     { THE LABEL LAYOUT'S LIST as the last build left it: one item per label
       of a series with a labelLayout, in LabelManager's order, and the
@@ -1385,6 +1396,7 @@ type
     { the list and keys of the render an update starts from }
     procedure AnimSnapshot;
     procedure AnimDropPrev;
+    procedure UtStaleHarvest;
     function AnimToOldPoint(AOldSeries: Integer; AX, AY: Double): TTyPointF;
     procedure AnimArmTimer;
     procedure AnimTimerFired(Sender: TObject);
@@ -5546,7 +5558,18 @@ begin
   { a resize renders every view [Batch 130] }
   if (ARect.Left <> FLastRect.Left) or (ARect.Top <> FLastRect.Top)
     or (ARect.Right <> FLastRect.Right) or (ARect.Bottom <> FLastRect.Bottom) then
+  begin
     FParBrushSkip := -1;
+    { A RESIZE IS AN UPDATE WITH A PAYLOAD (type 'resize'): the brush's
+      visual stage dispatches brushSelect, and resize() triggers `updated`
+      after it -- not for the first layout, an export's or a stream's
+      [milestone D5-D8: a resize published nothing] }
+    if (FLastPPI > 0) and not FExporting and not FStreamRelayout then
+    begin
+      FBrushPayload := True;
+      FResizeDue := True;
+    end;
+  end;
   FLastRect := ARect;
   FLastPPI := APPI;
   { a new layout: a progress frame's list is not this one's [Batch 119] }
@@ -5577,6 +5600,9 @@ begin
   end
   else
     AnimDropAll;
+  { a new option's data: the pieces the old one still named go with it
+    [milestone D5-D8] }
+  if FAnimPending and not FAnimFull then FUtStale := nil;
   Rebuild;
   { THE PIPELINES, from the counts the filters left -- before the bars ask
     which of them are large [Batch 119] }
@@ -5712,6 +5738,12 @@ begin
   FDirty := False;
   { the update's flush: `rendered` once it is painted [Batch 119] }
   if not FStreamRelayout and not FExporting then FFlushDue := True;
+  { a resize's `updated`, after its brushselected [milestone D5-D8] }
+  if FResizeDue and not FStreamRelayout and not FExporting then
+  begin
+    FResizeDue := False;
+    EmitUpdated;
+  end;
 end;
 
 { ==================== axis breaks [Batch 132] ==================== }
@@ -16427,6 +16459,7 @@ var
   k, n, raw: Integer;
   perRaw: TTyChartColorArray;
   bst: TTyOptStyle;
+  ov: TTyDataValue;
 begin
   Result := TyPieVisual(0);
   { colorBy:''data''. Each SECTOR takes the next slot of the same nine-colour
@@ -16474,16 +16507,26 @@ begin
     else Result.StrokeWidthLogical := bst.BorderWidthLogical;
   end;
   if FLastPPI > 0 then Result.PxScale := FLastPPI / 96;
-  { AND A visualMap's OPACITY, which a pie keeps (a funnel does not) }
+  { AND THE OPACITY, in the order upstream's stages write the item style:
+    the series' itemStyle.opacity, a visualMap's over it (which a pie keeps,
+    a funnel does not), then the row's own itemStyle.opacity over both
+    (dataStyleTask, 4500). [Milestone D5-D8: only the visualMap's was
+    drawn.] }
   SetLength(Result.Alphas, n);
   for k := 0 to n - 1 do
   begin
-    Result.Alphas[k] := NaN;
+    Result.Alphas[k] := bst.Opacity;
     if k > High(FPies[ASlot].Sectors) then Continue;
     raw := FPies[ASlot].Sectors[k].RawIndex;
     if (ASlot <= High(FVisualRows)) and (raw >= 0)
       and (raw <= High(FVisualRows[ASlot])) and FVisualRows[ASlot][raw].OpacitySet then
       Result.Alphas[k] := FVisualRows[ASlot][raw].Opacity;
+    if (raw >= 0) and (ASlot <= High(FStores)) and (FStores[ASlot] <> nil)
+      and FStores[ASlot].HasOverrideByRaw(raw, TyOverrideKey('itemStyle.opacity')) then
+    begin
+      ov := FStores[ASlot].GetOverrideByRaw(raw, TyOverrideKey('itemStyle.opacity'));
+      if (ov.Kind = dvkNumber) and not IsNan(ov.Num) then Result.Alphas[k] := ov.Num;
+    end;
   end;
   for k := 0 to n - 1 do
   begin
@@ -18808,6 +18851,7 @@ begin
     if FThumbSnapDue then ThumbRender;
     Inc(drawn, BuildThumbnails(list));
     Result := drawn + gfxCount;
+    UtStaleHarvest;
   end;
 end;
 
@@ -24741,9 +24785,19 @@ var
   data: TTySelData;
   d: TJSONData;
 begin
-  { the ACTION's type (updateDirectly's method), not the item's }
+  { toggleSelectionFromPayload reads the ITEM's type -- a batch item keeps
+    its own over the action's (defaults of a copy of the item over the
+    payload) -- and
+    does nothing for one that is no select type: the lowercased
+    'toggleselect' a connected chart's event hands its items, say.
+    [Milestone D5-D8: the action's type was read for every item.] }
   t := AType;
-  if t = 'select' then kind := 0 else if t = 'unselect' then kind := 1 else kind := 2;
+  d := APayload.Find('type');
+  if (d <> nil) and (d.JSONType = jtString) then t := d.AsString;
+  if t = 'select' then kind := 0
+  else if t = 'unselect' then kind := 1
+  else if t = 'toggleSelect' then kind := 2
+  else Exit;
   { updateDirectly: every series the query names }
   series := MatchSeries(APayload);
   for i := 0 to High(series) do
@@ -27378,7 +27432,9 @@ begin
     if (t = 'selectDataRange') or (t = 'legendToggleSelect') or (t = 'legendSelect')
       or (t = 'legendUnSelect') or (t = 'legendAllSelect') or (t = 'legendInverseSelect')
       or (t = 'legendScroll') or (t = 'dragNode') or (t = 'restore')
-      or (t = 'changeMagicType') or (t = 'changeDataView') then
+      or (t = 'changeMagicType') or (t = 'changeDataView')
+      { the timeline's two (prepareAndUpdate, update) [milestone D5-D8] }
+      or (t = 'timelineChange') or (t = 'timelinePlayChange') then
       FBrushPayload := True;
     { A BATCH -- `if (payload.batch)`, a truthy one -- of highlight /
       downplay [Batch 116]: each item over the payload, one event; of the
@@ -28766,8 +28822,13 @@ end;
 
 function TTyAdvanceChart.PointerValue(const AHit: TTyAxisHit): Double;
 begin
-  { a linked axis never snaps [Batch 141] }
-  if AHit.Spec.Snap and not AHit.Linked then Result := AHit.SnapValue
+  { a linked axis never snaps [Batch 141]; nor onto a value off the axis:
+    processOnAxis snaps only when axis.containData(snapToValue) -- the
+    nearest point of a series may lie past a written min or max, and the
+    pointer then stays where it is [milestone D5-D8: it went to the
+    point, clamped to the axis end] }
+  if AHit.Spec.Snap and not AHit.Linked and not IsNan(AHit.SnapValue)
+    and AHit.Axis.Scale.Contain(AHit.SnapValue) then Result := AHit.SnapValue
   else Result := AHit.Value;
   Result := PointerAt(AHit.Axis, Result);
 end;
@@ -32038,6 +32099,46 @@ begin
   end;
 end;
 
+{ a render's sunburst pieces (not the return circle, which no item is
+  morphed from), each replacing the one its row had [milestone D5-D8] }
+procedure TTyAdvanceChart.UtStaleHarvest;
+var
+  i, k: Integer;
+  el: TTyChartElement;
+  idx: TFPHashList;
+  key: string;
+  v: Pointer;
+begin
+  if FPaintList = nil then Exit;
+  idx := nil;
+  try
+    for i := 0 to FPaintList.Count - 1 do
+    begin
+      el := FPaintList.Element(i);
+      if (el.Anim.Role <> carSunPiece) or (el.Anim.Index <= 0) then Continue;
+      if idx = nil then
+      begin
+        idx := TFPHashList.Create;
+        for k := 0 to High(FUtStale) do
+          idx.Add(IntToStr(FUtStale[k].Anim.Series) + ':' + IntToStr(FUtStale[k].Anim.Index),
+            Pointer(PtrInt(k + 1)));
+      end;
+      key := IntToStr(el.Anim.Series) + ':' + IntToStr(el.Anim.Index);
+      v := idx.Find(key);
+      if v <> nil then
+        FUtStale[PtrInt(v) - 1] := el
+      else
+      begin
+        SetLength(FUtStale, Length(FUtStale) + 1);
+        FUtStale[High(FUtStale)] := el;
+        idx.Add(key, Pointer(PtrInt(Length(FUtStale))));
+      end;
+    end;
+  finally
+    idx.Free;
+  end;
+end;
+
 procedure TTyAdvanceChart.AnimDropPrev;
 begin
   FAnimPrev := Default(TTyChartAnimPrev);
@@ -32151,7 +32252,14 @@ begin
   SetLength(rawKeys, AStore.RawCount);
   counts := TStringList.Create;
   try
+    { THE NAMES AS JAVASCRIPT KEYS: compared byte for byte, and looked up by
+      halves. [Milestone D5-D8: an unsorted list compared through the
+      locale -- UTF-16 conversions per comparison, every name against every
+      earlier one -- made the gallery's grid-multiple (two series of 3,079
+      categories) spend a minute and a half here on each update.] }
     counts.CaseSensitive := True;
+    counts.UseLocale := False;
+    counts.Sorted := True;
     for raw := 0 to AStore.RawCount - 1 do
     begin
       id := AStore.GetIdByRaw(raw);
@@ -32265,9 +32373,10 @@ end;
 
 procedure TTyAdvanceChart.AnimSnapshot;
 var
-  slot, si, i, n: Integer;
+  slot, si, i, n, k: Integer;
   r: TTyChartAnimSeries;
   el: TTyChartElement;
+  drawnNow: Boolean;
 begin
   AnimDropPrev;
   { NOTHING DRAWN BEFORE: the option enters }
@@ -32326,6 +32435,25 @@ begin
     Inc(n);
   end;
   SetLength(FAnimPrev.Elements, n);
+  { the pieces the data still names that the last render did not draw
+    [milestone D5-D8] }
+  FAnimPrev.UtStale := nil;
+  if not FAnimFull then
+    for i := 0 to High(FUtStale) do
+    begin
+      drawnNow := False;
+      for k := 0 to n - 1 do
+        if (FAnimPrev.Elements[k].Anim.Role = carSunPiece)
+          and (FAnimPrev.Elements[k].Anim.Series = FUtStale[i].Anim.Series)
+          and (FAnimPrev.Elements[k].Anim.Index = FUtStale[i].Anim.Index) then
+        begin
+          drawnNow := True;
+          Break;
+        end;
+      if drawnNow then Continue;
+      SetLength(FAnimPrev.UtStale, Length(FAnimPrev.UtStale) + 1);
+      FAnimPrev.UtStale[High(FAnimPrev.UtStale)] := FUtStale[i];
+    end;
   FAnimPrev.ToOldPoint := @AnimToOldPoint;
   { THE OLD BUILD STAYS ALIVE for its coordinate systems; Rebuild's
     DropBuild finds nothing to free }
@@ -36675,6 +36803,10 @@ begin
     FAnimPending := True;
     FDirty := True;
     Invalidate;
+    { and rendered now, inside the dispatch, as prepareAndUpdate does: the
+      brushSelect its visual stage dispatches goes with the action
+      [milestone D5-D8: the render waited for the next frame] }
+    ConvertReady;
   end
   else
     FullUpdate;
@@ -36739,11 +36871,12 @@ begin
     ev.Free;
   end;
   { the action the end dispatched waits for this one -- and this one's
-    render comes first: the checkpoint the second render meets is already
-    sliding, and its stopAnimation(forward) puts it at its tick }
+    render came first (TlMerge renders inside the dispatch): the checkpoint
+    the second render meets is already sliding, and its
+    stopAnimation(forward) puts it at its tick [milestone D5-D8: a merged
+    frame waited for the next frame, so the timeline was rendered here] }
   if stop then
   begin
-    if (FTlView <> nil) and (FLastPPI > 0) then SolveTimeline(FLastPPI);
     pp := '{"type":"timelinePlayChange","playState":false';
     d := APayload.Find('from');
     if d <> nil then pp := pp + ',"from":' + d.AsJSON;
@@ -39591,7 +39724,14 @@ end;
 function TTyAdvanceChart.BrushSelectedJson(const ABatch: TTyBrushSelectBatch): string;
 var
   b, s, k: Integer;
+  st: TTyStyleSet;
+  defFill, defStroke: string;
 begin
+  { the model's areas whole: the brush's default colours are the skin's
+    [milestone D5-D8] }
+  st := ActiveController.Model.ResolveStyle('TyAdvChartBrush', '', []);
+  defFill := TyBrushColorText(Cardinal(st.Background.Color));
+  defStroke := TyBrushColorText(Cardinal(st.BorderColor));
   Result := '{"type":"brushselected","batch":[';
   for b := 0 to High(ABatch) do
   begin
@@ -39599,7 +39739,7 @@ begin
     Result := Result + '{"brushId":' + TyBrushJsonStr(ABatch[b].BrushId)
       + ',"brushIndex":' + IntToStr(ABatch[b].BrushIndex)
       + ',"brushName":' + TyBrushJsonStr(ABatch[b].BrushName)
-      + ',"areas":' + TyBrushAreasJson(ABatch[b].Areas) + ',"selected":[';
+      + ',"areas":' + TyBrushModelAreasJson(ABatch[b].Areas, defFill, defStroke) + ',"selected":[';
     for s := 0 to High(ABatch[b].Selected) do
     begin
       if s > 0 then Result := Result + ',';

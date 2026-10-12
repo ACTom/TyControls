@@ -122,6 +122,10 @@ type
       'style.opacity', 'extra.k'), kept for the element's life and put back
       before every update [Batch 139] }
     KfRestore: TTyAnimProps;
+    { a series' textContent: LabelManager has laid it out once (its
+      labelLayoutInnerStore oldLayout is set), so it is not faded in again
+      [milestone D5-D8] }
+    LabelLaidOut: Boolean;
     constructor Create(AKind: TTyGfxKind; const AType: string);
     destructor Destroy; override;
     function GetAnimProp(const AKey: string): TTyAnimValue; override;

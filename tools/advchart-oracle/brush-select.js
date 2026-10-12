@@ -343,11 +343,14 @@ function eventRec(type, p) {
     o.batch = (p.batch || []).map(b => ({
       brushId: nul(b.brushId), brushIndex: b.brushIndex, brushName: nul(b.brushName),
       areas: (b.areas || []).map(areaBrief),
+      // milestone D5-D8: the areas as the event holds them, every key in order
+      areasFull: (b.areas || []).map(a => clean(a)),
       selected: (b.selected || []).map(s => ({ seriesId: nul(s.seriesId), seriesIndex: s.seriesIndex, seriesName: nul(s.seriesName), dataIndex: s.dataIndex.slice() })),
     }));
     o._raw = (p.batch || []).map(b => ({ areas: JSON.parse(JSON.stringify(b.areas || [])), brushIndex: b.brushIndex }));
   } else if (type === 'brush' || type === 'brushend') {
     o.areas = (p.areas || []).map(areaBrief);
+    o.areasFull = (p.areas || []).map(a => clean(a));
   } else if (type === 'globalcursortaken') {
     o.key = clean(p.key);
     o.brushOption = p.brushOption === undefined ? null : clean(p.brushOption);

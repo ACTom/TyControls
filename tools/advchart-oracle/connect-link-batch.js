@@ -328,6 +328,59 @@ const LINK_CASES = [
     },
     steps: [[95, 200], [70, 200], [330, 200], [500, 200]],
   },
+  // ---- milestone D5-D8 ----
+  {
+    id: 'link-shared-grid', note: 'two x axes in one grid (bottom a..e; top p, q, r with max 4: positions 3 and 4 hold no category), linked '
+      + 'with @Half: at b both show and nothing is linked; at e and d the top one shows nothing and takes half the bottom one\'s value, '
+      + 'parsed (2, and 1.5 -> 2)',
+    option: {
+      animation: false, tooltip: { trigger: 'axis' }, axisPointer: { link: [{ xAxisIndex: [0, 1], mapper: '@Half' }] },
+      grid: { left: 50, right: 50, top: 60, bottom: 60 },
+      xAxis: [{ type: 'category', data: cats }, { type: 'category', position: 'top', data: ['p', 'q', 'r'], max: 4 }],
+      yAxis: {},
+      series: [{ type: 'bar', data: [5, 3, 4, 7, 2] }, { type: 'line', xAxisIndex: 1, data: [2, 6, 4] }],
+    },
+    steps: [[200, 200], [500, 200], [400, 200]],
+  },
+  {
+    id: 'link-last-source', note: 'two shown axes of one group in grid 0 (the bottom x at b, 1; the top x of three categories at p, 0) and a '
+      + 'target in grid 1: the target takes the LAST source\'s value',
+    option: {
+      animation: false, tooltip: { trigger: 'axis' }, axisPointer: { link: { xAxisIndex: 'all' } },
+      grid: [{ left: 50, width: 500, top: 40, height: 130 }, { left: 50, width: 500, top: 230, height: 130 }],
+      xAxis: [{ type: 'category', data: cats }, { type: 'category', position: 'top', data: ['p', 'q', 'r'] },
+        { type: 'category', data: cats, gridIndex: 1 }],
+      yAxis: [{}, { gridIndex: 1 }],
+      series: [{ type: 'bar', data: [5, 3, 4, 7, 2] }, { type: 'line', xAxisIndex: 1, data: [2, 6, 4] },
+        { type: 'line', xAxisIndex: 2, yAxisIndex: 1, data: [1, 2, 3, 4, 5] }],
+    },
+    steps: [[200, 100], [450, 100]],
+  },
+  {
+    id: 'link-regroup', note: 'a polar over the grid holds the point too: the grid\'s top x shows nothing and is linked from its bottom x '
+      + '(d, 3 -> @Half 1.5 -> r) -- its pointer joins the grid\'s axes in the tooltip, before the polar\'s',
+    option: {
+      animation: false, tooltip: { trigger: 'axis' }, axisPointer: { link: [{ xAxisIndex: [0, 1], mapper: '@Half' }] },
+      grid: { left: 50, right: 50, top: 60, bottom: 60 },
+      polar: { center: [400, 200], radius: 80 },
+      angleAxis: { type: 'category', data: ['u', 'v', 'w', 'x'] }, radiusAxis: {},
+      xAxis: [{ type: 'category', data: cats }, { type: 'category', position: 'top', data: ['p', 'q', 'r'], max: 4 }],
+      yAxis: {},
+      series: [{ type: 'bar', data: [5, 3, 4, 7, 2] }, { type: 'line', xAxisIndex: 1, data: [2, 6, 4] },
+        { type: 'bar', coordinateSystem: 'polar', data: [1, 2, 3, 4] }],
+    },
+    steps: [[420, 180], [380, 230]],
+  },
+  {
+    id: 'snap-outside', note: 'no link: a value axis cut at 10 snaps only to a point that is on it -- nearest 9 is 12, past the axis, so the '
+      + 'pointer stays at 9 (the tooltip still names 12); nearest 3 is 2',
+    option: {
+      animation: false, tooltip: { trigger: 'axis' }, grid: { left: 50, right: 50, top: 40, bottom: 40 },
+      xAxis: { type: 'value', min: 0, max: 10 }, yAxis: {},
+      series: [{ type: 'line', data: [[2, 1], [12, 3]] }],
+    },
+    steps: [[500, 200], [200, 200]],
+  },
 ];
 
 function axisKeyOf(ai) {
@@ -459,8 +512,7 @@ const CONNECT_CASES = [
     ],
   },
   {
-    id: 'conn-timeline', note: 'timelineChange and timelinePlayChange between two timeline charts; the brushSelect their updates dispatch is left out (dropBrushSelect: the port runs a timeline update at the next frame)',
-    dropBrushSelect: true,
+    id: 'conn-timeline', note: 'timelineChange and timelinePlayChange between two timeline charts, with the brushSelect their updates dispatch (milestone D5-D8: it was left out, dropBrushSelect, while the port ran the update of a merged frame at the next frame)',
     charts: [{ option: timelineOpt() }, { option: timelineOpt() }],
     steps: [
       { op: 'connectList', charts: [0, 1] },
@@ -481,6 +533,26 @@ const CONNECT_CASES = [
 
 const BATCH_CASES = [
   {
+    id: 'brush-own-keys', note: 'a brush whose option writes its style (the colours echoed as written) and action areas with keys of their '
+      + 'own: generateBrushOption overwrites the six in place, the rest follow in order, then range and a targeted panelId (milestone D5-D8)',
+    charts: [{ option: barLine({ brush: { xAxisIndex: 0, brushStyle: { color: 'rgba(10,20,30,0.25)', borderColor: '#336699', borderWidth: 2, opacity: 0.8 } } }) }],
+    steps: [
+      { op: 'action', chart: 0, payload: { type: 'brush', areas: [{ brushType: 'lineX', foo: 'bar', coordRange: [1, 3], xAxisIndex: 0, brushMode: 'multiple' }] } },
+      { op: 'action', chart: 0, payload: { type: 'brush', areas: [{ brushType: 'rect', range: [[100, 200], [80, 160]], z: 7 }] } },
+    ],
+  },
+  {
+    id: 'resize-brush', note: 'a resize is an update with a payload ({type: \'resize\'}): the brush visual dispatches brushSelect -- '
+      + 'brushselected, which B is sent -- then `updated` (milestone D5-D8)',
+    charts: [{ option: withBrush() }, { option: withBrush() }],
+    steps: [
+      { op: 'connectList', charts: [0, 1] },
+      { op: 'action', chart: 0, payload: { type: 'brush', areas: [{ brushType: 'lineX', coordRange: [1, 3], xAxisIndex: 0 }] } },
+      { op: 'resize', chart: 0, w: 500, h: 360 },
+      { op: 'resize', chart: 1, w: 560, h: 380 },
+    ],
+  },
+  {
     id: 'batch-legend', note: 'the legend actions with a batch: each item over the payload, ONE update, one event whose batch holds each item\'s own result',
     charts: [{ option: barLine() }],
     steps: [
@@ -497,6 +569,8 @@ const BATCH_CASES = [
       { op: 'action', chart: 0, payload: { type: 'select', seriesIndex: 0, batch: [{ dataIndex: 1 }, { dataIndex: 4 }, { seriesIndex: 1, dataIndex: 2 }] } },
       { op: 'action', chart: 0, payload: { type: 'toggleSelect', batch: [{ seriesIndex: 0, dataIndex: [1, 2] }, { seriesIndex: 1, dataIndex: 5 }] } },
       { op: 'action', chart: 0, payload: { type: 'unselect', seriesIndex: 0, dataIndex: 4, batch: [{ dataIndex: null }, { seriesName: 's2', dataIndex: 5 }] } },
+      // milestone D5-D8: an item's own type is the one its update reads
+      { op: 'action', chart: 0, payload: { type: 'select', batch: [{ seriesIndex: 0, dataIndex: 0 }, { type: 'unselect', seriesIndex: 0, dataIndex: 0 }, { type: 'toggleSelect', seriesIndex: 0, dataIndex: 2 }] } },
     ],
   },
   {
@@ -514,6 +588,9 @@ const BATCH_CASES = [
       { op: 'action', chart: 0, payload: { type: 'dataZoom', animation: { duration: 0 }, batch: [{ dataZoomIndex: 0, start: 10, end: 50 }] } },
       { op: 'action', chart: 0, payload: { type: 'dataZoom', batch: [{ dataZoomId: AUTO_DZ0, start: 25, end: 75 }, { dataZoomIndex: 1, start: 30, end: 40 }] } },
       { op: 'action', chart: 0, payload: { type: 'dataZoom', batch: [{ dataZoomIndex: 0, start: 0, end: 100 }] }, silent: true },
+      // milestone D5-D8: by value, both ends, then one end (the other kept)
+      { op: 'action', chart: 0, payload: { type: 'dataZoom', batch: [{ dataZoomIndex: 0, startValue: 1, endValue: 4 }] } },
+      { op: 'action', chart: 0, payload: { type: 'dataZoom', batch: [{ dataZoomIndex: 0, startValue: 2 }] } },
     ],
   },
   {
@@ -524,6 +601,9 @@ const BATCH_CASES = [
       { op: 'action', chart: 0, payload: { type: 'legendToggleSelect', batch: [{ name: 's2' }, { name: 's1' }, { name: 's1' }] } },
       { op: 'action', chart: 1, payload: { type: 'select', batch: [{ seriesIndex: 0, dataIndex: 2 }, { seriesIndex: 0, dataIndex: 5 }] } },
       { op: 'action', chart: 0, payload: { type: 'highlight', batch: [{ seriesIndex: 0, dataIndex: 0 }] } },
+      // milestone D5-D8: a toggleSelect batch of three, its event's items (the first one's copy, typed 'toggleselect') as A is
+      // sent them -- an item whose type is no select type changes nothing
+      { op: 'action', chart: 1, payload: { type: 'toggleSelect', batch: [{ seriesIndex: 0, dataIndex: 1 }, { seriesIndex: 0, dataIndex: 3 }, { seriesIndex: 0, dataIndex: 4 }] } },
     ],
   },
 ];
@@ -618,6 +698,7 @@ function runConnectCase(def) {
         must(skip > 0, def.id + ': the wheel dispatched no pointer action');
         pointerSkipped = true;
       } else if (st.op === 'idle') advanceClock(NOW + st.ms);
+      else if (st.op === 'resize') charts[st.chart].resize({ width: st.w, height: st.h });
       else throw new OracleError('op ' + st.op);
       charts.forEach(frame);
       if (typeof ret === 'string' && /^g_\d+$/.test(ret)) ret = 'g_<auto>';
@@ -648,6 +729,7 @@ const EXPORT_CASES = [
   { id: 'exp-ratio15', note: 'pixelRatio 1.5 with odd offsets: fractional positions, the canvas size as the raw product', rects: [{ left: 3, top: 7, w: 101, h: 67 }, { left: 117, top: 2, w: 55, h: 91 }], connect: true, chart: 0, opts: { pixelRatio: 1.5, connectedBackgroundColor: 'rgba(255,0,0,0.5)' } },
   { id: 'exp-overlap-neg', note: 'overlapping charts at negative offsets; jpeg; backgroundColor goes to each chart\'s own render', rects: [{ left: -40, top: -10, w: 120, h: 90 }, { left: 30, top: 20, w: 120, h: 90 }], connect: true, chart: 0, opts: { type: 'jpeg', backgroundColor: '#ffffff' } },
   { id: 'exp-none-bg', note: 'connectedBackgroundColor \'none\' is still a rect fill (zrender: no fill)', rects: [{ left: 0, top: 0, w: 100, h: 100 }, { left: 150, top: 0, w: 100, h: 100 }], connect: true, chart: 0, opts: { connectedBackgroundColor: 'none' } },
+  { id: 'exp-ratio11', note: 'pixelRatio 1.1: the left edge times the ratio is inexact, each offset the product less it (milestone D5-D8)', rects: [{ left: 3, top: 7, w: 101, h: 67 }, { left: 117, top: 29, w: 55, h: 91 }, { left: 241, top: 13, w: 40, h: 40 }], connect: true, chart: 0, opts: { pixelRatio: 1.1 } },
   { id: 'exp-not-connected', note: 'the group is set but never connected: getDataURL of the asking chart alone', rects: [{ left: 0, top: 0, w: 100, h: 100 }, { left: 150, top: 0, w: 100, h: 100 }], connect: false, chart: 1, opts: { pixelRatio: 2 } },
 ];
 

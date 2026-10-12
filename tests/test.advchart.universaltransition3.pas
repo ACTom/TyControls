@@ -285,6 +285,14 @@ begin
       end;
     end;
     FChart.AnimNow := t;
+    { a step may dispatch an action instead (milestone D5-D8) }
+    if st.IndexOfName('action') >= 0 then
+    begin
+      AssertTrue(cid + ': step ' + IntToStr(i) + ' dispatches',
+        FChart.DispatchAction(st.Objects['action'].AsJSON));
+      Draw;
+      Continue;
+    end;
     if (i > 0) and st.Booleans['merge'] then
       AssertTrue(cid + ': step ' + IntToStr(i) + ' merges', FChart.MergeOption(st.Elements['option'].AsJSON))
     else

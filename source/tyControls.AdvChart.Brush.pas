@@ -138,6 +138,13 @@ type
     { the area's own finder keys (xAxisIndex, yAxisId, gridName ...) as a
       JSON object, '' for none }
     Finder: string;
+    { THE AREA OBJECT'S OWN KEYS past generateBrushOption's six, as the
+      action's area wrote them, in order (a JSON object; '' none) -- the
+      model's area is merge(base, area), so they follow the six; and an
+      area the controller output (FromOutput) has panelId, range and what
+      setOutputRanges added [milestone D5-D8] }
+    OwnJson: string;
+    FromOutput: Boolean;
   end;
   TTyBrushAreaArray = array of TTyBrushArea;
 
@@ -429,6 +436,16 @@ function TyBrushRangeCopy(const A: TTyBrushRange): TTyBrushRange;
 { the areas of an event payload: brushType, panelId, range and what
   setOutputRanges added (coordRanges, coordRange, __rangeOffset) }
 function TyBrushAreasJson(const AAreas: TTyBrushAreaArray): string;
+{ the model's areas as brushselected clones them: generateBrushOption's six
+  (brushType, brushMode, transformable, brushStyle, removeOnClick, z), the
+  area's own keys in order, then what setInputRanges adds -- range, and a
+  targeted area's panelId. A colour the option did not write is the skin's
+  (ADefFill, ADefStroke) [milestone D5-D8] }
+function TyBrushModelAreasJson(const AAreas: TTyBrushAreaArray;
+  const ADefFill, ADefStroke: string): string;
+{ a colour as CSS: '#rrggbb', or rgba() with the shortest alpha that comes
+  back to the same byte }
+function TyBrushColorText(AColor: Cardinal): string;
 function TyBrushRangeJson(const A: TTyBrushRange; ALine: Boolean): string;
 { JSON.stringify of a string }
 function TyBrushJsonStr(const S: string): string;
@@ -547,7 +564,7 @@ procedure TyBrushThrottleCall(var T: TTyBrushThrottle; ANow: Double;
 
 implementation
 
-uses tyControls.AdvChart.Scale, tyControls.AdvChart.JsMath;
+uses jsonparser, tyControls.AdvChart.Scale, tyControls.AdvChart.JsMath;
 
 var
   GBrushUid: Integer = 0;
@@ -973,6 +990,28 @@ begin
   for i := 0 to AData.Count - 1 do ARanges[i] := TyBrushRangeOfJson(AType, AData.Items[i]);
 end;
 
+{ an area option's keys past generateBrushOption's six, in order }
+function OwnKeysJson(AObj: TJSONObject): string;
+var
+  i: Integer;
+  nm: string;
+  any: Boolean;
+begin
+  Result := '{';
+  any := False;
+  for i := 0 to AObj.Count - 1 do
+  begin
+    nm := AObj.Names[i];
+    if (nm = 'brushType') or (nm = 'brushMode') or (nm = 'transformable')
+      or (nm = 'brushStyle') or (nm = 'removeOnClick') or (nm = 'z') then Continue;
+    if any then Result := Result + ',';
+    Result := Result + TyBrushJsonStr(nm) + ':' + AObj.Items[i].AsJSON;
+    any := True;
+  end;
+  Result := Result + '}';
+  if not any then Result := '';
+end;
+
 function TyBrushAreaOfJson(const ASpec: TTyBrushSpec; AObj: TJSONObject;
   out AArea: TTyBrushArea): Boolean;
 var d, e: TJSONData;
@@ -1005,6 +1044,7 @@ begin
     AArea.OffsetXY := TyBrushRangeOfJson(btRect, TJSONObject(d).Find('xyMinMax'));
   end;
   AArea.Finder := FinderJsonOf(AObj);
+  AArea.OwnJson := OwnKeysJson(AObj);
   Result := True;
 end;
 
@@ -1023,6 +1063,8 @@ begin
   Result.CoordRange := Copy(AOut.CoordRange);
   Result.Offset := Copy(AOut.Offset);
   Result.OffsetXY := Copy(AOut.OffsetXY);
+  Result.OwnJson := '';
+  Result.FromOutput := True;
 end;
 
 { JSON.stringify of a number: NaN and the infinities are null }
@@ -1109,6 +1151,153 @@ begin
     if a.HasOffset then
       Result := Result + ',"__rangeOffset":{"offset":' + TyBrushRangeJson(a.Offset, ln)
         + ',"xyMinMax":' + TyBrushRangeJson(a.OffsetXY, False) + '}';
+    Result := Result + '}';
+  end;
+  Result := Result + ']';
+end;
+
+function TyBrushColorText(AColor: Cardinal): string;
+var
+  a, r, g, b, k, digits: Integer;
+  t: string;
+  v: Double;
+begin
+  a := (AColor shr 24) and $FF;
+  r := (AColor shr 16) and $FF;
+  g := (AColor shr 8) and $FF;
+  b := AColor and $FF;
+  if a = 255 then
+    Exit('#' + LowerCase(IntToHex(r, 2) + IntToHex(g, 2) + IntToHex(b, 2)));
+  t := '';
+  for digits := 1 to 4 do
+  begin
+    k := Round(a / 255 * Power(10, digits));
+    v := k / Power(10, digits);
+    { the shortest that comes back to the byte (half up, as a parse does) }
+    if Trunc(v * 255 + 0.5) = a then
+    begin
+      t := TyJsNumberToString(v);
+      Break;
+    end;
+  end;
+  if t = '' then t := TyJsNumberToString(a / 255);
+  Result := 'rgba(' + IntToStr(r) + ',' + IntToStr(g) + ',' + IntToStr(b) + ',' + t + ')';
+end;
+
+function TyBrushModelAreasJson(const AAreas: TTyBrushAreaArray;
+  const ADefFill, ADefStroke: string): string;
+var
+  i, k: Integer;
+  ln, hasRange, hasPanel: Boolean;
+  a: TTyBrushArea;
+  own: TJSONData;
+  o: TJSONObject;
+  nm, s: string;
+
+  function InkText(const AInk: TTyBrushInk; const ADef: string): string;
+  begin
+    if AInk.Written then Result := JsonStr(AInk.Text) else Result := JsonStr(ADef);
+  end;
+
+  function CoordRangesJson: string;
+  var q: Integer;
+  begin
+    Result := '[';
+    for q := 0 to High(a.CoordRanges) do
+    begin
+      if q > 0 then Result := Result + ',';
+      Result := Result + TyBrushRangeJson(a.CoordRanges[q], ln);
+    end;
+    Result := Result + ']';
+  end;
+
+  function OffsetJson: string;
+  begin
+    Result := '{"offset":' + TyBrushRangeJson(a.Offset, ln)
+      + ',"xyMinMax":' + TyBrushRangeJson(a.OffsetXY, False) + '}';
+  end;
+
+  function PanelJson: string;
+  begin
+    if a.Opt.HasPanel then Result := JsonStr(a.Opt.PanelId) else Result := 'null';
+  end;
+
+begin
+  Result := '[';
+  for i := 0 to High(AAreas) do
+  begin
+    a := AAreas[i];
+    ln := a.Opt.BrushType in [btLineX, btLineY];
+    if i > 0 then Result := Result + ',';
+    { generateBrushOption's six }
+    Result := Result + '{"brushType":' + JsonStr(TyBrushTypeName(a.Opt.BrushType));
+    if a.Opt.Multiple then Result := Result + ',"brushMode":"multiple"'
+    else Result := Result + ',"brushMode":"single"';
+    if a.Opt.Transformable then Result := Result + ',"transformable":true'
+    else Result := Result + ',"transformable":false';
+    Result := Result + ',"brushStyle":{"fill":' + InkText(a.Opt.Style.Fill, ADefFill)
+      + ',"stroke":' + InkText(a.Opt.Style.Stroke, ADefStroke);
+    if not IsNan(a.Opt.Style.LineWidth) then
+      Result := Result + ',"lineWidth":' + NumJson(a.Opt.Style.LineWidth);
+    if not IsNan(a.Opt.Style.Opacity) then
+      Result := Result + ',"opacity":' + NumJson(a.Opt.Style.Opacity);
+    Result := Result + '}';
+    if a.Opt.RemoveOnClick then Result := Result + ',"removeOnClick":true'
+    else Result := Result + ',"removeOnClick":false';
+    Result := Result + ',"z":' + NumJson(a.Opt.Z);
+    if a.FromOutput then
+    begin
+      { the controller's output: panelId, range, then setOutputRanges' }
+      Result := Result + ',"panelId":' + PanelJson
+        + ',"range":' + TyBrushRangeJson(a.Opt.Range, ln);
+      if a.HasCoordRanges then Result := Result + ',"coordRanges":' + CoordRangesJson;
+      if a.HasCoordRange then Result := Result + ',"coordRange":' + TyBrushRangeJson(a.CoordRange, ln);
+      if a.HasOffset then Result := Result + ',"__rangeOffset":' + OffsetJson;
+      Result := Result + '}';
+      Continue;
+    end;
+    { the action's own keys, in order, each the model's value now }
+    hasRange := False;
+    hasPanel := False;
+    if a.OwnJson <> '' then
+    begin
+      own := GetJSON(a.OwnJson);
+      try
+        if own is TJSONObject then
+        begin
+          o := TJSONObject(own);
+          for k := 0 to o.Count - 1 do
+          begin
+            nm := o.Names[k];
+            if nm = 'range' then
+            begin
+              hasRange := True;
+              s := TyBrushRangeJson(a.Opt.Range, ln);
+            end
+            else if nm = 'panelId' then
+            begin
+              hasPanel := True;
+              if a.Opt.HasPanel then s := JsonStr(a.Opt.PanelId) else s := o.Items[k].AsJSON;
+            end
+            else if (nm = 'coordRange') and a.HasCoordRange then
+              s := TyBrushRangeJson(a.CoordRange, ln)
+            else if (nm = 'coordRanges') and a.HasCoordRanges then
+              s := CoordRangesJson
+            else if (nm = '__rangeOffset') and a.HasOffset then
+              s := OffsetJson
+            else
+              s := o.Items[k].AsJSON;
+            Result := Result + ',' + JsonStr(nm) + ':' + s;
+          end;
+        end;
+      finally
+        own.Free;
+      end;
+    end;
+    { setInputRanges: range (`area.range || []`), then a targeted area's
+      panelId }
+    if not hasRange then Result := Result + ',"range":' + TyBrushRangeJson(a.Opt.Range, ln);
+    if a.Opt.HasPanel and not hasPanel then Result := Result + ',"panelId":' + JsonStr(a.Opt.PanelId);
     Result := Result + '}';
   end;
   Result := Result + ']';
