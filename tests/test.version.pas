@@ -49,6 +49,7 @@ uses
   tyControls.MultiTrackBar,
   tyControls.TrackEdit, tyControls.Transfer, tyControls.TreeSelect, tyControls.TreeView,
   tyControls.TyLabel, tyControls.URLEdit, tyControls.UpDown, tyControls.ValueListEditor,
+  tyControls.PropertyGrid,
   { The property-editor base classes. None of them is ever dropped on a form, so nothing else
     in this uses list drags them in — but InheritsFromAnEditorBase resolves them by name, and
     an unresolvable base would make that check answer False for everything beneath it. }
@@ -492,6 +493,9 @@ initialization
     checked against, so it is registered plainly here -- form files read in the tests and the
     custom-class guards resolve it by name. }
   RegisterClasses([TTyGradientTrackBar]);
+  { The property grid (#65) the same way, until its palette entry (plan Task 5) puts it in
+    Design.pas. }
+  RegisterClasses([TTyPropertyGrid]);
   RegisterTest(TVersionTest);
 
 finalization

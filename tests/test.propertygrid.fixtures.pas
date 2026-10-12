@@ -167,6 +167,17 @@ type
     property Ref: TComponent read FRef write FRef;
   end;
 
+  { A property picked from a list whose setter raises: the list must close all the same. }
+  TPGTrap = class(TPersistent)
+  private
+    FMode: TPGKind;
+    procedure SetMode(AValue: TPGKind);
+  public
+    ModeTries: Integer;
+  published
+    property Mode: TPGKind read FMode write SetMode;
+  end;
+
   { Drives the inline editor the way the keyboard does. }
   TPGEditAccess = class(TTyValueEdit)
   public
@@ -207,6 +218,12 @@ type
     { Click the value cell, type AText over it, press Enter. }
     procedure TypeInto(ARow: TTyValueRow; const AText: string);
     function RootKeys: string;     // the root rows' keys, comma-separated
+    { A click on ARow's expand triangle, where the user clicks it. }
+    procedure ClickTriangle(ARow: TTyValueRow);
+    { The row the selection is on (ItemIndex walked over the expanded rows), nil when none. }
+    function CurrentRow: TTyValueRow;
+    { csDesigning on and off, as the form designer sets it. }
+    procedure DesignMode(AOn: Boolean);
   end;
 
 { The runner never calls Forms.Application.Initialize; a test that needs window handles does. }
@@ -345,6 +362,12 @@ begin
   FSub := TPGSub.Create(Self);
   FSub.Name := 'Sub';
   FSub.SetSubComponent(True);
+end;
+
+procedure TPGTrap.SetMode(AValue: TPGKind);
+begin
+  Inc(ModeTries);
+  raise Exception.Create('no mode change');
 end;
 
 { ---- TPGEditAccess ---- }
@@ -568,6 +591,51 @@ begin
     if Result <> '' then Result := Result + ',';
     Result := Result + Row(i).Key;
   end;
+end;
+
+{ The triangle sits in the indent slot before the key: left padding, then one slot per level. }
+procedure TPGGrid.ClickTriangle(ARow: TTyValueRow);
+var f, x, y, level: Integer; p: TTyValueRow; r: TRect;
+begin
+  f := FlatOf(ARow);
+  TopIndex := f;
+  level := 0;
+  p := ARow.Parent;
+  while p <> nil do begin Inc(level); p := p.Parent; end;
+  r := ItemRect(f);
+  { 14 is the editor's indent slot at the classic density these guards run at. }
+  x := MulDiv(CurrentStyle.Padding.Left, Font.PixelsPerInch, 96)
+    + level * MulDiv(14, Font.PixelsPerInch, 96) + 4;
+  y := (r.Top + r.Bottom) div 2;
+  MouseDown(mbLeft, [], x, y);
+  MouseUp(mbLeft, [], x, y);
+end;
+
+function TPGGrid.CurrentRow: TTyValueRow;
+var n: Integer; res: TTyValueRow;
+
+  procedure Walk(R: TTyValueRow);
+  var i: Integer;
+  begin
+    if res <> nil then Exit;
+    if n = ItemIndex then begin res := R; Exit; end;
+    Inc(n);
+    if R.Expanded then
+      for i := 0 to R.ChildCount - 1 do Walk(R.Child[i]);
+  end;
+
+var i: Integer;
+begin
+  res := nil;
+  n := 0;
+  if ItemIndex >= 0 then
+    for i := 0 to RowCount - 1 do Walk(Row(i));
+  Result := res;
+end;
+
+procedure TPGGrid.DesignMode(AOn: Boolean);
+begin
+  SetDesigning(AOn, False);
 end;
 
 end.

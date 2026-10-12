@@ -24,6 +24,7 @@ uses
   tyControls.MRUComboBox, tyControls.OfficeComboBox, tyControls.ShellComboBox,
   tyControls.AdvancedListBox, tyControls.CheckListBox, tyControls.ColorListBox,
   tyControls.FontListBox, tyControls.OfficeListBox, tyControls.ValueListEditor,
+  tyControls.PropertyGrid,
   tyControls.ShellListView, tyControls.ShellTreeView,
   tyControls.PageControl, tyControls.TabSet, tyControls.ToolWindows,
   tyControls.Calendar, tyControls.DateTimePicker, tyControls.Dial, tyControls.GearDial,
@@ -239,6 +240,8 @@ begin
     { the list family: arrow keys move the selection, so the list itself must hold focus }
     TTyAdvancedListBox, TTyCheckListBox, TTyColorListBox, TTyFontListBox, TTyOfficeListBox,
     TTyValueListEditor,
+    { the property grid is a value list editor: the arrows move the row, F2 and Space edit it }
+    TTyPropertyGrid,
     { shell browsers — TTyListView / TTyTreeView with a directory behind them }
     TTyShellListView, TTyShellTreeView,
     { value pickers and data controls, each of which handles its own keys }
@@ -849,7 +852,9 @@ begin
     TTyDBRating, TTyDBComboBox, TTyDBLookupComboBox, TTyDBListBox, TTyDBLookupListBox,
     TTyDBDateTimePicker, TTyDBCalendar,
     { The data-aware grid is a grid: it takes the keys, as the string grid does. }
-    TTyDBGrid);
+    TTyDBGrid,
+    { The property grid: a value list editor with an inline editor of its own (#65). }
+    TTyPropertyGrid);
 end;
 
 procedure TTyClickFocusTest.TestAClickActuallyLandsFocusOnEveryFocusableControl;

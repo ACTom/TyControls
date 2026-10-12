@@ -1484,10 +1484,13 @@ begin
   if FDropSeeding then Exit;
   flat := FEditFlat;
   if flat < 0 then begin if FDropPopup <> nil then FDropPopup.Close; Exit; end;
+  { The commit is foreign code (OnValueChanged, a descendant's CanCommitValue) and may raise: the
+    list closes whatever happens, or it stays dropped over a cell no longer being edited. }
   case FDropKind of
     dkEnum:
-      begin
+      try
         if FEnumList.ItemIndex >= 0 then CommitEditor(flat, FEnumList.Items[FEnumList.ItemIndex]);
+      finally
         if FDropPopup <> nil then FDropPopup.Close;
       end;
     dkColor:
@@ -1504,10 +1507,11 @@ begin
           Application.QueueAsyncCall(@DeferredColorDialog, 0);
         end
         else
-        begin
-          CommitEditor(flat, ColorToString(TyColorOfItem(FColorList.Items, idx)));
-          if FDropPopup <> nil then FDropPopup.Close;
-        end;
+          try
+            CommitEditor(flat, ColorToString(TyColorOfItem(FColorList.Items, idx)));
+          finally
+            if FDropPopup <> nil then FDropPopup.Close;
+          end;
       end;
   else
     if FDropPopup <> nil then FDropPopup.Close;

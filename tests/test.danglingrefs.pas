@@ -36,6 +36,11 @@ type
     procedure TestAWatchedImageListCanBeFreedWhileItsFormLives;
   end;
 
+{ Poisoned frees, for any suite that has to prove nothing reads a freed object (see the
+  implementation). Pair every BeginPoison with an EndPoison in a finally. }
+procedure BeginPoison;
+procedure EndPoison;
+
 implementation
 
 { Freed memory, poisoned and held back. Between BeginPoison and EndPoison a freed block is filled

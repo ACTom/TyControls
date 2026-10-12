@@ -43,18 +43,18 @@ uses
   tyControls.Notification, tyControls.NumericEdit, tyControls.OfficeComboBox,
   tyControls.OfficeListBox, tyControls.PageControl, tyControls.Pagination, tyControls.PaintPanel,
   tyControls.Panel, tyControls.Popover, tyControls.PreviewBox, tyControls.ProgressBar,
-  tyControls.RadioGroup, tyControls.Rating, tyControls.RelativePanel, tyControls.Ribbon,
-  tyControls.RibbonAppMenu, tyControls.RibbonBackstage, tyControls.RibbonGallery,
-  tyControls.RibbonQuickAccess, tyControls.ScrollBar, tyControls.ScrollBox,
-  tyControls.ScrollContent, tyControls.ScrollPanel, tyControls.Segmented, tyControls.ShadowLabel,
-  tyControls.Shape, tyControls.ShellComboBox, tyControls.ShellListView, tyControls.ShellTreeView,
-  tyControls.SizeBox, tyControls.Sparkline, tyControls.SpinEdit, tyControls.Splitter,
-  tyControls.StarShape, tyControls.StatusBar, tyControls.Steps, tyControls.TabSet,
-  tyControls.TabSheet, tyControls.Tag, tyControls.Terminal, tyControls.ToggleSwitch,
-  tyControls.ToolBar, tyControls.ToolBarEx, tyControls.ToolGroupPanel, tyControls.ToolWindows,
-  tyControls.TrackBar, tyControls.TrackEdit, tyControls.Transfer, tyControls.TreeSelect,
-  tyControls.TreeView, tyControls.TyLabel, tyControls.URLEdit, tyControls.UpDown,
-  tyControls.ValueListEditor;
+  tyControls.PropertyGrid, tyControls.RadioGroup, tyControls.Rating, tyControls.RelativePanel,
+  tyControls.Ribbon, tyControls.RibbonAppMenu, tyControls.RibbonBackstage,
+  tyControls.RibbonGallery, tyControls.RibbonQuickAccess, tyControls.ScrollBar,
+  tyControls.ScrollBox, tyControls.ScrollContent, tyControls.ScrollPanel, tyControls.Segmented,
+  tyControls.ShadowLabel, tyControls.Shape, tyControls.ShellComboBox, tyControls.ShellListView,
+  tyControls.ShellTreeView, tyControls.SizeBox, tyControls.Sparkline, tyControls.SpinEdit,
+  tyControls.Splitter, tyControls.StarShape, tyControls.StatusBar, tyControls.Steps,
+  tyControls.TabSet, tyControls.TabSheet, tyControls.Tag, tyControls.Terminal,
+  tyControls.ToggleSwitch, tyControls.ToolBar, tyControls.ToolBarEx, tyControls.ToolGroupPanel,
+  tyControls.ToolWindows, tyControls.TrackBar, tyControls.TrackEdit, tyControls.Transfer,
+  tyControls.TreeSelect, tyControls.TreeView, tyControls.TyLabel, tyControls.URLEdit,
+  tyControls.UpDown, tyControls.ValueListEditor;
 
 type
   TGenAboutDialog = class(TTyCustomAboutDialog)
@@ -7644,6 +7644,78 @@ type
     property OnCanClose;
   end;
 
+  TGenPropertyGrid = class(TTyCustomPropertyGrid)
+  published
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property BorderWidth;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property ItemHeight;
+    property ScrollBarAutoHide;
+    property OnChange;
+    property OnSelectionChange;
+    property Align;
+    property Anchors;
+    property KeyColumnWidth;
+    property ReadOnly;
+    property Images;
+    property SelectedComponent;
+    property PropertyOrder;
+    property TypeFilter;
+    property HiddenProperties;
+    property ExpandedProperties;
+    property OnFilterProperty;
+    property OnGetComponentNames;
+    property OnGetPropertyRow;
+    property OnPropertyChanging;
+    property OnPropertyChanged;
+    property OnPropertyError;
+    property OnEditProperty;
+  end;
+
   TGenRadioButton = class(TTyCustomRadioButton)
   published
     property Version;
@@ -11391,7 +11463,7 @@ type
 
 const
   { (mimic, final class) }
-  CGenMimics: array[0..182, 0..1] of TClass = (
+  CGenMimics: array[0..183, 0..1] of TClass = (
     (TGenAboutDialog, TTyAboutDialog),
     (TGenActivityBar, TTyActivityBar),
     (TGenActivityIndicator, TTyActivityIndicator),
@@ -11518,6 +11590,7 @@ const
     (TGenPreviewBox, TTyPreviewBox),
     (TGenProgressBar, TTyProgressBar),
     (TGenProgressDialog, TTyProgressDialog),
+    (TGenPropertyGrid, TTyPropertyGrid),
     (TGenRadioButton, TTyRadioButton),
     (TGenRadioGroup, TTyRadioGroup),
     (TGenRangeTrackBar, TTyRangeTrackBar),
