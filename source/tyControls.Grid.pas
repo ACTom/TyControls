@@ -2366,6 +2366,9 @@ type
       the grid is unfocused and HideSelectionWhenInactive is on. The fill and the ink read it
       from here, so they cannot come from two different states. }
     function  SelectionFillStyle: TTyStyleSet;
+    { #60: the cursor cell keeps its own look (TyGridActiveCell) instead of the selection's,
+      because the selection holds more than that one cell. }
+    function  CursorStandsOut(ACol, ARow: Integer): Boolean;
     procedure EditorFollowCell; override;
     function  HoverIsHyperlink(X, Y: Integer): Boolean; override;
     function  DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean; override;
@@ -10973,6 +10976,29 @@ begin
     Result := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, [tysSelected]);
 end;
 
+{ #60. The selection always holds the cursor cell, and its fill went over that cell with the
+  rest, after the cell backgrounds -- TyGridActiveCell's included. With an opaque fill (the
+  shipped themes have one) a row-select grid showed a band and no cursor, while Left/Right, F2
+  and typing went on working on a cell nobody could see. So whenever the selection holds more
+  than the cursor cell -- a row or column band, a dragged range, cells gathered with Ctrl -- the
+  cursor cell takes no selection layer and keeps its own background and ink. A selection that
+  IS the cursor cell is painted as the selection: there is nothing to tell apart. Off with
+  ShowFocusCell, like the focus background itself. }
+function TTyStringGrid.CursorStandsOut(ACol, ARow: Integer): Boolean;
+var
+  r: TRect;
+begin
+  Result := False;
+  if not FShowFocusCell or not IsActiveCell(ACol, ARow) then Exit;
+  if Length(FSelRects) > 0 then Exit(True);
+  r := ActiveSelectionRect;
+  case FSelectionMode of
+    gsmRow:    Result := (r.Bottom > r.Top) or (Header.Columns.Count > 1);
+    gsmColumn: Result := (r.Right > r.Left) or (DisplayRowCount > 1);
+  else         Result := (r.Bottom > r.Top) or (r.Right > r.Left);
+  end;
+end;
+
 function TTyStringGrid.SelectionInk(ACol, ARow: Integer;
   const AAppearance: TTyGridCellAppearance; out AInk: TTyColor): Boolean;
 var
@@ -10984,6 +11010,7 @@ begin
     还透得出来 —— 文字也保持它自己的。 }
   if AAppearance.HasExplicitBackground then Exit;
   if not IsCellSelected(ACol, ARow) then Exit;
+  if CursorStandsOut(ACol, ARow) then Exit;   { #60: no selection layer, so its own ink }
   selS := SelectionFillStyle;
   { 没有选区底色就没有可配的文字色:主题没定义就什么都不换。 }
   if not ((tpBackground in selS.Present) and (tpTextColor in selS.Present)) then Exit;
@@ -15981,6 +16008,7 @@ begin
         for colIdx := 0 to Header.Columns.Count - 1 do
         begin
           if not IsCellSelected(colIdx, dataRow) then Continue;
+          if CursorStandsOut(colIdx, dataRow) then Continue;   { #60 }
           vis := CellVisibleRect(colIdx, dataRow);
           if IsRectEmpty(vis) then Continue;
           if CellAppearance(colIdx, dataRow, pos, AFrame).HasExplicitBackground
