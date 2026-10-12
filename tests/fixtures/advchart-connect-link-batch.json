@@ -1,0 +1,10905 @@
+{
+ "source": "ECharts 6.1.0, zrender 6.1.0; node v22.22.2",
+ "W": 600,
+ "H": 400,
+ "seed": 2463534242,
+ "clock": {
+  "start": 1700000000000,
+  "wheelDt": 200
+ },
+ "api": {
+  "chart": "echarts.init(null, null, {renderer: 'svg', ssr: true, width, height}); chart._ssr = false",
+  "connect": "echarts.connect(group | charts[]), echarts.disconnect(group), chart.group",
+  "export": "chart.getConnectedDataURL(opts) with getDom().getBoundingClientRect and renderToCanvas stubbed per chart and setPlatformAPI({createCanvas}) a recording canvas"
+ },
+ "notes": [
+  "Pointer steps: zrender Handler mousemove / globalout; a frame after every step.",
+  "Every chart listens to every connect-able event type plus selectchanged, axisbreakchanged and updated (rendered / finished are frames, not actions).",
+  "Upstream registers the forwarder of a published event before the connect listener (_initEvents runs in the constructor, enableConnect after init): a chart's own handlers hear an event before the charts of its group are sent the action."
+ ],
+ "revertMap": {
+  "highlight": "highlight",
+  "downplay": "downplay",
+  "select": "select",
+  "unselect": "unselect",
+  "toggleselect": "toggleSelect",
+  "globalcursortaken": "takeGlobalCursor",
+  "magictypechanged": "changeMagicType",
+  "dataviewchanged": "changeDataView",
+  "restore": "restore",
+  "changeaxisorder": "changeAxisOrder",
+  "pietoggleselect": "pieToggleSelect",
+  "pieselect": "pieSelect",
+  "pieunselect": "pieUnSelect",
+  "geoselectchanged": "geoToggleSelect",
+  "geoselected": "geoSelect",
+  "geounselected": "geoUnSelect",
+  "georoam": "geoRoam",
+  "maptoggleselect": "mapToggleSelect",
+  "mapselect": "mapSelect",
+  "mapunselect": "mapUnSelect",
+  "treeexpandandcollapse": "treeExpandAndCollapse",
+  "treeroam": "treeRoam",
+  "treemapzoomtonode": "treemapZoomToNode",
+  "treemaprender": "treemapRender",
+  "treemapmove": "treemapMove",
+  "treemaproottonode": "treemapRootToNode",
+  "focusnodeadjacency": "focusNodeAdjacency",
+  "unfocusnodeadjacency": "unfocusNodeAdjacency",
+  "graphroam": "graphRoam",
+  "axisareaselected": "axisAreaSelect",
+  "parallelaxisexpand": "parallelAxisExpand",
+  "dragnode": "dragNode",
+  "sankeyroam": "sankeyRoam",
+  "sunburstroottonode": "sunburstRootToNode",
+  "sunbursthighlight": "sunburstHighlight",
+  "sunburstunhighlight": "sunburstUnhighlight",
+  "updateaxispointer": "updateAxisPointer",
+  "datazoom": "dataZoom",
+  "showtip": "showTip",
+  "hidetip": "hideTip",
+  "brush": "brush",
+  "brushselected": "brushSelect",
+  "brushend": "brushEnd",
+  "timelinechanged": "timelineChange",
+  "timelineplaychanged": "timelinePlayChange",
+  "legendselectchanged": "legendToggleSelect",
+  "legendselectall": "legendAllSelect",
+  "legendinverseselect": "legendInverseSelect",
+  "legendselected": "legendSelect",
+  "legendunselected": "legendUnSelect",
+  "legendscroll": "legendScroll",
+  "datarangeselected": "selectDataRange",
+  "expandaxisbreak": "expandAxisBreak",
+  "collapseaxisbreak": "collapseAxisBreak",
+  "toggleaxisbreak": "toggleAxisBreak"
+ },
+ "link": [
+  {
+   "id": "link-all",
+   "note": "grid-multiple: two grids stacked, category x, link as an OBJECT {xAxisIndex: all} (the preprocessor wraps it)",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis"
+    },
+    "axisPointer": {
+     "link": {
+      "xAxisIndex": "all"
+     }
+    },
+    "grid": [
+     {
+      "left": 60,
+      "right": 40,
+      "top": 30,
+      "height": 140
+     },
+     {
+      "left": 60,
+      "right": 40,
+      "top": 220,
+      "height": 140
+     }
+    ],
+    "xAxis": [
+     {
+      "type": "category",
+      "data": [
+       "a",
+       "b",
+       "c",
+       "d",
+       "e"
+      ]
+     },
+     {
+      "type": "category",
+      "data": [
+       "a",
+       "b",
+       "c",
+       "d",
+       "e"
+      ],
+      "gridIndex": 1
+     }
+    ],
+    "yAxis": [
+     {},
+     {
+      "gridIndex": 1
+     }
+    ],
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       4,
+       7,
+       2
+      ]
+     },
+     {
+      "type": "line",
+      "xAxisIndex": 1,
+      "yAxisIndex": 1,
+      "data": [
+       1,
+       6,
+       2,
+       8,
+       3
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "at": [
+      120,
+      100
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "0000000000000000",
+       "valueText": "0",
+       "sdi": [
+        [
+         0,
+         0,
+         0
+        ]
+       ]
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "0000000000000000",
+       "valueText": "0",
+       "sdi": [
+        [
+         1,
+         0,
+         0
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "0000000000000000",
+         "valueText": "0",
+         "sdi": [
+          [
+           0,
+           0,
+           0
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "cs": "grid1",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "0000000000000000",
+         "valueText": "0",
+         "sdi": [
+          [
+           1,
+           0,
+           0
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         0
+        ],
+        [
+         1,
+         0
+        ]
+       ]
+      }
+     ],
+     "mapper": []
+    },
+    {
+     "at": [
+      300,
+      100
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "4000000000000000",
+       "valueText": "2",
+       "sdi": [
+        [
+         0,
+         2,
+         2
+        ]
+       ]
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "4000000000000000",
+       "valueText": "2",
+       "sdi": [
+        [
+         1,
+         2,
+         2
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "4000000000000000",
+         "valueText": "2",
+         "sdi": [
+          [
+           0,
+           2,
+           2
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "cs": "grid1",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "4000000000000000",
+         "valueText": "2",
+         "sdi": [
+          [
+           1,
+           2,
+           2
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         0,
+         0
+        ],
+        [
+         1,
+         0
+        ]
+       ]
+      },
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         2
+        ],
+        [
+         1,
+         2
+        ]
+       ]
+      }
+     ],
+     "mapper": []
+    },
+    {
+     "at": [
+      450,
+      300
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "4008000000000000",
+       "valueText": "3",
+       "sdi": [
+        [
+         0,
+         3,
+         3
+        ]
+       ]
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "4008000000000000",
+       "valueText": "3",
+       "sdi": [
+        [
+         1,
+         3,
+         3
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid1",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "4008000000000000",
+         "valueText": "3",
+         "sdi": [
+          [
+           1,
+           3,
+           3
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "4008000000000000",
+         "valueText": "3",
+         "sdi": [
+          [
+           0,
+           3,
+           3
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         0,
+         2
+        ],
+        [
+         1,
+         2
+        ]
+       ]
+      },
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         3
+        ],
+        [
+         1,
+         3
+        ]
+       ]
+      }
+     ],
+     "mapper": []
+    },
+    {
+     "at": [
+      559,
+      250
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "4010000000000000",
+       "valueText": "4",
+       "sdi": [
+        [
+         0,
+         4,
+         4
+        ]
+       ]
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "4010000000000000",
+       "valueText": "4",
+       "sdi": [
+        [
+         1,
+         4,
+         4
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid1",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "4010000000000000",
+         "valueText": "4",
+         "sdi": [
+          [
+           1,
+           4,
+           4
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "4010000000000000",
+         "valueText": "4",
+         "sdi": [
+          [
+           0,
+           4,
+           4
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         0,
+         3
+        ],
+        [
+         1,
+         3
+        ]
+       ]
+      },
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         4
+        ],
+        [
+         1,
+         4
+        ]
+       ]
+      }
+     ],
+     "mapper": []
+    },
+    {
+     "at": [
+      300,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      }
+     ],
+     "tip": "hide",
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         0,
+         4
+        ],
+        [
+         1,
+         4
+        ]
+       ]
+      }
+     ],
+     "mapper": []
+    },
+    {
+     "at": "leave",
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      }
+     ],
+     "tip": null,
+     "highlights": [],
+     "mapper": []
+    },
+    {
+     "at": [
+      61,
+      360
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "8000000000000000",
+       "valueText": "-0",
+       "sdi": [
+        [
+         0,
+         0,
+         0
+        ]
+       ]
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "8000000000000000",
+       "valueText": "-0",
+       "sdi": [
+        [
+         1,
+         0,
+         0
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid1",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "0000000000000000",
+         "valueText": "0",
+         "sdi": [
+          [
+           1,
+           0,
+           0
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "0000000000000000",
+         "valueText": "0",
+         "sdi": [
+          [
+           0,
+           0,
+           0
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         0
+        ],
+        [
+         1,
+         0
+        ]
+       ]
+      }
+     ],
+     "mapper": []
+    }
+   ]
+  },
+  {
+   "id": "link-id-mapper",
+   "note": "three grids side by side, value x axes with ids a / b / c; [{xAxisId: [a, b], mapper: @Double}]: a pointer in a puts b at twice the value and back; c is on its own",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis"
+    },
+    "axisPointer": {
+     "link": [
+      {
+       "xAxisId": [
+        "a",
+        "b"
+       ],
+       "mapper": "@Double"
+      }
+     ]
+    },
+    "grid": [
+     {
+      "left": 40,
+      "width": 140,
+      "top": 40,
+      "bottom": 40
+     },
+     {
+      "left": 230,
+      "width": 140,
+      "top": 40,
+      "bottom": 40
+     },
+     {
+      "left": 420,
+      "width": 140,
+      "top": 40,
+      "bottom": 40
+     }
+    ],
+    "xAxis": [
+     {
+      "id": "a",
+      "type": "value",
+      "min": 0,
+      "max": 10
+     },
+     {
+      "id": "b",
+      "type": "value",
+      "gridIndex": 1,
+      "min": 0,
+      "max": 20
+     },
+     {
+      "id": "c",
+      "type": "value",
+      "gridIndex": 2,
+      "min": 0,
+      "max": 10
+     }
+    ],
+    "yAxis": [
+     {},
+     {
+      "gridIndex": 1
+     },
+     {
+      "gridIndex": 2
+     }
+    ],
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       [
+        1,
+        3
+       ],
+       [
+        3,
+        5
+       ],
+       [
+        6,
+        2
+       ],
+       [
+        9,
+        4
+       ]
+      ]
+     },
+     {
+      "type": "line",
+      "xAxisIndex": 1,
+      "yAxisIndex": 1,
+      "data": [
+       [
+        2,
+        1
+       ],
+       [
+        7,
+        6
+       ],
+       [
+        12,
+        3
+       ],
+       [
+        18,
+        5
+       ]
+      ]
+     },
+     {
+      "type": "scatter",
+      "xAxisIndex": 2,
+      "yAxisIndex": 2,
+      "data": [
+       [
+        2,
+        2
+       ],
+       [
+        5,
+        5
+       ],
+       [
+        8,
+        1
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "at": [
+      60,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "3ff0000000000000",
+       "valueText": "1",
+       "sdi": [
+        [
+         0,
+         0,
+         0
+        ]
+       ]
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "4000000000000000",
+       "valueText": "2",
+       "sdi": [
+        [
+         1,
+         0,
+         0
+        ]
+       ]
+      },
+      {
+       "key": "x2",
+       "dim": "x",
+       "index": 2,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           0,
+           0,
+           0
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "cs": "grid1",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "4000000000000000",
+         "valueText": "2",
+         "sdi": [
+          [
+           1,
+           0,
+           0
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         0
+        ],
+        [
+         1,
+         0
+        ]
+       ]
+      }
+     ],
+     "mapper": [
+      {
+       "fn": "Double",
+       "value": "3ff0000000000000",
+       "valueText": "1",
+       "src": {
+        "axisDim": "x",
+        "axisIndex": 0,
+        "axisName": "series␀0",
+        "axisId": "a"
+       },
+       "tar": {
+        "axisDim": "x",
+        "axisIndex": 1,
+        "axisName": "series␀1",
+        "axisId": "b"
+       }
+      }
+     ]
+    },
+    {
+     "at": [
+      110,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "4018000000000000",
+       "valueText": "6",
+       "sdi": [
+        [
+         0,
+         2,
+         2
+        ]
+       ]
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "4028000000000000",
+       "valueText": "12",
+       "sdi": [
+        [
+         1,
+         2,
+         2
+        ]
+       ]
+      },
+      {
+       "key": "x2",
+       "dim": "x",
+       "index": 2,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "4018000000000000",
+         "valueText": "6",
+         "sdi": [
+          [
+           0,
+           2,
+           2
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "cs": "grid1",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "4028000000000000",
+         "valueText": "12",
+         "sdi": [
+          [
+           1,
+           2,
+           2
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         0,
+         0
+        ],
+        [
+         1,
+         0
+        ]
+       ]
+      },
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         2
+        ],
+        [
+         1,
+         2
+        ]
+       ]
+      }
+     ],
+     "mapper": [
+      {
+       "fn": "Double",
+       "value": "4018000000000000",
+       "valueText": "6",
+       "src": {
+        "axisDim": "x",
+        "axisIndex": 0,
+        "axisName": "series␀0",
+        "axisId": "a"
+       },
+       "tar": {
+        "axisDim": "x",
+        "axisIndex": 1,
+        "axisName": "series␀1",
+        "axisId": "b"
+       }
+      }
+     ]
+    },
+    {
+     "at": [
+      300,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "4028000000000000",
+       "valueText": "12",
+       "sdi": [
+        [
+         1,
+         2,
+         2
+        ]
+       ]
+      },
+      {
+       "key": "x2",
+       "dim": "x",
+       "index": 2,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid1",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "4028000000000000",
+         "valueText": "12",
+         "sdi": [
+          [
+           1,
+           2,
+           2
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         0,
+         2
+        ]
+       ]
+      }
+     ],
+     "mapper": [
+      {
+       "fn": "Double",
+       "value": "4028000000000000",
+       "valueText": "12",
+       "src": {
+        "axisDim": "x",
+        "axisIndex": 1,
+        "axisName": "series␀1",
+        "axisId": "b"
+       },
+       "tar": {
+        "axisDim": "x",
+        "axisIndex": 0,
+        "axisName": "series␀0",
+        "axisId": "a"
+       }
+      }
+     ]
+    },
+    {
+     "at": [
+      355,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "4032000000000000",
+       "valueText": "18",
+       "sdi": [
+        [
+         1,
+         3,
+         3
+        ]
+       ]
+      },
+      {
+       "key": "x2",
+       "dim": "x",
+       "index": 2,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid1",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "4032000000000000",
+         "valueText": "18",
+         "sdi": [
+          [
+           1,
+           3,
+           3
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         1,
+         2
+        ]
+       ]
+      },
+      {
+       "type": "highlight",
+       "items": [
+        [
+         1,
+         3
+        ]
+       ]
+      }
+     ],
+     "mapper": [
+      {
+       "fn": "Double",
+       "value": "4032000000000000",
+       "valueText": "18",
+       "src": {
+        "axisDim": "x",
+        "axisIndex": 1,
+        "axisName": "series␀1",
+        "axisId": "b"
+       },
+       "tar": {
+        "axisDim": "x",
+        "axisIndex": 0,
+        "axisName": "series␀0",
+        "axisId": "a"
+       }
+      }
+     ]
+    },
+    {
+     "at": [
+      500,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      },
+      {
+       "key": "x2",
+       "dim": "x",
+       "index": 2,
+       "status": "show",
+       "value": "4014000000000000",
+       "valueText": "5",
+       "sdi": [
+        [
+         2,
+         1,
+         1
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid2",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 2,
+         "value": "4014000000000000",
+         "valueText": "5",
+         "sdi": [
+          [
+           2,
+           1,
+           1
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         1,
+         3
+        ]
+       ]
+      },
+      {
+       "type": "highlight",
+       "items": [
+        [
+         2,
+         1
+        ]
+       ]
+      }
+     ],
+     "mapper": []
+    }
+   ]
+  },
+  {
+   "id": "link-name-first",
+   "note": "by axis NAME and the first group that matches: [{xAxisName: left}, {xAxisName: [right, left], mapper: @Shift}] -- left is taken by group 0, so group 1 holds right alone and nothing links; [{xAxisIndex: [0, 2]} ...] in the next case",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis"
+    },
+    "axisPointer": {
+     "link": [
+      {
+       "xAxisName": "left"
+      },
+      {
+       "xAxisName": [
+        "right",
+        "left"
+       ],
+       "mapper": "@Shift"
+      }
+     ]
+    },
+    "grid": [
+     {
+      "left": 40,
+      "width": 220,
+      "top": 40,
+      "bottom": 60
+     },
+     {
+      "left": 330,
+      "width": 220,
+      "top": 40,
+      "bottom": 60
+     }
+    ],
+    "xAxis": [
+     {
+      "name": "left",
+      "type": "category",
+      "data": [
+       "a",
+       "b",
+       "c",
+       "d",
+       "e"
+      ]
+     },
+     {
+      "name": "right",
+      "type": "category",
+      "data": [
+       "a",
+       "b",
+       "c",
+       "d",
+       "e"
+      ],
+      "gridIndex": 1
+     }
+    ],
+    "yAxis": [
+     {},
+     {
+      "gridIndex": 1
+     }
+    ],
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     },
+     {
+      "type": "bar",
+      "xAxisIndex": 1,
+      "yAxisIndex": 1,
+      "data": [
+       5,
+       4,
+       3,
+       2,
+       1
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "at": [
+      100,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "3ff0000000000000",
+       "valueText": "1",
+       "sdi": [
+        [
+         0,
+         1,
+         1
+        ]
+       ]
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         1
+        ]
+       ]
+      }
+     ],
+     "mapper": []
+    },
+    {
+     "at": [
+      400,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "3ff0000000000000",
+       "valueText": "1",
+       "sdi": [
+        [
+         1,
+         1,
+         1
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid1",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           1,
+           1,
+           1
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         0,
+         1
+        ]
+       ]
+      },
+      {
+       "type": "highlight",
+       "items": [
+        [
+         1,
+         1
+        ]
+       ]
+      }
+     ],
+     "mapper": []
+    }
+   ]
+  },
+  {
+   "id": "link-name-shift",
+   "note": "by name with a category mapper: [{xAxisName: [left, right], mapper: @Shift}] -- the target is one category on; past the last one there is no pointer",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis"
+    },
+    "axisPointer": {
+     "link": [
+      {
+       "xAxisName": [
+        "left",
+        "right"
+       ],
+       "mapper": "@Shift"
+      }
+     ]
+    },
+    "grid": [
+     {
+      "left": 40,
+      "width": 220,
+      "top": 40,
+      "bottom": 60
+     },
+     {
+      "left": 330,
+      "width": 220,
+      "top": 40,
+      "bottom": 60
+     }
+    ],
+    "xAxis": [
+     {
+      "name": "left",
+      "type": "category",
+      "data": [
+       "a",
+       "b",
+       "c",
+       "d",
+       "e"
+      ]
+     },
+     {
+      "name": "right",
+      "type": "category",
+      "data": [
+       "a",
+       "b",
+       "c",
+       "d",
+       "e"
+      ],
+      "gridIndex": 1
+     }
+    ],
+    "yAxis": [
+     {},
+     {
+      "gridIndex": 1
+     }
+    ],
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     },
+     {
+      "type": "bar",
+      "xAxisIndex": 1,
+      "yAxisIndex": 1,
+      "data": [
+       5,
+       4,
+       3,
+       2,
+       1
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "at": [
+      60,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "8000000000000000",
+       "valueText": "-0",
+       "sdi": [
+        [
+         0,
+         0,
+         0
+        ]
+       ]
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "3ff0000000000000",
+       "valueText": "1",
+       "sdi": [
+        [
+         1,
+         1,
+         1
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "0000000000000000",
+         "valueText": "0",
+         "sdi": [
+          [
+           0,
+           0,
+           0
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "cs": "grid1",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           1,
+           1,
+           1
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         0
+        ],
+        [
+         1,
+         1
+        ]
+       ]
+      }
+     ],
+     "mapper": [
+      {
+       "fn": "Shift",
+       "value": "8000000000000000",
+       "valueText": "-0",
+       "src": {
+        "axisDim": "x",
+        "axisIndex": 0,
+        "axisName": "left",
+        "axisId": "␀left␀0"
+       },
+       "tar": {
+        "axisDim": "x",
+        "axisIndex": 1,
+        "axisName": "right",
+        "axisId": "␀right␀0"
+       }
+      }
+     ]
+    },
+    {
+     "at": [
+      150,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "4000000000000000",
+       "valueText": "2",
+       "sdi": [
+        [
+         0,
+         2,
+         2
+        ]
+       ]
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "4008000000000000",
+       "valueText": "3",
+       "sdi": [
+        [
+         1,
+         3,
+         3
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "4000000000000000",
+         "valueText": "2",
+         "sdi": [
+          [
+           0,
+           2,
+           2
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "cs": "grid1",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "4008000000000000",
+         "valueText": "3",
+         "sdi": [
+          [
+           1,
+           3,
+           3
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         0,
+         0
+        ],
+        [
+         1,
+         1
+        ]
+       ]
+      },
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         2
+        ],
+        [
+         1,
+         3
+        ]
+       ]
+      }
+     ],
+     "mapper": [
+      {
+       "fn": "Shift",
+       "value": "4000000000000000",
+       "valueText": "2",
+       "src": {
+        "axisDim": "x",
+        "axisIndex": 0,
+        "axisName": "left",
+        "axisId": "␀left␀0"
+       },
+       "tar": {
+        "axisDim": "x",
+        "axisIndex": 1,
+        "axisName": "right",
+        "axisId": "␀right␀0"
+       }
+      }
+     ]
+    },
+    {
+     "at": [
+      250,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "4010000000000000",
+       "valueText": "4",
+       "sdi": [
+        [
+         0,
+         4,
+         4
+        ]
+       ]
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "4010000000000000",
+         "valueText": "4",
+         "sdi": [
+          [
+           0,
+           4,
+           4
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         0,
+         2
+        ],
+        [
+         1,
+         3
+        ]
+       ]
+      },
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         4
+        ]
+       ]
+      }
+     ],
+     "mapper": [
+      {
+       "fn": "Shift",
+       "value": "4010000000000000",
+       "valueText": "4",
+       "src": {
+        "axisDim": "x",
+        "axisIndex": 0,
+        "axisName": "left",
+        "axisId": "␀left␀0"
+       },
+       "tar": {
+        "axisDim": "x",
+        "axisIndex": 1,
+        "axisName": "right",
+        "axisId": "␀right␀0"
+       }
+      }
+     ]
+    },
+    {
+     "at": [
+      345,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "3ff0000000000000",
+       "valueText": "1",
+       "sdi": [
+        [
+         0,
+         1,
+         1
+        ]
+       ]
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "8000000000000000",
+       "valueText": "-0",
+       "sdi": [
+        [
+         1,
+         0,
+         0
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid1",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "0000000000000000",
+         "valueText": "0",
+         "sdi": [
+          [
+           1,
+           0,
+           0
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         0,
+         4
+        ]
+       ]
+      },
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         0
+        ]
+       ]
+      }
+     ],
+     "mapper": [
+      {
+       "fn": "Shift",
+       "value": "8000000000000000",
+       "valueText": "-0",
+       "src": {
+        "axisDim": "x",
+        "axisIndex": 1,
+        "axisName": "right",
+        "axisId": "␀right␀0"
+       },
+       "tar": {
+        "axisDim": "x",
+        "axisIndex": 0,
+        "axisName": "left",
+        "axisId": "␀left␀0"
+       }
+      }
+     ]
+    },
+    {
+     "at": [
+      540,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "4010000000000000",
+       "valueText": "4",
+       "sdi": [
+        [
+         1,
+         4,
+         4
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid1",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "4010000000000000",
+         "valueText": "4",
+         "sdi": [
+          [
+           1,
+           4,
+           4
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         0
+        ]
+       ]
+      },
+      {
+       "type": "highlight",
+       "items": [
+        [
+         1,
+         4
+        ]
+       ]
+      }
+     ],
+     "mapper": [
+      {
+       "fn": "Shift",
+       "value": "4010000000000000",
+       "valueText": "4",
+       "src": {
+        "axisDim": "x",
+        "axisIndex": 1,
+        "axisName": "right",
+        "axisId": "␀right␀0"
+       },
+       "tar": {
+        "axisDim": "x",
+        "axisIndex": 0,
+        "axisName": "left",
+        "axisId": "␀left␀0"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "link-cross",
+   "note": "tooltip cross: x linked by index, y linked with @Half (the cross arm: no tooltip, no snap, the pointer at the mapped value)",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis",
+     "axisPointer": {
+      "type": "cross"
+     }
+    },
+    "axisPointer": {
+     "link": [
+      {
+       "xAxisIndex": [
+        0,
+        1
+       ]
+      },
+      {
+       "yAxisIndex": "all",
+       "mapper": "@Half"
+      }
+     ]
+    },
+    "grid": [
+     {
+      "left": 50,
+      "width": 220,
+      "top": 40,
+      "bottom": 60
+     },
+     {
+      "left": 340,
+      "width": 220,
+      "top": 40,
+      "bottom": 60
+     }
+    ],
+    "xAxis": [
+     {
+      "type": "value",
+      "min": 0,
+      "max": 10
+     },
+     {
+      "type": "value",
+      "gridIndex": 1,
+      "min": 0,
+      "max": 10
+     }
+    ],
+    "yAxis": [
+     {
+      "min": 0,
+      "max": 100
+     },
+     {
+      "gridIndex": 1,
+      "min": 0,
+      "max": 100
+     }
+    ],
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       [
+        1,
+        10
+       ],
+       [
+        4,
+        60
+       ],
+       [
+        8,
+        30
+       ]
+      ]
+     },
+     {
+      "type": "line",
+      "xAxisIndex": 1,
+      "yAxisIndex": 1,
+      "data": [
+       [
+        2,
+        80
+       ],
+       [
+        5,
+        20
+       ],
+       [
+        9,
+        70
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "at": [
+      160,
+      150
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "4010000000000000",
+       "valueText": "4",
+       "sdi": [
+        [
+         0,
+         1,
+         1
+        ]
+       ]
+      },
+      {
+       "key": "y0",
+       "dim": "y",
+       "index": 0,
+       "status": "show",
+       "value": "404faaaaaaaaaaaa",
+       "valueText": "63.33333333333333",
+       "sdi": []
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "4010000000000000",
+       "valueText": "4",
+       "sdi": [
+        [
+         1,
+         1,
+         1
+        ]
+       ]
+      },
+      {
+       "key": "y1",
+       "dim": "y",
+       "index": 1,
+       "status": "show",
+       "value": "403faaaaaaaaaaaa",
+       "valueText": "31.666666666666664",
+       "sdi": []
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "4010000000000000",
+         "valueText": "4",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "cs": "grid1",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "4014000000000000",
+         "valueText": "5",
+         "sdi": [
+          [
+           1,
+           1,
+           1
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         1
+        ]
+       ]
+      }
+     ],
+     "mapper": [
+      {
+       "fn": "Half",
+       "value": "404faaaaaaaaaaaa",
+       "valueText": "63.33333333333333",
+       "src": {
+        "axisDim": "y",
+        "axisIndex": 0,
+        "axisName": "series␀0",
+        "axisId": "␀series␀0␀0"
+       },
+       "tar": {
+        "axisDim": "y",
+        "axisIndex": 1,
+        "axisName": "series␀1",
+        "axisId": "␀series␀1␀0"
+       }
+      }
+     ]
+    },
+    {
+     "at": [
+      400,
+      250
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "4000000000000000",
+       "valueText": "2",
+       "sdi": [
+        [
+         0,
+         0,
+         0
+        ]
+       ]
+      },
+      {
+       "key": "y0",
+       "dim": "y",
+       "index": 0,
+       "status": "show",
+       "value": "402e000000000000",
+       "valueText": "15",
+       "sdi": []
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "4000000000000000",
+       "valueText": "2",
+       "sdi": [
+        [
+         1,
+         0,
+         0
+        ]
+       ]
+      },
+      {
+       "key": "y1",
+       "dim": "y",
+       "index": 1,
+       "status": "show",
+       "value": "403e000000000000",
+       "valueText": "30",
+       "sdi": []
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid1",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "4000000000000000",
+         "valueText": "2",
+         "sdi": [
+          [
+           1,
+           0,
+           0
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           0,
+           0,
+           0
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         1
+        ]
+       ]
+      },
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         0
+        ],
+        [
+         1,
+         0
+        ]
+       ]
+      }
+     ],
+     "mapper": [
+      {
+       "fn": "Half",
+       "value": "403e000000000000",
+       "valueText": "30",
+       "src": {
+        "axisDim": "y",
+        "axisIndex": 1,
+        "axisName": "series␀1",
+        "axisId": "␀series␀1␀0"
+       },
+       "tar": {
+        "axisDim": "y",
+        "axisIndex": 0,
+        "axisName": "series␀0",
+        "axisId": "␀series␀0␀0"
+       }
+      }
+     ]
+    },
+    {
+     "at": [
+      300,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      },
+      {
+       "key": "y0",
+       "dim": "y",
+       "index": 0,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      },
+      {
+       "key": "y1",
+       "dim": "y",
+       "index": 1,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      }
+     ],
+     "tip": "hide",
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         0,
+         0
+        ],
+        [
+         1,
+         0
+        ]
+       ]
+      }
+     ],
+     "mapper": []
+    }
+   ]
+  },
+  {
+   "id": "link-snap-out",
+   "note": "a snapping value source passes its SNAPPED value on, the target does not snap; @Hundred maps out of the target extent: no pointer there",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "axis"
+    },
+    "axisPointer": {
+     "link": [
+      {
+       "xAxisIndex": [
+        0,
+        1
+       ]
+      },
+      {
+       "xAxisIndex": [
+        2,
+        3
+       ],
+       "mapper": "@Hundred"
+      }
+     ]
+    },
+    "grid": [
+     {
+      "left": 40,
+      "width": 110,
+      "top": 40,
+      "bottom": 60
+     },
+     {
+      "left": 180,
+      "width": 110,
+      "top": 40,
+      "bottom": 60
+     },
+     {
+      "left": 320,
+      "width": 110,
+      "top": 40,
+      "bottom": 60
+     },
+     {
+      "left": 460,
+      "width": 110,
+      "top": 40,
+      "bottom": 60
+     }
+    ],
+    "xAxis": [
+     {
+      "type": "value",
+      "min": 0,
+      "max": 10
+     },
+     {
+      "type": "value",
+      "gridIndex": 1,
+      "min": 0,
+      "max": 10
+     },
+     {
+      "type": "value",
+      "gridIndex": 2,
+      "min": 0,
+      "max": 10
+     },
+     {
+      "type": "value",
+      "gridIndex": 3,
+      "min": 0,
+      "max": 10
+     }
+    ],
+    "yAxis": [
+     {},
+     {
+      "gridIndex": 1
+     },
+     {
+      "gridIndex": 2
+     },
+     {
+      "gridIndex": 3
+     }
+    ],
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       [
+        1,
+        1
+       ],
+       [
+        4.5,
+        3
+       ],
+       [
+        8,
+        2
+       ]
+      ]
+     },
+     {
+      "type": "line",
+      "xAxisIndex": 1,
+      "yAxisIndex": 1,
+      "data": [
+       [
+        2,
+        3
+       ],
+       [
+        5,
+        1
+       ],
+       [
+        6,
+        4
+       ]
+      ]
+     },
+     {
+      "type": "line",
+      "xAxisIndex": 2,
+      "yAxisIndex": 2,
+      "data": [
+       [
+        0,
+        1
+       ],
+       [
+        0.05,
+        2
+       ],
+       [
+        10,
+        1
+       ]
+      ]
+     },
+     {
+      "type": "line",
+      "xAxisIndex": 3,
+      "yAxisIndex": 3,
+      "data": [
+       [
+        1,
+        2
+       ],
+       [
+        5,
+        2
+       ],
+       [
+        9,
+        2
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "at": [
+      95,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "4012000000000000",
+       "valueText": "4.5",
+       "sdi": [
+        [
+         0,
+         1,
+         1
+        ]
+       ]
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "4012000000000000",
+       "valueText": "4.5",
+       "sdi": [
+        [
+         1,
+         1,
+         1
+        ]
+       ]
+      },
+      {
+       "key": "x2",
+       "dim": "x",
+       "index": 2,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      },
+      {
+       "key": "x3",
+       "dim": "x",
+       "index": 3,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "4012000000000000",
+         "valueText": "4.5",
+         "sdi": [
+          [
+           0,
+           1,
+           1
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "cs": "grid1",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "4014000000000000",
+         "valueText": "5",
+         "sdi": [
+          [
+           1,
+           1,
+           1
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         1
+        ]
+       ]
+      }
+     ],
+     "mapper": []
+    },
+    {
+     "at": [
+      70,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "show",
+       "value": "3ff0000000000000",
+       "valueText": "1",
+       "sdi": [
+        [
+         0,
+         0,
+         0
+        ]
+       ]
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "show",
+       "value": "3ff0000000000000",
+       "valueText": "1",
+       "sdi": [
+        [
+         1,
+         0,
+         0
+        ]
+       ]
+      },
+      {
+       "key": "x2",
+       "dim": "x",
+       "index": 2,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      },
+      {
+       "key": "x3",
+       "dim": "x",
+       "index": 3,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid0",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 0,
+         "value": "3ff0000000000000",
+         "valueText": "1",
+         "sdi": [
+          [
+           0,
+           0,
+           0
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "cs": "grid1",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 1,
+         "value": "4000000000000000",
+         "valueText": "2",
+         "sdi": [
+          [
+           1,
+           0,
+           0
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         0,
+         1
+        ],
+        [
+         1,
+         1
+        ]
+       ]
+      },
+      {
+       "type": "highlight",
+       "items": [
+        [
+         0,
+         0
+        ],
+        [
+         1,
+         0
+        ]
+       ]
+      }
+     ],
+     "mapper": []
+    },
+    {
+     "at": [
+      330,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      },
+      {
+       "key": "x2",
+       "dim": "x",
+       "index": 2,
+       "status": "show",
+       "value": "3fa999999999999a",
+       "valueText": "0.05",
+       "sdi": [
+        [
+         2,
+         1,
+         1
+        ]
+       ]
+      },
+      {
+       "key": "x3",
+       "dim": "x",
+       "index": 3,
+       "status": "show",
+       "value": "4014000000000000",
+       "valueText": "5",
+       "sdi": [
+        [
+         3,
+         1,
+         1
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid2",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 2,
+         "value": "3fa999999999999a",
+         "valueText": "0.05",
+         "sdi": [
+          [
+           2,
+           1,
+           1
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "cs": "grid3",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 3,
+         "value": "4014000000000000",
+         "valueText": "5",
+         "sdi": [
+          [
+           3,
+           1,
+           1
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         0,
+         0
+        ],
+        [
+         1,
+         0
+        ]
+       ]
+      },
+      {
+       "type": "highlight",
+       "items": [
+        [
+         2,
+         1
+        ],
+        [
+         3,
+         1
+        ]
+       ]
+      }
+     ],
+     "mapper": [
+      {
+       "fn": "Hundred",
+       "value": "3fa999999999999a",
+       "valueText": "0.05",
+       "src": {
+        "axisDim": "x",
+        "axisIndex": 2,
+        "axisName": "series␀2",
+        "axisId": "␀series␀2␀0"
+       },
+       "tar": {
+        "axisDim": "x",
+        "axisIndex": 3,
+        "axisName": "series␀3",
+        "axisId": "␀series␀3␀0"
+       }
+      }
+     ]
+    },
+    {
+     "at": [
+      500,
+      200
+     ],
+     "axes": [
+      {
+       "key": "x0",
+       "dim": "x",
+       "index": 0,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      },
+      {
+       "key": "x1",
+       "dim": "x",
+       "index": 1,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      },
+      {
+       "key": "x2",
+       "dim": "x",
+       "index": 2,
+       "status": "hide",
+       "value": null,
+       "valueText": null,
+       "sdi": []
+      },
+      {
+       "key": "x3",
+       "dim": "x",
+       "index": 3,
+       "status": "show",
+       "value": "4014000000000000",
+       "valueText": "5",
+       "sdi": [
+        [
+         3,
+         1,
+         1
+        ]
+       ]
+      }
+     ],
+     "tip": [
+      {
+       "cs": "grid3",
+       "axes": [
+        {
+         "dim": "x",
+         "index": 3,
+         "value": "4014000000000000",
+         "valueText": "5",
+         "sdi": [
+          [
+           3,
+           1,
+           1
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     "highlights": [
+      {
+       "type": "downplay",
+       "items": [
+        [
+         2,
+         1
+        ]
+       ]
+      }
+     ],
+     "mapper": [
+      {
+       "fn": "Hundred",
+       "value": "4014000000000000",
+       "valueText": "5",
+       "src": {
+        "axisDim": "x",
+        "axisIndex": 3,
+        "axisName": "series␀3",
+        "axisId": "␀series␀3␀0"
+       },
+       "tar": {
+        "axisDim": "x",
+        "axisIndex": 2,
+        "axisName": "series␀2",
+        "axisId": "␀series␀2␀0"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "connect": [
+  {
+   "id": "conn-two",
+   "note": "two charts of one shape in group g: what A does B follows; B's own events do not come back; escapeConnect, a silent dispatch and disconnect stop it; connect([A, B]) keeps g",
+   "dropBrushSelect": false,
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "legend": {
+       "data": [
+        "s1",
+        "s2"
+       ]
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+       ]
+      },
+      "yAxis": {},
+      "dataZoom": [
+       {
+        "type": "slider"
+       },
+       {
+        "type": "inside"
+       }
+      ],
+      "series": [
+       {
+        "name": "s1",
+        "type": "bar",
+        "selectedMode": "multiple",
+        "data": [
+         3,
+         5,
+         2,
+         6,
+         4,
+         7
+        ]
+       },
+       {
+        "name": "s2",
+        "type": "line",
+        "selectedMode": "single",
+        "data": [
+         6,
+         2,
+         5,
+         3,
+         7,
+         1
+        ]
+       }
+      ],
+      "brush": {
+       "xAxisIndex": 0
+      }
+     },
+     "w": 600,
+     "h": 400
+    },
+    {
+     "option": {
+      "animation": false,
+      "legend": {
+       "data": [
+        "s1",
+        "s2"
+       ]
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+       ]
+      },
+      "yAxis": {},
+      "dataZoom": [
+       {
+        "type": "slider"
+       },
+       {
+        "type": "inside"
+       }
+      ],
+      "series": [
+       {
+        "name": "s1",
+        "type": "bar",
+        "selectedMode": "multiple",
+        "data": [
+         3,
+         5,
+         2,
+         6,
+         4,
+         7
+        ]
+       },
+       {
+        "name": "s2",
+        "type": "line",
+        "selectedMode": "single",
+        "data": [
+         6,
+         2,
+         5,
+         3,
+         7,
+         1
+        ]
+       }
+      ],
+      "brush": {
+       "xAxisIndex": 0
+      }
+     },
+     "w": 600,
+     "h": 400
+    }
+   ],
+   "steps": [
+    {
+     "op": "group",
+     "chart": 0,
+     "value": "g",
+     "ret": null,
+     "events": [],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      },
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "op": "group",
+     "chart": 1,
+     "value": "g",
+     "ret": null,
+     "events": [],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      },
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "op": "connect",
+     "group": "g",
+     "ret": "g",
+     "events": [],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      },
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "legendToggleSelect",
+      "name": "s2"
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "legendselectchanged",
+       {
+        "name": "s2",
+        "selected": {
+         "s1": true,
+         "s2": false
+        },
+        "type": "legendselectchanged"
+       }
+      ],
+      [
+       1,
+       "legendselectchanged",
+       {
+        "name": "s2",
+        "selected": {
+         "s1": true,
+         "s2": false
+        },
+        "type": "legendselectchanged"
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      },
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "dataZoom",
+      "dataZoomIndex": 0,
+      "start": 20,
+      "end": 60
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "datazoom",
+       {
+        "type": "datazoom",
+        "dataZoomIndex": 0,
+        "start": 20,
+        "end": 60
+       }
+      ],
+      [
+       1,
+       "datazoom",
+       {
+        "type": "datazoom",
+        "dataZoomIndex": 0,
+        "start": 20,
+        "end": 60
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4034000000000000",
+         "404e000000000000"
+        ],
+        [
+         "4034000000000000",
+         "404e000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      },
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4034000000000000",
+         "404e000000000000"
+        ],
+        [
+         "4034000000000000",
+         "404e000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 1,
+     "payload": {
+      "type": "dataZoom",
+      "batch": [
+       {
+        "dataZoomId": "␀series␀0␀0",
+        "start": 10,
+        "end": 90
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       1,
+       "datazoom",
+       {
+        "type": "datazoom",
+        "batch": [
+         {
+          "dataZoomId": "␀series␀0␀0",
+          "start": 10,
+          "end": 90,
+          "type": "datazoom",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "datazoom",
+       {
+        "type": "datazoom",
+        "batch": [
+         {
+          "dataZoomId": "␀series␀0␀0",
+          "start": 10,
+          "end": 90,
+          "type": "datazoom",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       1,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      },
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "highlight",
+       {
+        "type": "highlight",
+        "seriesIndex": 0,
+        "dataIndex": 2
+       }
+      ],
+      [
+       1,
+       "highlight",
+       {
+        "type": "highlight",
+        "seriesIndex": 0,
+        "dataIndex": 2
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      },
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "downplay",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "downplay",
+       {
+        "type": "downplay",
+        "seriesIndex": 0,
+        "dataIndex": 2
+       }
+      ],
+      [
+       1,
+       "downplay",
+       {
+        "type": "downplay",
+        "seriesIndex": 0,
+        "dataIndex": 2
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      },
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "select",
+      "seriesIndex": 0,
+      "dataIndex": [
+       1,
+       3
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "select",
+       {
+        "type": "select",
+        "seriesIndex": 0,
+        "dataIndex": [
+         1,
+         3
+        ]
+       }
+      ],
+      [
+       1,
+       "select",
+       {
+        "type": "select",
+        "seriesIndex": 0,
+        "dataIndex": [
+         1,
+         3
+        ]
+       }
+      ],
+      [
+       1,
+       "selectchanged",
+       {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           1,
+           3
+          ],
+          "seriesIndex": 0
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "select",
+        "fromActionPayload": {
+         "type": "select",
+         "seriesIndex": 0,
+         "dataIndex": [
+          1,
+          3
+         ]
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "selectchanged",
+       {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           1,
+           3
+          ],
+          "seriesIndex": 0
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "select",
+        "fromActionPayload": {
+         "type": "select",
+         "seriesIndex": 0,
+         "dataIndex": [
+          1,
+          3
+         ]
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          1,
+          3
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      },
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          1,
+          3
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 1,
+     "payload": {
+      "type": "toggleSelect",
+      "seriesIndex": 0,
+      "dataIndex": 3
+     },
+     "ret": null,
+     "events": [
+      [
+       1,
+       "toggleselect",
+       {
+        "type": "toggleselect",
+        "seriesIndex": 0,
+        "dataIndex": 3
+       }
+      ],
+      [
+       0,
+       "toggleselect",
+       {
+        "type": "toggleselect",
+        "seriesIndex": 0,
+        "dataIndex": 3
+       }
+      ],
+      [
+       0,
+       "selectchanged",
+       {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           1
+          ],
+          "seriesIndex": 0
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "toggleSelect",
+        "fromActionPayload": {
+         "type": "toggleSelect",
+         "seriesIndex": 0,
+         "dataIndex": 3
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       1,
+       "selectchanged",
+       {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           1
+          ],
+          "seriesIndex": 0
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "toggleSelect",
+        "fromActionPayload": {
+         "type": "toggleSelect",
+         "seriesIndex": 0,
+         "dataIndex": 3
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          1
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      },
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          1
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": [
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "brush",
+      "areas": [
+       {
+        "brushType": "lineX",
+        "coordRange": [
+         1,
+         3
+        ],
+        "xAxisIndex": 0
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "brush",
+       {
+        "type": "brush",
+        "areas": [
+         {
+          "brushType": "lineX",
+          "coordRange": [
+           1,
+           3
+          ],
+          "xAxisIndex": 0
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "brush",
+       {
+        "type": "brush",
+        "areas": [
+         {
+          "brushType": "lineX",
+          "coordRange": [
+           1,
+           3
+          ],
+          "xAxisIndex": 0
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [
+           {
+            "brushType": "lineX",
+            "brushMode": "single",
+            "transformable": true,
+            "brushStyle": {
+             "fill": "rgba(234,237,245,0.5)",
+             "stroke": "#cfd2d7",
+             "lineWidth": 1
+            },
+            "removeOnClick": true,
+            "z": 10000,
+            "coordRange": [
+             1,
+             3
+            ],
+            "xAxisIndex": 0,
+            "range": [
+             135,
+             315
+            ],
+            "panelId": "grid--␀series␀0␀0"
+           }
+          ],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": [
+             1,
+             2,
+             3
+            ]
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [
+           {
+            "brushType": "lineX",
+            "brushMode": "single",
+            "transformable": true,
+            "brushStyle": {
+             "fill": "rgba(234,237,245,0.5)",
+             "stroke": "#cfd2d7",
+             "lineWidth": 1
+            },
+            "removeOnClick": true,
+            "z": 10000,
+            "coordRange": [
+             1,
+             3
+            ],
+            "xAxisIndex": 0,
+            "range": [
+             135,
+             315
+            ],
+            "panelId": "grid--␀series␀0␀0"
+           }
+          ],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": [
+             1,
+             2,
+             3
+            ]
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [
+           {
+            "brushType": "lineX",
+            "brushMode": "single",
+            "transformable": true,
+            "brushStyle": {
+             "fill": "rgba(234,237,245,0.5)",
+             "stroke": "#cfd2d7",
+             "lineWidth": 1
+            },
+            "removeOnClick": true,
+            "z": 10000,
+            "coordRange": [
+             1,
+             3
+            ],
+            "xAxisIndex": 0,
+            "range": [
+             135,
+             315
+            ],
+            "panelId": "grid--␀series␀0␀0"
+           }
+          ],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": [
+             1,
+             2,
+             3
+            ]
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          1
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      },
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          1
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "highlight",
+      "seriesIndex": 1,
+      "dataIndex": 0,
+      "escapeConnect": true
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "highlight",
+       {
+        "type": "highlight",
+        "seriesIndex": 1,
+        "dataIndex": 0,
+        "escapeConnect": true
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          1
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      },
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          1
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "legendToggleSelect",
+      "name": "s2"
+     },
+     "silent": true,
+     "ret": null,
+     "events": [],
+     "state": [
+      {
+       "legend": [
+        "{\"s2\":true,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          1
+         ]
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      },
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          1
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      }
+     ]
+    },
+    {
+     "op": "disconnect",
+     "group": "g",
+     "ret": null,
+     "events": [],
+     "state": [
+      {
+       "legend": [
+        "{\"s2\":true,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          1
+         ]
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      },
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          1
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "legendToggleSelect",
+      "name": "s1"
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "legendselectchanged",
+       {
+        "name": "s1",
+        "selected": {
+         "s1": false,
+         "s2": true
+        },
+        "type": "legendselectchanged"
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [
+           {
+            "brushType": "lineX",
+            "brushMode": "single",
+            "transformable": true,
+            "brushStyle": {
+             "fill": "rgba(234,237,245,0.5)",
+             "stroke": "#cfd2d7",
+             "lineWidth": 1
+            },
+            "removeOnClick": true,
+            "z": 10000,
+            "coordRange": [
+             1,
+             3
+            ],
+            "xAxisIndex": 0,
+            "range": [
+             135,
+             315
+            ],
+            "panelId": "grid--␀series␀0␀0"
+           }
+          ],
+          "selected": [
+           {
+            "seriesId": "␀s2␀0",
+            "seriesIndex": 1,
+            "seriesName": "s2",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s2\":true,\"s1\":false}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      },
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          1
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      }
+     ]
+    },
+    {
+     "op": "connectList",
+     "charts": [
+      0,
+      1
+     ],
+     "ret": "g",
+     "events": [],
+     "state": [
+      {
+       "legend": [
+        "{\"s2\":true,\"s1\":false}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      },
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          1
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "legendAllSelect"
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "legendselectall",
+       {
+        "selected": {
+         "s1": true,
+         "s2": true
+        },
+        "legendIndex": [
+         0
+        ],
+        "type": "legendselectall"
+       }
+      ],
+      [
+       1,
+       "legendselectall",
+       {
+        "selected": {
+         "s1": true,
+         "s2": true
+        },
+        "legendIndex": [
+         0
+        ],
+        "type": "legendselectall"
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [
+           {
+            "brushType": "lineX",
+            "brushMode": "single",
+            "transformable": true,
+            "brushStyle": {
+             "fill": "rgba(234,237,245,0.5)",
+             "stroke": "#cfd2d7",
+             "lineWidth": 1
+            },
+            "removeOnClick": true,
+            "z": 10000,
+            "coordRange": [
+             1,
+             3
+            ],
+            "xAxisIndex": 0,
+            "range": [
+             135,
+             315
+            ],
+            "panelId": "grid--␀series␀0␀0"
+           }
+          ],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": [
+             1,
+             2,
+             3
+            ]
+           },
+           {
+            "seriesId": "␀s2␀0",
+            "seriesIndex": 1,
+            "seriesName": "s2",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [
+           {
+            "brushType": "lineX",
+            "brushMode": "single",
+            "transformable": true,
+            "brushStyle": {
+             "fill": "rgba(234,237,245,0.5)",
+             "stroke": "#cfd2d7",
+             "lineWidth": 1
+            },
+            "removeOnClick": true,
+            "z": 10000,
+            "coordRange": [
+             1,
+             3
+            ],
+            "xAxisIndex": 0,
+            "range": [
+             135,
+             315
+            ],
+            "panelId": "grid--␀series␀0␀0"
+           }
+          ],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": [
+             1,
+             2,
+             3
+            ]
+           },
+           {
+            "seriesId": "␀s2␀0",
+            "seriesIndex": 1,
+            "seriesName": "s2",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": [
+         {
+          "brushId": "␀series␀0␀0",
+          "brushIndex": 0,
+          "brushName": "series␀0",
+          "areas": [
+           {
+            "brushType": "lineX",
+            "brushMode": "single",
+            "transformable": true,
+            "brushStyle": {
+             "fill": "rgba(234,237,245,0.5)",
+             "stroke": "#cfd2d7",
+             "lineWidth": 1
+            },
+            "removeOnClick": true,
+            "z": 10000,
+            "coordRange": [
+             1,
+             3
+            ],
+            "xAxisIndex": 0,
+            "range": [
+             135,
+             315
+            ],
+            "panelId": "grid--␀series␀0␀0"
+           }
+          ],
+          "selected": [
+           {
+            "seriesId": "␀s1␀0",
+            "seriesIndex": 0,
+            "seriesName": "s1",
+            "dataIndex": [
+             1,
+             2,
+             3
+            ]
+           },
+           {
+            "seriesId": "␀s2␀0",
+            "seriesIndex": 1,
+            "seriesName": "s2",
+            "dataIndex": []
+           }
+          ],
+          "type": "brushselected",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s2\":true,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          1
+         ]
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      },
+      {
+       "legend": [
+        "{\"s2\":true,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ],
+        [
+         "4024000000000000",
+         "4056800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          1
+         ]
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": [
+        1
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "conn-three",
+   "note": "three charts: B's action reaches A and C (each once); C moved to group h stops hearing g; a chart with no group hears nothing",
+   "dropBrushSelect": false,
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "legend": {
+       "data": [
+        "s1",
+        "s2"
+       ]
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+       ]
+      },
+      "yAxis": {},
+      "dataZoom": [
+       {
+        "type": "slider"
+       },
+       {
+        "type": "inside"
+       }
+      ],
+      "series": [
+       {
+        "name": "s1",
+        "type": "bar",
+        "selectedMode": "multiple",
+        "data": [
+         3,
+         5,
+         2,
+         6,
+         4,
+         7
+        ]
+       },
+       {
+        "name": "s2",
+        "type": "line",
+        "selectedMode": "single",
+        "data": [
+         6,
+         2,
+         5,
+         3,
+         7,
+         1
+        ]
+       }
+      ]
+     },
+     "w": 600,
+     "h": 400
+    },
+    {
+     "option": {
+      "animation": false,
+      "legend": {
+       "data": [
+        "s1",
+        "s2"
+       ]
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+       ]
+      },
+      "yAxis": {},
+      "dataZoom": [
+       {
+        "type": "slider"
+       },
+       {
+        "type": "inside"
+       }
+      ],
+      "series": [
+       {
+        "name": "s1",
+        "type": "bar",
+        "selectedMode": "multiple",
+        "data": [
+         3,
+         5,
+         2,
+         6,
+         4,
+         7
+        ]
+       },
+       {
+        "name": "s2",
+        "type": "line",
+        "selectedMode": "single",
+        "data": [
+         6,
+         2,
+         5,
+         3,
+         7,
+         1
+        ]
+       }
+      ]
+     },
+     "w": 600,
+     "h": 400
+    },
+    {
+     "option": {
+      "animation": false,
+      "legend": {
+       "data": [
+        "s1",
+        "s2"
+       ]
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+       ]
+      },
+      "yAxis": {},
+      "dataZoom": [
+       {
+        "type": "slider"
+       },
+       {
+        "type": "inside"
+       }
+      ],
+      "series": [
+       {
+        "name": "s1",
+        "type": "bar",
+        "selectedMode": "multiple",
+        "data": [
+         3,
+         5,
+         2,
+         6,
+         4,
+         7
+        ]
+       },
+       {
+        "name": "s2",
+        "type": "line",
+        "selectedMode": "single",
+        "data": [
+         6,
+         2,
+         5,
+         3,
+         7,
+         1
+        ]
+       }
+      ]
+     },
+     "w": 600,
+     "h": 400
+    },
+    {
+     "option": {
+      "animation": false,
+      "legend": {
+       "data": [
+        "s1",
+        "s2"
+       ]
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+       ]
+      },
+      "yAxis": {},
+      "dataZoom": [
+       {
+        "type": "slider"
+       },
+       {
+        "type": "inside"
+       }
+      ],
+      "series": [
+       {
+        "name": "s1",
+        "type": "bar",
+        "selectedMode": "multiple",
+        "data": [
+         3,
+         5,
+         2,
+         6,
+         4,
+         7
+        ]
+       },
+       {
+        "name": "s2",
+        "type": "line",
+        "selectedMode": "single",
+        "data": [
+         6,
+         2,
+         5,
+         3,
+         7,
+         1
+        ]
+       }
+      ]
+     },
+     "w": 600,
+     "h": 400
+    }
+   ],
+   "steps": [
+    {
+     "op": "connectList",
+     "charts": [
+      0,
+      1,
+      2
+     ],
+     "ret": "g_<auto>",
+     "events": [],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 1,
+     "payload": {
+      "type": "legendUnSelect",
+      "name": "s1"
+     },
+     "ret": null,
+     "events": [
+      [
+       1,
+       "legendunselected",
+       {
+        "name": "s1",
+        "selected": {
+         "s1": false,
+         "s2": true
+        },
+        "type": "legendunselected"
+       }
+      ],
+      [
+       0,
+       "legendunselected",
+       {
+        "name": "s1",
+        "selected": {
+         "s1": false,
+         "s2": true
+        },
+        "type": "legendunselected"
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       2,
+       "legendunselected",
+       {
+        "name": "s1",
+        "selected": {
+         "s1": false,
+         "s2": true
+        },
+        "type": "legendunselected"
+       }
+      ],
+      [
+       2,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       2,
+       "updated",
+       null
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       2,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       2,
+       "updated",
+       null
+      ],
+      [
+       1,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s1\":false,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{\"s1\":false,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{\"s1\":false,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 2,
+     "payload": {
+      "type": "dataZoom",
+      "dataZoomIndex": 1,
+      "start": 30,
+      "end": 70
+     },
+     "ret": null,
+     "events": [
+      [
+       2,
+       "datazoom",
+       {
+        "type": "datazoom",
+        "dataZoomIndex": 1,
+        "start": 30,
+        "end": 70
+       }
+      ],
+      [
+       0,
+       "datazoom",
+       {
+        "type": "datazoom",
+        "dataZoomIndex": 1,
+        "start": 30,
+        "end": 70
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       1,
+       "datazoom",
+       {
+        "type": "datazoom",
+        "dataZoomIndex": 1,
+        "start": 30,
+        "end": 70
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       2,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       2,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s1\":false,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ],
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{\"s1\":false,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ],
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{\"s1\":false,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ],
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "group",
+     "chart": 2,
+     "value": "h",
+     "ret": null,
+     "events": [],
+     "state": [
+      {
+       "legend": [
+        "{\"s1\":false,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ],
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{\"s1\":false,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ],
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{\"s1\":false,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ],
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "connect",
+     "group": "h",
+     "ret": "h",
+     "events": [],
+     "state": [
+      {
+       "legend": [
+        "{\"s1\":false,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ],
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{\"s1\":false,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ],
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{\"s1\":false,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ],
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "legendSelect",
+      "name": "s1"
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "legendselected",
+       {
+        "name": "s1",
+        "selected": {
+         "s1": true,
+         "s2": true
+        },
+        "type": "legendselected"
+       }
+      ],
+      [
+       1,
+       "legendselected",
+       {
+        "name": "s1",
+        "selected": {
+         "s1": true,
+         "s2": true
+        },
+        "type": "legendselected"
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s1\":true,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ],
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{\"s1\":true,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ],
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{\"s1\":false,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ],
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 2,
+     "payload": {
+      "type": "legendInverseSelect"
+     },
+     "ret": null,
+     "events": [
+      [
+       2,
+       "legendinverseselect",
+       {
+        "selected": {
+         "s1": true,
+         "s2": false
+        },
+        "legendIndex": [
+         0
+        ],
+        "type": "legendinverseselect"
+       }
+      ],
+      [
+       2,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       2,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s1\":true,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ],
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{\"s1\":true,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ],
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{\"s1\":true,\"s2\":false}"
+       ],
+       "dz": [
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ],
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 3,
+     "payload": {
+      "type": "legendInverseSelect"
+     },
+     "ret": null,
+     "events": [
+      [
+       3,
+       "legendinverseselect",
+       {
+        "selected": {
+         "s1": false,
+         "s2": false
+        },
+        "legendIndex": [
+         0
+        ],
+        "type": "legendinverseselect"
+       }
+      ],
+      [
+       3,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       3,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s1\":true,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ],
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{\"s1\":true,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ],
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{\"s1\":true,\"s2\":false}"
+       ],
+       "dz": [
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ],
+        [
+         "403e000000000000",
+         "4051800000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{\"s1\":false,\"s2\":false}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "conn-wheel",
+   "note": "a wheel on A's inside dataZoom: the batched dataZoom action (its animation in every item) and B following",
+   "dropBrushSelect": false,
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "legend": {
+       "data": [
+        "s1",
+        "s2"
+       ]
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+       ]
+      },
+      "yAxis": {},
+      "dataZoom": [
+       {
+        "type": "slider"
+       },
+       {
+        "type": "inside"
+       }
+      ],
+      "series": [
+       {
+        "name": "s1",
+        "type": "bar",
+        "selectedMode": "multiple",
+        "data": [
+         3,
+         5,
+         2,
+         6,
+         4,
+         7
+        ]
+       },
+       {
+        "name": "s2",
+        "type": "line",
+        "selectedMode": "single",
+        "data": [
+         6,
+         2,
+         5,
+         3,
+         7,
+         1
+        ]
+       }
+      ]
+     },
+     "w": 600,
+     "h": 400
+    },
+    {
+     "option": {
+      "animation": false,
+      "legend": {
+       "data": [
+        "s1",
+        "s2"
+       ]
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+       ]
+      },
+      "yAxis": {},
+      "dataZoom": [
+       {
+        "type": "slider"
+       },
+       {
+        "type": "inside"
+       }
+      ],
+      "series": [
+       {
+        "name": "s1",
+        "type": "bar",
+        "selectedMode": "multiple",
+        "data": [
+         3,
+         5,
+         2,
+         6,
+         4,
+         7
+        ]
+       },
+       {
+        "name": "s2",
+        "type": "line",
+        "selectedMode": "single",
+        "data": [
+         6,
+         2,
+         5,
+         3,
+         7,
+         1
+        ]
+       }
+      ]
+     },
+     "w": 600,
+     "h": 400
+    }
+   ],
+   "steps": [
+    {
+     "op": "connectList",
+     "charts": [
+      0,
+      1
+     ],
+     "ret": "g_<auto>",
+     "events": [],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "wheel",
+     "chart": 0,
+     "x": 300,
+     "y": 200,
+     "delta": 1,
+     "ret": null,
+     "events": [
+      [
+       0,
+       "datazoom",
+       {
+        "type": "datazoom",
+        "batch": [
+         {
+          "dataZoomId": "␀series␀1␀0",
+          "start": 4.242424242424242,
+          "end": 95.15151515151516,
+          "type": "datazoom",
+          "animation": {
+           "easing": "cubicOut",
+           "duration": 100
+          },
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "datazoom",
+       {
+        "type": "datazoom",
+        "batch": [
+         {
+          "dataZoomId": "␀series␀1␀0",
+          "start": 4.242424242424242,
+          "end": 95.15151515151516,
+          "type": "datazoom",
+          "animation": {
+           "easing": "cubicOut",
+           "duration": 100
+          },
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "4010f83e0f83e0f8",
+         "4057c9b26c9b26ca"
+        ],
+        [
+         "4010f83e0f83e0f8",
+         "4057c9b26c9b26ca"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "4010f83e0f83e0f8",
+         "4057c9b26c9b26ca"
+        ],
+        [
+         "4010f83e0f83e0f8",
+         "4057c9b26c9b26ca"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 1000,
+     "ret": null,
+     "events": [],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "4010f83e0f83e0f8",
+         "4057c9b26c9b26ca"
+        ],
+        [
+         "4010f83e0f83e0f8",
+         "4057c9b26c9b26ca"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "4010f83e0f83e0f8",
+         "4057c9b26c9b26ca"
+        ],
+        [
+         "4010f83e0f83e0f8",
+         "4057c9b26c9b26ca"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "conn-timeline",
+   "note": "timelineChange and timelinePlayChange between two timeline charts; the brushSelect their updates dispatch is left out (dropBrushSelect: the port runs a timeline update at the next frame)",
+   "dropBrushSelect": true,
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "baseOption": {
+       "timeline": {
+        "axisType": "category",
+        "autoPlay": false,
+        "data": [
+         "2001",
+         "2002",
+         "2003"
+        ]
+       },
+       "xAxis": {
+        "type": "category",
+        "data": [
+         "a",
+         "b",
+         "c"
+        ]
+       },
+       "yAxis": {},
+       "series": [
+        {
+         "name": "v",
+         "type": "bar"
+        }
+       ]
+      },
+      "options": [
+       {
+        "series": [
+         {
+          "data": [
+           1,
+           2,
+           3
+          ]
+         }
+        ]
+       },
+       {
+        "series": [
+         {
+          "data": [
+           3,
+           1,
+           2
+          ]
+         }
+        ]
+       },
+       {
+        "series": [
+         {
+          "data": [
+           2,
+           3,
+           1
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "w": 600,
+     "h": 400
+    },
+    {
+     "option": {
+      "animation": false,
+      "baseOption": {
+       "timeline": {
+        "axisType": "category",
+        "autoPlay": false,
+        "data": [
+         "2001",
+         "2002",
+         "2003"
+        ]
+       },
+       "xAxis": {
+        "type": "category",
+        "data": [
+         "a",
+         "b",
+         "c"
+        ]
+       },
+       "yAxis": {},
+       "series": [
+        {
+         "name": "v",
+         "type": "bar"
+        }
+       ]
+      },
+      "options": [
+       {
+        "series": [
+         {
+          "data": [
+           1,
+           2,
+           3
+          ]
+         }
+        ]
+       },
+       {
+        "series": [
+         {
+          "data": [
+           3,
+           1,
+           2
+          ]
+         }
+        ]
+       },
+       {
+        "series": [
+         {
+          "data": [
+           2,
+           3,
+           1
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "w": 600,
+     "h": 400
+    }
+   ],
+   "steps": [
+    {
+     "op": "connectList",
+     "charts": [
+      0,
+      1
+     ],
+     "ret": "g_<auto>",
+     "events": [],
+     "state": [
+      {
+       "legend": [],
+       "dz": [],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": 0,
+       "brush": []
+      },
+      {
+       "legend": [],
+       "dz": [],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": 0,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "timelineChange",
+      "currentIndex": 2
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "timelinechanged",
+       {
+        "currentIndex": 2,
+        "type": "timelinechanged"
+       }
+      ],
+      [
+       1,
+       "timelinechanged",
+       {
+        "currentIndex": 2,
+        "type": "timelinechanged"
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [],
+       "dz": [],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": 2,
+       "brush": []
+      },
+      {
+       "legend": [],
+       "dz": [],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": 2,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 1,
+     "payload": {
+      "type": "timelinePlayChange",
+      "playState": false
+     },
+     "ret": null,
+     "events": [
+      [
+       1,
+       "timelineplaychanged",
+       {
+        "type": "timelineplaychanged",
+        "playState": false
+       }
+      ],
+      [
+       0,
+       "timelineplaychanged",
+       {
+        "type": "timelineplaychanged",
+        "playState": false
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       1,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [],
+       "dz": [],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": 2,
+       "brush": []
+      },
+      {
+       "legend": [],
+       "dz": [],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": 2,
+       "brush": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "conn-unlike",
+   "note": "B has no legend and one dataZoom: A's legend action reaches a chart with no legend (an empty map), A's dataZoom on index 1 finds no dataZoom in B",
+   "dropBrushSelect": false,
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "legend": {
+       "data": [
+        "s1",
+        "s2"
+       ]
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+       ]
+      },
+      "yAxis": {},
+      "dataZoom": [
+       {
+        "type": "slider"
+       },
+       {
+        "type": "inside"
+       }
+      ],
+      "series": [
+       {
+        "name": "s1",
+        "type": "bar",
+        "selectedMode": "multiple",
+        "data": [
+         3,
+         5,
+         2,
+         6,
+         4,
+         7
+        ]
+       },
+       {
+        "name": "s2",
+        "type": "line",
+        "selectedMode": "single",
+        "data": [
+         6,
+         2,
+         5,
+         3,
+         7,
+         1
+        ]
+       }
+      ]
+     },
+     "w": 600,
+     "h": 400
+    },
+    {
+     "option": {
+      "animation": false,
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+       ]
+      },
+      "yAxis": {},
+      "dataZoom": [
+       {
+        "type": "slider"
+       }
+      ],
+      "series": [
+       {
+        "name": "s1",
+        "type": "bar",
+        "selectedMode": "multiple",
+        "data": [
+         3,
+         5,
+         2,
+         6,
+         4,
+         7
+        ]
+       },
+       {
+        "name": "s2",
+        "type": "line",
+        "selectedMode": "single",
+        "data": [
+         6,
+         2,
+         5,
+         3,
+         7,
+         1
+        ]
+       }
+      ]
+     },
+     "w": 600,
+     "h": 400
+    }
+   ],
+   "steps": [
+    {
+     "op": "connectList",
+     "charts": [
+      0,
+      1
+     ],
+     "ret": "g_<auto>",
+     "events": [],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "legendToggleSelect",
+      "name": "s1"
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "legendselectchanged",
+       {
+        "name": "s1",
+        "selected": {
+         "s1": false,
+         "s2": true
+        },
+        "type": "legendselectchanged"
+       }
+      ],
+      [
+       1,
+       "legendselectchanged",
+       {
+        "name": "s1",
+        "selected": {},
+        "type": "legendselectchanged"
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s1\":false,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "dataZoom",
+      "dataZoomIndex": 1,
+      "start": 40,
+      "end": 50
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "datazoom",
+       {
+        "type": "datazoom",
+        "dataZoomIndex": 1,
+        "start": 40,
+        "end": 50
+       }
+      ],
+      [
+       1,
+       "datazoom",
+       {
+        "type": "datazoom",
+        "dataZoomIndex": 1,
+        "start": 40,
+        "end": 50
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s1\":false,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "4044000000000000",
+         "4049000000000000"
+        ],
+        [
+         "4044000000000000",
+         "4049000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "batch": [
+  {
+   "id": "batch-legend",
+   "note": "the legend actions with a batch: each item over the payload, ONE update, one event whose batch holds each item's own result",
+   "dropBrushSelect": false,
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "legend": {
+       "data": [
+        "s1",
+        "s2"
+       ]
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+       ]
+      },
+      "yAxis": {},
+      "dataZoom": [
+       {
+        "type": "slider"
+       },
+       {
+        "type": "inside"
+       }
+      ],
+      "series": [
+       {
+        "name": "s1",
+        "type": "bar",
+        "selectedMode": "multiple",
+        "data": [
+         3,
+         5,
+         2,
+         6,
+         4,
+         7
+        ]
+       },
+       {
+        "name": "s2",
+        "type": "line",
+        "selectedMode": "single",
+        "data": [
+         6,
+         2,
+         5,
+         3,
+         7,
+         1
+        ]
+       }
+      ]
+     },
+     "w": 600,
+     "h": 400
+    }
+   ],
+   "steps": [
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "legendToggleSelect",
+      "batch": [
+       {
+        "name": "s1"
+       },
+       {
+        "name": "s2"
+       },
+       {
+        "name": "s1"
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "legendselectchanged",
+       {
+        "type": "legendselectchanged",
+        "batch": [
+         {
+          "name": "s1",
+          "selected": {
+           "s1": false,
+           "s2": true
+          },
+          "type": "legendselectchanged"
+         },
+         {
+          "name": "s2",
+          "selected": {
+           "s1": false,
+           "s2": false
+          },
+          "type": "legendselectchanged"
+         },
+         {
+          "name": "s1",
+          "selected": {
+           "s1": true,
+           "s2": false
+          },
+          "type": "legendselectchanged"
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s1\":true,\"s2\":false}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "legendUnSelect",
+      "legendIndex": 0,
+      "batch": [
+       {
+        "name": "s1"
+       },
+       {
+        "name": "s2",
+        "legendIndex": null
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "legendunselected",
+       {
+        "type": "legendunselected",
+        "batch": [
+         {
+          "name": "s1",
+          "selected": {
+           "s1": false,
+           "s2": false
+          },
+          "type": "legendunselected"
+         },
+         {
+          "name": "s2",
+          "selected": {
+           "s1": false,
+           "s2": false
+          },
+          "type": "legendunselected"
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s1\":false,\"s2\":false}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "legendAllSelect",
+      "batch": [
+       {},
+       {
+        "legendIndex": 0
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "legendselectall",
+       {
+        "type": "legendselectall",
+        "batch": [
+         {
+          "selected": {
+           "s1": true,
+           "s2": true
+          },
+          "legendIndex": [
+           0
+          ],
+          "type": "legendselectall"
+         },
+         {
+          "selected": {
+           "s1": true,
+           "s2": true
+          },
+          "legendIndex": [
+           0
+          ],
+          "type": "legendselectall"
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s1\":true,\"s2\":true}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "legendInverseSelect",
+      "escapeConnect": false,
+      "batch": [
+       {}
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "legendinverseselect",
+       {
+        "type": "legendinverseselect",
+        "escapeConnect": false,
+        "batch": [
+         {
+          "selected": {
+           "s1": false,
+           "s2": false
+          },
+          "legendIndex": [
+           0
+          ],
+          "type": "legendinverseselect"
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s1\":false,\"s2\":false}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "batch-select",
+   "note": "select / toggleSelect / unselect with a batch: the event batch repeats the FIRST item (refineEvent keeps eventObj), selectchanged once with the outer payload",
+   "dropBrushSelect": false,
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "legend": {
+       "data": [
+        "s1",
+        "s2"
+       ]
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+       ]
+      },
+      "yAxis": {},
+      "dataZoom": [
+       {
+        "type": "slider"
+       },
+       {
+        "type": "inside"
+       }
+      ],
+      "series": [
+       {
+        "name": "s1",
+        "type": "bar",
+        "selectedMode": "multiple",
+        "data": [
+         3,
+         5,
+         2,
+         6,
+         4,
+         7
+        ]
+       },
+       {
+        "name": "s2",
+        "type": "line",
+        "selectedMode": "single",
+        "data": [
+         6,
+         2,
+         5,
+         3,
+         7,
+         1
+        ]
+       }
+      ]
+     },
+     "w": 600,
+     "h": 400
+    }
+   ],
+   "steps": [
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "select",
+      "seriesIndex": 0,
+      "batch": [
+       {
+        "dataIndex": 1
+       },
+       {
+        "dataIndex": 4
+       },
+       {
+        "seriesIndex": 1,
+        "dataIndex": 2
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "select",
+       {
+        "type": "select",
+        "batch": [
+         {
+          "dataIndex": 1,
+          "type": "select",
+          "seriesIndex": 0,
+          "batch": null
+         },
+         {
+          "dataIndex": 1,
+          "type": "select",
+          "seriesIndex": 0,
+          "batch": null
+         },
+         {
+          "dataIndex": 1,
+          "type": "select",
+          "seriesIndex": 0,
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "selectchanged",
+       {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           1,
+           4
+          ],
+          "seriesIndex": 0
+         },
+         {
+          "dataIndex": [
+           2
+          ],
+          "seriesIndex": 1
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "select",
+        "fromActionPayload": {
+         "type": "select",
+         "seriesIndex": 0,
+         "batch": [
+          {
+           "dataIndex": 1
+          },
+          {
+           "dataIndex": 4
+          },
+          {
+           "seriesIndex": 1,
+           "dataIndex": 2
+          }
+         ]
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          1,
+          4
+         ]
+        },
+        {
+         "s": 1,
+         "idx": [
+          2
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "toggleSelect",
+      "batch": [
+       {
+        "seriesIndex": 0,
+        "dataIndex": [
+         1,
+         2
+        ]
+       },
+       {
+        "seriesIndex": 1,
+        "dataIndex": 5
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "toggleselect",
+       {
+        "type": "toggleselect",
+        "batch": [
+         {
+          "seriesIndex": 0,
+          "dataIndex": [
+           1,
+           2
+          ],
+          "type": "toggleselect",
+          "batch": null
+         },
+         {
+          "seriesIndex": 0,
+          "dataIndex": [
+           1,
+           2
+          ],
+          "type": "toggleselect",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "selectchanged",
+       {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           4,
+           2
+          ],
+          "seriesIndex": 0
+         },
+         {
+          "dataIndex": [
+           5
+          ],
+          "seriesIndex": 1
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "toggleSelect",
+        "fromActionPayload": {
+         "type": "toggleSelect",
+         "batch": [
+          {
+           "seriesIndex": 0,
+           "dataIndex": [
+            1,
+            2
+           ]
+          },
+          {
+           "seriesIndex": 1,
+           "dataIndex": 5
+          }
+         ]
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          4,
+          2
+         ]
+        },
+        {
+         "s": 1,
+         "idx": [
+          5
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "unselect",
+      "seriesIndex": 0,
+      "dataIndex": 4,
+      "batch": [
+       {
+        "dataIndex": null
+       },
+       {
+        "seriesName": "s2",
+        "dataIndex": 5
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "unselect",
+       {
+        "type": "unselect",
+        "batch": [
+         {
+          "dataIndex": 4,
+          "type": "unselect",
+          "seriesIndex": 0,
+          "batch": null
+         },
+         {
+          "dataIndex": 4,
+          "type": "unselect",
+          "seriesIndex": 0,
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "selectchanged",
+       {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           2
+          ],
+          "seriesIndex": 0
+         },
+         {
+          "dataIndex": [
+           5
+          ],
+          "seriesIndex": 1
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "unselect",
+        "fromActionPayload": {
+         "type": "unselect",
+         "seriesIndex": 0,
+         "dataIndex": 4,
+         "batch": [
+          {
+           "dataIndex": null
+          },
+          {
+           "seriesName": "s2",
+           "dataIndex": 5
+          }
+         ]
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          2
+         ]
+        },
+        {
+         "s": 1,
+         "idx": [
+          5
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "batch-highdown",
+   "note": "highlight / downplay batches: escapeConnect rides on the event",
+   "dropBrushSelect": false,
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "legend": {
+       "data": [
+        "s1",
+        "s2"
+       ]
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+       ]
+      },
+      "yAxis": {},
+      "dataZoom": [
+       {
+        "type": "slider"
+       },
+       {
+        "type": "inside"
+       }
+      ],
+      "series": [
+       {
+        "name": "s1",
+        "type": "bar",
+        "selectedMode": "multiple",
+        "data": [
+         3,
+         5,
+         2,
+         6,
+         4,
+         7
+        ]
+       },
+       {
+        "name": "s2",
+        "type": "line",
+        "selectedMode": "single",
+        "data": [
+         6,
+         2,
+         5,
+         3,
+         7,
+         1
+        ]
+       }
+      ]
+     },
+     "w": 600,
+     "h": 400
+    }
+   ],
+   "steps": [
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "highlight",
+      "escapeConnect": true,
+      "batch": [
+       {
+        "seriesIndex": 0,
+        "dataIndex": 1
+       },
+       {
+        "seriesIndex": 1,
+        "dataIndex": 3
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "highlight",
+       {
+        "type": "highlight",
+        "escapeConnect": true,
+        "batch": [
+         {
+          "seriesIndex": 0,
+          "dataIndex": 1,
+          "type": "highlight",
+          "escapeConnect": true,
+          "batch": null
+         },
+         {
+          "seriesIndex": 1,
+          "dataIndex": 3,
+          "type": "highlight",
+          "escapeConnect": true,
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "downplay",
+      "seriesIndex": 0,
+      "batch": [
+       {
+        "dataIndex": 1
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "downplay",
+       {
+        "type": "downplay",
+        "batch": [
+         {
+          "dataIndex": 1,
+          "type": "downplay",
+          "seriesIndex": 0,
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "batch-datazoom",
+   "note": "dataZoom batches: by index, by id, the outer animation in every item; a silent one publishes nothing",
+   "dropBrushSelect": false,
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "legend": {
+       "data": [
+        "s1",
+        "s2"
+       ]
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+       ]
+      },
+      "yAxis": {},
+      "dataZoom": [
+       {
+        "type": "slider"
+       },
+       {
+        "type": "inside"
+       }
+      ],
+      "series": [
+       {
+        "name": "s1",
+        "type": "bar",
+        "selectedMode": "multiple",
+        "data": [
+         3,
+         5,
+         2,
+         6,
+         4,
+         7
+        ]
+       },
+       {
+        "name": "s2",
+        "type": "line",
+        "selectedMode": "single",
+        "data": [
+         6,
+         2,
+         5,
+         3,
+         7,
+         1
+        ]
+       }
+      ]
+     },
+     "w": 600,
+     "h": 400
+    }
+   ],
+   "steps": [
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "dataZoom",
+      "animation": {
+       "duration": 0
+      },
+      "batch": [
+       {
+        "dataZoomIndex": 0,
+        "start": 10,
+        "end": 50
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "datazoom",
+       {
+        "type": "datazoom",
+        "batch": [
+         {
+          "dataZoomIndex": 0,
+          "start": 10,
+          "end": 50,
+          "type": "datazoom",
+          "animation": {
+           "duration": 0
+          },
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "4024000000000000",
+         "4049000000000000"
+        ],
+        [
+         "4024000000000000",
+         "4049000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "dataZoom",
+      "batch": [
+       {
+        "dataZoomId": "␀series␀0␀0",
+        "start": 25,
+        "end": 75
+       },
+       {
+        "dataZoomIndex": 1,
+        "start": 30,
+        "end": 40
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "datazoom",
+       {
+        "type": "datazoom",
+        "batch": [
+         {
+          "dataZoomId": "␀series␀0␀0",
+          "start": 25,
+          "end": 75,
+          "type": "datazoom",
+          "batch": null
+         },
+         {
+          "dataZoomIndex": 1,
+          "start": 30,
+          "end": 40,
+          "type": "datazoom",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "403e000000000000",
+         "4044000000000000"
+        ],
+        [
+         "403e000000000000",
+         "4044000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "dataZoom",
+      "batch": [
+       {
+        "dataZoomIndex": 0,
+        "start": 0,
+        "end": 100
+       }
+      ]
+     },
+     "silent": true,
+     "ret": null,
+     "events": [],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "batch-connect",
+   "note": "a batch in a connected group: B is sent the batched event as an action (each item keeps the event's type and result keys)",
+   "dropBrushSelect": false,
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "legend": {
+       "data": [
+        "s1",
+        "s2"
+       ]
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+       ]
+      },
+      "yAxis": {},
+      "dataZoom": [
+       {
+        "type": "slider"
+       },
+       {
+        "type": "inside"
+       }
+      ],
+      "series": [
+       {
+        "name": "s1",
+        "type": "bar",
+        "selectedMode": "multiple",
+        "data": [
+         3,
+         5,
+         2,
+         6,
+         4,
+         7
+        ]
+       },
+       {
+        "name": "s2",
+        "type": "line",
+        "selectedMode": "single",
+        "data": [
+         6,
+         2,
+         5,
+         3,
+         7,
+         1
+        ]
+       }
+      ]
+     },
+     "w": 600,
+     "h": 400
+    },
+    {
+     "option": {
+      "animation": false,
+      "legend": {
+       "data": [
+        "s1",
+        "s2"
+       ]
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+       ]
+      },
+      "yAxis": {},
+      "dataZoom": [
+       {
+        "type": "slider"
+       },
+       {
+        "type": "inside"
+       }
+      ],
+      "series": [
+       {
+        "name": "s1",
+        "type": "bar",
+        "selectedMode": "multiple",
+        "data": [
+         3,
+         5,
+         2,
+         6,
+         4,
+         7
+        ]
+       },
+       {
+        "name": "s2",
+        "type": "line",
+        "selectedMode": "single",
+        "data": [
+         6,
+         2,
+         5,
+         3,
+         7,
+         1
+        ]
+       }
+      ]
+     },
+     "w": 600,
+     "h": 400
+    }
+   ],
+   "steps": [
+    {
+     "op": "connectList",
+     "charts": [
+      0,
+      1
+     ],
+     "ret": "g_<auto>",
+     "events": [],
+     "state": [
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        },
+        {
+         "s": 1,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "legendToggleSelect",
+      "batch": [
+       {
+        "name": "s2"
+       },
+       {
+        "name": "s1"
+       },
+       {
+        "name": "s1"
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "legendselectchanged",
+       {
+        "type": "legendselectchanged",
+        "batch": [
+         {
+          "name": "s2",
+          "selected": {
+           "s1": true,
+           "s2": false
+          },
+          "type": "legendselectchanged"
+         },
+         {
+          "name": "s1",
+          "selected": {
+           "s1": false,
+           "s2": false
+          },
+          "type": "legendselectchanged"
+         },
+         {
+          "name": "s1",
+          "selected": {
+           "s1": true,
+           "s2": false
+          },
+          "type": "legendselectchanged"
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "legendselectchanged",
+       {
+        "type": "legendselectchanged",
+        "batch": [
+         {
+          "name": "s2",
+          "selected": {
+           "s1": true,
+           "s2": false
+          },
+          "type": "legendselectchanged"
+         },
+         {
+          "name": "s1",
+          "selected": {
+           "s1": false,
+           "s2": false
+          },
+          "type": "legendselectchanged"
+         },
+         {
+          "name": "s1",
+          "selected": {
+           "s1": true,
+           "s2": false
+          },
+          "type": "legendselectchanged"
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "brushselected",
+       {
+        "type": "brushselected",
+        "batch": []
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": []
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 1,
+     "payload": {
+      "type": "select",
+      "batch": [
+       {
+        "seriesIndex": 0,
+        "dataIndex": 2
+       },
+       {
+        "seriesIndex": 0,
+        "dataIndex": 5
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       1,
+       "select",
+       {
+        "type": "select",
+        "batch": [
+         {
+          "seriesIndex": 0,
+          "dataIndex": 2,
+          "type": "select",
+          "batch": null
+         },
+         {
+          "seriesIndex": 0,
+          "dataIndex": 2,
+          "type": "select",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "select",
+       {
+        "type": "select",
+        "batch": [
+         {
+          "seriesIndex": 0,
+          "dataIndex": 2,
+          "type": "select",
+          "batch": null
+         },
+         {
+          "seriesIndex": 0,
+          "dataIndex": 2,
+          "type": "select",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "selectchanged",
+       {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           2
+          ],
+          "seriesIndex": 0
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "select",
+        "fromActionPayload": {
+         "type": "select",
+         "batch": [
+          {
+           "seriesIndex": 0,
+           "dataIndex": 2,
+           "type": "select",
+           "batch": null
+          },
+          {
+           "seriesIndex": 0,
+           "dataIndex": 2,
+           "type": "select",
+           "batch": null
+          }
+         ]
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       0,
+       "updated",
+       null
+      ],
+      [
+       1,
+       "selectchanged",
+       {
+        "type": "selectchanged",
+        "selected": [
+         {
+          "dataIndex": [
+           2,
+           5
+          ],
+          "seriesIndex": 0
+         }
+        ],
+        "isFromClick": false,
+        "fromAction": "select",
+        "fromActionPayload": {
+         "type": "select",
+         "batch": [
+          {
+           "seriesIndex": 0,
+           "dataIndex": 2
+          },
+          {
+           "seriesIndex": 0,
+           "dataIndex": 5
+          }
+         ]
+        },
+        "escapeConnect": true
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          2
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          2,
+          5
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    },
+    {
+     "op": "action",
+     "chart": 0,
+     "payload": {
+      "type": "highlight",
+      "batch": [
+       {
+        "seriesIndex": 0,
+        "dataIndex": 0
+       }
+      ]
+     },
+     "ret": null,
+     "events": [
+      [
+       0,
+       "highlight",
+       {
+        "type": "highlight",
+        "batch": [
+         {
+          "seriesIndex": 0,
+          "dataIndex": 0,
+          "type": "highlight",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "highlight",
+       {
+        "type": "highlight",
+        "batch": [
+         {
+          "seriesIndex": 0,
+          "dataIndex": 0,
+          "type": "highlight",
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       1,
+       "updated",
+       null
+      ],
+      [
+       0,
+       "updated",
+       null
+      ]
+     ],
+     "state": [
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          2
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": []
+      },
+      {
+       "legend": [
+        "{\"s2\":false,\"s1\":true}"
+       ],
+       "dz": [
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ],
+        [
+         "0000000000000000",
+         "4059000000000000"
+        ]
+       ],
+       "sel": [
+        {
+         "s": 0,
+         "idx": [
+          2,
+          5
+         ]
+        }
+       ],
+       "tl": null,
+       "brush": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "exportCases": [
+  {
+   "id": "exp-row",
+   "note": "three charts in a row with gaps, no options: the dpr is the asking chart's (1 here)",
+   "rects": [
+    {
+     "left": 10,
+     "top": 20,
+     "w": 200,
+     "h": 150
+    },
+    {
+     "left": 230,
+     "top": 20,
+     "w": 160,
+     "h": 150
+    },
+    {
+     "left": 400,
+     "top": 60,
+     "w": 100,
+     "h": 80
+    }
+   ],
+   "connect": true,
+   "chart": 0,
+   "opts": {},
+   "self": false,
+   "url": "data:image/png",
+   "renders": [
+    {
+     "chart": 0,
+     "opts": {}
+    },
+    {
+     "chart": 1,
+     "opts": {}
+    },
+    {
+     "chart": 2,
+     "opts": {}
+    }
+   ],
+   "canvas": {
+    "width": "407ea00000000000",
+    "height": "4062c00000000000",
+    "widthText": "490",
+    "heightText": "150"
+   },
+   "ops": [
+    {
+     "op": "image",
+     "chart": 0,
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "w": "4069000000000000",
+     "h": "4062c00000000000",
+     "xText": "0",
+     "yText": "0",
+     "wText": "200",
+     "hText": "150"
+    },
+    {
+     "op": "image",
+     "chart": 1,
+     "x": "406b800000000000",
+     "y": "0000000000000000",
+     "w": "4064000000000000",
+     "h": "4062c00000000000",
+     "xText": "220",
+     "yText": "0",
+     "wText": "160",
+     "hText": "150"
+    },
+    {
+     "op": "image",
+     "chart": 2,
+     "x": "4078600000000000",
+     "y": "4044000000000000",
+     "w": "4059000000000000",
+     "h": "4054000000000000",
+     "xText": "390",
+     "yText": "40",
+     "wText": "100",
+     "hText": "80"
+    }
+   ],
+   "mime": "image/png"
+  },
+  {
+   "id": "exp-ratio2-bg",
+   "note": "pixelRatio 2 and a connected background",
+   "rects": [
+    {
+     "left": 10,
+     "top": 20,
+     "w": 200,
+     "h": 150
+    },
+    {
+     "left": 230,
+     "top": 40,
+     "w": 160,
+     "h": 100
+    }
+   ],
+   "connect": true,
+   "chart": 1,
+   "opts": {
+    "pixelRatio": 2,
+    "connectedBackgroundColor": "#336699"
+   },
+   "self": false,
+   "url": "data:image/png",
+   "renders": [
+    {
+     "chart": 0,
+     "opts": {
+      "pixelRatio": 2,
+      "connectedBackgroundColor": "#336699"
+     }
+    },
+    {
+     "chart": 1,
+     "opts": {
+      "pixelRatio": 2,
+      "connectedBackgroundColor": "#336699"
+     }
+    }
+   ],
+   "canvas": {
+    "width": "4087c00000000000",
+    "height": "4072c00000000000",
+    "widthText": "760",
+    "heightText": "300"
+   },
+   "ops": [
+    {
+     "op": "fill",
+     "color": "#336699",
+     "rect": [
+      "0000000000000000",
+      "0000000000000000",
+      "4087c00000000000",
+      "4072c00000000000"
+     ],
+     "rectText": [
+      "0",
+      "0",
+      "760",
+      "300"
+     ]
+    },
+    {
+     "op": "image",
+     "chart": 0,
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "w": "4079000000000000",
+     "h": "4072c00000000000",
+     "xText": "0",
+     "yText": "0",
+     "wText": "400",
+     "hText": "300"
+    },
+    {
+     "op": "image",
+     "chart": 1,
+     "x": "407b800000000000",
+     "y": "4044000000000000",
+     "w": "4074000000000000",
+     "h": "4069000000000000",
+     "xText": "440",
+     "yText": "40",
+     "wText": "320",
+     "hText": "200"
+    }
+   ],
+   "mime": "image/png"
+  },
+  {
+   "id": "exp-ratio15",
+   "note": "pixelRatio 1.5 with odd offsets: fractional positions, the canvas size as the raw product",
+   "rects": [
+    {
+     "left": 3,
+     "top": 7,
+     "w": 101,
+     "h": 67
+    },
+    {
+     "left": 117,
+     "top": 2,
+     "w": 55,
+     "h": 91
+    }
+   ],
+   "connect": true,
+   "chart": 0,
+   "opts": {
+    "pixelRatio": 1.5,
+    "connectedBackgroundColor": "rgba(255,0,0,0.5)"
+   },
+   "self": false,
+   "url": "data:image/png",
+   "renders": [
+    {
+     "chart": 0,
+     "opts": {
+      "pixelRatio": 1.5,
+      "connectedBackgroundColor": "rgba(255,0,0,0.5)"
+     }
+    },
+    {
+     "chart": 1,
+     "opts": {
+      "pixelRatio": 1.5,
+      "connectedBackgroundColor": "rgba(255,0,0,0.5)"
+     }
+    }
+   ],
+   "canvas": {
+    "width": "406fb00000000000",
+    "height": "4061100000000000",
+    "widthText": "253.5",
+    "heightText": "136.5"
+   },
+   "ops": [
+    {
+     "op": "fill",
+     "color": "rgba(255,0,0,0.5)",
+     "rect": [
+      "0000000000000000",
+      "0000000000000000",
+      "406fb00000000000",
+      "4061100000000000"
+     ],
+     "rectText": [
+      "0",
+      "0",
+      "253.5",
+      "136.5"
+     ]
+    },
+    {
+     "op": "image",
+     "chart": 0,
+     "x": "0000000000000000",
+     "y": "401e000000000000",
+     "w": "4062e00000000000",
+     "h": "4059000000000000",
+     "xText": "0",
+     "yText": "7.5",
+     "wText": "151",
+     "hText": "100"
+    },
+    {
+     "op": "image",
+     "chart": 1,
+     "x": "4065600000000000",
+     "y": "0000000000000000",
+     "w": "4054800000000000",
+     "h": "4061000000000000",
+     "xText": "171",
+     "yText": "0",
+     "wText": "82",
+     "hText": "136"
+    }
+   ],
+   "mime": "image/png"
+  },
+  {
+   "id": "exp-overlap-neg",
+   "note": "overlapping charts at negative offsets; jpeg; backgroundColor goes to each chart's own render",
+   "rects": [
+    {
+     "left": -40,
+     "top": -10,
+     "w": 120,
+     "h": 90
+    },
+    {
+     "left": 30,
+     "top": 20,
+     "w": 120,
+     "h": 90
+    }
+   ],
+   "connect": true,
+   "chart": 0,
+   "opts": {
+    "type": "jpeg",
+    "backgroundColor": "#ffffff"
+   },
+   "self": false,
+   "url": "data:image/jpeg",
+   "renders": [
+    {
+     "chart": 0,
+     "opts": {
+      "type": "jpeg",
+      "backgroundColor": "#ffffff"
+     }
+    },
+    {
+     "chart": 1,
+     "opts": {
+      "type": "jpeg",
+      "backgroundColor": "#ffffff"
+     }
+    }
+   ],
+   "canvas": {
+    "width": "4067c00000000000",
+    "height": "405e000000000000",
+    "widthText": "190",
+    "heightText": "120"
+   },
+   "ops": [
+    {
+     "op": "image",
+     "chart": 0,
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "w": "405e000000000000",
+     "h": "4056800000000000",
+     "xText": "0",
+     "yText": "0",
+     "wText": "120",
+     "hText": "90"
+    },
+    {
+     "op": "image",
+     "chart": 1,
+     "x": "4051800000000000",
+     "y": "403e000000000000",
+     "w": "405e000000000000",
+     "h": "4056800000000000",
+     "xText": "70",
+     "yText": "30",
+     "wText": "120",
+     "hText": "90"
+    }
+   ],
+   "mime": "image/jpeg"
+  },
+  {
+   "id": "exp-none-bg",
+   "note": "connectedBackgroundColor 'none' is still a rect fill (zrender: no fill)",
+   "rects": [
+    {
+     "left": 0,
+     "top": 0,
+     "w": 100,
+     "h": 100
+    },
+    {
+     "left": 150,
+     "top": 0,
+     "w": 100,
+     "h": 100
+    }
+   ],
+   "connect": true,
+   "chart": 0,
+   "opts": {
+    "connectedBackgroundColor": "none"
+   },
+   "self": false,
+   "url": "data:image/png",
+   "renders": [
+    {
+     "chart": 0,
+     "opts": {
+      "connectedBackgroundColor": "none"
+     }
+    },
+    {
+     "chart": 1,
+     "opts": {
+      "connectedBackgroundColor": "none"
+     }
+    }
+   ],
+   "canvas": {
+    "width": "406f400000000000",
+    "height": "4059000000000000",
+    "widthText": "250",
+    "heightText": "100"
+   },
+   "ops": [
+    {
+     "op": "image",
+     "chart": 0,
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "w": "4059000000000000",
+     "h": "4059000000000000",
+     "xText": "0",
+     "yText": "0",
+     "wText": "100",
+     "hText": "100"
+    },
+    {
+     "op": "image",
+     "chart": 1,
+     "x": "4062c00000000000",
+     "y": "0000000000000000",
+     "w": "4059000000000000",
+     "h": "4059000000000000",
+     "xText": "150",
+     "yText": "0",
+     "wText": "100",
+     "hText": "100"
+    }
+   ],
+   "mime": "image/png"
+  },
+  {
+   "id": "exp-not-connected",
+   "note": "the group is set but never connected: getDataURL of the asking chart alone",
+   "rects": [
+    {
+     "left": 0,
+     "top": 0,
+     "w": 100,
+     "h": 100
+    },
+    {
+     "left": 150,
+     "top": 0,
+     "w": 100,
+     "h": 100
+    }
+   ],
+   "connect": false,
+   "chart": 1,
+   "opts": {
+    "pixelRatio": 2
+   },
+   "self": true,
+   "url": "self",
+   "renders": [],
+   "canvas": null,
+   "ops": [],
+   "mime": null
+  }
+ ],
+ "guards": [
+  {
+   "id": "link-follows",
+   "ok": true,
+   "what": "the bottom grid follows the top one"
+  },
+  {
+   "id": "link-tip-two-grids",
+   "ok": true,
+   "what": "the tooltip lists both grids"
+  },
+  {
+   "id": "link-highlight-both",
+   "ok": true,
+   "what": "one highlight batch for both grids"
+  },
+  {
+   "id": "link-leave-hides",
+   "ok": true,
+   "what": "leaving hides every pointer"
+  },
+  {
+   "id": "link-mapper-doubles",
+   "ok": true,
+   "what": "b follows a through the mapper"
+  },
+  {
+   "id": "link-unlinked-c",
+   "ok": true,
+   "what": "c links nothing"
+  },
+  {
+   "id": "link-first-group",
+   "ok": true,
+   "what": "left belongs to group 0 alone: nothing follows"
+  },
+  {
+   "id": "link-shift-past-end",
+   "ok": true,
+   "what": "one category on from the last: no target"
+  },
+  {
+   "id": "link-cross-y",
+   "ok": true,
+   "what": "the y cross arm follows"
+  },
+  {
+   "id": "link-out-of-extent",
+   "ok": true,
+   "what": "@Hundred maps out of the extent"
+  },
+  {
+   "id": "link-in-extent",
+   "ok": true,
+   "what": "@Hundred maps the snapped 0.05 to 5"
+  },
+  {
+   "id": "link-snapped-source",
+   "ok": true,
+   "what": "the target takes the source's snapped 4.5"
+  },
+  {
+   "id": "conn-legend-reaches-b",
+   "ok": true,
+   "what": "B toggles s2 as A did"
+  },
+  {
+   "id": "conn-handlers-first",
+   "ok": true,
+   "what": "A's own handler before B hears anything"
+  },
+  {
+   "id": "conn-no-loop",
+   "ok": true,
+   "what": "B's event is not sent back to A"
+  },
+  {
+   "id": "conn-escape",
+   "ok": true,
+   "what": "escapeConnect stays in A"
+  },
+  {
+   "id": "conn-silent",
+   "ok": true,
+   "what": "a silent dispatch publishes nothing, so nothing is broadcast"
+  },
+  {
+   "id": "conn-disconnect",
+   "ok": true,
+   "what": "disconnected: A alone"
+  },
+  {
+   "id": "conn-list-keeps",
+   "ok": true,
+   "what": "connect([A, B]) keeps their group"
+  },
+  {
+   "id": "conn-brush-echo",
+   "ok": true,
+   "what": "B hears its own brushselected and A's echo"
+  },
+  {
+   "id": "conn-three-once",
+   "ok": true,
+   "what": "A and C once each"
+  },
+  {
+   "id": "conn-moved",
+   "ok": true,
+   "what": "C in h hears nothing of g"
+  },
+  {
+   "id": "conn-nogroup",
+   "ok": true,
+   "what": "no group, no broadcast"
+  },
+  {
+   "id": "conn-wheel",
+   "ok": true,
+   "what": "the wheel reaches B"
+  },
+  {
+   "id": "batch-select-first-item",
+   "ok": true,
+   "what": "the select batch repeats the first item"
+  },
+  {
+   "id": "batch-legend-results",
+   "ok": true,
+   "what": "each item its own result"
+  },
+  {
+   "id": "batch-one-updated",
+   "ok": true,
+   "what": "one update"
+  },
+  {
+   "id": "batch-dz-silent",
+   "ok": true,
+   "what": "silent: applied, nothing published"
+  },
+  {
+   "id": "exp-layout-exp-row",
+   "ok": true,
+   "what": "the transcription reproduces the layout"
+  },
+  {
+   "id": "exp-layout-exp-ratio2-bg",
+   "ok": true,
+   "what": "the transcription reproduces the layout"
+  },
+  {
+   "id": "exp-layout-exp-ratio15",
+   "ok": true,
+   "what": "the transcription reproduces the layout"
+  },
+  {
+   "id": "exp-layout-exp-overlap-neg",
+   "ok": true,
+   "what": "the transcription reproduces the layout"
+  },
+  {
+   "id": "exp-layout-exp-none-bg",
+   "ok": true,
+   "what": "the transcription reproduces the layout"
+  },
+  {
+   "id": "exp-self-exp-not-connected",
+   "ok": true,
+   "what": "not connected: getDataURL"
+  }
+ ]
+}
