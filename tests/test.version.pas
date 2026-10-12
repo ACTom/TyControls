@@ -477,7 +477,8 @@ initialization
     TTyDBNavigator, TTyDBText, TTyDBEdit, TTyDBMaskEdit, TTyDBNumericEdit, TTyDBCurrencyEdit,
     TTyDBSpinEdit, TTyDBFloatSpinEdit, TTyDBMemo, TTyDBCheckBox, TTyDBToggleSwitch,
     TTyDBRadioGroup, TTyDBSegmented, TTyDBRating, TTyDBComboBox, TTyDBLookupComboBox,
-    TTyDBListBox, TTyDBLookupListBox, TTyDBImage, TTyDBDateTimePicker, TTyDBCalendar]);
+    TTyDBListBox, TTyDBLookupListBox, TTyDBImage, TTyDBDateTimePicker, TTyDBCalendar,
+    TTyDBGrid]);
   { The BASE classes the Version property editor is registered on. They are never dropped on
     a form, so nothing else registers them — but InheritsFromAnEditorBase resolves them by
     name, and an unresolvable base would make that check quietly answer False for everything
@@ -491,9 +492,6 @@ initialization
     checked against, so it is registered plainly here -- form files read in the tests and the
     custom-class guards resolve it by name. }
   RegisterClasses([TTyGradientTrackBar]);
-  { The data-aware grid (#34 phase 2) the same way, until its palette entry (DB grid plan
-    Task 6) puts it in Design.pas. }
-  RegisterClasses([TTyDBGrid]);
   RegisterTest(TVersionTest);
 
 finalization

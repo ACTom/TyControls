@@ -8,7 +8,7 @@ unit test.db.typekeys;
   each exactly like the control it is built on, and a theme that does can style the DB control
   alone. Checked here:
 
-  * each of the 21 classes answers 'TyDB' + its name, and each key's chain is the one plan D8
+  * each of the 22 classes answers 'TyDB' + its name, and each key's chain is the one plan D8
     names, the two sub-part keys (the navigator's buttons, the rating's stars) included;
   * the base controls answer the keys those chains end in;
   * in every built-in theme, light and dark, each DB key resolves to exactly the style of its
@@ -27,9 +27,9 @@ uses
   tyControls.FloatSpinEdit, tyControls.CheckBox, tyControls.ToggleSwitch,
   tyControls.RadioGroup, tyControls.Segmented, tyControls.Rating, tyControls.ComboBox,
   tyControls.ListBox, tyControls.Image, tyControls.DateTimePicker, tyControls.Calendar,
-  tyControls.ToolBar,
+  tyControls.ToolBar, tyControls.Grid,
   tyControls.DB.Edits, tyControls.DB.Choices, tyControls.DB.Lists, tyControls.DB.Image,
-  tyControls.DB.DateTime, tyControls.DB.Navigator;
+  tyControls.DB.DateTime, tyControls.DB.Navigator, tyControls.DB.Grid;
 
 type
   TDBTypeKeysTest = class(TTestCase)
@@ -65,7 +65,7 @@ const
   CStateNames: array[0..3] of string = ('at rest', ':hover', ':focus', ':disabled');
 
   { Plan D8; the two sub-part keys last. }
-  CChains: array[0..22] of TChainRow = (
+  CChains: array[0..23] of TChainRow = (
     (Key: 'TyDBEdit'; Chain: 'TyDBEdit > TyEdit'),
     (Key: 'TyDBMaskEdit'; Chain: 'TyDBMaskEdit > TyEdit'),
     (Key: 'TyDBNumericEdit'; Chain: 'TyDBNumericEdit > TyEdit'),
@@ -87,6 +87,7 @@ const
     (Key: 'TyDBDateTimePicker'; Chain: 'TyDBDateTimePicker > TyDateTimePicker'),
     (Key: 'TyDBCalendar'; Chain: 'TyDBCalendar > TyCalendar'),
     (Key: 'TyDBNavigator'; Chain: 'TyDBNavigator > TyToolBar'),
+    (Key: 'TyDBGrid'; Chain: 'TyDBGrid > TyGrid'),
     (Key: 'TyDBNavigatorButton'; Chain: 'TyDBNavigatorButton > TyButton'),
     (Key: 'TyDBRatingStar'; Chain: 'TyDBRatingStar > TyRatingStar'));
 
@@ -126,6 +127,9 @@ begin
   Add(TTyDBDateTimePicker, 'TyDBDateTimePicker', TTyDateTimePicker);
   Add(TTyDBCalendar, 'TyDBCalendar', TTyCalendar);
   Add(TTyDBNavigator, 'TyDBNavigator', TTyToolBar);
+  { The grid's parts (TyGridCell, TyGridHeader, TyGridIndicator, ...) are the string grid's own
+    keys in both, so its frame is all a chain has to carry. }
+  Add(TTyDBGrid, 'TyDBGrid', TTyStringGrid);
 end;
 
 function ChainText(const AKey: string): string;
@@ -229,7 +233,7 @@ var
   i: Integer;
 begin
   rows := DBClasses;
-  AssertEquals('the 21 data-aware controls', 21, Length(rows));
+  AssertEquals('the 22 data-aware controls', 22, Length(rows));
   for i := 0 to High(rows) do
     AssertEquals(rows[i].DB.ClassName, rows[i].Key, KeyOf(rows[i].DB));
 end;

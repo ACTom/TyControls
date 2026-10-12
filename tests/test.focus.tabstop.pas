@@ -44,7 +44,7 @@ uses
   tyControls.HtmlLabel, tyControls.PreviewBox, tyControls.Form, tyControls.AdvanceChart,
   { the data-aware controls (tycontrols_db), both sides }
   tyControls.DB.Edits, tyControls.DB.Choices, tyControls.DB.Lists, tyControls.DB.DateTime,
-  tyControls.DB.Navigator;
+  tyControls.DB.Navigator, tyControls.DB.Grid;
 
 type
   { Any windowed TyControl, as a class reference — TabStop is published on
@@ -268,7 +268,9 @@ begin
     TTyDBEdit, TTyDBMaskEdit, TTyDBNumericEdit, TTyDBCurrencyEdit, TTyDBSpinEdit,
     TTyDBFloatSpinEdit, TTyDBMemo, TTyDBCheckBox, TTyDBToggleSwitch, TTyDBSegmented,
     TTyDBRating, TTyDBComboBox, TTyDBLookupComboBox, TTyDBListBox, TTyDBLookupListBox,
-    TTyDBDateTimePicker, TTyDBCalendar);
+    TTyDBDateTimePicker, TTyDBCalendar,
+    { The data-aware grid is a grid: it takes the keys, as the string grid does. }
+    TTyDBGrid);
 end;
 
 { Containers and chrome. Every one of these either holds the real controls as children
@@ -835,7 +837,9 @@ begin
     TTyDBEdit, TTyDBMaskEdit, TTyDBNumericEdit, TTyDBCurrencyEdit, TTyDBSpinEdit,
     TTyDBFloatSpinEdit, TTyDBMemo, TTyDBCheckBox, TTyDBToggleSwitch, TTyDBSegmented,
     TTyDBRating, TTyDBComboBox, TTyDBLookupComboBox, TTyDBListBox, TTyDBLookupListBox,
-    TTyDBDateTimePicker, TTyDBCalendar);
+    TTyDBDateTimePicker, TTyDBCalendar,
+    { The data-aware grid is a grid: it takes the keys, as the string grid does. }
+    TTyDBGrid);
 end;
 
 procedure TTyClickFocusTest.TestAClickActuallyLandsFocusOnEveryFocusableControl;

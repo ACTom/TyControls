@@ -73,7 +73,7 @@ uses
   tyControls.AdvanceChart,
   { The data-aware controls (the tycontrols_db package). }
   tyControls.DB.Edits, tyControls.DB.Choices, tyControls.DB.Lists, tyControls.DB.Image,
-  tyControls.DB.DateTime, tyControls.DB.Navigator,
+  tyControls.DB.DateTime, tyControls.DB.Navigator, tyControls.DB.Grid,
   { The manager's registration needs its own unit (spec §16 step 7). }
   tyControls.ToolWindows, tyControls.ToolWindows.Manager,
   { The vocabulary source of the theme dropdowns, published into the IDE process here. }
@@ -196,7 +196,8 @@ begin
     [TTyDBNavigator, TTyDBText, TTyDBEdit, TTyDBMaskEdit, TTyDBNumericEdit, TTyDBCurrencyEdit,
      TTyDBSpinEdit, TTyDBFloatSpinEdit, TTyDBMemo, TTyDBCheckBox, TTyDBToggleSwitch,
      TTyDBRadioGroup, TTyDBSegmented, TTyDBRating, TTyDBComboBox, TTyDBLookupComboBox,
-     TTyDBListBox, TTyDBLookupListBox, TTyDBImage, TTyDBDateTimePicker, TTyDBCalendar]);
+     TTyDBListBox, TTyDBLookupListBox, TTyDBImage, TTyDBDateTimePicker, TTyDBCalendar,
+     TTyDBGrid]);
   // Menus.
   RegisterComponents('TyControls Menus',
     [TTyMenuBar, TTyPopupMenu, TTyImagesMenu, TTyMenuEx]);
