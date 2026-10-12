@@ -1701,6 +1701,93 @@ msgstr "TB"
 msgid "and %d more like these."
 msgstr "另有 %d 条同类。"
 
+#: tycontrols.strconsts.rstyserednotobject
+msgid "The option is not an object, so it has no series to edit."
+msgstr "option 不是一个对象，没有可以编辑的系列。"
+
+#: tycontrols.strconsts.rstyseredemptyliteral
+msgid "Write a value here, or clear the field to remove the key."
+msgstr "这里要写一个值；清空就是删掉这个键。"
+
+#: tycontrols.strconsts.rstyseredonevalue
+msgid "Write exactly one value here."
+msgstr "这里只能写一个值。"
+
+#: tycontrols.strconsts.rstyserednotinteger
+#, object-pascal-format
+msgid "\"%s\" is not a whole number."
+msgstr "“%s”不是整数。"
+
+#: tycontrols.strconsts.rstyserednotboolean
+#, object-pascal-format
+msgid "\"%s\" is neither true nor false."
+msgstr "“%s”既不是 true 也不是 false。"
+
+#: tycontrols.strconsts.rstyseredcaption
+#, object-pascal-format
+msgid "%d: %s"
+msgstr "%d：%s"
+
+#: tycontrols.strconsts.rstyseredcaptionnamed
+#, object-pascal-format
+msgid "%d: %s \"%s\""
+msgstr "%d：%s “%s”"
+
+#: tycontrols.strconsts.rstyseredhole
+msgid "(empty slot)"
+msgstr "（空位）"
+
+#: tycontrols.strconsts.rstyserednotype
+msgid "(no type)"
+msgstr "（没有 type）"
+
+#: tycontrols.strconsts.rstyseredcolcategory
+#, object-pascal-format
+msgid "%s category"
+msgstr "%s 类目"
+
+#: tycontrols.strconsts.rstyseredcolname
+msgid "name"
+msgstr "名称"
+
+#: tycontrols.strconsts.rstyseredcolvalue
+msgid "value"
+msgstr "值"
+
+#: tycontrols.strconsts.rstyseredcoldim
+#, object-pascal-format
+msgid "dim %d"
+msgstr "维 %d"
+
+#: tycontrols.strconsts.rstyserednotehole
+msgid "This slot holds no object, so there is nothing to edit in it."
+msgstr "这个位置上不是对象，没有可以编辑的内容。"
+
+#: tycontrols.strconsts.rstyserednotenotlist
+msgid "This data is not a list; edit it as text."
+msgstr "这份数据不是列表，请在文本里编辑。"
+
+#: tycontrols.strconsts.rstyserednotetree
+msgid "This data is a tree (items have children); edit it as text."
+msgstr "这份数据是树（数据项带 children），请在文本里编辑。"
+
+#: tycontrols.strconsts.rstyserednotenodata
+msgid "This series has no data of its own and reads a dataset. Rows added here give it data of its own, which then wins over the dataset."
+msgstr "这个系列没有自己的数据，读的是 dataset。在这里加行就给了它自己的数据，之后以它为准，不再读 dataset。"
+
+#: tycontrols.strconsts.rstyserednotecategory
+#, object-pascal-format
+msgid "Each row is a category of %s. Deleting a row deletes that category, and its value in every series on that axis."
+msgstr "每一行是 %s 的一个类目。删掉一行会删掉这个类目，以及这根轴上每个系列在这个类目上的值。"
+
+#: tycontrols.strconsts.rstyserednotetransform
+msgid "This dataset is made from another one by a transform; edit the source dataset instead."
+msgstr "这个 dataset 是从另一个经 transform 得来的，请去编辑源 dataset。"
+
+#: tycontrols.strconsts.rstyserednotedatasetform
+msgid "This dataset is not a table of rows; edit it as text."
+msgstr "这个 dataset 不是按行排的表，请在文本里编辑。"
+
 #: tycontrols.strconsts.rstyoptdiagallclear
 msgid "The option is understood."
 msgstr "option 没有问题。"

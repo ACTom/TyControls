@@ -221,6 +221,20 @@ const
 function TyJsonNestingExceeds(const AText: string; AMax: Integer;
   out ALine, ACol: Integer): Boolean;
 
+{ THE READER SetOptionText uses, on its own: the nesting guard, the escape
+  pre-decode, fcl-json in relaxed mode -- and nothing after it. No
+  preprocessor, no media, no merge, no legend `selected` made up: the tree
+  exactly as written. The design-time series editor reads the user's text
+  with it [Batch 143], because what it writes back is a patch against what
+  is THERE, and a tree the preprocessors had touched would differ from the
+  text before anyone edited anything.
+
+  False with AError set -- the message and position SetOptionText would
+  give -- when the text does not parse. True with AData nil for text with
+  no value in it (empty, blanks, comments only). }
+function TyOptionParseRaw(const AText: string; out AData: TJSONData;
+  out AError: TTyOptionError): Boolean;
+
 implementation
 
 uses
@@ -723,17 +737,38 @@ begin
 end;
 
 function TTyChartOption.ParseText(const AText: string; out AParsed: TJSONData): Boolean;
+var err: TTyOptionError;
+begin
+  Result := TyOptionParseRaw(AText, AParsed, err);
+  if not Result then SetError(err.Message, err.Line, err.Col);
+end;
+
+function TyOptionParseRaw(const AText: string; out AData: TJSONData;
+  out AError: TTyOptionError): Boolean;
 var
   parser: TJSONParser;
   line, col: Integer;
   msg: string;
+
+  procedure Fail(const AMsg: string; ALine, ACol: Integer);
+  begin
+    AError.Failed := True;
+    AError.Message := AMsg;
+    AError.Line := ALine;
+    AError.Col := ACol;
+  end;
+
 begin
   Result := False;
-  AParsed := nil;
+  AData := nil;
+  AError.Failed := False;
+  AError.Message := '';
+  AError.Line := 0;
+  AError.Col := 0;
   { TOO DEEP IS REFUSED before the parser can recurse into it }
   if TyJsonNestingExceeds(AText, TyOptionMaxNesting, line, col) then
   begin
-    SetError(Format(rsTyOptTooDeep, [TyOptionMaxNesting]), line, col);
+    Fail(Format(rsTyOptTooDeep, [TyOptionMaxNesting]), line, col);
     Exit(False);
   end;
   { DECODED FIRST -- see TyDecodeUnicodeEscapes. The scanner in FPC 3.2.2 drops
@@ -743,7 +778,7 @@ begin
     [joUTF8, joComments, joIgnoreTrailingComma]);
   try
     try
-      AParsed := parser.Parse;
+      AData := parser.Parse;
     except
       on E: Exception do
       begin
@@ -751,8 +786,8 @@ begin
         msg := E.Message;
         if TyOptionTextHasFunction(AText) then
           msg := msg + ' ' + rsTyOptFunctionValue;
-        SetError(msg, line, col);
-        AParsed := nil;
+        Fail(msg, line, col);
+        AData := nil;
         Exit(False);
       end;
     end;

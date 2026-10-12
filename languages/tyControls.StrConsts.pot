@@ -1491,6 +1491,93 @@ msgstr ""
 msgid "The option is nested more than %d levels deep."
 msgstr ""
 
+#: tycontrols.strconsts.rstyseredcaption
+#, object-pascal-format
+msgid "%d: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstyseredcaptionnamed
+#, object-pascal-format
+msgid "%d: %s \"%s\""
+msgstr ""
+
+#: tycontrols.strconsts.rstyseredcolcategory
+#, object-pascal-format
+msgid "%s category"
+msgstr ""
+
+#: tycontrols.strconsts.rstyseredcoldim
+#, object-pascal-format
+msgid "dim %d"
+msgstr ""
+
+#: tycontrols.strconsts.rstyseredcolname
+msgid "name"
+msgstr ""
+
+#: tycontrols.strconsts.rstyseredcolvalue
+msgid "value"
+msgstr ""
+
+#: tycontrols.strconsts.rstyseredemptyliteral
+msgid "Write a value here, or clear the field to remove the key."
+msgstr ""
+
+#: tycontrols.strconsts.rstyseredhole
+msgid "(empty slot)"
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotboolean
+#, object-pascal-format
+msgid "\"%s\" is neither true nor false."
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotecategory
+#, object-pascal-format
+msgid "Each row is a category of %s. Deleting a row deletes that category, and its value in every series on that axis."
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotedatasetform
+msgid "This dataset is not a table of rows; edit it as text."
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotehole
+msgid "This slot holds no object, so there is nothing to edit in it."
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotenodata
+msgid "This series has no data of its own and reads a dataset. Rows added here give it data of its own, which then wins over the dataset."
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotenotlist
+msgid "This data is not a list; edit it as text."
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotetransform
+msgid "This dataset is made from another one by a transform; edit the source dataset instead."
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotetree
+msgid "This data is a tree (items have children); edit it as text."
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotinteger
+#, object-pascal-format
+msgid "\"%s\" is not a whole number."
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotobject
+msgid "The option is not an object, so it has no series to edit."
+msgstr ""
+
+#: tycontrols.strconsts.rstyserednotype
+msgid "(no type)"
+msgstr ""
+
+#: tycontrols.strconsts.rstyseredonevalue
+msgid "Write exactly one value here."
+msgstr ""
+
 #: tycontrols.strconsts.rstyshortday1
 msgid "Sun"
 msgstr ""

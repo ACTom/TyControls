@@ -78,6 +78,7 @@ type
     procedure TimerTick(Sender: TObject);
     procedure ValidateClick(Sender: TObject);
     procedure FormatClick(Sender: TObject);
+    procedure SeriesClick(Sender: TObject);
   public
     constructor CreateFor; reintroduce;
     function Execute(var AText: string): Boolean;
@@ -93,7 +94,8 @@ type
 
   { Double-clicking the chart opens the same dialog. One verb, one code path --
     a second entry point that assembled the dialog differently is how the two
-    drift apart. }
+    drift apart. The second verb is the structured series and data editor
+    [Batch 143], the same function the option dialog's button calls. }
   TTyAdvanceChartEditor = class(TComponentEditor)
   public
     function GetVerbCount: Integer; override;
@@ -109,6 +111,7 @@ uses
   tyControls.AdvanceChart,
   tyControls.AdvChart.Catalog,
   tyControls.Design.AdvChart.Descs,
+  tyControls.Design.AdvChart.SeriesDialog,
   tyControls.Dialogs;
 
 resourcestring
@@ -125,6 +128,7 @@ resourcestring
   rsOptEdFormat = 'Format';
   rsOptEdFilter = 'Filter the reference';
   rsOptEdNoIssues = 'Nothing to report.';
+  rsOptEdSeries = 'Series && data...';
   rsOptEdFormatDropsComments =
     'Formatting re-writes the option from its parsed form, which drops the '
     + 'comments and the original quoting. Continue?';
@@ -237,6 +241,14 @@ begin
   b.Top := 8;
   b.Width := 90;
   b.OnClick := @FormatClick;
+
+  b := TButton.Create(Self);
+  b.Parent := panel;
+  b.Caption := rsOptEdSeries;
+  b.Left := 198;
+  b.Top := 8;
+  b.Width := 130;
+  b.OnClick := @SeriesClick;
 
   b := TButton.Create(Self);
   b.Parent := panel;
@@ -658,6 +670,24 @@ begin
   if TyOptFormat(src, outp) then FEdit.Text := outp;
 end;
 
+procedure TTyChartOptionDialog.SeriesClick(Sender: TObject);
+var
+  s: string;
+  last: TPoint;
+begin
+  { EXACTLY THE DOCUMENT, in and out: TextBetweenPoints over the whole of it
+    has no trailing line break the way Text does, and writing it back the
+    same way is one undoable change -- the structured edit lands in the
+    editor as text, and Ctrl+Z takes it back. }
+  if FEdit.Lines.Count = 0 then last := Point(1, 1)
+  else last := Point(Length(FEdit.Lines[FEdit.Lines.Count - 1]) + 1, FEdit.Lines.Count);
+  s := FEdit.TextBetweenPoints[Point(1, 1), last];
+  if not TyEditChartSeries(s) then Exit;
+  FEdit.TextBetweenPoints[Point(1, 1), last] := s;
+  TimerTick(nil);
+  FEdit.SetFocus;
+end;
+
 function TTyChartOptionDialog.Execute(var AText: string): Boolean;
 begin
   FEdit.Text := AText;
@@ -693,12 +723,13 @@ end;
 
 function TTyAdvanceChartEditor.GetVerbCount: Integer;
 begin
-  Result := 1;
+  Result := 2;
 end;
 
 function TTyAdvanceChartEditor.GetVerb(Index: Integer): string;
 begin
-  Result := rsOptEdTitle + '...';
+  if Index = 1 then Result := rsSerDlgTitle + '...'
+  else Result := rsOptEdTitle + '...';
 end;
 
 procedure TTyAdvanceChartEditor.ExecuteVerb(Index: Integer);
@@ -710,6 +741,17 @@ begin
   if not (GetComponent is TTyAdvanceChart) then Exit;
   chart := TTyAdvanceChart(GetComponent);
   s := chart.Option;
+  if Index = 1 then
+  begin
+    { the structured editor straight from the context menu -- the same dialog
+      the option editor's button opens }
+    if TyEditChartSeries(s) then
+    begin
+      chart.Option := s;
+      Modified;
+    end;
+    Exit;
+  end;
   dlg := TTyChartOptionDialog.CreateFor;
   try
     if dlg.Execute(s) then

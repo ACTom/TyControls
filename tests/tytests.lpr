@@ -162,6 +162,7 @@ uses
   test.advchart.complete,
   test.advchart.locate,
   test.advchart.diagnose,
+  test.advchart.serieseditor,
   test.advchart.handlers,
   test.advchart.data,
   test.advchart.builder,

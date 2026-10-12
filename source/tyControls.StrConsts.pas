@@ -661,6 +661,36 @@ resourcestring
     + 'draw.';
   rsTyOptDiagMoreRows = 'and %d more like these.';
 
+  // --- AdvanceChart: the design-time series and data editor [Batch 143] ---
+  // Said by tyControls.AdvChart.SeriesEdit, shown in the series dialog.
+  rsTySerEdNotObject = 'The option is not an object, so it has no series to edit.';
+  rsTySerEdEmptyLiteral = 'Write a value here, or clear the field to remove the key.';
+  rsTySerEdOneValue = 'Write exactly one value here.';
+  rsTySerEdNotInteger = '"%s" is not a whole number.';
+  rsTySerEdNotBoolean = '"%s" is neither true nor false.';
+  rsTySerEdCaption = '%d: %s';
+  rsTySerEdCaptionNamed = '%d: %s "%s"';
+  rsTySerEdHole = '(empty slot)';
+  rsTySerEdNoType = '(no type)';
+  rsTySerEdColCategory = '%s category';
+  rsTySerEdColName = 'name';
+  rsTySerEdColValue = 'value';
+  rsTySerEdColDim = 'dim %d';
+  rsTySerEdNoteHole = 'This slot holds no object, so there is nothing to edit in it.';
+  rsTySerEdNoteNotList = 'This data is not a list; edit it as text.';
+  rsTySerEdNoteTree = 'This data is a tree (items have children); edit it as text.';
+  rsTySerEdNoteNoData =
+    'This series has no data of its own and reads a dataset. Rows '
+    + 'added here give it data of its own, which then wins over the '
+    + 'dataset.';
+  rsTySerEdNoteCategory =
+    'Each row is a category of %s. Deleting a row deletes that '
+    + 'category, and its value in every series on that axis.';
+  rsTySerEdNoteTransform =
+    'This dataset is made from another one by a transform; edit '
+    + 'the source dataset instead.';
+  rsTySerEdNoteDatasetForm = 'This dataset is not a table of rows; edit it as text.';
+
 { ==================== which language the names come from ==================== }
 
 { MOVED HERE FROM tyControls.Calendar, and the move is the point: a time AXIS
