@@ -220,6 +220,14 @@ type
       y + height of these; the axes are laid over these. }
     FOuterXYWH: TTyXYWH;
     FPlotXYWH: TTyXYWH;
+    { THE BOX AS MERGED and THE CONTAINER IT WAS SOLVED IN --
+      createBoxLayoutReference's refContainer: the canvas, or the matrix
+      cell or calendar day the grid names with `coordinateSystem` + `coord`.
+      The outer bounds and the names' margin level are measured on it too
+      [Batch 151]. }
+    FBoxSpec: TTyBoxSpec;
+    FRefXYWH: TTyXYWH;
+    FBoxed: Boolean;
     FSpecs: TTyAxisLayoutSpecArray;
     { Index-parallel to FSpecs: the x axes then the y axes, which is the
       order SpecFor already walks. }
@@ -248,6 +256,10 @@ type
     property PlotRect: TTyRectF read FPlotRect;
     property OuterXYWH: TTyXYWH read FOuterXYWH;
     property PlotXYWH: TTyXYWH read FPlotXYWH;
+    { the refContainer the box was solved in; Boxed when it is a cell of
+      another coordinate system [Batch 151] }
+    property RefXYWH: TTyXYWH read FRefXYWH;
+    property Boxed: Boolean read FBoxed;
     { WHAT THE LAYOUT PASS MEASURED, kept so the renderer draws from it rather
       than assembling a second one. The plot rect was shrunk to fit exactly
       these labels in exactly this font, and a paint pass that rebuilt the spec
@@ -329,6 +341,15 @@ type
   produces an empty build with diagnostics, because a design-time editor renders
   every keystroke and half-typed text is the normal state. }
 function TyBuildGrids(AOption: TTyChartOption; const AViewport: TTyRectF): TTyChartBuild;
+{ GRID AGridIndex LAID OUT IN ARef [Batch 151] -- createBoxLayoutReference
+  for a grid with `coordinateSystem: 'matrix' | 'calendar'` and `coord`:
+  its box by getLayoutRect in the cell (x, y, width and height as upstream
+  holds them), the cartesians' approximate extent on it, and ARef kept as
+  the container its outer bounds and names are measured on. Called once the
+  matrices and calendars are laid out, before anything reads an axis' pixel
+  extent. }
+procedure TyPlaceGridIn(ABuild: TTyChartBuild; AGridIndex: Integer;
+  const ARef: TTyXYWH);
 
 { ---- phase C ---- }
 { ONE AXIS' LAYOUT SPEC from its option: the labels (each tick's text, value,
@@ -1248,6 +1269,8 @@ begin
       width, and the right edge is x + width }
     build.FGrids[i].FOuterXYWH := TySolveBoxXYWH(spec, TyFixedContainer(AViewport));
     build.FGrids[i].FOuterRect := TyRectOfXYWH(build.FGrids[i].FOuterXYWH);
+    build.FGrids[i].FBoxSpec := spec;
+    build.FGrids[i].FRefXYWH := TyXYWHOfRect(AViewport);
     build.FViewport := AViewport;
     build.FGrids[i].FPlotXYWH := build.FGrids[i].FOuterXYWH;
     build.FGrids[i].FPlotRect := build.FGrids[i].FOuterRect;
@@ -1337,6 +1360,39 @@ begin
           'y' + IntToStr(build.FGrids[i].FYAxes[k].ComponentIndex);
       end;
   end;
+end;
+
+procedure TyPlaceGridIn(ABuild: TTyChartBuild; AGridIndex: Integer;
+  const ARef: TTyXYWH);
+var
+  gb: TTyGridBuild;
+  j: Integer;
+begin
+  if (ABuild = nil) or (AGridIndex < 0) or (AGridIndex > High(ABuild.FGrids)) then Exit;
+  gb := ABuild.FGrids[AGridIndex];
+  gb.FRefXYWH := ARef;
+  gb.FBoxed := True;
+  { getLayoutRect on the raw box, the cell's x and y added as upstream adds
+    them -- not the shared solver's edge arithmetic, which a cell's
+    fractional edges would round differently }
+  gb.FOuterXYWH := TyGetLayoutRect(TyBoxSpecRaw(gb.FBoxSpec), ARef.X, ARef.Y,
+    ARef.W, ARef.H, []);
+  if not TyXYWHIsValid(gb.FOuterXYWH) then
+  begin
+    { A COORD THAT NAMES NO CELL: upstream lays the grid out on a rect that
+      is not a number, and nothing of it is drawn. Here it is put far off
+      the canvas in a box of TyBoxNowhereSize -- finite and roomy, so
+      nothing downstream meets a not-a-number (an axis of no length is
+      one), and out of sight, so nothing of it is seen. }
+    gb.FOuterXYWH := TyXYWH(TyBoxNowhere, TyBoxNowhere, TyBoxNowhereSize,
+      TyBoxNowhereSize);
+    gb.FRefXYWH := gb.FOuterXYWH;
+  end;
+  gb.FOuterRect := TyRectOfXYWH(gb.FOuterXYWH);
+  gb.FPlotXYWH := gb.FOuterXYWH;
+  gb.FPlotRect := gb.FOuterRect;
+  for j := 0 to High(gb.FCartesians) do
+    gb.FCartesians[j].SetRectXYWH(gb.FOuterXYWH);
 end;
 
 { ==================== reading series data ==================== }
@@ -3917,7 +3973,7 @@ var
     contain: TTyOuterBoundsContain;
     ob: TJSONObject;
     cw, ch: Double;
-    vp: TTyRectF;
+    vp: TTyXYWH;
   begin
     rawR := AGrid.FOuterRect;
     raw := AGrid.FOuterXYWH;
@@ -3934,7 +3990,8 @@ var
       if (d <> nil) and (d.JSONType = jtString) then s := d.AsString
       else if (d <> nil) and (d.JSONType <> jtNull) then s := '?';
     end;
-    vp := ABuild.Viewport;
+    { THE GRID'S OWN refContainer: the canvas, or its cell [Batch 151] }
+    vp := AGrid.FRefXYWH;
     if s = 'same' then
       outer := raw
     else if (s = '') or (s = 'auto') then
@@ -3943,10 +4000,12 @@ var
         grid.outerBounds says otherwise }
       ob := nil;
       if AGridNode <> nil then ob := ObjOf(AGridNode.Find('outerBounds'));
-      OuterDim(ob, 'left', 'right', 'width', vp.Right - vp.Left, outer.X, outer.W);
-      OuterDim(ob, 'top', 'bottom', 'height', vp.Bottom - vp.Top, outer.Y, outer.H);
-      outer.X := vp.Left + outer.X;
-      outer.Y := vp.Top + outer.Y;
+      OuterDim(ob, 'left', 'right', 'width', vp.W, outer.X, outer.W);
+      OuterDim(ob, 'top', 'bottom', 'height', vp.H, outer.Y, outer.H);
+      { getLayoutRect's `containerRect.x || 0`: a calendar day off its range
+        has a size and no place [Batch 151] }
+      if IsNan(vp.X) then outer.X := 0 + outer.X else outer.X := vp.X + outer.X;
+      if IsNan(vp.Y) then outer.Y := 0 + outer.Y else outer.Y := vp.Y + outer.Y;
     end
     else
       { 'none' -- and anything upstream does not know, which it ignores too }
@@ -3970,7 +4029,7 @@ var
     { THE NAME MARGIN LEVEL IS OF THE CANVAS: the grid's rect against the
       container it was laid out in }
     Result := TySolveGridBoundsXYWH(rawR, raw, outer, contain, cw, ch, ASpecs,
-      AMeasurer, APPI, TyXYWHOfRect(vp), noPx);
+      AMeasurer, APPI, vp, noPx);
     estimated := True;
   end;
 
@@ -4142,8 +4201,8 @@ begin
     { THE NAMES AS THEY ARE DRAWN: laid out again on the final rect, from the
       final frames above -- upstream's determine pass, with its own margin
       level }
-    names := TyLayoutGridNames(gb.FSpecs, gb.FPlotRect, vp.Right - vp.Left,
-      vp.Bottom - vp.Top, AMeasurer, APPI);
+    names := TyLayoutGridNames(gb.FSpecs, gb.FPlotRect, gb.FRefXYWH.W,
+      gb.FRefXYWH.H, AMeasurer, APPI);
     for t := 0 to High(gb.FSpecs) do
       gb.FSpecs[t].NamePlacement := names[t];
 

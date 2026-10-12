@@ -138,6 +138,14 @@ function TyRange(AStart, AStop: Double): TTyRange;
 function TyXYWH(AX, AY, AW, AH: Double): TTyXYWH;
 function TyXYWHOfRect(const ARect: TTyRectF): TTyXYWH;
 function TyRectOfXYWH(const A: TTyXYWH): TTyRectF;
+{ no part a NaN, no negative size -- TyRectFIsValid for an x, y, w, h
+  [Batch 151] }
+function TyXYWHIsValid(const A: TTyXYWH): Boolean;
+{ a width and a height that are numbers, not negative: a container
+  getLayoutRect can lay a box out in -- an x or a y that is not a number is
+  `containerRect.x || 0`, the canvas' edge (a calendar day off its range has
+  a size and no place) [Batch 151] }
+function TyXYWHHasSize(const A: TTyXYWH): Boolean;
 
 function TyRectFWidth(const AR: TTyRectF): Double;
 function TyRectFHeight(const AR: TTyRectF): Double;
@@ -262,6 +270,17 @@ function TyXYWHOfRect(const ARect: TTyRectF): TTyXYWH;
 begin
   Result := TyXYWH(ARect.Left, ARect.Top, ARect.Right - ARect.Left,
     ARect.Bottom - ARect.Top);
+end;
+
+function TyXYWHHasSize(const A: TTyXYWH): Boolean;
+begin
+  Result := (not IsNan(A.W)) and (not IsNan(A.H)) and (A.W >= 0) and (A.H >= 0);
+end;
+
+function TyXYWHIsValid(const A: TTyXYWH): Boolean;
+begin
+  Result := (not IsNan(A.X)) and (not IsNan(A.Y)) and (not IsNan(A.W))
+    and (not IsNan(A.H)) and (A.W >= 0) and (A.H >= 0);
 end;
 
 function TyRectOfXYWH(const A: TTyXYWH): TTyRectF;

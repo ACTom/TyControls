@@ -178,6 +178,13 @@ type
   and the family are in ANotes, one entry each as 'polarIndex:mainType'. }
 function TyBuildPolars(AOption: TTyChartOption; const AViewport: TTyRectF;
   out AMissing: TTyStringArray): TTyPolarArray;
+{ resizePolar: the centre against AContainer (polar.center's percentages of
+  its width and height, plus its x and y), the radius extent against half
+  its shorter side. AContainer is createBoxLayoutReference's refContainer --
+  the canvas, or the matrix cell or calendar day a polar names with
+  `coordinateSystem` + `coord` [Batch 151: out of TyBuildPolars]. }
+procedure TyPolarResize(AOption: TTyChartOption; APolar: TTyPolar;
+  const AContainer: TTyXYWH);
 
 { THE SERIES ON A POLAR [Batch 113, C4]: every binding that resolved to a
   polar takes that polar's axes -- XAxis the radius, YAxis the angle (the
@@ -551,12 +558,12 @@ var
   n, p, q, cnt, ai, ri: Integer;
   ids: TTyStringArray;
   holes: array of Boolean;
-  d, c0, c1, r0d, r1d: TJSONData;
+  d: TJSONData;
   node, an, rn: TJSONObject;
   ra, aa: TTyAxis;
   polar: TTyPolar;
   u: string;
-  w, h, size, start, stop, r0, r1: Double;
+  start, stop: Double;
   inv: Boolean;
   mask: TFPUExceptionMask;
 
@@ -596,8 +603,6 @@ begin
     ids[p] := StrIn(ObjOf(d), 'id');
   end;
   SetLength(Result, n);
-  w := AViewport.Right - AViewport.Left;
-  h := AViewport.Bottom - AViewport.Top;
   mask := MaskFP;
   try
     for p := 0 to n - 1 do
@@ -631,6 +636,31 @@ begin
       else if inv then stop := start + -360
       else stop := start + 360;
       aa.SetPxExtent(start, stop);
+      { resizePolar on the canvas; one in a matrix cell or a calendar day is
+        placed again once those are laid out [Batch 151] }
+      TyPolarResize(AOption, polar, TyXYWHOfRect(AViewport));
+    end;
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+procedure TyPolarResize(AOption: TTyChartOption; APolar: TTyPolar;
+  const AContainer: TTyXYWH);
+var
+  d, c0, c1, r0d, r1d: TJSONData;
+  node: TJSONObject;
+  ra: TTyAxis;
+  w, h, size, r0, r1: Double;
+  mask: TFPUExceptionMask;
+begin
+  if (APolar = nil) or (AOption = nil) then Exit;
+  node := ObjOf(AOption.ComponentAt('polar', APolar.Index));
+  ra := APolar.RadiusAxis;
+  w := AContainer.W;
+  h := AContainer.H;
+  mask := MaskFP;
+  try
       { resizePolar: the centre against the container, the radius against
         half its shorter side }
       d := FindIn(node, 'center');
@@ -638,15 +668,15 @@ begin
       c1 := nil;
       if d = nil then
       begin
-        polar.SetCentre(TyBoxRawResolve(TyBoxRawStr('50%'), w) + AViewport.Left,
-          TyBoxRawResolve(TyBoxRawStr('50%'), h) + AViewport.Top);
+        APolar.SetCentre(TyBoxRawResolve(TyBoxRawStr('50%'), w) + AContainer.X,
+          TyBoxRawResolve(TyBoxRawStr('50%'), h) + AContainer.Y);
       end
       else
       begin
         if (d.JSONType = jtArray) and (d.Count > 0) then c0 := d.Items[0];
         if (d.JSONType = jtArray) and (d.Count > 1) then c1 := d.Items[1];
-        polar.SetCentre(TyBoxRawResolve(TyBoxRawOf(c0), w) + AViewport.Left,
-          TyBoxRawResolve(TyBoxRawOf(c1), h) + AViewport.Top);
+        APolar.SetCentre(TyBoxRawResolve(TyBoxRawOf(c0), w) + AContainer.X,
+          TyBoxRawResolve(TyBoxRawOf(c1), h) + AContainer.Y);
       end;
       size := Math.Min(w, h) / 2;
       d := FindIn(node, 'radius');
@@ -675,9 +705,8 @@ begin
         r0 := TyBoxRawResolve(TyBoxRawNum(0), size);
         r1 := TyBoxRawResolve(TyBoxRawOf(d), size);
       end;
-      if polar.RadiusInverse then ra.SetPxExtent(r1, r0)
+      if APolar.RadiusInverse then ra.SetPxExtent(r1, r0)
       else ra.SetPxExtent(r0, r1);
-    end;
   finally
     UnmaskFP(mask);
   end;

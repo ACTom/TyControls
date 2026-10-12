@@ -1,0 +1,5189 @@
+{
+ "source": "D:/Projects/echarts/dist/echarts.js",
+ "version": "6.1.0",
+ "seed": 2463534242,
+ "W": 800,
+ "H": 600,
+ "measure": {
+  "firstCode": 32,
+  "ratio": [
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fd6666666666666",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fec7ae147ae147b",
+   "3fe570a3d70a3d71",
+   "3fc851eb851eb852",
+   "3fd51eb851eb851f",
+   "3fd51eb851eb851f",
+   "3fd8f5c28f5c28f6",
+   "3fe28f5c28f5c28f",
+   "3fd1eb851eb851ec",
+   "3fd51eb851eb851f",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fe28f5c28f5c28f",
+   "3fe28f5c28f5c28f",
+   "3fe28f5c28f5c28f",
+   "3fe1eb851eb851ec",
+   "3ff051eb851eb852",
+   "3fe570a3d70a3d71",
+   "3fe570a3d70a3d71",
+   "3fe70a3d70a3d70a",
+   "3fe70a3d70a3d70a",
+   "3fe570a3d70a3d71",
+   "3fe3851eb851eb85",
+   "3fe8f5c28f5c28f6",
+   "3fe70a3d70a3d70a",
+   "3fd1eb851eb851ec",
+   "3fe0000000000000",
+   "3fe570a3d70a3d71",
+   "3fe1eb851eb851ec",
+   "3fea8f5c28f5c28f",
+   "3fe70a3d70a3d70a",
+   "3fe8f5c28f5c28f6",
+   "3fe570a3d70a3d71",
+   "3fe8f5c28f5c28f6",
+   "3fe70a3d70a3d70a",
+   "3fe570a3d70a3d71",
+   "3fe3851eb851eb85",
+   "3fe70a3d70a3d70a",
+   "3fe570a3d70a3d71",
+   "3fee147ae147ae14",
+   "3fe570a3d70a3d71",
+   "3fe570a3d70a3d71",
+   "3fe3851eb851eb85",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fde147ae147ae14",
+   "3fe1eb851eb851ec",
+   "3fd51eb851eb851f",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe0000000000000",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fcc28f5c28f5c29",
+   "3fcc28f5c28f5c29",
+   "3fe0000000000000",
+   "3fcc28f5c28f5c29",
+   "3fea8f5c28f5c28f",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fd51eb851eb851f",
+   "3fe0000000000000",
+   "3fd1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe0000000000000",
+   "3fe70a3d70a3d70a",
+   "3fe0000000000000",
+   "3fe0000000000000",
+   "3fe0000000000000",
+   "3fd51eb851eb851f",
+   "3fd0a3d70a3d70a4",
+   "3fd51eb851eb851f",
+   "3fe28f5c28f5c28f"
+  ]
+ },
+ "notes": [
+  "every chart: 800 x 600, SVG ssr (chart._ssr false), animation false; the gallery options fed verbatim.",
+  "Math.random is the port's xorshift32 from 2463534242, reset before every chart.",
+  "a gauge, a sunburst, and a chord with no usage are laid out on the canvas whatever they name: their layouts never ask createBoxLayoutReference (gauge, sunburst) or have no box coordinate system (data usage)."
+ ],
+ "cases": [
+  {
+   "id": "grid-matrix-default",
+   "group": "grid",
+   "note": "a grid over a 3 x 3 range of cells, its default box (10% / 60 / 60) and outer bounds on the cell",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     }
+    },
+    "grid": {
+     "coordinateSystem": "matrix",
+     "coord": [
+      [
+       "a",
+       "c"
+      ],
+      [
+       "p",
+       "r"
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat",
+      "Sun"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       120,
+       200,
+       150,
+       80,
+       70,
+       110,
+       130
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4049800000000000",
+      "y": "4040800000000000",
+      "width": "4086480000000000",
+      "height": "4080780000000000"
+     }
+    }
+   ],
+   "grids": [
+    {
+     "index": 0,
+     "boxed": true,
+     "ref": {
+      "x": "406ca80000000000",
+      "y": "405b124924924925",
+      "width": "4080b60000000000",
+      "height": "406c3b6db6db6db8"
+     },
+     "rect": {
+      "x": "4073576666666666",
+      "y": "4065a92492492492",
+      "width": "4079110000000000",
+      "height": "405436db6db6db70"
+     }
+    }
+   ],
+   "polars": [],
+   "calls": [
+    {
+     "finder": {
+      "gridIndex": 0
+     },
+     "value": [
+      "Wed",
+      30
+     ],
+     "ret": [
+      "407c4b2f8af8af8a",
+      "406e407507507508"
+     ]
+    },
+    {
+     "finder": {
+      "gridIndex": 0
+     },
+     "value": [
+      "Mon",
+      0
+     ],
+     "ret": [
+      "407521c1d41d41d4",
+      "406fc4924924924a"
+     ]
+    },
+    {
+     "finder": {
+      "gridIndex": 0
+     },
+     "value": [
+      "Sun",
+      200
+     ],
+     "ret": [
+      "40854f057c57c57c",
+      "4065a92492492492"
+     ]
+    }
+   ],
+   "titles": [],
+   "legends": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "boxed": false,
+     "ref": null
+    }
+   ]
+  },
+  {
+   "id": "grid-matrix-boxes",
+   "group": "grid",
+   "note": "four grids in cells: px / percent edges with outerBoundsMode none, containLabel, axis names on the default box, outerBounds and a size",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     }
+    },
+    "grid": [
+     {
+      "coordinateSystem": "matrix",
+      "coord": [
+       "a",
+       "s"
+      ],
+      "left": 10,
+      "right": "8%",
+      "top": 5,
+      "bottom": 12,
+      "outerBoundsMode": "none"
+     },
+     {
+      "coordinateSystem": "matrix",
+      "coord": [
+       "b",
+       "s"
+      ],
+      "left": 0,
+      "right": 0,
+      "top": 0,
+      "bottom": 0,
+      "containLabel": true
+     },
+     {
+      "coordinateSystem": "matrix",
+      "coord": [
+       [
+        "b",
+        "c"
+       ],
+       [
+        "t",
+        "u"
+       ]
+      ]
+     },
+     {
+      "coordinateSystem": "matrix",
+      "coord": [
+       "c",
+       "s"
+      ],
+      "left": 20,
+      "top": 10,
+      "width": 100,
+      "height": 40,
+      "outerBounds": {
+       "left": 4,
+       "right": 4,
+       "top": 2,
+       "bottom": 2
+      }
+     }
+    ],
+    "xAxis": [
+     {
+      "gridIndex": 0,
+      "type": "value"
+     },
+     {
+      "gridIndex": 1,
+      "type": "value"
+     },
+     {
+      "gridIndex": 2,
+      "type": "value",
+      "name": "X name"
+     },
+     {
+      "gridIndex": 3,
+      "type": "category",
+      "data": [
+       "u",
+       "v",
+       "w"
+      ]
+     }
+    ],
+    "yAxis": [
+     {
+      "gridIndex": 0,
+      "type": "value"
+     },
+     {
+      "gridIndex": 1,
+      "type": "value"
+     },
+     {
+      "gridIndex": 2,
+      "type": "value",
+      "name": "Y"
+     },
+     {
+      "gridIndex": 3,
+      "type": "value"
+     }
+    ],
+    "series": [
+     {
+      "type": "scatter",
+      "xAxisIndex": 0,
+      "yAxisIndex": 0,
+      "data": [
+       [
+        1,
+        2
+       ],
+       [
+        5,
+        9
+       ],
+       [
+        3,
+        4
+       ]
+      ]
+     },
+     {
+      "type": "line",
+      "xAxisIndex": 1,
+      "yAxisIndex": 1,
+      "data": [
+       [
+        10,
+        200
+       ],
+       [
+        30,
+        1400
+       ],
+       [
+        70,
+        900
+       ]
+      ]
+     },
+     {
+      "type": "line",
+      "xAxisIndex": 2,
+      "yAxisIndex": 2,
+      "data": [
+       [
+        -3,
+        2
+       ],
+       [
+        4,
+        7.5
+       ],
+       [
+        9,
+        1
+       ]
+      ]
+     },
+     {
+      "type": "bar",
+      "xAxisIndex": 3,
+      "yAxisIndex": 3,
+      "data": [
+       3,
+       8,
+       5
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4049800000000000",
+      "y": "4040800000000000",
+      "width": "4086480000000000",
+      "height": "4080780000000000"
+     }
+    }
+   ],
+   "grids": [
+    {
+     "index": 0,
+     "boxed": true,
+     "ref": {
+      "x": "406ca80000000000",
+      "y": "4074e24924924925",
+      "width": "4066480000000000",
+      "height": "4052d24924924924"
+     },
+     "rect": {
+      "x": "406de80000000000",
+      "y": "4075324924924925",
+      "width": "40633fae147ae148",
+      "height": "404d249249249248"
+     }
+    },
+    {
+     "index": 1,
+     "boxed": true,
+     "ref": {
+      "x": "4079780000000000",
+      "y": "4074e24924924925",
+      "width": "4066480000000000",
+      "height": "4052d24924924924"
+     },
+     "rect": {
+      "x": "407bdbd70a3d70a4",
+      "y": "4074e24924924925",
+      "width": "40618051eb851eb8",
+      "height": "404ba49249249248"
+     }
+    },
+    {
+     "index": 2,
+     "boxed": true,
+     "ref": {
+      "x": "4079780000000000",
+      "y": "407996db6db6db6e",
+      "width": "4076480000000000",
+      "height": "4062d24924924924"
+     },
+     "rect": {
+      "x": "407ccf999999999a",
+      "y": "407da6db6db6db6e",
+      "width": "406eb028f5c28f5c",
+      "height": "4016492492492480"
+     }
+    },
+    {
+     "index": 3,
+     "boxed": true,
+     "ref": {
+      "x": "40824e0000000000",
+      "y": "4074e24924924925",
+      "width": "4066480000000000",
+      "height": "4052d24924924924"
+     },
+     "rect": {
+      "x": "4082fbc28f5c28f6",
+      "y": "4075824924924925",
+      "width": "405891eb851eb850",
+      "height": "4044000000000000"
+     }
+    }
+   ],
+   "polars": [],
+   "calls": [
+    {
+     "finder": {
+      "gridIndex": 0
+     },
+     "value": [
+      3,
+      4
+     ],
+     "ret": [
+      "4074ba4dd2f1a9fc",
+      "407761d41d41d41e"
+     ]
+    },
+    {
+     "finder": {
+      "gridIndex": 1
+     },
+     "value": [
+      3,
+      4
+     ],
+     "ret": [
+      "407c3bd8cba134f5",
+      "4078547f8fa70eec"
+     ]
+    },
+    {
+     "finder": {
+      "gridIndex": 2
+     },
+     "value": [
+      3,
+      4
+     ],
+     "ret": [
+      "40823dd1eb851eb9",
+      "407dd36db6db6db7"
+     ]
+    },
+    {
+     "finder": {
+      "gridIndex": 3
+     },
+     "value": [
+      "v",
+      5
+     ],
+     "ret": [
+      "408484e147ae147b",
+      "4076724924924925"
+     ]
+    }
+   ],
+   "titles": [],
+   "legends": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 1,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 2,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 3,
+     "type": "bar",
+     "boxed": false,
+     "ref": null
+    }
+   ]
+  },
+  {
+   "id": "grid-matrix-merged",
+   "group": "grid",
+   "note": "a grid on one cell of a merged block: dataToLayout expands it to the block",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     },
+     "body": {
+      "data": [
+       {
+        "coord": [
+         [
+          "a",
+          "b"
+         ],
+         [
+          "q",
+          "r"
+         ]
+        ],
+        "mergeCells": true
+       }
+      ]
+     }
+    },
+    "grid": {
+     "coordinateSystem": "matrix",
+     "coord": [
+      "b",
+      "r"
+     ],
+     "left": 30,
+     "right": 10,
+     "top": 10,
+     "bottom": 25
+    },
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": {
+     "type": "line",
+     "data": [
+      [
+       0,
+       0
+      ],
+      [
+       10,
+       7
+      ],
+      [
+       20,
+       3
+      ]
+     ]
+    }
+   },
+   "fails": [],
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4049800000000000",
+      "y": "4040800000000000",
+      "width": "4086480000000000",
+      "height": "4080780000000000"
+     }
+    }
+   ],
+   "grids": [
+    {
+     "index": 0,
+     "boxed": true,
+     "ref": {
+      "x": "406ca80000000000",
+      "y": "4066f24924924925",
+      "width": "4076480000000000",
+      "height": "4062d24924924925"
+     },
+     "rect": {
+      "x": "4070340000000000",
+      "y": "4068324924924925",
+      "width": "4073c80000000000",
+      "height": "405ce4924924924a"
+     }
+    }
+   ],
+   "polars": [],
+   "calls": [
+    {
+     "finder": {
+      "gridIndex": 0
+     },
+     "value": [
+      10,
+      7
+     ],
+     "ret": [
+      "407a180000000000",
+      "4068324924924925"
+     ]
+    }
+   ],
+   "titles": [],
+   "legends": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    }
+   ]
+  },
+  {
+   "id": "grid-calendar",
+   "group": "grid",
+   "note": "grids in calendar days: the content rect; outerBoundsMode none, and the default box",
+   "gallery": null,
+   "option": {
+    "calendar": {
+     "range": "2017-02",
+     "cellSize": [
+      90,
+      70
+     ],
+     "left": 40,
+     "top": 60
+    },
+    "grid": [
+     {
+      "coordinateSystem": "calendar",
+      "coord": "2017-02-07",
+      "left": 2,
+      "right": 2,
+      "top": 2,
+      "bottom": 2,
+      "outerBoundsMode": "none"
+     },
+     {
+      "coordinateSystem": "calendar",
+      "coord": [
+       "2017-02-15"
+      ],
+      "left": 4,
+      "right": 4,
+      "top": 4,
+      "bottom": 4
+     }
+    ],
+    "xAxis": [
+     {
+      "gridIndex": 0,
+      "type": "value",
+      "show": false
+     },
+     {
+      "gridIndex": 1,
+      "type": "category",
+      "data": [
+       "x",
+       "y"
+      ],
+      "show": false
+     }
+    ],
+    "yAxis": [
+     {
+      "gridIndex": 0,
+      "type": "value",
+      "show": false
+     },
+     {
+      "gridIndex": 1,
+      "type": "value",
+      "show": false
+     }
+    ],
+    "series": [
+     {
+      "type": "line",
+      "xAxisIndex": 0,
+      "yAxisIndex": 0,
+      "data": [
+       [
+        1,
+        1
+       ],
+       [
+        2,
+        4
+       ]
+      ]
+     },
+     {
+      "type": "bar",
+      "xAxisIndex": 1,
+      "yAxisIndex": 1,
+      "data": [
+       2,
+       5
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [],
+   "grids": [
+    {
+     "index": 0,
+     "boxed": true,
+     "ref": {
+      "x": "4060500000000000",
+      "y": "4069100000000000",
+      "width": "4056400000000000",
+      "height": "4051400000000000"
+     },
+     "rect": {
+      "x": "4060900000000000",
+      "y": "4069500000000000",
+      "width": "4055400000000000",
+      "height": "4050400000000000"
+     }
+    },
+    {
+     "index": 1,
+     "boxed": true,
+     "ref": {
+      "x": "406b900000000000",
+      "y": "4070e80000000000",
+      "width": "4056400000000000",
+      "height": "4051400000000000"
+     },
+     "rect": {
+      "x": "406c100000000000",
+      "y": "4071280000000000",
+      "width": "4054400000000000",
+      "height": "404e800000000000"
+     }
+    }
+   ],
+   "polars": [],
+   "calls": [
+    {
+     "finder": {
+      "gridIndex": 0
+     },
+     "value": [
+      2,
+      4
+     ],
+     "ret": [
+      "406b300000000000",
+      "4069500000000000"
+     ]
+    },
+    {
+     "finder": {
+      "gridIndex": 1
+     },
+     "value": [
+      "y",
+      5
+     ],
+     "ret": [
+      "4071d40000000000",
+      "4071280000000000"
+     ]
+    }
+   ],
+   "titles": [],
+   "legends": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 1,
+     "type": "bar",
+     "boxed": false,
+     "ref": null
+    }
+   ]
+  },
+  {
+   "id": "grid-fallbacks",
+   "group": "grid",
+   "note": "grids whose host gives them nothing: usage 'data', a matrixIndex not there, a coordinate system that hosts no component, a usage word that is neither; and one by matrixId on a second matrix",
+   "gallery": null,
+   "option": {
+    "matrix": [
+     {
+      "left": 51,
+      "right": 36,
+      "top": 33,
+      "bottom": 40,
+      "x": {
+       "data": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      "y": {
+       "data": [
+        "p",
+        "q",
+        "r",
+        "s",
+        "t",
+        "u"
+       ]
+      }
+     },
+     {
+      "left": 420,
+      "right": 20,
+      "top": 300,
+      "bottom": 20,
+      "x": {
+       "data": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      "y": {
+       "data": [
+        "p",
+        "q",
+        "r",
+        "s",
+        "t",
+        "u"
+       ]
+      },
+      "id": "m2"
+     }
+    ],
+    "grid": [
+     {
+      "coordinateSystem": "matrix",
+      "coordinateSystemUsage": "data",
+      "coord": [
+       "a",
+       "p"
+      ]
+     },
+     {
+      "coordinateSystem": "matrix",
+      "matrixIndex": 3,
+      "coord": [
+       "a",
+       "p"
+      ],
+      "left": 30,
+      "right": 30
+     },
+     {
+      "coordinateSystem": "polar",
+      "coord": [
+       "a",
+       "p"
+      ],
+      "top": 100,
+      "bottom": 100
+     },
+     {
+      "coordinateSystem": "matrix",
+      "coordinateSystemUsage": "sideways",
+      "coord": [
+       "a",
+       "p"
+      ],
+      "left": 200
+     },
+     {
+      "coordinateSystem": "matrix",
+      "matrixId": "m2",
+      "coord": [
+       "c",
+       "u"
+      ],
+      "left": 5,
+      "right": 5,
+      "top": 5,
+      "bottom": 5,
+      "outerBoundsMode": "none"
+     }
+    ],
+    "xAxis": [
+     {
+      "gridIndex": 0,
+      "type": "value",
+      "show": false
+     },
+     {
+      "gridIndex": 1,
+      "type": "value",
+      "show": false
+     },
+     {
+      "gridIndex": 2,
+      "type": "value",
+      "show": false
+     },
+     {
+      "gridIndex": 3,
+      "type": "value",
+      "show": false
+     },
+     {
+      "gridIndex": 4,
+      "type": "value",
+      "show": false
+     }
+    ],
+    "yAxis": [
+     {
+      "gridIndex": 0,
+      "type": "value",
+      "show": false
+     },
+     {
+      "gridIndex": 1,
+      "type": "value",
+      "show": false
+     },
+     {
+      "gridIndex": 2,
+      "type": "value",
+      "show": false
+     },
+     {
+      "gridIndex": 3,
+      "type": "value",
+      "show": false
+     },
+     {
+      "gridIndex": 4,
+      "type": "value",
+      "show": false
+     }
+    ],
+    "series": [
+     {
+      "type": "line",
+      "xAxisIndex": 0,
+      "yAxisIndex": 0,
+      "data": [
+       [
+        0,
+        0
+       ],
+       [
+        1,
+        1
+       ]
+      ]
+     },
+     {
+      "type": "line",
+      "xAxisIndex": 1,
+      "yAxisIndex": 1,
+      "data": [
+       [
+        0,
+        0
+       ],
+       [
+        1,
+        1
+       ]
+      ]
+     },
+     {
+      "type": "line",
+      "xAxisIndex": 2,
+      "yAxisIndex": 2,
+      "data": [
+       [
+        0,
+        0
+       ],
+       [
+        1,
+        1
+       ]
+      ]
+     },
+     {
+      "type": "line",
+      "xAxisIndex": 3,
+      "yAxisIndex": 3,
+      "data": [
+       [
+        0,
+        0
+       ],
+       [
+        1,
+        1
+       ]
+      ]
+     },
+     {
+      "type": "line",
+      "xAxisIndex": 4,
+      "yAxisIndex": 4,
+      "data": [
+       [
+        0,
+        0
+       ],
+       [
+        1,
+        1
+       ]
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4049800000000000",
+      "y": "4040800000000000",
+      "width": "4086480000000000",
+      "height": "4080780000000000"
+     }
+    },
+    {
+     "index": 1,
+     "rect": {
+      "x": "407a400000000000",
+      "y": "4072c00000000000",
+      "width": "4076800000000000",
+      "height": "4071800000000000"
+     }
+    }
+   ],
+   "grids": [
+    {
+     "index": 0,
+     "boxed": false,
+     "ref": null,
+     "rect": {
+      "x": "405e000000000000",
+      "y": "4050400000000000",
+      "width": "4082c00000000000",
+      "height": "407c700000000000"
+     }
+    },
+    {
+     "index": 1,
+     "boxed": false,
+     "ref": null,
+     "rect": {
+      "x": "403e000000000000",
+      "y": "4050400000000000",
+      "width": "4087200000000000",
+      "height": "407c700000000000"
+     }
+    },
+    {
+     "index": 2,
+     "boxed": false,
+     "ref": null,
+     "rect": {
+      "x": "405e000000000000",
+      "y": "4059000000000000",
+      "width": "4082c00000000000",
+      "height": "4079000000000000"
+     }
+    },
+    {
+     "index": 3,
+     "boxed": false,
+     "ref": null,
+     "rect": {
+      "x": "4069000000000000",
+      "y": "4050400000000000",
+      "width": "4080400000000000",
+      "height": "407c700000000000"
+     }
+    },
+    {
+     "index": 4,
+     "boxed": true,
+     "ref": {
+      "x": "4085900000000000",
+      "y": "4080e00000000000",
+      "width": "4056800000000000",
+      "height": "4044000000000000"
+     },
+     "rect": {
+      "x": "4085b80000000000",
+      "y": "4081080000000000",
+      "width": "4054000000000000",
+      "height": "403e000000000000"
+     }
+    }
+   ],
+   "polars": [],
+   "calls": [
+    {
+     "finder": {
+      "gridIndex": 0
+     },
+     "value": [
+      1,
+      1
+     ],
+     "ret": [
+      "4086800000000000",
+      "4050400000000000"
+     ]
+    },
+    {
+     "finder": {
+      "gridIndex": 1
+     },
+     "value": [
+      1,
+      1
+     ],
+     "ret": [
+      "4088100000000000",
+      "4050400000000000"
+     ]
+    },
+    {
+     "finder": {
+      "gridIndex": 2
+     },
+     "value": [
+      1,
+      1
+     ],
+     "ret": [
+      "4086800000000000",
+      "4059000000000000"
+     ]
+    },
+    {
+     "finder": {
+      "gridIndex": 3
+     },
+     "value": [
+      1,
+      1
+     ],
+     "ret": [
+      "4086800000000000",
+      "4050400000000000"
+     ]
+    },
+    {
+     "finder": {
+      "gridIndex": 4
+     },
+     "value": [
+      1,
+      1
+     ],
+     "ret": [
+      "4088380000000000",
+      "4081080000000000"
+     ]
+    }
+   ],
+   "titles": [],
+   "legends": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 1,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 2,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 3,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 4,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    }
+   ]
+  },
+  {
+   "id": "polar-matrix",
+   "group": "polar",
+   "note": "polars in cells: the default centre and radius, a percentage centre and a mixed radius over a range",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     }
+    },
+    "polar": [
+     {
+      "coordinateSystem": "matrix",
+      "coord": [
+       "b",
+       "q"
+      ]
+     },
+     {
+      "coordinateSystem": "matrix",
+      "coord": [
+       [
+        "b",
+        "c"
+       ],
+       [
+        "s",
+        "u"
+       ]
+      ],
+      "center": [
+       "30%",
+       "60%"
+      ],
+      "radius": [
+       "10%",
+       40
+      ]
+     }
+    ],
+    "angleAxis": [
+     {
+      "polarIndex": 0,
+      "type": "category",
+      "data": [
+       "n",
+       "e",
+       "s",
+       "w"
+      ]
+     },
+     {
+      "polarIndex": 1,
+      "type": "value"
+     }
+    ],
+    "radiusAxis": [
+     {
+      "polarIndex": 0
+     },
+     {
+      "polarIndex": 1
+     }
+    ],
+    "series": [
+     {
+      "type": "bar",
+      "coordinateSystem": "polar",
+      "polarIndex": 0,
+      "data": [
+       1,
+       2,
+       3,
+       4
+      ]
+     },
+     {
+      "type": "line",
+      "coordinateSystem": "polar",
+      "polarIndex": 1,
+      "data": [
+       [
+        1,
+        10
+       ],
+       [
+        3,
+        200
+       ],
+       [
+        2,
+        300
+       ]
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4049800000000000",
+      "y": "4040800000000000",
+      "width": "4086480000000000",
+      "height": "4080780000000000"
+     }
+    }
+   ],
+   "grids": [],
+   "polars": [
+    {
+     "index": 0,
+     "boxed": true,
+     "ref": {
+      "x": "4079780000000000",
+      "y": "4066f24924924925",
+      "width": "4066480000000000",
+      "height": "4052d24924924926"
+     },
+     "cx": "407f0a0000000000",
+     "cy": "406ba6db6db6db6e",
+     "r": [
+      "0000000000000000",
+      "403e1d41d41d41d7"
+     ]
+    },
+    {
+     "index": 1,
+     "boxed": true,
+     "ref": {
+      "x": "4079780000000000",
+      "y": "4074e24924924925",
+      "width": "4076480000000000",
+      "height": "406c3b6db6db6db6"
+     },
+     "cx": "408013999999999a",
+     "cy": "407d5a83a83a83a8",
+     "r": [
+      "402695f15f15f15f",
+      "4044000000000000"
+     ]
+    }
+   ],
+   "calls": [
+    {
+     "finder": {
+      "polarIndex": 0
+     },
+     "value": [
+      2,
+      "e"
+     ],
+     "ret": [
+      "407fb45a24df15a9",
+      "406cfb8fb77506bf"
+     ]
+    },
+    {
+     "finder": {
+      "polarIndex": 1
+     },
+     "value": [
+      2,
+      100
+     ],
+     "ret": [
+      "4080e66e8becccde",
+      "407e4df63f63f63f"
+     ]
+    }
+   ],
+   "titles": [],
+   "legends": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 1,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    }
+   ]
+  },
+  {
+   "id": "polar-calendar",
+   "group": "polar",
+   "note": "a polar in a calendar day",
+   "gallery": null,
+   "option": {
+    "calendar": {
+     "range": "2017-02",
+     "cellSize": [
+      90,
+      70
+     ],
+     "left": 40,
+     "top": 60
+    },
+    "polar": {
+     "coordinateSystem": "calendar",
+     "coord": "2017-02-21",
+     "radius": "90%"
+    },
+    "angleAxis": {
+     "type": "value"
+    },
+    "radiusAxis": {},
+    "series": {
+     "type": "line",
+     "coordinateSystem": "polar",
+     "data": [
+      [
+       1,
+       10
+      ],
+      [
+       2,
+       120
+      ]
+     ]
+    }
+   },
+   "fails": [],
+   "matrices": [],
+   "grids": [],
+   "polars": [
+    {
+     "index": 0,
+     "boxed": true,
+     "ref": {
+      "x": "4073680000000000",
+      "y": "4069100000000000",
+      "width": "4056400000000000",
+      "height": "4051400000000000"
+     },
+     "cx": "4076300000000000",
+     "cy": "406d600000000000",
+     "r": [
+      "0000000000000000",
+      "403f0ccccccccccd"
+     ]
+    }
+   ],
+   "calls": [
+    {
+     "finder": {
+      "polarIndex": 0
+     },
+     "value": [
+      1,
+      10
+     ],
+     "ret": [
+      "4076ac3333333333",
+      "406bb1c2324271f3"
+     ]
+    }
+   ],
+   "titles": [],
+   "legends": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    }
+   ]
+  },
+  {
+   "id": "title-matrix",
+   "group": "title",
+   "note": "titles in cells: centred, right and bottom with padding, a percentage left over a range, the defaults, a coord that names no cell, and two the host gives nothing (a matrixIndex not there, usage 'data')",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     }
+    },
+    "title": [
+     {
+      "textStyle": {
+       "fontSize": 16
+      },
+      "subtextStyle": {
+       "fontSize": 11
+      },
+      "text": "Centre",
+      "subtext": "sub line",
+      "coordinateSystem": "matrix",
+      "coord": [
+       "b",
+       "q"
+      ],
+      "left": "center",
+      "top": "middle",
+      "backgroundColor": "#eee"
+     },
+     {
+      "textStyle": {
+       "fontSize": 16
+      },
+      "subtextStyle": {
+       "fontSize": 11
+      },
+      "text": "Right",
+      "coordinateSystem": "matrix",
+      "coord": [
+       "c",
+       "p"
+      ],
+      "right": 10,
+      "bottom": 0,
+      "padding": [
+       4,
+       6
+      ],
+      "backgroundColor": "#eee"
+     },
+     {
+      "textStyle": {
+       "fontSize": 16
+      },
+      "subtextStyle": {
+       "fontSize": 11
+      },
+      "text": "Left",
+      "coordinateSystem": "matrix",
+      "coord": [
+       [
+        "a",
+        "b"
+       ],
+       "r"
+      ],
+      "left": "10%",
+      "top": 5
+     },
+     {
+      "textStyle": {
+       "fontSize": 16
+      },
+      "subtextStyle": {
+       "fontSize": 11
+      },
+      "text": "Plain",
+      "subtext": "s",
+      "coordinateSystem": "matrix",
+      "coord": [
+       "a",
+       "p"
+      ]
+     },
+     {
+      "textStyle": {
+       "fontSize": 16
+      },
+      "subtextStyle": {
+       "fontSize": 11
+      },
+      "text": "Gone",
+      "coordinateSystem": "matrix",
+      "coord": [
+       "zz",
+       "p"
+      ]
+     },
+     {
+      "textStyle": {
+       "fontSize": 16
+      },
+      "subtextStyle": {
+       "fontSize": 11
+      },
+      "text": "Canvas",
+      "coordinateSystem": "matrix",
+      "matrixIndex": 4,
+      "coord": [
+       "a",
+       "p"
+      ],
+      "left": "right"
+     },
+     {
+      "textStyle": {
+       "fontSize": 16
+      },
+      "subtextStyle": {
+       "fontSize": 11
+      },
+      "text": "Data",
+      "coordinateSystem": "matrix",
+      "coordinateSystemUsage": "data",
+      "coord": [
+       "a",
+       "p"
+      ],
+      "top": "bottom"
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4049800000000000",
+      "y": "4040800000000000",
+      "width": "4086480000000000",
+      "height": "4080780000000000"
+     }
+    }
+   ],
+   "grids": [],
+   "polars": [],
+   "calls": [],
+   "titles": [
+    {
+     "index": 0,
+     "boxed": true,
+     "ref": {
+      "x": "4079780000000000",
+      "y": "4066f24924924925",
+      "width": "4066480000000000",
+      "height": "4052d24924924926"
+     },
+     "shown": true,
+     "group": [
+      "407f0a0000000000",
+      "406ba6db6db6db6e"
+     ],
+     "bg": {
+      "x": "407d38b851eb851f",
+      "y": "406a06db6db6db6e",
+      "width": "404d147ae147ae15",
+      "height": "4048c00000000000"
+     },
+     "align": "center",
+     "verticalAlign": "middle"
+    },
+    {
+     "index": 1,
+     "boxed": true,
+     "ref": {
+      "x": "40824e0000000000",
+      "y": "405b124924924925",
+      "width": "4066480000000000",
+      "height": "4052d24924924925"
+     },
+     "shown": true,
+     "group": [
+      "4086347ae147ae14",
+      "4064724924924925"
+     ],
+     "bg": {
+      "x": "4086047ae147ae14",
+      "y": "4063f24924924925",
+      "width": "4048b851eb851eb8",
+      "height": "4038000000000000"
+     },
+     "align": "left",
+     "verticalAlign": "top"
+    },
+    {
+     "index": 2,
+     "boxed": true,
+     "ref": {
+      "x": "406ca80000000000",
+      "y": "40702db6db6db6dc",
+      "width": "4076480000000000",
+      "height": "4052d24924924924"
+     },
+     "shown": true,
+     "group": [
+      "4070de6666666666",
+      "4070cdb6db6db6dc"
+     ],
+     "bg": {
+      "x": "40708e6666666666",
+      "y": "40707db6db6db6dc",
+      "width": "404270a3d70a3d71",
+      "height": "403a000000000000"
+     },
+     "align": "left",
+     "verticalAlign": "top"
+    },
+    {
+     "index": 3,
+     "boxed": true,
+     "ref": {
+      "x": "406ca80000000000",
+      "y": "405b124924924925",
+      "width": "4066480000000000",
+      "height": "4052d24924924925"
+     },
+     "shown": true,
+     "group": [
+      "4073e60000000000",
+      "4060092492492492"
+     ],
+     "bg": {
+      "x": "4072788f5c28f5c2",
+      "y": "405ed24924924924",
+      "width": "4046d70a3d70a3d8",
+      "height": "4047800000000000"
+     },
+     "align": "center",
+     "verticalAlign": "top"
+    },
+    {
+     "index": 4,
+     "boxed": true,
+     "ref": {
+      "x": "7ff8000000000000",
+      "y": "405b124924924925",
+      "width": "7ff8000000000000",
+      "height": "4052d24924924925"
+     },
+     "shown": true,
+     "group": [
+      "4038ae147ae147ae",
+      "4060092492492492"
+     ],
+     "bg": {
+      "x": "0000000000000000",
+      "y": "405ed24924924924",
+      "width": "4048ae147ae147ae",
+      "height": "403a000000000000"
+     },
+     "align": "center",
+     "verticalAlign": "top"
+    },
+    {
+     "index": 5,
+     "boxed": false,
+     "ref": null,
+     "shown": true,
+     "group": [
+      "4088d80000000000",
+      "4034000000000000"
+     ],
+     "bg": {
+      "x": "4086fccccccccccd",
+      "y": "402e000000000000",
+      "width": "405019999999999a",
+      "height": "403a000000000000"
+     },
+     "align": "right",
+     "verticalAlign": "top"
+    },
+    {
+     "index": 6,
+     "boxed": false,
+     "ref": null,
+     "shown": true,
+     "group": [
+      "4079000000000000",
+      "4082980000000000"
+     ],
+     "bg": {
+      "x": "4077a0a3d70a3d71",
+      "y": "4081f00000000000",
+      "width": "4045f5c28f5c28f6",
+      "height": "403a000000000000"
+     },
+     "align": "center",
+     "verticalAlign": "bottom"
+    }
+   ],
+   "legends": [],
+   "series": []
+  },
+  {
+   "id": "title-calendar",
+   "group": "title",
+   "note": "titles in calendar days: centred in the content rect, and right-aligned",
+   "gallery": null,
+   "option": {
+    "calendar": {
+     "range": "2017-02",
+     "cellSize": [
+      90,
+      70
+     ],
+     "left": 40,
+     "top": 60
+    },
+    "title": [
+     {
+      "textStyle": {
+       "fontSize": 16
+      },
+      "subtextStyle": {
+       "fontSize": 11
+      },
+      "text": "Day",
+      "coordinateSystem": "calendar",
+      "coord": "2017-02-07",
+      "left": "center",
+      "top": "center"
+     },
+     {
+      "textStyle": {
+       "fontSize": 16
+      },
+      "subtextStyle": {
+       "fontSize": 11
+      },
+      "text": "R",
+      "subtext": "x",
+      "coordinateSystem": "calendar",
+      "coord": [
+       "2017-02-16"
+      ],
+      "right": 0,
+      "top": 0
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [],
+   "grids": [],
+   "polars": [],
+   "calls": [],
+   "titles": [
+    {
+     "index": 0,
+     "boxed": true,
+     "ref": {
+      "x": "4060500000000000",
+      "y": "4069100000000000",
+      "width": "4056400000000000",
+      "height": "4051400000000000"
+     },
+     "shown": true,
+     "group": [
+      "4065e00000000000",
+      "406d600000000000"
+     ],
+     "bg": {
+      "x": "40637851eb851eb8",
+      "y": "406bc00000000000",
+      "width": "40433d70a3d70a3e",
+      "height": "403a000000000000"
+     },
+     "align": "center",
+     "verticalAlign": "middle"
+    },
+    {
+     "index": 1,
+     "boxed": true,
+     "ref": {
+      "x": "406b900000000000",
+      "y": "4075480000000000",
+      "width": "4056400000000000",
+      "height": "4051400000000000"
+     },
+     "shown": true,
+     "group": [
+      "40724fae147ae148",
+      "4075980000000000"
+     ],
+     "bg": {
+      "x": "4071ffae147ae148",
+      "y": "4075480000000000",
+      "width": "4035851eb851eb85",
+      "height": "4047800000000000"
+     },
+     "align": "left",
+     "verticalAlign": "top"
+    }
+   ],
+   "legends": [],
+   "series": []
+  },
+  {
+   "id": "legend-matrix",
+   "group": "legend",
+   "note": "legends in cells: a horizontal one wrapping in its cell, a vertical one on the right of another",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     }
+    },
+    "legend": [
+     {
+      "coordinateSystem": "matrix",
+      "coord": [
+       "c",
+       [
+        "p",
+        "q"
+       ]
+      ]
+     },
+     {
+      "coordinateSystem": "matrix",
+      "coord": [
+       "a",
+       [
+        "t",
+        "u"
+       ]
+      ],
+      "orient": "vertical",
+      "right": 0,
+      "top": "middle"
+     }
+    ],
+    "xAxis": {
+     "show": false
+    },
+    "yAxis": {
+     "show": false
+    },
+    "series": [
+     {
+      "type": "line",
+      "name": "Alpha",
+      "data": []
+     },
+     {
+      "type": "line",
+      "name": "Beta",
+      "data": []
+     },
+     {
+      "type": "line",
+      "name": "Gamma",
+      "data": []
+     },
+     {
+      "type": "line",
+      "name": "Delta",
+      "data": []
+     },
+     {
+      "type": "line",
+      "name": "Epsilon",
+      "data": []
+     },
+     {
+      "type": "line",
+      "name": "Zeta",
+      "data": []
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4049800000000000",
+      "y": "4040800000000000",
+      "width": "4086480000000000",
+      "height": "4080780000000000"
+     }
+    }
+   ],
+   "grids": [
+    {
+     "index": 0,
+     "boxed": false,
+     "ref": null,
+     "rect": {
+      "x": "405e000000000000",
+      "y": "4050400000000000",
+      "width": "4082c00000000000",
+      "height": "407c700000000000"
+     }
+    }
+   ],
+   "polars": [],
+   "calls": [],
+   "titles": [],
+   "legends": [
+    {
+     "index": 0,
+     "boxed": true,
+     "ref": {
+      "x": "40824e0000000000",
+      "y": "405b124924924925",
+      "width": "4066480000000000",
+      "height": "4062d24924924926"
+     },
+     "group": [
+      "4082e3cccccccccd",
+      "4066e83a83a83a85"
+     ],
+     "items": [
+      {
+       "i": 0,
+       "name": "Alpha",
+       "t": [
+        "4082ebcccccccccd",
+        "4066db6db6db6db8"
+       ],
+       "r": [
+        "bff0000000000000",
+        "3fd9999999999990",
+        "404eeb851eb851ec",
+        "402a666666666668"
+       ]
+      },
+      {
+       "i": 1,
+       "name": "Beta",
+       "t": [
+        "40851a851eb851ec",
+        "4066db6db6db6db8"
+       ],
+       "r": [
+        "bff0000000000000",
+        "3fd9999999999990",
+        "404beb851eb851ec",
+        "402a666666666668"
+       ]
+      },
+      {
+       "i": 2,
+       "name": "Gamma",
+       "t": [
+        "4082ebcccccccccd",
+        "406981d41d41d41e"
+       ],
+       "r": [
+        "bff0000000000000",
+        "3fd9999999999990",
+        "40526e147ae147ae",
+        "402a666666666668"
+       ]
+      },
+      {
+       "i": 3,
+       "name": "Delta",
+       "t": [
+        "4085798f5c28f5c3",
+        "406981d41d41d41e"
+       ],
+       "r": [
+        "bff0000000000000",
+        "3fd9999999999990",
+        "404d8a3d70a3d70a",
+        "402a666666666668"
+       ]
+      },
+      {
+       "i": 4,
+       "name": "Epsilon",
+       "t": [
+        "4082ebcccccccccd",
+        "406c283a83a83a85"
+       ],
+       "r": [
+        "bff0000000000000",
+        "3fd9999999999990",
+        "40519eb851eb851f",
+        "402a666666666668"
+       ]
+      },
+      {
+       "i": 5,
+       "name": "Zeta",
+       "t": [
+        "40855fa3d70a3d71",
+        "406c283a83a83a85"
+       ],
+       "r": [
+        "bff0000000000000",
+        "3fd9999999999990",
+        "404b8f5c28f5c290",
+        "402a666666666668"
+       ]
+      }
+     ]
+    },
+    {
+     "index": 1,
+     "boxed": true,
+     "ref": {
+      "x": "406ca80000000000",
+      "y": "407996db6db6db6e",
+      "width": "4066480000000000",
+      "height": "4062d24924924924"
+     },
+     "group": [
+      "40748c7ae147ae14",
+      "407a91d41d41d41d"
+     ],
+     "items": [
+      {
+       "i": 0,
+       "name": "Alpha",
+       "t": [
+        "40749c7ae147ae14",
+        "407a8b6db6db6db7"
+       ],
+       "r": [
+        "bff0000000000000",
+        "3fd9999999999990",
+        "404eeb851eb851ec",
+        "402a666666666668"
+       ]
+      },
+      {
+       "i": 1,
+       "name": "Beta",
+       "t": [
+        "40749c7ae147ae14",
+        "407bdea0ea0ea0ea"
+       ],
+       "r": [
+        "bff0000000000000",
+        "3fd9999999999990",
+        "404beb851eb851ec",
+        "402a666666666668"
+       ]
+      },
+      {
+       "i": 2,
+       "name": "Gamma",
+       "t": [
+        "40749c7ae147ae14",
+        "407d31d41d41d41e"
+       ],
+       "r": [
+        "bff0000000000000",
+        "3fd9999999999990",
+        "40526e147ae147ae",
+        "402a666666666668"
+       ]
+      },
+      {
+       "i": 3,
+       "name": "Delta",
+       "t": [
+        "40749c7ae147ae14",
+        "407e850750750751"
+       ],
+       "r": [
+        "bff0000000000000",
+        "3fd9999999999990",
+        "404d8a3d70a3d70a",
+        "402a666666666668"
+       ]
+      },
+      {
+       "i": 4,
+       "name": "Epsilon",
+       "t": [
+        "40749c7ae147ae14",
+        "407fd83a83a83a84"
+       ],
+       "r": [
+        "bff0000000000000",
+        "3fd9999999999990",
+        "40519eb851eb851f",
+        "402a666666666668"
+       ]
+      },
+      {
+       "i": 5,
+       "name": "Zeta",
+       "t": [
+        "40749c7ae147ae14",
+        "408095b6db6db6dc"
+       ],
+       "r": [
+        "bff0000000000000",
+        "3fd9999999999990",
+        "404b8f5c28f5c290",
+        "402a666666666668"
+       ]
+      }
+     ]
+    }
+   ],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 1,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 2,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 3,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 4,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 5,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    }
+   ]
+  },
+  {
+   "id": "legend-calendar",
+   "group": "legend",
+   "note": "a legend in a calendar day",
+   "gallery": null,
+   "option": {
+    "calendar": {
+     "range": "2017-02",
+     "cellSize": [
+      90,
+      70
+     ],
+     "left": 40,
+     "top": 60
+    },
+    "legend": {
+     "coordinateSystem": "calendar",
+     "coord": "2017-02-22",
+     "left": 0
+    },
+    "xAxis": {
+     "show": false
+    },
+    "yAxis": {
+     "show": false
+    },
+    "series": [
+     {
+      "type": "line",
+      "name": "One",
+      "data": []
+     },
+     {
+      "type": "line",
+      "name": "Two",
+      "data": []
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [],
+   "grids": [
+    {
+     "index": 0,
+     "boxed": false,
+     "ref": null,
+     "rect": {
+      "x": "405e000000000000",
+      "y": "4050400000000000",
+      "width": "4082c00000000000",
+      "height": "407c700000000000"
+     }
+    }
+   ],
+   "polars": [],
+   "calls": [],
+   "titles": [],
+   "legends": [
+    {
+     "index": 0,
+     "boxed": true,
+     "ref": {
+      "x": "4073680000000000",
+      "y": "4070e80000000000",
+      "width": "4056400000000000",
+      "height": "4051400000000000"
+     },
+     "group": [
+      "4073b80000000000",
+      "4071d1999999999a"
+     ],
+     "items": [
+      {
+       "i": 0,
+       "name": "One",
+       "t": [
+        "4073c80000000000",
+        "4071cb3333333334"
+       ],
+       "r": [
+        "bff0000000000000",
+        "3fd9999999999990",
+        "404ae66666666666",
+        "402a666666666668"
+       ]
+      },
+      {
+       "i": 1,
+       "name": "Two",
+       "t": [
+        "4073c80000000000",
+        "40731e6666666667"
+       ],
+       "r": [
+        "bff0000000000000",
+        "3fd9999999999990",
+        "404ad70a3d70a3d7",
+        "402a666666666668"
+       ]
+      }
+     ]
+    }
+   ],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 1,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    }
+   ]
+  },
+  {
+   "id": "pie-cells",
+   "group": "series",
+   "note": "pies: by coord with a percentage radius, by center read as a coord, by coord with a percentage centre and a ring, on a calendar day by coord and by center, and one whose matrix is not there",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     }
+    },
+    "calendar": {
+     "range": "2017-02",
+     "cellSize": [
+      90,
+      70
+     ],
+     "left": 40,
+     "top": 330
+    },
+    "series": [
+     {
+      "type": "pie",
+      "coordinateSystem": "matrix",
+      "coord": [
+       "a",
+       "p"
+      ],
+      "radius": "60%",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "pie",
+      "coordinateSystem": "matrix",
+      "center": [
+       "b",
+       "p"
+      ],
+      "radius": 20,
+      "data": [
+       4,
+       1
+      ]
+     },
+     {
+      "type": "pie",
+      "coordinateSystem": "matrix",
+      "coord": [
+       [
+        "b",
+        "c"
+       ],
+       [
+        "q",
+        "r"
+       ]
+      ],
+      "center": [
+       "30%",
+       "40%"
+      ],
+      "radius": [
+       "20%",
+       "50%"
+      ],
+      "data": [
+       2,
+       2,
+       5
+      ]
+     },
+     {
+      "type": "pie",
+      "coordinateSystem": "calendar",
+      "coord": "2017-02-08",
+      "radius": "80%",
+      "data": [
+       1,
+       3
+      ]
+     },
+     {
+      "type": "pie",
+      "coordinateSystem": "calendar",
+      "center": "2017-02-10",
+      "radius": 15,
+      "data": [
+       3,
+       1
+      ]
+     },
+     {
+      "type": "pie",
+      "coordinateSystem": "matrix",
+      "matrixIndex": 5,
+      "coord": [
+       "a",
+       "p"
+      ],
+      "data": [
+       1,
+       1
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4049800000000000",
+      "y": "4040800000000000",
+      "width": "4086480000000000",
+      "height": "4080780000000000"
+     }
+    }
+   ],
+   "grids": [],
+   "polars": [],
+   "calls": [],
+   "titles": [],
+   "legends": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "pie",
+     "boxed": true,
+     "ref": {
+      "x": "406ca80000000000",
+      "y": "405b124924924925",
+      "width": "4066480000000000",
+      "height": "4052d24924924925"
+     },
+     "sectors": [
+      {
+       "i": 0,
+       "cx": "4073e60000000000",
+       "cy": "40623db6db6db6dc",
+       "r0": "0000000000000000",
+       "r": "403695f15f15f15f"
+      },
+      {
+       "i": 1,
+       "cx": "4073e60000000000",
+       "cy": "40623db6db6db6dc",
+       "r0": "0000000000000000",
+       "r": "403695f15f15f15f"
+      },
+      {
+       "i": 2,
+       "cx": "4073e60000000000",
+       "cy": "40623db6db6db6dc",
+       "r0": "0000000000000000",
+       "r": "403695f15f15f15f"
+      }
+     ]
+    },
+    {
+     "seriesIndex": 1,
+     "type": "pie",
+     "boxed": true,
+     "ref": {
+      "x": "4079780000000000",
+      "y": "405b124924924925",
+      "width": "4066480000000000",
+      "height": "4052d24924924925"
+     },
+     "sectors": [
+      {
+       "i": 0,
+       "cx": "407f0a0000000000",
+       "cy": "40623db6db6db6dc",
+       "r0": "0000000000000000",
+       "r": "4034000000000000"
+      },
+      {
+       "i": 1,
+       "cx": "407f0a0000000000",
+       "cy": "40623db6db6db6dc",
+       "r0": "0000000000000000",
+       "r": "4034000000000000"
+      }
+     ]
+    },
+    {
+     "seriesIndex": 2,
+     "type": "pie",
+     "boxed": true,
+     "ref": {
+      "x": "4079780000000000",
+      "y": "4066f24924924925",
+      "width": "4076480000000000",
+      "height": "4062d24924924925"
+     },
+     "sectors": [
+      {
+       "i": 0,
+       "cx": "408013999999999a",
+       "cy": "406e79999999999a",
+       "r0": "402e1d41d41d41d5",
+       "r": "4042d24924924925"
+      },
+      {
+       "i": 1,
+       "cx": "408013999999999a",
+       "cy": "406e79999999999a",
+       "r0": "402e1d41d41d41d5",
+       "r": "4042d24924924925"
+      },
+      {
+       "i": 2,
+       "cx": "408013999999999a",
+       "cy": "406e79999999999a",
+       "r0": "402e1d41d41d41d5",
+       "r": "4042d24924924925"
+      }
+     ]
+    },
+    {
+     "seriesIndex": 3,
+     "type": "pie",
+     "boxed": true,
+     "ref": {
+      "x": "4060500000000000",
+      "y": "4080e40000000000",
+      "width": "4056400000000000",
+      "height": "4051400000000000"
+     },
+     "sectors": [
+      {
+       "i": 0,
+       "cx": "4065e00000000000",
+       "cy": "4081f80000000000",
+       "r0": "0000000000000000",
+       "r": "403b99999999999a"
+      },
+      {
+       "i": 1,
+       "cx": "4065e00000000000",
+       "cy": "4081f80000000000",
+       "r0": "0000000000000000",
+       "r": "403b99999999999a"
+      }
+     ]
+    },
+    {
+     "seriesIndex": 4,
+     "type": "pie",
+     "boxed": true,
+     "ref": {
+      "x": "4060500000000000",
+      "y": "4085440000000000",
+      "width": "4056400000000000",
+      "height": "4051400000000000"
+     },
+     "sectors": [
+      {
+       "i": 0,
+       "cx": "4065e00000000000",
+       "cy": "4086580000000000",
+       "r0": "0000000000000000",
+       "r": "402e000000000000"
+      },
+      {
+       "i": 1,
+       "cx": "4065e00000000000",
+       "cy": "4086580000000000",
+       "r0": "0000000000000000",
+       "r": "402e000000000000"
+      }
+     ]
+    },
+    {
+     "seriesIndex": 5,
+     "type": "pie",
+     "boxed": false,
+     "ref": null,
+     "sectors": [
+      {
+       "i": 0,
+       "cx": "4079000000000000",
+       "cy": "4072c00000000000",
+       "r0": "0000000000000000",
+       "r": "4062c00000000000"
+      },
+      {
+       "i": 1,
+       "cx": "4079000000000000",
+       "cy": "4072c00000000000",
+       "r0": "0000000000000000",
+       "r": "4062c00000000000"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "funnel-cells",
+   "group": "series",
+   "note": "funnels in a matrix cell (a left and a percentage width) and in a calendar day",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     }
+    },
+    "calendar": {
+     "range": "2017-02",
+     "cellSize": [
+      90,
+      70
+     ],
+     "left": 40,
+     "top": 330
+    },
+    "series": [
+     {
+      "type": "funnel",
+      "coordinateSystem": "matrix",
+      "coord": [
+       [
+        "b",
+        "c"
+       ],
+       [
+        "p",
+        "q"
+       ]
+      ],
+      "left": 10,
+      "width": "50%",
+      "data": [
+       5,
+       3,
+       1
+      ]
+     },
+     {
+      "type": "funnel",
+      "coordinateSystem": "calendar",
+      "coord": "2017-02-14",
+      "data": [
+       2,
+       1
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4049800000000000",
+      "y": "4040800000000000",
+      "width": "4086480000000000",
+      "height": "4080780000000000"
+     }
+    }
+   ],
+   "grids": [],
+   "polars": [],
+   "calls": [],
+   "titles": [],
+   "legends": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "funnel",
+     "boxed": true,
+     "ref": {
+      "x": "4079780000000000",
+      "y": "405b124924924925",
+      "width": "4076480000000000",
+      "height": "4062d24924924926"
+     },
+     "items": [
+      {
+       "i": 0,
+       "points": [
+        [
+         "407a180000000000",
+         "4065092492492492"
+        ],
+        [
+         "40829e0000000000",
+         "4065092492492492"
+        ],
+        [
+         "408180cccccccccd",
+         "406619e79e79e79f"
+        ],
+        [
+         "407c526666666666",
+         "406619e79e79e79f"
+        ]
+       ]
+      },
+      {
+       "i": 1,
+       "points": [
+        [
+         "407c526666666666",
+         "406619e79e79e79f"
+        ],
+        [
+         "408180cccccccccd",
+         "406619e79e79e79f"
+        ],
+        [
+         "408063999999999a",
+         "40672aaaaaaaaaac"
+        ],
+        [
+         "407e8ccccccccccd",
+         "40672aaaaaaaaaac"
+        ]
+       ]
+      },
+      {
+       "i": 2,
+       "points": [
+        [
+         "407e8ccccccccccd",
+         "40672aaaaaaaaaac"
+        ],
+        [
+         "408063999999999a",
+         "40672aaaaaaaaaac"
+        ],
+        [
+         "407faa0000000000",
+         "40683b6db6db6db9"
+        ],
+        [
+         "407faa0000000000",
+         "40683b6db6db6db9"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "seriesIndex": 1,
+     "type": "funnel",
+     "boxed": true,
+     "ref": {
+      "x": "406b900000000000",
+      "y": "407d680000000000",
+      "width": "4056400000000000",
+      "height": "4051400000000000"
+     },
+     "items": [
+      {
+       "i": 0,
+       "points": [
+        [
+         "406cb00000000000",
+         "407da80000000000"
+        ],
+        [
+         "4072c80000000000",
+         "407da80000000000"
+        ],
+        [
+         "4071ac0000000000",
+         "407f680000000000"
+        ],
+        [
+         "406ee80000000000",
+         "407f680000000000"
+        ]
+       ]
+      },
+      {
+       "i": 1,
+       "points": [
+        [
+         "406ee80000000000",
+         "407f680000000000"
+        ],
+        [
+         "4071ac0000000000",
+         "407f680000000000"
+        ],
+        [
+         "4070900000000000",
+         "4080940000000000"
+        ],
+        [
+         "4070900000000000",
+         "4080940000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "sankey-cells",
+   "group": "series",
+   "note": "sankeys: the default box over a range of cells, edges at zero in a calendar day, and one whose calendar is not there (one whose matrix is not there throws: createGraphFromNodeEdge asks the matrix for its dimensions)",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     }
+    },
+    "calendar": {
+     "range": "2017-02",
+     "cellSize": [
+      90,
+      70
+     ],
+     "left": 40,
+     "top": 330
+    },
+    "series": [
+     {
+      "type": "sankey",
+      "coordinateSystem": "matrix",
+      "coord": [
+       [
+        "a",
+        "b"
+       ],
+       [
+        "p",
+        "r"
+       ]
+      ],
+      "data": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       },
+       {
+        "name": "C"
+       },
+       {
+        "name": "D"
+       }
+      ],
+      "links": [
+       {
+        "source": "A",
+        "target": "B",
+        "value": 5
+       },
+       {
+        "source": "A",
+        "target": "C",
+        "value": 3
+       },
+       {
+        "source": "B",
+        "target": "D",
+        "value": 4
+       },
+       {
+        "source": "C",
+        "target": "D",
+        "value": 2
+       }
+      ]
+     },
+     {
+      "type": "sankey",
+      "coordinateSystem": "calendar",
+      "coord": "2017-02-15",
+      "left": 0,
+      "right": 0,
+      "top": 0,
+      "bottom": 0,
+      "label": {
+       "show": false
+      },
+      "data": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       },
+       {
+        "name": "C"
+       },
+       {
+        "name": "D"
+       }
+      ],
+      "links": [
+       {
+        "source": "A",
+        "target": "B",
+        "value": 5
+       },
+       {
+        "source": "A",
+        "target": "C",
+        "value": 3
+       },
+       {
+        "source": "B",
+        "target": "D",
+        "value": 4
+       },
+       {
+        "source": "C",
+        "target": "D",
+        "value": 2
+       }
+      ]
+     },
+     {
+      "type": "sankey",
+      "coordinateSystem": "calendar",
+      "calendarIndex": 9,
+      "coord": "2017-02-15",
+      "data": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       },
+       {
+        "name": "C"
+       },
+       {
+        "name": "D"
+       }
+      ],
+      "links": [
+       {
+        "source": "A",
+        "target": "B",
+        "value": 5
+       },
+       {
+        "source": "A",
+        "target": "C",
+        "value": 3
+       },
+       {
+        "source": "B",
+        "target": "D",
+        "value": 4
+       },
+       {
+        "source": "C",
+        "target": "D",
+        "value": 2
+       }
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4049800000000000",
+      "y": "4040800000000000",
+      "width": "4086480000000000",
+      "height": "4080780000000000"
+     }
+    }
+   ],
+   "grids": [],
+   "polars": [],
+   "calls": [],
+   "titles": [],
+   "legends": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "sankey",
+     "boxed": true,
+     "ref": {
+      "x": "406ca80000000000",
+      "y": "405b124924924925",
+      "width": "4076480000000000",
+      "height": "406c3b6db6db6db8"
+     },
+     "layoutInfo": {
+      "x": "406ee26666666666",
+      "y": "405de50750750751",
+      "width": "4070b60000000000",
+      "height": "406968af8af8af8c"
+     },
+     "nodes": [
+      {
+       "i": 0,
+       "x": "0000000000000000",
+       "y": "3ff2a4926f75aabe",
+       "dx": "4034000000000000",
+       "dy": "406868af8af8af8c"
+      },
+      {
+       "i": 1,
+       "x": "405eec0000000000",
+       "y": "bd18000000000000",
+       "dx": "4034000000000000",
+       "dy": "405e82db6db6db6f"
+      },
+      {
+       "i": 2,
+       "x": "405eec0000000000",
+       "y": "4060416db6db6db7",
+       "dx": "4034000000000000",
+       "dy": "40524e83a83a83a9"
+      },
+      {
+       "i": 3,
+       "x": "406eec0000000000",
+       "y": "4038df56d3320ae8",
+       "dx": "4034000000000000",
+       "dy": "40624e83a83a83a9"
+      }
+     ]
+    },
+    {
+     "seriesIndex": 1,
+     "type": "sankey",
+     "boxed": true,
+     "ref": {
+      "x": "406b900000000000",
+      "y": "4080e40000000000",
+      "width": "4056400000000000",
+      "height": "4051400000000000"
+     },
+     "layoutInfo": {
+      "x": "406b900000000000",
+      "y": "4080e40000000000",
+      "width": "4056400000000000",
+      "height": "4051400000000000"
+     },
+     "nodes": [
+      {
+       "i": 0,
+       "x": "0000000000000000",
+       "y": "4002a1415ea32675",
+       "dx": "4034000000000000",
+       "dy": "404e800000000000"
+      },
+      {
+       "i": 1,
+       "x": "4041400000000000",
+       "y": "3cf8000000000000",
+       "dx": "4034000000000000",
+       "dy": "4043100000000000"
+      },
+      {
+       "i": 2,
+       "x": "4041400000000000",
+       "y": "4047100000000001",
+       "dx": "4034000000000000",
+       "dy": "4036e00000000000"
+      },
+      {
+       "i": 3,
+       "x": "4051400000000000",
+       "y": "402365926eaa0d07",
+       "dx": "4034000000000000",
+       "dy": "4046e00000000000"
+      }
+     ]
+    },
+    {
+     "seriesIndex": 2,
+     "type": "sankey",
+     "boxed": false,
+     "ref": null,
+     "layoutInfo": {
+      "x": "4044000000000000",
+      "y": "403e000000000000",
+      "width": "4082c00000000000",
+      "height": "4080e00000000000"
+     },
+     "nodes": [
+      {
+       "i": 0,
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "dx": "4034000000000000",
+       "dy": "4080a00000000000"
+      },
+      {
+       "i": 1,
+       "x": "4072200000000000",
+       "y": "bd30000000000000",
+       "dx": "4034000000000000",
+       "dy": "4074c80000000000"
+      },
+      {
+       "i": 2,
+       "x": "4072200000000000",
+       "y": "407547ffffffffff",
+       "dx": "4034000000000000",
+       "dy": "4068f00000000000"
+      },
+      {
+       "i": 3,
+       "x": "4082200000000000",
+       "y": "40500d566749e475",
+       "dx": "4034000000000000",
+       "dy": "4078f00000000000"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "tree-cells",
+   "group": "series",
+   "note": "trees in cells: orthogonal with the default box, radial over a range",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "tree",
+      "coordinateSystem": "matrix",
+      "coord": [
+       [
+        "a",
+        "b"
+       ],
+       [
+        "p",
+        "q"
+       ]
+      ],
+      "data": [
+       {
+        "name": "root",
+        "children": [
+         {
+          "name": "a",
+          "children": [
+           {
+            "name": "a1"
+           },
+           {
+            "name": "a2"
+           }
+          ]
+         },
+         {
+          "name": "b"
+         },
+         {
+          "name": "c",
+          "children": [
+           {
+            "name": "c1"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "tree",
+      "coordinateSystem": "matrix",
+      "coord": [
+       [
+        "b",
+        "c"
+       ],
+       [
+        "s",
+        "u"
+       ]
+      ],
+      "layout": "radial",
+      "data": [
+       {
+        "name": "root",
+        "children": [
+         {
+          "name": "a",
+          "children": [
+           {
+            "name": "a1"
+           },
+           {
+            "name": "a2"
+           }
+          ]
+         },
+         {
+          "name": "b"
+         },
+         {
+          "name": "c",
+          "children": [
+           {
+            "name": "c1"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4049800000000000",
+      "y": "4040800000000000",
+      "width": "4086480000000000",
+      "height": "4080780000000000"
+     }
+    }
+   ],
+   "grids": [],
+   "polars": [],
+   "calls": [],
+   "titles": [],
+   "legends": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "tree",
+     "boxed": true,
+     "ref": {
+      "x": "406ca80000000000",
+      "y": "405b124924924925",
+      "width": "4076480000000000",
+      "height": "4062d24924924926"
+     },
+     "layoutInfo": {
+      "x": "4071007ae147ae14",
+      "y": "405f96ac9dfd1305",
+      "width": "4070ef0a3d70a3d8",
+      "height": "405c9bcb564efe8c"
+     },
+     "nodes": [
+      {
+       "i": 1,
+       "x": "0000000000000000",
+       "y": "404f782c788a1800"
+      },
+      {
+       "i": 2,
+       "x": "4060ef0a3d70a3d8",
+       "y": "40412a46cd6298ba"
+      },
+      {
+       "i": 3,
+       "x": "4070ef0a3d70a3d8",
+       "y": "4036e30911d8cba3"
+      },
+      {
+       "i": 4,
+       "x": "4070ef0a3d70a3d8",
+       "y": "4046e30911d8cba3"
+      },
+      {
+       "i": 5,
+       "x": "4060ef0a3d70a3d8",
+       "y": "404f782c788a1800"
+      },
+      {
+       "i": 6,
+       "x": "4060ef0a3d70a3d8",
+       "y": "4056e30911d8cba3"
+      },
+      {
+       "i": 7,
+       "x": "4070ef0a3d70a3d8",
+       "y": "4056e30911d8cba3"
+      }
+     ]
+    },
+    {
+     "seriesIndex": 1,
+     "type": "tree",
+     "boxed": true,
+     "ref": {
+      "x": "4079780000000000",
+      "y": "4074e24924924925",
+      "width": "4076480000000000",
+      "height": "406c3b6db6db6db6"
+     },
+     "layoutInfo": {
+      "x": "407c247ae147ae14",
+      "y": "407693ee721a54d9",
+      "width": "4070ef0a3d70a3d8",
+      "height": "406574d880bb3ee6"
+     },
+     "nodes": [
+      {
+       "i": 1,
+       "x": "8000000000000000",
+       "y": "0000000000000000"
+      },
+      {
+       "i": 2,
+       "x": "40453cefbc2aa36a",
+       "y": "40186db5250169cf"
+      },
+      {
+       "i": 3,
+       "x": "40538477dc6e566e",
+       "y": "c041d39f03880910"
+      },
+      {
+       "i": 4,
+       "x": "405037373f5c76f8",
+       "y": "404c1a19135eaf9c"
+      },
+      {
+       "i": 5,
+       "x": "c0282e0dca675689",
+       "y": "40449658cc577448"
+      },
+      {
+       "i": 6,
+       "x": "c0438477dc6e566c",
+       "y": "c031d39f03880918"
+      },
+      {
+       "i": 7,
+       "x": "c0538477dc6e566c",
+       "y": "c041d39f03880918"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "treemap-cells",
+   "group": "series",
+   "note": "treemaps: one over a range of cells with its breadcrumb, one in a calendar day with no breadcrumb",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     }
+    },
+    "calendar": {
+     "range": "2017-02",
+     "cellSize": [
+      90,
+      70
+     ],
+     "left": 40,
+     "top": 330
+    },
+    "series": [
+     {
+      "type": "treemap",
+      "coordinateSystem": "matrix",
+      "coord": [
+       [
+        "a",
+        "c"
+       ],
+       [
+        "p",
+        "r"
+       ]
+      ],
+      "data": [
+       {
+        "name": "A",
+        "value": 10,
+        "children": [
+         {
+          "name": "A1",
+          "value": 6
+         },
+         {
+          "name": "A2",
+          "value": 4
+         }
+        ]
+       },
+       {
+        "name": "B",
+        "value": 5
+       },
+       {
+        "name": "C",
+        "value": 3
+       }
+      ]
+     },
+     {
+      "type": "treemap",
+      "coordinateSystem": "calendar",
+      "coord": "2017-02-23",
+      "breadcrumb": {
+       "show": false
+      },
+      "data": [
+       {
+        "name": "A",
+        "value": 10,
+        "children": [
+         {
+          "name": "A1",
+          "value": 6
+         },
+         {
+          "name": "A2",
+          "value": 4
+         }
+        ]
+       },
+       {
+        "name": "B",
+        "value": 5
+       },
+       {
+        "name": "C",
+        "value": 3
+       }
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4049800000000000",
+      "y": "4040800000000000",
+      "width": "4086480000000000",
+      "height": "4080780000000000"
+     }
+    }
+   ],
+   "grids": [],
+   "polars": [],
+   "calls": [],
+   "titles": [],
+   "legends": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "treemap",
+     "boxed": true,
+     "ref": {
+      "x": "406ca80000000000",
+      "y": "405b124924924925",
+      "width": "4080b60000000000",
+      "height": "406c3b6db6db6db8"
+     },
+     "layoutInfo": {
+      "x": "406f280000000000",
+      "y": "4063c92492492492",
+      "width": "407eec0000000000",
+      "height": "405f76db6db6db70"
+     },
+     "nodes": [
+      {
+       "i": 0,
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "width": "407eec0000000000",
+       "height": "405f76db6db6db70"
+      },
+      {
+       "i": 1,
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "width": "40712dc71c71c71b",
+       "height": "405f76db6db6db70"
+      },
+      {
+       "i": 2,
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "width": "40649d5555555553",
+       "height": "405f76db6db6db70"
+      },
+      {
+       "i": 3,
+       "x": "40649d5555555553",
+       "y": "0000000000000000",
+       "width": "405b7c71c71c71c6",
+       "height": "405f76db6db6db70"
+      },
+      {
+       "i": 4,
+       "x": "40712dc71c71c71b",
+       "y": "0000000000000000",
+       "width": "40612dc71c71c71c",
+       "height": "405f76db6db6db70"
+      },
+      {
+       "i": 5,
+       "x": "4079c4aaaaaaaaa9",
+       "y": "0000000000000000",
+       "width": "40549d555555555c",
+       "height": "405f76db6db6db70"
+      }
+     ],
+     "crumbs": [
+      [
+       [
+        "407e420000000000",
+        "4072924924924925"
+       ],
+       [
+        "407fd20000000000",
+        "4072924924924925"
+       ],
+       [
+        "407fd20000000000",
+        "4073f24924924925"
+       ],
+       [
+        "407e420000000000",
+        "4073f24924924925"
+       ]
+      ]
+     ]
+    },
+    {
+     "seriesIndex": 1,
+     "type": "treemap",
+     "boxed": true,
+     "ref": {
+      "x": "4073680000000000",
+      "y": "4083140000000000",
+      "width": "4056400000000000",
+      "height": "4051400000000000"
+     },
+     "layoutInfo": {
+      "x": "4074a80000000000",
+      "y": "4083ac0000000000",
+      "width": "4048800000000000",
+      "height": "403f000000000000"
+     },
+     "nodes": [
+      {
+       "i": 0,
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "width": "4048800000000000",
+       "height": "403f000000000000"
+      },
+      {
+       "i": 1,
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "width": "403b38e38e38e38f",
+       "height": "403f000000000000"
+      },
+      {
+       "i": 2,
+       "x": "0000000000000000",
+       "y": "0000000000000000",
+       "width": "4030555555555556",
+       "height": "403f000000000000"
+      },
+      {
+       "i": 3,
+       "x": "4030555555555556",
+       "y": "0000000000000000",
+       "width": "4025c71c71c71c72",
+       "height": "403f000000000000"
+      },
+      {
+       "i": 4,
+       "x": "403b38e38e38e38f",
+       "y": "0000000000000000",
+       "width": "4035c71c71c71c71",
+       "height": "4033600000000001"
+      },
+      {
+       "i": 5,
+       "x": "403b38e38e38e38f",
+       "y": "4033600000000001",
+       "width": "4035c71c71c71c71",
+       "height": "40273ffffffffffe"
+      }
+     ],
+     "crumbs": []
+    }
+   ]
+  },
+  {
+   "id": "graph-box",
+   "group": "series",
+   "note": "graphs with usage 'box': layout none in a cell, circular over a range, none in a calendar day",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     }
+    },
+    "calendar": {
+     "range": "2017-02",
+     "cellSize": [
+      90,
+      70
+     ],
+     "left": 40,
+     "top": 330
+    },
+    "series": [
+     {
+      "type": "graph",
+      "coordinateSystem": "matrix",
+      "coordinateSystemUsage": "box",
+      "coord": [
+       "a",
+       "q"
+      ],
+      "data": [
+       {
+        "name": "A",
+        "x": 0,
+        "y": 0
+       },
+       {
+        "name": "B",
+        "x": 10,
+        "y": 5
+       },
+       {
+        "name": "C",
+        "x": 4,
+        "y": 12
+       }
+      ],
+      "links": [
+       {
+        "source": "A",
+        "target": "B"
+       },
+       {
+        "source": "B",
+        "target": "C"
+       }
+      ]
+     },
+     {
+      "type": "graph",
+      "coordinateSystem": "matrix",
+      "coordinateSystemUsage": "box",
+      "coord": [
+       [
+        "b",
+        "c"
+       ],
+       [
+        "p",
+        "q"
+       ]
+      ],
+      "layout": "circular",
+      "data": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       },
+       {
+        "name": "C"
+       }
+      ],
+      "links": [
+       {
+        "source": "A",
+        "target": "B"
+       },
+       {
+        "source": "B",
+        "target": "C"
+       }
+      ]
+     },
+     {
+      "type": "graph",
+      "coordinateSystem": "calendar",
+      "coordinateSystemUsage": "box",
+      "coord": "2017-02-20",
+      "data": [
+       {
+        "name": "A",
+        "x": 0,
+        "y": 0
+       },
+       {
+        "name": "B",
+        "x": 10,
+        "y": 5
+       },
+       {
+        "name": "C",
+        "x": 4,
+        "y": 12
+       }
+      ],
+      "links": [
+       {
+        "source": "A",
+        "target": "B"
+       },
+       {
+        "source": "B",
+        "target": "C"
+       }
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4049800000000000",
+      "y": "4040800000000000",
+      "width": "4086480000000000",
+      "height": "4080780000000000"
+     }
+    }
+   ],
+   "grids": [],
+   "polars": [],
+   "calls": [],
+   "titles": [],
+   "legends": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "graph",
+     "boxed": true,
+     "ref": {
+      "x": "406ca80000000000",
+      "y": "4066f24924924925",
+      "width": "4066480000000000",
+      "height": "4052d24924924926"
+     },
+     "view": "view",
+     "viewRect": {
+      "x": "40725479e79e79e8",
+      "y": "4067e33333333334",
+      "width": "4049186186186189",
+      "height": "404e1d41d41d41d7"
+     },
+     "nodes": [
+      {
+       "i": 0,
+       "x": "40725479e79e79e8",
+       "y": "4067e33333333334"
+      },
+      {
+       "i": 1,
+       "x": "4075778618618619",
+       "y": "406b063f63f63f65"
+      },
+      {
+       "i": 2,
+       "x": "407395b1fb1fb1fc",
+       "y": "406f6a83a83a83aa"
+      }
+     ]
+    },
+    {
+     "seriesIndex": 1,
+     "type": "graph",
+     "boxed": true,
+     "ref": {
+      "x": "4079780000000000",
+      "y": "405b124924924925",
+      "width": "4076480000000000",
+      "height": "4062d24924924926"
+     },
+     "view": "view",
+     "viewRect": {
+      "x": "4079780000000000",
+      "y": "405ed5f15f15f160",
+      "width": "4076480000000000",
+      "height": "405e1d41d41d41d7"
+     },
+     "nodes": [
+      {
+       "i": 0,
+       "x": "40833eea0ea0ea0f",
+       "y": "406d77638b769a46"
+      },
+      {
+       "i": 1,
+       "x": "40806c2be2be2be2",
+       "y": "4066f24924924926"
+      },
+      {
+       "i": 2,
+       "x": "40833eea0ea0ea0e",
+       "y": "40606d2ebdadf804"
+      }
+     ]
+    },
+    {
+     "seriesIndex": 2,
+     "type": "graph",
+     "boxed": true,
+     "ref": {
+      "x": "4073680000000000",
+      "y": "4079080000000000",
+      "width": "4056400000000000",
+      "height": "4051400000000000"
+     },
+     "view": "view",
+     "viewRect": {
+      "x": "4074c00000000000",
+      "y": "4079766666666666",
+      "width": "4047000000000001",
+      "height": "404b99999999999a"
+     },
+     "nodes": [
+      {
+       "i": 0,
+       "x": "4074c00000000000",
+       "y": "4079766666666666"
+      },
+      {
+       "i": 1,
+       "x": "4077a00000000000",
+       "y": "407ae66666666666"
+      },
+      {
+       "i": 2,
+       "x": "4075e66666666666",
+       "y": "407ce99999999999"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "chord-cells",
+   "group": "series",
+   "note": "chords: usage 'box' in a cell, on a calendar day, and with no usage (a series' default 'data': the canvas)",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     }
+    },
+    "calendar": {
+     "range": "2017-02",
+     "cellSize": [
+      90,
+      70
+     ],
+     "left": 40,
+     "top": 330
+    },
+    "series": [
+     {
+      "type": "chord",
+      "coordinateSystem": "matrix",
+      "coordinateSystemUsage": "box",
+      "coord": [
+       [
+        "a",
+        "b"
+       ],
+       [
+        "p",
+        "q"
+       ]
+      ],
+      "data": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       },
+       {
+        "name": "C"
+       }
+      ],
+      "links": [
+       {
+        "source": "A",
+        "target": "B",
+        "value": 3
+       },
+       {
+        "source": "B",
+        "target": "C",
+        "value": 2
+       },
+       {
+        "source": "C",
+        "target": "A",
+        "value": 4
+       }
+      ]
+     },
+     {
+      "type": "chord",
+      "coordinateSystem": "calendar",
+      "coordinateSystemUsage": "box",
+      "coord": "2017-02-09",
+      "radius": [
+       "60%",
+       "70%"
+      ],
+      "data": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       },
+       {
+        "name": "C"
+       }
+      ],
+      "links": [
+       {
+        "source": "A",
+        "target": "B",
+        "value": 3
+       },
+       {
+        "source": "B",
+        "target": "C",
+        "value": 2
+       },
+       {
+        "source": "C",
+        "target": "A",
+        "value": 4
+       }
+      ]
+     },
+     {
+      "type": "chord",
+      "coordinateSystem": "matrix",
+      "coord": [
+       "c",
+       "u"
+      ],
+      "radius": [
+       "20%",
+       "25%"
+      ],
+      "data": [
+       {
+        "name": "A"
+       },
+       {
+        "name": "B"
+       },
+       {
+        "name": "C"
+       }
+      ],
+      "links": [
+       {
+        "source": "A",
+        "target": "B",
+        "value": 3
+       },
+       {
+        "source": "B",
+        "target": "C",
+        "value": 2
+       },
+       {
+        "source": "C",
+        "target": "A",
+        "value": 4
+       }
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4049800000000000",
+      "y": "4040800000000000",
+      "width": "4086480000000000",
+      "height": "4080780000000000"
+     }
+    }
+   ],
+   "grids": [],
+   "polars": [],
+   "calls": [],
+   "titles": [],
+   "legends": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "chord",
+     "boxed": true,
+     "ref": {
+      "x": "406ca80000000000",
+      "y": "405b124924924925",
+      "width": "4076480000000000",
+      "height": "4062d24924924926"
+     },
+     "sectors": [
+      {
+       "i": 0,
+       "cx": "4079780000000000",
+       "cy": "4066f24924924926",
+       "r0": "404a59999999999b",
+       "r": "404e1d41d41d41d7"
+      },
+      {
+       "i": 1,
+       "cx": "4079780000000000",
+       "cy": "4066f24924924926",
+       "r0": "404a59999999999b",
+       "r": "404e1d41d41d41d7"
+      },
+      {
+       "i": 2,
+       "cx": "4079780000000000",
+       "cy": "4066f24924924926",
+       "r0": "404a59999999999b",
+       "r": "404e1d41d41d41d7"
+      }
+     ]
+    },
+    {
+     "seriesIndex": 1,
+     "type": "chord",
+     "boxed": true,
+     "ref": {
+      "x": "4060500000000000",
+      "y": "4083140000000000",
+      "width": "4056400000000000",
+      "height": "4051400000000000"
+     },
+     "sectors": [
+      {
+       "i": 0,
+       "cx": "4065e00000000000",
+       "cy": "4084280000000000",
+       "r0": "4034b33333333333",
+       "r": "4038266666666666"
+      },
+      {
+       "i": 1,
+       "cx": "4065e00000000000",
+       "cy": "4084280000000000",
+       "r0": "4034b33333333333",
+       "r": "4038266666666666"
+      },
+      {
+       "i": 2,
+       "cx": "4065e00000000000",
+       "cy": "4084280000000000",
+       "r0": "4034b33333333333",
+       "r": "4038266666666666"
+      }
+     ]
+    },
+    {
+     "seriesIndex": 2,
+     "type": "chord",
+     "boxed": false,
+     "ref": null,
+     "sectors": [
+      {
+       "i": 0,
+       "cx": "4079000000000000",
+       "cy": "4072c00000000000",
+       "r0": "404e000000000000",
+       "r": "4052c00000000000"
+      },
+      {
+       "i": 1,
+       "cx": "4079000000000000",
+       "cy": "4072c00000000000",
+       "r0": "404e000000000000",
+       "r": "4052c00000000000"
+      },
+      {
+       "i": 2,
+       "cx": "4079000000000000",
+       "cy": "4072c00000000000",
+       "r0": "404e000000000000",
+       "r": "4052c00000000000"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "canvas-types",
+   "group": "series",
+   "note": "a gauge (no usage and 'box') and a sunburst ('box') naming a matrix cell: their layouts read the canvas",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "gauge",
+      "coordinateSystem": "matrix",
+      "coord": [
+       "a",
+       "p"
+      ],
+      "radius": "30%",
+      "center": [
+       "25%",
+       "50%"
+      ],
+      "progress": {
+       "show": true
+      },
+      "data": [
+       {
+        "value": 40
+       }
+      ]
+     },
+     {
+      "type": "gauge",
+      "coordinateSystem": "matrix",
+      "coordinateSystemUsage": "box",
+      "coord": [
+       "b",
+       "p"
+      ],
+      "radius": "30%",
+      "center": [
+       "75%",
+       "50%"
+      ],
+      "progress": {
+       "show": true
+      },
+      "data": [
+       {
+        "value": 70
+       }
+      ]
+     },
+     {
+      "type": "sunburst",
+      "coordinateSystem": "matrix",
+      "coordinateSystemUsage": "box",
+      "coord": [
+       "c",
+       "p"
+      ],
+      "radius": [
+       0,
+       "20%"
+      ],
+      "data": [
+       {
+        "name": "x",
+        "value": 4,
+        "children": [
+         {
+          "name": "y",
+          "value": 2
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4049800000000000",
+      "y": "4040800000000000",
+      "width": "4086480000000000",
+      "height": "4080780000000000"
+     }
+    }
+   ],
+   "grids": [],
+   "polars": [],
+   "calls": [],
+   "titles": [],
+   "legends": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "gauge",
+     "boxed": false,
+     "ref": null,
+     "centre": [
+      "4069000000000000",
+      "4072c00000000000"
+     ]
+    },
+    {
+     "seriesIndex": 1,
+     "type": "gauge",
+     "boxed": true,
+     "ref": {
+      "x": "4079780000000000",
+      "y": "405b124924924925",
+      "width": "4066480000000000",
+      "height": "4052d24924924925"
+     },
+     "centre": [
+      "4082c00000000000",
+      "4072c00000000000"
+     ]
+    },
+    {
+     "seriesIndex": 2,
+     "type": "sunburst",
+     "boxed": true,
+     "ref": {
+      "x": "40824e0000000000",
+      "y": "405b124924924925",
+      "width": "4066480000000000",
+      "height": "4052d24924924925"
+     },
+     "sectors": [
+      {
+       "i": 1,
+       "cx": "4079000000000000",
+       "cy": "4072c00000000000",
+       "r0": "0000000000000000",
+       "r": "403e000000000000"
+      },
+      {
+       "i": 2,
+       "cx": "4079000000000000",
+       "cy": "4072c00000000000",
+       "r0": "403e000000000000",
+       "r": "404e000000000000"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "gallery-matrix-stock",
+   "group": "gallery",
+   "note": "the gallery: five grids (time axes with breaks) and four titles in merged cells",
+   "gallery": "matrix-stock",
+   "option": null,
+   "fails": [],
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4024000000000000",
+      "y": "4024000000000000",
+      "width": "4088600000000000",
+      "height": "4082200000000000"
+     }
+    }
+   ],
+   "grids": [
+    {
+     "index": 0,
+     "boxed": true,
+     "ref": {
+      "x": "4024000000000000",
+      "y": "4024000000000000",
+      "width": "4083800000000000",
+      "height": "40782aaaaaaaaaab"
+     },
+     "rect": {
+      "x": "4024000000000000",
+      "y": "4024000000000000",
+      "width": "4083800000000000",
+      "height": "40782aaaaaaaaaab"
+     }
+    },
+    {
+     "index": 1,
+     "boxed": true,
+     "ref": {
+      "x": "4024000000000000",
+      "y": "407ed55555555556",
+      "width": "4083800000000000",
+      "height": "40582aaaaaaaaaa8"
+     },
+     "rect": {
+      "x": "4024000000000000",
+      "y": "40800aaaaaaaaaab",
+      "width": "4083800000000000",
+      "height": "40532aaaaaaaaaa8"
+     }
+    },
+    {
+     "index": 2,
+     "boxed": true,
+     "ref": {
+      "x": "4024000000000000",
+      "y": "4078caaaaaaaaaab",
+      "width": "4083800000000000",
+      "height": "40582aaaaaaaaaac"
+     },
+     "rect": {
+      "x": "4024000000000000",
+      "y": "407a0aaaaaaaaaab",
+      "width": "4083800000000000",
+      "height": "40532aaaaaaaaaac"
+     }
+    },
+    {
+     "index": 3,
+     "boxed": true,
+     "ref": {
+      "x": "4083d00000000000",
+      "y": "4024000000000000",
+      "width": "4063800000000000",
+      "height": "40782aaaaaaaaaab"
+     },
+     "rect": {
+      "x": "4083e00000000000",
+      "y": "4039000000000000",
+      "width": "4063000000000000",
+      "height": "40771aaaaaaaaaab"
+     }
+    },
+    {
+     "index": 4,
+     "boxed": true,
+     "ref": {
+      "x": "4083d00000000000",
+      "y": "4078caaaaaaaaaab",
+      "width": "4063800000000000",
+      "height": "40682aaaaaaaaaaa"
+     },
+     "rect": {
+      "x": "4083d00000000000",
+      "y": "4079baaaaaaaaaab",
+      "width": "4063800000000000",
+      "height": "40664aaaaaaaaaaa"
+     }
+    }
+   ],
+   "polars": [],
+   "calls": [
+    {
+     "finder": {
+      "gridIndex": 0
+     },
+     "value": [
+      1760578200000,
+      50.27172021701132
+     ],
+     "ret": [
+      "4024000000000000",
+      "4066ae3b79f1e6c7"
+     ]
+    },
+    {
+     "finder": {
+      "gridIndex": 1
+     },
+     "value": [
+      1760578260000,
+      714.5643377347881
+     ],
+     "ret": [
+      "402bcccccccccccd",
+      "40814bd294ba47f4"
+     ]
+    },
+    {
+     "finder": {
+      "gridIndex": 2
+     },
+     "value": [
+      1760580240000,
+      -0.001119309246099931
+     ],
+     "ret": [
+      "402d0b21642c8590",
+      "407ced69a70ecefe"
+     ]
+    },
+    {
+     "finder": {
+      "gridIndex": 3
+     },
+     "value": [
+      43,
+      0
+     ],
+     "ret": [
+      "4084fc2c8590b216",
+      "407782eeeeeeeeef"
+     ]
+    },
+    {
+     "finder": {
+      "gridIndex": 4
+     },
+     "value": [
+      3,
+      10178
+     ],
+     "ret": [
+      "4084300000000000",
+      "407a6e97a8150d72"
+     ]
+    }
+   ],
+   "titles": [
+    {
+     "index": 0,
+     "boxed": true,
+     "ref": {
+      "x": "4024000000000000",
+      "y": "407ed55555555556",
+      "width": "4083800000000000",
+      "height": "40582aaaaaaaaaa8"
+     },
+     "shown": true,
+     "group": [
+      "4028000000000000",
+      "407ef55555555556"
+     ],
+     "bg": {
+      "x": "4028000000000000",
+      "y": "407ef55555555556",
+      "width": "4044666666666667",
+      "height": "4036000000000000"
+     },
+     "align": "left",
+     "verticalAlign": "top"
+    },
+    {
+     "index": 1,
+     "boxed": true,
+     "ref": {
+      "x": "4024000000000000",
+      "y": "4078caaaaaaaaaab",
+      "width": "4083800000000000",
+      "height": "40582aaaaaaaaaac"
+     },
+     "shown": true,
+     "group": [
+      "4028000000000000",
+      "4078eaaaaaaaaaab"
+     ],
+     "bg": {
+      "x": "4028000000000000",
+      "y": "4078eaaaaaaaaaab",
+      "width": "4041a3d70a3d70a4",
+      "height": "4028000000000000"
+     },
+     "align": "left",
+     "verticalAlign": "top"
+    },
+    {
+     "index": 2,
+     "boxed": true,
+     "ref": {
+      "x": "4083d00000000000",
+      "y": "4024000000000000",
+      "width": "4063800000000000",
+      "height": "40782aaaaaaaaaab"
+     },
+     "shown": true,
+     "group": [
+      "4083e00000000000",
+      "4028000000000000"
+     ],
+     "bg": {
+      "x": "4083e00000000000",
+      "y": "4028000000000000",
+      "width": "404ec7ae147ae147",
+      "height": "4028000000000000"
+     },
+     "align": "left",
+     "verticalAlign": "top"
+    },
+    {
+     "index": 3,
+     "boxed": true,
+     "ref": {
+      "x": "4083d00000000000",
+      "y": "4078caaaaaaaaaab",
+      "width": "4063800000000000",
+      "height": "40682aaaaaaaaaaa"
+     },
+     "shown": true,
+     "group": [
+      "4083e00000000000",
+      "4078eaaaaaaaaaab"
+     ],
+     "bg": {
+      "x": "4083e00000000000",
+      "y": "4078eaaaaaaaaaab",
+      "width": "4040147ae147ae15",
+      "height": "4028000000000000"
+     },
+     "align": "left",
+     "verticalAlign": "top"
+    }
+   ],
+   "legends": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 1,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 2,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 3,
+     "type": "bar",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 4,
+     "type": "bar",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 5,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 6,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 7,
+     "type": "bar",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 8,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    },
+    {
+     "seriesIndex": 9,
+     "type": "line",
+     "boxed": false,
+     "ref": null
+    }
+   ]
+  }
+ ],
+ "guards": [
+  {
+   "name": "grid-matrix-default: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "grid-matrix-boxes: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "grid-matrix-merged: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "grid-calendar: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "grid-fallbacks: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "polar-matrix: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "polar-calendar: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "title-matrix: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "title-calendar: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "legend-matrix: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "legend-calendar: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "pie-cells: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "funnel-cells: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "sankey-cells: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "tree-cells: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "treemap-cells: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "graph-box: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "chord-cells: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "canvas-types: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "gallery-matrix-stock: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "every case draws something boxed",
+   "ok": true
+  },
+  {
+   "name": "a default grid shrinks inside its cell, not the canvas",
+   "ok": true
+  },
+  {
+   "name": "outerBoundsMode none keeps the cell's box exactly",
+   "ok": true
+  },
+  {
+   "name": "a merged block expands the grid's cell",
+   "ok": true
+  },
+  {
+   "name": "a grid in a calendar day takes the content rect (a half pixel in)",
+   "ok": true
+  },
+  {
+   "name": "fallbacks are on the canvas, matrixId finds the second matrix",
+   "ok": true
+  },
+  {
+   "name": "a polar's default centre is its cell's centre",
+   "ok": true
+  },
+  {
+   "name": "a polar's radius is of half its cell's shorter side",
+   "ok": true
+  },
+  {
+   "name": "a centred title is centred on its cell",
+   "ok": true
+  },
+  {
+   "name": "a title whose coord names no column is placed in its row at x nought (getLayoutRect: containerRect.x || 0, left || 0)",
+   "ok": true
+  },
+  {
+   "name": "a title in a calendar day is in its content rect (right 0 keeps the left align: `left || right` is 0)",
+   "ok": true
+  },
+  {
+   "name": "a legend wraps in its cell: its items stack",
+   "ok": true
+  },
+  {
+   "name": "a vertical legend sits on its cell's right edge",
+   "ok": true
+  },
+  {
+   "name": "a pie by center sits at the cell's centre",
+   "ok": true
+  },
+  {
+   "name": "a pie on a calendar day by center sits at the content rect's centre",
+   "ok": true
+  },
+  {
+   "name": "a pie whose matrix is not there is on the canvas",
+   "ok": true
+  },
+  {
+   "name": "a funnel in a calendar day is in it",
+   "ok": true
+  },
+  {
+   "name": "a sankey at zero edges fills its day",
+   "ok": true
+  },
+  {
+   "name": "a radial tree is in its cells",
+   "ok": true
+  },
+  {
+   "name": "the treemap's breadcrumb is in its cells",
+   "ok": true
+  },
+  {
+   "name": "a graph with usage box lays its view in the cell",
+   "ok": true
+  },
+  {
+   "name": "a chord with usage box is in its cell, with none on the canvas",
+   "ok": true
+  },
+  {
+   "name": "a gauge and a sunburst naming a cell are on the canvas",
+   "ok": true
+  },
+  {
+   "name": "the stock's five grids and four titles are in its cells",
+   "ok": true
+  }
+ ]
+}

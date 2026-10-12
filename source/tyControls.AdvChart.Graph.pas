@@ -530,7 +530,12 @@ function TyGraphViewRect(const ASpec: TTyGraphSpec; const AContainer: TTyRectF;
   AAspect: Double): TTyRectF;
 { THE SAME BOX, as a corner and a size -- the form the view is built from. }
 function TyGraphViewXYWH(const ASpec: TTyGraphSpec; const AContainer: TTyRectF;
-  AAspect: Double): TTyXYWH;
+  AAspect: Double): TTyXYWH; overload;
+{ the same in x, y, width, height: createBoxLayoutReference's refContainer
+  -- the canvas, or the matrix cell or calendar day a graph with
+  coordinateSystemUsage 'box' names with `coord` [Batch 151] }
+function TyGraphViewXYWH(const ASpec: TTyGraphSpec; const AContainer: TTyXYWH;
+  AAspect: Double): TTyXYWH; overload;
 
 { `layout: 'none'`: every node is where the author put it, and a node the author
   did not place has no position at all. }
@@ -903,7 +908,12 @@ function TyGraphSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
 function TyGraphSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
   AStore: TTyDataStore; const AContainer: TTyRectF;
   var AForce: TTyGraphForceState;
-  const ARoam: TTyGraphRoamState): TTyGraphSolved;
+  const ARoam: TTyGraphRoamState): TTyGraphSolved; overload;
+{ [Batch 151] the view laid out in x, y, width, height (the refContainer) }
+function TyGraphSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
+  AStore: TTyDataStore; const AContainer: TTyXYWH;
+  var AForce: TTyGraphForceState;
+  const ARoam: TTyGraphRoamState): TTyGraphSolved; overload;
 
 { THE SAME PASS FOR A GRAPH ON AXES, and most of it is not there. Upstream
   lays such a graph out in one place for every coordinate system that is not
@@ -3220,15 +3230,24 @@ end;
 
 function TyGraphViewXYWH(const ASpec: TTyGraphSpec; const AContainer: TTyRectF;
   AAspect: Double): TTyXYWH;
+begin
+  Result := TyXYWHOfRect(TyInvalidRectF);
+  if not TyRectFIsValid(AContainer) then Exit;
+  Result := TyGraphViewXYWH(ASpec, TyXYWHOfRect(AContainer), AAspect);
+end;
+
+function TyGraphViewXYWH(const ASpec: TTyGraphSpec; const AContainer: TTyXYWH;
+  AAspect: Double): TTyXYWH;
 var
   cw, ch, w, h, actual: Double;
   box, inner: TGraphBoxIn;
   wide, narrow, cover: Boolean;
 begin
   Result := TyXYWHOfRect(TyInvalidRectF);
-  if not TyRectFIsValid(AContainer) then Exit;
-  cw := AContainer.Right - AContainer.Left;
-  ch := AContainer.Bottom - AContainer.Top;
+  { no place is the canvas' edge (`x || 0` below); no size is nothing }
+  if not TyXYWHHasSize(AContainer) then Exit;
+  cw := AContainer.W;
+  ch := AContainer.H;
   if (cw <= 0) or (ch <= 0) then Exit;
 
   box.Left := ASpec.PosLeft;
@@ -3243,7 +3262,7 @@ begin
     placed -- so the aspect branch always runs. }
   box.HasAspect := True;
   box.Aspect := AAspect;
-  GraphLayoutRect(box, AContainer.Left, AContainer.Top, cw, ch, Result, w, h);
+  GraphLayoutRect(box, AContainer.X, AContainer.Y, cw, ch, Result, w, h);
   if ASpec.PreserveAspect = gpaOff then Exit;
 
   { applyPreserveAspect: the box is laid out again INSIDE ITSELF with one side
@@ -4799,6 +4818,18 @@ function TyGraphSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
   AStore: TTyDataStore; const AContainer: TTyRectF;
   var AForce: TTyGraphForceState;
   const ARoam: TTyGraphRoamState): TTyGraphSolved;
+var c: TTyXYWH;
+begin
+  { an invalid rect is an invalid view, as it always was }
+  if TyRectFIsValid(AContainer) then c := TyXYWHOfRect(AContainer)
+  else c := TyXYWH(NaN, NaN, NaN, NaN);
+  Result := TyGraphSolve(AOption, ASeriesIndex, AStore, c, AForce, ARoam);
+end;
+
+function TyGraphSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
+  AStore: TTyDataStore; const AContainer: TTyXYWH;
+  var AForce: TTyGraphForceState;
+  const ARoam: TTyGraphRoamState): TTyGraphSolved;
 var
   dataRect, viewRect: TTyRectF;
   viewBox: TTyXYWH;
@@ -4923,7 +4954,12 @@ begin
     else
     begin
       dataRect := viewRect;
-      Result.View := TTyGraphView.CreateXYWH(viewBox, viewBox);
+      { min / max from the view rect, the size max - min: (x + w) - x need
+        not round back to w where the box is fractional -- a matrix cell
+        [Batch 151] }
+      Result.View := TTyGraphView.CreateXYWH(TyXYWH(viewBox.X, viewBox.Y,
+        (viewBox.X + viewBox.W) - viewBox.X, (viewBox.Y + viewBox.H) - viewBox.Y),
+        viewBox);
     end;
     { THE ROAM, before any layout: the ring sizes its shares by the
       compensation scale the zoom makes. A roam's own centre and zoom beat

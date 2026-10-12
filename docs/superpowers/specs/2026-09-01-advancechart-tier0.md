@@ -7949,7 +7949,7 @@ M1–M4 完成:markPoint、markLine、markArea 的模型、变换、布局和画
 ### 做法
 
 - 关系图:`TyGraphSolveAtPoints`——节点放在调用方给的点上(按原始下标,NaN 即不放),边照非 view 坐标系的 simpleLayoutEdge;控件的 `CalendarGraphPoints` 照上游的维度猜测和放置规则算出每个节点的点。
-- 饼图:`SolveCalendars` 挪到 `SolvePies` 之前;日历上的饼走 `CalendarPieLayout`,容器是内容区,来自 `center` 时覆盖圆心(连同每个扇区的圆心);没有位置的格子让整个饼无效,不画。日历系列的 time/value 存储不给饼(饼用自己的值列)。
+- **[第 151 批：`CalendarPieLayout` 并进 `SeriesBoxRef`（与 matrix 一条路，容器按 x / y / 宽 / 高，圆心是 `x + width / 2`）；日历与 matrix 挪进 `Rebuild`；写 `'data'` 的饼照上游画在画布上，见 §190。]** 饼图:`SolveCalendars` 挪到 `SolvePies` 之前;日历上的饼走 `CalendarPieLayout`,容器是内容区,来自 `center` 时覆盖圆心(连同每个扇区的圆心);没有位置的格子让整个饼无效,不画。日历系列的 time/value 存储不给饼(饼用自己的值列)。
 
 ### 基准
 
@@ -10474,7 +10474,7 @@ B4 在真 dist 上探针确认：`LegendView.renderInner` 对既不是系列名�
 - **`center` 不是数组**时上游按串的字符取下标；端口当作没有中心（NaN）。
 - **subPixelOptimize 的线宽**取选项的 `lineStyle.width`（缺省 1，按 PPI 换算），绘制用主题的线宽；主题线宽不是 1 时吸附和描边差半个像素。
 - **角度轴的类目间隔**按 CSS px 量字高（屏幕 PPI 不是 96 时除回去），和上游一致；7 也是 CSS px。
-- **[第 147 批：饼与漏斗按 `coord`（饼还有 `center`）摆进 matrix 的格子了；组件与其余系列进格子仍是 D13，见 §186。]** **[第 145 批：matrix 坐标系有了（`DataToLayout` 给格子的矩形），box 用法仍在 D13，见 §184。]** **`coordinateSystemUsage: 'box'`**（polar 放在 calendar / matrix 的格子里）、`dataZoom` 控制极坐标轴是以后的事（后者是 C4）。**[第 113 批：dataZoom 控制极坐标轴做了（`radiusAxisIndex` / `angleAxisIndex`、自动目标、过滤、slider 的位置）；在 polar 上漫游没有，见 §148。]**
+- **[第 151 批：polar 经 `coordinateSystem` + `coord` 摆进 matrix / 日历的格子了（`resizePolar` 以格子为参照）；dataZoom 与漫游在格子里仍是 BX2，见 §190。]** **[第 147 批：饼与漏斗按 `coord`（饼还有 `center`）摆进 matrix 的格子了；组件与其余系列进格子仍是 D13，见 §186。]** **[第 145 批：matrix 坐标系有了（`DataToLayout` 给格子的矩形），box 用法仍在 D13，见 §184。]** **`coordinateSystemUsage: 'box'`**（polar 放在 calendar / matrix 的格子里）、`dataZoom` 控制极坐标轴是以后的事（后者是 C4）。**[第 113 批：dataZoom 控制极坐标轴做了（`radiusAxisIndex` / `angleAxisIndex`、自动目标、过滤、slider 的位置）；在 polar 上漫游没有，见 §148。]**
 
 ### 落地
 
@@ -13749,7 +13749,7 @@ GTK2 / Qt 上再跑 3、4、8：布局对齐、`TextBetweenPoints` 的撤销、C
 - **MX1（本批）**：模型（缺省、盒子在 init 时的 `mergeLayoutParam`、x / y 维模型不挂父模型）；两棵表头树（`data` 的遍历与 span、叶子在前的序号、重名与 null 的改名、`length`、没有 data 时从系列收集）；布局（单元：叶子与对面树的层，`size` / `levelSize` / `levels[i].levelSize` 的 px 与百分比、`confineSize`、平分剩余、最后一个单元贴到远端，全部指定且有剩余时不贴；非叶子的 span 矩形）；**单值定位**（一个维上一个值：叶子、非叶子、对面树的负数层定位、四舍五入）经 `DataToLayout` / `DataToPoint`；视图（表头格、正文格、角落格、背景与外框、两条分隔线、z2、亚像素、格子标签的溢出区与裁剪、字符串 formatter）；matrix 上的 heatmap 与 scatter / effectScatter（`matrixIndex` / `matrixId` 绑定，x / y 两列是序数列、借表头树的类目表）。
 - **MX2**：完整的定位代数——范围（`[[a, b], y]`、非叶子与范围混写、`[x1, x2, x3]` 取两端）、`clamp`（`MatrixClampOption` 的 none / all / body / corner 与「null 表示整行整列」）、`pointToData` 与 `convertFromPixel`、`convertToPixel` / `convertToLayout` / `containPixel` 的 finder；matrix 上的其余系列（custom 经 `prepareCustom` 的 `api.coord` / `api.layout`，graph 的 `COORD_SYS_USAGE_KIND_DATA`，pie / funnel 等默认 box 用法摆进一格）；交互（`triggerEvent` 的 eventData、格子的 tooltip、`silent` 的缺省规则、`cursor`），matrix 系列的悬停与提示框，标签的 `rotate`、rich 文本的溢出区。
 - **MX3**：`body.data` / `corner.data`（按 `coord` 定位的格子选项、`coordClamp`、格子里的 `value` 文字、样式的先后、稀疏的格子表）与 `mergeCells`（`resolveXYLocatorRangeByCellMerge` 的并集迭代、`spanRect`、`dataToLayout` 缺省 `ignoreMergeCells: false` 的扩张），正文格的 special z2，标签的函数 formatter，格子的 decal 与渐变，选项合并时 matrix 盒子的写回；画廊的 `matrix-stock` / `matrix-mini-bar-*`（正文文字与合并格）。
-- **D13** 在这之上：grid / geo / legend / title 等经 `coordinateSystem: 'matrix'` + `coord` 摆进格子，走契约 ① 已有的 `TyCoordCellContainer`（`ITyBoxContainer` 由宿主坐标系的 `DataToLayout` 给出）。
+- **[第 151 批：grid、polar、title、legend 进格子做了——容器按 x / y / 宽 / 高给出（`ContainerXYWH`、`TyXYWHContainer`），不是 `TyCoordCellContainer` 的右减左，见 §190；其余组件与 geo 是 BX2。]** **D13** 在这之上：grid / geo / legend / title 等经 `coordinateSystem: 'matrix'` + `coord` 摆进格子，走契约 ① 已有的 `TyCoordCellContainer`（`ITyBoxContainer` 由宿主坐标系的 `DataToLayout` 给出）。
 
 ### 上游的做法
 
@@ -13835,7 +13835,7 @@ GTK2 / Qt 上再跑 3、4、8：布局对齐、`TextBetweenPoints` 的撤销、C
 - **clamp**（`MatrixClampOption`：0 none、1 all、2 body、3 corner；判的是 `!!clamp` 与 `=== 2` / `=== 3`，所以 `true`、`'body'` 这类真值都是 all）：有 clamp 时 NaN 的一端换成整行整列——下界 `−对面树的层数`（没有层时是 `−0`）、上界 `本树叶子数 − 1`，body 把下界抬到 `max(0, 下界)`、corner 把上界压到 `min(−1, 上界)`，上界小于下界时两个都是 NaN；然后两端都夹到这个区间。null 与找不到的名字因此在 clamp 下表示「这一整行」。
 - **pointToData**：每个方向单独判区域——正文的第一个叶子、最后一个叶子、对面树的最外层与贴着正文的那一层（对面树隐藏时没有这一层）定出 `pxMin`、`pxLoc0`、`pxMax`；不 clamp 时越界就是 outside，clamp 时夹到边上；body / corner 只夹到那一区。然后：一个方向在正文、另一个在表头时，按两个坐标找表头格（父格子也找得到），答**它的序号**和它在对面方向的层；否则各自在叶子或层里找，答定位器（正文 `0..`、表头 `−1, −2…`）。边界都含。
 - **换算**：坐标系管理器的次序是普通的那张表（grid、radar、graph 的 view、parallel、polar、singleAxis）再 `nonSeriesBox` 那张（calendar、matrix）。matrix 的 `getCoordSys` 先看 finder 的 matrix 模型，再看系列的 `coordinateSystem`——只有按数据用 matrix 的系列（`decideCoordSysUsageKind` 是 data）才有；格子里的饼没有坐标系。`convertToPixel` 是 `dataToPoint(value, opt)`（值不是数组时是 `[NaN, NaN]`，不是「答不出」）、`convertToLayout` 是 `dataToLayout`、`convertFromPixel` 是 `pointToData`；`containPixel` 认 matrix 模型与 matrix 上的系列（矩形含边），格子里的饼走它自己视图的 `containPoint`。calendar 也有 `convertToLayout`：`dataToLayout` 的格子与内容区（clamp 缺省是 true）。
-- **matrix 上的系列**：`Matrix.create` 对**所有**组件做 `injectCoordSysByOption`。系列缺省 `coordinateSystemUsage` 是 `'data'`，pie、funnel（以及 sankey、tree、treemap）的缺省选项写的是 `'box'`；写了 null 时按系列的缺省 `'data'`，写了别的字是「都不是」。按数据用：heatmap、scatter、effectScatter（MX1）、custom（`prepareCustom`：`coordSys` 是 matrix 矩形，`api.coord` / `api.layout` 就是 `dataToPoint` / `dataToLayout`，第二个参数是 opt）、graph（`createSeriesData` 用 matrix 的维度，x / y 序数；`graphSimpleLayout` 只要 x、y、value 有一个是数就放在 `dataToPoint([x, y, value])`，边照 `simpleLayoutEdge`，曲度的控制点照算）。按盒子用：`createBoxLayoutReference` 用 `coord`（写了且不是 null），饼没有 `coord` 时用 `center` 当坐标（`getCoord2`）；拿到的 `dataToLayout(…).rect` 是参照矩形——饼的盒子与百分比半径在它里面算，圆心来自 `center` 时是这个矩形自己的中心；漏斗的 `getLayoutRect` 在它里面。matrix 的 `dataToLayout` 没有 `contentRect`，所以格子的边线也在饼的参照里。
+- **[第 151 批：sankey、tree、treemap 缺省按盒子用、chord 与 graph 写 `'box'` 时也进格子了；gauge 与 sunburst 照上游留在画布上，见 §190。]** **matrix 上的系列**：`Matrix.create` 对**所有**组件做 `injectCoordSysByOption`。系列缺省 `coordinateSystemUsage` 是 `'data'`，pie、funnel（以及 sankey、tree、treemap）的缺省选项写的是 `'box'`；写了 null 时按系列的缺省 `'data'`，写了别的字是「都不是」。按数据用：heatmap、scatter、effectScatter（MX1）、custom（`prepareCustom`：`coordSys` 是 matrix 矩形，`api.coord` / `api.layout` 就是 `dataToPoint` / `dataToLayout`，第二个参数是 opt）、graph（`createSeriesData` 用 matrix 的维度，x / y 序数；`graphSimpleLayout` 只要 x、y、value 有一个是数就放在 `dataToPoint([x, y, value])`，边照 `simpleLayoutEdge`，曲度的控制点照算）。按盒子用：`createBoxLayoutReference` 用 `coord`（写了且不是 null），饼没有 `coord` 时用 `center` 当坐标（`getCoord2`）；拿到的 `dataToLayout(…).rect` 是参照矩形——饼的盒子与百分比半径在它里面算，圆心来自 `center` 时是这个矩形自己的中心；漏斗的 `getLayoutRect` 在它里面。matrix 的 `dataToLayout` 没有 `contentRect`，所以格子的边线也在饼的参照里。
 - **格子的交互**（`createMatrixCell`）：格子矩形写了 `silent` 就照写的，没写时**没有填充就静默**（只剩边框能被命中，上游特意不要）；写成 `silent: false` 又没有填充时，`Path.contain` 只认描边——宽度至少 `strokeContainThreshold` 5，也就是离边框 2.5 px 以内。标签（`textContent`）写了 `silent` 就照写的，否则 `!(matrix.triggerEvent || matrix.tooltip.show)`，并且 `ignoreHostSilent`：宿主静默不影响它。`triggerEvent` 时格子矩形带 `eventData`：`componentType: 'matrix'`、`componentIndex` / `matrixIndex`、`targetType`（`'x'` / `'y'` / `'body'` / `'corner'`）、`name`（标签画出来的字，没有标签时 undefined）、`value`（格子的 textValue）、`coord`（定位器对）；悬停到标签上时 `findEventDispatcher` 顺着 `__hostTarget` 找到宿主的 `eventData`。
 - **[第 149 批：正文 / 角落写了 value 的格子也有 tooltip 与事件的 value，见 §188。]** **格子的 tooltip**：有 textValue 的格子（表头格；正文 / 角落的 `value` 是 MX3）都 `setTooltipConfig`：`itemName` 是**套过 formatter 的**字（标签显示不显示都一样），`formatterParams` 是 `componentType`、`name`、`matrixIndex`、`xyLocator`，`$vars` 是 `['name', 'xyLocator']`。`TooltipView` 对组件项不看 `trigger`：级联是 `matrix.tooltip`（字符串就是 formatter）、matrix 模型本身、`{formatter: content}`，最后是全局 tooltip——于是只要有 tooltip 组件，一个有填充、没写 `silent` 的表头格不写 `matrix.tooltip` 也会弹出它的名字。字符串 formatter 走 `formatTpl`：`{a}` / `{a0}` 是名字、`{b}` / `{b0}` 是定位器对（`String()` 成 `'x,y'`），各换第一次出现。
 - **系列在 matrix 上的悬停与提示框**：热力图的提示框是名字与值（value 是坐标维，`defaultedTooltip` 就是它）；散点的 value 不是坐标维、x / y 是序数，`defaultedLabel` 与 `defaultedTooltip` 都是空的，于是提示框把整条数据 `'a  p  3'` 两个空格连起来。系列的事件名是 x 的类目名（`itemName` 落在第一个序数维上）。
@@ -13899,7 +13899,7 @@ GTK2 / Qt 上再跑 3、4、8：布局对齐、`TextBetweenPoints` 的撤销、C
 ### 推迟与偏差
 
 - **[第 149 批：都做了（decal 上游不上格子），见 §188。]** **MX3**：正文 / 角落的 `data`（格子的 `value` 与文字、它们的 tooltip）、`mergeCells` 与 `dataToLayout` 的合并格扩张（`ignoreMergeCells`）、格子样式、decal、函数 formatter、画廊的 `matrix-stock` 与两个 `matrix-mini-bar`。
-- **D13**：组件（grid、geo、legend、title…）与 sankey / tree / treemap / gauge / sunburst / chord 摆进格子、graph 的 `coordinateSystemUsage: 'box'`（内部视图在格子里）；lines 在 matrix 上（上游按数据用 `dataToPoint`）也没有做，说坐标系还没做。
+- **[第 151 批：grid、polar、title、legend 与 sankey / tree / treemap / chord / graph 的 `'box'` 做了；gauge 与 sunburst 上游本来就不进格子；geo 与其余组件是 BX2，见 §190。]** **D13**：组件（grid、geo、legend、title…）与 sankey / tree / treemap / gauge / sunburst / chord 摆进格子、graph 的 `coordinateSystemUsage: 'box'`（内部视图在格子里）；lines 在 matrix 上（上游按数据用 `dataToPoint`）也没有做，说坐标系还没做。
 - **关系图在 matrix 上**：节点有一个坐标是 NaN 时上游照样算另一个（什么也画不出来），端口整个不放；上游的节点名（数组项没有名字时取 x 的类目）与提示框（x、y 两项连起来）端口没有——端口的关系图存储是它自己的那份，事件名为空、提示框只有值；收集模式的 matrix（没有 `data` 的树）不从关系图收类目。
 - **cursor**：格子的 `cursor` 不做——端口悬停任何元素都不改光标（系列项也一样），留给整个控件统一处理。
 - **格子的 tooltip**：formatter 的值不做 HTML 转义（端口画的是字，不是标记；上游 SSR 的 richText 模式会把 `&` 印成 `&amp;`）；`String.replace` 的 `$&` 一类替换模式不认。函数 formatter（`@name`）走端口的具名处理器，params 是 `componentType`、`componentIndex`、`name`、`Coord`。
@@ -13998,7 +13998,7 @@ GTK2 / Qt 上再跑 3、4、8：布局对齐、`TextBetweenPoints` 的撤销、C
 - **图案填充**：图片图案对象会交给元素的 `FillPattern`，没有对上游核过。
 - **副本选项**：上游是浅拷贝（与原项共享 itemStyle 等子对象），端口克隆原项再把 `coord` 置 null；读出来的值相同。
 - **cursor**：仍不做（见 §186）。
-- **D13**：`matrix-stock` 的 grid / title 与 `matrix-mini-bar-geo` 的 grid / geo 用 `coordinateSystem: 'matrix'` + `coord` 摆进格子，仍是 D13；这两个画廊文件现在 matrix 本身（正文的字、五块合并）与上游逐位相同，格子里的组件仍在画布上。
+- **[第 151 批：`matrix-stock` 的五个 grid 与四个 title 进格子了，逐位；`matrix-mini-bar-geo` 的 grid / geo 是 BX2，见 §190。]** **D13**：`matrix-stock` 的 grid / title 与 `matrix-mini-bar-geo` 的 grid / geo 用 `coordinateSystem: 'matrix'` + `coord` 摆进格子，仍是 D13；这两个画廊文件现在 matrix 本身（正文的字、五块合并）与上游逐位相同，格子里的组件仍在画布上。
 
 ### 落地
 
@@ -14009,3 +14009,104 @@ GTK2 / Qt 上再跑 3、4、8：布局对齐、`TextBetweenPoints` 的撤销、C
 - `tools/advchart-oracle/matrix3.js`、`tests/fixtures/advchart-matrix3.json`、`tests/test.advchart.matrix3.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.matrix.pas`（protected）。
 - 没有新单元、没有新的用户可见字符串、没有新的主题令牌。
 - §184、§186 在原处标注。
+
+## 190. Tier 3 第一百五十一批：box 用法（一）（D13 BX1，2026-10-13）
+
+路线图 D13：`coordinateSystemUsage: 'box'`，在 matrix / 日历的格子里嵌坐标系和组件，两批（BX1 / BX2），建在 D12 上。D12 之后格子里只摆得下饼和漏斗（§186），而且两条路各写各的：日历上的饼走 `CalendarPieLayout`（§106），matrix 上的饼和漏斗走 `MatrixBoxLayout`（§186）；组件一个都不认 `coordinateSystem` 与 `coord`——画廊 `matrix-stock` 的五个 grid 和四个 title 照旧摊在整张画布上（§188 记为 D13）；sankey、tree、treemap、chord、graph 写了 `coordinateSystem: 'matrix'` 就说「坐标系还没做」、什么都不画，gauge 和 sunburst 也一样，而上游把后两者照常画在画布上。契约 ① 的另一半——盒布局求解器收容器矩形提供者（§2）——一直在，可容器只给 `TTyRectF`，宽度是右减左，格子的边是小数时与上游的 `width` 差最后一位。这一批对着 6.1 的 `core/CoordinateSystem.ts`（`nonSeriesBoxCoordSysCreators` 与它先于普通坐标系创建的次序、`canBeNonSeriesBoxCoordSys`、`decideCoordSysUsageKind`、`injectCoordSysByOption`、`simpleCoordSysInjectionProvider`、`getCoordForCoordSysUsageKindBox`、`registerLayOutOnCoordSysUsage`）、`util/layout.ts`（`createBoxLayoutReference`、`getViewRectAndCenterForCircleLayout`、`getCircleLayout`、`getLayoutRect`、`positionElement`、`applyPreserveAspect`）、`coord/cartesian/Grid.ts`（`resize`、`prepareOuterBounds`、`layOutGridByOuterBounds`、`createOrUpdateAxesView` 的 `nameMarginLevel`）、`coord/polar/polarCreator.ts` 的 `resizePolar`、`component/title/install.ts`、`component/legend/LegendView.ts`（两次 `getLayoutRect`）、`chart/pie/PieSeries.ts`（缺省 `'box'` 与 `getCoord2`）、`chart/funnel/funnelLayout.ts`、`chart/sankey/sankeyLayout.ts`、`chart/tree/treeLayout.ts` 的 `commonLayout`、`chart/treemap/treemapLayout.ts`（盒子与 `prunning` 的画布）、`chart/treemap/Breadcrumb.ts`、`chart/treemap/TreemapView.ts` 的 `_renderBreadcrumb`、`chart/graph/createView.ts`、`chart/chord/chordLayout.ts`、`chart/gauge/GaugeView.ts` 与 `chart/sunburst/sunburstLayout.ts`（都只读画布）、`chart/helper/createGraphFromNodeEdge.ts`、`coord/calendar/Calendar.ts` 的 `create` / `dataToPoint` / `dataToLayout`、`coord/matrix/Matrix.ts` 的 `create`、`util/graphic.ts` 的 `expandOrShrinkRect` 逐行核过，在真 dist 上跑基准。§106、§146、§184、§186、§188 的相关处在原处标注。
+
+### BX1 / BX2 的切分
+
+先清点 6.1 里谁真的认 box 用法——它比路线图写的窄：
+
+- **宿主**：组件只能放进 `nonSeriesBoxCoordSysCreators` 那两个——matrix 与 calendar（`canBeNonSeriesBoxCoordSys`；源码里自己写着 FIXME 的硬编码）。系列的宿主还多两个：直角坐标与 geo 的 `dataToPoint`（`enableLayoutOnlyByCenter`，只有饼和 chord 用得上，圆心落在一个点上）。**calendar 不放进 matrix、matrix 也不放进 calendar**：两者自己的布局都是 `getLayoutRect` 在整张画布上，不问 `createBoxLayoutReference`。
+- **组件**：调 `createBoxLayoutReference` 的是 grid、polar、radar、singleAxis、parallel、geo、title、legend、visualMap、dataZoom（slider）、toolbox、timeline、thumbnail；graphic 不调。
+- **系列**：缺省写着 `'box'` 的是 pie、funnel、sankey、tree、treemap；chord 与 graph 要明写 `'box'`；map 走内部 geo（geo 那一条线）。**gauge 与 sunburst 根本不问**——它们的布局读 `api.getWidth()`，写什么 `coord` 都画在画布上。
+
+于是：
+
+- **BX1（本批）**：机制——`decideCoordSysUsageKind`（系列与组件两套缺省）、宿主按 `matrixIndex` / `matrixId`、`calendarIndex` / `calendarId` 解析（SINGLE_REFERRING，找不到就当没有宿主、留在画布上）、`getCoordForCoordSysUsageKindBox`（`coord`，饼再看 `center`）、宿主 `dataToLayout` 的 `contentRect || rect`；容器按 x / y / 宽 / 高给出；宿主在 grid 之前布局（上游的创建次序）。接线：grid（矩形、外边界、轴名的 margin level 都以格子为参照）、polar、title、legend；系列 pie、funnel（两条旧路收成一条，漏斗也能放进日历）、sankey、tree、treemap（连同面包屑）、graph（内部视图）、chord；gauge 与 sunburst 照上游留在画布上；画廊 `matrix-stock`。
+- **BX2**：其余组件（visualMap、dataZoom slider、toolbox、timeline、thumbnail、radar、singleAxis、parallel）；geo 进格子（geo 那一条线合回之后）与画廊 `matrix-mini-bar-geo`；系列以直角坐标 / geo 为宿主的 `dataToPoint` 圆心（`enableLayoutOnlyByCenter`）；交互——格子里的 grid / polar 的命中、轴指示器与提示框、格子里的 graph / tree / sankey / treemap 的漫游与命中、`dataZoom` 在格子里的 grid 上。
+
+### 上游的做法
+
+- **注入**：`CoordinateSystemManager.create` 先建 `nonSeriesBox` 那张表（calendar、matrix），再建普通的；`Calendar.create` / `Matrix.create` 各自对**所有**组件做 `injectCoordSysByOption`。`decideCoordSysUsageKind`：`coordinateSystem` 用 `getShallow`（不忽略父模型，所以类型自己的缺省也算），`coordinateSystemUsage` 用 `getShallow(…, true)`；没写或写了 null 时系列是 `'data'`、组件是 `'box'`；组件写 `'data'` 是「都不是」；`'box'` 对组件还要宿主是 matrix 或 calendar；别的字都是「都不是」。宿主由 `simpleCoordSysInjectionProvider` 按 SINGLE_REFERRING 找（都不写是第 0 个），找不到就不注入——组件、饼、sankey 都退回画布。按盒子用的模型记 `boxCoordinateSystem`，按数据用的才记 `coordinateSystem`：格子里的饼没有坐标系，`convertToPixel` 指它答不出。
+- **参照**：`createBoxLayoutReference` 取 `coord`（写了且不是 null），否则饼的 `getCoord2` 取 `center`（**不论写没写**：缺省的 `['50%', '50%']` 也被当成坐标，在 matrix 里找不到、在日历里是解析不出的日期），问宿主 `dataToLayout`（不带 clamp：日历自己缺省 clamp），`contentRect || rect` 就是 refContainer，`refPoint` 是它的 `x + width / 2`。matrix 的 `dataToLayout` 只有 rect（格子的边线也在参照里）、照合并格扩张；日历是一天的格子按半个线宽缩进的内容区。日历的 `dataToPoint` 先 `isArray(data) && (data = data[0])`；越界的日子 x、y 是 NaN、宽高照旧——**有大小、没位置**。
+- **getLayoutRect 遇到 NaN**：`(containerRect.x || 0)`、`left = left || 0`——一个没位置却有大小的容器把盒子放到画布左上；宽高是 NaN 时盒子的宽高也是 NaN。于是 title 的 `coord` 指到不存在的列时，标题落在它那一行、x 是 0 加对齐（可见）；日历越界那天的 treemap 照样画在画布左上角；polar 的 `cx = parsePercent(…) + refContainer.x` 没有 `|| 0`，NaN 的圆心什么都不画；grid 宽是 NaN 时也什么都不画。
+- **grid**（`Grid.resize`）：`getLayoutRect(boxLayoutParams, refContainer)` 是原始矩形；外边界 `getLayoutRect(outerBounds || {0,0,0,0}, refContainer)`——缺省就是整个格子；`nameMarginLevel` 比的是 `gridRect.width <= refContainer.width * 0.5`。这些都在 `create` 时算（`beforeDataProcessing`），所以采样、dataZoom 的窗口、柱子补的范围读到的轴像素长度已经是格子里的。
+- **polar**（`resizePolar`）：圆心是 `center` 对参照宽高的百分比加参照的 x / y，半径对参照短边的一半。
+- **title / legend**：title 的块量出来后 `getLayoutRect(…, refContainer, padding)`，自动对齐看 `left || right`（`right: 0` 时是 0，还是左对齐）；legend 两次 `getLayoutRect` 都在参照里——换行的宽度是格子的，块的位置也是。
+- **饼与 chord**（`getCircleLayout`）：viewRect 是 `getLayoutRect(boxParams, refContainer)`；圆心来自 `center` 当坐标时是 refPoint，否则 `parsePercent(center, viewRect.width) + viewRect.x`；半径对 `min(viewRect.width, viewRect.height) / 2`。chord 没有 `getCoord2`，它的组动画原点仍按画布（`ChordView` 的 `api.getWidth()`）。
+- **sankey / tree / treemap / funnel**：盒子 `getLayoutRect(boxParams, refContainer)`，节点相对盒子排。treemap 的裁剪（`prunning`）**仍是画布**：`(-layoutInfo.x, -layoutInfo.y, api.getWidth(), api.getHeight())`；面包屑的可用宽与位置（`positionElement`）在参照里，它指的节点仍是画布中心下的那个。
+- **graph**：`'box'` 时内部的 view 用 `createBoxLayoutReference` 求 viewRect（`getLayoutRect` 带 aspect，再 `applyPreserveAspect`）；节点都没位置时数据矩形取 viewRect 的 min / max，**宽是 `(x + w) - x`**——小数的格子里与 w 差最后一位，环形布局的圆心与半径跟着差。节点数据仍按 `createGraphFromNodeEdge`：`coordinateSystem` 是 matrix 时向 matrix 要维度——**matrix 不存在时 sankey、graph、chord 的 `setOption` 直接抛错**。
+- **gauge / sunburst**：布局只读画布；写了 `coordinateSystem: 'matrix'`（缺省 `'data'`）时 `seriesModel.coordinateSystem` 被设成 matrix，但没人用它——照常画在画布上。chord 不写用法也一样（`'data'`）。
+
+### port 以前
+
+- 盒子的容器只有 `TTyRectF`：`TySolveBox`、标题、图例、sankey、tree、treemap、graph、polar 都拿右减左当宽。
+- grid 的盒子在 `TyBuildGrids` 里按画布解，外边界和 margin level 读 `Build.Viewport`；polar 在 `TyBuildPolars` 里按画布。日历与 matrix 在 `Relayout` 里、grid 的布局之后才布局。
+- 系列绑定只让 pie / funnel 按盒子上 matrix（§186）；日历上的饼另有一条 `CalendarPieLayout`，饼以外的盒子类型在日历上一律拿到日历的 time / value 存储。
+
+### 做法
+
+- **`tyControls.AdvChart.Layout`**：`ITyBoxContainer.ContainerXYWH`（容器自己的 x / y / 宽 / 高），`TySolveBox` / `TySolveBoxXYWH` 改读它；新的 `TyXYWHContainer`；`TyGetLayoutRect` 翻转负尺寸前先挡 NaN（FPC 的 `<` 碰到 NaN 会报异常）；`TyBoxNowhere` / `TyBoxNowhereSize`（见下「没有位置的格子」）。
+- **`tyControls.AdvChart.Types`**：`TyXYWHIsValid`、`TyXYWHHasSize`（宽高是数且不为负——`getLayoutRect` 能在里面排的容器）。
+- **`tyControls.AdvChart.Series`**：`TyBoxUsageByDefault`（pie、funnel、sankey、tree、treemap）、`TyBoxLayoutType`（再加 chord、graph）、`TyCanvasOnHostType`、`TyComponentBoxSysOf`（组件的 `decideCoordSysUsageKind`）、导出 `TyMainIds` / `TyMainHoles`。绑定：matrix 上的盒子类型都记 `MatrixBox`；gauge、sunburst 以及 `'data'` 的 sankey / tree / treemap / chord 解析为画布；宿主找不到时盒子类型留在画布上；日历上按盒子用的系列记新的 `CalendarBoxIndex`，`CalendarIndex` 留 -1——它没有坐标系，按日历放点、换算、键名、存储的路都看不到它。
+- **`tyControls.AdvChart.Builder`**：`TTyGridBuild` 记下合并后的盒子与参照（`RefXYWH`、`Boxed`）；`TyPlaceGridIn` 用 `TyGetLayoutRect` 在参照里重解盒子、改笛卡尔的近似范围；外边界与轴名的 margin level 读格子的参照，x / y 是 NaN 时按 `|| 0`。
+- **`tyControls.AdvChart.Polar`**：`resizePolar` 从 `TyBuildPolars` 里拆成 `TyPolarResize`（画布上照旧调一次，逐位不变）。
+- **`tyControls.AdvChart.Title` / `Legend` / `Tree` / `Sankey` / `Treemap` / `Graph` / `Chord` / `Pie`**：各加一个按 x / y / 宽 / 高给容器的重载，`TTyRectF` 的旧入口转过去（右减左照旧算，画布上逐位不变）。title 只在宽或高为负时放弃——NaN 的容器照 `|| 0` 排；treemap 的盒子在参照里、裁剪在画布上，面包屑在参照里排、指的节点仍按画布中心；graph 没有节点位置时数据矩形的宽是 `(x + w) - x`；chord 的圆心与半径在参照里、原点仍按画布；饼新增 `TyPieLayoutInView`（圆心、半径对已解出的 viewRect 的宽高）。
+- **`tyControls.AdvanceChart`**：`CanvasXYWH`、`HostRefAt`（宿主的 `dataToLayout`：matrix 的 `TyMatrixLayoutJson` 不带 clamp，日历的 `DateLayoutXYWH` 的内容区，`coord` 是数组时取第一项）、`ComponentBoxRef`、`SeriesBoxRef`、`PlaceBoxedCoordSys`。`SolveCalendars` / `SolveMatrices` 从 `Relayout` 挪进 `Rebuild`——在 matrix 收集完类目之后、任何东西读轴的像素长度之前——紧跟着把格子里的 grid 与 polar 放好。title、legend 按 `ComponentBoxRef` 选容器；饼、漏斗（`CalendarPieLayout` 与 `MatrixBoxLayout` 并成 `SeriesBoxRef`）、sankey、tree、treemap、graph、chord 按 `SeriesBoxRef`；matrix 上按盒子用的系列不再拿 matrix 的三列存储。`TreeSolved`（给测试读）。
+- **没有位置的格子**：宽或高不是数（`coord` 指到不存在的列或行）时，sankey、tree、treemap、graph、chord 不画（与上游的 NaN 一样看不见）；只有 x / y 不是数（日历越界的日子）时照 `|| 0` 画在画布边上；grid 与 polar 放到画布外很远处一个普通大小的盒子里（`TyBoxNowhere`，−1e6，100 × 100）——有限的数，下游不碰 NaN（空盒子的轴长是 0，刻度是 NaN），而且看不见。
+- 没有新单元、没有新的用户可见字符串、没有新的主题令牌。
+
+### 基准
+
+`tools/advchart-oracle/box-usage.js`（新；真 dist，node SSR，`chart._ssr = false`；xorshift32；zrender 宽度表量字并逐字核对；两次生成逐字节一致，`process.exit()`）→ `tests/fixtures/advchart-box-usage.json`（约 90 KB）：
+
+- **20 例**，六组，matrix 用一个格子是小数的（713 / 4 宽、527 / 7 高）：
+  - **grid**（5）：三乘三格子上的缺省盒子（10% / 60 / 60）与外边界；四个 grid 各在一格：px / 百分比的边加 `outerBoundsMode: 'none'`、`containLabel`、缺省盒子带轴名、`outerBounds` 加定宽定高；合并格里的一格（扩张到整块）；日历的两天；退路——`'data'`、不存在的 `matrixIndex`、不收组件的 `coordinateSystem: 'polar'`、不认的用法字，以及按 `matrixId` 找第二个 matrix。
+  - **polar**（2）：缺省圆心与半径、百分比圆心与混合半径在一段范围上；日历的一天。
+  - **title**（2）：居中带副标题与背景、右下带 padding、范围上的百分比 left、缺省、`coord` 指不存在的列、两个退回画布的（不存在的 `matrixIndex`、`'data'`）；日历上居中与 `right: 0`。
+  - **legend**（2）：一格里横排换行、另一格里竖排靠右；日历的一天。
+  - **series**（8）：饼六个（`coord` 加百分比半径、`center` 当坐标、`coord` 加百分比圆心与环、日历上按 `coord` 与按 `center`、matrix 不存在）；漏斗两个（格子里定 left 与百分比宽、日历）；sankey 三个（范围上的缺省盒子、日历上零边距、日历不存在——matrix 不存在时上游抛错，不入例）；tree 两个（直角、径向）；treemap 两个（带面包屑、日历上不带）；graph 三个（`'box'`，格子里 layout none、范围上环形、日历上 none）；chord 三个（格子与日历上 `'box'`、不写用法）；gauge 两个与 sunburst 一个（写了格子，画在画布上）。
+  - **gallery**：`matrix-stock`（五个 grid 带断轴的时间轴、四个 title）。
+- 记录：每个 matrix 的矩形；每个 grid 的 refContainer 与最终矩形；23 次 `convertToPixel`；polar 的圆心与半径范围；title 的组位置、背景、对齐；legend 的组位置与每一项的全局位置与包围盒；系列——饼 / chord / sunburst 的扇区布局、漏斗四角、sankey / tree / treemap 的 `layoutInfo` 与节点（sankey 的 x / y / dx / dy、tree 的局部 x / y、treemap 的局部矩形）、treemap 面包屑每个多边形的全局点、graph 的 viewRect 与节点经 `dataToPoint` 的全局点、gauge 第一个扇形的圆心。17 个 matrix、20 个 grid（14 个在格子里）、3 个 polar、13 个 title、3 个 legend（14 项）、58 个系列。
+- **44 条守卫**全部成立：每例的转写（R1 每个按盒子用的模型的 ref 就是宿主对 `coord` 的 `dataToLayout`、R2 sankey / tree / treemap 的 `layoutInfo` 与 `outerBoundsMode: 'none'` 的 grid 就是 `getLayoutRect` 在 ref 里、R3 宿主什么都没给的模型与去掉 `coordinateSystem` 的同一张图逐项相同），与 24 条事实：缺省 grid 在格子里收缩、`'none'` 保留格子里的盒子、合并块扩张、日历内容区缩进半个像素、退路在画布上而 `matrixId` 找到第二个、polar 圆心与半径、居中的标题、指到不存在的列的标题落在它那一行的 x 0 附近、`right: 0` 仍左对齐、图例在格子里换行、竖排图例靠右、饼按 `center` 坐在格子中心（matrix 与日历）、matrix 不存在的饼在画布上、日历上的漏斗、零边距的 sankey 填满那一天、径向树、面包屑在格子里、graph 的视图在格子里、chord 的 `'box'` 与 `'data'`、gauge 与 sunburst 在画布上、stock 的五个 grid 与四个 title。
+
+### 测试
+
+`test.advchart.boxusage`（新，注册在 `tytests.lpr`）：
+
+- **`TAdvChartBoxUsageOracleTest`**（9 个；量字器是 SSR 表）：
+  - 六个逐位重放：grid（`Build.Grid(g)` 的 `Boxed`、`RefXYWH` 与 `PlotXYWH`）、换算（`ConvertToPixelData`）、polar（`PolarLayout` 的圆心与 `AxisExtent`）、title（`TitleLayoutOf` 的锚点、对齐、背景——中、下对齐时只比 x 与宽，同 `test.advchart.boxmerge`）、legend（每一项的 `IconBox` 左上逐位，包围盒左上逐位、宽高 1e-9——右、下是端口自己的和）、系列（饼与漏斗按画面元素，chord / sunburst / sankey / tree / treemap 按 `*Solved`，graph 按 `GraphView.DataToPoint` 与 `ViewXYWH`，gauge 按画面的扇形圆心）。
+  - `TestTheFallbacksAreOnTheCanvas`：绑定——格子上的 gauge、`'box'` 的 sunburst、不写用法的 chord、日历不存在的 sankey、matrix 不存在的饼都解析为画布；matrix 上的 sankey 是 `MatrixBox`；日历上 `'box'` 的 graph 只有 `CalendarBoxIndex`；`'box'` 的热力图不成立。
+  - `TestACoordNamingNoCellDoesNotRaise`：`coord` 指不到格子的 grid（matrix 与日历越界）、polar、legend、sankey、treemap、graph、chord、饼与 title 画两次（换一次尺寸）不抛；sankey、chord 不画；日历越界那天的 treemap 照上游画在 `{x: -1, y: -31, width: 21, height: 81}`；title 也排出来。
+  - `TestTheComponentUsageRule`：`TyComponentBoxSysOf` 的字面值（matrix、calendar、写 `'box'`、写 null、`'data'`、大写的 `'Box'`、polar、cartesian2d、没有、不是字符串、不是对象）。
+
+首跑：grid、换算、polar、系列的大部分**一次逐位通过**。不过的几处：（1）title 的字宽差得远——用例用了主题的缺省字号，端口的皮肤不是上游的 18px，基准给每个 title 写明 `fontSize`；（2）上游 `right: 0` 的标题是左对齐、缺省 `top` 是 15，基准的两条守卫写错了，改成上游的值；`coord` 指不到列的标题上游不是「没有位置」，而是按 `|| 0` 落在那一行——端口的 title 原来见 NaN 就放弃，改成照排；（3）环形 graph 一个节点的 y 差最后一位：数据矩形的宽上游是 `(x + w) - x`，端口直接用了 w；（4）gauge 的轴线扇形没有 datum，找不到——基准给 gauge 打开 `progress`，比进度扇形的圆心；（5）图例的组位置只在选择器 / 翻页那条路上记，普通图例比每一项的全局位置；（6）`coord` 指不到格子时 grid 的 NaN 一路传到 `TyOuterBoundsMargin` 报异常，日历越界那天「有大小、没位置」也要照 `|| 0`——于是有了 `TyXYWHHasSize` 与画布外的盒子；上游在越界那天把 treemap 画在左上，端口照样。为确认比较真的在比，临时改坏基准的 9 处（一个 grid 矩形、一次换算、polar 圆心、title 锚点、图例项、sankey 节点、面包屑的点、graph 节点、饼的半径），六个逐位测试各自如期变红，再还原（逐字节核对）。
+
+本批按规矩只跑了新套件和直接碰到的套件（全量与变异轮留到 D9–D14 里程碑末尾），全部通过：`TAdvChartBoxUsageOracleTest` 9，以及改动波及的 `TAdvChartLayoutTest` 9、`TAdvChartGridBoundsOracleTest` 3、`TAdvChartAxisNamesOracleTest` 17、`TAdvChartPieTest` 24、`TAdvChartPieLabelTest` 18、`TAdvChartPieAvoidTest` 5、`TAdvChartFunnelRuleTest` 18、`TAdvChartFunnelDrawTest` 5、`TAdvChartGaugeRuleTest` 31、`TAdvChartGaugeDrawTest` 8、`TAdvChartSankeyOracleTest` 2、`TAdvChartTreeOracleTest` 4、`TAdvChartTreeInteractOracleTest` 5、`TAdvChartTreemapOracleTest` 2、`TAdvChartSunburstOracleTest` 4、`TAdvChartSunburstTreemapInteractTest` 6、`TAdvChartChordTest` 9、`TAdvChartGraphRuleTest` 33、`TAdvChartGraphDrawTest` 4、`TAdvChartGraphForceTest` 13、`TAdvChartGraphForceDrawTest` 2、`TAdvChartGraphRoamTest` 5、`TAdvChartGraphFocusTest` 12、`TAdvChartGraphLegendTest` 8、`TAdvChartGraphCartesianTest` 5、`TAdvChartGraphSankeyInteractTest` 11、`TAdvChartTitleTest` 13、`TAdvChartLegendTest` 43、`TAdvChartLegendActTest` 8、`TAdvChartLegendScrollTest` 10、`TAdvChartBoxMergeOracleTest` 5、`TAdvChartOptionMergeTest` 15、`TAdvChartPolarAxesTest` 12、`TAdvChartPolarSeriesTest` 13、`TAdvChartMatrixOracleTest` 3、`TAdvChartMatrixChartTest` 8、`TAdvChartMatrix2AlgebraTest` 3、`TAdvChartMatrix2ViewTest` 3、`TAdvChartMatrix2ChartTest` 7、`TAdvChartMatrix3ViewTest` 6、`TAdvChartMatrix3AlgebraTest` 4、`TAdvChartMatrix3ChartTest` 4、`TAdvChartCalendarOracleTest` 4、`TAdvChartHeatmapCalendarOracleTest` 2、`TAdvChartSeriesCalendarOracleTest` 3、`TAdvChartCoordAffineOracleTest` 2、`TAdvChartCategoryMinMaxOracleTest` 4、`TAdvChartAxisBreaksOracleTest` 8、`TAdvChartDataZoomSliderOracleTest` 6、`TAdvChartDataZoomWindowOracleTest` 7、`TAdvChartSamplingOracleTest` 9、`TAdvChartConvertJitterTest` 10、`TAdvChartMarkPointOracleTest` 3、`TAdvChartExportLoadingTest` 15、`TAdvChartMediaTest` 10、`TAdvChartSeriesTest` 28、`TAdvanceChartTest` 60、`TAdvChartSingleRiverTest` 13、`TAdvChartParallelOracleTest` 6、`TAdvChartParallelTest` 8、`TAdvChartSunburstTreemapInteractOracleTest` 1、`TAdvChartGraphOracleTest` 1、`TAdvChartGraphRoamOracleTest` 1、`TAdvChartGraphFocusOracleTest` 1、`TAdvChartGraphLegendOracleTest` 1、`TAdvChartGraphCartesianOracleTest` 1、`TAdvChartGraphSankeyInteractOracleTest` 1、`TAdvChartCalendarChartTest` 1、`TAdvChartContainShapeOracleTest` 1、`TAdvChartGalleryTest` 1、`TAdvChartHostileOptionTest` 1。变异候选列在 `s190.md.candidates.md`（22 条，另记 3 处可能存活）。
+
+### 推迟与偏差
+
+- **BX2**：visualMap、dataZoom slider、toolbox、timeline、thumbnail、radar、singleAxis、parallel 进格子；geo 进格子与 `matrix-mini-bar-geo`；直角坐标 / geo 为宿主的饼与 chord 的圆心；格子里的命中、指针、提示框、漫游。
+- **没有位置的格子**：上游的 grid、polar 在 NaN 的矩形上布局，什么都画不出；端口把它们放到画布外很远处一个 100 × 100 的盒子里——看不见，但换算会答出一个画布外的点（上游答 NaN）。sankey、tree、treemap、graph、chord 在宽高是 NaN 的格子里不画（上游 NaN，同样看不见）；legend 在宽高是 NaN 的格子里不画（上游会排出一个 NaN 宽的图例，不比）。
+- **matrix 不存在的 sankey / graph / chord**：上游 `createGraphFromNodeEdge` 向不存在的 matrix 要维度，`setOption` 抛错、整张图不画；端口把 sankey 与 chord 画在画布上，graph 不画（它没有 view 也没有宿主）。
+- **按数据用的 sankey / tree / treemap / chord / gauge / sunburst**：上游把 matrix 记成它们的 `coordinateSystem`（没人用），`convertToPixel` 指它们会经 matrix 答出来；端口把它们解析成没有坐标系，答不出。饼与漏斗写 `'data'` 时仍按 §186 解析到 matrix。
+- **日历上写 `'data'` 的饼**：以前端口仍把它放进那一天（§106 的路不看用法），现在照上游画在画布上；日历上按盒子用的饼不再有 `CalendarIndex`，`convertToPixel` 指它答不出（上游同样没有坐标系）。
+- **`'box'` 的 graph 的节点数据**：上游 `'box'` 的 graph 仍按 matrix 的维度建节点数据（`createGraphFromNodeEdge` 只看 `coordinateSystem`），节点的 `value` 落在哪一维与画布上的 graph 不同；端口的 graph 存储照旧，没有核过，用例的节点没有 `value`。
+- **共用求解器**：`TySolveBox` / `TySolveBoxXYWH` 改读容器自己的宽高，但它的边仍是 `SolveAxis` 的算法（起点加偏移、终点减偏移），与 `getLayoutRect` 的 `width = containerWidth - right - left` 在小数容器上不一定逐位相同；这一批格子里的路都改走 `TyGetLayoutRect`，共用求解器仍只见画布。
+- **grid 的轴名 margin level** 按格子比（上游如此）；`containLabel` 的旧路没有参照，照旧。
+- **legend 的组位置**：普通图例（没有选择器、不翻页）端口不记组的位置，只记每一项；比的是项。
+
+### 落地
+
+- `source/tyControls.AdvChart.Layout.pas`：`ContainerXYWH`、`TyXYWHContainer`、求解器读容器的宽高、`TyGetLayoutRect` 挡 NaN、`TyBoxNowhere` / `TyBoxNowhereSize`。
+- `source/tyControls.AdvChart.Types.pas`：`TyXYWHIsValid`、`TyXYWHHasSize`。
+- `source/tyControls.AdvChart.Series.pas`：`CalendarBoxIndex`、`TyBoxUsageByDefault`、`TyBoxLayoutType`、`TyCanvasOnHostType`、`TyComponentBoxSysOf`、`TyMainIds` / `TyMainHoles`；matrix 与日历的绑定。
+- `source/tyControls.AdvChart.Builder.pas`：`RefXYWH` / `Boxed`、`TyPlaceGridIn`、外边界与轴名读参照。
+- `source/tyControls.AdvChart.Polar.pas`：`TyPolarResize`。
+- `source/tyControls.AdvChart.Title.pas`、`Legend.pas`、`Tree.pas`、`Sankey.pas`、`Treemap.pas`、`Graph.pas`、`Chord.pas`、`Pie.pas`：x / y / 宽 / 高的容器重载；treemap 的画布与参照分开，graph 的数据矩形，饼的 `TyPieLayoutInView`。
+- `source/tyControls.AdvanceChart.pas`：`CanvasXYWH`、`HostRefAt`、`ComponentBoxRef`、`SeriesBoxRef`、`PlaceBoxedCoordSys`、`TreeSolved`；日历与 matrix 挪进 `Rebuild`；title、legend、饼、漏斗、sankey、tree、treemap、graph、chord 的容器；`CalendarPieLayout` 与 `MatrixBoxLayout` 去掉。
+- `tools/advchart-oracle/box-usage.js`、`tests/fixtures/advchart-box-usage.json`、`tests/test.advchart.boxusage.pas`（新，注册在 `tytests.lpr`）。
+- 没有新单元、没有新的用户可见字符串、没有新的主题令牌。
+- §106、§146、§184、§186、§188 在原处标注。

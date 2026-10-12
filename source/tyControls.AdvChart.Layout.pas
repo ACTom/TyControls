@@ -50,6 +50,12 @@ type
   ITyBoxContainer = interface
     ['{8D31C60F-4A72-4B95-BE28-3F7A05D6C914}']
     function ContainerRect: TTyRectF;
+    { THE SAME RECT AS UPSTREAM'S refContainer HOLDS IT: x, y, width,
+      height. Not the rect's right edge less its left -- a matrix cell's
+      width is the matrix's own sum, and (x + w) - x need not round back to
+      w; a box solved in a cell takes the width the cell was given
+      [Batch 151]. }
+    function ContainerXYWH: TTyXYWH;
   end;
 
 function TyBoxSpec: TTyBoxSpec;              { every field buAuto }
@@ -123,6 +129,18 @@ function TyLinearMap(AValue, ADomainLo, ADomainHi, ARangeLo, ARangeHi: Double;
 function TyFixedContainer(const ARect: TTyRectF): ITyBoxContainer;
 function TyCoordCellContainer(const ACoordSys: ITyCoordSys;
   const AData: array of Double): ITyBoxContainer;
+{ A CONTAINER GIVEN AS x, y, width, height -- createBoxLayoutReference's
+  refContainer for a component or a series laid out in a matrix cell or a
+  calendar day (coordinateSystemUsage 'box'), or the canvas [Batch 151] }
+function TyXYWHContainer(const ARect: TTyXYWH): ITyBoxContainer;
+const
+  { WHERE A BOX OF NO POSITION IS PUT: a grid or a polar whose `coord`
+    names no cell is laid out here, far off any canvas, in a box of an
+    ordinary size (an empty one makes axes of no length, whose ticks are
+    not numbers) -- upstream's not-a-number rect draws nothing, and neither
+    does this [Batch 151] }
+  TyBoxNowhere = -1e6;
+  TyBoxNowhereSize = 100;
 
 { The one solver. Every component's rect comes from here. }
 function TySolveBox(const ASpec: TTyBoxSpec; const AContainer: ITyBoxContainer): TTyRectF;
@@ -883,6 +901,7 @@ type
   public
     constructor Create(const ARect: TTyRectF);
     function ContainerRect: TTyRectF;
+    function ContainerXYWH: TTyXYWH;
   end;
 
   TTyCoordCellContainer = class(TInterfacedObject, ITyBoxContainer)
@@ -892,6 +911,16 @@ type
   public
     constructor Create(const ACoordSys: ITyCoordSys; const AData: array of Double);
     function ContainerRect: TTyRectF;
+    function ContainerXYWH: TTyXYWH;
+  end;
+
+  TTyXYWHContainer = class(TInterfacedObject, ITyBoxContainer)
+  private
+    FRect: TTyXYWH;
+  public
+    constructor Create(const ARect: TTyXYWH);
+    function ContainerRect: TTyRectF;
+    function ContainerXYWH: TTyXYWH;
   end;
 
 function TyBoxAuto: TTyBoxValue;
@@ -1042,6 +1071,7 @@ function TySolveBox(const ASpec: TTyBoxSpec; const AContainer: ITyBoxContainer;
   const AMargin: array of Double): TTyRectF;
 var
   c: TTyRectF;
+  cx: TTyXYWH;
   l, r, t, b, lw, lh: Double;
   m: array[0..3] of Double;
   i: Integer;
@@ -1069,9 +1099,12 @@ begin
   else
     for i := 0 to 3 do m[i] := AMargin[i];
   end;
-  SolveAxis(ASpec.Left, ASpec.Right, ASpec.Width, c.Left, TyRectFWidth(c),
+  { the container's own width and height, not its edges' difference
+    [Batch 151] }
+  cx := AContainer.ContainerXYWH;
+  SolveAxis(ASpec.Left, ASpec.Right, ASpec.Width, cx.X, cx.W,
     m[3], m[1], l, r, lw);
-  SolveAxis(ASpec.Top, ASpec.Bottom, ASpec.Height, c.Top, TyRectFHeight(c),
+  SolveAxis(ASpec.Top, ASpec.Bottom, ASpec.Height, cx.Y, cx.H,
     m[0], m[2], t, b, lh);
   Result := TyRectF(l, t, r, b);
 end;
@@ -1085,15 +1118,17 @@ function TySolveBoxXYWH(const ASpec: TTyBoxSpec;
   const AContainer: ITyBoxContainer): TTyXYWH;
 var
   c: TTyRectF;
+  cx: TTyXYWH;
   l, r, t, b, lw, lh: Double;
 begin
   Result := TyXYWH(NaN, NaN, NaN, NaN);
   if AContainer = nil then Exit;
   c := AContainer.ContainerRect;
   if not TyRectFIsValid(c) then Exit;
-  SolveAxis(ASpec.Left, ASpec.Right, ASpec.Width, c.Left, TyRectFWidth(c),
+  cx := AContainer.ContainerXYWH;
+  SolveAxis(ASpec.Left, ASpec.Right, ASpec.Width, cx.X, cx.W,
     0, 0, l, r, lw);
-  SolveAxis(ASpec.Top, ASpec.Bottom, ASpec.Height, c.Top, TyRectFHeight(c),
+  SolveAxis(ASpec.Top, ASpec.Bottom, ASpec.Height, cx.Y, cx.H,
     0, 0, t, b, lh);
   Result := TyXYWH(l, t, lw, lh);
 end;
@@ -1107,6 +1142,27 @@ begin
 end;
 
 function TTyFixedContainer.ContainerRect: TTyRectF;
+begin
+  Result := FRect;
+end;
+
+function TTyFixedContainer.ContainerXYWH: TTyXYWH;
+begin
+  Result := TyXYWH(FRect.Left, FRect.Top, TyRectFWidth(FRect), TyRectFHeight(FRect));
+end;
+
+constructor TTyXYWHContainer.Create(const ARect: TTyXYWH);
+begin
+  inherited Create;
+  FRect := ARect;
+end;
+
+function TTyXYWHContainer.ContainerRect: TTyRectF;
+begin
+  Result := TyRectOfXYWH(FRect);
+end;
+
+function TTyXYWHContainer.ContainerXYWH: TTyXYWH;
 begin
   Result := FRect;
 end;
@@ -1131,6 +1187,13 @@ begin
   { ContentRect, not Rect — a nested thing must not paint over the host's
     divider. Same choice HeatmapView.ts:279 makes. }
   Result := l.ContentRect;
+end;
+
+function TTyCoordCellContainer.ContainerXYWH: TTyXYWH;
+var r: TTyRectF;
+begin
+  r := ContainerRect;
+  Result := TyXYWH(r.Left, r.Top, TyRectFWidth(r), TyRectFHeight(r));
 end;
 
 function TyBoxResolve(const AValue: TTyBoxValue; ABase: Double): Double;
@@ -1291,6 +1354,11 @@ function TyCoordCellContainer(const ACoordSys: ITyCoordSys;
   const AData: array of Double): ITyBoxContainer;
 begin
   Result := TTyCoordCellContainer.Create(ACoordSys, AData);
+end;
+
+function TyXYWHContainer(const ARect: TTyXYWH): ITyBoxContainer;
+begin
+  Result := TTyXYWHContainer.Create(ARect);
 end;
 
 
@@ -1781,13 +1849,15 @@ begin
   Result.Y := OrZero(ACY) + top + m[0];
   Result.W := w;
   Result.H := h;
-  { new BoundingRect: a negative size flips the rect onto its other edge }
-  if Result.W < 0 then
+  { new BoundingRect: a negative size flips the rect onto its other edge;
+    a size that is not a number is no size to compare -- a container of no
+    position, a matrix coord naming no cell [Batch 151] }
+  if (not IsNan(Result.W)) and (Result.W < 0) then
   begin
     Result.X := Result.X + Result.W;
     Result.W := -Result.W;
   end;
-  if Result.H < 0 then
+  if (not IsNan(Result.H)) and (Result.H < 0) then
   begin
     Result.Y := Result.Y + Result.H;
     Result.H := -Result.H;

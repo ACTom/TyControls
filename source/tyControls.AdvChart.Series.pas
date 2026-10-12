@@ -116,6 +116,14 @@ type
       calendar is laid out by the control, after binding. Resolved with
       HasAxes False, like a radar. [Batch 70] }
     CalendarIndex: Integer;
+    { THE CALENDAR WHOSE DAY THE SERIES IS LAID OUT IN, or -1
+      (coordinateSystemUsage 'box': a pie, a funnel, a sankey, a tree, a
+      treemap by default; a chord or a graph that says so). Such a series
+      has no coordinate system of its own -- only upstream's
+      boxCoordinateSystem -- so CalendarIndex stays -1 and nothing that
+      places per item, converts or keys by the calendar sees it
+      [Batch 151]. }
+    CalendarBoxIndex: Integer;
     { WHICH POLAR, or -1 [Batch 113, C4]. Resolved with HasAxes False, like a
       radar or a calendar -- HasAxes means the cartesian pair -- but once the
       control has built its polars (TyAttachPolarSeries) the axes ARE filled
@@ -153,7 +161,9 @@ type
     MatrixIndex: Integer;
     { the series is laid out in a cell of the matrix (usage 'box'), not
       placed per item: it has no coordinate system of its own -- a finder
-      naming it converts nothing [Batch 147] }
+      naming it converts nothing [Batch 147]. [Batch 151] A sankey, a tree
+      and a treemap by default too, a chord and a graph (its view) when
+      they say 'box'. }
     MatrixBox: Boolean;
     { SWITCHED OFF BY A LEGEND. Set by the control after the stores are
       filled and before anything is counted; every solver downstream skips
@@ -406,6 +416,29 @@ function TyAxisNoZoomExtent(AOption: TTyChartOption;
   const AStacks: TTySeriesStackArray; AIndex: TTyAxisSeriesIndex;
   AAxis: TTyAxis; const AMainType: string; out AAny: Boolean): TTyAxisRawExtent;
 
+{ [Batch 151] the series whose own defaults say coordinateSystemUsage 'box'
+  (pie, funnel, sankey, tree, treemap) }
+function TyBoxUsageByDefault(const AType: string): Boolean;
+{ the series that lay themselves out in a box reference when their usage is
+  'box': the five above, a chord and a graph (its view) }
+function TyBoxLayoutType(const AType: string): Boolean;
+{ the series upstream draws on the canvas when the matrix or calendar they
+  name gives them no box -- one not there, or a usage their layout never
+  asks for: a gauge and a sunburst always (their layouts read the canvas),
+  the box types above when the host is missing or their usage is 'data' }
+function TyCanvasOnHostType(const AType: string): Boolean;
+{ decideCoordSysUsageKind for a component that is no series: 'matrix' or
+  'calendar' when its coordinateSystem names one of the two (the
+  nonSeriesBox coordinate systems) and its coordinateSystemUsage is 'box',
+  unwritten or a written null; '' otherwise ('data' is no usage for a
+  component, nor is any other word) }
+function TyComponentBoxSysOf(ANode: TJSONData): string;
+{ a main type's ids ('' where none) and replaceMerge's holes in it, as the
+  series binder resolves a reference by them [Batch 151: exported for the
+  components' box references] }
+function TyMainIds(AOption: TTyChartOption; const AMain: string): TTyStringArray;
+function TyMainHoles(AOption: TTyChartOption; const AMain: string): TTyBoolArray;
+
 implementation
 
 uses
@@ -626,13 +659,51 @@ begin
   if ANode is TJSONObject then d := TJSONObject(ANode).Find('coordinateSystemUsage');
   if d = nil then
   begin
-    if (AType = 'pie') or (AType = 'funnel') then Exit('box');
+    { the series whose defaults write 'box' [Batch 151: sankey, tree and
+      treemap too] }
+    if TyBoxUsageByDefault(AType) then Exit('box');
     Exit('data');
   end;
   if d.JSONType = jtNull then Exit('data');
   Result := '';
   if d.JSONType = jtString then
     if (d.AsString = 'data') or (d.AsString = 'box') then Result := d.AsString;
+end;
+
+function TyBoxUsageByDefault(const AType: string): Boolean;
+begin
+  Result := (AType = 'pie') or (AType = 'funnel') or (AType = 'sankey')
+    or (AType = 'tree') or (AType = 'treemap');
+end;
+
+function TyBoxLayoutType(const AType: string): Boolean;
+begin
+  Result := TyBoxUsageByDefault(AType) or (AType = 'chord') or (AType = 'graph');
+end;
+
+function TyCanvasOnHostType(const AType: string): Boolean;
+begin
+  Result := (AType = 'pie') or (AType = 'funnel') or (AType = 'sankey')
+    or (AType = 'tree') or (AType = 'treemap') or (AType = 'chord')
+    or (AType = 'gauge') or (AType = 'sunburst');
+end;
+
+function TyComponentBoxSysOf(ANode: TJSONData): string;
+var d: TJSONData;
+begin
+  Result := '';
+  if not (ANode is TJSONObject) then Exit;
+  d := TJSONObject(ANode).Find('coordinateSystem');
+  if (d = nil) or (d.JSONType <> jtString) then Exit;
+  { canBeNonSeriesBoxCoordSys: the two in nonSeriesBoxCoordSysCreators }
+  if (d.AsString <> TyMatrixSysName) and (d.AsString <> TyCalendarSysName) then Exit;
+  Result := d.AsString;
+  d := TJSONObject(ANode).Find('coordinateSystemUsage');
+  { unwritten or null: a component's default, 'box'; 'data' is none for a
+    component, and so is any other word }
+  if (d <> nil) and (d.JSONType <> jtNull)
+    and not ((d.JSONType = jtString) and (d.AsString = 'box')) then
+    Result := '';
 end;
 
 function MainIds(AOption: TTyChartOption; const AMain: string): TTyStringArray;
@@ -720,6 +791,16 @@ begin
       Exit(k);
 end;
 
+function TyMainIds(AOption: TTyChartOption; const AMain: string): TTyStringArray;
+begin
+  Result := MainIds(AOption, AMain);
+end;
+
+function TyMainHoles(AOption: TTyChartOption; const AMain: string): TTyBoolArray;
+begin
+  Result := MainHoles(AOption, AMain);
+end;
+
 function TyBindSeries(AOption: TTyChartOption; ABuild: TTyChartBuild): TTySeriesBindingArray;
 var
   i, n, xi, yi: Integer;
@@ -742,6 +823,7 @@ begin
     b.SingleIndex := -1;
     b.ParallelIndex := -1;
     b.MatrixIndex := -1;
+    b.CalendarBoxIndex := -1;
     Result[i] := b;
 
     node := ObjAt(AOption, 'series', i);
@@ -825,11 +907,29 @@ begin
         its days are the calendar's own, not an axis'. [Batch 70] }
       b.CalendarIndex := TyResolveComponentRef(node, 'calendarIndex', 'calendarId',
         AOption.ComponentCount('calendar'), CalendarIds(AOption));
+      usage := TyMatrixUsageOf(node, b.SeriesType);
       if b.CalendarIndex < 0 then
       begin
+        { NO CALENDAR TO INJECT: a series that lays itself out in a box, or
+          on the canvas whatever it names, is on the canvas [Batch 151] }
+        if TyCanvasOnHostType(b.SeriesType)
+          or ((usage = 'box') and TyBoxLayoutType(b.SeriesType)) then
+        begin
+          b.Resolved := True;
+          b.HasAxes := False;
+          Result[i] := b;
+          Continue;
+        end;
         ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
         Result[i] := b;
         Continue;
+      end;
+      { IN ONE DAY'S CELL: a box usage of a type that lays itself out in one
+        [Batch 151] }
+      if (usage = 'box') and TyBoxLayoutType(b.SeriesType) then
+      begin
+        b.CalendarBoxIndex := b.CalendarIndex;
+        b.CalendarIndex := -1;
       end;
       b.Resolved := True;
       b.HasAxes := False;
@@ -845,9 +945,22 @@ begin
         written null is a series' 'data'), else the type's default -- 'box'
         for a pie and a funnel, 'data' for the rest. }
       usage := TyMatrixUsageOf(node, b.SeriesType);
+      { [Batch 151] a gauge or a sunburst lays itself out on the canvas
+        whatever it names; a box type with 'data' (other than a pie and a
+        funnel, which MX2 took there already) is injected a coordinate
+        system its layout never asks -- the canvas too }
+      if (b.SeriesType = 'gauge') or (b.SeriesType = 'sunburst')
+        or ((usage = 'data') and TyCanvasOnHostType(b.SeriesType)
+          and (b.SeriesType <> 'pie') and (b.SeriesType <> 'funnel')) then
+      begin
+        b.Resolved := True;
+        b.HasAxes := False;
+        Result[i] := b;
+        Continue;
+      end;
       if usage = 'box' then
       begin
-        if (b.SeriesType <> 'pie') and (b.SeriesType <> 'funnel') then usage := '?';
+        if not TyBoxLayoutType(b.SeriesType) then usage := '?';
       end
       else if usage = 'data' then
       begin
@@ -856,9 +969,9 @@ begin
           and (b.SeriesType <> 'graph') and (b.SeriesType <> 'pie')
           and (b.SeriesType <> 'funnel') then usage := '?';
       end;
-      { a pie or a funnel with no usage at all (a word that is neither) is
-        laid out on the canvas: no coordinate system }
-      if (usage = '') and ((b.SeriesType = 'pie') or (b.SeriesType = 'funnel')) then
+      { a box type with no usage at all (a word that is neither) is laid
+        out on the canvas: no coordinate system }
+      if (usage = '') and TyCanvasOnHostType(b.SeriesType) then
       begin
         b.Resolved := True;
         b.HasAxes := False;
@@ -876,6 +989,16 @@ begin
         MainHoles(AOption, TyMatrixSysName));
       if b.MatrixIndex < 0 then
       begin
+        { NO MATRIX TO INJECT: a box layout falls back to the canvas
+          (createBoxLayoutReference with no boxCoordinateSystem)
+          [Batch 151] }
+        if (usage = 'box') or TyCanvasOnHostType(b.SeriesType) then
+        begin
+          b.Resolved := True;
+          b.HasAxes := False;
+          Result[i] := b;
+          Continue;
+        end;
         ABuild.Note(Format(rsTyChartSeriesCoordSys, [i, sys]));
         Result[i] := b;
         Continue;

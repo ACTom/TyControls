@@ -117,7 +117,12 @@ type
   end;
 
 function TySankeySolve(AOption: TTyChartOption; ASeriesIndex: Integer;
-  const AContainer: TTyRectF; APPI: Integer): TTySankeySolved;
+  const AContainer: TTyRectF; APPI: Integer): TTySankeySolved; overload;
+{ the same over x, y, width, height: createBoxLayoutReference's
+  refContainer -- the canvas, or the matrix cell or calendar day the series
+  names with `coord` [Batch 151] }
+function TySankeySolve(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const AContainer: TTyXYWH; APPI: Integer): TTySankeySolved; overload;
 { The node colours: AStops the palette as zrender parses it. }
 procedure TySankeyColour(var ASolved: TTySankeySolved;
   const AStops: TTyVisualColorArray);
@@ -327,6 +332,12 @@ end;
 
 function TySankeySolve(AOption: TTyChartOption; ASeriesIndex: Integer;
   const AContainer: TTyRectF; APPI: Integer): TTySankeySolved;
+begin
+  Result := TySankeySolve(AOption, ASeriesIndex, TyXYWHOfRect(AContainer), APPI);
+end;
+
+function TySankeySolve(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const AContainer: TTyXYWH; APPI: Integer): TTySankeySolved;
 const
   cBoxKey: array[0..5] of string = ('width', 'left', 'right', 'height', 'top', 'bottom');
 var
@@ -655,9 +666,9 @@ begin
     box.Height := Scaled(target[3].V);
     box.Top := Scaled(target[4].V);
     box.Bottom := Scaled(target[5].V);
-    CW := AContainer.Right - AContainer.Left;
-    CH := AContainer.Bottom - AContainer.Top;
-    Result.Box := TyGetLayoutRect(box, AContainer.Left, AContainer.Top, CW, CH, []);
+    CW := AContainer.W;
+    CH := AContainer.H;
+    Result.Box := TyGetLayoutRect(box, AContainer.X, AContainer.Y, CW, CH, []);
     Result.HasT := not (Around0(Result.Box.X) and Around0(Result.Box.Y));
     if Result.HasT then
     begin

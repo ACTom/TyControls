@@ -187,6 +187,13 @@ function TyTreemapSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
 function TyTreemapSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
   const AContainer: TTyRectF; APPI: Integer; const AView: TTyTreemapView;
   const APrev: TTyTreemapSolved): TTyTreemapSolved; overload;
+{ [Batch 151] the box over ARef -- createBoxLayoutReference's refContainer,
+  the canvas or the matrix cell or calendar day the series names with
+  `coord` -- and the pruning over ACanvas, which upstream's is
+  (api.getWidth / getHeight) wherever the box went }
+function TyTreemapSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const ARef: TTyXYWH; const ACanvas: TTyRectF; APPI: Integer;
+  const AView: TTyTreemapView; const APrev: TTyTreemapSolved): TTyTreemapSolved; overload;
 { SeriesData's ids of a hierarchy's rows (upstream's node.getId()): the
   item's own id, else its name -- the k-th repeat among the rows without an
   id '__ec__k', the root named after the series -- else generated
@@ -246,6 +253,12 @@ procedure TyTreemapBreadcrumb(var ASolved: TTyTreemapSolved;
   const ACrumbSpec: TTyLabelSpec; const AMeasurer: ITyTextMeasurer;
   const AContainer: TTyRectF; ATarget: Integer; const AHave, APrevHave: TTyTreemapHave;
   const APrev: TTyTreemapSolved); overload;
+{ [Batch 151] placed in ARef (positionElement on the refContainer) while the
+  node it names is still the one under ACanvas' centre }
+procedure TyTreemapBreadcrumb(var ASolved: TTyTreemapSolved;
+  const ACrumbSpec: TTyLabelSpec; const AMeasurer: ITyTextMeasurer;
+  const ARef: TTyXYWH; const ACanvas: TTyRectF; ATarget: Integer;
+  const AHave, APrevHave: TTyTreemapHave; const APrev: TTyTreemapSolved); overload;
 { The rects in pre-order, then the breadcrumb. }
 function TyBuildTreemapMarks(ASeriesIndex: Integer; const ASolved: TTyTreemapSolved;
   const AInk: TTyTreemapInk; AList: TTyPaintList): Integer;
@@ -911,6 +924,14 @@ end;
 function TyTreemapSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
   const AContainer: TTyRectF; APPI: Integer; const AView: TTyTreemapView;
   const APrev: TTyTreemapSolved): TTyTreemapSolved;
+begin
+  Result := TyTreemapSolve(AOption, ASeriesIndex, TyXYWHOfRect(AContainer),
+    AContainer, APPI, AView, APrev);
+end;
+
+function TyTreemapSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const ARef: TTyXYWH; const ACanvas: TTyRectF; APPI: Integer;
+  const AView: TTyTreemapView; const APrev: TTyTreemapSolved): TTyTreemapSolved;
 const
   cBoxKey: array[0..5] of string = ('width', 'left', 'right', 'height', 'top', 'bottom');
 var
@@ -1025,9 +1046,10 @@ begin
     box.Height := Scaled(target[3].V);
     box.Top := Scaled(target[4].V);
     box.Bottom := Scaled(target[5].V);
-    W := AContainer.Right - AContainer.Left;
-    H := AContainer.Bottom - AContainer.Top;
-    Result.Box := TyGetLayoutRect(box, AContainer.Left, AContainer.Top, W, H, []);
+    Result.Box := TyGetLayoutRect(box, ARef.X, ARef.Y, ARef.W, ARef.H, []);
+    { the pruning's rect is the canvas' wherever the box went [Batch 151] }
+    W := ACanvas.Right - ACanvas.Left;
+    H := ACanvas.Bottom - ACanvas.Top;
     { THE VIEW ROOT and the path above it, root first [Batch 115] }
     vr := AView.ViewRoot;
     if (vr < 0) or (vr >= n) then vr := 0;
@@ -1147,7 +1169,7 @@ begin
       Result.Nodes[0].Y := 0;
     end;
     { the canvas in root coordinates }
-    Prune(Result, 0, -(Result.Box.X - AContainer.Left), -(Result.Box.Y - AContainer.Top), W, H, 0);
+    Prune(Result, 0, -(Result.Box.X - ACanvas.Left), -(Result.Box.Y - ACanvas.Top), W, H, 0);
     { the container group at the box, then the nodes' own groups }
     cx := Result.Box.X;
     cy := Result.Box.Y;
@@ -2049,6 +2071,20 @@ begin
   Result := FindIn(ASolved, AHave, tr, AX, AY);
 end;
 
+{ every crumb's points and label moved by (ADX, ADY) [Batch 151] }
+procedure OffsetCrumbs(var ASolved: TTyTreemapSolved; ADX, ADY: Double);
+var j, k: Integer;
+begin
+  for j := 0 to High(ASolved.Crumbs) do
+  begin
+    for k := 0 to High(ASolved.Crumbs[j].Points) do
+      ASolved.Crumbs[j].Points[k] := TyPointF(ASolved.Crumbs[j].Points[k].X + ADX,
+        ASolved.Crumbs[j].Points[k].Y + ADY);
+    ASolved.Crumbs[j].LabelX := ASolved.Crumbs[j].LabelX + ADX;
+    ASolved.Crumbs[j].LabelY := ASolved.Crumbs[j].LabelY + ADY;
+  end;
+end;
+
 procedure TyTreemapBreadcrumb(var ASolved: TTyTreemapSolved;
   const ACrumbSpec: TTyLabelSpec; const AMeasurer: ITyTextMeasurer;
   const AContainer: TTyRectF);
@@ -2062,6 +2098,18 @@ procedure TyTreemapBreadcrumb(var ASolved: TTyTreemapSolved;
   const ACrumbSpec: TTyLabelSpec; const AMeasurer: ITyTextMeasurer;
   const AContainer: TTyRectF; ATarget: Integer; const AHave, APrevHave: TTyTreemapHave;
   const APrev: TTyTreemapSolved);
+begin
+  TyTreemapBreadcrumb(ASolved, ACrumbSpec, AMeasurer, TyXYWH(0, 0,
+    AContainer.Right - AContainer.Left, AContainer.Bottom - AContainer.Top),
+    AContainer, ATarget, AHave, APrevHave, APrev);
+  { the canvas' own offset, as the breadcrumb always took it }
+  OffsetCrumbs(ASolved, AContainer.Left, AContainer.Top);
+end;
+
+procedure TyTreemapBreadcrumb(var ASolved: TTyTreemapSolved;
+  const ACrumbSpec: TTyLabelSpec; const AMeasurer: ITyTextMeasurer;
+  const ARef: TTyXYWH; const ACanvas: TTyRectF; ATarget: Integer;
+  const AHave, APrevHave: TTyTreemapHave; const APrev: TTyTreemapSolved);
 const
   cKey: array[0..3] of string = ('left', 'right', 'top', 'bottom');
 var
@@ -2132,8 +2180,9 @@ begin
       d := bc.Find(cKey[k]);
       if d <> nil then keys[k] := TyBoxRawOf(d);
     end;
-  W := AContainer.Right - AContainer.Left;
-  H := AContainer.Bottom - AContainer.Top;
+  { the target under the CANVAS' centre (api.getWidth() / 2) [Batch 151] }
+  W := ACanvas.Right - ACanvas.Left;
+  H := ACanvas.Bottom - ACanvas.Top;
   mask := GetExceptionMask;
   SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
   try
@@ -2201,7 +2250,9 @@ begin
     box.Bottom := Scaled(keys[3]);
     box.Width := TyBoxRawOf(nil);
     box.Height := TyBoxRawOf(nil);
-    avail := TyGetLayoutRect(box, 0, 0, W, H, []);
+    { the room and the place in the refContainer: x and y in it, so the
+      group's offset is upstream's sum [Batch 151] }
+    avail := TyGetLayoutRect(box, ARef.X, ARef.Y, ARef.W, ARef.H, []);
     lastX := 0;
     SetLength(polys, n);
     SetLength(bb, n);
@@ -2268,7 +2319,7 @@ begin
     end;
     box.Width := TyBoxRawNum(rw);
     box.Height := TyBoxRawNum(rh);
-    pos := TyGetLayoutRect(box, 0, 0, W, H, []);
+    pos := TyGetLayoutRect(box, ARef.X, ARef.Y, ARef.W, ARef.H, []);
     gx := 0 + (pos.X - rx);
     gy := 0 + (pos.Y - ry);
     hasG := not (Around0(gx) and Around0(gy));
@@ -2284,8 +2335,7 @@ begin
       ASolved.Crumbs[j].Text := shown[j];
       SetLength(ASolved.Crumbs[j].Points, Length(polys[j]));
       for k := 0 to High(polys[j]) do
-        ASolved.Crumbs[j].Points[k] := TyPointF(
-          polys[j][k].X + gx + AContainer.Left, polys[j][k].Y + gy + AContainer.Top);
+        ASolved.Crumbs[j].Points[k] := TyPointF(polys[j][k].X + gx, polys[j][k].Y + gy);
       tx := (bb[j].X * 1 + gx) + bb[j].W / 2;
       ty := (bb[j].Y * 1 + gy) + bb[j].H / 2;
       if Around0(tx) and Around0(ty) then
@@ -2293,8 +2343,8 @@ begin
         tx := 0;
         ty := 0;
       end;
-      ASolved.Crumbs[j].LabelX := tx + AContainer.Left;
-      ASolved.Crumbs[j].LabelY := ty + AContainer.Top;
+      ASolved.Crumbs[j].LabelX := tx;
+      ASolved.Crumbs[j].LabelY := ty;
     end;
   finally
     ClearExceptions(False);

@@ -431,10 +431,17 @@ function TyLegendSpecOf(AOption: TTyChartOption; AIndex: Integer): TTyLegendSpec
   made, the measured size winning over any width or height written. In
   device px. }
 function TyLegendWrapRect(const ASpec: TTyLegendSpec;
-  const AContainer: TTyRectF; APPI: Integer): TTyXYWH;
+  const AContainer: TTyRectF; APPI: Integer): TTyXYWH; overload;
 function TyLegendPlaceRect(const ASpec: TTyLegendSpec;
   const AContainer: TTyRectF; AMainW, AMainH: Double;
-  APPI: Integer): TTyXYWH;
+  APPI: Integer): TTyXYWH; overload;
+{ the same against x, y, width, height -- a legend in a matrix cell or a
+  calendar day [Batch 151] }
+function TyLegendWrapRect(const ASpec: TTyLegendSpec;
+  const AContainer: TTyXYWH; APPI: Integer): TTyXYWH; overload;
+function TyLegendPlaceRect(const ASpec: TTyLegendSpec;
+  const AContainer: TTyXYWH; AMainW, AMainH: Double;
+  APPI: Integer): TTyXYWH; overload;
 
 { The entries, in order. `legend.data` when it is an array -- INCLUDING an
   empty one, which is upstream's way of asking for no items at all -- and
@@ -590,6 +597,14 @@ function TyLayoutLegend(const ASpec: TTyLegendSpec;
 function TyLayoutLegend(const ASpec: TTyLegendSpec;
   const AEntries: TTyLegendEntryArray; const AFlags: TTyLegendFlags;
   const ASources: TTyLegendSourceArray; const AContainer: TTyRectF;
+  const AMeasurer: ITyTextMeasurer; const AFont: TTyLegendFont;
+  APPI: Integer; const ADeco: TTyLegendDeco): TTyLegendLayout; overload;
+{ [Batch 151] the same against x, y, width, height: createBoxLayoutReference's
+  refContainer -- the canvas, or the matrix cell or calendar day the legend
+  names with `coordinateSystem` + `coord` }
+function TyLayoutLegend(const ASpec: TTyLegendSpec;
+  const AEntries: TTyLegendEntryArray; const AFlags: TTyLegendFlags;
+  const ASources: TTyLegendSourceArray; const AContainer: TTyXYWH;
   const AMeasurer: ITyTextMeasurer; const AFont: TTyLegendFont;
   APPI: Integer; const ADeco: TTyLegendDeco): TTyLegendLayout; overload;
 
@@ -1742,18 +1757,31 @@ end;
 
 function TyLegendWrapRect(const ASpec: TTyLegendSpec;
   const AContainer: TTyRectF; APPI: Integer): TTyXYWH;
+begin
+  Result := TyLegendWrapRect(ASpec, TyXYWHOfRect(AContainer), APPI);
+end;
+
+function TyLegendPlaceRect(const ASpec: TTyLegendSpec;
+  const AContainer: TTyRectF; AMainW, AMainH: Double;
+  APPI: Integer): TTyXYWH;
+begin
+  Result := TyLegendPlaceRect(ASpec, TyXYWHOfRect(AContainer), AMainW, AMainH, APPI);
+end;
+
+function TyLegendWrapRect(const ASpec: TTyLegendSpec;
+  const AContainer: TTyXYWH; APPI: Integer): TTyXYWH;
 var pad: array[0..3] of Double;
 begin
   { THE OPTION'S OWN BOX, keywords and all: upstream solves the wrap room
     with no size given, so `bottom: 'bottom'` on a vertical legend leaves the
     height the switch computes from a not-a-number -- not the full height. }
   PadOf(ASpec, APPI, pad);
-  Result := TyGetLayoutRect(ASpec.Box, AContainer.Left, AContainer.Top,
-    AContainer.Right - AContainer.Left, AContainer.Bottom - AContainer.Top, pad);
+  Result := TyGetLayoutRect(ASpec.Box, AContainer.X, AContainer.Y,
+    AContainer.W, AContainer.H, pad);
 end;
 
 function TyLegendPlaceRect(const ASpec: TTyLegendSpec;
-  const AContainer: TTyRectF; AMainW, AMainH: Double;
+  const AContainer: TTyXYWH; AMainW, AMainH: Double;
   APPI: Integer): TTyXYWH;
 var
   pad: array[0..3] of Double;
@@ -1765,8 +1793,8 @@ begin
   box := ASpec.Box;
   box.Width := TyBoxRawNum(AMainW);
   box.Height := TyBoxRawNum(AMainH);
-  Result := TyGetLayoutRect(box, AContainer.Left, AContainer.Top,
-    AContainer.Right - AContainer.Left, AContainer.Bottom - AContainer.Top, pad);
+  Result := TyGetLayoutRect(box, AContainer.X, AContainer.Y,
+    AContainer.W, AContainer.H, pad);
 end;
 
 { ==================== [Batch 98] the selector and the pager ==================== }
@@ -1961,7 +1989,7 @@ end;
   arithmetic, step for step, everything group-local until the group is
   placed. ARects are the items as measured, ANewline the line breaks. }
 procedure LayoutRich(const ASpec: TTyLegendSpec; const ADeco: TTyLegendDeco;
-  const AContainer: TTyRectF; APPI: Integer; AScale, AGap: Double;
+  const AContainer: TTyXYWH; APPI: Integer; AScale, AGap: Double;
   const APad: array of Double; const AMaxBox: TTyXYWH;
   const ARects: array of TTyRectF; const ANewline, AAbsent: array of Boolean;
   var R: TTyLegendLayout);
@@ -2342,6 +2370,18 @@ function TyLayoutLegend(const ASpec: TTyLegendSpec;
   const ASources: TTyLegendSourceArray; const AContainer: TTyRectF;
   const AMeasurer: ITyTextMeasurer; const AFont: TTyLegendFont;
   APPI: Integer; const ADeco: TTyLegendDeco): TTyLegendLayout;
+begin
+  Result := Default(TTyLegendLayout);
+  if not TyRectFIsValid(AContainer) then Exit;
+  Result := TyLayoutLegend(ASpec, AEntries, AFlags, ASources,
+    TyXYWHOfRect(AContainer), AMeasurer, AFont, APPI, ADeco);
+end;
+
+function TyLayoutLegend(const ASpec: TTyLegendSpec;
+  const AEntries: TTyLegendEntryArray; const AFlags: TTyLegendFlags;
+  const ASources: TTyLegendSourceArray; const AContainer: TTyXYWH;
+  const AMeasurer: ITyTextMeasurer; const AFont: TTyLegendFont;
+  APPI: Integer; const ADeco: TTyLegendDeco): TTyLegendLayout;
 var
   n, i: Integer;
   scale, iw, ih, gap, tgap: Double;
@@ -2369,7 +2409,9 @@ begin
   Result := Default(TTyLegendLayout);
   if not ASpec.Show then Exit;
   if AMeasurer = nil then Exit;
-  if not TyRectFIsValid(AContainer) then Exit;
+  { a container of no place is at the canvas' edge (getLayoutRect's
+    `containerRect.x || 0`); one of no size is nothing [Batch 151] }
+  if not TyXYWHHasSize(AContainer) then Exit;
   n := Length(AEntries);
   if n = 0 then Exit;
 

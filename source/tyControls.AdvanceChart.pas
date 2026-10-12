@@ -2103,10 +2103,25 @@ type
     function LabelSpecFor(ASlot: Integer): TTyLabelSpec; overload;
     function HeatmapRadii(ASeriesIndex, APPI: Integer): TTyCornerRadii;
     procedure RippleOf(ASlot: Integer; var AVisual: TTySeriesVisual);
-    function CalendarPieLayout(ASlot, ADim: Integer): TTyPieLayout;
     function MatrixGraphPoints(ASeriesIndex: Integer; AMatrix: TTyMatrix): TTyPointFArray;
-    function MatrixBoxLayout(ASlot: Integer; ACentre: Boolean; out ARect: TTyXYWH;
+    { ---- createBoxLayoutReference [Batch 151, D13 BX1] ----
+      The canvas as a refContainer; a host's dataToLayout of a coord (a
+      matrix's rect, a calendar day's content rect) -- False when the host
+      named is not there; a component's reference (True when it is laid
+      out in a host: `coordinateSystem` 'matrix' | 'calendar' with usage
+      'box', and the host is there -- ARef may then be a rect of no
+      position); a series' (True for MatrixBox / CalendarBoxIndex: `coord`,
+      else with ACentre a pie's `center`). }
+    function CanvasXYWH: TTyXYWH;
+    function HostRefAt(const ASys: string; AIndex: Integer; ACoord: TJSONData;
+      out ARef: TTyXYWH): Boolean;
+    function ComponentBoxRef(const AMain: string; AIndex: Integer;
+      out ARef: TTyXYWH): Boolean;
+    function SeriesBoxRef(ASlot: Integer; ACentre: Boolean; out ARef: TTyXYWH;
       out AFromCentre: Boolean): Boolean;
+    { the grids and the polars laid out in their hosts' cells, once the
+      matrices and the calendars are }
+    procedure PlaceBoxedCoordSys;
     function CalendarGraphPoints(ASeriesIndex: Integer;
       ACal: TTyCalendar): TTyPointFArray;
     procedure SymbolItems(ASeriesIndex: Integer; const ABase: TTySymbolSpec;
@@ -3334,6 +3349,8 @@ type
     function SankeySolved(ASeriesIndex: Integer): TTySankeySolved;
     { the solved chord, for a test to read (Valid False: none) [Batch 120] }
     function ChordSolved(ASeriesIndex: Integer): TTyChordSolved;
+    { the solved tree, for a test to read (Valid False: none) [Batch 151] }
+    function TreeSolved(ASeriesIndex: Integer): TTyTreeSolved;
     { THE GRAPHIC COMPONENT, for a test to read [Batch 122]: the view (its
       elements by id), the model (nil: none), the last build's paint
       elements and the element each came from }
@@ -5003,6 +5020,7 @@ begin
       { [Batch 147] not a pie or a funnel (their own value column) nor a
         graph (its nodes the graph's way; the points are MatrixGraphPoints') }
       if (FBindings[i].MatrixIndex >= 0) and (FBindings[i].MatrixIndex <= High(FMatrices))
+        and not FBindings[i].MatrixBox
         and (FBindings[i].SeriesType <> TyPieSeriesTypeName)
         and (FBindings[i].SeriesType <> TyFunnelSeriesTypeName)
         and (FBindings[i].SeriesType <> TyGraphSeriesTypeName) then
@@ -5263,6 +5281,14 @@ begin
       FMatrices[i].Dims[0].TakeCollected;
       FMatrices[i].Dims[1].TakeCollected;
     end;
+  { THE BOX HOSTS, LAID OUT HERE [Batch 151]: upstream creates the calendars
+    and the matrices first (nonSeriesBoxCoordSysCreators) so a grid or a
+    polar in one of their cells has its rect before the data is processed
+    -- a sampling, a dataZoom window and a bar's extent all read the axes'
+    pixel extents. Once the trees have collected their names. }
+  SolveCalendars(FLastPPI);
+  SolveMatrices(FLastPPI);
+  PlaceBoxedCoordSys;
   { A DATASET WHOSE TRANSFORM FAILED has no table, and the series reading it
     draw nothing -- said here, once per dataset a series reached. Upstream
     throws out of setOption and draws nothing at all. [Batch 133] }
@@ -6011,11 +6037,9 @@ begin
   FWhiskers := TySolveWhiskerLayouts(FOption, FBindings, FStores, FIndex);
   { AFTER THE BARS: a marker on a bar series sits on its own bar }
   SolveMarkers(APPI);
-  { BEFORE THE PIES: a pie on a calendar is laid out in a day's cell
-    [Batch 72] }
-  SolveCalendars(APPI);
-  { the matrices on the canvas too [Batch 145] }
-  SolveMatrices(APPI);
+  { THE CALENDARS AND THE MATRICES were laid out by Rebuild, before the
+    grids in their cells [Batch 151; a pie on a calendar is laid out in a
+    day's cell, Batch 72; the matrices on the canvas, Batch 145] }
   SolvePies;
   SolveFunnels;
   SolveGauges(APPI);
@@ -10217,6 +10241,7 @@ var
   b: TTyRtBlockStyle;
   ah: TTyTextAnchorH;
   av: TTyTextAnchorV;
+  ref: TTyXYWH;
 begin
   n := TyTitleCount(FOption);
   SetLength(FTitles, n);
@@ -10252,8 +10277,13 @@ begin
       if rts[line].Needed then
         meters[line] := TyRtBlockMeasurer(AMeasurer, rts[line], glob, APPI / 96);
     end;
-    FTitles[i] := TyLayoutTitle(FTitleSpecs[i], FLastRect, AMeasurer,
-      FTitleFonts[i][0], FTitleFonts[i][1], APPI, meters[0], meters[1]);
+    { IN A MATRIX CELL OR A CALENDAR DAY when it names one [Batch 151] }
+    if ComponentBoxRef('title', i, ref) then
+      FTitles[i] := TyLayoutTitle(FTitleSpecs[i], ref, AMeasurer,
+        FTitleFonts[i][0], FTitleFonts[i][1], APPI, meters[0], meters[1])
+    else
+      FTitles[i] := TyLayoutTitle(FTitleSpecs[i], FLastRect, AMeasurer,
+        FTitleFonts[i][0], FTitleFonts[i][1], APPI, meters[0], meters[1]);
     for line := 0 to 1 do
     begin
       FTitleRt[i][line] := Default(TTyRtDrawn);
@@ -10307,6 +10337,7 @@ var
   i, dim, k: Integer;
   cell: TTyXYWH;
   fromCentre: Boolean;
+  cx, cy: Double;
 begin
   SetLength(FPies, Length(FBindings));
   SetLength(FPieSpecs, Length(FBindings));
@@ -10323,98 +10354,34 @@ begin
       own left/top/right/bottom shrink that. Handing it a grid rect would
       centre it on the plot instead of on the chart, which is not where
       ECharts puts it. }
-    if (FBindings[i].CalendarIndex >= 0)
-      and (FBindings[i].CalendarIndex <= High(FCalendars)) then
+    { A PIE IN A MATRIX CELL OR A CALENDAR DAY [Batches 72, 147, 151]:
+      createBoxLayoutReference asks the host's dataToLayout for `coord`,
+      else for `center` read as one (getCoord2); getCircleLayout's viewRect
+      is getLayoutRect of the series' box in that rect (a calendar's content
+      rect), the percentages of the centre and the radii against it, and
+      the centre is the refPoint -- the rect's x + width / 2 -- when the
+      coord came from `center`. A cell of no position draws nothing. }
+    if SeriesBoxRef(i, True, cell, fromCentre) then
     begin
-      FPies[i] := CalendarPieLayout(i, dim);
-      Continue;
-    end;
-    { A PIE IN A MATRIX CELL [Batch 147]: createBoxLayoutReference asks the
-      matrix's dataToLayout for `coord`, else for `center` read as one; the
-      box and a percentage radius are taken against that rect, and the
-      centre is the rect's own centre when the coord came from `center`.
-      A cell of no position draws nothing. }
-    if FBindings[i].MatrixBox and (FBindings[i].MatrixIndex >= 0)
-      and (FBindings[i].MatrixIndex <= High(FMatrices)) then
-    begin
-      MatrixBoxLayout(i, True, cell, fromCentre);
-      FPies[i] := TyPieLayoutOf(FPieSpecs[i], TyRectF(cell.X, cell.Y, cell.X + cell.W,
-        cell.Y + cell.H), FStores[i], dim);
+      FPies[i] := TyPieLayoutInView(FPieSpecs[i], TyGetLayoutRect(
+        TyBoxSpecRaw(FPieSpecs[i].Box), cell.X, cell.Y, cell.W, cell.H, []),
+        FStores[i], dim);
       if fromCentre then
       begin
-        FPies[i].CX := cell.X + cell.W / 2;
-        FPies[i].CY := cell.Y + cell.H / 2;
+        cx := cell.X + cell.W / 2;
+        cy := cell.Y + cell.H / 2;
+        FPies[i].CX := cx;
+        FPies[i].CY := cy;
         for k := 0 to High(FPies[i].Sectors) do
         begin
-          FPies[i].Sectors[k].CX := FPies[i].CX;
-          FPies[i].Sectors[k].CY := FPies[i].CY;
+          FPies[i].Sectors[k].CX := cx;
+          FPies[i].Sectors[k].CY := cy;
         end;
       end;
       if IsNan(FPies[i].CX) or IsNan(FPies[i].CY) then FPies[i].Valid := False;
       Continue;
     end;
     FPies[i] := TyPieLayoutOf(FPieSpecs[i], FLastRect, FStores[i], dim);
-  end;
-end;
-
-{ A PIE ON A CALENDAR: laid out in the content rect of a day's cell --
-  createBoxLayoutReference asks the calendar's dataToLayout for the pie's
-  coordinate, which is `coord` when written and else `center` read as a
-  date. The box and a percentage radius are taken against that rect; the
-  centre is the rect's own centre when the date came from `center`, and
-  `center` inside the box when it came from `coord`. A date off the range
-  leaves the cell's size and no position: the radius is a number, the
-  centre is not, and nothing is drawn. [Batch 72] }
-function TTyAdvanceChart.CalendarPieLayout(ASlot, ADim: Integer): TTyPieLayout;
-var
-  node, d: TJSONData;
-  cal: TTyCalendar;
-  dv: TTyDataValue;
-  fromCentre: Boolean;
-  lay: TTyCoordLayout;
-  cx, cy: Double;
-  k: Integer;
-begin
-  cal := FCalendars[FBindings[ASlot].CalendarIndex];
-  node := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
-  d := nil;
-  fromCentre := True;
-  if (node <> nil) and (node.JSONType = jtObject) then
-  begin
-    d := TJSONObject(node).Find('coord');
-    if (d <> nil) and (d.JSONType <> jtNull) then fromCentre := False
-    else d := TJSONObject(node).Find('center');
-  end;
-  dv := Default(TTyDataValue);
-  if d <> nil then
-    case d.JSONType of
-      jtNumber: dv := TyDataNum(d.AsFloat);
-      jtString:
-        begin
-          dv.Kind := dvkText;
-          dv.Text := d.AsString;
-        end;
-    end;
-  { no date at all -- the default ['50%', '50%'] read as one -- is a cell of
-    no position }
-  lay := cal.DateLayout(cal.ParseDate(dv), True);
-  Result := TyPieLayoutOf(FPieSpecs[ASlot], lay.ContentRect, FStores[ASlot], ADim);
-  { A CELL OF NO POSITION draws nothing: upstream's sectors are there with a
-    centre that is not a number, which paints nowhere }
-  if IsNan(lay.ContentRect.Left) or IsNan(lay.ContentRect.Top) then
-  begin
-    Result.Valid := False;
-    Exit;
-  end;
-  if not fromCentre then Exit;
-  cx := (lay.ContentRect.Left + lay.ContentRect.Right) / 2;
-  cy := (lay.ContentRect.Top + lay.ContentRect.Bottom) / 2;
-  Result.CX := cx;
-  Result.CY := cy;
-  for k := 0 to High(Result.Sectors) do
-  begin
-    Result.Sectors[k].CX := cx;
-    Result.Sectors[k].CY := cy;
   end;
 end;
 
@@ -10438,18 +10405,17 @@ begin
     { FLastRect, not a grid -- a funnel is laid out against the CONTROL and
       its own left/top/right/bottom shrink that, the same rule a pie follows
       and for the same reason. }
-    { A FUNNEL IN A MATRIX CELL: its box against the cell its `coord` names
-      (a funnel reads no `center`) [Batch 147] }
-    if FBindings[i].MatrixBox and (FBindings[i].MatrixIndex >= 0)
-      and (FBindings[i].MatrixIndex <= High(FMatrices)) then
+    { A FUNNEL IN A MATRIX CELL OR A CALENDAR DAY: its box against the cell
+      its `coord` names (a funnel reads no `center`) [Batches 147, 151] }
+    if SeriesBoxRef(i, False, cell, fromCentre) then
     begin
-      MatrixBoxLayout(i, False, cell, fromCentre);
       { getLayoutRect of the series' box in the cell, as upstream holds both }
       FFunnels[i] := TyFunnelLayoutInView(FFunnelSpecs[i],
         TyGetLayoutRect(TyBoxSpecRaw(FFunnelSpecs[i].Box), cell.X, cell.Y, cell.W,
         cell.H, []), FStores[i], dim);
-      if IsNan(cell.X) or IsNan(cell.Y) or IsNan(cell.W) or IsNan(cell.H) then
-        FFunnels[i].Valid := False;
+      { a cell of no size draws nothing; one of no place is at the canvas'
+        edge (getLayoutRect's `x || 0`) [Batch 151] }
+      if not TyXYWHHasSize(cell) then FFunnels[i].Valid := False;
       Continue;
     end;
     FFunnels[i] := TyFunnelLayoutOf(FFunnelSpecs[i], FLastRect,
@@ -10457,21 +10423,120 @@ begin
   end;
 end;
 
-{ createBoxLayoutReference on a matrix [Batch 147]: getCoordForCoordSysUsageKindBox
-  -- `coord` when written (not null), else (a pie's getCoord2) `center` --
-  and the matrix's dataToLayout of it, no clamp; device px }
-function TTyAdvanceChart.MatrixBoxLayout(ASlot: Integer; ACentre: Boolean;
-  out ARect: TTyXYWH; out AFromCentre: Boolean): Boolean;
+{ ==================== createBoxLayoutReference [Batch 151] ==================== }
+
+function TTyAdvanceChart.CanvasXYWH: TTyXYWH;
+begin
+  Result := TyXYWHOfRect(FLastRect);
+end;
+
+{ the date a calendar's dataToPoint reads from `coord`: an array's first
+  element (`isArray(data) && (data = data[0])`), a number or a string;
+  anything else no date at all -- a cell of no position }
+function CalendarCoordValue(AData: TJSONData): TTyDataValue;
+begin
+  Result := Default(TTyDataValue);
+  if (AData <> nil) and (AData.JSONType = jtArray) then
+  begin
+    if AData.Count = 0 then Exit;
+    AData := AData.Items[0];
+  end;
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtNumber: Result := TyDataNum(AData.AsFloat);
+    jtString:
+      begin
+        Result.Kind := dvkText;
+        Result.Text := AData.AsString;
+      end;
+  end;
+end;
+
+{ the host's dataToLayout of ACoord, no clamp asked (a calendar's own
+  default clamps): a matrix's rect -- it has no contentRect, so its cell's
+  border is inside the reference -- or a calendar day's content rect;
+  `contentRect || rect` }
+function TTyAdvanceChart.HostRefAt(const ASys: string; AIndex: Integer;
+  ACoord: TJSONData; out ARef: TTyXYWH): Boolean;
+var
+  loc: TTyMatrixLocRange;
+  rc: TTyXYWH;
+begin
+  Result := False;
+  ARef := TyXYWH(NaN, NaN, NaN, NaN);
+  if ASys = TyMatrixSysName then
+  begin
+    if (AIndex < 0) or (AIndex > High(FMatrices)) or (FMatrices[AIndex] = nil) then Exit;
+    TyMatrixLayoutJson(FMatrices[AIndex], ACoord, mclNone, ARef, loc);
+    Result := True;
+  end
+  else if ASys = TyCalendarSysName then
+  begin
+    if (AIndex < 0) or (AIndex > High(FCalendars)) or (FCalendars[AIndex] = nil) then Exit;
+    FCalendars[AIndex].DateLayoutXYWH(FCalendars[AIndex].ParseDate(
+      CalendarCoordValue(ACoord)), True, rc, ARef);
+    Result := True;
+  end;
+end;
+
+{ A COMPONENT'S REFERENCE: decideCoordSysUsageKind for a component (a
+  matrix or a calendar, usage 'box' unwritten), the host by its index or id
+  (SINGLE_REFERRING: neither written is the first; one not there leaves the
+  component on the canvas, as injectCoordSysByOption leaves it), and the
+  host's dataToLayout of `coord` }
+function TTyAdvanceChart.ComponentBoxRef(const AMain: string; AIndex: Integer;
+  out ARef: TTyXYWH): Boolean;
+var
+  node, coord: TJSONData;
+  sys: string;
+  k: Integer;
+begin
+  ARef := CanvasXYWH;
+  Result := False;
+  if FOption = nil then Exit;
+  node := FOption.ComponentAt(AMain, AIndex);
+  if not (node is TJSONObject) then Exit;
+  sys := TyComponentBoxSysOf(node);
+  if sys = '' then Exit;
+  if sys = TyMatrixSysName then
+    k := TyResolveComponentRef(TJSONObject(node), 'matrixIndex', 'matrixId',
+      FOption.ComponentCount(TyMatrixSysName), TyMainIds(FOption, TyMatrixSysName),
+      TyMainHoles(FOption, TyMatrixSysName))
+  else
+    k := TyResolveComponentRef(TJSONObject(node), 'calendarIndex', 'calendarId',
+      FOption.ComponentCount(TyCalendarSysName), TyMainIds(FOption, TyCalendarSysName),
+      TyMainHoles(FOption, TyCalendarSysName));
+  coord := TJSONObject(node).Find('coord');
+  Result := HostRefAt(sys, k, coord, ARef);
+  if not Result then ARef := CanvasXYWH;
+end;
+
+{ A SERIES' REFERENCE: getCoordForCoordSysUsageKindBox -- `coord` when
+  written (not null), else (a pie's getCoord2) `center` -- in the host the
+  binding found [Batch 147: a pie and a funnel in a matrix cell] }
+function TTyAdvanceChart.SeriesBoxRef(ASlot: Integer; ACentre: Boolean;
+  out ARef: TTyXYWH; out AFromCentre: Boolean): Boolean;
 var
   node, d: TJSONData;
-  loc: TTyMatrixLocRange;
-  m: TTyMatrix;
+  sys: string;
+  k: Integer;
 begin
-  ARect := TyXYWH(NaN, NaN, NaN, NaN);
+  ARef := CanvasXYWH;
   AFromCentre := False;
   Result := False;
-  m := FMatrices[FBindings[ASlot].MatrixIndex];
-  if m = nil then Exit;
+  if (FOption = nil) or (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  if FBindings[ASlot].MatrixBox and (FBindings[ASlot].MatrixIndex >= 0) then
+  begin
+    sys := TyMatrixSysName;
+    k := FBindings[ASlot].MatrixIndex;
+  end
+  else if FBindings[ASlot].CalendarBoxIndex >= 0 then
+  begin
+    sys := TyCalendarSysName;
+    k := FBindings[ASlot].CalendarBoxIndex;
+  end
+  else
+    Exit;
   node := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   d := nil;
   if node is TJSONObject then
@@ -10483,8 +10548,33 @@ begin
       AFromCentre := True;
     end;
   end;
-  TyMatrixLayoutJson(m, d, mclNone, ARect, loc);
-  Result := not IsNan(ARect.X) and not IsNan(ARect.Y);
+  if (d <> nil) and (d.JSONType = jtNull) then d := nil;
+  Result := HostRefAt(sys, k, d, ARef);
+  if not Result then
+  begin
+    ARef := CanvasXYWH;
+    AFromCentre := False;
+  end;
+end;
+
+procedure TTyAdvanceChart.PlaceBoxedCoordSys;
+var
+  g, p: Integer;
+  ref: TTyXYWH;
+begin
+  if FBuild <> nil then
+    for g := 0 to FBuild.GridCount - 1 do
+      if ComponentBoxRef('grid', FBuild.Grid(g).ComponentIndex, ref) then
+        TyPlaceGridIn(FBuild, g, ref);
+  for p := 0 to High(FPolars) do
+    if (FPolars[p] <> nil) and ComponentBoxRef('polar', p, ref) then
+    begin
+      { a coord naming no cell: no position, far off the canvas (see
+        TyBoxNowhere) }
+      if not TyXYWHIsValid(ref) then
+        ref := TyXYWH(TyBoxNowhere, TyBoxNowhere, TyBoxNowhereSize, TyBoxNowhereSize);
+      TyPolarResize(FOption, FPolars[p], ref);
+    end;
 end;
 
 procedure TTyAdvanceChart.FreeRadars;
@@ -11001,6 +11091,15 @@ begin
   slot := SlotOfSeries(ASeriesIndex);
   if (slot < 0) or (slot > High(FSankeys)) then Exit;
   Result := FSankeys[slot];
+end;
+
+function TTyAdvanceChart.TreeSolved(ASeriesIndex: Integer): TTyTreeSolved;
+var slot: Integer;
+begin
+  Result := Default(TTyTreeSolved);
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FTrees)) then Exit;
+  Result := FTrees[slot];
 end;
 
 function TTyAdvanceChart.ChordSolved(ASeriesIndex: Integer): TTyChordSolved;
@@ -14272,7 +14371,11 @@ end;
 { THE TREES: each laid out in its box on the whole canvas, as a pie is.
   [Batch 73] }
 procedure TTyAdvanceChart.SolveTrees(APPI: Integer);
-var i: Integer;
+var
+  i: Integer;
+  ref: TTyXYWH;
+  fc: Boolean;
+  tog: TTyBoolArray;
 begin
   FTrees := nil;
   SetLength(FTrees, Length(FBindings));
@@ -14281,7 +14384,17 @@ begin
     FTrees[i] := Default(TTyTreeSolved);
     if FBindings[i].SeriesType <> TyTreeSeriesTypeName then Continue;
     if (not FBindings[i].Resolved) or FBindings[i].Hidden then Continue;
-    if FBindings[i].SeriesIndex <= High(FTreeToggled) then
+    { IN A MATRIX CELL OR A CALENDAR DAY [Batch 151]: commonLayout's box in
+      the refContainer; a cell of no position draws nothing }
+    if SeriesBoxRef(i, False, ref, fc) then
+    begin
+      if not TyXYWHHasSize(ref) then Continue;
+      tog := nil;
+      if FBindings[i].SeriesIndex <= High(FTreeToggled) then
+        tog := FTreeToggled[FBindings[i].SeriesIndex];
+      FTrees[i] := TyTreeSolve(FOption, FBindings[i].SeriesIndex, ref, APPI, tog);
+    end
+    else if FBindings[i].SeriesIndex <= High(FTreeToggled) then
       FTrees[i] := TyTreeSolve(FOption, FBindings[i].SeriesIndex, FLastRect, APPI,
         FTreeToggled[FBindings[i].SeriesIndex])
     else
@@ -14580,6 +14693,8 @@ var
   view: TTyTreemapView;
   prev: TTyTreemapSolved;
   prevHave, have: TTyTreemapHave;
+  ref: TTyXYWH;
+  boxed, fc: Boolean;
 begin
   FTreemaps := nil;
   FTreemapInks := nil;
@@ -14608,7 +14723,17 @@ begin
     if si <= High(FTmPrev) then prev := FTmPrev[si];
     prevHave := Default(TTyTreemapHave);
     if si <= High(FTmHave) then prevHave := FTmHave[si];
-    FTreemaps[i] := TyTreemapSolve(FOption, si, FLastRect, APPI, view, prev);
+    { IN A MATRIX CELL OR A CALENDAR DAY [Batch 151]: the box in the
+      refContainer, the pruning still on the canvas; a cell of no position
+      draws nothing }
+    boxed := SeriesBoxRef(i, False, ref, fc);
+    if boxed then
+    begin
+      if not TyXYWHHasSize(ref) then Continue;
+      FTreemaps[i] := TyTreemapSolve(FOption, si, ref, FLastRect, APPI, view, prev);
+    end
+    else
+      FTreemaps[i] := TyTreemapSolve(FOption, si, FLastRect, APPI, view, prev);
     if not FTreemaps[i].Valid then Continue;
     have := TyTreemapHaveOf(FTreemaps[i], prevHave);
     TyTreemapColour(FTreemaps[i], pal, border);
@@ -14626,6 +14751,10 @@ begin
     target := -1;
     if view.Kind in [tpkZoomToNode, tpkRootToNode] then target := view.Target;
     if (view.Kind = tpkKeep) and prev.Valid then FTreemaps[i].Crumbs := prev.Crumbs
+    else if boxed then
+      TyTreemapBreadcrumb(FTreemaps[i],
+        FTreemapInks[i].ItemLabels[Length(FTreemaps[i].Nodes)], AMeasurer,
+        ref, FLastRect, target, have, prevHave, prev)
     else
       TyTreemapBreadcrumb(FTreemaps[i],
         FTreemapInks[i].ItemLabels[Length(FTreemaps[i].Nodes)], AMeasurer,
@@ -14689,6 +14818,8 @@ var
   base, lk: TTyLabelSpec;
   edgeSpecs: TTyLabelSpecArray;
   ls: TTyStyleSet;
+  ref: TTyXYWH;
+  fc: Boolean;
 
   procedure StopsOf(AData: TJSONData);
   var q: Integer;
@@ -14720,7 +14851,15 @@ begin
     FSankeyInks[i] := Default(TTySankeyInk);
     if FBindings[i].SeriesType <> TySankeySeriesTypeName then Continue;
     if (not FBindings[i].Resolved) or FBindings[i].Hidden then Continue;
-    FSankeys[i] := TySankeySolve(FOption, FBindings[i].SeriesIndex, FLastRect, APPI);
+    { IN A MATRIX CELL OR A CALENDAR DAY [Batch 151]: the box in the
+      refContainer; a cell of no position draws nothing }
+    if SeriesBoxRef(i, False, ref, fc) then
+    begin
+      if not TyXYWHHasSize(ref) then Continue;
+      FSankeys[i] := TySankeySolve(FOption, FBindings[i].SeriesIndex, ref, APPI);
+    end
+    else
+      FSankeys[i] := TySankeySolve(FOption, FBindings[i].SeriesIndex, FLastRect, APPI);
     if not FSankeys[i].Valid then Continue;
     { the drags' positions, and the view with its roam [Batch 114] }
     if FBindings[i].SeriesIndex <= High(FSankeyLocal) then
@@ -14771,6 +14910,8 @@ var
   perRaw: TTyChartColorArray;
   obj: TTyChartObjFill;
   base: TTyLabelSpec;
+  ref: TTyXYWH;
+  fc: Boolean;
 begin
   FChords := nil;
   FChordInks := nil;
@@ -14790,7 +14931,17 @@ begin
       SetLength(kept, st.RawCount);
       for k := 0 to st.RawCount - 1 do kept[k] := st.IndexOfRawIndex(k) >= 0;
     end;
-    FChords[i] := TyChordSolve(FOption, FBindings[i].SeriesIndex, FLastRect, APPI, kept);
+    { coordinateSystemUsage 'box' IN A MATRIX CELL OR A CALENDAR DAY
+      [Batch 151]: getCircleLayout's viewRect in the refContainer; a cell of
+      no position draws nothing }
+    if SeriesBoxRef(i, False, ref, fc) then
+    begin
+      if not TyXYWHHasSize(ref) then Continue;
+      FChords[i] := TyChordSolve(FOption, FBindings[i].SeriesIndex, FLastRect, ref,
+        APPI, kept);
+    end
+    else
+      FChords[i] := TyChordSolve(FOption, FBindings[i].SeriesIndex, FLastRect, APPI, kept);
     if not FChords[i].Valid then Continue;
     { the colour visual: the palette's pick or the datum's own colour, a
       gradient where one was written (not a string: no gradient ribbon) }
@@ -14967,6 +15118,8 @@ var
   solved: TTyGraphSolved;
   store: TTyDataStore;
   cols: TTyIntegerArray;
+  ref: TTyXYWH;
+  boxed, fc: Boolean;
 begin
   FreeGraphs;
   SetLength(FGraphs, Length(FBindings));
@@ -15025,6 +15178,7 @@ begin
     { A GRAPH ON A CALENDAR: each node where the calendar puts its date,
       under upstream's own rule for which nodes are placed at all -- see
       CalendarGraphPoints. [Batch 72] }
+    boxed := SeriesBoxRef(i, False, ref, fc);
     if (FBindings[i].CalendarIndex >= 0)
       and (FBindings[i].CalendarIndex <= High(FCalendars)) and (store <> nil) then
     begin
@@ -15055,13 +15209,21 @@ begin
     { ANY OTHER SYSTEM BUT A VIEW IS NOT PORTED -- polar, geo --
       and a graph on one resolves and draws nothing rather than being quietly
       given a view it did not ask for. }
-    if FBindings[i].CoordSysName <> 'view' then Continue;
+    { coordinateSystemUsage 'box' on a matrix or a calendar: the internal
+      view laid out in the cell (createView's getViewRect on the
+      refContainer); a cell of no position draws nothing [Batch 151] }
+    if (FBindings[i].CoordSysName <> 'view') and not boxed then Continue;
+    if boxed and not TyXYWHHasSize(ref) then Continue;
     if Length(FGraphForce) <= si then SetLength(FGraphForce, si + 1);
     if Length(FGraphRoam) <= si then SetLength(FGraphRoam, si + 1);
     { THE WHOLE PASS IS THE PURE UNIT'S, so the suite drives the same path this
       does rather than a copy of it. }
-    solved := TyGraphSolve(FOption, si, store, FLastRect, FGraphForce[si],
-      FGraphRoam[si]);
+    if boxed then
+      solved := TyGraphSolve(FOption, si, store, ref, FGraphForce[si],
+        FGraphRoam[si])
+    else
+      solved := TyGraphSolve(FOption, si, store, FLastRect, FGraphForce[si],
+        FGraphRoam[si]);
     FGraphs[i] := solved.View;
     FGraphNodeScale[i] := solved.NodeScale;
     FGraphLaidOut[i] := True;
@@ -18321,6 +18483,7 @@ var
   i: Integer;
   fnt: TTyLegendFont;
   ink: TTyLegendInk;
+  ref: TTyXYWH;
 begin
   if Length(FLegendSpecs) = 0 then Exit;
   for i := 0 to High(FLegendSpecs) do
@@ -18330,10 +18493,17 @@ begin
     LegendTextOf(i, fnt, ink);
     { a block is measured as the block it is drawn as [Batch 86]; the
       selector and the pager measure their own [Batch 98] }
-    FLegends[i] := TyLayoutLegend(FLegendSpecs[i], FLegendEntries[i],
-      FLegendFlags[i], LegendSources(FLegendEntries[i], i), FLastRect,
-      TyRtBlockMeasurer(AMeasurer, fnt.Rt, fnt.RtGlobal, APPI / 96), fnt, APPI,
-      LegendDeco(i, AMeasurer));
+    { IN A MATRIX CELL OR A CALENDAR DAY when it names one [Batch 151] }
+    if ComponentBoxRef('legend', i, ref) then
+      FLegends[i] := TyLayoutLegend(FLegendSpecs[i], FLegendEntries[i],
+        FLegendFlags[i], LegendSources(FLegendEntries[i], i), ref,
+        TyRtBlockMeasurer(AMeasurer, fnt.Rt, fnt.RtGlobal, APPI / 96), fnt, APPI,
+        LegendDeco(i, AMeasurer))
+    else
+      FLegends[i] := TyLayoutLegend(FLegendSpecs[i], FLegendEntries[i],
+        FLegendFlags[i], LegendSources(FLegendEntries[i], i), FLastRect,
+        TyRtBlockMeasurer(AMeasurer, fnt.Rt, fnt.RtGlobal, APPI / 96), fnt, APPI,
+        LegendDeco(i, AMeasurer));
   end;
   LegAnimSync;
 end;

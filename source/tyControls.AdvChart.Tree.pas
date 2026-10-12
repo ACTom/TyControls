@@ -137,7 +137,13 @@ procedure TyTreeApplyExpand(AOption: TTyChartOption; ASeriesIndex: Integer;
 { treeLayout.ts commonLayout over the container, device px at APPI. }
 function TyTreeSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
   const AContainer: TTyRectF; APPI: Integer;
-  const AToggled: TTyBoolArray = nil): TTyTreeSolved;
+  const AToggled: TTyBoolArray = nil): TTyTreeSolved; overload;
+{ the same over x, y, width, height: createBoxLayoutReference's
+  refContainer -- the canvas, or the matrix cell or calendar day the series
+  names with `coord` [Batch 151] }
+function TyTreeSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const AContainer: TTyXYWH; APPI: Integer;
+  const AToggled: TTyBoolArray = nil): TTyTreeSolved; overload;
 { The view's zoom AZ and translation (ATX, ATY), and the node scale:
   every placed row's pixel moved through them. [Batch 82] }
 procedure TyTreeApplyView(var ASolved: TTyTreeSolved; AZ, ATX, ATY, ANodeScale: Double);
@@ -759,6 +765,14 @@ end;
 function TyTreeSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
   const AContainer: TTyRectF; APPI: Integer;
   const AToggled: TTyBoolArray): TTyTreeSolved;
+begin
+  Result := TyTreeSolve(AOption, ASeriesIndex, TyXYWHOfRect(AContainer), APPI,
+    AToggled);
+end;
+
+function TyTreeSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const AContainer: TTyXYWH; APPI: Integer;
+  const AToggled: TTyBoolArray): TTyTreeSolved;
 var
   mask: TFPUExceptionMask;
   W: TWalk;
@@ -799,8 +813,8 @@ begin
   box.Bottom := Scaled(Result.Spec.Box.Bottom);
   box.Width := Scaled(Result.Spec.Box.Width);
   box.Height := Scaled(Result.Spec.Box.Height);
-  Result.Box := TyGetLayoutRect(box, AContainer.Left, AContainer.Top,
-    AContainer.Right - AContainer.Left, AContainer.Bottom - AContainer.Top, []);
+  Result.Box := TyGetLayoutRect(box, AContainer.X, AContainer.Y,
+    AContainer.W, AContainer.H, []);
   Result.Valid := True;
   Result.RealRoot := -1;
   { the main group: the box's corner, or its centre for a radial tree }

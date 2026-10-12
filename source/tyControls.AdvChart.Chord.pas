@@ -131,7 +131,14 @@ type
 { The graph and the layout. AKept: the legend's verdict per raw node (nil:
   every node kept); ACanvas the control's rect. }
 function TyChordSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
-  const ACanvas: TTyRectF; APPI: Integer; const AKept: TTyBoolArray): TTyChordSolved;
+  const ACanvas: TTyRectF; APPI: Integer; const AKept: TTyBoolArray): TTyChordSolved; overload;
+{ [Batch 151] coordinateSystemUsage 'box': getCircleLayout's viewRect is
+  getLayoutRect of the series' box in ARef (createBoxLayoutReference's
+  refContainer, a matrix cell or a calendar day); the group's origin stays
+  the canvas' }
+function TyChordSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const ACanvas: TTyRectF; const ARef: TTyXYWH; APPI: Integer;
+  const AKept: TTyBoolArray): TTyChordSolved; overload;
 
 { the item -> series chain of a node / a link for one key of a block ('' the
   item itself): the first that writes it, null falling through }
@@ -367,9 +374,29 @@ end;
 
 { ==================== the graph and the layout ==================== }
 
+function ChordSolveImpl(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const ACanvas: TTyRectF; AHasRef: Boolean; const ARef: TTyXYWH; APPI: Integer;
+  const AKept: TTyBoolArray): TTyChordSolved; forward;
+
 function TyChordSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
   const ACanvas: TTyRectF; APPI: Integer; const AKept: TTyBoolArray): TTyChordSolved;
+begin
+  Result := ChordSolveImpl(AOption, ASeriesIndex, ACanvas, False,
+    TyXYWH(NaN, NaN, NaN, NaN), APPI, AKept);
+end;
+
+function TyChordSolve(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const ACanvas: TTyRectF; const ARef: TTyXYWH; APPI: Integer;
+  const AKept: TTyBoolArray): TTyChordSolved;
+begin
+  Result := ChordSolveImpl(AOption, ASeriesIndex, ACanvas, True, ARef, APPI, AKept);
+end;
+
+function ChordSolveImpl(AOption: TTyChartOption; ASeriesIndex: Integer;
+  const ACanvas: TTyRectF; AHasRef: Boolean; const ARef: TTyXYWH; APPI: Integer;
+  const AKept: TTyBoolArray): TTyChordSolved;
 var
+  vx: TTyXYWH;
   node, arr, d: TJSONData;
   n, m, i, j, k, lo, a, b, rendered, nodeCount: Integer;
   ends: array[0..1] of Integer;
@@ -527,10 +554,21 @@ begin
       spec.Radius0 := TyBoxPercent(70);
       spec.Radius1 := TyBoxPercent(80);
     end;
-    view := TySolveBox(spec.Box, TyFixedContainer(ACanvas));
-    Result.CX := TyPieResolve(spec.CentreX, TyRectFWidth(view)) + view.Left;
-    Result.CY := TyPieResolve(spec.CentreY, TyRectFHeight(view)) + view.Top;
-    size := Math.Min(TyRectFWidth(view), TyRectFHeight(view));
+    if AHasRef then
+    begin
+      { in the refContainer, by getLayoutRect on the raw box [Batch 151] }
+      vx := TyGetLayoutRect(TyBoxSpecRaw(spec.Box), ARef.X, ARef.Y, ARef.W, ARef.H, []);
+      Result.CX := TyPieResolve(spec.CentreX, vx.W) + vx.X;
+      Result.CY := TyPieResolve(spec.CentreY, vx.H) + vx.Y;
+      size := Math.Min(vx.W, vx.H);
+    end
+    else
+    begin
+      view := TySolveBox(spec.Box, TyFixedContainer(ACanvas));
+      Result.CX := TyPieResolve(spec.CentreX, TyRectFWidth(view)) + view.Left;
+      Result.CY := TyPieResolve(spec.CentreY, TyRectFHeight(view)) + view.Top;
+      size := Math.Min(TyRectFWidth(view), TyRectFHeight(view));
+    end;
     Result.R0 := TyPieResolve(spec.Radius0, size / 2);
     Result.R := TyPieResolve(spec.Radius1, size / 2);
     W := ACanvas.Right - ACanvas.Left;

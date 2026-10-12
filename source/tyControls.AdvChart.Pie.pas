@@ -211,6 +211,13 @@ function TyPieSectorPercents(const ALayout: TTyPieLayout;
   rect: the series' box is solved against it. }
 function TyPieLayoutOf(const ASpec: TTyPieSpec; const AViewport: TTyRectF;
   AStore: TTyDataStore; ADim: Integer): TTyPieLayout;
+{ THE SAME IN A VIEW ALREADY SOLVED -- getCircleLayout's viewRect, as x, y,
+  width, height: the series' box got by getLayoutRect in a matrix cell or a
+  calendar day (createBoxLayoutReference). The centre's percentages run
+  against the view's own width and height, the radii against half its
+  shorter side [Batch 151]. }
+function TyPieLayoutInView(const ASpec: TTyPieSpec; const AView: TTyXYWH;
+  AStore: TTyDataStore; ADim: Integer): TTyPieLayout;
 
 { Resolve one sector's corner radii against its own geometry.
 
@@ -683,20 +690,26 @@ begin
   Result := (AVal - AD0) / subDomain * subRange + AR0;
 end;
 
-function PieLayoutOfImpl(const ASpec: TTyPieSpec; const AViewport: TTyRectF;
-  AStore: TTyDataStore; ADim: Integer): TTyPieLayout; forward;
+function PieLayoutOfImpl(const ASpec: TTyPieSpec; const AViewRect: TTyRectF;
+  const AView: TTyXYWH; AStore: TTyDataStore; ADim: Integer): TTyPieLayout; forward;
 
 { AN INFINITE SLICE IS DATA NOW -- 'Infinity' reads as what upstream reads it
   as -- and its arithmetic goes on to not-a-number angles the way
   JavaScript's does, where FPC would raise. }
 function TyPieLayoutOf(const ASpec: TTyPieSpec; const AViewport: TTyRectF;
   AStore: TTyDataStore; ADim: Integer): TTyPieLayout;
-var mask: TFPUExceptionMask;
+var
+  mask: TFPUExceptionMask;
+  vr: TTyRectF;
 begin
   mask := GetExceptionMask;
   SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide]);
   try
-    Result := PieLayoutOfImpl(ASpec, AViewport, AStore, ADim);
+    { getCircleLayout, layout.ts:225-251. The two bases are different and
+      that is the whole point of doing it here rather than reusing the
+      grid's solver. }
+    vr := TySolveBox(ASpec.Box, TyFixedContainer(AViewport));
+    Result := PieLayoutOfImpl(ASpec, vr, TyXYWHOfRect(vr), AStore, ADim);
   finally
     ClearExceptions(False);
     {$IFDEF CPUX86_64}
@@ -706,8 +719,25 @@ begin
   end;
 end;
 
-function PieLayoutOfImpl(const ASpec: TTyPieSpec; const AViewport: TTyRectF;
+function TyPieLayoutInView(const ASpec: TTyPieSpec; const AView: TTyXYWH;
   AStore: TTyDataStore; ADim: Integer): TTyPieLayout;
+var mask: TFPUExceptionMask;
+begin
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide]);
+  try
+    Result := PieLayoutOfImpl(ASpec, TyRectOfXYWH(AView), AView, AStore, ADim);
+  finally
+    ClearExceptions(False);
+    {$IFDEF CPUX86_64}
+    SetMXCSR(GetMXCSR and not LongWord($3F));
+    {$ENDIF}
+    SetExceptionMask(mask);
+  end;
+end;
+
+function PieLayoutOfImpl(const ASpec: TTyPieSpec; const AViewRect: TTyRectF;
+  const AView: TTyXYWH; AStore: TTyDataStore; ADim: Integer): TTyPieLayout;
 var
   size, startA, endA, padA, minA, minPad, halfPad: Double;
   unitRad, sum, angleRange, restAngle, sumBig, cur, ang, endOfIt: Double;
@@ -722,14 +752,12 @@ begin
   Result := Default(TTyPieLayout);
   Result.Clockwise := ASpec.Clockwise;
 
-  { getCircleLayout, layout.ts:225-251. The two bases are different and that is
-    the whole point of doing it here rather than reusing the grid's solver. }
-  Result.ViewRect := TySolveBox(ASpec.Box, TyFixedContainer(AViewport));
-  Result.CX := TyPieResolve(ASpec.CentreX, TyRectFWidth(Result.ViewRect))
-    + Result.ViewRect.Left;
-  Result.CY := TyPieResolve(ASpec.CentreY, TyRectFHeight(Result.ViewRect))
-    + Result.ViewRect.Top;
-  size := Min(TyRectFWidth(Result.ViewRect), TyRectFHeight(Result.ViewRect));
+  { the view's own x, y, width and height: the centre against each, the
+    radii against half the shorter [Batch 151: from the view handed in] }
+  Result.ViewRect := AViewRect;
+  Result.CX := TyPieResolve(ASpec.CentreX, AView.W) + AView.X;
+  Result.CY := TyPieResolve(ASpec.CentreY, AView.H) + AView.Y;
+  size := Min(AView.W, AView.H);
   Result.R0 := TyPieResolve(ASpec.Radius0, size / 2);
   Result.R1 := TyPieResolve(ASpec.Radius1, size / 2);
 
