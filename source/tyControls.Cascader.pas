@@ -1567,8 +1567,10 @@ begin
   if Result then Exit;
   ppi := Font.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
-  // MousePos is SCREEN px (the LCL contract); the geometry is panel-local.
-  P := ScreenToClient(MousePos);
+  { MousePos is panel-local already: LCL hands the wheel over in CLIENT coordinates
+    (TMouseWheelEvent.MousePos). This converted it again as a screen point, which put it off
+    the panel by the panel's own screen position, so no column was ever under it (#63). }
+  P := MousePos;
   S := CurrentStyle;
   col := TyCascaderColumnAt(ClientWidth, ClientHeight, ColumnCount, ColumnWidthPx(ppi),
     MulDiv(S.Padding.Left, ppi, 96), MulDiv(S.Padding.Top, ppi, 96),
