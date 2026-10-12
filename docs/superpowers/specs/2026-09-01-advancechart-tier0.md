@@ -2261,7 +2261,7 @@ Free Pascal 会直接抛异常。**加的是除法的护栏,不是行为的改�
 
 顺带:`test.advchart.diagnose` 里那条「某类型还没有渲染器」的测试第二次搬家
 (scatter → pie → funnel)。它钉的是**规则**,类型只是当下的例子;
-它变红就是又有一种类型能画了的提醒。**[第 120 批：又搬了一次——chord 能画了，示例换成 custom（两个类型那条是 grid 上的 lines 加 custom），`test.advchart.candlestick` 的同一条也是，见 §155。]** **[第 121 批：lines 也能画了，两个类型那条换成显式 `coordinateSystem: 'cartesian2d'` 的 map 加 custom，见 §156。]**
+它变红就是又有一种类型能画了的提醒。**[第 120 批：又搬了一次——chord 能画了，示例换成 custom（两个类型那条是 grid 上的 lines 加 custom），`test.advchart.candlestick` 的同一条也是，见 §155。]** **[第 121 批：lines 也能画了，两个类型那条换成显式 `coordinateSystem: 'cartesian2d'` 的 map 加 custom，见 §156。]** **[第 123 批：custom 也能画了，示例换成显式 `coordinateSystem: 'cartesian2d'` 的 parallel（两个类型那条是 map 加 parallel），`test.advchart.candlestick` 与 `test.advchart.marks` 的同一条也换成 parallel，见 §159。]**
 
 ---
 
@@ -7560,7 +7560,7 @@ dataZoom 系列完成(C1–C3)。下一步回画廊缺口清单挑下一个系�
 
 ## 97. Tier 1 第六十三批:折线的平滑(2026-09-29)
 
-dataZoom 做完后按画廊重数缺口:还不画的系列类型里 custom 13(`renderItem` 是函数,JSON 写不下)、heatmap 12、effectScatter/sankey/tree 各 7;已经画的系列上,`smooth` 出现在 19 个文件里,却一直画成直线段——这是已画内容里最大的走样,先补它。
+dataZoom 做完后按画廊重数缺口:还不画的系列类型里 custom 13(`renderItem` 是函数,JSON 写不下 **[第 123 批：`renderItem` 写成 `@Name` 具名句柄，直角坐标上的 custom 能画了，见 §159。]**)、heatmap 12、effectScatter/sankey/tree 各 7;已经画的系列上,`smooth` 出现在 19 个文件里,却一直画成直线段——这是已画内容里最大的走样,先补它。
 
 ### 上游的做法
 
@@ -7970,7 +7970,7 @@ M1–M4 完成:markPoint、markLine、markArea 的模型、变换、布局和画
 
 ### 热力图/日历系列小结
 
-H1–H4b 完成:直角坐标热力图、日历坐标系与它的画面、日历上的热力图、散点、涟漪散点、关系图、饼图,都按上游逐位对上;画廊的 10 个日历文件除 custom-calendar-icon(renderItem 是函数)外都画出来了。
+H1–H4b 完成:直角坐标热力图、日历坐标系与它的画面、日历上的热力图、散点、涟漪散点、关系图、饼图,都按上游逐位对上;画廊的 10 个日历文件除 custom-calendar-icon(renderItem 是函数)外都画出来了。**[第 123 批：renderItem 能写成具名句柄了，见 §159；日历上的 custom 是 C15 的事。]**
 
 ## 107. Tier 1 第七十三批:树图——层级、正交布局、节点、曲边、标签(T1,2026-09-30)
 
@@ -11589,7 +11589,95 @@ C12（lines）合进已有 C6–C11、C13 的分支。冲突全是两边往同�
 
 ### 给 C14 的提醒
 
-custom 落地时，`test.advchart.marks`、`test.advchart.diagnose`、`test.advchart.candlestick` 的「没有渲染器」示例要再搬一次；默认坐标系上已经没有别的没有渲染器的类型，diagnose 那条大概只能用显式坐标系挪过来的 map 或 parallel。
+custom 落地时，`test.advchart.marks`、`test.advchart.diagnose`、`test.advchart.candlestick` 的「没有渲染器」示例要再搬一次；默认坐标系上已经没有别的没有渲染器的类型，diagnose 那条大概只能用显式坐标系挪过来的 map 或 parallel。**[第 123 批：已搬，三处都换成显式 `coordinateSystem: 'cartesian2d'` 的 parallel（diagnose 两个类型那条是 map 加 parallel），见 §159。]**
+
+## 159. Tier 2 第一百二十三批：custom 系列（一）（C14，2026-10-12）
+
+路线图 C14：custom 系列 CU1——`renderItem` 作 `@Name` 句柄、api.value / coord / size / style / visual / barLayout、元素类型复用 C13。以前 `custom` 只在系列登记表里有一行：绑得上、轴照样量它的数，一个元素都不画，诊断面板说它「还画不出来」；§97 数画廊缺口时它排第一（13 个文件），理由是 `renderItem` 是函数、JSON 写不下。这一批对着 6.1 的 `chart/custom/CustomSeries.ts`（缺省、`STYLE_VISUAL_TYPE` 与 `NON_STYLE_VISUAL_PROPS`、`getDataParams` 带 `info`）、`CustomView.ts`（整段：`render` 的 diff、`makeRenderItem` 的 params 与 api 的每个函数、`wrapEncodeDef`、`createOrUpdateItem`、`doCreateOrUpdateEl`、`doesElNeedRecreate`、`copyElement`、`updateElNormal`、`updateElOnState`、`updateZ`、`doCreateOrUpdateAttachedTx`、`processTxInfo`、`retrieveStyleOptionOnState`、`mergeChildren`、`diffGroupChildren`、`createEl`）、`customSeriesRegister.ts`、`coord/cartesian/prepareCustom.ts`、`Cartesian2D.dataToPoint`、`Axis.dataToCoord`、`layout/barGrid.ts`（`computeBarLayoutForCustomSeries`、`calcBarWidthAndOffset`）、`coord/axisBand.ts`（`calcBandWidth`）、`util/styleCompat.ts`（`convertToEC4StyleForCustomSerise`、`convertFromEC4CompatibleStyle` 的 isNormal）、`label/labelStyle.ts`（`getFont`、`createTextStyle` / `createTextConfig` 的缺省）、`animation/customGraphicTransition.ts`（`applyPropsDirectly` 的 clearStyle、`applyMiscProps`）、`util/graphic.ts`（`traverseUpdateZ` / `doUpdateZ`）、`helper/createClipPathFromCoordSys.ts`（`createGridClipPath`）、`util/states.ts`（`createEmphasisDefaultState` 的 z2EmphasisLift）、`data/SeriesData.ts`（`getId`、`diff`、`setItemGraphicEl`）、`data/DataDiffer.ts`、`component/tooltip/seriesFormatTooltip.ts`，以及 zrender `Text` 的 `parsePlainText`（没有文字就没有行）逐行核过，在真 dist 上跑基准。§39、§97、§106 的相关处与 §158 的提醒在原处标注。
+
+### 上游的做法
+
+- **模型**：缺省 `coordinateSystem: 'cartesian2d'`、z 2、`clip: false`。数据是 createSeriesData 的维度：坐标维 x / y，其余列是 `value`、`value0`……（或 `dimensions` 写的名字）；`encode` 可以把一个坐标维摊到几列上（甘特条 `x: [1, 2]`），这几列都喂这根轴——轴的范围、dataZoom 的过滤都看全部几列。没有坐标轴认领的文字列按 guessOrdinal 是 ordinal、存的是原文。
+- **renderItem**：一个函数；6.x 起也可以是字符串，经 `registerCustomSeries(type, fn)` 登记的表查（查不到开发版只警告，什么都不画）。每次 render 调一遍 `makeRenderItem`，`context` 是这一轮所有调用共用的对象。
+- **params**：`context`、`seriesId`（自动 id 是 `'\0' + 名字 + '\0' + n`）、`seriesName`、`seriesIndex`、`dataIndex`（原始下标，`getRawIndex`）、`dataIndexInside`（过滤后的下标）、`dataInsideLength`、`actionType`（这次更新的 payload 的 type，setOption 是 null）、`coordSys`（`{type: 'cartesian2d', x, y, width, height}`，grid 的矩形）、`encode`（坐标维名 → 数据维下标，按维的顺序，非 extraCoord 的才有）、`itemPayload`（缺省 `{}`）。
+- **api**：`value(dim, idx)` 是 store 里解析后的值（类目轴上是序号，文字列是原文）；`ordinalRawValue` 有 ordinalMeta 时给类目名，否则同 value；`coord` 是 `dataToPoint`——两根都是数值轴时走仿射快路径，有类目轴时逐轴 `scale.parse`（类目的数字 `Math.round`、名字查序号）；`size(dataSize, dataItem)` 逐轴：类目轴是 `calcBandWidth(axis).w`，否则 `|dataToCoord(v − s/2) − dataToCoord(v + s/2)|`（轴自己的坐标，不是全局的），`dataItem` 缺省 `[0, 0]`；`style(extra)`（已废弃）是 itemStyle（数据项的盖系列的）经 getItemStyle、填上视觉色与透明度、再把 label 的文字样式与 textConfig 经 `convertToEC4StyleForCustomSerise` 写成 ec4 的 `textFill / textStroke / textStrokeWidth / textPosition / textDistance …`，`extra` 的每个键最后盖上去，`legacy: true`——label 不显示时 `text: null`；`styleEmphasis` 同法取 emphasis 的，不带视觉色、全局字体和 distance 缺省；`visual('color' | 'borderColor')` 是视觉 style 的 fill / stroke，`symbol`、`symbolSize` 等七个非样式视觉在 custom 上都是 undefined；`barLayout(opt)` 只在基准轴是类目轴时有答案——每个 count 一列、各自一个 stack，opt 的 barWidth / barMaxWidth / barMinWidth 不经 parsePercent，barGap 缺省 0（不是柱状图的 `'10%'`），barCategoryGap 缺省 `max(35 − n·4, 15)%`，每项 `{bandWidth, offset, width, offsetCenter}`；`currentSeriesIndices` 是图例留下的系列；`font(opt)` 是 `getFont`——opt 的、全局 textStyle 的、缺省 12px / sans-serif，拼完 trim；`getWidth / getHeight / getDevicePixelRatio`、`getZr`。
+- **diff**：`data.diff(oldData)`——DataDiffer 一对一，键是 `getId`（写了 id 用 id，否则名字，重名加 `__ec__n`，都没有是 `'e\0\0' + 原始下标`；类目维给没名字的项当名字），回调拿的是 dataIndexInside：旧数据按序 update 或 remove，然后剩下的新项依次 add，renderItem 就在这些回调里按这个次序调。旧数据为空（首次、增量之后）先 `group.removeAll()`。系列被图例关掉时视图 `remove()`——组清空、`_data` 留着，再打开时旧元素按 update 重新挂回去。
+- **元素**：`createOrUpdateItem`——返回假值就把已有的元素从组里拿掉；`doesElNeedRecreate`（type 写了且变了、path 的 pathData 变了、image 的 image 变了）就新建、`copyElement` 旧的、在原位置 `replaceAt`；否则就地更新（**merge 原则**：选项没写的键保留，`style` 整个替换——`useStyle({})` 再 `setStyle`）。`updateElNormal`：`setTextConfig`（扩展）、text 的 ec4 `textFill / textStroke` 改名、`applyUpdateTransition` 带 clearStyle；`info` 写了才换；emphasis / blur / select 各自 `ensureState`、state.style 取 `emphasis.style`（emphasis 退到 `styleEmphasis`）或 null；`updateZ`：非组的 z、zlevel 总是系列的，z2 写了才设（`|| 0`），各状态的 z2 同理；`createEl` 把 z2EmphasisLift、z2SelectLift 都设成 1。`mergeChildren`：`$mergeChildren: 'byName'`（或 `diffChildrenByName`）按名字 DataDiffer（没名字的键是 `'e\0\0' + 下标`），`false` 先全清，否则按下标——新孩子为假就把旧的同位孩子 ignore，没写 ignore 的新孩子补 `ignore: false`，多出来的旧孩子从后往前移走；`group.add` 已经是孩子的不动位置。
+- **文字**：`processTxInfo` 与 graphic 一样判 ec4（text 元素总是，别的看 style 有没有 `text`），转出来的 textContent 是 silent 的、textConfig 的 position 只在 normal 时缺省 `'inside'`；textContent 也按 merge 原则更新。
+- **次序**：series 视图的组；`updateZ` 对每个项的根 `traverseUpdateZ`：深度优先记最大 z2，挂着 textContent 的元素把标签的 z2 设成「到它为止的最大 z2 + 2」。没有文字的 Text 没有 tspan，不进显示列表。
+- **状态**：项的根是悬停分发者，整棵树一起进出 emphasis；每个可绘元素有三个状态对象，default proxy 照常提色（没声明 fill 时提 fill，否则提 stroke），z2 只加 1。
+- **clip**：`clip: true` 时组的 clipPath 是 `createGridClipPath`——grid 的 area 四周各放宽 `lineStyle.width / 2`，宽 ceil，x 不是整数就 floor 并把宽加一。
+- **提示框、图例、事件**：项提示框是 `defaultSeriesFormatTooltip`（`encode.tooltip` 两维以上时每维一行，名字是维的显示名）；图例图标是 roundRect、系列色；事件参数是系列的 `getDataParams`，多一个目标元素自己的 `info`。
+
+### port 以前
+
+- `custom` 绑定、建 store、参与轴的范围，没有任何渲染；`TySeriesTypeHasRenderer('custom')` 为假，诊断说「还画不出来」。`encode` 一个坐标维写成数组时 store 只取第一列。
+
+### 做法
+
+- **公开 API（`AdvChart.Custom`，新单元，接口注释里同一份说明）**：
+  - **句柄**：`TTyChartRenderItem = function(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData of object`；`TyChartRegisterRenderItem / Unregister / Find / RenderItemNames / ClearRenderItems`，规矩同其他登记表（同名再登记是替换）。选项里写 `renderItem: '@Name'`（A1 的写法），也认上游 `registerCustomSeries` 的裸名 `'Name'`。
+  - **params**：`TTyCustomParams` 一个字段对一个上游参数：`Context`（这一轮共用的 TJSONObject，图表持有，句柄可以写）、`SeriesId / SeriesName / SeriesIndex`、`DataIndex / DataIndexInside / DataInsideLength`、`ActionType`（上游的 null 是 `''`）、`CoordSys`（`Type_ / X / Y / Width / Height`，css px）、`Encode`、`ItemPayload`（只读）。
+  - **api**：抽象类 `TTyCustomApi`，一个方法对一个上游函数：`Value(dim[, dataIndexInside])`（Double；文字值是 NaN，原文看 `ValueText`）、`ValueText`（JavaScript 的 String()）、`OrdinalRawValue`、`Coord([x, y])`（`array of const`，数字或类目名）、`Size([dx, dy] [, [x, y]])`、`Style([extra])`、`StyleEmphasis([extra])`、`Visual(type)`（TJSONData，undefined 是 nil）与 `VisualText`、`BarLayout(opt)`（`TTyCustomBarLayout`，undefined 是空数组）、`CurrentSeriesIndices`、`Font(opt)`、`GetWidth / GetHeight / GetDevicePixelRatio`。维可以是下标或名字（重载），每个读数据项的方法都有可选的 dataIndexInside（−1 是当前项）。返回的 TJSONData 归调用方，放进树里就归树。坐标一律 css px：控件在设备像素上布局，api 除以 PPI/96，画的时候再乘回去。
+  - **返回值**：一棵元素选项树，形状就是 graphic 组件的（C13 的十三种里除 compoundPath / path 外都认），外加 custom 的 `info`、`emphasis / blur / select`、`styleEmphasis`、`$mergeChildren`、根上的 `focus / blurScope / emphasisDisabled`；nil、JSON null、false 是这一项什么都不画。树归图表，用完就放。**入口检查**：树先过 `TyJsonNestingExceeds`，太深就不要、并记一条诊断。
+  - C15 往上加坐标系时只改 api 的实现（`DoCoord`、`Size`、`BarLayout` 按绑定分支）和 `CoordSys`，句柄的形状不变。
+- **视图（`TTyCustomView`）**：每个系列一个，按「系列模型 id + 类型」认（notMerge 换模型 id 不变时沿用，同上游的视图复用）。`Render(ids, raws, call, z, zlevel)` 是 `CustomView.render`：没有旧数据先清组，`TyDataDiff`（AnimView 现成的一对一 DataDiffer）给出次序，每个 add / update 调 call（renderItem）、`CreateOrUpdateItem`，remove 把元素丢掉；`DoCreateOrUpdate` / `NeedRecreate` / `UpdateAttachedTx` / `UpdateNormal` / `UpdateStates` / `UpdateZ` / `MergeChildren` 一一对着上游的同名函数。`RemoveAll` 是图例关掉时的 `remove()`：根从组上摘下、仍归视图、数据留着。元素的去留：挂在组上的归组；摘下但旧数据还引用的归 `FDetached`；真正不要的进 `FGone`，下一次建绘制列表之前释放（同 graphic 的 GoneList）。抛错的地方（未知类型、compoundPath、path）照上游停在那里，`Error` 记下那句话，这一轮的数据不认（下一轮从头来）。每个元素的 `TTyGfxEl.Custom`（新字段，随元素释放）挂一个 `TTyCustomElInfo`：类型词、有没有写名字、三个状态的 style 与 z2、根的 focus 等。
+- **`AdvChart.Graphic`**：`ApplyUpdateTransition` 里「直接设终值」那段抽成 `TyGfxApplyDirect(el, opt, clearStyle)`，graphic 照旧（clearStyle 假），custom 传真；ec4 的两个函数公开为 `TyGfxIsEC4` / `TyGfxConvertEC4`，后者加 `AIsNormal`（非 normal 不缺省 `'inside'`）。
+- **`AdvChart.States`**：`TTyStElement.LiftOne`——emphasis、select 的 z2 只加 1（零值仍是原来的 10 / 9）。**`AdvChart.Marks`**：`custom` 进「别处画」的名单。**资源串**两条：`rsTyChartCustomNoRenderItem`（名字没登记）、`rsTyChartCustomRenderItemFailed`（句柄抛异常、树太深），中文条目与 `.pot` 同步，主题编辑器的 po 是逐字节拷贝。
+- **控件**：
+  - store：`CustomDims`——`encode` 把一个坐标维写成两列以上时，每列一个 store 维、`Coord` 记成那个坐标维，于是轴的范围、`weakFilter` 都看全部几列。
+  - 布局（`SolveCustom`，在 lines 之后）：每个 custom 绑定建 api（`TTyChartCustomApi`，控件内部类）与 params，`AnimRowKeys` 给出 getId 的键，跑视图的 `Render`；系列被图例关掉 `RemoveAll`；不在直角坐标上的记一条「坐标系还没做」的诊断；`clip` 按 createGridClipPath 算 css 的矩形。`actionType`：`DispatchAction` 在处理期间把 payload 的 type 记在 `FCustomAction`，`DzDispatch`（所有 dataZoom 都经过它）记 `'dataZoom'`，处理完还原。
+  - api 的实现：`Value` 先找读这个数据维的 store 列，没有就读原始单元按 `RawPosType` 解析；`Coord` 按轴 `scale.parse` 再 `Cart.DataToPoint`；`Size` 用 `TTyAxis.BandWidth` 与 `DataToLocal`；`Style` 按上面的 ec4 规则从选项里读 itemStyle 与 label；`Visual` 的颜色：数据项写的、系列写的（原样）、否则调色板色写成 `'#rrggbb'`；`BarLayout` 是新函数 `TyCustomBarLayout`（纯函数，JavaScript 的除法与 Math.min / max：陷阱屏蔽、MXCSR 清掉粘滞位再恢复）。
+  - 绘制（`CustomBuild`，`BuildSeriesList` 里一个分支）：变换与 textContent 的位置（同 graphic 的 Prepare），每个根先 doUpdateZ（标签 z2 = 到它为止的最大 z2 + 2），再按树的次序出绘制元素（`TyGfxPaintElement`；ignore 连子树跳过，silent 向下继承，没有文字的 Text 不出），Datum 是系列的 `(series, dataIndexInside, raw)`，`Z = zlevel × 100000 + z`，clip 时带裁剪矩形；`FCustomPaintEls` 记每个绘制元素来自哪个元素。
+  - 状态：`sskCustom`——`StSync` 把一个项的路径元素按列表次序收成 host 与 parts（文字、图片、textContent 不收），`StDeclareCustom` 给每个元素三个状态，声明的 fill / stroke / lineWidth / opacity 与 z2 来自元素选项，`LiftOne`。悬停、highlight / downplay 动作、图例悬停走现成的机器。
+  - 事件：系列事件参数多一个目标元素自己的 `info`（JSON 文本）。
+
+### 基准
+
+`tools/advchart-oracle/custom-series.js`（真 dist，node SSR，`chart._ssr = false`，`env.node` 关掉、`getDom` 给空对象让提示框跑，animation.js 的时钟钩子，setTimeout 是每步前后各推 500 ms 的队列，随机数是端口的 xorshift32，zrender 的宽度表量字；每个 `renderItem: '@name'` 在 node 里换成包着 JS 函数的记录器——记 params、每个 api 调用的参数与答案、返回的树；指针步走 zrender 自己的 Handler，每步之后画一遍，最后 `process.exit()`）→ `tests/fixtures/advchart-custom-series.json`：**10 个用例、24 个状态、14 步、58 次 renderItem 调用、389 次 api 调用、101 条元素记录、6 次悬停、2 次显示的提示框、3 份图例、56 条守卫**。
+
+- **形状** 7 个：甘特条（value / coord / size 的类目带宽 / style——系列色、数据项自己的色、系列透明度、没显示的 ec4 标签；`encode.tooltip` 两维的项提示框，悬停两次与离开）；误差棒（三条线的组、`visual('color')`、类目 x 轴上的 size，悬停组里的一条线）；六边形（两根数值轴、带数据项的 size、没写的 borderColor 是 undefined、数值基准轴上的 barLayout 是 undefined、getWidth / getHeight / getDevicePixelRatio、info）；文字（圆上 `top` 的 textContent、自由文字——猜出来的 ordinal 与类目的 ordinalRawValue、`api.font`、`params.context` 数调用、ec4 的 `api.style({text, textPosition})`）；两个共用一个带的 custom 柱（`barLayout` 的 count 2、`barGap: '20%'`、`barCategoryGap: 10`，以及 count 3 带 barWidth 与 barMaxWidth）；clip（`clip: true` 加 `lineStyle.width: 4` 的放宽，对照缺省的不裁）。
+- **合并** 1 个：组放在点上（组的 x / y / rotation）、info；两次 merge 新数据——按下标少一个孩子、按名字倒过来再转、只在一种变体里写的 stroke 在更新后消失（clearStyle）、新项加在最后。
+- **图例** 1 个：两个 custom 的图标与颜色；关掉一个（`currentSeriesIndices` 少了它、它不再画）、再打开（同一批元素按 update 挂回去）。
+- **dataZoom** 1 个：inside、`filterMode: 'weakFilter'`、两端都喂 x 的区间——跨过窗口的留下、在外面的过滤掉、`dataIndex` 与 `dataIndexInside` 不同；两次 dataZoom 动作（`actionType: 'dataZoom'`，调用次序是 DataDiffer 的）。
+- **emphasis** 1 个：rect 声明的 emphasis 样式、圆的缺省提色（z2 3 加 1）、整个项一起进出、离开。
+
+每个状态比：每次调用（系列、句柄名、params、api 的每一次调用与答案、返回的树；对象不论键序）、每个元素（键 `s<系列>:<原始下标>` 与 `/k`、类型、名字、标志、z / zlevel / z2、七个变换键与全局矩阵、形状、PathProxy 数据、样式、文字片段、textContent 的位置 / 缺省色 / 样式 / 片段 / z、所带的项、info）、显示次序、clip、每条路径的状态与状态样式（颜色、线宽、透明度、z2）、图例；指针步另比命中的元素与项、提示框的行。
+
+自检（任何一条不过就不写文件、退出 1）：R1 每个元素的全局矩阵由属性与父矩阵重算逐位一致、R2 显示列表按 (zlevel, z, z2) 有序；指针步不调 renderItem；四十多条区分事实（一项一调、params 的系列与坐标系、数据项自己的颜色、legacy 与系列透明度、类目带宽、ec4 的 silent 标签、提示框两维、误差棒是三条线的组、数值轴上的 barLayout 与没写的 borderColor 都是 undefined、getWidth、info、context 跨调用、ordinalRawValue 的两种、font 用全局字体、textContent 的文字、ec4 标签的文字、组在点上、按下标少孩子、按名字不挪位置、更新后 stroke 消失、新项在最后、两列与三列的 barLayout、clip 与不 clip、放宽 2、关掉的不画也不调、currentSeriesIndices、再打开、图例两项、weakFilter 的留与滤、dataIndexInside、actionType、声明的 emphasis 色、整项一起、提 1、离开清状态）；两次生成逐字节一致；没有 `\u0000`（id 里的 `\0` 写成 `~`）；JSON 能读回。提示框的行这次按「有宽度的是标记、粗体的是值、其余是名字」解析——lines 基准的解析把标记后面的名字当成值，这里的项名字会被吃掉。
+
+### 测试
+
+`test.advchart.customseries`（新，注册在 `tytests.lpr`）：
+
+- **基准重放**（`TAdvChartCustomSeriesOracleTest`，5 个）：形状、合并、图例、dataZoom、emphasis。每个 renderItem 是 Pascal 抄写的句柄，用同一个名字登记，api 的每次调用像记录器那样记下来；**每个 api 调用单独一句、按 JavaScript 的求值次序写**——FPC 对实参（和开放数组里的元素）的求值次序不是从左到右，记下的调用次序本身就在比较之列。全部逐位比较。
+- **手写**（`TAdvChartCustomSeriesTest`，10 个）：登记表认 `'@Name'` 与 `'Name'`、区分大小写；没登记的名字进诊断、什么都不画、不再说「还画不出来」；句柄抛异常——每项照问、什么都不画、诊断带异常信息；太深的树不要、记诊断；`TyCustomBarLayout` 的缺省、barWidth 被 barMaxWidth 截住、没有 count；元素真的画出来（像素）；未知类型停在那里（前面的画了、后面的不调）、下一轮从头来；事件参数带目标元素的 info；极坐标上的 custom 说坐标系还没做；动画开着也画在 renderItem 放的地方。
+
+另：`test.advchart.marks` 的发布答案测试把 custom 放进「别处画」的名单、断言它有渲染器，「还不画」的例子换成 parallel；`test.advchart.diagnose` 两条换成显式 `coordinateSystem: 'cartesian2d'` 的 parallel（两个类型那条是 map 加 parallel）；`test.advchart.candlestick` 的同一条换成 parallel。
+
+首跑：形状一组 145 处不同——几乎全是 Pascal 抄写里把 api 调用嵌在实参和 `TJSONObject.Create([...])` 里，FPC 从右往左求值，记下的次序与 JS 相反；拆成逐句之后全对。另两处：ec4 转出来的没有文字的标签端口多出一个绘制元素（上游没有行就不进显示列表，改成不出）；dataZoom 动作在端口是 `DispatchDataZoom`（不经 `DispatchAction`），测试按它走。之后全部逐位对上。
+
+本批按规矩只跑了新套件和直接碰到的套件，全部通过：`TAdvChartCustomSeriesOracleTest`（5）、`TAdvChartCustomSeriesTest`（10）、`TAdvChartMarksTest`（36）、`TAdvChartDiagnoseTest`（23）、`TAdvChartCandleRuleTest`（5）、`TAdvChartCandleDrawTest`（7）、`TAdvChartGraphicTest`（12）、`TAdvChartEmphasisRuleTest`（8）、`TAdvChartEmphasisDrawTest`（6）、`TAdvChartSelectOracleTest`（11）、`TAdvChartFocusBlurTest`（11）、`TAdvChartLegendActTest`（8）、`TAdvChartLinesOracleTest`（5）、`TAdvChartLinesTest`（8）、`TAdvChartDataZoomInteractOracleTest`（8）、`TAdvChartAnimStateEngineTest`（11）、`TAdvChartAnimStateTest`（5）、`TAdvChartMouseEventsOracleTest`（3）、`TAdvChartHitTest`（12）、`TAdvanceChartTest`（60）、`TI18NTest`（8）。全量与变异轮留到里程碑（C14–C22）末尾；变异候选列在会话草稿 `s159.md.candidates.md`。
+
+### 推迟与偏差
+
+- **坐标系**：只做直角坐标。极坐标、日历、单轴是 C15；`coordinateSystem: 'none'`、geo、matrix 以后；这些上面的 custom 不画、诊断说坐标系还没做。
+- **过渡动画**（C15）：更新直接到终值，`transition` / `enterFrom` / `leaveTo` / `enterAnimation` 等都不读；`keyframeAnimation`、`during`、`morph`、universal transition 不做。动画开着时元素画在 renderItem 放的地方。
+- **元素**：`path`（SVG pathData）、`compoundPath` 没有元素类，同上游抛错一样停在那里；元素上的 `clipPath`、`tooltipDisabled`（记下没接）、`autoBatch` 不做；`emphasisDisabled`、根上的 `focus / blurScope` 记下没接——项的焦点与淡出按系列的 `emphasis.focus` 走。
+- **状态**：只有路径元素有状态，状态样式只认 fill、stroke、lineWidth、opacity 与 z2；文字、图片、textContent 的状态（文字的 emphasis 样式、标签的 z2 提升）不做；ec4 写法的 emphasis 不转。
+- **clip**：命中不看裁剪（同端口的其他裁剪）。
+- **api**：`style` 的 label 文字是缺省标签（label 维的值空格连起来），`formatter` 不读，label 的富文本与 `borderType` 的虚线不转；`visual` 只认 color 与 borderColor（其余七个上游在 custom 上也是 undefined），颜色写了就原样、调色板色写成 `'#rrggbb'`（不透明时）或 `rgba()`，visualMap 改过的颜色看不到；`value` 读超出数据宽度的维是 NaN；`getZr` 没有；`getDevicePixelRatio` 是 PPI / 96。
+- **渐进 / 增量渲染**：没有；大数据量的 custom 也一次画完。
+- **renderItem 抛异常**：上游异常冒出整次更新，端口记诊断、这一项什么都不画、其余照常。
+- **`info` 进事件**是 JSON 文本，格式同 graphic（fpjson 的 `AsJSON`）。
+
+### 落地
+
+- `source/tyControls.AdvChart.Custom.pas`（新，进 `tycontrols.lpk` 与 `tycontrols.pas`）。
+- `source/tyControls.AdvChart.GfxEl.pas`：`TTyGfxEl.Custom`。`source/tyControls.AdvChart.Graphic.pas`：`TyGfxApplyDirect`、`TyGfxIsEC4`、`TyGfxConvertEC4`（加 `AIsNormal`）。`source/tyControls.AdvChart.States.pas`：`LiftOne`。`source/tyControls.AdvChart.Marks.pas`：「别处画」加 custom。`source/tyControls.StrConsts.pas` 两条资源串；`languages/tyControls.StrConsts.pot`、`languages/tycontrols.strconsts.zh_CN.po`、`tools/themebuilder/languages/tycontrols.zh_CN.po`。
+- `source/tyControls.AdvanceChart.pas`：上面「控件」一条的全部（`sskCustom`、`CustomDims`、`SolveCustom`、`CustomCall`、`CustomBuild`、`CustomVisualFill`、`StDeclareCustom`、`TTyChartCustomApi`、`FCustomAction`、事件的 info、测试读的 `CustomView` / `CustomPaintSource` / `CustomClip`）。
+- `tools/advchart-oracle/custom-series.js`、`tests/fixtures/advchart-custom-series.json`、`tests/test.advchart.customseries.pas`（新，注册在 `tytests.lpr`）；`tests/test.advchart.marks.pas`、`tests/test.advchart.diagnose.pas`、`tests/test.advchart.candlestick.pas`。
+- §39、§97、§106、§158 在原处标注。没有新主题键或新度量。
 
 ## 160. Tier 2 第一百二十五批：toolbox 工具栏（C16，2026-10-12）
 

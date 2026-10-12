@@ -843,6 +843,16 @@ msgstr ""
 msgid "xAxis or yAxis without the other: no grid was created, so neither is drawn"
 msgstr ""
 
+#: tycontrols.strconsts.rstychartcustomnorenderitem
+#, object-pascal-format
+msgid "series[%d]: no renderItem is registered as \"%s\", so nothing is drawn"
+msgstr ""
+
+#: tycontrols.strconsts.rstychartcustomrenderitemfailed
+#, object-pascal-format
+msgid "series[%d]: renderItem \"%s\" failed: %s"
+msgstr ""
+
 #: tycontrols.strconsts.rstychartexportoptsbad
 msgid "The export options are not valid JSON."
 msgstr ""

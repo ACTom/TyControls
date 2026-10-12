@@ -67,7 +67,7 @@ uses
   tyControls.AdvChart.Single, tyControls.AdvChart.ThemeRiver,
   tyControls.AdvChart.Chord,
   tyControls.AdvChart.GfxEl, tyControls.AdvChart.Graphic,
-  tyControls.AdvChart.Lines,
+  tyControls.AdvChart.Lines, tyControls.AdvChart.Custom,
   tyControls.AdvChart.Toolbox, tyControls.AdvChart.Brush,
   fpjson, contnrs, tyControls.SubPixel;
 
@@ -238,7 +238,10 @@ type
     sskChord,
     { [Batch 121] a lines row: its line the host, its end symbols parts
       whose states are the line's stroke and opacity }
-    sskLines);
+    sskLines,
+    { [Batch 123] a custom item: its first path the host, every other path
+      of its tree a part with states of its own }
+    sskCustom);
   TTyStNodeArray = array of TJSONObject;
   TTyStSeries = record
     Kind: TTyStKind;
@@ -563,6 +566,22 @@ type
     FLinesSpecs: TTyLabelSpecTable;
     FLnSlot: Integer;
     FTrailLayer: TBGRABitmap;
+    { THE CUSTOM SERIES [Batch 123]: one view per series index (its group
+      of item roots and its last data, kept across updates for the merge
+      by data id); the element each paint list entry was made from (nil for
+      the rest); the action the running update is for (renderItem's
+      actionType); each slot's clip (css px); and, while renderItem runs,
+      the slot, its handler, its params and its api }
+    FCustomViews: array of TTyCustomView;
+    FCustomPaintEls: TTyGfxElArray;
+    FCustomAction: string;
+    FCustomClipOn: TTyBoolArray;
+    FCustomClip: array of TTyXYWH;
+    FCustomSlot: Integer;
+    FCustomHandler: TTyChartRenderItem;
+    FCustomParams: TTyCustomParams;
+    FCustomApi: TObject;
+    FCustomMissing: string;
     { ONE VIEW PER GRAPH SERIES, not one per component: a graph's coordinate
       system belongs to the series, so these are indexed by BINDING slot and
       most of them are nil. A graph on AXES has none either -- its coordinate
@@ -1606,6 +1625,15 @@ type
     procedure SolveTreemaps(const AMeasurer: ITyTextMeasurer; APPI: Integer);
     procedure SolveSankeys(APPI: Integer);
     procedure SolveChords(APPI: Integer);
+    { [Batch 123] the custom series: every renderItem of every series
+      shown, its view merged; the columns an encode spreads over one axis;
+      the paint elements; the states }
+    procedure SolveCustom(APPI: Integer);
+    function CustomCall(AIndexInside: Integer): TJSONData;
+    procedure CustomDims(ASlot: Integer; var ADims: TTySeriesDimArray);
+    function CustomBuild(ASlot: Integer; AList: TTyPaintList; APPI: Integer): Integer;
+    function CustomVisualFill(ASlot, ARow: Integer): TJSONData;
+    procedure StDeclareCustom(ASlot, ARaw: Integer; AList: TTyPaintList);
     { [Batch 121] }
     procedure SolveLines(APPI: Integer);
     function LinesProject(const AX, AY: TTyLinesValue; AClamp: Boolean): TTyPointF;
@@ -2701,6 +2729,13 @@ type
     function GraphicPaintCount: Integer;
     function GraphicPaintElement(AIndex: Integer): TTyChartElement;
     function GraphicPaintSource(AIndex: Integer): TTyGfxEl;
+    { THE CUSTOM SERIES, for a test to read [Batch 123]: series
+      ASeriesIndex's view (nil: none), the element a paint list entry was
+      made from (nil: not a custom series'), and the series' clip in css px
+      (False: none) }
+    function CustomView(ASeriesIndex: Integer): TTyCustomView;
+    function CustomPaintSource(AIndex: Integer): TTyGfxEl;
+    function CustomClip(ASeriesIndex: Integer; out ARect: TTyXYWH): Boolean;
     { ---- the drill-downs [Batch 115] ---- }
     { upstream's sunburstRootToNode on the sunburst ASeriesIndex: the view
       root becomes ARow (a row of its tree; 0 the root) -- what a click on a
@@ -3012,6 +3047,7 @@ begin
 end;
 
 destructor TTyAdvanceChart.Destroy;
+var i: Integer;
 begin
   { Order is a contract, not a habit: a store BORROWS its category list from an
     axis the build owns, so every store goes first. }
@@ -3058,6 +3094,9 @@ begin
   { THE ELEMENTS BEFORE THEIR DRIVER [Batch 122] }
   FGfxPaintEl := nil;
   FreeAndNil(FGfxView);
+  for i := 0 to High(FCustomViews) do FreeAndNil(FCustomViews[i]);
+  FCustomViews := nil;
+  FCustomPaintEls := nil;
   FreeAndNil(FGfxModel);
   FreeAndNil(FGfxAnim);
   FreeAndNil(FGfxUnder);
@@ -4123,6 +4162,9 @@ begin
       other three away. The axis then sized itself from a quarter of its own
       data and the renderer found no columns to read. }
     MultiValueDims(FBindings[i], dims);
+    { a custom series' encode may spread one coordinate over several
+      columns (a span's start and end) [Batch 123] }
+    CustomDims(i, dims);
     for k := 0 to High(dims) do
     begin
       st.AddDimension(dims[k].Name, dims[k].Kind);
@@ -4904,6 +4946,9 @@ begin
     [Batch 121] }
   SolveLines(APPI);
   FreeAndNil(FTrailLayer);
+  { THE CUSTOM SERIES, on the coordinate systems laid out above: renderItem
+    runs here, once per item shown [Batch 123] }
+  SolveCustom(APPI);
   SolveTitles(AMeasurer, APPI);
   SolveLegends(AMeasurer, APPI);
   SolveVisualMapViews(AMeasurer, APPI);
@@ -7063,6 +7108,7 @@ end;
   payload -- the source slider keeps its view }
 procedure TTyAdvanceChart.DzDispatch(const AAction: TTyDzAction);
 var
+  savedAction: string;
   n, it, i, j, t, u: Integer;
   pay: TTyAnimOverride;
   hasPay: Boolean;
@@ -7149,10 +7195,14 @@ begin
       pay.Delay := 0;
     end;
   end;
+  { the update is a dataZoom action's, whoever dispatched it [Batch 123] }
+  savedAction := FCustomAction;
+  FCustomAction := 'dataZoom';
   try
     DzSyncLayout(pay, hasPay);
   finally
     FDzFrom := -1;
+    FCustomAction := savedAction;
   end;
   if Assigned(FOnDataZoom) then FOnDataZoom(Self, AAction);
   { the dispatch's triggerUpdatedEvent [Batch 97] }
@@ -15972,6 +16022,11 @@ begin
   if FPaintList = nil then FPaintList := TTyPaintList.Create
   else FPaintList.Clear;
   list := FPaintList;
+  { a new list: no entry is a custom element yet, and what the last render
+    removed may go [Batch 123] }
+  FCustomPaintEls := nil;
+  for i := 0 to High(FCustomViews) do
+    if FCustomViews[i] <> nil then FCustomViews[i].FreeGone;
   { THE GRAPHIC ELEMENTS FIRST: at an equal z they are under every series,
     the component's group joining the root before the series' [Batch 122] }
   for i := 0 to High(FGfxPaint) do list.Add(FGfxPaint[i]);
@@ -16036,6 +16091,13 @@ begin
       { A GRAPH IS ON A COORDINATE SYSTEM OF ITS OWN, and that system belongs
         to the series rather than to a component -- so it is solved in the
         layout pass like a pie's box and replayed here like a radar's. }
+      { A CUSTOM SERIES: the elements its renderItem made, drawn from its
+        view [Batch 123] }
+      if FBindings[i].SeriesType = TyCustomSeriesType then
+      begin
+        Inc(drawn, CustomBuild(i, list, APPI));
+        Continue;
+      end;
       { A LINES SERIES: its rows laid out on their coordinate system in the
         layout pass, drawn here; the labels go through the expansion with a
         spec per row [Batch 121] }
@@ -18876,6 +18938,7 @@ end;
 function TTyAdvanceChart.SeriesEventTarget(const ADatum: TTyChartDatumRef;
   AElement: Integer): TTyChartEventTarget;
 var
+  gel: TTyGfxEl;
   slot: Integer;
   p: TTyChartCallbackParams;
   n, d: TJSONData;
@@ -18925,6 +18988,10 @@ begin
   p.SeriesIndex := ADatum.SeriesIndex;
   p.SeriesName := SeriesModelName(ADatum.SeriesIndex);
   p.SeriesId := SeriesIdOf(FOption, ADatum.SeriesIndex);
+  { A CUSTOM ELEMENT'S info rides the event: CustomSeries.getDataParams
+    reads the target element's own [Batch 123] }
+  gel := CustomPaintSource(AElement);
+  if (gel <> nil) and (gel.Info <> nil) then p.Info := gel.Info.AsJSON;
   Result.HasData := True;
   Result.Params := p;
   Result.Model := SeriesEventModel(ADatum.SeriesIndex);
@@ -19824,7 +19891,9 @@ begin
   { a lines series' rows, not in large mode (a batch has no states)
     [Batch 121] }
   else if (t = TyLinesSeriesTypeName) and not ((ASlot <= High(FLines))
-    and FLines[ASlot].IsLarge) then Result := sskLines;
+    and FLines[ASlot].IsLarge) then Result := sskLines
+  { a custom series' items [Batch 123] }
+  else if t = TyCustomSeriesType then Result := sskCustom;
   { a line on a calendar is not drawn at all }
   if (FBindings[ASlot].CalendarIndex >= 0) and (t = 'line') then Result := sskNone;
 end;
@@ -19894,6 +19963,11 @@ var
   k: Integer;
 begin
   s := FBindings[ASlot].SeriesIndex;
+  if FSt[s].Kind = sskCustom then
+  begin
+    StDeclareCustom(ASlot, ARaw, AList);
+    Exit;
+  end;
   item := @FSt[s].Rows[ARaw];
   host := AList.Element(FSt[s].HostIdx[ARaw]);
   nodes := StNodes(s, ARaw);
@@ -20329,6 +20403,7 @@ procedure TTyAdvanceChart.StSync(AList: TTyPaintList; APPI: Integer);
 var
   slot, s, k, raw, n, i, hoverS: Integer;
   el: TTyChartElement;
+  gel: TTyGfxEl;
   item: PTyStItem;
   prev: TTyStNames;
   was: Boolean;
@@ -20510,6 +20585,17 @@ begin
     if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Continue;
     raw := FStores[slot].GetRawIndex(el.Datum.DataIndex);
     if (raw < 0) or (raw > High(FSt[s].HostIdx)) then Continue;
+    { A CUSTOM ITEM'S PATHS, in the order its tree draws them: the first
+      hosts, the rest are parts with states of their own; a text, an image
+      and a textContent take no state here [Batch 123] }
+    if FSt[s].Kind = sskCustom then
+    begin
+      gel := CustomPaintSource(k);
+      if (gel = nil) or not gel.StatePath or (gel.Host <> nil) then Continue;
+      if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k
+      else StPush(FSt[s].PartIdx[raw], k);
+      Continue;
+    end;
     if el.Caption.FontSizeLogical > 0 then
     begin
       if FSt[s].LabelIdx[raw] < 0 then FSt[s].LabelIdx[raw] := k;
@@ -24737,7 +24823,7 @@ function TTyAdvanceChart.DispatchAction(const APayloadJson: string): Boolean;
 var
   d, tp: TJSONData;
   p: TJSONObject;
-  t: string;
+  t, savedAction: string;
   nLine, nCol: Integer;
 begin
   Result := False;
@@ -24760,6 +24846,10 @@ begin
     tp := p.Find('type');
     if (tp = nil) or (tp.JSONType <> jtString) then Exit;
     t := tp.AsString;
+    { the update this action runs renders for it: renderItem's actionType
+      [Batch 123] }
+    savedAction := FCustomAction;
+    FCustomAction := t;
     { A BATCH of highlight / downplay [Batch 116]: each item over the
       payload, one event; any other batch is not taken }
     if (p.Find('batch') is TJSONArray) and ((t = 'highlight') or (t = 'downplay')) then
@@ -24840,6 +24930,7 @@ begin
     end;
   finally
     p.Free;
+    FCustomAction := savedAction;
   end;
   { every dispatch ends with triggerUpdatedEvent [Batch 97] }
   if Result then EmitUpdated;
@@ -29984,6 +30075,1188 @@ end;
 function TTyAdvanceChart.GraphicPaintSource(AIndex: Integer): TTyGfxEl;
 begin
   Result := FGfxPaintEl[AIndex];
+end;
+
+function TTyAdvanceChart.CustomView(ASeriesIndex: Integer): TTyCustomView;
+begin
+  Result := nil;
+  if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FCustomViews)) then
+    Result := FCustomViews[ASeriesIndex];
+end;
+
+function TTyAdvanceChart.CustomPaintSource(AIndex: Integer): TTyGfxEl;
+begin
+  Result := nil;
+  if (AIndex >= 0) and (AIndex <= High(FCustomPaintEls)) then
+    Result := FCustomPaintEls[AIndex];
+end;
+
+function TTyAdvanceChart.CustomClip(ASeriesIndex: Integer; out ARect: TTyXYWH): Boolean;
+var slot: Integer;
+begin
+  ARect := Default(TTyXYWH);
+  slot := SlotOfSeries(ASeriesIndex);
+  Result := (slot >= 0) and (slot <= High(FCustomClipOn)) and FCustomClipOn[slot];
+  if Result then ARect := FCustomClip[slot];
+end;
+
+{ ==================== the custom series [Batch 123] ==================== }
+
+type
+  { THE API a renderItem is handed: CustomView.makeRenderItem's closures over
+    the series' data, its visuals and its cartesian (prepareCustom.ts) }
+  TTyChartCustomApi = class(TTyCustomApi)
+  private
+    function Row(AInside: Integer; out ARow: Integer): Boolean;
+    function ColumnAt(ADim: Integer): Integer;
+    function ItemNode(ARow: Integer): TJSONObject;
+    function Lookup(AItem, ASeries: TJSONObject; const APath: array of string): TJSONData;
+    function GlobalText(const AKey: string): TJSONData;
+    function MakeStyle(AExtra: TJSONObject; ARow: Integer; AEmphasis: Boolean): TJSONObject;
+    function ParseOn(AAxis: TTyAxis; const ACell: TTyCustomCell): Double;
+  protected
+    function DimIndexOf(const AName: string): Integer; override;
+    function DoCoord(const ACells: TTyCustomCellArray): TTyDoubleArray; override;
+  public
+    Chart: TTyAdvanceChart;
+    Slot, Series: Integer;
+    Store: TTyDataStore;
+    Node: TJSONObject;
+    { the dataIndexInside of the running call }
+    Current: Integer;
+    { device px per css px }
+    Scale: Double;
+    function Value(ADim: Integer; ADataIndexInside: Integer = -1): Double; overload; override;
+    function ValueText(ADim: Integer; ADataIndexInside: Integer = -1): string; overload; override;
+    function OrdinalRawValue(ADim: Integer; ADataIndexInside: Integer = -1): string; overload; override;
+    function Size(const ADataSize, ADataItem: array of Double): TTyDoubleArray; overload; override;
+    function Style(AExtra: TJSONObject = nil; ADataIndexInside: Integer = -1): TJSONObject; override;
+    function StyleEmphasis(AExtra: TJSONObject = nil; ADataIndexInside: Integer = -1): TJSONObject; override;
+    function Visual(const AType: string; ADataIndexInside: Integer = -1): TJSONData; override;
+    function BarLayout(AOpt: TJSONObject): TTyCustomBarLayout; override;
+    function CurrentSeriesIndices: TTyIntegerArray; override;
+    function Font(AOpt: TJSONObject): string; override;
+    function GetWidth: Double; override;
+    function GetHeight: Double; override;
+    function GetDevicePixelRatio: Double; override;
+  end;
+
+function CuNull(A: TJSONData): Boolean; inline;
+begin
+  Result := (A = nil) or (A.JSONType = jtNull);
+end;
+
+function CuTruthy(A: TJSONData): Boolean;
+begin
+  if A = nil then Exit(False);
+  case A.JSONType of
+    jtNull: Result := False;
+    jtBoolean: Result := A.AsBoolean;
+    jtNumber: Result := (A.AsFloat <> 0) and not IsNan(A.AsFloat);
+    jtString: Result := A.AsString <> '';
+  else
+    Result := True;
+  end;
+end;
+
+procedure CuPut(AObj: TJSONObject; const AKey: string; AValue: TJSONData);
+var i: Integer;
+begin
+  i := AObj.IndexOfName(AKey);
+  if i >= 0 then AObj.Items[i] := AValue else AObj.Add(AKey, AValue);
+end;
+
+function CuObj(AObj: TJSONObject; const AKey: string): TJSONObject;
+var d: TJSONData;
+begin
+  Result := nil;
+  if AObj = nil then Exit;
+  d := AObj.Find(AKey);
+  if d is TJSONObject then Result := TJSONObject(d);
+end;
+
+{ String() of a JSON value the way a join prints it }
+function CuText(A: TJSONData): string;
+begin
+  Result := '';
+  if A = nil then Exit;
+  case A.JSONType of
+    jtString: Result := A.AsString;
+    jtNumber: Result := TyJsNumberToString(A.AsFloat);
+    jtBoolean: if A.AsBoolean then Result := 'true' else Result := 'false';
+    jtNull: Result := 'null';
+  end;
+end;
+
+function TTyChartCustomApi.Row(AInside: Integer; out ARow: Integer): Boolean;
+begin
+  if AInside < 0 then ARow := Current else ARow := AInside;
+  Result := (Store <> nil) and (ARow >= 0) and (ARow < Store.Count);
+end;
+
+{ the store column that reads data dimension ADim (its raw position) }
+function TTyChartCustomApi.ColumnAt(ADim: Integer): Integer;
+var c: Integer;
+begin
+  Result := -1;
+  if Store = nil then Exit;
+  for c := 0 to Store.DimCount - 1 do
+    if Store.RawDimPos(c) = ADim then Exit(c);
+end;
+
+function TTyChartCustomApi.ItemNode(ARow: Integer): TJSONObject;
+var d: TJSONData; raw: Integer;
+begin
+  Result := nil;
+  if (Node = nil) or (Store = nil) then Exit;
+  raw := Store.GetRawIndex(ARow);
+  d := Node.Find('data');
+  if not (d is TJSONArray) or (raw < 0) or (raw >= d.Count) then Exit;
+  d := TJSONArray(d).Items[raw];
+  if d is TJSONObject then Result := TJSONObject(d);
+end;
+
+{ getShallow through the item model: the item's own value, else the
+  series' }
+function TTyChartCustomApi.Lookup(AItem, ASeries: TJSONObject;
+  const APath: array of string): TJSONData;
+
+  function Walk(ARoot: TJSONObject): TJSONData;
+  var i: Integer; o: TJSONObject;
+  begin
+    Result := nil;
+    o := ARoot;
+    for i := 0 to High(APath) - 1 do
+    begin
+      o := CuObj(o, APath[i]);
+      if o = nil then Exit;
+    end;
+    if o <> nil then Result := o.Find(APath[High(APath)]);
+    if CuNull(Result) then Result := nil;
+  end;
+
+begin
+  Result := nil;
+  if AItem <> nil then Result := Walk(AItem);
+  if (Result = nil) and (ASeries <> nil) then Result := Walk(ASeries);
+end;
+
+{ the global text style: the option's root textStyle over globalDefault's }
+function TTyChartCustomApi.GlobalText(const AKey: string): TJSONData;
+var root: TJSONObject;
+begin
+  Result := nil;
+  if (Chart.FOption <> nil) and (Chart.FOption.Root is TJSONObject) then
+  begin
+    root := CuObj(TJSONObject(Chart.FOption.Root), 'textStyle');
+    if root <> nil then Result := root.Find(AKey);
+  end;
+  if CuNull(Result) then Result := TyMkDefaultTextStyle.Find(AKey);
+  if CuNull(Result) then Result := nil;
+end;
+
+function TTyChartCustomApi.DimIndexOf(const AName: string): Integer;
+var p: Integer;
+begin
+  Result := -1;
+  if Store = nil then Exit;
+  for p := 0 to Max(Store.RawWidth, Store.DimCount) - 1 do
+    if Store.RawDimName(p) = AName then Exit(p);
+end;
+
+function TTyChartCustomApi.Value(ADim: Integer; ADataIndexInside: Integer): Double;
+var
+  r, col: Integer;
+  cell: TTyDataValue;
+  t: TTyDimType;
+begin
+  Result := NaN;
+  if not Row(ADataIndexInside, r) then Exit;
+  col := ColumnAt(ADim);
+  if col >= 0 then Exit(Store.Get(col, r));
+  if not TTyDataStore.RawCell(Store.RawItem(r), ADim, cell) then Exit;
+  t := Store.RawPosType(ADim);
+  { an ordinal dimension no axis interns keeps the value as written }
+  if t = ddtOrdinal then
+  begin
+    if cell.Kind = dvkNumber then Result := cell.Num;
+    Exit;
+  end;
+  Result := TyParseDataValue(cell, t);
+end;
+
+function TTyChartCustomApi.ValueText(ADim: Integer; ADataIndexInside: Integer): string;
+var
+  r, col: Integer;
+  cell: TTyDataValue;
+begin
+  Result := 'undefined';
+  if not Row(ADataIndexInside, r) then Exit;
+  col := ColumnAt(ADim);
+  if col >= 0 then Exit(TyJsNumberToString(Store.Get(col, r)));
+  if not TTyDataStore.RawCell(Store.RawItem(r), ADim, cell) then Exit;
+  if (Store.RawPosType(ADim) = ddtOrdinal) or (cell.Kind = dvkNone) then
+    Exit(TyJsValueText(cell, 'undefined'));
+  Result := TyJsNumberToString(Value(ADim, r));
+end;
+
+function TTyChartCustomApi.OrdinalRawValue(ADim: Integer; ADataIndexInside: Integer): string;
+var r, col: Integer; v: Double;
+begin
+  Result := 'undefined';
+  if not Row(ADataIndexInside, r) then Exit;
+  col := ColumnAt(ADim);
+  if (col >= 0) and (Store.DimType(col) = ddtOrdinal) and (Store.OrdinalMeta(col) <> nil) then
+  begin
+    v := Store.Get(col, r);
+    if IsNan(v) or (Frac(v) <> 0) or (v < 0) or (v >= Store.CategoryCount(col)) then
+      Exit('undefined');
+    Exit(Store.CategoryAt(col, Trunc(v)));
+  end;
+  Result := ValueText(ADim, r);
+end;
+
+{ scale.parse of one cell on an axis }
+function TTyChartCustomApi.ParseOn(AAxis: TTyAxis; const ACell: TTyCustomCell): Double;
+var ord_: Integer; ms: Double;
+begin
+  Result := NaN;
+  if (AAxis = nil) or (ACell.Kind = cckNone) then Exit;
+  case AAxis.AxisType of
+    atCategory:
+      if ACell.Kind = cckText then
+      begin
+        if AAxis.Categories = nil then Exit;
+        ord_ := AAxis.Categories.GetOrdinal(ACell.Text);
+        if ord_ >= 0 then Result := ord_;
+      end
+      else
+        Result := TyJsRound(ACell.Num);
+    atTime:
+      if ACell.Kind = cckText then
+      begin
+        if TyParseDateMs(ACell.Text, ms, False) then Result := ms;
+      end
+      else
+        Result := TyJsRound(ACell.Num);
+  else
+    if ACell.Kind = cckText then
+    begin
+      if ACell.Text = '' then Exit;
+      Result := TyJsToNumber(ACell.Text);
+    end
+    else
+      Result := ACell.Num;
+  end;
+end;
+
+{ prepareCustom.ts' coord: coordSys.dataToPoint(data), in css px }
+function TTyChartCustomApi.DoCoord(const ACells: TTyCustomCellArray): TTyDoubleArray;
+var
+  b: TTySeriesBinding;
+  p: TTyPointF;
+  cx, cy: TTyCustomCell;
+begin
+  Result := nil;
+  SetLength(Result, 2);
+  Result[0] := NaN;
+  Result[1] := NaN;
+  b := Chart.FBindings[Slot];
+  if b.Cart = nil then Exit;
+  cx := Default(TTyCustomCell);
+  cy := Default(TTyCustomCell);
+  if Length(ACells) > 0 then cx := ACells[0];
+  if Length(ACells) > 1 then cy := ACells[1];
+  p := b.Cart.DataToPoint([ParseOn(b.XAxis, cx), ParseOn(b.YAxis, cy)]);
+  Result[0] := p.X / Scale;
+  Result[1] := p.Y / Scale;
+end;
+
+{ dataToCoordSize: a category axis' band width, else the span the size
+  covers about the item's value }
+function TTyChartCustomApi.Size(const ADataSize, ADataItem: array of Double): TTyDoubleArray;
+var
+  b: TTySeriesBinding;
+  ax: TTyAxis;
+  i: Integer;
+  val, half: Double;
+begin
+  Result := nil;
+  SetLength(Result, 2);
+  b := Chart.FBindings[Slot];
+  for i := 0 to 1 do
+  begin
+    Result[i] := NaN;
+    if i = 0 then ax := b.XAxis else ax := b.YAxis;
+    if ax = nil then Continue;
+    if i <= High(ADataItem) then val := ADataItem[i] else val := NaN;
+    if i <= High(ADataSize) then half := ADataSize[i] / 2 else half := NaN;
+    if ax.AxisType = atCategory then
+      Result[i] := ax.BandWidth / Scale
+    else
+      Result[i] := Abs(ax.DataToLocal(val - half) - ax.DataToLocal(val + half)) / Scale;
+  end;
+end;
+
+{ api.style / api.styleEmphasis: getItemStyle, the visual colour and
+  opacity (normal), the label's text style and config, then
+  convertToEC4StyleForCustomSerise, the extra over it, legacy }
+function TTyChartCustomApi.MakeStyle(AExtra: TJSONObject; ARow: Integer;
+  AEmphasis: Boolean): TJSONObject;
+const
+  cItem: array[0..12, 0..1] of string = (('fill', 'color'), ('stroke', 'borderColor'),
+    ('lineWidth', 'borderWidth'), ('opacity', 'opacity'), ('shadowBlur', 'shadowBlur'),
+    ('shadowOffsetX', 'shadowOffsetX'), ('shadowOffsetY', 'shadowOffsetY'),
+    ('shadowColor', 'shadowColor'), ('lineDash', 'borderType'),
+    ('lineDashOffset', 'borderDashOffset'), ('lineCap', 'borderCap'),
+    ('lineJoin', 'borderJoin'), ('miterLimit', 'borderMiterLimit'));
+  { convertToEC4RichItem: the text style's keys under their ec4 names }
+  cRich: array[0..21, 0..1] of string = (('lineWidth', 'textStrokeWidth'),
+    ('font', 'font'), ('fontStyle', 'fontStyle'), ('fontWeight', 'fontWeight'),
+    ('fontSize', 'fontSize'), ('fontFamily', 'fontFamily'), ('align', 'textAlign'),
+    ('verticalAlign', 'textVerticalAlign'), ('lineHeight', 'textLineHeight'),
+    ('width', 'textWidth'), ('height', 'textHeight'),
+    ('backgroundColor', 'textBackgroundColor'), ('padding', 'textPadding'),
+    ('borderColor', 'textBorderColor'), ('borderWidth', 'textBorderWidth'),
+    ('borderRadius', 'textBorderRadius'), ('shadowColor', 'textBoxShadowColor'),
+    ('shadowBlur', 'textBoxShadowBlur'), ('shadowOffsetX', 'textBoxShadowOffsetX'),
+    ('shadowOffsetY', 'textBoxShadowOffsetY'), ('textShadowColor', 'textShadowColor'),
+    ('textShadowBlur', 'textShadowBlur'));
+  cFonts: array[0..3] of string = ('fontStyle', 'fontWeight', 'fontSize', 'fontFamily');
+var
+  item, ts, tc: TJSONObject;
+  d, vis, posD: TJSONData;
+  i, k: Integer;
+  isInside, show: Boolean;
+  txt: string;
+  hasText: Boolean;
+  cells: TTyIntegerArray;
+  cell: TTyDataValue;
+
+  function ItemStyleOf(AKey: string): TJSONData;
+  begin
+    if AEmphasis then Result := Lookup(item, Node, ['emphasis', 'itemStyle', AKey])
+    else Result := Lookup(item, Node, ['itemStyle', AKey]);
+  end;
+
+  function LabelOf(AKey: string): TJSONData;
+  begin
+    if AEmphasis then Result := Lookup(item, Node, ['emphasis', 'label', AKey])
+    else Result := Lookup(item, Node, ['label', AKey]);
+  end;
+
+begin
+  item := ItemNode(ARow);
+  Result := TJSONObject.Create;
+  { getItemStyle }
+  for i := 0 to High(cItem) do
+  begin
+    d := ItemStyleOf(cItem[i, 1]);
+    if d = nil then Continue;
+    { borderType: getLineDash -- only a dash pattern is a lineDash }
+    if cItem[i, 1] = 'borderType' then
+    begin
+      if not (d is TJSONArray) then Continue;
+    end;
+    Result.Add(cItem[i, 0], d.Clone);
+  end;
+  vis := nil;
+  if not AEmphasis then
+  begin
+    { the visual's fill and opacity over it }
+    vis := Chart.CustomVisualFill(Slot, ARow);
+    if vis <> nil then CuPut(Result, 'fill', vis.Clone);
+    d := ItemStyleOf('opacity');
+    if d <> nil then CuPut(Result, 'opacity', d.Clone);
+  end;
+  try
+    { createTextStyle(labelModel, null, opt with inheritColor, isNotNormal,
+      true) }
+    ts := TJSONObject.Create;
+    tc := TJSONObject.Create;
+    try
+      d := LabelOf('color');
+      if d <> nil then
+      begin
+        if (d.JSONType = jtString) and (d.AsString = 'inherit') then
+        begin
+          if (vis <> nil) and (vis.JSONType = jtString) then ts.Add('fill', vis.AsString)
+          else ts.Add('fill', '#000');
+        end
+        else
+          ts.Add('fill', d.Clone);
+      end;
+      for k := 0 to High(cFonts) do
+      begin
+        d := LabelOf(cFonts[k]);
+        if (d = nil) and not AEmphasis then d := GlobalText(cFonts[k]);
+        if d <> nil then ts.Add(cFonts[k], d.Clone);
+      end;
+      d := LabelOf('align');
+      if d <> nil then ts.Add('align', d.Clone);
+      d := LabelOf('verticalAlign');
+      if d <> nil then ts.Add('verticalAlign', d.Clone);
+      d := LabelOf('lineHeight');
+      if d <> nil then ts.Add('lineHeight', d.Clone);
+      d := LabelOf('textBorderColor');
+      if d <> nil then ts.Add('stroke', d.Clone);
+      d := LabelOf('textBorderWidth');
+      if d <> nil then ts.Add('lineWidth', d.Clone);
+      { the text: shown, the default label (the label dimensions' values) }
+      show := CuTruthy(LabelOf('show'));
+      hasText := False;
+      txt := '';
+      if show then
+      begin
+        hasText := True;
+        if Store.HasLabelPositions then cells := Store.LabelPositions else cells := nil;
+        for k := 0 to High(cells) do
+        begin
+          if not TTyDataStore.RawCell(Store.RawItem(ARow), cells[k], cell) then
+            cell := Default(TTyDataValue);
+          if k > 0 then txt := txt + ' ';
+          txt := txt + TyJsValueText(cell, '');
+        end;
+      end;
+      { createTextConfig }
+      d := LabelOf('position');
+      if d <> nil then tc.Add('position', d.Clone);
+      d := LabelOf('distance');
+      if d <> nil then tc.Add('distance', d.Clone)
+      else if not AEmphasis then tc.Add('distance', 5);
+      d := LabelOf('offset');
+      if d <> nil then tc.Add('offset', d.Clone);
+      d := LabelOf('rotate');
+      if (d <> nil) and (d.JSONType = jtNumber) then tc.Add('rotation', d.AsFloat * Pi / 180);
+      { preFetchFromExtra }
+      if AExtra <> nil then
+      begin
+        if CuTruthy(AExtra.Find('textFill')) then CuPut(Result, 'textFill', AExtra.Find('textFill').Clone);
+        if CuTruthy(AExtra.Find('textPosition')) then
+          CuPut(Result, 'textPosition', AExtra.Find('textPosition').Clone);
+      end;
+      { convertToEC4StyleForCustomSerise }
+      posD := Result.Find('textPosition');
+      if not CuTruthy(posD) then
+      begin
+        if CuTruthy(tc.Find('position')) then CuPut(Result, 'textPosition', tc.Find('position').Clone)
+        else CuPut(Result, 'textPosition', TJSONString.Create('inside'));
+      end;
+      if not CuNull(tc.Find('offset')) then CuPut(Result, 'textOffset', tc.Find('offset').Clone);
+      if not CuNull(tc.Find('rotation')) then CuPut(Result, 'textRotation', tc.Find('rotation').Clone);
+      if not CuNull(tc.Find('distance')) then CuPut(Result, 'textDistance', tc.Find('distance').Clone);
+      posD := Result.Find('textPosition');
+      isInside := (posD <> nil) and (posD.JSONType = jtString)
+        and (Pos('inside', posD.AsString) > 0);
+      { convertToEC4RichItem(out, textStyle): fill to textFill and -- as
+        upstream writes it -- a stroke to textStroke as the fill }
+      if ts.IndexOfName('fill') >= 0 then CuPut(Result, 'textFill', ts.Find('fill').Clone);
+      if ts.IndexOfName('stroke') >= 0 then
+      begin
+        if ts.IndexOfName('fill') >= 0 then CuPut(Result, 'textStroke', ts.Find('fill').Clone)
+        else CuPut(Result, 'textStroke', TJSONNull.Create);
+      end;
+      for k := 0 to High(cRich) do
+        if ts.IndexOfName(cRich[k, 0]) >= 0 then
+          CuPut(Result, cRich[k, 1], ts.Find(cRich[k, 0]).Clone);
+      if CuNull(Result.Find('textFill')) then
+      begin
+        if isInside then
+        begin
+          CuPut(Result, 'textFill', TJSONString.Create('#fff'));
+          if not CuTruthy(Result.Find('textStroke')) then
+          begin
+            d := Result.Find('fill');
+            if CuTruthy(d) then CuPut(Result, 'textStroke', d.Clone)
+            else CuPut(Result, 'textStroke', TJSONString.Create('#000'));
+          end;
+          if CuNull(Result.Find('textStrokeWidth')) then
+            CuPut(Result, 'textStrokeWidth', TJSONIntegerNumber.Create(2));
+        end
+        else
+        begin
+          d := Result.Find('fill');
+          if CuTruthy(d) then CuPut(Result, 'textFill', d.Clone)
+          else CuPut(Result, 'textFill', TJSONString.Create('#000'));
+        end;
+      end
+      else if isInside then
+      begin
+        if not CuTruthy(Result.Find('textStroke')) then
+        begin
+          d := Result.Find('fill');
+          if CuTruthy(d) then CuPut(Result, 'textStroke', d.Clone)
+          else CuPut(Result, 'textStroke', TJSONString.Create('#000'));
+        end;
+        if CuNull(Result.Find('textStrokeWidth')) then
+          CuPut(Result, 'textStrokeWidth', TJSONIntegerNumber.Create(2));
+      end;
+      if hasText then CuPut(Result, 'text', TJSONString.Create(txt))
+      else CuPut(Result, 'text', TJSONNull.Create);
+    finally
+      ts.Free;
+      tc.Free;
+    end;
+  finally
+    vis.Free;
+  end;
+  { applyUserPropsAfter }
+  if AExtra <> nil then
+    for i := 0 to AExtra.Count - 1 do CuPut(Result, AExtra.Names[i], AExtra.Items[i].Clone);
+  CuPut(Result, 'legacy', TJSONBoolean.Create(True));
+end;
+
+function TTyChartCustomApi.Style(AExtra: TJSONObject; ADataIndexInside: Integer): TJSONObject;
+var r: Integer;
+begin
+  if not Row(ADataIndexInside, r) then r := -1;
+  Result := MakeStyle(AExtra, r, False);
+end;
+
+function TTyChartCustomApi.StyleEmphasis(AExtra: TJSONObject; ADataIndexInside: Integer): TJSONObject;
+var r: Integer;
+begin
+  if not Row(ADataIndexInside, r) then r := -1;
+  Result := MakeStyle(AExtra, r, True);
+end;
+
+{ the style visual's fill and stroke; the other visuals a custom series
+  has none of }
+function TTyChartCustomApi.Visual(const AType: string; ADataIndexInside: Integer): TJSONData;
+var r: Integer;
+begin
+  Result := nil;
+  if not Row(ADataIndexInside, r) then r := -1;
+  if AType = 'color' then Result := Chart.CustomVisualFill(Slot, r)
+  else if AType = 'borderColor' then
+  begin
+    Result := Lookup(ItemNode(r), Node, ['itemStyle', 'borderColor']);
+    if Result <> nil then Result := Result.Clone;
+  end;
+end;
+
+{ computeBarLayoutForCustomSeries on the base axis: a category axis' band,
+  anything else undefined }
+function TTyChartCustomApi.BarLayout(AOpt: TJSONObject): TTyCustomBarLayout;
+var b: TTySeriesBinding;
+begin
+  Result := nil;
+  b := Chart.FBindings[Slot];
+  if (b.BaseAxis = nil) or (b.BaseAxis.AxisType <> atCategory) then Exit;
+  Result := TyCustomBarLayout(b.BaseAxis.BandWidth / Scale, AOpt);
+end;
+
+function TTyChartCustomApi.CurrentSeriesIndices: TTyIntegerArray;
+var i, j, n, t: Integer;
+begin
+  Result := nil;
+  n := 0;
+  for i := 0 to High(Chart.FBindings) do
+  begin
+    if Chart.FBindings[i].Hidden or (Chart.FBindings[i].SeriesIndex < 0) then Continue;
+    SetLength(Result, n + 1);
+    Result[n] := Chart.FBindings[i].SeriesIndex;
+    Inc(n);
+  end;
+  { eachSeries: by series index }
+  for i := 1 to n - 1 do
+  begin
+    t := Result[i];
+    j := i - 1;
+    while (j >= 0) and (Result[j] > t) do
+    begin
+      Result[j + 1] := Result[j];
+      Dec(j);
+    end;
+    Result[j + 1] := t;
+  end;
+end;
+
+{ labelStyle.getFont over the global text style }
+function TTyChartCustomApi.Font(AOpt: TJSONObject): string;
+
+  function Part(const AKey, ADefault: string): string;
+  var d: TJSONData;
+  begin
+    d := nil;
+    if AOpt <> nil then d := AOpt.Find(AKey);
+    if not CuTruthy(d) then d := GlobalText(AKey);
+    if CuTruthy(d) then Result := CuText(d) else Result := ADefault;
+  end;
+
+begin
+  Result := Trim(Part('fontStyle', '') + ' ' + Part('fontWeight', '') + ' '
+    + Part('fontSize', '12') + 'px ' + Part('fontFamily', 'sans-serif'));
+end;
+
+function TTyChartCustomApi.GetWidth: Double;
+begin
+  Result := (Chart.FLastRect.Right - Chart.FLastRect.Left) / Scale;
+end;
+
+function TTyChartCustomApi.GetHeight: Double;
+begin
+  Result := (Chart.FLastRect.Bottom - Chart.FLastRect.Top) / Scale;
+end;
+
+function TTyChartCustomApi.GetDevicePixelRatio: Double;
+begin
+  Result := Scale;
+end;
+
+{ the style visual's fill of a row: the item's own itemStyle colour, the
+  series', else its palette colour -- as written where it was written }
+function TTyAdvanceChart.CustomVisualFill(ASlot, ARow: Integer): TJSONData;
+var
+  node, item: TJSONObject;
+  d: TJSONData;
+  raw, si: Integer;
+begin
+  Result := nil;
+  if (FOption = nil) or (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  si := FBindings[ASlot].SeriesIndex;
+  d := FOption.ComponentAt('series', si);
+  if not (d is TJSONObject) then Exit;
+  node := TJSONObject(d);
+  item := nil;
+  if (ARow >= 0) and (ASlot <= High(FStores)) and (FStores[ASlot] <> nil)
+    and (ARow < FStores[ASlot].Count) then
+  begin
+    raw := FStores[ASlot].GetRawIndex(ARow);
+    d := node.Find('data');
+    if (d is TJSONArray) and (raw >= 0) and (raw < d.Count)
+      and (TJSONArray(d).Items[raw] is TJSONObject) then
+      item := TJSONObject(TJSONArray(d).Items[raw]);
+  end;
+  d := nil;
+  if item <> nil then
+  begin
+    d := item.FindPath('itemStyle.color');
+    if CuNull(d) or ((d.JSONType = jtString) and (d.AsString = 'auto')) then d := nil;
+  end;
+  if d = nil then
+  begin
+    d := node.FindPath('itemStyle.color');
+    if CuNull(d) or ((d.JSONType = jtString) and (d.AsString = 'auto')) then d := nil;
+  end;
+  if d <> nil then Exit(d.Clone);
+  if (si >= 0) and (si <= High(FSeriesColorNone)) and FSeriesColorNone[si] then
+    Exit(TJSONString.Create('none'));
+  Result := TJSONString.Create(TyCustomColorText(Cardinal(SeriesColor(si))));
+end;
+
+procedure TTyAdvanceChart.CustomDims(ASlot: Integer; var ADims: TTySeriesDimArray);
+var
+  node, enc: TJSONObject;
+  d, names: TJSONData;
+  outDims: TTySeriesDimArray;
+  dim: TTySeriesDim;
+  i, k, n: Integer;
+  pos: TTyIntegerArray;
+  spread: Boolean;
+
+  function PosOf(A: TJSONData): Integer;
+  var q: Integer; e: TJSONData; nm: string;
+  begin
+    Result := -1;
+    if A = nil then Exit;
+    if A.JSONType = jtNumber then Exit(Trunc(A.AsFloat));
+    if (A.JSONType <> jtString) or not (names is TJSONArray) then Exit;
+    for q := 0 to names.Count - 1 do
+    begin
+      e := TJSONArray(names).Items[q];
+      if e.JSONType = jtString then nm := e.AsString
+      else if (e is TJSONObject) and (TJSONObject(e).Find('name') <> nil) then
+        nm := CuText(TJSONObject(e).Find('name'))
+      else nm := '';
+      if nm = A.AsString then Exit(q);
+    end;
+  end;
+
+  procedure Positions(A: TJSONData);
+  var q, p: Integer;
+  begin
+    pos := nil;
+    if A = nil then Exit;
+    if A is TJSONArray then
+    begin
+      for q := 0 to A.Count - 1 do
+      begin
+        p := PosOf(A.Items[q]);
+        if p < 0 then Continue;
+        SetLength(pos, Length(pos) + 1);
+        pos[High(pos)] := p;
+      end;
+    end
+    else
+    begin
+      p := PosOf(A);
+      if p >= 0 then
+      begin
+        SetLength(pos, 1);
+        pos[0] := p;
+      end;
+    end;
+  end;
+
+begin
+  if FBindings[ASlot].SeriesType <> TyCustomSeriesType then Exit;
+  if FOption = nil then Exit;
+  d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+  if not (d is TJSONObject) then Exit;
+  node := TJSONObject(d);
+  enc := CuObj(node, 'encode');
+  if enc = nil then Exit;
+  names := node.Find('dimensions');
+  spread := False;
+  for i := 0 to High(ADims) do
+  begin
+    Positions(enc.Find(ADims[i].Name));
+    if Length(pos) > 1 then spread := True;
+  end;
+  if not spread then Exit;
+  { EVERY POSITION THE ENCODE NAMES IS A COLUMN, each feeding its
+    coordinate: both ends of a span size the axis and both are what a
+    dataZoom filters on }
+  outDims := nil;
+  n := 0;
+  for i := 0 to High(ADims) do
+  begin
+    Positions(enc.Find(ADims[i].Name));
+    if Length(pos) = 0 then
+    begin
+      SetLength(outDims, n + 1);
+      outDims[n] := ADims[i];
+      Inc(n);
+      Continue;
+    end;
+    for k := 0 to High(pos) do
+    begin
+      dim := ADims[i];
+      if k > 0 then dim.Name := ADims[i].Name + IntToStr(k);
+      dim.SourceSlot := pos[k] + 1;
+      dim.Coord := ADims[i].Name;
+      SetLength(outDims, n + 1);
+      outDims[n] := dim;
+      Inc(n);
+    end;
+  end;
+  ADims := outDims;
+end;
+
+procedure TTyAdvanceChart.SolveCustom(APPI: Integer);
+var
+  i, si, n, p, c: Integer;
+  view: TTyCustomView;
+  node: TJSONObject;
+  d: TJSONData;
+  key, spec, coord: string;
+  ids: TTyStringArray;
+  raws: TTyIntegerArray;
+  api: TTyChartCustomApi;
+  scale, z, zl, lw, x, y, cw, ch: Double;
+  area: TTyXYWH;
+  st: TTyDataStore;
+  alive: TTyBoolArray;
+  arr: TJSONArray;
+begin
+  if APPI > 0 then scale := APPI / 96 else scale := 1;
+  if FOption = nil then n := 0 else n := FOption.ComponentCount('series');
+  { the views of series that are gone, or are another series now }
+  alive := nil;
+  SetLength(alive, Max(n, Length(FCustomViews)));
+  for i := 0 to High(FBindings) do
+    if (FBindings[i].SeriesType = TyCustomSeriesType) and (FBindings[i].SeriesIndex >= 0) then
+      alive[FBindings[i].SeriesIndex] := True;
+  for i := 0 to High(FCustomViews) do
+    if (FCustomViews[i] <> nil) and ((i >= n) or not alive[i]
+      or (FCustomViews[i].Key <> FOption.ComponentId('series', i) + #1 + TyCustomSeriesType)) then
+      FreeAndNil(FCustomViews[i]);
+  if Length(FCustomViews) < n then SetLength(FCustomViews, n);
+  FCustomClipOn := nil;
+  FCustomClip := nil;
+  SetLength(FCustomClipOn, Length(FBindings));
+  SetLength(FCustomClip, Length(FBindings));
+  for i := 0 to High(FBindings) do
+  begin
+    if FBindings[i].SeriesType <> TyCustomSeriesType then Continue;
+    si := FBindings[i].SeriesIndex;
+    if (si < 0) or (si >= n) then Continue;
+    key := FOption.ComponentId('series', si) + #1 + TyCustomSeriesType;
+    view := FCustomViews[si];
+    if view = nil then
+    begin
+      view := TTyCustomView.Create;
+      view.Key := key;
+      FCustomViews[si] := view;
+    end;
+    st := nil;
+    if i <= High(FStores) then st := FStores[i];
+    { NOT RENDERED: a series the legend switched off has its group emptied
+      (ChartView.remove) and keeps its data; one off every coordinate
+      system this batch draws on is not drawn }
+    if FBindings[i].Hidden or (not FBindings[i].Resolved) or (FBindings[i].Cart = nil)
+      or (st = nil) then
+    begin
+      view.RemoveAll;
+      { A COORDINATE SYSTEM THIS BATCH DOES NOT DRAW ON says so: a polar, a
+        calendar, a single axis are C15's, `none` and a geo later }
+      if FBindings[i].Resolved and not FBindings[i].Hidden and (FBindings[i].Cart = nil) then
+        FBuild.Note(Format(rsTyChartSeriesCoordSys, [si, FBindings[i].CoordSysName]));
+      Continue;
+    end;
+    d := FOption.ComponentAt('series', si);
+    if not (d is TJSONObject) then Continue;
+    node := TJSONObject(d);
+    AnimRowKeys(st, ids, raws);
+    { the handler }
+    FCustomHandler := nil;
+    spec := '';
+    d := node.Find('renderItem');
+    if (d <> nil) and (d.JSONType = jtString) then spec := d.AsString;
+    if not TyChartFindRenderItem(spec, FCustomHandler) then
+    begin
+      FCustomHandler := nil;
+      FBuild.Note(Format(rsTyChartCustomNoRenderItem, [si, spec]));
+    end;
+    FCustomMissing := spec;
+    { the api and the params of this round }
+    api := TTyChartCustomApi.Create;
+    api.Chart := Self;
+    api.Slot := i;
+    api.Series := si;
+    api.Store := st;
+    api.Node := node;
+    api.Current := -1;
+    api.Scale := scale;
+    FCustomApi := api;
+    FCustomSlot := i;
+    FCustomParams := Default(TTyCustomParams);
+    FCustomParams.Context := TJSONObject.Create;
+    FCustomParams.SeriesId := FOption.ComponentId('series', si);
+    FCustomParams.SeriesName := SeriesModelName(si);
+    FCustomParams.SeriesIndex := si;
+    FCustomParams.DataInsideLength := st.Count;
+    FCustomParams.ActionType := FCustomAction;
+    area := FBindings[i].Cart.GetArea;
+    FCustomParams.CoordSys.Type_ := 'cartesian2d';
+    FCustomParams.CoordSys.X := area.X / scale;
+    FCustomParams.CoordSys.Y := area.Y / scale;
+    FCustomParams.CoordSys.Width := area.W / scale;
+    FCustomParams.CoordSys.Height := area.H / scale;
+    { wrapEncodeDef: every coordinate column's data dimension, by position }
+    FCustomParams.Encode := TJSONObject.Create;
+    for p := 0 to Max(st.RawWidth, st.DimCount) - 1 do
+      for c := 0 to st.DimCount - 1 do
+      begin
+        if st.RawDimPos(c) <> p then Continue;
+        coord := st.DimCoord(c);
+        if coord = '' then coord := st.DimName(c);
+        if (coord <> 'x') and (coord <> 'y') then Continue;
+        d := FCustomParams.Encode.Find(coord);
+        if not (d is TJSONArray) then
+        begin
+          arr := TJSONArray.Create;
+          FCustomParams.Encode.Add(coord, arr);
+        end
+        else
+          arr := TJSONArray(d);
+        arr.Add(p);
+      end;
+    d := node.Find('itemPayload');
+    if CuTruthy(d) and (d is TJSONObject) then
+      FCustomParams.ItemPayload := TJSONObject(d.Clone)
+    else
+      FCustomParams.ItemPayload := TJSONObject.Create;
+    d := node.Find('z');
+    if (d <> nil) and (d.JSONType = jtNumber) then z := d.AsFloat else z := 2;
+    d := node.Find('zlevel');
+    if (d <> nil) and (d.JSONType = jtNumber) then zl := d.AsFloat else zl := 0;
+    try
+      view.Render(ids, raws, @CustomCall, z, zl);
+    finally
+      FreeAndNil(FCustomParams.Context);
+      FreeAndNil(FCustomParams.Encode);
+      FreeAndNil(FCustomParams.ItemPayload);
+      FCustomApi := nil;
+      FCustomHandler := nil;
+      api.Free;
+    end;
+    if view.Error <> '' then FBuild.Note('series[' + IntToStr(si) + ']: ' + view.Error);
+    { createGridClipPath: the grid's area widened by lineStyle.width, its
+      width ceiled, a fractional x floored }
+    if CuTruthy(node.Find('clip')) then
+    begin
+      d := node.FindPath('lineStyle.width');
+      if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then lw := d.AsFloat
+      else lw := 0;
+      x := area.X / scale - lw / 2;
+      y := area.Y / scale - lw / 2;
+      cw := area.W / scale + lw;
+      ch := area.H / scale + lw;
+      cw := Ceil(cw);
+      if x <> Floor(x) then
+      begin
+        x := Floor(x);
+        cw := cw + 1;
+      end;
+      FCustomClipOn[i] := True;
+      FCustomClip[i] := TyXYWH(x, y, cw, ch);
+    end;
+  end;
+end;
+
+{ renderItem for one item of the series being rendered }
+function TTyAdvanceChart.CustomCall(AIndexInside: Integer): TJSONData;
+var
+  api: TTyChartCustomApi;
+  nLine, nCol: Integer;
+begin
+  Result := nil;
+  api := TTyChartCustomApi(FCustomApi);
+  api.Current := AIndexInside;
+  FCustomParams.DataIndexInside := AIndexInside;
+  FCustomParams.DataIndex := api.Store.GetRawIndex(AIndexInside);
+  if not Assigned(FCustomHandler) then Exit;
+  try
+    Result := FCustomHandler(FCustomParams, api);
+  except
+    on E: Exception do
+    begin
+      Result := nil;
+      FBuild.Note(Format(rsTyChartCustomRenderItemFailed,
+        [FCustomParams.SeriesIndex, FCustomMissing, E.Message]));
+    end;
+  end;
+  { a tree too deep for the readers is no tree -- and the chart says so }
+  if (Result <> nil) and TyJsonNestingExceeds(Result.AsJSON, TyOptionMaxNesting,
+    nLine, nCol) then
+  begin
+    FreeAndNil(Result);
+    FBuild.Note(Format(rsTyChartCustomRenderItemFailed, [FCustomParams.SeriesIndex,
+      FCustomMissing, Format(rsTyOptTooDeep, [TyOptionMaxNesting])]));
+  end;
+end;
+
+function TTyAdvanceChart.CustomBuild(ASlot: Integer; AList: TTyPaintList;
+  APPI: Integer): Integer;
+var
+  si, i, inside, raw: Integer;
+  view: TTyCustomView;
+  root, el: TTyGfxEl;
+  meas: ITyTextMeasurer;
+  ground: TTyGfxGround;
+  ctx: TTyGfxPaintCtx;
+  scale, maxZ2: Double;
+  datum: TTyChartDatumRef;
+  clipOn: Boolean;
+  clip: TTyRectF;
+  all: TTyGfxElArray;
+
+  { doUpdateZ over one item's tree: the running greatest z2 lifts each
+    textContent to it + 2 }
+  procedure UpdZ(AEl: TTyGfxEl);
+  var k: Integer;
+  begin
+    if AEl.IsGroup then
+    begin
+      for k := 0 to High(AEl.Children) do UpdZ(AEl.Children[k]);
+      Exit;
+    end;
+    if AEl.Z2 > maxZ2 then maxZ2 := AEl.Z2;
+    if AEl.TextContent <> nil then
+    begin
+      AEl.TextContent.Z := AEl.Z;
+      AEl.TextContent.ZLevel := AEl.ZLevel;
+      if not IsInfinite(maxZ2) then AEl.TextContent.Z2 := maxZ2 + 2;
+    end;
+  end;
+
+  procedure Add(AEl: TTyGfxEl; ASilent: Boolean);
+  var
+    pe: TTyChartElement;
+    k: Integer;
+    d: TJSONData;
+  begin
+    { A TEXT OF NO TEXT has no line, so no tspan, so nothing in the display
+      list (parsePlainText: `text ? text.split('\n') : []`) -- the empty
+      label an ec4 style makes when the label is not shown }
+    if AEl.Kind = gkText then
+    begin
+      d := AEl.Style.Find('text');
+      if (d = nil) or (d.JSONType = jtNull) or ((d.JSONType = jtString) and (d.AsString = '')) then
+        Exit;
+    end;
+    if not TyGfxPaintElement(AEl, meas, ctx, pe) then Exit;
+    pe.Silent := ASilent;
+    pe.Datum := datum;
+    pe.Z := Round(AEl.ZLevel) * 100000 + Round(AEl.Z);
+    pe.Z2 := Round(AEl.Z2);
+    if clipOn then
+    begin
+      pe.HasClip := True;
+      pe.ClipRect := clip;
+    end;
+    k := AList.Add(pe);
+    if Length(FCustomPaintEls) <= k then SetLength(FCustomPaintEls, k + 1);
+    FCustomPaintEls[k] := AEl;
+    Inc(Result);
+  end;
+
+  procedure Walk(AEl: TTyGfxEl; ASilent: Boolean);
+  var k: Integer; s: Boolean;
+  begin
+    if AEl.Ignore then Exit;
+    s := ASilent or AEl.Silent;
+    if AEl.IsGroup then
+    begin
+      for k := 0 to High(AEl.Children) do Walk(AEl.Children[k], s);
+      Exit;
+    end;
+    Add(AEl, s);
+    if (AEl.TextContent <> nil) and not AEl.TextContent.Ignore then
+      Add(AEl.TextContent, s or AEl.TextContent.Silent);
+  end;
+
+begin
+  Result := 0;
+  si := FBindings[ASlot].SeriesIndex;
+  view := CustomView(si);
+  if (view = nil) or (ASlot > High(FStores)) or (FStores[ASlot] = nil) then Exit;
+  if APPI <= 0 then APPI := 96;
+  scale := APPI / 96;
+  meas := NewTextMeasurer(96);
+  { the transforms and the textContents' places }
+  TyGfxUpdateTransforms(view.Root);
+  MarkerGround(ground.Background, ground.IsDark);
+  all := nil;
+  TyGfxTraverse(view.Root, all);
+  for i := 0 to High(all) do
+    if all[i].TextContent <> nil then
+    begin
+      TyGfxInnerText(all[i], meas, ground);
+      TyGfxLabelTransform(all[i].TextContent, all[i].TextContent.HasTransform,
+        all[i].TextContent.Transform);
+    end;
+  ctx := Default(TTyGfxPaintCtx);
+  ctx.Scale := scale;
+  ctx.HasInk := True;
+  ctx.Ink := TTyChartColor(ActiveController.Model.ResolveStyle(GetStyleTypeKey,
+    StyleClass, [tysNormal]).TextColor);
+  ctx.ImageSize := @GfxImageSize;
+  clipOn := (ASlot <= High(FCustomClipOn)) and FCustomClipOn[ASlot];
+  if clipOn then
+    clip := TyRectF(FCustomClip[ASlot].X * scale, FCustomClip[ASlot].Y * scale,
+      (FCustomClip[ASlot].X + FCustomClip[ASlot].W) * scale,
+      (FCustomClip[ASlot].Y + FCustomClip[ASlot].H) * scale);
+  { which item each root draws }
+  for i := 0 to FStores[ASlot].Count - 1 do
+  begin
+    el := view.ElOf(i);
+    if el <> nil then el.Serial := i;
+  end;
+  for i := 0 to High(view.Root.Children) do
+  begin
+    root := view.Root.Children[i];
+    inside := root.Serial;
+    if (inside < 0) or (view.ElOf(inside) <> root) then Continue;
+    raw := FStores[ASlot].GetRawIndex(inside);
+    datum := TyChartDatum(si, inside, raw);
+    maxZ2 := NegInfinity;
+    UpdZ(root);
+    Walk(root, False);
+  end;
+end;
+
+{ a custom element's declared state, as its option wrote it: the style's
+  fill, stroke, lineWidth and opacity, and the state's z2 }
+function StCustomDecl(AInfo: TTyCustomElInfo; AName: TTyStName): TTyStObject;
+var
+  idx: Integer;
+  st: TJSONObject;
+  d: TJSONData;
+  c: TTyChartColor;
+
+  procedure Colour(const AKey: string; ASt: TTyStKey);
+  begin
+    d := st.Find(AKey);
+    if d = nil then Exit;
+    if (d.JSONType = jtNull) or ((d.JSONType = jtString) and TyChartColorIsNone(d.AsString)) then
+      TyStSetNone(Result, ASt)
+    else if (d.JSONType = jtString) and (d.AsString = 'inherit') and (ASt = stkFill) then
+      Result.FillInherit := True
+    else if (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
+      TyStSetColor(Result, ASt, c);
+  end;
+
+begin
+  Result := TyStNoObject;
+  if AInfo = nil then Exit;
+  case AName of
+    stnEmphasis: idx := 0;
+    stnBlur: idx := 1;
+  else
+    idx := 2;
+  end;
+  st := AInfo.StateStyle[idx];
+  if st <> nil then
+  begin
+    Colour('fill', stkFill);
+    Colour('stroke', stkStroke);
+    d := st.Find('lineWidth');
+    if (d <> nil) and (d.JSONType = jtNumber) then TyStSetNum(Result, stkLineWidth, d.AsFloat);
+    d := st.Find('opacity');
+    if (d <> nil) and (d.JSONType = jtNumber) then TyStSetNum(Result, stkOpacity, d.AsFloat);
+  end;
+  if not IsNan(AInfo.StateZ2[idx]) then TyStSetNum(Result, stkZ2, AInfo.StateZ2[idx]);
+end;
+
+{ a custom item's elements: every path of its tree has the three states
+  updateElOnState gives it, the default proxy and the lift of 1 }
+procedure TTyAdvanceChart.StDeclareCustom(ASlot, ARaw: Integer; AList: TTyPaintList);
+var
+  s, k: Integer;
+  item: PTyStItem;
+  was: Boolean;
+
+  procedure Declare(var AEl: TTyStElement; AIdx: Integer);
+  var
+    gel: TTyGfxEl;
+    info: TTyCustomElInfo;
+    n: TTyStName;
+  begin
+    gel := CustomPaintSource(AIdx);
+    info := nil;
+    if (gel <> nil) and (gel.Custom is TTyCustomElInfo) then info := TTyCustomElInfo(gel.Custom);
+    AEl.Exists := True;
+    AEl.IsPath := True;
+    AEl.Proxy := True;
+    AEl.LiftOne := True;
+    for n := Low(TTyStName) to High(TTyStName) do
+    begin
+      AEl.HasState[n] := True;
+      AEl.Decl[n] := StCustomDecl(info, n);
+    end;
+    AEl.Rest := StRestOf(AList.Element(AIdx));
+  end;
+
+begin
+  s := FBindings[ASlot].SeriesIndex;
+  item := @FSt[s].Rows[ARaw];
+  Declare(item^.Host, FSt[s].HostIdx[ARaw]);
+  if Length(item^.Parts) <> Length(FSt[s].PartIdx[ARaw]) then SetLength(item^.Parts, 0);
+  was := Length(item^.Parts) > 0;
+  SetLength(item^.Parts, Length(FSt[s].PartIdx[ARaw]));
+  for k := 0 to High(item^.Parts) do
+  begin
+    Declare(item^.Parts[k], FSt[s].PartIdx[ARaw][k]);
+    if not was then
+    begin
+      item^.Parts[k].Cur := item^.Parts[k].Rest;
+      item^.Parts[k].States := [];
+      if item^.Host.States <> [] then TyStUseStates(item^.Parts[k], item^.Host.States);
+    end;
+  end;
 end;
 
 { ==================== export and loading [Batch 106] ==================== }

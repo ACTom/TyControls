@@ -129,6 +129,29 @@ function TyGfxIdOf(AData: TJSONData; out AHas: Boolean): string;
 { the element ids as the oracle writes them: \0 as '~' }
 function TyGfxIdText(const AId: string): string;
 
+{ ---- shared with the custom series [Batch 123, C14] ---- }
+
+{ applyPropsDirectly and applyMiscProps (customGraphicTransition.ts): the
+  final props set at once -- the style (with AClearStyle, the custom
+  series' clearStyle, the element's style replaced: useStyle({}) before
+  setStyle), the legacy position / scale / origin arrays, every transform
+  prop the option gives a value, the shape (setShape); silent, ignore and
+  (not on a group) invisible where the option has the key. No animation. }
+procedure TyGfxApplyDirect(AEl: TTyGfxEl; AOpt: TJSONObject; AClearStyle: Boolean);
+
+{ isEC4CompatibleStyle (util/styleCompat.ts): `legacy: true`, or -- legacy
+  not false -- no textConfig, no textContent, not a tspan and a text element
+  or a style with a `text` }
+function TyGfxIsEC4(AStyle: TJSONObject; const AType: string;
+  AHasCfg, AHasContent: Boolean): Boolean;
+
+{ convertFromEC4CompatibleStyle: a text's own style renamed in place (no
+  config, no content); any other type's makes a silent textContent and a
+  textConfig -- its position the style's textPosition, else (AIsNormal) 
+  'inside'. AConfig / AContent are the caller's to free (nil when none). }
+procedure TyGfxConvertEC4(AStyle: TJSONObject; const AType: string;
+  AIsNormal: Boolean; out AConfig, AContent: TJSONObject);
+
 implementation
 
 uses
@@ -832,6 +855,53 @@ begin
   Result := (A is TJSONArray) or ((A <> nil) and (A.JSONType = jtString));
 end;
 
+procedure TyGfxApplyDirect(AEl: TTyGfxEl; AOpt: TJSONObject; AClearStyle: Boolean);
+var
+  styleOpt, shapeOpt: TJSONObject;
+  d: TJSONData;
+  k: Integer;
+begin
+  if (AEl = nil) or (AOpt = nil) then Exit;
+  styleOpt := ObjOf(AOpt, 'style');
+  shapeOpt := ObjOf(AOpt, 'shape');
+  if not AEl.IsGroup and (styleOpt <> nil) then
+  begin
+    if AClearStyle then AEl.Style.Clear;
+    TyGfxSetStyle(AEl, styleOpt);
+  end;
+  { legacy position / scale / origin, then the transformable props }
+  d := AOpt.Find('position');
+  if (d is TJSONArray) and (d.Count >= 2) then
+  begin
+    AEl.X := JsNumOf(d.Items[0]);
+    AEl.Y := JsNumOf(d.Items[1]);
+  end;
+  d := AOpt.Find('scale');
+  if (d is TJSONArray) and (d.Count >= 2) then
+  begin
+    AEl.ScaleX := JsNumOf(d.Items[0]);
+    AEl.ScaleY := JsNumOf(d.Items[1]);
+  end;
+  d := AOpt.Find('origin');
+  if (d is TJSONArray) and (d.Count >= 2) then
+  begin
+    AEl.OriginX := JsNumOf(d.Items[0]);
+    AEl.OriginY := JsNumOf(d.Items[1]);
+  end;
+  for k := 0 to High(cTransformable) do
+  begin
+    d := AOpt.Find(cTransformable[k]);
+    if JNull(d) then Continue;
+    TyGfxSetTransformProp(AEl, cTransformable[k], JsNumOf(d));
+  end;
+  if shapeOpt <> nil then TyGfxSetShape(AEl, shapeOpt);
+  { applyMiscProps }
+  if AOpt.Find('silent') <> nil then AEl.Silent := Truthy(AOpt.Find('silent'));
+  if AOpt.Find('ignore') <> nil then AEl.Ignore := Truthy(AOpt.Find('ignore'));
+  if not AEl.IsGroup and (AOpt.Find('invisible') <> nil) then
+    AEl.Invisible := Truthy(AOpt.Find('invisible'));
+end;
+
 procedure TTyGfxView.ApplyUpdateTransition(AEl: TTyGfxEl; AOpt: TJSONObject;
   AIsInit: Boolean);
 var
@@ -946,39 +1016,7 @@ begin
     end;
   end;
   { the final props, directly }
-  if not AEl.IsGroup and (styleOpt <> nil) then TyGfxSetStyle(AEl, styleOpt);
-  { legacy position / scale / origin, then the transformable props }
-  d := AOpt.Find('position');
-  if (d is TJSONArray) and (d.Count >= 2) then
-  begin
-    AEl.X := JsNumOf(d.Items[0]);
-    AEl.Y := JsNumOf(d.Items[1]);
-  end;
-  d := AOpt.Find('scale');
-  if (d is TJSONArray) and (d.Count >= 2) then
-  begin
-    AEl.ScaleX := JsNumOf(d.Items[0]);
-    AEl.ScaleY := JsNumOf(d.Items[1]);
-  end;
-  d := AOpt.Find('origin');
-  if (d is TJSONArray) and (d.Count >= 2) then
-  begin
-    AEl.OriginX := JsNumOf(d.Items[0]);
-    AEl.OriginY := JsNumOf(d.Items[1]);
-  end;
-  for k := 0 to High(cTransformable) do
-  begin
-    d := AOpt.Find(cTransformable[k]);
-    if JNull(d) then Continue;
-    v := JsNumOf(d);
-    TyGfxSetTransformProp(AEl, cTransformable[k], v);
-  end;
-  if shapeOpt <> nil then TyGfxSetShape(AEl, shapeOpt);
-  { applyMiscProps }
-  if AOpt.Find('silent') <> nil then AEl.Silent := Truthy(AOpt.Find('silent'));
-  if AOpt.Find('ignore') <> nil then AEl.Ignore := Truthy(AOpt.Find('ignore'));
-  if not AEl.IsGroup and (AOpt.Find('invisible') <> nil) then
-    AEl.Invisible := Truthy(AOpt.Find('invisible'));
+  TyGfxApplyDirect(AEl, AOpt, False);
   if FAnim.Enabled and (AEl.Animation <> nil) then
   begin
     if AIsInit then
@@ -1079,7 +1117,8 @@ begin
 end;
 
 { the ec4 style: isEC4CompatibleStyle and convertFromEC4CompatibleStyle }
-function IsEC4(AStyle: TJSONObject; const AType: string; AHasCfg, AHasContent: Boolean): Boolean;
+function TyGfxIsEC4(AStyle: TJSONObject; const AType: string;
+  AHasCfg, AHasContent: Boolean): Boolean;
 var d: TJSONData;
 begin
   Result := False;
@@ -1119,8 +1158,8 @@ begin
   end;
 end;
 
-procedure ConvertEC4(AStyle: TJSONObject; const AType: string;
-  out AConfig, AContent: TJSONObject);
+procedure TyGfxConvertEC4(AStyle: TJSONObject; const AType: string;
+  AIsNormal: Boolean; out AConfig, AContent: TJSONObject);
 var
   ts, rich, cs: TJSONObject;
   i: Integer;
@@ -1153,7 +1192,8 @@ begin
     AContent.Add('silent', True);
     AConfig := TJSONObject.Create;
     d := AStyle.Find('textPosition');
-    if d <> nil then AConfig.Add('position', d.Clone) else AConfig.Add('position', 'inside');
+    if d <> nil then AConfig.Add('position', d.Clone)
+    else if AIsNormal then AConfig.Add('position', 'inside');
     d := AStyle.Find('textOffset');
     if d <> nil then PutKey(AConfig, 'offset', d.Clone);
     d := AStyle.Find('textRotation');
@@ -1243,9 +1283,9 @@ begin
       tcOpt := ObjOf(opt, 'textContent');
       tcCfg := ObjOf(opt, 'textConfig');
       ownContent := nil;
-      if (style <> nil) and IsEC4(style, elType, tcCfg <> nil, tcOpt <> nil) then
+      if (style <> nil) and TyGfxIsEC4(style, elType, tcCfg <> nil, tcOpt <> nil) then
       begin
-        ConvertEC4(style, elType, convCfg, convContent);
+        TyGfxConvertEC4(style, elType, True, convCfg, convContent);
         if (tcCfg = nil) and (convCfg <> nil) then
         begin
           PutKey(opt, 'textConfig', convCfg);

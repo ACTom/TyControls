@@ -3501,10 +3501,10 @@ const
   { [Batch 118] a themeRiver's layers are built by the control, on its single
     axis; [Batch 120] a chord's sectors and ribbons by AdvChart.Chord;
     [Batch 121] a lines series' rows by AdvChart.Lines }
-  cElsewhere: array[0..11] of string = ('pie', 'funnel', 'gauge', 'radar',
+  cElsewhere: array[0..12] of string = ('pie', 'funnel', 'gauge', 'radar',
                                        'graph', 'tree', 'sunburst', 'treemap',
                                        'sankey', 'themeRiver', 'chord',
-                                       'lines');
+                                       'lines', 'custom');
 
 function RendererFor(const AType: string): TTyMarkBuilder;
 var i: Integer;

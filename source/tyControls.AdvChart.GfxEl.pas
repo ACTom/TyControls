@@ -104,6 +104,10 @@ type
     DefAutoStroke, HasDefault: Boolean;
     { the index the last paint list build gave it }
     Serial: Integer;
+    { what the custom series keeps on an element it made (its state
+      options, its root's focus) [Batch 123]: owned, freed with the
+      element; nil on everything else }
+    Custom: TObject;
     constructor Create(AKind: TTyGfxKind; const AType: string);
     destructor Destroy; override;
     function GetAnimProp(const AKey: string): TTyAnimValue; override;
@@ -531,6 +535,7 @@ begin
   FreeAndNil(TextContent);
   FreeAndNil(TextConfig);
   FreeAndNil(Info);
+  FreeAndNil(Custom);
   FreeAndNil(InnerOptW);
   FreeAndNil(InnerOptH);
   FreeAndNil(Handlers);

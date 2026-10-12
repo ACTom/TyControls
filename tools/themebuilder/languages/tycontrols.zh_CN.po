@@ -1232,6 +1232,16 @@ msgstr "series[%d]：coordinateSystem“%s”尚未实现"
 msgid "series[%d]: the \"%s\" series type is not drawn yet"
 msgstr "series[%d]：“%s”这个系列类型还画不出来"
 
+#: tycontrols.strconsts.rstychartcustomnorenderitem
+#, object-pascal-format
+msgid "series[%d]: no renderItem is registered as \"%s\", so nothing is drawn"
+msgstr "series[%d]：没有登记名为“%s”的 renderItem，所以什么都不画"
+
+#: tycontrols.strconsts.rstychartcustomrenderitemfailed
+#, object-pascal-format
+msgid "series[%d]: renderItem \"%s\" failed: %s"
+msgstr "series[%d]：renderItem“%s”失败：%s"
+
 #: tycontrols.strconsts.rstychartseriesnoaxis
 #, object-pascal-format
 msgid "series[%d] names an axis that does not exist"
