@@ -728,7 +728,6 @@ end;
 function TTyCustomImageView.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 var
-  p: TPoint;
   factor: Double;
 begin
   { The application's wheel events first, image or no image; a handler that sets Handled keeps
@@ -736,9 +735,11 @@ begin
     OnMouseWheelUp/Down never fired (#62). }
   Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
   if Result or (FSource = nil) then Exit;
-  p := ScreenToClient(MousePos);
+  { About the pointer, which LCL hands over in CLIENT coordinates (TMouseWheelEvent.MousePos).
+    This used to convert it again as a screen point, so the zoom was about a point off by the
+    view's own screen position (#63). }
   factor := Power(1.15, WheelDelta / 120);
-  ZoomAt(factor, p.X, p.Y);
+  ZoomAt(factor, MousePos.X, MousePos.Y);
   Result := True;   // handled
 end;
 
