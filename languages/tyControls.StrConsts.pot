@@ -1124,6 +1124,16 @@ msgstr ""
 msgid "The option is nested more than %d levels deep."
 msgstr ""
 
+#: tycontrols.strconsts.rstypropgridinvalidvalue
+#, object-pascal-format
+msgid "'%s' is not a valid value for %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgridoutofrange
+#, object-pascal-format
+msgid "%s must be between %s and %s"
+msgstr ""
+
 #: tycontrols.strconsts.rstyshortday1
 msgid "Sun"
 msgstr ""

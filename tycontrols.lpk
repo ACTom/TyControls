@@ -197,6 +197,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.ValueListEditor"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.PropertyGrid.pas"/>
+        <UnitName Value="tyControls.PropertyGrid"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.Calculator.pas"/>
         <UnitName Value="tyControls.Calculator"/>
       </Item>

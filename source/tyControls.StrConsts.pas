@@ -376,6 +376,12 @@ resourcestring
   rsTyWindowMenuMaximize = 'Ma&ximize';
   rsTyWindowMenuClose    = '&Close';
 
+  // --- Property grid: a value the grid could not write back ---
+  // %s = the text the user entered, %s = the property's name.
+  rsTyPropGridInvalidValue = '''%s'' is not a valid value for %s';
+  // %s = the property's name, then the lowest and highest value it takes.
+  rsTyPropGridOutOfRange   = '%s must be between %s and %s';
+
   { --- Calendar / DateTimePicker: month & weekday names ----------------------
     The names TTyCalendar and TTyDateTimePicker render ('August', 'Sun', ...).
     These are the one place where the runtime controls draw prose the APP never
