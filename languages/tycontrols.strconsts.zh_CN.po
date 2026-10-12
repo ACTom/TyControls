@@ -583,6 +583,26 @@ msgstr ""
 msgid "Add Item"
 msgstr "添加项"
 
+#: tycontrols.strconsts.rstypropgridcatappearance
+msgid "Appearance"
+msgstr "外观"
+
+#: tycontrols.strconsts.rstypropgridcatbehavior
+msgid "Behavior"
+msgstr "行为"
+
+#: tycontrols.strconsts.rstypropgridcatevents
+msgid "Events"
+msgstr "事件"
+
+#: tycontrols.strconsts.rstypropgridcatlayout
+msgid "Layout"
+msgstr "布局"
+
+#: tycontrols.strconsts.rstypropgridcatother
+msgid "Other"
+msgstr "其他"
+
 #: tycontrols.strconsts.rstypropgriddeleteitem
 msgid "Delete Item"
 msgstr "删除项"

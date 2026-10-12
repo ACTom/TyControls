@@ -399,6 +399,12 @@ resourcestring
   rsTyPropGridDeleteItem = 'Delete Item';
   rsTyPropGridMoveUp     = 'Move Up';
   rsTyPropGridMoveDown   = 'Move Down';
+  // The built-in categories of ShowCategories (the headings; also '@Layout' in ExpandedProperties).
+  rsTyPropGridCatLayout     = 'Layout';
+  rsTyPropGridCatAppearance = 'Appearance';
+  rsTyPropGridCatBehavior   = 'Behavior';
+  rsTyPropGridCatEvents     = 'Events';
+  rsTyPropGridCatOther      = 'Other';
 
   { --- Calendar / DateTimePicker: month & weekday names ----------------------
     The names TTyCalendar and TTyDateTimePicker render ('August', 'Sun', ...).

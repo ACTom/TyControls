@@ -1132,6 +1132,26 @@ msgstr ""
 msgid "Add Item"
 msgstr ""
 
+#: tycontrols.strconsts.rstypropgridcatappearance
+msgid "Appearance"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgridcatbehavior
+msgid "Behavior"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgridcatevents
+msgid "Events"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgridcatlayout
+msgid "Layout"
+msgstr ""
+
+#: tycontrols.strconsts.rstypropgridcatother
+msgid "Other"
+msgstr ""
+
 #: tycontrols.strconsts.rstypropgriddeleteitem
 msgid "Delete Item"
 msgstr ""

@@ -321,6 +321,10 @@ type
     function MenuItem(const ACaption: string): TMenuItem;
     { Choose that item the way a click in the shown menu does (a disabled one does nothing). }
     procedure PickMenu(const ACaption: string);
+    { The grid painted into ACanvas, as the window would show it. }
+    procedure PaintInto(ACanvas: TCanvas; const ARect: TRect);
+    { The keys of the rows on display, top to bottom, comma-separated. }
+    function ShownKeys: string;
   end;
 
 { The runner never calls Forms.Application.Initialize; a test that needs window handles does. }
@@ -647,7 +651,7 @@ var n, res: Integer; p: TTyValueRow; anyOpened: Boolean;
   procedure Walk(R: TTyValueRow);
   var i: Integer;
   begin
-    if res >= 0 then Exit;
+    if (res >= 0) or R.Hidden then Exit;
     if R = ARow then begin res := n; Exit; end;
     Inc(n);
     if R.Expanded then
@@ -766,7 +770,7 @@ var n: Integer; res: TTyValueRow;
   procedure Walk(R: TTyValueRow);
   var i: Integer;
   begin
-    if res <> nil then Exit;
+    if (res <> nil) or R.Hidden then Exit;
     if n = ItemIndex then begin res := R; Exit; end;
     Inc(n);
     if R.Expanded then
@@ -818,6 +822,23 @@ end;
 procedure TPGGrid.PickMenu(const ACaption: string);
 begin
   CollectionMenu.ActivateRowForTest(MenuItem(ACaption).MenuIndex);
+end;
+
+procedure TPGGrid.PaintInto(ACanvas: TCanvas; const ARect: TRect);
+begin
+  RenderTo(ACanvas, ARect, 96);
+end;
+
+function TPGGrid.ShownKeys: string;
+var i: Integer;
+begin
+  { The list box's items are the rows on display (the editor keeps them in step). }
+  Result := '';
+  for i := 0 to Items.Count - 1 do
+  begin
+    if i > 0 then Result := Result + ',';
+    Result := Result + Items[i];
+  end;
 end;
 
 end.

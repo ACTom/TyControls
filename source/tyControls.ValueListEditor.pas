@@ -41,6 +41,15 @@ type
     { Free for the application or a descendant to hang its own record on the row -- what the
       row stands for. nil by default, and NOT owned: freeing the row leaves it alone. }
     Data: Pointer;
+    { A group heading (a property grid's category): the key is drawn across the whole row, bold,
+      on the TyValueListEditorGroup band, with no column divider and no value; it is never edited
+      (no editor opens on it, not on its key either -- whatever ReadOnly and EditorKind say), and
+      Enter expands or collapses it. It can have children like any other row. False by default. }
+    Heading: Boolean;
+    { Left out of the list while True, together with the rows below it: not drawn, not reachable
+      by the keyboard or the mouse. It keeps its place, its value and its children. Call the
+      editor's UpdateRows after changing it. False by default. }
+    Hidden: Boolean;
     constructor Create;
     destructor Destroy; override;
     // Append a child row (nesting). Returns it for further configuration.
@@ -149,6 +158,10 @@ type
     FOnKeyChanged: TTyValueEditEvent;      // a keyEdit rename committed
     FOnKeyRejected: TTyKeyRejectedEvent;   // a keyUnique collision refused a rename
     FOnEditRow: TTyValueEditEvent;    // vekDialog: the app shows a dialog + sets ARow.Value
+    { The state set the row loop resolved for the row it is painting (ItemStatesFor hands it over
+      just before PaintItemContent): a heading row draws its band only at rest. }
+    FPaintRow: Integer;
+    FPaintRowStates: TTyStateSet;
     function Dp(ALogical: Integer): Integer;
     function ContentLeftDp: Integer;
     function ContentRightDp: Integer;
@@ -270,6 +283,12 @@ type
     function RtlRowLayout: Boolean; override;
     function GetStyleTypeKey: string; override;
     function GetItemStyleTypeKey: string; override;
+    { Unchanged states; it only notes them for PaintItemContent (see FPaintRowStates). }
+    function ItemStatesFor(AIndex: Integer; ABaseStates: TTyStateSet): TTyStateSet; override;
+    { A heading row (TTyValueRow.Heading) is drawn from 'TyValueListEditorGroup' (hung on
+      'TyValueListEditorRow'): at rest its background is the band and its color the ink; hovered
+      or selected it takes the row's own look like any other row. Its font-weight (default bold)
+      applies in every state. }
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -637,6 +656,7 @@ constructor TTyCustomValueListEditor.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FEditFlat := -1;
+  FPaintRow := -1;
   FEditCol := 1;      // the value column: what an edit meant before the key became editable
   FColorDlgRow := nil;
   FKeyColumnWidth := 110;
@@ -673,6 +693,7 @@ end;
 procedure TTyCustomValueListEditor.AppendFlat(ARow: TTyValueRow; ALevel: Integer);
 var i, n: Integer;
 begin
+  if ARow.Hidden then Exit;   // and everything below it
   n := Length(FFlatRow);
   SetLength(FFlatRow, n + 1);
   SetLength(FFlatLevel, n + 1);
@@ -1287,7 +1308,7 @@ begin
   if FReadOnly then Exit;
   if (AFlat < 0) or (AFlat > High(FFlatRow)) then Exit;
   r := FFlatRow[AFlat];
-  if r.ReadOnly or (r.EditorKind = vekReadOnly) then Exit;
+  if r.ReadOnly or r.Heading or (r.EditorKind = vekReadOnly) then Exit;
   { Same row AND same column: already editing this cell. A KEY edit on this row is a DIFFERENT
     cell, so clicking the value must still hand over -- without the column test the key editor
     stayed open and the click on the value did nothing. }
@@ -1353,6 +1374,7 @@ procedure TTyCustomValueListEditor.BeginKeyEdit(AFlat: Integer);
 begin
   if FReadOnly or not (keyEdit in FKeyOptions) then Exit;
   if (AFlat < 0) or (AFlat > High(FFlatRow)) then Exit;
+  if FFlatRow[AFlat].Heading then Exit;   // a heading is not an entry: nothing to rename
   if (FEditFlat = AFlat) and (FEditCol = 0) then Exit;
   if FEditFlat >= 0 then EndEdit(True);
   { EndEdit can drop rows out from under us (a rejected commit repaints, a handler may edit the
@@ -1563,7 +1585,7 @@ var r: TTyValueRow;
 begin
   if (AFlat < 0) or (AFlat > High(FFlatRow)) then Exit;
   r := FFlatRow[AFlat];
-  if FReadOnly or r.ReadOnly then Exit;
+  if FReadOnly or r.ReadOnly or r.Heading then Exit;
   { Commit + CLOSE the inline editor before the modal opens. Otherwise the editor loses focus to
     the dialog, its OnExit commits the (stale) editor text, and that overwrites the value the
     dialog just set — the classic "font dialog changes nothing" bug. }
@@ -1839,6 +1861,14 @@ begin
   Result := 'TyValueListEditorRow';
 end;
 
+function TTyCustomValueListEditor.ItemStatesFor(AIndex: Integer;
+  ABaseStates: TTyStateSet): TTyStateSet;
+begin
+  Result := inherited ItemStatesFor(AIndex, ABaseStates);
+  FPaintRow := AIndex;
+  FPaintRowStates := Result;
+end;
+
 procedure TTyCustomValueListEditor.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
 var
@@ -1847,8 +1877,9 @@ var
   keyR, valR, tri, swR: TRect;
   { Named *Sty, not *S: 'keyS' collides with the published Keys[] property (identifiers are
     case-insensitive), and the compiler reports it as a duplicate identifier. }
-  expSty, keySty, divSty, valSty: TTyStyleSet;
+  expSty, keySty, divSty, valSty, grpSty: TTyStyleSet;
   divider, keyCol, valCol, valDef, triCol: TTyColor;
+  keyWeight: Integer;
   ctx: TBGRACanvas2D;
   cy: Single;
 begin
@@ -1869,6 +1900,25 @@ begin
   if tpTextColor in expSty.Present then triCol := expSty.TextColor else triCol := AStyle.TextColor;
   if tpTextColor in keySty.Present then keyCol := keySty.TextColor else keyCol := AStyle.TextColor;
   if tpTextColor in valSty.Present then valDef := valSty.TextColor else valDef := AStyle.TextColor;
+
+  { A heading: its band and its ink at rest; hovered or selected, the row's own look (the fill
+    the row loop has just painted, the ink above) like any other row. Bold in every state. }
+  keyWeight := AStyle.FontWeight;
+  if r.Heading then
+  begin
+    grpSty := ActiveController.Model.ResolveStyle('TyValueListEditorGroup', '', [tysNormal]);
+    if tpFontWeight in grpSty.Present then keyWeight := grpSty.FontWeight else keyWeight := 700;
+    if not ((AIndex = FPaintRow) and (FPaintRowStates * [tysActive, tysHover] <> [])) then
+    begin
+      if tpBackground in grpSty.Present then
+        P.FillBackground(ARowRect, grpSty.Background, TyCorners(0, 0, 0, 0));
+      if tpTextColor in grpSty.Present then
+      begin
+        keyCol := grpSty.TextColor;
+        triCol := grpSty.TextColor;
+      end;
+    end;
+  end;
 
   splitX := ARowRect.Left + P.Scale(FKeyColumnWidth);
   lo := ARowRect.Left + P.Scale(24);
@@ -1905,6 +1955,16 @@ begin
     end;
     ctx.closePath;
     ctx.fill;
+  end;
+
+  { A heading's key runs across both columns; there is no divider and no value. }
+  if r.Heading then
+  begin
+    keyR := Rect(indentX + P.Scale(indent), ARowRect.Top, ARowRect.Right - P.Scale(4),
+      ARowRect.Bottom);
+    P.DrawText(keyR, r.EffectiveKey, AStyle.FontName, ResolveFontSize(AStyle), keyWeight,
+      keyCol, taLeftJustify, tlCenter, True);
+    Exit;
   end;
 
   // Key label (after the triangle + indent), skipped while ITS inline editor is open -- else the
@@ -2045,6 +2105,14 @@ begin
       Exit;
     end;
   end;
+  { A heading has nothing to edit: Enter opens or closes it instead. }
+  if (Key = VK_RETURN) and (Shift = []) and (ItemIndex >= 0) and (ItemIndex <= High(FFlatRow))
+    and FFlatRow[ItemIndex].Heading and (FEditFlat < 0) then
+  begin
+    SetExpanded(FFlatRow[ItemIndex], not FFlatRow[ItemIndex].Expanded);
+    Key := 0;
+    Exit;
+  end;
   if ((Key = VK_F2) or (Key = VK_RETURN)) and (Shift = []) and (ItemIndex >= 0)
     and not FReadOnly and (FEditFlat < 0) then
   begin
@@ -2063,5 +2131,13 @@ begin
   end;
   inherited KeyDown(Key, Shift);
 end;
+
+initialization
+  { A heading row is a row: a theme that styles the rows reaches the headings too, and
+    TyValueListEditorGroup says only how a heading differs. }
+  TyTryRegisterTypeKeyParent('TyValueListEditorGroup', 'TyValueListEditorRow');
+
+finalization
+  TyUnregisterTypeKeyParent('TyValueListEditorGroup');
 
 end.

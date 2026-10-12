@@ -7707,7 +7707,9 @@ type
     property TypeFilter;
     property HiddenProperties;
     property ExpandedProperties;
+    property ShowCategories;
     property OnFilterProperty;
+    property OnGetPropertyCategory;
     property OnGetComponentNames;
     property OnGetPropertyRow;
     property OnGetPropertyText;

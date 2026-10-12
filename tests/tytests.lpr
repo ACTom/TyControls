@@ -15,6 +15,7 @@ uses
   test.hscolorpicker, test.advancedlistbox, test.advancedcombobox, test.checkcombobox, test.valuelisteditor, test.valuelisteditor.hooks,
   test.propertygrid.fixtures, test.propertygrid, test.propertygrid.objects, test.propertygrid.control, test.propertygrid.theme,
   test.propertygrid.multi, test.propertygrid.extend, test.propertygrid.collections,
+  test.propertygrid.categories,
   test.calculator, test.calcedit,
   test.bevel, test.divider, test.paintpanel, test.sizebox,
   test.radiogroup, test.checkgroup, test.toolgrouppanel,

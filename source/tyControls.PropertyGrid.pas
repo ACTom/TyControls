@@ -47,7 +47,8 @@ type
     pnkComponent,       // a reference to another component, picked by name
     pnkStrings,         // a TStrings, edited in a dialog
     pnkMethod,          // an event handler, shown by name, read-only
-    pnkCustom);         // a kind the grid does not show itself, shown through OnGetPropertyText
+    pnkCustom,          // a kind the grid does not show itself, shown through OnGetPropertyText
+    pnkCategory);       // a category's heading (ShowCategories); its rows are the properties in it
 
   TTyPropertyRows = class;
 
@@ -65,15 +66,24 @@ type
       class of an expanded sub-object (nil when there was none), a collection's item count. }
     FBuiltClass: TClass;
     FBuiltCount: Integer;
+    { AddChildren built the rows below it (a descendant's BuildPropertyRow may not have): only
+      then does Refresh compare FBuiltClass / FBuiltCount with the object. }
+    FChildrenBuilt: Boolean;
     { Several objects selected and this sub-object is not of one class in all of them (or is
       missing from some): the row is read-only and has nothing below it. }
     FMixed: Boolean;
     { Some selected object's property has no setter (with one object: the property has none). }
     FNoSetter: Boolean;
+    { A category heading's name. }
+    FCategory: string;
+    { FilterText is set and something below this row matches it: the row is opened for it. }
+    FFilterOpen: Boolean;
   public
-    { The property's name; a set element's name; '[i]' for a collection item. }
+    { The property's name; a set element's name; '[i]' for a collection item; '@' and the name
+      for a category heading. }
     function Name: string;
-    { Dotted from the root: 'Font.Style.fsBold', 'Columns[0].Width'. }
+    { Dotted from the root: 'Font.Style.fsBold', 'Columns[0].Width'. A category is not part of
+      its properties' paths ('Font', not '@Appearance.Font'); its own path is '@Appearance'. }
     function Path: string;
     { The object that HAS this node's property (for a set element, the set's owner; for a
       collection item, nil). Resolved from the root on every call; nil when the chain is broken.
@@ -116,10 +126,17 @@ type
   TTyGetComponentNamesEvent = procedure(Sender: TObject; AInstance: TPersistent;
     APropInfo: PPropInfo; AList: TStrings) of object;
 
-  { A property's row has just been built: change its editor kind, its options, its DisplayValue,
-    its style, or make it read-only. }
+  { A property's row has just been built (with the rows below it): change its editor kind, its
+    options, its DisplayValue, its style, or make it read-only. }
   TTyGetPropertyRowEvent = procedure(Sender: TObject; AInstance: TPersistent;
     APropInfo: PPropInfo; ARow: TTyValueRow) of object;
+
+  { The category a top-level property is listed under while ShowCategories is on. ACategory
+    arrives holding the built-in one (TyPropertyGridCategoryOf); change it to any other, a name
+    of the application's own included. An empty name counts as Other. With several objects
+    selected, asked for the first. }
+  TTyGetPropertyCategoryEvent = procedure(Sender: TObject; AInstance: TPersistent;
+    const APropName: string; var ACategory: string) of object;
 
   { About to write ANewValue (the property's text as it will read: for one element of a set, the
     whole set) into AInstance.APropName; set AAllow to False to refuse it. }
@@ -158,9 +175,22 @@ type
     FOnGetPropertyRow: TTyGetPropertyRowEvent;
     FOnGetPropertyText: TTyGetPropertyTextEvent;
     FOnSetPropertyText: TTySetPropertyTextEvent;
+    FShowCategories: Boolean;
+    FFilterText: string;
+    FOnGetPropertyCategory: TTyGetPropertyCategoryEvent;
     procedure SetHiddenProperties(AValue: TStringList);
-    { OnGetPropertyText for AInstance's property: True with the text when it was handled. }
+    { GetPropText for AInstance's property: True with the text when it was handled. }
     function CustomText(AInstance: TObject; APropInfo: PPropInfo; out AText: string): Boolean;
+    { A property's node and row, under AParentRow (nil: a top-level row), built by BuildRow. }
+    procedure AddPropertyRow(AEditor: TTyCustomValueListEditor; AParentRow: TTyValueRow;
+      AParentNode: TTyPropertyNode; APropInfo: PPropInfo; const AInstances: array of TObject;
+      ADepth: Integer);
+    { The top-level properties (APropInfos, in their order) under a heading per category. }
+    procedure AddCategories(AEditor: TTyCustomValueListEditor; APropInfos: TFPList;
+      const AInstances: array of TObject);
+    { FilterText: hide every row that neither matches it nor has a match below it nor sits
+      below a match, and open the rows a match is below. }
+    procedure ApplyFilter(AEditor: TTyCustomValueListEditor);
     function NewNode(AParent: TTyPropertyNode; APropInfo: PPropInfo; AKind: TTyPropertyNodeKind;
       AIndex: Integer): TTyPropertyNode;
     function Accept(AInstance: TObject; APropInfo: PPropInfo; AParent: TTyPropertyNode): Boolean;
@@ -171,8 +201,6 @@ type
     function KindOf(APropInfo: PPropInfo; AInstance: TObject): TTyPropertyNodeKind;
     procedure AddProperties(AEditor: TTyCustomValueListEditor; AParentRow: TTyValueRow;
       AParentNode: TTyPropertyNode; const AInstances: array of TObject; ADepth: Integer);
-    procedure AddChildren(AEditor: TTyCustomValueListEditor; ANode: TTyPropertyNode);
-    procedure FillRow(ANode: TTyPropertyNode);
     { The class every root's sub-object has at ANode, nil when there is none; AMixed when they
       differ (or some root has none). }
     procedure SubObjectClass(ANode: TTyPropertyNode; out AClass: TClass; out AMixed: Boolean);
@@ -185,6 +213,18 @@ type
       const AText: string);
     function GetRoot: TPersistent;
     function GetRoots(AIndex: Integer): TPersistent;
+  protected
+    { The three ways a descendant (TTyCustomPropertyGrid's own, which hands them to the grid's
+      virtual methods) takes part in the mapping. BuildRow fills ANode's row (ANode.Row exists,
+      its key the property's name) and adds the rows below it; the default is FillRow and then
+      AddChildren. GetPropText / SetPropText are asked before the grid's own conversion of any
+      property (not of a set's element, which is part of its set); True = handled. The defaults
+      ask OnGetPropertyText / OnSetPropertyText. }
+    procedure BuildRow(AEditor: TTyCustomValueListEditor; ANode: TTyPropertyNode); virtual;
+    function GetPropText(AInstance: TPersistent; APropInfo: PPropInfo;
+      var AText: string): Boolean; virtual;
+    function SetPropText(AInstance: TPersistent; APropInfo: PPropInfo;
+      const AText: string): Boolean; virtual;
   public
     constructor Create(ASender: TObject);
     destructor Destroy; override;
@@ -212,6 +252,20 @@ type
     procedure WriteTextIn(ANode: TTyPropertyNode; ARoot: Integer; const AText: string);
     procedure WriteFontIn(ANode: TTyPropertyNode; ARoot: Integer; AFont: TFont);
     procedure WriteStringsIn(ANode: TTyPropertyNode; ARoot: Integer; AStrings: TStrings);
+    { What BuildRow does by default: FillRow sets the row's editor kind, options, read-only flag
+      and value from the property; AddChildren adds the rows below it (a set's elements, a
+      sub-object's or a font's properties, a collection's items), collapsed. }
+    procedure FillRow(ANode: TTyPropertyNode);
+    procedure AddChildren(AEditor: TTyCustomValueListEditor; ANode: TTyPropertyNode);
+    { OnGetPropertyText / OnSetPropertyText themselves (what GetText and SetText do by
+      default): True when the handler handled it. }
+    function CallGetPropertyText(AInstance: TPersistent; APropInfo: PPropInfo;
+      var AText: string): Boolean;
+    function CallSetPropertyText(AInstance: TPersistent; APropInfo: PPropInfo;
+      const AText: string): Boolean;
+    { The category a top-level property of AInstance goes under: the built-in one, then
+      OnGetPropertyCategory's say. }
+    function CategoryOf(AInstance: TObject; APropInfo: PPropInfo): string;
     { Drop the nodes. The rows they belong to must be cleared by the caller. }
     procedure Clear;
     function NodeOf(ARow: TTyValueRow): TTyPropertyNode;
@@ -269,6 +323,15 @@ type
       write FOnGetPropertyText;
     property OnSetPropertyText: TTySetPropertyTextEvent read FOnSetPropertyText
       write FOnSetPropertyText;
+    { The top-level properties under a heading row per category (TTyValueRow.Heading): the
+      built-in ones in the order Layout, Appearance, Behavior, Events, then the application's
+      own by name, then Other; an empty category has no heading. Within one, PropertyOrder. }
+    property ShowCategories: Boolean read FShowCategories write FShowCategories;
+    property OnGetPropertyCategory: TTyGetPropertyCategoryEvent read FOnGetPropertyCategory
+      write FOnGetPropertyCategory;
+    { Only the rows whose name holds this text (ignoring case; '' = every row), the rows above
+      them -- opened -- and the rows below them. Applied by Build. }
+    property FilterText: string read FFilterText write FFilterText;
   end;
 
   { What is done to a collection: an item added, deleted, or moved to another index. }
@@ -323,6 +386,11 @@ type
     FMenu: TTyPopupMenu;
     FMenuAdd, FMenuDelete, FMenuUp, FMenuDown: TMenuItem;
     FMenuPath: string;
+    { The category headings shown so far ('@Layout'): one shown for the first time opens. }
+    FSeenCategories: TStringList;
+    { ExpandedProperties as it was before FilterText was set, given back when it is cleared. }
+    FPreFilterExpanded: TStringList;
+    FFiltering: Boolean;
     function GetSelectedObject: TPersistent;
     procedure SetSelectedObject(AValue: TPersistent);
     function GetSelectedObjects(AIndex: Integer): TPersistent;
@@ -354,6 +422,15 @@ type
     procedure SetOnGetPropertyText(AValue: TTyGetPropertyTextEvent);
     function GetOnSetPropertyText: TTySetPropertyTextEvent;
     procedure SetOnSetPropertyText(AValue: TTySetPropertyTextEvent);
+    function GetShowCategories: Boolean;
+    procedure SetShowCategories(AValue: Boolean);
+    function GetOnGetPropertyCategory: TTyGetPropertyCategoryEvent;
+    procedure SetOnGetPropertyCategory(AValue: TTyGetPropertyCategoryEvent);
+    function GetFilterText: string;
+    procedure SetFilterText(const AValue: string);
+    { A category heading shown for the first time is opened (its path goes on ExpandedProperties);
+      from then on it is whatever the user (or the list) made it. }
+    procedure OpenNewCategories;
     { ASelect, when given, is the path of the row to make current (and scroll into view)
       instead of the one that was. }
     procedure RebuildRows(AKeepTop: Boolean; const ASelect: string = '';
@@ -402,6 +479,22 @@ type
     function ExecuteStringsDialog(const ATitle: string; AStrings: TStrings): Boolean; virtual;
     { What the '…' of a TStrings row runs: the dialog above, then the write. }
     procedure EditStringsRow(ARow: TTyValueRow);
+    { Builds the row of one property (not of a category heading, a set's element or a collection's
+      item): ANode.Row is already made -- its key the property's name, its Data the node -- and
+      this fills it and adds the rows below it. The default is PropertyRows.FillRow, then
+      PropertyRows.AddChildren. Override it to make the rows of some type your own way: set the
+      editor kind, the options, ReadOnly, add rows below or none. The value is read and written
+      through GetPropertyText / SetPropertyText (override those too, for a type whose text the
+      grid does not make itself), and OnGetPropertyRow still comes after. }
+    procedure BuildPropertyRow(ANode: TTyPropertyNode); virtual;
+    { A property's text, asked before the grid's own conversion: True = handled, AText is it.
+      The default asks OnGetPropertyText. With several objects selected, asked for each. }
+    function GetPropertyText(AInstance: TPersistent; APropInfo: PPropInfo;
+      var AText: string): Boolean; virtual;
+    { Write AText into the property yourself: True = handled, the grid's own conversion is
+      skipped. The default asks OnSetPropertyText. An exception goes the way a setter's does. }
+    function SetPropertyText(AInstance: TPersistent; APropInfo: PPropInfo;
+      const AText: string): Boolean; virtual;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -459,10 +552,27 @@ type
       default TyPropertyGridDefaultTypeFilter;
     { Property names ('Tag') or dotted paths ('Font.Height') never listed. }
     property HiddenProperties: TStrings read GetHiddenProperties write SetHiddenProperties;
-    { The dotted paths of the expanded rows ('Font', 'Font.Style', 'Columns[0]'). Kept when the
-      selection moves to another object, so a row expanded on one button is expanded on the
-      next; adding a path expands that row. }
+    { The dotted paths of the expanded rows ('Font', 'Font.Style', 'Columns[0]'), and '@' with
+      the name for an open category heading ('@Layout'). Kept when the selection moves to
+      another object, so a row expanded on one button is expanded on the next; adding a path
+      expands that row. A category heading the grid shows for the first time is open (its path
+      is added); take it off the list to close it. }
     property ExpandedProperties: TStrings read GetExpandedProperties write SetExpandedProperties;
+    { Group the top-level properties by category, each group under a heading row that is not
+      edited and opens and closes (Enter, or its triangle). Built-in categories by name: Layout
+      (Left, Top, Width, Height, Align, Anchors, AutoSize, BorderSpacing, Constraints,
+      ChildSizing), Appearance (Color, Font, Caption, Text, Visible, StyleClass, StyleOverride,
+      Images, ImageIndex, Cursor, ParentColor, ParentFont), Behavior (Enabled, ReadOnly, TabStop,
+      TabOrder, Hint, ShowHint, PopupMenu, Action), Events (every event), Other (the rest);
+      OnGetPropertyCategory changes any. A sub-property stays with its parent. Off by default. }
+    property ShowCategories: Boolean read GetShowCategories write SetShowCategories default False;
+    property OnGetPropertyCategory: TTyGetPropertyCategoryEvent read GetOnGetPropertyCategory
+      write SetOnGetPropertyCategory;
+    { Only the properties whose name holds this text, ignoring case (a sub-property or a set's
+      element too: the rows above it are shown and opened for it, and a matching row keeps the
+      rows below it). OnFilterProperty is asked first; this filters what it lets through. Clear
+      it and the rows are opened and closed as they were before it was set. '' by default. }
+    property FilterText: string read GetFilterText write SetFilterText;
     property OnFilterProperty: TTyFilterPropertyEvent read GetOnFilterProperty
       write SetOnFilterProperty;
     property OnGetComponentNames: TTyGetComponentNamesEvent read GetOnGetComponentNames
@@ -565,7 +675,9 @@ type
     property TypeFilter;
     property HiddenProperties;
     property ExpandedProperties;
+    property ShowCategories;
     property OnFilterProperty;
+    property OnGetPropertyCategory;
     property OnGetComponentNames;
     property OnGetPropertyRow;
     property OnGetPropertyText;
@@ -583,6 +695,11 @@ type
   is 'TGraphicsColor' on FPC 3.2.2 and 'TColor' once graphtype switches to System.UITypes). }
 function TyIsColorType(ATypeInfo: PTypeInfo): Boolean;
 
+{ The built-in category of a property (see TTyCustomPropertyGrid.ShowCategories): an event is
+  Events, the names of the table go under Layout, Appearance or Behavior, the rest under Other.
+  The names are the resourcestrings rsTyPropGridCat*, translated. }
+function TyPropertyGridCategoryOf(const APropName: string; AKind: TTypeKind): string;
+
 implementation
 
 uses
@@ -592,6 +709,49 @@ function TyIsColorType(ATypeInfo: PTypeInfo): Boolean;
 begin
   Result := (ATypeInfo = TypeInfo(TColor))
     or SameText(ATypeInfo^.Name, 'TColor') or SameText(ATypeInfo^.Name, 'TGraphicsColor');
+end;
+
+const
+  CCatLayout: array[0..9] of string = ('Left', 'Top', 'Width', 'Height', 'Align', 'Anchors',
+    'AutoSize', 'BorderSpacing', 'Constraints', 'ChildSizing');
+  CCatAppearance: array[0..11] of string = ('Color', 'Font', 'Caption', 'Text', 'Visible',
+    'StyleClass', 'StyleOverride', 'Images', 'ImageIndex', 'Cursor', 'ParentColor', 'ParentFont');
+  CCatBehavior: array[0..7] of string = ('Enabled', 'ReadOnly', 'TabStop', 'TabOrder', 'Hint',
+    'ShowHint', 'PopupMenu', 'Action');
+
+function NameIn(const AName: string; const ANames: array of string): Boolean;
+var i: Integer;
+begin
+  for i := 0 to High(ANames) do
+    if SameText(ANames[i], AName) then Exit(True);
+  Result := False;
+end;
+
+function TyPropertyGridCategoryOf(const APropName: string; AKind: TTypeKind): string;
+begin
+  if AKind = tkMethod then Result := rsTyPropGridCatEvents
+  else if NameIn(APropName, CCatLayout) then Result := rsTyPropGridCatLayout
+  else if NameIn(APropName, CCatAppearance) then Result := rsTyPropGridCatAppearance
+  else if NameIn(APropName, CCatBehavior) then Result := rsTyPropGridCatBehavior
+  else Result := rsTyPropGridCatOther;
+end;
+
+{ Where a category's heading goes: the built-in ones in their order, the application's own after
+  them (sorted by name among themselves), Other last. }
+function CategoryRank(const ACategory: string): Integer;
+begin
+  if ACategory = rsTyPropGridCatLayout then Result := 0
+  else if ACategory = rsTyPropGridCatAppearance then Result := 1
+  else if ACategory = rsTyPropGridCatBehavior then Result := 2
+  else if ACategory = rsTyPropGridCatEvents then Result := 3
+  else if ACategory = rsTyPropGridCatOther then Result := 5
+  else Result := 4;
+end;
+
+function CompareCategories(List: TStringList; A, B: Integer): Integer;
+begin
+  Result := CategoryRank(List[A]) - CategoryRank(List[B]);
+  if Result = 0 then Result := CompareText(List[A], List[B]);
 end;
 
 { The float format: always '.', never a thousands separator. The inline editor's number mode
@@ -890,6 +1050,7 @@ begin
   case FKind of
     pnkCollectionItem: Result := '[' + IntToStr(FIndex) + ']';
     pnkSetElement: Result := ElementName(GetTypeData(FPropInfo^.PropType)^.CompType, FIndex);
+    pnkCategory: Result := '@' + FCategory;
   else
     Result := FPropInfo^.Name;
   end;
@@ -904,7 +1065,7 @@ end;
 
 function TTyPropertyNode.Instance: TObject;
 begin
-  if FKind = pnkCollectionItem then Exit(nil);
+  if FKind in [pnkCollectionItem, pnkCategory] then Exit(nil);
   Result := FOwner.HolderOf(Self);
 end;
 
@@ -1113,9 +1274,51 @@ function TTyPropertyRows.CustomText(AInstance: TObject; APropInfo: PPropInfo;
 begin
   AText := '';
   Result := False;
-  if not Assigned(FOnGetPropertyText) or not (AInstance is TPersistent) then Exit;
-  FOnGetPropertyText(FSender, TPersistent(AInstance), APropInfo, AText, Result);
+  if not (AInstance is TPersistent) then Exit;
+  Result := GetPropText(TPersistent(AInstance), APropInfo, AText);
   if not Result then AText := '';
+end;
+
+function TTyPropertyRows.CallGetPropertyText(AInstance: TPersistent; APropInfo: PPropInfo;
+  var AText: string): Boolean;
+begin
+  Result := False;
+  if Assigned(FOnGetPropertyText) then
+    FOnGetPropertyText(FSender, AInstance, APropInfo, AText, Result);
+end;
+
+function TTyPropertyRows.CallSetPropertyText(AInstance: TPersistent; APropInfo: PPropInfo;
+  const AText: string): Boolean;
+begin
+  Result := False;
+  if Assigned(FOnSetPropertyText) then
+    FOnSetPropertyText(FSender, AInstance, APropInfo, AText, Result);
+end;
+
+function TTyPropertyRows.GetPropText(AInstance: TPersistent; APropInfo: PPropInfo;
+  var AText: string): Boolean;
+begin
+  Result := CallGetPropertyText(AInstance, APropInfo, AText);
+end;
+
+function TTyPropertyRows.SetPropText(AInstance: TPersistent; APropInfo: PPropInfo;
+  const AText: string): Boolean;
+begin
+  Result := CallSetPropertyText(AInstance, APropInfo, AText);
+end;
+
+procedure TTyPropertyRows.BuildRow(AEditor: TTyCustomValueListEditor; ANode: TTyPropertyNode);
+begin
+  FillRow(ANode);
+  AddChildren(AEditor, ANode);
+end;
+
+function TTyPropertyRows.CategoryOf(AInstance: TObject; APropInfo: PPropInfo): string;
+begin
+  Result := TyPropertyGridCategoryOf(APropInfo^.Name, APropInfo^.PropType^.Kind);
+  if Assigned(FOnGetPropertyCategory) and (AInstance is TPersistent) then
+    FOnGetPropertyCategory(FSender, TPersistent(AInstance), APropInfo^.Name, Result);
+  if Trim(Result) = '' then Result := rsTyPropGridCatOther;
 end;
 
 { Is this property shown? Readable, of a kind the filter lets through, not hidden by name or
@@ -1161,15 +1364,100 @@ begin
   Result := CompareText(PPropInfo(A)^.Name, PPropInfo(B)^.Name);
 end;
 
+procedure TTyPropertyRows.AddPropertyRow(AEditor: TTyCustomValueListEditor; AParentRow: TTyValueRow;
+  AParentNode: TTyPropertyNode; APropInfo: PPropInfo; const AInstances: array of TObject;
+  ADepth: Integer);
+var
+  k: Integer;
+  other: PPropInfo;
+  nd: TTyPropertyNode;
+  row: TTyValueRow;
+  first: TObject;
+begin
+  first := AInstances[0];
+  nd := NewNode(AParentNode, APropInfo, KindOf(APropInfo, first), 0);
+  nd.FDepth := ADepth;
+  nd.FNoSetter := APropInfo^.SetProc = nil;
+  for k := 1 to High(AInstances) do
+  begin
+    other := GetPropInfo(AInstances[k], APropInfo^.Name);
+    if (other = nil) or (other^.SetProc = nil) then nd.FNoSetter := True;
+  end;
+  if AParentRow = nil then row := AEditor.AddRow(APropInfo^.Name, '')
+  else row := AParentRow.AddChild(APropInfo^.Name, '');
+  nd.FRow := row;
+  row.Data := nd;
+  BuildRow(AEditor, nd);
+  if Assigned(FOnGetPropertyRow) and (first is TPersistent) then
+    FOnGetPropertyRow(FSender, TPersistent(first), APropInfo, row);
+end;
+
+procedure TTyPropertyRows.AddCategories(AEditor: TTyCustomValueListEditor; APropInfos: TFPList;
+  const AInstances: array of TObject);
+var
+  cats: TStringList;
+  names: array of string;
+  i, c: Integer;
+  head: TTyPropertyNode;
+  row: TTyValueRow;
+begin
+  cats := TStringList.Create;   // case-insensitive: 'layout' from a handler joins Layout
+  try
+    SetLength(names, APropInfos.Count);
+    for i := 0 to APropInfos.Count - 1 do
+    begin
+      names[i] := CategoryOf(AInstances[0], PPropInfo(APropInfos[i]));
+      if cats.IndexOf(names[i]) < 0 then cats.Add(names[i]);
+    end;
+    cats.CustomSort(@CompareCategories);
+    for c := 0 to cats.Count - 1 do
+    begin
+      head := NewNode(nil, nil, pnkCategory, 0);
+      head.FCategory := cats[c];
+      row := AEditor.AddRow(cats[c], '');
+      row.Heading := True;
+      row.Data := head;
+      head.FRow := row;
+      for i := 0 to APropInfos.Count - 1 do
+        if SameText(names[i], cats[c]) then
+          AddPropertyRow(AEditor, row, nil, PPropInfo(APropInfos[i]), AInstances, 0);
+    end;
+  finally
+    cats.Free;
+  end;
+end;
+
+procedure TTyPropertyRows.ApplyFilter(AEditor: TTyCustomValueListEditor);
+var
+  f: string;
+  i: Integer;
+
+  { True when R or a row below it matches. }
+  function Mark(R: TTyValueRow; AUnderMatch: Boolean): Boolean;
+  var nd: TTyPropertyNode; own, below: Boolean; j: Integer;
+  begin
+    nd := NodeOf(R);
+    own := (nd <> nil) and (nd.FKind <> pnkCategory) and (Pos(f, LowerCase(nd.Name)) > 0);
+    below := False;
+    for j := 0 to R.ChildCount - 1 do
+      if Mark(R.Child[j], AUnderMatch or own) then below := True;
+    if nd <> nil then nd.FFilterOpen := below;
+    R.Hidden := not (own or below or AUnderMatch);
+    Result := own or below;
+  end;
+
+begin
+  f := LowerCase(Trim(FFilterText));
+  if f = '' then Exit;   // the rows are new: nothing hidden, nothing opened
+  for i := 0 to AEditor.RowCount - 1 do Mark(AEditor.Row(i), False);
+end;
+
 procedure TTyPropertyRows.AddProperties(AEditor: TTyCustomValueListEditor; AParentRow: TTyValueRow;
   AParentNode: TTyPropertyNode; const AInstances: array of TObject; ADepth: Integer);
 var
   pl: PPropList;
-  n, i, k: Integer;
+  n, i: Integer;
   list: TFPList;
-  pi, other: PPropInfo;
-  nd: TTyPropertyNode;
-  row: TTyValueRow;
   first: TObject;
 begin
   if Length(AInstances) = 0 then Exit;
@@ -1187,26 +1475,12 @@ begin
     end;
     { GetPropList can sort too, but case-sensitively; the inspector order is CompareText. }
     if FOrder = poAlphabetical then list.Sort(@ComparePropNames);
-    for i := 0 to list.Count - 1 do
-    begin
-      pi := PPropInfo(list[i]);
-      nd := NewNode(AParentNode, pi, KindOf(pi, first), 0);
-      nd.FDepth := ADepth;
-      nd.FNoSetter := pi^.SetProc = nil;
-      for k := 1 to High(AInstances) do
-      begin
-        other := GetPropInfo(AInstances[k], pi^.Name);
-        if (other = nil) or (other^.SetProc = nil) then nd.FNoSetter := True;
-      end;
-      if AParentRow = nil then row := AEditor.AddRow(pi^.Name, '')
-      else row := AParentRow.AddChild(pi^.Name, '');
-      nd.FRow := row;
-      row.Data := nd;
-      FillRow(nd);
-      if Assigned(FOnGetPropertyRow) and (first is TPersistent) then
-        FOnGetPropertyRow(FSender, TPersistent(first), pi, row);
-      AddChildren(AEditor, nd);
-    end;
+    { Categories group the object's own properties only: a sub-property goes with its parent. }
+    if (AParentNode = nil) and FShowCategories then
+      AddCategories(AEditor, list, AInstances)
+    else
+      for i := 0 to list.Count - 1 do
+        AddPropertyRow(AEditor, AParentRow, AParentNode, PPropInfo(list[i]), AInstances, ADepth);
   finally
     list.Free;
   end;
@@ -1252,6 +1526,7 @@ var
   coll: TCollection;
   r: TTyValueRow;
 begin
+  ANode.FChildrenBuilt := True;
   case ANode.FKind of
     pnkSet:
       begin
@@ -1470,20 +1745,14 @@ var
   sz: Integer;
   comp: TComponent;
   fnt: TFont;
-  handled: Boolean;
 begin
   if AHolder = nil then
     raise EPropertyError.CreateFmt(rsTyPropGridInvalidValue, [AText, ANode.Name]);
   if APropInfo = nil then
     raise EPropertyError.CreateFmt(rsTyPropGridInvalidValue, [AText, ANode.Name]);
   { The application's conversion first (a set's element is written as part of its set). }
-  if (ANode.FKind <> pnkSetElement) and Assigned(FOnSetPropertyText)
-    and (AHolder is TPersistent) then
-  begin
-    handled := False;
-    FOnSetPropertyText(FSender, TPersistent(AHolder), APropInfo, AText, handled);
-    if handled then Exit;
-  end;
+  if (ANode.FKind <> pnkSetElement) and (AHolder is TPersistent)
+    and SetPropText(TPersistent(AHolder), APropInfo, AText) then Exit;
   if ANode.FKind = pnkFont then
   begin
     { Typed (or SetRowValue'd) 'Name, Size': the font's other attributes stay as they are. }
@@ -1798,7 +2067,7 @@ begin
   for i := 0 to FNodes.Count - 1 do
   begin
     nd := TTyPropertyNode(FNodes[i]);
-    if not (nd.FKind in [pnkObject, pnkFont, pnkCollection]) then Continue;
+    if not (nd.FKind in [pnkObject, pnkFont, pnkCollection]) or not nd.FChildrenBuilt then Continue;
     if nd.FDepth >= FMaxDepth then Continue;   // nothing was built below it, nothing to fit
     if nd.FKind = pnkCollection then
     begin
@@ -1845,8 +2114,43 @@ begin
     SetLength(insts, n);
     for i := 0 to n - 1 do insts[i] := FRoots[i];
     AddProperties(AEditor, nil, nil, insts, 0);
+    ApplyFilter(AEditor);
   end;
   AEditor.UpdateRows;
+end;
+
+{ ---- TTyGridPropertyRows: the grid's own mapping ---- }
+
+type
+  { The mapping a property grid uses: its three hooks are the grid's virtual methods, so a
+    descendant of the grid takes part without knowing the mapping class. }
+  TTyGridPropertyRows = class(TTyPropertyRows)
+  private
+    FGrid: TTyCustomPropertyGrid;
+  protected
+    procedure BuildRow(AEditor: TTyCustomValueListEditor; ANode: TTyPropertyNode); override;
+    function GetPropText(AInstance: TPersistent; APropInfo: PPropInfo;
+      var AText: string): Boolean; override;
+    function SetPropText(AInstance: TPersistent; APropInfo: PPropInfo;
+      const AText: string): Boolean; override;
+  end;
+
+procedure TTyGridPropertyRows.BuildRow(AEditor: TTyCustomValueListEditor; ANode: TTyPropertyNode);
+begin
+  if AEditor = FGrid then FGrid.BuildPropertyRow(ANode)
+  else inherited BuildRow(AEditor, ANode);
+end;
+
+function TTyGridPropertyRows.GetPropText(AInstance: TPersistent; APropInfo: PPropInfo;
+  var AText: string): Boolean;
+begin
+  Result := FGrid.GetPropertyText(AInstance, APropInfo, AText);
+end;
+
+function TTyGridPropertyRows.SetPropText(AInstance: TPersistent; APropInfo: PPropInfo;
+  const AText: string): Boolean;
+begin
+  Result := FGrid.SetPropertyText(AInstance, APropInfo, AText);
 end;
 
 { ---- TTyCustomPropertyGrid ---- }
@@ -1854,8 +2158,12 @@ end;
 constructor TTyCustomPropertyGrid.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FRows := TTyPropertyRows.Create(Self);
+  FRows := TTyGridPropertyRows.Create(Self);
+  TTyGridPropertyRows(FRows).FGrid := Self;
   FRows.HiddenProperties.OnChange := @HiddenChanged;
+  FSeenCategories := TStringList.Create;
+  FSeenCategories.CaseSensitive := False;
+  FPreFilterExpanded := TStringList.Create;
   FExpanded := TStringList.Create;
   FExpanded.CaseSensitive := False;
   FExpanded.Sorted := True;
@@ -1872,6 +2180,8 @@ begin
   Clear;          // rows first: their Data points at the nodes
   FreeAndNil(FRows);
   FreeAndNil(FExpanded);
+  FreeAndNil(FSeenCategories);
+  FreeAndNil(FPreFilterExpanded);
   FreeAndNil(FMenu);   // no owner: the grid frees it (its items with it)
   inherited Destroy;
 end;
@@ -2060,7 +2370,8 @@ begin
   begin
     nd := FRows.Node(i);
     if (nd.Row = nil) or not nd.Row.HasChildren then Continue;
-    nd.Row.Expanded := FExpanded.IndexOf(nd.Path) >= 0;
+    { FilterText opens the rows a match is below, whatever the list says. }
+    nd.Row.Expanded := (FExpanded.IndexOf(nd.Path) >= 0) or nd.FFilterOpen;
   end;
   UpdateRows;
 end;
@@ -2132,6 +2443,109 @@ begin
   FRows.OnSetPropertyText := AValue;
 end;
 
+function TTyCustomPropertyGrid.GetShowCategories: Boolean;
+begin
+  Result := FRows.ShowCategories;
+end;
+
+procedure TTyCustomPropertyGrid.SetShowCategories(AValue: Boolean);
+begin
+  if FRows.ShowCategories = AValue then Exit;
+  FRows.ShowCategories := AValue;
+  if not (csLoading in ComponentState) then Rebuild;
+end;
+
+function TTyCustomPropertyGrid.GetOnGetPropertyCategory: TTyGetPropertyCategoryEvent;
+begin
+  Result := FRows.OnGetPropertyCategory;
+end;
+
+procedure TTyCustomPropertyGrid.SetOnGetPropertyCategory(AValue: TTyGetPropertyCategoryEvent);
+begin
+  FRows.OnGetPropertyCategory := AValue;
+end;
+
+function TTyCustomPropertyGrid.GetFilterText: string;
+begin
+  Result := FRows.FilterText;
+end;
+
+{ Setting a filter keeps a copy of ExpandedProperties: while it filters, the rows a match is below
+  are opened for it (and what the user opens or closes is taken as usual), and clearing it puts
+  the copy back, so the rows are as they were before the search. }
+procedure TTyCustomPropertyGrid.SetFilterText(const AValue: string);
+var
+  sel: string;
+  wasOn, nowOn: Boolean;
+begin
+  if FRows.FilterText = AValue then Exit;
+  wasOn := Trim(FRows.FilterText) <> '';
+  nowOn := Trim(AValue) <> '';
+  sel := RowPath(SelectedRow);
+  if nowOn and not wasOn then
+  begin
+    HarvestExpanded;
+    FPreFilterExpanded.Assign(FExpanded);
+    FFiltering := True;
+  end;
+  FRows.FilterText := AValue;
+  if csLoading in ComponentState then Exit;   // Loaded builds
+  if not nowOn and FFiltering then
+  begin
+    FFiltering := False;
+    FHarvesting := True;
+    try
+      FExpanded.Assign(FPreFilterExpanded);
+    finally
+      FHarvesting := False;
+    end;
+    RebuildRows(False, sel, False);
+  end
+  else if nowOn or wasOn then
+    RebuildRows(False, sel);
+end;
+
+procedure TTyCustomPropertyGrid.OpenNewCategories;
+var
+  i: Integer;
+  nd: TTyPropertyNode;
+  p: string;
+begin
+  for i := 0 to FRows.NodeCount - 1 do
+  begin
+    nd := FRows.Node(i);
+    if nd.Kind <> pnkCategory then Continue;
+    p := nd.Path;
+    if FSeenCategories.IndexOf(p) >= 0 then Continue;
+    FSeenCategories.Add(p);
+    FHarvesting := True;
+    try
+      FExpanded.Add(p);
+      if FFiltering then FPreFilterExpanded.Add(p);   // open after the search too
+    finally
+      FHarvesting := False;
+    end;
+  end;
+end;
+
+procedure TTyCustomPropertyGrid.BuildPropertyRow(ANode: TTyPropertyNode);
+begin
+  FRows.FillRow(ANode);
+  FRows.AddChildren(Self, ANode);
+end;
+
+function TTyCustomPropertyGrid.GetPropertyText(AInstance: TPersistent; APropInfo: PPropInfo;
+  var AText: string): Boolean;
+begin
+  Result := FRows.CallGetPropertyText(AInstance, APropInfo, AText);
+end;
+
+function TTyCustomPropertyGrid.SetPropertyText(AInstance: TPersistent; APropInfo: PPropInfo;
+  const AText: string): Boolean;
+begin
+  Result := FRows.CallSetPropertyText(AInstance, APropInfo, AText);
+end;
+
 procedure TTyCustomPropertyGrid.Rebuild;
 begin
   RebuildRows(True);
@@ -2162,6 +2576,7 @@ begin
   keptTop := TopIndex;
   Inc(FBuildCount);
   FRows.Build(Self, FSelected);
+  OpenNewCategories;
   ApplyExpanded;
   nd := FRows.FindByPath(selPath);
   if nd <> nil then at := FlatIndexOf(nd.Row) else at := -1;
@@ -2198,13 +2613,15 @@ begin
   Result := FRows.PropertyOf(FRows.NodeOf(ARow), AInstance, APropName);
 end;
 
-{ The row at a display position: the same pre-order walk over expanded rows the editor lays out. }
+{ The row at a display position: the same pre-order walk over expanded rows the editor lays out
+  (a hidden row and everything below it left out). }
 function TTyCustomPropertyGrid.FlatRowAt(AFlat: Integer): TTyValueRow;
 var n: Integer;
 
   function Walk(ARow: TTyValueRow): TTyValueRow;
   var i: Integer;
   begin
+    if ARow.Hidden then Exit(nil);
     if n = AFlat then Exit(ARow);
     Inc(n);
     Result := nil;
@@ -2228,14 +2645,14 @@ begin
   end;
 end;
 
-{ The display position of ARow, -1 when a collapsed ancestor hides it. }
+{ The display position of ARow, -1 when it is hidden or a collapsed (or hidden) ancestor hides it. }
 function TTyCustomPropertyGrid.FlatIndexOf(ARow: TTyValueRow): Integer;
 var n, res: Integer;
 
   procedure Walk(R: TTyValueRow);
   var i: Integer;
   begin
-    if res >= 0 then Exit;
+    if (res >= 0) or R.Hidden then Exit;
     if R = ARow then begin res := n; Exit; end;
     Inc(n);
     if R.Expanded then
@@ -2334,6 +2751,7 @@ begin
   if FRows = nil then Exit(inherited CanCommitValue(ARow, AText));   // being destroyed
   nd := FRows.NodeOf(ARow);
   if nd = nil then Exit(inherited CanCommitValue(ARow, AText));
+  if nd.Kind = pnkCategory then Exit(False);   // a heading has no value to write
   if (CommitFont <> nil) and (nd.Kind = pnkFont) then
     Result := WriteProperty(nd, pwkFont, CommitFont, ARow, AText)   // the font dialog's pick, whole
   else
@@ -2471,6 +2889,7 @@ function TTyCustomPropertyGrid.DoCollectionAction(AAction: TTyCollectionAction;
   const APath: string; ADelta: Integer): TCollectionItem;
 var
   nd, collNode, p: TTyPropertyNode;
+  r: TTyValueRow;
   obj: TObject;
   coll: TCollection;
   idx, fromIdx, toIdx, gen: Integer;
@@ -2564,16 +2983,18 @@ begin
   else
     sel := collPath + '[' + IntToStr(toIdx) + ']';
   end;
-  { The row made current has to be seen: the collection's row and everything above it open. }
+  { The row made current has to be seen: the collection's row and every row above it open (a
+    category heading too -- it is above the row, not in its path). }
   if sel <> collPath then
   begin
     FHarvesting := True;
     try
-      p := collNode;
-      while p <> nil do
+      r := collNode.Row;
+      while r <> nil do
       begin
-        FExpanded.Add(p.Path);
-        p := p.Parent;
+        p := FRows.NodeOf(r);
+        if p <> nil then FExpanded.Add(p.Path);
+        r := r.Parent;
       end;
     finally
       FHarvesting := False;
