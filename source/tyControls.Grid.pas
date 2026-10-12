@@ -1613,8 +1613,9 @@ type
     function DisplayRowCount: Integer; virtual;
 
     { How many rows the VIEWPORT currently holds -- a viewport metric, the same thing
-      LCL's TCustomGrid.VisibleRowCount means (grids.pas:1301, body at 2274). This is
-      the number PageUp/PageDown maths is written against.
+      LCL's TCustomGrid.VisibleRowCount means (grids.pas:1301, body at 2274). LCL's own
+      PageUp/PageDown do NOT page by it: they count only the rows FULLY on screen -- see
+      PageRowStep (#57).
 
       It is NOT "how many rows survived the filter". That is DisplayRowCount (or its
       alias FilteredRowCount), and it used to be what this name returned on
@@ -1630,6 +1631,13 @@ type
       overlap is dropped when the whole grid fits, exactly as LCL's
       `if GridHeight<=ClientHeight then inc(Result)` does. }
     function VisibleRowCount: Integer;
+    { How many rows PageUp/PageDown move: the rows FULLY on screen, minus one, exactly as
+      LCL's TCustomGrid pages (grids.pas VK_PRIOR/VK_NEXT: FullVisibleGrid.Bottom -
+      FullVisibleGrid.Top). From the top row of a screen, PageDown lands on its last full
+      row, and each page keeps one row of overlap. A partly shown row at either edge does
+      not count, so a page never jumps past what the user could read. At least 1: LCL moves
+      nothing when fewer than two rows fit, which leaves the key dead. (#57) }
+    function PageRowStep: Integer;
 
     { 单元格所属窗格。**吃的是显示位置 APos,不是数据行** —— 这里的两个判据
       (`< FixedRows` / `>= DisplayRowCount - FixedRowsBottom`)本来就只在显示序里
@@ -2182,6 +2190,11 @@ type
       没有批注的表不该为此每格建一个临时键(与 FAttrs.IsEmpty 同一条理由)。 }
     FHasComments:    Boolean;
     FPickEditor: TTyComboBox;
+    { A pick from the open list ended the edit: the grid takes the focus when the list has
+      closed (PickEditorChange / PickEditorCloseUp, #59). Only a pick: on win32 a list left
+      for another control closes before the edit ends, so "not editing" alone would hold
+      there, but the flag does not depend on the order a widgetset closes things in. }
+    FPickEndedTheEdit: Boolean;
     FOnGetPickList: TTyGridGetPickListEvent;
     FOnCreateEditLink: TTyGridCreateEditLinkEvent;
     FOnClipboardCopy:  TTyGridClipboardEvent;
@@ -2396,6 +2409,7 @@ type
     procedure DateEditorExit(Sender: TObject);
     procedure PickEditorChange(Sender: TObject);
     procedure PickEditorExit(Sender: TObject);
+    procedure PickEditorCloseUp(Sender: TObject);
     procedure EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     { Esc ONLY, for the editors that cannot share EditorKeyDown because they spend Enter on
       their own content: the memo (Enter is a newline), the spin/slider/calc/date pickers
@@ -2550,6 +2564,9 @@ type
       the grid is unfocused and HideSelectionWhenInactive is on. The fill and the ink read it
       from here, so they cannot come from two different states. }
     function  SelectionFillStyle: TTyStyleSet;
+    { #60: the cursor cell keeps its own look (TyGridActiveCell) instead of the selection's,
+      because the selection holds more than that one cell. }
+    function  CursorStandsOut(ACol, ARow: Integer): Boolean;
     procedure EditorFollowCell; override;
     function  HoverIsHyperlink(X, Y: Integer): Boolean; override;
     function  DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean; override;
@@ -5183,6 +5200,10 @@ function TTyCustomGrid.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
 var
   step: Integer;
 begin
+  { The application's OnMouseWheel, then OnMouseWheelUp/Down -- TControl fires them -- and a
+    handler that sets Handled keeps the notch, as in LCL's TCustomGrid. This override never
+    called inherited, so none of the three ever fired (#62). }
+  if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
   { 一格滚轮走三行 —— 与列表/树保持一致的手感。 }
   step := 3 * ScaleI(GetDefaultRowHeight);
   if WheelDelta > 0 then SetScrollY(FScrollY - step)
@@ -6593,6 +6614,30 @@ begin
     has a frozen row. }
   if TyGridHeaderH(M) + TyGridContentHeight(M) <= M.ClientH then Inc(Result);
   if Result < 0 then Result := 0;
+end;
+
+function TTyCustomGrid.PageRowStep: Integer;
+var
+  M: TTyGridMetrics;
+  first, last, rowTop, rowH, fixedTop, fixedH, viewTop, viewBottom: Integer;
+  body: TRect;
+begin
+  Result := 1;
+  M := GridMetrics;
+  if not TyGridVisibleRows(M, first, last) then Exit;
+  { The body pane's window in content coordinates, as TyGridVisibleRows reads it: the
+    scroll offset past the fixed rows, as tall as the pane. A row is fully on screen when
+    its whole extent lies inside. }
+  body := TyGridPaneRect(M, gpBody);
+  fixedTop := 0;
+  if M.FixedRows > 0 then TyGridRowExtent(M.FixedRows, M, fixedTop, fixedH);
+  viewTop := M.ScrollY + fixedTop;
+  viewBottom := viewTop + (body.Bottom - body.Top);
+  TyGridRowExtent(first, M, rowTop, rowH);
+  if rowTop < viewTop then Inc(first);
+  TyGridRowExtent(last, M, rowTop, rowH);
+  if rowTop + rowH > viewBottom then Dec(last);
+  if last - first > Result then Result := last - first;
 end;
 
 function TTyCustomGrid.GetLeftCol: Integer;
@@ -8486,6 +8531,7 @@ begin
   FPickEditor.OnKeyDown := @PickEditorKeyDown;
   FPickEditor.OnChange := @PickEditorChange;
   FPickEditor.OnExit := @PickEditorExit;
+  FPickEditor.OnCloseUp := @PickEditorCloseUp;
 
   { 第三个复用编辑器:日期选择器。 }
   FDateEditor := TTyDateTimePicker.Create(Self);
@@ -8513,6 +8559,7 @@ begin
   FPickEditor.OnKeyDown := nil;
   FPickEditor.OnChange := nil;
   FPickEditor.OnExit := nil;
+  FPickEditor.OnCloseUp := nil;
   FDateEditor.OnKeyDown := nil;
   FDateEditor.OnExit := nil;
   FFilterEditor.OnKeyDown := nil;
@@ -9928,8 +9975,9 @@ begin
     VK_DOWN:  begin MoveCursor(FCol, FRow + 1); Key := 0; end;
     VK_HOME:  begin MoveCursor(FirstVisibleCol, FRow); Key := 0; end;
     VK_END:   begin MoveCursor(LastVisibleCol, FRow); Key := 0; end;
-    VK_PRIOR: begin MoveCursor(FCol, FRow - 10); Key := 0; end;
-    VK_NEXT:  begin MoveCursor(FCol, FRow + 10); Key := 0; end;
+    { A page, as LCL turns it: the rows fully on screen, minus one (#57). }
+    VK_PRIOR: begin MoveCursor(FCol, FRow - PageRowStep); Key := 0; end;
+    VK_NEXT:  begin MoveCursor(FCol, FRow + PageRowStep); Key := 0; end;
     VK_F2:    begin BeginEdit; Key := 0; end;
     { Enter = 提交并**向下推进一格**。表格录入是一列一列往下敲的,
       停在原地会让用户每敲一格都得再按一次方向键。 }
@@ -11449,6 +11497,29 @@ begin
     Result := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, [tysSelected]);
 end;
 
+{ #60. The selection always holds the cursor cell, and its fill went over that cell with the
+  rest, after the cell backgrounds -- TyGridActiveCell's included. With an opaque fill (the
+  shipped themes have one) a row-select grid showed a band and no cursor, while Left/Right, F2
+  and typing went on working on a cell nobody could see. So whenever the selection holds more
+  than the cursor cell -- a row or column band, a dragged range, cells gathered with Ctrl -- the
+  cursor cell takes no selection layer and keeps its own background and ink. A selection that
+  IS the cursor cell is painted as the selection: there is nothing to tell apart. Off with
+  ShowFocusCell, like the focus background itself. }
+function TTyCustomStringGrid.CursorStandsOut(ACol, ARow: Integer): Boolean;
+var
+  r: TRect;
+begin
+  Result := False;
+  if not FShowFocusCell or not IsActiveCell(ACol, ARow) then Exit;
+  if Length(FSelRects) > 0 then Exit(True);
+  r := ActiveSelectionRect;
+  case FSelectionMode of
+    gsmRow:    Result := (r.Bottom > r.Top) or (Header.Columns.Count > 1);
+    gsmColumn: Result := (r.Right > r.Left) or (DisplayRowCount > 1);
+  else         Result := (r.Bottom > r.Top) or (r.Right > r.Left);
+  end;
+end;
+
 function TTyCustomStringGrid.SelectionInk(ACol, ARow: Integer;
   const AAppearance: TTyGridCellAppearance; out AInk: TTyColor): Boolean;
 var
@@ -11460,6 +11531,7 @@ begin
     还透得出来 —— 文字也保持它自己的。 }
   if AAppearance.HasExplicitBackground then Exit;
   if not IsCellSelected(ACol, ARow) then Exit;
+  if CursorStandsOut(ACol, ARow) then Exit;   { #60: no selection layer, so its own ink }
   selS := SelectionFillStyle;
   { 没有选区底色就没有可配的文字色:主题没定义就什么都不换。 }
   if not ((tpBackground in selS.Present) and (tpTextColor in selS.Present)) then Exit;
@@ -16219,9 +16291,30 @@ begin
 end;
 
 procedure TTyCustomStringGrid.PickEditorChange(Sender: TObject);
+var
+  fromList: Boolean;
 begin
   { 选中即提交 —— 下拉不像文本框那样需要按 Enter 确认。被拦下就留在下拉里。 }
-  if FEditing then TryEndEdit(True);
+  if not FEditing then Exit;
+  fromList := FPickEditor.DroppedDown;
+  if not TryEndEdit(True) then Exit;
+  { #59. The pick just hid the editor that held the focus, and LCL clears the form's active
+    control with it: left alone, the focus went wherever the system sent it next -- another
+    control on the form. Give it back to the grid. A pick from the open list is made inside
+    the list's click, in the list's own window, so take the focus once the list has closed
+    rather than under that click (TTyComboBox.PopupListChange defers its close-up for the same
+    reason). Whether the list was open is read while the editor still shows, before the
+    edit ends and hides it. }
+  if fromList then FPickEndedTheEdit := True
+  else if HandleAllocated and CanFocus then SetFocus;
+end;
+
+procedure TTyCustomStringGrid.PickEditorCloseUp(Sender: TObject);
+begin
+  if not FPickEndedTheEdit then Exit;
+  FPickEndedTheEdit := False;
+  { #59: a pick from the list ended the edit (PickEditorChange); the list is closed now. }
+  if not FEditing and HandleAllocated and CanFocus then SetFocus;
 end;
 
 procedure TTyCustomStringGrid.PickEditorExit(Sender: TObject);
@@ -16303,6 +16396,20 @@ end;
 procedure TTyCustomStringGrid.PickEditorKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
+  { #59. A closed pick list leaves Up/Down to the grid, as LCL's TPickListCellEditor does:
+    commit and move a row, as the text editor's arrows do through ChildKey (#52). The list
+    took them as "the next item" -- and a pick commits at once, so the cell's value changed
+    under a key pressed to move, and the editor closed under the focus. Open, the list has the
+    arrows; Alt+Down, a modifier, still opens it. }
+  if ((Key = VK_UP) or (Key = VK_DOWN)) and not FPickEditor.DroppedDown and
+     (Shift * [ssShift, ssCtrl, ssAlt, ssMeta] = []) then
+  begin
+    if Key = VK_UP then MoveCursor(FCol, FRow - 1)
+    else MoveCursor(FCol, FRow + 1);
+    if not FEditing and HandleAllocated and CanFocus then SetFocus;
+    Key := 0;
+    Exit;
+  end;
   if Key <> VK_ESCAPE then Exit;
   { An open dropdown owns the key -- Esc there means "close the list", not "abandon the cell",
     and swallowing it would make the two gestures indistinguishable. }
@@ -16428,6 +16535,7 @@ begin
         for colIdx := 0 to Header.Columns.Count - 1 do
         begin
           if not IsCellSelected(colIdx, dataRow) then Continue;
+          if CursorStandsOut(colIdx, dataRow) then Continue;   { #60 }
           vis := CellVisibleRect(colIdx, dataRow);
           if IsRectEmpty(vis) then Continue;
           if CellAppearance(colIdx, dataRow, pos, AFrame).HasExplicitBackground

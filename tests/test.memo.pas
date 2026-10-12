@@ -61,6 +61,24 @@ type
     procedure TestMemoUsesIBeam;
   end;
 
+  { #58. The memo's text is a byte-for-byte account of what was set, typed or loaded. TStrings
+    treats text as terminated lines -- a break after the last line on the way out, a final
+    break swallowed on the way in, the platform's break style whatever the text had -- so
+    'abc' read back as 'abc'#13#10 and a file did not save back as it was. }
+  TTyMemoTextFidelityTest = class(TTestCase)
+  private
+    FChanges: Integer;
+    procedure CountChange(Sender: TObject);
+    procedure CheckFileRoundTrip(const AWhat: string; const ABytes: RawByteString);
+  published
+    procedure TestTextComesBackAsItWasSet;
+    procedure TestATrailingBreakIsAnEmptyLastLine;
+    procedure TestLinesTextIsTheSameText;
+    procedure TestAFileSavesBackByteForByte;
+    procedure TestSettingTextIsStillACodeChange;
+    procedure TestReassigningTheSameLinesIsNotAStep;
+  end;
+
   TTyMemoTest = class(TTestCase)
   private
     FCtl: TTyStyleController;
@@ -1441,7 +1459,177 @@ begin
   end;
 end;
 
+{ ===== TTyMemoTextFidelityTest (#58) ===== }
+
+const
+  { Every shape a text can end or break in. The break style varies on purpose: a text with LF
+    breaks must come back with LF, not with the platform's CRLF. }
+  cFidelityTexts: array[0..10] of string = (
+    '', 'abc', 'a'#13#10'b', 'abc'#13#10, 'a'#10'b', 'a'#10, #13#10, 'a'#13#10#13#10,
+    'x'#13'y', #13#10'lead', '中文'#10'行'#10);
+
+procedure TTyMemoTextFidelityTest.CountChange(Sender: TObject);
+begin
+  Inc(FChanges);
+end;
+
+procedure TTyMemoTextFidelityTest.TestTextComesBackAsItWasSet;
+var
+  m: TTyMemo;
+  i: Integer;
+begin
+  m := TTyMemo.Create(nil);
+  try
+    for i := 0 to High(cFidelityTexts) do
+    begin
+      m.Text := cFidelityTexts[i];
+      AssertEquals(Format('text %d reads back as it was set', [i]), cFidelityTexts[i], m.Text);
+    end;
+  finally
+    m.Free;
+  end;
+end;
+
+procedure TTyMemoTextFidelityTest.TestATrailingBreakIsAnEmptyLastLine;
+var
+  m: TTyMemo;
+begin
+  m := TTyMemo.Create(nil);
+  try
+    m.Text := 'abc';
+    AssertEquals('no break: one line', 1, m.Lines.Count);
+    m.Text := 'abc'#13#10;
+    AssertEquals('a final break: an empty last line to type on', 2, m.Lines.Count);
+    AssertEquals('the first line', 'abc', m.Lines[0]);
+    AssertEquals('the empty last line', '', m.Lines[1]);
+    m.Text := '';
+    AssertEquals('empty: no lines', 0, m.Lines.Count);
+  finally
+    m.Free;
+  end;
+end;
+
+procedure TTyMemoTextFidelityTest.TestLinesTextIsTheSameText;
+var
+  m: TTyMemo;
+  i: Integer;
+  src: TStringList;
+begin
+  m := TTyMemo.Create(nil);
+  try
+    for i := 0 to High(cFidelityTexts) do
+    begin
+      m.Text := cFidelityTexts[i];
+      AssertEquals(Format('text %d: Lines.Text is Text', [i]), cFidelityTexts[i], m.Lines.Text);
+      m.Text := 'other';
+      m.Lines.Text := cFidelityTexts[i];
+      AssertEquals(Format('text %d: set through Lines, read through Text', [i]),
+        cFidelityTexts[i], m.Text);
+    end;
+    { Assign copies the source list's options -- the trailing break among them. }
+    src := TStringList.Create;
+    try
+      src.Add('one');
+      src.Add('two');
+      m.Lines := src;
+    finally
+      src.Free;
+    end;
+    AssertEquals('assigned lines join without a break after the last',
+      'one' + m.Lines.LineBreak + 'two', m.Text);
+  finally
+    m.Free;
+  end;
+end;
+
+procedure TTyMemoTextFidelityTest.CheckFileRoundTrip(const AWhat: string;
+  const ABytes: RawByteString);
+var
+  m: TTyMemo;
+  src, dst: string;
+  fs: TFileStream;
+  got: RawByteString;
+begin
+  src := GetTempFileName('', 'tymemo');
+  dst := src + '.out';
+  m := TTyMemo.Create(nil);
+  try
+    fs := TFileStream.Create(src, fmCreate);
+    try
+      if ABytes <> '' then fs.WriteBuffer(ABytes[1], Length(ABytes));
+    finally
+      fs.Free;
+    end;
+    m.Lines.LoadFromFile(src);
+    m.Lines.SaveToFile(dst);
+    fs := TFileStream.Create(dst, fmOpenRead);
+    try
+      SetLength(got, fs.Size);
+      if fs.Size > 0 then fs.ReadBuffer(got[1], fs.Size);
+    finally
+      fs.Free;
+    end;
+    AssertTrue(Format('%s: loaded and saved straight back, byte for byte (%d bytes in, %d out)',
+      [AWhat, Length(ABytes), Length(got)]), got = ABytes);
+  finally
+    m.Free;
+    DeleteFile(src);
+    DeleteFile(dst);
+  end;
+end;
+
+procedure TTyMemoTextFidelityTest.TestAFileSavesBackByteForByte;
+begin
+  CheckFileRoundTrip('no final break', 'abc'#13#10'def');
+  CheckFileRoundTrip('a final break', 'abc'#13#10'def'#13#10);
+  CheckFileRoundTrip('LF breaks', 'abc'#10'def'#10);
+  CheckFileRoundTrip('UTF-8 with a BOM', #$EF#$BB#$BF'x'#13#10'y');
+  CheckFileRoundTrip('UTF-8 text', #$E4#$B8#$AD#$E6#$96#$87#10);
+  CheckFileRoundTrip('an empty file', '');
+end;
+
+procedure TTyMemoTextFidelityTest.TestSettingTextIsStillACodeChange;
+var
+  m: TTyMemo;
+begin
+  m := TTyMemo.Create(nil);
+  try
+    m.OnChange := @CountChange;
+    FChanges := 0;
+    m.Text := 'abc'#13#10;
+    AssertEquals('OnChange fires once', 1, FChanges);
+    AssertFalse('a write from code does not dirty the field', m.Modified);
+  finally
+    m.Free;
+  end;
+end;
+
+{ Lines := X records an undo step only when it changes the content. That check compared
+  X.Text with the memo's own text, and the two never match any more -- an ordinary TStrings
+  ends every line with a break, the memo's text does not -- so every reassignment, the same
+  content included, would have recorded a step. }
+procedure TTyMemoTextFidelityTest.TestReassigningTheSameLinesIsNotAStep;
+var
+  m: TTyMemo;
+  src: TStringList;
+begin
+  m := TTyMemo.Create(nil);
+  src := TStringList.Create;
+  try
+    src.Add('a');
+    src.Add('b');
+    m.Lines := src;
+    m.Lines := src;   // the same content again: nothing to undo
+    m.Undo;
+    AssertEquals('one Undo takes back the one real change', 0, m.Lines.Count);
+  finally
+    src.Free;
+    m.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyMemoTest);
+  RegisterTest(TTyMemoTextFidelityTest);
   RegisterTest(TTyMemoCursorTest);
 end.

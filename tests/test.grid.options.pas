@@ -120,6 +120,9 @@ type
     procedure TestTheEditorFollowsItsCell;
     procedure TestAGestureOnTheGridLeavesTheEditFirst;
     procedure TestUpDownTheEditorLeavesMoveTheCell;
+    procedure TestPageKeysPageByTheRowsOnScreen;
+    procedure TestAMemoCellCommittedUnchangedIsNotAnEdit;
+    procedure TestTheCursorCellStandsOutOfAWiderSelection;
     procedure TestAnArrowTheFilterBoxLeavesStaysThere;
     procedure TestHeaderPushedLookGatesThePressedFill;
     { --- 流式化 --- }
@@ -1309,6 +1312,238 @@ begin
   AssertTrue('Up is claimed', FGrid.KeyTo(FGrid.FilterBox, VK_UP));
   AssertTrue('the filter box stays open', FGrid.FilterBox.Visible);
   AssertEquals('the cursor did not move', 0, FGrid.Row);
+end;
+
+{ #57. PageUp/PageDown moved a fixed 10 rows. They page as LCL's TCustomGrid does
+  (grids.pas VK_PRIOR/VK_NEXT: FullVisibleGrid.Bottom - FullVisibleGrid.Top): by the rows
+  FULLY on screen, minus one. Asserted as the property that follows, not as a number: from
+  the top row, PageDown lands on the last row fully on screen; a second one pages on by the
+  same step; PageUp from there lands on the first row fully on screen. Two heights, so a
+  constant step (10, or any other) cannot pass both. }
+procedure TGridOptionsTest.TestPageKeysPageByTheRowsOnScreen;
+var
+  rowH, y0: Integer;
+  steps: array[0..1] of Integer;
+  pass: Integer;
+
+  function FullyShown(ARow: Integer): Boolean;
+  var
+    v, c: TRect;
+  begin
+    if (ARow < 0) or (ARow >= FGrid.RowCount) then Exit(False);
+    v := FGrid.VisibleCell(0, ARow);
+    c := FGrid.CellRectOf(0, ARow);
+    Result := (v.Bottom > v.Top) and (v.Top = c.Top) and (v.Bottom = c.Bottom);
+  end;
+
+begin
+  for pass := 0 to 1 do
+  begin
+    Build(2, 300, 80);
+    rowH := FGrid.CellRectOf(0, 1).Top - FGrid.CellRectOf(0, 0).Top;
+    AssertTrue('setup: rows have a height', rowH > 0);
+    { 6.5 rows of body, then 29.5: a partly visible last row both times. }
+    if pass = 0 then
+      FGrid.Height := FGrid.HeaderH + 6 * rowH + rowH div 2 + 4
+    else
+      FGrid.Height := FGrid.HeaderH + 29 * rowH + rowH div 2 + 4;
+    FGrid.Row := 0;
+    AssertTrue('setup: the top row is on screen', FullyShown(0));
+
+    { Where row 0 is drawn says whether the view moved, to the pixel. TopRow does not: a view
+      scrolled by half a row still has row 0 as its first visible row. }
+    y0 := FGrid.CellRectOf(0, 0).Top;
+    AssertTrue('PageDown is a grid key', FGrid.PressKey(VK_NEXT, []));
+    steps[pass] := FGrid.Row;
+    { Without this a step that reaches past the last full row passes the next two checks too:
+      the view scrolls to follow the cursor and leaves it on the last full row anyway. The
+      first PageDown from the top row stays on this screen. }
+    AssertEquals(Format('pass %d: the first PageDown does not scroll (cursor at row %d)',
+      [pass, FGrid.Row]), y0, FGrid.CellRectOf(0, 0).Top);
+    AssertTrue(Format('pass %d: PageDown lands on a row fully on screen (row %d)',
+      [pass, FGrid.Row]), FullyShown(FGrid.Row));
+    AssertFalse(Format('pass %d: the last one -- row %d below it is not fully on screen',
+      [pass, FGrid.Row + 1]), FullyShown(FGrid.Row + 1));
+    AssertTrue('a page is more than one row here', steps[pass] > 1);
+
+    FGrid.PressKey(VK_NEXT, []);
+    AssertEquals(Format('pass %d: a second PageDown pages on by the same step', [pass]),
+      2 * steps[pass], FGrid.Row);
+    y0 := FGrid.CellRectOf(0, 0).Top;
+    FGrid.PressKey(VK_PRIOR, []);
+    AssertEquals(Format('pass %d: PageUp from the last full row stays on this screen (row %d)',
+      [pass, FGrid.Row]), y0, FGrid.CellRectOf(0, 0).Top);
+    AssertTrue(Format('pass %d: PageUp lands on a row fully on screen (row %d)',
+      [pass, FGrid.Row]), FullyShown(FGrid.Row));
+    AssertFalse(Format('pass %d: the first one -- row %d above it is not fully on screen',
+      [pass, FGrid.Row - 1]), FullyShown(FGrid.Row - 1));
+  end;
+  AssertTrue(Format('the two heights page by different steps (%d, %d)', [steps[0], steps[1]]),
+    steps[0] <> steps[1]);
+
+  { One full row on screen: LCL's page is 0 and its PageDown does nothing. Ours still moves. }
+  Build(2, 300, 80);
+  FGrid.Height := FGrid.HeaderH + rowH + rowH div 2 + 4;
+  FGrid.Row := 0;
+  FGrid.PressKey(VK_NEXT, []);
+  AssertEquals('one full row on screen: PageDown still moves a row', 1, FGrid.Row);
+end;
+
+{ #58. The memo editor read its text back with a line break added, so opening a memo cell and
+  committing it untouched wrote "the value + a break" into the cell: the grid was marked
+  modified and the undo stack grew by a step nobody took. Both shapes of value -- with and
+  without a final break of its own. }
+procedure TGridOptionsTest.TestAMemoCellCommittedUnchangedIsNotAnEdit;
+const
+  cValues: array[0..1] of string = ('line one'#13#10'line two', 'ends with a break'#13#10);
+var
+  i, undo0: Integer;
+begin
+  Build(2, 4, 160);
+  FGrid.DefaultEditorKind := gekMemo;
+  for i := 0 to High(cValues) do
+  begin
+    FGrid.Cells[0, 1] := cValues[i];
+    FGrid.Modified := False;
+    undo0 := FGrid.UndoCount;
+    AssertTrue('setup: editing', FGrid.BeginEdit(0, 1));
+    AssertEquals('setup: the memo editor', 'TTyMemo', FGrid.EditorControl.ClassName);
+    FGrid.EndEdit(True);
+    AssertEquals(Format('value %d: the cell is as it was', [i]), cValues[i], FGrid.Cells[0, 1]);
+    AssertFalse(Format('value %d: the grid is not modified', [i]), FGrid.Modified);
+    AssertEquals(Format('value %d: no undo step', [i]), undo0, FGrid.UndoCount);
+  end;
+end;
+
+{ #60. TyGridActiveCell is the cursor cell's own background -- "in whole-row selection it is how
+  you see which cell the cursor is on" (grid.md). But the selection always holds the cursor cell,
+  and its fill went over every selected cell after the cell backgrounds, the cursor's included:
+  with an opaque selection fill (the shipped themes have one) a row-select grid showed a band and
+  no cursor, while Left/Right, F2 and typing went on working on a cell nobody could see.
+
+  Whenever the selection holds more than the cursor cell -- a row, a column, a dragged range --
+  the cursor cell takes no selection layer and keeps its own background and ink. A selection
+  that IS the cursor cell is painted as before: there is nothing to tell apart. The fixture's
+  four colours are all different, so each cell's answer can only come from one place. }
+procedure TGridOptionsTest.TestTheCursorCellStandsOutOfAWiderSelection;
+var
+  ctl: TTyStyleController;
+  bmp: TBGRABitmap;
+  plainBg, selBg, actBg: TBGRAPixel;
+  selInk, actInk: TTyColor;
+  r: TRect;
+
+  procedure Render;
+  begin
+    FGrid.RenderInto(bmp);
+  end;
+
+  procedure ExpectFill(const AWhat: string; ACol, ARow: Integer; const AWant: TBGRAPixel);
+  var
+    r: TRect;
+    px: TBGRAPixel;
+  begin
+    r := FGrid.CellRectOf(ACol, ARow);
+    px := bmp.GetPixel(r.Left + 4, r.Top + 4);
+    AssertTrue(Format('%s: cell (%d,%d) is %d,%d,%d, want %d,%d,%d', [AWhat, ACol, ARow,
+      px.red, px.green, px.blue, AWant.red, AWant.green, AWant.blue]),
+      (px.red = AWant.red) and (px.green = AWant.green) and (px.blue = AWant.blue));
+  end;
+
+  procedure ExpectInk(const AWhat: string; ACol, ARow: Integer; AWant: TTyColor);
+  begin
+    AssertTrue(Format('%s: cell (%d,%d) ink', [AWhat, ACol, ARow]),
+      FGrid.AppearanceOf(ACol, ARow).TextColor = AWant);
+  end;
+
+begin
+  Build(4, 8, 80);
+  ctl := TTyStyleController.Create(FForm);
+  ctl.LoadThemeCss(
+    'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+    'TyGridCell { color: #000000; }' +
+    'TyGridCell:selected { background: #2050C0; color: #FFFFFF; }' +
+    'TyGridActiveCell { background: #F0E060; color: #101010; }');
+  FGrid.Controller := ctl;
+  FGrid.GridLineStyle := glsNone;
+  plainBg := BGRA($FF, $FF, $FF);
+  selBg := BGRA($20, $50, $C0);
+  actBg := BGRA($F0, $E0, $60);
+  selInk := TyRGB($FF, $FF, $FF);
+  actInk := TyRGB($10, $10, $10);
+  AssertTrue('setup: the focus cell is shown', FGrid.ShowFocusCell);
+  bmp := TBGRABitmap.Create;
+  try
+    { A whole row: the band, and the cursor in it. }
+    FGrid.SelectionMode := gsmRow;
+    FGrid.Col := 2;
+    FGrid.Row := 3;
+    Render;
+    ExpectFill('row: the cursor cell', 2, 3, actBg);
+    ExpectFill('row: the rest of its row', 0, 3, selBg);
+    ExpectFill('row: the rest of its row', 3, 3, selBg);
+    ExpectFill('row: the next row', 2, 4, plainBg);
+    ExpectInk('row: the cursor cell', 2, 3, actInk);
+    ExpectInk('row: the rest of its row', 1, 3, selInk);
+
+    { ShowFocusCell off: the host asked for no focus cell, so the band is one piece. }
+    FGrid.ShowFocusCell := False;
+    Render;
+    ExpectFill('row, no focus cell: the cursor cell', 2, 3, selBg);
+    ExpectInk('row, no focus cell: the cursor cell', 2, 3, selInk);
+    FGrid.ShowFocusCell := True;
+
+    { A whole column, the same. }
+    FGrid.SelectionMode := gsmColumn;
+    FGrid.Col := 1;
+    FGrid.Row := 2;
+    Render;
+    ExpectFill('column: the cursor cell', 1, 2, actBg);
+    ExpectFill('column: the rest of its column', 1, 0, selBg);
+    ExpectFill('column: the rest of its column', 1, 5, selBg);
+    ExpectFill('column: the next column', 2, 2, plainBg);
+
+    { A dragged range of cells: the cursor is its far corner, and stands out of it. }
+    FGrid.SelectionMode := gsmCell;
+    FGrid.SelectRange(0, 1, 2, 3);
+    Render;
+    ExpectFill('range: the cursor cell', 2, 3, actBg);
+    ExpectFill('range: the anchor', 0, 1, selBg);
+    ExpectFill('range: a cell inside', 1, 2, selBg);
+    ExpectInk('range: the cursor cell', 2, 3, actInk);
+    ExpectInk('range: a cell inside', 1, 2, selInk);
+    { A range across one row only, and one down one column only: either way the selection is
+      more than the cursor. }
+    FGrid.SelectRange(0, 6, 3, 6);
+    Render;
+    ExpectFill('range across a row: the cursor cell', 3, 6, actBg);
+    ExpectFill('range across a row: the anchor', 0, 6, selBg);
+    FGrid.SelectRange(1, 2, 1, 4);
+    Render;
+    ExpectFill('range down a column: the cursor cell', 1, 4, actBg);
+    ExpectFill('range down a column: the anchor', 1, 2, selBg);
+
+    { One cell selected -- the cursor's: the selection IS the cursor, painted as before. }
+    FGrid.Col := 1;
+    FGrid.Row := 5;
+    Render;
+    ExpectFill('one cell: the cursor cell is the selection', 1, 5, selBg);
+    ExpectInk('one cell: the cursor cell is the selection', 1, 5, selInk);
+
+    { Cells gathered with Ctrl+click: the cursor's own block is that one cell, but the
+      selection holds the one gathered before it as well. }
+    r := FGrid.CellRectOf(0, 0);
+    FGrid.ClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+    r := FGrid.CellRectOf(3, 6);
+    FGrid.MouseDown(mbLeft, [ssCtrl], (r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+    FGrid.MouseUp(mbLeft, [ssCtrl], (r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+    AssertEquals('setup: two blocks', 2, FGrid.SelectedRangeCount);
+    Render;
+    ExpectFill('gathered: the cursor cell', 3, 6, actBg);
+    ExpectFill('gathered: the cell gathered before', 0, 0, selBg);
+  finally
+    bmp.Free;
+  end;
 end;
 
 procedure TGridOptionsTest.GridCellStyleRed(Sender: TObject; ACol, ARow: Integer;

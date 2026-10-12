@@ -196,10 +196,10 @@ begin
   AssertEquals('line 0', 'one', FMemo.ProbeLine(0));
   AssertEquals('line 1', 'two', FMemo.ProbeLine(1));
   AssertEquals('line 2', 'three', FMemo.ProbeLine(2));
-  // Text reads = TStrings.Text, which appends a trailing line break after the last
-  // line (native TMemo.Text semantics via Lines.Text).
-  AssertEquals('Text read = whole string with trailing break',
-    'one' + LineEnding + 'two' + LineEnding + 'three' + LineEnding, FMemo.Text);
+  // Text reads back exactly what was written: no break after the last line unless the text
+  // had one (#58). It used to read back with one added.
+  AssertEquals('Text read = the string as written',
+    'one' + LineEnding + 'two' + LineEnding + 'three', FMemo.Text);
   AssertTrue('Text write fired OnChange', FChangeCount >= 1);
 end;
 
