@@ -21,6 +21,7 @@ type
     procedure TestHeaderColumnsSurviveRoundTrip;
     procedure TestListViewAndTreeHeaderColumnsSurviveRoundTrip;
     procedure TestHeaderColumnsAssignmentReplacesTheCollection;
+    procedure TestAColumnMovedThroughIndexMovesWithItsCellsAndStaysThere;
   end;
 
   { A streamable root that owns the design tree (mirrors test.pagecontrol.streaming). }
@@ -375,6 +376,75 @@ begin
   finally
     B.Free;
     A.Free;
+  end;
+end;
+
+{ #70. Columns[i].Index := j moves a column through the collection -- the IDE's
+  collection editor moves columns up and down this way. TCollectionItem.SetIndex moves the
+  item and calls Changed(True), which reaches TCollection.Update, and TTyColumns did not
+  override it: the header and the grid never heard. The cells kept the old columns'
+  widths, and every column's Position still said where it had stood -- Position is
+  published, so the form file written next put the columns back where they had been. }
+procedure TTyGridStreamingTest.TestAColumnMovedThroughIndexMovesWithItsCellsAndStaysThere;
+var
+  Src, Dst: TColHostForm;
+  MS: TMemoryStream;
+  cols: TTyColumns;
+  DstGrid: TTyStringGrid;
+  r0, r1, r2: TRect;
+  i: Integer;
+begin
+  Src := TColHostForm.CreateNew(nil);
+  Dst := TColHostForm.CreateNew(nil);
+  MS := TMemoryStream.Create;
+  try
+    Src.Name := 'ColHost1';
+    Src.Grid := TTyStringGrid.Create(Src);
+    Src.Grid.Name := 'Grid';
+    Src.Grid.Parent := Src;
+    Src.Grid.SetBounds(0, 0, 400, 200);
+    Src.Grid.RowCount := 3;
+    cols := Src.Grid.Header.Columns;
+    with cols.Add do begin Text := 'A'; Width := 50; end;
+    with cols.Add do begin Text := 'B'; Width := 80; end;
+    with cols.Add do begin Text := 'C'; Width := 120; end;
+    r0 := Src.Grid.CellRect(0, 1);
+    AssertEquals('setup: the first column is 50 wide', 50, r0.Right - r0.Left);
+
+    cols[2].Index := 0;
+
+    AssertEquals('C is the first column', 'C', cols[0].Text);
+    AssertEquals('and shows first', 'C', cols.ColumnByPosition(0).Text);
+    r0 := Src.Grid.CellRect(0, 1);
+    r1 := Src.Grid.CellRect(1, 1);
+    r2 := Src.Grid.CellRect(2, 1);
+    AssertEquals('the first column''s cells are C''s width', 120, r0.Right - r0.Left);
+    AssertEquals('the second column''s are A''s', 50, r1.Right - r1.Left);
+    AssertEquals('the third column''s are B''s', 80, r2.Right - r2.Left);
+    AssertEquals('the second starts where the first ends', r0.Right, r1.Left);
+    AssertEquals('the third starts where the second ends', r1.Right, r2.Left);
+    for i := 0 to cols.Count - 1 do
+      AssertEquals('column ' + cols[i].Text + '''s Position is where it shows', i,
+        Integer(cols[i].Position));
+    { The header's own geometry, which it paints and hit-tests by -- the grid's cells are
+      laid out separately, so they alone do not show it. }
+    AssertEquals('C''s left edge', 0, cols[0].Left);
+    AssertEquals('A''s, after C', 120, cols[1].Left);
+    AssertEquals('B''s, after A', 170, cols[2].Left);
+
+    MS.WriteComponent(Src);
+    MS.Position := 0;
+    MS.ReadComponent(Dst);
+    DstGrid := Dst.FindComponent('Grid') as TTyStringGrid;
+    AssertNotNull('setup: the grid came back', DstGrid);
+    AssertEquals('after a save and a load, C still shows first', 'C',
+      DstGrid.Header.Columns.ColumnByPosition(0).Text);
+    AssertEquals('then A', 'A', DstGrid.Header.Columns.ColumnByPosition(1).Text);
+    AssertEquals('then B', 'B', DstGrid.Header.Columns.ColumnByPosition(2).Text);
+  finally
+    MS.Free;
+    Dst.Free;
+    Src.Free;
   end;
 end;
 
