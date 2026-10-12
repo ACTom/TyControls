@@ -28,7 +28,11 @@
 
 ## 设计
 
-**D1 控件**：`TTyCustomPropertyGrid` / `TTyPropertyGrid`。`SelectedObject: TPersistent` 是 public，不发布：它运行时才有意义，写进 `.lfm` 就成了对某个组件的引用，设计期反而碍事。设计期可以发布 `SelectedComponent: TComponent`，存成普通组件引用，被引用的组件释放时经 `Notification` 自动清空。
+**D1 控件**：`TTyCustomPropertyGrid` / `TTyPropertyGrid`。
+- 两个入口，背后是同一个字段。`SelectedObject: TPersistent` 是 public，运行时可以检查任何 `TPersistent`。`SelectedComponent: TComponent` 发布出去，对象查看器里就是一个组件下拉，窗体一载入就显示那个组件：设置面板直接绑一个组件，一行代码都不用写。读 `SelectedComponent` 时，当前对象是组件就返回它，否则返回 nil。不只发布一个 `TPersistent` 类型的属性，是因为对象查看器对这种属性给的是「展开子属性」，没有组件下拉。
+- 被检查的组件释放时，经 `FreeNotification` 自动清空。
+- 设计期照样列出行，方便看效果，但不能编辑：设计器拦了鼠标，而且绕过设计器去改被设计的组件，设计器不会知道。
+- 作为属性表格，ValueListEditor 里针对「名字/值列表」的东西不发布：`KeyOptions`（固定为 []，属性名不能改、行不能增删）、`Items`、`Sorted`、`MultiSelect`、`ExtendedSelect`、`OnKeyChanged`、`OnKeyRejected`。行由表格自己管，文档写明：别用 `AddRow` / `DeleteRow` 去动它们。
 
 **D2 行的生成**：
 - 列出 published 属性。默认按名字排序（同 Object Inspector），`PropertyOrder = poDeclared` 时按声明顺序。
@@ -40,17 +44,17 @@
 | 属性类型 | 行 |
 |---|---|
 | 整数、Int64、QWord、字符 | `vekInteger`（字符用 `vekText`，限一个字符） |
-| 浮点 | `vekFloat`；`TDateTime` / `TDate` / `TTime` 显示成日期文字，按文本编辑、按本机格式解析 |
+| 浮点 | `vekFloat`，显示与解析都固定用 `.` 作小数点（编辑器的数字模式只收 `.`；照本机格式的话，德语系统上会是 `,`，两边就对不上了）；`TDateTime` / `TDate` / `TTime` 显示成本机格式的日期文字，按文本编辑、按本机格式解析 |
 | 字符串（含 `TCaption`、`TTranslateString`） | `vekText` |
 | 布尔 | `vekBoolean` |
 | 枚举 | `vekEnum`，选项取 `GetEnumName` 的全部名字 |
 | 集合 | 显示 `[a,b]`；子行是每个元素一个 `vekBoolean`；改子行会重算父行并写回 |
 | `TColor` | `vekColor` |
 | `TFont` | `vekFont`：沿用编辑器现成的字体行和子行，写回时把整个字体 `Assign` 回去 |
-| 其他 `TPersistent` 类属性（`Constraints`、`BorderSpacing` 这类子对象） | 显示 `(TClassName)`，只读；子行是它的 published 属性，递归往下，有深度上限防止循环引用 |
-| 组件引用（`TComponent` 子类，如 `PopupMenu`、`Images`） | `vekEnum`：选项是 `(none)` 加上同一个 `Owner` 下类型兼容的组件名 |
+| 其他 `TPersistent` 类属性（`Constraints`、`BorderSpacing` 这类子对象），以及带 `csSubComponent` 的子组件 | 显示 `(TClassName)`，只读；子行是它的 published 属性，递归往下，有深度上限防止循环引用 |
+| 组件引用（其余 `TComponent` 子类，如 `PopupMenu`、`Images`、`Controller`） | `vekEnum`：选项是 `(none)` 加上被检查组件的 `Owner` 名下、类型兼容的组件名；当前值不在其中时也列上。`OnGetComponentNames(Sender; AInstance; APropInfo; AList: TStrings)` 可以改这份清单（比如跨窗体）。被检查的对象没有 `Owner` 时只有 `(none)` 和当前值 |
 | `TStrings` | `vekDialog`：经 `OnEditRow` 的默认处理弹一个多行文本对话框（用本库的对话框，测试可替换） |
-| `TCollection` | 第一期显示 `(N items)`、只读；编辑器放第二期 |
+| `TCollection` | 显示 `(N items)`；子行是每一项（`[0] 项的 DisplayName`），每一项再展开成它的 published 属性，可以直接改。增删项、调整顺序放第二期 |
 | 事件（`tkMethod`） | 默认不显示；`TypeFilter` 里加上 `tkMethod` 时显示处理程序名，只读 |
 | 接口、变体、记录、其他 | 不显示 |
 
@@ -65,16 +69,20 @@
 - `OnGetPropertyRow(Sender; AInstance; APropInfo: PPropInfo; ARow: TTyValueRow)`：行建好之后调用，应用可以改编辑器种类、枚举选项、显示文字、样式，或者把行设成只读。
 - 公开 `PropertyAt(ARow: TTyValueRow; out AInstance: TPersistent; out APropName: string): Boolean`：应用的 `OnEditRow` 能据此给某种属性接上自己的对话框。
 
-**D7 第二期（本计划不做，写进 #65）**：同时选中多个对象（只显示共同属性，改一处写回全部）、`TCollection` 编辑器、属性分类与分组、搜索过滤框。
+**D7 第二期（本计划不做，写进 #65）**：同时选中多个对象（只显示共同属性，改一处写回全部）、集合项的增删和排序、属性分类与分组、搜索过滤框。
+
+**D10 界面文字**：`(none)`、`(N items)`、`TStrings` 对话框的标题和按钮走 resourcestring，`languages/` 里补 zh_CN。
 
 **D8 主题**：typeKey `TyPropertyGrid` → `TyValueListEditor`，经 #14 的链回退，不加新令牌。
 
-**D9 需主控确认**（不回复就按建议）：
-1. 新控件 `TTyPropertyGrid`，不做「挂在任意 ValueListEditor 上的非可视适配器」。映射类独立，以后要做适配器可以复用。
-2. `SelectedObject` 是 public，设计期发布 `SelectedComponent`。
-3. 默认按名字排序，事件默认隐藏。
-4. 组件引用用下拉，只列同一 `Owner` 下的组件。
-5. `TCollection`、多选放第二期。
+**D9 定案**（2026-10-12 用户让主控「再仔细想想，然后根据你的意见来做」，复核后定为）：
+1. **新控件，不做非可视适配器。** 适配器能让现成的 ValueListEditor 也能检查对象，但同一个编辑器里手建的行和 RTTI 行混在一起，谁管哪行说不清；LCL 也是单独一个 `TTIPropertyGrid`。映射类独立，真要适配器以后能复用。补充：ValueListEditor 针对「名字/值列表」的属性不发布（见 D1）。
+2. **`SelectedObject`（public）+ `SelectedComponent`（发布），共用一个字段。** 设计期只显示、不编辑（见 D1）。
+3. **默认按名字排序，事件默认隐藏。** 运行时没有代码可挂，事件显示了也只能看。
+4. **组件引用用下拉，默认清单是 `Owner` 名下的组件，再加一个 `OnGetComponentNames` 事件。** 原方案只有同一 `Owner`，运行时用 `Owner = nil` 建的组件就什么都选不了，跨窗体也没办法；按用户原则，常用的内置，其余给事件。
+5. **改：集合（`TCollection`）在第一期就能展开、改每一项的属性。** 原方案第一期只显示 `(N items)`，但表格的列、状态栏的面板都是集合，看得见改不了太弱；展开复用类属性那套递归，代价很小。增删和排序才放第二期。多选仍放第二期：它要的是另一套数据模型（多个对象求共同属性）。
+
+复核时另外补上的：带 `csSubComponent` 的子组件按类属性展开，而不是当成引用；浮点固定用 `.`；界面文字走 resourcestring（D10）。
 
 ## 任务
 
@@ -92,9 +100,9 @@
 - 变异：枚举选项缺了一个；颜色按整数显示；只读属性可编辑；排序关掉。
 
 ### Task 3：集合、类属性、字体、组件引用、`TStrings`
-- 集合子行和父行重算；类属性递归展开和深度上限；`TFont` 整体 `Assign`；组件引用下拉；`TStrings` 对话框（经 protected virtual 弹出，测试替换）。
+- 集合子行和父行重算；类属性和子组件递归展开、深度上限；`TCollection` 展开到每一项及其属性；`TFont` 整体 `Assign`；组件引用下拉与 `OnGetComponentNames`；`TStrings` 对话框（经 protected virtual 弹出，测试替换）。
 - 测试用真实控件：一个 `TTyButton`，看 `Font`、`Constraints`、`Anchors`（集合）、`PopupMenu`（组件引用）。
-- 变异：集合子行改了不写回；循环引用不设深度上限（测试里构造一个互相引用的夹具）；组件下拉列出不同 `Owner` 的组件；字体只改了名字没改大小。
+- 变异：集合子行改了不写回；循环引用不设深度上限（测试里构造一个互相引用的夹具）；组件下拉列出不同 `Owner` 的组件；`OnGetComponentNames` 改的清单没用上；字体只改了名字没改大小；集合项的属性改了没写到那一项；子组件被当成引用。
 
 ### Task 4：控件、写回事件、刷新
 - `TTyCustomPropertyGrid` / `TTyPropertyGrid`：`SelectedObject`、`SelectedComponent`、`Refresh`、`ExpandedProperties`、`PropertyOrder`、D4 与 D6 的事件、`PropertyAt`。
