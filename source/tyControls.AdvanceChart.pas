@@ -369,6 +369,16 @@ type
       clips its enter once, on its first render (ParallelView._initialized);
       a legend-hidden series keeps its view }
     FParSeen: TStringList;
+    { THE PARALLEL AXES' AREA SELECT [Batch 130]: each parallelAxis view's
+      BrushController, by component index (nil until its view renders); the
+      axis whose view the update of an axisAreaSelect does not render
+      (fromAxisAreaSelect: the first the query finds; -1 none) -- it keeps
+      its covers until an update renders it again --, whether that update
+      is running, and the actions the views dispatched }
+    FParBrushCtls: array of TTyBrushController;
+    FParBrushSkip: Integer;
+    FParBrushInAas: Boolean;
+    FParBrushLog: array of TTyParallelBrushAction;
     FBindings: TTySeriesBindingArray;
     FStores: array of TTyDataStore;
     { Every bar's width and offset, index-parallel to FBindings. Solved in
@@ -1381,6 +1391,18 @@ type
     procedure BrushFlush;
     function BrushSelectedJson(const ABatch: TTyBrushSelectBatch): string;
     procedure BrushDoAxisAreaSelect(APayload: TJSONObject);
+    { [Batch 130] the parallel axes' area select: a controller by its brush
+      index (a brush component's, or TyParallelBrushBase plus a
+      parallelAxis' index), its trigger routed; every axis view's
+      _refreshBrushController; a view's _onBrush }
+    function BrushCtlOf(AIndex: Integer): TTyBrushController;
+    procedure BrushTriggerTo(AIndex: Integer; const ATrig: TTyBrushTrigger);
+    procedure ParBrushPass;
+    procedure ParBrushOnTrigger(AAxis: Integer; const ATrig: TTyBrushTrigger);
+    procedure ParBrushFree;
+    function BuildParallelBrushes(AList: TTyPaintList): Integer;
+    { the dispatch of a payload already parsed (it is freed) }
+    function DispatchActionObject(APayload: TJSONObject): Boolean;
     procedure ApplyVisualMaps(var AVisual: TTySeriesVisual; ASlot,
       APPI: Integer);
     { The THEME's ramp at ASlot, with nothing of the option in it. Split out
@@ -1506,7 +1528,7 @@ type
     procedure SolveParallels(APPI: Integer);
     procedure PaintParallels(APainter: TTyPainter; APPI: Integer;
       const AMeasurer: ITyTextMeasurer);
-    function ParallelAreaSelect(APayload: TJSONObject): Boolean;
+    function ParallelAreaSelect(APayload: TJSONObject; out AFirst: Integer): Boolean;
     function ParallelOfAxis(AComponent: Integer): Integer;
     { both axis views of every polar: the grid layer (split areas and lines)
       with ABelow, the axis lines, ticks, labels and names without }
@@ -2270,6 +2292,15 @@ type
     property BrushNow: Double read FBrushNow write FBrushNow;
     { whether some brush controller holds globalPan [Batch 127] }
     function BrushGlobalPanTaken: Boolean;
+    { ---- THE PARALLEL AXES' AREA SELECT [Batch 130] ----
+      A parallelAxis view's controller (nil before its view renders; CSS
+      px, the covers in the axis' frame), the axisAreaSelect actions the
+      views dispatched. BrushHitTest answers TyParallelBrushBase plus the
+      axis for a parallel axis' cover. }
+    function ParallelBrushOf(AAxis: Integer): TTyBrushController;
+    function ParallelBrushActionCount: Integer;
+    function ParallelBrushActionAt(AIndex: Integer): TTyParallelBrushAction;
+    procedure ParallelBrushClearLog;
     { ---- progressive rendering and appendData [Batch 119] ---- }
     { chart.appendData with seriesIndex and data: ADataJson, a JSON array of data
       items, appended to the series' own `data`. Nothing is drawn until the
@@ -2806,6 +2837,7 @@ begin
   FTbStatus := TStringList.Create;
   FTbBrushGrid := -1;
   FBrushNow := NaN;
+  FParBrushSkip := -1;
   FBrushTickPrev := NaN;
 end;
 
@@ -2830,6 +2862,7 @@ begin
   FreeAndNil(FDzTimer);
   BrushReset;
   BrushFreeCtl(FTbBrushCtl);
+  ParBrushFree;
   FreeAndNil(FBrushTimer);
   FreeAndNil(FTipTimer);
   { THE PROXIES BEFORE THE DRIVER: freeing one takes its clips off it }
@@ -3039,8 +3072,10 @@ begin
   { new axis models and views: nothing kept from the last render
     [Batch 101] }
   FAxisMemory.Clear;
-  { new parallelAxis models: no active intervals [Batch 128] }
+  { new parallelAxis models: no active intervals [Batch 128]; new views,
+    new controllers [Batch 130] }
   FParIntervals := nil;
+  ParBrushFree;
   FGraphForce := nil;
   { notMerge: new series models, so no roam survives either, nor a toggle. }
   FGraphRoam := nil;
@@ -3252,6 +3287,8 @@ begin
       begin
         FAxisMemory.Forget('parallelAxis' + IntToStr(s));
         if s <= High(FParIntervals) then FParIntervals[s] := nil;
+        { its view is new: a new controller [Batch 130] }
+        if s <= High(FParBrushCtls) then FreeAndNil(FParBrushCtls[s]);
       end;
   { A BRAND NEW MODEL ASKS FOR A NEW VIEW, whatever id it made (a removed
     model's, often) -- until the update that pairs the views [Batch 97] }
@@ -3311,6 +3348,8 @@ end;
 
 procedure TTyAdvanceChart.AfterSetOption(ALazy, ASilent: Boolean);
 begin
+  { the update renders every parallelAxis view [Batch 130] }
+  FParBrushSkip := -1;
   { restorePipelines: the next update's pipelines have no context yet; rows
     appended are in the option the update reads [Batch 119] }
   FProgFresh := True;
@@ -4570,6 +4609,10 @@ var
   largeBars: TTyBoolArray;
   i: Integer;
 begin
+  { a resize renders every view [Batch 130] }
+  if (ARect.Left <> FLastRect.Left) or (ARect.Top <> FLastRect.Top)
+    or (ARect.Right <> FLastRect.Right) or (ARect.Bottom <> FLastRect.Bottom) then
+    FParBrushSkip := -1;
   FLastRect := ARect;
   FLastPPI := APPI;
   { a new layout: a progress frame's list is not this one's [Batch 119] }
@@ -4695,6 +4738,9 @@ begin
   { the brush components: the visual stage's layoutCovers, then every brush
     view's render -- the covers laid from the model's areas [Batch 126] }
   if not FStreamRelayout and not FExporting then BrushPass;
+  { every parallelAxis view's BrushController, its covers from the axis'
+    active intervals [Batch 130] }
+  if not FStreamRelayout and not FExporting then ParBrushPass;
   { THE BRUSH'S VISUAL STAGE [Batch 127]: what every brush selects, its
     inBrush / outOfBrush visuals over the rows the visual stages left, and
     -- for an action's update -- brushSelect through the throttle }
@@ -11462,9 +11508,10 @@ end;
   (parallelAxisIndex, else parallelAxisId, else parallelAxisName; none is
   all) whose parallel was built takes `intervals` (setActiveIntervals: a
   clone, each pair ascending) }
-function TTyAdvanceChart.ParallelAreaSelect(APayload: TJSONObject): Boolean;
+function TTyAdvanceChart.ParallelAreaSelect(APayload: TJSONObject;
+  out AFirst: Integer): Boolean;
 var
-  n, k: Integer;
+  n, k, j, q: Integer;
   hit: array of Boolean;
   d: TJSONData;
   iv: TTyParallelIntervalArray;
@@ -11485,6 +11532,21 @@ var
     else Exit;
     if IsNan(v) or (Frac(v) <> 0) or (v < 0) or (v >= n) then Exit;
     hit[Trunc(v)] := True;
+  end;
+
+  { cmpts[idx] of one item of the index list: -1 for no model there }
+  function IndexOfItem(AData: TJSONData): Integer;
+  var v: Double;
+  begin
+    Result := -1;
+    if AData.JSONType = jtNumber then v := AData.AsFloat
+    else if (AData.JSONType = jtString) and (AData.AsString <> '')
+      and (IntToStr(StrToIntDef(AData.AsString, -1)) = AData.AsString) then
+      v := StrToInt(AData.AsString)
+    else Exit;
+    if IsNan(v) or (Frac(v) <> 0) or (v < 0) or (v >= n) then Exit;
+    if FOption.ComponentAt('parallelAxis', Trunc(v)) is TJSONObject then
+      Result := Trunc(v);
   end;
 
   procedure MarkText(AData: TJSONData; AById: Boolean; AInList: Boolean);
@@ -11509,13 +11571,32 @@ var
 
 begin
   Result := False;
+  AFirst := -1;
   if (FOption = nil) or (APayload = nil) then Exit;
   n := FOption.ComponentCount('parallelAxis');
   if n = 0 then Exit;
   SetLength(hit, n);
   for k := 0 to n - 1 do hit[k] := False;
   d := APayload.Find('parallelAxisIndex');
-  if (d <> nil) and (d.JSONType <> jtNull) then MarkIndex(d)
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    MarkIndex(d);
+    { findComponents by index: the list's order [Batch 130] }
+    if d is TJSONArray then
+    begin
+      for j := 0 to d.Count - 1 do
+      begin
+        q := IndexOfItem(TJSONArray(d).Items[j]);
+        if q >= 0 then
+        begin
+          AFirst := q;
+          Break;
+        end;
+      end;
+    end
+    else
+      AFirst := IndexOfItem(d);
+  end
   else
   begin
     d := APayload.Find('parallelAxisId');
@@ -11527,6 +11608,13 @@ begin
       else
         for k := 0 to n - 1 do hit[k] := True;
     end;
+    { by id, by name or all: the components' order [Batch 130] }
+    for k := 0 to n - 1 do
+      if hit[k] and (FOption.ComponentAt('parallelAxis', k) is TJSONObject) then
+      begin
+        AFirst := k;
+        Break;
+      end;
   end;
   iv := TyParallelIntervalsOf(APayload.Find('intervals'));
   if Length(FParIntervals) < n then SetLength(FParIntervals, n);
@@ -14334,6 +14422,9 @@ begin
       if n > 0 then ViewDrew(cvToolbox);
       Inc(drawn, n);
     end;
+    { the parallel axes' covers, z 10000: their controllers' groups are
+      zrender's, no view hides them [Batch 130] }
+    Inc(drawn, BuildParallelBrushes(list));
     { the brush's covers, z 10000 [Batch 126] }
     if not ViewHidden(cvBrush) then
     begin
@@ -16837,10 +16928,10 @@ begin
   if BrushPieceAt(AX, AY, k, q, piece) then
   begin
     Result.Id := -((Int64(9) shl 44) + (Int64(k) shl 36)
-      + Int64(FBrushCtls[k].Covers[q].Serial) * 16 + Ord(piece));
+      + Int64(BrushCtlOf(k).Covers[q].Serial) * 16 + Ord(piece));
     Result.HdKind := 9;
     Result.HdSeries := k;
-    Result.HdRow := FBrushCtls[k].Covers[q].Serial;
+    Result.HdRow := BrushCtlOf(k).Covers[q].Serial;
     Result.HdGen := Ord(piece);
     Exit;
   end;
@@ -22323,7 +22414,19 @@ begin
     d.Free;
     Exit;
   end;
-  p := TJSONObject(d);
+  Result := DispatchActionObject(TJSONObject(d));
+end;
+
+{ the dispatch itself, of a payload parsed or built (a view's own action
+  keeps its numbers as they are -- no text in between) [Batch 130] }
+function TTyAdvanceChart.DispatchActionObject(APayload: TJSONObject): Boolean;
+var
+  tp: TJSONData;
+  p: TJSONObject;
+  t: string;
+begin
+  Result := False;
+  p := APayload;
   { an action's brushselected comes after its own event [Batch 127] }
   Inc(FBrushActDepth);
   try
@@ -22914,6 +23017,9 @@ var
   m: ITyTextMeasurer;
   hk, hs, hraw, slot, inner: Integer;
 begin
+  { an update renders every parallelAxis view -- but the one an
+    axisAreaSelect names [Batch 130] }
+  if not FParBrushInAas then FParBrushSkip := -1;
   { nothing laid out yet: the first paint does it all }
   if (FLastPPI <= 0) or (FBuild = nil) then
   begin
@@ -28519,7 +28625,8 @@ begin
     statuses as this update renders them }
   BrushSelectRun(True);
   TbBrushSnap;
-  { update: every view renders again }
+  { update: every view renders again -- the parallel axes' too [Batch 130] }
+  FParBrushSkip := -1;
   FDirty := True;
   Invalidate;
   EmitPayloadEvent('globalcursortaken', TbEventJson(APayload, 'globalcursortaken'));
@@ -28904,7 +29011,12 @@ begin
   if (FEvHover.HdKind = 9) and (FEvHover.Id <> 0) and (FEvHover.HdGen >= 0)
     and (FEvHover.HdGen <= Ord(High(TTyBrushPiece))) then
   begin
-    bc := TyBrushPieceCursor(TTyBrushPiece(FEvHover.HdGen), True);
+    { through the controller's group: a parallel axis' is turned
+      [Batch 130] }
+    if BrushCtlOf(FEvHover.HdSeries) <> nil then
+      bc := BrushCtlOf(FEvHover.HdSeries).PieceCursor(TTyBrushPiece(FEvHover.HdGen), True)
+    else
+      bc := TyBrushPieceCursor(TTyBrushPiece(FEvHover.HdGen), True);
     c := bc;
   end;
   { the select brush's resetCursor [Batch 127] }
@@ -29756,7 +29868,8 @@ begin
   ABrush := -1;
   AIndex := -1;
   APiece := bpMain;
-  if (csDesigning in ComponentState) or (Length(FBrushCtls) = 0) then Exit;
+  if (csDesigning in ComponentState)
+    or ((Length(FBrushCtls) = 0) and (Length(FParBrushCtls) = 0)) then Exit;
   BrushCss(AX, AY, x, y);
   s := DzScale;
   if (x < 0) or (y < 0) or (x > (FLastRect.Right - FLastRect.Left) / s)
@@ -29765,6 +29878,13 @@ begin
     if (FBrushCtls[b] <> nil) and FBrushCtls[b].PieceAt(x, y, AIndex, APiece) then
     begin
       ABrush := b;
+      Exit(True);
+    end;
+  { the parallel axes' groups, under the brush views' [Batch 130] }
+  for b := High(FParBrushCtls) downto 0 do
+    if (FParBrushCtls[b] <> nil) and FParBrushCtls[b].PieceAt(x, y, AIndex, APiece) then
+    begin
+      ABrush := TyParallelBrushBase + b;
       Exit(True);
     end;
 end;
@@ -29783,7 +29903,7 @@ begin
   BrushCss(AX, AY, x, y);
   FBrushDragOn := True;
   FBrushDragBrush := b;
-  FBrushDragSerial := FBrushCtls[b].Covers[i].Serial;
+  FBrushDragSerial := BrushCtlOf(b).Covers[i].Serial;
   FBrushDragPiece := pc;
   FBrushDragX := x;
   FBrushDragY := y;
@@ -29799,6 +29919,10 @@ begin
   for b := 0 to High(FBrushCtls) do
     if FBrushCtls[b] <> nil then
       BrushOnTrigger(b, FBrushCtls[b].MouseDown(x, y, ADraggable));
+  { the parallel axes' controllers [Batch 130] }
+  for b := 0 to High(FParBrushCtls) do
+    if FParBrushCtls[b] <> nil then
+      ParBrushOnTrigger(b, FParBrushCtls[b].MouseDown(x, y, ADraggable));
 end;
 
 procedure TTyAdvanceChart.BrushPointerMove(AX, AY: Integer);
@@ -29807,17 +29931,16 @@ var
   x, y: Double;
   t: TTyBrushTrigger;
 begin
-  if Length(FBrushCtls) = 0 then Exit;
+  if (Length(FBrushCtls) = 0) and (Length(FParBrushCtls) = 0) then Exit;
   BrushCss(AX, AY, x, y);
   { Draggable's drag: the delta from the last pointer event }
-  if FBrushDragOn and (FBrushDragBrush <= High(FBrushCtls))
-    and (FBrushCtls[FBrushDragBrush] <> nil) then
+  if FBrushDragOn and (BrushCtlOf(FBrushDragBrush) <> nil) then
   begin
-    t := FBrushCtls[FBrushDragBrush].Drift(FBrushDragSerial, FBrushDragPiece,
+    t := BrushCtlOf(FBrushDragBrush).Drift(FBrushDragSerial, FBrushDragPiece,
       x - FBrushDragX, y - FBrushDragY);
     FBrushDragX := x;
     FBrushDragY := y;
-    BrushOnTrigger(FBrushDragBrush, t);
+    BrushTriggerTo(FBrushDragBrush, t);
     BrushChanged;
   end;
   for b := 0 to High(FBrushCtls) do
@@ -29831,6 +29954,14 @@ begin
       end
       else if FBrushCtls[b].Dragging then BrushChanged;
     end;
+  { the parallel axes' controllers [Batch 130] }
+  for b := 0 to High(FParBrushCtls) do
+    if FParBrushCtls[b] <> nil then
+    begin
+      t := FParBrushCtls[b].MouseMove(x, y);
+      if t.Fired then ParBrushOnTrigger(b, t)
+      else if FParBrushCtls[b].Dragging then BrushChanged;
+    end;
 end;
 
 { Draggable's dragend: the cover's ondragend triggers with isEnd }
@@ -29840,8 +29971,8 @@ begin
   if not FBrushDragOn then Exit;
   FBrushDragOn := False;
   b := FBrushDragBrush;
-  if (b < 0) or (b > High(FBrushCtls)) or (FBrushCtls[b] = nil) then Exit;
-  BrushOnTrigger(b, FBrushCtls[b].DragEnd(FBrushDragSerial));
+  if BrushCtlOf(b) = nil then Exit;
+  BrushTriggerTo(b, BrushCtlOf(b).DragEnd(FBrushDragSerial));
 end;
 
 procedure TTyAdvanceChart.BrushCtlUp(AX, AY: Integer);
@@ -29850,13 +29981,21 @@ var
   x, y: Double;
   was: Boolean;
 begin
-  if Length(FBrushCtls) = 0 then Exit;
+  if (Length(FBrushCtls) = 0) and (Length(FParBrushCtls) = 0) then Exit;
   BrushCss(AX, AY, x, y);
   for b := 0 to High(FBrushCtls) do
     if FBrushCtls[b] <> nil then
     begin
       was := FBrushCtls[b].Dragging;
       BrushOnTrigger(b, FBrushCtls[b].MouseUp(x, y));
+      if was then BrushChanged;
+    end;
+  { the parallel axes' controllers [Batch 130] }
+  for b := 0 to High(FParBrushCtls) do
+    if FParBrushCtls[b] <> nil then
+    begin
+      was := FParBrushCtls[b].Dragging;
+      ParBrushOnTrigger(b, FParBrushCtls[b].MouseUp(x, y));
       if was then BrushChanged;
     end;
 end;
@@ -29867,10 +30006,13 @@ var
   x, y: Double;
 begin
   Result := False;
-  if Length(FBrushCtls) = 0 then Exit;
+  if (Length(FBrushCtls) = 0) and (Length(FParBrushCtls) = 0) then Exit;
   BrushCss(AX, AY, x, y);
   for b := 0 to High(FBrushCtls) do
     if (FBrushCtls[b] <> nil) and FBrushCtls[b].Crosshair(x, y) then Result := True;
+  { the parallel axes' controllers [Batch 130] }
+  for b := 0 to High(FParBrushCtls) do
+    if (FParBrushCtls[b] <> nil) and FParBrushCtls[b].Crosshair(x, y) then Result := True;
 end;
 
 procedure TTyAdvanceChart.BrushChanged;
@@ -30335,10 +30477,25 @@ end;
   the chart updates (parallelVisual's opacities) [Batch 128]; the update's
   visual stage (brushSelect), the toolbox's render and the event }
 procedure TTyAdvanceChart.BrushDoAxisAreaSelect(APayload: TJSONObject);
+var
+  hit: Boolean;
+  first: Integer;
 begin
   { THE AXES THE QUERY NAMES take the intervals, and the update renders
-    them (parallelVisual's opacities) [Batch 128] }
-  if ParallelAreaSelect(APayload) then FullUpdate;
+    them (parallelVisual's opacities) [Batch 128] -- every parallelAxis
+    view but the first the query finds (fromAxisAreaSelect), which keeps
+    the covers it has [Batch 130] }
+  hit := ParallelAreaSelect(APayload, first);
+  FParBrushSkip := first;
+  if hit or (Length(FParallels) > 0) then
+  begin
+    FParBrushInAas := True;
+    try
+      FullUpdate;
+    finally
+      FParBrushInAas := False;
+    end;
+  end;
   BrushSync;
   BrushSelectRun(True);
   TbBrushSnap;
@@ -30511,6 +30668,309 @@ procedure TTyAdvanceChart.BrushClearLogs;
 begin
   FBrushSelLog := nil;
   FBrushEvLog := nil;
+end;
+
+{ ==================== the parallel axes' area select [Batch 130] ====================
+
+  ParallelAxisView: every parallelAxis view a BrushController of its own,
+  mounted on the axis' place and turned by its rotation, its one panel the
+  band along the axis, drawing lineX in that frame with the
+  areaSelectStyle and removeOnClick; never holding globalPan
+  (enableGlobalPan). A render lays the covers again from the axis model's
+  active intervals (getCoverInfoList) -- except the render of the update an
+  axisAreaSelect causes, for the first axis its query finds. A cover's
+  `brush` event turns the covers' ranges into intervals (coordToData,
+  clamped) and dispatches axisAreaSelect for the axis: while a drag moves
+  when the axis is realtime, at its end when it is not, and always for the
+  tiny drag that clears. }
+
+function TTyAdvanceChart.BrushCtlOf(AIndex: Integer): TTyBrushController;
+var k: Integer;
+begin
+  Result := nil;
+  if AIndex < 0 then Exit;
+  if AIndex < TyParallelBrushBase then
+  begin
+    if AIndex <= High(FBrushCtls) then Result := FBrushCtls[AIndex];
+    Exit;
+  end;
+  k := AIndex - TyParallelBrushBase;
+  if k <= High(FParBrushCtls) then Result := FParBrushCtls[k];
+end;
+
+procedure TTyAdvanceChart.BrushTriggerTo(AIndex: Integer; const ATrig: TTyBrushTrigger);
+begin
+  if AIndex < TyParallelBrushBase then BrushOnTrigger(AIndex, ATrig)
+  else ParBrushOnTrigger(AIndex - TyParallelBrushBase, ATrig);
+end;
+
+procedure TTyAdvanceChart.ParBrushFree;
+var k: Integer;
+begin
+  for k := 0 to High(FParBrushCtls) do FreeAndNil(FParBrushCtls[k]);
+  FParBrushCtls := nil;
+  FParBrushSkip := -1;
+  { a drag on a cover that is gone ends with it }
+  if FBrushDragOn and (FBrushDragBrush >= TyParallelBrushBase) then FBrushDragOn := False;
+end;
+
+{ _refreshBrushController of every axis view that renders: mount on the
+  axis' layout, the panel, enableBrush, updateCovers from the intervals.
+  CSS px: the axis' own coordinates over the view's scale. A view not
+  shown (`show: false`) returns before it -- its controller stays as it
+  was. }
+procedure TTyAdvanceChart.ParBrushPass;
+var
+  n, old, k, p, a, i: Integer;
+  par: TTyParallel;
+  ctl: TTyBrushController;
+  ss: TTyParallelSelectStyle;
+  v: TTyBrushView;
+  e0, e1: Double;
+  pn: array of TTyBrushPanel;
+  cfg: TTyBrushOptArray;
+  iv: TTyParallelIntervalArray;
+  ax: TTyAxis;
+  mask: TFPUExceptionMask;
+begin
+  if FOption = nil then n := 0 else n := FOption.ComponentCount('parallelAxis');
+  old := Length(FParBrushCtls);
+  for k := n to old - 1 do FreeAndNil(FParBrushCtls[k]);
+  SetLength(FParBrushCtls, n);
+  for k := old to n - 1 do FParBrushCtls[k] := nil;
+  if n = 0 then Exit;
+  v := BrushViewOf;
+  mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    for k := 0 to n - 1 do
+    begin
+      { fromAxisAreaSelect }
+      if k = FParBrushSkip then Continue;
+      p := ParallelOfAxis(k);
+      if p < 0 then Continue;
+      par := FParallels[p];
+      a := par.AxisOfComponent(k);
+      if (a < 0) or (a > High(par.Views)) or (a > High(par.Layouts)) then Continue;
+      if not par.Views[a].Shown then Continue;
+      ss := TyParallelSelectStyleOf(FOption.ComponentAt('parallelAxis', k));
+      ctl := FParBrushCtls[k];
+      if ctl = nil then
+      begin
+        ctl := TTyBrushController.Create;
+        FParBrushCtls[k] := ctl;
+      end;
+      ctl.Mount((par.Layouts[a].PosX - v.OX) / v.S, (par.Layouts[a].PosY - v.OY) / v.S,
+        par.Layouts[a].Rotation);
+      ax := par.Axis(a);
+      ax.LocalExtent(e0, e1);
+      SetLength(pn, 1);
+      pn[0] := Default(TTyBrushPanel);
+      pn[0].Id := 'pl';
+      pn[0].Rect := TyParallelBrushPanelRect(e0 / v.S, e1 / v.S, ss.Width);
+      pn[0].DefaultType := btLineX;
+      pn[0].GridComponent := -1;
+      ctl.CanvasW := (FLastRect.Right - FLastRect.Left) / v.S;
+      ctl.CanvasH := (FLastRect.Bottom - FLastRect.Top) / v.S;
+      ctl.SetPanels(pn, True);
+      { enableGlobalPan: the mutex is never this controller's }
+      ctl.EnableBrush(TyParallelBrushOpt(ss));
+      { getCoverInfoList }
+      iv := nil;
+      if k <= High(FParIntervals) then iv := FParIntervals[k];
+      SetLength(cfg, Length(iv));
+      for i := 0 to High(iv) do
+      begin
+        { brushType, panelId and range, over DEFAULT_BRUSH_OPT }
+        cfg[i] := TyBrushDefaultOpt;
+        cfg[i].BrushType := btLineX;
+        cfg[i].HasId := False;
+        cfg[i].Id := '';
+        cfg[i].HasPanel := True;
+        cfg[i].PanelId := 'pl';
+        cfg[i].HasRange := True;
+        SetLength(cfg[i].Range, 1);
+        cfg[i].Range[0][0] := ax.DataToCoord(iv[i][0], True) / v.S;
+        cfg[i].Range[0][1] := ax.DataToCoord(iv[i][1], True) / v.S;
+      end;
+      ctl.UpdateCovers(cfg);
+    end;
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
+{ ParallelAxisView._onBrush }
+procedure TTyAdvanceChart.ParBrushOnTrigger(AAxis: Integer; const ATrig: TTyBrushTrigger);
+var
+  p, a, i: Integer;
+  ax: TTyAxis;
+  node, d: TJSONData;
+  rt: Boolean;
+  pay: TJSONObject;
+  ivs, pair: TJSONArray;
+  act: TTyParallelBrushAction;
+  s: Double;
+  mask: TFPUExceptionMask;
+begin
+  if not ATrig.Fired then Exit;
+  BrushChanged;
+  p := ParallelOfAxis(AAxis);
+  if p < 0 then Exit;
+  a := FParallels[p].AxisOfComponent(AAxis);
+  if a < 0 then Exit;
+  ax := FParallels[p].Axis(a);
+  s := DzScale;
+  act := Default(TTyParallelBrushAction);
+  act.Axis := AAxis;
+  act.AxisId := ComponentModelId('parallelAxis', AAxis);
+  SetLength(act.Intervals, Length(ATrig.Areas));
+  mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    for i := 0 to High(ATrig.Areas) do
+    begin
+      act.Intervals[i][0] := NaN;
+      act.Intervals[i][1] := NaN;
+      if Length(ATrig.Areas[i].Opt.Range) < 1 then Continue;
+      act.Intervals[i][0] := ax.CoordToData(ATrig.Areas[i].Opt.Range[0][0] * s, True);
+      act.Intervals[i][1] := ax.CoordToData(ATrig.Areas[i].Opt.Range[0][1] * s, True);
+    end;
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+  { realtime: during the drag, not at its end (the end carries what the
+    last move did); not realtime: at the end. A clearing click always. }
+  node := FOption.ComponentAt('parallelAxis', AAxis);
+  d := nil;
+  if node is TJSONObject then d := TJSONObject(node).Find('realtime');
+  if d = nil then rt := True else rt := JsTruthy(d);
+  if not (((not rt) = ATrig.IsEnd) or ATrig.RemoveOnClick) then Exit;
+  SetLength(FParBrushLog, Length(FParBrushLog) + 1);
+  FParBrushLog[High(FParBrushLog)] := act;
+  pay := TJSONObject.Create;
+  pay.Add('type', 'axisAreaSelect');
+  pay.Add('parallelAxisId', act.AxisId);
+  ivs := TJSONArray.Create;
+  for i := 0 to High(act.Intervals) do
+  begin
+    pair := TJSONArray.Create;
+    pair.Add(TJSONFloat(act.Intervals[i][0]));
+    pair.Add(TJSONFloat(act.Intervals[i][1]));
+    ivs.Add(pair);
+  end;
+  pay.Add('intervals', ivs);
+  DispatchActionObject(pay);
+end;
+
+{ the covers of every parallel axis' controller, in the axes' order and a
+  group's in the order they were added: the main shape through the group's
+  transform, filled and stroked in its style (the skin's colours where the
+  areaSelectStyle wrote none; a cover laid from the intervals has the
+  brush's default style, and the brush's skin colours) }
+function TTyAdvanceChart.BuildParallelBrushes(AList: TTyPaintList): Integer;
+var
+  k, q, i: Integer;
+  ord_: TTyIntegerArray;
+  ctl: TTyBrushController;
+  cv: TTyBrushCover;
+  el: TTyChartElement;
+  v: TTyBrushView;
+  pts: array of TTyPointF;
+  st, stB: TTyStyleSet;
+  inkFill, inkStroke, brFill, brStroke, c: TTyChartColor;
+  lw, lx, ly: Double;
+  corner: array[0..3, 0..1] of Double;
+begin
+  Result := 0;
+  if (csDesigning in ComponentState) or (Length(FParBrushCtls) = 0) then Exit;
+  v := BrushViewOf;
+  st := ActiveController.Model.ResolveStyle(TyParallelSelectSkin, '', []);
+  inkFill := TTyChartColor(st.Background.Color);
+  inkStroke := TTyChartColor(st.BorderColor);
+  stB := ActiveController.Model.ResolveStyle('TyAdvChartBrush', '', []);
+  brFill := TTyChartColor(stB.Background.Color);
+  brStroke := TTyChartColor(stB.BorderColor);
+  for k := 0 to High(FParBrushCtls) do
+  begin
+    ctl := FParBrushCtls[k];
+    if ctl = nil then Continue;
+    ord_ := ctl.GroupOrder;
+    for q := 0 to High(ord_) do
+    begin
+      cv := ctl.Covers[ord_[q]];
+      if IsNan(cv.Main.X) or IsNan(cv.Main.Y) or IsNan(cv.Main.W) or IsNan(cv.Main.H)
+        or IsInfinite(cv.Main.X) or IsInfinite(cv.Main.Y)
+        or IsInfinite(cv.Main.W) or IsInfinite(cv.Main.H) then Continue;
+      el := Default(TTyChartElement);
+      el.Silent := True;
+      el.Datum := TyChartDatum(-1, -1);
+      el.Z := TyBrushCoverZ;
+      el.Style.Alpha := 1;
+      corner[0, 0] := cv.Main.X;
+      corner[0, 1] := cv.Main.Y;
+      corner[1, 0] := cv.Main.X + cv.Main.W;
+      corner[1, 1] := cv.Main.Y;
+      corner[2, 0] := cv.Main.X + cv.Main.W;
+      corner[2, 1] := cv.Main.Y + cv.Main.H;
+      corner[3, 0] := cv.Main.X;
+      corner[3, 1] := cv.Main.Y + cv.Main.H;
+      SetLength(pts, 4);
+      for i := 0 to 3 do
+      begin
+        lx := ctl.Xf[0] * corner[i, 0] + ctl.Xf[2] * corner[i, 1] + ctl.Xf[4];
+        ly := ctl.Xf[1] * corner[i, 0] + ctl.Xf[3] * corner[i, 1] + ctl.Xf[5];
+        pts[i] := TyPointF(v.OX + lx * v.S, v.OY + ly * v.S);
+      end;
+      el.Shape := TyShapePolygon(pts);
+      if not (cv.Opt.Style.Fill.Written and (cv.Opt.Style.Fill.Text = 'none')) then
+      begin
+        if cv.Opt.Style.Fill.Skin <> '' then c := inkFill else c := brFill;
+        if cv.Opt.Style.Fill.Written and not TyTryParseChartColor(cv.Opt.Style.Fill.Text, c) then
+          c := inkFill;
+        el.Style.HasFill := True;
+        el.Style.FillColor := c;
+      end;
+      lw := cv.Opt.Style.LineWidth;
+      if IsNan(lw) then lw := 1;
+      if (lw > 0) and not (cv.Opt.Style.Stroke.Written and (cv.Opt.Style.Stroke.Text = 'none')) then
+      begin
+        if cv.Opt.Style.Stroke.Skin <> '' then c := inkStroke else c := brStroke;
+        if cv.Opt.Style.Stroke.Written and not TyTryParseChartColor(cv.Opt.Style.Stroke.Text, c) then
+          c := inkStroke;
+        el.Style.StrokeColor := c;
+        el.Style.StrokeWidthLogical := lw;
+      end;
+      if not IsNan(cv.Opt.Style.Opacity) then
+        el.Style.Alpha := Max(0, Min(1, cv.Opt.Style.Opacity));
+      AList.Add(el);
+      Inc(Result);
+    end;
+  end;
+end;
+
+function TTyAdvanceChart.ParallelBrushOf(AAxis: Integer): TTyBrushController;
+begin
+  Result := nil;
+  if (AAxis >= 0) and (AAxis <= High(FParBrushCtls)) then Result := FParBrushCtls[AAxis];
+end;
+
+function TTyAdvanceChart.ParallelBrushActionCount: Integer;
+begin
+  Result := Length(FParBrushLog);
+end;
+
+function TTyAdvanceChart.ParallelBrushActionAt(AIndex: Integer): TTyParallelBrushAction;
+begin
+  Result := Default(TTyParallelBrushAction);
+  if (AIndex >= 0) and (AIndex <= High(FParBrushLog)) then Result := FParBrushLog[AIndex];
+end;
+
+procedure TTyAdvanceChart.ParallelBrushClearLog;
+begin
+  FParBrushLog := nil;
 end;
 
 end.

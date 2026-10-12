@@ -47,6 +47,17 @@ unit tyControls.AdvChart.Brush;
   outOfBrush visuals through the fixed mappings onto a visual row. The
   brush preprocessor's toolbox list (preprocessor.ts) is the option unit's.
 
+  THE PARALLEL AXES' AREA SELECT (ParallelAxisView.ts) [Batch 130, C20]: a
+  controller MOUNTED in an axis' frame -- its group moved to the axis' place
+  and turned by its rotation (getLocalTransform, matrix.invert) -- whose one
+  panel is the band along the axis (the extent widened by min(30, 10% of
+  it) at both ends, areaSelectStyle.width across) and whose covers are lineX
+  in that frame. The pointer comes in through the group's inverse
+  (transformCoordToLocal), a drag's delta through toLocalDelta, a handle's
+  cursor through transformDirection. resetCursor asks Path.contain with the
+  point it already made local, and contain makes it local AGAIN -- over a
+  turned axis' cover the crosshair stays; that is upstream's and it is kept.
+
   PURE: options and numbers in, records out. CSS px throughout; a
   conversion takes the view that maps them to the cartesian's device px. }
 interface
@@ -58,6 +69,16 @@ const
   TyBrushCoverZ = 10000;
   TyBrushUnselectThreshold = 6;
   TyBrushMinResizeLineWidth = 6;
+  { the brush index a parallel axis' controller answers to: this plus its
+    parallelAxis component index [Batch 130] }
+  TyParallelBrushBase = 64;
+  { a parallelAxis' areaSelectStyle defaults (component/parallel/install.ts):
+    the band's width, the border's, the opacity; the colours are the skin's }
+  TyParallelSelectWidth = 20;
+  TyParallelSelectBorderWidth = 1;
+  TyParallelSelectOpacity = 0.3;
+  { the skin key of the areaSelectStyle colours' defaults }
+  TyParallelSelectSkin = 'TyAdvChartParallelSelect';
 
 type
   TTyBrushType = (btNone, btRect, btPolygon, btLineX, btLineY);
@@ -71,6 +92,10 @@ type
   TTyBrushInk = record
     Written: Boolean;
     Text: string;
+    { not written: the skin key that stands in for a default the option
+      set (a parallel axis' areaSelectStyle colours); '' the brush's own
+      [Batch 130] }
+    Skin: string;
   end;
 
   { the cover's style: fill, stroke, lineWidth, opacity -- NaN where not set }
@@ -167,6 +192,9 @@ type
     system drawn over the panel [Batch 127] }
   TTyBrushPanelFilter = function(const APanel: TTyBrushPanel; AX, AY: Double): Boolean of object;
 
+  { a group's transform, zrender's six numbers [Batch 130] }
+  TTyBrushMat = array[0..5] of Double;
+
   { the controller's `brush` event }
   TTyBrushTrigger = record
     Fired, IsEnd, RemoveOnClick: Boolean;
@@ -192,6 +220,8 @@ type
     function ShouldShowCover: Boolean;
     function UpdateByMouse(AX, AY: Double; AIsEnd: Boolean): TTyBrushTrigger;
     function HandleDragEnd(AX, AY: Double): TTyBrushTrigger;
+    { toLocalDelta [Batch 130] }
+    procedure ToLocalDelta(ADX, ADY: Double; out LX, LY: Double);
   public
     { _brushType: drawing is on }
     Enabled: Boolean;
@@ -217,7 +247,21 @@ type
     { onIrrelevantElement, asked of every panel a point is in (nil: none)
       [Batch 127] }
     IsIrrelevant: TTyBrushPanelFilter;
+    { THE GROUP'S TRANSFORM (mount) [Batch 130]: Xf the local transform
+      (the identity until mounted), Inv its inverse when the group needs a
+      transform at all (needLocalTransform) -- the pointer comes in through
+      it; without one a point is already local }
+    Xf: TTyBrushMat;
+    HasInv: Boolean;
+    Inv: TTyBrushMat;
     constructor Create;
+    { mount with x, y and rotation }
+    procedure Mount(AX, AY, ARotation: Double);
+    { transformCoordToLocal }
+    procedure ToLocal(AX, AY: Double; out LX, LY: Double);
+    { a piece's cursor: 'move' for the main shape, a handle's through the
+      group's transform (getGlobalDirection, CURSOR_MAP) }
+    function PieceCursor(APiece: TTyBrushPiece; ATransformable: Boolean): string;
     { enableBrush: a type turns drawing on with the option merged over the
       defaults; btNone turns it off }
     procedure EnableBrush(const AOpt: TTyBrushOpt);
@@ -227,7 +271,8 @@ type
     procedure SetPanels(const APanels: array of TTyBrushPanel; AHasPanels: Boolean);
     procedure UpdateCovers(const AConfigs: array of TTyBrushOpt);
     { the pointer handlers (only while Enabled); ATargetDraggable: the press
-      is on a draggable element }
+      is on a draggable element. The pointer is the canvas' (CSS px); a
+      mounted controller turns it local [Batch 130] }
     function MouseDown(AX, AY: Double; ATargetDraggable: Boolean): TTyBrushTrigger;
     function MouseMove(AX, AY: Double): TTyBrushTrigger;
     function MouseUp(AX, AY: Double): TTyBrushTrigger;
@@ -443,6 +488,37 @@ function TyBrushControls(const AReach: TTyBrushReach; ASeriesIndex: Integer): Bo
 procedure TyBrushApplyVisual(const AVisuals: TTyVisualPieceVisualArray;
   ASkinColor: Boolean; const AOutColor: TTyVisualColor; var ARow: TTyVisualRow);
 
+{ ---- the parallel axes' area select (ParallelAxisView.ts) [Batch 130] ---- }
+
+type
+  { getAreaSelectStyle: the band's width across the axis, the covers' style
+    (color -> fill, borderColor -> stroke, borderWidth -> lineWidth,
+    opacity) }
+  TTyParallelSelectStyle = record
+    Width: Double;
+    Style: TTyBrushStyle;
+  end;
+
+  { an axisAreaSelect a parallel axis' view dispatched: the axis (its
+    component index and model id) and the intervals its covers gave }
+  TTyParallelBrushAction = record
+    Axis: Integer;
+    AxisId: string;
+    Intervals: array of TTyBrushPair;
+  end;
+
+{ A parallelAxis option's areaSelectStyle over the defaults: a key not
+  written is the default, one written as a number (a colour as a string) is
+  that; null or anything else leaves the cover's default (the brush's). }
+function TyParallelSelectStyleOf(AAxis: TJSONData): TTyParallelSelectStyle;
+{ The panel along an axis of extent [AE0, AE1]: the extent as a rect AWidth
+  across (BoundingRect.create turns a negative size over), min(30, 10%)
+  more at both ends }
+function TyParallelBrushPanelRect(AE0, AE1, AWidth: Double): TTyXYWH;
+{ enableBrush with brushType 'lineX', the areaSelectStyle as brushStyle,
+  removeOnClick true }
+function TyParallelBrushOpt(const AStyle: TTyParallelSelectStyle): TTyBrushOpt;
+
 { ---- the throttle (util/throttle.ts) ---- }
 
 type
@@ -471,7 +547,7 @@ procedure TyBrushThrottleCall(var T: TTyBrushThrottle; ANow: Double;
 
 implementation
 
-uses tyControls.AdvChart.Scale;
+uses tyControls.AdvChart.Scale, tyControls.AdvChart.JsMath;
 
 var
   GBrushUid: Integer = 0;
@@ -728,8 +804,9 @@ end;
 function MergeStyle(const ABase, AOver: TTyBrushStyle): TTyBrushStyle;
 begin
   Result := ABase;
-  if AOver.Fill.Written then Result.Fill := AOver.Fill;
-  if AOver.Stroke.Written then Result.Stroke := AOver.Stroke;
+  { a default the option set (Skin) is a value too [Batch 130] }
+  if AOver.Fill.Written or (AOver.Fill.Skin <> '') then Result.Fill := AOver.Fill;
+  if AOver.Stroke.Written or (AOver.Stroke.Skin <> '') then Result.Stroke := AOver.Stroke;
   if not IsNan(AOver.LineWidth) then Result.LineWidth := AOver.LineWidth;
   if not IsNan(AOver.Opacity) then Result.Opacity := AOver.Opacity;
 end;
@@ -1292,6 +1369,207 @@ begin
   CreatingPanel := -1;
   Inc(GBrushUid);
   Uid := GBrushUid;
+  Xf[0] := 1;
+  Xf[1] := 0;
+  Xf[2] := 0;
+  Xf[3] := 1;
+  Xf[4] := 0;
+  Xf[5] := 0;
+  HasInv := False;
+end;
+
+{ isNotAroundZero }
+function NotAroundZero(A: Double): Boolean;
+const cEps = 5e-5;
+begin
+  Result := (A > cEps) or (A < -cEps);
+end;
+
+procedure TTyBrushController.Mount(AX, AY, ARotation: Double);
+var
+  st, ct, aa, ac, atx, ab, ad, aty, det: Double;
+  m: TFPUExceptionMask;
+begin
+  m := MaskFP;
+  try
+    { getLocalTransform: the scale (1), no skew, no origin; then
+      `rotation && matrix.rotate(m, m, rotation)`; then the translation }
+    Xf[0] := 1;
+    Xf[1] := 0;
+    Xf[2] := 0;
+    Xf[3] := 1;
+    Xf[4] := 0;
+    Xf[5] := 0;
+    if (ARotation <> 0) and not IsNan(ARotation) then
+    begin
+      aa := Xf[0];
+      ac := Xf[2];
+      atx := Xf[4];
+      ab := Xf[1];
+      ad := Xf[3];
+      aty := Xf[5];
+      st := TyJsSin(ARotation);
+      ct := TyJsCos(ARotation);
+      Xf[0] := aa * ct + ab * st;
+      Xf[1] := -aa * st + ab * ct;
+      Xf[2] := ac * ct + ad * st;
+      Xf[3] := -ac * st + ct * ad;
+      Xf[4] := ct * (atx - 0) + st * (aty - 0) + 0;
+      Xf[5] := ct * (aty - 0) - st * (atx - 0) + 0;
+    end;
+    Xf[4] := Xf[4] + (0 + AX);
+    Xf[5] := Xf[5] + (0 + AY);
+    { updateTransform: a group that needs no transform has no inverse; one
+      that does inverts it (matrix.invert; a singular one keeps the
+      identity matrix.create gave) }
+    HasInv := NotAroundZero(ARotation) or NotAroundZero(AX) or NotAroundZero(AY);
+    if HasInv then
+    begin
+      Inv[0] := 1;
+      Inv[1] := 0;
+      Inv[2] := 0;
+      Inv[3] := 1;
+      Inv[4] := 0;
+      Inv[5] := 0;
+      aa := Xf[0];
+      ac := Xf[2];
+      atx := Xf[4];
+      ab := Xf[1];
+      ad := Xf[3];
+      aty := Xf[5];
+      det := aa * ad - ab * ac;
+      if (det <> 0) and not IsNan(det) then
+      begin
+        det := 1.0 / det;
+        Inv[0] := ad * det;
+        Inv[1] := -ab * det;
+        Inv[2] := -ac * det;
+        Inv[3] := aa * det;
+        Inv[4] := (ac * aty - ad * atx) * det;
+        Inv[5] := (ab * atx - aa * aty) * det;
+      end;
+    end;
+  finally
+    UnmaskFP(m);
+  end;
+end;
+
+procedure TTyBrushController.ToLocal(AX, AY: Double; out LX, LY: Double);
+var m: TFPUExceptionMask;
+begin
+  if not HasInv then
+  begin
+    LX := AX;
+    LY := AY;
+    Exit;
+  end;
+  m := MaskFP;
+  try
+    { vector.applyTransform }
+    LX := Inv[0] * AX + Inv[2] * AY + Inv[4];
+    LY := Inv[1] * AX + Inv[3] * AY + Inv[5];
+  finally
+    UnmaskFP(m);
+  end;
+end;
+
+procedure TTyBrushController.ToLocalDelta(ADX, ADY: Double; out LX, LY: Double);
+var dx, dy, zx, zy: Double;
+begin
+  ToLocal(ADX, ADY, dx, dy);
+  ToLocal(0, 0, zx, zy);
+  LX := dx - zx;
+  LY := dy - zy;
+end;
+
+function TTyBrushController.PieceCursor(APiece: TTyBrushPiece; ATransformable: Boolean): string;
+var
+  t: TTyBrushMat;
+  m: TFPUExceptionMask;
+
+  { graphic.transformDirection }
+  function Dir(const ADir: string): string;
+  var hBase, vBase, vx, vy, gx, gy: Double;
+  begin
+    if (t[4] = 0) or (t[5] = 0) or (t[0] = 0) then hBase := 1
+    else hBase := Abs(2 * t[4] / t[0]);
+    if (t[4] = 0) or (t[5] = 0) or (t[2] = 0) then vBase := 1
+    else vBase := Abs(2 * t[4] / t[2]);
+    vx := 0;
+    vy := 0;
+    if ADir = 'left' then vx := -hBase else if ADir = 'right' then vx := hBase;
+    if ADir = 'top' then vy := -vBase else if ADir = 'bottom' then vy := vBase;
+    gx := t[0] * vx + t[2] * vy + t[4];
+    gy := t[1] * vx + t[3] * vy + t[5];
+    if Abs(gx) > Abs(gy) then
+    begin
+      if gx > 0 then Result := 'right' else Result := 'left';
+    end
+    else if gy > 0 then Result := 'bottom'
+    else Result := 'top';
+  end;
+
+  { getGlobalDirection1: w e n s through the transform }
+  function G1(ALocal: Char): Char;
+  var d: string;
+  begin
+    case ALocal of
+      'w': d := Dir('left');
+      'e': d := Dir('right');
+      'n': d := Dir('top');
+    else
+      d := Dir('bottom');
+    end;
+    if d = 'left' then Result := 'w'
+    else if d = 'right' then Result := 'e'
+    else if d = 'top' then Result := 'n'
+    else Result := 's';
+  end;
+
+  { CURSOR_MAP; a pair upstream's map does not hold reads 'undefined' }
+  function CursorOf(const AName: string): string;
+  begin
+    if (AName = 'w') or (AName = 'e') then Result := 'ew'
+    else if (AName = 'n') or (AName = 's') then Result := 'ns'
+    else if (AName = 'ne') or (AName = 'sw') then Result := 'nesw'
+    else if (AName = 'nw') or (AName = 'se') then Result := 'nwse'
+    else Result := 'undefined';
+    Result := Result + '-resize';
+  end;
+
+var
+  seq, g: string;
+  c: Char;
+begin
+  if APiece = bpMain then
+  begin
+    if ATransformable then Exit('move');
+    Exit('default');
+  end;
+  if not ATransformable then Exit('');
+  m := MaskFP;
+  try
+    { graphic.getTransform(group): the identity times the local transform }
+    t[0] := Xf[0] * 1 + Xf[2] * 0;
+    t[1] := Xf[1] * 1 + Xf[3] * 0;
+    t[2] := Xf[0] * 0 + Xf[2] * 1;
+    t[3] := Xf[1] * 0 + Xf[3] * 1;
+    t[4] := Xf[0] * 0 + Xf[2] * 0 + Xf[4];
+    t[5] := Xf[1] * 0 + Xf[3] * 0 + Xf[5];
+    seq := TyBrushPieceName(APiece);
+    if Length(seq) = 1 then Exit(CursorOf(G1(seq[1])));
+    { getGlobalDirection2: an east or west first is turned round }
+    g := G1(seq[1]) + G1(seq[2]);
+    if (g[1] = 'e') or (g[1] = 'w') then
+    begin
+      c := g[1];
+      g[1] := g[2];
+      g[2] := c;
+    end;
+    Result := CursorOf(g);
+  finally
+    UnmaskFP(m);
+  end;
 end;
 
 function TTyBrushController.IndexOf(ASerial: Integer): Integer;
@@ -1574,7 +1852,11 @@ var
 begin
   m := MaskFP;
   try
-    if Enabled then base := Opt else base := TyBrushDefaultOpt;
+    { the 6.1 dist merges every config over DEFAULT_BRUSH_OPT, not over the
+      painting option (the source has since taken this._brushOption first):
+      a cover laid from a bare config -- a parallel axis' from its
+      intervals -- takes the default style [Batch 130] }
+    base := TyBrushDefaultOpt;
     SetLength(cfg, Length(AConfigs));
     for i := 0 to High(AConfigs) do cfg[i] := TyBrushMergeOpt(base, AConfigs[i]);
     oldC := Covers;
@@ -1735,6 +2017,8 @@ var m: TFPUExceptionMask;
 begin
   Result := Default(TTyBrushTrigger);
   if not Enabled then Exit;
+  { transformCoordToLocal [Batch 130] }
+  ToLocal(AX, AY, AX, AY);
   m := MaskFP;
   try
     if Dragging then
@@ -1763,6 +2047,7 @@ var m: TFPUExceptionMask;
 begin
   Result := Default(TTyBrushTrigger);
   if not Enabled or not Dragging then Exit;
+  ToLocal(AX, AY, AX, AY);
   m := MaskFP;
   try
     Result := UpdateByMouse(AX, AY, False);
@@ -1776,6 +2061,7 @@ var m: TFPUExceptionMask;
 begin
   Result := Default(TTyBrushTrigger);
   if not Enabled then Exit;
+  ToLocal(AX, AY, AX, AY);
   m := MaskFP;
   try
     Result := HandleDragEnd(AX, AY);
@@ -1787,20 +2073,25 @@ end;
 function TTyBrushController.Crosshair(AX, AY: Double): Boolean;
 var
   p, i: Integer;
+  lx, ly, cx, cy: Double;
   m: TFPUExceptionMask;
 begin
   Result := False;
   if not Enabled then Exit;
   { not outside the canvas }
   if (AX < 0) or (AX > CanvasW) or (AY < 0) or (AY > CanvasH) then Exit;
+  { the local point [Batch 130]; Path.contain turns the point it is given
+    local once more -- the local one, here }
+  ToLocal(AX, AY, lx, ly);
+  ToLocal(lx, ly, cx, cy);
   m := MaskFP;
   try
-    p := PanelAt(AX, AY);
+    p := PanelAt(lx, ly);
     if not Dragging then
       for i := 0 to High(Covers) do
         if (p <> -1) and ((p = -2) or (Covers[i].Opt.HasPanel
           and (Covers[i].Opt.PanelId = Panels[p].Id)))
-          and MainContains(i, AX, AY) then
+          and MainContains(i, cx, cy) then
           Exit(False);
     Result := p <> -1;
   finally
@@ -1817,6 +2108,8 @@ begin
   Result := Default(TTyBrushTrigger);
   i := IndexOf(ASerial);
   if i < 0 then Exit;
+  { toLocalDelta [Batch 130] }
+  if HasInv then ToLocalDelta(ADX, ADY, ADX, ADY);
   m := MaskFP;
   try
     Covers[i].Opt.Range := TyBrushDrift(Covers[i].Opt.BrushType, Covers[i].Opt.Range,
@@ -1939,6 +2232,8 @@ begin
   AIndex := -1;
   APiece := bpMain;
   ord_ := GroupOrder;
+  { the pieces' own inverse is the group's [Batch 130] }
+  ToLocal(AX, AY, AX, AY);
   m := MaskFP;
   try
     for q := High(ord_) downto 0 do
@@ -1971,6 +2266,109 @@ begin
   finally
     UnmaskFP(m);
   end;
+end;
+
+{ ==================== the parallel axes' area select [Batch 130] ==================== }
+
+function TyParallelSelectStyleOf(AAxis: TJSONData): TTyParallelSelectStyle;
+var
+  o: TJSONObject;
+  d: TJSONData;
+
+  { a key written: a number (or, for a colour, a string) is taken; null or
+    another type leaves the cover's default }
+  function Num(const AKey: string; ADefault: Double): Double;
+  var v: TJSONData;
+  begin
+    if o = nil then Exit(ADefault);
+    v := o.Find(AKey);
+    if v = nil then Exit(ADefault);
+    if v.JSONType = jtNumber then Result := v.AsFloat
+    else Result := NaN;
+  end;
+
+  procedure Ink(const AKey: string; var AInk: TTyBrushInk);
+  var v: TJSONData;
+  begin
+    if o = nil then Exit;
+    v := o.Find(AKey);
+    if (v <> nil) and (v.JSONType = jtString) then
+    begin
+      AInk.Written := True;
+      AInk.Text := v.AsString;
+    end;
+  end;
+
+begin
+  Result := Default(TTyParallelSelectStyle);
+  Result.Style := NoStyle;
+  o := nil;
+  if AAxis is TJSONObject then
+  begin
+    d := TJSONObject(AAxis).Find('areaSelectStyle');
+    if d is TJSONObject then o := TJSONObject(d);
+  end;
+  Result.Width := Num('width', TyParallelSelectWidth);
+  if IsNan(Result.Width) then Result.Width := TyParallelSelectWidth;
+  Result.Style.LineWidth := Num('borderWidth', TyParallelSelectBorderWidth);
+  Result.Style.Opacity := Num('opacity', TyParallelSelectOpacity);
+  Ink('color', Result.Style.Fill);
+  Ink('borderColor', Result.Style.Stroke);
+end;
+
+function TyParallelBrushPanelRect(AE0, AE1, AWidth: Double): TTyXYWH;
+const cTenth: Double = 0.1;
+var
+  len, extra: Double;
+  m: TFPUExceptionMask;
+
+  { new BoundingRect: a negative size turned over }
+  procedure Norm(var R: TTyXYWH);
+  begin
+    if R.W < 0 then
+    begin
+      R.X := R.X + R.W;
+      R.W := -R.W;
+    end;
+    if R.H < 0 then
+    begin
+      R.Y := R.Y + R.H;
+      R.H := -R.H;
+    end;
+  end;
+
+begin
+  m := MaskFP;
+  try
+    len := AE1 - AE0;
+    extra := JMin(30, Abs(len) * cTenth);
+    Result.X := AE0;
+    Result.Y := -AWidth / 2;
+    Result.W := len;
+    Result.H := AWidth;
+    Norm(Result);
+    Result.X := Result.X - extra;
+    Result.W := Result.W + 2 * extra;
+    { makeRectPanelClipPath / makeRectIsTargetByCursor normalise again }
+    Norm(Result);
+  finally
+    UnmaskFP(m);
+  end;
+end;
+
+function TyParallelBrushOpt(const AStyle: TTyParallelSelectStyle): TTyBrushOpt;
+begin
+  Result := TyBrushDefaultOpt;
+  Result.BrushType := btLineX;
+  Result.RemoveOnClick := True;
+  { brushStyle merged over the default's: what areaSelectStyle has -- the
+    colours it does not write are its defaults, the skin's }
+  if AStyle.Style.Fill.Written then Result.Style.Fill := AStyle.Style.Fill
+  else Result.Style.Fill.Skin := TyParallelSelectSkin;
+  if AStyle.Style.Stroke.Written then Result.Style.Stroke := AStyle.Style.Stroke
+  else Result.Style.Stroke.Skin := TyParallelSelectSkin;
+  if not IsNan(AStyle.Style.LineWidth) then Result.Style.LineWidth := AStyle.Style.LineWidth;
+  if not IsNan(AStyle.Style.Opacity) then Result.Style.Opacity := AStyle.Style.Opacity;
 end;
 
 { ==================== the selection [Batch 127] ====================
