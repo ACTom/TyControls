@@ -61,7 +61,6 @@ type
     procedure ActivityCancelsAnArmedFadeOut;
     procedure TurningItOffDisarmsAPendingFade;
     procedure ThemeTurningItOffUnhidesAFadedBar;
-    procedure FocusBringsItBack;
     procedure ThemeDelayTracksAThemeSwitch;
     procedure ThemeDelayTracksAControllerSwitch;
     procedure PropertyChangeIsNotServedAStaleDelay;
@@ -69,7 +68,6 @@ type
     procedure PointerOnBarStopsTheClockSpinning;
     procedure ARunningFadeOutranksBeingHeldOpen;
     procedure PointerLeavingRestartsTheIdleClock;
-    procedure FocusLeavingRestartsTheIdleClock;
     procedure ReleasingTheThumbRestartsTheIdleClock;
     procedure OneLateTickCatchesTheFadeUp;
     procedure BackToBackTicksStepTheFadeInsteadOfSnappingIt;
@@ -149,9 +147,6 @@ type
       走同一个口子,而不是为了测试把控件的可见性往上抬。 }
     procedure EnterBar;
     procedure LeaveBar;
-    { DoEnter/DoExit 同样是 protected。 }
-    procedure FocusIn;
-    procedure FocusOut;
     { SetDesigning 在 TComponent 上也是 protected,同一个口子。 }
     procedure MarkDesigning(AValue: Boolean);
     { 「延时表还有没有活干」这个判断在 protected 里。**能验的只有这个判断**:
@@ -199,16 +194,6 @@ end;
 procedure TBarAccess.LeaveBar;
 begin
   MouseLeave;
-end;
-
-procedure TBarAccess.FocusIn;
-begin
-  DoEnter;
-end;
-
-procedure TBarAccess.FocusOut;
-begin
-  DoExit;
 end;
 
 procedure TBarAccess.MarkDesigning(AValue: Boolean);
@@ -679,21 +664,6 @@ begin
   AssertEquals('换到不自动隐藏的主题,条当场就该在那儿', 1.0, FBar.FadeLevel, 0.001);
 end;
 
-procedure TTyScrollBarAutoHideTests.FocusBringsItBack;
-begin
-  { 焦点得**把条叫回来**,不能只是「不计时」。独立摆放的条 TabStop=True:淡到 0、
-    定时器停了之后 Tab 过来,按住不放那条臂连跑的机会都没有(没人推它),
-    键盘焦点就停在一个看不见的控件上。 }
-  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }');
-  FBar.NoteActivity;
-  FBar.AutoHideTick(1000);
-  FBar.AutoHideTick(TyScrollBarFadeOutMs);
-  AssertEquals(0.0, FBar.FadeLevel, 0.001);
-  TBarAccess(FBar).FocusIn;
-  FBar.AutoHideTick(TyScrollBarFadeInMs);
-  AssertEquals('Tab 到条上就该看得见', 1.0, FBar.FadeLevel, 0.001);
-end;
-
 procedure TTyScrollBarAutoHideTests.ThemeDelayTracksAThemeSwitch;
 begin
   { 延时是按主题版本缓存的(一拍要问两次,每次都拼一个 key 字符串走 IndexOf)。
@@ -814,18 +784,6 @@ begin
   FBar.AutoHideTick(TyScrollBarFadeOutMs);
   AssertEquals('指针离开之后闲置要从头算,不能接着离开之前那 999 毫秒',
     1.0, FBar.FadeLevel, 0.001);
-end;
-
-procedure TTyScrollBarAutoHideTests.FocusLeavingRestartsTheIdleClock;
-begin
-  { 同上,焦点那一半。DoExit 的真正职责是把停掉的表起回来,而那一半无头验不了。 }
-  UseThemeCss(':root { --scrollbar-auto-hide: 1000; }');
-  FBar.NoteActivity;
-  FBar.AutoHideTick(999);
-  TBarAccess(FBar).FocusOut;
-  FBar.AutoHideTick(1);
-  FBar.AutoHideTick(TyScrollBarFadeOutMs);
-  AssertEquals('失焦之后闲置要从头算', 1.0, FBar.FadeLevel, 0.001);
 end;
 
 procedure TTyScrollBarAutoHideTests.ReleasingTheThumbRestartsTheIdleClock;

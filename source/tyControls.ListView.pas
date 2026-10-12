@@ -332,6 +332,9 @@ type
     { Re-entry guard: EndEdit hides the editor (which fires OnExit -> EndEdit again) and
       may SetFocus (another OnExit); without this the commit path recurses. }
     FEndingEdit:      Boolean;
+    { The size the last Resize saw. LCL calls Resize on every layout pass, size changed or
+      not, so Resize compares against these to tell a real resize (rule 4) from a pass. }
+    FResizeW, FResizeH: Integer;
     FOnEditing:       TTyListEditingEvent;
     FOnEdited:        TTyListEditedEvent;
     { grouping (SP2b) }
@@ -3674,8 +3677,15 @@ procedure TTyCustomListView.Resize;
 begin
   inherited Resize;
   { Rule 4: a resize moves cells. Commit + close the editor first. Rule 2: the base
-    constructor calls Resize before FEditor exists, so EndEdit's own nil-guard covers that. }
-  EndEdit(True);
+    constructor calls Resize before FEditor exists, so EndEdit's own nil-guard covers that.
+    Only a real resize, though: LCL calls Resize on every layout pass, and showing the
+    editor starts one, so closing on every call shut each rename the moment it opened (#54). }
+  if (Width <> FResizeW) or (Height <> FResizeH) then
+  begin
+    FResizeW := Width;
+    FResizeH := Height;
+    EndEdit(True);
+  end;
   UpdateScrollBars;
 end;
 
