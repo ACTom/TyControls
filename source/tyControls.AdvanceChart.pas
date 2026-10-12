@@ -1159,6 +1159,19 @@ type
       option changes; and the axes a replaceMerge made brand new since --
       both new views, which never transition [Batch 99] }
     FAnimOldAxisKeys, FAnimFreshAxes: TTyStringArray;
+    { THE BAR RACE [Batch 135]: the views (series view key + #1 + 'bar')
+      past their first frame -- BarView's _isFirstFrame false, its
+      `rendered` listener on; the changeAxisOrder dispatches waiting for the
+      render or the frame that made them (upstream's pending actions), each
+      with the view whose init sort it is; the render being made for
+      changeAxisOrder (1, 2 the init sort) and the one the next arming is
+      for; a relayout of the paint path whose flush is still to be looked
+      at; whether the queue is being run }
+    FRtInit: TTyStringArray;
+    FRtQueue, FRtQueueInit: TTyStringArray;
+    FRtChange, FAnimRtChange: Integer;
+    FRtAfterRelayout, FRtFlushing: Boolean;
+    FRtLens: TTyDoubleArray;
     { THE AXES' groupTransition [Batch 96]: one proxy per leaf of an axis
       group, by 'xAxis0/anid', on the series' driver; made by a full update's
       arming, dropped with every other proxy }
@@ -1394,6 +1407,26 @@ type
       payload names take the new state into their option, the chart
       updates, and axisbreakchanged follows [Batch 132] }
     procedure DoAxisBreakAction(APayload: TJSONObject);
+    { ---- the bar race (realtimeSort) [Batch 135] ---- }
+    { shouldRealtimeSort: a bar series with realtimeSort, on a category base
+      axis of a cartesian2d }
+    function RtSortOf(ASlot: Integer): Boolean;
+    function RtKeyOf(ASlot: Integer; const AViewKeys: TTyStringArray): string;
+    { Grid.update: every category axis takes its model's categorySortInfo }
+    procedure RtApplySortInfos;
+    { the render's _enableRealtimeSort on a first frame: the init sort,
+      queued }
+    procedure RtRenderPass;
+    { the `rendered` listeners: _updateSortWithinSameData of every racing
+      view past its first frame, queued }
+    procedure RtRendered;
+    { flushPendingActions: the queue dispatched in order }
+    procedure RtFlushQueue;
+    { the changeAxisOrder action: categorySortInfo on the axes it queries,
+      the update, the event }
+    procedure DoChangeAxisOrder(APayload: TJSONObject);
+    function RtCompare(A, B: Integer): Integer;
+    function AxisByTick(AAxis: TTyAxis): TTyIntegerArray;
     { THE TWO LAYERS, split by what makes them change rather than by what they
       look like. Static is everything the model decides; dynamic is what moves
       while the model stands still. }
@@ -2774,6 +2807,10 @@ type
       chart at once and publish legendselectchanged, legendselected,
       legendunselected, legendselectall or legendinverseselect. }
     function DispatchAction(const APayloadJson: string): Boolean;
+    { A category axis' categorySortInfo.ordinalNumbers as its model holds
+      it (a bar race's changeAxisOrder writes it), as JSON; 'null' for none
+      [Batch 135] }
+    function CategorySortInfoText(const AMainType: string; AIndex: Integer): string;
     { What each axis keeps from one render to the next: the category
       interval's store and the split areas' colours [Batch 101]. Read-only
       to a host; a test reads it. }
@@ -3233,7 +3270,7 @@ uses
   tyControls.AdvChart.LinePath, tyControls.AdvChart.LabelGuide,
   BGRABitmapTypes, FPImage, FPWriteJPEG, base64,
   tyControls.AdvChart.ToolboxDlg, tyControls.AdvChart.Aria,
-  tyControls.AdvChart.AxisBreak,
+  tyControls.AdvChart.AxisBreak, tyControls.AdvChart.DataTransform,
   { ecStat's three transforms, registered by its initialization [Batch 134] }
   tyControls.AdvChart.StatTransform;
 
@@ -4658,6 +4695,9 @@ begin
   else
     TyApplyAxisExtents(FOption, FBuild, FBindings, FStores, FStacks, FIndex,
       FLastPPI, FAxisZooms);
+  { THE CATEGORY AXES' SORT (Grid.update after the extents): a bar race's
+    order [Batch 135] }
+  RtApplySortInfos;
   { AND THE POLARS' SCALES, the same nice step [Batch 111] -- over the
     series on them, the stacks and the dataZoom windows [Batch 113] }
   TyPolarApplyExtents(FOption, FPolars, FBindings, FStores, FStacks, FIndex,
@@ -5975,8 +6015,8 @@ var
   var p: TTyChartAnimProxy;
   begin
     if not AProxied or (spec = nil) or (AIndex > High(spec^.TickValues)) then Exit;
-    p := AxisProxyOf(TyAxisAnimKey(akey, 'label_'
-      + TyJsNumberToString(spec^.TickValues[AIndex])));
+    p := AxisProxyOf(TyAxisAnimKey(akey,
+      TyAxisLabelAnid(spec^.TickValues[AIndex], AxisByTick(AAxis))));
     if p = nil then Exit;
     AX := p.Num('x');
     AY := p.Num('y');
@@ -6464,6 +6504,15 @@ begin
   end;
   { the update painted: `rendered` [Batch 119] }
   EmitFlush;
+  { THE BAR RACE after setOption's flush: the init sorts the render left,
+    the `rendered` listeners, then the pending dispatches [Batch 135] }
+  if FRtAfterRelayout then
+  begin
+    FRtAfterRelayout := False;
+    RtRenderPass;
+    RtRendered;
+  end;
+  RtFlushQueue;
 end;
 
 procedure TTyAdvanceChart.PaintStatic(APainter: TTyPainter; const ARect: TRect;
@@ -6508,6 +6557,8 @@ begin
     Relayout(APainter, plotF, APPI, AMeasurer);
     { the frame a lazy setOption waited for [Batch 97] }
     LazyUpdateDone;
+    { its flush is `rendered` for a bar race [Batch 135] }
+    if not FExporting then FRtAfterRelayout := True;
   end;
 
   { THE GRAPHIC COMPONENT, against the canvas; its elements at z 0 and
@@ -18139,6 +18190,7 @@ begin
       ApplyOptStyle(v, FBindings[i].SeriesIndex);
       ApplyVisualMaps(v, i, APPI);
       if i <= High(FBarCols) then v.Bar := FBarCols[i];
+      v.RealtimeSort := RtSortOf(i);
       if i <= High(FPolarBars) then v.PolarBar := FPolarBars[i];
       v.Line := TyLineSpecOf(FOption, FBindings[i].SeriesIndex);
       { the area's base is smoothed as the series it stands on is }
@@ -26935,6 +26987,12 @@ begin
     begin
       DoAxisBreakAction(p);
       Result := True;
+    end
+    { a bar race's [Batch 135] }
+    else if t = 'changeAxisOrder' then
+    begin
+      DoChangeAxisOrder(p);
+      Result := True;
     end;
   finally
     p.Free;
@@ -26945,6 +27003,9 @@ begin
   if FBrushActDepth = 0 then BrushFlush;
   { every dispatch ends with triggerUpdatedEvent [Batch 97] }
   if Result then EmitUpdated;
+  { the actions the update's render left pending: a bar race's init sort
+    [Batch 135] }
+  RtFlushQueue;
 end;
 
 { echarts.ts:2341-2357: the first element on the chain with a dataIndex --
@@ -27481,6 +27542,8 @@ begin
       FEvHover := EventTargetAt(FEvLastX, FEvLastY);
   end;
   TipReset;
+  { a racing view's first frame: its init sort, pending [Batch 135] }
+  RtRenderPass;
   { the cached picture is the old render's; the list is the new one's }
   if FStatic <> nil then FStatic.Drop;
   inherited Invalidate;
@@ -30455,6 +30518,7 @@ var
     inp.SplitWidth := PenWidth('TyAdvChartSplitLine');
     inp.Horizontal := AAxis.Horizontal;
     inp.Plot := gb.PlotXYWH;
+    inp.ByTick := AxisByTick(AAxis);
     els := TyAxisAnimElements(spec^, inp);
     akey := AAxis.MainType + IntToStr(AAxis.ComponentIndex);
     SetLength(all_, n + Length(els));
@@ -30776,6 +30840,8 @@ begin
   FAnimHasPayload := AHasPayload;
   FAnimFull := True;
   FAnimPending := True;
+  { a changeAxisOrder's render [Batch 135] }
+  FAnimRtChange := FRtChange;
 end;
 
 procedure TTyAdvanceChart.AnimFullEnd;
@@ -30946,6 +31012,18 @@ begin
     end;
     r.BaseHoriz := (FBindings[slot].BaseAxis = nil)
       or FBindings[slot].BaseAxis.Horizontal;
+    { A BAR RACE: the base axis' model for the place along it, and the
+      render's changeAxisOrder for every bar [Batch 135] }
+    r.RtSort := RtSortOf(slot);
+    if r.RtSort then
+    begin
+      r.RtAxis := TyAnimComponentModel(FOption.ComponentAt(
+        FBindings[slot].BaseAxis.MainType, FBindings[slot].BaseAxis.ComponentIndex),
+        FOption.Root, 'axis');
+      r.RtAxis.Payload := FAnimPayload;
+      r.RtAxis.HasPayload := FAnimHasPayload;
+    end;
+    r.ChangeOrder := FAnimRtChange;
     { AN UPDATE'S VIEW [Batch 90] }
     r.SeriesType := t;
     { the universal transition [Batch 136] }
@@ -31007,11 +31085,14 @@ begin
       { A MERGE keeps its axis models and their views: the same groupTransition,
         an axis whose model is new (replaced, its type changed) excepted
         [Batch 99] }
+      { THE INIT SORT'S RENDER is laid out as it lands, no groupTransition
+        (CartesianAxisView: isInitialSortFromBarRacing) [Batch 135] }
       if FAnimPrev.Valid and (FAnimPrev.FullUpdate or FAnimPrev.Merge)
-        and (FAnimOldBuild <> nil) then
+        and (FAnimOldBuild <> nil) and (FAnimRtChange <> 2) then
         AxisAnimArm(FAnimOldBuild, FBuild)
       else
         AxisAnimDrop;
+      FAnimRtChange := 0;
       FAnimFull := False;
       FAnimMerge := False;
       FAnimHasPayload := False;
@@ -31083,6 +31164,472 @@ begin
   AnimTick(AnimClock);
 end;
 
+{ ==================== the bar race (realtimeSort) [Batch 135] ==================== }
+
+function TTyAdvanceChart.RtSortOf(ASlot: Integer): Boolean;
+var s: TJSONObject;
+begin
+  Result := False;
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  { shouldRealtimeSort: realtimeSort (the series' own, ignoreParent), a
+    category base axis, a cartesian2d }
+  if (FBindings[ASlot].SeriesType <> 'bar') or not FBindings[ASlot].Resolved
+    or not FBindings[ASlot].HasAxes or (FBindings[ASlot].Cart = nil)
+    or (FBindings[ASlot].BaseAxis = nil) or (FBindings[ASlot].ValueAxis = nil) then Exit;
+  if not (FBindings[ASlot].BaseAxis.Scale is TTyOrdinalScale) then Exit;
+  { _renderLarge has no race }
+  if LargeKindOf(ASlot) <> lgkNone then Exit;
+  s := StSeriesNode(FBindings[ASlot].SeriesIndex);
+  Result := (s <> nil) and JsTruthy(s.Find('realtimeSort'));
+end;
+
+function TTyAdvanceChart.RtKeyOf(ASlot: Integer; const AViewKeys: TTyStringArray): string;
+var si: Integer;
+begin
+  si := FBindings[ASlot].SeriesIndex;
+  if (si >= 0) and (si <= High(AViewKeys)) then Result := AViewKeys[si]
+  else Result := 'x:' + IntToStr(si);
+  Result := Result + #1 + FBindings[ASlot].SeriesType;
+end;
+
+function TTyAdvanceChart.AxisByTick(AAxis: TTyAxis): TTyIntegerArray;
+begin
+  Result := nil;
+  if (AAxis <> nil) and (AAxis.Scale is TTyOrdinalScale)
+    and TTyOrdinalScale(AAxis.Scale).Sorted then
+    Result := TTyOrdinalScale(AAxis.Scale).ByTick;
+end;
+
+procedure TTyAdvanceChart.RtApplySortInfos;
+var
+  g, a: Integer;
+  gb: TTyGridBuild;
+
+  procedure Apply(AAxis: TTyAxis);
+  var
+    node, si, arr: TJSONData;
+    ords: TTyIntegerArray;
+    k: Integer;
+  begin
+    if (AAxis = nil) or not (AAxis.Scale is TTyOrdinalScale) then Exit;
+    node := FOption.ComponentAt(AAxis.MainType, AAxis.ComponentIndex);
+    si := nil;
+    if node is TJSONObject then si := TJSONObject(node).Find('categorySortInfo');
+    { setSortInfo(axis.model.get('categorySortInfo')): none drops it }
+    if not (si is TJSONObject) then
+    begin
+      TTyOrdinalScale(AAxis.Scale).SetSortInfo(nil, False);
+      Exit;
+    end;
+    ords := nil;
+    arr := TJSONObject(si).Find('ordinalNumbers');
+    if arr is TJSONArray then
+    begin
+      SetLength(ords, arr.Count);
+      for k := 0 to arr.Count - 1 do
+        if (TJSONArray(arr).Items[k].JSONType = jtNumber)
+          and not IsNan(TJSONArray(arr).Items[k].AsFloat) then
+          ords[k] := Trunc(TJSONArray(arr).Items[k].AsFloat)
+        else
+          ords[k] := -1;
+    end;
+    TTyOrdinalScale(AAxis.Scale).SetSortInfo(ords, True);
+  end;
+
+begin
+  if (FBuild = nil) or (FOption = nil) then Exit;
+  for g := 0 to FBuild.GridCount - 1 do
+  begin
+    gb := FBuild.Grid(g);
+    for a := 0 to gb.XAxisCount - 1 do Apply(gb.XAxis(a));
+    for a := 0 to gb.YAxisCount - 1 do Apply(gb.YAxis(a));
+  end;
+end;
+
+function TTyAdvanceChart.CategorySortInfoText(const AMainType: string;
+  AIndex: Integer): string;
+var node, si, arr: TJSONData;
+begin
+  Result := 'null';
+  if FOption = nil then Exit;
+  node := FOption.ComponentAt(AMainType, AIndex);
+  if not (node is TJSONObject) then Exit;
+  si := TJSONObject(node).Find('categorySortInfo');
+  if not (si is TJSONObject) then Exit;
+  arr := TJSONObject(si).Find('ordinalNumbers');
+  if arr <> nil then Result := arr.AsJSON;
+end;
+
+function TTyAdvanceChart.RtCompare(A, B: Integer): Integer;
+var d: Double;
+begin
+  { b.mappedValue - a.mappedValue: not a number is 0 to V8's sort }
+  d := FRtLens[B] - FRtLens[A];
+  if d < 0 then Result := -1
+  else if d > 0 then Result := 1
+  else Result := 0;
+end;
+
+{ the payload's ordinalNumbers: the rows' ordinals in the order of
+  _dataSort -- every row by its mapped value, descending, V8's stable sort }
+function RtOrdinalsJson(const AOrds: TTyDoubleArray; const AIdx: TTyIntegerArray): string;
+var k: Integer;
+begin
+  Result := '';
+  for k := 0 to High(AIdx) do
+  begin
+    if k > 0 then Result := Result + ',';
+    if IsNan(AOrds[AIdx[k]]) then Result := Result + 'null'
+    else Result := Result + TyJsNumberToString(AOrds[AIdx[k]]);
+  end;
+end;
+
+procedure TTyAdvanceChart.RtRenderPass;
+var
+  slot, k, n, baseCol, valCol: Integer;
+  keys, live: TTyStringArray;
+  key: string;
+  st: TTyDataStore;
+  ords: TTyDoubleArray;
+  idx: TTyIntegerArray;
+  base: TTyAxis;
+  queued: Boolean;
+begin
+  if (FBuild = nil) or (FOption = nil) then Exit;
+  keys := AnimViewKeys;
+  live := nil;
+  for slot := 0 to High(FBindings) do
+  begin
+    if FBindings[slot].SeriesType <> 'bar' then Continue;
+    key := RtKeyOf(slot, keys);
+    { a view the legend took away: _clear, its first frame again }
+    if FBindings[slot].Hidden then Continue;
+    SetLength(live, Length(live) + 1);
+    live[High(live)] := key;
+    if not RtSortOf(slot) then Continue;
+    st := nil;
+    if slot <= High(FStores) then st := FStores[slot];
+    { no data yet: it waits for some }
+    if (st = nil) or (st.Count = 0) then Continue;
+    queued := False;
+    for k := 0 to High(FRtInit) do
+      if FRtInit[k] = key then queued := True;
+    for k := 0 to High(FRtQueueInit) do
+      if FRtQueueInit[k] = key then queued := True;
+    if queued then Continue;
+    { _dispatchInitSort: the rows by the value on the other axis }
+    base := FBindings[slot].BaseAxis;
+    baseCol := -1;
+    valCol := -1;
+    if Length(st.DimsOfCoord(base.Dim)) > 0 then baseCol := st.DimsOfCoord(base.Dim)[0];
+    if Length(st.DimsOfCoord(FBindings[slot].ValueAxis.Dim)) > 0 then
+      valCol := st.DimsOfCoord(FBindings[slot].ValueAxis.Dim)[0];
+    if (baseCol < 0) or (valCol < 0) then Continue;
+    n := st.Count;
+    SetLength(ords, n);
+    SetLength(FRtLens, n);
+    SetLength(idx, n);
+    for k := 0 to n - 1 do
+    begin
+      ords[k] := st.Get(baseCol, k);
+      FRtLens[k] := st.Get(valCol, k);
+      idx[k] := k;
+    end;
+    TyJsArraySort(idx, @RtCompare);
+    SetLength(FRtQueue, Length(FRtQueue) + 1);
+    FRtQueue[High(FRtQueue)] := '{"type":"changeAxisOrder","componentType":"'
+      + base.MainType + '","isInitSort":true,"axisId":' + IntToStr(base.ComponentIndex)
+      + ',"sortInfo":{"ordinalNumbers":[' + RtOrdinalsJson(ords, idx) + ']}}';
+    SetLength(FRtQueueInit, Length(FRtQueue));
+    FRtQueueInit[High(FRtQueueInit)] := key;
+  end;
+  { the views still shown keep their state; the rest start over }
+  n := 0;
+  for k := 0 to High(FRtInit) do
+  begin
+    queued := False;
+    for slot := 0 to High(live) do
+      if live[slot] = FRtInit[k] then queued := True;
+    if not queued then Continue;
+    FRtInit[n] := FRtInit[k];
+    Inc(n);
+  end;
+  SetLength(FRtInit, n);
+end;
+
+procedure TTyAdvanceChart.RtRendered;
+var
+  slot, k, n, i, cats, baseCol, rawIdx, row, si: Integer;
+  keys: TTyStringArray;
+  key, ordJson: string;
+  st: TTyDataStore;
+  base: TTyAxis;
+  sc: TTyOrdinalScale;
+  ords, byRow: TTyDoubleArray;
+  idx, elAt: TTyIntegerArray;
+  el: TTyChartElement;
+  p: TTyChartAnimProxy;
+  last, v, t, tMax: Double;
+  known, ordMoved, differs: Boolean;
+  e: TTyRange;
+  minValue: Double;
+  minBits: Int64;
+begin
+  { a layout still to come reads its own frame }
+  if (FBuild = nil) or (FOption = nil) or (FPaintList = nil) or FDirty then Exit;
+  { Number.MIN_VALUE, the least subnormal }
+  minBits := 1;
+  Move(minBits, minValue, SizeOf(Double));
+  keys := nil;
+  for slot := 0 to High(FBindings) do
+  begin
+    if FBindings[slot].Hidden or not RtSortOf(slot) then Continue;
+    if keys = nil then keys := AnimViewKeys;
+    key := RtKeyOf(slot, keys);
+    { a first frame has no listener yet }
+    known := False;
+    for k := 0 to High(FRtInit) do
+      if FRtInit[k] = key then known := True;
+    if not known then Continue;
+    st := nil;
+    if slot <= High(FStores) then st := FStores[slot];
+    if (st = nil) or (st.Count = 0) then Continue;
+    base := FBindings[slot].BaseAxis;
+    sc := TTyOrdinalScale(base.Scale);
+    if Length(st.DimsOfCoord(base.Dim)) = 0 then Continue;
+    baseCol := st.DimsOfCoord(base.Dim)[0];
+    si := FBindings[slot].SeriesIndex;
+    n := st.Count;
+    { orderMapping: the bar's CURRENT length -- |height| on a horizontal
+      base axis, |width| on a vertical one -- its proxy's while it moves;
+      no bar, or not a number, is 0 }
+    SetLength(elAt, n);
+    for i := 0 to n - 1 do elAt[i] := -1;
+    for i := 0 to FPaintList.Count - 1 do
+    begin
+      el := FPaintList.Element(i);
+      if (el.Anim.Role = carBar) and (el.Anim.Series = si)
+        and (el.Anim.Index >= 0) and (el.Anim.Index < n) then
+        elAt[el.Anim.Index] := i;
+    end;
+    SetLength(byRow, n);
+    for i := 0 to n - 1 do
+    begin
+      byRow[i] := 0;
+      if elAt[i] < 0 then Continue;
+      el := FPaintList.Element(elAt[i]);
+      p := nil;
+      if FAnimSet <> nil then p := FAnimSet.Find(si, i, 'bar');
+      if base.Horizontal then
+      begin
+        if p <> nil then v := p.Num('shape.height') else v := el.Anim.G[3];
+      end
+      else
+      begin
+        if p <> nil then v := p.Num('shape.width') else v := el.Anim.G[2];
+      end;
+      if IsNan(v) then v := 0;
+      byRow[i] := Abs(v);
+    end;
+    { _isOrderChangedWithinSameData: tick by tick, a value above the one
+      before; a tick with no bar is Number.MIN_VALUE }
+    ordMoved := False;
+    last := MaxDouble;
+    cats := sc.CategoryCount;
+    for k := 0 to cats - 1 do
+    begin
+      v := sc.TickToOrdinal(k);
+      rawIdx := -1;
+      if not IsNan(v) then rawIdx := st.RawIndexOfOrdinal(baseCol, Trunc(v));
+      if rawIdx < 0 then v := minValue
+      else
+      begin
+        row := st.IndexOfRawIndex(rawIdx);
+        if row < 0 then v := 0 else v := byRow[row];
+      end;
+      if v > last then
+      begin
+        ordMoved := True;
+        Break;
+      end;
+      last := v;
+    end;
+    if not ordMoved then Continue;
+    { _dataSort over the rows }
+    SetLength(ords, n);
+    SetLength(FRtLens, n);
+    SetLength(idx, n);
+    for i := 0 to n - 1 do
+    begin
+      ords[i] := st.Get(baseCol, i);
+      FRtLens[i] := byRow[i];
+      idx[i] := i;
+    end;
+    TyJsArraySort(idx, @RtCompare);
+    { _isOrderDifferentInView: inside the extent, a tick whose ordinal
+      changed }
+    differs := False;
+    e := sc.GetExtent;
+    t := Math.Max(Double(0), e.Start);
+    tMax := Math.Min(e.Stop, Double(cats - 1));
+    while t <= tMax do
+    begin
+      if (Frac(t) <> 0) or (t >= n) then
+      begin
+        differs := True;
+        Break;
+      end;
+      v := sc.TickToOrdinal(t);
+      if IsNan(ords[idx[Trunc(t)]]) or IsNan(v) or (ords[idx[Trunc(t)]] <> v) then
+      begin
+        differs := True;
+        Break;
+      end;
+      t := t + 1;
+    end;
+    if not differs then Continue;
+    ordJson := RtOrdinalsJson(ords, idx);
+    SetLength(FRtQueue, Length(FRtQueue) + 1);
+    FRtQueue[High(FRtQueue)] := '{"type":"changeAxisOrder","componentType":"'
+      + base.MainType + '","axisId":' + IntToStr(base.ComponentIndex)
+      + ',"sortInfo":{"ordinalNumbers":[' + ordJson + ']}}';
+    SetLength(FRtQueueInit, Length(FRtQueue));
+    FRtQueueInit[High(FRtQueueInit)] := '';
+  end;
+end;
+
+procedure TTyAdvanceChart.RtFlushQueue;
+var
+  payload, key: string;
+begin
+  if FRtFlushing then Exit;
+  FRtFlushing := True;
+  try
+    while Length(FRtQueue) > 0 do
+    begin
+      payload := FRtQueue[0];
+      key := FRtQueueInit[0];
+      Delete(FRtQueue, 0, 1);
+      Delete(FRtQueueInit, 0, 1);
+      { the view's first frame is over: its listener is on from this render }
+      if key <> '' then
+      begin
+        SetLength(FRtInit, Length(FRtInit) + 1);
+        FRtInit[High(FRtInit)] := key;
+      end;
+      DispatchAction(payload);
+    end;
+  finally
+    FRtFlushing := False;
+  end;
+end;
+
+procedure TTyAdvanceChart.DoChangeAxisOrder(APayload: TJSONObject);
+var
+  main: string;
+  d, si: TJSONData;
+  ev: TJSONObject;
+  idx: TTyIntegerArray;
+  i, n, c: Integer;
+  ax: TTyAxis;
+  node: TJSONData;
+
+  procedure Add(AIndex: Integer);
+  var z: Integer;
+  begin
+    if (AIndex < 0) or (AIndex >= c) then Exit;
+    for z := 0 to High(idx) do
+      if idx[z] = AIndex then Exit;
+    SetLength(idx, Length(idx) + 1);
+    idx[High(idx)] := AIndex;
+  end;
+
+  function Wanted(AData: TJSONData; const AText: string): Boolean;
+  var z: Integer;
+  begin
+    Result := False;
+    if AData is TJSONArray then
+    begin
+      for z := 0 to AData.Count - 1 do
+        if (TJSONArray(AData).Items[z].JSONType in [jtString, jtNumber])
+          and (TJSONArray(AData).Items[z].AsString = AText) then Exit(True);
+    end
+    else if AData.JSONType in [jtString, jtNumber] then
+      Result := AData.AsString = AText;
+  end;
+
+begin
+  { payload.componentType || 'series' }
+  main := 'series';
+  d := APayload.Find('componentType');
+  if JsTruthy(d) and (d.JSONType = jtString) then main := d.AsString;
+  si := APayload.Find('sortInfo');
+  { eachComponent with the payload as the query: <main>Index, else <main>Id,
+    else <main>Name when one is written -- the payload's axisId is none of
+    them -- else every component of the type }
+  idx := nil;
+  c := FOption.ComponentCount(main);
+  d := APayload.Find(main + 'Index');
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    if d is TJSONArray then
+    begin
+      for i := 0 to d.Count - 1 do
+        if TJSONArray(d).Items[i].JSONType = jtNumber then
+          Add(Trunc(TJSONArray(d).Items[i].AsFloat));
+    end
+    else if d.JSONType = jtNumber then Add(Trunc(d.AsFloat));
+  end
+  else
+  begin
+    d := APayload.Find(main + 'Id');
+    if (d <> nil) and (d.JSONType <> jtNull) then
+    begin
+      for i := 0 to c - 1 do
+        if (ComponentModelId(main, i) <> '') and Wanted(d, ComponentModelId(main, i)) then Add(i);
+    end
+    else
+    begin
+      d := APayload.Find(main + 'Name');
+      if (d <> nil) and (d.JSONType <> jtNull) then
+      begin
+        for i := 0 to c - 1 do
+          if Wanted(d, ComponentModelName(main, i)) then Add(i);
+      end
+      else
+        for i := 0 to c - 1 do Add(i);
+    end;
+  end;
+  { axis.setCategorySortInfo: a category axis only, its model's option
+    takes the info as it is }
+  if JsTruthy(si) and ((main = 'xAxis') or (main = 'yAxis')) and (FBuild <> nil) then
+    for n := 0 to High(idx) do
+    begin
+      ax := FBuild.Axis(main, idx[n]);
+      if (ax = nil) or not (ax.Scale is TTyOrdinalScale) then Continue;
+      node := FOption.ComponentAt(main, idx[n]);
+      if not (node is TJSONObject) then Continue;
+      if TJSONObject(node).Find('categorySortInfo') <> nil then
+        TJSONObject(node).Delete('categorySortInfo');
+      TJSONObject(node).Add('categorySortInfo', si.Clone);
+    end;
+  { the update renders for the order: 2 for the init sort }
+  if JsTruthy(APayload.Find('isInitSort')) then FRtChange := 2 else FRtChange := 1;
+  try
+    FullUpdate;
+  finally
+    FRtChange := 0;
+  end;
+  { the event: the payload, its type the event's }
+  ev := TJSONObject(APayload.Clone);
+  try
+    ev.Strings['type'] := 'changeaxisorder';
+    EmitPayloadEvent('changeaxisorder', ev.AsJSON);
+  finally
+    ev.Free;
+  end;
+end;
+
 procedure TTyAdvanceChart.AnimTick(ANowMs: Double);
 var ran, was: Boolean;
 begin
@@ -31097,6 +31644,9 @@ begin
   begin
     EmitPlain('rendered');
     if ProgIdle then EmitPlain('finished');
+    { the bar race's `rendered` listeners read the frame [Batch 135] }
+    RtRendered;
+    RtFlushQueue;
   end;
 end;
 
@@ -31748,6 +32298,14 @@ begin
   end;
   { the update painted: `rendered` [Batch 119] }
   EmitFlush;
+  { the bar race, as RenderTo's [Batch 135] }
+  if FRtAfterRelayout then
+  begin
+    FRtAfterRelayout := False;
+    RtRenderPass;
+    RtRendered;
+  end;
+  RtFlushQueue;
 end;
 
 procedure TTyAdvanceChart.Paint;

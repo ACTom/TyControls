@@ -3439,7 +3439,8 @@ begin
       ASpec.Labels[kept] := AMeasurer.WrapToWidth(ASpec.Labels[kept],
         ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight,
         AxisScaleF(ASpec.LabelWidthLogical, APPI));
-    ASpec.Positions[kept] := AAxis.NormalizedCoord(ticks[q].Value);
+    { a category's place is its RAW ordinal's: the sort's tick [Batch 135] }
+    ASpec.Positions[kept] := AAxis.NormalizedCoord(AAxis.TickDataValue(ticks[q].Value));
     if hasBrk then
     begin
       ASpec.LabelBreakKind[kept] := Ord(ticks[q].BreakKind);
@@ -3448,11 +3449,11 @@ begin
     { on the raw rect, which is what the estimate lays out on; the final
       pass takes them again once the rect is final }
     ASpec.TickValues[kept] := ticks[q].Value;
-    ASpec.LocalCoords[kept] := AAxis.DataToLocal(ticks[q].Value);
-    { the first category, which the stride is aligned from nought against }
+    ASpec.LocalCoords[kept] := AAxis.DataToLocal(AAxis.TickDataValue(ticks[q].Value));
+    { the first TICK, which the stride is aligned from nought against
+      (makeLabelsByNumericCategoryInterval counts tick numbers) }
     if (kept = 0) and (AAxis.Scale is TTyOrdinalScale) then
-      ASpec.OrdinalStart := Round(TTyOrdinalScale(AAxis.Scale).TickToOrdinal(
-        ticks[q].Value));
+      ASpec.OrdinalStart := Round(ticks[q].Value);
     { upstream's proportion: the tick in the scale's own extent -- an
       ordinal's raw number, not band-adjusted and not inverted }
     if AAxis.Scale is TTyOrdinalScale then
@@ -3585,6 +3586,7 @@ var
   { whether the grid's estimate ran, and whether it overflowed anything }
   estimated, noPx: Boolean;
   est: TTyAxisLabelPlacementArray;
+  v: Double;
 
   { `grid.containLabel` in JavaScript's truthiness: true, a non-zero number,
     a non-empty string, any object }
@@ -3715,7 +3717,7 @@ var
         Result[q].OffInterval := offs[q];
         { IN THE AXIS' OWN FRAME, as upstream's getTicksCoords: straight from
           the axis, not a canvas coordinate taken back into it }
-        Result[q].Coord := AAxis.DataToLocal(vals[q]);
+        Result[q].Coord := AAxis.DataToLocal(AAxis.TickDataValue(vals[q]));
       end;
       TyFixOnBandMarks(Result, AAxis.OnBand, AAlign, AAxis.BandWidth,
         ASpec.OrdinalStart + n - 1);
@@ -4092,13 +4094,18 @@ begin
     begin
       specs[t].NameFrame := gb.NameFrameFor(AxisAt(gb, t), specs[t], APPI);
       specs[t].HasNameFrame := True;
+      { a tick's value through the sort; a custom label's is data already
+        [Batch 135] }
       for i := 0 to High(specs[t].TickValues) do
       begin
-        specs[t].LocalCoords[i] := AxisAt(gb, t).DataToLocal(specs[t].TickValues[i]);
-        specs[t].Positions[i] := AxisAt(gb, t).NormalizedCoord(specs[t].TickValues[i]);
+        if specs[t].CustomLabels then v := specs[t].TickValues[i]
+        else v := AxisAt(gb, t).TickDataValue(specs[t].TickValues[i]);
+        specs[t].LocalCoords[i] := AxisAt(gb, t).DataToLocal(v);
+        specs[t].Positions[i] := AxisAt(gb, t).NormalizedCoord(v);
       end;
       for i := 0 to High(specs[t].CatTickValues) do
-        specs[t].CatLocalCoords[i] := AxisAt(gb, t).DataToLocal(specs[t].CatTickValues[i]);
+        specs[t].CatLocalCoords[i] := AxisAt(gb, t).DataToLocal(
+          AxisAt(gb, t).TickDataValue(specs[t].CatTickValues[i]));
     end;
 
     { THE INTERVAL THE LAST RENDER LEFT [Batch 101]. A category axis' auto

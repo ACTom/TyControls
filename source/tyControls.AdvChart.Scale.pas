@@ -319,9 +319,9 @@ type
       ordinal number  0..CategoryCount-1 -- what a data column holds and what
                       DataToCoord takes
       tick number     what GetTicks yields, and what the EXTENT is measured in
-    The last two are the same number today. They stop being the same the moment
-    a bar race reorders categories, and ECharts' own source carries a complaint
-    about not having separated them early. Separating them now costs a rename.
+    The last two are the same number until a bar race reorders the categories
+    (SetSortInfo, upstream's setSortInfo) [Batch 135]: tick t then shows the
+    category of ordinal ByTick[t], and ordinal o sits on tick ByOrdinal[o].
 
     THE META IS BORROWED, NEVER OWNED. The axis owns it and hands the SAME
     instance to this scale and to every series dimension bound to that axis.
@@ -333,6 +333,10 @@ type
   TTyOrdinalScale = class(TTyScale)
   private
     FMeta: TTyOrdinalMeta;              // BORROWED -- never freed here
+    { THE SORT [Batch 135]: _ordinalNumbersByTick and its inverse; empty
+      while there is none }
+    FByTick, FByOrdinal: TTyIntegerArray;
+    FSorted: Boolean;
   public
     constructor Create;
     { The one place the extent comes from: [0, CategoryCount-1]. NEVER from the
@@ -361,10 +365,19 @@ type
     function GetTicks: TTyScaleTickArray; override;
     function Blank: Boolean; override;
 
-    { Identity today. The indirection stays because it is the API shape that a
-      reordering feature needs, not the feature itself. }
+    { _getTickNumber and getRawOrdinalNumber: the sort's maps for a number
+      inside them, the number itself outside (or with no sort). }
     function OrdinalToTick(AOrdinal: Double): Double;
     function TickToOrdinal(ATick: Double): Double;
+    { setSortInfo [Batch 135]: the ordinals in tick order, as many as there
+      are categories, the categories they leave after them in ascending
+      order; ASet False drops the sort. Upstream's array may name an ordinal
+      twice, or one past the categories -- read as it does (the inverse takes
+      the last tick naming it; a free one is the first the inverse does not
+      have). }
+    procedure SetSortInfo(const AOrdinals: TTyIntegerArray; ASet: Boolean);
+    property Sorted: Boolean read FSorted;
+    property ByTick: TTyIntegerArray read FByTick;
 
     function Normalize(AValue: Double): Double; override;
     function Denormalize(ANorm: Double): Double; override;
@@ -1469,13 +1482,60 @@ begin
 end;
 
 function TTyOrdinalScale.OrdinalToTick(AOrdinal: Double): Double;
+var o: Integer;
 begin
   Result := AOrdinal;
+  { ordinal >= 0 && ordinal < length, an index that is a whole number --
+    anything else reads undefined off the array upstream: not a number }
+  if not FSorted or IsNan(AOrdinal) or (AOrdinal < 0)
+    or (AOrdinal >= Length(FByOrdinal)) then Exit;
+  if Frac(AOrdinal) <> 0 then Exit(NaN);
+  o := Trunc(AOrdinal);
+  if FByOrdinal[o] < 0 then Exit(NaN);
+  Result := FByOrdinal[o];
 end;
 
 function TTyOrdinalScale.TickToOrdinal(ATick: Double): Double;
 begin
   Result := ATick;
+  if not FSorted or IsNan(ATick) or (ATick < 0) or (ATick >= Length(FByTick)) then Exit;
+  if Frac(ATick) <> 0 then Exit(NaN);
+  Result := FByTick[Trunc(ATick)];
+end;
+
+procedure TTyOrdinalScale.SetSortInfo(const AOrdinals: TTyIntegerArray; ASet: Boolean);
+var
+  all, n, t, o, unused, i: Integer;
+begin
+  FByTick := nil;
+  FByOrdinal := nil;
+  FSorted := ASet;
+  if not ASet then Exit;
+  all := CategoryCount;
+  n := Length(AOrdinals);
+  if n > all then n := all;
+  SetLength(FByTick, all);
+  { the inverse is as long as the largest ordinal it was given, and at
+    least the categories; -1 is a hole }
+  o := all;
+  for t := 0 to n - 1 do
+    if AOrdinals[t] + 1 > o then o := AOrdinals[t] + 1;
+  SetLength(FByOrdinal, o);
+  for i := 0 to High(FByOrdinal) do FByOrdinal[i] := -1;
+  for t := 0 to n - 1 do
+  begin
+    FByTick[t] := AOrdinals[t];
+    if AOrdinals[t] >= 0 then FByOrdinal[AOrdinals[t]] := t;
+  end;
+  { the categories series.data leaves out, after them in ascending order }
+  unused := 0;
+  for t := n to all - 1 do
+  begin
+    while (unused <= High(FByOrdinal)) and (FByOrdinal[unused] >= 0) do Inc(unused);
+    FByTick[t] := unused;
+    if unused > High(FByOrdinal) then SetLength(FByOrdinal, unused + 1);
+    FByOrdinal[unused] := t;
+  end;
 end;
 
 function TTyOrdinalScale.GetLabel(ATickValue: Double): string;

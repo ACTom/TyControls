@@ -132,6 +132,20 @@ unit tyControls.AdvChart.AnimView;
                  LineView._endLabelOnDuring (the place on the line where the
                  clip has got to, and the value there).
 
+  A BAR RACE [Batch 135]. A bar series with realtimeSort on a category base
+  axis of a cartesian2d (BarView.updateRealtimeAnimation) splits its shape
+  in two: the length (y / height on a horizontal base axis, x / width on a
+  vertical one) on the SERIES' timing, the place along the base axis
+  (x / width, or y / height) on the BASE AXIS model's -- both at the row,
+  initProps for a new bar and updateProps for a kept one, the axis model
+  only where the series animates. A render for changeAxisOrder starts the
+  place alone (the length tween goes on) and touches no label: a count
+  goes on, unless its last setLabelValueAnimation found no previous value
+  (prevValue null), which counts again from where it is at enter timing.
+  The init sort's render (isInitSort) sets every bar, racing or not, to its
+  layout at once (attr) under the tweens already running. A racing bar
+  clipped past the plot is kept, ignored, and its label counts on.
+
   A SUNBURST'S DRILL-DOWN [Batch 115, C6]. sunburstRootToNode is an
   updateView: every piece the new view keeps runs SunburstPiece.updateData
   -- updateProps of its whole shape, update timing with no row; a piece
@@ -228,6 +242,9 @@ type
       value while it runs, the precision, the words; and the text now }
     FValFrom, FValTo, FValInterp, FValPrec: Double;
     FValHasInterp, FValHasPrec: Boolean;
+    { the last setLabelValueAnimation found no previous value
+      (labelInnerStore.prevValue null) [Batch 135] }
+    FValNoPrev: Boolean;
     FValTpl: string;
     FText: string;
     FHasText: Boolean;
@@ -352,6 +369,14 @@ type
     { [Batch 115] this render is the series' drill-down (a sunburst's
       sunburstRootToNode): its pieces and labels transition }
     HierDrill: Boolean;
+    { A BAR RACE [Batch 135]: shouldRealtimeSort, and the base axis' model
+      (the axis tween's -- Present False where the series does not
+      animate) }
+    RtSort: Boolean;
+    RtAxis: TTyAnimModel;
+    { THE RENDER IS changeAxisOrder's: 1, 2 for the init sort (isInitSort);
+      0 for any other -- every bar series reads it }
+    ChangeOrder: Integer;
     { ---- THE UNIVERSAL TRANSITION [Batch 136, D5 UT1] ----
       isUniversalTransitionEnabled (`universalTransition: true`, or an object
       whose `enabled` is truthy); the transition key as TyUtTransitionKey
@@ -1501,6 +1526,37 @@ begin
   AP.FEnd.Text := AEnd.Caption.Text;
 end;
 
+{ BarView's updateRealtimeAnimation: the length on the series' timing --
+  unless the render is only an order's -- then the place along the base axis
+  on the axis model's (seriesAnimationModel ? baseAxis.model : null); initProps
+  for a new bar, updateProps for a kept one; both at the row [Batch 135] }
+procedure RtTween(AP: TTyChartAnimProxy; const AEl: TTyChartElement;
+  const AC: TTyChartAnimSeries; AUpdate, AChangeOrder: Boolean; ARow: Integer);
+var
+  axisT, serT: TTyAnimProps;
+  axisModel: TTyAnimModel;
+begin
+  if AEl.Anim.G[4] <> 0 then
+  begin
+    axisT := TyAnimProps([Num1('shape.x', AEl.Anim.G[0]), Num1('shape.width', AEl.Anim.G[2])]);
+    serT := TyAnimProps([Num1('shape.y', AEl.Anim.G[1]), Num1('shape.height', AEl.Anim.G[3])]);
+  end
+  else
+  begin
+    axisT := TyAnimProps([Num1('shape.y', AEl.Anim.G[1]), Num1('shape.height', AEl.Anim.G[3])]);
+    serT := TyAnimProps([Num1('shape.x', AEl.Anim.G[0]), Num1('shape.width', AEl.Anim.G[2])]);
+  end;
+  { animationModel: the series only where it animates }
+  if not AChangeOrder then
+  begin
+    if AUpdate then TyUpdateProps(AP, serT, AC.Model, TyAnimCallAt(ARow))
+    else TyInitProps(AP, serT, AC.Model, TyAnimCallAt(ARow));
+  end;
+  if AC.Enabled then axisModel := AC.RtAxis else axisModel := TyAnimNoModel;
+  if AUpdate then TyUpdateProps(AP, axisT, axisModel, TyAnimCallAt(ARow))
+  else TyInitProps(AP, axisT, axisModel, TyAnimCallAt(ARow));
+end;
+
 procedure TTyChartAnimSet.ArmOne(AList: TTyPaintList; AAt: Integer;
   const AEl: TTyChartElement; const AC: TTyChartAnimSeries; AUpdate: Boolean);
 var
@@ -1578,7 +1634,11 @@ begin
           if AEl.Anim.G[4] <> 0 then p.SetNum('shape.height', 0)
           else p.SetNum('shape.width', 0);
         end;
-        Start(props, TyAnimCallAt(idx));
+        { the init sort's render sets it to its layout; a racing bar tweens
+          its two halves apart [Batch 135] }
+        if AC.ChangeOrder = 2 then p.Attr(props)
+        else if AC.RtSort then RtTween(p, AEl, AC, False, False, idx)
+        else Start(props, TyAnimCallAt(idx));
       end;
     carRiver:
       begin
@@ -1845,6 +1905,7 @@ begin
         begin
           if not AC.Enabled then Exit;
           p := Make(AEl.Anim.Series, idx, 'label');
+          p.FValNoPrev := True;
           StartCount(p, AEl, NaN, False, AC.Model, idx);
           Exit;
         end;
@@ -2091,10 +2152,13 @@ var
     ASer, ARow: Integer; const ARole: string; const AModel: TTyAnimModel);
   var from: Double;
   begin
+    { setLabelValueAnimation: prevValue is the old value [Batch 135] }
+    if AP <> nil then AP.FValNoPrev := not AOldEl.Caption.ValHas;
     if AOldEl.Caption.ValHas and (not IsNan(AOldEl.Caption.ValNum))
       and (not IsNan(AEl.Caption.ValNum))
       and (AOldEl.Caption.ValNum = AEl.Caption.ValNum) then Exit;
     if AP = nil then AP := Make(ASer, ARow, ARole);
+    AP.FValNoPrev := not AOldEl.Caption.ValHas;
     if AP.FValHasInterp then from := AP.FValInterp
     else if AOldEl.Caption.ValHas then from := AOldEl.Caption.ValNum
     else from := NaN;
@@ -2202,7 +2266,12 @@ var
             else p.SetNum('shape.width', 0);
           end;
           p.SetFinal(props);
-          TyUpdateProps(p, props, AC.Model, TyAnimCallAt(r));
+          { the init sort's render: the layout at once, under what runs; a
+            racing bar: its two halves -- an order's render the place alone
+            [Batch 135] }
+          if AC.ChangeOrder = 2 then p.Attr(props)
+          else if AC.RtSort then RtTween(p, AEl, AC, True, AC.ChangeOrder = 1, r)
+          else TyUpdateProps(p, props, AC.Model, TyAnimCallAt(r));
         end;
       carPolarBar:
         begin
@@ -2458,7 +2527,19 @@ var
                 [Batch 103] }
               if AC.Enabled then
               begin
-                if AEl.Caption.ValAnim then
+                { AN ORDER'S RENDER styles no label: prevValue becomes the
+                  value -- the count goes on -- unless it was null, and
+                  animateLabelValue counts again from the interpolated
+                  value (or 0) at ENTER timing [Batch 135] }
+                if AEl.Caption.ValAnim and (AC.ChangeOrder <> 0) then
+                begin
+                  if (p <> nil) and p.FValNoPrev then
+                  begin
+                    if p.FValHasInterp then a := p.FValInterp else a := NaN;
+                    StartCount(p, AEl, a, False, AC.Model, r);
+                  end;
+                end
+                else if AEl.Caption.ValAnim then
                   CountOn(p, oe, AEl, s, r, 'label', AC.Model)
                 else if (AEl.Anim.HostPlus1 = 0)
                   and ((AC.SeriesType = 'pie') or AEl.Caption.LmFree

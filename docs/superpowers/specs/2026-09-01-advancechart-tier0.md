@@ -8768,7 +8768,7 @@ AN2 之后，第二次设 Option 仍被当成一次新的入场：每根柱子�
 - **[第 96 批：同一 Option 的整体更新（图例、dataZoom）已做，见 §131；notMerge 下仍不过渡，与上游一致。]** **`groupTransition` 不做**：控件只有 notMerge，上游 notMerge 下坐标轴不过渡（见上）。将来若加 merge 式的 setOption，需要把坐标轴画进动态层、按 `anid` 建代理。（第 95 批：merge 式的 setOption 已有（§130），“控件只有 notMerge”这条理由不再成立；坐标轴仍没有代理，合并下轴直接到终值，仍未做。）
 - **阶梯线**的更新直接到终值（上游补间阶梯化后的点、符号跟 `__points`，没移植）；`step` 改变时上游会整条重新入场，这里同样直接到终值。
 - 漏斗的更新只补间不透明度，多边形的点不补间；仪表盘、雷达、K 线的更新按 3B 的规则做了，没有 fixture 用例。仪表盘「没有旧指针时从 startAngle 当 rotation」的怪癖没有覆盖。
-- 端口不构建完全被裁掉的柱子，所以「旧的被裁掉、新的露出来」走的是「旧行无元素」那条路：从零长出，上游是从裁到边上的形状补间。
+- **[第 135 批：竞赛（realtimeSort）的柱整根裁掉也留着——ignore、停在出去的那条边上，爬回来时从那里补间；不竞赛的仍照这一条，见 §172]** 端口不构建完全被裁掉的柱子，所以「旧的被裁掉、新的露出来」走的是「旧行无元素」那条路：从零长出，上游是从裁到边上的形状补间。
 - 散点更新时样式里的不透明度直接设上；入场的不透明度若还在补间，上游换了 style 对象，旧补间落空，这里补间会接着写。
 - `animationTypeUpdate: 'expansion'` 的饼每次重新扫开，旧扇区当即丢掉（上游不删旧扇区，未核实）。
 - **[第 136 批：新系列开了 universalTransition 时，过渡键（缺省是模型 id）相同的旧系列的条目元素是新元素变形的起点，旧视图照样即刻离开；见 §173。]** 删除的系列、类型变了的系列即刻消失——与上游 notMerge 一致。
@@ -8789,7 +8789,7 @@ AN2、AN3 之后还有一圈动画没接：柱子标签的数值滚动、仪表�
 ### 上游的做法（`wf86/anim.md` 3A §A5、3B §B3/B11–B13；源码逐行核过，几处在真 dist 上探针确认）
 
 - **[第 103 批：写了 labelLayout 的标签 x / y 不再恒为 0（LabelManager 写回分解出的位置）；给了 x / y 的标签不跟宿主，更新时同样从旧布局滑过去，见 §138]** **LabelManager 的旧布局**：`_animateLabels` 对每个有 `oldLayout` 的文字先 `attr(oldLayout)`，再以更新时序、带 dataIndex `updateProps({x, y, rotation})`。挂在宿主上的标签（柱、符号）自身的 x/y 恒为 0，什么也不发生；真正会挪的是饼标签，它们由 `pieLabelLayout` 直接写 `label.x/y`。`oldLayout` 是**上一次布局的终值**，不是当前值：动画进行中再来一次 Option，标签先跳回上一次的终点再出发（新 fixture `pie-update.inflight` 确认）。引导线同理，`shape.points` 从旧点补间，**不带 dataIndex**。漏斗标签靠 `style.x/y` 定位，不走这条路。
-- **数值滚动**：只有 BarView 和 GaugeView 调 `setLabelValueAnimation`，别的系列写了 `label.valueAnimation` 也照样淡入。`animateLabelValue` 在值没变（`prevValue === value`）时什么都不做（进行中的那条接着跑）；否则先置 `percent = 0`，以 `percent: 1` 为目标，没有旧值时 `initProps`（入场时序）、有旧值时 `updateProps`（更新时序），during 里用 `interpolateRawValues` 算当前值写字。起点是**进行中那条的插值**，否则是旧值；`source || 0`。数值的精度：写了 `precision` 用它，否则取 `max(getPrecision(起点), getPrecision(终点))`，再 `toFixed`，打印用 `Number#toString`（`-0` 打成 `0`）。文字：没有 formatter 是值本身；模板里 `{c}` 换成插值，其余照常。数值滚动的标签不淡入。
+- **[第 135 批：changeAxisOrder 的渲染不调 setLabelValueAnimation——prevValue 不为 null 时计数接着走，为 null（还没有 setOption 给过旧值）时以入场时序从插值或 0 重新数，见 §172]** **数值滚动**：只有 BarView 和 GaugeView 调 `setLabelValueAnimation`，别的系列写了 `label.valueAnimation` 也照样淡入。`animateLabelValue` 在值没变（`prevValue === value`）时什么都不做（进行中的那条接着跑）；否则先置 `percent = 0`，以 `percent: 1` 为目标，没有旧值时 `initProps`（入场时序）、有旧值时 `updateProps`（更新时序），during 里用 `interpolateRawValues` 算当前值写字。起点是**进行中那条的插值**，否则是旧值；`source || 0`。数值的精度：写了 `precision` 用它，否则取 `max(getPrecision(起点), getPrecision(终点))`，再 `toFixed`，打印用 `Number#toString`（`-0` 打成 `0`）。文字：没有 formatter 是值本身；模板里 `{c}` 换成插值，其余照常。数值滚动的标签不淡入。
 - **折线末端标签**：`endLabel` 是折线 polyline 的 textContent。裁剪矩形入场时，`_endLabelOnDuring` 是裁剪动画的 during：取裁剪矩形的前沿（横向基轴是 `x + width`，inverse 取另一侧），`getIndexRange` 在布局点里找跨过前沿的那一段——跨在空值上（`connectNulls` 关）停在空值前一点；找到就用 `polyline.getPointOn`（直线段线性、曲线段用 `cubicRootAt` 解三次方程）定位、值在两端之间按比例插值；没找到时取第一个点，**直到动画记录里有过一次有效区间**（或 percent 为 1）才取最后一个。创建时先 `during(1)` 设到终态，done 时回到第一次记下的位置。默认 `valueAnimation: true`、`distance: 8`，横向基轴左对齐垂直居中。**更新时裁剪矩形 initProps 不带 during**，末端标签直接站在终点。
 - **标注**：markPoint 是 SymbolDraw 的新符号（缩放 0 → size/2、不透明度 0 → 自己的），markLine 是 `Line._createLine`（`shape.percent` 0 → 1，然后 `beforeUpdate` 每帧按 percent 放两端符号——缩放 = percent，终点 = `pointAt(percent)`——和标签：`d = normalize(终点 − 起点)`，percent 为 0 时 d 是零向量，`end` 位置的标签居中）。时序走标注自己的模型链（`markLine` 的 easing 默认 `linear`），**系列的 animationDuration 管不到它**；开关是 `MarkerModel.isAnimationEnabled` = 标注的 `animation` 且宿主系列 `isAnimationEnabled()`。markArea 默认 `animation: false`。探针确认：**notMerge 下标注是新视图**，每次设 Option 都重新入场；markArea 的更新补间在 notMerge 下根本到不了。
 - **effectScatter**：构造时 `updateData` 一次（缩放与样式不透明度从 0 入场），紧接着 `EffectSymbol.updateData` 又调一次：缩放以**更新时序**重新补间（第一次的轨道尚未步进就被 stopTracks 步回 0），而 `_updateCommon` 换了 style 对象——不透明度那条补间还在跑、动画器还在数，却不再影响画面。涟漪是原始 `animate('', true)`：`when(period, scale/2)` 与 `animateStyle(true).when(period, {opacity: 0})`，延迟 `-i/n·period + idx/count`（负延迟从周期中途开始，小数延迟在 epoch 量级上舍入），循环重启保留相位；**不受系列 animation 开关约束**。只在 `DIFFICULT_PROPS`（符号类型、周期、缩放、个数）变了才重启，更新时接着跑；删除即刻消失。帧间隔超过一个周期时，跨过的那一帧写出终值再按余数续上（探针：更新用例 t = 0 的涟漪都是 1.25 / 0）。
@@ -9050,7 +9050,7 @@ AN2–AN4、AN3b 之后，同一个 Option 上的整体更新仍然一帧切过�
   - 被图例关掉的柱系列走 `BarView._clear(this._model)`：模型 `isAnimationEnabled()` 时每根柱子 `removeElementWithFadeOut`（200 ms、`cubicOut`、标签当即去掉），否则 `removeAll`；`_data` 置空。折线的 `remove()` 把折线与面积当即 `removeAll`，符号走 `SymbolDraw.remove(true)`：每个符号 `fadeOut`，路径的不透明度和缩放一起到 0；散点同样。K 线、热力图、雷达、涟漪散点（`fadeOut` 直接回调）当即消失。
   - 重新打开的系列：视图的 `_data` 是空的，所有行都是新增，按**入场**时序进来——柱子从 0 长出、折线的裁剪矩形重新长、符号重新弹出。探针：折线的符号**被复用**——`SymbolDraw.remove` 不清 `_data`，重新显示时旧符号按差分更新回来，组的缩放 0 → 1 照首次渲染的规则弹出，路径的缩放与不透明度直接设回。
   - 其余系列照常差分：堆叠的另一层以**更新**时序落到新的底上；并排的柱子变宽、挪位；饼按名字过滤，被关掉的那一片淡出，其余的角度补间，标签从旧布局挪过去，重新打开的一片只扫 `endAngle`、更新时序，它的标签和引导线按 LabelManager 首次出现淡入、描入。
-- **[第 99 批：“只有同一个 Option 的整体更新才有”——合并式 setOption 也有，模型与视图都留着；被替换、类型变了的轴是新视图，见 §134。]** **坐标轴的 groupTransition**（`util/graphic.ts:406-447`）：`CartesianAxisView.render` 留着旧的 `_axisGroup`、建新的，然后对新组里每个有 `anid` 的非组元素，若旧组有同 anid 的元素，就先 `attr(旧元素当前的 x、y、rotation、shape)`、再 `updateProps` 到自己的——坐标轴模型（自己的选项 → 根 → 全局默认，即 500 ms `cubicInOut`），**不带 dataIndex**。没有配对的新元素当即出现，没有配对的旧元素当即消失；样式不动画。anid：轴线 `'line'`，刻度 `'ticks_' + 刻度值`，标签 `'label_' + 刻度值`，分隔线 `'line_' + 刻度值`（另有次刻度、次分隔线、分隔区域、轴名，见偏差）；刻度值按 JavaScript 的数字转字符串，类目轴是序号，带 boundaryGap 时最后多一条 `最后类目 + 1`。几何：轴线是 `(extent[0], 0)`、`(extent[1], 0)` 经轴组矩阵，刻度是 `(coord, 0)`、`(coord, tickDirection × length)` 经同一矩阵（**y 轴的四分之一转不精确**：`cos(π/2) = 6e-17`，刻度端点的 x 是 `60.00000000000001` 而不是 60），分隔线是网格矩形上的画布坐标；三者都过 `subPixelOptimizeLine`（`Math.round`，不是银行家舍入）。标签是分解后的 x、y、rotation。坐标轴 `onZero` 时，另一个轴的零点一挪，轴线和它的刻度就跟着滑（`legend-bar-negative`）。**notMerge 下坐标轴是新视图，不过渡**（§126 已确认）；只有同一个 Option 的整体更新才有。
+- **[第 135 批：标签的 anid 是 getTickValueOutermost，排过序的类目轴上是原始序号——标签跟着类目滑到新格子，刻度与分隔线仍按刻度号不动；changeAxisOrder 的 isInitSort 那次渲染两根直角坐标轴都不做 groupTransition，见 §172]** **[第 99 批：“只有同一个 Option 的整体更新才有”——合并式 setOption 也有，模型与视图都留着；被替换、类型变了的轴是新视图，见 §134。]** **坐标轴的 groupTransition**（`util/graphic.ts:406-447`）：`CartesianAxisView.render` 留着旧的 `_axisGroup`、建新的，然后对新组里每个有 `anid` 的非组元素，若旧组有同 anid 的元素，就先 `attr(旧元素当前的 x、y、rotation、shape)`、再 `updateProps` 到自己的——坐标轴模型（自己的选项 → 根 → 全局默认，即 500 ms `cubicInOut`），**不带 dataIndex**。没有配对的新元素当即出现，没有配对的旧元素当即消失；样式不动画。anid：轴线 `'line'`，刻度 `'ticks_' + 刻度值`，标签 `'label_' + 刻度值`，分隔线 `'line_' + 刻度值`（另有次刻度、次分隔线、分隔区域、轴名，见偏差）；刻度值按 JavaScript 的数字转字符串，类目轴是序号，带 boundaryGap 时最后多一条 `最后类目 + 1`。几何：轴线是 `(extent[0], 0)`、`(extent[1], 0)` 经轴组矩阵，刻度是 `(coord, 0)`、`(coord, tickDirection × length)` 经同一矩阵（**y 轴的四分之一转不精确**：`cos(π/2) = 6e-17`，刻度端点的 x 是 `60.00000000000001` 而不是 60），分隔线是网格矩形上的画布坐标；三者都过 `subPixelOptimizeLine`（`Math.round`，不是银行家舍入）。标签是分解后的 x、y、rotation。坐标轴 `onZero` 时，另一个轴的零点一挪，轴线和它的刻度就跟着滑（`legend-bar-negative`）。**notMerge 下坐标轴是新视图，不过渡**（§126 已确认）；只有同一个 Option 的整体更新才有。
 - **载荷动画**（`getAnimationConfig`，`basicTransition.ts:58-130`）：`ecModel.getUpdatePayload().animation` 在模型时序之后覆盖 duration、easing、delay 中写了的那几项——enter、update、**leave 都覆盖**（leave 原本恒为 200 ms `cubicOut`）。inside 的漫游（滚轮缩放、拖动平移）派发 `{easing: 'cubicOut', duration: 100}`（`roams.ts:158-168`）；slider 在 `realtime` 拖动时派发 `{cubicOut, 100, delay 0}`，拖动结束（非 realtime）、点击面板、刷选派发 `animation: null`——不覆盖，即模型的更新时序；API 的 `dispatchAction({type: 'dataZoom'})` 没有 animation，同样是模型的时序。系列、标签的淡入、坐标轴的 groupTransition 一起按载荷补间。节流（`throttle`，默认 100 ms）延后的那次调用用的是**最后一次调用**的参数。关系图、树的漫游是 `{duration: 0}`，当即到位（`graph-roam`：全程 0 个 clip）。
 - **一帧的顺序**：`dispatchAction` 同步渲染完就返回，**不 flush**；这次渲染建出的 clip 在下一帧第一次步进。动作发生时还在跑的动画，新的补间从它们**上一帧**的值出发。
 - **悬停跨过重渲染**：图例/dataZoom 的整体更新里复用的元素带着 hoverState 和 `__highByOuter`（§128 已做）。**notMerge 的 setOption 同样**：系列视图按 id/名字/序号与类型复用，元素按数据差分复用，复用的元素保留 hoverState 和 hbo 位；`updateStates` 先无过渡地套回 prevStates，列表没变就什么都不做（`bar-hover-notmerge` 高亮一直保持到 downplay）。选中丢失（新模型没有 selectedMap），系列的 `isBlured` 也是新的。zrender 的悬停目标就是那个复用的元素，下一次移动在它上面既不 out 也不 over。
@@ -12734,6 +12734,98 @@ Lazarus 3.0：最后一次全量之前用 `laz30_build.ps1`（私有 `--pcp`、`
 - `source/tyControls.StrConsts.pas`、`languages/tyControls.StrConsts.pot`、`languages/tycontrols.strconsts.zh_CN.po`、`tools/themebuilder/languages/tycontrols.zh_CN.po`：16 条字符串。
 - `tycontrols.lpk`、`tycontrols.pas`（忽略的）。
 - `tools/advchart-oracle/stat-transforms.js`、`tests/fixtures/advchart-stat-transforms.json`、`tests/test.advchart.stattransforms.pas`（新，注册在 `tytests.lpr`）。
+
+## 172. Tier 3 第一百三十五批：realtimeSort 柱状竞赛（D4，2026-10-12）
+
+路线图 D4：`realtimeSort` 柱状竞赛，前置是 A8 那一串动画（§122–§134）。在这之前端口只认得这个键：`realtimeSort: true` 的柱照普通柱画，类目轴永远按类目的原始次序排，没有 `changeAxisOrder` 动作，也没有这个事件；类目刻度（scale 的「刻度号」）和数据里的「序号」虽然在 `TTyOrdinalScale` 里分了名字（`OrdinalToTick` / `TickToOrdinal`），两个函数都是恒等。这一批对着 6.1 的 `chart/bar/BarView.ts`（`_renderNormal` 的 add / update 两路、`_enableRealtimeSort`、`_dataSort`、`_isOrderChangedWithinSameData`、`_isOrderDifferentInView`、`_updateSortWithinSameData`、`_dispatchInitSort`、`_removeOnRenderedListener`、`_clear`、`shouldRealtimeSort`、`updateRealtimeAnimation`、`clip.cartesian2d`、`elementCreator.cartesian2d`、`updateStyle`）、`chart/bar/install.ts` 的 `changeAxisOrder` 动作、`BarSeries.ts`（`createInvertedIndices`、缺省 `realtimeSort: false`）、`coord/cartesian/Axis2D.ts` 的 `setCategorySortInfo`、`coord/cartesian/Grid.ts` 的 `update`、`scale/Ordinal.ts`（`setSortInfo`、`_getTickNumber`、`getRawOrdinalNumber`、`normalize`、`getLabel`）、`coord/Axis.ts` 的 `getTicksCoords`、`coord/axisHelper.ts` 的 `getTickValueOutermost`、`component/axis/AxisBuilder.ts` 的 `buildAxisLabel`（anid）、`component/axis/CartesianAxisView.ts` 的 `isInitialSortFromBarRacing`、`label/labelStyle.ts` 的 `setLabelValueAnimation` / `animateLabelValue`、`label/LabelManager.ts` 的 `processLabelsOverall` / `_animateLabels`（`forceLabelAnimation`）、`data/SeriesData.ts` 的 `rawIndexOf` / `prepareInvertedIndex`、`model/Global.ts` 的 `eachComponent` 查询、`core/echarts.ts` 的 `setOption` / `dispatchAction` / `doDispatchAction` / `flushPendingActions`、`animation/basicTransition.ts` 的 `animateOrSetProps`，以及 zrender 的 `zrender.ts`（`_flush`、`rendered`）、`animation/Animation.ts` 的 `update`（stage 在 frame 之后）、`core/Eventful.ts` 的 `trigger` / `off` 逐行核过，在真 dist 上跑基准。§126、§127、§131 的相关处在原处标注。
+
+### 上游的做法
+
+- **谁算竞赛**（`shouldRealtimeSort`）：柱系列自己写了真值的 `realtimeSort`（`get('realtimeSort', true)`，不读根），基轴是类目轴，坐标系是 cartesian2d；极坐标、值轴、时间轴的只在 dev 构建里警告。large 模式走 `_renderLarge`，没有竞赛。系列为它建 `rawIndexOf` 要的倒排索引（最后一行赢）。
+- **第一帧**：视图的 `_isFirstFrame` 为真且数据非空时，`_dispatchInitSort` 按**另一根轴的值**（`data.get(mapDimension(otherAxis.dim))`，不是堆叠结果）给行排序，派发 `{type: 'changeAxisOrder', componentType: dim + 'Axis', isInitSort: true, axisId, sortInfo: {ordinalNumbers}}`。这是在渲染里派发的——`IN_EC_CYCLE` 为真，动作进 `_pendingActions`：`setOption` 先 `zr.flush()`（步进并 `rendered`），再 `flushPendingActions`。数据为空时什么都不做，等有数据的那次渲染。
+- **以后每一次渲染**（不是第一帧、有数据）：`_enableRealtimeSort` 往 zr 挂一个 `rendered` 监听，闭包里是这次的 data，`orderMapping(idx)` 读那根柱**当前**的形状——基轴横着是 `|shape.height|`，竖着是 `|shape.width|`，没有元素或不是数是 0。监听在 `_updateSortWithinSameData`：
+  - `_isOrderChangedWithinSameData`：从刻度 0 走到类目数 − 1，每个刻度的原始序号经倒排索引找到行（找不到是 `Number.MIN_VALUE`），读它的长度，比前一个**大**（严格 `>`，从 `Number.MAX_VALUE` 起）就算变了——相等不算。
+  - 变了就 `_dataSort`：每行 `{dataIndex, mappedValue, ordinalNumber}`，`Array.prototype.sort` 按 `b.mappedValue - a.mappedValue`（V8 的稳定排序，NaN 当 0）；`_isOrderDifferentInView` 只看轴范围 `[max(0, extent[0]), min(extent[1], 类目数 − 1)]` 里的刻度：新次序在那里有一个和当前 `getRawOrdinalNumber` 不同，才先 `_removeOnRenderedListener` 再派发 `{type, componentType, axisId, sortInfo}`（没有 `isInitSort`）。看不见的两根柱换位置不派发，监听留着，下一帧再看。
+  - **一帧的顺序**：zrender 的循环是 `animation.update()`——先步进所有 clip，再 `frame`（ECharts 的 `_onframe`），再 stage 的 `_flush`；有脏元素才刷新并 `rendered`。所以监听读的是**这一帧步进之后**的长度；它派发的动作同步渲染、不 flush，新 clip 在下一帧第一次步进。`setOption` 自己的 flush 也会 `rendered`：那时监听已由这次渲染挂上，读到的是补间的起点；这时 `IN_EC_CYCLE` 还为真，派发进 pending，`setOption` 末尾执行。动画关掉时柱子当即在终值，于是**换序发生在 `setOption` 里面**。
+  - **挂监听的怪癖**：`_onRendered` 直接被下一次渲染覆盖，旧的那个只有在它自己派发时才被摘掉——别的时候它漏在 zr 上，闭包里是旧 data。Eventful 的 `off` 换新数组、`trigger` 遍历旧数组，所以同一帧里旧监听派发之后，被摘掉的新监听照样跑一遍，但轴已经换好、长度没动，它不会再派发。只要各次 setOption 的行不变，漏掉的监听和当前的算出同一件事。
+- **动作**（`install.ts`）：`componentType || 'series'`；`eachComponent({mainType, query: payload})`——查询只认 `<main>Index` / `<main>Id` / `<main>Name`，**payload 里的 `axisId` 不算**，于是这一类的所有组件都收到；对每个 `axis.setCategorySortInfo(sortInfo)`：不是类目轴返回 false，否则 `model.option.categorySortInfo = info` 并 `scale.setSortInfo`。动作是 `update: 'update'`，整体更新；事件是 `changeaxisorder`（`registerAction` 把事件名转成小写），内容是 payload 的副本、`type` 换成事件名。`Grid.update` 每次都对类目轴 `setSortInfo(axis.model.get('categorySortInfo'))`，没有就清掉——信息住在轴模型的 option 里，合并留着它，notMerge 的新模型没有它。
+- **`setSortInfo`**：`_ordinalNumbersByTick` 取 `ordinalNumbers` 的前「类目数」个，`_ticksByOrdinalNumber` 是它的逆；`series.data` 没覆盖到的类目按序号升序补在后面（取第一个逆表里还没有的）。`_getTickNumber(序号)` 与 `getRawOrdinalNumber(刻度)`：在表的范围内查表，否则原数。`normalize(序号)` 先换成刻度，所以 `dataToCoord(序号)` 落在它被排到的那一格；刻度 `t` 的标签是 `getLabel` 的 `categories[getRawOrdinalNumber(t)]`。
+- **坐标轴**：`getTicksCoords` 的刻度坐标是 `dataToCoord(getTickValueOutermost(tick))`，刻度值是 `tick.value`——刻度、分隔线不动，anid 也还是刻度号；标签的 anid 是 `'label_' + getTickValueOutermost`，即**原始序号**：groupTransition 把「B」这个标签从旧格子滑到新格子（轴模型的更新时序，不带下标），没配上的当即出现。`CartesianAxisView.render` 遇到 `changeAxisOrder` 的 `isInitSort` 不做 groupTransition——**两根直角坐标轴都不做**，那一次排好就是排好。值轴每次整体更新都重新 groupTransition：上一次的补间还在半路，就从半路出发、按完整时长重新走（`race-h` 里值轴的标签和分隔线跟着每一次换序重启 1000 ms）。
+- **柱子**（`_renderNormal`）：竞赛的柱总是裁剪（`needsClip = clip || realtimeSortCfg`），整根裁出绘图区的不丢——元素留着、`ignore`、放在它出去的那条边上（`clip.cartesian2d`），文字随宿主不画。`forceLabelAnimation` 让被忽略的柱子的标签照样计数。补间按 `updateRealtimeAnimation` 拆成两半：长度（基轴横着是 `y / height`，竖着是 `x / width`）走**系列**的时序，沿基轴的位置（另外两个）走**基轴模型**的时序（`seriesAnimationModel ? baseAxis.model : null`），都带行号；新柱 `initProps`、留下的 `updateProps`。`changeAxisOrder` 的渲染只启动位置那一半，长度的补间接着走；`isInitSort` 的渲染对**每一根柱**（竞赛与否）`attr({shape: layout})`，不补间，已有的补间照写自己的键。不竞赛的柱在 `changeAxisOrder` 的渲染里照常整形 `updateProps`（系列的更新时序）。`animateOrSetProps` 时长不大于 0 时 `stopAnimation()` 停掉元素上的**全部**动画器——轴模型的时长是 0 时，系列那一半也被停下。
+- **标签计数**：`changeAxisOrder` 的渲染不调 `updateStyle`（于是不调 `setLabelValueAnimation`），只在 `prevValue != null` 时令 `prevValue = value`——计数接着走。而第一次渲染的 `setLabelValueAnimation` 让 `prevValue` 是 undefined；直到下一次 setOption 之前，每一次换序的渲染里 `animateLabelValue` 都看到 `prevValue !== value`，以**入场**时序（`prevValue == null` 用 `initProps`）从 `retrieve2(interpolatedValue, prevValue)` 重新数——在走的从插值，走完的从 `undefined || 0` 即 **0**。初次排序的那次渲染正是这样：计数在下一帧从 0 重新开始（`race-v`、`action-change-order` 的守卫 `action-recount`）。
+- 轴指示器的标签：`getValueLabel` 把指针的**序号**当刻度交给 `getLabel`，排过序的轴上会再映射一次（上游的怪癖；端口的 `GetLabel` 也取刻度，同样如此，没有基准）。
+
+### port 以前
+
+- `TTyOrdinalScale.OrdinalToTick` / `TickToOrdinal` 恒等；`Builder` 与 `TTyAxis.TickCoords` 直接拿刻度值当数据值去换坐标（不排序时两者相同）。
+- 竞赛的柱当普通柱：`clip` 为假就不裁；整根裁掉的柱不建元素（§126 的偏差）。
+- 没有 `changeAxisOrder`、没有 `categorySortInfo`；坐标轴标签的 anid 用刻度值。
+
+### 做法
+
+- **`tyControls.AdvChart.Scale`**：`TTyOrdinalScale.SetSortInfo(序号数组, 有无)`（`setSortInfo` 照搬：截到类目数、逆表、补上没覆盖的类目；逆表里重复的序号后一个赢、空洞答不是数）；`OrdinalToTick` / `TickToOrdinal` 是 `_getTickNumber` / `getRawOrdinalNumber`（范围外原数，小数在表内答不是数）；`Sorted`、`ByTick`。
+- **`tyControls.AdvChart.Coord`**：`TTyAxis.TickDataValue`（`getTickValueOutermost`）；`TickCoords` 经它。**`Builder`**：类目标签的 `Positions` / `LocalCoords`（估算一遍、终值一遍）、类目刻度与分隔线（`CategoryMarks`）都经它；自定义标签值本来就是数据值，不经；`OrdinalStart` 改成第一个刻度号（`makeLabelsByNumericCategoryInterval` 数的是刻度号，以前写成 `TickToOrdinal` 只因为它恒等）。
+- **`AnimAxis`**：`TyAxisLabelAnid(刻度值, ByTick)`；`TTyAxisAnimInput.ByTick`。控件画代理里的标签时用同一个函数。
+- **`Marks.BuildBars`**：`TTySeriesVisual.RealtimeSort`；竞赛的柱 `clip || realtimeSort` 时裁，整根裁掉的留在列表里、`Ignore`、形状是裁到边上的那个（零宽也留）。**`Labels`**：宿主是被忽略的柱时，标签也 `Ignore`（还在列表里，计数照走）。
+- **`AnimView`**：`TTyChartAnimSeries` 多了 `RtSort`、`RtAxis`（基轴模型，系列不动画时 `Present` 为假）、`ChangeOrder`（0、1、2 = init sort）；`RtTween` 是 `updateRealtimeAnimation`；`ArmOne` 与 `UpdateOne` 的柱：`ChangeOrder = 2` 时 `Attr` 到布局，竞赛的走 `RtTween`，其余照旧。代理多了 `FValNoPrev`（`prevValue == null`）：第一次计数置真，`CountOn` 按旧元素有没有值设它（值没变提前退出时也设）；换序的渲染里有值动画的标签只在 `FValNoPrev` 时以入场时序从插值（或 0）重新数，否则什么都不做。
+- **控件**：
+  - `RtSortOf`（`shouldRealtimeSort`，再排除 large）；视图键是系列视图键 + `#1` + 类型。`FRtInit` 记下过了第一帧的视图（`_isFirstFrame` 为假，监听挂着）；被图例关掉的（`_clear`）、不在了的视图从里面去掉。
+  - `RtApplySortInfos`：`Rebuild` 里在 `TyApplyAxisExtents` 之后，每根类目轴读自己模型 option 的 `categorySortInfo`（没有就清掉）。
+  - `RtRenderPass`：一次渲染之后，第一帧且有数据的竞赛视图按值算出 init sort 排进队列（视图在队列真正派发时才记进 `FRtInit`）。`RtRendered`：对过了第一帧的视图做 `_updateSortWithinSameData`——长度取柱代理当前的 `shape.height` / `shape.width`（没有代理取布局），`RawIndexOfOrdinal` 是倒排索引，`Number.MIN_VALUE` 由位模式取，排序用 D2 的 `TyJsArraySort`（V8 TimSort）。`RtFlushQueue` 依次 `DispatchAction`，可重入的调用直接返回。
+  - **`rendered` 落在哪**：`AnimTick` 里只要这一帧步进过（`FAnimLive`）或渐进渲染跑过，就在 `rendered` 事件之后查一次并执行队列；`RenderTo` / `Paint` 在绘制路径上重新布局过（setOption、notMerge、改尺寸）时，在 flush 和 `rendered` 之后先 `RtRenderPass` 再 `RtRendered`，然后执行队列——即 `setOption` 的「flush → rendered → pending」。`FullUpdateWith` 末尾 `RtRenderPass`，`DispatchActionObject` 末尾执行队列（`flushPendingActions`）。布局还没做（`FDirty`）时不查。
+  - `DoChangeAxisOrder`：按上面的查询规则给类目轴的模型写 `categorySortInfo`（副本），`FRtChange` 记下 1 或 2 再 `FullUpdate`，然后发 `changeaxisorder`（payload 副本、`type` 换掉）；`DispatchActionObject` 照常 `updated`。`AnimFullBegin` 把 `FRtChange` 记进 `FAnimRtChange` 给布防用；init sort 的渲染不布防坐标轴（`AxisAnimDrop`）。
+  - `CategorySortInfoText(主类型, 下标)`：模型里的 `ordinalNumbers`（JSON），测试读它。
+- 没有新的主题键、字符串、单元（测试单元除外），也没有新的 JSON 入口（动作走 `DispatchAction`，已经过 `TyJsonNestingExceeds`）。
+
+### 基准
+
+`tools/advchart-oracle/realtime-sort.js`（真 dist，node 下 SSR / SVG，400 × 300，时钟钩子 T0 = 1700000000000，`chart._ssr = false`、`env.node = false`，种子随机数，最后 `process.exit()`）→ `tests/fixtures/advchart-realtime-sort.json`（约 960 KB）。和 `merge-anim.js` 的钩子相同，只改一处：`zr.animation.stage.update = () => zr._flush(false)`，像浏览器那样每一帧步进之后 flush、`rendered`——竞赛就在那里看柱子。一帧 20 ms：先放这一帧的输入（`setOption` 合并、自己 flush；`dispatchAction`），没有 setOption 时 `NOW = T0 + t`、`zr.animation.update()`。逐帧记录：clip 数；每根类目轴模型的 `categorySortInfo`；每根柱（按系列与数据下标）的 `shape.x / y / width / height`、`ignore`、标签文字、动画器数；每个直角坐标轴 `_axisGroup` 里带 anid 的叶子（标签的 x / y / rotation 与文字，线的两端，动画器数）；每个 `changeaxisorder` 事件和它所在的帧。11 个用例、1071 帧、55 个事件：
+
+- `race-h`：画廊的竞赛——横柱、类目 y 轴 inverse、`max: 2`（前三名）、自己 300 ms，系列入场 0、更新 1000 ms linear；100 ms 时数据追上来，补间中途换序 5 次（280 … 1040），1300 ms 再一次（1740 … 2100）。被裁掉的柱忽略、标签照数。
+- `race-v`：竖柱、类目 x 轴、500 ms 的入场被 init sort 截在半路（计数下一帧从 0 重数），800 ms cubicOut 的更新里每次交叉都换序，x 轴自己 400 ms。
+- `race-v-inverse`：同上，x 轴 inverse。
+- `race-ties`：并列——V8 的稳定排序留数据次序；相等不算变；全部相等的更新什么都不派发。
+- `race-two-series`：同一类目轴两个柱系列、只有第一个竞赛——另一个按自己的更新时序跟着轴的次序整形补间。
+- `race-no-change`：不改次序的更新——除了 init sort 没有事件。
+- `race-out-of-view`：`max: 1`，两根看不见的柱换位置——次序变了但不在范围里，不派发（每帧都查）；之后一根爬进视野。
+- `race-anim-off`：`animation: false`——`setOption` 自己 flush 的 `rendered` 就看到新次序，换序发生在 `setOption` 里。
+- `race-partial-data`：六个类目、五个数据——sortInfo 五个数，scale 把 F 补在后面。
+- `race-interrupt`：两次更新相隔 120 ms——计数从插值、柱子从当前位置接着走。
+- `action-change-order`：不竞赛，手动派发 `changeAxisOrder`——轴换序、柱子按系列的时序更新、标签过渡；还没有 setOption 给计数一个旧值，所以两次换序都让计数从 0 以入场时序（200 ms）重数；第二次只写三个序号。
+
+25 条守卫（init sort 在第一个 setOption 里、`isInitSort`、按值降序、写在 y 轴上；裁掉的两根留着且忽略；补间中途的换序都不是 init；y 轴标签按 anid 移动；init sort 落在入场半路；并列稳定、全等不派发；不改次序没有事件；看不见的换位不派发、爬进来派发；动画关掉时在 setOption 里换序；五个数；手动动作的次序；计数从 0 重数；每个用例最后静止）全部成立；两次生成逐字节一致；没有 `\u0000`。
+
+### 测试
+
+`test.advchart.realtimesort`（新，注册在 `tytests.lpr`；`TY_REALTIMESORT_COUNTS=1` 时打印计数），5 个测试：
+
+- **`TestRacesAsUpstream`**：每个用例经真控件（`camAlways`、注入 `AnimNow`、SSR 量字、400 × 300）——T0 设 `Option` 并渲染，之后每帧先放输入（`SetOption(json, '')` 后渲染；`DispatchAction`），没有 setOption 就 `AnimTick`（每五帧渲染一次，渲染不改变任何被比较的量）。逐帧比：clip 数；轴模型的 sortInfo；每根柱在不在、四个形状键对它的代理（没有代理时对布局）**逐位**、`Ignore`、动画器数、标签文字（计数代理的文字，静止时列表里的）；坐标轴叶子——控件有坐标轴代理时，在不在与上游完全一致、标签的 x / y / rotation 与线的四端逐位、动画器数，没有代理时上游的叶子不许在动；事件按序、按帧、payload 逐个比。1071 帧、5810 次柱比较、14993 次叶子比较，全部对上。
+- 手写 4 个：`setSortInfo` 照 `Ordinal.ts` 注释里的例子（六个类目排四个：刻度表 2 5 3 4 0 1、逆表、`getLabel`、表外原数、`normalize` 经刻度、清掉恒等）；手动动作只写类目轴、`axisId` 不是查询键（两根 x 轴都收到）、`xAxisIndex` 是、值轴不收、事件的 payload；值轴当基轴不竞赛；`camOff` 下裁掉的竞赛柱留着且忽略、它的标签也忽略、不竞赛的照旧丢掉。
+
+首跑：手写两个断言把 `AsJSON` 的空格写死了，改成比规范化的 JSON；基准逐位全过。为了确认这不是空转，临时把 `RtTween` 的轴模型换成系列的模型跑了一次：4655 处差异（八个用例），已还原、重编。
+
+本批按规矩只跑了自己的新套件和直接碰到的代码的套件，全部通过：`TAdvChartRealtimeSortTest` 5、`TAdvChartOrdinalScaleTest` 37、`TAdvChartAnimMergeTest` 6、`TAdvChartAnimFullUpdateTest` 7。全量与变异留到 D1–D4 里程碑末；候选见 `s172.md.candidates.md`（22 个）。
+
+### 推迟与偏差
+
+- **漏掉的监听**：上游被覆盖的 `rendered` 监听带着旧 data 留在 zr 上；端口每次 `rendered` 只按当前的 data 查一次。行不变时两者相同（全部用例如此）；setOption 增删行之后，上游的旧监听可能按旧行另算一次，端口没有。
+- **dataZoom 在竞赛的类目轴上**：按上游的倒排索引与 `indexOfRawIndex` 写了，没有基准；上游 dataZoom 的窗口按序号过滤、竞赛按刻度排，二者本来就对不齐。
+- **notMerge**：端口按系列视图键 + 类型记「过了第一帧」——上游 notMerge 下视图按 id 复用，`_isFirstFrame` 留着，而新模型没有 `categorySortInfo`，轴回到原始次序，随后的 `rendered` 再派发；端口同样如此，但没有基准。replaceMerge 带来的 brand new 系列在上游是新视图（第一帧），端口仍当作已过第一帧。
+- **`rendered` 的时机**：端口在步进过的帧、绘制路径的重新布局之后查；上游在任何 flush 有脏元素时（悬停刷新也算）。改尺寸后上游下一帧才查，端口在那次绘制里查。`camAuto` 的窗口外渲染不布防不 flush，查到的是终值——上游 flush 读的是补间起点。
+- **轴指示器的标签**在排过序的轴上把序号当刻度再映射一次——照上游，没有基准。
+- 不竞赛的柱整根裁掉仍不建元素（§126 的偏差不变）；竞赛的极坐标柱、large 模式与上游一样没有竞赛。
+
+### 落地
+
+- `source/tyControls.AdvChart.Scale.pas`：`SetSortInfo`、`OrdinalToTick` / `TickToOrdinal` 的映射、`Sorted`、`ByTick`。
+- `source/tyControls.AdvChart.Coord.pas`：`TickDataValue`，`TickCoords` 经它。
+- `source/tyControls.AdvChart.Builder.pas`：类目标签的位置、类目刻度与分隔线经 `TickDataValue`；`OrdinalStart` 取刻度号。
+- `source/tyControls.AdvChart.AnimAxis.pas`：`TyAxisLabelAnid`、`TTyAxisAnimInput.ByTick`。
+- `source/tyControls.AdvChart.Marks.pas`：`TTySeriesVisual.RealtimeSort`，竞赛柱的裁剪与保留。
+- `source/tyControls.AdvChart.Labels.pas`：被忽略的柱的标签也忽略。
+- `source/tyControls.AdvChart.AnimView.pas`：`RtTween`、`ChangeOrder`、`FValNoPrev`、柱与标签的两条布防路径。
+- `source/tyControls.AdvanceChart.pas`：竞赛的状态与队列、`RtApplySortInfos`、`RtRenderPass`、`RtRendered`、`RtFlushQueue`、`DoChangeAxisOrder`、`CategorySortInfoText`，以及 `AnimTick`、`RenderTo`、`Paint`、`FullUpdateWith`、`DispatchActionObject`、`AnimFullBegin`、`AnimAfterBuild`、`AnimSeriesInfo`、`AxisAnimElementsOf`、`PaintAxis` 里的接线。
+- `tools/advchart-oracle/realtime-sort.js`、`tests/fixtures/advchart-realtime-sort.json`、`tests/test.advchart.realtimesort.pas`（新，注册在 `tytests.lpr`）。
 
 ## 173. Tier 3 第一百三十六批：universalTransition（一）（D5 UT1，2026-10-12）
 
