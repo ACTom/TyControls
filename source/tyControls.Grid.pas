@@ -16123,7 +16123,10 @@ begin
   { 一次只会有一个编辑器可见,所以按可见性挑;日期与时间共用一个控件,得看开编辑时记下的种类
     (从前一律当日期提交,时间格被写成 1899-12-30 —— 见旧 EndEdit 里的注释)。 }
   if FEditLink <> nil then Exit(FEditLink.GetValue);
-  if FSpinEditor.Visible   then Exit(IntToStr(FSpinEditor.Value));
+  { #66. Not Value: the number being typed sits in the spin edit's text until the spin edit
+    commits it -- on Enter, or in its DoExit, which runs after the OnExit that ends the edit
+    here. Read it the way that commit will, clamped to the range. }
+  if FSpinEditor.Visible   then Exit(IntToStr(FSpinEditor.StrToValue(FSpinEditor.Text)));
   if FSliderEditor.Visible then Exit(IntToStr(FSliderEditor.Position));
   if FMemoEditor.Visible   then Exit(FMemoEditor.Text);
   if FMaskEditor.Visible   then Exit(FMaskEditor.Text);
