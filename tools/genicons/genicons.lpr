@@ -982,6 +982,7 @@ procedure GDBLookupListBox(b: TBGRABitmap); begin GAdvancedListBox(b); DbBadge(b
 procedure GDBImage(b: TBGRABitmap); begin GImage(b); DbBadge(b); end;
 procedure GDBDateTimePicker(b: TBGRABitmap); begin GDateTimePicker(b); DbBadge(b); end;
 procedure GDBCalendar(b: TBGRABitmap); begin GCalendar(b); DbBadge(b); end;
+procedure GDBGrid(b: TBGRABitmap); begin GStringGrid(b); DbBadge(b); end;
 
 { TTyToolWindowBar: a window frame with an icon strip down its left edge (three small squares,
   the top one in the accent colour = the current page) and the content area to its right }
@@ -1008,7 +1009,7 @@ begin
 end;
 
 const
-  Glyphs: array[0..192] of TGlyph = (
+  Glyphs: array[0..193] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -1201,7 +1202,8 @@ const
     (Name:'TTyDBLookupListBox'; Draw:@GDBLookupListBox),
     (Name:'TTyDBImage'; Draw:@GDBImage),
     (Name:'TTyDBDateTimePicker'; Draw:@GDBDateTimePicker),
-    (Name:'TTyDBCalendar'; Draw:@GDBCalendar)
+    (Name:'TTyDBCalendar'; Draw:@GDBCalendar),
+    (Name:'TTyDBGrid'; Draw:@GDBGrid)
   );
 
 const
