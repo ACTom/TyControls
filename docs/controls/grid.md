@@ -69,7 +69,7 @@ end;
 | `AutoFillColumns` | 让**每一列**分掉多余的宽度,按各自的 `SizePriority` 加权。与 `hoAutoResize` + `AutoSizeIndex` 的区别:那一对只让**指定的一列**吸收剩余宽度 |
 | `ScrollBars` | `ssNone` / `ssHorizontal` / `ssVertical` / `ssBoth` / `ssAuto*`。存储仍是 `VertScrollBarMode` / `HorzScrollBarMode` 那一对(现已 published),这个是 LCL 同名同类型的视图 |
 | `ScrollBarAutoHide` | 两条内嵌滚动条闲下来之后要不要淡出。属性在 `TTyCustomGrid` 上,`TTyStringGrid` 与 `TTyDrawGrid` 都有。默认 `sbahDefault` = 跟主题走,三个值的含义与主题令牌见 [scrollbar.md](scrollbar.md) §7 |
-| `ShowFocusCell` / `FocusRectVisible` | 焦点格要不要铺一层区分底色(`TyGridActiveCell`;同一个存储,后者是 LCL 的名字)。**默认 True** —— 两个属性一直都写着 `default True`,但构造函数从来没设过它,所以在此之前出厂的网格里这层底色是熄的;`Options` 的出厂值断言把它照了出来。`Options` 里的对应位是 `goDrawFocusSelected` |
+| `ShowFocusCell` / `FocusRectVisible` | 焦点格要不要铺一层区分底色(`TyGridActiveCell`;同一个存储,后者是 LCL 的名字)。选区不止光标这一格时(整行/整列模式、拉出的范围、`Ctrl+点` 攒的块),光标格不铺选区底色,露出自己的底色和文字色;只选中光标这一格时,它就是选区本身,照选区画。**默认 True** —— 两个属性一直都写着 `default True`,但构造函数从来没设过它,所以在此之前出厂的网格里这层底色是熄的;`Options` 的出厂值断言把它照了出来。`Options` 里的对应位是 `goDrawFocusSelected` |
 | `HideSelectionWhenInactive` / `FadeUnfocusedSelection` | 失去焦点时选区变淡(同上)。**现已 published** |
 | `Modified` | 自建表 / 上次装载以来有没有被改过。收口在 `Cells[]` 与结构性增删行,所以粘贴、填充柄、撤销、勾选框、CSV 装载都算数。存过盘之后宿主自己写 `False` 复位 |
 | `EditorMode` | 开/关编辑器的**一个布尔**(读 = `Editing`;写 `False` 是**提交**,不是丢弃)。工具栏按钮要绑的就是它 |
@@ -635,7 +635,7 @@ TyDefaultGridOptions =
 | `goFixedVertLine` | 不收 | — | — | 我们的列头/冻结带是**主题绘制的 chrome**,分隔线取自 `TyGridHeaderSection` 的 `border-color`,不是"固定单元格的格线"。真要拆开:`RenderGridLines` 的纵向循环已经以 `M.FrozenTop` 为界,那就是现成的 seam;列头带那一段还要在 `RenderHeaderSections` 再开一处 |
 | `goFixedHorzLine` | 不收 | — | — | 同上。今天顶部固定行走正文那条横线路径,而列头带的横线是无条件画的 |
 | `goRangeSelect` | 自有 | `goRangeSelect` | 开 | 关掉后拖动/Shift 仍移动光标,但选区收在当前格。只管**手势**,`SelectRange` 等 API 不受影响 |
-| `goDrawFocusSelected` | 视图 | `ShowFocusCell` / `FocusRectVisible` | 开 | 我们的选区**恒含光标格**(`ClearSelection` 收缩到光标),所以"焦点格总是画在选中格上",这个映射是精确的而非近似 |
+| `goDrawFocusSelected` | 视图 | `ShowFocusCell` / `FocusRectVisible` | 开 | 我们的选区**恒含光标格**(`ClearSelection` 收缩到光标)。开着时,选区一旦不止光标这一格,光标格就不按选中画、显示 `TyGridActiveCell`。⚠ 方向与 LCL 相反:LCL 打开这一位是"焦点格也按选中画",关着(它的默认)时焦点格画成未选中 —— 我们出厂开的样子,相当于 LCL 出厂关的样子 |
 | `goRowSizing` | 自有 | `goRowSizing` | 开 | 仍需 `ShowIndicator` —— 行分隔线只在行头槽里认(放在单元格上会和框选抢手势) |
 | `goColSizing` | 视图 | `Header.Options` 含 `hoColumnResize` | 开 | |
 | `goRowMoving` | 自有 | `goRowMoving` | 开 | 仍需 `ShowIndicator`,且排序/过滤生效时不可拖(显示序 ≠ 数据序) |

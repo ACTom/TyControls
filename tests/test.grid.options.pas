@@ -122,6 +122,7 @@ type
     procedure TestUpDownTheEditorLeavesMoveTheCell;
     procedure TestPageKeysPageByTheRowsOnScreen;
     procedure TestAMemoCellCommittedUnchangedIsNotAnEdit;
+    procedure TestTheCursorCellStandsOutOfAWiderSelection;
     procedure TestAnArrowTheFilterBoxLeavesStaysThere;
     procedure TestHeaderPushedLookGatesThePressedFill;
     { --- 流式化 --- }
@@ -1411,6 +1412,137 @@ begin
     AssertEquals(Format('value %d: the cell is as it was', [i]), cValues[i], FGrid.Cells[0, 1]);
     AssertFalse(Format('value %d: the grid is not modified', [i]), FGrid.Modified);
     AssertEquals(Format('value %d: no undo step', [i]), undo0, FGrid.UndoCount);
+  end;
+end;
+
+{ #60. TyGridActiveCell is the cursor cell's own background -- "in whole-row selection it is how
+  you see which cell the cursor is on" (grid.md). But the selection always holds the cursor cell,
+  and its fill went over every selected cell after the cell backgrounds, the cursor's included:
+  with an opaque selection fill (the shipped themes have one) a row-select grid showed a band and
+  no cursor, while Left/Right, F2 and typing went on working on a cell nobody could see.
+
+  Whenever the selection holds more than the cursor cell -- a row, a column, a dragged range --
+  the cursor cell takes no selection layer and keeps its own background and ink. A selection
+  that IS the cursor cell is painted as before: there is nothing to tell apart. The fixture's
+  four colours are all different, so each cell's answer can only come from one place. }
+procedure TGridOptionsTest.TestTheCursorCellStandsOutOfAWiderSelection;
+var
+  ctl: TTyStyleController;
+  bmp: TBGRABitmap;
+  plainBg, selBg, actBg: TBGRAPixel;
+  selInk, actInk: TTyColor;
+  r: TRect;
+
+  procedure Render;
+  begin
+    FGrid.RenderInto(bmp);
+  end;
+
+  procedure ExpectFill(const AWhat: string; ACol, ARow: Integer; const AWant: TBGRAPixel);
+  var
+    r: TRect;
+    px: TBGRAPixel;
+  begin
+    r := FGrid.CellRectOf(ACol, ARow);
+    px := bmp.GetPixel(r.Left + 4, r.Top + 4);
+    AssertTrue(Format('%s: cell (%d,%d) is %d,%d,%d, want %d,%d,%d', [AWhat, ACol, ARow,
+      px.red, px.green, px.blue, AWant.red, AWant.green, AWant.blue]),
+      (px.red = AWant.red) and (px.green = AWant.green) and (px.blue = AWant.blue));
+  end;
+
+  procedure ExpectInk(const AWhat: string; ACol, ARow: Integer; AWant: TTyColor);
+  begin
+    AssertTrue(Format('%s: cell (%d,%d) ink', [AWhat, ACol, ARow]),
+      FGrid.AppearanceOf(ACol, ARow).TextColor = AWant);
+  end;
+
+begin
+  Build(4, 8, 80);
+  ctl := TTyStyleController.Create(FForm);
+  ctl.LoadThemeCss(
+    'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+    'TyGridCell { color: #000000; }' +
+    'TyGridCell:selected { background: #2050C0; color: #FFFFFF; }' +
+    'TyGridActiveCell { background: #F0E060; color: #101010; }');
+  FGrid.Controller := ctl;
+  FGrid.GridLineStyle := glsNone;
+  plainBg := BGRA($FF, $FF, $FF);
+  selBg := BGRA($20, $50, $C0);
+  actBg := BGRA($F0, $E0, $60);
+  selInk := TyRGB($FF, $FF, $FF);
+  actInk := TyRGB($10, $10, $10);
+  AssertTrue('setup: the focus cell is shown', FGrid.ShowFocusCell);
+  bmp := TBGRABitmap.Create;
+  try
+    { A whole row: the band, and the cursor in it. }
+    FGrid.SelectionMode := gsmRow;
+    FGrid.Col := 2;
+    FGrid.Row := 3;
+    Render;
+    ExpectFill('row: the cursor cell', 2, 3, actBg);
+    ExpectFill('row: the rest of its row', 0, 3, selBg);
+    ExpectFill('row: the rest of its row', 3, 3, selBg);
+    ExpectFill('row: the next row', 2, 4, plainBg);
+    ExpectInk('row: the cursor cell', 2, 3, actInk);
+    ExpectInk('row: the rest of its row', 1, 3, selInk);
+
+    { ShowFocusCell off: the host asked for no focus cell, so the band is one piece. }
+    FGrid.ShowFocusCell := False;
+    Render;
+    ExpectFill('row, no focus cell: the cursor cell', 2, 3, selBg);
+    ExpectInk('row, no focus cell: the cursor cell', 2, 3, selInk);
+    FGrid.ShowFocusCell := True;
+
+    { A whole column, the same. }
+    FGrid.SelectionMode := gsmColumn;
+    FGrid.Col := 1;
+    FGrid.Row := 2;
+    Render;
+    ExpectFill('column: the cursor cell', 1, 2, actBg);
+    ExpectFill('column: the rest of its column', 1, 0, selBg);
+    ExpectFill('column: the rest of its column', 1, 5, selBg);
+    ExpectFill('column: the next column', 2, 2, plainBg);
+
+    { A dragged range of cells: the cursor is its far corner, and stands out of it. }
+    FGrid.SelectionMode := gsmCell;
+    FGrid.SelectRange(0, 1, 2, 3);
+    Render;
+    ExpectFill('range: the cursor cell', 2, 3, actBg);
+    ExpectFill('range: the anchor', 0, 1, selBg);
+    ExpectFill('range: a cell inside', 1, 2, selBg);
+    ExpectInk('range: the cursor cell', 2, 3, actInk);
+    ExpectInk('range: a cell inside', 1, 2, selInk);
+    { A range across one row only, and one down one column only: either way the selection is
+      more than the cursor. }
+    FGrid.SelectRange(0, 6, 3, 6);
+    Render;
+    ExpectFill('range across a row: the cursor cell', 3, 6, actBg);
+    ExpectFill('range across a row: the anchor', 0, 6, selBg);
+    FGrid.SelectRange(1, 2, 1, 4);
+    Render;
+    ExpectFill('range down a column: the cursor cell', 1, 4, actBg);
+    ExpectFill('range down a column: the anchor', 1, 2, selBg);
+
+    { One cell selected -- the cursor's: the selection IS the cursor, painted as before. }
+    FGrid.Col := 1;
+    FGrid.Row := 5;
+    Render;
+    ExpectFill('one cell: the cursor cell is the selection', 1, 5, selBg);
+    ExpectInk('one cell: the cursor cell is the selection', 1, 5, selInk);
+
+    { Cells gathered with Ctrl+click: the cursor's own block is that one cell, but the
+      selection holds the one gathered before it as well. }
+    r := FGrid.CellRectOf(0, 0);
+    FGrid.ClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+    r := FGrid.CellRectOf(3, 6);
+    FGrid.MouseDown(mbLeft, [ssCtrl], (r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+    FGrid.MouseUp(mbLeft, [ssCtrl], (r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+    AssertEquals('setup: two blocks', 2, FGrid.SelectedRangeCount);
+    Render;
+    ExpectFill('gathered: the cursor cell', 3, 6, actBg);
+    ExpectFill('gathered: the cell gathered before', 0, 0, selBg);
+  finally
+    bmp.Free;
   end;
 end;
 
