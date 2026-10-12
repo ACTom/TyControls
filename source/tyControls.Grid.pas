@@ -2521,6 +2521,9 @@ type
     { 星级格里第 AStar 颗星(1-based)的矩形。绘制与命中共用它。 }
     function RatingStarRect(ACol, ARow, AStar: Integer): TRect;
     procedure SetRatingByPoint(ACol, ARow, X, Y: Integer); override;
+    { 星级格写成 AValue 分(0..TyGridRatingMax):点星和敲数字都走这里,
+      照常经 OnCellEdited(可否决)、SetEditText、OnRatingChange。 }
+    procedure SetRatingValue(ACol, ARow, AValue: Integer); virtual;
     { 触发省略号按钮:问宿主要新值,接受就写回(照常走 OnCellEdited)。 }
     procedure InvokeEllipsis(ACol, ARow: Integer); virtual;
     procedure DblClick; override;
@@ -9890,6 +9893,16 @@ begin
   if Key < #32 then Exit;             { 控制字符不算录入 }
   if EditorKindFor(FCol, FRow) in [gekNone, gekCheckBox] then Exit;
 
+  { 星级格:敲数字就是几分(#61),0 清空,超过 TyGridRatingMax 的不理。不开编辑器,
+    光标也不动 —— 连着录入时和文本格一样,敲完按 Enter / ↓ 去下一行。 }
+  if EditorKindFor(FCol, FRow) = gekRating then
+  begin
+    if (Key >= '0') and (Key <= Chr(Ord('0') + TyGridRatingMax)) then
+      SetRatingValue(FCol, FRow, Ord(Key) - Ord('0'));
+    Key := #0;
+    Exit;
+  end;
+
   { 按键级过滤:非法字符连编辑都不进,而不是等提交时再退回 ——
     "敲进去了又被弹回来"比"根本敲不进去"更让人困惑。 }
   vc := ValidCharsFor(FCol, FRow);
@@ -11634,26 +11647,33 @@ end;
 procedure TTyCustomStringGrid.SetRatingByPoint(ACol, ARow, X, Y: Integer);
 var
   i: Integer;
+begin
+  for i := 1 to TyGridRatingMax do
+    if PtInRect(RatingStarRect(ACol, ARow, i), Point(X, Y)) then
+    begin
+      SetRatingValue(ACol, ARow, i);
+      Exit;
+    end;
+end;
+
+procedure TTyCustomStringGrid.SetRatingValue(ACol, ARow, AValue: Integer);
+var
   oldTxt, newTxt: string;
   accept: Boolean;
 begin
   if FReadOnly then Exit;
-  for i := 1 to TyGridRatingMax do
-    if PtInRect(RatingStarRect(ACol, ARow, i), Point(X, Y)) then
-    begin
-      oldTxt := GetCellText(ACol, ARow);
-      newTxt := IntToStr(i);
-      if newTxt = oldTxt then Exit;
-      accept := True;
-      if Assigned(FOnCellEdited) then
-        FOnCellEdited(Self, ACol, ARow, oldTxt, newTxt, accept);
-      if accept then
-      begin
-        SetEditText(ACol, ARow, newTxt);
-        if Assigned(FOnRatingChange) then FOnRatingChange(Self, ACol, ARow, i);
-      end;
-      Exit;
-    end;
+  if (AValue < 0) or (AValue > TyGridRatingMax) then Exit;
+  oldTxt := GetCellText(ACol, ARow);
+  newTxt := IntToStr(AValue);
+  if newTxt = oldTxt then Exit;
+  accept := True;
+  if Assigned(FOnCellEdited) then
+    FOnCellEdited(Self, ACol, ARow, oldTxt, newTxt, accept);
+  if accept then
+  begin
+    SetEditText(ACol, ARow, newTxt);
+    if Assigned(FOnRatingChange) then FOnRatingChange(Self, ACol, ARow, AValue);
+  end;
 end;
 
 function TTyCustomStringGrid.RatingStarRect(ACol, ARow, AStar: Integer): TRect;
