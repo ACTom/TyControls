@@ -18,13 +18,13 @@
 
 ## 核实记录（执行前补）
 
-| # | 待核的事实 | 影响 |
-|---|---|---|
-| V1 | ValueListEditor 的编辑器是否都已接线：文本、整数、浮点、布尔、枚举、颜色、字体、对话框、只读。开头那段注释说只做了文本和只读，已过时。2026-10-12 主控粗看是全接了。 | 映射直接用，顺手改掉过时注释 |
-| V2 | 提交路径：`CommitEditorRow`（私有）→ `Value` → `OnValueChanged` → `PropagateUp`；字体行的子行（name/size/Bold…）各自也会触发 `OnValueChanged` | 写回挂在哪、字体整体写回还是逐项写回 |
-| V3 | `TypInfo` 在 FPC 3.2 上的读写：`GetPropList`、`GetOrdProp`、`SetOrdProp`、`GetFloatProp`、`SetStrProp`、`GetEnumName`、`SetToString`、`StringToSet`、`GetObjectProp`、`tkSet` / `tkClass` / `tkMethod` / `tkInterface`；Lazarus 3.0 下同样可用 | 只用 3.0 就有的接口 |
-| V4 | `TColor` 的识别：属性的 `PTypeInfo` 名为 `TColor` / `TGraphicsColor`；`ColorToString` / `IdentToColor` | 颜色行 |
-| V5 | LCL `RTTIGrids.TTIPropertyGrid` 的公开接口名（`TIObject`、`Filter`、`ExpandedProperties`…） | 只借名字和习惯，代码自己写 |
+| # | 待核的事实 | 影响 | 核实结果（2026-10-12，实现 agent 读源码） |
+|---|---|---|---|
+| V1 | ValueListEditor 的编辑器是否都已接线：文本、整数、浮点、布尔、枚举、颜色、字体、对话框、只读。开头那段注释说只做了文本和只读，已过时。2026-10-12 主控粗看是全接了。 | 映射直接用，顺手改掉过时注释 | **全接了。** `BeginEdit` 按种类分派：文本/整数/浮点走行内编辑器（数字模式只收数字、开头的 `-`、浮点再收一个 `.`）；布尔/枚举走下拉；颜色走色板下拉，末行「更多…」异步弹 `TySelectColor`；字体/对话框行内只读，「…」打开内置字体对话框或 `OnEditRow`；只读行、Style 复合行拒绝编辑。另外两点：控件**不处理空格键**（单选时列表不吃 Space），「空格切换布尔」要属性表格自己做；字体对话框和取色器在 `EditFontRow` / `DeferredColorDialog` 里直接创建，测试没有替身的缝，只能弹真模态框。顺带看到「更多…」「选择颜色」两处写死的中文，不是 resourcestring（未改，不在本计划范围）。 |
+| V2 | 提交路径：`CommitEditorRow`（私有）→ `Value` → `OnValueChanged` → `PropagateUp`；字体行的子行（name/size/Bold…）各自也会触发 `OnValueChanged` | 写回挂在哪、字体整体写回还是逐项写回 | 经过 `CommitEditorRow` 的：行内（`EndEdit`→`CommitEditor`）、下拉（`HandleDropCommit`→`CommitEditor`）、颜色「更多…」（`DeferredColorDialog`）、没有子行的字体行、`SetRowValue`。**绕开它的**：有子行的字体对话框（`SyncFontChildren` 直接改各子行 `Value`、逐个发 `OnValueChanged`，再 `RecomputeComposite`）；`Values[]` / `ValueFromIndex[]`（`SetValueFromIndex` 直接改）；`OnEditRow` 处理程序自己改 `ARow.Value`，控件看不见。`PropagateUp` / `RecomputeComposite` 只改派生值，不算提交。→ 钩子放进 `CommitEditorRow`、`SetValueFromIndex`，有子行的字体对话框在字体行上整体问一次（对话框选中的字体经 protected `CommitFont` 给子类，整体写回）。 |
+| V3 | `TypInfo` 在 FPC 3.2 上的读写：`GetPropList`、`GetOrdProp`、`SetOrdProp`、`GetFloatProp`、`SetStrProp`、`GetEnumName`、`SetToString`、`StringToSet`、`GetObjectProp`、`tkSet` / `tkClass` / `tkMethod` / `tkInterface`；Lazarus 3.0 下同样可用 | 只用 3.0 就有的接口 | 两套安装（`C:\lazarus`、`D:\lazarus30`）都是 FPC 3.2.2，`typinfo.pp` 逐字节相同，列出的函数都在。要注意的：`GetPropList` 自带的排序是区分大小写的 ShortString 比较，按名排序自己做（`CompareText`）；不排序时是 NameIndex 顺序（祖先在前，重新发布的属性留在首次发布的位置），这就是「声明顺序」；`GetOrdProp` / `SetToString` 只处理不超过 4 字节的集合，超过 32 个元素的集合会被截断，所以不显示；集合的元素类型可能是整数子界，不能用 `GetEnumName`；`TDateTime` / `TDate` / `TTime` 是三个 `type Double`，各有自己的 `PTypeInfo`。 |
+| V4 | `TColor` 的识别：属性的 `PTypeInfo` 名为 `TColor` / `TGraphicsColor`；`ColorToString` / `IdentToColor` | 颜色行 | `TColor = TGraphicsColor`（graphics.pp:59）是别名，FPC 3.2.2 下 RTTI 名字是 **`TGraphicsColor`**；FPC ≥ 3.2.3 时 graphtype 改用 `System.UITypes.TColor`，名字变成 `TColor`。识别先比 `PropType = TypeInfo(TGraphicsColor)`，再按两个名字兜底。`ColorToString` / `StringToColorDef` / `IdentToColor` 都在 Graphics，3.0 同样有。 |
+| V5 | LCL `RTTIGrids.TTIPropertyGrid` 的公开接口名（`TIObject`、`Filter`、`ExpandedProperties`…） | 只借名字和习惯，代码自己写 | `TTIPropertyGrid` → `TTICustomPropertyGrid` → `TCustomPropertiesGrid`（objectinspector.pp）。检查对象叫 `TIObject: TPersistent`（public，在 `TTIPropertyGrid` 里发布，靠专门的属性编辑器给下拉）；`Filter: TTypeKinds`（`TTIPropertyGrid` 用 `AllTypeKinds`，事件也显示；IDE 的对象查看器用 `DefaultOITypeKinds`）；`ExpandedProperties: TStringList`，记点号路径（`PropertyPath`：`Font.Style`）；另有 `OnModified`、`OnEditorFilter`、`CheckboxForBoolean`、`SplitterX`。我们沿用点号路径；过滤属性按 D2 叫 `TypeFilter`。 |
 
 ## 设计
 
