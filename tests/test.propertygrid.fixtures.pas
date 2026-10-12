@@ -178,6 +178,66 @@ type
     property Mode: TPGKind read FMode write SetMode;
   end;
 
+  TPGInnerB = class(TPersistent)
+  private
+    FLevel: Integer;
+  published
+    property Level: Integer read FLevel write FLevel;
+  end;
+
+  { For several objects at once (phase 2). TPGPart and TPGPartOther share Level, Caption, Active
+    and Note (Note has no setter on TPGPartOther); Kind is a TPGKind on one and an Integer on the
+    other; Special, Guarded, Flags, Inner and Items are TPGPart's alone. Guarded's setter raises
+    when Refuse is set; Inner is a TPGInner unless UseInnerB swapped it for a TPGInnerB. }
+  TPGPart = class(TPersistent)
+  private
+    FLevel: Integer;
+    FCaption: string;
+    FActive: Boolean;
+    FNote: string;
+    FKind: TPGKind;
+    FSpecial: Integer;
+    FGuarded: Integer;
+    FFlags: TPGFlags;
+    FInner: TPersistent;
+    FItems: TOwnedCollection;
+    procedure SetGuarded(AValue: Integer);
+  public
+    Refuse: Boolean;
+    GuardedTries: Integer;
+    constructor Create;
+    destructor Destroy; override;
+    procedure UseInnerB;
+  published
+    property Level: Integer read FLevel write FLevel;
+    property Caption: string read FCaption write FCaption;
+    property Active: Boolean read FActive write FActive;
+    property Note: string read FNote write FNote;
+    property Kind: TPGKind read FKind write FKind;
+    property Special: Integer read FSpecial write FSpecial;
+    property Guarded: Integer read FGuarded write SetGuarded;
+    property Flags: TPGFlags read FFlags write FFlags;
+    property Inner: TPersistent read FInner;
+    property Items: TOwnedCollection read FItems;
+  end;
+
+  TPGPartOther = class(TPersistent)
+  private
+    FLevel: Integer;
+    FCaption: string;
+    FActive: Boolean;
+    FNote: string;
+    FKind: Integer;
+  public
+    procedure SetNoteDirectly(const AValue: string);
+  published
+    property Level: Integer read FLevel write FLevel;
+    property Caption: string read FCaption write FCaption;
+    property Active: Boolean read FActive write FActive;
+    property Note: string read FNote;                          // no setter here
+    property Kind: Integer read FKind write FKind;              // same name, another type
+  end;
+
   { Drives the inline editor the way the keyboard does. }
   TPGEditAccess = class(TTyValueEdit)
   public
@@ -368,6 +428,43 @@ procedure TPGTrap.SetMode(AValue: TPGKind);
 begin
   Inc(ModeTries);
   raise Exception.Create('no mode change');
+end;
+
+{ ---- TPGPart ---- }
+
+constructor TPGPart.Create;
+var it: TPGItem;
+begin
+  inherited Create;
+  FInner := TPGInner.Create;
+  FItems := TOwnedCollection.Create(Self, TPGItem);
+  it := TPGItem(FItems.Add);
+  it.Caption := 'only';
+end;
+
+destructor TPGPart.Destroy;
+begin
+  FItems.Free;
+  FInner.Free;
+  inherited Destroy;
+end;
+
+procedure TPGPart.UseInnerB;
+begin
+  FInner.Free;
+  FInner := TPGInnerB.Create;
+end;
+
+procedure TPGPart.SetGuarded(AValue: Integer);
+begin
+  Inc(GuardedTries);
+  if Refuse then raise Exception.Create('guarded');
+  FGuarded := AValue;
+end;
+
+procedure TPGPartOther.SetNoteDirectly(const AValue: string);
+begin
+  FNote := AValue;
 end;
 
 { ---- TPGEditAccess ---- }
