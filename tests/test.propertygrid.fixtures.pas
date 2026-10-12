@@ -14,7 +14,7 @@ unit test.propertygrid.fixtures;
 interface
 
 uses
-  Classes, SysUtils, TypInfo, LCLType, Controls, Graphics, Forms,
+  Classes, SysUtils, Variants, TypInfo, LCLType, Controls, Graphics, Forms,
   tyControls.ListBox, tyControls.ValueListEditor, tyControls.PropertyGrid;
 
 type
@@ -236,6 +236,33 @@ type
     property Active: Boolean read FActive write FActive;
     property Note: string read FNote;                          // no setter here
     property Kind: Integer read FKind write FKind;              // same name, another type
+  end;
+
+  { The kinds the grid does not show itself (D6): an interface, a variant, a class that is not a
+    TPersistent (a record, or a set of more than 32 elements, cannot be published at all on FPC
+    3.2.2). Amount has a setter (counted); Level is an ordinary property beside them. }
+
+  TPGNamed = class(TInterfacedObject)
+  public
+    Name: string;
+  end;
+
+  TPGExotic = class(TPersistent)
+  private
+    FIntf: IInterface;
+    FAmount: Variant;
+    FRaw: TObject;
+    FLevel: Integer;
+    procedure SetAmount(const AValue: Variant);
+  public
+    AmountSets: Integer;
+    Named: TPGNamed;   // what Intf holds (not owned here: the interface counts it)
+    constructor Create(const AName: string);
+  published
+    property Intf: IInterface read FIntf write FIntf;
+    property Amount: Variant read FAmount write SetAmount;
+    property Raw: TObject read FRaw write FRaw;
+    property Level: Integer read FLevel write FLevel;
   end;
 
   { Drives the inline editor the way the keyboard does. }
@@ -465,6 +492,21 @@ end;
 procedure TPGPartOther.SetNoteDirectly(const AValue: string);
 begin
   FNote := AValue;
+end;
+
+constructor TPGExotic.Create(const AName: string);
+begin
+  inherited Create;
+  Named := TPGNamed.Create;
+  Named.Name := AName;
+  FIntf := Named;
+  FAmount := 12;
+end;
+
+procedure TPGExotic.SetAmount(const AValue: Variant);
+begin
+  Inc(AmountSets);
+  FAmount := AValue;
 end;
 
 { ---- TPGEditAccess ---- }

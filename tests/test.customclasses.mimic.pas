@@ -7710,6 +7710,8 @@ type
     property OnFilterProperty;
     property OnGetComponentNames;
     property OnGetPropertyRow;
+    property OnGetPropertyText;
+    property OnSetPropertyText;
     property OnPropertyChanging;
     property OnPropertyChanged;
     property OnPropertyError;

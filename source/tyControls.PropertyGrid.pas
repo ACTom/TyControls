@@ -46,7 +46,8 @@ type
     pnkCollectionItem,  // one collection item, expanded into its own properties
     pnkComponent,       // a reference to another component, picked by name
     pnkStrings,         // a TStrings, edited in a dialog
-    pnkMethod);         // an event handler, shown by name, read-only
+    pnkMethod,          // an event handler, shown by name, read-only
+    pnkCustom);         // a kind the grid does not show itself, shown through OnGetPropertyText
 
   TTyPropertyRows = class;
 
@@ -86,8 +87,24 @@ type
     property Row: TTyValueRow read FRow;
   end;
 
+  { Asked about every published property TypeFilter and HiddenProperties let through. AShow
+    arrives True for a property the grid can show and False for one it cannot by itself (an
+    interface, a variant, a record, a set of more than 32 elements, a class that is not a
+    TPersistent); such a property is listed when the handler sets AShow and OnGetPropertyText
+    supplies its text. }
   TTyFilterPropertyEvent = procedure(Sender: TObject; AInstance: TPersistent;
     const APropName: string; var AShow: Boolean) of object;
+
+  { The text a property's row shows, instead of the grid's own (set AHandled). For a kind the
+    grid does not show itself this is the only text there is. Asked for each selected object. }
+  TTyGetPropertyTextEvent = procedure(Sender: TObject; AInstance: TPersistent;
+    APropInfo: PPropInfo; var AText: string; var AHandled: Boolean) of object;
+
+  { Write AText into the property yourself (set AHandled): the grid's own conversion is skipped.
+    A kind the grid does not show itself is editable only while this is assigned. Asked for
+    each selected object; an exception goes the way a setter's does (OnPropertyError). }
+  TTySetPropertyTextEvent = procedure(Sender: TObject; AInstance: TPersistent;
+    APropInfo: PPropInfo; const AText: string; var AHandled: Boolean) of object;
 
   { The names a component-reference row offers. AList arrives holding '(none)' and the
     type-compatible components of the candidate root, each name with its component in Objects[]:
@@ -139,7 +156,11 @@ type
     FOnFilterProperty: TTyFilterPropertyEvent;
     FOnGetComponentNames: TTyGetComponentNamesEvent;
     FOnGetPropertyRow: TTyGetPropertyRowEvent;
+    FOnGetPropertyText: TTyGetPropertyTextEvent;
+    FOnSetPropertyText: TTySetPropertyTextEvent;
     procedure SetHiddenProperties(AValue: TStringList);
+    { OnGetPropertyText for AInstance's property: True with the text when it was handled. }
+    function CustomText(AInstance: TObject; APropInfo: PPropInfo; out AText: string): Boolean;
     function NewNode(AParent: TTyPropertyNode; APropInfo: PPropInfo; AKind: TTyPropertyNodeKind;
       AIndex: Integer): TTyPropertyNode;
     function Accept(AInstance: TObject; APropInfo: PPropInfo; AParent: TTyPropertyNode): Boolean;
@@ -244,6 +265,10 @@ type
       row is filled. }
     property OnGetPropertyRow: TTyGetPropertyRowEvent read FOnGetPropertyRow
       write FOnGetPropertyRow;
+    property OnGetPropertyText: TTyGetPropertyTextEvent read FOnGetPropertyText
+      write FOnGetPropertyText;
+    property OnSetPropertyText: TTySetPropertyTextEvent read FOnSetPropertyText
+      write FOnSetPropertyText;
   end;
 
   { How a write reaches the object: typed (or picked) text, a font from the font dialog, a list
@@ -295,6 +320,10 @@ type
     procedure SetOnGetComponentNames(AValue: TTyGetComponentNamesEvent);
     function GetOnGetPropertyRow: TTyGetPropertyRowEvent;
     procedure SetOnGetPropertyRow(AValue: TTyGetPropertyRowEvent);
+    function GetOnGetPropertyText: TTyGetPropertyTextEvent;
+    procedure SetOnGetPropertyText(AValue: TTyGetPropertyTextEvent);
+    function GetOnSetPropertyText: TTySetPropertyTextEvent;
+    procedure SetOnSetPropertyText(AValue: TTySetPropertyTextEvent);
     procedure RebuildRows(AKeepTop: Boolean);
   protected
     function CanCommitValue(ARow: TTyValueRow; var AText: string): Boolean; override;
@@ -369,6 +398,14 @@ type
       write SetOnGetComponentNames;
     property OnGetPropertyRow: TTyGetPropertyRowEvent read GetOnGetPropertyRow
       write SetOnGetPropertyRow;
+    { A property's text both ways, instead of the grid's own conversion -- and the way to show
+      a kind the grid does not show itself (see TTyFilterPropertyEvent). Together with
+      OnGetPropertyRow (the editor) and OnEditProperty (a dialog) an application can support any
+      type. Assigning them does not rebuild the rows; call Rebuild. }
+    property OnGetPropertyText: TTyGetPropertyTextEvent read GetOnGetPropertyText
+      write SetOnGetPropertyText;
+    property OnSetPropertyText: TTySetPropertyTextEvent read GetOnSetPropertyText
+      write SetOnSetPropertyText;
     property OnPropertyChanging: TTyPropertyChangingEvent read FOnPropertyChanging
       write FOnPropertyChanging;
     property OnPropertyChanged: TTyPropertyChangedEvent read FOnPropertyChanged
@@ -454,6 +491,8 @@ type
     property OnFilterProperty;
     property OnGetComponentNames;
     property OnGetPropertyRow;
+    property OnGetPropertyText;
+    property OnSetPropertyText;
     property OnPropertyChanging;
     property OnPropertyChanged;
     property OnPropertyError;
@@ -934,12 +973,31 @@ begin
   Result := ValueObject(ANode);
 end;
 
+{ Can the grid show this property by itself? A set wider than 32 elements does not fit the Int64
+  TypInfo hands sets through (it would be truncated, silently), and a class property only means
+  something to the grid when it is a TPersistent. The rest (interfaces, variants, records...)
+  only through OnGetPropertyText. }
+function GridShows(APropInfo: PPropInfo): Boolean;
+const
+  Showable = [tkInteger, tkChar, tkEnumeration, tkFloat, tkSet, tkMethod, tkSString, tkLString,
+    tkAString, tkWString, tkClass, tkWChar, tkBool, tkInt64, tkQWord, tkUString];
+begin
+  Result := False;
+  if not (APropInfo^.PropType^.Kind in Showable) then Exit;
+  if (APropInfo^.PropType^.Kind = tkSet)
+    and (GetTypeData(APropInfo^.PropType)^.SetSize > SizeOf(Longint)) then Exit;
+  if (APropInfo^.PropType^.Kind = tkClass)
+    and not GetTypeData(APropInfo^.PropType)^.ClassType.InheritsFrom(TPersistent) then Exit;
+  Result := True;
+end;
+
 { How a property is shown. A class property is told apart by its DECLARED class, except that a
   component which is a csSubComponent of its holder (a TTyButton's sub-parts, say) is a part of
   the object -- expanded like any sub-object -- and not a reference to pick from a list. }
 function TTyPropertyRows.KindOf(APropInfo: PPropInfo; AInstance: TObject): TTyPropertyNodeKind;
 var cls: TClass; obj: TObject;
 begin
+  if not GridShows(APropInfo) then Exit(pnkCustom);
   case APropInfo^.PropType^.Kind of
     tkMethod: Result := pnkMethod;
     tkSet:    Result := pnkSet;
@@ -970,30 +1028,37 @@ end;
 
 { Is this property shown? Readable, of a kind the grid can show and the filter lets through, not
   hidden by name or path, and not refused by OnFilterProperty. }
+function TTyPropertyRows.CustomText(AInstance: TObject; APropInfo: PPropInfo;
+  out AText: string): Boolean;
+begin
+  AText := '';
+  Result := False;
+  if not Assigned(FOnGetPropertyText) or not (AInstance is TPersistent) then Exit;
+  FOnGetPropertyText(FSender, TPersistent(AInstance), APropInfo, AText, Result);
+  if not Result then AText := '';
+end;
+
+{ Is this property shown? Readable, of a kind the filter lets through, not hidden by name or
+  path, and then OnFilterProperty's say -- asked about every such property, the ones the grid
+  cannot show by itself too (AShow False on the way in): those are listed when the handler
+  turns AShow on and OnGetPropertyText gives them a text. }
 function TTyPropertyRows.Accept(AInstance: TObject; APropInfo: PPropInfo;
   AParent: TTyPropertyNode): Boolean;
-const
-  Showable = [tkInteger, tkChar, tkEnumeration, tkFloat, tkSet, tkMethod, tkSString, tkLString,
-    tkAString, tkWString, tkClass, tkWChar, tkBool, tkInt64, tkQWord, tkUString];
 var
-  path: string;
+  path, t: string;
+  shows: Boolean;
 begin
   Result := False;
   if APropInfo^.GetProc = nil then Exit;
-  if not (APropInfo^.PropType^.Kind in Showable) then Exit;
   if not (APropInfo^.PropType^.Kind in FTypeFilter) then Exit;
-  { A set wider than 32 elements does not fit the Int64 TypInfo hands sets through (it would be
-    truncated, silently), and a class property only means something when it is a TPersistent. }
-  if (APropInfo^.PropType^.Kind = tkSet)
-    and (GetTypeData(APropInfo^.PropType)^.SetSize > SizeOf(Longint)) then Exit;
-  if (APropInfo^.PropType^.Kind = tkClass)
-    and not GetTypeData(APropInfo^.PropType)^.ClassType.InheritsFrom(TPersistent) then Exit;
   if AParent <> nil then path := AParent.Path + '.' + APropInfo^.Name else path := APropInfo^.Name;
   if (FHiddenProperties.IndexOf(APropInfo^.Name) >= 0)
     or (FHiddenProperties.IndexOf(path) >= 0) then Exit;
-  Result := True;
+  shows := GridShows(APropInfo);
+  Result := shows;
   if Assigned(FOnFilterProperty) and (AInstance is TPersistent) then
     FOnFilterProperty(FSender, TPersistent(AInstance), APropInfo^.Name, Result);
+  if Result and not shows then Result := CustomText(AInstance, APropInfo, t);
 end;
 
 function TTyPropertyRows.SharedByAll(const AInstances: array of TObject; APropInfo: PPropInfo;
@@ -1194,6 +1259,8 @@ begin
   case ANode.FKind of
     pnkMethod:
       row.EditorKind := vekReadOnly;
+    pnkCustom:
+      row.EditorKind := vekText;   // OnGetPropertyRow can make it anything else
     pnkSetElement:
       row.EditorKind := vekBoolean;
     pnkFont:
@@ -1247,6 +1314,9 @@ begin
     { Written whole into the object they hold when there is no setter. }
     pnkFont, pnkStrings:
       row.ReadOnly := False;
+    { Written only by the application, through OnSetPropertyText. }
+    pnkCustom:
+      row.ReadOnly := not Assigned(FOnSetPropertyText);
   else
     row.ReadOnly := ANode.FNoSetter;
   end;
@@ -1254,7 +1324,7 @@ begin
 end;
 
 function TTyPropertyRows.ReadTextIn(ANode: TTyPropertyNode; ARoot: Integer): string;
-var h, obj: TObject; pi: PPropInfo;
+var h, obj: TObject; pi: PPropInfo; t: string;
 begin
   Result := '';
   if ANode = nil then Exit;
@@ -1268,6 +1338,8 @@ begin
     h := HolderIn(ANode, ARoot);
     pi := PropInfoIn(ANode, h, ARoot);
     if pi = nil then Exit;
+    { The application's text first, for any property (a set's element is part of its set). }
+    if (ANode.FKind <> pnkSetElement) and CustomText(h, pi, t) then Exit(t);
     case ANode.FKind of
       pnkValue:  Result := SimpleText(h, pi);
       pnkMethod: Result := MethodText(h, pi);
@@ -1318,11 +1390,20 @@ var
   sz: Integer;
   comp: TComponent;
   fnt: TFont;
+  handled: Boolean;
 begin
   if AHolder = nil then
     raise EPropertyError.CreateFmt(rsTyPropGridInvalidValue, [AText, ANode.Name]);
   if APropInfo = nil then
     raise EPropertyError.CreateFmt(rsTyPropGridInvalidValue, [AText, ANode.Name]);
+  { The application's conversion first (a set's element is written as part of its set). }
+  if (ANode.FKind <> pnkSetElement) and Assigned(FOnSetPropertyText)
+    and (AHolder is TPersistent) then
+  begin
+    handled := False;
+    FOnSetPropertyText(FSender, TPersistent(AHolder), APropInfo, AText, handled);
+    if handled then Exit;
+  end;
   if ANode.FKind = pnkFont then
   begin
     { Typed (or SetRowValue'd) 'Name, Size': the font's other attributes stay as they are. }
@@ -1948,6 +2029,26 @@ end;
 procedure TTyCustomPropertyGrid.SetOnGetPropertyRow(AValue: TTyGetPropertyRowEvent);
 begin
   FRows.OnGetPropertyRow := AValue;
+end;
+
+function TTyCustomPropertyGrid.GetOnGetPropertyText: TTyGetPropertyTextEvent;
+begin
+  Result := FRows.OnGetPropertyText;
+end;
+
+procedure TTyCustomPropertyGrid.SetOnGetPropertyText(AValue: TTyGetPropertyTextEvent);
+begin
+  FRows.OnGetPropertyText := AValue;
+end;
+
+function TTyCustomPropertyGrid.GetOnSetPropertyText: TTySetPropertyTextEvent;
+begin
+  Result := FRows.OnSetPropertyText;
+end;
+
+procedure TTyCustomPropertyGrid.SetOnSetPropertyText(AValue: TTySetPropertyTextEvent);
+begin
+  FRows.OnSetPropertyText := AValue;
 end;
 
 procedure TTyCustomPropertyGrid.Rebuild;
