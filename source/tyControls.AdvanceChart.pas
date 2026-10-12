@@ -49,6 +49,7 @@ uses
   tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
   tyControls.AdvChart.Gauge, tyControls.AdvChart.Radar,
   tyControls.AdvChart.Calendar, tyControls.AdvChart.Tree,
+  tyControls.AdvChart.Geo,
   tyControls.AdvChart.Sunburst, tyControls.AdvChart.Treemap,
   tyControls.AdvChart.Sankey,
   tyControls.AdvChart.Graph,
@@ -587,6 +588,9 @@ type
     FRadars: array of TTyRadar;
     { THE CALENDARS, one per component, laid out on the canvas. [Batch 69] }
     FCalendars: array of TTyCalendar;
+    { THE GEOS, one per geo component, laid out on the canvas: the
+      coordinate system and the map it draws [Batch 146] }
+    FGeos: array of TTyGeo;
     { THE TREES, laid out per slot -- an empty record where the slot is no
       tree. [Batch 73] }
     FTrees: array of TTyTreeSolved;
@@ -1998,6 +2002,10 @@ type
     procedure SolveCalendars(APPI: Integer);
     procedure FreeCalendars;
     function CalendarInk: TTyCalendarInk;
+    { the geo components [Batch 146] }
+    procedure SolveGeos(APPI: Integer);
+    procedure FreeGeos;
+    function GeoInk: TTyGeoInk;
     procedure FreeRadars;
     { the polars go with the build [Batch 111] }
     procedure FreePolars;
@@ -2207,6 +2215,8 @@ type
     function ConvertOnGrid(AGrid: TTyGridBuild; const AF: TTyParsedFinder;
       AValue: TJSONData; AFrom: Boolean): TTyConvertResult;
     function ConvertOnCalendar(ACal: TTyCalendar; AValue: TJSONData;
+      AFrom: Boolean): TTyConvertResult;
+    function ConvertOnGeo(AGeo: TTyGeo; AValue: TJSONData;
       AFrom: Boolean): TTyConvertResult;
     function ConvertOnView(AView: TTyGraphView; AValue: TJSONData;
       AFrom: Boolean): TTyConvertResult;
@@ -3374,6 +3384,11 @@ type
     function RadarLayout(AIndex: Integer): TTyRadar;
     { Calendar component AIndex as the last render laid it out, or nil. }
     function CalendarLayout(AIndex: Integer): TTyCalendar;
+    { Geo component AIndex as the last render laid it out -- the coordinate
+      system with its map's regions and its view -- or nil. Owned by the
+      control and gone at the next layout. [Batch 146] }
+    function GeoCount: Integer;
+    function GeoLayout(AIndex: Integer): TTyGeo;
     { Polar component AIndex as the last render laid it out -- its centre,
       its two axes and both axis views -- or nil [Batch 111]. }
     function PolarCount: Integer;
@@ -3894,6 +3909,7 @@ begin
     stop existing. }
   FreeRadars;
   FreeCalendars;
+  FreeGeos;
   FreeGraphs;
   FreeTreeViews;
   FreePolars;
@@ -5907,6 +5923,8 @@ begin
   { BEFORE THE PIES: a pie on a calendar is laid out in a day's cell
     [Batch 72] }
   SolveCalendars(APPI);
+  { THE GEOS: their maps and views [Batch 146] }
+  SolveGeos(APPI);
   SolvePies;
   SolveFunnels;
   SolveGauges(APPI);
@@ -10323,6 +10341,48 @@ end;
 { THE CALENDARS: each laid out on the whole canvas, as upstream's is -- its
   box is getLayoutRect against the chart's width and height, with no margin
   and nothing else shrinking it. [Batch 69] }
+procedure TTyAdvanceChart.FreeGeos;
+var i: Integer;
+begin
+  for i := 0 to High(FGeos) do FreeAndNil(FGeos[i]);
+  FGeos := nil;
+end;
+
+procedure TTyAdvanceChart.SolveGeos(APPI: Integer);
+var i, n: Integer;
+begin
+  FreeGeos;
+  n := 0;
+  if FOption <> nil then n := FOption.ComponentCount('geo');
+  if n = 0 then Exit;
+  SetLength(FGeos, n);
+  for i := 0 to n - 1 do
+  begin
+    FGeos[i] := TTyGeo.Create(FOption, i);
+    FGeos[i].Resize(FLastRect, APPI);
+  end;
+end;
+
+{ THE GEO'S INK: the area and its rim from the skin's geo keys, the labels
+  from the geo label key. Upstream's tokens are backgroundTint (a pale tint at
+  half), border and tertiary. }
+function TTyAdvanceChart.GeoInk: TTyGeoInk;
+var
+  model: TTyStyleModel;
+  st: TTyStyleSet;
+begin
+  Result := Default(TTyGeoInk);
+  model := ActiveController.Model;
+  st := model.ResolveStyle('TyAdvChartGeoArea', '', []);
+  Result.AreaFill := TTyChartColor(st.Background.Color);
+  Result.Border := TTyChartColor(st.BorderColor);
+  st := model.ResolveStyle('TyAdvChartGeoLabel', '', []);
+  Result.LabelColour := TTyChartColor(st.TextColor);
+  Result.LabelFontName := st.FontName;
+  Result.LabelFontSizeLogical := ResolveFontSize(st);
+  Result.LabelFontWeight := st.FontWeight;
+end;
+
 procedure TTyAdvanceChart.SolveCalendars(APPI: Integer);
 var i, n: Integer;
 begin
@@ -13970,6 +14030,18 @@ begin
   Result := nil;
   if (AIndex >= 0) and (AIndex <= High(FCalendars)) then
     Result := FCalendars[AIndex];
+end;
+
+function TTyAdvanceChart.GeoCount: Integer;
+begin
+  Result := Length(FGeos);
+end;
+
+function TTyAdvanceChart.GeoLayout(AIndex: Integer): TTyGeo;
+begin
+  Result := nil;
+  if (AIndex >= 0) and (AIndex <= High(FGeos)) then
+    Result := FGeos[AIndex];
 end;
 
 function TTyAdvanceChart.TitleCount: Integer;
@@ -18616,6 +18688,10 @@ begin
     for i := 0 to High(FCalendars) do
       Inc(drawn, TyBuildCalendar(FCalendars[i], CalendarInk, AMeasurer, APPI, list));
   if drawn > furniture then ViewDrew(cvCalendar);
+  furniture := drawn;
+  { THE GEOS' MAPS, a component group ahead of every series [Batch 146] }
+  for i := 0 to High(FGeos) do
+    Inc(drawn, TyBuildGeo(FGeos[i], GeoInk, AMeasurer, APPI, list));
   furniture := drawn;
   { nothing is large until the loop below says so [Batch 117] }
   SetLength(FLargeKinds, Length(FBindings));
@@ -27016,6 +27092,25 @@ end;
 { Calendar.convertToPixel: dataToPoint of the value (its first element when
   it is an array), clamped to the range; convertFromPixel: the time of the
   day under the point, nothing off the range }
+{ Geo.convertToPixel / convertFromPixel: dataToPoint of a region's name or
+  a [lng, lat] pair, pointToData of a pixel; upstream's undefined (a name no
+  region has, a projection's null point) answers nothing [Batch 146] }
+function TTyAdvanceChart.ConvertOnGeo(AGeo: TTyGeo; AValue: TJSONData;
+  AFrom: Boolean): TTyConvertResult;
+var
+  p: TTyPointF;
+  q: TTyGeoPt;
+begin
+  Result := TyConvertNone;
+  if AFrom then
+  begin
+    if TyJsonNullish(AValue) then Exit;
+    if AGeo.FromPixelJson(AValue, q) then Result := TyConvertXY(q.X, q.Y);
+    Exit;
+  end;
+  if AGeo.ToPixelJson(AValue, p) then Result := TyConvertXY(p.X, p.Y);
+end;
+
 function TTyAdvanceChart.ConvertOnCalendar(ACal: TTyCalendar; AValue: TJSONData;
   AFrom: Boolean): TTyConvertResult;
 var
@@ -27106,6 +27201,14 @@ begin
     for g := 0 to FBuild.GridCount - 1 do
     begin
       Result := ConvertOnGrid(FBuild.Grid(g), pf, AValue, AFrom);
+      if Result.Kind <> cvkNone then Exit;
+    end;
+    { THE GEOS [Batch 146], registered before the graph's view: the geo the
+      finder names (a series on a geo is GE4) }
+    target := TyFinderModel(pf, 'geo');
+    if (target >= 0) and (target <= High(FGeos)) and (FGeos[target] <> nil) then
+    begin
+      Result := ConvertOnGeo(FGeos[target], AValue, AFrom);
       if Result.Kind <> cvkNone then Exit;
     end;
     { the graphs' views: one per graph series laid out on 'view', in series
@@ -27316,10 +27419,18 @@ begin
           g := ParallelOfAxis(pf.Types[t].Models[k]);
           if (g >= 0) and TyParallelContainJson(FParallels[g], APoint) then
             Exit(True);
+        end
+        { Geo.containPoint: the data rect through the overall matrix
+          [Batch 146] }
+        else if mt = 'geo' then
+        begin
+          g := pf.Types[t].Models[k];
+          if (g >= 0) and (g <= High(FGeos)) and (FGeos[g] <> nil)
+            and FGeos[g].ContainPoint(TyJsonPoint(APoint)) then
+            Exit(True);
         end;
         { a calendar's and a radar's containPoint are not implemented
-          upstream (false); an axis has no coordinate system; singleAxis
-          and geo are not here yet }
+          upstream (false); an axis has no coordinate system }
       end;
     end;
   except

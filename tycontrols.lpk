@@ -905,6 +905,14 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvChart.DirtyRect"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvChart.GeoFix.pas"/>
+        <UnitName Value="tyControls.AdvChart.GeoFix"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvChart.Geo.pas"/>
+        <UnitName Value="tyControls.AdvChart.Geo"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvChart.KeyNav.pas"/>
         <UnitName Value="tyControls.AdvChart.KeyNav"/>
       </Item>
